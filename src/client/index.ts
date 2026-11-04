@@ -193,6 +193,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         fx,
         monsters,
         bullets,
+        [],
       );
     }
     const seen = new Set<number>();

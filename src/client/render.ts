@@ -3,10 +3,11 @@
 import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { forward } from '../shared/physics';
 import { MONSTER, TEX } from '../shared/types';
-import type { Bullet, Edge, Level, Monster, PlayerState } from '../shared/types';
+import type { Bullet, Edge, Item, Level, Monster, PlayerState } from '../shared/types';
 import { BLAST, glow } from './effects';
 import type { Effects } from './effects';
 import { MUZZLE, chaingun } from './gun';
+import { props } from './items';
 import { STRIDE, basis, dress, place, pushBox } from './mesh';
 import type { Vec3 } from './mesh';
 import { SWING, bullet, flyer, walker } from './monsters';
@@ -119,8 +120,9 @@ export const levelVerts = (lvl: Level): number[] => {
 
 export interface Renderer {
   /**
-   * Draws one frame: the map, the others, the monsters, their bullets and the effects as seen from
-   * eye, with the view model on top. colors maps player id to CSS.
+   * Draws one frame: the map, its gates, goal and items, the others, the monsters, their bullets
+   * and the effects as seen from eye, with the view model on top (not while fx.dead). colors maps
+   * player id to CSS.
    */
   frame(
     eye: Vec3,
@@ -131,14 +133,18 @@ export interface Renderer {
     fx: Effects,
     monsters: Monster[],
     bullets: Bullet[],
+    items: Item[],
   ): void;
+  /** Builds the geometry of another level, drawn from the next frame on. */
+  level(lvl: Level): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
   destroy(): void;
 }
 
 /** Throws when the browser has no WebGL2. */
-export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer => {
+export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Renderer => {
+  let lvl = first;
   const gl = canvas.getContext('webgl2', { antialias: true });
   if (!gl) {
     throw new Error('WebGL2 is not available');
@@ -158,9 +164,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
     return c;
   };
 
-  const ground = levelVerts(lvl);
+  let ground = levelVerts(lvl);
   const pixels = textures();
-  const tail = ground.length * 4;
+  let tail = ground.length * 4;
   let cap = tail + TAIL;
   const [steel, iron] = [
     [0.55, 0.55, 0.6],
@@ -250,7 +256,16 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   return {
-    frame(eye, yaw, pitch, others, colors, fx, monsters, bullets) {
+    level(next) {
+      lvl = next;
+      ground = levelVerts(lvl);
+      tail = ground.length * 4;
+      cap = tail + TAIL;
+      if (!lost) {
+        alloc();
+      }
+    },
+    frame(eye, yaw, pitch, others, colors, fx, monsters, bullets, items) {
       const dpr = Math.min(devicePixelRatio, 2);
       const w = Math.round(canvas.clientWidth * dpr);
       const h = Math.round(canvas.clientHeight * dpr);
@@ -298,6 +313,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
       for (const b of bullets) {
         bullet(v, b, fx.aim.get(b.id));
       }
+      props(v, lvl, items, now);
       for (const { p, c } of fx.sparks) {
         pushBox(v, p, [0.025, 0.025, 0.025], 0, c ?? [1, 0.8, 0.3], -2);
       }
@@ -317,10 +333,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
       // Last, over a cleared depth: the gun never sinks into a wall.
       const axes = basis(yaw, pitch, fx.roll);
       const off: Vec3 = [0.26, -0.24 + fx.kick * 0.01, 0.6 - fx.kick * 0.06];
-      place(v, near.body, eye, axes, off, 0.8);
-      place(v, near.barrels, eye, axes, off, 0.8, fx.spin);
-      if (fx.flash > 0) {
-        place(v, flare, eye, axes, off, 0.8, fx.spin * 3);
+      if (!fx.dead) {
+        place(v, near.body, eye, axes, off, 0.8);
+        place(v, near.barrels, eye, axes, off, 0.8, fx.spin);
+        if (fx.flash > 0) {
+          place(v, flare, eye, axes, off, 0.8, fx.spin * 3);
+        }
       }
       if (tail + v.length * 4 > cap) {
         cap = tail + v.length * 8;

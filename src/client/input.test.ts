@@ -38,6 +38,9 @@ describe('createInput', () => {
     document.dispatchEvent(e);
   };
 
+  const click = (type: string, button: number) =>
+    document.dispatchEvent(new MouseEvent(type, { button }));
+
   const make = () => {
     canvas = document.createElement('canvas');
     document.body.append(canvas);
@@ -94,6 +97,35 @@ describe('createInput', () => {
     expect(ctl.keys).toBe(0);
     key('keydown', 'KeyD');
     lock(false);
+    expect(ctl.keys).toBe(0);
+  });
+
+  it('fires while the left button is held under the lock, and releases it unlocked too', () => {
+    make();
+    lock(true);
+    click('mousedown', 2);
+    expect(ctl.keys).toBe(0);
+    click('mousedown', 0);
+    expect(ctl.keys).toBe(KEY.FIRE);
+    lock(false);
+    expect(ctl.keys).toBe(0);
+    lock(true);
+    click('mousedown', 0);
+    click('mouseup', 2);
+    expect(ctl.keys).toBe(KEY.FIRE);
+    window.dispatchEvent(new Event('blur'));
+    expect(ctl.keys).toBe(0);
+    click('mousedown', 0);
+    lock(false);
+    click('mouseup', 0);
+    expect(ctl.keys).toBe(0);
+  });
+
+  it('does not fire on the click that takes the lock', () => {
+    make();
+    click('mousedown', 0);
+    lock(true);
+    click('mouseup', 0);
     expect(ctl.keys).toBe(0);
   });
 

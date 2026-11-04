@@ -34,7 +34,7 @@ export interface Controls {
   destroy(): void;
 }
 
-/** Click the canvas to lock the pointer; while locked the mouse looks and the keys move. */
+/** Click the canvas to lock the pointer; while locked the mouse looks, the keys move, the left button fires. */
 export const createInput = (canvas: HTMLCanvasElement): Controls => {
   const ac = new AbortController();
   const on = <T extends EventTarget>(t: T, type: string, cb: (e: never) => void) =>
@@ -66,6 +66,17 @@ export const createInput = (canvas: HTMLCanvasElement): Controls => {
   // A release counts even without the lock, so a key never sticks.
   on(document, 'keyup', (e: KeyboardEvent) => {
     c.keys &= ~keyBit(e.code);
+  });
+  // The click that takes the lock lands before it: it does not fire. A release counts without it.
+  on(document, 'mousedown', (e: MouseEvent) => {
+    if (e.button == 0 && c.locked()) {
+      c.keys |= KEY.FIRE;
+    }
+  });
+  on(document, 'mouseup', (e: MouseEvent) => {
+    if (e.button == 0) {
+      c.keys &= ~KEY.FIRE;
+    }
   });
   const release = () => {
     c.keys = 0;

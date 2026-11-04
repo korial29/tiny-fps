@@ -16,13 +16,13 @@ describe('textures', () => {
   it('has one opaque SIZE x SIZE layer per TEX id', () => {
     expect(LAYERS).toBe(Object.keys(TEX).length);
     expect(pix).toHaveLength(LAYERS * SIZE * SIZE * 4);
-    for (let i = 3; i < pix.length; i += 4) {
-      expect(pix[i]).toBe(255);
-    }
+    expect(pix.filter((v, i) => i % 4 == 3 && v != 255)).toHaveLength(0);
   });
 
   it('is deterministic', () => {
-    expect(textures()).toEqual(pix);
+    // Byte compare: toEqual walks 256 KB element by element and can time out under load.
+    const bytes = (a: Uint8ClampedArray) => new Uint8Array(a.buffer);
+    expect(Buffer.compare(bytes(textures()), bytes(pix))).toBe(0);
   });
 
   it('tiles: the left column continues the right one', () => {

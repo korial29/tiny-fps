@@ -6,7 +6,8 @@
 import { INTERP_DELAY } from '../shared/constants';
 import { TAU, move, norm } from '../shared/physics';
 import { onWire } from '../shared/protocol';
-import type { Input, Level, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
+import { fire } from '../shared/shoot';
+import type { Input, Level, PlayerState, Shot, SnapPlayer, Snapshot } from '../shared/types';
 
 export interface Predictor {
   /** The own player id, from the roster. Snapshots before it are only used for the others. */
@@ -16,8 +17,14 @@ export interface Predictor {
    * own player with it, keeps it for replay, and returns it for the caller to send (the very
    * values predicted with, which the host reads back). Until the own player is known (no snapshot
    * shows it yet) it only numbers and keeps the input: the first snapshot replays it.
+   * With `now` (ms, performance.now()) the input carries the view tick the others are drawn at.
    */
-  step(i: Omit<Input, 'seq'>): Input;
+  step(i: Omit<Input, 'seq' | 'view'>, now?: number): Input;
+  /**
+   * The shot the last step fired, resolved with fire() against others(now) of that step; undefined
+   * when it did not fire. Replays on a snapshot never fire again.
+   */
+  shot(): Shot | undefined;
   /** A decoded snapshot, received at `now` (ms, performance.now()). */
   snapshot(s: Snapshot, now: number): void;
   /**
@@ -35,7 +42,7 @@ const MAX_PENDING = 120;
 /** Snapshots kept for interpolation (about 0.5 s at 30 Hz). */
 const MAX_SNAPS = 16;
 
-const state = ({ id, x, y, z, vy, yaw, pitch, ground }: SnapPlayer | PlayerState): PlayerState => ({
+const state = ({
   id,
   x,
   y,
@@ -44,7 +51,8 @@ const state = ({ id, x, y, z, vy, yaw, pitch, ground }: SnapPlayer | PlayerState
   yaw,
   pitch,
   ground,
-});
+  cool,
+}: SnapPlayer | PlayerState): PlayerState => ({ id, x, y, z, vy, yaw, pitch, ground, cool });
 
 /** Whether the host's ack covers seq, on the u16 circle: seq is at most half a turn behind it. */
 const acked = (seq: number, ack: number): boolean => ((ack - seq) & 0xffff) < 0x8000;
@@ -70,15 +78,57 @@ export const createPredictor = (lvl: Level): Predictor => {
   /** The own player after the last step, and before it. */
   let own: PlayerState | undefined;
   let prev: PlayerState | undefined;
+  let shot: Shot | undefined;
   const snaps: { t: number; s: Snapshot }[] = [];
+
+  /**
+   * The snapshots around the time the others are drawn at, and how far between them (0 to 1). The
+   * newest one at or before it, and the next; before the first one or after the last, both are
+   * the same snapshot.
+   */
+  const around = (now: number) => {
+    const t = now - INTERP_DELAY;
+    let k = 0;
+    while (k + 1 < snaps.length && snaps[k + 1].t <= t) {
+      k++;
+    }
+    const a = snaps[k];
+    const b = snaps[k + 1] ?? a;
+    return { a, b, u: b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 0 };
+  };
+
+  /** The host tick the others are drawn at, fractional, in [0, 65536). */
+  const view = (now: number): number | undefined => {
+    if (!snaps.length) {
+      return undefined;
+    }
+    const { a, b, u } = around(now);
+    return (a.s.tick + ((b.s.tick - a.s.tick) & 0xffff) * u) % 0x10000;
+  };
+
+  const others = (now: number): PlayerState[] => {
+    const last = snaps.at(-1);
+    if (!last) {
+      return [];
+    }
+    const { a, b, u } = around(now);
+    return last.s.players
+      .filter(p => p.id !== id)
+      .map(p => {
+        const pa = a.s.players.find(q => q.id === p.id);
+        const pb = b.s.players.find(q => q.id === p.id);
+        return pa && pb ? lerp(state(pa), state(pb), u) : state(pb ?? pa ?? p);
+      });
+  };
 
   return {
     you: n => {
       id = n;
     },
 
-    step: i => {
-      const input = onWire({ ...i, seq });
+    step: (i, now) => {
+      const input = onWire({ ...i, seq, view: now === undefined ? undefined : view(now) });
+      shot = undefined;
       seq = (seq + 1) & 0xffff;
       pending.push(input);
       if (pending.length > MAX_PENDING) {
@@ -86,7 +136,10 @@ export const createPredictor = (lvl: Level): Predictor => {
       }
       if (own) {
         prev = state(own);
-        move(own, input, lvl);
+        if (move(own, input, lvl)) {
+          // Without a clock, the others as of the newest snapshot.
+          shot = fire(lvl, own, input.seq, others(now ?? Infinity));
+        }
       }
       return input;
     },
@@ -111,30 +164,10 @@ export const createPredictor = (lvl: Level): Predictor => {
       });
     },
 
+    shot: () => shot,
+
     me: alpha => (own && prev ? lerp(prev, own, Math.max(0, Math.min(1, alpha))) : undefined),
 
-    others: now => {
-      const last = snaps.at(-1);
-      if (!last) {
-        return [];
-      }
-      const t = now - INTERP_DELAY;
-      // The snapshots around t: the newest one at or before it, and the next. Before the first
-      // one or after the last, both are the same snapshot.
-      let k = 0;
-      while (k + 1 < snaps.length && snaps[k + 1].t <= t) {
-        k++;
-      }
-      const a = snaps[k];
-      const b = snaps[k + 1] ?? a;
-      const u = b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 0;
-      return last.s.players
-        .filter(p => p.id !== id)
-        .map(p => {
-          const pa = a.s.players.find(q => q.id === p.id);
-          const pb = b.s.players.find(q => q.id === p.id);
-          return pa && pb ? lerp(state(pa), state(pb), u) : state(pb ?? pa ?? p);
-        });
-    },
+    others,
   };
 };

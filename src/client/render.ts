@@ -1,22 +1,23 @@
 // WebGL2 drawing: one program, one buffer. The level is built once; the other players are boxes
 // rewritten each frame into the tail of the same buffer. No DOM beyond the canvas.
-import { MAX_PLAYERS, PLAYER_H, PLAYER_R } from '../shared/constants';
+import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { forward } from '../shared/physics';
 import { TEX } from '../shared/types';
 import type { Edge, Level, PlayerState } from '../shared/types';
+import type { Effects } from './effects';
+import { MUZZLE, chaingun } from './gun';
 import { LAYERS, SIZE, textures } from './textures';
 
 /** Clear colour and what distance fog fades to: dark, the map is indoors. */
 const FOG = [0.05, 0.045, 0.05];
 /**
  * Floats per vertex: position, normal, then c. A map vertex has c = (u, v, texture layer, light),
- * u and v in metres. A player vertex has layer -1 and its flat colour in c.x, c.y, c.w.
+ * u and v in metres. A player vertex has layer -1 and its flat colour in c.x, c.y, c.w; layer -2 is
+ * the same colour, bright and unlit (flashes, sparks).
  */
 const STRIDE = 10;
-/** Vertices of a box: 6 faces of 2 triangles. */
-const BOX = 36;
-/** Boxes per player: body, head, visor. */
-const PER_PLAYER = 3;
+/** Bytes the dynamic tail starts with; it grows when a frame needs more. */
+const TAIL = 1 << 18;
 /** Metres one texture covers. */
 const TILE = 2;
 
@@ -25,12 +26,13 @@ layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec
 uniform mat4 m;out vec3 P,N;out vec4 C;
 void main(){P=p;N=n;C=c;gl_Position=m*vec4(p,1);}`;
 
-// s: 1 on a texture, 0 on a flat colour. g: lava, which glows (no light, no shade) and drifts.
+// s: 1 on a texture, 0 on a flat colour. g: lava (which also drifts) and layer -2, which glow: no
+// light, no shade.
 const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;
 in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T;uniform sampler2DArray S;out vec4 o;
 void main(){
-float L=C.z,s=step(0.,L),g=step(abs(L-${TEX.LAVA}.),.5);
+float L=C.z,s=step(0.,L),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec3 c=mix(vec3(C.xy,C.w),texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.))).rgb,s);
 c*=mix(mix(1.,C.w,s)*(.45+.55*max(dot(normalize(N),normalize(vec3(.4,.8,.3))),0.)),1.4,g);
 o=vec4(mix(c,vec3(${FOG}),1.-exp(-.02*length(P-E))),1);}`;
@@ -38,15 +40,24 @@ o=vec4(mix(c,vec3(${FOG}),1.-exp(-.02*length(P-E))),1);}`;
 type Vec3 = [number, number, number];
 
 /**
- * Column-major view-projection matrix: camera at eye looking along (-sin yaw cos pitch, sin pitch,
- * -cos yaw cos pitch), y up, 70° vertical field of view.
+ * Camera axes [right, up, forward]: forward is (-sin yaw cos pitch, sin pitch, -cos yaw cos pitch),
+ * y up at roll 0. A positive roll leans the camera right: up tilts toward right.
  */
-export const viewProj = (eye: Vec3, yaw: number, pitch: number, aspect: number) => {
-  const [sy, cy, sp, cp] = [Math.sin(yaw), Math.cos(yaw), Math.sin(pitch), Math.cos(pitch)];
+export const basis = (yaw: number, pitch: number, roll = 0): [Vec3, Vec3, Vec3] => {
+  const [sy, cy, sp, cp, sr, cr] = [yaw, pitch, roll].flatMap(a => [Math.sin(a), Math.cos(a)]);
+  const r: Vec3 = [cy, 0, -sy];
+  const u: Vec3 = [sy * sp, cp, cy * sp];
+  return [
+    r.map((v, i) => v * cr - u[i] * sr) as Vec3,
+    u.map((v, i) => v * cr + r[i] * sr) as Vec3,
+    [-sy * cp, sp, -cy * cp],
+  ];
+};
+
+/** Column-major view-projection matrix of basis(yaw, pitch, roll) at eye, 70° vertical field of view. */
+export const viewProj = (eye: Vec3, yaw: number, pitch: number, aspect: number, roll = 0) => {
+  const [r, u, f] = basis(yaw, pitch, roll);
   const [N, F, t] = [0.1, 200, Math.tan((70 * Math.PI) / 360)];
-  const r = [cy, 0, -sy];
-  const u = [sy * sp, cp, cy * sp];
-  const f = [-sy * cp, sp, -cy * cp];
   const k = (F + N) / (F - N);
   const rows = [r.map(v => v / (t * aspect)), u.map(v => v / t), f.map(v => v * k), f].map(v => [
     ...v,
@@ -82,6 +93,7 @@ export const pushBox = (
   [hx, hy, hz]: Vec3,
   yaw: number,
   color: number[],
+  layer = -1,
 ) => {
   const [s, k] = [Math.sin(yaw), Math.cos(yaw)];
   const turn = (x: number, z: number) => [x * k + z * s, -x * s + z * k];
@@ -102,7 +114,7 @@ export const pushBox = (
         const l: Vec3 = [0, 0, 0];
         [l[a], l[b], l[d]] = [side, i, j];
         const [x, z] = turn(l[0] * hx, l[2] * hz);
-        out.push(cx + x, cy + l[1] * hy, cz + z, nx, n[1], nz, color[0], color[1], -1, color[2]);
+        out.push(cx + x, cy + l[1] * hy, cz + z, nx, n[1], nz, color[0], color[1], layer, color[2]);
       }
     }
   }
@@ -161,14 +173,49 @@ export const levelVerts = (lvl: Level): number[] => {
   return out;
 };
 
+/** gun.ts vertices (position, normal) given a flat colour, in the vertex format above. */
+const dress = (v: number[], [r, g, b]: number[]): number[] =>
+  Array.from({ length: v.length * (STRIDE / 6) }, (_, i) => {
+    const [k, j] = [Math.floor(i / STRIDE), i % STRIDE];
+    return j < 6 ? v[k * 6 + j] : [r, g, -1, b][j - 6];
+  });
+
+/**
+ * Appends gun-space vertices (x right, y up, -z forward) scaled by k, turned by spin about z, then
+ * carried to the world: axes `[r, u, f]` at eye, moved by off = (right, up, forward) along them.
+ */
+const place = (
+  out: number[],
+  src: number[],
+  eye: Vec3,
+  [r, u, f]: Vec3[],
+  off: Vec3,
+  k: number,
+  spin = 0,
+) => {
+  const [s, c] = [Math.sin(spin), Math.cos(spin)];
+  const turn = (x: number, y: number, z: number) =>
+    [0, 1, 2].map(i => r[i] * (x * c - y * s) + u[i] * (x * s + y * c) - f[i] * z);
+  const o = [0, 1, 2].map(i => eye[i] + r[i] * off[0] + u[i] * off[1] + f[i] * off[2]);
+  for (let i = 0; i < src.length; i += STRIDE) {
+    const p = turn(src[i] * k, src[i + 1] * k, src[i + 2] * k);
+    out.push(o[0] + p[0], o[1] + p[1], o[2] + p[2], ...turn(src[i + 3], src[i + 4], src[i + 5]));
+    out.push(...src.slice(i + 6, i + STRIDE));
+  }
+};
+
 export interface Renderer {
-  /** Draws one frame: the map and the others as seen from eye. colors maps player id to CSS. */
+  /**
+   * Draws one frame: the map, the others and the effects as seen from eye, with the view model on
+   * top. colors maps player id to CSS.
+   */
   frame(
     eye: Vec3,
     yaw: number,
     pitch: number,
     others: PlayerState[],
     colors: ReadonlyMap<number, string>,
+    fx: Effects,
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
@@ -199,9 +246,36 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
   const ground = levelVerts(lvl);
   const pixels = textures();
   const tail = ground.length * 4;
+  let cap = tail + TAIL;
+  const [steel, iron] = [
+    [0.55, 0.55, 0.6],
+    [0.2, 0.2, 0.23],
+  ];
+  const near = {
+    barrels: dress(chaingun(10).barrels, steel),
+    body: dress(chaingun(10).body, iron),
+  };
+  const far = { barrels: dress(chaingun(5).barrels, steel), body: dress(chaingun(5).body, iron) };
+  const flare: number[] = [];
+  /** The others' flash, three times as wide: at a few metres the own one is a dot. */
+  const wide: number[] = [];
+  for (const h of [
+    [0.1, 0.01, 0.03],
+    [0.01, 0.1, 0.03],
+    [0.03, 0.03, 0.05],
+  ] as Vec3[]) {
+    pushBox(flare, [0, 0, -MUZZLE - 0.04], h, 0, [1, 0.85, 0.4], -2);
+    pushBox(wide, [0, 0, -MUZZLE - 0.12], h.map(x => x * 3) as Vec3, 0, [1, 0.85, 0.4], -2);
+  }
   let uniforms: WebGLUniformLocation[] = [];
   let lost = false;
   let vp = new Float32Array(16);
+
+  /** (Re)allocates the buffer at cap bytes and puts the level back at its head. */
+  const alloc = () => {
+    gl.bufferData(gl.ARRAY_BUFFER, cap, gl.DYNAMIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(ground));
+  };
 
   // Everything GL owns goes with a lost context: set it all up again on restore.
   const setup = () => {
@@ -219,12 +293,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
     gl.useProgram(prog);
     uniforms = ['m', 'E', 'T'].map(n => gl.getUniformLocation(prog, n)!);
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      tail + MAX_PLAYERS * PER_PLAYER * BOX * STRIDE * 4,
-      gl.DYNAMIC_DRAW,
-    );
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(ground));
+    alloc();
     [3, 3, 4].reduce((at, size, i) => {
       gl.enableVertexAttribArray(i);
       gl.vertexAttribPointer(i, size, gl.FLOAT, false, STRIDE * 4, at * 4);
@@ -266,7 +335,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   return {
-    frame(eye, yaw, pitch, others, colors) {
+    frame(eye, yaw, pitch, others, colors, fx) {
       const dpr = Math.min(devicePixelRatio, 2);
       const w = Math.round(canvas.clientWidth * dpr);
       const h = Math.round(canvas.clientHeight * dpr);
@@ -278,10 +347,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
         canvas.height = h;
       }
       gl.viewport(0, 0, w, h);
-      vp = viewProj(eye, yaw, pitch, w / h);
+      vp = viewProj(eye, yaw, pitch, w / h, fx.roll);
       const v: number[] = [];
-      for (const p of others.slice(0, MAX_PLAYERS)) {
-        const [fx, fz] = forward(p.yaw);
+      for (const p of others) {
+        const [fx_, fz] = forward(p.yaw);
         const hw = PLAYER_R * 0.8;
         const shoulders = PLAYER_H - 0.35;
         pushBox(v, [p.x, p.y + shoulders / 2, p.z], [hw, shoulders / 2, hw], p.yaw, [
@@ -291,18 +360,42 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
         pushBox(v, head, [0.17, 0.17, 0.17], p.yaw, [0.95, 0.8, 0.65]);
         pushBox(
           v,
-          [head[0] + fx * 0.17, head[1] + 0.03, head[2] + fz * 0.17],
+          [head[0] + fx_ * 0.17, head[1] + 0.03, head[2] + fz * 0.17],
           [0.13, 0.05, 0.03],
           p.yaw,
           [0.1, 0.1, 0.12],
         );
+        const hand: Vec3 = [p.x, p.y + 1.25, p.z];
+        const axes = basis(p.yaw, p.pitch);
+        for (const part of [far.barrels, far.body, fx.flashes.has(p.id) ? wide : []]) {
+          place(v, part, hand, axes, [0.36, -0.12, 0.3], 0.8);
+        }
+      }
+      for (const { p } of fx.sparks) {
+        pushBox(v, p, [0.025, 0.025, 0.025], 0, [1, 0.8, 0.3], -2);
+      }
+      const world = v.length;
+      // Last, over a cleared depth: the gun never sinks into a wall.
+      const axes = basis(yaw, pitch, fx.roll);
+      const off: Vec3 = [0.26, -0.24 + fx.kick * 0.01, 0.6 - fx.kick * 0.06];
+      place(v, near.body, eye, axes, off, 0.8);
+      place(v, near.barrels, eye, axes, off, 0.8, fx.spin);
+      if (fx.flash > 0) {
+        place(v, flare, eye, axes, off, 0.8, fx.spin * 3);
+      }
+      if (tail + v.length * 4 > cap) {
+        cap = tail + v.length * 8;
+        alloc();
       }
       gl.bufferSubData(gl.ARRAY_BUFFER, tail, new Float32Array(v));
       gl.uniformMatrix4fv(uniforms[0], false, vp);
       gl.uniform3fv(uniforms[1], eye);
       gl.uniform1f(uniforms[2], performance.now() / 1000);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-      gl.drawArrays(gl.TRIANGLES, 0, ground.length / STRIDE + v.length / STRIDE);
+      const first = ground.length / STRIDE;
+      gl.drawArrays(gl.TRIANGLES, 0, first + world / STRIDE);
+      gl.clear(gl.DEPTH_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES, first + world / STRIDE, (v.length - world) / STRIDE);
     },
     project: (x, y, z) => project(vp, x, y, z),
     destroy() {

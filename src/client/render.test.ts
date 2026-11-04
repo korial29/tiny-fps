@@ -3,7 +3,7 @@ import { compile, inside } from '../shared/level';
 import { HALL } from '../shared/map';
 import { forward } from '../shared/physics';
 import { TEX } from '../shared/types';
-import { levelVerts, project, pushBox, spans, viewProj } from './render';
+import { basis, levelVerts, project, pushBox, spans, viewProj } from './render';
 
 const at = (yaw: number, pitch: number, x: number, y: number, z: number) =>
   project(viewProj([0, 0, 0], yaw, pitch, 1), x, y, z);
@@ -42,7 +42,43 @@ describe('viewProj and project', () => {
   });
 });
 
+describe('roll', () => {
+  const rolled = (roll: number, x: number, y: number) =>
+    project(viewProj([0, 0, 0], 0, 0, 1, roll), x, y, -5)!;
+
+  it('is the same view at 0, and by default', () => {
+    expect(viewProj([1, 2, 3], 0.4, 0.2, 1.5, 0)).toEqual(viewProj([1, 2, 3], 0.4, 0.2, 1.5));
+  });
+
+  it('keeps the axis of sight', () => {
+    const [x, y] = rolled(0.3, 0, 0);
+    expect([x, y]).toEqual([0.5, 0.5]);
+  });
+
+  it('tilts the up vector toward the right when leaning right', () => {
+    const [r, u, f] = basis(0, 0, 0.3);
+    expect(u[0]).toBeCloseTo(Math.sin(0.3));
+    expect(u[1]).toBeCloseTo(Math.cos(0.3));
+    expect(r[0]).toBeCloseTo(Math.cos(0.3));
+    expect(r[1]).toBeCloseTo(-Math.sin(0.3));
+    expect(f).toEqual([-0, 0, -1]);
+  });
+
+  it('moves a point above the sight line to the left of the screen when leaning right', () => {
+    expect(rolled(0, 0, 3)[0]).toBeCloseTo(0.5);
+    expect(rolled(0.3, 0, 3)[0]).toBeLessThan(0.5);
+    expect(rolled(-0.3, 0, 3)[0]).toBeGreaterThan(0.5);
+  });
+});
+
 describe('pushBox', () => {
+  it('writes the layer it is given, flat by default', () => {
+    const [a, b]: number[][] = [[], []];
+    pushBox(a, [0, 0, 0], [1, 1, 1], 0, [1, 1, 1]);
+    pushBox(b, [0, 0, 0], [1, 1, 1], 0, [1, 1, 1], -2);
+    expect([a[8], b[8]]).toEqual([-1, -2]);
+  });
+
   it('writes 36 vertices of 10 floats a box', () => {
     const out: number[] = [];
     pushBox(out, [0, 0, 0], [1, 1, 1], 0, [1, 0, 0, 0]);

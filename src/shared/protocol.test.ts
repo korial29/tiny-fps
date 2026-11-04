@@ -5,6 +5,7 @@ import {
   MSG_SNAPSHOT,
   SNAP_HEAD,
   SNAP_PLAYER,
+  SNAP_SHOT,
   decodeInput,
   decodeSnapshot,
   encodeInput,
@@ -12,7 +13,7 @@ import {
   onWire,
   parseText,
 } from './protocol';
-import type { SnapPlayer } from './types';
+import type { Shot, SnapPlayer } from './types';
 
 const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
   id,
@@ -23,6 +24,7 @@ const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
   yaw: 4.2,
   pitch: -0.7,
   ground: false,
+  cool: 0,
   ack: 1234,
   ...over,
 });
@@ -30,11 +32,36 @@ const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
 const bytes = (buf: ArrayBuffer): number[] => [...new Uint8Array(buf)];
 
 describe('input frame', () => {
-  it('is 8 bytes: type, seq, keys, yaw in 65536ths of a turn, pitch in 1/10000 rad', () => {
-    const buf = encodeInput({ seq: 0x0102, keys: 0b10101, yaw: Math.PI, pitch: -0.5 });
+  it('is 11 bytes: type, seq, keys, yaw in turns, pitch in 1/10000 rad, view in 1/256 tick', () => {
+    const buf = encodeInput({
+      seq: 0x0102,
+      keys: 0b110101,
+      yaw: Math.PI,
+      pitch: -0.5,
+      view: 0x1234 + 0.5,
+    });
     expect(buf.byteLength).toBe(INPUT_BYTES);
-    // Half a turn is 0x8000; -0.5 rad is -5000 = 0xec78.
-    expect(bytes(buf)).toEqual([MSG_INPUT, 0x01, 0x02, 0b10101, 0x80, 0x00, 0xec, 0x78]);
+    // Half a turn is 0x8000; -0.5 rad is -5000 = 0xec78; the view is 0x1234, then 128/256.
+    expect(bytes(buf)).toEqual([
+      ...[MSG_INPUT, 0x01, 0x02, 0b110101, 0x80, 0x00, 0xec, 0x78],
+      ...[0x12, 0x34, 0x80],
+    ]);
+  });
+
+  it('encodes an absent view as 0, and round-trips the view to 1/256 tick', () => {
+    const none = decodeInput(encodeInput({ seq: 1, keys: 0, yaw: 0, pitch: 0 }))!;
+    expect(none.view).toBe(0);
+    expect(bytes(encodeInput({ seq: 1, keys: 0, yaw: 0, pitch: 0 })).slice(8)).toEqual([0, 0, 0]);
+    for (const view of [0, 1, 255.25, 1000.3333, 65535.5, 65535.99]) {
+      const back = decodeInput(encodeInput({ seq: 1, keys: 0, yaw: 0, pitch: 0, view }))!.view!;
+      expect(Math.abs(back - view)).toBeLessThanOrEqual(1 / 512 + 1e-9);
+      expect(back).toBeGreaterThanOrEqual(0);
+      expect(back).toBeLessThan(65536);
+    }
+    // Rounding up to 65536 wraps to 0: the tick circle.
+    expect(
+      decodeInput(encodeInput({ seq: 1, keys: 0, yaw: 0, pitch: 0, view: 65535.999 }))!.view,
+    ).toBe(0);
   });
 
   it('round-trips within the fixed point', () => {
@@ -71,12 +98,20 @@ describe('input frame', () => {
     let s = 7;
     const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
     for (let k = 0; k < 2000; k++) {
-      const i = { seq: k, keys: k & 31, yaw: (rnd() - 0.3) * 20, pitch: (rnd() - 0.5) * 8 };
+      const i = {
+        seq: k,
+        keys: k & 63,
+        yaw: (rnd() - 0.3) * 20,
+        pitch: (rnd() - 0.5) * 8,
+        view: rnd() * 65535,
+      };
       expect(onWire(i)).toEqual(decodeInput(encodeInput(i)));
     }
     // Idempotent: a value already on the wire stays put.
-    const w = onWire({ seq: 1, keys: 2, yaw: 1.234567, pitch: 0.7654321 });
+    const w = onWire({ seq: 1, keys: 2, yaw: 1.234567, pitch: 0.7654321, view: 77.77777 });
     expect(onWire(w)).toEqual(w);
+    // An absent view stays absent (the host reads 0).
+    expect(onWire({ seq: 1, keys: 2, yaw: 1, pitch: 0 }).view).toBeUndefined();
   });
 
   it('rejects a wrong length or type', () => {
@@ -94,13 +129,14 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 4-byte head and 24 bytes per player', () => {
+  it('has a 4-byte head, 24 bytes per player and a shot list', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [player(7, { x: 1, y: 2, z: 3, vy: -1, yaw: Math.PI, pitch: 0.5, ground: true })],
+      shots: [],
     });
     expect(SNAP_PLAYER).toBe(24);
-    expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER);
+    expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + 1);
     expect(bytes(buf)).toEqual([
       MSG_SNAPSHOT,
       0x12,
@@ -119,7 +155,67 @@ describe('snapshot frame', () => {
       0x04,
       0xd2, // ack 1234
       1,
+      0, // no shots
     ]);
+  });
+
+  it('keeps the cooldown in bits 1-7 of the flags next to the ground bit', () => {
+    const flags = (p: Partial<SnapPlayer>) =>
+      bytes(encodeSnapshot({ tick: 0, players: [player(1, p)], shots: [] }))[SNAP_HEAD + 23];
+    expect(flags({ ground: false, cool: 0 })).toBe(0);
+    expect(flags({ ground: true, cool: 0 })).toBe(1);
+    expect(flags({ ground: false, cool: 5 })).toBe(0b1010);
+    expect(flags({ ground: true, cool: 5 })).toBe(0b1011);
+    for (const [ground, cool] of [
+      [false, 0],
+      [true, 5],
+      [false, 3],
+      [true, 127],
+    ] as const) {
+      const [p] = decodeSnapshot(
+        encodeSnapshot({ tick: 0, players: [player(1, { ground, cool })], shots: [] }),
+      )!.players;
+      expect([p.ground, p.cool]).toEqual([ground, cool]);
+    }
+  });
+
+  const shot = (id: number, hit: number, over: Partial<Shot> = {}): Shot => ({
+    id,
+    x: 1.5,
+    y: -2.25,
+    z: 30.125,
+    hit,
+    ...over,
+  });
+
+  it('carries shots after the players: 14 bytes each, 255 for nobody hit', () => {
+    const buf = encodeSnapshot({
+      tick: 0x0102,
+      players: [player(7)],
+      shots: [shot(7, 3), shot(2, -1, { x: 1, y: 2, z: 3 })],
+    });
+    const end = SNAP_HEAD + SNAP_PLAYER;
+    expect(buf.byteLength).toBe(end + 1 + 2 * SNAP_SHOT);
+    expect(SNAP_SHOT).toBe(14);
+    expect(bytes(buf).slice(end)).toEqual([
+      2,
+      // First shot: id 7, x 1.5, y -2.25, z 30.125, hit 3.
+      ...[7, 0x3f, 0xc0, 0, 0, 0xc0, 0x10, 0, 0, 0x41, 0xf1, 0x00, 0, 3],
+      // Second: id 2, x 1, y 2, z 3, nobody.
+      ...[2, 0x3f, 0x80, 0, 0, 0x40, 0, 0, 0, 0x40, 0x40, 0, 0, 255],
+    ]);
+  });
+
+  it('round-trips shots in order, float32 exact, and -1 for the level', () => {
+    const f = Math.fround;
+    const shots = [shot(0, -1, { x: f(0.1), y: f(99.9), z: f(-3.3) }), shot(15, 14), shot(1, 0)];
+    const back = decodeSnapshot(
+      encodeSnapshot({ tick: 9, players: [player(1), player(2)], shots }),
+    )!;
+    expect(back.shots).toEqual(shots);
+    expect(back.players).toHaveLength(2);
+    // And with no players at all.
+    expect(decodeSnapshot(encodeSnapshot({ tick: 9, players: [], shots }))!.shots).toEqual(shots);
   });
 
   it('round-trips the float32 state exactly, and yaw, pitch within the wire', () => {
@@ -138,7 +234,7 @@ describe('snapshot frame', () => {
       }),
       player(255, { x: 0, y: -2.5, z: 300.125, vy: f(9.99) }),
     ];
-    const back = decodeSnapshot(encodeSnapshot({ tick: 70000, players }))!;
+    const back = decodeSnapshot(encodeSnapshot({ tick: 70000, players, shots: [] }))!;
     expect(back.tick).toBe(70000 & 0xffff);
     expect(back.players).toHaveLength(3);
     back.players.forEach((b, i) => {
@@ -153,7 +249,7 @@ describe('snapshot frame', () => {
 
   it('rounds a float64 value to the nearest float32, not further', () => {
     const [p] = decodeSnapshot(
-      encodeSnapshot({ tick: 0, players: [player(1, { x: 1 / 3, z: -1e-3, vy: 1e9 })] }),
+      encodeSnapshot({ tick: 0, players: [player(1, { x: 1 / 3, z: -1e-3, vy: 1e9 })], shots: [] }),
     )!.players;
     expect(p.x).toBe(Math.fround(1 / 3));
     expect(p.z).toBe(Math.fround(-1e-3));
@@ -161,21 +257,22 @@ describe('snapshot frame', () => {
   });
 
   it('takes an empty snapshot', () => {
-    expect(decodeSnapshot(encodeSnapshot({ tick: 5, players: [] }))).toEqual({
+    expect(decodeSnapshot(encodeSnapshot({ tick: 5, players: [], shots: [] }))).toEqual({
       tick: 5,
       players: [],
+      shots: [],
     });
   });
 
   it('rejects a wrong type, a truncated or a padded frame, and a wrong count', () => {
-    const ok = encodeSnapshot({ tick: 1, players: [player(1), player(2)] });
+    const ok = encodeSnapshot({ tick: 1, players: [player(1), player(2)], shots: [] });
     expect(decodeSnapshot(ok)).not.toBeNull();
     expect(decodeSnapshot(new ArrayBuffer(0))).toBeNull();
     expect(decodeSnapshot(new ArrayBuffer(SNAP_HEAD - 1))).toBeNull();
     expect(decodeSnapshot(ok.slice(0, ok.byteLength - 1))).toBeNull();
     expect(decodeSnapshot(ok.slice(0, SNAP_HEAD + SNAP_PLAYER))).toBeNull();
-    // The old 16-byte layout is not a snapshot any more.
-    expect(decodeSnapshot(ok.slice(0, SNAP_HEAD + 16 * 2))).toBeNull();
+    // No shot count at all: the frame stops after the players.
+    expect(decodeSnapshot(ok.slice(0, SNAP_HEAD + SNAP_PLAYER * 2))).toBeNull();
     expect(decodeSnapshot(new Uint8Array([...bytes(ok), 0]).buffer)).toBeNull();
     const bad = new Uint8Array(ok.slice(0));
     bad[0] = MSG_INPUT;
@@ -185,9 +282,23 @@ describe('snapshot frame', () => {
     expect(decodeSnapshot(bad.buffer)).toBeNull();
   });
 
+  it('rejects a shot count that does not match the bytes', () => {
+    const ok = encodeSnapshot({ tick: 1, players: [player(1)], shots: [shot(1, 2), shot(1, 3)] });
+    expect(decodeSnapshot(ok)).not.toBeNull();
+    const end = SNAP_HEAD + SNAP_PLAYER;
+    expect(decodeSnapshot(ok.slice(0, ok.byteLength - 1))).toBeNull();
+    expect(decodeSnapshot(ok.slice(0, ok.byteLength - SNAP_SHOT))).toBeNull();
+    expect(decodeSnapshot(new Uint8Array([...bytes(ok), 0]).buffer)).toBeNull();
+    for (const n of [0, 1, 3, 255]) {
+      const bad = new Uint8Array(ok.slice(0));
+      bad[end] = n;
+      expect(decodeSnapshot(bad.buffer)).toBeNull();
+    }
+  });
+
   it('does not take an input frame for a snapshot, nor the reverse', () => {
     expect(decodeSnapshot(encodeInput({ seq: 0, keys: 0, yaw: 0, pitch: 0 }))).toBeNull();
-    expect(decodeInput(encodeSnapshot({ tick: 0, players: [] }))).toBeNull();
+    expect(decodeInput(encodeSnapshot({ tick: 0, players: [], shots: [] }))).toBeNull();
   });
 });
 

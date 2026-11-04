@@ -9,6 +9,7 @@ import type { Effects } from './effects';
 import { MUZZLE, chaingun } from './gun';
 import { props } from './items';
 import { STRIDE, basis, dress, place, pushBox } from './mesh';
+import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { SWING, bullet, flyer, walker } from './monsters';
 import { LAYERS, SIZE, textures } from './textures';
@@ -134,6 +135,8 @@ export interface Renderer {
     monsters: Monster[],
     bullets: Bullet[],
     items: Item[],
+    /** gather() in lights.ts: at most MAX_LIGHTS, the first MAX_SHADOWS shadowed spots mapped. */
+    lights: Light[],
   ): void;
   /** Builds the geometry of another level, drawn from the next frame on. */
   level(lvl: Level): void;

@@ -64,7 +64,7 @@ describe('createRenderer', () => {
     rd: ReturnType<typeof createRenderer>,
     fx = createEffects(),
     items = [] as never[],
-  ) => rd.frame([1, 1.6, 1], 0, 0, [], new Map(), fx, [], [], items);
+  ) => rd.frame([1, 1.6, 1], 0, 0, [], new Map(), fx, [], [], items, []);
 
   it('rebuilds the level geometry on level()', () => {
     const [a, b] = [compile(HALL), compile(ROOM)];

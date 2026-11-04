@@ -6,7 +6,17 @@ import { TEX } from '../shared/types';
 import { basis, pushBox } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
-import { SPEC, levelVerts, lightProj, pack, project, spans, viewProj } from './render';
+import {
+  MAX_PIXELS,
+  SPEC,
+  backing,
+  levelVerts,
+  lightProj,
+  pack,
+  project,
+  spans,
+  viewProj,
+} from './render';
 import { LAYERS } from './textures';
 
 const at = (yaw: number, pitch: number, x: number, y: number, z: number) =>
@@ -290,5 +300,21 @@ describe('pack', () => {
     const pk = pack([a, b]);
     expect([...pk.m.slice(0, 16)]).toEqual([...lightProj(a)]);
     expect([...pk.m.slice(16, 32)]).toEqual([...lightProj(b)]);
+  });
+});
+
+describe('backing', () => {
+  it('keeps the pixel ratio, up to 2, on a small canvas', () => {
+    expect(backing(800, 600, 1)).toEqual([800, 600]);
+    expect(backing(640, 480, 2)).toEqual([1280, 960]);
+    expect(backing(400, 300, 3)).toEqual([800, 600]);
+  });
+
+  it('scales a big canvas down to MAX_PIXELS, keeping its ratio', () => {
+    const [w, h] = backing(1024, 768, 2);
+    expect(w * h).toBeLessThanOrEqual(MAX_PIXELS * 1.01);
+    expect(w / h).toBeCloseTo(1024 / 768, 2);
+    expect(backing(1920, 1080, 1)).toEqual([1920, 1080]);
+    expect(backing(2560, 1440, 2)[0]).toBeLessThan(2560);
   });
 });

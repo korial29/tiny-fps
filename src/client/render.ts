@@ -250,6 +250,15 @@ export interface Renderer {
   destroy(): void;
 }
 
+/** Pixels drawn at most (1080p): every one is lit per light and shadow map, so a 4K screen at a pixel ratio of 2 would pay for 8 million. */
+export const MAX_PIXELS = 1920 * 1080;
+
+/** The canvas size in device pixels: the CSS size times the pixel ratio (2 at most), scaled down to MAX_PIXELS. */
+export const backing = (cw: number, ch: number, dpr: number): [number, number] => {
+  const k = Math.min(dpr, 2, Math.sqrt(MAX_PIXELS / (cw * ch || 1)));
+  return [Math.round(cw * k), Math.round(ch * k)];
+};
+
 /** Throws when the browser has no WebGL2. */
 export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Renderer => {
   let lvl = first;
@@ -401,9 +410,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       }
     },
     frame(eye, yaw, pitch, others, colors, fx, monsters, bullets, items, lights) {
-      const dpr = Math.min(devicePixelRatio, 2);
-      const w = Math.round(canvas.clientWidth * dpr);
-      const h = Math.round(canvas.clientHeight * dpr);
+      const [w, h] = backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
       if (lost || !w || !h) {
         return;
       }

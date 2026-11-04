@@ -291,7 +291,7 @@ export const createEffects = (rand = Math.random, lvl?: Level): Effects => {
             p: [x, y + r2() * 0.3, z],
             v: [Math.cos(a) * k, 2 + rand() * 4, Math.sin(a) * k],
             yaw: rand() * TAU,
-            size: 0.04 + rand() * 0.06,
+            size: 0.05 + rand() * 0.08,
             c: chunks[Math.floor(rand() * chunks.length)],
             life: 2 + rand(),
             floor: lvl?.map.sectors[sectorAt(lvl, x, z)]?.floor ?? y,

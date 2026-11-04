@@ -14,12 +14,13 @@ export const GAIT = 3.6;
 
 /** Flat colours, shared with the gibs. Eyes are the unlit layer: they glow in the dark. */
 export const COLOR = {
-  body: [0.2, 0.17, 0.19],
-  arm: [0.3, 0.2, 0.18],
-  leg: [0.13, 0.12, 0.15],
-  head: [0.32, 0.24, 0.22],
-  shell: [0.26, 0.14, 0.22],
-  fin: [0.42, 0.2, 0.2],
+  body: [0.27, 0.22, 0.25],
+  arm: [0.4, 0.26, 0.22],
+  leg: [0.18, 0.17, 0.22],
+  head: [0.45, 0.33, 0.3],
+  shell: [0.36, 0.2, 0.32],
+  fin: [0.5, 0.25, 0.25],
+  gore: [0.6, 0.08, 0.07],
   calm: [0.6, 0.05, 0.04],
   chase: [1, 0.3, 0.15],
   blob: [1, 0.3, 0.05],
@@ -28,8 +29,8 @@ export const COLOR = {
 
 /** What a monster of each MONSTER kind bursts into. */
 export const CHUNKS = [
-  [COLOR.body, COLOR.arm, COLOR.leg, COLOR.head, COLOR.chase],
-  [COLOR.shell, COLOR.fin, COLOR.shell, COLOR.chase],
+  [COLOR.body, COLOR.arm, COLOR.head, COLOR.gore, COLOR.gore, COLOR.chase],
+  [COLOR.shell, COLOR.fin, COLOR.shell, COLOR.gore, COLOR.chase],
 ];
 
 const eyes = (chase: boolean) => (chase ? COLOR.chase : COLOR.calm);
@@ -84,7 +85,7 @@ export const walker = (out: number[], m: Monster, walked: number, blow: number) 
   pushBox(out, at(m, 0, hips + 0.35, 0), [0.26, 0.35, 0.16], m.yaw, COLOR.body);
   const head = at(m, 0, WALKER_H - 0.15, 0);
   pushBox(out, head, [0.15, 0.15, 0.15], m.yaw, COLOR.head);
-  const glow = m.chase ? 0.04 : 0.03;
+  const glow = m.chase ? 0.06 : 0.045;
   for (const side of [-1, 1]) {
     const eye = at(m, side * 0.075, WALKER_H - 0.11, 0.15);
     pushBox(out, eye, [glow, glow * 0.7, 0.02], m.yaw, eyes(m.chase), -2);

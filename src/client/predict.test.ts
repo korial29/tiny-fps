@@ -32,6 +32,7 @@ const snapPlayer = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => (
   pitch: 0,
   ground: true,
   cool: 0,
+  hp: 9,
   ack: 0xffff,
   ...over,
 });
@@ -42,6 +43,11 @@ const snapshot = (tick: number, ...players: SnapPlayer[]): Snapshot => ({
   monsters: [],
   bullets: [],
   events: [],
+  level: 0,
+  hard: false,
+  phase: 0,
+  keys: 0,
+  items: [],
 });
 const fwd = { keys: KEY.FORWARD, yaw: 0, pitch: 0 };
 
@@ -193,6 +199,11 @@ describe('prediction against the room', () => {
       monsters: [],
       bullets: [],
       events: [],
+      level: 0,
+      hard: false,
+      phase: 0,
+      keys: 0,
+      items: [],
     };
   };
 

@@ -29,6 +29,7 @@ const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
   pitch: -0.7,
   ground: false,
   cool: 0,
+  hp: 9,
   ack: 1234,
   ...over,
 });
@@ -141,6 +142,11 @@ describe('snapshot frame', () => {
       monsters: [],
       bullets: [],
       events: [],
+      level: 0,
+      hard: false,
+      phase: 0,
+      keys: 0,
+      items: [],
     });
     expect(SNAP_PLAYER).toBe(24);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + 4);
@@ -175,6 +181,11 @@ describe('snapshot frame', () => {
           monsters: [],
           bullets: [],
           events: [],
+          level: 0,
+          hard: false,
+          phase: 0,
+          keys: 0,
+          items: [],
         }),
       )[SNAP_HEAD + 23];
     expect(flags({ ground: false, cool: 0 })).toBe(0);
@@ -195,6 +206,11 @@ describe('snapshot frame', () => {
           monsters: [],
           bullets: [],
           events: [],
+          level: 0,
+          hard: false,
+          phase: 0,
+          keys: 0,
+          items: [],
         }),
       )!.players;
       expect([p.ground, p.cool]).toEqual([ground, cool]);
@@ -218,6 +234,11 @@ describe('snapshot frame', () => {
       monsters: [],
       bullets: [],
       events: [],
+      level: 0,
+      hard: false,
+      phase: 0,
+      keys: 0,
+      items: [],
     });
     const end = SNAP_HEAD + SNAP_PLAYER;
     expect(buf.byteLength).toBe(end + 1 + 2 * SNAP_SHOT + 3);
@@ -250,6 +271,11 @@ describe('snapshot frame', () => {
     monsters: [],
     bullets: [],
     events: [],
+    level: 0,
+    hard: false,
+    phase: 0,
+    keys: 0,
+    items: [],
     ...over,
   });
 
@@ -367,6 +393,11 @@ describe('snapshot frame', () => {
         monsters: [],
         bullets: [],
         events: [],
+        level: 0,
+        hard: false,
+        phase: 0,
+        keys: 0,
+        items: [],
       }),
     )!;
     expect(back.shots).toEqual(shots);
@@ -374,7 +405,19 @@ describe('snapshot frame', () => {
     // And with no players at all.
     expect(
       decodeSnapshot(
-        encodeSnapshot({ tick: 9, players: [], shots, monsters: [], bullets: [], events: [] }),
+        encodeSnapshot({
+          tick: 9,
+          players: [],
+          shots,
+          monsters: [],
+          bullets: [],
+          events: [],
+          level: 0,
+          hard: false,
+          phase: 0,
+          keys: 0,
+          items: [],
+        }),
       )!.shots,
     ).toEqual(shots);
   });
@@ -396,7 +439,19 @@ describe('snapshot frame', () => {
       player(255, { x: 0, y: -2.5, z: 300.125, vy: f(9.99) }),
     ];
     const back = decodeSnapshot(
-      encodeSnapshot({ tick: 70000, players, shots: [], monsters: [], bullets: [], events: [] }),
+      encodeSnapshot({
+        tick: 70000,
+        players,
+        shots: [],
+        monsters: [],
+        bullets: [],
+        events: [],
+        level: 0,
+        hard: false,
+        phase: 0,
+        keys: 0,
+        items: [],
+      }),
     )!;
     expect(back.tick).toBe(70000 & 0xffff);
     expect(back.players).toHaveLength(3);
@@ -419,6 +474,11 @@ describe('snapshot frame', () => {
         monsters: [],
         bullets: [],
         events: [],
+        level: 0,
+        hard: false,
+        phase: 0,
+        keys: 0,
+        items: [],
       }),
     )!.players;
     expect(p.x).toBe(Math.fround(1 / 3));
@@ -429,7 +489,19 @@ describe('snapshot frame', () => {
   it('takes an empty snapshot', () => {
     expect(
       decodeSnapshot(
-        encodeSnapshot({ tick: 5, players: [], shots: [], monsters: [], bullets: [], events: [] }),
+        encodeSnapshot({
+          tick: 5,
+          players: [],
+          shots: [],
+          monsters: [],
+          bullets: [],
+          events: [],
+          level: 0,
+          hard: false,
+          phase: 0,
+          keys: 0,
+          items: [],
+        }),
       ),
     ).toEqual({
       tick: 5,
@@ -438,6 +510,11 @@ describe('snapshot frame', () => {
       monsters: [],
       bullets: [],
       events: [],
+      level: 0,
+      hard: false,
+      phase: 0,
+      keys: 0,
+      items: [],
     });
   });
 
@@ -449,6 +526,11 @@ describe('snapshot frame', () => {
       monsters: [],
       bullets: [],
       events: [],
+      level: 0,
+      hard: false,
+      phase: 0,
+      keys: 0,
+      items: [],
     });
     expect(decodeSnapshot(ok)).not.toBeNull();
     expect(decodeSnapshot(new ArrayBuffer(0))).toBeNull();
@@ -474,6 +556,11 @@ describe('snapshot frame', () => {
       monsters: [],
       bullets: [],
       events: [],
+      level: 0,
+      hard: false,
+      phase: 0,
+      keys: 0,
+      items: [],
     });
     expect(decodeSnapshot(ok)).not.toBeNull();
     const end = SNAP_HEAD + SNAP_PLAYER;
@@ -491,7 +578,19 @@ describe('snapshot frame', () => {
     expect(decodeSnapshot(encodeInput({ seq: 0, keys: 0, yaw: 0, pitch: 0 }))).toBeNull();
     expect(
       decodeInput(
-        encodeSnapshot({ tick: 0, players: [], shots: [], monsters: [], bullets: [], events: [] }),
+        encodeSnapshot({
+          tick: 0,
+          players: [],
+          shots: [],
+          monsters: [],
+          bullets: [],
+          events: [],
+          level: 0,
+          hard: false,
+          phase: 0,
+          keys: 0,
+          items: [],
+        }),
       ),
     ).toBeNull();
   });

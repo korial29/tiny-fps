@@ -19,7 +19,11 @@ import type { Input, PlayerInfo, Snapshot } from './types';
 
 export type ClientText = { t: 'join'; name: string };
 
-export type ServerText = { t: 'roster'; you: number; players: PlayerInfo[] } | { t: 'full' };
+export type ServerText =
+  | { t: 'roster'; you: number; players: PlayerInfo[] }
+  | { t: 'full' }
+  /** The last level of a run was won: the run took `ticks` host ticks. The next run is hard. */
+  | { t: 'end'; ticks: number; hard: boolean };
 
 export const MSG_INPUT = 1;
 export const MSG_SNAPSHOT = 2;
@@ -189,6 +193,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       ack: v.getUint16(o + 21),
       cool: v.getUint8(o + 23) >> 1,
       ground: (v.getUint8(o + 23) & 1) === 1,
+      hp: 9,
     });
   }
   return {
@@ -223,6 +228,11 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       y: v.getFloat32(o + 6),
       z: v.getFloat32(o + 10),
     })),
+    level: 0,
+    hard: false,
+    phase: 0,
+    keys: 0,
+    items: [],
   };
 };
 

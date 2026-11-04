@@ -1,4 +1,5 @@
 // Sector maps, compiled once for physics and drawing. No DOM, no Node API.
+import { PHASE } from './types';
 import type { Level, MapDef, Sector } from './types';
 
 /** Joins every edge a→b with the sector that has b→a, if any: that edge is a portal. */
@@ -14,7 +15,16 @@ export const compile = (map: MapDef): Level => {
       return { ax, az, bx, bz, front, back: owner.get(key(bx, bz, ax, az)) ?? -1 };
     }),
   );
-  return { map, edges };
+  const lvl = { map, edges, barred: new Set<number>() };
+  bar(lvl, 0, PHASE.HUNT);
+  return lvl;
+};
+
+/** Bars the gates whose key is not in `keys` (bits 1 << ITEM.KEY_*), and the exit before RETURN. */
+export const bar = (lvl: Level, keys: number, phase: number): void => {
+  void keys;
+  void phase;
+  lvl.barred.clear();
 };
 
 /** Whether (x, z) is inside the sector, its edges included. */

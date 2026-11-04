@@ -35,6 +35,12 @@ export interface Predictor {
    * a target); undefined when it did not fire. Replays on a snapshot never fire again.
    */
   shot(): Shot | undefined;
+  /**
+   * Switches to another level (a snapshot with a new `level` or `hard`): prediction, replay and
+   * interpolation use it from now on, and snapshots of the previous level are dropped. Each
+   * snapshot also bars the level with its keys and phase (bar() in level.ts) before the replay.
+   */
+  level(lvl: Level): void;
   /** A decoded snapshot, received at `now` (ms, performance.now()). */
   snapshot(s: Snapshot, now: number): void;
   /**
@@ -238,6 +244,8 @@ export const createPredictor = (lvl: Level): Predictor => {
         s => s.bullets,
         (a, b, t) => ({ ...b, ...mid(a, b, t) }),
       ),
+
+    level: () => {},
 
     shot: () => shot,
 

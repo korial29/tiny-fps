@@ -179,12 +179,17 @@ export class Room {
       // One buffer for everyone: transports must not mutate it.
       const snap = encodeSnapshot({
         tick: this.ticks,
-        players: players.map(p => ({ ...p.state, ack: p.ack })),
+        players: players.map(p => ({ ...p.state, ack: p.ack, hp: 9 })),
         shots: this.shots,
         monsters,
         bullets: this.horde.bullets(),
         // The snapshot counts events with a u8: the rest wait for the next one.
         events: this.horde.events.splice(0, 255),
+        level: 0,
+        hard: false,
+        phase: 0,
+        keys: 0,
+        items: [],
       });
       this.shots = [];
       players.forEach(p => p.conn.send(snap));

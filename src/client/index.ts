@@ -1,12 +1,15 @@
 import { EYE, MAX_PITCH, PLAYER_H, TICK_HZ } from '../shared/constants';
 import { blocked, compile } from '../shared/level';
-import { HALL } from '../shared/map';
+import { LEVELS } from '../shared/levels';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import type { GameEvent, PlayerInfo, Shot, SocketLike } from '../shared/types';
 import { createDelay, createEffects } from './effects';
+import { HUD_CSS, createHud } from './hud';
 import { createInput } from './input';
 import { createPredictor } from './predict';
+import { css } from './items';
+import { createProgress } from './progress';
 import { createRenderer } from './render';
 import type { Renderer } from './render';
 
@@ -30,7 +33,6 @@ export interface TinyFps {
   destroy(): void;
 }
 
-const lvl = compile(HALL);
 const STEP = 1 / TICK_HZ;
 /** Steps run in one frame at most: a background tab catches up by this much, not by minutes. */
 const MAX_STEPS = 5;
@@ -47,33 +49,45 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     `canvas{display:block;width:100%;height:100%;cursor:pointer}` +
     `i,p,b,em,s{position:absolute;pointer-events:none;user-select:none;margin:0}` +
     `s{inset:0;background:#e00;opacity:0}` +
+    HUD_CSS +
     `i{left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #0008}` +
     `p{top:8px;left:12px}em{left:50%;top:60%;transform:translateX(-50%);font-size:18px;font-style:normal}` +
     `b{transform:translate(-50%,-100%);font-size:12px;white-space:nowrap}[hidden]{display:none}</style>` +
-    `<div><canvas></canvas><s></s><i></i><p></p><em></em></div>`;
+    `<div><canvas></canvas><s></s><s></s><i></i><p></p><em></em></div>`;
   container.append(wrap);
   const canvas = root.querySelector('canvas')!;
   const count = root.querySelector('p')!;
   const hint = root.querySelector('em')!;
-  const tint = root.querySelector('s')!;
+  const [tint, glint] = root.querySelectorAll('s');
   const screen = root.querySelector('div')!;
+  const hud = createHud(screen);
 
   const listeners: Record<TinyFpsEvent, (() => void)[]> = { roster: [], open: [], close: [] };
   const emit = (ev: TinyFpsEvent) => listeners[ev].forEach(cb => cb());
 
-  const predictor = createPredictor(lvl);
+  const first = compile(LEVELS[0]);
+  const predictor = createPredictor(first);
   const ctl = createInput(canvas);
-  const fx = createEffects(Math.random, lvl);
+  const fx = createEffects(Math.random, first);
   /** Others' shots and the host's events wait INTERP_DELAY: the others are drawn that far in the past. */
   const shots = createDelay<Shot>();
   const events = createDelay<GameEvent>();
   let you = -1;
   let rd: Renderer | undefined;
   try {
-    rd = createRenderer(canvas, lvl);
+    rd = createRenderer(canvas, first);
   } catch {
     // No WebGL2: stay connected, say so in the hint.
   }
+  const progress = createProgress({
+    lvl: first,
+    you: () => you,
+    predictor,
+    rd,
+    delays: [shots, events],
+    fx,
+    hud,
+  });
   let roster: PlayerInfo[] = [];
   let colors = new Map<number, string>();
   let names = new Map<number, string>();
@@ -106,6 +120,8 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       const s = decodeSnapshot(data);
       if (s) {
         const now = performance.now();
+        // A new level first: the predictor takes the snapshot as one of that level.
+        progress.snapshot(s);
         predictor.snapshot(s, now);
         shots.push(
           s.shots.filter(sh => sh.id != you),
@@ -125,6 +141,8 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       emit('roster');
     } else if (m?.t == 'full') {
       msg = 'Room is full';
+    } else if (m?.t == 'end') {
+      progress.end(m.ticks, m.hard);
     }
   };
 
@@ -153,7 +171,9 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       acc = 0;
     }
     for (; ready && acc >= STEP; acc -= STEP) {
-      const input = predictor.step({ keys: ctl.keys, yaw: ctl.yaw, pitch: ctl.pitch }, now);
+      // A dead player neither moves nor fires.
+      const keys = progress.dead ? 0 : ctl.keys;
+      const input = predictor.step({ keys, yaw: ctl.yaw, pitch: ctl.pitch }, now);
       if (open) {
         ws.send(encodeInput(input));
       }
@@ -165,7 +185,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     }
 
     const me = predictor.me(acc / STEP);
-    const others = predictor.others(now);
+    const others = predictor.others(now).filter(p => progress.alive(p.id));
     const monsters = predictor.monsters(now);
     const bullets = predictor.bullets(now);
     const eye: [number, number, number] = me ? [me.x, me.y + EYE, me.z] : [0, 0, 0];
@@ -180,7 +200,9 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     for (const e of events.due(now)) {
       fx.event(e, you);
     }
-    fx.update(me, ctl.keys, Math.min((now - before) / 1000, 0.1));
+    const dt = Math.min((now - before) / 1000, 0.1);
+    fx.update(me, ctl.keys, dt, progress.dead);
+    hud.update(dt);
     if (me && rd) {
       // Bob and shake are for the eye only: the inputs keep sending the real angles.
       const pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, ctl.pitch + fx.shakePitch));
@@ -193,14 +215,14 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         fx,
         monsters,
         bullets,
-        [],
+        progress.items,
       );
     }
     const seen = new Set<number>();
     for (const p of others) {
       const top: [number, number, number] = [p.x, p.y + PLAYER_H + 0.3, p.z];
       // Behind a wall the tag would give the player away.
-      const at = me && !blocked(lvl, eye, top) ? rd?.project(...top) : undefined;
+      const at = me && !blocked(progress.lvl, eye, top) ? rd?.project(...top) : undefined;
       const el = tag(p.id);
       seen.add(p.id);
       el.hidden = !at;
@@ -220,10 +242,13 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       }
     }
 
-    const veil = String(fx.hurt * 2);
-    if (tint.style.opacity != veil) {
-      tint.style.opacity = veil;
+    for (const [el, a] of [
+      [tint, fx.hurt * 2],
+      [glint, fx.gain * 0.8],
+    ] as const) {
+      el.style.opacity = String(a);
     }
+    glint.style.background = css(fx.gainC);
     const text =
       msg || (!open ? 'Connecting…' : !ready ? 'Joining…' : ctl.locked() ? '' : 'Click to play');
     if (hint.textContent != text) {

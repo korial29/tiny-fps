@@ -4,7 +4,8 @@ import type { MapDef } from './types';
 
 /**
  * A room is a rectangle: x0, z0, x1, z1, floor, ceiling, textures, light, key. Textures are three
- * TEX digits (floor, walls, ceiling: 0 brick, 1 tile, 2 lava, 3 stone), default "103". A room with
+ * TEX digits (floor, walls, ceiling: 0 brick, 1 tile, 2 lava, 3 stone, 4 metal, 5 wood, 6 moss,
+ * 7 grate), default "103". A room with
  * a key is a gate. Rooms that touch are joined where they share a stretch of edge, so a door is a
  * small room between two others (or an offset overlap): build() splits the edges at every corner.
  */
@@ -116,10 +117,10 @@ export const LEVELS: MapDef[] = [
     [
       [0, 0, 10, 10, 0, 4, '103'],
       [10, 4, 22, 6, 0, 2.8, '333', 0.6],
-      [22, 0, 38, 14, 0, 6, '303'],
-      ...stairs(0, [38, 4, 42, 10], 0.4, 0.4, 4, 6, '333'),
+      [22, 0, 38, 14, 0, 6, '553'],
+      ...stairs(0, [38, 4, 42, 10], 0.4, 0.4, 4, 6, '553'),
       [42, 2, 52, 12, 2, 6, '103', 0.9],
-      ...stairs(1, [46, 12, 48, 22], 1.6, -0.4, 4, 4.8, '000', 0.7),
+      ...stairs(1, [46, 12, 48, 22], 1.6, -0.4, 4, 4.8, '744', 0.7),
       [38, 22, 56, 36, 0, 6, '113'],
     ],
     [2, 2, 6],

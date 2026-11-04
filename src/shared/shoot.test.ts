@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EYE, MAX_PITCH, PLAYER_H, RANGE, SPREAD } from './constants';
 import { compile } from './level';
 import { HALL } from './map';
-import { aim, fire, trace } from './shoot';
+import { aim, body, fire, trace } from './shoot';
 import { TEX } from './types';
 import type { MapDef, PlayerState } from './types';
 
@@ -187,7 +187,7 @@ describe('fire', () => {
   const shooter = player(0, 4, 1, 8, EAST);
 
   it('hits the side of a cylinder on the line, and stops where it enters', () => {
-    const s = fire(lvl, shooter, 3, [player(1, 10, 1, 8)]);
+    const s = fire(lvl, shooter, 3, [player(1, 10, 1, 8)].map(body));
     expect(s).toMatchObject({ id: 0, hit: 1 });
     expect(s.x).toBeCloseTo(10 - 0.4, 1);
     // The spread moves the point by at most 6 m x SPREAD.
@@ -196,7 +196,7 @@ describe('fire', () => {
   });
 
   it('misses a cylinder beside the line, and ends on the wall', () => {
-    const s = fire(lvl, shooter, 3, [player(1, 10, 1, 9)]);
+    const s = fire(lvl, shooter, 3, [player(1, 10, 1, 9)].map(body));
     expect(s.hit).toBe(-1);
     expect(s.x).toBeCloseTo(36, 0);
   });
@@ -204,15 +204,15 @@ describe('fire', () => {
   it('shoots over a head and under a pair of feet', () => {
     // Eye at 2.6: a target standing at 1 holds it, one whose head is 2.4 high is under the line,
     // one whose feet are at 3 is over it.
-    expect(fire(lvl, shooter, 3, [player(1, 10, 1, 8)]).hit).toBe(1);
-    expect(fire(lvl, shooter, 3, [player(1, 10, 0.6, 8)]).hit).toBe(-1);
-    expect(fire(lvl, shooter, 3, [player(1, 10, 3, 8)]).hit).toBe(-1);
+    expect(fire(lvl, shooter, 3, [player(1, 10, 1, 8)].map(body)).hit).toBe(1);
+    expect(fire(lvl, shooter, 3, [player(1, 10, 0.6, 8)].map(body)).hit).toBe(-1);
+    expect(fire(lvl, shooter, 3, [player(1, 10, 3, 8)].map(body)).hit).toBe(-1);
   });
 
   it('enters through the top cap when shooting down onto a head', () => {
     const above = player(0, 4, 2, 8, NORTH, -MAX_PITCH);
     // Eye at 3.6 looking almost straight down at a target 0.05 m ahead: the head top is at 2.8.
-    const s = fire(lvl, above, 3, [player(1, 4, 1, 7.95)]);
+    const s = fire(lvl, above, 3, [player(1, 4, 1, 7.95)].map(body));
     expect(s.hit).toBe(1);
     expect(s.y).toBeCloseTo(1 + PLAYER_H, 1);
   });
@@ -220,25 +220,27 @@ describe('fire', () => {
   it('enters through the bottom cap when shooting up at feet over the eye', () => {
     const below = player(0, 4, 1, 8, NORTH, MAX_PITCH);
     // Eye at 2.6 looking almost straight up at a target standing at 3.2.
-    const s = fire(lvl, below, 3, [player(1, 4, 3.2, 7.95)]);
+    const s = fire(lvl, below, 3, [player(1, 4, 3.2, 7.95)].map(body));
     expect(s.hit).toBe(1);
     expect(s.y).toBeCloseTo(3.2, 1);
   });
 
   it('does not see through walls', () => {
     const west = player(0, 4, 1, 8, WEST);
-    const s = fire(lvl, west, 3, [player(1, -3, 1, 8)]);
+    const s = fire(lvl, west, 3, [player(1, -3, 1, 8)].map(body));
     expect(s.hit).toBe(-1);
     expect(s.x).toBeCloseTo(0, 0);
     // Nor through a step face or a low ceiling.
-    expect(fire(lvl, player(0, 30, 1, 13, SOUTH, -0.05), 3, [player(1, 30, 2.6, 22)]).hit).toBe(-1);
+    expect(
+      fire(lvl, player(0, 30, 1, 13, SOUTH, -0.05), 3, [player(1, 30, 2.6, 22)].map(body)).hit,
+    ).toBe(-1);
   });
 
   it('never hits the shooter, and takes the nearest of several targets', () => {
-    expect(fire(lvl, shooter, 3, [shooter, player(1, 10, 1, 8)]).hit).toBe(1);
-    expect(fire(lvl, shooter, 3, [player(2, 14, 1, 8), shooter]).hit).toBe(2);
-    expect(fire(lvl, shooter, 3, [player(2, 14, 1, 8), player(1, 8, 1, 8)]).hit).toBe(1);
-    expect(fire(lvl, shooter, 3, [player(1, 8, 1, 8), player(2, 14, 1, 8)]).hit).toBe(1);
+    expect(fire(lvl, shooter, 3, [shooter, player(1, 10, 1, 8)].map(body)).hit).toBe(1);
+    expect(fire(lvl, shooter, 3, [player(2, 14, 1, 8), shooter].map(body)).hit).toBe(2);
+    expect(fire(lvl, shooter, 3, [player(2, 14, 1, 8), player(1, 8, 1, 8)].map(body)).hit).toBe(1);
+    expect(fire(lvl, shooter, 3, [player(1, 8, 1, 8), player(2, 14, 1, 8)].map(body)).hit).toBe(1);
   });
 
   it('shoots from the eye along aim(), with the same spread the client rolls', () => {
@@ -275,8 +277,8 @@ describe('fire', () => {
     const seq = Array.from({ length: 5000 }, (_, k) => k).find(
       k => angle(aim(EAST, 0, k), [1, 0, 0]) < 0.001,
     )!;
-    expect(fire(big, far, seq, [player(1, -150 + RANGE - 1, 0, 10)]).hit).toBe(1);
-    const miss = fire(big, far, seq, [player(1, -150 + RANGE + 2, 0, 10)]);
+    expect(fire(big, far, seq, [player(1, -150 + RANGE - 1, 0, 10)].map(body)).hit).toBe(1);
+    const miss = fire(big, far, seq, [player(1, -150 + RANGE + 2, 0, 10)].map(body));
     expect(miss.hit).toBe(-1);
     expect(Math.hypot(miss.x + 150, miss.z - 10)).toBeCloseTo(RANGE, 0);
   });

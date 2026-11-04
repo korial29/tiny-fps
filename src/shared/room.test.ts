@@ -14,7 +14,7 @@ import { HALL } from './map';
 import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
-import { fire } from './shoot';
+import { body, fire } from './shoot';
 import { KEY } from './types';
 import type { Conn, Every, Input, PlayerState, Shot, Snapshot } from './types';
 
@@ -497,7 +497,7 @@ describe('Room: chaingun', () => {
     // What fire() gives against B where the room should have put it (A's yaw and pitch are the
     // wire's).
     const a = { ...d.aState() };
-    const want = fire(lvl, a, 7, [target]);
+    const want = fire(lvl, a, 7, [target].map(body));
     expect(shots[0].hit).toBe(want.hit);
     expect([shots[0].x, shots[0].y, shots[0].z]).toEqual(
       [want.x, want.y, want.z].map(v => expect.closeTo(v, 3)),
@@ -517,7 +517,7 @@ describe('Room: chaingun', () => {
     expect(bNow.x - target.x).toBeCloseTo(2, 3);
     const look = lookAt(d.aState(), [target.x, target.y + 0.9, target.z]);
     const a = { ...d.aState(), ...look };
-    expect(fire(lvl, a, 7, [bNow]).hit).toBe(-1);
+    expect(fire(lvl, a, 7, [bNow].map(body)).hit).toBe(-1);
   });
 
   it('interpolates between the two snapshots around a fractional view', () => {

@@ -151,7 +151,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       hit: v.getUint8(o + 13) === 255 ? -1 : v.getUint8(o + 13),
     });
   }
-  return { tick: v.getUint16(1), players, shots };
+  return { tick: v.getUint16(1), players, shots, monsters: [], bullets: [], events: [] };
 };
 
 /** Returns null on anything that is not a known text message. */

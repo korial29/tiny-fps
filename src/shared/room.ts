@@ -4,7 +4,7 @@ import { HALL } from './map';
 import { move, spawn } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
-import { fire } from './shoot';
+import { body, fire } from './shoot';
 import type { Conn, Every, PlayerInfo, PlayerState, Rules, Shot } from './types';
 
 interface Player {
@@ -125,7 +125,7 @@ export class Room {
     if (input && p.bank > 0) {
       p.bank--;
       if (move(p.state, input, LEVEL)) {
-        this.shots.push(fire(LEVEL, p.state, input.seq, this.rewind(p, input.view)));
+        this.shots.push(fire(LEVEL, p.state, input.seq, this.rewind(p, input.view).map(body)));
       }
       p.ack = input.seq;
     }
@@ -157,6 +157,9 @@ export class Room {
         tick: this.ticks,
         players: players.map(p => ({ ...p.state, ack: p.ack })),
         shots: this.shots,
+        monsters: [],
+        bullets: [],
+        events: [],
       });
       this.shots = [];
       players.forEach(p => p.conn.send(snap));

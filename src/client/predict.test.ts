@@ -5,7 +5,7 @@ import { HALL } from '../shared/map';
 import { move, spawn } from '../shared/physics';
 import { decodeInput, decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
 import { Room } from '../shared/room';
-import { fire } from '../shared/shoot';
+import { body, fire } from '../shared/shoot';
 import { KEY } from '../shared/types';
 import type { Conn, Input, PlayerState, Shot, SnapPlayer, Snapshot } from '../shared/types';
 import { createPredictor } from './predict';
@@ -30,6 +30,9 @@ const snapshot = (tick: number, ...players: SnapPlayer[]): Snapshot => ({
   tick,
   players,
   shots: [],
+  monsters: [],
+  bullets: [],
+  events: [],
 });
 const fwd = { keys: KEY.FORWARD, yaw: 0, pitch: 0 };
 
@@ -178,6 +181,9 @@ describe('prediction against the room', () => {
       end: gap(final, ref),
       cool: pred.me(1)!.cool - final.cool,
       shots: { predicted, hosted },
+      monsters: [],
+      bullets: [],
+      events: [],
     };
   };
 
@@ -547,7 +553,7 @@ describe('own shots', () => {
         fired.push(k);
         const me = p.me(1)!;
         // Exactly fire() on the state after the step, with the seq of the input.
-        expect(s).toEqual(fire(lvl, me, i.seq, p.others(1000 + INTERP_DELAY)));
+        expect(s).toEqual(fire(lvl, me, i.seq, p.others(1000 + INTERP_DELAY).map(body)));
         expect(s).toMatchObject({ id: 0, hit: 1 });
       }
     }
@@ -708,7 +714,7 @@ describe('lag compensation through the room', () => {
     expect(r.hosted[0].y).toBeCloseTo(r.shot.y, 2);
     expect(r.hosted[0].z).toBeCloseTo(r.shot.z, 2);
     // ... and without the rewind the same shot, from the same view, misses B at the host.
-    expect(fire(lvl, r.mine, r.sent.seq, [r.arrival]).hit).toBe(-1);
+    expect(fire(lvl, r.mine, r.sent.seq, [body(r.arrival)]).hit).toBe(-1);
   });
 
   it('carries a view tick on the input that is behind the host tick by the interpolation delay', () => {

@@ -6,8 +6,17 @@
 import { INTERP_DELAY } from '../shared/constants';
 import { TAU, move, norm } from '../shared/physics';
 import { onWire } from '../shared/protocol';
-import { fire } from '../shared/shoot';
-import type { Input, Level, PlayerState, Shot, SnapPlayer, Snapshot } from '../shared/types';
+import { body, fire } from '../shared/shoot';
+import type {
+  Bullet,
+  Input,
+  Level,
+  Monster,
+  PlayerState,
+  Shot,
+  SnapPlayer,
+  Snapshot,
+} from '../shared/types';
 
 export interface Predictor {
   /** The own player id, from the roster. Snapshots before it are only used for the others. */
@@ -35,6 +44,13 @@ export interface Predictor {
   me(alpha: number): PlayerState | undefined;
   /** The other players at now - INTERP_DELAY; a player missing from the latest snapshot is gone. */
   others(now: number): PlayerState[];
+  /**
+   * The living monsters at now - INTERP_DELAY, interpolated like others() (yaw along the shortest
+   * arc); a monster missing from the latest snapshot is gone.
+   */
+  monsters(now: number): Monster[];
+  /** The bullets in flight at now - INTERP_DELAY, interpolated the same way. */
+  bullets(now: number): Bullet[];
 }
 
 /** Unacked inputs kept at most (2 s at 60 Hz): a stalled host does not grow the list. */
@@ -138,7 +154,7 @@ export const createPredictor = (lvl: Level): Predictor => {
         prev = state(own);
         if (move(own, input, lvl)) {
           // Without a clock, the others as of the newest snapshot.
-          shot = fire(lvl, own, input.seq, others(now ?? Infinity));
+          shot = fire(lvl, own, input.seq, others(now ?? Infinity).map(body));
         }
       }
       return input;
@@ -163,6 +179,10 @@ export const createPredictor = (lvl: Level): Predictor => {
         move(own!, i, lvl);
       });
     },
+
+    monsters: () => [],
+
+    bullets: () => [],
 
     shot: () => shot,
 

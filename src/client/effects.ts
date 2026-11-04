@@ -111,8 +111,9 @@ const MAX_SPARKS = 96;
 const MAX_GIBS = 64;
 const MAX_BLASTS = 12;
 export const BLAST = 0.3;
-const HURT = 0.15;
-const GAIN = 0.4;
+/** Seconds the hit vignette and the pickup fade take to go out. */
+export const HURT = 0.45;
+export const GAIN = 0.4;
 /** Seconds the camera takes to sink, the roll it ends at, and the eye height it ends at. */
 const SINK = 0.5;
 const TILT = 0.9;

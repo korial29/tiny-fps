@@ -14,8 +14,8 @@ Read this file before any change. Change a gameplay rule only when the user asks
 | `src/shared/physics.ts` | `move()` and `spawn()`, shared by the host and the client's prediction |
 | `src/shared/protocol.ts` | Wire format: JSON text frames, binary input and snapshot frames |
 | `src/shared/room.ts` | One game, transport-agnostic: roster, inputs, snapshots |
-| `src/server/` | Node `ws` adapter (`tiny-fps/server`) and its CLI, copied from air-hockey |
-| `src/local/` | Same-browser multiplayer over BroadcastChannel (`tiny-fps/local`), copied from air-hockey |
+| `src/server/` | Node `ws` adapter (`@korial29/tiny-fps/server`) and its CLI, copied from air-hockey |
+| `src/local/` | Same-browser multiplayer over BroadcastChannel (`@korial29/tiny-fps/local`), copied from air-hockey |
 | `src/client/` | `tinyFps()` API (`index.ts`), prediction (`predict.ts`), WebGL drawing (`render.ts`), input (`input.ts`) |
 | `demo/` | Demo page |
 

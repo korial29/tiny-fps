@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { bar, compile, sectorAt } from '../shared/level';
+import { LEVELS } from '../shared/levels';
 import { HALL } from '../shared/map';
-import { PHASE } from '../shared/types';
-import type { PlayerState } from '../shared/types';
+import { PHASE, TEX } from '../shared/types';
+import type { MapDef, PlayerState } from '../shared/types';
 import { BLAST, createEffects, glow } from './effects';
-import { LIGHT, MAX_LIGHTS, gather } from './lights';
+import { LIGHT, MAX_LIGHTS, gather, lava } from './lights';
 import type { Scene } from './lights';
 import { basis } from './mesh';
 
@@ -208,5 +209,112 @@ describe('cap', () => {
     expect(rest).toEqual([...rest].sort((a, b) => a - b));
     expect(ls.some(l => l.p[1] == 1)).toBe(true);
     expect(Math.max(...ls.map(l => l.p[0]))).toBeLessThan(20 + MAX_LIGHTS);
+  });
+});
+
+describe('lava', () => {
+  /** n lava pools 2 m square, 3 m apart along x at z 0..2, floor at 0.4: centres at 1, 4, 7, ... */
+  const pools = (n: number, over: Partial<MapDef['sectors'][number]> = {}) =>
+    compile({
+      sectors: Array.from({ length: n }, (_, i) => ({
+        pts: [
+          [3 * i, 0],
+          [3 * i + 2, 0],
+          [3 * i + 2, 2],
+          [3 * i, 2],
+        ],
+        floor: 0.4,
+        ceil: 6,
+        ft: TEX.LAVA,
+        wt: TEX.STONE,
+        ct: TEX.STONE,
+        ...over,
+      })),
+      spawns: [[1, 1, 0]],
+    } as MapDef);
+  const at = (x: number, lv = pools(1), o: Partial<Scene> = {}) =>
+    scene({ lvl: lv, eye: [x, 1.6, 1], ...o });
+  const lit = (s: Scene) => gather(s).filter(l => l.kind == LIGHT.POINT);
+
+  it('lights nothing where there is no lava, or none near the eye', () => {
+    expect(lava(pools(1, { ft: TEX.TILE }))).toEqual([]);
+    expect(lit(at(1, pools(1, { ft: TEX.TILE })))).toHaveLength(0);
+    expect(lit(at(40))).toHaveLength(0);
+    expect(gather(bare())).toHaveLength(1);
+  });
+
+  it('puts a warm point light above the middle of a pool near the eye', () => {
+    const [l, ...more] = lit(at(-3));
+    expect(more).toHaveLength(0);
+    expect(l.shadow).toBe(false);
+    expect([l.p[0], l.p[2]]).toEqual([1, 1]);
+    expect(l.p[1]).toBeGreaterThan(0.4);
+    expect(l.p[1]).toBeLessThan(0.4 + 3);
+    expect(l.color[0]).toBeGreaterThan(l.color[1] * 2);
+    expect(l.color[1]).toBeGreaterThan(l.color[2]);
+    // Its reach grows with the pool: 2 m square is small, a 14 x 10 pit is wide.
+    const big = compile({
+      sectors: [
+        {
+          ...pools(1).map.sectors[0],
+          pts: [
+            [0, 0],
+            [14, 0],
+            [14, 10],
+            [0, 10],
+          ],
+        },
+      ],
+      spawns: [[1, 1, 0]],
+    } as MapDef);
+    expect(lava(big)[0].range).toBeGreaterThan(l.range * 1.5);
+    expect(lava(big)[0].p).toEqual([7, 2.4, 5]);
+  });
+
+  it('breathes and flickers with the time, out of step from pool to pool', () => {
+    const lv = pools(2);
+    const colors = [0, 0.05, 0.4, 1.3].map(t => lit(at(2.5, lv, { t })).map(l => l.color[0]));
+    expect(new Set(colors.map(c => c[0])).size).toBe(4);
+    expect(colors.every(c => c[0] > 0.8 && c[0] < 2.5)).toBe(true);
+    expect(colors[0][0]).not.toBeCloseTo(colors[0][1]);
+  });
+
+  it('goes nearest-first with the other lights, and at most four pools', () => {
+    // Eye at x 11.5 sees pools at 1.5, 1.5, 4.5, 4.5, 7.5, 7.5 m: six in reach, four kept.
+    const ls = lit(at(11.5, pools(8)));
+    expect(ls).toHaveLength(4);
+    const d = ls.map(l => dist(l.p, [11.5, 1.6, 1]));
+    expect(d).toEqual([...d].sort((a, b) => a - b));
+    expect(Math.max(...d)).toBeLessThan(4.6 * 1.5);
+    const others = [player(1, 9)];
+    const all = gather(at(11.5, pools(8), { others })).slice(1);
+    const ds = all.map(l => dist(l.p, [11.5, 1.6, 1]));
+    expect(ds).toEqual([...ds].sort((a, b) => a - b));
+  });
+
+  it('never pushes out the own flashlight or muzzle flash', () => {
+    const fx = createEffects();
+    fx.flash = 0.05;
+    const others = Array.from({ length: 20 }, (_, i) => player(i + 1, 12 + i));
+    const ls = gather(at(11.5, pools(8), { fx, others }));
+    expect(ls).toHaveLength(MAX_LIGHTS);
+    expect(ls[0].kind).toBe(LIGHT.SPOT);
+    expect(ls[1].kind).toBe(LIGHT.SPOT);
+    expect(ls[1].color[0]).toBeGreaterThan(2.5);
+    expect(ls[0].shadow && ls[1].shadow).toBe(true);
+  });
+
+  it('derives its pools once per level object', () => {
+    const lv = pools(3);
+    const first = lava(lv);
+    expect(first).toHaveLength(3);
+    gather(at(4, lv));
+    expect(lava(lv)).toBe(first);
+    expect(lava({ ...lv })).not.toBe(first);
+  });
+
+  it('finds the lava of the campaign levels that have some', () => {
+    // The warm-up has none.
+    expect(LEVELS.map(m => lava(compile(m)).length > 0)).toEqual([false, true, true, true, true]);
   });
 });

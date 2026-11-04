@@ -201,11 +201,15 @@ export interface Sector {
   ct: number;
   /** Light level multiplied into the shading, 0 to 1. Absent: 1. */
   light?: number;
+  /** Colour of the sector's ambient light, linear RGB 0 to 1 (a cold blue cellar, a warm furnace). Absent: white. */
+  tint?: [r: number, g: number, b: number];
 }
 
 export interface MapDef {
   /** Shown on the title screen after the level number. */
   name?: string;
+  /** Fog colour (linear RGB 0 to 1) and density per metre (0.02 is the default haze). Absent: the default. */
+  fog?: [r: number, g: number, b: number, density: number];
   sectors: Sector[];
   /** Spawn points: feet x, z (inside a sector, standing on its floor) and the yaw to face. */
   spawns: [x: number, z: number, yaw: number][];

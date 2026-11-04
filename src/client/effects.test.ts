@@ -4,7 +4,7 @@ import { compile, sectorAt } from '../shared/level';
 import { HALL } from '../shared/map';
 import { EVENT, KEY, MONSTER } from '../shared/types';
 import type { GameEvent, Monster, PlayerState, Shot } from '../shared/types';
-import { GAIN, HURT, createDelay, createEffects, glow } from './effects';
+import { GAIN, HURT, MOTES, createDelay, createEffects, glow, lit, puff } from './effects';
 import { CHUNKS } from './monsters';
 
 const DT = 1 / 60;
@@ -355,6 +355,7 @@ describe('death', () => {
     }
     expect(fx.gibs.length).toBeLessThanOrEqual(64);
     expect(fx.blasts.length).toBeLessThanOrEqual(12);
+    expect(fx.smoke.length).toBeLessThanOrEqual(40);
     expect(fx.sparks.length).toBeLessThanOrEqual(96);
     expect(fx.swings.size).toBeLessThanOrEqual(64);
   });
@@ -525,6 +526,7 @@ describe('reset', () => {
   it('drops every effect of the old level', () => {
     const fx = createEffects(Math.random, lvl);
     fx.event(die(8, 2, 8), 1);
+    expect(fx.smoke.length).toBeGreaterThan(0);
     fx.event({ type: EVENT.SWING, id: 20, x: 8, y: 2, z: 8 }, 1);
     fx.track([{ id: 20, kind: 0, x: 8, y: 1, z: 8, yaw: 0, chase: false }], []);
     fx.shot(shot, [0, 1.6, 0], true);
@@ -532,7 +534,7 @@ describe('reset', () => {
     fx.hit();
     fx.pickup([1, 1, 1]);
     fx.reset(lvl);
-    expect([fx.gibs, fx.sparks, fx.blasts]).toEqual([[], [], []]);
+    expect([fx.gibs, fx.sparks, fx.blasts, fx.smoke]).toEqual([[], [], [], []]);
     expect([fx.swings.size, fx.herd.size, fx.flashes.size, fx.aim.size]).toEqual([0, 0, 0, 0]);
     expect([fx.hurt, fx.gain, fx.flash]).toEqual([0, 0, 0]);
   });
@@ -547,5 +549,227 @@ describe('reset', () => {
     }
     step(fx, 1);
     expect(Math.min(...fx.gibs.map(g => g.p[1]))).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('smoke', () => {
+  const lvl = compile(HALL);
+  const ev = (type: number): GameEvent => ({ type, id: 16, x: 8, y: 1, z: 8 });
+  const step = (fx: ReturnType<typeof createEffects>, seconds: number) => {
+    for (let t = 0; t < seconds - 1e-9; t += DT) {
+      fx.update(undefined, 0, DT);
+    }
+  };
+
+  it('puffs on a DIE, fewer and smaller on a BOOM', () => {
+    const [die, boom] = [EVENT.DIE, EVENT.BOOM].map(type => {
+      const fx = createEffects(() => 0.5, lvl);
+      fx.event(ev(type), 1);
+      return fx.smoke;
+    });
+    expect(die.length).toBeGreaterThanOrEqual(6);
+    expect(boom.length).toBeGreaterThan(0);
+    expect(boom.length).toBeLessThan(die.length);
+    expect(boom[0].r).toBeLessThan(die[0].r);
+  });
+
+  it('puffs nothing for the other events', () => {
+    const fx = createEffects();
+    for (const type of [EVENT.HURT, EVENT.SWING]) {
+      fx.event(ev(type), 2);
+    }
+    expect(fx.smoke).toHaveLength(0);
+  });
+
+  it('rises and drifts', () => {
+    const fx = createEffects(() => 0.9, lvl);
+    fx.event(ev(EVENT.DIE), 1);
+    const [before] = fx.smoke.map(s => [...s.p]);
+    step(fx, 0.5);
+    const [after] = fx.smoke.map(s => s.p);
+    expect(after[1]).toBeGreaterThan(before[1] + 0.2);
+    expect(Math.hypot(after[0] - before[0], after[2] - before[2])).toBeGreaterThan(0.05);
+  });
+
+  it('stays under the ceiling', () => {
+    const fx = createEffects(() => 0.99, lvl);
+    fx.event({ ...ev(EVENT.DIE), y: 2 }, 1);
+    step(fx, 1.4);
+    const ceil = lvl.map.sectors[sectorAt(lvl, 8, 8)].ceil;
+    expect(fx.smoke.length).toBeGreaterThan(0);
+    for (const s of fx.smoke) {
+      expect(s.p[1]).toBeLessThanOrEqual(ceil);
+    }
+  });
+
+  it('grows, then shrinks to nothing as it ends', () => {
+    const fx = createEffects(() => 0.5, lvl);
+    fx.event(ev(EVENT.DIE), 1);
+    const [s] = fx.smoke;
+    const size = (u: number) => puff({ ...s, t: u * s.life });
+    expect(size(0)).toBeGreaterThan(0);
+    expect(size(0.1)).toBeGreaterThan(size(0));
+    expect(size(0.5)).toBeGreaterThan(size(0.1));
+    expect(size(0.9)).toBeLessThan(size(0.5));
+    expect(size(0.99)).toBeLessThan(size(0.9));
+    expect(size(1)).toBe(0);
+  });
+
+  it('lives 1.5 to 2.5 s, then goes', () => {
+    for (const [r, life] of [
+      [0, 1.5],
+      [0.999, 2.5],
+    ]) {
+      const fx = createEffects(() => r, lvl);
+      fx.event(ev(EVENT.BOOM), 1);
+      expect(fx.smoke[0].life).toBeCloseTo(life, 2);
+      step(fx, life - 0.1);
+      expect(fx.smoke.length).toBeGreaterThan(0);
+      step(fx, 0.2);
+      expect(fx.smoke).toHaveLength(0);
+    }
+  });
+
+  it('keeps the newest puffs when capped', () => {
+    const fx = createEffects(() => 0.5, lvl);
+    for (let i = 0; i < 30; i++) {
+      fx.event({ ...ev(EVENT.DIE), z: 8 + i * 0.1 }, 1);
+    }
+    expect(fx.smoke).toHaveLength(40);
+    expect(fx.smoke.at(-1)!.p[2]).toBeGreaterThan(10.8);
+  });
+});
+
+describe('dust motes', () => {
+  /** A seeded generator: the motes need real spread. */
+  const seeded = () => {
+    let s = 7;
+    return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
+  };
+  const EYE_Y = 1.6;
+  const spread = (fx: ReturnType<typeof createEffects>, x: number, z: number) => {
+    const d = [];
+    for (let i = 0; i < fx.motes.length; i += 3) {
+      d.push([fx.motes[i] - x, fx.motes[i + 1] - EYE_Y, fx.motes[i + 2] - z]);
+    }
+    return d;
+  };
+
+  it('scatter around the eye on the first update, and not before a player is known', () => {
+    const fx = createEffects(seeded());
+    fx.update(undefined, 0, DT);
+    expect(fx.motes.every(m => m == 0)).toBe(true);
+    fx.update(me(10), 0, DT);
+    expect(fx.motes).toHaveLength(MOTES * 3);
+    const d = spread(fx, 10, 0);
+    expect(d.every(([x, y, z]) => Math.abs(x) <= 5 && Math.abs(y) <= 1.7 && Math.abs(z) <= 5)).toBe(
+      true,
+    );
+    expect(Math.max(...d.map(([x]) => x))).toBeGreaterThan(2);
+    expect(Math.min(...d.map(([x]) => x))).toBeLessThan(-2);
+    expect(Math.max(...d.map(([, y]) => y))).toBeGreaterThan(0.5);
+  });
+
+  it('drift slowly while the player stands', () => {
+    const fx = createEffects(seeded());
+    fx.update(me(), 0, DT);
+    const before = Float32Array.from(fx.motes);
+    for (let i = 0; i < 60; i++) {
+      fx.update(me(), 0, DT);
+    }
+    // Across a wrap a mote comes out on the other side of its box: measure the short way round.
+    const moved = [...fx.motes].map((m, i) => {
+      const [d, side] = [Math.abs(m - before[i]), i % 3 == 1 ? 3.2 : 10];
+      return Math.min(d, side - d);
+    });
+    expect(Math.max(...moved)).toBeLessThan(0.5);
+    expect(moved.filter(m => m > 0.01).length).toBeGreaterThan(MOTES);
+  });
+
+  it('are recycled round the box as the player walks off, and never leave it', () => {
+    const fx = createEffects(seeded());
+    for (let i = 0; i < 600; i++) {
+      fx.update(me(i * 0.1), KEY.FORWARD, DT);
+      const d = spread(fx, i * 0.1, 0);
+      expect(
+        d.every(([x, y, z]) => Math.abs(x) <= 5.01 && Math.abs(y) <= 1.61 && Math.abs(z) <= 5.01),
+      ).toBe(true);
+    }
+    const d = spread(fx, 59.9, 0);
+    expect(Math.max(...d.map(([x]) => x))).toBeGreaterThan(2);
+    expect(Math.min(...d.map(([x]) => x))).toBeLessThan(-2);
+  });
+
+  it('follow a respawn jump', () => {
+    const fx = createEffects(seeded());
+    fx.update(me(0), 0, DT);
+    fx.update(me(300), 0, DT);
+    expect(spread(fx, 300, 0).every(([x]) => Math.abs(x) <= 5.01)).toBe(true);
+  });
+
+  describe('lit', () => {
+    const FWD: [number, number, number] = [0, 0, -1];
+    const eye: [number, number, number] = [0, 1.6, 0];
+    const at = (...p: [number, number, number][]) => {
+      const fx = createEffects();
+      fx.motes.set(p.flat());
+      return fx;
+    };
+
+    it('shows a mote in the cone and none outside it', () => {
+      const fx = at([0, 1.6, -4], [4, 1.6, -4], [0, 1.6, 4], [0, 1.6, -7], [0, 3.8, -4]);
+      const seen = lit(fx, eye, FWD);
+      expect(seen).toHaveLength(4);
+      expect(seen[0]).toBe(0);
+      expect(seen[1]).toBeCloseTo(1.6);
+      expect(seen[2]).toBe(-4);
+      expect(seen[3]).toBeGreaterThan(0);
+    });
+
+    it('shows more of what is near the axis and near the eye', () => {
+      const fx = at([0, 1.6, -4], [1, 1.6, -4], [0, 1.6, -5.5]);
+      const [on, off, far] = [0, 4, 8].map(i => lit(fx, eye, FWD)[i + 3]);
+      expect(on).toBeGreaterThan(off);
+      expect(on).toBeGreaterThan(far);
+      expect(on).toBeLessThanOrEqual(1);
+    });
+
+    it('follows the view direction', () => {
+      const fx = at([4, 1.6, 0]);
+      expect(lit(fx, eye, FWD)).toHaveLength(0);
+      expect(lit(fx, eye, [1, 0, 0])).toHaveLength(4);
+    });
+
+    it('shows nothing once the own player is dead, and again after the respawn', () => {
+      const fx = createEffects(seeded());
+      fx.update(me(), 0, DT);
+      fx.motes.fill(0);
+      fx.motes.set([0, 1.6, -4]);
+      expect(lit(fx, eye, FWD)).toHaveLength(4);
+      fx.update(me(), 0, DT, true);
+      expect(lit(fx, eye, FWD)).toHaveLength(0);
+      for (let i = 0; i < 40; i++) {
+        fx.update(me(), 0, DT, false);
+      }
+      expect(lit(fx, eye, FWD).length).toBeGreaterThan(0);
+    });
+
+    it('lights a few motes of a real scatter, a fraction of them', () => {
+      const fx = createEffects(seeded());
+      fx.update(me(), 0, DT);
+      const n = lit(fx, eye, FWD).length / 4;
+      expect(n).toBeGreaterThan(2);
+      expect(n).toBeLessThan(MOTES / 2);
+    });
+  });
+
+  it('are scattered again after a level change', () => {
+    const fx = createEffects(seeded());
+    fx.update(me(), 0, DT);
+    fx.motes.fill(0);
+    fx.reset(compile(HALL));
+    fx.update(me(), 0, DT);
+    expect(fx.motes.some(m => m != 0)).toBe(true);
+    expect(spread(fx, 0, 0).some(([x]) => Math.abs(x) > 1)).toBe(true);
   });
 });

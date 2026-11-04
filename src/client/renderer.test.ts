@@ -9,7 +9,7 @@ import { LIGHT } from './lights';
 import type { Light } from './lights';
 import { STRIDE } from './mesh';
 import { LAYERS } from './textures';
-import { createRenderer, levelVerts } from './render';
+import { FOG, MAX_TINTS, createRenderer, levelVerts } from './render';
 
 type Call = [name: string, ...args: unknown[]];
 
@@ -112,6 +112,55 @@ describe('createRenderer', () => {
     fx.update(undefined, 0, 0.1, true);
     frame(rd, fx);
     expect(draws()[1][1]).toBe(0);
+  });
+
+  describe('atmosphere', () => {
+    const fogOf = () => calls.filter(c => c[0] == 'uniform4fv' && (c[2] as number[]).length == 4);
+    const palOf = () => calls.filter(c => c[0] == 'uniform3fv' && (c[2] as number[]).length > 3);
+    const clear = () =>
+      calls
+        .filter(c => c[0] == 'clearColor')
+        .at(-1)!
+        .slice(1);
+
+    it('fogs and clears with the dark haze when the map sets none', () => {
+      createRenderer(canvas, compile(ROOM));
+      expect(fogOf().at(-1)![2]).toEqual(FOG);
+      expect(clear()).toEqual([FOG[0], FOG[1], FOG[2], 1]);
+      expect(FOG[3]).toBe(0.02);
+    });
+
+    it('takes the fog colour, density and clear colour from the map, and changes with the level', () => {
+      const fog: [number, number, number, number] = [0.5, 0.25, 0.125, 0.04];
+      const rd = createRenderer(canvas, compile({ ...ROOM, fog }));
+      expect(fogOf().at(-1)![2]).toEqual(fog);
+      expect(clear()).toEqual([0.5, 0.25, 0.125, 1]);
+      rd.level(compile(ROOM));
+      expect(fogOf().at(-1)![2]).toEqual(FOG);
+      expect(clear()).toEqual([FOG[0], FOG[1], FOG[2], 1]);
+    });
+
+    it('uploads the tint palette, white first and padded with white', () => {
+      const tint: [number, number, number] = [0.5, 0.25, 1];
+      const lvl = compile({ ...ROOM, sectors: [{ ...ROOM.sectors[0], tint }] });
+      const rd = createRenderer(canvas, lvl);
+      const pal = Array.from(palOf().at(-1)![2] as Float32Array);
+      expect(pal).toHaveLength(MAX_TINTS * 3);
+      expect(pal.slice(0, 6)).toEqual([1, 1, 1, ...tint]);
+      expect(pal.slice(6).every(v => v == 1)).toBe(true);
+      rd.level(compile(ROOM));
+      expect(Array.from(palOf().at(-1)![2] as Float32Array).every(v => v == 1)).toBe(true);
+    });
+
+    it('declares the fog and palette uniforms in the shader', () => {
+      createRenderer(canvas, compile(ROOM));
+      const frag = calls
+        .filter(c => c[0] == 'shaderSource')
+        .map(c => String(c[2]))
+        .find(s => s.includes('precision'))!;
+      expect(frag).toContain(`G[${MAX_TINTS}]`);
+      expect(frag).not.toMatch(/undefined|NaN|\[object/);
+    });
   });
 
   describe('lights', () => {

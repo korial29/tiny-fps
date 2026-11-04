@@ -14,7 +14,7 @@ export interface TinyFpsOptions {
   name: string;
   /** WebSocket URL, e.g. ws://localhost:8787/demo (the path picks the room). */
   url?: string;
-  /** Any WebSocket-like socket, e.g. localSocket('room') from 'tiny-fps/local'. */
+  /** Any WebSocket-like socket, e.g. localSocket('room') from '@korial29/tiny-fps/local'. */
   socket?: SocketLike;
 }
 

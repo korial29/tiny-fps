@@ -4,6 +4,7 @@
 // host's state and the unacked inputs are replayed on top. Other players are drawn
 // INTERP_DELAY in the past, interpolated between the two snapshots around that time.
 import { INTERP_DELAY, MAX_PLAYERS } from '../shared/constants';
+import { bar } from '../shared/level';
 import { TAU, move, norm } from '../shared/physics';
 import { onWire } from '../shared/protocol';
 import { body, fire, monsterBody } from '../shared/shoot';
@@ -30,15 +31,19 @@ export interface Predictor {
    */
   step(i: Omit<Input, 'seq' | 'view'>, now?: number): Input;
   /**
-   * The shot the last step fired, resolved with fire() against others(now) and monsters(now) of
-   * that step (a monster this predictor already shot dead, and the host has not acked yet, is not
-   * a target); undefined when it did not fire. Replays on a snapshot never fire again.
+   * The shot the last step fired, resolved with fire() against the living others(now) and
+   * monsters(now) of that step (a monster this predictor already shot dead, and the host has not
+   * acked yet, is not a target); undefined when it did not fire (a dead own player never does).
+   * Replays on a snapshot never fire again.
    */
   shot(): Shot | undefined;
   /**
    * Switches to another level (a snapshot with a new `level` or `hard`): prediction, replay and
-   * interpolation use it from now on, and snapshots of the previous level are dropped. Each
-   * snapshot also bars the level with its keys and phase (bar() in level.ts) before the replay.
+   * interpolation use it from now on, and the snapshots of the previous level are dropped; the own
+   * player waits for the next snapshot, as at the start. Each snapshot also bars the level with
+   * its keys and phase (bar() in level.ts) before the replay. A gate that opens between a
+   * snapshot and the inputs the host has not applied yet is the one thing prediction cannot know:
+   * it corrects at the next snapshot.
    */
   level(lvl: Level): void;
   /** A decoded snapshot, received at `now` (ms, performance.now()). */
@@ -103,7 +108,8 @@ const lerp = (a: PlayerState, b: PlayerState, t: number): PlayerState => ({
   pitch: a.pitch + (b.pitch - a.pitch) * t,
 });
 
-export const createPredictor = (lvl: Level): Predictor => {
+export const createPredictor = (first: Level): Predictor => {
+  let lvl = first;
   let id: number | undefined;
   let seq = 0;
   let pending: Input[] = [];
@@ -111,9 +117,12 @@ export const createPredictor = (lvl: Level): Predictor => {
   let own: PlayerState | undefined;
   let prev: PlayerState | undefined;
   let shot: Shot | undefined;
+  /** The own player has health, as of the last snapshot: a dead one neither moves nor fires. */
+  let alive = true;
   /**
-   * Monsters the own predicted shots killed, with the seq of the shot, until the host acks it: the
-   * host no longer lets a shot hit them, but the snapshots in flight still draw them.
+   * Monsters the own predicted shots killed, with the seq of the shot, until the host acks it and
+   * the snapshots drawn no longer show them: the host no longer lets a shot hit them, but the
+   * interpolated snapshots still draw them.
    */
   const killed = new Map<number, number>();
   const snaps: { t: number; s: Snapshot }[] = [];
@@ -202,11 +211,14 @@ export const createPredictor = (lvl: Level): Predictor => {
       }
       if (own) {
         prev = state(own);
-        if (move(own, input, lvl)) {
+        if (alive && move(own, input, lvl)) {
           // Without a clock, the others as of the newest snapshot.
           const t = now ?? Infinity;
-          const alive = monsters(t).filter(m => !killed.has(m.id));
-          shot = fire(lvl, own, input.seq, [...others(t).map(body), ...alive.map(monsterBody)]);
+          const mobs = monsters(t).filter(m => !killed.has(m.id));
+          // A dead player is no target, as on the host.
+          const live = snaps.at(-1)?.s.players ?? [];
+          const players = others(t).filter(p => live.find(q => q.id === p.id)?.hp);
+          shot = fire(lvl, own, input.seq, [...players.map(body), ...mobs.map(monsterBody)]);
           if (shot.hit >= MAX_PLAYERS) {
             killed.set(shot.hit, input.seq);
           }
@@ -220,19 +232,30 @@ export const createPredictor = (lvl: Level): Predictor => {
       if (snaps.length > MAX_SNAPS) {
         snaps.shift();
       }
+      bar(lvl, s.keys, s.phase);
       const me = s.players.find(p => p.id === id);
       if (!me) {
         return;
       }
+      alive = me.hp > 0;
       pending = pending.filter(i => !acked(i.seq, me.ack));
-      killed.forEach((seq, k) => acked(seq, me.ack) && killed.delete(k));
+      // An acked kill stays excluded while a kept snapshot still shows the monster (the others are
+      // drawn INTERP_DELAY late), unless this one shows it too: the host did not kill it.
+      killed.forEach((q, k) => {
+        const shows = (t: Snapshot) => t.monsters.some(m => m.id === k);
+        if (acked(q, me.ack) && (shows(s) || !snaps.some(t => shows(t.s)))) {
+          killed.delete(k);
+        }
+      });
       own = state(me);
       prev = state(own);
       pending.forEach((i, k) => {
         if (k === pending.length - 1) {
           prev = state(own!);
         }
-        move(own!, i, lvl);
+        if (alive) {
+          move(own!, i, lvl);
+        }
       });
     },
 
@@ -245,7 +268,12 @@ export const createPredictor = (lvl: Level): Predictor => {
         (a, b, t) => ({ ...b, ...mid(a, b, t) }),
       ),
 
-    level: () => {},
+    level: l => {
+      lvl = l;
+      snaps.length = 0;
+      killed.clear();
+      own = prev = shot = undefined;
+    },
 
     shot: () => shot,
 

@@ -1,16 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { EYE, FIRE_EVERY, INTERP_DELAY, MAX_PLAYERS, PLAYER_H, TICK_HZ } from '../shared/constants';
+import {
+  EYE,
+  FIRE_EVERY,
+  HEALTH,
+  INTERP_DELAY,
+  MAX_PLAYERS,
+  PLAYER_H,
+  TICK_HZ,
+} from '../shared/constants';
 import { compile, sectorAt } from '../shared/level';
 import { HALL } from '../shared/map';
 import { move, spawn } from '../shared/physics';
 import { decodeInput, decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
 import { Room } from '../shared/room';
 import { body, fire, monsterBody } from '../shared/shoot';
-import { EVENT, KEY, MONSTER } from '../shared/types';
+import { EVENT, ITEM, KEY, MONSTER, PHASE, TEX } from '../shared/types';
 import type {
   Bullet,
   Conn,
   Input,
+  MapDef,
   Monster,
   PlayerState,
   Shot,
@@ -152,6 +161,8 @@ describe('prediction against the room', () => {
         room.receive(conn, inputs.shift()!.data);
       }
       room.tick();
+      // The monsters get no kill: the reference does not die, nor respawn (that has its own test).
+      room['peers'].get(conn)!.hp = HEALTH;
       for (; seen < conn.bins.length; seen++) {
         snaps.push({ at: snapAt(k), data: conn.bins[seen] });
       }
@@ -1000,5 +1011,290 @@ describe('lag compensation of monsters through the room', () => {
     // ... while the same shot at the monster where the host had it on arrival misses.
     const bodies = [...r.arrival.map(monsterBody), body(room['peers'].get(b)!.state)];
     expect(fire(lvl, r.mine, r.sent.seq, bodies).hit).toBe(-1);
+  });
+});
+
+describe('health and progression', () => {
+  const EAST = (3 * Math.PI) / 2;
+  const trigger = { keys: KEY.FIRE, yaw: EAST, pitch: 0 };
+  const RED = 1 << ITEM.KEY_RED;
+
+  describe('a dead own player', () => {
+    const dead = () => {
+      const pred = createPredictor(lvl);
+      pred.you(0);
+      pred.snapshot(snapshot(1, snapPlayer(0, { hp: 0 })), 0);
+      return pred;
+    };
+
+    it('neither moves nor fires on a step, though its inputs are numbered and kept', () => {
+      const pred = dead();
+      const before = pred.me(1);
+      const i = pred.step({ keys: KEY.FORWARD | KEY.JUMP | KEY.FIRE, yaw: 1, pitch: 0.3 });
+      expect(i.seq).toBe(0);
+      expect(pred.shot()).toBeUndefined();
+      expect(pred.me(1)).toEqual(before);
+      expect(pred.step(fwd).seq).toBe(1);
+    });
+
+    it('is not moved by the replay of what the host has not acked, and is again once alive', () => {
+      const pred = dead();
+      for (let k = 0; k < 6; k++) {
+        pred.step(fwd);
+      }
+      // The host acks seqs 0 and 1 and says the player is dead: 2 to 5 replay as nothing.
+      pred.snapshot(snapshot(2, snapPlayer(0, { hp: 0, ack: 1 })), 40);
+      expect(pred.me(1)).toMatchObject({ z: 14, y: 1 });
+      // Alive again (respawned): the same four inputs now move it.
+      pred.snapshot(snapshot(3, snapPlayer(0, { hp: HEALTH, ack: 1 })), 80);
+      expect(pred.me(1)!.z).toBeCloseTo(14 - 0.4);
+      // And it fires and moves on a step.
+      pred.step(trigger);
+      expect(pred.shot()).toBeDefined();
+    });
+  });
+
+  it('shoots through a dead player, as the host does', () => {
+    const shotAt = (hp: number) => {
+      const pred = createPredictor(lvl);
+      pred.you(0);
+      pred.snapshot(
+        snapshot(1, snapPlayer(0, { x: 4, z: 8, yaw: EAST }), snapPlayer(1, { x: 10, z: 8, hp })),
+        1000,
+      );
+      pred.step(trigger, 1000);
+      return pred.shot()!;
+    };
+    expect(shotAt(HEALTH).hit).toBe(1);
+    expect(shotAt(0).hit).toBe(-1);
+  });
+
+  describe('a monster this predictor killed', () => {
+    const mon = (id: number): Monster => ({
+      id,
+      kind: MONSTER.WALKER,
+      x: 10,
+      y: 1,
+      z: 8,
+      yaw: 0,
+      chase: false,
+    });
+    const withMonster = (monsters: Monster[]): Snapshot => ({
+      ...snapshot(2, snapPlayer(0, { x: 4, z: 8, yaw: EAST, ack: 0 })),
+      monsters,
+    });
+    /** Fires at monster 16, is acked in a snapshot that has it or not, and fires again at 1050. */
+    const again = (after: Monster[]) => {
+      const pred = createPredictor(lvl);
+      pred.you(0);
+      const before = {
+        ...snapshot(0, snapPlayer(0, { x: 4, z: 8, yaw: EAST })),
+        monsters: [mon(16)],
+      };
+      pred.snapshot(before, 900);
+      pred.snapshot({ ...before, tick: 1 }, 1000);
+      pred.step(trigger, 1000);
+      expect(pred.shot()!.hit).toBe(16);
+      pred.snapshot(withMonster(after), 1040);
+      for (let k = 0; k < FIRE_EVERY - 1; k++) {
+        pred.step({ ...trigger, keys: 0 }, 1050);
+      }
+      // 1050 - INTERP_DELAY is between the snapshots before the death: it is still drawn.
+      expect(pred.monsters(1050).map(m => m.id)).toEqual([16]);
+      pred.step(trigger, 1050);
+      return pred.shot()!;
+    };
+
+    it('stays out of the targets after the host acked the kill, while it is still drawn', () => {
+      expect(again([]).hit).toBe(-1);
+    });
+
+    it('is a target again when the host acked the shot and the monster lives', () => {
+      expect(again([mon(16)]).hit).toBe(16);
+    });
+  });
+
+  describe('the level', () => {
+    const room = (x0: number, z0: number, ...more: [number, number][][]): [number, number][] => [
+      [x0, z0],
+      [x0 + 10, z0],
+      [x0 + 10, z0 + 10],
+      [x0, z0 + 10],
+      ...more.flat(),
+    ];
+    const sector = (pts: [number, number][]) => ({
+      pts,
+      floor: 0,
+      ceil: 4,
+      ft: TEX.TILE,
+      wt: TEX.BRICK,
+      ct: TEX.STONE,
+    });
+    /** A box whose north wall is at z = 1: moving -z from (5, 3) stops at 1.4, in HALL at 0.4. */
+    const box = compile({ sectors: [sector(room(0, 1))], spawns: [[5, 3, 0]] });
+
+    it('switches to the next level: its walls for the replay, nothing of the last one drawn', () => {
+      const pred = createPredictor(lvl);
+      pred.you(0);
+      pred.snapshot(
+        snapshot(1, snapPlayer(0, { x: 5, z: 3 }), snapPlayer(1, { x: 8, z: 3 })),
+        1000,
+      );
+      pred.snapshot(
+        snapshot(2, snapPlayer(0, { x: 5, z: 3 }), snapPlayer(1, { x: 8, z: 3 })),
+        1040,
+      );
+      expect(pred.others(1100)).toHaveLength(1);
+      for (let k = 0; k < 3; k++) {
+        pred.step(fwd);
+      }
+      pred.level(box);
+      // Waiting for the first snapshot of the new level, as at the start.
+      expect(pred.me(1)).toBeUndefined();
+      expect(pred.others(1100)).toEqual([]);
+      expect(pred.monsters(1100)).toEqual([]);
+      expect(pred.bullets(1100)).toEqual([]);
+      // Inputs go on being numbered, and kept for the replay.
+      for (let k = 0; k < 40; k++) {
+        pred.step(fwd);
+      }
+      pred.snapshot(snapshot(1, snapPlayer(0, { x: 5, y: 0, z: 3, ack: 2 })), 2000);
+      expect(pred.me(1)!.z).toBeCloseTo(1 + 0.4);
+      expect(pred.others(2100)).toEqual([]);
+    });
+
+    it('keeps the old level when it was not switched: the wall of HALL is at 0.4', () => {
+      const pred = createPredictor(lvl);
+      pred.you(0);
+      pred.snapshot(snapshot(1, snapPlayer(0, { x: 5, z: 3 })), 1000);
+      for (let k = 0; k < 40; k++) {
+        pred.step(fwd);
+      }
+      expect(pred.me(1)!.z).toBeCloseTo(0.4);
+    });
+
+    const twin = (): MapDef => ({
+      sectors: [sector(room(0, 0)), sector(room(10, 0))],
+      spawns: [[5, 5, 0]],
+      gates: [{ sector: 1, key: ITEM.KEY_RED }],
+    });
+
+    it('bars it with the keys and the phase of each snapshot before the replay', () => {
+      const gate = compile(twin());
+      const pred = createPredictor(gate);
+      pred.you(0);
+      const at = (tick: number, keys: number) => ({
+        ...snapshot(tick, snapPlayer(0, { x: 5, y: 0, z: 5, yaw: EAST })),
+        keys,
+      });
+      pred.snapshot(at(1, 0), 0);
+      for (let k = 0; k < 60; k++) {
+        pred.step({ keys: KEY.FORWARD, yaw: EAST, pitch: 0 });
+      }
+      // Walking east into the shut gate.
+      expect(pred.me(1)!.x).toBeCloseTo(10 - 0.4, 3);
+      // The same unacked inputs replayed under the key walk through it.
+      pred.snapshot(at(2, RED), 40);
+      expect(pred.me(1)!.x).toBeCloseTo(11, 3);
+      // And shut again if a snapshot says the team no longer holds it (a new level, a lost key).
+      pred.snapshot(at(3, 0), 80);
+      expect(pred.me(1)!.x).toBeCloseTo(10 - 0.4, 3);
+      expect(gate.barred).toEqual(new Set([1]));
+    });
+
+    it('opens the exit on RETURN: the map decides which sector it is', () => {
+      const exit = compile({ ...twin(), gates: undefined, exit: 0 });
+      const pred = createPredictor(exit);
+      pred.you(0);
+      pred.snapshot({ ...snapshot(1, snapPlayer(0, { x: 15, y: 0, z: 5 })), phase: PHASE.HUNT }, 0);
+      for (let k = 0; k < 60; k++) {
+        pred.step({ keys: KEY.FORWARD, yaw: Math.PI / 2, pitch: 0 });
+      }
+      expect(pred.me(1)!.x).toBeCloseTo(10 + 0.4, 3);
+      pred.snapshot(
+        { ...snapshot(2, snapPlayer(0, { x: 15, y: 0, z: 5 })), phase: PHASE.RETURN },
+        40,
+      );
+      expect(pred.me(1)!.x).toBeCloseTo(9, 3);
+    });
+
+    /**
+     * A run through a Room on `twin()` with the key `key` away from the start and a door at x = 10:
+     * 120 steps east, inputs and snapshots `lag` steps late. Returns the biggest jump the player
+     * made when a snapshot arrived (the correction), and how far the host and the player ended
+     * apart.
+     */
+    const run = (key: [number, number], lag: number, hook?: (k: number, room: Room) => void) => {
+      const map: MapDef = { ...twin(), items: [[...key, ITEM.KEY_RED]] };
+      const host = new Room({}, 1, [map]);
+      const conn: Conn & { bins: ArrayBuffer[] } = {
+        bins: [],
+        send: d => typeof d !== 'string' && conn.bins.push(d),
+      };
+      host.connect(conn);
+      host.receive(conn, JSON.stringify({ t: 'join', name: 'me' }));
+      const pred = createPredictor(compile(map));
+      pred.you(0);
+      const [inbox, outbox]: { at: number; data: ArrayBuffer }[][] = [[], []];
+      let [seen, worst] = [0, 0];
+      const hp: number[] = [];
+      for (let k = 0; k < 140; k++) {
+        if (k < 120) {
+          const i = pred.step({ keys: KEY.FORWARD, yaw: EAST, pitch: 0 }, k * STEP);
+          inbox.push({ at: k + lag, data: encodeInput(i) });
+        }
+        while (inbox.length && inbox[0].at <= k) {
+          host.receive(conn, inbox.shift()!.data);
+        }
+        hook?.(k, host);
+        host.tick();
+        for (; seen < conn.bins.length; seen++) {
+          outbox.push({ at: k + lag, data: conn.bins[seen] });
+        }
+        while (outbox.length && outbox[0].at <= k) {
+          const snap = decodeSnapshot(outbox.shift()!.data)!;
+          const before = pred.me(1);
+          pred.snapshot(snap, k * STEP);
+          const after = pred.me(1)!;
+          hp.push(snap.players[0].hp);
+          worst = Math.max(worst, before ? Math.hypot(after.x - before.x, after.z - before.z) : 0);
+        }
+      }
+      const last = decodeSnapshot(conn.bins.at(-1)!)!.players[0];
+      const me = pred.me(1)!;
+      return { worst, end: Math.hypot(last.x - me.x, last.z - me.z), x: last.x, hp };
+    };
+
+    it('predicts a gate that opens on a pickup far from it exactly', () => {
+      // The key is 4 m before the door: the snapshot that tells of it is in long before it.
+      const r = run([5.5, 4.8], 6);
+      expect(r.x).toBeGreaterThan(12);
+      expect(r.worst).toBe(0);
+      expect(r.end).toBe(0);
+    });
+
+    it('corrects once, by at most the distance run in a round trip, for a key taken at the door', () => {
+      // 1 m before the door, and a round trip of 20 steps: the player runs into the shut gate
+      // for a few steps while the host lets it through.
+      const r = run([9.1, 4.8], 10);
+      expect(r.x).toBeGreaterThan(12);
+      expect(r.worst).toBeGreaterThan(0.1);
+      expect(r.worst).toBeLessThanOrEqual(2);
+      expect(r.end).toBe(0);
+    });
+
+    it('stops where the host stopped a player that died on the way, replaying nothing', () => {
+      const r = run([5.5, 4.8], 6, (k, host) => {
+        const [me] = host['peers'].values();
+        if (k === 30) {
+          [me!.hp, me!.hurt] = [0, host['ticks']];
+        }
+      });
+      expect(r.hp).toContain(0);
+      // 24 steps from 5 m, not the 7 m to the far side of the door.
+      expect(r.x).toBeGreaterThan(6);
+      expect(r.x).toBeLessThan(8.5);
+      expect(r.end).toBe(0);
+    });
   });
 });

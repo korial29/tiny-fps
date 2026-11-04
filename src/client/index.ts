@@ -4,12 +4,11 @@ import { LEVELS } from '../shared/levels';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import type { GameEvent, PlayerInfo, Shot, SocketLike } from '../shared/types';
-import { createAudio, createClock, hear, savedMute, toggleMute } from './audio';
-import { createDelay, createEffects } from './effects';
+import { createAudio, createClock, createHeart, hear, savedMute, toggleMute } from './audio';
+import { GAIN, HURT, createDelay, createEffects } from './effects';
 import { HUD_CSS, createHud } from './hud';
 import { createInput } from './input';
 import { createPredictor } from './predict';
-import { css } from './items';
 import { gather } from './lights';
 import { createProgress, facing } from './progress';
 import { createRenderer } from './render';
@@ -50,18 +49,15 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   root.innerHTML =
     `<style>:host{display:block;width:100%;height:100%}div{position:relative;width:100%;height:100%;overflow:hidden;background:#000;font:600 14px system-ui,sans-serif;color:#fff;text-shadow:0 1px 2px #000}` +
     `canvas{display:block;width:100%;height:100%;cursor:pointer}` +
-    `i,p,b,em,s{position:absolute;pointer-events:none;user-select:none;margin:0}` +
-    `s{inset:0;background:#e00;opacity:0}` +
+    `i,p,b{position:absolute;pointer-events:none;user-select:none;margin:0}` +
     HUD_CSS +
     `i{left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #0008}` +
-    `p{top:8px;left:12px}em{left:50%;top:60%;transform:translateX(-50%);font-size:18px;font-style:normal}` +
+    `p{top:8px;left:12px}` +
     `b{transform:translate(-50%,-100%);font-size:12px;white-space:nowrap}[hidden]{display:none}</style>` +
-    `<div><canvas></canvas><s></s><s></s><i></i><p></p><em></em></div>`;
+    `<div><canvas></canvas><i></i><p></p></div>`;
   container.append(wrap);
   const canvas = root.querySelector('canvas')!;
   const count = root.querySelector('p')!;
-  const hint = root.querySelector('em')!;
-  const [tint, glint] = root.querySelectorAll('s');
   const screen = root.querySelector('div')!;
   const hud = createHud(screen);
 
@@ -74,6 +70,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   audio.mute(savedMute());
   hud.mute(audio.muted);
   const tick = createClock(audio);
+  const beat = createHeart(audio);
   const ctl = createInput(canvas, () => hud.mute(toggleMute(audio)));
   // The click that takes the pointer lock is the gesture that lets the sound start.
   canvas.addEventListener('click', () => audio.unlock());
@@ -86,11 +83,12 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   try {
     rd = createRenderer(canvas, first);
   } catch {
-    // No WebGL2: stay connected, say so in the hint.
+    // No WebGL2: stay connected, say so on the title screen.
   }
   const progress = createProgress({
     lvl: first,
     you: () => you,
+    roster: () => roster,
     predictor,
     rd,
     delays: [shots, events],
@@ -104,7 +102,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   /** Tags above the others, by player id. */
   const tags = new Map<number, HTMLElement>();
   let open = false;
-  /** Shown instead of the hint: a closed connection, a full room, no WebGL. */
+  /** Shown on the title screen instead of "Click to play": a closed connection, a full room, no WebGL. */
   let msg = rd ? '' : 'WebGL2 is not available';
   /** The own player is known, and the look angles start from where the host spawned it. */
   let ready = false;
@@ -163,7 +161,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     } else if (m?.t == 'full') {
       msg = 'Room is full';
     } else if (m?.t == 'end') {
-      progress.end(m.ticks, m.hard);
+      progress.end(m.ticks, m.hard, m.stats);
     }
   };
 
@@ -280,18 +278,11 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       }
     }
 
-    for (const [el, a] of [
-      [tint, fx.hurt * 2],
-      [glint, fx.gain * 0.8],
-    ] as const) {
-      el.style.opacity = String(a);
-    }
-    glint.style.background = css(fx.gainC);
-    const text =
-      msg || (!open ? 'Connecting…' : !ready ? 'Joining…' : ctl.locked() ? '' : 'Click to play');
-    if (hint.textContent != text) {
-      hint.textContent = text;
-    }
+    hud.fade(fx.hurt / HURT, beat(progress.hp, now), fx.gain / GAIN, fx.gainC);
+    hud.title(
+      msg || (!open ? 'Connecting…' : !ready ? 'Joining…' : ctl.locked() ? '' : 'Click to play'),
+      progress.name,
+    );
   };
   raf = requestAnimationFrame(frame);
 

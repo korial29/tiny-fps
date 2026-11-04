@@ -1,19 +1,26 @@
 // Where the run stands, read from the snapshots: the level, health, pickups, keys and phase. It
 // switches levels and drives the HUD and the effects. No DOM of its own, unit-tested.
-import { TICK_HZ } from '../shared/constants';
+import { PLAYER_RESPAWN, TICK_HZ } from '../shared/constants';
 import { compile } from '../shared/level';
 import { LEVELS } from '../shared/levels';
 import { PHASE } from '../shared/types';
-import type { Item, Level, MapDef, Snapshot } from '../shared/types';
+import type { Item, Level, MapDef, PlayerInfo, Snapshot } from '../shared/types';
 import type { Audio } from './audio';
 import type { Effects } from './effects';
 import { SAY } from './hud';
-import type { Hud } from './hud';
+import type { Hud, Score } from './hud';
 import { ITEM_COLOR } from './items';
 import { SOUND } from './sfx';
 
 /** An item that vanishes this close (metres, on the floor plane) to the own player was theirs. */
 const NEAR = 1.5;
+
+/** The levels' names, as the title screen shows them. */
+const NAMES = ['Warm-up', 'Foundry', 'Cistern', 'The loop', 'Citadel'];
+
+/** "Level 2: Foundry", and "Hard mode" after it on the second run on. */
+const label = (n: number, hard: boolean) =>
+  `Level ${n + 1}${NAMES[n] ? `: ${NAMES[n]}` : ''}${hard ? ' (hard mode)' : ''}`;
 
 /** Ticks as m:ss.s, the tenth cut, not rounded. */
 export const clock = (ticks: number) => {
@@ -28,14 +35,18 @@ export interface Progress {
   readonly items: Item[];
   /** The own player has no health left. */
   readonly dead: boolean;
+  /** The own health: 0 when dead or unknown. */
+  readonly hp: number;
+  /** The level's number, name and mode, for the title screen. */
+  readonly name: string;
   /** The level is in its RETURN phase: the team runs back to the exit. */
   readonly returning: boolean;
   /** False for a player the latest snapshot shows without health: not drawn. */
   alive(id: number): boolean;
   /** A snapshot, before the predictor sees it: a new level or `hard` switches everything. */
   snapshot(s: Snapshot): void;
-  /** The run is won: the end screen with its time. */
-  end(ticks: number, hard: boolean): void;
+  /** The run is won: the end screen with its time and the players' kills and deaths. */
+  end(ticks: number, hard: boolean, stats: { id: number; kills: number; deaths: number }[]): void;
 }
 
 export interface Deps {
@@ -43,6 +54,8 @@ export interface Deps {
   lvl: Level;
   /** The own player id, -1 while unknown. */
   you(): number;
+  /** Everyone in the room. */
+  roster(): PlayerInfo[];
   predictor: { level(lvl: Level): void };
   /** Absent without WebGL. */
   rd?: { level(lvl: Level): void };
@@ -63,6 +76,7 @@ export const facing = ({ spawns }: MapDef, x: number, z: number): number =>
 export const createProgress = ({
   lvl,
   you,
+  roster,
   predictor,
   rd,
   delays,
@@ -73,11 +87,15 @@ export const createProgress = ({
   /** Level and `hard` of the last snapshot, as one number; -1 before the first. */
   let at = -1;
   let phase = -1;
+  /** Host tick the own player died at, as the first snapshot saw it. */
+  let died = 0;
   let hp = new Map<number, number>();
   const p: { -readonly [K in keyof Progress]: Progress[K] } = {
     lvl,
     items: [],
     dead: false,
+    hp: 0,
+    name: label(0, false),
     returning: false,
     alive: id => hp.get(id) !== 0,
 
@@ -98,6 +116,7 @@ export const createProgress = ({
         rd?.level(p.lvl);
         fx.reset(p.lvl);
         delays.forEach(d => d.clear());
+        p.name = label(s.level, s.hard);
         hud.say(SAY.TITLE, `Level ${s.level + 1}${s.hard ? '\nHard mode' : ''}`);
       }
       const me = s.players.find(q => q.id == id);
@@ -122,17 +141,31 @@ export const createProgress = ({
         p.returning = phase == PHASE.RETURN;
         hud.say(SAY.NOTE, phase == PHASE.RETURN ? 'Back to the start!' : 'Find the exit');
       }
+      if (me?.hp === 0 && !p.dead) {
+        died = s.tick;
+      }
       p.dead = me?.hp === 0;
-      hud.hp(me?.hp ?? 0);
+      p.hp = me?.hp ?? 0;
+      hud.hp(p.hp);
       hud.keys(s.keys);
-      hud.dead(p.dead);
+      // The tick is a u16. The respawn comes PLAYER_RESPAWN ticks after the death.
+      const left = PLAYER_RESPAWN - ((s.tick - died) & 0xffff);
+      hud.dead(p.dead ? Math.max(1, Math.ceil(left / TICK_HZ)) : 0);
     },
 
-    end: (ticks, hard) =>
-      hud.say(
-        SAY.END,
-        `Run complete\n${clock(ticks)}${hard ? ' (hard)' : ''}\nNext run: Hard mode`,
-      ),
+    end(ticks, hard, stats) {
+      const names = new Map(roster().map(q => [q.id, q]));
+      const rows = stats
+        .filter(r => names.has(r.id))
+        .sort((a, b) => b.kills - a.kills || a.deaths - b.deaths || a.id - b.id)
+        .map(({ id, kills, deaths }): Score => [
+          names.get(id)!.name,
+          names.get(id)!.color,
+          kills,
+          deaths,
+        ]);
+      hud.end(`Run complete\n${clock(ticks)}${hard ? ' (hard)' : ''}`, rows, 'Next run: Hard mode');
+    },
   };
   return p;
 };

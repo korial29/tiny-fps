@@ -12,7 +12,7 @@ Budgets: client 30 KB gzip, local host 12 KB.
 
 ## Steps
 
-All seven steps are done (PRs #7 to #11, #13 and the HUD PR): the game is at parity. Next come graphics and level design.
+All seven steps are done (PRs #7 to #11, #13 and #14): the game is at parity. Next come graphics and level design.
 
 One PR per step, each playable on its own.
 

@@ -3,12 +3,12 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import { RULES } from '../shared/constants';
+import { HEALTH, RULES } from '../shared/constants';
 import { decodeSnapshot, encodeInput } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import { Room } from '../shared/room';
 import type { Rules } from '../shared/types';
-import { KEY } from '../shared/types';
+import { KEY, PHASE } from '../shared/types';
 import { serve } from './index';
 
 const until = async (check: () => boolean, ms = 2000): Promise<void> => {
@@ -72,6 +72,14 @@ describe('serve', () => {
 
     await until(() => a.binaries.length > 0 && b.binaries.length > 0);
     expect(decodeSnapshot(a.binaries.at(-1)!)?.players).toHaveLength(2);
+    // The progression state crosses the socket too: health, level, phase, keys.
+    expect(decodeSnapshot(a.binaries.at(-1)!)).toMatchObject({
+      level: 0,
+      hard: false,
+      phase: PHASE.HUNT,
+      keys: 0,
+      players: [{ hp: HEALTH }, { hp: HEALTH }],
+    });
 
     // A binary input travels through the Buffer → ArrayBuffer copy, moves the player and is
     // acked. The snapshot comes from the real timer, hence the loose bounds.

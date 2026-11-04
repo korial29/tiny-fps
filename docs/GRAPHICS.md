@@ -1,6 +1,6 @@
 # Graphics
 
-Now that the game is at parity (see [PARITY.md](PARITY.md)), the graphics come next, then the level design. Budgets are unchanged: client 30 KB gzip (21.2 KB at the start of this phase), local 12 KB. Everything is still generated in code, and the GPL clone's code stays off limits.
+Now that the game is at parity (see [PARITY.md](PARITY.md)), the graphics come next, then the level design. Budgets are unchanged: client 30 KB gzip (21.2 KB at the start of this phase, 24.6 KB after G3), local 12 KB. Everything is still generated in code, and the GPL clone's code stays off limits.
 
 ## Steps
 

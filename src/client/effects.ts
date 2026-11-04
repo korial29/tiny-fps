@@ -1,6 +1,6 @@
 // Camera and gun feel, fed each frame: head bob, roll, shake, gun kick, barrel spin, muzzle flash
-// and impact sparks; and what the host reports of the monsters: gibs, explosions, blows, the red
-// hurt tint. No DOM, times in seconds, unit-tested.
+// and impact sparks; and what the host reports of the monsters: gibs, explosions, smoke, blows, the
+// red hurt tint; and the dust motes around the own eye. No DOM, times in seconds, unit-tested.
 import { EYE, INTERP_DELAY, RANGE } from '../shared/constants';
 import { blocked, sectorAt } from '../shared/level';
 import { TAU } from '../shared/physics';
@@ -41,6 +41,18 @@ export interface Blast {
   t: number;
 }
 
+/** A puff of smoke: it rises and drifts, swells, then shrinks away over `life` seconds. */
+export interface Puff {
+  p: Vec3;
+  v: Vec3;
+  /** Half the side of its cube at its biggest, metres. */
+  r: number;
+  yaw: number;
+  /** Age and lifetime, seconds. */
+  t: number;
+  life: number;
+}
+
 /** What the client keeps of each monster it has drawn. */
 export interface Walker {
   x: number;
@@ -70,6 +82,9 @@ export interface Effects {
   sparks: Spark[];
   gibs: Gib[];
   blasts: Blast[];
+  smoke: Puff[];
+  /** Dust motes, x y z each, in a box around the own eye; `lit` says which the flashlight shows. */
+  motes: Float32Array;
   /** Seconds of the red hurt tint left. */
   hurt: number;
   /** Seconds left of the fade of a picked-up item's colour, and that colour (0 to 1 each). */
@@ -110,6 +125,13 @@ const LIFE = 0.3;
 const MAX_SPARKS = 96;
 const MAX_GIBS = 64;
 const MAX_BLASTS = 12;
+const MAX_SMOKE = 40;
+/** Motes, and the half sides of the box they live in: they wrap round it as the eye moves. */
+export const MOTES = 128;
+const BOX = [5, 1.6, 5];
+/** The flashlight as the motes see it: a cone of cos(25°), this long, metres. */
+const CONE = Math.cos(0.436);
+const REACH = 6;
 export const BLAST = 0.3;
 /** Seconds the hit vignette and the pickup fade take to go out. */
 export const HURT = 0.45;
@@ -130,6 +152,29 @@ const SPIN_MAX = 30;
 export const glow = ({ r, t }: Blast) => {
   const u = t / BLAST;
   return u < 1 ? r * Math.sqrt(u) * (1 - u * u * u) : 0;
+};
+
+/** Half the side of a puff of smoke: it starts at a third, swells for half its life, then shrinks to nothing. */
+export const puff = ({ r, t, life }: Puff) => {
+  const u = t / life;
+  return r * (0.3 + 0.7 * Math.min(1, u * 2)) * Math.min(1, (1 - u) / 0.3);
+};
+
+/**
+ * The motes the own flashlight shows, from the eye along the unit view direction f: x, y, z and a
+ * brightness in (0, 1] each, fuller near the axis and the eye. None while the own player is dead.
+ */
+export const lit = (fx: Effects, eye: Vec3, f: Vec3) => {
+  const out: number[] = [];
+  for (let i = 0; i < fx.motes.length && !fx.dead; i += 3) {
+    const d = [0, 1, 2].map(a => fx.motes[i + a] - eye[a]);
+    const r = Math.hypot(...d);
+    const c = (d[0] * f[0] + d[1] * f[1] + d[2] * f[2]) / r;
+    if (r < REACH && c > CONE) {
+      out.push(...d.map((x, a) => eye[a] + x), ((c - CONE) / (1 - CONE)) * (1 - r / REACH));
+    }
+  }
+  return out;
 };
 
 /**
@@ -164,6 +209,10 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
   let shake = 0;
   let lean = 0;
   let rate = 0;
+  let clock = 0;
+  /** The motes are scattered at the next update: first one, or a new level. */
+  let fresh = true;
+  const drift = new Float32Array(MOTES * 3);
   let last: PlayerState | undefined;
   const r2 = () => rand() * 2 - 1;
   /** Previous position of each bullet, to find its heading. */
@@ -179,6 +228,19 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
       const k = Math.sqrt(1 - up * up) * speed * (0.5 + rand() * 0.5);
       spark(p, [Math.cos(a) * k, up * speed, Math.sin(a) * k], LIFE * (0.6 + rand() * 0.4), c);
     }
+  };
+  const puffs = (p: Vec3, n: number, r: number) => {
+    for (let i = 0; i < n; i++) {
+      fx.smoke.push({
+        p: p.map(x => x + r2() * 0.3) as Vec3,
+        v: [r2() * 0.5, 0.5 + rand() * 0.7, r2() * 0.5],
+        r: r * (0.7 + rand() * 0.6),
+        yaw: rand() * TAU,
+        t: 0,
+        life: 1.5 + rand(),
+      });
+    }
+    fx.smoke.splice(0, fx.smoke.length - MAX_SMOKE);
   };
   const blast = (p: Vec3, r: number) => {
     fx.blasts.push({ p, r, t: 0 });
@@ -197,6 +259,8 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
     sparks: [],
     gibs: [],
     blasts: [],
+    smoke: [],
+    motes: new Float32Array(MOTES * 3),
     hurt: 0,
     gain: 0,
     gainC: [1, 1, 1],
@@ -265,6 +329,25 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
         }
       }
       fx.gibs = fx.gibs.filter(g => g.life > 0);
+      for (const { p, v } of fx.smoke) {
+        p.forEach((x, i) => (p[i] = x + v[i] * dt));
+        p[1] = Math.min(p[1], lvl?.map.sectors[sectorAt(lvl, p[0], p[2])]?.ceil ?? Infinity);
+      }
+      for (const s of fx.smoke) {
+        s.t += dt;
+      }
+      fx.smoke = fx.smoke.filter(s => s.t < s.life);
+      if (me) {
+        clock += dt;
+        fx.motes.forEach((m, i) => {
+          const [a, h] = [i % 3, BOX[i % 3]];
+          const o = a == 1 ? me.y + EYE : a ? me.z : me.x;
+          drift[i] = fresh ? r2() * 0.1 : drift[i];
+          const x = fresh ? o + r2() * h : m + (drift[i] + Math.sin(clock * 0.8 + i) * 0.05) * dt;
+          fx.motes[i] = o + ((((x - o + h) % (2 * h)) + 2 * h) % (2 * h)) - h;
+        });
+        fresh = false;
+      }
     },
 
     hit() {
@@ -280,6 +363,8 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
       fx.sparks = [];
       fx.gibs = [];
       fx.blasts = [];
+      fx.smoke = [];
+      fresh = true;
       fx.flashes.clear();
       fx.swings.clear();
       fx.herd.clear();
@@ -355,9 +440,11 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
         fx.gibs.splice(0, fx.gibs.length - MAX_GIBS);
         blast(p, 0.6);
         burst(p, 14, 5);
+        puffs(p, 6 + Math.floor(rand() * 3), 0.3);
       } else if (type == EVENT.BOOM) {
         blast(p, 0.25);
         burst(p, 8, 3);
+        puffs(p, 3, 0.15);
       } else if (type == EVENT.HURT) {
         // Sparks at the viewer's own eye would burst inside the camera: its health drop tints.
         if (id != you) {

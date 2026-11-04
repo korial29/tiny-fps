@@ -35,10 +35,11 @@ export const createHud = (screen: HTMLElement): Hud => {
   screen.insertAdjacentHTML(
     'beforeend',
     `<ul>${'<li></li>'.repeat(HEALTH)}</ul><ol>${'<li hidden></li>'.repeat(3)}</ol>` +
-      `<h1 hidden></h1><h2 hidden></h2><h3 hidden></h3><h4 hidden>Respawning…</h4>`,
+      `<h1 hidden></h1><h2 hidden></h2><h4 hidden>Respawning…</h4><h3 hidden></h3>`,
   );
   const all = <T extends HTMLElement>(sel: string) => [...screen.querySelectorAll<T>(sel)];
-  const [pips, marks, texts] = [all('ul li'), all('ol li'), all('h1,h2,h3')];
+  const [pips, marks] = [all('ul li'), all('ol li')];
+  const texts = ['h1', 'h2', 'h3'].map(t => screen.querySelector<HTMLElement>(t)!);
   const respawn = screen.querySelector('h4')!;
   marks.forEach((m, i) => (m.style.background = css(ITEM_COLOR[i + 1])));
   const left = SHOW.map(() => 0);

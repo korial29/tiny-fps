@@ -1,5 +1,131 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>tiny-fps</title></head>
-<body><div id="game"></div><script type="module" src="./main.ts"></script></body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tiny-fps</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0e151c;
+        --fg: #e6edf3;
+        --muted: #8b98a5;
+        --field: #18222c;
+        --line: #2c3a47;
+        --accent: #e8590c;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 24px 16px;
+        display: grid;
+        gap: 16px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 22px;
+      }
+      p {
+        margin: 0;
+        color: var(--muted);
+      }
+      form {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: end;
+      }
+      label {
+        display: grid;
+        gap: 4px;
+        font-size: 14px;
+        color: var(--muted);
+        flex: 1 1 200px;
+      }
+      input,
+      select,
+      button {
+        font: inherit;
+        min-height: 40px;
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--field);
+        color: var(--fg);
+        min-width: 0;
+      }
+      button {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+        font-weight: 600;
+        padding: 6px 20px;
+        cursor: pointer;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      /* Playing: the game takes the whole window, the status and Leave float over it. */
+      #game {
+        position: fixed;
+        inset: 0;
+      }
+      #bar {
+        position: fixed;
+        top: 8px;
+        right: 12px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        text-shadow: 0 1px 2px #000;
+      }
+      #bar button {
+        min-height: 32px;
+        padding: 2px 14px;
+        background: #0008;
+        border-color: #fff4;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="menu">
+      <h1>tiny-fps</h1>
+      <p>
+        Click the game to look around with the mouse, WASD (ZQSD on AZERTY) to move, Space to jump,
+        Esc to get the mouse back. Open this page in another tab to play together.
+      </p>
+      <form id="form">
+        <label>Name <input name="name" maxlength="16" required autocomplete="nickname" /></label>
+        <label
+          >Mode
+          <select name="mode">
+            <option value="local">Local (tabs of this browser)</option>
+            <option value="server">Server</option>
+          </select>
+        </label>
+        <label id="url" hidden
+          >Server URL <input name="url" type="url" value="ws://localhost:8787/demo"
+        /></label>
+        <button>Join</button>
+      </form>
+    </main>
+    <div id="game" hidden></div>
+    <div id="bar" hidden>
+      <span id="status"></span>
+      <button id="leave" type="button">Leave</button>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
 </html>

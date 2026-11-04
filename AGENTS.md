@@ -44,16 +44,16 @@ npm run size        # gzip budgets
 - **The host is authoritative**: the Node server or the local host tab.
 - **Inputs, not positions**: the client sends one `Input` per step (8 bytes, 60 Hz): held keys, yaw, pitch, a u16 `seq`. The host applies each input on arrival with `move()` and acks the last seq per player in the snapshot. A bank of `INPUT_BURST` inputs per player stops speed hacks.
 - **The client predicts** its own player: it applies its inputs at once, and on each snapshot resets to the host state and replays the unacked inputs. Other players are drawn `INTERP_DELAY` (100 ms) in the past, interpolated between snapshots.
-- **Snapshots** at 30 Hz (`SNAP_EVERY` 2 of `TICK_HZ` 60), 16 bytes per player.
+- **Snapshots** at 30 Hz (`SNAP_EVERY` 2 of `TICK_HZ` 60), 24 bytes per player.
 - **`src/shared` never touches the DOM or Node APIs.**
-- Coordinates: metres, y up, yaw 0 looks toward -z, `forward(yaw) = (-sin yaw, -cos yaw)` on x, z. Maps stay inside [0, 127] m (u16 fixed point, `SCALE` 512).
+- Coordinates: metres, y up, yaw 0 looks toward -z, `forward(yaw) = (-sin yaw, -cos yaw)` on x, z.
 - Keys are read by `KeyboardEvent.code`: WASD on QWERTY is ZQSD on AZERTY with no extra code.
 - `erasableSyntaxOnly` is on: no enums, no parameter properties, no namespaces.
 
 ## Tests
 
 - Vitest. A fix comes with a test that fails without it.
-- Prediction must be checked against the room: the same inputs through the room and through the predictor end at the same place (within the wire's fixed point).
+- Prediction must be checked against the room: the same inputs through the room and through the predictor end at exactly the same place (state is float32 on both sides).
 - Visual work: render the built client with a fake socket in headless Chromium, look at the screenshot, then report.
 
 ## Git, PRs and releases

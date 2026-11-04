@@ -162,7 +162,7 @@ describe('move: walls', () => {
   it('stops against a wall and slides along it', () => {
     const p = at(8, 8);
     run(p, FORWARD, 200, WEST);
-    expect([p.x, p.z]).toEqual([PLAYER_R, 8]);
+    expect([p.x, p.z]).toEqual([Math.fround(PLAYER_R), 8]);
 
     // Towards -z and +x at once: z stops at the north wall, x keeps going at the rest of the speed.
     const q = at(2, 8);
@@ -194,7 +194,7 @@ describe('move: walls', () => {
     const p = at(8, 8);
     p.x = 0;
     run(p, 0, 1);
-    expect([p.x, p.z]).toEqual([PLAYER_R, 8]);
+    expect([p.x, p.z]).toEqual([Math.fround(PLAYER_R), 8]);
   });
 
   it('is stopped by the jamb when it aims into the wall beside the doorway', () => {
@@ -280,7 +280,7 @@ describe('move: heights', () => {
     });
     // Past the stairs (z 16 to 19), on the balcony (floor 2.6).
     expect(p.z).toBeGreaterThan(20);
-    expect(p).toMatchObject({ y: 2.6, ground: true });
+    expect(p).toMatchObject({ y: Math.fround(2.6), ground: true });
 
     run(p, FORWARD, 80, NORTH);
     expect(p.z).toBeLessThan(15);
@@ -427,10 +427,10 @@ describe('move: heights', () => {
     ]) {
       const p: PlayerState = { ...at(x, z), y: y - 0.0012 };
       run(p, 0, 5);
-      expect(p.y).toBeCloseTo(y, 9);
+      expect(p.y).toBe(Math.fround(y));
       expect([p.x, p.z]).toEqual([x, z]);
       run(p, FORWARD, 20, EAST);
-      expect(p.y).toBeCloseTo(y, 9);
+      expect(p.y).toBe(Math.fround(y));
     }
   });
 });
@@ -474,6 +474,42 @@ describe('move: a long walk', () => {
   }, 30_000);
 });
 
+describe('float32 state', () => {
+  it('leaves x, y, z and vy on float32 values after every step, in the air and on the ground', () => {
+    const p = at(4, 14);
+    const f32 = (v: number) => v === Math.fround(v);
+    let air = 0;
+    for (let k = 0; k < 200; k++) {
+      // Jump now and then, wander with a yaw that is not a round number.
+      const keys = FORWARD | (k % 3 === 0 ? RIGHT : 0) | (k % 40 < 3 ? JUMP : 0);
+      move(p, { seq: k, keys, yaw: 0.37 + k * 0.021, pitch: 0 }, lvl);
+      air += +!p.ground;
+      expect([p.x, p.y, p.z, p.vy].map(f32)).toEqual([true, true, true, true]);
+    }
+    expect(air).toBeGreaterThan(10);
+  });
+
+  it('is the same state on a copy rebuilt from float32 values (what the snapshot carries)', () => {
+    const a = at(4, 14);
+    const input = (k: number): Input => ({ seq: k, keys: FORWARD | JUMP, yaw: 0.3 * k, pitch: 0 });
+    for (let k = 0; k < 50; k++) {
+      move(a, input(k), lvl);
+      const b = {
+        ...a,
+        x: new Float32Array([a.x])[0],
+        y: new Float32Array([a.y])[0],
+        z: new Float32Array([a.z])[0],
+        vy: new Float32Array([a.vy])[0],
+      };
+      expect(b).toEqual(a);
+      const [u, v] = [{ ...a }, { ...b }];
+      move(u, input(k + 1), lvl);
+      move(v, input(k + 1), lvl);
+      expect(v).toEqual(u);
+    }
+  });
+});
+
 describe('spawn', () => {
   it('stands on the floor of its sector at the point, facing its yaw, modulo the count', () => {
     const [x, z, yaw] = HALL.spawns[1];
@@ -485,7 +521,7 @@ describe('spawn', () => {
 
   it('uses the floor height whatever the sector', () => {
     const map: MapDef = { ...HALL, spawns: [[28, 22, 0]] };
-    expect(spawn(0, compile(map), 0).y).toBe(2.6);
+    expect(spawn(0, compile(map), 0).y).toBe(Math.fround(2.6));
   });
 
   it('puts every HALL spawn clear of the walls and at rest', () => {

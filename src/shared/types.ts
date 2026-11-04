@@ -60,7 +60,7 @@ export interface Sector {
    * Collinear points are allowed.
    */
   pts: [x: number, z: number][];
-  /** Heights in metres, floor ≥ 0 (the wire's fixed point starts at 0), ceil > floor. */
+  /** Heights in metres, ceil > floor. */
   floor: number;
   ceil: number;
   /** TEX ids of the floor, the walls (and steps) on its edges, and the ceiling. */

@@ -5,14 +5,16 @@
 // INTERP_DELAY in the past, interpolated between the two snapshots around that time.
 import { INTERP_DELAY } from '../shared/constants';
 import { TAU, move, norm } from '../shared/physics';
+import { onWire } from '../shared/protocol';
 import type { Input, Level, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
 
 export interface Predictor {
   /** The own player id, from the roster. Snapshots before it are only used for the others. */
   you(id: number): void;
   /**
-   * One local step: gives the input the next seq, moves the own player with it, keeps it for
-   * replay, and returns it for the caller to send. Until the own player is known (no snapshot
+   * One local step: gives the input the next seq, rounds its yaw and pitch to the wire, moves the
+   * own player with it, keeps it for replay, and returns it for the caller to send (the very
+   * values predicted with, which the host reads back). Until the own player is known (no snapshot
    * shows it yet) it only numbers and keeps the input: the first snapshot replays it.
    */
   step(i: Omit<Input, 'seq'>): Input;
@@ -76,7 +78,7 @@ export const createPredictor = (lvl: Level): Predictor => {
     },
 
     step: i => {
-      const input: Input = { ...i, seq };
+      const input = onWire({ ...i, seq });
       seq = (seq + 1) & 0xffff;
       pending.push(input);
       if (pending.length > MAX_PENDING) {

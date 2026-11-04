@@ -16,14 +16,13 @@ describe('compile', () => {
     }
   });
 
-  it('has counter-clockwise sectors, floors at 0 or above and spawns on a sector', () => {
+  it('has counter-clockwise sectors, ceilings above floors and spawns on a sector', () => {
     for (const { pts, floor, ceil } of HALL.sectors) {
       const area = pts.reduce((a, [x, z], i) => {
         const [u, v] = pts[(i + 1) % pts.length];
         return a + x * v - u * z;
       }, 0);
       expect(area).toBeGreaterThan(0);
-      expect(floor).toBeGreaterThanOrEqual(0);
       expect(ceil).toBeGreaterThan(floor);
     }
     for (const [x, z] of HALL.spawns) {

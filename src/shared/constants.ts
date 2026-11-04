@@ -29,14 +29,6 @@ export const MAX_PITCH = 1.55;
 export const STEP_H = 0.5;
 
 /**
- * Network fixed point: a coordinate travels as round(v * SCALE) in a Uint16, so 0 to
- * 65535 / SCALE = 127.99 m at 2 mm steps. Maps stay inside [0, 127] on x, y and z.
- */
-export const SCALE = 512;
-/** A vertical speed travels as round(vy * VY_SCALE) in an Int16: ±327 m/s at 1 cm/s. */
-export const VY_SCALE = 100;
-
-/**
  * Host-side speed-hack guard: each player earns one input per host tick and may bank up to
  * INPUT_BURST of them; inputs beyond the bank are dropped (and not acked).
  */

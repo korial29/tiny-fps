@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { SCALE } from './constants';
 import {
   INPUT_BYTES,
   MSG_INPUT,
@@ -10,6 +9,7 @@ import {
   decodeSnapshot,
   encodeInput,
   encodeSnapshot,
+  onWire,
   parseText,
 } from './protocol';
 import type { SnapPlayer } from './types';
@@ -67,6 +67,18 @@ describe('input frame', () => {
     );
   });
 
+  it('onWire gives exactly what the host reads back from the frame', () => {
+    let s = 7;
+    const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
+    for (let k = 0; k < 2000; k++) {
+      const i = { seq: k, keys: k & 31, yaw: (rnd() - 0.3) * 20, pitch: (rnd() - 0.5) * 8 };
+      expect(onWire(i)).toEqual(decodeInput(encodeInput(i)));
+    }
+    // Idempotent: a value already on the wire stays put.
+    const w = onWire({ seq: 1, keys: 2, yaw: 1.234567, pitch: 0.7654321 });
+    expect(onWire(w)).toEqual(w);
+  });
+
   it('rejects a wrong length or type', () => {
     const ok = encodeInput({ seq: 1, keys: 1, yaw: 1, pitch: 1 });
     expect(decodeInput(ok)).not.toBeNull();
@@ -82,11 +94,12 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 4-byte head and 16 bytes per player', () => {
+  it('has a 4-byte head and 24 bytes per player', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [player(7, { x: 1, y: 2, z: 3, vy: -1, yaw: Math.PI, pitch: 0.5, ground: true })],
     });
+    expect(SNAP_PLAYER).toBe(24);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER);
     expect(bytes(buf)).toEqual([
       MSG_SNAPSHOT,
@@ -94,9 +107,11 @@ describe('snapshot frame', () => {
       0x34,
       1,
       7,
-      ...[1, 2, 3].flatMap(v => [(v * SCALE) >> 8, (v * SCALE) & 255]),
-      0xff,
-      0x9c, // vy -1 m/s = -100
+      // Big-endian float32: 1, 2, 3 and -1.
+      ...[0x3f, 0x80, 0, 0],
+      ...[0x40, 0, 0, 0],
+      ...[0x40, 0x40, 0, 0],
+      ...[0xbf, 0x80, 0, 0],
       0x80,
       0x00, // yaw
       0x13,
@@ -107,11 +122,21 @@ describe('snapshot frame', () => {
     ]);
   });
 
-  it('round-trips several players within the fixed point', () => {
+  it('round-trips the float32 state exactly, and yaw, pitch within the wire', () => {
+    const f = Math.fround;
     const players = [
-      player(0),
-      player(3, { ground: true, vy: 0, ack: 65535, yaw: 0, pitch: 1.55 }),
-      player(255, { x: 0, y: 0, z: 127, vy: 9.99 }),
+      player(0, { x: f(12.3), y: f(0.8), z: f(31.7), vy: f(-3.21) }),
+      player(3, {
+        x: f(12.3),
+        y: f(0.8),
+        z: f(31.7),
+        ground: true,
+        vy: 0,
+        ack: 65535,
+        yaw: 0,
+        pitch: 1.55,
+      }),
+      player(255, { x: 0, y: -2.5, z: 300.125, vy: f(9.99) }),
     ];
     const back = decodeSnapshot(encodeSnapshot({ tick: 70000, players }))!;
     expect(back.tick).toBe(70000 & 0xffff);
@@ -119,23 +144,20 @@ describe('snapshot frame', () => {
     back.players.forEach((b, i) => {
       const p = players[i];
       expect([b.id, b.ground, b.ack]).toEqual([p.id, p.ground, p.ack]);
-      expect(Math.abs(b.x - p.x)).toBeLessThanOrEqual(0.5 / SCALE + 1e-12);
-      expect(Math.abs(b.y - p.y)).toBeLessThanOrEqual(0.5 / SCALE + 1e-12);
-      expect(Math.abs(b.z - p.z)).toBeLessThanOrEqual(0.5 / SCALE + 1e-12);
-      expect(Math.abs(b.vy - p.vy)).toBeLessThanOrEqual(0.005 + 1e-12);
+      // Exact, not close: the predictor resets to these values.
+      expect([b.x, b.y, b.z, b.vy]).toEqual([p.x, p.y, p.z, p.vy]);
       expect(Math.abs(b.yaw - p.yaw)).toBeLessThanOrEqual(Math.PI / 65536 + 1e-12);
       expect(Math.abs(b.pitch - p.pitch)).toBeLessThanOrEqual(0.00005 + 1e-12);
     });
   });
 
-  it('clamps out-of-range values instead of wrapping them', () => {
+  it('rounds a float64 value to the nearest float32, not further', () => {
     const [p] = decodeSnapshot(
-      encodeSnapshot({ tick: 0, players: [player(1, { x: -3, y: 500, z: 128, vy: -9999 })] }),
+      encodeSnapshot({ tick: 0, players: [player(1, { x: 1 / 3, z: -1e-3, vy: 1e9 })] }),
     )!.players;
-    expect(p.x).toBe(0);
-    expect(p.y).toBe(65535 / SCALE);
-    expect(p.z).toBe(65535 / SCALE);
-    expect(p.vy).toBe(-327.68);
+    expect(p.x).toBe(Math.fround(1 / 3));
+    expect(p.z).toBe(Math.fround(-1e-3));
+    expect(p.vy).toBe(Math.fround(1e9));
   });
 
   it('takes an empty snapshot', () => {
@@ -152,6 +174,8 @@ describe('snapshot frame', () => {
     expect(decodeSnapshot(new ArrayBuffer(SNAP_HEAD - 1))).toBeNull();
     expect(decodeSnapshot(ok.slice(0, ok.byteLength - 1))).toBeNull();
     expect(decodeSnapshot(ok.slice(0, SNAP_HEAD + SNAP_PLAYER))).toBeNull();
+    // The old 16-byte layout is not a snapshot any more.
+    expect(decodeSnapshot(ok.slice(0, SNAP_HEAD + 16 * 2))).toBeNull();
     expect(decodeSnapshot(new Uint8Array([...bytes(ok), 0]).buffer)).toBeNull();
     const bad = new Uint8Array(ok.slice(0));
     bad[0] = MSG_INPUT;

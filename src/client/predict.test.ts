@@ -3,7 +3,7 @@ import { INTERP_DELAY, PLAYER_H, TICK_HZ } from '../shared/constants';
 import { compile, sectorAt } from '../shared/level';
 import { HALL } from '../shared/map';
 import { move, spawn } from '../shared/physics';
-import { decodeSnapshot, encodeInput } from '../shared/protocol';
+import { decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
 import { Room } from '../shared/room';
 import { KEY } from '../shared/types';
 import type { Conn, Input, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
@@ -52,8 +52,8 @@ describe('prediction against the room', () => {
     { to: [30, 15], max: 100, jump: true },
     { to: [22, 14], max: 90 },
   ];
-  const script = (): Omit<Input, 'seq'>[] => {
-    let s = 12345;
+  const script = (seed = 12345): Omit<Input, 'seq'>[] => {
+    let s = seed;
     const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
     const out: Omit<Input, 'seq'>[] = [];
     const sim = spawn(0, lvl, 0);
@@ -79,6 +79,14 @@ describe('prediction against the room', () => {
     return out;
   };
   const SCRIPT = script();
+  /** Seeds of the route noise for the sweep: different wobbles hit different thresholds. */
+  const SEEDS = Array.from({ length: 24 }, (_, k) => 1000 + k * 977);
+  /** The three lag scenarios of the tests below, as steps of delay per input. */
+  const LAGS: [string, (k: number) => number][] = [
+    ['jittery', k => 2 + (k % 7 === 0 ? 3 : 0) + (k % 50 < 5 ? 4 : 0)],
+    ['none', () => 0],
+    ['long', () => 8],
+  ];
 
   /**
    * Runs the script through a room (inputs and snapshots delayed, in order, by `lag(k)` steps)
@@ -87,8 +95,8 @@ describe('prediction against the room', () => {
    * with no network at all, the worst gap to the host's own snapshot at the end, and how far the
    * raw host state was behind the prediction (what the replay had to make up).
    */
-  const race = (lag: (k: number) => number) => {
-    const n = SCRIPT.length;
+  const race = (lag: (k: number) => number, steps = SCRIPT) => {
+    const n = steps.length;
     const room = new Room();
     const sent: ArrayBuffer[] = [];
     const conn: Conn & { bins: ArrayBuffer[] } = {
@@ -135,7 +143,7 @@ describe('prediction against the room', () => {
     };
 
     let last = 0;
-    SCRIPT.forEach((i, k) => {
+    steps.forEach((i, k) => {
       const input = pred.step(i);
       move(ref, input, lvl);
       sent.push(encodeInput(input));
@@ -152,52 +160,83 @@ describe('prediction against the room', () => {
     return { worst, behind, final: gap(final, pred.me(1)!), end: gap(final, ref) };
   };
 
-  it('agrees with the host within a centimetre, inputs and snapshots in flight', () => {
-    const r = race(k => 2 + (k % 7 === 0 ? 3 : 0) + (k % 50 < 5 ? 4 : 0));
-    expect(r.worst).toBeLessThan(0.01);
+  // Host, client replay and reference all run move() on float32 state with the wire-rounded input,
+  // and the snapshot carries that state exactly: the gaps are 0, not "small". The one thing left
+  // that could differ is Math.sin / Math.cos across JS engines, and these all run on one.
+  it('agrees with the host exactly, inputs and snapshots in flight', () => {
+    const r = race(LAGS[0][1]);
+    expect(r.worst).toBe(0);
     // The replay was needed: the host state alone was well behind the predicted one.
     expect(r.behind).toBeGreaterThan(0.1);
-    expect(r.end).toBeLessThan(0.01);
-    expect(r.final).toBeLessThan(0.01);
+    expect(r.end).toBe(0);
+    expect(r.final).toBe(0);
   });
 
-  it('agrees with the host when nothing is delayed', () => {
-    const r = race(() => 0);
-    expect(r.worst).toBeLessThan(0.01);
-    expect(r.end).toBeLessThan(0.01);
+  it('agrees with the host exactly when nothing is delayed', () => {
+    const r = race(LAGS[1][1]);
+    expect(r.worst).toBe(0);
+    expect(r.end).toBe(0);
   });
 
-  it('agrees with the host with a long lag (many unacked inputs)', () => {
-    const r = race(() => 8);
-    expect(r.worst).toBeLessThan(0.01);
+  it('agrees with the host exactly with a long lag (many unacked inputs)', () => {
+    const r = race(LAGS[2][1]);
+    expect(r.worst).toBe(0);
     expect(r.behind).toBeGreaterThan(0.3);
-    expect(r.end).toBeLessThan(0.01);
+    expect(r.end).toBe(0);
   });
 
-  it('makes the predicted run actually take the stairs, the pit, the walls and the jumps', () => {
-    // Guards the script: a run that never left spawn would agree trivially.
+  it('agrees exactly over many seeds of route noise, under every lag', () => {
+    // Stops at the first seed and lag that disagree, naming it, so a regression fails fast.
+    let bad = '';
+    for (const seed of SEEDS) {
+      const steps = script(seed);
+      for (const [name, lag] of LAGS) {
+        const r = race(lag, steps);
+        if (r.worst || r.end || r.final) {
+          bad = `seed ${seed}, ${name} lag: ${JSON.stringify(r)}`;
+          break;
+        }
+      }
+      if (bad) {
+        break;
+      }
+    }
+    expect(bad).toBe('');
+  }, 60_000);
+
+  /** What a run goes through: sectors visited, lowest and highest feet, head bumps, wall presses. */
+  const cover = (steps: Omit<Input, 'seq'>[]) => {
     const p = spawn(0, lvl, 0);
     const seen = new Set<number>();
     let [low, high, bump] = [Infinity, 0, 0];
     let walls = 0;
-    SCRIPT.forEach((i, k) => {
+    steps.forEach((step, k) => {
+      const i = onWire({ ...step, seq: k });
       const [x, z] = [p.x, p.z];
-      move(p, { ...i, seq: k }, lvl);
+      move(p, i, lvl);
       seen.add(sectorAt(lvl, p.x, p.z));
       low = Math.min(low, p.y);
       high = Math.max(high, p.y);
       // Head against the corridor ceiling.
-      bump += +(sectorAt(lvl, p.x, p.z) === 1 && p.y > 3.5 - PLAYER_H - 1e-9);
+      bump += +(sectorAt(lvl, p.x, p.z) === 1 && p.y > 3.5 - PLAYER_H - 1e-6);
       // Pushed: asked for (nearly) a full step and moved much less.
       walls += +(i.keys & KEY.FORWARD && Math.hypot(p.x - x, p.z - z) < 0.05 && p.ground);
     });
-    for (const s of [0, 1, 3, 6, 7, 8, 9, 10]) {
-      expect(seen.has(s)).toBe(true);
+    return { seen, low, high, bump, walls };
+  };
+
+  it('makes every predicted run actually take the stairs, the pit, the walls and the jumps', () => {
+    // Guards the scripts: a run that never left spawn would agree trivially.
+    for (const seed of [12345, ...SEEDS]) {
+      const { seen, low, high, bump, walls } = cover(script(seed));
+      for (const s of [0, 1, 3, 6, 7, 8, 9, 10]) {
+        expect(seen.has(s), `seed ${seed}, sector ${s}`).toBe(true);
+      }
+      expect(low).toBe(0);
+      expect(high).toBeGreaterThan(2.6);
+      expect(bump).toBeGreaterThanOrEqual(2);
+      expect(walls).toBeGreaterThan(20);
     }
-    expect(low).toBe(0);
-    expect(high).toBeGreaterThan(2.6);
-    expect(bump).toBeGreaterThanOrEqual(2);
-    expect(walls).toBeGreaterThan(20);
   });
 });
 
@@ -213,7 +252,7 @@ describe('own player', () => {
 
     // The first snapshot with the own player replays what it has not acked.
     pred.snapshot(snapshot(2, snapPlayer(3, { ack: 0 })), 10);
-    expect(pred.me(1)).toMatchObject({ id: 3, x: 8, z: 14 - 0.1 });
+    expect(pred.me(1)).toMatchObject({ id: 3, x: 8, z: Math.fround(14 - 0.1) });
   });
 
   it('eases between the state before and after the last step', () => {

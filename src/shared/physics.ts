@@ -1,6 +1,6 @@
 // Player movement, shared by the host and the client's prediction: no DOM, no Node API.
 // Deterministic for a given state and input, so the client's replay of unacked inputs lands where
-// the host does (give or take the wire's fixed point, corrected on each snapshot).
+// the host does.
 import {
   GRAVITY,
   JUMP_SPEED,
@@ -20,8 +20,8 @@ export const TAU = Math.PI * 2;
 /** Overlaps smaller than this are rounding noise, not contact. */
 const EPS = 1e-6;
 /**
- * Feet this close below a floor still stand on it (the wire rounds y to 1 mm, which must not sink
- * a player into the floor or flip a step test), and a fall that ends this close above a floor
+ * Feet this close below a floor still stand on it (rounding of y must not sink a player into
+ * the floor or flip a step test), and a fall that ends this close above a floor
  * lands on it.
  */
 const SKIN = 0.01;
@@ -32,12 +32,14 @@ export const norm = (a: number): number => ((a % TAU) + TAU) % TAU;
 /** Unit vector the player faces at yaw, on the floor plane: yaw 0 looks toward -z. */
 export const forward = (yaw: number): [x: number, z: number] => [-Math.sin(yaw), -Math.cos(yaw)];
 
+const f32 = Math.fround;
+
 const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v, lo), hi);
 
 /**
  * Whether the edge stops a player whose feet are at y: a solid wall, a floor on the far side more
  * than STEP_H above the feet, or an opening (the lower ceiling minus the higher floor) too short
- * for the body or under the head. SKIN keeps the wire's 1 mm rounding from flipping the answer
+ * for the body or under the head. SKIN keeps rounding from flipping the answer
  * for a player resting on a step or against a ceiling.
  */
 const shut = ({ map }: Level, e: Edge, y: number): boolean => {
@@ -170,7 +172,7 @@ export const move = (p: PlayerState, i: Input, lvl: Level): void => {
   }
   // A falling player whose feet end within SKIN of the floor (or below it) stands on it: the
   // margin keeps a player resting on it, or a jump that comes back to its starting height, from
-  // landing on one step or the next depending on the wire's rounding. A rising player that ends
+  // landing on one step or the next depending on rounding. A rising player that ends
   // below it (a jump onto a step) is lifted onto it and keeps rising.
   if (p.vy <= 0 ? p.y <= floor + SKIN : p.y < floor) {
     p.y = floor;
@@ -179,6 +181,12 @@ export const move = (p: PlayerState, i: Input, lvl: Level): void => {
       p.ground = true;
     }
   }
+  // Host and client then hold identical values and the snapshot carries them exactly, so the
+  // replay is exact (barring Math.sin / Math.cos differences between JS engines).
+  p.x = f32(p.x);
+  p.y = f32(p.y);
+  p.z = f32(p.z);
+  p.vy = f32(p.vy);
 };
 
 /** A player standing on the floor at spawn point n of the map (modulo the count). */
@@ -186,5 +194,5 @@ export const spawn = (id: number, lvl: Level, n: number): PlayerState => {
   const { spawns, sectors } = lvl.map;
   const [x, z, yaw] = spawns[((n % spawns.length) + spawns.length) % spawns.length];
   const y = sectors[Math.max(sectorAt(lvl, x, z), 0)].floor;
-  return { id, x, y, z, vy: 0, yaw: norm(yaw), pitch: 0, ground: true };
+  return { id, x: f32(x), y: f32(y), z: f32(z), vy: 0, yaw: norm(yaw), pitch: 0, ground: true };
 };

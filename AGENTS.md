@@ -34,7 +34,7 @@ npm run size        # gzip budgets
 
 ## Size comes first
 
-- Budgets, gated by `npm run size`: `dist/index.js` ≤ 12 KB gzip, `dist/local.js` ≤ 6 KB. Raise one only when the user agrees.
+- Budgets, gated by `npm run size`: `dist/index.js` ≤ 30 KB gzip, `dist/local.js` ≤ 12 KB (raised from 12 and 6 by the user for parity with the js13k game). Raise one only when the user agrees.
 - No game or 3D library, no runtime dependency, no images, fonts or assets: geometry and textures are generated in code.
 - Raw WebGL2, one small shader program. No three.js, no WASM.
 - Do not copy code from `carlini/js13k2019-yet-another-doom-clone`: it is GPL-3.0, this project is Apache-2.0. Its ideas (procedural textures, maps as compact data, shadow maps, jsfxr-style sound) are fair game; reimplement them.

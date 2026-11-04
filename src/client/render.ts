@@ -2,7 +2,7 @@
 // rewritten each frame into the tail of the same buffer. No DOM beyond the canvas.
 import { MAX_PLAYERS, PLAYER_H, PLAYER_R } from '../shared/constants';
 import { forward } from '../shared/physics';
-import type { Box, MapDef, PlayerState } from '../shared/types';
+import type { Box, BoxMap, PlayerState } from '../shared/types';
 
 /** Sky colour: the clear colour, and what distance fog fades to. */
 const SKY = [0.56, 0.71, 0.87];
@@ -129,7 +129,7 @@ export const blocked = (boxes: Box[], a: Vec3, b: Vec3) =>
   });
 
 /** The floor (a box whose top is y 0, reaching BEYOND past the map) and every map box. */
-export const mapVerts = (map: MapDef, rgb: (css: string) => number[]): number[] => {
+export const mapVerts = (map: BoxMap, rgb: (css: string) => number[]): number[] => {
   const out: number[] = [];
   const h = BEYOND + 1;
   pushBox(out, [map.w / 2, -0.5, map.d / 2], [map.w / 2 + h, 0.5, map.d / 2 + h], 0, [
@@ -163,7 +163,7 @@ export interface Renderer {
 }
 
 /** Throws when the browser has no WebGL2. */
-export const createRenderer = (canvas: HTMLCanvasElement, map: MapDef): Renderer => {
+export const createRenderer = (canvas: HTMLCanvasElement, map: BoxMap): Renderer => {
   const gl = canvas.getContext('webgl2', { antialias: true });
   if (!gl) {
     throw new Error('WebGL2 is not available');

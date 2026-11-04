@@ -11,7 +11,7 @@ import {
   TICK_HZ,
 } from './constants';
 import { KEY } from './types';
-import type { Box, Input, MapDef, PlayerState } from './types';
+import type { Box, Input, BoxMap, PlayerState } from './types';
 
 const DT = 1 / TICK_HZ;
 export const TAU = Math.PI * 2;
@@ -78,7 +78,7 @@ const push = (p: PlayerState, b: Box): void => {
  * GRAVITY, then collisions: the player cylinder (PLAYER_R, PLAYER_H) slides along box sides,
  * lands on box tops and on the floor (y 0), and bumps its head on box bottoms.
  */
-export const move = (p: PlayerState, i: Input, map: MapDef): void => {
+export const move = (p: PlayerState, i: Input, map: BoxMap): void => {
   const { boxes } = map;
   p.yaw = norm(i.yaw);
   p.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, i.pitch));
@@ -130,7 +130,7 @@ export const move = (p: PlayerState, i: Input, map: MapDef): void => {
 };
 
 /** A player standing at spawn point n of the map (modulo the count). */
-export const spawn = (id: number, map: MapDef, n: number): PlayerState => {
+export const spawn = (id: number, map: BoxMap, n: number): PlayerState => {
   const { spawns } = map;
   const [x, z, yaw] = spawns[((n % spawns.length) + spawns.length) % spawns.length];
   return { id, x, y: 0, z, vy: 0, yaw: norm(yaw), pitch: 0, ground: true };

@@ -25,6 +25,8 @@ export const JUMP_SPEED = 7;
 export const GRAVITY = 20;
 /** Pitch is clamped to ±MAX_PITCH radians, just short of straight up or down. */
 export const MAX_PITCH = 1.55;
+/** A floor at most this much higher is walked onto; a higher one needs a jump. */
+export const STEP_H = 0.5;
 
 /**
  * Network fixed point: a coordinate travels as round(v * SCALE) in a Uint16, so 0 to

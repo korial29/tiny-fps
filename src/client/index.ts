@@ -235,6 +235,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
           dead: progress.dead,
           others,
           fx,
+          bullets,
           lvl: progress.lvl,
           t: now / 1000,
         }),

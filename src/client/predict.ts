@@ -6,6 +6,7 @@
 import { INTERP_DELAY } from '../shared/constants';
 import { TAU, move, norm } from '../shared/physics';
 import { onWire } from '../shared/protocol';
+import { fire } from '../shared/shoot';
 import type { Input, Level, PlayerState, Shot, SnapPlayer, Snapshot } from '../shared/types';
 
 export interface Predictor {
@@ -77,15 +78,57 @@ export const createPredictor = (lvl: Level): Predictor => {
   /** The own player after the last step, and before it. */
   let own: PlayerState | undefined;
   let prev: PlayerState | undefined;
+  let shot: Shot | undefined;
   const snaps: { t: number; s: Snapshot }[] = [];
+
+  /**
+   * The snapshots around the time the others are drawn at, and how far between them (0 to 1). The
+   * newest one at or before it, and the next; before the first one or after the last, both are
+   * the same snapshot.
+   */
+  const around = (now: number) => {
+    const t = now - INTERP_DELAY;
+    let k = 0;
+    while (k + 1 < snaps.length && snaps[k + 1].t <= t) {
+      k++;
+    }
+    const a = snaps[k];
+    const b = snaps[k + 1] ?? a;
+    return { a, b, u: b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 0 };
+  };
+
+  /** The host tick the others are drawn at, fractional, in [0, 65536). */
+  const view = (now: number): number | undefined => {
+    if (!snaps.length) {
+      return undefined;
+    }
+    const { a, b, u } = around(now);
+    return (a.s.tick + ((b.s.tick - a.s.tick) & 0xffff) * u) % 0x10000;
+  };
+
+  const others = (now: number): PlayerState[] => {
+    const last = snaps.at(-1);
+    if (!last) {
+      return [];
+    }
+    const { a, b, u } = around(now);
+    return last.s.players
+      .filter(p => p.id !== id)
+      .map(p => {
+        const pa = a.s.players.find(q => q.id === p.id);
+        const pb = b.s.players.find(q => q.id === p.id);
+        return pa && pb ? lerp(state(pa), state(pb), u) : state(pb ?? pa ?? p);
+      });
+  };
 
   return {
     you: n => {
       id = n;
     },
 
-    step: i => {
-      const input = onWire({ ...i, seq });
+    step: (i, now) => {
+      const input = onWire({ ...i, seq, view: now === undefined ? undefined : view(now) });
+      shot = undefined;
       seq = (seq + 1) & 0xffff;
       pending.push(input);
       if (pending.length > MAX_PENDING) {
@@ -93,7 +136,10 @@ export const createPredictor = (lvl: Level): Predictor => {
       }
       if (own) {
         prev = state(own);
-        move(own, input, lvl);
+        if (move(own, input, lvl)) {
+          // Without a clock, the others as of the newest snapshot.
+          shot = fire(lvl, own, input.seq, others(now ?? Infinity));
+        }
       }
       return input;
     },
@@ -118,32 +164,10 @@ export const createPredictor = (lvl: Level): Predictor => {
       });
     },
 
-    shot: () => undefined,
+    shot: () => shot,
 
     me: alpha => (own && prev ? lerp(prev, own, Math.max(0, Math.min(1, alpha))) : undefined),
 
-    others: now => {
-      const last = snaps.at(-1);
-      if (!last) {
-        return [];
-      }
-      const t = now - INTERP_DELAY;
-      // The snapshots around t: the newest one at or before it, and the next. Before the first
-      // one or after the last, both are the same snapshot.
-      let k = 0;
-      while (k + 1 < snaps.length && snaps[k + 1].t <= t) {
-        k++;
-      }
-      const a = snaps[k];
-      const b = snaps[k + 1] ?? a;
-      const u = b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 0;
-      return last.s.players
-        .filter(p => p.id !== id)
-        .map(p => {
-          const pa = a.s.players.find(q => q.id === p.id);
-          const pb = b.s.players.find(q => q.id === p.id);
-          return pa && pb ? lerp(state(pa), state(pb), u) : state(pb ?? pa ?? p);
-        });
-    },
+    others,
   };
 };

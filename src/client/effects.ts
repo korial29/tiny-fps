@@ -1,7 +1,7 @@
 // Camera and gun feel, fed each frame: head bob, roll, shake, gun kick, barrel spin, muzzle flash
 // and impact sparks; and what the host reports of the monsters: gibs, explosions, blows, the red
 // hurt tint. No DOM, times in seconds, unit-tested.
-import { INTERP_DELAY, RANGE } from '../shared/constants';
+import { EYE, INTERP_DELAY, RANGE } from '../shared/constants';
 import { blocked, sectorAt } from '../shared/level';
 import { TAU } from '../shared/physics';
 import { EVENT, KEY } from '../shared/types';
@@ -72,14 +72,28 @@ export interface Effects {
   blasts: Blast[];
   /** Seconds of the red hurt tint left. */
   hurt: number;
+  /** Seconds left of the fade of a picked-up item's colour, and that colour (0 to 1 each). */
+  gain: number;
+  gainC: number[];
+  /** 0 to 1: how far the camera has sunk and tilted since the own player died; the gun hides. */
+  dead: number;
   /** Seconds of blow left at each monster, by id. */
   swings: Map<number, number>;
   /** Every monster seen so far, by id. Ids are bounded, so it is too. */
   herd: Map<number, Walker>;
   /** Unit heading of each bullet in flight, by id, once it has moved. */
   aim: Map<number, Vec3>;
-  /** Advances dt seconds: the own player (eased, undefined before the first snapshot) and the held keys. */
-  update(me: PlayerState | undefined, keys: number, dt: number): void;
+  /**
+   * Advances dt seconds: the own player (eased, undefined before the first snapshot), the held
+   * keys and whether the own player is dead.
+   */
+  update(me: PlayerState | undefined, keys: number, dt: number, dead?: boolean): void;
+  /** The own health dropped: the red tint. */
+  hit(): void;
+  /** An item of colour c was picked up near the own player: its colour fades over the screen. */
+  pickup(c: number[]): void;
+  /** A new level: drops every effect of the old one, and lets gibs land on the new `lvl`. */
+  reset(lvl: Level): void;
   /**
    * A shot, from the shooter's eye; own ones kick the camera and the gun. No sparks with
    * `sparks` false: a shot that hit the viewer would burst them inside the camera.
@@ -98,6 +112,11 @@ const MAX_GIBS = 64;
 const MAX_BLASTS = 12;
 export const BLAST = 0.3;
 const HURT = 0.15;
+const GAIN = 0.4;
+/** Seconds the camera takes to sink, the roll it ends at, and the eye height it ends at. */
+const SINK = 0.5;
+const TILT = 0.9;
+const LOW = 0.3;
 /** Gibs fall faster than players: they are small. */
 const GIB_G = 14;
 /** Bob phase per metre walked, and its amplitude in metres. */
@@ -117,8 +136,12 @@ export const glow = ({ r, t }: Blast) => {
  * who are drawn that far in the past. Keeps at most `max`: a hidden tab does not grow it.
  */
 export const createDelay = <T>(max = 64) => {
-  const q: { t: number; v: T }[] = [];
+  let q: { t: number; v: T }[] = [];
   return {
+    /** Forgets what is held: it belongs to a level that is gone. */
+    clear() {
+      q = [];
+    },
     push(items: T[], now: number) {
       q.push(...items.map(v => ({ t: now, v })));
       q.splice(0, q.length - max);
@@ -132,11 +155,13 @@ export const createDelay = <T>(max = 64) => {
 };
 
 /** rand in [0, 1): injectable so the tests are exact. The level lets gibs land and bounce off walls. */
-export const createEffects = (rand = Math.random, lvl?: Level): Effects => {
+export const createEffects = (rand = Math.random, level?: Level): Effects => {
+  let lvl = level;
   let phase = 0;
   /** 0 to 1: how much of the bob shows, so stopping does not snap the eye. */
   let amt = 0;
   let shake = 0;
+  let lean = 0;
   let rate = 0;
   let last: PlayerState | undefined;
   const r2 = () => rand() * 2 - 1;
@@ -172,11 +197,14 @@ export const createEffects = (rand = Math.random, lvl?: Level): Effects => {
     gibs: [],
     blasts: [],
     hurt: 0,
+    gain: 0,
+    gainC: [1, 1, 1],
+    dead: 0,
     swings: new Map(),
     herd: new Map(),
     aim: new Map(),
 
-    update(me, keys, dt) {
+    update(me, keys, dt, dead = false) {
       const ease = Math.min(1, dt * 10);
       // Distance on the floor, a respawn (a jump of metres) excepted.
       const d = me && last?.ground && me.ground ? Math.hypot(me.x - last.x, me.z - last.z) : 0;
@@ -185,10 +213,13 @@ export const createEffects = (rand = Math.random, lvl?: Level): Effects => {
       }
       amt += ((d > 0.5 * dt && d < 1 ? 1 : 0) - amt) * ease;
       last = me;
-      fx.bob = Math.sin(phase) * BOB * amt;
+      fx.dead = Math.max(0, Math.min(1, fx.dead + (dead ? dt : -dt) / SINK));
+      const sink = fx.dead * fx.dead * (3 - 2 * fx.dead);
+      fx.bob = Math.sin(phase) * BOB * amt - sink * (EYE - LOW);
 
       const strafe = +!!(keys & KEY.RIGHT) - +!!(keys & KEY.LEFT);
-      fx.roll += (strafe * ROLL - fx.roll) * Math.min(1, dt * 8);
+      lean += (strafe * ROLL - lean) * Math.min(1, dt * 8);
+      fx.roll = lean + sink * TILT;
 
       shake *= Math.exp(-dt * 12);
       fx.shakeYaw = r2() * shake;
@@ -214,6 +245,7 @@ export const createEffects = (rand = Math.random, lvl?: Level): Effects => {
       fx.sparks = fx.sparks.filter(s => s.life > 0);
 
       fx.hurt = Math.max(0, fx.hurt - dt);
+      fx.gain = Math.max(0, fx.gain - dt);
       for (const [id, t] of fx.swings) {
         if (t > dt) {
           fx.swings.set(id, t - dt);
@@ -232,6 +264,27 @@ export const createEffects = (rand = Math.random, lvl?: Level): Effects => {
         }
       }
       fx.gibs = fx.gibs.filter(g => g.life > 0);
+    },
+
+    hit() {
+      fx.hurt = HURT;
+    },
+
+    pickup(c) {
+      [fx.gain, fx.gainC] = [GAIN, c];
+    },
+
+    reset(next) {
+      lvl = next;
+      fx.sparks = [];
+      fx.gibs = [];
+      fx.blasts = [];
+      fx.flashes.clear();
+      fx.swings.clear();
+      fx.herd.clear();
+      fx.aim.clear();
+      flown.clear();
+      fx.hurt = fx.gain = fx.flash = 0;
     },
 
     shot(s, from, own, sparks = true) {
@@ -305,10 +358,8 @@ export const createEffects = (rand = Math.random, lvl?: Level): Effects => {
         blast(p, 0.25);
         burst(p, 8, 3);
       } else if (type == EVENT.HURT) {
-        // Sparks at the viewer's own eye would burst inside the camera: it gets the tint.
-        if (id == you) {
-          fx.hurt = HURT;
-        } else {
+        // Sparks at the viewer's own eye would burst inside the camera: its health drop tints.
+        if (id != you) {
           burst(p, 8, 3, [1, 0.12, 0.08]);
         }
       } else if (type == EVENT.SWING) {

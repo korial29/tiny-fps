@@ -379,11 +379,17 @@ describe('death', () => {
 describe('other events', () => {
   const ev = (type: number, id: number): GameEvent => ({ type, id, x: 3, y: 1, z: 4 });
 
-  it('tint the screen red for the own player hurt, with no sparks in the camera', () => {
+  it('leave the own player hurt to the health drop: no tint, no sparks in the camera', () => {
     const fx = createEffects();
     fx.event(ev(EVENT.HURT, 2), 2);
-    expect(fx.hurt).toBeCloseTo(0.15);
+    expect(fx.hurt).toBe(0);
     expect(fx.sparks).toHaveLength(0);
+  });
+
+  it('tint the screen red for 0.15 s on a hit', () => {
+    const fx = createEffects();
+    fx.hit();
+    expect(fx.hurt).toBeCloseTo(0.15);
     run(fx, 0, 0.1);
     expect(fx.hurt).toBeGreaterThan(0);
     run(fx, 0, 0.06);
@@ -435,9 +441,110 @@ describe('delay', () => {
     expect(q.due(1030 + INTERP_DELAY)).toEqual(['b', 'c']);
   });
 
+  it('forgets what it holds on clear', () => {
+    const q = createDelay<number>();
+    q.push([1, 2], 0);
+    q.clear();
+    expect(q.due(1e6)).toEqual([]);
+  });
+
   it('keeps the newest max', () => {
     const q = createDelay<number>(3);
     q.push([1, 2, 3, 4, 5], 0);
     expect(q.due(1e6)).toEqual([3, 4, 5]);
+  });
+});
+
+describe('pickup', () => {
+  it('fades the item colour over 0.4 s', () => {
+    const fx = createEffects();
+    fx.pickup([1, 0, 0]);
+    expect(fx.gain).toBeCloseTo(0.4);
+    expect(fx.gainC).toEqual([1, 0, 0]);
+    run(fx, 0, 0.3);
+    expect(fx.gain).toBeGreaterThan(0);
+    run(fx, 0, 0.12);
+    expect(fx.gain).toBe(0);
+  });
+});
+
+describe('dead', () => {
+  const sunk = (seconds: number, dead = true) => {
+    const fx = createEffects();
+    for (let t = 0; t < seconds; t += DT) {
+      fx.update(me(), 0, DT, dead);
+    }
+    return fx;
+  };
+
+  it('sinks the eye to the floor and tilts the camera, over half a second', () => {
+    const [half, done] = [sunk(0.25), sunk(0.6)];
+    expect(half.bob).toBeLessThan(-0.5);
+    expect(done.dead).toBe(1);
+    expect(done.bob).toBeCloseTo(-1.3);
+    expect(done.roll).toBeCloseTo(0.9);
+    expect(half.roll).toBeLessThan(done.roll);
+  });
+
+  it('is 0 while alive, and rises again after a respawn', () => {
+    expect(sunk(1, false).dead).toBe(0);
+    const fx = sunk(1);
+    for (let t = 0; t < 0.7; t += DT) {
+      fx.update(me(), 0, DT, false);
+    }
+    expect(fx.dead).toBe(0);
+    expect(fx.bob).toBeCloseTo(0);
+    expect(fx.roll).toBeCloseTo(0);
+  });
+
+  it('keeps the strafe lean apart from the tilt', () => {
+    const fx = createEffects();
+    for (let t = 0; t < 1; t += DT) {
+      fx.update(me(), KEY.RIGHT, DT, true);
+    }
+    expect(fx.roll).toBeCloseTo(0.9 + 0.03, 2);
+  });
+});
+
+describe('reset', () => {
+  const lvl = compile(HALL);
+  const die = (x: number, y: number, z: number): GameEvent => ({
+    type: EVENT.DIE,
+    id: 16,
+    x,
+    y,
+    z,
+  });
+  const step = (fx: ReturnType<typeof createEffects>, seconds: number) => {
+    for (let t = 0; t < seconds; t += DT) {
+      fx.update(undefined, 0, DT);
+    }
+  };
+
+  it('drops every effect of the old level', () => {
+    const fx = createEffects(Math.random, lvl);
+    fx.event(die(8, 2, 8), 1);
+    fx.event({ type: EVENT.SWING, id: 20, x: 8, y: 2, z: 8 }, 1);
+    fx.track([{ id: 20, kind: 0, x: 8, y: 1, z: 8, yaw: 0, chase: false }], []);
+    fx.shot(shot, [0, 1.6, 0], true);
+    fx.shot({ ...shot, id: 2 }, [0, 1.6, 0], false);
+    fx.hit();
+    fx.pickup([1, 1, 1]);
+    fx.reset(lvl);
+    expect([fx.gibs, fx.sparks, fx.blasts]).toEqual([[], [], []]);
+    expect([fx.swings.size, fx.herd.size, fx.flashes.size, fx.aim.size]).toEqual([0, 0, 0, 0]);
+    expect([fx.hurt, fx.gain, fx.flash]).toEqual([0, 0, 0]);
+  });
+
+  it('lets later gibs land on the new level', () => {
+    const fx = createEffects(() => 0.5);
+    fx.reset(lvl);
+    fx.event(die(8, 5, 8), 1);
+    expect(fx.gibs.length).toBeGreaterThan(0);
+    for (const g of fx.gibs) {
+      expect(g.floor).toBe(lvl.map.sectors[sectorAt(lvl, 8, 8)].floor);
+    }
+    step(fx, 1);
+    expect(Math.min(...fx.gibs.map(g => g.p[1]))).toBeGreaterThanOrEqual(1);
   });
 });

@@ -59,6 +59,7 @@ npm run size        # gzip budgets
 ## Git, PRs and releases
 
 - Same flow as air-hockey: branch from `master` (`feature/…`, `fix/…`), one release label per PR, rebase on `origin/master` with `--force-with-lease`, conventional commit subjects in English.
+- The PR's label picks the bump (`release:major`, `release:minor`, `release:patch`); `release:skip` publishes nothing. A merge releases at once, with no approval (single maintainer): npm publish, `vX.Y.Z` tag, GitHub Release, built from the PR's merge commit, one release at a time.
 
 ## Working with several agents
 

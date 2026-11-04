@@ -176,6 +176,13 @@ describe('sparks', () => {
     expect(fx.sparks).toHaveLength(0);
   });
 
+  it('are left out when asked, still flashing at the shooter', () => {
+    const fx = createEffects();
+    fx.shot(shot, [0, 1, 0], false, false);
+    expect(fx.sparks).toHaveLength(0);
+    expect(fx.flashes.get(2)).toBeGreaterThan(0);
+  });
+
   it('skip a shot that went the full range, and stay bounded', () => {
     const fx = createEffects();
     fx.shot({ ...shot, z: -100 }, [0, 1, 0], false);

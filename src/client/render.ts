@@ -257,12 +257,15 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
   };
   const far = { barrels: dress(chaingun(5).barrels, steel), body: dress(chaingun(5).body, iron) };
   const flare: number[] = [];
+  /** The others' flash, three times as wide: at a few metres the own one is a dot. */
+  const wide: number[] = [];
   for (const h of [
     [0.1, 0.01, 0.03],
     [0.01, 0.1, 0.03],
     [0.03, 0.03, 0.05],
   ] as Vec3[]) {
     pushBox(flare, [0, 0, -MUZZLE - 0.04], h, 0, [1, 0.85, 0.4], -2);
+    pushBox(wide, [0, 0, -MUZZLE - 0.12], h.map(x => x * 3) as Vec3, 0, [1, 0.85, 0.4], -2);
   }
   let uniforms: WebGLUniformLocation[] = [];
   let lost = false;
@@ -364,7 +367,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
         );
         const hand: Vec3 = [p.x, p.y + 1.25, p.z];
         const axes = basis(p.yaw, p.pitch);
-        for (const part of [far.barrels, far.body, fx.flashes.has(p.id) ? flare : []]) {
+        for (const part of [far.barrels, far.body, fx.flashes.has(p.id) ? wide : []]) {
           place(v, part, hand, axes, [0.36, -0.12, 0.3], 0.8);
         }
       }

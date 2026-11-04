@@ -34,8 +34,11 @@ export interface Effects {
   sparks: Spark[];
   /** Advances dt seconds: the own player (eased, undefined before the first snapshot) and the held keys. */
   update(me: PlayerState | undefined, keys: number, dt: number): void;
-  /** A shot, from the shooter's eye; own ones kick the camera and the gun. */
-  shot(s: Shot, from: Vec3, own: boolean): void;
+  /**
+   * A shot, from the shooter's eye; own ones kick the camera and the gun. No sparks with
+   * `sparks` false: a shot that hit the viewer would burst them inside the camera.
+   */
+  shot(s: Shot, from: Vec3, own: boolean, sparks?: boolean): void;
 }
 
 const FLASH = 0.05;
@@ -106,7 +109,7 @@ export const createEffects = (rand = Math.random): Effects => {
       fx.sparks = fx.sparks.filter(s => s.life > 0);
     },
 
-    shot(s, from, own) {
+    shot(s, from, own, sparks = true) {
       if (own) {
         fx.kick = 1;
         fx.flash = FLASH;
@@ -118,7 +121,7 @@ export const createEffects = (rand = Math.random): Effects => {
       const back = from.map((x, i) => x - at[i]);
       const len = Math.hypot(...back);
       // A shot that reached RANGE hit nothing near.
-      if (len > 0 && len < RANGE - 0.01) {
+      if (sparks && len > 0 && len < RANGE - 0.01) {
         for (let i = 0; i < 4 && fx.sparks.length < MAX_SPARKS; i++) {
           const v = back.map(x => (x / len) * (2 + rand() * 2) + r2()) as Vec3;
           v[1] += 1;

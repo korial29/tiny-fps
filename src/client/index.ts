@@ -163,7 +163,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     for (; late.length && late[0].t + INTERP_DELAY <= now; late.shift()) {
       const p = others.find(o => o.id == late[0].s.id);
       if (p) {
-        fx.shot(late[0].s, [p.x, p.y + EYE, p.z], false);
+        fx.shot(late[0].s, [p.x, p.y + EYE, p.z], false, late[0].s.hit != you);
       }
     }
     fx.update(me, ctl.keys, Math.min((now - before) / 1000, 0.1));

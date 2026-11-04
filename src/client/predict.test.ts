@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { INTERP_DELAY, PLAYER_H, TICK_HZ } from '../shared/constants';
+import { EYE, FIRE_EVERY, INTERP_DELAY, PLAYER_H, TICK_HZ } from '../shared/constants';
 import { compile, sectorAt } from '../shared/level';
 import { HALL } from '../shared/map';
 import { move, spawn } from '../shared/physics';
-import { decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
+import { decodeInput, decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
 import { Room } from '../shared/room';
+import { fire } from '../shared/shoot';
 import { KEY } from '../shared/types';
-import type { Conn, Input, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
+import type { Conn, Input, PlayerState, Shot, SnapPlayer, Snapshot } from '../shared/types';
 import { createPredictor } from './predict';
 
 const STEP = 1000 / TICK_HZ;
@@ -57,7 +58,8 @@ describe('prediction against the room', () => {
     { to: [30, 15], max: 100, jump: true },
     { to: [22, 14], max: 90 },
   ];
-  const script = (seed = 12345): Omit<Input, 'seq'>[] => {
+  /** With `trigger`, FIRE is held for 16 steps of every 40, from the 24th: the pace slows and shots go out. */
+  const script = (seed = 12345, trigger = false): Omit<Input, 'seq'>[] => {
     let s = seed;
     const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
     const out: Omit<Input, 'seq'>[] = [];
@@ -73,7 +75,7 @@ describe('prediction against the room', () => {
           keys = KEY.FORWARD | (rnd() < 0.2 ? KEY.LEFT : 0) | (rnd() < 0.2 ? KEY.RIGHT : 0);
         }
         const i = {
-          keys: keys | (jump ? KEY.JUMP : 0),
+          keys: keys | (jump ? KEY.JUMP : 0) | (trigger && out.length % 40 >= 24 ? KEY.FIRE : 0),
           yaw: Math.atan2(-dx, -dz) + (rnd() - 0.5) * 0.1,
           pitch: Math.sin(out.length / 20) * 0.5,
         };
@@ -98,7 +100,8 @@ describe('prediction against the room', () => {
    * and a predictor fed with the decoded snapshots. Returns the worst gap between the
    * predictor's own player right after each snapshot and a reference stepped on the same inputs
    * with no network at all, the worst gap to the host's own snapshot at the end, and how far the
-   * raw host state was behind the prediction (what the replay had to make up).
+   * raw host state was behind the prediction (what the replay had to make up). `shots` are the
+   * ones the predictor fired and the ones the room sent, in order.
    */
   const race = (lag: (k: number) => number, steps = SCRIPT) => {
     const n = steps.length;
@@ -123,6 +126,7 @@ describe('prediction against the room', () => {
     let seen = 0;
     let worst = 0;
     let behind = 0;
+    const predicted: Shot[] = [];
 
     const gap = (a: PlayerState, b: PlayerState) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
     const flush = (k: number, snapAt: (k: number) => number) => {
@@ -150,6 +154,10 @@ describe('prediction against the room', () => {
     let last = 0;
     steps.forEach((i, k) => {
       const input = pred.step(i);
+      const shot = pred.shot();
+      if (shot) {
+        predicted.push(shot);
+      }
       move(ref, input, lvl);
       sent.push(encodeInput(input));
       // In order: never delivered before the previous one.
@@ -162,7 +170,15 @@ describe('prediction against the room', () => {
       flush(k, () => k);
     }
     const final = decodeSnapshot(conn.bins.at(-1)!)!.players.find(p => p.id === 0)!;
-    return { worst, behind, final: gap(final, pred.me(1)!), end: gap(final, ref) };
+    const hosted = conn.bins.flatMap(b => decodeSnapshot(b)!.shots);
+    return {
+      worst,
+      behind,
+      final: gap(final, pred.me(1)!),
+      end: gap(final, ref),
+      cool: pred.me(1)!.cool - final.cool,
+      shots: { predicted, hosted },
+    };
   };
 
   // Host, client replay and reference all run move() on float32 state with the wire-rounded input,
@@ -199,6 +215,49 @@ describe('prediction against the room', () => {
         const r = race(lag, steps);
         if (r.worst || r.end || r.final) {
           bad = `seed ${seed}, ${name} lag: ${JSON.stringify(r)}`;
+          break;
+        }
+      }
+      if (bad) {
+        break;
+      }
+    }
+    expect(bad).toBe('');
+  }, 60_000);
+
+  it('agrees with the host exactly with FIRE held: position, cooldown and every shot', () => {
+    const steps = script(12345, true);
+    expect(steps.filter(i => i.keys & KEY.FIRE).length).toBeGreaterThan(40);
+    for (const [name, lag] of LAGS) {
+      const r = race(lag, steps);
+      expect([name, r.worst, r.end, r.final, r.cool]).toEqual([name, 0, 0, 0, 0]);
+      const { predicted, hosted } = r.shots;
+      expect(hosted.length).toBeGreaterThan(8);
+      expect(predicted).toHaveLength(hosted.length);
+      predicted.forEach((p, k) => {
+        expect(p.id).toBe(hosted[k].id);
+        expect(p.hit).toBe(hosted[k].hit);
+        expect([p.x, p.y, p.z]).toEqual(
+          [hosted[k].x, hosted[k].y, hosted[k].z].map(v => expect.closeTo(v, 3)),
+        );
+      });
+    }
+  });
+
+  it('agrees exactly over many seeds of route noise with FIRE held', () => {
+    let bad = '';
+    for (const seed of SEEDS.slice(0, 8)) {
+      const steps = script(seed, true);
+      for (const [name, lag] of LAGS) {
+        const r = race(lag, steps);
+        if (
+          r.worst ||
+          r.end ||
+          r.final ||
+          r.cool ||
+          r.shots.predicted.length !== r.shots.hosted.length
+        ) {
+          bad = `seed ${seed}, ${name} lag: ${JSON.stringify({ ...r, shots: 0 })}`;
           break;
         }
       }
@@ -413,5 +472,250 @@ describe('other players', () => {
     expect(x(pred.others(199 * 33 + INTERP_DELAY - 33), 1)).toBeCloseTo(198);
     // Interpolating inside the kept history still works.
     expect(x(pred.others(199 * 33 + INTERP_DELAY - 16.5), 1)).toBeCloseTo(198.5);
+  });
+});
+
+describe('view tick', () => {
+  const pred = () => {
+    const p = createPredictor(lvl);
+    p.you(0);
+    return p;
+  };
+  const idle = { keys: 0, yaw: 0, pitch: 0 };
+
+  it('is the snapshot tick the others are drawn at, interpolated like their positions', () => {
+    const p = pred();
+    p.snapshot(snapshot(10, snapPlayer(0)), 1000);
+    p.snapshot(snapshot(14, snapPlayer(0)), 1100);
+    expect(p.step(idle, 1050 + INTERP_DELAY).view).toBe(12);
+    expect(p.step(idle, 1025 + INTERP_DELAY).view).toBe(11);
+    // Clamped to the first and the newest snapshot, like the others.
+    expect(p.step(idle, 0).view).toBe(10);
+    expect(p.step(idle, 9000).view).toBe(14);
+  });
+
+  it('goes the short way round the u16 tick circle, and stays in [0, 65536)', () => {
+    const p = pred();
+    p.snapshot(snapshot(65534, snapPlayer(0)), 1000);
+    p.snapshot(snapshot(2, snapPlayer(0)), 1100);
+    expect(p.step(idle, 1000 + INTERP_DELAY).view).toBe(65534);
+    expect(p.step(idle, 1025 + INTERP_DELAY).view).toBe(65535);
+    expect(p.step(idle, 1050 + INTERP_DELAY).view).toBe(0);
+    expect(p.step(idle, 1075 + INTERP_DELAY).view).toBe(1);
+    expect(p.step(idle, 1100 + INTERP_DELAY).view).toBe(2);
+  });
+
+  it('is rounded to the wire, and absent without a clock or a snapshot', () => {
+    const p = pred();
+    expect(p.step(idle, 5000).view).toBeUndefined();
+    p.snapshot(snapshot(10, snapPlayer(0)), 1000);
+    p.snapshot(snapshot(13, snapPlayer(0)), 1100);
+    const i = p.step(idle, 1033 + INTERP_DELAY);
+    expect(i.view).not.toBe(10 + 3 * 0.33);
+    expect(i.view).toBe(Math.round(i.view! * 256) / 256);
+    expect(i.view).toBeCloseTo(10.99, 1);
+    expect(decodeInput(encodeInput(i))!.view).toBe(i.view);
+    expect(p.step(idle).view).toBeUndefined();
+  });
+});
+
+describe('own shots', () => {
+  const EAST = (3 * Math.PI) / 2;
+  const trigger = { keys: KEY.FIRE, yaw: EAST, pitch: 0 };
+  /** Own player at (4, 8) on the floor, another at (10, 8) on the line east. */
+  const scene = (own: Partial<SnapPlayer> = {}, other: Partial<SnapPlayer> = {}) => {
+    const p = createPredictor(lvl);
+    p.you(0);
+    p.snapshot(
+      snapshot(
+        1,
+        snapPlayer(0, { x: 4, z: 8, yaw: EAST, ...own }),
+        snapPlayer(1, { x: 10, z: 8, ...other }),
+      ),
+      1000,
+    );
+    return p;
+  };
+
+  it('fires with the cadence of move(), resolved against the others as drawn', () => {
+    const p = scene();
+    const fired: number[] = [];
+    for (let k = 0; k < 2 * FIRE_EVERY + 1; k++) {
+      const i = p.step(trigger, 1000 + INTERP_DELAY);
+      const s = p.shot();
+      if (s) {
+        fired.push(k);
+        const me = p.me(1)!;
+        // Exactly fire() on the state after the step, with the seq of the input.
+        expect(s).toEqual(fire(lvl, me, i.seq, p.others(1000 + INTERP_DELAY)));
+        expect(s).toMatchObject({ id: 0, hit: 1 });
+      }
+    }
+    expect(fired).toEqual([0, FIRE_EVERY, 2 * FIRE_EVERY]);
+  });
+
+  it('forgets the shot on the next step, and does not fire without the trigger', () => {
+    const p = scene();
+    p.step(trigger, 1000);
+    expect(p.shot()).toBeDefined();
+    p.step({ ...trigger, keys: 0 }, 1000);
+    expect(p.shot()).toBeUndefined();
+    expect(scene().shot()).toBeUndefined();
+  });
+
+  it('starts from the host cooldown', () => {
+    const p = scene({ cool: 3 });
+    const fired = [0, 1, 2, 3].map(() => (p.step(trigger, 1000), !!p.shot()));
+    expect(fired).toEqual([false, false, true, false]);
+  });
+
+  it('shoots at the others where they are drawn, not where the newest snapshot has them', () => {
+    // The other crosses the line: z = 8 at t = 1000, 12 m south at t = 1100.
+    const p = scene();
+    p.snapshot(snapshot(3, snapPlayer(0, { x: 4, z: 8 }), snapPlayer(1, { x: 10, z: 20 })), 1100);
+    p.step(trigger, 1000 + INTERP_DELAY);
+    expect(p.shot()!.hit).toBe(1);
+    const q = scene();
+    q.snapshot(snapshot(3, snapPlayer(0, { x: 4, z: 8 }), snapPlayer(1, { x: 10, z: 20 })), 1100);
+    // The clock at the newest snapshot: the other is 12 m off the line.
+    q.step(trigger, 1100 + INTERP_DELAY);
+    expect(q.shot()!.hit).toBe(-1);
+  });
+
+  it('uses the newest snapshot without a clock', () => {
+    const p = scene();
+    p.snapshot(snapshot(3, snapPlayer(0, { x: 4, z: 8 }), snapPlayer(1, { x: 10, z: 20 })), 1100);
+    p.step(trigger);
+    expect(p.shot()!.hit).toBe(-1);
+    const q = scene();
+    q.step(trigger);
+    expect(q.shot()!.hit).toBe(1);
+  });
+
+  it('does not fire before the own player is known', () => {
+    const p = createPredictor(lvl);
+    p.you(0);
+    p.step(trigger, 1000);
+    expect(p.shot()).toBeUndefined();
+  });
+
+  it('does not fire again when a snapshot replays the unacked inputs', () => {
+    const p = scene();
+    p.step(trigger, 1000);
+    p.step({ ...trigger, keys: 0 }, 1000);
+    expect(p.shot()).toBeUndefined();
+    // The host has not seen either input: the replay holds a firing step again.
+    p.snapshot(
+      snapshot(2, snapPlayer(0, { x: 4, z: 8, yaw: EAST }), snapPlayer(1, { x: 10, z: 8 })),
+      1033,
+    );
+    expect(p.shot()).toBeUndefined();
+    // And the replay left the cooldown where the host's would be.
+    expect(p.me(1)!.cool).toBe(FIRE_EVERY - 1);
+  });
+});
+
+describe('lag compensation through the room', () => {
+  const STEP = 1000 / TICK_HZ;
+  /** Steps a shooter's input takes to reach the host. */
+  const LATENCY = 4;
+  const FIRE_AT = 60;
+
+  const play = (fireAt = FIRE_AT) => {
+    const room = new Room();
+    const peers = ['A', 'B'].map(name => {
+      const c: Conn & { bins: ArrayBuffer[] } = {
+        bins: [],
+        send: d => typeof d !== 'string' && c.bins.push(d),
+      };
+      room.connect(c);
+      room.receive(c, JSON.stringify({ t: 'join', name }));
+      return c;
+    });
+    const [a, b] = peers;
+    const pred = createPredictor(lvl);
+    pred.you(0);
+    // B at spawn 1 runs sideways, +x, 6 m/s. The reference is what the host holds for it.
+    const bHost = spawn(1, lvl, 1);
+    const inFlight: { at: number; data: ArrayBuffer }[] = [];
+    let seen = 0;
+    let result:
+      | { drawn: PlayerState; arrival: PlayerState; mine: PlayerState; sent: Input; shot: Shot }
+      | undefined;
+
+    for (let k = 0; k < fireAt + 20; k++) {
+      const now = k * STEP;
+      const bIn = { seq: k, keys: KEY.RIGHT, yaw: 0, pitch: 0 };
+      room.receive(b, encodeInput(bIn));
+      move(bHost, bIn, lvl);
+      while (inFlight.length && inFlight[0].at <= k) {
+        const { data } = inFlight.shift()!;
+        room.receive(a, data);
+        // B as the host holds it when the shot input arrives.
+        if (result && decodeInput(data)!.seq === result.sent.seq) {
+          result.arrival = { ...bHost };
+        }
+      }
+      room.tick();
+      for (; seen < a.bins.length; seen++) {
+        pred.snapshot(decodeSnapshot(a.bins[seen])!, now);
+      }
+
+      let i: Omit<Input, 'seq' | 'view'> = { keys: 0, yaw: 0, pitch: 0 };
+      let target: PlayerState | undefined;
+      if (k === fireAt) {
+        // Aim at the middle of B as it is drawn.
+        target = pred.others(now).find(p => p.id === 1)!;
+        const me = pred.me(1)!;
+        const [dx, dy, dz] = [target.x - me.x, target.y + 0.9 - me.y - EYE, target.z - me.z];
+        i = {
+          keys: KEY.FIRE,
+          yaw: Math.atan2(-dx, -dz),
+          pitch: Math.atan2(dy, Math.hypot(dx, dz)),
+        };
+      }
+      const sent = pred.step(i, now);
+      inFlight.push({ at: k + LATENCY, data: encodeInput(sent) });
+      if (target) {
+        result = {
+          drawn: target,
+          arrival: bHost,
+          mine: { ...pred.me(1)! },
+          sent,
+          shot: pred.shot()!,
+        };
+      }
+    }
+    // Let the shot come back in a snapshot.
+    for (let n = 0; n < 8; n++) {
+      room.tick();
+    }
+    const hosted = a.bins.flatMap(d => decodeSnapshot(d)!.shots);
+    return { ...result!, hosted, bHost };
+  };
+
+  it('resolves the shot where the shooter saw B, which is no longer where B is', () => {
+    const r = play();
+    // B has run on: at the host it is well clear of where it was drawn (about 100 ms plus the
+    // latency back, at 6 m/s).
+    expect(r.arrival.x - r.drawn.x).toBeGreaterThan(0.9);
+    // The shooter's own prediction hit what it saw...
+    expect(r.shot).toMatchObject({ id: 0, hit: 1 });
+    // ... the host agrees, on the same point...
+    expect(r.hosted).toHaveLength(1);
+    expect(r.hosted[0]).toMatchObject({ id: 0, hit: 1 });
+    expect(r.hosted[0].x).toBeCloseTo(r.shot.x, 2);
+    expect(r.hosted[0].y).toBeCloseTo(r.shot.y, 2);
+    expect(r.hosted[0].z).toBeCloseTo(r.shot.z, 2);
+    // ... and without the rewind the same shot, from the same view, misses B at the host.
+    expect(fire(lvl, r.mine, r.sent.seq, [r.arrival]).hit).toBe(-1);
+  });
+
+  it('carries a view tick on the input that is behind the host tick by the interpolation delay', () => {
+    const r = play();
+    const ticksBack = FIRE_AT + 1 + LATENCY - r.sent.view!;
+    // 100 ms is 6 ticks; the delivery of the snapshots adds up to a snapshot interval.
+    expect(ticksBack).toBeGreaterThan((INTERP_DELAY * TICK_HZ) / 1000 + LATENCY - 2);
+    expect(ticksBack).toBeLessThan((INTERP_DELAY * TICK_HZ) / 1000 + LATENCY + 4);
   });
 });

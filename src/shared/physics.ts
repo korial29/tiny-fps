@@ -2,6 +2,8 @@
 // Deterministic for a given state and input, so the client's replay of unacked inputs lands where
 // the host does.
 import {
+  FIRE_EVERY,
+  FIRE_SLOW,
   GRAVITY,
   JUMP_SPEED,
   MAX_PITCH,
@@ -142,14 +144,19 @@ const span = (lvl: Level, x: number, z: number, y: number): [floor: number, ceil
  * it slides along shut edges (see shut and push), stands on the highest floor under the circle
  * (a step up to STEP_H is climbed at once, a higher one needs a jump, a ledge is a fall), and
  * bumps its head on the lowest ceiling.
+ * The chaingun: `cool` counts down one per step, RUN_SPEED is scaled by FIRE_SLOW while KEY.FIRE
+ * is held, and the step that finds it held with `cool` at 0 re-arms it to FIRE_EVERY and returns
+ * true: the caller resolves a shot (one every FIRE_EVERY steps, the first at once).
  */
-export const move = (p: PlayerState, i: Input, lvl: Level): void => {
+export const move = (p: PlayerState, i: Input, lvl: Level): boolean => {
+  const fire = (i.keys & KEY.FIRE) !== 0;
+  p.cool = Math.max(0, p.cool - 1);
   p.yaw = norm(i.yaw);
   p.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, i.pitch));
 
   const f = (i.keys & KEY.FORWARD ? 1 : 0) - (i.keys & KEY.BACK ? 1 : 0);
   const s = (i.keys & KEY.RIGHT ? 1 : 0) - (i.keys & KEY.LEFT ? 1 : 0);
-  const d = (RUN_SPEED * DT) / (Math.hypot(f, s) || 1);
+  const d = (RUN_SPEED * DT * (fire ? FIRE_SLOW : 1)) / (Math.hypot(f, s) || 1);
   const [fx, fz] = forward(p.yaw);
 
   p.x += (fx * f - fz * s) * d;
@@ -187,6 +194,11 @@ export const move = (p: PlayerState, i: Input, lvl: Level): void => {
   p.y = f32(p.y);
   p.z = f32(p.z);
   p.vy = f32(p.vy);
+  if (fire && !p.cool) {
+    p.cool = FIRE_EVERY;
+    return true;
+  }
+  return false;
 };
 
 /** A player standing on the floor at spawn point n of the map (modulo the count). */

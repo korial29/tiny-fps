@@ -1,10 +1,11 @@
-import { INPUT_BURST, MAX_NAME, RULES, SNAP_EVERY, TICK_HZ } from './constants';
+import { INPUT_BURST, MAX_NAME, MAX_REWIND, RULES, SNAP_EVERY, TICK_HZ } from './constants';
 import { compile } from './level';
 import { HALL } from './map';
 import { move, spawn } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
-import type { Conn, Every, PlayerInfo, PlayerState, Rules } from './types';
+import { fire } from './shoot';
+import type { Conn, Every, PlayerInfo, PlayerState, Rules, Shot } from './types';
 
 interface Player {
   conn: Conn;
@@ -76,12 +77,19 @@ const setEvery: Every = (cb, ms) => {
  *   taken by another player; 'full' beyond rules.maxPlayers. Everyone gets a fresh 'roster' on
  *   every join and leave.
  * - Each input frame moves its player at once with move(); the INPUT_BURST bank drops the excess.
- * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player goes to every peer.
+ *   A step that fires resolves its shot at once with fire(), the other players rewound to the
+ *   view tick of the input (lag compensation, at most MAX_REWIND ticks back).
+ * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player and the shots resolved
+ *   since the last one goes to every peer.
  */
 export class Room {
   /** Every connected peer; null until it joins. */
   private peers = new Map<Conn, Player | null>();
   private ticks = 0;
+  /** The players as each snapshot of the last MAX_REWIND ticks sent them. */
+  private history: { tick: number; players: PlayerState[] }[] = [];
+  /** Shots resolved since the last snapshot. */
+  private shots: Shot[] = [];
   private halt: (() => void) | undefined;
   private rules: Rules;
   /** Round-robin cursor over the spawn points, used once they are all taken. */
@@ -116,7 +124,9 @@ export class Room {
     // An input beyond the bank is dropped, and not acked.
     if (input && p.bank > 0) {
       p.bank--;
-      move(p.state, input, LEVEL);
+      if (move(p.state, input, LEVEL)) {
+        this.shots.push(fire(LEVEL, p.state, input.seq, this.rewind(p, input.view)));
+      }
       p.ack = input.seq;
     }
   }
@@ -138,12 +148,17 @@ export class Room {
     }
     players.forEach(p => (p.bank = Math.min(INPUT_BURST, p.bank + 1)));
     if (++this.ticks % SNAP_EVERY === 0) {
+      this.history.push({ tick: this.ticks, players: players.map(p => ({ ...p.state })) });
+      while (this.history[0].tick < this.ticks - MAX_REWIND) {
+        this.history.shift();
+      }
       // One buffer for everyone: transports must not mutate it.
       const snap = encodeSnapshot({
         tick: this.ticks,
         players: players.map(p => ({ ...p.state, ack: p.ack })),
-        shots: [],
+        shots: this.shots,
       });
+      this.shots = [];
       players.forEach(p => p.conn.send(snap));
     }
   }
@@ -177,6 +192,39 @@ export class Room {
   public stop(): void {
     this.halt?.();
     this.halt = undefined;
+  }
+
+  /**
+   * The players other than `shooter` as the shooter drew them at `view` (a u16 tick, fractional,
+   * read against the current tick and clamped to the kept history): x, y, z interpolated between
+   * the two snapshots around it like the client does. A player the history does not hold stands
+   * where it is.
+   */
+  private rewind(shooter: Player, view = 0): PlayerState[] {
+    const now = this.players()
+      .filter(p => p !== shooter)
+      .map(p => p.state);
+    const [first, last] = [this.history[0], this.history.at(-1)];
+    if (!first || !last) {
+      return now;
+    }
+    // Ticks back, on the u16 circle: in [-0x8000, 0x8000).
+    const back = ((((this.ticks - view + 0x8000) % 0x10000) + 0x10000) % 0x10000) - 0x8000;
+    const t = Math.min(Math.max(this.ticks - back, first.tick), last.tick);
+    let k = 0;
+    while (k + 1 < this.history.length && this.history[k + 1].tick <= t) {
+      k++;
+    }
+    const [a, b] = [this.history[k], this.history[k + 1] ?? this.history[k]];
+    const u = b.tick > a.tick ? (t - a.tick) / (b.tick - a.tick) : 0;
+    return now.map(p => {
+      const pa = a.players.find(q => q.id === p.id);
+      const pb = b.players.find(q => q.id === p.id);
+      const l = (m: number, n: number): number => m + (n - m) * u;
+      return pa && pb
+        ? { ...pb, x: l(pa.x, pb.x), y: l(pa.y, pb.y), z: l(pa.z, pb.z) }
+        : (pb ?? pa ?? p);
+    });
   }
 
   private players(): Player[] {

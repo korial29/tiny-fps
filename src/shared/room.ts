@@ -1,5 +1,6 @@
 import { INPUT_BURST, MAX_NAME, RULES, SNAP_EVERY, TICK_HZ } from './constants';
-import { YARD } from './map';
+import { compile } from './level';
+import { HALL } from './map';
 import { move, spawn } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
@@ -17,6 +18,8 @@ interface Player {
 
 /** Ticks run at most this many times per timer callback, so a stalled host does not spiral. */
 const MAX_CATCH_UP = 20;
+/** The map every room plays, compiled once. */
+const LEVEL = compile(HALL);
 /** A new player does not spawn within this many metres of another one. */
 const SPAWN_CLEAR = 2;
 
@@ -113,7 +116,7 @@ export class Room {
     // An input beyond the bank is dropped, and not acked.
     if (input && p.bank > 0) {
       p.bank--;
-      move(p.state, input, YARD);
+      move(p.state, input, LEVEL);
       p.ack = input.seq;
     }
   }
@@ -195,11 +198,11 @@ export class Room {
       COLORS.find(c => !players.some(p => p.info.color === c)) ?? COLORS[id % COLORS.length];
     // First spawn point with nobody within SPAWN_CLEAR, else the next one round-robin.
     const near = (n: number): boolean => {
-      const { x, z } = spawn(id, YARD, n);
+      const { x, z } = spawn(id, LEVEL, n);
       return players.some(p => Math.hypot(p.state.x - x, p.state.z - z) < SPAWN_CLEAR);
     };
     let n = 0;
-    while (n < YARD.spawns.length && near(n)) {
+    while (n < HALL.spawns.length && near(n)) {
       n++;
     }
     const player: Player = {
@@ -213,7 +216,7 @@ export class Room {
         ),
         color,
       },
-      state: spawn(id, YARD, n < YARD.spawns.length ? n : this.rr++),
+      state: spawn(id, LEVEL, n < HALL.spawns.length ? n : this.rr++),
       bank: INPUT_BURST,
       ack: 0xffff,
     };

@@ -1,20 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { INTERP_DELAY, TICK_HZ } from '../shared/constants';
-import { YARD } from '../shared/map';
+import { INTERP_DELAY, PLAYER_H, TICK_HZ } from '../shared/constants';
+import { compile, sectorAt } from '../shared/level';
+import { HALL } from '../shared/map';
 import { move, spawn } from '../shared/physics';
-import { decodeSnapshot, encodeInput } from '../shared/protocol';
+import { decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
 import { Room } from '../shared/room';
 import { KEY } from '../shared/types';
 import type { Conn, Input, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
 import { createPredictor } from './predict';
 
 const STEP = 1000 / TICK_HZ;
+const lvl = compile(HALL);
 
 const snapPlayer = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
   id,
-  x: 15,
-  y: 0,
-  z: 38,
+  x: 8,
+  y: 1,
+  z: 14,
   vy: 0,
   yaw: 0,
   pitch: 0,
@@ -26,24 +28,65 @@ const snapshot = (tick: number, ...players: SnapPlayer[]): Snapshot => ({ tick, 
 const fwd = { keys: KEY.FORWARD, yaw: 0, pitch: 0 };
 
 describe('prediction against the room', () => {
-  /** Keys held for a few steps at a time, yaw drifting: walls, pillars, the platform, jumps. */
-  const script = (n: number): Omit<Input, 'seq'>[] => {
-    let s = 12345;
+  /**
+   * A route through HALL, steered on a copy of the physics: the corridor with head bumps, the
+   * west hall, into the lava pit and against its wall, a jump out, the stairs up to the balcony
+   * and against its wall, and back down hopping. Keys wobble (strafing, small yaw noise) so the
+   * inputs are not tidy. Each leg ends at its target or after `max` steps (a target inside a wall
+   * is a press against it).
+   */
+  const route: { to: [number, number]; max: number; jump?: boolean }[] = [
+    { to: [17, 3], max: 150 },
+    { to: [15, 8], max: 60 },
+    { to: [19.5, 8], max: 70, jump: true },
+    { to: [17, 8], max: 50, jump: true },
+    { to: [23, 8], max: 60 },
+    { to: [28, 8], max: 60 },
+    { to: [31, 8], max: 40 },
+    { to: [33, 8], max: 50, jump: true },
+    { to: [33, 13], max: 60 },
+    { to: [30, 14], max: 40 },
+    { to: [30, 22], max: 100 },
+    { to: [37, 22], max: 80 },
+    { to: [30, 22], max: 70 },
+    { to: [30, 15], max: 100, jump: true },
+    { to: [22, 14], max: 90 },
+  ];
+  const script = (seed = 12345): Omit<Input, 'seq'>[] => {
+    let s = seed;
     const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
     const out: Omit<Input, 'seq'>[] = [];
-    let keys = 0;
-    let yaw = 1.25 * Math.PI;
-    while (out.length < n) {
-      keys = KEY.FORWARD | (rnd() < 0.3 ? KEY.LEFT : 0) | (rnd() < 0.3 ? KEY.RIGHT : 0);
-      keys |= rnd() < 0.25 ? KEY.JUMP : 0;
-      const turn = (rnd() - 0.5) * 0.08;
-      for (let k = 0, len = 5 + Math.floor(rnd() * 25); k < len && out.length < n; k++) {
-        yaw += turn;
-        out.push({ keys, yaw, pitch: Math.sin(out.length / 20) * 0.5 });
+    const sim = spawn(0, lvl, 0);
+    for (const { to, max, jump } of route) {
+      let keys = 0;
+      for (let k = 0; k < max; k++) {
+        const [dx, dz] = [to[0] - sim.x, to[1] - sim.z];
+        if (Math.hypot(dx, dz) < 0.3) {
+          break;
+        }
+        if (k % 12 === 0) {
+          keys = KEY.FORWARD | (rnd() < 0.2 ? KEY.LEFT : 0) | (rnd() < 0.2 ? KEY.RIGHT : 0);
+        }
+        const i = {
+          keys: keys | (jump ? KEY.JUMP : 0),
+          yaw: Math.atan2(-dx, -dz) + (rnd() - 0.5) * 0.1,
+          pitch: Math.sin(out.length / 20) * 0.5,
+        };
+        out.push(i);
+        move(sim, { ...i, seq: 0 }, lvl);
       }
     }
     return out;
   };
+  const SCRIPT = script();
+  /** Seeds of the route noise for the sweep: different wobbles hit different thresholds. */
+  const SEEDS = Array.from({ length: 24 }, (_, k) => 1000 + k * 977);
+  /** The three lag scenarios of the tests below, as steps of delay per input. */
+  const LAGS: [string, (k: number) => number][] = [
+    ['jittery', k => 2 + (k % 7 === 0 ? 3 : 0) + (k % 50 < 5 ? 4 : 0)],
+    ['none', () => 0],
+    ['long', () => 8],
+  ];
 
   /**
    * Runs the script through a room (inputs and snapshots delayed, in order, by `lag(k)` steps)
@@ -52,7 +95,8 @@ describe('prediction against the room', () => {
    * with no network at all, the worst gap to the host's own snapshot at the end, and how far the
    * raw host state was behind the prediction (what the replay had to make up).
    */
-  const race = (n: number, lag: (k: number) => number) => {
+  const race = (lag: (k: number) => number, steps = SCRIPT) => {
+    const n = steps.length;
     const room = new Room();
     const sent: ArrayBuffer[] = [];
     const conn: Conn & { bins: ArrayBuffer[] } = {
@@ -66,9 +110,9 @@ describe('prediction against the room', () => {
     room.connect(other);
     room.receive(other, JSON.stringify({ t: 'join', name: 'other' }));
 
-    const pred = createPredictor(YARD);
+    const pred = createPredictor(lvl);
     pred.you(0);
-    const ref: PlayerState = spawn(0, YARD, 0);
+    const ref: PlayerState = spawn(0, lvl, 0);
     const inputs: { at: number; data: ArrayBuffer }[] = [];
     const snaps: { at: number; data: ArrayBuffer }[] = [];
     let seen = 0;
@@ -99,9 +143,9 @@ describe('prediction against the room', () => {
     };
 
     let last = 0;
-    script(n).forEach((i, k) => {
+    steps.forEach((i, k) => {
       const input = pred.step(i);
-      move(ref, input, YARD);
+      move(ref, input, lvl);
       sent.push(encodeInput(input));
       // In order: never delivered before the previous one.
       last = Math.max(last, k + lag(k));
@@ -116,48 +160,89 @@ describe('prediction against the room', () => {
     return { worst, behind, final: gap(final, pred.me(1)!), end: gap(final, ref) };
   };
 
-  it('agrees with the host within a centimetre, inputs and snapshots in flight', () => {
-    const r = race(600, k => 2 + (k % 7 === 0 ? 3 : 0) + (k % 50 < 5 ? 4 : 0));
-    expect(r.worst).toBeLessThan(0.01);
+  // Host, client replay and reference all run move() on float32 state with the wire-rounded input,
+  // and the snapshot carries that state exactly: the gaps are 0, not "small". The one thing left
+  // that could differ is Math.sin / Math.cos across JS engines, and these all run on one.
+  it('agrees with the host exactly, inputs and snapshots in flight', () => {
+    const r = race(LAGS[0][1]);
+    expect(r.worst).toBe(0);
     // The replay was needed: the host state alone was well behind the predicted one.
     expect(r.behind).toBeGreaterThan(0.1);
-    expect(r.end).toBeLessThan(0.01);
-    expect(r.final).toBeLessThan(0.01);
+    expect(r.end).toBe(0);
+    expect(r.final).toBe(0);
   });
 
-  it('agrees with the host when nothing is delayed', () => {
-    const r = race(400, () => 0);
-    expect(r.worst).toBeLessThan(0.01);
-    expect(r.end).toBeLessThan(0.01);
+  it('agrees with the host exactly when nothing is delayed', () => {
+    const r = race(LAGS[1][1]);
+    expect(r.worst).toBe(0);
+    expect(r.end).toBe(0);
   });
 
-  it('agrees with the host with a long lag (many unacked inputs)', () => {
-    const r = race(500, () => 8);
-    expect(r.worst).toBeLessThan(0.01);
+  it('agrees with the host exactly with a long lag (many unacked inputs)', () => {
+    const r = race(LAGS[2][1]);
+    expect(r.worst).toBe(0);
     expect(r.behind).toBeGreaterThan(0.3);
-    expect(r.end).toBeLessThan(0.01);
+    expect(r.end).toBe(0);
   });
 
-  it('makes the predicted run actually cover ground, up in the air and against walls', () => {
-    // Guards the script: a run that never left spawn would agree trivially.
-    const p = spawn(0, YARD, 0);
-    let high = 0;
-    let moved = 0;
-    const seq = script(600);
-    seq.forEach((i, k) => {
+  it('agrees exactly over many seeds of route noise, under every lag', () => {
+    // Stops at the first seed and lag that disagree, naming it, so a regression fails fast.
+    let bad = '';
+    for (const seed of SEEDS) {
+      const steps = script(seed);
+      for (const [name, lag] of LAGS) {
+        const r = race(lag, steps);
+        if (r.worst || r.end || r.final) {
+          bad = `seed ${seed}, ${name} lag: ${JSON.stringify(r)}`;
+          break;
+        }
+      }
+      if (bad) {
+        break;
+      }
+    }
+    expect(bad).toBe('');
+  }, 60_000);
+
+  /** What a run goes through: sectors visited, lowest and highest feet, head bumps, wall presses. */
+  const cover = (steps: Omit<Input, 'seq'>[]) => {
+    const p = spawn(0, lvl, 0);
+    const seen = new Set<number>();
+    let [low, high, bump] = [Infinity, 0, 0];
+    let walls = 0;
+    steps.forEach((step, k) => {
+      const i = onWire({ ...step, seq: k });
       const [x, z] = [p.x, p.z];
-      move(p, { ...i, seq: k }, YARD);
+      move(p, i, lvl);
+      seen.add(sectorAt(lvl, p.x, p.z));
+      low = Math.min(low, p.y);
       high = Math.max(high, p.y);
-      moved += Math.hypot(p.x - x, p.z - z);
+      // Head against the corridor ceiling.
+      bump += +(sectorAt(lvl, p.x, p.z) === 1 && p.y > 3.5 - PLAYER_H - 1e-6);
+      // Pushed: asked for (nearly) a full step and moved much less.
+      walls += +(i.keys & KEY.FORWARD && Math.hypot(p.x - x, p.z - z) < 0.05 && p.ground);
     });
-    expect(high).toBeGreaterThan(1);
-    expect(moved).toBeGreaterThan(20);
+    return { seen, low, high, bump, walls };
+  };
+
+  it('makes every predicted run actually take the stairs, the pit, the walls and the jumps', () => {
+    // Guards the scripts: a run that never left spawn would agree trivially.
+    for (const seed of [12345, ...SEEDS]) {
+      const { seen, low, high, bump, walls } = cover(script(seed));
+      for (const s of [0, 1, 3, 6, 7, 8, 9, 10]) {
+        expect(seen.has(s), `seed ${seed}, sector ${s}`).toBe(true);
+      }
+      expect(low).toBe(0);
+      expect(high).toBeGreaterThan(2.6);
+      expect(bump).toBeGreaterThanOrEqual(2);
+      expect(walls).toBeGreaterThan(20);
+    }
   });
 });
 
 describe('own player', () => {
   it('is unknown until a snapshot shows it, but numbers and keeps the inputs meanwhile', () => {
-    const pred = createPredictor(YARD);
+    const pred = createPredictor(lvl);
     pred.you(3);
     expect(pred.me(0)).toBeUndefined();
     expect(pred.step(fwd)).toEqual({ ...fwd, seq: 0 });
@@ -167,21 +252,21 @@ describe('own player', () => {
 
     // The first snapshot with the own player replays what it has not acked.
     pred.snapshot(snapshot(2, snapPlayer(3, { ack: 0 })), 10);
-    expect(pred.me(1)).toMatchObject({ id: 3, x: 15, z: 38 - 0.1 });
+    expect(pred.me(1)).toMatchObject({ id: 3, x: 8, z: Math.fround(14 - 0.1) });
   });
 
   it('eases between the state before and after the last step', () => {
-    const pred = createPredictor(YARD);
+    const pred = createPredictor(lvl);
     pred.you(0);
     pred.snapshot(snapshot(1, snapPlayer(0)), 0);
-    expect(pred.me(0)!.z).toBe(38);
+    expect(pred.me(0)!.z).toBe(14);
     pred.step(fwd);
-    expect(pred.me(0)!.z).toBeCloseTo(38);
-    expect(pred.me(0.5)!.z).toBeCloseTo(37.95);
-    expect(pred.me(1)!.z).toBeCloseTo(37.9);
+    expect(pred.me(0)!.z).toBeCloseTo(14);
+    expect(pred.me(0.5)!.z).toBeCloseTo(13.95);
+    expect(pred.me(1)!.z).toBeCloseTo(13.9);
     // alpha is clamped.
-    expect(pred.me(-1)!.z).toBeCloseTo(38);
-    expect(pred.me(3)!.z).toBeCloseTo(37.9);
+    expect(pred.me(-1)!.z).toBeCloseTo(14);
+    expect(pred.me(3)!.z).toBeCloseTo(13.9);
     // Yaw goes the short way round, and stays in [0, 2π).
     pred.snapshot(snapshot(2, snapPlayer(0, { yaw: 6.2, ack: 0 })), 20);
     pred.step({ keys: 0, yaw: 0.1, pitch: 0.2 });
@@ -193,27 +278,27 @@ describe('own player', () => {
   });
 
   it('resets to the host state and replays only what is unacked', () => {
-    const pred = createPredictor(YARD);
+    const pred = createPredictor(lvl);
     pred.you(0);
     pred.snapshot(snapshot(1, snapPlayer(0)), 0);
     for (let k = 0; k < 10; k++) {
       pred.step(fwd);
     }
-    expect(pred.me(1)!.z).toBeCloseTo(37);
+    expect(pred.me(1)!.z).toBeCloseTo(13);
     // The host applied seqs 0..5 and is where 6 steps put it: 4 are replayed on top of it.
-    pred.snapshot(snapshot(2, snapPlayer(0, { z: 37.4, ack: 5 })), 50);
-    expect(pred.me(1)!.z).toBeCloseTo(37.0);
+    pred.snapshot(snapshot(2, snapPlayer(0, { z: 13.4, ack: 5 })), 50);
+    expect(pred.me(1)!.z).toBeCloseTo(13.0);
     // A host that disagrees wins: it is somewhere else and the replay starts from there.
-    pred.snapshot(snapshot(3, snapPlayer(0, { z: 30, ack: 5 })), 60);
-    expect(pred.me(1)!.z).toBeCloseTo(29.6);
+    pred.snapshot(snapshot(3, snapPlayer(0, { z: 8, ack: 5 })), 60);
+    expect(pred.me(1)!.z).toBeCloseTo(7.6);
     // Everything acked: nothing left to replay.
-    pred.snapshot(snapshot(4, snapPlayer(0, { z: 30, ack: 9 })), 70);
-    expect(pred.me(1)!.z).toBeCloseTo(30);
-    expect(pred.me(0)!.z).toBeCloseTo(30);
+    pred.snapshot(snapshot(4, snapPlayer(0, { z: 8, ack: 9 })), 70);
+    expect(pred.me(1)!.z).toBeCloseTo(8);
+    expect(pred.me(0)!.z).toBeCloseTo(8);
   });
 
   it('counts acks round the u16 wrap', () => {
-    const pred = createPredictor(YARD);
+    const pred = createPredictor(lvl);
     pred.you(0);
     // Inputs numbered before the own player is known: only the last 120 are kept.
     for (let k = 0; k < 65534; k++) {
@@ -221,29 +306,29 @@ describe('own player', () => {
     }
     pred.snapshot(snapshot(1, snapPlayer(0, { ack: 65530 })), 0);
     // 65531, 65532 and 65533 are unacked.
-    expect(pred.me(1)!.z).toBeCloseTo(38 - 0.3);
+    expect(pred.me(1)!.z).toBeCloseTo(14 - 0.3);
     const wrap = [pred.step(fwd).seq, pred.step(fwd).seq, pred.step(fwd).seq, pred.step(fwd).seq];
     expect(wrap).toEqual([65534, 65535, 0, 1]);
     // The host is at 65535: 0 and 1 come after it, across the wrap.
-    pred.snapshot(snapshot(2, snapPlayer(0, { z: 30, ack: 65535 })), 10);
-    expect(pred.me(1)!.z).toBeCloseTo(30 - 0.2);
-    pred.snapshot(snapshot(3, snapPlayer(0, { z: 30, ack: 0 })), 20);
-    expect(pred.me(1)!.z).toBeCloseTo(30 - 0.1);
-    pred.snapshot(snapshot(4, snapPlayer(0, { z: 30, ack: 1 })), 30);
-    expect(pred.me(1)!.z).toBeCloseTo(30);
+    pred.snapshot(snapshot(2, snapPlayer(0, { z: 8, ack: 65535 })), 10);
+    expect(pred.me(1)!.z).toBeCloseTo(8 - 0.2);
+    pred.snapshot(snapshot(3, snapPlayer(0, { z: 8, ack: 0 })), 20);
+    expect(pred.me(1)!.z).toBeCloseTo(8 - 0.1);
+    pred.snapshot(snapshot(4, snapPlayer(0, { z: 8, ack: 1 })), 30);
+    expect(pred.me(1)!.z).toBeCloseTo(8);
   });
 
   it('starts from the initial ack: the host has applied nothing, input 0 is still pending', () => {
-    const pred = createPredictor(YARD);
+    const pred = createPredictor(lvl);
     pred.you(0);
     pred.snapshot(snapshot(1, snapPlayer(0)), 0);
     pred.step(fwd);
     pred.snapshot(snapshot(2, snapPlayer(0, { ack: 0xffff })), 10);
-    expect(pred.me(1)!.z).toBeCloseTo(37.9);
+    expect(pred.me(1)!.z).toBeCloseTo(13.9);
   });
 
   it('keeps the pending list bounded', () => {
-    const pred = createPredictor(YARD);
+    const pred = createPredictor(lvl);
     pred.you(0);
     pred.snapshot(snapshot(1, snapPlayer(0)), 0);
     for (let k = 0; k < 500; k++) {
@@ -251,12 +336,12 @@ describe('own player', () => {
     }
     // Nothing acked since: only the newest 120 are replayed (12 m).
     pred.snapshot(snapshot(2, snapPlayer(0)), 10);
-    expect(pred.me(1)!.z).toBe(38);
+    expect(pred.me(1)!.z).toBe(14);
     for (let k = 0; k < 500; k++) {
       pred.step(fwd);
     }
     pred.snapshot(snapshot(3, snapPlayer(0)), 20);
-    expect(pred.me(1)!.z).toBeCloseTo(38 - 12);
+    expect(pred.me(1)!.z).toBeCloseTo(14 - 12);
   });
 });
 
@@ -265,7 +350,7 @@ describe('other players', () => {
     snapPlayer(id, { x, ...over });
 
   const fed = () => {
-    const pred = createPredictor(YARD);
+    const pred = createPredictor(lvl);
     pred.you(0);
     // Snapshots every 40 ms from t = 1000; player 1 runs along x, 2 leaves, 3 arrives.
     pred.snapshot(snapshot(1, at(0, 5), at(1, 10), at(2, 20)), 1000);
@@ -302,7 +387,7 @@ describe('other players', () => {
   });
 
   it('interpolates yaw along the shortest arc and keeps ground and vy of the newer one', () => {
-    const pred = createPredictor(YARD);
+    const pred = createPredictor(lvl);
     pred.you(0);
     pred.snapshot(snapshot(1, at(1, 10, { yaw: 6.2, ground: true, vy: 0 })), 1000);
     pred.snapshot(snapshot(2, at(1, 10, { yaw: 0.1, pitch: 0.4, ground: false, vy: 3 })), 1100);
@@ -315,7 +400,7 @@ describe('other players', () => {
   });
 
   it('is empty before any snapshot, and bounds its history', () => {
-    const pred = createPredictor(YARD);
+    const pred = createPredictor(lvl);
     expect(pred.others(0)).toEqual([]);
     for (let k = 0; k < 200; k++) {
       pred.snapshot(snapshot(k, at(1, k)), k * 33);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { INPUT_BURST, MAX_NAME, MAX_PLAYERS, SNAP_EVERY, TICK_HZ } from './constants';
-import { YARD } from './map';
+import { HALL } from './map';
 import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
@@ -137,10 +137,12 @@ describe('Room: joining', () => {
     ticks(room, SNAP_EVERY);
     const at = (c: Peer, id: number) => snap(c).players.find(p => p.id === id)!;
     expect([at(a, 0).x, at(a, 0).z, at(a, 0).yaw]).toEqual([
-      YARD.spawns[0][0],
-      YARD.spawns[0][1],
-      YARD.spawns[0][2],
+      HALL.spawns[0][0],
+      HALL.spawns[0][1],
+      HALL.spawns[0][2],
     ]);
+    // On the floor of the start room (1 m), not at 0: the host would drop him through it.
+    expect(at(a, 0)).toMatchObject({ y: 1, vy: 0, ground: true });
     // Walk away from spawn 0 and back in: the second joiner then takes spawn 0 again.
     for (let k = 0; k < 60; k++) {
       room.receive(a, input(k, KEY.RIGHT));
@@ -148,10 +150,10 @@ describe('Room: joining', () => {
     }
     const b = join(room);
     ticks(room, SNAP_EVERY);
-    expect([at(b, 1).x, at(b, 1).z]).toEqual([YARD.spawns[0][0], YARD.spawns[0][1]]);
+    expect([at(b, 1).x, at(b, 1).z]).toEqual([HALL.spawns[0][0], HALL.spawns[0][1]]);
 
     // Standing on spawn 0, a third one takes spawn 1, and so on: nobody within 2 m.
-    for (let n = 2; n < YARD.spawns.length; n++) {
+    for (let n = 2; n < HALL.spawns.length; n++) {
       join(room);
     }
     ticks(room, SNAP_EVERY);
@@ -167,7 +169,7 @@ describe('Room: joining', () => {
     join(room);
     join(room);
     ticks(room, SNAP_EVERY);
-    expect(snap(a).players).toHaveLength(YARD.spawns.length + 2);
+    expect(snap(a).players).toHaveLength(HALL.spawns.length + 2);
   });
 });
 
@@ -175,7 +177,7 @@ describe('Room: inputs and snapshots', () => {
   it('moves a player with each input at once, and acks its seq', () => {
     const room = new Room();
     const a = join(room);
-    const [x0, z0] = [YARD.spawns[0][0], YARD.spawns[0][1]];
+    const [x0, z0] = [HALL.spawns[0][0], HALL.spawns[0][1]];
     ticks(room, SNAP_EVERY);
     // Nothing applied yet: seq 65535 is acked, the one before the client's first (0).
     expect(snap(a).players[0]).toMatchObject({ x: x0, z: z0, ack: 65535 });
@@ -190,6 +192,7 @@ describe('Room: inputs and snapshots', () => {
     expect(p.z).toBeCloseTo(z0 - 0.6, 2);
     expect(p.x).toBeCloseTo(x0, 2);
     expect(p.ground).toBe(true);
+    expect(p.y).toBeCloseTo(1, 2);
   });
 
   it('applies jumps and gravity through the shared physics', () => {
@@ -198,7 +201,7 @@ describe('Room: inputs and snapshots', () => {
     room.receive(a, input(0, KEY.JUMP));
     ticks(room, SNAP_EVERY);
     expect(snap(a).players[0]).toMatchObject({ ground: false, ack: 0 });
-    expect(snap(a).players[0].y).toBeGreaterThan(0.1);
+    expect(snap(a).players[0].y).toBeGreaterThan(1.1);
     expect(snap(a).players[0].vy).toBeGreaterThan(6);
   });
 
@@ -211,7 +214,7 @@ describe('Room: inputs and snapshots', () => {
     ticks(room, SNAP_EVERY);
     // INPUT_BURST steps of 0.1 m, the last acked seq is the INPUT_BURST-th.
     expect(snap(a).players[0].ack).toBe(INPUT_BURST - 1);
-    expect(snap(a).players[0].z).toBeCloseTo(YARD.spawns[0][1] - INPUT_BURST * 0.1, 2);
+    expect(snap(a).players[0].z).toBeCloseTo(HALL.spawns[0][1] - INPUT_BURST * 0.1, 2);
 
     // The two ticks above earned two inputs.
     for (let k = 0; k < 5; k++) {
@@ -253,7 +256,7 @@ describe('Room: inputs and snapshots', () => {
     room.receive(a, new ArrayBuffer(3));
     room.receive(a, new ArrayBuffer(8));
     ticks(room, SNAP_EVERY);
-    expect(snap(a).players[0]).toMatchObject({ ack: 65535, z: YARD.spawns[0][1] });
+    expect(snap(a).players[0]).toMatchObject({ ack: 65535, z: HALL.spawns[0][1] });
   });
 
   it('sends one snapshot every SNAP_EVERY ticks to every joined peer, and none to the others', () => {

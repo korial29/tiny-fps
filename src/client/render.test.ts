@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { YARD } from '../shared/map';
+import { compile, inside } from '../shared/level';
+import { HALL } from '../shared/map';
 import { forward } from '../shared/physics';
-import { blocked, mapVerts, project, pushBox, viewProj } from './render';
+import { TEX } from '../shared/types';
+import { levelVerts, project, pushBox, spans, viewProj } from './render';
 
 const at = (yaw: number, pitch: number, x: number, y: number, z: number) =>
   project(viewProj([0, 0, 0], yaw, pitch, 1), x, y, z);
@@ -40,7 +42,7 @@ describe('viewProj and project', () => {
   });
 });
 
-describe('pushBox and mapVerts', () => {
+describe('pushBox', () => {
   it('writes 36 vertices of 10 floats a box', () => {
     const out: number[] = [];
     pushBox(out, [0, 0, 0], [1, 1, 1], 0, [1, 0, 0, 0]);
@@ -70,27 +72,60 @@ describe('pushBox and mapVerts', () => {
       );
     }
   });
+});
 
-  it('builds the floor and one box a map box', () => {
-    const verts = mapVerts(YARD, () => [1, 1, 1]);
-    expect(verts).toHaveLength((YARD.boxes.length + 1) * 36 * 10);
+const lvl = compile(HALL);
+const edge = (front: number, back: number) =>
+  lvl.edges.find(e => e.front === front && e.back === back)!;
+
+describe('spans', () => {
+  it('gives a solid wall one full-height span', () => {
+    expect(spans(lvl, edge(0, -1))).toEqual([[1, 5]]);
+  });
+
+  it('draws a step on the lower side only, up to the higher floor', () => {
+    const [low, high] = [edge(7, 8), edge(8, 7)];
+    expect(spans(lvl, low)).toEqual([[1.4, 1.8]]);
+    expect(spans(lvl, high)).toEqual([]);
+  });
+
+  it('draws the upper wall on the side with the higher ceiling', () => {
+    expect(spans(lvl, edge(0, 1))).toEqual([[3.5, 5]]);
+    expect(spans(lvl, edge(1, 0))).toEqual([]);
+  });
+
+  it('draws nothing across a flat opening, and the pit rim from the hall side', () => {
+    expect(spans(lvl, edge(2, 3))).toEqual([]);
+    expect(spans(lvl, edge(2, 6))).toEqual([]);
+    expect(spans(lvl, edge(6, 2))).toEqual([[0, 1]]);
   });
 });
 
-describe('blocked', () => {
-  const pillar = YARD.boxes[4]; // x, z in [10, 12], 3 m high
-  it('sees through open air and is stopped by a box', () => {
-    expect(blocked(YARD.boxes, [5, 1.6, 5], [20, 2, 5])).toBe(false);
-    expect(blocked([pillar], [5, 1.6, 11], [20, 2, 11])).toBe(true);
+describe('levelVerts', () => {
+  const verts = levelVerts(lvl);
+  const count = HALL.sectors.reduce((n, { pts }) => n + 2 * (pts.length - 2) * 3, 0);
+  const quads = lvl.edges.reduce((n, e) => n + spans(lvl, e).length, 0);
+
+  it('builds a fan per floor and ceiling and a quad per span', () => {
+    expect(verts).toHaveLength((count + quads * 6) * 10);
   });
 
-  it('sees over a box and stops at a segment that ends before it', () => {
-    expect(blocked([pillar], [5, 4, 11], [20, 4, 11])).toBe(false);
-    expect(blocked([pillar], [5, 1.6, 11], [9, 1.6, 11])).toBe(false);
+  it('points every wall normal into its own sector', () => {
+    let at = count * 10;
+    for (const e of lvl.edges) {
+      for (let q = 0; q < spans(lvl, e).length; q++, at += 60) {
+        const [x, , z, nx, ny, nz] = verts.slice(at, at + 6);
+        expect(ny).toBe(0);
+        expect(inside(HALL.sectors[e.front], x + nx * 0.01, z + nz * 0.01)).toBe(true);
+        expect(inside(HALL.sectors[e.front], x - nx * 0.01, z - nz * 0.01)).toBe(false);
+      }
+    }
+    expect(at).toBe(verts.length);
   });
 
-  it('handles a segment parallel to a face', () => {
-    expect(blocked([pillar], [5, 1.6, 9], [20, 1.6, 9])).toBe(false);
-    expect(blocked([pillar], [11, 1.6, 5], [11, 1.6, 20])).toBe(true);
+  it('gives floors x, z texture coordinates and the sector light', () => {
+    // Sector 0's floor fan has 4 triangles; sector 1 follows with its floor, light 0.6.
+    const at = (HALL.sectors[0].pts.length - 2) * 6 * 10;
+    expect(verts.slice(at, at + 10)).toEqual([16, 1, 6, 0, 1, 0, 16, 6, TEX.TILE, 0.6]);
   });
 });

@@ -1,11 +1,12 @@
 import { EYE, PLAYER_H, TICK_HZ } from '../shared/constants';
-import { YARD } from '../shared/map';
+import { blocked, compile } from '../shared/level';
+import { HALL } from '../shared/map';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import type { PlayerInfo, SocketLike } from '../shared/types';
 import { createInput } from './input';
 import { createPredictor } from './predict';
-import { blocked, createRenderer } from './render';
+import { createRenderer } from './render';
 import type { Renderer } from './render';
 
 export type { PlayerInfo, SocketLike } from '../shared/types';
@@ -28,6 +29,7 @@ export interface TinyFps {
   destroy(): void;
 }
 
+const lvl = compile(HALL);
 const STEP = 1 / TICK_HZ;
 /** Steps run in one frame at most: a background tab catches up by this much, not by minutes. */
 const MAX_STEPS = 5;
@@ -56,11 +58,11 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const listeners: Record<TinyFpsEvent, (() => void)[]> = { roster: [], open: [], close: [] };
   const emit = (ev: TinyFpsEvent) => listeners[ev].forEach(cb => cb());
 
-  const predictor = createPredictor(YARD);
+  const predictor = createPredictor(lvl);
   const ctl = createInput(canvas);
   let rd: Renderer | undefined;
   try {
-    rd = createRenderer(canvas, YARD);
+    rd = createRenderer(canvas, lvl);
   } catch {
     // No WebGL2: stay connected, say so in the hint.
   }
@@ -152,7 +154,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     for (const p of others) {
       const top: [number, number, number] = [p.x, p.y + PLAYER_H + 0.3, p.z];
       // Behind a wall the tag would give the player away.
-      const at = me && !blocked(YARD.boxes, eye, top) ? rd?.project(...top) : undefined;
+      const at = me && !blocked(lvl, eye, top) ? rd?.project(...top) : undefined;
       const el = tag(p.id);
       seen.add(p.id);
       el.hidden = !at;

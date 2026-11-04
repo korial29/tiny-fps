@@ -25,14 +25,8 @@ export const JUMP_SPEED = 7;
 export const GRAVITY = 20;
 /** Pitch is clamped to ±MAX_PITCH radians, just short of straight up or down. */
 export const MAX_PITCH = 1.55;
-
-/**
- * Network fixed point: a coordinate travels as round(v * SCALE) in a Uint16, so 0 to
- * 65535 / SCALE = 127.99 m at 2 mm steps. Maps stay inside [0, 127] on x, y and z.
- */
-export const SCALE = 512;
-/** A vertical speed travels as round(vy * VY_SCALE) in an Int16: ±327 m/s at 1 cm/s. */
-export const VY_SCALE = 100;
+/** A floor at most this much higher is walked onto; a higher one needs a jump. */
+export const STEP_H = 0.5;
 
 /**
  * Host-side speed-hack guard: each player earns one input per host tick and may bank up to

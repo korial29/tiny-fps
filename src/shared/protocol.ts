@@ -4,11 +4,10 @@
 //
 // Input, 8 bytes: [type u8 = MSG_INPUT][seq u16][keys u8][yaw u16][pitch i16]
 //   yaw in 65536ths of a turn, decoded in [0, 2π); pitch in 1/10000 rad.
-// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8] then count × 16 bytes:
-//   [id u8][x u16][y u16][z u16][vy i16][yaw u16][pitch i16][ack u16][flags u8, bit 0 = ground]
-//   x, y, z fixed point (SCALE), clamped to [0, 65535]; vy × VY_SCALE, clamped to the Int16.
+// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8] then count × 24 bytes:
+//   [id u8][x f32][y f32][z f32][vy f32][yaw u16][pitch i16][ack u16][flags u8, bit 0 = ground]
+//   x, y, z, vy are the host's float32 state, exact (see move in physics.ts).
 // Every multi-byte field is big-endian (DataView's default).
-import { SCALE, VY_SCALE } from './constants';
 import type { Input, PlayerInfo, Snapshot } from './types';
 
 export type ClientText = { t: 'join'; name: string };
@@ -20,14 +19,26 @@ export const MSG_SNAPSHOT = 2;
 
 export const INPUT_BYTES = 8;
 export const SNAP_HEAD = 4;
-export const SNAP_PLAYER = 16;
+export const SNAP_PLAYER = 24;
 
-const toWire = (v: number): number => Math.max(0, Math.min(65535, Math.round(v * SCALE)));
-const fromWire = (v: number): number => v / SCALE;
 const TURN = 65536 / (2 * Math.PI);
 /** Radians to 65536ths of a turn; the mask also folds negative and ≥ 2π angles into one turn. */
 const toTurn = (yaw: number): number => Math.round(yaw * TURN) & 0xffff;
 const clamp16 = (v: number): number => Math.max(-32768, Math.min(32767, Math.round(v)));
+/** Pitch in 1/10000 rad, and back. */
+const toPitch = (pitch: number): number => clamp16(pitch * 10000);
+const fromPitch = (w: number): number => w / 10000;
+const fromTurn = (w: number): number => w / TURN;
+
+/**
+ * The input as the host will read it after encodeInput and decodeInput: yaw and pitch rounded to
+ * the wire. The client predicts with this, so both sides move with the same values.
+ */
+export const onWire = (i: Input): Input => ({
+  ...i,
+  yaw: fromTurn(toTurn(i.yaw)),
+  pitch: fromPitch(toPitch(i.pitch)),
+});
 
 export const encodeInput = (i: Input): ArrayBuffer => {
   const v = new DataView(new ArrayBuffer(INPUT_BYTES));
@@ -35,7 +46,7 @@ export const encodeInput = (i: Input): ArrayBuffer => {
   v.setUint16(1, i.seq & 0xffff);
   v.setUint8(3, i.keys & 0xff);
   v.setUint16(4, toTurn(i.yaw));
-  v.setInt16(6, clamp16(i.pitch * 10000));
+  v.setInt16(6, toPitch(i.pitch));
   return v.buffer;
 };
 
@@ -51,8 +62,8 @@ export const decodeInput = (buf: ArrayBuffer): Input | null => {
   return {
     seq: v.getUint16(1),
     keys: v.getUint8(3),
-    yaw: v.getUint16(4) / TURN,
-    pitch: v.getInt16(6) / 10000,
+    yaw: fromTurn(v.getUint16(4)),
+    pitch: fromPitch(v.getInt16(6)),
   };
 };
 
@@ -64,14 +75,14 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
   s.players.forEach((p, i) => {
     const o = SNAP_HEAD + i * SNAP_PLAYER;
     v.setUint8(o, p.id);
-    v.setUint16(o + 1, toWire(p.x));
-    v.setUint16(o + 3, toWire(p.y));
-    v.setUint16(o + 5, toWire(p.z));
-    v.setInt16(o + 7, clamp16(p.vy * VY_SCALE));
-    v.setUint16(o + 9, toTurn(p.yaw));
-    v.setInt16(o + 11, clamp16(p.pitch * 10000));
-    v.setUint16(o + 13, p.ack & 0xffff);
-    v.setUint8(o + 15, +p.ground);
+    v.setFloat32(o + 1, p.x);
+    v.setFloat32(o + 5, p.y);
+    v.setFloat32(o + 9, p.z);
+    v.setFloat32(o + 13, p.vy);
+    v.setUint16(o + 17, toTurn(p.yaw));
+    v.setInt16(o + 19, toPitch(p.pitch));
+    v.setUint16(o + 21, p.ack & 0xffff);
+    v.setUint8(o + 23, +p.ground);
   });
   return v.buffer;
 };
@@ -91,14 +102,14 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     const o = SNAP_HEAD + i * SNAP_PLAYER;
     players.push({
       id: v.getUint8(o),
-      x: fromWire(v.getUint16(o + 1)),
-      y: fromWire(v.getUint16(o + 3)),
-      z: fromWire(v.getUint16(o + 5)),
-      vy: v.getInt16(o + 7) / VY_SCALE,
-      yaw: v.getUint16(o + 9) / TURN,
-      pitch: v.getInt16(o + 11) / 10000,
-      ack: v.getUint16(o + 13),
-      ground: (v.getUint8(o + 15) & 1) === 1,
+      x: v.getFloat32(o + 1),
+      y: v.getFloat32(o + 5),
+      z: v.getFloat32(o + 9),
+      vy: v.getFloat32(o + 13),
+      yaw: fromTurn(v.getUint16(o + 17)),
+      pitch: fromPitch(v.getInt16(o + 19)),
+      ack: v.getUint16(o + 21),
+      ground: (v.getUint8(o + 23) & 1) === 1,
     });
   }
   return { tick: v.getUint16(1), players };

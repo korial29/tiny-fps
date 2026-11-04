@@ -1,13 +1,14 @@
-// WebGL2 drawing: one program, one buffer. The level is built once; the other players are boxes
+// WebGL2 drawing: one scene program, one buffer. The level is built once; the other players are boxes
 // rewritten each frame into the tail of the same buffer. Lights come from lights.ts: the shader adds
 // them to a dim ambient, and each shadowed spot first draws the level and the bodies into its layer
-// of a depth texture array. No DOM beyond the canvas.
+// of a depth texture array. The scene goes into an offscreen target, then a second, small program
+// (POST) turns it into the picture on the canvas. No DOM beyond the canvas.
 import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { forward } from '../shared/physics';
 import { MONSTER, TEX } from '../shared/types';
 import type { Bullet, Edge, Item, Level, Monster, PlayerState, Sector } from '../shared/types';
-import { BLAST, glow, lit, puff } from './effects';
-import type { Effects } from './effects';
+import { BLAST, fade, glow, lit, puff } from './effects';
+import type { Effects, Puff } from './effects';
 import { MUZZLE, chaingun } from './gun';
 import { props } from './items';
 import { STRIDE, basis, dress, place, pushBox } from './mesh';
@@ -23,6 +24,15 @@ export const FOG = [0.05, 0.045, 0.05, 0.02];
 export const MAX_TINTS = 16;
 /** Bytes the dynamic tail starts with; it grows when a frame needs more. */
 const TAIL = 1 << 18;
+/** The corners of a billboard's two triangles. */
+const QUAD = [
+  [-1, -1],
+  [1, -1],
+  [1, 1],
+  [-1, -1],
+  [1, 1],
+  [-1, 1],
+];
 /** Metres one texture covers. */
 const TILE = 2;
 /** Shadow map side in texels. */
@@ -31,11 +41,39 @@ const SHADOW = 512;
 const AMBIENT = 0.3;
 /** The view model's floor, in place of AMBIENT: it never goes black. */
 const GUN = 0.55;
+/** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
+const SAMPLES = 4;
 
 const VERT = `#version 300 es
 layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec4 c;
 uniform mat4 m;out vec3 P,N;out vec4 C;
 void main(){P=p;N=n;C=c;gl_Position=m*vec4(p,1);}`;
+
+// A fullscreen triangle from gl_VertexID, no buffer.
+const POST_VERT = `#version 300 es
+out vec2 U;void main(){U=vec2(gl_VertexID&1,gl_VertexID>>1)*2.;gl_Position=vec4(U*2.-1.,0,1);}`;
+
+// The post program, one pass per Y.z (a uniform: the branches are coherent). Y.xy: the step
+// between taps, Y.w: the clock. 0: a bright pass of the scene (S[0]) at a quarter of its pixels,
+// four taps each thresholded alone so a single hot pixel survives the averaging. 1: a 9-tap
+// gaussian along Y.xy in 5 taps (the weights and offsets fold the bilinear filter in). 2: the
+// scene plus the three blurs (S[1..3]) on the canvas. Tone: linear up to .6, then a shoulder
+// toward 1.
+const POST_FRAG = `#version 300 es
+precision highp float;uniform sampler2D S[4];uniform vec4 Y;in vec2 U;out vec4 o;
+vec3 b(vec2 x){vec3 c=texture(S[0],x).rgb;return c*smoothstep(.65,1.3,max(c.r,max(c.g,c.b)));}
+#define T(k)texture(S[0],U+Y.xy*(k)).rgb
+void main(){
+vec3 c;
+if(Y.z<1.)c=(b(U+Y.xy)+b(U-Y.xy)+b(U+Y.xy*vec2(1,-1))+b(U-Y.xy*vec2(1,-1)))/4.;
+else if(Y.z<2.)c=T(0.)*.227+(T(1.3846)+T(-1.3846))*.3162+(T(3.2308)+T(-3.2308))*.0703;
+else{
+c=texture(S[0],U).rgb+texture(S[1],U).rgb*1.+texture(S[2],U).rgb*.8+texture(S[3],U).rgb*.6;
+vec2 q=U-.5;
+c=min(c,.6)+.4*(1.-exp(-max(c-.6,0.)/.4));
+c*=1.-.7*dot(q,q);
+c=pow(c,vec3(.92))+(fract(sin(dot(gl_FragCoord.xy+Y.w,vec2(12.9898,78.233)))*43758.5453)-.5)*.03;}
+o=vec4(c,1);}`;
 
 /**
  * Blinn-Phong strength and exponent: a row per TEX id in order (brick, tile, lava, stone, metal, wood,
@@ -55,8 +93,9 @@ export const SPEC = [
 /** Metres a height of 1 in a texture's alpha stands for. */
 const RELIEF = 0.06;
 
-// s: 1 on a texture, 0 on a flat colour. g: lava (which also drifts) and layer -2, which glow: no
-// light, no shade. The texture's alpha is a height: its screen-space derivatives tilt the normal
+// s: 1 on a texture, 0 on a flat colour. y: layer -3, a smoke billboard: C is (corner x, corner y,
+// -3, opacity), grey and lit like the rest, with an alpha that falls off from its centre to its
+// edge. g: lava (which also drifts) and layer -2, which glow: no light, no shade. The texture's alpha is a height: its screen-space derivatives tilt the normal
 // (bump mapping without tangents), faded out as a pixel covers more than a texel or two so the
 // mipmapped relief does not shimmer. n is the surface normal, m the bumped one. l: the ambient
 // term (Z, times the sector light on a texture) with the directional shade, plus every light, then
@@ -74,9 +113,9 @@ const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)})
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
 void main(){
 if(Z<0.)return;
-float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
+float L=C.z,s=step(0.,L),I=floor(C.w*.5),y=step(L,-2.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5)*(1.-y);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
-vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
+vec3 c=y>0.?vec3(.6):mix(vec3(C.xy,C.w),t.rgb,s);
 vec3 n=normalize(N),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float h=t.a*s*${RELIEF},det=dot(dx,a);
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
@@ -97,7 +136,7 @@ w*=v/4.;}
 l+=K[i].rgb*w;
 sp+=K[i].rgb*w*pow(max(dot(m,normalize(d+V)),0.),R.y);}
 c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
-o=vec4(mix(c,F.rgb,1.-exp(-F.a*length(P-E))),1);}`;
+o=vec4(mix(c,F.rgb,1.-exp(-F.a*length(P-E))),y>0.?C.w*(1.-smoothstep(.2,1.,length(C.xy))):1.);}`;
 
 /**
  * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
@@ -246,6 +285,14 @@ export const levelVerts = (lvl: Level): number[] => {
   return out;
 };
 
+/** A texture and the framebuffer that draws into it. */
+interface Target {
+  t: WebGLTexture;
+  f: WebGLFramebuffer;
+  w: number;
+  h: number;
+}
+
 export interface Renderer {
   /**
    * Draws one frame: the map, its gates, goal and items, the others, the monsters, their bullets
@@ -284,7 +331,7 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 /** Throws when the browser has no WebGL2. */
 export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Renderer => {
   let lvl = first;
-  const gl = canvas.getContext('webgl2', { antialias: true });
+  const gl = canvas.getContext('webgl2', { antialias: false, depth: false });
   if (!gl) {
     throw new Error('WebGL2 is not available');
   }
@@ -303,6 +350,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
     return c;
   };
 
+  const size = () => backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
   let ground = levelVerts(lvl);
   const pixels = textures();
   let tail = ground.length * 4;
@@ -330,6 +378,19 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
   let u: Record<string, WebGLUniformLocation> = {};
   let shadows: WebGLTexture;
   let depth: WebGLFramebuffer;
+  let scene: WebGLProgram;
+  let post: WebGLProgram;
+  let pu: Record<string, WebGLUniformLocation> = {};
+  let fmt: number;
+  // The multisampled target the scene draws into, and the texture it is resolved to.
+  let msaa: WebGLFramebuffer;
+  let hdr: Target;
+  /** The bloom's blur levels, from half the frame down: each a pair, the second one the scratch. */
+  let bloom: [Target, Target][];
+  /** The frame size the targets were built for, [0, 0] before the first. */
+  let made = [0, 0];
+  /** Deletes what targets() built. */
+  const owned: (() => void)[] = [];
   let lost = false;
   let vp = new Float32Array(16);
 
@@ -339,12 +400,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(ground));
   };
 
-  // Everything GL owns goes with a lost context: set it all up again on restore.
-  const setup = () => {
+  const link = (vert: string, frag: string, names: string[]) => {
     const prog = gl.createProgram();
     for (const [type, src] of [
-      [gl.VERTEX_SHADER, VERT],
-      [gl.FRAGMENT_SHADER, FRAG],
+      [gl.VERTEX_SHADER, vert],
+      [gl.FRAGMENT_SHADER, frag],
     ] as const) {
       const sh = gl.createShader(type)!;
       gl.shaderSource(sh, src);
@@ -353,12 +413,79 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
     }
     gl.linkProgram(prog);
     gl.useProgram(prog);
-    u = Object.fromEntries(
-      ['m', 'E', 'T', 'Z', 'Q', 'A', 'B', 'K', 'M', 'D', 'F', 'G'].map(n => [
-        n,
-        gl.getUniformLocation(prog, n)!,
-      ]),
+    return [
+      prog,
+      Object.fromEntries(names.map(n => [n, gl.getUniformLocation(prog, n)!])),
+    ] as const;
+  };
+
+  /** A w x h texture with a framebuffer to draw into it. */
+  const target = (w: number, h: number): Target => {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, fmt, w, h);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const f = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    owned.push(
+      () => gl.deleteTexture(t),
+      () => gl.deleteFramebuffer(f),
     );
+    return { t, f, w, h };
+  };
+
+  /** (Re)builds the offscreen targets for a w x h frame. */
+  const targets = (w: number, h: number) => {
+    owned.splice(0).forEach(free => free());
+    made = [w, h];
+    hdr = target(w, h);
+    bloom = [1, 2, 3].map(i => [0, 1].map(() => target(w >> i || 1, h >> i || 1))) as typeof bloom;
+    const rb = (format: number) => {
+      const r = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, r);
+      gl.renderbufferStorageMultisample(gl.RENDERBUFFER, SAMPLES, format, w, h);
+      owned.push(() => gl.deleteRenderbuffer(r));
+      return r;
+    };
+    gl.bindFramebuffer(gl.FRAMEBUFFER, (msaa = gl.createFramebuffer()));
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rb(fmt));
+    gl.framebufferRenderbuffer(
+      gl.FRAMEBUFFER,
+      gl.DEPTH_ATTACHMENT,
+      gl.RENDERBUFFER,
+      rb(gl.DEPTH_COMPONENT24),
+    );
+    owned.push(() => gl.deleteFramebuffer(msaa));
+  };
+
+  /**
+   * One pass of the post program: mode z and tap step (x, y), reading the sources on units 0 up and
+   * drawing into `to` (the canvas when undefined).
+   */
+  const pass = (to: Target | undefined, z: number, x: number, y: number, ...from: Target[]) => {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, to?.f ?? null);
+    gl.viewport(0, 0, to?.w ?? made[0], to?.h ?? made[1]);
+    from.forEach((src, i) => {
+      gl.activeTexture(gl.TEXTURE0 + i);
+      gl.bindTexture(gl.TEXTURE_2D, src.t);
+    });
+    gl.uniform4f(pu.Y, x, y, z, performance.now() % 1e4);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  };
+
+  // Everything GL owns goes with a lost context: set it all up again on restore.
+  const setup = () => {
+    // Without it the scene can only be 8-bit: lights above 1 clip instead of reaching the post pass.
+    fmt = gl.getExtension('EXT_color_buffer_float') ? gl.RGBA16F : gl.RGBA8;
+    owned.length = 0;
+    made = [0, 0];
+    [post, pu] = link(POST_VERT, POST_FRAG, ['S', 'Y']);
+    gl.uniform1iv(pu.S, [0, 1, 2, 3]);
+    [scene, u] = link(VERT, FRAG, ['m', 'E', 'T', 'Z', 'Q', 'A', 'B', 'K', 'M', 'D', 'F', 'G']);
     gl.uniform1i(u.D, 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
     alloc();
@@ -406,7 +533,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       gl.texParameterf(gl.TEXTURE_2D_ARRAY, aniso.TEXTURE_MAX_ANISOTROPY_EXT, 8);
     }
     gl.enable(gl.DEPTH_TEST);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     climate();
+    const [w, h] = size();
+    if (w && h) {
+      targets(w, h);
+    }
   };
 
   /** The level's fog (and clear colour) and tint palette, into the program. */
@@ -445,13 +577,16 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       }
     },
     frame(eye, yaw, pitch, others, colors, fx, monsters, bullets, items, lights) {
-      const [w, h] = backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
+      const [w, h] = size();
       if (lost || !w || !h) {
         return;
       }
       if (canvas.width != w || canvas.height != h) {
         canvas.width = w;
         canvas.height = h;
+      }
+      if (made[0] != w || made[1] != h) {
+        targets(w, h);
       }
       vp = viewProj(eye, yaw, pitch, w / h, fx.roll);
       const v: number[] = [];
@@ -496,14 +631,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       for (const b of bullets) {
         bullet(v, b, fx.aim.get(b.id));
       }
-      for (const s of fx.smoke) {
-        // Pale and puffy, then darker as it thins out; lit like the map.
-        const [k, g] = [puff(s), 0.42 - 0.32 * (s.t / s.life)];
-        for (const yaw of [s.yaw, s.yaw + Math.PI / 4]) {
-          pushBox(v, s.p, [k, k, k], yaw, [g, g, g * 1.05]);
-        }
-      }
-      const [, , f] = basis(yaw, pitch);
+      const axes = basis(yaw, pitch, fx.roll);
+      const [right, up, f] = axes;
       const specks = lit(fx, eye, f);
       for (let i = 0; i < specks.length; i += 4) {
         const [b, k] = [Math.sqrt(specks[i + 3]), 0.01 + 0.025 * specks[i + 3]];
@@ -521,8 +650,20 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
         }
       }
       const world = v.length;
+      // Blended after the opaque scene, far to near, as billboards.
+      const dist = (s: Puff) => Math.hypot(s.p[0] - eye[0], s.p[1] - eye[1], s.p[2] - eye[2]);
+      for (const s of [...fx.smoke].sort((a, b) => dist(b) - dist(a))) {
+        const [k, a] = [puff(s) * 1.6, fade(s)];
+        for (const [i, j] of QUAD) {
+          v.push(
+            ...[0, 1, 2].map(n => s.p[n] + (right[n] * i + up[n] * j) * k),
+            ...f.map(x => -x),
+            ...[i, j, -3, a],
+          );
+        }
+      }
+      const haze = v.length;
       // Last, over a cleared depth: the gun never sinks into a wall.
-      const axes = basis(yaw, pitch, fx.roll);
       const off: Vec3 = [0.26, -0.24 + fx.kick * 0.01, 0.6 - fx.kick * 0.06];
       if (!fx.dead) {
         place(v, near.body, eye, axes, off, 0.8);
@@ -553,10 +694,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
           gl.drawArrays(gl.TRIANGLES, 0, first + bodies / STRIDE);
         }
         gl.disable(gl.POLYGON_OFFSET_FILL);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, shadows);
         gl.activeTexture(gl.TEXTURE0);
       }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, msaa);
       gl.viewport(0, 0, w, h);
       gl.uniformMatrix4fv(u.m, false, vp);
       gl.uniform3fv(u.E, eye);
@@ -569,9 +710,36 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       gl.uniformMatrix4fv(u.M, false, pk.m);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, first + world / STRIDE);
+      if (haze > world) {
+        // Tested against the scene's depth, not written: puffs do not hide each other's far side.
+        gl.enable(gl.BLEND);
+        gl.depthMask(false);
+        gl.drawArrays(gl.TRIANGLES, first + world / STRIDE, (haze - world) / STRIDE);
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
+      }
       gl.clear(gl.DEPTH_BUFFER_BIT);
       gl.uniform1f(u.Z, GUN);
-      gl.drawArrays(gl.TRIANGLES, first + world / STRIDE, (v.length - world) / STRIDE);
+      gl.drawArrays(gl.TRIANGLES, first + haze / STRIDE, (v.length - haze) / STRIDE);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaa);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, hdr.f);
+      gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      gl.useProgram(post);
+      // The bright parts at half size, then each level blurred along x into its scratch and back
+      // along y; the next level reads the last one, so each is blurrier and half the size.
+      pass(bloom[0][0], 0, 1 / w, 1 / h, hdr);
+      bloom.forEach(([a, b], i) => {
+        pass(b, 1, 1 / b.w, 0, bloom[i && i - 1][0]);
+        pass(a, 1, 0, 1 / a.h, b);
+      });
+      pass(undefined, 2, 0, 0, hdr, ...bloom.map(l => l[0]));
+      // Units 1 to 3 hold the blurs, which the next frame draws into.
+      for (let i = 3; i > 0; i--) {
+        gl.activeTexture(gl.TEXTURE0 + i);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+      }
+      gl.activeTexture(gl.TEXTURE0);
+      gl.useProgram(scene);
     },
     project: (x, y, z) => project(vp, x, y, z),
     destroy() {

@@ -4,7 +4,7 @@ import { compile, sectorAt } from '../shared/level';
 import { HALL } from '../shared/map';
 import { EVENT, KEY, MONSTER } from '../shared/types';
 import type { GameEvent, Monster, PlayerState, Shot } from '../shared/types';
-import { GAIN, HURT, MOTES, createDelay, createEffects, glow, lit, puff } from './effects';
+import { GAIN, HURT, MOTES, createDelay, createEffects, fade, glow, lit, puff } from './effects';
 import { CHUNKS } from './monsters';
 
 const DT = 1 / 60;
@@ -613,6 +613,23 @@ describe('smoke', () => {
     expect(size(0.9)).toBeLessThan(size(0.5));
     expect(size(0.99)).toBeLessThan(size(0.9));
     expect(size(1)).toBe(0);
+  });
+
+  it('fades in over a tenth of its life, then thins out to nothing', () => {
+    const fx = createEffects(() => 0.5, lvl);
+    fx.event(ev(EVENT.DIE), 1);
+    const [s] = fx.smoke;
+    const alpha = (u: number) => fade({ ...s, t: u * s.life });
+    expect(alpha(0)).toBe(0);
+    expect(alpha(0.05)).toBeGreaterThan(0);
+    expect(alpha(0.05)).toBeLessThan(alpha(0.1));
+    expect(alpha(0.1)).toBeGreaterThan(alpha(0.5));
+    expect(alpha(0.5)).toBeGreaterThan(alpha(0.9));
+    expect(alpha(1)).toBe(0);
+    for (let u = 0; u <= 1; u += 0.05) {
+      expect(alpha(u)).toBeGreaterThanOrEqual(0);
+      expect(alpha(u)).toBeLessThan(1);
+    }
   });
 
   it('lives 1.5 to 2.5 s, then goes', () => {

@@ -160,6 +160,12 @@ export const puff = ({ r, t, life }: Puff) => {
   return r * (0.3 + 0.7 * Math.min(1, u * 2)) * Math.min(1, (1 - u) / 0.3);
 };
 
+/** How opaque a puff of smoke is, 0 to 1: it comes in over a tenth of its life, then thins out to nothing. */
+export const fade = ({ t, life }: Puff) => {
+  const u = t / life;
+  return 0.85 * Math.min(1, u * 10) * (1 - u);
+};
+
 /**
  * The motes the own flashlight shows, from the eye along the unit view direction f: x, y, z and a
  * brightness in (0, 1] each, fuller near the axis and the eye. None while the own player is dead.

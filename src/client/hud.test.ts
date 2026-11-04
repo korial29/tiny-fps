@@ -68,6 +68,15 @@ describe('createHud', () => {
     expect(end().hidden).toBe(true);
   });
 
+  it('shows the muted mark while muted', () => {
+    const mark = screen.querySelector<HTMLElement>('h5')!;
+    expect(mark.hidden).toBe(true);
+    hud.mute(true);
+    expect(mark.hidden).toBe(false);
+    hud.mute(false);
+    expect(mark.hidden).toBe(true);
+  });
+
   it('shows the respawn text while dead', () => {
     hud.dead(true);
     expect(respawn().hidden).toBe(false);

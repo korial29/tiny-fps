@@ -189,7 +189,7 @@ Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard
 - **Health**: 9 points. A hit takes one, then you can't be hurt for a second. A dead player comes back at the start 3 s later. Every 4th kill leaves a health pack.
 - **Keys and gates**: red, blue and yellow keys open the barred gates of their colour, for the whole team.
 - **The way out**: the start room locks behind you. Touch the goal to open it, then the level is won once every living player is back inside.
-- **Five levels**: Warm-up, Foundry, Cistern, Loop and Citadel. Then the run starts over in hard mode, with faster monsters that strike and fire more often. The end screen shows the time.
+- **Five levels**: Warm-up, Foundry, Cistern, Loop and Citadel. Then the run starts over in hard mode, with faster monsters that strike and fire more often. The end screen shows the time and each player's kills and deaths.
 - **Sound**: every sound is synthesised in code and placed left or right by where it comes from; a dark music loops under it. The sound starts with the click that locks the pointer.
 - **Dark levels**: your flashlight casts shadows, and so do muzzle flashes. Explosions, hits, bullets, the goal and the open exit light up their surroundings.
 
@@ -208,7 +208,7 @@ Parity with the js13k game is tracked in [`docs/PARITY.md`](docs/PARITY.md).
 - [x] Five levels, the goal and the way back, hard mode on the next run, end screen with the time
 - [x] Flashlights with shadow maps, lit muzzle flashes, explosion, hit, bullet, goal and exit lights
 - [x] Sound: a jsfxr-style synthesiser (shot, boom, hit, collect, clock, burst), stereo by position, a looped music; M mutes
-- [ ] HUD and screens: health bar, damage and pickup fades, low-health cue, title screen
+- [x] HUD and screens: health bar, damage vignette and pickup fades, low-health pulse and heartbeat, title and pause screen, death countdown, end screen with each player's kills and deaths
 - [x] Shadow DOM, zero runtime dependencies, size-gated in CI
 
 ---

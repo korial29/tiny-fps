@@ -6,16 +6,12 @@ import { TEX } from '../shared/types';
 import type { Edge, Level, PlayerState } from '../shared/types';
 import type { Effects } from './effects';
 import { MUZZLE, chaingun } from './gun';
+import { STRIDE, basis, dress, place, pushBox } from './mesh';
+import type { Vec3 } from './mesh';
 import { LAYERS, SIZE, textures } from './textures';
 
 /** Clear colour and what distance fog fades to: dark, the map is indoors. */
 const FOG = [0.05, 0.045, 0.05];
-/**
- * Floats per vertex: position, normal, then c. A map vertex has c = (u, v, texture layer, light),
- * u and v in metres. A player vertex has layer -1 and its flat colour in c.x, c.y, c.w; layer -2 is
- * the same colour, bright and unlit (flashes, sparks).
- */
-const STRIDE = 10;
 /** Bytes the dynamic tail starts with; it grows when a frame needs more. */
 const TAIL = 1 << 18;
 /** Metres one texture covers. */
@@ -36,23 +32,6 @@ float L=C.z,s=step(0.,L),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec3 c=mix(vec3(C.xy,C.w),texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.))).rgb,s);
 c*=mix(mix(1.,C.w,s)*(.45+.55*max(dot(normalize(N),normalize(vec3(.4,.8,.3))),0.)),1.4,g);
 o=vec4(mix(c,vec3(${FOG}),1.-exp(-.02*length(P-E))),1);}`;
-
-type Vec3 = [number, number, number];
-
-/**
- * Camera axes [right, up, forward]: forward is (-sin yaw cos pitch, sin pitch, -cos yaw cos pitch),
- * y up at roll 0. A positive roll leans the camera right: up tilts toward right.
- */
-export const basis = (yaw: number, pitch: number, roll = 0): [Vec3, Vec3, Vec3] => {
-  const [sy, cy, sp, cp, sr, cr] = [yaw, pitch, roll].flatMap(a => [Math.sin(a), Math.cos(a)]);
-  const r: Vec3 = [cy, 0, -sy];
-  const u: Vec3 = [sy * sp, cp, cy * sp];
-  return [
-    r.map((v, i) => v * cr - u[i] * sr) as Vec3,
-    u.map((v, i) => v * cr + r[i] * sr) as Vec3,
-    [-sy * cp, sp, -cy * cp],
-  ];
-};
 
 /** Column-major view-projection matrix of basis(yaw, pitch, roll) at eye, 70° vertical field of view. */
 export const viewProj = (eye: Vec3, yaw: number, pitch: number, aspect: number, roll = 0) => {
@@ -81,43 +60,6 @@ export const project = (
   const cx = m[0] * x + m[4] * y + m[8] * z + m[12];
   const cy = m[1] * x + m[5] * y + m[9] * z + m[13];
   return [0.5 + cx / (2 * w), 0.5 - cy / (2 * w)];
-};
-
-/**
- * Appends the 36 vertices of a box centred on (cx, cy, cz) with half sizes (hx, hy, hz), turned
- * by yaw about its own vertical axis (local forward, -z, ends up along forward(yaw)).
- */
-export const pushBox = (
-  out: number[],
-  [cx, cy, cz]: Vec3,
-  [hx, hy, hz]: Vec3,
-  yaw: number,
-  color: number[],
-  layer = -1,
-) => {
-  const [s, k] = [Math.sin(yaw), Math.cos(yaw)];
-  const turn = (x: number, z: number) => [x * k + z * s, -x * s + z * k];
-  for (let a = 0; a < 3; a++) {
-    for (const side of [-1, 1]) {
-      const [b, d] = [(a + 1) % 3, (a + 2) % 3];
-      const n: Vec3 = [0, 0, 0];
-      n[a] = side;
-      const [nx, nz] = turn(n[0], n[2]);
-      for (const [i, j] of [
-        [-1, -1],
-        [1, -1],
-        [1, 1],
-        [-1, -1],
-        [1, 1],
-        [-1, 1],
-      ]) {
-        const l: Vec3 = [0, 0, 0];
-        [l[a], l[b], l[d]] = [side, i, j];
-        const [x, z] = turn(l[0] * hx, l[2] * hz);
-        out.push(cx + x, cy + l[1] * hy, cz + z, nx, n[1], nz, color[0], color[1], layer, color[2]);
-      }
-    }
-  }
 };
 
 /** Vertical spans [y0, y1] an edge draws on its own side: the wall, or the steps of a portal. */
@@ -171,37 +113,6 @@ export const levelVerts = (lvl: Level): number[] => {
     }
   }
   return out;
-};
-
-/** gun.ts vertices (position, normal) given a flat colour, in the vertex format above. */
-const dress = (v: number[], [r, g, b]: number[]): number[] =>
-  Array.from({ length: v.length * (STRIDE / 6) }, (_, i) => {
-    const [k, j] = [Math.floor(i / STRIDE), i % STRIDE];
-    return j < 6 ? v[k * 6 + j] : [r, g, -1, b][j - 6];
-  });
-
-/**
- * Appends gun-space vertices (x right, y up, -z forward) scaled by k, turned by spin about z, then
- * carried to the world: axes `[r, u, f]` at eye, moved by off = (right, up, forward) along them.
- */
-const place = (
-  out: number[],
-  src: number[],
-  eye: Vec3,
-  [r, u, f]: Vec3[],
-  off: Vec3,
-  k: number,
-  spin = 0,
-) => {
-  const [s, c] = [Math.sin(spin), Math.cos(spin)];
-  const turn = (x: number, y: number, z: number) =>
-    [0, 1, 2].map(i => r[i] * (x * c - y * s) + u[i] * (x * s + y * c) - f[i] * z);
-  const o = [0, 1, 2].map(i => eye[i] + r[i] * off[0] + u[i] * off[1] + f[i] * off[2]);
-  for (let i = 0; i < src.length; i += STRIDE) {
-    const p = turn(src[i] * k, src[i + 1] * k, src[i + 2] * k);
-    out.push(o[0] + p[0], o[1] + p[1], o[2] + p[2], ...turn(src[i + 3], src[i + 4], src[i + 5]));
-    out.push(...src.slice(i + 6, i + STRIDE));
-  }
 };
 
 export interface Renderer {

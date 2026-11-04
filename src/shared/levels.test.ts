@@ -13,7 +13,7 @@ import {
 import { compile, sectorAt } from './level';
 import { LEVELS } from './levels';
 import { walk } from './physics';
-import { ITEM, MONSTER } from './types';
+import { ITEM, MONSTER, TEX } from './types';
 import type { Level, MapDef, Sector } from './types';
 
 type Pt = [number, number];
@@ -205,6 +205,16 @@ describe.each(LEVELS.map((map, i) => [i + 1, map] as [number, MapDef]))('level %
         }
       }
     }
+  });
+
+  it('uses valid textures, at least three materials and one of the new ones', () => {
+    const valid = new Set<number>(Object.values(TEX));
+    const used = new Set(map.sectors.flatMap(s => [s.ft, s.wt, s.ct]));
+    for (const id of used) {
+      expect(valid.has(id)).toBe(true);
+    }
+    expect(used.size).toBeGreaterThanOrEqual(3);
+    expect([TEX.METAL, TEX.WOOD, TEX.MOSS, TEX.GRATE].some(id => used.has(id))).toBe(true);
   });
 
   it('matches every portal edge exactly, with no T-junction', () => {

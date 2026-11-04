@@ -1,9 +1,20 @@
 // Hitscan, shared by the host (on rewound targets) and the client (its own shots, predicted on the
 // interpolated others). No DOM, no Node API.
-import { EYE, PLAYER_H, PLAYER_R, RANGE, SPREAD } from './constants';
+import {
+  EYE,
+  FLYER_H,
+  FLYER_R,
+  PLAYER_H,
+  PLAYER_R,
+  RANGE,
+  SPREAD,
+  WALKER_H,
+  WALKER_R,
+} from './constants';
 import { sectorAt } from './level';
 import { TAU } from './physics';
-import type { Body, Edge, Level, PlayerState, Shot } from './types';
+import { MONSTER } from './types';
+import type { Body, Edge, Level, Monster, PlayerState, Shot } from './types';
 
 type Vec3 = [number, number, number];
 
@@ -91,7 +102,7 @@ export const trace = (lvl: Level, o: Vec3, d: Vec3, max: number): number => {
  * Distance at which the ray enters the upright cylinder of t (sides and caps), Infinity on a miss:
  * the span of the ray inside the infinite cylinder, cut to the span between the cap planes.
  */
-const hit = (o: Vec3, d: Vec3, t: Body): number => {
+export const hit = (o: Vec3, d: Vec3, t: Body): number => {
   const [px, pz] = [o[0] - t.x, o[2] - t.z];
   const a = d[0] * d[0] + d[2] * d[2];
   const b = px * d[0] + pz * d[2];
@@ -126,6 +137,12 @@ export const body = ({ id, x, y, z }: PlayerState): Body => ({
   r: PLAYER_R,
   h: PLAYER_H,
 });
+
+/** The body a shot sees of a monster. */
+export const monsterBody = ({ id, kind, x, y, z }: Monster): Body => {
+  const walker = kind === MONSTER.WALKER;
+  return { id, x, y, z, r: walker ? WALKER_R : FLYER_R, h: walker ? WALKER_H : FLYER_H };
+};
 
 /**
  * Resolves one shot of `shooter` (state after the step that fired) from its eye (feet + EYE)

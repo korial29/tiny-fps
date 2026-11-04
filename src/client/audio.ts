@@ -14,9 +14,9 @@ export interface Audio {
   listen(eye: Vec3, yaw: number): void;
   /**
    * Plays the SOUND `id`. With `at`, panned left or right by its direction from the listener and
-   * fainter with distance; without, centred at full volume (the own player's sounds).
+   * fainter with distance; without, centred (the own player's sounds). `gain` scales the volume.
    */
-  play(id: number, at?: Vec3): void;
+  play(id: number, at?: Vec3, gain?: number): void;
   /** Mutes or unmutes everything, music included. */
   mute(on: boolean): void;
   readonly muted: boolean;
@@ -97,13 +97,13 @@ export const createAudio = (): Audio => {
     listen(at, y) {
       [eye, yaw] = [at, y];
     },
-    play(id, at) {
+    play(id, at, gain = 1) {
       let pan = 0;
-      let vol = 1;
+      let vol = gain;
       if (at) {
         const [dx, dy, dz] = at.map((v, i) => v - eye[i]);
         const d = Math.hypot(dx, dy, dz);
-        vol = Math.max(0, 1 - d / RANGE) ** 2;
+        vol = Math.max(0, 1 - d / RANGE) ** 2 * gain;
         // The listener's right is (cos yaw, -sin yaw) on x, z.
         pan = (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / Math.max(d, 1);
       }
@@ -159,6 +159,31 @@ export const createClock = (a: Audio) => {
       next = now + 1000;
       a.play(SOUND.CLOCK);
     }
+  };
+};
+
+/** The heart beats at this health or below, while alive. */
+export const LOW_HP = 3;
+
+/**
+ * Returns a function called each frame with the own health (0 when dead) and `now` in ms. At 1 to
+ * LOW_HP health it plays HEART, every 0.8 s, and at 1 every 0.5 s and louder; the first beat
+ * comes the moment health gets low. Returns the beat for the screen: 1 at a thump, fading to 0 by
+ * the next, and 0 when the health is not low.
+ */
+export const createHeart = (a: Audio) => {
+  let beat = -Infinity;
+  return (hp: number, now: number) => {
+    if (hp < 1 || hp > LOW_HP) {
+      beat = -Infinity;
+      return 0;
+    }
+    const gap = hp > 1 ? 800 : 500;
+    if (now - beat >= gap) {
+      beat = now;
+      a.play(SOUND.HEART, undefined, hp > 1 ? 0.6 : 1);
+    }
+    return 1 - (now - beat) / gap;
   };
 };
 

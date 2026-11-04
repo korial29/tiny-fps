@@ -4,7 +4,7 @@ import { compile, sectorAt } from '../shared/level';
 import { HALL } from '../shared/map';
 import { EVENT, KEY, MONSTER } from '../shared/types';
 import type { GameEvent, Monster, PlayerState, Shot } from '../shared/types';
-import { createDelay, createEffects, glow } from './effects';
+import { GAIN, HURT, createDelay, createEffects, glow } from './effects';
 import { CHUNKS } from './monsters';
 
 const DT = 1 / 60;
@@ -386,11 +386,12 @@ describe('other events', () => {
     expect(fx.sparks).toHaveLength(0);
   });
 
-  it('tint the screen red for 0.15 s on a hit', () => {
+  it('keep the hit vignette for a moment, long enough to fade out', () => {
     const fx = createEffects();
     fx.hit();
-    expect(fx.hurt).toBeCloseTo(0.15);
-    run(fx, 0, 0.1);
+    expect(fx.hurt).toBeCloseTo(HURT);
+    expect(HURT).toBeGreaterThanOrEqual(0.4);
+    run(fx, 0, HURT - 0.05);
     expect(fx.hurt).toBeGreaterThan(0);
     run(fx, 0, 0.06);
     expect(fx.hurt).toBe(0);
@@ -459,7 +460,7 @@ describe('pickup', () => {
   it('fades the item colour over 0.4 s', () => {
     const fx = createEffects();
     fx.pickup([1, 0, 0]);
-    expect(fx.gain).toBeCloseTo(0.4);
+    expect(fx.gain).toBeCloseTo(GAIN);
     expect(fx.gainC).toEqual([1, 0, 0]);
     run(fx, 0, 0.3);
     expect(fx.gain).toBeGreaterThan(0);

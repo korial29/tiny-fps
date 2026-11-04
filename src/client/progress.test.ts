@@ -1,19 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HEALTH } from '../shared/constants';
+import { HEALTH, PLAYER_RESPAWN, TICK_HZ } from '../shared/constants';
 import { compile } from '../shared/level';
+import { LEVELS } from '../shared/levels';
 import { HALL } from '../shared/map';
 import { ITEM, PHASE } from '../shared/types';
-import type { Item, SnapPlayer, Snapshot } from '../shared/types';
-import { createDelay, createEffects } from './effects';
+import type { Item, PlayerInfo, SnapPlayer, Snapshot } from '../shared/types';
+import { HURT, createDelay, createEffects } from './effects';
 import { SAY } from './hud';
-import type { Hud } from './hud';
+import type { Hud, Score } from './hud';
 import { ITEM_COLOR } from './items';
 import { SOUND } from './sfx';
 import { clock, createProgress, facing } from './progress';
 
 vi.mock('../shared/levels', async () => {
   const { HALL } = await import('../shared/map');
-  return { LEVELS: [HALL, { ...HALL }, { ...HALL }] };
+  return { LEVELS: [{ ...HALL, name: 'Warm-up' }, { ...HALL, name: 'Foundry' }, { ...HALL }] };
 });
 
 const YOU = 1;
@@ -45,13 +46,23 @@ const snap = (over: Partial<Snapshot> = {}): Snapshot => ({
   ...over,
 });
 
+const ROSTER: PlayerInfo[] = [
+  { id: YOU, name: 'Ann', color: '#e6194b' },
+  { id: 2, name: 'Bob', color: '#3cb44b' },
+  { id: 3, name: 'Cy', color: '#ffe119' },
+];
+
 const setup = () => {
   const said: [number, string][] = [];
-  const shown = { hp: -1, keys: -1, dead: false };
+  const shown = { hp: -1, keys: -1, dead: 0 };
+  const ended: { head: string; scores: Score[]; foot: string }[] = [];
   const hud: Hud = {
     hp: n => (shown.hp = n),
     keys: n => (shown.keys = n),
-    dead: on => (shown.dead = on),
+    dead: secs => (shown.dead = secs),
+    fade: () => {},
+    title: () => {},
+    end: (head, scores, foot) => void ended.push({ head, scores, foot }),
     mute: () => {},
     say: (slot, text) => void said.push([slot, text]),
     update: () => {},
@@ -65,6 +76,7 @@ const setup = () => {
   const progress = createProgress({
     lvl: first,
     you: () => YOU,
+    roster: () => ROSTER,
     predictor,
     rd,
     delays: [delay],
@@ -72,7 +84,7 @@ const setup = () => {
     hud,
     audio,
   });
-  return { progress, said, shown, fx, first, predictor, rd, delay, audio };
+  return { progress, said, shown, ended, fx, first, predictor, rd, delay, audio };
 };
 
 describe('clock', () => {
@@ -91,7 +103,7 @@ describe('level switch', () => {
     progress.snapshot(snap());
     const lvl = progress.lvl;
     expect(lvl).not.toBe(first);
-    expect(lvl.map).toBe(HALL);
+    expect(lvl.map).toBe(LEVELS[0]);
     expect(lvl.edges).toEqual(first.edges);
     expect(predictor.level).toHaveBeenCalledExactlyOnceWith(lvl);
     expect(rd.level).toHaveBeenCalledExactlyOnceWith(lvl);
@@ -139,10 +151,21 @@ describe('level switch', () => {
     const bare = createProgress({
       lvl: compile(HALL),
       you: () => YOU,
+      roster: () => [],
       predictor: { level: () => {} },
       delays: [],
       fx: createEffects(),
-      hud: { hp() {}, keys() {}, dead() {}, mute() {}, say() {}, update() {} },
+      hud: {
+        hp() {},
+        keys() {},
+        dead() {},
+        fade() {},
+        title() {},
+        end() {},
+        mute() {},
+        say() {},
+        update() {},
+      },
     });
     expect(() => bare.snapshot(snap())).not.toThrow();
     expect(progress.lvl).toBeDefined();
@@ -163,12 +186,13 @@ describe('hud', () => {
   it('follows the own health, the keys and the death', () => {
     const { progress, shown } = setup();
     progress.snapshot(snap({ keys: 0b1010, players: [player(YOU, 5)] }));
-    expect(shown).toEqual({ hp: 5, keys: 0b1010, dead: false });
+    expect(shown).toEqual({ hp: 5, keys: 0b1010, dead: 0 });
+    expect(progress.hp).toBe(5);
     progress.snapshot(snap({ keys: 0, players: [player(YOU, 0)] }));
-    expect(shown).toEqual({ hp: 0, keys: 0, dead: true });
-    expect(progress.dead).toBe(true);
+    expect(shown).toEqual({ hp: 0, keys: 0, dead: 3 });
+    expect([progress.dead, progress.hp]).toEqual([true, 0]);
     progress.snapshot(snap({ players: [player(YOU, HEALTH)] }));
-    expect(shown.dead).toBe(false);
+    expect(shown.dead).toBe(0);
     expect(progress.dead).toBe(false);
   });
 
@@ -185,12 +209,131 @@ describe('hud', () => {
     expect(notes()).toEqual(['Find the exit', 'Back to the start!', 'Find the exit']);
   });
 
-  it('shows the end screen with the time', () => {
-    const { progress, said } = setup();
-    progress.end(3723, false);
-    expect(said).toEqual([[SAY.END, 'Run complete\n1:02.0\nNext run: Hard mode']]);
-    progress.end(600, true);
-    expect(said.at(-1)![1]).toBe('Run complete\n0:10.0 (hard)\nNext run: Hard mode');
+  it('names the level and its mode for the title screen', () => {
+    const { progress } = setup();
+    expect(progress.name).toBe('Level 1: Warm-up');
+    progress.snapshot(snap({ level: 1 }));
+    expect(progress.name).toBe('Level 2: Foundry');
+    progress.snapshot(snap({ level: 0, hard: true }));
+    expect(progress.name).toBe('Level 1: Warm-up (hard mode)');
+    // A level without a name shows its number alone.
+    progress.snapshot(snap({ level: 2, hard: true }));
+    expect(progress.name).toBe('Level 3 (hard mode)');
+  });
+});
+
+describe('end screen', () => {
+  const stats = [
+    { id: YOU, kills: 4, deaths: 2 },
+    { id: 2, kills: 9, deaths: 5 },
+    { id: 3, kills: 4, deaths: 0 },
+  ];
+
+  it('shows the time, and a hard run says so', () => {
+    const { progress, ended } = setup();
+    progress.end(3723, false, []);
+    expect(ended[0]).toEqual({
+      head: 'Run complete\n1:02.0',
+      scores: [],
+      foot: 'Next run: Hard mode',
+    });
+    progress.end(600, true, []);
+    expect(ended[1].head).toBe('Run complete\n0:10.0 (hard)');
+  });
+
+  it('lists the players with their names and colours, the most kills first', () => {
+    const { progress, ended } = setup();
+    progress.end(60, false, stats);
+    expect(ended[0].scores).toEqual([
+      ['Bob', '#3cb44b', 9, 5],
+      ['Cy', '#ffe119', 4, 0],
+      ['Ann', '#e6194b', 4, 2],
+    ]);
+  });
+
+  it('breaks a tie of kills by the fewer deaths, then the lower id', () => {
+    const { progress, ended } = setup();
+    progress.end(60, false, [
+      { id: 3, kills: 1, deaths: 1 },
+      { id: 2, kills: 1, deaths: 1 },
+      { id: YOU, kills: 1, deaths: 2 },
+    ]);
+    expect(ended[0].scores.map(r => r[0])).toEqual(['Bob', 'Cy', 'Ann']);
+  });
+
+  it('leaves out a player the roster does not know', () => {
+    const { progress, ended } = setup();
+    progress.end(60, false, [...stats, { id: 7, kills: 99, deaths: 0 }]);
+    expect(ended[0].scores).toHaveLength(3);
+  });
+});
+
+describe('death countdown', () => {
+  const dead = (tick: number) => snap({ tick, players: [player(YOU, 0)] });
+
+  it('counts the seconds to the respawn from the tick the health hit 0', () => {
+    const { progress, shown } = setup();
+    progress.snapshot(snap({ tick: 100 }));
+    const left = (since: number) => {
+      progress.snapshot(dead(100 + since));
+      return shown.dead;
+    };
+    expect([0, 2, 59, 60, 61, 119, 120, 121, 179, PLAYER_RESPAWN - 1].map(left)).toEqual([
+      3, 3, 3, 2, 2, 2, 1, 1, 1, 1,
+    ]);
+    // Never 0 while still dead: that hides the screen.
+    expect(left(PLAYER_RESPAWN + 30)).toBe(1);
+  });
+
+  it('measures from the first snapshot that shows the death, not from the last', () => {
+    const { progress, shown } = setup();
+    progress.snapshot(snap({ tick: 0 }));
+    progress.snapshot(dead(10));
+    progress.snapshot(dead(10 + TICK_HZ * 2));
+    expect(shown.dead).toBe(1);
+  });
+
+  it('counts across the u16 wrap of the host tick', () => {
+    const { progress, shown } = setup();
+    progress.snapshot(snap({ tick: 65500 }));
+    progress.snapshot(dead(65530));
+    expect(shown.dead).toBe(3);
+    progress.snapshot(dead(65530 + 130 - 65536));
+    expect(shown.dead).toBe(1);
+  });
+
+  it('starts over at each death, and hides at the respawn', () => {
+    const { progress, shown } = setup();
+    progress.snapshot(dead(0));
+    progress.snapshot(dead(150));
+    expect(shown.dead).toBe(1);
+    progress.snapshot(snap({ tick: 200 }));
+    expect(shown.dead).toBe(0);
+    progress.snapshot(dead(1000));
+    expect(shown.dead).toBe(3);
+  });
+});
+
+describe('low health', () => {
+  it('reads the own health for the heartbeat: 0 when dead or unseen', () => {
+    const { progress } = setup();
+    expect(progress.hp).toBe(0);
+    progress.snapshot(snap({ players: [player(YOU, 2)] }));
+    expect(progress.hp).toBe(2);
+    progress.snapshot(snap({ players: [player(YOU, 6)] }));
+    expect(progress.hp).toBe(6);
+    progress.snapshot(snap({ players: [player(YOU, 0)] }));
+    expect(progress.hp).toBe(0);
+    progress.snapshot(snap({ players: [player(2, 1)] }));
+    expect(progress.hp).toBe(0);
+  });
+
+  it('starts over with the level: full health there', () => {
+    const { progress } = setup();
+    progress.snapshot(snap({ players: [player(YOU, 1)] }));
+    expect(progress.hp).toBe(1);
+    progress.snapshot(snap({ level: 1, players: [player(YOU, HEALTH)] }));
+    expect(progress.hp).toBe(HEALTH);
   });
 });
 
@@ -217,13 +360,13 @@ describe('hurt flash', () => {
     hp(9, [player(2, 3)]);
     expect(fx.hurt).toBe(0);
     hp(8);
-    expect(fx.hurt).toBeCloseTo(0.15);
+    expect(fx.hurt).toBeCloseTo(HURT);
     fx.update(undefined, 0, 1);
     hp(8);
     hp(9);
     expect(fx.hurt).toBe(0);
     hp(0);
-    expect(fx.hurt).toBeCloseTo(0.15);
+    expect(fx.hurt).toBeCloseTo(HURT);
     fx.update(undefined, 0, 1);
     // Dead, then back at the start with all its health.
     hp(HEALTH);

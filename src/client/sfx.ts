@@ -4,7 +4,7 @@
 /**
  * One oscillator: wave (0 square, 1 saw, 2 sine, 3 noise held for one period), hz, slide in octaves
  * per second, attack, sustain and decay in seconds, vibrato depth, low-pass (0..1, 1 is off),
- * arpeggio time and frequency multiplier, volume.
+ * arpeggio time and frequency multiplier, volume; optionally the seconds it starts late.
  */
 type Voice = [
   number,
@@ -18,6 +18,7 @@ type Voice = [
   number,
   number,
   number,
+  number?,
 ];
 
 /** Sample rate of everything rendered here; audio.ts resamples through AudioBuffer if needed. */
@@ -37,6 +38,8 @@ export const SOUND = {
   CLOCK: 4,
   /** A bullet bursting on a wall. */
   BURST: 5,
+  /** A heartbeat, looped by the client while the own health is low. */
+  HEART: 6,
 } as const;
 
 const synth = ([wave, hz, slide, a, s, d, vib, lp, jt, jm, vol]: Voice, seed: number) => {
@@ -108,6 +111,14 @@ const LAYERS: Voice[][] = [
     [3, 1200, -1, 0.002, 0, 0.14, 0, 0.45, 0, 1, 0.7],
     [0, 3200, -1, 0.002, 0, 0.05, 0, 1, 0.025, 0.7, 0.2],
   ],
+  // HEART: a soft "lub-dub", two sine thumps 0.22 s apart, the second lower and fainter. Each has
+  // a faint octave above it, so small speakers carry it.
+  [
+    [2, 55, -1, 0.01, 0.01, 0.12, 0, 1, 0, 1, 0.9],
+    [2, 110, -1, 0.01, 0, 0.08, 0, 1, 0, 1, 0.3],
+    [2, 48, -1, 0.01, 0.01, 0.14, 0, 1, 0, 1, 0.6, 0.22],
+    [2, 96, -1, 0.01, 0, 0.09, 0, 1, 0, 1, 0.2, 0.22],
+  ],
 ];
 
 /**
@@ -115,10 +126,12 @@ const LAYERS: Voice[][] = [
  * tenths of a second long, silent at both ends (no click).
  */
 export const render = (id: number): Float32Array => {
-  const voices = LAYERS[id].map((v, i) => synth(v, id * 9 + i));
+  const voices = LAYERS[id].map(
+    (v, i) => [synth(v, id * 9 + i), Math.round((v[11] ?? 0) * RATE)] as const,
+  );
   // tanh keeps the sum of the voices within [-1, 1] and rounds the boom.
-  return Float32Array.from({ length: Math.max(...voices.map(v => v.length)) }, (_, i) =>
-    Math.tanh(voices.reduce((sum, v) => sum + (v[i] ?? 0), 0)),
+  return Float32Array.from({ length: Math.max(...voices.map(([v, d]) => d + v.length)) }, (_, i) =>
+    Math.tanh(voices.reduce((sum, [v, d]) => sum + (v[i - d] ?? 0), 0)),
   );
 };
 

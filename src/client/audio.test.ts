@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EVENT } from '../shared/types';
-import { createAudio, createClock, hear, savedMute, toggleMute } from './audio';
+import { createAudio, createClock, createHeart, hear, savedMute, toggleMute } from './audio';
 import type { Audio } from './audio';
 import { RATE, SOUND } from './sfx';
 
@@ -176,6 +176,16 @@ describe('play', () => {
     expect(voice()).toMatchObject({ pan: 0, vol: 1 });
   });
 
+  it('scales the volume by the gain, with or without a position', () => {
+    const a = unlocked();
+    a.play(SOUND.HEART, undefined, 0.5);
+    expect(voice().vol).toBe(0.5);
+    a.play(SOUND.SHOT, at(2, 0));
+    const full = voice().vol;
+    a.play(SOUND.SHOT, at(2, 0), 0.5);
+    expect(voice().vol).toBeCloseTo(full / 2);
+  });
+
   it('keeps at most 24 voices: the quietest goes for a louder one, the newest if it is quietest', () => {
     const a = unlocked();
     for (let i = 0; i < 24; i++) {
@@ -307,6 +317,76 @@ describe('createClock', () => {
     tick(true, 10_000);
     tick(true, 10_001);
     expect(play).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('createHeart', () => {
+  const setup = () => {
+    const play = vi.fn();
+    return { play, beat: createHeart({ play } as unknown as Audio) };
+  };
+
+  it('is silent above 3 health and at 0, and returns no beat', () => {
+    const { play, beat } = setup();
+    for (const hp of [9, 4, 0]) {
+      expect(beat(hp, 0)).toBe(0);
+      expect(beat(hp, 5000)).toBe(0);
+    }
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it('beats at once at 3 health, then every 0.8 s, softly', () => {
+    const { play, beat } = setup();
+    beat(3, 1000);
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenLastCalledWith(SOUND.HEART, undefined, 0.6);
+    beat(3, 1799);
+    expect(play).toHaveBeenCalledTimes(1);
+    beat(3, 1800);
+    expect(play).toHaveBeenCalledTimes(2);
+    for (let t = 1800; t <= 4000; t += 16) {
+      beat(2, t);
+    }
+    // 1000, 1800, 2600, 3400, 4200 is not yet.
+    expect(play).toHaveBeenCalledTimes(4);
+  });
+
+  it('is faster and louder at 1 health', () => {
+    const { play, beat } = setup();
+    for (let t = 0; t < 2000; t += 16) {
+      beat(1, t);
+    }
+    // Every 0.5 s: 0, 500, 1000, 1500 (and 2000 is not yet).
+    expect(play).toHaveBeenCalledTimes(4);
+    expect(play).toHaveBeenLastCalledWith(SOUND.HEART, undefined, 1);
+  });
+
+  it('speeds up when the health drops from 2 to 1 without waiting out the slow gap', () => {
+    const { play, beat } = setup();
+    beat(2, 0);
+    beat(1, 500);
+    expect(play).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops on healing or death, and beats at once when low again', () => {
+    const { play, beat } = setup();
+    beat(2, 0);
+    expect(beat(6, 100)).toBe(0);
+    beat(6, 5000);
+    expect(play).toHaveBeenCalledTimes(1);
+    beat(2, 5100);
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(beat(0, 5200)).toBe(0);
+    beat(0, 9000);
+    expect(play).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns the beat for the screen: 1 at a thump, falling to 0 before the next', () => {
+    const { beat } = setup();
+    expect(beat(3, 0)).toBe(1);
+    expect(beat(3, 400)).toBeCloseTo(0.5);
+    expect(beat(3, 799)).toBeGreaterThan(0);
+    expect(beat(3, 800)).toBe(1);
   });
 });
 

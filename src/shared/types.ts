@@ -196,6 +196,8 @@ export interface Sector {
 }
 
 export interface MapDef {
+  /** Shown on the title screen after the level number. */
+  name?: string;
   sectors: Sector[];
   /** Spawn points: feet x, z (inside a sector, standing on its floor) and the yaw to face. */
   spawns: [x: number, z: number, yaw: number][];

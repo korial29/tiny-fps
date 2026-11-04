@@ -1,6 +1,6 @@
 import { EYE, PLAYER_H, TICK_HZ } from '../shared/constants';
 import { blocked, compile } from '../shared/level';
-import { HALL, YARD } from '../shared/map';
+import { HALL } from '../shared/map';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import type { PlayerInfo, SocketLike } from '../shared/types';
@@ -58,7 +58,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const listeners: Record<TinyFpsEvent, (() => void)[]> = { roster: [], open: [], close: [] };
   const emit = (ev: TinyFpsEvent) => listeners[ev].forEach(cb => cb());
 
-  const predictor = createPredictor(YARD);
+  const predictor = createPredictor(lvl);
   const ctl = createInput(canvas);
   let rd: Renderer | undefined;
   try {

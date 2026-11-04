@@ -2,12 +2,14 @@
 // rewritten each frame into the tail of the same buffer. No DOM beyond the canvas.
 import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { forward } from '../shared/physics';
-import { TEX } from '../shared/types';
-import type { Edge, Level, PlayerState } from '../shared/types';
+import { MONSTER, TEX } from '../shared/types';
+import type { Bullet, Edge, Level, Monster, PlayerState } from '../shared/types';
+import { BLAST, glow } from './effects';
 import type { Effects } from './effects';
 import { MUZZLE, chaingun } from './gun';
 import { STRIDE, basis, dress, place, pushBox } from './mesh';
 import type { Vec3 } from './mesh';
+import { SWING, bullet, flyer, walker } from './monsters';
 import { LAYERS, SIZE, textures } from './textures';
 
 /** Clear colour and what distance fog fades to: dark, the map is indoors. */
@@ -117,8 +119,8 @@ export const levelVerts = (lvl: Level): number[] => {
 
 export interface Renderer {
   /**
-   * Draws one frame: the map, the others and the effects as seen from eye, with the view model on
-   * top. colors maps player id to CSS.
+   * Draws one frame: the map, the others, the monsters, their bullets and the effects as seen from
+   * eye, with the view model on top. colors maps player id to CSS.
    */
   frame(
     eye: Vec3,
@@ -127,6 +129,8 @@ export interface Renderer {
     others: PlayerState[],
     colors: ReadonlyMap<number, string>,
     fx: Effects,
+    monsters: Monster[],
+    bullets: Bullet[],
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
@@ -246,7 +250,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   return {
-    frame(eye, yaw, pitch, others, colors, fx) {
+    frame(eye, yaw, pitch, others, colors, fx, monsters, bullets) {
       const dpr = Math.min(devicePixelRatio, 2);
       const w = Math.round(canvas.clientWidth * dpr);
       const h = Math.round(canvas.clientHeight * dpr);
@@ -282,8 +286,32 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
           place(v, part, hand, axes, [0.36, -0.12, 0.3], 0.8);
         }
       }
-      for (const { p } of fx.sparks) {
-        pushBox(v, p, [0.025, 0.025, 0.025], 0, [1, 0.8, 0.3], -2);
+      const now = performance.now() / 1000;
+      for (const m of monsters) {
+        if (m.kind == MONSTER.FLYER) {
+          flyer(v, m, now);
+        } else {
+          const left = fx.swings.get(m.id);
+          walker(v, m, fx.herd.get(m.id)?.walked ?? 0, left ? 1 - left / SWING : 0);
+        }
+      }
+      for (const b of bullets) {
+        bullet(v, b, fx.aim.get(b.id));
+      }
+      for (const { p, c } of fx.sparks) {
+        pushBox(v, p, [0.025, 0.025, 0.025], 0, c ?? [1, 0.8, 0.3], -2);
+      }
+      for (const { p, yaw, size, c, life } of fx.gibs) {
+        const k = size * Math.min(1, life * 2);
+        pushBox(v, p, [k, k, k], yaw, c);
+      }
+      for (const b of fx.blasts) {
+        // Bright at the start, red and shrinking at the end: no blending to fade it with.
+        const [k, u] = [glow(b), b.t / BLAST];
+        const c = [1, 0.9 - u * 0.7, 0.5 - u * 0.45];
+        for (const yaw of [0, Math.PI / 4]) {
+          pushBox(v, b.p, [k, k, k], yaw, c, -2);
+        }
       }
       const world = v.length;
       // Last, over a cleared depth: the gun never sinks into a wall.

@@ -299,7 +299,7 @@ export const createEffects = (rand = Math.random, lvl?: Level): Effects => {
           });
         }
         fx.gibs.splice(0, fx.gibs.length - MAX_GIBS);
-        blast(p, 1);
+        blast(p, 0.6);
         burst(p, 14, 5);
       } else if (type == EVENT.BOOM) {
         blast(p, 0.25);

@@ -219,7 +219,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       }
     }
 
-    const veil = String(fx.hurt * 3);
+    const veil = String(fx.hurt * 2);
     if (tint.style.opacity != veil) {
       tint.style.opacity = veil;
     }

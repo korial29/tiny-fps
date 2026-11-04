@@ -76,8 +76,6 @@ export const BULLET_SPEED = 12;
 export const BULLET_R = 0.15;
 /** Ticks a bullet lives at most. */
 export const BULLET_LIFE = 300;
-/** Ticks after the last monster dies before the map's monsters come back (until step 4). */
-export const RESPAWN_AFTER = 300;
 
 // Health and progression. Times are host ticks.
 export const HEALTH = 9;

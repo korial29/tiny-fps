@@ -6,7 +6,7 @@ import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { forward } from '../shared/physics';
 import { MONSTER, TEX } from '../shared/types';
 import type { Bullet, Edge, Item, Level, Monster, PlayerState } from '../shared/types';
-import { BLAST, glow } from './effects';
+import { BLAST, glow, lit, puff } from './effects';
 import type { Effects } from './effects';
 import { MUZZLE, chaingun } from './gun';
 import { props } from './items';
@@ -460,6 +460,19 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       const bodies = v.length;
       for (const b of bullets) {
         bullet(v, b, fx.aim.get(b.id));
+      }
+      for (const s of fx.smoke) {
+        // Pale and puffy, then darker as it thins out; lit like the map.
+        const [k, g] = [puff(s), 0.42 - 0.32 * (s.t / s.life)];
+        for (const yaw of [s.yaw, s.yaw + Math.PI / 4]) {
+          pushBox(v, s.p, [k, k, k], yaw, [g, g, g * 1.05]);
+        }
+      }
+      const [, , f] = basis(yaw, pitch);
+      const specks = lit(fx, eye, f);
+      for (let i = 0; i < specks.length; i += 4) {
+        const [b, k] = [Math.sqrt(specks[i + 3]), 0.01 + 0.025 * specks[i + 3]];
+        pushBox(v, specks.slice(i, i + 3) as Vec3, [k, k, k], 0, [b, b * 0.9, b * 0.7], -2);
       }
       for (const { p, c } of fx.sparks) {
         pushBox(v, p, [0.025, 0.025, 0.025], 0, c ?? [1, 0.8, 0.3], -2);

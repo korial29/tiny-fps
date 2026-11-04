@@ -1,9 +1,10 @@
-import { EYE, PLAYER_H, TICK_HZ } from '../shared/constants';
+import { EYE, INTERP_DELAY, MAX_PITCH, PLAYER_H, TICK_HZ } from '../shared/constants';
 import { blocked, compile } from '../shared/level';
 import { HALL } from '../shared/map';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
-import type { PlayerInfo, SocketLike } from '../shared/types';
+import type { PlayerInfo, Shot, SocketLike } from '../shared/types';
+import { createEffects } from './effects';
 import { createInput } from './input';
 import { createPredictor } from './predict';
 import { createRenderer } from './render';
@@ -60,6 +61,10 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
 
   const predictor = createPredictor(lvl);
   const ctl = createInput(canvas);
+  const fx = createEffects();
+  /** Others' shots wait INTERP_DELAY: they are drawn that far in the past, and fire with it. */
+  const late: { t: number; s: Shot }[] = [];
+  let you = -1;
   let rd: Renderer | undefined;
   try {
     rd = createRenderer(canvas, lvl);
@@ -97,7 +102,9 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     if (typeof data != 'string') {
       const s = decodeSnapshot(data);
       if (s) {
-        predictor.snapshot(s, performance.now());
+        const now = performance.now();
+        predictor.snapshot(s, now);
+        late.push(...s.shots.filter(sh => sh.id != you).map(sh => ({ t: now, s: sh })));
       }
       return;
     }
@@ -106,7 +113,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       roster = m.players;
       colors = new Map(roster.map(p => [p.id, p.color]));
       names = new Map(roster.map(p => [p.id, p.name]));
-      predictor.you(m.you);
+      predictor.you((you = m.you));
       count.textContent = `Players: ${roster.length}`;
       emit('roster');
     } else if (m?.t == 'full') {
@@ -126,6 +133,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const frame = () => {
     raf = requestAnimationFrame(frame);
     const now = performance.now();
+    const before = last;
     acc = Math.min(acc + (now - last) / 1000, MAX_STEPS * STEP);
     last = now;
 
@@ -142,13 +150,27 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       if (open) {
         ws.send(encodeInput(input));
       }
+      const shot = predictor.shot();
+      const p = shot && predictor.me(1);
+      if (shot && p) {
+        fx.shot(shot, [p.x, p.y + EYE, p.z], true);
+      }
     }
 
     const me = predictor.me(acc / STEP);
     const others = predictor.others(now);
     const eye: [number, number, number] = me ? [me.x, me.y + EYE, me.z] : [0, 0, 0];
+    for (; late.length && late[0].t + INTERP_DELAY <= now; late.shift()) {
+      const p = others.find(o => o.id == late[0].s.id);
+      if (p) {
+        fx.shot(late[0].s, [p.x, p.y + EYE, p.z], false);
+      }
+    }
+    fx.update(me, ctl.keys, Math.min((now - before) / 1000, 0.1));
     if (me && rd) {
-      rd.frame(eye, ctl.yaw, ctl.pitch, others, colors);
+      // Bob and shake are for the eye only: the inputs keep sending the real angles.
+      const pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, ctl.pitch + fx.shakePitch));
+      rd.frame([eye[0], eye[1] + fx.bob, eye[2]], ctl.yaw + fx.shakeYaw, pitch, others, colors, fx);
     }
     const seen = new Set<number>();
     for (const p of others) {

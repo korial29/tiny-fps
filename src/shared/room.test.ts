@@ -1211,7 +1211,17 @@ describe('Room: levels and the end of a run', () => {
     ticks(room, 100);
     win(room, a, b);
     // The run took every tick since the first one: 100, the goal, the win.
-    expect(ends(a)).toEqual([{ t: 'end', ticks: 102, hard: false, stats: [] }]);
+    expect(ends(a)).toEqual([
+      {
+        t: 'end',
+        ticks: 102,
+        hard: false,
+        stats: [
+          { id: 0, kills: 0, deaths: 0 },
+          { id: 1, kills: 0, deaths: 0 },
+        ],
+      },
+    ]);
     expect(ends(b)).toEqual(ends(a));
     expect(lurker.texts).toEqual([]);
     expect(next(room, a)).toMatchObject({ level: 0, hard: true, phase: PHASE.HUNT, keys: 0 });
@@ -1221,8 +1231,104 @@ describe('Room: levels and the end of a run', () => {
     // The second run is timed from its own start, and stays hard.
     ticks(room, 50);
     win(room, a, b);
-    expect(ends(a).at(-1)).toEqual({ t: 'end', ticks: room['ticks'] - 102, hard: true, stats: [] });
+    expect(ends(a).at(-1)).toMatchObject({ ticks: room['ticks'] - 102, hard: true });
     expect(next(room, a).hard).toBe(true);
+  });
+
+  describe('run stats', () => {
+    const mobs = arena({
+      monsters: [3, 5, 7].map(
+        z => [8, z, EAST, MONSTER.WALKER] as [number, number, number, number],
+      ),
+    });
+    /** `c` stands 6 m west of monster `id` and shoots it with a view of the host's own tick. */
+    const shoot = (room: Room, c: Peer, id: number) => {
+      const p = at(room, c);
+      const live = () => room['horde'].monsters().find(m => m.id === id);
+      const { x, y, z } = live()!;
+      [p.state.x, p.state.y, p.state.z] = [x - 6, 0, z];
+      const pitch = Math.atan2(y + 0.9 - EYE, 6);
+      for (let k = 0; live() && k < 30; k++) {
+        const seq = (p.ack + 1) & 0xffff;
+        room.receive(
+          c,
+          encodeInput({ seq, keys: KEY.FIRE, yaw: EAST, pitch, view: room['ticks'] }),
+        );
+        room.tick();
+      }
+      expect(live()).toBeUndefined();
+    };
+    /** `c` loses its last health, and is back after the respawn delay. */
+    const die = (room: Room, c: Peer) => {
+      at(room, c).hp = 1;
+      expect(room['wound'](at(room, c).info.id, room['ticks'])).toBe(true);
+      expect(at(room, c).hp).toBe(0);
+      ticks(room, PLAYER_RESPAWN);
+    };
+    const stats = (c: Peer) => (ends(c).at(-1) as Extract<ServerText, { t: 'end' }>).stats;
+
+    it('counts the monsters each player killed and their deaths, and sends them with the end', () => {
+      const { room, a, b } = game([mobs]);
+      shoot(room, a, MAX_PLAYERS);
+      shoot(room, b, MAX_PLAYERS + 1);
+      shoot(room, a, MAX_PLAYERS + 2);
+      die(room, b);
+      win(room, a, b);
+      expect(stats(a)).toEqual([
+        { id: 0, kills: 2, deaths: 0 },
+        { id: 1, kills: 1, deaths: 1 },
+      ]);
+      expect(stats(b)).toEqual(stats(a));
+    });
+
+    it('counts a death once, however the blows after it fall', () => {
+      const { room, a, b } = game([first]);
+      at(room, a).hp = 2;
+      expect(room['wound'](0, 1000)).toBe(true);
+      expect(room['wound'](0, 2000)).toBe(true);
+      expect(room['wound'](0, 3000)).toBe(false);
+      win(room, b, a);
+      expect(stats(a)[0]).toEqual({ id: 0, kills: 0, deaths: 1 });
+    });
+
+    it('starts every run at 0', () => {
+      const { room, a, b } = game([mobs]);
+      shoot(room, a, MAX_PLAYERS);
+      die(room, a);
+      win(room, a, b);
+      expect(stats(a)[0]).toEqual({ id: 0, kills: 1, deaths: 1 });
+      win(room, a, b);
+      expect(stats(a)).toEqual([
+        { id: 0, kills: 0, deaths: 0 },
+        { id: 1, kills: 0, deaths: 0 },
+      ]);
+    });
+
+    it('has a row for each player present, and a player who rejoins starts at 0', () => {
+      const { room, a, b } = game([mobs]);
+      shoot(room, b, MAX_PLAYERS);
+      shoot(room, a, MAX_PLAYERS + 1);
+      room.disconnect(b);
+      const b2 = join(room, 'B');
+      expect(roster(b2).you).toBe(1);
+      win(room, a, b2);
+      expect(stats(a)).toEqual([
+        { id: 0, kills: 1, deaths: 0 },
+        { id: 1, kills: 0, deaths: 0 },
+      ]);
+      room.disconnect(a);
+      const [c] = [join(room, 'C')];
+      put(room, c, 20, 5);
+      room.tick();
+      put(room, c, 5, 3);
+      put(room, b2, 5, 7);
+      room.tick();
+      expect(
+        stats(c)
+          .map(r => r.id)
+          .sort(),
+      ).toEqual([0, 1]);
+    });
   });
 
   /** Metres the only monster of a room walks per tick on patrol, over 40 ticks. */

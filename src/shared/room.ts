@@ -50,6 +50,9 @@ interface Player {
   hp: number;
   /** Host tick of the last hit that took health (the death, once hp is 0). */
   hurt: number;
+  /** Monsters killed and deaths since the run began (or the player joined). */
+  kills: number;
+  deaths: number;
 }
 
 /** Ticks run at most this many times per timer callback, so a stalled host does not spiral. */
@@ -127,7 +130,8 @@ const setEvery: Every = (cb, ms) => {
  *   opens its gates for the team, a pack heals below full health.
  * - Touching the goal turns the level from HUNT to RETURN (the exit opens); when every living
  *   player is in the exit the level is won: the next one starts, everyone respawned. After the
- *   last, every player gets { t: 'end' } and a new run starts at level 0, hard from then on.
+ *   last, every player gets { t: 'end' } with the run's kills and deaths per player, and a new
+ *   run starts at level 0, hard from then on, the counts back at 0.
  * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player, the shots resolved since
  *   the last one, the monsters, the bullets, the events since the last one and the items goes to
  *   every peer.
@@ -198,6 +202,9 @@ export class Room {
         this.shots.push(shot);
         if (shot.hit >= MAX_PLAYERS) {
           const dead = this.horde.kill(shot.hit, p.state.id);
+          if (dead) {
+            p.kills++;
+          }
           if (dead && ++this.kills % DROP_EVERY === 0) {
             this.drop(ITEM.HEALTH, dead.x, dead.z);
           }
@@ -388,6 +395,7 @@ export class Room {
       return false;
     }
     [p.hp, p.hurt] = [p.hp - 1, now];
+    p.deaths += +!p.hp;
     return true;
   }
 
@@ -434,9 +442,10 @@ export class Room {
       t: 'end',
       ticks: this.ticks - this.runStart,
       hard: this.hard,
-      stats: [],
+      stats: this.players().map(p => ({ id: p.info.id, kills: p.kills, deaths: p.deaths })),
     } satisfies ServerText);
     this.players().forEach(p => p.conn.send(end));
+    this.players().forEach(p => (p.kills = p.deaths = 0));
     [this.hard, this.runStart] = [true, this.ticks];
     this.load(0);
   }
@@ -478,6 +487,8 @@ export class Room {
       ack: 0xffff,
       hp: HEALTH,
       hurt: -HIT_COOLDOWN,
+      kills: 0,
+      deaths: 0,
     };
     this.peers.set(conn, player);
     this.roster();

@@ -29,7 +29,8 @@ export interface Input {
   /**
    * Host tick the client drew the others at when it sent this input, fractional (interpolation
    * between two snapshots), in [0, 65536): the host rewinds the targets of a shot to it (lag
-   * compensation). The wire keeps 1/256 tick. Absent (no snapshot seen yet): no rewind.
+   * compensation). The wire keeps 1/256 tick. Absent (no snapshot seen yet) goes out as 0: the host
+   * clamps it to the oldest tick it keeps.
    */
   view?: number;
 }

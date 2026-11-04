@@ -32,8 +32,8 @@ const roomName = (url = '/'): string => {
 export const serve = (opts: ServeOptions): (() => Promise<void>) => {
   const wss = new WebSocketServer({
     ...(opts.server ? { server: opts.server } : { port: opts.port }),
-    // Inputs are 5 bytes and joins a few dozen: anything bigger is abuse.
-    maxPayload: 1024,
+    // Inputs are 8 bytes and joins under a hundred: anything bigger is abuse.
+    maxPayload: 256,
   });
   const rooms = new Map<string, { room: Room; conns: number }>();
 

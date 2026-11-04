@@ -86,10 +86,13 @@ GEN[TEX.METAL] = (u, v) => {
   // The nearest of the three rivet columns and rows (0.1, 0.5, 0.9), none in the middle.
   const near = (f: number) => Math.min(Math.max(Math.round((f - 0.1) / 0.4), 0), 2) * 0.4 + 0.1;
   const [ru, rv] = [near(fu), near(fv)];
-  const dome = ru == rv && ru == 0.5 ? 0 : clamp(1 - Math.hypot(fu - ru, fv - rv) / 0.07);
+  const d = ru == rv && ru == 0.5 ? 1 : Math.hypot(fu - ru, fv - rv);
+  const dome = clamp(1 - d / 0.07);
   const steel = scale(
-    [118, 128, 142],
-    (0.9 + 0.2 * noise(u * 32, v * 32, 32, 9) + 0.12 * hash(a, b, 6)) * (1 + 0.3 * dome),
+    [98, 108, 124],
+    (0.9 + 0.2 * noise(u * 32, v * 32, 32, 9) + 0.12 * hash(a, b, 6)) *
+      (1 + 0.3 * dome) *
+      (0.65 + 0.35 * clamp((d - 0.06) / 0.04)),
   );
   const seam = Math.min(fu, fv, 1 - fu, 1 - fv);
   return seam < 0.03

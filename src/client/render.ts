@@ -37,7 +37,8 @@ void main(){P=p;N=n;C=c;gl_Position=m*vec4(p,1);}`;
 
 // s: 1 on a texture, 0 on a flat colour. g: lava (which also drifts) and layer -2, which glow: no
 // light, no shade. l: the ambient term (Z, times the sector light on a texture) with the directional
-// shade, plus every light. A: position and range, B: direction and cone (-9 on a point: no cone),
+// shade, plus every light, then eased toward 2 so many beams on one wall do not burn it white.
+// A: position and range, B: direction and cone (-9 on a point: no cone),
 // K: colour and shadow slot (-1: none), M: the slots' matrices. Z < 0 is the depth pass: no colour.
 const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
@@ -61,6 +62,7 @@ float v=0.;
 for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADOW},k,q.z-.0005));
 w*=v/4.;}
 l+=K[i].rgb*w;}
+l=2.*(1.-exp(-.5*l));
 c*=mix(l,vec3(1.4),g);
 o=vec4(mix(c,vec3(${FOG}),1.-exp(-.02*length(P-E))),1);}`;
 

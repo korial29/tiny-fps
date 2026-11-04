@@ -140,41 +140,135 @@ describe('createRenderer', () => {
       });
     });
 
-    it('draws the scene into the multisampled target, resolves it, then draws the post pass on the canvas', () => {
+    it('draws the scene into the multisampled target, resolves it, then draws the post passes, the last on the canvas', () => {
       const rd = createRenderer(canvas, compile(ROOM));
       calls.length = 0;
       frame(rd);
       const blit = calls.findIndex(c => c[0] == 'blitFramebuffer');
-      const triangle = calls.findIndex(c => c[0] == 'drawArrays' && c[3] == 3);
+      const post = calls.flatMap((c, i) => (c[0] == 'drawArrays' && c[3] == 3 ? [i] : []));
       expect(blit).toBeGreaterThan(0);
-      expect(triangle).toBeGreaterThan(blit);
+      expect(post.length).toBeGreaterThan(0);
+      expect(post[0]).toBeGreaterThan(blit);
+      // The scene: cleared and drawn (world and gun) into a target of its own, before the resolve.
       const scene = calls.slice(0, blit);
       expect(scene.filter(c => c[0] == 'drawArrays')).toHaveLength(2);
-      // Cleared and drawn with the multisampled target bound.
-      const binds = calls.filter(c => c[0] == 'bindFramebuffer');
-      expect(binds.find(c => c[1] == K('FRAMEBUFFER'))![2]).not.toBeNull();
-      expect(calls.indexOf(binds.find(c => c[1] == K('FRAMEBUFFER'))!)).toBeLessThan(
-        calls.findIndex(c => c[0] == 'clear'),
-      );
-      expect(calls.slice(blit - 2, blit)).toEqual([
-        ['bindFramebuffer', K('READ_FRAMEBUFFER'), expect.anything()],
-        ['bindFramebuffer', K('DRAW_FRAMEBUFFER'), expect.anything()],
-      ]);
+      const target = scene.find(c => c[0] == 'bindFramebuffer' && c[1] == K('FRAMEBUFFER'))!;
+      expect(target[2]).not.toBeNull();
+      expect(scene.indexOf(target)).toBeLessThan(scene.findIndex(c => c[0] == 'clear'));
+      expect(scene.at(-2)).toEqual(['bindFramebuffer', K('READ_FRAMEBUFFER'), target[2]]);
+      expect(scene.at(-1)).toEqual(['bindFramebuffer', K('DRAW_FRAMEBUFFER'), expect.anything()]);
       expect(calls[blit]).toEqual([
         'blitFramebuffer',
         ...[0, 0, 320, 200, 0, 0, 320, 200],
         K('COLOR_BUFFER_BIT'),
         K('NEAREST'),
       ]);
-      // The last binding before the post pass is the canvas.
+      // The last binding before the last pass is the canvas.
       expect(
         calls
-          .slice(blit, triangle)
+          .slice(blit, post.at(-1))
           .filter(c => c[0] == 'bindFramebuffer')
           .at(-1),
       ).toEqual(['bindFramebuffer', K('FRAMEBUFFER'), null]);
-      expect(calls.slice(triangle).filter(c => c[0] == 'drawArrays')).toHaveLength(1);
-      expect(calls[triangle]).toEqual(['drawArrays', K('TRIANGLES'), 0, 3]);
+      expect(calls[post.at(-1)!]).toEqual(['drawArrays', K('TRIANGLES'), 0, 3]);
+    });
+
+    /** Every post pass in the calls: what it drew into, at which size, in which mode, and what it read. */
+    const passes = () => {
+      const owner = new Map<unknown, unknown>();
+      const units: unknown[] = [];
+      let [fbo, unit, size, step] = [null as unknown, 0, [0, 0], [0, 0, 0]];
+      const out: {
+        to: unknown;
+        size: number[];
+        mode: number;
+        step: number[];
+        from: unknown[];
+      }[] = [];
+      for (const [name, ...a] of calls) {
+        if (name == 'bindFramebuffer') {
+          fbo = a[1];
+        } else if (name == 'framebufferTexture2D' && fbo) {
+          owner.set(fbo, a[3]);
+        } else if (name == 'activeTexture') {
+          unit = (a[0] as number) - K('TEXTURE0');
+        } else if (name == 'bindTexture' && a[0] == FLAT) {
+          units[unit] = a[1];
+        } else if (name == 'viewport') {
+          size = a.slice(2) as number[];
+        } else if (name == 'uniform4f') {
+          step = a.slice(1) as number[];
+        } else if (name == 'drawArrays' && a[2] == 3) {
+          out.push({
+            to: fbo && owner.get(fbo),
+            size,
+            mode: step[2],
+            step: step.slice(0, 2),
+            from: [...units],
+          });
+        }
+      }
+      return out;
+    };
+
+    it('blooms the bright parts at half size, then blurs them at a quarter and an eighth', () => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      frame(rd);
+      const run = passes();
+      expect(run.map(p => p.mode)).toEqual([0, 1, 1, 1, 1, 1, 1, 2]);
+      expect(run.map(p => p.size)).toEqual([
+        [160, 100],
+        [160, 100],
+        [160, 100],
+        [80, 50],
+        [80, 50],
+        [40, 25],
+        [40, 25],
+        [320, 200],
+      ]);
+      // The bright pass steps by a texel of the scene, each blur by one of its own size: x then y.
+      expect(run[0].step).toEqual([1 / 320, 1 / 200]);
+      expect(run.slice(1, 7).map(p => p.step)).toEqual([
+        [1 / 160, 0],
+        [0, 1 / 100],
+        [1 / 80, 0],
+        [0, 1 / 50],
+        [1 / 40, 0],
+        [0, 1 / 25],
+      ]);
+    });
+
+    it('never reads a texture it draws into, and composes the scene with the three blurs', () => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      frame(rd);
+      frame(rd);
+      const run = passes();
+      expect(run).toHaveLength(16);
+      for (const { to, from } of run) {
+        if (to) {
+          expect(from).not.toContain(to);
+        }
+      }
+      const [bright, h0, v0, h1, v1, h2, v2, compose] = run.slice(8);
+      const scene = bright.from[0];
+      expect(scene).toBeTruthy();
+      // Level 0 blurs the bright pass in place through its scratch; each next level reads the last.
+      expect(v0.to).toBe(bright.to);
+      expect([h0.from[0], v0.from[0]]).toEqual([bright.to, h0.to]);
+      expect([h1.from[0], v1.from[0]]).toEqual([v0.to, h1.to]);
+      expect([h2.from[0], v2.from[0]]).toEqual([v1.to, h2.to]);
+      expect(new Set([scene, v0.to, h0.to, v1.to, h1.to, v2.to, h2.to]).size).toBe(7);
+      expect(compose.to).toBeNull();
+      expect(compose.from).toEqual([scene, v0.to, v1.to, v2.to]);
+    });
+
+    it('unbinds units 1 to 3 after the composite: the next frame draws into the blurs', () => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      frame(rd);
+      const last = calls.filter(c => c[0] == 'bindTexture' && c[1] == FLAT).slice(-3);
+      expect(last.map(c => c[2])).toEqual([null, null, null]);
+      const units = calls.filter(c => c[0] == 'activeTexture').slice(-4);
+      expect(units.map(c => (c[1] as number) - K('TEXTURE0'))).toEqual([3, 2, 1, 0]);
     });
 
     it('allocates the targets at the backing size, 16-bit float with the extension', () => {
@@ -212,7 +306,7 @@ describe('createRenderer', () => {
       resize(640, 360);
       frame(rd);
       expect(named('texStorage2D')).toHaveLength(2 * storage);
-      expect(named('texStorage2D').at(-1)!.slice(4)).toEqual([640, 360]);
+      expect(named('texStorage2D')[storage].slice(4)).toEqual([640, 360]);
       expect(named('renderbufferStorageMultisample').at(-1)!.slice(4)).toEqual([640, 360]);
       expect(frees()).toBeGreaterThan(0);
       expect(canvas.width).toBe(640);

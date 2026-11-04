@@ -44,16 +44,26 @@ void main(){P=p;N=n;C=c;gl_Position=m*vec4(p,1);}`;
 const POST_VERT = `#version 300 es
 out vec2 U;void main(){U=vec2(gl_VertexID&1,gl_VertexID>>1)*2.;gl_Position=vec4(U*2.-1.,0,1);}`;
 
-// The post program, one pass per Y.z (a uniform: the branches are coherent). Y.xy: the texel
-// step, Y.w: the clock. 2: the scene on the canvas. Tone: linear up to .6, then a shoulder toward 1.
+// The post program, one pass per Y.z (a uniform: the branches are coherent). Y.xy: the step
+// between taps, Y.w: the clock. 0: a bright pass of the scene (S[0]) at a quarter of its pixels,
+// four taps each thresholded alone so a single hot pixel survives the averaging. 1: a 9-tap
+// gaussian along Y.xy in 5 taps (the weights and offsets fold the bilinear filter in). 2: the
+// scene plus the three blurs (S[1..3]) on the canvas. Tone: linear up to .6, then a shoulder
+// toward 1.
 const POST_FRAG = `#version 300 es
 precision highp float;uniform sampler2D S[4];uniform vec4 Y;in vec2 U;out vec4 o;
+vec3 b(vec2 x){vec3 c=texture(S[0],x).rgb;return c*smoothstep(.65,1.3,max(c.r,max(c.g,c.b)));}
+#define T(k)texture(S[0],U+Y.xy*(k)).rgb
 void main(){
-vec3 c=texture(S[0],U).rgb;
+vec3 c;
+if(Y.z<1.)c=(b(U+Y.xy)+b(U-Y.xy)+b(U+Y.xy*vec2(1,-1))+b(U-Y.xy*vec2(1,-1)))/4.;
+else if(Y.z<2.)c=T(0.)*.227+(T(1.3846)+T(-1.3846))*.3162+(T(3.2308)+T(-3.2308))*.0703;
+else{
+c=texture(S[0],U).rgb+texture(S[1],U).rgb*1.+texture(S[2],U).rgb*.8+texture(S[3],U).rgb*.6;
 vec2 q=U-.5;
 c=min(c,.6)+.4*(1.-exp(-max(c-.6,0.)/.4));
-c*=1.-.8*dot(q,q);
-c=pow(c,vec3(.92))+(fract(sin(dot(gl_FragCoord.xy+Y.w,vec2(12.9898,78.233)))*43758.5453)-.5)*.03;
+c*=1.-.7*dot(q,q);
+c=pow(c,vec3(.92))+(fract(sin(dot(gl_FragCoord.xy+Y.w,vec2(12.9898,78.233)))*43758.5453)-.5)*.03;}
 o=vec4(c,1);}`;
 
 /**
@@ -365,6 +375,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
   // The multisampled target the scene draws into, and the texture it is resolved to.
   let msaa: WebGLFramebuffer;
   let hdr: Target;
+  /** The bloom's blur levels, from half the frame down: each a pair, the second one the scratch. */
+  let bloom: [Target, Target][];
   /** The frame size the targets were built for, [0, 0] before the first. */
   let made = [0, 0];
   /** Deletes what targets() built. */
@@ -421,6 +433,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
     owned.splice(0).forEach(free => free());
     made = [w, h];
     hdr = target(w, h);
+    bloom = [1, 2, 3].map(i => [0, 1].map(() => target(w >> i || 1, h >> i || 1))) as typeof bloom;
     const rb = (format: number) => {
       const r = gl.createRenderbuffer();
       gl.bindRenderbuffer(gl.RENDERBUFFER, r);
@@ -437,6 +450,21 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       rb(gl.DEPTH_COMPONENT24),
     );
     owned.push(() => gl.deleteFramebuffer(msaa));
+  };
+
+  /**
+   * One pass of the post program: mode z and tap step (x, y), reading the sources on units 0 up and
+   * drawing into `to` (the canvas when undefined).
+   */
+  const pass = (to: Target | undefined, z: number, x: number, y: number, ...from: Target[]) => {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, to?.f ?? null);
+    gl.viewport(0, 0, to?.w ?? made[0], to?.h ?? made[1]);
+    from.forEach((src, i) => {
+      gl.activeTexture(gl.TEXTURE0 + i);
+      gl.bindTexture(gl.TEXTURE_2D, src.t);
+    });
+    gl.uniform4f(pu.Y, x, y, z, performance.now() % 1e4);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
   };
 
   // Everything GL owns goes with a lost context: set it all up again on restore.
@@ -672,10 +700,20 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, hdr.f);
       gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
       gl.useProgram(post);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.bindTexture(gl.TEXTURE_2D, hdr.t);
-      gl.uniform4f(pu.Y, 0, 0, 0, performance.now() % 1e4);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      // The bright parts at half size, then each level blurred along x into its scratch and back
+      // along y; the next level reads the last one, so each is blurrier and half the size.
+      pass(bloom[0][0], 0, 1 / w, 1 / h, hdr);
+      bloom.forEach(([a, b], i) => {
+        pass(b, 1, 1 / b.w, 0, bloom[i && i - 1][0]);
+        pass(a, 1, 0, 1 / a.h, b);
+      });
+      pass(undefined, 2, 0, 0, hdr, ...bloom.map(l => l[0]));
+      // Units 1 to 3 hold the blurs, which the next frame draws into.
+      for (let i = 3; i > 0; i--) {
+        gl.activeTexture(gl.TEXTURE0 + i);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+      }
+      gl.activeTexture(gl.TEXTURE0);
       gl.useProgram(scene);
     },
     project: (x, y, z) => project(vp, x, y, z),

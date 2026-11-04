@@ -1,5 +1,7 @@
 // WebGL2 drawing: one program, one buffer. The level is built once; the other players are boxes
-// rewritten each frame into the tail of the same buffer. No DOM beyond the canvas.
+// rewritten each frame into the tail of the same buffer. Lights come from lights.ts: the shader adds
+// them to a dim ambient, and each shadowed spot first draws the level and the bodies into its layer
+// of a depth texture array. No DOM beyond the canvas.
 import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { forward } from '../shared/physics';
 import { MONSTER, TEX } from '../shared/types';
@@ -9,6 +11,7 @@ import type { Effects } from './effects';
 import { MUZZLE, chaingun } from './gun';
 import { props } from './items';
 import { STRIDE, basis, dress, place, pushBox } from './mesh';
+import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { SWING, bullet, flyer, walker } from './monsters';
@@ -20,6 +23,12 @@ const FOG = [0.05, 0.045, 0.05];
 const TAIL = 1 << 18;
 /** Metres one texture covers. */
 const TILE = 2;
+/** Shadow map side in texels. */
+const SHADOW = 512;
+/** What the sector light is scaled to: lit by nothing else, a room is this bright. The flashlight must matter. */
+const AMBIENT = 0.3;
+/** The view model's floor, in place of AMBIENT: it never goes black. */
+const GUN = 0.55;
 
 const VERT = `#version 300 es
 layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec4 c;
@@ -27,20 +36,48 @@ uniform mat4 m;out vec3 P,N;out vec4 C;
 void main(){P=p;N=n;C=c;gl_Position=m*vec4(p,1);}`;
 
 // s: 1 on a texture, 0 on a flat colour. g: lava (which also drifts) and layer -2, which glow: no
-// light, no shade.
+// light, no shade. l: the ambient term (Z, times the sector light on a texture) with the directional
+// shade, plus every light. A: position and range, B: direction and cone (-9 on a point: no cone),
+// K: colour and shadow slot (-1: none), M: the slots' matrices. Z < 0 is the depth pass: no colour.
 const FRAG = `#version 300 es
-precision highp float;precision highp sampler2DArray;
-in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T;uniform sampler2DArray S;out vec4 o;
+precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
+in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T,Z;uniform int Q;
+uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}];uniform mat4 M[${MAX_SHADOWS}];
+uniform sampler2DArray S;uniform sampler2DArrayShadow D;out vec4 o;
 void main(){
+if(Z<0.)return;
 float L=C.z,s=step(0.,L),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec3 c=mix(vec3(C.xy,C.w),texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.))).rgb,s);
-c*=mix(mix(1.,C.w,s)*(.45+.55*max(dot(normalize(N),normalize(vec3(.4,.8,.3))),0.)),1.4,g);
+vec3 n=normalize(N),l=vec3(mix(1.,C.w,s)*Z*(.45+.55*max(dot(n,normalize(vec3(.4,.8,.3))),0.)));
+for(int i=0;i<${MAX_LIGHTS};i++){
+if(i>=Q||g>0.)break;
+vec3 d=A[i].xyz-P;float r=length(d),k=K[i].w,u=B[i].w;
+d/=r;
+float w=max(1.-r*r/(A[i].w*A[i].w),0.);
+w*=w*smoothstep(u,u+(1.-u)*.4,-dot(d,B[i].xyz))*max(dot(n,d),0.);
+if(w>0.&&k>=0.){
+vec4 q=M[int(k)]*vec4(P+n*.03,1);q.xyz=q.xyz/q.w*.5+.5;
+float v=0.;
+for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADOW},k,q.z-.0005));
+w*=v/4.;}
+l+=K[i].rgb*w;}
+c*=mix(l,vec3(1.4),g);
 o=vec4(mix(c,vec3(${FOG}),1.-exp(-.02*length(P-E))),1);}`;
 
-/** Column-major view-projection matrix of basis(yaw, pitch, roll) at eye, 70° vertical field of view. */
-export const viewProj = (eye: Vec3, yaw: number, pitch: number, aspect: number, roll = 0) => {
+/**
+ * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
+ * vertical field of view (70° by default), [N, F] the near and far clip distances.
+ */
+export const viewProj = (
+  eye: Vec3,
+  yaw: number,
+  pitch: number,
+  aspect: number,
+  roll = 0,
+  t = Math.tan((70 * Math.PI) / 360),
+  [N, F] = [0.1, 200],
+) => {
   const [r, u, f] = basis(yaw, pitch, roll);
-  const [N, F, t] = [0.1, 200, Math.tan((70 * Math.PI) / 360)];
   const k = (F + N) / (F - N);
   const rows = [r.map(v => v / (t * aspect)), u.map(v => v / t), f.map(v => v * k), f].map(v => [
     ...v,
@@ -64,6 +101,43 @@ export const project = (
   const cx = m[0] * x + m[4] * y + m[8] * z + m[12];
   const cy = m[1] * x + m[5] * y + m[9] * z + m[13];
   return [0.5 + cx / (2 * w), 0.5 - cy / (2 * w)];
+};
+
+/**
+ * The view-projection of a spot's shadow map: from its position along its axis, a square window
+ * just wide enough for the cone, clipped from 0.3 m (a flashlight sits inside its player's head)
+ * to its range.
+ */
+export const lightProj = ({ p, d, cone, range }: Light) =>
+  viewProj(
+    p,
+    Math.atan2(-d[0], -d[2]),
+    Math.atan2(d[1], Math.hypot(d[0], d[2])),
+    1,
+    0,
+    Math.min(Math.tan(Math.acos(cone)), 5.7),
+    [0.3, range],
+  );
+
+/**
+ * The lights as the shader's uniform arrays (see FRAG): at most MAX_LIGHTS of them, and the first
+ * MAX_SHADOWS shadowed spots get a slot, whose matrix goes in m at 16 floats a slot.
+ */
+export const pack = (lights: Light[]) => {
+  const [a, b, k] = [0, 0, 0].map(() => new Float32Array(MAX_LIGHTS * 4));
+  const m = new Float32Array(MAX_SHADOWS * 16);
+  let maps = 0;
+  const list = lights.slice(0, MAX_LIGHTS);
+  list.forEach((l, i) => {
+    const slot = l.shadow && l.kind == LIGHT.SPOT && maps < MAX_SHADOWS ? maps++ : -1;
+    a.set([...l.p, l.range], i * 4);
+    b.set([...l.d, l.kind == LIGHT.POINT ? -9 : l.cone], i * 4);
+    k.set([...l.color, slot], i * 4);
+    if (slot >= 0) {
+      m.set(lightProj(l), slot * 16);
+    }
+  });
+  return { n: list.length, maps, a, b, k, m };
 };
 
 /** Vertical spans [y0, y1] an edge draws on its own side: the wall, or the steps of a portal. */
@@ -191,7 +265,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
     pushBox(flare, [0, 0, -MUZZLE - 0.04], h, 0, [1, 0.85, 0.4], -2);
     pushBox(wide, [0, 0, -MUZZLE - 0.12], h.map(x => x * 3) as Vec3, 0, [1, 0.85, 0.4], -2);
   }
-  let uniforms: WebGLUniformLocation[] = [];
+  let u: Record<string, WebGLUniformLocation> = {};
+  let shadows: WebGLTexture;
+  let depth: WebGLFramebuffer;
   let lost = false;
   let vp = new Float32Array(16);
 
@@ -215,7 +291,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
     }
     gl.linkProgram(prog);
     gl.useProgram(prog);
-    uniforms = ['m', 'E', 'T'].map(n => gl.getUniformLocation(prog, n)!);
+    u = Object.fromEntries(
+      ['m', 'E', 'T', 'Z', 'Q', 'A', 'B', 'K', 'M', 'D'].map(n => [
+        n,
+        gl.getUniformLocation(prog, n)!,
+      ]),
+    );
+    gl.uniform1i(u.D, 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
     alloc();
     [3, 3, 4].reduce((at, size, i) => {
@@ -223,6 +305,25 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       gl.vertexAttribPointer(i, size, gl.FLOAT, false, STRIDE * 4, at * 4);
       return at + size;
     }, 0);
+    // Unit 1: one depth layer per shadowed light, compared in the shader (linear: a 2x2 PCF per tap).
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, (shadows = gl.createTexture()));
+    gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.DEPTH_COMPONENT24, SHADOW, SHADOW, MAX_SHADOWS);
+    for (const [name, value] of [
+      [gl.TEXTURE_MIN_FILTER, gl.LINEAR],
+      [gl.TEXTURE_MAG_FILTER, gl.LINEAR],
+      [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE],
+      [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE],
+      [gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE],
+    ]) {
+      gl.texParameteri(gl.TEXTURE_2D_ARRAY, name, value);
+    }
+    // No colour attachment: the depth passes write nothing but depth.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, (depth = gl.createFramebuffer()));
+    gl.drawBuffers([gl.NONE]);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.polygonOffset(2, 4);
+    gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, gl.createTexture());
     gl.texImage3D(
       gl.TEXTURE_2D_ARRAY,
@@ -268,7 +369,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
         alloc();
       }
     },
-    frame(eye, yaw, pitch, others, colors, fx, monsters, bullets, items) {
+    frame(eye, yaw, pitch, others, colors, fx, monsters, bullets, items, lights) {
       const dpr = Math.min(devicePixelRatio, 2);
       const w = Math.round(canvas.clientWidth * dpr);
       const h = Math.round(canvas.clientHeight * dpr);
@@ -279,7 +380,6 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
         canvas.width = w;
         canvas.height = h;
       }
-      gl.viewport(0, 0, w, h);
       vp = viewProj(eye, yaw, pitch, w / h, fx.roll);
       const v: number[] = [];
       for (const p of others) {
@@ -313,16 +413,18 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
           walker(v, m, fx.herd.get(m.id)?.walked ?? 0, left ? 1 - left / SWING : 0);
         }
       }
-      for (const b of bullets) {
-        bullet(v, b, fx.aim.get(b.id));
-      }
       props(v, lvl, items, now);
-      for (const { p, c } of fx.sparks) {
-        pushBox(v, p, [0.025, 0.025, 0.025], 0, c ?? [1, 0.8, 0.3], -2);
-      }
       for (const { p, yaw, size, c, life } of fx.gibs) {
         const k = size * Math.min(1, life * 2);
         pushBox(v, p, [k, k, k], yaw, c);
+      }
+      // What the shadow maps hold ends here: the unlit effects after it cast nothing.
+      const bodies = v.length;
+      for (const b of bullets) {
+        bullet(v, b, fx.aim.get(b.id));
+      }
+      for (const { p, c } of fx.sparks) {
+        pushBox(v, p, [0.025, 0.025, 0.025], 0, c ?? [1, 0.8, 0.3], -2);
       }
       for (const b of fx.blasts) {
         // Bright at the start, red and shrinking at the end: no blending to fade it with.
@@ -348,13 +450,41 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
         alloc();
       }
       gl.bufferSubData(gl.ARRAY_BUFFER, tail, new Float32Array(v));
-      gl.uniformMatrix4fv(uniforms[0], false, vp);
-      gl.uniform3fv(uniforms[1], eye);
-      gl.uniform1f(uniforms[2], performance.now() / 1000);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      const pk = pack(lights);
       const first = ground.length / STRIDE;
+      if (pk.maps) {
+        gl.uniform1f(u.Z, -1);
+        // Unit 1 is unbound meanwhile: sampling a map the framebuffer writes is a feedback loop.
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, depth);
+        gl.viewport(0, 0, SHADOW, SHADOW);
+        gl.enable(gl.POLYGON_OFFSET_FILL);
+        for (let i = 0; i < pk.maps; i++) {
+          gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, shadows, 0, i);
+          gl.uniformMatrix4fv(u.m, false, pk.m.subarray(i * 16, i * 16 + 16));
+          gl.clear(gl.DEPTH_BUFFER_BIT);
+          gl.drawArrays(gl.TRIANGLES, 0, first + bodies / STRIDE);
+        }
+        gl.disable(gl.POLYGON_OFFSET_FILL);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, shadows);
+        gl.activeTexture(gl.TEXTURE0);
+      }
+      gl.viewport(0, 0, w, h);
+      gl.uniformMatrix4fv(u.m, false, vp);
+      gl.uniform3fv(u.E, eye);
+      gl.uniform1f(u.T, performance.now() / 1000);
+      gl.uniform1f(u.Z, AMBIENT);
+      gl.uniform1i(u.Q, pk.n);
+      gl.uniform4fv(u.A, pk.a);
+      gl.uniform4fv(u.B, pk.b);
+      gl.uniform4fv(u.K, pk.k);
+      gl.uniformMatrix4fv(u.M, false, pk.m);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, first + world / STRIDE);
       gl.clear(gl.DEPTH_BUFFER_BIT);
+      gl.uniform1f(u.Z, GUN);
       gl.drawArrays(gl.TRIANGLES, first + world / STRIDE, (v.length - world) / STRIDE);
     },
     project: (x, y, z) => project(vp, x, y, z),

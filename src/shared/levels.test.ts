@@ -174,6 +174,12 @@ const wallDistance = (lvl: Level, s: number, p: Pt): number =>
       .map(e => dist(p, [e.ax, e.az], [e.bx, e.bz])),
   );
 
+describe('the campaign', () => {
+  it('has five levels', () => {
+    expect(LEVELS).toHaveLength(5);
+  });
+});
+
 describe.each(LEVELS.map((map, i) => [i + 1, map] as [number, MapDef]))('level %i', (n, map) => {
   const lvl = compile(map);
   const plan = PLAN[n - 1];

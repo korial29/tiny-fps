@@ -8,6 +8,7 @@ import { createEffects } from './effects';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
 import { STRIDE } from './mesh';
+import { LAYERS } from './textures';
 import { createRenderer, levelVerts } from './render';
 
 type Call = [name: string, ...args: unknown[]];
@@ -68,6 +69,16 @@ describe('createRenderer', () => {
     items = [] as never[],
     lights = [] as Light[],
   ) => rd.frame([1, 1.6, 1], 0, 0, [], new Map(), fx, [], [], items, lights);
+
+  it('builds a fragment shader with one specular row per layer and no stray JS values', () => {
+    createRenderer(canvas, compile(ROOM));
+    const src = calls.filter(c => c[0] == 'shaderSource').map(c => String(c[2]));
+    const frag = src.find(s => s.includes('precision'))!;
+    const rows = frag.match(/const vec2 SP\[(\d+)\]=vec2\[\]\((.*)\);/)!;
+    expect(Number(rows[1])).toBe(LAYERS + 1);
+    expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 1);
+    expect(frag).not.toMatch(/undefined|NaN|\[object/);
+  });
 
   it('rebuilds the level geometry on level()', () => {
     const [a, b] = [compile(HALL), compile(ROOM)];

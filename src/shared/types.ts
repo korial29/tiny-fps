@@ -170,6 +170,14 @@ export const TEX = {
   TILE: 1,
   LAVA: 2,
   STONE: 3,
+  /** Riveted metal plates. */
+  METAL: 4,
+  /** Planks, the grain running along u. */
+  WOOD: 5,
+  /** Stone blocks with moss in the joints. */
+  MOSS: 6,
+  /** Metal floor grating over darkness. */
+  GRATE: 7,
 } as const;
 
 /**

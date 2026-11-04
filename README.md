@@ -200,7 +200,7 @@ Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard
 Parity with the js13k game is tracked in [`docs/PARITY.md`](docs/PARITY.md).
 
 - [x] Multiplayer over WebSocket, or between tabs of one browser with no server
-- [x] Doom-style sector maps: steps, pits, low ceilings, balconies, procedural brick, tile, lava and stone textures
+- [x] Doom-style sector maps: steps, pits, low ceilings, balconies, eight procedural materials (brick, tile, lava, stone, metal, wood, moss, grating) with bump mapping and per-material highlights, each level themed
 - [x] Client-side prediction, exact to the bit, and the other players interpolated
 - [x] Chaingun with lag-compensated hitscan, spinning barrels, recoil, muzzle flash, head bob, sparks
 - [x] Walkers and flyers: patrol, sight cone, alert, chase, bullets, melee, gibs and explosions

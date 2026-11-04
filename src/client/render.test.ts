@@ -6,7 +6,18 @@ import { TEX } from '../shared/types';
 import { basis, pushBox } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
-import { levelVerts, lightProj, pack, project, spans, viewProj } from './render';
+import {
+  MAX_PIXELS,
+  SPEC,
+  backing,
+  levelVerts,
+  lightProj,
+  pack,
+  project,
+  spans,
+  viewProj,
+} from './render';
+import { LAYERS } from './textures';
 
 const at = (yaw: number, pitch: number, x: number, y: number, z: number) =>
   project(viewProj([0, 0, 0], yaw, pitch, 1), x, y, z);
@@ -42,6 +53,23 @@ describe('viewProj and project', () => {
   it('moves with the eye', () => {
     const m = viewProj([10, 2, 10], 0, 0, 1);
     expect(project(m, 10, 2, 5)![0]).toBeCloseTo(0.5);
+  });
+});
+
+describe('SPEC', () => {
+  it('has a row per texture layer and one for the flat bodies', () => {
+    expect(SPEC).toHaveLength(LAYERS + 1);
+  });
+
+  it('makes metal and grating shinier than brick and wood, and sharper', () => {
+    for (const shiny of [TEX.METAL, TEX.GRATE]) {
+      for (const dull of [TEX.BRICK, TEX.WOOD]) {
+        expect(SPEC[shiny][0]).toBeGreaterThan(SPEC[dull][0] * 5);
+        expect(SPEC[shiny][1]).toBeGreaterThan(SPEC[dull][1]);
+      }
+    }
+    expect(SPEC[LAYERS][0]).toBeGreaterThan(0);
+    expect(SPEC[LAYERS][0]).toBeLessThan(SPEC[TEX.METAL][0] / 4);
   });
 });
 
@@ -272,5 +300,21 @@ describe('pack', () => {
     const pk = pack([a, b]);
     expect([...pk.m.slice(0, 16)]).toEqual([...lightProj(a)]);
     expect([...pk.m.slice(16, 32)]).toEqual([...lightProj(b)]);
+  });
+});
+
+describe('backing', () => {
+  it('keeps the pixel ratio, up to 2, on a small canvas', () => {
+    expect(backing(800, 600, 1)).toEqual([800, 600]);
+    expect(backing(640, 480, 2)).toEqual([1280, 960]);
+    expect(backing(400, 300, 3)).toEqual([800, 600]);
+  });
+
+  it('scales a big canvas down to MAX_PIXELS, keeping its ratio', () => {
+    const [w, h] = backing(1024, 768, 2);
+    expect(w * h).toBeLessThanOrEqual(MAX_PIXELS * 1.01);
+    expect(w / h).toBeCloseTo(1024 / 768, 2);
+    expect(backing(1920, 1080, 1)).toEqual([1920, 1080]);
+    expect(backing(2560, 1440, 2)[0]).toBeLessThan(2560);
   });
 });

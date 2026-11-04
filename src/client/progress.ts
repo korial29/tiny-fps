@@ -15,12 +15,11 @@ import { SOUND } from './sfx';
 /** An item that vanishes this close (metres, on the floor plane) to the own player was theirs. */
 const NEAR = 1.5;
 
-/** The levels' names, as the title screen shows them. */
-const NAMES = ['Warm-up', 'Foundry', 'Cistern', 'The loop', 'Citadel'];
-
 /** "Level 2: Foundry", and "Hard mode" after it on the second run on. */
-const label = (n: number, hard: boolean) =>
-  `Level ${n + 1}${NAMES[n] ? `: ${NAMES[n]}` : ''}${hard ? ' (hard mode)' : ''}`;
+const label = (n: number, hard: boolean) => {
+  const name = LEVELS[n]?.name;
+  return `Level ${n + 1}${name ? `: ${name}` : ''}${hard ? ' (hard mode)' : ''}`;
+};
 
 /** Ticks as m:ss.s, the tenth cut, not rounded. */
 export const clock = (ticks: number) => {

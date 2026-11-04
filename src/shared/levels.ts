@@ -37,11 +37,12 @@ const [H, R, B, Y] = [ITEM.HEALTH, ITEM.KEY_RED, ITEM.KEY_BLUE, ITEM.KEY_YELLOW]
 const QUARTER = Math.PI / 4;
 
 /**
- * One level from its rooms (the first is the start and the exit), the spawn grid (x, z of its
+ * One level from its name, its rooms (the first is the start and the exit), the spawn grid (x, z of its
  * corner, facing), walkers and flyers (x, z, facing in eighth turns: 0 north, 2 west, 4 south, 6
  * east), items (x, z, kind) and the goal.
  */
 const level = (
+  name: string,
   rooms: Room[],
   [sx, sz, sd]: [number, number, number],
   walkers: [number, number, number][],
@@ -57,6 +58,7 @@ const level = (
   ]);
   const corners = [...new Map(boxes.flat().map(p => [`${p}`, p])).values()];
   return {
+    name,
     sectors: rooms.map(([, , , , floor, ceil, t = '103', light], s) => ({
       // Each edge gets the corners of other rooms that lie on it, nearest first.
       pts: boxes[s].flatMap((a, i, p): Pt[] => {
@@ -110,6 +112,7 @@ const level = (
 export const LEVELS: MapDef[] = [
   // 1: warm-up. Start room, a corridor, a hall, stairs up to a platform, a stair corridor down to the goal room.
   level(
+    'Warm-up',
     [
       [0, 0, 10, 10, 0, 4, '103'],
       [10, 4, 22, 6, 0, 2.8, '333', 0.6],
@@ -139,6 +142,7 @@ export const LEVELS: MapDef[] = [
   ),
   // 2: foundry. A hall around a lava pit, a balcony above it with the red key, a red gate to the vault.
   level(
+    'Foundry',
     [
       [0, 14, 10, 26, 0, 4, '103'],
       [10, 22, 20, 24, 0, 2.8, '333', 0.6],
@@ -181,6 +185,7 @@ export const LEVELS: MapDef[] = [
   ),
   // 3: cistern. A tall hall around a lava pool, a crawlway to the red key, a red gate, stairs up to a gallery with the blue key.
   level(
+    'Cistern',
     [
       [0, 20, 10, 32, 0, 4, '103'],
       [10, 26, 20, 28, 0, 2.8, '333', 0.6],
@@ -228,6 +233,7 @@ export const LEVELS: MapDef[] = [
   ),
   // 4: the loop. A hub round a pillar, with a wing for each key; the last gate opens stairs to a balcony over the hub, and the goal lies back near the start.
   level(
+    'Loop',
     [
       [0, 44, 10, 56, 0, 4, '103'],
       [10, 49, 20, 51, 0, 2.8, '333', 0.6],
@@ -283,6 +289,7 @@ export const LEVELS: MapDef[] = [
   ),
   // 5: citadel. An atrium with three wings: a furnace with a bridge (red), a tower (blue), a crawl to the cellar (yellow). The yellow gate opens on the arena, and the goal lies beyond.
   level(
+    'Citadel',
     [
       [0, 60, 10, 72, 0, 4, '103'],
       [10, 65, 24, 67, 0, 2.8, '333', 0.6],

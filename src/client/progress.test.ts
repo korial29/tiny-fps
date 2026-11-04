@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HEALTH, PLAYER_RESPAWN, TICK_HZ } from '../shared/constants';
 import { compile } from '../shared/level';
+import { LEVELS } from '../shared/levels';
 import { HALL } from '../shared/map';
 import { ITEM, PHASE } from '../shared/types';
 import type { Item, PlayerInfo, SnapPlayer, Snapshot } from '../shared/types';
@@ -13,7 +14,7 @@ import { clock, createProgress, facing } from './progress';
 
 vi.mock('../shared/levels', async () => {
   const { HALL } = await import('../shared/map');
-  return { LEVELS: [HALL, { ...HALL }, { ...HALL }] };
+  return { LEVELS: [{ ...HALL, name: 'Warm-up' }, { ...HALL, name: 'Foundry' }, { ...HALL }] };
 });
 
 const YOU = 1;
@@ -102,7 +103,7 @@ describe('level switch', () => {
     progress.snapshot(snap());
     const lvl = progress.lvl;
     expect(lvl).not.toBe(first);
-    expect(lvl.map).toBe(HALL);
+    expect(lvl.map).toBe(LEVELS[0]);
     expect(lvl.edges).toEqual(first.edges);
     expect(predictor.level).toHaveBeenCalledExactlyOnceWith(lvl);
     expect(rd.level).toHaveBeenCalledExactlyOnceWith(lvl);
@@ -215,6 +216,9 @@ describe('hud', () => {
     expect(progress.name).toBe('Level 2: Foundry');
     progress.snapshot(snap({ level: 0, hard: true }));
     expect(progress.name).toBe('Level 1: Warm-up (hard mode)');
+    // A level without a name shows its number alone.
+    progress.snapshot(snap({ level: 2, hard: true }));
+    expect(progress.name).toBe('Level 3 (hard mode)');
   });
 });
 

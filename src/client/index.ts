@@ -9,6 +9,7 @@ import { HUD_CSS, createHud } from './hud';
 import { createInput } from './input';
 import { createPredictor } from './predict';
 import { css } from './items';
+import { gather } from './lights';
 import { createProgress, facing } from './progress';
 import { createRenderer } from './render';
 import type { Renderer } from './render';
@@ -227,6 +228,17 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         monsters,
         bullets,
         progress.items,
+        gather({
+          eye: [eye[0], eye[1] + fx.bob, eye[2]],
+          yaw: ctl.yaw,
+          pitch: ctl.pitch,
+          dead: progress.dead,
+          others,
+          fx,
+          bullets,
+          lvl: progress.lvl,
+          t: now / 1000,
+        }),
       );
     }
     const seen = new Set<number>();

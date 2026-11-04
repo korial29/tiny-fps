@@ -8,7 +8,7 @@ import { createDelay, createEffects } from './effects';
 import { SAY } from './hud';
 import type { Hud } from './hud';
 import { ITEM_COLOR } from './items';
-import { clock, createProgress } from './progress';
+import { clock, createProgress, facing } from './progress';
 
 vi.mock('../shared/levels', async () => {
   const { HALL } = await import('../shared/map');
@@ -275,5 +275,21 @@ describe('pickup fade', () => {
     const { progress } = setup();
     progress.snapshot(snap({ items }));
     expect(progress.items).toBe(items);
+  });
+});
+
+describe('facing', () => {
+  it('takes the yaw of the nearest spawn', () => {
+    const map = {
+      sectors: [],
+      spawns: [
+        [0, 0, 1],
+        [10, 0, 2],
+        [0, 10, 3],
+      ] as [number, number, number][],
+    };
+    expect(facing(map, 9, 1)).toBe(2);
+    expect(facing(map, 1, 8)).toBe(3);
+    expect(facing(map, 0.5, 0.5)).toBe(1);
   });
 });

@@ -9,7 +9,7 @@ import { HUD_CSS, createHud } from './hud';
 import { createInput } from './input';
 import { createPredictor } from './predict';
 import { css } from './items';
-import { createProgress } from './progress';
+import { createProgress, facing } from './progress';
 import { createRenderer } from './render';
 import type { Renderer } from './render';
 
@@ -98,6 +98,9 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   let msg = rd ? '' : 'WebGL2 is not available';
   /** The own player is known, and the look angles start from where the host spawned it. */
   let ready = false;
+  /** Level and `hard` of the last snapshot as one number, and whether the own player was alive. */
+  let stage = -1;
+  let alive = false;
   let last = performance.now();
   let acc = 0;
   let raf = 0;
@@ -123,6 +126,14 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         // A new level first: the predictor takes the snapshot as one of that level.
         progress.snapshot(s);
         predictor.snapshot(s, now);
+        // A new level or a respawn puts the player at a spawn: look the way it faces. Taken from the
+        // map, as inputs still in flight carry the old yaw back into the host and the replay.
+        const own = s.players.find(p => p.id == you);
+        const key = s.level * 2 + +s.hard;
+        if (own?.hp && (key != stage || !alive)) {
+          [ctl.yaw, ctl.pitch] = [facing(progress.lvl.map, own.x, own.z), 0];
+        }
+        [stage, alive] = [key, !!own?.hp];
         shots.push(
           s.shots.filter(sh => sh.id != you),
           now,

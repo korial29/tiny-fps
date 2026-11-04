@@ -4,7 +4,7 @@ import { TICK_HZ } from '../shared/constants';
 import { compile } from '../shared/level';
 import { LEVELS } from '../shared/levels';
 import { PHASE } from '../shared/types';
-import type { Item, Level, Snapshot } from '../shared/types';
+import type { Item, Level, MapDef, Snapshot } from '../shared/types';
 import type { Effects } from './effects';
 import { SAY } from './hud';
 import type { Hud } from './hud';
@@ -47,6 +47,12 @@ export interface Deps {
   fx: Effects;
   hud: Hud;
 }
+
+/** The yaw of the spawn nearest (x, z): where a player put back at the start should look. */
+export const facing = ({ spawns }: MapDef, x: number, z: number): number =>
+  spawns.reduce((a, b) =>
+    Math.hypot(b[0] - x, b[1] - z) < Math.hypot(a[0] - x, a[1] - z) ? b : a,
+  )[2];
 
 export const createProgress = ({ lvl, you, predictor, rd, delays, fx, hud }: Deps): Progress => {
   /** Level and `hard` of the last snapshot, as one number; -1 before the first. */

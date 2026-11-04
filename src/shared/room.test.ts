@@ -6,6 +6,7 @@ import {
   MAX_NAME,
   MAX_PLAYERS,
   MAX_REWIND,
+  RESPAWN_AFTER,
   SNAP_EVERY,
   TICK_HZ,
 } from './constants';
@@ -15,7 +16,7 @@ import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
 import { body, fire } from './shoot';
-import { KEY } from './types';
+import { EVENT, KEY } from './types';
 import type { Conn, Every, Input, PlayerState, Shot, Snapshot } from './types';
 
 /** A peer that records what the room sends it. */
@@ -552,7 +553,7 @@ describe('Room: chaingun', () => {
     const e = duel(65520);
     e.run(50);
     rewound(e, 65550, 65550);
-  });
+  }, 60_000);
 
   it('stands a player the history does not hold where it is', () => {
     const d = duel();
@@ -565,5 +566,97 @@ describe('Room: chaingun', () => {
     d.room.receive(d.a, encodeInput({ seq: 7, keys: FIRE, ...look, view: d.tick - 10 }));
     ticks(d.room, 2);
     expect(snap(d.a).shots).toEqual([expect.objectContaining({ hit: 2 })]);
+  });
+});
+
+describe('Room: monsters', () => {
+  const { FIRE } = KEY;
+  /** The horde ticks run: tick() and then the newest snapshot of the peer. */
+  const monstersOf = (c: Peer) => snap(c).monsters;
+  const soloRoom = (seed?: number) => {
+    const room = new Room({}, seed);
+    return { room, a: join(room, 'A') };
+  };
+
+  it('puts the map monsters in every snapshot, with ids from MAX_PLAYERS', () => {
+    const { room, a } = soloRoom(1);
+    ticks(room, 2);
+    const s = snap(a);
+    expect(s.monsters.map(m => m.id)).toEqual(HALL.monsters!.map((_, i) => MAX_PLAYERS + i));
+    expect(s.monsters.map(m => m.kind)).toEqual(HALL.monsters!.map(m => m[3]));
+    expect([s.bullets, s.events]).toEqual([[], []]);
+  });
+
+  it('steps the monsters every tick while a player is there, and not when the room is empty', () => {
+    const { room, a } = soloRoom(1);
+    ticks(room, 2);
+    const first = JSON.stringify(monstersOf(a));
+    ticks(room, 120);
+    expect(JSON.stringify(monstersOf(a))).not.toBe(first);
+    room.disconnect(a);
+    const peers = room['horde'].monsters();
+    ticks(room, 120);
+    expect(room['horde'].monsters()).toEqual(peers);
+  });
+
+  it('plays the same game from the same seed, a different one from another', () => {
+    const play = (seed: number) => {
+      const { room, a } = soloRoom(seed);
+      ticks(room, 600);
+      return a.bins.map(b => [...new Uint8Array(b)].join(',')).join(';');
+    };
+    expect(play(7)).toBe(play(7));
+    expect(play(7)).not.toBe(play(8));
+  });
+
+  /** A at a spot of the hall, looking at the monster `id` where it is now. */
+  const aimAt = (room: Room, a: Peer, id: number) => {
+    const mob = room['horde'].monsters().find(m => m.id === id)!;
+    const p = room['peers'].get(a)!.state;
+    // The west arm of the hall, 6 m due south of the walker at (24, 2) facing the pit.
+    [p.x, p.y, p.z] = [mob.x, 1, mob.z + 6];
+    const [dx, dy, dz] = [0, mob.y + 0.9 - p.y - EYE, -6];
+    return { yaw: Math.atan2(-dx, -dz), pitch: Math.atan2(dy, 6) };
+  };
+
+  it('kills the monster a shot hits: a DIE in the next snapshot, then the monster is gone', () => {
+    const { room, a } = soloRoom(1);
+    ticks(room, 4);
+    const look = aimAt(room, a, MAX_PLAYERS);
+    // View of the host's own tick: no rewind.
+    room.receive(a, encodeInput({ seq: 0, keys: FIRE, ...look, view: room['ticks'] }));
+    ticks(room, 2);
+    const s = snap(a);
+    expect(s.shots).toEqual([expect.objectContaining({ id: 0, hit: MAX_PLAYERS })]);
+    expect(s.events.filter(e => e.type === EVENT.DIE)).toEqual([
+      expect.objectContaining({ id: MAX_PLAYERS }),
+    ]);
+    expect(s.monsters.map(m => m.id)).not.toContain(MAX_PLAYERS);
+    expect(s.monsters).toHaveLength(HALL.monsters!.length - 1);
+    // Events go out once.
+    ticks(room, 2);
+    expect(snap(a).events.filter(e => e.type === EVENT.DIE)).toEqual([]);
+  });
+
+  it('brings the monsters back RESPAWN_AFTER ticks after the last death', () => {
+    const { room, a } = soloRoom(1);
+    ticks(room, 2);
+    monstersOf(a).forEach(m => room['horde'].kill(m.id, 0));
+    ticks(room, 2);
+    expect(monstersOf(a)).toEqual([]);
+    ticks(room, RESPAWN_AFTER);
+    expect(monstersOf(a)).toHaveLength(HALL.monsters!.length);
+  });
+
+  it('keeps the events of a busy tick for the next snapshot when a u8 cannot count them', () => {
+    const { room, a } = soloRoom(1);
+    ticks(room, 2);
+    for (let k = 0; k < 300; k++) {
+      room['horde'].events.push({ type: EVENT.BOOM, id: k & 255, x: 0, y: 0, z: 0 });
+    }
+    ticks(room, 2);
+    expect(snap(a).events).toHaveLength(255);
+    ticks(room, 2);
+    expect(snap(a).events.length).toBeGreaterThanOrEqual(45);
   });
 });

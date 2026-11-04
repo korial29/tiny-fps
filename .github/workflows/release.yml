@@ -3,9 +3,10 @@ name: Release
 # Release automation (single-branch / trunk model on master).
 #
 # When a PR is merged into master, the version bump is derived from the PR's
-# release label (release:major / release:minor / release:patch). The actual
-# tag + npm publish + GitHub Release is gated behind the "release" environment,
-# so it is only *proposed* on merge and waits for a manual approval.
+# release label (release:major / release:minor / release:patch) and the release
+# (npm publish, tag, GitHub Release) runs at once, with no approval: the
+# "release" environment has no required reviewer while the project has a single
+# maintainer. Add one back in Settings → Environments to gate releases again.
 #
 # A manual fallback is available via workflow_dispatch.
 on:
@@ -75,7 +76,6 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # 2. Bump, build, tag, publish and create the GitHub Release.
-  #    Protected by the "release" environment (manual approval).
   # ---------------------------------------------------------------------------
   release:
     name: release
@@ -83,13 +83,22 @@ jobs:
     if: needs.prepare.outputs.skip == 'false'
     runs-on: ubuntu-latest
     environment: release
+    # One release at a time: two at once would compute the same version from the
+    # same latest tag. GitHub keeps one waiting run per group: a third merge
+    # replaces the waiting one, whose changes ship in the newer merge commit, but
+    # under the newer PR's bump only. Job-level, so skipped PRs never queue here.
+    concurrency:
+      group: release
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
-      - name: Checkout master
+      # The PR's merge commit, not master's tip: a later merge must not ship
+      # under this PR's version.
+      - name: Checkout the merged commit
         uses: actions/checkout@v7
         with:
-          ref: master
+          ref: ${{ github.event.pull_request.merge_commit_sha || 'master' }}
           fetch-depth: 0
 
       - name: Setup Node
@@ -150,7 +159,7 @@ jobs:
           gh release create "${VERSION}" \
             --title "${VERSION}" \
             --generate-notes \
-            --target master
+            --target "$(git rev-parse HEAD)"
 
       - name: Job summary
         run: |

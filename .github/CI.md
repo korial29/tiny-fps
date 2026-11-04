@@ -20,12 +20,16 @@ On every PR into `master`, enforces exactly one label among
 `release:major` / `release:minor` / `release:patch` / `release:skip`.
 Exposes the **`require-release-label`** status check.
 
-### `release.yml` — release on merge (label-driven, approval-gated)
+### `release.yml` — release on merge (label-driven, automatic)
 When a PR is merged into `master`:
 1. **prepare** reads the release label and computes the bump (skips on `release:skip` or no label).
-2. **release** waits for manual approval via the **`release`** environment, then:
-   computes the next version from the latest git tag, builds, publishes to npm
-   (`--access public`), pushes the `vX.Y.Z` tag and creates the GitHub Release.
+2. **release** runs at once on the PR's merge commit: it computes the next version
+   from the latest git tag, builds, publishes to npm (`--access public`), pushes the
+   `vX.Y.Z` tag and creates the GitHub Release. Releases are queued one at a time.
+
+The **`release`** environment has no required reviewer while the project has a single
+maintainer. Add one in **Settings → Environments → release** to turn releases back
+into proposals awaiting approval.
 
 The released version lives in the **git tag** and the **published npm package**, not
 in a commit on `master`. Nothing is pushed to the protected `master` branch, so no
@@ -53,8 +57,8 @@ Then **Settings → Pages →** source *Deploy from a branch*, branch `gh-pages`
 
 Then, in the GitHub UI:
 
-1. **Settings → Environments →** create `release` and add yourself as a *required reviewer*.
-   This is what turns the release into a *proposal* awaiting approval.
+1. **Settings → Environments →** create `release`. A *required reviewer* there turns each
+   release into a proposal awaiting approval; leave it empty for automatic releases.
 2. **Settings → Secrets and variables → Actions:**
    - `NPM_PUBLISH_TOKEN` — npm automation token, for `npm publish`. (Only secret required.)
 
@@ -63,4 +67,4 @@ Then, in the GitHub UI:
 1. Branch `feature/x` off `master`.
 2. Open a PR into `master` with one `release:*` label.
 3. Merge once CI is green.
-4. Approve the `release` environment → it tags, publishes and creates the GitHub Release.
+4. The release follows on its own: npm publish, tag, GitHub Release.

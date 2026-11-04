@@ -76,8 +76,22 @@ export const BULLET_SPEED = 12;
 export const BULLET_R = 0.15;
 /** Ticks a bullet lives at most. */
 export const BULLET_LIFE = 300;
-/** Ticks after the last monster dies before the map's monsters come back (until step 4). */
-export const RESPAWN_AFTER = 300;
+
+// Health and progression. Times are host ticks.
+export const HEALTH = 9;
+/** A hit takes 1 health, then the player cannot be hurt for HIT_COOLDOWN ticks. */
+export const HIT_COOLDOWN = 60;
+/** Every DROP_EVERY-th kill of the team leaves a HEALTH pickup where the monster died. */
+export const DROP_EVERY = 4;
+export const HEAL = 3;
+/** A player whose axis comes this close to a pickup (on the floor plane) takes it. */
+export const PICKUP_R = 0.8;
+export const GOAL_R = 1;
+/** A dead player comes back at the level start after this long. */
+export const PLAYER_RESPAWN = 180;
+/** Hard mode (second run on): monster speed factor, and the share of SHOOT_EVERY and MELEE_EVERY. */
+export const HARD_SPEED = 1.3;
+export const HARD_RATE = 0.6;
 /** Longest player name, in characters (code points). */
 export const MAX_NAME = 16;
 

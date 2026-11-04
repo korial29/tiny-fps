@@ -4,17 +4,19 @@ import {
   FLYER_H,
   FLYER_HOVER,
   MAX_PLAYERS,
+  HARD_RATE,
+  HARD_SPEED,
   MELEE_EVERY,
   PLAYER_H,
-  RESPAWN_AFTER,
+  SHOOT_EVERY,
   SIGHT_EVERY,
   WALKER_H,
 } from './constants';
-import { compile, sectorAt } from './level';
+import { bar, compile, sectorAt } from './level';
 import { HALL } from './map';
 import { createHorde, mulberry32 } from './monsters';
 import type { Horde } from './monsters';
-import { EVENT, MONSTER } from './types';
+import { EVENT, ITEM, MONSTER, PHASE } from './types';
 import type { GameEvent, MapDef, Monster, PlayerState, Sector } from './types';
 
 const { WALKER, FLYER } = MONSTER;
@@ -84,10 +86,10 @@ describe('horde: spawning', () => {
     });
   });
 
-  it('has none without map monsters, and nothing to bring back', () => {
+  it('has none without map monsters', () => {
     const h = createHorde(level(OPEN, undefined), calm);
     expect(h.monsters()).toEqual([]);
-    expect(run(h, [player(0, 5, 5)], RESPAWN_AFTER + 10)).toEqual([]);
+    expect(run(h, [player(0, 5, 5)], 400)).toEqual([]);
     expect(h.monsters()).toEqual([]);
     expect(h.bullets()).toEqual([]);
   });
@@ -643,7 +645,7 @@ describe('horde: walkers shoot', () => {
   });
 });
 
-describe('horde: death and respawn', () => {
+describe('horde: death', () => {
   const two = (): [Horde, ReturnType<typeof level>] => {
     const lvl = level(OPEN, [
       [10, 10, 0, WALKER],
@@ -679,30 +681,124 @@ describe('horde: death and respawn', () => {
     expect(h.monsters()).toHaveLength(1);
   });
 
-  it('brings every monster back RESPAWN_AFTER ticks after the last one died', () => {
+  it('returns the monster it killed, and nothing for one that is not alive', () => {
+    const [h] = two();
+    expect(h.kill(17, 0)).toMatchObject({ id: 17, kind: FLYER, x: 30, z: 10 });
+    expect(h.kill(17, 0)).toBeUndefined();
+    expect(h.kill(3, 0)).toBeUndefined();
+  });
+
+  it('never brings the monsters back: the level is over when they are dead', () => {
     const [h] = two();
     const p = [player(0, 20, 2)];
     h.kill(16, 0);
-    run(h, p, 100);
     h.kill(17, 0);
-    h.events.length = 0;
-    // Counted from the last death, not the first.
-    run(h, p, RESPAWN_AFTER - 1);
+    run(h, p, 1000);
     expect(h.monsters()).toEqual([]);
-    run(h, p, 1, RESPAWN_AFTER - 1);
-    const back = h.monsters();
-    expect(back.map(m => [m.id, m.kind, m.x, m.z, m.chase])).toEqual([
-      [16, WALKER, 10, 10, false],
-      [17, FLYER, 30, 10, false],
-    ]);
+  });
+});
+
+describe('horde: hard mode', () => {
+  /** Ticks at which a bullet with a new id appears, from a walker that shoots on sight. */
+  const volleys = (hard: boolean) => {
+    const h = createHorde(
+      level(
+        [rect(0, 0, 200, 20)],
+        [
+          [2, 8, 0, WALKER],
+          [5, 10, EAST, WALKER],
+        ],
+      ),
+      calm,
+      hard,
+    );
+    h.kill(16, 0);
+    const seen = new Set<number>();
+    const at: number[] = [];
+    for (let k = 1; k <= 400; k++) {
+      h.step([player(0, 33, 10)]);
+      h.bullets().forEach(b => seen.has(b.id) || (seen.add(b.id), at.push(k)));
+    }
+    return at;
+  };
+
+  it('shoots HARD_RATE as often', () => {
+    const [easy, hard] = [volleys(false), volleys(true)];
+    const gap = (at: number[]) => at[2] - at[1];
+    expect(gap(easy)).toBeGreaterThanOrEqual(SHOOT_EVERY);
+    expect(gap(hard)).toBe(gap(easy) - SHOOT_EVERY + Math.round(SHOOT_EVERY * HARD_RATE));
+    expect(hard.length).toBeGreaterThan(easy.length + 2);
   });
 
-  it('does not bring them back while one is still alive', () => {
-    const [h] = two();
-    h.kill(16, 0);
-    run(h, [player(0, 20, 2)], RESPAWN_AFTER * 2);
-    expect(h.monsters().map(m => m.id)).toEqual([17]);
+  it('swings HARD_RATE as often, the blow as late', () => {
+    const swings = (hard: boolean) => {
+      const h = createHorde(
+        level(OPEN, [
+          [4, 4, 0, WALKER],
+          [10, 10, 0, FLYER],
+        ]),
+        calm,
+        hard,
+      );
+      h.kill(16, 0);
+      h.events.length = 0;
+      const log = run(h, [player(0, 10, 9.2)], 100);
+      return log.filter(l => l.e.type === EVENT.SWING).map(l => l.tick);
+    };
+    expect(swings(false)).toEqual([1, 1 + MELEE_EVERY, 1 + 2 * MELEE_EVERY]);
+    const every = Math.round(MELEE_EVERY * HARD_RATE);
+    expect(swings(true)).toEqual([1, 1 + every, 1 + 2 * every, 1 + 3 * every]);
   });
+
+  it('moves HARD_SPEED faster, on a patrol and on a chase, walkers and flyers', () => {
+    const walked = (kind: number, hard: boolean, players: PlayerState[]) => {
+      const h = createHorde(level(OPEN, [[5, 10, EAST, kind]]), calm, hard);
+      run(h, players, 90);
+      const from = { ...mob(h, 16) };
+      run(h, players, 60, 90);
+      return dist(from, mob(h, 16));
+    };
+    for (const [kind, players] of [
+      [WALKER, []],
+      [FLYER, []],
+      [WALKER, [player(0, 35, 10)]],
+      [FLYER, [player(0, 35, 10)]],
+    ] as const) {
+      const ratio = walked(kind, true, [...players]) / walked(kind, false, [...players]);
+      expect(ratio, `kind ${kind}, ${players.length ? 'chase' : 'patrol'}`).toBeCloseTo(
+        HARD_SPEED,
+        1,
+      );
+    }
+  });
+});
+
+describe('horde: barred sectors', () => {
+  /** A hall, a gate and a room beyond it; the monster is in the hall, the player in the room. */
+  const gated = (kind: number) => {
+    const lvl = compile({
+      sectors: [rect(0, 0, 10, 10), rect(10, 0, 14, 10), rect(14, 0, 30, 10)],
+      spawns: [[1, 1, 0]],
+      monsters: [[5, 5, EAST, kind]],
+      gates: [{ sector: 1, key: ITEM.KEY_RED }],
+    });
+    return [createHorde(lvl, calm), lvl] as const;
+  };
+
+  for (const kind of [WALKER, FLYER]) {
+    it(`stops a ${kind === WALKER ? 'walker' : 'flyer'} at a gate it chases through, until the key is held`, () => {
+      const [h, lvl] = gated(kind);
+      const p = [player(0, 20, 5)];
+      // It sees the player through the bars and runs at them.
+      run(h, p, 600);
+      expect(mob(h, 16).chase).toBe(true);
+      expect(mob(h, 16).x).toBeGreaterThan(8);
+      expect(mob(h, 16).x).toBeLessThan(10);
+      bar(lvl, 1 << ITEM.KEY_RED, PHASE.HUNT);
+      run(h, p, 600, 600);
+      expect(mob(h, 16).x).toBeGreaterThan(17);
+    });
+  }
 });
 
 describe('HALL monsters', () => {

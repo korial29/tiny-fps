@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { EYE, MAX_PITCH, PLAYER_H, RANGE, SPREAD } from './constants';
-import { compile } from './level';
+import { bar, compile } from './level';
 import { HALL } from './map';
 import { aim, body, fire, trace } from './shoot';
-import { TEX } from './types';
+import { ITEM, PHASE, TEX } from './types';
 import type { MapDef, PlayerState } from './types';
 
 const lvl = compile(HALL);
@@ -281,5 +281,57 @@ describe('fire', () => {
     const miss = fire(big, far, seq, [player(1, -150 + RANGE + 2, 0, 10)].map(body));
     expect(miss.hit).toBe(-1);
     expect(Math.hypot(miss.x + 150, miss.z - 10)).toBeCloseTo(RANGE, 0);
+  });
+});
+
+describe('barred sectors', () => {
+  const room = (x0: number, x1: number): [number, number][] => [
+    [x0, 0],
+    [x1, 0],
+    [x1, 10],
+    [x0, 10],
+  ];
+  const sector = (x0: number, x1: number) => ({
+    pts: room(x0, x1),
+    floor: 0,
+    ceil: 4,
+    ft: TEX.TILE,
+    wt: TEX.BRICK,
+    ct: TEX.STONE,
+  });
+  /** Three rooms in a row, the middle one a gate: bars are bars, you shoot through them. */
+  const gated = compile({
+    sectors: [sector(0, 10), sector(10, 14), sector(14, 24)],
+    spawns: [[5, 5, 0]],
+    gates: [{ sector: 1, key: ITEM.KEY_RED }],
+  });
+
+  it('lets a shot fly through a barred gate to the far wall, as through an open one', () => {
+    const from: Vec3 = [2, 1.6, 5];
+    expect(gated.barred.has(1)).toBe(true);
+    const shut = trace(gated, from, [1, 0, 0], RANGE);
+    expect(shut).toBeCloseTo(22);
+    bar(gated, 1 << ITEM.KEY_RED, PHASE.HUNT);
+    expect(gated.barred.has(1)).toBe(false);
+    expect(trace(gated, from, [1, 0, 0], RANGE)).toBe(shut);
+    bar(gated, 0, PHASE.HUNT);
+  });
+
+  it('hits a body standing behind a barred gate, and one inside it', () => {
+    const at = (id: number, x: number, yaw = 0): PlayerState => ({
+      id,
+      x,
+      y: 0,
+      z: 5,
+      vy: 0,
+      yaw,
+      pitch: 0,
+      ground: true,
+      cool: 0,
+    });
+    expect(gated.barred.has(1)).toBe(true);
+    for (const x of [12, 18]) {
+      expect(fire(gated, at(0, 2, EAST), 3, [at(1, x)].map(body)).hit).toBe(1);
+    }
   });
 });

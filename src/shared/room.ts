@@ -1,21 +1,42 @@
 import {
+  DROP_EVERY,
+  GOAL_R,
+  HEAL,
+  HEALTH,
+  HIT_COOLDOWN,
   INPUT_BURST,
   MAX_NAME,
   MAX_PLAYERS,
   MAX_REWIND,
+  PICKUP_R,
+  PLAYER_H,
+  PLAYER_RESPAWN,
   RULES,
   SNAP_EVERY,
   TICK_HZ,
 } from './constants';
-import { compile } from './level';
-import { HALL } from './map';
+import { bar, compile, inside, sectorAt } from './level';
+import { LEVELS } from './levels';
 import { createHorde, mulberry32 } from './monsters';
 import type { Horde } from './monsters';
 import { move, spawn } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
 import { body, fire, monsterBody } from './shoot';
-import type { Body, Conn, Every, Monster, PlayerInfo, PlayerState, Rules, Shot } from './types';
+import { EVENT, ITEM, PHASE } from './types';
+import type {
+  Body,
+  Conn,
+  Every,
+  Item,
+  Level,
+  MapDef,
+  Monster,
+  PlayerInfo,
+  PlayerState,
+  Rules,
+  Shot,
+} from './types';
 
 interface Player {
   conn: Conn;
@@ -25,12 +46,16 @@ interface Player {
   bank: number;
   /** Seq of the last applied input. Starts at 65535, the seq before the client's first (0). */
   ack: number;
+  /** Health: 0 is dead, until PLAYER_RESPAWN ticks after `hurt`. */
+  hp: number;
+  /** Host tick of the last hit that took health (the death, once hp is 0). */
+  hurt: number;
 }
 
 /** Ticks run at most this many times per timer callback, so a stalled host does not spiral. */
 const MAX_CATCH_UP = 20;
-/** The map every room plays, compiled once. */
-const LEVEL = compile(HALL);
+/** A pickup is this tall, standing on the floor: a body touches it when their heights overlap. */
+const ITEM_H = 0.5;
 /** A new player does not spawn within this many metres of another one. */
 const SPAWN_CLEAR = 2;
 
@@ -74,6 +99,10 @@ const unique = (name: string, taken: string[]): string => {
   return out;
 };
 
+/** Whether the player's body is within r of (x, z) on the floor plane and meets a thing resting on y. */
+const reach = (p: PlayerState, x: number, y: number, z: number, r: number): boolean =>
+  Math.hypot(p.x - x, p.z - z) <= r && p.y < y + ITEM_H && y < p.y + PLAYER_H;
+
 const setEvery: Every = (cb, ms) => {
   const id = setInterval(cb, ms);
   return () => clearInterval(id);
@@ -91,8 +120,17 @@ const setEvery: Every = (cb, ms) => {
  *   view tick of the input (lag compensation, at most MAX_REWIND ticks back).
  * - The room owns the horde (monsters.ts), stepped every tick while a player is present. A shot
  *   rewinds the monsters with the players, and one that hits a monster kills it.
+ * - A player has HEALTH. A monster's blow or bullet takes 1, then HIT_COOLDOWN ticks of grace
+ *   (only a hit that took health is told as a HURT event). A dead player moves, shoots and
+ *   counts for nothing until PLAYER_RESPAWN ticks later, when it is back at a spawn.
+ * - The level's items lie in it, and every DROP_EVERY-th kill leaves a HEALTH pack. A key taken
+ *   opens its gates for the team, a pack heals below full health.
+ * - Touching the goal turns the level from HUNT to RETURN (the exit opens); when every living
+ *   player is in the exit the level is won: the next one starts, everyone respawned. After the
+ *   last, every player gets { t: 'end' } and a new run starts at level 0, hard from then on.
  * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player, the shots resolved since
- *   the last one, the monsters, the bullets and the events since the last one goes to every peer.
+ *   the last one, the monsters, the bullets, the events since the last one and the items goes to
+ *   every peer.
  */
 export class Room {
   /** Every connected peer; null until it joins. */
@@ -100,7 +138,21 @@ export class Room {
   private ticks = 0;
   /** The players and monsters as each snapshot of the last MAX_REWIND ticks sent them. */
   private history: { tick: number; players: PlayerState[]; monsters: Monster[] }[] = [];
-  private horde: Horde;
+  private maps: Level[];
+  private lvl!: Level;
+  private horde!: Horde;
+  private rand: () => number;
+  private level = 0;
+  private hard = false;
+  private phase: number = PHASE.HUNT;
+  /** The team's key bits (1 << ITEM.KEY_*). */
+  private keys = 0;
+  private items: Item[] = [];
+  private nextItem = 0;
+  /** Monsters the team killed in this level. */
+  private kills = 0;
+  /** Host tick the run started at. */
+  private runStart = 0;
   /** Shots resolved since the last snapshot. */
   private shots: Shot[] = [];
   private halt: (() => void) | undefined;
@@ -108,10 +160,12 @@ export class Room {
   /** Round-robin cursor over the spawn points, used once they are all taken. */
   private rr = 0;
 
-  /** Missing rules fall back to RULES. The seed drives the monsters. */
-  public constructor(rules: Partial<Rules> = {}, seed = Date.now()) {
+  /** Missing rules fall back to RULES. The seed drives the monsters. `levels` is the campaign. */
+  public constructor(rules: Partial<Rules> = {}, seed = Date.now(), levels: MapDef[] = LEVELS) {
     this.rules = { ...RULES, ...rules };
-    this.horde = createHorde(LEVEL, mulberry32(seed));
+    this.rand = mulberry32(seed);
+    this.maps = levels.map(compile);
+    this.load(0);
   }
 
   /** Number of joined players. */
@@ -138,11 +192,15 @@ export class Room {
     // An input beyond the bank is dropped, and not acked.
     if (input && p.bank > 0) {
       p.bank--;
-      if (move(p.state, input, LEVEL)) {
-        const shot = fire(LEVEL, p.state, input.seq, this.rewind(p, input.view));
+      // A dead player's inputs are acked and move nothing.
+      if (p.hp && move(p.state, input, this.lvl)) {
+        const shot = fire(this.lvl, p.state, input.seq, this.rewind(p, input.view));
         this.shots.push(shot);
         if (shot.hit >= MAX_PLAYERS) {
-          this.horde.kill(shot.hit, p.state.id);
+          const dead = this.horde.kill(shot.hit, p.state.id);
+          if (dead && ++this.kills % DROP_EVERY === 0) {
+            this.drop(ITEM.HEALTH, dead.x, dead.z);
+          }
         }
       }
       p.ack = input.seq;
@@ -164,27 +222,47 @@ export class Room {
     if (!players.length) {
       return;
     }
-    players.forEach(p => (p.bank = Math.min(INPUT_BURST, p.bank + 1)));
-    this.horde.step(players.map(p => p.state));
-    if (++this.ticks % SNAP_EVERY === 0) {
+    const now = ++this.ticks;
+    for (const p of players) {
+      p.bank = Math.min(INPUT_BURST, p.bank + 1);
+      if (!p.hp && now - p.hurt >= PLAYER_RESPAWN) {
+        p.hp = HEALTH;
+        p.state = this.place(
+          p.info.id,
+          players.filter(q => q.hp && q !== p).map(q => q.state),
+        );
+      }
+    }
+    const { events } = this.horde;
+    const old = events.length;
+    this.horde.step(players.filter(p => p.hp).map(p => p.state));
+    // The horde reports every blow; only the ones that took health are told.
+    events.push(...events.splice(old).filter(e => e.type !== EVENT.HURT || this.wound(e.id, now)));
+    this.progress(players.filter(p => p.hp));
+    if (now % SNAP_EVERY === 0) {
       const monsters = this.horde.monsters();
       this.history.push({
-        tick: this.ticks,
+        tick: now,
         players: players.map(p => ({ ...p.state })),
         monsters,
       });
-      while (this.history[0].tick < this.ticks - MAX_REWIND) {
+      while (this.history[0].tick < now - MAX_REWIND) {
         this.history.shift();
       }
       // One buffer for everyone: transports must not mutate it.
       const snap = encodeSnapshot({
-        tick: this.ticks,
-        players: players.map(p => ({ ...p.state, ack: p.ack })),
+        tick: now,
+        players: players.map(p => ({ ...p.state, ack: p.ack, hp: p.hp })),
         shots: this.shots,
         monsters,
         bullets: this.horde.bullets(),
         // The snapshot counts events with a u8: the rest wait for the next one.
         events: this.horde.events.splice(0, 255),
+        level: this.level,
+        hard: this.hard,
+        phase: this.phase,
+        keys: this.keys,
+        items: this.items,
       });
       this.shots = [];
       players.forEach(p => p.conn.send(snap));
@@ -230,7 +308,7 @@ export class Room {
    */
   private rewind(shooter: Player, view = 0): Body[] {
     const now = this.players()
-      .filter(p => p !== shooter)
+      .filter(p => p !== shooter && p.hp)
       .map(p => p.state);
     const mobs = this.horde.monsters();
     const [first, last] = [this.history[0], this.history.at(-1)];
@@ -261,6 +339,107 @@ export class Room {
     return [...at(now, h => h.players).map(body), ...at(mobs, h => h.monsters).map(monsterBody)];
   }
 
+  /** Resets everything a level owns, and puts every player on a spawn of it with full health. */
+  private load(n: number): void {
+    this.level = n;
+    this.lvl = this.maps[n];
+    this.keys = 0;
+    this.phase = PHASE.HUNT;
+    bar(this.lvl, 0, PHASE.HUNT);
+    this.horde = createHorde(this.lvl, this.rand, this.hard);
+    this.items = [];
+    this.nextItem = 0;
+    this.kills = 0;
+    this.lvl.map.items?.forEach(([x, z, kind]) => this.drop(kind, x, z));
+    this.shots = [];
+    this.history = [];
+    const placed: PlayerState[] = [];
+    for (const p of this.players()) {
+      p.hp = HEALTH;
+      p.state = this.place(p.info.id, placed);
+      placed.push(p.state);
+    }
+  }
+
+  /** The first spawn point with none of `others` within SPAWN_CLEAR, else the next one round-robin. */
+  private place(id: number, others: PlayerState[]): PlayerState {
+    const n = this.lvl.map.spawns.findIndex((_, k) => {
+      const { x, z } = spawn(id, this.lvl, k);
+      return !others.some(o => Math.hypot(o.x - x, o.z - z) < SPAWN_CLEAR);
+    });
+    return spawn(id, this.lvl, n < 0 ? this.rr++ : n);
+  }
+
+  /** The floor of the sector holding (x, z). */
+  private floor(x: number, z: number): number {
+    return this.lvl.map.sectors[Math.max(sectorAt(this.lvl, x, z), 0)].floor;
+  }
+
+  /** Leaves an item of `kind` on the floor at (x, z). */
+  private drop(kind: number, x: number, z: number): void {
+    const f = Math.fround;
+    this.items.push({ id: this.nextItem++, kind, x: f(x), y: f(this.floor(x, z)), z: f(z) });
+  }
+
+  /** Takes 1 health off player `id` unless it was hurt less than HIT_COOLDOWN ticks ago. */
+  private wound(id: number, now: number): boolean {
+    const p = this.players().find(q => q.info.id === id);
+    if (!p?.hp || now - p.hurt < HIT_COOLDOWN) {
+      return false;
+    }
+    [p.hp, p.hurt] = [p.hp - 1, now];
+    return true;
+  }
+
+  /** What the living players do to the level: pick things up, touch the goal, win. */
+  private progress(alive: Player[]): void {
+    const { sectors, goal, exit } = this.lvl.map;
+    let bars = false;
+    this.items = this.items.filter(t => {
+      const who = alive.find(
+        p => reach(p.state, t.x, t.y, t.z, PICKUP_R) && (t.kind !== ITEM.HEALTH || p.hp < HEALTH),
+      );
+      if (who && t.kind === ITEM.HEALTH) {
+        who.hp = Math.min(HEALTH, who.hp + HEAL);
+      } else if (who) {
+        this.keys |= 1 << t.kind;
+        bars = true;
+      }
+      return !who;
+    });
+    if (this.phase === PHASE.HUNT) {
+      if (goal && alive.some(p => reach(p.state, goal[0], this.floor(...goal), goal[1], GOAL_R))) {
+        this.phase = PHASE.RETURN;
+        bars = true;
+      }
+    } else if (
+      exit !== undefined &&
+      alive.length &&
+      alive.every(p => inside(sectors[exit], p.state.x, p.state.z))
+    ) {
+      return this.win();
+    }
+    if (bars) {
+      bar(this.lvl, this.keys, this.phase);
+    }
+  }
+
+  /** The level is won: the next one, or the end of the run and a new, hard one. */
+  private win(): void {
+    if (this.level + 1 < this.maps.length) {
+      this.load(this.level + 1);
+      return;
+    }
+    const end = JSON.stringify({
+      t: 'end',
+      ticks: this.ticks - this.runStart,
+      hard: this.hard,
+    } satisfies ServerText);
+    this.players().forEach(p => p.conn.send(end));
+    [this.hard, this.runStart] = [true, this.ticks];
+    this.load(0);
+  }
+
   private players(): Player[] {
     return [...this.peers.values()].filter(p => p !== null);
   }
@@ -279,15 +458,6 @@ export class Room {
     // First colour nobody wears (all of them taken only when maxPlayers exceeds the palette).
     const color =
       COLORS.find(c => !players.some(p => p.info.color === c)) ?? COLORS[id % COLORS.length];
-    // First spawn point with nobody within SPAWN_CLEAR, else the next one round-robin.
-    const near = (n: number): boolean => {
-      const { x, z } = spawn(id, LEVEL, n);
-      return players.some(p => Math.hypot(p.state.x - x, p.state.z - z) < SPAWN_CLEAR);
-    };
-    let n = 0;
-    while (n < HALL.spawns.length && near(n)) {
-      n++;
-    }
     const player: Player = {
       conn,
       info: {
@@ -299,9 +469,14 @@ export class Room {
         ),
         color,
       },
-      state: spawn(id, LEVEL, n < HALL.spawns.length ? n : this.rr++),
+      state: this.place(
+        id,
+        players.filter(p => p.hp).map(p => p.state),
+      ),
       bank: INPUT_BURST,
       ack: 0xffff,
+      hp: HEALTH,
+      hurt: -HIT_COOLDOWN,
     };
     this.peers.set(conn, player);
     this.roster();

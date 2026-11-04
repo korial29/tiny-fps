@@ -9,13 +9,14 @@ import {
   FLYER_H,
   FLYER_HOVER,
   FLYER_SPEED,
+  HARD_RATE,
+  HARD_SPEED,
   MAX_MONSTERS,
   MAX_PLAYERS,
   MELEE_EVERY,
   MELEE_R,
   PLAYER_H,
   PLAYER_R,
-  RESPAWN_AFTER,
   SHOOT_EVERY,
   SIGHT_COS,
   SIGHT_EVERY,
@@ -86,43 +87,46 @@ export interface Horde {
   events: GameEvent[];
   /** One host tick, with the players' states. */
   step(players: PlayerState[]): void;
-  /** A player's shot killed monster `id`: it dies at once, and the monsters that see it hunt `by`. */
-  kill(id: number, by: number): void;
+  /**
+   * A player's shot killed monster `id`: it dies at once, and the monsters that see it hunt `by`.
+   * Returns the monster, undefined when `id` is not alive.
+   */
+  kill(id: number, by: number): Monster | undefined;
 }
 
-/** The monsters of the level's map, from the first spawn. */
-export const createHorde = (lvl: Level, rand: () => number): Horde => {
+/**
+ * The monsters of the level's map, from the first spawn. In hard mode they move HARD_SPEED faster
+ * and swing and shoot HARD_RATE as often.
+ */
+export const createHorde = (lvl: Level, rand: () => number, hard = false): Horde => {
   const def = (lvl.map.monsters ?? []).slice(0, MAX_MONSTERS);
-  let mobs: Mob[] = [];
+  const [fast, rate] = hard ? [HARD_SPEED, HARD_RATE] : [1, 1];
+  const [walkerSpeed, flyerSpeed] = [WALKER_SPEED * fast, FLYER_SPEED * fast];
+  const [shootEvery, meleeEvery] = [SHOOT_EVERY, MELEE_EVERY].map(n => Math.round(n * rate));
   let shells: Shell[] = [];
   const events: GameEvent[] = [];
   let tick = 0;
   let nextBullet = 0;
-  let wait = 0;
-
-  const spawnAll = (): void => {
-    mobs = def.map(([x, z, yaw, kind], i) => {
-      const { floor, ceil } = lvl.map.sectors[Math.max(sectorAt(lvl, x, z), 0)];
-      const flyer = kind === MONSTER.FLYER;
-      return {
-        id: MAX_PLAYERS + i,
-        kind,
-        x: Math.fround(x),
-        y: Math.fround(flyer ? Math.min(floor + FLYER_HOVER, ceil - FLYER_H) : floor),
-        z: Math.fround(z),
-        yaw: norm(yaw),
-        chase: false,
-        vy: 0,
-        ground: true,
-        target: -1,
-        turn: Math.floor(rand() * 240),
-        melee: 0,
-        swing: 0,
-        shoot: Math.floor(rand() * SHOOT_EVERY),
-      };
-    });
-  };
-  spawnAll();
+  const mobs: Mob[] = def.map(([x, z, yaw, kind], i) => {
+    const { floor, ceil } = lvl.map.sectors[Math.max(sectorAt(lvl, x, z), 0)];
+    const flyer = kind === MONSTER.FLYER;
+    return {
+      id: MAX_PLAYERS + i,
+      kind,
+      x: Math.fround(x),
+      y: Math.fround(flyer ? Math.min(floor + FLYER_HOVER, ceil - FLYER_H) : floor),
+      z: Math.fround(z),
+      yaw: norm(yaw),
+      chase: false,
+      vy: 0,
+      ground: true,
+      target: -1,
+      turn: Math.floor(rand() * 240),
+      melee: 0,
+      swing: 0,
+      shoot: Math.floor(rand() * shootEvery),
+    };
+  });
 
   const mid = (m: Mob): number => m.y + monsterBody(m).h / 2;
   const eye = (m: Mob): [number, number, number] => [
@@ -186,7 +190,7 @@ export const createHorde = (lvl: Level, rand: () => number): Horde => {
     lvl.map.sectors[Math.max(sectorAt(lvl, m.x, m.z), 0)].floor < y - STEP_H;
 
   const patrol = (m: Mob): void => {
-    const s = (m.kind === MONSTER.WALKER ? WALKER_SPEED : FLYER_SPEED) * PATROL * DT;
+    const s = (m.kind === MONSTER.WALKER ? walkerSpeed : flyerSpeed) * PATROL * DT;
     const [fx, fz] = forward(m.yaw);
     const before = { x: m.x, y: m.y, z: m.z, vy: m.vy, ground: m.ground };
     if (m.kind === MONSTER.WALKER) {
@@ -227,7 +231,7 @@ export const createHorde = (lvl: Level, rand: () => number): Horde => {
       vz: v[2] * k,
       life: BULLET_LIFE,
     });
-    m.shoot = SHOOT_EVERY + Math.floor((rand() - 0.5) * 20);
+    m.shoot = shootEvery + Math.floor((rand() - 0.5) * 20);
   };
 
   const chase = (m: Mob, p: PlayerState): void => {
@@ -238,12 +242,12 @@ export const createHorde = (lvl: Level, rand: () => number): Horde => {
     }
     if (m.kind === MONSTER.WALKER) {
       const [fx, fz] = forward(m.yaw);
-      const s = d > STOP ? WALKER_SPEED * DT : 0;
+      const s = d > STOP ? walkerSpeed * DT : 0;
       walk(m, fx * s, fz * s, false, lvl);
     } else {
       // Straight at the chest, at FLYER_SPEED in 3D, the body's middle on it.
       const dy = p.y + CHEST - FLYER_H / 2 - m.y;
-      const k = Math.min(1, (FLYER_SPEED * DT) / (Math.hypot(d, dy) || 1));
+      const k = Math.min(1, (flyerSpeed * DT) / (Math.hypot(d, dy) || 1));
       fly(m, d > STOP ? dx * k : 0, dy * k, d > STOP ? dz * k : 0, lvl);
     }
 
@@ -262,7 +266,7 @@ export const createHorde = (lvl: Level, rand: () => number): Horde => {
     }
     if (near && !m.melee) {
       events.push({ type: EVENT.SWING, id: m.id, x: m.x, y: mid(m), z: m.z });
-      [m.melee, m.swing] = [MELEE_EVERY, SWING_DELAY];
+      [m.melee, m.swing] = [meleeEvery, SWING_DELAY];
     }
 
     if (m.kind === MONSTER.WALKER && m.shoot-- <= 0 && d <= SIGHT_RANGE) {
@@ -325,9 +329,6 @@ export const createHorde = (lvl: Level, rand: () => number): Horde => {
         }
       }
       shells = shells.filter(b => advance(b, players));
-      if (!mobs.length && def.length && --wait <= 0) {
-        spawnAll();
-      }
     },
 
     kill: (id, by) => {
@@ -338,7 +339,7 @@ export const createHorde = (lvl: Level, rand: () => number): Horde => {
       const [m] = mobs.splice(i, 1);
       events.push({ type: EVENT.DIE, id, x: m.x, y: mid(m), z: m.z });
       alert(m, by);
-      wait = RESPAWN_AFTER;
+      return m;
     },
   };
 };

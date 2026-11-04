@@ -5,7 +5,7 @@
 // INTERP_DELAY in the past, interpolated between the two snapshots around that time.
 import { INTERP_DELAY } from '../shared/constants';
 import { TAU, move, norm } from '../shared/physics';
-import type { Input, BoxMap, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
+import type { Input, Level, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
 
 export interface Predictor {
   /** The own player id, from the roster. Snapshots before it are only used for the others. */
@@ -61,7 +61,7 @@ const lerp = (a: PlayerState, b: PlayerState, t: number): PlayerState => {
   };
 };
 
-export const createPredictor = (map: BoxMap): Predictor => {
+export const createPredictor = (lvl: Level): Predictor => {
   let id: number | undefined;
   let seq = 0;
   let pending: Input[] = [];
@@ -84,7 +84,7 @@ export const createPredictor = (map: BoxMap): Predictor => {
       }
       if (own) {
         prev = state(own);
-        move(own, input, map);
+        move(own, input, lvl);
       }
       return input;
     },
@@ -105,7 +105,7 @@ export const createPredictor = (map: BoxMap): Predictor => {
         if (k === pending.length - 1) {
           prev = state(own!);
         }
-        move(own!, i, map);
+        move(own!, i, lvl);
       });
     },
 

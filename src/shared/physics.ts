@@ -46,13 +46,13 @@ const f32 = Math.fround;
 const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v, lo), hi);
 
 /**
- * Whether the edge stops a body of height h whose feet are at y: a solid wall, a floor on the far
- * side more than `step` above the feet, or an opening (the lower ceiling minus the higher floor)
- * too short for the body or under the head. SKIN keeps rounding from flipping the answer
- * for a player resting on a step or against a ceiling.
+ * Whether the edge stops a body of height h whose feet are at y: a solid wall, a barred sector on
+ * the far side, a floor there more than `step` above the feet, or an opening (the lower ceiling
+ * minus the higher floor) too short for the body or under the head. SKIN keeps rounding from
+ * flipping the answer for a player resting on a step or against a ceiling.
  */
-const shut = ({ map }: Level, e: Edge, y: number, h: number, step: number): boolean => {
-  if (e.back < 0) {
+const shut = ({ map, barred }: Level, e: Edge, y: number, h: number, step: number): boolean => {
+  if (e.back < 0 || barred.has(e.back)) {
     return true;
   }
   const f = map.sectors[e.front];

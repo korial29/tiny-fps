@@ -21,10 +21,12 @@ export const compile = (map: MapDef): Level => {
 };
 
 /** Bars the gates whose key is not in `keys` (bits 1 << ITEM.KEY_*), and the exit before RETURN. */
-export const bar = (lvl: Level, keys: number, phase: number): void => {
-  void keys;
-  void phase;
-  lvl.barred.clear();
+export const bar = ({ map, barred }: Level, keys: number, phase: number): void => {
+  barred.clear();
+  map.gates?.forEach(g => keys & (1 << g.key) || barred.add(g.sector));
+  if (map.exit !== undefined && phase === PHASE.HUNT) {
+    barred.add(map.exit);
+  }
 };
 
 /** Whether (x, z) is inside the sector, its edges included. */

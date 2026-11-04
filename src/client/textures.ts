@@ -66,6 +66,9 @@ GEN[TEX.STONE] = (u, v) => {
   return scale([128, 124, 120], 0.45 + 0.7 * n);
 };
 
+// Placeholders until G1 draws them.
+GEN[TEX.METAL] = GEN[TEX.WOOD] = GEN[TEX.MOSS] = GEN[TEX.GRATE] = () => [128, 128, 128];
+
 /** All layers, RGBA, layer after layer, rows top to bottom: the upload of a texture array. */
 export const textures = (): Uint8ClampedArray => {
   const out = new Uint8ClampedArray(LAYERS * SIZE * SIZE * 4);

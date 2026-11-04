@@ -4,6 +4,7 @@ import { LEVELS } from '../shared/levels';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import type { GameEvent, PlayerInfo, Shot, SocketLike } from '../shared/types';
+import { createAudio, createClock, hear, savedMute, toggleMute } from './audio';
 import { createDelay, createEffects } from './effects';
 import { HUD_CSS, createHud } from './hud';
 import { createInput } from './input';
@@ -13,6 +14,7 @@ import { gather } from './lights';
 import { createProgress, facing } from './progress';
 import { createRenderer } from './render';
 import type { Renderer } from './render';
+import { SOUND } from './sfx';
 
 export type { PlayerInfo, SocketLike } from '../shared/types';
 
@@ -68,7 +70,13 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
 
   const first = compile(LEVELS[0]);
   const predictor = createPredictor(first);
-  const ctl = createInput(canvas);
+  const audio = createAudio();
+  audio.mute(savedMute());
+  hud.mute(audio.muted);
+  const tick = createClock(audio);
+  const ctl = createInput(canvas, () => hud.mute(toggleMute(audio)));
+  // The click that takes the pointer lock is the gesture that lets the sound start.
+  canvas.addEventListener('click', () => audio.unlock());
   const fx = createEffects(Math.random, first);
   /** Others' shots and the host's events wait INTERP_DELAY: the others are drawn that far in the past. */
   const shots = createDelay<Shot>();
@@ -88,6 +96,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     delays: [shots, events],
     fx,
     hud,
+    audio,
   });
   let roster: PlayerInfo[] = [];
   let colors = new Map<number, string>();
@@ -193,6 +202,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       const p = shot && predictor.me(1);
       if (shot && p) {
         fx.shot(shot, [p.x, p.y + EYE, p.z], true);
+        audio.play(SOUND.SHOT);
       }
     }
 
@@ -203,15 +213,20 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     const eye: [number, number, number] = me ? [me.x, me.y + EYE, me.z] : [0, 0, 0];
     // Track first: a DIE names a monster the interpolated list has already dropped.
     fx.track(monsters, bullets);
+    audio.listen(eye, ctl.yaw);
     for (const sh of shots.due(now)) {
       const p = others.find(o => o.id == sh.id);
       if (p) {
-        fx.shot(sh, [p.x, p.y + EYE, p.z], false, sh.hit != you);
+        const from: [number, number, number] = [p.x, p.y + EYE, p.z];
+        fx.shot(sh, from, false, sh.hit != you);
+        audio.play(SOUND.SHOT, from);
       }
     }
     for (const e of events.due(now)) {
       fx.event(e, you);
+      hear(audio, e, you);
     }
+    tick(progress.returning, now);
     const dt = Math.min((now - before) / 1000, 0.1);
     fx.update(me, ctl.keys, dt, progress.dead);
     hud.update(dt);
@@ -290,6 +305,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       dead = true;
       cancelAnimationFrame(raf);
       ctl.destroy();
+      audio.destroy();
       rd?.destroy();
       ws.onopen = ws.onclose = ws.onmessage = null;
       ws.close();

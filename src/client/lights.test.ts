@@ -96,9 +96,12 @@ describe('other players', () => {
       .filter(l => l.kind == LIGHT.SPOT)
       .slice(1);
 
-  it('each carry a flashlight from their eye along their view', () => {
+  it('each carry a flashlight from just ahead of their eye along their view', () => {
     const [s] = spots([player(1, 3, Math.PI)]);
-    expect(s.p).toEqual([3, 1.6, 8]);
+    // Facing +z: 0.35 m ahead, clear of the head box (0.17 m half side).
+    expect(s.p[0]).toBeCloseTo(3);
+    expect(s.p[1]).toBeCloseTo(1.6);
+    expect(s.p[2]).toBeCloseTo(8.35);
     expect(s.d[2]).toBeCloseTo(1);
   });
 

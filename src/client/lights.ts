@@ -119,7 +119,8 @@ export const gather = ({ eye, yaw, pitch, dead, others, fx, bullets, lvl, t }: S
     .sort((a, b) => near(a.e) - near(b.e))
     .forEach(({ p, e }, i) => {
       const [r, u, f] = basis(p.yaw, p.pitch);
-      rest.push(spot(e, f, NARROW, 25, WHITE, i < SHADOWED));
+      // Ahead of the head box, or its own head would shadow the whole beam.
+      rest.push(spot(at(e, [f, 0.35]), f, NARROW, 25, WHITE, i < SHADOWED));
       if (fx.flashes.has(p.id)) {
         rest.push(point(at([p.x, p.y + 1.25, p.z], [r, 0.36], [u, -0.12], [f, 0.8]), 6, FIRE));
       }

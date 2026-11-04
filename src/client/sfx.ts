@@ -37,6 +37,8 @@ export const SOUND = {
   CLOCK: 4,
   /** A bullet bursting on a wall. */
   BURST: 5,
+  /** A heartbeat, looped by the client while the own health is low. */
+  HEART: 6,
 } as const;
 
 const synth = ([wave, hz, slide, a, s, d, vib, lp, jt, jm, vol]: Voice, seed: number) => {
@@ -107,6 +109,11 @@ const LAYERS: Voice[][] = [
   [
     [3, 1200, -1, 0.002, 0, 0.14, 0, 0.45, 0, 1, 0.7],
     [0, 3200, -1, 0.002, 0, 0.05, 0, 1, 0.025, 0.7, 0.2],
+  ],
+  // HEART: a low thump.
+  [
+    [2, 60, -1, 0.005, 0.02, 0.15, 0, 1, 0, 1, 0.9],
+    [2, 90, -2, 0.003, 0.01, 0.08, 0, 1, 0, 1, 0.4],
   ],
 ];
 

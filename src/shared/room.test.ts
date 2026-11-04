@@ -1211,7 +1211,7 @@ describe('Room: levels and the end of a run', () => {
     ticks(room, 100);
     win(room, a, b);
     // The run took every tick since the first one: 100, the goal, the win.
-    expect(ends(a)).toEqual([{ t: 'end', ticks: 102, hard: false }]);
+    expect(ends(a)).toEqual([{ t: 'end', ticks: 102, hard: false, stats: [] }]);
     expect(ends(b)).toEqual(ends(a));
     expect(lurker.texts).toEqual([]);
     expect(next(room, a)).toMatchObject({ level: 0, hard: true, phase: PHASE.HUNT, keys: 0 });
@@ -1221,7 +1221,7 @@ describe('Room: levels and the end of a run', () => {
     // The second run is timed from its own start, and stays hard.
     ticks(room, 50);
     win(room, a, b);
-    expect(ends(a).at(-1)).toEqual({ t: 'end', ticks: room['ticks'] - 102, hard: true });
+    expect(ends(a).at(-1)).toEqual({ t: 'end', ticks: room['ticks'] - 102, hard: true, stats: [] });
     expect(next(room, a).hard).toBe(true);
   });
 

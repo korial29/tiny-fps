@@ -434,6 +434,7 @@ export class Room {
       t: 'end',
       ticks: this.ticks - this.runStart,
       hard: this.hard,
+      stats: [],
     } satisfies ServerText);
     this.players().forEach(p => p.conn.send(end));
     [this.hard, this.runStart] = [true, this.ticks];

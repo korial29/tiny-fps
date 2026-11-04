@@ -28,9 +28,15 @@ export type ServerText =
   | { t: 'full' }
   /**
    * The last level of a run was won: the run took `ticks` host ticks; `hard` says whether that run
-   * was hard. The next run always is.
+   * was hard. The next run always is. `stats` has one row per player still in the room, kills and
+   * deaths over the whole run.
    */
-  | { t: 'end'; ticks: number; hard: boolean };
+  | {
+      t: 'end';
+      ticks: number;
+      hard: boolean;
+      stats: { id: number; kills: number; deaths: number }[];
+    };
 
 export const MSG_INPUT = 1;
 export const MSG_SNAPSHOT = 2;

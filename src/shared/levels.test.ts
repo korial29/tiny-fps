@@ -398,3 +398,30 @@ describe.each(LEVELS.map((map, i) => [i + 1, map] as [number, MapDef]))('level %
     expect(checked).toBeGreaterThan(map.sectors.length);
   });
 });
+
+describe('atmosphere', () => {
+  const unit = (v: number) => v >= 0 && v <= 1;
+
+  it('keeps every sector tint and level fog in range', () => {
+    for (const { sectors, fog } of LEVELS) {
+      for (const { tint } of sectors) {
+        expect(tint === undefined || (tint.length == 3 && tint.every(unit))).toBe(true);
+      }
+      expect(fog?.slice(0, 3).every(unit) ?? true).toBe(true);
+      // Denser than 0.06 and the far end of a hall is a flat wall of fog.
+      expect(fog === undefined || (fog[3] > 0 && fog[3] <= 0.06)).toBe(true);
+    }
+  });
+
+  it('gives every level a mood of its own', () => {
+    const fogs = LEVELS.map(l => `${l.fog}`);
+    expect(new Set(fogs).size).toBe(fogs.length);
+    expect(LEVELS.filter(l => l.sectors.some(s => s.tint)).length).toBe(LEVELS.length);
+  });
+
+  it('keeps the start rooms readable: no tint channel below 0.4', () => {
+    for (const { sectors } of LEVELS) {
+      expect(sectors[0].tint?.every(v => v >= 0.4) ?? true).toBe(true);
+    }
+  });
+});

@@ -5,7 +5,7 @@
 import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { forward } from '../shared/physics';
 import { MONSTER, TEX } from '../shared/types';
-import type { Bullet, Edge, Item, Level, Monster, PlayerState } from '../shared/types';
+import type { Bullet, Edge, Item, Level, Monster, PlayerState, Sector } from '../shared/types';
 import { BLAST, glow, lit, puff } from './effects';
 import type { Effects } from './effects';
 import { MUZZLE, chaingun } from './gun';
@@ -17,8 +17,10 @@ import type { Vec3 } from './mesh';
 import { SWING, bullet, flyer, walker } from './monsters';
 import { LAYERS, SIZE, textures } from './textures';
 
-/** Clear colour and what distance fog fades to: dark, the map is indoors. */
-const FOG = [0.05, 0.045, 0.05];
+/** MapDef.fog when a map sets none: the clear colour and what distance fog fades to, then its density. Dark, the map is indoors. */
+export const FOG = [0.05, 0.045, 0.05, 0.02];
+/** Tints a level can use at once, white included (see palette). */
+export const MAX_TINTS = 16;
 /** Bytes the dynamic tail starts with; it grows when a frame needs more. */
 const TAIL = 1 << 18;
 /** Metres one texture covers. */
@@ -61,16 +63,18 @@ const RELIEF = 0.06;
 // eased toward 2 (e) so many beams on one wall do not burn it white; sp: the specular sum, added
 // after the colour is lit. A: position and range, B: direction and cone (-9 on a point: no cone),
 // K: colour and shadow slot (-1: none), M: the slots' matrices. Z < 0 is the depth pass: no colour.
+// On a texture C.w is 2 * the sector's tint index + its light (see levelVerts); G is the palette.
+// F: fog colour and density.
 const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T,Z;uniform int Q;
-uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}];uniform mat4 M[${MAX_SHADOWS}];
+uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F;uniform vec3 G[${MAX_TINTS}];uniform mat4 M[${MAX_SHADOWS}];
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;out vec4 o;
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
 void main(){
 if(Z<0.)return;
-float L=C.z,s=step(0.,L),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
+float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
 vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
 vec3 n=normalize(N),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
@@ -78,7 +82,7 @@ float h=t.a*s*${RELIEF},det=dot(dx,a);
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
 vec2 R=SP[int(s>0.?L+.5:${LAYERS}.)];
-vec3 l=vec3(mix(1.,C.w,s)*Z*(.45+.55*max(dot(normalize(n+m),normalize(vec3(.4,.8,.3))),0.))),sp=vec3(0),V=normalize(E-P);
+vec3 l=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s)*Z*(.45+.55*max(dot(normalize(n+m),normalize(vec3(.4,.8,.3))),0.)),sp=vec3(0),V=normalize(E-P);
 for(int i=0;i<${MAX_LIGHTS};i++){
 if(i>=Q||g>0.)break;
 vec3 d=A[i].xyz-P;float r=length(d),k=K[i].w,u=B[i].w;
@@ -93,7 +97,7 @@ w*=v/4.;}
 l+=K[i].rgb*w;
 sp+=K[i].rgb*w*pow(max(dot(m,normalize(d+V)),0.),R.y);}
 c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
-o=vec4(mix(c,vec3(${FOG}),1.-exp(-.02*length(P-E))),1);}`;
+o=vec4(mix(c,F.rgb,1.-exp(-F.a*length(P-E))),1);}`;
 
 /**
  * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
@@ -186,10 +190,27 @@ export const spans = ({ map }: Level, { front, back }: Edge): [number, number][]
   ).filter(([a, b]) => b > a);
 };
 
-/** Floors and ceilings as fans, then every edge's walls as quads, in the vertex format above. */
+/** The tints of a level's sectors, white first and each once: the shader's palette, MAX_TINTS at most. */
+export const palette = ({ map }: Level): Vec3[] =>
+  [
+    ...new Map<string, Vec3>([
+      ['1,1,1', [1, 1, 1]],
+      ...map.sectors.flatMap(({ tint }): [string, Vec3][] => (tint ? [[`${tint}`, tint]] : [])),
+    ]).values(),
+  ].slice(0, MAX_TINTS);
+
+/**
+ * Floors and ceilings as fans, then every edge's walls as quads, in the vertex format above. A
+ * sector's light is packed with its palette index as 2 * index + light: light is at most 1, so
+ * the shader takes the index from floor(w / 2) and keeps the vertex at 10 floats.
+ */
 export const levelVerts = (lvl: Level): number[] => {
   const out: number[] = [];
-  for (const { pts, floor, ceil, ft, ct, light = 1 } of lvl.map.sectors) {
+  const keys = palette(lvl).map(String);
+  const pack = ({ light = 1, tint }: Sector) => light + 2 * Math.max(0, keys.indexOf(`${tint}`));
+  for (const sector of lvl.map.sectors) {
+    const { pts, floor, ceil, ft, ct } = sector;
+    const light = pack(sector);
     for (const [y, ny, t] of [
       [floor, 1, ft],
       [ceil, -1, ct],
@@ -203,7 +224,8 @@ export const levelVerts = (lvl: Level): number[] => {
   }
   for (const e of lvl.edges) {
     const { ax, az, bx, bz, front } = e;
-    const { wt, light = 1 } = lvl.map.sectors[front];
+    const { wt } = lvl.map.sectors[front];
+    const light = pack(lvl.map.sectors[front]);
     const len = Math.hypot(bx - ax, bz - az);
     // The normal points into the sector (left of a counter-clockwise edge). u runs along the edge
     // from the viewer's left to right, in world metres, so collinear walls line up.
@@ -332,7 +354,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
     gl.linkProgram(prog);
     gl.useProgram(prog);
     u = Object.fromEntries(
-      ['m', 'E', 'T', 'Z', 'Q', 'A', 'B', 'K', 'M', 'D'].map(n => [
+      ['m', 'E', 'T', 'Z', 'Q', 'A', 'B', 'K', 'M', 'D', 'F', 'G'].map(n => [
         n,
         gl.getUniformLocation(prog, n)!,
       ]),
@@ -384,7 +406,19 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       gl.texParameterf(gl.TEXTURE_2D_ARRAY, aniso.TEXTURE_MAX_ANISOTROPY_EXT, 8);
     }
     gl.enable(gl.DEPTH_TEST);
-    gl.clearColor(FOG[0], FOG[1], FOG[2], 1);
+    climate();
+  };
+
+  /** The level's fog (and clear colour) and tint palette, into the program. */
+  const climate = () => {
+    const fog = lvl.map.fog ?? FOG;
+    const tints = palette(lvl);
+    gl.uniform4fv(u.F, fog);
+    gl.uniform3fv(
+      u.G,
+      Float32Array.from({ length: MAX_TINTS * 3 }, (_, i) => tints[(i / 3) | 0]?.[i % 3] ?? 1),
+    );
+    gl.clearColor(fog[0], fog[1], fog[2], 1);
   };
   setup();
 
@@ -407,6 +441,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       cap = tail + TAIL;
       if (!lost) {
         alloc();
+        climate();
       }
     },
     frame(eye, yaw, pitch, others, colors, fx, monsters, bullets, items, lights) {

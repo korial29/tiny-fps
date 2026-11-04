@@ -1,18 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { compile, inside } from '../shared/level';
+import { LEVELS } from '../shared/levels';
 import { HALL } from '../shared/map';
 import { forward } from '../shared/physics';
 import { TEX } from '../shared/types';
+import type { Level, MapDef, Sector } from '../shared/types';
 import { basis, pushBox } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import {
   MAX_PIXELS,
+  MAX_TINTS,
   SPEC,
   backing,
   levelVerts,
   lightProj,
   pack,
+  palette,
   project,
   spans,
   viewProj,
@@ -194,6 +198,94 @@ describe('levelVerts', () => {
     // Sector 0's floor fan has 4 triangles; sector 1 follows with its floor, light 0.6.
     const at = (HALL.sectors[0].pts.length - 2) * 6 * 10;
     expect(verts.slice(at, at + 10)).toEqual([16, 1, 6, 0, 1, 0, 16, 6, TEX.TILE, 0.6]);
+  });
+});
+
+/** Squares side by side, one sector each, with the given tint and light. */
+const tinted = (...cells: Pick<Sector, 'tint' | 'light'>[]) =>
+  compile({
+    sectors: cells.map((c, i) => ({
+      pts: [
+        [4 * i, 0],
+        [4 * i + 4, 0],
+        [4 * i + 4, 4],
+        [4 * i, 4],
+      ],
+      floor: 0,
+      ceil: 3,
+      ft: TEX.TILE,
+      wt: TEX.BRICK,
+      ct: TEX.STONE,
+      ...c,
+    })),
+    spawns: [[1, 1, 0]],
+  } as MapDef);
+
+describe('palette and tint packing', () => {
+  const [warm, cold]: [number, number, number][] = [
+    [1, 0.5, 0.25],
+    [0.25, 0.5, 1],
+  ];
+  const lvl = tinted({ tint: warm, light: 0.6 }, {}, { tint: cold }, { tint: warm, light: 0.3 });
+  /** The shader's unpacking: the index is floor(w / 2), the light what is left. */
+  const unpack = (w: number): [number, number] => [
+    Math.floor(w * 0.5),
+    w - 2 * Math.floor(w * 0.5),
+  ];
+  /** The light of the first vertex of each sector's floor (a 4-point fan is 6 vertices, plus 6 of ceiling). */
+  const lights = (l: Level) =>
+    levelVerts(l)
+      .filter((_, i) => i % 120 == 9)
+      .slice(0, l.map.sectors.length);
+
+  it('lists white first, then each tint once', () => {
+    expect(palette(lvl)).toEqual([[1, 1, 1], warm, cold]);
+    expect(palette(compile(HALL))).toEqual([[1, 1, 1]]);
+    expect(palette(tinted({ tint: [1, 1, 1] }))).toEqual([[1, 1, 1]]);
+  });
+
+  it('round-trips the palette index and the light through the vertex', () => {
+    const pal = palette(lvl);
+    const got = lights(lvl).map(unpack);
+    expect(got.map(([i]) => pal[i])).toEqual([warm, [1, 1, 1], cold, warm]);
+    expect(got.map(([, l]) => l)).toEqual([
+      expect.closeTo(0.6),
+      expect.closeTo(1),
+      expect.closeTo(1),
+      expect.closeTo(0.3),
+    ]);
+  });
+
+  it('leaves an untinted sector as the bare light, as before', () => {
+    expect(lights(tinted({ light: 0.4 }, {}))).toEqual([0.4, 1]);
+  });
+
+  it('stamps walls with the tint of the sector they belong to', () => {
+    const v = levelVerts(lvl);
+    // After the 4 sectors' fans (48 vertices), each edge's quad: the first edge is sector 0's.
+    const [i] = unpack(v[48 * 10 + 9]);
+    expect(palette(lvl)[i]).toEqual(warm);
+  });
+
+  it('keeps at most MAX_TINTS, the rest falling back to white', () => {
+    const many = tinted(
+      ...Array.from({ length: MAX_TINTS + 4 }, (_, i): Pick<Sector, 'tint'> => ({
+        tint: [i / 100, 0.5, 0.5],
+      })),
+    );
+    expect(palette(many)).toHaveLength(MAX_TINTS);
+    const last = unpack(levelVerts(many)[(MAX_TINTS + 3) * 12 * 10 + 9]);
+    expect(last[0]).toBe(0);
+  });
+
+  it('fits the palette of every level', () => {
+    for (const map of LEVELS) {
+      const lv = compile(map);
+      expect(palette(lv).length).toBeLessThan(MAX_TINTS);
+      expect(palette(lv).length).toBe(
+        1 + new Set(map.sectors.flatMap(s => (s.tint ? [`${s.tint}`] : []))).size,
+      );
+    }
   });
 });
 

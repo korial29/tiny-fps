@@ -2,6 +2,7 @@
 // renderer lights the scene with them (render.ts) and gives shadow maps to the first few.
 import { EYE } from '../shared/constants';
 import { sectorAt } from '../shared/level';
+import { TEX } from '../shared/types';
 import type { Bullet, Level, PlayerState } from '../shared/types';
 import { glow } from './effects';
 import type { Effects } from './effects';
@@ -92,6 +93,45 @@ const at = (o: Vec3, ...m: [Vec3, number][]) =>
   o.map((v, i) => v + m.reduce((s, [x, k]) => s + x[i] * k, 0)) as Vec3;
 const scale = (c: Vec3, k: number) => c.map(v => v * k) as Vec3;
 
+/** Lava lights kept per frame: a carpet of lava sectors would otherwise crowd out everything else. */
+const LAVA = 4;
+/** The lava sector's light: its centre, two metres above the floor, and how far it reaches. */
+interface Pool {
+  p: Vec3;
+  range: number;
+}
+const pools = new WeakMap<Level, Pool[]>();
+/** The lava sectors of a level, derived once per Level object: they never change. */
+export const lava = (lvl: Level): Pool[] => {
+  let found = pools.get(lvl);
+  if (!found) {
+    found = lvl.map.sectors
+      .filter(s => s.ft == TEX.LAVA)
+      .map(({ pts, floor }) => {
+        const [xs, zs] = [0, 1].map(i => pts.map(p => p[i]));
+        const [w, d] = [Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs)];
+        return {
+          p: [
+            (Math.max(...xs) + Math.min(...xs)) / 2,
+            floor + 2,
+            (Math.max(...zs) + Math.min(...zs)) / 2,
+          ],
+          range: 4 + Math.sqrt(w * d) * 0.6,
+        };
+      });
+    pools.set(lvl, found);
+  }
+  return found;
+};
+/** A lava light's colour at time t: a slow breath and a fast flicker, out of step from pool to pool. */
+const ember = (p: Vec3, t: number): Vec3 => {
+  const k = p[0] + p[2];
+  return scale(
+    [1.4, 0.45, 0.12],
+    1 + 0.18 * Math.sin(t * 1.3 + k) + 0.1 * Math.sin(t * 11 + k * 3) + 0.06 * Math.sin(t * 23 + k),
+  );
+};
+
 /** The lights of this frame, most important first. */
 export const gather = ({ eye, yaw, pitch, dead, others, fx, bullets, lvl, t }: Scene): Light[] => {
   const [right, up, fwd] = basis(yaw, pitch);
@@ -138,6 +178,12 @@ export const gather = ({ eye, yaw, pitch, dead, others, fx, bullets, lvl, t }: S
     .map(b => point([b.x, b.y, b.z], 3, [1.2, 0.4, 0.15]))
     .sort((a, b) => near(a.p) - near(b.p))
     .slice(0, BULLETS)
+    .forEach(l => rest.push(l));
+  lava(lvl)
+    .filter(l => near(l.p) < l.range * 2)
+    .map(({ p, range }) => point(p, range, ember(p, t)))
+    .sort((a, b) => near(a.p) - near(b.p))
+    .slice(0, LAVA)
     .forEach(l => rest.push(l));
   const { exit, goal } = lvl.map;
   if (exit !== undefined) {

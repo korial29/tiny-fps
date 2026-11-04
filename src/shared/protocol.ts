@@ -26,7 +26,10 @@ export type ClientText = { t: 'join'; name: string };
 export type ServerText =
   | { t: 'roster'; you: number; players: PlayerInfo[] }
   | { t: 'full' }
-  /** The last level of a run was won: the run took `ticks` host ticks. The next run is hard. */
+  /**
+   * The last level of a run was won: the run took `ticks` host ticks; `hard` says whether that run
+   * was hard. The next run always is.
+   */
   | { t: 'end'; ticks: number; hard: boolean };
 
 export const MSG_INPUT = 1;

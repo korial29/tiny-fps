@@ -68,7 +68,7 @@ const ticks = (room: Room, n: number): void => {
 
 describe('Room: joining', () => {
   it('sends every joined peer the roster with its own id, on every join and leave', () => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const a = join(room, 'Ann');
     expect(roster(a)).toMatchObject({ you: 0 });
     expect(names(a)).toEqual(['Ann']);
@@ -86,7 +86,7 @@ describe('Room: joining', () => {
   });
 
   it('sends nothing before the join, and ignores a second join and bad text', () => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const c = peer();
     room.connect(c);
     room.receive(c, 'nope');
@@ -99,7 +99,7 @@ describe('Room: joining', () => {
   });
 
   it('keeps names unique and clean, within MAX_NAME', () => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const a = join(room, 'Bob');
     join(room, 'Bob');
     join(room, '  Bob ');
@@ -121,7 +121,7 @@ describe('Room: joining', () => {
   });
 
   it('gives each player a distinct colour and the smallest free id', () => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const a = join(room, 'a');
     for (let n = 1; n < MAX_PLAYERS; n++) {
       join(room, `p${n}`);
@@ -145,14 +145,14 @@ describe('Room: joining', () => {
   });
 
   it('honours rules.maxPlayers', () => {
-    const room = new Room({ maxPlayers: 2 });
+    const room = new Room({ maxPlayers: 2 }, undefined, [HALL]);
     join(room, 'a');
     join(room, 'b');
     expect(join(room, 'c').texts).toEqual([{ t: 'full' }]);
   });
 
   it('spawns at the first spawn point with nobody within 2 m, else round-robin', () => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const a = join(room);
     ticks(room, SNAP_EVERY);
     const at = (c: Peer, id: number) => snap(c).players.find(p => p.id === id)!;
@@ -195,7 +195,7 @@ describe('Room: joining', () => {
 
 describe('Room: inputs and snapshots', () => {
   it('moves a player with each input at once, and acks its seq', () => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const a = join(room);
     const [x0, z0] = [HALL.spawns[0][0], HALL.spawns[0][1]];
     ticks(room, SNAP_EVERY);
@@ -216,7 +216,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('applies jumps and gravity through the shared physics', () => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const a = join(room);
     room.receive(a, input(0, KEY.JUMP));
     ticks(room, SNAP_EVERY);
@@ -226,7 +226,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('drops the inputs beyond the INPUT_BURST bank, unacked, and earns one per tick', () => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const a = join(room);
     for (let k = 0; k < INPUT_BURST + 5; k++) {
       room.receive(a, input(k, KEY.FORWARD));
@@ -253,7 +253,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('keeps one bank per player and ignores frames from a peer that has not joined', () => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const a = join(room);
     const b = join(room);
     const lurker = peer();
@@ -271,7 +271,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('ignores malformed binary frames', () => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const a = join(room);
     room.receive(a, new ArrayBuffer(3));
     room.receive(a, new ArrayBuffer(8));
@@ -280,7 +280,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('sends one snapshot every SNAP_EVERY ticks to every joined peer, and none to the others', () => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const a = join(room);
     const b = join(room);
     const lurker = peer();
@@ -298,7 +298,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('does not run without players, and drops a leaver from the next snapshot', () => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     ticks(room, 10);
     const a = join(room);
     const b = join(room);
@@ -333,7 +333,7 @@ describe('Room: timer', () => {
 
   it('ticks at TICK_HZ whatever the timer jitter, and starts once', () => {
     const t = timed();
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const a = join(room);
     room.start(t.every);
     room.start(t.every);
@@ -348,7 +348,7 @@ describe('Room: timer', () => {
 
   it('replays at most a bounded catch-up after a stall, and stops', () => {
     const t = timed();
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const a = join(room);
     room.start(t.every);
     t.advance(10_000);
@@ -374,7 +374,7 @@ describe('Room: chaingun', () => {
 
   /** Two players, A (id 0, at rest) and B (id 1), and everything the room sends A. */
   const duel = (pre = 0) => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const a = join(room, 'A');
     const b = join(room, 'B');
     // A long wait under the monsters' bullets: healed every tick, so nobody dies of it.
@@ -586,7 +586,7 @@ describe('Room: monsters', () => {
   /** The horde ticks run: tick() and then the newest snapshot of the peer. */
   const monstersOf = (c: Peer) => snap(c).monsters;
   const soloRoom = (seed?: number) => {
-    const room = new Room({}, seed);
+    const room = new Room({}, seed, [HALL]);
     return { room, a: join(room, 'A') };
   };
 

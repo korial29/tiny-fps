@@ -132,7 +132,7 @@ describe('prediction against the room', () => {
    */
   const race = (lag: (k: number) => number, steps = SCRIPT) => {
     const n = steps.length;
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const sent: ArrayBuffer[] = [];
     const conn: Conn & { bins: ArrayBuffer[] } = {
       bins: [],
@@ -661,7 +661,7 @@ describe('lag compensation through the room', () => {
   const FIRE_AT = 60;
 
   const play = (fireAt = FIRE_AT) => {
-    const room = new Room();
+    const room = new Room({}, undefined, [HALL]);
     const peers = ['A', 'B'].map(name => {
       const c: Conn & { bins: ArrayBuffer[] } = {
         bins: [],
@@ -911,7 +911,7 @@ describe('lag compensation of monsters through the room', () => {
   const DELAY = 10;
 
   it('kills a monster where the shooter saw it, which is no longer where it is', () => {
-    const room = new Room({}, 5);
+    const room = new Room({}, 5, [HALL]);
     const join = (name: string) => {
       const c: Conn & { bins: ArrayBuffer[] } = {
         bins: [],

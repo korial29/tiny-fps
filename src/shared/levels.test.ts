@@ -356,6 +356,8 @@ describe.each(LEVELS.map((map, i) => [i + 1, map] as [number, MapDef]))('level %
   });
 
   it('lets the real physics walk through every doorway the search crosses on foot', () => {
+    // Gates and the exit are the search's business: here every doorway is open.
+    lvl.barred.clear();
     let checked = 0;
     for (const e of lvl.edges) {
       if (e.back < 0 || !passable(lvl, e.front, e.back, STEP_H)) {

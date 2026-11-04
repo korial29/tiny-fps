@@ -1,7 +1,8 @@
-// WebGL2 drawing: one program, one buffer. The level is built once; the other players are boxes
+// WebGL2 drawing: one scene program, one buffer. The level is built once; the other players are boxes
 // rewritten each frame into the tail of the same buffer. Lights come from lights.ts: the shader adds
 // them to a dim ambient, and each shadowed spot first draws the level and the bodies into its layer
-// of a depth texture array. No DOM beyond the canvas.
+// of a depth texture array. The scene goes into an offscreen target, then a second, small program
+// (POST) turns it into the picture on the canvas. No DOM beyond the canvas.
 import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { forward } from '../shared/physics';
 import { MONSTER, TEX } from '../shared/types';
@@ -31,11 +32,29 @@ const SHADOW = 512;
 const AMBIENT = 0.3;
 /** The view model's floor, in place of AMBIENT: it never goes black. */
 const GUN = 0.55;
+/** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
+const SAMPLES = 4;
 
 const VERT = `#version 300 es
 layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec4 c;
 uniform mat4 m;out vec3 P,N;out vec4 C;
 void main(){P=p;N=n;C=c;gl_Position=m*vec4(p,1);}`;
+
+// A fullscreen triangle from gl_VertexID, no buffer.
+const POST_VERT = `#version 300 es
+out vec2 U;void main(){U=vec2(gl_VertexID&1,gl_VertexID>>1)*2.;gl_Position=vec4(U*2.-1.,0,1);}`;
+
+// The post program, one pass per Y.z (a uniform: the branches are coherent). Y.xy: the texel
+// step, Y.w: the clock. 2: the scene on the canvas. Tone: linear up to .6, then a shoulder toward 1.
+const POST_FRAG = `#version 300 es
+precision highp float;uniform sampler2D S[4];uniform vec4 Y;in vec2 U;out vec4 o;
+void main(){
+vec3 c=texture(S[0],U).rgb;
+vec2 q=U-.5;
+c=min(c,.6)+.4*(1.-exp(-max(c-.6,0.)/.4));
+c*=1.-.8*dot(q,q);
+c=pow(c,vec3(.92))+(fract(sin(dot(gl_FragCoord.xy+Y.w,vec2(12.9898,78.233)))*43758.5453)-.5)*.03;
+o=vec4(c,1);}`;
 
 /**
  * Blinn-Phong strength and exponent: a row per TEX id in order (brick, tile, lava, stone, metal, wood,
@@ -246,6 +265,14 @@ export const levelVerts = (lvl: Level): number[] => {
   return out;
 };
 
+/** A texture and the framebuffer that draws into it. */
+interface Target {
+  t: WebGLTexture;
+  f: WebGLFramebuffer;
+  w: number;
+  h: number;
+}
+
 export interface Renderer {
   /**
    * Draws one frame: the map, its gates, goal and items, the others, the monsters, their bullets
@@ -284,7 +311,7 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 /** Throws when the browser has no WebGL2. */
 export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Renderer => {
   let lvl = first;
-  const gl = canvas.getContext('webgl2', { antialias: true });
+  const gl = canvas.getContext('webgl2', { antialias: false, depth: false });
   if (!gl) {
     throw new Error('WebGL2 is not available');
   }
@@ -303,6 +330,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
     return c;
   };
 
+  const size = () => backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
   let ground = levelVerts(lvl);
   const pixels = textures();
   let tail = ground.length * 4;
@@ -330,6 +358,17 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
   let u: Record<string, WebGLUniformLocation> = {};
   let shadows: WebGLTexture;
   let depth: WebGLFramebuffer;
+  let scene: WebGLProgram;
+  let post: WebGLProgram;
+  let pu: Record<string, WebGLUniformLocation> = {};
+  let fmt: number;
+  // The multisampled target the scene draws into, and the texture it is resolved to.
+  let msaa: WebGLFramebuffer;
+  let hdr: Target;
+  /** The frame size the targets were built for, [0, 0] before the first. */
+  let made = [0, 0];
+  /** Deletes what targets() built. */
+  const owned: (() => void)[] = [];
   let lost = false;
   let vp = new Float32Array(16);
 
@@ -339,12 +378,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(ground));
   };
 
-  // Everything GL owns goes with a lost context: set it all up again on restore.
-  const setup = () => {
+  const link = (vert: string, frag: string, names: string[]) => {
     const prog = gl.createProgram();
     for (const [type, src] of [
-      [gl.VERTEX_SHADER, VERT],
-      [gl.FRAGMENT_SHADER, FRAG],
+      [gl.VERTEX_SHADER, vert],
+      [gl.FRAGMENT_SHADER, frag],
     ] as const) {
       const sh = gl.createShader(type)!;
       gl.shaderSource(sh, src);
@@ -353,12 +391,63 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
     }
     gl.linkProgram(prog);
     gl.useProgram(prog);
-    u = Object.fromEntries(
-      ['m', 'E', 'T', 'Z', 'Q', 'A', 'B', 'K', 'M', 'D', 'F', 'G'].map(n => [
-        n,
-        gl.getUniformLocation(prog, n)!,
-      ]),
+    return [
+      prog,
+      Object.fromEntries(names.map(n => [n, gl.getUniformLocation(prog, n)!])),
+    ] as const;
+  };
+
+  /** A w x h texture with a framebuffer to draw into it. */
+  const target = (w: number, h: number): Target => {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, fmt, w, h);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const f = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    owned.push(
+      () => gl.deleteTexture(t),
+      () => gl.deleteFramebuffer(f),
     );
+    return { t, f, w, h };
+  };
+
+  /** (Re)builds the offscreen targets for a w x h frame. */
+  const targets = (w: number, h: number) => {
+    owned.splice(0).forEach(free => free());
+    made = [w, h];
+    hdr = target(w, h);
+    const rb = (format: number) => {
+      const r = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, r);
+      gl.renderbufferStorageMultisample(gl.RENDERBUFFER, SAMPLES, format, w, h);
+      owned.push(() => gl.deleteRenderbuffer(r));
+      return r;
+    };
+    gl.bindFramebuffer(gl.FRAMEBUFFER, (msaa = gl.createFramebuffer()));
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rb(fmt));
+    gl.framebufferRenderbuffer(
+      gl.FRAMEBUFFER,
+      gl.DEPTH_ATTACHMENT,
+      gl.RENDERBUFFER,
+      rb(gl.DEPTH_COMPONENT24),
+    );
+    owned.push(() => gl.deleteFramebuffer(msaa));
+  };
+
+  // Everything GL owns goes with a lost context: set it all up again on restore.
+  const setup = () => {
+    // Without it the scene can only be 8-bit: lights above 1 clip instead of reaching the post pass.
+    fmt = gl.getExtension('EXT_color_buffer_float') ? gl.RGBA16F : gl.RGBA8;
+    owned.length = 0;
+    made = [0, 0];
+    [post, pu] = link(POST_VERT, POST_FRAG, ['S', 'Y']);
+    gl.uniform1iv(pu.S, [0, 1, 2, 3]);
+    [scene, u] = link(VERT, FRAG, ['m', 'E', 'T', 'Z', 'Q', 'A', 'B', 'K', 'M', 'D', 'F', 'G']);
     gl.uniform1i(u.D, 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
     alloc();
@@ -407,6 +496,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
     }
     gl.enable(gl.DEPTH_TEST);
     climate();
+    const [w, h] = size();
+    if (w && h) {
+      targets(w, h);
+    }
   };
 
   /** The level's fog (and clear colour) and tint palette, into the program. */
@@ -445,13 +538,16 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       }
     },
     frame(eye, yaw, pitch, others, colors, fx, monsters, bullets, items, lights) {
-      const [w, h] = backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
+      const [w, h] = size();
       if (lost || !w || !h) {
         return;
       }
       if (canvas.width != w || canvas.height != h) {
         canvas.width = w;
         canvas.height = h;
+      }
+      if (made[0] != w || made[1] != h) {
+        targets(w, h);
       }
       vp = viewProj(eye, yaw, pitch, w / h, fx.roll);
       const v: number[] = [];
@@ -553,10 +649,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
           gl.drawArrays(gl.TRIANGLES, 0, first + bodies / STRIDE);
         }
         gl.disable(gl.POLYGON_OFFSET_FILL);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, shadows);
         gl.activeTexture(gl.TEXTURE0);
       }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, msaa);
       gl.viewport(0, 0, w, h);
       gl.uniformMatrix4fv(u.m, false, vp);
       gl.uniform3fv(u.E, eye);
@@ -572,6 +668,15 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       gl.clear(gl.DEPTH_BUFFER_BIT);
       gl.uniform1f(u.Z, GUN);
       gl.drawArrays(gl.TRIANGLES, first + world / STRIDE, (v.length - world) / STRIDE);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaa);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, hdr.f);
+      gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      gl.useProgram(post);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.bindTexture(gl.TEXTURE_2D, hdr.t);
+      gl.uniform4f(pu.Y, 0, 0, 0, performance.now() % 1e4);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.useProgram(scene);
     },
     project: (x, y, z) => project(vp, x, y, z),
     destroy() {

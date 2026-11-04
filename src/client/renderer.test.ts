@@ -9,19 +9,27 @@ import { LIGHT } from './lights';
 import type { Light } from './lights';
 import { STRIDE } from './mesh';
 import { LAYERS } from './textures';
-import { FOG, MAX_TINTS, createRenderer, levelVerts } from './render';
+import { FOG, MAX_PIXELS, MAX_TINTS, backing, createRenderer, levelVerts } from './render';
 
 type Call = [name: string, ...args: unknown[]];
 
-// A GL that records its calls and answers constants with 1 and everything else with a no-op.
-const fakeGl = (calls: Call[]) =>
+// A GL that records its calls. Each constant answers with a number of its own (K says which), an
+// extension with `ext`, and everything else with a new object.
+const consts = new Map<string, number>();
+const K = (name: string) => {
+  if (!consts.has(name)) {
+    consts.set(name, 1e6 + consts.size);
+  }
+  return consts.get(name)!;
+};
+const fakeGl = (calls: Call[], ext: () => unknown) =>
   new Proxy({} as Record<string, unknown>, {
     get: (_, name: string) =>
       /^[A-Z_\d]+$/.test(name)
-        ? 1
+        ? K(name)
         : (...args: unknown[]) => {
             calls.push([name, ...args]);
-            return {};
+            return name == 'getExtension' ? ext() : {};
           },
   });
 
@@ -47,22 +55,28 @@ const ROOM: MapDef = {
 describe('createRenderer', () => {
   let calls: Call[];
   let canvas: HTMLCanvasElement;
+  let float: unknown;
   beforeEach(() => {
     calls = [];
+    float = {};
     canvas = document.createElement('canvas');
-    Object.defineProperty(canvas, 'clientWidth', { value: 320 });
-    Object.defineProperty(canvas, 'clientHeight', { value: 200 });
+    resize(320, 200);
     vi.stubGlobal('devicePixelRatio', 1);
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(((kind: string) =>
-      kind == 'webgl2' ? fakeGl(calls) : {}) as never);
+      kind == 'webgl2' ? fakeGl(calls, () => float) : {}) as never);
   });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
+  // The scene's draws: the post passes each draw a bare triangle.
+  const resize = (w: number, h: number) => {
+    Object.defineProperty(canvas, 'clientWidth', { value: w, configurable: true });
+    Object.defineProperty(canvas, 'clientHeight', { value: h, configurable: true });
+  };
   const draws = () =>
-    calls.filter(c => c[0] == 'drawArrays').map(c => [c[2], c[3]] as [number, number]);
+    calls.filter(c => c[0] == 'drawArrays' && c[3] != 3).map(c => [c[2], c[3]] as [number, number]);
   const frame = (
     rd: ReturnType<typeof createRenderer>,
     fx = createEffects(),
@@ -73,7 +87,7 @@ describe('createRenderer', () => {
   it('builds a fragment shader with one specular row per layer and no stray JS values', () => {
     createRenderer(canvas, compile(ROOM));
     const src = calls.filter(c => c[0] == 'shaderSource').map(c => String(c[2]));
-    const frag = src.find(s => s.includes('precision'))!;
+    const frag = src.find(s => s.includes('sampler2DArray'))!;
     const rows = frag.match(/const vec2 SP\[(\d+)\]=vec2\[\]\((.*)\);/)!;
     expect(Number(rows[1])).toBe(LAYERS + 1);
     expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 1);
@@ -112,6 +126,129 @@ describe('createRenderer', () => {
     fx.update(undefined, 0, 0.1, true);
     frame(rd, fx);
     expect(draws()[1][1]).toBe(0);
+  });
+
+  describe('post-processing', () => {
+    const named = (name: string) => calls.filter(c => c[0] == name);
+    const FLAT = K('TEXTURE_2D');
+
+    it('asks for a context with no antialiasing and no depth: the scene target has both', () => {
+      createRenderer(canvas, compile(ROOM));
+      expect(HTMLCanvasElement.prototype.getContext).toHaveBeenCalledWith('webgl2', {
+        antialias: false,
+        depth: false,
+      });
+    });
+
+    it('draws the scene into the multisampled target, resolves it, then draws the post pass on the canvas', () => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      calls.length = 0;
+      frame(rd);
+      const blit = calls.findIndex(c => c[0] == 'blitFramebuffer');
+      const triangle = calls.findIndex(c => c[0] == 'drawArrays' && c[3] == 3);
+      expect(blit).toBeGreaterThan(0);
+      expect(triangle).toBeGreaterThan(blit);
+      const scene = calls.slice(0, blit);
+      expect(scene.filter(c => c[0] == 'drawArrays')).toHaveLength(2);
+      // Cleared and drawn with the multisampled target bound.
+      const binds = calls.filter(c => c[0] == 'bindFramebuffer');
+      expect(binds.find(c => c[1] == K('FRAMEBUFFER'))![2]).not.toBeNull();
+      expect(calls.indexOf(binds.find(c => c[1] == K('FRAMEBUFFER'))!)).toBeLessThan(
+        calls.findIndex(c => c[0] == 'clear'),
+      );
+      expect(calls.slice(blit - 2, blit)).toEqual([
+        ['bindFramebuffer', K('READ_FRAMEBUFFER'), expect.anything()],
+        ['bindFramebuffer', K('DRAW_FRAMEBUFFER'), expect.anything()],
+      ]);
+      expect(calls[blit]).toEqual([
+        'blitFramebuffer',
+        ...[0, 0, 320, 200, 0, 0, 320, 200],
+        K('COLOR_BUFFER_BIT'),
+        K('NEAREST'),
+      ]);
+      // The last binding before the post pass is the canvas.
+      expect(
+        calls
+          .slice(blit, triangle)
+          .filter(c => c[0] == 'bindFramebuffer')
+          .at(-1),
+      ).toEqual(['bindFramebuffer', K('FRAMEBUFFER'), null]);
+      expect(calls.slice(triangle).filter(c => c[0] == 'drawArrays')).toHaveLength(1);
+      expect(calls[triangle]).toEqual(['drawArrays', K('TRIANGLES'), 0, 3]);
+    });
+
+    it('allocates the targets at the backing size, 16-bit float with the extension', () => {
+      createRenderer(canvas, compile(ROOM));
+      expect(named('getExtension').map(c => c[1])).toContain('EXT_color_buffer_float');
+      expect(named('texStorage2D')[0]).toEqual(['texStorage2D', FLAT, 1, K('RGBA16F'), 320, 200]);
+      expect(named('renderbufferStorageMultisample').map(c => c.slice(2))).toEqual([
+        [4, K('RGBA16F'), 320, 200],
+        [4, K('DEPTH_COMPONENT24'), 320, 200],
+      ]);
+    });
+
+    it('falls back to 8 bits without the extension', () => {
+      float = null;
+      createRenderer(canvas, compile(ROOM));
+      expect(named('texStorage2D').every(c => c[3] == K('RGBA8'))).toBe(true);
+      expect(named('renderbufferStorageMultisample')[0][3]).toBe(K('RGBA8'));
+    });
+
+    it('scales the targets with the pixel ratio and the pixel budget', () => {
+      vi.stubGlobal('devicePixelRatio', 2);
+      resize(1920, 1080);
+      createRenderer(canvas, compile(ROOM));
+      const [w, h] = backing(1920, 1080, 2);
+      expect(named('texStorage2D')[0].slice(4)).toEqual([w, h]);
+      expect(w * h).toBeLessThanOrEqual(MAX_PIXELS);
+    });
+
+    it('reallocates the targets, and frees the old ones, when the size changes', () => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      frame(rd);
+      const storage = named('texStorage2D').length;
+      const frees = () => named('deleteTexture').length + named('deleteRenderbuffer').length;
+      expect(frees()).toBe(0);
+      resize(640, 360);
+      frame(rd);
+      expect(named('texStorage2D')).toHaveLength(2 * storage);
+      expect(named('texStorage2D').at(-1)!.slice(4)).toEqual([640, 360]);
+      expect(named('renderbufferStorageMultisample').at(-1)!.slice(4)).toEqual([640, 360]);
+      expect(frees()).toBeGreaterThan(0);
+      expect(canvas.width).toBe(640);
+      // The same size again leaves them alone.
+      frame(rd);
+      expect(named('texStorage2D')).toHaveLength(2 * storage);
+    });
+
+    it('builds the targets at the first frame when the canvas had no size yet', () => {
+      resize(0, 0);
+      const rd = createRenderer(canvas, compile(ROOM));
+      expect(named('texStorage2D')).toHaveLength(0);
+      frame(rd);
+      expect(named('texStorage2D')).toHaveLength(0);
+      resize(320, 200);
+      frame(rd);
+      expect(named('texStorage2D').length).toBeGreaterThan(0);
+    });
+
+    it('rebuilds the post program and the targets when the context is restored', () => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      const programs = named('createProgram').length;
+      const storage = named('texStorage2D').length;
+      canvas.dispatchEvent(new Event('webglcontextlost'));
+      calls.length = 0;
+      frame(rd);
+      expect(calls).toEqual([]);
+      canvas.dispatchEvent(new Event('webglcontextrestored'));
+      expect(named('createProgram')).toHaveLength(programs);
+      expect(named('texStorage2D')).toHaveLength(storage);
+      expect(named('renderbufferStorageMultisample')).toHaveLength(2);
+      calls.length = 0;
+      frame(rd);
+      expect(named('blitFramebuffer')).toHaveLength(1);
+      expect(named('texStorage2D')).toHaveLength(0);
+    });
   });
 
   describe('atmosphere', () => {
@@ -157,7 +294,7 @@ describe('createRenderer', () => {
       const frag = calls
         .filter(c => c[0] == 'shaderSource')
         .map(c => String(c[2]))
-        .find(s => s.includes('precision'))!;
+        .find(s => s.includes('sampler2DArray'))!;
       expect(frag).toContain(`G[${MAX_TINTS}]`);
       expect(frag).not.toMatch(/undefined|NaN|\[object/);
     });
@@ -194,7 +331,7 @@ describe('createRenderer', () => {
       expect(draws()).toHaveLength(4);
       expect(calls.filter(c => c[0] == 'clear')).toHaveLength(2 + 2);
       const scene = calls.findIndex(c => c[0] == 'viewport' && c[3] == 320);
-      const drawn = (a: Call[]) => a.filter(c => c[0] == 'drawArrays').length;
+      const drawn = (a: Call[]) => a.filter(c => c[0] == 'drawArrays' && c[3] != 3).length;
       expect([drawn(calls.slice(0, scene)), drawn(calls.slice(scene))]).toEqual([2, 2]);
       expect(calls.find(c => c[0] == 'viewport')).toEqual(['viewport', 0, 0, 512, 512]);
       expect(calls.filter(c => c[0] == 'viewport').at(-1)).toEqual(['viewport', 0, 0, 320, 200]);
@@ -234,18 +371,18 @@ describe('createRenderer', () => {
       expect(binds[1]).not.toBeNull();
     });
 
-    it('recreates the shadow map and its framebuffer when the context is restored', () => {
+    it('recreates the shadow map, the targets and their framebuffers when the context is restored', () => {
       const rd = createRenderer(canvas, compile(ROOM));
       const count = (name: string) => calls.filter(c => c[0] == name).length;
+      const made = count('createFramebuffer');
       expect(count('texStorage3D')).toBe(1);
-      expect(count('createFramebuffer')).toBe(1);
       canvas.dispatchEvent(new Event('webglcontextlost'));
       calls.length = 0;
       frame(rd, createEffects(), [], [spot()]);
       expect(calls).toEqual([]);
       canvas.dispatchEvent(new Event('webglcontextrestored'));
       expect(count('texStorage3D')).toBe(1);
-      expect(count('createFramebuffer')).toBe(1);
+      expect(count('createFramebuffer')).toBe(made);
       frame(rd, createEffects(), [], [spot()]);
       expect(layers()).toEqual([0]);
     });

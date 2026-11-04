@@ -1,11 +1,21 @@
-import { INPUT_BURST, MAX_NAME, MAX_REWIND, RULES, SNAP_EVERY, TICK_HZ } from './constants';
+import {
+  INPUT_BURST,
+  MAX_NAME,
+  MAX_PLAYERS,
+  MAX_REWIND,
+  RULES,
+  SNAP_EVERY,
+  TICK_HZ,
+} from './constants';
 import { compile } from './level';
 import { HALL } from './map';
+import { createHorde, mulberry32 } from './monsters';
+import type { Horde } from './monsters';
 import { move, spawn } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
-import { fire } from './shoot';
-import type { Conn, Every, PlayerInfo, PlayerState, Rules, Shot } from './types';
+import { body, fire, monsterBody } from './shoot';
+import type { Body, Conn, Every, Monster, PlayerInfo, PlayerState, Rules, Shot } from './types';
 
 interface Player {
   conn: Conn;
@@ -79,15 +89,18 @@ const setEvery: Every = (cb, ms) => {
  * - Each input frame moves its player at once with move(); the INPUT_BURST bank drops the excess.
  *   A step that fires resolves its shot at once with fire(), the other players rewound to the
  *   view tick of the input (lag compensation, at most MAX_REWIND ticks back).
- * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player and the shots resolved
- *   since the last one goes to every peer.
+ * - The room owns the horde (monsters.ts), stepped every tick while a player is present. A shot
+ *   rewinds the monsters with the players, and one that hits a monster kills it.
+ * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player, the shots resolved since
+ *   the last one, the monsters, the bullets and the events since the last one goes to every peer.
  */
 export class Room {
   /** Every connected peer; null until it joins. */
   private peers = new Map<Conn, Player | null>();
   private ticks = 0;
-  /** The players as each snapshot of the last MAX_REWIND ticks sent them. */
-  private history: { tick: number; players: PlayerState[] }[] = [];
+  /** The players and monsters as each snapshot of the last MAX_REWIND ticks sent them. */
+  private history: { tick: number; players: PlayerState[]; monsters: Monster[] }[] = [];
+  private horde: Horde;
   /** Shots resolved since the last snapshot. */
   private shots: Shot[] = [];
   private halt: (() => void) | undefined;
@@ -95,9 +108,10 @@ export class Room {
   /** Round-robin cursor over the spawn points, used once they are all taken. */
   private rr = 0;
 
-  /** Missing rules fall back to RULES. */
-  public constructor(rules: Partial<Rules> = {}) {
+  /** Missing rules fall back to RULES. The seed drives the monsters. */
+  public constructor(rules: Partial<Rules> = {}, seed = Date.now()) {
     this.rules = { ...RULES, ...rules };
+    this.horde = createHorde(LEVEL, mulberry32(seed));
   }
 
   /** Number of joined players. */
@@ -125,7 +139,11 @@ export class Room {
     if (input && p.bank > 0) {
       p.bank--;
       if (move(p.state, input, LEVEL)) {
-        this.shots.push(fire(LEVEL, p.state, input.seq, this.rewind(p, input.view)));
+        const shot = fire(LEVEL, p.state, input.seq, this.rewind(p, input.view));
+        this.shots.push(shot);
+        if (shot.hit >= MAX_PLAYERS) {
+          this.horde.kill(shot.hit, p.state.id);
+        }
       }
       p.ack = input.seq;
     }
@@ -147,8 +165,14 @@ export class Room {
       return;
     }
     players.forEach(p => (p.bank = Math.min(INPUT_BURST, p.bank + 1)));
+    this.horde.step(players.map(p => p.state));
     if (++this.ticks % SNAP_EVERY === 0) {
-      this.history.push({ tick: this.ticks, players: players.map(p => ({ ...p.state })) });
+      const monsters = this.horde.monsters();
+      this.history.push({
+        tick: this.ticks,
+        players: players.map(p => ({ ...p.state })),
+        monsters,
+      });
       while (this.history[0].tick < this.ticks - MAX_REWIND) {
         this.history.shift();
       }
@@ -157,6 +181,10 @@ export class Room {
         tick: this.ticks,
         players: players.map(p => ({ ...p.state, ack: p.ack })),
         shots: this.shots,
+        monsters,
+        bullets: this.horde.bullets(),
+        // The snapshot counts events with a u8: the rest wait for the next one.
+        events: this.horde.events.splice(0, 255),
       });
       this.shots = [];
       players.forEach(p => p.conn.send(snap));
@@ -195,18 +223,19 @@ export class Room {
   }
 
   /**
-   * The players other than `shooter` as the shooter drew them at `view` (a u16 tick, fractional,
-   * read against the current tick and clamped to the kept history): x, y, z interpolated between
-   * the two snapshots around it like the client does. A player the history does not hold stands
-   * where it is.
+   * The bodies a shot of `shooter` can hit as the shooter drew them at `view` (a u16 tick,
+   * fractional, read against the current tick and clamped to the kept history): the other players
+   * and the monsters, x, y, z interpolated between the two snapshots around it like the client
+   * does. One the history does not hold stands where it is.
    */
-  private rewind(shooter: Player, view = 0): PlayerState[] {
+  private rewind(shooter: Player, view = 0): Body[] {
     const now = this.players()
       .filter(p => p !== shooter)
       .map(p => p.state);
+    const mobs = this.horde.monsters();
     const [first, last] = [this.history[0], this.history.at(-1)];
     if (!first || !last) {
-      return now;
+      return [...now.map(body), ...mobs.map(monsterBody)];
     }
     // Ticks back, on the u16 circle: in [-0x8000, 0x8000).
     const back = ((((this.ticks - view + 0x8000) % 0x10000) + 0x10000) % 0x10000) - 0x8000;
@@ -217,14 +246,19 @@ export class Room {
     }
     const [a, b] = [this.history[k], this.history[k + 1] ?? this.history[k]];
     const u = b.tick > a.tick ? (t - a.tick) / (b.tick - a.tick) : 0;
-    return now.map(p => {
-      const pa = a.players.find(q => q.id === p.id);
-      const pb = b.players.find(q => q.id === p.id);
-      const l = (m: number, n: number): number => m + (n - m) * u;
-      return pa && pb
-        ? { ...pb, x: l(pa.x, pb.x), y: l(pa.y, pb.y), z: l(pa.z, pb.z) }
-        : (pb ?? pa ?? p);
-    });
+    const l = (m: number, n: number): number => m + (n - m) * u;
+    const at = <T extends { id: number; x: number; y: number; z: number }>(
+      cur: T[],
+      list: (h: typeof a) => T[],
+    ): T[] =>
+      cur.map(p => {
+        const pa = list(a).find(q => q.id === p.id);
+        const pb = list(b).find(q => q.id === p.id);
+        return pa && pb
+          ? { ...pb, x: l(pa.x, pb.x), y: l(pa.y, pb.y), z: l(pa.z, pb.z) }
+          : (pb ?? pa ?? p);
+      });
+    return [...at(now, h => h.players).map(body), ...at(mobs, h => h.monsters).map(monsterBody)];
   }
 
   private players(): Player[] {

@@ -3,7 +3,8 @@ import { compile, inside } from '../shared/level';
 import { HALL } from '../shared/map';
 import { forward } from '../shared/physics';
 import { TEX } from '../shared/types';
-import { basis, levelVerts, project, pushBox, spans, viewProj } from './render';
+import { basis, pushBox } from './mesh';
+import { levelVerts, project, spans, viewProj } from './render';
 
 const at = (yaw: number, pitch: number, x: number, y: number, z: number) =>
   project(viewProj([0, 0, 0], yaw, pitch, 1), x, y, z);

@@ -1,9 +1,20 @@
 // Hitscan, shared by the host (on rewound targets) and the client (its own shots, predicted on the
 // interpolated others). No DOM, no Node API.
-import { EYE, PLAYER_H, PLAYER_R, RANGE, SPREAD } from './constants';
+import {
+  EYE,
+  FLYER_H,
+  FLYER_R,
+  PLAYER_H,
+  PLAYER_R,
+  RANGE,
+  SPREAD,
+  WALKER_H,
+  WALKER_R,
+} from './constants';
 import { sectorAt } from './level';
 import { TAU } from './physics';
-import type { Edge, Level, PlayerState, Shot } from './types';
+import { MONSTER } from './types';
+import type { Body, Edge, Level, Monster, PlayerState, Shot } from './types';
 
 type Vec3 = [number, number, number];
 
@@ -91,11 +102,11 @@ export const trace = (lvl: Level, o: Vec3, d: Vec3, max: number): number => {
  * Distance at which the ray enters the upright cylinder of t (sides and caps), Infinity on a miss:
  * the span of the ray inside the infinite cylinder, cut to the span between the cap planes.
  */
-const hit = (o: Vec3, d: Vec3, t: PlayerState): number => {
+export const hit = (o: Vec3, d: Vec3, t: Body): number => {
   const [px, pz] = [o[0] - t.x, o[2] - t.z];
   const a = d[0] * d[0] + d[2] * d[2];
   const b = px * d[0] + pz * d[2];
-  const c = px * px + pz * pz - PLAYER_R * PLAYER_R;
+  const c = px * px + pz * pz - t.r * t.r;
   let [lo, hi] = [0, Infinity];
   if (a > 1e-12) {
     const q = b * b - a * c;
@@ -106,7 +117,7 @@ const hit = (o: Vec3, d: Vec3, t: PlayerState): number => {
   } else if (c > 0) {
     return Infinity;
   }
-  const [y0, y1] = [t.y - o[1], t.y + PLAYER_H - o[1]];
+  const [y0, y1] = [t.y - o[1], t.y + t.h - o[1]];
   if (d[1]) {
     const [u, v] = [y0 / d[1], y1 / d[1]];
     lo = Math.max(lo, Math.min(u, v));
@@ -117,17 +128,28 @@ const hit = (o: Vec3, d: Vec3, t: PlayerState): number => {
   return lo <= hi ? lo : Infinity;
 };
 
+/** The body a shot sees of a player. */
+export const body = ({ id, x, y, z }: PlayerState): Body => ({
+  id,
+  x,
+  y,
+  z,
+  r: PLAYER_R,
+  h: PLAYER_H,
+});
+
+/** The body a shot sees of a monster. */
+export const monsterBody = ({ id, kind, x, y, z }: Monster): Body => {
+  const walker = kind === MONSTER.WALKER;
+  return { id, x, y, z, r: walker ? WALKER_R : FLYER_R, h: walker ? WALKER_H : FLYER_H };
+};
+
 /**
  * Resolves one shot of `shooter` (state after the step that fired) from its eye (feet + EYE)
  * along aim(yaw, pitch, seq): the nearest of the level (trace) and the upright cylinders
- * (PLAYER_R, PLAYER_H, from the feet) of `targets` other than the shooter, within RANGE.
+ * of `targets` (bodies: players, monsters) other than the shooter, within RANGE.
  */
-export const fire = (
-  lvl: Level,
-  shooter: PlayerState,
-  seq: number,
-  targets: PlayerState[],
-): Shot => {
+export const fire = (lvl: Level, shooter: PlayerState, seq: number, targets: Body[]): Shot => {
   const o: Vec3 = [shooter.x, shooter.y + EYE, shooter.z];
   const d = aim(shooter.yaw, shooter.pitch, seq);
   let t = trace(lvl, o, d, RANGE);

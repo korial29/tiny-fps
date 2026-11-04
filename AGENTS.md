@@ -6,20 +6,21 @@ Read this file before any change. Change a gameplay rule only when the user asks
 
 ## Layout
 
-| Path                      | Role                                                                                                                                                                        |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/shared/constants.ts` | Tick rate, player size, speeds, network scale, default rules (`RULES`)                                                                                                      |
-| `src/shared/types.ts`     | PlayerState, Input, KEY, Shot, Sector, MapDef, Level, Snapshot, Rules, SocketLike, Conn                                                                                     |
-| `src/shared/map.ts`       | Maps as data: `HALL`, the test level (room, corridor, lava pit, stairs, balcony)                                                                                            |
-| `src/shared/level.ts`     | `compile()` sector edges and portals, `sectorAt()`, `blocked()` line of sight                                                                                               |
-| `src/shared/shoot.ts`     | Hitscan: `aim()`, `trace()` through the sectors, `fire()` against the level and players                                                                                     |
-| `src/shared/physics.ts`   | `move()` and `spawn()`, shared by the host and the client's prediction                                                                                                      |
-| `src/shared/protocol.ts`  | Wire format: JSON text frames, binary input and snapshot frames                                                                                                             |
-| `src/shared/room.ts`      | One game, transport-agnostic: roster, inputs, snapshots                                                                                                                     |
-| `src/server/`             | Node `ws` adapter (`@korial29/tiny-fps/server`) and its CLI, copied from air-hockey                                                                                         |
-| `src/local/`              | Same-browser multiplayer over BroadcastChannel (`@korial29/tiny-fps/local`), copied from air-hockey                                                                         |
-| `src/client/`             | `tinyFps()` API (`index.ts`), prediction (`predict.ts`), WebGL drawing (`render.ts`), textures, input, the chaingun model (`gun.ts`), camera and gun effects (`effects.ts`) |
-| `demo/`                   | Demo page                                                                                                                                                                   |
+| Path                      | Role                                                                                                                                                                                                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/shared/constants.ts` | Tick rate, player size, speeds, network scale, default rules (`RULES`)                                                                                                                                                                                  |
+| `src/shared/types.ts`     | PlayerState, Input, KEY, Shot, Sector, MapDef, Level, Snapshot, Rules, SocketLike, Conn                                                                                                                                                                 |
+| `src/shared/map.ts`       | Maps as data: `HALL`, the test level (room, corridor, lava pit, stairs, balcony)                                                                                                                                                                        |
+| `src/shared/level.ts`     | `compile()` sector edges and portals, `sectorAt()`, `blocked()` line of sight                                                                                                                                                                           |
+| `src/shared/shoot.ts`     | Hitscan: `aim()`, `trace()` through the sectors, `fire()` against the level and bodies (players, monsters)                                                                                                                                              |
+| `src/shared/monsters.ts`  | The horde, host-only: patrol, sight cone, alert, chase, melee, walker bullets, death, respawn; seeded PRNG                                                                                                                                              |
+| `src/shared/physics.ts`   | `move()` and `spawn()`, shared by the host and the client's prediction                                                                                                                                                                                  |
+| `src/shared/protocol.ts`  | Wire format: JSON text frames, binary input and snapshot frames                                                                                                                                                                                         |
+| `src/shared/room.ts`      | One game, transport-agnostic: roster, inputs, snapshots                                                                                                                                                                                                 |
+| `src/server/`             | Node `ws` adapter (`@korial29/tiny-fps/server`) and its CLI, copied from air-hockey                                                                                                                                                                     |
+| `src/local/`              | Same-browser multiplayer over BroadcastChannel (`@korial29/tiny-fps/local`), copied from air-hockey                                                                                                                                                     |
+| `src/client/`             | `tinyFps()` API (`index.ts`), prediction (`predict.ts`), WebGL drawing (`render.ts`), textures, input, the chaingun model (`gun.ts`), monster models (`monsters.ts`), vertex helpers (`mesh.ts`), camera, gun, gib and explosion effects (`effects.ts`) |
+| `demo/`                   | Demo page                                                                                                                                                                                                                                               |
 
 ## Commands
 
@@ -46,8 +47,9 @@ npm run size        # gzip budgets
 - **The host is authoritative**: the Node server or the local host tab.
 - **Inputs, not positions**: the client sends one `Input` per step (11 bytes, 60 Hz): held keys, yaw, pitch, a u16 `seq`, and the `view` tick it draws the others at. The host applies each input on arrival with `move()` and acks the last seq per player in the snapshot. A bank of `INPUT_BURST` inputs per player stops speed hacks.
 - **The client predicts** its own player: it applies its inputs at once, and on each snapshot resets to the host state and replays the unacked inputs. Other players are drawn `INTERP_DELAY` (100 ms) in the past, interpolated between snapshots.
-- **Snapshots** at 30 Hz (`SNAP_EVERY` 2 of `TICK_HZ` 60), 24 bytes per player, then 14 bytes per shot fired since the last one.
-- **Hitscan with lag compensation** (`shoot.ts`): `move()` says when a step fires; the host rewinds the other players to the input's `view` tick (at most `MAX_REWIND`), interpolated the way the client drew them, and resolves the shot with `fire()`. The client predicts its own shots with the same `fire()` and draws remote ones `INTERP_DELAY` late.
+- **Snapshots** at 30 Hz (`SNAP_EVERY` 2 of `TICK_HZ` 60): 24 bytes per player, 14 per shot fired since the last one, 16 per living monster, 13 per bullet, 14 per event (death, hurt, bullet burst, swing).
+- **Monsters run on the host only** (`monsters.ts`, stepped every tick). Clients interpolate monsters and bullets like the other players, and show events `INTERP_DELAY` late; a monster stays drawn until the interpolation reaches the snapshot without it, so it vanishes with its explosion. Ids: players 0 to `MAX_PLAYERS - 1`, monsters from `MAX_PLAYERS`.
+- **Hitscan with lag compensation** (`shoot.ts`): `move()` says when a step fires; the host rewinds the other players and the monsters to the input's `view` tick (at most `MAX_REWIND`), interpolated the way the client drew them, and resolves the shot with `fire()`. The client predicts its own shots with the same `fire()` and draws remote ones `INTERP_DELAY` late.
 - **`src/shared` never touches the DOM or Node APIs.**
 - Coordinates: metres, y up, yaw 0 looks toward -z, `forward(yaw) = (-sin yaw, -cos yaw)` on x, z.
 - Keys are read by `KeyboardEvent.code`: WASD on QWERTY is ZQSD on AZERTY with no extra code.

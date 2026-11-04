@@ -1,10 +1,10 @@
-import { EYE, INTERP_DELAY, MAX_PITCH, PLAYER_H, TICK_HZ } from '../shared/constants';
+import { EYE, MAX_PITCH, PLAYER_H, TICK_HZ } from '../shared/constants';
 import { blocked, compile } from '../shared/level';
 import { HALL } from '../shared/map';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
-import type { PlayerInfo, Shot, SocketLike } from '../shared/types';
-import { createEffects } from './effects';
+import type { GameEvent, PlayerInfo, Shot, SocketLike } from '../shared/types';
+import { createDelay, createEffects } from './effects';
 import { createInput } from './input';
 import { createPredictor } from './predict';
 import { createRenderer } from './render';
@@ -45,15 +45,17 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   root.innerHTML =
     `<style>:host{display:block;width:100%;height:100%}div{position:relative;width:100%;height:100%;overflow:hidden;background:#000;font:600 14px system-ui,sans-serif;color:#fff;text-shadow:0 1px 2px #000}` +
     `canvas{display:block;width:100%;height:100%;cursor:pointer}` +
-    `i,p,b,em{position:absolute;pointer-events:none;user-select:none;margin:0}` +
+    `i,p,b,em,s{position:absolute;pointer-events:none;user-select:none;margin:0}` +
+    `s{inset:0;background:#e00;opacity:0}` +
     `i{left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #0008}` +
     `p{top:8px;left:12px}em{left:50%;top:60%;transform:translateX(-50%);font-size:18px;font-style:normal}` +
     `b{transform:translate(-50%,-100%);font-size:12px;white-space:nowrap}[hidden]{display:none}</style>` +
-    `<div><canvas></canvas><i></i><p></p><em></em></div>`;
+    `<div><canvas></canvas><s></s><i></i><p></p><em></em></div>`;
   container.append(wrap);
   const canvas = root.querySelector('canvas')!;
   const count = root.querySelector('p')!;
   const hint = root.querySelector('em')!;
+  const tint = root.querySelector('s')!;
   const screen = root.querySelector('div')!;
 
   const listeners: Record<TinyFpsEvent, (() => void)[]> = { roster: [], open: [], close: [] };
@@ -61,9 +63,10 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
 
   const predictor = createPredictor(lvl);
   const ctl = createInput(canvas);
-  const fx = createEffects();
-  /** Others' shots wait INTERP_DELAY: they are drawn that far in the past, and fire with it. */
-  const late: { t: number; s: Shot }[] = [];
+  const fx = createEffects(Math.random, lvl);
+  /** Others' shots and the host's events wait INTERP_DELAY: the others are drawn that far in the past. */
+  const shots = createDelay<Shot>();
+  const events = createDelay<GameEvent>();
   let you = -1;
   let rd: Renderer | undefined;
   try {
@@ -104,7 +107,11 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       if (s) {
         const now = performance.now();
         predictor.snapshot(s, now);
-        late.push(...s.shots.filter(sh => sh.id != you).map(sh => ({ t: now, s: sh })));
+        shots.push(
+          s.shots.filter(sh => sh.id != you),
+          now,
+        );
+        events.push(s.events, now);
       }
       return;
     }
@@ -159,18 +166,34 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
 
     const me = predictor.me(acc / STEP);
     const others = predictor.others(now);
+    const monsters = predictor.monsters(now);
+    const bullets = predictor.bullets(now);
     const eye: [number, number, number] = me ? [me.x, me.y + EYE, me.z] : [0, 0, 0];
-    for (; late.length && late[0].t + INTERP_DELAY <= now; late.shift()) {
-      const p = others.find(o => o.id == late[0].s.id);
+    // Track first: a DIE names a monster the interpolated list has already dropped.
+    fx.track(monsters, bullets);
+    for (const sh of shots.due(now)) {
+      const p = others.find(o => o.id == sh.id);
       if (p) {
-        fx.shot(late[0].s, [p.x, p.y + EYE, p.z], false, late[0].s.hit != you);
+        fx.shot(sh, [p.x, p.y + EYE, p.z], false, sh.hit != you);
       }
+    }
+    for (const e of events.due(now)) {
+      fx.event(e, you);
     }
     fx.update(me, ctl.keys, Math.min((now - before) / 1000, 0.1));
     if (me && rd) {
       // Bob and shake are for the eye only: the inputs keep sending the real angles.
       const pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, ctl.pitch + fx.shakePitch));
-      rd.frame([eye[0], eye[1] + fx.bob, eye[2]], ctl.yaw + fx.shakeYaw, pitch, others, colors, fx);
+      rd.frame(
+        [eye[0], eye[1] + fx.bob, eye[2]],
+        ctl.yaw + fx.shakeYaw,
+        pitch,
+        others,
+        colors,
+        fx,
+        monsters,
+        bullets,
+      );
     }
     const seen = new Set<number>();
     for (const p of others) {
@@ -196,6 +219,10 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       }
     }
 
+    const veil = String(fx.hurt * 2);
+    if (tint.style.opacity != veil) {
+      tint.style.opacity = veil;
+    }
     const text =
       msg || (!open ? 'Connecting…' : !ready ? 'Joining…' : ctl.locked() ? '' : 'Click to play');
     if (hint.textContent != text) {

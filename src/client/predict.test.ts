@@ -21,10 +21,15 @@ const snapPlayer = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => (
   yaw: 0,
   pitch: 0,
   ground: true,
+  cool: 0,
   ack: 0xffff,
   ...over,
 });
-const snapshot = (tick: number, ...players: SnapPlayer[]): Snapshot => ({ tick, players });
+const snapshot = (tick: number, ...players: SnapPlayer[]): Snapshot => ({
+  tick,
+  players,
+  shots: [],
+});
 const fwd = { keys: KEY.FORWARD, yaw: 0, pitch: 0 };
 
 describe('prediction against the room', () => {

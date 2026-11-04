@@ -142,6 +142,7 @@ export class Room {
       const snap = encodeSnapshot({
         tick: this.ticks,
         players: players.map(p => ({ ...p.state, ack: p.ack })),
+        shots: [],
       });
       players.forEach(p => p.conn.send(snap));
     }

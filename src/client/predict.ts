@@ -6,7 +6,7 @@
 import { INTERP_DELAY } from '../shared/constants';
 import { TAU, move, norm } from '../shared/physics';
 import { onWire } from '../shared/protocol';
-import type { Input, Level, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
+import type { Input, Level, PlayerState, Shot, SnapPlayer, Snapshot } from '../shared/types';
 
 export interface Predictor {
   /** The own player id, from the roster. Snapshots before it are only used for the others. */
@@ -16,8 +16,14 @@ export interface Predictor {
    * own player with it, keeps it for replay, and returns it for the caller to send (the very
    * values predicted with, which the host reads back). Until the own player is known (no snapshot
    * shows it yet) it only numbers and keeps the input: the first snapshot replays it.
+   * With `now` (ms, performance.now()) the input carries the view tick the others are drawn at.
    */
-  step(i: Omit<Input, 'seq'>): Input;
+  step(i: Omit<Input, 'seq' | 'view'>, now?: number): Input;
+  /**
+   * The shot the last step fired, resolved with fire() against others(now) of that step; undefined
+   * when it did not fire. Replays on a snapshot never fire again.
+   */
+  shot(): Shot | undefined;
   /** A decoded snapshot, received at `now` (ms, performance.now()). */
   snapshot(s: Snapshot, now: number): void;
   /**
@@ -35,7 +41,7 @@ const MAX_PENDING = 120;
 /** Snapshots kept for interpolation (about 0.5 s at 30 Hz). */
 const MAX_SNAPS = 16;
 
-const state = ({ id, x, y, z, vy, yaw, pitch, ground }: SnapPlayer | PlayerState): PlayerState => ({
+const state = ({
   id,
   x,
   y,
@@ -44,7 +50,8 @@ const state = ({ id, x, y, z, vy, yaw, pitch, ground }: SnapPlayer | PlayerState
   yaw,
   pitch,
   ground,
-});
+  cool,
+}: SnapPlayer | PlayerState): PlayerState => ({ id, x, y, z, vy, yaw, pitch, ground, cool });
 
 /** Whether the host's ack covers seq, on the u16 circle: seq is at most half a turn behind it. */
 const acked = (seq: number, ack: number): boolean => ((ack - seq) & 0xffff) < 0x8000;
@@ -110,6 +117,8 @@ export const createPredictor = (lvl: Level): Predictor => {
         move(own!, i, lvl);
       });
     },
+
+    shot: () => undefined,
 
     me: alpha => (own && prev ? lerp(prev, own, Math.max(0, Math.min(1, alpha))) : undefined),
 

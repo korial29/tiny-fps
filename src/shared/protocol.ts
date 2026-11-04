@@ -109,10 +109,11 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       yaw: fromTurn(v.getUint16(o + 17)),
       pitch: fromPitch(v.getInt16(o + 19)),
       ack: v.getUint16(o + 21),
+      cool: 0,
       ground: (v.getUint8(o + 23) & 1) === 1,
     });
   }
-  return { tick: v.getUint16(1), players };
+  return { tick: v.getUint16(1), players, shots: [] };
 };
 
 /** Returns null on anything that is not a known text message. */

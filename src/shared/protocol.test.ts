@@ -23,6 +23,7 @@ const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
   yaw: 4.2,
   pitch: -0.7,
   ground: false,
+  cool: 0,
   ack: 1234,
   ...over,
 });
@@ -98,6 +99,7 @@ describe('snapshot frame', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [player(7, { x: 1, y: 2, z: 3, vy: -1, yaw: Math.PI, pitch: 0.5, ground: true })],
+      shots: [],
     });
     expect(SNAP_PLAYER).toBe(24);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER);
@@ -138,7 +140,7 @@ describe('snapshot frame', () => {
       }),
       player(255, { x: 0, y: -2.5, z: 300.125, vy: f(9.99) }),
     ];
-    const back = decodeSnapshot(encodeSnapshot({ tick: 70000, players }))!;
+    const back = decodeSnapshot(encodeSnapshot({ tick: 70000, players, shots: [] }))!;
     expect(back.tick).toBe(70000 & 0xffff);
     expect(back.players).toHaveLength(3);
     back.players.forEach((b, i) => {
@@ -153,7 +155,7 @@ describe('snapshot frame', () => {
 
   it('rounds a float64 value to the nearest float32, not further', () => {
     const [p] = decodeSnapshot(
-      encodeSnapshot({ tick: 0, players: [player(1, { x: 1 / 3, z: -1e-3, vy: 1e9 })] }),
+      encodeSnapshot({ tick: 0, players: [player(1, { x: 1 / 3, z: -1e-3, vy: 1e9 })], shots: [] }),
     )!.players;
     expect(p.x).toBe(Math.fround(1 / 3));
     expect(p.z).toBe(Math.fround(-1e-3));
@@ -161,14 +163,15 @@ describe('snapshot frame', () => {
   });
 
   it('takes an empty snapshot', () => {
-    expect(decodeSnapshot(encodeSnapshot({ tick: 5, players: [] }))).toEqual({
+    expect(decodeSnapshot(encodeSnapshot({ tick: 5, players: [], shots: [] }))).toEqual({
       tick: 5,
       players: [],
+      shots: [],
     });
   });
 
   it('rejects a wrong type, a truncated or a padded frame, and a wrong count', () => {
-    const ok = encodeSnapshot({ tick: 1, players: [player(1), player(2)] });
+    const ok = encodeSnapshot({ tick: 1, players: [player(1), player(2)], shots: [] });
     expect(decodeSnapshot(ok)).not.toBeNull();
     expect(decodeSnapshot(new ArrayBuffer(0))).toBeNull();
     expect(decodeSnapshot(new ArrayBuffer(SNAP_HEAD - 1))).toBeNull();
@@ -187,7 +190,7 @@ describe('snapshot frame', () => {
 
   it('does not take an input frame for a snapshot, nor the reverse', () => {
     expect(decodeSnapshot(encodeInput({ seq: 0, keys: 0, yaw: 0, pitch: 0 }))).toBeNull();
-    expect(decodeInput(encodeSnapshot({ tick: 0, players: [] }))).toBeNull();
+    expect(decodeInput(encodeSnapshot({ tick: 0, players: [], shots: [] }))).toBeNull();
   });
 });
 

@@ -194,5 +194,15 @@ export const spawn = (id: number, lvl: Level, n: number): PlayerState => {
   const { spawns, sectors } = lvl.map;
   const [x, z, yaw] = spawns[((n % spawns.length) + spawns.length) % spawns.length];
   const y = sectors[Math.max(sectorAt(lvl, x, z), 0)].floor;
-  return { id, x: f32(x), y: f32(y), z: f32(z), vy: 0, yaw: norm(yaw), pitch: 0, ground: true };
+  return {
+    id,
+    x: f32(x),
+    y: f32(y),
+    z: f32(z),
+    vy: 0,
+    yaw: norm(yaw),
+    pitch: 0,
+    ground: true,
+    cool: 0,
+  };
 };

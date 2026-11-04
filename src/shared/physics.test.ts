@@ -34,6 +34,7 @@ const at = (x: number, z: number, level: Level = lvl): PlayerState => ({
   yaw: 0,
   pitch: 0,
   ground: true,
+  cool: 0,
 });
 
 /** Runs n steps of the same keys; `each` sees the state after every step. */
@@ -514,7 +515,7 @@ describe('spawn', () => {
   it('stands on the floor of its sector at the point, facing its yaw, modulo the count', () => {
     const [x, z, yaw] = HALL.spawns[1];
     const p = spawn(7, lvl, 1);
-    expect(p).toEqual({ id: 7, x, y: 1, z, vy: 0, yaw, pitch: 0, ground: true });
+    expect(p).toEqual({ id: 7, x, y: 1, z, vy: 0, yaw, pitch: 0, ground: true, cool: 0 });
     expect(spawn(7, lvl, 1 + HALL.spawns.length)).toEqual(p);
     expect(spawn(7, lvl, -1)).toEqual(spawn(7, lvl, HALL.spawns.length - 1));
   });

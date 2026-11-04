@@ -138,7 +138,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       acc = 0;
     }
     for (; ready && acc >= STEP; acc -= STEP) {
-      const input = predictor.step({ keys: ctl.keys, yaw: ctl.yaw, pitch: ctl.pitch });
+      const input = predictor.step({ keys: ctl.keys, yaw: ctl.yaw, pitch: ctl.pitch }, now);
       if (open) {
         ws.send(encodeInput(input));
       }

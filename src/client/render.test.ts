@@ -6,7 +6,8 @@ import { TEX } from '../shared/types';
 import { basis, pushBox } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
-import { levelVerts, lightProj, pack, project, spans, viewProj } from './render';
+import { SPEC, levelVerts, lightProj, pack, project, spans, viewProj } from './render';
+import { LAYERS } from './textures';
 
 const at = (yaw: number, pitch: number, x: number, y: number, z: number) =>
   project(viewProj([0, 0, 0], yaw, pitch, 1), x, y, z);
@@ -42,6 +43,23 @@ describe('viewProj and project', () => {
   it('moves with the eye', () => {
     const m = viewProj([10, 2, 10], 0, 0, 1);
     expect(project(m, 10, 2, 5)![0]).toBeCloseTo(0.5);
+  });
+});
+
+describe('SPEC', () => {
+  it('has a row per texture layer and one for the flat bodies', () => {
+    expect(SPEC).toHaveLength(LAYERS + 1);
+  });
+
+  it('makes metal and grating shinier than brick and wood, and sharper', () => {
+    for (const shiny of [TEX.METAL, TEX.GRATE]) {
+      for (const dull of [TEX.BRICK, TEX.WOOD]) {
+        expect(SPEC[shiny][0]).toBeGreaterThan(SPEC[dull][0] * 5);
+        expect(SPEC[shiny][1]).toBeGreaterThan(SPEC[dull][1]);
+      }
+    }
+    expect(SPEC[LAYERS][0]).toBeGreaterThan(0);
+    expect(SPEC[LAYERS][0]).toBeLessThan(SPEC[TEX.METAL][0] / 4);
   });
 });
 

@@ -8,6 +8,7 @@ import { createDelay, createEffects } from './effects';
 import { SAY } from './hud';
 import type { Hud } from './hud';
 import { ITEM_COLOR } from './items';
+import { SOUND } from './sfx';
 import { clock, createProgress, facing } from './progress';
 
 vi.mock('../shared/levels', async () => {
@@ -51,6 +52,7 @@ const setup = () => {
     hp: n => (shown.hp = n),
     keys: n => (shown.keys = n),
     dead: on => (shown.dead = on),
+    mute: () => {},
     say: (slot, text) => void said.push([slot, text]),
     update: () => {},
   };
@@ -59,6 +61,7 @@ const setup = () => {
   const predictor = { level: vi.fn() };
   const rd = { level: vi.fn() };
   const delay = createDelay<number>();
+  const audio = { play: vi.fn() };
   const progress = createProgress({
     lvl: first,
     you: () => YOU,
@@ -67,8 +70,9 @@ const setup = () => {
     delays: [delay],
     fx,
     hud,
+    audio,
   });
-  return { progress, said, shown, fx, first, predictor, rd, delay };
+  return { progress, said, shown, fx, first, predictor, rd, delay, audio };
 };
 
 describe('clock', () => {
@@ -138,7 +142,7 @@ describe('level switch', () => {
       predictor: { level: () => {} },
       delays: [],
       fx: createEffects(),
-      hud: { hp() {}, keys() {}, dead() {}, say() {}, update() {} },
+      hud: { hp() {}, keys() {}, dead() {}, mute() {}, say() {}, update() {} },
     });
     expect(() => bare.snapshot(snap())).not.toThrow();
     expect(progress.lvl).toBeDefined();
@@ -255,10 +259,21 @@ describe('pickup fade', () => {
   });
 
   it('keeps quiet for an item that vanishes far from the own player', () => {
-    const { progress, fx } = setup();
+    const { progress, fx, audio } = setup();
     progress.snapshot(snap({ items }));
     progress.snapshot(snap({ items: [items[0]] }));
     expect(fx.gain).toBe(0);
+    expect(audio.play).not.toHaveBeenCalled();
+  });
+
+  it('plays COLLECT once for an item the own player takes, and only then', () => {
+    const { progress, audio } = setup();
+    progress.snapshot(snap({ items }));
+    progress.snapshot(snap({ items }));
+    expect(audio.play).not.toHaveBeenCalled();
+    progress.snapshot(snap({ items: [items[1]] }));
+    progress.snapshot(snap({ items: [items[1]] }));
+    expect(audio.play.mock.calls).toEqual([[SOUND.COLLECT]]);
   });
 
   it('keeps quiet for items that appear, stay, or go with the level', () => {
@@ -275,6 +290,17 @@ describe('pickup fade', () => {
     const { progress } = setup();
     progress.snapshot(snap({ items }));
     expect(progress.items).toBe(items);
+  });
+});
+
+describe('returning', () => {
+  it('follows the phase, and starts over with a level', () => {
+    const { progress } = setup();
+    expect(progress.returning).toBe(false);
+    progress.snapshot(snap({ phase: PHASE.RETURN }));
+    expect(progress.returning).toBe(true);
+    progress.snapshot(snap({ level: 1, phase: PHASE.HUNT }));
+    expect(progress.returning).toBe(false);
   });
 });
 

@@ -5,10 +5,12 @@ import { compile } from '../shared/level';
 import { LEVELS } from '../shared/levels';
 import { PHASE } from '../shared/types';
 import type { Item, Level, MapDef, Snapshot } from '../shared/types';
+import type { Audio } from './audio';
 import type { Effects } from './effects';
 import { SAY } from './hud';
 import type { Hud } from './hud';
 import { ITEM_COLOR } from './items';
+import { SOUND } from './sfx';
 
 /** An item that vanishes this close (metres, on the floor plane) to the own player was theirs. */
 const NEAR = 1.5;
@@ -26,6 +28,8 @@ export interface Progress {
   readonly items: Item[];
   /** The own player has no health left. */
   readonly dead: boolean;
+  /** The level is in its RETURN phase: the team runs back to the exit. */
+  readonly returning: boolean;
   /** False for a player the latest snapshot shows without health: not drawn. */
   alive(id: number): boolean;
   /** A snapshot, before the predictor sees it: a new level or `hard` switches everything. */
@@ -46,6 +50,8 @@ export interface Deps {
   delays: { clear(): void }[];
   fx: Effects;
   hud: Hud;
+  /** Plays COLLECT when the own player takes an item. */
+  audio?: Pick<Audio, 'play'>;
 }
 
 /** The yaw of the spawn nearest (x, z): where a player put back at the start should look. */
@@ -54,7 +60,16 @@ export const facing = ({ spawns }: MapDef, x: number, z: number): number =>
     Math.hypot(b[0] - x, b[1] - z) < Math.hypot(a[0] - x, a[1] - z) ? b : a,
   )[2];
 
-export const createProgress = ({ lvl, you, predictor, rd, delays, fx, hud }: Deps): Progress => {
+export const createProgress = ({
+  lvl,
+  you,
+  predictor,
+  rd,
+  delays,
+  fx,
+  hud,
+  audio,
+}: Deps): Progress => {
   /** Level and `hard` of the last snapshot, as one number; -1 before the first. */
   let at = -1;
   let phase = -1;
@@ -63,6 +78,7 @@ export const createProgress = ({ lvl, you, predictor, rd, delays, fx, hud }: Dep
     lvl,
     items: [],
     dead: false,
+    returning: false,
     alive: id => hp.get(id) !== 0,
 
     snapshot(s) {
@@ -97,11 +113,13 @@ export const createProgress = ({ lvl, you, predictor, rd, delays, fx, hud }: Dep
           Math.hypot(it.x - me.x, it.z - me.z) < NEAR
         ) {
           fx.pickup(ITEM_COLOR[it.kind]);
+          audio?.play(SOUND.COLLECT);
         }
       }
       p.items = s.items;
       if (s.phase != phase) {
         phase = s.phase;
+        p.returning = phase == PHASE.RETURN;
         hud.say(SAY.NOTE, phase == PHASE.RETURN ? 'Back to the start!' : 'Find the exit');
       }
       p.dead = me?.hp === 0;

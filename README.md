@@ -172,6 +172,7 @@ The subset of `WebSocket` the client uses: `binaryType`, `onopen`, `onclose`, `o
 | Move   | WASD, or the arrow keys                                       |
 | Jump   | Space                                                         |
 | Fire   | Left mouse button, held                                       |
+| Mute   | M (remembered)                                                |
 
 Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard WASD is ZQSD with nothing to set.
 
@@ -189,6 +190,7 @@ Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard
 - **Keys and gates**: red, blue and yellow keys open the barred gates of their colour, for the whole team.
 - **The way out**: the start room locks behind you. Touch the goal to open it, then the level is won once every living player is back inside.
 - **Five levels**: Warm-up, Foundry, Cistern, Loop and Citadel. Then the run starts over in hard mode, with faster monsters that strike and fire more often. The end screen shows the time.
+- **Sound**: every sound is synthesised in code and placed left or right by where it comes from; a dark music loops under it. The sound starts with the click that locks the pointer.
 - **Dark levels**: your flashlight casts shadows, and so do muzzle flashes. Explosions, hits, bullets, the goal and the open exit light up their surroundings.
 
 ---
@@ -205,7 +207,7 @@ Parity with the js13k game is tracked in [`docs/PARITY.md`](docs/PARITY.md).
 - [x] Health, hit cooldown, death and respawn, health drops, team keys and barred gates
 - [x] Five levels, the goal and the way back, hard mode on the next run, end screen with the time
 - [x] Flashlights with shadow maps, lit muzzle flashes, explosion, hit, bullet, goal and exit lights
-- [ ] Sound: a small synthesiser, stereo by position, looped music
+- [x] Sound: a jsfxr-style synthesiser (shot, boom, hit, collect, clock, burst), stereo by position, a looped music; M mutes
 - [ ] HUD and screens: health bar, damage and pickup fades, low-health cue, title screen
 - [x] Shadow DOM, zero runtime dependencies, size-gated in CI
 

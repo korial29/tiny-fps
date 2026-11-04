@@ -34,8 +34,11 @@ export interface Controls {
   destroy(): void;
 }
 
-/** Click the canvas to lock the pointer; while locked the mouse looks, the keys move, the left button fires. */
-export const createInput = (canvas: HTMLCanvasElement): Controls => {
+/**
+ * Click the canvas to lock the pointer; while locked the mouse looks, the keys move, the left
+ * button fires and M calls `onMute`.
+ */
+export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Controls => {
   const ac = new AbortController();
   const on = <T extends EventTarget>(t: T, type: string, cb: (e: never) => void) =>
     t.addEventListener(type, cb as EventListener, { signal: ac.signal });
@@ -58,6 +61,9 @@ export const createInput = (canvas: HTMLCanvasElement): Controls => {
   });
   on(document, 'keydown', (e: KeyboardEvent) => {
     const bit = keyBit(e.code);
+    if (e.code == 'KeyM' && !e.repeat && c.locked()) {
+      onMute();
+    }
     if (bit && c.locked()) {
       c.keys |= bit;
       e.preventDefault();

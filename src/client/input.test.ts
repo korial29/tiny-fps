@@ -41,10 +41,10 @@ describe('createInput', () => {
   const click = (type: string, button: number) =>
     document.dispatchEvent(new MouseEvent(type, { button }));
 
-  const make = () => {
+  const make = (onMute?: () => void) => {
     canvas = document.createElement('canvas');
     document.body.append(canvas);
-    ctl = createInput(canvas);
+    ctl = createInput(canvas, onMute);
   };
   afterEach(() => {
     ctl.destroy();
@@ -87,6 +87,21 @@ describe('createInput', () => {
     expect(ctl.keys).toBe(KEY.FORWARD | KEY.JUMP);
     key('keyup', 'KeyW');
     expect(ctl.keys).toBe(KEY.JUMP);
+  });
+
+  it('calls onMute once per press of M, by code, under the lock only', () => {
+    let n = 0;
+    make(() => n++);
+    key('keydown', 'KeyM');
+    expect(n).toBe(0);
+    lock(true);
+    key('keydown', 'KeyM');
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', repeat: true }));
+    key('keyup', 'KeyM');
+    key('keydown', 'KeyN');
+    expect(n).toBe(1);
+    key('keydown', 'KeyM');
+    expect([n, ctl.keys]).toEqual([2, 0]);
   });
 
   it('clears the keys on blur and when the lock is lost', () => {

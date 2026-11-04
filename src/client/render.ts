@@ -35,35 +35,64 @@ layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec
 uniform mat4 m;out vec3 P,N;out vec4 C;
 void main(){P=p;N=n;C=c;gl_Position=m*vec4(p,1);}`;
 
+/**
+ * Blinn-Phong strength and exponent: a row per TEX id in order (brick, tile, lava, stone, metal, wood,
+ * moss, grate), then the flat bodies. Lava and glows never get here: they light themselves.
+ */
+export const SPEC = [
+  [0.04, 8],
+  [0.25, 30],
+  [0, 1],
+  [0.08, 10],
+  [0.8, 48],
+  [0.06, 12],
+  [0.3, 20],
+  [0.7, 40],
+  [0.1, 24],
+];
+/** Metres a height of 1 in a texture's alpha stands for. */
+const RELIEF = 0.06;
+
 // s: 1 on a texture, 0 on a flat colour. g: lava (which also drifts) and layer -2, which glow: no
-// light, no shade. l: the ambient term (Z, times the sector light on a texture) with the directional
-// shade, plus every light, then eased toward 2 so many beams on one wall do not burn it white.
-// A: position and range, B: direction and cone (-9 on a point: no cone),
+// light, no shade. The texture's alpha is a height: its screen-space derivatives tilt the normal
+// (bump mapping without tangents), faded out as a pixel covers more than a texel or two so the
+// mipmapped relief does not shimmer. n is the surface normal, m the bumped one. l: the ambient
+// term (Z, times the sector light on a texture) with the directional shade, plus every light, then
+// eased toward 2 (e) so many beams on one wall do not burn it white; sp: the specular sum, added
+// after the colour is lit. A: position and range, B: direction and cone (-9 on a point: no cone),
 // K: colour and shadow slot (-1: none), M: the slots' matrices. Z < 0 is the depth pass: no colour.
 const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T,Z;uniform int Q;
 uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}];uniform mat4 M[${MAX_SHADOWS}];
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;out vec4 o;
+const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
+vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
 void main(){
 if(Z<0.)return;
 float L=C.z,s=step(0.,L),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
-vec3 c=mix(vec3(C.xy,C.w),texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.))).rgb,s);
-vec3 n=normalize(N),l=vec3(mix(1.,C.w,s)*Z*(.45+.55*max(dot(n,normalize(vec3(.4,.8,.3))),0.)));
+vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
+vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
+vec3 n=normalize(N),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
+float h=t.a*s*${RELIEF},det=dot(dx,a);
+float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
+vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
+vec2 R=SP[int(s>0.?L+.5:${LAYERS}.)];
+vec3 l=vec3(mix(1.,C.w,s)*Z*(.45+.55*max(dot(normalize(n+m),normalize(vec3(.4,.8,.3))),0.))),sp=vec3(0),V=normalize(E-P);
 for(int i=0;i<${MAX_LIGHTS};i++){
 if(i>=Q||g>0.)break;
 vec3 d=A[i].xyz-P;float r=length(d),k=K[i].w,u=B[i].w;
 d/=r;
 float w=max(1.-r*r/(A[i].w*A[i].w),0.);
-w*=w*smoothstep(u,u+(1.-u)*.4,-dot(d,B[i].xyz))*max(dot(n,d),0.);
+w*=w*smoothstep(u,u+(1.-u)*.4,-dot(d,B[i].xyz))*max(dot(m,d),0.);
 if(w>0.&&k>=0.){
 vec4 q=M[int(k)]*vec4(P+n*.03,1);q.xyz=q.xyz/q.w*.5+.5;
 float v=0.;
 for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADOW},k,q.z-.0005));
 w*=v/4.;}
-l+=K[i].rgb*w;}
-l=2.*(1.-exp(-.5*l));
-c*=mix(l,vec3(1.4),g);
+l+=K[i].rgb*w;
+sp+=K[i].rgb*w*pow(max(dot(m,normalize(d+V)),0.),R.y);}
+c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
 o=vec4(mix(c,vec3(${FOG}),1.-exp(-.02*length(P-E))),1);}`;
 
 /**

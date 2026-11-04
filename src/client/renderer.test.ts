@@ -4,7 +4,8 @@ import { compile } from '../shared/level';
 import { HALL } from '../shared/map';
 import { ITEM, TEX } from '../shared/types';
 import type { MapDef } from '../shared/types';
-import { createEffects } from './effects';
+import { createEffects, fade, puff } from './effects';
+import type { Puff } from './effects';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
 import { STRIDE } from './mesh';
@@ -342,6 +343,137 @@ describe('createRenderer', () => {
       frame(rd);
       expect(named('blitFramebuffer')).toHaveLength(1);
       expect(named('texStorage2D')).toHaveLength(0);
+    });
+  });
+
+  describe('smoke', () => {
+    const cloud = (x: number, z: number, t = 0.5): Puff => ({
+      p: [x, 1.5, z],
+      v: [0, 0, 0],
+      r: 0.3,
+      yaw: 0,
+      t,
+      life: 2,
+    });
+    const smoky = (...puffs: Puff[]) => {
+      const fx = createEffects();
+      fx.smoke.push(...puffs);
+      return fx;
+    };
+    const named = (name: string) => calls.filter(c => c[0] == name);
+
+    it('draws nothing blended without smoke', () => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      frame(rd);
+      expect(named('enable').map(c => c[1])).not.toContain(K('BLEND'));
+      expect(named('depthMask')).toHaveLength(0);
+      expect(draws()).toHaveLength(2);
+    });
+
+    it('draws it after the opaque scene with blending on and depth writes off, then the gun', () => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      expect(named('blendFunc')[0].slice(1)).toEqual([K('SRC_ALPHA'), K('ONE_MINUS_SRC_ALPHA')]);
+      calls.length = 0;
+      frame(rd);
+      const [world, gun] = draws();
+      calls.length = 0;
+      frame(rd, smoky(cloud(2, 0), cloud(2, 3)));
+      const [w, smoke, g] = draws();
+      expect(w).toEqual(world);
+      // Two billboards of six vertices, right after the world, before the gun.
+      expect(smoke).toEqual([world[1], 12]);
+      expect(g).toEqual([world[1] + 12, gun[1]]);
+      const at = (name: string, ...args: unknown[]) =>
+        calls.findIndex(c => c[0] == name && args.every((a, i) => c[i + 1] == a));
+      const drawn = calls
+        .map((c, i) => (c[0] == 'drawArrays' && c[3] == 12 ? i : -1))
+        .find(i => i > 0)!;
+      expect(at('enable', K('BLEND'))).toBeLessThan(drawn);
+      expect(at('depthMask', false)).toBeLessThan(drawn);
+      expect(at('depthMask', true)).toBeGreaterThan(drawn);
+      expect(at('disable', K('BLEND'))).toBeGreaterThan(drawn);
+      // The gun's depth clear comes after the smoke has been drawn.
+      const clears = calls.map((c, i) => (c[0] == 'clear' ? i : -1)).filter(i => i >= 0);
+      expect(clears.at(-1)).toBeGreaterThan(drawn);
+      expect(clears.filter(i => i < drawn)).toHaveLength(1);
+    });
+
+    it('keeps it out of the depth passes', () => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      const light: Light = {
+        kind: LIGHT.SPOT,
+        p: [2, 1.6, 2],
+        d: [1, 0, 0],
+        cone: 0.9,
+        range: 10,
+        color: [1, 1, 1],
+        shadow: true,
+      };
+      frame(rd, createEffects(), [], [light]);
+      const [depth] = draws();
+      calls.length = 0;
+      frame(rd, smoky(cloud(2, 0)), [], [light]);
+      expect(draws()[0]).toEqual(depth);
+    });
+
+    /** The billboards of the last frame: centre, alpha and the layer of each vertex. */
+    const quads = () => {
+      const data = calls.filter(c => c[0] == 'bufferSubData').at(-1)![3] as Float32Array;
+      const out: { c: number[]; a: number[]; n: number[]; uv: number[][] }[] = [];
+      let cur: number[][] = [];
+      for (let i = 0; i < data.length; i += STRIDE) {
+        if (data[i + 8] == -3) {
+          cur.push(Array.from(data.slice(i, i + STRIDE)));
+          if (cur.length == 6) {
+            out.push({
+              c: [0, 1, 2].map(n => cur.reduce((s, v) => s + v[n], 0) / 6),
+              a: cur.map(v => v[9]),
+              n: cur[0].slice(3, 6),
+              uv: cur.map(v => v.slice(6, 8)),
+            });
+            cur = [];
+          }
+        }
+      }
+      return out;
+    };
+
+    it('builds one camera-facing quad per puff, with its opacity, far to near', () => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      const [near, far, mid] = [cloud(1, 2), cloud(1, -5), cloud(1, -2, 1.5)];
+      // Looking toward -z from [1, 1.6, 1].
+      frame(rd, smoky(near, far, mid));
+      const q = quads();
+      expect(q.map(b => b.c[2])).toEqual([-5, -2, 2].map(z => expect.closeTo(z, 4)));
+      expect(q.map(b => b.a[0])).toEqual([far, mid, near].map(p => expect.closeTo(fade(p), 5)));
+      for (const b of q) {
+        expect(b.a.every(a => a == b.a[0])).toBe(true);
+        // The normal points back at the viewer, the corners are the unit square's.
+        expect(b.n).toEqual([-0, -0, 1].map(n => expect.closeTo(n, 5)));
+        expect(new Set(b.uv.map(String))).toEqual(new Set(['-1,-1', '1,-1', '1,1', '-1,1']));
+      }
+    });
+
+    it('turns the quads with the camera, and sizes them with the puff', () => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      const fx = smoky(cloud(1, -4));
+      rd.frame([1, 1.6, 1], 0, 0, [], new Map(), fx, [], [], [], []);
+      const width = () => {
+        const data = calls.filter(c => c[0] == 'bufferSubData').at(-1)![3] as Float32Array;
+        const xs = Array.from({ length: data.length / STRIDE }, (_, i) => i)
+          .filter(i => data[i * STRIDE + 8] == -3)
+          .map(i => data[i * STRIDE]);
+        return Math.max(...xs) - Math.min(...xs);
+      };
+      expect(quads()[0].n[2]).toBeCloseTo(1);
+      expect(width()).toBeCloseTo(2 * 1.6 * puff(fx.smoke[0]), 4);
+      calls.length = 0;
+      rd.frame([1, 1.6, 1], Math.PI / 2, 0, [], new Map(), fx, [], [], [], []);
+      expect(quads()[0].n).toEqual([1, 0, 0].map(n => expect.closeTo(n, 5)));
+      calls.length = 0;
+      const big = smoky({ ...cloud(1, -4), r: 0.6 });
+      rd.frame([1, 1.6, 1], 0, 0, [], new Map(), big, [], [], [], []);
+      expect(width()).toBeCloseTo(2 * 1.6 * puff(big.smoke[0]), 4);
     });
   });
 

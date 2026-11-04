@@ -7,8 +7,8 @@ import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { forward } from '../shared/physics';
 import { MONSTER, TEX } from '../shared/types';
 import type { Bullet, Edge, Item, Level, Monster, PlayerState, Sector } from '../shared/types';
-import { BLAST, glow, lit, puff } from './effects';
-import type { Effects } from './effects';
+import { BLAST, fade, glow, lit, puff } from './effects';
+import type { Effects, Puff } from './effects';
 import { MUZZLE, chaingun } from './gun';
 import { props } from './items';
 import { STRIDE, basis, dress, place, pushBox } from './mesh';
@@ -24,6 +24,15 @@ export const FOG = [0.05, 0.045, 0.05, 0.02];
 export const MAX_TINTS = 16;
 /** Bytes the dynamic tail starts with; it grows when a frame needs more. */
 const TAIL = 1 << 18;
+/** The corners of a billboard's two triangles. */
+const QUAD = [
+  [-1, -1],
+  [1, -1],
+  [1, 1],
+  [-1, -1],
+  [1, 1],
+  [-1, 1],
+];
 /** Metres one texture covers. */
 const TILE = 2;
 /** Shadow map side in texels. */
@@ -84,8 +93,9 @@ export const SPEC = [
 /** Metres a height of 1 in a texture's alpha stands for. */
 const RELIEF = 0.06;
 
-// s: 1 on a texture, 0 on a flat colour. g: lava (which also drifts) and layer -2, which glow: no
-// light, no shade. The texture's alpha is a height: its screen-space derivatives tilt the normal
+// s: 1 on a texture, 0 on a flat colour. y: layer -3, a smoke billboard: C is (corner x, corner y,
+// -3, opacity), grey and lit like the rest, with an alpha that falls off from its centre to its
+// edge. g: lava (which also drifts) and layer -2, which glow: no light, no shade. The texture's alpha is a height: its screen-space derivatives tilt the normal
 // (bump mapping without tangents), faded out as a pixel covers more than a texel or two so the
 // mipmapped relief does not shimmer. n is the surface normal, m the bumped one. l: the ambient
 // term (Z, times the sector light on a texture) with the directional shade, plus every light, then
@@ -103,9 +113,9 @@ const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)})
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
 void main(){
 if(Z<0.)return;
-float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
+float L=C.z,s=step(0.,L),I=floor(C.w*.5),y=step(L,-2.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5)*(1.-y);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
-vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
+vec3 c=y>0.?vec3(.6):mix(vec3(C.xy,C.w),t.rgb,s);
 vec3 n=normalize(N),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float h=t.a*s*${RELIEF},det=dot(dx,a);
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
@@ -126,7 +136,7 @@ w*=v/4.;}
 l+=K[i].rgb*w;
 sp+=K[i].rgb*w*pow(max(dot(m,normalize(d+V)),0.),R.y);}
 c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
-o=vec4(mix(c,F.rgb,1.-exp(-F.a*length(P-E))),1);}`;
+o=vec4(mix(c,F.rgb,1.-exp(-F.a*length(P-E))),y>0.?C.w*(1.-smoothstep(.2,1.,length(C.xy))):1.);}`;
 
 /**
  * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
@@ -523,6 +533,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       gl.texParameterf(gl.TEXTURE_2D_ARRAY, aniso.TEXTURE_MAX_ANISOTROPY_EXT, 8);
     }
     gl.enable(gl.DEPTH_TEST);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     climate();
     const [w, h] = size();
     if (w && h) {
@@ -620,14 +631,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       for (const b of bullets) {
         bullet(v, b, fx.aim.get(b.id));
       }
-      for (const s of fx.smoke) {
-        // Pale and puffy, then darker as it thins out; lit like the map.
-        const [k, g] = [puff(s), 0.42 - 0.32 * (s.t / s.life)];
-        for (const yaw of [s.yaw, s.yaw + Math.PI / 4]) {
-          pushBox(v, s.p, [k, k, k], yaw, [g, g, g * 1.05]);
-        }
-      }
-      const [, , f] = basis(yaw, pitch);
+      const axes = basis(yaw, pitch, fx.roll);
+      const [right, up, f] = axes;
       const specks = lit(fx, eye, f);
       for (let i = 0; i < specks.length; i += 4) {
         const [b, k] = [Math.sqrt(specks[i + 3]), 0.01 + 0.025 * specks[i + 3]];
@@ -645,8 +650,20 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
         }
       }
       const world = v.length;
+      // Blended after the opaque scene, far to near, as billboards.
+      const dist = (s: Puff) => Math.hypot(s.p[0] - eye[0], s.p[1] - eye[1], s.p[2] - eye[2]);
+      for (const s of [...fx.smoke].sort((a, b) => dist(b) - dist(a))) {
+        const [k, a] = [puff(s) * 1.6, fade(s)];
+        for (const [i, j] of QUAD) {
+          v.push(
+            ...[0, 1, 2].map(n => s.p[n] + (right[n] * i + up[n] * j) * k),
+            ...f.map(x => -x),
+            ...[i, j, -3, a],
+          );
+        }
+      }
+      const haze = v.length;
       // Last, over a cleared depth: the gun never sinks into a wall.
-      const axes = basis(yaw, pitch, fx.roll);
       const off: Vec3 = [0.26, -0.24 + fx.kick * 0.01, 0.6 - fx.kick * 0.06];
       if (!fx.dead) {
         place(v, near.body, eye, axes, off, 0.8);
@@ -693,9 +710,17 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       gl.uniformMatrix4fv(u.M, false, pk.m);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, first + world / STRIDE);
+      if (haze > world) {
+        // Tested against the scene's depth, not written: puffs do not hide each other's far side.
+        gl.enable(gl.BLEND);
+        gl.depthMask(false);
+        gl.drawArrays(gl.TRIANGLES, first + world / STRIDE, (haze - world) / STRIDE);
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
+      }
       gl.clear(gl.DEPTH_BUFFER_BIT);
       gl.uniform1f(u.Z, GUN);
-      gl.drawArrays(gl.TRIANGLES, first + world / STRIDE, (v.length - world) / STRIDE);
+      gl.drawArrays(gl.TRIANGLES, first + haze / STRIDE, (v.length - haze) / STRIDE);
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaa);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, hdr.f);
       gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);

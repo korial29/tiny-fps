@@ -7,7 +7,7 @@ import { DASH_COOLDOWN, DASH_TICKS, GRAB_GAP, PLAYER_R, SPRINT_SPEED } from '../
 import { eyeHeight, speedOf, sprinting } from '../shared/physics';
 import { EV, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { RADII, hand, shoe, torso } from './figure';
+import { RADII, TOWARD, hand, ik, shoe, torso } from './figure';
 import { add, basis, dot, mix, segment, solid, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 
@@ -61,24 +61,6 @@ const [UPPER, FORE] = [0.35, 0.38];
 const [THIGH, SHIN] = [0.43, 0.45];
 const RED = [0.95, 0.22, 0.1];
 
-/**
- * The joint and the end of a two-bone limb from `a` toward `b`, segments l1 and l2: the joint
- * bends toward `pole`, and out of reach the limb stretches straight.
- */
-const ik = (a: Vec3, b: Vec3, pole: Vec3, l1: number, l2: number): [Vec3, Vec3] => {
-  const d = sub(b, a);
-  const n = unit(d);
-  const len = Math.max(Math.min(Math.hypot(...d), (l1 + l2) * 0.99), 0.15);
-  const x = (l1 * l1 - l2 * l2 + len * len) / (2 * len);
-  const h = Math.sqrt(Math.max(l1 * l1 - x * x, 0));
-  const k = dot(pole, n);
-  const p = unit([pole[0] - n[0] * k, pole[1] - n[1] * k, pole[2] - n[2] * k]);
-  return [
-    [a[0] + n[0] * x + p[0] * h, a[1] + n[1] * x + p[1] * h, a[2] + n[2] * x + p[2] * h],
-    [a[0] + n[0] * len, a[1] + n[1] * len, a[2] + n[2] * len],
-  ];
-};
-
 const [JACKET, TROUSERS, SHOE] = [
   [0.3, 0.32, 0.37],
   [0.14, 0.15, 0.2],
@@ -92,15 +74,6 @@ const kit = () => ({
   thigh: solid(1, THIGH, RADII.thigh, [0.5, 1]),
   shin: solid(1, SHIN, RADII.shin, [0.5, 0.5]),
 });
-
-/** The unit vector toward a wall on each SIDE, on the floor plane. */
-const TOWARD = [
-  [0, 0],
-  [1, 0],
-  [-1, 0],
-  [0, 1],
-  [0, -1],
-];
 
 /** A hand's goal: where the wrist goes (view space: right, up, forward) and where the elbow bends. */
 type Goal = [wrist: Vec3, pole: Vec3];

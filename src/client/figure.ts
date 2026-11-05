@@ -1,7 +1,7 @@
 // The parts of a person that the own body and the runners share, from the smooth solids of mesh.ts:
 // a jacket with its hips, a shoe, a hand with fingers that curl. Built once per level of detail,
 // tinted and placed per frame. No DOM, no state.
-import { aim, dot, mix, place, segment, solid, unit } from './mesh';
+import { aim, dot, mix, place, segment, solid, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 
 export const SKIN = [0.66, 0.45, 0.35];
@@ -157,3 +157,30 @@ export const hand = (
     1.25,
   );
 };
+
+/**
+ * The joint and the end of a two-bone limb from `a` toward `b`, segments l1 and l2: the joint
+ * bends toward `pole`, and out of reach the limb stretches straight.
+ */
+export const ik = (a: Vec3, b: Vec3, pole: Vec3, l1: number, l2: number): [Vec3, Vec3] => {
+  const d = sub(b, a);
+  const n = unit(d);
+  const len = Math.max(Math.min(Math.hypot(...d), (l1 + l2) * 0.99), 0.15);
+  const x = (l1 * l1 - l2 * l2 + len * len) / (2 * len);
+  const h = Math.sqrt(Math.max(l1 * l1 - x * x, 0));
+  const k = dot(pole, n);
+  const p = unit([pole[0] - n[0] * k, pole[1] - n[1] * k, pole[2] - n[2] * k]);
+  return [
+    [a[0] + n[0] * x + p[0] * h, a[1] + n[1] * x + p[1] * h, a[2] + n[2] * x + p[2] * h],
+    [a[0] + n[0] * len, a[1] + n[1] * len, a[2] + n[2] * len],
+  ];
+};
+
+/** The unit vector toward a wall on each SIDE, on the floor plane. */
+export const TOWARD = [
+  [0, 0],
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];

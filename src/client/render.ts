@@ -3,19 +3,18 @@
 // them to a dim ambient, and each shadowed spot first draws the level and the bodies into its layer
 // of a depth texture array. The scene goes into an offscreen target, then a second, small program
 // (POST) turns it into the picture on the canvas. No DOM beyond the canvas.
-import { PLAYER_H, PLAYER_R } from '../shared/constants';
-import { forward } from '../shared/physics';
 import { MONSTER, TEX } from '../shared/types';
 import type { Bullet, Edge, Item, Level, Monster, PlayerState, Sector } from '../shared/types';
-import { BLAST, fade, glow, lit, puff } from './effects';
+import { BLAST, BLOOD, TRAIL, fade, glow, lit, puff } from './effects';
 import type { Effects, Puff } from './effects';
 import { MUZZLE, chaingun } from './gun';
 import { props } from './items';
-import { STRIDE, basis, dress, place, pushBox } from './mesh';
+import { METAL, QUAD, STRIDE, axesAlong, basis, dress, place, pushBox, pushFrame } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
-import { SWING, bullet, flyer, walker } from './monsters';
+import { SWING, bullet, flyer, follow, pace, soldier, walker } from './monsters';
+import type { Gait } from './monsters';
 import { LAYERS, SIZE, textures } from './textures';
 
 /** MapDef.fog when a map sets none: the clear colour and what distance fog fades to, then its density. Dark, the map is indoors. */
@@ -24,15 +23,6 @@ export const FOG = [0.05, 0.045, 0.05, 0.02];
 export const MAX_TINTS = 16;
 /** Bytes the dynamic tail starts with; it grows when a frame needs more. */
 const TAIL = 1 << 18;
-/** The corners of a billboard's two triangles. */
-const QUAD = [
-  [-1, -1],
-  [1, -1],
-  [1, 1],
-  [-1, -1],
-  [1, 1],
-  [-1, 1],
-];
 /** Metres one texture covers. */
 const TILE = 2;
 /** Shadow map side in texels. */
@@ -77,7 +67,7 @@ o=vec4(c,1);}`;
 
 /**
  * Blinn-Phong strength and exponent: a row per TEX id in order (brick, tile, lava, stone, metal, wood,
- * moss, grate), then the flat bodies. Lava and glows never get here: they light themselves.
+ * moss, grate), then the flat bodies and the flat metal (layer METAL). Lava and glows never get here: they light themselves.
  */
 export const SPEC = [
   [0.04, 8],
@@ -89,11 +79,12 @@ export const SPEC = [
   [0.3, 20],
   [0.7, 40],
   [0.1, 24],
+  [0.3, 40],
 ];
 /** Metres a height of 1 in a texture's alpha stands for. */
 const RELIEF = 0.06;
 
-// s: 1 on a texture, 0 on a flat colour. y: layer -3, a smoke billboard: C is (corner x, corner y,
+// s: 1 on a texture, 0 on a flat colour (layer -0.5 shines like metal). y: layer -3, a smoke billboard: C is (corner x, corner y,
 // -3, opacity), grey and lit like the rest, with an alpha that falls off from its centre to its
 // edge. g: lava (which also drifts) and layer -2, which glow: no light, no shade. The texture's alpha is a height: its screen-space derivatives tilt the normal
 // (bump mapping without tangents), faded out as a pixel covers more than a texel or two so the
@@ -120,7 +111,7 @@ vec3 n=normalize(N),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float h=t.a*s*${RELIEF},det=dot(dx,a);
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
-vec2 R=SP[int(s>0.?L+.5:${LAYERS}.)];
+vec2 R=SP[int(s>0.?L+.5:${LAYERS}.+step(-.7,L))];
 vec3 l=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s)*Z*(.45+.55*max(dot(normalize(n+m),normalize(vec3(.4,.8,.3))),0.)),sp=vec3(0),V=normalize(E-P);
 for(int i=0;i<${MAX_LIGHTS};i++){
 if(i>=Q||g>0.)break;
@@ -331,6 +322,9 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 /** Throws when the browser has no WebGL2. */
 export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Renderer => {
   let lvl = first;
+  /** How far and how fast each body drawn has gone: the limbs stride with it. */
+  const gaits = new Map<number, Gait>();
+  let clock = performance.now() / 1000;
   const gl = canvas.getContext('webgl2', { antialias: false, depth: false });
   if (!gl) {
     throw new Error('WebGL2 is not available');
@@ -355,15 +349,28 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
   const pixels = textures();
   let tail = ground.length * 4;
   let cap = tail + TAIL;
-  const [steel, iron] = [
+  const [steel, iron, plate, dark, gold] = [
     [0.55, 0.55, 0.6],
     [0.2, 0.2, 0.23],
+    [0.38, 0.38, 0.42],
+    [0.03, 0.03, 0.04],
+    [0.75, 0.5, 0.15],
   ];
-  const near = {
-    barrels: dress(chaingun(10).barrels, steel),
-    body: dress(chaingun(10).body, iron),
+  /** The chaingun in its flat colours: `spun` turns with the barrels, `still` does not. */
+  const gear = (sides: number) => {
+    const g = chaingun(sides);
+    const paint = (k: keyof typeof g, c: number[], layer = METAL) => dress(g[k], c, layer);
+    return {
+      spun: [paint('barrels', steel), paint('clamps', plate)].flat(),
+      still: [
+        paint('body', iron),
+        paint('trim', plate),
+        paint('holes', dark, -1),
+        paint('brass', gold),
+      ].flat(),
+    };
   };
-  const far = { barrels: dress(chaingun(5).barrels, steel), body: dress(chaingun(5).body, iron) };
+  const [near, far] = [gear(10), gear(5)];
   const flare: number[] = [];
   /** The others' flash, three times as wide: at a few metres the own one is a dot. */
   const wide: number[] = [];
@@ -568,6 +575,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
   return {
     level(next) {
       lvl = next;
+      gaits.clear();
       ground = levelVerts(lvl);
       tail = ground.length * 4;
       cap = tail + TAIL;
@@ -590,41 +598,27 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       }
       vp = viewProj(eye, yaw, pitch, w / h, fx.roll);
       const v: number[] = [];
-      for (const p of others) {
-        const [fx_, fz] = forward(p.yaw);
-        const hw = PLAYER_R * 0.8;
-        const shoulders = PLAYER_H - 0.35;
-        pushBox(v, [p.x, p.y + shoulders / 2, p.z], [hw, shoulders / 2, hw], p.yaw, [
-          ...rgb(colors.get(p.id) ?? '#888'),
-        ]);
-        const head: Vec3 = [p.x, p.y + PLAYER_H - 0.17, p.z];
-        pushBox(v, head, [0.17, 0.17, 0.17], p.yaw, [0.95, 0.8, 0.65]);
-        pushBox(
-          v,
-          [head[0] + fx_ * 0.17, head[1] + 0.03, head[2] + fz * 0.17],
-          [0.13, 0.05, 0.03],
-          p.yaw,
-          [0.1, 0.1, 0.12],
-        );
-        const hand: Vec3 = [p.x, p.y + 1.25, p.z];
-        const axes = basis(p.yaw, p.pitch);
-        for (const part of [far.barrels, far.body, fx.flashes.has(p.id) ? wide : []]) {
-          place(v, part, hand, axes, [0.36, -0.12, 0.3], 0.8);
-        }
-      }
       const now = performance.now() / 1000;
+      const dt = Math.min(0.1, now - clock);
+      clock = now;
+      for (const p of others) {
+        const g = follow(gaits, p.id, p.x, p.z, dt);
+        const gun = [far.spun, far.still, fx.flashes.has(p.id) ? wide : []];
+        soldier(v, p, rgb(colors.get(p.id) ?? '#888'), g.walked, pace(g), gun);
+      }
       for (const m of monsters) {
+        const g = follow(gaits, m.id, m.x, m.z, dt);
         if (m.kind == MONSTER.FLYER) {
-          flyer(v, m, now);
+          flyer(v, m, now, g.vx, g.vz);
         } else {
           const left = fx.swings.get(m.id);
-          walker(v, m, fx.herd.get(m.id)?.walked ?? 0, left ? 1 - left / SWING : 0);
+          walker(v, m, g.walked, left ? 1 - left / SWING : 0, pace(g));
         }
       }
       props(v, lvl, items, now);
-      for (const { p, yaw, size, c, life } of fx.gibs) {
-        const k = size * Math.min(1, life * 2);
-        pushBox(v, p, [k, k, k], yaw, c);
+      for (const { p, yaw, half, c, life } of fx.gibs) {
+        const k = Math.min(1, life * 2);
+        pushBox(v, p, half.map(x => x * k) as Vec3, yaw, c);
       }
       // What the shadow maps hold ends here: the unlit effects after it cast nothing.
       const bodies = v.length;
@@ -638,8 +632,33 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
         const [b, k] = [Math.sqrt(specks[i + 3]), 0.01 + 0.025 * specks[i + 3]];
         pushBox(v, specks.slice(i, i + 3) as Vec3, [k, k, k], 0, [b, b * 0.9, b * 0.7], -2);
       }
-      for (const { p, c } of fx.sparks) {
-        pushBox(v, p, [0.025, 0.025, 0.025], 0, c ?? [1, 0.8, 0.3], -2);
+      for (const { p, v: w, c = [1, 0.8, 0.3] } of fx.sparks) {
+        // A streak from the head back along the velocity: bright at the head, dim at the tail.
+        const [speed, h] = [Math.hypot(...w), Math.max(Math.hypot(...w) * TRAIL, 0.04) / 2];
+        const d = (speed ? w.map(x => x / speed) : [0, 1, 0]) as Vec3;
+        pushFrame(
+          v,
+          p.map((x, i) => x - d[i] * h) as Vec3,
+          axesAlong(d),
+          [h, 0.008, 0.008],
+          c.map(x => x * 0.25),
+          -2,
+          c,
+        );
+      }
+      for (const { p, yaw, tilt, size, life } of fx.casings) {
+        if (life > 0) {
+          const [k, t] = [size * Math.min(1, life * 2), Math.cos(tilt)];
+          const d: Vec3 = [t * Math.sin(yaw), Math.sin(tilt), t * Math.cos(yaw)];
+          pushFrame(v, p, axesAlong(d), [k * 2.8, k, k], gold, METAL);
+        }
+      }
+      for (const { p, r, yaw, life } of fx.splats) {
+        // Two flat slabs across each other: a blot.
+        const k = r * Math.min(1, life);
+        for (const a of [yaw, yaw + Math.PI / 4]) {
+          pushBox(v, p, [k, 0.002, k * 0.8], a, BLOOD);
+        }
       }
       for (const b of fx.blasts) {
         // Bright at the start, red and shrinking at the end: no blending to fade it with.
@@ -666,8 +685,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       // Last, over a cleared depth: the gun never sinks into a wall.
       const off: Vec3 = [0.26, -0.24 + fx.kick * 0.01, 0.6 - fx.kick * 0.06];
       if (!fx.dead) {
-        place(v, near.body, eye, axes, off, 0.8);
-        place(v, near.barrels, eye, axes, off, 0.8, fx.spin);
+        place(v, near.still, eye, axes, off, 0.8);
+        place(v, near.spun, eye, axes, off, 0.8, fx.spin);
         if (fx.flash > 0) {
           place(v, flare, eye, axes, off, 0.8, fx.spin * 3);
         }

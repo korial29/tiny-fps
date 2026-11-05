@@ -209,6 +209,7 @@ Parity with the js13k game is tracked in [`docs/PARITY.md`](docs/PARITY.md).
 - [x] Flashlights with shadow maps, lit muzzle flashes, explosion, hit, bullet, goal and exit lights
 - [x] Atmosphere: a light colour per room, a fog colour per level, flickering lava light, dust in the flashlight beam, soft smoke after explosions
 - [x] Post-processing: bloom on flashes, lava and glows, tone mapping, vignette, film grain, 4x antialiasing
+- [x] Models and particles: hunched walkers with jointed limbs, flapping flyers, soldiers for the other players, a detailed chaingun, ejected brass casings, streaking sparks, gibs that leave blood splats
 - [x] Sound: a jsfxr-style synthesiser (shot, boom, hit, collect, clock, burst), stereo by position, a looped music; M mutes
 - [x] HUD and screens: health bar, damage vignette and pickup fades, low-health pulse and heartbeat, title and pause screen, death countdown, end screen with each player's kills and deaths
 - [x] Shadow DOM, zero runtime dependencies, size-gated in CI

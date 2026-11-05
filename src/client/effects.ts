@@ -1,5 +1,5 @@
-// Camera and gun feel, fed each frame: head bob, roll, shake, gun kick, barrel spin, muzzle flash
-// and impact sparks; and what the host reports of the monsters: gibs, explosions, smoke, blows, the
+// Camera and gun feel, fed each frame: head bob, roll, shake, gun kick, barrel spin, muzzle flash,
+// shell casings and impact sparks; and what the host reports of the monsters: gibs, explosions, smoke, blows, the
 // red hurt tint; and the dust motes around the own eye. No DOM, times in seconds, unit-tested.
 import { EYE, INTERP_DELAY, RANGE } from '../shared/constants';
 import { blocked, sectorAt } from '../shared/level';
@@ -7,6 +7,7 @@ import { TAU } from '../shared/physics';
 import { EVENT, KEY } from '../shared/types';
 import type { Bullet, GameEvent, Level, Monster, PlayerState, Shot } from '../shared/types';
 import { CHUNKS, SWING } from './monsters';
+import { cross } from './mesh';
 import type { Vec3 } from './mesh';
 
 export interface Spark {
@@ -18,20 +19,54 @@ export interface Spark {
   c?: number[];
 }
 
-/** A chunk of a dead monster: it flies, lands on the floor below, then shrinks away. */
-export interface Gib {
+/** What `fall` moves: a position, a velocity, the half height it rests on, the floor under it. */
+interface Body {
   p: Vec3;
   v: Vec3;
-  yaw: number;
-  /** Half the side of its cube, metres. */
   size: number;
-  c: number[];
-  /** Seconds left. */
-  life: number;
   /** Floor height under it, as of the last sector it was in. */
   floor: number;
   /** Landed for good. */
   rest: boolean;
+}
+
+/** A chunk of a dead monster: it flies, lands on the floor below, then shrinks away. */
+export interface Gib extends Body {
+  yaw: number;
+  /** Half its sides along x, y and z before the turn by yaw, metres; `size` is the y one. */
+  half: Vec3;
+  c: number[];
+  /** Seconds left. */
+  life: number;
+  /** Leaves a splat where it first lands. */
+  gore: boolean;
+}
+
+/** A blot of blood on the floor: it shrinks away over its last second. */
+export interface Splat {
+  /** On the floor, a hair above it. */
+  p: Vec3;
+  /** Half its side, metres. */
+  r: number;
+  yaw: number;
+  /** Seconds left. */
+  life: number;
+}
+
+/**
+ * A brass shell casing: it tumbles end over end (`tilt` is its angle to the floor, about the
+ * horizontal axis across `yaw`), bounces on the floor below, lies still, then shrinks away. A
+ * free slot has `life` 0 or less; `size` is its radius, its half length is 2.8 times that.
+ */
+export interface Casing extends Body {
+  yaw: number;
+  tilt: number;
+  /** Tumble, radians a second. */
+  spin: number;
+  /** Seconds left. */
+  life: number;
+  /** Ejected by the own gun: the rest are the others', smaller and few. */
+  own: boolean;
 }
 
 /** An explosion: a glow of radius r at its biggest, t seconds old. */
@@ -81,6 +116,9 @@ export interface Effects {
   flashes: Map<number, number>;
   sparks: Spark[];
   gibs: Gib[];
+  /** A fixed pool: the live ones have `life` above 0. */
+  casings: Casing[];
+  splats: Splat[];
   blasts: Blast[];
   smoke: Puff[];
   /** Dust motes, x y z each, in a box around the own eye; `lit` says which the flashlight shows. */
@@ -107,11 +145,12 @@ export interface Effects {
   hit(): void;
   /** An item of colour c was picked up near the own player: its colour fades over the screen. */
   pickup(c: number[]): void;
-  /** A new level: drops every effect of the old one, and lets gibs land on the new `lvl`. */
+  /** A new level: drops every effect of the old one, and lets gibs and casings land on the new `lvl`. */
   reset(lvl: Level): void;
   /**
-   * A shot, from the shooter's eye; own ones kick the camera and the gun. No sparks with
-   * `sparks` false: a shot that hit the viewer would burst them inside the camera.
+   * A shot, from the shooter's eye; own ones kick the camera and the gun. Each ejects a casing to
+   * the right of the view. No sparks with `sparks` false: a shot that hit the viewer would burst
+   * them inside the camera.
    */
   shot(s: Shot, from: Vec3, own: boolean, sparks?: boolean): void;
   /** The monsters and bullets drawn this frame: how far each walked, which way each bullet flies. */
@@ -124,6 +163,10 @@ const FLASH = 0.05;
 const LIFE = 0.3;
 const MAX_SPARKS = 96;
 const MAX_GIBS = 64;
+const MAX_CASINGS = 32;
+/** Of those, the ones the others' guns may hold at once. */
+const MAX_REMOTE = 8;
+const MAX_SPLATS = 24;
 const MAX_BLASTS = 12;
 const MAX_SMOKE = 40;
 /** Motes, and the half sides of the box they live in: they wrap round it as the eye moves. */
@@ -142,6 +185,17 @@ const TILT = 0.9;
 const LOW = 0.3;
 /** Gibs fall faster than players: they are small. */
 const GIB_G = 14;
+/** Seconds of velocity a spark's streak spans. */
+export const TRAIL = 0.04;
+/** Dark red: the gibs that leave a splat, and the splat. */
+export const BLOOD = [0.3, 0.03, 0.03];
+/** Box shapes of a gib, times its base size: a chunk, a flat slab, a long bit, a speck. */
+const SHAPES: Vec3[] = [
+  [1, 1, 1],
+  [1.6, 0.35, 1.3],
+  [0.35, 0.35, 2],
+  [0.5, 0.5, 0.5],
+];
 /** Bob phase per metre walked, and its amplitude in metres. */
 const STRIDE = 4.4;
 const BOB = 0.035;
@@ -264,6 +318,15 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
     flashes: new Map(),
     sparks: [],
     gibs: [],
+    // The rest of a casing's fields are set when it is ejected.
+    casings: Array.from({ length: MAX_CASINGS }, () => ({
+      p: [0, 0, 0],
+      v: [0, 0, 0],
+      life: 0,
+      rest: true,
+      own: false,
+    })) as Casing[],
+    splats: [],
     blasts: [],
     smoke: [],
     motes: new Float32Array(MOTES * 3),
@@ -330,11 +393,27 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
       fx.blasts = fx.blasts.filter(b => b.t < BLAST);
       for (const g of fx.gibs) {
         g.life -= dt;
-        if (!g.rest) {
-          fall(g, dt);
+        if (!g.rest && fall(g, dt, GIB_G, 3, 0.3, 0.5) && g.gore) {
+          g.gore = false;
+          splat(g.p[0], g.floor, g.p[2]);
         }
       }
       fx.gibs = fx.gibs.filter(g => g.life > 0);
+      for (const c of fx.casings) {
+        c.life -= dt;
+        if (c.life > 0 && !c.rest) {
+          c.tilt += c.spin * dt;
+          if (fall(c, dt, 9.8, 1.2, 0.4, 0.6)) {
+            c.spin *= 0.5;
+          }
+          // Lying still, it lies flat.
+          c.tilt *= +!c.rest;
+        }
+      }
+      for (const s of fx.splats) {
+        s.life -= dt;
+      }
+      fx.splats = fx.splats.filter(s => s.life > 0);
       for (const { p, v } of fx.smoke) {
         p.forEach((x, i) => (p[i] = x + v[i] * dt));
         p[1] = Math.min(p[1], lvl?.map.sectors[sectorAt(lvl, p[0], p[2])]?.ceil ?? Infinity);
@@ -368,6 +447,8 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
       lvl = next;
       fx.sparks = [];
       fx.gibs = [];
+      fx.splats = [];
+      fx.casings.forEach(c => (c.life = 0));
       fx.blasts = [];
       fx.smoke = [];
       fresh = true;
@@ -388,6 +469,7 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
         fx.flashes.set(s.id, FLASH);
       }
       const at: Vec3 = [s.x, s.y, s.z];
+      eject(from, at, own);
       const back = from.map((x, i) => x - at[i]);
       const len = Math.hypot(...back);
       // A shot that reached RANGE hit nothing near.
@@ -432,12 +514,16 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
         for (let i = 0; i < n; i++) {
           const a = rand() * TAU;
           const k = 1.5 + rand() * 3.5;
+          const [base, shape] = [0.05 + rand() * 0.08, SHAPES[Math.floor(rand() * SHAPES.length)]];
+          const gore = rand() < 0.25;
           fx.gibs.push({
             p: [x, y + r2() * 0.3, z],
             v: [Math.cos(a) * k, 2 + rand() * 4, Math.sin(a) * k],
             yaw: rand() * TAU,
-            size: 0.05 + rand() * 0.08,
-            c: chunks[Math.floor(rand() * chunks.length)],
+            half: shape.map(m => m * base) as Vec3,
+            size: shape[1] * base,
+            c: gore ? BLOOD : chunks[Math.floor(rand() * chunks.length)],
+            gore,
             life: 2 + rand(),
             floor: lvl?.map.sectors[sectorAt(lvl, x, z)]?.floor ?? y,
             rest: false,
@@ -462,10 +548,16 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
     },
   };
 
-  /** One step of a flying gib: gravity, a bounce off walls, a landing on the floor below. */
-  const fall = (g: Gib, dt: number) => {
-    g.v[1] -= GIB_G * dt;
-    const to = g.p.map((x, i) => x + g.v[i] * dt) as Vec3;
+  /** Where a step ends, so `fall` allocates nothing. */
+  const to: Vec3 = [0, 0, 0];
+  /**
+   * One step of a falling body: gravity `grav`, a bounce off walls, a landing on the floor below.
+   * It bounces off the floor while it lands faster than `hop` (keeping `bounce` of the speed up
+   * and `keep` of the speed along), else it lies still. Says whether it touched the floor.
+   */
+  const fall = (g: Body, dt: number, grav: number, hop: number, bounce: number, keep: number) => {
+    g.v[1] -= grav * dt;
+    g.p.forEach((x, i) => (to[i] = x + g.v[i] * dt));
     if (lvl && blocked(lvl, g.p, to)) {
       g.v[0] *= -0.3;
       g.v[2] *= -0.3;
@@ -477,17 +569,69 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
       to[1] = s.ceil - g.size;
       g.v[1] = Math.min(g.v[1], 0) * 0.3;
     }
-    if (to[1] <= g.floor + g.size) {
+    const hit = to[1] <= g.floor + g.size;
+    if (hit) {
       to[1] = g.floor + g.size;
-      // The first fall bounces a little, the next ones lie still.
-      if (g.v[1] < -3) {
-        g.v = [g.v[0] * 0.5, -g.v[1] * 0.3, g.v[2] * 0.5];
+      if (g.v[1] < -hop) {
+        [g.v[0], g.v[1], g.v[2]] = [g.v[0] * keep, -g.v[1] * bounce, g.v[2] * keep];
       } else {
-        g.v = [0, 0, 0];
+        g.v.fill(0);
         g.rest = true;
       }
     }
-    g.p = to;
+    to.forEach((x, i) => (g.p[i] = x));
+    return hit;
+  };
+  /** A blot at x, z on the floor. */
+  const splat = (x: number, floor: number, z: number) => {
+    fx.splats.push({
+      p: [x, floor + 0.004, z],
+      r: 0.1 + rand() * 0.12,
+      yaw: rand() * TAU,
+      life: 8,
+    });
+    fx.splats.splice(0, fx.splats.length - MAX_SPLATS);
+  };
+  /**
+   * A casing flies out of the gun's port, to the right of the view: `from` is the shooter's eye, `at`
+   * where the shot stopped, which gives the view direction. The own gun may take the slot of the
+   * casing nearest to vanishing; the others' only take a free one, and at most MAX_REMOTE of them.
+   */
+  const eject = (from: Vec3, at: Vec3, own: boolean) => {
+    let [pick, remote] = [fx.casings[0], 0];
+    for (const c of fx.casings) {
+      remote += +(c.life > 0 && !c.own);
+      pick = c.life < pick.life ? c : pick;
+    }
+    if (!own && (pick.life > 0 || remote >= MAX_REMOTE)) {
+      return;
+    }
+    const n = Math.hypot(...at.map((x, i) => x - from[i])) || 1;
+    const d = at.map((x, i) => (x - from[i]) / n) as Vec3;
+    const h = Math.hypot(d[0], d[2]) || 1;
+    const right: Vec3 = [-d[2] / h, 0, d[0] / h];
+    const up = cross(right, d);
+    // The port: at the own gun, down and right of the eye; at the others', at their hand.
+    const port = own ? [0.32, -0.22, 0.62] : [0.3, -0.45, 0.3];
+    const [out, rise, drift] = [0.9 + rand() * 0.8, 1 + rand(), rand() * 0.6 - 0.3];
+    for (let i = 0; i < 3; i++) {
+      pick.p[i] = from[i] + right[i] * port[0] + up[i] * port[1] + d[i] * port[2];
+      pick.v[i] = right[i] * out + up[i] * rise + d[i] * drift;
+    }
+    // Against a wall the port is outside it: eject from the eye, and the wall does the rest.
+    if (lvl && blocked(lvl, from, pick.p)) {
+      from.forEach((x, i) => (pick.p[i] = x));
+    }
+    Object.assign(pick, {
+      yaw: rand() * TAU,
+      tilt: rand() * TAU,
+      spin: (rand() < 0.5 ? -1 : 1) * (15 + rand() * 20),
+      size: own ? 0.01 : 0.006,
+      life: 3 + rand(),
+      floor: lvl?.map.sectors[sectorAt(lvl, pick.p[0], pick.p[2])]?.floor ?? from[1] - EYE,
+      rest: false,
+      own,
+    });
   };
   return fx;
 };

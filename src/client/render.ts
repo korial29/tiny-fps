@@ -3,8 +3,6 @@
 // them to a dim ambient, and each shadowed spot first draws the level and the bodies into its layer
 // of a depth texture array. The scene goes into an offscreen target, then a second, small program
 // (POST) turns it into the picture on the canvas. No DOM beyond the canvas.
-import { PLAYER_H, PLAYER_R } from '../shared/constants';
-import { forward } from '../shared/physics';
 import { MONSTER, TEX } from '../shared/types';
 import type { Bullet, Edge, Item, Level, Monster, PlayerState, Sector } from '../shared/types';
 import { BLAST, fade, glow, lit, puff } from './effects';
@@ -15,7 +13,7 @@ import { STRIDE, basis, dress, place, pushBox } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
-import { SWING, bullet, flyer, follow, pace, walker } from './monsters';
+import { SWING, bullet, flyer, follow, pace, soldier, walker } from './monsters';
 import type { Gait } from './monsters';
 import { LAYERS, SIZE, textures } from './textures';
 
@@ -599,26 +597,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       const dt = Math.min(0.1, now - clock);
       clock = now;
       for (const p of others) {
-        const [fx_, fz] = forward(p.yaw);
-        const hw = PLAYER_R * 0.8;
-        const shoulders = PLAYER_H - 0.35;
-        pushBox(v, [p.x, p.y + shoulders / 2, p.z], [hw, shoulders / 2, hw], p.yaw, [
-          ...rgb(colors.get(p.id) ?? '#888'),
-        ]);
-        const head: Vec3 = [p.x, p.y + PLAYER_H - 0.17, p.z];
-        pushBox(v, head, [0.17, 0.17, 0.17], p.yaw, [0.95, 0.8, 0.65]);
-        pushBox(
-          v,
-          [head[0] + fx_ * 0.17, head[1] + 0.03, head[2] + fz * 0.17],
-          [0.13, 0.05, 0.03],
-          p.yaw,
-          [0.1, 0.1, 0.12],
-        );
-        const hand: Vec3 = [p.x, p.y + 1.25, p.z];
-        const axes = basis(p.yaw, p.pitch);
-        for (const part of [far.barrels, far.body, fx.flashes.has(p.id) ? wide : []]) {
-          place(v, part, hand, axes, [0.36, -0.12, 0.3], 0.8);
-        }
+        const g = follow(gaits, p.id, p.x, p.z, dt);
+        const gun = [far.barrels, far.body, fx.flashes.has(p.id) ? wide : []];
+        soldier(v, p, rgb(colors.get(p.id) ?? '#888'), g.walked, pace(g), gun);
       }
       for (const m of monsters) {
         const g = follow(gaits, m.id, m.x, m.z, dt);

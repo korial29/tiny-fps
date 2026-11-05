@@ -1,9 +1,9 @@
 // Procedural monsters: boxes and one lathe, in the renderer's vertex format. Pure functions of the
 // pose, no state, no DOM. A monster's (x, y, z) is the bottom of its body.
-import { BULLET_R, FLYER_H, FLYER_R, WALKER_H } from '../shared/constants';
-import type { Bullet, Monster } from '../shared/types';
+import { BULLET_R, FLYER_H, FLYER_R, PLAYER_H, WALKER_H } from '../shared/constants';
+import type { Bullet, Monster, PlayerState } from '../shared/types';
 import { lathe } from './gun';
-import { aim, dress, place, pushBox, pushQuad } from './mesh';
+import { aim, basis, dress, place, pushBox, pushQuad } from './mesh';
 import type { Vec3 } from './mesh';
 
 /** Seconds a walker's blow takes. */
@@ -130,7 +130,24 @@ const CONE = piece(
   5,
 );
 
-/** A piece from local `a` to local `b`, `k` wide, `w` times that along the body's right. */
+/** A piece from world point `p` to `q`, `k` wide, `w` times that along the right of `yaw`. */
+const link = (
+  out: number[],
+  src: number[],
+  yaw: number,
+  p: Vec3,
+  q: Vec3,
+  k: number,
+  tint: number[],
+  w = 1,
+) => {
+  const d = q.map((v, i) => v - p[i]);
+  const len = Math.hypot(...d);
+  const axes = aim(d.map(v => v / len) as Vec3, [Math.cos(yaw), 0, -Math.sin(yaw)]);
+  place(out, src, p, axes, [0, 0, 0], [k * w, k, len], 0, tint);
+};
+
+/** The same between two points local to a body (right, up, forward). */
 const bone = (
   out: number[],
   src: number[],
@@ -140,13 +157,7 @@ const bone = (
   k: number,
   tint: number[],
   w = 1,
-) => {
-  const [p, q] = [at(m, ...a), at(m, ...b)];
-  const d = q.map((v, i) => v - p[i]);
-  const len = Math.hypot(...d);
-  const axes = aim(d.map(v => v / len) as Vec3, [Math.cos(m.yaw), 0, -Math.sin(m.yaw)]);
-  place(out, src, p, axes, [0, 0, 0], [k * w, k, len], 0, tint);
-};
+) => link(out, src, m.yaw, at(m, ...a), at(m, ...b), k, tint, w);
 
 /**
  * The joint and the end of a two-part limb hanging from `root` (right, up, forward): the first
@@ -240,6 +251,66 @@ export const walker = (out: number[], m: Monster, walked: number, blow: number, 
       neck[2] + SKULL * 0.45 * Math.sin(LEAN) + 0.18 * Math.cos(LEAN),
     );
     pushBox(out, eye, [glow, glow * 0.7, 0.02], m.yaw, eyes(m.chase), -2);
+  }
+};
+
+/** The elbow of a two-part arm from shoulder `s` to hand `h`, bent toward `bend` (a direction). */
+const elbow = (s: Vec3, h: Vec3, l1: number, l2: number, bend: Vec3): Vec3 => {
+  const d = h.map((v, i) => v - s[i]);
+  const reach = Math.hypot(...d);
+  const n = d.map(v => v / reach) as Vec3;
+  const len = Math.min(reach, l1 + l2 - 0.01);
+  const a = (l1 * l1 - l2 * l2 + len * len) / (2 * len);
+  const dot = n[0] * bend[0] + n[1] * bend[1] + n[2] * bend[2];
+  const perp = walk(bend, [n, -dot]);
+  return walk(s, [n, a], [perp, Math.sqrt(Math.max(0, l1 * l1 - a * a)) / Math.hypot(...perp)]);
+};
+
+/**
+ * Appends another player as a soldier: `color` (r, g, b) for the body, darker for the legs, the
+ * helmet and the gloves, a visor that glows in it. The legs stride with `walked` and `pace` as a
+ * walker's do, both arms reach the `gun` parts (gun-space vertices, drawn forward at the chest and
+ * aimed with the player's pitch).
+ */
+export const soldier = (
+  out: number[],
+  p: PlayerState,
+  color: number[],
+  walked: number,
+  pace: number,
+  gun: number[][],
+) => {
+  const ph = walked * GAIT;
+  const hy = HIP - 0.08 * Math.sin(ph) ** 2 * pace;
+  const [dark, boot] = [color.map(v => v * 0.45), [0.1, 0.1, 0.12]];
+  const [pelvis, neck]: Vec3[] = [
+    [0, hy, 0],
+    [0, hy + 0.55, 0.02],
+  ];
+  bone(out, TORSO, p, pelvis, neck, 1, color, 1.25);
+  bone(out, HEAD, p, neck, [0, PLAYER_H, 0.02], 1.1, dark);
+  const visor = color.map(v => 0.35 + 0.65 * v);
+  pushBox(out, at(p, 0, neck[1] + 0.17, 0.17), [0.11, 0.035, 0.03], p.yaw, visor, -2);
+  pushBox(out, at(p, 0, hy + 0.4, -0.2), [0.15, 0.2, 0.07], p.yaw, dark);
+  const [right, up, fwd] = basis(p.yaw, p.pitch);
+  const chest = at(p, 0, 1.3, 0);
+  const grip = walk(chest, [right, 0.2], [up, -0.1], [fwd, 0.3]);
+  for (const part of gun) {
+    place(out, part, chest, [right, up, fwd], [0.2, -0.1, 0.3], 0.8);
+  }
+  for (const side of [-1, 1]) {
+    const hip: Vec3 = [side * 0.12, hy, 0];
+    const [knee, ankle] = leg(hip, ph + (side > 0 ? Math.PI : 0), pace);
+    bone(out, LIMB, p, hip, knee, 0.1, dark);
+    bone(out, LIMB, p, knee, ankle, 0.08, dark);
+    pushBox(out, at(p, ankle[0], ankle[1] + 0.03, ankle[2] + 0.05), [0.06, 0.03, 0.1], p.yaw, boot);
+    // The right hand holds the grip, the left the barrel shroud.
+    const hand = walk(grip, [up, -0.09], [fwd, side > 0 ? 0.02 : 0.26]);
+    const shoulder = at(p, side * 0.27, hy + 0.5, 0.02);
+    const bend = walk([0, -1, 0], [right, side * 0.5]);
+    const mid = elbow(shoulder, hand, 0.34, 0.36, bend);
+    link(out, LIMB, p.yaw, shoulder, mid, 0.07, color);
+    link(out, FORE, p.yaw, mid, hand, 0.06, dark);
   }
 };
 

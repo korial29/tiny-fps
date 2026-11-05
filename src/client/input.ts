@@ -15,7 +15,15 @@ const BITS: Record<string, number> = {
   KeyD: KEY.RIGHT,
   ArrowRight: KEY.RIGHT,
   Space: KEY.JUMP,
+  ShiftLeft: KEY.SPRINT,
+  ShiftRight: KEY.SPRINT,
+  KeyE: KEY.DASH,
+  // Not Ctrl: Ctrl+W closes the tab and the browser keeps it.
+  KeyC: KEY.CROUCH,
 };
+
+/** The mouse button that dashes, like KeyE: the right one. */
+const DASH_BUTTON = 2;
 
 /** The KEY bit of a KeyboardEvent.code, 0 for a key the game ignores. */
 export const keyBit = (code: string): number => BITS[code] ?? 0;
@@ -35,8 +43,8 @@ export interface Controls {
 }
 
 /**
- * Click the canvas to lock the pointer; while locked the mouse looks, the keys move and M calls
- * `onMute`.
+ * Click the canvas to lock the pointer; while locked the mouse looks, the keys move (WASD, Shift
+ * sprints, Space jumps, E or the right button dashes, C crouches) and M calls `onMute`.
  */
 export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Controls => {
   const ac = new AbortController();
@@ -73,6 +81,19 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   on(document, 'keyup', (e: KeyboardEvent) => {
     c.keys &= ~keyBit(e.code);
   });
+  on(document, 'mousedown', (e: MouseEvent) => {
+    if (e.button === DASH_BUTTON && c.locked()) {
+      c.keys |= KEY.DASH;
+      e.preventDefault();
+    }
+  });
+  on(document, 'mouseup', (e: MouseEvent) => {
+    if (e.button === DASH_BUTTON) {
+      c.keys &= ~KEY.DASH;
+    }
+  });
+  // No menu on the right button while playing.
+  on(document, 'contextmenu', (e: MouseEvent) => c.locked() && e.preventDefault());
   const release = () => {
     c.keys = 0;
   };

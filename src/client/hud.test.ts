@@ -22,10 +22,27 @@ describe('createHud', () => {
       expect(text).toContain('TINY FPS');
       expect(text).toContain('Rooftops');
       expect(text).toContain('Click to play');
-      for (const control of ['Mouse', 'WASD / ZQSD', 'Space', 'M']) {
+      for (const control of [
+        'Mouse',
+        'WASD / ZQSD',
+        'Shift',
+        'Space',
+        'E / right click',
+        'C',
+        'M',
+      ]) {
         expect(text).toContain(control);
       }
       expect(q('aside h6').textContent).toBe('TINY FPS');
+    });
+
+    it('says what each move key does: sprint, jump again for the double jump, dash, slide', () => {
+      hud.title('Click to play', 'Rooftops');
+      const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
+      expect(rows).toContain('Shiftsprint');
+      expect(rows).toContain('Spacejump, again in the air');
+      expect(rows).toContain('E / right clickdash');
+      expect(rows).toContain('Ccrouch, slide when fast');
     });
 
     it('lists no way to fire', () => {

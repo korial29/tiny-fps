@@ -15,6 +15,15 @@ describe('keyBit', () => {
     expect(keyBit('Space')).toBe(KEY.JUMP);
     expect(keyBit('KeyQ')).toBe(0);
   });
+
+  it('maps Shift to the sprint, E to the dash and C to the crouch, and not Ctrl', () => {
+    expect(keyBit('ShiftLeft')).toBe(KEY.SPRINT);
+    expect(keyBit('ShiftRight')).toBe(KEY.SPRINT);
+    expect(keyBit('KeyE')).toBe(KEY.DASH);
+    expect(keyBit('KeyC')).toBe(KEY.CROUCH);
+    // Ctrl+W closes the tab: the game must not ask for it.
+    expect(keyBit('ControlLeft')).toBe(0);
+  });
 });
 
 describe('createInput', () => {
@@ -84,6 +93,45 @@ describe('createInput', () => {
     expect(ctl.keys).toBe(KEY.FORWARD | KEY.JUMP);
     key('keyup', 'KeyW');
     expect(ctl.keys).toBe(KEY.JUMP);
+  });
+
+  it('sprints on Shift, dashes on E and crouches on C, together with the move keys', () => {
+    make();
+    lock(true);
+    for (const code of ['KeyW', 'ShiftLeft', 'KeyE', 'KeyC']) {
+      key('keydown', code);
+    }
+    expect(ctl.keys).toBe(KEY.FORWARD | KEY.SPRINT | KEY.DASH | KEY.CROUCH);
+    key('keyup', 'ShiftLeft');
+    key('keyup', 'KeyE');
+    key('keyup', 'KeyC');
+    expect(ctl.keys).toBe(KEY.FORWARD);
+  });
+
+  it('dashes on the right mouse button under the lock, and has no menu there', () => {
+    make();
+    const down = (button: number) =>
+      document.dispatchEvent(new MouseEvent('mousedown', { button, cancelable: true }));
+    const up = (button: number) => document.dispatchEvent(new MouseEvent('mouseup', { button }));
+    const menu = () => {
+      const e = new MouseEvent('contextmenu', { cancelable: true });
+      document.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    // Not under the lock: nothing, and the page keeps its menu.
+    down(2);
+    expect(ctl.keys).toBe(0);
+    expect(menu()).toBe(false);
+    lock(true);
+    down(0);
+    expect(ctl.keys).toBe(0);
+    down(2);
+    expect(ctl.keys).toBe(KEY.DASH);
+    expect(menu()).toBe(true);
+    up(0);
+    expect(ctl.keys).toBe(KEY.DASH);
+    up(2);
+    expect(ctl.keys).toBe(0);
   });
 
   it('calls onMute once per press of M, by code, under the lock only', () => {

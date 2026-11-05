@@ -1,7 +1,13 @@
 // Web Audio: the sounds of sfx.ts placed in stereo around the listener, and the music loop.
 import type { Vec3 } from './mesh';
-import { LAYERS, RATE, music, render } from './sfx';
+import { LAYERS, LOOPED, RATE, music, render, seam } from './sfx';
 import type { Voice } from './sfx';
+
+/** A sound that plays on and on, started on its first set. */
+export interface Loop {
+  /** Volume and speed (pitch) to move to, eased over a fraction of a second: 0 is silence. */
+  set(volume: number, rate: number): void;
+}
 
 export interface Audio {
   /**
@@ -13,9 +19,12 @@ export interface Audio {
   listen(eye: Vec3, yaw: number): void;
   /**
    * Plays the sound `id` (an index into the layers). With `at`, panned left or right by its direction from the listener and
-   * fainter with distance; without, centred (the own player's sounds). `gain` scales the volume.
+   * fainter with distance; without, centred (the own player's sounds). `gain` scales the volume,
+   * `rate` the speed and so the pitch.
    */
-  play(id: number, at?: Vec3, gain?: number): void;
+  play(id: number, at?: Vec3, gain?: number, rate?: number): void;
+  /** The sound `id` (one of LOOPED) as a loop, silent until its first set; the own player's, centred. */
+  loop(id: number): Loop;
   /** Mutes or unmutes everything, music included. */
   mute(on: boolean): void;
   readonly muted: boolean;
@@ -37,6 +46,7 @@ const silent = (): Audio => {
     unlock: () => {},
     listen: () => {},
     play: () => {},
+    loop: () => ({ set: () => {} }),
     mute: on => {
       muted = on;
     },
@@ -86,7 +96,10 @@ export const createAudio = (layers: Voice[][] = LAYERS): Audio => {
       ctx.resume().catch(() => {});
       if (!started) {
         started = true;
-        layers.forEach((_, id) => (bufs[id] = buffer(render(id, layers))));
+        layers.forEach((_, id) => {
+          const s = render(id, layers);
+          bufs[id] = buffer(LOOPED.includes(id) ? seam(s) : s);
+        });
         const m = source(buffer(music()));
         m.loop = true;
         m.connect(bed);
@@ -96,7 +109,7 @@ export const createAudio = (layers: Voice[][] = LAYERS): Audio => {
     listen(at, y) {
       [eye, yaw] = [at, y];
     },
-    play(id, at, gain = 1) {
+    play(id, at, gain = 1, rate = 1) {
       let pan = 0;
       let vol = gain;
       if (at) {
@@ -119,6 +132,7 @@ export const createAudio = (layers: Voice[][] = LAYERS): Audio => {
         voices.delete(q);
       }
       const src = source(b);
+      src.playbackRate.value = rate;
       const p = ctx.createStereoPanner();
       p.pan.value = pan;
       src.connect(p).connect(out(master, vol));
@@ -126,6 +140,24 @@ export const createAudio = (layers: Voice[][] = LAYERS): Audio => {
       voices.add(v);
       src.onended = () => voices.delete(v);
       src.start();
+    },
+    loop(id) {
+      let src: AudioBufferSourceNode | undefined;
+      let g: GainNode;
+      return {
+        set(volume, rate) {
+          if (!src && bufs[id]) {
+            src = source(bufs[id]);
+            src.loop = true;
+            src.connect((g = out(master, 0)));
+            src.start();
+          }
+          if (src) {
+            g.gain.setTargetAtTime(volume, ctx.currentTime, 0.08);
+            src.playbackRate.setTargetAtTime(rate, ctx.currentTime, 0.08);
+          }
+        },
+      };
     },
     mute(on) {
       muted = on;

@@ -36,7 +36,7 @@ export const skyline = ({ brushes }: WorldDef): Brush[] => {
       const [x, z] = [cx + d * Math.cos(a), cz + d * Math.sin(a)];
       const [w, e] = [5 + h(3) * 8, 5 + h(4) * 8];
       const top = ring ? -5 + h(5) ** 2 * 90 : -20 + h(5) * 30;
-      const side = h(6) < 0.75 ? TEX.GLASS : TEX.CONCRETE;
+      const side = [TEX.GLASS, TEX.STEEL, TEX.CONCRETE][+(h(6) > 0.7) + +(h(6) > 0.85)];
       const tower: Brush = {
         min: [x - w, FOOT, z - e],
         max: [x + w, top, z + e],

@@ -22,7 +22,7 @@ const WALL_THICK = 3;
 const BESIDE = 0.4;
 /** How far the red stands off the surface, how wide a lip band is, and the stripe's height range above the foot of a wall. */
 const OFF = 0.012;
-const BAND = 0.14;
+const BAND = 0.2;
 const HAND: [number, number] = [1.2, 1.45];
 
 /** Unlit red (the shader brightens an unlit colour by 1.4, so these bloom), the faint stripe, and the lit red of a pipe. */

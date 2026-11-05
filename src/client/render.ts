@@ -115,8 +115,10 @@ const RELIEF = 0.06;
 // is lit. A: position and range, B: direction and cone (-9 on a point: no cone), K: colour and
 // shadow slot (-1: none; slot k is layer k + 1), M: the slots' matrices. Z < 0 is the depth pass:
 // no colour. Y > 0 is the sky, from the colours in H[3] (zenith) and H[4] (horizon): a gradient, a
-// haze band, the sun's disc and glow, bright enough to bloom. On a texture C.w is 2 * the brush's
-// tint index + its light (see level); G is the palette. F: fog colour and density.
+// haze band, the sun's disc and glow, bright enough to bloom (K0, the sky along a direction). The
+// glass layer adds K0 along the reflected view, strong at a grazing angle (Fresnel), after the
+// lighting. On a texture C.w is 2 * the brush's tint index + its light (see level); G is the
+// palette. F: fog colour and density.
 const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T,Z,Y;uniform int Q;

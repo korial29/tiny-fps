@@ -2,12 +2,6 @@
 // Deterministic for a given state and input, so the client's replay of unacked inputs lands where
 // the host does.
 import {
-  FIRE_EVERY,
-  FIRE_SLOW,
-  FLYER_H,
-  FLYER_HOVER,
-  FLYER_R,
-  FLYER_SPEED,
   GRAVITY,
   JUMP_SPEED,
   MAX_PITCH,
@@ -23,8 +17,6 @@ import type { Edge, Input, Level, PlayerState } from './types';
 
 const DT = 1 / TICK_HZ;
 type Pos = Pick<PlayerState, 'x' | 'y' | 'z'>;
-/** What walk() moves: a player, or a walker with the same feet, speed and floor contact. */
-type Walker = Pos & Pick<PlayerState, 'vy' | 'ground'>;
 export const TAU = Math.PI * 2;
 /** Overlaps smaller than this are rounding noise, not contact. */
 const EPS = 1e-6;
@@ -46,13 +38,13 @@ const f32 = Math.fround;
 const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v, lo), hi);
 
 /**
- * Whether the edge stops a body of height h whose feet are at y: a solid wall, a barred sector on
- * the far side, a floor there more than `step` above the feet, or an opening (the lower ceiling
- * minus the higher floor) too short for the body or under the head. SKIN keeps rounding from
- * flipping the answer for a player resting on a step or against a ceiling.
+ * Whether the edge stops a body of height h whose feet are at y: a solid wall, a floor on the far
+ * side more than `step` above the feet, or an opening (the lower ceiling minus the higher floor)
+ * too short for the body or under the head. SKIN keeps rounding from flipping the answer for a
+ * player resting on a step or against a ceiling.
  */
-const shut = ({ map, barred }: Level, e: Edge, y: number, h: number, step: number): boolean => {
-  if (e.back < 0 || barred.has(e.back)) {
+const shut = ({ map }: Level, e: Edge, y: number, h: number, step: number): boolean => {
+  if (e.back < 0) {
     return true;
   }
   const f = map.sectors[e.front];
@@ -155,9 +147,9 @@ const span = (
  * collisions of the cylinder (PLAYER_R, PLAYER_H) with the sectors of the level: it slides along
  * shut edges (see shut and push), stands on the highest floor under the circle (a step up to
  * STEP_H is climbed at once, a higher one needs a jump, a ledge is a fall), and bumps its head on
- * the lowest ceiling. Players and walkers share it, in place.
+ * the lowest ceiling, in place.
  */
-export const walk = (p: Walker, dx: number, dz: number, jump: boolean, lvl: Level): void => {
+export const walk = (p: PlayerState, dx: number, dz: number, jump: boolean, lvl: Level): void => {
   p.x += dx;
   p.z += dz;
   push(p, lvl, PLAYER_R, PLAYER_H, STEP_H);
@@ -196,50 +188,19 @@ export const walk = (p: Walker, dx: number, dz: number, jump: boolean, lvl: Leve
 };
 
 /**
- * Moves a flyer (underside at p.y, radius FLYER_R, height FLYER_H) by (dx, dy, dz): sideways it is
- * stopped by solid walls and by openings too small for it, and it never steps (it flies over
- * steps and pits); then y is held between FLYER_HOVER above the highest floor under it and the
- * lowest ceiling minus FLYER_H, the ceiling winning in a low room. Below the hover height it
- * rises at FLYER_SPEED, so crossing from a pit to a ledge is not a jump; the floor itself is
- * never entered.
- */
-export const fly = (p: Pos, dx: number, dy: number, dz: number, lvl: Level): void => {
-  p.x += dx;
-  p.z += dz;
-  push(p, lvl, FLYER_R, FLYER_H, 0);
-  const [floor, ceil] = span(lvl, p.x, p.z, p.y, FLYER_R, FLYER_H, 0);
-  const hover = Math.min(floor + FLYER_HOVER, ceil - FLYER_H);
-  const low = Math.max(floor, Math.min(hover, p.y + FLYER_SPEED * DT));
-  p.y = Math.min(Math.max(p.y + dy, low), ceil - FLYER_H);
-  p.x = f32(p.x);
-  p.y = f32(p.y);
-  p.z = f32(p.z);
-};
-
-/**
  * Applies one input for 1 / TICK_HZ s, in place: yaw and pitch from the input (pitch clamped to
  * MAX_PITCH), RUN_SPEED along the held keys (diagonals not faster), then walk().
- * The chaingun: `cool` counts down one per step, RUN_SPEED is scaled by FIRE_SLOW while KEY.FIRE
- * is held, and the step that finds it held with `cool` at 0 re-arms it to FIRE_EVERY and returns
- * true: the caller resolves a shot (one every FIRE_EVERY steps, the first at once).
  */
-export const move = (p: PlayerState, i: Input, lvl: Level): boolean => {
-  const fire = (i.keys & KEY.FIRE) !== 0;
-  p.cool = Math.max(0, p.cool - 1);
+export const move = (p: PlayerState, i: Input, lvl: Level): void => {
   p.yaw = norm(i.yaw);
   p.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, i.pitch));
 
   const f = (i.keys & KEY.FORWARD ? 1 : 0) - (i.keys & KEY.BACK ? 1 : 0);
   const s = (i.keys & KEY.RIGHT ? 1 : 0) - (i.keys & KEY.LEFT ? 1 : 0);
-  const d = (RUN_SPEED * DT * (fire ? FIRE_SLOW : 1)) / (Math.hypot(f, s) || 1);
+  const d = (RUN_SPEED * DT) / (Math.hypot(f, s) || 1);
   const [fx, fz] = forward(p.yaw);
 
   walk(p, (fx * f - fz * s) * d, (fz * f + fx * s) * d, (i.keys & KEY.JUMP) !== 0, lvl);
-  if (fire && !p.cool) {
-    p.cool = FIRE_EVERY;
-    return true;
-  }
-  return false;
 };
 
 /** A player standing on the floor at spawn point n of the map (modulo the count). */
@@ -256,6 +217,5 @@ export const spawn = (id: number, lvl: Level, n: number): PlayerState => {
     yaw: norm(yaw),
     pitch: 0,
     ground: true,
-    cool: 0,
   };
 };

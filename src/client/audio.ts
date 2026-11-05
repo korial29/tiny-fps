@@ -1,8 +1,7 @@
 // Web Audio: the sounds of sfx.ts placed in stereo around the listener, and the music loop.
-import { EVENT } from '../shared/types';
-import type { GameEvent } from '../shared/types';
 import type { Vec3 } from './mesh';
-import { RATE, SOUND, music, render } from './sfx';
+import { LAYERS, RATE, music, render } from './sfx';
+import type { Voice } from './sfx';
 
 export interface Audio {
   /**
@@ -13,7 +12,7 @@ export interface Audio {
   /** Where the listener is and looks, each frame (yaw as a player's: 0 looks toward -z). */
   listen(eye: Vec3, yaw: number): void;
   /**
-   * Plays the SOUND `id`. With `at`, panned left or right by its direction from the listener and
+   * Plays the sound `id` (an index into the layers). With `at`, panned left or right by its direction from the listener and
    * fainter with distance; without, centred (the own player's sounds). `gain` scales the volume.
    */
   play(id: number, at?: Vec3, gain?: number): void;
@@ -48,7 +47,7 @@ const silent = (): Audio => {
   };
 };
 
-export const createAudio = (): Audio => {
+export const createAudio = (layers: Voice[][] = LAYERS): Audio => {
   let ctx: AudioContext;
   try {
     ctx = new AudioContext();
@@ -63,8 +62,9 @@ export const createAudio = (): Audio => {
   };
   const master = out(ctx.destination);
   const bed = out(master, MUSIC);
-  /** Indexed by SOUND id; empty until unlock. */
+  /** Indexed by sound id; empty until unlock. */
   const bufs: AudioBuffer[] = [];
+  let started = false;
   const voices = new Set<{ vol: number; src: AudioBufferSourceNode }>();
   let eye: Vec3 = [0, 0, 0];
   let yaw = 0;
@@ -84,10 +84,9 @@ export const createAudio = (): Audio => {
   return {
     unlock() {
       ctx.resume().catch(() => {});
-      if (!bufs.length) {
-        for (const id of Object.values(SOUND)) {
-          bufs[id] = buffer(render(id));
-        }
+      if (!started) {
+        started = true;
+        layers.forEach((_, id) => (bufs[id] = buffer(render(id, layers))));
         const m = source(buffer(music()));
         m.loop = true;
         m.connect(bed);
@@ -136,54 +135,6 @@ export const createAudio = (): Audio => {
       return muted;
     },
     destroy: () => void ctx.close().catch(() => {}),
-  };
-};
-
-/** Plays the sound of a host event: where it happened, centred for the own player's hurt. */
-export const hear = (a: Audio, { type, id, x, y, z }: GameEvent, you: number) => {
-  const at: Vec3 = [x, y, z];
-  if (type == EVENT.DIE) {
-    a.play(SOUND.BOOM, at);
-  } else if (type == EVENT.BOOM) {
-    a.play(SOUND.BURST, at);
-  } else if (type == EVENT.HURT) {
-    a.play(SOUND.HIT, id == you ? undefined : at);
-  }
-};
-
-/** Returns a function that plays CLOCK once a second while called with `on`; `now` in ms. */
-export const createClock = (a: Audio) => {
-  let next = 0;
-  return (on: boolean, now: number) => {
-    if (on && now >= next) {
-      next = now + 1000;
-      a.play(SOUND.CLOCK);
-    }
-  };
-};
-
-/** The heart beats at this health or below, while alive. */
-export const LOW_HP = 3;
-
-/**
- * Returns a function called each frame with the own health (0 when dead) and `now` in ms. At 1 to
- * LOW_HP health it plays HEART, every 0.8 s, and at 1 every 0.5 s and louder; the first beat
- * comes the moment health gets low. Returns the beat for the screen: 1 at a thump, fading to 0 by
- * the next, and 0 when the health is not low.
- */
-export const createHeart = (a: Audio) => {
-  let beat = -Infinity;
-  return (hp: number, now: number) => {
-    if (hp < 1 || hp > LOW_HP) {
-      beat = -Infinity;
-      return 0;
-    }
-    const gap = hp > 1 ? 800 : 500;
-    if (now - beat >= gap) {
-      beat = now;
-      a.play(SOUND.HEART, undefined, hp > 1 ? 0.6 : 1);
-    }
-    return 1 - (now - beat) / gap;
   };
 };
 

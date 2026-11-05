@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   EYE,
-  FIRE_EVERY,
-  FIRE_SLOW,
   GRAVITY,
   JUMP_SPEED,
   MAX_PITCH,
@@ -11,14 +9,14 @@ import {
   RUN_SPEED,
   TICK_HZ,
 } from './constants';
-import { bar, compile, sectorAt } from './level';
+import { compile, sectorAt } from './level';
 import { HALL } from './map';
-import { fly, forward, move, spawn } from './physics';
-import { ITEM, KEY, PHASE, TEX } from './types';
+import { forward, move, spawn } from './physics';
+import { KEY, TEX } from './types';
 import type { Input, Level, MapDef, PlayerState, Sector } from './types';
 
 const lvl = compile(HALL);
-const { FORWARD, BACK, LEFT, RIGHT, JUMP, FIRE } = KEY;
+const { FORWARD, BACK, LEFT, RIGHT, JUMP } = KEY;
 
 // Yaws: forward(yaw) = (-sin, -cos), so these face -z, +x, +z and -x.
 const NORTH = 0;
@@ -36,7 +34,6 @@ const at = (x: number, z: number, level: Level = lvl): PlayerState => ({
   yaw: 0,
   pitch: 0,
   ground: true,
-  cool: 0,
 });
 
 /** Runs n steps of the same keys; `each` sees the state after every step. */
@@ -517,7 +514,7 @@ describe('spawn', () => {
   it('stands on the floor of its sector at the point, facing its yaw, modulo the count', () => {
     const [x, z, yaw] = HALL.spawns[1];
     const p = spawn(7, lvl, 1);
-    expect(p).toEqual({ id: 7, x, y: 1, z, vy: 0, yaw, pitch: 0, ground: true, cool: 0 });
+    expect(p).toEqual({ id: 7, x, y: 1, z, vy: 0, yaw, pitch: 0, ground: true });
     expect(spawn(7, lvl, 1 + HALL.spawns.length)).toEqual(p);
     expect(spawn(7, lvl, -1)).toEqual(spawn(7, lvl, HALL.spawns.length - 1));
   });
@@ -540,141 +537,5 @@ describe('spawn', () => {
 
   it('keeps the eye inside the walls', () => {
     expect(EYE).toBeLessThan(PLAYER_H);
-  });
-});
-
-describe('chaingun', () => {
-  const step = (p: PlayerState, keys: number) =>
-    move(p, { seq: 0, keys, yaw: NORTH, pitch: 0 }, lvl);
-
-  it('fires on the first step, then every FIRE_EVERY steps while the trigger is held', () => {
-    const p = at(8, 8);
-    const fired: number[] = [];
-    for (let k = 0; k < 4 * FIRE_EVERY + 1; k++) {
-      if (step(p, FIRE)) {
-        fired.push(k);
-      }
-    }
-    expect(fired).toEqual([0, 1, 2, 3, 4].map(n => n * FIRE_EVERY));
-  });
-
-  it('counts the cooldown down from FIRE_EVERY, and never below 0', () => {
-    const p = at(8, 8);
-    step(p, FIRE);
-    expect(p.cool).toBe(FIRE_EVERY);
-    step(p, 0);
-    expect(p.cool).toBe(FIRE_EVERY - 1);
-    for (let k = 0; k < 2 * FIRE_EVERY; k++) {
-      step(p, 0);
-    }
-    expect(p.cool).toBe(0);
-  });
-
-  it('does not fire without the trigger, and a released trigger keeps the cooldown', () => {
-    const p = at(8, 8);
-    expect(step(p, FORWARD)).toBe(false);
-    expect(step(p, FIRE)).toBe(true);
-    // Tapping again inside the cooldown does not fire, after it does.
-    for (let k = 1; k < FIRE_EVERY; k++) {
-      expect(step(p, k % 2 ? 0 : FIRE)).toBe(false);
-    }
-    expect(step(p, FIRE)).toBe(true);
-  });
-
-  it('slows the run down by FIRE_SLOW while the trigger is held', () => {
-    const [a, b] = [at(4, 8), at(4, 8)];
-    run(a, FORWARD, 10, EAST);
-    run(b, FORWARD | FIRE, 10, EAST);
-    expect(b.x - 4).toBeCloseTo((a.x - 4) * FIRE_SLOW, 4);
-    // Diagonals stay no faster.
-    const c = at(4, 8);
-    run(c, FORWARD | RIGHT | FIRE, 10, EAST);
-    expect(Math.hypot(c.x - 4, c.z - 8)).toBeCloseTo((RUN_SPEED / TICK_HZ) * 10 * FIRE_SLOW, 4);
-  });
-});
-
-describe('barred sectors', () => {
-  const room = (x0: number, x1: number): [number, number][] => [
-    [x0, 0],
-    [x1, 0],
-    [x1, 10],
-    [x0, 10],
-  ];
-  /** Two 10 m rooms side by side, joined along their whole wall. */
-  const twin = (over: Partial<MapDef>): Level =>
-    compile({
-      sectors: [sector(room(0, 10), 0), sector(room(10, 20), 0)],
-      spawns: [[5, 5, 0]],
-      ...over,
-    });
-  const RED = 1 << ITEM.KEY_RED;
-  const stand = (level: Level, x: number): PlayerState => ({ ...at(x, 5, level), y: 0 });
-
-  it('stops a walker at the edge of a gate until its key is held', () => {
-    const gate = twin({ gates: [{ sector: 1, key: ITEM.KEY_RED }] });
-    const p = stand(gate, 5);
-    run(p, FORWARD, 100, EAST, undefined, gate);
-    expect([p.x, p.z]).toEqual([Math.fround(10 - PLAYER_R), 5]);
-    // The same run once the team holds the key goes through.
-    bar(gate, RED, PHASE.HUNT);
-    run(p, FORWARD, 100, EAST, undefined, gate);
-    expect(p.x).toBeGreaterThan(13);
-    // A key of another colour opens nothing.
-    const other = twin({ gates: [{ sector: 1, key: ITEM.KEY_BLUE }] });
-    bar(other, RED, PHASE.HUNT);
-    const q = stand(other, 5);
-    run(q, FORWARD, 100, EAST, undefined, other);
-    expect(q.x).toBeCloseTo(10 - PLAYER_R);
-  });
-
-  it('slides along the wall of a gate', () => {
-    const gate = twin({ gates: [{ sector: 1, key: ITEM.KEY_RED }] });
-    const p = stand(gate, 5);
-    // Diagonally into the gate: x stops, z keeps moving.
-    run(p, FORWARD, 80, EAST - 0.5, undefined, gate);
-    expect(p.x).toBeCloseTo(10 - PLAYER_R);
-    expect(p.z).toBeGreaterThan(8);
-  });
-
-  it('keeps everybody out of the exit until RETURN, but lets a player in it walk out', () => {
-    const exit = twin({ exit: 0 });
-    expect(exit.barred).toEqual(new Set([0]));
-    const p = stand(exit, 5);
-    // Standing in the exit it moves freely, and walks out into the next room.
-    run(p, FORWARD, 30, WEST, undefined, exit);
-    expect(p.x).toBeCloseTo(5 - 3);
-    run(p, FORWARD, 150, EAST, undefined, exit);
-    expect(p.x).toBeGreaterThan(14);
-    // Back at the exit it is shut, from the room beside it.
-    run(p, FORWARD, 100, WEST, undefined, exit);
-    expect(p.x).toBeCloseTo(10 + PLAYER_R);
-    bar(exit, 0, PHASE.RETURN);
-    run(p, FORWARD, 100, WEST, undefined, exit);
-    expect(p.x).toBeLessThan(5);
-  });
-
-  it('keeps a flyer out as well', () => {
-    const gate = twin({ gates: [{ sector: 1, key: ITEM.KEY_RED }] });
-    const f = { x: 5, y: 1.2, z: 5 };
-    for (let k = 0; k < 100; k++) {
-      fly(f, 0.05, 0, 0, gate);
-    }
-    expect(f.x).toBeCloseTo(10 - 0.45);
-    bar(gate, RED, PHASE.HUNT);
-    for (let k = 0; k < 100; k++) {
-      fly(f, 0.05, 0, 0, gate);
-    }
-    expect(f.x).toBeGreaterThan(14);
-  });
-
-  it('does not count the floor behind a gate: no step up onto it', () => {
-    // Behind the gate the floor is a high step: a barred gate must not lift the player either.
-    const gate = twin({
-      sectors: [sector(room(0, 10), 0), sector(room(10, 20), 0.3)],
-      gates: [{ sector: 1, key: ITEM.KEY_RED }],
-    });
-    const p = stand(gate, 9.5);
-    run(p, 0, 5, EAST, undefined, gate);
-    expect(p.y).toBe(0);
   });
 });

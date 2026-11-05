@@ -1,4 +1,4 @@
-import { ITEM, MONSTER, TEX } from './types';
+import { TEX } from './types';
 import type { MapDef, Sector } from './types';
 
 const sector = (
@@ -11,8 +11,7 @@ const sector = (
 
 /**
  * The first sector map, a test bed for heights: a start room, a low corridor, a tall hall around a
- * lava pit, stairs up to a balcony. Each spot is reachable on foot; the pit is a 1 m drop. The goal
- * is on the balcony, the exit is the start room, and a health pack lies in the hall.
+ * lava pit, stairs up to a balcony. Each spot is reachable on foot; the pit is a 1 m drop.
  */
 export const HALL: MapDef = {
   sectors: [
@@ -166,19 +165,65 @@ export const HALL: MapDef = {
     [8, 2, Math.PI * 1.5],
     [8, 14, Math.PI * 1.5],
   ],
-  // Around the pit, on the balcony and over the pit; none in the start room or the corridor, so
-  // nobody is jumped at spawn.
-  monsters: [
-    [24, 2, Math.PI * 1.2, MONSTER.WALKER],
-    [33, 3, Math.PI * 0.75, MONSTER.WALKER],
-    [33, 8, Math.PI * 0.5, MONSTER.WALKER],
-    [24, 14, Math.PI * 1.8, MONSTER.WALKER],
-    [30, 23, 0, MONSTER.WALKER],
-    [28, 8, 0, MONSTER.FLYER],
-    [34, 13, Math.PI * 0.3, MONSTER.FLYER],
-    [34, 22, Math.PI * 0.5, MONSTER.FLYER],
+};
+
+/** Grid lines of ROOF, metres: every feature below starts and ends on one, so the cells join exactly. */
+const GRID_X = [0, 1.2, 7, 9, 14, 17, 23, 26, 27, 31, 38.8, 40];
+const GRID_Z = [0, 1.2, 8, 9, 10, 11, 16, 18, 24, 26, 38.8, 40];
+/** A very high ceiling: the sky, until the sector walls go (step 2). */
+const SKY = 120;
+/** What ROOF is made of, painted in order: x0, z0, x1, z1, floor height, floor texture. */
+const PAINT: [number, number, number, number, number, number][] = [
+  // The parapet, a 1 m ledge round the edge that a jump reaches, and the deck inside it.
+  [0, 0, 40, 40, 1, TEX.STONE],
+  [1.2, 1.2, 38.8, 38.8, 0, TEX.TILE],
+  // A platform 1.6 m up, with four steps of 0.4 m up to it.
+  [14, 1.2, 26, 8, 1.6, TEX.TILE],
+  [17, 8, 23, 9, 1.2, TEX.STONE],
+  [17, 9, 23, 10, 0.8, TEX.STONE],
+  [17, 10, 23, 11, 0.4, TEX.STONE],
+  // A crate a jump climbs, and a block it does not.
+  [7, 16, 9, 18, 1, TEX.WOOD],
+  [27, 24, 31, 26, 2, TEX.METAL],
+];
+
+/**
+ * The first rooftop, for the capture-the-flag game: a flat 40 x 40 m deck in the open, a 1 m
+ * parapet round it, a crate, a block and a platform with steps. Built as a grid of cells, one
+ * sector each: neighbours at one height are open to each other, and the edge is solid wall.
+ */
+export const ROOF: MapDef = {
+  name: 'Rooftops',
+  // A bright haze: the sky is the clear colour.
+  fog: [0.8, 0.88, 1, 0.02],
+  sectors: GRID_X.slice(1).flatMap((x1, i) =>
+    GRID_Z.slice(1).map((z1, j) => {
+      const [x0, z0] = [GRID_X[i], GRID_Z[j]];
+      const [cx, cz] = [(x0 + x1) / 2, (z0 + z1) / 2];
+      // The last paint over the centre of the cell wins.
+      const [, , , , floor, tex] = PAINT.filter(
+        ([ax, az, bx, bz]) => ax < cx && cx < bx && az < cz && cz < bz,
+      ).at(-1)!;
+      return sector(
+        [
+          [x0, z0],
+          [x1, z0],
+          [x1, z1],
+          [x0, z1],
+        ],
+        floor,
+        SKY,
+        tex,
+      );
+    }),
+  ),
+  // Along the south edge of the deck, facing the platform (yaw 0 looks toward -z).
+  spawns: [
+    [6, 34, 0],
+    [13, 34, 0],
+    [20, 34, 0],
+    [27, 34, 0],
+    [34, 34, 0],
+    [20, 22, 0],
   ],
-  items: [[23, 8, ITEM.HEALTH]],
-  goal: [30, 24],
-  exit: 0,
 };

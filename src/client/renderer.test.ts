@@ -1,16 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { compile } from '../shared/level';
-import { HALL } from '../shared/map';
-import { ITEM, TEX } from '../shared/types';
+import { TEX } from '../shared/types';
 import type { MapDef } from '../shared/types';
-import { TRAIL, createEffects, fade, puff } from './effects';
-import type { Puff } from './effects';
+import { createEffects, lit } from './effects';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
-import { METAL, STRIDE } from './mesh';
+import { STRIDE } from './mesh';
 import { LAYERS } from './textures';
-import { FOG, MAX_PIXELS, MAX_TINTS, backing, createRenderer, levelVerts } from './render';
+import { FOG, MAX_PIXELS, MAX_TINTS, backing, createRenderer } from './render';
 
 type Call = [name: string, ...args: unknown[]];
 
@@ -81,52 +79,17 @@ describe('createRenderer', () => {
   const frame = (
     rd: ReturnType<typeof createRenderer>,
     fx = createEffects(),
-    items = [] as never[],
     lights = [] as Light[],
-  ) => rd.frame([1, 1.6, 1], 0, 0, [], new Map(), fx, [], [], items, lights);
+  ) => rd.frame([1, 1.6, 1], 0, 0, [], new Map(), fx, lights);
 
   it('builds a fragment shader with one specular row per layer and no stray JS values', () => {
     createRenderer(canvas, compile(ROOM));
     const src = calls.filter(c => c[0] == 'shaderSource').map(c => String(c[2]));
     const frag = src.find(s => s.includes('sampler2DArray'))!;
     const rows = frag.match(/const vec2 SP\[(\d+)\]=vec2\[\]\((.*)\);/)!;
-    expect(Number(rows[1])).toBe(LAYERS + 2);
-    expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 2);
+    expect(Number(rows[1])).toBe(LAYERS + 1);
+    expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 1);
     expect(frag).not.toMatch(/undefined|NaN|\[object/);
-  });
-
-  it('rebuilds the level geometry on level()', () => {
-    const [a, b] = [compile(HALL), compile(ROOM)];
-    const rd = createRenderer(canvas, a);
-    const head = () =>
-      calls.filter(c => c[0] == 'bufferSubData' && c[2] == 0).at(-1)?.[3] as Float32Array;
-    expect(head()).toHaveLength(levelVerts(a).length);
-    rd.level(b);
-    expect(head()).toEqual(new Float32Array(levelVerts(b)));
-    expect(calls.filter(c => c[0] == 'bufferData').at(-1)?.[2]).toBeGreaterThan(
-      levelVerts(b).length * 4,
-    );
-    frame(rd);
-    // The world draw starts from the new level's vertices.
-    expect(draws()[0][1]).toBeGreaterThanOrEqual(levelVerts(b).length / STRIDE);
-    expect(draws()[0][1]).toBeLessThan(levelVerts(a).length / STRIDE);
-  });
-
-  it('draws the items, and the gun on top unless dead', () => {
-    const rd = createRenderer(canvas, compile(ROOM));
-    const items = [{ id: 0, kind: ITEM.HEALTH, x: 2, y: 0, z: 2 }] as never[];
-    frame(rd);
-    const plain = draws();
-    calls.length = 0;
-    frame(rd, createEffects(), items);
-    expect(draws()[0][1]).toBe(plain[0][1] + 144);
-    // The second call is the view model.
-    expect(draws()[1][1]).toBeGreaterThan(0);
-    calls.length = 0;
-    const fx = createEffects();
-    fx.update(undefined, 0, 0.1, true);
-    frame(rd, fx);
-    expect(draws()[1][1]).toBe(0);
   });
 
   describe('post-processing', () => {
@@ -150,9 +113,9 @@ describe('createRenderer', () => {
       expect(blit).toBeGreaterThan(0);
       expect(post.length).toBeGreaterThan(0);
       expect(post[0]).toBeGreaterThan(blit);
-      // The scene: cleared and drawn (world and gun) into a target of its own, before the resolve.
+      // The scene: cleared and drawn into a target of its own, before the resolve.
       const scene = calls.slice(0, blit);
-      expect(scene.filter(c => c[0] == 'drawArrays')).toHaveLength(2);
+      expect(scene.filter(c => c[0] == 'drawArrays')).toHaveLength(1);
       const target = scene.find(c => c[0] == 'bindFramebuffer' && c[1] == K('FRAMEBUFFER'))!;
       expect(target[2]).not.toBeNull();
       expect(scene.indexOf(target)).toBeLessThan(scene.findIndex(c => c[0] == 'clear'));
@@ -346,135 +309,12 @@ describe('createRenderer', () => {
     });
   });
 
-  describe('smoke', () => {
-    const cloud = (x: number, z: number, t = 0.5): Puff => ({
-      p: [x, 1.5, z],
-      v: [0, 0, 0],
-      r: 0.3,
-      yaw: 0,
-      t,
-      life: 2,
-    });
-    const smoky = (...puffs: Puff[]) => {
-      const fx = createEffects();
-      fx.smoke.push(...puffs);
-      return fx;
-    };
-    const named = (name: string) => calls.filter(c => c[0] == name);
-
-    it('draws nothing blended without smoke', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
-      frame(rd);
-      expect(named('enable').map(c => c[1])).not.toContain(K('BLEND'));
-      expect(named('depthMask')).toHaveLength(0);
-      expect(draws()).toHaveLength(2);
-    });
-
-    it('draws it after the opaque scene with blending on and depth writes off, then the gun', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
-      expect(named('blendFunc')[0].slice(1)).toEqual([K('SRC_ALPHA'), K('ONE_MINUS_SRC_ALPHA')]);
-      calls.length = 0;
-      frame(rd);
-      const [world, gun] = draws();
-      calls.length = 0;
-      frame(rd, smoky(cloud(2, 0), cloud(2, 3)));
-      const [w, smoke, g] = draws();
-      expect(w).toEqual(world);
-      // Two billboards of six vertices, right after the world, before the gun.
-      expect(smoke).toEqual([world[1], 12]);
-      expect(g).toEqual([world[1] + 12, gun[1]]);
-      const at = (name: string, ...args: unknown[]) =>
-        calls.findIndex(c => c[0] == name && args.every((a, i) => c[i + 1] == a));
-      const drawn = calls
-        .map((c, i) => (c[0] == 'drawArrays' && c[3] == 12 ? i : -1))
-        .find(i => i > 0)!;
-      expect(at('enable', K('BLEND'))).toBeLessThan(drawn);
-      expect(at('depthMask', false)).toBeLessThan(drawn);
-      expect(at('depthMask', true)).toBeGreaterThan(drawn);
-      expect(at('disable', K('BLEND'))).toBeGreaterThan(drawn);
-      // The gun's depth clear comes after the smoke has been drawn.
-      const clears = calls.map((c, i) => (c[0] == 'clear' ? i : -1)).filter(i => i >= 0);
-      expect(clears.at(-1)).toBeGreaterThan(drawn);
-      expect(clears.filter(i => i < drawn)).toHaveLength(1);
-    });
-
-    it('keeps it out of the depth passes', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
-      const light: Light = {
-        kind: LIGHT.SPOT,
-        p: [2, 1.6, 2],
-        d: [1, 0, 0],
-        cone: 0.9,
-        range: 10,
-        color: [1, 1, 1],
-        shadow: true,
-      };
-      frame(rd, createEffects(), [], [light]);
-      const [depth] = draws();
-      calls.length = 0;
-      frame(rd, smoky(cloud(2, 0)), [], [light]);
-      expect(draws()[0]).toEqual(depth);
-    });
-
-    /** The billboards of the last frame: centre, alpha and the layer of each vertex. */
-    const quads = () => {
-      const data = calls.filter(c => c[0] == 'bufferSubData').at(-1)![3] as Float32Array;
-      const out: { c: number[]; a: number[]; n: number[]; uv: number[][] }[] = [];
-      let cur: number[][] = [];
-      for (let i = 0; i < data.length; i += STRIDE) {
-        if (data[i + 8] == -3) {
-          cur.push(Array.from(data.slice(i, i + STRIDE)));
-          if (cur.length == 6) {
-            out.push({
-              c: [0, 1, 2].map(n => cur.reduce((s, v) => s + v[n], 0) / 6),
-              a: cur.map(v => v[9]),
-              n: cur[0].slice(3, 6),
-              uv: cur.map(v => v.slice(6, 8)),
-            });
-            cur = [];
-          }
-        }
-      }
-      return out;
-    };
-
-    it('builds one camera-facing quad per puff, with its opacity, far to near', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
-      const [near, far, mid] = [cloud(1, 2), cloud(1, -5), cloud(1, -2, 1.5)];
-      // Looking toward -z from [1, 1.6, 1].
-      frame(rd, smoky(near, far, mid));
-      const q = quads();
-      expect(q.map(b => b.c[2])).toEqual([-5, -2, 2].map(z => expect.closeTo(z, 4)));
-      expect(q.map(b => b.a[0])).toEqual([far, mid, near].map(p => expect.closeTo(fade(p), 5)));
-      for (const b of q) {
-        expect(b.a.every(a => a == b.a[0])).toBe(true);
-        // The normal points back at the viewer, the corners are the unit square's.
-        expect(b.n).toEqual([-0, -0, 1].map(n => expect.closeTo(n, 5)));
-        expect(new Set(b.uv.map(String))).toEqual(new Set(['-1,-1', '1,-1', '1,1', '-1,1']));
-      }
-    });
-
-    it('turns the quads with the camera, and sizes them with the puff', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
-      const fx = smoky(cloud(1, -4));
-      rd.frame([1, 1.6, 1], 0, 0, [], new Map(), fx, [], [], [], []);
-      const width = () => {
-        const data = calls.filter(c => c[0] == 'bufferSubData').at(-1)![3] as Float32Array;
-        const xs = Array.from({ length: data.length / STRIDE }, (_, i) => i)
-          .filter(i => data[i * STRIDE + 8] == -3)
-          .map(i => data[i * STRIDE]);
-        return Math.max(...xs) - Math.min(...xs);
-      };
-      expect(quads()[0].n[2]).toBeCloseTo(1);
-      expect(width()).toBeCloseTo(2 * 1.6 * puff(fx.smoke[0]), 4);
-      calls.length = 0;
-      rd.frame([1, 1.6, 1], Math.PI / 2, 0, [], new Map(), fx, [], [], [], []);
-      expect(quads()[0].n).toEqual([1, 0, 0].map(n => expect.closeTo(n, 5)));
-      calls.length = 0;
-      const big = smoky({ ...cloud(1, -4), r: 0.6 });
-      rd.frame([1, 1.6, 1], 0, 0, [], new Map(), big, [], [], [], []);
-      expect(width()).toBeCloseTo(2 * 1.6 * puff(big.smoke[0]), 4);
-    });
+  it('draws the world in one call, and nothing blended', () => {
+    const rd = createRenderer(canvas, compile(ROOM));
+    frame(rd);
+    expect(draws()).toHaveLength(1);
+    expect(calls.filter(c => c[0] == 'enable').map(c => c[1])).not.toContain(K('BLEND'));
+    expect(calls.filter(c => c[0] == 'depthMask')).toHaveLength(0);
   });
 
   describe('atmosphere', () => {
@@ -493,26 +333,21 @@ describe('createRenderer', () => {
       expect(FOG[3]).toBe(0.02);
     });
 
-    it('takes the fog colour, density and clear colour from the map, and changes with the level', () => {
+    it('takes the fog colour, density and clear colour from the map', () => {
       const fog: [number, number, number, number] = [0.5, 0.25, 0.125, 0.04];
-      const rd = createRenderer(canvas, compile({ ...ROOM, fog }));
+      createRenderer(canvas, compile({ ...ROOM, fog }));
       expect(fogOf().at(-1)![2]).toEqual(fog);
       expect(clear()).toEqual([0.5, 0.25, 0.125, 1]);
-      rd.level(compile(ROOM));
-      expect(fogOf().at(-1)![2]).toEqual(FOG);
-      expect(clear()).toEqual([FOG[0], FOG[1], FOG[2], 1]);
     });
 
     it('uploads the tint palette, white first and padded with white', () => {
       const tint: [number, number, number] = [0.5, 0.25, 1];
       const lvl = compile({ ...ROOM, sectors: [{ ...ROOM.sectors[0], tint }] });
-      const rd = createRenderer(canvas, lvl);
+      createRenderer(canvas, lvl);
       const pal = Array.from(palOf().at(-1)![2] as Float32Array);
       expect(pal).toHaveLength(MAX_TINTS * 3);
       expect(pal.slice(0, 6)).toEqual([1, 1, 1, ...tint]);
       expect(pal.slice(6).every(v => v == 1)).toBe(true);
-      rd.level(compile(ROOM));
-      expect(Array.from(palOf().at(-1)![2] as Float32Array).every(v => v == 1)).toBe(true);
     });
 
     it('declares the fog and palette uniforms in the shader', () => {
@@ -543,22 +378,22 @@ describe('createRenderer', () => {
       const rd = createRenderer(canvas, compile(ROOM));
       frame(rd);
       expect(layers()).toEqual([]);
-      expect(draws()).toHaveLength(2);
-      frame(rd, createEffects(), [], [spot(false), { ...spot(), kind: LIGHT.POINT }]);
+      expect(draws()).toHaveLength(1);
+      frame(rd, createEffects(), [spot(false), { ...spot(), kind: LIGHT.POINT }]);
       expect(layers()).toEqual([]);
-      expect(draws()).toHaveLength(4);
+      expect(draws()).toHaveLength(2);
     });
 
     it('draws one depth pass per mapped light, into its own layer, before the scene', () => {
       const rd = createRenderer(canvas, compile(ROOM));
-      frame(rd, createEffects(), [], [spot(), spot(false), spot()]);
+      frame(rd, createEffects(), [spot(), spot(false), spot()]);
       expect(layers()).toEqual([0, 1]);
-      // Two depth passes, then the world and the view model.
-      expect(draws()).toHaveLength(4);
-      expect(calls.filter(c => c[0] == 'clear')).toHaveLength(2 + 2);
+      // Two depth passes, then the world.
+      expect(draws()).toHaveLength(3);
+      expect(calls.filter(c => c[0] == 'clear')).toHaveLength(2 + 1);
       const scene = calls.findIndex(c => c[0] == 'viewport' && c[3] == 320);
       const drawn = (a: Call[]) => a.filter(c => c[0] == 'drawArrays' && c[3] != 3).length;
-      expect([drawn(calls.slice(0, scene)), drawn(calls.slice(scene))]).toEqual([2, 2]);
+      expect([drawn(calls.slice(0, scene)), drawn(calls.slice(scene))]).toEqual([2, 1]);
       expect(calls.find(c => c[0] == 'viewport')).toEqual(['viewport', 0, 0, 512, 512]);
       expect(calls.filter(c => c[0] == 'viewport').at(-1)).toEqual(['viewport', 0, 0, 320, 200]);
     });
@@ -568,30 +403,15 @@ describe('createRenderer', () => {
       frame(
         rd,
         createEffects(),
-        [],
         Array.from({ length: 7 }, () => spot()),
       );
       expect(layers()).toHaveLength(4);
     });
 
-    it('leaves the unlit effects and the view model out of the depth passes', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
-      frame(rd, createEffects(), [], [spot()]);
-      const [depth, world] = draws();
-      expect(depth[1]).toBe(world[1]);
-      calls.length = 0;
-      const fx = createEffects();
-      fx.sparks.push({ p: [2, 1, 2], v: [0, 0, 0], life: 1 } as never);
-      frame(rd, fx, [], [spot()]);
-      const [d2, w2] = draws();
-      expect(d2[1]).toBe(depth[1]);
-      expect(w2[1]).toBe(depth[1] + 36);
-    });
-
     it('unbinds the shadow map while writing it, and binds it back for the scene', () => {
       const rd = createRenderer(canvas, compile(ROOM));
       calls.length = 0;
-      frame(rd, createEffects(), [], [spot()]);
+      frame(rd, createEffects(), [spot()]);
       const binds = calls.filter(c => c[0] == 'bindTexture').map(c => c[2]);
       expect(binds[0]).toBeNull();
       expect(binds[1]).not.toBeNull();
@@ -604,223 +424,62 @@ describe('createRenderer', () => {
       expect(count('texStorage3D')).toBe(1);
       canvas.dispatchEvent(new Event('webglcontextlost'));
       calls.length = 0;
-      frame(rd, createEffects(), [], [spot()]);
+      frame(rd, createEffects(), [spot()]);
       expect(calls).toEqual([]);
       canvas.dispatchEvent(new Event('webglcontextrestored'));
       expect(count('texStorage3D')).toBe(1);
       expect(count('createFramebuffer')).toBe(made);
-      frame(rd, createEffects(), [], [spot()]);
+      frame(rd, createEffects(), [spot()]);
       expect(layers()).toEqual([0]);
     });
   });
 
-  describe('view model and particles', () => {
-    /** What the last frame wrote after the level: the dynamic tail, as vertices of STRIDE floats. */
-    const tail = () =>
-      calls.filter(c => c[0] == 'bufferSubData' && c[2] != 0).at(-1)?.[3] as Float32Array;
-    const vertex = (v: Float32Array, i: number) =>
-      Array.from(v.slice(i * STRIDE, (i + 1) * STRIDE));
-    const NEAR = 4158;
-    const STILL = 576 + 924 + 66 + 144;
-    const room = (fx = createEffects(), lights = [] as Light[]) => {
+  describe('dust', () => {
+    /** The motes of a fresh effects, scattered round a player at the eye of the test frames. */
+    const dusty = () => {
+      let n = 7;
+      const fx = createEffects(() => (n = (n * 1103515245 + 12345) % 2147483648) / 2147483648);
+      fx.update({ id: 0, x: 1, y: 0, z: 1, vy: 0, yaw: 0, pitch: 0, ground: true }, 0, 1 / 60);
+      return fx;
+    };
+    const spot = (): Light => ({
+      kind: LIGHT.SPOT,
+      p: [2, 1.6, 2],
+      d: [1, 0, 0],
+      cone: 0.9,
+      range: 10,
+      color: [1, 1, 1],
+      shadow: true,
+    });
+    const specks = (fx: ReturnType<typeof createEffects>) =>
+      lit(fx, [1, 1.6, 1], [0, 0, -1]).length / 4;
+
+    it('draws each mote the flashlight shows as a small unlit box, after the world', () => {
+      const fx = dusty();
+      const n = specks(fx);
+      expect(n).toBeGreaterThan(2);
       const rd = createRenderer(canvas, compile(ROOM));
-      frame(rd, fx, [], lights);
-      return tail();
-    };
-    const extent = (v: Float32Array, from: number, n: number, axis: number) => {
-      const xs = Array.from({ length: n }, (_, i) => v[(from + i) * STRIDE + axis]);
-      return [Math.min(...xs), Math.max(...xs)];
-    };
-
-    it('draws the chaingun with 4158 vertices, and the flash on top of them', () => {
-      room();
-      expect(draws()[1][1]).toBe(NEAR);
-      calls.length = 0;
-      const fx = createEffects();
-      fx.flash = 0.05;
-      room(fx);
-      expect(draws()[1][1]).toBe(NEAR + 3 * 36);
-    });
-
-    it('shines the gun like metal, and the barrels and clamps turn with the spin, the rest not', () => {
-      const [a, b] = [0, 1.2].map(spin => {
-        calls.length = 0;
-        const fx = createEffects();
-        fx.spin = spin;
-        return room(fx);
-      });
-      const [ga, gb] = [a, b].map(v => v.length / STRIDE - NEAR);
-      // The gun is the end of the tail.
-      expect([ga, gb]).toEqual([0, 0]);
-      for (let i = 0; i < NEAR; i++) {
-        const same = vertex(a, i).every((x, k) => Math.abs(x - vertex(b, i)[k]) < 1e-6);
-        if (i < STILL) {
-          expect(same).toBe(true);
-        }
-      }
-      let moved = 0;
-      for (let i = STILL; i < NEAR; i++) {
-        moved += +(vertex(a, i)[0] != vertex(b, i)[0] || vertex(a, i)[1] != vertex(b, i)[1]);
-      }
-      expect(moved).toBeGreaterThan(2000);
-      // The parts that spin are all there is behind the still ones: barrels and clamps.
-      expect(NEAR - STILL).toBe(1800 + 648);
-      const layers = new Set(Array.from({ length: NEAR }, (_, i) => vertex(a, i)[8]));
-      expect([...layers].sort((a, b) => a - b)).toEqual([-1, METAL]);
-    });
-
-    it('draws a spark as a streak from its head back along its velocity, as long as the speed says', () => {
-      const lengths = [5, 10].map(speed => {
-        const fx = createEffects();
-        fx.sparks.push({ p: [2, 1, 2], v: [0, 0, -speed], life: 1, c: [1, 0.5, 0.2] });
-        calls.length = 0;
-        const v = room(fx);
-        const [z0, z1] = extent(v, 0, 36, 2);
-        // The head is at the spark, the tail a streak behind it.
-        expect(z0).toBeCloseTo(2);
-        return z1 - z0;
-      });
-      expect(lengths[0]).toBeCloseTo(5 * TRAIL);
-      expect(lengths[1]).toBeCloseTo(2 * lengths[0]);
-    });
-
-    it('lights the head of a streak and dims its tail, unlit', () => {
-      const fx = createEffects();
-      fx.sparks.push({ p: [2, 1, 2], v: [0, 0, -10], life: 1, c: [1, 0.5, 0.2] });
-      const v = room(fx);
-      const head = Array.from({ length: 36 }, (_, i) => vertex(v, i)).filter(x => x[2] < 2.01);
-      const back = Array.from({ length: 36 }, (_, i) => vertex(v, i)).filter(x => x[2] > 2.39);
-      expect(head.length).toBeGreaterThan(5);
-      expect(back.length).toBeGreaterThan(5);
-      for (const x of head) {
-        expect([x[6], x[7], x[9], x[8]]).toEqual([1, 0.5, expect.closeTo(0.2), -2]);
-      }
-      for (const x of back) {
-        expect(x[6]).toBeCloseTo(0.25);
-        expect(x[8]).toBe(-2);
+      frame(rd, fx);
+      const data = calls
+        .filter(c => c[0] == 'bufferSubData' && c[2] != 0)
+        .at(-1)![3] as Float32Array;
+      expect(data.length).toBe(n * 36 * STRIDE);
+      for (let i = 0; i < data.length; i += STRIDE) {
+        expect(data[i + 8]).toBe(-2);
       }
     });
 
-    it('streaks a spark that falls straight down, and one that does not move', () => {
-      const fx = createEffects();
-      fx.sparks.push(
-        { p: [2, 1, 2], v: [0, -8, 0], life: 1 },
-        { p: [3, 1, 3], v: [0, 0, 0], life: 1 },
-      );
-      const v = room(fx);
-      const [y0, y1] = extent(v, 0, 36, 1);
-      expect(y0).toBeCloseTo(1);
-      expect(y1).toBeCloseTo(1 + 8 * TRAIL);
-      // At rest it is a short bar, standing, 4 cm long.
-      const [s0, s1] = extent(v, 36, 36, 1);
-      expect([s0, s1]).toEqual([expect.closeTo(0.96), expect.closeTo(1)]);
-      expect(v.every(Number.isFinite)).toBe(true);
-    });
-
-    it('draws each live casing as a brass bar that shines, and none for a free slot', () => {
-      const fx = createEffects();
-      const empty = room(fx).length;
+    it('keeps them out of the depth passes', () => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      frame(rd, createEffects(), [spot()]);
+      const [depth, world] = draws();
+      expect(depth[1]).toBe(world[1]);
       calls.length = 0;
-      const c = fx.casings[3];
-      Object.assign(c, { p: [2, 0.01, 2], yaw: 0, tilt: 0, size: 0.01, life: 2, rest: true });
-      const v = room(fx);
-      expect(v.length - empty).toBe(36 * STRIDE);
-      const [z0, z1] = extent(v, 0, 36, 2);
-      expect(z1 - z0).toBeCloseTo(2 * 2.8 * 0.01);
-      const [x0, x1] = extent(v, 0, 36, 0);
-      expect(x1 - x0).toBeCloseTo(0.02);
-      expect(vertex(v, 0)[8]).toBe(METAL);
-      expect(vertex(v, 0)[6]).toBeGreaterThan(vertex(v, 0)[9] * 3);
-    });
-
-    it('stands a tumbling casing on end, and shrinks it over its last half second', () => {
-      const fx = createEffects();
-      Object.assign(fx.casings[0], {
-        p: [2, 1, 2],
-        yaw: 0,
-        tilt: Math.PI / 2,
-        size: 0.01,
-        life: 2,
-      });
-      const [y0, y1] = extent(room(fx), 0, 36, 1);
-      expect(y1 - y0).toBeCloseTo(0.056);
-      calls.length = 0;
-      fx.casings[0].life = 0.25;
-      const [z0, z1] = extent(room(fx), 0, 36, 1);
-      expect(z1 - z0).toBeCloseTo(0.028);
-    });
-
-    it('draws a blot of two slabs across each other for each splat, and shrinks it over its last second', () => {
-      const fx = createEffects();
-      fx.splats.push({ p: [2, 0.004, 2], r: 0.2, yaw: 0, life: 6 });
-      const v = room(fx);
-      expect(v.length / STRIDE).toBe(NEAR + 72);
-      const [x0, x1] = extent(v, 0, 36, 0);
-      expect(x1 - x0).toBeCloseTo(0.4);
-      expect(extent(v, 0, 72, 1)).toEqual([expect.closeTo(0.002), expect.closeTo(0.006)]);
-      // The second slab is turned by an eighth of a turn.
-      const [z0, z1] = extent(v, 36, 36, 2);
-      expect(z1 - z0).toBeGreaterThan(0.3);
-      expect(vertex(v, 0).slice(6, 10)).toEqual([
-        expect.closeTo(0.3),
-        expect.closeTo(0.03),
-        -1,
-        expect.closeTo(0.03),
-      ]);
-      calls.length = 0;
-      fx.splats[0].life = 0.5;
-      const [y0, y1] = extent(room(fx), 0, 36, 0);
-      expect(y1 - y0).toBeCloseTo(0.2);
-    });
-
-    it('draws a gib with its own half sizes, and shrinks all three over its last half second', () => {
-      const fx = createEffects();
-      fx.gibs.push({
-        p: [2, 0.5, 2],
-        v: [0, 0, 0],
-        yaw: 0,
-        half: [0.1, 0.02, 0.05],
-        size: 0.02,
-        c: [0.5, 0.1, 0.1],
-        life: 5,
-        floor: 0,
-        rest: true,
-        gore: false,
-      });
-      const v = room(fx);
-      const size = (w: Float32Array) =>
-        [0, 1, 2].map(a => extent(w, 0, 36, a)).map(([lo, hi]) => hi - lo);
-      expect(size(v)).toEqual([expect.closeTo(0.2), expect.closeTo(0.04), expect.closeTo(0.1)]);
-      calls.length = 0;
-      fx.gibs[0].life = 0.25;
-      expect(size(room(fx))).toEqual([
-        expect.closeTo(0.1),
-        expect.closeTo(0.02),
-        expect.closeTo(0.05),
-      ]);
-    });
-
-    it('keeps casings, splats and streaks out of the depth passes', () => {
-      const spot = (): Light => ({
-        kind: LIGHT.SPOT,
-        p: [2, 1.6, 2],
-        d: [1, 0, 0],
-        cone: 0.9,
-        range: 10,
-        color: [1, 1, 1],
-        shadow: true,
-      });
-      room(createEffects(), [spot()]);
-      const [depth] = draws();
-      calls.length = 0;
-      const fx = createEffects();
-      Object.assign(fx.casings[0], { p: [2, 0.5, 2], size: 0.01, life: 2 });
-      fx.splats.push({ p: [2, 0.004, 2], r: 0.2, yaw: 0, life: 6 });
-      fx.sparks.push({ p: [2, 1, 2], v: [0, 0, -5], life: 1 });
-      room(fx, [spot()]);
+      const fx = dusty();
+      frame(rd, fx, [spot()]);
       const [d2, w2] = draws();
       expect(d2[1]).toBe(depth[1]);
-      expect(w2[1]).toBe(depth[1] + 36 + 72 + 36);
+      expect(w2[1]).toBe(depth[1] + specks(fx) * 36);
     });
   });
 });

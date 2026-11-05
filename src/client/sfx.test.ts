@@ -1,13 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import { RATE, SOUND, music, render } from './sfx';
+import { LAYERS, RATE, music, render } from './sfx';
+import type { Voice } from './sfx';
 
 const peak = (s: Float32Array) => s.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
 
-describe.each(Object.entries(SOUND))('%s', (_, id) => {
-  const s = render(id);
+/** Two made-up sounds to run the generator on: the game has none yet. */
+const SOUNDS: Record<string, Voice[]> = {
+  // A noise crack over a short thump, and a saw and a square falling out of tune over grit.
+  crack: [
+    [3, 7000, -0.5, 0.002, 0, 0.06, 0, 0.6, 0, 1, 0.8],
+    [0, 220, -5, 0.002, 0, 0.075, 0, 0.3, 0, 1, 0.5],
+  ],
+  growl: [
+    [1, 160, -1.5, 0.003, 0.04, 0.22, 0.2, 0.5, 0, 1, 0.6],
+    [0, 83, -1, 0.003, 0.04, 0.22, 0, 0.3, 0, 1, 0.4],
+    [3, 3000, 0, 0.002, 0, 0.12, 0, 0.4, 0, 1, 0.5],
+  ],
+  // A late voice: it starts 0.22 s after the first.
+  late: [
+    [2, 55, -1, 0.01, 0.01, 0.12, 0, 1, 0, 1, 0.9],
+    [2, 48, -1, 0.01, 0.01, 0.14, 0, 1, 0, 1, 0.6, 0.22],
+  ],
+};
+const LAYERS_FIXTURE = Object.values(SOUNDS);
+
+describe.each(Object.keys(SOUNDS))('%s', name => {
+  const id = Object.keys(SOUNDS).indexOf(name);
+  const s = render(id, LAYERS_FIXTURE);
 
   it('is deterministic', () => {
-    expect(render(id)).toEqual(s);
+    expect(render(id, LAYERS_FIXTURE)).toEqual(s);
   });
 
   it('is audible and within [-1, 1]', () => {
@@ -26,37 +48,18 @@ describe.each(Object.entries(SOUND))('%s', (_, id) => {
   });
 });
 
-describe('sounds', () => {
-  it('make a shot shorter than a boom', () => {
-    expect(render(SOUND.SHOT).length).toBeLessThan(render(SOUND.BOOM).length);
+describe('render', () => {
+  it('delays a voice by its start, and is as long as the latest one ends', () => {
+    const id = Object.keys(SOUNDS).indexOf('late');
+    const s = render(id, LAYERS_FIXTURE);
+    expect(s.length).toBe(Math.round(0.22 * RATE) + Math.ceil((0.01 + 0.01 + 0.14) * RATE));
+    // Between the two thumps the first has decayed: the second is not there yet.
+    expect(peak(s.subarray(0.17 * RATE, 0.2 * RATE))).toBeLessThan(0.1);
+    expect(peak(s.subarray(0.25 * RATE, 0.3 * RATE))).toBeGreaterThan(0.1);
   });
 
-  it('keep the chaingun under its 12 shots per second', () => {
-    expect(render(SOUND.SHOT).length).toBeLessThan(RATE / 12);
-  });
-});
-
-describe('HEART', () => {
-  const s = render(SOUND.HEART);
-  /** Loudest sample between two times, in seconds. */
-  const loud = (from: number, to: number) => peak(s.subarray(from * RATE, to * RATE));
-
-  it('is a lub-dub: two thumps with a near silence between them, the second fainter', () => {
-    const [lub, dub] = [loud(0, 0.2), loud(0.22, 0.45)];
-    expect(Math.min(lub, dub)).toBeGreaterThan(0.2);
-    expect(dub).toBeLessThan(lub);
-    expect(loud(0.15, 0.21)).toBeLessThan(0.1);
-  });
-
-  it('is short enough to repeat at the fastest beat, 0.5 s', () => {
-    expect(s.length).toBeLessThan(0.5 * RATE);
-  });
-
-  it('is low and soft: under 150 Hz at the loudest, a ten millisecond attack', () => {
-    const lub = s.subarray(0, 0.2 * RATE);
-    const crossings = lub.filter((x, i) => i && x * lub[i - 1] < 0).length;
-    expect(crossings / 0.4).toBeLessThan(250);
-    expect(peak(s.subarray(0, 0.001 * RATE))).toBeLessThan(0.1);
+  it('has no sound of its own yet', () => {
+    expect(LAYERS).toEqual([]);
   });
 });
 

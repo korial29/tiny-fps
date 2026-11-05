@@ -1,19 +1,17 @@
-import { EYE, MAX_PITCH, PLAYER_H, TICK_HZ } from '../shared/constants';
+import { EYE, PLAYER_H, TICK_HZ } from '../shared/constants';
 import { blocked, compile } from '../shared/level';
-import { LEVELS } from '../shared/levels';
+import { ROOF } from '../shared/map';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
-import type { GameEvent, PlayerInfo, Shot, SocketLike } from '../shared/types';
-import { createAudio, createClock, createHeart, hear, savedMute, toggleMute } from './audio';
-import { GAIN, HURT, createDelay, createEffects } from './effects';
+import type { PlayerInfo, SocketLike } from '../shared/types';
+import { createAudio, savedMute, toggleMute } from './audio';
+import { createEffects } from './effects';
 import { HUD_CSS, createHud } from './hud';
 import { createInput } from './input';
 import { createPredictor } from './predict';
 import { gather } from './lights';
-import { createProgress, facing } from './progress';
 import { createRenderer } from './render';
 import type { Renderer } from './render';
-import { SOUND } from './sfx';
 
 export type { PlayerInfo, SocketLike } from '../shared/types';
 
@@ -64,38 +62,21 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const listeners: Record<TinyFpsEvent, (() => void)[]> = { roster: [], open: [], close: [] };
   const emit = (ev: TinyFpsEvent) => listeners[ev].forEach(cb => cb());
 
-  const first = compile(LEVELS[0]);
-  const predictor = createPredictor(first);
+  const lvl = compile(ROOF);
+  const predictor = createPredictor(lvl);
   const audio = createAudio();
   audio.mute(savedMute());
   hud.mute(audio.muted);
-  const tick = createClock(audio);
-  const beat = createHeart(audio);
   const ctl = createInput(canvas, () => hud.mute(toggleMute(audio)));
   // The click that takes the pointer lock is the gesture that lets the sound start.
   canvas.addEventListener('click', () => audio.unlock());
-  const fx = createEffects(Math.random, first);
-  /** Others' shots and the host's events wait INTERP_DELAY: the others are drawn that far in the past. */
-  const shots = createDelay<Shot>();
-  const events = createDelay<GameEvent>();
-  let you = -1;
+  const fx = createEffects();
   let rd: Renderer | undefined;
   try {
-    rd = createRenderer(canvas, first);
+    rd = createRenderer(canvas, lvl);
   } catch {
     // No WebGL2: stay connected, say so on the title screen.
   }
-  const progress = createProgress({
-    lvl: first,
-    you: () => you,
-    roster: () => roster,
-    predictor,
-    rd,
-    delays: [shots, events],
-    fx,
-    hud,
-    audio,
-  });
   let roster: PlayerInfo[] = [];
   let colors = new Map<number, string>();
   let names = new Map<number, string>();
@@ -106,9 +87,6 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   let msg = rd ? '' : 'WebGL2 is not available';
   /** The own player is known, and the look angles start from where the host spawned it. */
   let ready = false;
-  /** Level and `hard` of the last snapshot as one number, and whether the own player was alive. */
-  let stage = -1;
-  let alive = false;
   let last = performance.now();
   let acc = 0;
   let raf = 0;
@@ -130,23 +108,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     if (typeof data != 'string') {
       const s = decodeSnapshot(data);
       if (s) {
-        const now = performance.now();
-        // A new level first: the predictor takes the snapshot as one of that level.
-        progress.snapshot(s);
-        predictor.snapshot(s, now);
-        // A new level or a respawn puts the player at a spawn: look the way it faces. Taken from the
-        // map, as inputs still in flight carry the old yaw back into the host and the replay.
-        const own = s.players.find(p => p.id == you);
-        const key = s.level * 2 + +s.hard;
-        if (own?.hp && (key != stage || !alive)) {
-          [ctl.yaw, ctl.pitch] = [facing(progress.lvl.map, own.x, own.z), 0];
-        }
-        [stage, alive] = [key, !!own?.hp];
-        shots.push(
-          s.shots.filter(sh => sh.id != you),
-          now,
-        );
-        events.push(s.events, now);
+        predictor.snapshot(s, performance.now());
       }
       return;
     }
@@ -155,13 +117,11 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       roster = m.players;
       colors = new Map(roster.map(p => [p.id, p.color]));
       names = new Map(roster.map(p => [p.id, p.name]));
-      predictor.you((you = m.you));
+      predictor.you(m.you);
       count.textContent = `Players: ${roster.length}`;
       emit('roster');
     } else if (m?.t == 'full') {
       msg = 'Room is full';
-    } else if (m?.t == 'end') {
-      progress.end(m.ticks, m.hard, m.stats);
     }
   };
 
@@ -190,66 +150,33 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       acc = 0;
     }
     for (; ready && acc >= STEP; acc -= STEP) {
-      // A dead player neither moves nor fires.
-      const keys = progress.dead ? 0 : ctl.keys;
-      const input = predictor.step({ keys, yaw: ctl.yaw, pitch: ctl.pitch }, now);
+      const input = predictor.step({ keys: ctl.keys, yaw: ctl.yaw, pitch: ctl.pitch }, now);
       if (open) {
         ws.send(encodeInput(input));
-      }
-      const shot = predictor.shot();
-      const p = shot && predictor.me(1);
-      if (shot && p) {
-        fx.shot(shot, [p.x, p.y + EYE, p.z], true);
-        audio.play(SOUND.SHOT);
       }
     }
 
     const me = predictor.me(acc / STEP);
-    const others = predictor.others(now).filter(p => progress.alive(p.id));
-    const monsters = predictor.monsters(now);
-    const bullets = predictor.bullets(now);
+    const others = predictor.others(now);
     const eye: [number, number, number] = me ? [me.x, me.y + EYE, me.z] : [0, 0, 0];
-    // Track first: a DIE names a monster the interpolated list has already dropped.
-    fx.track(monsters, bullets);
     audio.listen(eye, ctl.yaw);
-    for (const sh of shots.due(now)) {
-      const p = others.find(o => o.id == sh.id);
-      if (p) {
-        const from: [number, number, number] = [p.x, p.y + EYE, p.z];
-        fx.shot(sh, from, false, sh.hit != you);
-        audio.play(SOUND.SHOT, from);
-      }
-    }
-    for (const e of events.due(now)) {
-      fx.event(e, you);
-      hear(audio, e, you);
-    }
-    tick(progress.returning, now);
     const dt = Math.min((now - before) / 1000, 0.1);
-    fx.update(me, ctl.keys, dt, progress.dead);
-    hud.update(dt);
+    fx.update(me, ctl.keys, dt);
     if (me && rd) {
-      // Bob and shake are for the eye only: the inputs keep sending the real angles.
-      const pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, ctl.pitch + fx.shakePitch));
+      // The bob is for the eye only: the inputs keep sending the real height.
       rd.frame(
         [eye[0], eye[1] + fx.bob, eye[2]],
-        ctl.yaw + fx.shakeYaw,
-        pitch,
+        ctl.yaw,
+        ctl.pitch,
         others,
         colors,
         fx,
-        monsters,
-        bullets,
-        progress.items,
         gather({
           eye: [eye[0], eye[1] + fx.bob, eye[2]],
           yaw: ctl.yaw,
           pitch: ctl.pitch,
-          dead: progress.dead,
           others,
-          fx,
-          bullets,
-          lvl: progress.lvl,
+          lvl,
           t: now / 1000,
         }),
       );
@@ -258,7 +185,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     for (const p of others) {
       const top: [number, number, number] = [p.x, p.y + PLAYER_H + 0.3, p.z];
       // Behind a wall the tag would give the player away.
-      const at = me && !blocked(progress.lvl, eye, top) ? rd?.project(...top) : undefined;
+      const at = me && !blocked(lvl, eye, top) ? rd?.project(...top) : undefined;
       const el = tag(p.id);
       seen.add(p.id);
       el.hidden = !at;
@@ -278,10 +205,9 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       }
     }
 
-    hud.fade(fx.hurt / HURT, beat(progress.hp, now), fx.gain / GAIN, fx.gainC);
     hud.title(
       msg || (!open ? 'Connecting…' : !ready ? 'Joining…' : ctl.locked() ? '' : 'Click to play'),
-      progress.name,
+      lvl.map.name ?? '',
     );
   };
   raf = requestAnimationFrame(frame);

@@ -1,15 +1,14 @@
 // Vertex format and the shapes built from it, shared by the renderer and the models. No DOM.
+import { TAU } from '../shared/physics';
+
 export type Vec3 = [number, number, number];
 
 /**
  * Floats per vertex: position, normal, then c. A map vertex has c = (u, v, texture layer, light),
  * u and v in metres. A player vertex has layer -1 and its flat colour in c.x, c.y, c.w; layer -2 is
- * the same colour, bright and unlit (flashes, sparks, eyes); layer METAL is a flat colour with the
- * metal's specular (the gun, brass).
+ * the same colour, bright and unlit (dust, visors, markers).
  */
 export const STRIDE = 10;
-/** The flat colour layer that shines like the metal texture. */
-export const METAL = -0.5;
 
 /**
  * Camera axes [right, up, forward]: forward is (-sin yaw cos pitch, sin pitch, -cos yaw cos pitch),
@@ -27,7 +26,7 @@ export const basis = (yaw: number, pitch: number, roll = 0): [Vec3, Vec3, Vec3] 
 };
 
 /** The corners of a unit square's two triangles, in the square's own units. */
-export const QUAD = [
+const QUAD = [
   [-1, -1],
   [1, -1],
   [1, 1],
@@ -66,61 +65,58 @@ export const pushBox = (
   }
 };
 
-/** gun.ts vertices (position, normal) given a flat colour, in the vertex format above. */
-export const dress = (v: number[], [r, g, b]: number[], layer = -1): number[] =>
-  Array.from({ length: v.length * (STRIDE / 6) }, (_, i) => {
-    const [k, j] = [Math.floor(i / STRIDE), i % STRIDE];
-    return j < 6 ? v[k * 6 + j] : [r, g, layer, b][j - 6];
-  });
-
-/** The cross product of two vectors. */
-export const cross = (a: Vec3, b: Vec3): Vec3 => [
-  a[1] * b[2] - a[2] * b[1],
-  a[2] * b[0] - a[0] * b[2],
-  a[0] * b[1] - a[1] * b[0],
-];
-
-/** Unit axes [d, u, w] of a frame whose first axis is the unit vector d. */
-export const axesAlong = (d: Vec3): Vec3[] => {
-  const u = cross(Math.abs(d[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], d);
-  const e = u.map(x => x / Math.hypot(...u)) as Vec3;
-  return [d, e, cross(d, e)];
-};
-
 /**
- * Appends the 36 vertices of a box centred on c with half sizes h along the unit axes `ax`. The
- * vertices at the +ax[0] end take the colour `end`: a gradient along the first axis.
+ * Revolves a profile of [radius, length] points around the axis through `at` along -z: `length`
+ * runs forward from `at`. Returns triangles as x, y, z, nx, ny, nz per vertex, `sides` quads of 2
+ * triangles per profile segment. The profile goes from back to front and closes on the axis, so
+ * the normals (smooth around the ring, flat along the profile) point outward.
  */
-export const pushFrame = (
-  out: number[],
-  c: Vec3,
-  ax: Vec3[],
-  h: Vec3,
-  color: number[],
-  layer = -1,
-  end = color,
-) => {
-  for (let a = 0; a < 3; a++) {
-    for (const side of [-1, 1]) {
-      const [b, d] = [(a + 1) % 3, (a + 2) % 3];
-      for (const [i, j] of QUAD) {
-        const l: Vec3 = [0, 0, 0];
-        [l[a], l[b], l[d]] = [side, i, j];
-        const k = l[0] > 0 ? end : color;
-        const at = [0, 1, 2].map(
-          n => c[n] + ax[0][n] * l[0] * h[0] + ax[1][n] * l[1] * h[1] + ax[2][n] * l[2] * h[2],
-        );
-        out.push(...at, ...ax[a].map(x => x * side), k[0], k[1], layer, k[2]);
+export const lathe = (
+  profile: [number, number][],
+  sides: number,
+  at: Vec3 = [0, 0, 0],
+): number[] => {
+  const out: number[] = [];
+  for (let k = 1; k < profile.length; k++) {
+    const [[r0, l0], [r1, l1]] = [profile[k - 1], profile[k]];
+    const len = Math.hypot(r1 - r0, l1 - l0);
+    if (!len) {
+      continue;
+    }
+    // Outward in the (radius, length) plane: the profile tangent turned a quarter.
+    const [nr, nl] = [(l1 - l0) / len, -(r1 - r0) / len];
+    const ring = (i: number, r: number, l: number) => {
+      const [c, s] = [Math.cos((i * TAU) / sides), Math.sin((i * TAU) / sides)];
+      out.push(at[0] + r * c, at[1] + r * s, at[2] - l, nr * c, nr * s, -nl);
+    };
+    for (let i = 0; i < sides; i++) {
+      for (const [j, r, l] of [
+        [i, r0, l0],
+        [i + 1, r0, l0],
+        [i + 1, r1, l1],
+        [i, r0, l0],
+        [i + 1, r1, l1],
+        [i, r1, l1],
+      ] as const) {
+        ring(j, r, l);
       }
     }
   }
+  return out;
 };
 
+/** lathe() vertices (position, normal) given a flat colour, in the vertex format above. */
+export const dress = (v: number[], [r, g, b]: number[]): number[] =>
+  Array.from({ length: v.length * (STRIDE / 6) }, (_, i) => {
+    const [k, j] = [Math.floor(i / STRIDE), i % STRIDE];
+    return j < 6 ? v[k * 6 + j] : [r, g, -1, b][j - 6];
+  });
+
 /**
- * Appends gun-space vertices (x right, y up, -z forward) scaled by k (one factor, or one per axis
- * before the turn), turned by spin about z, then carried to the world: axes `[r, u, f]` at eye,
- * moved by off = (right, up, forward) along them. `tint` multiplies the flat colour. Written
- * without allocations: a body is placed a thousand vertices at a time.
+ * Appends model-space vertices (x right, y up, -z forward) scaled by k (one factor, or one per
+ * axis), then carried to the world: axes `[r, u, f]` at eye, moved by off = (right, up, forward)
+ * along them. `tint` multiplies the flat colour. Written without allocations: a body is placed a
+ * thousand vertices at a time.
  */
 export const place = (
   out: number[],
@@ -129,28 +125,20 @@ export const place = (
   [r, u, f]: Vec3[],
   off: Vec3,
   k: number | Vec3,
-  spin = 0,
   tint: number[] = [1, 1, 1],
 ) => {
   const [kx, ky, kz] = typeof k == 'number' ? [k, k, k] : k;
-  const [s, c] = [Math.sin(spin), Math.cos(spin)];
   const [rx, ry, rz, ux, uy, uz, fx, fy, fz] = [...r, ...u, ...f];
   const ox = eye[0] + rx * off[0] + ux * off[1] + fx * off[2];
   const oy = eye[1] + ry * off[0] + uy * off[1] + fy * off[2];
   const oz = eye[2] + rz * off[0] + uz * off[1] + fz * off[2];
   for (let i = 0; i < src.length; i += STRIDE) {
-    const x = src[i] * kx;
-    const y = src[i + 1] * ky;
-    const z = src[i + 2] * kz;
-    const a = x * c - y * s;
-    const b = x * s + y * c;
-    const m = src[i + 3] * c - src[i + 4] * s;
-    const n = src[i + 3] * s + src[i + 4] * c;
-    const w = src[i + 5];
+    const [x, y, z] = [src[i] * kx, src[i + 1] * ky, src[i + 2] * kz];
+    const [m, n, w] = [src[i + 3], src[i + 4], src[i + 5]];
     out.push(
-      ox + rx * a + ux * b - fx * z,
-      oy + ry * a + uy * b - fy * z,
-      oz + rz * a + uz * b - fz * z,
+      ox + rx * x + ux * y - fx * z,
+      oy + ry * x + uy * y - fy * z,
+      oz + rz * x + uz * y - fz * z,
       rx * m + ux * n - fx * w,
       ry * m + uy * n - fy * w,
       rz * m + uz * n - fz * w,
@@ -172,24 +160,4 @@ export const aim = (to: Vec3, side: Vec3): [Vec3, Vec3, Vec3] => {
   const l = Math.hypot(...r) || 1;
   const [x, y, z] = r.map(v => v / l);
   return [[x, y, z], [y * to[2] - z * to[1], z * to[0] - x * to[2], x * to[1] - y * to[0]], to];
-};
-
-/** Appends a quad a, b, c, d, lit on both faces: a membrane. */
-export const pushQuad = (
-  out: number[],
-  a: Vec3,
-  b: Vec3,
-  c: Vec3,
-  d: Vec3,
-  color: number[],
-  layer = -1,
-) => {
-  const [e, f] = [b, d].map(q => q.map((v, i) => v - a[i]));
-  const n = [e[1] * f[2] - e[2] * f[1], e[2] * f[0] - e[0] * f[2], e[0] * f[1] - e[1] * f[0]];
-  const l = Math.hypot(...n) || 1;
-  for (const s of [1, -1]) {
-    for (const q of s > 0 ? [a, b, c, a, c, d] : [a, c, b, a, d, c]) {
-      out.push(...q, ...n.map(v => (v * s) / l), color[0], color[1], layer, color[2]);
-    }
-  }
 };

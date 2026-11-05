@@ -10,15 +10,15 @@
 
 **▶ Play it now: https://korial29.github.io/tiny-fps/**
 
-A tiny co-op first-person shooter for the browser, written in TypeScript with raw WebGL2, no game library and no runtime dependency. Players team up against walkers and flyers through five dark levels: find the keys, open the barred gates, reach the goal, then get everyone back to the start. Everything is generated in code: geometry, textures, lights. There are no images, fonts or assets to serve.
+A tiny multiplayer first-person game for the browser, written in TypeScript with raw WebGL2, no game library and no runtime dependency. It is becoming an open-air capture-the-flag between two teams of players on rooftops, inspired by Mirror's Edge: parkour movement, no weapons, no CPU enemies. The game is being rebuilt step by step toward that ([`docs/PLAN.md`](docs/PLAN.md)): today you run and jump around one empty rooftop with the other players in the room. Everything is generated in code: geometry, textures, lights. There are no images, fonts or assets to serve.
 
-It is inspired by carlini's [Yet Another Doom Clone](https://github.com/carlini/js13k2019-yet-another-doom-clone) (js13k 2019), and adds multiplayer. Only the ideas are reused, not the code.
+It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](https://github.com/carlini/js13k2019-yet-another-doom-clone) (js13k 2019). Only the ideas were reused, not the code. The renderer, the netcode and the sound come from that first game; the screenshots below are from it.
 
-![A dark corridor in the flashlight's beam, a walker at the far end](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-corridor.jpg)
+![Sector rooms in the flashlight's beam](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-corridor.jpg)
 
-![The stairs down to the goal room, lit cyan by the goal, with gibs on the floor](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-goal.jpg)
+![A stair down to a lit room](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-goal.jpg)
 
-![Back to the start: the open exit glows green at the end of the corridor](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-exit.jpg)
+![An open doorway glowing green at the end of a corridor](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-exit.jpg)
 
 ## Framework-agnostic, light to add
 
@@ -26,8 +26,8 @@ It is inspired by carlini's [Yet Another Doom Clone](https://github.com/carlini/
 
 | Entry                       | What it is                                                             | Size (gzip) |
 | --------------------------- | ---------------------------------------------------------------------- | ----------- |
-| `@korial29/tiny-fps`        | The game client: rendering, lights and shadows, input, prediction, HUD | ~18 KB      |
-| `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~9.5 KB     |
+| `@korial29/tiny-fps`        | The game client: rendering, lights and shadows, input, prediction, HUD | ~15 KB      |
+| `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~4.3 KB     |
 | `@korial29/tiny-fps/server` | Node WebSocket server (needs `ws`)                                     | Node only   |
 
 CI checks the budgets (40 KB and 16 KB) on every pull request.
@@ -36,8 +36,8 @@ CI checks the budgets (40 KB and 16 KB) on every pull request.
 
 https://korial29.github.io/tiny-fps/
 
-1. Open the page, pick a name and play: you are alone against the monsters.
-2. For co-op on one machine, open it in a second tab of the same browser and join with another name: the tabs play together, with no server.
+1. Open the page, pick a name and play: you have the rooftop to yourself.
+2. To play with someone on one machine, open it in a second tab of the same browser and join with another name: the tabs play together, with no server.
 3. To play across devices, pick the server mode and give it the URL of a running `tiny-fps-server`.
 
 ---
@@ -171,7 +171,6 @@ The subset of `WebSocket` the client uses: `binaryType`, `onopen`, `onclose`, `o
 | Look   | Mouse (click the game to lock the pointer, Esc to release it) |
 | Move   | WASD, or the arrow keys                                       |
 | Jump   | Space                                                         |
-| Fire   | Left mouse button, held                                       |
 | Mute   | M (remembered)                                                |
 
 Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard WASD is ZQSD with nothing to set.
@@ -180,47 +179,37 @@ Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard
 
 ## How a game plays
 
-- **Co-op**: everyone fights the monsters together; there is no friendly fire. Up to 16 players.
-- **Chaingun**: 12 shots a second, at half speed while you fire. The host decides every hit, and moves the targets back to where you saw them (lag compensation).
-- **Monsters**:
-  - Walkers patrol the floors, fire bullets and strike up close.
-  - Flyers float over steps and pits.
-  - They spot you within 60° of where they face and never through a wall, then alert their neighbours. One shot kills.
-- **Health**: 9 points. A hit takes one, then you can't be hurt for a second. A dead player comes back at the start 3 s later. Every 4th kill leaves a health pack.
-- **Keys and gates**: red, blue and yellow keys open the barred gates of their colour, for the whole team.
-- **The way out**: the start room locks behind you. Touch the goal to open it, then the level is won once every living player is back inside.
-- **Five levels**: Warm-up, Foundry, Cistern, Loop and Citadel. Then the run starts over in hard mode, with faster monsters that strike and fire more often. The end screen shows the time and each player's kills and deaths.
-- **Sound**: every sound is synthesised in code and placed left or right by where it comes from; a dark music loops under it. The sound starts with the click that locks the pointer.
-- **Dark levels**: your flashlight casts shadows, and so do muzzle flashes. Explosions, hits, bullets, the goal and the open exit light up their surroundings.
+For now the game is the movement and the room; the rules come with the next steps of [`docs/PLAN.md`](docs/PLAN.md).
+
+- **The rooftop**: one 40 × 40 m deck under an open sky, with a parapet round the edge, a crate you can jump onto, a block too tall to climb, and a platform with four steps up to it. Up to 16 players share it, each with a name tag and a colour of their own.
+- **Moving**: run, strafe and jump. The host decides where everyone is. Your own moves show at once (the client predicts them) and are corrected to the host's state, to the bit.
+- **The others**: drawn 100 ms in the past, interpolated between snapshots, as soldiers with swinging arms and legs. Each carries a flashlight that casts shadows.
+- **Sound**: a synthesiser and a mixer that places sounds left or right by where they come from, and a dark music loop. The sound starts with the click that locks the pointer. There are no sound effects yet.
+- **Coming**: parkour moves (sprint, double jump, wall-run, ledge grab, slide), a Mirror's Edge look, two teams, flags, a score, and a tackle that makes a carrier drop the flag.
 
 ---
 
 ## Features
 
-Parity with the js13k game is tracked in [`docs/PARITY.md`](docs/PARITY.md).
-
 - [x] Multiplayer over WebSocket, or between tabs of one browser with no server
-- [x] Doom-style sector maps: steps, pits, low ceilings, balconies, eight procedural materials (brick, tile, lava, stone, metal, wood, moss, grating) with bump mapping and per-material highlights, each level themed
+- [x] Doom-style sector maps: steps, pits, low ceilings, balconies, eight procedural materials (brick, tile, lava, stone, metal, wood, moss, grating) with bump mapping and per-material highlights
+- [x] The rooftop map: a deck, a parapet, a crate, a block and a platform with steps
 - [x] Client-side prediction, exact to the bit, and the other players interpolated
-- [x] Chaingun with lag-compensated hitscan, spinning barrels, recoil, muzzle flash, head bob, sparks
-- [x] Walkers and flyers: patrol, sight cone, alert, chase, bullets, melee, gibs and explosions
-- [x] Health, hit cooldown, death and respawn, health drops, team keys and barred gates
-- [x] Five levels, the goal and the way back, hard mode on the next run, end screen with the time
-- [x] Flashlights with shadow maps, lit muzzle flashes, explosion, hit, bullet, goal and exit lights
-- [x] Atmosphere: a light colour per room, a fog colour per level, flickering lava light, dust in the flashlight beam, soft smoke after explosions
-- [x] Post-processing: bloom on flashes, lava and glows, tone mapping, vignette, film grain, 4x antialiasing
-- [x] Models and particles: hunched walkers with jointed limbs, flapping flyers, soldiers for the other players, a detailed chaingun, ejected brass casings, streaking sparks, gibs that leave blood splats
-- [x] Sound: a jsfxr-style synthesiser (shot, boom, hit, collect, clock, burst), stereo by position, a looped music; M mutes
-- [x] HUD and screens: health bar, damage vignette and pickup fades, low-health pulse and heartbeat, title and pause screen, death countdown, end screen with each player's kills and deaths
+- [x] A per-tick history of the players on the host, for lag compensation
+- [x] Flashlights with shadow maps, a light colour per room, a fog colour per map, flickering lava light, dust in the flashlight beam
+- [x] Post-processing: bloom, tone mapping, vignette, film grain, 4x antialiasing
+- [x] A model for the other players: jointed legs and arms that follow their stride
+- [x] Sound: a jsfxr-style synthesiser and a looped music; M mutes
+- [x] A title screen with the controls, a muted mark, a player count and name tags
 - [x] Shadow DOM, zero runtime dependencies, size-gated in CI
 
 ---
 
 ## How it works
 
-- **The host is authoritative**: the Node server, or the host tab in local mode. It runs the players, the monsters, the bullets, the pickups and the levels.
+- **The host is authoritative**: the Node server, or the host tab in local mode. It runs the players on the map.
 - **Inputs, not positions**: each client sends one 11-byte input per step at 60 Hz, holding its keys, view angles and the moment it sees the others at. It predicts its own player at once and replays what the host has not acknowledged yet.
-- **Snapshots** go out at 30 Hz: players, shots, monsters, bullets, events and pickups, in a compact binary format. The other players and the monsters are drawn 100 ms in the past, interpolated between snapshots.
+- **Snapshots** go out at 30 Hz: a 4-byte head and 24 bytes per player, in a compact binary format. The other players are drawn 100 ms in the past, interpolated between snapshots.
 - **Rendering**: one WebGL2 shader program and one vertex buffer, up to 16 lights, with up to 4 shadow maps drawn by the same program.
 
 ---

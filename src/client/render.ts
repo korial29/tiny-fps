@@ -3,18 +3,16 @@
 // them to a dim ambient, and each shadowed spot first draws the level and the bodies into its layer
 // of a depth texture array. The scene goes into an offscreen target, then a second, small program
 // (POST) turns it into the picture on the canvas. No DOM beyond the canvas.
-import { MONSTER, TEX } from '../shared/types';
-import type { Bullet, Edge, Item, Level, Monster, PlayerState, Sector } from '../shared/types';
-import { BLAST, BLOOD, TRAIL, fade, glow, lit, puff } from './effects';
-import type { Effects, Puff } from './effects';
-import { MUZZLE, chaingun } from './gun';
-import { props } from './items';
-import { METAL, QUAD, STRIDE, axesAlong, basis, dress, place, pushBox, pushFrame } from './mesh';
+import { TEX } from '../shared/types';
+import type { Edge, Level, PlayerState, Sector } from '../shared/types';
+import { lit } from './effects';
+import type { Effects } from './effects';
+import { STRIDE, basis, pushBox } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
-import { SWING, bullet, flyer, follow, pace, soldier, walker } from './monsters';
-import type { Gait } from './monsters';
+import { follow, pace, soldier } from './soldier';
+import type { Gait } from './soldier';
 import { LAYERS, SIZE, textures } from './textures';
 
 /** MapDef.fog when a map sets none: the clear colour and what distance fog fades to, then its density. Dark, the map is indoors. */
@@ -29,8 +27,6 @@ const TILE = 2;
 const SHADOW = 512;
 /** What the sector light is scaled to: lit by nothing else, a room is this bright. The flashlight must matter. */
 const AMBIENT = 0.3;
-/** The view model's floor, in place of AMBIENT: it never goes black. */
-const GUN = 0.55;
 /** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
 const SAMPLES = 4;
 
@@ -67,7 +63,7 @@ o=vec4(c,1);}`;
 
 /**
  * Blinn-Phong strength and exponent: a row per TEX id in order (brick, tile, lava, stone, metal, wood,
- * moss, grate), then the flat bodies and the flat metal (layer METAL). Lava and glows never get here: they light themselves.
+ * moss, grate), then the flat bodies. Lava and glows never get here: they light themselves.
  */
 export const SPEC = [
   [0.04, 8],
@@ -79,14 +75,12 @@ export const SPEC = [
   [0.3, 20],
   [0.7, 40],
   [0.1, 24],
-  [0.3, 40],
 ];
 /** Metres a height of 1 in a texture's alpha stands for. */
 const RELIEF = 0.06;
 
-// s: 1 on a texture, 0 on a flat colour (layer -0.5 shines like metal). y: layer -3, a smoke billboard: C is (corner x, corner y,
-// -3, opacity), grey and lit like the rest, with an alpha that falls off from its centre to its
-// edge. g: lava (which also drifts) and layer -2, which glow: no light, no shade. The texture's alpha is a height: its screen-space derivatives tilt the normal
+// s: 1 on a texture, 0 on a flat colour. g: lava (which also drifts)
+// and layer -2, which glow: no light, no shade. The texture's alpha is a height: its screen-space derivatives tilt the normal
 // (bump mapping without tangents), faded out as a pixel covers more than a texel or two so the
 // mipmapped relief does not shimmer. n is the surface normal, m the bumped one. l: the ambient
 // term (Z, times the sector light on a texture) with the directional shade, plus every light, then
@@ -104,14 +98,14 @@ const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)})
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
 void main(){
 if(Z<0.)return;
-float L=C.z,s=step(0.,L),I=floor(C.w*.5),y=step(L,-2.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5)*(1.-y);
+float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
-vec3 c=y>0.?vec3(.6):mix(vec3(C.xy,C.w),t.rgb,s);
+vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
 vec3 n=normalize(N),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float h=t.a*s*${RELIEF},det=dot(dx,a);
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
-vec2 R=SP[int(s>0.?L+.5:${LAYERS}.+step(-.7,L))];
+vec2 R=SP[int(s>0.?L+.5:${LAYERS}.)];
 vec3 l=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s)*Z*(.45+.55*max(dot(normalize(n+m),normalize(vec3(.4,.8,.3))),0.)),sp=vec3(0),V=normalize(E-P);
 for(int i=0;i<${MAX_LIGHTS};i++){
 if(i>=Q||g>0.)break;
@@ -127,7 +121,7 @@ w*=v/4.;}
 l+=K[i].rgb*w;
 sp+=K[i].rgb*w*pow(max(dot(m,normalize(d+V)),0.),R.y);}
 c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
-o=vec4(mix(c,F.rgb,1.-exp(-F.a*length(P-E))),y>0.?C.w*(1.-smoothstep(.2,1.,length(C.xy))):1.);}`;
+o=vec4(mix(c,F.rgb,1.-exp(-F.a*length(P-E))),1.);}`;
 
 /**
  * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
@@ -286,9 +280,8 @@ interface Target {
 
 export interface Renderer {
   /**
-   * Draws one frame: the map, its gates, goal and items, the others, the monsters, their bullets
-   * and the effects as seen from eye, with the view model on top (not while fx.dead). colors maps
-   * player id to CSS.
+   * Draws one frame: the map, the others and the dust as seen from eye. colors maps player id to
+   * CSS.
    */
   frame(
     eye: Vec3,
@@ -297,14 +290,9 @@ export interface Renderer {
     others: PlayerState[],
     colors: ReadonlyMap<number, string>,
     fx: Effects,
-    monsters: Monster[],
-    bullets: Bullet[],
-    items: Item[],
     /** gather() in lights.ts: at most MAX_LIGHTS, the first MAX_SHADOWS shadowed spots mapped. */
     lights: Light[],
   ): void;
-  /** Builds the geometry of another level, drawn from the next frame on. */
-  level(lvl: Level): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
   destroy(): void;
@@ -320,8 +308,7 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 };
 
 /** Throws when the browser has no WebGL2. */
-export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Renderer => {
-  let lvl = first;
+export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer => {
   /** How far and how fast each body drawn has gone: the limbs stride with it. */
   const gaits = new Map<number, Gait>();
   let clock = performance.now() / 1000;
@@ -345,43 +332,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
   };
 
   const size = () => backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
-  let ground = levelVerts(lvl);
+  const ground = levelVerts(lvl);
   const pixels = textures();
-  let tail = ground.length * 4;
+  const tail = ground.length * 4;
   let cap = tail + TAIL;
-  const [steel, iron, plate, dark, gold] = [
-    [0.55, 0.55, 0.6],
-    [0.2, 0.2, 0.23],
-    [0.38, 0.38, 0.42],
-    [0.03, 0.03, 0.04],
-    [0.75, 0.5, 0.15],
-  ];
-  /** The chaingun in its flat colours: `spun` turns with the barrels, `still` does not. */
-  const gear = (sides: number) => {
-    const g = chaingun(sides);
-    const paint = (k: keyof typeof g, c: number[], layer = METAL) => dress(g[k], c, layer);
-    return {
-      spun: [paint('barrels', steel), paint('clamps', plate)].flat(),
-      still: [
-        paint('body', iron),
-        paint('trim', plate),
-        paint('holes', dark, -1),
-        paint('brass', gold),
-      ].flat(),
-    };
-  };
-  const [near, far] = [gear(10), gear(5)];
-  const flare: number[] = [];
-  /** The others' flash, three times as wide: at a few metres the own one is a dot. */
-  const wide: number[] = [];
-  for (const h of [
-    [0.1, 0.01, 0.03],
-    [0.01, 0.1, 0.03],
-    [0.03, 0.03, 0.05],
-  ] as Vec3[]) {
-    pushBox(flare, [0, 0, -MUZZLE - 0.04], h, 0, [1, 0.85, 0.4], -2);
-    pushBox(wide, [0, 0, -MUZZLE - 0.12], h.map(x => x * 3) as Vec3, 0, [1, 0.85, 0.4], -2);
-  }
   let u: Record<string, WebGLUniformLocation> = {};
   let shadows: WebGLTexture;
   let depth: WebGLFramebuffer;
@@ -540,7 +494,6 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       gl.texParameterf(gl.TEXTURE_2D_ARRAY, aniso.TEXTURE_MAX_ANISOTROPY_EXT, 8);
     }
     gl.enable(gl.DEPTH_TEST);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     climate();
     const [w, h] = size();
     if (w && h) {
@@ -573,18 +526,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   return {
-    level(next) {
-      lvl = next;
-      gaits.clear();
-      ground = levelVerts(lvl);
-      tail = ground.length * 4;
-      cap = tail + TAIL;
-      if (!lost) {
-        alloc();
-        climate();
-      }
-    },
-    frame(eye, yaw, pitch, others, colors, fx, monsters, bullets, items, lights) {
+    frame(eye, yaw, pitch, others, colors, fx, lights) {
       const [w, h] = size();
       if (lost || !w || !h) {
         return;
@@ -603,93 +545,14 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       clock = now;
       for (const p of others) {
         const g = follow(gaits, p.id, p.x, p.z, dt);
-        const gun = [far.spun, far.still, fx.flashes.has(p.id) ? wide : []];
-        soldier(v, p, rgb(colors.get(p.id) ?? '#888'), g.walked, pace(g), gun);
+        soldier(v, p, rgb(colors.get(p.id) ?? '#888'), g.walked, pace(g));
       }
-      for (const m of monsters) {
-        const g = follow(gaits, m.id, m.x, m.z, dt);
-        if (m.kind == MONSTER.FLYER) {
-          flyer(v, m, now, g.vx, g.vz);
-        } else {
-          const left = fx.swings.get(m.id);
-          walker(v, m, g.walked, left ? 1 - left / SWING : 0, pace(g));
-        }
-      }
-      props(v, lvl, items, now);
-      for (const { p, yaw, half, c, life } of fx.gibs) {
-        const k = Math.min(1, life * 2);
-        pushBox(v, p, half.map(x => x * k) as Vec3, yaw, c);
-      }
-      // What the shadow maps hold ends here: the unlit effects after it cast nothing.
+      // What the shadow maps hold ends here: the unlit dust after it casts nothing.
       const bodies = v.length;
-      for (const b of bullets) {
-        bullet(v, b, fx.aim.get(b.id));
-      }
-      const axes = basis(yaw, pitch, fx.roll);
-      const [right, up, f] = axes;
-      const specks = lit(fx, eye, f);
+      const specks = lit(fx, eye, basis(yaw, pitch, fx.roll)[2]);
       for (let i = 0; i < specks.length; i += 4) {
         const [b, k] = [Math.sqrt(specks[i + 3]), 0.01 + 0.025 * specks[i + 3]];
         pushBox(v, specks.slice(i, i + 3) as Vec3, [k, k, k], 0, [b, b * 0.9, b * 0.7], -2);
-      }
-      for (const { p, v: w, c = [1, 0.8, 0.3] } of fx.sparks) {
-        // A streak from the head back along the velocity: bright at the head, dim at the tail.
-        const [speed, h] = [Math.hypot(...w), Math.max(Math.hypot(...w) * TRAIL, 0.04) / 2];
-        const d = (speed ? w.map(x => x / speed) : [0, 1, 0]) as Vec3;
-        pushFrame(
-          v,
-          p.map((x, i) => x - d[i] * h) as Vec3,
-          axesAlong(d),
-          [h, 0.008, 0.008],
-          c.map(x => x * 0.25),
-          -2,
-          c,
-        );
-      }
-      for (const { p, yaw, tilt, size, life } of fx.casings) {
-        if (life > 0) {
-          const [k, t] = [size * Math.min(1, life * 2), Math.cos(tilt)];
-          const d: Vec3 = [t * Math.sin(yaw), Math.sin(tilt), t * Math.cos(yaw)];
-          pushFrame(v, p, axesAlong(d), [k * 2.8, k, k], gold, METAL);
-        }
-      }
-      for (const { p, r, yaw, life } of fx.splats) {
-        // Two flat slabs across each other: a blot.
-        const k = r * Math.min(1, life);
-        for (const a of [yaw, yaw + Math.PI / 4]) {
-          pushBox(v, p, [k, 0.002, k * 0.8], a, BLOOD);
-        }
-      }
-      for (const b of fx.blasts) {
-        // Bright at the start, red and shrinking at the end: no blending to fade it with.
-        const [k, u] = [glow(b), b.t / BLAST];
-        const c = [1, 0.9 - u * 0.7, 0.5 - u * 0.45];
-        for (const yaw of [0, Math.PI / 4]) {
-          pushBox(v, b.p, [k, k, k], yaw, c, -2);
-        }
-      }
-      const world = v.length;
-      // Blended after the opaque scene, far to near, as billboards.
-      const dist = (s: Puff) => Math.hypot(s.p[0] - eye[0], s.p[1] - eye[1], s.p[2] - eye[2]);
-      for (const s of [...fx.smoke].sort((a, b) => dist(b) - dist(a))) {
-        const [k, a] = [puff(s) * 1.6, fade(s)];
-        for (const [i, j] of QUAD) {
-          v.push(
-            ...[0, 1, 2].map(n => s.p[n] + (right[n] * i + up[n] * j) * k),
-            ...f.map(x => -x),
-            ...[i, j, -3, a],
-          );
-        }
-      }
-      const haze = v.length;
-      // Last, over a cleared depth: the gun never sinks into a wall.
-      const off: Vec3 = [0.26, -0.24 + fx.kick * 0.01, 0.6 - fx.kick * 0.06];
-      if (!fx.dead) {
-        place(v, near.still, eye, axes, off, 0.8);
-        place(v, near.spun, eye, axes, off, 0.8, fx.spin);
-        if (fx.flash > 0) {
-          place(v, flare, eye, axes, off, 0.8, fx.spin * 3);
-        }
       }
       if (tail + v.length * 4 > cap) {
         cap = tail + v.length * 8;
@@ -728,18 +591,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       gl.uniform4fv(u.K, pk.k);
       gl.uniformMatrix4fv(u.M, false, pk.m);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-      gl.drawArrays(gl.TRIANGLES, 0, first + world / STRIDE);
-      if (haze > world) {
-        // Tested against the scene's depth, not written: puffs do not hide each other's far side.
-        gl.enable(gl.BLEND);
-        gl.depthMask(false);
-        gl.drawArrays(gl.TRIANGLES, first + world / STRIDE, (haze - world) / STRIDE);
-        gl.depthMask(true);
-        gl.disable(gl.BLEND);
-      }
-      gl.clear(gl.DEPTH_BUFFER_BIT);
-      gl.uniform1f(u.Z, GUN);
-      gl.drawArrays(gl.TRIANGLES, first + haze / STRIDE, (v.length - haze) / STRIDE);
+      gl.drawArrays(gl.TRIANGLES, 0, first + v.length / STRIDE);
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaa);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, hdr.f);
       gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);

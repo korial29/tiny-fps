@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { bar, compile } from './level';
+import { compile } from './level';
 import { HALL } from './map';
 import { trace } from './trace';
-import { ITEM, PHASE, TEX } from './types';
 
 const lvl = compile(HALL);
 type Vec3 = [number, number, number];
@@ -108,39 +107,5 @@ describe('trace', () => {
     const t = from(-5, 1.6, 8, [1, 0, 0]);
     expect(t).toBeGreaterThanOrEqual(0);
     expect(t).toBeLessThanOrEqual(RANGE);
-  });
-});
-
-describe('barred sectors', () => {
-  const room = (x0: number, x1: number): [number, number][] => [
-    [x0, 0],
-    [x1, 0],
-    [x1, 10],
-    [x0, 10],
-  ];
-  const sector = (x0: number, x1: number) => ({
-    pts: room(x0, x1),
-    floor: 0,
-    ceil: 4,
-    ft: TEX.TILE,
-    wt: TEX.BRICK,
-    ct: TEX.STONE,
-  });
-  /** Three rooms in a row, the middle one a gate: bars are bars, you see through them. */
-  const gated = compile({
-    sectors: [sector(0, 10), sector(10, 14), sector(14, 24)],
-    spawns: [[5, 5, 0]],
-    gates: [{ sector: 1, key: ITEM.KEY_RED }],
-  });
-
-  it('lets a ray fly through a barred gate to the far wall, as through an open one', () => {
-    const from: Vec3 = [2, 1.6, 5];
-    expect(gated.barred.has(1)).toBe(true);
-    const shut = trace(gated, from, [1, 0, 0], RANGE);
-    expect(shut).toBeCloseTo(22);
-    bar(gated, 1 << ITEM.KEY_RED, PHASE.HUNT);
-    expect(gated.barred.has(1)).toBe(false);
-    expect(trace(gated, from, [1, 0, 0], RANGE)).toBe(shut);
-    bar(gated, 0, PHASE.HUNT);
   });
 });

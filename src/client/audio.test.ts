@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createAudio, createClock, createHeart, savedMute, toggleMute } from './audio';
+import { createAudio, createHeart, savedMute, toggleMute } from './audio';
 import type { Audio } from './audio';
 import { RATE, SOUND } from './sfx';
 
@@ -194,9 +194,9 @@ describe('play', () => {
     const n = fake().sources.length;
     a.play(SOUND.HIT, at(35, 0));
     expect(fake().sources).toHaveLength(n);
-    a.play(SOUND.COLLECT, at(1, 0));
+    a.play(SOUND.HEART, at(1, 0));
     expect(playing()).toBe(24);
-    expect(voice()).toMatchObject({ id: SOUND.COLLECT, src: { started: 1 } });
+    expect(voice()).toMatchObject({ id: SOUND.HEART, src: { started: 1 } });
   });
 
   it('frees a voice when its sound ends', () => {
@@ -205,8 +205,8 @@ describe('play', () => {
       a.play(SOUND.HIT);
     }
     fake().sources.at(-1)!.onended!();
-    a.play(SOUND.COLLECT);
-    expect(voice()).toMatchObject({ id: SOUND.COLLECT, src: { started: 1 } });
+    a.play(SOUND.HEART);
+    expect(voice()).toMatchObject({ id: SOUND.HEART, src: { started: 1 } });
     expect(fake().sources.filter(s => s.stopped)).toHaveLength(0);
   });
 });
@@ -260,32 +260,6 @@ describe('without Web Audio', () => {
       },
     );
     quiet(createAudio());
-  });
-});
-
-describe('createClock', () => {
-  it('ticks once a second while on, and only then', () => {
-    const play = vi.fn();
-    const tick = createClock({ play } as unknown as Audio);
-    tick(false, 0);
-    tick(false, 5000);
-    expect(play).not.toHaveBeenCalled();
-    tick(true, 5000);
-    tick(true, 5500);
-    tick(true, 5999);
-    expect(play).toHaveBeenCalledTimes(1);
-    tick(true, 6000);
-    expect(play).toHaveBeenCalledTimes(2);
-    expect(play).toHaveBeenLastCalledWith(SOUND.CLOCK);
-  });
-
-  it('does not make up for a long gap with a burst', () => {
-    const play = vi.fn();
-    const tick = createClock({ play } as unknown as Audio);
-    tick(true, 0);
-    tick(true, 10_000);
-    tick(true, 10_001);
-    expect(play).toHaveBeenCalledTimes(2);
   });
 });
 

@@ -4,7 +4,6 @@
 // host's state and the unacked inputs are replayed on top. Other players are drawn
 // INTERP_DELAY in the past, interpolated between the two snapshots around that time.
 import { INTERP_DELAY } from '../shared/constants';
-import { bar } from '../shared/level';
 import { TAU, move, norm } from '../shared/physics';
 import { onWire } from '../shared/protocol';
 import type { Input, Level, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
@@ -20,12 +19,7 @@ export interface Predictor {
    * With `now` (ms, performance.now()) the input carries the view tick the others are drawn at.
    */
   step(i: Omit<Input, 'seq' | 'view'>, now?: number): Input;
-  /**
-   * A decoded snapshot, received at `now` (ms, performance.now()). It also bars the level with its
-   * keys and phase (bar() in level.ts) before the replay. A gate that opens between a snapshot and
-   * the inputs the host has not applied yet is the one thing prediction cannot know: it corrects
-   * at the next snapshot.
-   */
+  /** A decoded snapshot, received at `now` (ms, performance.now()). */
   snapshot(s: Snapshot, now: number): void;
   /**
    * The own player, eased between the state before and after the last step by alpha in [0, 1]
@@ -154,7 +148,6 @@ export const createPredictor = (lvl: Level): Predictor => {
       if (snaps.length > MAX_SNAPS) {
         snaps.shift();
       }
-      bar(lvl, s.keys, s.phase);
       const me = s.players.find(p => p.id === id);
       if (!me) {
         return;

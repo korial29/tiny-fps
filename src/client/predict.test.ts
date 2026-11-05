@@ -5,8 +5,8 @@ import { HALL } from '../shared/map';
 import { move, spawn } from '../shared/physics';
 import { decodeInput, decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
 import { Room } from '../shared/room';
-import { ITEM, KEY, PHASE, TEX } from '../shared/types';
-import type { Conn, Input, MapDef, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
+import { KEY } from '../shared/types';
+import type { Conn, Input, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
 import { createPredictor } from './predict';
 
 const STEP = 1000 / TICK_HZ;
@@ -28,9 +28,6 @@ const snapPlayer = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => (
 const snapshot = (tick: number, ...players: SnapPlayer[]): Snapshot => ({
   tick,
   players,
-  phase: 0,
-  keys: 0,
-  items: [],
 });
 const fwd = { keys: KEY.FORWARD, yaw: 0, pitch: 0 };
 
@@ -548,10 +545,7 @@ describe('lag compensation through the room', () => {
   });
 });
 
-describe('health and progression', () => {
-  const EAST = (3 * Math.PI) / 2;
-  const RED = 1 << ITEM.KEY_RED;
-
+describe('health', () => {
   describe('a dead own player', () => {
     const dead = () => {
       const pred = createPredictor(lvl);
@@ -584,147 +578,6 @@ describe('health and progression', () => {
       const z = pred.me(1)!.z;
       pred.step(fwd);
       expect(pred.me(1)!.z).toBeLessThan(z);
-    });
-  });
-
-  describe('the level', () => {
-    const room = (x0: number, z0: number, ...more: [number, number][][]): [number, number][] => [
-      [x0, z0],
-      [x0 + 10, z0],
-      [x0 + 10, z0 + 10],
-      [x0, z0 + 10],
-      ...more.flat(),
-    ];
-    const sector = (pts: [number, number][]) => ({
-      pts,
-      floor: 0,
-      ceil: 4,
-      ft: TEX.TILE,
-      wt: TEX.BRICK,
-      ct: TEX.STONE,
-    });
-    const twin = (): MapDef => ({
-      sectors: [sector(room(0, 0)), sector(room(10, 0))],
-      spawns: [[5, 5, 0]],
-      gates: [{ sector: 1, key: ITEM.KEY_RED }],
-    });
-
-    it('bars it with the keys and the phase of each snapshot before the replay', () => {
-      const gate = compile(twin());
-      const pred = createPredictor(gate);
-      pred.you(0);
-      const at = (tick: number, keys: number) => ({
-        ...snapshot(tick, snapPlayer(0, { x: 5, y: 0, z: 5, yaw: EAST })),
-        keys,
-      });
-      pred.snapshot(at(1, 0), 0);
-      for (let k = 0; k < 60; k++) {
-        pred.step({ keys: KEY.FORWARD, yaw: EAST, pitch: 0 });
-      }
-      // Walking east into the shut gate.
-      expect(pred.me(1)!.x).toBeCloseTo(10 - 0.4, 3);
-      // The same unacked inputs replayed under the key walk through it.
-      pred.snapshot(at(2, RED), 40);
-      expect(pred.me(1)!.x).toBeCloseTo(11, 3);
-      // And shut again if a snapshot says the team no longer holds it (a new level, a lost key).
-      pred.snapshot(at(3, 0), 80);
-      expect(pred.me(1)!.x).toBeCloseTo(10 - 0.4, 3);
-      expect(gate.barred).toEqual(new Set([1]));
-    });
-
-    it('opens the exit on RETURN: the map decides which sector it is', () => {
-      const exit = compile({ ...twin(), gates: undefined, exit: 0 });
-      const pred = createPredictor(exit);
-      pred.you(0);
-      pred.snapshot({ ...snapshot(1, snapPlayer(0, { x: 15, y: 0, z: 5 })), phase: PHASE.HUNT }, 0);
-      for (let k = 0; k < 60; k++) {
-        pred.step({ keys: KEY.FORWARD, yaw: Math.PI / 2, pitch: 0 });
-      }
-      expect(pred.me(1)!.x).toBeCloseTo(10 + 0.4, 3);
-      pred.snapshot(
-        { ...snapshot(2, snapPlayer(0, { x: 15, y: 0, z: 5 })), phase: PHASE.RETURN },
-        40,
-      );
-      expect(pred.me(1)!.x).toBeCloseTo(9, 3);
-    });
-
-    /**
-     * A run through a Room on `twin()` with the key `key` away from the start and a door at x = 10:
-     * 120 steps east, inputs and snapshots `lag` steps late. Returns the biggest jump the player
-     * made when a snapshot arrived (the correction), and how far the host and the player ended
-     * apart.
-     */
-    const run = (key: [number, number], lag: number, hook?: (k: number, room: Room) => void) => {
-      const map: MapDef = { ...twin(), items: [[...key, ITEM.KEY_RED]] };
-      const host = new Room({}, map);
-      const conn: Conn & { bins: ArrayBuffer[] } = {
-        bins: [],
-        send: d => typeof d !== 'string' && conn.bins.push(d),
-      };
-      host.connect(conn);
-      host.receive(conn, JSON.stringify({ t: 'join', name: 'me' }));
-      const pred = createPredictor(compile(map));
-      pred.you(0);
-      const [inbox, outbox]: { at: number; data: ArrayBuffer }[][] = [[], []];
-      let [seen, worst] = [0, 0];
-      const hp: number[] = [];
-      for (let k = 0; k < 140; k++) {
-        if (k < 120) {
-          const i = pred.step({ keys: KEY.FORWARD, yaw: EAST, pitch: 0 }, k * STEP);
-          inbox.push({ at: k + lag, data: encodeInput(i) });
-        }
-        while (inbox.length && inbox[0].at <= k) {
-          host.receive(conn, inbox.shift()!.data);
-        }
-        hook?.(k, host);
-        host.tick();
-        for (; seen < conn.bins.length; seen++) {
-          outbox.push({ at: k + lag, data: conn.bins[seen] });
-        }
-        while (outbox.length && outbox[0].at <= k) {
-          const snap = decodeSnapshot(outbox.shift()!.data)!;
-          const before = pred.me(1);
-          pred.snapshot(snap, k * STEP);
-          const after = pred.me(1)!;
-          hp.push(snap.players[0].hp);
-          worst = Math.max(worst, before ? Math.hypot(after.x - before.x, after.z - before.z) : 0);
-        }
-      }
-      const last = decodeSnapshot(conn.bins.at(-1)!)!.players[0];
-      const me = pred.me(1)!;
-      return { worst, end: Math.hypot(last.x - me.x, last.z - me.z), x: last.x, hp };
-    };
-
-    it('predicts a gate that opens on a pickup far from it exactly', () => {
-      // The key is 4 m before the door: the snapshot that tells of it is in long before it.
-      const r = run([5.5, 4.8], 6);
-      expect(r.x).toBeGreaterThan(12);
-      expect(r.worst).toBe(0);
-      expect(r.end).toBe(0);
-    });
-
-    it('corrects once, by at most the distance run in a round trip, for a key taken at the door', () => {
-      // 1 m before the door, and a round trip of 20 steps: the player runs into the shut gate
-      // for a few steps while the host lets it through.
-      const r = run([9.1, 4.8], 10);
-      expect(r.x).toBeGreaterThan(12);
-      expect(r.worst).toBeGreaterThan(0.1);
-      expect(r.worst).toBeLessThanOrEqual(2);
-      expect(r.end).toBe(0);
-    });
-
-    it('stops where the host stopped a player that died on the way, replaying nothing', () => {
-      const r = run([5.5, 4.8], 6, (k, host) => {
-        const [me] = host['peers'].values();
-        if (k === 30) {
-          [me!.hp, me!.hurt] = [0, host['ticks']];
-        }
-      });
-      expect(r.hp).toContain(0);
-      // 24 steps from 5 m, not the 7 m to the far side of the door.
-      expect(r.x).toBeGreaterThan(6);
-      expect(r.x).toBeLessThan(8.5);
-      expect(r.end).toBe(0);
     });
   });
 });

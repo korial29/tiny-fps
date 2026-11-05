@@ -5,13 +5,10 @@
 // Input, 11 bytes: [type u8 = MSG_INPUT][seq u16][keys u8][yaw u16][pitch i16][view u16][frac u8]
 //   yaw in 65536ths of a turn, decoded in [0, 2π); pitch in 1/10000 rad; view is the host tick
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
-// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8][flags u8][keys u8]
-//   flags: bit 0 = phase (0 hunt, 1 return); keys: the team's key bits (1 << ITEM.KEY_*)
-//   then count × 25 bytes:
+// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 25 bytes:
 //   [id u8][x f32][y f32][z f32][vy f32][yaw u16][pitch i16][ack u16][flags u8][hp u8]
 //   flags: bit 0 = ground
 //   x, y, z, vy are the host's float32 state, exact (see move in physics.ts).
-//   then [items u8] and items × 14 bytes: [id u8][kind u8][x f32][y f32][z f32]
 // Every multi-byte field is big-endian (DataView's default).
 import type { Input, PlayerInfo, Snapshot } from './types';
 
@@ -23,9 +20,8 @@ export const MSG_INPUT = 1;
 export const MSG_SNAPSHOT = 2;
 
 export const INPUT_BYTES = 11;
-export const SNAP_HEAD = 6;
+export const SNAP_HEAD = 4;
 export const SNAP_PLAYER = 25;
-export const SNAP_ITEM = 14;
 
 const TURN = 65536 / (2 * Math.PI);
 /** Radians to 65536ths of a turn; the mask also folds negative and ≥ 2π angles into one turn. */
@@ -82,13 +78,10 @@ export const decodeInput = (buf: ArrayBuffer): Input | null => {
 };
 
 export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
-  const items = SNAP_HEAD + SNAP_PLAYER * s.players.length;
-  const v = new DataView(new ArrayBuffer(items + 1 + SNAP_ITEM * s.items.length));
+  const v = new DataView(new ArrayBuffer(SNAP_HEAD + SNAP_PLAYER * s.players.length));
   v.setUint8(0, MSG_SNAPSHOT);
   v.setUint16(1, s.tick & 0xffff);
   v.setUint8(3, s.players.length);
-  v.setUint8(4, s.phase & 1);
-  v.setUint8(5, s.keys);
   s.players.forEach((p, i) => {
     const o = SNAP_HEAD + i * SNAP_PLAYER;
     v.setUint8(o, p.id);
@@ -102,15 +95,6 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint8(o + 23, +p.ground);
     v.setUint8(o + 24, p.hp);
   });
-  v.setUint8(items, s.items.length);
-  s.items.forEach((t, i) => {
-    const o = items + 1 + i * SNAP_ITEM;
-    v.setUint8(o, t.id);
-    v.setUint8(o + 1, t.kind);
-    v.setFloat32(o + 2, t.x);
-    v.setFloat32(o + 6, t.y);
-    v.setFloat32(o + 10, t.z);
-  });
   return v.buffer;
 };
 
@@ -121,26 +105,9 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
   }
   const v = new DataView(buf);
   const count = v.getUint8(3);
-  if (v.getUint8(0) !== MSG_SNAPSHOT) {
+  if (v.getUint8(0) !== MSG_SNAPSHOT || buf.byteLength !== SNAP_HEAD + SNAP_PLAYER * count) {
     return null;
   }
-  // Start of each section: its u8 count, then count records. Null when the frame ends early.
-  let at = SNAP_HEAD + SNAP_PLAYER * count;
-  const section = (size: number): [start: number, n: number] | null => {
-    if (buf.byteLength <= at) {
-      return null;
-    }
-    const n = v.getUint8(at);
-    const start = at + 1;
-    at = start + size * n;
-    return [start, n];
-  };
-  const items = section(SNAP_ITEM);
-  if (!items || buf.byteLength !== at) {
-    return null;
-  }
-  const each = <T>([start, n]: [number, number], size: number, f: (o: number) => T): T[] =>
-    Array.from({ length: n }, (_, i) => f(start + i * size));
   const players = [];
   for (let i = 0; i < count; i++) {
     const o = SNAP_HEAD + i * SNAP_PLAYER;
@@ -157,19 +124,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       hp: v.getUint8(o + 24),
     });
   }
-  return {
-    tick: v.getUint16(1),
-    players,
-    phase: v.getUint8(4) & 1,
-    keys: v.getUint8(5),
-    items: each(items, SNAP_ITEM, o => ({
-      id: v.getUint8(o),
-      kind: v.getUint8(o + 1),
-      x: v.getFloat32(o + 2),
-      y: v.getFloat32(o + 6),
-      z: v.getFloat32(o + 10),
-    })),
-  };
+  return { tick: v.getUint16(1), players };
 };
 
 /** Returns null on anything that is not a known text message. */

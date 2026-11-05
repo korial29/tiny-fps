@@ -137,17 +137,6 @@ export const createAudio = (): Audio => {
   };
 };
 
-/** Returns a function that plays CLOCK once a second while called with `on`; `now` in ms. */
-export const createClock = (a: Audio) => {
-  let next = 0;
-  return (on: boolean, now: number) => {
-    if (on && now >= next) {
-      next = now + 1000;
-      a.play(SOUND.CLOCK);
-    }
-  };
-};
-
 /** The heart beats at this health or below, while alive. */
 export const LOW_HP = 3;
 

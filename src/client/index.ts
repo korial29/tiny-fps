@@ -4,8 +4,8 @@ import { HALL } from '../shared/map';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import type { PlayerInfo, SocketLike } from '../shared/types';
-import { createAudio, createClock, createHeart, savedMute, toggleMute } from './audio';
-import { GAIN, HURT, createEffects } from './effects';
+import { createAudio, createHeart, savedMute, toggleMute } from './audio';
+import { HURT, createEffects } from './effects';
 import { HUD_CSS, createHud } from './hud';
 import { createInput } from './input';
 import { createPredictor } from './predict';
@@ -68,7 +68,6 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const audio = createAudio();
   audio.mute(savedMute());
   hud.mute(audio.muted);
-  const tick = createClock(audio);
   const beat = createHeart(audio);
   const ctl = createInput(canvas, () => hud.mute(toggleMute(audio)));
   // The click that takes the pointer lock is the gesture that lets the sound start.
@@ -81,7 +80,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   } catch {
     // No WebGL2: stay connected, say so on the title screen.
   }
-  const progress = createProgress({ lvl, you: () => you, fx, hud, audio });
+  const progress = createProgress({ lvl, you: () => you, fx, hud });
   let roster: PlayerInfo[] = [];
   let colors = new Map<number, string>();
   let names = new Map<number, string>();
@@ -178,7 +177,6 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     const others = predictor.others(now).filter(p => progress.alive(p.id));
     const eye: [number, number, number] = me ? [me.x, me.y + EYE, me.z] : [0, 0, 0];
     audio.listen(eye, ctl.yaw);
-    tick(progress.returning, now);
     const dt = Math.min((now - before) / 1000, 0.1);
     fx.update(me, ctl.keys, dt, progress.dead);
     hud.update(dt);
@@ -191,7 +189,6 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         others,
         colors,
         fx,
-        progress.items,
         gather({
           eye: [eye[0], eye[1] + fx.bob, eye[2]],
           yaw: ctl.yaw,
@@ -228,7 +225,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       }
     }
 
-    hud.fade(fx.hurt / HURT, beat(progress.hp, now), fx.gain / GAIN, fx.gainC);
+    hud.fade(fx.hurt / HURT, beat(progress.hp, now));
     hud.title(
       msg || (!open ? 'Connecting…' : !ready ? 'Joining…' : ctl.locked() ? '' : 'Click to play'),
       progress.name,

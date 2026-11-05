@@ -1,14 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { HEALTH, PLAYER_RESPAWN, TICK_HZ } from '../shared/constants';
 import { compile } from '../shared/level';
 import { HALL } from '../shared/map';
-import { ITEM, PHASE } from '../shared/types';
-import type { Item, SnapPlayer, Snapshot } from '../shared/types';
+import type { SnapPlayer, Snapshot } from '../shared/types';
 import { HURT, createEffects } from './effects';
-import { SAY } from './hud';
 import type { Hud } from './hud';
-import { ITEM_COLOR } from './items';
-import { SOUND } from './sfx';
 import { createProgress, facing } from './progress';
 
 const YOU = 1;
@@ -27,56 +23,36 @@ const player = (id: number, hp = HEALTH, x = 2, z = 2): SnapPlayer => ({
 const snap = (over: Partial<Snapshot> = {}): Snapshot => ({
   tick: 0,
   players: [player(YOU)],
-  phase: PHASE.HUNT,
-  keys: 0,
-  items: [],
   ...over,
 });
 
 const setup = () => {
-  const said: [number, string][] = [];
-  const shown = { hp: -1, keys: -1, dead: 0 };
+  const shown = { hp: -1, dead: 0 };
   const hud: Hud = {
     hp: n => (shown.hp = n),
-    keys: n => (shown.keys = n),
     dead: secs => (shown.dead = secs),
     fade: () => {},
     title: () => {},
     mute: () => {},
-    say: (slot, text) => void said.push([slot, text]),
     update: () => {},
   };
   const fx = createEffects();
-  const audio = { play: vi.fn() };
-  const progress = createProgress({ lvl: compile(HALL), you: () => YOU, fx, hud, audio });
-  return { progress, said, shown, fx, audio };
+  const progress = createProgress({ lvl: compile(HALL), you: () => YOU, fx, hud });
+  return { progress, shown, fx };
 };
 
 describe('hud', () => {
-  it('follows the own health, the keys and the death', () => {
+  it('follows the own health and the death', () => {
     const { progress, shown } = setup();
-    progress.snapshot(snap({ keys: 0b1010, players: [player(YOU, 5)] }));
-    expect(shown).toEqual({ hp: 5, keys: 0b1010, dead: 0 });
+    progress.snapshot(snap({ players: [player(YOU, 5)] }));
+    expect(shown).toEqual({ hp: 5, dead: 0 });
     expect(progress.hp).toBe(5);
-    progress.snapshot(snap({ keys: 0, players: [player(YOU, 0)] }));
-    expect(shown).toEqual({ hp: 0, keys: 0, dead: 3 });
+    progress.snapshot(snap({ players: [player(YOU, 0)] }));
+    expect(shown).toEqual({ hp: 0, dead: 3 });
     expect([progress.dead, progress.hp]).toEqual([true, 0]);
     progress.snapshot(snap({ players: [player(YOU, HEALTH)] }));
     expect(shown.dead).toBe(0);
     expect(progress.dead).toBe(false);
-  });
-
-  it('hints at the phase when it changes, and at the start', () => {
-    const { progress, said } = setup();
-    const notes = () => said.filter(([slot]) => slot == SAY.NOTE).map(([, t]) => t);
-    progress.snapshot(snap());
-    progress.snapshot(snap({ tick: 2 }));
-    expect(notes()).toEqual(['Find the exit']);
-    progress.snapshot(snap({ phase: PHASE.RETURN }));
-    progress.snapshot(snap({ phase: PHASE.RETURN }));
-    expect(notes()).toEqual(['Find the exit', 'Back to the start!']);
-    progress.snapshot(snap({ phase: PHASE.HUNT }));
-    expect(notes()).toEqual(['Find the exit', 'Back to the start!', 'Find the exit']);
   });
 });
 
@@ -182,63 +158,6 @@ describe('hurt flash', () => {
     progress.snapshot(snap({ players: [player(YOU), player(2, 9)] }));
     progress.snapshot(snap({ players: [player(YOU), player(2, 5)] }));
     expect(fx.hurt).toBe(0);
-  });
-});
-
-describe('pickup fade', () => {
-  const item = (id: number, kind: number, x: number, z: number): Item => ({ id, kind, x, y: 1, z });
-  const items = [item(0, ITEM.HEALTH, 3, 2), item(1, ITEM.KEY_BLUE, 2, 9)];
-
-  it('fades the colour of an item that vanishes near the own player', () => {
-    const { progress, fx } = setup();
-    progress.snapshot(snap({ items }));
-    expect(fx.gain).toBe(0);
-    progress.snapshot(snap({ items: [items[1]] }));
-    expect(fx.gain).toBeCloseTo(0.4);
-    expect(fx.gainC).toEqual(ITEM_COLOR[ITEM.HEALTH]);
-  });
-
-  it('keeps quiet for an item that vanishes far from the own player', () => {
-    const { progress, fx, audio } = setup();
-    progress.snapshot(snap({ items }));
-    progress.snapshot(snap({ items: [items[0]] }));
-    expect(fx.gain).toBe(0);
-    expect(audio.play).not.toHaveBeenCalled();
-  });
-
-  it('plays COLLECT once for an item the own player takes, and only then', () => {
-    const { progress, audio } = setup();
-    progress.snapshot(snap({ items }));
-    progress.snapshot(snap({ items }));
-    expect(audio.play).not.toHaveBeenCalled();
-    progress.snapshot(snap({ items: [items[1]] }));
-    progress.snapshot(snap({ items: [items[1]] }));
-    expect(audio.play.mock.calls).toEqual([[SOUND.COLLECT]]);
-  });
-
-  it('keeps quiet for items that appear or stay', () => {
-    const { progress, fx } = setup();
-    progress.snapshot(snap({ items: [] }));
-    progress.snapshot(snap({ items }));
-    progress.snapshot(snap({ items }));
-    expect(fx.gain).toBe(0);
-  });
-
-  it('keeps the items of the latest snapshot', () => {
-    const { progress } = setup();
-    progress.snapshot(snap({ items }));
-    expect(progress.items).toBe(items);
-  });
-});
-
-describe('returning', () => {
-  it('follows the phase', () => {
-    const { progress } = setup();
-    expect(progress.returning).toBe(false);
-    progress.snapshot(snap({ phase: PHASE.RETURN }));
-    expect(progress.returning).toBe(true);
-    progress.snapshot(snap({ phase: PHASE.HUNT }));
-    expect(progress.returning).toBe(false);
   });
 });
 

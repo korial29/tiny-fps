@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { GAIN, HURT, MOTES, createEffects, lit } from './effects';
+import { HURT, MOTES, createEffects, lit } from './effects';
 
 const DT = 1 / 60;
 const me = (x = 0, ground = true): PlayerState => ({
@@ -89,19 +89,6 @@ describe('hurt', () => {
     expect(fx.hurt).toBeGreaterThan(0);
     run(fx, 0, 0.06);
     expect(fx.hurt).toBe(0);
-  });
-});
-
-describe('pickup', () => {
-  it('fades the item colour over 0.4 s', () => {
-    const fx = createEffects();
-    fx.pickup([1, 0, 0]);
-    expect(fx.gain).toBeCloseTo(GAIN);
-    expect(fx.gainC).toEqual([1, 0, 0]);
-    run(fx, 0, 0.3);
-    expect(fx.gain).toBeGreaterThan(0);
-    run(fx, 0, 0.12);
-    expect(fx.gain).toBe(0);
   });
 });
 

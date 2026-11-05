@@ -9,10 +9,10 @@ import {
   RUN_SPEED,
   TICK_HZ,
 } from './constants';
-import { bar, compile, sectorAt } from './level';
+import { compile, sectorAt } from './level';
 import { HALL } from './map';
 import { forward, move, spawn } from './physics';
-import { ITEM, KEY, PHASE, TEX } from './types';
+import { KEY, TEX } from './types';
 import type { Input, Level, MapDef, PlayerState, Sector } from './types';
 
 const lvl = compile(HALL);
@@ -537,77 +537,5 @@ describe('spawn', () => {
 
   it('keeps the eye inside the walls', () => {
     expect(EYE).toBeLessThan(PLAYER_H);
-  });
-});
-
-describe('barred sectors', () => {
-  const room = (x0: number, x1: number): [number, number][] => [
-    [x0, 0],
-    [x1, 0],
-    [x1, 10],
-    [x0, 10],
-  ];
-  /** Two 10 m rooms side by side, joined along their whole wall. */
-  const twin = (over: Partial<MapDef>): Level =>
-    compile({
-      sectors: [sector(room(0, 10), 0), sector(room(10, 20), 0)],
-      spawns: [[5, 5, 0]],
-      ...over,
-    });
-  const RED = 1 << ITEM.KEY_RED;
-  const stand = (level: Level, x: number): PlayerState => ({ ...at(x, 5, level), y: 0 });
-
-  it('stops a player at the edge of a gate until its key is held', () => {
-    const gate = twin({ gates: [{ sector: 1, key: ITEM.KEY_RED }] });
-    const p = stand(gate, 5);
-    run(p, FORWARD, 100, EAST, undefined, gate);
-    expect([p.x, p.z]).toEqual([Math.fround(10 - PLAYER_R), 5]);
-    // The same run once the team holds the key goes through.
-    bar(gate, RED, PHASE.HUNT);
-    run(p, FORWARD, 100, EAST, undefined, gate);
-    expect(p.x).toBeGreaterThan(13);
-    // A key of another colour opens nothing.
-    const other = twin({ gates: [{ sector: 1, key: ITEM.KEY_BLUE }] });
-    bar(other, RED, PHASE.HUNT);
-    const q = stand(other, 5);
-    run(q, FORWARD, 100, EAST, undefined, other);
-    expect(q.x).toBeCloseTo(10 - PLAYER_R);
-  });
-
-  it('slides along the wall of a gate', () => {
-    const gate = twin({ gates: [{ sector: 1, key: ITEM.KEY_RED }] });
-    const p = stand(gate, 5);
-    // Diagonally into the gate: x stops, z keeps moving.
-    run(p, FORWARD, 80, EAST - 0.5, undefined, gate);
-    expect(p.x).toBeCloseTo(10 - PLAYER_R);
-    expect(p.z).toBeGreaterThan(8);
-  });
-
-  it('keeps everybody out of the exit until RETURN, but lets a player in it walk out', () => {
-    const exit = twin({ exit: 0 });
-    expect(exit.barred).toEqual(new Set([0]));
-    const p = stand(exit, 5);
-    // Standing in the exit it moves freely, and walks out into the next room.
-    run(p, FORWARD, 30, WEST, undefined, exit);
-    expect(p.x).toBeCloseTo(5 - 3);
-    run(p, FORWARD, 150, EAST, undefined, exit);
-    expect(p.x).toBeGreaterThan(14);
-    // Back at the exit it is shut, from the room beside it.
-    run(p, FORWARD, 100, WEST, undefined, exit);
-    expect(p.x).toBeCloseTo(10 + PLAYER_R);
-    bar(exit, 0, PHASE.RETURN);
-    run(p, FORWARD, 100, WEST, undefined, exit);
-    expect(p.x).toBeLessThan(5);
-  });
-
-  it('does not count the floor behind a gate: no step up onto it', () => {
-    // Behind the gate the floor is a high step: a barred gate must not lift the player either.
-    const gate = twin({
-      sectors: [sector(room(0, 10), 0), sector(room(10, 20), 0.3)],
-      gates: [{ sector: 1, key: ITEM.KEY_RED }],
-    });
-    const p = stand(gate, 9.5);
-    run(p, 0, 5, EAST, undefined, gate);
-    expect(p.y).toBe(0);
   });
 });

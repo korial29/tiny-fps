@@ -4,10 +4,9 @@
 // of a depth texture array. The scene goes into an offscreen target, then a second, small program
 // (POST) turns it into the picture on the canvas. No DOM beyond the canvas.
 import { TEX } from '../shared/types';
-import type { Edge, Item, Level, PlayerState, Sector } from '../shared/types';
+import type { Edge, Level, PlayerState, Sector } from '../shared/types';
 import { lit } from './effects';
 import type { Effects } from './effects';
-import { props } from './items';
 import { STRIDE, basis, pushBox } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
@@ -281,8 +280,8 @@ interface Target {
 
 export interface Renderer {
   /**
-   * Draws one frame: the map, its gates, goal and items, the others and the effects as seen from
-   * eye. colors maps player id to CSS.
+   * Draws one frame: the map, the others and the dust as seen from eye. colors maps player id to
+   * CSS.
    */
   frame(
     eye: Vec3,
@@ -291,7 +290,6 @@ export interface Renderer {
     others: PlayerState[],
     colors: ReadonlyMap<number, string>,
     fx: Effects,
-    items: Item[],
     /** gather() in lights.ts: at most MAX_LIGHTS, the first MAX_SHADOWS shadowed spots mapped. */
     lights: Light[],
   ): void;
@@ -528,7 +526,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   return {
-    frame(eye, yaw, pitch, others, colors, fx, items, lights) {
+    frame(eye, yaw, pitch, others, colors, fx, lights) {
       const [w, h] = size();
       if (lost || !w || !h) {
         return;
@@ -549,7 +547,6 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
         const g = follow(gaits, p.id, p.x, p.z, dt);
         soldier(v, p, rgb(colors.get(p.id) ?? '#888'), g.walked, pace(g));
       }
-      props(v, lvl, items, now);
       // What the shadow maps hold ends here: the unlit dust after it casts nothing.
       const bodies = v.length;
       const specks = lit(fx, eye, basis(yaw, pitch, fx.roll)[2]);

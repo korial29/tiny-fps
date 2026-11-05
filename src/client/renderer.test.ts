@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { compile } from '../shared/level';
-import { ITEM, TEX } from '../shared/types';
+import { TEX } from '../shared/types';
 import type { MapDef } from '../shared/types';
 import { createEffects, lit } from './effects';
 import { LIGHT } from './lights';
@@ -79,9 +79,8 @@ describe('createRenderer', () => {
   const frame = (
     rd: ReturnType<typeof createRenderer>,
     fx = createEffects(),
-    items = [] as never[],
     lights = [] as Light[],
-  ) => rd.frame([1, 1.6, 1], 0, 0, [], new Map(), fx, items, lights);
+  ) => rd.frame([1, 1.6, 1], 0, 0, [], new Map(), fx, lights);
 
   it('builds a fragment shader with one specular row per layer and no stray JS values', () => {
     createRenderer(canvas, compile(ROOM));
@@ -91,16 +90,6 @@ describe('createRenderer', () => {
     expect(Number(rows[1])).toBe(LAYERS + 1);
     expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 1);
     expect(frag).not.toMatch(/undefined|NaN|\[object/);
-  });
-
-  it('draws the items after the level, in the same call', () => {
-    const rd = createRenderer(canvas, compile(ROOM));
-    const items = [{ id: 0, kind: ITEM.HEALTH, x: 2, y: 0, z: 2 }] as never[];
-    frame(rd);
-    const plain = draws();
-    calls.length = 0;
-    frame(rd, createEffects(), items);
-    expect(draws()).toEqual([[0, plain[0][1] + 144]]);
   });
 
   describe('post-processing', () => {
@@ -390,14 +379,14 @@ describe('createRenderer', () => {
       frame(rd);
       expect(layers()).toEqual([]);
       expect(draws()).toHaveLength(1);
-      frame(rd, createEffects(), [], [spot(false), { ...spot(), kind: LIGHT.POINT }]);
+      frame(rd, createEffects(), [spot(false), { ...spot(), kind: LIGHT.POINT }]);
       expect(layers()).toEqual([]);
       expect(draws()).toHaveLength(2);
     });
 
     it('draws one depth pass per mapped light, into its own layer, before the scene', () => {
       const rd = createRenderer(canvas, compile(ROOM));
-      frame(rd, createEffects(), [], [spot(), spot(false), spot()]);
+      frame(rd, createEffects(), [spot(), spot(false), spot()]);
       expect(layers()).toEqual([0, 1]);
       // Two depth passes, then the world.
       expect(draws()).toHaveLength(3);
@@ -414,7 +403,6 @@ describe('createRenderer', () => {
       frame(
         rd,
         createEffects(),
-        [],
         Array.from({ length: 7 }, () => spot()),
       );
       expect(layers()).toHaveLength(4);
@@ -423,7 +411,7 @@ describe('createRenderer', () => {
     it('unbinds the shadow map while writing it, and binds it back for the scene', () => {
       const rd = createRenderer(canvas, compile(ROOM));
       calls.length = 0;
-      frame(rd, createEffects(), [], [spot()]);
+      frame(rd, createEffects(), [spot()]);
       const binds = calls.filter(c => c[0] == 'bindTexture').map(c => c[2]);
       expect(binds[0]).toBeNull();
       expect(binds[1]).not.toBeNull();
@@ -436,12 +424,12 @@ describe('createRenderer', () => {
       expect(count('texStorage3D')).toBe(1);
       canvas.dispatchEvent(new Event('webglcontextlost'));
       calls.length = 0;
-      frame(rd, createEffects(), [], [spot()]);
+      frame(rd, createEffects(), [spot()]);
       expect(calls).toEqual([]);
       canvas.dispatchEvent(new Event('webglcontextrestored'));
       expect(count('texStorage3D')).toBe(1);
       expect(count('createFramebuffer')).toBe(made);
-      frame(rd, createEffects(), [], [spot()]);
+      frame(rd, createEffects(), [spot()]);
       expect(layers()).toEqual([0]);
     });
   });
@@ -483,12 +471,12 @@ describe('createRenderer', () => {
 
     it('keeps them out of the depth passes', () => {
       const rd = createRenderer(canvas, compile(ROOM));
-      frame(rd, createEffects(), [], [spot()]);
+      frame(rd, createEffects(), [spot()]);
       const [depth, world] = draws();
       expect(depth[1]).toBe(world[1]);
       calls.length = 0;
       const fx = dusty();
-      frame(rd, fx, [], [spot()]);
+      frame(rd, fx, [spot()]);
       const [d2, w2] = draws();
       expect(d2[1]).toBe(depth[1]);
       expect(w2[1]).toBe(depth[1] + specks(fx) * 36);

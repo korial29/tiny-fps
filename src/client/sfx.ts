@@ -28,12 +28,8 @@ export const RATE = 44100;
 export const SOUND = {
   /** A player hurt. */
   HIT: 0,
-  /** A pickup taken: health or a key. */
-  COLLECT: 1,
-  /** A tick, once a second while the team runs back to the exit (RETURN). */
-  CLOCK: 2,
   /** A heartbeat, looped by the client while the own health is low. */
-  HEART: 3,
+  HEART: 1,
 } as const;
 
 const synth = ([wave, hz, slide, a, s, d, vib, lp, jt, jm, vol]: Voice, seed: number) => {
@@ -79,16 +75,6 @@ const LAYERS: Voice[][] = [
     [1, 160, -1.5, 0.003, 0.04, 0.22, 0.2, 0.5, 0, 1, 0.6],
     [0, 83, -1, 0.003, 0.04, 0.22, 0, 0.3, 0, 1, 0.4],
     [3, 3000, 0, 0.002, 0, 0.12, 0, 0.4, 0, 1, 0.5],
-  ],
-  // COLLECT: two sines, the second a fifth up after 90 ms.
-  [
-    [2, 880, 0.3, 0.005, 0.06, 0.4, 0, 1, 0.09, 1.5, 0.8],
-    [2, 1760, 0.3, 0.005, 0.06, 0.35, 0, 1, 0.09, 1.5, 0.3],
-  ],
-  // CLOCK: a dry click on a short blip.
-  [
-    [3, 4000, 0, 0.001, 0, 0.025, 0, 0.5, 0, 1, 0.7],
-    [2, 1300, -1, 0.001, 0, 0.04, 0, 1, 0, 1, 0.5],
   ],
   // HEART: a soft "lub-dub", two sine thumps 0.22 s apart, the second lower and fainter. Each has
   // a faint octave above it, so small speakers carry it.

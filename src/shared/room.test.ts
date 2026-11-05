@@ -1,13 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  GOAL_R,
-  HEAL,
   HEALTH,
   INPUT_BURST,
   MAX_NAME,
   MAX_PLAYERS,
   MAX_REWIND,
-  PICKUP_R,
   PLAYER_RESPAWN,
   SNAP_EVERY,
   TICK_HZ,
@@ -16,7 +13,7 @@ import { HALL } from './map';
 import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
-import { ITEM, KEY, PHASE, TEX } from './types';
+import { KEY, TEX } from './types';
 import type { Conn, Every, Input, MapDef, PlayerState, Sector, Snapshot } from './types';
 
 /** A peer that records what the room sends it. */
@@ -468,9 +465,8 @@ describe('Room: rewind', () => {
   });
 });
 
-/** Progression: a purpose-built campaign, so each rule is tested on a map that shows only it. */
+/** A purpose-built map, so each rule is tested on a map that shows only it. */
 const EAST = (3 * Math.PI) / 2;
-const SOUTH = Math.PI;
 const sector = (pts: [number, number][], floor = 0): Sector => ({
   pts,
   floor,
@@ -480,8 +476,7 @@ const sector = (pts: [number, number][], floor = 0): Sector => ({
   ct: TEX.STONE,
 });
 /**
- * 0: the start room, which is the exit (10 x 10 m); 1: a doorway east, a gate for the red key; 2:
- * the far room, with the goal (10 x 10 m); 3: a yard south of the start room. The red key lies in
+ * 0: the start room (10 x 10 m); 1: a doorway east; 2: a far room (10 x 10 m); 3: a yard south of
  * the start room.
  */
 const ARENA: MapDef = {
@@ -520,12 +515,7 @@ const ARENA: MapDef = {
     [2, 2, EAST],
     [2, 8, EAST],
   ],
-  items: [[6, 2, ITEM.KEY_RED]],
-  gates: [{ sector: 1, key: ITEM.KEY_RED }],
-  goal: [20, 5],
-  exit: 0,
 };
-const arena = (over: Partial<MapDef> = {}): MapDef => ({ ...ARENA, ...over });
 
 /** A room, its players' peers, joined in this order. */
 const game = (levels: MapDef[] = [ARENA], names = ['A', 'B']) => {
@@ -617,134 +607,5 @@ describe('Room: health', () => {
     expect(room.rewind(0).map(p => p.id)).toEqual([1]);
     kill(room, b);
     expect(room.rewind(0)).toEqual([]);
-  });
-});
-
-describe('Room: items', () => {
-  const HEALTHPACKS = (...at: [number, number][]) =>
-    arena({ items: at.map(([x, z]) => [x, z, ITEM.HEALTH]) });
-
-  it('lies the map items in the snapshot, ids from 0, on the floor', () => {
-    const { room, a } = game([
-      arena({
-        sectors: ARENA.sectors.map((s, i) => ({ ...s, floor: i ? 0 : 1 })),
-        items: [
-          [6, 2, ITEM.KEY_RED],
-          [7, 8, ITEM.HEALTH],
-        ],
-      }),
-    ]);
-    expect(next(room, a).items).toEqual([
-      { id: 0, kind: ITEM.KEY_RED, x: 6, y: 1, z: 2 },
-      { id: 1, kind: ITEM.HEALTH, x: 7, y: 1, z: 8 },
-    ]);
-  });
-
-  it('opens the gates of a key for the whole team, whoever took it', () => {
-    const { room, a, b } = game();
-    // B walks at the shut doorway: it stops at the wall of the gate.
-    put(room, b, 7, 5);
-    drive(room, b, KEY.FORWARD, EAST, 60);
-    expect(at(room, b).state.x).toBeCloseTo(10 - 0.4, 3);
-    expect(next(room, b).keys).toBe(0);
-
-    // A takes the key; it is gone from the level and in the team's hands.
-    put(room, a, 6.3, 2);
-    const s = next(room, a);
-    expect(s.keys).toBe(1 << ITEM.KEY_RED);
-    expect(s.items).toEqual([]);
-    // B goes through the doorway it could not pass.
-    drive(room, b, KEY.FORWARD, EAST, 80);
-    expect(at(room, b).state.x).toBeGreaterThan(14);
-  });
-
-  it('is taken only within PICKUP_R, and only when the body is at the height of the floor', () => {
-    const { room, a } = game();
-    const [kx, kz] = [6, 2];
-    put(room, a, kx + PICKUP_R + 0.1, kz);
-    expect(next(room, a).items).toHaveLength(1);
-    // Right above it, in the air: out of reach.
-    put(room, a, kx, kz, 1.5);
-    expect(next(room, a).items).toHaveLength(1);
-    put(room, a, kx + PICKUP_R - 0.1, kz);
-    const s = next(room, a);
-    expect([s.items, s.keys]).toEqual([[], 1 << ITEM.KEY_RED]);
-  });
-
-  it('does not let a dead player take anything', () => {
-    const { room, a } = game();
-    put(room, a, 6, 2);
-    at(room, a).hp = 0;
-    at(room, a).hurt = room['ticks'];
-    expect(next(room, a).items).toHaveLength(1);
-    expect(snap(a).keys).toBe(0);
-  });
-
-  it('gives HEAL health from a pack below full health, and leaves it at full health', () => {
-    const { room, a } = game([HEALTHPACKS([3, 5])]);
-    put(room, a, 3, 5);
-    // At full health: it stays.
-    expect(next(room, a).items).toHaveLength(1);
-    expect(at(room, a).hp).toBe(HEALTH);
-    at(room, a).hp = 4;
-    const s = next(room, a);
-    expect(s.items).toEqual([]);
-    expect(s.players.find(p => p.id === 0)!.hp).toBe(4 + HEAL);
-  });
-
-  it('caps the health at HEALTH, and takes the next pack only if there is room for it', () => {
-    const { room, a } = game([HEALTHPACKS([3, 5], [3, 5.2])]);
-    put(room, a, 3, 5);
-    at(room, a).hp = HEALTH - 1;
-    const s = next(room, a);
-    expect(at(room, a).hp).toBe(HEALTH);
-    // The first pack healed 1 (capped), the second finds it full and stays.
-    expect(s.items.map(t => t.id)).toEqual([1]);
-    at(room, a).hp = HEALTH - 2;
-    next(room, a);
-    expect(at(room, a).hp).toBe(HEALTH);
-  });
-});
-
-describe('Room: goal and exit', () => {
-  const [GOAL_X, GOAL_Z] = ARENA.goal!;
-  const goal = (room: Room, c: Peer, off = 0) => put(room, c, GOAL_X + off, GOAL_Z);
-  const EXIT_X = 5;
-
-  it('bars the exit until the goal is touched: out of it you can go, back into it not', () => {
-    const { room, a, b } = game();
-    expect(next(room, a)).toMatchObject({ phase: PHASE.HUNT });
-    // B walks south out of the start room into the yard, and back north at the exit.
-    put(room, b, 5, 8);
-    drive(room, b, KEY.FORWARD, SOUTH, 40);
-    expect(at(room, b).state.z).toBeGreaterThan(11);
-    drive(room, b, KEY.FORWARD, 0, 60);
-    expect(at(room, b).state.z).toBeCloseTo(10 + 0.4, 3);
-
-    // The goal is touched: the exit opens for everyone.
-    goal(room, a);
-    expect(next(room, a).phase).toBe(PHASE.RETURN);
-    drive(room, b, KEY.FORWARD, 0, 40);
-    expect(at(room, b).state.z).toBeLessThan(9);
-  });
-
-  it('turns to RETURN within GOAL_R of the goal, for a living player only', () => {
-    const { room, a, b } = game();
-    goal(room, a, GOAL_R + 0.2);
-    expect(next(room, a).phase).toBe(PHASE.HUNT);
-    // A dead player on the goal does nothing.
-    goal(room, b);
-    at(room, b).hp = 0;
-    at(room, b).hurt = room['ticks'];
-    expect(next(room, a).phase).toBe(PHASE.HUNT);
-    // Nor one under it, a floor down.
-    goal(room, a, 0.2);
-    at(room, a).state.y = -3;
-    expect(next(room, a).phase).toBe(PHASE.HUNT);
-    goal(room, a, GOAL_R - 0.2);
-    expect(next(room, a).phase).toBe(PHASE.RETURN);
-    // It stays so, with the goal left behind.
-    put(room, a, 15, EXIT_X);
-    expect(next(room, a).phase).toBe(PHASE.RETURN);
   });
 });

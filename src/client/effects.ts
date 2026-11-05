@@ -1,5 +1,5 @@
-// Camera feel, fed each frame: head bob and roll, the red hurt tint, the pickup fade, and the dust
-// motes around the own eye. No DOM, times in seconds, unit-tested.
+// Camera feel, fed each frame: head bob and roll, the red hurt tint, and the dust motes around the
+// own eye. No DOM, times in seconds, unit-tested.
 import { EYE } from '../shared/constants';
 import { KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -15,9 +15,6 @@ export interface Effects {
   motes: Float32Array;
   /** Seconds of the red hurt tint left. */
   hurt: number;
-  /** Seconds left of the fade of a picked-up item's colour, and that colour (0 to 1 each). */
-  gain: number;
-  gainC: number[];
   /** 0 to 1: how far the camera has sunk and tilted since the own player died; the light goes out. */
   dead: number;
   /**
@@ -27,8 +24,6 @@ export interface Effects {
   update(me: PlayerState | undefined, keys: number, dt: number, dead?: boolean): void;
   /** The own health dropped: the red tint. */
   hit(): void;
-  /** An item of colour c was picked up near the own player: its colour fades over the screen. */
-  pickup(c: number[]): void;
 }
 
 /** Motes, and the half sides of the box they live in: they wrap round it as the eye moves. */
@@ -37,9 +32,8 @@ const BOX = [5, 1.6, 5];
 /** The flashlight as the motes see it: a cone of cos(25°), this long, metres. */
 const CONE = Math.cos(0.436);
 const REACH = 6;
-/** Seconds the hit vignette and the pickup fade take to go out. */
+/** Seconds the hit vignette takes to go out. */
 export const HURT = 0.45;
-export const GAIN = 0.4;
 /** Seconds the camera takes to sink, the roll it ends at, and the eye height it ends at. */
 const SINK = 0.5;
 const TILT = 0.9;
@@ -84,8 +78,6 @@ export const createEffects = (rand = Math.random): Effects => {
     roll: 0,
     motes: new Float32Array(MOTES * 3),
     hurt: 0,
-    gain: 0,
-    gainC: [1, 1, 1],
     dead: 0,
 
     update(me, keys, dt, dead = false) {
@@ -106,7 +98,6 @@ export const createEffects = (rand = Math.random): Effects => {
       fx.roll = lean + sink * TILT;
 
       fx.hurt = Math.max(0, fx.hurt - dt);
-      fx.gain = Math.max(0, fx.gain - dt);
       if (me) {
         clock += dt;
         fx.motes.forEach((m, i) => {
@@ -122,10 +113,6 @@ export const createEffects = (rand = Math.random): Effects => {
 
     hit() {
       fx.hurt = HURT;
-    },
-
-    pickup(c) {
-      [fx.gain, fx.gainC] = [GAIN, c];
     },
   };
   return fx;

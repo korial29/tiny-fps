@@ -1,25 +1,20 @@
 import {
-  GOAL_R,
-  HEAL,
   HEALTH,
   HIT_COOLDOWN,
   INPUT_BURST,
   MAX_NAME,
   MAX_REWIND,
-  PICKUP_R,
-  PLAYER_H,
   PLAYER_RESPAWN,
   RULES,
   SNAP_EVERY,
   TICK_HZ,
 } from './constants';
-import { bar, compile, sectorAt } from './level';
+import { compile } from './level';
 import { HALL } from './map';
 import { move, spawn } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
-import { ITEM, PHASE } from './types';
-import type { Conn, Every, Item, Level, MapDef, PlayerInfo, PlayerState, Rules } from './types';
+import type { Conn, Every, Level, MapDef, PlayerInfo, PlayerState, Rules } from './types';
 
 interface Player {
   conn: Conn;
@@ -37,8 +32,6 @@ interface Player {
 
 /** Ticks run at most this many times per timer callback, so a stalled host does not spiral. */
 const MAX_CATCH_UP = 20;
-/** A pickup is this tall, standing on the floor: a body touches it when their heights overlap. */
-const ITEM_H = 0.5;
 /** A new player does not spawn within this many metres of another one. */
 const SPAWN_CLEAR = 2;
 
@@ -82,10 +75,6 @@ const unique = (name: string, taken: string[]): string => {
   return out;
 };
 
-/** Whether the player's body is within r of (x, z) on the floor plane and meets a thing resting on y. */
-const reach = (p: PlayerState, x: number, y: number, z: number, r: number): boolean =>
-  Math.hypot(p.x - x, p.z - z) <= r && p.y < y + ITEM_H && y < p.y + PLAYER_H;
-
 const setEvery: Every = (cb, ms) => {
   const id = setInterval(cb, ms);
   return () => clearInterval(id);
@@ -103,11 +92,7 @@ const setEvery: Every = (cb, ms) => {
  *   at most MAX_REWIND ticks back).
  * - A player has HEALTH. A dead player moves and counts for nothing until PLAYER_RESPAWN
  *   ticks later, when it is back at a spawn.
- * - The level's items lie in it. A key taken opens its gates for the team, a pack heals below full
- *   health.
- * - Touching the goal turns the level from HUNT to RETURN (the exit opens).
- * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player and the items goes to every
- *   peer.
+ * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player goes to every peer.
  */
 export class Room {
   /** Every connected peer; null until it joins. */
@@ -116,11 +101,6 @@ export class Room {
   /** The players as each snapshot of the last MAX_REWIND ticks sent them. */
   private history: { tick: number; players: PlayerState[] }[] = [];
   private lvl: Level;
-  private phase: number = PHASE.HUNT;
-  /** The team's key bits (1 << ITEM.KEY_*). */
-  private keys = 0;
-  private items: Item[] = [];
-  private nextItem = 0;
   private halt: (() => void) | undefined;
   private rules: Rules;
   /** Round-robin cursor over the spawn points, used once they are all taken. */
@@ -130,7 +110,6 @@ export class Room {
   public constructor(rules: Partial<Rules> = {}, map: MapDef = HALL) {
     this.rules = { ...RULES, ...rules };
     this.lvl = compile(map);
-    map.items?.forEach(([x, z, kind]) => this.drop(kind, x, z));
   }
 
   /** Number of joined players. */
@@ -191,7 +170,6 @@ export class Room {
         );
       }
     }
-    this.progress(players.filter(p => p.hp));
     if (now % SNAP_EVERY === 0) {
       this.history.push({ tick: now, players: players.map(p => ({ ...p.state })) });
       while (this.history[0].tick < now - MAX_REWIND) {
@@ -201,9 +179,6 @@ export class Room {
       const snap = encodeSnapshot({
         tick: now,
         players: players.map(p => ({ ...p.state, ack: p.ack, hp: p.hp })),
-        phase: this.phase,
-        keys: this.keys,
-        items: this.items,
       });
       players.forEach(p => p.conn.send(snap));
     }
@@ -280,46 +255,6 @@ export class Room {
       return !others.some(o => Math.hypot(o.x - x, o.z - z) < SPAWN_CLEAR);
     });
     return spawn(id, this.lvl, n < 0 ? this.rr++ : n);
-  }
-
-  /** The floor of the sector holding (x, z). */
-  private floor(x: number, z: number): number {
-    return this.lvl.map.sectors[Math.max(sectorAt(this.lvl, x, z), 0)].floor;
-  }
-
-  /** Leaves an item of `kind` on the floor at (x, z). */
-  private drop(kind: number, x: number, z: number): void {
-    const f = Math.fround;
-    this.items.push({ id: this.nextItem++, kind, x: f(x), y: f(this.floor(x, z)), z: f(z) });
-  }
-
-  /** What the living players do to the level: pick things up, touch the goal, win. */
-  private progress(alive: Player[]): void {
-    const { goal } = this.lvl.map;
-    let bars = false;
-    this.items = this.items.filter(t => {
-      const who = alive.find(
-        p => reach(p.state, t.x, t.y, t.z, PICKUP_R) && (t.kind !== ITEM.HEALTH || p.hp < HEALTH),
-      );
-      if (who && t.kind === ITEM.HEALTH) {
-        who.hp = Math.min(HEALTH, who.hp + HEAL);
-      } else if (who) {
-        this.keys |= 1 << t.kind;
-        bars = true;
-      }
-      return !who;
-    });
-    if (
-      this.phase === PHASE.HUNT &&
-      goal &&
-      alive.some(p => reach(p.state, goal[0], this.floor(...goal), goal[1], GOAL_R))
-    ) {
-      this.phase = PHASE.RETURN;
-      bars = true;
-    }
-    if (bars) {
-      bar(this.lvl, this.keys, this.phase);
-    }
   }
 
   private players(): Player[] {

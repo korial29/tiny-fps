@@ -1,4 +1,4 @@
-import { ITEM, TEX } from './types';
+import { TEX } from './types';
 import type { MapDef, Sector } from './types';
 
 const sector = (
@@ -11,8 +11,7 @@ const sector = (
 
 /**
  * The first sector map, a test bed for heights: a start room, a low corridor, a tall hall around a
- * lava pit, stairs up to a balcony. Each spot is reachable on foot; the pit is a 1 m drop. The goal
- * is on the balcony, the exit is the start room, and a health pack lies in the hall.
+ * lava pit, stairs up to a balcony. Each spot is reachable on foot; the pit is a 1 m drop.
  */
 export const HALL: MapDef = {
   sectors: [
@@ -166,7 +165,4 @@ export const HALL: MapDef = {
     [8, 2, Math.PI * 1.5],
     [8, 14, Math.PI * 1.5],
   ],
-  items: [[23, 8, ITEM.HEALTH]],
-  goal: [30, 24],
-  exit: 0,
 };

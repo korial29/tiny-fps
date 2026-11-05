@@ -46,10 +46,6 @@ export const MAX_PLAYERS = 16;
 export const HEALTH = 9;
 /** A hit takes 1 health, then the player cannot be hurt for HIT_COOLDOWN ticks. */
 export const HIT_COOLDOWN = 60;
-export const HEAL = 3;
-/** A player whose axis comes this close to a pickup (on the floor plane) takes it. */
-export const PICKUP_R = 0.8;
-export const GOAL_R = 1;
 /** A dead player comes back at the level start after this long. */
 export const PLAYER_RESPAWN = 180;
 /** Longest player name, in characters (code points). */

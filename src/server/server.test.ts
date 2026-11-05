@@ -8,7 +8,7 @@ import { decodeSnapshot, encodeInput } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import { Room } from '../shared/room';
 import type { Rules } from '../shared/types';
-import { KEY, PHASE } from '../shared/types';
+import { KEY } from '../shared/types';
 import { serve } from './index';
 
 const until = async (check: () => boolean, ms = 2000): Promise<void> => {
@@ -72,10 +72,8 @@ describe('serve', () => {
 
     await until(() => a.binaries.length > 0 && b.binaries.length > 0);
     expect(decodeSnapshot(a.binaries.at(-1)!)?.players).toHaveLength(2);
-    // The progression state crosses the socket too: health, phase, keys.
+    // The health crosses the socket too.
     expect(decodeSnapshot(a.binaries.at(-1)!)).toMatchObject({
-      phase: PHASE.HUNT,
-      keys: 0,
       players: [{ hp: HEALTH }, { hp: HEALTH }],
     });
 

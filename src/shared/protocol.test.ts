@@ -4,7 +4,6 @@ import {
   MSG_INPUT,
   MSG_SNAPSHOT,
   SNAP_HEAD,
-  SNAP_ITEM,
   SNAP_PLAYER,
   decodeInput,
   decodeSnapshot,
@@ -13,8 +12,7 @@ import {
   onWire,
   parseText,
 } from './protocol';
-import { ITEM, PHASE } from './types';
-import type { Item, SnapPlayer, Snapshot } from './types';
+import type { SnapPlayer } from './types';
 
 const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
   id,
@@ -130,22 +128,17 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 6-byte head, 25 bytes per player, then the items', () => {
+  it('has a 4-byte head and 25 bytes per player, nothing else', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [
         player(7, { x: 1, y: 2, z: 3, vy: -1, yaw: Math.PI, pitch: 0.5, ground: true, hp: 6 }),
       ],
-      phase: PHASE.RETURN,
-      keys: 0b1010,
-      items: [],
     });
-    expect([SNAP_HEAD, SNAP_PLAYER]).toEqual([6, 25]);
-    expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + 1);
+    expect([SNAP_HEAD, SNAP_PLAYER]).toEqual([4, 25]);
+    expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER);
     expect(bytes(buf)).toEqual([
       ...[MSG_SNAPSHOT, 0x12, 0x34, 1],
-      // Phase, keys.
-      ...[1, 0b1010],
       7,
       // Big-endian float32: 1, 2, 3 and -1.
       ...[0x3f, 0x80, 0, 0],
@@ -160,99 +153,23 @@ describe('snapshot frame', () => {
       0xd2, // ack 1234
       1, // ground
       6, // hp
-      0, // no items
     ]);
   });
 
-  const f32 = Math.fround;
-  const snap = (over: Partial<Snapshot>): Snapshot => ({
-    tick: 0,
-    players: [],
-    phase: 0,
-    keys: 0,
-    items: [],
-    ...over,
-  });
-  const item = (id: number, kind: number, over: Partial<Item> = {}): Item => ({
-    id,
-    kind,
-    x: 1,
-    y: 2,
-    z: 3,
-    ...over,
-  });
-
-  it('round-trips the phase, the keys and every health', () => {
-    const back = (over: Partial<Snapshot>) => decodeSnapshot(encodeSnapshot(snap(over)))!;
-    for (const [phase, keys] of [
-      [PHASE.HUNT, 0],
-      [PHASE.HUNT, 0b1110],
-      [PHASE.RETURN, 0b0010],
-      [PHASE.RETURN, 255],
-    ] as const) {
-      const s = back({ phase, keys });
-      expect([s.phase, s.keys]).toEqual([phase, keys]);
-    }
-    const hp = back({ players: [0, 1, 5, 9].map((h, i) => player(i, { hp: h })) }).players;
-    expect(hp.map(p => p.hp)).toEqual([0, 1, 5, 9]);
+  it('round-trips every health', () => {
+    const back = decodeSnapshot(
+      encodeSnapshot({ tick: 0, players: [0, 1, 5, 9].map((h, i) => player(i, { hp: h })) }),
+    )!;
+    expect(back.players.map(p => p.hp)).toEqual([0, 1, 5, 9]);
   });
 
   it('keeps the ground bit in the flags', () => {
     const round = (ground: boolean) => {
-      const buf = encodeSnapshot({
-        tick: 0,
-        players: [player(1, { ground })],
-        phase: 0,
-        keys: 0,
-        items: [],
-      });
+      const buf = encodeSnapshot({ tick: 0, players: [player(1, { ground })] });
       return [bytes(buf)[SNAP_HEAD + 23], decodeSnapshot(buf)!.players[0].ground];
     };
     expect(round(false)).toEqual([0, false]);
     expect(round(true)).toEqual([1, true]);
-  });
-
-  it('lays out items after the players: 14 bytes each', () => {
-    const buf = encodeSnapshot(
-      snap({
-        items: [item(3, ITEM.KEY_BLUE, { x: 1.5, y: -2.25, z: 30.125 }), item(255, ITEM.HEALTH)],
-      }),
-    );
-    expect(SNAP_ITEM).toBe(14);
-    expect(buf.byteLength).toBe(SNAP_HEAD + 1 + 2 * SNAP_ITEM);
-    expect(bytes(buf).slice(SNAP_HEAD)).toEqual([
-      2,
-      // Id 3, kind KEY_BLUE, x 1.5, y -2.25, z 30.125.
-      ...[3, ITEM.KEY_BLUE, 0x3f, 0xc0, 0, 0, 0xc0, 0x10, 0, 0, 0x41, 0xf1, 0x00, 0],
-      // Id 255, kind HEALTH, x 1, y 2, z 3.
-      ...[255, ITEM.HEALTH, 0x3f, 0x80, 0, 0, 0x40, 0, 0, 0, 0x40, 0x40, 0, 0],
-    ]);
-  });
-
-  it('round-trips items, float32 exact, in order', () => {
-    const items = [
-      item(0, ITEM.HEALTH, { x: f32(0.1), y: f32(2.6), z: f32(-3.3) }),
-      item(1, ITEM.KEY_RED),
-      item(2, ITEM.KEY_YELLOW, { x: -0.5 }),
-    ];
-    const back = decodeSnapshot(encodeSnapshot(snap({ players: [player(1)], items })))!;
-    expect(back.items).toEqual(items);
-    expect(decodeSnapshot(encodeSnapshot(snap({})))!.items).toEqual([]);
-  });
-
-  it('rejects a frame cut or padded in the item section, or counted wrong', () => {
-    const ok = encodeSnapshot(snap({ players: [player(1)], items: [item(1, ITEM.KEY_RED)] }));
-    expect(decodeSnapshot(ok)).not.toBeNull();
-    for (let cut = 1; cut <= SNAP_ITEM; cut++) {
-      expect(decodeSnapshot(ok.slice(0, ok.byteLength - cut))).toBeNull();
-    }
-    expect(decodeSnapshot(new Uint8Array([...bytes(ok), 0]).buffer)).toBeNull();
-    // The count byte, set to a number the bytes do not hold.
-    for (const n of [0, 2, 255]) {
-      const bad = new Uint8Array(ok.slice(0));
-      bad[SNAP_HEAD + SNAP_PLAYER] = n;
-      expect(decodeSnapshot(bad.buffer)).toBeNull();
-    }
   });
 
   it('round-trips the float32 state exactly, and yaw, pitch within the wire', () => {
@@ -271,15 +188,7 @@ describe('snapshot frame', () => {
       }),
       player(255, { x: 0, y: -2.5, z: 300.125, vy: f(9.99) }),
     ];
-    const back = decodeSnapshot(
-      encodeSnapshot({
-        tick: 70000,
-        players,
-        phase: 0,
-        keys: 0,
-        items: [],
-      }),
-    )!;
+    const back = decodeSnapshot(encodeSnapshot({ tick: 70000, players }))!;
     expect(back.tick).toBe(70000 & 0xffff);
     expect(back.players).toHaveLength(3);
     back.players.forEach((b, i) => {
@@ -294,13 +203,7 @@ describe('snapshot frame', () => {
 
   it('rounds a float64 value to the nearest float32, not further', () => {
     const [p] = decodeSnapshot(
-      encodeSnapshot({
-        tick: 0,
-        players: [player(1, { x: 1 / 3, z: -1e-3, vy: 1e9 })],
-        phase: 0,
-        keys: 0,
-        items: [],
-      }),
+      encodeSnapshot({ tick: 0, players: [player(1, { x: 1 / 3, z: -1e-3, vy: 1e9 })] }),
     )!.players;
     expect(p.x).toBe(Math.fround(1 / 3));
     expect(p.z).toBe(Math.fround(-1e-3));
@@ -308,40 +211,19 @@ describe('snapshot frame', () => {
   });
 
   it('takes an empty snapshot', () => {
-    expect(
-      decodeSnapshot(
-        encodeSnapshot({
-          tick: 5,
-          players: [],
-          phase: 0,
-          keys: 0,
-          items: [],
-        }),
-      ),
-    ).toEqual({
+    expect(decodeSnapshot(encodeSnapshot({ tick: 5, players: [] }))).toEqual({
       tick: 5,
       players: [],
-      phase: 0,
-      keys: 0,
-      items: [],
     });
   });
 
   it('rejects a wrong type, a truncated or a padded frame, and a wrong count', () => {
-    const ok = encodeSnapshot({
-      tick: 1,
-      players: [player(1), player(2)],
-      phase: 0,
-      keys: 0,
-      items: [],
-    });
+    const ok = encodeSnapshot({ tick: 1, players: [player(1), player(2)] });
     expect(decodeSnapshot(ok)).not.toBeNull();
     expect(decodeSnapshot(new ArrayBuffer(0))).toBeNull();
     expect(decodeSnapshot(new ArrayBuffer(SNAP_HEAD - 1))).toBeNull();
     expect(decodeSnapshot(ok.slice(0, ok.byteLength - 1))).toBeNull();
     expect(decodeSnapshot(ok.slice(0, SNAP_HEAD + SNAP_PLAYER))).toBeNull();
-    // No item count at all: the frame stops after the players.
-    expect(decodeSnapshot(ok.slice(0, SNAP_HEAD + SNAP_PLAYER * 2))).toBeNull();
     expect(decodeSnapshot(new Uint8Array([...bytes(ok), 0]).buffer)).toBeNull();
     const bad = new Uint8Array(ok.slice(0));
     bad[0] = MSG_INPUT;
@@ -353,17 +235,7 @@ describe('snapshot frame', () => {
 
   it('does not take an input frame for a snapshot, nor the reverse', () => {
     expect(decodeSnapshot(encodeInput({ seq: 0, keys: 0, yaw: 0, pitch: 0 }))).toBeNull();
-    expect(
-      decodeInput(
-        encodeSnapshot({
-          tick: 0,
-          players: [],
-          phase: 0,
-          keys: 0,
-          items: [],
-        }),
-      ),
-    ).toBeNull();
+    expect(decodeInput(encodeSnapshot({ tick: 0, players: [] }))).toBeNull();
   });
 });
 

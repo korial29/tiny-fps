@@ -1,7 +1,6 @@
 // The lights of a frame: what shines where, gathered from the game state. No DOM, no GL; the
 // renderer lights the scene with them (render.ts) and gives shadow maps to the first few.
 import { EYE } from '../shared/constants';
-import { sectorAt } from '../shared/level';
 import { TEX } from '../shared/types';
 import type { Level, PlayerState } from '../shared/types';
 import type { Effects } from './effects';
@@ -11,7 +10,7 @@ import type { Vec3 } from './mesh';
 export const LIGHT = {
   /** A cone from p along d: flashlights. */
   SPOT: 0,
-  /** All around p: the exit, the goal. */
+  /** All around p: the red flash of a hit, the lava. */
   POINT: 1,
 } as const;
 
@@ -46,7 +45,7 @@ export interface Scene {
   /** The living other players, interpolated. */
   others: PlayerState[];
   fx: Effects;
-  /** The level, with its live `barred` (the exit is open once it is not barred). */
+  /** The level, for its lava. */
   lvl: Level;
   /** Seconds, for pulsing lights. */
   t: number;
@@ -151,31 +150,5 @@ export const gather = ({ eye, yaw, pitch, dead, others, fx, lvl, t }: Scene): Li
     .sort((a, b) => near(a.p) - near(b.p))
     .slice(0, LAVA)
     .forEach(l => rest.push(l));
-  const { exit, goal } = lvl.map;
-  if (exit !== undefined) {
-    const pulse = 1 + 0.3 * Math.sin(t * 4);
-    if (lvl.barred.has(exit)) {
-      if (goal) {
-        const floor = lvl.map.sectors[sectorAt(lvl, goal[0], goal[1])]?.floor ?? 0;
-        rest.push(point([goal[0], floor + 1, goal[1]], 8, scale([0.2, 1.2, 1.5], pulse)));
-      }
-    } else {
-      const { floor } = lvl.map.sectors[exit];
-      for (const { ax, az, bx, bz, front, back } of lvl.edges) {
-        if (front == exit && back >= 0) {
-          // Sectors run counter-clockwise: the inside is to the left of an edge.
-          const [dx, dz] = [bx - ax, bz - az];
-          const k = 0.5 / Math.hypot(dx, dz);
-          rest.push(
-            point(
-              [(ax + bx) / 2 - dz * k, floor + 1.2, (az + bz) / 2 + dx * k],
-              8,
-              scale([0.2, 1.5, 0.3], pulse),
-            ),
-          );
-        }
-      }
-    }
-  }
   return head.concat(rest.sort((a, b) => near(a.p) - near(b.p)).slice(0, MAX_LIGHTS - head.length));
 };

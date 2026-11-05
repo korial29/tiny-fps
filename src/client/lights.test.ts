@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { bar, compile, sectorAt } from '../shared/level';
+import { compile } from '../shared/level';
 import { HALL } from '../shared/map';
-import { PHASE, TEX } from '../shared/types';
+import { TEX } from '../shared/types';
 import type { MapDef, PlayerState } from '../shared/types';
 import { createEffects } from './effects';
 import { LIGHT, MAX_LIGHTS, gather, lava } from './lights';
@@ -31,24 +31,12 @@ const scene = (over: Partial<Scene> = {}): Scene => ({
   t: 0,
   ...over,
 });
-/** The scene with the exit open, or barred (the goal still to find). */
-const open = (o: Partial<Scene> = {}) => {
-  bar(lvl, 0, PHASE.RETURN);
-  return scene(o);
-};
-const closed = (o: Partial<Scene> = {}) => {
-  bar(lvl, 0, PHASE.HUNT);
-  return scene(o);
-};
-/** No exit, no goal: only the lights a test asks for. */
-const bare = (o: Partial<Scene> = {}) =>
-  scene({ lvl: { ...lvl, map: { ...HALL, exit: undefined, goal: undefined } }, ...o });
 const dist = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]));
 const dot = (a: number[], b: number[]) => a.reduce((s, v, i) => s + v * b[i], 0);
 
 describe('own flashlight', () => {
   it('is first, a shadowed spot along the view, just below and right of the eye', () => {
-    const [a] = gather(bare({ yaw: 1, pitch: 0.4 }));
+    const [a] = gather(scene({ yaw: 1, pitch: 0.4 }));
     const [right, up, fwd] = basis(1, 0.4);
     const off = a.p.map((v, i) => v - EYE[i]);
     expect(a.kind).toBe(LIGHT.SPOT);
@@ -60,21 +48,21 @@ describe('own flashlight', () => {
   });
 
   it('looks toward -z at yaw 0 and pitch 0', () => {
-    expect(gather(bare())[0].d).toEqual([-0, 0, -1]);
+    expect(gather(scene())[0].d).toEqual([-0, 0, -1]);
   });
 
   it('is gone when dead', () => {
-    expect(gather(bare({ dead: true }))).toEqual([]);
+    expect(gather(scene({ dead: true }))).toEqual([]);
   });
 
   it('lights alone in a bare scene', () => {
-    expect(gather(bare())).toHaveLength(1);
+    expect(gather(scene())).toHaveLength(1);
   });
 });
 
 describe('other players', () => {
   const spots = (others: PlayerState[]) =>
-    gather(bare({ others }))
+    gather(scene({ others }))
       .filter(l => l.kind == LIGHT.SPOT)
       .slice(1);
 
@@ -97,55 +85,19 @@ describe('other players', () => {
 describe('hit light', () => {
   it('shows only while hurt, red, at the eye', () => {
     const fx = createEffects();
-    expect(gather(bare({ fx }))).toHaveLength(1);
+    expect(gather(scene({ fx }))).toHaveLength(1);
     fx.hit();
-    const [, h] = gather(bare({ fx }));
+    const [, h] = gather(scene({ fx }));
     expect(h.kind).toBe(LIGHT.POINT);
     expect(h.color[0]).toBeGreaterThan(h.color[1] * 5);
     expect(dist(h.p, EYE)).toBeLessThan(1);
   });
 });
 
-describe('exit and goal', () => {
-  const doorways = lvl.edges.filter(e => e.front == 0 && e.back >= 0);
-  const goal = HALL.goal ?? [0, 0];
-
-  it('light each doorway of the exit sector once it is open, half a metre inside', () => {
-    const [, ...ls] = gather(open());
-    expect(doorways.length).toBeGreaterThan(0);
-    expect(ls).toHaveLength(doorways.length);
-    for (const l of ls) {
-      expect(l.kind).toBe(LIGHT.POINT);
-      expect(l.color[1]).toBeGreaterThan(l.color[0]);
-      expect(sectorAt(lvl, l.p[0], l.p[2])).toBe(0);
-      const mid = doorways.map(e => dist([(e.ax + e.bx) / 2, (e.az + e.bz) / 2], [l.p[0], l.p[2]]));
-      expect(Math.min(...mid)).toBeCloseTo(0.5);
-    }
-  });
-
-  it('pulse', () => {
-    expect(gather(open({ t: 0.4 }))[1].color).not.toEqual(gather(open())[1].color);
-  });
-
-  it('light a cyan pulse above the goal while the exit is barred, not the doorways', () => {
-    const [, ...ls] = gather(closed());
-    const floor = HALL.sectors[sectorAt(lvl, goal[0], goal[1])].floor;
-    expect(ls).toHaveLength(1);
-    expect([ls[0].p[0], ls[0].p[2]]).toEqual(goal);
-    expect(ls[0].p[1]).toBeGreaterThan(floor);
-    expect(ls[0].color[2]).toBeGreaterThan(ls[0].color[0]);
-    expect(gather(closed({ t: 0.4 }))[1].color).not.toEqual(ls[0].color);
-  });
-
-  it('drop the goal once the exit is open', () => {
-    expect(gather(open()).some(l => l.p[0] == goal[0] && l.p[2] == goal[1])).toBe(false);
-  });
-});
-
 describe('cap', () => {
   it('keeps the own lights, then the nearest of the rest', () => {
     const others = Array.from({ length: 20 }, (_, i) => player(i + 1, 20 + i));
-    const ls = gather(bare({ others }));
+    const ls = gather(scene({ others }));
     const rest = ls.slice(1).map(l => dist(l.p, EYE));
     expect(ls).toHaveLength(MAX_LIGHTS);
     expect(ls[0].shadow).toBe(true);
@@ -182,7 +134,7 @@ describe('lava', () => {
     expect(lava(pools(1, { ft: TEX.TILE }))).toEqual([]);
     expect(lit(at(1, pools(1, { ft: TEX.TILE })))).toHaveLength(0);
     expect(lit(at(40))).toHaveLength(0);
-    expect(gather(bare())).toHaveLength(1);
+    expect(gather(scene())).toHaveLength(1);
   });
 
   it('puts a warm point light above the middle of a pool near the eye', () => {

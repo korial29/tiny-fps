@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
 import { HEALTH } from '../shared/constants';
-import { ITEM } from '../shared/types';
-import { HUD_CSS, SAY, createHud } from './hud';
+import { HUD_CSS, createHud } from './hud';
 import type { Hud } from './hud';
 
 describe('createHud', () => {
@@ -13,10 +12,7 @@ describe('createHud', () => {
     hud = createHud(screen);
   });
   const q = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
-  const marks = () => [...screen.querySelectorAll<HTMLElement>('ol li')];
-  const [title, note, respawn, muted, menu] = ['h1', 'h2', 'h4', 'h5', 'aside'].map(
-    t => () => q(t),
-  );
+  const [respawn, muted, menu] = ['h4', 'h5', 'aside'].map(t => () => q(t));
   const [fill, num, bar] = [() => q('ul li'), () => q('ul li+li'), () => q('ul')];
   /** A custom property of the health bar. */
   const prop = (k: string) => Number(bar().style.getPropertyValue(k));
@@ -97,59 +93,37 @@ describe('createHud', () => {
     });
   });
 
-  it('shows a mark in the colour of each key held, and none for the rest', () => {
-    expect(marks().every(m => m.hidden)).toBe(true);
-    hud.keys((1 << ITEM.KEY_RED) | (1 << ITEM.KEY_YELLOW));
-    expect(marks().map(m => m.hidden)).toEqual([false, true, false]);
-    expect(marks().map(m => m.style.background)).toEqual([
-      'rgb(242, 38, 26)',
-      'rgb(51, 102, 255)',
-      'rgb(255, 217, 38)',
-    ]);
-    hud.keys(0);
-    expect(marks().every(m => m.hidden)).toBe(true);
-  });
-
   describe('fades', () => {
-    const [vignette, glint] = [0, 1].map(i => () => screen.querySelectorAll('s')[i] as HTMLElement);
+    const vignette = () => screen.querySelector('s') as HTMLElement;
     const opacity = (el: HTMLElement) => Number(el.style.opacity);
 
     it('draws the vignette with a radial gradient, clear in the middle, red at the edges', () => {
-      expect(HUD_CSS).toMatch(/s:first-of-type\{background:radial-gradient\(#d000 \d+%,#d00 /);
+      expect(HUD_CSS).toMatch(/s\{inset:0;opacity:0;background:radial-gradient\(#d000 \d+%,#d00 /);
     });
 
     it('lights the vignette on a hit and lets it out', () => {
-      hud.fade(0, 0, 0, [1, 1, 1]);
+      hud.fade(0, 0);
       expect(opacity(vignette())).toBe(0);
-      hud.fade(1, 0, 0, [1, 1, 1]);
+      hud.fade(1, 0);
       expect(opacity(vignette())).toBeGreaterThan(0.8);
-      hud.fade(0.5, 0, 0, [1, 1, 1]);
+      hud.fade(0.5, 0);
       expect(opacity(vignette())).toBeCloseTo(0.45);
-      hud.fade(0, 0, 0, [1, 1, 1]);
+      hud.fade(0, 0);
       expect(opacity(vignette())).toBe(0);
     });
 
     it('pulses the same vignette with the low-health beat, never fully clear while low', () => {
-      hud.fade(0, 1, 0, [1, 1, 1]);
+      hud.fade(0, 1);
       const top = opacity(vignette());
-      hud.fade(0, 0.01, 0, [1, 1, 1]);
+      hud.fade(0, 0.01);
       const low = opacity(vignette());
       expect(top).toBeGreaterThan(low);
       expect(low).toBeGreaterThan(0.1);
-      hud.fade(0, 0, 0, [1, 1, 1]);
+      hud.fade(0, 0);
       expect(opacity(vignette())).toBe(0);
       // A hit over a beat shows the stronger of the two.
-      hud.fade(1, 0.5, 0, [1, 1, 1]);
+      hud.fade(1, 0.5);
       expect(opacity(vignette())).toBeGreaterThan(top);
-    });
-
-    it('fades a picked-up item over the screen in its colour, not as a vignette', () => {
-      hud.fade(0, 0, 1, [1, 0, 0]);
-      expect(glint().style.background).toBe('rgb(255, 0, 0)');
-      expect(opacity(glint())).toBeGreaterThan(0.2);
-      expect(opacity(vignette())).toBe(0);
-      hud.fade(0, 0, 0, [1, 0, 0]);
-      expect(opacity(glint())).toBe(0);
     });
   });
 
@@ -207,21 +181,6 @@ describe('createHud', () => {
       hud.dead(0);
       expect(respawn().hidden).toBe(true);
     });
-  });
-
-  it('keeps the texts hidden until said, then hides each after its time', () => {
-    expect([title(), note(), respawn()].every(e => e.hidden)).toBe(true);
-    hud.say(SAY.TITLE, 'Level 1');
-    hud.say(SAY.NOTE, 'Find the exit');
-    expect(title().textContent).toBe('Level 1');
-    expect(note().hidden).toBe(false);
-    hud.update(1.9);
-    expect(title().hidden).toBe(false);
-    hud.update(0.2);
-    expect(title().hidden).toBe(true);
-    expect(note().hidden).toBe(false);
-    hud.update(1);
-    expect(note().hidden).toBe(true);
   });
 
   it('shows the muted mark while muted', () => {

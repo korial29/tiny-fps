@@ -4,7 +4,7 @@ import { decodeSnapshot, encodeInput } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import { Room } from '../shared/room';
 import type { Rules, SocketLike } from '../shared/types';
-import { KEY, PHASE } from '../shared/types';
+import { KEY } from '../shared/types';
 import { localSocket } from './index';
 
 const until = async (check: () => boolean, ms = 2000): Promise<void> => {
@@ -66,10 +66,8 @@ describe('localSocket', () => {
     await until(() => a.binaries.length > 0 && b.binaries.length > 0);
     expect(b.binaries[0]).toBeInstanceOf(ArrayBuffer);
     expect(decodeSnapshot(b.binaries.at(-1)!)?.players).toHaveLength(2);
-    // The progression state crosses the channel too: health, phase, keys.
+    // The health crosses the channel too.
     expect(decodeSnapshot(b.binaries.at(-1)!)).toMatchObject({
-      phase: PHASE.HUNT,
-      keys: 0,
       players: [{ hp: HEALTH }, { hp: HEALTH }],
     });
 

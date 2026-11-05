@@ -522,6 +522,8 @@ export const createGait = (): Gait => {
       y,
       b[2] + z * cs - x * sn,
     ];
+    /** A direction: the same, from nowhere. */
+    const D = (x: number, y: number, z: number) => R(x, y, z, [0, 0, 0]);
     const goals: [number, number, Vec3, Vec3, Quat][] = [];
     const { pos, rot: wr } = solve(out);
     const pel = pos[J.PELVIS];
@@ -537,7 +539,7 @@ export const createGait = (): Gait => {
           hand(s),
           hang,
           [gx + nx * d - nz * s * 0.21, e + 0.03, gz + nz * d + nx * s * 0.21],
-          R(s * 0.8, 0, 0.6, [0, 0, 0]),
+          D(s * 0.8, 0, 0.6),
           frame([0, s, 0], [nx, 0, nz]),
         ]),
       );
@@ -566,14 +568,10 @@ export const createGait = (): Gait => {
             i
               ? R(-s * 0.12, pel[1] - 0.7 + 0.4 * lift, z)
               : R(s * (0.34 - 0.2 * lift), pel[1] - 0.52 + 0.3 * lift, z),
-            R(-s * 0.7, 1, -1, [0, 0, 0]),
+            D(-s * 0.7, 1, -1),
             i
               ? mul(axis(Y, yaw), axis(X, -0.5))
-              : slerp(
-                  flat,
-                  frame(cross([wx, 0, wz], R(0, 0, -1, [0, 0, 0])), [wx, 0, wz]),
-                  1 - lift,
-                ),
+              : slerp(flat, frame(cross([wx, 0, wz], D(0, 0, -1)), [wx, 0, wz]), 1 - lift),
           ]);
           const v = Math.cos(TAU * (ph + 0.5 * (1 - i)));
           goals.push([
@@ -582,10 +580,8 @@ export const createGait = (): Gait => {
             i
               ? R(-s * 0.5, pel[1] + 0.3 + 0.12 * v, 0.2 * v)
               : R(s * 0.37, pel[1] + 0.3 + 0.05 * v, 0.1 * v),
-            R(i ? -s * 0.7 : 0, i ? 0 : -0.5, 0.7, [0, 0, 0]),
-            i
-              ? frame([0, k, 0], R(0, 0, -1, [0, 0, 0]))
-              : frame([-k * wx, 0, -k * wz], R(0, 0, -1, [0, 0, 0])),
+            D(i ? -s * 0.7 : 0, i ? 0 : -0.5, 0.7),
+            i ? frame([0, k, 0], D(0, 0, -1)) : frame([-k * wx, 0, -k * wz], D(0, 0, -1)),
           ]);
         });
       }
@@ -595,14 +591,14 @@ export const createGait = (): Gait => {
       // On the back hip: the right leg out ahead, the left foot flat by the hip, the left hand down behind.
       const y = at[1];
       goals.push(
-        [J.FOOT_R, slide, R(0.12, y + SOLE + 0.14, -0.85, pel), R(0.1, 1, -0.3, [0, 0, 0]), flat],
-        [J.FOOT_L, slide, R(-0.2, y + SOLE, -0.3, pel), R(-0.4, 1, -0.1, [0, 0, 0]), flat],
+        [J.FOOT_R, slide, R(0.12, y + SOLE + 0.14, -0.85, pel), D(0.1, 1, -0.3), flat],
+        [J.FOOT_L, slide, R(-0.2, y + SOLE, -0.3, pel), D(-0.4, 1, -0.1), flat],
         [
           J.HAND_L,
           slide,
           R(-0.4, y + 0.03, 0.4, pel),
-          R(-0.7, 0, 0.7, [0, 0, 0]),
-          frame([0, -1, 0], R(-1, 0, 0, [0, 0, 0])),
+          D(-0.7, 0, 0.7),
+          frame([0, -1, 0], D(-1, 0, 0)),
         ],
       );
     }

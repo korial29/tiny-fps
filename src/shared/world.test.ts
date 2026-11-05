@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { TEX } from './types';
 import { build, hidden, near, ray } from './world';
 import type { Brush, WorldDef } from './world';
+import { duo } from '../../test/teams';
 
 type Vec3 = [number, number, number];
 
 const brush = (min: Vec3, max: Vec3): Brush => ({ min, max, top: TEX.TILE, side: TEX.BRICK });
 const def = (brushes: Brush[]): WorldDef => ({
   brushes,
-  spawns: [[0, 0, 0, 0]],
+  teams: duo([[0, 0, 0, 0]]),
   floor: -10,
   sun: { dir: [0, 1, 0], color: [1, 1, 1] },
   sky: [

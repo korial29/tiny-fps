@@ -1,4 +1,13 @@
-import { INPUT_BURST, MAX_NAME, MAX_REWIND, RULES, SNAP_EVERY, TICK_HZ } from './constants';
+import {
+  INPUT_BURST,
+  MAX_NAME,
+  MAX_REWIND,
+  RULES,
+  SNAP_EVERY,
+  TEAM_COLOR,
+  TICK_HZ,
+} from './constants';
+import { Ctf } from './ctf';
 import { ROOFTOPS } from './map';
 import { move, spawn } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
@@ -21,25 +30,6 @@ interface Player {
 const MAX_CATCH_UP = 20;
 /** A new player does not spawn within this many metres of another one. */
 const SPAWN_CLEAR = 2;
-
-const COLORS = [
-  '#e6194b',
-  '#3cb44b',
-  '#ffe119',
-  '#4363d8',
-  '#f58231',
-  '#911eb4',
-  '#42d4f4',
-  '#f032e6',
-  '#bfef45',
-  '#fabed4',
-  '#469990',
-  '#dcbeff',
-  '#9a6324',
-  '#800000',
-  '#aaffc3',
-  '#808000',
-];
 
 /** First n characters (code points) of s, trimmed. */
 const cut = (s: string, n: number): string => Array.from(s).slice(0, n).join('').trim();
@@ -71,13 +61,18 @@ const setEvery: Every = (cb, ms) => {
  * One game, transport-agnostic. The Node server and the local host tab both drive a Room: they
  * feed it connections and frames, the room answers through Conn.send.
  *
- * - A peer joins with { t: 'join', name }: unique name (`Bob 2`), unique colour, a spawn point not
- *   taken by another player; 'full' beyond rules.maxPlayers. Everyone gets a fresh 'roster' on
- *   every join and leave.
+ * - A peer joins with { t: 'join', name }: unique name (`Bob 2`), the smaller team (red on a tie)
+ *   and its colour, a spawn point of the team not taken by another player; 'full' beyond
+ *   rules.maxPlayers. Everyone gets a fresh 'roster' on every join and leave. Teams are not
+ *   rebalanced when someone leaves: the next join fills the smaller one.
  * - Each input frame moves its player at once with move(); the INPUT_BURST bank drops the excess.
  *   rewind() answers where the others were drawn at the view tick of an input (lag compensation,
  *   at most MAX_REWIND ticks back).
- * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player goes to every peer.
+ * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player, the score, the clock and
+ *   the two flags goes to every peer. The flag rules and the match are ctf.ts's: a match ends at
+ *   rules.scoreLimit or rules.timeLimit ('end' text to everyone), the end screen runs END_SCREEN
+ *   seconds, then everyone is put back at a spawn of his team and the score starts again.
+ *   drop(id) makes a carrier drop the flag: the hook of the tackle (step 7).
  */
 export class Room {
   /** Every connected peer; null until it joins. */
@@ -86,15 +81,17 @@ export class Room {
   /** The players as each snapshot of the last MAX_REWIND ticks sent them. */
   private history: { tick: number; players: PlayerState[] }[] = [];
   private world: World;
+  private ctf: Ctf;
   private halt: (() => void) | undefined;
   private rules: Rules;
-  /** Round-robin cursor over the spawn points, used once they are all taken. */
-  private rr = 0;
+  /** Round-robin cursor over the spawn points of each team, used once they are all taken. */
+  private rr = [0, 0];
 
   /** Missing rules fall back to RULES. */
   public constructor(rules: Partial<Rules> = {}, map: WorldDef = ROOFTOPS) {
     this.rules = { ...RULES, ...rules };
     this.world = build(map);
+    this.ctf = new Ctf(this.world, this.rules);
   }
 
   /** Number of joined players. */
@@ -121,7 +118,8 @@ export class Room {
     // An input beyond the bank is dropped, and not acked.
     if (input && p.bank > 0) {
       p.bank--;
-      move(p.state, input, this.world);
+      move(p.state, input, this.world, p.info.team);
+      this.ctf.moved(p.state);
       p.ack = input.seq;
     }
   }
@@ -131,8 +129,21 @@ export class Room {
     const p = this.peers.get(conn);
     this.peers.delete(conn);
     if (p) {
+      this.ctf.leave(p.info.id);
+      if (!this.size) {
+        this.ctf.reset();
+      }
       this.roster();
     }
+  }
+
+  /**
+   * Makes the player `id` drop the flag he carries, where he stands (the tackle of step 7).
+   * False when he carries none or is not there.
+   */
+  public drop(id: number): boolean {
+    const p = this.players().find(q => q.info.id === id);
+    return !!p && this.ctf.drop(p.state);
   }
 
   /** One host tick. Public so tests can drive the room without a timer. */
@@ -145,6 +156,14 @@ export class Room {
     for (const p of players) {
       p.bank = Math.min(INPUT_BURST, p.bank + 1);
     }
+    const turn = this.ctf.tick(
+      players.map(p => ({ id: p.info.id, team: p.info.team, state: p.state })),
+    );
+    if (turn === 'end') {
+      this.end(players);
+    } else if (turn === 'start') {
+      this.restart(players);
+    }
     if (now % SNAP_EVERY === 0) {
       this.history.push({ tick: now, players: players.map(p => ({ ...p.state })) });
       while (this.history[0].tick < now - MAX_REWIND) {
@@ -154,6 +173,7 @@ export class Room {
       const snap = encodeSnapshot({
         tick: now,
         players: players.map(p => ({ ...p.state, ack: p.ack })),
+        ...this.ctf.wire(),
       });
       players.forEach(p => p.conn.send(snap));
     }
@@ -223,13 +243,38 @@ export class Room {
     });
   }
 
-  /** The first spawn point with none of `others` within SPAWN_CLEAR, else the next one round-robin. */
-  private place(id: number, others: PlayerState[]): PlayerState {
-    const n = this.world.def.spawns.findIndex((_, k) => {
-      const { x, z } = spawn(id, this.world, k);
+  /** The first spawn point of the team with none of `others` within SPAWN_CLEAR, else the next one round-robin. */
+  private place(id: number, team: number, others: PlayerState[]): PlayerState {
+    const n = this.world.def.teams[team].spawns.findIndex((_, k) => {
+      const { x, z } = spawn(id, this.world, k, team);
       return !others.some(o => Math.hypot(o.x - x, o.z - z) < SPAWN_CLEAR);
     });
-    return spawn(id, this.world, n < 0 ? this.rr++ : n);
+    return spawn(id, this.world, n < 0 ? this.rr[team]++ : n, team);
+  }
+
+  /** The match is over: everyone gets the result and what each player did. */
+  private end(players: Player[]): void {
+    const tally = this.ctf.tally().flatMap(t => {
+      const info = players.find(p => p.info.id === t.id)?.info;
+      return info ? [{ ...t, name: info.name, team: info.team }] : [];
+    });
+    const msg = JSON.stringify({
+      t: 'end',
+      score: this.ctf.score,
+      players: tally,
+    } satisfies ServerText);
+    players.forEach(p => p.conn.send(msg));
+  }
+
+  /** A new match: everyone back at a spawn of his team. */
+  private restart(players: Player[]): void {
+    const put: PlayerState[] = [];
+    this.rr = [0, 0];
+    for (const p of players) {
+      p.state = this.place(p.info.id, p.info.team, put);
+      put.push(p.state);
+      this.ctf.place(p.info.id, p.state);
+    }
   }
 
   private players(): Player[] {
@@ -247,9 +292,9 @@ export class Room {
     while (players.some(p => p.info.id === id)) {
       id++;
     }
-    // First colour nobody wears (all of them taken only when maxPlayers exceeds the palette).
-    const color =
-      COLORS.find(c => !players.some(p => p.info.color === c)) ?? COLORS[id % COLORS.length];
+    // The smaller team, red when they are equal.
+    const reds = players.filter(p => p.info.team === 0).length;
+    const team = reds > players.length - reds ? 1 : 0;
     const player: Player = {
       conn,
       info: {
@@ -259,16 +304,19 @@ export class Room {
           cleanName(name) || `Player ${id}`,
           players.map(p => p.info.name),
         ),
-        color,
+        team,
+        color: TEAM_COLOR[team],
       },
       state: this.place(
         id,
+        team,
         players.map(p => p.state),
       ),
       bank: INPUT_BURST,
       ack: 0xffff,
     };
     this.peers.set(conn, player);
+    this.ctf.join(id, team, player.state);
     this.roster();
   }
 

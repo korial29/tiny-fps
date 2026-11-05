@@ -10,8 +10,11 @@ import type { Input, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
 import type { World } from '../shared/world';
 
 export interface Predictor {
-  /** The own player id, from the roster. Snapshots before it are only used for the others. */
-  you(id: number): void;
+  /**
+   * The own player id and team, from the roster. Snapshots before it are only used for the others.
+   * The team picks the spawn a fall puts the player back at.
+   */
+  you(id: number, team?: number): void;
   /**
    * One local step: gives the input the next seq, rounds its yaw and pitch to the wire, moves the
    * own player with it, keeps it for replay, and returns it for the caller to send (the very
@@ -76,6 +79,7 @@ const lerp = (a: PlayerState, b: PlayerState, t: number): PlayerState => ({
 
 export const createPredictor = (world: World): Predictor => {
   let id: number | undefined;
+  let team = 0;
   let seq = 0;
   let pending: Input[] = [];
   /** The own player after the last step, and before it. */
@@ -126,8 +130,8 @@ export const createPredictor = (world: World): Predictor => {
   };
 
   return {
-    you: n => {
-      id = n;
+    you: (n, t = 0) => {
+      [id, team] = [n, t];
     },
 
     step: (i, now) => {
@@ -139,7 +143,7 @@ export const createPredictor = (world: World): Predictor => {
       }
       if (own) {
         prev = state(own);
-        move(own, input, world);
+        move(own, input, world, team);
         ev |= own.ev;
         fall = Math.max(fall, own.fall);
       }
@@ -162,7 +166,7 @@ export const createPredictor = (world: World): Predictor => {
         if (k === pending.length - 1) {
           prev = state(own!);
         }
-        move(own!, i, world);
+        move(own!, i, world, team);
       });
     },
 

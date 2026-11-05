@@ -35,7 +35,7 @@ const stair = (z: number, y: number): Brush[] =>
  * sprint jump 6.3 m, and reaches a box 1.7 m high; the hands catch a top 1.2 to 2.4 m above the
  * feet, and a fall that reaches a face within about 3.5 m is caught by them.
  *
- * - A: the start roof (10 m), with the spawns. B: a roof at 10 m, across a 4.2 m gap from A (a
+ * - A: the start roof (10 m), red's base, with its spawns. B: a roof at 10 m, across a 4.2 m gap from A (a
  *   run and a jump: walking off the edge falls).
  * - On B, a platform floating at 12.2 to 12.6 m (an overhang to walk under, a bump for a jump) and
  *   a stair of six 0.4 m steps up to it. 3 m north of it, C (12.4 m): the south face of C above B
@@ -45,6 +45,8 @@ const stair = (z: number, y: number): Brush[] =>
  * - G (8 m) is across a 10 m drop from E, reached by a 0.5 m wide beam; it has a 1.6 m ledge.
  * - F (12.4 m) is 13 m north of C: a sprint and a jump fall short of it, and so does a walk with
  *   the dash or the double jump; it takes the sprint and the jump and the dash or the double jump.
+ *   F is blue's base, with its spawns: the flags are 90 m and the chasm apart, and the way back is
+ *   the same line in reverse, then a drop to B and the A gap jumped south.
  */
 export const ROOFTOPS: WorldDef = {
   name: 'Rooftops',
@@ -70,16 +72,35 @@ export const ROOFTOPS: WorldDef = {
     box([41.5, 7.6, 50], [42, 8, 60], TEX.METAL),
     box([30, 8, 64], [34, 9.6, 68], TEX.STONE, TEX.BRICK),
   ],
-  // Side by side on A, facing north (yaw 0 looks toward -z).
-  spawns: [
-    [6, 10, 72, 0],
-    [10, 10, 72, 0],
-    [14, 10, 72, 0],
-    [18, 10, 72, 0],
-    [22, 10, 72, 0],
-    [8, 10, 66, 0],
-    [14, 10, 66, 0],
-    [20, 10, 66, 0],
+  teams: [
+    // Red holds A, side by side facing north (yaw 0 looks toward -z), its flag 4.8 m from the gap.
+    {
+      base: [14, 10, 62.5],
+      spawns: [
+        [6, 10, 72, 0],
+        [10, 10, 72, 0],
+        [14, 10, 72, 0],
+        [18, 10, 72, 0],
+        [22, 10, 72, 0],
+        [8, 10, 66, 0],
+        [14, 10, 66, 0],
+        [20, 10, 66, 0],
+      ],
+    },
+    // Blue holds F across the chasm, facing south, its flag 4.8 m from the chasm's edge.
+    {
+      base: [14, 12.4, 2.2],
+      spawns: [
+        [6, 12.4, -3, Math.PI],
+        [10, 12.4, -3, Math.PI],
+        [14, 12.4, -3, Math.PI],
+        [18, 12.4, -3, Math.PI],
+        [22, 12.4, -3, Math.PI],
+        [8, 12.4, 0.5, Math.PI],
+        [14, 12.4, 0.5, Math.PI],
+        [20, 12.4, 0.5, Math.PI],
+      ],
+    },
   ],
   floor: -25,
   // A sun low in the east, warm and bright: long sharp shadows across the roofs.

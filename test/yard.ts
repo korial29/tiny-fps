@@ -4,13 +4,14 @@ import { RUN_SPEED } from '../src/shared/constants';
 import { MODE, TEX } from '../src/shared/types';
 import { build } from '../src/shared/world';
 import type { Brush, World } from '../src/shared/world';
+import { duo } from './teams';
 
 type Vec3 = [number, number, number];
 const box = (min: Vec3, max: Vec3): Brush => ({ min, max, top: TEX.TILE, side: TEX.BRICK });
 const world = (brushes: Brush[], floor = -50): World =>
   build({
     brushes,
-    spawns: [[0, 0, 0, 0]],
+    teams: duo([[0, 0, 0, 0]]),
     floor,
     sun: { dir: [0, 1, 0], color: [1, 1, 1] },
     sky: [

@@ -158,9 +158,26 @@ export const INPUT_BURST = 10;
 
 export const MAX_PLAYERS = 16;
 
+/** Team names and colours (CSS), red then blue: the runners, the flags, the bases and the HUD wear them. */
+export const TEAM_NAME = ['Red', 'Blue'];
+export const TEAM_COLOR = ['#ff3d4f', '#2f80ff'];
+
+/** Capture the flag. Reach: horizontal metres from a flag stand or a lying flag within which the player touches it. */
+export const FLAG_REACH = 1.5;
+/** A flag is as tall as this above its foot: a body touches it only if it overlaps that height. */
+export const FLAG_H = 2.2;
+/** Seconds a dropped flag lies before it goes home by itself. */
+export const FLAG_RETURN = 10;
+/** Seconds a carrier who is made to drop the flag cannot take it again: he would pick it up where he stands. */
+export const FLAG_LOCK = 2;
+/** Seconds the end screen of a match stays, then a new match starts. */
+export const END_SCREEN = 10;
+
 /** Longest player name, in characters (code points). */
 export const MAX_NAME = 16;
 
 export const RULES: Rules = {
   maxPlayers: MAX_PLAYERS,
+  scoreLimit: 3,
+  timeLimit: 480,
 };

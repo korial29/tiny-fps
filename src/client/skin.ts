@@ -3,10 +3,11 @@
 // and deformed on the CPU by linear blend skinning. A limb is one tube from its root joint to its
 // end, its rings shared across the joints, so it bends without a gap. Clothes are colour regions of
 // the triangles. See rig.ts for the joints and the pose.
-import { SKIN } from './figure';
 import { JOINT as J, JOINTS, rest, solve } from './rig';
 import type { Quat } from './rig';
 import type { Vec3 } from './mesh';
+
+const SKIN = [0.66, 0.45, 0.35];
 
 /** The colour regions of a palette. */
 const [JACKET, TRIM, PANTS, FLESH, HAIR, UPPER, SOLE, GLOVE, SHADES] = [0, 1, 2, 3, 4, 5, 6, 7, 8];
@@ -106,10 +107,10 @@ const ARM: Loft = {
     [1.09, 0.222, -0.002, 0.046, 0.048, 0.8, JACKET],
     [0.975, 0.222, 0, 0.034, 0.034, 1.2, TRIM],
     [0.935, 0.222, 0, 0.03, 0.03, 1.8, GLOVE],
-    [0.89, 0.222, -0.004, 0.024, 0.037, 2, GLOVE],
-    [0.82, 0.222, -0.01, 0.021, 0.034, 2, GLOVE],
-    [0.765, 0.222, -0.02, 0.013, 0.02, 2, GLOVE],
-    [0.745, 0.222, -0.025, 0, 0, 2, GLOVE],
+    [0.885, 0.222, -0.004, 0.027, 0.037, 2, GLOVE],
+    [0.84, 0.222, -0.008, 0.029, 0.042, 2, GLOVE],
+    [0.795, 0.222, -0.012, 0.025, 0.034, 2, GLOVE],
+    [0.772, 0.222, -0.014, 0, 0, 2, GLOVE],
   ],
 };
 
@@ -180,11 +181,17 @@ const sgn = (v: number, e: number) => Math.sign(v) * Math.abs(v) ** (2 / e);
 const generate = (lod: number): Skin => {
   const [v, j, w, t, c]: number[][] = [[], [], [], [], []];
   for (const L of LOFTS) {
-    const n = L.n[lod];
-    if (!n) {
+    const n = L.n[Math.min(lod, 1)];
+    // The eye's own body has no head: the trunk ends in a cap at the shoulders.
+    if (!n || (lod > 1 && (L === HEAD || L === NOSE))) {
       continue;
     }
-    const rings = lod ? L.rings : L.far.map(i => L.rings[i]);
+    const rings =
+      lod > 1 && L === TRUNK
+        ? [...L.rings.slice(0, 9), [1.455, 0, 0, 0, 0, 2, JACKET]]
+        : lod
+          ? L.rings
+          : L.far.map(i => L.rings[i]);
     const up = rings[rings.length - 1][0] > rings[0][0];
     for (const m of L.m ? [1, -1] : [1]) {
       /** The left joints are the right ones' four ids before. */
@@ -261,7 +268,7 @@ const generate = (lod: number): Skin => {
 };
 
 const skins: Skin[] = [];
-/** The skin at a level of detail (see DETAIL in mesh.ts): 0 far, 1 near. Built once. */
+/** The skin at a level of detail (see DETAIL in mesh.ts): 0 far, 1 near, 2 near and headless, for the eye. Built once. */
 export const body = (lod: number) => (skins[lod] ??= generate(lod));
 
 const BIND = solve(rest()).pos;

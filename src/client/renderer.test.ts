@@ -382,8 +382,9 @@ describe('createRenderer', () => {
     const body = (
       draw = vi.fn((out: number[]) => void out.push(...new Array<number>(SOLID).fill(0))),
     ) => ({
+      id: 7,
       update: vi.fn(),
-      rig: vi.fn(),
+      pose: vi.fn(),
       draw,
     });
 
@@ -391,8 +392,16 @@ describe('createRenderer', () => {
       const rd = createRenderer(canvas, ROOM);
       const b = body();
       const fx = createEffects();
-      rd.frame([1, 1.6, 1], 0.5, -0.2, [], new Map(), fx, [], b);
-      expect(b.draw).toHaveBeenCalledWith(expect.any(Array), [1, 1.6, 1], 0.5, -0.2, fx.roll);
+      rd.frame([1, 1.6, 1], 0.5, -0.2, [], new Map([[7, '#ff0000']]), fx, [], b);
+      // In the colour of the own player's team.
+      expect(b.draw).toHaveBeenCalledWith(
+        expect.any(Array),
+        [1, 1.6, 1],
+        0.5,
+        -0.2,
+        fx.roll,
+        [1, 0, 0],
+      );
       expect(draws()).toEqual([
         [0, FLOOR_VERTS],
         [0, FLOOR_VERTS],

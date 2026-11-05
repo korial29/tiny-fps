@@ -113,6 +113,29 @@ describe('skin', () => {
     }
   });
 
+  it('has no head for the eye: the trunk ends in a closed cap on the shoulders', () => {
+    const v = draw(2);
+    const colors = new Set<string>();
+    for (let i = 0; i < v.length; i += STRIDE) {
+      colors.add([v[i + 6], v[i + 7], v[i + 9]].join());
+    }
+    for (const c of [FLESH, HAIR]) {
+      expect(colors.has(c.join())).toBe(false);
+    }
+    expect(Math.max(...v.filter((_, i) => i % STRIDE == 1))).toBeLessThan(1.52);
+    expect(v.length).toBeLessThan(draw(1).length);
+    const s = body(2);
+    const seen = new Map<string, number>();
+    for (let i = 0; i < s.t.length; i += 3) {
+      for (let k = 0; k < 3; k++) {
+        const [a, b] = [s.t[i + k], s.t[i + ((k + 1) % 3)]];
+        const key = a < b ? `${a} ${b}` : `${b} ${a}`;
+        seen.set(key, (seen.get(key) ?? 0) + 1);
+      }
+    }
+    expect([...seen.values()].every(n => n == 2)).toBe(true);
+  });
+
   it('is closed: every edge joins two triangles but the three rings buried in the head', () => {
     for (const lod of [0, 1]) {
       const s = body(lod);

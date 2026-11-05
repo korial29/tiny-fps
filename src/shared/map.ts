@@ -46,10 +46,10 @@ const stair = (z: number, y: number): Brush[] =>
 export const ROOFTOPS: WorldDef = {
   name: 'Rooftops',
   brushes: [
-    roof(4, 56, 24, 76, 10),
+    roof(4, 57.7, 24, 76, 10),
     roof(4, 36, 24, 53.5, 10),
     roof(4, 20, 24, 36, 12.4),
-    roof(4, 0, 24, 12, 12.4),
+    roof(4, -5, 24, 7, 12.4),
     roof(27, 20, 47, 50, 8),
     roof(27, 60, 47, 76, 8),
     // The overhang, its stair and two poles.

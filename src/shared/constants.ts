@@ -28,6 +28,104 @@ export const MAX_PITCH = 1.55;
 /** A floor at most this much higher is walked onto; a higher one needs a jump. */
 export const STEP_H = 0.5;
 
+// Movement (physics.ts). Speeds in m/s, rates in m/s², durations in ticks of 1 / TICK_HZ s. The
+// timers go on the wire in 3 or 8 bits (protocol.ts): keep them within 7 and 255.
+
+/** Ground acceleration toward the wished direction: from standing to RUN_SPEED in 0.12 s. */
+export const ACCEL = 50;
+/** Ground deceleration with no direction held: strong, a stop takes about 0.15 s. */
+export const FRICTION = 45;
+/**
+ * How fast the speed across the wished direction is killed on the ground. A gentle turn keeps
+ * nearly all the speed, a turn of 90 degrees loses it all and starts again from RUN_SPEED.
+ */
+export const GRIP = 45;
+/** How fast a speed above the current top speed falls back to it (sprint released, dash over). */
+export const DECAY = 12;
+/** Acceleration in the air toward the wished direction. The speed never grows from it, see AIR_SPEED. */
+export const AIR_ACCEL = 14;
+/** The speed air control may build up to; a faster player keeps his speed and only turns. */
+export const AIR_SPEED = RUN_SPEED;
+
+/** Top speed after about a second of sprinting forward (Shift held, forward held). */
+export const SPRINT_SPEED = 9;
+/** Acceleration from RUN_SPEED to SPRINT_SPEED: 3 m/s over 1 s. */
+export const SPRINT_ACCEL = 3;
+
+/** Dash: a burst of this speed in the wished direction (forward without a key), no gravity. */
+export const DASH_SPEED = 16;
+/** Ticks the burst lasts (0.17 s, about 2.7 m). */
+export const DASH_TICKS = 10;
+/** The speed left after the burst; it then falls to the top speed at DECAY. */
+export const DASH_EXIT_SPEED = 10;
+/** Ticks from one dash to the next dash, burst included (1 s). */
+export const DASH_COOLDOWN = 60;
+
+/** The extra jump in the air: weaker than the first one, so a walk and a double jump stay short. */
+export const DOUBLE_JUMP_SPEED = 6;
+/** Air jumps that landing, a wall-run and a ledge grab give back. */
+export const AIR_JUMPS = 1;
+/** Ticks after walking off an edge in which a jump still works (0.1 s). */
+export const COYOTE_TICKS = 6;
+/** Ticks a jump press is remembered (0.1 s): pressed this close to the ground, it goes off on landing. */
+export const JUMP_BUFFER_TICKS = 6;
+
+/** Height of the cylinder when sliding or crouching, and the eye in it. */
+export const LOW_H = 0.9;
+export const LOW_EYE = 0.7;
+/** Speed from which a crouch is a slide (above RUN_SPEED: only a sprint slides). */
+export const SLIDE_MIN_SPEED = 7.5;
+/** A slide bleeds speed at this rate (9 m/s lasts about a second)... */
+export const SLIDE_DECEL = 4.5;
+/** ...and ends under this speed, or after this many ticks (1.2 s). */
+export const SLIDE_END_SPEED = 4;
+export const SLIDE_TICKS = 72;
+/** Top speed of a crouch walk. */
+export const CROUCH_SPEED = 3;
+
+/** Wall-run: moving at least this fast along a wall (m/s) starts it, and under WALLRUN_KEEP it ends. */
+export const WALLRUN_MIN_SPEED = 7;
+export const WALLRUN_KEEP_SPEED = 5.5;
+/** Speed lost along the wall, m/s². */
+export const WALLRUN_DRAG = 2;
+/** Longest run, in ticks (1 s). */
+export const WALLRUN_TICKS = 60;
+/** Gravity during the run, as a share of GRAVITY, and the fastest rise it starts with. */
+export const WALLRUN_GRAVITY = 0.15;
+export const WALLRUN_VY_MAX = 3;
+/** How far from the cylinder a wall still counts as next to it (m). */
+export const WALL_REACH = 0.15;
+/** The share of the speed that may point into or away from the wall for it to count as along it. */
+export const WALL_PARALLEL = 0.4;
+/** A kick-off from the wall: speed away from it and upward (m/s). */
+export const WALL_KICK_SPEED = 5;
+export const WALL_KICK_UP = 6.5;
+
+/** Ledge grab: a top this far above the feet (m) can be caught, if the player faces it (cosine). */
+export const GRAB_MIN = 1.2;
+export const GRAB_MAX = 2.4;
+export const GRAB_FACING = 0.5;
+/** A hand's reach beyond the cylinder (m), and the gap left between the hanging body and the wall. */
+export const GRAB_REACH = 0.2;
+export const GRAB_GAP = 0.03;
+/** Feet this far under the ledge (m) when hanging, and how fast the body settles there (m/s). */
+export const HANG_H = 2;
+export const HANG_SNAP = 8;
+/** A forward press climbs from this tick of the hang (0.1 s); with nothing held the hand slips at HANG_SLIDE. */
+export const HANG_MIN_TICKS = 6;
+export const HANG_SLIDE_TICKS = 30;
+/** Climb: the body rises to the top at this speed (m/s), then moves CLIMB_INSET in from the edge. */
+export const CLIMB_RISE = 8;
+export const CLIMB_INSET = 0.2;
+export const CLIMB_FWD_SPEED = 5.5;
+/** Safety: a climb that has not ended after this many ticks ends where it is. */
+export const CLIMB_MAX_TICKS = 40;
+/** Speed forward when the climb ends (m/s). */
+export const CLIMB_EXIT_SPEED = 3;
+/** Jumping off a ledge facing away from it: speed away and upward (m/s). */
+export const VAULT_SPEED = 4;
+export const VAULT_UP = 6;
+
 /**
  * Host ticks the history of the players goes back (0.5 s): the host rewinds the others to the
  * view tick of an input, clamped to this.

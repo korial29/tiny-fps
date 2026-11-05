@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { STILL } from '../shared/physics';
 import { TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
@@ -427,7 +428,17 @@ describe('createRenderer', () => {
 
     it('is cast by the other players too, drawn after the brushes', () => {
       const rd = createRenderer(canvas, ROOM);
-      const p: PlayerState = { id: 1, x: 2, y: 0, z: 2, vy: 0, yaw: 0, pitch: 0, ground: true };
+      const p: PlayerState = {
+        id: 1,
+        x: 2,
+        y: 0,
+        z: 2,
+        vy: 0,
+        yaw: 0,
+        pitch: 0,
+        ground: true,
+        ...STILL,
+      };
       rd.frame([1, 1.6, 1], 0, 0, [p], new Map(), createEffects(), []);
       const [depth, world] = draws();
       expect(depth[1]).toBeGreaterThan(FLOOR_VERTS);

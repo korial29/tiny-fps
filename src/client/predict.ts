@@ -23,6 +23,12 @@ export interface Predictor {
   /** A decoded snapshot, received at `now` (ms, performance.now()). */
   snapshot(s: Snapshot, now: number): void;
   /**
+   * What happened in the own player's live steps since the last call: the EV bits of every one of
+   * them or-ed together, and the fastest landing. Replays after a snapshot do not count: a move is
+   * reported once, when it is first predicted. For the camera, the body and the sounds.
+   */
+  events(): { ev: number; fall: number };
+  /**
    * The own player, eased between the state before and after the last step by alpha in [0, 1]
    * (the share of a step elapsed since it), so the camera moves smoothly at any frame rate.
    * Undefined until a snapshot shows the own player.
@@ -39,16 +45,12 @@ const MAX_SNAPS = 16;
 
 type Point = { x: number; y: number; z: number };
 
-const state = ({ id, x, y, z, vy, yaw, pitch, ground }: SnapPlayer | PlayerState): PlayerState => ({
-  id,
-  x,
-  y,
-  z,
-  vy,
-  yaw,
-  pitch,
-  ground,
-});
+/** A copy of the player without the ack a snapshot adds. */
+const state = (s: SnapPlayer | PlayerState): PlayerState => {
+  const p: PlayerState & { ack?: number } = { ...s };
+  delete p.ack;
+  return p;
+};
 
 /** The point a share t of the way from a to b. */
 const mid = (a: Point, b: Point, t: number): Point => ({
@@ -80,6 +82,8 @@ export const createPredictor = (world: World): Predictor => {
   let own: PlayerState | undefined;
   let prev: PlayerState | undefined;
   const snaps: { t: number; s: Snapshot }[] = [];
+  let ev = 0;
+  let fall = 0;
 
   /**
    * The snapshots around the time the others are drawn at, and how far between them (0 to 1). The
@@ -136,6 +140,8 @@ export const createPredictor = (world: World): Predictor => {
       if (own) {
         prev = state(own);
         move(own, input, world);
+        ev |= own.ev;
+        fall = Math.max(fall, own.fall);
       }
       return input;
     },
@@ -158,6 +164,12 @@ export const createPredictor = (world: World): Predictor => {
         }
         move(own!, i, world);
       });
+    },
+
+    events: () => {
+      const out = { ev, fall };
+      ev = fall = 0;
+      return out;
     },
 
     me: alpha => (own && prev ? lerp(prev, own, Math.max(0, Math.min(1, alpha))) : undefined),

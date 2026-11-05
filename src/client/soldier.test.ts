@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { STILL } from '../shared/physics';
 import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import type { PlayerState } from '../shared/types';
 import { STRIDE } from './mesh';
@@ -63,6 +64,7 @@ describe('soldier', () => {
     yaw: 0,
     pitch: 0,
     ground: true,
+    ...STILL,
     ...o,
   });
   const GREEN = [0.1, 0.8, 0.2];

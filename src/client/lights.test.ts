@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { STILL } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { gather } from './lights';
 import type { Scene } from './lights';
@@ -12,6 +13,7 @@ const player = (id: number, x: number, yaw = 0): PlayerState => ({
   yaw,
   pitch: 0,
   ground: true,
+  ...STILL,
 });
 const scene = (over: Partial<Scene> = {}): Scene => ({
   eye: [8, 1.6, 8],

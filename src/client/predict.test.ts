@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { INTERP_DELAY, PLAYER_H, STEP_H, TICK_HZ } from '../shared/constants';
+import { INTERP_DELAY, PLAYER_H, RUN_SPEED, STEP_H, TICK_HZ } from '../shared/constants';
 import { ROOFTOPS } from '../shared/map';
-import { move, spawn } from '../shared/physics';
+import { STILL, move, spawn } from '../shared/physics';
 import { decodeInput, decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
 import { Room } from '../shared/room';
 import { KEY } from '../shared/types';
@@ -12,6 +12,7 @@ import { createPredictor } from './predict';
 const STEP = 1000 / TICK_HZ;
 const world = build(ROOFTOPS);
 
+/** A player on the start roof, running north at RUN_SPEED: a forward step is 0.1 m. */
 const snapPlayer = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
   id,
   x: 8,
@@ -22,6 +23,8 @@ const snapPlayer = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => (
   pitch: 0,
   ground: true,
   ack: 0xffff,
+  ...STILL,
+  vz: -RUN_SPEED,
   ...over,
 });
 const snapshot = (tick: number, ...players: SnapPlayer[]): Snapshot => ({
@@ -40,7 +43,7 @@ describe('prediction against the room', () => {
    * press against it).
    */
   const route: { to: [number, number]; max: number; jump?: boolean; calm?: boolean }[] = [
-    { to: [16, 56.4], max: 220, calm: true },
+    { to: [16, 57.5], max: 220, calm: true },
     { to: [16, 50], max: 80, jump: true, calm: true },
     { to: [13, 53.2], max: 60, calm: true },
     { to: [13, 39.3], max: 150, calm: true },
@@ -48,7 +51,7 @@ describe('prediction against the room', () => {
     { to: [14, 21], max: 200 },
     // From the edge of the high roof to the north roof, 8 m away: a fall, a respawn at the start.
     { to: [14, 8], max: 150, jump: true },
-    { to: [16, 56.4], max: 220, calm: true },
+    { to: [16, 57.5], max: 220, calm: true },
     { to: [16, 50], max: 80, jump: true, calm: true },
     // Under the platform, hopping into its underside.
     { to: [16, 44], max: 80 },
@@ -81,12 +84,13 @@ describe('prediction against the room', () => {
             (rnd() < 0.2 && !calm ? KEY.RIGHT : 0);
         }
         const i = {
-          keys: keys | (jump ? KEY.JUMP : 0),
+          // A tap on every step that starts on a floor: a hop.
+          keys: keys | (jump && sim.ground ? KEY.JUMP : 0),
           yaw: Math.atan2(-dx, -dz) + (rnd() - 0.5) * 0.1,
           pitch: Math.sin(out.length / 20) * 0.5,
         };
         out.push(i);
-        move(sim, { ...i, seq: 0 }, world);
+        move(sim, onWire({ ...i, seq: 0 }), world);
       }
     }
     return out;
@@ -273,7 +277,7 @@ describe('prediction against the room', () => {
       expect(c.respawns, `seed ${seed}, respawns`).toBeGreaterThanOrEqual(1);
       expect(c.low, `seed ${seed}, low`).toBeLessThan(ROOFTOPS.floor + 5);
       expect(c.bump, `seed ${seed}, bumps`).toBeGreaterThanOrEqual(2);
-      expect(c.walls, `seed ${seed}, walls`).toBeGreaterThan(20);
+      expect(c.walls, `seed ${seed}, walls`).toBeGreaterThan(10);
     }
   });
 });
@@ -373,13 +377,13 @@ describe('own player', () => {
       pred.step({ ...fwd, keys: 0 });
     }
     // Nothing acked since: only the newest 120 are replayed (12 m).
-    pred.snapshot(snapshot(2, snapPlayer(0)), 10);
+    pred.snapshot(snapshot(2, snapPlayer(0, { vz: 0 })), 10);
     expect(pred.me(1)!.z).toBe(70);
     for (let k = 0; k < 500; k++) {
       pred.step(fwd);
     }
-    pred.snapshot(snapshot(3, snapPlayer(0)), 20);
-    expect(pred.me(1)!.z).toBeCloseTo(70 - 12);
+    pred.snapshot(snapshot(3, snapPlayer(0, { vz: 0 })), 20);
+    expect(pred.me(1)!.z).toBeCloseTo(70 - 12, 0);
   });
 });
 

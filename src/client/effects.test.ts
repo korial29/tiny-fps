@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { STILL } from '../shared/physics';
 import { KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { createEffects } from './effects';
@@ -13,6 +14,7 @@ const me = (x = 0, ground = true): PlayerState => ({
   yaw: 0,
   pitch: 0,
   ground,
+  ...STILL,
 });
 const run = (fx: ReturnType<typeof createEffects>, keys: number, seconds: number) => {
   for (let t = 0; t < seconds; t += DT) {

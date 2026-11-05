@@ -70,7 +70,7 @@ describe('ROOFTOPS', () => {
       // Standing, not falling, and well above the kill floor.
       const p = spawn(0, world, n);
       move(p, { seq: 0, keys: 0, yaw: p.yaw, pitch: 0 }, world);
-      expect(p).toEqual(spawn(0, world, n));
+      expect(p).toEqual({ ...spawn(0, world, n), t: 1 });
       expect(y).toBeGreaterThan(ROOFTOPS.floor + 20);
     }
   });
@@ -120,7 +120,7 @@ describe('ROOFTOPS', () => {
       const p = spawn(0, world, 2);
       route(p, [
         [16, 72],
-        [16, 56.6],
+        [16, 57.5],
         [16, 50, true],
       ]);
       expect(on(p, 10, [4, 36, 24, 53.5])).toBe(true);
@@ -156,7 +156,7 @@ describe('ROOFTOPS', () => {
       const p = spawn(0, world, 2);
       route(p, [
         [16, 72],
-        [16, 56.6],
+        [16, 57.5],
         [16, 50, true],
         [13, 53.2],
       ]);
@@ -173,7 +173,7 @@ describe('ROOFTOPS', () => {
       const q = spawn(0, world, 2);
       route(q, [
         [16, 72],
-        [16, 56.6],
+        [16, 57.5],
         [16, 50, true],
         [16, 43],
       ]);
@@ -191,7 +191,7 @@ describe('ROOFTOPS', () => {
       const p = spawn(0, world, 2);
       route(p, [
         [16, 72],
-        [16, 56.6],
+        [16, 57.5],
         [16, 50, true],
         [13, 53.2],
         [13, 39.6],
@@ -211,7 +211,7 @@ describe('ROOFTOPS', () => {
       const p = spawn(0, world, 2);
       route(p, [
         [16, 72],
-        [16, 56.6],
+        [16, 57.5],
         [16, 50, true],
         [13, 53.2],
         [13, 39.6],
@@ -232,7 +232,7 @@ describe('ROOFTOPS', () => {
       const p = spawn(0, world, 2);
       route(p, [
         [16, 72],
-        [16, 56.6],
+        [16, 57.5],
         [16, 50, true],
         [13, 53.2],
         [13, 39.6],
@@ -251,7 +251,7 @@ describe('ROOFTOPS', () => {
       const p = spawn(0, world, 2);
       route(p, [
         [16, 72],
-        [16, 56.6],
+        [16, 57.5],
         [16, 50, true],
         [13, 53.2],
         [13, 39.6],

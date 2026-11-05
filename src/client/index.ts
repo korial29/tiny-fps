@@ -176,7 +176,6 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
           yaw: ctl.yaw,
           pitch: ctl.pitch,
           others,
-          world,
           t: now / 1000,
         }),
       );

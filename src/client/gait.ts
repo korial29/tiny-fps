@@ -171,7 +171,8 @@ export const MOVE = {
  * A move's pose, in radians (metres for the offsets): drop of the pelvis, lean forward, lean to the
  * left, hip and knee flexion of the left then the right leg, shoulder and elbow flexion of the left
  * then the right arm, both arms out sideways, then the pelvis forward and to the right. Hands and
- * feet that touch the world are placed over it (see `reach`).
+ * feet that touch the world are placed over it (see `reach`). A stumble poses the arms only: the
+ * trunk and the legs follow the knock.
  */
 export const MOVES: number[][] = [
   [-0.05, 0.12, 0, 0.35, 0.5, 0.15, 0.7, 0.25, 0.5, 0.25, 0.5, 1.15, 0, 0],
@@ -182,7 +183,7 @@ export const MOVES: number[][] = [
   [0.07, 0.05, 0, 0.2, 0.3, 0.1, 0.2, 3, 0.2, 3, 0.2, 0.2, -0.22, 0],
   [0, 0.5, 0, 0.2, 0.4, 1.4, 1.7, 1, 1.4, 1, 1.4, 0.15, -0.1, 0],
   [-0.78, -1.1, 0, 1.1, 1.8, 1.4, 0.1, 0.5, 0.8, 0.4, 0.5, 0.8, 0, 0],
-  [-0.15, -0.5, 0, 0.3, 0.4, -0.3, 0.5, 1.2, 0.3, 1.2, 0.3, 1, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 0.8, 1.6, 0.8, 1.6, 0.2, 0, 0],
   [-0.05, 0.9, 0, 1.7, 2, 1.7, 2, 0.8, 1.6, 0.8, 1.6, 0.2, 0, 0],
 ];
 // A wall on the left is the wall on the right seen in a mirror.
@@ -251,8 +252,10 @@ const TOWARD = [
   [0, -1],
 ];
 
-/** Spring slots, a value and its speed each: lean, bank, yaw offset, landing dip, crouch, the velocity the stride sees, the pelvis height, how far up a ledge the climb is, then one per move. */
-const [LEAN, BANK, YAW, DIP, LOW, VX, VZ, HY, UP, W] = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18];
+/** Spring slots, a value and its speed each: lean, bank, yaw offset, landing dip, crouch, the velocity the stride sees, the pelvis height, how far up a ledge the climb is, the knock ahead and to the right, then one per move. */
+const [LEAN, BANK, YAW, DIP, LOW, VX, VZ, HY, UP, KA, KR, W] = [
+  0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22,
+];
 /** Metres a respawn moves a player in a frame, at the least. */
 const TELEPORT = 5;
 /** Half of a hip joint's distance from the middle: the feet stand this far apart when idle. */
@@ -416,6 +419,10 @@ export const createGait = (): Gait => {
     const face = p.yaw + arc(p.yaw, way) * turned;
     yaw = face + arc(face, wall) * clamp(sw(MOVE.HANG) + sw(MOVE.CLIMB));
     yaw += sp[YAW] * (1 - turned);
+    // The push of a tackle in the body's frame, taken off the velocity as it lands and eased out as it slides away.
+    const [kc, ks] = [Math.cos(yaw), Math.sin(yaw)];
+    set(KA, p.stun > 0 ? clamp(-(p.vx * ks + p.vz * kc) / 4.2, -1, 1) : 0, 18);
+    set(KR, p.stun > 0 ? clamp((p.vx * kc - p.vz * ks) / 4.2, -1, 1) : 0, 18);
     [look, pitch, at] = [p.yaw, p.pitch, [p.x, p.y, p.z]];
 
     // The stride's numbers at this speed.
@@ -426,7 +433,8 @@ export const createGait = (): Gait => {
       P[k as Key] = r[i] + (r[i + 1] - r[i]) * t;
     }
     gate = ease((v - 0.2) / 1.2);
-    const cadence = P.f * who[0] * (0.35 + 0.65 * clamp(v / 1.4));
+    // A stumble takes quick catching steps.
+    const cadence = P.f * who[0] * (0.35 + 0.65 * clamp(v / 1.4)) * (1 + 0.5 * sw(MOVE.STUN));
     duty = clamp((P.s * cadence) / Math.max(v, 0.1), 0.2, 0.62);
     const [rx, rz] = [Math.cos(yaw), -Math.sin(yaw)];
     const ground = (x: number, z: number) => {
@@ -715,8 +723,11 @@ export const createGait = (): Gait => {
       const w = sw(k);
       if (w > 0.002) {
         const to = fk(c);
-        FK.forEach(j => (rot[j] = slerp(rot[j], to[j], w)));
-        [c[13], c[0], c[12]].forEach((v, i) => (out.hips[i] += (v - out.hips[i]) * w));
+        const arms = k == MOVE.STUN;
+        FK.slice(arms ? 3 : 0, arms ? 7 : 15).forEach(j => (rot[j] = slerp(rot[j], to[j], w)));
+        if (!arms) {
+          [c[13], c[0], c[12]].forEach((v, i) => (out.hips[i] += (v - out.hips[i]) * w));
+        }
       }
     });
     if (flip) {
@@ -724,7 +735,11 @@ export const createGait = (): Gait => {
     }
     const stun = sw(MOVE.STUN);
     if (stun) {
-      // Reeling: the arms flail against each other, the shoulders sway.
+      // Reeling: the trunk is thrown the way the knock goes. The arms flail against each other, the shoulders sway.
+      [J.SPINE, J.CHEST].forEach((j, i) => {
+        const a = 0.3 + 0.1 * i;
+        rot[j] = mul(rot[j], mul(axis(Z, -a * sp[KR]), axis(X, -a * sp[KA])));
+      });
       const k = Math.sin(time * 13);
       [J.ARM_L, J.ARM_R].forEach((j, i) => (rot[j] = mul(rot[j], axis(X, stun * (i ? k : -k)))));
       rot[J.CHEST] = mul(rot[J.CHEST], axis(Y, 0.3 * stun * Math.sin(time * 8)));
@@ -734,7 +749,7 @@ export const createGait = (): Gait => {
     // The head holds the way the player looks, whatever the trunk does.
     const chest = mul(mul(R, rot[J.PELVIS]), mul(rot[J.SPINE], rot[J.CHEST]));
     const aim = mul(axis(Y, look), axis(X, clamp(pitch, -1, 1) * 0.9));
-    const rel = mul(inv(chest), slerp(chest, aim, 0.85 * (1 - sw(MOVE.TUCK))));
+    const rel = mul(inv(chest), slerp(chest, aim, 0.85 * (1 - sw(MOVE.TUCK)) * (1 - 0.5 * stun)));
     rot[J.NECK] = slerp([0, 0, 0, 1], rel, 0.4);
     rot[J.HEAD] = mul(inv(rot[J.NECK]), rel);
     dirty = false;

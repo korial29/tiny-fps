@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PLAYER_H } from '../shared/constants';
+import { PLAYER_H, STUMBLE_DRAG, STUMBLE_KNOCK, STUMBLE_TICKS } from '../shared/constants';
 import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { MOVE, MOVES, createGait } from './gait';
@@ -937,17 +937,104 @@ describe('gait: the poses of the other moves', () => {
     expect(Math.abs(f.pos[J.FOOT_L][2] - f.pos[J.FOOT_R][2])).toBeGreaterThan(0.5);
   });
 
-  it('reels in a stumble: thrown back, the arms flailing, and eases out as the timer runs down', () => {
+  it('reels in a stumble with the arms flailing, and is upright again once it is over', () => {
     const fs = frames({ stun: 40, vz: -2 }, 0.8, (p, t) => (p.stun = Math.max(0, 40 - 60 * t)));
-    const at = (t: number) => fs[Math.round(t * 60)];
-    expect(lean(at(0.45))).toBeLessThan(-0.15);
     // The hands swing against each other: the heights of the two differ and change sign.
     const diff = fs.slice(20, 40).map(f => f.pos[J.HAND_L][1] - f.pos[J.HAND_R][1]);
     expect(Math.max(...diff)).toBeGreaterThan(0.1);
     expect(Math.min(...diff)).toBeLessThan(-0.1);
-    // Out of it, upright again.
     const end = frames({}, 3).pop()!;
     expect(Math.abs(lean(end))).toBeLessThan(0.1);
+  });
+
+  describe('a knock', () => {
+    /**
+     * A runner who looks along `yaw`, thrown (right, back) of it at the speed of a tackle, slowing at
+     * the stumble's drag. `lean` is the neck's offset from the pelvis along the push and across it.
+     */
+    const knocked = (right: number, back: number, yaw = 0, secs = 2) => {
+      const u: Vec3 = [
+        right * Math.cos(yaw) + back * Math.sin(yaw),
+        0,
+        back * Math.cos(yaw) - right * Math.sin(yaw),
+      ];
+      const g = createGait();
+      const fs = sim(g, state({ id: 2, yaw }), secs, (q, t) => {
+        const s = t < 0.5 ? STUMBLE_KNOCK - STUMBLE_DRAG * t : 0;
+        [q.vx, q.vz] = [u[0] * s, u[2] * s];
+        q.x += q.vx * DT;
+        q.z += q.vz * DT;
+        q.stun = Math.max(0, STUMBLE_TICKS - 60 * t);
+      });
+      const lean = (f: Frame): [number, number] => {
+        const d = sub(f.pos[J.NECK], f.pos[J.PELVIS]);
+        return [dot(d, u), dot(d, cross(u, [0, 1, 0]))];
+      };
+      return { fs, g, u, lean };
+    };
+
+    it.each([
+      ['from behind: ahead of the pelvis', 0, -1, 0],
+      ['from the front: behind it', 0, 1, 0],
+      ['from the left: to the right', 1, 0, 0],
+      ['from the right: to the left', -1, 0, 0],
+      ['from behind, looking the other way', 0, -1, 2.2],
+      ['from the right, looking the other way', -1, 0, 2.2],
+    ])('throws the chest along the push, %s', (_n, right, back, yaw) => {
+      const { fs, lean } = knocked(right, back, yaw);
+      const [along, across] = lean(fs[18]);
+      expect(along).toBeGreaterThan(0.1);
+      expect(Math.abs(across)).toBeLessThan(0.06);
+    });
+
+    it('comes in with the hit, and eases out as the knock slides away and the stun ends', () => {
+      const { fs, lean } = knocked(0, -1);
+      const a = fs.map(f => lean(f)[0]);
+      // Fast: most of the lean is there 0.1 s in, and the peak a little later.
+      expect(a[6]).toBeGreaterThan(0.08);
+      const peak = Math.max(...a);
+      expect(peak).toBeGreaterThan(0.14);
+      expect(a.indexOf(peak)).toBeLessThan(24);
+      // Out again with the knock, and upright before the stun is over.
+      expect(a[36]).toBeLessThan(peak * 0.5);
+      expect(Math.abs(a[48])).toBeLessThan(0.03);
+      expect(Math.abs(a[a.length - 1])).toBeLessThan(0.03);
+    });
+
+    it('never pops: no joint jumps between two frames, whichever way it is thrown', () => {
+      const local = (f: Frame) => f.pos.map(q => sub(q, f.at));
+      for (const [right, back] of [
+        [0, -1],
+        [0, 1],
+        [1, 0],
+      ]) {
+        // The first frames are the gait settling in from nothing.
+        const poses = knocked(right, back).fs.slice(10).map(local);
+        const steps = poses
+          .slice(1)
+          .map((a, i) => Math.max(...a.map((q, j) => Math.hypot(...sub(q, poses[i][j])))));
+        expect(Math.max(...steps)).toBeLessThan(0.25);
+        const kinks = steps.slice(1).map((s, i) => Math.abs(s - steps[i]));
+        expect(Math.max(...kinks)).toBeLessThan(0.15);
+      }
+    });
+
+    it('takes catching steps along the push, not a frozen stance', () => {
+      for (const [right, back] of [
+        [0, -1],
+        [0, 1],
+        [1, 0],
+        [-1, 0],
+      ]) {
+        const { fs, g, u } = knocked(right, back);
+        expect(g.steps).toBeGreaterThanOrEqual(3);
+        // Each foot goes along the push relative to the pelvis, and comes back under it.
+        for (const j of [J.FOOT_L, J.FOOT_R]) {
+          const along = fs.slice(0, 40).map(f => dot(sub(f.pos[j], f.pos[J.PELVIS]), u));
+          expect(spread(along)).toBeGreaterThan(0.25);
+        }
+      }
+    });
   });
 
   it('walks crouched: low, the trunk forward, the hands ready in front', () => {

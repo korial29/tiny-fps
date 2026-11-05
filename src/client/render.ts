@@ -35,6 +35,8 @@ export const HAZE = 0.6;
 /** The vertical field of view at rest, degrees, and the tangent of its half. */
 export const FOV_DEG = 70;
 export const FOV = Math.tan((FOV_DEG * Math.PI) / 360);
+/** Metres within which another player is drawn with the near level of detail (see DETAIL). */
+const NEAR = 10;
 /** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
 const SAMPLES = 4;
 
@@ -636,7 +638,14 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       clock = now;
       for (const p of others) {
         const g = follow(gaits, p.id, p.x, p.z, dt);
-        soldier(v, p, rgb(colors.get(p.id) ?? '#888'), g.walked, pace(g));
+        soldier(
+          v,
+          p,
+          rgb(colors.get(p.id) ?? '#888'),
+          g.walked,
+          pace(g),
+          +(Math.hypot(p.x - eye[0], p.z - eye[2]) < NEAR),
+        );
       }
       const bodyAt = v.length;
       body?.draw(v, eye, yaw, pitch, fx.roll);

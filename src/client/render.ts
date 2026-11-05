@@ -8,6 +8,7 @@
 import { TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import type { World, WorldDef } from '../shared/world';
+import type { Body } from './body';
 import type { Effects } from './effects';
 import { STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
@@ -343,8 +344,8 @@ interface Target {
 
 export interface Renderer {
   /**
-   * Draws one frame: the sky, the brushes and the others as seen from eye. colors maps player id
-   * to CSS.
+   * Draws one frame: the sky, the brushes and the others as seen from eye, then the own `body` over
+   * a cleared depth, lit but casting no shadow. colors maps player id to CSS.
    */
   frame(
     eye: Vec3,
@@ -355,6 +356,7 @@ export interface Renderer {
     fx: Effects,
     /** gather() in lights.ts: at most MAX_LIGHTS, the first MAX_SHADOWS shadowed spots mapped, besides the sun. */
     lights: Light[],
+    body?: Body,
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
@@ -614,7 +616,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   return {
-    frame(eye, yaw, pitch, others, colors, fx, lights) {
+    frame(eye, yaw, pitch, others, colors, fx, lights, body) {
       const [w, h] = size();
       if (lost || !w || !h) {
         return;
@@ -636,6 +638,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         const g = follow(gaits, p.id, p.x, p.z, dt);
         soldier(v, p, rgb(colors.get(p.id) ?? '#888'), g.walked, pace(g));
       }
+      const bodyAt = v.length;
+      body?.draw(v, eye, yaw, pitch, fx.roll);
       if (tail + v.length * 4 > cap) {
         cap = tail + v.length * 8;
         alloc();
@@ -656,7 +660,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, shadows, 0, i);
         gl.uniformMatrix4fv(u.m, false, i ? pk.m.subarray(i * 16 - 16, i * 16) : sunM);
         gl.clear(gl.DEPTH_BUFFER_BIT);
-        gl.drawArrays(gl.TRIANGLES, 0, first + v.length / STRIDE);
+        gl.drawArrays(gl.TRIANGLES, 0, first + bodyAt / STRIDE);
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, shadows);
@@ -680,7 +684,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.uniform1f(u.Y, 1);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.uniform1f(u.Y, 0);
-      gl.drawArrays(gl.TRIANGLES, 0, first + v.length / STRIDE);
+      gl.drawArrays(gl.TRIANGLES, 0, first + bodyAt / STRIDE);
+      if (v.length > bodyAt) {
+        // Last, over a cleared depth: the body never sinks into a wall.
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLES, first + bodyAt / STRIDE, (v.length - bodyAt) / STRIDE);
+      }
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaa);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, hdr.f);
       gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);

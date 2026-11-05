@@ -3,7 +3,8 @@ import { FLYER_H, FLYER_R, WALKER_H, WALKER_R } from '../shared/constants';
 import { MONSTER } from '../shared/types';
 import type { Monster } from '../shared/types';
 import { STRIDE } from './mesh';
-import { CHUNKS, bullet, flyer, strike, walker } from './monsters';
+import { CHUNKS, GAIT, bullet, flyer, follow, pace, strike, walker } from './monsters';
+import type { Gait } from './monsters';
 
 const mob = (kind: number, o: Partial<Monster> = {}): Monster => ({
   id: 16,
@@ -20,98 +21,173 @@ const build = (f: (out: number[]) => void) => {
   f(out);
   return out;
 };
-const walked = (d: number, blow = 0, o?: Partial<Monster>) =>
-  build(out => walker(out, mob(MONSTER.WALKER, o), d, blow));
+const walked = (d: number, blow = 0, o?: Partial<Monster>, pace = 1) =>
+  build(out => walker(out, mob(MONSTER.WALKER, o), d, blow, pace));
 /** The vertices from box `from` (36 vertices each) up to box `to`, as [x, y, z, layer, r]. */
 const boxes = (v: number[], from: number, to: number) =>
   Array.from({ length: Math.ceil((to - from) * 36) }, (_, i) => {
     const k = (from * 36 + i) * STRIDE;
     return v.slice(k, k + STRIDE);
   });
-const rows = (v: number[]) => boxes(v, 0, v.length / STRIDE / 36);
+const boxRows = (v: number[]) => boxes(v, 0, v.length / STRIDE / 36);
+/** Vertices `from` to `to` of a model, as [x, y, z, layer, r] after the position and normal. */
+const rows = (v: number[], from = 0, to = v.length / STRIDE) =>
+  Array.from({ length: to - from }, (_, i) => {
+    const k = (from + i) * STRIDE;
+    return [v[k], v[k + 1], v[k + 2], v[k + 8], v[k + 6], v[k + 7], v[k + 9]];
+  });
 const mean = (v: number[][], i: number) => v.reduce((s, p) => s + p[i], 0) / v.length;
 const lowest = (v: number[][]) => v.filter(p => p[1] < Math.min(...v.map(q => q[1])) + 0.01);
+/** Where the walker's vertices sit: torso, head, then per side (left, right) these runs. */
+const W = {
+  torso: [0, 180],
+  head: [180, 372],
+  left: 372,
+  right: 924,
+  // Offsets inside a side: thigh, shin, foot, upper arm, forearm, shoulder spike, eye.
+  thigh: [0, 90],
+  shin: [90, 180],
+  foot: [180, 216],
+  upper: [216, 306],
+  fore: [306, 456],
+  spike: [456, 516],
+  eye: [516, 552],
+} as const;
+const part = (v: number[], side: number, [a, b]: readonly number[]) => rows(v, side + a, side + b);
+
+describe('follow', () => {
+  const step = (book: Map<number, Gait>, x: number, dt = 1 / 60) => follow(book, 1, x, 0, dt);
+
+  it('adds up the distance, and a jump of metres is not a walk', () => {
+    const book = new Map<number, Gait>();
+    step(book, 0);
+    step(book, 0.3);
+    expect(step(book, 0.5).walked).toBeCloseTo(0.5);
+    expect(step(book, 40).walked).toBeCloseTo(0.5);
+    expect(step(book, 40.2).walked).toBeCloseTo(0.7);
+  });
+
+  it('eases toward the speed it is going, and back to rest', () => {
+    const book = new Map<number, Gait>();
+    let x = 0;
+    for (let i = 0; i < 30; i++) {
+      step(book, (x += 0.05));
+    }
+    expect(pace(book.get(1)!)).toBe(1);
+    for (let i = 0; i < 60; i++) {
+      step(book, x);
+    }
+    expect(pace(book.get(1)!)).toBeLessThan(0.01);
+  });
+
+  it('keeps the speed when no time has passed', () => {
+    const book = new Map<number, Gait>();
+    step(book, 0);
+    step(book, 0.05);
+    const v = book.get(1)!.vx;
+    step(book, 0.1, 0);
+    expect(book.get(1)!.vx).toBe(v);
+  });
+});
 
 describe('walker', () => {
-  it('is eight boxes: four limbs, torso, head, two eyes', () => {
-    expect(walked(0)).toHaveLength(8 * 36 * STRIDE);
+  it('is 1476 vertices: torso, head, and per side two leg parts, a foot, two arm parts, a spike, an eye', () => {
+    expect(walked(0)).toHaveLength(1476 * STRIDE);
   });
 
   it('fits its cylinder, feet on the floor, and the eyes alone glow', () => {
-    const v = boxes(walked(0), 0, 8);
-    expect(Math.min(...v.map(p => p[1]))).toBeCloseTo(1);
-    expect(Math.max(...v.map(p => p[1]))).toBeCloseTo(1 + WALKER_H);
+    const v = rows(walked(0));
+    expect(Math.min(...v.map(p => p[1]))).toBeCloseTo(1, 1);
+    expect(Math.max(...v.map(p => p[1]))).toBeCloseTo(1 + WALKER_H, 1);
+    expect(Math.max(...v.map(p => p[1]))).toBeLessThanOrEqual(1 + WALKER_H + 1e-6);
     for (const p of v) {
       expect(Math.hypot(p[0] - 5, p[2] + 3)).toBeLessThan(WALKER_R * 1.2);
     }
-    expect(boxes(walked(0), 0, 6).every(p => p[8] == -1)).toBe(true);
-    const eyes = boxes(walked(0), 6, 8);
-    expect(eyes.every(p => p[8] == -2)).toBe(true);
-    expect(eyes.every(p => p[6] > 2 * p[7] && p[6] > 2 * p[9])).toBe(true);
+    for (const side of [W.left, W.right]) {
+      expect(part(walked(0), side, [0, W.eye[0]]).every(p => p[3] == -1)).toBe(true);
+      const eye = part(walked(0), side, W.eye);
+      expect(eye.every(p => p[3] == -2)).toBe(true);
+      expect(eye.every(p => p[4] > 2 * p[5] && p[4] > 2 * p[6])).toBe(true);
+    }
+    expect(rows(walked(0), 0, 372).every(p => p[3] == -1)).toBe(true);
   });
 
   it('looks along forward(yaw)', () => {
-    const [a, b] = [boxes(walked(0), 6, 8), boxes(walked(0, 0, { yaw: Math.PI / 2 }), 6, 8)];
-    expect(mean(a, 2)).toBeLessThan(-3);
-    expect(mean(b, 0)).toBeLessThan(5);
-    expect(mean(b, 2)).toBeCloseTo(-3, 1);
+    const eyes = (o?: Partial<Monster>) => part(walked(0, 0, o), W.left, W.eye);
+    expect(mean(eyes(), 2)).toBeLessThan(-3);
+    expect(mean(eyes({ yaw: Math.PI / 2 }), 0)).toBeLessThan(5);
+    expect(mean(eyes({ yaw: Math.PI / 2 }), 2)).toBeCloseTo(-3, 0);
+  });
+
+  it('hunches forward: the head is ahead of the feet', () => {
+    expect(mean(rows(walked(0), ...W.head), 2)).toBeLessThan(-3.1);
   });
 
   it('swings the legs with the distance walked, one against the other', () => {
-    const [still, a, b] = [walked(0), walked(0.2), walked(0.4)];
-    const [l0, r0] = [boxes(still, 0, 1), boxes(still, 1, 2)];
-    const [l1, r1] = [boxes(a, 0, 1), boxes(a, 1, 2)];
+    const [still, a] = [walked(0), walked(0.2)];
+    const foot = (v: number[], side: number) => lowest(part(v, side, W.shin));
     // The feet of a leg swing about its hip: forward is -z.
-    expect(mean(lowest(l1), 2)).toBeLessThan(mean(lowest(l0), 2) - 0.1);
-    expect(mean(lowest(r1), 2)).toBeGreaterThan(mean(lowest(r0), 2) + 0.1);
-    expect(boxes(b, 0, 1)).not.toEqual(l1);
+    expect(mean(foot(a, W.left), 2)).toBeLessThan(mean(foot(still, W.left), 2) - 0.1);
+    expect(mean(foot(a, W.right), 2)).toBeGreaterThan(mean(foot(still, W.right), 2) + 0.1);
   });
 
-  it('keeps the torso and the head still while the limbs swing', () => {
-    expect(boxes(walked(0.3), 4, 8)).toEqual(boxes(walked(0), 4, 8));
-    expect(boxes(walked(0.3), 0, 4)).not.toEqual(boxes(walked(0), 0, 4));
+  it('bends the knees as a leg trails, and keeps them straight standing', () => {
+    const reach = (v: number[], d: number) => {
+      const shin = part(v, W.left, W.shin);
+      const [hx, hy, hz] = [4.86, 1.88 - 0.1 * Math.sin(d * GAIT) ** 2, -3.02];
+      return Math.max(...shin.map(p => Math.hypot(p[0] - hx, p[1] - hy, p[2] - hz)));
+    };
+    expect(reach(walked(0), 0)).toBeGreaterThan(0.88);
+    expect(reach(walked(1.17), 1.17)).toBeLessThan(0.86);
+    expect(reach(walked(1.17, 0, undefined, 0), 0)).toBeGreaterThan(0.88);
+  });
+
+  it('does not move the limbs of a body that stands, whatever its distance', () => {
+    expect(walked(0.77, 0, undefined, 0)).toEqual(walked(0, 0, undefined, 0));
+    expect(walked(0.77)).not.toEqual(walked(0));
   });
 
   it('swings the arms against the legs on the same side', () => {
     const [still, a] = [walked(0), walked(0.2)];
-    const dz = (i: number) =>
-      mean(lowest(boxes(a, i, i + 1)), 2) - mean(lowest(boxes(still, i, i + 1)), 2);
+    const dz = (side: number, r: readonly number[]) =>
+      mean(lowest(part(a, side, r)), 2) - mean(lowest(part(still, side, r)), 2);
     // Left leg and right arm go together: forward and back, then the other pair.
-    expect(Math.sign(dz(0))).toBe(Math.sign(dz(3)));
-    expect(Math.sign(dz(0))).toBe(-Math.sign(dz(2)));
+    expect(Math.sign(dz(W.left, W.shin))).toBe(Math.sign(dz(W.right, W.fore)));
+    expect(Math.sign(dz(W.left, W.shin))).toBe(-Math.sign(dz(W.left, W.fore)));
   });
 
   it('glows brighter, and bigger, while chasing', () => {
-    const [calm, chase] = [boxes(walked(0), 6, 7), boxes(walked(0, 0, { chase: true }), 6, 7)];
-    expect(chase[0][6]).toBeGreaterThan(calm[0][6]);
-    expect(chase[0][7]).toBeGreaterThan(calm[0][7]);
+    const eye = (o?: Partial<Monster>) => part(walked(0, 0, o), W.left, W.eye);
+    const [calm, chase] = [eye(), eye({ chase: true })];
+    expect(chase[0][4]).toBeGreaterThan(calm[0][4]);
+    expect(chase[0][5]).toBeGreaterThan(calm[0][5]);
     const w = (v: number[][]) => Math.max(...v.map(p => p[0])) - Math.min(...v.map(p => p[0]));
     expect(w(chase)).toBeGreaterThan(w(calm));
   });
 });
 
 describe('a blow', () => {
-  const hand = (blow: number) => mean(boxes(walked(0, blow), 3, 4), 2);
+  const fist = (blow: number) => lowest(part(walked(0, blow), W.right, W.fore));
 
-  it('winds the arm back, strikes it forward, then settles', () => {
-    expect(strike(0.1)).toBeLessThan(0);
-    expect(strike(0.6)).toBeGreaterThan(1.5);
+  it('winds the arm up and back, strikes it down and forward, then settles', () => {
+    expect(strike(0.2)).toBeGreaterThan(1.5);
+    expect(strike(0.4)).toBeGreaterThan(strike(0.2));
+    expect(strike(0.6)).toBeLessThan(strike(0.4) - 0.5);
     expect(Math.abs(strike(1))).toBeLessThan(1e-9);
-    expect(hand(0.12)).toBeGreaterThan(hand(0));
-    expect(hand(0.6)).toBeLessThan(hand(0) - 0.25);
-    expect(hand(1)).toBeCloseTo(hand(0));
+    // The fist goes up while winding, then drops below that and ahead of where it was.
+    expect(mean(fist(0.38), 1)).toBeGreaterThan(mean(fist(0), 1) + 0.6);
+    expect(mean(fist(0.7), 1)).toBeLessThan(mean(fist(0.38), 1) - 0.5);
+    expect(mean(fist(0.7), 2)).toBeLessThan(mean(fist(0), 2) - 0.1);
+    expect(walked(0, 1)).toEqual(walked(0, 0));
   });
 
-  it('moves the right arm only, and nothing without a blow', () => {
-    const [rest, mid] = [walked(0), walked(0, 0.6)];
-    expect(boxes(mid, 3, 4)).not.toEqual(boxes(rest, 3, 4));
-    for (const [a, b] of [
-      [0, 3],
-      [4, 8],
-    ]) {
-      expect(boxes(mid, a, b)).toEqual(boxes(rest, a, b));
+  it('leans the body back while the arm is up, and leaves the legs alone', () => {
+    const [rest, up] = [walked(0), walked(0, 0.38)];
+    expect(mean(rows(up, ...W.head), 2)).toBeGreaterThan(mean(rows(rest, ...W.head), 2) + 0.05);
+    for (const side of [W.left, W.right]) {
+      expect(part(up, side, [0, 216])).toEqual(part(rest, side, [0, 216]));
     }
-    expect(walked(0, 0)).toEqual(rest);
+    expect(part(up, W.right, W.fore)).not.toEqual(part(rest, W.right, W.fore));
   });
 });
 
@@ -128,14 +204,14 @@ describe('flyer', () => {
   });
 
   it('floats about FLYER_R wide and FLYER_H tall above its underside', () => {
-    const shell = rows(verts(0, { id: 0 })).slice(0, 240);
+    const shell = boxRows(verts(0, { id: 0 })).slice(0, 240);
     expect(Math.min(...shell.map(p => p[1]))).toBeCloseTo(1);
     expect(Math.max(...shell.map(p => p[1]))).toBeCloseTo(1 + FLYER_H);
     expect(Math.max(...shell.map(p => Math.hypot(p[0] - 5, p[2] + 3)))).toBeCloseTo(FLYER_R);
   });
 
   it('bobs on a slow sine and spins its fins', () => {
-    const low = (t: number) => Math.min(...rows(verts(t)).map(p => p[1]));
+    const low = (t: number) => Math.min(...boxRows(verts(t)).map(p => p[1]));
     const seen = [0, 0.4, 0.8, 1.2, 1.6].map(low);
     expect(Math.max(...seen) - Math.min(...seen)).toBeGreaterThan(0.04);
     expect(Math.max(...seen)).toBeLessThan(1.07);

@@ -15,7 +15,8 @@ import { STRIDE, basis, dress, place, pushBox } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
-import { SWING, bullet, flyer, walker } from './monsters';
+import { SWING, bullet, flyer, follow, pace, walker } from './monsters';
+import type { Gait } from './monsters';
 import { LAYERS, SIZE, textures } from './textures';
 
 /** MapDef.fog when a map sets none: the clear colour and what distance fog fades to, then its density. Dark, the map is indoors. */
@@ -331,6 +332,9 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 /** Throws when the browser has no WebGL2. */
 export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Renderer => {
   let lvl = first;
+  /** How far and how fast each body drawn has gone: the limbs stride with it. */
+  const gaits = new Map<number, Gait>();
+  let clock = performance.now() / 1000;
   const gl = canvas.getContext('webgl2', { antialias: false, depth: false });
   if (!gl) {
     throw new Error('WebGL2 is not available');
@@ -568,6 +572,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
   return {
     level(next) {
       lvl = next;
+      gaits.clear();
       ground = levelVerts(lvl);
       tail = ground.length * 4;
       cap = tail + TAIL;
@@ -590,6 +595,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       }
       vp = viewProj(eye, yaw, pitch, w / h, fx.roll);
       const v: number[] = [];
+      const now = performance.now() / 1000;
+      const dt = Math.min(0.1, now - clock);
+      clock = now;
       for (const p of others) {
         const [fx_, fz] = forward(p.yaw);
         const hw = PLAYER_R * 0.8;
@@ -612,13 +620,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
           place(v, part, hand, axes, [0.36, -0.12, 0.3], 0.8);
         }
       }
-      const now = performance.now() / 1000;
       for (const m of monsters) {
+        const g = follow(gaits, m.id, m.x, m.z, dt);
         if (m.kind == MONSTER.FLYER) {
           flyer(v, m, now);
         } else {
           const left = fx.swings.get(m.id);
-          walker(v, m, fx.herd.get(m.id)?.walked ?? 0, left ? 1 - left / SWING : 0);
+          walker(v, m, g.walked, left ? 1 - left / SWING : 0, pace(g));
         }
       }
       props(v, lvl, items, now);

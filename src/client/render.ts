@@ -14,8 +14,8 @@ import { STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
-import { follow, pace, soldier } from './soldier';
-import type { Gait } from './soldier';
+import { animate, soldier } from './soldier';
+import type { Runner } from './soldier';
 import { LAYERS, SIZE, textures } from './textures';
 
 /** Tints a world can use at once, white included (see palette). */
@@ -376,8 +376,8 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 
 /** Throws when the browser has no WebGL2. */
 export const createRenderer = (canvas: HTMLCanvasElement, world: World): Renderer => {
-  /** How far and how fast each body drawn has gone: the limbs stride with it. */
-  const gaits = new Map<number, Gait>();
+  /** The animation state of each runner drawn. */
+  const runners = new Map<number, Runner>();
   let clock = performance.now() / 1000;
   const gl = canvas.getContext('webgl2', { antialias: false, depth: false });
   if (!gl) {
@@ -636,14 +636,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const now = performance.now() / 1000;
       const dt = Math.min(0.1, now - clock);
       clock = now;
+      animate(runners, others, dt);
       for (const p of others) {
-        const g = follow(gaits, p.id, p.x, p.z, dt);
         soldier(
           v,
-          p,
+          runners.get(p.id)!,
           rgb(colors.get(p.id) ?? '#888'),
-          g.walked,
-          pace(g),
           +(Math.hypot(p.x - eye[0], p.z - eye[2]) < NEAR),
         );
       }

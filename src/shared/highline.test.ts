@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { NORTH, Sim } from '../../test/pilot';
-import { HIGH, LOW, MID, UP, above, fly, leap, plain, trip } from '../../test/routes';
+import { EAST, NORTH, Sim } from '../../test/pilot';
+import { HIGH, LOW, MID, UP, above, fly, go, leap, plain, trip } from '../../test/routes';
 import type { Leg, Route } from '../../test/routes';
 import { palette, MAX_TINTS } from '../client/render';
-import { FLAG_H, FLAG_REACH, PLAYER_H, PLAYER_R, SNAP_EVERY } from './constants';
+import { FLAG_H, FLAG_REACH, MAX_PITCH, PLAYER_H, PLAYER_R, SNAP_EVERY } from './constants';
 import { touches } from './ctf';
 import { HIGHLINE, TEAM_TINT } from './map';
 import { move, spawn } from './physics';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
 import { EV, FLAG, KEY, MODE, TEAM, TEX } from './types';
-import type { Conn, Snapshot } from './types';
+import type { Conn, PlayerState, Snapshot } from './types';
 import { build } from './world';
 import type { Brush } from './world';
 
@@ -24,7 +24,9 @@ const twin = (b: Brush): Brush => ({
   max: [b.max[0], b.max[1], ZED - b.min[2]],
 });
 const same = (a: Brush, b: Brush) =>
-  [0, 1, 2].every(k => a.min[k] === b.min[k] && a.max[k] === b.max[k]) &&
+  [0, 1, 2].every(
+    k => Math.abs(a.min[k] - b.min[k]) < 1e-9 && Math.abs(a.max[k] - b.max[k]) < 1e-9,
+  ) &&
   a.top === b.top &&
   a.side === b.side;
 /** A red accent has a blue twin: the two are the team tints, every other tint is its own twin. */
@@ -83,7 +85,7 @@ describe('HIGHLINE', () => {
 
   it('is concrete, glass and steel with the team colours near each base and accents in the middle', () => {
     const count = (id: number) => brushes.filter(b => b.top == id || b.side == id).length;
-    expect(brushes.filter(b => b.top == TEX.CONCRETE).length).toBeGreaterThan(brushes.length / 2);
+    expect(brushes.filter(b => b.top == TEX.CONCRETE).length).toBeGreaterThan(brushes.length * 0.4);
     expect(count(TEX.GLASS)).toBeGreaterThanOrEqual(8);
     expect(count(TEX.STEEL)).toBeGreaterThanOrEqual(20);
     expect(count(TEX.BRICK) + count(TEX.WOOD)).toBe(0);
@@ -382,13 +384,8 @@ describe('HIGHLINE, the three routes, flown with the real physics', () => {
 });
 
 describe('HIGHLINE, recoveries: a miss costs time, not always a fall', () => {
-  const where = {
-    terrace: [6, 201, 26, 212],
-    viaduct: [16, 147, 26, 164],
-    plaza: [6, 106, 62, 134],
-  };
   for (const [name, u] of Object.entries(UP) as [keyof typeof UP, (typeof UP)[keyof typeof UP]][]) {
-    it(`climbs back up from the ${name} to the roof above, by ledges the hands catch`, () => {
+    it(`climbs up from the ${name} to the roof above, by ledges the hands catch`, () => {
       const s = new Sim(spawn(0, world, 0), world).put(u.from[0], u.from[1], u.from[2], NORTH);
       expect(s.p.y).toBe(u.from[1]);
       const f = fly(s, u.legs);
@@ -396,7 +393,6 @@ describe('HIGHLINE, recoveries: a miss costs time, not always a fall', () => {
       expect(s.p.y).toBe(26);
       expect(s.ev & (EV.GRAB | EV.CLIMB)).toBe(EV.GRAB | EV.CLIMB);
       expect(s.low).toBeGreaterThan(u.from[1] - 0.1);
-      expect(where[name]).toBeDefined();
     });
   }
 
@@ -432,6 +428,74 @@ describe('HIGHLINE, recoveries: a miss costs time, not always a fall', () => {
     const f = fly(s, UP.viaduct.legs);
     expect(f.ok, JSON.stringify(f.failed)).toBe(true);
     expect(s.low).toBeGreaterThan(18.9);
+  });
+});
+
+describe('HIGHLINE, crossings', () => {
+  it('has a stair from the low roofs up to the forecourt of Midtown, walked both ways with no jump', () => {
+    const s = new Sim(spawn(0, world, 0), world).put(90, 14.5, 199, NORTH);
+    const up = fly(s, [go(74, 199, 19, false)]);
+    expect(up.ok, JSON.stringify(up.failed)).toBe(true);
+    expect(s.ev & EV.JUMP).toBe(0);
+    const down = fly(s, [go(90, 199, 14.5, false)]);
+    expect(down.ok, JSON.stringify(down.failed)).toBe(true);
+    expect(s.ev & EV.JUMP).toBe(0);
+  });
+
+  it('drops from the first Spine roof to the forecourt of Midtown by the same ledges, a jump or a walk off', () => {
+    const s = new Sim(spawn(0, world, 0), world).put(22, 26, 186, EAST);
+    s.until(p => p.ground && p.y < 20, KEY.FORWARD, EAST, 200);
+    expect(s.p.y).toBeLessThan(26);
+    expect(s.p.y).toBeGreaterThan(18.9);
+  });
+});
+
+describe('HIGHLINE, random play', () => {
+  it('never puts a player inside a brush or loses it, whatever is pressed, on the stairs, beams and ledges', () => {
+    const inside = (p: PlayerState) =>
+      brushes.some(
+        b =>
+          p.x > b.min[0] + 1e-3 &&
+          p.x < b.max[0] - 1e-3 &&
+          p.z > b.min[2] + 1e-3 &&
+          p.z < b.max[2] - 1e-3 &&
+          p.y > b.min[1] + 1e-3 &&
+          p.y < b.max[1] - 1e-3,
+      );
+    let landed = 0;
+    for (const [seed, team, spawnAt] of [
+      [1, 0, 0],
+      [2, 0, 4],
+      [3, 1, 7],
+      [4, 1, 2],
+    ]) {
+      let r = seed;
+      const rnd = () => (r = (r * 1103515245 + 12345) % 2147483648) / 2147483648;
+      const sim = at(team, spawnAt);
+      let keys = 0;
+      let yaw = sim.p.yaw;
+      let turn = 0;
+      for (let k = 0; k < 15000; k++) {
+        if (k % 8 === 0) {
+          keys =
+            (rnd() < 0.85 ? 1 : 0) | (Math.floor(rnd() * 256) & ~1 & (rnd() < 0.5 ? 0xff : 0x1c));
+          turn = (rnd() - 0.5) * 0.15;
+          if (rnd() < 0.05) {
+            yaw += (rnd() - 0.5) * 6;
+          }
+        }
+        yaw += turn;
+        const p = sim.step(keys, yaw, Math.sin(k / 50) * MAX_PITCH);
+        const label = `seed ${seed}, step ${k}`;
+        for (const v of [p.x, p.y, p.z, p.vx, p.vy, p.vz]) {
+          expect(Number.isFinite(v), label).toBe(true);
+        }
+        expect(inside(p), label).toBe(false);
+        expect(p.y, label).toBeGreaterThan(HIGHLINE.floor - 3);
+        landed += p.ev & EV.LAND ? 1 : 0;
+      }
+    }
+    expect(landed).toBeGreaterThan(100);
   });
 });
 

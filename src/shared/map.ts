@@ -214,8 +214,9 @@ const half: Brush[] = [
     [18, 158, 22, 162, 23.4],
     [23, 160, 26, 164, 25],
   ].map(([x0, z0, x1, z1, top]) => box([x0, 19, z0], [x1, top, z1], TEX.STEEL, TEX.CONCRETE)),
-  box([20, 26, 185], [23, 27.3, 188], TEX.STEEL),
+  box([20, 26, 178], [23, 27.3, 181], TEX.STEEL),
   box([8, 26, 176], [11, 27.2, 179], TEX.STEEL),
+  box([8, 26, 190], [11, 27.3, 193], TEX.STEEL),
   box([20, 26, 140], [23, 27.3, 143], TEX.STEEL),
   // Midtown (middle route): the forecourt under the tower, its ladder up the tower's face, then
   // two roofs across short gaps, and a ladder from the forecourt up to the first Spine roof.
@@ -233,6 +234,10 @@ const half: Brush[] = [
   box([52, 19, 148], [57, 20.3, 151], TEX.STEEL),
   box([38, 19, 196], [41, 20.4, 199], TEX.STEEL),
   box([60, 19, 200], [63, 20.4, 203], TEX.STEEL),
+  box([52, 19, 190], [58, 20.6, 194], TEX.STEEL),
+  box([66, 19, 204], [72, 20.2, 207], TEX.STEEL),
+  box([56, 21.2, 170], [60, 22.4, 174], TEX.STEEL),
+  box([34, 19, 152], [37, 20.3, 156], TEX.STEEL),
   ...ladder(36, 135, 18, 0, 3, 15, [17.2, 17.2]),
   // From the plaza to the first Spine roof, four platforms along its face.
   ...ladder(6.5, 129, 6, 0, 4, 15, [17.2, 19.4, 21.6, 23.8]),
@@ -244,6 +249,10 @@ const half: Brush[] = [
   box([80, 15.7, 158], [96, 17.7, 162], TEX.STEEL, TEX.PAINT, ORANGE),
   box([82, 14.5, 234], [85, 15.9, 237], TEX.STEEL),
   box([91, 14.5, 190], [94, 15.9, 193], TEX.STEEL),
+  box([80, 14.5, 204], [83, 15.6, 207], TEX.STEEL),
+  box([78, 14.5, 170], [81, 15.9, 173], TEX.STEEL),
+  box([92, 14.5, 146], [95, 15.7, 149], TEX.STEEL),
+  box([92, 14.5, 222], [96, 15.8, 226], TEX.STEEL),
   ...stairs(0, 76, 52, 226, 232, 14.5, 26),
   ...stairs(0, 85, 76, 196, 202, 14.5, 19, 14.5),
 ];
@@ -266,6 +275,11 @@ const centre: Brush[] = [
   box([56, 15, 114], [59, 16.5, 117], TEX.STEEL),
   box([56, 15, 123], [59, 16.5, 126], TEX.STEEL),
   box([15.35, 25.5, 106], [15.85, 26, 134], TEX.STEEL),
+  // Two masts on the east terrace, tall enough to find the middle from either base.
+  box([70, 14.5, 108], [70.8, 38, 108.8], TEX.STEEL),
+  box([70, 14.5, 131.2], [70.8, 38, 132], TEX.STEEL),
+  box([66, 14.5, 110], [69, 15.9, 113], TEX.STEEL),
+  box([66, 14.5, 127], [69, 15.9, 130], TEX.STEEL),
 ];
 
 /** The twin of a brush across the centre line. */

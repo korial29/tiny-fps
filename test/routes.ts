@@ -256,10 +256,11 @@ export const trip = (r: Route, from: 'red' | 'blue'): { there: Leg[]; back: Leg[
 /**
  * The ways back up after a miss, from the roof a fall lands on to the roof above (red's half):
  * the terrace under the first gap of the Spine, the roof under the viaduct, the plaza under the
- * beam. Each starts with the player on the lower roof, standing at `from`.
+ * beam, and the shortcut from the forecourt of Midtown up to the first Spine roof. Each starts with
+ * the player on the lower roof, standing at `from`.
  */
 export const UP: Record<
-  'terrace' | 'viaduct' | 'plaza',
+  'terrace' | 'viaduct' | 'plaza' | 'forecourt',
   { from: [number, number, number]; legs: Leg[] }
 > = {
   terrace: {
@@ -280,6 +281,15 @@ export const UP: Record<
       leap([20, 155.4], [20, 160], 23.4, { sprint: false }),
       leap([21.4, 161], [24.5, 161], 25, { sprint: false }),
       leap([24.5, 163], [24.5, 168], 26, { sprint: false }),
+    ],
+  },
+  forecourt: {
+    from: [36, 19, 198],
+    legs: [
+      leap([34, 198], [30, 198], 21.2, { sprint: false }),
+      leap([30.4, 196.6], [30, 192], 23.4, { sprint: false }),
+      leap([30, 190.4], [28, 186], 25, { sprint: false }),
+      leap([27.2, 186], [21, 186], 26, { sprint: false }),
     ],
   },
   plaza: {

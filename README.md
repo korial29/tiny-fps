@@ -10,7 +10,7 @@
 
 **▶ Play it now: https://korial29.github.io/tiny-fps/**
 
-A tiny multiplayer first-person game for the browser, written in TypeScript with raw WebGL2, no game library and no runtime dependency. It is becoming an open-air capture-the-flag between two teams of players on rooftops, inspired by Mirror's Edge: parkour movement, no weapons, no CPU enemies. The game is being rebuilt step by step toward that ([`docs/PLAN.md`](docs/PLAN.md)): today two teams play capture the flag on one rooftop course, with the parkour moves and no weapons. Everything is generated in code: geometry, textures, lights. There are no images, fonts or assets to serve.
+A tiny multiplayer first-person game for the browser, written in TypeScript with raw WebGL2, no game library and no runtime dependency. It is becoming an open-air capture-the-flag between two teams of players on rooftops, inspired by Mirror's Edge: parkour movement, no weapons, no CPU enemies. The game is being rebuilt step by step toward that ([`docs/PLAN.md`](docs/PLAN.md)): today two teams play capture the flag on Highline, a symmetric rooftop map, with the parkour moves, a tackle and no weapons. Everything is generated in code: geometry, textures, lights. There are no images, fonts or assets to serve.
 
 It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](https://github.com/carlini/js13k2019-yet-another-doom-clone) (js13k 2019). Only the ideas were reused, not the code. The renderer, the netcode and the sound come from that first game; the screenshots below are from it.
 
@@ -186,16 +186,15 @@ Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard
 
 ## How a game plays
 
-The game is the movement and a capture the flag on top of it; the tackle and the real map come with the next steps of [`docs/PLAN.md`](docs/PLAN.md).
+The game is the movement and a capture the flag on top of it, with a tackle to stop a carrier ([`docs/PLAN.md`](docs/PLAN.md)).
 
-- **Teams**: red and blue. A joiner goes to the smaller team (red on a tie), up to 16 players in all. Each team starts on its own roof and wears its colour, name tags included.
+- **Teams**: red and blue. A joiner goes to the smaller team (red on a tie), up to 16 players in all. Each team starts on its own tower and wears its colour, name tags included.
 - **Capture the flag**: touch the enemy flag, at its base or where it was dropped, to take it, and carry it to your own base while your own flag is there: that is a capture, and the flag goes home. Touch your own dropped flag to send it home at once; left alone it goes home after 10 seconds. A carrier who falls off the roofs or leaves drops it where he last stood. There is a ring of light on each base, a marker toward each flag (and toward your base while you carry), a banner for each event and a sound for a take, a drop, a return and a capture.
 - **A match** ends at 3 captures or after 8 minutes, then everyone sees the result and each player's captures and returns for 10 seconds, and a new match starts with everyone back at their spawn.
-- **The rooftop**: ROOFTOPS, the parkour course under an open sky. Red holds the start roof, blue the far one across a 13 m chasm that takes a sprint, a jump and a dash or a double jump.
+- **The map**: Highline, 94 by 240 m under an open sky, the same for both teams (the blue half is the mirror of the red one). Each team holds a 26 m tower with its flag and eight spawns. Three routes lead to the other tower, and they meet at the plaza in the middle. The **Spine** (west, 26 m) is the fast one, about 25 s by sprint: an 11 m gap that takes a dash or a double jump, a 17 m viaduct along a wall that takes a wall-run and a dash, a beam over the plaza. **Midtown** (centre, 19 to 21 m) is roofs, short gaps and ledges to grab, about 36 s. The **Lowline** (east, 14.5 m) is stairs, short gaps and a sign to slide under, about 39 s, and needs no special move. A miss costs time: roofs under the gaps and ladders of ledges lead back up, and only a fall into the street puts you back at your tower.
 - **Moving**: momentum, sprint, dash, double jump, ledge grab and climb, wall-run, slide, coyote time and a jump buffer. The host decides where everyone is. Your own moves show at once (the client predicts them) and are corrected to the host's state, to the bit.
 - **The others**: drawn 100 ms in the past, interpolated between snapshots, as soldiers with swinging arms and legs. Each carries a flashlight that casts shadows.
 - **Sound**: a synthesiser and a mixer that places sounds left or right by where they come from, and a dark music loop. The sound starts with the click that locks the pointer. There are no sound effects yet.
-- **Coming**: a tackle that makes a carrier drop the flag, a Mirror's Edge look, and a symmetric map made for two teams.
 
 ---
 
@@ -203,7 +202,7 @@ The game is the movement and a capture the flag on top of it; the tackle and the
 
 - [x] Multiplayer over WebSocket, or between tabs of one browser with no server
 - [x] A brush world under an open sky: roofs at any height, gaps, floating platforms and overhangs, steps, falls back to a spawn; eight procedural materials (brick, tile, lava, stone, metal, wood, moss, grating) with bump mapping and per-material highlights; a sky with a blooming sun, a sun shadow that follows you, daylight from the sky
-- [x] ROOFTOPS, a parkour course: roofs across jumpable and unjumpable gaps, a stair to a floating platform, ledges to grab, a long wall to run along, a slot to slide under, a beam, a far roof for sprint plus dash
+- [x] Highline, the capture-the-flag map: two towers, three routes at three heights, a plaza, wall-run and dash gaps, ledge ladders and stairs, ways back up after a miss; ROOFTOPS, a parkour course, stays as the test course of the moves
 - [x] Client-side prediction, exact to the bit, and the other players interpolated
 - [x] A per-tick history of the players on the host, for lag compensation
 - [x] Daylight: a sky with a blooming sun, a sun shadow that follows you, a light colour per box, haze toward the horizon

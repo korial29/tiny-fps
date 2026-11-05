@@ -30,7 +30,7 @@ It is inspired by carlini's [Yet Another Doom Clone](https://github.com/carlini/
 | `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~9.5 KB     |
 | `@korial29/tiny-fps/server` | Node WebSocket server (needs `ws`)                                     | Node only   |
 
-CI checks the budgets (30 KB and 12 KB) on every pull request.
+CI checks the budgets (40 KB and 16 KB) on every pull request.
 
 ## Live demo
 

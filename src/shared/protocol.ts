@@ -12,10 +12,6 @@
 //   flags: bit 0 = ground, bits 1-7 = cool (the chaingun cooldown, in steps)
 //   x, y, z, vy are the host's float32 state, exact (see move in physics.ts).
 //   then [shots u8] and shots × 14 bytes: [id u8][x f32][y f32][z f32][hit u8, 255 = nobody]
-//   then [monsters u8] and monsters × 16 bytes: [id u8][flags u8][x f32][y f32][z f32][yaw u16]
-//   flags: bit 0 = kind (0 walker, 1 flyer), bit 1 = chase
-//   then [bullets u8] and bullets × 13 bytes: [id u8][x f32][y f32][z f32]
-//   then [events u8] and events × 14 bytes: [type u8][id u8][x f32][y f32][z f32]
 //   then [items u8] and items × 14 bytes: [id u8][kind u8][x f32][y f32][z f32]
 // Every multi-byte field is big-endian (DataView's default).
 import type { Input, PlayerInfo, Snapshot } from './types';
@@ -31,9 +27,6 @@ export const INPUT_BYTES = 11;
 export const SNAP_HEAD = 6;
 export const SNAP_PLAYER = 25;
 export const SNAP_SHOT = 14;
-export const SNAP_MONSTER = 16;
-export const SNAP_BULLET = 13;
-export const SNAP_EVENT = 14;
 export const SNAP_ITEM = 14;
 
 const TURN = 65536 / (2 * Math.PI);
@@ -92,10 +85,7 @@ export const decodeInput = (buf: ArrayBuffer): Input | null => {
 
 export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
   const shots = SNAP_HEAD + SNAP_PLAYER * s.players.length;
-  const monsters = shots + 1 + SNAP_SHOT * s.shots.length;
-  const bullets = monsters + 1 + SNAP_MONSTER * s.monsters.length;
-  const events = bullets + 1 + SNAP_BULLET * s.bullets.length;
-  const items = events + 1 + SNAP_EVENT * s.events.length;
+  const items = shots + 1 + SNAP_SHOT * s.shots.length;
   const v = new DataView(new ArrayBuffer(items + 1 + SNAP_ITEM * s.items.length));
   v.setUint8(0, MSG_SNAPSHOT);
   v.setUint16(1, s.tick & 0xffff);
@@ -123,33 +113,6 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setFloat32(o + 5, h.y);
     v.setFloat32(o + 9, h.z);
     v.setUint8(o + 13, h.hit & 0xff);
-  });
-  v.setUint8(monsters, s.monsters.length);
-  s.monsters.forEach((m, i) => {
-    const o = monsters + 1 + i * SNAP_MONSTER;
-    v.setUint8(o, m.id);
-    v.setUint8(o + 1, (m.kind & 1) | (+m.chase << 1));
-    v.setFloat32(o + 2, m.x);
-    v.setFloat32(o + 6, m.y);
-    v.setFloat32(o + 10, m.z);
-    v.setUint16(o + 14, toTurn(m.yaw));
-  });
-  v.setUint8(bullets, s.bullets.length);
-  s.bullets.forEach((b, i) => {
-    const o = bullets + 1 + i * SNAP_BULLET;
-    v.setUint8(o, b.id);
-    v.setFloat32(o + 1, b.x);
-    v.setFloat32(o + 5, b.y);
-    v.setFloat32(o + 9, b.z);
-  });
-  v.setUint8(events, s.events.length);
-  s.events.forEach((e, i) => {
-    const o = events + 1 + i * SNAP_EVENT;
-    v.setUint8(o, e.type);
-    v.setUint8(o + 1, e.id);
-    v.setFloat32(o + 2, e.x);
-    v.setFloat32(o + 6, e.y);
-    v.setFloat32(o + 10, e.z);
   });
   v.setUint8(items, s.items.length);
   s.items.forEach((t, i) => {
@@ -184,14 +147,8 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     at = start + size * n;
     return [start, n];
   };
-  const [shots, monsters, bullets, events, items] = [
-    SNAP_SHOT,
-    SNAP_MONSTER,
-    SNAP_BULLET,
-    SNAP_EVENT,
-    SNAP_ITEM,
-  ].map(section);
-  if (!shots || !monsters || !bullets || !events || !items || buf.byteLength !== at) {
+  const [shots, items] = [SNAP_SHOT, SNAP_ITEM].map(section);
+  if (!shots || !items || buf.byteLength !== at) {
     return null;
   }
   const each = <T>([start, n]: [number, number], size: number, f: (o: number) => T): T[] =>
@@ -222,28 +179,6 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       y: v.getFloat32(o + 5),
       z: v.getFloat32(o + 9),
       hit: v.getUint8(o + 13) === 255 ? -1 : v.getUint8(o + 13),
-    })),
-    monsters: each(monsters, SNAP_MONSTER, o => ({
-      id: v.getUint8(o),
-      kind: v.getUint8(o + 1) & 1,
-      chase: (v.getUint8(o + 1) & 2) !== 0,
-      x: v.getFloat32(o + 2),
-      y: v.getFloat32(o + 6),
-      z: v.getFloat32(o + 10),
-      yaw: fromTurn(v.getUint16(o + 14)),
-    })),
-    bullets: each(bullets, SNAP_BULLET, o => ({
-      id: v.getUint8(o),
-      x: v.getFloat32(o + 1),
-      y: v.getFloat32(o + 5),
-      z: v.getFloat32(o + 9),
-    })),
-    events: each(events, SNAP_EVENT, o => ({
-      type: v.getUint8(o),
-      id: v.getUint8(o + 1),
-      x: v.getFloat32(o + 2),
-      y: v.getFloat32(o + 6),
-      z: v.getFloat32(o + 10),
     })),
     phase: v.getUint8(4) & 1,
     keys: v.getUint8(5),

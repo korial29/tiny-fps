@@ -3,7 +3,7 @@ import { bar, compile, sectorAt } from '../shared/level';
 import { HALL } from '../shared/map';
 import { PHASE, TEX } from '../shared/types';
 import type { MapDef, PlayerState } from '../shared/types';
-import { BLAST, createEffects, glow } from './effects';
+import { createEffects } from './effects';
 import { LIGHT, MAX_LIGHTS, gather, lava } from './lights';
 import type { Scene } from './lights';
 import { basis } from './mesh';
@@ -28,7 +28,6 @@ const scene = (over: Partial<Scene> = {}): Scene => ({
   dead: false,
   others: [],
   fx: createEffects(),
-  bullets: [],
   lvl,
   t: 0,
   ...over,
@@ -122,22 +121,6 @@ describe('other players', () => {
   });
 });
 
-describe('blasts', () => {
-  const lit = (t: number) => {
-    const fx = createEffects();
-    fx.blasts.push({ p: [9, 1, 9], r: 0.6, t });
-    return gather(bare({ fx })).filter(l => l.kind == LIGHT.POINT);
-  };
-  const g = (t: number) => glow({ p: [0, 0, 0], r: 0.6, t });
-
-  it('follow glow() and are gone when it is', () => {
-    expect(lit(0.05)[0].color[0] / lit(0.2)[0].color[0]).toBeCloseTo(g(0.05) / g(0.2));
-    expect(lit(0.05)[0].p).toEqual([9, 1, 9]);
-    expect(lit(BLAST)).toHaveLength(0);
-    expect(lit(0)).toHaveLength(0);
-  });
-});
-
 describe('hit light', () => {
   it('shows only while hurt, red, at the eye', () => {
     const fx = createEffects();
@@ -147,14 +130,6 @@ describe('hit light', () => {
     expect(h.kind).toBe(LIGHT.POINT);
     expect(h.color[0]).toBeGreaterThan(h.color[1] * 5);
     expect(dist(h.p, EYE)).toBeLessThan(1);
-  });
-});
-
-describe('monster bullets', () => {
-  it('glow, for the nearest few only', () => {
-    const bullets = Array.from({ length: 8 }, (_, i) => ({ id: i, x: 8, y: 1, z: 8 - i }));
-    const [, ...b] = gather(bare({ bullets }));
-    expect(b.map(l => l.p[2])).toEqual([8, 7, 6, 5]);
   });
 });
 
@@ -199,14 +174,12 @@ describe('cap', () => {
     const fx = createEffects();
     fx.flash = 0.05;
     const others = Array.from({ length: 20 }, (_, i) => player(i + 1, 20 + i));
-    const bullets = [{ id: 99, x: 8, y: 1, z: 9 }];
-    const ls = gather(bare({ fx, others, bullets }));
+    const ls = gather(bare({ fx, others }));
     const rest = ls.slice(2).map(l => dist(l.p, EYE));
     expect(ls).toHaveLength(MAX_LIGHTS);
     expect(ls[0].shadow && ls[1].shadow).toBe(true);
     expect(ls[1].color[0]).toBeGreaterThan(1);
     expect(rest).toEqual([...rest].sort((a, b) => a - b));
-    expect(ls.some(l => l.p[1] == 1)).toBe(true);
     expect(Math.max(...ls.map(l => l.p[0]))).toBeLessThan(20 + MAX_LIGHTS);
   });
 });

@@ -3,18 +3,18 @@
 // them to a dim ambient, and each shadowed spot first draws the level and the bodies into its layer
 // of a depth texture array. The scene goes into an offscreen target, then a second, small program
 // (POST) turns it into the picture on the canvas. No DOM beyond the canvas.
-import { MONSTER, TEX } from '../shared/types';
-import type { Bullet, Edge, Item, Level, Monster, PlayerState, Sector } from '../shared/types';
-import { BLAST, BLOOD, TRAIL, fade, glow, lit, puff } from './effects';
-import type { Effects, Puff } from './effects';
+import { TEX } from '../shared/types';
+import type { Edge, Item, Level, PlayerState, Sector } from '../shared/types';
+import { TRAIL, lit } from './effects';
+import type { Effects } from './effects';
 import { MUZZLE, chaingun } from './gun';
 import { props } from './items';
-import { METAL, QUAD, STRIDE, axesAlong, basis, dress, place, pushBox, pushFrame } from './mesh';
+import { METAL, STRIDE, axesAlong, basis, dress, place, pushBox, pushFrame } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
-import { SWING, bullet, flyer, follow, pace, soldier, walker } from './monsters';
-import type { Gait } from './monsters';
+import { follow, pace, soldier } from './soldier';
+import type { Gait } from './soldier';
 import { LAYERS, SIZE, textures } from './textures';
 
 /** MapDef.fog when a map sets none: the clear colour and what distance fog fades to, then its density. Dark, the map is indoors. */
@@ -84,9 +84,8 @@ export const SPEC = [
 /** Metres a height of 1 in a texture's alpha stands for. */
 const RELIEF = 0.06;
 
-// s: 1 on a texture, 0 on a flat colour (layer -0.5 shines like metal). y: layer -3, a smoke billboard: C is (corner x, corner y,
-// -3, opacity), grey and lit like the rest, with an alpha that falls off from its centre to its
-// edge. g: lava (which also drifts) and layer -2, which glow: no light, no shade. The texture's alpha is a height: its screen-space derivatives tilt the normal
+// s: 1 on a texture, 0 on a flat colour (layer -0.5 shines like metal). g: lava (which also drifts)
+// and layer -2, which glow: no light, no shade. The texture's alpha is a height: its screen-space derivatives tilt the normal
 // (bump mapping without tangents), faded out as a pixel covers more than a texel or two so the
 // mipmapped relief does not shimmer. n is the surface normal, m the bumped one. l: the ambient
 // term (Z, times the sector light on a texture) with the directional shade, plus every light, then
@@ -104,9 +103,9 @@ const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)})
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
 void main(){
 if(Z<0.)return;
-float L=C.z,s=step(0.,L),I=floor(C.w*.5),y=step(L,-2.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5)*(1.-y);
+float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
-vec3 c=y>0.?vec3(.6):mix(vec3(C.xy,C.w),t.rgb,s);
+vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
 vec3 n=normalize(N),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float h=t.a*s*${RELIEF},det=dot(dx,a);
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
@@ -127,7 +126,7 @@ w*=v/4.;}
 l+=K[i].rgb*w;
 sp+=K[i].rgb*w*pow(max(dot(m,normalize(d+V)),0.),R.y);}
 c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
-o=vec4(mix(c,F.rgb,1.-exp(-F.a*length(P-E))),y>0.?C.w*(1.-smoothstep(.2,1.,length(C.xy))):1.);}`;
+o=vec4(mix(c,F.rgb,1.-exp(-F.a*length(P-E))),1.);}`;
 
 /**
  * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
@@ -286,9 +285,8 @@ interface Target {
 
 export interface Renderer {
   /**
-   * Draws one frame: the map, its gates, goal and items, the others, the monsters, their bullets
-   * and the effects as seen from eye, with the view model on top (not while fx.dead). colors maps
-   * player id to CSS.
+   * Draws one frame: the map, its gates, goal and items, the others and the effects as seen from
+   * eye, with the view model on top (not while fx.dead). colors maps player id to CSS.
    */
   frame(
     eye: Vec3,
@@ -297,8 +295,6 @@ export interface Renderer {
     others: PlayerState[],
     colors: ReadonlyMap<number, string>,
     fx: Effects,
-    monsters: Monster[],
-    bullets: Bullet[],
     items: Item[],
     /** gather() in lights.ts: at most MAX_LIGHTS, the first MAX_SHADOWS shadowed spots mapped. */
     lights: Light[],
@@ -537,7 +533,6 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
       gl.texParameterf(gl.TEXTURE_2D_ARRAY, aniso.TEXTURE_MAX_ANISOTROPY_EXT, 8);
     }
     gl.enable(gl.DEPTH_TEST);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     climate();
     const [w, h] = size();
     if (w && h) {
@@ -570,7 +565,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   return {
-    frame(eye, yaw, pitch, others, colors, fx, monsters, bullets, items, lights) {
+    frame(eye, yaw, pitch, others, colors, fx, items, lights) {
       const [w, h] = size();
       if (lost || !w || !h) {
         return;
@@ -592,28 +587,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
         const gun = [far.spun, far.still, fx.flashes.has(p.id) ? wide : []];
         soldier(v, p, rgb(colors.get(p.id) ?? '#888'), g.walked, pace(g), gun);
       }
-      for (const m of monsters) {
-        const g = follow(gaits, m.id, m.x, m.z, dt);
-        if (m.kind == MONSTER.FLYER) {
-          flyer(v, m, now, g.vx, g.vz);
-        } else {
-          const left = fx.swings.get(m.id);
-          walker(v, m, g.walked, left ? 1 - left / SWING : 0, pace(g));
-        }
-      }
       props(v, lvl, items, now);
-      for (const { p, yaw, half, c, life } of fx.gibs) {
-        const k = Math.min(1, life * 2);
-        pushBox(v, p, half.map(x => x * k) as Vec3, yaw, c);
-      }
       // What the shadow maps hold ends here: the unlit effects after it cast nothing.
       const bodies = v.length;
-      for (const b of bullets) {
-        bullet(v, b, fx.aim.get(b.id));
-      }
       const axes = basis(yaw, pitch, fx.roll);
-      const [right, up, f] = axes;
-      const specks = lit(fx, eye, f);
+      const specks = lit(fx, eye, axes[2]);
       for (let i = 0; i < specks.length; i += 4) {
         const [b, k] = [Math.sqrt(specks[i + 3]), 0.01 + 0.025 * specks[i + 3]];
         pushBox(v, specks.slice(i, i + 3) as Vec3, [k, k, k], 0, [b, b * 0.9, b * 0.7], -2);
@@ -639,35 +617,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
           pushFrame(v, p, axesAlong(d), [k * 2.8, k, k], gold, METAL);
         }
       }
-      for (const { p, r, yaw, life } of fx.splats) {
-        // Two flat slabs across each other: a blot.
-        const k = r * Math.min(1, life);
-        for (const a of [yaw, yaw + Math.PI / 4]) {
-          pushBox(v, p, [k, 0.002, k * 0.8], a, BLOOD);
-        }
-      }
-      for (const b of fx.blasts) {
-        // Bright at the start, red and shrinking at the end: no blending to fade it with.
-        const [k, u] = [glow(b), b.t / BLAST];
-        const c = [1, 0.9 - u * 0.7, 0.5 - u * 0.45];
-        for (const yaw of [0, Math.PI / 4]) {
-          pushBox(v, b.p, [k, k, k], yaw, c, -2);
-        }
-      }
       const world = v.length;
-      // Blended after the opaque scene, far to near, as billboards.
-      const dist = (s: Puff) => Math.hypot(s.p[0] - eye[0], s.p[1] - eye[1], s.p[2] - eye[2]);
-      for (const s of [...fx.smoke].sort((a, b) => dist(b) - dist(a))) {
-        const [k, a] = [puff(s) * 1.6, fade(s)];
-        for (const [i, j] of QUAD) {
-          v.push(
-            ...[0, 1, 2].map(n => s.p[n] + (right[n] * i + up[n] * j) * k),
-            ...f.map(x => -x),
-            ...[i, j, -3, a],
-          );
-        }
-      }
-      const haze = v.length;
       // Last, over a cleared depth: the gun never sinks into a wall.
       const off: Vec3 = [0.26, -0.24 + fx.kick * 0.01, 0.6 - fx.kick * 0.06];
       if (!fx.dead) {
@@ -715,17 +665,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
       gl.uniformMatrix4fv(u.M, false, pk.m);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, first + world / STRIDE);
-      if (haze > world) {
-        // Tested against the scene's depth, not written: puffs do not hide each other's far side.
-        gl.enable(gl.BLEND);
-        gl.depthMask(false);
-        gl.drawArrays(gl.TRIANGLES, first + world / STRIDE, (haze - world) / STRIDE);
-        gl.depthMask(true);
-        gl.disable(gl.BLEND);
-      }
       gl.clear(gl.DEPTH_BUFFER_BIT);
       gl.uniform1f(u.Z, GUN);
-      gl.drawArrays(gl.TRIANGLES, first + haze / STRIDE, (v.length - haze) / STRIDE);
+      gl.drawArrays(gl.TRIANGLES, first + world / STRIDE, (v.length - world) / STRIDE);
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaa);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, hdr.f);
       gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);

@@ -3,8 +3,7 @@
 import { EYE } from '../shared/constants';
 import { sectorAt } from '../shared/level';
 import { TEX } from '../shared/types';
-import type { Bullet, Level, PlayerState } from '../shared/types';
-import { glow } from './effects';
+import type { Level, PlayerState } from '../shared/types';
 import type { Effects } from './effects';
 import { MUZZLE } from './gun';
 import { basis } from './mesh';
@@ -13,7 +12,7 @@ import type { Vec3 } from './mesh';
 export const LIGHT = {
   /** A cone from p along d: flashlights, muzzle flashes. */
   SPOT: 0,
-  /** All around p: explosions, bursts, the exit, the goal. */
+  /** All around p: the exit, the goal. */
   POINT: 1,
 } as const;
 
@@ -48,8 +47,6 @@ export interface Scene {
   /** The living other players, interpolated. */
   others: PlayerState[];
   fx: Effects;
-  /** The monster bullets in flight, as drawn. */
-  bullets: Bullet[];
   /** The level, with its live `barred` (the exit is open once it is not barred). */
   lvl: Level;
   /** Seconds, for pulsing lights. */
@@ -61,9 +58,8 @@ const FIRE: Vec3 = [3, 1.4, 0.4];
 /** Half-angle cosines: a flashlight's 25 degrees, a muzzle flash's 60. */
 const NARROW = Math.cos(0.436);
 const WIDE = 0.5;
-/** Others' flashlights that cast shadows, and bullets that glow. */
+/** Others' flashlights that cast shadows. */
 const SHADOWED = 2;
-const BULLETS = 4;
 
 const point = (p: Vec3, range: number, color: Vec3): Light => ({
   kind: LIGHT.POINT,
@@ -133,7 +129,7 @@ const ember = (p: Vec3, t: number): Vec3 => {
 };
 
 /** The lights of this frame, most important first. */
-export const gather = ({ eye, yaw, pitch, dead, others, fx, bullets, lvl, t }: Scene): Light[] => {
+export const gather = ({ eye, yaw, pitch, dead, others, fx, lvl, t }: Scene): Light[] => {
   const [right, up, fwd] = basis(yaw, pitch);
   const head: Light[] = [];
   if (!dead) {
@@ -165,20 +161,9 @@ export const gather = ({ eye, yaw, pitch, dead, others, fx, bullets, lvl, t }: S
         rest.push(point(at([p.x, p.y + 1.25, p.z], [r, 0.36], [u, -0.12], [f, 0.8]), 6, FIRE));
       }
     });
-  for (const b of fx.blasts) {
-    const g = glow(b);
-    if (g > 0) {
-      rest.push(point(b.p, 6, scale(FIRE, g * 6)));
-    }
-  }
   if (fx.hurt > 0) {
     rest.push(point(eye, 4, scale([2, 0.15, 0.1], Math.min(1, fx.hurt * 10))));
   }
-  bullets
-    .map(b => point([b.x, b.y, b.z], 3, [1.2, 0.4, 0.15]))
-    .sort((a, b) => near(a.p) - near(b.p))
-    .slice(0, BULLETS)
-    .forEach(l => rest.push(l));
   lava(lvl)
     .filter(l => near(l.p) < l.range * 2)
     .map(({ p, range }) => point(p, range, ember(p, t)))

@@ -13,7 +13,7 @@ import {
 } from './constants';
 import { bar, compile, sectorAt } from './level';
 import { HALL } from './map';
-import { fly, forward, move, spawn } from './physics';
+import { forward, move, spawn } from './physics';
 import { ITEM, KEY, PHASE, TEX } from './types';
 import type { Input, Level, MapDef, PlayerState, Sector } from './types';
 
@@ -610,7 +610,7 @@ describe('barred sectors', () => {
   const RED = 1 << ITEM.KEY_RED;
   const stand = (level: Level, x: number): PlayerState => ({ ...at(x, 5, level), y: 0 });
 
-  it('stops a walker at the edge of a gate until its key is held', () => {
+  it('stops a player at the edge of a gate until its key is held', () => {
     const gate = twin({ gates: [{ sector: 1, key: ITEM.KEY_RED }] });
     const p = stand(gate, 5);
     run(p, FORWARD, 100, EAST, undefined, gate);
@@ -651,20 +651,6 @@ describe('barred sectors', () => {
     bar(exit, 0, PHASE.RETURN);
     run(p, FORWARD, 100, WEST, undefined, exit);
     expect(p.x).toBeLessThan(5);
-  });
-
-  it('keeps a flyer out as well', () => {
-    const gate = twin({ gates: [{ sector: 1, key: ITEM.KEY_RED }] });
-    const f = { x: 5, y: 1.2, z: 5 };
-    for (let k = 0; k < 100; k++) {
-      fly(f, 0.05, 0, 0, gate);
-    }
-    expect(f.x).toBeCloseTo(10 - 0.45);
-    bar(gate, RED, PHASE.HUNT);
-    for (let k = 0; k < 100; k++) {
-      fly(f, 0.05, 0, 0, gate);
-    }
-    expect(f.x).toBeGreaterThan(14);
   });
 
   it('does not count the floor behind a gate: no step up onto it', () => {

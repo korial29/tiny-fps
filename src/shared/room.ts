@@ -1,12 +1,10 @@
 import {
-  DROP_EVERY,
   GOAL_R,
   HEAL,
   HEALTH,
   HIT_COOLDOWN,
   INPUT_BURST,
   MAX_NAME,
-  MAX_PLAYERS,
   MAX_REWIND,
   PICKUP_R,
   PLAYER_H,
@@ -17,13 +15,11 @@ import {
 } from './constants';
 import { bar, compile, sectorAt } from './level';
 import { HALL } from './map';
-import { createHorde, mulberry32 } from './monsters';
-import type { Horde } from './monsters';
 import { move, spawn } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
-import { body, fire, monsterBody } from './shoot';
-import { EVENT, ITEM, PHASE } from './types';
+import { body, fire } from './shoot';
+import { ITEM, PHASE } from './types';
 import type {
   Body,
   Conn,
@@ -31,7 +27,6 @@ import type {
   Item,
   Level,
   MapDef,
-  Monster,
   PlayerInfo,
   PlayerState,
   Rules,
@@ -118,33 +113,26 @@ const setEvery: Every = (cb, ms) => {
  * - Each input frame moves its player at once with move(); the INPUT_BURST bank drops the excess.
  *   A step that fires resolves its shot at once with fire(), the other players rewound to the
  *   view tick of the input (lag compensation, at most MAX_REWIND ticks back).
- * - The room owns the horde (monsters.ts), stepped every tick while a player is present. A shot
- *   rewinds the monsters with the players, and one that hits a monster kills it.
- * - A player has HEALTH. A monster's blow or bullet takes 1, then HIT_COOLDOWN ticks of grace
- *   (only a hit that took health is told as a HURT event). A dead player moves, shoots and
- *   counts for nothing until PLAYER_RESPAWN ticks later, when it is back at a spawn.
- * - The level's items lie in it, and every DROP_EVERY-th kill leaves a HEALTH pack. A key taken
- *   opens its gates for the team, a pack heals below full health.
+ * - A player has HEALTH. A dead player moves, shoots and counts for nothing until PLAYER_RESPAWN
+ *   ticks later, when it is back at a spawn.
+ * - The level's items lie in it. A key taken opens its gates for the team, a pack heals below full
+ *   health.
  * - Touching the goal turns the level from HUNT to RETURN (the exit opens).
  * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player, the shots resolved since
- *   the last one, the monsters, the bullets, the events since the last one and the items goes to
- *   every peer.
+ *   the last one and the items goes to every peer.
  */
 export class Room {
   /** Every connected peer; null until it joins. */
   private peers = new Map<Conn, Player | null>();
   private ticks = 0;
-  /** The players and monsters as each snapshot of the last MAX_REWIND ticks sent them. */
-  private history: { tick: number; players: PlayerState[]; monsters: Monster[] }[] = [];
+  /** The players as each snapshot of the last MAX_REWIND ticks sent them. */
+  private history: { tick: number; players: PlayerState[] }[] = [];
   private lvl: Level;
-  private horde: Horde;
   private phase: number = PHASE.HUNT;
   /** The team's key bits (1 << ITEM.KEY_*). */
   private keys = 0;
   private items: Item[] = [];
   private nextItem = 0;
-  /** Monsters the team killed in this level. */
-  private kills = 0;
   /** Shots resolved since the last snapshot. */
   private shots: Shot[] = [];
   private halt: (() => void) | undefined;
@@ -152,11 +140,10 @@ export class Room {
   /** Round-robin cursor over the spawn points, used once they are all taken. */
   private rr = 0;
 
-  /** Missing rules fall back to RULES. The seed drives the monsters. */
-  public constructor(rules: Partial<Rules> = {}, seed = Date.now(), map: MapDef = HALL) {
+  /** Missing rules fall back to RULES. */
+  public constructor(rules: Partial<Rules> = {}, map: MapDef = HALL) {
     this.rules = { ...RULES, ...rules };
     this.lvl = compile(map);
-    this.horde = createHorde(this.lvl, mulberry32(seed));
     map.items?.forEach(([x, z, kind]) => this.drop(kind, x, z));
   }
 
@@ -188,12 +175,6 @@ export class Room {
       if (p.hp && move(p.state, input, this.lvl)) {
         const shot = fire(this.lvl, p.state, input.seq, this.rewind(p, input.view));
         this.shots.push(shot);
-        if (shot.hit >= MAX_PLAYERS) {
-          const dead = this.horde.kill(shot.hit, p.state.id);
-          if (dead && ++this.kills % DROP_EVERY === 0) {
-            this.drop(ITEM.HEALTH, dead.x, dead.z);
-          }
-        }
       }
       p.ack = input.seq;
     }
@@ -225,19 +206,9 @@ export class Room {
         );
       }
     }
-    const { events } = this.horde;
-    const old = events.length;
-    this.horde.step(players.filter(p => p.hp).map(p => p.state));
-    // The horde reports every blow; only the ones that took health are told.
-    events.push(...events.splice(old).filter(e => e.type !== EVENT.HURT || this.wound(e.id, now)));
     this.progress(players.filter(p => p.hp));
     if (now % SNAP_EVERY === 0) {
-      const monsters = this.horde.monsters();
-      this.history.push({
-        tick: now,
-        players: players.map(p => ({ ...p.state })),
-        monsters,
-      });
+      this.history.push({ tick: now, players: players.map(p => ({ ...p.state })) });
       while (this.history[0].tick < now - MAX_REWIND) {
         this.history.shift();
       }
@@ -246,10 +217,6 @@ export class Room {
         tick: now,
         players: players.map(p => ({ ...p.state, ack: p.ack, hp: p.hp })),
         shots: this.shots,
-        monsters,
-        bullets: this.horde.bullets(),
-        // The snapshot counts events with a u8: the rest wait for the next one.
-        events: this.horde.events.splice(0, 255),
         phase: this.phase,
         keys: this.keys,
         items: this.items,
@@ -292,18 +259,17 @@ export class Room {
 
   /**
    * The bodies a shot of `shooter` can hit as the shooter drew them at `view` (a u16 tick,
-   * fractional, read against the current tick and clamped to the kept history): the other players
-   * and the monsters, x, y, z interpolated between the two snapshots around it like the client
-   * does. One the history does not hold stands where it is.
+   * fractional, read against the current tick and clamped to the kept history): the other players,
+   * x, y, z interpolated between the two snapshots around it like the client does. One the
+   * history does not hold stands where it is.
    */
   private rewind(shooter: Player, view = 0): Body[] {
     const now = this.players()
       .filter(p => p !== shooter && p.hp)
       .map(p => p.state);
-    const mobs = this.horde.monsters();
     const [first, last] = [this.history[0], this.history.at(-1)];
     if (!first || !last) {
-      return [...now.map(body), ...mobs.map(monsterBody)];
+      return now.map(body);
     }
     // Ticks back, on the u16 circle: in [-0x8000, 0x8000).
     const back = ((((this.ticks - view + 0x8000) % 0x10000) + 0x10000) % 0x10000) - 0x8000;
@@ -315,18 +281,15 @@ export class Room {
     const [a, b] = [this.history[k], this.history[k + 1] ?? this.history[k]];
     const u = b.tick > a.tick ? (t - a.tick) / (b.tick - a.tick) : 0;
     const l = (m: number, n: number): number => m + (n - m) * u;
-    const at = <T extends { id: number; x: number; y: number; z: number }>(
-      cur: T[],
-      list: (h: typeof a) => T[],
-    ): T[] =>
-      cur.map(p => {
-        const pa = list(a).find(q => q.id === p.id);
-        const pb = list(b).find(q => q.id === p.id);
-        return pa && pb
+    return now.map(p => {
+      const pa = a.players.find(q => q.id === p.id);
+      const pb = b.players.find(q => q.id === p.id);
+      return body(
+        pa && pb
           ? { ...pb, x: l(pa.x, pb.x), y: l(pa.y, pb.y), z: l(pa.z, pb.z) }
-          : (pb ?? pa ?? p);
-      });
-    return [...at(now, h => h.players).map(body), ...at(mobs, h => h.monsters).map(monsterBody)];
+          : (pb ?? pa ?? p),
+      );
+    });
   }
 
   /** The first spawn point with none of `others` within SPAWN_CLEAR, else the next one round-robin. */
@@ -347,16 +310,6 @@ export class Room {
   private drop(kind: number, x: number, z: number): void {
     const f = Math.fround;
     this.items.push({ id: this.nextItem++, kind, x: f(x), y: f(this.floor(x, z)), z: f(z) });
-  }
-
-  /** Takes 1 health off player `id` unless it was hurt less than HIT_COOLDOWN ticks ago. */
-  private wound(id: number, now: number): boolean {
-    const p = this.players().find(q => q.info.id === id);
-    if (!p?.hp || now - p.hurt < HIT_COOLDOWN) {
-      return false;
-    }
-    [p.hp, p.hurt] = [p.hp - 1, now];
-    return true;
   }
 
   /** What the living players do to the level: pick things up, touch the goal, win. */

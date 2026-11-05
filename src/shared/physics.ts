@@ -4,10 +4,6 @@
 import {
   FIRE_EVERY,
   FIRE_SLOW,
-  FLYER_H,
-  FLYER_HOVER,
-  FLYER_R,
-  FLYER_SPEED,
   GRAVITY,
   JUMP_SPEED,
   MAX_PITCH,
@@ -23,8 +19,6 @@ import type { Edge, Input, Level, PlayerState } from './types';
 
 const DT = 1 / TICK_HZ;
 type Pos = Pick<PlayerState, 'x' | 'y' | 'z'>;
-/** What walk() moves: a player, or a walker with the same feet, speed and floor contact. */
-type Walker = Pos & Pick<PlayerState, 'vy' | 'ground'>;
 export const TAU = Math.PI * 2;
 /** Overlaps smaller than this are rounding noise, not contact. */
 const EPS = 1e-6;
@@ -155,9 +149,9 @@ const span = (
  * collisions of the cylinder (PLAYER_R, PLAYER_H) with the sectors of the level: it slides along
  * shut edges (see shut and push), stands on the highest floor under the circle (a step up to
  * STEP_H is climbed at once, a higher one needs a jump, a ledge is a fall), and bumps its head on
- * the lowest ceiling. Players and walkers share it, in place.
+ * the lowest ceiling, in place.
  */
-export const walk = (p: Walker, dx: number, dz: number, jump: boolean, lvl: Level): void => {
+export const walk = (p: PlayerState, dx: number, dz: number, jump: boolean, lvl: Level): void => {
   p.x += dx;
   p.z += dz;
   push(p, lvl, PLAYER_R, PLAYER_H, STEP_H);
@@ -193,27 +187,6 @@ export const walk = (p: Walker, dx: number, dz: number, jump: boolean, lvl: Leve
   p.y = f32(p.y);
   p.z = f32(p.z);
   p.vy = f32(p.vy);
-};
-
-/**
- * Moves a flyer (underside at p.y, radius FLYER_R, height FLYER_H) by (dx, dy, dz): sideways it is
- * stopped by solid walls and by openings too small for it, and it never steps (it flies over
- * steps and pits); then y is held between FLYER_HOVER above the highest floor under it and the
- * lowest ceiling minus FLYER_H, the ceiling winning in a low room. Below the hover height it
- * rises at FLYER_SPEED, so crossing from a pit to a ledge is not a jump; the floor itself is
- * never entered.
- */
-export const fly = (p: Pos, dx: number, dy: number, dz: number, lvl: Level): void => {
-  p.x += dx;
-  p.z += dz;
-  push(p, lvl, FLYER_R, FLYER_H, 0);
-  const [floor, ceil] = span(lvl, p.x, p.z, p.y, FLYER_R, FLYER_H, 0);
-  const hover = Math.min(floor + FLYER_HOVER, ceil - FLYER_H);
-  const low = Math.max(floor, Math.min(hover, p.y + FLYER_SPEED * DT));
-  p.y = Math.min(Math.max(p.y + dy, low), ceil - FLYER_H);
-  p.x = f32(p.x);
-  p.y = f32(p.y);
-  p.z = f32(p.z);
 };
 
 /**

@@ -27,10 +27,6 @@ describe.each(Object.entries(SOUND))('%s', (_, id) => {
 });
 
 describe('sounds', () => {
-  it('make a shot shorter than a boom', () => {
-    expect(render(SOUND.SHOT).length).toBeLessThan(render(SOUND.BOOM).length);
-  });
-
   it('keep the chaingun under its 12 shots per second', () => {
     expect(render(SOUND.SHOT).length).toBeLessThan(RATE / 12);
   });

@@ -1,4 +1,4 @@
-import { ITEM, MONSTER, TEX } from './types';
+import { ITEM, TEX } from './types';
 import type { MapDef, Sector } from './types';
 
 const sector = (
@@ -165,18 +165,6 @@ export const HALL: MapDef = {
     [2, 8, Math.PI * 1.5],
     [8, 2, Math.PI * 1.5],
     [8, 14, Math.PI * 1.5],
-  ],
-  // Around the pit, on the balcony and over the pit; none in the start room or the corridor, so
-  // nobody is jumped at spawn.
-  monsters: [
-    [24, 2, Math.PI * 1.2, MONSTER.WALKER],
-    [33, 3, Math.PI * 0.75, MONSTER.WALKER],
-    [33, 8, Math.PI * 0.5, MONSTER.WALKER],
-    [24, 14, Math.PI * 1.8, MONSTER.WALKER],
-    [30, 23, 0, MONSTER.WALKER],
-    [28, 8, 0, MONSTER.FLYER],
-    [34, 13, Math.PI * 0.3, MONSTER.FLYER],
-    [34, 22, Math.PI * 0.5, MONSTER.FLYER],
   ],
   items: [[23, 8, ITEM.HEALTH]],
   goal: [30, 24],

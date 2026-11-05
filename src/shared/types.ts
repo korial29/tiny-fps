@@ -55,67 +55,12 @@ export interface PlayerState {
 export interface Shot {
   /** The shooter. */
   id: number;
-  /** Where the shot stopped: a wall, a floor, a ceiling, a target, or RANGE away. */
+  /** Where the shot stopped: a wall, a floor, a ceiling, a player, or RANGE away. */
   x: number;
   y: number;
   z: number;
-  /** Id of the player or monster hit, -1 for the level or nothing. */
+  /** Id of the player hit, -1 for the level or nothing. */
   hit: number;
-}
-
-/** Monster kinds. */
-export const MONSTER = {
-  /** Walks the floors like a player, shoots bullets from afar and hits up close. */
-  WALKER: 0,
-  /** Hovers above the floor, flies over steps and pits, hits up close. */
-  FLYER: 1,
-} as const;
-
-/**
- * A monster as the host runs it and the snapshot carries it. Ids run from MAX_PLAYERS up, so a
- * Shot.hit or an event names a player or a monster with one u8.
- */
-export interface Monster {
-  id: number;
-  /** MONSTER kind. */
-  kind: number;
-  /** Bottom of the body: the feet of a walker, the underside of a flyer. */
-  x: number;
-  y: number;
-  z: number;
-  /** Facing, as a player's yaw. */
-  yaw: number;
-  /** Hunting a player (it saw one, or was alerted), not patrolling. */
-  chase: boolean;
-}
-
-/** A monster's bullet in flight, host-simulated. Ids are a u8 counter that wraps. */
-export interface Bullet {
-  id: number;
-  x: number;
-  y: number;
-  z: number;
-}
-
-/** What a GameEvent reports. */
-export const EVENT = {
-  /** Monster `id` died, (x, y, z) the middle of its body: gibs and an explosion. */
-  DIE: 0,
-  /** Player `id` was hit by a bullet or a blow at (x, y, z). Harmless until health (step 4). */
-  HURT: 1,
-  /** A bullet burst on the level at (x, y, z); `id` is the bullet. */
-  BOOM: 2,
-  /** Monster `id` swung at its target from (x, y, z), hit or miss. */
-  SWING: 3,
-} as const;
-
-export interface GameEvent {
-  /** EVENT type. */
-  type: number;
-  id: number;
-  x: number;
-  y: number;
-  z: number;
 }
 
 /** Something a shot can hit: an upright cylinder of radius r from y up to y + h. */
@@ -213,8 +158,6 @@ export interface MapDef {
   sectors: Sector[];
   /** Spawn points: feet x, z (inside a sector, standing on its floor) and the yaw to face. */
   spawns: [x: number, z: number, yaw: number][];
-  /** Monsters at the start: x, z inside a sector, the yaw they face, their MONSTER kind. Absent: none. */
-  monsters?: [x: number, z: number, yaw: number, kind: number][];
   /** Pickups at the start: x, z inside a sector, their ITEM kind. Absent: none. */
   items?: [x: number, z: number, kind: number][];
   /** Barred doorways. Absent: none. */
@@ -275,12 +218,6 @@ export interface Snapshot {
   players: SnapPlayer[];
   /** Shots fired since the previous snapshot, in order. */
   shots: Shot[];
-  /** Living monsters. */
-  monsters: Monster[];
-  /** Bullets in flight. */
-  bullets: Bullet[];
-  /** Events since the previous snapshot, in order. */
-  events: GameEvent[];
   /** PHASE of the level. */
   phase: number;
   /** Keys the team holds: bit (1 << ITEM.KEY_*). */

@@ -28,18 +28,14 @@ export const RATE = 44100;
 export const SOUND = {
   /** The chaingun, one per shot. */
   SHOT: 0,
-  /** A monster's death. */
-  BOOM: 1,
-  /** A player hurt: a blow or a bullet. */
-  HIT: 2,
+  /** A player hurt. */
+  HIT: 1,
   /** A pickup taken: health or a key. */
-  COLLECT: 3,
+  COLLECT: 2,
   /** A tick, once a second while the team runs back to the exit (RETURN). */
-  CLOCK: 4,
-  /** A bullet bursting on a wall. */
-  BURST: 5,
+  CLOCK: 3,
   /** A heartbeat, looped by the client while the own health is low. */
-  HEART: 6,
+  HEART: 4,
 } as const;
 
 const synth = ([wave, hz, slide, a, s, d, vib, lp, jt, jm, vol]: Voice, seed: number) => {
@@ -85,11 +81,6 @@ const LAYERS: Voice[][] = [
     [3, 7000, -0.5, 0.002, 0, 0.06, 0, 0.6, 0, 1, 0.8],
     [0, 220, -5, 0.002, 0, 0.075, 0, 0.3, 0, 1, 0.5],
   ],
-  // BOOM: low-passed noise rumble over a falling sine.
-  [
-    [3, 500, -1.5, 0.004, 0.05, 0.8, 0, 0.1, 0, 1, 2.2],
-    [2, 110, -1.5, 0.004, 0.05, 0.6, 0, 1, 0, 1, 0.8],
-  ],
   // HIT: a saw and a square falling out of tune, over grit.
   [
     [1, 160, -1.5, 0.003, 0.04, 0.22, 0.2, 0.5, 0, 1, 0.6],
@@ -105,11 +96,6 @@ const LAYERS: Voice[][] = [
   [
     [3, 4000, 0, 0.001, 0, 0.025, 0, 0.5, 0, 1, 0.7],
     [2, 1300, -1, 0.001, 0, 0.04, 0, 1, 0, 1, 0.5],
-  ],
-  // BURST: grains of noise and a high spark.
-  [
-    [3, 1200, -1, 0.002, 0, 0.14, 0, 0.45, 0, 1, 0.7],
-    [0, 3200, -1, 0.002, 0, 0.05, 0, 1, 0.025, 0.7, 0.2],
   ],
   // HEART: a soft "lub-dub", two sine thumps 0.22 s apart, the second lower and fainter. Each has
   // a faint octave above it, so small speakers carry it.

@@ -49,40 +49,11 @@ export const MAX_REWIND = 30;
 export const INPUT_BURST = 10;
 
 export const MAX_PLAYERS = 16;
-/** Monsters alive at once at most; their ids run from MAX_PLAYERS to MAX_PLAYERS + MAX_MONSTERS - 1. */
-export const MAX_MONSTERS = 64;
-
-// Monsters. Times are host ticks (TICK_HZ), distances metres, speeds metres per second.
-export const WALKER_R = 0.4;
-export const WALKER_H = 1.8;
-export const WALKER_SPEED = 2.5;
-export const FLYER_R = 0.45;
-export const FLYER_H = 0.9;
-/** A flyer's underside floats this high above the floor below it, ceilings allowing. */
-export const FLYER_HOVER = 1.2;
-export const FLYER_SPEED = 3.5;
-/** Each monster looks for players once per SIGHT_EVERY ticks (staggered), in a cone this wide. */
-export const SIGHT_EVERY = 60;
-export const SIGHT_COS = Math.cos(Math.PI / 6);
-export const SIGHT_RANGE = 30;
-/** A monster that sees a player or dies alerts the others within ALERT_R that can see it. */
-export const ALERT_R = 12;
-/** A chasing monster this close (centre to centre, on the floor plane) swings, once per MELEE_EVERY. */
-export const MELEE_R = 1.4;
-export const MELEE_EVERY = 45;
-/** A chasing walker that sees its target fires once per SHOOT_EVERY ticks. */
-export const SHOOT_EVERY = 90;
-export const BULLET_SPEED = 12;
-export const BULLET_R = 0.15;
-/** Ticks a bullet lives at most. */
-export const BULLET_LIFE = 300;
 
 // Health and progression. Times are host ticks.
 export const HEALTH = 9;
 /** A hit takes 1 health, then the player cannot be hurt for HIT_COOLDOWN ticks. */
 export const HIT_COOLDOWN = 60;
-/** Every DROP_EVERY-th kill of the team leaves a HEALTH pickup where the monster died. */
-export const DROP_EVERY = 4;
 export const HEAL = 3;
 /** A player whose axis comes this close to a pickup (on the floor plane) takes it. */
 export const PICKUP_R = 0.8;

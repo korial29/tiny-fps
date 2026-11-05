@@ -1,20 +1,9 @@
 // Hitscan, shared by the host (on rewound targets) and the client (its own shots, predicted on the
 // interpolated others). No DOM, no Node API.
-import {
-  EYE,
-  FLYER_H,
-  FLYER_R,
-  PLAYER_H,
-  PLAYER_R,
-  RANGE,
-  SPREAD,
-  WALKER_H,
-  WALKER_R,
-} from './constants';
+import { EYE, PLAYER_H, PLAYER_R, RANGE, SPREAD } from './constants';
 import { sectorAt } from './level';
 import { TAU } from './physics';
-import { MONSTER } from './types';
-import type { Body, Edge, Level, Monster, PlayerState, Shot } from './types';
+import type { Body, Edge, Level, PlayerState, Shot } from './types';
 
 type Vec3 = [number, number, number];
 
@@ -138,16 +127,10 @@ export const body = ({ id, x, y, z }: PlayerState): Body => ({
   h: PLAYER_H,
 });
 
-/** The body a shot sees of a monster. */
-export const monsterBody = ({ id, kind, x, y, z }: Monster): Body => {
-  const walker = kind === MONSTER.WALKER;
-  return { id, x, y, z, r: walker ? WALKER_R : FLYER_R, h: walker ? WALKER_H : FLYER_H };
-};
-
 /**
  * Resolves one shot of `shooter` (state after the step that fired) from its eye (feet + EYE)
  * along aim(yaw, pitch, seq): the nearest of the level (trace) and the upright cylinders
- * of `targets` (bodies: players, monsters) other than the shooter, within RANGE.
+ * of `targets` (the other players' bodies) other than the shooter, within RANGE.
  */
 export const fire = (lvl: Level, shooter: PlayerState, seq: number, targets: Body[]): Shot => {
   const o: Vec3 = [shooter.x, shooter.y + EYE, shooter.z];

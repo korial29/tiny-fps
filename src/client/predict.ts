@@ -3,21 +3,12 @@
 // physics and keeps it until the host acks it. On a snapshot the own player is reset to the
 // host's state and the unacked inputs are replayed on top. Other players are drawn
 // INTERP_DELAY in the past, interpolated between the two snapshots around that time.
-import { INTERP_DELAY, MAX_PLAYERS } from '../shared/constants';
+import { INTERP_DELAY } from '../shared/constants';
 import { bar } from '../shared/level';
 import { TAU, move, norm } from '../shared/physics';
 import { onWire } from '../shared/protocol';
-import { body, fire, monsterBody } from '../shared/shoot';
-import type {
-  Bullet,
-  Input,
-  Level,
-  Monster,
-  PlayerState,
-  Shot,
-  SnapPlayer,
-  Snapshot,
-} from '../shared/types';
+import { body, fire } from '../shared/shoot';
+import type { Input, Level, PlayerState, Shot, SnapPlayer, Snapshot } from '../shared/types';
 
 export interface Predictor {
   /** The own player id, from the roster. Snapshots before it are only used for the others. */
@@ -31,10 +22,9 @@ export interface Predictor {
    */
   step(i: Omit<Input, 'seq' | 'view'>, now?: number): Input;
   /**
-   * The shot the last step fired, resolved with fire() against the living others(now) and
-   * monsters(now) of that step (a monster this predictor already shot dead, and the host has not
-   * acked yet, is not a target); undefined when it did not fire (a dead own player never does).
-   * Replays on a snapshot never fire again.
+   * The shot the last step fired, resolved with fire() against the living others(now) of that
+   * step; undefined when it did not fire (a dead own player never does). Replays on a snapshot
+   * never fire again.
    */
   shot(): Shot | undefined;
   /**
@@ -52,15 +42,6 @@ export interface Predictor {
   me(alpha: number): PlayerState | undefined;
   /** The other players at now - INTERP_DELAY; a player missing from the latest snapshot is gone. */
   others(now: number): PlayerState[];
-  /**
-   * The living monsters at now - INTERP_DELAY, interpolated like others() (yaw along the shortest
-   * arc). Unlike others(), presence follows the newer snapshot of the interpolation pair, not the
-   * latest: a monster is drawn until the pair reaches the first snapshot that lacks it, as late
-   * as its DIE event is shown.
-   */
-  monsters(now: number): Monster[];
-  /** The bullets in flight at now - INTERP_DELAY, interpolated and kept the same way (until their BOOM). */
-  bullets(now: number): Bullet[];
 }
 
 /** Unacked inputs kept at most (2 s at 60 Hz): a stalled host does not grow the list. */
@@ -114,12 +95,6 @@ export const createPredictor = (lvl: Level): Predictor => {
   let shot: Shot | undefined;
   /** The own player has health, as of the last snapshot: a dead one neither moves nor fires. */
   let alive = true;
-  /**
-   * Monsters the own predicted shots killed, with the seq of the shot, until the host acks it and
-   * the snapshots drawn no longer show them: the host no longer lets a shot hit them, but the
-   * interpolated snapshots still draw them.
-   */
-  const killed = new Map<number, number>();
   const snaps: { t: number; s: Snapshot }[] = [];
 
   /**
@@ -162,35 +137,6 @@ export const createPredictor = (lvl: Level): Predictor => {
       });
   };
 
-  /**
-   * The things (`list`) of the newer snapshot of the pair around now - INTERP_DELAY, interpolated
-   * from the older one when it has them too: one that has just appeared stands where the newer
-   * says, one the newer no longer has is gone. The client draws the events of a snapshot at the
-   * same delay, so a body does not vanish before its explosion.
-   */
-  const drawn = <T extends { id: number }>(
-    now: number,
-    list: (s: Snapshot) => T[],
-    mix: (a: T, b: T, t: number) => T,
-  ): T[] => {
-    if (!snaps.length) {
-      return [];
-    }
-    const { a, b, u } = around(now);
-    const before = list(a.s);
-    return list(b.s).map(p => {
-      const pa = before.find(q => q.id === p.id);
-      return pa ? mix(pa, p, u) : p;
-    });
-  };
-
-  const monsters = (now: number): Monster[] =>
-    drawn(
-      now,
-      s => s.monsters,
-      (a, b, t) => ({ ...b, ...mid(a, b, t), yaw: turn(a.yaw, b.yaw, t) }),
-    );
-
   return {
     you: n => {
       id = n;
@@ -207,16 +153,11 @@ export const createPredictor = (lvl: Level): Predictor => {
       if (own) {
         prev = state(own);
         if (alive && move(own, input, lvl)) {
-          // Without a clock, the others as of the newest snapshot.
-          const t = now ?? Infinity;
-          const mobs = monsters(t).filter(m => !killed.has(m.id));
-          // A dead player is no target, as on the host.
+          // Without a clock, the others as of the newest snapshot. A dead player is no target, as
+          // on the host.
           const live = snaps.at(-1)?.s.players ?? [];
-          const players = others(t).filter(p => live.find(q => q.id === p.id)?.hp);
-          shot = fire(lvl, own, input.seq, [...players.map(body), ...mobs.map(monsterBody)]);
-          if (shot.hit >= MAX_PLAYERS) {
-            killed.set(shot.hit, input.seq);
-          }
+          const players = others(now ?? Infinity).filter(p => live.find(q => q.id === p.id)?.hp);
+          shot = fire(lvl, own, input.seq, players.map(body));
         }
       }
       return input;
@@ -234,14 +175,6 @@ export const createPredictor = (lvl: Level): Predictor => {
       }
       alive = me.hp > 0;
       pending = pending.filter(i => !acked(i.seq, me.ack));
-      // An acked kill stays excluded while a kept snapshot still shows the monster (the others are
-      // drawn INTERP_DELAY late), unless this one shows it too: the host did not kill it.
-      killed.forEach((q, k) => {
-        const shows = (t: Snapshot) => t.monsters.some(m => m.id === k);
-        if (acked(q, me.ack) && (shows(s) || !snaps.some(t => shows(t.s)))) {
-          killed.delete(k);
-        }
-      });
       own = state(me);
       prev = state(own);
       pending.forEach((i, k) => {
@@ -253,15 +186,6 @@ export const createPredictor = (lvl: Level): Predictor => {
         }
       });
     },
-
-    monsters,
-
-    bullets: now =>
-      drawn(
-        now,
-        s => s.bullets,
-        (a, b, t) => ({ ...b, ...mid(a, b, t) }),
-      ),
 
     shot: () => shot,
 

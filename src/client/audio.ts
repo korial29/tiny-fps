@@ -1,6 +1,4 @@
 // Web Audio: the sounds of sfx.ts placed in stereo around the listener, and the music loop.
-import { EVENT } from '../shared/types';
-import type { GameEvent } from '../shared/types';
 import type { Vec3 } from './mesh';
 import { RATE, SOUND, music, render } from './sfx';
 
@@ -137,18 +135,6 @@ export const createAudio = (): Audio => {
     },
     destroy: () => void ctx.close().catch(() => {}),
   };
-};
-
-/** Plays the sound of a host event: where it happened, centred for the own player's hurt. */
-export const hear = (a: Audio, { type, id, x, y, z }: GameEvent, you: number) => {
-  const at: Vec3 = [x, y, z];
-  if (type == EVENT.DIE) {
-    a.play(SOUND.BOOM, at);
-  } else if (type == EVENT.BOOM) {
-    a.play(SOUND.BURST, at);
-  } else if (type == EVENT.HURT) {
-    a.play(SOUND.HIT, id == you ? undefined : at);
-  }
 };
 
 /** Returns a function that plays CLOCK once a second while called with `on`; `now` in ms. */

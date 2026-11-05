@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EVENT } from '../shared/types';
-import { createAudio, createClock, createHeart, hear, savedMute, toggleMute } from './audio';
+import { createAudio, createClock, createHeart, savedMute, toggleMute } from './audio';
 import type { Audio } from './audio';
 import { RATE, SOUND } from './sfx';
 
@@ -195,9 +194,9 @@ describe('play', () => {
     const n = fake().sources.length;
     a.play(SOUND.SHOT, at(35, 0));
     expect(fake().sources).toHaveLength(n);
-    a.play(SOUND.BOOM, at(1, 0));
+    a.play(SOUND.HIT, at(1, 0));
     expect(playing()).toBe(24);
-    expect(voice()).toMatchObject({ id: SOUND.BOOM, src: { started: 1 } });
+    expect(voice()).toMatchObject({ id: SOUND.HIT, src: { started: 1 } });
   });
 
   it('frees a voice when its sound ends', () => {
@@ -206,8 +205,8 @@ describe('play', () => {
       a.play(SOUND.SHOT);
     }
     fake().sources.at(-1)!.onended!();
-    a.play(SOUND.BOOM);
-    expect(voice()).toMatchObject({ id: SOUND.BOOM, src: { started: 1 } });
+    a.play(SOUND.HIT);
+    expect(voice()).toMatchObject({ id: SOUND.HIT, src: { started: 1 } });
     expect(fake().sources.filter(s => s.stopped)).toHaveLength(0);
   });
 });
@@ -261,36 +260,6 @@ describe('without Web Audio', () => {
       },
     );
     quiet(createAudio());
-  });
-});
-
-describe('hear', () => {
-  const spy = () => {
-    const play = vi.fn();
-    return { play, a: { play } as unknown as Audio };
-  };
-  const ev = (type: number, id = 0) => ({ type, id, x: 1, y: 2, z: 3 });
-
-  it('plays BOOM at a monster death and BURST at a bullet burst', () => {
-    const { a, play } = spy();
-    hear(a, ev(EVENT.DIE, 9), 0);
-    expect(play).toHaveBeenLastCalledWith(SOUND.BOOM, [1, 2, 3]);
-    hear(a, ev(EVENT.BOOM, 9), 0);
-    expect(play).toHaveBeenLastCalledWith(SOUND.BURST, [1, 2, 3]);
-  });
-
-  it('plays HIT centred for the own player and at the point for the others', () => {
-    const { a, play } = spy();
-    hear(a, ev(EVENT.HURT, 4), 4);
-    expect(play).toHaveBeenLastCalledWith(SOUND.HIT, undefined);
-    hear(a, ev(EVENT.HURT, 5), 4);
-    expect(play).toHaveBeenLastCalledWith(SOUND.HIT, [1, 2, 3]);
-  });
-
-  it('stays silent for a swing', () => {
-    const { a, play } = spy();
-    hear(a, ev(EVENT.SWING), 0);
-    expect(play).not.toHaveBeenCalled();
   });
 });
 

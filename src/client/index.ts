@@ -3,8 +3,8 @@ import { blocked, compile } from '../shared/level';
 import { HALL } from '../shared/map';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
-import type { GameEvent, PlayerInfo, Shot, SocketLike } from '../shared/types';
-import { createAudio, createClock, createHeart, hear, savedMute, toggleMute } from './audio';
+import type { PlayerInfo, Shot, SocketLike } from '../shared/types';
+import { createAudio, createClock, createHeart, savedMute, toggleMute } from './audio';
 import { GAIN, HURT, createDelay, createEffects } from './effects';
 import { HUD_CSS, createHud } from './hud';
 import { createInput } from './input';
@@ -75,9 +75,8 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   // The click that takes the pointer lock is the gesture that lets the sound start.
   canvas.addEventListener('click', () => audio.unlock());
   const fx = createEffects(Math.random, lvl);
-  /** Others' shots and the host's events wait INTERP_DELAY: the others are drawn that far in the past. */
+  /** Others' shots wait INTERP_DELAY: the others are drawn that far in the past. */
   const shots = createDelay<Shot>();
-  const events = createDelay<GameEvent>();
   let you = -1;
   let rd: Renderer | undefined;
   try {
@@ -133,7 +132,6 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
           s.shots.filter(sh => sh.id != you),
           now,
         );
-        events.push(s.events, now);
       }
       return;
     }
@@ -191,11 +189,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
 
     const me = predictor.me(acc / STEP);
     const others = predictor.others(now).filter(p => progress.alive(p.id));
-    const monsters = predictor.monsters(now);
-    const bullets = predictor.bullets(now);
     const eye: [number, number, number] = me ? [me.x, me.y + EYE, me.z] : [0, 0, 0];
-    // Track first: a DIE names a monster the interpolated list has already dropped.
-    fx.track(monsters, bullets);
     audio.listen(eye, ctl.yaw);
     for (const sh of shots.due(now)) {
       const p = others.find(o => o.id == sh.id);
@@ -204,10 +198,6 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         fx.shot(sh, from, false, sh.hit != you);
         audio.play(SOUND.SHOT, from);
       }
-    }
-    for (const e of events.due(now)) {
-      fx.event(e, you);
-      hear(audio, e, you);
     }
     tick(progress.returning, now);
     const dt = Math.min((now - before) / 1000, 0.1);
@@ -223,8 +213,6 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         others,
         colors,
         fx,
-        monsters,
-        bullets,
         progress.items,
         gather({
           eye: [eye[0], eye[1] + fx.bob, eye[2]],
@@ -233,7 +221,6 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
           dead: progress.dead,
           others,
           fx,
-          bullets,
           lvl,
           t: now / 1000,
         }),

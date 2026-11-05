@@ -28,11 +28,7 @@ const APEX = JUMP_SPEED ** 2 / (2 * GRAVITY);
 
 type Vec3 = [number, number, number];
 const box = (min: Vec3, max: Vec3): Brush => ({ min, max, top: TEX.TILE, side: TEX.BRICK });
-const world = (
-  brushes: Brush[],
-  floor = -50,
-  spawns: WorldDef['spawns'] = [[0, 0, 0, 0]],
-): World =>
+const world = (brushes: Brush[], floor = -50, spawns: WorldDef['spawns'] = [[0, 0, 0, 0]]): World =>
   build({
     brushes,
     spawns,
@@ -238,7 +234,10 @@ describe('move: sides', () => {
       let last = p.z;
       run(p, FORWARD, 70, yaw, () => {
         // The same stride every step, before, on and after the seam.
-        expect((p.z - last) * dz).toBeCloseTo(RUN_SPEED / TICK_HZ / Math.hypot(1, Math.tan(0.2)), 3);
+        expect((p.z - last) * dz).toBeCloseTo(
+          RUN_SPEED / TICK_HZ / Math.hypot(1, Math.tan(0.2)),
+          3,
+        );
         expect(p.x).toBeLessThanOrEqual(200 - PLAYER_R + 1e-4);
         last = p.z;
       });

@@ -1,10 +1,11 @@
 import { INPUT_BURST, MAX_NAME, MAX_REWIND, RULES, SNAP_EVERY, TICK_HZ } from './constants';
-import { compile } from './level';
-import { ROOF } from './map';
+import { ROOFTOPS } from './map';
 import { move, spawn } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
-import type { Conn, Every, Level, MapDef, PlayerInfo, PlayerState, Rules } from './types';
+import type { Conn, Every, PlayerInfo, PlayerState, Rules } from './types';
+import { build } from './world';
+import type { World, WorldDef } from './world';
 
 interface Player {
   conn: Conn;
@@ -84,16 +85,16 @@ export class Room {
   private ticks = 0;
   /** The players as each snapshot of the last MAX_REWIND ticks sent them. */
   private history: { tick: number; players: PlayerState[] }[] = [];
-  private lvl: Level;
+  private world: World;
   private halt: (() => void) | undefined;
   private rules: Rules;
   /** Round-robin cursor over the spawn points, used once they are all taken. */
   private rr = 0;
 
   /** Missing rules fall back to RULES. */
-  public constructor(rules: Partial<Rules> = {}, map: MapDef = ROOF) {
+  public constructor(rules: Partial<Rules> = {}, map: WorldDef = ROOFTOPS) {
     this.rules = { ...RULES, ...rules };
-    this.lvl = compile(map);
+    this.world = build(map);
   }
 
   /** Number of joined players. */
@@ -120,7 +121,7 @@ export class Room {
     // An input beyond the bank is dropped, and not acked.
     if (input && p.bank > 0) {
       p.bank--;
-      move(p.state, input, this.lvl);
+      move(p.state, input, this.world);
       p.ack = input.seq;
     }
   }
@@ -224,11 +225,11 @@ export class Room {
 
   /** The first spawn point with none of `others` within SPAWN_CLEAR, else the next one round-robin. */
   private place(id: number, others: PlayerState[]): PlayerState {
-    const n = this.lvl.map.spawns.findIndex((_, k) => {
-      const { x, z } = spawn(id, this.lvl, k);
+    const n = this.world.def.spawns.findIndex((_, k) => {
+      const { x, z } = spawn(id, this.world, k);
       return !others.some(o => Math.hypot(o.x - x, o.z - z) < SPAWN_CLEAR);
     });
-    return spawn(id, this.lvl, n < 0 ? this.rr++ : n);
+    return spawn(id, this.world, n < 0 ? this.rr++ : n);
   }
 
   private players(): Player[] {

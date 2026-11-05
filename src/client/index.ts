@@ -1,9 +1,9 @@
 import { EYE, PLAYER_H, TICK_HZ } from '../shared/constants';
-import { blocked, compile } from '../shared/level';
-import { ROOF } from '../shared/map';
+import { ROOFTOPS } from '../shared/map';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import type { PlayerInfo, SocketLike } from '../shared/types';
+import { build, hidden } from '../shared/world';
 import { createAudio, savedMute, toggleMute } from './audio';
 import { createEffects } from './effects';
 import { HUD_CSS, createHud } from './hud';
@@ -62,8 +62,8 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const listeners: Record<TinyFpsEvent, (() => void)[]> = { roster: [], open: [], close: [] };
   const emit = (ev: TinyFpsEvent) => listeners[ev].forEach(cb => cb());
 
-  const lvl = compile(ROOF);
-  const predictor = createPredictor(lvl);
+  const world = build(ROOFTOPS);
+  const predictor = createPredictor(world);
   const audio = createAudio();
   audio.mute(savedMute());
   hud.mute(audio.muted);
@@ -73,7 +73,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const fx = createEffects();
   let rd: Renderer | undefined;
   try {
-    rd = createRenderer(canvas, lvl);
+    rd = createRenderer(canvas, world);
   } catch {
     // No WebGL2: stay connected, say so on the title screen.
   }
@@ -176,7 +176,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
           yaw: ctl.yaw,
           pitch: ctl.pitch,
           others,
-          lvl,
+          world,
           t: now / 1000,
         }),
       );
@@ -185,7 +185,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     for (const p of others) {
       const top: [number, number, number] = [p.x, p.y + PLAYER_H + 0.3, p.z];
       // Behind a wall the tag would give the player away.
-      const at = me && !blocked(lvl, eye, top) ? rd?.project(...top) : undefined;
+      const at = me && !hidden(world, eye, top) ? rd?.project(...top) : undefined;
       const el = tag(p.id);
       seen.add(p.id);
       el.hidden = !at;
@@ -207,7 +207,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
 
     hud.title(
       msg || (!open ? 'Connecting…' : !ready ? 'Joining…' : ctl.locked() ? '' : 'Click to play'),
-      lvl.map.name ?? '',
+      world.def.name ?? '',
     );
   };
   raf = requestAnimationFrame(frame);

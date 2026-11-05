@@ -1,22 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { INTERP_DELAY, PLAYER_H, TICK_HZ } from '../shared/constants';
-import { compile, sectorAt } from '../shared/level';
-import { HALL } from '../shared/map';
+import { INTERP_DELAY, PLAYER_H, STEP_H, TICK_HZ } from '../shared/constants';
+import { ROOFTOPS } from '../shared/map';
 import { move, spawn } from '../shared/physics';
 import { decodeInput, decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
 import { Room } from '../shared/room';
 import { KEY } from '../shared/types';
 import type { Conn, Input, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
+import { build } from '../shared/world';
 import { createPredictor } from './predict';
 
 const STEP = 1000 / TICK_HZ;
-const lvl = compile(HALL);
+const world = build(ROOFTOPS);
 
 const snapPlayer = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
   id,
   x: 8,
-  y: 1,
-  z: 14,
+  y: 10,
+  z: 70,
   vy: 0,
   yaw: 0,
   pitch: 0,
@@ -32,35 +32,42 @@ const fwd = { keys: KEY.FORWARD, yaw: 0, pitch: 0 };
 
 describe('prediction against the room', () => {
   /**
-   * A route through HALL, steered on a copy of the physics: the corridor with head bumps, the
-   * west hall, into the lava pit and against its wall, a jump out, the stairs up to the balcony
-   * and against its wall, and back down hopping. Keys wobble (strafing, small yaw noise) so the
-   * inputs are not tidy. Each leg ends at its target or after `max` steps (a target inside a wall
-   * is a press against it).
+   * A route through ROOFTOPS, steered on a copy of the physics: the jump from the start roof to the
+   * next, the stair, the platform and a head bump under it, the jump to the high roof, the 8 m gap
+   * that is a fall to the kill floor and a respawn at the start, then against a pole, the face of
+   * the high roof and its ledge, hopping. Keys wobble (strafing, small yaw noise) so the inputs
+   * are not tidy. Each leg ends at its target or after `max` steps (a target inside a wall is a
+   * press against it).
    */
-  const route: { to: [number, number]; max: number; jump?: boolean }[] = [
-    { to: [17, 3], max: 150 },
-    { to: [15, 8], max: 60 },
-    { to: [19.5, 8], max: 70, jump: true },
-    { to: [17, 8], max: 50, jump: true },
-    { to: [23, 8], max: 60 },
-    { to: [28, 8], max: 60 },
-    { to: [31, 8], max: 40 },
-    { to: [33, 8], max: 50, jump: true },
-    { to: [33, 13], max: 60 },
-    { to: [30, 14], max: 40 },
-    { to: [30, 22], max: 100 },
-    { to: [37, 22], max: 80 },
-    { to: [30, 22], max: 70 },
-    { to: [30, 15], max: 100, jump: true },
-    { to: [22, 14], max: 90 },
+  const route: { to: [number, number]; max: number; jump?: boolean; calm?: boolean }[] = [
+    { to: [16, 56.4], max: 220, calm: true },
+    { to: [16, 50], max: 80, jump: true, calm: true },
+    { to: [13, 53.2], max: 60, calm: true },
+    { to: [13, 39.3], max: 150, calm: true },
+    { to: [13, 32], max: 80, jump: true, calm: true },
+    { to: [14, 21], max: 200 },
+    // From the edge of the high roof to the north roof, 8 m away: a fall, a respawn at the start.
+    { to: [14, 8], max: 150, jump: true },
+    { to: [16, 56.4], max: 220, calm: true },
+    { to: [16, 50], max: 80, jump: true, calm: true },
+    // Under the platform, hopping into its underside.
+    { to: [16, 44], max: 80 },
+    { to: [16, 40.5], max: 60, jump: true },
+    { to: [16, 44], max: 60, jump: true },
+    { to: [16, 40.5], max: 60, jump: true },
+    { to: [16, 44], max: 60, jump: true },
+    { to: [16, 40.5], max: 60, jump: true },
+    // A pole, the high roof's face 2.4 m above this roof, hopping against it.
+    { to: [5.2, 42.2], max: 110 },
+    { to: [16, 34], max: 230 },
+    { to: [16, 34], max: 60, jump: true },
   ];
   const script = (seed = 12345): Omit<Input, 'seq'>[] => {
     let s = seed;
     const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
     const out: Omit<Input, 'seq'>[] = [];
-    const sim = spawn(0, lvl, 0);
-    for (const { to, max, jump } of route) {
+    const sim = spawn(0, world, 0);
+    for (const { to, max, jump, calm } of route) {
       let keys = 0;
       for (let k = 0; k < max; k++) {
         const [dx, dz] = [to[0] - sim.x, to[1] - sim.z];
@@ -68,7 +75,10 @@ describe('prediction against the room', () => {
           break;
         }
         if (k % 12 === 0) {
-          keys = KEY.FORWARD | (rnd() < 0.2 ? KEY.LEFT : 0) | (rnd() < 0.2 ? KEY.RIGHT : 0);
+          keys =
+            KEY.FORWARD |
+            (rnd() < 0.2 && !calm ? KEY.LEFT : 0) |
+            (rnd() < 0.2 && !calm ? KEY.RIGHT : 0);
         }
         const i = {
           keys: keys | (jump ? KEY.JUMP : 0),
@@ -76,7 +86,7 @@ describe('prediction against the room', () => {
           pitch: Math.sin(out.length / 20) * 0.5,
         };
         out.push(i);
-        move(sim, { ...i, seq: 0 }, lvl);
+        move(sim, { ...i, seq: 0 }, world);
       }
     }
     return out;
@@ -100,7 +110,7 @@ describe('prediction against the room', () => {
    */
   const race = (lag: (k: number) => number, steps = SCRIPT) => {
     const n = steps.length;
-    const room = new Room({}, HALL);
+    const room = new Room({});
     const sent: ArrayBuffer[] = [];
     const conn: Conn & { bins: ArrayBuffer[] } = {
       bins: [],
@@ -113,9 +123,9 @@ describe('prediction against the room', () => {
     room.connect(other);
     room.receive(other, JSON.stringify({ t: 'join', name: 'other' }));
 
-    const pred = createPredictor(lvl);
+    const pred = createPredictor(world);
     pred.you(0);
-    const ref: PlayerState = spawn(0, lvl, 0);
+    const ref: PlayerState = spawn(0, world, 0);
     const inputs: { at: number; data: ArrayBuffer }[] = [];
     const snaps: { at: number; data: ArrayBuffer }[] = [];
     let seen = 0;
@@ -148,7 +158,7 @@ describe('prediction against the room', () => {
     let last = 0;
     steps.forEach((i, k) => {
       const input = pred.step(i, k * STEP);
-      move(ref, input, lvl);
+      move(ref, input, world);
       sent.push(encodeInput(input));
       // In order: never delivered before the previous one.
       last = Math.max(last, k + lag(k));
@@ -212,45 +222,65 @@ describe('prediction against the room', () => {
     expect(bad).toBe('');
   }, 60_000);
 
-  /** What a run goes through: sectors visited, lowest and highest feet, head bumps, wall presses. */
+  /**
+   * What a run goes through: the highest feet on the platform and on the high roof, the head bumps
+   * under the platform, the respawns, the lowest feet, wall presses and steps up.
+   */
   const cover = (steps: Omit<Input, 'seq'>[]) => {
-    const p = spawn(0, lvl, 0);
-    const seen = new Set<number>();
-    let [low, high, bump] = [Infinity, 0, 0];
-    let walls = 0;
+    const p = spawn(0, world, 0);
+    const c = { platform: 0, high: 0, bump: 0, respawns: 0, low: Infinity, walls: 0, stairs: 0 };
     steps.forEach((step, k) => {
       const i = onWire({ ...step, seq: k });
-      const [x, z] = [p.x, p.z];
-      move(p, i, lvl);
-      seen.add(sectorAt(lvl, p.x, p.z));
-      low = Math.min(low, p.y);
-      high = Math.max(high, p.y);
-      // Head against the corridor ceiling.
-      bump += +(sectorAt(lvl, p.x, p.z) === 1 && p.y > 3.5 - PLAYER_H - 1e-6);
+      const before = { ...p };
+      move(p, i, world);
+      c.low = Math.min(c.low, p.y);
+      c.respawns += +(p.y > before.y + 5);
+      if (p.ground && p.x > 9 && p.x < 19 && p.z > 39 && p.z < 47) {
+        c.platform = Math.max(c.platform, p.y);
+      }
+      if (p.ground && p.z < 36 && p.z > 20 && p.y > 12) {
+        c.high = Math.max(c.high, p.y);
+      }
+      // Head against the underside of the platform (feet at 12.2 - PLAYER_H on the roof below).
+      c.bump += +(
+        p.x > 9 &&
+        p.x < 19 &&
+        p.z > 39 &&
+        p.z < 47 &&
+        p.y > 12.2 - PLAYER_H - 1e-6 &&
+        p.y < 11
+      );
       // Pushed: asked for (nearly) a full step and moved much less.
-      walls += +(i.keys & KEY.FORWARD && Math.hypot(p.x - x, p.z - z) < 0.05 && p.ground);
+      c.walls += +(
+        i.keys & KEY.FORWARD &&
+        Math.hypot(p.x - before.x, p.z - before.z) < 0.05 &&
+        p.ground
+      );
+      // A step up of 0.4 m on the stair.
+      c.stairs += +(p.ground && before.ground && p.y - before.y > 0.3 && p.y - before.y <= STEP_H);
     });
-    return { seen, low, high, bump, walls };
+    return c;
   };
 
-  it('makes every predicted run actually take the stairs, the pit, the walls and the jumps', () => {
+  it('makes every predicted run actually jump, climb, bump, fall, respawn and press on walls', () => {
     // Guards the scripts: a run that never left spawn would agree trivially.
     for (const seed of [12345, ...SEEDS]) {
-      const { seen, low, high, bump, walls } = cover(script(seed));
-      for (const s of [0, 1, 3, 6, 7, 8, 9, 10]) {
-        expect(seen.has(s), `seed ${seed}, sector ${s}`).toBe(true);
-      }
-      expect(low).toBe(0);
-      expect(high).toBeGreaterThan(2.6);
-      expect(bump).toBeGreaterThanOrEqual(2);
-      expect(walls).toBeGreaterThan(20);
+      const c = cover(script(seed));
+      expect(c.platform, `seed ${seed}, platform`).toBe(Math.fround(12.6));
+      // 12.4 m is the roof, 12.85 m the pipe lying on it.
+      expect(c.high, `seed ${seed}, high roof`).toBeGreaterThanOrEqual(Math.fround(12.4));
+      expect(c.stairs, `seed ${seed}, stairs`).toBeGreaterThanOrEqual(6);
+      expect(c.respawns, `seed ${seed}, respawns`).toBeGreaterThanOrEqual(1);
+      expect(c.low, `seed ${seed}, low`).toBeLessThan(ROOFTOPS.floor + 5);
+      expect(c.bump, `seed ${seed}, bumps`).toBeGreaterThanOrEqual(2);
+      expect(c.walls, `seed ${seed}, walls`).toBeGreaterThan(20);
     }
   });
 });
 
 describe('own player', () => {
   it('is unknown until a snapshot shows it, but numbers and keeps the inputs meanwhile', () => {
-    const pred = createPredictor(lvl);
+    const pred = createPredictor(world);
     pred.you(3);
     expect(pred.me(0)).toBeUndefined();
     expect(pred.step(fwd)).toEqual({ ...fwd, seq: 0 });
@@ -260,21 +290,21 @@ describe('own player', () => {
 
     // The first snapshot with the own player replays what it has not acked.
     pred.snapshot(snapshot(2, snapPlayer(3, { ack: 0 })), 10);
-    expect(pred.me(1)).toMatchObject({ id: 3, x: 8, z: Math.fround(14 - 0.1) });
+    expect(pred.me(1)).toMatchObject({ id: 3, x: 8, z: Math.fround(70 - 0.1) });
   });
 
   it('eases between the state before and after the last step', () => {
-    const pred = createPredictor(lvl);
+    const pred = createPredictor(world);
     pred.you(0);
     pred.snapshot(snapshot(1, snapPlayer(0)), 0);
-    expect(pred.me(0)!.z).toBe(14);
+    expect(pred.me(0)!.z).toBe(70);
     pred.step(fwd);
-    expect(pred.me(0)!.z).toBeCloseTo(14);
-    expect(pred.me(0.5)!.z).toBeCloseTo(13.95);
-    expect(pred.me(1)!.z).toBeCloseTo(13.9);
+    expect(pred.me(0)!.z).toBeCloseTo(70);
+    expect(pred.me(0.5)!.z).toBeCloseTo(69.95);
+    expect(pred.me(1)!.z).toBeCloseTo(69.9);
     // alpha is clamped.
-    expect(pred.me(-1)!.z).toBeCloseTo(14);
-    expect(pred.me(3)!.z).toBeCloseTo(13.9);
+    expect(pred.me(-1)!.z).toBeCloseTo(70);
+    expect(pred.me(3)!.z).toBeCloseTo(69.9);
     // Yaw goes the short way round, and stays in [0, 2π).
     pred.snapshot(snapshot(2, snapPlayer(0, { yaw: 6.2, ack: 0 })), 20);
     pred.step({ keys: 0, yaw: 0.1, pitch: 0.2 });
@@ -286,27 +316,27 @@ describe('own player', () => {
   });
 
   it('resets to the host state and replays only what is unacked', () => {
-    const pred = createPredictor(lvl);
+    const pred = createPredictor(world);
     pred.you(0);
     pred.snapshot(snapshot(1, snapPlayer(0)), 0);
     for (let k = 0; k < 10; k++) {
       pred.step(fwd);
     }
-    expect(pred.me(1)!.z).toBeCloseTo(13);
+    expect(pred.me(1)!.z).toBeCloseTo(69);
     // The host applied seqs 0..5 and is where 6 steps put it: 4 are replayed on top of it.
-    pred.snapshot(snapshot(2, snapPlayer(0, { z: 13.4, ack: 5 })), 50);
-    expect(pred.me(1)!.z).toBeCloseTo(13.0);
+    pred.snapshot(snapshot(2, snapPlayer(0, { z: 69.4, ack: 5 })), 50);
+    expect(pred.me(1)!.z).toBeCloseTo(69);
     // A host that disagrees wins: it is somewhere else and the replay starts from there.
-    pred.snapshot(snapshot(3, snapPlayer(0, { z: 8, ack: 5 })), 60);
-    expect(pred.me(1)!.z).toBeCloseTo(7.6);
+    pred.snapshot(snapshot(3, snapPlayer(0, { z: 64, ack: 5 })), 60);
+    expect(pred.me(1)!.z).toBeCloseTo(63.6);
     // Everything acked: nothing left to replay.
-    pred.snapshot(snapshot(4, snapPlayer(0, { z: 8, ack: 9 })), 70);
-    expect(pred.me(1)!.z).toBeCloseTo(8);
-    expect(pred.me(0)!.z).toBeCloseTo(8);
+    pred.snapshot(snapshot(4, snapPlayer(0, { z: 64, ack: 9 })), 70);
+    expect(pred.me(1)!.z).toBeCloseTo(64);
+    expect(pred.me(0)!.z).toBeCloseTo(64);
   });
 
   it('counts acks round the u16 wrap', () => {
-    const pred = createPredictor(lvl);
+    const pred = createPredictor(world);
     pred.you(0);
     // Inputs numbered before the own player is known: only the last 120 are kept.
     for (let k = 0; k < 65534; k++) {
@@ -314,29 +344,29 @@ describe('own player', () => {
     }
     pred.snapshot(snapshot(1, snapPlayer(0, { ack: 65530 })), 0);
     // 65531, 65532 and 65533 are unacked.
-    expect(pred.me(1)!.z).toBeCloseTo(14 - 0.3);
+    expect(pred.me(1)!.z).toBeCloseTo(70 - 0.3);
     const wrap = [pred.step(fwd).seq, pred.step(fwd).seq, pred.step(fwd).seq, pred.step(fwd).seq];
     expect(wrap).toEqual([65534, 65535, 0, 1]);
     // The host is at 65535: 0 and 1 come after it, across the wrap.
-    pred.snapshot(snapshot(2, snapPlayer(0, { z: 8, ack: 65535 })), 10);
-    expect(pred.me(1)!.z).toBeCloseTo(8 - 0.2);
-    pred.snapshot(snapshot(3, snapPlayer(0, { z: 8, ack: 0 })), 20);
-    expect(pred.me(1)!.z).toBeCloseTo(8 - 0.1);
-    pred.snapshot(snapshot(4, snapPlayer(0, { z: 8, ack: 1 })), 30);
-    expect(pred.me(1)!.z).toBeCloseTo(8);
+    pred.snapshot(snapshot(2, snapPlayer(0, { z: 64, ack: 65535 })), 10);
+    expect(pred.me(1)!.z).toBeCloseTo(64 - 0.2);
+    pred.snapshot(snapshot(3, snapPlayer(0, { z: 64, ack: 0 })), 20);
+    expect(pred.me(1)!.z).toBeCloseTo(64 - 0.1);
+    pred.snapshot(snapshot(4, snapPlayer(0, { z: 64, ack: 1 })), 30);
+    expect(pred.me(1)!.z).toBeCloseTo(64);
   });
 
   it('starts from the initial ack: the host has applied nothing, input 0 is still pending', () => {
-    const pred = createPredictor(lvl);
+    const pred = createPredictor(world);
     pred.you(0);
     pred.snapshot(snapshot(1, snapPlayer(0)), 0);
     pred.step(fwd);
     pred.snapshot(snapshot(2, snapPlayer(0, { ack: 0xffff })), 10);
-    expect(pred.me(1)!.z).toBeCloseTo(13.9);
+    expect(pred.me(1)!.z).toBeCloseTo(69.9);
   });
 
   it('keeps the pending list bounded', () => {
-    const pred = createPredictor(lvl);
+    const pred = createPredictor(world);
     pred.you(0);
     pred.snapshot(snapshot(1, snapPlayer(0)), 0);
     for (let k = 0; k < 500; k++) {
@@ -344,12 +374,12 @@ describe('own player', () => {
     }
     // Nothing acked since: only the newest 120 are replayed (12 m).
     pred.snapshot(snapshot(2, snapPlayer(0)), 10);
-    expect(pred.me(1)!.z).toBe(14);
+    expect(pred.me(1)!.z).toBe(70);
     for (let k = 0; k < 500; k++) {
       pred.step(fwd);
     }
     pred.snapshot(snapshot(3, snapPlayer(0)), 20);
-    expect(pred.me(1)!.z).toBeCloseTo(14 - 12);
+    expect(pred.me(1)!.z).toBeCloseTo(70 - 12);
   });
 });
 
@@ -358,7 +388,7 @@ describe('other players', () => {
     snapPlayer(id, { x, ...over });
 
   const fed = () => {
-    const pred = createPredictor(lvl);
+    const pred = createPredictor(world);
     pred.you(0);
     // Snapshots every 40 ms from t = 1000; player 1 runs along x, 2 leaves, 3 arrives.
     pred.snapshot(snapshot(1, at(0, 5), at(1, 10), at(2, 20)), 1000);
@@ -395,7 +425,7 @@ describe('other players', () => {
   });
 
   it('interpolates yaw along the shortest arc and keeps ground and vy of the newer one', () => {
-    const pred = createPredictor(lvl);
+    const pred = createPredictor(world);
     pred.you(0);
     pred.snapshot(snapshot(1, at(1, 10, { yaw: 6.2, ground: true, vy: 0 })), 1000);
     pred.snapshot(snapshot(2, at(1, 10, { yaw: 0.1, pitch: 0.4, ground: false, vy: 3 })), 1100);
@@ -408,7 +438,7 @@ describe('other players', () => {
   });
 
   it('is empty before any snapshot, and bounds its history', () => {
-    const pred = createPredictor(lvl);
+    const pred = createPredictor(world);
     expect(pred.others(0)).toEqual([]);
     for (let k = 0; k < 200; k++) {
       pred.snapshot(snapshot(k, at(1, k)), k * 33);
@@ -421,7 +451,7 @@ describe('other players', () => {
 
 describe('view tick', () => {
   const pred = () => {
-    const p = createPredictor(lvl);
+    const p = createPredictor(world);
     p.you(0);
     return p;
   };
@@ -474,7 +504,7 @@ describe('lag compensation through the room', () => {
    * input (with its view tick) is sent, and when it reaches the host the room rewinds B to it.
    */
   const play = () => {
-    const room = new Room({}, HALL);
+    const room = new Room({});
     const peers = ['A', 'B'].map(name => {
       const c: Conn & { bins: ArrayBuffer[] } = {
         bins: [],
@@ -485,10 +515,10 @@ describe('lag compensation through the room', () => {
       return c;
     });
     const [a, b] = peers;
-    const pred = createPredictor(lvl);
+    const pred = createPredictor(world);
     pred.you(0);
     // B at spawn 1 runs sideways, +x, 6 m/s. The reference is what the host holds for it.
-    const bHost = spawn(1, lvl, 1);
+    const bHost = spawn(1, world, 1);
     const inFlight: { at: number; data: ArrayBuffer }[] = [];
     let seen = 0;
     let sent: Input | undefined;
@@ -500,7 +530,7 @@ describe('lag compensation through the room', () => {
       const now = k * STEP;
       const bIn = { seq: k, keys: KEY.RIGHT, yaw: 0, pitch: 0 };
       room.receive(b, encodeInput(bIn));
-      move(bHost, bIn, lvl);
+      move(bHost, bIn, world);
       while (inFlight.length && inFlight[0].at <= k) {
         const { data } = inFlight.shift()!;
         // B as the host holds it, and as it rewinds it, when the probe input arrives.

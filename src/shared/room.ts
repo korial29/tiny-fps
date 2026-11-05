@@ -1,6 +1,6 @@
 import { INPUT_BURST, MAX_NAME, MAX_REWIND, RULES, SNAP_EVERY, TICK_HZ } from './constants';
 import { compile } from './level';
-import { HALL } from './map';
+import { ROOF } from './map';
 import { move, spawn } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
@@ -91,7 +91,7 @@ export class Room {
   private rr = 0;
 
   /** Missing rules fall back to RULES. */
-  public constructor(rules: Partial<Rules> = {}, map: MapDef = HALL) {
+  public constructor(rules: Partial<Rules> = {}, map: MapDef = ROOF) {
     this.rules = { ...RULES, ...rules };
     this.lvl = compile(map);
   }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { INPUT_BURST, MAX_NAME, MAX_PLAYERS, MAX_REWIND, SNAP_EVERY, TICK_HZ } from './constants';
-import { HALL } from './map';
+import { HALL, ROOF } from './map';
 import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
@@ -170,6 +170,25 @@ describe('Room: joining', () => {
     join(room);
     ticks(room, SNAP_EVERY);
     expect(snap(a).players).toHaveLength(HALL.spawns.length + 2);
+  });
+});
+
+describe('Room: the map', () => {
+  it('plays the rooftop unless it is given another map', () => {
+    const room = new Room();
+    const a = join(room);
+    ticks(room, SNAP_EVERY);
+    // On the deck of ROOF (floor 0), at its first spawn.
+    expect(snap(a).players[0]).toMatchObject({
+      x: ROOF.spawns[0][0],
+      y: 0,
+      z: ROOF.spawns[0][1],
+      ground: true,
+    });
+    const other = new Room({}, HALL);
+    const b = join(other);
+    ticks(other, SNAP_EVERY);
+    expect(snap(b).players[0]).toMatchObject({ x: HALL.spawns[0][0], y: 1 });
   });
 });
 

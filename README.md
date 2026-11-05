@@ -26,8 +26,8 @@ It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](htt
 
 | Entry                       | What it is                                                             | Size (gzip) |
 | --------------------------- | ---------------------------------------------------------------------- | ----------- |
-| `@korial29/tiny-fps`        | The game client: rendering, lights and shadows, input, prediction, HUD | ~27 KB      |
-| `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~8.6 KB     |
+| `@korial29/tiny-fps`        | The game client: rendering, lights and shadows, input, prediction, HUD | ~26 KB      |
+| `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~8.4 KB     |
 | `@korial29/tiny-fps/server` | Node WebSocket server (needs `ws`)                                     | Node only   |
 
 CI checks the budgets (40 KB and 16 KB) on every pull request.

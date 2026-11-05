@@ -61,7 +61,10 @@ export interface MarkScene {
 /** Height above a flag's foot the mark aims at: the top of the pole. */
 const TIP = 2.6;
 
-/** The markers of a frame: each flag but one the player carries, and the own base while he carries. */
+/**
+ * The markers of a frame: each flag but one the player carries, and the own base while he carries
+ * (which stands for his own flag too while it is home there).
+ */
 export const marks = (s: MarkScene): Mark[] => {
   const out: Mark[] = [];
   const one = (team: number, kind: Mark['kind'], [x, y, z]: Vec3) => {
@@ -77,10 +80,15 @@ export const marks = (s: MarkScene): Mark[] => {
       out.push({ team, kind, x: px, y: py, arrow: a, text });
     }
   };
+  const carrying = s.flags.some(f => f.state === FLAG.CARRIED && f.by === s.id);
   s.flags.forEach((f, team) => {
     if (f.state === FLAG.CARRIED && f.by === s.id) {
       // Carried by the player: he knows where it is. His base is where to go.
       one(s.team, 'base', s.bases[s.team]);
+      return;
+    }
+    // His flag at home is at that base: one mark says it.
+    if (carrying && team === s.team && f.state === FLAG.HOME) {
       return;
     }
     const at =

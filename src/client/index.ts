@@ -129,6 +129,10 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         for (const beat of beats(match, s)) {
           const line = say(beat, you, id => names.get(id) ?? 'Someone');
           hud.banner(line.text, line.team);
+          if (beat.kind == 'start') {
+            // A new match: everyone is back at a spawn, facing the way his team's spawns do.
+            [ctl.yaw, ctl.pitch] = [world.def.teams[you.team].spawns[0][3], 0];
+          }
           const sound = cue(beat, you.team);
           if (sound) {
             audio.play(sound[0], undefined, 1, sound[1]);

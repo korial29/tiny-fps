@@ -28,7 +28,7 @@ Budgets: client 40 KB gzip, local 16 KB.
 
 One PR per step, each playable on its own. Steps 2 to 4 carry the priority.
 
-Step 1 is done: the client weighs 15.1 KB gzip and the local host 4.3 KB, down from 27.6 and 9.9. Step 2 is done: the brush world, ROOFTOPS, an open sky and the sun, at 15.0 and 4.2 KB. Step 6 is done: the client weighs 26.9 KB gzip and the local host 8.6 KB.
+Step 1 is done: the client weighs 15.1 KB gzip and the local host 4.3 KB, down from 27.6 and 9.9. Step 2 is done: the brush world, ROOFTOPS, an open sky and the sun, at 15.0 and 4.2 KB. Step 6 is done: the client weighs 26.4 KB gzip and the local host 8.4 KB.
 
 | #   | Step                     | What changes                                                                                                                                                                                                                                                                                                                                                  |
 | --- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

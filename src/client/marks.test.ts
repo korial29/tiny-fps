@@ -114,18 +114,22 @@ describe('marks', () => {
 
   it('marks the own base, not the flag, while the player carries the enemy flag', () => {
     const list = marks(scene({ flags: [flag({}), flag({ state: FLAG.CARRIED, by: 0 })] }));
-    expect(list.map(m => [m.team, m.kind])).toEqual([
-      [0, 'flag'],
-      [0, 'base'],
-    ]);
-    expect(list[1].text).toBe('10 m');
-    // Blue carrying the red flag has his base, the blue one, as the second mark.
+    // His own flag is home at that base: the one mark says both.
+    expect(list.map(m => [m.team, m.kind])).toEqual([[0, 'base']]);
+    expect(list[0].text).toBe('10 m');
+    // Blue carrying the red flag has his base, the blue one.
     const blue = marks(
       scene({ team: 1, id: 7, flags: [flag({ state: FLAG.CARRIED, by: 7 }), flag({})] }),
     );
-    expect(blue.map(m => [m.team, m.kind])).toEqual([
-      [1, 'base'],
-      [1, 'flag'],
+    expect(blue.map(m => [m.team, m.kind])).toEqual([[1, 'base']]);
+  });
+
+  it('keeps the own flag marked while it is away, with the base: there is a flag to take back first', () => {
+    const lying = flag({ state: FLAG.DROPPED, x: 5, y: 10, z: 40 });
+    const list = marks(scene({ flags: [lying, flag({ state: FLAG.CARRIED, by: 0 })] }));
+    expect(list.map(m => [m.team, m.kind])).toEqual([
+      [0, 'flag'],
+      [0, 'base'],
     ]);
   });
 

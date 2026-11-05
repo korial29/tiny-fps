@@ -14,7 +14,7 @@ export const HUD_CSS =
   `nav span,nav time{font:900 24px/1 system-ui,sans-serif;letter-spacing:.03em}nav time{min-width:4.2ch;font-variant-numeric:tabular-nums;font-size:20px}` +
   `nav small{font-size:12px;opacity:.95}nav small:first-of-type{text-align:right}nav small:last-of-type{text-align:left}` +
   `output{top:20%;left:50%;transform:translateX(-50%);padding:6px 18px;font:900 clamp(18px,3.4vw,30px)/1.1 system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;background:#000a;border-bottom:3px solid currentColor}` +
-  `em{font-style:normal;font-size:11px;line-height:1.1;text-align:center;transform:translate(-50%,-50%)}em span{display:block;font-size:20px;line-height:1}` +
+  `em{font-style:normal;font-size:13px;font-weight:800;line-height:1.1;text-align:center;transform:translate(-50%,-50%)}em span{display:block;font-size:20px;line-height:1}` +
   `section{inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0 12px;text-align:center;background:#000c}` +
   `section h6{font:900 clamp(30px,9vw,72px)/1 system-ui,sans-serif;letter-spacing:.04em}section strong{font-size:34px}` +
   `section td:first-child{text-align:left;opacity:1}section td+td{text-align:center}section th{padding:2px 10px;font-size:12px;opacity:.7;font-weight:600}` +

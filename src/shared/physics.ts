@@ -84,6 +84,11 @@ const EPS = 1e-6;
  * lands on it.
  */
 const SKIN = 0.01;
+/**
+ * A circle this close to a box (1 mm) is touching it: a push leaves it exactly PLAYER_R away, and
+ * the float32 position it is rounded to is a few micrometres off.
+ */
+const TOUCH = 1e-3;
 
 /** An angle in [0, 2π). */
 export const norm = (a: number): number => ((a % TAU) + TAU) % TAU;
@@ -300,7 +305,7 @@ const along = (p: Pos, side: number) => {
 const faceDist = (b: Brush, p: Pos, side: number, reach: number): number | undefined => {
   const { a, o, sign, c, co } = along(p, side);
   const dist = ((sign > 0 ? b.min[a] : b.max[a]) - c) * sign;
-  return dist >= PLAYER_R - 1e-3 && dist <= PLAYER_R + reach && co >= b.min[o] && co <= b.max[o]
+  return dist >= PLAYER_R - TOUCH && dist <= PLAYER_R + reach && co >= b.min[o] && co <= b.max[o]
     ? dist
     : undefined;
 };
@@ -427,12 +432,12 @@ const cap = (p: PlayerState, max: number): void => {
  */
 const unwalled = (p: PlayerState, w: World, c: Ctl, h: number): [x: number, z: number] => {
   let [x, z] = [c.wx, c.wz];
-  for (const i of near(w, p.x, p.z, PLAYER_R + 2 * EPS)) {
+  for (const i of near(w, p.x, p.z, PLAYER_R + TOUCH)) {
     const b = w.def.brushes[i];
     const [dx, dz] = gap(b, p.x, p.z);
     const d = len(dx, dz);
     // Touching the side of a box that blocks: the push is along the way back out.
-    if (d > 0 && d <= PLAYER_R + 2 * EPS && blocks(b, p.y, h)) {
+    if (d > 0 && d <= PLAYER_R + TOUCH && blocks(b, p.y, h)) {
       const into = (-x * dx - z * dz) / d;
       if (into > 0) {
         x += (into * dx) / d;

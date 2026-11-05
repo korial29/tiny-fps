@@ -85,19 +85,26 @@ export const place = (
 ) => {
   const [kx, ky, kz] = typeof k == 'number' ? [k, k, k] : k;
   const [s, c] = [Math.sin(spin), Math.cos(spin)];
-  const o = [0, 1, 2].map(i => eye[i] + r[i] * off[0] + u[i] * off[1] + f[i] * off[2]);
+  const [rx, ry, rz, ux, uy, uz, fx, fy, fz] = [...r, ...u, ...f];
+  const ox = eye[0] + rx * off[0] + ux * off[1] + fx * off[2];
+  const oy = eye[1] + ry * off[0] + uy * off[1] + fy * off[2];
+  const oz = eye[2] + rz * off[0] + uz * off[1] + fz * off[2];
   for (let i = 0; i < src.length; i += STRIDE) {
-    const [x, y, z] = [src[i] * kx, src[i + 1] * ky, src[i + 2] * kz];
-    const [a, b] = [x * c - y * s, x * s + y * c];
-    const [m, n] = [src[i + 3] * c - src[i + 4] * s, src[i + 3] * s + src[i + 4] * c];
+    const x = src[i] * kx;
+    const y = src[i + 1] * ky;
+    const z = src[i + 2] * kz;
+    const a = x * c - y * s;
+    const b = x * s + y * c;
+    const m = src[i + 3] * c - src[i + 4] * s;
+    const n = src[i + 3] * s + src[i + 4] * c;
     const w = src[i + 5];
     out.push(
-      o[0] + r[0] * a + u[0] * b - f[0] * z,
-      o[1] + r[1] * a + u[1] * b - f[1] * z,
-      o[2] + r[2] * a + u[2] * b - f[2] * z,
-      r[0] * m + u[0] * n - f[0] * w,
-      r[1] * m + u[1] * n - f[1] * w,
-      r[2] * m + u[2] * n - f[2] * w,
+      ox + rx * a + ux * b - fx * z,
+      oy + ry * a + uy * b - fy * z,
+      oz + rz * a + uz * b - fz * z,
+      rx * m + ux * n - fx * w,
+      ry * m + uy * n - fy * w,
+      rz * m + uz * n - fz * w,
       src[i + 6] * tint[0],
       src[i + 7] * tint[1],
       src[i + 8],

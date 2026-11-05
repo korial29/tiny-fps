@@ -11,7 +11,7 @@ import { BLAST, fade, glow, lit, puff } from './effects';
 import type { Effects, Puff } from './effects';
 import { MUZZLE, chaingun } from './gun';
 import { props } from './items';
-import { STRIDE, basis, dress, place, pushBox } from './mesh';
+import { METAL, QUAD, STRIDE, basis, dress, place, pushBox } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
@@ -24,15 +24,6 @@ export const FOG = [0.05, 0.045, 0.05, 0.02];
 export const MAX_TINTS = 16;
 /** Bytes the dynamic tail starts with; it grows when a frame needs more. */
 const TAIL = 1 << 18;
-/** The corners of a billboard's two triangles. */
-const QUAD = [
-  [-1, -1],
-  [1, -1],
-  [1, 1],
-  [-1, -1],
-  [1, 1],
-  [-1, 1],
-];
 /** Metres one texture covers. */
 const TILE = 2;
 /** Shadow map side in texels. */
@@ -77,7 +68,7 @@ o=vec4(c,1);}`;
 
 /**
  * Blinn-Phong strength and exponent: a row per TEX id in order (brick, tile, lava, stone, metal, wood,
- * moss, grate), then the flat bodies. Lava and glows never get here: they light themselves.
+ * moss, grate), then the flat bodies and the flat metal (layer METAL). Lava and glows never get here: they light themselves.
  */
 export const SPEC = [
   [0.04, 8],
@@ -89,11 +80,12 @@ export const SPEC = [
   [0.3, 20],
   [0.7, 40],
   [0.1, 24],
+  [0.3, 40],
 ];
 /** Metres a height of 1 in a texture's alpha stands for. */
 const RELIEF = 0.06;
 
-// s: 1 on a texture, 0 on a flat colour. y: layer -3, a smoke billboard: C is (corner x, corner y,
+// s: 1 on a texture, 0 on a flat colour (layer -0.5 shines like metal). y: layer -3, a smoke billboard: C is (corner x, corner y,
 // -3, opacity), grey and lit like the rest, with an alpha that falls off from its centre to its
 // edge. g: lava (which also drifts) and layer -2, which glow: no light, no shade. The texture's alpha is a height: its screen-space derivatives tilt the normal
 // (bump mapping without tangents), faded out as a pixel covers more than a texel or two so the
@@ -120,7 +112,7 @@ vec3 n=normalize(N),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float h=t.a*s*${RELIEF},det=dot(dx,a);
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
-vec2 R=SP[int(s>0.?L+.5:${LAYERS}.)];
+vec2 R=SP[int(s>0.?L+.5:${LAYERS}.+step(-.7,L))];
 vec3 l=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s)*Z*(.45+.55*max(dot(normalize(n+m),normalize(vec3(.4,.8,.3))),0.)),sp=vec3(0),V=normalize(E-P);
 for(int i=0;i<${MAX_LIGHTS};i++){
 if(i>=Q||g>0.)break;
@@ -355,15 +347,28 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
   const pixels = textures();
   let tail = ground.length * 4;
   let cap = tail + TAIL;
-  const [steel, iron] = [
+  const [steel, iron, plate, dark, gold] = [
     [0.55, 0.55, 0.6],
     [0.2, 0.2, 0.23],
+    [0.38, 0.38, 0.42],
+    [0.03, 0.03, 0.04],
+    [0.75, 0.5, 0.15],
   ];
-  const near = {
-    barrels: dress(chaingun(10).barrels, steel),
-    body: dress(chaingun(10).body, iron),
+  /** The chaingun in its flat colours: `spun` turns with the barrels, `still` does not. */
+  const gear = (sides: number) => {
+    const g = chaingun(sides);
+    const paint = (k: keyof typeof g, c: number[], layer = METAL) => dress(g[k], c, layer);
+    return {
+      spun: [paint('barrels', steel), paint('clamps', plate)].flat(),
+      still: [
+        paint('body', iron),
+        paint('trim', plate),
+        paint('holes', dark, -1),
+        paint('brass', gold),
+      ].flat(),
+    };
   };
-  const far = { barrels: dress(chaingun(5).barrels, steel), body: dress(chaingun(5).body, iron) };
+  const [near, far] = [gear(10), gear(5)];
   const flare: number[] = [];
   /** The others' flash, three times as wide: at a few metres the own one is a dot. */
   const wide: number[] = [];
@@ -608,7 +613,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
         );
         const hand: Vec3 = [p.x, p.y + 1.25, p.z];
         const axes = basis(p.yaw, p.pitch);
-        for (const part of [far.barrels, far.body, fx.flashes.has(p.id) ? wide : []]) {
+        for (const part of [far.spun, far.still, fx.flashes.has(p.id) ? wide : []]) {
           place(v, part, hand, axes, [0.36, -0.12, 0.3], 0.8);
         }
       }
@@ -666,8 +671,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       // Last, over a cleared depth: the gun never sinks into a wall.
       const off: Vec3 = [0.26, -0.24 + fx.kick * 0.01, 0.6 - fx.kick * 0.06];
       if (!fx.dead) {
-        place(v, near.body, eye, axes, off, 0.8);
-        place(v, near.barrels, eye, axes, off, 0.8, fx.spin);
+        place(v, near.still, eye, axes, off, 0.8);
+        place(v, near.spun, eye, axes, off, 0.8, fx.spin);
         if (fx.flash > 0) {
           place(v, flare, eye, axes, off, 0.8, fx.spin * 3);
         }

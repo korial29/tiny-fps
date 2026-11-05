@@ -8,7 +8,7 @@ import { createEffects, fade, puff } from './effects';
 import type { Puff } from './effects';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
-import { STRIDE } from './mesh';
+import { METAL, STRIDE } from './mesh';
 import { LAYERS } from './textures';
 import { FOG, MAX_PIXELS, MAX_TINTS, backing, createRenderer, levelVerts } from './render';
 
@@ -90,8 +90,8 @@ describe('createRenderer', () => {
     const src = calls.filter(c => c[0] == 'shaderSource').map(c => String(c[2]));
     const frag = src.find(s => s.includes('sampler2DArray'))!;
     const rows = frag.match(/const vec2 SP\[(\d+)\]=vec2\[\]\((.*)\);/)!;
-    expect(Number(rows[1])).toBe(LAYERS + 1);
-    expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 1);
+    expect(Number(rows[1])).toBe(LAYERS + 2);
+    expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 2);
     expect(frag).not.toMatch(/undefined|NaN|\[object/);
   });
 
@@ -611,6 +611,58 @@ describe('createRenderer', () => {
       expect(count('createFramebuffer')).toBe(made);
       frame(rd, createEffects(), [], [spot()]);
       expect(layers()).toEqual([0]);
+    });
+  });
+
+  describe('view model and particles', () => {
+    /** What the last frame wrote after the level: the dynamic tail, as vertices of STRIDE floats. */
+    const tail = () =>
+      calls.filter(c => c[0] == 'bufferSubData' && c[2] != 0).at(-1)?.[3] as Float32Array;
+    const vertex = (v: Float32Array, i: number) =>
+      Array.from(v.slice(i * STRIDE, (i + 1) * STRIDE));
+    const NEAR = 4158;
+    const STILL = 576 + 924 + 66 + 144;
+    const room = (fx = createEffects(), lights = [] as Light[]) => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      frame(rd, fx, [], lights);
+      return tail();
+    };
+
+    it('draws the chaingun with 4158 vertices, and the flash on top of them', () => {
+      room();
+      expect(draws()[1][1]).toBe(NEAR);
+      calls.length = 0;
+      const fx = createEffects();
+      fx.flash = 0.05;
+      room(fx);
+      expect(draws()[1][1]).toBe(NEAR + 3 * 36);
+    });
+
+    it('shines the gun like metal, and the barrels and clamps turn with the spin, the rest not', () => {
+      const [a, b] = [0, 1.2].map(spin => {
+        calls.length = 0;
+        const fx = createEffects();
+        fx.spin = spin;
+        return room(fx);
+      });
+      const [ga, gb] = [a, b].map(v => v.length / STRIDE - NEAR);
+      // The gun is the end of the tail.
+      expect([ga, gb]).toEqual([0, 0]);
+      for (let i = 0; i < NEAR; i++) {
+        const same = vertex(a, i).every((x, k) => Math.abs(x - vertex(b, i)[k]) < 1e-6);
+        if (i < STILL) {
+          expect(same).toBe(true);
+        }
+      }
+      let moved = 0;
+      for (let i = STILL; i < NEAR; i++) {
+        moved += +(vertex(a, i)[0] != vertex(b, i)[0] || vertex(a, i)[1] != vertex(b, i)[1]);
+      }
+      expect(moved).toBeGreaterThan(2000);
+      // The parts that spin are all there is behind the still ones: barrels and clamps.
+      expect(NEAR - STILL).toBe(1800 + 648);
+      const layers = new Set(Array.from({ length: NEAR }, (_, i) => vertex(a, i)[8]));
+      expect([...layers].sort((a, b) => a - b)).toEqual([-1, METAL]);
     });
   });
 });

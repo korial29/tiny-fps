@@ -120,6 +120,8 @@ export interface PlayerState {
   dashes: number;
   /** Ticks to the next dash; the first DASH_TICKS of DASH_COOLDOWN are the burst. */
   dash: number;
+  /** Ticks of stumble left after a tackle (STUMBLE_TICKS at the start): no sprint, dash or jump, and slow. */
+  stun: number;
   /** Ticks left in which a jump still works after walking off an edge, and in which a press is kept. */
   coyote: number;
   buffer: number;
@@ -150,6 +152,8 @@ export const TEX = {
 export interface SnapPlayer extends PlayerState {
   /** Seq of the last input of this player the host applied: the client replays the ones after. */
   ack: number;
+  /** While `stun` runs: the id of the player who tackled this one (4 bits), else 0. Not part of the movement. */
+  by: number;
 }
 
 /** The flag of a team as a snapshot carries it: only the fields of its state are meaningful, the rest read 0. */

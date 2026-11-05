@@ -7,7 +7,9 @@
 // from the mode, the keys and the state (jump, dash, let go, climb, stand up...), then moves the
 // cylinder by its speed (fly), then looks at where it ended (landed, left the floor, next to a
 // ledge or a wall it can take). Time spent in a mode (t), the coyote and buffer windows, the dash
-// cooldown and the jumps left are all in the state, so a snapshot is enough to carry on.
+// cooldown, the jumps left and the stumble of a tackle are all in the state, so a snapshot is
+// enough to carry on. A tackle itself (`stumble()`) is the host's: it changes the state between two
+// steps, and the tackled client gets the result in the next snapshot, then replays on it.
 import {
   ACCEL,
   AIR_ACCEL,
@@ -54,6 +56,10 @@ import {
   SPRINT_ACCEL,
   SPRINT_SPEED,
   STEP_H,
+  STUMBLE_DRAG,
+  STUMBLE_KNOCK,
+  STUMBLE_SPEED,
+  STUMBLE_TICKS,
   TICK_HZ,
   VAULT_SPEED,
   VAULT_UP,
@@ -128,6 +134,7 @@ export const STILL = {
   jumps: AIR_JUMPS,
   dashes: 1,
   dash: 0,
+  stun: 0,
   coyote: COYOTE_TICKS,
   buffer: 0,
   held: 0,
@@ -409,6 +416,8 @@ const landingSoon = (p: PlayerState, w: World): boolean => {
 /** What one input asks for, worked out once per step. */
 interface Ctl {
   keys: number;
+  /** Stumbling: the dash and jump presses are already dropped, and the speed is held down. */
+  stumble: boolean;
   /** A press this step, not a hold. */
   jump: boolean;
   dash: boolean;
@@ -426,6 +435,27 @@ interface Ctl {
 const enter = (p: PlayerState, mode: number): void => {
   p.mode = mode;
   p.t = 0;
+};
+
+/**
+ * A tackle lands on the player: he stumbles for STUMBLE_TICKS and is thrown STUMBLE_KNOCK m/s along
+ * (dx, dz), a unit vector (the tackler's way). It ends a dash, a wall-run, a hang and a climb, and
+ * clears a jump press and the coyote window. For the host to call between two steps.
+ */
+export const stumble = (p: PlayerState, dx: number, dz: number): void => {
+  p.stun = STUMBLE_TICKS;
+  p.vx = f32(dx * STUMBLE_KNOCK);
+  p.vz = f32(dz * STUMBLE_KNOCK);
+  p.dash = Math.min(p.dash, DASH_COOLDOWN - DASH_TICKS);
+  p.coyote = 0;
+  p.buffer = 0;
+  if (p.mode === MODE.HANG || p.mode === MODE.CLIMB) {
+    p.vy = 0;
+  }
+  if (p.mode === MODE.HANG || p.mode === MODE.CLIMB || p.mode === MODE.WALLRUN) {
+    enter(p, MODE.AIR);
+    p.edge = 0;
+  }
 };
 
 /** Scales the horizontal speed to at most max. */
@@ -776,7 +806,10 @@ const onGround = (p: PlayerState, w: World, c: Ctl, burst: boolean): void => {
     const slide = speed >= SLIDE_MIN_SPEED;
     enter(p, slide ? MODE.SLIDE : MODE.CROUCH);
     p.ev |= slide ? EV.SLIDE_START : 0;
-  } else if (p.mode === MODE.SLIDE && (p.t >= SLIDE_TICKS || speed < SLIDE_END_SPEED)) {
+  } else if (
+    p.mode === MODE.SLIDE &&
+    (p.t >= SLIDE_TICKS || speed < SLIDE_END_SPEED || c.stumble)
+  ) {
     p.ev |= EV.SLIDE_END;
     enter(p, !low && canStand(p, w) ? MODE.GROUND : MODE.CROUCH);
   } else if (p.mode === MODE.SLIDE && !low && canStand(p, w)) {
@@ -788,7 +821,16 @@ const onGround = (p: PlayerState, w: World, c: Ctl, burst: boolean): void => {
   if (burst) {
     return;
   }
-  if (p.mode === MODE.SLIDE) {
+  if (c.stumble) {
+    // Thrown back: the knock slides out at STUMBLE_DRAG, with no steering, then a slow walk.
+    if (speed > STUMBLE_SPEED) {
+      const k = Math.max(STUMBLE_SPEED, speed - STUMBLE_DRAG * DT) / speed;
+      p.vx *= k;
+      p.vz *= k;
+    } else {
+      steer(p, unwalled(p, w, c, heightOf(p)), STUMBLE_SPEED);
+    }
+  } else if (p.mode === MODE.SLIDE) {
     const k = Math.max(0, speed - SLIDE_DECEL * DT) / speed;
     p.vx *= k;
     p.vz *= k;
@@ -834,10 +876,13 @@ export const move = (p: PlayerState, i: Input, w: World, team = 0): void => {
   const n = len(f, s) || 1;
   const [fx, fz] = forward(p.yaw);
   const pressed = (bit: number): boolean => (i.keys & bit) !== 0 && (p.held & bit) === 0;
+  // A stumble (STUMBLE_TICKS steps from the tackle) drops the jump and dash presses.
+  const stumbling = p.stun > 0;
   const c: Ctl = {
     keys: i.keys,
-    jump: pressed(KEY.JUMP),
-    dash: pressed(KEY.DASH),
+    stumble: stumbling,
+    jump: !stumbling && pressed(KEY.JUMP),
+    dash: !stumbling && pressed(KEY.DASH),
     fwd: f > 0,
     wx: (fx * f - fz * s) / n,
     wz: (fz * f + fx * s) / n,
@@ -851,6 +896,9 @@ export const move = (p: PlayerState, i: Input, w: World, team = 0): void => {
   if (c.jump) {
     // The press tick uses one: a press stays good for JUMP_BUFFER_TICKS steps after it.
     p.buffer = JUMP_BUFFER_TICKS + 1;
+  }
+  if (stumbling) {
+    p.stun--;
   }
   if (p.dash > 0) {
     p.dash--;

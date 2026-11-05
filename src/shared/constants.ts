@@ -29,7 +29,8 @@ export const MAX_PITCH = 1.55;
 export const STEP_H = 0.5;
 
 // Movement (physics.ts). Speeds in m/s, rates in m/s², durations in ticks of 1 / TICK_HZ s. The
-// timers go on the wire in 3 or 8 bits (protocol.ts): keep them within 7 and 255.
+// timers go on the wire in 3, 6 or 8 bits (protocol.ts): keep the coyote and buffer windows within 7,
+// DASH_COOLDOWN and STUMBLE_TICKS within 63, the other times within 255.
 
 /** Ground acceleration toward the wished direction: from standing to RUN_SPEED in 0.12 s. */
 export const ACCEL = 50;
@@ -145,6 +146,23 @@ export const VAULT_SPEED = 4;
 export const VAULT_UP = 6;
 
 /**
+ * The tackle (tackle.ts, room.ts): a dash or a slide into an enemy carrier. The tackler's body
+ * reaches TACKLE_REACH metres past touching the carrier's, as the tackler drew him.
+ */
+export const TACKLE_REACH = 0.3;
+/** Ticks before a tackler may tackle again (0.5 s): one dash that carries through two carriers tackles one. */
+export const TACKLE_COOLDOWN = 30;
+/**
+ * The stumble a tackle leaves (physics.ts, `stumble()`): the carrier cannot sprint, dash or jump
+ * for STUMBLE_TICKS (0.8 s), walks at STUMBLE_SPEED at most, and is thrown STUMBLE_KNOCK m/s along
+ * the tackler's way, a speed that slides out at STUMBLE_DRAG m/s² (about a metre).
+ */
+export const STUMBLE_TICKS = 48;
+export const STUMBLE_SPEED = 2.5;
+export const STUMBLE_KNOCK = 6;
+export const STUMBLE_DRAG = 12;
+
+/**
  * Host ticks the history of the players goes back (0.5 s): the host rewinds the others to the
  * view tick of an input, clamped to this.
  */
@@ -156,6 +174,7 @@ export const MAX_REWIND = 30;
  */
 export const INPUT_BURST = 10;
 
+/** At most 16: the id of a tackler goes on the wire in 4 bits (protocol.ts). */
 export const MAX_PLAYERS = 16;
 
 /** Team names and colours (CSS), red then blue: the runners, the flags, the bases and the HUD wear them. */

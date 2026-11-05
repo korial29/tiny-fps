@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { INTERP_DELAY, PLAYER_H, RUN_SPEED, STEP_H, TICK_HZ } from '../shared/constants';
+import {
+  DASH_COOLDOWN,
+  DASH_TICKS,
+  INTERP_DELAY,
+  PLAYER_H,
+  RUN_SPEED,
+  STEP_H,
+  TICK_HZ,
+} from '../shared/constants';
 import { ROOFTOPS } from '../shared/map';
-import { STILL, move, spawn } from '../shared/physics';
+import { STILL, move, spawn, stumble } from '../shared/physics';
 import { decodeInput, decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
 import { Room } from '../shared/room';
 import { EV, KEY, MODE } from '../shared/types';
@@ -26,6 +34,7 @@ const snapPlayer = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => (
   pitch: 0,
   ground: true,
   ack: 0xffff,
+  by: 0,
   ...STILL,
   vz: -RUN_SPEED,
   ...over,
@@ -36,6 +45,8 @@ const snapshot = (tick: number, ...players: SnapPlayer[]): Snapshot => ({
   ...IDLE,
 });
 const fwd = { keys: KEY.FORWARD, yaw: 0, pitch: 0 };
+/** The way a tackler of these tests goes: north-east. */
+const TACKLE_WAY = [0.6, -0.8];
 
 describe('prediction against the room', () => {
   /**
@@ -116,7 +127,7 @@ describe('prediction against the room', () => {
    * with no network at all, the worst gap to the host's own snapshot at the end, and how far the
    * raw host state was behind the prediction (what the replay had to make up).
    */
-  const race = (lag: (k: number) => number, steps = SCRIPT, team = 0) => {
+  const race = (lag: (k: number) => number, steps = SCRIPT, team = 0, tackles: number[] = []) => {
     const n = steps.length;
     const room = new Room({});
     const sent: ArrayBuffer[] = [];
@@ -145,6 +156,9 @@ describe('prediction against the room', () => {
     const inputs: { at: number; data: ArrayBuffer }[] = [];
     const snaps: { at: number; data: ArrayBuffer }[] = [];
     let seen = 0;
+    let applied = 0;
+    let stunned = 0;
+    let checked = 0;
     let worst = 0;
     let behind = 0;
     /** Fields of the own player, after a snapshot, that differ from the reference. */
@@ -154,6 +168,10 @@ describe('prediction against the room', () => {
     const flush = (k: number, snapAt: (k: number) => number) => {
       while (inputs.length && inputs[0].at <= k) {
         room.receive(conn, inputs.shift()!.data);
+        // A tackle lands on the host between two inputs, after the n-th it applied.
+        if (tackles.includes(applied++)) {
+          stumble(room['peers'].get(conn)!.state, TACKLE_WAY[0], TACKLE_WAY[1]);
+        }
       }
       room.tick();
       for (; seen < conn.bins.length; seen++) {
@@ -161,7 +179,16 @@ describe('prediction against the room', () => {
       }
       while (snaps.length && snaps[0].at <= k) {
         const s = decodeSnapshot(snaps.shift()!.data)!;
+        const own = s.players.find(p => p.id === team)!;
+        stunned += +(own.stun > 0);
         pred.snapshot(s, k * STEP);
+        // A tackle the host has applied and this snapshot does not carry yet (after the ack, up to
+        // the steps taken) is not predictable: the replay cannot know it, the reference does.
+        const ack = own.ack === 0xffff ? -1 : own.ack;
+        if (tackles.some(t => t > ack && t <= k)) {
+          continue;
+        }
+        checked++;
         worst = Math.max(worst, gap(pred.me(1)!, ref));
         // Every field the move continues from, not only the place: speed, mode, timers. Not the
         // look angles (me() eases them along the shortest arc, a rounding apart) nor the events.
@@ -172,13 +199,7 @@ describe('prediction against the room', () => {
             differing.add(key);
           }
         }
-        behind = Math.max(
-          behind,
-          gap(
-            s.players.find(p => p.id === team)!,
-            ref,
-          ),
-        );
+        behind = Math.max(behind, gap(own, ref));
       }
     };
 
@@ -186,6 +207,9 @@ describe('prediction against the room', () => {
     steps.forEach((i, k) => {
       const input = pred.step(i, k * STEP);
       move(ref, input, world, team);
+      if (tackles.includes(k)) {
+        stumble(ref, TACKLE_WAY[0], TACKLE_WAY[1]);
+      }
       sent.push(encodeInput(input));
       // In order: never delivered before the previous one.
       last = Math.max(last, k + lag(k));
@@ -203,6 +227,10 @@ describe('prediction against the room', () => {
       final: gap(final, pred.me(1)!),
       end: gap(final, ref),
       differing: [...differing],
+      /** Own snapshots that showed a stumble, the ones compared, and where the reference ended. */
+      stunned,
+      checked,
+      at: [ref.x, ref.y, ref.z],
     };
   };
 
@@ -278,6 +306,74 @@ describe('prediction against the room', () => {
       expect(r.differing, `${name} lag`).toEqual([]);
       // With a lag the replay had work to do: the host state was behind the predicted one.
       expect(r.behind, `${name} lag`).toBeGreaterThanOrEqual(name === 'none' ? 0 : 0.1);
+    }
+  }, 60_000);
+
+  /**
+   * The input of the course at which each kind of moment first comes (20 steps apart or more): running fast
+   * on the ground, in the air, on a wall, hanging, climbing, sliding and in the burst of a dash.
+   */
+  const MOMENTS = (() => {
+    const p = spawn(0, world, 0);
+    const kinds: ((q: PlayerState) => boolean)[] = [
+      q => q.mode === MODE.GROUND && Math.hypot(q.vx, q.vz) > 7,
+      q => q.mode === MODE.AIR && q.vy < -2,
+      q => q.mode === MODE.WALLRUN,
+      q => q.mode === MODE.HANG,
+      q => q.mode === MODE.CLIMB,
+      q => q.mode === MODE.SLIDE,
+      q => q.dash > DASH_COOLDOWN - DASH_TICKS,
+    ];
+    const first = kinds.map(() => -1);
+    COURSE.inputs.forEach((step, k) => {
+      move(p, onWire({ ...step, seq: k }), world);
+      kinds.forEach((is, n) => {
+        first[n] = first[n] < 0 && is(p) ? k : first[n];
+      });
+    });
+    const out: number[] = [];
+    for (const k of first.sort((x, y) => x - y)) {
+      if (k >= 0 && k > (out.at(-1) ?? -20) + 20) {
+        out.push(k);
+      }
+    }
+    return out;
+  })();
+
+  it('finds a tackle moment of each kind in the course', () => {
+    expect(MOMENTS.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it('agrees with the host exactly when a tackle lands, in every move, under every lag', () => {
+    const free = race(LAGS[1][1], COURSE.inputs);
+    for (const [name, lag] of LAGS) {
+      const r = race(lag, COURSE.inputs, 0, MOMENTS);
+      expect(r.worst, `${name} lag`).toBe(0);
+      expect(r.end, `${name} lag`).toBe(0);
+      expect(r.final, `${name} lag`).toBe(0);
+      // The stumble itself, the timer and the knocked speed included, and the snapshots showed it.
+      expect(r.differing, `${name} lag`).toEqual([]);
+      expect(r.stunned, `${name} lag`).toBeGreaterThan(MOMENTS.length * 10);
+      // Most snapshots were compared, the ones just before a tackle's own apart.
+      expect(r.checked, `${name} lag`).toBeGreaterThan(500);
+      // A guard: the tackles did change the run.
+      expect(r.at, `${name} lag`).not.toEqual(free.at);
+    }
+  }, 60_000);
+
+  it('agrees exactly when a tackle lands, for a blue player and many seeds', () => {
+    for (const seed of SEEDS.slice(0, 6)) {
+      const steps = script(seed);
+      const at = [60, 200, 330, 460].filter(k => k < steps.length);
+      for (const [name, lag] of LAGS) {
+        const r = race(lag, steps, seed % 2, at);
+        expect([r.worst, r.end, r.final, r.differing], `seed ${seed}, ${name} lag`).toEqual([
+          0,
+          0,
+          0,
+          [],
+        ]);
+      }
     }
   }, 60_000);
 

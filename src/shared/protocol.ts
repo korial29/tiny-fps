@@ -6,11 +6,14 @@
 //   yaw in 65536ths of a turn, decoded in [0, 2π); pitch in 1/10000 rad; view is the host tick
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
 //   keys is a u8: KEY bits 0 to 7 (forward, back, left, right, jump, sprint, dash, crouch).
-// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 39 bytes:
+// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 40 bytes:
 //   [id u8][x f32][y f32][z f32][vx f32][vy f32][vz f32][edge f32]
-//   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8]
+//   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8][stun u8]
 //   mode: bits 0-2 MODE, bits 3-5 wall (SIDE), bit 6 jumps left, bit 7 air dashes left
+//   dash: bits 0-5 the dash timer, bits 6-7 the high bits of the tackler's id (see stun)
 //   timers: bits 0-2 coyote ticks, bits 3-5 jump buffer ticks, bit 6 jump held, bit 7 dash held
+//   stun: bits 0-5 the stumble ticks left after a tackle, bits 6-7 the low bits of the id of the
+//   player who tackled (`by`, 4 bits in all: ids go to 15; 0 when the stumble is over)
 //   The floats are the host's float32 state, exact (see move in physics.ts), and with the rest
 //   they are all a move needs to continue from. ground comes from the mode; ev and fall (what the
 //   animation reads) are not sent, they read 0.
@@ -20,7 +23,7 @@
 //     HOME: nothing more (2 bytes in all for the two flags);
 //     CARRIED: [by u8] the carrier's player id;
 //     DROPPED: [x i16][y i16][z i16] in 1/16 m, [left u8] whole seconds before it goes home.
-//   A snapshot is 4 + 39 × players + 4 + 2 to 16 bytes: 6 on top of the players when both flags are home.
+//   A snapshot is 4 + 40 × players + 4 + 2 to 16 bytes: 6 on top of the players when both flags are home.
 // Every multi-byte field is big-endian (DataView's default).
 import { FLAG, KEY, MODE } from './types';
 import type { FlagState, Input, PlayerInfo, Snapshot } from './types';
@@ -47,7 +50,7 @@ export const MSG_SNAPSHOT = 2;
 
 export const INPUT_BYTES = 11;
 export const SNAP_HEAD = 4;
-export const SNAP_PLAYER = 39;
+export const SNAP_PLAYER = 40;
 /** The match block after the players: the captures, the clock; the flags follow (2 to 16 bytes). */
 export const SNAP_MATCH = 4;
 
@@ -135,7 +138,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint16(o + 33, p.ack & 0xffff);
     v.setUint8(o + 35, (p.mode & 7) | ((p.wall & 7) << 3) | ((p.jumps & 1) << 6) | (p.dashes << 7));
     v.setUint8(o + 36, p.t);
-    v.setUint8(o + 37, p.dash);
+    v.setUint8(o + 37, p.dash | (((p.by >> 2) & 3) << 6));
     v.setUint8(
       o + 38,
       (p.coyote & 7) |
@@ -143,6 +146,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
         (p.held & KEY.JUMP ? 64 : 0) |
         (p.held & KEY.DASH ? 128 : 0),
     );
+    v.setUint8(o + 39, p.stun | ((p.by & 3) << 6));
   });
   v.setUint8(end, s.score[0]);
   v.setUint8(end + 1, s.score[1]);
@@ -179,6 +183,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     const o = SNAP_HEAD + i * SNAP_PLAYER;
     const mode = v.getUint8(o + 35);
     const timers = v.getUint8(o + 38);
+    const [dash, stun] = [v.getUint8(o + 37), v.getUint8(o + 39)];
     const m = mode & 7;
     players.push({
       id: v.getUint8(o),
@@ -198,7 +203,9 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       jumps: (mode >> 6) & 1,
       dashes: mode >> 7,
       t: v.getUint8(o + 36),
-      dash: v.getUint8(o + 37),
+      dash: dash & 63,
+      stun: stun & 63,
+      by: ((dash >> 6) << 2) | (stun >> 6),
       coyote: timers & 7,
       buffer: (timers >> 3) & 7,
       held: (timers & 64 ? KEY.JUMP : 0) | (timers & 128 ? KEY.DASH : 0),

@@ -48,10 +48,11 @@ const MAX_SNAPS = 16;
 
 type Point = { x: number; y: number; z: number };
 
-/** A copy of the player without the ack a snapshot adds. */
+/** A copy of the player without the ack and the tackler a snapshot adds. */
 const state = (s: SnapPlayer | PlayerState): PlayerState => {
-  const p: PlayerState & { ack?: number } = { ...s };
+  const p: PlayerState & { ack?: number; by?: number } = { ...s };
   delete p.ack;
+  delete p.by;
   return p;
 };
 

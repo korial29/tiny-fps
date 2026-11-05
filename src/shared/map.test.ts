@@ -51,6 +51,54 @@ describe('ROOFTOPS', () => {
     }
   });
 
+  it('keeps the geometry of the parkour course: the look changed materials and colours only', () => {
+    // min x, y, z then max x, y, z of the 22 brushes as step 7 left them.
+    const before = [
+      [4, -30, 57.7, 24, 10, 76],
+      [4, -30, 36, 24, 10, 53.5],
+      [4, -30, 20, 24, 12.4, 36],
+      [4, -30, -5, 24, 12.4, 7],
+      [27, -30, 20, 47, 8, 50],
+      [27, -30, 60, 47, 8, 76],
+      [9, 12.2, 39, 19, 12.6, 47],
+      [12, 10, 52, 14, 10.4, 53],
+      [12, 10, 51, 14, 10.8, 52],
+      [12, 10, 50, 14, 11.2, 51],
+      [12, 10, 49, 14, 11.6, 50],
+      [12, 10, 48, 14, 12, 49],
+      [12, 10, 47, 14, 12.4, 48],
+      [5, 10, 42, 5.5, 14, 42.5],
+      [5, 10, 50, 5.5, 14, 50.5],
+      [8, 12.4, 24, 20, 12.85, 24.45],
+      [36, 8, 22, 37, 14.5, 48],
+      [30, 8, 28, 34, 10, 32],
+      [40, 8, 30, 44, 10.2, 34],
+      [28, 9.2, 44, 35, 12, 46],
+      [41.5, 7.6, 50, 42, 8, 60],
+      [30, 8, 64, 34, 9.6, 68],
+    ];
+    expect(brushes.map(b => [...b.min, ...b.max])).toEqual(before);
+    expect(teams.map(t => t.base)).toEqual([
+      [14, 10, 62.5],
+      [14, 12.4, 2.2],
+    ]);
+    expect(ROOFTOPS.floor).toBe(-25);
+  });
+
+  it('is white concrete with a few glass and steel volumes and colour accents, brick and wood rare', () => {
+    const count = (id: number) => brushes.filter(b => b.top == id || b.side == id).length;
+    expect(brushes.filter(b => b.top == TEX.CONCRETE).length).toBeGreaterThan(brushes.length / 3);
+    expect(count(TEX.GLASS)).toBeGreaterThanOrEqual(2);
+    expect(count(TEX.STEEL)).toBeGreaterThanOrEqual(4);
+    expect(count(TEX.BRICK) + count(TEX.WOOD)).toBeLessThanOrEqual(2);
+    const painted = brushes.filter(b => b.top == TEX.PAINT && b.tint);
+    expect(painted.length).toBeGreaterThanOrEqual(3);
+    // Accents are saturated: one channel well above another.
+    for (const { tint } of painted) {
+      expect(Math.max(...tint!) - Math.min(...tint!)).toBeGreaterThan(0.5);
+    }
+  });
+
   it('keeps brushes out of each other: touching is fine, overlapping is not', () => {
     for (const [i, a] of brushes.entries()) {
       for (const [j, b] of brushes.entries()) {

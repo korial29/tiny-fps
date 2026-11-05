@@ -146,6 +146,14 @@ export const TEX = {
   MOSS: 6,
   /** Metal floor grating over darkness. */
   GRATE: 7,
+  /** White precast concrete in 1 m panels: the roofs and walls. */
+  CONCRETE: 8,
+  /** Dark blue glass in steel frames; the shader adds the sky's reflection. */
+  GLASS: 9,
+  /** Brushed steel. */
+  STEEL: 10,
+  /** A near white painted panel: the brush tint is its colour. */
+  PAINT: 11,
 } as const;
 
 /** One player in a snapshot: the state (its ev and fall read 0) and the ack. */

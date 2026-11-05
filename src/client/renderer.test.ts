@@ -16,10 +16,12 @@ import {
   MAX_TINTS,
   SHADOW,
   backing,
+  city,
   createRenderer,
   daylight,
   fogOf,
-  level,
+  palette,
+  scenery,
   sunProj,
 } from './render';
 import { duo } from '../../test/teams';
@@ -77,7 +79,8 @@ const worldOf = (over: Partial<WorldDef> = {}) =>
     ...over,
   });
 const ROOM = worldOf();
-const FLOOR_VERTS = level(ROOM).length / STRIDE;
+/** The brush, the distant city, the zones: everything the renderer draws of the map. */
+const FLOOR_VERTS = scenery(ROOM).length / STRIDE;
 
 describe('createRenderer', () => {
   let calls: Call[];
@@ -580,11 +583,28 @@ describe('createRenderer', () => {
 
     it('uploads the tint palette, white first and padded with white', () => {
       const tint: [number, number, number] = [0.5, 0.25, 1];
-      createRenderer(canvas, worldOf({ brushes: [brush({ tint })] }));
+      const w = worldOf({ brushes: [brush({ tint })] });
+      createRenderer(canvas, w);
       const pal = Array.from(set('G').at(-1)![2] as Float32Array);
       expect(pal).toHaveLength(MAX_TINTS * 3);
       expect(pal.slice(0, 6)).toEqual([1, 1, 1, ...tint]);
-      expect(pal.slice(6).every(v => v == 1)).toBe(true);
+      // The caps of the distant towers follow, the rest is white.
+      const used = palette(city(w)).flat().map(Math.fround);
+      expect(used.length).toBeGreaterThan(6);
+      expect(pal.slice(0, used.length)).toEqual(used);
+      expect(pal.slice(used.length).every(v => v == 1)).toBe(true);
+    });
+
+    it('reflects the sky in the glass layer, and nowhere else', () => {
+      createRenderer(canvas, ROOM);
+      const frag = calls
+        .filter(c => c[0] == 'shaderSource')
+        .map(c => String(c[2]))
+        .find(s => s.includes('sampler2DArray'))!;
+      expect(frag).toContain(`abs(L-${TEX.GLASS}.)`);
+      expect(frag).toMatch(/K0\(reflect\(-V,m\)\)/);
+      // The sky pass and the reflection are the one function.
+      expect(frag.match(/K0\(/g)).toHaveLength(3);
     });
 
     it('declares the fog, palette and daylight uniforms in the shader', () => {

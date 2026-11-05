@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ROOFTOPS } from '../shared/map';
 import { forward } from '../shared/physics';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
@@ -22,10 +23,13 @@ import {
   pack,
   palette,
   project,
+  scenery,
+  city,
   sunProj,
   viewProj,
 } from './render';
 import { LAYERS } from './textures';
+import { vision, zones } from './vision';
 import { duo } from '../../test/teams';
 
 const at = (yaw: number, pitch: number, x: number, y: number, z: number) =>
@@ -79,6 +83,15 @@ describe('SPEC', () => {
     }
     expect(SPEC[LAYERS][0]).toBeGreaterThan(0);
     expect(SPEC[LAYERS][0]).toBeLessThan(SPEC[TEX.METAL][0] / 4);
+  });
+
+  it('makes glass the shiniest and sharpest of all, then steel, and concrete a dull stone', () => {
+    const rows = SPEC.slice(0, LAYERS);
+    expect(SPEC[TEX.GLASS][0]).toBe(Math.max(...rows.map(r => r[0])));
+    expect(SPEC[TEX.GLASS][1]).toBe(Math.max(...rows.map(r => r[1])));
+    expect(SPEC[TEX.GLASS][0]).toBeGreaterThan(1);
+    expect(SPEC[TEX.STEEL][0]).toBeGreaterThan(SPEC[TEX.PAINT][0] * 2);
+    expect(SPEC[TEX.CONCRETE][0]).toBeLessThan(SPEC[TEX.STEEL][0] / 5);
   });
 });
 
@@ -403,10 +416,42 @@ describe('daylight', () => {
     expect(up[2] / up[0]).toBeGreaterThan(down[2] / down[0]);
   });
 
+  it('leans blue in the shade: the sky above lights the roofs bluer than grey, and not as dark as a night', () => {
+    const [r, g, b] = daylight(ROOFTOPS)[0];
+    expect(b / r).toBeGreaterThan(1.3);
+    expect(b).toBeGreaterThan(g);
+    expect(b).toBeGreaterThan(0.45);
+  });
+
   it('keeps a shadow well under the sun but well above black', () => {
     const lum = (c: number[]) => (c[0] + c[1] + c[2]) / 3;
     expect(lum(up)).toBeGreaterThan(0.3);
     expect(lum(up)).toBeLessThan(1);
+  });
+});
+
+describe('scenery', () => {
+  const w = build(ROOFTOPS);
+  const v = scenery(w);
+
+  it('draws the brushes, a distant city, the runner red and the team zones, in whole triangles', () => {
+    expect(v.length % (3 * STRIDE)).toBe(0);
+    const [brushes, tower, vis, zone] = [level(w), level(city(w)), vision(w.def), zones(w.def)].map(
+      a => a.length,
+    );
+    expect(tower).toBeGreaterThan(brushes);
+    expect(vis).toBeGreaterThan(0);
+    expect(v).toHaveLength(tower + vis + zone);
+  });
+
+  it('puts the map first and the red last, so the red is never hidden by the city', () => {
+    expect(v.slice(0, 20)).toEqual(level(city(w)).slice(0, 20));
+    expect(v.slice(-STRIDE)).toEqual(zones(w.def).slice(-STRIDE));
+  });
+
+  it('keeps the world the physics reads as it was', () => {
+    expect(w.def.brushes).toBe(ROOFTOPS.brushes);
+    expect(city(w).grid).toBe(w.grid);
   });
 });
 

@@ -1,23 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { compile, inside } from '../shared/level';
-import { HALL } from '../shared/map';
 import { forward } from '../shared/physics';
 import { TEX } from '../shared/types';
-import type { Level, MapDef, Sector } from '../shared/types';
-import { basis, pushBox } from './mesh';
+import { build } from '../shared/world';
+import type { Brush, WorldDef } from '../shared/world';
+import { STRIDE, basis, pushBox } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import {
+  HAZE,
   MAX_PIXELS,
   MAX_TINTS,
+  SHADOW,
   SPEC,
+  SUN_AREA,
+  SUN_DEPTH,
   backing,
-  levelVerts,
+  daylight,
+  fogOf,
+  level,
   lightProj,
   pack,
   palette,
   project,
-  spans,
+  sunProj,
   viewProj,
 } from './render';
 import { LAYERS } from './textures';
@@ -144,145 +149,324 @@ describe('pushBox', () => {
   });
 });
 
-const lvl = compile(HALL);
-const edge = (front: number, back: number) =>
-  lvl.edges.find(e => e.front === front && e.back === back)!;
-
-describe('spans', () => {
-  it('gives a solid wall one full-height span', () => {
-    expect(spans(lvl, edge(0, -1))).toEqual([[1, 5]]);
+const SKY: WorldDef['sky'] = [
+  [0.2, 0.4, 0.9],
+  [0.7, 0.8, 0.9],
+];
+const brush = (min: number[], max: number[], over: Partial<Brush> = {}): Brush =>
+  ({ min, max, top: TEX.TILE, side: TEX.BRICK, ...over }) as Brush;
+const worldOf = (brushes: Brush[], over: Partial<WorldDef> = {}) =>
+  build({
+    brushes,
+    spawns: [[0, 0, 0, 0]],
+    floor: -20,
+    sun: { dir: [0.6, 0.6, 0.53], color: [2.5, 2.3, 2] },
+    sky: SKY,
+    ...over,
   });
 
-  it('draws a step on the lower side only, up to the higher floor', () => {
-    const [low, high] = [edge(7, 8), edge(8, 7)];
-    expect(spans(lvl, low)).toEqual([[1.4, 1.8]]);
-    expect(spans(lvl, high)).toEqual([]);
+/** The vertices of a built world, one { p, n, uv, layer, light } each. */
+const verts = (w: ReturnType<typeof worldOf>) => {
+  const v = level(w);
+  return Array.from({ length: v.length / STRIDE }, (_, i) => {
+    const o = v.slice(i * STRIDE, (i + 1) * STRIDE);
+    return { p: o.slice(0, 3), n: o.slice(3, 6), uv: o.slice(6, 8), layer: o[8], light: o[9] };
   });
+};
+/** The vertices of the faces whose normal is n. */
+const facing = (vs: ReturnType<typeof verts>, ...n: number[]) =>
+  vs.filter(v => v.n.every((c, i) => c == n[i]));
 
-  it('draws the upper wall on the side with the higher ceiling', () => {
-    expect(spans(lvl, edge(0, 1))).toEqual([[3.5, 5]]);
-    expect(spans(lvl, edge(1, 0))).toEqual([]);
-  });
+describe('level', () => {
+  const box = worldOf([brush([2, -6, 3], [6, 1, 9], { top: TEX.STONE, side: TEX.WOOD })]);
+  const vs = verts(box);
 
-  it('draws nothing across a flat opening, and the pit rim from the hall side', () => {
-    expect(spans(lvl, edge(2, 3))).toEqual([]);
-    expect(spans(lvl, edge(2, 6))).toEqual([]);
-    expect(spans(lvl, edge(6, 2))).toEqual([[0, 1]]);
-  });
-});
-
-describe('levelVerts', () => {
-  const verts = levelVerts(lvl);
-  const count = HALL.sectors.reduce((n, { pts }) => n + 2 * (pts.length - 2) * 3, 0);
-  const quads = lvl.edges.reduce((n, e) => n + spans(lvl, e).length, 0);
-
-  it('builds a fan per floor and ceiling and a quad per span', () => {
-    expect(verts).toHaveLength((count + quads * 6) * 10);
-  });
-
-  it('points every wall normal into its own sector', () => {
-    let at = count * 10;
-    for (const e of lvl.edges) {
-      for (let q = 0; q < spans(lvl, e).length; q++, at += 60) {
-        const [x, , z, nx, ny, nz] = verts.slice(at, at + 6);
-        expect(ny).toBe(0);
-        expect(inside(HALL.sectors[e.front], x + nx * 0.01, z + nz * 0.01)).toBe(true);
-        expect(inside(HALL.sectors[e.front], x - nx * 0.01, z - nz * 0.01)).toBe(false);
-      }
+  it('builds six faces of two triangles for a lone brush', () => {
+    expect(level(box)).toHaveLength(6 * 6 * STRIDE);
+    for (const n of [
+      [1, 0, 0],
+      [-1, 0, 0],
+      [0, 1, 0],
+      [0, -1, 0],
+      [0, 0, 1],
+      [0, 0, -1],
+    ]) {
+      expect(facing(vs, ...n)).toHaveLength(6);
     }
-    expect(at).toBe(verts.length);
   });
 
-  it('gives floors x, z texture coordinates and the sector light', () => {
-    // Sector 0's floor fan has 4 triangles; sector 1 follows with its floor, light 0.6.
-    const at = (HALL.sectors[0].pts.length - 2) * 6 * 10;
-    expect(verts.slice(at, at + 10)).toEqual([16, 1, 6, 0, 1, 0, 16, 6, TEX.TILE, 0.6]);
+  it('keeps every vertex on its face, on the brush', () => {
+    for (const { p, n } of vs) {
+      const [min, max] = [
+        [2, -6, 3],
+        [6, 1, 9],
+      ];
+      p.forEach((c, i) => expect(c).toBeGreaterThanOrEqual(min[i]));
+      p.forEach((c, i) => expect(c).toBeLessThanOrEqual(max[i]));
+      n.forEach((c, i) => {
+        if (c) {
+          expect(p[i]).toBe(c > 0 ? max[i] : min[i]);
+        }
+      });
+    }
+  });
+
+  it('puts the top texture on the top face and the side texture on the five others', () => {
+    for (const v of vs) {
+      expect(v.layer).toBe(v.n[1] == 1 ? TEX.STONE : TEX.WOOD);
+    }
+  });
+
+  it('draws both triangles of a face over its whole rectangle', () => {
+    const top = facing(vs, 0, 1, 0);
+    expect(new Set(top.map(v => `${v.p}`))).toEqual(new Set(['2,1,3', '6,1,3', '6,1,9', '2,1,9']));
+  });
+
+  it('gives faces world-space texture coordinates: x, z on the horizontal ones, z, y facing x, x, y facing z', () => {
+    for (const v of vs) {
+      const [x, y, z] = v.p;
+      const [u, w] = v.n[0] ? [z, y] : v.n[1] ? [x, z] : [x, y];
+      expect(v.uv).toEqual([u, w]);
+    }
+  });
+
+  it('lines textures up across brushes: the same world point has the same coordinates', () => {
+    const two = verts(worldOf([brush([0, -5, 0], [4, 0, 4]), brush([4, -5, 0], [8, 0, 4])]));
+    const tops = facing(two, 0, 1, 0).filter(v => v.p[0] == 4);
+    expect(tops.length).toBeGreaterThan(2);
+    for (const v of tops) {
+      expect(v.uv).toEqual([4, v.p[2]]);
+    }
+  });
+
+  it('skips the faces two brushes share flush, on both sides', () => {
+    const stack = worldOf([brush([0, -5, 0], [4, 0, 4]), brush([0, 0, 0], [4, 3, 4])]);
+    expect(level(stack)).toHaveLength(10 * 6 * STRIDE);
+    const vs = verts(stack);
+    expect(facing(vs, 0, 1, 0).every(v => v.p[1] == 3)).toBe(true);
+    expect(facing(vs, 0, -1, 0).every(v => v.p[1] == -5)).toBe(true);
+  });
+
+  it('skips the face of a small brush a big one covers, not the big one under it', () => {
+    const crate = worldOf([brush([0, -5, 0], [10, 0, 10]), brush([2, 0, 2], [4, 1, 4])]);
+    const vs = verts(crate);
+    // The crate's bottom is hidden; the roof's top, which it only half covers, stays.
+    expect(facing(vs, 0, -1, 0).map(v => v.p[1])).toEqual(Array(6).fill(-5));
+    expect(facing(vs, 0, 1, 0).filter(v => v.p[1] == 0)).toHaveLength(6);
+  });
+
+  it('keeps a face another brush only touches in part, or does not touch flush', () => {
+    const [a, b] = [brush([0, -5, 0], [4, 0, 4]), brush([2, 0, 2], [8, 1, 8])];
+    expect(level(worldOf([a, b]))).toHaveLength(12 * 6 * STRIDE);
+    const gap = worldOf([a, brush([0, 0.1, 0], [4, 1, 4])]);
+    expect(level(gap)).toHaveLength(12 * 6 * STRIDE);
+  });
+
+  it('skips the bottom of a brush at or under the kill floor: nobody sees it', () => {
+    const [low, high] = [
+      worldOf([brush([0, -20, 0], [4, 0, 4])]),
+      worldOf([brush([0, -19, 0], [4, 0, 4])]),
+    ];
+    expect(level(low)).toHaveLength(5 * 6 * STRIDE);
+    expect(level(high)).toHaveLength(6 * 6 * STRIDE);
+    // A floating platform shows its underside.
+    const platform = verts(worldOf([brush([0, 4, 0], [4, 4.4, 4])]));
+    expect(facing(platform, 0, -1, 0)).toHaveLength(6);
+  });
+
+  it('builds nothing for no brushes', () => {
+    expect(level(worldOf([]))).toEqual([]);
   });
 });
-
-/** Squares side by side, one sector each, with the given tint and light. */
-const tinted = (...cells: Pick<Sector, 'tint' | 'light'>[]) =>
-  compile({
-    sectors: cells.map((c, i) => ({
-      pts: [
-        [4 * i, 0],
-        [4 * i + 4, 0],
-        [4 * i + 4, 4],
-        [4 * i, 4],
-      ],
-      floor: 0,
-      ceil: 3,
-      ft: TEX.TILE,
-      wt: TEX.BRICK,
-      ct: TEX.STONE,
-      ...c,
-    })),
-    spawns: [[1, 1, 0]],
-  } as MapDef);
 
 describe('palette and tint packing', () => {
   const [warm, cold]: [number, number, number][] = [
     [1, 0.5, 0.25],
     [0.25, 0.5, 1],
   ];
-  const lvl = tinted({ tint: warm, light: 0.6 }, {}, { tint: cold }, { tint: warm, light: 0.3 });
+  const tinted = (...tints: (typeof warm | undefined)[]) =>
+    worldOf(tints.map((tint, i) => brush([4 * i, -5, 0], [4 * i + 3, 0, 3], { tint })));
+  const w = tinted(warm, undefined, cold, warm);
   /** The shader's unpacking: the index is floor(w / 2), the light what is left. */
-  const unpack = (w: number): [number, number] => [
-    Math.floor(w * 0.5),
-    w - 2 * Math.floor(w * 0.5),
+  const unpack = (v: number): [number, number] => [
+    Math.floor(v * 0.5),
+    v - 2 * Math.floor(v * 0.5),
   ];
-  /** The light of the first vertex of each sector's floor (a 4-point fan is 6 vertices, plus 6 of ceiling). */
-  const lights = (l: Level) =>
-    levelVerts(l)
-      .filter((_, i) => i % 120 == 9)
-      .slice(0, l.map.sectors.length);
+  /** The packed light of the first vertex of each brush (a lone brush has 36). */
+  const lights = (world: ReturnType<typeof worldOf>) =>
+    level(world).filter((_, i) => i % (36 * STRIDE) == 9);
 
   it('lists white first, then each tint once', () => {
-    expect(palette(lvl)).toEqual([[1, 1, 1], warm, cold]);
-    expect(palette(compile(HALL))).toEqual([[1, 1, 1]]);
-    expect(palette(tinted({ tint: [1, 1, 1] }))).toEqual([[1, 1, 1]]);
+    expect(palette(w)).toEqual([[1, 1, 1], warm, cold]);
+    expect(palette(worldOf([brush([0, 0, 0], [1, 1, 1])]))).toEqual([[1, 1, 1]]);
+    expect(palette(tinted([1, 1, 1]))).toEqual([[1, 1, 1]]);
   });
 
-  it('round-trips the palette index and the light through the vertex', () => {
-    const pal = palette(lvl);
-    const got = lights(lvl).map(unpack);
+  it('round-trips the palette index through the vertex, with a light of 1', () => {
+    const pal = palette(w);
+    const got = lights(w).map(unpack);
     expect(got.map(([i]) => pal[i])).toEqual([warm, [1, 1, 1], cold, warm]);
-    expect(got.map(([, l]) => l)).toEqual([
-      expect.closeTo(0.6),
-      expect.closeTo(1),
-      expect.closeTo(1),
-      expect.closeTo(0.3),
-    ]);
+    expect(got.map(([, l]) => l)).toEqual([1, 1, 1, 1]);
   });
 
-  it('leaves an untinted sector as the bare light, as before', () => {
-    expect(lights(tinted({ light: 0.4 }, {}))).toEqual([0.4, 1]);
+  it('leaves an untinted brush as the bare light, index 0', () => {
+    expect(lights(tinted(undefined, undefined))).toEqual([1, 1]);
   });
 
-  it('stamps walls with the tint of the sector they belong to', () => {
-    const v = levelVerts(lvl);
-    // After the 4 sectors' fans (48 vertices), each edge's quad: the first edge is sector 0's.
-    const [i] = unpack(v[48 * 10 + 9]);
-    expect(palette(lvl)[i]).toEqual(warm);
+  it('stamps every face of a brush with its tint', () => {
+    const lone = tinted(cold);
+    for (const v of verts(lone)) {
+      expect(palette(lone)[unpack(v.light)[0]]).toEqual(cold);
+    }
   });
 
   it('keeps at most MAX_TINTS, the rest falling back to white', () => {
-    const many = tinted(
-      ...Array.from({ length: MAX_TINTS + 4 }, (_, i): Pick<Sector, 'tint'> => ({
-        tint: [i / 100, 0.5, 0.5],
-      })),
+    const many = worldOf(
+      Array.from({ length: MAX_TINTS + 4 }, (_, i) =>
+        brush([4 * i, -5, 0], [4 * i + 3, 0, 3], { tint: [i / 100, 0.5, 0.5] }),
+      ),
     );
     expect(palette(many)).toHaveLength(MAX_TINTS);
-    const last = unpack(levelVerts(many)[(MAX_TINTS + 3) * 12 * 10 + 9]);
+    const last = unpack(level(many)[(MAX_TINTS + 3) * 36 * STRIDE + 9]);
     expect(last[0]).toBe(0);
   });
+});
 
-  it('fits the palette of the map', () => {
-    const lv = compile(HALL);
-    expect(palette(lv).length).toBeLessThan(MAX_TINTS);
-    expect(palette(lv).length).toBe(
-      1 + new Set(HALL.sectors.flatMap(s => (s.tint ? [`${s.tint}`] : []))).size,
+describe('sunProj', () => {
+  const dir = [0.6, 0.6, 0.529] as [number, number, number];
+  const eye = [10.3, 1.6, -4.1] as [number, number, number];
+  const apply = (m: Float32Array, [x, y, z]: number[]) =>
+    [0, 1, 2].map(r => m[r] * x + m[4 + r] * y + m[8 + r] * z + m[12 + r]);
+  /** The sun's axes in the matrix rows: right, up, and the direction it looks along. */
+  const rows = (m: Float32Array) => [0, 1, 2].map(r => [m[r], m[4 + r], m[8 + r]]);
+  const dot = (a: number[], b: number[]) => a.reduce((s, v, i) => s + v * b[i], 0);
+
+  it('looks along the direction away from the sun, orthogonally, with unit axes', () => {
+    const m = sunProj(dir, eye);
+    const [r, u, f] = rows(m).map((v, i) =>
+      v.map(c => c * [SUN_AREA / 2, SUN_AREA / 2, SUN_DEPTH][i]),
     );
+    expect(f.map(c => -c)).toEqual(dir.map(c => expect.closeTo(c, 5)));
+    expect(dot(r, u)).toBeCloseTo(0);
+    expect(dot(r, f)).toBeCloseTo(0);
+    expect(dot(u, f)).toBeCloseTo(0);
+    expect(Math.hypot(...r)).toBeCloseTo(1);
+    expect(Math.hypot(...u)).toBeCloseTo(1);
+    // Right is horizontal, up leans toward the sky.
+    expect(r[1]).toBeCloseTo(0);
+    expect(u[1]).toBeGreaterThan(0);
+  });
+
+  it('covers SUN_AREA metres around the eye, to SUN_DEPTH either side of it', () => {
+    const m = sunProj(dir, eye);
+    const [r, u, f] = rows(m).map(v => v.map(c => c / Math.hypot(...v)));
+    const edge = (axis: number[], k: number) => eye.map((c, i) => c + axis[i] * k);
+    const [rx] = apply(m, edge(r, SUN_AREA / 2));
+    const [lx] = apply(m, edge(r, -SUN_AREA / 2));
+    const [, uy] = apply(m, edge(u, SUN_AREA / 2));
+    const [, , nz] = apply(m, edge(f, -SUN_DEPTH));
+    const [, , fz] = apply(m, edge(f, SUN_DEPTH));
+    // The eye is within a texel of the middle, the edges within a texel of +-1.
+    const texel = 2 / SHADOW;
+    expect(Math.abs(rx - 1)).toBeLessThanOrEqual(texel * 1.01);
+    expect(Math.abs(lx + 1)).toBeLessThanOrEqual(texel * 1.01);
+    expect(Math.abs(uy - 1)).toBeLessThanOrEqual(texel * 1.01);
+    expect(nz).toBeCloseTo(-1);
+    expect(fz).toBeCloseTo(1);
+    const [cx, cy, cz] = apply(m, eye);
+    expect(Math.abs(cx)).toBeLessThanOrEqual(texel);
+    expect(Math.abs(cy)).toBeLessThanOrEqual(texel);
+    expect(cz).toBeCloseTo(0);
+  });
+
+  it('is orthographic: w stays 1, so a point far off to the side keeps its scale', () => {
+    const m = sunProj(dir, eye);
+    expect([m[3], m[7], m[11], m[15]]).toEqual([0, 0, 0, 1]);
+  });
+
+  it('snaps its window to the texels of the map along its own axes', () => {
+    const [r, u] = rows(sunProj(dir, eye)).map(v => v.map(c => c / Math.hypot(...v)));
+    const texel = SUN_AREA / SHADOW;
+    // The window's centre, in the sun's right and up axes, is a whole number of texels.
+    for (const e of [eye, [0, 0, 0], [-33.7, 9, 120.2]] as (typeof eye)[]) {
+      const m = sunProj(dir, e);
+      for (const [axis, at] of [
+        [r, 12],
+        [u, 13],
+      ] as const) {
+        const centre = (-m[at] * SUN_AREA) / 2;
+        expect(centre / texel).toBeCloseTo(Math.round(centre / texel), 3);
+        expect(Math.abs(centre - dot(axis, e))).toBeLessThanOrEqual(texel / 2 + 1e-4);
+      }
+    }
+  });
+
+  it('holds still while the eye moves less than a texel, and steps a whole texel at a time', () => {
+    const texel = SUN_AREA / SHADOW;
+    const [r] = rows(sunProj(dir, eye)).map(v => v.map(c => c / Math.hypot(...v)));
+    const base = sunProj(dir, eye);
+    // Sliding the eye along the window's right axis by a quarter texel changes nothing...
+    const near = eye.map((c, i) => c + r[i] * texel * 0.2) as typeof eye;
+    expect(Array.from(sunProj(dir, near))).toEqual(Array.from(base));
+    // ... and by two texels moves the window by exactly two texels.
+    const far = eye.map((c, i) => c + r[i] * texel * 2) as typeof eye;
+    const moved = sunProj(dir, far);
+    expect((base[12] - moved[12]) / (2 / SHADOW)).toBeCloseTo(2, 2);
+  });
+
+  it('handles a sun straight overhead', () => {
+    const m = sunProj([0, 1, 0], eye);
+    expect(Array.from(m).every(Number.isFinite)).toBe(true);
+    expect(rows(m)[2].map(c => Math.round(c * SUN_DEPTH) + 0)).toEqual([0, -1, 0]);
+  });
+});
+
+describe('daylight', () => {
+  const def = worldOf([]).def;
+  const [up, side, down, zenith, horizon] = daylight(def);
+
+  it('ends with the sky colours the shader paints', () => {
+    expect([zenith, horizon]).toEqual(SKY);
+  });
+
+  it('lights the sides and the sky above well, and what bounces up from below least', () => {
+    const lum = (c: number[]) => c[0] + c[1] + c[2];
+    expect(lum(up)).toBeGreaterThan(lum(down));
+    expect(lum(side)).toBeGreaterThan(lum(down));
+    expect(lum(down)).toBeGreaterThan(0);
+  });
+
+  it('takes its colour from the sky: bluer above than below', () => {
+    expect(up[2]).toBeGreaterThan(up[0]);
+    expect(up[2] / up[0]).toBeGreaterThan(down[2] / down[0]);
+  });
+
+  it('keeps a shadow well under the sun but well above black', () => {
+    const lum = (c: number[]) => (c[0] + c[1] + c[2]) / 3;
+    expect(lum(up)).toBeGreaterThan(0.3);
+    expect(lum(up)).toBeLessThan(1);
+  });
+});
+
+describe('fogOf', () => {
+  const def = (fog?: WorldDef['fog']) => worldOf([], { fog }).def;
+
+  it('is none, with the horizon as colour, when the world has no fog', () => {
+    expect(fogOf(def())).toEqual([...SKY[1], 0]);
+  });
+
+  it('keeps the density and pulls the colour toward the horizon', () => {
+    const [r, g, b, d] = fogOf(def([0, 0.5, 1, 0.02]));
+    expect(d).toBe(0.02);
+    expect([r, g, b]).toEqual([
+      expect.closeTo(0.7 * HAZE),
+      expect.closeTo(0.5 + (0.8 - 0.5) * HAZE),
+      expect.closeTo(1 + (0.9 - 1) * HAZE),
+    ]);
+  });
+
+  it('is exactly the fog when the fog is the horizon already', () => {
+    expect(fogOf(def([...SKY[1], 0.01]))).toEqual([...SKY[1], 0.01].map(c => expect.closeTo(c)));
   });
 });
 

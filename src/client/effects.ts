@@ -1,9 +1,6 @@
-// Camera feel, fed each frame: head bob and roll, and the dust motes around the own eye. No DOM,
-// times in seconds, unit-tested.
-import { EYE } from '../shared/constants';
+// Camera feel, fed each frame: head bob and roll. No DOM, times in seconds, unit-tested.
 import { KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import type { Vec3 } from './mesh';
 
 /** What the renderer and the camera read; update moves it. */
 export interface Effects {
@@ -11,57 +8,25 @@ export interface Effects {
   bob: number;
   /** Radians, positive leans right (strafing right). */
   roll: number;
-  /** Dust motes, x y z each, in a box around the own eye; `lit` says which the flashlight shows. */
-  motes: Float32Array;
   /** Advances dt seconds: the own player (eased, undefined before the first snapshot) and the held keys. */
   update(me: PlayerState | undefined, keys: number, dt: number): void;
 }
 
-/** Motes, and the half sides of the box they live in: they wrap round it as the eye moves. */
-export const MOTES = 128;
-const BOX = [5, 1.6, 5];
-/** The flashlight as the motes see it: a cone of cos(25°), this long, metres. */
-const CONE = Math.cos(0.436);
-const REACH = 6;
 /** Bob phase per metre walked, and its amplitude in metres. */
 const STRIDE = 4.4;
 const BOB = 0.035;
 const ROLL = 0.03;
 
-/**
- * The motes the own flashlight shows, from the eye along the unit view direction f: x, y, z and a
- * brightness in (0, 1] each, fuller near the axis and the eye.
- */
-export const lit = (fx: Effects, eye: Vec3, f: Vec3) => {
-  const out: number[] = [];
-  for (let i = 0; i < fx.motes.length; i += 3) {
-    const d = [0, 1, 2].map(a => fx.motes[i + a] - eye[a]);
-    const r = Math.hypot(...d);
-    const c = (d[0] * f[0] + d[1] * f[1] + d[2] * f[2]) / r;
-    if (r < REACH && c > CONE) {
-      out.push(...d.map((x, a) => eye[a] + x), ((c - CONE) / (1 - CONE)) * (1 - r / REACH));
-    }
-  }
-  return out;
-};
-
-/** rand in [0, 1): injectable so the tests are exact. */
-export const createEffects = (rand = Math.random): Effects => {
+export const createEffects = (): Effects => {
   let phase = 0;
   /** 0 to 1: how much of the bob shows, so stopping does not snap the eye. */
   let amt = 0;
   let lean = 0;
-  let clock = 0;
-  /** The motes are scattered at the next update. */
-  let fresh = true;
-  const drift = new Float32Array(MOTES * 3);
   let last: PlayerState | undefined;
-  const r2 = () => rand() * 2 - 1;
 
   const fx: Effects = {
     bob: 0,
     roll: 0,
-    motes: new Float32Array(MOTES * 3),
 
     update(me, keys, dt) {
       const ease = Math.min(1, dt * 10);
@@ -77,18 +42,6 @@ export const createEffects = (rand = Math.random): Effects => {
       const strafe = +!!(keys & KEY.RIGHT) - +!!(keys & KEY.LEFT);
       lean += (strafe * ROLL - lean) * Math.min(1, dt * 8);
       fx.roll = lean;
-
-      if (me) {
-        clock += dt;
-        fx.motes.forEach((m, i) => {
-          const [a, h] = [i % 3, BOX[i % 3]];
-          const o = a == 1 ? me.y + EYE : a ? me.z : me.x;
-          drift[i] = fresh ? r2() * 0.1 : drift[i];
-          const x = fresh ? o + r2() * h : m + (drift[i] + Math.sin(clock * 0.8 + i) * 0.05) * dt;
-          fx.motes[i] = o + ((((x - o + h) % (2 * h)) + 2 * h) % (2 * h)) - h;
-        });
-        fresh = false;
-      }
     },
   };
   return fx;

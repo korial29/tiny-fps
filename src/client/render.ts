@@ -1,13 +1,15 @@
-// WebGL2 drawing: one scene program, one buffer. The level is built once; the other players are boxes
-// rewritten each frame into the tail of the same buffer. Lights come from lights.ts: the shader adds
-// them to a dim ambient, and each shadowed spot first draws the level and the bodies into its layer
-// of a depth texture array. The scene goes into an offscreen target, then a second, small program
-// (POST) turns it into the picture on the canvas. No DOM beyond the canvas.
+// WebGL2 drawing: one scene program, one buffer. The brushes are built once; the other players are
+// boxes rewritten each frame into the tail of the same buffer. The sky is a fullscreen triangle at
+// depth 1, the sun a directional light with an orthographic shadow map that follows the eye (layer 0
+// of the shadow array), and lights.ts adds spots and points on top (the first MAX_SHADOWS shadowed
+// spots get the layers after it). Everything is drawn in the one program, the depth passes with
+// colour writes off. The scene goes into an offscreen target, then a second, small program (POST)
+// turns it into the picture on the canvas. No DOM beyond the canvas.
 import { TEX } from '../shared/types';
-import type { Edge, Level, PlayerState, Sector } from '../shared/types';
-import { lit } from './effects';
+import type { PlayerState } from '../shared/types';
+import type { World, WorldDef } from '../shared/world';
 import type { Effects } from './effects';
-import { STRIDE, basis, pushBox } from './mesh';
+import { STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
@@ -15,25 +17,33 @@ import { follow, pace, soldier } from './soldier';
 import type { Gait } from './soldier';
 import { LAYERS, SIZE, textures } from './textures';
 
-/** MapDef.fog when a map sets none: the clear colour and what distance fog fades to, then its density. Dark, the map is indoors. */
-export const FOG = [0.05, 0.045, 0.05, 0.02];
-/** Tints a level can use at once, white included (see palette). */
+/** Tints a world can use at once, white included (see palette). */
 export const MAX_TINTS = 16;
 /** Bytes the dynamic tail starts with; it grows when a frame needs more. */
 const TAIL = 1 << 18;
 /** Metres one texture covers. */
 const TILE = 2;
 /** Shadow map side in texels. */
-const SHADOW = 512;
-/** What the sector light is scaled to: lit by nothing else, a room is this bright. The flashlight must matter. */
-const AMBIENT = 0.3;
+export const SHADOW = 1024;
+/** Metres the sun's shadow window spans on a side, centred on the eye: 6 cm a texel. */
+export const SUN_AREA = 64;
+/** Half the depth range of the sun's window, metres: what stands this far from the eye along the sun's direction still casts. */
+export const SUN_DEPTH = 100;
+/** How far the fog colour is pulled toward the sky's horizon, 0 to 1: a fog unlike the horizon draws an edge against the sky. */
+export const HAZE = 0.6;
+/** Tangent of half the vertical field of view (70 degrees). */
+export const FOV = Math.tan((70 * Math.PI) / 360);
 /** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
 const SAMPLES = 4;
 
+// Y > 0 is the sky: a fullscreen triangle from gl_VertexID at depth 1, whose varying P is the view
+// ray (J: the camera's right and up scaled by the field of view, then forward).
 const VERT = `#version 300 es
 layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec4 c;
-uniform mat4 m;out vec3 P,N;out vec4 C;
-void main(){P=p;N=n;C=c;gl_Position=m*vec4(p,1);}`;
+uniform mat4 m;uniform float Y;uniform vec3 J[3];out vec3 P,N;out vec4 C;
+void main(){
+if(Y>.5){vec2 q=vec2(gl_VertexID&1,gl_VertexID>>1)*4.-1.;gl_Position=vec4(q,1,1);P=J[0]*q.x+J[1]*q.y+J[2];N=vec3(0);C=vec4(0);return;}
+P=p;N=n;C=c;gl_Position=m*vec4(p,1);}`;
 
 // A fullscreen triangle from gl_VertexID, no buffer.
 const POST_VERT = `#version 300 es
@@ -47,7 +57,7 @@ out vec2 U;void main(){U=vec2(gl_VertexID&1,gl_VertexID>>1)*2.;gl_Position=vec4(
 // toward 1.
 const POST_FRAG = `#version 300 es
 precision highp float;uniform sampler2D S[4];uniform vec4 Y;in vec2 U;out vec4 o;
-vec3 b(vec2 x){vec3 c=texture(S[0],x).rgb;return c*smoothstep(.65,1.3,max(c.r,max(c.g,c.b)));}
+vec3 b(vec2 x){vec3 c=texture(S[0],x).rgb;return c*smoothstep(.95,2.2,max(c.r,max(c.g,c.b)));}
 #define T(k)texture(S[0],U+Y.xy*(k)).rgb
 void main(){
 vec3 c;
@@ -82,22 +92,31 @@ const RELIEF = 0.06;
 // s: 1 on a texture, 0 on a flat colour. g: lava (which also drifts)
 // and layer -2, which glow: no light, no shade. The texture's alpha is a height: its screen-space derivatives tilt the normal
 // (bump mapping without tangents), faded out as a pixel covers more than a texel or two so the
-// mipmapped relief does not shimmer. n is the surface normal, m the bumped one. l: the ambient
-// term (Z, times the sector light on a texture) with the directional shade, plus every light, then
-// eased toward 2 (e) so many beams on one wall do not burn it white; sp: the specular sum, added
-// after the colour is lit. A: position and range, B: direction and cone (-9 on a point: no cone),
-// K: colour and shadow slot (-1: none), M: the slots' matrices. Z < 0 is the depth pass: no colour.
-// On a texture C.w is 2 * the sector's tint index + its light (see levelVerts); G is the palette.
-// F: fog colour and density.
+// mipmapped relief does not shimmer. n is the surface normal, m the bumped one. y: the brush tint,
+// which colours the daylight (ambient and sun) but not the highlights. l: the light, the hemisphere
+// ambient (H[0..2]: from the sky above, from the sides, bounced from below) plus the sun (O toward
+// it, X its colour, W the matrix of its shadow layer 0) plus every other light, then eased toward 2
+// (e) so many beams on one wall do not burn it white; sp: the specular sum, added after the colour
+// is lit. A: position and range, B: direction and cone (-9 on a point: no cone), K: colour and
+// shadow slot (-1: none; slot k is layer k + 1), M: the slots' matrices. Z < 0 is the depth pass:
+// no colour. Y > 0 is the sky, from the colours in H[3] (zenith) and H[4] (horizon): a gradient, a
+// haze band, the sun's disc and glow, bright enough to bloom. On a texture C.w is 2 * the brush's
+// tint index + its light (see level); G is the palette. F: fog colour and density.
 const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
-in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T,Z;uniform int Q;
-uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F;uniform vec3 G[${MAX_TINTS}];uniform mat4 M[${MAX_SHADOWS}];
+in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T,Z,Y;uniform int Q;
+uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;out vec4 o;
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
 void main(){
 if(Z<0.)return;
+if(Y>.5){
+vec3 d=normalize(P);float h=d.y,k=max(dot(d,O),0.);
+vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
+c=mix(c,H[4]*1.08,exp(-abs(h)*7.));
+c+=X*(.2*pow(k,24.)+.05*pow(k,4.)+2.*smoothstep(.9993,.9997,k));
+o=vec4(c,1);return;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
 vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
@@ -106,7 +125,14 @@ float h=t.a*s*${RELIEF},det=dot(dx,a);
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
 vec2 R=SP[int(s>0.?L+.5:${LAYERS}.)];
-vec3 l=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s)*Z*(.45+.55*max(dot(normalize(n+m),normalize(vec3(.4,.8,.3))),0.)),sp=vec3(0),V=normalize(E-P);
+vec3 y=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s),V=normalize(E-P),w=normalize(n+m);
+float sd=max(dot(m,O),0.)*smoothstep(0.,.1,dot(n,O)),sv=1.;
+if(sd>0.&&g<1.){
+vec4 q=W*vec4(P+n*.08,1);q.xyz=q.xyz*.5+.5;
+float v=0.;
+for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADOW},0,q.z-.0004));
+sv=mix(v/4.,1.,smoothstep(.8,1.,max(abs(q.x-.5),abs(q.y-.5))*2.));}
+vec3 l=y*(mix(mix(H[1],H[0],max(w.y,0.)),H[2],max(-w.y,0.))+X*sd*sv),sp=X*sv*sd*pow(max(dot(m,normalize(O+V)),0.),R.y);
 for(int i=0;i<${MAX_LIGHTS};i++){
 if(i>=Q||g>0.)break;
 vec3 d=A[i].xyz-P;float r=length(d),k=K[i].w,u=B[i].w;
@@ -116,7 +142,7 @@ w*=w*smoothstep(u,u+(1.-u)*.4,-dot(d,B[i].xyz))*max(dot(m,d),0.);
 if(w>0.&&k>=0.){
 vec4 q=M[int(k)]*vec4(P+n*.03,1);q.xyz=q.xyz/q.w*.5+.5;
 float v=0.;
-for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADOW},k,q.z-.0005));
+for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADOW},k+1.,q.z-.0005));
 w*=v/4.;}
 l+=K[i].rgb*w;
 sp+=K[i].rgb*w*pow(max(dot(m,normalize(d+V)),0.),R.y);}
@@ -133,7 +159,7 @@ export const viewProj = (
   pitch: number,
   aspect: number,
   roll = 0,
-  t = Math.tan((70 * Math.PI) / 360),
+  t = FOV,
   [N, F] = [0.1, 200],
 ) => {
   const [r, u, f] = basis(yaw, pitch, roll);
@@ -199,76 +225,110 @@ export const pack = (lights: Light[]) => {
   return { n: list.length, maps, a, b, k, m };
 };
 
-/** Vertical spans [y0, y1] an edge draws on its own side: the wall, or the steps of a portal. */
-export const spans = ({ map }: Level, { front, back }: Edge): [number, number][] => {
-  const f = map.sectors[front];
-  if (back < 0) {
-    return [[f.floor, f.ceil]];
-  }
-  const k = map.sectors[back];
-  return (
-    [
-      [f.floor, k.floor],
-      [k.ceil, f.ceil],
-    ] as [number, number][]
-  ).filter(([a, b]) => b > a);
+/**
+ * The view-projection of the sun's shadow map: an orthographic window of `area` metres a side
+ * looking along -dir (dir points toward the sun), centred on the eye and clipped `depth` metres
+ * either side of it. The centre is snapped to the map's texels along the window's own axes, so a
+ * shadow edge keeps its texels as the eye moves instead of crawling.
+ */
+export const sunProj = (dir: Vec3, eye: Vec3, area = SUN_AREA, depth = SUN_DEPTH) => {
+  const f = dir.map(v => -v) as Vec3;
+  const k = Math.hypot(f[0], f[2]);
+  const r: Vec3 = k > 1e-3 ? [-f[2] / k, 0, f[0] / k] : [1, 0, 0];
+  const u: Vec3 = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+  const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const [h, texel] = [area / 2, area / SHADOW];
+  const rows = [r, u].map(v => [
+    ...v.map(c => c / h),
+    -(Math.round(dot(v, eye) / texel) * texel) / h,
+  ]);
+  rows.push([...f.map(c => c / depth), -dot(f, eye) / depth], [0, 0, 0, 1]);
+  return Float32Array.from({ length: 16 }, (_, i) => rows[i & 3][i >> 2]);
 };
 
-/** The tints of a level's sectors, white first and each once: the shader's palette, MAX_TINTS at most. */
-export const palette = ({ map }: Level): Vec3[] =>
+/** The tints of a world's brushes, white first and each once: the shader's palette, MAX_TINTS at most. */
+export const palette = ({ def }: World): Vec3[] =>
   [
     ...new Map<string, Vec3>([
       ['1,1,1', [1, 1, 1]],
-      ...map.sectors.flatMap(({ tint }): [string, Vec3][] => (tint ? [[`${tint}`, tint]] : [])),
+      ...def.brushes.flatMap(({ tint }): [string, Vec3][] => (tint ? [[`${tint}`, tint]] : [])),
     ]).values(),
   ].slice(0, MAX_TINTS);
 
+/** The corners of a face's two triangles, as [along p, along q] picks of its min or max. */
+const CORNERS = [
+  [0, 0],
+  [1, 0],
+  [1, 1],
+  [0, 0],
+  [1, 1],
+  [0, 1],
+];
+
 /**
- * Floors and ceilings as fans, then every edge's walls as quads, in the vertex format above. A
- * sector's light is packed with its palette index as 2 * index + light: light is at most 1, so
- * the shader takes the index from floor(w / 2) and keeps the vertex at 10 floats.
+ * The faces of every brush as triangles in the vertex format of mesh.ts: the top gets the brush's
+ * top texture, every other face its side texture. Texture coordinates are world metres on the face
+ * (x, z on horizontal faces; z, y on faces facing x; x, y on faces facing z), so a texture runs on
+ * across neighbouring brushes. A face another brush covers flush is not built, nor is the bottom
+ * of a brush at or under the kill floor: nothing is seen from there. A brush's light is packed
+ * with its palette index as 2 * index + 1: the light is 1 (the daylight is in the shader), and
+ * the shader takes the index from floor(w / 2).
  */
-export const levelVerts = (lvl: Level): number[] => {
+export const level = (world: World): number[] => {
+  const { brushes, floor } = world.def;
   const out: number[] = [];
-  const keys = palette(lvl).map(String);
-  const pack = ({ light = 1, tint }: Sector) => light + 2 * Math.max(0, keys.indexOf(`${tint}`));
-  for (const sector of lvl.map.sectors) {
-    const { pts, floor, ceil, ft, ct } = sector;
-    const light = pack(sector);
-    for (const [y, ny, t] of [
-      [floor, 1, ft],
-      [ceil, -1, ct],
-    ]) {
-      for (let i = 1; i < pts.length - 1; i++) {
-        for (const [x, z] of [pts[0], pts[i], pts[i + 1]]) {
-          out.push(x, y, z, 0, ny, 0, x, z, t, light);
+  const keys = palette(world).map(String);
+  brushes.forEach((b, bi) => {
+    const light = 1 + 2 * Math.max(0, keys.indexOf(`${b.tint}`));
+    for (let a = 0; a < 3; a++) {
+      const [p, q] = [(a + 1) % 3, (a + 2) % 3];
+      const [du, dv] = a == 0 ? [2, 1] : a == 1 ? [0, 2] : [0, 1];
+      for (const up of [0, 1]) {
+        const at = up ? b.max[a] : b.min[a];
+        const covered = brushes.some(
+          (c, j) =>
+            j != bi &&
+            (up ? c.min[a] : c.max[a]) == at &&
+            c.min[p] <= b.min[p] &&
+            c.max[p] >= b.max[p] &&
+            c.min[q] <= b.min[q] &&
+            c.max[q] >= b.max[q],
+        );
+        if (covered || (a == 1 && !up && b.min[1] <= floor)) {
+          continue;
+        }
+        const n: Vec3 = [0, 0, 0];
+        n[a] = up ? 1 : -1;
+        for (const [i, j] of CORNERS) {
+          const v: Vec3 = [0, 0, 0];
+          [v[a], v[p], v[q]] = [at, (i ? b.max : b.min)[p], (j ? b.max : b.min)[q]];
+          out.push(...v, ...n, v[du], v[dv], a == 1 && up ? b.top : b.side, light);
         }
       }
     }
-  }
-  for (const e of lvl.edges) {
-    const { ax, az, bx, bz, front } = e;
-    const { wt } = lvl.map.sectors[front];
-    const light = pack(lvl.map.sectors[front]);
-    const len = Math.hypot(bx - ax, bz - az);
-    // The normal points into the sector (left of a counter-clockwise edge). u runs along the edge
-    // from the viewer's left to right, in world metres, so collinear walls line up.
-    const [dx, dz] = [(bx - ax) / len, (bz - az) / len];
-    for (const [y0, y1] of spans(lvl, e)) {
-      for (const [x, z, y] of [
-        [ax, az, y0],
-        [bx, bz, y0],
-        [bx, bz, y1],
-        [ax, az, y0],
-        [bx, bz, y1],
-        [ax, az, y1],
-      ]) {
-        out.push(x, y, z, -dz, 0, dx, x * dx + z * dz, y, wt, light);
-      }
-    }
-  }
+  });
   return out;
 };
+
+/**
+ * What the daylight of a world lights its surfaces with, linear RGB, as the shader's H uniform:
+ * the ambient from the sky above, from the sides and bounced up from below, then the sky's zenith
+ * and horizon colours. The ambient is the sky's own colour, washed toward white so a shadow is
+ * blue-grey and not blue, and dimmer on the sides and below.
+ */
+export const daylight = ({ sky: [zenith, horizon] }: WorldDef): Vec3[] => [
+  zenith.map(v => (v * 0.55 + 0.45) * 0.62) as Vec3,
+  horizon.map(v => (v * 0.7 + 0.3) * 0.58) as Vec3,
+  horizon.map((v, i) => v * [1, 0.92, 0.8][i] * 0.34) as Vec3,
+  zenith,
+  horizon,
+];
+
+/** The shader's fog uniform: the world's fog colour pulled toward its horizon by HAZE, and its density; none when the world has no fog. */
+export const fogOf = ({ fog, sky }: WorldDef): [number, number, number, number] =>
+  fog
+    ? [...([0, 1, 2].map(i => fog[i] + (sky[1][i] - fog[i]) * HAZE) as Vec3), fog[3]]
+    : [...sky[1], 0];
 
 /** A texture and the framebuffer that draws into it. */
 interface Target {
@@ -280,8 +340,8 @@ interface Target {
 
 export interface Renderer {
   /**
-   * Draws one frame: the map, the others and the dust as seen from eye. colors maps player id to
-   * CSS.
+   * Draws one frame: the sky, the brushes and the others as seen from eye. colors maps player id
+   * to CSS.
    */
   frame(
     eye: Vec3,
@@ -290,7 +350,7 @@ export interface Renderer {
     others: PlayerState[],
     colors: ReadonlyMap<number, string>,
     fx: Effects,
-    /** gather() in lights.ts: at most MAX_LIGHTS, the first MAX_SHADOWS shadowed spots mapped. */
+    /** gather() in lights.ts: at most MAX_LIGHTS, the first MAX_SHADOWS shadowed spots mapped, besides the sun. */
     lights: Light[],
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
@@ -308,7 +368,7 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 };
 
 /** Throws when the browser has no WebGL2. */
-export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer => {
+export const createRenderer = (canvas: HTMLCanvasElement, world: World): Renderer => {
   /** How far and how fast each body drawn has gone: the limbs stride with it. */
   const gaits = new Map<number, Gait>();
   let clock = performance.now() / 1000;
@@ -332,7 +392,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
   };
 
   const size = () => backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
-  const ground = levelVerts(lvl);
+  const ground = level(world);
+  const { sun, sky } = world.def;
+  const sunDir = sun.dir.map(v => v / Math.hypot(...sun.dir)) as Vec3;
   const pixels = textures();
   const tail = ground.length * 4;
   let cap = tail + TAIL;
@@ -446,7 +508,26 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
     made = [0, 0];
     [post, pu] = link(POST_VERT, POST_FRAG, ['S', 'Y']);
     gl.uniform1iv(pu.S, [0, 1, 2, 3]);
-    [scene, u] = link(VERT, FRAG, ['m', 'E', 'T', 'Z', 'Q', 'A', 'B', 'K', 'M', 'D', 'F', 'G']);
+    [scene, u] = link(VERT, FRAG, [
+      'm',
+      'E',
+      'T',
+      'Z',
+      'Q',
+      'A',
+      'B',
+      'K',
+      'M',
+      'D',
+      'F',
+      'G',
+      'W',
+      'H',
+      'O',
+      'X',
+      'Y',
+      'J',
+    ]);
     gl.uniform1i(u.D, 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
     alloc();
@@ -455,10 +536,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
       gl.vertexAttribPointer(i, size, gl.FLOAT, false, STRIDE * 4, at * 4);
       return at + size;
     }, 0);
-    // Unit 1: one depth layer per shadowed light, compared in the shader (linear: a 2x2 PCF per tap).
+    // Unit 1: the sun's depth layer, then one per shadowed light, compared in the shader (linear: a 2x2 PCF per tap).
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, (shadows = gl.createTexture()));
-    gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.DEPTH_COMPONENT24, SHADOW, SHADOW, MAX_SHADOWS);
+    gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.DEPTH_COMPONENT24, SHADOW, SHADOW, MAX_SHADOWS + 1);
     for (const [name, value] of [
       [gl.TEXTURE_MIN_FILTER, gl.LINEAR],
       [gl.TEXTURE_MAG_FILTER, gl.LINEAR],
@@ -494,6 +575,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
       gl.texParameterf(gl.TEXTURE_2D_ARRAY, aniso.TEXTURE_MAX_ANISOTROPY_EXT, 8);
     }
     gl.enable(gl.DEPTH_TEST);
+    // The sky sits at depth 1, the clear value.
+    gl.depthFunc(gl.LEQUAL);
     climate();
     const [w, h] = size();
     if (w && h) {
@@ -501,16 +584,18 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
     }
   };
 
-  /** The level's fog (and clear colour) and tint palette, into the program. */
+  /** The world's fog, daylight, sun and tint palette, and the clear colour (the horizon's), into the program. */
   const climate = () => {
-    const fog = lvl.map.fog ?? FOG;
-    const tints = palette(lvl);
-    gl.uniform4fv(u.F, fog);
+    const tints = palette(world);
+    gl.uniform4fv(u.F, fogOf(world.def));
+    gl.uniform3fv(u.H, daylight(world.def).flat());
+    gl.uniform3fv(u.O, sunDir);
+    gl.uniform3fv(u.X, sun.color);
     gl.uniform3fv(
       u.G,
       Float32Array.from({ length: MAX_TINTS * 3 }, (_, i) => tints[(i / 3) | 0]?.[i % 3] ?? 1),
     );
-    gl.clearColor(fog[0], fog[1], fog[2], 1);
+    gl.clearColor(...sky[1], 1);
   };
   setup();
 
@@ -547,13 +632,6 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
         const g = follow(gaits, p.id, p.x, p.z, dt);
         soldier(v, p, rgb(colors.get(p.id) ?? '#888'), g.walked, pace(g));
       }
-      // What the shadow maps hold ends here: the unlit dust after it casts nothing.
-      const bodies = v.length;
-      const specks = lit(fx, eye, basis(yaw, pitch, fx.roll)[2]);
-      for (let i = 0; i < specks.length; i += 4) {
-        const [b, k] = [Math.sqrt(specks[i + 3]), 0.01 + 0.025 * specks[i + 3]];
-        pushBox(v, specks.slice(i, i + 3) as Vec3, [k, k, k], 0, [b, b * 0.9, b * 0.7], -2);
-      }
       if (tail + v.length * 4 > cap) {
         cap = tail + v.length * 8;
         alloc();
@@ -561,36 +639,43 @@ export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer 
       gl.bufferSubData(gl.ARRAY_BUFFER, tail, new Float32Array(v));
       const pk = pack(lights);
       const first = ground.length / STRIDE;
-      if (pk.maps) {
-        gl.uniform1f(u.Z, -1);
-        // Unit 1 is unbound meanwhile: sampling a map the framebuffer writes is a feedback loop.
-        gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, depth);
-        gl.viewport(0, 0, SHADOW, SHADOW);
-        gl.enable(gl.POLYGON_OFFSET_FILL);
-        for (let i = 0; i < pk.maps; i++) {
-          gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, shadows, 0, i);
-          gl.uniformMatrix4fv(u.m, false, pk.m.subarray(i * 16, i * 16 + 16));
-          gl.clear(gl.DEPTH_BUFFER_BIT);
-          gl.drawArrays(gl.TRIANGLES, 0, first + bodies / STRIDE);
-        }
-        gl.disable(gl.POLYGON_OFFSET_FILL);
-        gl.bindTexture(gl.TEXTURE_2D_ARRAY, shadows);
-        gl.activeTexture(gl.TEXTURE0);
+      const sunM = sunProj(sunDir, eye);
+      // Layer 0: the sun, once; then one layer per mapped light.
+      gl.uniform1f(u.Z, -1);
+      // Unit 1 is unbound meanwhile: sampling a map the framebuffer writes is a feedback loop.
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, depth);
+      gl.viewport(0, 0, SHADOW, SHADOW);
+      gl.enable(gl.POLYGON_OFFSET_FILL);
+      for (let i = 0; i <= pk.maps; i++) {
+        gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, shadows, 0, i);
+        gl.uniformMatrix4fv(u.m, false, i ? pk.m.subarray(i * 16 - 16, i * 16) : sunM);
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLES, 0, first + v.length / STRIDE);
       }
+      gl.disable(gl.POLYGON_OFFSET_FILL);
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY, shadows);
+      gl.activeTexture(gl.TEXTURE0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, msaa);
       gl.viewport(0, 0, w, h);
       gl.uniformMatrix4fv(u.m, false, vp);
+      gl.uniformMatrix4fv(u.W, false, sunM);
       gl.uniform3fv(u.E, eye);
       gl.uniform1f(u.T, performance.now() / 1000);
-      gl.uniform1f(u.Z, AMBIENT);
+      gl.uniform1f(u.Z, 1);
       gl.uniform1i(u.Q, pk.n);
       gl.uniform4fv(u.A, pk.a);
       gl.uniform4fv(u.B, pk.b);
       gl.uniform4fv(u.K, pk.k);
       gl.uniformMatrix4fv(u.M, false, pk.m);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      // The sky first, at depth 1: the view ray of each pixel from the camera's axes.
+      const [r, up, fwd] = basis(yaw, pitch, fx.roll);
+      gl.uniform3fv(u.J, [r.map(c => c * FOV * (w / h)), up.map(c => c * FOV), fwd].flat());
+      gl.uniform1f(u.Y, 1);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.uniform1f(u.Y, 0);
       gl.drawArrays(gl.TRIANGLES, 0, first + v.length / STRIDE);
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaa);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, hdr.f);

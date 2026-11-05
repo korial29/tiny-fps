@@ -733,6 +733,39 @@ describe('gait: the contacts', () => {
     expect(ahead[0] * TO[wall][0] + ahead[2] * TO[wall][1]).toBeGreaterThan(0.9);
   });
 
+  it('sways a little as it hangs: the feet a few centimetres, the hands not at all, each player in their own time', () => {
+    const swing = (id: number) =>
+      sim(
+        createGait(),
+        state({ id, ...at, mode: MODE.HANG, ground: false, wall: 4, edge: 3 }),
+        8,
+        () => undefined,
+      );
+    const [a, b] = [swing(3), swing(4)];
+    for (const fs of [a, b]) {
+      for (const j of [J.FOOT_L, J.FOOT_R]) {
+        const move = Math.hypot(...[0, 1, 2].map(k => spread(fs.map(f => f.pos[j][k]))));
+        expect(move).toBeGreaterThan(0.03);
+        expect(move).toBeLessThan(0.1);
+      }
+      // The wrists stay on the lip, within the tolerance of the hang, and in fact where they were.
+      for (const j of [J.HAND_L, J.HAND_R]) {
+        for (const f of fs) {
+          const [along, up] = rel(f.pos[j], 4, 3);
+          expect(Math.abs(along - 0.43)).toBeLessThan(0.05);
+          expect(Math.abs(up)).toBeLessThan(0.05);
+        }
+        expect(Math.max(...[0, 1, 2].map(k => spread(fs.map(f => f.pos[j][k]))))).toBeLessThan(
+          0.005,
+        );
+      }
+    }
+    // Not in unison: the two feet of two players are not at the same place at the same time.
+    expect(
+      Math.max(...a.map((f, i) => Math.abs(f.pos[J.FOOT_R][2] - b[i].pos[J.FOOT_R][2]))),
+    ).toBeGreaterThan(0.02);
+  });
+
   it('keeps the hands on the lip as the body climbs, then puts a foot over it', () => {
     const climb = (y: number) => hold({ mode: MODE.CLIMB, ground: false, wall: 4, edge: 3, y }, 90);
     const [low, mid, top] = [climb(1.2), climb(1.9), climb(2.9)];

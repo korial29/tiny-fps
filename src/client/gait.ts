@@ -315,8 +315,8 @@ export const createGait = (): Gait => {
   let [ph, steps, time, v, yaw, wall, heading] = [0, 0, 0, 0, 0, 0, 0];
   let [kick, fall, flip, duty, gate] = [0, 0, 0, 0.6, 0];
   let [grounded, fresh, dirty, built] = [false, true, true, -1];
-  /** Per player: cadence, arm swing of each side, mean tilt, toe-out. */
-  let who = [1, 1, 1, 0, 0.06];
+  /** Per player: cadence, arm swing of each side, mean tilt, toe-out, the phase of a hang's sway. */
+  let who = [1, 1, 1, 0, 0.06, 0];
   let [look, pitch, at] = [0, 0, [0, 0, 0]];
   /** The wall of a wall-run: its side of the runner (-1 left, 1 right) and its normal. The ledge held: where the hands took it, the normal and the height of its top. */
   let [side, wn, lip, held] = [1, [1, 0], [0, 0, 0, -1, 0], false];
@@ -347,6 +347,7 @@ export const createGait = (): Gait => {
         1 + 0.16 * (rnd(id, 2) - 0.5),
         0.03 * (rnd(id, 3) - 0.5),
         0.05 + 0.04 * rnd(id, 4),
+        rnd(id, 6),
       ];
       ph = v > 0.25 ? rnd(id, 5) : rnd(id, 5) < 0.5 ? 0.05 : 0.55;
       [steps, time, flip, kick, fall, grounded, built] = [0, 0, 0, 0, 0, false, -1];
@@ -732,6 +733,18 @@ export const createGait = (): Gait => {
     });
     if (flip) {
       rot[J.PELVIS] = mul(axis(X, -TAU * (3 - 2 * flip) * flip * flip), rot[J.PELVIS]);
+    }
+    const hang = sw(MOVE.HANG);
+    if (hang > 0.002) {
+      // A hang sways: the body swings about the hands, a metre above the pelvis, the legs a little more. The hands go back on the lip in `reach`.
+      const [a, b] = [
+        0.01 * Math.sin(TAU * (0.3 * time + who[5])),
+        0.006 * Math.sin(TAU * (0.2 * time + 3 * who[5])),
+      ].map(v => v * hang * (0.7 + 0.6 * who[5]));
+      rot[J.PELVIS] = mul(mul(axis(Z, b), axis(X, a)), rot[J.PELVIS]);
+      [J.THIGH_L, J.THIGH_R].forEach(j => (rot[j] = mul(rot[j], axis(X, a))));
+      out.hips[0] += b;
+      out.hips[2] -= a;
     }
     const stun = sw(MOVE.STUN);
     if (stun) {

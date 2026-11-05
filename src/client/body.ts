@@ -105,6 +105,7 @@ const RATES = {
   slide: 10,
   low: 12,
   amp: 8,
+  stun: 14,
 };
 /** Events that kick a pulse up at once and let it die away (1 / s). */
 const DECAY = { jump: 5, tuck: 4, land: 7 };
@@ -112,7 +113,20 @@ const DECAY = { jump: 5, tuck: 4, land: 7 };
 export const createBody = (): Body => {
   /** The own player as last seen. */
   let me: PlayerState | undefined;
-  const w = { sprint: 0, air: 0, dash: 0, hang: 0, climb: 0, wall: 0, slide: 0, low: 0, amp: 0 };
+  const w = {
+    sprint: 0,
+    air: 0,
+    dash: 0,
+    hang: 0,
+    climb: 0,
+    wall: 0,
+    slide: 0,
+    low: 0,
+    amp: 0,
+    stun: 0,
+  };
+  /** Seconds, for the flailing of a stumble. */
+  let clock = 0;
   /** Pulses: `v` follows `kick` (which an event sets to 1 and which decays), so they ease in as well. */
   const kick = { jump: 0, tuck: 0, land: 0 };
   const v = { jump: 0, tuck: 0, land: 0 };
@@ -134,6 +148,7 @@ export const createBody = (): Body => {
     const run = walks(p.mode) && d < 1;
     phase += run ? d * (GAIT - 0.6 * w.sprint) : 0;
     me = { ...p };
+    clock += dt;
     const to = {
       sprint: +sprinting(p),
       air: +(p.mode == MODE.AIR && p.dash <= DASH_COOLDOWN - DASH_TICKS),
@@ -144,6 +159,7 @@ export const createBody = (): Body => {
       slide: +(p.mode == MODE.SLIDE),
       low: +(p.mode == MODE.SLIDE || p.mode == MODE.CROUCH),
       amp: walks(p.mode) ? clamp(speedOf(p) / SPRINT_SPEED) : 0,
+      stun: +(p.stun > 0),
     };
     for (const n of Object.keys(RATES) as (keyof typeof RATES)[]) {
       w[n] += (to[n] - w[n]) * (1 - Math.exp(-dt * RATES[n]));
@@ -212,6 +228,9 @@ export const createBody = (): Body => {
           : goal(1, -0.3, -0.12, 0.5, -0.8, -0.6, -0.3),
         w.slide,
       );
+      // Reeling from a tackle: the hands thrown out and up, flailing against each other.
+      const flail = Math.sin(clock * 12 + (s > 0 ? Math.PI : 0));
+      g = layer(g, goal(s, 0.5, 0.05 + 0.2 * flail, 0.5 + 0.1 * flail, 1, -0.2, -0.6), w.stun);
       let dir: Vec3 | undefined;
       if (grip) {
         // Planted: the wrist on the ledge's lip, the hands a hand-width apart along the wall.
@@ -248,6 +267,7 @@ export const createBody = (): Body => {
         [0.1, toWall],
         [0.35, w.slide],
         [0.1, plant],
+        [0.2, w.stun],
       ]) {
         curl += (to - curl) * t;
       }
@@ -265,9 +285,12 @@ export const createBody = (): Body => {
     });
 
     const stand = mix([0, 0.88, -0.12], [0, 0.46, -0.2], w.low);
+    // Thrown back: the pelvis shoved forward under the leaning chest.
+    stand[2] += 0.12 * w.stun;
     const pelvis = mix(stand, [0, 0.26, -0.4], w.slide);
     pelvis[1] -= 0.22 * v.land;
     const chest = mix(mix([0, 1.4, -0.2], [0, 0.55, -0.12], w.low), [0, 0.5, -0.3], w.slide);
+    chest[2] -= 0.2 * w.stun;
     const legs = [-1, 1].map((s): Limb => {
       const sn = Math.sin(phase + (s > 0 ? 0 : Math.PI));
       const cn = Math.cos(phase + (s > 0 ? 0 : Math.PI));

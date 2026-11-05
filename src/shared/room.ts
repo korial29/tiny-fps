@@ -4,14 +4,16 @@ import {
   MAX_REWIND,
   RULES,
   SNAP_EVERY,
+  TACKLE_COOLDOWN,
   TEAM_COLOR,
   TICK_HZ,
 } from './constants';
 import { Ctf } from './ctf';
 import { ROOFTOPS } from './map';
-import { move, spawn } from './physics';
+import { forward, move, spawn, speedOf, stumble } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
+import { reaches, tackling } from './tackle';
 import type { Conn, Every, PlayerInfo, PlayerState, Rules } from './types';
 import { build } from './world';
 import type { World, WorldDef } from './world';
@@ -24,6 +26,10 @@ interface Player {
   bank: number;
   /** Seq of the last applied input. Starts at 65535, the seq before the client's first (0). */
   ack: number;
+  /** The id of the player who tackled this one, while the stumble runs. */
+  by: number;
+  /** The host tick of the last tackle this player made. */
+  tackled: number;
 }
 
 /** Ticks run at most this many times per timer callback, so a stalled host does not spiral. */
@@ -120,6 +126,7 @@ export class Room {
       p.bank--;
       move(p.state, input, this.world, p.info.team);
       this.ctf.moved(p.state);
+      this.tackle(p, input.view);
       p.ack = input.seq;
     }
   }
@@ -172,7 +179,7 @@ export class Room {
       // One buffer for everyone: transports must not mutate it.
       const snap = encodeSnapshot({
         tick: now,
-        players: players.map(p => ({ ...p.state, ack: p.ack })),
+        players: players.map(p => ({ ...p.state, ack: p.ack, by: p.state.stun ? p.by : 0 })),
         ...this.ctf.wire(),
       });
       players.forEach(p => p.conn.send(snap));
@@ -241,6 +248,35 @@ export class Room {
         ? { ...pb, x: l(pa.x, pb.x), y: l(pa.y, pb.y), z: l(pa.z, pb.z) }
         : (pb ?? pa ?? p);
     });
+  }
+
+  /**
+   * After a move of `p` at the view tick `view`: a dash or a slide that overlaps an enemy carrier
+   * tackles him. The carrier is where `p` drew him (lag compensation), so a tackle that hit on
+   * the tackler's screen counts; the carrier drops the flag and stumbles, thrown the way the
+   * tackler goes. Once per TACKLE_COOLDOWN ticks, for the first carrier hit.
+   */
+  private tackle(p: Player, view: number | undefined): void {
+    const me = p.state;
+    if (!tackling(me) || this.ticks - p.tackled < TACKLE_COOLDOWN) {
+      return;
+    }
+    const foes = this.players().filter(q => q.info.team !== p.info.team);
+    const hit = this.rewind(p.info.id, view).find(
+      seen =>
+        reaches(me, seen) &&
+        foes.some(q => q.info.id === seen.id && this.ctf.carrying(q.info.id) >= 0),
+    );
+    const foe = foes.find(q => q.info.id === hit?.id);
+    if (!foe || !this.drop(foe.info.id)) {
+      return;
+    }
+    // His way: the tackler's speed, or the way he faces when he has none.
+    const v = speedOf(me);
+    const [dx, dz] = v > 1e-3 ? [me.vx / v, me.vz / v] : forward(me.yaw);
+    stumble(foe.state, dx, dz);
+    foe.by = p.info.id;
+    p.tackled = this.ticks;
   }
 
   /** The first spawn point of the team with none of `others` within SPAWN_CLEAR, else the next one round-robin. */
@@ -314,6 +350,8 @@ export class Room {
       ),
       bank: INPUT_BURST,
       ack: 0xffff,
+      by: 0,
+      tackled: -TACKLE_COOLDOWN,
     };
     this.peers.set(conn, player);
     this.ctf.join(id, team, player.state);

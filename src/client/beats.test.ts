@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { IDLE } from '../../test/teams';
 import { TEAM_NAME } from '../shared/constants';
 import { FLAG, TEAM } from '../shared/types';
-import type { FlagState, Snapshot } from '../shared/types';
-import { beats, cue, say } from './beats';
+import type { FlagState, SnapPlayer, Snapshot } from '../shared/types';
+import { STILL } from '../shared/physics';
+import { beats, cues, say } from './beats';
+import type { Beat } from './beats';
 import { SOUND } from './sfx';
 
 const flag = (over: Partial<FlagState> = {}): FlagState => ({ ...IDLE.flags[0], ...over });
@@ -69,7 +71,7 @@ describe('beats', () => {
 describe('say', () => {
   const name = (id: number) => `P${id}`;
   const red: { id: number; team: number } = { id: 0, team: TEAM.RED };
-  const text = (beat: Parameters<typeof say>[0], me = red) => say(beat, me, name);
+  const text = (beat: Parameters<typeof say>[0], me = red) => say(beat, me, name)!;
 
   it('says the other team took your flag, in its colour', () => {
     expect(text({ kind: 'take', flag: TEAM.RED, by: 2 })).toEqual({
@@ -108,19 +110,101 @@ describe('say', () => {
   });
 });
 
-describe('cue', () => {
+describe('cues', () => {
+  const sound = (beat: Parameters<typeof cues>[0], team: number) =>
+    cues(beat, { id: 9, team }).map(c => [c.id, c.rate]);
+
   it('plays the sound of the beat, plainly for good news for the team and lower for bad news', () => {
-    expect(cue({ kind: 'take', flag: TEAM.BLUE, by: 0 }, TEAM.RED)).toEqual([SOUND.TAKE, 1]);
-    expect(cue({ kind: 'take', flag: TEAM.RED, by: 2 }, TEAM.RED)).toEqual([SOUND.TAKE, 0.8]);
-    expect(cue({ kind: 'drop', flag: TEAM.RED }, TEAM.RED)).toEqual([SOUND.DROP, 1]);
-    expect(cue({ kind: 'drop', flag: TEAM.BLUE }, TEAM.RED)).toEqual([SOUND.DROP, 0.85]);
-    expect(cue({ kind: 'return', flag: TEAM.RED }, TEAM.RED)).toEqual([SOUND.RETURN, 1]);
-    expect(cue({ kind: 'return', flag: TEAM.BLUE }, TEAM.RED)).toEqual([SOUND.RETURN, 0.85]);
-    expect(cue({ kind: 'capture', team: TEAM.RED }, TEAM.RED)).toEqual([SOUND.CAPTURE, 1]);
-    expect(cue({ kind: 'capture', team: TEAM.RED }, TEAM.BLUE)).toEqual([SOUND.CAPTURE, 0.8]);
+    expect(sound({ kind: 'take', flag: TEAM.BLUE, by: 0 }, TEAM.RED)).toEqual([[SOUND.TAKE, 1]]);
+    expect(sound({ kind: 'take', flag: TEAM.RED, by: 2 }, TEAM.RED)).toEqual([[SOUND.TAKE, 0.8]]);
+    expect(sound({ kind: 'drop', flag: TEAM.RED }, TEAM.RED)).toEqual([[SOUND.DROP, 1]]);
+    expect(sound({ kind: 'drop', flag: TEAM.BLUE }, TEAM.RED)).toEqual([[SOUND.DROP, 0.85]]);
+    expect(sound({ kind: 'return', flag: TEAM.RED }, TEAM.RED)).toEqual([[SOUND.RETURN, 1]]);
+    expect(sound({ kind: 'return', flag: TEAM.BLUE }, TEAM.RED)).toEqual([[SOUND.RETURN, 0.85]]);
+    expect(sound({ kind: 'capture', team: TEAM.RED }, TEAM.RED)).toEqual([[SOUND.CAPTURE, 1]]);
+    expect(sound({ kind: 'capture', team: TEAM.RED }, TEAM.BLUE)).toEqual([[SOUND.CAPTURE, 0.8]]);
   });
 
   it('plays nothing for a new match', () => {
-    expect(cue({ kind: 'start' }, TEAM.RED)).toBeUndefined();
+    expect(cues({ kind: 'start' }, { id: 0, team: TEAM.RED })).toEqual([]);
+  });
+
+  it('plays a tackle by who you are in it: an impact and a grunt, a close impact, an impact at the spot', () => {
+    const beat: Beat = { kind: 'tackle', who: 1, by: 2, at: [3, 4, 5] };
+    // The one tackled: centred, the impact and the grunt.
+    expect(cues(beat, { id: 1, team: TEAM.BLUE })).toEqual([
+      { id: SOUND.TACKLE },
+      { id: SOUND.GRUNT },
+    ]);
+    // The tackler: one impact, centred and a little quieter.
+    expect(cues(beat, { id: 2, team: TEAM.RED })).toEqual([
+      { id: SOUND.TACKLE, gain: 0.8, rate: 1.1 },
+    ]);
+    // Anyone else hears it where it happened, and no grunt.
+    expect(cues(beat, { id: 3, team: TEAM.RED })).toEqual([{ id: SOUND.TACKLE, at: [3, 4, 5] }]);
+  });
+});
+
+describe('tackles', () => {
+  const runner = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
+    ...STILL,
+    id,
+    x: id,
+    y: 10,
+    z: 0,
+    vy: 0,
+    yaw: 0,
+    pitch: 0,
+    ground: true,
+    ack: 0,
+    by: 0,
+    ...over,
+  });
+  const name = (id: number) => `P${id}`;
+  const red = { id: 2, team: TEAM.RED };
+
+  it('reads a tackle from a stumble timer that went up, with the tackler and the place', () => {
+    const before = snap({ players: [runner(1), runner(2)] });
+    const after = snap({ players: [runner(1, { stun: 48, by: 2 }), runner(2)] });
+    expect(beats(before, after)).toEqual([{ kind: 'tackle', who: 1, by: 2, at: [1, 11, 0] }]);
+  });
+
+  it('reads one tackle once: not while the stumble runs down, not when it ends', () => {
+    const at = (stun: number) => snap({ players: [runner(1, { stun, by: 2 }), runner(2)] });
+    expect(beats(at(48), at(46))).toEqual([]);
+    expect(beats(at(2), at(0))).toEqual([]);
+    expect(beats(at(0), at(0))).toEqual([]);
+    // A second tackle on a runner still stumbling is a new one.
+    expect(beats(at(20), at(48))).toHaveLength(1);
+  });
+
+  it('does not read a tackle off a player the first snapshot did not have', () => {
+    const before = snap({ players: [runner(2)] });
+    const after = snap({ players: [runner(1, { stun: 48, by: 2 }), runner(2)] });
+    expect(beats(before, after)).toEqual([]);
+  });
+
+  it('puts a tackle after the flag beats, and reads a flag sent home at once as one return', () => {
+    const before = snap({ flags: [carried(1), flag()], players: [runner(1), runner(2)] });
+    // The tackler stood by the flag: it went home in the same two ticks.
+    const after = snap({
+      flags: [flag(), flag()],
+      players: [runner(1, { stun: 48, by: 2 }), runner(2)],
+    });
+    expect(beats(before, after).map(b => b.kind)).toEqual(['return', 'tackle']);
+    // A capture is still one beat, with no return.
+    expect(
+      beats(
+        snap({ flags: [carried(1), flag()] }),
+        snap({ score: [0, 1], flags: [flag(), flag()] }),
+      ),
+    ).toEqual([{ kind: 'capture', team: TEAM.BLUE }]);
+  });
+
+  it('tells the tackler, and nobody else, in a banner', () => {
+    const beat: Beat = { kind: 'tackle', who: 1, by: 2, at: [0, 0, 0] };
+    expect(say(beat, red, name)).toEqual({ team: TEAM.RED, text: 'Tackled P1!' });
+    expect(say(beat, { id: 1, team: TEAM.BLUE }, name)).toBeUndefined();
+    expect(say(beat, { id: 3, team: TEAM.RED }, name)).toBeUndefined();
   });
 });

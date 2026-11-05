@@ -6,7 +6,7 @@ import type { ServerText } from '../shared/protocol';
 import type { PlayerInfo, SocketLike, Snapshot } from '../shared/types';
 import { build, hidden } from '../shared/world';
 import { createAudio, savedMute, toggleMute } from './audio';
-import { beats, cue, say } from './beats';
+import { beats, cues, say } from './beats';
 import { createBody } from './body';
 import { createEffects } from './effects';
 import { flagDraws } from './flag';
@@ -128,14 +128,23 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         predictor.snapshot(s, performance.now());
         for (const beat of beats(match, s)) {
           const line = say(beat, you, id => names.get(id) ?? 'Someone');
-          hud.banner(line.text, line.team);
+          if (line) {
+            hud.banner(line.text, line.team);
+          }
           if (beat.kind == 'start') {
             // A new match: everyone is back at a spawn, facing the way his team's spawns do.
             [ctl.yaw, ctl.pitch] = [world.def.teams[you.team].spawns[0][3], 0];
           }
-          const sound = cue(beat, you.team);
-          if (sound) {
-            audio.play(sound[0], undefined, 1, sound[1]);
+          for (const c of cues(beat, you)) {
+            audio.play(c.id, c.at, c.gain, c.rate);
+          }
+          if (beat.kind == 'tackle') {
+            // The own player tackled, or was: the camera answers.
+            if (beat.who == you.id) {
+              fx.jolt();
+            } else if (beat.by == you.id) {
+              fx.punch();
+            }
           }
         }
         match = s;
@@ -200,6 +209,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     // What the live steps did, once: the camera, the sounds and the body read it, the inputs sent do not.
     const hit = predictor.events();
     fx.update(me, ctl.keys, dt, hit);
+    hud.hurt(fx.hurt);
     foley.me(me, hit, fx.stride);
     foley.others(others);
     body.update(me, hit, dt);

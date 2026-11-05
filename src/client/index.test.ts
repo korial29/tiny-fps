@@ -31,6 +31,7 @@ describe('tinyFps, the match through the socket', () => {
       ...STILL,
       id,
       ack: 0xffff,
+      by: 0,
     }));
     sock.onmessage!({ data: encodeSnapshot({ tick: 2, players, ...IDLE, ...over }) });
   };

@@ -19,7 +19,9 @@ import {
   COYOTE_TICKS,
   DASH_COOLDOWN,
   JUMP_BUFFER_TICKS,
+  MAX_PLAYERS,
   SLIDE_TICKS,
+  STUMBLE_TICKS,
 } from './constants';
 import { STILL } from './physics';
 import { FLAG, KEY, MODE, SIDE } from './types';
@@ -36,6 +38,7 @@ const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
   pitch: -0.7,
   ground: false,
   ack: 1234,
+  by: 0,
   ...STILL,
   mode: MODE.AIR,
   ...over,
@@ -141,7 +144,7 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 4-byte head, 39 bytes per player, then the match: 4 bytes and a byte per flag at home', () => {
+  it('has a 4-byte head, 40 bytes per player, then the match: 4 bytes and a byte per flag at home', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [
@@ -161,6 +164,8 @@ describe('snapshot frame', () => {
           dashes: 0,
           t: 200,
           dash: 33,
+          stun: 40,
+          by: 0b1011,
           coyote: 5,
           buffer: 3,
           held: KEY.JUMP,
@@ -171,7 +176,7 @@ describe('snapshot frame', () => {
       ],
       ...IDLE,
     });
-    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 39, 4]);
+    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 40, 4]);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + SNAP_MATCH + 2);
     expect(bytes(buf)).toEqual([
       ...[MSG_SNAPSHOT, 0x12, 0x34, 1],
@@ -192,8 +197,9 @@ describe('snapshot frame', () => {
       0xd2, // ack 1234
       0b01010010, // mode 2, wall 2 << 3, jumps 1 << 6, no air dash
       200, // t
-      33, // dash
+      0b10100001, // dash 33, the high bits of the tackler 10 << 6
       0b01011101, // coyote 5, buffer 3 << 3, jump held << 6
+      0b11101000, // stun 40, the low bits of the tackler 11 << 6
       ...[0, 0, 0x01, 0xe0], // red 0, blue 0, clock 480 s, not over
       ...[0, 0], // both flags at home
     ]);
@@ -306,6 +312,8 @@ describe('snapshot frame', () => {
           dashes: (n >> 1) & 1,
           t: (n * 37) & 255,
           dash: n % (DASH_COOLDOWN + 1),
+          stun: (n * 5) % (STUMBLE_TICKS + 1),
+          by: n % MAX_PLAYERS,
           coyote: n % (COYOTE_TICKS + 1),
           buffer: (n * 3) % (JUMP_BUFFER_TICKS + 1),
           held: [0, KEY.JUMP, KEY.DASH, KEY.JUMP | KEY.DASH][n & 3],
@@ -328,6 +336,8 @@ describe('snapshot frame', () => {
           dashes: p.dashes,
           t: p.t,
           dash: p.dash,
+          stun: p.stun,
+          by: p.by,
           coyote: p.coyote,
           buffer: p.buffer,
           held: p.held,
@@ -341,11 +351,14 @@ describe('snapshot frame', () => {
   });
 
   it('keeps every timer within the bits it has on the wire', () => {
-    // 3 bits for the coyote and buffer ticks, 1 for the jumps, 8 for the dash and the time in mode.
+    // 3 bits for the coyote and buffer ticks, 1 for the jumps, 6 for the dash and the stumble, 8 for the time in mode.
     expect(COYOTE_TICKS).toBeLessThanOrEqual(7);
     expect(JUMP_BUFFER_TICKS + 1).toBeLessThanOrEqual(7);
     expect(AIR_JUMPS).toBeLessThanOrEqual(1);
-    expect(DASH_COOLDOWN).toBeLessThanOrEqual(255);
+    expect(DASH_COOLDOWN).toBeLessThanOrEqual(63);
+    expect(STUMBLE_TICKS).toBeLessThanOrEqual(63);
+    // The id of a tackler is 4 bits.
+    expect(MAX_PLAYERS).toBeLessThanOrEqual(16);
     expect(Object.keys(MODE).length).toBeLessThanOrEqual(8);
     expect(Object.keys(SIDE).length).toBeLessThanOrEqual(8);
     // A slide, a wall-run and a climb end long before t saturates, and the key bits are a byte.

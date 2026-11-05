@@ -207,6 +207,32 @@ describe('body', () => {
       expect(b.legs[0].end[1] - p.y).toBeGreaterThan(0.45);
     });
 
+    it('flail out and up in a stumble, swinging, and drop back when it is over', () => {
+      const rest = man();
+      const calm = hands(rest, look(watch(rest, 20), rest));
+      const p = man({ stun: 40 });
+      const body = watch(p, 20);
+      const first = hands(p, look(body, p));
+      // Out to the sides and higher than at rest.
+      first.forEach((h, i) => {
+        expect(Math.abs(h[0])).toBeGreaterThan(Math.abs(calm[i][0]) + 0.1);
+        expect(h[1]).toBeGreaterThan(calm[i][1] + 0.1);
+      });
+      // They swing: some frames on, the left hand is somewhere else.
+      const ys = Array.from({ length: 12 }, () => {
+        watch(p, 1, NONE, body);
+        return hands(p, look(body, p))[0][1];
+      });
+      expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.1);
+      // Over, they ease back to the rest pose.
+      const done = man();
+      watch(done, 60, NONE, body);
+      hands(done, look(body, done)).forEach((h, i) => {
+        expect(h[0]).toBeCloseTo(calm[i][0], 1);
+        expect(h[1]).toBeCloseTo(calm[i][1], 1);
+      });
+    });
+
     it('drive straight forward on a dash', () => {
       const p = man({ mode: MODE.AIR, ground: false, y: 0.3, dash: DASH_COOLDOWN - 2 });
       for (const h of hands(p, look(watch(p, 12), p))) {

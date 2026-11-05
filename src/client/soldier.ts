@@ -42,6 +42,7 @@ const RATES = {
   wl: 10,
   slide: 10,
   low: 12,
+  stun: 14,
 };
 type Blends = Record<keyof typeof RATES, number>;
 
@@ -98,6 +99,7 @@ const aims = (p: PlayerState): Blends => {
     wl: +(wall && side < 0),
     slide: +(p.mode == MODE.SLIDE),
     low: +(p.mode == MODE.SLIDE || p.mode == MODE.CROUCH),
+    stun: +(p.stun > 0),
   };
 };
 
@@ -321,6 +323,30 @@ const ledge = (r: Runner): Layer => {
   };
 };
 
+/**
+ * Reeling from a tackle: thrown back with the arms flung out and flailing, one leg trailing. The
+ * runner's clock swings the arms against each other and the torso side to side.
+ */
+const stagger = (r: Runner): Layer => {
+  const k = Math.sin(r.time * 12);
+  const arm = (s: number, d: number) => [
+    s * 0.85,
+    1.2 + 0.28 * d,
+    -0.1 + 0.2 * d,
+    s * 0.4,
+    -0.3,
+    -1,
+  ];
+  return {
+    c: [0.8, -0.12, -0.5, 0.18 * k],
+    a: [arm(-1, -k), arm(1, k)],
+    l: [
+      [-0.12, 0.2, 0.3, -0.15, 0.2, 1, 0],
+      [0.14, 0.12, -0.35, ...KNEE, 0],
+    ],
+  };
+};
+
 const lerp = (a: number[], b: number[] | undefined, t: number) =>
   b ? a.map((v, i) => v + ((b[i] ?? v) - v) * t) : a;
 /** The spine of a core: up, leaning forward and to the right. */
@@ -387,6 +413,7 @@ export const pose = (r: Runner): Pose => {
     [w.slide, POSES.slide],
     [plant, plant > 0.001 ? ledge(r) : {}],
     [tuck, POSES.tuck],
+    [w.stun, w.stun > 0.001 ? stagger(r) : {}],
   ];
   for (const [t, l] of stack) {
     if (t > 0.001) {

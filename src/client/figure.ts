@@ -50,19 +50,6 @@ export const torso = (
   );
 };
 
-/** A neck, skin, from inside the jacket up into the head: `pelvis` and `spine` as for torso(). */
-export const neck = (out: number[], lod: number, pelvis: Vec3, spine: Vec3, right: Vec3) =>
-  segment(
-    out,
-    solid(lod, 0.17, [0.066, 0.06], [0, 0.5]),
-    pelvis.map((v, i) => v + spine[i] * 0.55) as Vec3,
-    pelvis.map((v, i) => v + spine[i] * 0.72) as Vec3,
-    right,
-    0.17,
-    1,
-    SKIN,
-  );
-
 /**
  * A shoe on the ankle `end`, toes toward `fwd` (unit, flat) and turned a little to stay square to
  * the shin (unit, knee to ankle): an ellipsoid sole, a level coarser than the upper over it, and

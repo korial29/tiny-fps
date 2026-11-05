@@ -3,13 +3,15 @@ import { DASH_COOLDOWN, PLAYER_H, PLAYER_R } from '../shared/constants';
 import { STILL } from '../shared/physics';
 import { MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { SKIN, SOLE } from './figure';
-import { STRIDE } from './mesh';
+import { STRIDE, sub } from './mesh';
 import type { Vec3 } from './mesh';
-import { animate, createRunner, pose, soldier, step } from './soldier';
+import { JOINT, axis, solve, turn } from './rig';
+import { animate, createRunner, pose, rigged, soldier, step } from './soldier';
 import type { Pose, Runner } from './soldier';
+import { palette } from './skin';
 
 const DT = 1 / 60;
+const [, , , SKIN, , , SOLE] = palette([0.1, 0.8, 0.2]);
 const man = (o: Partial<PlayerState> = {}): PlayerState => ({
   id: 1,
   x: 5,
@@ -514,12 +516,12 @@ describe('soldier', () => {
     { stun: 40, vz: -3 },
   ];
 
-  it('stays under 2500 vertices near and about half of that far, in every move, as whole triangles', () => {
+  it('stays under 3100 vertices near and about 40% of that far, in every move, as whole triangles', () => {
     for (const o of MOVES) {
       const [near, far] = [1, 0].map(lod => draw(o, lod).length / STRIDE);
-      expect(near).toBeLessThan(2500);
-      expect(near).toBeGreaterThan(1500);
-      expect(far).toBeLessThan(near * 0.55);
+      expect(near).toBeLessThan(3100);
+      expect(near).toBeGreaterThan(2000);
+      expect(far).toBeLessThan(near * 0.45);
       expect(near % 3).toBe(0);
       expect(far % 3).toBe(0);
     }
@@ -565,7 +567,7 @@ describe('soldier', () => {
     const v = rows(draw());
     const jacket = dyed(v, GREEN);
     expect(jacket.length).toBeGreaterThan(300);
-    expect(Math.min(...jacket.map(p => p[1]))).toBeGreaterThan(1 + 0.6);
+    expect(Math.min(...jacket.map(p => p[1]))).toBeGreaterThan(1 + 0.9);
     expect(Math.max(...jacket.map(p => p[1]))).toBeLessThan(1 + 1.55);
     const legs = v.filter(p => p[1] < 1 + 0.8);
     expect(dyed(legs, GREEN)).toHaveLength(0);
@@ -610,5 +612,93 @@ describe('soldier', () => {
     const sx = Math.max(...left.map(p => p[0])) - Math.min(...left.map(p => p[0]));
     const sz = Math.max(...left.map(p => p[2])) - Math.min(...left.map(p => p[2]));
     expect(sx).toBeLessThan(sz);
+  });
+});
+
+describe('rigged', () => {
+  const MOVES2: [string, Partial<PlayerState>][] = [
+    ['still', {}],
+    ['run', { vz: -5, yaw: 2 }],
+    ['sprint', { vz: -9 }],
+    ['air', { mode: MODE.AIR, ground: false, vy: 5, vz: -6 }],
+    ['dash', { dash: 58, vz: -14 }],
+    ['wall', { mode: MODE.WALLRUN, ground: false, wall: SIDE.WEST, vz: -8 }],
+    ['slide', { mode: MODE.SLIDE, vz: -8 }],
+    ['crouch', { mode: MODE.CROUCH, vz: -2 }],
+    ['hang', HANGS],
+  ];
+  const sees = (o: Partial<PlayerState>) => {
+    const r = hold(o, 90);
+    const j = pose(r);
+    const s = solve(rigged(j, r));
+    const q = axis([0, 1, 0], -r.yaw);
+    /** A joint of the rig in the pose's frame: x right, y up, z ahead. */
+    const at = (k: number): Vec3 => {
+      const [x, y, z] = turn(q, sub(s.pos[k], [r.p.x, r.p.y, r.p.z]));
+      return [x, y, -z];
+    };
+    return { j, at };
+  };
+
+  it('puts the feet where the pose has them and the hands where it holds them from the shoulders', () => {
+    for (const [name, o] of MOVES2) {
+      const { j, at } = sees(o);
+      j.legs.forEach((l, i) => {
+        // The ankle target is 1 cm down: the rig's ankle is a centimetre lower than the pose's. A
+        // leg stretched out in a slide or a dash falls a little short.
+        expect(dist(at(JOINT.FOOT_L + i * 4), l.end)).toBeLessThan(
+          name == 'slide' || name == 'dash' ? 0.12 : 0.015,
+        );
+        // The rig's hips follow its shoulders, the pose's lean having another pivot: they are near.
+        expect(dist(l.root, at(JOINT.THIGH_L + i * 4))).toBeLessThan(0.25);
+      });
+      j.arms.forEach((l, i) => {
+        const [sh, wr] = [at(JOINT.ARM_L + i * 4), at(JOINT.HAND_L + i * 4)];
+        expect(dist(sub(wr, sh), sub(l.end, l.root))).toBeLessThan(0.04);
+        // The shoulders are 9 cm above the pose's: the rig is taller.
+        expect(dist(sh, l.root)).toBeGreaterThan(0.06);
+        expect(dist(sh, l.root)).toBeLessThan(0.12);
+      });
+      expect(dist(at(JOINT.PELVIS), j.pelvis)).toBeLessThan(0.25);
+      expect(dist(at(JOINT.HEAD), j.head)).toBeLessThan(0.2);
+    }
+  });
+
+  it('bends the knees and the elbows the way the pose does', () => {
+    for (const [, o] of MOVES2) {
+      const { j, at } = sees(o);
+      const side = (a: Vec3, b: Vec3, c: Vec3): Vec3 =>
+        sub(b, [0, 1, 2].map(k => (a[k] + c[k]) / 2) as Vec3);
+      [
+        ...j.legs.map(
+          (l, i) =>
+            [l, [JOINT.THIGH_L, JOINT.SHIN_L, JOINT.FOOT_L].map(k => at(k + i * 4))] as const,
+        ),
+        ...j.arms.map(
+          (l, i) =>
+            [l, [JOINT.ARM_L, JOINT.FOREARM_L, JOINT.HAND_L].map(k => at(k + i * 4))] as const,
+        ),
+      ].forEach(([l, [a, b, c]]) => {
+        const old = side(l.root, l.mid, l.end);
+        if (Math.hypot(...old) > 0.08) {
+          const now = side(a, b, c);
+          expect(now[0] * old[0] + now[1] * old[1] + now[2] * old[2]).toBeGreaterThan(0);
+        }
+      });
+    }
+  });
+
+  it('keeps the rig stiff: the bones keep their lengths in every move', () => {
+    for (const [, o] of MOVES2) {
+      const { at } = sees(o);
+      for (const [k, up] of [
+        [JOINT.SHIN_L, JOINT.THIGH_L],
+        [JOINT.FOOT_L, JOINT.SHIN_L],
+        [JOINT.FOREARM_R, JOINT.ARM_R],
+      ]) {
+        expect(dist(at(k), at(up))).toBeGreaterThan(0.25);
+        expect(dist(at(k), at(up))).toBeLessThan(0.45);
+      }
+    }
   });
 });

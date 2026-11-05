@@ -1,4 +1,4 @@
-// The other players' model: a runner of smooth solids (mesh.ts), in the renderer's vertex format.
+// The other players' model: a runner's skin (skin.ts), in the renderer's vertex format.
 // Each runner keeps a small animation state, eased every frame from the interpolated PlayerState
 // the snapshots give: the movement mode, the velocity, the ledge, the dash timer. The jump, double
 // jump and landing are found in the changes between two frames (the events are not on the wire).
@@ -16,9 +16,12 @@ import {
 import { speedOf, sprinting } from '../shared/physics';
 import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { RADII, SKIN, TOWARD, ik, neck, shoe, torso } from './figure';
-import { aim, mix, place, segment, solid, sub, unit } from './mesh';
+import { TOWARD, ik } from './figure';
+import { dot, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
+import { JOINT as J, REST, axis, mul, rest, slerp, solve, turn } from './rig';
+import type { Pose as Rigged, Quat } from './rig';
+import { body, palette, skin } from './skin';
 
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
 /** The shortest signed turn from angle a to angle b. */
@@ -466,13 +469,6 @@ export const pose = (r: Runner): Pose => {
   return out;
 };
 
-const [TROUSERS, HAIR, SHOE, SHADES] = [
-  [0.12, 0.13, 0.17],
-  [0.09, 0.07, 0.06],
-  [0.16, 0.16, 0.19],
-  [0.03, 0.03, 0.04],
-];
-
 /** A dash trails three streaks: thin glowing (layer -2) spikes, a pair of crossed triangles each. */
 const streaks = (out: number[], r: Runner, color: number[], at: (v: Vec3) => Vec3) => {
   const back = unit([-r.p.vx, 0, -r.p.vz]);
@@ -495,50 +491,105 @@ const streaks = (out: number[], r: Runner, color: number[], at: (v: Vec3) => Vec
   });
 };
 
+const inv = ([x, y, z, w]: Quat): Quat => [-x, -y, -z, w];
+/** The shortest rotation taking the unit vector a to b. */
+const fromTo = (a: Vec3, b: Vec3): Quat => {
+  const c = cross(a, b);
+  const d = dot(a, b);
+  if (d < -0.9999) {
+    const [x, y, z] = unit(cross(a, Math.abs(a[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]));
+    return [x, y, z, 0];
+  }
+  const n = Math.hypot(...c, 1 + d);
+  return [c[0] / n, c[1] / n, c[2] / n, (1 + d) / n];
+};
+/** The runner's frame (right, up, forward) in the rig's: it looks toward -z. */
+const R = ([a, u, f]: Vec3): Vec3 => [a, u, -f];
+const [UP, FWD]: Vec3[] = [
+  [0, 1, 0],
+  [0, 0, -1],
+];
+
 /**
- * Appends a runner at level of detail `lod` (see DETAIL): the jacket in `color` (r, g, b), dark
+ * The rig pose (rig.ts) of the runner's pose, until gait.ts poses the rig itself: each bone is
+ * aimed at where its child goes by the shortest turn from its rest direction. The rig's limbs are
+ * not the pose's lengths, so a two-bone IK reaches the same feet and the hands the same way from
+ * the shoulders; the rig stands 10 cm above the pose's pelvis.
+ */
+export const rigged = (j: Pose, r: Runner): Rigged => {
+  const p = rest();
+  const th = r.flip ? 2 * Math.PI * (3 - 2 * r.flip) * r.flip * r.flip : 0;
+  const flip = axis([1, 0, 0], -th);
+  const [pelvis, chest] = [R(j.pelvis), fromTo(UP, R(j.spine))];
+  p.rot[J.PELVIS] = flip;
+  const lift = turn(flip, [0, 0.1, 0]);
+  p.hips = pelvis.map((v, i) => v + lift[i] - REST[0][i]) as Vec3;
+  // The lean is shared by the two spine joints, the look by the neck and the head.
+  const lean = mul(inv(flip), chest);
+  p.rot[J.SPINE] = slerp([0, 0, 0, 1], lean, 0.4);
+  p.rot[J.CHEST] = mul(inv(p.rot[J.SPINE]), lean);
+  const look = fromTo(FWD, turn(inv(chest), R(j.look)));
+  p.rot[J.NECK] = slerp([0, 0, 0, 1], look, 0.4);
+  p.rot[J.HEAD] = mul(inv(p.rot[J.NECK]), look);
+  // The spine pivots higher than the pose's: keep the shoulders where it has them, 9 cm up.
+  const shoulders = (pos: Vec3[], k: number) => pos[k].map((v, i) => v + pos[k + 4][i]);
+  const gap = shoulders(solve(p).pos, J.ARM_L);
+  const want = [j.arms[0].root, j.arms[1].root].map(R);
+  p.hips = p.hips.map(
+    (v, i) => v + (want[0][i] + want[1][i] + (i == 1 ? 0.18 : 0) - gap[i]) / 2,
+  ) as Vec3;
+  const core = solve(p);
+  [j.arms, j.legs].forEach((limbs, leg) =>
+    limbs.forEach((l, side) => {
+      const [up, a, b, c] = leg
+        ? [J.PELVIS, ...[J.THIGH_L, J.SHIN_L, J.FOOT_L].map(k => k + side * 4)]
+        : [J.CLAVICLE_L + side * 4, ...[J.ARM_L, J.FOREARM_L, J.HAND_L].map(k => k + side * 4)];
+      const from = core.pos[a];
+      // Hands keep their place from the shoulder, feet their place on the floor.
+      const goal = (leg ? [0, -0.01, 0] : sub(from, R(l.root))).map(
+        (v, i) => v + R(l.end)[i],
+      ) as Vec3;
+      const n = unit(sub(l.end, l.root));
+      const bend = sub(l.mid, l.root);
+      const k = dot(bend, n);
+      const [mid, end] = ik(
+        from,
+        goal,
+        R([bend[0] - n[0] * k, bend[1] - n[1] * k, bend[2] - n[2] * k]),
+        Math.hypot(...REST[b]),
+        Math.hypot(...REST[c]),
+      );
+      const aim = (w: Quat, to: Vec3, at: number) => fromTo(unit(REST[at]), turn(inv(w), unit(to)));
+      const w1 = mul(core.rot[up], (p.rot[a] = aim(core.rot[up], sub(mid, from), b)));
+      const w2 = mul(w1, (p.rot[b] = aim(w1, sub(end, mid), c)));
+      if (leg) {
+        // The foot lies flat, square to the shin, rolled by the tilt.
+        const shin = unit(sub(end, mid));
+        const f = unit(sub(FWD, shin.map(v => v * dot(FWD, shin) * 0.4) as Vec3));
+        const t: Vec3 = [Math.sin(l.tilt), Math.cos(l.tilt), 0];
+        const u = unit(sub(t, f.map(v => v * dot(t, f)) as Vec3));
+        const q = fromTo(UP, u);
+        const flat = mul(fromTo(turn(q, [0, 0, 1]), f.map(v => -v) as Vec3), q);
+        p.rot[c] = mul(inv(w2), mul(flip, flat));
+      } else {
+        p.rot[c] = fromTo([0, -1, 0], turn(inv(w2), R(l.dir)));
+      }
+    }),
+  );
+  p.at = [r.p.x, r.p.y, r.p.z];
+  p.yaw = r.yaw;
+  return p;
+};
+
+/**
+ * Appends a runner at level of detail `lod` (see body()): the jacket in `color` (r, g, b), dark
  * trousers, skin, hair and light shoes, posed by pose(). A dash trails a few glowing streaks.
  */
 export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
-  const j = pose(r);
-  const [s, c] = [Math.sin(r.yaw), Math.cos(r.yaw)];
-  const { x, y, z } = r.p;
-  /** The runner's frame (right, up, forward) as a point in the world, and as a direction. */
-  const at = ([a, u, f]: Vec3): Vec3 => [x + a * c - f * s, y + u, z - a * s - f * c];
-  const dir = ([a, u, f]: Vec3): Vec3 => [a * c - f * s, u, -a * s - f * c];
-  const [right, fwd, spine] = [dir([1, 0, 0]), dir(j.chest), dir(j.spine)];
-  const pelvis = at(j.pelvis);
-  torso(out, lod, pelvis, spine, fwd, right, color, TROUSERS);
-  const [ball, small] = [lod, 0].map(l => solid(l, 0, [1, 1]));
-  const [head, face] = [at(j.head), aim(dir(j.look), right)];
-  if (lod) {
-    neck(out, lod, pelvis, spine, right);
-  }
-  place(out, ball, head, face, [0, 0, 0.012], [0.082, 0.12, 0.1], SKIN);
-  place(out, ball, head, face, [0, 0.02, -0.004], [0.088, 0.113, 0.11], HAIR);
-  if (lod) {
-    // A hood rolled down behind the neck, and a nose.
-    const hood = pelvis.map((v, i) => v + spine[i] * 0.58) as Vec3;
-    place(out, small, hood, face, [0, 0, -0.075], [0.115, 0.055, 0.06], color);
-    place(out, small, head, face, [0, -0.02, 0.108], [0.016, 0.028, 0.022], SKIN);
-    place(out, small, head, face, [0, 0.025, 0.083], [0.068, 0.016, 0.03], SHADES);
-  }
-  const toes = dir([0, 0, 1]);
-  for (const { root, mid, end, tilt } of j.legs) {
-    const [hip, knee, ankle] = [root, mid, end].map(at);
-    segment(out, solid(lod, THIGH, RADII.thigh, [0.5, 1]), hip, knee, right, THIGH, 1, TROUSERS);
-    segment(out, solid(lod, SHIN, RADII.shin, [0.5, 0.5]), knee, ankle, right, SHIN, 1, TROUSERS);
-    // The foot's top turns toward the left of the body as it rolls: on a wall the sole faces it.
-    const top: Vec3 = [Math.sin(tilt) * right[0], Math.cos(tilt), Math.sin(tilt) * right[2]];
-    shoe(out, lod, ankle, unit(sub(ankle, knee)), toes, cross(toes, top), SHOE);
-  }
-  for (const { root, mid, end, dir: d } of j.arms) {
-    const [shoulder, elbow, wrist] = [root, mid, end].map(at);
-    segment(out, solid(lod, UPPER, RADII.upper, [1, 0.5]), shoulder, elbow, right, UPPER, 1, color);
-    segment(out, solid(lod, FORE, RADII.fore, [0.5, 0]), elbow, wrist, right, FORE, 1, color);
-    place(out, small, wrist, aim(dir(d), right), [0, 0, 0.04], [0.04, 0.036, 0.058], SKIN);
-  }
+  skin(out, body(lod), solve(rigged(pose(r), r)), palette(color));
   if (r.w.dash > 0.15) {
-    streaks(out, r, color, at);
+    const [s, c] = [Math.sin(r.yaw), Math.cos(r.yaw)];
+    const { x, y, z } = r.p;
+    streaks(out, r, color, ([a, u, f]) => [x + a * c - f * s, y + u, z - a * s - f * c]);
   }
 };

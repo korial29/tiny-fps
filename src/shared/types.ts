@@ -206,7 +206,7 @@ export interface Sector {
 }
 
 export interface MapDef {
-  /** Shown on the title screen after the level number. */
+  /** Shown on the title screen. */
   name?: string;
   /** Fog colour (linear RGB 0 to 1) and density per metre (0.02 is the default haze). Absent: the default. */
   fog?: [r: number, g: number, b: number, density: number];
@@ -281,10 +281,6 @@ export interface Snapshot {
   bullets: Bullet[];
   /** Events since the previous snapshot, in order. */
   events: GameEvent[];
-  /** Index of the level in LEVELS (levels.ts). A change means a new level: clients rebuild. */
-  level: number;
-  /** The second run and later: monsters are faster and fire more often. */
-  hard: boolean;
   /** PHASE of the level. */
   phase: number;
   /** Keys the team holds: bit (1 << ITEM.KEY_*). */

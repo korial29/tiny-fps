@@ -15,8 +15,8 @@ import {
   SNAP_EVERY,
   TICK_HZ,
 } from './constants';
-import { bar, compile, inside, sectorAt } from './level';
-import { LEVELS } from './levels';
+import { bar, compile, sectorAt } from './level';
+import { HALL } from './map';
 import { createHorde, mulberry32 } from './monsters';
 import type { Horde } from './monsters';
 import { move, spawn } from './physics';
@@ -50,9 +50,6 @@ interface Player {
   hp: number;
   /** Host tick of the last hit that took health (the death, once hp is 0). */
   hurt: number;
-  /** Monsters killed and deaths since the run began (or the player joined). */
-  kills: number;
-  deaths: number;
 }
 
 /** Ticks run at most this many times per timer callback, so a stalled host does not spiral. */
@@ -128,10 +125,7 @@ const setEvery: Every = (cb, ms) => {
  *   counts for nothing until PLAYER_RESPAWN ticks later, when it is back at a spawn.
  * - The level's items lie in it, and every DROP_EVERY-th kill leaves a HEALTH pack. A key taken
  *   opens its gates for the team, a pack heals below full health.
- * - Touching the goal turns the level from HUNT to RETURN (the exit opens); when every living
- *   player is in the exit the level is won: the next one starts, everyone respawned. After the
- *   last, every player gets { t: 'end' } with the run's kills and deaths per player, and a new
- *   run starts at level 0, hard from then on, the counts back at 0.
+ * - Touching the goal turns the level from HUNT to RETURN (the exit opens).
  * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player, the shots resolved since
  *   the last one, the monsters, the bullets, the events since the last one and the items goes to
  *   every peer.
@@ -142,12 +136,8 @@ export class Room {
   private ticks = 0;
   /** The players and monsters as each snapshot of the last MAX_REWIND ticks sent them. */
   private history: { tick: number; players: PlayerState[]; monsters: Monster[] }[] = [];
-  private maps: Level[];
-  private lvl!: Level;
-  private horde!: Horde;
-  private rand: () => number;
-  private level = 0;
-  private hard = false;
+  private lvl: Level;
+  private horde: Horde;
   private phase: number = PHASE.HUNT;
   /** The team's key bits (1 << ITEM.KEY_*). */
   private keys = 0;
@@ -155,8 +145,6 @@ export class Room {
   private nextItem = 0;
   /** Monsters the team killed in this level. */
   private kills = 0;
-  /** Host tick the run started at. */
-  private runStart = 0;
   /** Shots resolved since the last snapshot. */
   private shots: Shot[] = [];
   private halt: (() => void) | undefined;
@@ -164,12 +152,12 @@ export class Room {
   /** Round-robin cursor over the spawn points, used once they are all taken. */
   private rr = 0;
 
-  /** Missing rules fall back to RULES. The seed drives the monsters. `levels` is the campaign. */
-  public constructor(rules: Partial<Rules> = {}, seed = Date.now(), levels: MapDef[] = LEVELS) {
+  /** Missing rules fall back to RULES. The seed drives the monsters. */
+  public constructor(rules: Partial<Rules> = {}, seed = Date.now(), map: MapDef = HALL) {
     this.rules = { ...RULES, ...rules };
-    this.rand = mulberry32(seed);
-    this.maps = levels.map(compile);
-    this.load(0);
+    this.lvl = compile(map);
+    this.horde = createHorde(this.lvl, mulberry32(seed));
+    map.items?.forEach(([x, z, kind]) => this.drop(kind, x, z));
   }
 
   /** Number of joined players. */
@@ -202,9 +190,6 @@ export class Room {
         this.shots.push(shot);
         if (shot.hit >= MAX_PLAYERS) {
           const dead = this.horde.kill(shot.hit, p.state.id);
-          if (dead) {
-            p.kills++;
-          }
           if (dead && ++this.kills % DROP_EVERY === 0) {
             this.drop(ITEM.HEALTH, dead.x, dead.z);
           }
@@ -265,8 +250,6 @@ export class Room {
         bullets: this.horde.bullets(),
         // The snapshot counts events with a u8: the rest wait for the next one.
         events: this.horde.events.splice(0, 255),
-        level: this.level,
-        hard: this.hard,
         phase: this.phase,
         keys: this.keys,
         items: this.items,
@@ -346,28 +329,6 @@ export class Room {
     return [...at(now, h => h.players).map(body), ...at(mobs, h => h.monsters).map(monsterBody)];
   }
 
-  /** Resets everything a level owns, and puts every player on a spawn of it with full health. */
-  private load(n: number): void {
-    this.level = n;
-    this.lvl = this.maps[n];
-    this.keys = 0;
-    this.phase = PHASE.HUNT;
-    bar(this.lvl, 0, PHASE.HUNT);
-    this.horde = createHorde(this.lvl, this.rand, this.hard);
-    this.items = [];
-    this.nextItem = 0;
-    this.kills = 0;
-    this.lvl.map.items?.forEach(([x, z, kind]) => this.drop(kind, x, z));
-    this.shots = [];
-    this.history = [];
-    const placed: PlayerState[] = [];
-    for (const p of this.players()) {
-      p.hp = HEALTH;
-      p.state = this.place(p.info.id, placed);
-      placed.push(p.state);
-    }
-  }
-
   /** The first spawn point with none of `others` within SPAWN_CLEAR, else the next one round-robin. */
   private place(id: number, others: PlayerState[]): PlayerState {
     const n = this.lvl.map.spawns.findIndex((_, k) => {
@@ -395,13 +356,12 @@ export class Room {
       return false;
     }
     [p.hp, p.hurt] = [p.hp - 1, now];
-    p.deaths += +!p.hp;
     return true;
   }
 
   /** What the living players do to the level: pick things up, touch the goal, win. */
   private progress(alive: Player[]): void {
-    const { sectors, goal, exit } = this.lvl.map;
+    const { goal } = this.lvl.map;
     let bars = false;
     this.items = this.items.filter(t => {
       const who = alive.find(
@@ -415,39 +375,17 @@ export class Room {
       }
       return !who;
     });
-    if (this.phase === PHASE.HUNT) {
-      if (goal && alive.some(p => reach(p.state, goal[0], this.floor(...goal), goal[1], GOAL_R))) {
-        this.phase = PHASE.RETURN;
-        bars = true;
-      }
-    } else if (
-      exit !== undefined &&
-      alive.length &&
-      alive.every(p => inside(sectors[exit], p.state.x, p.state.z))
+    if (
+      this.phase === PHASE.HUNT &&
+      goal &&
+      alive.some(p => reach(p.state, goal[0], this.floor(...goal), goal[1], GOAL_R))
     ) {
-      return this.win();
+      this.phase = PHASE.RETURN;
+      bars = true;
     }
     if (bars) {
       bar(this.lvl, this.keys, this.phase);
     }
-  }
-
-  /** The level is won: the next one, or the end of the run and a new, hard one. */
-  private win(): void {
-    if (this.level + 1 < this.maps.length) {
-      this.load(this.level + 1);
-      return;
-    }
-    const end = JSON.stringify({
-      t: 'end',
-      ticks: this.ticks - this.runStart,
-      hard: this.hard,
-      stats: this.players().map(p => ({ id: p.info.id, kills: p.kills, deaths: p.deaths })),
-    } satisfies ServerText);
-    this.players().forEach(p => p.conn.send(end));
-    this.players().forEach(p => (p.kills = p.deaths = 0));
-    [this.hard, this.runStart] = [true, this.ticks];
-    this.load(0);
   }
 
   private players(): Player[] {
@@ -487,8 +425,6 @@ export class Room {
       ack: 0xffff,
       hp: HEALTH,
       hurt: -HIT_COOLDOWN,
-      kills: 0,
-      deaths: 0,
     };
     this.peers.set(conn, player);
     this.roster();

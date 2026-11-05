@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { compile } from '../shared/level';
-import { HALL } from '../shared/map';
 import { ITEM, TEX } from '../shared/types';
 import type { MapDef } from '../shared/types';
 import { TRAIL, createEffects, fade, puff } from './effects';
@@ -10,7 +9,7 @@ import { LIGHT } from './lights';
 import type { Light } from './lights';
 import { METAL, STRIDE } from './mesh';
 import { LAYERS } from './textures';
-import { FOG, MAX_PIXELS, MAX_TINTS, backing, createRenderer, levelVerts } from './render';
+import { FOG, MAX_PIXELS, MAX_TINTS, backing, createRenderer } from './render';
 
 type Call = [name: string, ...args: unknown[]];
 
@@ -93,23 +92,6 @@ describe('createRenderer', () => {
     expect(Number(rows[1])).toBe(LAYERS + 2);
     expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 2);
     expect(frag).not.toMatch(/undefined|NaN|\[object/);
-  });
-
-  it('rebuilds the level geometry on level()', () => {
-    const [a, b] = [compile(HALL), compile(ROOM)];
-    const rd = createRenderer(canvas, a);
-    const head = () =>
-      calls.filter(c => c[0] == 'bufferSubData' && c[2] == 0).at(-1)?.[3] as Float32Array;
-    expect(head()).toHaveLength(levelVerts(a).length);
-    rd.level(b);
-    expect(head()).toEqual(new Float32Array(levelVerts(b)));
-    expect(calls.filter(c => c[0] == 'bufferData').at(-1)?.[2]).toBeGreaterThan(
-      levelVerts(b).length * 4,
-    );
-    frame(rd);
-    // The world draw starts from the new level's vertices.
-    expect(draws()[0][1]).toBeGreaterThanOrEqual(levelVerts(b).length / STRIDE);
-    expect(draws()[0][1]).toBeLessThan(levelVerts(a).length / STRIDE);
   });
 
   it('draws the items, and the gun on top unless dead', () => {
@@ -493,26 +475,21 @@ describe('createRenderer', () => {
       expect(FOG[3]).toBe(0.02);
     });
 
-    it('takes the fog colour, density and clear colour from the map, and changes with the level', () => {
+    it('takes the fog colour, density and clear colour from the map', () => {
       const fog: [number, number, number, number] = [0.5, 0.25, 0.125, 0.04];
-      const rd = createRenderer(canvas, compile({ ...ROOM, fog }));
+      createRenderer(canvas, compile({ ...ROOM, fog }));
       expect(fogOf().at(-1)![2]).toEqual(fog);
       expect(clear()).toEqual([0.5, 0.25, 0.125, 1]);
-      rd.level(compile(ROOM));
-      expect(fogOf().at(-1)![2]).toEqual(FOG);
-      expect(clear()).toEqual([FOG[0], FOG[1], FOG[2], 1]);
     });
 
     it('uploads the tint palette, white first and padded with white', () => {
       const tint: [number, number, number] = [0.5, 0.25, 1];
       const lvl = compile({ ...ROOM, sectors: [{ ...ROOM.sectors[0], tint }] });
-      const rd = createRenderer(canvas, lvl);
+      createRenderer(canvas, lvl);
       const pal = Array.from(palOf().at(-1)![2] as Float32Array);
       expect(pal).toHaveLength(MAX_TINTS * 3);
       expect(pal.slice(0, 6)).toEqual([1, 1, 1, ...tint]);
       expect(pal.slice(6).every(v => v == 1)).toBe(true);
-      rd.level(compile(ROOM));
-      expect(Array.from(palOf().at(-1)![2] as Float32Array).every(v => v == 1)).toBe(true);
     });
 
     it('declares the fog and palette uniforms in the shader', () => {

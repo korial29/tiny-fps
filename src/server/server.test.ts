@@ -72,10 +72,8 @@ describe('serve', () => {
 
     await until(() => a.binaries.length > 0 && b.binaries.length > 0);
     expect(decodeSnapshot(a.binaries.at(-1)!)?.players).toHaveLength(2);
-    // The progression state crosses the socket too: health, level, phase, keys.
+    // The progression state crosses the socket too: health, phase, keys.
     expect(decodeSnapshot(a.binaries.at(-1)!)).toMatchObject({
-      level: 0,
-      hard: false,
       phase: PHASE.HUNT,
       keys: 0,
       players: [{ hp: HEALTH }, { hp: HEALTH }],

@@ -52,8 +52,6 @@ const snapshot = (tick: number, ...players: SnapPlayer[]): Snapshot => ({
   monsters: [],
   bullets: [],
   events: [],
-  level: 0,
-  hard: false,
   phase: 0,
   keys: 0,
   items: [],
@@ -132,7 +130,7 @@ describe('prediction against the room', () => {
    */
   const race = (lag: (k: number) => number, steps = SCRIPT) => {
     const n = steps.length;
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const sent: ArrayBuffer[] = [];
     const conn: Conn & { bins: ArrayBuffer[] } = {
       bins: [],
@@ -210,8 +208,6 @@ describe('prediction against the room', () => {
       monsters: [],
       bullets: [],
       events: [],
-      level: 0,
-      hard: false,
       phase: 0,
       keys: 0,
       items: [],
@@ -661,7 +657,7 @@ describe('lag compensation through the room', () => {
   const FIRE_AT = 60;
 
   const play = (fireAt = FIRE_AT) => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const peers = ['A', 'B'].map(name => {
       const c: Conn & { bins: ArrayBuffer[] } = {
         bins: [],
@@ -911,7 +907,7 @@ describe('lag compensation of monsters through the room', () => {
   const DELAY = 10;
 
   it('kills a monster where the shooter saw it, which is no longer where it is', () => {
-    const room = new Room({}, 5, [HALL]);
+    const room = new Room({}, 5, HALL);
     const join = (name: string) => {
       const c: Conn & { bins: ArrayBuffer[] } = {
         bins: [],
@@ -1130,49 +1126,6 @@ describe('health and progression', () => {
       wt: TEX.BRICK,
       ct: TEX.STONE,
     });
-    /** A box whose north wall is at z = 1: moving -z from (5, 3) stops at 1.4, in HALL at 0.4. */
-    const box = compile({ sectors: [sector(room(0, 1))], spawns: [[5, 3, 0]] });
-
-    it('switches to the next level: its walls for the replay, nothing of the last one drawn', () => {
-      const pred = createPredictor(lvl);
-      pred.you(0);
-      pred.snapshot(
-        snapshot(1, snapPlayer(0, { x: 5, z: 3 }), snapPlayer(1, { x: 8, z: 3 })),
-        1000,
-      );
-      pred.snapshot(
-        snapshot(2, snapPlayer(0, { x: 5, z: 3 }), snapPlayer(1, { x: 8, z: 3 })),
-        1040,
-      );
-      expect(pred.others(1100)).toHaveLength(1);
-      for (let k = 0; k < 3; k++) {
-        pred.step(fwd);
-      }
-      pred.level(box);
-      // Waiting for the first snapshot of the new level, as at the start.
-      expect(pred.me(1)).toBeUndefined();
-      expect(pred.others(1100)).toEqual([]);
-      expect(pred.monsters(1100)).toEqual([]);
-      expect(pred.bullets(1100)).toEqual([]);
-      // Inputs go on being numbered, and kept for the replay.
-      for (let k = 0; k < 40; k++) {
-        pred.step(fwd);
-      }
-      pred.snapshot(snapshot(1, snapPlayer(0, { x: 5, y: 0, z: 3, ack: 2 })), 2000);
-      expect(pred.me(1)!.z).toBeCloseTo(1 + 0.4);
-      expect(pred.others(2100)).toEqual([]);
-    });
-
-    it('keeps the old level when it was not switched: the wall of HALL is at 0.4', () => {
-      const pred = createPredictor(lvl);
-      pred.you(0);
-      pred.snapshot(snapshot(1, snapPlayer(0, { x: 5, z: 3 })), 1000);
-      for (let k = 0; k < 40; k++) {
-        pred.step(fwd);
-      }
-      expect(pred.me(1)!.z).toBeCloseTo(0.4);
-    });
-
     const twin = (): MapDef => ({
       sectors: [sector(room(0, 0)), sector(room(10, 0))],
       spawns: [[5, 5, 0]],
@@ -1226,7 +1179,7 @@ describe('health and progression', () => {
      */
     const run = (key: [number, number], lag: number, hook?: (k: number, room: Room) => void) => {
       const map: MapDef = { ...twin(), items: [[...key, ITEM.KEY_RED]] };
-      const host = new Room({}, 1, [map]);
+      const host = new Room({}, 1, map);
       const conn: Conn & { bins: ArrayBuffer[] } = {
         bins: [],
         send: d => typeof d !== 'string' && conn.bins.push(d),

@@ -135,7 +135,7 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 7-byte head, 25 bytes per player, then the shots, monsters, bullets, events and items', () => {
+  it('has a 6-byte head, 25 bytes per player, then the shots, monsters, bullets, events and items', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [
@@ -145,18 +145,17 @@ describe('snapshot frame', () => {
       monsters: [],
       bullets: [],
       events: [],
-      level: 3,
-      hard: true,
+
       phase: PHASE.RETURN,
       keys: 0b1010,
       items: [],
     });
-    expect([SNAP_HEAD, SNAP_PLAYER]).toEqual([7, 25]);
+    expect([SNAP_HEAD, SNAP_PLAYER]).toEqual([6, 25]);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + 5);
     expect(bytes(buf)).toEqual([
       ...[MSG_SNAPSHOT, 0x12, 0x34, 1],
-      // Level 3, flags hard | phase << 1, keys.
-      ...[3, 0b11, 0b1010],
+      // Phase, keys.
+      ...[1, 0b1010],
       7,
       // Big-endian float32: 1, 2, 3 and -1.
       ...[0x3f, 0x80, 0, 0],
@@ -175,22 +174,17 @@ describe('snapshot frame', () => {
     ]);
   });
 
-  it('round-trips the level, the hard bit, the phase, the keys and every health', () => {
+  it('round-trips the phase, the keys and every health', () => {
     const back = (over: Partial<Snapshot>) => decodeSnapshot(encodeSnapshot(snap(over)))!;
-    for (const [level, hard, phase, keys] of [
-      [0, false, PHASE.HUNT, 0],
-      [4, true, PHASE.HUNT, 0b1110],
-      [255, false, PHASE.RETURN, 0b0010],
-      [1, true, PHASE.RETURN, 255],
+    for (const [phase, keys] of [
+      [PHASE.HUNT, 0],
+      [PHASE.HUNT, 0b1110],
+      [PHASE.RETURN, 0b0010],
+      [PHASE.RETURN, 255],
     ] as const) {
-      const s = back({ level, hard, phase, keys });
-      expect([s.level, s.hard, s.phase, s.keys]).toEqual([level, hard, phase, keys]);
+      const s = back({ phase, keys });
+      expect([s.phase, s.keys]).toEqual([phase, keys]);
     }
-    // Hard and phase are independent bits.
-    const flags = (hard: boolean, phase: number) => bytes(encodeSnapshot(snap({ hard, phase })))[5];
-    expect([flags(false, 0), flags(true, 0), flags(false, 1), flags(true, 1)]).toEqual([
-      0, 1, 2, 3,
-    ]);
     const hp = back({ players: [0, 1, 5, 9].map((h, i) => player(i, { hp: h })) }).players;
     expect(hp.map(p => p.hp)).toEqual([0, 1, 5, 9]);
   });
@@ -205,8 +199,7 @@ describe('snapshot frame', () => {
           monsters: [],
           bullets: [],
           events: [],
-          level: 0,
-          hard: false,
+
           phase: 0,
           keys: 0,
           items: [],
@@ -230,8 +223,7 @@ describe('snapshot frame', () => {
           monsters: [],
           bullets: [],
           events: [],
-          level: 0,
-          hard: false,
+
           phase: 0,
           keys: 0,
           items: [],
@@ -258,8 +250,7 @@ describe('snapshot frame', () => {
       monsters: [],
       bullets: [],
       events: [],
-      level: 0,
-      hard: false,
+
       phase: 0,
       keys: 0,
       items: [],
@@ -295,8 +286,7 @@ describe('snapshot frame', () => {
     monsters: [],
     bullets: [],
     events: [],
-    level: 0,
-    hard: false,
+
     phase: 0,
     keys: 0,
     items: [],
@@ -460,8 +450,7 @@ describe('snapshot frame', () => {
         monsters: [],
         bullets: [],
         events: [],
-        level: 0,
-        hard: false,
+
         phase: 0,
         keys: 0,
         items: [],
@@ -479,8 +468,7 @@ describe('snapshot frame', () => {
           monsters: [],
           bullets: [],
           events: [],
-          level: 0,
-          hard: false,
+
           phase: 0,
           keys: 0,
           items: [],
@@ -513,8 +501,7 @@ describe('snapshot frame', () => {
         monsters: [],
         bullets: [],
         events: [],
-        level: 0,
-        hard: false,
+
         phase: 0,
         keys: 0,
         items: [],
@@ -541,8 +528,7 @@ describe('snapshot frame', () => {
         monsters: [],
         bullets: [],
         events: [],
-        level: 0,
-        hard: false,
+
         phase: 0,
         keys: 0,
         items: [],
@@ -563,8 +549,7 @@ describe('snapshot frame', () => {
           monsters: [],
           bullets: [],
           events: [],
-          level: 0,
-          hard: false,
+
           phase: 0,
           keys: 0,
           items: [],
@@ -577,8 +562,7 @@ describe('snapshot frame', () => {
       monsters: [],
       bullets: [],
       events: [],
-      level: 0,
-      hard: false,
+
       phase: 0,
       keys: 0,
       items: [],
@@ -593,8 +577,7 @@ describe('snapshot frame', () => {
       monsters: [],
       bullets: [],
       events: [],
-      level: 0,
-      hard: false,
+
       phase: 0,
       keys: 0,
       items: [],
@@ -623,8 +606,7 @@ describe('snapshot frame', () => {
       monsters: [],
       bullets: [],
       events: [],
-      level: 0,
-      hard: false,
+
       phase: 0,
       keys: 0,
       items: [],
@@ -652,8 +634,7 @@ describe('snapshot frame', () => {
           monsters: [],
           bullets: [],
           events: [],
-          level: 0,
-          hard: false,
+
           phase: 0,
           keys: 0,
           items: [],

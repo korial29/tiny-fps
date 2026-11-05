@@ -145,8 +145,6 @@ export interface Effects {
   hit(): void;
   /** An item of colour c was picked up near the own player: its colour fades over the screen. */
   pickup(c: number[]): void;
-  /** A new level: drops every effect of the old one, and lets gibs and casings land on the new `lvl`. */
-  reset(lvl: Level): void;
   /**
    * A shot, from the shooter's eye; own ones kick the camera and the gun. Each ejects a casing to
    * the right of the view. No sparks with `sparks` false: a shot that hit the viewer would burst
@@ -242,12 +240,8 @@ export const lit = (fx: Effects, eye: Vec3, f: Vec3) => {
  * who are drawn that far in the past. Keeps at most `max`: a hidden tab does not grow it.
  */
 export const createDelay = <T>(max = 64) => {
-  let q: { t: number; v: T }[] = [];
+  const q: { t: number; v: T }[] = [];
   return {
-    /** Forgets what is held: it belongs to a level that is gone. */
-    clear() {
-      q = [];
-    },
     push(items: T[], now: number) {
       q.push(...items.map(v => ({ t: now, v })));
       q.splice(0, q.length - max);
@@ -262,7 +256,7 @@ export const createDelay = <T>(max = 64) => {
 
 /** rand in [0, 1): injectable so the tests are exact. The level lets gibs land and bounce off walls. */
 export const createEffects = (rand = Math.random, level?: Level): Effects => {
-  let lvl = level;
+  const lvl = level;
   let phase = 0;
   /** 0 to 1: how much of the bob shows, so stopping does not snap the eye. */
   let amt = 0;
@@ -441,23 +435,6 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
 
     pickup(c) {
       [fx.gain, fx.gainC] = [GAIN, c];
-    },
-
-    reset(next) {
-      lvl = next;
-      fx.sparks = [];
-      fx.gibs = [];
-      fx.splats = [];
-      fx.casings.forEach(c => (c.life = 0));
-      fx.blasts = [];
-      fx.smoke = [];
-      fresh = true;
-      fx.flashes.clear();
-      fx.swings.clear();
-      fx.herd.clear();
-      fx.aim.clear();
-      flown.clear();
-      fx.hurt = fx.gain = fx.flash = 0;
     },
 
     shot(s, from, own, sparks = true) {

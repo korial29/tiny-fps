@@ -66,10 +66,8 @@ describe('localSocket', () => {
     await until(() => a.binaries.length > 0 && b.binaries.length > 0);
     expect(b.binaries[0]).toBeInstanceOf(ArrayBuffer);
     expect(decodeSnapshot(b.binaries.at(-1)!)?.players).toHaveLength(2);
-    // The progression state crosses the channel too: health, level, phase, keys.
+    // The progression state crosses the channel too: health, phase, keys.
     expect(decodeSnapshot(b.binaries.at(-1)!)).toMatchObject({
-      level: 0,
-      hard: false,
       phase: PHASE.HUNT,
       keys: 0,
       players: [{ hp: HEALTH }, { hp: HEALTH }],

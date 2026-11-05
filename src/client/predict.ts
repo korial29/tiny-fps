@@ -38,15 +38,11 @@ export interface Predictor {
    */
   shot(): Shot | undefined;
   /**
-   * Switches to another level (a snapshot with a new `level` or `hard`): prediction, replay and
-   * interpolation use it from now on, and the snapshots of the previous level are dropped; the own
-   * player waits for the next snapshot, as at the start. Each snapshot also bars the level with
-   * its keys and phase (bar() in level.ts) before the replay. A gate that opens between a
-   * snapshot and the inputs the host has not applied yet is the one thing prediction cannot know:
-   * it corrects at the next snapshot.
+   * A decoded snapshot, received at `now` (ms, performance.now()). It also bars the level with its
+   * keys and phase (bar() in level.ts) before the replay. A gate that opens between a snapshot and
+   * the inputs the host has not applied yet is the one thing prediction cannot know: it corrects
+   * at the next snapshot.
    */
-  level(lvl: Level): void;
-  /** A decoded snapshot, received at `now` (ms, performance.now()). */
   snapshot(s: Snapshot, now: number): void;
   /**
    * The own player, eased between the state before and after the last step by alpha in [0, 1]
@@ -108,8 +104,7 @@ const lerp = (a: PlayerState, b: PlayerState, t: number): PlayerState => ({
   pitch: a.pitch + (b.pitch - a.pitch) * t,
 });
 
-export const createPredictor = (first: Level): Predictor => {
-  let lvl = first;
+export const createPredictor = (lvl: Level): Predictor => {
   let id: number | undefined;
   let seq = 0;
   let pending: Input[] = [];
@@ -267,13 +262,6 @@ export const createPredictor = (first: Level): Predictor => {
         s => s.bullets,
         (a, b, t) => ({ ...b, ...mid(a, b, t) }),
       ),
-
-    level: l => {
-      lvl = l;
-      snaps.length = 0;
-      killed.clear();
-      own = prev = shot = undefined;
-    },
 
     shot: () => shot,
 

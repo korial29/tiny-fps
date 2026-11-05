@@ -1,21 +1,17 @@
-// The HUD, in the game's Shadow DOM: the health bar and the keys held, the screen fades, the level
-// banners, the title, death and end screens, and the muted mark. Timed things count down on the
+// The HUD, in the game's Shadow DOM: the health bar and the keys held, the screen fades, the
+// banners, the title and death screens, and the muted mark. Timed things count down on the
 // frame loop (update).
 import { HEALTH } from '../shared/constants';
 import { ITEM_COLOR, css } from './items';
 
-/** Slots of say(): a title, a hint under it; and seconds each stays up (the end screen is the third). */
+/** Slots of say(): a title, a hint under it; and seconds each stays up. */
 export const SAY = { TITLE: 0, NOTE: 1 } as const;
-const SHOW = [2, 3, 8];
-const END = 2;
+const SHOW = [2, 3];
 /** Seconds the health bar flashes (up) or shakes (down). */
 const BUMP = 0.35;
 
-/** A player's line of the end screen. */
-export type Score = [name: string, color: string, kills: number, deaths: number];
-
 export const HUD_CSS =
-  `h1,h2,h4,h5,ul,ol,aside,section,s{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h1,h2,h4,h5,ul,ol,aside,s{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h1,h2,h4{left:0;right:0;text-align:center}` +
   `h1{top:14%;font-size:20px;line-height:1.4}h1::first-line{font-size:44px}` +
   `h2{top:32%;font-size:22px}h5{top:8px;right:12px;font-size:12px}` +
@@ -27,17 +23,14 @@ export const HUD_CSS =
   `ul li+li{right:0;width:auto;text-align:center;line-height:22px;font-size:14px}` +
   `ol{left:calc(22px + min(40vw,140px));bottom:12px;display:flex;gap:4px;list-style:none}` +
   `ol li{width:16px;height:22px;border-radius:3px;box-shadow:0 0 0 1px #0008}` +
-  `aside,section{inset:0;z-index:1;display:flex;flex-direction:column;align-items:center;gap:14px;padding:0 12px;text-align:center;background:#000b}` +
-  `aside{justify-content:center}section{padding-top:10%;font-size:20px}` +
-  `:is(aside,section):not([hidden])~:is(h1,h2){visibility:hidden}` +
+  `aside{inset:0;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:0 12px;text-align:center;background:#000b}` +
+  `aside:not([hidden])~:is(h1,h2){visibility:hidden}` +
   `h6{margin:0;font-size:inherit;text-shadow:none}` +
   `aside h6{font:900 clamp(36px,13vw,84px)/1 system-ui,sans-serif;letter-spacing:.04em;transform:skewX(-8deg);` +
   `background:linear-gradient(#fe6,#f92 45%,#d21);-webkit-background-clip:text;background-clip:text;color:transparent;` +
   `filter:drop-shadow(0 3px 0 #500) drop-shadow(0 0 14px #f604)}` +
-  `section h6{font-size:20px;line-height:1.5}section h6::first-line{font-size:48px}` +
-  `strong{font-size:22px}small{font-size:16px;opacity:.8}` +
-  `table{border-collapse:collapse;font-size:16px}td,th{padding:2px 10px}th{opacity:.6}` +
-  `td+td,th+th{text-align:left}td+td+td,th+th+th{text-align:right}aside td:first-child{text-align:right;opacity:.7}`;
+  `strong{font-size:22px}` +
+  `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}`;
 
 export interface Hud {
   /** The own health: the bar's width, number and colour. It flashes on a rise and shakes on a fall. */
@@ -53,8 +46,6 @@ export interface Hud {
   fade(hurt: number, low: number, gain: number, color: number[]): void;
   /** The title screen with `status` under the controls, "Click to play" or why not; '' hides it. */
   title(status: string, level: string): void;
-  /** The end screen: `head`, the players' scores in the order given, `foot`. */
-  end(head: string, scores: Score[], foot: string): void;
   /** Shows or hides the muted mark. */
   mute(on: boolean): void;
   /** Shows text in a SAY slot, for that slot's time. */
@@ -71,17 +62,15 @@ export const createHud = (screen: HTMLElement): Hud => {
       `<aside hidden><h6>TINY FPS</h6><span></span><table>` +
       `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Space<td>jump<tr><td>Left click<td>fire<tr><td>M<td>mute</table>` +
       `<strong></strong></aside>` +
-      `<section hidden><h6></h6><table><thead><tr><th><th>Player<th>Kills<th>Deaths</thead><tbody></tbody></table><small></small></section>` +
       `<h1 hidden></h1><h2 hidden></h2><h4 hidden></h4><h5 hidden>Muted (M)</h5>`,
   );
   const one = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
   const [vignette, glint] = [...screen.querySelectorAll('s')];
   const [bar, fill, num] = [one('ul'), one('ul li'), one('ul li+li')];
   const marks = [...screen.querySelectorAll<HTMLElement>('ol li')];
-  const [respawn, muted, over, menu] = ['h4', 'h5', 'section', 'aside'].map(t => one(t));
-  const [head, board, foot] = ['section h6', 'section tbody', 'small'].map(t => one(t));
+  const [respawn, muted, menu] = ['h4', 'h5', 'aside'].map(t => one(t));
   const [level, status] = ['aside span', 'strong'].map(t => one(t));
-  const texts = [one('h1'), one('h2'), over];
+  const texts = [one('h1'), one('h2')];
   marks.forEach((m, i) => (m.style.background = css(ITEM_COLOR[i + 1])));
   const left = SHOW.map(() => 0);
   /** Health shown, and seconds of flash and shake left. */
@@ -115,23 +104,6 @@ export const createHud = (screen: HTMLElement): Hud => {
       menu.hidden = !text;
       set(level, name);
       set(status, text);
-    },
-    end(text, scores, note) {
-      set(head, text);
-      set(foot, note);
-      board.replaceChildren(
-        ...scores.map(([name, color, kills, deaths]) => {
-          const row = document.createElement('tr');
-          ['●', name, kills, deaths].forEach((v, i) => {
-            const cell = row.insertCell();
-            cell.textContent = String(v);
-            cell.style.color = i ? '' : color;
-          });
-          return row;
-        }),
-      );
-      texts[END].hidden = false;
-      left[END] = SHOW[END];
     },
     mute: on => (muted.hidden = !on),
     say(slot, text) {

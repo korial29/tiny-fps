@@ -303,8 +303,6 @@ export interface Renderer {
     /** gather() in lights.ts: at most MAX_LIGHTS, the first MAX_SHADOWS shadowed spots mapped. */
     lights: Light[],
   ): void;
-  /** Builds the geometry of another level, drawn from the next frame on. */
-  level(lvl: Level): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
   destroy(): void;
@@ -320,8 +318,7 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 };
 
 /** Throws when the browser has no WebGL2. */
-export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Renderer => {
-  let lvl = first;
+export const createRenderer = (canvas: HTMLCanvasElement, lvl: Level): Renderer => {
   /** How far and how fast each body drawn has gone: the limbs stride with it. */
   const gaits = new Map<number, Gait>();
   let clock = performance.now() / 1000;
@@ -345,9 +342,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
   };
 
   const size = () => backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
-  let ground = levelVerts(lvl);
+  const ground = levelVerts(lvl);
   const pixels = textures();
-  let tail = ground.length * 4;
+  const tail = ground.length * 4;
   let cap = tail + TAIL;
   const [steel, iron, plate, dark, gold] = [
     [0.55, 0.55, 0.6],
@@ -573,17 +570,6 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   return {
-    level(next) {
-      lvl = next;
-      gaits.clear();
-      ground = levelVerts(lvl);
-      tail = ground.length * 4;
-      cap = tail + TAIL;
-      if (!lost) {
-        alloc();
-        climate();
-      }
-    },
     frame(eye, yaw, pitch, others, colors, fx, monsters, bullets, items, lights) {
       const [w, h] = size();
       if (lost || !w || !h) {

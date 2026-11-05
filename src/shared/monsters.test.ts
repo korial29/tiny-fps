@@ -4,11 +4,8 @@ import {
   FLYER_H,
   FLYER_HOVER,
   MAX_PLAYERS,
-  HARD_RATE,
-  HARD_SPEED,
   MELEE_EVERY,
   PLAYER_H,
-  SHOOT_EVERY,
   SIGHT_EVERY,
   WALKER_H,
 } from './constants';
@@ -695,81 +692,6 @@ describe('horde: death', () => {
     h.kill(17, 0);
     run(h, p, 1000);
     expect(h.monsters()).toEqual([]);
-  });
-});
-
-describe('horde: hard mode', () => {
-  /** Ticks at which a bullet with a new id appears, from a walker that shoots on sight. */
-  const volleys = (hard: boolean) => {
-    const h = createHorde(
-      level(
-        [rect(0, 0, 200, 20)],
-        [
-          [2, 8, 0, WALKER],
-          [5, 10, EAST, WALKER],
-        ],
-      ),
-      calm,
-      hard,
-    );
-    h.kill(16, 0);
-    const seen = new Set<number>();
-    const at: number[] = [];
-    for (let k = 1; k <= 400; k++) {
-      h.step([player(0, 33, 10)]);
-      h.bullets().forEach(b => seen.has(b.id) || (seen.add(b.id), at.push(k)));
-    }
-    return at;
-  };
-
-  it('shoots HARD_RATE as often', () => {
-    const [easy, hard] = [volleys(false), volleys(true)];
-    const gap = (at: number[]) => at[2] - at[1];
-    expect(gap(easy)).toBeGreaterThanOrEqual(SHOOT_EVERY);
-    expect(gap(hard)).toBe(gap(easy) - SHOOT_EVERY + Math.round(SHOOT_EVERY * HARD_RATE));
-    expect(hard.length).toBeGreaterThan(easy.length + 2);
-  });
-
-  it('swings HARD_RATE as often, the blow as late', () => {
-    const swings = (hard: boolean) => {
-      const h = createHorde(
-        level(OPEN, [
-          [4, 4, 0, WALKER],
-          [10, 10, 0, FLYER],
-        ]),
-        calm,
-        hard,
-      );
-      h.kill(16, 0);
-      h.events.length = 0;
-      const log = run(h, [player(0, 10, 9.2)], 100);
-      return log.filter(l => l.e.type === EVENT.SWING).map(l => l.tick);
-    };
-    expect(swings(false)).toEqual([1, 1 + MELEE_EVERY, 1 + 2 * MELEE_EVERY]);
-    const every = Math.round(MELEE_EVERY * HARD_RATE);
-    expect(swings(true)).toEqual([1, 1 + every, 1 + 2 * every, 1 + 3 * every]);
-  });
-
-  it('moves HARD_SPEED faster, on a patrol and on a chase, walkers and flyers', () => {
-    const walked = (kind: number, hard: boolean, players: PlayerState[]) => {
-      const h = createHorde(level(OPEN, [[5, 10, EAST, kind]]), calm, hard);
-      run(h, players, 90);
-      const from = { ...mob(h, 16) };
-      run(h, players, 60, 90);
-      return dist(from, mob(h, 16));
-    };
-    for (const [kind, players] of [
-      [WALKER, []],
-      [FLYER, []],
-      [WALKER, [player(0, 35, 10)]],
-      [FLYER, [player(0, 35, 10)]],
-    ] as const) {
-      const ratio = walked(kind, true, [...players]) / walked(kind, false, [...players]);
-      expect(ratio, `kind ${kind}, ${players.length ? 'chase' : 'patrol'}`).toBeCloseTo(
-        HARD_SPEED,
-        1,
-      );
-    }
   });
 });
 

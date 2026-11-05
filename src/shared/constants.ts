@@ -89,9 +89,6 @@ export const PICKUP_R = 0.8;
 export const GOAL_R = 1;
 /** A dead player comes back at the level start after this long. */
 export const PLAYER_RESPAWN = 180;
-/** Hard mode (second run on): monster speed factor, and the share of SHOOT_EVERY and MELEE_EVERY. */
-export const HARD_SPEED = 1.3;
-export const HARD_RATE = 0.6;
 /** Longest player name, in characters (code points). */
 export const MAX_NAME = 16;
 

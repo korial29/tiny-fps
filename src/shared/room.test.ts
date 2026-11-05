@@ -4,7 +4,6 @@ import {
   EYE,
   FIRE_EVERY,
   GOAL_R,
-  HARD_SPEED,
   HEAL,
   HEALTH,
   HIT_COOLDOWN,
@@ -68,7 +67,7 @@ const ticks = (room: Room, n: number): void => {
 
 describe('Room: joining', () => {
   it('sends every joined peer the roster with its own id, on every join and leave', () => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const a = join(room, 'Ann');
     expect(roster(a)).toMatchObject({ you: 0 });
     expect(names(a)).toEqual(['Ann']);
@@ -86,7 +85,7 @@ describe('Room: joining', () => {
   });
 
   it('sends nothing before the join, and ignores a second join and bad text', () => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const c = peer();
     room.connect(c);
     room.receive(c, 'nope');
@@ -99,7 +98,7 @@ describe('Room: joining', () => {
   });
 
   it('keeps names unique and clean, within MAX_NAME', () => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const a = join(room, 'Bob');
     join(room, 'Bob');
     join(room, '  Bob ');
@@ -121,7 +120,7 @@ describe('Room: joining', () => {
   });
 
   it('gives each player a distinct colour and the smallest free id', () => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const a = join(room, 'a');
     for (let n = 1; n < MAX_PLAYERS; n++) {
       join(room, `p${n}`);
@@ -145,14 +144,14 @@ describe('Room: joining', () => {
   });
 
   it('honours rules.maxPlayers', () => {
-    const room = new Room({ maxPlayers: 2 }, undefined, [HALL]);
+    const room = new Room({ maxPlayers: 2 }, undefined, HALL);
     join(room, 'a');
     join(room, 'b');
     expect(join(room, 'c').texts).toEqual([{ t: 'full' }]);
   });
 
   it('spawns at the first spawn point with nobody within 2 m, else round-robin', () => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const a = join(room);
     ticks(room, SNAP_EVERY);
     const at = (c: Peer, id: number) => snap(c).players.find(p => p.id === id)!;
@@ -195,7 +194,7 @@ describe('Room: joining', () => {
 
 describe('Room: inputs and snapshots', () => {
   it('moves a player with each input at once, and acks its seq', () => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const a = join(room);
     const [x0, z0] = [HALL.spawns[0][0], HALL.spawns[0][1]];
     ticks(room, SNAP_EVERY);
@@ -216,7 +215,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('applies jumps and gravity through the shared physics', () => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const a = join(room);
     room.receive(a, input(0, KEY.JUMP));
     ticks(room, SNAP_EVERY);
@@ -226,7 +225,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('drops the inputs beyond the INPUT_BURST bank, unacked, and earns one per tick', () => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const a = join(room);
     for (let k = 0; k < INPUT_BURST + 5; k++) {
       room.receive(a, input(k, KEY.FORWARD));
@@ -253,7 +252,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('keeps one bank per player and ignores frames from a peer that has not joined', () => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const a = join(room);
     const b = join(room);
     const lurker = peer();
@@ -271,7 +270,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('ignores malformed binary frames', () => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const a = join(room);
     room.receive(a, new ArrayBuffer(3));
     room.receive(a, new ArrayBuffer(8));
@@ -280,7 +279,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('sends one snapshot every SNAP_EVERY ticks to every joined peer, and none to the others', () => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const a = join(room);
     const b = join(room);
     const lurker = peer();
@@ -298,7 +297,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('does not run without players, and drops a leaver from the next snapshot', () => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     ticks(room, 10);
     const a = join(room);
     const b = join(room);
@@ -333,7 +332,7 @@ describe('Room: timer', () => {
 
   it('ticks at TICK_HZ whatever the timer jitter, and starts once', () => {
     const t = timed();
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const a = join(room);
     room.start(t.every);
     room.start(t.every);
@@ -348,7 +347,7 @@ describe('Room: timer', () => {
 
   it('replays at most a bounded catch-up after a stall, and stops', () => {
     const t = timed();
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const a = join(room);
     room.start(t.every);
     t.advance(10_000);
@@ -374,7 +373,7 @@ describe('Room: chaingun', () => {
 
   /** Two players, A (id 0, at rest) and B (id 1), and everything the room sends A. */
   const duel = (pre = 0) => {
-    const room = new Room({}, undefined, [HALL]);
+    const room = new Room({}, undefined, HALL);
     const a = join(room, 'A');
     const b = join(room, 'B');
     // A long wait under the monsters' bullets: healed every tick, so nobody dies of it.
@@ -586,7 +585,7 @@ describe('Room: monsters', () => {
   /** The horde ticks run: tick() and then the newest snapshot of the peer. */
   const monstersOf = (c: Peer) => snap(c).monsters;
   const soloRoom = (seed?: number) => {
-    const room = new Room({}, seed, [HALL]);
+    const room = new Room({}, seed, HALL);
     return { room, a: join(room, 'A') };
   };
 
@@ -735,7 +734,7 @@ const arena = (over: Partial<MapDef> = {}): MapDef => ({ ...ARENA, ...over });
 
 /** A room, its players' peers, joined in this order. */
 const game = (levels: MapDef[] = [ARENA], names = ['A', 'B']) => {
-  const room = new Room({}, 1, levels);
+  const room = new Room({}, 1, levels[0]);
   const [a, b] = names.map(n => join(room, n));
   return { room, a, b };
 };
@@ -759,7 +758,6 @@ const drive = (room: Room, c: Peer, keys: number, yaw: number, n: number): void 
     room.tick();
   }
 };
-const ends = (c: Peer) => c.texts.filter(m => m.t === 'end');
 
 describe('Room: health', () => {
   /** Player A and a flyer 5 m off, facing it: it sees A on its next look, chases and swings. */
@@ -1063,7 +1061,7 @@ describe('Room: goal and exit', () => {
 
   it('bars the exit until the goal is touched: out of it you can go, back into it not', () => {
     const { room, a, b } = game();
-    expect(next(room, a)).toMatchObject({ phase: PHASE.HUNT, level: 0 });
+    expect(next(room, a)).toMatchObject({ phase: PHASE.HUNT });
     // B walks south out of the start room into the yard, and back north at the exit.
     put(room, b, 5, 8);
     drive(room, b, KEY.FORWARD, SOUTH, 40);
@@ -1096,261 +1094,5 @@ describe('Room: goal and exit', () => {
     // It stays so, with the goal left behind.
     put(room, a, 15, EXIT_X);
     expect(next(room, a).phase).toBe(PHASE.RETURN);
-  });
-
-  const campaign = [ARENA, arena({ spawns: [[8, 2, EAST]] })];
-
-  it('wins the level when every living player is in the exit, and not before', () => {
-    const { room, a, b } = game(campaign);
-    // Everyone starts in the exit, but the goal was not touched: no win.
-    ticks(room, 20);
-    expect(next(room, a).level).toBe(0);
-    goal(room, a);
-    ticks(room, 2);
-    expect(snap(a).phase).toBe(PHASE.RETURN);
-    // B is in the exit, A is not.
-    ticks(room, 30);
-    expect(next(room, a)).toMatchObject({ level: 0, phase: PHASE.RETURN });
-    // A comes home: next level, at once.
-    put(room, a, EXIT_X, 3);
-    room.tick();
-    expect(next(room, a)).toMatchObject({ level: 1, phase: PHASE.HUNT });
-    expect(room['level']).toBe(1);
-    void b;
-  });
-
-  it('does not wait for the dead, and does not win with nobody alive', () => {
-    const { room, a, b } = game(campaign);
-    goal(room, a);
-    ticks(room, 2);
-    // A is dead out at the goal, B alive in the exit: B alone brings the team home.
-    at(room, a).hp = 0;
-    at(room, a).hurt = room['ticks'];
-    room.tick();
-    expect(room['level']).toBe(1);
-
-    // Both dead, both lying in the exit: nobody is alive, nobody wins.
-    const g = game(campaign);
-    goal(g.room, g.a);
-    ticks(g.room, 2);
-    for (const c of [g.a, g.b]) {
-      at(g.room, c).hp = 0;
-      at(g.room, c).hurt = g.room['ticks'];
-    }
-    ticks(g.room, 20);
-    expect(g.room['level']).toBe(0);
-    expect(next(g.room, g.a).phase).toBe(PHASE.RETURN);
-    void b;
-  });
-});
-
-describe('Room: levels and the end of a run', () => {
-  const second = arena({
-    spawns: [
-      [8, 2, EAST],
-      [8, 8, EAST],
-    ],
-    items: [[7, 8, ITEM.HEALTH]],
-    monsters: [
-      [20, 1, EAST, MONSTER.WALKER],
-      [20, 9, EAST, MONSTER.FLYER],
-    ],
-  });
-  const first = arena({ monsters: [[20, 1, EAST, MONSTER.WALKER]] });
-  /** The goal, then everyone home: the win comes on the second tick. */
-  const win = (room: Room, a: Peer, b: Peer) => {
-    put(room, a, 20, 5);
-    room.tick();
-    put(room, a, 5, 3);
-    put(room, b, 5, 7);
-    room.tick();
-  };
-
-  it('starts the next level fresh: players, monsters, items, keys, phase', () => {
-    const { room, a, b } = game([first, second]);
-    // A level played: a key taken, a monster dead, a drop on the floor, A hurt and far away.
-    put(room, a, 6.3, 2);
-    ticks(room, 2);
-    room['horde'].kill(MAX_PLAYERS, 0);
-    room['drop'](ITEM.HEALTH, 3, 3);
-    at(room, a).hp = 3;
-    at(room, a).state.cool = 4;
-    expect(next(room, a)).toMatchObject({ keys: 1 << ITEM.KEY_RED, level: 0 });
-    expect(snap(a).items).toHaveLength(1);
-
-    win(room, a, b);
-    const s = next(room, a);
-    expect([s.level, s.phase, s.keys, s.hard]).toEqual([1, PHASE.HUNT, 0, false]);
-    // The second level's items only, ids from 0; its monsters, all alive.
-    expect(s.items).toEqual([{ id: 0, kind: ITEM.HEALTH, x: 7, y: 0, z: 8 }]);
-    expect(s.monsters.map(m => m.id)).toEqual([MAX_PLAYERS, MAX_PLAYERS + 1]);
-    // Everyone on a spawn of it with full health, nobody within 2 m of another.
-    expect(s.players.map(p => [p.id, p.hp, p.cool, p.x, p.z])).toEqual([
-      [0, HEALTH, 0, 8, 2],
-      [1, HEALTH, 0, 8, 8],
-    ]);
-    // The new exit is barred again, the gate is shut.
-    expect([...room['lvl'].barred].sort()).toEqual([0, 1]);
-    expect(s.shots).toEqual([]);
-  });
-
-  it('forgets the lag-compensation history of the level it leaves', () => {
-    const { room, a, b } = game([first, second]);
-    ticks(room, 30);
-    expect(room['history'].length).toBeGreaterThan(5);
-    win(room, a, b);
-    const won = room['ticks'];
-    expect(room['level']).toBe(1);
-    expect(room['history'].every(h => h.tick >= won)).toBe(true);
-  });
-
-  it('sends the end of the run to every player after the last level, then starts again in hard mode', () => {
-    const { room, a, b } = game([first]);
-    const lurker = peer();
-    room.connect(lurker);
-    ticks(room, 100);
-    win(room, a, b);
-    // The run took every tick since the first one: 100, the goal, the win.
-    expect(ends(a)).toEqual([
-      {
-        t: 'end',
-        ticks: 102,
-        hard: false,
-        stats: [
-          { id: 0, kills: 0, deaths: 0 },
-          { id: 1, kills: 0, deaths: 0 },
-        ],
-      },
-    ]);
-    expect(ends(b)).toEqual(ends(a));
-    expect(lurker.texts).toEqual([]);
-    expect(next(room, a)).toMatchObject({ level: 0, hard: true, phase: PHASE.HUNT, keys: 0 });
-    expect(snap(a).players.map(p => p.hp)).toEqual([HEALTH, HEALTH]);
-    expect(snap(a).monsters).toHaveLength(1);
-
-    // The second run is timed from its own start, and stays hard.
-    ticks(room, 50);
-    win(room, a, b);
-    expect(ends(a).at(-1)).toMatchObject({ ticks: room['ticks'] - 102, hard: true });
-    expect(next(room, a).hard).toBe(true);
-  });
-
-  describe('run stats', () => {
-    const mobs = arena({
-      monsters: [3, 5, 7].map(
-        z => [8, z, EAST, MONSTER.WALKER] as [number, number, number, number],
-      ),
-    });
-    /** `c` stands 6 m west of monster `id` and shoots it with a view of the host's own tick. */
-    const shoot = (room: Room, c: Peer, id: number) => {
-      const p = at(room, c);
-      const live = () => room['horde'].monsters().find(m => m.id === id);
-      const { x, y, z } = live()!;
-      [p.state.x, p.state.y, p.state.z] = [x - 6, 0, z];
-      const pitch = Math.atan2(y + 0.9 - EYE, 6);
-      for (let k = 0; live() && k < 30; k++) {
-        const seq = (p.ack + 1) & 0xffff;
-        room.receive(
-          c,
-          encodeInput({ seq, keys: KEY.FIRE, yaw: EAST, pitch, view: room['ticks'] }),
-        );
-        room.tick();
-      }
-      expect(live()).toBeUndefined();
-    };
-    /** `c` loses its last health, and is back after the respawn delay. */
-    const die = (room: Room, c: Peer) => {
-      at(room, c).hp = 1;
-      expect(room['wound'](at(room, c).info.id, room['ticks'])).toBe(true);
-      expect(at(room, c).hp).toBe(0);
-      ticks(room, PLAYER_RESPAWN);
-    };
-    const stats = (c: Peer) => (ends(c).at(-1) as Extract<ServerText, { t: 'end' }>).stats;
-
-    it('counts the monsters each player killed and their deaths, and sends them with the end', () => {
-      const { room, a, b } = game([mobs]);
-      shoot(room, a, MAX_PLAYERS);
-      shoot(room, b, MAX_PLAYERS + 1);
-      shoot(room, a, MAX_PLAYERS + 2);
-      die(room, b);
-      win(room, a, b);
-      expect(stats(a)).toEqual([
-        { id: 0, kills: 2, deaths: 0 },
-        { id: 1, kills: 1, deaths: 1 },
-      ]);
-      expect(stats(b)).toEqual(stats(a));
-    });
-
-    it('counts a death once, however the blows after it fall', () => {
-      const { room, a, b } = game([first]);
-      at(room, a).hp = 2;
-      expect(room['wound'](0, 1000)).toBe(true);
-      expect(room['wound'](0, 2000)).toBe(true);
-      expect(room['wound'](0, 3000)).toBe(false);
-      win(room, b, a);
-      expect(stats(a)[0]).toEqual({ id: 0, kills: 0, deaths: 1 });
-    });
-
-    it('starts every run at 0', () => {
-      const { room, a, b } = game([mobs]);
-      shoot(room, a, MAX_PLAYERS);
-      die(room, a);
-      win(room, a, b);
-      expect(stats(a)[0]).toEqual({ id: 0, kills: 1, deaths: 1 });
-      win(room, a, b);
-      expect(stats(a)).toEqual([
-        { id: 0, kills: 0, deaths: 0 },
-        { id: 1, kills: 0, deaths: 0 },
-      ]);
-    });
-
-    it('has a row for each player present, and a player who rejoins starts at 0', () => {
-      const { room, a, b } = game([mobs]);
-      shoot(room, b, MAX_PLAYERS);
-      shoot(room, a, MAX_PLAYERS + 1);
-      room.disconnect(b);
-      const b2 = join(room, 'B');
-      expect(roster(b2).you).toBe(1);
-      win(room, a, b2);
-      expect(stats(a)).toEqual([
-        { id: 0, kills: 1, deaths: 0 },
-        { id: 1, kills: 0, deaths: 0 },
-      ]);
-      room.disconnect(a);
-      const [c] = [join(room, 'C')];
-      put(room, c, 20, 5);
-      room.tick();
-      put(room, c, 5, 3);
-      put(room, b2, 5, 7);
-      room.tick();
-      expect(
-        stats(c)
-          .map(r => r.id)
-          .sort(),
-      ).toEqual([0, 1]);
-    });
-  });
-
-  /** Metres the only monster of a room walks per tick on patrol, over 40 ticks. */
-  const pace = (room: Room): number => {
-    let [last] = room['horde'].monsters();
-    let sum = 0;
-    for (let k = 0; k < 40; k++) {
-      room.tick();
-      const [m] = room['horde'].monsters();
-      sum += Math.hypot(m.x - last.x, m.z - last.z);
-      last = m;
-    }
-    return sum / 40;
-  };
-
-  it('runs the second run with a faster horde', () => {
-    const { room, a, b } = game([arena({ monsters: [[17, 5, EAST, MONSTER.WALKER]] })]);
-    const easy = pace(room);
-    win(room, a, b);
-    expect(room['hard']).toBe(true);
-    const hard = pace(room);
-    expect(easy).toBeCloseTo(1 / TICK_HZ, 3);
-    expect(hard / easy).toBeCloseTo(HARD_SPEED, 1);
   });
 });

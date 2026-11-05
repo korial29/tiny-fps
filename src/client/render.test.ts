@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { compile, inside } from '../shared/level';
-import { LEVELS } from '../shared/levels';
 import { HALL } from '../shared/map';
 import { forward } from '../shared/physics';
 import { TEX } from '../shared/types';
@@ -372,14 +371,12 @@ describe('palette and tint packing', () => {
     expect(last[0]).toBe(0);
   });
 
-  it('fits the palette of every level', () => {
-    for (const map of LEVELS) {
-      const lv = compile(map);
-      expect(palette(lv).length).toBeLessThan(MAX_TINTS);
-      expect(palette(lv).length).toBe(
-        1 + new Set(map.sectors.flatMap(s => (s.tint ? [`${s.tint}`] : []))).size,
-      );
-    }
+  it('fits the palette of the map', () => {
+    const lv = compile(HALL);
+    expect(palette(lv).length).toBeLessThan(MAX_TINTS);
+    expect(palette(lv).length).toBe(
+      1 + new Set(HALL.sectors.flatMap(s => (s.tint ? [`${s.tint}`] : []))).size,
+    );
   });
 });
 

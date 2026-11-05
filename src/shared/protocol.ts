@@ -5,9 +5,8 @@
 // Input, 11 bytes: [type u8 = MSG_INPUT][seq u16][keys u8][yaw u16][pitch i16][view u16][frac u8]
 //   yaw in 65536ths of a turn, decoded in [0, 2π); pitch in 1/10000 rad; view is the host tick
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
-// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8][level u8][flags u8][keys u8]
-//   level: index in LEVELS; flags: bit 0 = hard, bit 1 = phase (0 hunt, 1 return);
-//   keys: the team's key bits (1 << ITEM.KEY_*)
+// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8][flags u8][keys u8]
+//   flags: bit 0 = phase (0 hunt, 1 return); keys: the team's key bits (1 << ITEM.KEY_*)
 //   then count × 25 bytes:
 //   [id u8][x f32][y f32][z f32][vy f32][yaw u16][pitch i16][ack u16][flags u8][hp u8]
 //   flags: bit 0 = ground, bits 1-7 = cool (the chaingun cooldown, in steps)
@@ -23,26 +22,13 @@ import type { Input, PlayerInfo, Snapshot } from './types';
 
 export type ClientText = { t: 'join'; name: string };
 
-export type ServerText =
-  | { t: 'roster'; you: number; players: PlayerInfo[] }
-  | { t: 'full' }
-  /**
-   * The last level of a run was won: the run took `ticks` host ticks; `hard` says whether that run
-   * was hard. The next run always is. `stats` has one row per player still in the room, kills and
-   * deaths over the whole run.
-   */
-  | {
-      t: 'end';
-      ticks: number;
-      hard: boolean;
-      stats: { id: number; kills: number; deaths: number }[];
-    };
+export type ServerText = { t: 'roster'; you: number; players: PlayerInfo[] } | { t: 'full' };
 
 export const MSG_INPUT = 1;
 export const MSG_SNAPSHOT = 2;
 
 export const INPUT_BYTES = 11;
-export const SNAP_HEAD = 7;
+export const SNAP_HEAD = 6;
 export const SNAP_PLAYER = 25;
 export const SNAP_SHOT = 14;
 export const SNAP_MONSTER = 16;
@@ -114,9 +100,8 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
   v.setUint8(0, MSG_SNAPSHOT);
   v.setUint16(1, s.tick & 0xffff);
   v.setUint8(3, s.players.length);
-  v.setUint8(4, s.level);
-  v.setUint8(5, +s.hard | ((s.phase & 1) << 1));
-  v.setUint8(6, s.keys);
+  v.setUint8(4, s.phase & 1);
+  v.setUint8(5, s.keys);
   s.players.forEach((p, i) => {
     const o = SNAP_HEAD + i * SNAP_PLAYER;
     v.setUint8(o, p.id);
@@ -260,10 +245,8 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       y: v.getFloat32(o + 6),
       z: v.getFloat32(o + 10),
     })),
-    level: v.getUint8(4),
-    hard: (v.getUint8(5) & 1) === 1,
-    phase: (v.getUint8(5) >> 1) & 1,
-    keys: v.getUint8(6),
+    phase: v.getUint8(4) & 1,
+    keys: v.getUint8(5),
     items: each(items, SNAP_ITEM, o => ({
       id: v.getUint8(o),
       kind: v.getUint8(o + 1),

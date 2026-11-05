@@ -455,13 +455,6 @@ describe('delay', () => {
     expect(q.due(1030 + INTERP_DELAY)).toEqual(['b', 'c']);
   });
 
-  it('forgets what it holds on clear', () => {
-    const q = createDelay<number>();
-    q.push([1, 2], 0);
-    q.clear();
-    expect(q.due(1e6)).toEqual([]);
-  });
-
   it('keeps the newest max', () => {
     const q = createDelay<number>(3);
     q.push([1, 2, 3, 4, 5], 0);
@@ -517,52 +510,6 @@ describe('dead', () => {
       fx.update(me(), KEY.RIGHT, DT, true);
     }
     expect(fx.roll).toBeCloseTo(0.9 + 0.03, 2);
-  });
-});
-
-describe('reset', () => {
-  const lvl = compile(HALL);
-  const die = (x: number, y: number, z: number): GameEvent => ({
-    type: EVENT.DIE,
-    id: 16,
-    x,
-    y,
-    z,
-  });
-  const step = (fx: ReturnType<typeof createEffects>, seconds: number) => {
-    for (let t = 0; t < seconds; t += DT) {
-      fx.update(undefined, 0, DT);
-    }
-  };
-
-  it('drops every effect of the old level', () => {
-    const fx = createEffects(Math.random, lvl);
-    fx.event(die(8, 2, 8), 1);
-    expect(fx.smoke.length).toBeGreaterThan(0);
-    fx.splats.push({ p: [8, 1, 8], r: 0.1, yaw: 0, life: 5 });
-    fx.event({ type: EVENT.SWING, id: 20, x: 8, y: 2, z: 8 }, 1);
-    fx.track([{ id: 20, kind: 0, x: 8, y: 1, z: 8, yaw: 0, chase: false }], []);
-    fx.shot(shot, [0, 1.6, 0], true);
-    fx.shot({ ...shot, id: 2 }, [0, 1.6, 0], false);
-    fx.hit();
-    fx.pickup([1, 1, 1]);
-    fx.reset(lvl);
-    expect([fx.gibs, fx.sparks, fx.blasts, fx.smoke, fx.splats]).toEqual([[], [], [], [], []]);
-    expect(fx.casings.filter(c => c.life > 0)).toHaveLength(0);
-    expect([fx.swings.size, fx.herd.size, fx.flashes.size, fx.aim.size]).toEqual([0, 0, 0, 0]);
-    expect([fx.hurt, fx.gain, fx.flash]).toEqual([0, 0, 0]);
-  });
-
-  it('lets later gibs land on the new level', () => {
-    const fx = createEffects(() => 0.5);
-    fx.reset(lvl);
-    fx.event(die(8, 5, 8), 1);
-    expect(fx.gibs.length).toBeGreaterThan(0);
-    for (const g of fx.gibs) {
-      expect(g.floor).toBe(lvl.map.sectors[sectorAt(lvl, 8, 8)].floor);
-    }
-    step(fx, 1);
-    expect(Math.min(...fx.gibs.map(g => g.p[1]))).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -793,16 +740,6 @@ describe('dust motes', () => {
       expect(n).toBeLessThan(MOTES / 2);
     });
   });
-
-  it('are scattered again after a level change', () => {
-    const fx = createEffects(seeded());
-    fx.update(me(), 0, DT);
-    fx.motes.fill(0);
-    fx.reset(compile(HALL));
-    fx.update(me(), 0, DT);
-    expect(fx.motes.some(m => m != 0)).toBe(true);
-    expect(spread(fx, 0, 0).some(([x]) => Math.abs(x) > 1)).toBe(true);
-  });
 });
 
 describe('shell casings', () => {
@@ -962,16 +899,6 @@ describe('shell casings', () => {
     fire(fx, [0, 1.6, 0], [0, -1]);
     step(fx, 2);
     expect(live(fx)[0].p[1]).toBeCloseTo(live(fx)[0].size);
-  });
-
-  it('lands on the new level after a reset', () => {
-    const fx = createEffects(() => 0.5);
-    fire(fx, room, [0, -1]);
-    fx.reset(lvl);
-    expect(live(fx)).toHaveLength(0);
-    fire(fx, room, [0, -1]);
-    step(fx, 1.5);
-    expect(live(fx)[0].p[1]).toBeCloseTo(1 + live(fx)[0].size);
   });
 });
 

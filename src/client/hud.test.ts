@@ -14,14 +14,9 @@ describe('createHud', () => {
   });
   const q = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
   const marks = () => [...screen.querySelectorAll<HTMLElement>('ol li')];
-  const [title, note, respawn, muted, over, menu] = [
-    'h1',
-    'h2',
-    'h4',
-    'h5',
-    'section',
-    'aside',
-  ].map(t => () => q(t));
+  const [title, note, respawn, muted, menu] = ['h1', 'h2', 'h4', 'h5', 'aside'].map(
+    t => () => q(t),
+  );
   const [fill, num, bar] = [() => q('ul li'), () => q('ul li+li'), () => q('ul')];
   /** A custom property of the health bar. */
   const prop = (k: string) => Number(bar().style.getPropertyValue(k));
@@ -214,60 +209,8 @@ describe('createHud', () => {
     });
   });
 
-  describe('end screen', () => {
-    const scores: [string, string, number, number][] = [
-      ['Ann', '#e6194b', 12, 1],
-      ['<b>Bob</b>', '#3cb44b', 7, 3],
-    ];
-    const rows = () => [...over().querySelectorAll('tbody tr')];
-
-    it('shows the head, a row per player in the order given, and the foot', () => {
-      expect(over().hidden).toBe(true);
-      hud.end('Run complete\n1:02.3', scores, 'Next run: Hard mode');
-      expect(over().hidden).toBe(false);
-      expect(q('section h6').textContent).toBe('Run complete\n1:02.3');
-      expect(q('section small').textContent).toBe('Next run: Hard mode');
-      expect(rows().map(r => [...r.querySelectorAll('td')].map(c => c.textContent))).toEqual([
-        ['●', 'Ann', '12', '1'],
-        ['●', '<b>Bob</b>', '7', '3'],
-      ]);
-    });
-
-    it('colours each player with a dot, and writes names as text, never as markup', () => {
-      hud.end('x', scores, 'y');
-      expect(rows().map(r => (r.firstElementChild as HTMLElement).style.color)).toEqual([
-        'rgb(230, 25, 75)',
-        'rgb(60, 180, 75)',
-      ]);
-      expect(over().querySelector('tbody b')).toBeNull();
-    });
-
-    it('has column heads, and replaces the rows of an earlier run', () => {
-      hud.end('x', scores, 'y');
-      expect([...over().querySelectorAll('th')].map(c => c.textContent)).toEqual([
-        '',
-        'Player',
-        'Kills',
-        'Deaths',
-      ]);
-      hud.end('x', [['Cy', '#fff', 0, 0]], 'y');
-      expect(rows()).toHaveLength(1);
-    });
-
-    it('stays up for 8 s, and restarts when shown again', () => {
-      hud.end('x', scores, 'y');
-      hud.update(7.9);
-      expect(over().hidden).toBe(false);
-      hud.end('x', scores, 'y');
-      hud.update(7.9);
-      expect(over().hidden).toBe(false);
-      hud.update(0.2);
-      expect(over().hidden).toBe(true);
-    });
-  });
-
   it('keeps the texts hidden until said, then hides each after its time', () => {
-    expect([title(), note(), over(), respawn()].every(e => e.hidden)).toBe(true);
+    expect([title(), note(), respawn()].every(e => e.hidden)).toBe(true);
     hud.say(SAY.TITLE, 'Level 1');
     hud.say(SAY.NOTE, 'Find the exit');
     expect(title().textContent).toBe('Level 1');

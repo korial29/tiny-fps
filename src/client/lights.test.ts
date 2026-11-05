@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { bar, compile, sectorAt } from '../shared/level';
-import { LEVELS } from '../shared/levels';
 import { HALL } from '../shared/map';
 import { PHASE, TEX } from '../shared/types';
 import type { MapDef, PlayerState } from '../shared/types';
@@ -311,10 +310,5 @@ describe('lava', () => {
     gather(at(4, lv));
     expect(lava(lv)).toBe(first);
     expect(lava({ ...lv })).not.toBe(first);
-  });
-
-  it('finds the lava of the campaign levels that have some', () => {
-    // The warm-up has none.
-    expect(LEVELS.map(m => lava(compile(m)).length > 0)).toEqual([false, true, true, true, true]);
   });
 });

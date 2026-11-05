@@ -102,8 +102,8 @@ describe('body', () => {
       });
       // Two arms with five fingers each ahead, the jacket, legs and shoes more looking down.
       expect(level).toBeGreaterThan(2500);
-      expect(level).toBeLessThanOrEqual(p.mode == MODE.SLIDE ? 5200 : 3800);
-      expect(down).toBeLessThanOrEqual(5200);
+      expect(level).toBeLessThanOrEqual(p.mode == MODE.SLIDE ? 5600 : 3800);
+      expect(down).toBeLessThanOrEqual(5600);
       expect(down).toBeGreaterThanOrEqual(level);
     }
     expect(watch(man(), 9).rig([0, EYE, 0], 0, 0)?.arms).toHaveLength(2);

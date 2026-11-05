@@ -341,7 +341,7 @@ export const createBody = (): Body => {
       const k = kit();
       // Below the view, unless the body is low: the legs are only seen looking down.
       if (pitch < LOOK_DOWN || j.low > 0.2) {
-        torso(out, 1, pelvis, unit(sub(chest, pelvis)), fwd, right, JACKET, TROUSERS, 0.75);
+        torso(out, 2, pelvis, unit(sub(chest, pelvis)), fwd, right, JACKET, TROUSERS, 0.75);
         for (const { root, mid, end } of j.legs) {
           segment(out, k.thigh, root, mid, right, THIGH, 1, TROUSERS);
           segment(out, k.shin, mid, end, right, SHIN, 1, TROUSERS);

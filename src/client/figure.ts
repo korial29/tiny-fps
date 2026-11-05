@@ -16,7 +16,7 @@ export const RADII = {
 };
 
 /** The jacket from the hem to the collar: half widths at equal steps along the spine. */
-const JACKET = [0.17, 0.153, 0.16, 0.18, 0.196, 0.2, 0.09];
+const JACKET = [0.17, 0.153, 0.16, 0.18, 0.196, 0.19, 0.105];
 export const SPINE = 0.62;
 
 /** A body's axes from where it faces, `up` being the world's. */
@@ -54,7 +54,7 @@ export const torso = (
 export const neck = (out: number[], lod: number, pelvis: Vec3, spine: Vec3, right: Vec3) =>
   segment(
     out,
-    solid(lod, 0.17, [0.06, 0.055], [0, 0.5]),
+    solid(lod, 0.17, [0.066, 0.06], [0, 0.5]),
     pelvis.map((v, i) => v + spine[i] * 0.55) as Vec3,
     pelvis.map((v, i) => v + spine[i] * 0.72) as Vec3,
     right,
@@ -77,7 +77,7 @@ export const shoe = (
   right: Vec3,
   upper: number[],
 ) => {
-  const k = dot(fwd, shin) * 0.6;
+  const k = dot(fwd, shin) * 0.4;
   const axes = aim(unit([fwd[0] - shin[0] * k, fwd[1] - shin[1] * k, fwd[2] - shin[2] * k]), right);
   const small = solid(0, 0, [1, 1]);
   place(

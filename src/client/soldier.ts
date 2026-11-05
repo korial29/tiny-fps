@@ -112,8 +112,19 @@ export const soldier = (
     neck(out, lod, pelvis, spine, right);
   }
   place(out, ball, head, face, [0, 0, 0.012], [0.082, 0.12, 0.1], SKIN);
-  place(out, small, head, face, [0, 0.02, -0.004], [0.088, 0.113, 0.11], HAIR);
+  place(out, ball, head, face, [0, 0.02, -0.004], [0.088, 0.113, 0.11], HAIR);
   if (lod) {
+    // A hood rolled down behind the neck, and a nose.
+    place(
+      out,
+      small,
+      w(0, hy + 0.58 * Math.cos(lean), 0.58 * Math.sin(lean)),
+      face,
+      [0, 0, -0.075],
+      [0.115, 0.055, 0.06],
+      color,
+    );
+    place(out, small, head, face, [0, -0.02, 0.108], [0.016, 0.028, 0.022], SKIN);
     place(out, small, head, face, [0, 0.025, 0.083], [0.068, 0.016, 0.03], SHADES);
   }
   for (const side of [-1, 1]) {

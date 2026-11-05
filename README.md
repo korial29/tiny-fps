@@ -192,7 +192,7 @@ For now the game is the movement and the room; the rules come with the next step
 ## Features
 
 - [x] Multiplayer over WebSocket, or between tabs of one browser with no server
-- [x] Doom-style sector maps: steps, pits, low ceilings, balconies, eight procedural materials (brick, tile, lava, stone, metal, wood, moss, grating) with bump mapping and per-material highlights
+- [x] A brush world under an open sky: roofs at any height, gaps, floating platforms and overhangs, steps, falls back to a spawn; eight procedural materials (brick, tile, lava, stone, metal, wood, moss, grating) with bump mapping and per-material highlights; a sky with a blooming sun, a sun shadow that follows you, daylight from the sky
 - [x] The rooftop map: a deck, a parapet, a crate, a block and a platform with steps
 - [x] Client-side prediction, exact to the bit, and the other players interpolated
 - [x] A per-tick history of the players on the host, for lag compensation

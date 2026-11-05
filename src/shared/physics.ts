@@ -11,9 +11,10 @@ import {
   STEP_H,
   TICK_HZ,
 } from './constants';
-import { sectorAt } from './level';
 import { KEY } from './types';
-import type { Edge, Input, Level, PlayerState } from './types';
+import type { Input, PlayerState } from './types';
+import { near } from './world';
+import type { Brush, World } from './world';
 
 const DT = 1 / TICK_HZ;
 type Pos = Pick<PlayerState, 'x' | 'y' | 'z'>;
@@ -37,66 +38,77 @@ const f32 = Math.fround;
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v, lo), hi);
 
-/**
- * Whether the edge stops a body of height h whose feet are at y: a solid wall, a floor on the far
- * side more than `step` above the feet, or an opening (the lower ceiling minus the higher floor)
- * too short for the body or under the head. SKIN keeps rounding from flipping the answer for a
- * player resting on a step or against a ceiling.
- */
-const shut = ({ map }: Level, e: Edge, y: number, h: number, step: number): boolean => {
-  if (e.back < 0) {
-    return true;
-  }
-  const f = map.sectors[e.front];
-  const k = map.sectors[e.back];
-  const top = Math.min(f.ceil, k.ceil);
-  return (
-    k.floor > y + step + SKIN || top - Math.max(f.floor, k.floor) < h - SKIN || top < y + h - SKIN
-  );
+/** A player standing on spawn point n of the world (modulo the count). */
+export const spawn = (id: number, w: World, n: number): PlayerState => {
+  const { spawns } = w.def;
+  const [x, y, z, yaw] = spawns[((n % spawns.length) + spawns.length) % spawns.length];
+  return { id, x: f32(x), y: f32(y), z: f32(z), vy: 0, yaw: norm(yaw), pitch: 0, ground: true };
 };
 
+/** Whether the brush stops a body whose feet are at y when it walks sideways into it. */
+const blocks = (b: Brush, y: number): boolean =>
+  b.max[1] > y + STEP_H + SKIN && b.min[1] < y + PLAYER_H - SKIN;
+
+/** The closest point of the brush footprint to (x, z), as the offset from it to (x, z). */
+const gap = (b: Brush, x: number, z: number): [dx: number, dz: number] => [
+  x - clamp(x, b.min[0], b.max[0]),
+  z - clamp(z, b.min[2], b.max[2]),
+];
+
 /**
- * Pushes the player out of every shut edge it overlaps, deepest first (up to 4 passes: two walls
- * in a corner settle in two). The push is along the vector from the closest point of the edge, so
- * against a wall it is the normal (the other axis keeps moving: the slide) and at an endpoint it
- * is radial: a player running at a corner slides round it. Deepest first matters on a straight
- * wall split by a collinear point: the endpoint of the next piece is always shallower than the
- * normal push of the piece the player is on, so it never pulls him back along the wall.
- * An edge only counts from its front side (the inside of its sector); across it, the twin edge of
- * the neighbour decides.
- * Tunnelling is impossible: a step is RUN_SPEED / TICK_HZ = 0.1 m and the axis ends each step at
- * least PLAYER_R = 0.4 m from every shut edge it started beside, so it cannot cross one in 0.1 m.
+ * Pushes the player out of every brush that blocks it and that the circle overlaps, deepest first
+ * (up to 4 passes: two walls in a corner settle in two). The push is along the vector from the
+ * closest point of the box, so against a side it is the normal (the other axis keeps moving: the
+ * slide) and at an edge it is radial: a player running at a corner slides round it. Deepest first
+ * matters on a flat wall made of several boxes: the corner of the next box is always shallower
+ * than the normal push of the box the player is on, so it never pulls him back along the wall.
+ * A centre inside a footprint (it never gets there by walking, see below) leaves by the nearest
+ * side.
+ *
+ * Tunnelling is impossible: a step is RUN_SPEED / TICK_HZ = 0.1 m, and each push leaves the centre
+ * at least PLAYER_R = 0.4 m from the footprint of every box it started beside, so a 0.1 m step
+ * cannot bring the centre across one, however thin. The candidates come from near() with twice
+ * PLAYER_R, enough for the one push of at most PLAYER_R that matters.
  */
-const push = (p: Pos, lvl: Level, r: number, h: number, step: number): void => {
-  const reach = (r - EPS) ** 2;
+const push = (p: Pos, w: World): void => {
+  const { brushes } = w.def;
+  const ids = near(w, p.x, p.z, 2 * PLAYER_R);
+  const reach = (PLAYER_R - EPS) ** 2;
   for (let pass = 0; pass < 4; pass++) {
     let best = 0;
     let px = 0;
     let pz = 0;
-    for (const e of lvl.edges) {
-      const ex = e.bx - e.ax;
-      const ez = e.bz - e.az;
-      const rx = p.x - e.ax;
-      const rz = p.z - e.az;
-      if (ex * rz - ez * rx < 0) {
+    for (const i of ids) {
+      const b = brushes[i];
+      if (!blocks(b, p.y)) {
         continue;
       }
-      const t = clamp((rx * ex + rz * ez) / (ex * ex + ez * ez), 0, 1);
-      const dx = rx - t * ex;
-      const dz = rz - t * ez;
+      const [dx, dz] = gap(b, p.x, p.z);
       const d2 = dx * dx + dz * dz;
       if (d2 >= reach) {
         continue;
       }
-      const d = Math.sqrt(d2);
-      if (r - d <= best || !shut(lvl, e, p.y, h, step)) {
+      if (d2) {
+        const d = Math.sqrt(d2);
+        if (PLAYER_R - d > best) {
+          best = PLAYER_R - d;
+          px = (dx / d) * best;
+          pz = (dz / d) * best;
+        }
         continue;
       }
-      best = r - d;
-      // On the edge itself the direction is its inward normal.
-      const n = d || Math.hypot(ex, ez);
-      px = ((d ? dx : -ez) / n) * best;
-      pz = ((d ? dz : ex) / n) * best;
+      // Centre inside: the nearest of the four sides, then the radius beyond it.
+      const out: [number, number, number][] = [
+        [p.x - b.min[0], -1, 0],
+        [b.max[0] - p.x, 1, 0],
+        [p.z - b.min[2], 0, -1],
+        [b.max[2] - p.z, 0, 1],
+      ];
+      const [m, nx, nz] = out.reduce((a, c) => (c[0] < a[0] ? c : a));
+      if (m + PLAYER_R > best) {
+        best = m + PLAYER_R;
+        [px, pz] = [nx * best, nz * best];
+      }
     }
     if (!best) {
       return;
@@ -107,36 +119,28 @@ const push = (p: Pos, lvl: Level, r: number, h: number, step: number): void => {
 };
 
 /**
- * The floor and the ceiling under the player: the highest floor and the lowest ceiling of the
- * sector holding the axis and of every sector across a portal the circle overlaps and could walk
- * through (a shut edge is a wall: the circle never counts what lies behind it).
+ * The floor and the ceiling under the player: the highest top the player can stand on (at most
+ * STEP_H above the feet) and the lowest bottom above the head, among the boxes the circle overlaps.
+ * Every top between the feet and the fall is a candidate and so is every bottom above the head,
+ * however far: a fall of any speed stops on the first top under the circle, and a rise (at most
+ * JUMP_SPEED / TICK_HZ = 0.12 m a step) cannot pass a bottom. Only a corner clipped by under a
+ * millimetre of overlap at one end of a step and none at the other could slip past.
  */
-const span = (
-  lvl: Level,
-  x: number,
-  z: number,
-  y: number,
-  r: number,
-  h: number,
-  step: number,
-): [floor: number, ceil: number] => {
-  const { map, edges } = lvl;
-  const s = Math.max(sectorAt(lvl, x, z), 0);
-  let { floor, ceil } = map.sectors[s];
-  const reach = (r - EPS) ** 2;
-  for (const e of edges) {
-    if (e.front !== s || e.back < 0) {
+const span = (p: Pos, w: World): [floor: number, ceil: number] => {
+  const { brushes } = w.def;
+  const reach = (PLAYER_R - EPS) ** 2;
+  let floor = -Infinity;
+  let ceil = Infinity;
+  for (const i of near(w, p.x, p.z, PLAYER_R)) {
+    const b = brushes[i];
+    const [dx, dz] = gap(b, p.x, p.z);
+    if (dx * dx + dz * dz >= reach) {
       continue;
     }
-    const ex = e.bx - e.ax;
-    const ez = e.bz - e.az;
-    const rx = x - e.ax;
-    const rz = z - e.az;
-    const t = clamp((rx * ex + rz * ez) / (ex * ex + ez * ez), 0, 1);
-    if ((rx - t * ex) ** 2 + (rz - t * ez) ** 2 < reach && !shut(lvl, e, y, h, step)) {
-      const k = map.sectors[e.back];
-      floor = Math.max(floor, k.floor);
-      ceil = Math.min(ceil, k.ceil);
+    if (b.max[1] <= p.y + STEP_H + SKIN) {
+      floor = Math.max(floor, b.max[1]);
+    } else if (b.min[1] >= p.y + PLAYER_H - SKIN) {
+      ceil = Math.min(ceil, b.min[1]);
     }
   }
   return [floor, ceil];
@@ -144,17 +148,17 @@ const span = (
 
 /**
  * Moves the feet by (dx, dz) for 1 / TICK_HZ s, then a jump from the ground, GRAVITY and the
- * collisions of the cylinder (PLAYER_R, PLAYER_H) with the sectors of the level: it slides along
- * shut edges (see shut and push), stands on the highest floor under the circle (a step up to
- * STEP_H is climbed at once, a higher one needs a jump, a ledge is a fall), and bumps its head on
- * the lowest ceiling, in place.
+ * collisions of the cylinder (PLAYER_R, PLAYER_H) with the brushes of the world: it slides along
+ * their sides (see push), stands on the highest top under the circle (a top up to STEP_H above the
+ * feet is climbed at once, a higher one needs a jump, an edge is a fall), and bumps its head on the
+ * lowest bottom, in place. Feet under the world's kill floor put the player back at a spawn.
+ * Sides and tops are judged from the feet at the start of the step.
  */
-export const walk = (p: PlayerState, dx: number, dz: number, jump: boolean, lvl: Level): void => {
+export const walk = (p: PlayerState, dx: number, dz: number, jump: boolean, w: World): void => {
   p.x += dx;
   p.z += dz;
-  push(p, lvl, PLAYER_R, PLAYER_H, STEP_H);
-  // Edges and steps are judged from the feet at the start of the step.
-  const [floor, ceil] = span(lvl, p.x, p.z, p.y, PLAYER_R, PLAYER_H, STEP_H);
+  push(p, w);
+  const [floor, ceil] = span(p, w);
 
   if (p.ground && jump) {
     p.vy = JUMP_SPEED;
@@ -179,6 +183,11 @@ export const walk = (p: PlayerState, dx: number, dz: number, jump: boolean, lvl:
       p.ground = true;
     }
   }
+  if (p.y < w.def.floor) {
+    // Fallen off the roofs: back at the spawn of the player's id, looking where the input says.
+    const { x, y, z } = spawn(p.id, w, p.id);
+    Object.assign(p, { x, y, z, vy: 0, ground: true });
+  }
   // Host and client then hold identical values and the snapshot carries them exactly, so the
   // replay is exact (barring Math.sin / Math.cos differences between JS engines).
   p.x = f32(p.x);
@@ -191,7 +200,7 @@ export const walk = (p: PlayerState, dx: number, dz: number, jump: boolean, lvl:
  * Applies one input for 1 / TICK_HZ s, in place: yaw and pitch from the input (pitch clamped to
  * MAX_PITCH), RUN_SPEED along the held keys (diagonals not faster), then walk().
  */
-export const move = (p: PlayerState, i: Input, lvl: Level): void => {
+export const move = (p: PlayerState, i: Input, w: World): void => {
   p.yaw = norm(i.yaw);
   p.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, i.pitch));
 
@@ -200,22 +209,5 @@ export const move = (p: PlayerState, i: Input, lvl: Level): void => {
   const d = (RUN_SPEED * DT) / (Math.hypot(f, s) || 1);
   const [fx, fz] = forward(p.yaw);
 
-  walk(p, (fx * f - fz * s) * d, (fz * f + fx * s) * d, (i.keys & KEY.JUMP) !== 0, lvl);
-};
-
-/** A player standing on the floor at spawn point n of the map (modulo the count). */
-export const spawn = (id: number, lvl: Level, n: number): PlayerState => {
-  const { spawns, sectors } = lvl.map;
-  const [x, z, yaw] = spawns[((n % spawns.length) + spawns.length) % spawns.length];
-  const y = sectors[Math.max(sectorAt(lvl, x, z), 0)].floor;
-  return {
-    id,
-    x: f32(x),
-    y: f32(y),
-    z: f32(z),
-    vy: 0,
-    yaw: norm(yaw),
-    pitch: 0,
-    ground: true,
-  };
+  walk(p, (fx * f - fz * s) * d, (fz * f + fx * s) * d, (i.keys & KEY.JUMP) !== 0, w);
 };

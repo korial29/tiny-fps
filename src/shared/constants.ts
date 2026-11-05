@@ -86,20 +86,35 @@ export const SLIDE_TICKS = 60;
 /** Top speed of a crouch walk. */
 export const CROUCH_SPEED = 3;
 
-/** Wall-run: moving at least this fast along a wall (m/s) starts it, and under WALLRUN_KEEP it ends. */
-export const WALLRUN_MIN_SPEED = 7;
-export const WALLRUN_KEEP_SPEED = 5.5;
+/**
+ * Wall-run: in the air with forward held, running at least WALLRUN_MIN_SPEED (m/s, a normal run is
+ * 6) toward or along a wall within reach starts it; under WALLRUN_KEEP_SPEED it ends.
+ */
+export const WALLRUN_MIN_SPEED = 4.5;
+export const WALLRUN_KEEP_SPEED = 3.5;
 /** Speed lost along the wall, m/s². */
-export const WALLRUN_DRAG = 2.5;
+export const WALLRUN_DRAG = 1.5;
 /** Longest run, in ticks (1 s). */
 export const WALLRUN_TICKS = 60;
-/** Gravity during the run, as a share of GRAVITY, and the fastest rise it starts with. */
+/**
+ * Gravity during the run, as a share of GRAVITY. The start lifts the rise to at least
+ * WALLRUN_LIFT and holds it to at most WALLRUN_VY_MAX (m/s).
+ */
 export const WALLRUN_GRAVITY = 0.15;
+export const WALLRUN_LIFT = 2;
 export const WALLRUN_VY_MAX = 3;
 /** How far from the cylinder a wall still counts as next to it (m). */
-export const WALL_REACH = 0.15;
-/** The share of the speed that may point into or away from the wall for it to count as along it. */
-export const WALL_PARALLEL = 0.4;
+export const WALL_REACH = 0.5;
+/**
+ * The share of the speed that may point into the wall for a run to start (0.75 is 49 degrees off
+ * the wall), and the share that may point away from it. A run starting at an angle is turned
+ * along the wall and keeps WALL_TURN_KEEP of its speed (a parallel one keeps all of it).
+ */
+export const WALL_PARALLEL = 0.75;
+export const WALL_AWAY = 0.2;
+export const WALL_TURN_KEEP = 0.9;
+/** Speed at which a run draws the body in to the wall when it starts up to WALL_REACH away (m/s). */
+export const WALL_PULL = 4;
 /** A kick-off from the wall: speed away from it and upward (m/s). */
 export const WALL_KICK_SPEED = 5;
 export const WALL_KICK_UP = 6.5;

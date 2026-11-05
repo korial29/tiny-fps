@@ -60,13 +60,17 @@ import {
   WALLRUN_DRAG,
   WALLRUN_GRAVITY,
   WALLRUN_KEEP_SPEED,
+  WALLRUN_LIFT,
   WALLRUN_MIN_SPEED,
   WALLRUN_TICKS,
   WALLRUN_VY_MAX,
+  WALL_AWAY,
   WALL_KICK_SPEED,
   WALL_KICK_UP,
   WALL_PARALLEL,
+  WALL_PULL,
   WALL_REACH,
+  WALL_TURN_KEEP,
 } from './constants';
 import { EV, KEY, MODE, SIDE } from './types';
 import type { Input, PlayerState } from './types';
@@ -314,16 +318,21 @@ const faceDist = (b: Brush, p: Pos, side: number, reach: number): number | undef
     : undefined;
 };
 
-/** Whether a wall on `side` covers the body from the knees to the head and is within reach. */
-const wallOn = (p: Pos, w: World, side: number): boolean =>
-  near(w, p.x, p.z, PLAYER_R + WALL_REACH).some(i => {
+/**
+ * The gap between the cylinder and a wall on `side` that covers the body from the knees to the
+ * head and is within WALL_REACH (the nearest one), or undefined when there is none.
+ */
+const wallGap = (p: Pos, w: World, side: number): number | undefined => {
+  let best: number | undefined;
+  for (const i of near(w, p.x, p.z, PLAYER_R + WALL_REACH)) {
     const b = w.def.brushes[i];
-    return (
-      faceDist(b, p, side, WALL_REACH) !== undefined &&
-      b.min[1] < p.y + STEP_H &&
-      b.max[1] > p.y + PLAYER_H
-    );
-  });
+    const d = faceDist(b, p, side, WALL_REACH);
+    if (d !== undefined && b.min[1] < p.y + STEP_H && b.max[1] > p.y + PLAYER_H) {
+      best = Math.min(best ?? Infinity, Math.max(0, d - PLAYER_R));
+    }
+  }
+  return best;
+};
 
 interface Ledge {
   side: number;
@@ -607,36 +616,53 @@ const run = (p: PlayerState, w: World, c: Ctl): void => {
     p.jumps = AIR_JUMPS;
     p.dashes = 1;
     p.ev |= EV.WALLRUN_END;
-  } else if (!c.fwd || s < WALLRUN_KEEP_SPEED || p.t >= WALLRUN_TICKS || !wallOn(p, w, p.wall)) {
-    enter(p, MODE.AIR);
-    p.ev |= EV.WALLRUN_END;
   } else {
+    const gap = wallGap(p, w, p.wall);
+    if (gap === undefined || !c.fwd || s < WALLRUN_KEEP_SPEED || p.t >= WALLRUN_TICKS) {
+      enter(p, MODE.AIR);
+      p.ev |= EV.WALLRUN_END;
+      return;
+    }
     const k = Math.max(0, s - WALLRUN_DRAG * DT) / s;
     p.vx = tx * k;
     p.vz = tz * k;
+    // A start up to WALL_REACH away draws the body in to the wall, so it runs along its side.
+    const pull = Math.min(gap, WALL_PULL * DT);
+    p.x += nx * pull;
+    p.z += nz * pull;
   }
 };
 
-/** Starts a wall-run if the player is moving fast along a wall he is next to. */
+/**
+ * Starts a wall-run if the player, in the air with forward held, runs at least WALLRUN_MIN_SPEED
+ * toward or along a wall within reach: at most WALL_PARALLEL of the speed into it (about 49
+ * degrees off the wall) and at most WALL_AWAY of it away. The velocity is turned along the wall,
+ * keeping WALL_TURN_KEEP of the speed (all of it from a parallel run), with a small lift.
+ */
 const startRun = (p: PlayerState, w: World, c: Ctl): void => {
   if (!c.fwd) {
     return;
   }
   const s = len(p.vx, p.vz);
+  if (s < WALLRUN_MIN_SPEED) {
+    return;
+  }
   for (let side = 1; side <= 4; side++) {
     const [nx, nz] = TOWARD[side];
     const into = p.vx * nx + p.vz * nz;
     const [tx, tz] = [p.vx - into * nx, p.vz - into * nz];
     if (
       side !== p.wall &&
-      len(tx, tz) >= WALLRUN_MIN_SPEED &&
-      Math.abs(into) <= WALL_PARALLEL * s &&
-      wallOn(p, w, side)
+      into <= WALL_PARALLEL * s &&
+      into >= -WALL_AWAY * s &&
+      wallGap(p, w, side) !== undefined
     ) {
+      const t = len(tx, tz);
+      const k = Math.max(t, WALL_TURN_KEEP * s) / t;
       enter(p, MODE.WALLRUN);
       p.wall = side;
-      [p.vx, p.vz] = [tx, tz];
-      p.vy = Math.min(p.vy, WALLRUN_VY_MAX);
+      [p.vx, p.vz] = [tx * k, tz * k];
+      p.vy = clamp(p.vy, WALLRUN_LIFT, WALLRUN_VY_MAX);
       p.jumps = AIR_JUMPS;
       p.dashes = 1;
       p.coyote = 0;

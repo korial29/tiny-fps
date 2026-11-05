@@ -4,7 +4,7 @@ import { compile } from '../shared/level';
 import { HALL } from '../shared/map';
 import { ITEM, TEX } from '../shared/types';
 import type { MapDef } from '../shared/types';
-import { createEffects, fade, puff } from './effects';
+import { TRAIL, createEffects, fade, puff } from './effects';
 import type { Puff } from './effects';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
@@ -628,6 +628,11 @@ describe('createRenderer', () => {
       return tail();
     };
 
+    const extent = (v: Float32Array, from: number, n: number, axis: number) => {
+      const xs = Array.from({ length: n }, (_, i) => v[(from + i) * STRIDE + axis]);
+      return [Math.min(...xs), Math.max(...xs)];
+    };
+
     it('draws the chaingun with 4158 vertices, and the flash on top of them', () => {
       room();
       expect(draws()[1][1]).toBe(NEAR);
@@ -663,6 +668,54 @@ describe('createRenderer', () => {
       expect(NEAR - STILL).toBe(1800 + 648);
       const layers = new Set(Array.from({ length: NEAR }, (_, i) => vertex(a, i)[8]));
       expect([...layers].sort((a, b) => a - b)).toEqual([-1, METAL]);
+    });
+
+    it('draws a spark as a streak from its head back along its velocity, as long as the speed says', () => {
+      const lengths = [5, 10].map(speed => {
+        const fx = createEffects();
+        fx.sparks.push({ p: [2, 1, 2], v: [0, 0, -speed], life: 1, c: [1, 0.5, 0.2] });
+        calls.length = 0;
+        const v = room(fx);
+        const [z0, z1] = extent(v, 0, 36, 2);
+        // The head is at the spark, the tail a streak behind it.
+        expect(z0).toBeCloseTo(2);
+        return z1 - z0;
+      });
+      expect(lengths[0]).toBeCloseTo(5 * TRAIL);
+      expect(lengths[1]).toBeCloseTo(2 * lengths[0]);
+    });
+
+    it('lights the head of a streak and dims its tail, unlit', () => {
+      const fx = createEffects();
+      fx.sparks.push({ p: [2, 1, 2], v: [0, 0, -10], life: 1, c: [1, 0.5, 0.2] });
+      const v = room(fx);
+      const head = Array.from({ length: 36 }, (_, i) => vertex(v, i)).filter(x => x[2] < 2.01);
+      const back = Array.from({ length: 36 }, (_, i) => vertex(v, i)).filter(x => x[2] > 2.39);
+      expect(head.length).toBeGreaterThan(5);
+      expect(back.length).toBeGreaterThan(5);
+      for (const x of head) {
+        expect([x[6], x[7], x[9], x[8]]).toEqual([1, 0.5, expect.closeTo(0.2), -2]);
+      }
+      for (const x of back) {
+        expect(x[6]).toBeCloseTo(0.25);
+        expect(x[8]).toBe(-2);
+      }
+    });
+
+    it('streaks a spark that falls straight down, and one that does not move', () => {
+      const fx = createEffects();
+      fx.sparks.push(
+        { p: [2, 1, 2], v: [0, -8, 0], life: 1 },
+        { p: [3, 1, 3], v: [0, 0, 0], life: 1 },
+      );
+      const v = room(fx);
+      const [y0, y1] = extent(v, 0, 36, 1);
+      expect(y0).toBeCloseTo(1);
+      expect(y1).toBeCloseTo(1 + 8 * TRAIL);
+      // At rest it is a short bar, standing, 4 cm long.
+      const [s0, s1] = extent(v, 36, 36, 1);
+      expect([s0, s1]).toEqual([expect.closeTo(0.96), expect.closeTo(1)]);
+      expect(v.every(Number.isFinite)).toBe(true);
     });
   });
 });

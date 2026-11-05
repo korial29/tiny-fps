@@ -142,6 +142,8 @@ const TILT = 0.9;
 const LOW = 0.3;
 /** Gibs fall faster than players: they are small. */
 const GIB_G = 14;
+/** Seconds of velocity a spark's streak spans. */
+export const TRAIL = 0.04;
 /** Bob phase per metre walked, and its amplitude in metres. */
 const STRIDE = 4.4;
 const BOB = 0.035;

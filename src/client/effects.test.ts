@@ -4,7 +4,18 @@ import { compile, sectorAt } from '../shared/level';
 import { HALL } from '../shared/map';
 import { EVENT, KEY, MONSTER } from '../shared/types';
 import type { GameEvent, Monster, PlayerState, Shot } from '../shared/types';
-import { GAIN, HURT, MOTES, createDelay, createEffects, fade, glow, lit, puff } from './effects';
+import {
+  GAIN,
+  HURT,
+  MOTES,
+  TRAIL,
+  createDelay,
+  createEffects,
+  fade,
+  glow,
+  lit,
+  puff,
+} from './effects';
 import { CHUNKS } from './monsters';
 
 const DT = 1 / 60;
@@ -788,5 +799,12 @@ describe('dust motes', () => {
     fx.update(me(), 0, DT);
     expect(fx.motes.some(m => m != 0)).toBe(true);
     expect(spread(fx, 0, 0).some(([x]) => Math.abs(x) > 1)).toBe(true);
+  });
+});
+
+describe('spark streaks', () => {
+  it('spans TRAIL seconds of velocity', () => {
+    expect(TRAIL).toBeGreaterThan(0.02);
+    expect(TRAIL).toBeLessThan(0.1);
   });
 });

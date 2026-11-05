@@ -48,10 +48,9 @@ const cross = (a: Vec3, b: Vec3): Vec3 => [
   a[2] * b[0] - a[0] * b[2],
   a[0] * b[1] - a[1] * b[0],
 ];
-const unit = (a: Vec3): Vec3 => {
-  const n = Math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) || 1;
-  return [a[0] / n, a[1] / n, a[2] / n];
-};
+/** p a + q b. */
+const lin = (a: Vec3, p: number, b: Vec3, q = 0) => a.map((v, i) => v * p + b[i] * q) as Vec3;
+const unit = (a: Vec3) => lin(a, 1 / (Math.hypot(...a) || 1), a);
 /** Smooth minimum: the lower of two, rounded over a band of k. */
 const low = (a: number, b: number, k: number) => {
   const h = Math.max(k - Math.abs(a - b), 0) / k;
@@ -78,16 +77,14 @@ const frame = (x: Vec3, d: Vec3): Quat => {
  * leaves the leg straight.
  */
 const leg = (h: Vec3, t: Vec3, f: Vec3): [Quat, Quat] => {
-  const v: Vec3 = [t[0] - h[0], t[1] - h[1], t[2] - h[2]];
-  const len = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) || 1e-6;
+  const v = lin(t, 1, h, -1);
+  const len = Math.hypot(...v) || 1e-6;
   const d = clamp(len, 0.2, LEG * 0.999);
-  const u: Vec3 = [v[0] / len, v[1] / len, v[2] / len];
-  const fu = f[0] * u[0] + f[1] * u[1] + f[2] * u[2];
-  const w = unit([f[0] - fu * u[0], f[1] - fu * u[1], f[2] - fu * u[2]]);
+  const u = lin(v, 1 / len, v);
+  const w = unit(lin(f, 1, u, -(f[0] * u[0] + f[1] * u[1] + f[2] * u[2])));
   const c = clamp((THIGH * THIGH + d * d - SHIN * SHIN) / (2 * THIGH * d), -1, 1);
-  const s = Math.sqrt(1 - c * c);
-  const a: Vec3 = [u[0] * c + w[0] * s, u[1] * c + w[1] * s, u[2] * c + w[2] * s];
-  const b = unit([u[0] * d - a[0] * THIGH, u[1] * d - a[1] * THIGH, u[2] * d - a[2] * THIGH]);
+  const a = lin(u, c, w, Math.sqrt(1 - c * c));
+  const b = unit(lin(u, d, a, -THIGH));
   const x = cross(u, w);
   return [frame(x, a), frame(x, b)];
 };
@@ -265,7 +262,6 @@ export const createGait = (): Gait => {
   const out = rest();
   const P = {} as Record<Key, number>;
   const sp = new Array<number>(W + 2 * MOVES.length).fill(0);
-  const goal = new Array<number>(MOVES.length).fill(0);
   const feet: Foot[] = [0, 1].map(() => ({
     x: 0,
     y: 0,
@@ -299,6 +295,7 @@ export const createGait = (): Gait => {
     dt = clamp(dt, 0, 0.1);
     fresh = !known || Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) > TELEPORT;
     const walks = p.mode == MODE.GROUND || p.mode == MODE.CROUCH;
+    const air = p.mode == MODE.AIR;
     // The stride sees the velocity a moment late, so that a stop or a turn moves the feet smoothly.
     const set = (i: number, to: number, w: number) => {
       if (fresh) {
@@ -326,7 +323,6 @@ export const createGait = (): Gait => {
       heading = way;
       wall = p.yaw;
     } else {
-      const air = p.mode == MODE.AIR;
       if (air && q.mode == MODE.AIR && p.jumps < q.jumps && p.vy > q.vy) {
         flip = 1e-3;
       }
@@ -354,17 +350,18 @@ export const createGait = (): Gait => {
     if (hold && p.wall) {
       wall = Math.atan2(-side[0], -side[1]);
     }
-    goal[MOVE.AIR] = +(p.mode == MODE.AIR);
-    goal[MOVE.RISE] = +(p.mode == MODE.AIR && p.vy > 0.5);
-    goal[MOVE.DASH] = +(p.dash > DASH_COOLDOWN - DASH_TICKS);
-    goal[MOVE.WALL_L] = +(wr && right < 0);
-    goal[MOVE.WALL_R] = +(wr && right >= 0);
-    goal[MOVE.HANG] = +(p.mode == MODE.HANG);
-    goal[MOVE.CLIMB] = +(p.mode == MODE.CLIMB);
-    goal[MOVE.SLIDE] = +(p.mode == MODE.SLIDE);
-    goal[MOVE.STUN] = +(p.stun > 0);
-    goal[MOVE.TUCK] = flip ? Math.sqrt(Math.sin(Math.PI * flip)) : 0;
-    goal.forEach((g, i) => set(W + 2 * i, g, 12));
+    [
+      air,
+      air && p.vy > 0.5,
+      p.dash > DASH_COOLDOWN - DASH_TICKS,
+      wr && right < 0,
+      wr && right >= 0,
+      p.mode == MODE.HANG,
+      p.mode == MODE.CLIMB,
+      p.mode == MODE.SLIDE,
+      p.stun > 0,
+      flip && Math.sqrt(Math.sin(Math.PI * flip)),
+    ].forEach((g, i) => set(W + 2 * i, +g, 12));
     set(LOW, +(p.mode == MODE.CROUCH), 12);
     set(DIP, kick, 26);
 

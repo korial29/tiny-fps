@@ -6,6 +6,7 @@ import type { ServerText } from '../shared/protocol';
 import type { PlayerInfo, SocketLike } from '../shared/types';
 import { build, hidden } from '../shared/world';
 import { createAudio, savedMute, toggleMute } from './audio';
+import { createBody } from './body';
 import { createEffects } from './effects';
 import { HUD_CSS, createHud } from './hud';
 import { createInput } from './input';
@@ -73,6 +74,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   // The click that takes the pointer lock is the gesture that lets the sound start.
   canvas.addEventListener('click', () => audio.unlock());
   const fx = createEffects();
+  const body = createBody();
   let rd: Renderer | undefined;
   try {
     rd = createRenderer(canvas, world);
@@ -164,6 +166,8 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     audio.listen(eye, ctl.yaw);
     const dt = Math.min((now - before) / 1000, 0.1);
     fx.update(me, ctl.keys, dt);
+    // The events of the live steps come out once: whoever else reads them shares this call.
+    body.update(me, predictor.events(), dt);
     if (me && rd) {
       // The bob is for the eye only: the inputs keep sending the real height.
       rd.frame(
@@ -180,6 +184,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
           others,
           t: now / 1000,
         }),
+        body,
       );
     }
     const seen = new Set<number>();

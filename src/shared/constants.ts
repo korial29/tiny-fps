@@ -67,7 +67,10 @@ export const DOUBLE_JUMP_SPEED = 6;
 export const AIR_JUMPS = 1;
 /** Ticks after walking off an edge in which a jump still works (0.1 s). */
 export const COYOTE_TICKS = 6;
-/** Ticks a jump press is remembered (0.1 s): pressed this close to the ground, it goes off on landing. */
+/**
+ * Ticks a jump press is remembered after its own (0.1 s): pressed this close to the ground, it
+ * goes off on landing. The state counts it as JUMP_BUFFER_TICKS + 1, which must fit 3 bits.
+ */
 export const JUMP_BUFFER_TICKS = 6;
 
 /** Height of the cylinder when sliding or crouching, and the eye in it. */

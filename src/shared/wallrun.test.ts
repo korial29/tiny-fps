@@ -62,7 +62,7 @@ describe('wall-run', () => {
     expect(far.p.mode).toBe(MODE.AIR);
   });
 
-  it('runs with a tenth of the gravity, and for about a second at most', () => {
+  it('runs with 15 % of the gravity, and for about a second at most', () => {
     const s = jumpAlong();
     const vy = s.p.vy;
     s.step(FORWARD | SPRINT, NORTH);

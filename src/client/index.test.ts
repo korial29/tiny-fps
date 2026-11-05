@@ -5,7 +5,7 @@ import { TEAM_COLOR } from '../shared/constants';
 import { STILL, spawn } from '../shared/physics';
 import { encodeSnapshot } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
-import { ROOFTOPS } from '../shared/map';
+import { HIGHLINE, ROOFTOPS } from '../shared/map';
 import { FLAG, TEAM } from '../shared/types';
 import type { FlagState, PlayerInfo, SnapPlayer, SocketLike, Snapshot } from '../shared/types';
 import { build } from '../shared/world';
@@ -85,6 +85,11 @@ describe('tinyFps, the match through the socket', () => {
     expect(q('nav').textContent).toContain('Red flag: home');
     expect(q('nav').textContent).toContain('Blue flag: home');
     expect(q('output').hidden).toBe(true);
+  });
+
+  it('puts the name of the map it plays, Highline, on the title screen', () => {
+    expect(hud().textContent).toContain(HIGHLINE.name);
+    expect(HIGHLINE.name).toBe('Highline');
   });
 
   it('says in a banner that the other team took the own flag, and names the carrier in the flag line', () => {

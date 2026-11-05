@@ -12,7 +12,7 @@ import {
   TEAM_COLOR,
   TICK_HZ,
 } from './constants';
-import { ROOFTOPS } from './map';
+import { HIGHLINE } from './map';
 import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
@@ -231,15 +231,15 @@ describe('Room: joining', () => {
 });
 
 describe('Room: the map', () => {
-  it('plays ROOFTOPS unless it is given another map', () => {
+  it('plays HIGHLINE unless it is given another map', () => {
     const room = new Room();
     const a = join(room);
     ticks(room, SNAP_EVERY);
-    // On the start roof, at its first spawn.
+    // On red's tower, at its first spawn.
     expect(snap(a).players[0]).toMatchObject({
-      x: ROOFTOPS.teams[0].spawns[0][0],
-      y: ROOFTOPS.teams[0].spawns[0][1],
-      z: ROOFTOPS.teams[0].spawns[0][2],
+      x: HIGHLINE.teams[0].spawns[0][0],
+      y: HIGHLINE.teams[0].spawns[0][1],
+      z: HIGHLINE.teams[0].spawns[0][2],
       ground: true,
     });
     const other = new Room({}, ARENA);

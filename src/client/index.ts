@@ -1,5 +1,5 @@
 import { PLAYER_H, TICK_HZ } from '../shared/constants';
-import { ROOFTOPS } from '../shared/map';
+import { HIGHLINE } from '../shared/map';
 import { eyeHeight } from '../shared/physics';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
@@ -70,7 +70,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const listeners: Record<TinyFpsEvent, (() => void)[]> = { roster: [], open: [], close: [] };
   const emit = (ev: TinyFpsEvent) => listeners[ev].forEach(cb => cb());
 
-  const world = build(ROOFTOPS);
+  const world = build(HIGHLINE);
   const predictor = createPredictor(world);
   const audio = createAudio();
   audio.mute(savedMute());

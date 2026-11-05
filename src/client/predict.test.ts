@@ -129,7 +129,7 @@ describe('prediction against the room', () => {
    */
   const race = (lag: (k: number) => number, steps = SCRIPT, team = 0, tackles: number[] = []) => {
     const n = steps.length;
-    const room = new Room({});
+    const room = new Room({}, ROOFTOPS);
     const sent: ArrayBuffer[] = [];
     const conn: Conn & { bins: ArrayBuffer[] } = {
       bins: [],
@@ -721,7 +721,7 @@ describe('lag compensation through the room', () => {
    * input (with its view tick) is sent, and when it reaches the host the room rewinds B to it.
    */
   const play = () => {
-    const room = new Room({});
+    const room = new Room({}, ROOFTOPS);
     const peers = ['A', 'B'].map(name => {
       const c: Conn & { bins: ArrayBuffer[] } = {
         bins: [],

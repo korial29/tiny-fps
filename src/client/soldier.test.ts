@@ -323,6 +323,34 @@ describe('pose', () => {
     expect(ahead).toBeGreaterThan(0.4);
   });
 
+  it('reels from a tackle: the torso thrown back, the arms flung out wide and swinging, and it eases out', () => {
+    const stand = look(hold({}, 60));
+    const r = hold({ stun: 40 }, 60);
+    const j = look(r);
+    // Thrown back: the spine leans away from the way it faces, the chest higher than ahead.
+    expect(stand.spine[2]).toBeCloseTo(0, 1);
+    expect(j.spine[2]).toBeLessThan(-0.3);
+    // Arms out to the sides, at shoulder height or above, wider than at rest.
+    for (const a of j.arms) {
+      expect(Math.abs(a.end[0])).toBeGreaterThan(0.6);
+      expect(a.end[1]).toBeGreaterThan(1);
+    }
+    for (const a of stand.arms) {
+      expect(Math.abs(a.end[0])).toBeLessThan(0.45);
+    }
+    // They flail: a half second later the arms are not where they were.
+    const x0 = look(r).arms[0].end[1];
+    for (let i = 0; i < 20; i++) {
+      step(r, man({ stun: 30 }), DT);
+    }
+    expect(Math.abs(look(r).arms[0].end[1] - x0)).toBeGreaterThan(0.05);
+    // The timer over, the pose is the standing one again.
+    for (let i = 0; i < 90; i++) {
+      step(r, man(), DT);
+    }
+    expect(look(r).spine[2]).toBeCloseTo(0, 1);
+  });
+
   it('hangs: both hands on the ledge at its height, the body hanging below it, the legs loose', () => {
     const r = hold(HANGS, 60);
     const j = look(r);
@@ -483,6 +511,7 @@ describe('soldier', () => {
     { mode: MODE.WALLRUN, ground: false, wall: SIDE.WEST, vz: -8 },
     { mode: MODE.SLIDE, vz: -8 },
     { mode: MODE.CROUCH, vz: -2 },
+    { stun: 40, vz: -3 },
   ];
 
   it('stays under 2500 vertices near and about half of that far, in every move, as whole triangles', () => {

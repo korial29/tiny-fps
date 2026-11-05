@@ -86,6 +86,19 @@ describe('createHud', () => {
     });
   });
 
+  it('shows the red vignette of a tackle by its level, and nothing under a hundredth', () => {
+    const v = () => q('u').style.opacity;
+    expect(v()).toBe('');
+    hud.hurt(1);
+    expect(v()).toBe('1');
+    hud.hurt(0.4);
+    expect(v()).toBe('0.4');
+    hud.hurt(3);
+    expect(v()).toBe('1');
+    hud.hurt(0.005);
+    expect(v()).toBe('');
+  });
+
   it('shows the muted mark while muted', () => {
     expect(muted().hidden).toBe(true);
     hud.mute(true);

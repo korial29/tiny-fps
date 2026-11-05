@@ -536,6 +536,22 @@ describe('own player', () => {
     expect(pred.me(0)!.z).toBeCloseTo(64);
   });
 
+  it('keeps the ack and the tackler out of the states it hands out, own and others', () => {
+    const pred = createPredictor(world);
+    pred.you(0);
+    pred.snapshot(
+      snapshot(1, snapPlayer(0, { stun: 30, by: 3, ack: 5 }), snapPlayer(1, { stun: 20, by: 2 })),
+      0,
+    );
+    const [mine] = [pred.me(1)!];
+    expect(mine.stun).toBe(30);
+    expect(mine).not.toHaveProperty('by');
+    expect(mine).not.toHaveProperty('ack');
+    const [other] = pred.others(0);
+    expect(other.stun).toBe(20);
+    expect(other).not.toHaveProperty('by');
+  });
+
   it('counts acks round the u16 wrap', () => {
     const pred = createPredictor(world);
     pred.you(0);

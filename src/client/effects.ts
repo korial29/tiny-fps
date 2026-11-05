@@ -83,7 +83,7 @@ const ARC_TICKS = 24;
 const W = 15.7;
 const Z = 0.45;
 /** A tackle: the eye's and the look's speed it is hit with (m/s, rad/s), the roll's, and how fast the vignette fades (1 / s). */
-const JOLT = [-6, 4, 5];
+const JOLT = [-8, 4, 5];
 const FADE = 3;
 /** The tackler's punch: the same, smaller, and the degrees of field of view it adds. */
 const PUNCH = [-1, 1.2];

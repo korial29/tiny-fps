@@ -301,6 +301,72 @@ describe('no player yet', () => {
   });
 });
 
+describe('tackle', () => {
+  /** The peak of each camera value over `seconds` after `act`, on a player standing still. */
+  const peaks = (act: (fx: Fx) => void, state = me(), seconds = 1) => {
+    const fx = createEffects();
+    run(fx, state, 0.3);
+    act(fx);
+    const out = { dy: 0, pitch: 0, roll: 0, fov: 0, hurt: 0 };
+    for (let t = 0; t < seconds; t += DT) {
+      fx.update(state, 0, DT);
+      for (const k of Object.keys(out) as (keyof typeof out)[]) {
+        out[k] = Math.max(out[k], Math.abs(fx[k]));
+      }
+    }
+    return { fx, ...out };
+  };
+
+  it('jolts the eye, the look and the roll hard, and reddens the view fully', () => {
+    const hit = peaks(fx => fx.jolt());
+    const nothing = peaks(() => {});
+    expect(nothing).toMatchObject({ dy: 0, pitch: 0, roll: 0, fov: 0, hurt: 0 });
+    // A landing from 10 m/s dips the eye by about 10 cm; this one by 25 cm or more.
+    expect(hit.dy).toBeGreaterThan(0.25);
+    expect(hit.pitch).toBeGreaterThan(0.1);
+    expect(hit.roll).toBeGreaterThan(0.15);
+    expect(hit.hurt).toBeGreaterThan(0.95);
+    expect(hit.hurt).toBeLessThanOrEqual(1);
+  });
+
+  it('fades the vignette in under a second, and the jolt settles', () => {
+    const { fx } = peaks(f => f.jolt(), me(), 1.5);
+    expect(fx.hurt).toBeLessThan(0.02);
+    expect(Math.abs(fx.dy)).toBeLessThan(0.01);
+    expect(Math.abs(fx.roll)).toBeLessThan(0.01);
+    // Half a second on, it is still there but going.
+    const half = createEffects();
+    run(half, me(), 0.2);
+    half.jolt();
+    run(half, me(), 0.5);
+    expect(half.hurt).toBeGreaterThan(0.1);
+    expect(half.hurt).toBeLessThan(0.5);
+  });
+
+  it('punches the tackler a little: a small kick of the look and the field of view, no vignette', () => {
+    const punch = peaks(fx => fx.punch());
+    const jolt = peaks(fx => fx.jolt());
+    expect(punch.hurt).toBe(0);
+    expect(punch.fov).toBeGreaterThan(1);
+    expect(punch.pitch).toBeGreaterThan(0.02);
+    expect(punch.dy).toBeGreaterThan(0.02);
+    expect(punch.pitch).toBeLessThan(jolt.pitch / 2);
+    expect(punch.dy).toBeLessThan(jolt.dy / 2);
+    expect(peaks(() => {}).fov).toBe(0);
+  });
+
+  it('tilts the view while the stumble lasts, and levels it when it is over', () => {
+    const reeling = peaks(() => {}, me({ stun: 40 }));
+    expect(reeling.roll).toBeGreaterThan(0.05);
+    expect(reeling.pitch).toBeGreaterThan(0.02);
+    const after = createEffects();
+    run(after, me({ stun: 40 }), 0.5);
+    run(after, me(), 1);
+    expect(Math.abs(after.roll)).toBeLessThan(0.01);
+    expect(Math.abs(after.pitch)).toBeLessThan(0.01);
+  });
+});
+
 describe('shape', () => {
   it('holds the numbers the camera draws and the stride, and update', () => {
     expect(Object.keys(createEffects()).sort()).toEqual([

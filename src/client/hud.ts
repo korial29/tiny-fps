@@ -138,7 +138,9 @@ export const createHud = (screen: HTMLElement): Hud => {
     },
     hurt(level) {
       const v = level < 0.01 ? '' : `${Math.min(1, level)}`;
-      vignette.style.opacity != v && (vignette.style.opacity = v);
+      if (vignette.style.opacity != v) {
+        vignette.style.opacity = v;
+      }
     },
     banner(text, team) {
       banner.hidden = false;

@@ -10,7 +10,7 @@
 
 **▶ Play it now: https://korial29.github.io/tiny-fps/**
 
-A tiny multiplayer first-person game for the browser, written in TypeScript with raw WebGL2, no game library and no runtime dependency. It is becoming an open-air capture-the-flag between two teams of players on rooftops, inspired by Mirror's Edge: parkour movement, no weapons, no CPU enemies. The game is being rebuilt step by step toward that ([`docs/PLAN.md`](docs/PLAN.md)): today you run and jump around one empty rooftop with the other players in the room. Everything is generated in code: geometry, textures, lights. There are no images, fonts or assets to serve.
+A tiny multiplayer first-person game for the browser, written in TypeScript with raw WebGL2, no game library and no runtime dependency. It is becoming an open-air capture-the-flag between two teams of players on rooftops, inspired by Mirror's Edge: parkour movement, no weapons, no CPU enemies. The game is being rebuilt step by step toward that ([`docs/PLAN.md`](docs/PLAN.md)): today two teams play capture the flag on one rooftop course, with the parkour moves and no weapons. Everything is generated in code: geometry, textures, lights. There are no images, fonts or assets to serve.
 
 It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](https://github.com/carlini/js13k2019-yet-another-doom-clone) (js13k 2019). Only the ideas were reused, not the code. The renderer, the netcode and the sound come from that first game; the screenshots below are from it.
 
@@ -26,8 +26,8 @@ It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](htt
 
 | Entry                       | What it is                                                             | Size (gzip) |
 | --------------------------- | ---------------------------------------------------------------------- | ----------- |
-| `@korial29/tiny-fps`        | The game client: rendering, lights and shadows, input, prediction, HUD | ~15 KB      |
-| `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~4.3 KB     |
+| `@korial29/tiny-fps`        | The game client: rendering, lights and shadows, input, prediction, HUD | ~27 KB      |
+| `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~8.6 KB     |
 | `@korial29/tiny-fps/server` | Node WebSocket server (needs `ws`)                                     | Node only   |
 
 CI checks the budgets (40 KB and 16 KB) on every pull request.
@@ -138,7 +138,7 @@ game.on('roster', () => console.log(game.players().map(p => p.name)));
 
 ### `players()`
 
-Everyone in the room, you included: `{ id, name, color }[]`. Each player has a colour of their own.
+Everyone in the room, you included: `{ id, name, team, color }[]`. `team` is 0 (red) or 1 (blue), and `color` is the team's CSS colour.
 
 ### `destroy()`
 
@@ -158,9 +158,11 @@ The subset of `WebSocket` the client uses: `binaryType`, `onopen`, `onclose`, `o
 
 ### Rules
 
-| Rule         | Default | Description                                                 |
-| ------------ | ------- | ----------------------------------------------------------- |
-| `maxPlayers` | `16`    | Players in a room; the next ones are told the room is full. |
+| Rule         | Default | Description                                                                                  |
+| ------------ | ------- | -------------------------------------------------------------------------------------------- |
+| `maxPlayers` | `16`    | Players in a room; the next ones are told the room is full.                                  |
+| `scoreLimit` | `3`     | Captures that end a match at once.                                                           |
+| `timeLimit`  | `480`   | Seconds a match lasts. The team with more captures wins, a level score is a draw.            |
 
 ---
 
@@ -184,13 +186,16 @@ Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard
 
 ## How a game plays
 
-For now the game is the movement and the room; the rules come with the next steps of [`docs/PLAN.md`](docs/PLAN.md).
+The game is the movement and a capture the flag on top of it; the tackle and the real map come with the next steps of [`docs/PLAN.md`](docs/PLAN.md).
 
-- **The rooftop**: one 40 × 40 m deck under an open sky, with a parapet round the edge, a crate you can jump onto, a block too tall to climb, and a platform with four steps up to it. Up to 16 players share it, each with a name tag and a colour of their own.
+- **Teams**: red and blue. A joiner goes to the smaller team (red on a tie), up to 16 players in all. Each team starts on its own roof and wears its colour, name tags included.
+- **Capture the flag**: touch the enemy flag, at its base or where it was dropped, to take it, and carry it to your own base while your own flag is there: that is a capture, and the flag goes home. Touch your own dropped flag to send it home at once; left alone it goes home after 10 seconds. A carrier who falls off the roofs or leaves drops it where he last stood. There is a ring of light on each base, a marker toward each flag (and toward your base while you carry), a banner for each event and a sound for a take, a drop, a return and a capture.
+- **A match** ends at 3 captures or after 8 minutes, then everyone sees the result and each player's captures and returns for 10 seconds, and a new match starts with everyone back at their spawn.
+- **The rooftop**: ROOFTOPS, the parkour course under an open sky. Red holds the start roof, blue the far one across a 13 m chasm that takes a sprint, a jump and a dash or a double jump.
 - **Moving**: momentum, sprint, dash, double jump, ledge grab and climb, wall-run, slide, coyote time and a jump buffer. The host decides where everyone is. Your own moves show at once (the client predicts them) and are corrected to the host's state, to the bit.
 - **The others**: drawn 100 ms in the past, interpolated between snapshots, as soldiers with swinging arms and legs. Each carries a flashlight that casts shadows.
 - **Sound**: a synthesiser and a mixer that places sounds left or right by where they come from, and a dark music loop. The sound starts with the click that locks the pointer. There are no sound effects yet.
-- **Coming**: a first-person body that shows the moves, a Mirror's Edge look, two teams, flags, a score, and a tackle that makes a carrier drop the flag.
+- **Coming**: a tackle that makes a carrier drop the flag, a Mirror's Edge look, and a symmetric map made for two teams.
 
 ---
 
@@ -208,6 +213,7 @@ For now the game is the movement and the room; the rules come with the next step
 - [x] A model for the other players: jointed legs and arms that follow their stride
 - [x] Sound: a jsfxr-style synthesiser for steps, jumps, dashes, landings, grabs, climbs, slides and the wind of speed, placed in stereo; a looped music; M mutes
 - [x] A title screen with the controls, a muted mark, a player count and name tags
+- [x] Teams and capture the flag: bases with a glowing ring, flags that wave and ride on a carrier's back, a score and a clock, markers toward the flags, banners, an end screen and synth sounds
 - [x] Shadow DOM, zero runtime dependencies, size-gated in CI
 
 ---
@@ -216,7 +222,7 @@ For now the game is the movement and the room; the rules come with the next step
 
 - **The host is authoritative**: the Node server, or the host tab in local mode. It runs the players on the map.
 - **Inputs, not positions**: each client sends one 11-byte input per step at 60 Hz, holding its keys, view angles and the moment it sees the others at. It predicts its own player at once and replays what the host has not acknowledged yet.
-- **Snapshots** go out at 30 Hz: a 4-byte head and 39 bytes per player (position, speed, look angles, the movement state and its timers), in a compact binary format. The other players are drawn 100 ms in the past, interpolated between snapshots.
+- **Snapshots** go out at 30 Hz: a 4-byte head, 39 bytes per player (position, speed, look angles, the movement state and its timers), then the match: the captures, the clock and the two flags, 6 bytes when both are home, in a compact binary format. The other players are drawn 100 ms in the past, interpolated between snapshots.
 - **Rendering**: one WebGL2 shader program and one vertex buffer, up to 16 lights, with up to 4 shadow maps drawn by the same program.
 
 ---

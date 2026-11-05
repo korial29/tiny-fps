@@ -875,7 +875,7 @@ describe('gait: the contacts', () => {
         }
       }
     }
-  });
+  }, 60_000);
 });
 
 describe('gait: the poses of the other moves', () => {

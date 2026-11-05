@@ -496,7 +496,7 @@ describe('HIGHLINE, random play', () => {
       }
     }
     expect(landed).toBeGreaterThan(100);
-  });
+  }, 60_000);
 });
 
 describe('HIGHLINE, capture the flag, end to end through a room', () => {

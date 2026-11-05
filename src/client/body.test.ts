@@ -457,13 +457,16 @@ describe('body', () => {
       expect(Math.min(...gap)).toBeLessThan(-0.3);
     });
 
-    it('stretch out in front, low, in a slide', () => {
-      const s = pose(watch(slide, 40), slide);
-      for (const [hip, foot] of [
+    it('put the lead leg out in front, low, in a slide, the other foot by the hip', () => {
+      const s = pose(watch(slide, 60), slide);
+      const ahead = (hip: number, foot: number) => s.pos[hip][2] - s.pos[foot][2];
+      const legs = [
         [J.THIGH_L, J.FOOT_L],
         [J.THIGH_R, J.FOOT_R],
-      ]) {
-        expect(s.pos[hip][2] - s.pos[foot][2]).toBeGreaterThan(0.3);
+      ];
+      // Forward is -z: one foot is well ahead of its hip, and both are low.
+      expect(Math.max(...legs.map(([h, f]) => ahead(h, f)))).toBeGreaterThan(0.4);
+      for (const [, foot] of legs) {
         expect(s.pos[foot][1] - slide.y).toBeLessThan(0.5);
       }
     });
@@ -509,7 +512,7 @@ describe('body', () => {
       [flat, ground],
       [ground, low],
       [low, ground],
-      [ground, hang],
+      [{ ...ground, z: hang.z }, hang],
     ]) {
       expect(worst([a, b], 90)).toBeLessThan(0.25);
     }

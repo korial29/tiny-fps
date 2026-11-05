@@ -4,6 +4,7 @@ import {
   MSG_INPUT,
   MSG_SNAPSHOT,
   SNAP_HEAD,
+  SNAP_MATCH,
   SNAP_PLAYER,
   decodeInput,
   decodeSnapshot,
@@ -12,6 +13,7 @@ import {
   onWire,
   parseText,
 } from './protocol';
+import type { ServerText } from './protocol';
 import {
   AIR_JUMPS,
   COYOTE_TICKS,
@@ -20,8 +22,9 @@ import {
   SLIDE_TICKS,
 } from './constants';
 import { STILL } from './physics';
-import { KEY, MODE, SIDE } from './types';
-import type { SnapPlayer } from './types';
+import { FLAG, KEY, MODE, SIDE } from './types';
+import type { FlagState, SnapPlayer, Snapshot } from './types';
+import { IDLE } from '../../test/teams';
 
 const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
   id,
@@ -138,7 +141,7 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 4-byte head and 39 bytes per player, nothing else', () => {
+  it('has a 4-byte head, 39 bytes per player, then the match: 4 bytes and a byte per flag at home', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [
@@ -166,9 +169,10 @@ describe('snapshot frame', () => {
           fall: 9,
         }),
       ],
+      ...IDLE,
     });
-    expect([SNAP_HEAD, SNAP_PLAYER]).toEqual([4, 39]);
-    expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER);
+    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 39, 4]);
+    expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + SNAP_MATCH + 2);
     expect(bytes(buf)).toEqual([
       ...[MSG_SNAPSHOT, 0x12, 0x34, 1],
       7,
@@ -190,12 +194,101 @@ describe('snapshot frame', () => {
       200, // t
       33, // dash
       0b01011101, // coyote 5, buffer 3 << 3, jump held << 6
+      ...[0, 0, 0x01, 0xe0], // red 0, blue 0, clock 480 s, not over
+      ...[0, 0], // both flags at home
     ]);
+  });
+
+  describe('the match and the flags', () => {
+    const match = (over: Partial<Snapshot> = {}): Snapshot => ({
+      tick: 9,
+      players: [],
+      ...IDLE,
+      ...over,
+    });
+    const flag = (f: Partial<FlagState>): FlagState => ({ ...IDLE.flags[0], ...f });
+    const trip = (m: Snapshot): Snapshot => decodeSnapshot(encodeSnapshot(m))!;
+
+    it('writes the captures, the clock with the over bit, and a flag by its state', () => {
+      const buf = encodeSnapshot(
+        match({
+          score: [2, 3],
+          clock: 0x123,
+          over: true,
+          flags: [
+            flag({ state: FLAG.CARRIED, by: 5 }),
+            flag({ state: FLAG.DROPPED, x: 1.5, y: -2, z: 100.0625, left: 7 }),
+          ],
+        }),
+      );
+      expect(bytes(buf).slice(SNAP_HEAD)).toEqual([
+        ...[2, 3, 0x81, 0x23],
+        ...[FLAG.CARRIED, 5],
+        ...[FLAG.DROPPED, 0, 24, 0xff, 0xe0, 0x06, 0x41, 7],
+      ]);
+    });
+
+    it('is 6 bytes over the players with both flags home, 16 with both dropped', () => {
+      expect(encodeSnapshot(match()).byteLength).toBe(SNAP_HEAD + SNAP_MATCH + 2);
+      const lying = flag({ state: FLAG.DROPPED, x: 1, y: 2, z: 3, left: 4 });
+      expect(encodeSnapshot(match({ flags: [lying, lying] })).byteLength).toBe(
+        SNAP_HEAD + SNAP_MATCH + 16,
+      );
+    });
+
+    it('round-trips every state, the score, the clock and the over bit', () => {
+      const states = [
+        flag({}),
+        flag({ state: FLAG.CARRIED, by: 255 }),
+        flag({ state: FLAG.DROPPED, x: -12.3125, y: 14.5, z: 76.0625, left: 10 }),
+      ];
+      for (const a of states) {
+        for (const b of states) {
+          for (const over of [false, true]) {
+            const m = match({ score: [3, 255], clock: over ? 10 : 32767, over, flags: [a, b] });
+            expect(trip(m)).toEqual(m);
+          }
+        }
+      }
+    });
+
+    it('rounds a lying flag to 1/16 m and clamps it to the i16 range and its timer to a byte', () => {
+      const { flags } = trip(
+        match({
+          flags: [
+            flag({ state: FLAG.DROPPED, x: 1 / 3, y: 5000, z: -5000, left: 300 }),
+            flag({ state: FLAG.DROPPED, x: 0.04, left: 3 }),
+          ],
+        }),
+      );
+      expect(flags[0].x).toBeCloseTo(1 / 3, 1);
+      expect(Math.abs(flags[0].x - 1 / 3)).toBeLessThanOrEqual(1 / 32);
+      expect([flags[0].y, flags[0].z, flags[0].left]).toEqual([32767 / 16, -2048, 255]);
+      expect(flags[1].x).toBe(0.0625);
+    });
+
+    it('rejects a frame cut in a flag, with a flag of no known state, or padded', () => {
+      const ok = encodeSnapshot(
+        match({ flags: [flag({ state: FLAG.DROPPED, left: 1 }), flag({ state: FLAG.CARRIED })] }),
+      );
+      expect(decodeSnapshot(ok)).not.toBeNull();
+      for (let n = SNAP_HEAD; n < ok.byteLength; n++) {
+        expect(decodeSnapshot(ok.slice(0, n)), `cut at ${n}`).toBeNull();
+      }
+      expect(decodeSnapshot(new Uint8Array([...bytes(ok), 0]).buffer)).toBeNull();
+      const bad = new Uint8Array(ok.slice(0));
+      bad[SNAP_HEAD + SNAP_MATCH] = 3;
+      expect(decodeSnapshot(bad.buffer)).toBeNull();
+    });
   });
 
   it('derives ground from the mode: ground, slide and crouch stand on a floor', () => {
     for (const mode of Object.values(MODE)) {
-      const buf = encodeSnapshot({ tick: 0, players: [player(1, { mode, ground: false })] });
+      const buf = encodeSnapshot({
+        tick: 0,
+        players: [player(1, { mode, ground: false })],
+        ...IDLE,
+      });
       const stands = mode === MODE.GROUND || mode === MODE.SLIDE || mode === MODE.CROUCH;
       expect([mode, decodeSnapshot(buf)!.players[0].ground]).toEqual([mode, stands]);
     }
@@ -224,7 +317,7 @@ describe('snapshot frame', () => {
           fall: 5,
         });
         n++;
-        const [b] = decodeSnapshot(encodeSnapshot({ tick: 0, players: [p] }))!.players;
+        const [b] = decodeSnapshot(encodeSnapshot({ tick: 0, players: [p], ...IDLE }))!.players;
         const { ev, fall, ground, ...rest } = b;
         expect([ev, fall]).toEqual([0, 0]);
         expect(ground).toBe(mode === MODE.GROUND || mode === MODE.SLIDE || mode === MODE.CROUCH);
@@ -277,7 +370,7 @@ describe('snapshot frame', () => {
       }),
       player(255, { x: 0, y: -2.5, z: 300.125, vy: f(9.99) }),
     ];
-    const back = decodeSnapshot(encodeSnapshot({ tick: 70000, players }))!;
+    const back = decodeSnapshot(encodeSnapshot({ tick: 70000, players, ...IDLE }))!;
     expect(back.tick).toBe(70000 & 0xffff);
     expect(back.players).toHaveLength(3);
     back.players.forEach((b, i) => {
@@ -292,7 +385,7 @@ describe('snapshot frame', () => {
 
   it('rounds a float64 value to the nearest float32, not further', () => {
     const [p] = decodeSnapshot(
-      encodeSnapshot({ tick: 0, players: [player(1, { x: 1 / 3, z: -1e-3, vy: 1e9 })] }),
+      encodeSnapshot({ tick: 0, players: [player(1, { x: 1 / 3, z: -1e-3, vy: 1e9 })], ...IDLE }),
     )!.players;
     expect(p.x).toBe(Math.fround(1 / 3));
     expect(p.z).toBe(Math.fround(-1e-3));
@@ -300,14 +393,15 @@ describe('snapshot frame', () => {
   });
 
   it('takes an empty snapshot', () => {
-    expect(decodeSnapshot(encodeSnapshot({ tick: 5, players: [] }))).toEqual({
+    expect(decodeSnapshot(encodeSnapshot({ tick: 5, players: [], ...IDLE }))).toEqual({
       tick: 5,
       players: [],
+      ...IDLE,
     });
   });
 
   it('rejects a wrong type, a truncated or a padded frame, and a wrong count', () => {
-    const ok = encodeSnapshot({ tick: 1, players: [player(1), player(2)] });
+    const ok = encodeSnapshot({ tick: 1, players: [player(1), player(2)], ...IDLE });
     expect(decodeSnapshot(ok)).not.toBeNull();
     expect(decodeSnapshot(new ArrayBuffer(0))).toBeNull();
     expect(decodeSnapshot(new ArrayBuffer(SNAP_HEAD - 1))).toBeNull();
@@ -324,7 +418,18 @@ describe('snapshot frame', () => {
 
   it('does not take an input frame for a snapshot, nor the reverse', () => {
     expect(decodeSnapshot(encodeInput({ seq: 0, keys: 0, yaw: 0, pitch: 0 }))).toBeNull();
-    expect(decodeInput(encodeSnapshot({ tick: 0, players: [] }))).toBeNull();
+    expect(decodeInput(encodeSnapshot({ tick: 0, players: [], ...IDLE }))).toBeNull();
+  });
+});
+
+describe('the end of a match', () => {
+  it('is a text message with the score and what each player did', () => {
+    const end: ServerText = {
+      t: 'end',
+      score: [3, 1],
+      players: [{ id: 2, name: 'Ann', team: 0, caps: 3, returns: 1 }],
+    };
+    expect(parseText<ServerText>(JSON.stringify(end))).toEqual(end);
   });
 });
 

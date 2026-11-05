@@ -1,7 +1,15 @@
+/** The two teams: an index into WorldDef.teams, TEAM_NAME and TEAM_COLOR. */
+export const TEAM = { RED: 0, BLUE: 1 } as const;
+
+/** Where a team's flag is: at its base, on a carrier's back, or on the ground where it was dropped. */
+export const FLAG = { HOME: 0, CARRIED: 1, DROPPED: 2 } as const;
+
 export interface PlayerInfo {
   id: number;
   name: string;
-  /** CSS colour, unique within the room. */
+  /** TEAM, set when the player joins and kept for the room's life. */
+  team: number;
+  /** CSS colour: the team's (TEAM_COLOR). */
   color: string;
 }
 
@@ -59,6 +67,8 @@ export const EV = {
   WALLRUN_END: 128,
   SLIDE_START: 256,
   SLIDE_END: 512,
+  /** Fell under the kill floor and was put back at a spawn: the host drops a carried flag. */
+  RESPAWN: 1024,
 } as const;
 
 /** One client step: what the player held during 1 / TICK_HZ s, and where they looked. */
@@ -142,15 +152,40 @@ export interface SnapPlayer extends PlayerState {
   ack: number;
 }
 
+/** The flag of a team as a snapshot carries it: only the fields of its state are meaningful, the rest read 0. */
+export interface FlagState {
+  /** FLAG. */
+  state: number;
+  /** CARRIED: the carrier's player id. */
+  by: number;
+  /** DROPPED: where it lies, metres (the wire keeps 1/16 m), and the whole seconds left before it goes home. */
+  x: number;
+  y: number;
+  z: number;
+  left: number;
+}
+
 export interface Snapshot {
   /** Host tick, u16, wraps. */
   tick: number;
   players: SnapPlayer[];
+  /** Captures per team, red then blue (u8). */
+  score: [number, number];
+  /** Whole seconds to the end of the match, or, once it is over, to the next one (15 bits). */
+  clock: number;
+  /** The match is over: the end screen shows until the clock runs out. */
+  over: boolean;
+  /** The flag of each team, red then blue. */
+  flags: [FlagState, FlagState];
 }
 
 /** Room rules, set by the host. Defaults in constants.ts (RULES). */
 export interface Rules {
   maxPlayers: number;
+  /** Captures that end the match at once. */
+  scoreLimit: number;
+  /** Seconds a match lasts: the team with more captures wins, a tie is a draw. */
+  timeLimit: number;
 }
 
 /**

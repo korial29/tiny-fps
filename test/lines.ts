@@ -15,6 +15,20 @@ export const gapAB = (s: Sim): void => {
   s.until(p => p.ground, FORWARD, NORTH, 120);
 };
 
+/** B to A, back the way gapAB came: the same run and jump from the south edge of B, southward. */
+export const gapBA = (s: Sim): void => {
+  s.goTo(16, 44);
+  s.goTo(16, 53.7);
+  s.step(FORWARD | JUMP, SOUTH);
+  s.until(p => p.ground, FORWARD, SOUTH, 120);
+};
+
+/** C to B, back the way ledgeBC came: off the south edge of C and down its 2.4 m face onto B. */
+export const dropCB = (s: Sim): void => {
+  s.goTo(22, 40);
+  s.settle();
+};
+
 /** B to C: a run and a jump at the 2.4 m face of C, caught by the hands and climbed. */
 export const ledgeBC = (s: Sim): void => {
   s.goTo(22, 41);

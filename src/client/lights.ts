@@ -1,6 +1,9 @@
-// The extra lights of a frame, besides the sun and the sky (render.ts): none for now, daylight
-// needs no flashlight. The list, its caps and its shadow slots stay for effects to come. No DOM, no GL.
+// The extra lights of a frame, besides the sun and the sky (render.ts): daylight needs no
+// flashlight, so only the glow of the bases and of a flag lying on the ground, in their team's
+// colour. The list, its caps and its shadow slots stay for effects to come. No DOM, no GL.
 import type { PlayerState } from '../shared/types';
+import { teamRgb } from './flag';
+import type { CtfScene } from './flag';
 import type { Vec3 } from './mesh';
 
 export const LIGHT = {
@@ -40,10 +43,36 @@ export interface Scene {
   others: PlayerState[];
   /** Seconds, for pulsing lights. */
   t: number;
+  /** The bases and the flags in play: each base and each lying flag lights the roof around it. */
+  ctf?: CtfScene;
 }
 
-/** The lights of this frame, most important first: none yet. */
+/** Metres a base's glow and a lying flag's reach on the roof. */
+const BASE_RANGE = 9;
+const FLAG_RANGE = 6;
+
+/** The lights of this frame, most important first: the two bases, then the flags that lie on the ground. */
 export const gather = (scene: Scene): Light[] => {
-  void scene;
-  return [];
+  const { ctf, t } = scene;
+  if (!ctf) {
+    return [];
+  }
+  const point = ([x, y, z]: Vec3, team: number, range: number, k: number): Light => ({
+    kind: LIGHT.POINT,
+    p: [x, y, z],
+    d: [0, -1, 0],
+    cone: 0,
+    range,
+    color: teamRgb(team).map(c => c * k) as Vec3,
+    shadow: false,
+  });
+  return [
+    // Over the ring, at the height of a hand: the pad glows and breathes with the ring.
+    ...ctf.bases.map(([x, y, z], team) =>
+      point([x, y + 1.2, z], team, BASE_RANGE, 1.1 + 0.3 * Math.sin(t * 3)),
+    ),
+    ...ctf.flags
+      .filter(f => f.dropped)
+      .map(f => point([f.at[0], f.at[1] + 0.8, f.at[2]], f.team, FLAG_RANGE, 0.9)),
+  ];
 };

@@ -26,6 +26,7 @@ import {
   viewProj,
 } from './render';
 import { LAYERS } from './textures';
+import { duo } from '../../test/teams';
 
 const at = (yaw: number, pitch: number, x: number, y: number, z: number) =>
   project(viewProj([0, 0, 0], yaw, pitch, 1), x, y, z);
@@ -119,7 +120,7 @@ const brush = (min: number[], max: number[], over: Partial<Brush> = {}): Brush =
 const worldOf = (brushes: Brush[], over: Partial<WorldDef> = {}) =>
   build({
     brushes,
-    spawns: [[0, 0, 0, 0]],
+    teams: duo([[0, 0, 0, 0]]),
     floor: -20,
     sun: { dir: [0.6, 0.6, 0.53], color: [2.5, 2.3, 2] },
     sky: SKY,

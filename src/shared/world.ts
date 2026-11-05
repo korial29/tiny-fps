@@ -16,13 +16,24 @@ export interface Brush {
   tint?: Vec3;
 }
 
+/** Feet x, y, z (standing on a top) and the yaw to face. */
+export type Spawn = [x: number, y: number, z: number, yaw: number];
+
+/** What one team owns on a map. */
+export interface TeamDef {
+  /** Where its flag stands (a point on a top, the foot of the pole) and where its carriers score. */
+  base: Vec3;
+  /** Where its players start, and come back to after a fall. */
+  spawns: Spawn[];
+}
+
 export interface WorldDef {
   /** Shown on the title screen. */
   name?: string;
   brushes: Brush[];
-  /** Feet x, y, z (standing on a top) and the yaw to face. */
-  spawns: [x: number, y: number, z: number, yaw: number][];
-  /** Feet below this height have fallen off the roofs: the player is put back at a spawn. */
+  /** The red team, then the blue one (TEAM). */
+  teams: [red: TeamDef, blue: TeamDef];
+  /** Feet below this height have fallen off the roofs: the player is put back at a spawn of the team. */
   floor: number;
   /** Unit direction toward the sun, and its colour (linear RGB, may exceed 1). */
   sun: { dir: Vec3; color: Vec3 };

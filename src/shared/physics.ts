@@ -135,9 +135,9 @@ export const STILL = {
   fall: 0,
 };
 
-/** A player standing on spawn point n of the world (modulo the count). */
-export const spawn = (id: number, w: World, n: number): PlayerState => {
-  const { spawns } = w.def;
+/** A player standing on spawn point n of a team (modulo the count): the red team's by default. */
+export const spawn = (id: number, w: World, n: number, team = 0): PlayerState => {
+  const { spawns } = w.def.teams[team];
   const [x, y, z, yaw] = spawns[((n % spawns.length) + spawns.length) % spawns.length];
   return {
     id,
@@ -823,9 +823,9 @@ const air = (p: PlayerState, w: World, c: Ctl, burst: boolean): void => {
 /**
  * Applies one input for 1 / TICK_HZ s, in place: yaw and pitch from the input (pitch clamped to
  * MAX_PITCH), then the step of the current mode (see the top of the file). Feet under the world's
- * kill floor put the player back at a spawn.
+ * kill floor put the player back at a spawn of his `team` (EV.RESPAWN).
  */
-export const move = (p: PlayerState, i: Input, w: World): void => {
+export const move = (p: PlayerState, i: Input, w: World, team = 0): void => {
   p.yaw = norm(i.yaw);
   p.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, i.pitch));
 
@@ -870,9 +870,9 @@ export const move = (p: PlayerState, i: Input, w: World): void => {
   }
 
   if (p.y < w.def.floor) {
-    // Fallen off the roofs: back at the spawn of the player's id, looking where the input says.
+    // Fallen off the roofs: back at the spawn of the player's id in his team, looking where the input says.
     const { yaw, pitch, id } = p;
-    Object.assign(p, spawn(id, w, id), { yaw, pitch });
+    Object.assign(p, spawn(id, w, id, team), { yaw, pitch, ev: p.ev | EV.RESPAWN });
   }
   p.t = p.mode === before ? Math.min(255, p.t + 1) : p.t;
   p.buffer = Math.max(0, p.buffer - 1);

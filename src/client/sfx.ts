@@ -74,6 +74,11 @@ export const SOUND = {
   SCUFF: 7,
   WIND: 8,
   SCRAPE: 9,
+  /** Capture the flag: a flag taken, dropped, returned home, and a capture. */
+  TAKE: 10,
+  DROP: 11,
+  RETURN: 12,
+  CAPTURE: 13,
 } as const;
 
 /**
@@ -120,6 +125,29 @@ export const LAYERS: Voice[][] = [
   [
     [3, 9000, 0, 0.001, 2.1, 0.001, 0.5, 0.4, 0, 1, 0.5],
     [3, 3000, 0, 0.001, 2.1, 0.001, 0.4, 0.2, 0, 1, 0.5],
+  ],
+  // TAKE: a square note that jumps a fifth, over a sine an octave up that comes in late.
+  [
+    [0, 392, 0, 0.003, 0.05, 0.08, 0, 0.35, 0.07, 1.5, 0.5],
+    [2, 784, 0, 0.003, 0.03, 0.1, 0.01, 1, 0, 1, 0.3, 0.05],
+  ],
+  // DROP: a saw sliding down, and a rattle.
+  [
+    [1, 330, -2.2, 0.003, 0.04, 0.22, 0.04, 0.25, 0, 1, 0.45],
+    [3, 2500, -1, 0.001, 0, 0.12, 0, 0.3, 0, 1, 0.4],
+  ],
+  // RETURN: a chime, a sine that jumps a fifth and a bell over it.
+  [
+    [2, 659, 0, 0.003, 0.06, 0.25, 0.015, 1, 0.09, 1.5, 0.5],
+    [2, 1318, 0, 0.003, 0.03, 0.2, 0, 1, 0, 1, 0.2, 0.09],
+  ],
+  // CAPTURE: C, E, G in squares and a long C an octave up over a sine.
+  [
+    [0, 523, 0, 0.004, 0.07, 0.1, 0, 0.3, 0, 1, 0.4],
+    [0, 659, 0, 0.004, 0.07, 0.1, 0, 0.3, 0, 1, 0.4, 0.11],
+    [0, 784, 0, 0.004, 0.07, 0.1, 0, 0.3, 0, 1, 0.4, 0.22],
+    [0, 1047, 0, 0.004, 0.2, 0.35, 0.008, 0.3, 0, 1, 0.5, 0.33],
+    [2, 262, 0, 0.004, 0.25, 0.3, 0, 1, 0, 1, 0.35, 0.33],
   ],
 ];
 

@@ -22,6 +22,7 @@ import {
   level,
   sunProj,
 } from './render';
+import { duo } from '../../test/teams';
 
 type Call = [name: string, ...args: unknown[]];
 
@@ -67,7 +68,14 @@ const brush = (over: Partial<Brush> = {}): Brush => ({
   ...over,
 });
 const worldOf = (over: Partial<WorldDef> = {}) =>
-  build({ brushes: [brush()], spawns: [[1, 0, 1, 0]], floor: -20, sun: SUN, sky: SKY, ...over });
+  build({
+    brushes: [brush()],
+    teams: duo([[1, 0, 1, 0]]),
+    floor: -20,
+    sun: SUN,
+    sky: SKY,
+    ...over,
+  });
 const ROOM = worldOf();
 const FLOOR_VERTS = level(ROOM).length / STRIDE;
 
@@ -509,6 +517,25 @@ describe('createRenderer', () => {
       rd.frame([1, 1.6, 1], 0, 0, [p], new Map(), createEffects(), []);
       const [depth, world] = draws();
       expect(depth[1]).toBeGreaterThan(FLOOR_VERTS);
+      expect(depth[1]).toBe(world[1]);
+    });
+
+    it('is cast by the bases and the flags too, drawn with the brushes and before the other players', () => {
+      const rd = createRenderer(canvas, ROOM);
+      frame(rd);
+      const [bare] = draws();
+      expect(bare[1]).toBe(FLOOR_VERTS);
+      calls.length = 0;
+      rd.frame([1, 1.6, 1], 0, 0, [], new Map(), createEffects(), [], undefined, {
+        bases: [
+          [0, 0, 0],
+          [4, 0, 4],
+        ],
+        flags: [{ team: 0, at: [0, 0, 0] }],
+      });
+      const [depth, world] = draws();
+      // The base pads and rings, a pole and its cloth: a few hundred vertices more than the room.
+      expect(depth[1]).toBeGreaterThan(FLOOR_VERTS + 300);
       expect(depth[1]).toBe(world[1]);
     });
 

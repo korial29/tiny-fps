@@ -75,11 +75,11 @@ export const LOW_H = 0.9;
 export const LOW_EYE = 0.7;
 /** Speed from which a crouch is a slide (above RUN_SPEED: only a sprint slides). */
 export const SLIDE_MIN_SPEED = 7.5;
-/** A slide bleeds speed at this rate (9 m/s lasts about a second)... */
-export const SLIDE_DECEL = 4.5;
-/** ...and ends under this speed, or after this many ticks (1.2 s). */
-export const SLIDE_END_SPEED = 4;
-export const SLIDE_TICKS = 72;
+/** A slide bleeds speed at this rate (a sprint of 9 m/s is down to 5 after a second)... */
+export const SLIDE_DECEL = 4;
+/** ...and ends under this speed, or after this many ticks (1 s), into a crouch or a stand. */
+export const SLIDE_END_SPEED = 4.5;
+export const SLIDE_TICKS = 60;
 /** Top speed of a crouch walk. */
 export const CROUCH_SPEED = 3;
 
@@ -87,7 +87,7 @@ export const CROUCH_SPEED = 3;
 export const WALLRUN_MIN_SPEED = 7;
 export const WALLRUN_KEEP_SPEED = 5.5;
 /** Speed lost along the wall, m/s². */
-export const WALLRUN_DRAG = 2;
+export const WALLRUN_DRAG = 2.5;
 /** Longest run, in ticks (1 s). */
 export const WALLRUN_TICKS = 60;
 /** Gravity during the run, as a share of GRAVITY, and the fastest rise it starts with. */

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   EYE,
   GRAVITY,
+  LOW_EYE,
+  LOW_H,
   JUMP_SPEED,
   MAX_PITCH,
   PLAYER_H,
@@ -10,8 +12,8 @@ import {
   STEP_H,
   TICK_HZ,
 } from './constants';
-import { STILL, forward, move, speedOf, spawn } from './physics';
-import { KEY, TEX } from './types';
+import { STILL, eyeHeight, forward, heightOf, move, speedOf, spawn } from './physics';
+import { EV, KEY, MODE, TEX } from './types';
 import type { Input, PlayerState } from './types';
 import { build } from './world';
 import type { Brush, World, WorldDef } from './world';
@@ -684,5 +686,61 @@ describe('spawn', () => {
 
   it('keeps the eye inside the body', () => {
     expect(EYE).toBeLessThan(PLAYER_H);
+  });
+});
+
+describe('time in the mode', () => {
+  it('counts the ticks since the mode began, and saturates at 255', () => {
+    const p = at(-8, 8);
+    move(p, { seq: 0, keys: 0, yaw: 0, pitch: 0 }, yard);
+    expect(p.t).toBe(1);
+    run(p, 0, 400);
+    expect(p.t).toBe(255);
+    run(p, JUMP, 1);
+    expect([p.mode, p.t]).toEqual([MODE.AIR, 0]);
+    run(p, 0, 1);
+    expect(p.t).toBe(1);
+  });
+
+  it('knows the height of the body and of the eye in each mode', () => {
+    for (const mode of Object.values(MODE)) {
+      const low = mode === MODE.SLIDE || mode === MODE.CROUCH;
+      expect([heightOf({ mode }), eyeHeight({ mode })]).toEqual(
+        low ? [LOW_H, LOW_EYE] : [PLAYER_H, EYE],
+      );
+    }
+    expect(LOW_H).toBeCloseTo(PLAYER_H / 2, 1);
+    expect(LOW_EYE).toBeLessThan(LOW_H);
+  });
+});
+
+describe('landing', () => {
+  it('reports the speed of a landing, and no landing for a step down', () => {
+    const p = at(-8, 8, 5);
+    p.mode = MODE.AIR;
+    p.ground = false;
+    p.coyote = 0;
+    run(p, 0, 80);
+    // 5 m under g: sqrt(2 g h) = 14.1 m/s, give or take a step.
+    expect(p.mode).toBe(MODE.GROUND);
+    let landed = 0;
+    let fall = 0;
+    const q = at(-8, 8, 5);
+    Object.assign(q, { mode: MODE.AIR, ground: false, coyote: 0 });
+    run(q, 0, 80, 0, () => {
+      landed += q.ev & EV.LAND ? 1 : 0;
+      fall = Math.max(fall, q.fall);
+    });
+    expect(landed).toBe(1);
+    expect(fall).toBeGreaterThan(13);
+    expect(fall).toBeLessThan(15);
+    // Down the stair of the yard (0.2 and 0.4 steps): a walk, not a fall.
+    const s = cruising(at(53.5, 0, 0.4), EAST);
+    let air = 0;
+    run(s, FORWARD, 30, EAST, () => {
+      air += s.mode === MODE.AIR ? 1 : 0;
+    });
+    expect(air).toBe(0);
+    expect(s.y).toBe(0);
   });
 });

@@ -595,6 +595,8 @@ const run = (p: PlayerState, w: World, c: Ctl): void => {
     p.vx = tx - nx * WALL_KICK_SPEED;
     p.vz = tz - nz * WALL_KICK_SPEED;
     leap(p, WALL_KICK_UP);
+    p.jumps = AIR_JUMPS;
+    p.dashes = 1;
     p.ev |= EV.WALLRUN_END;
   } else if (!c.fwd || s < WALLRUN_KEEP_SPEED || p.t >= WALLRUN_TICKS || !wallOn(p, w, p.wall)) {
     enter(p, MODE.AIR);
@@ -768,7 +770,7 @@ const air = (p: PlayerState, w: World, c: Ctl, burst: boolean): void => {
   if (p.buffer > 0) {
     if (p.coyote > 0) {
       leap(p, JUMP_SPEED);
-    } else if (c.jump && p.jumps > 0 && !landingSoon(p, w)) {
+    } else if (p.jumps > 0 && !landingSoon(p, w)) {
       p.jumps--;
       leap(p, DOUBLE_JUMP_SPEED);
       p.ev = (p.ev & ~EV.JUMP) | EV.DOUBLE;
@@ -812,7 +814,8 @@ export const move = (p: PlayerState, i: Input, w: World): void => {
   p.ev = 0;
   p.fall = 0;
   if (c.jump) {
-    p.buffer = JUMP_BUFFER_TICKS;
+    // The press tick uses one: a press stays good for JUMP_BUFFER_TICKS steps after it.
+    p.buffer = JUMP_BUFFER_TICKS + 1;
   }
   if (p.dash > 0) {
     p.dash--;

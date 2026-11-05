@@ -250,7 +250,7 @@ describe('snapshot frame', () => {
   it('keeps every timer within the bits it has on the wire', () => {
     // 3 bits for the coyote and buffer ticks, 1 for the jumps, 8 for the dash and the time in mode.
     expect(COYOTE_TICKS).toBeLessThanOrEqual(7);
-    expect(JUMP_BUFFER_TICKS).toBeLessThanOrEqual(7);
+    expect(JUMP_BUFFER_TICKS + 1).toBeLessThanOrEqual(7);
     expect(AIR_JUMPS).toBeLessThanOrEqual(1);
     expect(DASH_COOLDOWN).toBeLessThanOrEqual(255);
     expect(Object.keys(MODE).length).toBeLessThanOrEqual(8);

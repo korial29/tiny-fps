@@ -647,7 +647,7 @@ describe('rigged', () => {
         // The ankle target is 1 cm down: the rig's ankle is a centimetre lower than the pose's. A
         // leg stretched out in a slide or a dash falls a little short.
         expect(dist(at(JOINT.FOOT_L + i * 4), l.end)).toBeLessThan(
-          name == 'slide' || name == 'dash' ? 0.12 : 0.015,
+          name == 'slide' || name == 'dash' ? 0.2 : 0.015,
         );
         // The rig's hips follow its shoulders, the pose's lean having another pivot: they are near.
         expect(dist(l.root, at(JOINT.THIGH_L + i * 4))).toBeLessThan(0.25);

@@ -304,27 +304,24 @@ export const skin = (
     Q = new Float32Array(n * 6);
   }
   for (let i = 0; i < n; i++) {
-    const [a, b, u] = [s.j[i * 2] * 12, s.j[i * 2 + 1] * 12, s.w[i]];
-    const k = i * 6;
+    const [a, b, u, k] = [s.j[i * 2] * 12, s.j[i * 2 + 1] * 12, s.w[i], i * 6];
     for (let r = 0; r < 6; r++) {
-      const [o, e] = [(r % 3) * 3, r < 3 ? 1 : 0];
-      const [x, y, z] = [
-        s.v[k + (r < 3 ? 0 : 3)],
-        s.v[k + (r < 3 ? 1 : 4)],
-        s.v[k + (r < 3 ? 2 : 5)],
-      ];
+      const [o, h] = [(r % 3) * 3, r < 3 ? k : k + 3];
+      const [x, y, z, e] = [s.v[h], s.v[h + 1], s.v[h + 2], r < 3 ? 1 : 0];
       Q[k + r] =
         (1 - u) * (M[a + o] * x + M[a + o + 1] * y + M[a + o + 2] * z + e * M[a + 9 + (r % 3)]) +
         u * (M[b + o] * x + M[b + o + 1] * y + M[b + o + 2] * z + e * M[b + 9 + (r % 3)]);
     }
-    const l = Math.hypot(Q[k + 3], Q[k + 4], Q[k + 5]) || 1;
+    const l = Math.sqrt(Q[k + 3] ** 2 + Q[k + 4] ** 2 + Q[k + 5] ** 2) || 1;
     Q[k + 3] /= l;
     Q[k + 4] /= l;
     Q[k + 5] /= l;
   }
-  for (let i = 0; i < s.t.length; i++) {
-    const [r, g, b] = colors[s.c[(i / 3) | 0]];
-    const k = s.t[i] * 6;
-    out.push(Q[k], Q[k + 1], Q[k + 2], Q[k + 3], Q[k + 4], Q[k + 5], r, g, -1, b);
+  for (let i = 0; i < s.t.length; i += 3) {
+    const [r, g, b] = colors[s.c[i / 3]];
+    for (let h = i; h < i + 3; h++) {
+      const k = s.t[h] * 6;
+      out.push(Q[k], Q[k + 1], Q[k + 2], Q[k + 3], Q[k + 4], Q[k + 5], r, g, -1, b);
+    }
   }
 };

@@ -5,6 +5,7 @@ import { EV, MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { createBody } from './body';
 import type { Events, Rig } from './body';
+import { SKIN, SOLE } from './figure';
 import { STRIDE, basis } from './mesh';
 import type { Vec3 } from './mesh';
 
@@ -80,7 +81,7 @@ describe('body', () => {
     expect(out.length).toBeGreaterThan(0);
   });
 
-  it('keeps its geometry bounded: whole triangles, finite, a few legs more looking down', () => {
+  it('keeps its geometry bounded: whole triangles, finite unit normals, the legs more looking down', () => {
     const states: PlayerState[] = [
       man(),
       man({ mode: MODE.SLIDE, vz: -8 }),
@@ -94,10 +95,15 @@ describe('body', () => {
         body.draw(out, eyeOf(p), p.yaw, pitch);
         expect(out.length % (3 * STRIDE)).toBe(0);
         expect(out.every(Number.isFinite)).toBe(true);
+        for (let i = 0; i < out.length; i += STRIDE) {
+          expect(Math.hypot(out[i + 3], out[i + 4], out[i + 5])).toBeCloseTo(1);
+        }
         return out.length / STRIDE;
       });
-      expect(level).toBeGreaterThan(300);
-      expect(down).toBeLessThanOrEqual(1500);
+      // Two arms with five fingers each ahead, the jacket, legs and shoes more looking down.
+      expect(level).toBeGreaterThan(2500);
+      expect(level).toBeLessThanOrEqual(p.mode == MODE.SLIDE ? 5600 : 3800);
+      expect(down).toBeLessThanOrEqual(5600);
       expect(down).toBeGreaterThanOrEqual(level);
     }
     expect(watch(man(), 9).rig([0, EYE, 0], 0, 0)?.arms).toHaveLength(2);
@@ -281,6 +287,85 @@ describe('body', () => {
     });
   });
 
+  describe('hands', () => {
+    /** Each hand's skin as seen from a level look: how many vertices, and how far past the wrist along its pointing. */
+    const fingers = (p: PlayerState, body = watch(p, 60), pitch = 0) => {
+      const out: number[] = [];
+      body.draw(out, eyeOf(p), p.yaw, pitch);
+      const skin: Vec3[] = [];
+      for (let i = 0; i < out.length; i += STRIDE) {
+        if (out[i + 6] == SKIN[0] && out[i + 7] == SKIN[1] && out[i + 9] == SKIN[2]) {
+          skin.push([out[i], out[i + 1], out[i + 2]]);
+        }
+      }
+      const arms = look(body, p, pitch).arms;
+      const away = (q: Vec3, e: Vec3) => Math.hypot(q[0] - e[0], q[1] - e[1], q[2] - e[2]);
+      return arms.map(({ end, dir }, i) => {
+        // The skin nearer to this wrist than to the other.
+        const near = skin.filter(q => away(q, end) < away(q, arms[1 - i].end));
+        const d = near.map(
+          q => (q[0] - end[0]) * dir[0] + (q[1] - end[1]) * dir[1] + (q[2] - end[2]) * dir[2],
+        );
+        return { count: near.length, reach: Math.max(...d) };
+      });
+    };
+    const ledge = man({
+      mode: MODE.HANG,
+      ground: false,
+      y: 0.4,
+      z: 5.43,
+      wall: SIDE.NORTH,
+      edge: 2.4,
+    });
+
+    it('curl into a loose fist on a run, tighter on a sprint, and open flat on a ledge', () => {
+      const [jog, fast] = [run(5, 90), run(10, 90)];
+      const [a, b, c] = [
+        look(jog.body, jog.p),
+        look(fast.body, fast.p),
+        look(watch(ledge, 40, { ev: EV.GRAB, fall: 0 }), ledge),
+      ].map(r => r.arms.map(l => l.curl));
+      for (const i of [0, 1]) {
+        expect(a[i]).toBeGreaterThan(0.5);
+        expect(b[i]).toBeGreaterThan(a[i] + 0.1);
+        expect(c[i]).toBeLessThan(0.15);
+      }
+    });
+
+    it('draw a palm with ten finger segments, a fist shorter than an open hand', () => {
+      const jog = run(5, 90);
+      const [fist, open] = [fingers(jog.p, jog.body), fingers(ledge)];
+      for (const i of [0, 1]) {
+        // The palm and the ten segments of fingers and thumb: 126 + 10 * 90 vertices.
+        expect(fist[i].count).toBe(1026);
+        expect(open[i].count).toBe(1026);
+        expect(fist[i].reach).toBeLessThan(open[i].reach - 0.04);
+      }
+    });
+
+    it('end each sleeve at the wrist in a cuff of the accent colour', () => {
+      const p = man();
+      const out: number[] = [];
+      const body = watch(p, 60);
+      body.draw(out, eyeOf(p), 0, 0);
+      const ends = look(body, p).arms.map(a => a.end);
+      const cuff: Vec3[] = [];
+      for (let i = 0; i < out.length; i += STRIDE) {
+        if (out[i + 6] == 0.95 && out[i + 7] == 0.22 && out[i + 9] == 0.1) {
+          cuff.push([out[i], out[i + 1], out[i + 2]]);
+        }
+      }
+      const away = (q: Vec3, e: Vec3) => Math.hypot(q[0] - e[0], q[1] - e[1], q[2] - e[2]);
+      expect(cuff.length).toBeGreaterThan(100);
+      for (const q of cuff) {
+        expect(Math.min(...ends.map(e => away(q, e)))).toBeLessThan(0.06);
+      }
+      for (const e of ends) {
+        expect(cuff.some(q => away(q, e) < 0.03)).toBe(true);
+      }
+    });
+  });
+
   describe('legs', () => {
     it('stand under the eye, planted', () => {
       const p = man();
@@ -303,6 +388,27 @@ describe('body', () => {
       }
       expect(Math.max(...gap)).toBeGreaterThan(0.3);
       expect(Math.min(...gap)).toBeLessThan(-0.3);
+    });
+
+    it('end in shoes: light soles on the floor under the ankles, toes ahead', () => {
+      const p = man({ pitch: -1 });
+      const out: number[] = [];
+      const body = watch(p, 60);
+      body.draw(out, eyeOf(p), 0, -1);
+      const sole: Vec3[] = [];
+      for (let i = 0; i < out.length; i += STRIDE) {
+        if (out[i + 6] == SOLE[0] && out[i + 7] == SOLE[1] && out[i + 9] == SOLE[2]) {
+          sole.push([out[i], out[i + 1], out[i + 2]]);
+        }
+      }
+      expect(sole.length).toBeGreaterThan(50);
+      expect(Math.min(...sole.map(q => q[1]))).toBeCloseTo(p.y, 1);
+      // Facing -z: the toes are ahead of the ankles, the heel just behind them.
+      for (const leg of look(body, p, -1).legs) {
+        const mine = sole.filter(q => Math.abs(q[0] - leg.end[0]) < 0.08);
+        expect(Math.min(...mine.map(q => q[2]))).toBeLessThan(leg.end[2] - 0.12);
+        expect(Math.max(...mine.map(q => q[2]))).toBeLessThan(leg.end[2] + 0.12);
+      }
     });
 
     it('stretch out in front, low, in a slide', () => {

@@ -1,12 +1,14 @@
 // The own player's body in first person, Mirror's Edge style: two arms in the view, two legs below
 // it. A small animation state eased each frame from the own PlayerState and its events picks the
-// pose; the joints come from two-bone IK; pieces are unit lathes placed per frame. Drawn by the
-// renderer over a cleared depth, like a view model. No DOM, pure but for the state it keeps.
+// pose; the joints come from two-bone IK; the pieces are smooth solids placed per frame (figure.ts).
+// Drawn by the renderer over a cleared depth, like a view model. No DOM, pure but for the state it
+// keeps.
 import { DASH_COOLDOWN, DASH_TICKS, GRAB_GAP, PLAYER_R, SPRINT_SPEED } from '../shared/constants';
 import { eyeHeight, speedOf, sprinting } from '../shared/physics';
 import { EV, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { aim, basis, dress, lathe, place, pushBox } from './mesh';
+import { RADII, hand, shoe, torso } from './figure';
+import { add, basis, dot, mix, segment, solid, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 
 /** What the predictor reports of the live steps since the last frame. */
@@ -15,12 +17,17 @@ export interface Events {
   fall: number;
 }
 
-/** A limb in world space: its root, its joint, its end, and where the hand or foot points. */
+/**
+ * A limb in world space: its root, its joint, its end, and where the hand or foot points. A hand
+ * also has `curl`, 0 open to 1 a fist, and `roll`, 1 with the palm toward the body, 0 down, -1 out.
+ */
 export interface Limb {
   root: Vec3;
   mid: Vec3;
   end: Vec3;
   dir: Vec3;
+  curl: number;
+  roll: number;
 }
 
 /** The joints of the body: index 0 is the left side, 1 the right. */
@@ -50,22 +57,9 @@ const GAIT = 2.2;
 const AWAY = 0.5;
 /** Pitch below which the legs can be in view (the field of view is 70 degrees, its bottom 35 below the look). */
 const LOOK_DOWN = -0.15;
-const [UPPER, FORE, HAND] = [0.35, 0.38, 0.15];
+const [UPPER, FORE] = [0.35, 0.38];
 const [THIGH, SHIN] = [0.43, 0.45];
 const RED = [0.95, 0.22, 0.1];
-
-const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const mix = (a: Vec3, b: Vec3, t: number): Vec3 => [
-  a[0] + (b[0] - a[0]) * t,
-  a[1] + (b[1] - a[1]) * t,
-  a[2] + (b[2] - a[2]) * t,
-];
-const unit = (a: Vec3): Vec3 => {
-  const l = Math.hypot(...a) || 1;
-  return [a[0] / l, a[1] / l, a[2] / l];
-};
 
 /**
  * The joint and the end of a two-bone limb from `a` toward `b`, segments l1 and l2: the joint
@@ -85,65 +79,19 @@ const ik = (a: Vec3, b: Vec3, pole: Vec3, l1: number, l2: number): [Vec3, Vec3] 
   ];
 };
 
-/** A unit piece (length 1 along its axis, radii in metres) in its own flat colour. */
-const piece = (profile: [number, number][], sides: number, color: number[], at?: Vec3) =>
-  dress(lathe(profile, sides, at), color);
-/** A rounded, tapered tube, wider at the root. */
-const TUBE: [number, number][] = [
-  [0, 0],
-  [0.9, 0.04],
-  [1, 0.15],
-  [0.78, 0.95],
-  [0, 1],
+const [JACKET, TROUSERS, SHOE] = [
+  [0.3, 0.32, 0.37],
+  [0.14, 0.15, 0.2],
+  [0.6, 0.61, 0.65],
 ];
-const SLEEVE = [0.07, 0.075, 0.09];
-const GLOVE_COLOR = [0.2, 0.19, 0.2];
-/** The upper arm, the forearm with its accent band, and trousers. */
-const UPPER_ARM = piece(TUBE, 5, SLEEVE);
-const FORE_ARM = [
-  ...UPPER_ARM,
-  ...piece(
-    [
-      [0.97, 0.5],
-      [0.9, 0.66],
-    ],
-    5,
-    RED,
-  ),
-];
-const LEG = piece(TUBE, 4, [0.14, 0.15, 0.19]);
-/** A glove: a palm and a thumb along the inside of the hand, mirrored per side. */
-const GLOVE = [-1, 1].map(s => [
-  ...piece(
-    [
-      [0, 0],
-      [0.8, 0.05],
-      [1, 0.3],
-      [0.9, 0.82],
-      [0, 1],
-    ],
-    5,
-    GLOVE_COLOR,
-  ),
-  ...piece(
-    [
-      [0.4, 0],
-      [0.35, 0.5],
-      [0, 0.55],
-    ],
-    4,
-    GLOVE_COLOR,
-    [-s * 1.05, 0.1, -0.05],
-  ),
-]);
-const [JACKET, SHOE] = [SLEEVE, [0.6, 0.62, 0.68]];
-
-/** One piece from a to b, `k` wide, `w` times that across `side`. */
-const limb = (out: number[], src: number[], a: Vec3, b: Vec3, side: Vec3, k: number, w = 1) => {
-  const d = sub(b, a);
-  const len = Math.hypot(...d);
-  place(out, src, a, aim(unit(d), side), [0, 0, 0], [k * w, k, len]);
-};
+/** The solids, built from the first frame: the sleeves, the cuff, the legs at the middle level of detail. */
+const kit = () => ({
+  upper: solid(2, UPPER, RADII.upper, [1, 1]),
+  fore: solid(2, FORE, RADII.fore, [1, 0]),
+  cuff: solid(2, 0.03, [0.033, 0.033], [0, 0]),
+  thigh: solid(1, THIGH, RADII.thigh, [0.5, 1]),
+  shin: solid(1, SHIN, RADII.shin, [0.5, 0.5]),
+});
 
 /** The unit vector toward a wall on each SIDE, on the floor plane. */
 const TOWARD = [
@@ -282,7 +230,8 @@ export const createBody = (): Body => {
       g = layer(g, goal(s, 0.42, -0.4, 0.3, 1, -1, -0.2), v.land);
       g = layer(g, goal(s, 0.13, -0.1, 0.64, 0.7, -1, -0.3), w.dash);
       const wallHand = goal(s, 0.4, -0.2 + 0.02 * Math.sin(phase * 2), 0.52, 0.4, -1, -0.5);
-      g = layer(g, wallHand, w.wall * clamp(side * s));
+      const toWall = w.wall * clamp(side * s);
+      g = layer(g, wallHand, toWall);
       g = layer(
         g,
         s > 0
@@ -316,6 +265,19 @@ export const createBody = (): Body => {
         );
         dir = rot([grip.dx, -0.15, grip.dz]);
       }
+      // A loose fist, tighter as the pace goes up; open to catch the air, flat on a ledge or a wall.
+      let curl = 0.55 + 0.35 * w.sprint;
+      for (const [to, t] of [
+        [0.3, w.air],
+        [0.1, v.jump],
+        [0.9, v.tuck],
+        [1, w.dash],
+        [0.1, toWall],
+        [0.35, w.slide],
+        [0.1, plant],
+      ]) {
+        curl += (to - curl) * t;
+      }
       const shoulder: Vec3 = [s * (0.15 - 0.05 * plant), -0.22 + 0.08 * plant, -0.2 + 0.12 * plant];
       const [elbow, wrist] = ik(shoulder, g[0], g[1], UPPER, FORE);
       const pointing = unit(sub(wrist, elbow));
@@ -324,6 +286,8 @@ export const createBody = (): Body => {
         mid: view(elbow),
         end: view(wrist),
         dir: turn(dir ? mix(pointing, unit(dir), plant) : pointing),
+        curl,
+        roll: (1 - plant) * (1 - 2 * toWall),
       };
     });
 
@@ -348,7 +312,14 @@ export const createBody = (): Body => {
       ankle = mix(ankle, [s * 0.11, 0.2, 0.84 + 0.08 * s], w.slide);
       const hip: Vec3 = [pelvis[0] + s * 0.11, pelvis[1], pelvis[2]];
       const [knee, end] = ik(hip, ankle, [s * 0.15, 0.2, 1], THIGH, SHIN);
-      return { root: body(hip), mid: body(knee), end: body(end), dir: [-sy, 0, -cy] };
+      return {
+        root: body(hip),
+        mid: body(knee),
+        end: body(end),
+        dir: [-sy, 0, -cy],
+        curl: 0,
+        roll: 1,
+      };
     });
     return { arms, legs, torso: [body(pelvis), body(chest)], grip: plant, low: w.low };
   };
@@ -362,26 +333,39 @@ export const createBody = (): Body => {
         return;
       }
       const [r] = basis(yaw, pitch, roll);
-      const right: Vec3 = [Math.cos(yaw), 0, -Math.sin(yaw)];
+      const [right, fwd]: Vec3[] = [
+        [Math.cos(yaw), 0, -Math.sin(yaw)],
+        [-Math.sin(yaw), 0, -Math.cos(yaw)],
+      ];
       const [pelvis, chest] = j.torso;
-      pushBox(
-        out,
-        mix(pelvis, chest, 0.5),
-        [0.2, Math.abs(chest[1] - pelvis[1]) / 2, 0.1],
-        yaw,
-        JACKET,
-      );
+      const k = kit();
       // Below the view, unless the body is low: the legs are only seen looking down.
-      for (const { root, mid, end, dir } of pitch < LOOK_DOWN || j.low > 0.2 ? j.legs : []) {
-        limb(out, LEG, root, mid, right, 0.075);
-        limb(out, LEG, mid, end, right, 0.06);
-        const at: Vec3 = [end[0] + dir[0] * 0.07, end[1] - 0.03, end[2] + dir[2] * 0.07];
-        pushBox(out, at, [0.055, 0.035, 0.12], yaw, SHOE);
+      if (pitch < LOOK_DOWN || j.low > 0.2) {
+        torso(out, 2, pelvis, unit(sub(chest, pelvis)), fwd, right, JACKET, TROUSERS, 0.75);
+        for (const { root, mid, end } of j.legs) {
+          segment(out, k.thigh, root, mid, right, THIGH, 1, TROUSERS);
+          segment(out, k.shin, mid, end, right, SHIN, 1, TROUSERS);
+          shoe(out, 1, end, unit(sub(end, mid)), fwd, right, SHOE);
+        }
       }
-      j.arms.forEach(({ root, mid, end, dir }, i) => {
-        limb(out, UPPER_ARM, root, mid, r, 0.046 * (1 - 0.4 * j.grip));
-        limb(out, FORE_ARM, mid, end, r, 0.038 * (1 - 0.3 * j.grip));
-        place(out, GLOVE[i], end, aim(dir, r), [0, 0, 0], [0.04, 0.036, HAND]);
+      j.arms.forEach(({ root, mid, end, dir, curl, roll: turn }, i) => {
+        const s = i ? 1 : -1;
+        const along = unit(sub(end, mid));
+        segment(out, k.upper, root, mid, r, UPPER, 1 - 0.4 * j.grip, JACKET);
+        segment(out, k.fore, mid, end, r, FORE, 1 - 0.3 * j.grip, JACKET);
+        segment(
+          out,
+          k.cuff,
+          sub(end, along.map(v => v * 0.025) as Vec3),
+          add(end, along.map(v => v * 0.005) as Vec3),
+          r,
+          0.03,
+          1,
+          RED,
+        );
+        // The palm turns from down, on a ledge, to toward the body, to out against a wall.
+        const side = add(r.map(v => v * (1 - Math.abs(turn))) as Vec3, [0, -s * turn, 0]);
+        hand(out, end, dir, side, -s, curl);
       });
     },
   };

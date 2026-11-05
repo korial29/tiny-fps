@@ -181,12 +181,12 @@ export const MOVE = {
 export const MOVES: number[][] = [
   [-0.05, 0.12, 0, 0.35, 0.5, 0.15, 0.7, 0.25, 0.5, 0.25, 0.5, 1.15, 0, 0],
   [0, 0.1, 0, 1.2, 1.5, -0.35, 0.3, 2.4, 0.3, 2.2, 0.3, 0.35, 0, 0],
-  [-0.3, 1, 0, 1, 1.2, -0.55, 0.25, -0.9, 0.3, -0.9, 0.3, 0.25, 0, 0],
+  [-0.35, 1.25, 0, 1.1, 1.3, -0.6, 0.25, -1, 0.3, -1, 0.3, 0.25, 0, 0],
   [],
-  [-0.12, 0.2, 0.3, 0.9, 1.2, 0.6, 1.3, 0.8, 1, 0.3, 0.5, 0.6, 0, 0.1],
+  [-0.02, 0.2, 0.4, 0.9, 1.2, 0.6, 1.3, 0.8, 1, 0.3, 0.5, 0.6, 0, 0.1],
   [0.07, 0.05, 0, 0.2, 0.3, 0.1, 0.2, 3, 0.2, 3, 0.2, 0.2, -0.22, 0],
   [0, 0.5, 0, 0.2, 0.4, 1.4, 1.7, 1, 1.4, 1, 1.4, 0.15, -0.1, 0],
-  [-0.78, -1.1, 0, 1.1, 1.8, 1.4, 0.1, 0.5, 0.8, 1.2, 0.5, 0.6, 0, 0],
+  [-0.78, -1.1, 0, 1.1, 1.8, 1.4, 0.1, 0.5, 0.8, 0.4, 0.5, 0.8, 0, 0],
   [-0.15, -0.5, 0, 0.3, 0.4, -0.3, 0.5, 1.2, 0.3, 1.2, 0.3, 1, 0, 0],
   [-0.05, 0.9, 0, 1.7, 2, 1.7, 2, 0.8, 1.6, 0.8, 1.6, 0.2, 0, 0],
 ];
@@ -569,8 +569,8 @@ export const createGait = (): Gait => {
             foot(k),
             w,
             i
-              ? R(-s * 0.12, pel[1] - 0.62 + 0.4 * lift, z)
-              : R(s * (0.34 - 0.2 * lift), pel[1] - 0.4 + 0.3 * lift, z),
+              ? R(-s * 0.12, pel[1] - 0.7 + 0.4 * lift, z)
+              : R(s * (0.34 - 0.2 * lift), pel[1] - 0.52 + 0.3 * lift, z),
             R(0, 1, -1, [0, 0, 0]),
             i
               ? mul(axis(Y, yaw), axis(X, -0.5))
@@ -648,9 +648,9 @@ export const createGait = (): Gait => {
 
     rot[J.PELVIS] = mul(
       mul(axis(Y, -P.pr * g * c1), axis(Z, obl + 0.4 * bank)),
-      axis(X, -(tilt + 0.25 * lean + 0.3 * crouch)),
+      axis(X, -(tilt + 0.25 * lean + 0.3 * crouch + 0.5 * dip)),
     );
-    const body = tilt + 0.25 * lean - lean - 0.7 * crouch;
+    const body = tilt + 0.25 * lean - lean - 0.7 * crouch - 0.8 * dip;
     rot[J.SPINE] = mul(
       mul(axis(Y, 0.4 * turn_ - 0.25 * yo), axis(Z, 0.25 * bank - 0.8 * obl + 0.5 * shift)),
       axis(X, 0.45 * body + breath * 0.5),
@@ -663,10 +663,16 @@ export const createGait = (): Gait => {
       const k = Math.cos(TAU * (ph - (s < 0 ? 0.5 : 0)));
       const a = who[s < 0 ? 1 : 2];
       rot[s < 0 ? J.ARM_L : J.ARM_R] = mul(
-        axis(Z, s * (0.06 + P.ab * g)),
-        axis(X, (P.am + P.aa * a * k) * g + 0.05 * idle * s * Math.sin(time * 1.3)),
+        axis(Z, s * (0.06 + P.ab * g + 0.5 * dip)),
+        axis(
+          X,
+          (P.am + P.aa * a * k) * g + 0.05 * idle * s * Math.sin(time * 1.3) + dip + 0.5 * crouch,
+        ),
       );
-      rot[s < 0 ? J.FOREARM_L : J.FOREARM_R] = axis(X, 0.15 * idle + g * (P.em + P.ea * k));
+      rot[s < 0 ? J.FOREARM_L : J.FOREARM_R] = axis(
+        X,
+        0.15 * idle + g * (P.em + P.ea * k) + dip + 0.5 * crouch,
+      );
     });
 
     // Pelvis: as high as the stance legs allow, then the legs by IK.
@@ -675,7 +681,7 @@ export const createGait = (): Gait => {
     const [rx, rz] = [Math.cos(yaw), -Math.sin(yaw)];
     const base: Vec3 = [at[0] + rx * hipX, 0, at[2] + rz * hipX];
     const off = [J.THIGH_L, J.THIGH_R].map(j => turn(pw, REST[j]));
-    const stand = 1 - 0.25 * crouch - 0.25 * dip;
+    const stand = 1 - 0.25 * crouch - 0.55 * dip;
     const flight =
       at[1] +
       0.05 +

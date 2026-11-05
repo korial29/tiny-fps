@@ -12,6 +12,15 @@ import {
   onWire,
   parseText,
 } from './protocol';
+import {
+  AIR_JUMPS,
+  COYOTE_TICKS,
+  DASH_COOLDOWN,
+  JUMP_BUFFER_TICKS,
+  SLIDE_TICKS,
+} from './constants';
+import { STILL } from './physics';
+import { KEY, MODE, SIDE } from './types';
 import type { SnapPlayer } from './types';
 
 const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
@@ -24,6 +33,8 @@ const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
   pitch: -0.7,
   ground: false,
   ack: 1234,
+  ...STILL,
+  mode: MODE.AIR,
   ...over,
 });
 
@@ -64,9 +75,9 @@ describe('input frame', () => {
 
   it('round-trips within the fixed point', () => {
     for (const yaw of [0, 0.001, 1, Math.PI, 5, 6.28]) {
-      const back = decodeInput(encodeInput({ seq: 65535, keys: 31, yaw, pitch: 1.55 }))!;
+      const back = decodeInput(encodeInput({ seq: 65535, keys: 255, yaw, pitch: 1.55 }))!;
       expect(back.seq).toBe(65535);
-      expect(back.keys).toBe(31);
+      expect(back.keys).toBe(255);
       expect(Math.abs(back.yaw - yaw)).toBeLessThanOrEqual(Math.PI / 65536 + 1e-12);
       expect(back.pitch).toBeCloseTo(1.55, 4);
     }
@@ -98,7 +109,7 @@ describe('input frame', () => {
     for (let k = 0; k < 2000; k++) {
       const i = {
         seq: k,
-        keys: k & 63,
+        keys: k & 255,
         yaw: (rnd() - 0.3) * 20,
         pitch: (rnd() - 0.5) * 8,
         view: rnd() * 65535,
@@ -127,38 +138,126 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 4-byte head and 24 bytes per player, nothing else', () => {
+  it('has a 4-byte head and 39 bytes per player, nothing else', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
-      players: [player(7, { x: 1, y: 2, z: 3, vy: -1, yaw: Math.PI, pitch: 0.5, ground: true })],
+      players: [
+        player(7, {
+          x: 1,
+          y: 2,
+          z: 3,
+          vx: -2,
+          vy: -1,
+          vz: 0.5,
+          edge: 12.5,
+          yaw: Math.PI,
+          pitch: 0.5,
+          mode: MODE.WALLRUN,
+          wall: SIDE.WEST,
+          jumps: 1,
+          dashes: 0,
+          t: 200,
+          dash: 33,
+          coyote: 5,
+          buffer: 3,
+          held: KEY.JUMP,
+          // What the animation reads is not sent.
+          ev: 0xffff,
+          fall: 9,
+        }),
+      ],
     });
-    expect([SNAP_HEAD, SNAP_PLAYER]).toEqual([4, 24]);
+    expect([SNAP_HEAD, SNAP_PLAYER]).toEqual([4, 39]);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER);
     expect(bytes(buf)).toEqual([
       ...[MSG_SNAPSHOT, 0x12, 0x34, 1],
       7,
-      // Big-endian float32: 1, 2, 3 and -1.
+      // Big-endian float32: 1, 2, 3, then vx -2, vy -1, vz 0.5 and the edge 12.5.
       ...[0x3f, 0x80, 0, 0],
       ...[0x40, 0, 0, 0],
       ...[0x40, 0x40, 0, 0],
+      ...[0xc0, 0, 0, 0],
       ...[0xbf, 0x80, 0, 0],
+      ...[0x3f, 0, 0, 0],
+      ...[0x41, 0x48, 0, 0],
       0x80,
       0x00, // yaw
       0x13,
       0x88, // pitch 5000
       0x04,
       0xd2, // ack 1234
-      1, // ground
+      0b01010010, // mode 2, wall 2 << 3, jumps 1 << 6, no air dash
+      200, // t
+      33, // dash
+      0b01011101, // coyote 5, buffer 3 << 3, jump held << 6
     ]);
   });
 
-  it('keeps the ground bit in the flags', () => {
-    const round = (ground: boolean) => {
-      const buf = encodeSnapshot({ tick: 0, players: [player(1, { ground })] });
-      return [bytes(buf)[SNAP_HEAD + 23], decodeSnapshot(buf)!.players[0].ground];
-    };
-    expect(round(false)).toEqual([0, false]);
-    expect(round(true)).toEqual([1, true]);
+  it('derives ground from the mode: ground, slide and crouch stand on a floor', () => {
+    for (const mode of Object.values(MODE)) {
+      const buf = encodeSnapshot({ tick: 0, players: [player(1, { mode, ground: false })] });
+      const stands = mode === MODE.GROUND || mode === MODE.SLIDE || mode === MODE.CROUCH;
+      expect([mode, decodeSnapshot(buf)!.players[0].ground]).toEqual([mode, stands]);
+    }
+  });
+
+  it('round-trips every movement field, and reads the animation fields as 0', () => {
+    const f = Math.fround;
+    let n = 0;
+    for (const mode of Object.values(MODE)) {
+      for (const wall of Object.values(SIDE)) {
+        const p = player(n % 256, {
+          mode,
+          wall,
+          jumps: n & 1,
+          dashes: (n >> 1) & 1,
+          t: (n * 37) & 255,
+          dash: n % (DASH_COOLDOWN + 1),
+          coyote: n % (COYOTE_TICKS + 1),
+          buffer: (n * 3) % (JUMP_BUFFER_TICKS + 1),
+          held: [0, KEY.JUMP, KEY.DASH, KEY.JUMP | KEY.DASH][n & 3],
+          x: f(n * 1.1),
+          vx: f(-n * 0.7),
+          vz: f(n * 0.3),
+          edge: n % 3 ? 0 : f(12.4),
+          ev: 77,
+          fall: 5,
+        });
+        n++;
+        const [b] = decodeSnapshot(encodeSnapshot({ tick: 0, players: [p] }))!.players;
+        const { ev, fall, ground, ...rest } = b;
+        expect([ev, fall]).toEqual([0, 0]);
+        expect(ground).toBe(mode === MODE.GROUND || mode === MODE.SLIDE || mode === MODE.CROUCH);
+        expect(rest).toMatchObject({
+          mode,
+          wall,
+          jumps: p.jumps,
+          dashes: p.dashes,
+          t: p.t,
+          dash: p.dash,
+          coyote: p.coyote,
+          buffer: p.buffer,
+          held: p.held,
+          x: p.x,
+          vx: p.vx,
+          vz: p.vz,
+          edge: p.edge,
+        });
+      }
+    }
+  });
+
+  it('keeps every timer within the bits it has on the wire', () => {
+    // 3 bits for the coyote and buffer ticks, 1 for the jumps, 8 for the dash and the time in mode.
+    expect(COYOTE_TICKS).toBeLessThanOrEqual(7);
+    expect(JUMP_BUFFER_TICKS + 1).toBeLessThanOrEqual(7);
+    expect(AIR_JUMPS).toBeLessThanOrEqual(1);
+    expect(DASH_COOLDOWN).toBeLessThanOrEqual(255);
+    expect(Object.keys(MODE).length).toBeLessThanOrEqual(8);
+    expect(Object.keys(SIDE).length).toBeLessThanOrEqual(8);
+    // A slide, a wall-run and a climb end long before t saturates, and the key bits are a byte.
+    expect(SLIDE_TICKS).toBeLessThan(255);
+    expect(Math.max(...Object.values(KEY))).toBeLessThanOrEqual(255);
   });
 
   it('round-trips the float32 state exactly, and yaw, pitch within the wire', () => {
@@ -169,6 +268,7 @@ describe('snapshot frame', () => {
         x: f(12.3),
         y: f(0.8),
         z: f(31.7),
+        mode: MODE.GROUND,
         ground: true,
         vy: 0,
         ack: 65535,

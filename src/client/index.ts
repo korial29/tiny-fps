@@ -1,5 +1,6 @@
-import { EYE, PLAYER_H, TICK_HZ } from '../shared/constants';
+import { PLAYER_H, TICK_HZ } from '../shared/constants';
 import { ROOFTOPS } from '../shared/map';
+import { eyeHeight } from '../shared/physics';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import type { PlayerInfo, SocketLike } from '../shared/types';
@@ -39,7 +40,8 @@ const MAX_STEPS = 5;
 
 /**
  * Mounts the game in a Shadow DOM inside container: one WebGL2 canvas filling it, a click locks the
- * pointer, the mouse looks, WASD (ZQSD on AZERTY) moves, Space jumps.
+ * pointer, the mouse looks, WASD (ZQSD on AZERTY) moves, Shift sprints, Space jumps (again in the
+ * air for a second jump), E or the right button dashes, C crouches and slides.
  */
 export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps => {
   const wrap = document.createElement('div');
@@ -158,7 +160,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
 
     const me = predictor.me(acc / STEP);
     const others = predictor.others(now);
-    const eye: [number, number, number] = me ? [me.x, me.y + EYE, me.z] : [0, 0, 0];
+    const eye: [number, number, number] = me ? [me.x, me.y + eyeHeight(me), me.z] : [0, 0, 0];
     audio.listen(eye, ctl.yaw);
     const dt = Math.min((now - before) / 1000, 0.1);
     fx.update(me, ctl.keys, dt);

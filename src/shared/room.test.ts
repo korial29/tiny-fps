@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { INPUT_BURST, MAX_NAME, MAX_PLAYERS, MAX_REWIND, SNAP_EVERY, TICK_HZ } from './constants';
+import {
+  ACCEL,
+  INPUT_BURST,
+  MAX_NAME,
+  MAX_PLAYERS,
+  MAX_REWIND,
+  RUN_SPEED,
+  SNAP_EVERY,
+  TICK_HZ,
+} from './constants';
 import { ROOFTOPS } from './map';
 import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
@@ -7,6 +16,16 @@ import { Room } from './room';
 import { KEY, TEX } from './types';
 import type { Conn, Every, Input, PlayerState, Snapshot } from './types';
 import type { WorldDef } from './world';
+
+/** Metres run in n steps of forward from a stand, with the ground acceleration. */
+const ramp = (n: number): number => {
+  let [v, d] = [0, 0];
+  for (let k = 0; k < n; k++) {
+    v = Math.min(RUN_SPEED, v + ACCEL / TICK_HZ);
+    d += v / TICK_HZ;
+  }
+  return d;
+};
 
 /** A flat 200 m slab at y = 1, with eight spawns on it, 4 m or more apart. */
 const ARENA: WorldDef = {
@@ -223,14 +242,14 @@ describe('Room: inputs and snapshots', () => {
     // Nothing applied yet: seq 65535 is acked, the one before the client's first (0).
     expect(snap(a).players[0]).toMatchObject({ x: x0, z: z0, ack: 65535 });
 
-    // Yaw 0 faces -z: 6 inputs forward = 0.6 m.
+    // Yaw 0 faces -z: 6 inputs forward, from a stand.
     for (let k = 0; k < 6; k++) {
       room.receive(a, input(k, KEY.FORWARD));
     }
     ticks(room, SNAP_EVERY);
     const p = snap(a).players[0];
     expect(p.ack).toBe(5);
-    expect(p.z).toBeCloseTo(z0 - 0.6, 2);
+    expect(p.z).toBeCloseTo(z0 - ramp(6), 2);
     expect(p.x).toBeCloseTo(x0, 2);
     expect(p.ground).toBe(true);
     expect(p.y).toBeCloseTo(1, 2);
@@ -275,9 +294,9 @@ describe('Room: inputs and snapshots', () => {
       room.receive(a, input(k, KEY.FORWARD));
     }
     ticks(room, SNAP_EVERY);
-    // INPUT_BURST steps of 0.1 m, the last acked seq is the INPUT_BURST-th.
+    // INPUT_BURST steps forward, the last acked seq is the INPUT_BURST-th.
     expect(snap(a).players[0].ack).toBe(INPUT_BURST - 1);
-    expect(snap(a).players[0].z).toBeCloseTo(ARENA.spawns[0][2] - INPUT_BURST * 0.1, 2);
+    expect(snap(a).players[0].z).toBeCloseTo(ARENA.spawns[0][2] - ramp(INPUT_BURST), 2);
 
     // The two ticks above earned two inputs.
     for (let k = 0; k < 5; k++) {

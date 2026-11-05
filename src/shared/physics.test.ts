@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   EYE,
   GRAVITY,
+  LOW_EYE,
+  LOW_H,
   JUMP_SPEED,
   MAX_PITCH,
   PLAYER_H,
@@ -10,8 +12,8 @@ import {
   STEP_H,
   TICK_HZ,
 } from './constants';
-import { forward, move, spawn } from './physics';
-import { KEY, TEX } from './types';
+import { STILL, eyeHeight, forward, heightOf, move, speedOf, spawn } from './physics';
+import { EV, KEY, MODE, TEX } from './types';
 import type { Input, PlayerState } from './types';
 import { build } from './world';
 import type { Brush, World, WorldDef } from './world';
@@ -81,9 +83,13 @@ const at = (x: number, z: number, y = 0): PlayerState => ({
   yaw: 0,
   pitch: 0,
   ground: true,
+  ...STILL,
 });
 
-/** Runs n steps of the same keys; `each` sees the state after every step. */
+/**
+ * Runs n steps of the same keys; `each` sees the state after every step. A held JUMP is a tap on
+ * every step that starts on a floor: the player hops, and never double-jumps (`hold` keeps it down).
+ */
 const run = (
   p: PlayerState,
   keys: number,
@@ -91,11 +97,19 @@ const run = (
   yaw = p.yaw,
   each?: (k: number) => void,
   w: World = yard,
+  hold = false,
 ): void => {
   for (let k = 0; k < n; k++) {
-    move(p, { seq: k, keys, yaw, pitch: 0 }, w);
+    const tap = hold || p.ground ? keys : keys & ~JUMP;
+    move(p, { seq: k, keys: tap, yaw, pitch: 0 }, w);
     each?.(k);
   }
+};
+
+/** The player already running at RUN_SPEED along the facing, as after a second of it. */
+const cruising = (p: PlayerState, yaw: number, speed = RUN_SPEED): PlayerState => {
+  const [fx, fz] = forward(yaw);
+  return Object.assign(p, { yaw, vx: Math.fround(fx * speed), vz: Math.fround(fz * speed) });
 };
 
 describe('forward', () => {
@@ -108,24 +122,41 @@ describe('forward', () => {
 });
 
 describe('move: on the ground', () => {
-  it('runs at RUN_SPEED along the facing, and strafes and backs off', () => {
+  it('speeds up to RUN_SPEED along the facing in a fraction of a second, and runs at it', () => {
     const p = at(-20, 8);
+    run(p, FORWARD, 3, EAST);
+    expect(speedOf(p)).toBeGreaterThan(1);
+    expect(speedOf(p)).toBeLessThan(RUN_SPEED);
+    run(p, FORWARD, 12, EAST);
+    expect(speedOf(p)).toBeCloseTo(RUN_SPEED, 4);
+    const x = p.x;
     run(p, FORWARD, TICK_HZ, EAST);
-    expect(p.x).toBeCloseTo(-20 + RUN_SPEED);
+    expect(p.x - x).toBeCloseTo(RUN_SPEED);
     expect(p.z).toBeCloseTo(8);
+  });
 
-    run(p, RIGHT, TICK_HZ, EAST);
-    expect(p.z).toBeCloseTo(8 + RUN_SPEED);
-    run(p, LEFT, TICK_HZ, EAST);
-    run(p, BACK, TICK_HZ, EAST);
-    expect(p.x).toBeCloseTo(-20);
-    expect(p.z).toBeCloseTo(8);
+  it('strafes and backs off at the same speed, and stops within a fraction of a second', () => {
+    const p = cruising(at(-20, 8), EAST);
+    run(p, RIGHT, 15, EAST);
+    expect(speedOf(p)).toBeCloseTo(RUN_SPEED, 4);
+    expect(p.vz).toBeCloseTo(RUN_SPEED, 4);
+    expect(p.vx).toBeCloseTo(0, 4);
+    run(p, BACK, 15, EAST);
+    expect(p.vx).toBeCloseTo(-RUN_SPEED, 4);
+    run(p, LEFT, 15, EAST);
+    expect(p.vz).toBeCloseTo(-RUN_SPEED, 4);
+    // No key: friction stops it in under 0.2 s, and it stays stopped.
+    run(p, 0, 11, EAST);
+    expect(speedOf(p)).toBe(0);
+    const [x, z] = [p.x, p.z];
+    run(p, 0, 10, EAST);
+    expect([p.x, p.z]).toEqual([x, z]);
     expect(p.y).toBe(0);
     expect(p.ground).toBe(true);
   });
 
   it('moves along the facing whatever the yaw', () => {
-    const p = at(-12, 8);
+    const p = cruising(at(-12, 8), WEST);
     run(p, FORWARD, 30, WEST);
     expect(p.x).toBeCloseTo(-12 - RUN_SPEED / 2);
     expect(p.z).toBeCloseTo(8);
@@ -134,9 +165,10 @@ describe('move: on the ground', () => {
   it('is no faster on a diagonal, and stands still on opposite keys', () => {
     const p = at(-4, 12);
     run(p, FORWARD | RIGHT, 30, NORTH);
-    expect(Math.hypot(p.x + 4, p.z - 12)).toBeCloseTo(RUN_SPEED / 2);
-    expect(p.x).toBeGreaterThan(-4);
-    expect(p.z).toBeLessThan(12);
+    expect(speedOf(p)).toBeCloseTo(RUN_SPEED, 4);
+    expect(p.vx).toBeGreaterThan(0);
+    expect(p.vz).toBeLessThan(0);
+    expect(p.vx).toBeCloseTo(-p.vz, 4);
 
     const q = at(-4, 12);
     run(q, FORWARD | BACK | LEFT | RIGHT, 10);
@@ -158,7 +190,7 @@ describe('move: on the ground', () => {
     const a = at(-5, 5);
     const b = at(-5, 5);
     for (let k = 0; k < 300; k++) {
-      const i = { seq: k, keys: (k * 7) % 32, yaw: k * 0.05, pitch: 0.1 };
+      const i = { seq: k, keys: (k * 7) % 256, yaw: k * 0.05, pitch: 0.1 };
       move(a, i, yard);
       move(b, i, yard);
     }
@@ -177,7 +209,7 @@ describe('move: sides', () => {
     expect([p.x, p.z]).toEqual([Math.fround(10 - PLAYER_R), 8]);
 
     // Toward +x and -z at once: x stops at the wall, z keeps going at the rest of the speed.
-    const q = at(2, 8);
+    const q = cruising(at(2, 8), EAST + 0.6);
     run(q, FORWARD, 100, EAST + 0.6);
     expect(q.x).toBeCloseTo(10 - PLAYER_R);
     const z = q.z;
@@ -205,10 +237,11 @@ describe('move: sides', () => {
     });
     // Pushed off the corner toward -z, and on past the pillar.
     expect(p.x).toBeGreaterThan(110);
-    expect(p.z).toBeCloseTo(10 - PLAYER_R, 3);
+    expect(p.z).toBeLessThan(10 - PLAYER_R + 1e-3);
+    expect(p.z).toBeGreaterThan(10 - 2 * PLAYER_R);
 
     // The same corner, heading in at an angle: it rounds it.
-    const q = at(97, 8);
+    const q = cruising(at(97, 8), EAST - 0.45);
     run(q, FORWARD, 200, EAST - 0.45);
     expect(q.x).toBeGreaterThan(110);
   });
@@ -230,7 +263,7 @@ describe('move: sides', () => {
       [-3, SOUTH + 0.2, 1],
       [3, NORTH - 0.2, -1],
     ] as const) {
-      const p = at(199, z0);
+      const p = cruising(at(199, z0), yaw);
       let last = p.z;
       run(p, FORWARD, 70, yaw, () => {
         // The same stride every step, before, on and after the seam.
@@ -304,29 +337,20 @@ describe('move: heights', () => {
     expect(q.y).toBe(0);
 
     // A jump clears it: the feet are within STEP_H of the top when they reach the edge.
-    const r = at(27, 0);
+    const r = cruising(at(27, 0), EAST);
     run(r, FORWARD | JUMP, 1, EAST);
     run(r, FORWARD, 50, EAST);
     expect(r.x).toBeGreaterThan(30);
     expect(r).toMatchObject({ y: 1, ground: true });
   });
 
-  it('jumps onto a box up to about APEX + STEP_H, and no higher', () => {
-    const reach = (x: number) => {
-      const p = at(x, 0);
-      run(p, FORWARD | JUMP, 1, EAST);
-      run(p, FORWARD, 50, EAST);
-      return p;
-    };
-    expect(reach(37)).toMatchObject({ y: 1.5, ground: true });
-    const high = reach(42);
-    expect(high.x).toBeCloseTo(45 - PLAYER_R);
-    expect(high.y).toBeLessThan(2.5);
+  it('jumps onto a box up to about APEX + STEP_H', () => {
+    // A top 2.5 high is past a plain jump; the hands catch its edge instead (see the ledge tests).
+    const p = cruising(at(37, 0), EAST);
+    run(p, FORWARD | JUMP, 1, EAST);
+    run(p, FORWARD, 50, EAST);
+    expect(p).toMatchObject({ y: 1.5, ground: true });
     expect(APEX + STEP_H).toBeLessThan(2.5);
-    // Even jumping on the spot, again and again, against the side.
-    const p = at(44.5, 0);
-    run(p, FORWARD | JUMP, 200, EAST, () => expect(p.y + PLAYER_H).toBeLessThan(4.5));
-    expect(p.x).toBeLessThan(45 - PLAYER_R + 1e-6);
   });
 
   it('lands on the highest top under the circle', () => {
@@ -448,7 +472,7 @@ describe('move: heights', () => {
     expect(air).toBeLessThanOrEqual(42);
     expect(p).toMatchObject({ y: 0, vy: 0, ground: true });
 
-    // No second jump in the air.
+    // Holding the key is not a press: no jump again in the air.
     const q = at(-8, 8);
     move(q, { seq: 0, keys: JUMP, yaw: 0, pitch: 0 }, yard);
     expect(q.ground).toBe(false);
@@ -458,7 +482,7 @@ describe('move: heights', () => {
   });
 
   it('keeps its x and z moving in the air', () => {
-    const p = at(-4, 14);
+    const p = cruising(at(-4, 14), NORTH);
     run(p, JUMP | FORWARD, 20, NORTH);
     expect(p.z).toBeCloseTo(14 - 2);
     expect(p.y).toBeGreaterThan(0.5);
@@ -583,6 +607,10 @@ describe('move: a long walk', () => {
         }
         yaw += turn;
         move(p, { seq: k, keys, yaw, pitch: 0 }, yard);
+        // The yard ends at z = ±100: a walk that gets there has seen what it can.
+        if (Math.abs(p.z) > 98) {
+          break;
+        }
         expect(solid(p), `seed ${seed}, step ${k}`).toBe(false);
         expect(p.y).toBeGreaterThanOrEqual(-1e-9);
         high = Math.max(high, p.y);
@@ -645,6 +673,7 @@ describe('spawn', () => {
       yaw: 2.5,
       pitch: 0,
       ground: true,
+      ...STILL,
     });
     expect(spawn(7, w, 1 + w.def.spawns.length)).toEqual(p);
     expect(spawn(7, w, -1)).toEqual(spawn(7, w, w.def.spawns.length - 1));
@@ -657,5 +686,61 @@ describe('spawn', () => {
 
   it('keeps the eye inside the body', () => {
     expect(EYE).toBeLessThan(PLAYER_H);
+  });
+});
+
+describe('time in the mode', () => {
+  it('counts the ticks since the mode began, and saturates at 255', () => {
+    const p = at(-8, 8);
+    move(p, { seq: 0, keys: 0, yaw: 0, pitch: 0 }, yard);
+    expect(p.t).toBe(1);
+    run(p, 0, 400);
+    expect(p.t).toBe(255);
+    run(p, JUMP, 1);
+    expect([p.mode, p.t]).toEqual([MODE.AIR, 0]);
+    run(p, 0, 1);
+    expect(p.t).toBe(1);
+  });
+
+  it('knows the height of the body and of the eye in each mode', () => {
+    for (const mode of Object.values(MODE)) {
+      const low = mode === MODE.SLIDE || mode === MODE.CROUCH;
+      expect([heightOf({ mode }), eyeHeight({ mode })]).toEqual(
+        low ? [LOW_H, LOW_EYE] : [PLAYER_H, EYE],
+      );
+    }
+    expect(LOW_H).toBeCloseTo(PLAYER_H / 2, 1);
+    expect(LOW_EYE).toBeLessThan(LOW_H);
+  });
+});
+
+describe('landing', () => {
+  it('reports the speed of a landing, and no landing for a step down', () => {
+    const p = at(-8, 8, 5);
+    p.mode = MODE.AIR;
+    p.ground = false;
+    p.coyote = 0;
+    run(p, 0, 80);
+    // 5 m under g: sqrt(2 g h) = 14.1 m/s, give or take a step.
+    expect(p.mode).toBe(MODE.GROUND);
+    let landed = 0;
+    let fall = 0;
+    const q = at(-8, 8, 5);
+    Object.assign(q, { mode: MODE.AIR, ground: false, coyote: 0 });
+    run(q, 0, 80, 0, () => {
+      landed += q.ev & EV.LAND ? 1 : 0;
+      fall = Math.max(fall, q.fall);
+    });
+    expect(landed).toBe(1);
+    expect(fall).toBeGreaterThan(13);
+    expect(fall).toBeLessThan(15);
+    // Down the stair of the yard (0.2 and 0.4 steps): a walk, not a fall.
+    const s = cruising(at(53.5, 0, 0.4), EAST);
+    let air = 0;
+    run(s, FORWARD, 30, EAST, () => {
+      air += s.mode === MODE.AIR ? 1 : 0;
+    });
+    expect(air).toBe(0);
+    expect(s.y).toBe(0);
   });
 });

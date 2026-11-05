@@ -30,26 +30,29 @@ const stair = (z: number, y: number): Brush[] =>
   );
 
 /**
- * A parkour test course, laid out for the moves of step 3 and walkable now with run, jump and the
- * 0.5 m step-up. Metres, y up, the course runs north (toward -z). Jumps reach about 4 m on the
- * flat, and a box 1.7 m high.
+ * A parkour test course, laid out for the moves of step 3 and flown with them by test/lines.ts.
+ * Metres, y up, the course runs north (toward -z). A walking jump flies about 4.2 m on the flat, a
+ * sprint jump 6.3 m, and reaches a box 1.7 m high; the hands catch a top 1.2 to 2.4 m above the
+ * feet, and a fall that reaches a face within about 3.5 m is caught by them.
  *
- * - A: the start roof (10 m), with the spawns. B: a roof at 10 m, across a 2.5 m gap from A.
+ * - A: the start roof (10 m), with the spawns. B: a roof at 10 m, across a 4.2 m gap from A (a
+ *   run and a jump: walking off the edge falls).
  * - On B, a platform floating at 12.2 to 12.6 m (an overhang to walk under, a bump for a jump) and
  *   a stair of six 0.4 m steps up to it. 3 m north of it, C (12.4 m): the south face of C above B
  *   is a 2.4 m ledge to grab. Two poles stand by the platform.
  * - E (8 m), 3 m east of C and 4.4 m lower: a long wall (6.5 m high, 26 m long) to run along, ledges
  *   2.0 and 2.2 m high, and a 1.2 m low gap under a lintel to slide under, with a way round it.
  * - G (8 m) is across a 10 m drop from E, reached by a 0.5 m wide beam; it has a 1.6 m ledge.
- * - F (12.4 m) is 8 m north of C: out of reach until the dash and the double jump.
+ * - F (12.4 m) is 13 m north of C: a sprint and a jump fall short of it, and so does a walk with
+ *   the dash or the double jump; it takes the sprint and the jump and the dash or the double jump.
  */
 export const ROOFTOPS: WorldDef = {
   name: 'Rooftops',
   brushes: [
-    roof(4, 56, 24, 76, 10),
+    roof(4, 57.7, 24, 76, 10),
     roof(4, 36, 24, 53.5, 10),
     roof(4, 20, 24, 36, 12.4),
-    roof(4, 0, 24, 12, 12.4),
+    roof(4, -5, 24, 7, 12.4),
     roof(27, 20, 47, 50, 8),
     roof(27, 60, 47, 76, 8),
     // The overhang, its stair and two poles.

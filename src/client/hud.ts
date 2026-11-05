@@ -23,7 +23,8 @@ export const createHud = (screen: HTMLElement): Hud => {
   screen.insertAdjacentHTML(
     'beforeend',
     `<aside hidden><h6>TINY FPS</h6><span></span><table>` +
-      `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Space<td>jump<tr><td>M<td>mute</table>` +
+      `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Shift<td>sprint<tr><td>Space<td>jump, again in the air` +
+      `<tr><td>E / right click<td>dash<tr><td>C<td>crouch, slide when fast<tr><td>M<td>mute</table>` +
       `<strong></strong></aside>` +
       `<h5 hidden>Muted (M)</h5>`,
   );

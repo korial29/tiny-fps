@@ -166,12 +166,17 @@ The subset of `WebSocket` the client uses: `binaryType`, `onopen`, `onclose`, `o
 
 ## Controls
 
-| Action | Keys                                                          |
-| ------ | ------------------------------------------------------------- |
-| Look   | Mouse (click the game to lock the pointer, Esc to release it) |
-| Move   | WASD, or the arrow keys                                       |
-| Jump   | Space                                                         |
-| Mute   | M (remembered)                                                |
+| Action | Keys                                                                       |
+| ------ | -------------------------------------------------------------------------- |
+| Look   | Mouse (click the game to lock the pointer, Esc to release it)              |
+| Move   | WASD, or the arrow keys                                                    |
+| Sprint | Shift, with forward: the top speed builds over about a second              |
+| Jump   | Space. Press it again in the air for a second jump                         |
+| Dash   | E or the right mouse button: a short burst, once a second, once in the air |
+| Crouch | C. At sprint speed it is a slide, low enough to go under a 1.2 m slot      |
+| Mute   | M (remembered)                                                             |
+
+Facing a ledge between 1.2 and 2.4 m above your feet in the air, you take hold of it: forward or Space climbs, back or C lets go, and Space looking away jumps off it. Running fast along a wall in the air starts a wall-run (about a second, Space kicks off). Ctrl is not used, since Ctrl+W closes the tab.
 
 Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard WASD is ZQSD with nothing to set.
 
@@ -182,10 +187,10 @@ Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard
 For now the game is the movement and the room; the rules come with the next steps of [`docs/PLAN.md`](docs/PLAN.md).
 
 - **The rooftop**: one 40 × 40 m deck under an open sky, with a parapet round the edge, a crate you can jump onto, a block too tall to climb, and a platform with four steps up to it. Up to 16 players share it, each with a name tag and a colour of their own.
-- **Moving**: run, strafe and jump. The host decides where everyone is. Your own moves show at once (the client predicts them) and are corrected to the host's state, to the bit.
+- **Moving**: momentum, sprint, dash, double jump, ledge grab and climb, wall-run, slide, coyote time and a jump buffer. The host decides where everyone is. Your own moves show at once (the client predicts them) and are corrected to the host's state, to the bit.
 - **The others**: drawn 100 ms in the past, interpolated between snapshots, as soldiers with swinging arms and legs. Each carries a flashlight that casts shadows.
 - **Sound**: a synthesiser and a mixer that places sounds left or right by where they come from, and a dark music loop. The sound starts with the click that locks the pointer. There are no sound effects yet.
-- **Coming**: parkour moves (sprint, double jump, wall-run, ledge grab, slide), a Mirror's Edge look, two teams, flags, a score, and a tackle that makes a carrier drop the flag.
+- **Coming**: a first-person body that shows the moves, a Mirror's Edge look, two teams, flags, a score, and a tackle that makes a carrier drop the flag.
 
 ---
 
@@ -209,7 +214,7 @@ For now the game is the movement and the room; the rules come with the next step
 
 - **The host is authoritative**: the Node server, or the host tab in local mode. It runs the players on the map.
 - **Inputs, not positions**: each client sends one 11-byte input per step at 60 Hz, holding its keys, view angles and the moment it sees the others at. It predicts its own player at once and replays what the host has not acknowledged yet.
-- **Snapshots** go out at 30 Hz: a 4-byte head and 24 bytes per player, in a compact binary format. The other players are drawn 100 ms in the past, interpolated between snapshots.
+- **Snapshots** go out at 30 Hz: a 4-byte head and 39 bytes per player (position, speed, look angles, the movement state and its timers), in a compact binary format. The other players are drawn 100 ms in the past, interpolated between snapshots.
 - **Rendering**: one WebGL2 shader program and one vertex buffer, up to 16 lights, with up to 4 shadow maps drawn by the same program.
 
 ---

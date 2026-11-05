@@ -84,7 +84,8 @@ describe('serve', () => {
       return p?.ack === 4;
     });
     const p = decodeSnapshot(a.binaries.at(-1)!)!.players.find(q => q.id === you)!;
-    expect(p.z).toBeCloseTo(z0 - 0.5, 1);
+    // Five steps from a stand: 50 m/s² for 5 / 60 s, about 0.21 m.
+    expect(p.z).toBeCloseTo(z0 - 0.21, 1);
   });
 
   it('closes a connection that sends an oversized frame', async () => {

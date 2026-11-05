@@ -5,11 +5,17 @@
 // Input, 11 bytes: [type u8 = MSG_INPUT][seq u16][keys u8][yaw u16][pitch i16][view u16][frac u8]
 //   yaw in 65536ths of a turn, decoded in [0, 2π); pitch in 1/10000 rad; view is the host tick
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
-// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 24 bytes:
-//   [id u8][x f32][y f32][z f32][vy f32][yaw u16][pitch i16][ack u16][flags u8]
-//   flags: bit 0 = ground
-//   x, y, z, vy are the host's float32 state, exact (see move in physics.ts).
+//   keys is a u8: KEY bits 0 to 7 (forward, back, left, right, jump, sprint, dash, crouch).
+// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 39 bytes:
+//   [id u8][x f32][y f32][z f32][vx f32][vy f32][vz f32][edge f32]
+//   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8]
+//   mode: bits 0-2 MODE, bits 3-5 wall (SIDE), bit 6 jumps left, bit 7 air dashes left
+//   timers: bits 0-2 coyote ticks, bits 3-5 jump buffer ticks, bit 6 jump held, bit 7 dash held
+//   The floats are the host's float32 state, exact (see move in physics.ts), and with the rest
+//   they are all a move needs to continue from. ground comes from the mode; ev and fall (what the
+//   animation reads) are not sent, they read 0.
 // Every multi-byte field is big-endian (DataView's default).
+import { KEY, MODE } from './types';
 import type { Input, PlayerInfo, Snapshot } from './types';
 
 export type ClientText = { t: 'join'; name: string };
@@ -21,7 +27,7 @@ export const MSG_SNAPSHOT = 2;
 
 export const INPUT_BYTES = 11;
 export const SNAP_HEAD = 4;
-export const SNAP_PLAYER = 24;
+export const SNAP_PLAYER = 39;
 
 const TURN = 65536 / (2 * Math.PI);
 /** Radians to 65536ths of a turn; the mask also folds negative and ≥ 2π angles into one turn. */
@@ -88,11 +94,23 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setFloat32(o + 1, p.x);
     v.setFloat32(o + 5, p.y);
     v.setFloat32(o + 9, p.z);
-    v.setFloat32(o + 13, p.vy);
-    v.setUint16(o + 17, toTurn(p.yaw));
-    v.setInt16(o + 19, toPitch(p.pitch));
-    v.setUint16(o + 21, p.ack & 0xffff);
-    v.setUint8(o + 23, +p.ground);
+    v.setFloat32(o + 13, p.vx);
+    v.setFloat32(o + 17, p.vy);
+    v.setFloat32(o + 21, p.vz);
+    v.setFloat32(o + 25, p.edge);
+    v.setUint16(o + 29, toTurn(p.yaw));
+    v.setInt16(o + 31, toPitch(p.pitch));
+    v.setUint16(o + 33, p.ack & 0xffff);
+    v.setUint8(o + 35, (p.mode & 7) | ((p.wall & 7) << 3) | ((p.jumps & 1) << 6) | (p.dashes << 7));
+    v.setUint8(o + 36, p.t);
+    v.setUint8(o + 37, p.dash);
+    v.setUint8(
+      o + 38,
+      (p.coyote & 7) |
+        ((p.buffer & 7) << 3) |
+        (p.held & KEY.JUMP ? 64 : 0) |
+        (p.held & KEY.DASH ? 128 : 0),
+    );
   });
   return v.buffer;
 };
@@ -110,16 +128,33 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
   const players = [];
   for (let i = 0; i < count; i++) {
     const o = SNAP_HEAD + i * SNAP_PLAYER;
+    const mode = v.getUint8(o + 35);
+    const timers = v.getUint8(o + 38);
+    const m = mode & 7;
     players.push({
       id: v.getUint8(o),
       x: v.getFloat32(o + 1),
       y: v.getFloat32(o + 5),
       z: v.getFloat32(o + 9),
-      vy: v.getFloat32(o + 13),
-      yaw: fromTurn(v.getUint16(o + 17)),
-      pitch: fromPitch(v.getInt16(o + 19)),
-      ack: v.getUint16(o + 21),
-      ground: (v.getUint8(o + 23) & 1) === 1,
+      vx: v.getFloat32(o + 13),
+      vy: v.getFloat32(o + 17),
+      vz: v.getFloat32(o + 21),
+      edge: v.getFloat32(o + 25),
+      yaw: fromTurn(v.getUint16(o + 29)),
+      pitch: fromPitch(v.getInt16(o + 31)),
+      ack: v.getUint16(o + 33),
+      ground: m === MODE.GROUND || m === MODE.SLIDE || m === MODE.CROUCH,
+      mode: m,
+      wall: (mode >> 3) & 7,
+      jumps: (mode >> 6) & 1,
+      dashes: mode >> 7,
+      t: v.getUint8(o + 36),
+      dash: v.getUint8(o + 37),
+      coyote: timers & 7,
+      buffer: (timers >> 3) & 7,
+      held: (timers & 64 ? KEY.JUMP : 0) | (timers & 128 ? KEY.DASH : 0),
+      ev: 0,
+      fall: 0,
     });
   }
   return { tick: v.getUint16(1), players };

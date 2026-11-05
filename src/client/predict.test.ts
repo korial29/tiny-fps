@@ -4,9 +4,11 @@ import { ROOFTOPS } from '../shared/map';
 import { STILL, move, spawn } from '../shared/physics';
 import { decodeInput, decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
 import { Room } from '../shared/room';
-import { KEY } from '../shared/types';
+import { EV, KEY, MODE } from '../shared/types';
 import type { Conn, Input, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
 import { build } from '../shared/world';
+import * as lines from '../../test/lines';
+import { Sim } from '../../test/pilot';
 import { createPredictor } from './predict';
 
 const STEP = 1000 / TICK_HZ;
@@ -135,6 +137,8 @@ describe('prediction against the room', () => {
     let seen = 0;
     let worst = 0;
     let behind = 0;
+    /** Fields of the own player, after a snapshot, that differ from the reference. */
+    const differing = new Set<string>();
 
     const gap = (a: PlayerState, b: PlayerState) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
     const flush = (k: number, snapAt: (k: number) => number) => {
@@ -149,6 +153,15 @@ describe('prediction against the room', () => {
         const s = decodeSnapshot(snaps.shift()!.data)!;
         pred.snapshot(s, k * STEP);
         worst = Math.max(worst, gap(pred.me(1)!, ref));
+        // Every field the move continues from, not only the place: speed, mode, timers. Not the
+        // look angles (me() eases them along the shortest arc, a rounding apart) nor the events.
+        const me = pred.me(1)!;
+        const skip = ['ev', 'fall', 'yaw', 'pitch'];
+        for (const key of Object.keys(ref) as (keyof PlayerState)[]) {
+          if (!skip.includes(key) && me[key] !== ref[key]) {
+            differing.add(key);
+          }
+        }
         behind = Math.max(
           behind,
           gap(
@@ -179,6 +192,7 @@ describe('prediction against the room', () => {
       behind,
       final: gap(final, pred.me(1)!),
       end: gap(final, ref),
+      differing: [...differing],
     };
   };
 
@@ -206,6 +220,46 @@ describe('prediction against the room', () => {
     expect(r.behind).toBeGreaterThan(0.3);
     expect(r.end).toBe(0);
   });
+
+  /**
+   * The whole of ROOFTOPS in one run (see test/lines.ts): a gap by a jump, a ledge grabbed and
+   * climbed, a sprint, a dash and a double jump across the chasm and back, a jump across the alley,
+   * a ledge, a wall-run and a kick-off, a slide under the lintel and a beam. Flown on the real
+   * physics with the wire-rounded inputs, so what the room and the predictor replay is it.
+   */
+  const COURSE = (() => {
+    const s = Sim.at(world, 0);
+    lines.gapAB(s);
+    lines.ledgeBC(s);
+    lines.chasm(s, 'F');
+    lines.chasm(s, 'C', { sprint: true, double: 40 });
+    lines.alleyCE(s);
+    lines.ledgeE(s);
+    lines.wallrunE(s);
+    lines.slideE(s);
+    lines.beamEG(s);
+    return s;
+  })();
+
+  it('flies a course that uses every move: a guard, so the run below is not a trivial one', () => {
+    expect([...COURSE.modes].sort()).toEqual(Object.values(MODE).sort());
+    expect(COURSE.ev).toBe(Object.values(EV).reduce((a, b) => a | b, 0));
+    expect(COURSE.low).toBeGreaterThan(7.9);
+    expect(COURSE.inputs.length).toBeGreaterThan(2000);
+  });
+
+  it('agrees with the host exactly on a run of every move, under every lag', () => {
+    for (const [name, lag] of LAGS) {
+      const r = race(lag, COURSE.inputs);
+      expect(r.worst, `${name} lag`).toBe(0);
+      expect(r.end, `${name} lag`).toBe(0);
+      expect(r.final, `${name} lag`).toBe(0);
+      // Speed, mode, time in it, the jumps and dash left, the ledge, the timers: all of them.
+      expect(r.differing, `${name} lag`).toEqual([]);
+      // With a lag the replay had work to do: the host state was behind the predicted one.
+      expect(r.behind, `${name} lag`).toBeGreaterThanOrEqual(name === 'none' ? 0 : 0.1);
+    }
+  }, 60_000);
 
   it('agrees exactly over many seeds of route noise, under every lag', () => {
     // Stops at the first seed and lag that disagree, naming it, so a regression fails fast.
@@ -295,6 +349,33 @@ describe('own player', () => {
     // The first snapshot with the own player replays what it has not acked.
     pred.snapshot(snapshot(2, snapPlayer(3, { ack: 0 })), 10);
     expect(pred.me(1)).toMatchObject({ id: 3, x: 8, z: Math.fround(70 - 0.1) });
+  });
+
+  it('reports what happened in its live steps once: the events or-ed, the fastest landing', () => {
+    const pred = createPredictor(world);
+    pred.you(0);
+    pred.snapshot(snapshot(1, snapPlayer(0, { vz: 0 })), 0);
+    expect(pred.events()).toEqual({ ev: 0, fall: 0 });
+    // A jump, then a fall back to the roof: JUMP, then LAND with the speed it came down at.
+    pred.step({ keys: KEY.JUMP, yaw: 0, pitch: 0 });
+    expect(pred.events()).toEqual({ ev: EV.JUMP, fall: 0 });
+    expect(pred.events()).toEqual({ ev: 0, fall: 0 });
+    let all = 0;
+    let fall = 0;
+    for (let k = 0; k < 60; k++) {
+      pred.step({ keys: 0, yaw: 0, pitch: 0 });
+      const e = pred.events();
+      all |= e.ev;
+      fall = Math.max(fall, e.fall);
+    }
+    expect(all).toBe(EV.LAND);
+    expect(fall).toBeGreaterThan(6);
+    // A snapshot replays the steps it has not acked: that is not a second jump.
+    pred.step({ keys: KEY.JUMP, yaw: 0, pitch: 0 });
+    pred.events();
+    pred.snapshot(snapshot(2, snapPlayer(0, { vz: 0 })), 100);
+    expect(pred.events()).toEqual({ ev: 0, fall: 0 });
+    expect(pred.me(1)!.ground).toBe(false);
   });
 
   it('eases between the state before and after the last step', () => {

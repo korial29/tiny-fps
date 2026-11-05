@@ -668,7 +668,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const now = performance.now() / 1000;
       const dt = Math.min(0.1, now - clock);
       clock = now;
-      animate(runners, others, dt);
+      animate(runners, others, dt, world);
       ctf?.bases.forEach((at, team) => base(v, at, teamRgb(team), now));
       ctf?.flags.forEach(f => flag(v, f, teamRgb(f.team), now));
       for (const p of others) {

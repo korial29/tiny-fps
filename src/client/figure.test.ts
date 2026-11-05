@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SKIN, SOLE, SPINE, hand, neck, shoe, torso } from './figure';
+import { SKIN, SOLE, SPINE, hand, shoe, torso } from './figure';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 
@@ -94,13 +94,6 @@ describe('torso', () => {
     for (const p of v) {
       expect(Math.hypot(p[3], p[4], p[5])).toBeCloseTo(1);
     }
-  });
-
-  it('has a neck of skin up into the head', () => {
-    const n = verts(out => neck(out, 1, [0, 1, 0], UP, RIGHT));
-    expect(n.every(p => p[6] == SKIN[0])).toBe(true);
-    expect(span(n, 1)[1]).toBeGreaterThan(1 + SPINE);
-    expect(span(n, 1)[0]).toBeLessThan(1 + SPINE);
   });
 });
 

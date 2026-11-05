@@ -19,9 +19,6 @@ export const RADII = {
 const JACKET = [0.17, 0.153, 0.16, 0.18, 0.196, 0.19, 0.105];
 export const SPINE = 0.62;
 
-/** A body's axes from where it faces, `up` being the world's. */
-export const frame = (fwd: Vec3, right: Vec3) => aim(fwd, right);
-
 /**
  * The jacket and the hips of a body whose pelvis is at `pelvis`, the spine going up along `spine`
  * (unit) and shortened to `k` of its length, facing `fwd`. A torso is wider than it is deep.
@@ -49,19 +46,6 @@ export const torso = (
     trousers,
   );
 };
-
-/** A neck, skin, from inside the jacket up into the head: `pelvis` and `spine` as for torso(). */
-export const neck = (out: number[], lod: number, pelvis: Vec3, spine: Vec3, right: Vec3) =>
-  segment(
-    out,
-    solid(lod, 0.17, [0.066, 0.06], [0, 0.5]),
-    pelvis.map((v, i) => v + spine[i] * 0.55) as Vec3,
-    pelvis.map((v, i) => v + spine[i] * 0.72) as Vec3,
-    right,
-    0.17,
-    1,
-    SKIN,
-  );
 
 /**
  * A shoe on the ankle `end`, toes toward `fwd` (unit, flat) and turned a little to stay square to

@@ -1,14 +1,26 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { compile } from '../shared/level';
 import { TEX } from '../shared/types';
-import type { MapDef } from '../shared/types';
-import { createEffects, lit } from './effects';
+import type { PlayerState } from '../shared/types';
+import { build } from '../shared/world';
+import type { Brush, WorldDef } from '../shared/world';
+import { createEffects } from './effects';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
 import { STRIDE } from './mesh';
 import { LAYERS } from './textures';
-import { FOG, MAX_PIXELS, MAX_TINTS, backing, createRenderer } from './render';
+import {
+  HAZE,
+  MAX_PIXELS,
+  MAX_TINTS,
+  SHADOW,
+  backing,
+  createRenderer,
+  daylight,
+  fogOf,
+  level,
+  sunProj,
+} from './render';
 
 type Call = [name: string, ...args: unknown[]];
 
@@ -28,28 +40,35 @@ const fakeGl = (calls: Call[], ext: () => unknown) =>
         ? K(name)
         : (...args: unknown[]) => {
             calls.push([name, ...args]);
-            return name == 'getExtension' ? ext() : {};
+            return name == 'getExtension'
+              ? ext()
+              : name == 'getUniformLocation'
+                ? { u: args[1] }
+                : {};
           },
   });
 
-const ROOM: MapDef = {
-  sectors: [
-    {
-      pts: [
-        [0, 0],
-        [4, 0],
-        [4, 4],
-        [0, 4],
-      ],
-      floor: 0,
-      ceil: 3,
-      ft: TEX.TILE,
-      wt: TEX.BRICK,
-      ct: TEX.STONE,
-    },
-  ],
-  spawns: [[1, 1, 0]],
+const SUN = {
+  dir: [0.6, 0.6, 0.53] as [number, number, number],
+  color: [2.5, 2.3, 2] as [number, number, number],
 };
+/** What the renderer makes of it: a unit direction. */
+const SUN_DIR = SUN.dir.map(v => v / Math.hypot(...SUN.dir)) as [number, number, number];
+const SKY: WorldDef['sky'] = [
+  [0.2, 0.4, 0.9],
+  [0.7, 0.8, 0.9],
+];
+const brush = (over: Partial<Brush> = {}): Brush => ({
+  min: [0, -10, 0],
+  max: [4, 0, 4],
+  top: TEX.TILE,
+  side: TEX.BRICK,
+  ...over,
+});
+const worldOf = (over: Partial<WorldDef> = {}) =>
+  build({ brushes: [brush()], spawns: [[1, 0, 1, 0]], floor: -20, sun: SUN, sky: SKY, ...over });
+const ROOM = worldOf();
+const FLOOR_VERTS = level(ROOM).length / STRIDE;
 
 describe('createRenderer', () => {
   let calls: Call[];
@@ -83,7 +102,7 @@ describe('createRenderer', () => {
   ) => rd.frame([1, 1.6, 1], 0, 0, [], new Map(), fx, lights);
 
   it('builds a fragment shader with one specular row per layer and no stray JS values', () => {
-    createRenderer(canvas, compile(ROOM));
+    createRenderer(canvas, ROOM);
     const src = calls.filter(c => c[0] == 'shaderSource').map(c => String(c[2]));
     const frag = src.find(s => s.includes('sampler2DArray'))!;
     const rows = frag.match(/const vec2 SP\[(\d+)\]=vec2\[\]\((.*)\);/)!;
@@ -97,7 +116,7 @@ describe('createRenderer', () => {
     const FLAT = K('TEXTURE_2D');
 
     it('asks for a context with no antialiasing and no depth: the scene target has both', () => {
-      createRenderer(canvas, compile(ROOM));
+      createRenderer(canvas, ROOM);
       expect(HTMLCanvasElement.prototype.getContext).toHaveBeenCalledWith('webgl2', {
         antialias: false,
         depth: false,
@@ -105,20 +124,25 @@ describe('createRenderer', () => {
     });
 
     it('draws the scene into the multisampled target, resolves it, then draws the post passes, the last on the canvas', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
+      const rd = createRenderer(canvas, ROOM);
       calls.length = 0;
       frame(rd);
       const blit = calls.findIndex(c => c[0] == 'blitFramebuffer');
-      const post = calls.flatMap((c, i) => (c[0] == 'drawArrays' && c[3] == 3 ? [i] : []));
+      const post = calls.flatMap((c, i) =>
+        i > blit && c[0] == 'drawArrays' && c[3] == 3 ? [i] : [],
+      );
       expect(blit).toBeGreaterThan(0);
       expect(post.length).toBeGreaterThan(0);
       expect(post[0]).toBeGreaterThan(blit);
-      // The scene: cleared and drawn into a target of its own, before the resolve.
+      // The scene: cleared and drawn into a target of its own, before the resolve, after the sun's
+      // depth pass, the sky and the world.
       const scene = calls.slice(0, blit);
-      expect(scene.filter(c => c[0] == 'drawArrays')).toHaveLength(1);
-      const target = scene.find(c => c[0] == 'bindFramebuffer' && c[1] == K('FRAMEBUFFER'))!;
+      expect(scene.filter(c => c[0] == 'drawArrays')).toHaveLength(3);
+      const target = scene
+        .filter(c => c[0] == 'bindFramebuffer' && c[1] == K('FRAMEBUFFER'))
+        .at(-1)!;
       expect(target[2]).not.toBeNull();
-      expect(scene.indexOf(target)).toBeLessThan(scene.findIndex(c => c[0] == 'clear'));
+      expect(scene.indexOf(target)).toBeLessThan(scene.map(c => c[0]).lastIndexOf('clear'));
       expect(scene.at(-2)).toEqual(['bindFramebuffer', K('READ_FRAMEBUFFER'), target[2]]);
       expect(scene.at(-1)).toEqual(['bindFramebuffer', K('DRAW_FRAMEBUFFER'), expect.anything()]);
       expect(calls[blit]).toEqual([
@@ -142,6 +166,7 @@ describe('createRenderer', () => {
       const owner = new Map<unknown, unknown>();
       const units: unknown[] = [];
       let [fbo, unit, size, step] = [null as unknown, 0, [0, 0], [0, 0, 0]];
+      let blitted = false;
       const out: {
         to: unknown;
         size: number[];
@@ -150,7 +175,11 @@ describe('createRenderer', () => {
         from: unknown[];
       }[] = [];
       for (const [name, ...a] of calls) {
-        if (name == 'bindFramebuffer') {
+        if (name == 'blitFramebuffer') {
+          blitted = true;
+        } else if (name == 'clear') {
+          blitted = false;
+        } else if (name == 'bindFramebuffer') {
           fbo = a[1];
         } else if (name == 'framebufferTexture2D' && fbo) {
           owner.set(fbo, a[3]);
@@ -162,7 +191,7 @@ describe('createRenderer', () => {
           size = a.slice(2) as number[];
         } else if (name == 'uniform4f') {
           step = a.slice(1) as number[];
-        } else if (name == 'drawArrays' && a[2] == 3) {
+        } else if (name == 'drawArrays' && a[2] == 3 && blitted) {
           out.push({
             to: fbo && owner.get(fbo),
             size,
@@ -176,7 +205,7 @@ describe('createRenderer', () => {
     };
 
     it('blooms the bright parts at half size, then blurs them at a quarter and an eighth', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
+      const rd = createRenderer(canvas, ROOM);
       frame(rd);
       const run = passes();
       expect(run.map(p => p.mode)).toEqual([0, 1, 1, 1, 1, 1, 1, 2]);
@@ -203,7 +232,7 @@ describe('createRenderer', () => {
     });
 
     it('never reads a texture it draws into, and composes the scene with the three blurs', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
+      const rd = createRenderer(canvas, ROOM);
       frame(rd);
       frame(rd);
       const run = passes();
@@ -227,7 +256,7 @@ describe('createRenderer', () => {
     });
 
     it('unbinds units 1 to 3 after the composite: the next frame draws into the blurs', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
+      const rd = createRenderer(canvas, ROOM);
       frame(rd);
       const last = calls.filter(c => c[0] == 'bindTexture' && c[1] == FLAT).slice(-3);
       expect(last.map(c => c[2])).toEqual([null, null, null]);
@@ -236,7 +265,7 @@ describe('createRenderer', () => {
     });
 
     it('allocates the targets at the backing size, 16-bit float with the extension', () => {
-      createRenderer(canvas, compile(ROOM));
+      createRenderer(canvas, ROOM);
       expect(named('getExtension').map(c => c[1])).toContain('EXT_color_buffer_float');
       expect(named('texStorage2D')[0]).toEqual(['texStorage2D', FLAT, 1, K('RGBA16F'), 320, 200]);
       expect(named('renderbufferStorageMultisample').map(c => c.slice(2))).toEqual([
@@ -247,7 +276,7 @@ describe('createRenderer', () => {
 
     it('falls back to 8 bits without the extension', () => {
       float = null;
-      createRenderer(canvas, compile(ROOM));
+      createRenderer(canvas, ROOM);
       expect(named('texStorage2D').every(c => c[3] == K('RGBA8'))).toBe(true);
       expect(named('renderbufferStorageMultisample')[0][3]).toBe(K('RGBA8'));
     });
@@ -255,14 +284,14 @@ describe('createRenderer', () => {
     it('scales the targets with the pixel ratio and the pixel budget', () => {
       vi.stubGlobal('devicePixelRatio', 2);
       resize(1920, 1080);
-      createRenderer(canvas, compile(ROOM));
+      createRenderer(canvas, ROOM);
       const [w, h] = backing(1920, 1080, 2);
       expect(named('texStorage2D')[0].slice(4)).toEqual([w, h]);
       expect(w * h).toBeLessThanOrEqual(MAX_PIXELS);
     });
 
     it('reallocates the targets, and frees the old ones, when the size changes', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
+      const rd = createRenderer(canvas, ROOM);
       frame(rd);
       const storage = named('texStorage2D').length;
       const frees = () => named('deleteTexture').length + named('deleteRenderbuffer').length;
@@ -281,7 +310,7 @@ describe('createRenderer', () => {
 
     it('builds the targets at the first frame when the canvas had no size yet', () => {
       resize(0, 0);
-      const rd = createRenderer(canvas, compile(ROOM));
+      const rd = createRenderer(canvas, ROOM);
       expect(named('texStorage2D')).toHaveLength(0);
       frame(rd);
       expect(named('texStorage2D')).toHaveLength(0);
@@ -291,7 +320,7 @@ describe('createRenderer', () => {
     });
 
     it('rebuilds the post program and the targets when the context is restored', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
+      const rd = createRenderer(canvas, ROOM);
       const programs = named('createProgram').length;
       const storage = named('texStorage2D').length;
       canvas.dispatchEvent(new Event('webglcontextlost'));
@@ -309,54 +338,158 @@ describe('createRenderer', () => {
     });
   });
 
-  it('draws the world in one call, and nothing blended', () => {
-    const rd = createRenderer(canvas, compile(ROOM));
+  it('draws the sun depth pass, the sky and the world, and nothing blended', () => {
+    const rd = createRenderer(canvas, ROOM);
     frame(rd);
-    expect(draws()).toHaveLength(1);
+    expect(draws()).toEqual([
+      [0, FLOOR_VERTS],
+      [0, FLOOR_VERTS],
+    ]);
     expect(calls.filter(c => c[0] == 'enable').map(c => c[1])).not.toContain(K('BLEND'));
     expect(calls.filter(c => c[0] == 'depthMask')).toHaveLength(0);
   });
 
+  /** The calls that set the uniform `name`. */
+  const set = (name: string) =>
+    calls.filter(c => (c[1] as { u?: string } | undefined)?.u == name && /^uniform/.test(c[0]));
+
+  describe('sky', () => {
+    const sky = () =>
+      calls.findIndex(c => c[0] == 'drawArrays' && c[3] == 3 && c[1] == K('TRIANGLES'));
+
+    it('is a fullscreen triangle at depth 1, drawn first in the scene, with its own mode uniform', () => {
+      const rd = createRenderer(canvas, ROOM);
+      const vert = calls
+        .filter(c => c[0] == 'shaderSource')
+        .map(c => String(c[2]))
+        .find(src => src.includes('J[3]'))!;
+      expect(vert).toContain('gl_Position=vec4(q,1,1)');
+      calls.length = 0;
+      frame(rd);
+      const clear = calls.map(c => c[0]).lastIndexOf('clear');
+      const world = calls.findIndex(
+        c => c[0] == 'drawArrays' && c[3] == FLOOR_VERTS && calls.indexOf(c) > clear,
+      );
+      expect(sky()).toBeGreaterThan(clear);
+      expect(sky()).toBeLessThan(world);
+      // Between the clear and the sky, nothing is drawn; the mode is on for the sky and off after.
+      expect(calls.slice(clear, sky()).some(c => c[0] == 'drawArrays')).toBe(false);
+      const mode = set('Y').filter(c => c[0] == 'uniform1f' && c.length == 3);
+      expect(mode.slice(0, 2).map(c => c[2])).toEqual([1, 0]);
+      expect(calls.indexOf(mode[0])).toBeLessThan(sky());
+      expect(calls.indexOf(mode[1])).toBeGreaterThan(sky());
+      expect(calls.indexOf(mode[1])).toBeLessThan(world);
+    });
+
+    it('passes the depth test at the cleared depth, so it needs no depth write tricks', () => {
+      createRenderer(canvas, ROOM);
+      expect(calls.filter(c => c[0] == 'depthFunc').at(-1)![1]).toBe(K('LEQUAL'));
+    });
+
+    it('gets the view rays of the camera: right and up scaled by the field of view, then forward', () => {
+      const rd = createRenderer(canvas, ROOM);
+      rd.frame([0, 1.6, 0], 0, 0, [], new Map(), createEffects(), []);
+      const rays = Array.from(set('J').at(-1)![2] as number[]);
+      const t = Math.tan((70 * Math.PI) / 360);
+      [t * 1.6, 0, 0, 0, t, 0, 0, 0, -1].forEach((v, i) => expect(rays[i]).toBeCloseTo(v, 4));
+    });
+
+    it('is not drawn into the shadow map', () => {
+      const rd = createRenderer(canvas, ROOM);
+      frame(rd);
+      const depth = calls.findIndex(c => c[0] == 'framebufferTextureLayer');
+      expect(set('Y').every(c => calls.indexOf(c) > depth)).toBe(true);
+      expect(set('Z')[0][2]).toBe(-1);
+    });
+  });
+
+  describe('sun', () => {
+    const layers = () => calls.filter(c => c[0] == 'framebufferTextureLayer');
+
+    it('draws one depth pass per frame, into layer 0, with the sun matrix around the eye', () => {
+      const rd = createRenderer(canvas, ROOM);
+      frame(rd);
+      expect(layers().map(c => c[5])).toEqual([0]);
+      const pass = calls.findIndex(c => c[0] == 'framebufferTextureLayer');
+      const m = calls.slice(pass).find(c => (c[1] as { u?: string }).u == 'm')!;
+      expect(Array.from(m[3] as Float32Array)).toEqual(Array.from(sunProj(SUN_DIR, [1, 1.6, 1])));
+      expect(calls.find(c => c[0] == 'viewport')).toEqual(['viewport', 0, 0, SHADOW, SHADOW]);
+      frame(rd);
+      expect(layers()).toHaveLength(2);
+    });
+
+    it('moves with the eye, and the scene reads the same matrix', () => {
+      const rd = createRenderer(canvas, ROOM);
+      rd.frame([30, 1.6, -5], 0, 0, [], new Map(), createEffects(), []);
+      const w = Array.from(set('W').at(-1)![3] as Float32Array);
+      expect(w).toEqual(Array.from(sunProj(SUN_DIR, [30, 1.6, -5])));
+    });
+
+    it('is cast by the other players too, drawn after the brushes', () => {
+      const rd = createRenderer(canvas, ROOM);
+      const p: PlayerState = { id: 1, x: 2, y: 0, z: 2, vy: 0, yaw: 0, pitch: 0, ground: true };
+      rd.frame([1, 1.6, 1], 0, 0, [p], new Map(), createEffects(), []);
+      const [depth, world] = draws();
+      expect(depth[1]).toBeGreaterThan(FLOOR_VERTS);
+      expect(depth[1]).toBe(world[1]);
+    });
+
+    it('uploads its direction and colour, and the daylight, with the world', () => {
+      createRenderer(canvas, ROOM);
+      expect(set('O').at(-1)![2]).toEqual(SUN_DIR);
+      expect(set('X').at(-1)![2]).toEqual(SUN.color);
+      expect(set('H').at(-1)![2]).toEqual(daylight(ROOM.def).flat());
+    });
+
+    it('has the shadow array a layer for the sun and one for each mapped light', () => {
+      createRenderer(canvas, ROOM);
+      const [storage] = calls.filter(c => c[0] == 'texStorage3D');
+      expect(storage.slice(3)).toEqual([K('DEPTH_COMPONENT24'), SHADOW, SHADOW, 5]);
+    });
+  });
+
   describe('atmosphere', () => {
-    const fogOf = () => calls.filter(c => c[0] == 'uniform4fv' && (c[2] as number[]).length == 4);
-    const palOf = () => calls.filter(c => c[0] == 'uniform3fv' && (c[2] as number[]).length > 3);
+    const fogs = () => set('F').map(c => c[2] as number[]);
     const clear = () =>
       calls
         .filter(c => c[0] == 'clearColor')
         .at(-1)!
         .slice(1);
 
-    it('fogs and clears with the dark haze when the map sets none', () => {
-      createRenderer(canvas, compile(ROOM));
-      expect(fogOf().at(-1)![2]).toEqual(FOG);
-      expect(clear()).toEqual([FOG[0], FOG[1], FOG[2], 1]);
-      expect(FOG[3]).toBe(0.02);
+    it('has no fog when the world sets none, and clears with the horizon', () => {
+      createRenderer(canvas, ROOM);
+      expect(fogs().at(-1)).toEqual([...SKY[1], 0]);
+      expect(clear()).toEqual([...SKY[1], 1]);
     });
 
-    it('takes the fog colour, density and clear colour from the map', () => {
+    it('takes the fog density from the world, its colour pulled toward the horizon', () => {
       const fog: [number, number, number, number] = [0.5, 0.25, 0.125, 0.04];
-      createRenderer(canvas, compile({ ...ROOM, fog }));
-      expect(fogOf().at(-1)![2]).toEqual(fog);
-      expect(clear()).toEqual([0.5, 0.25, 0.125, 1]);
+      createRenderer(canvas, worldOf({ fog }));
+      const got = fogs().at(-1)!;
+      expect(got).toEqual(fogOf(worldOf({ fog }).def));
+      expect(got[3]).toBe(0.04);
+      for (const i of [0, 1, 2]) {
+        expect(got[i]).toBeCloseTo(fog[i] + (SKY[1][i] - fog[i]) * HAZE);
+      }
     });
 
     it('uploads the tint palette, white first and padded with white', () => {
       const tint: [number, number, number] = [0.5, 0.25, 1];
-      const lvl = compile({ ...ROOM, sectors: [{ ...ROOM.sectors[0], tint }] });
-      createRenderer(canvas, lvl);
-      const pal = Array.from(palOf().at(-1)![2] as Float32Array);
+      createRenderer(canvas, worldOf({ brushes: [brush({ tint })] }));
+      const pal = Array.from(set('G').at(-1)![2] as Float32Array);
       expect(pal).toHaveLength(MAX_TINTS * 3);
       expect(pal.slice(0, 6)).toEqual([1, 1, 1, ...tint]);
       expect(pal.slice(6).every(v => v == 1)).toBe(true);
     });
 
-    it('declares the fog and palette uniforms in the shader', () => {
-      createRenderer(canvas, compile(ROOM));
+    it('declares the fog, palette and daylight uniforms in the shader', () => {
+      createRenderer(canvas, ROOM);
       const frag = calls
         .filter(c => c[0] == 'shaderSource')
         .map(c => String(c[2]))
         .find(s => s.includes('sampler2DArray'))!;
       expect(frag).toContain(`G[${MAX_TINTS}]`);
+      expect(frag).toContain('H[5]');
       expect(frag).not.toMatch(/undefined|NaN|\[object/);
     });
   });
@@ -374,42 +507,43 @@ describe('createRenderer', () => {
     const layers = () =>
       calls.filter(c => c[0] == 'framebufferTextureLayer').map(c => c[5] as number);
 
-    it('draws no depth pass without lights, nor for lights that cast nothing', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
+    it('draws the sun pass alone, nothing more, for lights that cast nothing', () => {
+      const rd = createRenderer(canvas, ROOM);
       frame(rd);
-      expect(layers()).toEqual([]);
-      expect(draws()).toHaveLength(1);
+      expect(layers()).toEqual([0]);
+      expect(draws()).toHaveLength(2);
+      calls.length = 0;
       frame(rd, createEffects(), [spot(false), { ...spot(), kind: LIGHT.POINT }]);
-      expect(layers()).toEqual([]);
+      expect(layers()).toEqual([0]);
       expect(draws()).toHaveLength(2);
     });
 
-    it('draws one depth pass per mapped light, into its own layer, before the scene', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
+    it('draws one depth pass per mapped light after the sun, into the next layer, before the scene', () => {
+      const rd = createRenderer(canvas, ROOM);
       frame(rd, createEffects(), [spot(), spot(false), spot()]);
-      expect(layers()).toEqual([0, 1]);
-      // Two depth passes, then the world.
-      expect(draws()).toHaveLength(3);
-      expect(calls.filter(c => c[0] == 'clear')).toHaveLength(2 + 1);
+      expect(layers()).toEqual([0, 1, 2]);
+      // Three depth passes, then the world.
+      expect(draws()).toHaveLength(4);
+      expect(calls.filter(c => c[0] == 'clear')).toHaveLength(3 + 1);
       const scene = calls.findIndex(c => c[0] == 'viewport' && c[3] == 320);
       const drawn = (a: Call[]) => a.filter(c => c[0] == 'drawArrays' && c[3] != 3).length;
-      expect([drawn(calls.slice(0, scene)), drawn(calls.slice(scene))]).toEqual([2, 1]);
-      expect(calls.find(c => c[0] == 'viewport')).toEqual(['viewport', 0, 0, 512, 512]);
+      expect([drawn(calls.slice(0, scene)), drawn(calls.slice(scene))]).toEqual([3, 1]);
+      expect(calls.find(c => c[0] == 'viewport')).toEqual(['viewport', 0, 0, SHADOW, SHADOW]);
       expect(calls.filter(c => c[0] == 'viewport').at(-1)).toEqual(['viewport', 0, 0, 320, 200]);
     });
 
     it('maps at most MAX_SHADOWS lights', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
+      const rd = createRenderer(canvas, ROOM);
       frame(
         rd,
         createEffects(),
         Array.from({ length: 7 }, () => spot()),
       );
-      expect(layers()).toHaveLength(4);
+      expect(layers()).toEqual([0, 1, 2, 3, 4]);
     });
 
     it('unbinds the shadow map while writing it, and binds it back for the scene', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
+      const rd = createRenderer(canvas, ROOM);
       calls.length = 0;
       frame(rd, createEffects(), [spot()]);
       const binds = calls.filter(c => c[0] == 'bindTexture').map(c => c[2]);
@@ -418,7 +552,7 @@ describe('createRenderer', () => {
     });
 
     it('recreates the shadow map, the targets and their framebuffers when the context is restored', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
+      const rd = createRenderer(canvas, ROOM);
       const count = (name: string) => calls.filter(c => c[0] == name).length;
       const made = count('createFramebuffer');
       expect(count('texStorage3D')).toBe(1);
@@ -430,56 +564,7 @@ describe('createRenderer', () => {
       expect(count('texStorage3D')).toBe(1);
       expect(count('createFramebuffer')).toBe(made);
       frame(rd, createEffects(), [spot()]);
-      expect(layers()).toEqual([0]);
-    });
-  });
-
-  describe('dust', () => {
-    /** The motes of a fresh effects, scattered round a player at the eye of the test frames. */
-    const dusty = () => {
-      let n = 7;
-      const fx = createEffects(() => (n = (n * 1103515245 + 12345) % 2147483648) / 2147483648);
-      fx.update({ id: 0, x: 1, y: 0, z: 1, vy: 0, yaw: 0, pitch: 0, ground: true }, 0, 1 / 60);
-      return fx;
-    };
-    const spot = (): Light => ({
-      kind: LIGHT.SPOT,
-      p: [2, 1.6, 2],
-      d: [1, 0, 0],
-      cone: 0.9,
-      range: 10,
-      color: [1, 1, 1],
-      shadow: true,
-    });
-    const specks = (fx: ReturnType<typeof createEffects>) =>
-      lit(fx, [1, 1.6, 1], [0, 0, -1]).length / 4;
-
-    it('draws each mote the flashlight shows as a small unlit box, after the world', () => {
-      const fx = dusty();
-      const n = specks(fx);
-      expect(n).toBeGreaterThan(2);
-      const rd = createRenderer(canvas, compile(ROOM));
-      frame(rd, fx);
-      const data = calls
-        .filter(c => c[0] == 'bufferSubData' && c[2] != 0)
-        .at(-1)![3] as Float32Array;
-      expect(data.length).toBe(n * 36 * STRIDE);
-      for (let i = 0; i < data.length; i += STRIDE) {
-        expect(data[i + 8]).toBe(-2);
-      }
-    });
-
-    it('keeps them out of the depth passes', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
-      frame(rd, createEffects(), [spot()]);
-      const [depth, world] = draws();
-      expect(depth[1]).toBe(world[1]);
-      calls.length = 0;
-      const fx = dusty();
-      frame(rd, fx, [spot()]);
-      const [d2, w2] = draws();
-      expect(d2[1]).toBe(depth[1]);
-      expect(w2[1]).toBe(depth[1] + specks(fx) * 36);
+      expect(layers()).toEqual([0, 1]);
     });
   });
 });

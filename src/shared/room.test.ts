@@ -1,11 +1,33 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { INPUT_BURST, MAX_NAME, MAX_PLAYERS, MAX_REWIND, SNAP_EVERY, TICK_HZ } from './constants';
-import { HALL, ROOF } from './map';
+import { ROOFTOPS } from './map';
 import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
-import { KEY } from './types';
+import { KEY, TEX } from './types';
 import type { Conn, Every, Input, PlayerState, Snapshot } from './types';
+import type { WorldDef } from './world';
+
+/** A flat 200 m slab at y = 1, with eight spawns on it, 4 m or more apart. */
+const ARENA: WorldDef = {
+  brushes: [{ min: [-100, -5, -100], max: [100, 1, 100], top: TEX.TILE, side: TEX.BRICK }],
+  spawns: [
+    [4, 1, 4, (3 * Math.PI) / 2],
+    [4, 1, 12, (3 * Math.PI) / 2],
+    [8, 1, 8, (3 * Math.PI) / 2],
+    [12, 1, 4, (3 * Math.PI) / 2],
+    [12, 1, 12, (3 * Math.PI) / 2],
+    [2, 1, 8, (3 * Math.PI) / 2],
+    [8, 1, 2, (3 * Math.PI) / 2],
+    [8, 1, 14, (3 * Math.PI) / 2],
+  ],
+  floor: -20,
+  sun: { dir: [0, 1, 0], color: [1, 1, 1] },
+  sky: [
+    [0, 0, 1],
+    [1, 1, 1],
+  ],
+};
 
 /** A peer that records what the room sends it. */
 const peer = () => {
@@ -48,7 +70,7 @@ const ticks = (room: Room, n: number): void => {
 
 describe('Room: joining', () => {
   it('sends every joined peer the roster with its own id, on every join and leave', () => {
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const a = join(room, 'Ann');
     expect(roster(a)).toMatchObject({ you: 0 });
     expect(names(a)).toEqual(['Ann']);
@@ -66,7 +88,7 @@ describe('Room: joining', () => {
   });
 
   it('sends nothing before the join, and ignores a second join and bad text', () => {
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const c = peer();
     room.connect(c);
     room.receive(c, 'nope');
@@ -79,7 +101,7 @@ describe('Room: joining', () => {
   });
 
   it('keeps names unique and clean, within MAX_NAME', () => {
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const a = join(room, 'Bob');
     join(room, 'Bob');
     join(room, '  Bob ');
@@ -101,7 +123,7 @@ describe('Room: joining', () => {
   });
 
   it('gives each player a distinct colour and the smallest free id', () => {
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const a = join(room, 'a');
     for (let n = 1; n < MAX_PLAYERS; n++) {
       join(room, `p${n}`);
@@ -125,21 +147,21 @@ describe('Room: joining', () => {
   });
 
   it('honours rules.maxPlayers', () => {
-    const room = new Room({ maxPlayers: 2 }, HALL);
+    const room = new Room({ maxPlayers: 2 }, ARENA);
     join(room, 'a');
     join(room, 'b');
     expect(join(room, 'c').texts).toEqual([{ t: 'full' }]);
   });
 
   it('spawns at the first spawn point with nobody within 2 m, else round-robin', () => {
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const a = join(room);
     ticks(room, SNAP_EVERY);
     const at = (c: Peer, id: number) => snap(c).players.find(p => p.id === id)!;
     expect([at(a, 0).x, at(a, 0).z, at(a, 0).yaw]).toEqual([
-      HALL.spawns[0][0],
-      HALL.spawns[0][1],
-      HALL.spawns[0][2],
+      ARENA.spawns[0][0],
+      ARENA.spawns[0][2],
+      ARENA.spawns[0][3],
     ]);
     // On the floor of the start room (1 m), not at 0: the host would drop him through it.
     expect(at(a, 0)).toMatchObject({ y: 1, vy: 0, ground: true });
@@ -150,10 +172,10 @@ describe('Room: joining', () => {
     }
     const b = join(room);
     ticks(room, SNAP_EVERY);
-    expect([at(b, 1).x, at(b, 1).z]).toEqual([HALL.spawns[0][0], HALL.spawns[0][1]]);
+    expect([at(b, 1).x, at(b, 1).z]).toEqual([ARENA.spawns[0][0], ARENA.spawns[0][2]]);
 
     // Standing on spawn 0, a third one takes spawn 1, and so on: nobody within 2 m.
-    for (let n = 2; n < HALL.spawns.length; n++) {
+    for (let n = 2; n < ARENA.spawns.length; n++) {
       join(room);
     }
     ticks(room, SNAP_EVERY);
@@ -169,34 +191,34 @@ describe('Room: joining', () => {
     join(room);
     join(room);
     ticks(room, SNAP_EVERY);
-    expect(snap(a).players).toHaveLength(HALL.spawns.length + 2);
+    expect(snap(a).players).toHaveLength(ARENA.spawns.length + 2);
   });
 });
 
 describe('Room: the map', () => {
-  it('plays the rooftop unless it is given another map', () => {
+  it('plays ROOFTOPS unless it is given another map', () => {
     const room = new Room();
     const a = join(room);
     ticks(room, SNAP_EVERY);
-    // On the deck of ROOF (floor 0), at its first spawn.
+    // On the start roof, at its first spawn.
     expect(snap(a).players[0]).toMatchObject({
-      x: ROOF.spawns[0][0],
-      y: 0,
-      z: ROOF.spawns[0][1],
+      x: ROOFTOPS.spawns[0][0],
+      y: ROOFTOPS.spawns[0][1],
+      z: ROOFTOPS.spawns[0][2],
       ground: true,
     });
-    const other = new Room({}, HALL);
+    const other = new Room({}, ARENA);
     const b = join(other);
     ticks(other, SNAP_EVERY);
-    expect(snap(b).players[0]).toMatchObject({ x: HALL.spawns[0][0], y: 1 });
+    expect(snap(b).players[0]).toMatchObject({ x: ARENA.spawns[0][0], y: 1 });
   });
 });
 
 describe('Room: inputs and snapshots', () => {
   it('moves a player with each input at once, and acks its seq', () => {
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const a = join(room);
-    const [x0, z0] = [HALL.spawns[0][0], HALL.spawns[0][1]];
+    const [x0, z0] = [ARENA.spawns[0][0], ARENA.spawns[0][2]];
     ticks(room, SNAP_EVERY);
     // Nothing applied yet: seq 65535 is acked, the one before the client's first (0).
     expect(snap(a).players[0]).toMatchObject({ x: x0, z: z0, ack: 65535 });
@@ -215,7 +237,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('applies jumps and gravity through the shared physics', () => {
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const a = join(room);
     room.receive(a, input(0, KEY.JUMP));
     ticks(room, SNAP_EVERY);
@@ -224,8 +246,30 @@ describe('Room: inputs and snapshots', () => {
     expect(snap(a).players[0].vy).toBeGreaterThan(6);
   });
 
+  it('puts a player that walks off the world back at its spawn, standing', () => {
+    // A 10 m island with the kill floor 20 m below.
+    const island: WorldDef = {
+      ...ARENA,
+      brushes: [{ min: [-5, -5, -5], max: [5, 0, 5], top: TEX.TILE, side: TEX.BRICK }],
+      spawns: [[0, 0, 0, 0]],
+    };
+    const room = new Room({}, island);
+    const a = join(room);
+    for (let k = 0; k < 300; k++) {
+      room.receive(a, input(k, KEY.FORWARD, (3 * Math.PI) / 2));
+      room.tick();
+    }
+    const ys = a.bins.map(b => decodeSnapshot(b)!.players[0]);
+    // Down to the kill floor, then up again in one snapshot: standing at the spawn, 0.1 m on.
+    const k = ys.findIndex((p, i) => i > 0 && p.y > ys[i - 1].y + 10);
+    expect(Math.min(...ys.map(p => p.y))).toBeLessThan(-15);
+    expect(k).toBeGreaterThan(0);
+    expect(ys[k]).toMatchObject({ y: 0, vy: 0, ground: true });
+    expect(Math.hypot(ys[k].x, ys[k].z)).toBeLessThan(0.3);
+  });
+
   it('drops the inputs beyond the INPUT_BURST bank, unacked, and earns one per tick', () => {
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const a = join(room);
     for (let k = 0; k < INPUT_BURST + 5; k++) {
       room.receive(a, input(k, KEY.FORWARD));
@@ -233,7 +277,7 @@ describe('Room: inputs and snapshots', () => {
     ticks(room, SNAP_EVERY);
     // INPUT_BURST steps of 0.1 m, the last acked seq is the INPUT_BURST-th.
     expect(snap(a).players[0].ack).toBe(INPUT_BURST - 1);
-    expect(snap(a).players[0].z).toBeCloseTo(HALL.spawns[0][1] - INPUT_BURST * 0.1, 2);
+    expect(snap(a).players[0].z).toBeCloseTo(ARENA.spawns[0][2] - INPUT_BURST * 0.1, 2);
 
     // The two ticks above earned two inputs.
     for (let k = 0; k < 5; k++) {
@@ -252,7 +296,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('keeps one bank per player and ignores frames from a peer that has not joined', () => {
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const a = join(room);
     const b = join(room);
     const lurker = peer();
@@ -270,16 +314,16 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('ignores malformed binary frames', () => {
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const a = join(room);
     room.receive(a, new ArrayBuffer(3));
     room.receive(a, new ArrayBuffer(8));
     ticks(room, SNAP_EVERY);
-    expect(snap(a).players[0]).toMatchObject({ ack: 65535, z: HALL.spawns[0][1] });
+    expect(snap(a).players[0]).toMatchObject({ ack: 65535, z: ARENA.spawns[0][2] });
   });
 
   it('sends one snapshot every SNAP_EVERY ticks to every joined peer, and none to the others', () => {
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const a = join(room);
     const b = join(room);
     const lurker = peer();
@@ -297,7 +341,7 @@ describe('Room: inputs and snapshots', () => {
   });
 
   it('does not run without players, and drops a leaver from the next snapshot', () => {
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     ticks(room, 10);
     const a = join(room);
     const b = join(room);
@@ -332,7 +376,7 @@ describe('Room: timer', () => {
 
   it('ticks at TICK_HZ whatever the timer jitter, and starts once', () => {
     const t = timed();
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const a = join(room);
     room.start(t.every);
     room.start(t.every);
@@ -347,7 +391,7 @@ describe('Room: timer', () => {
 
   it('replays at most a bounded catch-up after a stall, and stops', () => {
     const t = timed();
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const a = join(room);
     room.start(t.every);
     t.advance(10_000);
@@ -364,7 +408,7 @@ describe('Room: timer', () => {
 describe('Room: rewind', () => {
   /** Two players, A (id 0, at rest) and B (id 1), and B's state in every snapshot A got. */
   const duel = (pre = 0) => {
-    const room = new Room({}, HALL);
+    const room = new Room({}, ARENA);
     const a = join(room, 'A');
     const b = join(room, 'B');
     ticks(room, pre);

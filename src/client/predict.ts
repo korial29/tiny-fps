@@ -6,7 +6,8 @@
 import { INTERP_DELAY } from '../shared/constants';
 import { TAU, move, norm } from '../shared/physics';
 import { onWire } from '../shared/protocol';
-import type { Input, Level, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
+import type { Input, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
+import type { World } from '../shared/world';
 
 export interface Predictor {
   /** The own player id, from the roster. Snapshots before it are only used for the others. */
@@ -71,7 +72,7 @@ const lerp = (a: PlayerState, b: PlayerState, t: number): PlayerState => ({
   pitch: a.pitch + (b.pitch - a.pitch) * t,
 });
 
-export const createPredictor = (lvl: Level): Predictor => {
+export const createPredictor = (world: World): Predictor => {
   let id: number | undefined;
   let seq = 0;
   let pending: Input[] = [];
@@ -134,7 +135,7 @@ export const createPredictor = (lvl: Level): Predictor => {
       }
       if (own) {
         prev = state(own);
-        move(own, input, lvl);
+        move(own, input, world);
       }
       return input;
     },
@@ -155,7 +156,7 @@ export const createPredictor = (lvl: Level): Predictor => {
         if (k === pending.length - 1) {
           prev = state(own!);
         }
-        move(own!, i, lvl);
+        move(own!, i, world);
       });
     },
 

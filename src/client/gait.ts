@@ -65,24 +65,19 @@ const low = (a: number, b: number, k: number) => {
 const frame = (x: Vec3, d: Vec3): Quat => {
   const y: Vec3 = [-d[0], -d[1], -d[2]];
   const z = cross(x, y);
-  // The matrix of the three axes as a quaternion, through its largest term (stable at a half turn).
-  const [i, a] =
-    x[0] > y[1] && x[0] > z[2]
-      ? [0, 1 + x[0] - y[1] - z[2]]
-      : y[1] > z[2]
-        ? [1, 1 + y[1] - x[0] - z[2]]
-        : [2, 1 + z[2] - x[0] - y[1]];
-  const t = x[0] + y[1] + z[2];
-  const s = 2 * Math.sqrt(t > 0 ? 1 + t : a);
-  const q: Quat =
-    t > 0
-      ? [y[2] - z[1], z[0] - x[2], x[1] - y[0], (s * s) / 4]
-      : i == 0
-        ? [(s * s) / 4, y[0] + x[1], z[0] + x[2], y[2] - z[1]]
-        : i == 1
-          ? [y[0] + x[1], (s * s) / 4, z[1] + y[2], z[0] - x[2]]
-          : [z[0] + x[2], z[1] + y[2], (s * s) / 4, x[1] - y[0]];
-  return q.map(v => v / s) as Quat;
+  // The matrix of the axes as a quaternion, through its largest term, which stays sound at a half turn.
+  const t = [x[0] + y[1] + z[2], x[0] - y[1] - z[2], y[1] - x[0] - z[2], z[2] - x[0] - y[1]];
+  const i = t.indexOf(Math.max(...t));
+  const [h, a, b, c] = [1 + t[i], y[2] - z[1], z[0] - x[2], x[1] - y[0]];
+  const [u, v, w] = [y[0] + x[1], z[0] + x[2], z[1] + y[2]];
+  const q = [
+    [a, b, c, h],
+    [h, u, v, a],
+    [u, h, w, b],
+    [v, w, h, c],
+  ][i];
+  const n = Math.hypot(...q);
+  return q.map(e => e / n) as Quat;
 };
 
 /**
@@ -571,7 +566,7 @@ export const createGait = (): Gait => {
             i
               ? R(-s * 0.12, pel[1] - 0.7 + 0.4 * lift, z)
               : R(s * (0.34 - 0.2 * lift), pel[1] - 0.52 + 0.3 * lift, z),
-            R(0, 1, -1, [0, 0, 0]),
+            R(-s * 0.7, 1, -1, [0, 0, 0]),
             i
               ? mul(axis(Y, yaw), axis(X, -0.5))
               : slerp(
@@ -681,7 +676,7 @@ export const createGait = (): Gait => {
     const [rx, rz] = [Math.cos(yaw), -Math.sin(yaw)];
     const base: Vec3 = [at[0] + rx * hipX, 0, at[2] + rz * hipX];
     const off = [J.THIGH_L, J.THIGH_R].map(j => turn(pw, REST[j]));
-    const stand = 1 - 0.25 * crouch - 0.55 * dip;
+    const stand = 1 - 0.25 * crouch - 0.7 * dip;
     const flight =
       at[1] +
       0.05 +

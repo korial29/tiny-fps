@@ -12,7 +12,7 @@ import { palette } from './skin';
 
 const DT = 1 / 60;
 const DASH_BURST = DASH_COOLDOWN - 2;
-const [, , , SKIN, , , SOLE] = palette([0.1, 0.8, 0.2]);
+const [, , , SKIN, , , SOLE, GLOVE] = palette([0.1, 0.8, 0.2]);
 const man = (o: Partial<PlayerState> = {}): PlayerState => ({
   id: 1,
   x: 5,
@@ -238,8 +238,57 @@ describe('soldier', () => {
     expect(mean(b, 0) - 5).toBeLessThan(-0.05);
     expect(Math.abs(mean(b, 2) + 3)).toBeLessThan(0.03);
   });
-  // C3 (docs/CHARACTERS.md) poses hang, climb and wall-run for real: the gait's stand-in poses
-  // do not put the hands on the ledge or the sole on the wall yet.
-  it.todo('draws the hands at the ledge in the world when hanging');
-  it.todo('draws the sole on the wall in a wall-run');
+
+  it('draws the hands at the ledge in the world when hanging, on every side', () => {
+    // The runner stands at (5, -3), the ledge top is 3 m up and the wall face 0.43 m from its centre.
+    const TO = [[], [1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (const wall of [SIDE.EAST, SIDE.WEST, SIDE.SOUTH, SIDE.NORTH]) {
+      const [nx, nz] = TO[wall];
+      const gloves = dyed(rows(draw({ ...HANGS, wall })), GLOVE);
+      // A point as (metres past the wall face, metres above the lip, along the wall).
+      const at = (p: number[]) => [
+        (p[0] - 5) * nx + (p[2] + 3) * nz - 0.43,
+        p[1] - 3,
+        (p[0] - 5) * -nz + (p[2] + 3) * nx,
+      ];
+      const g = gloves.map(at);
+      expect(g.length).toBeGreaterThan(60);
+      // Each hand has a point within 3 cm of the lip, a hand-width apart along the wall.
+      for (const side of [-1, 1]) {
+        const hand = g.filter(q => q[2] * side > 0.05);
+        expect(hand.length).toBeGreaterThan(30);
+        expect(Math.min(...hand.map(q => Math.hypot(q[0], q[1])))).toBeLessThan(0.04);
+      }
+      // The fingers lie on the top, over the lip, and nothing goes into the wall or under the top.
+      expect(Math.max(...g.map(q => q[0]))).toBeGreaterThan(0.1);
+      for (const q of g) {
+        expect(q[0] > 0.01 ? q[1] : 0).toBeGreaterThan(-0.02);
+        expect(q[1] < -0.02 ? q[0] : -1).toBeLessThan(0.02);
+      }
+      expect(Math.max(...g.map(q => q[1]))).toBeLessThan(0.12);
+    }
+  });
+
+  it('draws the sole on the wall in a wall-run, on both sides', () => {
+    for (const [wall, s] of [
+      [SIDE.WEST, -1],
+      [SIDE.EAST, 1],
+    ] as const) {
+      // The wall face is 0.4 m from the centre. Over a stride the sole is flat on it for a while.
+      const dist = [60, 65, 70, 75, 80, 85, 90, 95, 100].map(n => {
+        const v = rows(draw({ mode: MODE.WALLRUN, ground: false, wall, vz: -8 }, 1, n));
+        return dyed(v, SOLE).map(p => 0.4 - (p[0] - 5) * s);
+      });
+      for (const d of dist) {
+        // Never through the wall.
+        expect(Math.min(...d)).toBeGreaterThan(-0.03);
+      }
+      const flat = dist.filter(d => d.filter(x => Math.abs(x) < 0.03).length > 25);
+      expect(flat.length).toBeGreaterThan(2);
+      // The sole is a patch parallel to the wall: the other shoe is far from it.
+      for (const d of flat) {
+        expect(d.filter(x => x > 0.3).length).toBeGreaterThan(20);
+      }
+    }
+  });
 });

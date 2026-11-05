@@ -18,7 +18,9 @@ import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { animate, soldier } from './soldier';
 import type { Runner } from './soldier';
+import { skyline } from './skyline';
 import { LAYERS, SIZE, textures } from './textures';
+import { vision, zones } from './vision';
 
 /** Tints a world can use at once, white included (see palette). */
 export const MAX_TINTS = 16;
@@ -63,25 +65,26 @@ out vec2 U;void main(){U=vec2(gl_VertexID&1,gl_VertexID>>1)*2.;gl_Position=vec4(
 // toward 1.
 const POST_FRAG = `#version 300 es
 precision highp float;uniform sampler2D S[4];uniform vec4 Y;uniform float L;in vec2 U;out vec4 o;
-vec3 b(vec2 x){vec3 c=texture(S[0],x).rgb;return c*smoothstep(.95,2.2,max(c.r,max(c.g,c.b)));}
+vec3 b(vec2 x){vec3 c=texture(S[0],x).rgb;return c*smoothstep(.9,2.,max(c.r,max(c.g,c.b)));}
 #define T(k)texture(S[0],U+Y.xy*(k)).rgb
 void main(){
 vec3 c;
 if(Y.z<1.)c=(b(U+Y.xy)+b(U-Y.xy)+b(U+Y.xy*vec2(1,-1))+b(U-Y.xy*vec2(1,-1)))/4.;
 else if(Y.z<2.)c=T(0.)*.227+(T(1.3846)+T(-1.3846))*.3162+(T(3.2308)+T(-3.2308))*.0703;
 else{
-c=texture(S[0],U).rgb+texture(S[1],U).rgb*1.+texture(S[2],U).rgb*.8+texture(S[3],U).rgb*.6;
+c=texture(S[0],U).rgb+texture(S[1],U).rgb*1.3+texture(S[2],U).rgb*1.+texture(S[3],U).rgb*.7;
 vec2 q=U-.5;
 c=min(c,.6)+.4*(1.-exp(-max(c-.6,0.)/.4));
 float a=atan(q.y,q.x)*24.,h=fract(sin(floor(a)*12.9898)*43758.5453);
 c+=L*step(.85-.5*L,h)*sin(fract(a)*3.1416)*smoothstep(.2,.6,length(q))*fract(length(q)*3.-Y.w*.002+h*9.)*.22;
 c*=1.-(.7+.3*L)*dot(q,q);
-c=pow(c,vec3(.92))+(fract(sin(dot(gl_FragCoord.xy+Y.w,vec2(12.9898,78.233)))*43758.5453)-.5)*.03;}
+c=pow(c*vec3(.97,1.,1.03),vec3(.92))+(fract(sin(dot(gl_FragCoord.xy+Y.w,vec2(12.9898,78.233)))*43758.5453)-.5)*.03;}
 o=vec4(c,1);}`;
 
 /**
  * Blinn-Phong strength and exponent: a row per TEX id in order (brick, tile, lava, stone, metal, wood,
- * moss, grate), then the flat bodies. Lava and glows never get here: they light themselves.
+ * moss, grate, concrete, glass, steel, paint), then the flat bodies. Lava and glows never get here:
+ * they light themselves.
  */
 export const SPEC = [
   [0.04, 8],
@@ -92,6 +95,10 @@ export const SPEC = [
   [0.06, 12],
   [0.3, 20],
   [0.7, 40],
+  [0.06, 14],
+  [1.5, 110],
+  [0.9, 60],
+  [0.25, 30],
   [0.1, 24],
 ];
 /** Metres a height of 1 in a texture's alpha stands for. */
@@ -117,14 +124,14 @@ uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F;uniform vec3 G
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;out vec4 o;
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
-void main(){
-if(Z<0.)return;
-if(Y>.5){
-vec3 d=normalize(P);float h=d.y,k=max(dot(d,O),0.);
+vec3 K0(vec3 d){
+float h=d.y,k=max(dot(d,O),0.);
 vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
 c=mix(c,H[4]*1.08,exp(-abs(h)*7.));
-c+=X*(.2*pow(k,24.)+.05*pow(k,4.)+2.*smoothstep(.9993,.9997,k));
-o=vec4(c,1);return;}
+return c+X*(.2*pow(k,24.)+.05*pow(k,4.)+2.*smoothstep(.9993,.9997,k));}
+void main(){
+if(Z<0.)return;
+if(Y>.5){o=vec4(K0(normalize(P)),1);return;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
 vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
@@ -155,6 +162,7 @@ w*=v/4.;}
 l+=K[i].rgb*w;
 sp+=K[i].rgb*w*pow(max(dot(m,normalize(d+V)),0.),R.y);}
 c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
+c+=step(abs(L-${TEX.GLASS}.),.5)*K0(reflect(-V,m))*(.1+.9*pow(1.-max(dot(m,V),0.),4.));
 o=vec4(mix(c,F.rgb,1.-exp(-F.a*length(P-E))),1.);}`;
 
 /**
@@ -168,7 +176,7 @@ export const viewProj = (
   aspect: number,
   roll = 0,
   t = FOV,
-  [N, F] = [0.1, 200],
+  [N, F] = [0.1, 400],
 ) => {
   const [r, u, f] = basis(yaw, pitch, roll);
   const k = (F + N) / (F - N);
@@ -325,11 +333,24 @@ export const level = (world: World): number[] => {
  * blue-grey and not blue, and dimmer on the sides and below.
  */
 export const daylight = ({ sky: [zenith, horizon] }: WorldDef): Vec3[] => [
-  zenith.map(v => (v * 0.55 + 0.45) * 0.62) as Vec3,
+  zenith.map(v => (v * 0.45 + 0.55) * 0.74) as Vec3,
   horizon.map(v => (v * 0.7 + 0.3) * 0.58) as Vec3,
   horizon.map((v, i) => v * [1, 0.92, 0.8][i] * 0.34) as Vec3,
   zenith,
   horizon,
+];
+
+/** The world as it is drawn: its brushes and a distant city around them. The physics knows only the brushes. */
+export const city = (world: World): World => ({
+  ...world,
+  def: { ...world.def, brushes: [...world.def.brushes, ...skyline(world.def)] },
+});
+
+/** All the map's vertices, drawn once: the city, the brushes, the runner's red and the team zones. */
+export const scenery = (world: World): number[] => [
+  ...level(city(world)),
+  ...vision(world.def),
+  ...zones(world.def),
 ];
 
 /** The shader's fog uniform: the world's fog colour pulled toward its horizon by HAZE, and its density; none when the world has no fog. */
@@ -403,7 +424,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   };
 
   const size = () => backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
-  const ground = level(world);
+  // What is drawn is the world plus a distant city and the runner's red; the physics knows only `world`.
+  const seen = {
+    ...world,
+    def: { ...world.def, brushes: [...world.def.brushes, ...skyline(world.def)] },
+  };
+  const ground = [...level(seen), ...vision(world.def), ...zones(world.def)];
   const { sun, sky } = world.def;
   const sunDir = sun.dir.map(v => v / Math.hypot(...sun.dir)) as Vec3;
   const pixels = textures();
@@ -597,7 +623,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
 
   /** The world's fog, daylight, sun and tint palette, and the clear colour (the horizon's), into the program. */
   const climate = () => {
-    const tints = palette(world);
+    const tints = palette(city(world));
     gl.uniform4fv(u.F, fogOf(world.def));
     gl.uniform3fv(u.H, daylight(world.def).flat());
     gl.uniform3fv(u.O, sunDir);

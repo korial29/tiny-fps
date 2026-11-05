@@ -6,7 +6,7 @@ export const SIZE = 128;
 export const LAYERS = Object.keys(TEX).length;
 
 /** Integer hash of a lattice point to [0, 1). */
-const hash = (x: number, y: number, s: number) => {
+export const hash = (x: number, y: number, s: number) => {
   let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 144665)) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
@@ -149,6 +149,49 @@ GEN[TEX.GRATE] = (u, v) => {
         ),
         weld ? 1 : 0.6 + 0.4 * clamp((e - 0.36) * 12),
       ];
+};
+
+// 1 m panels with a seam, tie holes at the quarter points of each, pores and a slow stain.
+GEN[TEX.CONCRETE] = (u, v) => {
+  const [fu, fv] = [(u * 2) % 1, (v * 2) % 1];
+  const n = fbm(u * 4, v * 4, 4, 3, 41);
+  const pore = hash(Math.floor(u * SIZE), Math.floor(v * SIZE), 43) > 0.992;
+  const tie = Math.hypot((fu % 0.5) - 0.25, (fv % 0.5) - 0.25) < 0.02;
+  const tone =
+    (0.94 + 0.1 * n + 0.03 * hash(Math.floor(u * 2), Math.floor(v * 2), 44)) *
+    (pore || tie ? 0.9 : 1);
+  return fu < 0.015 || fv < 0.015
+    ? [scale([160, 164, 172], tone), 0.3]
+    : [scale([206, 209, 214], tone), tie ? 0.5 : 0.8 + 0.2 * n - (pore ? 0.15 : 0)];
+};
+
+// 1 m panes between steel frames, dark blue with a paler sky at the top of each and a soft diagonal sheen.
+GEN[TEX.GLASS] = (u, v) => {
+  const fu = (u * 2) % 1;
+  const d = (((fu + v * 0.7) % 1) - 0.5) / 0.12;
+  const sheen = Math.exp(-d * d);
+  return fu < 0.03 || v < 0.03
+    ? [scale([150, 158, 170], 1 - 0.3 * fu), 0.9]
+    : [mix(mix([7, 20, 44], [48, 88, 136], v ** 2), [120, 160, 200], sheen * 0.18), 0.4];
+};
+
+// Brushed along u: each pixel row has its own tone and drift. Standing seams every 50 cm.
+GEN[TEX.STEEL] = (u, v) => {
+  const row = Math.floor(v * SIZE);
+  const streak = 0.5 * hash(row, 3, 31) + 0.5 * noise(u * 8, 0, 8, row + 7);
+  const seam = (u * 4) % 1;
+  return seam < 0.03
+    ? [[60, 66, 76], 0.1]
+    : [scale([176, 184, 196], 0.8 + 0.35 * streak + (seam > 0.97 ? 0.15 : 0)), 0.6 + 0.2 * streak];
+};
+
+// Near white, so the brush tint is the colour: roller stipple, a seam every metre.
+GEN[TEX.PAINT] = (u, v) => {
+  const [fu, fv] = [(u * 2) % 1, (v * 2) % 1];
+  const n = hash(Math.floor(u * SIZE), Math.floor(v * SIZE), 47);
+  return fu < 0.02 || fv < 0.02
+    ? [[200, 200, 206], 0.3]
+    : [scale([246, 246, 248], 0.96 + 0.06 * n), 0.85 + 0.04 * n];
 };
 
 /** All layers, RGBA, layer after layer, rows top to bottom: the upload of a texture array. */

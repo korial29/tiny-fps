@@ -9,7 +9,7 @@ import {
   TICK_HZ,
 } from './constants';
 import { Ctf } from './ctf';
-import { ROOFTOPS } from './map';
+import { HIGHLINE } from './map';
 import { forward, move, spawn, speedOf, stumble } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
@@ -94,7 +94,7 @@ export class Room {
   private rr = [0, 0];
 
   /** Missing rules fall back to RULES. */
-  public constructor(rules: Partial<Rules> = {}, map: WorldDef = ROOFTOPS) {
+  public constructor(rules: Partial<Rules> = {}, map: WorldDef = HIGHLINE) {
     this.rules = { ...RULES, ...rules };
     this.world = build(map);
     this.ctf = new Ctf(this.world, this.rules);

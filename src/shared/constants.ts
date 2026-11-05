@@ -168,6 +168,8 @@ export const FLAG_REACH = 1.5;
 export const FLAG_H = 2.2;
 /** Seconds a dropped flag lies before it goes home by itself. */
 export const FLAG_RETURN = 10;
+/** Seconds a carrier who is made to drop the flag cannot take it again: he would pick it up where he stands. */
+export const FLAG_LOCK = 2;
 /** Seconds the end screen of a match stays, then a new match starts. */
 export const END_SCREEN = 10;
 

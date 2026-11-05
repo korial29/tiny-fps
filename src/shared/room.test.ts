@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ACCEL,
+  END_SCREEN,
+  FLAG_RETURN,
   INPUT_BURST,
   MAX_NAME,
   MAX_PLAYERS,
@@ -14,7 +16,7 @@ import { ROOFTOPS } from './map';
 import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
-import { KEY, TEX } from './types';
+import { FLAG, KEY, TEAM, TEX } from './types';
 import type { Conn, Every, Input, PlayerState, Snapshot } from './types';
 import type { Spawn, WorldDef } from './world';
 import { duo } from '../../test/teams';
@@ -41,12 +43,12 @@ const SPAWNS: Spawn[] = [
   [8, 1, 14, (3 * Math.PI) / 2],
 ];
 
-/** A flat 200 m slab at y = 1, with eight spawns for each team and their flags 40 m apart. */
+/** A flat 200 m slab at y = 1, with eight spawns for each team and their flags 60 m apart on the line red spawn 0 faces. */
 const ARENA: WorldDef = {
   brushes: [{ min: [-100, -5, -100], max: [100, 1, 100], top: TEX.TILE, side: TEX.BRICK }],
   teams: [
-    { base: [-30, 1, 8], spawns: SPAWNS },
-    { base: [30, 1, 8], spawns: SPAWNS.map(([x, y, z, yaw]): Spawn => [x + 60, y, z, yaw]) },
+    { base: [-30, 1, 4], spawns: SPAWNS },
+    { base: [30, 1, 4], spawns: SPAWNS.map(([x, y, z, yaw]): Spawn => [x + 60, y, z, yaw]) },
   ],
   floor: -20,
   sun: { dir: [0, 1, 0], color: [1, 1, 1] },
@@ -549,5 +551,254 @@ describe('Room: rewind', () => {
     const c = join(d.room, 'C');
     const cState = d.room['peers'].get(c)!.state;
     expect(d.room.rewind(0, d.tick - 10).find(p => p.id === 2)).toEqual(cState);
+  });
+});
+
+/** A 10 m island at y = 0 with the red spawn and flag on its west side, the blue ones on its east. */
+const ISLE = (over: Partial<WorldDef> = {}): WorldDef => ({
+  ...ARENA,
+  brushes: [{ min: [-5, -5, -5], max: [5, 0, 5], top: TEX.TILE, side: TEX.BRICK }],
+  teams: [
+    { base: [-4, 0, 0], spawns: [[-3, 0, 0, (3 * Math.PI) / 2]] },
+    { base: [3, 0, 0], spawns: [[3, 0, 3, (3 * Math.PI) / 2]] },
+  ],
+  ...over,
+});
+
+describe('Room: teams', () => {
+  const teamOf = (c: Peer, id: number) => roster(c).players.find(p => p.id === id)!.team;
+
+  it('puts each joiner in the smaller team, red when they are equal', () => {
+    const room = new Room({}, ARENA);
+    const peers = ['a', 'b', 'c', 'd', 'e'].map(n => join(room, n));
+    expect(roster(peers[0]).players.map(p => p.team)).toEqual([0, 1, 0, 1, 0]);
+    expect(roster(peers[0]).players.map(p => p.color)).toEqual(
+      roster(peers[0]).players.map(p => TEAM_COLOR[p.team]),
+    );
+  });
+
+  it('fills the smaller team after players leave, and leaves the others where they are', () => {
+    const room = new Room({}, ARENA);
+    const [a, b, , d] = ['a', 'b', 'c', 'd'].map(n => join(room, n));
+    // Red 0 and 2, blue 1 and 3. Both blues leave: the next two joiners are blue, then it is a tie.
+    room.disconnect(b);
+    room.disconnect(d);
+    expect(roster(a).players.map(p => [p.id, p.team])).toEqual([
+      [0, 0],
+      [2, 0],
+    ]);
+    const e = join(room, 'e');
+    const f = join(room, 'f');
+    const g = join(room, 'g');
+    expect(roster(e).players.map(p => [p.id, p.team])).toEqual([
+      [0, 0],
+      [1, 1],
+      [2, 0],
+      [3, 1],
+      [4, 0],
+    ]);
+    expect(teamOf(f, 3)).toBe(1);
+    expect(teamOf(g, 4)).toBe(0);
+  });
+
+  it('starts every player on a spawn of his team, and puts him back there after a fall', () => {
+    const isle = ISLE();
+    const room = new Room({}, isle);
+    const [a, b] = [join(room, 'a'), join(room, 'b')];
+    ticks(room, SNAP_EVERY);
+    const [red, blue] = isle.teams.map(t => t.spawns[0]);
+    expect(snap(a).players.map(p => [p.x, p.z])).toEqual([
+      [red[0], red[2]],
+      [blue[0], blue[2]],
+    ]);
+    // The blue player runs off his island, falls, and is put back at a blue spawn.
+    let seq = 0;
+    const step = (keys: number) => {
+      room.receive(b, input(seq++, keys, (3 * Math.PI) / 2));
+      room.tick();
+    };
+    for (let k = 0; k < 400 && snap(a).players[1].y > -3; k++) {
+      step(KEY.FORWARD);
+    }
+    expect(snap(a).players[1].y).toBeLessThan(-3);
+    for (let k = 0; k < 120; k++) {
+      step(0);
+    }
+    expect(snap(a).players[1]).toMatchObject({ x: blue[0], z: blue[2], y: 0, ground: true });
+  });
+});
+
+describe('Room: capture the flag', () => {
+  const EAST = (3 * Math.PI) / 2;
+  const WEST = Math.PI / 2;
+  /** Per peer, the next seq. */
+  const seqs = new Map<Peer, number>();
+  /** Drives a peer with forward at yaw, a tick per input, until the snapshot says done (or max). */
+  const run = (room: Room, c: Peer, yaw: number, done: (s: Snapshot) => boolean, max = 1200) => {
+    ticks(room, SNAP_EVERY);
+    for (let k = 0; k < max && !done(snap(c)); k++) {
+      const n = seqs.get(c) ?? 0;
+      seqs.set(c, n + 1);
+      room.receive(c, input(n, KEY.FORWARD, yaw));
+      room.tick();
+      room.tick();
+    }
+    return snap(c);
+  };
+  const flags = (c: Peer) => snap(c).flags;
+
+  it('carries the score, the clock and both flags on every snapshot, flags home at the start', () => {
+    const room = new Room({}, ARENA);
+    const a = join(room);
+    ticks(room, SNAP_EVERY);
+    expect(snap(a)).toMatchObject({
+      score: [0, 0],
+      clock: 480,
+      over: false,
+      flags: [{ state: FLAG.HOME }, { state: FLAG.HOME }],
+    });
+    ticks(room, TICK_HZ);
+    expect(snap(a).clock).toBe(479);
+  });
+
+  it('keeps the clock still with nobody in the room', () => {
+    const room = new Room({}, ARENA);
+    ticks(room, 10 * TICK_HZ);
+    const a = join(room);
+    ticks(room, SNAP_EVERY);
+    expect(snap(a).clock).toBe(480);
+  });
+
+  it('lets a player take the enemy flag and carry it home for a capture with the real physics', () => {
+    const room = new Room({}, ARENA);
+    const a = join(room, 'Ann');
+    run(room, a, EAST, s => s.flags[TEAM.BLUE].state === FLAG.CARRIED);
+    expect(flags(a)).toMatchObject([{ state: FLAG.HOME }, { state: FLAG.CARRIED, by: 0 }]);
+    // Home to the red flag, 60 m back: the capture sends the blue flag home.
+    const done = run(room, a, WEST, s => s.score[0] > 0);
+    expect(done.score).toEqual([1, 0]);
+    expect(done.flags.map(f => f.state)).toEqual([FLAG.HOME, FLAG.HOME]);
+  });
+
+  it('does not score a carrier who gets home while his own flag is away', () => {
+    const room = new Room({}, ARENA);
+    const a = join(room, 'Ann');
+    const b = join(room, 'Bob');
+    run(room, a, EAST, s => s.flags[TEAM.BLUE].state === FLAG.CARRIED);
+    // Bob is blue and runs west for the red flag, on the same line, and takes it.
+    ticks(room, SNAP_EVERY);
+    const bob = snap(b).players[1];
+    expect(bob.x).toBeGreaterThan(60);
+    run(room, b, WEST, s => s.flags[TEAM.RED].state === FLAG.CARRIED);
+    expect(flags(a)[TEAM.RED]).toMatchObject({ state: FLAG.CARRIED, by: 1 });
+    // Ann is home with the blue flag, and the red one is Bob's: no capture.
+    run(room, a, WEST, s => s.players[0].x < -29, 1200);
+    expect(snap(a).players[0].x).toBeLessThan(-29);
+    expect(snap(a).score).toEqual([0, 0]);
+    expect(flags(a)[TEAM.BLUE]).toMatchObject({ state: FLAG.CARRIED, by: 0 });
+  });
+
+  it('drops the flag where a carrier stood when he falls off the map, and returns it after FLAG_RETURN seconds', () => {
+    const room = new Room({}, ISLE());
+    const a = join(room, 'Ann');
+    run(room, a, EAST, s => s.flags[TEAM.BLUE].state === FLAG.CARRIED);
+    // On east: off the island's east edge, into the void, and back at the spawn.
+    const s = run(room, a, EAST, s => s.flags[TEAM.BLUE].state === FLAG.DROPPED);
+    const f = s.flags[TEAM.BLUE];
+    expect(f.x).toBeGreaterThan(4);
+    expect(f.x).toBeLessThan(6);
+    expect([f.y, f.z]).toEqual([0, 0]);
+    expect(f.left).toBe(FLAG_RETURN);
+    expect(snap(a).players[0].y).toBeLessThan(0.5);
+    // Nobody picks it up: it goes home by itself.
+    ticks(room, FLAG_RETURN * TICK_HZ + SNAP_EVERY);
+    expect(flags(a)[TEAM.BLUE].state).toBe(FLAG.HOME);
+  });
+
+  it('drops the flag where a carrier last stood when he leaves', () => {
+    const room = new Room({}, ISLE());
+    const a = join(room, 'Ann');
+    const b = join(room, 'Bob');
+    run(room, a, EAST, s => s.flags[TEAM.BLUE].state === FLAG.CARRIED);
+    const { x } = snap(a).players[0];
+    room.disconnect(a);
+    ticks(room, SNAP_EVERY);
+    expect(flags(b)[TEAM.BLUE]).toMatchObject({ state: FLAG.DROPPED, y: 0, z: 0 });
+    expect(Math.abs(flags(b)[TEAM.BLUE].x - x)).toBeLessThan(0.3);
+  });
+
+  it('exposes drop(id) for the tackle: the carrier drops it where he stands, others have nothing to drop', () => {
+    const room = new Room({}, ISLE());
+    const a = join(room, 'Ann');
+    run(room, a, EAST, s => s.flags[TEAM.BLUE].state === FLAG.CARRIED);
+    const { x } = snap(a).players[0];
+    expect(room.drop(7)).toBe(false);
+    expect(room.drop(0)).toBe(true);
+    expect(room.drop(0)).toBe(false);
+    ticks(room, SNAP_EVERY);
+    expect(flags(a)[TEAM.BLUE]).toMatchObject({ state: FLAG.DROPPED, y: 0, z: 0 });
+    // The wire keeps a lying flag to 1/16 m.
+    expect(Math.abs(flags(a)[TEAM.BLUE].x - x)).toBeLessThanOrEqual(1 / 32);
+  });
+
+  describe('the match', () => {
+    it('ends at the score limit: tells everyone, shows the end screen, then starts a new match', () => {
+      const room = new Room({ scoreLimit: 1 }, ARENA);
+      const a = join(room, 'Ann');
+      const b = join(room, 'Bob');
+      run(room, a, EAST, s => s.flags[TEAM.BLUE].state === FLAG.CARRIED);
+      run(room, a, WEST, s => s.over);
+      for (const c of [a, b]) {
+        expect(c.texts.filter(m => m.t === 'end')).toEqual([
+          {
+            t: 'end',
+            score: [1, 0],
+            players: [
+              { id: 0, name: 'Ann', team: 0, caps: 1, returns: 0 },
+              { id: 1, name: 'Bob', team: 1, caps: 0, returns: 0 },
+            ],
+          },
+        ]);
+      }
+      expect(snap(b)).toMatchObject({ over: true, score: [1, 0], clock: END_SCREEN });
+      // The end screen runs END_SCREEN seconds; then everyone is back at his spawn, scores clear.
+      ticks(room, END_SCREEN * TICK_HZ + SNAP_EVERY);
+      const s = snap(a);
+      expect(s).toMatchObject({ over: false, score: [0, 0], clock: 480 });
+      expect(s.flags.map(f => f.state)).toEqual([FLAG.HOME, FLAG.HOME]);
+      const [red, blue] = ARENA.teams.map(t => t.spawns[0]);
+      expect(s.players.map(p => [p.x, p.z])).toEqual([
+        [red[0], red[2]],
+        [blue[0], blue[2]],
+      ]);
+      expect(s.players.every(p => p.ground && p.vx === 0 && p.vz === 0)).toBe(true);
+      // The next match counts from nothing: no second 'end' for the old captures.
+      expect(a.texts.filter(m => m.t === 'end')).toHaveLength(1);
+    });
+
+    it('ends at the time limit with the draw or the team ahead', () => {
+      const room = new Room({ timeLimit: 2 }, ARENA);
+      const a = join(room, 'Ann');
+      ticks(room, 2 * TICK_HZ);
+      expect(a.texts.filter(m => m.t === 'end')).toEqual([
+        {
+          t: 'end',
+          score: [0, 0],
+          players: [{ id: 0, name: 'Ann', team: 0, caps: 0, returns: 0 }],
+        },
+      ]);
+      expect(snap(a)).toMatchObject({ over: true, clock: END_SCREEN });
+    });
+
+    it('starts again from scratch when the room has been empty', () => {
+      const room = new Room({ timeLimit: 60 }, ARENA);
+      const a = join(room, 'Ann');
+      ticks(room, 5 * TICK_HZ);
+      expect(snap(a).clock).toBe(55);
+      room.disconnect(a);
+      const b = join(room, 'Bob');
+      ticks(room, SNAP_EVERY);
+      expect(snap(b)).toMatchObject({ clock: 60, score: [0, 0] });
+    });
   });
 });

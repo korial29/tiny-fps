@@ -2,7 +2,15 @@
 // match. Rules over the players the room hands in, ticked at TICK_HZ; no timer, no DOM, no sockets.
 // The flags never touch the movement: nothing here changes a PlayerState, so prediction is the same
 // with or without them.
-import { END_SCREEN, FLAG_H, FLAG_REACH, FLAG_RETURN, PLAYER_H, TICK_HZ } from './constants';
+import {
+  END_SCREEN,
+  FLAG_H,
+  FLAG_LOCK,
+  FLAG_REACH,
+  FLAG_RETURN,
+  PLAYER_H,
+  TICK_HZ,
+} from './constants';
 import { EV, FLAG } from './types';
 import type { FlagState, PlayerState, Rules, Snapshot } from './types';
 import { ray } from './world';
@@ -54,6 +62,11 @@ export class Ctf {
   private clock: number;
   /** Ticks before each dropped flag goes home. */
   private back = [0, 0];
+  /** Who may not take each flag, and for how many more ticks: the carrier that was made to drop it. */
+  private lock = [
+    { id: -1, left: 0 },
+    { id: -1, left: 0 },
+  ];
 
   public constructor(world: World, rules: Rules) {
     this.world = world;
@@ -123,6 +136,7 @@ export class Ctf {
       }
     }
     this.dropAt(k, at);
+    this.lock[k] = { id: p.id, left: FLAG_LOCK * TICK_HZ };
     return true;
   }
 
@@ -148,6 +162,7 @@ export class Ctf {
     this.score = [0, 0];
     this.flags = [home(), home()];
     this.back = [0, 0];
+    this.lock.forEach(l => (l.left = 0));
     this.clock = this.rules.timeLimit * TICK_HZ;
     for (const m of this.mates.values()) {
       m.caps = m.returns = 0;
@@ -179,6 +194,7 @@ export class Ctf {
     }
     for (const k of [0, 1]) {
       const f = this.flags[k];
+      this.lock[k].left--;
       if (f.state === FLAG.DROPPED) {
         f.left = Math.ceil(--this.back[k] / TICK_HZ);
         if (this.back[k] <= 0) {
@@ -195,7 +211,9 @@ export class Ctf {
       // A teammate sends a lying flag home, before an enemy gets to take it; an enemy takes it at its base.
       const near = players.filter(q => touches(q.state, at));
       const mate = f.state === FLAG.DROPPED ? near.find(q => q.team === k) : undefined;
-      const foe = near.find(q => q.team !== k);
+      const foe = near.find(
+        q => q.team !== k && (q.id !== this.lock[k].id || this.lock[k].left <= 0),
+      );
       if (mate) {
         const m = this.mates.get(mate.id);
         if (m) {

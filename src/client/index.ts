@@ -58,7 +58,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     `i,p,b{position:absolute;pointer-events:none;user-select:none;margin:0}` +
     HUD_CSS +
     `i{left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #0008}` +
-    `p{top:8px;left:12px}` +
+    `p{bottom:8px;left:12px}` +
     `b{transform:translate(-50%,-100%);font-size:12px;white-space:nowrap}[hidden]{display:none}</style>` +
     `<div><canvas></canvas><i></i><p></p></div>`;
   container.append(wrap);

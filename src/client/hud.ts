@@ -11,8 +11,8 @@ export const HUD_CSS =
   `h5,aside,nav,output,section,em{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
-  `nav span,nav time{font:900 24px/1 system-ui,sans-serif;letter-spacing:.03em}nav time{min-width:4.2ch;font-variant-numeric:tabular-nums;font-size:20px}` +
-  `nav small{font-size:12px;opacity:.95}nav small:first-of-type{text-align:right}nav small:last-of-type{text-align:left}` +
+  `nav span,nav time{font:900 clamp(16px,4.6vw,24px)/1 system-ui,sans-serif;letter-spacing:.03em;white-space:nowrap}nav time{min-width:4.2ch;font-variant-numeric:tabular-nums;font-size:clamp(14px,3.8vw,20px)}` +
+  `nav small{font-size:clamp(10px,2.6vw,12px);white-space:nowrap;opacity:.95}nav small:first-of-type{text-align:right}nav small:last-of-type{text-align:left}` +
   `output{top:20%;left:50%;transform:translateX(-50%);padding:6px 18px;font:900 clamp(18px,3.4vw,30px)/1.1 system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;background:#000a;border-bottom:3px solid currentColor}` +
   `em{font-style:normal;font-size:13px;font-weight:800;line-height:1.1;text-align:center;transform:translate(-50%,-50%)}em span{display:block;font-size:20px;line-height:1}` +
   `section{inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0 12px;text-align:center;background:#000c}` +

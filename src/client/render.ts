@@ -7,7 +7,7 @@ import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { forward } from '../shared/physics';
 import { MONSTER, TEX } from '../shared/types';
 import type { Bullet, Edge, Item, Level, Monster, PlayerState, Sector } from '../shared/types';
-import { BLAST, TRAIL, fade, glow, lit, puff } from './effects';
+import { BLAST, BLOOD, TRAIL, fade, glow, lit, puff } from './effects';
 import type { Effects, Puff } from './effects';
 import { MUZZLE, chaingun } from './gun';
 import { props } from './items';
@@ -627,9 +627,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
         }
       }
       props(v, lvl, items, now);
-      for (const { p, yaw, size, c, life } of fx.gibs) {
-        const k = size * Math.min(1, life * 2);
-        pushBox(v, p, [k, k, k], yaw, c);
+      for (const { p, yaw, half, c, life } of fx.gibs) {
+        const k = Math.min(1, life * 2);
+        pushBox(v, p, half.map(x => x * k) as Vec3, yaw, c);
       }
       // What the shadow maps hold ends here: the unlit effects after it cast nothing.
       const bodies = v.length;
@@ -662,6 +662,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
           const [k, t] = [size * Math.min(1, life * 2), Math.cos(tilt)];
           const d: Vec3 = [t * Math.sin(yaw), Math.sin(tilt), t * Math.cos(yaw)];
           pushFrame(v, p, axesAlong(d), [k * 2.8, k, k], gold, METAL);
+        }
+      }
+      for (const { p, r, yaw, life } of fx.splats) {
+        // Two flat slabs across each other: a blot.
+        const k = r * Math.min(1, life);
+        for (const a of [yaw, yaw + Math.PI / 4]) {
+          pushBox(v, p, [k, 0.002, k * 0.8], a, BLOOD);
         }
       }
       for (const b of fx.blasts) {

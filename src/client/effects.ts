@@ -33,8 +33,22 @@ interface Body {
 /** A chunk of a dead monster: it flies, lands on the floor below, then shrinks away. */
 export interface Gib extends Body {
   yaw: number;
-  /** Half the side of its cube, metres. */
+  /** Half its sides along x, y and z before the turn by yaw, metres; `size` is the y one. */
+  half: Vec3;
   c: number[];
+  /** Seconds left. */
+  life: number;
+  /** Leaves a splat where it first lands. */
+  gore: boolean;
+}
+
+/** A blot of blood on the floor: it shrinks away over its last second. */
+export interface Splat {
+  /** On the floor, a hair above it. */
+  p: Vec3;
+  /** Half its side, metres. */
+  r: number;
+  yaw: number;
   /** Seconds left. */
   life: number;
 }
@@ -104,6 +118,7 @@ export interface Effects {
   gibs: Gib[];
   /** A fixed pool: the live ones have `life` above 0. */
   casings: Casing[];
+  splats: Splat[];
   blasts: Blast[];
   smoke: Puff[];
   /** Dust motes, x y z each, in a box around the own eye; `lit` says which the flashlight shows. */
@@ -151,6 +166,7 @@ const MAX_GIBS = 64;
 const MAX_CASINGS = 32;
 /** Of those, the ones the others' guns may hold at once. */
 const MAX_REMOTE = 8;
+const MAX_SPLATS = 24;
 const MAX_BLASTS = 12;
 const MAX_SMOKE = 40;
 /** Motes, and the half sides of the box they live in: they wrap round it as the eye moves. */
@@ -171,6 +187,15 @@ const LOW = 0.3;
 const GIB_G = 14;
 /** Seconds of velocity a spark's streak spans. */
 export const TRAIL = 0.04;
+/** Dark red: the gibs that leave a splat, and the splat. */
+export const BLOOD = [0.3, 0.03, 0.03];
+/** Box shapes of a gib, times its base size: a chunk, a flat slab, a long bit, a speck. */
+const SHAPES: Vec3[] = [
+  [1, 1, 1],
+  [1.6, 0.35, 1.3],
+  [0.35, 0.35, 2],
+  [0.5, 0.5, 0.5],
+];
 /** Bob phase per metre walked, and its amplitude in metres. */
 const STRIDE = 4.4;
 const BOB = 0.035;
@@ -301,6 +326,7 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
       rest: true,
       own: false,
     })) as Casing[],
+    splats: [],
     blasts: [],
     smoke: [],
     motes: new Float32Array(MOTES * 3),
@@ -367,8 +393,9 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
       fx.blasts = fx.blasts.filter(b => b.t < BLAST);
       for (const g of fx.gibs) {
         g.life -= dt;
-        if (!g.rest) {
-          fall(g, dt, GIB_G, 3, 0.3, 0.5);
+        if (!g.rest && fall(g, dt, GIB_G, 3, 0.3, 0.5) && g.gore) {
+          g.gore = false;
+          splat(g.p[0], g.floor, g.p[2]);
         }
       }
       fx.gibs = fx.gibs.filter(g => g.life > 0);
@@ -383,6 +410,10 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
           c.tilt *= +!c.rest;
         }
       }
+      for (const s of fx.splats) {
+        s.life -= dt;
+      }
+      fx.splats = fx.splats.filter(s => s.life > 0);
       for (const { p, v } of fx.smoke) {
         p.forEach((x, i) => (p[i] = x + v[i] * dt));
         p[1] = Math.min(p[1], lvl?.map.sectors[sectorAt(lvl, p[0], p[2])]?.ceil ?? Infinity);
@@ -416,6 +447,7 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
       lvl = next;
       fx.sparks = [];
       fx.gibs = [];
+      fx.splats = [];
       fx.casings.forEach(c => (c.life = 0));
       fx.blasts = [];
       fx.smoke = [];
@@ -482,12 +514,16 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
         for (let i = 0; i < n; i++) {
           const a = rand() * TAU;
           const k = 1.5 + rand() * 3.5;
+          const [base, shape] = [0.05 + rand() * 0.08, SHAPES[Math.floor(rand() * SHAPES.length)]];
+          const gore = rand() < 0.25;
           fx.gibs.push({
             p: [x, y + r2() * 0.3, z],
             v: [Math.cos(a) * k, 2 + rand() * 4, Math.sin(a) * k],
             yaw: rand() * TAU,
-            size: 0.05 + rand() * 0.08,
-            c: chunks[Math.floor(rand() * chunks.length)],
+            half: shape.map(m => m * base) as Vec3,
+            size: shape[1] * base,
+            c: gore ? BLOOD : chunks[Math.floor(rand() * chunks.length)],
+            gore,
             life: 2 + rand(),
             floor: lvl?.map.sectors[sectorAt(lvl, x, z)]?.floor ?? y,
             rest: false,
@@ -545,6 +581,16 @@ export const createEffects = (rand = Math.random, level?: Level): Effects => {
     }
     to.forEach((x, i) => (g.p[i] = x));
     return hit;
+  };
+  /** A blot at x, z on the floor. */
+  const splat = (x: number, floor: number, z: number) => {
+    fx.splats.push({
+      p: [x, floor + 0.004, z],
+      r: 0.1 + rand() * 0.12,
+      yaw: rand() * TAU,
+      life: 8,
+    });
+    fx.splats.splice(0, fx.splats.length - MAX_SPLATS);
   };
   /**
    * A casing flies out of the gun's port, to the right of the view: `from` is the shooter's eye, `at`

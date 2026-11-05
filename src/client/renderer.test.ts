@@ -750,7 +750,57 @@ describe('createRenderer', () => {
       expect(z1 - z0).toBeCloseTo(0.028);
     });
 
-    it('keeps casings and streaks out of the depth passes', () => {
+    it('draws a blot of two slabs across each other for each splat, and shrinks it over its last second', () => {
+      const fx = createEffects();
+      fx.splats.push({ p: [2, 0.004, 2], r: 0.2, yaw: 0, life: 6 });
+      const v = room(fx);
+      expect(v.length / STRIDE).toBe(NEAR + 72);
+      const [x0, x1] = extent(v, 0, 36, 0);
+      expect(x1 - x0).toBeCloseTo(0.4);
+      expect(extent(v, 0, 72, 1)).toEqual([expect.closeTo(0.002), expect.closeTo(0.006)]);
+      // The second slab is turned by an eighth of a turn.
+      const [z0, z1] = extent(v, 36, 36, 2);
+      expect(z1 - z0).toBeGreaterThan(0.3);
+      expect(vertex(v, 0).slice(6, 10)).toEqual([
+        expect.closeTo(0.3),
+        expect.closeTo(0.03),
+        -1,
+        expect.closeTo(0.03),
+      ]);
+      calls.length = 0;
+      fx.splats[0].life = 0.5;
+      const [y0, y1] = extent(room(fx), 0, 36, 0);
+      expect(y1 - y0).toBeCloseTo(0.2);
+    });
+
+    it('draws a gib with its own half sizes, and shrinks all three over its last half second', () => {
+      const fx = createEffects();
+      fx.gibs.push({
+        p: [2, 0.5, 2],
+        v: [0, 0, 0],
+        yaw: 0,
+        half: [0.1, 0.02, 0.05],
+        size: 0.02,
+        c: [0.5, 0.1, 0.1],
+        life: 5,
+        floor: 0,
+        rest: true,
+        gore: false,
+      });
+      const v = room(fx);
+      const size = (w: Float32Array) =>
+        [0, 1, 2].map(a => extent(w, 0, 36, a)).map(([lo, hi]) => hi - lo);
+      expect(size(v)).toEqual([expect.closeTo(0.2), expect.closeTo(0.04), expect.closeTo(0.1)]);
+      calls.length = 0;
+      fx.gibs[0].life = 0.25;
+      expect(size(room(fx))).toEqual([
+        expect.closeTo(0.1),
+        expect.closeTo(0.02),
+        expect.closeTo(0.05),
+      ]);
+    });
+
+    it('keeps casings, splats and streaks out of the depth passes', () => {
       const spot = (): Light => ({
         kind: LIGHT.SPOT,
         p: [2, 1.6, 2],
@@ -765,11 +815,12 @@ describe('createRenderer', () => {
       calls.length = 0;
       const fx = createEffects();
       Object.assign(fx.casings[0], { p: [2, 0.5, 2], size: 0.01, life: 2 });
+      fx.splats.push({ p: [2, 0.004, 2], r: 0.2, yaw: 0, life: 6 });
       fx.sparks.push({ p: [2, 1, 2], v: [0, 0, -5], life: 1 });
       room(fx, [spot()]);
       const [d2, w2] = draws();
       expect(d2[1]).toBe(depth[1]);
-      expect(w2[1]).toBe(depth[1] + 36 + 36);
+      expect(w2[1]).toBe(depth[1] + 36 + 72 + 36);
     });
   });
 });

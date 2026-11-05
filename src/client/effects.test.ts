@@ -5,6 +5,7 @@ import { HALL } from '../shared/map';
 import { EVENT, KEY, MONSTER } from '../shared/types';
 import type { GameEvent, Monster, PlayerState, Shot } from '../shared/types';
 import {
+  BLOOD,
   GAIN,
   HURT,
   MOTES,
@@ -297,7 +298,7 @@ describe('death', () => {
     ]) {
       fx.gibs = [];
       fx.event(die(8, 2, 8, id), 1);
-      expect(fx.gibs.every(g => CHUNKS[kind].includes(g.c))).toBe(true);
+      expect(fx.gibs.every(g => g.c == BLOOD || CHUNKS[kind].includes(g.c))).toBe(true);
     }
     expect(new Set(CHUNKS[0].flat()).size).toBeGreaterThan(new Set(CHUNKS[1].flat()).size);
   });
@@ -538,6 +539,7 @@ describe('reset', () => {
     const fx = createEffects(Math.random, lvl);
     fx.event(die(8, 2, 8), 1);
     expect(fx.smoke.length).toBeGreaterThan(0);
+    fx.splats.push({ p: [8, 1, 8], r: 0.1, yaw: 0, life: 5 });
     fx.event({ type: EVENT.SWING, id: 20, x: 8, y: 2, z: 8 }, 1);
     fx.track([{ id: 20, kind: 0, x: 8, y: 1, z: 8, yaw: 0, chase: false }], []);
     fx.shot(shot, [0, 1.6, 0], true);
@@ -545,7 +547,7 @@ describe('reset', () => {
     fx.hit();
     fx.pickup([1, 1, 1]);
     fx.reset(lvl);
-    expect([fx.gibs, fx.sparks, fx.blasts, fx.smoke]).toEqual([[], [], [], []]);
+    expect([fx.gibs, fx.sparks, fx.blasts, fx.smoke, fx.splats]).toEqual([[], [], [], [], []]);
     expect(fx.casings.filter(c => c.life > 0)).toHaveLength(0);
     expect([fx.swings.size, fx.herd.size, fx.flashes.size, fx.aim.size]).toEqual([0, 0, 0, 0]);
     expect([fx.hurt, fx.gain, fx.flash]).toEqual([0, 0, 0]);
@@ -970,6 +972,106 @@ describe('shell casings', () => {
     fire(fx, room, [0, -1]);
     step(fx, 1.5);
     expect(live(fx)[0].p[1]).toBeCloseTo(1 + live(fx)[0].size);
+  });
+});
+
+describe('gib shapes and splats', () => {
+  const lvl = compile(HALL);
+  const die = (x: number, y: number, z: number): GameEvent => ({
+    type: EVENT.DIE,
+    id: 16,
+    x,
+    y,
+    z,
+  });
+  const step = (fx: ReturnType<typeof createEffects>, seconds: number) => {
+    for (let t = 0; t < seconds - 1e-9; t += DT) {
+      fx.update(undefined, 0, DT);
+    }
+  };
+  /** A fixed sequence of numbers in [0, 1): the tests are exact. */
+  const lcg =
+    (seed = 7) =>
+    () =>
+      (seed = (seed * 1664525 + 1013904223) % 2 ** 32) / 2 ** 32;
+  const kind = ({ half: [x, y, z] }: { half: number[] }) =>
+    z > 1.5 * x ? 'long' : y < 0.5 * x ? 'flat' : Math.max(x, y, z) < 0.04 ? 'speck' : 'chunk';
+
+  it('throws flat slabs, long bits, specks and chunks', () => {
+    const fx = createEffects(lcg(), lvl);
+    const kinds = new Set<string>();
+    for (let i = 0; i < 12; i++) {
+      fx.gibs = [];
+      fx.event(die(8, 2, 8), 1);
+      fx.gibs.forEach(g => kinds.add(kind(g)));
+    }
+    expect([...kinds].sort()).toEqual(['chunk', 'flat', 'long', 'speck']);
+  });
+
+  it('rests a gib on its own height', () => {
+    const fx = createEffects(lcg(), lvl);
+    fx.event(die(8, 2, 8), 1);
+    expect(fx.gibs.every(g => g.size == g.half[1])).toBe(true);
+    step(fx, 1.8);
+    for (const g of fx.gibs) {
+      expect(g.p[1]).toBeCloseTo(1 + g.half[1]);
+    }
+  });
+
+  it('makes some of them dark red, and only those leave a splat where they first land', () => {
+    const fx = createEffects(lcg(3), lvl);
+    fx.event(die(8, 2, 8), 1);
+    const gore = fx.gibs.filter(g => g.gore);
+    expect(gore.length).toBeGreaterThan(0);
+    expect(gore.length).toBeLessThan(fx.gibs.length);
+    expect(gore.every(g => g.c == BLOOD)).toBe(true);
+    expect(fx.gibs.filter(g => !g.gore).every(g => g.c != BLOOD)).toBe(true);
+    expect(fx.splats).toHaveLength(0);
+    const ids = new Set(gore);
+    step(fx, 1.5);
+    // One splat each, on the floor of the start room, flat just above it.
+    expect(fx.splats).toHaveLength(gore.length);
+    for (const s of fx.splats) {
+      expect(s.p[1]).toBeCloseTo(1.004);
+      expect(s.r).toBeGreaterThan(0.09);
+    }
+    expect(ids.size).toBe(gore.length);
+    expect(gore.every(g => !g.gore)).toBe(true);
+  });
+
+  it('puts the splat where the gib first touched the floor', () => {
+    const fx = createEffects(() => 0, lvl);
+    // Every gib is dark red, thrown at the same speed: straight up from the middle.
+    fx.event(die(8, 2, 8), 1);
+    const g = fx.gibs[0];
+    let at: number[] | undefined;
+    for (let t = 0; t < 1 && !fx.splats.length; t += DT) {
+      fx.update(undefined, 0, DT);
+      at = [...g.p];
+    }
+    expect(fx.splats[0].p[0]).toBeCloseTo(at![0]);
+    expect(fx.splats[0].p[2]).toBeCloseTo(at![2]);
+  });
+
+  it('lets a splat lie for 8 s, then it is gone', () => {
+    const fx = createEffects(() => 0, lvl);
+    fx.event(die(8, 2, 8), 1);
+    step(fx, 3.5);
+    expect(fx.gibs).toHaveLength(0);
+    expect(fx.splats.length).toBeGreaterThan(0);
+    step(fx, 3);
+    expect(fx.splats.length).toBeGreaterThan(0);
+    step(fx, 2.5);
+    expect(fx.splats).toHaveLength(0);
+  });
+
+  it('keeps at most 24 splats, the newest', () => {
+    const fx = createEffects(() => 0, lvl);
+    for (let i = 0; i < 6; i++) {
+      fx.event(die(8, 2, 8), 1);
+      step(fx, 1.2);
+    }
+    expect(fx.splats).toHaveLength(24);
   });
 });
 

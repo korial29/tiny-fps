@@ -5,7 +5,7 @@ import type { PlayerState } from '../shared/types';
 import { MOVE, MOVES, createGait } from './gait';
 import type { Floor, Gait } from './gait';
 import type { Vec3 } from './mesh';
-import { JOINT as J, JOINTS, solve, turn } from './rig';
+import { JOINT as J, JOINTS, PARENT, REST, solve, turn } from './rig';
 import type { Quat } from './rig';
 
 const DT = 1 / 60;
@@ -666,6 +666,298 @@ describe('gait: the other moves', () => {
     const f = solve(g.pose());
     expect(Math.min(...[J.FOOT_L, J.FOOT_R].map(j => f.pos[j][1]))).toBeLessThan(0.15);
     expect(f.pos[J.PELVIS][1]).toBeGreaterThan(0.8);
+  });
+});
+
+describe('gait: the contacts', () => {
+  /** The unit vector toward a wall on each SIDE (EAST +x, WEST -x, SOUTH +z, NORTH -z). */
+  const TO = [
+    [0, 0],
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+  const at = { x: 5, y: 1, z: -3 };
+  /** A runner that holds the state `o` for `n` frames, `drive` moving it before each; its last frame. */
+  const hold = (o: Partial<PlayerState>, n = 120, drive?: (p: PlayerState) => void) => {
+    const g = createGait();
+    const p = state({ id: 3, ...at, ...o });
+    const frame = (): Frame => ({
+      ...solve(g.pose()),
+      at: [p.x, p.y, p.z],
+      phase: g.phase,
+      steps: g.steps,
+    });
+    g.update(p, DT);
+    let f = frame();
+    for (let i = 0; i < n; i++) {
+      drive?.(p);
+      g.update(p, DT);
+      f = frame();
+    }
+    return { f, p, g };
+  };
+  /** The fingertips: 19 cm along the hand. */
+  const tip = (f: Frame, j: number): Vec3 => {
+    const d = turn(f.rot[j], [0, -0.19, 0]);
+    return [f.pos[j][0] + d[0], f.pos[j][1] + d[1], f.pos[j][2] + d[2]];
+  };
+  /** A point as (metres toward the wall, metres above the ledge top), from the runner's centre. */
+  const rel = (q: Vec3, wall: number, edge: number) => [
+    (q[0] - at.x) * TO[wall][0] + (q[2] - at.z) * TO[wall][1],
+    q[1] - edge,
+  ];
+
+  it.each([1, 2, 3, 4])('hangs by both hands on the lip, on side %i, the body below it', wall => {
+    const { f } = hold({ mode: MODE.HANG, ground: false, wall, edge: 3 });
+    const hands = [J.HAND_L, J.HAND_R];
+    for (const j of hands) {
+      // The wrist is at the lip (the wall is 0.43 m from the centre) and over it; the fingers lie on the top.
+      const [along, up] = rel(f.pos[j], wall, 3);
+      expect(Math.abs(along - 0.43)).toBeLessThan(0.05);
+      expect(Math.abs(up)).toBeLessThan(0.05);
+      const [far, top] = rel(tip(f, j), wall, 3);
+      expect(far).toBeGreaterThan(0.43 + 0.1);
+      expect(Math.abs(top)).toBeLessThan(0.06);
+    }
+    // A shoulder's width apart, along the wall.
+    const [a, b] = hands.map(j => f.pos[j]);
+    expect(Math.hypot(a[0] - b[0], a[2] - b[2])).toBeGreaterThan(0.3);
+    // The body hangs below, against the wall, facing it.
+    expect(f.pos[J.HEAD][1]).toBeLessThan(3);
+    expect(Math.min(...[J.FOOT_L, J.FOOT_R].map(j => f.pos[j][1]))).toBeLessThan(1.4);
+    expect(rel(f.pos[J.PELVIS], wall, 3)[0]).toBeGreaterThan(0.1);
+    expect(rel(f.pos[J.PELVIS], wall, 3)[0]).toBeLessThan(0.3);
+    const ahead = turn(f.rot[J.CHEST], [0, 0, -1]);
+    expect(ahead[0] * TO[wall][0] + ahead[2] * TO[wall][1]).toBeGreaterThan(0.9);
+  });
+
+  it('keeps the hands on the lip as the body climbs, then puts a foot over it', () => {
+    const climb = (y: number) => hold({ mode: MODE.CLIMB, ground: false, wall: 4, edge: 3, y }, 90);
+    const [low, mid, top] = [climb(1.2), climb(1.9), climb(2.9)];
+    for (const { f } of [low, mid]) {
+      for (const j of [J.HAND_L, J.HAND_R]) {
+        const [along, up] = rel(f.pos[j], 4, 3);
+        expect(along).toBeGreaterThan(0.3);
+        expect(along).toBeLessThan(0.65);
+        expect(Math.abs(up)).toBeLessThan(0.06);
+      }
+    }
+    // Early on both feet hang below; at the top a foot is on the ledge, beyond its lip, the knee high.
+    const feet = (r: typeof low) => [J.FOOT_L, J.FOOT_R].map(j => rel(r.f.pos[j], 4, 3));
+    expect(Math.max(...feet(low).map(q => q[1]))).toBeLessThan(-1.2);
+    const [foot] = feet(top).filter(q => q[0] > 0.43);
+    expect(foot).toBeDefined();
+    expect(Math.abs(foot[1] - 0.06)).toBeLessThan(0.06);
+    expect(top.f.pos[J.SHIN_R][1]).toBeGreaterThan(3 - 0.2);
+    // The trunk is further forward than in the hang.
+    expect(lean(top.f)).toBeGreaterThan(
+      lean(hold({ mode: MODE.HANG, ground: false, wall: 4, edge: 3 }).f) + 0.2,
+    );
+  });
+
+  it.each([
+    ['east', 1, 0, -7],
+    ['west', 2, 0, -7],
+    ['east, running the other way', 1, Math.PI, 7],
+  ])(
+    'runs the %s wall with the near sole and hand on it, the legs cycling along it',
+    (_n, wall, yaw, vz) => {
+      const g = createGait();
+      const p = state({ id: 6, ...at, mode: MODE.WALLRUN, ground: false, wall, vz, yaw });
+      const frames = sim(g, p, 3, q => (q.z += vz * DT)).slice(90);
+      // Facing -z the right hand is +x: the wall is on the side of the runner that matches.
+      const right = TO[wall][0] * Math.cos(yaw) - TO[wall][1] * Math.sin(yaw) > 0;
+      const [foot, hand] = right ? ['R', J.HAND_R] : ['L', J.HAND_L];
+      const x = (q: Vec3) => (q[0] - p.x) * TO[wall][0];
+      const near = frames.map(f => Math.min(...sole(f, foot as 'L' | 'R').map(q => 0.4 - x(q))));
+      // In the stance the whole sole lies on the wall plane (a few mm), in the swing it comes off it.
+      const planted = near.filter(d => Math.abs(d) < 0.03).length;
+      expect(planted).toBeGreaterThan(frames.length * 0.4);
+      expect(Math.max(...near)).toBeGreaterThan(0.1);
+      expect(Math.min(...near)).toBeGreaterThan(-0.03);
+      for (const f of frames) {
+        expect(0.4 - x(f.pos[hand])).toBeLessThan(0.1);
+        expect(0.4 - x(f.pos[hand])).toBeGreaterThan(0.01);
+      }
+      // The sole faces the wall in the stance: the ball and the heel at the same distance.
+      const flat = frames.filter((_, i) => Math.abs(near[i]) < 0.01);
+      expect(flat.length).toBeGreaterThan(10);
+      for (const f of flat) {
+        const [heel, ball] = sole(f, foot as 'L' | 'R');
+        expect(Math.abs(x(heel) - x(ball))).toBeLessThan(0.03);
+      }
+      // A run, not a pose: the foot moves along the wall, both feet cycle, and nothing goes through it.
+      const z = frames.map(f => f.pos[right ? J.FOOT_R : J.FOOT_L][2] - f.pos[J.PELVIS][2]);
+      expect(spread(z)).toBeGreaterThan(0.4);
+      expect(
+        spread(frames.map(f => f.pos[right ? J.FOOT_L : J.FOOT_R][2] - f.pos[J.PELVIS][2])),
+      ).toBeGreaterThan(0.4);
+      for (const f of frames) {
+        for (let j = 0; j < JOINTS; j++) {
+          expect(x(f.pos[j])).toBeLessThan(0.4 + 0.01);
+        }
+      }
+    },
+  );
+
+  it('slides on the back hip, the lead foot out ahead and a hand on the floor', () => {
+    const { f } = hold({ mode: MODE.SLIDE, vz: -8 }, 120, p => (p.z -= 8 * DT));
+    const floor = at.y;
+    expect(f.pos[J.PELVIS][1] - floor).toBeLessThan(0.35);
+    expect(f.pos[J.HEAD][1] - floor).toBeLessThan(0.95);
+    // One hand rests on the floor behind the hip.
+    const [low, high] = [J.HAND_L, J.HAND_R].map(j => f.pos[j]).sort((a, b) => a[1] - b[1]);
+    expect(low[1] - floor).toBeLessThan(0.06);
+    expect(low[1] - floor).toBeGreaterThan(0);
+    expect(low[2]).toBeGreaterThan(f.pos[J.PELVIS][2]);
+    expect(high[1]).toBeGreaterThan(low[1] + 0.2);
+    // The lead leg goes out ahead, low, and nothing sinks into the floor.
+    const lead = f.pos[J.FOOT_R];
+    expect(f.pos[J.PELVIS][2] - lead[2]).toBeGreaterThan(0.6);
+    expect(lead[1] - floor).toBeLessThan(0.3);
+    for (let j = 0; j < JOINTS; j++) {
+      expect(f.pos[j][1] - floor).toBeGreaterThan(-0.03);
+    }
+  });
+
+  it('keeps every bone its length in every move, the IK included', () => {
+    const states: Partial<PlayerState>[] = [
+      { mode: MODE.HANG, wall: 3, edge: 3 },
+      { mode: MODE.CLIMB, wall: 2, edge: 3, y: 2.5 },
+      { mode: MODE.WALLRUN, wall: 1, vz: -7 },
+      { mode: MODE.WALLRUN, wall: 2, vz: -7, yaw: 1 },
+      { mode: MODE.SLIDE, vz: -8 },
+      { mode: MODE.AIR, vy: 5, vz: -6 },
+      { mode: MODE.CROUCH, vz: -2 },
+      { stun: 30 },
+    ];
+    for (const o of states) {
+      const { f } = hold(o, 80, p => (p.z += (p.vz ?? 0) * DT));
+      PARENT.forEach((up, j) => {
+        if (up >= 0) {
+          expect(Math.hypot(...sub(f.pos[j], f.pos[up]))).toBeCloseTo(Math.hypot(...REST[j]), 4);
+        }
+      });
+    }
+  });
+
+  it('never produces a NaN or a stretched limb, in any mode, wall, ledge or timing', () => {
+    let seed = 11;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let n = 0; n < 6; n++) {
+      const g = createGait();
+      const p = state({ id: n + 1 });
+      for (let i = 0; i < 1500; i++) {
+        if (i % 25 == 0) {
+          Object.assign(p, {
+            mode: Math.floor(rnd() * 7),
+            wall: Math.floor(rnd() * 5),
+            edge: rnd() < 0.2 ? 0 : p.y + rnd() * 3 - 0.5,
+            yaw: rnd() * 7,
+            vx: (rnd() - 0.5) * 20,
+            vz: (rnd() - 0.5) * 20,
+            vy: (rnd() - 0.5) * 12,
+            stun: rnd() < 0.2 ? 30 : 0,
+          });
+        }
+        p.x += p.vx * DT;
+        p.z += p.vz * DT;
+        p.y += p.vy * DT * 0.2;
+        g.update(p, rnd() < 0.05 ? 0 : 1 / (20 + rnd() * 140));
+        const f = solve(g.pose());
+        for (let j = 0; j < JOINTS; j++) {
+          expect(f.rot[j].every(Number.isFinite)).toBe(true);
+          expect(Math.abs(Math.hypot(...f.rot[j]) - 1)).toBeLessThan(1e-4);
+          expect(f.pos[j].every(Number.isFinite)).toBe(true);
+          expect(Math.hypot(...sub(f.pos[j], [p.x, p.y, p.z]))).toBeLessThan(2.5);
+        }
+      }
+    }
+  });
+});
+
+describe('gait: the poses of the other moves', () => {
+  const frames = (
+    to: Partial<PlayerState>,
+    secs = 1.5,
+    drive?: (p: PlayerState, t: number) => void,
+  ) => sim(createGait(), state({ id: 2, ...to }), secs, drive ?? (() => undefined));
+  const pelvis = (f: Frame) => f.pos[J.PELVIS][1] - f.at[1];
+
+  it('takes off and rises with one knee driven up and the arms thrown up', () => {
+    const f = frames({ mode: MODE.AIR, ground: false, vy: 6, vz: -6 }).pop()!;
+    const [kl, kr] = [J.SHIN_L, J.SHIN_R].map(j => f.pos[j][1]);
+    expect(Math.abs(kl - kr)).toBeGreaterThan(0.2);
+    expect(Math.max(kl, kr)).toBeGreaterThan(f.pos[J.PELVIS][1] - 0.25);
+    for (const j of [J.HAND_L, J.HAND_R]) {
+      expect(f.pos[j][1]).toBeGreaterThan(f.pos[J.NECK][1]);
+    }
+  });
+
+  it('falls with the legs reaching down and the arms out for balance', () => {
+    const f = frames({ mode: MODE.AIR, ground: false, vy: -8, vz: -6 }).pop()!;
+    for (const j of [J.FOOT_L, J.FOOT_R]) {
+      expect(f.pos[J.PELVIS][1] - f.pos[j][1]).toBeGreaterThan(0.6);
+    }
+    for (const j of [J.HAND_L, J.HAND_R]) {
+      expect(Math.abs(f.pos[j][0] - f.pos[J.PELVIS][0])).toBeGreaterThan(0.45);
+      expect(Math.abs(f.pos[j][1] - f.pos[J.CHEST][1])).toBeLessThan(0.4);
+    }
+  });
+
+  it('absorbs a landing by the knees and the trunk, deeper for a harder fall', () => {
+    const land = (v: number) => {
+      const g = createGait();
+      const p = state({ id: 2, mode: MODE.AIR, ground: false, y: 3, vy: -v });
+      const fs = sim(g, p, 1.5, (q, t) => {
+        if (t < 0.4) {
+          q.y = 3 - v * t;
+        } else {
+          Object.assign(q, { mode: MODE.GROUND, ground: true, y: 0, vy: 0 });
+        }
+      }).slice(24);
+      return fs.reduce((a, b) => (pelvis(b) < pelvis(a) ? b : a));
+    };
+    const [soft, hard] = [land(5), land(14)];
+    expect(pelvis(hard)).toBeLessThan(pelvis(soft) - 0.08);
+    expect(pelvis(hard)).toBeLessThan(0.8);
+    expect(lean(hard)).toBeGreaterThan(lean(soft));
+    // The hands come forward of the hips to balance.
+    expect(hard.pos[J.HAND_L][2]).toBeLessThan(hard.pos[J.PELVIS][2] - 0.15);
+  });
+
+  it('dashes in a lunge: the trunk low and forward, the arms swept back, the legs split', () => {
+    const f = frames({ mode: MODE.AIR, ground: false, dash: 59, vz: -16 }, 1).pop()!;
+    expect(lean(f)).toBeGreaterThan(0.6);
+    for (const j of [J.HAND_L, J.HAND_R]) {
+      expect(f.pos[j][2]).toBeGreaterThan(f.pos[J.PELVIS][2] + 0.05);
+    }
+    expect(Math.abs(f.pos[J.FOOT_L][2] - f.pos[J.FOOT_R][2])).toBeGreaterThan(0.5);
+  });
+
+  it('reels in a stumble: thrown back, the arms flailing, and eases out as the timer runs down', () => {
+    const fs = frames({ stun: 40, vz: -2 }, 0.8, (p, t) => (p.stun = Math.max(0, 40 - 60 * t)));
+    const at = (t: number) => fs[Math.round(t * 60)];
+    expect(lean(at(0.45))).toBeLessThan(-0.15);
+    // The hands swing against each other: the heights of the two differ and change sign.
+    const diff = fs.slice(20, 40).map(f => f.pos[J.HAND_L][1] - f.pos[J.HAND_R][1]);
+    expect(Math.max(...diff)).toBeGreaterThan(0.1);
+    expect(Math.min(...diff)).toBeLessThan(-0.1);
+    // Out of it, upright again.
+    const end = frames({}, 3).pop()!;
+    expect(Math.abs(lean(end))).toBeLessThan(0.1);
+  });
+
+  it('walks crouched: low, the trunk forward, the hands ready in front', () => {
+    const fs = frames({ mode: MODE.CROUCH, vz: -2.2 }, 3, p => (p.z -= 2.2 * DT));
+    const f = fs[fs.length - 1];
+    expect(pelvis(f)).toBeLessThan(0.75);
+    expect(lean(f)).toBeGreaterThan(0.2);
+    for (const j of [J.HAND_L, J.HAND_R]) {
+      expect(f.pos[j][2]).toBeLessThan(f.pos[J.PELVIS][2] - 0.2);
+    }
   });
 });
 

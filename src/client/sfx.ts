@@ -61,11 +61,70 @@ const synth = ([wave, hz, slide, a, s, d, vib, lp, jt, jm, vol]: Voice, seed: nu
   return out;
 };
 
+/** The ids of the sounds: an index into LAYERS. The last two are loops (see LOOPED). */
+export const SOUND = {
+  STEP: 0,
+  /** The lighter tap of a step on a wall. */
+  WALLSTEP: 1,
+  JUMP: 2,
+  DOUBLE: 3,
+  DASH: 4,
+  LAND: 5,
+  GRAB: 6,
+  SCUFF: 7,
+  WIND: 8,
+  SCRAPE: 9,
+} as const;
+
 /**
- * The sounds of the game: one entry per sound, its voices layered, an index per sound for
- * audio.play. None yet: the footsteps, the dash and the grab of the next steps go here.
+ * The sounds of the game: one entry per sound, its voices layered, in SOUND order. A low-passed
+ * noise is quiet (lp 0.06 keeps about a tenth of the swing): the loops have a high volume.
  */
-export const LAYERS: Voice[][] = [];
+export const LAYERS: Voice[][] = [
+  [
+    [2, 130, -3, 0.001, 0.005, 0.06, 0, 1, 0, 1, 0.7],
+    [3, 8000, -1, 0.001, 0, 0.035, 0, 0.4, 0, 1, 0.45],
+  ],
+  [
+    [3, 12000, 0, 0.001, 0, 0.03, 0, 0.5, 0, 1, 0.4],
+    [2, 190, -3, 0.001, 0, 0.04, 0, 1, 0, 1, 0.3],
+  ],
+  [
+    [3, 14000, 0, 0.015, 0.02, 0.09, 0.3, 0.18, 0, 1, 0.5],
+    [2, 70, -2, 0.003, 0, 0.07, 0, 1, 0, 1, 0.3],
+  ],
+  [
+    [3, 4000, 3.5, 0.03, 0.03, 0.2, 0, 0.25, 0, 1, 0.5],
+    [2, 350, 1.2, 0.03, 0.02, 0.18, 0.02, 1, 0, 1, 0.12],
+  ],
+  [
+    [3, 14000, -2.5, 0.008, 0.07, 0.2, 0.25, 0.3, 0, 1, 0.8],
+    [3, 3500, 0.5, 0.01, 0.06, 0.2, 0, 0.12, 0, 1, 0.5],
+  ],
+  [
+    [2, 70, -2.5, 0.001, 0.01, 0.2, 0, 1, 0, 1, 0.9],
+    [3, 7000, -1, 0.001, 0, 0.09, 0, 0.25, 0, 1, 0.5],
+  ],
+  [
+    [3, 6000, -1, 0.001, 0, 0.05, 0, 0.5, 0, 1, 0.7],
+    [2, 160, -4, 0.001, 0, 0.07, 0, 1, 0, 1, 0.5],
+  ],
+  [
+    [3, 5000, 0, 0.01, 0.04, 0.14, 0.5, 0.3, 0, 1, 0.5],
+    [3, 2500, 0, 0.03, 0, 0.1, 0.4, 0.2, 0, 1, 0.3, 0.08],
+  ],
+  [
+    [3, 20000, 0, 0.001, 2.1, 0.001, 0.25, 0.06, 0, 1, 1.2],
+    [3, 20000, 0, 0.001, 2.1, 0.001, 0.35, 0.3, 0, 1, 0.3],
+  ],
+  [
+    [3, 9000, 0, 0.001, 2.1, 0.001, 0.5, 0.4, 0, 1, 0.5],
+    [3, 3000, 0, 0.001, 2.1, 0.001, 0.4, 0.2, 0, 1, 0.5],
+  ],
+];
+
+/** The sounds played in a loop: their buffers go through seam. */
+export const LOOPED: number[] = [SOUND.WIND, SOUND.SCRAPE];
 
 /**
  * Renders the sound `id` of `layers` as mono samples in [-1, 1] at RATE, deterministic (seeded
@@ -78,6 +137,19 @@ export const render = (id: number, layers: Voice[][] = LAYERS): Float32Array => 
   // tanh keeps the sum of the voices within [-1, 1].
   return Float32Array.from({ length: Math.max(...voices.map(([v, d]) => d + v.length)) }, (_, i) =>
     Math.tanh(voices.reduce((sum, [v, d]) => sum + (v[i - d] ?? 0), 0)),
+  );
+};
+
+/**
+ * A sound made loopable: the last `x` samples are cross-faded into the first, the length drops by
+ * `x`, and the end joins the start. For a stationary sound (a loop's voice is held at full
+ * volume, nothing but noise), whose own ends are no longer heard.
+ */
+export const seam = (s: Float32Array, x = RATE / 10): Float32Array => {
+  const n = s.length - x;
+  // Equal power: the two parts are not correlated.
+  return Float32Array.from({ length: n }, (_, i) =>
+    i < x ? s[i] * Math.sqrt(i / x) + s[n + i] * Math.sqrt(1 - i / x) : s[i],
   );
 };
 

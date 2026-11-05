@@ -205,6 +205,22 @@ describe('createRenderer', () => {
       return out;
     };
 
+    it('gives the final pass the speed lines of the effects, and only it', () => {
+      const rd = createRenderer(canvas, ROOM);
+      const fx = createEffects();
+      fx.lines = 0.7;
+      calls.length = 0;
+      frame(rd, fx);
+      const lines = calls.filter(c => (c[1] as { u?: string } | undefined)?.u == 'L');
+      expect(lines.map(c => c[2])).toEqual([0.7]);
+      // Set before the last pass of the frame, which draws on the canvas.
+      const last = calls.map(c => c[0] == 'drawArrays' && c[3] == 3).lastIndexOf(true);
+      expect(calls.indexOf(lines[0])).toBeLessThan(last);
+      expect(calls.indexOf(lines[0])).toBeGreaterThan(
+        calls.map(c => c[0]).lastIndexOf('blitFramebuffer'),
+      );
+    });
+
     it('blooms the bright parts at half size, then blurs them at a quarter and an eighth', () => {
       const rd = createRenderer(canvas, ROOM);
       frame(rd);
@@ -350,6 +366,46 @@ describe('createRenderer', () => {
     expect(calls.filter(c => c[0] == 'depthMask')).toHaveLength(0);
   });
 
+  describe('body', () => {
+    const SOLID = 36 * STRIDE;
+    const body = (
+      draw = vi.fn((out: number[]) => void out.push(...new Array<number>(SOLID).fill(0))),
+    ) => ({
+      update: vi.fn(),
+      rig: vi.fn(),
+      draw,
+    });
+
+    it('is drawn last, over a cleared depth, and casts no shadow', () => {
+      const rd = createRenderer(canvas, ROOM);
+      const b = body();
+      const fx = createEffects();
+      rd.frame([1, 1.6, 1], 0.5, -0.2, [], new Map(), fx, [], b);
+      expect(b.draw).toHaveBeenCalledWith(expect.any(Array), [1, 1.6, 1], 0.5, -0.2, fx.roll);
+      expect(draws()).toEqual([
+        [0, FLOOR_VERTS],
+        [0, FLOOR_VERTS],
+        [FLOOR_VERTS, 36],
+      ]);
+      const scene = calls.flatMap((c, i) => (c[0] == 'drawArrays' && c[3] != 3 ? [i] : []));
+      const clears = calls.flatMap((c, i) =>
+        c[0] == 'clear' && c[1] == K('DEPTH_BUFFER_BIT') ? [i] : [],
+      );
+      // The world, then a depth clear, then the body.
+      expect(clears.at(-1)).toBeGreaterThan(scene[1]);
+      expect(clears.at(-1)).toBeLessThan(scene[2]);
+    });
+
+    it('is not drawn, and costs no clear, when it has nothing to show', () => {
+      const rd = createRenderer(canvas, ROOM);
+      rd.frame([1, 1.6, 1], 0, 0, [], new Map(), createEffects(), [], body(vi.fn()));
+      const depthClears = calls.filter(c => c[0] == 'clear' && c[1] == K('DEPTH_BUFFER_BIT'));
+      expect(draws()).toHaveLength(2);
+      // The sun's pass and the scene's own.
+      expect(depthClears).toHaveLength(1);
+    });
+  });
+
   /** The calls that set the uniform `name`. */
   const set = (name: string) =>
     calls.filter(c => (c[1] as { u?: string } | undefined)?.u == name && /^uniform/.test(c[0]));
@@ -393,6 +449,17 @@ describe('createRenderer', () => {
       const rays = Array.from(set('J').at(-1)![2] as number[]);
       const t = Math.tan((70 * Math.PI) / 360);
       [t * 1.6, 0, 0, 0, t, 0, 0, 0, -1].forEach((v, i) => expect(rays[i]).toBeCloseTo(v, 4));
+    });
+
+    it('widens with the field of view of the effects: the rays and the projection', () => {
+      const rd = createRenderer(canvas, ROOM);
+      const fx = createEffects();
+      fx.fov = 10;
+      rd.frame([0, 1.6, 0], 0, 0, [], new Map(), fx, []);
+      const rays = Array.from(set('J').at(-1)![2] as number[]);
+      expect(rays[4]).toBeCloseTo(Math.tan((80 * Math.PI) / 360), 4);
+      // The matrix row for y is 1 / the same tangent.
+      expect(Array.from(set('m').at(-1)![3] as number[])[5]).toBeCloseTo(1 / rays[4], 4);
     });
 
     it('is not drawn into the shadow map', () => {

@@ -6,7 +6,9 @@ import type { ServerText } from '../shared/protocol';
 import type { PlayerInfo, SocketLike } from '../shared/types';
 import { build, hidden } from '../shared/world';
 import { createAudio, savedMute, toggleMute } from './audio';
+import { createBody } from './body';
 import { createEffects } from './effects';
+import { createFoley } from './foley';
 import { HUD_CSS, createHud } from './hud';
 import { createInput } from './input';
 import { createPredictor } from './predict';
@@ -73,6 +75,8 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   // The click that takes the pointer lock is the gesture that lets the sound start.
   canvas.addEventListener('click', () => audio.unlock());
   const fx = createEffects();
+  const foley = createFoley(audio);
+  const body = createBody();
   let rd: Renderer | undefined;
   try {
     rd = createRenderer(canvas, world);
@@ -163,23 +167,25 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     const eye: [number, number, number] = me ? [me.x, me.y + eyeHeight(me), me.z] : [0, 0, 0];
     audio.listen(eye, ctl.yaw);
     const dt = Math.min((now - before) / 1000, 0.1);
-    fx.update(me, ctl.keys, dt);
+    // What the live steps did, once: the camera, the sounds and the body read it, the inputs sent do not.
+    const hit = predictor.events();
+    fx.update(me, ctl.keys, dt, hit);
+    foley.me(me, hit, fx.stride);
+    foley.others(others);
+    body.update(me, hit, dt);
     if (me && rd) {
-      // The bob is for the eye only: the inputs keep sending the real height.
+      // The camera moves for the eye only: the inputs keep sending the real height and angles.
+      const cam: [number, number, number] = [eye[0], eye[1] + fx.dy, eye[2]];
+      const pitch = ctl.pitch + fx.pitch;
       rd.frame(
-        [eye[0], eye[1] + fx.bob, eye[2]],
+        cam,
         ctl.yaw,
-        ctl.pitch,
+        pitch,
         others,
         colors,
         fx,
-        gather({
-          eye: [eye[0], eye[1] + fx.bob, eye[2]],
-          yaw: ctl.yaw,
-          pitch: ctl.pitch,
-          others,
-          t: now / 1000,
-        }),
+        gather({ eye: cam, yaw: ctl.yaw, pitch, others, t: now / 1000 }),
+        body,
       );
     }
     const seen = new Set<number>();

@@ -8,6 +8,7 @@
 import { TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import type { World, WorldDef } from '../shared/world';
+import type { Body } from './body';
 import type { Effects } from './effects';
 import { STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
@@ -31,8 +32,9 @@ export const SUN_AREA = 64;
 export const SUN_DEPTH = 100;
 /** How far the fog colour is pulled toward the sky's horizon, 0 to 1: a fog unlike the horizon draws an edge against the sky. */
 export const HAZE = 0.6;
-/** Tangent of half the vertical field of view (70 degrees). */
-export const FOV = Math.tan((70 * Math.PI) / 360);
+/** The vertical field of view at rest, degrees, and the tangent of its half. */
+export const FOV_DEG = 70;
+export const FOV = Math.tan((FOV_DEG * Math.PI) / 360);
 /** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
 const SAMPLES = 4;
 
@@ -56,7 +58,7 @@ out vec2 U;void main(){U=vec2(gl_VertexID&1,gl_VertexID>>1)*2.;gl_Position=vec4(
 // scene plus the three blurs (S[1..3]) on the canvas. Tone: linear up to .6, then a shoulder
 // toward 1.
 const POST_FRAG = `#version 300 es
-precision highp float;uniform sampler2D S[4];uniform vec4 Y;in vec2 U;out vec4 o;
+precision highp float;uniform sampler2D S[4];uniform vec4 Y;uniform float L;in vec2 U;out vec4 o;
 vec3 b(vec2 x){vec3 c=texture(S[0],x).rgb;return c*smoothstep(.95,2.2,max(c.r,max(c.g,c.b)));}
 #define T(k)texture(S[0],U+Y.xy*(k)).rgb
 void main(){
@@ -67,7 +69,9 @@ else{
 c=texture(S[0],U).rgb+texture(S[1],U).rgb*1.+texture(S[2],U).rgb*.8+texture(S[3],U).rgb*.6;
 vec2 q=U-.5;
 c=min(c,.6)+.4*(1.-exp(-max(c-.6,0.)/.4));
-c*=1.-.7*dot(q,q);
+float a=atan(q.y,q.x)*24.,h=fract(sin(floor(a)*12.9898)*43758.5453);
+c+=L*step(.85-.5*L,h)*sin(fract(a)*3.1416)*smoothstep(.2,.6,length(q))*fract(length(q)*3.-Y.w*.002+h*9.)*.22;
+c*=1.-(.7+.3*L)*dot(q,q);
 c=pow(c,vec3(.92))+(fract(sin(dot(gl_FragCoord.xy+Y.w,vec2(12.9898,78.233)))*43758.5453)-.5)*.03;}
 o=vec4(c,1);}`;
 
@@ -340,8 +344,8 @@ interface Target {
 
 export interface Renderer {
   /**
-   * Draws one frame: the sky, the brushes and the others as seen from eye. colors maps player id
-   * to CSS.
+   * Draws one frame: the sky, the brushes and the others as seen from eye, then the own `body` over
+   * a cleared depth, lit but casting no shadow. colors maps player id to CSS.
    */
   frame(
     eye: Vec3,
@@ -352,6 +356,7 @@ export interface Renderer {
     fx: Effects,
     /** gather() in lights.ts: at most MAX_LIGHTS, the first MAX_SHADOWS shadowed spots mapped, besides the sun. */
     lights: Light[],
+    body?: Body,
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
@@ -506,7 +511,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     fmt = gl.getExtension('EXT_color_buffer_float') ? gl.RGBA16F : gl.RGBA8;
     owned.length = 0;
     made = [0, 0];
-    [post, pu] = link(POST_VERT, POST_FRAG, ['S', 'Y']);
+    [post, pu] = link(POST_VERT, POST_FRAG, ['S', 'Y', 'L']);
     gl.uniform1iv(pu.S, [0, 1, 2, 3]);
     [scene, u] = link(VERT, FRAG, [
       'm',
@@ -611,7 +616,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   return {
-    frame(eye, yaw, pitch, others, colors, fx, lights) {
+    frame(eye, yaw, pitch, others, colors, fx, lights, body) {
       const [w, h] = size();
       if (lost || !w || !h) {
         return;
@@ -623,7 +628,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       if (made[0] != w || made[1] != h) {
         targets(w, h);
       }
-      vp = viewProj(eye, yaw, pitch, w / h, fx.roll);
+      const tan = Math.tan(((FOV_DEG + fx.fov) * Math.PI) / 360);
+      vp = viewProj(eye, yaw, pitch, w / h, fx.roll, tan);
       const v: number[] = [];
       const now = performance.now() / 1000;
       const dt = Math.min(0.1, now - clock);
@@ -632,6 +638,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         const g = follow(gaits, p.id, p.x, p.z, dt);
         soldier(v, p, rgb(colors.get(p.id) ?? '#888'), g.walked, pace(g));
       }
+      const bodyAt = v.length;
+      body?.draw(v, eye, yaw, pitch, fx.roll);
       if (tail + v.length * 4 > cap) {
         cap = tail + v.length * 8;
         alloc();
@@ -652,7 +660,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, shadows, 0, i);
         gl.uniformMatrix4fv(u.m, false, i ? pk.m.subarray(i * 16 - 16, i * 16) : sunM);
         gl.clear(gl.DEPTH_BUFFER_BIT);
-        gl.drawArrays(gl.TRIANGLES, 0, first + v.length / STRIDE);
+        gl.drawArrays(gl.TRIANGLES, 0, first + bodyAt / STRIDE);
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, shadows);
@@ -672,11 +680,16 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       // The sky first, at depth 1: the view ray of each pixel from the camera's axes.
       const [r, up, fwd] = basis(yaw, pitch, fx.roll);
-      gl.uniform3fv(u.J, [r.map(c => c * FOV * (w / h)), up.map(c => c * FOV), fwd].flat());
+      gl.uniform3fv(u.J, [r.map(c => c * tan * (w / h)), up.map(c => c * tan), fwd].flat());
       gl.uniform1f(u.Y, 1);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.uniform1f(u.Y, 0);
-      gl.drawArrays(gl.TRIANGLES, 0, first + v.length / STRIDE);
+      gl.drawArrays(gl.TRIANGLES, 0, first + bodyAt / STRIDE);
+      if (v.length > bodyAt) {
+        // Last, over a cleared depth: the body never sinks into a wall.
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLES, first + bodyAt / STRIDE, (v.length - bodyAt) / STRIDE);
+      }
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaa);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, hdr.f);
       gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
@@ -688,6 +701,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         pass(b, 1, 1 / b.w, 0, bloom[i && i - 1][0]);
         pass(a, 1, 0, 1 / a.h, b);
       });
+      gl.uniform1f(pu.L, fx.lines);
       pass(undefined, 2, 0, 0, hdr, ...bloom.map(l => l[0]));
       // Units 1 to 3 hold the blurs, which the next frame draws into.
       for (let i = 3; i > 0; i--) {

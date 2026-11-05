@@ -198,13 +198,15 @@ For now the game is the movement and the room; the rules come with the next step
 
 - [x] Multiplayer over WebSocket, or between tabs of one browser with no server
 - [x] A brush world under an open sky: roofs at any height, gaps, floating platforms and overhangs, steps, falls back to a spawn; eight procedural materials (brick, tile, lava, stone, metal, wood, moss, grating) with bump mapping and per-material highlights; a sky with a blooming sun, a sun shadow that follows you, daylight from the sky
-- [x] The rooftop map: a deck, a parapet, a crate, a block and a platform with steps
+- [x] ROOFTOPS, a parkour course: roofs across jumpable and unjumpable gaps, a stair to a floating platform, ledges to grab, a long wall to run along, a slot to slide under, a beam, a far roof for sprint plus dash
 - [x] Client-side prediction, exact to the bit, and the other players interpolated
 - [x] A per-tick history of the players on the host, for lag compensation
-- [x] Flashlights with shadow maps, a light colour per room, a fog colour per map, flickering lava light, dust in the flashlight beam
+- [x] Daylight: a sky with a blooming sun, a sun shadow that follows you, a light colour per box, haze toward the horizon
 - [x] Post-processing: bloom, tone mapping, vignette, film grain, 4x antialiasing
+- [x] Parkour moves, predicted exactly: momentum, sprint, dash, double jump, ledge grab and climb, wall-run, slide, coyote time and jump buffer
+- [x] Your own body in first person, Mirror's Edge style: arms that pump with the stride, hands on the ledge, legs when you look down; a camera that kicks its field of view, dips on landings, leans into wall-runs; speed lines
 - [x] A model for the other players: jointed legs and arms that follow their stride
-- [x] Sound: a jsfxr-style synthesiser and a looped music; M mutes
+- [x] Sound: a jsfxr-style synthesiser for steps, jumps, dashes, landings, grabs, climbs, slides and the wind of speed, placed in stereo; a looped music; M mutes
 - [x] A title screen with the controls, a muted mark, a player count and name tags
 - [x] Shadow DOM, zero runtime dependencies, size-gated in CI
 

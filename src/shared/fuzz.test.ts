@@ -6,6 +6,7 @@ import { decodeSnapshot, encodeSnapshot } from './protocol';
 import { EV, MODE } from './types';
 import type { PlayerState, SnapPlayer } from './types';
 import { build } from './world';
+import { IDLE } from '../../test/teams';
 
 const world = build(ROOFTOPS);
 
@@ -79,7 +80,7 @@ describe('random play on ROOFTOPS', () => {
         // it carry on the same.
         if (k % 7 === 0) {
           const [back] = decodeSnapshot(
-            encodeSnapshot({ tick: 0, players: [{ ...p, ack: 0 } as SnapPlayer] }),
+            encodeSnapshot({ tick: 0, players: [{ ...p, ack: 0 } as SnapPlayer], ...IDLE }),
           )!.players;
           const { ack, ...rest } = back;
           expect(ack).toBe(0);

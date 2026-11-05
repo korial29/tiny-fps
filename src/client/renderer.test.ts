@@ -22,6 +22,7 @@ import {
   level,
   sunProj,
 } from './render';
+import { duo } from '../../test/teams';
 
 type Call = [name: string, ...args: unknown[]];
 
@@ -67,7 +68,14 @@ const brush = (over: Partial<Brush> = {}): Brush => ({
   ...over,
 });
 const worldOf = (over: Partial<WorldDef> = {}) =>
-  build({ brushes: [brush()], spawns: [[1, 0, 1, 0]], floor: -20, sun: SUN, sky: SKY, ...over });
+  build({
+    brushes: [brush()],
+    teams: duo([[1, 0, 1, 0]]),
+    floor: -20,
+    sun: SUN,
+    sky: SKY,
+    ...over,
+  });
 const ROOM = worldOf();
 const FLOOR_VERTS = level(ROOM).length / STRIDE;
 

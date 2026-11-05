@@ -1,15 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import * as lines from '../../test/lines';
 import { EAST, NORTH, SOUTH, Sim } from '../../test/pilot';
-import { GRAB_MAX, GRAVITY, JUMP_SPEED, PLAYER_H, PLAYER_R, RUN_SPEED, STEP_H } from './constants';
+import {
+  FLAG_H,
+  FLAG_REACH,
+  GRAB_MAX,
+  GRAVITY,
+  JUMP_SPEED,
+  PLAYER_H,
+  PLAYER_R,
+  RUN_SPEED,
+  STEP_H,
+} from './constants';
 import { ROOFTOPS } from './map';
 import { move, spawn } from './physics';
 import { EV, KEY, MODE, TEX } from './types';
 import type { PlayerState } from './types';
+import { touches } from './ctf';
 import { build } from './world';
 
 const world = build(ROOFTOPS);
-const { brushes, spawns } = ROOFTOPS;
+const { brushes, teams } = ROOFTOPS;
 /** The highest a jump lifts the feet. */
 const APEX = JUMP_SPEED ** 2 / (2 * GRAVITY);
 
@@ -51,29 +62,78 @@ describe('ROOFTOPS', () => {
     }
   });
 
-  it('puts every spawn on a top, with room above it, outside every brush, clear of the others', () => {
-    expect(spawns.length).toBeGreaterThanOrEqual(8);
-    for (const [n, [x, y, z]] of spawns.entries()) {
-      const under = brushes.filter(
-        b => b.min[0] < x && x < b.max[0] && b.min[2] < z && z < b.max[2],
-      );
-      expect(
-        under.some(b => b.max[1] === y),
-        `spawn ${n}: a top at ${y}`,
-      ).toBe(true);
-      // A whole body stands there: nothing within the cylinder's box from the feet up to the head.
-      expect(
-        brushes.some(b => meets(b, x, y, z, PLAYER_H)),
-        `spawn ${n}: room`,
-      ).toBe(false);
-      for (const [m, [u, , v]] of spawns.entries()) {
-        expect(m === n || Math.hypot(u - x, v - z) >= 2, `spawns ${n} and ${m}`).toBe(true);
+  it('puts every spawn of both teams on a top, with room above it, outside every brush, clear of the others', () => {
+    for (const [team, { spawns }] of teams.entries()) {
+      expect(spawns.length).toBeGreaterThanOrEqual(8);
+      for (const [n, [x, y, z]] of spawns.entries()) {
+        const under = brushes.filter(
+          b => b.min[0] < x && x < b.max[0] && b.min[2] < z && z < b.max[2],
+        );
+        expect(
+          under.some(b => b.max[1] === y),
+          `team ${team}, spawn ${n}: a top at ${y}`,
+        ).toBe(true);
+        // A whole body stands there: nothing within the cylinder's box from the feet up to the head.
+        expect(
+          brushes.some(b => meets(b, x, y, z, PLAYER_H)),
+          `team ${team}, spawn ${n}: room`,
+        ).toBe(false);
+        for (const [m, [u, , v]] of spawns.entries()) {
+          expect(m === n || Math.hypot(u - x, v - z) >= 2, `spawns ${n} and ${m}`).toBe(true);
+        }
+        // Standing, not falling, and well above the kill floor.
+        const p = spawn(0, world, n, team);
+        move(p, { seq: 0, keys: 0, yaw: p.yaw, pitch: 0 }, world, team);
+        expect(p).toEqual({ ...spawn(0, world, n, team), t: 1 });
+        expect(y).toBeGreaterThan(ROOFTOPS.floor + 20);
       }
-      // Standing, not falling, and well above the kill floor.
-      const p = spawn(0, world, n);
-      move(p, { seq: 0, keys: 0, yaw: p.yaw, pitch: 0 }, world);
-      expect(p).toEqual({ ...spawn(0, world, n), t: 1 });
-      expect(y).toBeGreaterThan(ROOFTOPS.floor + 20);
+    }
+  });
+
+  it('puts the teams on opposite roofs, facing the way to the other, and no spawn near the other base', () => {
+    const [red, blue] = teams;
+    expect(Math.hypot(red.base[0] - blue.base[0], red.base[2] - blue.base[2])).toBeGreaterThan(50);
+    // Yaw 0 looks toward -z: red looks north, to the far end, blue looks back south.
+    expect(red.spawns.every(s => s[3] === 0)).toBe(true);
+    expect(blue.spawns.every(s => Math.cos(s[3]) < -0.99)).toBe(true);
+    for (const [mine, other] of [
+      [red, blue],
+      [blue, red],
+    ]) {
+      for (const [x, , z] of mine.spawns) {
+        expect(Math.hypot(x - mine.base[0], z - mine.base[2])).toBeLessThan(15);
+        expect(Math.hypot(x - other.base[0], z - other.base[2])).toBeGreaterThan(50);
+      }
+    }
+  });
+
+  it('stands each flag on a top, with its ring and pole free of any other brush', () => {
+    for (const [
+      team,
+      {
+        base: [x, y, z],
+      },
+    ] of teams.entries()) {
+      const r = FLAG_REACH;
+      const top = brushes.find(
+        b =>
+          b.max[1] === y &&
+          b.min[0] <= x - r &&
+          b.max[0] >= x + r &&
+          b.min[2] <= z - r &&
+          b.max[2] >= z + r,
+      );
+      expect(top, `team ${team}: a roof under the whole ring`).toBeDefined();
+      const blocks = brushes.some(
+        b =>
+          b.min[0] < x + r &&
+          b.max[0] > x - r &&
+          b.min[2] < z + r &&
+          b.max[2] > z - r &&
+          b.min[1] < y + FLAG_H &&
+          b.max[1] > y + 1e-6,
+      );
+      expect(blocks, `team ${team}: room`).toBe(false);
     }
   });
 
@@ -151,7 +211,8 @@ describe('ROOFTOPS', () => {
       const r = fall(p, KEY.FORWARD, 0);
       expect(r.respawned).toBe(true);
       expect(r.low).toBeLessThan(ROOFTOPS.floor + 1);
-      expect(p).toMatchObject({ ...spawn(0, world, 0), yaw: 0 });
+      // The step that respawned reports it.
+      expect(p).toMatchObject({ ...spawn(0, world, 0), yaw: 0, ev: EV.RESPAWN });
     });
 
     it('climbs the stair onto the platform, passing 0.4 m steps, and walks under it', () => {
@@ -447,6 +508,30 @@ describe('ROOFTOPS, the lines the course is laid out for', () => {
     // Never fell to the kill floor: every line was made, not rescued.
     expect(s.low).toBeGreaterThan(7.9);
     expect([...s.modes].sort()).toEqual(Object.values(MODE).sort());
-    expect(s.ev).toBe(Object.values(EV).reduce((a, b) => a | b, 0));
+    // Every event but the respawn: nothing was rescued.
+    expect(s.ev).toBe(Object.values(EV).reduce((a, b) => a | b, 0) & ~EV.RESPAWN);
+  });
+});
+
+describe('ROOFTOPS, the flags', () => {
+  const [red, blue] = teams.map(t => t.base);
+  const there = (s: Sim, base: number[]) => touches(s.p, base as [number, number, number]);
+
+  it('can be reached from the other base, and carried back to it, with the moves alone', () => {
+    // Red runs the course out to blue's flag; the same player then carries it home the other way.
+    const s = Sim.at(world, 0);
+    lines.gapAB(s);
+    lines.ledgeBC(s);
+    lines.chasm(s, 'F');
+    s.goTo(blue[0], blue[2]);
+    expect(there(s, blue)).toBe(true);
+    lines.chasm(s, 'C', { sprint: true, double: 40 });
+    lines.dropCB(s);
+    lines.gapBA(s);
+    s.goTo(red[0], red[2]);
+    expect(there(s, red)).toBe(true);
+    // Never fell: the way back is made with the moves too, not rescued by a respawn.
+    expect(s.low).toBeGreaterThan(9.9);
+    expect(s.ev & EV.RESPAWN).toBe(0);
   });
 });

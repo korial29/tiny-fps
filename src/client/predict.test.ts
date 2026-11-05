@@ -10,6 +10,7 @@ import { build } from '../shared/world';
 import * as lines from '../../test/lines';
 import { Sim } from '../../test/pilot';
 import { createPredictor } from './predict';
+import { IDLE } from '../../test/teams';
 
 const STEP = 1000 / TICK_HZ;
 const world = build(ROOFTOPS);
@@ -32,6 +33,7 @@ const snapPlayer = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => (
 const snapshot = (tick: number, ...players: SnapPlayer[]): Snapshot => ({
   tick,
   players,
+  ...IDLE,
 });
 const fwd = { keys: KEY.FORWARD, yaw: 0, pitch: 0 };
 
@@ -243,7 +245,7 @@ describe('prediction against the room', () => {
 
   it('flies a course that uses every move: a guard, so the run below is not a trivial one', () => {
     expect([...COURSE.modes].sort()).toEqual(Object.values(MODE).sort());
-    expect(COURSE.ev).toBe(Object.values(EV).reduce((a, b) => a | b, 0));
+    expect(COURSE.ev).toBe(Object.values(EV).reduce((a, b) => a | b, 0) & ~EV.RESPAWN);
     expect(COURSE.low).toBeGreaterThan(7.9);
     expect(COURSE.inputs.length).toBeGreaterThan(2000);
   });

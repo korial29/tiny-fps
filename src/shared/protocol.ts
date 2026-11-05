@@ -1,5 +1,5 @@
 // Wire format.
-// Text frames carry rare JSON messages (join, roster, full).
+// Text frames carry rare JSON messages (join, roster, full, end).
 // Binary frames carry the hot path: inputs (client → host) and snapshots (host → client).
 //
 // Input, 11 bytes: [type u8 = MSG_INPUT][seq u16][keys u8][yaw u16][pitch i16][view u16][frac u8]
@@ -14,13 +14,33 @@
 //   The floats are the host's float32 state, exact (see move in physics.ts), and with the rest
 //   they are all a move needs to continue from. ground comes from the mode; ev and fall (what the
 //   animation reads) are not sent, they read 0.
+//   Then the match, after the players: [red u8][blue u8][clock u16] the captures of each team, and
+//   the whole seconds to the end of the match (bit 15: it is over, and the clock counts to the next
+//   one); then the red and the blue flag, each [state u8 = FLAG] and by state:
+//     HOME: nothing more (2 bytes in all for the two flags);
+//     CARRIED: [by u8] the carrier's player id;
+//     DROPPED: [x i16][y i16][z i16] in 1/16 m, [left u8] whole seconds before it goes home.
+//   A snapshot is 4 + 39 × players + 4 + 2 to 16 bytes: 6 on top of the players when both flags are home.
 // Every multi-byte field is big-endian (DataView's default).
-import { KEY, MODE } from './types';
-import type { Input, PlayerInfo, Snapshot } from './types';
+import { FLAG, KEY, MODE } from './types';
+import type { FlagState, Input, PlayerInfo, Snapshot } from './types';
 
 export type ClientText = { t: 'join'; name: string };
 
-export type ServerText = { t: 'roster'; you: number; players: PlayerInfo[] } | { t: 'full' };
+/** What a player did in a match, for the end screen: it carries the name and the team, which a leaver takes out of the roster. */
+export interface Result {
+  id: number;
+  name: string;
+  team: number;
+  caps: number;
+  returns: number;
+}
+
+export type ServerText =
+  | { t: 'roster'; you: number; players: PlayerInfo[] }
+  | { t: 'full' }
+  /** The match is over: the final captures of red and blue, and every player's result. */
+  | { t: 'end'; score: [number, number]; players: Result[] };
 
 export const MSG_INPUT = 1;
 export const MSG_SNAPSHOT = 2;
@@ -28,6 +48,11 @@ export const MSG_SNAPSHOT = 2;
 export const INPUT_BYTES = 11;
 export const SNAP_HEAD = 4;
 export const SNAP_PLAYER = 39;
+/** The match block after the players: the captures, the clock; the flags follow (2 to 16 bytes). */
+export const SNAP_MATCH = 4;
+
+/** A flag's resting place on the wire: 1/16 m in an i16, so ±2 km. */
+const POS = 16;
 
 const TURN = 65536 / (2 * Math.PI);
 /** Radians to 65536ths of a turn; the mask also folds negative and ≥ 2π angles into one turn. */
@@ -83,8 +108,15 @@ export const decodeInput = (buf: ArrayBuffer): Input | null => {
   };
 };
 
+/** Bytes of a flag on the wire, by its state. */
+const flagBytes = (state: number): number =>
+  state === FLAG.CARRIED ? 2 : state === FLAG.DROPPED ? 8 : 1;
+
 export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
-  const v = new DataView(new ArrayBuffer(SNAP_HEAD + SNAP_PLAYER * s.players.length));
+  const end = SNAP_HEAD + SNAP_PLAYER * s.players.length;
+  const v = new DataView(
+    new ArrayBuffer(end + SNAP_MATCH + s.flags.reduce((n, f) => n + flagBytes(f.state), 0)),
+  );
   v.setUint8(0, MSG_SNAPSHOT);
   v.setUint16(1, s.tick & 0xffff);
   v.setUint8(3, s.players.length);
@@ -112,6 +144,22 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
         (p.held & KEY.DASH ? 128 : 0),
     );
   });
+  v.setUint8(end, s.score[0]);
+  v.setUint8(end + 1, s.score[1]);
+  v.setUint16(end + 2, (s.clock & 0x7fff) | (s.over ? 0x8000 : 0));
+  let o = end + SNAP_MATCH;
+  for (const f of s.flags) {
+    v.setUint8(o, f.state);
+    if (f.state === FLAG.CARRIED) {
+      v.setUint8(o + 1, f.by);
+    } else if (f.state === FLAG.DROPPED) {
+      v.setInt16(o + 1, clamp16(f.x * POS));
+      v.setInt16(o + 3, clamp16(f.y * POS));
+      v.setInt16(o + 5, clamp16(f.z * POS));
+      v.setUint8(o + 7, Math.min(255, f.left));
+    }
+    o += flagBytes(f.state);
+  }
   return v.buffer;
 };
 
@@ -122,7 +170,8 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
   }
   const v = new DataView(buf);
   const count = v.getUint8(3);
-  if (v.getUint8(0) !== MSG_SNAPSHOT || buf.byteLength !== SNAP_HEAD + SNAP_PLAYER * count) {
+  const end = SNAP_HEAD + SNAP_PLAYER * count;
+  if (v.getUint8(0) !== MSG_SNAPSHOT || buf.byteLength < end + SNAP_MATCH + 2) {
     return null;
   }
   const players = [];
@@ -157,7 +206,35 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       fall: 0,
     });
   }
-  return { tick: v.getUint16(1), players };
+  const clock = v.getUint16(end + 2);
+  let o = end + SNAP_MATCH;
+  const flags: FlagState[] = [];
+  for (let k = 0; k < 2; k++) {
+    const state = o < buf.byteLength ? v.getUint8(o) : -1;
+    if (state < 0 || state > FLAG.DROPPED || o + flagBytes(state) > buf.byteLength) {
+      return null;
+    }
+    const f: FlagState = { state, by: 0, x: 0, y: 0, z: 0, left: 0 };
+    if (state === FLAG.CARRIED) {
+      f.by = v.getUint8(o + 1);
+    } else if (state === FLAG.DROPPED) {
+      [f.x, f.y, f.z] = [1, 3, 5].map(d => v.getInt16(o + d) / POS);
+      f.left = v.getUint8(o + 7);
+    }
+    flags.push(f);
+    o += flagBytes(state);
+  }
+  if (o !== buf.byteLength) {
+    return null;
+  }
+  return {
+    tick: v.getUint16(1),
+    players,
+    score: [v.getUint8(end), v.getUint8(end + 1)],
+    clock: clock & 0x7fff,
+    over: (clock & 0x8000) !== 0,
+    flags: flags as Snapshot['flags'],
+  };
 };
 
 /** Returns null on anything that is not a known text message. */

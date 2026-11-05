@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { duo } from '../../test/teams';
 import {
   EYE,
   GRAVITY,
@@ -16,7 +17,7 @@ import { STILL, eyeHeight, forward, heightOf, move, speedOf, spawn } from './phy
 import { EV, KEY, MODE, TEX } from './types';
 import type { Input, PlayerState } from './types';
 import { build } from './world';
-import type { Brush, World, WorldDef } from './world';
+import type { Brush, Spawn, World } from './world';
 
 const { FORWARD, BACK, LEFT, RIGHT, JUMP } = KEY;
 
@@ -30,10 +31,15 @@ const APEX = JUMP_SPEED ** 2 / (2 * GRAVITY);
 
 type Vec3 = [number, number, number];
 const box = (min: Vec3, max: Vec3): Brush => ({ min, max, top: TEX.TILE, side: TEX.BRICK });
-const world = (brushes: Brush[], floor = -50, spawns: WorldDef['spawns'] = [[0, 0, 0, 0]]): World =>
+const world = (
+  brushes: Brush[],
+  floor = -50,
+  spawns: Spawn[] = [[0, 0, 0, 0]],
+  blue?: Spawn[],
+): World =>
   build({
     brushes,
-    spawns,
+    teams: duo(spawns, blue),
     floor,
     sun: { dir: [0, 1, 0], color: [1, 1, 1] },
     sky: [
@@ -505,7 +511,7 @@ describe('move: heights', () => {
 });
 
 describe('move: falling off the world', () => {
-  const spawns: WorldDef['spawns'] = [
+  const spawns: Spawn[] = [
     [0, 0, 0, 0],
     [3, 0, 3, 1],
     [-3, 0, -3, 2],
@@ -675,8 +681,8 @@ describe('spawn', () => {
       ground: true,
       ...STILL,
     });
-    expect(spawn(7, w, 1 + w.def.spawns.length)).toEqual(p);
-    expect(spawn(7, w, -1)).toEqual(spawn(7, w, w.def.spawns.length - 1));
+    expect(spawn(7, w, 1 + w.def.teams[0].spawns.length)).toEqual(p);
+    expect(spawn(7, w, -1)).toEqual(spawn(7, w, w.def.teams[0].spawns.length - 1));
   });
 
   it('holds float32 values', () => {

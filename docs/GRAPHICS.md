@@ -4,7 +4,7 @@ Now that the game is at parity (see [PARITY.md](PARITY.md)), the graphics come n
 
 ## Steps
 
-All four steps are done (PRs #15, #16, #17 and #18). Next: level design.
+All four steps are done (PRs #15, #16, #17 and #18). The level design phase was dropped for a new direction: see [PLAN.md](PLAN.md).
 
 One PR per step, each playable on its own.
 

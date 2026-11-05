@@ -3,7 +3,7 @@ import { forward } from '../shared/physics';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
 import type { Brush, WorldDef } from '../shared/world';
-import { STRIDE, basis, pushBox } from './mesh';
+import { STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import {
@@ -107,45 +107,6 @@ describe('roll', () => {
     expect(rolled(0, 0, 3)[0]).toBeCloseTo(0.5);
     expect(rolled(0.3, 0, 3)[0]).toBeLessThan(0.5);
     expect(rolled(-0.3, 0, 3)[0]).toBeGreaterThan(0.5);
-  });
-});
-
-describe('pushBox', () => {
-  it('writes the layer it is given, flat by default', () => {
-    const [a, b]: number[][] = [[], []];
-    pushBox(a, [0, 0, 0], [1, 1, 1], 0, [1, 1, 1]);
-    pushBox(b, [0, 0, 0], [1, 1, 1], 0, [1, 1, 1], -2);
-    expect([a[8], b[8]]).toEqual([-1, -2]);
-  });
-
-  it('writes 36 vertices of 10 floats a box', () => {
-    const out: number[] = [];
-    pushBox(out, [0, 0, 0], [1, 1, 1], 0, [1, 0, 0, 0]);
-    expect(out).toHaveLength(36 * 10);
-  });
-
-  it('turns the -z face toward forward(yaw)', () => {
-    const yaw = 1.1;
-    const out: number[] = [];
-    pushBox(out, [0, 0, 0], [1, 1, 1], yaw, [1, 1, 1, 0]);
-    const [fx, fz] = forward(yaw);
-    let faces = 0;
-    for (let v = 0; v < 36; v++) {
-      const [nx, ny, nz] = out.slice(v * 10 + 3, v * 10 + 6);
-      faces += +(Math.abs(nx - fx) < 1e-9 && ny == 0 && Math.abs(nz - fz) < 1e-9);
-    }
-    expect(faces).toBe(6);
-  });
-
-  it('keeps every vertex on the face its normal points to', () => {
-    const out: number[] = [];
-    pushBox(out, [5, 2, 3], [1, 2, 3], 0, [1, 1, 1, 0]);
-    for (let v = 0; v < 36; v++) {
-      const [x, y, z, nx, ny, nz] = out.slice(v * 10, v * 10 + 6);
-      expect(nx * (x - 5) + ny * (y - 2) + nz * (z - 3)).toBeCloseTo(
-        Math.abs(nx) * 1 + Math.abs(ny) * 2 + Math.abs(nz) * 3,
-      );
-    }
   });
 });
 

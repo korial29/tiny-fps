@@ -205,6 +205,22 @@ describe('createRenderer', () => {
       return out;
     };
 
+    it('gives the final pass the speed lines of the effects, and only it', () => {
+      const rd = createRenderer(canvas, ROOM);
+      const fx = createEffects();
+      fx.lines = 0.7;
+      calls.length = 0;
+      frame(rd, fx);
+      const lines = calls.filter(c => (c[1] as { u?: string } | undefined)?.u == 'L');
+      expect(lines.map(c => c[2])).toEqual([0.7]);
+      // Set before the last pass of the frame, which draws on the canvas.
+      const last = calls.map(c => c[0] == 'drawArrays' && c[3] == 3).lastIndexOf(true);
+      expect(calls.indexOf(lines[0])).toBeLessThan(last);
+      expect(calls.indexOf(lines[0])).toBeGreaterThan(
+        calls.map(c => c[0]).lastIndexOf('blitFramebuffer'),
+      );
+    });
+
     it('blooms the bright parts at half size, then blurs them at a quarter and an eighth', () => {
       const rd = createRenderer(canvas, ROOM);
       frame(rd);
@@ -393,6 +409,17 @@ describe('createRenderer', () => {
       const rays = Array.from(set('J').at(-1)![2] as number[]);
       const t = Math.tan((70 * Math.PI) / 360);
       [t * 1.6, 0, 0, 0, t, 0, 0, 0, -1].forEach((v, i) => expect(rays[i]).toBeCloseTo(v, 4));
+    });
+
+    it('widens with the field of view of the effects: the rays and the projection', () => {
+      const rd = createRenderer(canvas, ROOM);
+      const fx = createEffects();
+      fx.fov = 10;
+      rd.frame([0, 1.6, 0], 0, 0, [], new Map(), fx, []);
+      const rays = Array.from(set('J').at(-1)![2] as number[]);
+      expect(rays[4]).toBeCloseTo(Math.tan((80 * Math.PI) / 360), 4);
+      // The matrix row for y is 1 / the same tangent.
+      expect(Array.from(set('m').at(-1)![3] as number[])[5]).toBeCloseTo(1 / rays[4], 4);
     });
 
     it('is not drawn into the shadow map', () => {

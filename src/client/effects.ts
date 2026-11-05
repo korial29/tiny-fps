@@ -57,7 +57,7 @@ const SPRINT_FOV = 5;
 const DASH_FOV = 9;
 /** Speed from which the lines show, and the share of them a sprint reaches (a dash adds the rest). */
 const LINES_FROM = RUN_SPEED + 0.5;
-const SPRINT_LINES = 0.4;
+const SPRINT_LINES = 0.25;
 /** Metres per second of eye speed a landing takes per m/s of fall (at most 20), and a jump gives. */
 const DIP = 0.22;
 const LIFT = 0.9;

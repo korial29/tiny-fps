@@ -68,8 +68,8 @@ else{
 c=texture(S[0],U).rgb+texture(S[1],U).rgb*1.+texture(S[2],U).rgb*.8+texture(S[3],U).rgb*.6;
 vec2 q=U-.5;
 c=min(c,.6)+.4*(1.-exp(-max(c-.6,0.)/.4));
-float r=length(q),h=fract(sin(floor(atan(q.y,q.x)*8.)*12.9898)*43758.5453);
-c+=L*step(.6,h)*smoothstep(.2,.55,r)*(.5+.5*sin(r*30.-Y.w*.03*(1.+h)))*.3;
+float a=atan(q.y,q.x)*24.,h=fract(sin(floor(a)*12.9898)*43758.5453);
+c+=L*step(.85-.5*L,h)*sin(fract(a)*3.1416)*smoothstep(.2,.6,length(q))*fract(length(q)*3.-Y.w*.002+h*9.)*.22;
 c*=1.-(.7+.3*L)*dot(q,q);
 c=pow(c,vec3(.92))+(fract(sin(dot(gl_FragCoord.xy+Y.w,vec2(12.9898,78.233)))*43758.5453)-.5)*.03;}
 o=vec4(c,1);}`;

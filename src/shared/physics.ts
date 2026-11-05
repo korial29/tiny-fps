@@ -162,6 +162,10 @@ export const eyeHeight = (p: Pick<PlayerState, 'mode'>): number =>
 /** Horizontal speed, m/s. */
 export const speedOf = (p: Pick<PlayerState, 'vx' | 'vz'>): number => len(p.vx, p.vz);
 
+/** Running faster than a walk on the ground: the sprint, for the animation to pump the arms. */
+export const sprinting = (p: Pick<PlayerState, 'mode' | 'vx' | 'vz'>): boolean =>
+  p.mode === MODE.GROUND && len(p.vx, p.vz) > RUN_SPEED + 0.5;
+
 /** Whether the brush stops a body of height h whose feet are at y when it walks sideways into it. */
 const blocks = (b: Brush, y: number, h: number): boolean =>
   b.max[1] > y + STEP_H + SKIN && b.min[1] < y + h - SKIN;

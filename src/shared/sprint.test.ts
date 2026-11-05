@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EAST, NORTH, WEST, at, running } from '../../test/yard';
 import { RUN_SPEED, SPRINT_SPEED, TICK_HZ } from './constants';
-import { speedOf } from './physics';
+import { speedOf, sprinting } from './physics';
 import { KEY } from './types';
 
 const { FORWARD, RIGHT, SPRINT } = KEY;
@@ -21,6 +21,18 @@ describe('sprint', () => {
     expect(reached).toBeLessThan(1.3 * TICK_HZ);
     expect(speeds[89]).toBeCloseTo(SPRINT_SPEED, 4);
     expect(Math.max(...speeds)).toBeLessThanOrEqual(SPRINT_SPEED + 1e-6);
+  });
+
+  it('shows as sprinting once it is past a walk, on the ground only', () => {
+    const s = at(-200, 0);
+    expect(sprinting(s.p)).toBe(false);
+    s.run(30, FORWARD, NORTH);
+    expect(sprinting(s.p)).toBe(false);
+    s.run(90, FORWARD | SPRINT, NORTH);
+    expect(sprinting(s.p)).toBe(true);
+    // A jump keeps the speed and is not a sprint.
+    s.step(FORWARD | SPRINT | KEY.JUMP, NORTH);
+    expect(sprinting(s.p)).toBe(false);
   });
 
   it('is only a sprint with forward held: the key alone, or sideways, stays at RUN_SPEED', () => {

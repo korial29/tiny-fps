@@ -21,9 +21,10 @@ export const WEST = Math.PI / 2;
 export class Sim {
   /** What was sent, rounded to the wire as the host and the predictor read it. */
   public readonly inputs: Step[] = [];
-  /** Every EV bit seen, and every mode. */
+  /** Every EV bit seen, every mode, and the lowest the feet have been. */
   public ev = 0;
   public modes = new Set<number>();
+  public low = Infinity;
 
   public p: PlayerState;
   public w: World;
@@ -51,6 +52,7 @@ export class Sim {
     move(this.p, i, this.w);
     this.ev |= this.p.ev;
     this.modes.add(this.p.mode);
+    this.low = Math.min(this.low, this.p.y);
     return this.p;
   }
 

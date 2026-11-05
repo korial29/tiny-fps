@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { GRAVITY, JUMP_SPEED, PLAYER_H, PLAYER_R, STEP_H } from './constants';
+import * as lines from '../../test/lines';
+import { EAST, NORTH, SOUTH, Sim } from '../../test/pilot';
+import { GRAB_MAX, GRAVITY, JUMP_SPEED, PLAYER_H, PLAYER_R, STEP_H } from './constants';
 import { ROOFTOPS } from './map';
 import { move, spawn } from './physics';
-import { KEY, TEX } from './types';
+import { EV, KEY, MODE, TEX } from './types';
 import type { PlayerState } from './types';
 import { build } from './world';
 
@@ -247,7 +249,7 @@ describe('ROOFTOPS', () => {
       expect(p).toMatchObject({ y: 10, ground: true });
     });
 
-    it('stops at the lintel: a 1.2 m low gap is too low to walk under yet', () => {
+    it('stops at the lintel standing: a 1.2 m low gap is too low to walk under', () => {
       const p = spawn(0, world, 2);
       route(p, [
         [16, 72],
@@ -267,24 +269,31 @@ describe('ROOFTOPS', () => {
       expect(9.2 - 8).toBeLessThan(PLAYER_H);
     });
 
-    it('keeps its ledges, 1.5 to 2.5 m high, out of reach of a jump', () => {
-      // Each: where to run from, which way (yaw), the floor under the player and the top.
-      const ledges: [from: [number, number], yaw: number, floor: number, top: number][] = [
-        [[32, 22], Math.PI, 8, 10],
-        [[42, 24], Math.PI, 8, 10.2],
-        [[16, 40.5], 0, 10, 12.4],
+    it('keeps its ledges 1.5 to 2.5 m high: out of a jump, within the hands, and climbed', () => {
+      // Each: where to run from, which way (yaw), the floor under the player, the top, and the
+      // coordinate along the run at which to jump (1.2 m from the face).
+      const ledges: [
+        from: [number, number],
+        yaw: number,
+        floor: number,
+        top: number,
+        at: number,
+      ][] = [
+        [[32, 22], SOUTH, 8, 10, 26.8],
+        [[42, 24], SOUTH, 8, 10.2, 28.8],
+        [[16, 44.5], NORTH, 10, 12.4, 37.2],
       ];
-      for (const [[x, z], yaw, floor, top] of ledges) {
+      for (const [[x, z], yaw, floor, top, at] of ledges) {
         expect(top - floor).toBeGreaterThanOrEqual(1.5);
-        expect(top - floor).toBeLessThanOrEqual(2.5);
+        expect(top - floor).toBeLessThanOrEqual(GRAB_MAX + 1e-9);
+        // More than a jump and a step reach, as far as a hand and no further.
         expect(top - floor).toBeGreaterThan(APEX + STEP_H);
-        const p: PlayerState = { ...spawn(0, world, 0), x, y: floor, z };
-        let high = 0;
-        for (let k = 0; k < 200; k++) {
-          move(p, { seq: k, keys: KEY.FORWARD | KEY.JUMP, yaw, pitch: 0 }, world);
-          high = Math.max(high, p.y);
-        }
-        expect(high - floor, `ledge ${top}`).toBeLessThan(APEX + 1e-3);
+        const s = new Sim(spawn(0, world, 0), world).put(x, floor, z, yaw);
+        s.until(p => (yaw === NORTH ? p.z <= at : p.z >= at), KEY.FORWARD, yaw);
+        s.step(KEY.FORWARD | KEY.JUMP, yaw);
+        s.until(p => p.ground && p.y > floor + 1, KEY.FORWARD, yaw, 200);
+        expect(s.p.y, `ledge ${top}`).toBe(Math.fround(top));
+        expect(s.ev & (EV.GRAB | EV.CLIMB), `ledge ${top}`).toBe(EV.GRAB | EV.CLIMB);
       }
     });
 
@@ -300,5 +309,128 @@ describe('ROOFTOPS', () => {
       const narrow = brushes.filter(b => b.max[0] - b.min[0] < 1 || b.max[2] - b.min[2] < 1);
       expect(narrow.length).toBeGreaterThanOrEqual(4);
     });
+  });
+});
+
+describe('ROOFTOPS, the lines the course is laid out for', () => {
+  /** A sim of the course, the player at (x, y, z) facing yaw. */
+  const at = (x: number, y: number, z: number, yaw = NORTH) =>
+    new Sim(spawn(0, world, 0), world).put(x, y, z, yaw);
+  /** Standing on a roof: its height, and the box it is over. */
+  const onRoof = (p: PlayerState, y: number, [x0, z0, x1, z1]: number[]) =>
+    p.ground && p.y === Math.fround(y) && p.x > x0 && p.x < x1 && p.z > z0 && p.z < z1;
+  const [A, B, C, E, F, G] = [
+    [4, 57.7, 24, 76],
+    [4, 36, 24, 53.5],
+    [4, 20, 24, 36],
+    [27, 20, 47, 50],
+    [4, -5, 24, 7],
+    [27, 60, 47, 76],
+  ];
+
+  it('crosses the 4.2 m gap from the start roof to the next with a run and a jump', () => {
+    const s = Sim.at(world, 2);
+    expect(onRoof(s.p, 10, A)).toBe(true);
+    lines.gapAB(s);
+    expect(onRoof(s.p, 10, B)).toBe(true);
+  });
+
+  it('does not cross it by walking off the edge: the hands have nothing to catch, it falls', () => {
+    const s = Sim.at(world, 2);
+    s.goTo(16, 57.5);
+    // Straight on into the gap: it falls away from both roofs, never up onto the far one.
+    const fell = s.until(p => p.y < -10, KEY.FORWARD, NORTH, 400);
+    expect(fell).toBeGreaterThan(0);
+    expect(s.ev & EV.GRAB).toBe(0);
+    expect(s.p.z).toBeGreaterThan(53.5);
+  });
+
+  it('climbs from the low roof to the high one by the 2.4 m ledge: a jump, a catch, a climb', () => {
+    const s = at(22, 10, 45);
+    lines.ledgeBC(s);
+    expect(onRoof(s.p, 12.4, C)).toBe(true);
+    expect(s.ev & (EV.GRAB | EV.CLIMB)).toBe(EV.GRAB | EV.CLIMB);
+  });
+
+  it('crosses the 13 m chasm to the far roof only by sprint, jump and dash, or by a double jump', () => {
+    const tries = (to: 'F' | 'C', how: Parameters<typeof lines.chasm>[2]) => {
+      const s = to === 'F' ? at(22, 12.4, 35) : at(22, 12.4, -3, SOUTH);
+      lines.chasm(s, to, how);
+      return { ok: onRoof(s.p, 12.4, to === 'F' ? F : C), fell: s.low < ROOFTOPS.floor + 1 };
+    };
+    for (const to of ['F', 'C'] as const) {
+      // The moves: a sprint, a jump, and a dash or a double jump partway.
+      expect(tries(to, { sprint: true, dash: 40 }).ok, `${to}, sprint and dash`).toBe(true);
+      expect(tries(to, { sprint: true, double: 40 }).ok, `${to}, sprint and double jump`).toBe(
+        true,
+      );
+      // Each alone, or without the sprint, is short of it: a fall to the kill floor.
+      const short = [
+        tries(to, { sprint: true }),
+        tries(to, { sprint: false }),
+        ...[30, 40, 50].map(d => tries(to, { sprint: false, dash: d })),
+        ...[30, 40, 50].map(d => tries(to, { sprint: false, double: d })),
+      ];
+      expect(short.map(r => [r.ok, r.fell])).toEqual(short.map(() => [false, true]));
+    }
+  });
+
+  it('drops from the high roof to the east one by a jump across the 3 m alley', () => {
+    const s = at(16, 12.4, 24.5, EAST);
+    lines.alleyCE(s);
+    expect(onRoof(s.p, 8, E)).toBe(true);
+  });
+
+  it('climbs the 2.0 m ledge on the east roof', () => {
+    const s = at(30, 8, 24.5, SOUTH);
+    lines.ledgeE(s);
+    expect(s.p.y).toBe(10);
+    expect(s.p.z).toBeGreaterThan(28);
+    expect(s.ev & EV.CLIMB).toBe(EV.CLIMB);
+  });
+
+  it('runs along the long wall and kicks off it back to the roof', () => {
+    const s = at(35.55, 8, 40);
+    lines.wallrunE(s);
+    expect(s.ev & (EV.WALLRUN_START | EV.WALLRUN_END)).toBe(EV.WALLRUN_START | EV.WALLRUN_END);
+    expect(s.modes.has(MODE.WALLRUN)).toBe(true);
+    // Eight metres or so along the wall, then off it, west.
+    expect(s.p.z).toBeLessThan(36);
+    expect(s.p.x).toBeLessThan(36 - PLAYER_R);
+    expect(s.low).toBeGreaterThan(7.9);
+  });
+
+  it('slides under the lintel on a sprint, and stands again beyond it', () => {
+    const s = at(28.8, 8, 25, SOUTH);
+    lines.slideE(s);
+    expect(s.modes.has(MODE.SLIDE)).toBe(true);
+    expect(s.p.z).toBeGreaterThan(46.4);
+    expect(onRoof(s.p, 8, E)).toBe(true);
+    expect(s.p.mode).toBe(MODE.GROUND);
+  });
+
+  it('crosses the beam to the far roof', () => {
+    const s = at(41.75, 8, 49);
+    lines.beamEG(s);
+    expect(onRoof(s.p, 8, G)).toBe(true);
+    expect(s.low).toBeGreaterThan(7.9);
+  });
+
+  it('flies the whole course from the start: every move, every mode, and ends on the far roof', () => {
+    const s = Sim.at(world, 0);
+    lines.gapAB(s);
+    lines.ledgeBC(s);
+    lines.chasm(s, 'F');
+    lines.chasm(s, 'C', { sprint: true, double: 40 });
+    lines.alleyCE(s);
+    lines.ledgeE(s);
+    lines.wallrunE(s);
+    lines.slideE(s);
+    lines.beamEG(s);
+    expect(onRoof(s.p, 8, G)).toBe(true);
+    // Never fell to the kill floor: every line was made, not rescued.
+    expect(s.low).toBeGreaterThan(7.9);
+    expect([...s.modes].sort()).toEqual(Object.values(MODE).sort());
+    expect(s.ev).toBe(Object.values(EV).reduce((a, b) => a | b, 0));
   });
 });

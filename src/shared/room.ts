@@ -18,20 +18,8 @@ import { HALL } from './map';
 import { move, spawn } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
-import { body, fire } from './shoot';
 import { ITEM, PHASE } from './types';
-import type {
-  Body,
-  Conn,
-  Every,
-  Item,
-  Level,
-  MapDef,
-  PlayerInfo,
-  PlayerState,
-  Rules,
-  Shot,
-} from './types';
+import type { Conn, Every, Item, Level, MapDef, PlayerInfo, PlayerState, Rules } from './types';
 
 interface Player {
   conn: Conn;
@@ -111,15 +99,15 @@ const setEvery: Every = (cb, ms) => {
  *   taken by another player; 'full' beyond rules.maxPlayers. Everyone gets a fresh 'roster' on
  *   every join and leave.
  * - Each input frame moves its player at once with move(); the INPUT_BURST bank drops the excess.
- *   A step that fires resolves its shot at once with fire(), the other players rewound to the
- *   view tick of the input (lag compensation, at most MAX_REWIND ticks back).
- * - A player has HEALTH. A dead player moves, shoots and counts for nothing until PLAYER_RESPAWN
+ *   rewind() answers where the others were drawn at the view tick of an input (lag compensation,
+ *   at most MAX_REWIND ticks back).
+ * - A player has HEALTH. A dead player moves and counts for nothing until PLAYER_RESPAWN
  *   ticks later, when it is back at a spawn.
  * - The level's items lie in it. A key taken opens its gates for the team, a pack heals below full
  *   health.
  * - Touching the goal turns the level from HUNT to RETURN (the exit opens).
- * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player, the shots resolved since
- *   the last one and the items goes to every peer.
+ * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player and the items goes to every
+ *   peer.
  */
 export class Room {
   /** Every connected peer; null until it joins. */
@@ -133,8 +121,6 @@ export class Room {
   private keys = 0;
   private items: Item[] = [];
   private nextItem = 0;
-  /** Shots resolved since the last snapshot. */
-  private shots: Shot[] = [];
   private halt: (() => void) | undefined;
   private rules: Rules;
   /** Round-robin cursor over the spawn points, used once they are all taken. */
@@ -172,9 +158,8 @@ export class Room {
     if (input && p.bank > 0) {
       p.bank--;
       // A dead player's inputs are acked and move nothing.
-      if (p.hp && move(p.state, input, this.lvl)) {
-        const shot = fire(this.lvl, p.state, input.seq, this.rewind(p, input.view));
-        this.shots.push(shot);
+      if (p.hp) {
+        move(p.state, input, this.lvl);
       }
       p.ack = input.seq;
     }
@@ -216,12 +201,10 @@ export class Room {
       const snap = encodeSnapshot({
         tick: now,
         players: players.map(p => ({ ...p.state, ack: p.ack, hp: p.hp })),
-        shots: this.shots,
         phase: this.phase,
         keys: this.keys,
         items: this.items,
       });
-      this.shots = [];
       players.forEach(p => p.conn.send(snap));
     }
   }
@@ -258,18 +241,18 @@ export class Room {
   }
 
   /**
-   * The bodies a shot of `shooter` can hit as the shooter drew them at `view` (a u16 tick,
-   * fractional, read against the current tick and clamped to the kept history): the other players,
-   * x, y, z interpolated between the two snapshots around it like the client does. One the
-   * history does not hold stands where it is.
+   * The players other than `id` (living ones) as player `id` drew them at `view`, the view tick of
+   * one of its inputs (a u16 tick, fractional, read against the current tick and clamped to the
+   * kept history): x, y, z interpolated between the two snapshots around it like the client does.
+   * One the history does not hold stands where it is.
    */
-  private rewind(shooter: Player, view = 0): Body[] {
+  public rewind(id: number, view = 0): PlayerState[] {
     const now = this.players()
-      .filter(p => p !== shooter && p.hp)
+      .filter(p => p.info.id !== id && p.hp)
       .map(p => p.state);
     const [first, last] = [this.history[0], this.history.at(-1)];
     if (!first || !last) {
-      return now.map(body);
+      return now;
     }
     // Ticks back, on the u16 circle: in [-0x8000, 0x8000).
     const back = ((((this.ticks - view + 0x8000) % 0x10000) + 0x10000) % 0x10000) - 0x8000;
@@ -284,11 +267,9 @@ export class Room {
     return now.map(p => {
       const pa = a.players.find(q => q.id === p.id);
       const pb = b.players.find(q => q.id === p.id);
-      return body(
-        pa && pb
-          ? { ...pb, x: l(pa.x, pb.x), y: l(pa.y, pb.y), z: l(pa.z, pb.z) }
-          : (pb ?? pa ?? p),
-      );
+      return pa && pb
+        ? { ...pb, x: l(pa.x, pb.x), y: l(pa.y, pb.y), z: l(pa.z, pb.z) }
+        : (pb ?? pa ?? p);
     });
   }
 

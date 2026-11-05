@@ -63,21 +63,17 @@ describe('soldier', () => {
     yaw: 0,
     pitch: 0,
     ground: true,
-    cool: 0,
     ...o,
   });
   const GREEN = [0.1, 0.8, 0.2];
-  // One gun vertex a metre ahead of its origin, to see where the hands carry the gun.
-  const GUN = [[0, 0, -1, 0, 0, 1, 0.5, 0.5, -1, 0.5]];
-  const dressed = (o?: Partial<PlayerState>, d = 0, pc = 1, gun: number[][] = []) =>
-    build(out => soldier(out, man(o), GREEN, d, pc, gun));
+  const dressed = (o?: Partial<PlayerState>, d = 0, pc = 1) =>
+    build(out => soldier(out, man(o), GREEN, d, pc));
   /** Vertex runs: torso, helmet, visor, pack, then per side leg (thigh, shin, boot) and arm (upper, forearm). */
   const [VISOR, SIDE] = [372, 444];
   const side = (n: number) => SIDE + n * 456;
 
-  it('is 1356 vertices, and a gun adds its own', () => {
+  it('is 1356 vertices', () => {
     expect(dressed()).toHaveLength(1356 * STRIDE);
-    expect(dressed(undefined, 0, 1, GUN)).toHaveLength(1357 * STRIDE);
   });
 
   it('stands PLAYER_H tall on its feet, torso, head and legs inside PLAYER_R', () => {
@@ -125,21 +121,20 @@ describe('soldier', () => {
     );
   });
 
-  it('holds the gun out ahead with both hands, the left further out on it', () => {
-    const [a, b] = [dressed(undefined, 0, 1, GUN), dressed()];
-    const gun = rows(a, 0, 1357).slice(444, 445);
-    // Placed before the legs: the gun vertex is the first after the pack.
-    expect(gun[0][2]).toBeLessThan(-3 - 1);
-    const reach = (n: number) => Math.min(...rows(b, side(n) + 306, side(n) + 456).map(p => p[2]));
-    expect(reach(0)).toBeLessThan(-3 - 0.3);
-    expect(reach(1)).toBeLessThan(-3 - 0.2);
-    expect(reach(0)).toBeLessThan(reach(1));
-  });
-
-  it('aims the gun with the pitch', () => {
-    const [flat, up] = [dressed(undefined, 0, 1, GUN), dressed({ pitch: 0.6 }, 0, 1, GUN)];
-    expect(rows(up)[444][1]).toBeGreaterThan(rows(flat)[444][1] + 0.4);
-    const hand = (v: number[]) => mean(rows(v, side(0) + 307, side(0) + 457), 1);
-    expect(hand(up)).toBeGreaterThan(hand(flat));
+  it('hangs the arms empty at the sides, and swings each against the leg on its side', () => {
+    const hand = (n: number, d: number, pc = 1) =>
+      mean(rows(dressed(undefined, d, pc), side(n) + 306, side(n) + 456), 2) + 3;
+    const foot = (n: number, d: number) =>
+      mean(lowest(rows(dressed(undefined, d)).slice(side(n) + 90, side(n) + 180)), 2) + 3;
+    // At rest the hands hang below the shoulders (1.38 m above the feet), not out ahead.
+    const low = Math.min(...rows(dressed(), side(0) + 306, side(0) + 456).map(p => p[1]));
+    expect(low).toBeLessThan(1 + 0.9);
+    expect(Math.abs(hand(0, 0, 0))).toBeLessThan(0.1);
+    for (const n of [0, 1]) {
+      expect(Math.abs(hand(n, 0.2))).toBeGreaterThan(0.05);
+      expect(hand(n, 0.2) * foot(n, 0.2)).toBeLessThan(0);
+    }
+    // The two arms swing against each other.
+    expect(hand(0, 0.2) * hand(1, 0.2)).toBeLessThan(0);
   });
 });

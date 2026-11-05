@@ -26,16 +26,14 @@ export const RATE = 44100;
 
 /** The sounds of the game. */
 export const SOUND = {
-  /** The chaingun, one per shot. */
-  SHOT: 0,
   /** A player hurt. */
-  HIT: 1,
+  HIT: 0,
   /** A pickup taken: health or a key. */
-  COLLECT: 2,
+  COLLECT: 1,
   /** A tick, once a second while the team runs back to the exit (RETURN). */
-  CLOCK: 3,
+  CLOCK: 2,
   /** A heartbeat, looped by the client while the own health is low. */
-  HEART: 4,
+  HEART: 3,
 } as const;
 
 const synth = ([wave, hz, slide, a, s, d, vib, lp, jt, jm, vol]: Voice, seed: number) => {
@@ -76,11 +74,6 @@ const synth = ([wave, hz, slide, a, s, d, vib, lp, jt, jm, vol]: Voice, seed: nu
 };
 
 const LAYERS: Voice[][] = [
-  // SHOT: a noise crack over a short thump.
-  [
-    [3, 7000, -0.5, 0.002, 0, 0.06, 0, 0.6, 0, 1, 0.8],
-    [0, 220, -5, 0.002, 0, 0.075, 0, 0.3, 0, 1, 0.5],
-  ],
   // HIT: a saw and a square falling out of tune, over grit.
   [
     [1, 160, -1.5, 0.003, 0.04, 0.22, 0.2, 0.5, 0, 1, 0.6],

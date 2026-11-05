@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  EYE,
-  FIRE_EVERY,
   GOAL_R,
   HEAL,
   HEALTH,
@@ -14,14 +12,12 @@ import {
   SNAP_EVERY,
   TICK_HZ,
 } from './constants';
-import { compile } from './level';
 import { HALL } from './map';
 import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
-import { body, fire } from './shoot';
 import { ITEM, KEY, PHASE, TEX } from './types';
-import type { Conn, Every, Input, MapDef, PlayerState, Sector, Shot, Snapshot } from './types';
+import type { Conn, Every, Input, MapDef, PlayerState, Sector, Snapshot } from './types';
 
 /** A peer that records what the room sends it. */
 const peer = () => {
@@ -358,17 +354,8 @@ describe('Room: timer', () => {
   });
 });
 
-describe('Room: chaingun', () => {
-  const lvl = compile(HALL);
-  const { FIRE, RIGHT } = KEY;
-
-  /** Yaw and pitch that look from the eye of a standing player at (x, z) to the point. */
-  const lookAt = (from: PlayerState, to: [number, number, number]) => {
-    const [dx, dy, dz] = [to[0] - from.x, to[1] - (from.y + EYE), to[2] - from.z];
-    return { yaw: Math.atan2(-dx, -dz), pitch: Math.atan2(dy, Math.hypot(dx, dz)) };
-  };
-
-  /** Two players, A (id 0, at rest) and B (id 1), and everything the room sends A. */
+describe('Room: rewind', () => {
+  /** Two players, A (id 0, at rest) and B (id 1), and B's state in every snapshot A got. */
   const duel = (pre = 0) => {
     const room = new Room({}, HALL);
     const a = join(room, 'A');
@@ -379,18 +366,8 @@ describe('Room: chaingun', () => {
     /** B's state in every snapshot, by absolute tick. */
     const bAt = new Map<number, PlayerState>();
     let seen = 0;
-    const collect = () => {
-      for (; seen < a.bins.length; seen++) {
-        const s = decodeSnapshot(a.bins[seen])!;
-        bAt.set(
-          tick,
-          s.players.find(p => p.id === 1)!,
-        );
-      }
-    };
     return {
       room,
-      a,
       b,
       bAt,
       get tick() {
@@ -399,90 +376,27 @@ describe('Room: chaingun', () => {
       /** B runs sideways (+x) one step per tick for n ticks. */
       run: (n: number) => {
         for (let k = 0; k < n; k++) {
-          room.receive(b, input(seq++ & 0xffff, RIGHT));
+          room.receive(b, input(seq++ & 0xffff, KEY.RIGHT));
           room.tick();
           tick++;
-          collect();
+          for (; seen < a.bins.length; seen++) {
+            bAt.set(
+              tick,
+              decodeSnapshot(a.bins[seen])!.players.find(p => p.id === 1)!,
+            );
+          }
         }
       },
-      /** A's input, then ticks until the next snapshot. Returns what that snapshot carries. */
-      fire: (yaw: number, pitch: number, view?: number, keys = FIRE, n = 0): Shot[] => {
-        const i = { seq: 7 + n, keys, yaw, pitch, view };
-        room.receive(a, encodeInput(i));
-        do {
-          room.tick();
-          tick++;
-        } while (tick % SNAP_EVERY);
-        collect();
-        return snap(a).shots;
-      },
-      aState: () => snap(a).players.find(p => p.id === 0)!,
     };
   };
-
-  it('resolves a shot on the input and sends it with the next snapshot, once', () => {
-    const d = duel();
-    ticks(d.room, 2);
-    const a = d.aState();
-    const b = snap(d.a).players.find(p => p.id === 1)!;
-    const { yaw, pitch } = lookAt(a, [b.x, b.y + 0.9, b.z]);
-    d.room.receive(d.a, encodeInput({ seq: 7, keys: FIRE, yaw, pitch }));
-    // Nothing goes out before the snapshot.
-    const before = d.a.bins.length;
-    d.room.tick();
-    expect(d.a.bins).toHaveLength(before);
-    d.room.tick();
-    expect(snap(d.a).shots).toEqual([expect.objectContaining({ id: 0, hit: 1 })]);
-    ticks(d.room, 2);
-    expect(snap(d.a).shots).toEqual([]);
-    // The same snapshot goes to everyone.
-    expect(snap(d.b).shots).toEqual([]);
-  });
-
-  it('puts a shot into the wall on a miss, and in the snapshot of every peer', () => {
-    const d = duel();
-    // Along +x from A (4, 4): the room wall at x = 16.
-    const shots = d.fire(Math.PI * 1.5, 0);
-    expect(shots).toHaveLength(1);
-    expect(shots[0].hit).toBe(-1);
-    expect(shots[0].x).toBeCloseTo(16, 0);
-    expect(snap(d.b).shots).toEqual(shots);
-  });
-
-  it('fires every FIRE_EVERY inputs while the trigger is held, and keeps the cooldown in the snapshot', () => {
-    const d = duel();
-    for (let k = 0; k < 2 * FIRE_EVERY + 1; k++) {
-      d.room.receive(d.a, input(k, FIRE, Math.PI * 1.5));
-      if (k === 0) {
-        d.room.tick();
-        d.room.tick();
-        expect(snap(d.a).players.find(p => p.id === 0)!.cool).toBe(FIRE_EVERY);
-      }
-    }
-    d.room.tick();
-    d.room.tick();
-    // Steps 0, 5 and 10; the first went out with the earlier snapshot.
-    expect(snap(d.a).shots).toHaveLength(2);
-    expect(snap(d.a).players.find(p => p.id === 0)!.cool).toBe(FIRE_EVERY);
-  });
-
-  it('does not fire for an input dropped by the bank', () => {
-    const d = duel();
-    for (let k = 0; k < INPUT_BURST + 5; k++) {
-      d.room.receive(d.a, input(k, FIRE, Math.PI * 1.5));
-    }
-    ticks(d.room, 2);
-    // INPUT_BURST inputs applied: steps 0 and 5.
-    expect(snap(d.a).shots).toHaveLength(2);
-  });
 
   /**
    * B as A's client would draw it at the absolute tick: its recorded states, kept and clamped
    * like the room does, interpolated linearly between the two snapshots around it.
    */
-  const drawn = (d: ReturnType<typeof duel>, at: number, now = d.tick): PlayerState => {
+  const drawn = (d: ReturnType<typeof duel>, at: number): PlayerState => {
     const kept = [...d.bAt.keys()]
-      .filter(t => t >= now - MAX_REWIND && t <= now)
+      .filter(t => t >= d.tick - MAX_REWIND && t <= d.tick)
       .sort((x, y) => x - y);
     const t = Math.min(Math.max(at, kept[0]), kept.at(-1)!);
     const lo = kept.filter(k => k <= t).at(-1)!;
@@ -492,53 +406,37 @@ describe('Room: chaingun', () => {
     return { ...q, x: p.x + (q.x - p.x) * u, y: p.y + (q.y - p.y) * u, z: p.z + (q.z - p.z) * u };
   };
 
-  /** Fires from A at B as drawn at `at` (a view given as `view`) and checks the room's shot. */
+  /** What the room rewinds A's view to, checked against B as drawn at the tick `at`. */
   const rewound = (d: ReturnType<typeof duel>, at: number, view: number) => {
-    const target = drawn(d, at);
-    const look = lookAt(d.aState(), [target.x, target.y + 0.9, target.z]);
-    const now = d.tick;
-    const shots = d.fire(look.yaw, look.pitch, view);
-    expect(shots).toHaveLength(1);
-    // What fire() gives against B where the room should have put it (A's yaw and pitch are the
-    // wire's).
-    const a = { ...d.aState() };
-    const want = fire(lvl, a, 7, [target].map(body));
-    expect(shots[0].hit).toBe(want.hit);
-    expect([shots[0].x, shots[0].y, shots[0].z]).toEqual(
-      [want.x, want.y, want.z].map(v => expect.closeTo(v, 3)),
-    );
-    return { shot: shots[0], now, target };
+    const [got, ...more] = d.room.rewind(0, view);
+    const want = drawn(d, at);
+    expect(more).toEqual([]);
+    expect(got.id).toBe(1);
+    expect([got.x, got.y, got.z]).toEqual([want.x, want.y, want.z].map(v => expect.closeTo(v, 3)));
+    return got;
   };
 
-  it('rewinds the targets to the view tick: a shot at where B was drawn hits, where B is now misses', () => {
+  it('puts the others where they were drawn at the view tick, not where they are now', () => {
     const d = duel();
     d.run(60);
-    const now = d.tick;
-    const view = now - 20;
-    const { shot, target } = rewound(d, view, view);
-    expect(shot.hit).toBe(1);
-    // B has run 2 m since: A aiming at it now (no rewind) would miss.
-    const bNow = d.bAt.get(now)!;
-    expect(bNow.x - target.x).toBeCloseTo(2, 3);
-    const look = lookAt(d.aState(), [target.x, target.y + 0.9, target.z]);
-    const a = { ...d.aState(), ...look };
-    expect(fire(lvl, a, 7, [bNow].map(body)).hit).toBe(-1);
+    const got = rewound(d, d.tick - 20, d.tick - 20);
+    // B has run 2 m since.
+    expect(d.bAt.get(d.tick)!.x - got.x).toBeCloseTo(2, 3);
   });
 
   it('interpolates between the two snapshots around a fractional view', () => {
     const d = duel();
     d.run(60);
     const view = d.tick - 20 + 0.5;
-    const { target } = rewound(d, view, view);
-    // Not on a snapshot: B is where it was drawn halfway, 0.05 m past the earlier one.
+    const got = rewound(d, view, view);
+    // Not on a snapshot: B is halfway, 0.05 m past the earlier one.
     const lo = d.bAt.get(Math.floor(view / 2) * 2)!;
-    expect(target.x - lo.x).toBeGreaterThan(0.04);
-    expect(target.x - lo.x).toBeLessThan(0.11);
+    expect(got.x - lo.x).toBeGreaterThan(0.04);
+    expect(got.x - lo.x).toBeLessThan(0.11);
   });
 
   it('clamps a view older than MAX_REWIND to the oldest kept tick, and a future one to the newest', () => {
-    // Ticks 82, 84, ... 112 are kept at 112: the oldest is 82. (A fresh duel per shot: the
-    // cooldown counts inputs.)
+    // Ticks 82, 84, ... 112 are kept at 112: the oldest is 82.
     const old = duel();
     old.run(112);
     rewound(old, 0, old.tick - 100);
@@ -559,17 +457,14 @@ describe('Room: chaingun', () => {
     rewound(e, 65550, 65550);
   }, 60_000);
 
-  it('stands a player the history does not hold where it is', () => {
+  it('leaves out the asker, and stands a player the history does not hold where it is', () => {
     const d = duel();
+    expect(d.room.rewind(0, 0).map(p => p.id)).toEqual([1]);
     d.run(10);
     // C joins after the last snapshot: there is nothing to rewind it to.
     const c = join(d.room, 'C');
     const cState = d.room['peers'].get(c)!.state;
-    expect(cState).toBeDefined();
-    const look = lookAt(d.aState(), [cState.x, cState.y + 0.9, cState.z]);
-    d.room.receive(d.a, encodeInput({ seq: 7, keys: FIRE, ...look, view: d.tick - 10 }));
-    ticks(d.room, 2);
-    expect(snap(d.a).shots).toEqual([expect.objectContaining({ hit: 2 })]);
+    expect(d.room.rewind(0, d.tick - 10).find(p => p.id === 2)).toEqual(cState);
   });
 });
 
@@ -717,30 +612,11 @@ describe('Room: health', () => {
     expect(at(room, b).hp).toBe(HEALTH);
   });
 
-  it('lets a shot pass through a dead player', () => {
-    const { room, a, b } = game();
-    put(room, a, 8, 5);
-    put(room, b, 4, 5);
-    const fireAt = (): Shot => {
-      room.receive(b, input((at(room, b).ack + 1) & 0xffff, KEY.FIRE, EAST));
-      return next(room, b).shots[0];
-    };
-    expect(fireAt().hit).toBe(0);
-    // The chaingun cools down one input at a time.
-    drive(room, b, 0, EAST, FIRE_EVERY);
-    at(room, a).hp = 0;
-    at(room, a).hurt = room['ticks'];
-    // Through the barred doorway too, to the far wall.
-    const through = fireAt();
-    expect(through.hit).toBe(-1);
-    expect(through.x).toBeCloseTo(22, 0);
-  });
-
-  it('does not let a dead player shoot', () => {
-    const { room, a } = game();
-    at(room, a).hp = 0;
-    room.receive(a, encodeInput({ seq: 0, keys: KEY.FIRE, yaw: EAST, pitch: 0 }));
-    expect(next(room, a).shots).toEqual([]);
+  it('leaves a dead player out of the rewind', () => {
+    const { room, b } = game();
+    expect(room.rewind(0).map(p => p.id)).toEqual([1]);
+    kill(room, b);
+    expect(room.rewind(0)).toEqual([]);
   });
 });
 

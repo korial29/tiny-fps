@@ -116,7 +116,7 @@ describe('unlock', () => {
   it('plays nothing before the first unlock', () => {
     install();
     const a = createAudio();
-    a.play(SOUND.SHOT);
+    a.play(SOUND.HIT);
     expect(fake().sources).toHaveLength(0);
   });
 
@@ -132,40 +132,40 @@ describe('unlock', () => {
 describe('play', () => {
   it('pans a source to the right right and one to the left left', () => {
     const a = unlocked();
-    a.play(SOUND.SHOT, at(5, 0));
+    a.play(SOUND.HIT, at(5, 0));
     expect(voice().pan).toBeCloseTo(1);
-    a.play(SOUND.SHOT, at(-5, 0));
+    a.play(SOUND.HIT, at(-5, 0));
     expect(voice().pan).toBeCloseTo(-1);
   });
 
   it('centres a source straight ahead or straight behind', () => {
     const a = unlocked();
-    a.play(SOUND.SHOT, at(0, -5));
+    a.play(SOUND.HIT, at(0, -5));
     expect(voice().pan).toBeCloseTo(0);
-    a.play(SOUND.SHOT, at(0, 5));
+    a.play(SOUND.HIT, at(0, 5));
     expect(voice().pan).toBeCloseTo(0);
   });
 
   it('follows the yaw: facing -x, -z is on the right and +z on the left', () => {
     const a = unlocked(Math.PI / 2);
-    a.play(SOUND.SHOT, at(0, -5));
+    a.play(SOUND.HIT, at(0, -5));
     expect(voice().pan).toBeCloseTo(1);
-    a.play(SOUND.SHOT, at(0, 5));
+    a.play(SOUND.HIT, at(0, 5));
     expect(voice().pan).toBeCloseTo(-1);
-    a.play(SOUND.SHOT, at(-5, 0));
+    a.play(SOUND.HIT, at(-5, 0));
     expect(voice().pan).toBeCloseTo(0);
   });
 
   it('is fainter with distance and silent beyond the range', () => {
     const a = unlocked();
-    a.play(SOUND.SHOT, at(2, 0));
+    a.play(SOUND.HIT, at(2, 0));
     const near = voice().vol;
-    a.play(SOUND.SHOT, at(20, 0));
+    a.play(SOUND.HIT, at(20, 0));
     const far = voice().vol;
     expect(near).toBeGreaterThan(far);
     expect(far).toBeGreaterThan(0);
     const n = fake().sources.length;
-    a.play(SOUND.SHOT, at(41, 0));
+    a.play(SOUND.HIT, at(41, 0));
     expect(fake().sources).toHaveLength(n);
   });
 
@@ -179,34 +179,34 @@ describe('play', () => {
     const a = unlocked();
     a.play(SOUND.HEART, undefined, 0.5);
     expect(voice().vol).toBe(0.5);
-    a.play(SOUND.SHOT, at(2, 0));
+    a.play(SOUND.HIT, at(2, 0));
     const full = voice().vol;
-    a.play(SOUND.SHOT, at(2, 0), 0.5);
+    a.play(SOUND.HIT, at(2, 0), 0.5);
     expect(voice().vol).toBeCloseTo(full / 2);
   });
 
   it('keeps at most 24 voices: the quietest goes for a louder one, the newest if it is quietest', () => {
     const a = unlocked();
     for (let i = 0; i < 24; i++) {
-      a.play(SOUND.SHOT, at(20, 0));
+      a.play(SOUND.HIT, at(20, 0));
     }
     expect(playing()).toBe(24);
     const n = fake().sources.length;
-    a.play(SOUND.SHOT, at(35, 0));
+    a.play(SOUND.HIT, at(35, 0));
     expect(fake().sources).toHaveLength(n);
-    a.play(SOUND.HIT, at(1, 0));
+    a.play(SOUND.COLLECT, at(1, 0));
     expect(playing()).toBe(24);
-    expect(voice()).toMatchObject({ id: SOUND.HIT, src: { started: 1 } });
+    expect(voice()).toMatchObject({ id: SOUND.COLLECT, src: { started: 1 } });
   });
 
   it('frees a voice when its sound ends', () => {
     const a = unlocked();
     for (let i = 0; i < 24; i++) {
-      a.play(SOUND.SHOT);
+      a.play(SOUND.HIT);
     }
     fake().sources.at(-1)!.onended!();
-    a.play(SOUND.HIT);
-    expect(voice()).toMatchObject({ id: SOUND.HIT, src: { started: 1 } });
+    a.play(SOUND.COLLECT);
+    expect(voice()).toMatchObject({ id: SOUND.COLLECT, src: { started: 1 } });
     expect(fake().sources.filter(s => s.stopped)).toHaveLength(0);
   });
 });
@@ -238,7 +238,7 @@ describe('without Web Audio', () => {
     expect(() => {
       a.unlock();
       a.listen([0, 0, 0], 0);
-      a.play(SOUND.SHOT, [1, 0, 0]);
+      a.play(SOUND.HIT, [1, 0, 0]);
       a.destroy();
     }).not.toThrow();
     expect(a.muted).toBe(false);

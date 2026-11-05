@@ -12,8 +12,6 @@ export const KEY = {
   LEFT: 4,
   RIGHT: 8,
   JUMP: 16,
-  /** Left mouse button: the chaingun fires every FIRE_EVERY steps while held. */
-  FIRE: 32,
 } as const;
 
 /** One client step: what the player held during 1 / TICK_HZ s, and where they looked. */
@@ -28,7 +26,7 @@ export interface Input {
   pitch: number;
   /**
    * Host tick the client drew the others at when it sent this input, fractional (interpolation
-   * between two snapshots), in [0, 65536): the host rewinds the targets of a shot to it (lag
+   * between two snapshots), in [0, 65536): the host rewinds the other players to it (lag
    * compensation). The wire keeps 1/256 tick. Absent (no snapshot seen yet) goes out as 0: the host
    * clamps it to the oldest tick it keeps.
    */
@@ -47,30 +45,6 @@ export interface PlayerState {
   pitch: number;
   /** Standing on a floor: a jump is allowed. */
   ground: boolean;
-  /** Steps until the chaingun may fire again, 0 to FIRE_EVERY. */
-  cool: number;
-}
-
-/** One shot, as the host resolved it. */
-export interface Shot {
-  /** The shooter. */
-  id: number;
-  /** Where the shot stopped: a wall, a floor, a ceiling, a player, or RANGE away. */
-  x: number;
-  y: number;
-  z: number;
-  /** Id of the player hit, -1 for the level or nothing. */
-  hit: number;
-}
-
-/** Something a shot can hit: an upright cylinder of radius r from y up to y + h. */
-export interface Body {
-  id: number;
-  x: number;
-  y: number;
-  z: number;
-  r: number;
-  h: number;
 }
 
 /** Pickup kinds. A key is shared by the team: once anyone takes it, its gates open for all. */
@@ -190,7 +164,7 @@ export interface Level {
   edges: Edge[];
   /**
    * Sectors that bodies cannot enter now: gates without their key, the exit before RETURN.
-   * Mutable: set it with bar() in level.ts (host and client alike); sight and shots ignore it.
+   * Mutable: set it with bar() in level.ts (host and client alike); sight and rays ignore it.
    */
   barred: Set<number>;
 }
@@ -205,7 +179,6 @@ export interface SnapPlayer {
   yaw: number;
   pitch: number;
   ground: boolean;
-  cool: number;
   /** Health, HEALTH at most; 0 is dead, waiting PLAYER_RESPAWN ticks to respawn at the start. */
   hp: number;
   /** Seq of the last input of this player the host applied: the client replays the ones after. */
@@ -216,8 +189,6 @@ export interface Snapshot {
   /** Host tick, u16, wraps. */
   tick: number;
   players: SnapPlayer[];
-  /** Shots fired since the previous snapshot, in order. */
-  shots: Shot[];
   /** PHASE of the level. */
   phase: number;
   /** Keys the team holds: bit (1 << ITEM.KEY_*). */

@@ -28,17 +28,9 @@ export const MAX_PITCH = 1.55;
 /** A floor at most this much higher is walked onto; a higher one needs a jump. */
 export const STEP_H = 0.5;
 
-/** Steps between two chaingun shots while the trigger is held: 60 / 5 = 12 shots per second. */
-export const FIRE_EVERY = 5;
-/** Speed factor while the trigger is held. */
-export const FIRE_SLOW = 0.5;
-/** Metres a shot reaches. */
-export const RANGE = 100;
-/** Largest angle, in radians, between a shot and the view direction. */
-export const SPREAD = 0.02;
 /**
- * Host ticks a shot may look back (0.5 s): the host rewinds the targets to the view tick of the
- * input that fired, clamped to this.
+ * Host ticks the history of the players goes back (0.5 s): the host rewinds the others to the
+ * view tick of an input, clamped to this.
  */
 export const MAX_REWIND = 30;
 

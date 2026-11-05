@@ -7,8 +7,7 @@ import { INTERP_DELAY } from '../shared/constants';
 import { bar } from '../shared/level';
 import { TAU, move, norm } from '../shared/physics';
 import { onWire } from '../shared/protocol';
-import { body, fire } from '../shared/shoot';
-import type { Input, Level, PlayerState, Shot, SnapPlayer, Snapshot } from '../shared/types';
+import type { Input, Level, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
 
 export interface Predictor {
   /** The own player id, from the roster. Snapshots before it are only used for the others. */
@@ -21,12 +20,6 @@ export interface Predictor {
    * With `now` (ms, performance.now()) the input carries the view tick the others are drawn at.
    */
   step(i: Omit<Input, 'seq' | 'view'>, now?: number): Input;
-  /**
-   * The shot the last step fired, resolved with fire() against the living others(now) of that
-   * step; undefined when it did not fire (a dead own player never does). Replays on a snapshot
-   * never fire again.
-   */
-  shot(): Shot | undefined;
   /**
    * A decoded snapshot, received at `now` (ms, performance.now()). It also bars the level with its
    * keys and phase (bar() in level.ts) before the replay. A gate that opens between a snapshot and
@@ -51,7 +44,7 @@ const MAX_SNAPS = 16;
 
 type Point = { x: number; y: number; z: number };
 
-const state = ({
+const state = ({ id, x, y, z, vy, yaw, pitch, ground }: SnapPlayer | PlayerState): PlayerState => ({
   id,
   x,
   y,
@@ -60,8 +53,7 @@ const state = ({
   yaw,
   pitch,
   ground,
-  cool,
-}: SnapPlayer | PlayerState): PlayerState => ({ id, x, y, z, vy, yaw, pitch, ground, cool });
+});
 
 /** The point a share t of the way from a to b. */
 const mid = (a: Point, b: Point, t: number): Point => ({
@@ -92,8 +84,7 @@ export const createPredictor = (lvl: Level): Predictor => {
   /** The own player after the last step, and before it. */
   let own: PlayerState | undefined;
   let prev: PlayerState | undefined;
-  let shot: Shot | undefined;
-  /** The own player has health, as of the last snapshot: a dead one neither moves nor fires. */
+  /** The own player has health, as of the last snapshot: a dead one does not move. */
   let alive = true;
   const snaps: { t: number; s: Snapshot }[] = [];
 
@@ -144,7 +135,6 @@ export const createPredictor = (lvl: Level): Predictor => {
 
     step: (i, now) => {
       const input = onWire({ ...i, seq, view: now === undefined ? undefined : view(now) });
-      shot = undefined;
       seq = (seq + 1) & 0xffff;
       pending.push(input);
       if (pending.length > MAX_PENDING) {
@@ -152,12 +142,8 @@ export const createPredictor = (lvl: Level): Predictor => {
       }
       if (own) {
         prev = state(own);
-        if (alive && move(own, input, lvl)) {
-          // Without a clock, the others as of the newest snapshot. A dead player is no target, as
-          // on the host.
-          const live = snaps.at(-1)?.s.players ?? [];
-          const players = others(now ?? Infinity).filter(p => live.find(q => q.id === p.id)?.hp);
-          shot = fire(lvl, own, input.seq, players.map(body));
+        if (alive) {
+          move(own, input, lvl);
         }
       }
       return input;
@@ -186,8 +172,6 @@ export const createPredictor = (lvl: Level): Predictor => {
         }
       });
     },
-
-    shot: () => shot,
 
     me: alpha => (own && prev ? lerp(prev, own, Math.max(0, Math.min(1, alpha))) : undefined),
 

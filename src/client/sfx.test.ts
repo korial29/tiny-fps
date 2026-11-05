@@ -26,12 +26,6 @@ describe.each(Object.entries(SOUND))('%s', (_, id) => {
   });
 });
 
-describe('sounds', () => {
-  it('keep the chaingun under its 12 shots per second', () => {
-    expect(render(SOUND.SHOT).length).toBeLessThan(RATE / 12);
-  });
-});
-
 describe('HEART', () => {
   const s = render(SOUND.HEART);
   /** Loudest sample between two times, in seconds. */

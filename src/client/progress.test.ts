@@ -21,14 +21,12 @@ const player = (id: number, hp = HEALTH, x = 2, z = 2): SnapPlayer => ({
   yaw: 0,
   pitch: 0,
   ground: true,
-  cool: 0,
   hp,
   ack: 0,
 });
 const snap = (over: Partial<Snapshot> = {}): Snapshot => ({
   tick: 0,
   players: [player(YOU)],
-  shots: [],
   phase: PHASE.HUNT,
   keys: 0,
   items: [],

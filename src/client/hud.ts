@@ -60,7 +60,7 @@ export const createHud = (screen: HTMLElement): Hud => {
     'beforeend',
     `<s></s><s></s><ul><li></li><li></li></ul><ol>${'<li hidden></li>'.repeat(3)}</ol>` +
       `<aside hidden><h6>TINY FPS</h6><span></span><table>` +
-      `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Space<td>jump<tr><td>Left click<td>fire<tr><td>M<td>mute</table>` +
+      `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Space<td>jump<tr><td>M<td>mute</table>` +
       `<strong></strong></aside>` +
       `<h1 hidden></h1><h2 hidden></h2><h4 hidden></h4><h5 hidden>Muted (M)</h5>`,
   );

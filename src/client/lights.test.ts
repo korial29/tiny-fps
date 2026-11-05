@@ -19,7 +19,6 @@ const player = (id: number, x: number, yaw = 0): PlayerState => ({
   yaw,
   pitch: 0,
   ground: true,
-  cool: 0,
 });
 const scene = (over: Partial<Scene> = {}): Scene => ({
   eye: EYE,
@@ -64,28 +63,12 @@ describe('own flashlight', () => {
     expect(gather(bare())[0].d).toEqual([-0, 0, -1]);
   });
 
-  it('is gone when dead, the muzzle flash with it', () => {
-    const fx = createEffects();
-    fx.flash = 0.05;
-    expect(gather(bare({ dead: true, fx }))).toEqual([]);
+  it('is gone when dead', () => {
+    expect(gather(bare({ dead: true }))).toEqual([]);
   });
 
   it('lights alone in a bare scene', () => {
     expect(gather(bare())).toHaveLength(1);
-  });
-});
-
-describe('own muzzle flash', () => {
-  it('shows only while fx.flash runs, a bright shadowed spot ahead of the eye', () => {
-    const fx = createEffects();
-    expect(gather(bare({ fx }))).toHaveLength(1);
-    fx.flash = 0.05;
-    const [, m, ...more] = gather(bare({ fx }));
-    expect(more).toHaveLength(0);
-    expect(m.kind).toBe(LIGHT.SPOT);
-    expect(m.shadow).toBe(true);
-    expect(m.p[2]).toBeLessThan(8 - 0.5);
-    expect(m.color[0]).toBeGreaterThan(1);
   });
 });
 
@@ -108,16 +91,6 @@ describe('other players', () => {
     const ls = spots([player(1, 2), player(2, 4), player(3, 6)]);
     expect(ls.filter(l => l.shadow).map(l => l.p[0])).toEqual([6, 4]);
     expect(ls.find(l => !l.shadow)?.p[0]).toBe(2);
-  });
-
-  it('light a point at the gun while they shoot', () => {
-    const fx = createEffects();
-    const points = (s: Scene) => gather(s).filter(l => l.kind == LIGHT.POINT);
-    expect(points(bare({ others: [player(1, 3)] }))).toHaveLength(0);
-    fx.flashes.set(1, 0.05);
-    const [p, ...more] = points(bare({ others: [player(1, 3)], fx }));
-    expect(more).toHaveLength(0);
-    expect(dist(p.p, [3, 1.25, 8])).toBeLessThan(1.5);
   });
 });
 
@@ -171,14 +144,11 @@ describe('exit and goal', () => {
 
 describe('cap', () => {
   it('keeps the own lights, then the nearest of the rest', () => {
-    const fx = createEffects();
-    fx.flash = 0.05;
     const others = Array.from({ length: 20 }, (_, i) => player(i + 1, 20 + i));
-    const ls = gather(bare({ fx, others }));
-    const rest = ls.slice(2).map(l => dist(l.p, EYE));
+    const ls = gather(bare({ others }));
+    const rest = ls.slice(1).map(l => dist(l.p, EYE));
     expect(ls).toHaveLength(MAX_LIGHTS);
-    expect(ls[0].shadow && ls[1].shadow).toBe(true);
-    expect(ls[1].color[0]).toBeGreaterThan(1);
+    expect(ls[0].shadow).toBe(true);
     expect(rest).toEqual([...rest].sort((a, b) => a - b));
     expect(Math.max(...ls.map(l => l.p[0]))).toBeLessThan(20 + MAX_LIGHTS);
   });
@@ -264,16 +234,12 @@ describe('lava', () => {
     expect(ds).toEqual([...ds].sort((a, b) => a - b));
   });
 
-  it('never pushes out the own flashlight or muzzle flash', () => {
-    const fx = createEffects();
-    fx.flash = 0.05;
+  it('never pushes out the own flashlight', () => {
     const others = Array.from({ length: 20 }, (_, i) => player(i + 1, 12 + i));
-    const ls = gather(at(11.5, pools(8), { fx, others }));
+    const ls = gather(at(11.5, pools(8), { others }));
     expect(ls).toHaveLength(MAX_LIGHTS);
     expect(ls[0].kind).toBe(LIGHT.SPOT);
-    expect(ls[1].kind).toBe(LIGHT.SPOT);
-    expect(ls[1].color[0]).toBeGreaterThan(2.5);
-    expect(ls[0].shadow && ls[1].shadow).toBe(true);
+    expect(ls[0].shadow).toBe(true);
   });
 
   it('derives its pools once per level object', () => {

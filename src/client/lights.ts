@@ -5,12 +5,11 @@ import { sectorAt } from '../shared/level';
 import { TEX } from '../shared/types';
 import type { Level, PlayerState } from '../shared/types';
 import type { Effects } from './effects';
-import { MUZZLE } from './gun';
 import { basis } from './mesh';
 import type { Vec3 } from './mesh';
 
 export const LIGHT = {
-  /** A cone from p along d: flashlights, muzzle flashes. */
+  /** A cone from p along d: flashlights. */
   SPOT: 0,
   /** All around p: the exit, the goal. */
   POINT: 1,
@@ -54,10 +53,8 @@ export interface Scene {
 }
 
 const WHITE: Vec3 = [1.2, 1.1, 0.9];
-const FIRE: Vec3 = [3, 1.4, 0.4];
-/** Half-angle cosines: a flashlight's 25 degrees, a muzzle flash's 60. */
+/** Half-angle cosine of a flashlight's cone: 25 degrees. */
 const NARROW = Math.cos(0.436);
-const WIDE = 0.5;
 /** Others' flashlights that cast shadows. */
 const SHADOWED = 2;
 
@@ -134,19 +131,6 @@ export const gather = ({ eye, yaw, pitch, dead, others, fx, lvl, t }: Scene): Li
   const head: Light[] = [];
   if (!dead) {
     head.push(spot(at(eye, [right, 0.2], [up, -0.2]), fwd, NARROW, 25, WHITE, true));
-    // Where the own gun's barrels end (render.ts: its offset, scaled).
-    if (fx.flash > 0) {
-      head.push(
-        spot(
-          at(eye, [right, 0.26], [up, -0.24], [fwd, 0.6 + MUZZLE * 0.8]),
-          fwd,
-          WIDE,
-          8,
-          FIRE,
-          true,
-        ),
-      );
-    }
   }
   const near = (p: Vec3) => Math.hypot(p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]);
   const rest: Light[] = [];
@@ -154,12 +138,9 @@ export const gather = ({ eye, yaw, pitch, dead, others, fx, lvl, t }: Scene): Li
     .map(p => ({ p, e: [p.x, p.y + EYE, p.z] as Vec3 }))
     .sort((a, b) => near(a.e) - near(b.e))
     .forEach(({ p, e }, i) => {
-      const [r, u, f] = basis(p.yaw, p.pitch);
+      const f = basis(p.yaw, p.pitch)[2];
       // Ahead of the head box, or its own head would shadow the whole beam.
       rest.push(spot(at(e, [f, 0.35]), f, NARROW, 25, WHITE, i < SHADOWED));
-      if (fx.flashes.has(p.id)) {
-        rest.push(point(at([p.x, p.y + 1.25, p.z], [r, 0.36], [u, -0.12], [f, 0.8]), 6, FIRE));
-      }
     });
   if (fx.hurt > 0) {
     rest.push(point(eye, 4, scale([2, 0.15, 0.1], Math.min(1, fx.hurt * 10))));

@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   EYE,
-  FIRE_EVERY,
-  FIRE_SLOW,
   GRAVITY,
   JUMP_SPEED,
   MAX_PITCH,
@@ -18,7 +16,7 @@ import { ITEM, KEY, PHASE, TEX } from './types';
 import type { Input, Level, MapDef, PlayerState, Sector } from './types';
 
 const lvl = compile(HALL);
-const { FORWARD, BACK, LEFT, RIGHT, JUMP, FIRE } = KEY;
+const { FORWARD, BACK, LEFT, RIGHT, JUMP } = KEY;
 
 // Yaws: forward(yaw) = (-sin, -cos), so these face -z, +x, +z and -x.
 const NORTH = 0;
@@ -36,7 +34,6 @@ const at = (x: number, z: number, level: Level = lvl): PlayerState => ({
   yaw: 0,
   pitch: 0,
   ground: true,
-  cool: 0,
 });
 
 /** Runs n steps of the same keys; `each` sees the state after every step. */
@@ -517,7 +514,7 @@ describe('spawn', () => {
   it('stands on the floor of its sector at the point, facing its yaw, modulo the count', () => {
     const [x, z, yaw] = HALL.spawns[1];
     const p = spawn(7, lvl, 1);
-    expect(p).toEqual({ id: 7, x, y: 1, z, vy: 0, yaw, pitch: 0, ground: true, cool: 0 });
+    expect(p).toEqual({ id: 7, x, y: 1, z, vy: 0, yaw, pitch: 0, ground: true });
     expect(spawn(7, lvl, 1 + HALL.spawns.length)).toEqual(p);
     expect(spawn(7, lvl, -1)).toEqual(spawn(7, lvl, HALL.spawns.length - 1));
   });
@@ -540,56 +537,6 @@ describe('spawn', () => {
 
   it('keeps the eye inside the walls', () => {
     expect(EYE).toBeLessThan(PLAYER_H);
-  });
-});
-
-describe('chaingun', () => {
-  const step = (p: PlayerState, keys: number) =>
-    move(p, { seq: 0, keys, yaw: NORTH, pitch: 0 }, lvl);
-
-  it('fires on the first step, then every FIRE_EVERY steps while the trigger is held', () => {
-    const p = at(8, 8);
-    const fired: number[] = [];
-    for (let k = 0; k < 4 * FIRE_EVERY + 1; k++) {
-      if (step(p, FIRE)) {
-        fired.push(k);
-      }
-    }
-    expect(fired).toEqual([0, 1, 2, 3, 4].map(n => n * FIRE_EVERY));
-  });
-
-  it('counts the cooldown down from FIRE_EVERY, and never below 0', () => {
-    const p = at(8, 8);
-    step(p, FIRE);
-    expect(p.cool).toBe(FIRE_EVERY);
-    step(p, 0);
-    expect(p.cool).toBe(FIRE_EVERY - 1);
-    for (let k = 0; k < 2 * FIRE_EVERY; k++) {
-      step(p, 0);
-    }
-    expect(p.cool).toBe(0);
-  });
-
-  it('does not fire without the trigger, and a released trigger keeps the cooldown', () => {
-    const p = at(8, 8);
-    expect(step(p, FORWARD)).toBe(false);
-    expect(step(p, FIRE)).toBe(true);
-    // Tapping again inside the cooldown does not fire, after it does.
-    for (let k = 1; k < FIRE_EVERY; k++) {
-      expect(step(p, k % 2 ? 0 : FIRE)).toBe(false);
-    }
-    expect(step(p, FIRE)).toBe(true);
-  });
-
-  it('slows the run down by FIRE_SLOW while the trigger is held', () => {
-    const [a, b] = [at(4, 8), at(4, 8)];
-    run(a, FORWARD, 10, EAST);
-    run(b, FORWARD | FIRE, 10, EAST);
-    expect(b.x - 4).toBeCloseTo((a.x - 4) * FIRE_SLOW, 4);
-    // Diagonals stay no faster.
-    const c = at(4, 8);
-    run(c, FORWARD | RIGHT | FIRE, 10, EAST);
-    expect(Math.hypot(c.x - 4, c.z - 8)).toBeCloseTo((RUN_SPEED / TICK_HZ) * 10 * FIRE_SLOW, 4);
   });
 });
 

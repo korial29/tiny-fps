@@ -154,25 +154,25 @@ describe('createHud', () => {
   });
 
   describe('title screen', () => {
-    it('is hidden until given a status, then shows it with the name, level and controls', () => {
+    it('is hidden until given a status, then shows it with the name and the controls', () => {
       expect(menu().hidden).toBe(true);
-      hud.title('Click to play', 'Level 2: Foundry');
+      hud.title('Click to play', 'Rooftops');
       expect(menu().hidden).toBe(false);
       const text = menu().textContent!;
       expect(text).toContain('TINY FPS');
-      expect(text).toContain('Level 2: Foundry');
+      expect(text).toContain('Rooftops');
       expect(text).toContain('Click to play');
-      for (const control of ['Mouse', 'WASD / ZQSD', 'Space', 'Left click', 'M']) {
+      for (const control of ['Mouse', 'WASD / ZQSD', 'Space', 'M']) {
         expect(text).toContain(control);
       }
       expect(q('aside h6').textContent).toBe('TINY FPS');
     });
 
     it('hides when the status is empty, and is back for the next pause', () => {
-      hud.title('Click to play', 'Level 1');
+      hud.title('Click to play', 'Rooftops');
       hud.title('', 'Level 1');
       expect(menu().hidden).toBe(true);
-      hud.title('Click to play', 'Level 1');
+      hud.title('Click to play', 'Rooftops');
       expect(menu().hidden).toBe(false);
     });
 

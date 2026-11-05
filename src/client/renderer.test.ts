@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { compile } from '../shared/level';
 import { ITEM, TEX } from '../shared/types';
 import type { MapDef } from '../shared/types';
-import { TRAIL, createEffects } from './effects';
+import { createEffects, lit } from './effects';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
-import { METAL, STRIDE } from './mesh';
+import { STRIDE } from './mesh';
 import { LAYERS } from './textures';
 import { FOG, MAX_PIXELS, MAX_TINTS, backing, createRenderer } from './render';
 
@@ -88,26 +88,19 @@ describe('createRenderer', () => {
     const src = calls.filter(c => c[0] == 'shaderSource').map(c => String(c[2]));
     const frag = src.find(s => s.includes('sampler2DArray'))!;
     const rows = frag.match(/const vec2 SP\[(\d+)\]=vec2\[\]\((.*)\);/)!;
-    expect(Number(rows[1])).toBe(LAYERS + 2);
-    expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 2);
+    expect(Number(rows[1])).toBe(LAYERS + 1);
+    expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 1);
     expect(frag).not.toMatch(/undefined|NaN|\[object/);
   });
 
-  it('draws the items, and the gun on top unless dead', () => {
+  it('draws the items after the level, in the same call', () => {
     const rd = createRenderer(canvas, compile(ROOM));
     const items = [{ id: 0, kind: ITEM.HEALTH, x: 2, y: 0, z: 2 }] as never[];
     frame(rd);
     const plain = draws();
     calls.length = 0;
     frame(rd, createEffects(), items);
-    expect(draws()[0][1]).toBe(plain[0][1] + 144);
-    // The second call is the view model.
-    expect(draws()[1][1]).toBeGreaterThan(0);
-    calls.length = 0;
-    const fx = createEffects();
-    fx.update(undefined, 0, 0.1, true);
-    frame(rd, fx);
-    expect(draws()[1][1]).toBe(0);
+    expect(draws()).toEqual([[0, plain[0][1] + 144]]);
   });
 
   describe('post-processing', () => {
@@ -131,9 +124,9 @@ describe('createRenderer', () => {
       expect(blit).toBeGreaterThan(0);
       expect(post.length).toBeGreaterThan(0);
       expect(post[0]).toBeGreaterThan(blit);
-      // The scene: cleared and drawn (world and gun) into a target of its own, before the resolve.
+      // The scene: cleared and drawn into a target of its own, before the resolve.
       const scene = calls.slice(0, blit);
-      expect(scene.filter(c => c[0] == 'drawArrays')).toHaveLength(2);
+      expect(scene.filter(c => c[0] == 'drawArrays')).toHaveLength(1);
       const target = scene.find(c => c[0] == 'bindFramebuffer' && c[1] == K('FRAMEBUFFER'))!;
       expect(target[2]).not.toBeNull();
       expect(scene.indexOf(target)).toBeLessThan(scene.findIndex(c => c[0] == 'clear'));
@@ -327,10 +320,10 @@ describe('createRenderer', () => {
     });
   });
 
-  it('draws the world, then the gun over a cleared depth, and nothing blended', () => {
+  it('draws the world in one call, and nothing blended', () => {
     const rd = createRenderer(canvas, compile(ROOM));
     frame(rd);
-    expect(draws()).toHaveLength(2);
+    expect(draws()).toHaveLength(1);
     expect(calls.filter(c => c[0] == 'enable').map(c => c[1])).not.toContain(K('BLEND'));
     expect(calls.filter(c => c[0] == 'depthMask')).toHaveLength(0);
   });
@@ -396,22 +389,22 @@ describe('createRenderer', () => {
       const rd = createRenderer(canvas, compile(ROOM));
       frame(rd);
       expect(layers()).toEqual([]);
-      expect(draws()).toHaveLength(2);
+      expect(draws()).toHaveLength(1);
       frame(rd, createEffects(), [], [spot(false), { ...spot(), kind: LIGHT.POINT }]);
       expect(layers()).toEqual([]);
-      expect(draws()).toHaveLength(4);
+      expect(draws()).toHaveLength(2);
     });
 
     it('draws one depth pass per mapped light, into its own layer, before the scene', () => {
       const rd = createRenderer(canvas, compile(ROOM));
       frame(rd, createEffects(), [], [spot(), spot(false), spot()]);
       expect(layers()).toEqual([0, 1]);
-      // Two depth passes, then the world and the view model.
-      expect(draws()).toHaveLength(4);
-      expect(calls.filter(c => c[0] == 'clear')).toHaveLength(2 + 2);
+      // Two depth passes, then the world.
+      expect(draws()).toHaveLength(3);
+      expect(calls.filter(c => c[0] == 'clear')).toHaveLength(2 + 1);
       const scene = calls.findIndex(c => c[0] == 'viewport' && c[3] == 320);
       const drawn = (a: Call[]) => a.filter(c => c[0] == 'drawArrays' && c[3] != 3).length;
-      expect([drawn(calls.slice(0, scene)), drawn(calls.slice(scene))]).toEqual([2, 2]);
+      expect([drawn(calls.slice(0, scene)), drawn(calls.slice(scene))]).toEqual([2, 1]);
       expect(calls.find(c => c[0] == 'viewport')).toEqual(['viewport', 0, 0, 512, 512]);
       expect(calls.filter(c => c[0] == 'viewport').at(-1)).toEqual(['viewport', 0, 0, 320, 200]);
     });
@@ -425,20 +418,6 @@ describe('createRenderer', () => {
         Array.from({ length: 7 }, () => spot()),
       );
       expect(layers()).toHaveLength(4);
-    });
-
-    it('leaves the unlit effects and the view model out of the depth passes', () => {
-      const rd = createRenderer(canvas, compile(ROOM));
-      frame(rd, createEffects(), [], [spot()]);
-      const [depth, world] = draws();
-      expect(depth[1]).toBe(world[1]);
-      calls.length = 0;
-      const fx = createEffects();
-      fx.sparks.push({ p: [2, 1, 2], v: [0, 0, 0], life: 1 } as never);
-      frame(rd, fx, [], [spot()]);
-      const [d2, w2] = draws();
-      expect(d2[1]).toBe(depth[1]);
-      expect(w2[1]).toBe(depth[1] + 36);
     });
 
     it('unbinds the shadow map while writing it, and binds it back for the scene', () => {
@@ -467,162 +446,52 @@ describe('createRenderer', () => {
     });
   });
 
-  describe('view model and particles', () => {
-    /** What the last frame wrote after the level: the dynamic tail, as vertices of STRIDE floats. */
-    const tail = () =>
-      calls.filter(c => c[0] == 'bufferSubData' && c[2] != 0).at(-1)?.[3] as Float32Array;
-    const vertex = (v: Float32Array, i: number) =>
-      Array.from(v.slice(i * STRIDE, (i + 1) * STRIDE));
-    const NEAR = 4158;
-    const STILL = 576 + 924 + 66 + 144;
-    const room = (fx = createEffects(), lights = [] as Light[]) => {
+  describe('dust', () => {
+    /** The motes of a fresh effects, scattered round a player at the eye of the test frames. */
+    const dusty = () => {
+      let n = 7;
+      const fx = createEffects(() => (n = (n * 1103515245 + 12345) % 2147483648) / 2147483648);
+      fx.update({ id: 0, x: 1, y: 0, z: 1, vy: 0, yaw: 0, pitch: 0, ground: true }, 0, 1 / 60);
+      return fx;
+    };
+    const spot = (): Light => ({
+      kind: LIGHT.SPOT,
+      p: [2, 1.6, 2],
+      d: [1, 0, 0],
+      cone: 0.9,
+      range: 10,
+      color: [1, 1, 1],
+      shadow: true,
+    });
+    const specks = (fx: ReturnType<typeof createEffects>) =>
+      lit(fx, [1, 1.6, 1], [0, 0, -1]).length / 4;
+
+    it('draws each mote the flashlight shows as a small unlit box, after the world', () => {
+      const fx = dusty();
+      const n = specks(fx);
+      expect(n).toBeGreaterThan(2);
       const rd = createRenderer(canvas, compile(ROOM));
-      frame(rd, fx, [], lights);
-      return tail();
-    };
-    const extent = (v: Float32Array, from: number, n: number, axis: number) => {
-      const xs = Array.from({ length: n }, (_, i) => v[(from + i) * STRIDE + axis]);
-      return [Math.min(...xs), Math.max(...xs)];
-    };
-
-    it('draws the chaingun with 4158 vertices, and the flash on top of them', () => {
-      room();
-      expect(draws()[1][1]).toBe(NEAR);
-      calls.length = 0;
-      const fx = createEffects();
-      fx.flash = 0.05;
-      room(fx);
-      expect(draws()[1][1]).toBe(NEAR + 3 * 36);
-    });
-
-    it('shines the gun like metal, and the barrels and clamps turn with the spin, the rest not', () => {
-      const [a, b] = [0, 1.2].map(spin => {
-        calls.length = 0;
-        const fx = createEffects();
-        fx.spin = spin;
-        return room(fx);
-      });
-      const [ga, gb] = [a, b].map(v => v.length / STRIDE - NEAR);
-      // The gun is the end of the tail.
-      expect([ga, gb]).toEqual([0, 0]);
-      for (let i = 0; i < NEAR; i++) {
-        const same = vertex(a, i).every((x, k) => Math.abs(x - vertex(b, i)[k]) < 1e-6);
-        if (i < STILL) {
-          expect(same).toBe(true);
-        }
-      }
-      let moved = 0;
-      for (let i = STILL; i < NEAR; i++) {
-        moved += +(vertex(a, i)[0] != vertex(b, i)[0] || vertex(a, i)[1] != vertex(b, i)[1]);
-      }
-      expect(moved).toBeGreaterThan(2000);
-      // The parts that spin are all there is behind the still ones: barrels and clamps.
-      expect(NEAR - STILL).toBe(1800 + 648);
-      const layers = new Set(Array.from({ length: NEAR }, (_, i) => vertex(a, i)[8]));
-      expect([...layers].sort((a, b) => a - b)).toEqual([-1, METAL]);
-    });
-
-    it('draws a spark as a streak from its head back along its velocity, as long as the speed says', () => {
-      const lengths = [5, 10].map(speed => {
-        const fx = createEffects();
-        fx.sparks.push({ p: [2, 1, 2], v: [0, 0, -speed], life: 1, c: [1, 0.5, 0.2] });
-        calls.length = 0;
-        const v = room(fx);
-        const [z0, z1] = extent(v, 0, 36, 2);
-        // The head is at the spark, the tail a streak behind it.
-        expect(z0).toBeCloseTo(2);
-        return z1 - z0;
-      });
-      expect(lengths[0]).toBeCloseTo(5 * TRAIL);
-      expect(lengths[1]).toBeCloseTo(2 * lengths[0]);
-    });
-
-    it('lights the head of a streak and dims its tail, unlit', () => {
-      const fx = createEffects();
-      fx.sparks.push({ p: [2, 1, 2], v: [0, 0, -10], life: 1, c: [1, 0.5, 0.2] });
-      const v = room(fx);
-      const head = Array.from({ length: 36 }, (_, i) => vertex(v, i)).filter(x => x[2] < 2.01);
-      const back = Array.from({ length: 36 }, (_, i) => vertex(v, i)).filter(x => x[2] > 2.39);
-      expect(head.length).toBeGreaterThan(5);
-      expect(back.length).toBeGreaterThan(5);
-      for (const x of head) {
-        expect([x[6], x[7], x[9], x[8]]).toEqual([1, 0.5, expect.closeTo(0.2), -2]);
-      }
-      for (const x of back) {
-        expect(x[6]).toBeCloseTo(0.25);
-        expect(x[8]).toBe(-2);
+      frame(rd, fx);
+      const data = calls
+        .filter(c => c[0] == 'bufferSubData' && c[2] != 0)
+        .at(-1)![3] as Float32Array;
+      expect(data.length).toBe(n * 36 * STRIDE);
+      for (let i = 0; i < data.length; i += STRIDE) {
+        expect(data[i + 8]).toBe(-2);
       }
     });
 
-    it('streaks a spark that falls straight down, and one that does not move', () => {
-      const fx = createEffects();
-      fx.sparks.push(
-        { p: [2, 1, 2], v: [0, -8, 0], life: 1 },
-        { p: [3, 1, 3], v: [0, 0, 0], life: 1 },
-      );
-      const v = room(fx);
-      const [y0, y1] = extent(v, 0, 36, 1);
-      expect(y0).toBeCloseTo(1);
-      expect(y1).toBeCloseTo(1 + 8 * TRAIL);
-      // At rest it is a short bar, standing, 4 cm long.
-      const [s0, s1] = extent(v, 36, 36, 1);
-      expect([s0, s1]).toEqual([expect.closeTo(0.96), expect.closeTo(1)]);
-      expect(v.every(Number.isFinite)).toBe(true);
-    });
-
-    it('draws each live casing as a brass bar that shines, and none for a free slot', () => {
-      const fx = createEffects();
-      const empty = room(fx).length;
+    it('keeps them out of the depth passes', () => {
+      const rd = createRenderer(canvas, compile(ROOM));
+      frame(rd, createEffects(), [], [spot()]);
+      const [depth, world] = draws();
+      expect(depth[1]).toBe(world[1]);
       calls.length = 0;
-      const c = fx.casings[3];
-      Object.assign(c, { p: [2, 0.01, 2], yaw: 0, tilt: 0, size: 0.01, life: 2, rest: true });
-      const v = room(fx);
-      expect(v.length - empty).toBe(36 * STRIDE);
-      const [z0, z1] = extent(v, 0, 36, 2);
-      expect(z1 - z0).toBeCloseTo(2 * 2.8 * 0.01);
-      const [x0, x1] = extent(v, 0, 36, 0);
-      expect(x1 - x0).toBeCloseTo(0.02);
-      expect(vertex(v, 0)[8]).toBe(METAL);
-      expect(vertex(v, 0)[6]).toBeGreaterThan(vertex(v, 0)[9] * 3);
-    });
-
-    it('stands a tumbling casing on end, and shrinks it over its last half second', () => {
-      const fx = createEffects();
-      Object.assign(fx.casings[0], {
-        p: [2, 1, 2],
-        yaw: 0,
-        tilt: Math.PI / 2,
-        size: 0.01,
-        life: 2,
-      });
-      const [y0, y1] = extent(room(fx), 0, 36, 1);
-      expect(y1 - y0).toBeCloseTo(0.056);
-      calls.length = 0;
-      fx.casings[0].life = 0.25;
-      const [z0, z1] = extent(room(fx), 0, 36, 1);
-      expect(z1 - z0).toBeCloseTo(0.028);
-    });
-
-    it('keeps casings and streaks out of the depth passes', () => {
-      const spot = (): Light => ({
-        kind: LIGHT.SPOT,
-        p: [2, 1.6, 2],
-        d: [1, 0, 0],
-        cone: 0.9,
-        range: 10,
-        color: [1, 1, 1],
-        shadow: true,
-      });
-      room(createEffects(), [spot()]);
-      const [depth] = draws();
-      calls.length = 0;
-      const fx = createEffects();
-      Object.assign(fx.casings[0], { p: [2, 0.5, 2], size: 0.01, life: 2 });
-      fx.sparks.push({ p: [2, 1, 2], v: [0, 0, -5], life: 1 });
-      room(fx, [spot()]);
+      const fx = dusty();
+      frame(rd, fx, [], [spot()]);
       const [d2, w2] = draws();
       expect(d2[1]).toBe(depth[1]);
-      expect(w2[1]).toBe(depth[1] + 36 + 36);
+      expect(w2[1]).toBe(depth[1] + specks(fx) * 36);
     });
   });
 });

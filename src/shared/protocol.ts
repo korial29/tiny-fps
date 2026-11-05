@@ -9,9 +9,8 @@
 //   flags: bit 0 = phase (0 hunt, 1 return); keys: the team's key bits (1 << ITEM.KEY_*)
 //   then count × 25 bytes:
 //   [id u8][x f32][y f32][z f32][vy f32][yaw u16][pitch i16][ack u16][flags u8][hp u8]
-//   flags: bit 0 = ground, bits 1-7 = cool (the chaingun cooldown, in steps)
+//   flags: bit 0 = ground
 //   x, y, z, vy are the host's float32 state, exact (see move in physics.ts).
-//   then [shots u8] and shots × 14 bytes: [id u8][x f32][y f32][z f32][hit u8, 255 = nobody]
 //   then [items u8] and items × 14 bytes: [id u8][kind u8][x f32][y f32][z f32]
 // Every multi-byte field is big-endian (DataView's default).
 import type { Input, PlayerInfo, Snapshot } from './types';
@@ -26,7 +25,6 @@ export const MSG_SNAPSHOT = 2;
 export const INPUT_BYTES = 11;
 export const SNAP_HEAD = 6;
 export const SNAP_PLAYER = 25;
-export const SNAP_SHOT = 14;
 export const SNAP_ITEM = 14;
 
 const TURN = 65536 / (2 * Math.PI);
@@ -84,8 +82,7 @@ export const decodeInput = (buf: ArrayBuffer): Input | null => {
 };
 
 export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
-  const shots = SNAP_HEAD + SNAP_PLAYER * s.players.length;
-  const items = shots + 1 + SNAP_SHOT * s.shots.length;
+  const items = SNAP_HEAD + SNAP_PLAYER * s.players.length;
   const v = new DataView(new ArrayBuffer(items + 1 + SNAP_ITEM * s.items.length));
   v.setUint8(0, MSG_SNAPSHOT);
   v.setUint16(1, s.tick & 0xffff);
@@ -102,17 +99,8 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint16(o + 17, toTurn(p.yaw));
     v.setInt16(o + 19, toPitch(p.pitch));
     v.setUint16(o + 21, p.ack & 0xffff);
-    v.setUint8(o + 23, +p.ground | (p.cool << 1));
+    v.setUint8(o + 23, +p.ground);
     v.setUint8(o + 24, p.hp);
-  });
-  v.setUint8(shots, s.shots.length);
-  s.shots.forEach((h, i) => {
-    const o = shots + 1 + i * SNAP_SHOT;
-    v.setUint8(o, h.id);
-    v.setFloat32(o + 1, h.x);
-    v.setFloat32(o + 5, h.y);
-    v.setFloat32(o + 9, h.z);
-    v.setUint8(o + 13, h.hit & 0xff);
   });
   v.setUint8(items, s.items.length);
   s.items.forEach((t, i) => {
@@ -147,8 +135,8 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     at = start + size * n;
     return [start, n];
   };
-  const [shots, items] = [SNAP_SHOT, SNAP_ITEM].map(section);
-  if (!shots || !items || buf.byteLength !== at) {
+  const items = section(SNAP_ITEM);
+  if (!items || buf.byteLength !== at) {
     return null;
   }
   const each = <T>([start, n]: [number, number], size: number, f: (o: number) => T): T[] =>
@@ -165,7 +153,6 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       yaw: fromTurn(v.getUint16(o + 17)),
       pitch: fromPitch(v.getInt16(o + 19)),
       ack: v.getUint16(o + 21),
-      cool: v.getUint8(o + 23) >> 1,
       ground: (v.getUint8(o + 23) & 1) === 1,
       hp: v.getUint8(o + 24),
     });
@@ -173,13 +160,6 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
   return {
     tick: v.getUint16(1),
     players,
-    shots: each(shots, SNAP_SHOT, o => ({
-      id: v.getUint8(o),
-      x: v.getFloat32(o + 1),
-      y: v.getFloat32(o + 5),
-      z: v.getFloat32(o + 9),
-      hit: v.getUint8(o + 13) === 255 ? -1 : v.getUint8(o + 13),
-    })),
     phase: v.getUint8(4) & 1,
     keys: v.getUint8(5),
     items: each(items, SNAP_ITEM, o => ({

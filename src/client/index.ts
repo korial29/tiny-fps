@@ -1,11 +1,11 @@
-import { EYE, MAX_PITCH, PLAYER_H, TICK_HZ } from '../shared/constants';
+import { EYE, PLAYER_H, TICK_HZ } from '../shared/constants';
 import { blocked, compile } from '../shared/level';
 import { HALL } from '../shared/map';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
-import type { PlayerInfo, Shot, SocketLike } from '../shared/types';
+import type { PlayerInfo, SocketLike } from '../shared/types';
 import { createAudio, createClock, createHeart, savedMute, toggleMute } from './audio';
-import { GAIN, HURT, createDelay, createEffects } from './effects';
+import { GAIN, HURT, createEffects } from './effects';
 import { HUD_CSS, createHud } from './hud';
 import { createInput } from './input';
 import { createPredictor } from './predict';
@@ -13,7 +13,6 @@ import { gather } from './lights';
 import { createProgress, facing } from './progress';
 import { createRenderer } from './render';
 import type { Renderer } from './render';
-import { SOUND } from './sfx';
 
 export type { PlayerInfo, SocketLike } from '../shared/types';
 
@@ -74,9 +73,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const ctl = createInput(canvas, () => hud.mute(toggleMute(audio)));
   // The click that takes the pointer lock is the gesture that lets the sound start.
   canvas.addEventListener('click', () => audio.unlock());
-  const fx = createEffects(Math.random, lvl);
-  /** Others' shots wait INTERP_DELAY: the others are drawn that far in the past. */
-  const shots = createDelay<Shot>();
+  const fx = createEffects();
   let you = -1;
   let rd: Renderer | undefined;
   try {
@@ -128,10 +125,6 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
           [ctl.yaw, ctl.pitch] = [facing(lvl.map, own.x, own.z), 0];
         }
         alive = !!own?.hp;
-        shots.push(
-          s.shots.filter(sh => sh.id != you),
-          now,
-        );
       }
       return;
     }
@@ -173,17 +166,11 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       acc = 0;
     }
     for (; ready && acc >= STEP; acc -= STEP) {
-      // A dead player neither moves nor fires.
+      // A dead player does not move.
       const keys = progress.dead ? 0 : ctl.keys;
       const input = predictor.step({ keys, yaw: ctl.yaw, pitch: ctl.pitch }, now);
       if (open) {
         ws.send(encodeInput(input));
-      }
-      const shot = predictor.shot();
-      const p = shot && predictor.me(1);
-      if (shot && p) {
-        fx.shot(shot, [p.x, p.y + EYE, p.z], true);
-        audio.play(SOUND.SHOT);
       }
     }
 
@@ -191,25 +178,16 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     const others = predictor.others(now).filter(p => progress.alive(p.id));
     const eye: [number, number, number] = me ? [me.x, me.y + EYE, me.z] : [0, 0, 0];
     audio.listen(eye, ctl.yaw);
-    for (const sh of shots.due(now)) {
-      const p = others.find(o => o.id == sh.id);
-      if (p) {
-        const from: [number, number, number] = [p.x, p.y + EYE, p.z];
-        fx.shot(sh, from, false, sh.hit != you);
-        audio.play(SOUND.SHOT, from);
-      }
-    }
     tick(progress.returning, now);
     const dt = Math.min((now - before) / 1000, 0.1);
     fx.update(me, ctl.keys, dt, progress.dead);
     hud.update(dt);
     if (me && rd) {
-      // Bob and shake are for the eye only: the inputs keep sending the real angles.
-      const pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, ctl.pitch + fx.shakePitch));
+      // The bob is for the eye only: the inputs keep sending the real height.
       rd.frame(
         [eye[0], eye[1] + fx.bob, eye[2]],
-        ctl.yaw + fx.shakeYaw,
-        pitch,
+        ctl.yaw,
+        ctl.pitch,
         others,
         colors,
         fx,

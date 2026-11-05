@@ -4,7 +4,7 @@ import { HALL } from '../shared/map';
 import { forward } from '../shared/physics';
 import { TEX } from '../shared/types';
 import type { Level, MapDef, Sector } from '../shared/types';
-import { METAL, axesAlong, basis, dress, pushBox, pushFrame } from './mesh';
+import { basis, pushBox } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import {
@@ -60,14 +60,8 @@ describe('viewProj and project', () => {
 });
 
 describe('SPEC', () => {
-  it('has a row per texture layer, one for the flat bodies and one for flat metal', () => {
-    expect(SPEC).toHaveLength(LAYERS + 2);
-  });
-
-  it('makes flat metal shine more than a flat body, and less than the metal texture', () => {
-    expect(SPEC[LAYERS + 1][0]).toBeGreaterThan(SPEC[LAYERS][0]);
-    expect(SPEC[LAYERS + 1][0]).toBeLessThan(SPEC[TEX.METAL][0]);
-    expect(SPEC[LAYERS + 1][1]).toBeGreaterThan(SPEC[LAYERS][1]);
+  it('has a row per texture layer, and one for the flat bodies', () => {
+    expect(SPEC).toHaveLength(LAYERS + 1);
   });
 
   it('makes metal and grating shinier than brick and wood, and sharper', () => {
@@ -147,94 +141,6 @@ describe('pushBox', () => {
         Math.abs(nx) * 1 + Math.abs(ny) * 2 + Math.abs(nz) * 3,
       );
     }
-  });
-});
-
-describe('axesAlong', () => {
-  it('gives unit axes at right angles, the first one along d', () => {
-    for (const d of [
-      [0, 0, -1],
-      [0, 1, 0],
-      [0.6, 0, -0.8],
-      [0.48, 0.64, 0.6],
-    ] as [number, number, number][]) {
-      const [a, b, c] = axesAlong(d);
-      expect(a).toEqual(d);
-      for (const [u, v, dot] of [
-        [a, a, 1],
-        [b, b, 1],
-        [c, c, 1],
-        [a, b, 0],
-        [a, c, 0],
-        [b, c, 0],
-      ] as const) {
-        expect(u[0] * v[0] + u[1] * v[1] + u[2] * v[2]).toBeCloseTo(dot);
-      }
-    }
-  });
-});
-
-describe('pushFrame', () => {
-  const axes = axesAlong([0.6, 0, -0.8]);
-
-  it('writes 36 vertices on the faces of a box turned to its axes', () => {
-    const out: number[] = [];
-    pushFrame(out, [5, 2, 3], axes, [1, 2, 3], [1, 1, 1]);
-    expect(out).toHaveLength(36 * 10);
-    for (let v = 0; v < 36; v++) {
-      const [x, y, z, nx, ny, nz] = out.slice(v * 10, v * 10 + 6);
-      expect(Math.hypot(nx, ny, nz)).toBeCloseTo(1);
-      // Along its normal the vertex is on the face: one half size from the centre.
-      const half = [1, 2, 3][
-        axes.findIndex(a => Math.abs(a[0] * nx + a[1] * ny + a[2] * nz) > 0.99)
-      ];
-      expect(nx * (x - 5) + ny * (y - 2) + nz * (z - 3)).toBeCloseTo(half);
-    }
-  });
-
-  it('writes the same vertices as pushBox when the axes are the world ones', () => {
-    const [a, b]: number[][] = [[], []];
-    pushFrame(
-      a,
-      [1, 2, 3],
-      [
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1],
-      ],
-      [1, 2, 3],
-      [0.5, 0.25, 0.1],
-      -2,
-    );
-    pushBox(b, [1, 2, 3], [1, 2, 3], 0, [0.5, 0.25, 0.1], -2);
-    const rows = (v: number[]) =>
-      Array.from({ length: 36 }, (_, i) =>
-        v
-          .slice(i * 10, i * 10 + 10)
-          .map(x => x + 0)
-          .join(),
-      ).sort();
-    expect(rows(a)).toEqual(rows(b));
-  });
-
-  it('colours the +x end with `end`, and the rest with the colour: a gradient along the first axis', () => {
-    const out: number[] = [];
-    pushFrame(out, [0, 0, 0], axes, [2, 1, 1], [0.1, 0.1, 0.1], -2, [1, 0.5, 0.2]);
-    for (let v = 0; v < 36; v++) {
-      const [x, y, z] = out.slice(v * 10, v * 10 + 3);
-      const along = x * axes[0][0] + y * axes[0][1] + z * axes[0][2];
-      const c = [out[v * 10 + 6], out[v * 10 + 7], out[v * 10 + 9]];
-      expect(c).toEqual(along > 0 ? [1, 0.5, 0.2] : [0.1, 0.1, 0.1]);
-    }
-  });
-});
-
-describe('dress', () => {
-  it('writes the layer it is given: flat by default, shiny metal for the gun', () => {
-    const v = [0, 0, 0, 0, 1, 0];
-    expect([dress(v, [1, 1, 1])[8], dress(v, [1, 1, 1], METAL)[8]]).toEqual([-1, METAL]);
-    expect(METAL).toBeGreaterThan(-1);
-    expect(METAL).toBeLessThan(0);
   });
 });
 

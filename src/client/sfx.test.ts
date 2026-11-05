@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { LAYERS, RATE, music, render } from './sfx';
+import { LAYERS, LOOPED, RATE, SOUND, music, render, seam } from './sfx';
 import type { Voice } from './sfx';
 
 const peak = (s: Float32Array) => s.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
 
-/** Two made-up sounds to run the generator on: the game has none yet. */
+/** Two made-up sounds to run the generator on: they stay as they were before the game had its own. */
 const SOUNDS: Record<string, Voice[]> = {
   // A noise crack over a short thump, and a saw and a square falling out of tune over grit.
   crack: [
@@ -57,9 +57,74 @@ describe('render', () => {
     expect(peak(s.subarray(0.17 * RATE, 0.2 * RATE))).toBeLessThan(0.1);
     expect(peak(s.subarray(0.25 * RATE, 0.3 * RATE))).toBeGreaterThan(0.1);
   });
+});
 
-  it('has no sound of its own yet', () => {
-    expect(LAYERS).toEqual([]);
+const rms = (s: Float32Array) => Math.sqrt(s.reduce((m, x) => m + x * x, 0) / s.length);
+/** The sound by its name in SOUND. */
+const sound = (name: keyof typeof SOUND) => render(SOUND[name], LAYERS);
+
+describe('the sounds of the game', () => {
+  it('are one entry per id, and the looped ones are the wind and the scrape', () => {
+    expect(LAYERS).toHaveLength(Object.keys(SOUND).length);
+    expect(Object.values(SOUND).sort((a, b) => a - b)).toEqual(LAYERS.map((_, i) => i));
+    expect(LOOPED).toEqual([SOUND.WIND, SOUND.SCRAPE]);
+  });
+
+  describe.each(Object.entries(SOUND).filter(([, id]) => !LOOPED.includes(id)))('%s', (_, id) => {
+    const s = render(id, LAYERS);
+
+    it('is deterministic, audible and within [-1, 1]', () => {
+      expect(render(id, LAYERS)).toEqual(s);
+      expect(peak(s)).toBeGreaterThan(0.3);
+      expect(peak(s)).toBeLessThanOrEqual(1);
+    });
+
+    it('starts and ends silent, and is short', () => {
+      expect(Math.abs(s[0])).toBeLessThan(0.01);
+      expect(Math.abs(s[s.length - 1])).toBeLessThan(0.01);
+      expect(s.length).toBeGreaterThan(0.03 * RATE);
+      expect(s.length).toBeLessThan(0.4 * RATE);
+    });
+  });
+
+  it('make the step on a wall lighter than on a floor, and the dash stronger than the double jump', () => {
+    expect(rms(sound('WALLSTEP'))).toBeLessThan(rms(sound('STEP')) * 0.7);
+    expect(rms(sound('DASH'))).toBeGreaterThan(rms(sound('DOUBLE')) * 1.3);
+    expect(rms(sound('LAND'))).toBeGreaterThan(rms(sound('JUMP')) * 1.5);
+  });
+});
+
+describe('seam', () => {
+  it('drops the cross-fade from the length and joins the end to the start', () => {
+    const sine = Float32Array.from({ length: 5000 }, (_, i) => Math.sin(i * 0.1));
+    const out = seam(sine, 500);
+    expect(out).toHaveLength(4500);
+    // The first sample is the one that follows the last in the original: no step between them.
+    expect(Math.abs(out[0] - out[out.length - 1])).toBeLessThan(0.11);
+    expect(out[0]).toBe(sine[4500]);
+    expect(out[1000]).toBe(sine[1000]);
+  });
+
+  it('keeps the power through the cross-fade, for noise', () => {
+    let seed = 1;
+    const noise = Float32Array.from(
+      { length: 22000 },
+      () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1,
+    );
+    const out = seam(noise, 2000);
+    expect(rms(out.subarray(0, 2000)) / rms(out.subarray(2000))).toBeGreaterThan(0.9);
+    expect(rms(out.subarray(0, 2000)) / rms(out.subarray(2000))).toBeLessThan(1.1);
+  });
+
+  it.each(LOOPED)('makes the loop %i a bed two seconds long that does not click', id => {
+    const s = seam(render(id, LAYERS));
+    expect(Math.abs(s.length / RATE - 2)).toBeLessThan(0.01);
+    expect(rms(s)).toBeGreaterThan(0.05);
+    expect(rms(s)).toBeLessThan(0.4);
+    const steps = s.map((x, i) => Math.abs(x - s[(i + 1) % s.length]));
+    const wrap = steps[steps.length - 1];
+    expect(wrap).toBeLessThanOrEqual(steps.subarray(0, -1).reduce((m, x) => Math.max(m, x), 0));
+    expect(peak(s)).toBeLessThan(1.1);
   });
 });
 

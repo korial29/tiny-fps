@@ -14,12 +14,14 @@ vi.mock('./sfx', async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
   render: (id: number) => new Float32Array(10 + id),
   music: () => new Float32Array(5),
+  seam: (s: Float32Array) => new Float32Array(s.length - 5),
 }));
 
 interface Node {
   to?: Node;
   gain: { value: number; setTargetAtTime: ReturnType<typeof vi.fn> };
   pan: { value: number };
+  playbackRate: { value: number; setTargetAtTime: ReturnType<typeof vi.fn> };
   buffer?: { length: number };
   loop?: boolean;
   started: number;
@@ -44,6 +46,7 @@ class FakeContext {
     const n: Node = {
       gain: { value: 1, setTargetAtTime: vi.fn() },
       pan: { value: 0 },
+      playbackRate: { value: 1, setTargetAtTime: vi.fn() },
       started: 0,
       stopped: 0,
     };
@@ -190,6 +193,14 @@ describe('play', () => {
     expect(voice().vol).toBeCloseTo(full / 2);
   });
 
+  it('plays at the rate asked, 1 by default', () => {
+    const a = unlocked();
+    a.play(SOUND.HIT);
+    expect(voice().src.playbackRate.value).toBe(1);
+    a.play(SOUND.HIT, undefined, 1, 0.75);
+    expect(voice().src.playbackRate.value).toBe(0.75);
+  });
+
   it('keeps at most 24 voices: the quietest goes for a louder one, the newest if it is quietest', () => {
     const a = unlocked();
     for (let i = 0; i < 24; i++) {
@@ -213,6 +224,46 @@ describe('play', () => {
     a.play(SOUND.HEART);
     expect(voice()).toMatchObject({ id: SOUND.HEART, src: { started: 1 } });
     expect(fake().sources.filter(s => s.stopped)).toHaveLength(0);
+  });
+});
+
+describe('loop', () => {
+  /** The loops started: looping sources but the music (the first), with their gain node. */
+  const loops = () =>
+    fake()
+      .sources.filter(s => s.loop)
+      .slice(1);
+
+  it('starts on its first set after the unlock, once, and eases to the volume and rate', () => {
+    install();
+    const a = createAudio(LAYERS);
+    const l = a.loop(SOUND.HEART);
+    l.set(0.5, 1.2);
+    expect(fake().sources).toHaveLength(0);
+    a.unlock();
+    expect(loops()).toHaveLength(0);
+    l.set(0.5, 1.2);
+    l.set(0.2, 0.8);
+    expect(loops()).toHaveLength(1);
+    const [src] = loops();
+    expect(src).toMatchObject({ started: 1, buffer: { length: 10 + SOUND.HEART } });
+    expect(src.to!.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.2, 3, expect.any(Number));
+    expect(src.to!.gain.value).toBe(0);
+    expect(src.playbackRate.setTargetAtTime).toHaveBeenLastCalledWith(0.8, 3, expect.any(Number));
+    expect(src.playbackRate.setTargetAtTime).toHaveBeenCalledTimes(2);
+  });
+
+  it('goes through the master gain, so mute silences it', () => {
+    const a = unlocked();
+    a.loop(SOUND.HIT).set(1, 1);
+    expect(loops()[0].to!.to).toBe(fake().gains[0]);
+  });
+
+  it('seams the sounds that loop, and only them', () => {
+    install();
+    createAudio(Array.from({ length: 10 }, () => [])).unlock();
+    const lengths = fake().buffers.map(b => b.length);
+    expect(lengths.slice(0, 10)).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 13, 14]);
   });
 });
 
@@ -244,6 +295,7 @@ describe('without Web Audio', () => {
       a.unlock();
       a.listen([0, 0, 0], 0);
       a.play(SOUND.HIT, [1, 0, 0]);
+      a.loop(SOUND.HIT).set(1, 1);
       a.destroy();
     }).not.toThrow();
     expect(a.muted).toBe(false);

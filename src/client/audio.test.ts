@@ -1,8 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createAudio, createHeart, savedMute, toggleMute } from './audio';
+import { createAudio, savedMute, toggleMute } from './audio';
 import type { Audio } from './audio';
-import { RATE, SOUND } from './sfx';
+import { RATE } from './sfx';
+import type { Voice } from './sfx';
+
+/** Two sounds, named here: the game has none yet. */
+const SOUND = { HIT: 0, HEART: 1 } as const;
+const LAYERS: Voice[][] = [[], []];
 
 // Each rendered buffer is as long as its sound id says: a played source names its sound.
 vi.mock('./sfx', async importOriginal => ({
@@ -84,7 +89,7 @@ const playing = () => fake().sources.filter(s => !s.loop && s.started && !s.stop
 const EYE: [number, number, number] = [10, 1.6, 10];
 const unlocked = (yaw = 0): Audio => {
   install();
-  const a = createAudio();
+  const a = createAudio(LAYERS);
   a.unlock();
   a.listen(EYE, yaw);
   return a;
@@ -99,7 +104,7 @@ afterEach(() => {
 describe('unlock', () => {
   it('resumes the context, renders every sound once and starts the music once', () => {
     install();
-    const a = createAudio();
+    const a = createAudio(LAYERS);
     a.unlock();
     a.unlock();
     const c = fake();
@@ -115,7 +120,7 @@ describe('unlock', () => {
 
   it('plays nothing before the first unlock', () => {
     install();
-    const a = createAudio();
+    const a = createAudio(LAYERS);
     a.play(SOUND.HIT);
     expect(fake().sources).toHaveLength(0);
   });
@@ -214,7 +219,7 @@ describe('play', () => {
 describe('mute', () => {
   it('ramps the master gain to 0 and back', () => {
     install();
-    const a = createAudio();
+    const a = createAudio(LAYERS);
     const ramp = fake().gains[0].gain.setTargetAtTime;
     a.mute(true);
     expect(a.muted).toBe(true);
@@ -247,7 +252,7 @@ describe('without Web Audio', () => {
   };
 
   it('is a silent stub', () => {
-    quiet(createAudio());
+    quiet(createAudio(LAYERS));
   });
 
   it('is a silent stub when the context cannot be built', () => {
@@ -259,82 +264,12 @@ describe('without Web Audio', () => {
         }
       },
     );
-    quiet(createAudio());
-  });
-});
-
-describe('createHeart', () => {
-  const setup = () => {
-    const play = vi.fn();
-    return { play, beat: createHeart({ play } as unknown as Audio) };
-  };
-
-  it('is silent above 3 health and at 0, and returns no beat', () => {
-    const { play, beat } = setup();
-    for (const hp of [9, 4, 0]) {
-      expect(beat(hp, 0)).toBe(0);
-      expect(beat(hp, 5000)).toBe(0);
-    }
-    expect(play).not.toHaveBeenCalled();
-  });
-
-  it('beats at once at 3 health, then every 0.8 s, softly', () => {
-    const { play, beat } = setup();
-    beat(3, 1000);
-    expect(play).toHaveBeenCalledTimes(1);
-    expect(play).toHaveBeenLastCalledWith(SOUND.HEART, undefined, 0.6);
-    beat(3, 1799);
-    expect(play).toHaveBeenCalledTimes(1);
-    beat(3, 1800);
-    expect(play).toHaveBeenCalledTimes(2);
-    for (let t = 1800; t <= 4000; t += 16) {
-      beat(2, t);
-    }
-    // 1000, 1800, 2600, 3400, 4200 is not yet.
-    expect(play).toHaveBeenCalledTimes(4);
-  });
-
-  it('is faster and louder at 1 health', () => {
-    const { play, beat } = setup();
-    for (let t = 0; t < 2000; t += 16) {
-      beat(1, t);
-    }
-    // Every 0.5 s: 0, 500, 1000, 1500 (and 2000 is not yet).
-    expect(play).toHaveBeenCalledTimes(4);
-    expect(play).toHaveBeenLastCalledWith(SOUND.HEART, undefined, 1);
-  });
-
-  it('speeds up when the health drops from 2 to 1 without waiting out the slow gap', () => {
-    const { play, beat } = setup();
-    beat(2, 0);
-    beat(1, 500);
-    expect(play).toHaveBeenCalledTimes(2);
-  });
-
-  it('stops on healing or death, and beats at once when low again', () => {
-    const { play, beat } = setup();
-    beat(2, 0);
-    expect(beat(6, 100)).toBe(0);
-    beat(6, 5000);
-    expect(play).toHaveBeenCalledTimes(1);
-    beat(2, 5100);
-    expect(play).toHaveBeenCalledTimes(2);
-    expect(beat(0, 5200)).toBe(0);
-    beat(0, 9000);
-    expect(play).toHaveBeenCalledTimes(2);
-  });
-
-  it('returns the beat for the screen: 1 at a thump, falling to 0 before the next', () => {
-    const { beat } = setup();
-    expect(beat(3, 0)).toBe(1);
-    expect(beat(3, 400)).toBeCloseTo(0.5);
-    expect(beat(3, 799)).toBeGreaterThan(0);
-    expect(beat(3, 800)).toBe(1);
+    quiet(createAudio(LAYERS));
   });
 });
 
 describe('mute memory', () => {
-  const stub = () => createAudio();
+  const stub = () => createAudio(LAYERS);
 
   it('remembers the choice', () => {
     const a = stub();

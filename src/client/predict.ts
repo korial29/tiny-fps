@@ -78,8 +78,6 @@ export const createPredictor = (lvl: Level): Predictor => {
   /** The own player after the last step, and before it. */
   let own: PlayerState | undefined;
   let prev: PlayerState | undefined;
-  /** The own player has health, as of the last snapshot: a dead one does not move. */
-  let alive = true;
   const snaps: { t: number; s: Snapshot }[] = [];
 
   /**
@@ -136,9 +134,7 @@ export const createPredictor = (lvl: Level): Predictor => {
       }
       if (own) {
         prev = state(own);
-        if (alive) {
-          move(own, input, lvl);
-        }
+        move(own, input, lvl);
       }
       return input;
     },
@@ -152,7 +148,6 @@ export const createPredictor = (lvl: Level): Predictor => {
       if (!me) {
         return;
       }
-      alive = me.hp > 0;
       pending = pending.filter(i => !acked(i.seq, me.ack));
       own = state(me);
       prev = state(own);
@@ -160,9 +155,7 @@ export const createPredictor = (lvl: Level): Predictor => {
         if (k === pending.length - 1) {
           prev = state(own!);
         }
-        if (alive) {
-          move(own!, i, lvl);
-        }
+        move(own!, i, lvl);
       });
     },
 

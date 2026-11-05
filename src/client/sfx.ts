@@ -6,7 +6,7 @@
  * per second, attack, sustain and decay in seconds, vibrato depth, low-pass (0..1, 1 is off),
  * arpeggio time and frequency multiplier, volume; optionally the seconds it starts late.
  */
-type Voice = [
+export type Voice = [
   number,
   number,
   number,
@@ -23,14 +23,6 @@ type Voice = [
 
 /** Sample rate of everything rendered here; audio.ts resamples through AudioBuffer if needed. */
 export const RATE = 44100;
-
-/** The sounds of the game. */
-export const SOUND = {
-  /** A player hurt. */
-  HIT: 0,
-  /** A heartbeat, looped by the client while the own health is low. */
-  HEART: 1,
-} as const;
 
 const synth = ([wave, hz, slide, a, s, d, vib, lp, jt, jm, vol]: Voice, seed: number) => {
   const out = new Float32Array(Math.ceil((a + s + d) * RATE));
@@ -69,32 +61,21 @@ const synth = ([wave, hz, slide, a, s, d, vib, lp, jt, jm, vol]: Voice, seed: nu
   return out;
 };
 
-const LAYERS: Voice[][] = [
-  // HIT: a saw and a square falling out of tune, over grit.
-  [
-    [1, 160, -1.5, 0.003, 0.04, 0.22, 0.2, 0.5, 0, 1, 0.6],
-    [0, 83, -1, 0.003, 0.04, 0.22, 0, 0.3, 0, 1, 0.4],
-    [3, 3000, 0, 0.002, 0, 0.12, 0, 0.4, 0, 1, 0.5],
-  ],
-  // HEART: a soft "lub-dub", two sine thumps 0.22 s apart, the second lower and fainter. Each has
-  // a faint octave above it, so small speakers carry it.
-  [
-    [2, 55, -1, 0.01, 0.01, 0.12, 0, 1, 0, 1, 0.9],
-    [2, 110, -1, 0.01, 0, 0.08, 0, 1, 0, 1, 0.3],
-    [2, 48, -1, 0.01, 0.01, 0.14, 0, 1, 0, 1, 0.6, 0.22],
-    [2, 96, -1, 0.01, 0, 0.09, 0, 1, 0, 1, 0.2, 0.22],
-  ],
-];
+/**
+ * The sounds of the game: one entry per sound, its voices layered, an index per sound for
+ * audio.play. None yet: the footsteps, the dash and the grab of the next steps go here.
+ */
+export const LAYERS: Voice[][] = [];
 
 /**
- * Renders the SOUND `id` as mono samples in [-1, 1] at RATE, deterministic (seeded noise), a few
- * tenths of a second long, silent at both ends (no click).
+ * Renders the sound `id` of `layers` as mono samples in [-1, 1] at RATE, deterministic (seeded
+ * noise), silent at both ends (no click).
  */
-export const render = (id: number): Float32Array => {
-  const voices = LAYERS[id].map(
+export const render = (id: number, layers: Voice[][] = LAYERS): Float32Array => {
+  const voices = layers[id].map(
     (v, i) => [synth(v, id * 9 + i), Math.round((v[11] ?? 0) * RATE)] as const,
   );
-  // tanh keeps the sum of the voices within [-1, 1] and rounds the boom.
+  // tanh keeps the sum of the voices within [-1, 1].
   return Float32Array.from({ length: Math.max(...voices.map(([v, d]) => d + v.length)) }, (_, i) =>
     Math.tanh(voices.reduce((sum, [v, d]) => sum + (v[i - d] ?? 0), 0)),
   );

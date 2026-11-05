@@ -3,14 +3,13 @@
 import { EYE } from '../shared/constants';
 import { TEX } from '../shared/types';
 import type { Level, PlayerState } from '../shared/types';
-import type { Effects } from './effects';
 import { basis } from './mesh';
 import type { Vec3 } from './mesh';
 
 export const LIGHT = {
   /** A cone from p along d: flashlights. */
   SPOT: 0,
-  /** All around p: the red flash of a hit, the lava. */
+  /** All around p: the lava. */
   POINT: 1,
 } as const;
 
@@ -40,11 +39,8 @@ export interface Scene {
   eye: Vec3;
   yaw: number;
   pitch: number;
-  /** The own player is dead: no flashlight. */
-  dead: boolean;
-  /** The living other players, interpolated. */
+  /** The other players, interpolated. */
   others: PlayerState[];
-  fx: Effects;
   /** The level, for its lava. */
   lvl: Level;
   /** Seconds, for pulsing lights. */
@@ -125,12 +121,9 @@ const ember = (p: Vec3, t: number): Vec3 => {
 };
 
 /** The lights of this frame, most important first. */
-export const gather = ({ eye, yaw, pitch, dead, others, fx, lvl, t }: Scene): Light[] => {
+export const gather = ({ eye, yaw, pitch, others, lvl, t }: Scene): Light[] => {
   const [right, up, fwd] = basis(yaw, pitch);
-  const head: Light[] = [];
-  if (!dead) {
-    head.push(spot(at(eye, [right, 0.2], [up, -0.2]), fwd, NARROW, 25, WHITE, true));
-  }
+  const head = [spot(at(eye, [right, 0.2], [up, -0.2]), fwd, NARROW, 25, WHITE, true)];
   const near = (p: Vec3) => Math.hypot(p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]);
   const rest: Light[] = [];
   others
@@ -141,9 +134,6 @@ export const gather = ({ eye, yaw, pitch, dead, others, fx, lvl, t }: Scene): Li
       // Ahead of the head box, or its own head would shadow the whole beam.
       rest.push(spot(at(e, [f, 0.35]), f, NARROW, 25, WHITE, i < SHADOWED));
     });
-  if (fx.hurt > 0) {
-    rest.push(point(eye, 4, scale([2, 0.15, 0.1], Math.min(1, fx.hurt * 10))));
-  }
   lava(lvl)
     .filter(l => near(l.p) < l.range * 2)
     .map(({ p, range }) => point(p, range, ember(p, t)))

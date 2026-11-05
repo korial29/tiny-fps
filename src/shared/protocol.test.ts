@@ -23,7 +23,6 @@ const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
   yaw: 4.2,
   pitch: -0.7,
   ground: false,
-  hp: 9,
   ack: 1234,
   ...over,
 });
@@ -128,14 +127,12 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 4-byte head and 25 bytes per player, nothing else', () => {
+  it('has a 4-byte head and 24 bytes per player, nothing else', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
-      players: [
-        player(7, { x: 1, y: 2, z: 3, vy: -1, yaw: Math.PI, pitch: 0.5, ground: true, hp: 6 }),
-      ],
+      players: [player(7, { x: 1, y: 2, z: 3, vy: -1, yaw: Math.PI, pitch: 0.5, ground: true })],
     });
-    expect([SNAP_HEAD, SNAP_PLAYER]).toEqual([4, 25]);
+    expect([SNAP_HEAD, SNAP_PLAYER]).toEqual([4, 24]);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER);
     expect(bytes(buf)).toEqual([
       ...[MSG_SNAPSHOT, 0x12, 0x34, 1],
@@ -152,15 +149,7 @@ describe('snapshot frame', () => {
       0x04,
       0xd2, // ack 1234
       1, // ground
-      6, // hp
     ]);
-  });
-
-  it('round-trips every health', () => {
-    const back = decodeSnapshot(
-      encodeSnapshot({ tick: 0, players: [0, 1, 5, 9].map((h, i) => player(i, { hp: h })) }),
-    )!;
-    expect(back.players.map(p => p.hp)).toEqual([0, 1, 5, 9]);
   });
 
   it('keeps the ground bit in the flags', () => {

@@ -1,20 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  HEALTH,
-  INPUT_BURST,
-  MAX_NAME,
-  MAX_PLAYERS,
-  MAX_REWIND,
-  PLAYER_RESPAWN,
-  SNAP_EVERY,
-  TICK_HZ,
-} from './constants';
+import { INPUT_BURST, MAX_NAME, MAX_PLAYERS, MAX_REWIND, SNAP_EVERY, TICK_HZ } from './constants';
 import { HALL } from './map';
 import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
-import { KEY, TEX } from './types';
-import type { Conn, Every, Input, MapDef, PlayerState, Sector, Snapshot } from './types';
+import { KEY } from './types';
+import type { Conn, Every, Input, PlayerState, Snapshot } from './types';
 
 /** A peer that records what the room sends it. */
 const peer = () => {
@@ -462,150 +453,5 @@ describe('Room: rewind', () => {
     const c = join(d.room, 'C');
     const cState = d.room['peers'].get(c)!.state;
     expect(d.room.rewind(0, d.tick - 10).find(p => p.id === 2)).toEqual(cState);
-  });
-});
-
-/** A purpose-built map, so each rule is tested on a map that shows only it. */
-const EAST = (3 * Math.PI) / 2;
-const sector = (pts: [number, number][], floor = 0): Sector => ({
-  pts,
-  floor,
-  ceil: 4,
-  ft: TEX.TILE,
-  wt: TEX.BRICK,
-  ct: TEX.STONE,
-});
-/**
- * 0: the start room (10 x 10 m); 1: a doorway east; 2: a far room (10 x 10 m); 3: a yard south of
- * the start room.
- */
-const ARENA: MapDef = {
-  sectors: [
-    sector([
-      [0, 0],
-      [10, 0],
-      [10, 4],
-      [10, 6],
-      [10, 10],
-      [0, 10],
-    ]),
-    sector([
-      [10, 4],
-      [12, 4],
-      [12, 6],
-      [10, 6],
-    ]),
-    sector([
-      [12, 0],
-      [22, 0],
-      [22, 10],
-      [12, 10],
-      [12, 6],
-      [12, 4],
-    ]),
-    sector([
-      [0, 10],
-      [10, 10],
-      [10, 16],
-      [0, 16],
-    ]),
-  ],
-  spawns: [
-    [2, 5, EAST],
-    [2, 2, EAST],
-    [2, 8, EAST],
-  ],
-};
-
-/** A room, its players' peers, joined in this order. */
-const game = (levels: MapDef[] = [ARENA], names = ['A', 'B']) => {
-  const room = new Room({}, levels[0]);
-  const [a, b] = names.map(n => join(room, n));
-  return { room, a, b };
-};
-const at = (room: Room, c: Peer) => room['peers'].get(c)!;
-/** Stands the player on the floor at (x, z), at rest. */
-const put = (room: Room, c: Peer, x: number, z: number, floor = 0): void => {
-  Object.assign(at(room, c).state, { x, y: floor, z, vy: 0, ground: true });
-};
-/** Ticks until a snapshot goes out, and decodes it. */
-const next = (room: Room, c: Peer): Snapshot => {
-  const n = c.bins.length;
-  for (let k = 0; c.bins.length === n && k < 10; k++) {
-    room.tick();
-  }
-  return snap(c);
-};
-/** One input per tick for n ticks, with the next seqs of the player. */
-const drive = (room: Room, c: Peer, keys: number, yaw: number, n: number): void => {
-  for (let k = 0; k < n; k++) {
-    room.receive(c, input((at(room, c).ack + 1) & 0xffff, keys, yaw));
-    room.tick();
-  }
-};
-
-describe('Room: health', () => {
-  it('gives every player HEALTH on joining', () => {
-    const { room, a } = game();
-    expect(next(room, a).players.map(p => p.hp)).toEqual([HEALTH, HEALTH]);
-  });
-
-  /** `c` dies: no health, and PLAYER_RESPAWN ticks to come back. */
-  const kill = (room: Room, c: Peer) => {
-    at(room, c).hp = 0;
-    at(room, c).hurt = room['ticks'];
-  };
-
-  it('moves nothing of a dead player, and acks its inputs', () => {
-    const { room, a } = game();
-    put(room, a, 5, 5);
-    kill(room, a);
-    const ack = at(room, a).ack;
-    // Pushed on a wall for a second: nothing moves, everything is acked.
-    drive(room, a, KEY.FORWARD | KEY.JUMP, 0, 30);
-    expect(next(room, a).players[0]).toMatchObject({
-      hp: 0,
-      x: 5,
-      z: 5,
-      y: 0,
-      ack: (ack + 30) & 0xffff,
-    });
-  });
-
-  it('respawns PLAYER_RESPAWN ticks after dying, at a spawn point with full health', () => {
-    const { room, a } = game();
-    const me = at(room, a);
-    kill(room, a);
-    const died = room['ticks'];
-    while (room['ticks'] < died + PLAYER_RESPAWN - 1) {
-      room.tick();
-    }
-    expect(me.hp).toBe(0);
-    room.tick();
-    expect(me.hp).toBe(HEALTH);
-    const [sx, sz] = ARENA.spawns[0];
-    expect([me.state.x, me.state.z, me.state.y]).toEqual([sx, sz, 0]);
-    expect(next(room, a).players[0]).toMatchObject({ hp: HEALTH, x: sx, z: sz });
-    // And its inputs move it again.
-    drive(room, a, KEY.FORWARD, EAST, 10);
-    expect(me.state.x).toBeCloseTo(sx + 1, 3);
-  });
-
-  it('takes the spawn of the level that is on, away from the others', () => {
-    const { room, a, b } = game();
-    at(room, a).hp = 0;
-    at(room, a).hurt = room['ticks'];
-    ticks(room, PLAYER_RESPAWN);
-    // B stands on spawn 1: A comes back on spawn 0, 3 m off.
-    expect(at(room, a).hp).toBe(HEALTH);
-    expect([at(room, a).state.x, at(room, a).state.z]).toEqual([2, 5]);
-    expect(at(room, b).hp).toBe(HEALTH);
-  });
-
-  it('leaves a dead player out of the rewind', () => {
-    const { room, b } = game();
-    expect(room.rewind(0).map(p => p.id)).toEqual([1]);
-    kill(room, b);
-    expect(room.rewind(0)).toEqual([]);
   });
 });

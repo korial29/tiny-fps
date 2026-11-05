@@ -5,8 +5,8 @@
 // Input, 11 bytes: [type u8 = MSG_INPUT][seq u16][keys u8][yaw u16][pitch i16][view u16][frac u8]
 //   yaw in 65536ths of a turn, decoded in [0, 2π); pitch in 1/10000 rad; view is the host tick
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
-// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 25 bytes:
-//   [id u8][x f32][y f32][z f32][vy f32][yaw u16][pitch i16][ack u16][flags u8][hp u8]
+// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 24 bytes:
+//   [id u8][x f32][y f32][z f32][vy f32][yaw u16][pitch i16][ack u16][flags u8]
 //   flags: bit 0 = ground
 //   x, y, z, vy are the host's float32 state, exact (see move in physics.ts).
 // Every multi-byte field is big-endian (DataView's default).
@@ -21,7 +21,7 @@ export const MSG_SNAPSHOT = 2;
 
 export const INPUT_BYTES = 11;
 export const SNAP_HEAD = 4;
-export const SNAP_PLAYER = 25;
+export const SNAP_PLAYER = 24;
 
 const TURN = 65536 / (2 * Math.PI);
 /** Radians to 65536ths of a turn; the mask also folds negative and ≥ 2π angles into one turn. */
@@ -93,7 +93,6 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setInt16(o + 19, toPitch(p.pitch));
     v.setUint16(o + 21, p.ack & 0xffff);
     v.setUint8(o + 23, +p.ground);
-    v.setUint8(o + 24, p.hp);
   });
   return v.buffer;
 };
@@ -121,7 +120,6 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       pitch: fromPitch(v.getInt16(o + 19)),
       ack: v.getUint16(o + 21),
       ground: (v.getUint8(o + 23) & 1) === 1,
-      hp: v.getUint8(o + 24),
     });
   }
   return { tick: v.getUint16(1), players };

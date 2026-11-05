@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { HURT, MOTES, createEffects, lit } from './effects';
+import { MOTES, createEffects, lit } from './effects';
 
 const DT = 1 / 60;
 const me = (x = 0, ground = true): PlayerState => ({
@@ -76,57 +76,6 @@ describe('roll', () => {
     const fx = createEffects();
     run(fx, KEY.LEFT | KEY.RIGHT, 1);
     expect(fx.roll).toBeCloseTo(0);
-  });
-});
-
-describe('hurt', () => {
-  it('keeps the hit vignette for a moment, long enough to fade out', () => {
-    const fx = createEffects();
-    fx.hit();
-    expect(fx.hurt).toBeCloseTo(HURT);
-    expect(HURT).toBeGreaterThanOrEqual(0.4);
-    run(fx, 0, HURT - 0.05);
-    expect(fx.hurt).toBeGreaterThan(0);
-    run(fx, 0, 0.06);
-    expect(fx.hurt).toBe(0);
-  });
-});
-
-describe('dead', () => {
-  const sunk = (seconds: number, dead = true) => {
-    const fx = createEffects();
-    for (let t = 0; t < seconds; t += DT) {
-      fx.update(me(), 0, DT, dead);
-    }
-    return fx;
-  };
-
-  it('sinks the eye to the floor and tilts the camera, over half a second', () => {
-    const [half, done] = [sunk(0.25), sunk(0.6)];
-    expect(half.bob).toBeLessThan(-0.5);
-    expect(done.dead).toBe(1);
-    expect(done.bob).toBeCloseTo(-1.3);
-    expect(done.roll).toBeCloseTo(0.9);
-    expect(half.roll).toBeLessThan(done.roll);
-  });
-
-  it('is 0 while alive, and rises again after a respawn', () => {
-    expect(sunk(1, false).dead).toBe(0);
-    const fx = sunk(1);
-    for (let t = 0; t < 0.7; t += DT) {
-      fx.update(me(), 0, DT, false);
-    }
-    expect(fx.dead).toBe(0);
-    expect(fx.bob).toBeCloseTo(0);
-    expect(fx.roll).toBeCloseTo(0);
-  });
-
-  it('keeps the strafe lean apart from the tilt', () => {
-    const fx = createEffects();
-    for (let t = 0; t < 1; t += DT) {
-      fx.update(me(), KEY.RIGHT, DT, true);
-    }
-    expect(fx.roll).toBeCloseTo(0.9 + 0.03, 2);
   });
 });
 
@@ -228,20 +177,6 @@ describe('dust motes', () => {
       const fx = at([4, 1.6, 0]);
       expect(lit(fx, eye, FWD)).toHaveLength(0);
       expect(lit(fx, eye, [1, 0, 0])).toHaveLength(4);
-    });
-
-    it('shows nothing once the own player is dead, and again after the respawn', () => {
-      const fx = createEffects(seeded());
-      fx.update(me(), 0, DT);
-      fx.motes.fill(0);
-      fx.motes.set([0, 1.6, -4]);
-      expect(lit(fx, eye, FWD)).toHaveLength(4);
-      fx.update(me(), 0, DT, true);
-      expect(lit(fx, eye, FWD)).toHaveLength(0);
-      for (let i = 0; i < 40; i++) {
-        fx.update(me(), 0, DT, false);
-      }
-      expect(lit(fx, eye, FWD).length).toBeGreaterThan(0);
     });
 
     it('lights a few motes of a real scatter, a fraction of them', () => {

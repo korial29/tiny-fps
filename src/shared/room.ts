@@ -1,14 +1,4 @@
-import {
-  HEALTH,
-  HIT_COOLDOWN,
-  INPUT_BURST,
-  MAX_NAME,
-  MAX_REWIND,
-  PLAYER_RESPAWN,
-  RULES,
-  SNAP_EVERY,
-  TICK_HZ,
-} from './constants';
+import { INPUT_BURST, MAX_NAME, MAX_REWIND, RULES, SNAP_EVERY, TICK_HZ } from './constants';
 import { compile } from './level';
 import { HALL } from './map';
 import { move, spawn } from './physics';
@@ -24,10 +14,6 @@ interface Player {
   bank: number;
   /** Seq of the last applied input. Starts at 65535, the seq before the client's first (0). */
   ack: number;
-  /** Health: 0 is dead, until PLAYER_RESPAWN ticks after `hurt`. */
-  hp: number;
-  /** Host tick of the last hit that took health (the death, once hp is 0). */
-  hurt: number;
 }
 
 /** Ticks run at most this many times per timer callback, so a stalled host does not spiral. */
@@ -90,8 +76,6 @@ const setEvery: Every = (cb, ms) => {
  * - Each input frame moves its player at once with move(); the INPUT_BURST bank drops the excess.
  *   rewind() answers where the others were drawn at the view tick of an input (lag compensation,
  *   at most MAX_REWIND ticks back).
- * - A player has HEALTH. A dead player moves and counts for nothing until PLAYER_RESPAWN
- *   ticks later, when it is back at a spawn.
  * - Every SNAP_EVERY ticks of TICK_HZ, one snapshot with every player goes to every peer.
  */
 export class Room {
@@ -136,10 +120,7 @@ export class Room {
     // An input beyond the bank is dropped, and not acked.
     if (input && p.bank > 0) {
       p.bank--;
-      // A dead player's inputs are acked and move nothing.
-      if (p.hp) {
-        move(p.state, input, this.lvl);
-      }
+      move(p.state, input, this.lvl);
       p.ack = input.seq;
     }
   }
@@ -162,13 +143,6 @@ export class Room {
     const now = ++this.ticks;
     for (const p of players) {
       p.bank = Math.min(INPUT_BURST, p.bank + 1);
-      if (!p.hp && now - p.hurt >= PLAYER_RESPAWN) {
-        p.hp = HEALTH;
-        p.state = this.place(
-          p.info.id,
-          players.filter(q => q.hp && q !== p).map(q => q.state),
-        );
-      }
     }
     if (now % SNAP_EVERY === 0) {
       this.history.push({ tick: now, players: players.map(p => ({ ...p.state })) });
@@ -178,7 +152,7 @@ export class Room {
       // One buffer for everyone: transports must not mutate it.
       const snap = encodeSnapshot({
         tick: now,
-        players: players.map(p => ({ ...p.state, ack: p.ack, hp: p.hp })),
+        players: players.map(p => ({ ...p.state, ack: p.ack })),
       });
       players.forEach(p => p.conn.send(snap));
     }
@@ -216,14 +190,14 @@ export class Room {
   }
 
   /**
-   * The players other than `id` (living ones) as player `id` drew them at `view`, the view tick of
+   * The players other than `id` as player `id` drew them at `view`, the view tick of
    * one of its inputs (a u16 tick, fractional, read against the current tick and clamped to the
    * kept history): x, y, z interpolated between the two snapshots around it like the client does.
    * One the history does not hold stands where it is.
    */
   public rewind(id: number, view = 0): PlayerState[] {
     const now = this.players()
-      .filter(p => p.info.id !== id && p.hp)
+      .filter(p => p.info.id !== id)
       .map(p => p.state);
     const [first, last] = [this.history[0], this.history.at(-1)];
     if (!first || !last) {
@@ -288,12 +262,10 @@ export class Room {
       },
       state: this.place(
         id,
-        players.filter(p => p.hp).map(p => p.state),
+        players.map(p => p.state),
       ),
       bank: INPUT_BURST,
       ack: 0xffff,
-      hp: HEALTH,
-      hurt: -HIT_COOLDOWN,
     };
     this.peers.set(conn, player);
     this.roster();

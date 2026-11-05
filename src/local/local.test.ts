@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HEALTH, RULES } from '../shared/constants';
+import { RULES } from '../shared/constants';
 import { decodeSnapshot, encodeInput } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import { Room } from '../shared/room';
@@ -66,10 +66,6 @@ describe('localSocket', () => {
     await until(() => a.binaries.length > 0 && b.binaries.length > 0);
     expect(b.binaries[0]).toBeInstanceOf(ArrayBuffer);
     expect(decodeSnapshot(b.binaries.at(-1)!)?.players).toHaveLength(2);
-    // The health crosses the channel too.
-    expect(decodeSnapshot(b.binaries.at(-1)!)).toMatchObject({
-      players: [{ hp: HEALTH }, { hp: HEALTH }],
-    });
 
     // The guest's input crosses the channel to the host's room and comes back acked.
     const you = b.roster()!.you;

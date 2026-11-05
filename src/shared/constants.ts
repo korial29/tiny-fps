@@ -42,12 +42,6 @@ export const INPUT_BURST = 10;
 
 export const MAX_PLAYERS = 16;
 
-// Health and progression. Times are host ticks.
-export const HEALTH = 9;
-/** A hit takes 1 health, then the player cannot be hurt for HIT_COOLDOWN ticks. */
-export const HIT_COOLDOWN = 60;
-/** A dead player comes back at the level start after this long. */
-export const PLAYER_RESPAWN = 180;
 /** Longest player name, in characters (code points). */
 export const MAX_NAME = 16;
 

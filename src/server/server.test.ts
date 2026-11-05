@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import { HEALTH, RULES } from '../shared/constants';
+import { RULES } from '../shared/constants';
 import { decodeSnapshot, encodeInput } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import { Room } from '../shared/room';
@@ -72,10 +72,6 @@ describe('serve', () => {
 
     await until(() => a.binaries.length > 0 && b.binaries.length > 0);
     expect(decodeSnapshot(a.binaries.at(-1)!)?.players).toHaveLength(2);
-    // The health crosses the socket too.
-    expect(decodeSnapshot(a.binaries.at(-1)!)).toMatchObject({
-      players: [{ hp: HEALTH }, { hp: HEALTH }],
-    });
 
     // A binary input travels through the Buffer → ArrayBuffer copy, moves the player and is
     // acked. The snapshot comes from the real timer, hence the loose bounds.

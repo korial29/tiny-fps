@@ -127,8 +127,6 @@ export interface SnapPlayer {
   yaw: number;
   pitch: number;
   ground: boolean;
-  /** Health, HEALTH at most; 0 is dead, waiting PLAYER_RESPAWN ticks to respawn at the start. */
-  hp: number;
   /** Seq of the last input of this player the host applied: the client replays the ones after. */
   ack: number;
 }

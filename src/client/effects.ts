@@ -1,5 +1,5 @@
-// Camera feel, fed each frame: head bob and roll, the red hurt tint, and the dust motes around the
-// own eye. No DOM, times in seconds, unit-tested.
+// Camera feel, fed each frame: head bob and roll, and the dust motes around the own eye. No DOM,
+// times in seconds, unit-tested.
 import { EYE } from '../shared/constants';
 import { KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -13,17 +13,8 @@ export interface Effects {
   roll: number;
   /** Dust motes, x y z each, in a box around the own eye; `lit` says which the flashlight shows. */
   motes: Float32Array;
-  /** Seconds of the red hurt tint left. */
-  hurt: number;
-  /** 0 to 1: how far the camera has sunk and tilted since the own player died; the light goes out. */
-  dead: number;
-  /**
-   * Advances dt seconds: the own player (eased, undefined before the first snapshot), the held
-   * keys and whether the own player is dead.
-   */
-  update(me: PlayerState | undefined, keys: number, dt: number, dead?: boolean): void;
-  /** The own health dropped: the red tint. */
-  hit(): void;
+  /** Advances dt seconds: the own player (eased, undefined before the first snapshot) and the held keys. */
+  update(me: PlayerState | undefined, keys: number, dt: number): void;
 }
 
 /** Motes, and the half sides of the box they live in: they wrap round it as the eye moves. */
@@ -32,12 +23,6 @@ const BOX = [5, 1.6, 5];
 /** The flashlight as the motes see it: a cone of cos(25°), this long, metres. */
 const CONE = Math.cos(0.436);
 const REACH = 6;
-/** Seconds the hit vignette takes to go out. */
-export const HURT = 0.45;
-/** Seconds the camera takes to sink, the roll it ends at, and the eye height it ends at. */
-const SINK = 0.5;
-const TILT = 0.9;
-const LOW = 0.3;
 /** Bob phase per metre walked, and its amplitude in metres. */
 const STRIDE = 4.4;
 const BOB = 0.035;
@@ -45,11 +30,11 @@ const ROLL = 0.03;
 
 /**
  * The motes the own flashlight shows, from the eye along the unit view direction f: x, y, z and a
- * brightness in (0, 1] each, fuller near the axis and the eye. None while the own player is dead.
+ * brightness in (0, 1] each, fuller near the axis and the eye.
  */
 export const lit = (fx: Effects, eye: Vec3, f: Vec3) => {
   const out: number[] = [];
-  for (let i = 0; i < fx.motes.length && !fx.dead; i += 3) {
+  for (let i = 0; i < fx.motes.length; i += 3) {
     const d = [0, 1, 2].map(a => fx.motes[i + a] - eye[a]);
     const r = Math.hypot(...d);
     const c = (d[0] * f[0] + d[1] * f[1] + d[2] * f[2]) / r;
@@ -77,10 +62,8 @@ export const createEffects = (rand = Math.random): Effects => {
     bob: 0,
     roll: 0,
     motes: new Float32Array(MOTES * 3),
-    hurt: 0,
-    dead: 0,
 
-    update(me, keys, dt, dead = false) {
+    update(me, keys, dt) {
       const ease = Math.min(1, dt * 10);
       // Distance on the floor, a respawn (a jump of metres) excepted.
       const d = me && last?.ground && me.ground ? Math.hypot(me.x - last.x, me.z - last.z) : 0;
@@ -89,15 +72,12 @@ export const createEffects = (rand = Math.random): Effects => {
       }
       amt += ((d > 0.5 * dt && d < 1 ? 1 : 0) - amt) * ease;
       last = me;
-      fx.dead = Math.max(0, Math.min(1, fx.dead + (dead ? dt : -dt) / SINK));
-      const sink = fx.dead * fx.dead * (3 - 2 * fx.dead);
-      fx.bob = Math.sin(phase) * BOB * amt - sink * (EYE - LOW);
+      fx.bob = Math.sin(phase) * BOB * amt;
 
       const strafe = +!!(keys & KEY.RIGHT) - +!!(keys & KEY.LEFT);
       lean += (strafe * ROLL - lean) * Math.min(1, dt * 8);
-      fx.roll = lean + sink * TILT;
+      fx.roll = lean;
 
-      fx.hurt = Math.max(0, fx.hurt - dt);
       if (me) {
         clock += dt;
         fx.motes.forEach((m, i) => {
@@ -109,10 +89,6 @@ export const createEffects = (rand = Math.random): Effects => {
         });
         fresh = false;
       }
-    },
-
-    hit() {
-      fx.hurt = HURT;
     },
   };
   return fx;

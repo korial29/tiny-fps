@@ -3,7 +3,6 @@ import { compile } from '../shared/level';
 import { HALL } from '../shared/map';
 import { TEX } from '../shared/types';
 import type { MapDef, PlayerState } from '../shared/types';
-import { createEffects } from './effects';
 import { LIGHT, MAX_LIGHTS, gather, lava } from './lights';
 import type { Scene } from './lights';
 import { basis } from './mesh';
@@ -24,9 +23,7 @@ const scene = (over: Partial<Scene> = {}): Scene => ({
   eye: EYE,
   yaw: 0,
   pitch: 0,
-  dead: false,
   others: [],
-  fx: createEffects(),
   lvl,
   t: 0,
   ...over,
@@ -49,10 +46,6 @@ describe('own flashlight', () => {
 
   it('looks toward -z at yaw 0 and pitch 0', () => {
     expect(gather(scene())[0].d).toEqual([-0, 0, -1]);
-  });
-
-  it('is gone when dead', () => {
-    expect(gather(scene({ dead: true }))).toEqual([]);
   });
 
   it('lights alone in a bare scene', () => {
@@ -79,18 +72,6 @@ describe('other players', () => {
     const ls = spots([player(1, 2), player(2, 4), player(3, 6)]);
     expect(ls.filter(l => l.shadow).map(l => l.p[0])).toEqual([6, 4]);
     expect(ls.find(l => !l.shadow)?.p[0]).toBe(2);
-  });
-});
-
-describe('hit light', () => {
-  it('shows only while hurt, red, at the eye', () => {
-    const fx = createEffects();
-    expect(gather(scene({ fx }))).toHaveLength(1);
-    fx.hit();
-    const [, h] = gather(scene({ fx }));
-    expect(h.kind).toBe(LIGHT.POINT);
-    expect(h.color[0]).toBeGreaterThan(h.color[1] * 5);
-    expect(dist(h.p, EYE)).toBeLessThan(1);
   });
 });
 

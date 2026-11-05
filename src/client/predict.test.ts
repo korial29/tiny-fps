@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HEALTH, INTERP_DELAY, PLAYER_H, TICK_HZ } from '../shared/constants';
+import { INTERP_DELAY, PLAYER_H, TICK_HZ } from '../shared/constants';
 import { compile, sectorAt } from '../shared/level';
 import { HALL } from '../shared/map';
 import { move, spawn } from '../shared/physics';
@@ -21,7 +21,6 @@ const snapPlayer = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => (
   yaw: 0,
   pitch: 0,
   ground: true,
-  hp: 9,
   ack: 0xffff,
   ...over,
 });
@@ -542,42 +541,5 @@ describe('lag compensation through the room', () => {
     // 100 ms is 6 ticks; the delivery of the snapshots adds up to a snapshot interval.
     expect(ticksBack).toBeGreaterThan((INTERP_DELAY * TICK_HZ) / 1000 + LATENCY - 2);
     expect(ticksBack).toBeLessThan((INTERP_DELAY * TICK_HZ) / 1000 + LATENCY + 4);
-  });
-});
-
-describe('health', () => {
-  describe('a dead own player', () => {
-    const dead = () => {
-      const pred = createPredictor(lvl);
-      pred.you(0);
-      pred.snapshot(snapshot(1, snapPlayer(0, { hp: 0 })), 0);
-      return pred;
-    };
-
-    it('does not move on a step, though its inputs are numbered and kept', () => {
-      const pred = dead();
-      const before = pred.me(1);
-      const i = pred.step({ keys: KEY.FORWARD | KEY.JUMP, yaw: 1, pitch: 0.3 });
-      expect(i.seq).toBe(0);
-      expect(pred.me(1)).toEqual(before);
-      expect(pred.step(fwd).seq).toBe(1);
-    });
-
-    it('is not moved by the replay of what the host has not acked, and is again once alive', () => {
-      const pred = dead();
-      for (let k = 0; k < 6; k++) {
-        pred.step(fwd);
-      }
-      // The host acks seqs 0 and 1 and says the player is dead: 2 to 5 replay as nothing.
-      pred.snapshot(snapshot(2, snapPlayer(0, { hp: 0, ack: 1 })), 40);
-      expect(pred.me(1)).toMatchObject({ z: 14, y: 1 });
-      // Alive again (respawned): the same four inputs now move it.
-      pred.snapshot(snapshot(3, snapPlayer(0, { hp: HEALTH, ack: 1 })), 80);
-      expect(pred.me(1)!.z).toBeCloseTo(14 - 0.4);
-      // And it moves on a step.
-      const z = pred.me(1)!.z;
-      pred.step(fwd);
-      expect(pred.me(1)!.z).toBeLessThan(z);
-    });
   });
 });

@@ -4,13 +4,12 @@ import { HALL } from '../shared/map';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import type { PlayerInfo, SocketLike } from '../shared/types';
-import { createAudio, createHeart, savedMute, toggleMute } from './audio';
-import { HURT, createEffects } from './effects';
+import { createAudio, savedMute, toggleMute } from './audio';
+import { createEffects } from './effects';
 import { HUD_CSS, createHud } from './hud';
 import { createInput } from './input';
 import { createPredictor } from './predict';
 import { gather } from './lights';
-import { createProgress, facing } from './progress';
 import { createRenderer } from './render';
 import type { Renderer } from './render';
 
@@ -68,19 +67,16 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const audio = createAudio();
   audio.mute(savedMute());
   hud.mute(audio.muted);
-  const beat = createHeart(audio);
   const ctl = createInput(canvas, () => hud.mute(toggleMute(audio)));
   // The click that takes the pointer lock is the gesture that lets the sound start.
   canvas.addEventListener('click', () => audio.unlock());
   const fx = createEffects();
-  let you = -1;
   let rd: Renderer | undefined;
   try {
     rd = createRenderer(canvas, lvl);
   } catch {
     // No WebGL2: stay connected, say so on the title screen.
   }
-  const progress = createProgress({ lvl, you: () => you, fx, hud });
   let roster: PlayerInfo[] = [];
   let colors = new Map<number, string>();
   let names = new Map<number, string>();
@@ -91,8 +87,6 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   let msg = rd ? '' : 'WebGL2 is not available';
   /** The own player is known, and the look angles start from where the host spawned it. */
   let ready = false;
-  /** The own player was alive in the last snapshot. */
-  let alive = false;
   let last = performance.now();
   let acc = 0;
   let raf = 0;
@@ -114,16 +108,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     if (typeof data != 'string') {
       const s = decodeSnapshot(data);
       if (s) {
-        const now = performance.now();
-        progress.snapshot(s);
-        predictor.snapshot(s, now);
-        // A respawn puts the player at a spawn: look the way it faces. Taken from the map, as
-        // inputs still in flight carry the old yaw back into the host and the replay.
-        const own = s.players.find(p => p.id == you);
-        if (own?.hp && !alive) {
-          [ctl.yaw, ctl.pitch] = [facing(lvl.map, own.x, own.z), 0];
-        }
-        alive = !!own?.hp;
+        predictor.snapshot(s, performance.now());
       }
       return;
     }
@@ -132,7 +117,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       roster = m.players;
       colors = new Map(roster.map(p => [p.id, p.color]));
       names = new Map(roster.map(p => [p.id, p.name]));
-      predictor.you((you = m.you));
+      predictor.you(m.you);
       count.textContent = `Players: ${roster.length}`;
       emit('roster');
     } else if (m?.t == 'full') {
@@ -165,21 +150,18 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       acc = 0;
     }
     for (; ready && acc >= STEP; acc -= STEP) {
-      // A dead player does not move.
-      const keys = progress.dead ? 0 : ctl.keys;
-      const input = predictor.step({ keys, yaw: ctl.yaw, pitch: ctl.pitch }, now);
+      const input = predictor.step({ keys: ctl.keys, yaw: ctl.yaw, pitch: ctl.pitch }, now);
       if (open) {
         ws.send(encodeInput(input));
       }
     }
 
     const me = predictor.me(acc / STEP);
-    const others = predictor.others(now).filter(p => progress.alive(p.id));
+    const others = predictor.others(now);
     const eye: [number, number, number] = me ? [me.x, me.y + EYE, me.z] : [0, 0, 0];
     audio.listen(eye, ctl.yaw);
     const dt = Math.min((now - before) / 1000, 0.1);
-    fx.update(me, ctl.keys, dt, progress.dead);
-    hud.update(dt);
+    fx.update(me, ctl.keys, dt);
     if (me && rd) {
       // The bob is for the eye only: the inputs keep sending the real height.
       rd.frame(
@@ -193,9 +175,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
           eye: [eye[0], eye[1] + fx.bob, eye[2]],
           yaw: ctl.yaw,
           pitch: ctl.pitch,
-          dead: progress.dead,
           others,
-          fx,
           lvl,
           t: now / 1000,
         }),
@@ -225,10 +205,9 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       }
     }
 
-    hud.fade(fx.hurt / HURT, beat(progress.hp, now));
     hud.title(
       msg || (!open ? 'Connecting…' : !ready ? 'Joining…' : ctl.locked() ? '' : 'Click to play'),
-      progress.name,
+      lvl.map.name ?? '',
     );
   };
   raf = requestAnimationFrame(frame);

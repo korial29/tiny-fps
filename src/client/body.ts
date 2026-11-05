@@ -34,7 +34,7 @@ export interface Body {
 
 /** Metres the camera may be from the eye of the body and still show it: the bob is centimetres, a crouch's ease under a metre. */
 const AWAY = 1;
-/** Where the camera sits against the head when the hands hold a ledge: behind it and below it, for the arms to reach. */
+/** On a ledge the camera sits this far behind the head and below it, so that the arms reach the ledge. */
 const [BEHIND, DROP] = [0.12, 0.03];
 const [X, Y]: Vec3[] = [
   [1, 0, 0],
@@ -130,7 +130,7 @@ export const createBody = (world?: World): Body => {
   let clock = 0;
   /** Which hand the wall is on: -1 left, 1 right, eased. */
   let side = 0;
-  /** The ledge the hands are on: where the body hangs, its top, and the way the wall faces. */
+  /** The ledge the hands are on: the body's x and z, the height of its top, and the way the wall faces. */
   let grip: { x: number; y: number; z: number; dx: number; dz: number } | undefined;
 
   const update: Body['update'] = (p, dt) => {

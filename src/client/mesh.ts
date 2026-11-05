@@ -26,7 +26,7 @@ export const basis = (yaw: number, pitch: number, roll = 0): [Vec3, Vec3, Vec3] 
 };
 
 /** The corners of a unit square's two triangles, in the square's own units. */
-export const QUAD = [
+const QUAD = [
   [-1, -1],
   [1, -1],
   [1, 1],

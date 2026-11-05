@@ -1,6 +1,6 @@
 {
   "name": "@korial29/tiny-fps",
-  "description": "Tiny multiplayer first-person shooter for the browser: raw WebGL, zero runtime dependencies, WebSocket or same-browser multi-tab play.",
+  "description": "Tiny multiplayer first-person rooftop game for the browser: raw WebGL, zero runtime dependencies, WebSocket or same-browser multi-tab play.",
   "license": "Apache-2.0",
   "version": "0.0.0",
   "type": "module",

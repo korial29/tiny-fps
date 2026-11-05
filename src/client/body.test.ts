@@ -7,7 +7,7 @@ import { createBody } from './body';
 import type { Body } from './body';
 import { STRIDE, basis } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J } from './rig';
+import { JOINT as J, turn } from './rig';
 import { palette } from './skin';
 
 const DT = 1 / 60;
@@ -136,9 +136,9 @@ describe('body', () => {
     ]) {
       for (const pitch of [0, -1.2, 1]) {
         const v = draw(watch(p, 40), p, pitch);
-        // The near runner minus its head and neck.
-        expect(v.length).toBeGreaterThan(2000);
-        expect(v.length).toBeLessThanOrEqual(3000);
+        // The near runner minus its head, neck and fists, plus two hands of 1026 vertices each.
+        expect(v.length).toBeGreaterThan(4000);
+        expect(v.length).toBeLessThanOrEqual(5000);
         for (const { at, n } of v) {
           expect(at.every(Number.isFinite)).toBe(true);
           expect(Math.hypot(...n)).toBeCloseTo(1);
@@ -387,6 +387,58 @@ describe('body', () => {
       const [l, r] = hands(slide, watch(slide, 40));
       expect(r[1]).toBeLessThan(l[1]);
       expect(r[0]).toBeGreaterThan(0.3);
+    });
+  });
+
+  describe('hands', () => {
+    /** How far the right hand's fingers go past the wrist, and how wide they spread there. */
+    const fingers = (p: PlayerState, body: Body) => {
+      const s = pose(body, p);
+      const [wrist, f, thumb] = [
+        s.pos[J.HAND_R],
+        turn(s.rot[J.HAND_R], [0, -1, 0]),
+        turn(s.rot[J.HAND_R], [0, 0, -1]),
+      ];
+      const along = (v: Vert, a: Vec3) =>
+        (v.at[0] - wrist[0]) * a[0] + (v.at[1] - wrist[1]) * a[1] + (v.at[2] - wrist[2]) * a[2];
+      // The glove around the right wrist, not the left hand's.
+      const glove = colored(draw(body, p), GLOVE).filter(
+        v => away(v.at, wrist) < 0.25 && v.at[0] > eyeOf(p)[0],
+      );
+      const tips = glove.filter(v => along(v, f) > 0.1).map(v => along(v, thumb));
+      return {
+        reach: Math.max(...glove.map(v => along(v, f))),
+        spread: Math.max(...tips) - Math.min(...tips),
+      };
+    };
+    const running = (v: number) => {
+      const { body, p } = run(v, 120);
+      return fingers(p, body);
+    };
+
+    it('close into a loose fist on a run, tighter on a sprint', () => {
+      const [idle, jog, fast] = [fingers(man(), watch(man(), 60)), running(5.5), running(10)];
+      for (const fist of [idle, jog]) {
+        expect(fist.reach).toBeLessThan(0.14);
+      }
+      expect(fast.reach).toBeLessThan(jog.reach);
+      expect(fast.spread).toBeLessThan(jog.spread);
+    });
+
+    it('open and spread on a ledge, against a wall, in the air and flat in a slide', () => {
+      const fist = running(5.5);
+      for (const p of [hang, wall, slide, man({ mode: MODE.AIR, ground: false, y: 1, vy: -3 })]) {
+        const open = fingers(p, watch(p, 90));
+        expect(open.reach).toBeGreaterThan(fist.reach + 0.04);
+        expect(open.spread).toBeGreaterThan(fist.spread);
+      }
+    });
+
+    it('are a palm, four fingers and a thumb in the glove colour, on a thinner wrist', () => {
+      const p = man();
+      const v = draw(watch(p, 60), p);
+      // 126 vertices of palm and ten segments of 90 a hand, besides the cuffs.
+      expect(colored(v, GLOVE).length).toBeGreaterThanOrEqual(2 * (126 + 10 * 90));
     });
   });
 

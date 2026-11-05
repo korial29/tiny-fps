@@ -13,7 +13,7 @@ import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { createGait } from './gait';
 import type { Floor } from './gait';
-import { add, basis, dot, mix, sub, unit } from './mesh';
+import { add, basis, dot, mix, place, segment, solid, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, axis, mul, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
@@ -100,6 +100,64 @@ const TOWARD = [
   [0, -1],
 ];
 
+/** A finger segment, 4 cm, in the coarsest level: it is small, and there are ten a hand. */
+const FINGER = () => solid(0, 0.04, [0.0105, 0.0095], [1, 2]);
+/** Finger lengths against 4 cm, index to little. */
+const LENGTH = [1, 1.1, 1, 0.82];
+/** The thumb's two segments open and in a fist, as directions in the hand (x toward the thumb). */
+const THUMB: [Vec3, Vec3][] = [
+  [
+    [0.55, -0.2, 0.8],
+    [0.2, -0.75, 0.6],
+  ],
+  [
+    [0.4, -0.1, 0.9],
+    [-0.55, -0.5, 0.65],
+  ],
+];
+
+/**
+ * A gloved hand at the wrist `end`: the fingers along `f`, the back of the hand along `u`, the thumb
+ * toward `th` (unit vectors). `curl` runs from 0, a flat open hand with the fingers spread, to 1, a
+ * fist: a palm, four fingers of two segments and a thumb of two, each a smooth solid.
+ */
+const hand = (
+  out: number[],
+  end: Vec3,
+  f: Vec3,
+  u: Vec3,
+  th: Vec3,
+  curl: number,
+  tint: number[],
+) => {
+  /** Hand space (x toward the thumb, y the back, z toward the fingers) to the world. */
+  const at = ([x, y, z]: Vec3): Vec3 => [
+    end[0] + th[0] * x + u[0] * y + f[0] * z,
+    end[1] + th[1] * x + u[1] * y + f[1] * z,
+    end[2] + th[2] * x + u[2] * y + f[2] * z,
+  ];
+  /** Segments of lengths `l` from `from` along `dirs` (hand space), `k` times as wide. */
+  const chain = (from: Vec3, dirs: Vec3[], l: number, k: number) =>
+    dirs.reduce((p, d, i) => {
+      const q: Vec3 = [p[0] + d[0] * l, p[1] + d[1] * l, p[2] + d[2] * l];
+      segment(out, FINGER(), at(p), at(q), th, 0.04, k * 0.88 ** i, tint);
+      return q;
+    }, from);
+  place(out, solid(1, 0, [1, 1]), end, [th, u, f], [0, 0, 0.045], [0.0425, 0.02, 0.058], tint);
+  for (let i = 0; i < 4; i++) {
+    const [a, b] = [0.1 + 1.3 * curl, 0.2 + 3 * curl];
+    const splay = -(i - 1.5) * 0.08 * (1 - curl);
+    const dirs = [a, b].map(n => unit([splay, -Math.sin(n), Math.cos(n)]));
+    chain([0.0315 - 0.021 * i, -0.004, 0.092], dirs, 0.04 * LENGTH[i], 1);
+  }
+  chain(
+    [0.034, -0.012, 0.025],
+    THUMB.map(([open, fist]) => unit(mix(open, fist, curl))),
+    0.037,
+    1.25,
+  );
+};
+
 /** The floor under a player standing at height `y`: the first top within a step above or below it. */
 const floorOf =
   (world: World, y: number): Floor =>
@@ -132,6 +190,8 @@ export const createBody = (world?: World): Body => {
   let side = 0;
   /** The ledge the hands are on: the body's x and z, the height of its top, and the way the wall faces. */
   let grip: { x: number; y: number; z: number; dx: number; dz: number } | undefined;
+  /** How closed each hand is, left then right, as of the last pose(). */
+  const curls = [0, 0];
 
   const update: Body['update'] = (p, dt) => {
     if (!p) {
@@ -212,8 +272,9 @@ export const createBody = (world?: World): Body => {
       h = mix(h, [0.38, -0.2, 0.34], w.air);
       h = mix(h, [0.3, 0.02, 0.45], w.rise);
       h = mix(h, [0.14, -0.1, 0.5], w.dash);
-      h = mix(h, [0.42, -0.16, 0.42], w.wall * clamp(side * sd));
-      h = mix(h, sd > 0 ? [0.4, -0.3, 0.34] : [0.28, -0.1, 0.42], w.slide);
+      const toWall = w.wall * clamp(side * sd);
+      h = mix(h, [0.42, -0.16, 0.42], toWall);
+      h = mix(h, sd > 0 ? [0.36, -0.26, 0.38] : [0.28, -0.1, 0.42], w.slide);
       // Reeling from a tackle: the hands thrown out and up, flailing against each other.
       const flail = Math.sin(clock * 12 + (sd > 0 ? Math.PI : 0));
       h = mix(h, [0.46, 0.05 + 0.2 * flail, 0.4 + 0.1 * flail], w.stun);
@@ -234,11 +295,25 @@ export const createBody = (world?: World): Body => {
         const [px, py, pz] = view(sub(at, eye));
         h = mix(h, [px * sd, Math.max(py, -0.28), Math.max(pz, 0.4)], w.plant);
       }
+      // A loose fist, tighter as the pace goes up; open to catch the air, flat on a ledge, a wall or the floor.
+      let curl = 0.75 + 0.25 * w.sprint;
+      for (const [open, t] of [
+        [0.25, w.air],
+        [0.1, w.rise],
+        [1, w.dash],
+        [0.1, toWall],
+        [0.1, w.slide],
+        [0.1, w.plant],
+        [0.2, w.stun],
+      ]) {
+        curl += (open - curl) * t;
+      }
+      curls[(sd + 1) / 2] = curl;
       const to = add(eye, turn([h[0] * sd, h[1], h[2]]));
       const arm = sd < 0 ? J.ARM_L : J.ARM_R;
       reach(q, s, arm, to, turn([POLE[0] * sd, POLE[1], POLE[2]]));
-      // The palm turns down, the back of the hand to the view, flat on a ledge.
-      q.rot[arm + 2] = axis(Y, -sd * (1 + 0.5 * w.plant));
+      // The palm turns down, the back of the hand to the view, flat on a ledge or the floor.
+      q.rot[arm + 2] = axis(Y, sd * (1 + 0.5 * (w.plant + w.slide)));
     }
     return solve(q);
   };
@@ -252,7 +327,20 @@ export const createBody = (world?: World): Body => {
     draw(out, eye, yaw, pitch, roll = 0, color = [0.7, 0.7, 0.7]) {
       const s = pose(eye, yaw, pitch, roll);
       if (s) {
-        skin(out, body(2), s, palette(color));
+        const colors = palette(color);
+        skin(out, body(2), s, colors);
+        [J.HAND_L, J.HAND_R].forEach((j, i) => {
+          const q = s.rot[j];
+          hand(
+            out,
+            s.pos[j],
+            spin(q, [0, -1, 0]),
+            spin(q, [i * 2 - 1, 0, 0]),
+            spin(q, [0, 0, -1]),
+            curls[i],
+            colors[7],
+          );
+        });
       }
     },
   };

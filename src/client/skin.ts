@@ -182,16 +182,25 @@ const generate = (lod: number): Skin => {
   const [v, j, w, t, c]: number[][] = [[], [], [], [], []];
   for (const L of LOFTS) {
     const n = L.n[Math.min(lod, 1)];
-    // The eye's own body has no head: the trunk ends in a cap at the shoulders.
+    // The eye's own body has no head.
     if (!n || (lod > 1 && (L === HEAD || L === NOSE))) {
       continue;
     }
+    // The eye's own body ends the trunk in a cap on the shoulders and each sleeve in a cuff over a
+    // thin wrist, where body.ts puts a hand.
     const rings =
       lod > 1 && L === TRUNK
         ? [...L.rings.slice(0, 9), [1.455, 0, 0, 0, 0, 2, JACKET]]
-        : lod
-          ? L.rings
-          : L.far.map(i => L.rings[i]);
+        : lod > 1 && L === ARM
+          ? [
+              ...L.rings.slice(0, 7),
+              [0.95, 0.222, 0, 0.037, 0.037, 1.6, GLOVE],
+              [0.925, 0.222, 0, 0.027, 0.027, 2, GLOVE],
+              [0.91, 0.222, 0, 0, 0, 2, GLOVE],
+            ]
+          : lod
+            ? L.rings
+            : L.far.map(i => L.rings[i]);
     const up = rings[rings.length - 1][0] > rings[0][0];
     for (const m of L.m ? [1, -1] : [1]) {
       /** The left joints are the right ones' four ids before. */
@@ -268,7 +277,7 @@ const generate = (lod: number): Skin => {
 };
 
 const skins: Skin[] = [];
-/** The skin at a level of detail (see DETAIL in mesh.ts): 0 far, 1 near, 2 near and headless, for the eye. Built once. */
+/** The skin at a level of detail (see DETAIL in mesh.ts): 0 far, 1 near, 2 near, headless and handless, for the eye. Built once. */
 export const body = (lod: number) => (skins[lod] ??= generate(lod));
 
 const BIND = solve(rest()).pos;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as lines from '../../test/lines';
 import { EAST, NORTH, SOUTH, Sim } from '../../test/pilot';
-import { GRAB_MAX, GRAVITY, JUMP_SPEED, PLAYER_H, PLAYER_R, STEP_H } from './constants';
+import { GRAB_MAX, GRAVITY, JUMP_SPEED, PLAYER_H, PLAYER_R, RUN_SPEED, STEP_H } from './constants';
 import { ROOFTOPS } from './map';
 import { move, spawn } from './physics';
 import { EV, KEY, MODE, TEX } from './types';
@@ -398,6 +398,22 @@ describe('ROOFTOPS, the lines the course is laid out for', () => {
     expect(s.p.z).toBeLessThan(36);
     expect(s.p.x).toBeLessThan(36 - PLAYER_R);
     expect(s.low).toBeGreaterThan(7.9);
+  });
+
+  it('runs along the long wall from a jump at a normal run, 0.3 m from it, with no sprint', () => {
+    // The lane west of the wall (its face is at x = 36), a run to RUN_SPEED, then a jump.
+    const s = at(35.3, 8, 46);
+    s.until(p => -p.vz >= RUN_SPEED - 0.01, KEY.FORWARD, NORTH, 60);
+    expect(s.p.mode).toBe(MODE.GROUND);
+    s.step(KEY.FORWARD | KEY.JUMP, NORTH);
+    s.until(p => p.mode === MODE.WALLRUN, KEY.FORWARD, NORTH, 20);
+    expect(s.p.mode).toBe(MODE.WALLRUN);
+    const z0 = s.p.z;
+    s.until(p => p.mode !== MODE.WALLRUN, KEY.FORWARD, NORTH, 100);
+    // Most of a second along the wall, 4 m or more, against it.
+    expect(z0 - s.p.z).toBeGreaterThan(4);
+    expect(s.p.x).toBeCloseTo(36 - PLAYER_R, 1);
+    expect(s.ev & EV.WALLRUN_START).toBe(EV.WALLRUN_START);
   });
 
   it('slides under the lintel on a sprint, and stands again beyond it', () => {

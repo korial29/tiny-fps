@@ -27,7 +27,7 @@ describe('createHud', () => {
         'WASD / ZQSD',
         'Shift',
         'Space',
-        'E / right click',
+        'Move key twice',
         'C',
         'M',
       ]) {
@@ -41,7 +41,7 @@ describe('createHud', () => {
       const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
       expect(rows).toContain('Shiftsprint');
       expect(rows).toContain('Spacejump, again in the air');
-      expect(rows).toContain('E / right clickdash');
+      expect(rows).toContain('Move key twicedash that way');
       expect(rows).toContain('Ccrouch, slide when fast');
     });
 

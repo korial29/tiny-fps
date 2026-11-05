@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
-import { MAX_PITCH } from '../shared/constants';
-import { KEY } from '../shared/types';
-import { createInput, keyBit } from './input';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { at, EAST, NORTH, WEST } from '../../test/yard';
+import { DASH_SPEED, MAX_PITCH } from '../shared/constants';
+import { EV, KEY } from '../shared/types';
+import { DOUBLE_TAP_MS, createInput, dashKeys, keyBit } from './input';
 import type { Controls } from './input';
 
 describe('keyBit', () => {
@@ -16,10 +17,10 @@ describe('keyBit', () => {
     expect(keyBit('KeyQ')).toBe(0);
   });
 
-  it('maps Shift to the sprint, E to the dash and C to the crouch, and not Ctrl', () => {
+  it('maps Shift to the sprint and C to the crouch, and not Ctrl, nor E (the dash is a double tap)', () => {
     expect(keyBit('ShiftLeft')).toBe(KEY.SPRINT);
     expect(keyBit('ShiftRight')).toBe(KEY.SPRINT);
-    expect(keyBit('KeyE')).toBe(KEY.DASH);
+    expect(keyBit('KeyE')).toBe(0);
     expect(keyBit('KeyC')).toBe(KEY.CROUCH);
     // Ctrl+W closes the tab: the game must not ask for it.
     expect(keyBit('ControlLeft')).toBe(0);
@@ -95,43 +96,175 @@ describe('createInput', () => {
     expect(ctl.keys).toBe(KEY.JUMP);
   });
 
-  it('sprints on Shift, dashes on E and crouches on C, together with the move keys', () => {
+  it('sprints on Shift and crouches on C, together with the move keys', () => {
     make();
     lock(true);
-    for (const code of ['KeyW', 'ShiftLeft', 'KeyE', 'KeyC']) {
+    for (const code of ['KeyW', 'ShiftLeft', 'KeyC']) {
       key('keydown', code);
     }
-    expect(ctl.keys).toBe(KEY.FORWARD | KEY.SPRINT | KEY.DASH | KEY.CROUCH);
+    expect(ctl.keys).toBe(KEY.FORWARD | KEY.SPRINT | KEY.CROUCH);
     key('keyup', 'ShiftLeft');
-    key('keyup', 'KeyE');
     key('keyup', 'KeyC');
     expect(ctl.keys).toBe(KEY.FORWARD);
   });
 
-  it('dashes on the right mouse button under the lock, and has no menu there', () => {
-    make();
-    const down = (button: number) =>
-      document.dispatchEvent(new MouseEvent('mousedown', { button, cancelable: true }));
-    const up = (button: number) => document.dispatchEvent(new MouseEvent('mouseup', { button }));
-    const menu = () => {
-      const e = new MouseEvent('contextmenu', { cancelable: true });
-      document.dispatchEvent(e);
-      return e.defaultPrevented;
+  describe('the dash', () => {
+    let clock = 0;
+    beforeEach(() => {
+      clock = 1000;
+      vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    /** A press and a release of `code`, `gap` ms after the last one began. */
+    const tap = (code: string, gap = 0) => {
+      clock += gap;
+      key('keydown', code);
+      key('keyup', code);
     };
-    // Not under the lock: nothing, and the page keeps its menu.
-    down(2);
-    expect(ctl.keys).toBe(0);
-    expect(menu()).toBe(false);
-    lock(true);
-    down(0);
-    expect(ctl.keys).toBe(0);
-    down(2);
-    expect(ctl.keys).toBe(KEY.DASH);
-    expect(menu()).toBe(true);
-    up(0);
-    expect(ctl.keys).toBe(KEY.DASH);
-    up(2);
-    expect(ctl.keys).toBe(0);
+    const DIRS: [string, string, number][] = [
+      ['KeyW', 'ArrowUp', KEY.FORWARD],
+      ['KeyS', 'ArrowDown', KEY.BACK],
+      ['KeyA', 'ArrowLeft', KEY.LEFT],
+      ['KeyD', 'ArrowRight', KEY.RIGHT],
+    ];
+
+    it.each(
+      DIRS.flatMap(
+        ([wasd, arrow, bit]) =>
+          [
+            [wasd, bit],
+            [arrow, bit],
+          ] as [string, number][],
+      ),
+    )('a double tap of %s sends one step with DASH and that direction alone', (code, bit) => {
+      make();
+      lock(true);
+      tap(code);
+      expect(ctl.take()).toBe(0);
+      tap(code, DOUBLE_TAP_MS - 10);
+      expect(ctl.take()).toBe(bit | KEY.DASH);
+      // Once: the next step has no dash.
+      expect(ctl.take()).toBe(0);
+    });
+
+    it('is slow to be one: a second press after the window is a first tap', () => {
+      make();
+      lock(true);
+      tap('KeyW');
+      tap('KeyW', DOUBLE_TAP_MS + 10);
+      expect(ctl.take()).toBe(0);
+      // And it starts a window of its own.
+      tap('KeyW', 100);
+      expect(ctl.take()).toBe(KEY.FORWARD | KEY.DASH);
+    });
+
+    it('needs the same key twice, not two different ones, and does not chain into a third tap', () => {
+      make();
+      lock(true);
+      tap('KeyW');
+      tap('KeyD', 50);
+      expect(ctl.take()).toBe(0);
+      tap('KeyW', 50);
+      expect(ctl.take()).toBe(KEY.FORWARD | KEY.DASH);
+      tap('KeyW', 50);
+      expect(ctl.take()).toBe(0);
+    });
+
+    it('does not repeat while the key is held, with or without auto-repeat events', () => {
+      make();
+      lock(true);
+      key('keydown', 'KeyW');
+      for (let k = 0; k < 5; k++) {
+        clock += 40;
+        document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', repeat: true }));
+        key('keydown', 'KeyW');
+      }
+      expect(ctl.take()).toBe(KEY.FORWARD);
+      expect(ctl.take()).toBe(KEY.FORWARD);
+    });
+
+    it('keeps moving after the dash while the second press is held, and sends the tapped direction only', () => {
+      make();
+      lock(true);
+      key('keydown', 'KeyW');
+      key('keydown', 'ShiftLeft');
+      // Back, twice, with forward held: the dash goes back, the other keys wait one step.
+      tap('KeyS');
+      tap('KeyS', 100);
+      key('keydown', 'KeyS');
+      expect(ctl.take()).toBe(KEY.BACK | KEY.DASH | KEY.SPRINT);
+      expect(ctl.take()).toBe(KEY.FORWARD | KEY.BACK | KEY.SPRINT);
+      expect(ctl.keys).toBe(KEY.FORWARD | KEY.BACK | KEY.SPRINT);
+    });
+
+    it('is not on E, nor on the right button, nor on a double tap of another key', () => {
+      make();
+      lock(true);
+      tap('KeyE');
+      tap('KeyE', 50);
+      for (const type of ['mousedown', 'mousedown', 'mouseup']) {
+        document.dispatchEvent(new MouseEvent(type, { button: 2, cancelable: true }));
+      }
+      tap('Space');
+      tap('Space', 50);
+      expect([ctl.take(), ctl.keys]).toEqual([0, 0]);
+      const menu = new MouseEvent('contextmenu', { cancelable: true });
+      document.dispatchEvent(menu);
+      expect(menu.defaultPrevented).toBe(false);
+    });
+
+    it('is dropped with the lock, and does nothing without it', () => {
+      make();
+      tap('KeyW');
+      tap('KeyW', 50);
+      expect(ctl.take()).toBe(0);
+      lock(true);
+      tap('KeyW', 50);
+      tap('KeyW', 50);
+      lock(false);
+      expect(ctl.take()).toBe(0);
+      lock(true);
+      // The first tap of a window is forgotten too.
+      tap('KeyA');
+      lock(false);
+      lock(true);
+      tap('KeyA', 50);
+      expect(ctl.take()).toBe(0);
+    });
+
+    it('is a dash that way in the physics, whatever else is held', () => {
+      // Facing north, forward held, sprinting: a double tap of back, left or right.
+      for (const [code, vx, vz] of [
+        ['KeyS', 0, DASH_SPEED],
+        ['KeyA', -DASH_SPEED, 0],
+        ['KeyD', DASH_SPEED, 0],
+        ['KeyW', 0, -DASH_SPEED],
+      ] as const) {
+        make();
+        lock(true);
+        key('keydown', 'KeyW');
+        key('keydown', 'ShiftLeft');
+        tap(code);
+        tap(code, 80);
+        key('keydown', code);
+        const s = at(0, 0, NORTH);
+        s.step(ctl.take(), NORTH);
+        expect(s.p.ev & EV.DASH, code).toBe(EV.DASH);
+        expect(s.p.vx, code).toBeCloseTo(vx, 4);
+        expect(s.p.vz, code).toBeCloseTo(vz, 4);
+        ctl.destroy();
+        canvas.remove();
+        lock(false);
+      }
+      // Relative to the view: facing west, back is east; facing east, left is north.
+      const w = at(0, 0, WEST);
+      w.step(dashKeys(KEY.FORWARD, KEY.BACK), WEST);
+      expect(w.p.vx).toBeCloseTo(DASH_SPEED, 4);
+      const e = at(0, 0, EAST);
+      e.step(dashKeys(KEY.FORWARD | KEY.RIGHT, KEY.LEFT), EAST);
+      expect(e.p.vz).toBeCloseTo(-DASH_SPEED, 4);
+    });
   });
 
   it('calls onMute once per press of M, by code, under the lock only', () => {

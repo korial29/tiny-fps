@@ -43,7 +43,7 @@ const MAX_STEPS = 5;
 /**
  * Mounts the game in a Shadow DOM inside container: one WebGL2 canvas filling it, a click locks the
  * pointer, the mouse looks, WASD (ZQSD on AZERTY) moves, Shift sprints, Space jumps (again in the
- * air for a second jump), E or the right button dashes, C crouches and slides.
+ * air for a second jump), C crouches and slides, a direction key pressed twice dashes.
  */
 export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps => {
   const wrap = document.createElement('div');
@@ -156,7 +156,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       acc = 0;
     }
     for (; ready && acc >= STEP; acc -= STEP) {
-      const input = predictor.step({ keys: ctl.keys, yaw: ctl.yaw, pitch: ctl.pitch }, now);
+      const input = predictor.step({ keys: ctl.take(), yaw: ctl.yaw, pitch: ctl.pitch }, now);
       if (open) {
         ws.send(encodeInput(input));
       }

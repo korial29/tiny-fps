@@ -166,15 +166,15 @@ The subset of `WebSocket` the client uses: `binaryType`, `onopen`, `onclose`, `o
 
 ## Controls
 
-| Action | Keys                                                                       |
-| ------ | -------------------------------------------------------------------------- |
-| Look   | Mouse (click the game to lock the pointer, Esc to release it)              |
-| Move   | WASD, or the arrow keys                                                    |
-| Sprint | Shift, with forward: the top speed builds over about a second              |
-| Jump   | Space. Press it again in the air for a second jump                         |
-| Dash   | E or the right mouse button: a short burst, once a second, once in the air |
-| Crouch | C. At sprint speed it is a slide, low enough to go under a 1.2 m slot      |
-| Mute   | M (remembered)                                                             |
+| Action | Keys                                                                    |
+| ------ | ----------------------------------------------------------------------- |
+| Look   | Mouse (click the game to lock the pointer, Esc to release it)           |
+| Move   | WASD, or the arrow keys                                                 |
+| Sprint | Shift, with forward: the top speed builds over about a second           |
+| Jump   | Space. Press it again in the air for a second jump                      |
+| Dash   | A move key pressed twice quickly: a short burst that way, once a second |
+| Crouch | C. At sprint speed it is a slide, low enough to go under a 1.2 m slot   |
+| Mute   | M (remembered)                                                          |
 
 Facing a ledge between 1.2 and 2.4 m above your feet in the air, you take hold of it: forward or Space climbs, back or C lets go, and Space looking away jumps off it. Running fast along a wall in the air starts a wall-run (about a second, Space kicks off). Ctrl is not used, since Ctrl+W closes the tab.
 

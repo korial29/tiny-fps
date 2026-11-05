@@ -1,10 +1,11 @@
 // Test helper: the lines of ROOFTOPS, each flown with the real physics by a small pilot. A line
 // starts where the one before it ends (or anywhere on its roof) and ends standing on its target.
+import { dashKeys } from '../src/client/input';
 import { KEY } from '../src/shared/types';
 import { EAST, NORTH, SOUTH } from './pilot';
 import type { Sim } from './pilot';
 
-const { FORWARD, JUMP, SPRINT, DASH, CROUCH } = KEY;
+const { FORWARD, JUMP, SPRINT, CROUCH } = KEY;
 
 /** A to B: the 4.2 m gap at the start, by a run and a jump from the edge. */
 export const gapAB = (s: Sim): void => {
@@ -23,8 +24,8 @@ export const ledgeBC = (s: Sim): void => {
 };
 
 /**
- * C to F, 13 m of nothing, or F to C: a sprint, a jump from the edge and a dash late in the
- * flight (`dash` steps after the jump), or a double jump there instead.
+ * C to F, 13 m of nothing, or F to C: a sprint, a jump from the edge and a dash (a double tap
+ * of forward) late in the flight (`dash` steps after the jump), or a double jump there instead.
  */
 export const chasm = (
   s: Sim,
@@ -47,7 +48,8 @@ export const chasm = (
         return keys | JUMP;
       }
       k++;
-      return keys | (k === how.dash ? DASH : 0) | (k === how.double ? JUMP : 0);
+      // The dash is what a double tap of forward sends (see input.ts).
+      return (k === how.dash ? dashKeys(keys, FORWARD) : keys) | (k === how.double ? JUMP : 0);
     },
     yaw,
     200,

@@ -1,10 +1,9 @@
 // Procedural monsters: boxes and one lathe, in the renderer's vertex format. Pure functions of the
 // pose, no state, no DOM. A monster's (x, y, z) is the bottom of its body.
 import { BULLET_R, FLYER_H, FLYER_R, WALKER_H } from '../shared/constants';
-import { TAU } from '../shared/physics';
 import type { Bullet, Monster } from '../shared/types';
 import { lathe } from './gun';
-import { aim, basis, dress, place, pushBox } from './mesh';
+import { aim, dress, place, pushBox, pushQuad } from './mesh';
 import type { Vec3 } from './mesh';
 
 /** Seconds a walker's blow takes. */
@@ -244,35 +243,81 @@ export const walker = (out: number[], m: Monster, walked: number, blow: number, 
   }
 };
 
-/** The flyer's pod, upright: its length runs from the underside up. */
+/** The flyer's pod: its length runs from the underside up. */
 const SHELL = dress(
   lathe(
     [
       [0, 0],
-      [0.18, 0.06],
-      [FLYER_R, 0.32],
-      [FLYER_R * 0.93, 0.5],
-      [0.22, 0.78],
+      [0.16, 0.04],
+      [0.33, 0.15],
+      [0.43, 0.3],
+      [FLYER_R, 0.45],
+      [0.4, 0.62],
+      [0.27, 0.76],
       [0, FLYER_H],
     ],
-    8,
+    10,
   ),
   COLOR.shell,
 );
 
-/** Appends a flyer at time t (seconds): it bobs on a slow sine and its fins spin. */
-export const flyer = (out: number[], m: Monster, t: number) => {
-  const bob = Math.sin(t * 2 + m.id) * 0.06;
-  const base: Vec3 = [m.x, m.y + bob, m.z];
-  place(out, SHELL, base, basis(0, Math.PI / 2), [0, 0, 0], 1);
-  for (let i = 0; i < 4; i++) {
-    const a = t * 1.5 + (i * TAU) / 4;
-    const fin: Vec3 = [m.x + Math.cos(a) * 0.4, base[1] + 0.35, m.z + Math.sin(a) * 0.4];
-    pushBox(out, fin, [0.16, 0.03, 0.04], -a, COLOR.fin);
-  }
-  const eye = at({ ...m, y: base[1] }, 0, FLYER_H * 0.45, FLYER_R * 0.9);
+/** o plus each direction times its length. */
+const walk = (o: Vec3, ...t: [Vec3, number][]) =>
+  t.reduce((p, [d, k]) => p.map((v, i) => v + d[i] * k) as Vec3, o);
+
+/** Radians of lean per m/s of speed. */
+const TILT = 0.09;
+
+/**
+ * Appends a flyer at time t (seconds): it bobs on a slow sine, its membranes flap, and the pod
+ * leans toward where it goes, (vx, vz) m/s.
+ */
+export const flyer = (out: number[], m: Monster, t: number, vx = 0, vz = 0) => {
+  const [s, c] = [Math.sin(m.yaw), Math.cos(m.yaw)];
+  // The speed ahead and to the right of it tips the axis that way.
+  const [ahead, right] = [-vx * s - vz * c, vx * c - vz * s];
+  const lean: Vec3 = [(-s * ahead + c * right) * TILT, 1, (-c * ahead - s * right) * TILT];
+  const axis = lean.map(v => v / Math.hypot(...lean)) as Vec3;
+  const base = walk(
+    [m.x, m.y + Math.sin(t * 2 + m.id) * 0.06 + FLYER_H / 2, m.z],
+    [axis, -FLYER_H / 2],
+  );
+  const [r, u] = aim(axis, [c, 0, -s]);
+  const front = u.map(v => -v) as Vec3;
+  place(out, SHELL, base, [r, u, axis], [0, 0, 0], 1);
+  place(
+    out,
+    CONE,
+    base,
+    aim(axis.map(v => -v) as Vec3, [c, 0, -s]),
+    [0, 0, 0.06],
+    [0.09, 0.09, 0.3],
+    0,
+    COLOR.fin,
+  );
   const glow = m.chase ? 1.3 : 1;
-  pushBox(out, eye, [0.1 * glow, 0.07 * glow, 0.05], m.yaw, eyes(m.chase), -2);
+  const eye = walk(base, [axis, 0.4], [front, 0.4]);
+  pushBox(out, eye, [0.12 * glow, 0.08 * glow, 0.05], m.yaw, eyes(m.chase), -2);
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + (i * Math.PI) / 2;
+    const [out_, side] = [
+      walk([0, 0, 0], [r, Math.cos(a)], [front, Math.sin(a)]),
+      walk([0, 0, 0], [r, -Math.sin(a)], [front, Math.cos(a)]),
+    ];
+    const flap = t * 8 + m.id;
+    const wing = (e: number): Vec3 => walk([0, 0, 0], [out_, Math.cos(e)], [axis, Math.sin(e)]);
+    const root = walk(base, [axis, 0.4], [out_, 0.42]);
+    const mid = walk(root, [wing(0.15 + 0.55 * Math.sin(flap)), 0.32]);
+    const tip = walk(mid, [wing(0.15 + 0.55 * Math.sin(flap - 1.2)), 0.3]);
+    const [a0, a1, b0, b1] = [
+      walk(root, [side, -0.08]),
+      walk(root, [side, 0.08]),
+      walk(mid, [side, 0.17]),
+      walk(mid, [side, -0.17]),
+    ];
+    pushQuad(out, a0, a1, b0, b1, COLOR.fin);
+    pushQuad(out, b1, b0, walk(tip, [side, 0.04]), walk(tip, [side, -0.04]), COLOR.fin);
+  }
 };
 
 /**

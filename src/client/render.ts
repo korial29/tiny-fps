@@ -623,7 +623,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
       for (const m of monsters) {
         const g = follow(gaits, m.id, m.x, m.z, dt);
         if (m.kind == MONSTER.FLYER) {
-          flyer(v, m, now);
+          flyer(v, m, now, g.vx, g.vz);
         } else {
           const left = fx.swings.get(m.id);
           walker(v, m, g.walked, left ? 1 - left / SWING : 0, pace(g));

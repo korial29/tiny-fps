@@ -29,7 +29,6 @@ const boxes = (v: number[], from: number, to: number) =>
     const k = (from * 36 + i) * STRIDE;
     return v.slice(k, k + STRIDE);
   });
-const boxRows = (v: number[]) => boxes(v, 0, v.length / STRIDE / 36);
 /** Vertices `from` to `to` of a model, as [x, y, z, layer, r] after the position and normal. */
 const rows = (v: number[], from = 0, to = v.length / STRIDE) =>
   Array.from({ length: to - from }, (_, i) => {
@@ -192,40 +191,78 @@ describe('a blow', () => {
 });
 
 describe('flyer', () => {
-  const verts = (t: number, o?: Partial<Monster>) =>
-    build(out => flyer(out, mob(MONSTER.FLYER, o), t));
+  const verts = (t: number, o?: Partial<Monster>, vx = 0, vz = 0) =>
+    build(out => flyer(out, mob(MONSTER.FLYER, o), t, vx, vz));
+  /** Vertex runs: the pod, the stinger, the eye, then four membranes of two quads, both faces. */
+  const [POD, STING, EYE] = [420, 480, 516];
 
-  it('is a lathed pod, four fins and an eye, the eye alone glowing', () => {
+  it('is 612 vertices: a lathed pod, a stinger, an eye and four membranes, the eye alone glowing', () => {
     const v = verts(0);
-    expect(v).toHaveLength((5 * 8 * 6 + 5 * 36) * STRIDE);
-    const lit = Array.from({ length: v.length / STRIDE }, (_, i) => v[i * STRIDE + 8]);
-    expect(lit.filter(l => l == -2)).toHaveLength(36);
-    expect(lit.filter(l => l == -1)).toHaveLength(lit.length - 36);
+    expect(v).toHaveLength(612 * STRIDE);
+    const layers = rows(v).map(p => p[3]);
+    expect(layers.slice(STING, EYE).every(l => l == -2)).toBe(true);
+    expect(layers.filter(l => l == -2)).toHaveLength(36);
   });
 
   it('floats about FLYER_R wide and FLYER_H tall above its underside', () => {
-    const shell = boxRows(verts(0, { id: 0 })).slice(0, 240);
-    expect(Math.min(...shell.map(p => p[1]))).toBeCloseTo(1);
-    expect(Math.max(...shell.map(p => p[1]))).toBeCloseTo(1 + FLYER_H);
-    expect(Math.max(...shell.map(p => Math.hypot(p[0] - 5, p[2] + 3)))).toBeCloseTo(FLYER_R);
+    const pod = rows(verts(0, { id: 0 }), 0, POD);
+    expect(Math.min(...pod.map(p => p[1]))).toBeCloseTo(1);
+    expect(Math.max(...pod.map(p => p[1]))).toBeCloseTo(1 + FLYER_H);
+    expect(Math.max(...pod.map(p => Math.hypot(p[0] - 5, p[2] + 3)))).toBeCloseTo(FLYER_R, 1);
   });
 
-  it('bobs on a slow sine and spins its fins', () => {
-    const low = (t: number) => Math.min(...boxRows(verts(t)).map(p => p[1]));
+  it('bobs on a slow sine', () => {
+    const low = (t: number) => Math.min(...rows(verts(t), 0, POD).map(p => p[1]));
     const seen = [0, 0.4, 0.8, 1.2, 1.6].map(low);
     expect(Math.max(...seen) - Math.min(...seen)).toBeGreaterThan(0.04);
     expect(Math.max(...seen)).toBeLessThan(1.07);
     expect(Math.min(...seen)).toBeGreaterThan(0.93);
-    const fin = (t: number) => verts(t).slice(240 * STRIDE, 240 * STRIDE + 3);
-    expect(fin(0)).not.toEqual(fin(0.5));
+  });
+
+  it('flaps its membranes: their tips rise and fall against the pod', () => {
+    const tip = (t: number) => {
+      const v = verts(t, { id: 0 });
+      const wings = rows(v, EYE).map(p => p[1]);
+      const pod = rows(v, 0, POD).map(p => p[1]);
+      return Math.max(...wings) - Math.min(...pod);
+    };
+    const seen = [0, 0.05, 0.1, 0.15, 0.2, 0.25].map(tip);
+    expect(Math.max(...seen) - Math.min(...seen)).toBeGreaterThan(0.2);
+  });
+
+  it('stands upright still, and leans toward where it goes', () => {
+    const top = (v: number[]) => {
+      const pod = rows(v, 0, POD);
+      const [hi, lo] = [Math.max(...pod.map(p => p[1])), Math.min(...pod.map(p => p[1]))];
+      const end = (f: (p: number[]) => boolean) => pod.filter(f);
+      return [end(p => p[1] > hi - 0.1), end(p => p[1] < lo + 0.1)] as const;
+    };
+    const lean = (v: number[], i: number) => {
+      const [hi, lo] = top(v);
+      return mean(hi, i) - mean(lo, i);
+    };
+    const still = verts(0);
+    expect(Math.abs(lean(still, 0))).toBeLessThan(1e-6);
+    expect(Math.abs(lean(still, 2))).toBeLessThan(1e-6);
+    // Yaw 0 looks toward -z, right is +x.
+    expect(lean(verts(0, {}, 0, -3.5), 2)).toBeLessThan(-0.08);
+    expect(lean(verts(0, {}, 3.5, 0), 0)).toBeGreaterThan(0.08);
+    // Turned a quarter, the same speed leans the other axis.
+    expect(lean(verts(0, { yaw: Math.PI / 2 }, -3.5, 0), 0)).toBeLessThan(-0.08);
+    expect(lean(verts(0, {}, 0, 3.5), 2)).toBeGreaterThan(0.08);
+  });
+
+  it('keeps the pod whole: it only turns about its middle', () => {
+    const pod = rows(verts(0, { id: 0 }, 0, -3.5), 0, POD);
+    expect(Math.min(...pod.map(p => p[1]))).toBeGreaterThan(1);
+    expect(Math.max(...pod.map(p => p[1]))).toBeLessThan(1 + FLYER_H);
   });
 
   it('glows brighter while chasing, and its eye faces yaw', () => {
-    const eye = (o?: Partial<Monster>) => verts(0, o).slice(-36 * STRIDE);
-    expect(eye({ chase: true })[6]).toBeGreaterThan(eye()[6]);
-    const z = (o?: Partial<Monster>) => mean(boxes(eye(o), 0, 1), 2);
-    expect(z()).toBeLessThan(-3);
-    expect(z({ yaw: Math.PI })).toBeGreaterThan(-3);
+    const eye = (o?: Partial<Monster>) => rows(verts(0, o), 480, EYE);
+    expect(eye({ chase: true })[0][4]).toBeGreaterThan(eye()[0][4]);
+    expect(mean(eye(), 2)).toBeLessThan(-3);
+    expect(mean(eye({ yaw: Math.PI }), 2)).toBeGreaterThan(-3);
   });
 });
 

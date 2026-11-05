@@ -116,7 +116,7 @@ describe('prediction against the room', () => {
    * with no network at all, the worst gap to the host's own snapshot at the end, and how far the
    * raw host state was behind the prediction (what the replay had to make up).
    */
-  const race = (lag: (k: number) => number, steps = SCRIPT) => {
+  const race = (lag: (k: number) => number, steps = SCRIPT, team = 0) => {
     const n = steps.length;
     const room = new Room({});
     const sent: ArrayBuffer[] = [];
@@ -124,16 +124,24 @@ describe('prediction against the room', () => {
       bins: [],
       send: d => typeof d !== 'string' && conn.bins.push(d),
     };
-    room.connect(conn);
-    room.receive(conn, JSON.stringify({ t: 'join', name: 'me' }));
-    // Another player, so the snapshot carries two and the right one is picked.
+    // Another player, so the snapshot carries two and the right one is picked. The first to join
+    // is red, the second blue: `team` says which of them is the player under test.
     const other: Conn = { send: () => {} };
-    room.connect(other);
-    room.receive(other, JSON.stringify({ t: 'join', name: 'other' }));
+    const join = (c: Conn, name: string) => {
+      room.connect(c);
+      room.receive(c, JSON.stringify({ t: 'join', name }));
+    };
+    if (team) {
+      join(other, 'other');
+    }
+    join(conn, 'me');
+    if (!team) {
+      join(other, 'other');
+    }
 
     const pred = createPredictor(world);
-    pred.you(0);
-    const ref: PlayerState = spawn(0, world, 0);
+    pred.you(team, team);
+    const ref: PlayerState = spawn(team, world, 0, team);
     const inputs: { at: number; data: ArrayBuffer }[] = [];
     const snaps: { at: number; data: ArrayBuffer }[] = [];
     let seen = 0;
@@ -167,7 +175,7 @@ describe('prediction against the room', () => {
         behind = Math.max(
           behind,
           gap(
-            s.players.find(p => p.id === 0)!,
+            s.players.find(p => p.id === team)!,
             ref,
           ),
         );
@@ -177,7 +185,7 @@ describe('prediction against the room', () => {
     let last = 0;
     steps.forEach((i, k) => {
       const input = pred.step(i, k * STEP);
-      move(ref, input, world);
+      move(ref, input, world, team);
       sent.push(encodeInput(input));
       // In order: never delivered before the previous one.
       last = Math.max(last, k + lag(k));
@@ -188,7 +196,7 @@ describe('prediction against the room', () => {
     for (let k = n; inputs.length || snaps.length || k < n + 10; k++) {
       flush(k, () => k);
     }
-    const final = decodeSnapshot(conn.bins.at(-1)!)!.players.find(p => p.id === 0)!;
+    const final = decodeSnapshot(conn.bins.at(-1)!)!.players.find(p => p.id === team)!;
     return {
       worst,
       behind,
@@ -208,6 +216,16 @@ describe('prediction against the room', () => {
     expect(r.behind).toBeGreaterThan(0.1);
     expect(r.end).toBe(0);
     expect(r.final).toBe(0);
+  });
+
+  it('agrees with the host exactly for a blue player, who falls off the far roof and respawns at a blue spawn', () => {
+    for (const [name, lag] of LAGS) {
+      const r = race(lag, SCRIPT, 1);
+      expect(r.worst, `${name} lag`).toBe(0);
+      expect(r.end, `${name} lag`).toBe(0);
+      expect(r.final, `${name} lag`).toBe(0);
+      expect(r.differing, `${name} lag`).toEqual([]);
+    }
   });
 
   it('agrees with the host exactly when nothing is delayed', () => {
@@ -605,7 +623,7 @@ describe('lag compensation through the room', () => {
     const pred = createPredictor(world);
     pred.you(0);
     // B at spawn 1 runs sideways, +x, 6 m/s. The reference is what the host holds for it.
-    const bHost = spawn(1, world, 1);
+    const bHost = spawn(1, world, 0, 1);
     const inFlight: { at: number; data: ArrayBuffer }[] = [];
     let seen = 0;
     let sent: Input | undefined;

@@ -10,6 +10,8 @@ import type { PlayerState } from '../shared/types';
 import type { World, WorldDef } from '../shared/world';
 import type { Body } from './body';
 import type { Effects } from './effects';
+import { base, flag, teamRgb } from './flag';
+import type { CtfScene } from './flag';
 import { STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
@@ -359,6 +361,8 @@ export interface Renderer {
     /** gather() in lights.ts: at most MAX_LIGHTS, the first MAX_SHADOWS shadowed spots mapped, besides the sun. */
     lights: Light[],
     body?: Body,
+    /** The bases and the flags: drawn lit, casting shadows, with the other players. */
+    ctf?: CtfScene,
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
@@ -618,7 +622,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   return {
-    frame(eye, yaw, pitch, others, colors, fx, lights, body) {
+    frame(eye, yaw, pitch, others, colors, fx, lights, body, ctf) {
       const [w, h] = size();
       if (lost || !w || !h) {
         return;
@@ -636,6 +640,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const now = performance.now() / 1000;
       const dt = Math.min(0.1, now - clock);
       clock = now;
+      ctf?.bases.forEach((at, team) => base(v, at, teamRgb(team), now));
+      ctf?.flags.forEach(f => flag(v, f, teamRgb(f.team), now));
       for (const p of others) {
         const g = follow(gaits, p.id, p.x, p.z, dt);
         soldier(

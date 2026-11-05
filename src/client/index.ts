@@ -3,16 +3,20 @@ import { ROOFTOPS } from '../shared/map';
 import { eyeHeight } from '../shared/physics';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
-import type { PlayerInfo, SocketLike } from '../shared/types';
+import type { PlayerInfo, SocketLike, Snapshot } from '../shared/types';
 import { build, hidden } from '../shared/world';
 import { createAudio, savedMute, toggleMute } from './audio';
+import { beats, cue, say } from './beats';
 import { createBody } from './body';
 import { createEffects } from './effects';
+import { flagDraws } from './flag';
 import { createFoley } from './foley';
 import { HUD_CSS, createHud } from './hud';
+import type { Summary } from './hud';
 import { createInput } from './input';
 import { createPredictor } from './predict';
 import { gather } from './lights';
+import { marks } from './marks';
 import { createRenderer } from './render';
 import type { Renderer } from './render';
 
@@ -83,7 +87,14 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   } catch {
     // No WebGL2: stay connected, say so on the title screen.
   }
+  const bases = world.def.teams.map(t => t.base);
   let roster: PlayerInfo[] = [];
+  /** The own player's id and team, from the roster. */
+  let you = { id: -1, team: 0 };
+  /** The latest snapshot, for the flags and the match; the one before it tells what just happened. */
+  let match: Snapshot | undefined;
+  /** The result of the match that has just ended, while its end screen shows. */
+  let ended: Summary | undefined;
   let colors = new Map<number, string>();
   let names = new Map<number, string>();
   /** Tags above the others, by player id. */
@@ -115,6 +126,15 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       const s = decodeSnapshot(data);
       if (s) {
         predictor.snapshot(s, performance.now());
+        for (const beat of beats(match, s)) {
+          const line = say(beat, you, id => names.get(id) ?? 'Someone');
+          hud.banner(line.text, line.team);
+          const sound = cue(beat, you.team);
+          if (sound) {
+            audio.play(sound[0], undefined, 1, sound[1]);
+          }
+        }
+        match = s;
       }
       return;
     }
@@ -123,9 +143,12 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       roster = m.players;
       colors = new Map(roster.map(p => [p.id, p.color]));
       names = new Map(roster.map(p => [p.id, p.name]));
-      predictor.you(m.you);
+      you = { id: m.you, team: roster.find(p => p.id == m.you)?.team ?? 0 };
+      predictor.you(you.id, you.team);
       count.textContent = `Players: ${roster.length}`;
       emit('roster');
+    } else if (m?.t == 'end') {
+      ended = { score: m.score, players: m.players };
     } else if (m?.t == 'full') {
       msg = 'Room is full';
     }
@@ -167,6 +190,9 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     const eye: [number, number, number] = me ? [me.x, me.y + eyeHeight(me), me.z] : [0, 0, 0];
     audio.listen(eye, ctl.yaw);
     const dt = Math.min((now - before) / 1000, 0.1);
+    // The flags and the bases for the renderer and the lights, and the HUD that goes with them.
+    const who = (id: number) => (id == you.id ? me : others.find(p => p.id == id));
+    const ctf = match && { bases, flags: flagDraws(match.flags, bases, who) };
     // What the live steps did, once: the camera, the sounds and the body read it, the inputs sent do not.
     const hit = predictor.events();
     fx.update(me, ctl.keys, dt, hit);
@@ -184,9 +210,32 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         others,
         colors,
         fx,
-        gather({ eye: cam, yaw: ctl.yaw, pitch, others, t: now / 1000 }),
+        gather({ eye: cam, yaw: ctl.yaw, pitch, others, t: now / 1000, ctf }),
         body,
+        ctf,
       );
+    }
+    if (match) {
+      hud.match(match, id => names.get(id) ?? '?');
+      hud.marks(
+        me && rd
+          ? marks({
+              eye,
+              id: you.id,
+              team: you.team,
+              yaw: ctl.yaw,
+              flags: match.flags,
+              bases,
+              where: id => {
+                const p = who(id);
+                return p && [p.x, p.y, p.z];
+              },
+              project: rd.project,
+            })
+          : [],
+      );
+      // A match that is over shows its result until the next one; its text arrives with the snapshot that says so.
+      hud.end(match.over ? ended : undefined, match.clock);
     }
     const seen = new Set<number>();
     for (const p of others) {
@@ -204,6 +253,8 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       if (el.textContent != name) {
         el.textContent = name;
       }
+      // In the team's colour.
+      el.style.color = colors.get(p.id) ?? '';
     }
     for (const [id, el] of tags) {
       if (!seen.has(id)) {

@@ -83,8 +83,18 @@ describe('the sounds of the game', () => {
       expect(Math.abs(s[0])).toBeLessThan(0.01);
       expect(Math.abs(s[s.length - 1])).toBeLessThan(0.01);
       expect(s.length).toBeGreaterThan(0.03 * RATE);
-      expect(s.length).toBeLessThan(0.4 * RATE);
+      // The flag sounds are phrases, up to a second.
+      expect(s.length).toBeLessThan((id >= SOUND.TAKE ? 1 : 0.4) * RATE);
     });
+  });
+
+  it('give the capture a longer phrase than the take, and the drop a lower pitch than the return', () => {
+    expect(sound('CAPTURE').length).toBeGreaterThan(sound('TAKE').length * 3);
+    expect(sound('CAPTURE').length).toBeGreaterThan(0.6 * RATE);
+    // Zero crossings: the drop is a fall from 330 Hz, the return a chime from 659 up.
+    const crossings = (s: Float32Array) =>
+      s.reduce((n, x, i) => n + +(i > 0 && s[i - 1] < 0 !== x < 0), 0) / (s.length / RATE);
+    expect(crossings(sound('DROP'))).toBeLessThan(crossings(sound('RETURN')));
   });
 
   it('make the step on a wall lighter than on a floor, and the dash stronger than the double jump', () => {

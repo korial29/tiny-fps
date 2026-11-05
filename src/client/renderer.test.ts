@@ -520,6 +520,25 @@ describe('createRenderer', () => {
       expect(depth[1]).toBe(world[1]);
     });
 
+    it('is cast by the bases and the flags too, drawn with the brushes and before the other players', () => {
+      const rd = createRenderer(canvas, ROOM);
+      frame(rd);
+      const [bare] = draws();
+      expect(bare[1]).toBe(FLOOR_VERTS);
+      calls.length = 0;
+      rd.frame([1, 1.6, 1], 0, 0, [], new Map(), createEffects(), [], undefined, {
+        bases: [
+          [0, 0, 0],
+          [4, 0, 4],
+        ],
+        flags: [{ team: 0, at: [0, 0, 0] }],
+      });
+      const [depth, world] = draws();
+      // The base pads and rings, a pole and its cloth: a few hundred vertices more than the room.
+      expect(depth[1]).toBeGreaterThan(FLOOR_VERTS + 300);
+      expect(depth[1]).toBe(world[1]);
+    });
+
     it('uploads its direction and colour, and the daylight, with the world', () => {
       createRenderer(canvas, ROOM);
       expect(set('O').at(-1)![2]).toEqual(SUN_DIR);

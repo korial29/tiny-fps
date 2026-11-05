@@ -4,7 +4,19 @@ import { compile, sectorAt } from '../shared/level';
 import { HALL } from '../shared/map';
 import { EVENT, KEY, MONSTER } from '../shared/types';
 import type { GameEvent, Monster, PlayerState, Shot } from '../shared/types';
-import { GAIN, HURT, MOTES, createDelay, createEffects, fade, glow, lit, puff } from './effects';
+import {
+  BLOOD,
+  GAIN,
+  HURT,
+  MOTES,
+  TRAIL,
+  createDelay,
+  createEffects,
+  fade,
+  glow,
+  lit,
+  puff,
+} from './effects';
 import { CHUNKS } from './monsters';
 
 const DT = 1 / 60;
@@ -286,7 +298,7 @@ describe('death', () => {
     ]) {
       fx.gibs = [];
       fx.event(die(8, 2, 8, id), 1);
-      expect(fx.gibs.every(g => CHUNKS[kind].includes(g.c))).toBe(true);
+      expect(fx.gibs.every(g => g.c == BLOOD || CHUNKS[kind].includes(g.c))).toBe(true);
     }
     expect(new Set(CHUNKS[0].flat()).size).toBeGreaterThan(new Set(CHUNKS[1].flat()).size);
   });
@@ -527,6 +539,7 @@ describe('reset', () => {
     const fx = createEffects(Math.random, lvl);
     fx.event(die(8, 2, 8), 1);
     expect(fx.smoke.length).toBeGreaterThan(0);
+    fx.splats.push({ p: [8, 1, 8], r: 0.1, yaw: 0, life: 5 });
     fx.event({ type: EVENT.SWING, id: 20, x: 8, y: 2, z: 8 }, 1);
     fx.track([{ id: 20, kind: 0, x: 8, y: 1, z: 8, yaw: 0, chase: false }], []);
     fx.shot(shot, [0, 1.6, 0], true);
@@ -534,7 +547,8 @@ describe('reset', () => {
     fx.hit();
     fx.pickup([1, 1, 1]);
     fx.reset(lvl);
-    expect([fx.gibs, fx.sparks, fx.blasts, fx.smoke]).toEqual([[], [], [], []]);
+    expect([fx.gibs, fx.sparks, fx.blasts, fx.smoke, fx.splats]).toEqual([[], [], [], [], []]);
+    expect(fx.casings.filter(c => c.life > 0)).toHaveLength(0);
     expect([fx.swings.size, fx.herd.size, fx.flashes.size, fx.aim.size]).toEqual([0, 0, 0, 0]);
     expect([fx.hurt, fx.gain, fx.flash]).toEqual([0, 0, 0]);
   });
@@ -788,5 +802,282 @@ describe('dust motes', () => {
     fx.update(me(), 0, DT);
     expect(fx.motes.some(m => m != 0)).toBe(true);
     expect(spread(fx, 0, 0).some(([x]) => Math.abs(x) > 1)).toBe(true);
+  });
+});
+
+describe('shell casings', () => {
+  const lvl = compile(HALL);
+  const live = (fx: ReturnType<typeof createEffects>) => fx.casings.filter(c => c.life > 0);
+  const step = (fx: ReturnType<typeof createEffects>, seconds: number) => {
+    for (let t = 0; t < seconds - 1e-9; t += DT) {
+      fx.update(undefined, 0, DT);
+    }
+  };
+  /** Fires from the eye `from` at the point 10 m away along (dx, dz). */
+  const fire = (
+    fx: ReturnType<typeof createEffects>,
+    from: [number, number, number],
+    [dx, dz]: [number, number],
+    own = true,
+  ) =>
+    fx.shot(
+      { id: own ? 1 : 2, x: from[0] + dx * 10, y: from[1], z: from[2] + dz * 10, hit: -1 },
+      from,
+      own,
+    );
+  // The start room (floor 1) and, over the lava pit, a floor at 0.
+  const room: [number, number, number] = [8, 2.6, 8];
+  const pit: [number, number, number] = [28, 2.6, 8];
+
+  it('ejects to the right of the view, whichever way it points', () => {
+    for (const [dir, right] of [
+      [
+        [0, -1],
+        [1, 0],
+      ],
+      [
+        [1, 0],
+        [0, 1],
+      ],
+      [
+        [0, 1],
+        [-1, 0],
+      ],
+      [
+        [-1, 0],
+        [0, -1],
+      ],
+    ] as const) {
+      const fx = createEffects(() => 0.5, lvl);
+      fire(fx, room, [dir[0], dir[1]]);
+      const [c] = live(fx);
+      const [dx, dz] = [c.p[0] - room[0], c.p[2] - room[2]];
+      expect(dx * right[0] + dz * right[1]).toBeGreaterThan(0.25);
+      expect(c.v[0] * right[0] + c.v[2] * right[1]).toBeGreaterThan(0.5);
+      // Down from the eye, out of the gun's port.
+      expect(c.p[1]).toBeLessThan(room[1] - 0.15);
+    }
+  });
+
+  it('falls, bounces once or twice on the floor below, then lies flat and still', () => {
+    for (const [from, floor] of [
+      [room, 1],
+      [pit, 0],
+    ] as const) {
+      const fx = createEffects(() => 0.5, lvl);
+      fire(fx, from, [0, -1]);
+      const c = live(fx)[0];
+      let [bounces, last] = [0, c.v[1]];
+      for (let t = 0; t < 2.5; t += DT) {
+        fx.update(undefined, 0, DT);
+        bounces += +(last < 0 && c.v[1] > 0);
+        last = c.v[1];
+        expect(c.p[1]).toBeGreaterThanOrEqual(floor + c.size - 1e-9);
+      }
+      expect(bounces).toBeGreaterThanOrEqual(1);
+      expect(bounces).toBeLessThanOrEqual(2);
+      expect(c.rest).toBe(true);
+      expect(c.p[1]).toBeCloseTo(floor + c.size);
+      expect([...c.v, c.tilt]).toEqual([0, 0, 0, 0]);
+      const at = [...c.p];
+      step(fx, 1);
+      expect(c.p).toEqual(at);
+    }
+  });
+
+  it('tumbles while it flies', () => {
+    const fx = createEffects(() => 0.5, lvl);
+    fire(fx, room, [0, -1]);
+    const c = live(fx)[0];
+    const tilt = c.tilt;
+    step(fx, 0.1);
+    expect(Math.abs(c.tilt - tilt)).toBeGreaterThan(1);
+  });
+
+  it('stays in the room: a wall stops it', () => {
+    const fx = createEffects(() => 0.5, lvl);
+    // 0.2 m from the west wall, ejecting west.
+    fire(fx, [0.3, 2.6, 8], [0, 1]);
+    step(fx, 2);
+    expect(live(fx)[0].p[0]).toBeGreaterThan(0);
+  });
+
+  it('shrinks away after 3 to 4 s of life, and its slot is free again', () => {
+    const fx = createEffects(() => 0.5, lvl);
+    fire(fx, room, [0, -1]);
+    step(fx, 2.9);
+    expect(live(fx)).toHaveLength(1);
+    expect(live(fx)[0].rest).toBe(true);
+    step(fx, 1.2);
+    expect(live(fx)).toHaveLength(0);
+    // Back in the pool for the next shot.
+    fire(fx, room, [0, -1]);
+    expect(live(fx)).toHaveLength(1);
+  });
+
+  it('keeps a pool of 32 that is never reallocated, and the own gun recycles the oldest', () => {
+    const fx = createEffects(Math.random, lvl);
+    const pool = fx.casings;
+    expect(pool).toHaveLength(32);
+    const first = pool[0];
+    for (let i = 0; i < 100; i++) {
+      fire(fx, room, [0, -1]);
+      step(fx, 0.02);
+    }
+    expect(fx.casings).toBe(pool);
+    expect(pool).toHaveLength(32);
+    expect(pool[0]).toBe(first);
+    expect(live(fx)).toHaveLength(32);
+    // The newest is the one just ejected.
+    expect(Math.max(...live(fx).map(c => c.life))).toBeGreaterThan(2.9);
+  });
+
+  it('draws smaller ones for the others, and at most 8 of them at once', () => {
+    const fx = createEffects(() => 0.5, lvl);
+    fire(fx, room, [0, -1]);
+    for (let i = 0; i < 30; i++) {
+      fire(fx, room, [0, -1], false);
+    }
+    const [own, ...others] = live(fx);
+    expect(own.own).toBe(true);
+    expect(others).toHaveLength(8);
+    expect(others.every(c => !c.own && c.size < own.size)).toBe(true);
+    // Remote ones never take the own gun's slots, and the own gun still ejects over them.
+    for (let i = 0; i < 40; i++) {
+      fire(fx, room, [0, -1]);
+    }
+    expect(live(fx).filter(c => !c.own).length).toBeLessThanOrEqual(8);
+    expect(live(fx).filter(c => c.own).length).toBeGreaterThan(8);
+  });
+
+  it('ejects when the shot hit something point blank', () => {
+    const fx = createEffects(() => 0.5, lvl);
+    fx.shot({ id: 1, x: 8, y: 2.6, z: 8, hit: -1 }, room, true);
+    expect(live(fx)).toHaveLength(1);
+    expect(live(fx)[0].p.every(Number.isFinite)).toBe(true);
+  });
+
+  it('works without a level: it falls to the shooter feet', () => {
+    const fx = createEffects(() => 0.5);
+    fire(fx, [0, 1.6, 0], [0, -1]);
+    step(fx, 2);
+    expect(live(fx)[0].p[1]).toBeCloseTo(live(fx)[0].size);
+  });
+
+  it('lands on the new level after a reset', () => {
+    const fx = createEffects(() => 0.5);
+    fire(fx, room, [0, -1]);
+    fx.reset(lvl);
+    expect(live(fx)).toHaveLength(0);
+    fire(fx, room, [0, -1]);
+    step(fx, 1.5);
+    expect(live(fx)[0].p[1]).toBeCloseTo(1 + live(fx)[0].size);
+  });
+});
+
+describe('gib shapes and splats', () => {
+  const lvl = compile(HALL);
+  const die = (x: number, y: number, z: number): GameEvent => ({
+    type: EVENT.DIE,
+    id: 16,
+    x,
+    y,
+    z,
+  });
+  const step = (fx: ReturnType<typeof createEffects>, seconds: number) => {
+    for (let t = 0; t < seconds - 1e-9; t += DT) {
+      fx.update(undefined, 0, DT);
+    }
+  };
+  /** A fixed sequence of numbers in [0, 1): the tests are exact. */
+  const lcg =
+    (seed = 7) =>
+    () =>
+      (seed = (seed * 1664525 + 1013904223) % 2 ** 32) / 2 ** 32;
+  const kind = ({ half: [x, y, z] }: { half: number[] }) =>
+    z > 1.5 * x ? 'long' : y < 0.5 * x ? 'flat' : Math.max(x, y, z) < 0.04 ? 'speck' : 'chunk';
+
+  it('throws flat slabs, long bits, specks and chunks', () => {
+    const fx = createEffects(lcg(), lvl);
+    const kinds = new Set<string>();
+    for (let i = 0; i < 12; i++) {
+      fx.gibs = [];
+      fx.event(die(8, 2, 8), 1);
+      fx.gibs.forEach(g => kinds.add(kind(g)));
+    }
+    expect([...kinds].sort()).toEqual(['chunk', 'flat', 'long', 'speck']);
+  });
+
+  it('rests a gib on its own height', () => {
+    const fx = createEffects(lcg(), lvl);
+    fx.event(die(8, 2, 8), 1);
+    expect(fx.gibs.every(g => g.size == g.half[1])).toBe(true);
+    step(fx, 1.8);
+    for (const g of fx.gibs) {
+      expect(g.p[1]).toBeCloseTo(1 + g.half[1]);
+    }
+  });
+
+  it('makes some of them dark red, and only those leave a splat where they first land', () => {
+    const fx = createEffects(lcg(3), lvl);
+    fx.event(die(8, 2, 8), 1);
+    const gore = fx.gibs.filter(g => g.gore);
+    expect(gore.length).toBeGreaterThan(0);
+    expect(gore.length).toBeLessThan(fx.gibs.length);
+    expect(gore.every(g => g.c == BLOOD)).toBe(true);
+    expect(fx.gibs.filter(g => !g.gore).every(g => g.c != BLOOD)).toBe(true);
+    expect(fx.splats).toHaveLength(0);
+    const ids = new Set(gore);
+    step(fx, 1.5);
+    // One splat each, on the floor of the start room, flat just above it.
+    expect(fx.splats).toHaveLength(gore.length);
+    for (const s of fx.splats) {
+      expect(s.p[1]).toBeCloseTo(1.004);
+      expect(s.r).toBeGreaterThan(0.09);
+    }
+    expect(ids.size).toBe(gore.length);
+    expect(gore.every(g => !g.gore)).toBe(true);
+  });
+
+  it('puts the splat where the gib first touched the floor', () => {
+    const fx = createEffects(() => 0, lvl);
+    // Every gib is dark red, thrown at the same speed: straight up from the middle.
+    fx.event(die(8, 2, 8), 1);
+    const g = fx.gibs[0];
+    let at: number[] | undefined;
+    for (let t = 0; t < 1 && !fx.splats.length; t += DT) {
+      fx.update(undefined, 0, DT);
+      at = [...g.p];
+    }
+    expect(fx.splats[0].p[0]).toBeCloseTo(at![0]);
+    expect(fx.splats[0].p[2]).toBeCloseTo(at![2]);
+  });
+
+  it('lets a splat lie for 8 s, then it is gone', () => {
+    const fx = createEffects(() => 0, lvl);
+    fx.event(die(8, 2, 8), 1);
+    step(fx, 3.5);
+    expect(fx.gibs).toHaveLength(0);
+    expect(fx.splats.length).toBeGreaterThan(0);
+    step(fx, 3);
+    expect(fx.splats.length).toBeGreaterThan(0);
+    step(fx, 2.5);
+    expect(fx.splats).toHaveLength(0);
+  });
+
+  it('keeps at most 24 splats, the newest', () => {
+    const fx = createEffects(() => 0, lvl);
+    for (let i = 0; i < 6; i++) {
+      fx.event(die(8, 2, 8), 1);
+      step(fx, 1.2);
+    }
+    expect(fx.splats).toHaveLength(24);
+  });
+});
+
+describe('spark streaks', () => {
+  it('spans TRAIL seconds of velocity', () => {
+    expect(TRAIL).toBeGreaterThan(0.02);
+    expect(TRAIL).toBeLessThan(0.1);
   });
 });

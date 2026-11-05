@@ -657,6 +657,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, first: Level): Rendere
           c,
         );
       }
+      for (const { p, yaw, tilt, size, life } of fx.casings) {
+        if (life > 0) {
+          const [k, t] = [size * Math.min(1, life * 2), Math.cos(tilt)];
+          const d: Vec3 = [t * Math.sin(yaw), Math.sin(tilt), t * Math.cos(yaw)];
+          pushFrame(v, p, axesAlong(d), [k * 2.8, k, k], gold, METAL);
+        }
+      }
       for (const b of fx.blasts) {
         // Bright at the start, red and shrinking at the end: no blending to fade it with.
         const [k, u] = [glow(b), b.t / BLAST];

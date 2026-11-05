@@ -627,7 +627,6 @@ describe('createRenderer', () => {
       frame(rd, fx, [], lights);
       return tail();
     };
-
     const extent = (v: Float32Array, from: number, n: number, axis: number) => {
       const xs = Array.from({ length: n }, (_, i) => v[(from + i) * STRIDE + axis]);
       return [Math.min(...xs), Math.max(...xs)];
@@ -716,6 +715,61 @@ describe('createRenderer', () => {
       const [s0, s1] = extent(v, 36, 36, 1);
       expect([s0, s1]).toEqual([expect.closeTo(0.96), expect.closeTo(1)]);
       expect(v.every(Number.isFinite)).toBe(true);
+    });
+
+    it('draws each live casing as a brass bar that shines, and none for a free slot', () => {
+      const fx = createEffects();
+      const empty = room(fx).length;
+      calls.length = 0;
+      const c = fx.casings[3];
+      Object.assign(c, { p: [2, 0.01, 2], yaw: 0, tilt: 0, size: 0.01, life: 2, rest: true });
+      const v = room(fx);
+      expect(v.length - empty).toBe(36 * STRIDE);
+      const [z0, z1] = extent(v, 0, 36, 2);
+      expect(z1 - z0).toBeCloseTo(2 * 2.8 * 0.01);
+      const [x0, x1] = extent(v, 0, 36, 0);
+      expect(x1 - x0).toBeCloseTo(0.02);
+      expect(vertex(v, 0)[8]).toBe(METAL);
+      expect(vertex(v, 0)[6]).toBeGreaterThan(vertex(v, 0)[9] * 3);
+    });
+
+    it('stands a tumbling casing on end, and shrinks it over its last half second', () => {
+      const fx = createEffects();
+      Object.assign(fx.casings[0], {
+        p: [2, 1, 2],
+        yaw: 0,
+        tilt: Math.PI / 2,
+        size: 0.01,
+        life: 2,
+      });
+      const [y0, y1] = extent(room(fx), 0, 36, 1);
+      expect(y1 - y0).toBeCloseTo(0.056);
+      calls.length = 0;
+      fx.casings[0].life = 0.25;
+      const [z0, z1] = extent(room(fx), 0, 36, 1);
+      expect(z1 - z0).toBeCloseTo(0.028);
+    });
+
+    it('keeps casings and streaks out of the depth passes', () => {
+      const spot = (): Light => ({
+        kind: LIGHT.SPOT,
+        p: [2, 1.6, 2],
+        d: [1, 0, 0],
+        cone: 0.9,
+        range: 10,
+        color: [1, 1, 1],
+        shadow: true,
+      });
+      room(createEffects(), [spot()]);
+      const [depth] = draws();
+      calls.length = 0;
+      const fx = createEffects();
+      Object.assign(fx.casings[0], { p: [2, 0.5, 2], size: 0.01, life: 2 });
+      fx.sparks.push({ p: [2, 1, 2], v: [0, 0, -5], life: 1 });
+      room(fx, [spot()]);
+      const [d2, w2] = draws();
+      expect(d2[1]).toBe(depth[1]);
+      expect(w2[1]).toBe(depth[1] + 36 + 36);
     });
   });
 });

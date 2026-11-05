@@ -546,6 +546,7 @@ describe('reset', () => {
     fx.pickup([1, 1, 1]);
     fx.reset(lvl);
     expect([fx.gibs, fx.sparks, fx.blasts, fx.smoke]).toEqual([[], [], [], []]);
+    expect(fx.casings.filter(c => c.life > 0)).toHaveLength(0);
     expect([fx.swings.size, fx.herd.size, fx.flashes.size, fx.aim.size]).toEqual([0, 0, 0, 0]);
     expect([fx.hurt, fx.gain, fx.flash]).toEqual([0, 0, 0]);
   });
@@ -799,6 +800,176 @@ describe('dust motes', () => {
     fx.update(me(), 0, DT);
     expect(fx.motes.some(m => m != 0)).toBe(true);
     expect(spread(fx, 0, 0).some(([x]) => Math.abs(x) > 1)).toBe(true);
+  });
+});
+
+describe('shell casings', () => {
+  const lvl = compile(HALL);
+  const live = (fx: ReturnType<typeof createEffects>) => fx.casings.filter(c => c.life > 0);
+  const step = (fx: ReturnType<typeof createEffects>, seconds: number) => {
+    for (let t = 0; t < seconds - 1e-9; t += DT) {
+      fx.update(undefined, 0, DT);
+    }
+  };
+  /** Fires from the eye `from` at the point 10 m away along (dx, dz). */
+  const fire = (
+    fx: ReturnType<typeof createEffects>,
+    from: [number, number, number],
+    [dx, dz]: [number, number],
+    own = true,
+  ) =>
+    fx.shot(
+      { id: own ? 1 : 2, x: from[0] + dx * 10, y: from[1], z: from[2] + dz * 10, hit: -1 },
+      from,
+      own,
+    );
+  // The start room (floor 1) and, over the lava pit, a floor at 0.
+  const room: [number, number, number] = [8, 2.6, 8];
+  const pit: [number, number, number] = [28, 2.6, 8];
+
+  it('ejects to the right of the view, whichever way it points', () => {
+    for (const [dir, right] of [
+      [
+        [0, -1],
+        [1, 0],
+      ],
+      [
+        [1, 0],
+        [0, 1],
+      ],
+      [
+        [0, 1],
+        [-1, 0],
+      ],
+      [
+        [-1, 0],
+        [0, -1],
+      ],
+    ] as const) {
+      const fx = createEffects(() => 0.5, lvl);
+      fire(fx, room, [dir[0], dir[1]]);
+      const [c] = live(fx);
+      const [dx, dz] = [c.p[0] - room[0], c.p[2] - room[2]];
+      expect(dx * right[0] + dz * right[1]).toBeGreaterThan(0.25);
+      expect(c.v[0] * right[0] + c.v[2] * right[1]).toBeGreaterThan(0.5);
+      // Down from the eye, out of the gun's port.
+      expect(c.p[1]).toBeLessThan(room[1] - 0.15);
+    }
+  });
+
+  it('falls, bounces once or twice on the floor below, then lies flat and still', () => {
+    for (const [from, floor] of [
+      [room, 1],
+      [pit, 0],
+    ] as const) {
+      const fx = createEffects(() => 0.5, lvl);
+      fire(fx, from, [0, -1]);
+      const c = live(fx)[0];
+      let [bounces, last] = [0, c.v[1]];
+      for (let t = 0; t < 2.5; t += DT) {
+        fx.update(undefined, 0, DT);
+        bounces += +(last < 0 && c.v[1] > 0);
+        last = c.v[1];
+        expect(c.p[1]).toBeGreaterThanOrEqual(floor + c.size - 1e-9);
+      }
+      expect(bounces).toBeGreaterThanOrEqual(1);
+      expect(bounces).toBeLessThanOrEqual(2);
+      expect(c.rest).toBe(true);
+      expect(c.p[1]).toBeCloseTo(floor + c.size);
+      expect([...c.v, c.tilt]).toEqual([0, 0, 0, 0]);
+      const at = [...c.p];
+      step(fx, 1);
+      expect(c.p).toEqual(at);
+    }
+  });
+
+  it('tumbles while it flies', () => {
+    const fx = createEffects(() => 0.5, lvl);
+    fire(fx, room, [0, -1]);
+    const c = live(fx)[0];
+    const tilt = c.tilt;
+    step(fx, 0.1);
+    expect(Math.abs(c.tilt - tilt)).toBeGreaterThan(1);
+  });
+
+  it('stays in the room: a wall stops it', () => {
+    const fx = createEffects(() => 0.5, lvl);
+    // 0.2 m from the west wall, ejecting west.
+    fire(fx, [0.3, 2.6, 8], [0, 1]);
+    step(fx, 2);
+    expect(live(fx)[0].p[0]).toBeGreaterThan(0);
+  });
+
+  it('shrinks away after 3 to 4 s of life, and its slot is free again', () => {
+    const fx = createEffects(() => 0.5, lvl);
+    fire(fx, room, [0, -1]);
+    step(fx, 2.9);
+    expect(live(fx)).toHaveLength(1);
+    expect(live(fx)[0].rest).toBe(true);
+    step(fx, 1.2);
+    expect(live(fx)).toHaveLength(0);
+    // Back in the pool for the next shot.
+    fire(fx, room, [0, -1]);
+    expect(live(fx)).toHaveLength(1);
+  });
+
+  it('keeps a pool of 32 that is never reallocated, and the own gun recycles the oldest', () => {
+    const fx = createEffects(Math.random, lvl);
+    const pool = fx.casings;
+    expect(pool).toHaveLength(32);
+    const first = pool[0];
+    for (let i = 0; i < 100; i++) {
+      fire(fx, room, [0, -1]);
+      step(fx, 0.02);
+    }
+    expect(fx.casings).toBe(pool);
+    expect(pool).toHaveLength(32);
+    expect(pool[0]).toBe(first);
+    expect(live(fx)).toHaveLength(32);
+    // The newest is the one just ejected.
+    expect(Math.max(...live(fx).map(c => c.life))).toBeGreaterThan(2.9);
+  });
+
+  it('draws smaller ones for the others, and at most 8 of them at once', () => {
+    const fx = createEffects(() => 0.5, lvl);
+    fire(fx, room, [0, -1]);
+    for (let i = 0; i < 30; i++) {
+      fire(fx, room, [0, -1], false);
+    }
+    const [own, ...others] = live(fx);
+    expect(own.own).toBe(true);
+    expect(others).toHaveLength(8);
+    expect(others.every(c => !c.own && c.size < own.size)).toBe(true);
+    // Remote ones never take the own gun's slots, and the own gun still ejects over them.
+    for (let i = 0; i < 40; i++) {
+      fire(fx, room, [0, -1]);
+    }
+    expect(live(fx).filter(c => !c.own).length).toBeLessThanOrEqual(8);
+    expect(live(fx).filter(c => c.own).length).toBeGreaterThan(8);
+  });
+
+  it('ejects when the shot hit something point blank', () => {
+    const fx = createEffects(() => 0.5, lvl);
+    fx.shot({ id: 1, x: 8, y: 2.6, z: 8, hit: -1 }, room, true);
+    expect(live(fx)).toHaveLength(1);
+    expect(live(fx)[0].p.every(Number.isFinite)).toBe(true);
+  });
+
+  it('works without a level: it falls to the shooter feet', () => {
+    const fx = createEffects(() => 0.5);
+    fire(fx, [0, 1.6, 0], [0, -1]);
+    step(fx, 2);
+    expect(live(fx)[0].p[1]).toBeCloseTo(live(fx)[0].size);
+  });
+
+  it('lands on the new level after a reset', () => {
+    const fx = createEffects(() => 0.5);
+    fire(fx, room, [0, -1]);
+    fx.reset(lvl);
+    expect(live(fx)).toHaveLength(0);
+    fire(fx, room, [0, -1]);
+    step(fx, 1.5);
+    expect(live(fx)[0].p[1]).toBeCloseTo(1 + live(fx)[0].size);
   });
 });
 

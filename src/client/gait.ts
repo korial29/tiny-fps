@@ -1,0 +1,599 @@
+// The runners' natural gait on the rig (rig.ts). Walk, run and sprint are a few numbers per gait,
+// blended by speed. A foot on the ground stays where it landed (two-bone IK), the pelvis sits where
+// the stance legs put it, and a swing foot flies from where it left to where the stride will land
+// it. The other moves are static poses (MOVES) eased in by critically damped springs, so a switch
+// never pops. Everything is in the runner's frame: x right, y up, -z ahead. No DOM.
+import { DASH_COOLDOWN, DASH_TICKS } from '../shared/constants';
+import { MODE } from '../shared/types';
+import type { PlayerState } from '../shared/types';
+import type { Vec3 } from './mesh';
+import { JOINT as J, REST, axis, mul, rest, slerp, turn } from './rig';
+import type { Pose, Quat } from './rig';
+import { damp } from './spring';
+
+/** The height of the ground at (x, z), for feet that stand on stairs and slopes. */
+export type Floor = (x: number, z: number) => number;
+
+export interface Gait {
+  /** Moves to the state `p` after dt seconds. Without `floor` the feet stand on y = p.y. */
+  update(p: PlayerState, dt: number, floor?: Floor): void;
+  /** The pose now: one object, rewritten by each call. */
+  pose(): Pose;
+  /** Stride phase, in cycles: the left foot lands at 0 and the right one at a half. */
+  readonly phase: number;
+  /** Footsteps so far. */
+  readonly steps: number;
+}
+
+const TAU = Math.PI * 2;
+const [X, Y, Z]: Vec3[] = [
+  [1, 0, 0],
+  [0, 1, 0],
+  [0, 0, 1],
+];
+/** Thigh and shin, and the ankle above the floor when the foot is flat. */
+const [THIGH, SHIN, SOLE] = [0.44, 0.43, 0.06];
+const LEG = THIGH + SHIN;
+const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
+const ease = (v: number) => (v = clamp(v)) * v * (3 - 2 * v);
+const arc = (a: number, b: number) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+const inv = (q: Quat): Quat => [-q[0], -q[1], -q[2], q[3]];
+/** Per player and per number, in [0, 1). */
+const rnd = (id: number, n: number) => {
+  const x = Math.sin(id * 78.233 + n * 37.719) * 43758.5453;
+  return x - Math.floor(x);
+};
+const cross = (a: Vec3, b: Vec3): Vec3 => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+const unit = (a: Vec3): Vec3 => {
+  const n = Math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) || 1;
+  return [a[0] / n, a[1] / n, a[2] / n];
+};
+/** Smooth minimum: the lower of two, rounded over a band of k. */
+const low = (a: number, b: number, k: number) => {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.min(a, b) - (h * h * k) / 4;
+};
+
+/** The rotation whose x axis is `x` and whose y axis points up the bone, opposite to `d`. */
+const frame = (x: Vec3, d: Vec3): Quat => {
+  const y: Vec3 = [-d[0], -d[1], -d[2]];
+  const z = cross(x, y);
+  const [a, b, c] = [x[0], y[1], z[2]];
+  const sign = (v: number, k: number) => (k < 0 ? -v : v);
+  return [
+    sign(Math.sqrt(Math.max(0, 1 + a - b - c)) / 2, y[2] - z[1]),
+    sign(Math.sqrt(Math.max(0, 1 - a + b - c)) / 2, z[0] - x[2]),
+    sign(Math.sqrt(Math.max(0, 1 - a - b + c)) / 2, x[1] - y[0]),
+    Math.sqrt(Math.max(0, 1 + a + b + c)) / 2,
+  ];
+};
+
+/**
+ * The world rotations of a thigh and a shin that put the ankle at `t` from the hip at `h`, the knee
+ * toward `f`. The knee bends about the one axis, so it never turns backward; a target out of reach
+ * leaves the leg straight.
+ */
+const leg = (h: Vec3, t: Vec3, f: Vec3): [Quat, Quat] => {
+  const v: Vec3 = [t[0] - h[0], t[1] - h[1], t[2] - h[2]];
+  const len = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) || 1e-6;
+  const d = clamp(len, 0.2, LEG * 0.999);
+  const u: Vec3 = [v[0] / len, v[1] / len, v[2] / len];
+  const fu = f[0] * u[0] + f[1] * u[1] + f[2] * u[2];
+  const w = unit([f[0] - fu * u[0], f[1] - fu * u[1], f[2] - fu * u[2]]);
+  const c = clamp((THIGH * THIGH + d * d - SHIN * SHIN) / (2 * THIGH * d), -1, 1);
+  const s = Math.sqrt(1 - c * c);
+  const a: Vec3 = [u[0] * c + w[0] * s, u[1] * c + w[1] * s, u[2] * c + w[2] * s];
+  const b = unit([u[0] * d - a[0] * THIGH, u[1] * d - a[1] * THIGH, u[2] * d - a[2] * THIGH]);
+  const x = cross(u, w);
+  return [frame(x, a), frame(x, b)];
+};
+
+/**
+ * How far the ankle moves forward and up from where it stands with the foot flat, when the foot
+ * is pitched `t` (toes up positive): it turns about the heel, or about the ball once the toes
+ * point down. The heel is 7 cm behind the ankle and the ball 13 cm ahead, the sole 6 cm below.
+ */
+const roll = (t: number): [number, number] => {
+  const [a, d] = [Math.abs(t), t > 0 ? 0.07 : 0.13];
+  const [s, c] = [Math.sin(a), Math.cos(a)];
+  return [(t > 0 ? -1 : 1) * (d * (1 - c) + SOLE * s), SOLE * (c - 1) + d * s];
+};
+
+/**
+ * The gaits, as numbers at three speeds: a walk at 1.4 m/s, a run at 5 and a sprint at 9, linear
+ * between, held beyond. Angles in radians, lengths in metres. Real running: cadence and stride
+ * both grow with speed, the foot lands nearer the body and leaves higher, the knees bend deeper in
+ * stance and swing, the elbows fold to a right angle and beyond.
+ */
+const SPEEDS = [1.4, 5, 9];
+const GAITS = {
+  /** Stride frequency, cycles per second (two steps). */
+  f: [0.95, 1.4, 1.8],
+  /** Stance travel: how far the body goes while one foot is down. It sets the contact time. */
+  s: [0.88, 0.95, 1],
+  /** The part of it that the foot lands ahead of the hip. */
+  k: [0.45, 0.42, 0.4],
+  /** Foot sideways from the midline. */
+  lat: [0.11, 0.09, 0.07],
+  /** Swing foot clearance: the ankle's peak above its resting height. */
+  lift: [0.09, 0.3, 0.4],
+  /** Leg shortening (a fraction of the leg) at touchdown, and the extra loading at mid-stance. */
+  d0: [0.002, 0.01, 0.01],
+  d1: [0.008, 0.075, 0.05],
+  /** Ankle at touchdown (toes up positive) and at toe-off. */
+  td: [0.12, 0.1, -0.12],
+  to: [-0.45, -0.6, -0.8],
+  /** Pelvis turn, obliquity (the swing side drops), mean tilt and the twice-a-stride tilt. */
+  pr: [0.07, 0.1, 0.14],
+  po: [0.06, 0.06, 0.05],
+  pt: [0.04, 0.1, 0.16],
+  pa: [0.02, 0.05, 0.06],
+  /** Shoulder line turn against the pelvis. */
+  cc: [0.1, 0.16, 0.22],
+  /** Arm swing, mean shoulder flexion, mean and swing of the elbow, arm abduction. */
+  aa: [0.35, 0.8, 1],
+  am: [-0.05, 0.12, 0.25],
+  em: [0.3, 1.4, 1.75],
+  ea: [0.12, 0.25, 0.3],
+  ab: [0.1, 0.12, 0.1],
+  /** Hips sway toward the stance foot, and the flight bump of the pelvis. */
+  sw: [0.025, 0.012, 0.008],
+  hop: [0, 0.02, 0.025],
+};
+type Key = keyof typeof GAITS;
+
+/** The moves other than the stride, in layering order: a later one covers an earlier one. */
+export const MOVE = {
+  AIR: 0,
+  RISE: 1,
+  DASH: 2,
+  WALL_L: 3,
+  WALL_R: 4,
+  HANG: 5,
+  CLIMB: 6,
+  SLIDE: 7,
+  STUN: 8,
+  TUCK: 9,
+} as const;
+
+/**
+ * A move's pose, in radians (the drop in metres): drop of the pelvis, lean forward, lean to the
+ * left, hip and knee flexion of the left then the right leg, shoulder and elbow flexion of the left
+ * then the right arm, both arms out sideways. Stand-ins for step C3: swap an entry for the real
+ * pose of the move.
+ */
+export const MOVES: number[][] = [
+  [-0.1, 0.15, 0, 0.55, 1, -0.15, 0.5, 1.3, 0.5, 1.3, 0.5, 0.6],
+  [-0.05, 0.1, 0, 0.95, 1.3, -0.1, 0.35, 2.5, 0.3, 2.5, 0.3, 0.3],
+  [-0.3, 1, 0, 1, 1.2, -0.55, 0.25, -0.9, 0.3, -0.9, 0.3, 0.25],
+  [],
+  [-0.1, 0.25, 0.3, -0.3, 0.5, 0.9, 1, 1, 0.3, 0.6, 1, 0.5],
+  [0, 0, 0, 0.15, 0.2, 0.1, 0.15, 3, 0.15, 3, 0.15, 0.15],
+  [-0.05, 0.4, 0, 1.3, 1.6, 0.1, 0.2, 2.5, 1.3, 2.5, 1.3, 0.15],
+  [-0.6, -1.1, 0, 1.35, 0.15, 1.2, 0.35, 0.5, 0.8, 0.5, 0.8, 0.5],
+  [-0.15, -0.5, 0, 0.3, 0.4, -0.3, 0.5, 1.2, 0.3, 1.2, 0.3, 1],
+  [-0.05, 0.9, 0, 1.7, 2, 1.7, 2, 0.8, 1.6, 0.8, 1.6, 0.2],
+];
+// A wall on the left is the wall on the right seen in a mirror.
+const m = MOVES[MOVE.WALL_R];
+MOVES[MOVE.WALL_L] = [m[0], m[1], -m[2], m[5], m[6], m[3], m[4], m[9], m[10], m[7], m[8], m[11]];
+
+/** What a move poses: the pelvis, the spine, the arms and the legs, and nothing of the head. */
+const FK = [
+  J.PELVIS,
+  J.SPINE,
+  J.CHEST,
+  J.ARM_L,
+  J.FOREARM_L,
+  J.ARM_R,
+  J.FOREARM_R,
+  J.THIGH_L,
+  J.SHIN_L,
+  J.FOOT_L,
+  J.TOE_L,
+  J.THIGH_R,
+  J.SHIN_R,
+  J.FOOT_R,
+  J.TOE_R,
+];
+const fk = (c: number[]): Quat[] => {
+  const q: Quat[] = [];
+  const [lean, roll_, abd] = [c[1], c[2], c[11]];
+  q[J.PELVIS] = mul(axis(Z, roll_ * 0.4), axis(X, -0.3 * lean));
+  q[J.SPINE] = mul(axis(Z, roll_ * 0.3), axis(X, -0.35 * lean));
+  q[J.CHEST] = q[J.SPINE];
+  q[J.ARM_L] = mul(axis(Z, -abd), axis(X, c[7]));
+  q[J.FOREARM_L] = axis(X, c[8]);
+  q[J.ARM_R] = mul(axis(Z, abd), axis(X, c[9]));
+  q[J.FOREARM_R] = axis(X, c[10]);
+  [J.THIGH_L, J.THIGH_R].forEach((j, i) => {
+    q[j] = axis(X, c[3 + 2 * i] + 0.3 * lean);
+    q[j + 1] = axis(X, -c[4 + 2 * i]);
+    q[j + 2] = axis(X, -0.35);
+    q[j + 3] = IDENT;
+  });
+  return q;
+};
+const IDENT: Quat = [0, 0, 0, 1];
+
+/** The unit vector toward a wall on each SIDE of PlayerState.wall, on the floor plane. */
+const TOWARD = [
+  [0, 0],
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+/** Spring slots, a value and its speed each: lean, bank, yaw offset, landing dip, crouch, the velocity the stride sees, the pelvis height, then one per move. */
+const [LEAN, BANK, YAW, DIP, LOW, VX, VZ, HY, W] = [0, 2, 4, 6, 8, 10, 12, 14, 16];
+/** Metres a respawn moves a player in a frame, at the least. */
+const TELEPORT = 5;
+/** Half of a hip joint's distance from the middle: the feet stand this far apart when idle. */
+const HIP = 0.1;
+
+interface Foot {
+  /** The ankle now. */
+  x: number;
+  y: number;
+  z: number;
+  /** Planted: where the flat foot stands, and the ground height there. */
+  px: number;
+  pz: number;
+  gy: number;
+  /** Swing: where the ankle left, the stride phase it left at, and the ground height it lands on. */
+  lx: number;
+  ly: number;
+  lz: number;
+  dl: number;
+  tg: number;
+  /** Stride phase last frame, how far along the stance (0 to 1), and the weight it has on the pelvis. */
+  u: number;
+  x0: number;
+  w: number;
+  /** Pitch of the foot, toes up positive, and how much of the toes' bend against it holds. */
+  th: number;
+  tw: number;
+  on: boolean;
+}
+
+export const createGait = (): Gait => {
+  const out = rest();
+  const P = {} as Record<Key, number>;
+  const sp = new Array<number>(W + 2 * MOVES.length).fill(0);
+  const goal = new Array<number>(MOVES.length).fill(0);
+  const feet: Foot[] = [0, 1].map(() => ({
+    x: 0,
+    y: 0,
+    z: 0,
+    px: 0,
+    pz: 0,
+    gy: 0,
+    lx: 0,
+    ly: 0,
+    lz: 0,
+    dl: 0,
+    tg: 0,
+    u: 0,
+    x0: 0,
+    w: 0,
+    th: 0,
+    tw: 1,
+    on: true,
+  }));
+  /** The state of the last frame, once there is one. */
+  const q = {} as PlayerState;
+  let known = false;
+  let [ph, steps, time, v, yaw, wall, heading] = [0, 0, 0, 0, 0, 0, 0];
+  let [kick, fall, flip, duty, gate] = [0, 0, 0, 0.6, 0];
+  let [grounded, fresh, dirty, built] = [false, true, true, -1];
+  /** Per player: cadence, arm swing of each side, mean tilt, toe-out. */
+  let who = [1, 1, 1, 0, 0.06];
+  let [look, pitch, at] = [0, 0, [0, 0, 0]];
+
+  const update = (p: PlayerState, dt: number, floor?: Floor) => {
+    dt = clamp(dt, 0, 0.1);
+    fresh = !known || Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) > TELEPORT;
+    const walks = p.mode == MODE.GROUND || p.mode == MODE.CROUCH;
+    // The stride sees the velocity a moment late, so that a stop or a turn moves the feet smoothly.
+    const set = (i: number, to: number, w: number) => {
+      if (fresh) {
+        [sp[i], sp[i + 1]] = [to, 0];
+      } else {
+        damp(sp, i, to, w, dt);
+      }
+    };
+    set(VX, p.vx, 12);
+    set(VZ, p.vz, 12);
+    const [vx, vz] = [sp[VX], sp[VZ]];
+    v = Math.sqrt(vx * vx + vz * vz);
+    const way = v > 1 ? Math.atan2(-vx, -vz) : p.yaw;
+    if (fresh) {
+      const id = p.id;
+      who = [
+        1 + 0.08 * (rnd(id, 0) - 0.5),
+        1 + 0.16 * (rnd(id, 1) - 0.5),
+        1 + 0.16 * (rnd(id, 2) - 0.5),
+        0.03 * (rnd(id, 3) - 0.5),
+        0.05 + 0.04 * rnd(id, 4),
+      ];
+      ph = v > 0.25 ? rnd(id, 5) : rnd(id, 5) < 0.5 ? 0.05 : 0.55;
+      [steps, time, flip, kick, fall, grounded, built] = [0, 0, 0, 0, 0, false, -1];
+      heading = way;
+      wall = p.yaw;
+    } else {
+      const air = p.mode == MODE.AIR;
+      if (air && q.mode == MODE.AIR && p.jumps < q.jumps && p.vy > q.vy) {
+        flip = 1e-3;
+      }
+      if (air) {
+        fall = Math.min(fall, p.vy);
+      } else {
+        if (q.mode == MODE.AIR && (walks || p.mode == MODE.SLIDE) && fall < -3) {
+          kick = clamp(-fall / 12, 0.3);
+        }
+        fall = 0;
+      }
+      if (flip) {
+        flip += dt * (air ? 2.2 : 8);
+        flip = flip >= 1 ? 0 : flip;
+      }
+    }
+    time += dt;
+    kick *= Math.exp(-dt * 7);
+
+    // The moves other than the stride.
+    const side = TOWARD[p.wall];
+    const wr = p.mode == MODE.WALLRUN;
+    const right = side[0] * Math.cos(way) - side[1] * Math.sin(way);
+    const hold = p.mode == MODE.HANG || p.mode == MODE.CLIMB;
+    if (hold && p.wall) {
+      wall = Math.atan2(-side[0], -side[1]);
+    }
+    goal[MOVE.AIR] = +(p.mode == MODE.AIR);
+    goal[MOVE.RISE] = +(p.mode == MODE.AIR && p.vy > 0.5);
+    goal[MOVE.DASH] = +(p.dash > DASH_COOLDOWN - DASH_TICKS);
+    goal[MOVE.WALL_L] = +(wr && right < 0);
+    goal[MOVE.WALL_R] = +(wr && right >= 0);
+    goal[MOVE.HANG] = +(p.mode == MODE.HANG);
+    goal[MOVE.CLIMB] = +(p.mode == MODE.CLIMB);
+    goal[MOVE.SLIDE] = +(p.mode == MODE.SLIDE);
+    goal[MOVE.STUN] = +(p.stun > 0);
+    goal[MOVE.TUCK] = flip ? Math.sqrt(Math.sin(Math.PI * flip)) : 0;
+    goal.forEach((g, i) => set(W + 2 * i, g, 12));
+    set(LOW, +(p.mode == MODE.CROUCH), 12);
+    set(DIP, kick, 26);
+
+    // Lean with speed and acceleration, bank with the turn of the heading.
+    const turnRate = fresh || v < 2 ? 0 : arc(heading, way) / Math.max(dt, 1e-3);
+    heading = way;
+    const accel = fresh
+      ? 0
+      : -((p.vx - q.vx) * Math.sin(yaw) + (p.vz - q.vz) * Math.cos(yaw)) / Math.max(dt, 1e-3);
+    const ahead = -(vx * Math.sin(yaw) + vz * Math.cos(yaw));
+    const run = Math.sign(ahead) * clamp((Math.abs(ahead) - 1.5) * 0.028, 0, 0.22);
+    set(LEAN, (ahead > 0 ? run : run / 2) + clamp(accel * 0.012, -0.3, 0.3), 7);
+    set(BANK, clamp(0.3 * Math.atan((v * turnRate) / 9.8), -0.4, 0.4), 8);
+    set(YAW, 0.5 * Math.sin(arc(p.yaw, way)) * clamp(v / 2), 10);
+    const sw = (k: number) => sp[W + 2 * k];
+    const turned = clamp(sw(MOVE.DASH) + sw(MOVE.WALL_L) + sw(MOVE.WALL_R) + sw(MOVE.SLIDE));
+    const face = p.yaw + arc(p.yaw, way) * turned;
+    yaw = face + arc(face, wall) * clamp(sw(MOVE.HANG) + sw(MOVE.CLIMB));
+    yaw += sp[YAW] * (1 - turned);
+    [look, pitch, at] = [p.yaw, p.pitch, [p.x, p.y, p.z]];
+
+    // The stride's numbers at this speed.
+    const i = v < SPEEDS[1] ? 0 : 1;
+    const t = clamp((v - SPEEDS[i]) / (SPEEDS[i + 1] - SPEEDS[i]));
+    for (const k in GAITS) {
+      const r = GAITS[k as Key];
+      P[k as Key] = r[i] + (r[i + 1] - r[i]) * t;
+    }
+    gate = ease((v - 0.2) / 1.2);
+    const cadence = P.f * who[0] * (0.35 + 0.65 * clamp(v / 1.4));
+    duty = clamp((P.s * cadence) / Math.max(v, 0.1), 0.2, 0.62);
+    const [rx, rz] = [Math.cos(yaw), -Math.sin(yaw)];
+    const ground = (x: number, z: number) => {
+      const g = floor ? floor(x, z) : p.y;
+      return Math.abs(g - p.y) < 0.6 ? g : p.y;
+    };
+    const idle = v <= 0.25;
+    const advance = walks && (!idle || !feet[0].on || !feet[1].on);
+    if (advance) {
+      ph = (ph + (idle ? 0.9 : cadence) * dt) % 1;
+    }
+    feet.forEach((f, n) => {
+      const s = n ? 1 : -1;
+      const u = (ph + n / 2) % 1;
+      const [hx, hz] = [p.x + rx * s * HIP, p.z + rz * s * HIP];
+      const fy = yaw - s * who[4];
+      const [fx, fz] = [-Math.sin(fy), -Math.cos(fy)];
+      if (!walks) {
+        // Off the ground the foot rides with the body and eases to hanging under the hip.
+        const k = fresh ? 0 : Math.exp(-10 * dt);
+        const o = fresh ? [0, 0, 0] : [f.x - q.x, f.y - q.y, f.z - q.z];
+        f.x = p.x + o[0] * k + (hx - p.x) * (1 - k);
+        f.y = p.y + o[1] * k + SOLE * (1 - k);
+        f.z = p.z + o[2] * k + (hz - p.z) * (1 - k);
+        [f.th, f.tw, f.w, f.on, f.u] = [f.th * k, f.tw * k, 0, false, u];
+        return;
+      }
+      if (!grounded) {
+        [f.px, f.pz, f.gy, f.on] = [hx, hz, ground(hx, hz), true];
+        if (fresh) {
+          [f.x, f.y, f.z, f.th, f.tw] = [hx, f.gy + SOLE, hz, 0, 1];
+        }
+      }
+      if (f.on && advance && (u >= duty || Math.hypot(f.x - hx, f.z - hz) > 0.56)) {
+        [f.on, f.lx, f.ly, f.lz, f.dl] = [false, f.x - p.x, f.y, f.z - p.z, u];
+      } else if (!f.on && u < f.u) {
+        const [df] = roll(P.td * gate);
+        [f.on, f.px, f.pz, f.gy] = [true, f.x - fx * df, f.z - fz * df, f.tg];
+        steps++;
+      }
+      f.u = u;
+      if (f.on) {
+        if (idle && feet[0].on && feet[1].on) {
+          const k = 1 - Math.exp(-8 * dt);
+          f.px += (hx - f.px) * k;
+          f.pz += (hz - f.pz) * k;
+          f.gy += (ground(hx, hz) - f.gy) * k;
+        }
+        f.x0 = clamp(u / duty);
+        f.th = gate * (P.td * (1 - ease(f.x0 / 0.25)) + P.to * ease((f.x0 - 0.55) / 0.45));
+        const [df, dy] = roll(f.th);
+        [f.x, f.y, f.z] = [f.px + fx * df, f.gy + SOLE + dy, f.pz + fz * df];
+        f.w = 1 - gate * (1 - ease(Math.min(f.x0, 1 - f.x0) / 0.12));
+        f.tw = ease(f.x0 * 10);
+      } else {
+        // Fly from where the foot left to where it will land, both measured from the pelvis: the
+        // foot rides with the body and swings forward once the heel is up.
+        const sw = clamp((u - f.dl) / (1 - f.dl + 1e-6));
+        const [ax, az] = [(P.k * duty) / cadence, (1 - u) / cadence + (P.k * duty) / cadence];
+        const [tx, tz] = [vx * ax + rx * s * P.lat, vz * ax + rz * s * P.lat];
+        f.tg = ground(p.x + vx * az + rx * s * P.lat, p.z + vz * az + rz * s * P.lat);
+        const [td, to] = [P.td * gate, P.to * gate];
+        const e = ease((sw - 0.12) / 0.78);
+        f.x = p.x + f.lx + (tx - f.lx) * e;
+        f.z = p.z + f.lz + (tz - f.lz) * e;
+        f.y =
+          f.ly +
+          (f.tg + SOLE + roll(td)[1] - f.ly) * ease(sw * 1.5) +
+          P.lift * Math.sin(Math.PI * Math.pow(sw, 0.6));
+        f.th = to + (td - to) * ease(sw) + 0.15 * Math.sin(Math.PI * sw);
+        f.tw = 1 - ease(sw * 4);
+        f.w = 0;
+      }
+    });
+    grounded = walks;
+    dirty = true;
+    Object.assign(q, p);
+    known = true;
+  };
+
+  const build = () => {
+    const { rot } = out;
+    const g = gate;
+    const sw = (k: number) => sp[W + 2 * k];
+    const [lean, bank, yo, dip, crouch] = [sp[LEAN], sp[BANK], sp[YAW], sp[DIP], sp[LOW]];
+    const [c1, c2] = [Math.cos(TAU * ph), Math.cos(2 * TAU * ph)];
+    // Positive turns about z lean to the left; negative about x lean forward.
+    const side = Math.cos(TAU * (ph - (1 + duty) / 2));
+    const obl = P.po * g * side;
+    const tilt = P.pt + who[3] + P.pa * g * c2;
+    const turn_ = (P.cc + P.pr) * g * c1;
+    const idle = 1 - g;
+    const breath = idle * 0.012 * Math.sin(TAU * 0.28 * time);
+    const shift = idle * 0.012 * Math.sin(TAU * 0.17 * time + who[1] * 9);
+    const hipX = P.sw * g * side + shift;
+    out.at[0] = at[0];
+    out.at[1] = at[1];
+    out.at[2] = at[2];
+    out.yaw = yaw;
+
+    rot[J.PELVIS] = mul(
+      mul(axis(Y, -P.pr * g * c1), axis(Z, obl + 0.4 * bank)),
+      axis(X, -(tilt + 0.25 * lean + 0.3 * crouch)),
+    );
+    const body = tilt + 0.25 * lean - lean - 0.7 * crouch;
+    rot[J.SPINE] = mul(
+      mul(axis(Y, 0.4 * turn_ - 0.25 * yo), axis(Z, 0.25 * bank - 0.8 * obl + 0.5 * shift)),
+      axis(X, 0.45 * body + breath * 0.5),
+    );
+    rot[J.CHEST] = mul(
+      mul(axis(Y, 0.6 * turn_ - 0.25 * yo), axis(Z, 0.25 * bank - 0.8 * obl - 0.5 * shift)),
+      axis(X, 0.55 * body + breath),
+    );
+    [-1, 1].forEach(s => {
+      const k = Math.cos(TAU * (ph - (s < 0 ? 0.5 : 0)));
+      const a = who[s < 0 ? 1 : 2];
+      rot[s < 0 ? J.ARM_L : J.ARM_R] = mul(
+        axis(Z, s * (0.06 + P.ab * g)),
+        axis(X, (P.am + P.aa * a * k) * g + 0.05 * idle * s * Math.sin(time * 1.3)),
+      );
+      rot[s < 0 ? J.FOREARM_L : J.FOREARM_R] = axis(X, 0.15 * idle + g * (P.em + P.ea * k));
+    });
+
+    // Pelvis: as high as the stance legs allow, then the legs by IK.
+    const R = axis(Y, yaw);
+    const pw = mul(R, rot[J.PELVIS]);
+    const [rx, rz] = [Math.cos(yaw), -Math.sin(yaw)];
+    const base: Vec3 = [at[0] + rx * hipX, 0, at[2] + rz * hipX];
+    const off = [J.THIGH_L, J.THIGH_R].map(j => turn(pw, REST[j]));
+    const stand = 1 - 0.25 * crouch - 0.25 * dip;
+    const flight =
+      at[1] +
+      0.05 +
+      SOLE +
+      LEG * (stand - P.d0 - 0.6 * P.d1 * g) +
+      P.hop * g * (0.5 - 0.5 * Math.cos(2 * TAU * ph - (2 * TAU * duty) / 2));
+    const cand = feet.map((f, n) => {
+      const [dx, dz] = [f.x - base[0] - off[n][0], f.z - base[2] - off[n][2]];
+      const deficit = P.d0 + P.d1 * g * Math.sin(Math.PI * f.x0) + 1 - stand;
+      const reach = Math.min(LEG * (1 - deficit), LEG * 0.99);
+      const hip = f.y + Math.sqrt(Math.max(reach * reach - dx * dx - dz * dz, 0.04));
+      return flight + (hip - off[n][1] - flight) * f.w;
+    });
+    // A pelvis that must drop does at once; one that rises is held back a moment, so that a foot
+    // set free does not throw it up.
+    const top = low(cand[0], cand[1], 0.05);
+    const gap = time - built;
+    built = time;
+    if (gap > 0.1) {
+      [sp[HY], sp[HY + 1]] = [top, 0];
+    } else {
+      damp(sp, HY, top, 30, gap);
+    }
+    base[1] = Math.min(top, sp[HY]);
+    out.hips = [hipX, base[1] - at[1] - REST[0][1], 0];
+    feet.forEach((f, n) => {
+      const s = n ? 1 : -1;
+      const hip: Vec3 = [base[0] + off[n][0], base[1] + off[n][1], base[2] + off[n][2]];
+      const fy = yaw - s * who[4];
+      const [a, b] = leg(hip, [f.x, f.y, f.z], [-Math.sin(fy), 0, -Math.cos(fy)]);
+      const j = n ? J.THIGH_R : J.THIGH_L;
+      rot[j] = mul(inv(pw), a);
+      rot[j + 1] = mul(inv(a), b);
+      rot[j + 2] = mul(inv(b), mul(axis(Y, fy), axis(X, f.th)));
+      rot[j + 3] = axis(X, f.th < 0 ? -f.th * f.tw : 0);
+    });
+
+    // The other moves, laid over the stride.
+    MOVES.forEach((c, k) => {
+      const w = sw(k);
+      if (w > 0.002) {
+        const to = fk(c);
+        FK.forEach(j => (rot[j] = slerp(rot[j], to[j], w)));
+        out.hips[1] += (c[0] - out.hips[1]) * w;
+        out.hips[0] -= out.hips[0] * w;
+      }
+    });
+    if (flip) {
+      rot[J.PELVIS] = mul(axis(X, -TAU * (3 - 2 * flip) * flip * flip), rot[J.PELVIS]);
+    }
+
+    // The head holds the way the player looks, whatever the trunk does.
+    const chest = mul(mul(R, rot[J.PELVIS]), mul(rot[J.SPINE], rot[J.CHEST]));
+    const aim = mul(axis(Y, look), axis(X, clamp(pitch, -1, 1) * 0.9));
+    const rel = mul(inv(chest), slerp(chest, aim, 0.85 * (1 - sw(MOVE.TUCK))));
+    rot[J.NECK] = slerp([0, 0, 0, 1], rel, 0.4);
+    rot[J.HEAD] = mul(inv(rot[J.NECK]), rel);
+    dirty = false;
+    return out;
+  };
+
+  return {
+    update,
+    pose: () => (dirty ? build() : out),
+    get phase() {
+      return ph;
+    },
+    get steps() {
+      return steps;
+    },
+  };
+};

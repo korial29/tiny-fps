@@ -1,368 +1,347 @@
-// The own player's body in first person, Mirror's Edge style: two arms in the view, two legs below
-// it. A small animation state eased each frame from the own PlayerState and its events picks the
-// pose; the joints come from two-bone IK; the pieces are smooth solids placed per frame (figure.ts).
-// Drawn by the renderer over a cleared depth, like a view model. No DOM, pure but for the state it
-// keeps.
-import { DASH_COOLDOWN, DASH_TICKS, GRAB_GAP, PLAYER_R, SPRINT_SPEED } from '../shared/constants';
-import { eyeHeight, speedOf, sprinting } from '../shared/physics';
-import { EV, MODE } from '../shared/types';
+// The own player's body in first person, Mirror's Edge style: the runners' skin (skin.ts) on the rig
+// (rig.ts), posed by its own gait (gait.ts) from the predicted state and seen from its head, which
+// is left out. The gait gives the stride, the trunk and the feet it plants. Here the body is moved
+// so that its head sits at the camera, leaned with the look, the legs are solved again onto the
+// planted feet and the hands are put on goals placed in the view: the frame edges on a run, the
+// ledge on a hang, the wall on a wall-run. Drawn by the renderer over a cleared depth, like a view
+// model. No DOM, pure but for the state it keeps.
+import { DASH_COOLDOWN, DASH_TICKS, GRAB_GAP, PLAYER_R, STEP_H } from '../shared/constants';
+import { TAU, eyeHeight, speedOf, sprinting } from '../shared/physics';
+import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { RADII, TOWARD, hand, ik, shoe, torso } from './figure';
-import { add, basis, dot, mix, segment, solid, sub, unit } from './mesh';
+import { ray } from '../shared/world';
+import type { World } from '../shared/world';
+import { createGait } from './gait';
+import type { Floor } from './gait';
+import { add, basis, dot, mix, place, segment, solid, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
+import { JOINT as J, PARENT, axis, mul, solve, turn as spin } from './rig';
+import type { Pose, Quat } from './rig';
+import { body, palette, skin } from './skin';
 
-/** What the predictor reports of the live steps since the last frame. */
-export interface Events {
-  ev: number;
-  fall: number;
-}
-
-/**
- * A limb in world space: its root, its joint, its end, and where the hand or foot points. A hand
- * also has `curl`, 0 open to 1 a fist, and `roll`, 1 with the palm toward the body, 0 down, -1 out.
- */
-export interface Limb {
-  root: Vec3;
-  mid: Vec3;
-  end: Vec3;
-  dir: Vec3;
-  curl: number;
-  roll: number;
-}
-
-/** The joints of the body: index 0 is the left side, 1 the right. */
-export interface Rig {
-  arms: Limb[];
-  legs: Limb[];
-  /** Pelvis and the top of the chest. */
-  torso: [Vec3, Vec3];
-  /** 0 to 1: how much the hands hold a ledge; the sleeves slim down, being this close to the eye. */
-  grip: number;
-  /** 0 to 1: how low the body is (a crouch or a slide). */
-  low: number;
-}
+export type Solved = ReturnType<typeof solve>;
 
 export interface Body {
-  /** Advances dt seconds: the own player (eased, undefined before the first snapshot) and the events of its steps. */
-  update(me: PlayerState | undefined, e: Events, dt: number): void;
+  /** The own player's id, -1 before the first snapshot. */
+  readonly id: number;
+  /** Advances dt seconds: the own player, eased (undefined before the first snapshot). */
+  update(me: PlayerState | undefined, dt: number): void;
   /** The joints for a camera at `eye`; undefined without a player, or with the camera away from the body. */
-  rig(eye: Vec3, yaw: number, pitch: number, roll?: number): Rig | undefined;
-  /** Appends the body's vertices (see STRIDE) for that camera; nothing when rig() has none. */
-  draw(out: number[], eye: Vec3, yaw: number, pitch: number, roll?: number): void;
+  pose(eye: Vec3, yaw: number, pitch: number, roll?: number): Solved | undefined;
+  /** Appends the body's vertices (see STRIDE) in the jacket `color`; nothing when pose() has none. */
+  draw(out: number[], eye: Vec3, yaw: number, pitch: number, roll?: number, color?: number[]): void;
 }
 
-/** Limb phase per metre run, slower on a sprint (longer strides): one stride is 2.9 m, matching the camera bob. */
-const GAIT = 2.2;
-/** Metres the camera may be from the eye of the body and still show it (the bob is centimetres). */
-const AWAY = 0.5;
-/** Pitch below which the legs can be in view (the field of view is 70 degrees, its bottom 35 below the look). */
-const LOOK_DOWN = -0.15;
-const [UPPER, FORE] = [0.35, 0.38];
-const [THIGH, SHIN] = [0.43, 0.45];
-const RED = [0.95, 0.22, 0.1];
-
-const [JACKET, TROUSERS, SHOE] = [
-  [0.3, 0.32, 0.37],
-  [0.14, 0.15, 0.2],
-  [0.6, 0.61, 0.65],
+/** Metres the camera may be from the eye of the body and still show it: the bob is centimetres, a crouch's ease under a metre. */
+const AWAY = 1;
+/** On a ledge the camera sits this far behind the head and below it, so that the arms reach the ledge. */
+const [BEHIND, DROP] = [0.12, 0.03];
+const [X, Y]: Vec3[] = [
+  [1, 0, 0],
+  [0, 1, 0],
 ];
-/** The solids, built from the first frame: the sleeves, the cuff, the legs at the middle level of detail. */
-const kit = () => ({
-  upper: solid(2, UPPER, RADII.upper, [1, 1]),
-  fore: solid(2, FORE, RADII.fore, [1, 0]),
-  cuff: solid(2, 0.03, [0.033, 0.033], [0, 0]),
-  thigh: solid(1, THIGH, RADII.thigh, [0.5, 1]),
-  shin: solid(1, SHIN, RADII.shin, [0.5, 0.5]),
-});
-
-/** A hand's goal: where the wrist goes (view space: right, up, forward) and where the elbow bends. */
-type Goal = [wrist: Vec3, pole: Vec3];
-
-/** A goal for the hand of side s: the numbers are for the right hand, mirrored for the left. */
-const goal = (
-  s: number,
-  x: number,
-  y: number,
-  z: number,
-  px: number,
-  py: number,
-  pz: number,
-): Goal => [
-  [s * x, y, z],
-  [s * px, py, pz],
-];
-const layer = ([w0, p0]: Goal, [w1, p1]: Goal, t: number): Goal => [mix(w0, w1, t), mix(p0, p1, t)];
+const POLE: Vec3 = [0.7, -1, -0.5];
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
+const inv = ([x, y, z, w]: Quat): Quat => [-x, -y, -z, w];
+const dist = (a: Vec3, b: Vec3) => Math.hypot(...sub(a, b));
+/** The point `k` along the direction `d` from `o`. */
+const along = (o: Vec3, d: Vec3, k: number): Vec3 => add(o, mix([0, 0, 0], d, k));
+
+/** The shortest rotation that turns the direction a into b. */
+const arc = (a: Vec3, b: Vec3): Quat => {
+  const [u, v] = [unit(a), unit(b)];
+  const q = [
+    u[1] * v[2] - u[2] * v[1],
+    u[2] * v[0] - u[0] * v[2],
+    u[0] * v[1] - u[1] * v[0],
+    1 + dot(u, v),
+  ];
+  const n = Math.hypot(...q) || 1;
+  return q.map(c => c / n) as Quat;
+};
+
+/**
+ * The middle joint of a two-bone limb from `a` toward `b`, bones l1 and l2, bent toward `pole`; and
+ * the end it reaches, which is short of `b` when that is out of reach.
+ */
+const ik = (a: Vec3, b: Vec3, pole: Vec3, l1: number, l2: number): [Vec3, Vec3] => {
+  const d = sub(b, a);
+  const n = unit(d);
+  const len = Math.max(Math.min(Math.hypot(...d), (l1 + l2) * 0.99), 0.15);
+  const x = (l1 * l1 - l2 * l2 + len * len) / (2 * len);
+  const h = Math.sqrt(Math.max(l1 * l1 - x * x, 0));
+  const p = unit(sub(pole, mix([0, 0, 0], n, dot(pole, n))));
+  return [along(along(a, n, x), p, h), along(a, n, len)];
+};
+
+/**
+ * Turns the limb of root joint j (a shoulder, a hip) in `q` so that its end reaches `to`, the
+ * middle joint toward `pole`. `s` is q solved: the bones keep their twist and swing the shortest
+ * way. The end joint keeps its own turn in the world (a foot stays flat) or follows the bone (a hand).
+ */
+const reach = (q: Pose, s: Solved, j: number, to: Vec3, pole: Vec3, flat = false) => {
+  const [a, b, c] = [s.pos[j], s.pos[j + 1], s.pos[j + 2]];
+  const [e, f] = ik(a, to, pole, dist(a, b), dist(b, c));
+  const r1 = mul(arc(sub(b, a), sub(e, a)), s.rot[j]);
+  const r2 = mul(arc(sub(c, b), sub(f, e)), s.rot[j + 1]);
+  q.rot[j] = mul(inv(s.rot[PARENT[j]]), r1);
+  q.rot[j + 1] = mul(inv(r1), r2);
+  if (flat) {
+    q.rot[j + 2] = mul(inv(r2), s.rot[j + 2]);
+  }
+};
+
+/** The unit vector toward a wall on each SIDE, on the floor plane. */
+const TOWARD = [
+  [0, 0],
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+/** A finger segment, 4 cm, in the coarsest level: it is small, and there are ten a hand. */
+const FINGER = () => solid(0, 0.04, [0.0105, 0.0095], [1, 2]);
+/** Finger lengths against 4 cm, index to little. */
+const LENGTH = [1, 1.1, 1, 0.82];
+/** The thumb's two segments open and in a fist, as directions in the hand (x toward the thumb). */
+const THUMB: [Vec3, Vec3][] = [
+  [
+    [0.55, -0.2, 0.8],
+    [0.2, -0.75, 0.6],
+  ],
+  [
+    [0.4, -0.1, 0.9],
+    [-0.55, -0.5, 0.65],
+  ],
+];
+
+/**
+ * A gloved hand at the wrist `end`: the fingers along `f`, the back of the hand along `u`, the thumb
+ * toward `th` (unit vectors). `curl` runs from 0, a flat open hand with the fingers spread, to 1, a
+ * fist: a palm, four fingers of two segments and a thumb of two, each a smooth solid.
+ */
+const hand = (
+  out: number[],
+  end: Vec3,
+  f: Vec3,
+  u: Vec3,
+  th: Vec3,
+  curl: number,
+  tint: number[],
+) => {
+  /** Hand space (x toward the thumb, y the back, z toward the fingers) to the world. */
+  const at = ([x, y, z]: Vec3): Vec3 => [
+    end[0] + th[0] * x + u[0] * y + f[0] * z,
+    end[1] + th[1] * x + u[1] * y + f[1] * z,
+    end[2] + th[2] * x + u[2] * y + f[2] * z,
+  ];
+  /** Segments of lengths `l` from `from` along `dirs` (hand space), `k` times as wide. */
+  const chain = (from: Vec3, dirs: Vec3[], l: number, k: number) =>
+    dirs.reduce((p, d, i) => {
+      const q: Vec3 = [p[0] + d[0] * l, p[1] + d[1] * l, p[2] + d[2] * l];
+      segment(out, FINGER(), at(p), at(q), th, 0.04, k * 0.88 ** i, tint);
+      return q;
+    }, from);
+  place(out, solid(1, 0, [1, 1]), end, [th, u, f], [0, 0, 0.045], [0.0425, 0.02, 0.058], tint);
+  for (let i = 0; i < 4; i++) {
+    const [a, b] = [0.1 + 1.3 * curl, 0.2 + 3 * curl];
+    const splay = -(i - 1.5) * 0.08 * (1 - curl);
+    const dirs = [a, b].map(n => unit([splay, -Math.sin(n), Math.cos(n)]));
+    chain([0.0315 - 0.021 * i, -0.004, 0.092], dirs, 0.04 * LENGTH[i], 1);
+  }
+  chain(
+    [0.034, -0.012, 0.025],
+    THUMB.map(([open, fist]) => unit(mix(open, fist, curl))),
+    0.037,
+    1.25,
+  );
+};
+
+/** The floor under a player standing at height `y`: the first top within a step above or below it. */
+const floorOf =
+  (world: World, y: number): Floor =>
+  (x, z) => {
+    const d = ray(world, [x, y + STEP_H, z], [0, -1, 0], 2 * STEP_H);
+    return d > 0 && d < 2 * STEP_H ? y + STEP_H - d : y;
+  };
 
 /** The blends the animation eases, each toward 0 or 1, and how fast (1 / s). */
 const RATES = {
+  amp: 8,
   sprint: 6,
   air: 12,
+  rise: 10,
   dash: 14,
-  hang: 16,
-  climb: 12,
+  plant: 16,
   wall: 10,
   slide: 10,
-  low: 12,
-  amp: 8,
   stun: 14,
 };
-/** Events that kick a pulse up at once and let it die away (1 / s). */
-const DECAY = { jump: 5, tuck: 4, land: 7 };
 
-export const createBody = (): Body => {
+export const createBody = (world?: World): Body => {
+  const gait = createGait();
   /** The own player as last seen. */
   let me: PlayerState | undefined;
-  const w = {
-    sprint: 0,
-    air: 0,
-    dash: 0,
-    hang: 0,
-    climb: 0,
-    wall: 0,
-    slide: 0,
-    low: 0,
-    amp: 0,
-    stun: 0,
-  };
+  const w = { amp: 0, sprint: 0, air: 0, rise: 0, dash: 0, plant: 0, wall: 0, slide: 0, stun: 0 };
   /** Seconds, for the flailing of a stumble. */
   let clock = 0;
-  /** Pulses: `v` follows `kick` (which an event sets to 1 and which decays), so they ease in as well. */
-  const kick = { jump: 0, tuck: 0, land: 0 };
-  const v = { jump: 0, tuck: 0, land: 0 };
-  /** Stride phase, run distance times GAIT. */
-  let phase = 0;
   /** Which hand the wall is on: -1 left, 1 right, eased. */
   let side = 0;
-  /** The ledge the hands are planted on: where its lip is, and the way the wall faces. */
-  let grip: { x: number; z: number; y: number; dx: number; dz: number } | undefined;
+  /** The ledge the hands are on: the body's x and z, the height of its top, and the way the wall faces. */
+  let grip: { x: number; y: number; z: number; dx: number; dz: number } | undefined;
+  /** How closed each hand is, left then right, as of the last pose(). */
+  const curls = [0, 0];
 
-  const walks = (m: number) => m == MODE.GROUND || m == MODE.WALLRUN || m == MODE.CROUCH;
-
-  const update: Body['update'] = (p, { ev, fall }, dt) => {
+  const update: Body['update'] = (p, dt) => {
     if (!p) {
       me = undefined;
       return;
     }
-    const d = me && walks(me.mode) && walks(p.mode) ? Math.hypot(p.x - me.x, p.z - me.z) : 0;
-    const run = walks(p.mode) && d < 1;
-    phase += run ? d * (GAIT - 0.6 * w.sprint) : 0;
+    gait.update(p, dt, world && floorOf(world, p.y));
     me = { ...p };
     clock += dt;
+    const walks = p.mode == MODE.GROUND || p.mode == MODE.CROUCH || p.mode == MODE.WALLRUN;
+    const dash = p.dash > DASH_COOLDOWN - DASH_TICKS;
+    const air = p.mode == MODE.AIR && !dash;
     const to = {
+      amp: walks ? clamp(speedOf(p) / 9) : 0,
       sprint: +sprinting(p),
-      air: +(p.mode == MODE.AIR && p.dash <= DASH_COOLDOWN - DASH_TICKS),
-      dash: +(p.dash > DASH_COOLDOWN - DASH_TICKS),
-      hang: +(p.mode == MODE.HANG),
-      climb: +(p.mode == MODE.CLIMB),
+      air: +air,
+      rise: +(air && p.vy > 0.5),
+      dash: +dash,
+      plant: +(p.mode == MODE.HANG || p.mode == MODE.CLIMB),
       wall: +(p.mode == MODE.WALLRUN),
       slide: +(p.mode == MODE.SLIDE),
-      low: +(p.mode == MODE.SLIDE || p.mode == MODE.CROUCH),
-      amp: walks(p.mode) ? clamp(speedOf(p) / SPRINT_SPEED) : 0,
       stun: +(p.stun > 0),
     };
     for (const n of Object.keys(RATES) as (keyof typeof RATES)[]) {
       w[n] += (to[n] - w[n]) * (1 - Math.exp(-dt * RATES[n]));
     }
-    if (ev & EV.JUMP) {
-      kick.jump = 1;
-    }
-    if (ev & EV.DOUBLE) {
-      kick.tuck = 1;
-    }
-    if (ev & EV.LAND) {
-      kick.land = clamp(fall / 12, 0.3);
-    }
-    for (const n of Object.keys(DECAY) as (keyof typeof DECAY)[]) {
-      v[n] += (kick[n] - v[n]) * (1 - Math.exp(-dt * 24));
-      kick[n] *= Math.exp(-dt * DECAY[n]);
-    }
     const [tx, tz] = TOWARD[p.wall];
     // Right of a body that faces `yaw` is (cos, -sin): the wall's side is its dot with it.
     side +=
       (clamp(tx * Math.cos(p.yaw) - tz * Math.sin(p.yaw), -1, 1) - side) * (1 - Math.exp(-dt * 10));
-    if ((p.mode == MODE.HANG || p.mode == MODE.CLIMB) && p.edge) {
-      grip = { x: p.x, z: p.z, y: p.edge, dx: tx, dz: tz };
+    if (to.plant && p.edge) {
+      grip = { x: p.x, y: p.edge, z: p.z, dx: tx, dz: tz };
     }
   };
 
-  const rig: Body['rig'] = (eye, yaw, pitch, roll = 0) => {
-    if (!me || Math.hypot(...sub(eye, [me.x, me.y + eyeHeight(me), me.z])) > AWAY) {
+  const pose: Body['pose'] = (eye, yaw, pitch, roll = 0) => {
+    if (!me || dist(eye, [me.x, me.y + eyeHeight(me), me.z]) > AWAY) {
       return undefined;
     }
+    const g = gait.pose();
+    const q: Pose = {
+      at: [...g.at],
+      yaw: g.yaw,
+      hips: [...g.hips],
+      rot: g.rot.map(r => [...r] as Quat),
+    };
     const [r, u, f] = basis(yaw, pitch, roll);
-    const rot = (a: Vec3): Vec3 => [dot(a, r), dot(a, u), dot(a, f)];
-    /** View space (right, up, forward) as a direction in the world, and as a point. */
+    /** Camera space (right, up, forward) as a direction in the world, and a world direction in it. */
     const turn = ([a, b, c]: Vec3): Vec3 => [
       r[0] * a + u[0] * b + f[0] * c,
       r[1] * a + u[1] * b + f[1] * c,
       r[2] * a + u[2] * b + f[2] * c,
     ];
-    const view = (p: Vec3): Vec3 => add(eye, turn(p));
-    const [sy, cy] = [Math.sin(yaw), Math.cos(yaw)];
-    const body = ([a, b, c]: Vec3): Vec3 => [
-      me!.x + a * cy - c * sy,
-      me!.y + b,
-      me!.z - a * sy - c * cy,
-    ];
-    const a = w.amp * (1 + 0.5 * w.sprint);
-    const plant = Math.max(w.hang, w.climb);
-
-    const arms = [-1, 1].map((s): Limb => {
-      const sn = Math.sin(phase + (s > 0 ? Math.PI : 0));
-      const k = Math.sign(sn) * Math.abs(sn) ** (1 - 0.4 * w.sprint);
-      const rest = mix([0.27, -0.27, 0.46], [0.2, -0.16, 0.44], w.sprint);
-      let g: Goal = goal(s, rest[0], rest[1] + 0.08 * a * k, rest[2] + 0.1 * a * k, 0.7, -1, -0.5);
-      g = layer(g, goal(s, 0.4, -0.2, 0.36, 0.8, -0.8, -0.3), w.air);
-      g = layer(g, goal(s, 0.3, 0.04, 0.5, 0.6, -1, -0.2), v.jump);
-      g = layer(g, goal(s, 0.15, -0.24, 0.28, 0.9, -0.4, -0.6), v.tuck);
-      g = layer(g, goal(s, 0.42, -0.4, 0.3, 1, -1, -0.2), v.land);
-      g = layer(g, goal(s, 0.13, -0.1, 0.64, 0.7, -1, -0.3), w.dash);
-      const wallHand = goal(s, 0.4, -0.2 + 0.02 * Math.sin(phase * 2), 0.52, 0.4, -1, -0.5);
-      const toWall = w.wall * clamp(side * s);
-      g = layer(g, wallHand, toWall);
-      g = layer(
-        g,
-        s > 0
-          ? goal(1, 0.46, -0.32, 0.4, 1, -0.4, -0.5)
-          : goal(1, -0.3, -0.12, 0.5, -0.8, -0.6, -0.3),
-        w.slide,
-      );
+    const view = (v: Vec3): Vec3 => [dot(v, r), dot(v, u), dot(v, f)];
+    // The trunk follows the look a little.
+    for (const j of [J.SPINE, J.CHEST]) {
+      q.rot[j] = mul(q.rot[j], axis(X, 0.12 * clamp(pitch, -1.3, 1.3)));
+    }
+    // The head goes to the camera, the planted feet stay where they are.
+    const s0 = solve(q);
+    const ahead: Vec3 = [-Math.sin(yaw), 0, -Math.cos(yaw)];
+    const nose = add(s0.pos[J.HEAD], spin(s0.rot[J.HEAD], [0, 0.02, -0.08]));
+    q.at = add(
+      q.at,
+      sub(eye, along(nose, [-ahead[0] * BEHIND, -DROP, -ahead[2] * BEHIND], w.plant)),
+    );
+    const s = solve(q);
+    const fwd: Vec3 = [-Math.sin(q.yaw), 0, -Math.cos(q.yaw)];
+    for (const j of [J.THIGH_L, J.THIGH_R]) {
+      reach(q, s, j, s0.pos[j + 2], fwd, true);
+    }
+    for (const sd of [-1, 1]) {
+      const k = Math.cos(TAU * gait.phase) * sd;
+      const a = w.amp * (1 + 0.5 * w.sprint);
+      // The numbers are for the right hand, mirrored below.
+      let h = mix([0.25, -0.17, 0.36], [0.2, -0.14, 0.42], w.sprint);
+      h = [h[0], h[1] + 0.07 * a * k, h[2] + 0.12 * a * k];
+      h = mix(h, [0.38, -0.2, 0.34], w.air);
+      h = mix(h, [0.3, 0.02, 0.45], w.rise);
+      h = mix(h, [0.14, -0.1, 0.5], w.dash);
+      const toWall = w.wall * clamp(side * sd);
+      h = mix(h, [0.42, -0.16, 0.42], toWall);
+      h = mix(h, sd > 0 ? [0.36, -0.26, 0.38] : [0.28, -0.1, 0.42], w.slide);
       // Reeling from a tackle: the hands thrown out and up, flailing against each other.
-      const flail = Math.sin(clock * 12 + (s > 0 ? Math.PI : 0));
-      g = layer(g, goal(s, 0.5, 0.05 + 0.2 * flail, 0.5 + 0.1 * flail, 1, -0.2, -0.6), w.stun);
-      let dir: Vec3 | undefined;
+      const flail = Math.sin(clock * 12 + (sd > 0 ? Math.PI : 0));
+      h = mix(h, [0.46, 0.05 + 0.2 * flail, 0.4 + 0.1 * flail], w.stun);
       if (grip) {
-        // Planted: the wrist on the ledge's lip, the hands a hand-width apart along the wall.
-        let tx = -grip.dz;
-        let tz = grip.dx;
-        if (tx * cy - tz * sy < 0) {
+        // On the ledge's lip, a hand-width apart along the wall, the right hand on the right.
+        let [tx, tz] = [-grip.dz, grip.dx];
+        if (dot([tx, 0, tz], r) < 0) {
           [tx, tz] = [-tx, -tz];
         }
-        const lip = PLAYER_R + GRAB_GAP;
+        // The wrist a hand's length short of the lip, the fingers over it.
+        const lip = PLAYER_R + GRAB_GAP - 0.08;
         const at: Vec3 = [
-          grip.x + grip.dx * lip + tx * 0.12 * s,
-          grip.y + 0.06,
-          grip.z + grip.dz * lip + tz * 0.12 * s,
+          grip.x + grip.dx * lip + tx * 0.12 * sd,
+          grip.y + 0.03,
+          grip.z + grip.dz * lip + tz * 0.12 * sd,
         ];
-        const [px, py, pz] = rot(sub(at, eye));
-        // Pushing down on it while the body rises past: the hands stay in the lower view.
-        g = layer(
-          g,
-          [
-            [px, Math.max(py, -0.36), Math.max(pz, 0.3)],
-            [s * 0.5, -1, -0.4],
-          ],
-          plant,
-        );
-        dir = rot([grip.dx, -0.15, grip.dz]);
+        // Rising past it the hands push down on it and stay in the lower view.
+        const [px, py, pz] = view(sub(at, eye));
+        h = mix(h, [px * sd, Math.max(py, -0.28), Math.max(pz, 0.4)], w.plant);
       }
-      // A loose fist, tighter as the pace goes up; open to catch the air, flat on a ledge or a wall.
-      let curl = 0.55 + 0.35 * w.sprint;
-      for (const [to, t] of [
-        [0.3, w.air],
-        [0.1, v.jump],
-        [0.9, v.tuck],
+      // A loose fist, tighter as the pace goes up; open to catch the air, flat on a ledge, a wall or the floor.
+      let curl = 0.75 + 0.25 * w.sprint;
+      for (const [open, t] of [
+        [0.25, w.air],
+        [0.1, w.rise],
         [1, w.dash],
         [0.1, toWall],
-        [0.35, w.slide],
-        [0.1, plant],
+        [0.1, w.slide],
+        [0.1, w.plant],
         [0.2, w.stun],
       ]) {
-        curl += (to - curl) * t;
+        curl += (open - curl) * t;
       }
-      const shoulder: Vec3 = [s * (0.15 - 0.05 * plant), -0.22 + 0.08 * plant, -0.2 + 0.12 * plant];
-      const [elbow, wrist] = ik(shoulder, g[0], g[1], UPPER, FORE);
-      const pointing = unit(sub(wrist, elbow));
-      return {
-        root: view(shoulder),
-        mid: view(elbow),
-        end: view(wrist),
-        dir: turn(dir ? mix(pointing, unit(dir), plant) : pointing),
-        curl,
-        roll: (1 - plant) * (1 - 2 * toWall),
-      };
-    });
-
-    const stand = mix([0, 0.88, -0.12], [0, 0.46, -0.2], w.low);
-    // Thrown back: the pelvis shoved forward under the leaning chest.
-    stand[2] += 0.12 * w.stun;
-    const pelvis = mix(stand, [0, 0.26, -0.4], w.slide);
-    pelvis[1] -= 0.22 * v.land;
-    const chest = mix(mix([0, 1.4, -0.2], [0, 0.55, -0.12], w.low), [0, 0.5, -0.3], w.slide);
-    chest[2] -= 0.2 * w.stun;
-    const legs = [-1, 1].map((s): Limb => {
-      const sn = Math.sin(phase + (s > 0 ? 0 : Math.PI));
-      const cn = Math.cos(phase + (s > 0 ? 0 : Math.PI));
-      const swing = w.amp * (1 + 0.5 * w.sprint);
-      let ankle: Vec3 = [
-        s * 0.12,
-        0.07 + 0.2 * swing * Math.max(0, cn),
-        -0.02 - 0.1 * w.low + 0.3 * swing * sn,
-      ];
-      ankle = mix(ankle, [s * 0.12, 0.3, s * 0.2], w.air);
-      ankle = mix(ankle, [s * 0.12, 0.62, 0.1], v.tuck);
-      ankle = mix(ankle, [s * 0.1, 0.28, -0.4], w.dash);
-      ankle = mix(ankle, [s * 0.1, 0.12, -0.12], w.hang);
-      ankle = mix(ankle, s > 0 ? [0.1, 0.5, 0.2] : [-0.1, 0.1, -0.1], w.climb);
-      ankle = mix(ankle, [s * 0.11, 0.2, 0.84 + 0.08 * s], w.slide);
-      const hip: Vec3 = [pelvis[0] + s * 0.11, pelvis[1], pelvis[2]];
-      const [knee, end] = ik(hip, ankle, [s * 0.15, 0.2, 1], THIGH, SHIN);
-      return {
-        root: body(hip),
-        mid: body(knee),
-        end: body(end),
-        dir: [-sy, 0, -cy],
-        curl: 0,
-        roll: 1,
-      };
-    });
-    return { arms, legs, torso: [body(pelvis), body(chest)], grip: plant, low: w.low };
+      curls[(sd + 1) / 2] = curl;
+      const to = add(eye, turn([h[0] * sd, h[1], h[2]]));
+      const arm = sd < 0 ? J.ARM_L : J.ARM_R;
+      reach(q, s, arm, to, turn([POLE[0] * sd, POLE[1], POLE[2]]));
+      // The palm turns down, the back of the hand to the view, flat on a ledge or the floor.
+      q.rot[arm + 2] = axis(Y, sd * (1 + 0.5 * (w.plant + w.slide)));
+    }
+    return solve(q);
   };
 
   return {
+    get id() {
+      return me?.id ?? -1;
+    },
     update,
-    rig,
-    draw(out, eye, yaw, pitch, roll = 0) {
-      const j = rig(eye, yaw, pitch, roll);
-      if (!j) {
-        return;
+    pose,
+    draw(out, eye, yaw, pitch, roll = 0, color = [0.7, 0.7, 0.7]) {
+      const s = pose(eye, yaw, pitch, roll);
+      if (s) {
+        const colors = palette(color);
+        skin(out, body(2), s, colors);
+        [J.HAND_L, J.HAND_R].forEach((j, i) => {
+          const q = s.rot[j];
+          hand(
+            out,
+            s.pos[j],
+            spin(q, [0, -1, 0]),
+            spin(q, [i * 2 - 1, 0, 0]),
+            spin(q, [0, 0, -1]),
+            curls[i],
+            colors[7],
+          );
+        });
       }
-      const [r] = basis(yaw, pitch, roll);
-      const [right, fwd]: Vec3[] = [
-        [Math.cos(yaw), 0, -Math.sin(yaw)],
-        [-Math.sin(yaw), 0, -Math.cos(yaw)],
-      ];
-      const [pelvis, chest] = j.torso;
-      const k = kit();
-      // Below the view, unless the body is low: the legs are only seen looking down.
-      if (pitch < LOOK_DOWN || j.low > 0.2) {
-        torso(out, 2, pelvis, unit(sub(chest, pelvis)), fwd, right, JACKET, TROUSERS, 0.75);
-        for (const { root, mid, end } of j.legs) {
-          segment(out, k.thigh, root, mid, right, THIGH, 1, TROUSERS);
-          segment(out, k.shin, mid, end, right, SHIN, 1, TROUSERS);
-          shoe(out, 1, end, unit(sub(end, mid)), fwd, right, SHOE);
-        }
-      }
-      j.arms.forEach(({ root, mid, end, dir, curl, roll: turn }, i) => {
-        const s = i ? 1 : -1;
-        const along = unit(sub(end, mid));
-        segment(out, k.upper, root, mid, r, UPPER, 1 - 0.4 * j.grip, JACKET);
-        segment(out, k.fore, mid, end, r, FORE, 1 - 0.3 * j.grip, JACKET);
-        segment(
-          out,
-          k.cuff,
-          sub(end, along.map(v => v * 0.025) as Vec3),
-          add(end, along.map(v => v * 0.005) as Vec3),
-          r,
-          0.03,
-          1,
-          RED,
-        );
-        // The palm turns from down, on a ledge, to toward the body, to out against a wall.
-        const side = add(r.map(v => v * (1 - Math.abs(turn))) as Vec3, [0, -s * turn, 0]);
-        hand(out, end, dir, side, -s, curl);
-      });
     },
   };
 };

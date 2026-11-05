@@ -680,7 +680,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         );
       }
       const bodyAt = v.length;
-      body?.draw(v, eye, yaw, pitch, fx.roll);
+      body?.draw(v, eye, yaw, pitch, fx.roll, rgb(colors.get(body.id) ?? '#888'));
       if (tail + v.length * 4 > cap) {
         cap = tail + v.length * 8;
         alloc();

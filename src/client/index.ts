@@ -80,7 +80,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   canvas.addEventListener('click', () => audio.unlock());
   const fx = createEffects();
   const foley = createFoley(audio);
-  const body = createBody();
+  const body = createBody(world);
   let rd: Renderer | undefined;
   try {
     rd = createRenderer(canvas, world);
@@ -206,13 +206,13 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     // The flags and the bases for the renderer and the lights, and the HUD that goes with them.
     const who = (id: number) => (id == you.id ? me : others.find(p => p.id == id));
     const ctf = match && { bases, flags: flagDraws(match.flags, bases, who) };
-    // What the live steps did, once: the camera, the sounds and the body read it, the inputs sent do not.
+    // What the live steps did, once: the camera and the sounds read it, the inputs sent do not.
     const hit = predictor.events();
     fx.update(me, ctl.keys, dt, hit);
     hud.hurt(fx.hurt);
     foley.me(me, hit, fx.stride);
     foley.others(others);
-    body.update(me, hit, dt);
+    body.update(me, dt);
     if (me && rd) {
       // The camera moves for the eye only: the inputs keep sending the real height and angles.
       const cam: [number, number, number] = [eye[0], eye[1] + fx.dy, eye[2]];

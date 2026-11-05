@@ -19,9 +19,6 @@ export const RADII = {
 const JACKET = [0.17, 0.153, 0.16, 0.18, 0.196, 0.19, 0.105];
 export const SPINE = 0.62;
 
-/** A body's axes from where it faces, `up` being the world's. */
-export const frame = (fwd: Vec3, right: Vec3) => aim(fwd, right);
-
 /**
  * The jacket and the hips of a body whose pelvis is at `pelvis`, the spine going up along `spine`
  * (unit) and shortened to `k` of its length, facing `fwd`. A torso is wider than it is deep.

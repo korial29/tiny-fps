@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { PLAYER_H, STUMBLE_DRAG, STUMBLE_KNOCK, STUMBLE_TICKS } from '../shared/constants';
+import {
+  CLIMB_FWD_SPEED,
+  CLIMB_RISE,
+  PLAYER_H,
+  STUMBLE_DRAG,
+  STUMBLE_KNOCK,
+  STUMBLE_TICKS,
+} from '../shared/constants';
 import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { MOVE, MOVES, createGait } from './gait';
@@ -764,6 +771,56 @@ describe('gait: the contacts', () => {
     expect(
       Math.max(...a.map((f, i) => Math.abs(f.pos[J.FOOT_R][2] - b[i].pos[J.FOOT_R][2]))),
     ).toBeGreaterThan(0.02);
+  });
+
+  it('keeps both hands planted on the ledge for the whole climb, sliding in under the shoulders as they pass over it', () => {
+    // The physics of a 3 m ledge: 20 frames of hang, the rise at CLIMB_RISE, then the body goes in 0.63 m, then it is over.
+    const edge = 3;
+    const g = createGait();
+    const p = state({ id: 3, ...at, mode: MODE.HANG, ground: false, wall: 4, edge });
+    const z0 = p.z;
+    const fs = sim(g, p, 1.2, (q, t) => {
+      if (t < 20 * DT) {
+        return;
+      }
+      if (q.y < edge) {
+        [q.mode, q.y] = [MODE.CLIMB, Math.min(edge, q.y + CLIMB_RISE * DT)];
+      } else if (z0 - q.z < 0.63) {
+        q.z -= CLIMB_FWD_SPEED * DT;
+      } else {
+        Object.assign(q, { mode: MODE.GROUND, ground: true, wall: 0, edge: 0 });
+      }
+    });
+    const end = fs.findIndex(f => f.at[1] >= edge && f.at[2] < z0 - 0.62);
+    expect(end).toBeGreaterThan(30);
+    for (const f of fs.slice(0, end)) {
+      for (const [j, arm] of [
+        [J.HAND_L, J.ARM_L],
+        [J.HAND_R, J.ARM_R],
+      ]) {
+        // On the top, or just over it: never below the lip, never in the air.
+        const [along, up] = rel(f.pos[j], 4, edge);
+        expect(up).toBeGreaterThan(-0.02);
+        expect(up).toBeLessThan(0.08);
+        expect(along).toBeGreaterThan(0.35);
+        // And the arm holds it: it is never stretched past its length.
+        expect(Math.hypot(...sub(f.pos[j], f.pos[arm]))).toBeLessThan(0.56);
+      }
+    }
+    // At the top the arms stand straight under the shoulders, pressing the ledge.
+    const top = fs[end - 1];
+    for (const [j, arm] of [
+      [J.HAND_L, J.ARM_L],
+      [J.HAND_R, J.ARM_R],
+    ]) {
+      const d = sub(top.pos[arm], top.pos[j]);
+      expect(d[1]).toBeGreaterThan(0.45);
+      expect(Math.hypot(d[0], d[2])).toBeLessThan(0.15);
+    }
+    // The hands let go once the climb is over: the body stands up and runs on.
+    const last = fs[fs.length - 1];
+    expect(last.pos[J.HAND_L][1]).toBeGreaterThan(edge + 0.3);
+    expect(last.pos[J.PELVIS][1]).toBeGreaterThan(edge + 0.8);
   });
 
   it('keeps the hands on the lip as the body climbs, then puts a foot over it', () => {

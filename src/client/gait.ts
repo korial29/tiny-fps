@@ -543,22 +543,34 @@ export const createGait = (): Gait => {
     if (hang > 0.002) {
       const [gx, gz, nx, nz, e] = lip;
       const d = 0.4 + 0.14 * sp[UP];
+      // The hands stay on the lip and, once the shoulders pass over it, slide in under them. The
+      // body rises no higher than the arms let it: it is held there, the arms straight, until the
+      // climb is over, then stands up fast.
+      const ends = [-1, 1].map(s => {
+        const a = pos[hand(s) - 2];
+        const k = Math.max(d, (a[0] - gx) * nx + (a[2] - gz) * nz);
+        const t: Vec3 = [gx + nx * k - nz * s * 0.21, e + 0.03, gz + nz * k + nx * s * 0.21];
+        const h = (a[0] - t[0]) ** 2 + (a[2] - t[2]) ** 2;
+        return [t, a[1] - t[1] - Math.sqrt(Math.max(((ARM + FORE) * 0.97) ** 2 - h, 0))] as const;
+      });
+      const drop = hang ** 4 * clamp(Math.max(...ends.map(c => c[1]))); // a metre at most
+      out.at[1] -= drop;
+      pos.forEach(q => (q[1] -= drop));
+      [-1, 1].forEach((s, i) =>
+        goals.push([hand(s), hang, ends[i][0], D(s * 0.8, 0, 0.6), frame([0, s, 0], [nx, 0, nz])]),
+      );
+      // The feet come up on the ledge, the left one when the hips are over its lip, and ahead of them as they go in.
+      const pa = (pel[0] - gx) * nx + (pel[2] - gz) * nz;
+      const f = Math.max(0.58, pa + 0.45);
       [-1, 1].forEach(s =>
         goals.push([
-          hand(s),
-          hang,
-          [gx + nx * d - nz * s * 0.21, e + 0.03, gz + nz * d + nx * s * 0.21],
-          D(s * 0.8, 0, 0.6),
-          frame([0, s, 0], [nx, 0, nz]),
+          foot(s),
+          sw(MOVE.CLIMB) * (s < 0 ? clamp((pa - 0.25) * 4) : clamp(sp[UP] * 2 - 0.4)),
+          [gx + nx * f - nz * s * 0.1, e + SOLE, gz + nz * f + nx * s * 0.1],
+          [nx, 0.5, nz],
+          frame([-nz, 0, nx], [0, -1, 0]),
         ]),
       );
-      goals.push([
-        J.FOOT_R,
-        sw(MOVE.CLIMB) * clamp(sp[UP] * 2 - 0.4),
-        [gx + nx * 0.58 - nz * 0.1, e + SOLE, gz + nz * 0.58 + nx * 0.1],
-        [nx, 0.5, nz],
-        frame([-nz, 0, nx], [0, -1, 0]),
-      ]);
     }
     [-1, 1].forEach(s => {
       const w = sw(s < 0 ? MOVE.WALL_L : MOVE.WALL_R);
@@ -740,7 +752,7 @@ export const createGait = (): Gait => {
       const [a, b] = [
         0.01 * Math.sin(TAU * (0.3 * time + who[5])),
         0.006 * Math.sin(TAU * (0.2 * time + 3 * who[5])),
-      ].map(v => v * hang * (0.7 + 0.6 * who[5]));
+      ].map(v => v * hang);
       rot[J.PELVIS] = mul(mul(axis(Z, b), axis(X, a)), rot[J.PELVIS]);
       [J.THIGH_L, J.THIGH_R].forEach(j => (rot[j] = mul(rot[j], axis(X, a))));
       out.hips[0] += b;

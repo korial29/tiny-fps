@@ -158,11 +158,11 @@ The subset of `WebSocket` the client uses: `binaryType`, `onopen`, `onclose`, `o
 
 ### Rules
 
-| Rule         | Default | Description                                                                                  |
-| ------------ | ------- | -------------------------------------------------------------------------------------------- |
-| `maxPlayers` | `16`    | Players in a room; the next ones are told the room is full.                                  |
-| `scoreLimit` | `3`     | Captures that end a match at once.                                                           |
-| `timeLimit`  | `480`   | Seconds a match lasts. The team with more captures wins, a level score is a draw.            |
+| Rule         | Default | Description                                                                       |
+| ------------ | ------- | --------------------------------------------------------------------------------- |
+| `maxPlayers` | `16`    | Players in a room; the next ones are told the room is full.                       |
+| `scoreLimit` | `3`     | Captures that end a match at once.                                                |
+| `timeLimit`  | `480`   | Seconds a match lasts. The team with more captures wins, a level score is a draw. |
 
 ---
 
@@ -189,7 +189,7 @@ Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard
 The game is the movement and a capture the flag on top of it, with a tackle to stop a carrier ([`docs/PLAN.md`](docs/PLAN.md)).
 
 - **Teams**: red and blue. A joiner goes to the smaller team (red on a tie), up to 16 players in all. Each team starts on its own tower and wears its colour, name tags included.
-- **Capture the flag**: touch the enemy flag, at its base or where it was dropped, to take it, and carry it to your own base while your own flag is there: that is a capture, and the flag goes home. Touch your own dropped flag to send it home at once; left alone it goes home after 10 seconds. A carrier who falls off the roofs or leaves drops it where he last stood. There is a ring of light on each base, a marker toward each flag (and toward your base while you carry), a banner for each event and a sound for a take, a drop, a return and a capture.
+- **Capture the flag**: touch the enemy flag, at its base or where it was dropped, to take it, and carry it to your own base while your own flag is there: that is a capture, and the flag goes home. Touch your own dropped flag to send it home at once; left alone it goes home after 10 seconds. A carrier who falls off the roofs or leaves drops it where he last stood. A tackled carrier drops it too, and it lies there for 2 seconds: nobody can send it home, and the carrier's teammates can grab it. There is a ring of light on each base, a marker toward each flag (and toward your base while you carry), a banner for each event and a sound for a take, a drop, a return and a capture.
 - **A match** ends at 3 captures or after 8 minutes, then everyone sees the result and each player's captures and returns for 10 seconds, and a new match starts with everyone back at their spawn.
 - **The map**: Highline, 94 by 240 m under an open sky, the same for both teams (the blue half is the mirror of the red one). Each team holds a 26 m tower with its flag and eight spawns. Three routes lead to the other tower, and they meet at the plaza in the middle. The **Spine** (west, 26 m) is the fast one, about 25 s by sprint: an 11 m gap that takes a dash or a double jump, a 17 m viaduct along a wall that takes a wall-run and a dash, a beam over the plaza. **Midtown** (centre, 19 to 21 m) is roofs, short gaps and ledges to grab, about 36 s. The **Lowline** (east, 14.5 m) is stairs, short gaps and a sign to slide under, about 39 s, and needs no special move. A miss costs time: roofs under the gaps and ladders of ledges lead back up, and only a fall into the street puts you back at your tower.
 - **Moving**: momentum, sprint, dash, double jump, ledge grab and climb, wall-run, slide, coyote time and a jump buffer. The host decides where everyone is. Your own moves show at once (the client predicts them) and are corrected to the host's state, to the bit.

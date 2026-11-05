@@ -67,6 +67,8 @@ export class Ctf {
     { id: -1, left: 0 },
     { id: -1, left: 0 },
   ];
+  /** Ticks before a tackled flag can be sent home: it lies there, and the carrier's mates may take it. */
+  private hold = [0, 0];
 
   public constructor(world: World, rules: Rules) {
     this.world = world;
@@ -137,6 +139,7 @@ export class Ctf {
     }
     this.dropAt(k, at);
     this.lock[k] = { id: p.id, left: FLAG_LOCK * TICK_HZ };
+    this.hold[k] = FLAG_LOCK * TICK_HZ;
     return true;
   }
 
@@ -163,6 +166,7 @@ export class Ctf {
     this.flags = [home(), home()];
     this.back = [0, 0];
     this.lock.forEach(l => (l.left = 0));
+    this.hold = [0, 0];
     this.clock = this.rules.timeLimit * TICK_HZ;
     for (const m of this.mates.values()) {
       m.caps = m.returns = 0;
@@ -195,6 +199,7 @@ export class Ctf {
     for (const k of [0, 1]) {
       const f = this.flags[k];
       this.lock[k].left--;
+      this.hold[k]--;
       if (f.state === FLAG.DROPPED) {
         f.left = Math.ceil(--this.back[k] / TICK_HZ);
         if (this.back[k] <= 0) {
@@ -208,9 +213,11 @@ export class Ctf {
         continue;
       }
       const at = f.state === FLAG.HOME ? this.world.def.teams[k].base : ([f.x, f.y, f.z] as Vec3);
-      // A teammate sends a lying flag home, before an enemy gets to take it; an enemy takes it at its base.
+      // A teammate sends a lying flag home, before an enemy gets to take it, once a tackled flag has
+      // lain its FLAG_LOCK (the tackler stands on it); an enemy takes it at its base.
       const near = players.filter(q => touches(q.state, at));
-      const mate = f.state === FLAG.DROPPED ? near.find(q => q.team === k) : undefined;
+      const mate =
+        f.state === FLAG.DROPPED && this.hold[k] <= 0 ? near.find(q => q.team === k) : undefined;
       const foe = near.find(
         q => q.team !== k && (q.id !== this.lock[k].id || this.lock[k].left <= 0),
       );

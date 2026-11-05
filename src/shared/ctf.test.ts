@@ -132,10 +132,12 @@ describe('returning and dropping', () => {
     expect(ctf.carrying(0)).toBe(-1);
   });
 
-  it('is returned at once by a teammate of its team, who is credited with it', () => {
+  it('lies FLAG_LOCK seconds after a tackle, then a teammate of its team sends it home and is credited', () => {
     const { ctf, at, tick } = dropped();
     at(2, 5, 0);
-    tick();
+    tick(FLAG_LOCK * TICK_HZ - 1);
+    expect(ctf.flags[TEAM.BLUE].state).toBe(FLAG.DROPPED);
+    tick(1);
     expect(ctf.flags[TEAM.BLUE].state).toBe(FLAG.HOME);
     expect(ctf.tally().find(t => t.id === 2)).toMatchObject({ returns: 1, caps: 0 });
   });
@@ -156,12 +158,22 @@ describe('returning and dropping', () => {
     expect(ctf.flags[TEAM.BLUE]).toMatchObject({ state: FLAG.CARRIED, by: 0 });
   });
 
-  it('goes to a defender before an attacker when both touch it in the same tick', () => {
+  it('goes to a defender before an attacker when both touch it in the same tick, once it has lain', () => {
     const { ctf, at, tick } = dropped();
+    at(0, 40, 0);
+    tick(FLAG_LOCK * TICK_HZ);
     at(1, 5, 0);
     at(3, 5, 0);
     tick();
     expect(ctf.flags[TEAM.BLUE].state).toBe(FLAG.HOME);
+  });
+
+  it('goes to an attacker who reaches it while it lies after a tackle, even with a defender on it', () => {
+    const { ctf, at, tick } = dropped();
+    at(1, 5, 0);
+    at(3, 5, 0);
+    tick();
+    expect(ctf.flags[TEAM.BLUE]).toMatchObject({ state: FLAG.CARRIED, by: 1 });
   });
 
   it('goes home by itself after FLAG_RETURN seconds, counting down in whole seconds', () => {
@@ -279,12 +291,13 @@ describe('capturing', () => {
     tick(30);
     expect(ctf.score).toEqual([0, 0]);
     expect(ctf.carrying(0)).toBe(TEAM.BLUE);
-    // The blue carrier is tackled and drops the red flag where he stands; a red teammate sends it
-    // home, and that same tick the carrier at the red base scores.
+    // The blue carrier is tackled and drops the red flag where he stands; once it has lain, a red
+    // teammate sends it home, and that same tick the carrier at the red base scores.
+    at(3, 30, 40);
     ctf.drop(players[2].state);
     expect(ctf.flags[TEAM.RED].state).toBe(FLAG.DROPPED);
     at(1, 0, 40);
-    tick();
+    tick(FLAG_LOCK * TICK_HZ);
     expect(ctf.flags[TEAM.RED].state).toBe(FLAG.HOME);
     expect(ctf.score).toEqual([1, 0]);
   });

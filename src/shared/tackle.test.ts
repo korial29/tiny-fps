@@ -296,11 +296,10 @@ describe('the tackle cooldown', () => {
         () => m.send(m.cy, FORWARD | DASH),
       ),
     ).toBe(true);
-    // The tackler is by the flag: he sends it home at once. Dee, his teammate, takes it again
-    // (set by hand: the flag is back at its base), and is in the same dash's way.
+    // The tackler is by the flag, but a tackled flag lies FLAG_LOCK seconds before anyone sends it
+    // home: Dee, the carrier's teammate, picks it up where it lies, in the same dash's way.
     m.ticks(1);
-    expect(m.flag(TEAM.RED).state).toBe(FLAG.HOME);
-    m.carry(m.dee);
+    expect(m.flag(TEAM.RED)).toMatchObject({ state: FLAG.CARRIED, by: 3 });
     m.send(m.cy, FORWARD | DASH);
     m.send(m.cy, FORWARD | DASH);
     expect(m.state(m.dee).stun).toBe(0);

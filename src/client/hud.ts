@@ -8,8 +8,9 @@ import type { Snapshot } from '../shared/types';
 import type { Mark } from './marks';
 
 export const HUD_CSS =
-  `h5,aside,nav,output,section,em{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,output,section,em,u{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
+  `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
   `nav span,nav time{font:900 clamp(16px,4.6vw,24px)/1 system-ui,sans-serif;letter-spacing:.03em;white-space:nowrap}nav time{min-width:4.2ch;font-variant-numeric:tabular-nums;font-size:clamp(14px,3.8vw,20px)}` +
   `nav small{font-size:clamp(10px,2.6vw,12px);white-space:nowrap;opacity:.95}nav small:first-of-type{text-align:right}nav small:last-of-type{text-align:left}` +
@@ -44,6 +45,8 @@ export interface Hud {
   match(m: Pick<Snapshot, 'score' | 'clock' | 'over' | 'flags'>, who: (id: number) => string): void;
   /** The markers of this frame (see marks.ts), in the order given; the ones before are removed. */
   marks(list: Mark[]): void;
+  /** The red vignette of a tackle, 0 (none) to 1 (full). */
+  hurt(level: number): void;
   /** A line in the middle of the top of the screen in `team`'s colour, for a few seconds; a newer one replaces it. */
   banner(text: string, team?: number): void;
   /** The end screen with the result and each player's captures and returns, `next` seconds before the next match; undefined hides it. */
@@ -65,7 +68,7 @@ export const createHud = (screen: HTMLElement): Hud => {
       `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>M<td>mute</table>` +
       `<span>Take the enemy flag to your own base while yours is home.</span>` +
       `<strong></strong></aside>` +
-      `<h5 hidden>Muted (M)</h5>` +
+      `<u></u><h5 hidden>Muted (M)</h5>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav>` +
       `<output hidden></output>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
@@ -78,6 +81,7 @@ export const createHud = (screen: HTMLElement): Hud => {
   const [red, time, blue] = [...bar.querySelectorAll<HTMLElement>('span, time')];
   const [redFlag, blueFlag] = [...bar.querySelectorAll<HTMLElement>('small')];
   const banner = one('output');
+  const vignette = one('u');
   const end = one('section');
   const [title, score, next] = ['h6', 'strong', 'span'].map(t =>
     end.querySelector<HTMLElement>(t)!,
@@ -131,6 +135,10 @@ export const createHud = (screen: HTMLElement): Hud => {
         set(arrow, m.arrow === undefined ? '▼' : '▲');
         set(text, `${m.kind === 'base' ? 'Base ' : ''}${m.text}`);
       });
+    },
+    hurt(level) {
+      const v = level < 0.01 ? '' : `${Math.min(1, level)}`;
+      vignette.style.opacity != v && (vignette.style.opacity = v);
     },
     banner(text, team) {
       banner.hidden = false;

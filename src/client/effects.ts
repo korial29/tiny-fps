@@ -1,6 +1,12 @@
 // Camera feel, fed each frame: field of view, eye height, roll and speed lines. No DOM, times in
 // seconds, unit-tested. It only moves what is drawn: the inputs sent keep the real eye and angles.
-import { DASH_COOLDOWN, DASH_TICKS, RUN_SPEED, SPRINT_SPEED } from '../shared/constants';
+import {
+  DASH_COOLDOWN,
+  DASH_TICKS,
+  RUN_SPEED,
+  SPRINT_SPEED,
+  STUMBLE_TICKS,
+} from '../shared/constants';
 import { eyeHeight, speedOf } from '../shared/physics';
 import { EV, KEY, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -24,6 +30,12 @@ export interface Effects {
   lines: number;
   /** Steps walked on a floor or a wall: each whole number is a footfall. */
   stride: number;
+  /** 0 to 1: the red vignette of a tackle, full at the hit and gone in under a second. */
+  hurt: number;
+  /** The own player was tackled: a hard jolt of the eye, the look and the roll, and the vignette. */
+  jolt(): void;
+  /** The own player tackled someone: a small punch of the look and the field of view. */
+  punch(): void;
   /** Advances dt seconds: the own player (eased, undefined before the first snapshot), the held keys, the events. */
   update(me: PlayerState | undefined, keys: number, dt: number, hit?: Hit): void;
 }
@@ -70,6 +82,14 @@ const ARC_TICKS = 24;
 /** The landing spring: 2.5 Hz, damping ratio 0.45 (about a fifth of overshoot). */
 const W = 15.7;
 const Z = 0.45;
+/** A tackle: the eye's and the look's speed it is hit with (m/s, rad/s), the roll's, and how fast the vignette fades (1 / s). */
+const JOLT = [-6, 4, 5];
+const FADE = 3;
+/** The tackler's punch: the same, smaller, and the degrees of field of view it adds. */
+const PUNCH = [-1, 1.2];
+const PUNCH_FOV = 4;
+/** While stumbling the view tilts: the roll and pitch swing (radians) and their rate (rad/s). */
+const REEL = [0.1, 0.05, 11];
 
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
 
@@ -89,11 +109,14 @@ export const createEffects = (): Effects => {
   let punch = 0;
   let sprint = 0;
   let arc = 0;
+  let thump = 0;
+  let reel = 0;
   /** The eye height as drawn; undefined until the first state, which it starts at. */
   let h: number | undefined;
   let last: PlayerState | undefined;
   const y: Spring = [0, 0];
   const p: Spring = [0, 0];
+  const r: Spring = [0, 0];
 
   const fx: Effects = {
     dy: 0,
@@ -102,6 +125,20 @@ export const createEffects = (): Effects => {
     fov: 0,
     lines: 0,
     stride: 0,
+    hurt: 0,
+
+    jolt() {
+      y[1] += JOLT[0];
+      p[1] += JOLT[1];
+      r[1] += JOLT[2];
+      fx.hurt = 1;
+    },
+
+    punch() {
+      y[1] += PUNCH[0];
+      p[1] += PUNCH[1];
+      thump = 1;
+    },
 
     update(me, keys, dt, hit = { ev: 0, fall: 0 }) {
       const ease = (rate: number) => Math.min(1, dt * rate);
@@ -131,13 +168,19 @@ export const createEffects = (): Effects => {
       }
       spring(y, dt);
       spring(p, dt);
+      spring(r, dt);
+      fx.hurt *= Math.exp(-dt * FADE);
+      thump *= Math.exp(-dt * 10);
+      // Stumbling: the view reels, in and out of balance as long as the timer runs.
+      reel += dt * REEL[2];
+      const stun = me ? Math.min(1, me.stun / STUMBLE_TICKS) : 0;
       const want = me ? eyeHeight(me) : 0;
       h = me ? (h === undefined ? want : h + (want - h) * ease(14)) : undefined;
       fx.dy = (h ?? 0) - want + y[0] - Math.cos(fx.stride * 2 * Math.PI) * bob(v) * amt;
       arc +=
         ((me?.mode === MODE.CLIMB ? ARC * Math.sin(Math.PI * clamp(me.t / ARC_TICKS)) : 0) - arc) *
         ease(10);
-      fx.pitch = p[0] + arc;
+      fx.pitch = p[0] + arc + Math.sin(reel * 0.8) * REEL[1] * stun;
 
       // Toward the wall: its side against the player's right, (cos yaw, -sin yaw) on x, z.
       const wall = me?.mode === MODE.WALLRUN ? WALL[me.wall] : [0, 0];
@@ -145,13 +188,14 @@ export const createEffects = (): Effects => {
       const strafe = +!!(keys & KEY.RIGHT) - +!!(keys & KEY.LEFT);
       lean +=
         (strafe * STRAFE + side * LEAN + (me?.mode === MODE.SLIDE ? TILT : 0) - lean) * ease(8);
-      fx.roll = lean + Math.sin(fx.stride * Math.PI) * SWAY * amt;
+      fx.roll =
+        lean + Math.sin(fx.stride * Math.PI) * SWAY * amt + r[0] + Math.sin(reel) * REEL[0] * stun;
 
       // The dash is a burst of its first ticks; the speed part saturates at the sprint's.
       const burst = !!me && me.dash > DASH_COOLDOWN - DASH_TICKS;
       punch += (+burst - punch) * ease(burst ? 40 : 6);
       sprint += (clamp((v - RUN_SPEED) / (SPRINT_SPEED - RUN_SPEED)) - sprint) * ease(4);
-      fx.fov = sprint * SPRINT_FOV + punch * DASH_FOV;
+      fx.fov = sprint * SPRINT_FOV + punch * DASH_FOV + thump * PUNCH_FOV;
       fx.lines +=
         (clamp((v - LINES_FROM) / (SPRINT_SPEED - LINES_FROM)) * SPRINT_LINES +
           punch * (1 - SPRINT_LINES) -

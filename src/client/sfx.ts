@@ -79,6 +79,9 @@ export const SOUND = {
   DROP: 11,
   RETURN: 12,
   CAPTURE: 13,
+  /** A tackle: the impact, and the grunt of the one tackled. */
+  TACKLE: 14,
+  GRUNT: 15,
 } as const;
 
 /**
@@ -148,6 +151,17 @@ export const LAYERS: Voice[][] = [
     [0, 784, 0, 0.004, 0.07, 0.1, 0, 0.3, 0, 1, 0.4, 0.22],
     [0, 1047, 0, 0.004, 0.2, 0.35, 0.008, 0.3, 0, 1, 0.5, 0.33],
     [2, 262, 0, 0.004, 0.25, 0.3, 0, 1, 0, 1, 0.35, 0.33],
+  ],
+  // TACKLE: a body hit, a sine thump falling fast under a crack of noise and a rustle of cloth.
+  [
+    [2, 120, -3, 0.001, 0.01, 0.24, 0, 1, 0, 1, 1],
+    [3, 5000, -1.5, 0.001, 0, 0.09, 0, 0.35, 0, 1, 0.7],
+    [3, 2200, 0, 0.01, 0.03, 0.16, 0.3, 0.15, 0, 1, 0.4, 0.03],
+  ],
+  // GRUNT: breath pushed out, a low saw dropping with a wobble, with a hiss of air.
+  [
+    [1, 170, -0.9, 0.012, 0.05, 0.17, 0.06, 0.2, 0, 1, 0.5],
+    [3, 3000, 0, 0.01, 0.04, 0.14, 0.4, 0.12, 0, 1, 0.5],
   ],
 ];
 

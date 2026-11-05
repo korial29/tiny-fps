@@ -306,8 +306,11 @@ describe('shape', () => {
     expect(Object.keys(createEffects()).sort()).toEqual([
       'dy',
       'fov',
+      'hurt',
+      'jolt',
       'lines',
       'pitch',
+      'punch',
       'roll',
       'stride',
       'update',

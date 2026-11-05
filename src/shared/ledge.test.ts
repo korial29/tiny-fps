@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EAST, NORTH, SOUTH, WEST, at, falling } from '../../test/yard';
 import {
+  CLIMB_EXIT_SPEED,
   CLIMB_MAX_TICKS,
   HANG_H,
   HANG_SLIDE_TICKS,
@@ -149,6 +150,9 @@ describe('ledge grab and climb', () => {
     expect(s.p.x).toBeGreaterThan(10);
     expect(s.p.x).toBeLessThan(14);
     expect(s.ev & EV.CLIMB).toBe(EV.CLIMB);
+    // It stands up moving in, at CLIMB_EXIT_SPEED, not stopped dead.
+    expect(s.p.vx).toBeCloseTo(CLIMB_EXIT_SPEED, 4);
+    expect(s.p.vz).toBeCloseTo(0, 4);
     // A few tenths of a second, the body going up and then in.
     const took = s.inputs.length - grabbed;
     expect(took).toBeGreaterThan(0.2 * TICK_HZ);

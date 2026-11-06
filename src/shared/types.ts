@@ -42,6 +42,12 @@ export const KEY = {
  */
 export const CUT = { THRUST: 0, LEFT: 1, RIGHT: 2, SLASH: 3 } as const;
 
+/**
+ * The limb a katana's cut takes off when it puts a player down (PlayerState.lost), by where the
+ * blade crosses the body (see limbOf(), blade.ts). Sides are the victim's own.
+ */
+export const LIMB = { NONE: 0, HEAD: 1, ARM_L: 2, ARM_R: 3, LEG_L: 4, LEG_R: 5 } as const;
+
 /** The movement state of a player: what the body is doing, one of these. */
 export const MODE = {
   /** Standing or running on a floor. */
@@ -164,6 +170,8 @@ export interface PlayerState {
   cut?: number;
   /** The running stumble (`stun`) is a katana's shock, not a tackle. Absent reads false. */
   zap?: boolean;
+  /** While down after a katana's cut put him down: the LIMB it took off, for the clients to draw. NONE once up. Absent reads NONE. */
+  lost?: number;
   /** For the animation, not sent: the EV bits of the last step, and the speed of a landing. */
   ev: number;
   fall: number;

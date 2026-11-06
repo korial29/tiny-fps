@@ -54,3 +54,22 @@ A second weapon: a katana with a cyan electric glow along the blade. Its cut dep
 Step 3 is done: racks on HIGHLINE (47, 26, 231.5 and its mirror) and ROOFTOPS (13.5, 10, 69 and 14.5, 12.4, -1.2), 2.5 m from the gun rack.
 
 Step 4 is done: `katana.ts` (the model, its hold and the cut keys in camera space), `trail.ts`, the cuts in `body.ts` and `soldier.ts`, the rack in `props.ts`. The weapon choice is in `input.ts`, the shock beat in `beats.ts`, the sparks and crackle in `beams.ts`. With empty hands the own arms hang out of view and swing with the stride (the user, 2026-11-06).
+
+## A longer katana, two hands, limb cuts (the user, 2026-11-06)
+
+The katana gets longer, is held in both hands and swings wider. The cut that puts a foe down takes off the limb the blade crosses. The limb cut is only drawn: it changes no rule.
+
+| Rule      | Value                                                                                                                                                                                                                                                                  |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Blade     | About 1 m from the guard to the point (was 74 cm), with a grip long enough for two hands with a gap. Reach is 0.25 m longer (`CUTS`).                                                                                                                                   |
+| Hands     | Both hands on the grip, in the guard and in every cut, in the first person and on the other runners.                                                                                                                                                                  |
+| Swings    | Longer (`CUTS`: 28, 34, 34 and 40 ticks), with a real wind-up (behind the shoulder, above the head, a pull back for the thrust) and a full follow-through. The strike still passes the middle of the view.                                                              |
+| Limb      | `limbOf(p, f)` in `blade.ts`: where the cut crosses the foe's body. Thrust and the cuts across: the height of the look line at his distance, as a share of his height. Above `NECK` the head, below `HIPS` a leg, else an arm; the side is the one the blade meets first (a cut across: the side it comes from; a thrust: the side of his middle the line passes). A thrust within `MIDLINE` of his middle at arm height takes nothing. A slash takes the head within `MIDLINE`, else the arm on the side the line passes. |
+| State     | `PlayerState.lost` (`LIMB`) is set by the room when a cut puts a player down, and cleared when he is back up. Shots never set it. On the wire: a new byte at the end of the player record (47 bytes), bits 0-2.                                                       |
+| Look      | The limb comes off at its joint with the body (head at the neck, arm at the shoulder, leg at the hip) as a separate piece that falls, bounces and lies on the roof until the body is gone. Both cut faces are capped and glow red-orange, cauterized; cyan sparks burst at the cut and the stump spits a few more for a second. No blood. |
+
+Steps:
+
+5. Rules: `limbOf()` and its tests, `lost` set in `Room.cut()` and cleared on respawn, the wire byte. The longer `CUTS` numbers are in the contract.
+6. Katana: the longer blade and grip in `katana.ts`, the two-hand guard and the wider cut keys, in the first person (`body.ts`) and on the runners (`soldier.ts`).
+7. Limb cuts: the severed piece (the skin's triangles of the limb's joints, see `skin.ts`), its fall, the caps and the sparks, drawn for a runner whose `lost` is set.

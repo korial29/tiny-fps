@@ -24,8 +24,12 @@ export type Voice = [
 /** Sample rate of everything rendered here; audio.ts resamples through AudioBuffer if needed. */
 export const RATE = 44100;
 
-const synth = ([wave, hz, slide, a, s, d, vib, lp, jt, jm, vol]: Voice, seed: number) => {
-  const out = new Float32Array(Math.ceil((a + s + d) * RATE));
+const synth = (
+  [wave, hz, slide, a, s, d, vib, lp, jt, jm, vol]: Voice,
+  seed: number,
+  rate = RATE,
+) => {
+  const out = new Float32Array(Math.ceil((a + s + d) * rate));
   let phase = 0;
   let low = 0;
   let noise = 0;
@@ -37,8 +41,8 @@ const synth = ([wave, hz, slide, a, s, d, vib, lp, jt, jm, vol]: Voice, seed: nu
     return ((z ^ (z >>> 14)) >>> 0) / 2 ** 31 - 1;
   };
   for (let i = 0; i < out.length; i++) {
-    const t = i / RATE;
-    phase += (hz * 2 ** (slide * t) * (t > jt ? jm : 1) * (1 + vib * Math.sin(t * 44))) / RATE;
+    const t = i / rate;
+    phase += (hz * 2 ** (slide * t) * (t > jt ? jm : 1) * (1 + vib * Math.sin(t * 44))) / rate;
     if (phase >= 1) {
       phase %= 1;
       noise = rand();
@@ -274,8 +278,10 @@ export const seam = (s: Float32Array, x = RATE / 10): Float32Array => {
   );
 };
 
+/** The music's sample rate: half, as nothing in it but the hats goes past 4 kHz. */
+export const MUSIC_RATE = RATE / 2;
 const BPM = 84;
-const BEAT = (RATE * 60) / BPM;
+const BEAT = (MUSIC_RATE * 60) / BPM;
 const BARS = 16;
 /** Two bars each, in semitones above A2: Dmaj9, Bm7, Gmaj7, Asus2. */
 const CHORDS = [
@@ -290,7 +296,7 @@ const CHORDS = [
  */
 const ARP = ['0...2..3..1.2...', '4..6.5..7..6.5..'];
 const HAT: Voice = [3, 30000, 0, 0.001, 0, 0.04, 0, 0.7, 0, 1, 0.3];
-const PULSE: Voice = [2, 85, -2, 0.008, 0, 0.2, 0, 1, 0, 1, 0.3];
+const PULSE: Voice = [2, 85, -2, 0.008, 0, 0.2, 0, 1, 0, 1, 0.22];
 
 /**
  * Adds `src` to `to` from sample `at`, read `r` times as fast (a pitch) for `len` samples, wrapping
@@ -307,31 +313,51 @@ const add = (
   a = 1,
   d = 1,
 ) => {
-  // Integer indices and no modulo in the loop: it runs millions of times.
+  // Integer indices, no modulo and no division in the loop: it runs millions of times.
+  const end = src.length - 1;
+  const [ia, id] = [1 / a, 1 / d];
   for (let j = 0, p = 0, o = (at % to.length) | 0; j < len; j++) {
     const k = p | 0;
     to[o] +=
-      gain * (src[k] + (src[k + 1] - src[k]) * (p - k)) * Math.min(1, j / a, (len - j) / d) ** 2;
+      gain * (src[k] + (src[k + 1] - src[k]) * (p - k)) * Math.min(1, j * ia, (len - j) * id) ** 2;
     if (++o == to.length) {
       o = 0;
     }
-    if ((p += r) >= src.length - 1) {
-      p -= src.length - 1;
+    if ((p += r) >= end) {
+      p -= end;
     }
   }
 };
 
 /**
+ * Adds `pads` to both halves of `mix` and brings its peak to 0.35. Hot loops sit in small functions:
+ * V8 compiles a big one on its first hot loop, which costs more than the loop.
+ */
+const mixdown = (mix: Float32Array, pads: Float32Array) => {
+  let peak = 0;
+  for (let i = 0; i < pads.length; i++) {
+    mix[i] += pads[i];
+    mix[i + pads.length] += pads[i];
+    peak = Math.max(peak, Math.abs(mix[i]), Math.abs(mix[i + pads.length]));
+  }
+  for (let i = 0; i < mix.length; i++) {
+    mix[i] *= 0.35 / peak;
+  }
+  return mix;
+};
+
+/**
  * The music: sixteen bars in D major at 84 bpm (whole beats, whole samples), slow pads, sparse
- * bells with an echo, soft hats and a muted pulse; mono samples in [-1, 1] at RATE, deterministic,
- * whose end joins its start (every tail wraps onto the start). Quiet enough to sit under the sounds.
+ * bells with an echo, soft hats and a muted pulse; mono samples in [-1, 1] at MUSIC_RATE,
+ * deterministic, whose end joins its start (every tail wraps onto the start). Quiet enough to sit
+ * under the sounds.
  */
 export const music = (): Float32Array => {
   const n = BEAT * 4 * BARS;
   // One period of A2: two sines 8 cents apart that beat at half a hertz, a soft octave and twelfth.
-  const table = new Float32Array(2 * RATE + 1);
-  for (let i = 0; i <= 2 * RATE; i++) {
-    const w = (Math.PI * i) / RATE;
+  const table = new Float32Array(2 * MUSIC_RATE + 1);
+  for (let i = 0; i <= 2 * MUSIC_RATE; i++) {
+    const w = (Math.PI * i) / MUSIC_RATE;
     table[i] =
       Math.sin(220 * w) + Math.sin(221 * w) + 0.4 * Math.sin(441 * w) + 0.15 * Math.sin(659 * w);
   }
@@ -343,11 +369,13 @@ export const music = (): Float32Array => {
     ),
   );
   const mix = new Float32Array(n);
-  // A sine bell at A4 with a short inharmonic partial: a higher note is shorter, as a real one.
-  const bell = synth([2, 440, 0, 0.004, 0, 1.2, 0.002, 1, 0, 1, 0.36], 1);
-  synth([2, 1214, 0, 0.002, 0, 0.25, 0, 1, 0, 1, 0.1], 1).forEach((x, i) => (bell[i] += x));
-  const hat = synth(HAT, 1);
-  const pulse = synth(PULSE, 1);
+  // A sine bell at A3 with a short inharmonic partial: a higher note is shorter, as a real one.
+  const bell = synth([2, 220, 0, 0.004, 0, 1, 0.002, 1, 0, 1, 0.36], 1, MUSIC_RATE);
+  synth([2, 607, 0, 0.002, 0, 0.25, 0, 1, 0, 1, 0.1], 1, MUSIC_RATE).forEach(
+    (x, i) => (bell[i] += x),
+  );
+  const hat = synth(HAT, 1, MUSIC_RATE);
+  const pulse = synth(PULSE, 1, MUSIC_RATE);
   for (let e = 0; e < BARS * 8; e++) {
     const at = (e * BEAT) / 2;
     const d = +ARP[e >> 6][e & 15];
@@ -357,7 +385,7 @@ export const music = (): Float32Array => {
         mix,
         bell,
         at + k * 0.75 * BEAT,
-        2 ** ((CHORDS[(e >> 4) & 3][d & 3] + 12 * (d >> 2) - 12) / 12),
+        2 ** ((CHORDS[(e >> 4) & 3][d & 3] + 12 * (d >> 2)) / 12),
         0.35 ** k,
       );
     }
@@ -369,13 +397,5 @@ export const music = (): Float32Array => {
       add(mix, pulse, at);
     }
   }
-  let peak = 0;
-  for (let i = 0; i < n; i++) {
-    mix[i] += pads[i % (n / 2)];
-    peak = Math.max(peak, Math.abs(mix[i]));
-  }
-  for (let i = 0; i < n; i++) {
-    mix[i] *= 0.35 / peak;
-  }
-  return mix;
+  return mixdown(mix, pads);
 };

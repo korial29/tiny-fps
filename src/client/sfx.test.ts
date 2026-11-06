@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LAYERS, LOOPED, RATE, SOUND, music, render, seam } from './sfx';
+import { LAYERS, LOOPED, MUSIC_RATE, RATE, SOUND, music, render, seam } from './sfx';
 import type { Voice } from './sfx';
 
 const peak = (s: Float32Array) => s.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
@@ -221,7 +221,7 @@ describe('seam', () => {
 });
 
 describe('music', () => {
-  // Best of three, loose: the other test files compete for the CPU (about 50 ms when alone).
+  // Best of three, loose: the other test files compete for the CPU (about 20 ms when alone).
   const times: number[] = [];
   const m = Array.from({ length: 3 }, () => {
     const t0 = performance.now();
@@ -229,7 +229,7 @@ describe('music', () => {
     times.push(performance.now() - t0);
     return out;
   })[0];
-  const beats = (m.length * 84) / (RATE * 60);
+  const beats = (m.length * 84) / (MUSIC_RATE * 60);
 
   it('is deterministic', () => {
     expect(Buffer.from(music().buffer).equals(Buffer.from(m.buffer))).toBe(true);
@@ -238,7 +238,7 @@ describe('music', () => {
   it('is a whole number of beats at 84 bpm, sixteen bars: three quarters of a minute', () => {
     expect(beats).toBe(Math.round(beats));
     expect(beats / 4).toBe(16);
-    expect(m.length / RATE).toBeGreaterThan(45);
+    expect(m.length / MUSIC_RATE).toBeGreaterThan(45);
   });
 
   it('is quiet, but not silent', () => {
@@ -258,7 +258,7 @@ describe('music', () => {
 
   it('is light: under a third of its energy below 200 Hz', () => {
     // Two one-pole low-passes at 200 Hz.
-    const a = 1 - Math.exp((-2 * Math.PI * 200) / RATE);
+    const a = 1 - Math.exp((-2 * Math.PI * 200) / MUSIC_RATE);
     let [y1, y2, low, all] = [0, 0, 0, 0];
     for (const x of m) {
       y1 += (x - y1) * a;

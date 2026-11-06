@@ -1,6 +1,6 @@
 // Web Audio: the sounds of sfx.ts placed in stereo around the listener, and the music loop.
 import type { Vec3 } from './mesh';
-import { LAYERS, LOOPED, RATE, music, render, seam } from './sfx';
+import { LAYERS, LOOPED, MUSIC_RATE, RATE, music, render, seam } from './sfx';
 import type { Voice } from './sfx';
 
 /** A sound that plays on and on, started on its first set. */
@@ -80,8 +80,8 @@ export const createAudio = (layers: Voice[][] = LAYERS): Audio => {
   let yaw = 0;
   let muted = false;
 
-  const buffer = (samples: Float32Array) => {
-    const b = ctx.createBuffer(1, samples.length, RATE);
+  const buffer = (samples: Float32Array, rate = RATE) => {
+    const b = ctx.createBuffer(1, samples.length, rate);
     b.getChannelData(0).set(samples);
     return b;
   };
@@ -100,7 +100,7 @@ export const createAudio = (layers: Voice[][] = LAYERS): Audio => {
           const s = render(id, layers);
           bufs[id] = buffer(LOOPED.includes(id) ? seam(s) : s);
         });
-        const m = source(buffer(music()));
+        const m = source(buffer(music(), MUSIC_RATE));
         m.loop = true;
         m.connect(bed);
         m.start();

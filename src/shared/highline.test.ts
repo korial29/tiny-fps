@@ -4,7 +4,7 @@ import { problems } from '../../test/pickups';
 import { HIGH, LOW, MID, UP, above, fly, go, leap, plain, trip } from '../../test/routes';
 import type { Leg, Route } from '../../test/routes';
 import { palette, MAX_TINTS } from '../client/render';
-import { FLAG_H, FLAG_REACH, MAX_PITCH, PLAYER_H, PLAYER_R, SNAP_EVERY } from './constants';
+import { FLAG_H, FLAG_REACH, MAX_PITCH, PLAYER_H, PLAYER_R, RACK_R, SNAP_EVERY } from './constants';
 import { touches } from './ctf';
 import { HIGHLINE, TEAM_TINT } from './map';
 import { move, spawn } from './physics';
@@ -289,6 +289,19 @@ describe('HIGHLINE, racks and packs', () => {
     const [red, blue] = teams.map(t => t.rack!);
     expect(red).toEqual([47, 26, 234]);
     expect(blue).toEqual([red[0], red[1], ZED - red[2]]);
+  });
+
+  it('has a katana rack for each team, 2.5 m from its gun rack toward the spawns, and mirrored', () => {
+    const [red, blue] = teams.map(t => t.blade!);
+    expect(red).toEqual([47, 26, 231.5]);
+    expect(blue).toEqual([red[0], red[1], ZED - red[2]]);
+    for (const { rack, blade, spawns } of teams) {
+      expect(Math.hypot(blade![0] - rack![0], blade![2] - rack![2])).toBeCloseTo(2.5, 6);
+      expect(blade![1]).toBe(rack![1]);
+      for (const [x, y, z] of spawns) {
+        expect(y === blade![1] && Math.hypot(x - blade![0], z - blade![2]) < RACK_R).toBe(false);
+      }
+    }
   });
 
   it('has 8 to 12 health packs, each with a twin across the line, and a few on every route of each half', () => {

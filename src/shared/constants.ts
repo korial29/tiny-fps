@@ -213,6 +213,30 @@ export const RACK_R = 1.2;
 /** Metres the feet may be above or below a pack or a rack to take it. */
 export const PICK_H = 1;
 
+// The electric katana (blade.ts). Ticks of 1 / TICK_HZ s; on the wire a swing's ticks take 6 bits.
+
+/**
+ * The cuts, by CUT. A swing lasts `ticks`, during which no other starts, and strikes once, `strike`
+ * ticks after its start. It hits every enemy whose body comes within `reach` metres of the
+ * attacker's (centre to centre less PLAYER_R, on the floor plane), within `arc` radians either side
+ * of his look, at a height his body overlaps, with no brush between. A hit takes `hp`.
+ */
+export const CUTS = [
+  /** THRUST: quick and the longest, a narrow line. */
+  { ticks: 24, strike: 8, reach: 2.4, arc: 0.3, hp: 2 },
+  /** LEFT, then RIGHT: across, a wide arc. */
+  { ticks: 30, strike: 11, reach: 1.9, arc: 1.2, hp: 2 },
+  { ticks: 30, strike: 11, reach: 1.9, arc: 1.2, hp: 2 },
+  /** SLASH: down from above, the slowest and the hardest. */
+  { ticks: 36, strike: 14, reach: 1.9, arc: 0.45, hp: 3 },
+];
+/**
+ * A cut that does not put the enemy down shocks him: a stumble (`stumble()`, physics.ts) of
+ * SHOCK_TICKS (0.4 s), thrown SHOCK_KNOCK m/s the way the blade goes.
+ */
+export const SHOCK_TICKS = 24;
+export const SHOCK_KNOCK = 4;
+
 /** Seconds a carrier who is made to drop the flag cannot take it again: he would pick it up where he stands. */
 export const FLAG_LOCK = 2;
 /** Seconds the end screen of a match stays, then a new match starts. */

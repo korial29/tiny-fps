@@ -26,9 +26,21 @@ export const KEY = {
   DASH: 64,
   /** Hold to crouch, or to slide when fast. */
   CROUCH: 128,
-  /** Hold to fire the gun: one shot every GUN_COOLDOWN ticks while there is ammo. */
+  /** Hold to fire the gun: one shot every GUN_COOLDOWN ticks while there is ammo. With the katana in hand: a cut (see CUT). */
   FIRE: 256,
+  /**
+   * Set while the player wants the katana in hand (the client's choice: 1, 2 or the wheel), clear
+   * for the gun. Ignored without the katana; without the gun the katana is in hand whatever it says.
+   */
+  BLADE: 512,
 } as const;
+
+/**
+ * The katana's cuts (PlayerState.cut, constants CUTS), chosen by the keys held when FIRE starts
+ * one: LEFT or RIGHT (one of them) cuts across from that side, else FORWARD thrusts, else (back or
+ * no key) it slashes down from above.
+ */
+export const CUT = { THRUST: 0, LEFT: 1, RIGHT: 2, SLASH: 3 } as const;
 
 /** The movement state of a player: what the body is doing, one of these. */
 export const MODE = {
@@ -139,9 +151,19 @@ export interface PlayerState {
   rack?: boolean;
   /** Ticks left lying down after the health ran out; at 0 the player is back at a spawn. 0 when up. */
   down: number;
-  /** Shots fired and hits landed, u8 counters that wrap: the clients draw a beam and play the hit sound on each change. */
+  /** Shots fired and hits landed (a laser or a cut), u8 counters that wrap: the clients draw a beam and play the hit sound on each change. */
   shots: number;
   hits: number;
+  /** Has the katana (taken at the team's katana rack, lost on going down). Absent reads false. */
+  blade?: boolean;
+  /** The katana is in hand rather than the gun (see KEY.BLADE). Absent reads false. */
+  wield?: boolean;
+  /** Ticks left in the katana's swing, CUTS[cut].ticks at its start, 0 when ready. Absent reads 0. */
+  swing?: number;
+  /** CUT of the running or last swing. Absent reads 0. */
+  cut?: number;
+  /** The running stumble (`stun`) is a katana's shock, not a tackle. Absent reads false. */
+  zap?: boolean;
   /** For the animation, not sent: the EV bits of the last step, and the speed of a landing. */
   ev: number;
   fall: number;

@@ -1,4 +1,4 @@
-// Test helper: what a map must get right about its gun racks and health packs.
+// Test helper: what a map must get right about its gun and katana racks and its packs.
 import { FLAG_REACH, PACK_R, PICK_H, PLAYER_H, PLAYER_R, RACK_R } from '../src/shared/constants';
 import { build, hidden } from '../src/shared/world';
 import type { WorldDef } from '../src/shared/world';
@@ -12,7 +12,8 @@ const EDGE = 1;
  * What is wrong with the racks and packs of a map, one line each; nothing when all is right. Each
  * stands on a top, at least EDGE from its edge, with room for a body above it and not inside a
  * brush; packs are 2 PACK_R apart and a rack is off its team's flag base and within 8 m of a spawn
- * it can walk to in a straight line on the spawn's roof, without being at one.
+ * it can walk to in a straight line on the spawn's roof, without being at one. The katana rack is
+ * 2 to 3 m from the gun rack, outside its circle, and outside the circle of every spawn.
  */
 export const problems = (def: WorldDef): string[] => {
   const out: string[] = [];
@@ -76,10 +77,11 @@ export const problems = (def: WorldDef): string[] => {
         out.push(`${names[k]} and ${names[j]} are too close`);
       }
     });
-    for (const [t, { base, rack }] of def.teams.entries()) {
+    for (const [t, { base, rack, blade }] of def.teams.entries()) {
       for (const [what, at] of [
         ['base', base],
         ['rack', rack],
+        ['katana rack', blade],
       ] as const) {
         if (at && Math.hypot(p[0] - at[0], p[2] - at[2]) < 4 * PACK_R) {
           out.push(`${names[k]} is by the ${what} of team ${t}`);
@@ -90,12 +92,28 @@ export const problems = (def: WorldDef): string[] => {
   if (all.length > 32) {
     out.push('more than 32 packs');
   }
-  def.teams.forEach(({ base, spawns, rack }, team) => {
+  def.teams.forEach(({ base, spawns, rack, blade }, team) => {
     if (!rack) {
       out.push(`team ${team}: no rack`);
       return;
     }
     stands(`rack ${team}`, rack, RACK_R);
+    if (!blade) {
+      out.push(`team ${team}: no katana rack`);
+    } else {
+      stands(`katana rack ${team}`, blade, RACK_R);
+      const apart = Math.hypot(blade[0] - rack[0], blade[2] - rack[2]);
+      if (blade[1] !== rack[1] || apart < 2 || apart > 3) {
+        out.push(
+          `katana rack ${team}: ${apart.toFixed(2)} m from the gun rack, not 2 to 3 on its top`,
+        );
+      }
+      for (const [x, y, z] of spawns) {
+        if (y === blade[1] && Math.hypot(x - blade[0], z - blade[2]) < RACK_R) {
+          out.push(`katana rack ${team}: a spawn stands in its circle`);
+        }
+      }
+    }
     if (Math.hypot(rack[0] - base[0], rack[2] - base[2]) < FLAG_REACH + RACK_R + 1) {
       out.push(`rack ${team}: on the flag base`);
     }

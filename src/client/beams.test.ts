@@ -148,3 +148,81 @@ describe('the tracer', () => {
     expect(drawn(t).length).toBeLessThan(2000);
   });
 });
+
+describe('the shock of the katana', () => {
+  const AT: Vec3 = [3, 1, -4];
+
+  it('bursts into cyan sparks and bolts around the runner, drawn finite and unlit', () => {
+    const t = createTracer();
+    t.shock(AT);
+    const v = drawn(t);
+    expect(v.length).toBeGreaterThan(30);
+    for (const x of v) {
+      expect(x[8]).toBe(-2);
+      // Cyan and white: blue and green over red.
+      expect(x[9]).toBeGreaterThan(x[6]);
+    }
+    // Everything is near him.
+    for (const x of v) {
+      expect(Math.hypot(x[0] - AT[0], x[1] - AT[1], x[2] - AT[2])).toBeLessThan(2);
+    }
+    expect(t.count).toBe(0);
+  });
+
+  it('flickers out: the bolts in a tenth of a second, the sparks in a quarter', () => {
+    const t = createTracer();
+    t.shock(AT);
+    const n = drawn(t).length;
+    t.update(0.1);
+    expect(drawn(t).length).toBeGreaterThan(0);
+    expect(drawn(t).length).toBeLessThan(n);
+    t.update(0.2);
+    expect(drawn(t)).toEqual([]);
+    expect(t.lights()).toEqual([]);
+  });
+
+  it('crackles a few bolts around his middle each frame, short ones, and they do not pile up', () => {
+    const t = createTracer();
+    for (let i = 0; i < 60; i++) {
+      t.crackle(AT);
+      t.update(1 / 60);
+    }
+    const v = drawn(t);
+    expect(v.length).toBeGreaterThan(0);
+    // A few ribbons of 12 vertices at most each: not hundreds.
+    expect(v.length).toBeLessThan(24 * 24);
+    for (const x of v) {
+      expect(Math.hypot(x[0] - AT[0], x[1] - AT[1], x[2] - AT[2])).toBeLessThan(1.2);
+    }
+    // Ceases with the shock.
+    t.update(0.2);
+    expect(drawn(t)).toEqual([]);
+  });
+
+  it('draws the same bolts on the same run, and different ones from frame to frame', () => {
+    const run = () => {
+      const t = createTracer();
+      t.crackle(AT);
+      t.crackle(AT);
+      return drawn(t);
+    };
+    expect(run()).toEqual(run());
+    const t = createTracer();
+    const seen = new Set<string>();
+    for (let i = 0; i < 20; i++) {
+      t.update(1);
+      t.crackle(AT);
+      seen.add(JSON.stringify(drawn(t)));
+    }
+    expect(seen.size).toBeGreaterThan(5);
+  });
+
+  it('lights the shocked runner cyan for a moment, with the light of at most two bolts', () => {
+    const t = createTracer();
+    t.shock(AT);
+    const l = t.lights();
+    expect(l.length).toBeGreaterThan(0);
+    expect(l.length).toBeLessThanOrEqual(2);
+    expect(l[0].color[2]).toBeGreaterThan(l[0].color[0]);
+  });
+});

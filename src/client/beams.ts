@@ -13,6 +13,10 @@ const SPARK = 0.22;
 const SPARKS = 7;
 /** Beams kept at most: the oldest goes. */
 const MAX = 16;
+/** Seconds a bolt lasts, bolts kept at most, and the sparks of a shock. */
+const BOLT = 0.05;
+const BOLTS = 24;
+const SHOCK_SPARKS = 10;
 
 /** One shot: from `a` to `b`, `age` seconds old; `hit` when a wall stopped it. */
 interface Beam {
@@ -28,10 +32,21 @@ interface Spark {
   v: Vec3;
   age: number;
 }
+/** A jagged bolt: two segments, a to m to b. */
+interface Bolt {
+  a: Vec3;
+  m: Vec3;
+  b: Vec3;
+  age: number;
+}
 
 export interface Tracer {
   /** A shot from `a` to `b`; `hit` when it ended on a wall, which sparks; `own` for the player's, which stays on its muzzle. */
   shoot(a: Vec3, b: Vec3, hit: boolean, own?: boolean): void;
+  /** The katana's shock at `at`: a burst of sparks and bolts. */
+  shock(at: Vec3): void;
+  /** One frame of the crackle around a shocked runner whose middle is `at`: a few bolts, flickering. */
+  crackle(at: Vec3): void;
   /** Where the own muzzle is now: the own beams start there, so that a kick of the view does not swing them. */
   mount(a: Vec3): void;
   /** Ages everything by dt seconds and drops what is over. */
@@ -98,11 +113,36 @@ const ribbon = (
 export const createTracer = (): Tracer => {
   let beams: Beam[] = [];
   let sparks: Spark[] = [];
+  let bolts: Bolt[] = [];
   let seed = 7;
   /** A number in [-1, 1) from a small generator: the same run draws the same sparks. */
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
 
+  /** A bolt of about `len` metres from `p`, any way. */
+  const bolt = (p: Vec3, len: number) => {
+    const d = [rnd(), rnd(), rnd()].map(v => v * len) as Vec3;
+    const b = [0, 1, 2].map(i => p[i] + d[i]) as Vec3;
+    const m = [0, 1, 2].map(i => p[i] + d[i] / 2 + rnd() * len * 0.3) as Vec3;
+    bolts = [...bolts, { a: p, m, b, age: 0 }].slice(-BOLTS);
+  };
+
   return {
+    shock(at) {
+      for (let i = 0; i < SHOCK_SPARKS; i++) {
+        sparks.push({ p: at, v: [rnd() * 4, rnd() * 3 + 1, rnd() * 4], age: 0 });
+        if (i % 2 == 0) {
+          bolt(at, 0.6);
+        }
+      }
+      sparks = sparks.slice(-MAX * SPARKS);
+    },
+    crackle(at) {
+      for (let i = 0; i < 2; i++) {
+        if (rnd() > 0) {
+          bolt([at[0] + rnd() * 0.4, at[1] + rnd() * 0.7, at[2] + rnd() * 0.4], 0.35);
+        }
+      }
+    },
     mount(a) {
       beams.forEach(b => b.own && (b.a = a));
     },
@@ -122,11 +162,12 @@ export const createTracer = (): Tracer => {
       }
     },
     update(dt) {
-      for (const x of [...beams, ...sparks]) {
+      for (const x of [...beams, ...sparks, ...bolts]) {
         x.age += dt;
       }
       beams = beams.filter(b => b.age < LIFE);
       sparks = sparks.filter(s => s.age < SPARK);
+      bolts = bolts.filter(b => b.age < BOLT);
       for (const s of sparks) {
         s.v[1] -= 9 * dt;
         s.p = s.p.map((v, i) => v + s.v[i] * dt) as Vec3;
@@ -147,6 +188,15 @@ export const createTracer = (): Tracer => {
             lift,
           ),
         );
+      }
+      for (const { a, m, b, age } of bolts) {
+        const k = 1 - age / BOLT;
+        for (const [p, q] of [
+          [a, m],
+          [m, b],
+        ]) {
+          RIBBONS.forEach(([w, rgb, lift]) => ribbon(out, p, q, w * 0.5 * k, rgb, eye, lift));
+        }
       }
       for (const { p, age } of sparks) {
         const k = 1 - age / SPARK;
@@ -173,7 +223,10 @@ export const createTracer = (): Tracer => {
         color: rgb.map(c => c * k) as Vec3,
         shadow: false,
       });
-      return beams
+      const arcs = bolts
+        .slice(-2)
+        .map(b => point(b.m, 3, 0.8 * (1 - b.age / BOLT), [0.3, 0.7, 1.3]));
+      const flashes = beams
         .filter(b => b.age < FLASH)
         .slice(-3)
         .flatMap(b => {
@@ -183,6 +236,7 @@ export const createTracer = (): Tracer => {
             ...(b.hit ? [point(b.b, 3.5, 0.9 * k, [0.3, 0.7, 1.3])] : []),
           ];
         });
+      return [...arcs, ...flashes];
     },
     get count() {
       return beams.length;

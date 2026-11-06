@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { DASH_COOLDOWN, PLAYER_H, PLAYER_R } from '../shared/constants';
+import { CUTS, DASH_COOLDOWN, PLAYER_H, PLAYER_R } from '../shared/constants';
 import { STILL } from '../shared/physics';
-import { MODE, SIDE, TEX } from '../shared/types';
+import { CUT, MODE, SIDE, TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
@@ -459,5 +459,186 @@ describe('the gun on a runner', () => {
     animate(book, [armed()], DT);
     animate(book, [armed({ shots: 1 })], DT);
     expect(book.get(1)!.aim).toBe(1);
+  });
+});
+
+describe('a runner with the katana', () => {
+  const GREEN = [0.1, 0.8, 0.2];
+  const blade = (o: Partial<PlayerState> = {}) =>
+    man({ wield: true, blade: true, cut: CUT.THRUST, swing: 0, ...o });
+  /** The vertices of the katana's light: bright cyan, unlit. */
+  const light = (v: number[]) => rows(v).filter(p => p[3] == -2 && p[5] > 1.5 && p[6] > p[4] * 2);
+  /** The runner, drawn at frame i of a swing of `cut` from a standing start (swing 0 when `tick` is below 0). */
+  const frames = (cut: number, o: Partial<PlayerState> = {}, lod = 1) => {
+    const book = new Map<number, Runner>();
+    for (let i = 0; i < 40; i++) {
+      animate(book, [blade({ ...o, cut })], DT);
+    }
+    const out: number[][] = [];
+    for (let i = 0; i < CUTS[cut].ticks; i++) {
+      animate(book, [blade({ ...o, cut, swing: CUTS[cut].ticks - i })], DT);
+      const v: number[] = [];
+      soldier(v, book.get(1)!, GREEN, lod);
+      out.push(v);
+    }
+    return { book, out };
+  };
+  /** The point of the blade: the light farthest from the runner's eye. */
+  const tipOf = (v: number[], p: Partial<PlayerState> = {}) => {
+    const eye = [p.x ?? 5, (p.y ?? 1) + 1.6, p.z ?? -3];
+    return light(v).reduce((m, q) =>
+      Math.hypot(q[0] - eye[0], q[1] - eye[1], q[2] - eye[2]) >
+      Math.hypot(m[0] - eye[0], m[1] - eye[1], m[2] - eye[2])
+        ? q
+        : m,
+    );
+  };
+  const still = (o: Partial<PlayerState> = {}) => {
+    const out: number[] = [];
+    soldier(out, hold(blade(o), 60), GREEN, 1);
+    return out;
+  };
+
+  it('carries the katana in the right hand instead of the gun, in the same triangles', () => {
+    expect(light(still()).length).toBeGreaterThan(200);
+    // With the gun in the bag as well, it is the same picture.
+    expect(still({ ammo: 30 })).toEqual(still());
+    expect(light(still({ wield: false }))).toHaveLength(0);
+    // Down, nothing in the hand.
+    expect(light(still({ down: 40 }))).toHaveLength(0);
+    // Far away it is the cheaper model.
+    const [near, far] = [1, 0].map(lod => {
+      const out: number[] = [];
+      soldier(out, hold(blade(), 60), GREEN, lod);
+      return out.length;
+    });
+    expect(far).toBeLessThan(near * 0.6);
+  });
+
+  it('carries it blade back and low, running or standing, at the right', () => {
+    for (const vz of [0, -6, -9]) {
+      const out: number[] = [];
+      const r = hold(blade({ vz }), 90);
+      soldier(out, r, GREEN, 1);
+      const [x, y, z] = tipOf(out, { z: r.p.z });
+      // Behind it (it runs toward -z), below the hip, to its right.
+      expect(z).toBeGreaterThan(r.p.z + 0.3);
+      expect(y).toBeLessThan(r.p.y + 0.95);
+      expect(x).toBeGreaterThan(r.p.x - 0.1);
+      // Never in front of it.
+      expect(Math.min(...light(out).map(q => q[2]))).toBeGreaterThan(r.p.z - 0.3);
+    }
+  });
+
+  it.each([
+    [CUT.THRUST, 8, 'thrusts: the point goes out ahead of it, toward -z'],
+    [CUT.LEFT, 11, 'cuts from its left to its right, toward +x'],
+    [CUT.RIGHT, 11, 'cuts from its right to its left, toward -x'],
+    [CUT.SLASH, 14, 'slashes down from over its head'],
+  ])('does cut %i with the arm: %s', (cut, strike, _name) => {
+    const { out } = frames(cut);
+    const path = out.map(v => tipOf(v));
+    // A big move: over a metre and a half of the point, readable from far away.
+    const total = path
+      .slice(1)
+      .reduce((n, q, i) => n + Math.hypot(...q.map((c, k) => c - path[i][k])), 0);
+    expect(total).toBeGreaterThan(2);
+    // Where it is at the strike: ahead of the runner (z = -3, ahead is -z), around the height of the eyes.
+    expect(path[strike][2]).toBeLessThan(-3 - 0.7);
+    if (cut == CUT.THRUST) {
+      expect(path[strike][2]).toBeLessThan(path[3][2] - 0.2);
+    } else if (cut == CUT.SLASH) {
+      expect(path[9][1]).toBeGreaterThan(path[strike][1] + 0.4);
+      expect(path[strike][1]).toBeGreaterThan(path[20][1] + 0.3);
+    } else {
+      const s = cut == CUT.LEFT ? 1 : -1;
+      expect(s * path[strike + 3][0]).toBeGreaterThan(s * path[strike - 4][0] + 0.8);
+      // The runner faces -z: its right is +x.
+      expect(s * (path[6][0] - 5)).toBeLessThan(0);
+      expect(s * (path[17][0] - 5)).toBeGreaterThan(0);
+    }
+    // The cut ends where the carry was: the blade back and low.
+    expect(path.at(-1)![2]).toBeGreaterThan(-3 - 0.2);
+  });
+
+  it('turns the trunk into the cut: the shoulders go with the blade', () => {
+    /** Which way the jacket's chest faces, from the front of the torso: the mean x of its upper vertices, in front and behind. */
+    const turned = (v: number[]) => {
+      const [, , , JACKET] = [0, 0, 0, palette(GREEN)[0]];
+      const chest = rows(v).filter(
+        p =>
+          p[4] == JACKET[0] &&
+          p[5] == JACKET[1] &&
+          p[6] == JACKET[2] &&
+          p[1] > 1 + 1.25 &&
+          p[1] < 1 + 1.4 &&
+          Math.abs(p[0] - 5) < 0.3 &&
+          Math.abs(p[2] + 3) < 0.2,
+      );
+      const [a, b] = [chest.filter(p => p[2] < -3), chest.filter(p => p[2] >= -3)];
+      const m = (r: number[][]) => r.reduce((s, p) => s + p[0], 0) / r.length;
+      return m(a) - m(b);
+    };
+    const { out } = frames(CUT.LEFT);
+    // Wound up to the left, then through to the right.
+    expect(turned(out[6])).not.toBeCloseTo(turned(out[16]), 2);
+    expect(turned(out[6]) - turned(out[16])).toBeLessThan(-0.01);
+  });
+
+  it('leaves a ribbon of light behind the blade through the cut only, which fades after it', () => {
+    const book = new Map<number, Runner>();
+    animate(book, [blade({ cut: CUT.LEFT })], DT);
+    const r = book.get(1)!;
+    const marks: number[] = [];
+    for (let i = 0; i < CUTS[CUT.LEFT].ticks; i++) {
+      animate(book, [blade({ cut: CUT.LEFT, swing: CUTS[CUT.LEFT].ticks - i })], DT);
+      soldier([], r, GREEN, 1);
+      marks.push(r.trail.count);
+    }
+    expect(marks[1]).toBe(0);
+    expect(marks[12]).toBeGreaterThan(3);
+    // The cut is over at 0.6 of the swing: the ribbon fades in about 0.15 s, and is gone.
+    expect(marks[20]).toBeGreaterThan(0);
+    expect(marks[29]).toBe(0);
+    // A runner with the gun never makes one.
+    const gunner = new Map<number, Runner>();
+    animate(gunner, [man({ ammo: 30, swing: 5, cut: CUT.LEFT })], DT);
+    soldier([], gunner.get(1)!, GREEN, 1);
+    expect(gunner.get(1)!.trail.count).toBe(0);
+  });
+
+  it('eases the swing between the snapshots: it runs on with the time, never far ahead of the count', () => {
+    const book = new Map<number, Runner>();
+    const t = CUTS[CUT.SLASH].ticks;
+    animate(book, [blade({ cut: CUT.SLASH })], DT);
+    expect(book.get(1)!.prog).toBe(-1);
+    animate(book, [blade({ cut: CUT.SLASH, swing: t - 6 })], DT);
+    const r = book.get(1)!;
+    expect(r.prog).toBeCloseTo(6 / t, 6);
+    // Snapshots every second tick, frames at 144 Hz: it moves on between them, stays within two ticks of the count.
+    for (let i = 0; i < 10; i++) {
+      animate(book, [blade({ cut: CUT.SLASH, swing: t - 6 })], 1 / 144);
+      expect(r.prog).toBeLessThanOrEqual(8 / t + 1e-9);
+    }
+    expect(r.prog).toBeGreaterThan(6 / t);
+    animate(book, [blade({ cut: CUT.SLASH, swing: 0 })], DT);
+    expect(r.prog).toBe(-1);
+  });
+
+  it('keeps the vertices finite and the unit normals in every cut, move and level', () => {
+    for (const cut of [0, 1, 2, 3]) {
+      for (const o of [{}, { vz: -9 }, { yaw: 2.2, pitch: 0.6 }, { mode: MODE.SLIDE, vz: -8 }]) {
+        for (const lod of [0, 1]) {
+          const { out } = frames(cut, o, lod);
+          for (const v of [out[3], out[10], out[20]]) {
+            expect(v.length % (3 * STRIDE)).toBe(0);
+            for (let i = 0; i < v.length; i += STRIDE) {
+              expect(v.slice(i, i + STRIDE).every(Number.isFinite)).toBe(true);
+              expect(Math.hypot(v[i + 3], v[i + 4], v[i + 5])).toBeCloseTo(1);
+            }
+          }
+        }
+      }
+    }
   });
 });

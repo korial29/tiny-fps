@@ -94,6 +94,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   }
   const bases = world.def.teams.map(t => t.base);
   const racks = world.def.teams.map(t => t.rack);
+  const blades = world.def.teams.map(t => t.blade);
   let roster: PlayerInfo[] = [];
   /** The own player's id and team, from the roster. */
   let you = { id: -1, team: 0 };
@@ -151,6 +152,11 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
             } else if (beat.by == you.id) {
               fx.punch();
             }
+          } else if (beat.kind == 'shock') {
+            tracer.shock(beat.at);
+            if (beat.who == you.id) {
+              fx.jolt();
+            }
           }
         }
         match = s;
@@ -201,6 +207,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       const was = predictor.me(1);
       const input = predictor.step({ keys: ctl.take(), yaw: ctl.yaw, pitch: ctl.pitch }, now);
       combat.step(was, predictor.me(1));
+      ctl.track(was, predictor.me(1));
       if (open) {
         ws.send(encodeInput(input));
       }
@@ -217,6 +224,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       bases,
       flags: flagDraws(match.flags, bases, who),
       racks,
+      blades,
       packs: packsOf(world.def.packs, match.packs),
       ammo: packsOf(world.def.ammo, match.packs, world.def.packs?.length),
     };

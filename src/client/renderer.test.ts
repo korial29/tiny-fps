@@ -632,6 +632,8 @@ describe('createRenderer', () => {
       );
       rd.frame([1, 1.6, 1], 0, 0, [], new Map(), createEffects(), [], undefined, undefined, {
         shoot: vi.fn(),
+        shock: vi.fn(),
+        crackle: vi.fn(),
         mount: vi.fn(),
         update: vi.fn(),
         draw,

@@ -3,13 +3,14 @@ import { Sim } from '../../test/pilot';
 import {
   AIR_JUMPS,
   AMMO_MAX,
+  CUTS,
   DASH_COOLDOWN,
   DOWN_TICKS,
   GUN_COOLDOWN,
   HP_MAX,
   MAX_PITCH,
 } from './constants';
-import { step } from './gun';
+import { STRIKE, step } from './gun';
 import { ROOFTOPS } from './map';
 import { spawn } from './physics';
 import { decodeSnapshot, encodeSnapshot, onWire } from './protocol';
@@ -112,9 +113,12 @@ describe('random play on ROOFTOPS', () => {
 
 describe('random fire on ROOFTOPS', () => {
   it('keeps the gun fields in range and on the wire, whatever is pressed, hit or not', () => {
-    // Every key at random, FIRE included, held a few steps; the host's hits dropped in at random
-    // (health down, down for DOWN_TICKS, the gun gone), and a gun handed back now and then.
+    // Every key at random, FIRE and BLADE included, held a few steps; the host's hits dropped in at
+    // random (health down, down for DOWN_TICKS, the weapons gone), and a gun and a katana handed
+    // back now and then.
     let shots = 0;
+    let cuts = 0;
+    let wielded = 0;
     let downs = 0;
     let wasDown = false;
     for (const [seed, team] of [
@@ -130,27 +134,44 @@ describe('random fire on ROOFTOPS', () => {
       let yaw = p.yaw;
       for (let k = 0; k < 20000; k++) {
         if (k % 6 === 0) {
-          keys = (rnd() < 0.8 ? KEY.FORWARD : 0) | (Math.floor(rnd() * 0x200) & ~KEY.FORWARD);
+          keys = (rnd() < 0.8 ? KEY.FORWARD : 0) | (Math.floor(rnd() * 0x400) & ~KEY.FORWARD);
           yaw += (rnd() - 0.5) * 1.5;
         }
         const before = p.shots;
-        const fired = step(
+        const struck = step(
           p,
           onWire({ seq: 0, keys, yaw, pitch: Math.sin(k / 40) * MAX_PITCH }),
           world,
           team,
         );
         const label = `seed ${seed}, step ${k}`;
-        expect(fired, label).toBe(((p.shots - before) & 255) === 1);
-        shots += +fired;
+        expect(struck === STRIKE.SHOT, label).toBe(((p.shots - before) & 255) === 1);
+        shots += +(struck === STRIKE.SHOT);
+        cuts += +(struck === STRIKE.CUT);
+        wielded += +!!p.wield;
+        // In hand: with the katana, and wanted (BLADE), or no gun, or in mid swing.
+        expect(!!p.wield, label).toBe(
+          !!p.blade && (!!p.swing || (keys & KEY.BLADE) !== 0 || p.ammo < 0),
+        );
         if (!p.down && rnd() < 0.002) {
-          Object.assign(p, { hp: 0, down: DOWN_TICKS, ammo: -1, cool: 0 });
+          Object.assign(p, {
+            hp: 0,
+            down: DOWN_TICKS,
+            ammo: -1,
+            cool: 0,
+            blade: false,
+            wield: false,
+            swing: 0,
+          });
         } else if (!p.down && p.hp > 1 && rnd() < 0.01) {
           p.hp--;
         }
         // A rack is far off on these roofs: the gun comes back at random now and then.
         if (!p.down && p.ammo <= 0 && rnd() < 0.02) {
           p.ammo = AMMO_MAX;
+        }
+        if (!p.down && !p.blade && rnd() < 0.01) {
+          p.blade = true;
         }
         downs += +(p.down > 0 && !wasDown);
         wasDown = p.down > 0;
@@ -168,6 +189,13 @@ describe('random fire on ROOFTOPS', () => {
         expect(p.down > 0, label).toBe(p.hp === 0);
         expect(p.down > 0 ? p.ammo : -1, label).toBe(-1);
         expect(p.shots & 255, label).toBe(p.shots);
+        // The katana: the swing runs in the katana's ticks, only with the katana in hand, and
+        // only a katana that is there is in hand.
+        expect(p.swing, label).toBeGreaterThanOrEqual(0);
+        expect(p.swing, label).toBeLessThanOrEqual(CUTS[p.cut ?? 0].ticks);
+        expect(!p.wield || p.blade, label).toBe(true);
+        expect(!p.swing || p.wield, label).toBe(true);
+        expect(!p.down || (!p.blade && !p.wield && !p.swing), label).toBe(true);
         if (k % 5 === 0) {
           const [back] = decodeSnapshot(
             encodeSnapshot({ tick: 0, players: [{ ...p, ack: 0, by: 0 }], ...IDLE }),
@@ -179,12 +207,19 @@ describe('random fire on ROOFTOPS', () => {
             down: p.down,
             shots: p.shots,
             hits: p.hits,
+            blade: !!p.blade,
+            wield: !!p.wield,
+            swing: p.swing ?? 0,
+            cut: p.cut ?? 0,
+            zap: !!p.zap,
           });
         }
       }
     }
     // The run fired and went down and got up many times: or it proves little.
     expect(shots).toBeGreaterThan(500);
+    expect(cuts).toBeGreaterThan(300);
+    expect(wielded).toBeGreaterThan(5000);
     expect(downs).toBeGreaterThan(20);
   }, 60_000);
 });

@@ -3,7 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { at, EAST, NORTH, WEST } from '../../test/yard';
 import { DASH_SPEED, MAX_PITCH } from '../shared/constants';
 import { EV, KEY } from '../shared/types';
-import { DOUBLE_TAP_MS, createInput, dashKeys, keyBit } from './input';
+import type { PlayerState } from '../shared/types';
+import { STILL } from '../shared/physics';
+import {
+  DOUBLE_TAP_MS,
+  WHEEL_MS,
+  chosen,
+  createInput,
+  dashKeys,
+  keyBit,
+  picked,
+  withBlade,
+} from './input';
 import type { Controls } from './input';
 
 describe('keyBit', () => {
@@ -24,6 +35,67 @@ describe('keyBit', () => {
     expect(keyBit('KeyC')).toBe(KEY.CROUCH);
     // Ctrl+W closes the tab: the game must not ask for it.
     expect(keyBit('ControlLeft')).toBe(0);
+  });
+});
+
+const player = (o: Partial<PlayerState> = {}): PlayerState => ({
+  id: 1,
+  x: 0,
+  y: 0,
+  z: 0,
+  vy: 0,
+  yaw: 0,
+  pitch: 0,
+  ground: true,
+  ...STILL,
+  ammo: 30,
+  ...o,
+});
+
+describe('the weapon choice', () => {
+  it('picks the gun on 1 and the katana on 2, and keeps the choice on any other key', () => {
+    expect(picked(true, 'Digit1')).toBe(false);
+    expect(picked(false, 'Digit2')).toBe(true);
+    expect(picked(true, 'Digit2')).toBe(true);
+    expect(picked(false, 'Digit1')).toBe(false);
+    expect(picked(true, 'KeyW')).toBe(true);
+    expect(picked(false, 'Digit3')).toBe(false);
+  });
+
+  it('sets KEY.BLADE exactly while the katana is chosen, and nothing else', () => {
+    expect(withBlade(KEY.FORWARD | KEY.FIRE, true)).toBe(KEY.FORWARD | KEY.FIRE | KEY.BLADE);
+    expect(withBlade(KEY.FORWARD | KEY.FIRE, false)).toBe(KEY.FORWARD | KEY.FIRE);
+    expect(withBlade(KEY.BLADE, false)).toBe(KEY.BLADE);
+  });
+
+  it('switches to the katana when it is picked up, once, and keeps the choice after', () => {
+    const gun = player();
+    const both = player({ blade: true });
+    expect(chosen(false, gun, both)).toBe(true);
+    // Switching back to the gun by hand sticks: the next steps are not a pickup.
+    expect(chosen(false, both, both)).toBe(false);
+    expect(chosen(true, both, both)).toBe(true);
+  });
+
+  it('does not switch to the katana at the first state, or when it was already carried', () => {
+    expect(chosen(false, undefined, player({ blade: true }))).toBe(false);
+    expect(chosen(false, player({ blade: true }), player({ blade: true }))).toBe(false);
+  });
+
+  it('does not go back to the gun when the gun is picked up later', () => {
+    const blade = player({ blade: true, ammo: -1 });
+    const both = player({ blade: true, ammo: 30 });
+    expect(chosen(true, blade, both)).toBe(true);
+    expect(chosen(false, blade, both)).toBe(false);
+  });
+
+  it('goes back to the gun on losing both, going down', () => {
+    const both = player({ blade: true });
+    expect(chosen(true, both, player({ blade: false, ammo: -1, down: 60 }))).toBe(false);
+    // Losing only the katana, or only the gun, is not that.
+    expect(chosen(true, both, player({ blade: false }))).toBe(true);
+    expect(chosen(true, both, player({ blade: true, ammo: -1 }))).toBe(true);
+    expect(chosen(true, both, undefined)).toBe(false);
   });
 });
 
@@ -359,5 +431,109 @@ describe('createInput', () => {
     key('keydown', 'KeyW');
     move(50, 0);
     expect([ctl.yaw, ctl.keys]).toEqual([0, 0]);
+  });
+
+  describe('the weapon', () => {
+    let clock = 0;
+    beforeEach(() => {
+      clock = 1000;
+      vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    });
+    afterEach(() => vi.restoreAllMocks());
+    const wheel = (deltaY: number) => {
+      const e = new WheelEvent('wheel', { deltaY, cancelable: true });
+      document.dispatchEvent(e);
+      return e;
+    };
+
+    it('starts with the gun: no BLADE in the keys of a step', () => {
+      make();
+      lock(true);
+      key('keydown', 'KeyW');
+      expect(ctl.blade).toBe(false);
+      expect(ctl.take()).toBe(KEY.FORWARD);
+    });
+
+    it('takes the katana on 2 and the gun on 1, and every step carries BLADE while it is chosen', () => {
+      make();
+      lock(true);
+      key('keydown', 'Digit2');
+      key('keydown', 'KeyW');
+      expect(ctl.blade).toBe(true);
+      expect(ctl.take()).toBe(KEY.FORWARD | KEY.BLADE);
+      expect(ctl.take()).toBe(KEY.FORWARD | KEY.BLADE);
+      // The held keys stay as they are: BLADE is not a held key.
+      expect(ctl.keys).toBe(KEY.FORWARD);
+      key('keydown', 'Digit1');
+      expect(ctl.take()).toBe(KEY.FORWARD);
+    });
+
+    it('keeps FIRE on the left button, with or without the katana', () => {
+      make();
+      lock(true);
+      key('keydown', 'Digit2');
+      document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }));
+      expect(ctl.take()).toBe(KEY.FIRE | KEY.BLADE);
+      document.dispatchEvent(new MouseEvent('mouseup', { button: 0 }));
+      expect(ctl.take()).toBe(KEY.BLADE);
+    });
+
+    it('keeps BLADE through a dash, which has only the tapped direction', () => {
+      make();
+      lock(true);
+      key('keydown', 'Digit2');
+      for (let i = 0; i < 2; i++) {
+        key('keydown', 'KeyD');
+        key('keyup', 'KeyD');
+      }
+      expect(ctl.take()).toBe(KEY.RIGHT | KEY.DASH | KEY.BLADE);
+    });
+
+    it('swaps the weapons with the wheel, either way, once for a flick, and holds the page still', () => {
+      make();
+      lock(true);
+      expect(wheel(100).defaultPrevented).toBe(true);
+      expect(ctl.blade).toBe(true);
+      clock += WHEEL_MS / 2;
+      expect(wheel(100).defaultPrevented).toBe(true);
+      expect(ctl.blade).toBe(true);
+      clock += WHEEL_MS;
+      wheel(-100);
+      expect(ctl.blade).toBe(false);
+    });
+
+    it('ignores the wheel and the digits without the lock, and a wheel that does not turn', () => {
+      make();
+      expect(wheel(100).defaultPrevented).toBe(false);
+      key('keydown', 'Digit2');
+      expect(ctl.blade).toBe(false);
+      lock(true);
+      wheel(0);
+      expect(ctl.blade).toBe(false);
+    });
+
+    it('follows the steps: a katana picked up is chosen, going down chooses the gun, and 1 wins after the pickup', () => {
+      make();
+      lock(true);
+      ctl.track(player(), player({ blade: true }));
+      expect(ctl.blade).toBe(true);
+      expect(ctl.take() & KEY.BLADE).toBe(KEY.BLADE);
+      key('keydown', 'Digit1');
+      ctl.track(player({ blade: true }), player({ blade: true }));
+      expect(ctl.blade).toBe(false);
+      key('keydown', 'Digit2');
+      ctl.track(player({ blade: true }), player({ blade: false, ammo: -1, down: 60 }));
+      expect(ctl.blade).toBe(false);
+      expect(ctl.take() & KEY.BLADE).toBe(0);
+    });
+
+    it('keeps the choice when the lock is lost and found again', () => {
+      make();
+      lock(true);
+      key('keydown', 'Digit2');
+      lock(false);
+      lock(true);
+      expect(ctl.blade).toBe(true);
+    });
   });
 });

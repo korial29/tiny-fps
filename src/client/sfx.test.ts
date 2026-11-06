@@ -147,6 +147,33 @@ describe('the sounds of the game', () => {
     }
   });
 
+  it('give the katana three sounds: the shing, the swish of a cut and the zap of a hit', () => {
+    const blade = ['SHING', 'SWISH', 'ZAP'] as const;
+    expect(blade.map(n => SOUND[n])).toEqual([23, 24, 25]);
+    for (const n of blade) {
+      const s = sound(n);
+      expect(s.every(Number.isFinite)).toBe(true);
+      expect(rms(s)).toBeGreaterThan(0.03);
+      expect(LOOPED).not.toContain(SOUND[n]);
+    }
+  });
+
+  it('make the swish short enough that a slash, played at 0.8, is under a third of a second', () => {
+    expect(sound('SWISH').length / RATE / 0.8).toBeLessThan(0.33);
+  });
+
+  it('make the shing a ring that lasts, over a quick scrape: still loud 150 ms in', () => {
+    const s = sound('SHING');
+    expect(peak(s.subarray(0.15 * RATE, 0.2 * RATE))).toBeGreaterThan(0.1);
+    expect(s.length).toBeGreaterThan(sound('SWISH').length * 1.5);
+  });
+
+  it('make the zap a short punch: under a quarter second and loud', () => {
+    const z = sound('ZAP');
+    expect(z.length / RATE).toBeLessThan(0.25);
+    expect(peak(z)).toBeGreaterThan(0.5);
+  });
+
   it('make the step on a wall lighter than on a floor, and the dash stronger than the double jump', () => {
     expect(rms(sound('WALLSTEP'))).toBeLessThan(rms(sound('STEP')) * 0.7);
     expect(rms(sound('DASH'))).toBeGreaterThan(rms(sound('DOUBLE')) * 1.3);

@@ -208,3 +208,73 @@ describe('tackles', () => {
     expect(say(beat, { id: 3, team: TEAM.RED }, name)).toBeUndefined();
   });
 });
+
+describe('shocks', () => {
+  const runner = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
+    ...STILL,
+    id,
+    x: id,
+    y: 10,
+    z: 0,
+    vy: 0,
+    yaw: 0,
+    pitch: 0,
+    ground: true,
+    ack: 0,
+    by: 0,
+    ...over,
+  });
+  const name = (id: number) => `P${id}`;
+
+  it('reads a stumble that went up with zap set as a shock, not a tackle', () => {
+    const before = snap({ players: [runner(1), runner(2)] });
+    const after = snap({ players: [runner(1, { stun: 24, by: 2, zap: true }), runner(2)] });
+    expect(beats(before, after)).toEqual([{ kind: 'shock', who: 1, by: 2, at: [1, 11, 0] }]);
+  });
+
+  it('still reads a plain stumble as a tackle, and tells them apart in one snapshot', () => {
+    const before = snap({ players: [runner(1), runner(2), runner(3)] });
+    const after = snap({
+      players: [
+        runner(1, { stun: 48, by: 2 }),
+        runner(2),
+        runner(3, { stun: 24, by: 2, zap: true }),
+      ],
+    });
+    expect(beats(before, after).map(b => b.kind)).toEqual(['tackle', 'shock']);
+    // `zap` false is a tackle too.
+    expect(
+      beats(
+        before,
+        snap({ players: [runner(1, { stun: 48, by: 2, zap: false }), runner(2), runner(3)] }),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('reads a shock once: not while the stumble runs down', () => {
+    const at = (stun: number) =>
+      snap({ players: [runner(1, { stun, by: 2, zap: true }), runner(2)] });
+    expect(beats(at(24), at(22))).toEqual([]);
+    expect(beats(at(2), at(0))).toEqual([]);
+    expect(beats(at(0), at(24))).toHaveLength(1);
+  });
+
+  it('shows no banner for a shock, to anyone, and no tackle banner', () => {
+    const beat: Beat = { kind: 'shock', who: 1, by: 2, at: [0, 0, 0] };
+    for (const id of [1, 2, 3]) {
+      expect(say(beat, { id, team: TEAM.RED }, name)).toBeUndefined();
+    }
+  });
+
+  it('plays the zap, and no tackle sound and no grunt: centred to the one shocked, at the spot to the others, to the attacker with the hit instead', () => {
+    const beat: Beat = { kind: 'shock', who: 1, by: 2, at: [3, 4, 5] };
+    expect(cues(beat, { id: 1, team: TEAM.BLUE })).toEqual([{ id: SOUND.ZAP }]);
+    expect(cues(beat, { id: 3, team: TEAM.RED })).toEqual([{ id: SOUND.ZAP, at: [3, 4, 5] }]);
+    expect(cues(beat, { id: 2, team: TEAM.RED })).toEqual([]);
+    for (const id of [1, 2, 3]) {
+      const ids = cues(beat, { id, team: TEAM.RED }).map(c => c.id);
+      expect(ids).not.toContain(SOUND.TACKLE);
+      expect(ids).not.toContain(SOUND.GRUNT);
+    }
+  });
+});

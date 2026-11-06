@@ -17,7 +17,7 @@ import { STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
-import { cell, kit, rack } from './props';
+import { cell, kit, racks } from './props';
 import { animate, soldier } from './soldier';
 import type { Runner } from './soldier';
 import { skyline } from './skyline';
@@ -706,7 +706,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       drive(v, eye, fwd, Date.now() / 1000);
       ctf?.bases.forEach((at, team) => base(v, at, teamRgb(team), now));
       ctf?.flags.forEach(f => flag(v, f, teamRgb(f.team), now));
-      ctf?.racks?.forEach((at, team) => at && rack(v, at, teamRgb(team), now));
+      racks(v, ctf?.racks, ctf?.blades, now);
       ctf?.packs?.forEach(at => kit(v, at, now));
       ctf?.ammo?.forEach(at => cell(v, at, now));
       for (const p of others) {
@@ -720,6 +720,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       // The beams glow and cast nothing: they come after the last thing that casts a shadow.
       const beamAt = v.length;
       tracer?.draw(v, eye);
+      for (const p of others) {
+        runners.get(p.id)?.trail.draw(v);
+      }
       const bodyAt = v.length;
       body?.draw(v, eye, yaw, pitch, fx.roll, rgb(colors.get(body.id) ?? '#888'));
       if (tail + v.length * 4 > cap) {

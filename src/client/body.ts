@@ -14,11 +14,13 @@ import type { World } from '../shared/world';
 import { createGait, frame } from './gait';
 import type { Floor } from './gait';
 import { TILT, held, pointed, tip } from './gun';
+import { cutting, ends, fingers, frameOf, held as sword, progress, stroke, wrists } from './katana';
 import { add, basis, dot, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
 import { CUFF, CUFF_SIDES, body, palette, skin } from './skin';
+import { createTrail } from './trail';
 
 export type Solved = ReturnType<typeof solve>;
 
@@ -306,6 +308,8 @@ const RATES = {
   slide: 10,
   stun: 14,
   gun: 10,
+  blade: 10,
+  swing: 14,
 };
 
 export const createBody = (world?: World): Body => {
@@ -323,9 +327,14 @@ export const createBody = (world?: World): Body => {
     slide: 0,
     stun: 0,
     gun: 0,
+    blade: 0,
+    swing: 0,
   };
-  /** The kick of the last shot, 0 to 1, and how much of the right hand's pose the gun takes, as of the last pose(). */
-  let [kick, hold, wide] = [0, 0, 1.6];
+  /** The kick of the last shot, 0 to 1, and how much of the right hand's pose the gun and the katana take, as of the last pose(). */
+  let [kick, hold, grasp, wide] = [0, 0, 0, 1.6];
+  /** How far through its cut the katana is, -1 when it is not cutting; and the light it leaves. */
+  let prog = -1;
+  const trail = createTrail();
   /** Where the gun points, in the camera's space. */
   let target: Vec3 = [0, 0, 8];
   /** Seconds, for the flailing of a stumble. */
@@ -347,6 +356,8 @@ export const createBody = (world?: World): Body => {
     gait.update(p, dt, world && floorOf(world, p.y));
     me = { ...p };
     clock += dt;
+    prog = progress(prog, p, dt);
+    trail.update(dt);
     const walks = p.mode == MODE.GROUND || p.mode == MODE.CROUCH || p.mode == MODE.WALLRUN;
     const dash = p.dash > DASH_COOLDOWN - DASH_TICKS;
     const air = p.mode == MODE.AIR && !dash;
@@ -360,7 +371,9 @@ export const createBody = (world?: World): Body => {
       wall: +(p.mode == MODE.WALLRUN),
       slide: +(p.mode == MODE.SLIDE),
       stun: +(p.stun > 0),
-      gun: +(p.ammo >= 0 && !p.down),
+      gun: +(p.ammo >= 0 && !p.down && !p.wield),
+      blade: +(!!p.wield && !p.down),
+      swing: +(prog >= 0),
     };
     for (const n of Object.keys(RATES) as (keyof typeof RATES)[]) {
       w[n] += (to[n] - w[n]) * (1 - Math.exp(-dt * RATES[n]));
@@ -389,6 +402,21 @@ export const createBody = (world?: World): Body => {
     // A shot kicks the nose up.
     const to: Vec3 = [target[0], target[1] + 0.1 * kick * Math.hypot(...target), target[2]];
     return [at, pointed(at, to, X, Y)];
+  };
+
+  /**
+   * The katana in camera space, in the guard (rising from below as it is drawn, swaying with the
+   * run) or in the cut: its axes [right, up, forward], the wrists of the right and the left hand
+   * on its grip and where the fingers point.
+   */
+  const blade = () => {
+    const a = w.amp * (1 + 0.5 * w.sprint);
+    const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
+    const k = stroke(me?.cut ?? 0, Math.max(prog, 0));
+    const at: Vec3 = [k[0] + 0.012 * a * s, k[1] + 0.018 * a * c - 0.35 * (1 - w.blade), k[2]];
+    const ax = frameOf([k[3], k[4], k[5]], k[6]);
+    const [r, l] = wrists(at, ax);
+    return { ax, r, l, g: fingers(ax) };
   };
 
   const pose: Body['pose'] = (eye, yaw, pitch, roll = 0) => {
@@ -431,16 +459,14 @@ export const createBody = (world?: World): Body => {
     const [gp, ga] = holster();
     const fh = [0, 1, 2].map(i => TILT[1] * ga[2][i] - TILT[0] * ga[1][i]) as Vec3;
     const wrist = [0, 1, 2].map(i => gp[i] - 0.078 * fh[i] + 0.022 * ga[0][i]) as Vec3;
+    const sw = w.blade > 0.002 ? blade() : undefined;
     for (const sd of [-1, 1]) {
       const k = Math.cos(TAU * gait.phase) * sd;
-      const a = w.amp * (1 + 0.5 * w.sprint);
-      // The numbers are for the right hand, mirrored below.
-      let h = mix([0.25, -0.17, 0.36], [0.2, -0.14, 0.42], w.sprint);
-      h = [h[0], h[1] + 0.07 * a * k, h[2] + 0.12 * a * k];
-      // While the gun is held and he stands or walks, the left hand drops out of view.
-      if (sd < 0) {
-        h = mix(h, [-0.2, -0.65, 0.2], w.gun * (1 - clamp(w.amp * 2.5)));
-      }
+      // The numbers are for the right hand, mirrored below. The arms hang along the body, out of
+      // view; in a stride each swings like a pendulum, up into the lower view ahead and out of it
+      // behind, more with speed and highest in a sprint.
+      const g = clamp(w.amp * 1.8) + 0.2 * w.sprint;
+      let h: Vec3 = [0.24 - 0.05 * g, -0.66 + 0.46 * g * ((k + 1) / 2) ** 1.2, 0.1 + 0.26 * g * k];
       h = mix(h, [0.38, -0.2, 0.34], w.air);
       h = mix(h, [0.3, 0.02, 0.45], w.rise);
       h = mix(h, [0.14, -0.1, 0.5], w.dash);
@@ -467,10 +493,20 @@ export const createBody = (world?: World): Body => {
         const [px, py, pz] = view(sub(at, eye));
         h = mix(h, [px * sd, Math.max(py, -0.28), Math.max(pz, 0.4)], w.plant);
       }
+      // The weapons take the hand unless it is on a ledge or a wall or reeling. The left hand
+      // joins the katana's grip while he stands or walks, and in a cut.
+      const free = 1 - clamp(w.plant + toWall + w.stun);
+      let [taken, onSword] = [0, 0];
       if (sd > 0) {
-        // The gun takes the right hand unless it is on a ledge or a wall or reeling.
-        hold = w.gun * (1 - clamp(w.plant + toWall + w.stun));
+        hold = w.gun * free;
         h = mix(h, wrist, hold);
+        grasp = sw ? w.blade * free : 0;
+        h = sw ? mix(h, sw.r as Vec3, grasp) : h;
+        taken = Math.max(hold, grasp);
+        onSword = grasp;
+      } else {
+        onSword = taken = sw ? w.blade * free * Math.max(1 - clamp((w.amp - 0.3) * 3), w.swing) : 0;
+        h = sw ? mix(h, [-sw.l[0], sw.l[1], sw.l[2]], onSword) : h;
       }
       // A loose fist, tighter as the pace goes up; open to catch the air, flat on a ledge, a wall or the floor.
       let curl = 0.75 + 0.25 * w.sprint;
@@ -485,7 +521,7 @@ export const createBody = (world?: World): Body => {
       ]) {
         curl += (open - curl) * t;
       }
-      curls[(sd + 1) / 2] = sd > 0 ? curl + (0.9 - curl) * hold : curl;
+      curls[(sd + 1) / 2] = curl + (0.9 - curl) * taken;
       const to = add(eye, turn([h[0] * sd, h[1], h[2]]));
       const arm = sd < 0 ? J.ARM_L : J.ARM_R;
       reach(q, s, arm, to, turn([POLE[0] * sd, POLE[1], POLE[2]]));
@@ -495,6 +531,12 @@ export const createBody = (world?: World): Body => {
         // The back of the hand along the gun's right, the fingers around the grip.
         const rot = frame(turn(ga[0]), turn(fh));
         q.rot[arm + 2] = slerp(q.rot[arm + 2], mul(inv(solve(q).rot[J.FOREARM_R]), rot), hold);
+      }
+      if (sw && onSword > 0.002) {
+        // Both hands: the back of the hand along the blade's right, the fingers around the grip.
+        const rot = frame(turn(sw.ax[0]), turn(sw.g));
+        const fore = sd > 0 ? J.FOREARM_R : J.FOREARM_L;
+        q.rot[arm + 2] = slerp(q.rot[arm + 2], mul(inv(solve(q).rot[fore]), rot), onSword);
       }
     }
     return solve(q);
@@ -526,6 +568,12 @@ export const createBody = (world?: World): Body => {
         if (hold > 0.2) {
           held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], 1, clamp(hold * 1.5 - 0.5), me?.ammo);
         }
+        if (grasp > 0.2) {
+          sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], 1, clock, clamp(grasp * 1.5 - 0.5));
+        }
+        const [base, point] = ends(s.pos[J.HAND_R], s.rot[J.HAND_R]);
+        trail.mark(base, point, grasp > 0.5 && cutting(prog));
+        trail.draw(out);
       }
     },
     aim(t) {

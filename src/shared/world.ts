@@ -27,6 +27,8 @@ export interface TeamDef {
   spawns: Spawn[];
   /** The gun rack near the spawns, a point on a top: walking within RACK_R gives the gun with AMMO_MAX shots. */
   rack?: Vec3;
+  /** The katana rack, next to the gun rack, a point on a top: walking within RACK_R gives the katana. */
+  blade?: Vec3;
 }
 
 export interface WorldDef {

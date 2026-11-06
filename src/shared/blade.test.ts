@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { EAST, at, yard } from '../../test/yard';
-import { cutOf, knock, strike } from './blade';
+import { cutOf, knock, limbOf, strike } from './blade';
 import { step } from './gun';
 import { HIGHLINE, ROOFTOPS } from './map';
 import { spawn } from './physics';
 import { onWire } from './protocol';
-import { CUTS, LOW_H, PLAYER_H, PLAYER_R } from './constants';
-import { CUT, KEY, MODE, TEX } from './types';
+import { CUTS, EYE, HIPS, LOW_EYE, LOW_H, MIDLINE, NECK, PLAYER_H, PLAYER_R } from './constants';
+import { CUT, KEY, LIMB, MODE, TEX } from './types';
 import type { PlayerState } from './types';
 import { build } from './world';
 import type { Brush } from './world';
@@ -252,6 +252,133 @@ describe('the strike test: who', () => {
     // 2.7 m is out of reach of a slash.
     me.cut = CUT.SLASH;
     expect(strike(flat, me, [foe])).toEqual([]);
+  });
+});
+
+describe('limbOf', () => {
+  /**
+   * The limb the cut of an attacker at the origin looking along `yaw`, `pitch` up, takes off a foe
+   * `d` m ahead and `l` m to the attacker's right, looking `turn` from the attacker's way (PI: at
+   * him). `me` and `him` go on top of the two states.
+   */
+  const limb = (
+    cut: number,
+    { d = 1.5, l = 0, turn = Math.PI, pitch = 0, yaw = EAST } = {},
+    me: Partial<PlayerState> = {},
+    him: Partial<PlayerState> = {},
+  ) => {
+    const [fx, fz] = [-Math.sin(yaw), -Math.cos(yaw)];
+    const p = Object.assign(at(0, 0, yaw).p, { cut, pitch }, me);
+    const f = Object.assign(at(d * fx - l * fz, d * fz + l * fx, yaw + turn).p, him);
+    return limbOf(p, f);
+  };
+  /** The pitch that puts the look line at `h` m over the feet, 1.5 m ahead. */
+  const aim = (h: number, eye = EYE) => Math.atan((h - eye) / 1.5);
+  const [HEAD, ARMS, LEGS] = [aim(0.95 * PLAYER_H), aim(0.6 * PLAYER_H), aim(0.25 * PLAYER_H)];
+  const ACROSS = [CUT.THRUST, CUT.LEFT, CUT.RIGHT];
+
+  it('takes the head of a standing foe from a level look: the eye is above the neck', () => {
+    expect(EYE / PLAYER_H).toBeGreaterThan(NECK);
+    for (const cut of ACROSS) {
+      expect(limb(cut), `cut ${cut}`).toBe(LIMB.HEAD);
+      expect(limb(cut, { pitch: HEAD, l: 0.3 }), `cut ${cut}`).toBe(LIMB.HEAD);
+    }
+  });
+
+  it('splits the body at NECK and HIPS of his height, for the thrust and the cuts across', () => {
+    const at = (share: number) => ({ pitch: aim(share * PLAYER_H), l: 0.3 });
+    for (const cut of ACROSS) {
+      expect(limb(cut, at(NECK + 0.01)), `cut ${cut}`).toBe(LIMB.HEAD);
+      expect(limb(cut, at(NECK - 0.01)), `cut ${cut}`).not.toBe(LIMB.HEAD);
+      expect([LIMB.ARM_L, LIMB.ARM_R]).toContain(limb(cut, at(HIPS + 0.01)));
+      expect([LIMB.LEG_L, LIMB.LEG_R]).toContain(limb(cut, at(HIPS - 0.01)));
+    }
+  });
+
+  it('cuts across into the side the cut comes from: LEFT meets his right when he faces the attacker', () => {
+    // Facing each other, the attacker's left is the foe's right.
+    expect(limb(CUT.LEFT, { pitch: ARMS })).toBe(LIMB.ARM_R);
+    expect(limb(CUT.RIGHT, { pitch: ARMS })).toBe(LIMB.ARM_L);
+    expect(limb(CUT.LEFT, { pitch: LEGS })).toBe(LIMB.LEG_R);
+    expect(limb(CUT.RIGHT, { pitch: LEGS })).toBe(LIMB.LEG_L);
+    // From behind, the two lefts are on the same side.
+    expect(limb(CUT.LEFT, { pitch: ARMS, turn: 0 })).toBe(LIMB.ARM_L);
+    expect(limb(CUT.RIGHT, { pitch: ARMS, turn: 0 })).toBe(LIMB.ARM_R);
+    expect(limb(CUT.LEFT, { pitch: LEGS, turn: 0 })).toBe(LIMB.LEG_L);
+    // Where the line passes does not matter, and the middle takes an arm too.
+    for (const l of [-0.3, 0, 0.3]) {
+      expect(limb(CUT.LEFT, { pitch: ARMS, l }), `l ${l}`).toBe(LIMB.ARM_R);
+      expect(limb(CUT.RIGHT, { pitch: ARMS, l }), `l ${l}`).toBe(LIMB.ARM_L);
+    }
+  });
+
+  it('thrusts into the side of his middle the line passes, his own side', () => {
+    // The foe 0.3 m to the attacker's right: the line passes on the attacker's left of him, his right.
+    expect(limb(CUT.THRUST, { pitch: ARMS, l: 0.3 })).toBe(LIMB.ARM_R);
+    expect(limb(CUT.THRUST, { pitch: ARMS, l: -0.3 })).toBe(LIMB.ARM_L);
+    expect(limb(CUT.THRUST, { pitch: LEGS, l: 0.3 })).toBe(LIMB.LEG_R);
+    expect(limb(CUT.THRUST, { pitch: LEGS, l: -0.3 })).toBe(LIMB.LEG_L);
+    // His back to the attacker: the sides swap.
+    expect(limb(CUT.THRUST, { pitch: ARMS, l: 0.3, turn: 0 })).toBe(LIMB.ARM_L);
+    expect(limb(CUT.THRUST, { pitch: LEGS, l: -0.3, turn: 0 })).toBe(LIMB.LEG_R);
+  });
+
+  it('thrusts into the chest within MIDLINE of his middle: no limb', () => {
+    for (const l of [0, MIDLINE - 0.01, -MIDLINE + 0.01]) {
+      expect(limb(CUT.THRUST, { pitch: ARMS, l }), `l ${l}`).toBe(LIMB.NONE);
+    }
+    expect(limb(CUT.THRUST, { pitch: ARMS, l: MIDLINE + 0.01 })).toBe(LIMB.ARM_R);
+    expect(limb(CUT.THRUST, { pitch: ARMS, l: -MIDLINE - 0.01 })).toBe(LIMB.ARM_L);
+    // Only at arm height: the head and the legs come off on the middle too.
+    expect(limb(CUT.THRUST, { pitch: HEAD })).toBe(LIMB.HEAD);
+    expect([LIMB.LEG_L, LIMB.LEG_R]).toContain(limb(CUT.THRUST, { pitch: LEGS }));
+  });
+
+  it('slashes the head within MIDLINE of his middle, else the arm on the side the line passes, at any height', () => {
+    for (const pitch of [HEAD, ARMS, LEGS, 0]) {
+      expect(limb(CUT.SLASH, { pitch }), `pitch ${pitch}`).toBe(LIMB.HEAD);
+      expect(limb(CUT.SLASH, { pitch, l: MIDLINE - 0.01 }), `pitch ${pitch}`).toBe(LIMB.HEAD);
+      expect(limb(CUT.SLASH, { pitch, l: 0.3 }), `pitch ${pitch}`).toBe(LIMB.ARM_R);
+      expect(limb(CUT.SLASH, { pitch, l: -0.3 }), `pitch ${pitch}`).toBe(LIMB.ARM_L);
+      expect(limb(CUT.SLASH, { pitch, l: 0.3, turn: 0 }), `pitch ${pitch}`).toBe(LIMB.ARM_L);
+    }
+  });
+
+  it('follows the pitch: looking up raises the line, looking down lowers it', () => {
+    // A crouched attacker looks level into the legs of a standing foe.
+    expect(LOW_EYE / PLAYER_H).toBeLessThan(HIPS);
+    const low = { mode: MODE.CROUCH };
+    expect(limb(CUT.LEFT, {}, low)).toBe(LIMB.LEG_R);
+    expect(limb(CUT.LEFT, { pitch: aim(0.6 * PLAYER_H, LOW_EYE) }, low)).toBe(LIMB.ARM_R);
+    expect(limb(CUT.LEFT, { pitch: aim(0.95 * PLAYER_H, LOW_EYE) }, low)).toBe(LIMB.HEAD);
+    // Farther away, the same pitch reaches lower.
+    expect(limb(CUT.LEFT, { pitch: -0.06 })).toBe(LIMB.HEAD);
+    expect(limb(CUT.LEFT, { pitch: -0.06, d: 3 })).toBe(LIMB.ARM_R);
+  });
+
+  it('measures the share on the foe as he is: his feet and his height', () => {
+    // A level look at a foe standing 0.5 m higher: 1.1 m over his feet, an arm.
+    expect(limb(CUT.LEFT, {}, {}, { y: 0.5 })).toBe(LIMB.ARM_R);
+    // A line 0.7 m over the feet is at the arms of a crouched foe, the legs of a standing one.
+    expect(limb(CUT.LEFT, { pitch: aim(0.7) }, {}, { mode: MODE.CROUCH })).toBe(LIMB.ARM_R);
+    expect(limb(CUT.LEFT, { pitch: aim(0.7) })).toBe(LIMB.LEG_R);
+  });
+
+  it('turns with the look: any yaw gives the same limbs', () => {
+    const cases = [
+      [CUT.LEFT, ARMS, 0.3, Math.PI],
+      [CUT.RIGHT, LEGS, -0.3, 0],
+      [CUT.THRUST, ARMS, 0.3, Math.PI],
+      [CUT.THRUST, LEGS, -0.3, 0.4],
+      [CUT.SLASH, ARMS, 0.3, Math.PI],
+      [CUT.SLASH, LEGS, 0.05, 2],
+    ] as const;
+    for (const [cut, pitch, l, turn] of cases) {
+      const want = limb(cut, { pitch, l, turn });
+      for (let yaw = 0; yaw < 6.3; yaw += 0.7) {
+        expect(limb(cut, { pitch, l, turn, yaw }), `cut ${cut} yaw ${yaw}`).toBe(want);
+      }
+    }
   });
 });
 

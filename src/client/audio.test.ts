@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAudio, savedMute, toggleMute } from './audio';
 import type { Audio } from './audio';
-import { RATE } from './sfx';
+import { MUSIC_RATE, RATE } from './sfx';
 import type { Voice } from './sfx';
 
 /** Two sounds, named here: the game has none yet. */
@@ -114,7 +114,7 @@ describe('unlock', () => {
     expect(c.resumed).toBe(2);
     expect(c.buffers).toEqual([
       ...Object.values(SOUND).map(id => ({ length: 10 + id, rate: RATE })),
-      { length: 5, rate: RATE },
+      { length: 5, rate: MUSIC_RATE },
     ]);
     const loops = c.sources.filter(s => s.loop);
     expect(loops).toHaveLength(1);

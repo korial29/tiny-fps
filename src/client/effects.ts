@@ -32,6 +32,14 @@ export interface Effects {
   stride: number;
   /** 0 to 1: the red vignette of a tackle, full at the hit and gone in under a second. */
   hurt: number;
+  /** 0 to 1: the kick of the gun in the hand, full at a shot and gone in a tenth of a second. */
+  kick: number;
+  /** 0 to 1: how far the view has gone down to the floor, while the own player is down. */
+  lie: number;
+  /** The own player fired: a small shake of the eye, the look and the roll, and the kick of the gun. */
+  fire(): void;
+  /** The own player was hit by a laser: the red vignette and a small knock. */
+  wound(): void;
   /** The own player was tackled: a hard jolt of the eye, the look and the roll, and the vignette. */
   jolt(): void;
   /** The own player tackled someone: a small punch of the look and the field of view. */
@@ -88,6 +96,12 @@ const FADE = 3;
 /** The tackler's punch: the same, smaller, and the degrees of field of view it adds. */
 const PUNCH = [-1, 1.2];
 const PUNCH_FOV = 4;
+/** A shot: the eye's, the look's and the roll's speed it is kicked with, and how much the roll's goes either way. */
+const SHOT = [-0.25, 0.4, 0.5];
+/** A laser hit: the same, and a floor at which the view lies, tilted (radians) and lowered to a hand's width. */
+const WOUND = [-1.5, 0.8, 1.5];
+const LIE = [0.9, 0.3];
+
 /** While stumbling the view tilts: the roll and pitch swing (radians) and their rate (rad/s). */
 const REEL = [0.1, 0.05, 11];
 
@@ -111,6 +125,7 @@ export const createEffects = (): Effects => {
   let arc = 0;
   let thump = 0;
   let reel = 0;
+  let shots = 0;
   /** The eye height as drawn; undefined until the first state, which it starts at. */
   let h: number | undefined;
   let last: PlayerState | undefined;
@@ -126,6 +141,24 @@ export const createEffects = (): Effects => {
     lines: 0,
     stride: 0,
     hurt: 0,
+    kick: 0,
+    lie: 0,
+
+    fire() {
+      // The roll's kick alternates sides.
+      shots++;
+      y[1] += SHOT[0];
+      p[1] += SHOT[1];
+      r[1] += SHOT[2] * Math.sin(shots * 2.4);
+      fx.kick = 1;
+    },
+
+    wound() {
+      y[1] += WOUND[0];
+      p[1] += WOUND[1];
+      r[1] += WOUND[2] * Math.sin(shots++);
+      fx.hurt = 1;
+    },
 
     jolt() {
       y[1] += JOLT[0];
@@ -171,12 +204,19 @@ export const createEffects = (): Effects => {
       spring(r, dt);
       fx.hurt *= Math.exp(-dt * FADE);
       thump *= Math.exp(-dt * 10);
+      fx.kick *= Math.exp(-dt * 22);
+      fx.lie += (+!!me?.down - fx.lie) * ease(5);
       // Stumbling: the view reels, in and out of balance as long as the timer runs.
       reel += dt * REEL[2];
       const stun = me ? Math.min(1, me.stun / STUMBLE_TICKS) : 0;
       const want = me ? eyeHeight(me) : 0;
       h = me ? (h === undefined ? want : h + (want - h) * ease(14)) : undefined;
-      fx.dy = (h ?? 0) - want + y[0] - Math.cos(fx.stride * 2 * Math.PI) * bob(v) * amt;
+      fx.dy =
+        (h ?? 0) -
+        want +
+        y[0] -
+        Math.cos(fx.stride * 2 * Math.PI) * bob(v) * amt -
+        fx.lie * (want - LIE[1]);
       arc +=
         ((me?.mode === MODE.CLIMB ? ARC * Math.sin(Math.PI * clamp(me.t / ARC_TICKS)) : 0) - arc) *
         ease(10);
@@ -189,7 +229,11 @@ export const createEffects = (): Effects => {
       lean +=
         (strafe * STRAFE + side * LEAN + (me?.mode === MODE.SLIDE ? TILT : 0) - lean) * ease(8);
       fx.roll =
-        lean + Math.sin(fx.stride * Math.PI) * SWAY * amt + r[0] + Math.sin(reel) * REEL[0] * stun;
+        lean +
+        Math.sin(fx.stride * Math.PI) * SWAY * amt +
+        r[0] +
+        Math.sin(reel) * REEL[0] * stun +
+        fx.lie * LIE[0];
 
       // The dash is a burst of its first ticks; the speed part saturates at the sprint's.
       const burst = !!me && me.dash > DASH_COOLDOWN - DASH_TICKS;

@@ -1,7 +1,12 @@
 import {
+  DOWN_TICKS,
+  HP_MAX,
   INPUT_BURST,
   MAX_NAME,
   MAX_REWIND,
+  PACK_BACK,
+  PACK_HP,
+  PACK_R,
   RULES,
   SNAP_EVERY,
   TACKLE_COOLDOWN,
@@ -9,8 +14,9 @@ import {
   TICK_HZ,
 } from './constants';
 import { Ctf } from './ctf';
+import { shoot, step, within } from './gun';
 import { HIGHLINE } from './map';
-import { forward, move, spawn, speedOf, stumble } from './physics';
+import { forward, spawn, speedOf, stumble } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
 import { reaches, tackling } from './tackle';
@@ -92,12 +98,15 @@ export class Room {
   private rules: Rules;
   /** Round-robin cursor over the spawn points of each team, used once they are all taken. */
   private rr = [0, 0];
+  /** Ticks before each health pack of the map is back: 0 when it is there to take. */
+  private gone: number[];
 
   /** Missing rules fall back to RULES. */
   public constructor(rules: Partial<Rules> = {}, map: WorldDef = HIGHLINE) {
     this.rules = { ...RULES, ...rules };
     this.world = build(map);
     this.ctf = new Ctf(this.world, this.rules);
+    this.gone = (map.packs ?? []).map(() => 0);
   }
 
   /** Number of joined players. */
@@ -124,9 +133,12 @@ export class Room {
     // An input beyond the bank is dropped, and not acked.
     if (input && p.bank > 0) {
       p.bank--;
-      move(p.state, input, this.world, p.info.team);
+      const fired = step(p.state, input, this.world, p.info.team, !this.ctf.over);
       this.ctf.moved(p.state);
       this.tackle(p, input.view);
+      if (fired) {
+        this.shoot(p, input.view);
+      }
       p.ack = input.seq;
     }
   }
@@ -139,6 +151,7 @@ export class Room {
       this.ctf.leave(p.info.id);
       if (!this.size) {
         this.ctf.reset();
+        this.gone.fill(0);
       }
       this.roster();
     }
@@ -163,8 +176,12 @@ export class Room {
     for (const p of players) {
       p.bank = Math.min(INPUT_BURST, p.bank + 1);
     }
+    this.heal(players);
+    // Someone lying down touches no flag.
     const turn = this.ctf.tick(
-      players.map(p => ({ id: p.info.id, team: p.info.team, state: p.state })),
+      players
+        .filter(p => !p.state.down)
+        .map(p => ({ id: p.info.id, team: p.info.team, state: p.state })),
     );
     if (turn === 'end') {
       this.end(players);
@@ -181,6 +198,7 @@ export class Room {
         tick: now,
         players: players.map(p => ({ ...p.state, ack: p.ack, by: p.state.stun ? p.by : 0 })),
         ...this.ctf.wire(),
+        packs: this.gone.reduce((m, t, k) => (t ? m : m | (1 << k)), 0) >>> 0,
       });
       players.forEach(p => p.conn.send(snap));
     }
@@ -258,7 +276,7 @@ export class Room {
    */
   private tackle(p: Player, view: number | undefined): void {
     const me = p.state;
-    if (!tackling(me) || this.ticks - p.tackled < TACKLE_COOLDOWN) {
+    if (me.down || !tackling(me) || this.ticks - p.tackled < TACKLE_COOLDOWN) {
       return;
     }
     const foes = this.players().filter(q => q.info.team !== p.info.team);
@@ -277,6 +295,45 @@ export class Room {
     stumble(foe.state, dx, dz);
     foe.by = p.info.id;
     p.tackled = this.ticks;
+  }
+
+  /**
+   * A shot of `p` went off at the view tick `view`: it hits the first enemy on its way as `p` drew
+   * him (lag compensation), unless he lies down now or did then. A hit takes 1 hp; the last one puts
+   * him down: he lies where he fell, without the gun, and a flag he carries drops with the lock.
+   */
+  private shoot(p: Player, view: number | undefined): void {
+    const peers = this.players();
+    const foes = this.rewind(p.info.id, view).filter(seen => {
+      const q = peers.find(r => r.info.id === seen.id);
+      return q && q.info.team !== p.info.team && !q.state.down && !seen.down;
+    });
+    const foe = peers.find(q => q.info.id === shoot(this.world, p.state, foes)?.id);
+    if (!foe) {
+      return;
+    }
+    p.state.hits = (p.state.hits + 1) & 255;
+    if (--foe.state.hp <= 0) {
+      Object.assign(foe.state, { hp: 0, down: DOWN_TICKS, ammo: -1, cool: 0 });
+      this.ctf.drop(foe.state);
+    }
+  }
+
+  /** The packs: one that is gone comes back after PACK_BACK s; a hurt player standing at one takes it. */
+  private heal(players: Player[]): void {
+    this.world.def.packs?.forEach((at, k) => {
+      if (this.gone[k] > 0) {
+        this.gone[k]--;
+        return;
+      }
+      const p = players.find(
+        q => q.state.hp < HP_MAX && !q.state.down && within(q.state, at, PACK_R),
+      );
+      if (p) {
+        p.state.hp = Math.min(HP_MAX, p.state.hp + PACK_HP);
+        this.gone[k] = PACK_BACK * TICK_HZ;
+      }
+    });
   }
 
   /** The first spawn point of the team with none of `others` within SPAWN_CLEAR, else the next one round-robin. */
@@ -306,8 +363,10 @@ export class Room {
   private restart(players: Player[]): void {
     const put: PlayerState[] = [];
     this.rr = [0, 0];
+    this.gone.fill(0);
     for (const p of players) {
-      p.state = this.place(p.info.id, p.info.team, put);
+      const { shots, hits } = p.state;
+      p.state = { ...this.place(p.info.id, p.info.team, put), shots, hits };
       put.push(p.state);
       this.ctf.place(p.info.id, p.state);
     }

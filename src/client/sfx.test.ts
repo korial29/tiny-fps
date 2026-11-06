@@ -97,6 +97,56 @@ describe('the sounds of the game', () => {
     expect(crossings(sound('DROP'))).toBeLessThan(crossings(sound('RETURN')));
   });
 
+  it('give the gun seven sounds: a shot, the hit, hurt, down, the pickups and the empty click', () => {
+    const gun = ['LASER', 'HIT', 'HURT', 'DOWN', 'GUN', 'PACK', 'DRY'] as const;
+    expect(gun.map(n => SOUND[n])).toEqual([16, 17, 18, 19, 20, 21, 22]);
+  });
+
+  it('make the shot short enough for 8.6 a second, and a falling sweep', () => {
+    const s = sound('LASER');
+    // Under the 116 ms between two shots.
+    expect(s.length / RATE).toBeLessThan(0.116);
+    // Zero crossings a second, early against late: the pitch comes down.
+    const rate = (a: number, b: number) =>
+      s
+        .subarray(a * RATE, b * RATE)
+        .reduce((n, x, i, v) => n + +(i > 0 && v[i - 1] < 0 !== x < 0), 0) /
+      (b - a);
+    expect(rate(0, 0.03)).toBeGreaterThan(rate(0.06, 0.09) * 1.3);
+    expect(rms(s)).toBeLessThan(0.5);
+  });
+
+  it('make the hit a short high ping of one to two kHz that dies away fast, like Quake 3', () => {
+    const s = sound('HIT');
+    expect(s.length / RATE).toBeLessThan(0.2);
+    // Zero crossings give twice the pitch of the main tone.
+    const hz = (a: number, b: number) =>
+      s
+        .subarray(a * RATE, b * RATE)
+        .reduce((n, x, i, v) => n + +(i > 0 && v[i - 1] < 0 !== x < 0), 0) /
+      (b - a) /
+      2;
+    expect(hz(0.002, 0.03)).toBeGreaterThan(1000);
+    expect(hz(0.002, 0.03)).toBeLessThan(2600);
+    // Gone: a hundredth of the start's level 120 ms in.
+    expect(peak(s.subarray(0.12 * RATE))).toBeLessThan(0.1 * peak(s.subarray(0, 0.03 * RATE)));
+  });
+
+  it('make hurt lower than the hit, and going down the longest of the gun sounds', () => {
+    const crossings = (s: Float32Array) =>
+      s.reduce((n, x, i) => n + +(i > 0 && s[i - 1] < 0 !== x < 0), 0) / (s.length / RATE);
+    expect(crossings(sound('HURT'))).toBeLessThan(crossings(sound('HIT')));
+    for (const n of ['LASER', 'HIT', 'HURT', 'GUN', 'PACK', 'DRY'] as const) {
+      expect(sound('DOWN').length).toBeGreaterThan(sound(n).length);
+    }
+  });
+
+  it('make the dry click the shortest', () => {
+    for (const n of ['LASER', 'HIT', 'HURT', 'DOWN', 'GUN', 'PACK'] as const) {
+      expect(sound('DRY').length).toBeLessThan(sound(n).length);
+    }
+  });
+
   it('make the step on a wall lighter than on a floor, and the dash stronger than the double jump', () => {
     expect(rms(sound('WALLSTEP'))).toBeLessThan(rms(sound('STEP')) * 0.7);
     expect(rms(sound('DASH'))).toBeGreaterThan(rms(sound('DOUBLE')) * 1.3);

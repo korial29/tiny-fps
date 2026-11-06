@@ -11,11 +11,12 @@ import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
-import { createGait } from './gait';
+import { createGait, frame } from './gait';
 import type { Floor } from './gait';
-import { add, basis, dot, mix, place, segment, solid, sub, unit } from './mesh';
+import { held, TILT, tip } from './gun';
+import { add, aim, basis, dot, mix, place, segment, solid, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, PARENT, axis, mul, solve, turn as spin } from './rig';
+import { JOINT as J, PARENT, axis, mul, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
 import { body, palette, skin } from './skin';
 
@@ -24,8 +25,10 @@ export type Solved = ReturnType<typeof solve>;
 export interface Body {
   /** The own player's id, -1 before the first snapshot. */
   readonly id: number;
-  /** Advances dt seconds: the own player, eased (undefined before the first snapshot). */
-  update(me: PlayerState | undefined, dt: number): void;
+  /** Advances dt seconds: the own player, eased (undefined before the first snapshot), the kick of the gun (0 to 1) and the aspect of the screen, which keeps the gun in a narrow one. */
+  update(me: PlayerState | undefined, dt: number, kick?: number, aspect?: number): void;
+  /** The muzzle of the gun in the right hand, in the camera's space (right, up, forward), as of the last update. */
+  muzzle(): Vec3;
   /** The joints for a camera at `eye`; undefined without a player, or with the camera away from the body. */
   pose(eye: Vec3, yaw: number, pitch: number, roll?: number): Solved | undefined;
   /** Appends the body's vertices (see STRIDE) in the jacket `color`; nothing when pose() has none. */
@@ -42,7 +45,7 @@ const [X, Y]: Vec3[] = [
 ];
 const POLE: Vec3 = [0.7, -1, -0.5];
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
-const inv = ([x, y, z, w]: Quat): Quat => [-x, -y, -z, w];
+export const inv = ([x, y, z, w]: Quat): Quat => [-x, -y, -z, w];
 const dist = (a: Vec3, b: Vec3) => Math.hypot(...sub(a, b));
 /** The point `k` along the direction `d` from `o`. */
 const along = (o: Vec3, d: Vec3, k: number): Vec3 => add(o, mix([0, 0, 0], d, k));
@@ -79,7 +82,7 @@ const ik = (a: Vec3, b: Vec3, pole: Vec3, l1: number, l2: number): [Vec3, Vec3] 
  * middle joint toward `pole`. `s` is q solved: the bones keep their twist and swing the shortest
  * way. The end joint keeps its own turn in the world (a foot stays flat) or follows the bone (a hand).
  */
-const reach = (q: Pose, s: Solved, j: number, to: Vec3, pole: Vec3, flat = false) => {
+export const reach = (q: Pose, s: Solved, j: number, to: Vec3, pole: Vec3, flat = false) => {
   const [a, b, c] = [s.pos[j], s.pos[j + 1], s.pos[j + 2]];
   const [e, f] = ik(a, to, pole, dist(a, b), dist(b, c));
   const r1 = mul(arc(sub(b, a), sub(e, a)), s.rot[j]);
@@ -177,13 +180,27 @@ const RATES = {
   wall: 10,
   slide: 10,
   stun: 14,
+  gun: 10,
 };
 
 export const createBody = (world?: World): Body => {
   const gait = createGait();
   /** The own player as last seen. */
   let me: PlayerState | undefined;
-  const w = { amp: 0, sprint: 0, air: 0, rise: 0, dash: 0, plant: 0, wall: 0, slide: 0, stun: 0 };
+  const w = {
+    amp: 0,
+    sprint: 0,
+    air: 0,
+    rise: 0,
+    dash: 0,
+    plant: 0,
+    wall: 0,
+    slide: 0,
+    stun: 0,
+    gun: 0,
+  };
+  /** The kick of the last shot, 0 to 1, and how much of the right hand's pose the gun takes, as of the last pose(). */
+  let [kick, hold, wide] = [0, 0, 1.6];
   /** Seconds, for the flailing of a stumble. */
   let clock = 0;
   /** Which hand the wall is on: -1 left, 1 right, eased. */
@@ -193,7 +210,9 @@ export const createBody = (world?: World): Body => {
   /** How closed each hand is, left then right, as of the last pose(). */
   const curls = [0, 0];
 
-  const update: Body['update'] = (p, dt) => {
+  const update: Body['update'] = (p, dt, k = 0, aspect = 1.6) => {
+    kick = k;
+    wide = aspect;
     if (!p) {
       me = undefined;
       return;
@@ -214,6 +233,7 @@ export const createBody = (world?: World): Body => {
       wall: +(p.mode == MODE.WALLRUN),
       slide: +(p.mode == MODE.SLIDE),
       stun: +(p.stun > 0),
+      gun: +(p.ammo >= 0 && !p.down),
     };
     for (const n of Object.keys(RATES) as (keyof typeof RATES)[]) {
       w[n] += (to[n] - w[n]) * (1 - Math.exp(-dt * RATES[n]));
@@ -227,8 +247,24 @@ export const createBody = (world?: World): Body => {
     }
   };
 
+  /**
+   * The gun in camera space: where its grip is (lower right, rising from below as it is taken, kicked
+   * back by a shot, swaying with the run) and its axes, aimed at the crosshair 2.5 m out.
+   */
+  const holster = (): [Vec3, Vec3[]] => {
+    const a = w.amp * (1 + 0.5 * w.sprint);
+    const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
+    const at: Vec3 = [
+      Math.min(0.27, 0.21 * wide) + 0.012 * a * s,
+      -0.2 + 0.018 * a * c - 0.3 * (1 - w.gun),
+      0.5 - 0.05 * kick,
+    ];
+    const d = unit([-at[0], 0.1 * kick - at[1], 2.5 - at[2]]);
+    return [at, aim(d, X)];
+  };
+
   const pose: Body['pose'] = (eye, yaw, pitch, roll = 0) => {
-    if (!me || dist(eye, [me.x, me.y + eyeHeight(me), me.z]) > AWAY) {
+    if (!me || me.down || dist(eye, [me.x, me.y + eyeHeight(me), me.z]) > AWAY) {
       return undefined;
     }
     const g = gait.pose();
@@ -263,12 +299,20 @@ export const createBody = (world?: World): Body => {
     for (const j of [J.THIGH_L, J.THIGH_R]) {
       reach(q, s, j, s0.pos[j + 2], fwd, true);
     }
+    // The gun hand's wrist: the grip is 8 cm along the fingers from it and 2 cm toward the palm.
+    const [gp, ga] = holster();
+    const fh = [0, 1, 2].map(i => TILT[1] * ga[2][i] - TILT[0] * ga[1][i]) as Vec3;
+    const wrist = [0, 1, 2].map(i => gp[i] - 0.078 * fh[i] + 0.022 * ga[0][i]) as Vec3;
     for (const sd of [-1, 1]) {
       const k = Math.cos(TAU * gait.phase) * sd;
       const a = w.amp * (1 + 0.5 * w.sprint);
       // The numbers are for the right hand, mirrored below.
       let h = mix([0.25, -0.17, 0.36], [0.2, -0.14, 0.42], w.sprint);
       h = [h[0], h[1] + 0.07 * a * k, h[2] + 0.12 * a * k];
+      // While the gun is held and he stands or walks, the left hand drops out of view.
+      if (sd < 0) {
+        h = mix(h, [-0.2, -0.65, 0.2], w.gun * (1 - clamp(w.amp * 2.5)));
+      }
       h = mix(h, [0.38, -0.2, 0.34], w.air);
       h = mix(h, [0.3, 0.02, 0.45], w.rise);
       h = mix(h, [0.14, -0.1, 0.5], w.dash);
@@ -295,6 +339,11 @@ export const createBody = (world?: World): Body => {
         const [px, py, pz] = view(sub(at, eye));
         h = mix(h, [px * sd, Math.max(py, -0.28), Math.max(pz, 0.4)], w.plant);
       }
+      if (sd > 0) {
+        // The gun takes the right hand unless it is on a ledge or a wall or reeling.
+        hold = w.gun * (1 - clamp(w.plant + toWall + w.stun));
+        h = mix(h, wrist, hold);
+      }
       // A loose fist, tighter as the pace goes up; open to catch the air, flat on a ledge, a wall or the floor.
       let curl = 0.75 + 0.25 * w.sprint;
       for (const [open, t] of [
@@ -308,12 +357,17 @@ export const createBody = (world?: World): Body => {
       ]) {
         curl += (open - curl) * t;
       }
-      curls[(sd + 1) / 2] = curl;
+      curls[(sd + 1) / 2] = sd > 0 ? curl + (0.9 - curl) * hold : curl;
       const to = add(eye, turn([h[0] * sd, h[1], h[2]]));
       const arm = sd < 0 ? J.ARM_L : J.ARM_R;
       reach(q, s, arm, to, turn([POLE[0] * sd, POLE[1], POLE[2]]));
       // The palm turns down, the back of the hand to the view, flat on a ledge or the floor.
       q.rot[arm + 2] = axis(Y, sd * (1 + 0.5 * (w.plant + w.slide)));
+      if (sd > 0 && hold > 0.002) {
+        // The back of the hand along the gun's right, the fingers around the grip.
+        const rot = frame(turn(ga[0]), turn(fh));
+        q.rot[arm + 2] = slerp(q.rot[arm + 2], mul(inv(solve(q).rot[J.FOREARM_R]), rot), hold);
+      }
     }
     return solve(q);
   };
@@ -341,7 +395,11 @@ export const createBody = (world?: World): Body => {
             colors[7],
           );
         });
+        if (hold > 0.2) {
+          held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], 1, clamp(hold * 1.5 - 0.5));
+        }
       }
     },
+    muzzle: () => tip(...holster()),
   };
 };

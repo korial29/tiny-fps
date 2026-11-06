@@ -523,3 +523,185 @@ describe('body', () => {
     settled.forEach((v, i) => expect(again[i]).toBeCloseTo(v, 3));
   });
 });
+
+describe('the gun in the right hand', () => {
+  const armed = (o: Partial<PlayerState> = {}) => man({ ...o, ammo: 30 });
+  /** The cyan glow of the gun: bright green, over a violet that is not. */
+  const glow = (v: Vert[]) => v.filter(q => q.c[1] > 1.5);
+  const GRIP: Vec3 = [0.27, -0.2, 0.5];
+
+  it('is not there without the gun, nor while down', () => {
+    expect(glow(draw(watch(man(), 60), man()))).toHaveLength(0);
+    const down = armed({ down: 60 });
+    const body = watch(down, 60);
+    expect(body.pose(eyeOf(down), 0, 0)).toBeUndefined();
+    const out: number[] = [];
+    body.draw(out, eyeOf(down), 0, 0);
+    expect(out).toEqual([]);
+  });
+
+  it('is in the lower right of the view, in front of the camera, aimed at the crosshair', () => {
+    const p = armed();
+    const v = draw(watch(p, 60), p);
+    const g = glow(v).map(q => local(p, q.at));
+    expect(g.length).toBeGreaterThan(50);
+    for (const l of g) {
+      expect(seen(l)).toBe(true);
+      expect(l[0]).toBeGreaterThan(0);
+    }
+    const body = watch(p, 60);
+    const [mx, my, mz] = body.muzzle();
+    expect(mx).toBeGreaterThan(0.05);
+    expect(mx).toBeLessThan(0.3);
+    expect(my).toBeLessThan(0.1);
+    expect(my).toBeGreaterThan(-0.35);
+    expect(mz).toBeGreaterThan(0.6);
+    // The muzzle is on the screen, between the grip and the crosshair.
+    expect(seen([mx, my, mz])).toBe(true);
+    expect(mx).toBeLessThan(GRIP[0] + 0.02);
+  });
+
+  it('is held on the grip: the hand is where the gun puts its grip, the back of the hand to its right', () => {
+    const p = armed();
+    const body = watch(p, 90);
+    const s = pose(body, p);
+    const wrist = local(p, s.pos[J.HAND_R]);
+    const q = s.rot[J.HAND_R];
+    // The middle of the grip is 8 cm along the fingers and 2 cm toward the palm from the wrist.
+    const g = local(
+      p,
+      [0, 1, 2].map(
+        i => s.pos[J.HAND_R][i] + turn(q, [0, -1, 0])[i] * 0.078 - turn(q, [1, 0, 0])[i] * 0.022,
+      ) as Vec3,
+    );
+    expect(away(g, GRIP)).toBeLessThan(0.02);
+    expect(away(wrist, g)).toBeCloseTo(Math.hypot(0.078, 0.022), 2);
+    // The back of the hand looks right, and the fingers go forward and down: around a grip that rises.
+    const back = turn(q, [1, 0, 0]);
+    expect(back[0]).toBeGreaterThan(0.9);
+  });
+
+  it('sways with the run: the hand and the muzzle move with the stride, less than the free arm', () => {
+    const ys: number[] = [];
+    const bob = createBody();
+    const q = armed({ vz: -9 });
+    for (let i = 0; i < 80; i++) {
+      q.z -= 9 * DT;
+      bob.update(q, DT);
+      if (i > 40) {
+        ys.push(bob.muzzle()[1]);
+      }
+    }
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.005);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeLessThan(0.1);
+  });
+
+  it('kicks back and up with a shot, and comes back', () => {
+    const p = armed();
+    const body = watch(p, 60);
+    const rest = body.muzzle();
+    body.update(p, DT, 1);
+    const kicked = body.muzzle();
+    expect(kicked[2]).toBeLessThan(rest[2] - 0.03);
+    expect(kicked[1]).toBeGreaterThan(rest[1] - 0.02);
+    body.update(p, DT, 0);
+    expect(away(body.muzzle(), rest)).toBeLessThan(1e-3);
+  });
+
+  it('rises from below when taken', () => {
+    const p = armed();
+    const body = createBody();
+    body.update(man(), DT);
+    for (let i = 0; i < 3; i++) {
+      body.update(man(), DT);
+    }
+    body.update(p, DT);
+    const low = body.muzzle()[1];
+    for (let i = 0; i < 60; i++) {
+      body.update(p, DT);
+    }
+    expect(body.muzzle()[1]).toBeGreaterThan(low + 0.1);
+  });
+
+  it('leaves the right hand to the ledge on a hang, and the wall on a wall-run, and shows no gun there', () => {
+    const h = armed({ ...hang });
+    const hung = draw(watch(h, 120), h);
+    expect(glow(hung).length).toBe(0);
+    const w = armed({ ...wall });
+    // A wall on the east is on the right: that hand is busy; one on the left leaves it free.
+    expect(glow(draw(watch(w, 120), w)).length).toBe(0);
+    const left = armed({ ...wall, wall: SIDE.WEST });
+    expect(glow(draw(watch(left, 120), left)).length).toBeGreaterThan(50);
+  });
+
+  it('shows it again after the hang', () => {
+    const h = armed({ ...hang });
+    const body = watch(h, 120);
+    const g = armed();
+    for (let i = 0; i < 60; i++) {
+      body.update(g, DT);
+    }
+    const out: number[] = [];
+    body.draw(out, eyeOf(g), 0, 0, 0, TEAM);
+    expect(out.length).toBeGreaterThan(0);
+    expect(glow(draw(body, g)).length).toBeGreaterThan(50);
+  });
+
+  it('keeps the arm within its length and the vertices finite, whatever the pose', () => {
+    for (const o of [
+      {},
+      { vz: -9 },
+      { mode: MODE.SLIDE, vz: -8 },
+      { mode: MODE.AIR, ground: false, vy: 4 },
+      { stun: 20 },
+      dash,
+    ]) {
+      const p = armed(o);
+      const body = watch(p, 90);
+      const s = pose(body, p, 0.5);
+      for (const [a, b] of [
+        [J.ARM_R, J.FOREARM_R],
+        [J.FOREARM_R, J.HAND_R],
+      ]) {
+        expect(away(s.pos[a], s.pos[b])).toBeGreaterThan(0.2);
+        expect(away(s.pos[a], s.pos[b])).toBeLessThan(0.31);
+      }
+      const out: number[] = [];
+      body.draw(out, eyeOf(p), p.yaw, 0.5, 0, TEAM);
+      expect(out.every(Number.isFinite)).toBe(true);
+    }
+  });
+
+  it('drops the left hand out of view while it stands with the gun, and brings it back to run', () => {
+    const idle = armed();
+    const [still] = hands(idle, watch(idle, 90));
+    expect(seen(still)).toBe(false);
+    expect(still[1]).toBeLessThan(-0.45);
+    // Without the gun the same stance keeps it in view.
+    const [free] = hands(man(), watch(man(), 90));
+    expect(seen(free)).toBe(true);
+    // Running, it swings in view again.
+    const run = armed({ vz: -9 });
+    const body = createBody();
+    for (let i = 0; i < 90; i++) {
+      run.z -= 9 * DT;
+      body.update(run, DT);
+    }
+    expect(seen(hands(run, body)[0])).toBe(true);
+  });
+
+  it('keeps the gun in a narrow screen: the grip comes in with the aspect', () => {
+    const p = armed();
+    const side = (aspect: number) => {
+      const body = createBody();
+      for (let i = 0; i < 90; i++) {
+        body.update(p, DT, 0, aspect);
+      }
+      return body.muzzle()[0];
+    };
+    expect(side(1.6)).toBeGreaterThan(0.1);
+    expect(side(0.55)).toBeLessThan(side(1.6) - 0.1);
+    // Inside the view of a phone held upright.
+    expect(side(0.55)).toBeLessThan(0.45 * TAN * 0.55 * 2);
+  });
+});

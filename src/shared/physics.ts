@@ -41,6 +41,7 @@ import {
   HANG_MIN_TICKS,
   HANG_SLIDE_TICKS,
   HANG_SNAP,
+  HP_MAX,
   JUMP_BUFFER_TICKS,
   JUMP_SPEED,
   LOW_EYE,
@@ -138,6 +139,13 @@ export const STILL = {
   coyote: COYOTE_TICKS,
   buffer: 0,
   held: 0,
+  hp: HP_MAX,
+  ammo: -1,
+  cool: 0,
+  rack: false,
+  down: 0,
+  shots: 0,
+  hits: 0,
   ev: 0,
   fall: 0,
 };
@@ -157,6 +165,15 @@ export const spawn = (id: number, w: World, n: number, team = 0): PlayerState =>
     ground: true,
     ...STILL,
   };
+};
+
+/**
+ * Puts the player back at the spawn of his id in his team, looking where he looked, with full
+ * health and no gun (EV.RESPAWN). The shot and hit counters go on: a reset would read as a shot.
+ */
+export const respawn = (p: PlayerState, w: World, team: number): void => {
+  const { yaw, pitch, id, shots, hits } = p;
+  Object.assign(p, spawn(id, w, id, team), { yaw, pitch, shots, hits, ev: p.ev | EV.RESPAWN });
 };
 
 /** The modes with the feet on a floor: ground, slide and crouch. */
@@ -918,9 +935,8 @@ export const move = (p: PlayerState, i: Input, w: World, team = 0): void => {
   }
 
   if (p.y < w.def.floor) {
-    // Fallen off the roofs: back at the spawn of the player's id in his team, looking where the input says.
-    const { yaw, pitch, id } = p;
-    Object.assign(p, spawn(id, w, id, team), { yaw, pitch, ev: p.ev | EV.RESPAWN });
+    // Fallen off the roofs: back at the spawn of the player's id in his team.
+    respawn(p, w, team);
   }
   p.t = p.mode === before ? Math.min(255, p.t + 1) : p.t;
   p.buffer = Math.max(0, p.buffer - 1);

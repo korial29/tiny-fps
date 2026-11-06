@@ -292,3 +292,116 @@ describe('soldier', () => {
     }
   });
 });
+
+describe('the gun on a runner', () => {
+  const armed = (o: Partial<PlayerState> = {}) => man({ ...o, ammo: 30 });
+  /** The runner after `n` frames, the states given by `p` each one. */
+  const run = (p: (i: number) => PlayerState, n: number) => {
+    const book = new Map<number, Runner>();
+    for (let i = 0; i < n; i++) {
+      animate(book, [p(i)], DT);
+    }
+    return book.get(1)!;
+  };
+  const drawn = (r: Runner, lod = 1) => {
+    const v: number[] = [];
+    soldier(v, r, [0.1, 0.8, 0.2], lod);
+    expect(v.every(Number.isFinite)).toBe(true);
+    return rows(v);
+  };
+  /** The cyan of the gun: unlit, bright green. */
+  const glow = (v: ReturnType<typeof rows>) => v.filter(p => p[3] == -2 && p[5] > 1.5);
+  const centre = (v: ReturnType<typeof rows>) =>
+    [0, 1, 2].map(k => v.reduce((s, p) => s + p[k], 0) / v.length);
+
+  it('holds the gun when it has one, and nothing without', () => {
+    expect(glow(drawn(run(() => armed(), 60))).length).toBeGreaterThan(50);
+    expect(glow(drawn(run(() => man(), 60)))).toHaveLength(0);
+    expect(glow(drawn(run(() => armed({ down: 50 }), 60)))).toHaveLength(0);
+    // Far, it has the gun too, in fewer triangles.
+    const [far, near] = [0, 1].map(lod =>
+      drawn(
+        run(() => armed(), 60),
+        lod,
+      ),
+    );
+    expect(glow(far).length).toBeGreaterThan(20);
+    expect(far.length).toBeLessThan(near.length);
+  });
+
+  it('carries it at the side: low, beside the hip, not in front of the chest', () => {
+    const r = run(() => armed({ yaw: 0 }), 90);
+    const c = centre(glow(drawn(r)));
+    expect(c[1] - 1).toBeLessThan(1.1);
+    expect(c[1] - 1).toBeGreaterThan(0.3);
+    // The right hand is on the runner's right: +x when he looks along -z.
+    expect(c[0] - 5).toBeGreaterThan(0.1);
+    expect(r.aim).toBe(0);
+  });
+
+  it('raises the arm and aims along the pitch when it fires, then lowers it after half a second', () => {
+    const p = (i: number) => armed({ yaw: 0, pitch: 0.4, shots: i == 60 ? 1 : 0 });
+    const side = run(p, 59);
+    const sideC = centre(glow(drawn(side)));
+    const r = run(p, 90);
+    expect(r.aim).toBeGreaterThan(0.9);
+    const up = glow(drawn(r));
+    const [x, y, z] = centre(up);
+    // Out in front of the face now, higher than at the side.
+    expect(y).toBeGreaterThan(sideC[1] + 0.3);
+    expect(z).toBeLessThan(-3 - 0.2);
+    expect(Math.abs(x - 5 - 0.2)).toBeLessThan(0.25);
+    // With no shot for half a second it is lowered again.
+    const later = run(i => armed({ pitch: 0.4, shots: i >= 60 ? 1 : 0 }), 60 + 60);
+    expect(later.aim).toBeLessThan(0.1);
+    expect(later.since).toBeGreaterThan(0.5);
+  });
+
+  it('eases the arm up and down, never jumps', () => {
+    const book = new Map<number, Runner>();
+    animate(book, [armed()], DT);
+    animate(book, [armed({ shots: 1 })], DT);
+    const r = book.get(1)!;
+    expect(r.since).toBe(0);
+    expect(r.aim).toBeGreaterThan(0);
+    expect(r.aim).toBeLessThan(0.5);
+    animate(book, [armed({ shots: 1 })], DT);
+    expect(r.since).toBeCloseTo(DT, 6);
+  });
+
+  it('counts a wrapped counter as a shot', () => {
+    const book = new Map<number, Runner>();
+    animate(book, [armed({ shots: 255 })], DT);
+    animate(book, [armed({ shots: 0 })], DT);
+    expect(book.get(1)!.since).toBe(0);
+  });
+
+  it('keeps the arm its length and the body finite while aiming, looking up, down and about', () => {
+    for (const [yaw, pitch] of [
+      [0, 0],
+      [1, 1.2],
+      [3, -1.2],
+      [-2, 0.3],
+    ]) {
+      const r = run(i => armed({ yaw, pitch, shots: i > 40 ? 1 : 0, vz: -5 }), 90);
+      const v = drawn(r);
+      expect(v.length).toBeGreaterThan(500);
+      // Nothing flung away from the runner.
+      for (const p of v) {
+        expect(Math.hypot(p[0] - 5, p[1] - 1, p[2] + 3 - 0)).toBeLessThan(40);
+      }
+    }
+  });
+
+  it('lies when down, and sinks into the roof for the last half second', () => {
+    const lowest = (down: number) =>
+      Math.min(...drawn(run(() => man({ down, ammo: -1 }), 120)).map(p => p[1]));
+    const top = (down: number) =>
+      Math.max(...drawn(run(() => man({ down, ammo: -1 }), 120)).map(p => p[1]));
+    expect(top(100)).toBeLessThan(1 + 0.5);
+    expect(top(100)).toBeGreaterThan(1 + 0.1);
+    expect(lowest(100)).toBeGreaterThan(1 - 0.05);
+    expect(top(2)).toBeLessThan(top(100) - 0.3);
+    expect(lowest(2)).toBeLessThan(0.7);
+  });
+});

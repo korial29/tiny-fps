@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as lines from '../../test/lines';
+import { problems } from '../../test/pickups';
 import { EAST, NORTH, SOUTH, Sim } from '../../test/pilot';
 import {
   FLAG_H,
@@ -418,6 +419,20 @@ describe('ROOFTOPS', () => {
       const narrow = brushes.filter(b => b.max[0] - b.min[0] < 1 || b.max[2] - b.min[2] < 1);
       expect(narrow.length).toBeGreaterThanOrEqual(4);
     });
+  });
+});
+
+describe('ROOFTOPS, racks and packs', () => {
+  it('stands each rack and pack on a top clear of brushes, off the flag bases', () => {
+    expect(problems(ROOFTOPS)).toEqual([]);
+  });
+
+  it('has a rack on each spawn roof and a few health packs on the roofs between', () => {
+    expect(teams.map(t => t.rack)).toEqual([
+      [11, 10, 69],
+      [17, 12.4, -1.2],
+    ]);
+    expect(ROOFTOPS.packs).toHaveLength(3);
   });
 });
 

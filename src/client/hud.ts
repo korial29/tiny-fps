@@ -1,14 +1,14 @@
 // The HUD, in the game's Shadow DOM: the title screen with the controls, the muted mark, the score
 // and the clock with the state of both flags, the markers toward the flags, the banner of the last
 // event and the end screen of a match.
-import { TEAM_COLOR, TEAM_NAME } from '../shared/constants';
+import { HP_MAX, TEAM_COLOR, TEAM_NAME } from '../shared/constants';
 import type { Result } from '../shared/protocol';
 import { FLAG } from '../shared/types';
 import type { Snapshot } from '../shared/types';
 import type { Mark } from './marks';
 
 export const HUD_CSS =
-  `h5,aside,nav,output,section,em,u{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,output,section,em,u,ul,dl,s,mark{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
@@ -24,6 +24,17 @@ export const HUD_CSS =
   `aside h6{font:900 clamp(36px,13vw,84px)/1 system-ui,sans-serif;letter-spacing:.04em;transform:skewX(-8deg);` +
   `background:linear-gradient(#fe6,#f92 45%,#d21);-webkit-background-clip:text;background-clip:text;color:transparent;` +
   `filter:drop-shadow(0 3px 0 #500) drop-shadow(0 0 14px #f604)}` +
+  `ul{left:12px;bottom:30px;display:flex;gap:4px;list-style:none}li{width:16px;height:6px;background:#fff;box-shadow:0 0 0 1px #0008}` +
+  `li.e{background:#0000;box-shadow:inset 0 0 0 1px #fffb,0 0 0 1px #0008}ul.low li{background:#f55}ul.low li.e{background:#0000}` +
+  `dl{left:50%;bottom:10px;transform:translateX(-50%);display:flex;align-items:center;gap:10px}dl svg{width:38px;fill:#fff;filter:drop-shadow(0 1px 1px #000)}` +
+  `@media(max-width:520px){dl{left:auto;right:12px;bottom:46px;transform:none}}` +
+  `dl data{font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}dl.e data{color:#f66}` +
+  `s{left:50%;top:50%;width:28px;height:28px;margin:-14px 0 0 -14px;` +
+  `background:linear-gradient(45deg,#0000 44%,#fff 44% 56%,#0000 56%),linear-gradient(-45deg,#0000 44%,#fff 44% 56%,#0000 56%);` +
+  `-webkit-mask:radial-gradient(#0000 6px,#000 7px);mask:radial-gradient(#0000 6px,#000 7px)}` +
+  `mark{inset:0;z-index:1;padding-top:30vh;text-align:center;color:#ddd;` +
+  `background:radial-gradient(ellipse at center,#6668 0%,#4a0c0ce8 130%);backdrop-filter:grayscale(1)}` +
+  `mark::first-line{font:900 clamp(30px,8vw,64px)/1 system-ui,sans-serif;letter-spacing:.24em}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}`;
 
@@ -47,14 +58,21 @@ export interface Hud {
   marks(list: Mark[]): void;
   /** The red vignette of a tackle, 0 (none) to 1 (full). */
   hurt(level: number): void;
+  /** The health as pips out of HP_MAX, and the ammo counter with the gun glyph; -1 ammo (no gun) hides the counter. */
+  vitals(hp: number, ammo: number): void;
+  /** A hit marker on the crosshair for a moment: a laser of the own player hit. */
+  hit(): void;
+  /** The state of being down: `level` 0 (up) to 1 hides or greys the screen, `left` seconds till the respawn. */
+  down(level: number, left: number): void;
   /** A line in the middle of the top of the screen in `team`'s colour, for a few seconds; a newer one replaces it. */
   banner(text: string, team?: number): void;
   /** The end screen with the result and each player's captures and returns, `next` seconds before the next match; undefined hides it. */
   end(sum: Summary | undefined, next: number): void;
 }
 
-/** Milliseconds a banner stays. */
+/** Milliseconds a banner stays, and a hit marker. */
 export const BANNER_MS = 2800;
+export const HIT_MS = 140;
 
 /** m:ss. */
 export const clock = (s: number): string => `${Math.floor(s / 60)}:${`${s % 60}`.padStart(2, '0')}`;
@@ -65,10 +83,13 @@ export const createHud = (screen: HTMLElement): Hud => {
     'beforeend',
     `<aside hidden><h6>TINY FPS</h6><span></span><table>` +
       `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Shift<td>sprint<tr><td>Space<td>jump, again in the air` +
-      `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>M<td>mute</table>` +
-      `<span>Take the enemy flag to your own base while yours is home.</span>` +
+      `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>Left click<td>fire the gun<tr><td>M<td>mute</table>` +
+      `<span>Take the enemy flag to your own base while yours is home. Take the gun at your rack.</span>` +
       `<strong></strong></aside>` +
       `<u></u><h5 hidden>Muted (M)</h5>` +
+      `<ul>${'<li></li>'.repeat(HP_MAX)}</ul>` +
+      `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg><data></data></dl>` +
+      `<s hidden></s><mark hidden></mark>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav>` +
       `<output hidden></output>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
@@ -80,6 +101,9 @@ export const createHud = (screen: HTMLElement): Hud => {
   const bar = one('nav');
   const [red, time, blue] = [...bar.querySelectorAll<HTMLElement>('span, time')];
   const [redFlag, blueFlag] = [...bar.querySelectorAll<HTMLElement>('small')];
+  const pips = [...screen.querySelectorAll('li')];
+  const [life, ammo, marker, fallen] = [one('ul'), one('dl'), one('s'), one('mark')];
+  let ticker: ReturnType<typeof setTimeout> | undefined;
   const banner = one('output');
   const vignette = one('u');
   const end = one('section');
@@ -141,6 +165,23 @@ export const createHud = (screen: HTMLElement): Hud => {
       if (vignette.style.opacity != v) {
         vignette.style.opacity = v;
       }
+    },
+    vitals(hp, rounds) {
+      pips.forEach((li, i) => li.classList.toggle('e', i >= hp));
+      life.classList.toggle('low', hp <= 1);
+      ammo.hidden = rounds < 0;
+      ammo.classList.toggle('e', !rounds);
+      set(ammo.lastElementChild as HTMLElement, `${Math.max(rounds, 0)}`);
+    },
+    hit() {
+      marker.hidden = false;
+      clearTimeout(ticker);
+      ticker = setTimeout(() => (marker.hidden = true), HIT_MS);
+    },
+    down(level, left) {
+      fallen.hidden = level < 0.02;
+      fallen.style.opacity = `${Math.min(level, 1)}`;
+      set(fallen, fallen.hidden ? '' : `DOWN\nBack in ${left.toFixed(1)}`);
     },
     banner(text, team) {
       banner.hidden = false;

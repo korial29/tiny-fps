@@ -9,6 +9,7 @@ import { TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import type { World, WorldDef } from '../shared/world';
 import type { Body } from './body';
+import type { Tracer } from './beams';
 import type { Effects } from './effects';
 import { base, flag, teamRgb } from './flag';
 import type { CtfScene } from './flag';
@@ -16,6 +17,7 @@ import { STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
+import { kit, rack } from './props';
 import { animate, soldier } from './soldier';
 import type { Runner } from './soldier';
 import { skyline } from './skyline';
@@ -384,8 +386,10 @@ export interface Renderer {
     /** gather() in lights.ts: at most MAX_LIGHTS, the first MAX_SHADOWS shadowed spots mapped, besides the sun. */
     lights: Light[],
     body?: Body,
-    /** The bases and the flags: drawn lit, casting shadows, with the other players. */
+    /** The bases, the flags, the racks and the health packs: drawn lit, casting shadows, with the other players. */
     ctf?: CtfScene,
+    /** The laser beams: glowing ribbons that cast no shadow. */
+    tracer?: Tracer,
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
@@ -650,7 +654,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   return {
-    frame(eye, yaw, pitch, others, colors, fx, lights, body, ctf) {
+    frame(eye, yaw, pitch, others, colors, fx, lights, body, ctf, tracer) {
       const [w, h] = size();
       if (lost || !w || !h) {
         return;
@@ -671,6 +675,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       animate(runners, others, dt, world);
       ctf?.bases.forEach((at, team) => base(v, at, teamRgb(team), now));
       ctf?.flags.forEach(f => flag(v, f, teamRgb(f.team), now));
+      ctf?.racks?.forEach((at, team) => at && rack(v, at, teamRgb(team), now));
+      ctf?.packs?.forEach(at => kit(v, at, now));
       for (const p of others) {
         soldier(
           v,
@@ -679,6 +685,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           +(Math.hypot(p.x - eye[0], p.z - eye[2]) < NEAR),
         );
       }
+      // The beams glow and cast nothing: they come after the last thing that casts a shadow.
+      const beamAt = v.length;
+      tracer?.draw(v, eye);
       const bodyAt = v.length;
       body?.draw(v, eye, yaw, pitch, fx.roll, rgb(colors.get(body.id) ?? '#888'));
       if (tail + v.length * 4 > cap) {
@@ -701,7 +710,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, shadows, 0, i);
         gl.uniformMatrix4fv(u.m, false, i ? pk.m.subarray(i * 16 - 16, i * 16) : sunM);
         gl.clear(gl.DEPTH_BUFFER_BIT);
-        gl.drawArrays(gl.TRIANGLES, 0, first + bodyAt / STRIDE);
+        gl.drawArrays(gl.TRIANGLES, 0, first + beamAt / STRIDE);
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, shadows);

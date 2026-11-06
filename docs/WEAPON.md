@@ -1,0 +1,26 @@
+# Weapon
+
+The user's direction, 2026-11-06: a first gun, taken near the spawn. It is inspired by the Halo plasma pistol: a curved alien sidearm, violet metal with cyan glow strips. It fires lasers at a high rate, with an ammo counter and recoil. Players have 5 HP, and 5 hits put a player down. Health packs are spread over the map and give 2 HP each. A hit plays a hit sound to the shooter, as in Quake 3. Everything stays procedural, with no assets. The client budget is raised to 48 KB (the user, 2026-11-06).
+
+## Rules
+
+| Rule         | Value                                                                                                                                                                                                                              |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Health       | `HP_MAX` 5, a hit takes 1. No friendly fire. No regeneration.                                                                                                                                                                      |
+| Gun          | Taken at the team's rack (`TeamDef.rack`, within `RACK_R`) with `AMMO_MAX` 60 shots. The rack fills on arrival only: stepping into the circle loads `AMMO_MAX` once, staying gives nothing more, and leaving and coming back loads it again (`PlayerState.rack` tells he is inside, on the wire). Lost when going down. `ammo` is -1 without it.                                                        |
+| Fire         | Hold `KEY.FIRE`: one hitscan laser every `GUN_COOLDOWN` (7) ticks, from the eye along the look, `GUN_RANGE` 80 m, stopped by the brushes (`ray`). The host checks hits on the others as the shooter saw them (`Room.rewind`).      |
+| Recoil       | A view kick of `RECOIL` up per shot, on the client. The kick is in the pitch the inputs carry, so the host aims where the player sees. Sustained fire climbs.                                                                      |
+| Down         | At 0 HP the player lies down for `DOWN_TICKS` (2 s) and cannot move or fire. A carried flag drops where he fell, with the tackle's 2 s lock. Then he is back at a team spawn with full health and no gun.                          |
+| Health packs | `WorldDef.packs`, up to 32. Within `PACK_R` a pack gives `PACK_HP` (2) up to `HP_MAX`; a player at full health does not take it. It is back after `PACK_BACK` (20 s). `Snapshot.packs` holds the bits of the packs that are there. |
+| Tackle       | Unchanged; it works with or without the gun.                                                                                                                                                                                       |
+
+The gun state (`hp`, `ammo`, `cool`, `down`, `shots`, `hits`) is in `PlayerState`. A shared step fires it from the inputs, so the client predicts its own shots and ammo exactly. Hits and damage are the host's. The `shots` and `hits` counters (u8, wrapping) go on the wire, so every client draws the others' lasers, and the shooter hears a hit when its `hits` changes.
+
+## Steps
+
+| #   | Step              | What changes                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Rules on the host | `gun.ts`: the shared trigger (cooldown, ammo, shots counter) run with every input on the host and in the predictor, and the hitscan against rewound others. Damage, going down, respawn, flag drop, racks and packs in the room. The inputs carry `KEY.FIRE` (keys go to 9 bits); the snapshot carries `hp`, `ammo`, `down`, `shots`, `hits` and `packs`. Racks and packs placed on HIGHLINE and ROOFTOPS.                       |
+| 2   | Gun and feedback  | The gun model, a procedural curved pistol in the right hand of the own body and of every runner. Laser beams with a muzzle flash and impact sparks. The recoil kick. A down pose and a fade for a fallen runner. A HUD with health pips and an ammo counter, and a hurt flash. Sounds: the laser, the Quake 3 style hit sound, hurt, down, gun and pack pickups. Rack and pack models on the map. Fire on the left mouse button. |
+
+Steps 1 and 2 are done.

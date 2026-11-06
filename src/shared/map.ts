@@ -91,6 +91,8 @@ export const ROOFTOPS: WorldDef = {
         [14, 10, 66, 0],
         [20, 10, 66, 0],
       ],
+      // Behind the spawn rows, 3 m from the nearest.
+      rack: [11, 10, 69],
     },
     // Blue holds F across the chasm, facing south, its flag 4.8 m from the chasm's edge.
     {
@@ -105,7 +107,14 @@ export const ROOFTOPS: WorldDef = {
         [14, 12.4, 0.5, Math.PI],
         [20, 12.4, 0.5, Math.PI],
       ],
+      rack: [17, 12.4, -1.2],
     },
+  ],
+  // One on each of the roofs B, C and E, away from the edges.
+  packs: [
+    [20, 10, 51],
+    [18, 12.4, 29],
+    [42, 8, 24],
   ],
   floor: -25,
   // A warm bright sun, low in the east: long sharp shadows across the roofs.
@@ -296,12 +305,31 @@ const row = (yaw: number, z: number, z2: number): Spawn[] => [
   ...[19, 31, 43].map((x): Spawn => [x, 26, z2, yaw]),
 ];
 
+/**
+ * Health packs in red's half, one per stretch of a route: the Spine, the Midtown roofs (two) and
+ * the Lowline, each away from the edges and the cover. Their twins are across the line, and the
+ * plaza has a pair of its own.
+ */
+const PACKS: Vec3[] = [
+  [20, 26, 190],
+  [48, 21.2, 172],
+  [48, 19, 200],
+  [88, 14.5, 198],
+];
+
 export const HIGHLINE: WorldDef = {
   name: 'Highline',
   brushes: [...half, ...half.map(flip), ...centre],
   teams: [
-    { base: [32, 26, 224], spawns: row(0, 236, 231) },
-    { base: [32, 26, ZED - 224], spawns: row(Math.PI, ZED - 236, ZED - 231) },
+    // The rack is at the side of the spawn rows, 5 m from the nearest spawn.
+    { base: [32, 26, 224], spawns: row(0, 236, 231), rack: [47, 26, 234] },
+    { base: [32, 26, ZED - 224], spawns: row(Math.PI, ZED - 236, ZED - 231), rack: [47, 26, 6] },
+  ],
+  packs: [
+    ...PACKS,
+    ...PACKS.map(([x, y, z]): Vec3 => [x, y, ZED - z]),
+    [24, 15, 112],
+    [24, 15, 128],
   ],
   floor: -25,
   // A warm sun low in the east, along the roofs' short side: the same light for both teams.

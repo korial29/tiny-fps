@@ -52,3 +52,5 @@ A second weapon: a katana with a cyan electric glow along the blade. Its cut dep
 | 4   | Katana and feel | The model: a slightly curved blade with a cyan glow and crackling arcs, a round guard, a wrapped grip, in the own right hand and in every runner's. The three cuts in first person and on the runners, a glowing trail. The electric hit: sparks, the shocked runner crackles. Sounds: draw, swing, electric hit. HUD: the weapon in hand. 1, 2 and the wheel. The katana rack on the map. |
 
 Step 3 is done: racks on HIGHLINE (47, 26, 231.5 and its mirror) and ROOFTOPS (13.5, 10, 69 and 14.5, 12.4, -1.2), 2.5 m from the gun rack.
+
+Step 4 is done: `katana.ts` (the model, its hold and the cut keys in camera space), `trail.ts`, the cuts in `body.ts` and `soldier.ts`, the rack in `props.ts`. The weapon choice is in `input.ts`, the shock beat in `beats.ts`, the sparks and crackle in `beams.ts`. With empty hands the own arms hang out of view and swing with the stride (the user, 2026-11-06).

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ROOFTOPS } from '../shared/map';
+import { HIGHLINE, ROOFTOPS } from '../shared/map';
 import { forward } from '../shared/physics';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
@@ -17,7 +17,11 @@ import {
   SUN_DEPTH,
   backing,
   daylight,
+  FOG_LAYER,
+  FOG_RISE,
+  fogDepth,
   fogOf,
+  fogRef,
   level,
   lightProj,
   pack,
@@ -28,6 +32,7 @@ import {
   sunProj,
   viewProj,
 } from './render';
+import { STREET, street } from './street';
 import { LAYERS } from './textures';
 import { vision, zones } from './vision';
 import { duo } from '../../test/teams';
@@ -436,12 +441,17 @@ describe('scenery', () => {
 
   it('draws the brushes, a distant city, the runner red and the team zones, in whole triangles', () => {
     expect(v.length % (3 * STRIDE)).toBe(0);
-    const [brushes, tower, vis, zone] = [level(w), level(city(w)), vision(w.def), zones(w.def)].map(
-      a => a.length,
-    );
+    const [brushes, tower, road, vis, zone] = [
+      level(w),
+      level(city(w)),
+      street(w.def),
+      vision(w.def),
+      zones(w.def),
+    ].map(a => a.length);
     expect(tower).toBeGreaterThan(brushes);
+    expect(road).toBeGreaterThan(0);
     expect(vis).toBeGreaterThan(0);
-    expect(v).toHaveLength(tower + vis + zone);
+    expect(v).toHaveLength(tower + road + vis + zone);
   });
 
   it('puts the map first and the red last, so the red is never hidden by the city', () => {
@@ -452,6 +462,82 @@ describe('scenery', () => {
   it('keeps the world the physics reads as it was', () => {
     expect(w.def.brushes).toBe(ROOFTOPS.brushes);
     expect(city(w).grid).toBe(w.grid);
+  });
+});
+
+describe('the height fog', () => {
+  const eye = (y: number): [number, number, number] => [0, y, 0];
+  const today = (density: number, d: number) => density * d;
+
+  it('is the world fog plus the layer: at the roof level it matches the fog of before within a few percent', () => {
+    for (const def of [HIGHLINE, ROOFTOPS]) {
+      const [density, ref] = [def.fog![3], fogRef(def)];
+      // On any roof, from the lowest to 12 m above, across 200 m: never thinner, at most 4 % thicker.
+      for (const y of [ref, ref + 6, ref + 12]) {
+        const k = fogDepth(density, ref, eye(y), [200, y, 0]) / today(density, 200);
+        expect(k).toBeGreaterThanOrEqual(1);
+        expect(k).toBeLessThan(1.04);
+      }
+    }
+  });
+
+  it('thickens toward the street: down 100 m it is several times as dense as across, and it is monotonic', () => {
+    const [density, ref] = [HIGHLINE.fog![3], fogRef(HIGHLINE)];
+    const across = fogDepth(density, ref, eye(ref + 10), [100, ref + 10, 0]);
+    const down = fogDepth(density, ref, eye(ref + 10), [0, ref - 90, 0]);
+    // The whole way down is a third thicker than the same 100 m across, and the air on the street,
+    // 94 m under the lowest roof, is over three times as dense as the air at the roof.
+    expect(down / today(density, 100)).toBeGreaterThan(1.3);
+    expect(down).toBeGreaterThan(across);
+    const local = (y: number) =>
+      (fogDepth(density, ref, eye(y + 1), [0, y, 0]) +
+        fogDepth(density, ref, eye(y), [0, y - 1, 0])) /
+      2 /
+      density;
+    expect(local(STREET) / local(ref)).toBeGreaterThan(3);
+    // Per metre of view, a ray down is thicker than a level one, and a ray up is thinner.
+    const per = (dy: number) =>
+      fogDepth(density, ref, eye(ref + 10), [60, ref + 10 + dy, 0]) /
+      today(density, Math.hypot(60, dy));
+    expect(per(-60)).toBeGreaterThan(per(0));
+    expect(per(0)).toBeGreaterThan(per(60));
+    let last = 0;
+    for (let drop = 0; drop <= 100; drop += 10) {
+      const d = per(-drop);
+      expect(d).toBeGreaterThanOrEqual(last);
+      last = d;
+    }
+  });
+
+  it('lets the street and the cars through: at the street 100 m under a roof the view is hazy, not blind', () => {
+    const [density, ref] = [HIGHLINE.fog![3], fogRef(HIGHLINE)];
+    const seen = Math.exp(-fogDepth(density, ref, eye(ref + 10), [0, ref - 90, 0]));
+    expect(seen).toBeGreaterThan(0.25);
+    expect(seen).toBeLessThan(0.8);
+  });
+
+  it('has no seam where the closed form changes branch, and none on the level or straight down', () => {
+    const [density, ref] = [HIGHLINE.fog![3], fogRef(HIGHLINE)];
+    const y = 30;
+    const [a, b] = [0.99, 1.01].map(k => (1e-3 / FOG_RISE) * k);
+    const [fa, fb] = [a, b].map(climb => fogDepth(density, ref, eye(y), [100, y + climb, 0]));
+    expect(Math.abs(fa - fb) / fa).toBeLessThan(1e-4);
+    for (const p of [
+      [100, y, 0],
+      [0, y - 100, 0],
+      [0, y + 100, 0],
+      [0, y, 0],
+    ] as const) {
+      const d = fogDepth(density, ref, eye(y), [...p]);
+      expect(Number.isFinite(d)).toBe(true);
+      expect(d).toBeGreaterThanOrEqual(0);
+    }
+    expect(FOG_LAYER).toBeGreaterThan(0);
+  });
+
+  it('is anchored at the lowest top of the world', () => {
+    expect(fogRef(HIGHLINE)).toBe(Math.min(...HIGHLINE.brushes.map(b => b.max[1])));
+    expect(fogRef(ROOFTOPS)).toBe(Math.min(...ROOFTOPS.brushes.map(b => b.max[1])));
   });
 });
 

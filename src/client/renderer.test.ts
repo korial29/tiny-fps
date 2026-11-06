@@ -11,6 +11,8 @@ import type { Light } from './lights';
 import { STRIDE } from './mesh';
 import { LAYERS } from './textures';
 import {
+  FOG_LAYER,
+  FOG_RISE,
   HAZE,
   MAX_PIXELS,
   MAX_TINTS,
@@ -20,11 +22,26 @@ import {
   createRenderer,
   daylight,
   fogOf,
+  fogRef,
   palette,
   scenery,
   sunProj,
 } from './render';
+import type * as Traffic from './traffic';
 import { duo } from '../../test/teams';
+
+// The traffic is off unless a test turns it on: the draws below are counted to the vertex.
+const cars = vi.hoisted(() => ({ on: false }));
+vi.mock('./traffic', async importOriginal => {
+  const real = await importOriginal<typeof Traffic>();
+  return {
+    ...real,
+    traffic: (def: WorldDef) => {
+      const drive = real.traffic(def);
+      return (...args: Parameters<typeof drive>) => cars.on && drive(...args);
+    },
+  };
+});
 
 type Call = [name: string, ...args: unknown[]];
 
@@ -701,6 +718,37 @@ describe('createRenderer', () => {
       expect(frag).toContain(`G[${MAX_TINTS}]`);
       expect(frag).toContain('H[5]');
       expect(frag).not.toMatch(/undefined|NaN|\[object/);
+    });
+
+    it('sets the height of the fog layer to the lowest roof, and integrates the layer along the ray', () => {
+      createRenderer(canvas, ROOM);
+      const frag = calls
+        .filter(c => c[0] == 'shaderSource')
+        .map(c => String(c[2]))
+        .find(s => s.includes('sampler2DArray'))!;
+      expect(frag).toContain('uniform float U;');
+      expect(frag).toContain(`${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))`);
+      expect(set('U').map(c => c.slice(2))).toEqual([[fogRef(ROOM.def)]]);
+    });
+  });
+
+  describe('traffic', () => {
+    afterEach(() => {
+      cars.on = false;
+    });
+
+    it('adds the cars in view to the dynamic vertices, before the beams and the body, and none when it is off', () => {
+      const rd = createRenderer(canvas, ROOM);
+      frame(rd);
+      expect(draws()[1][1]).toBe(FLOOR_VERTS);
+      calls.length = 0;
+      cars.on = true;
+      vi.spyOn(Date, 'now').mockReturnValue(161e3);
+      rd.frame([1, 100, 1], 0, -Math.PI / 2, [], new Map(), createEffects(), []);
+      const [depth, world] = draws();
+      expect(depth[1]).toBeGreaterThan(FLOOR_VERTS);
+      expect(world[1]).toBe(depth[1]);
+      expect((depth[1] - FLOOR_VERTS) % 3).toBe(0);
     });
   });
 

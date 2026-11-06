@@ -39,6 +39,8 @@ export interface WorldDef {
   floor: number;
   /** Health packs, points on tops (at most 32): walking within PACK_R gives PACK_HP, then it is gone PACK_BACK seconds. */
   packs?: Vec3[];
+  /** Ammo packs, points on tops (health and ammo packs together at most 32): within PACK_R a player with the gun and fewer than AMMO_MAX shots takes AMMO_PACK, then it is gone PACK_BACK seconds. */
+  ammo?: Vec3[];
   /** Unit direction toward the sun, and its colour (linear RGB, may exceed 1). */
   sun: { dir: Vec3; color: Vec3 };
   /** Sky colours at the zenith and the horizon, linear RGB. */

@@ -204,7 +204,10 @@ export interface Snapshot {
   over: boolean;
   /** The flag of each team, red then blue. */
   flags: [FlagState, FlagState];
-  /** Bit n set: health pack n of WorldDef.packs is there to take. Absent: none. */
+  /**
+   * Bit n set: pack n is there to take, the health packs of WorldDef.packs first, then the ammo
+   * packs of WorldDef.ammo (bit packs.length + n). Absent: none.
+   */
   packs?: number;
 }
 

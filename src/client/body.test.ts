@@ -755,9 +755,9 @@ describe('the ammo on the back of the gun', () => {
       // Within about 45 degrees of head on.
       expect(cos).toBeGreaterThan(0.7);
     }
-    // Two digits side by side, big on the screen: wider than 4 cm in the camera's space.
+    // Two digits side by side, wider than 3 cm in the camera's space.
     const xs = glow.map(g => local(p, [g[0], g[1], g[2]])[0]);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.05);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.03);
   });
 
   it('are not drawn without the gun', () => {

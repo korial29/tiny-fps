@@ -321,21 +321,25 @@ describe('focus', () => {
 describe('the readout on the back of the gun', () => {
   const v = (n: number) => verts(readout(n));
   const digits = (n: number) => v(n).filter(x => x.layer == -2);
-  const housing = (n: number) => v(n).filter(x => x.layer == -1);
+  const metal = (n: number) => v(n).filter(x => x.layer == -1 && Math.max(...x.c) > 0.1);
+  const screen = (n: number) => v(n).filter(x => x.layer == -1 && Math.max(...x.c) <= 0.1);
   const SEGS = [6, 2, 5, 5, 4, 5, 6, 3, 7, 6];
 
-  it('is a dark display and two digits of thick quads, a pair of triangles to a segment', () => {
+  it('is a small block with a dark screen and two digits of thick quads, a pair of triangles to a segment', () => {
     for (const n of [0, 7, 40, 59, 60, 99]) {
       const [a, b] = `${n}`.padStart(2, '0');
       expect(digits(n)).toHaveLength((SEGS[+a] + SEGS[+b]) * 6);
-      // Five faces of the slab, two triangles each.
-      expect(housing(n)).toHaveLength(30);
+      // The block: back, front, two sloping sides and the top, two triangles each; the screen one quad.
+      expect(metal(n)).toHaveLength(30);
+      expect(screen(n)).toHaveLength(6);
     }
   });
 
-  it('has dark backing behind the digits: the display is much darker than the metal and the digits', () => {
-    for (const x of housing(40)) {
-      expect(Math.max(...x.c)).toBeLessThan(0.1);
+  it('has the block in the violet of the gun, a shade darker, and a dark screen behind the digits', () => {
+    for (const x of metal(40)) {
+      expect(x.c[2]).toBeGreaterThan(x.c[0]);
+      expect(x.c[0]).toBeGreaterThan(x.c[1]);
+      expect(x.c[2]).toBeLessThan(0.5);
     }
   });
 
@@ -355,27 +359,54 @@ describe('the readout on the back of the gun', () => {
     expect(digits(11)[0].c[0]).toBeLessThan(digits(11)[0].c[2]);
   });
 
-  it('is big: each digit is about 3 cm wide and 4 cm high, with segments of a centimetre', () => {
+  it('is as big as the screen allows: each digit about 2 cm wide and 2.5 cm high with segments of half a centimetre', () => {
     const xs = digits(88).map(x => x.p[0]);
-    // Two digits side by side on a display that is a little turned.
-    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.055);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.04);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.046);
     const ys = digits(88).map(x => x.p[1]);
-    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.035);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.02);
   });
 
-  it('is a small display on the back of the body, facing back and up toward the eye, over the top', () => {
+  it('keeps the digits inside the screen, and the screen inside the back face of the block', () => {
+    const sx = screen(88).map(x => x.p[0]);
+    const dx = digits(88).map(x => x.p[0]);
+    expect(Math.min(...dx)).toBeGreaterThan(Math.min(...sx));
+    expect(Math.max(...dx)).toBeLessThan(Math.max(...sx));
+    // The back face is 5.6 cm wide at the top.
+    expect(Math.max(...sx) - Math.min(...sx)).toBeLessThan(0.056);
+  });
+
+  it('is low on the body, not a sign: the block stands at most 2 cm over its top', () => {
+    const top = Math.max(...v(88).map(x => x.p[1]));
+    // The body's highest point, 0.144, and the block's top, a little over it at the back.
+    expect(top).toBeLessThan(0.16);
+    expect(top).toBeGreaterThan(0.145);
+  });
+
+  it('has the block tapering: narrow at the top, wider at the base, so the sides slope in', () => {
+    const m = metal(88);
+    const widthAt = (lo: number, hi: number) => {
+      const xs = m.filter(x => x.p[1] >= lo && x.p[1] <= hi).map(x => x.p[0]);
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    expect(widthAt(0.15, 0.2)).toBeLessThan(widthAt(0.11, 0.113));
+  });
+
+  it('sits on the back of the top of the body, over its back half', () => {
     for (const x of v(88)) {
-      expect(Math.abs(x.p[0])).toBeLessThan(0.05);
+      expect(Math.abs(x.p[0])).toBeLessThan(0.04);
       expect(x.p[2]).toBeGreaterThan(0);
-      expect(x.p[2]).toBeLessThan(0.07);
+      expect(x.p[2]).toBeLessThan(0.06);
       expect(x.p[1]).toBeGreaterThan(0.11);
-      expect(x.p[1]).toBeLessThan(0.2);
+      expect(x.p[1]).toBeLessThan(0.16);
     }
+  });
+
+  it('shows the digits on a face leaning back and up toward the player', () => {
     for (const x of digits(88)) {
-      // Back is +z: it faces the player, tipped up (about 25 degrees) and a little to the left.
-      expect(x.n[2]).toBeGreaterThan(0.7);
+      // Back is +z: the face is tipped up by about 25 degrees.
+      expect(x.n[2]).toBeGreaterThan(0.85);
       expect(x.n[1]).toBeGreaterThan(0.3);
-      expect(x.n[0]).toBeLessThan(0);
     }
   });
 

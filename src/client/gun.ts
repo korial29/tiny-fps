@@ -261,7 +261,7 @@ const DIGITS = [
   'abcdfg',
 ];
 /** A digit: width, height, thickness of a segment, gap between the two digits. */
-const [DW, DH, DT, DGAP] = [0.028, 0.042, 0.0085, 0.006];
+const [DW, DH, DT, DGAP] = [0.019, 0.026, 0.0055, 0.004];
 /** The rectangle of each segment in a digit: across and up from its bottom left corner. */
 const SEGMENTS: Record<string, [number, number, number, number]> = {
   a: [0, DH - DT, DW, DH],
@@ -273,56 +273,79 @@ const SEGMENTS: Record<string, [number, number, number, number]> = {
   g: [0, (DH - DT) / 2, DW, (DH + DT) / 2],
 };
 /**
- * The display: a small slab on the back of the top of the body, half width, half height and half
- * thickness, its middle, and how it faces: tipped back and up toward the eye of the player holding
- * the gun (about 25 degrees up, and 15 to the left, as the gun is held at the right), so that the
- * digits are seen nearly head on.
+ * The display block: a low trapezoidal wedge on the back of the top of the body, in the gun's
+ * violet, a shade darker. Its base is a rectangle sunk into the body, its top a smaller one, so that
+ * the sides slope in; its back face leans toward the eye of the player holding the gun. Corners as
+ * [across, up, back] of the back edge and of the front edge, base then top.
  */
-const [PW, PH, PD] = [0.039, 0.029, 0.005];
-const PLATE: Vec3 = [0, 0.15, 0.03];
-const [TIPPED, TURNED] = [0.5, -0.2];
+const BLOCK_BASE: [Vec3, Vec3] = [
+  [0.036, 0.112, 0.056],
+  [0.036, 0.112, 0.012],
+];
+const BLOCK_TOP: [Vec3, Vec3] = [
+  [0.028, 0.156, 0.036],
+  [0.028, 0.152, 0.02],
+];
+const BLOCK = [0.2, 0.075, 0.36];
+/** The dark screen set in the back face: half width, and from where to where up the face, in metres. */
+const [SW, SFROM, STO] = [0.023, 0.0175, 0.0455];
 const readouts = new Map<number, number[]>();
 
 /**
- * The ammo as two glowing seven-segment digits on a dark display on the back of the body, in model
- * space: cyan, red at 10 or fewer, thick segments that bloom only a little. 99 at most.
+ * The ammo as two glowing seven-segment digits on a dark screen set in the back of a small block
+ * on top of the body, in model space: cyan, red at 10 or fewer, thick segments that bloom only a
+ * little. The block is part of the readout, so only a gun that shows the ammo carries it. 99 at most.
  */
 export const readout = (ammo: number): number[] => {
   const n = Math.min(Math.max(Math.floor(ammo), 0), 99);
   let out = readouts.get(n);
   if (!out) {
     const v: number[] = (out = []);
-    // The display's axes: across, up its face, and out of it.
-    const [s, c, sy, cy] = [Math.sin(TIPPED), Math.cos(TIPPED), Math.sin(TURNED), Math.cos(TURNED)];
-    const turn = ([x, y, z]: Vec3): Vec3 => [x * cy + z * sy, y, -x * sy + z * cy];
-    const [X, U, N] = [turn([1, 0, 0]), turn([0, c, -s]), turn([0, s, c])];
-    const at = (a: number, b: number, k: number): Vec3 =>
-      [0, 1, 2].map(i => PLATE[i] + X[i] * a + U[i] * b + N[i] * k) as Vec3;
-    /** A quad of the display, wound so that its normal points along `hint`. */
-    const face = (pts: Vec3[], hint: Vec3) => {
+    const mirror = (p: Vec3): Vec3 => [-p[0], p[1], p[2]];
+    const [b0, b1, t0, t1] = [BLOCK_BASE[0], BLOCK_BASE[1], BLOCK_TOP[0], BLOCK_TOP[1]];
+    const all = [b0, b1, t0, t1].flatMap(p => [p, mirror(p)]);
+    const mid = [0, 1, 2].map(k => all.reduce((s, p) => s + p[k], 0) / all.length) as Vec3;
+    /** A quad, wound so that it faces away from the middle of the block. */
+    const face = (pts: Vec3[], rgb: number[]) => {
       const [u, w] = [sub(pts[1], pts[0]), sub(pts[2], pts[0])];
       const f: Vec3 = [
         u[1] * w[2] - u[2] * w[1],
         u[2] * w[0] - u[0] * w[2],
         u[0] * w[1] - u[1] * w[0],
       ];
-      const p = dot(f, hint) < 0 ? [pts[0], pts[3], pts[2], pts[1]] : pts;
-      tri(v, p[0], p[1], p[2], DARK);
-      tri(v, p[0], p[2], p[3], DARK);
+      const c = sub(pts[0], mid);
+      const p = dot(f, c) < 0 ? [pts[0], pts[3], pts[2], pts[1]] : pts;
+      tri(v, p[0], p[1], p[2], rgb);
+      tri(v, p[0], p[2], p[3], rgb);
     };
-    const neg = (a: Vec3): Vec3 => [-a[0], -a[1], -a[2]];
-    face([at(-PW, -PH, PD), at(PW, -PH, PD), at(PW, PH, PD), at(-PW, PH, PD)], N);
-    face([at(-PW, -PH, -PD), at(PW, -PH, -PD), at(PW, PH, -PD), at(-PW, PH, -PD)], neg(N));
-    face([at(-PW, PH, -PD), at(PW, PH, -PD), at(PW, PH, PD), at(-PW, PH, PD)], U);
-    face([at(-PW, -PH, -PD), at(-PW, PH, -PD), at(-PW, PH, PD), at(-PW, -PH, PD)], neg(X));
-    face([at(PW, -PH, -PD), at(PW, PH, -PD), at(PW, PH, PD), at(PW, -PH, PD)], X);
+    // The back, the front, the two sloping sides and the top; the base is in the body.
+    face([b0, mirror(b0), mirror(t0), t0], BLOCK);
+    face([b1, mirror(b1), mirror(t1), t1], BLOCK);
+    face([b0, b1, t1, t0], BLOCK);
+    face([mirror(b0), mirror(b1), mirror(t1), mirror(t0)], BLOCK);
+    face([t0, mirror(t0), mirror(t1), t1], BLOCK);
+    // The back face's axes: across, up its slope and out of it. Points on it from the middle of its base.
+    const slope = unit(sub(t0, b0));
+    const [O, N]: [Vec3, Vec3] = [
+      [0, b0[1], b0[2]],
+      [0, -slope[2], slope[1]],
+    ];
+    const at = (a: number, b: number, k: number): Vec3 => [
+      O[0] + a,
+      O[1] + slope[1] * b + N[1] * k,
+      O[2] + slope[2] * b + N[2] * k,
+    ];
+    face(
+      [at(-SW, SFROM, 0.0012), at(SW, SFROM, 0.0012), at(SW, STO, 0.0012), at(-SW, STO, 0.0012)],
+      DARK,
+    );
     const from = v.length;
     [...`${n}`.padStart(2, '0')].forEach((ch, i) => {
       const x0 = -DW - DGAP / 2 + i * (DW + DGAP);
       for (const seg of DIGITS[+ch]) {
         const [a, b, d, e] = SEGMENTS[seg];
-        // Segments lie on the display, a hair out of it.
-        const p = (x: number, t: number) => at(x0 + x, t - DH / 2, PD + 0.0015);
+        // Segments lie on the screen, a hair out of it.
+        const p = (x: number, t: number) => at(x0 + x, (SFROM + STO - DH) / 2 + t, 0.0027);
         const rgb = n > 10 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
         tri(v, p(a, b), p(d, b), p(d, e), rgb);
         tri(v, p(a, b), p(d, e), p(a, e), rgb);

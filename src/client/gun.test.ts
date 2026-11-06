@@ -100,7 +100,7 @@ describe('the gun model', () => {
     }
   });
 
-  it('is about a hand and a half long, with the muzzle at the front between two jaws', () => {
+  it('is about a hand and a half long, with the muzzle on the tip of its nose', () => {
     const [x, y, z] = [0, 1, 2].map(k => [
       Math.min(...near.map(v => v.p[k])),
       Math.max(...near.map(v => v.p[k])),
@@ -110,17 +110,24 @@ describe('the gun model', () => {
     expect(y[1] - y[0]).toBeGreaterThan(0.15);
     expect(y[1] - y[0]).toBeLessThan(0.3);
     expect(x[1] - x[0]).toBeLessThan(0.12);
-    // The muzzle is ahead of everything but the jaw tips, and the middle of the grip is the origin.
-    expect(z[0]).toBeLessThan(MUZZLE[2]);
+    // The middle of the grip is the origin; the emitter glows on the muzzle.
     expect(
       Math.min(
-        ...near.map(v => Math.hypot(v.p[0] - MUZZLE[0], v.p[1] - MUZZLE[1], v.p[2] - MUZZLE[2])),
+        ...near
+          .filter(v => v.layer == -2)
+          .map(v => Math.hypot(v.p[0] - MUZZLE[0], v.p[1] - MUZZLE[1], v.p[2] - MUZZLE[2])),
       ),
-    ).toBeLessThan(0.03);
-    // A jaw each side: the prongs are apart where the emitter sits.
-    const front = near.filter(v => v.p[2] < -0.17 && v.layer == -1);
-    expect(Math.min(...front.map(v => v.p[0]))).toBeLessThan(-0.008);
-    expect(Math.max(...front.map(v => v.p[0]))).toBeGreaterThan(0.008);
+    ).toBeLessThan(0.01);
+  });
+
+  it('has a smooth top: from its highest point the top only falls toward the muzzle, with no prongs', () => {
+    // The highest metal at each ring of the bulb, from its widest to the nose.
+    const top = (f: number) =>
+      Math.max(...near.filter(v => v.layer == -1 && Math.abs(v.p[2] + f) < 0.004).map(v => v.p[1]));
+    const rings = [0.035, 0.08, 0.12, 0.16, 0.19, 0.205].map(top);
+    rings.slice(1).forEach((h, i) => expect(h).toBeLessThan(rings[i]));
+    // Nothing of the body sticks out ahead of the muzzle above the hull's tip.
+    expect(near.filter(v => v.p[2] < MUZZLE[2] - 0.005 && v.p[1] > 0.07)).toHaveLength(0);
   });
 });
 

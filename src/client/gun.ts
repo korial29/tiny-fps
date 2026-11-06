@@ -110,7 +110,7 @@ const DARK = [0.035, 0.025, 0.08];
 const glow: Paint = () => [GLOW[0], GLOW[1], -2, GLOW[2]];
 
 /**
- * The back of the body and the muzzle, between the jaws, in model space (the tail and the front of
+ * The back of the body and the muzzle, the tip of the nose, in model space (the tail and the front of
  * the emitter): the line through them is the gun's long axis, the way it points and the way the
  * beam leaves. The grip's tilt: its lower end goes back by TILT[0] for each TILT[1] down.
  */
@@ -120,7 +120,7 @@ export const TILT = [Math.sin(0.4), Math.cos(0.4)];
 
 // The side view, forward then up, in metres from the middle of the grip. The hand sits in the gap
 // between the upper body and the lower shell, round the short grip that joins them.
-// The upper body: a smooth bulb widest at the back and top, tapering to the front.
+// The upper body: a smooth bulb widest at the back and top, tapering to the muzzle.
 const BULB: Station[] = [
   [-0.06, 0.095, 0, 0],
   [-0.055, 0.098, 0.022, 0.022],
@@ -129,9 +129,12 @@ const BULB: Station[] = [
   [0.035, 0.1, 0.044, 0.038],
   [0.08, 0.094, 0.036, 0.034],
   [0.12, 0.088, 0.028, 0.028],
-  [0.135, 0.084, 0, 0],
+  [0.16, 0.082, 0.021, 0.021],
+  [0.19, 0.078, 0.015, 0.015],
+  [0.205, 0.076, 0.01, 0.01],
+  [0.208, 0.0755, 0, 0],
 ];
-/** The lower shell, a hull that runs from under the jaws back under the hand. */
+/** The lower shell, a hull that runs from under the nose back under the hand. */
 const HULL: Station[] = [
   [-0.05, -0.02, 0, 0],
   [-0.045, -0.025, 0.018, 0.012],
@@ -147,9 +150,9 @@ const built: number[][] = [];
 
 /**
  * The gun at a level of detail (0 far, 1 near), built once, in the vertex format of mesh.ts, after
- * the Halo plasma pistol: a smooth bulbous upper body that splits into two jaws around a glowing
- * emitter, a chunky lower shell under the hand, a short thick grip between them, and cyan strips
- * along the sides.
+ * the Halo plasma pistol: a smooth bulbous upper body tapering to a glowing emitter on its nose, a
+ * chunky lower shell under the hand, a short thick grip between them, and cyan strips along the
+ * sides.
  */
 export const gun = (lod: number): number[] => {
   if (built[lod]) {
@@ -174,20 +177,6 @@ export const gun = (lod: number): number[] => {
     metal(0.1),
   );
   for (const s of [-1, 1]) {
-    // A jaw: a stout prong from the front of the bulb, level, with its tip turned down a little.
-    tube(
-      out,
-      [
-        [0.06, 0.095, 0.018, 0.03, 0.026 * s],
-        [0.1, 0.093, 0.017, 0.028, 0.027 * s],
-        [0.15, 0.088, 0.015, 0.024, 0.024 * s],
-        [0.19, 0.081, 0.012, 0.018, 0.019 * s],
-        [0.222, 0.074, 0.008, 0.012, 0.015 * s],
-        [0.232, 0.07, 0, 0, 0.014 * s],
-      ],
-      m,
-      metal(0.05),
-    );
     // A strip of light along each side of the bulb and of the hull.
     tube(
       out,
@@ -214,14 +203,13 @@ export const gun = (lod: number): number[] => {
       glow,
     );
   }
-  // The emitter between the jaws.
+  // The emitter: a glowing cap on the tip of the nose.
   tube(
     out,
     [
-      [0.09, 0.088, 0, 0],
-      [0.1, 0.088, 0.009, 0.009],
-      [0.15, 0.084, 0.009, 0.009],
-      [0.2, 0.078, 0.007, 0.007],
+      [0.198, 0.077, 0, 0],
+      [0.2, 0.077, 0.011, 0.011],
+      [0.207, 0.0757, 0.008, 0.008],
       [-MUZZLE[2], MUZZLE[1], 0, 0],
     ],
     m,

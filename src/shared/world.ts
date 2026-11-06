@@ -112,12 +112,14 @@ export const near = (w: World, x: number, z: number, r: number): number[] => {
 /**
  * Distance along the ray from o in the unit direction d to the first brush face, at most max. A ray
  * that starts inside a brush hits at 0; one that starts on a face and moves away from it does not hit it.
+ * With `grow`, every brush is that much bigger on each side: the path of a sphere of that radius
+ * (its corners square, and a brush is only found in the cells the ray crosses).
  *
  * Walks the grid cells the ray crosses (Amanatides and Woo), testing the brushes of each against
  * the exact slab test, and stops once the next cell starts beyond the best hit or max. A brush
  * spanning several cells is tested in each: the hit is the same, and lists are short.
  */
-export const ray = (w: World, o: Vec3, d: Vec3, max: number): number => {
+export const ray = (w: World, o: Vec3, d: Vec3, max: number, grow = 0): number => {
   const { cell, def } = w;
   let best = max;
   // Cell of the origin, step direction, distance to the next boundary and between boundaries.
@@ -138,13 +140,13 @@ export const ray = (w: World, o: Vec3, d: Vec3, max: number): number => {
       for (let a = 0; a < 3 && lo <= hi; a++) {
         if (!d[a]) {
           // Parallel to the slab: inside it for the whole ray, or never.
-          if (o[a] < b.min[a] || o[a] > b.max[a]) {
+          if (o[a] < b.min[a] - grow || o[a] > b.max[a] + grow) {
             hi = -1;
           }
           continue;
         }
-        const t0 = (b.min[a] - o[a]) / d[a];
-        const t1 = (b.max[a] - o[a]) / d[a];
+        const t0 = (b.min[a] - grow - o[a]) / d[a];
+        const t1 = (b.max[a] + grow - o[a]) / d[a];
         lo = Math.max(lo, Math.min(t0, t1));
         hi = Math.min(hi, Math.max(t0, t1));
       }

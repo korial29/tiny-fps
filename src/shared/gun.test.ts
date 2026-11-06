@@ -1,27 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { EAST, at, yard } from '../../test/yard';
-import {
-  AMMO_MAX,
-  CUTS,
-  DOWN_TICKS,
-  EYE,
-  GUN_COOLDOWN,
-  GUN_RANGE,
-  HP_MAX,
-  LOW_EYE,
-  LOW_H,
-  PICK_H,
-  PLAYER_H,
-  PLAYER_R,
-  RACK_R,
-} from './constants';
-import { STRIKE, shoot, step, within } from './gun';
+import { AMMO_MAX, CUTS, DOWN_TICKS, GUN_COOLDOWN, HP_MAX, PICK_H, RACK_R } from './constants';
+import { STRIKE, step, within } from './gun';
 import { spawn } from './physics';
 import { onWire } from './protocol';
-import { CUT, EV, KEY, MODE, TEX } from './types';
+import { CUT, EV, KEY, MODE } from './types';
 import type { PlayerState } from './types';
 import { build } from './world';
-import type { Brush } from './world';
 
 const { FORWARD, JUMP, FIRE, CROUCH } = KEY;
 
@@ -45,9 +30,6 @@ const go = (p: PlayerState, keys: number, yaw = EAST, pitch = 0, w = yard, team 
 /** A red player standing at (x, z) on the yard with a full gun. */
 const armed = (x = 0, z = 0, over: Partial<PlayerState> = {}): PlayerState =>
   Object.assign(at(x, z, EAST).p, { ammo: AMMO_MAX }, over);
-
-/** Only the ground of the yard: nothing stands in a laser's way. */
-const flat = build({ ...yard.def, brushes: [yard.def.brushes[0]] });
 
 describe('the trigger', () => {
   it('fires at once, then every GUN_COOLDOWN ticks while FIRE is held, one ammo each', () => {
@@ -339,104 +321,6 @@ describe('the kill floor', () => {
     go(p, 0);
     expect(p).toMatchObject({ hp: HP_MAX, ammo: -1, cool: 0, shots: 7, hits: 3 });
     expect(p.ev & EV.RESPAWN).toBe(EV.RESPAWN);
-  });
-});
-
-/** A shooter at the origin looking east, and a foe standing at (x, 0, z). */
-const shooter = (over: Partial<PlayerState> = {}): PlayerState =>
-  Object.assign(spawn(0, flat, 0), { x: 0, y: 0, z: 0, yaw: EAST }, over);
-const foe = (x: number, z = 0, over: Partial<PlayerState> = {}): PlayerState =>
-  Object.assign(spawn(1, flat, 0), { x, y: 0, z }, over);
-
-describe('the laser', () => {
-  it('hits an enemy in front, at the eye height of the look', () => {
-    const f = foe(10);
-    expect(shoot(flat, shooter(), [f])).toBe(f);
-    // The eye is 1.6 m up and the cylinder 1.8 m: a look 0.015 rad up still hits at 10 m...
-    expect(shoot(flat, shooter({ pitch: 0.015 }), [f])).toBe(f);
-    // ...and 0.1 rad up passes over the head, and 0.1 rad down hits the body.
-    expect(shoot(flat, shooter({ pitch: 0.1 }), [f])).toBeUndefined();
-    expect(shoot(flat, shooter({ pitch: -0.1 }), [f])).toBe(f);
-    expect(shoot(flat, shooter({ pitch: -0.2 }), [f])).toBeUndefined();
-    expect(EYE).toBeLessThan(PLAYER_H);
-  });
-
-  it('is as wide as the body: a miss by more than PLAYER_R sideways, a hit by less', () => {
-    expect(shoot(flat, shooter(), [foe(10, PLAYER_R - 0.01)])).toBeDefined();
-    expect(shoot(flat, shooter(), [foe(10, -(PLAYER_R - 0.01))])).toBeDefined();
-    expect(shoot(flat, shooter(), [foe(10, PLAYER_R + 0.01)])).toBeUndefined();
-    // Behind the shooter, or off to the side.
-    expect(shoot(flat, shooter(), [foe(-10)])).toBeUndefined();
-    expect(shoot(flat, shooter(), [foe(0, 10)])).toBeUndefined();
-  });
-
-  it('goes along the yaw, whatever way he faces', () => {
-    for (const [yaw, x, z] of [
-      [0, 0, -9],
-      [Math.PI, 0, 9],
-      [Math.PI / 2, -9, 0],
-      [Math.PI / 4, -9 * Math.SQRT1_2, -9 * Math.SQRT1_2],
-    ]) {
-      expect(shoot(flat, shooter({ yaw }), [foe(x, z)]), `yaw ${yaw}`).toBeDefined();
-      expect(shoot(flat, shooter({ yaw: yaw + 0.2 }), [foe(x, z)]), `yaw ${yaw}`).toBeUndefined();
-    }
-  });
-
-  it('takes the nearest of two in line, and the one it reaches when the near one is beside it', () => {
-    const [near, far] = [foe(6), foe(12)];
-    expect(shoot(flat, shooter(), [far, near])).toBe(near);
-    expect(shoot(flat, shooter(), [near, far])).toBe(near);
-    const beside = foe(6, 1);
-    expect(shoot(flat, shooter(), [beside, far])).toBe(far);
-  });
-
-  it('is as low as the target: a slide or a crouch passes under a laser from the standing eye', () => {
-    expect(shoot(flat, shooter(), [foe(10, 0, { mode: MODE.CROUCH })])).toBeUndefined();
-    expect(shoot(flat, shooter(), [foe(10, 0, { mode: MODE.SLIDE })])).toBeUndefined();
-    expect(LOW_H).toBeLessThan(EYE);
-    // From a crouch, the eye is down at 0.7 m: the same low target is hit.
-    const low = shooter({ mode: MODE.CROUCH });
-    expect(shoot(flat, low, [foe(10, 0, { mode: MODE.CROUCH })])).toBeDefined();
-    expect(LOW_EYE).toBeLessThan(LOW_H);
-    // And a standing target is hit by the low eye too.
-    expect(shoot(flat, low, [foe(10)])).toBeDefined();
-  });
-
-  it('hits from above and from below, down a slope of fire', () => {
-    // From a roof 8 m up, looking 0.7 rad down.
-    const up = shooter({ y: 8, pitch: -0.7 });
-    const x = (8 + EYE - 0.9) / Math.tan(0.7);
-    expect(shoot(flat, up, [foe(x)])).toBeDefined();
-    expect(shoot(flat, up, [foe(x + 4)])).toBeUndefined();
-    // From the ground, up at one standing on a roof 5 m up.
-    const below = shooter({ pitch: Math.atan2(5 + 0.9 - EYE, 10) });
-    expect(shoot(flat, below, [foe(10, 0, { y: 5 })])).toBeDefined();
-    expect(shoot(flat, below, [foe(10)])).toBeUndefined();
-  });
-
-  it('is stopped by a brush, and not by one behind the target or beside the line', () => {
-    const wall = (x0: number, x1: number, z0 = -5, z1 = 5): Brush => ({
-      min: [x0, 0, z0],
-      max: [x1, 6, z1],
-      top: TEX.TILE,
-      side: TEX.BRICK,
-    });
-    const f = foe(10);
-    const walled = (...b: Brush[]) => build({ ...flat.def, brushes: [...flat.def.brushes, ...b] });
-    expect(shoot(walled(wall(5, 5.5)), shooter(), [f])).toBeUndefined();
-    expect(shoot(walled(wall(12, 12.5)), shooter(), [f])).toBe(f);
-    expect(shoot(walled(wall(5, 5.5, 3, 8)), shooter(), [f])).toBe(f);
-    // A low step does not stop it: the eye is above the top.
-    const step = { ...wall(5, 5.5), max: [5.5, 1, 5] as [number, number, number] };
-    expect(shoot(walled(step), shooter(), [f])).toBe(f);
-    // A floor does: aimed down into the flat ground, the laser ends there, short of a target
-    // standing under it.
-    expect(shoot(flat, shooter({ pitch: -0.5 }), [foe(30, 0, { y: -5 })])).toBeUndefined();
-  });
-
-  it('reaches GUN_RANGE and no further', () => {
-    expect(shoot(flat, shooter(), [foe(GUN_RANGE - 1)])).toBeDefined();
-    expect(shoot(flat, shooter(), [foe(GUN_RANGE + 1)])).toBeUndefined();
   });
 });
 

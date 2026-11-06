@@ -1,9 +1,10 @@
-// The runner's body: one skin generated once per level of detail in the rest pose from rings (a
-// cross-section at stations along the torso, each limb and the head), weighted to the rig's joints
-// and deformed on the CPU by linear blend skinning. A limb is one tube from its root joint to its
-// end, its rings shared across the joints, so it bends without a gap. Clothes are colour regions of
+// The runner's body: one closed surface generated once per level of detail in the rest pose from
+// rings (a cross-section at stations along the trunk, each limb), weighted to the rig's joints and
+// deformed on the CPU by dual quaternion skinning, which keeps the volume of a bent joint. The
+// trunk runs from the crotch to the crown; the arms hang on it at the armpits and the legs at the
+// crotch by sharing its vertices, so normals flow over the joins. Clothes are colour regions of
 // the triangles. See rig.ts for the joints and the pose.
-import { JOINT as J, JOINTS, rest, solve } from './rig';
+import { JOINT as J, JOINTS, mul, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
 import type { Vec3 } from './mesh';
 
@@ -50,60 +51,78 @@ interface Loft {
 }
 
 // Metres, rest pose, +x the runner's right, the right limbs written and the left mirrored.
-// Trunk, neck: from the crotch to the collar, shoulders and neck inside the jacket's yoke.
+// Trunk: from the crotch to the crown. Its first ring is the pelvis, whose halves are the tops of
+// the legs. Two rings at the armpits' height are the split: the first is the torso alone, the second
+// takes in the shoulders, and the sleeves hang from the shoulders' sides, ending in the torso's own
+// side vertices.
 const TRUNK: Loft = {
   chain: [J.PELVIS, J.SPINE, J.CHEST, J.NECK, J.HEAD],
-  n: [8, 8],
+  n: [8, 12],
   e: 2.3,
-  far: [0, 2, 4, 6, 8, 10, 13],
+  far: [0, 2, 4, 5, 6, 8, 11, 13, 14, 16, 18, 20],
   rings: [
-    [0.84, 0, 0, 0, 0, 0, PANTS],
-    [0.88, 0, 0.005, 0.13, 0.09, 0, PANTS],
-    [0.94, 0, 0.01, 0.187, 0.108, 0, PANTS],
+    [0.93, 0, 0.01, 0.187, 0.108, 0, PANTS],
     [0.99, 0, 0.005, 0.18, 0.106, 0.25, TRIM],
     [1.03, 0, 0, 0.17, 0.102, 0.5, JACKET],
     [1.12, 0, 0, 0.155, 0.097, 1, JACKET],
     [1.24, 0, -0.003, 0.176, 0.112, 1.7, JACKET],
-    [1.35, 0, -0.005, 0.19, 0.126, 2, JACKET],
-    [1.44, 0, -0.004, 0.2, 0.116, 2, JACKET],
-    [1.485, 0, 0, 0.2, 0.098, 2.05, JACKET],
+    [1.29, 0, -0.004, 0.18, 0.118, 1.85, JACKET],
+    [1.29, 0, -0.004, 0.262, 0.118, 1.85, JACKET],
+    [1.35, 0, -0.005, 0.268, 0.126, 2, JACKET],
+    [1.44, 0, -0.004, 0.262, 0.116, 2, JACKET],
+    [1.485, 0, 0, 0.235, 0.098, 2.05, JACKET],
+    [1.502, 0, 0, 0.185, 0.09, 2.08, JACKET],
     [1.512, 0, 0, 0.125, 0.08, 2.1, JACKET],
     [1.532, 0, 0, 0.07, 0.068, 2.25, TRIM],
     [1.555, 0, 0, 0.06, 0.062, 2.6, FLESH],
-    [1.6, 0, 0, 0.057, 0.059, 3.5, FLESH],
+    // The head: the jaw, the chin, the brow, shades across the eyes and a hairline that climbs from
+    // the nape to the crown.
+    [1.6, 0, -0.0165, 0.058, 0.0665, 3.5, FLESH],
+    [1.635, 0, -0.0085, 0.072, 0.0785, 4, FLESH, 150, HAIR],
+    [1.675, 0, -0.001, 0.08, 0.089, 4, FLESH, -36, SHADES, 110, HAIR],
+    [1.71, 0, 0.0035, 0.083, 0.0935, 4, FLESH, 72, HAIR],
+    [1.75, 0, 0.0065, 0.08, 0.0885, 4, HAIR],
+    [1.785, 0, 0.011, 0.056, 0.061, 4, HAIR],
+    [1.8, 0, 0.015, 0, 0, 4, HAIR],
   ],
 };
 
+// A leg to the sole: the shoe is its last rings. Its first ring is the pelvis' half, and it is not
+// written here.
 const LEG: Loft = {
-  chain: [J.PELVIS, J.THIGH_R, J.SHIN_R, J.FOOT_R],
+  chain: [J.PELVIS, J.THIGH_R, J.SHIN_R, J.FOOT_R, J.TOE_R],
   n: [6, 8],
   m: true,
-  far: [0, 2, 4, 6, 7, 9],
+  far: [0, 2, 4, 6, 8, 10, 12, 14],
   rings: [
-    [1, 0.1, 0.01, 0, 0, 0, PANTS],
-    [0.9, 0.1, 0.006, 0.093, 0.098, 0.5, PANTS],
+    [0.93, 0.1, 0, 0, 0, 0, PANTS],
+    [0.85, 0.1, 0.006, 0.093, 0.098, 0.6, PANTS],
     [0.72, 0.1, -0.002, 0.088, 0.09, 1, PANTS],
     [0.55, 0.1, -0.003, 0.066, 0.07, 1.25, PANTS],
     [0.49, 0.1, -0.004, 0.058, 0.064, 1.5, PANTS],
     [0.42, 0.1, 0.002, 0.056, 0.064, 1.8, PANTS],
     [0.33, 0.1, 0.012, 0.055, 0.068, 2, PANTS],
     [0.19, 0.1, 0.003, 0.04, 0.047, 2.05, PANTS],
-    [0.09, 0.1, 0, 0.036, 0.04, 2.6, PANTS],
-    [0.06, 0.1, 0, 0, 0, 3, PANTS],
+    [0.105, 0.1, 0, 0.038, 0.045, 2.3, UPPER],
+    [0.085, 0.1, 0.0025, 0.038, 0.0425, 2.5, UPPER],
+    [0.065, 0.1, 0.02, 0.043, 0.098, 3, UPPER],
+    [0.045, 0.1, 0.039, 0.046, 0.133, 3, UPPER],
+    [0.026, 0.1, 0.059, 0.046, 0.149, 3, SOLE],
+    [0.008, 0.1, 0.062, 0.03, 0.138, 3, SOLE],
+    [0, 0.1, 0.062, 0, 0, 3, SOLE],
   ],
 };
 
+// A sleeve to the glove. Its first ring is the shoulder's, and it is not written here either.
 const ARM: Loft = {
   chain: [J.ARM_R, J.FOREARM_R, J.HAND_R],
-  n: [5, 7],
+  n: [0, 0],
   m: true,
-  far: [0, 2, 4, 6, 7, 9, 11],
+  far: [0, 2, 3, 4, 5, 7, 9],
   rings: [
-    [1.5, 0.19, 0, 0, 0, 0, JACKET],
-    [1.465, 0.192, 0, 0.052, 0.056, 0, JACKET],
-    [1.38, 0.198, 0, 0.056, 0.058, 0.1, JACKET],
-    [1.27, 0.21, 0, 0.049, 0.051, 0.3, JACKET],
-    [1.18, 0.22, 0, 0.043, 0.046, 0.5, JACKET],
+    [1.29, 0.222, 0, 0, 0, 0, JACKET],
+    [1.22, 0.222, 0, 0.049, 0.052, 0.2, JACKET],
+    [1.18, 0.222, 0, 0.043, 0.046, 0.5, JACKET],
     [1.09, 0.222, -0.002, 0.046, 0.048, 0.8, JACKET],
     [0.975, 0.222, 0, 0.034, 0.034, 1.2, TRIM],
     [0.935, 0.222, 0, 0.03, 0.03, 1.8, GLOVE],
@@ -114,44 +133,7 @@ const ARM: Loft = {
   ],
 };
 
-const SHOE: Loft = {
-  chain: [J.FOOT_R, J.TOE_R],
-  n: [5, 6],
-  e: 2.6,
-  z: true,
-  m: true,
-  far: [0, 1, 3, 5, 7],
-  rings: [
-    [0.095, 0.1, 0.05, 0, 0, 0, UPPER],
-    [0.08, 0.1, 0.048, 0.032, 0.042, 0, UPPER, 130, SOLE],
-    [0.03, 0.1, 0.052, 0.042, 0.052, 0.05, UPPER, 130, SOLE],
-    [-0.05, 0.1, 0.04, 0.045, 0.044, 0.3, UPPER, 130, SOLE],
-    [-0.12, 0.1, 0.033, 0.047, 0.034, 0.6, UPPER, 130, SOLE],
-    [-0.17, 0.1, 0.028, 0.042, 0.028, 1, UPPER, 130, SOLE],
-    [-0.205, 0.1, 0.024, 0.028, 0.02, 1, UPPER, 130, SOLE],
-    [-0.215, 0.1, 0.022, 0, 0, 1, UPPER],
-  ],
-};
-
-// A face: the jaw, the chin, the brow, shades across the eyes and a hairline that climbs from the
-// nape to the crown. After a ring's colour come rules, [limit, colour] pairs on the angle in
-// degrees from the first side: beyond a positive limit, within a negative one.
-const HEAD: Loft = {
-  chain: [J.HEAD],
-  n: [7, 10],
-  far: [0, 1, 3, 5, 6, 7],
-  rings: [
-    [1.575, 0, -0.0075, 0.034, 0.0425, 0, FLESH],
-    [1.6, 0, -0.0165, 0.058, 0.0665, 0, FLESH],
-    [1.635, 0, -0.0085, 0.072, 0.0785, 0, FLESH, 150, HAIR],
-    [1.675, 0, -0.001, 0.08, 0.089, 0, FLESH, -36, SHADES, 110, HAIR],
-    [1.71, 0, 0.0035, 0.083, 0.0935, 0, FLESH, 72, HAIR],
-    [1.75, 0, 0.0065, 0.08, 0.0885, 0, HAIR],
-    [1.785, 0, 0.011, 0.056, 0.061, 0, HAIR],
-    [1.8, 0, 0.015, 0, 0, 0, HAIR],
-  ],
-};
-
+// The nose is a small piece of its own, buried in the face.
 const NOSE: Loft = {
   chain: [J.HEAD],
   n: [0, 5],
@@ -164,7 +146,7 @@ const NOSE: Loft = {
   ],
 };
 
-const LOFTS = [TRUNK, LEG, ARM, SHOE, HEAD, NOSE];
+const LOFTS = [TRUNK, LEG, ARM, NOSE];
 
 /** The rest mesh: per vertex a position and a normal, two joints and the weight of the second. */
 export interface Skin {
@@ -177,13 +159,27 @@ export interface Skin {
 }
 
 const sgn = (v: number, e: number) => Math.sign(v) * Math.abs(v) ** (2 / e);
+const clamp = (v: number) => Math.min(Math.max(v, 0), 1);
 
 const generate = (lod: number): Skin => {
   const [v, j, w, t, c]: number[][] = [[], [], [], [], []];
+  const N = TRUNK.n[Math.min(lod, 1)];
+  /** The back vertex of a ring, and the last of the shoulder's side. */
+  const [H, A] = [N / 2, N / 2 - 1];
+  /** The trunk's rows of vertices, where it splits, and the crotch vertices both legs share. */
+  let T: number[][] = [];
+  let S = 0;
+  const crotch: number[] = [];
+  const put = (p: number[], a: number, b: number, k: number) => {
+    v.push(...p, 0, 0, 0);
+    j.push(a, b);
+    w.push(k);
+    return w.length - 1;
+  };
   for (const L of LOFTS) {
-    const n = L.n[Math.min(lod, 1)];
+    const n = L === ARM ? N - 4 : L.n[Math.min(lod, 1)];
     // The eye's own body has no head.
-    if (!n || (lod > 1 && (L === HEAD || L === NOSE))) {
+    if (!n || (lod > 1 && L === NOSE)) {
       continue;
     }
     // The eye's own body ends the trunk in a cap on the shoulders and each sleeve in a cuff over a
@@ -193,7 +189,7 @@ const generate = (lod: number): Skin => {
         ? [...L.rings.slice(0, 9), [1.455, 0, 0, 0, 0, 2, JACKET]]
         : lod > 1 && L === ARM
           ? [
-              ...L.rings.slice(0, 7),
+              ...L.rings.slice(0, 5),
               [0.95, 0.222, 0, 0.037, 0.037, 1.6, GLOVE],
               [0.925, 0.222, 0, 0.027, 0.027, 2, GLOVE],
               [0.91, 0.222, 0, 0, 0, 2, GLOVE],
@@ -202,26 +198,86 @@ const generate = (lod: number): Skin => {
             ? L.rings
             : L.far.map(i => L.rings[i]);
     const up = rings[rings.length - 1][0] > rings[0][0];
+    if (L === TRUNK) {
+      S = rings.findIndex((r, i) => i && r[0] == rings[i - 1][0]);
+    }
     for (const m of L.m ? [1, -1] : [1]) {
       /** The left joints are the right ones' four ids before. */
-      const side = (a: number) => (m < 0 && a > J.HEAD ? a - 4 : a);
-      const grid = rings.map(([at, cx, co, rx, ro, u]) => {
-        const k = Math.min(Math.floor(u), L.chain.length - 2);
+      const side = (b: number) => (m < 0 && b > J.HEAD ? b - 4 : b);
+      /** A vertex of a trunk row, seen from this side. */
+      const col = (row: number[], i: number) => row[m < 0 ? (N - i) % N : i];
+      const vertex = (x: number, y: number, z: number, u: number) => {
+        // The toe bends the front of the foot.
+        u = L === LEG && y < 0.12 ? 3 + clamp((-z - 0.04) / 0.14) : u;
+        const g = Math.min(Math.floor(u), L.chain.length - 2);
+        // The shoulder's side follows the arm.
+        const q =
+          L === TRUNK
+            ? clamp((Math.abs(x) - 0.14) / 0.1) *
+              clamp((1.53 - y) / 0.15) *
+              clamp((y - 1.27) / 0.02)
+            : 0;
+        return q
+          ? put([x, y, z], J.CHEST, x < 0 ? J.ARM_L : J.ARM_R, q)
+          : put(
+              [x, y, z],
+              side(L.chain[Math.max(g, 0)]),
+              side(L.chain[g + 1] ?? L.chain[0]),
+              g < 0 ? 0 : u - g,
+            );
+      };
+      const grid = rings.map(([at, cx, co, rx, ro, u], r) => {
         const row: number[] = [];
-        for (let i = 0; i < (rx ? n : 1); i++) {
-          const a = (i * 2 * Math.PI) / n;
-          const [x, o] = [
-            cx + rx * sgn(Math.sin(a), L.e ?? 2),
-            co + ro * sgn(Math.cos(a), L.e ?? 2),
-          ];
-          v.push(m * x, ...(L.z ? [o, at] : [at, -o]), 0, 0, 0);
-          j.push(side(L.chain[Math.max(k, 0)]), side(L.chain[k + 1] ?? L.chain[0]));
-          w.push(k < 0 || L.chain[k + 1] === undefined ? 0 : u - k);
-          row.push(w.length - 1);
+        if (!r && L === ARM) {
+          // The shoulder's side, then the torso's own side vertices, from the back to the front.
+          for (let i = 1; i <= A; i++) {
+            row.push(col(T[S], i));
+          }
+          for (let i = A - 1; i > 1; i--) {
+            row.push(col(T[S - 1], i));
+          }
+        } else if (!r && L === LEG) {
+          // The pelvis' half, then the crotch from its back to its front.
+          for (let i = 0; i <= H; i++) {
+            row.push(col(T[0], i));
+          }
+          const [f, b] = [T[0][0] * 6, T[0][H] * 6];
+          for (let i = 0; i < n - H - 1; i++) {
+            const g = (i + 1) / (n - H);
+            crotch[i] ??= put(
+              [0, 1, 2].map(k => v[b + k] + (v[f + k] - v[b + k]) * g - (k == 1 ? 0.04 : 0)),
+              J.PELVIS,
+              J.PELVIS,
+              0,
+            );
+            row.push(crotch[i]);
+          }
+          // Turned to start at the side, as the next ring does, so the strip does not twist.
+          row.push(row.shift()!);
+        } else {
+          for (let i = 0; i < (rx ? n : 1); i++) {
+            // The torso's ring at the split gets its other vertices from the shoulders' ring.
+            if (L === TRUNK && r == S - 1 && !(i > 1 && i < A) && !(i > N - A && i < N - 1)) {
+              row.push(-1);
+              continue;
+            }
+            const q = (i * 2 * Math.PI) / n;
+            // The shoe is squarer than the leg, so its toe is not a point.
+            const e = (L.e ?? 2) * (L === LEG && at < 0.12 ? 2 : 1);
+            const [x, o] = [cx + rx * sgn(Math.sin(q), e), co + ro * sgn(Math.cos(q), e)];
+            row.push(L.z ? vertex(m * x, o, at, u) : vertex(m * x, at, -o, u));
+          }
         }
         return row;
       });
+      if (L === TRUNK) {
+        grid[S - 1] = grid[S - 1].map((k, i) => (k < 0 ? grid[S][i] : k));
+        T = grid;
+      }
       grid.slice(1).forEach((b, k) => {
+        if (L === TRUNK && k == S - 1) {
+          return;
+        }
         const a = grid[k];
         const [, , , , , , col, ...rules] = rings[k];
         for (let i = 0; i < n; i++) {
@@ -281,14 +337,16 @@ const skins: Skin[] = [];
 export const body = (lod: number) => (skins[lod] ??= generate(lod));
 
 const BIND = solve(rest()).pos;
-/** Per joint the rotation matrix and the translation that carry the rest pose to the pose. */
-const M = new Float64Array(JOINTS * 12);
+/** Per joint the dual quaternion that carries the rest pose to the pose: the rotation, then its dual. */
+const D = new Float64Array(JOINTS * 8);
+const E = new Float64Array(8);
 let Q = new Float32Array(0);
 
 /**
  * Appends the skin in the pose `solved` (see solve()) to `out` as triangles in the renderer's
  * vertex format, each in its palette colour: a vertex goes where the two joints it hangs on would
- * carry it, mixed by the weights, its normal turned the same way.
+ * carry it, their dual quaternions mixed by the weights (so a bent joint keeps its thickness), its
+ * normal turned the same way.
  */
 export const skin = (
   out: number[],
@@ -297,41 +355,43 @@ export const skin = (
   colors: number[][],
 ) => {
   for (let k = 0; k < JOINTS; k++) {
-    const [x, y, z, w] = rot[k];
-    const m = [
-      1 - 2 * (y * y + z * z),
-      2 * (x * y - z * w),
-      2 * (x * z + y * w),
-      2 * (x * y + z * w),
-      1 - 2 * (x * x + z * z),
-      2 * (y * z - x * w),
-      2 * (x * z - y * w),
-      2 * (y * z + x * w),
-      1 - 2 * (x * x + y * y),
-    ];
-    for (let r = 0; r < 3; r++) {
-      M.set(m.slice(r * 3, r * 3 + 3), k * 12 + r * 3);
-      M[k * 12 + 9 + r] =
-        pos[k][r] - (m[r * 3] * BIND[k][0] + m[r * 3 + 1] * BIND[k][1] + m[r * 3 + 2] * BIND[k][2]);
-    }
+    const t = turn(rot[k], BIND[k]);
+    D.set(rot[k], k * 8);
+    D.set(
+      mul([(pos[k][0] - t[0]) / 2, (pos[k][1] - t[1]) / 2, (pos[k][2] - t[2]) / 2, 0], rot[k]),
+      k * 8 + 4,
+    );
   }
   const n = s.w.length;
   if (Q.length < n * 6) {
     Q = new Float32Array(n * 6);
   }
   for (let i = 0; i < n; i++) {
-    const [a, b, u, k] = [s.j[i * 2] * 12, s.j[i * 2 + 1] * 12, s.w[i], i * 6];
-    for (let r = 0; r < 6; r++) {
-      const [o, h] = [(r % 3) * 3, r < 3 ? k : k + 3];
-      const [x, y, z, e] = [s.v[h], s.v[h + 1], s.v[h + 2], r < 3 ? 1 : 0];
-      Q[k + r] =
-        (1 - u) * (M[a + o] * x + M[a + o + 1] * y + M[a + o + 2] * z + e * M[a + 9 + (r % 3)]) +
-        u * (M[b + o] * x + M[b + o + 1] * y + M[b + o + 2] * z + e * M[b + 9 + (r % 3)]);
+    const [a, b, u, k] = [s.j[i * 2] * 8, s.j[i * 2 + 1] * 8, s.w[i], i * 6];
+    // The shorter way round.
+    const f =
+      D[a] * D[b] + D[a + 1] * D[b + 1] + D[a + 2] * D[b + 2] + D[a + 3] * D[b + 3] < 0 ? -u : u;
+    for (let r = 0; r < 8; r++) {
+      E[r] = (1 - u) * D[a + r] + f * D[b + r];
     }
-    const l = Math.sqrt(Q[k + 3] ** 2 + Q[k + 4] ** 2 + Q[k + 5] ** 2) || 1;
-    Q[k + 3] /= l;
-    Q[k + 4] /= l;
-    Q[k + 5] /= l;
+    const l = Math.hypot(E[0], E[1], E[2], E[3]);
+    for (let r = 0; r < 8; r++) {
+      E[r] /= l;
+    }
+    // The translation is twice the dual part times the rotation's conjugate.
+    const m = [
+      E[3] * E[4] - E[7] * E[0] - (E[5] * E[2] - E[6] * E[1]),
+      E[3] * E[5] - E[7] * E[1] - (E[6] * E[0] - E[4] * E[2]),
+      E[3] * E[6] - E[7] * E[2] - (E[4] * E[1] - E[5] * E[0]),
+    ];
+    for (const h of [k, k + 3]) {
+      const [x, y, z] = [s.v[h], s.v[h + 1], s.v[h + 2]];
+      const [p, q, r] = [E[1] * z - E[2] * y, E[2] * x - E[0] * z, E[0] * y - E[1] * x];
+      const e = h == k ? 2 : 0;
+      Q[h] = x + 2 * (E[3] * p + E[1] * r - E[2] * q) + e * m[0];
+      Q[h + 1] = y + 2 * (E[3] * q + E[2] * p - E[0] * r) + e * m[1];
+      Q[h + 2] = z + 2 * (E[3] * r + E[0] * q - E[1] * p) + e * m[2];
+    }
   }
   for (let i = 0; i < s.t.length; i += 3) {
     const [r, g, b] = colors[s.c[i / 3]];

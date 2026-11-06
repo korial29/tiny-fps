@@ -165,10 +165,10 @@ describe('soldier', () => {
     { stun: 40, vz: -3 },
   ];
 
-  it('stays under 3100 vertices near and about 40% of that far, in every move, as whole triangles', () => {
+  it('stays under 3600 vertices near and about 40% of that far, in every move, as whole triangles', () => {
     for (const o of MOVES) {
       const [near, far] = [1, 0].map(lod => draw(o, lod).length / STRIDE);
-      expect(near).toBeLessThan(3100);
+      expect(near).toBeLessThan(3600);
       expect(near).toBeGreaterThan(2000);
       expect(far).toBeLessThan(near * 0.45);
       expect(near % 3).toBe(0);

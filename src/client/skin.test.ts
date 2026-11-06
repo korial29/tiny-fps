@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT, JOINTS, PARENT, axis, rest, solve } from './rig';
+import { JOINT, JOINTS, PARENT, axis, rest, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
 import { body, palette, skin } from './skin';
 
@@ -36,9 +36,9 @@ const edges = (v: number[]) => {
 };
 
 describe('skin', () => {
-  it('stays within the budgets: near about 3000 vertices drawn, far under half of that', () => {
+  it('stays within the budgets: near about 3400 vertices drawn, far under half of that', () => {
     const [far, near] = [0, 1].map(lod => draw(lod).length / STRIDE);
-    expect(near).toBeLessThanOrEqual(3100);
+    expect(near).toBeLessThanOrEqual(3600);
     expect(near).toBeGreaterThan(2000);
     expect(far).toBeLessThan(near * 0.45);
     expect(body(1).w.length).toBeLessThan(700);
@@ -68,7 +68,14 @@ describe('skin', () => {
         const [a, b, w] = [s.j[i * 2], s.j[i * 2 + 1], s.w[i]];
         expect(w).toBeGreaterThanOrEqual(0);
         expect(w).toBeLessThanOrEqual(1);
-        expect(a == b || PARENT[a] == b || PARENT[b] == a).toBe(true);
+        // The shoulder's side hangs on the chest and the arm, across the clavicle.
+        expect(
+          a == b ||
+            PARENT[a] == b ||
+            PARENT[b] == a ||
+            (a == JOINT.CHEST && PARENT[PARENT[b]] == a) ||
+            (b == JOINT.CHEST && PARENT[PARENT[a]] == b),
+        ).toBe(true);
         for (const j of [a, b]) {
           mean[j] += s.v[i * 6];
           count[j]++;
@@ -136,29 +143,87 @@ describe('skin', () => {
     expect([...seen.values()].every(n => n == 2)).toBe(true);
   });
 
-  it('is closed: every edge joins two triangles but the three rings buried in the head', () => {
-    for (const lod of [0, 1]) {
+  it('is one closed surface: every edge joins two triangles wound the same way round', () => {
+    for (const lod of [0, 1, 2]) {
       const s = body(lod);
-      const seen = new Map<string, number>();
+      const dir = new Set<string>();
       for (let i = 0; i < s.t.length; i += 3) {
         for (let k = 0; k < 3; k++) {
-          const [a, b] = [s.t[i + k], s.t[i + ((k + 1) % 3)]];
-          const key = a < b ? `${a} ${b}` : `${b} ${a}`;
-          seen.set(key, (seen.get(key) ?? 0) + 1);
+          const key = `${s.t[i + k]} ${s.t[i + ((k + 1) % 3)]}`;
+          // The same direction twice would be a fold or a second surface on top.
+          expect(dir.has(key)).toBe(false);
+          dir.add(key);
         }
       }
-      for (const [key, n] of seen) {
-        expect(n).toBeLessThanOrEqual(2);
-        if (n == 1) {
-          // The neck's top, the head's chin ring and the nose's base: inside the head.
-          const [y, z] = key
-            .split(' ')
-            .map(a => [s.v[+a * 6 + 1], s.v[+a * 6 + 2]])
-            .reduce((p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]);
-          expect(y > 1.56 || z < -0.07).toBe(true);
+      for (const key of dir) {
+        const [a, b] = key.split(' ');
+        if (!dir.has(`${b} ${a}`)) {
+          // Only the nose's base, buried in the face.
+          for (const k of [a, b]) {
+            expect(s.v[+k * 6 + 2] < -0.07 && s.v[+k * 6 + 1] > 1.6).toBe(true);
+          }
         }
+      }
+      // Each vertex is its own: the limbs share the trunk's at the hips and the armpits.
+      const places = new Set(
+        Array.from({ length: s.w.length }, (_, i) =>
+          [...s.v.slice(i * 6, i * 6 + 3)].map(v => v.toFixed(4)).join(),
+        ),
+      );
+      expect(places.size).toBe(s.w.length);
+    }
+  });
+
+  it('is a runner and not a heap of tubes: its volume is that of a person', () => {
+    // The divergence theorem on the closed mesh: an overlap would count twice.
+    const s = body(2);
+    let volume = 0;
+    for (let i = 0; i < s.t.length; i += 3) {
+      const [a, b, c] = [0, 1, 2].map(k => [...s.v.slice(s.t[i + k] * 6, s.t[i + k] * 6 + 3)]);
+      volume +=
+        (a[0] * (b[1] * c[2] - b[2] * c[1]) -
+          a[1] * (b[0] * c[2] - b[2] * c[0]) +
+          a[2] * (b[0] * c[1] - b[1] * c[0])) /
+        6;
+    }
+    // A trunk, arms and legs of those widths: about 0.068 m3 with no head.
+    expect(volume).toBeGreaterThan(0.05);
+    expect(volume).toBeLessThan(0.08);
+  });
+
+  it('shades the joins as one surface: the shoulders and the hips turn no more than the rest', () => {
+    const s = body(1);
+    const seen = new Set<string>();
+    const turned = { join: 0, loft: 0 };
+    for (let i = 0; i < s.t.length; i += 3) {
+      for (let k = 0; k < 3; k++) {
+        const [a, b] = [s.t[i + k], s.t[i + ((k + 1) % 3)]];
+        const key = a < b ? `${a} ${b}` : `${b} ${a}`;
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        const angle =
+          (Math.acos(
+            Math.min(
+              1,
+              s.v[a * 6 + 3] * s.v[b * 6 + 3] +
+                s.v[a * 6 + 4] * s.v[b * 6 + 4] +
+                s.v[a * 6 + 5] * s.v[b * 6 + 5],
+            ),
+          ) *
+            180) /
+          Math.PI;
+        // The rings where the limbs hang: the top of the sleeves (outside the armpit) and the
+        // pelvis' sides. The crotch and the armpit are creases on purpose.
+        const at = (v: number, y: number, x: number) =>
+          Math.abs(s.v[v * 6 + 1] - y) < 1e-4 && Math.abs(s.v[v * 6]) > x;
+        const join = [a, b].some(v => at(v, 1.29, 0.2) || at(v, 0.93, 0.1));
+        turned[join ? 'join' : 'loft'] = Math.max(turned[join ? 'join' : 'loft'], angle);
       }
     }
+    expect(turned.join).toBeLessThan(turned.loft);
+    expect(turned.join).toBeLessThan(60);
   });
 
   it('keeps the surface continuous when a joint bends 90 degrees, and creases the inside', () => {
@@ -175,7 +240,8 @@ describe('skin', () => {
       const v = draw(1, bend(j, q));
       const e = edges(v);
       // A neighbour stays a neighbour: no edge grows past twice its length and a few centimetres.
-      e.forEach((l, i) => expect(l).toBeLessThan(rest0[i] * 2 + 0.03));
+      // (the armpit's skin stretches more, as the arm leaves it)
+      e.forEach((l, i) => expect(l).toBeLessThan(rest0[i] * (j == JOINT.ARM_R ? 4 : 2) + 0.03));
       for (let i = 0; i < v.length; i += STRIDE) {
         expect(v.slice(i, i + STRIDE).every(Number.isFinite)).toBe(true);
         expect(Math.hypot(v[i + 3], v[i + 4], v[i + 5])).toBeCloseTo(1, 4);
@@ -197,6 +263,66 @@ describe('skin', () => {
     const bent = draw(1, bend(JOINT.SHIN_R, x(-KNEE)));
     expect(between(bent, true)).toBeLessThan(between(base, true) * 0.5);
     expect(between(bent, false)).toBeGreaterThan(between(base, false) * 0.9);
+  });
+
+  it('keeps the thickness of a bent elbow and knee, where linear blending pinches them', () => {
+    const s = body(1);
+    const bind = solve(rest()).pos;
+    const bound = (y: number) =>
+      Array.from({ length: s.w.length }, (_, i) => i).filter(
+        i => Math.abs(s.v[i * 6 + 1] - y) < 1e-4 && s.v[i * 6] > 0.02,
+      );
+    /** The ring of the right limb at the joint, in order round it. */
+    const rings = [
+      [1.18, JOINT.FOREARM_R, 1],
+      [0.49, JOINT.SHIN_R, -1],
+    ].map(([y, j, d]) => {
+      const ids = bound(y);
+      const mid = [0, 2].map(r => ids.reduce((m, i) => m + s.v[i * 6 + r], 0) / ids.length);
+      ids.sort(
+        (a, b) =>
+          Math.atan2(s.v[a * 6 + 2] - mid[1], s.v[a * 6] - mid[0]) -
+          Math.atan2(s.v[b * 6 + 2] - mid[1], s.v[b * 6] - mid[0]),
+      );
+      return { ids, j, d };
+    });
+    /** The area of the ring's polygon, whatever plane it lies in. */
+    const area = (p: Vec3[]) => {
+      const c = [0, 1, 2].map(r => p.reduce((m, q) => m + q[r], 0) / p.length);
+      const n = [0, 0, 0];
+      p.forEach((q, i) => {
+        const [a, b] = [q, p[(i + 1) % p.length]].map(r => r.map((v, k) => v - c[k]));
+        n[0] += a[1] * b[2] - a[2] * b[1];
+        n[1] += a[2] * b[0] - a[0] * b[2];
+        n[2] += a[0] * b[1] - a[1] * b[0];
+      });
+      return Math.hypot(...n) / 2;
+    };
+    for (const { ids, j, d } of rings) {
+      const straight = area(ids.map(i => Array.from(s.v.slice(i * 6, i * 6 + 3)) as Vec3));
+      for (const deg of [90, 140]) {
+        const pose = bend(j, axis([1, 0, 0], (d * deg * Math.PI) / 180));
+        const solved = solve(pose);
+        const v = draw(1, pose);
+        // Where each vertex goes: with the skin, and with plain linear blending.
+        const dual = new Map<number, Vec3>();
+        s.t.forEach((k, h) => dual.set(k, at(v, h)));
+        const linear = (i: number): Vec3 => {
+          const [a, b, w] = [s.j[i * 2], s.j[i * 2 + 1], s.w[i]];
+          const p = Array.from(s.v.slice(i * 6, i * 6 + 3)) as Vec3;
+          const to = (k: number) =>
+            turn(solved.rot[k], p.map((c, r) => c - bind[k][r]) as Vec3).map(
+              (c, r) => c + solved.pos[k][r],
+            );
+          const [pa, pb] = [to(a), to(b)];
+          return pa.map((c, r) => c * (1 - w) + pb[r] * w) as Vec3;
+        };
+        const [kept, pinched] = [area(ids.map(i => dual.get(i)!)), area(ids.map(linear))];
+        expect(kept / straight).toBeGreaterThan(0.85);
+        expect(kept / straight).toBeLessThan(1.15);
+        expect(pinched / straight).toBeLessThan(0.85);
+      }
+    }
   });
 
   it('dresses the runner in regions: jacket in the team colour, dark trim, trousers, skin, hair, shoes, gloves', () => {

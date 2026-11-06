@@ -161,8 +161,7 @@ const tube = (rings: Ring[], sides: number, put: (p: Vec3, n: Vec3) => void, lea
       }
       // A point has no ring to go round: its normal is the way the tube runs into it.
       if (row.length < 2) {
-        const c = P[r - 1].reduce((m, v) => add(m, v), [0, 0, 0] as Vec3);
-        return unit(sub(row[0], mix([0, 0, 0], c, 1 / sides)));
+        return unit(sub(row[0], rings[r - 1][0]));
       }
       return unit(
         cross(sub(at(P, r, i + 1), at(P, r, i - 1)), sub(at(P, r + 1, i), at(P, r - 1, i))),
@@ -201,7 +200,7 @@ export const finger = (p: Vec3, d1: Vec3, d2: Vec3, l: number, r: number, t: Vec
   const [a, b] = [along(joint, d1, -l / 2), along(joint, d2, l / 2)];
   const ring = (c: Vec3, d: Vec3, k: number): Ring => {
     const [t, y] = [unit(d), unit(cross(d, X))];
-    return [c, mix([0, 0, 0], cross(y, t), r * k), mix([0, 0, 0], y, r * k)];
+    return [c, cross(y, t).map(v => v * r * k) as Vec3, y.map(v => v * r * k) as Vec3];
   };
   return [
     ring(p, t, 1.03),

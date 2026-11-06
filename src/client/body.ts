@@ -14,10 +14,10 @@ import type { World } from '../shared/world';
 import { createGait, frame } from './gait';
 import type { Floor } from './gait';
 import { TILT, held, pointed, tip } from './gun';
-import { cutting, ends, fingers, frameOf, held as sword, progress, stroke, wrists } from './katana';
+import { BEHIND as BACK, C, S, cutting, ends, held as sword, progress, stroke } from './katana';
 import { add, basis, dot, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, PARENT, axis, mul, rest, slerp, solve, turn as spin } from './rig';
+import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
 import { CUFF, CUFF_SIDES, body, palette, skin } from './skin';
 import { createTrail } from './trail';
@@ -99,6 +99,51 @@ export const reach = (q: Pose, s: Solved, j: number, to: Vec3, pole: Vec3, flat 
   if (flat) {
     q.rot[j + 2] = mul(inv(r2), s.rot[j + 2]);
   }
+};
+
+/** The part of `v` across the unit vector `u`. */
+const across = (v: Vec3, u: Vec3): Vec3 => along(v, u, -dot(v, u));
+/** The twist of the turn `q` about the unit axis `b`, radians in [-PI, PI]. */
+const twist = (q: Quat, b: Vec3): number => {
+  const t = 2 * Math.atan2(q[0] * b[0] + q[1] * b[1] + q[2] * b[2], q[3]);
+  return t > Math.PI ? t - 2 * Math.PI : t < -Math.PI ? t + 2 * Math.PI : t;
+};
+/** The rotation `r` turned the shortest way so that its bone of rest offset `rest` lies along `d`. */
+const lay = (r: Quat, rest: Vec3, d: Vec3): Quat => mul(arc(spin(r, rest), d), r);
+
+/**
+ * Puts the arm of shoulder joint `j` (ARM_R or ARM_L) of `q` on a handle running along the unit
+ * `g`, the hand round the point `at`, the elbow toward `pole`; `s` is q solved. The hand comes
+ * first: its axis leaves the handle on the shoulder's side, the thumb along the handle (the tilt of
+ * katana.ts), and the elbow goes where the forearm carries on that axis, as near as the bones
+ * allow. The elbow is a hinge, and the forearm's turn about itself goes half to the elbow and half
+ * to the wrist, as a forearm's twist does. Out of reach the hand stops short.
+ */
+export const wield = (q: Pose, s: Solved, j: number, at: Vec3, g: Vec3, pole: Vec3) => {
+  const a = s.pos[j];
+  const [l1, l2] = [dist(a, s.pos[j + 1]), dist(s.pos[j + 1], s.pos[j + 2])];
+  // Away from the elbow too, for a handle that points at the shoulder or away from it.
+  const side = unit(
+    add(across(unit(sub(at, a)), g), along([0, 0, 0], unit(across(pole, g)), -0.3)),
+  );
+  const th = add(along([0, 0, 0], g, C), along([0, 0, 0], side, -S));
+  const fing = add(along([0, 0, 0], g, S), along([0, 0, 0], side, C));
+  const x = cross(fing, th);
+  const hand = frame(x, fing);
+  // The grip is 7.8 cm along the fingers from the wrist and 2.2 cm toward the palm, which the
+  // left hand, a mirror, has on its other side.
+  const wrist = along(along(at, fing, -0.078), x, j == J.ARM_L ? -0.022 : 0.022);
+  const [e, f] = ik(a, wrist, add(sub(along(wrist, fing, -l2), a), pole), l1, l2);
+  const [u, v] = [unit(sub(e, a)), unit(sub(f, e))];
+  const bend = cross(u, v);
+  const h = unit(Math.hypot(...bend) > 1e-3 ? bend : cross(u, mix([0, 0, 0], pole, -1)));
+  const [upper, fore] = [unit(REST[j + 1]), unit(REST[j + 2])];
+  const r1 = lay(frame(h, u), upper, u);
+  const r0 = lay(frame(h, v), fore, v);
+  const r2 = mul(r0, axis(fore, twist(mul(inv(r0), hand), fore) / 2));
+  q.rot[j] = mul(inv(s.rot[PARENT[j]]), r1);
+  q.rot[j + 1] = mul(inv(r1), r2);
+  q.rot[j + 2] = mul(inv(r2), hand);
 };
 
 /** The unit vector toward a wall on each SIDE, on the floor plane. */
@@ -403,17 +448,14 @@ export const createBody = (world?: World): Body => {
 
   /**
    * The katana in camera space, in the guard (rising from below as it is drawn, swaying with the
-   * run) or in the cut: its axes [right, up, forward], the wrists of the right and the left hand
-   * on its grip and where the fingers point.
+   * run) or in the cut: where the right hand holds its grip and the way the blade points.
    */
   const blade = () => {
     const a = w.amp * (1 + 0.5 * w.sprint);
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     const k = stroke(me?.cut ?? 0, Math.max(prog, 0));
     const at: Vec3 = [k[0] + 0.012 * a * s, k[1] + 0.018 * a * c - 0.35 * (1 - w.blade), k[2]];
-    const ax = frameOf([k[3], k[4], k[5]], k[6]);
-    const [r, l] = wrists(at, ax);
-    return { ax, r, l, g: fingers(ax) };
+    return { at, g: unit([k[3], k[4], k[5]]) };
   };
 
   const pose: Body['pose'] = (eye, yaw, pitch, roll = 0) => {
@@ -501,9 +543,6 @@ export const createBody = (world?: World): Body => {
         grasp = onSword;
         taken = Math.max(hold, grasp);
       }
-      if (sw) {
-        h = mix(h, sd > 0 ? sw.r : [-sw.l[0], sw.l[1], sw.l[2]], onSword);
-      }
       // A loose fist, tighter as the pace goes up; open to catch the air, flat on a ledge, a wall or the floor.
       let curl = 0.75 + 0.25 * w.sprint;
       for (const [open, t] of [
@@ -529,10 +568,14 @@ export const createBody = (world?: World): Body => {
         q.rot[arm + 2] = slerp(q.rot[arm + 2], mul(inv(solve(q).rot[J.FOREARM_R]), rot), hold);
       }
       if (sw && onSword > 0.002) {
-        // Both hands: the back of the hand along the blade's right, the fingers around the grip.
-        const rot = frame(turn(sw.ax[0]), turn(sw.g));
-        const fore = sd > 0 ? J.FOREARM_R : J.FOREARM_L;
-        q.rot[arm + 2] = slerp(q.rot[arm + 2], mul(inv(solve(q).rot[fore]), rot), onSword);
+        // Both hands round the grip, the left one BACK behind the right, the elbows down and out.
+        const g = turn(sw.g);
+        const at = along(add(eye, turn(sw.at)), g, sd > 0 ? 0 : -BACK);
+        const held = { ...q, rot: q.rot.slice() };
+        wield(held, s, arm, at, g, turn([0.5 * sd, -1, -0.35]));
+        for (const k of [arm, arm + 1, arm + 2]) {
+          q.rot[k] = slerp(q.rot[k], held.rot[k], onSword);
+        }
       }
     }
     return solve(q);

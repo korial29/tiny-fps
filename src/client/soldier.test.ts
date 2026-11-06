@@ -555,7 +555,8 @@ describe('a runner with the katana', () => {
         expect(apart(book.get(1)!)).toBeLessThan(0.005);
         for (let i = 0; i < CUTS[cut].ticks; i++) {
           animate(book, [blade({ cut, vz, z: (z += vz * DT), swing: CUTS[cut].ticks - i })], DT);
-          expect(apart(book.get(1)!)).toBeLessThan(0.005);
+          // Within 3 cm: the arms run out of reach for a few frames of a sprint's follow-through.
+          expect(apart(book.get(1)!)).toBeLessThan(0.03);
         }
       }
     }
@@ -580,18 +581,17 @@ describe('a runner with the katana', () => {
     // Where it is at the strike: ahead of the runner (z = -3, ahead is -z), around the height of the eyes.
     expect(path[strike][2]).toBeLessThan(-3 - 0.7);
     if (cut == CUT.THRUST) {
-      expect(path[strike][2]).toBeLessThan(path[tick(0.22)][2] - 0.2);
+      expect(path[strike][2]).toBeLessThan(path[tick(0.3)][2] - 0.2);
     } else if (cut == CUT.SLASH) {
       // Raised over the head and behind it, then down to below the hips.
-      expect(path[tick(0.27)][1]).toBeGreaterThan(path[strike][1] + 0.6);
-      expect(path[tick(0.27)][2]).toBeGreaterThan(-3);
+      expect(path[tick(0.28)][1]).toBeGreaterThan(path[strike][1] + 0.6);
+      expect(path[tick(0.28)][2]).toBeGreaterThan(-3);
       expect(path[strike][1]).toBeGreaterThan(path[tick(0.55)][1] + 0.8);
     } else {
       const s = cut == CUT.LEFT ? 1 : -1;
       expect(s * path[strike + 3][0]).toBeGreaterThan(s * path[strike - 4][0] + 0.8);
-      // The runner faces -z: its right is +x. Wound up behind the shoulder, finished low on the other side.
-      expect(s * (path[tick(0.22)][0] - 5)).toBeLessThan(-0.3);
-      expect(path[tick(0.22)][2]).toBeGreaterThan(-3);
+      // The runner faces -z: its right is +x. Wound up out at one side, finished out at the other.
+      expect(s * (path[tick(0.24)][0] - 5)).toBeLessThan(-0.3);
       expect(s * (path[tick(0.6)][0] - 5)).toBeGreaterThan(0.3);
       expect(path[tick(0.6)][1]).toBeLessThan(1 + 1.2);
     }

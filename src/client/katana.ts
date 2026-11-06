@@ -6,7 +6,7 @@ import { CUTS, TICK_HZ } from '../shared/constants';
 import type { PlayerState } from '../shared/types';
 import { glow as lit, tri } from './flag';
 import { grip } from './gun';
-import { dot, place, unit } from './mesh';
+import { place } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
@@ -18,9 +18,9 @@ const SORI = 0.03;
 /** Blade half height at its root: where it narrows, its middle rises, so that the point rides the spine side. */
 const TALL = 0.019;
 /** The left hand grips this far behind the right one: a gap between the two fists. */
-export const BEHIND = 0.14;
+export const BEHIND = 0.1;
 /** The tilt between the grip and the hand's thumb: the blade rises off the forearm's line. */
-const [S, C] = [Math.sin(0.55), Math.cos(0.55)];
+export const [S, C] = [Math.sin(0.55), Math.cos(0.55)];
 
 /** Sum of vectors, each times a number. */
 const sum = (...t: [Vec3, number][]): Vec3 =>
@@ -256,68 +256,56 @@ export const ends = (pos: Vec3, q: Quat): Vec3[] => {
 };
 
 /**
- * The axes [right, up, forward] in the camera's space (right, up, forward: a mirror of the world's)
- * for a blade along `d`, rolled by `roll` about it: right as near (cos, sin, 0) as it can be, up
- * forward cross right, so that the frame is a proper turn whichever way the blade points.
+ * The cuts, held the way Jedi Knight 2 holds its saber in the first person: the hands stay low at
+ * the right, close together on the grip, and the blade makes the wide arcs. Each cut is keys of
+ * [share of the swing, grip x, y, z, blade direction x, y, z] in the camera's space (right, up,
+ * forward), the guard first and last: a wind-up, the strike at its tick (every cut passes the
+ * middle of the view there) and a follow-through, with the hands taking the slope between their
+ * neighbours' keys (fastest through the strike). The right hand holds the grip at the guard, the
+ * left BEHIND it. In the guard the blade rises across the view, up and to the left.
  */
-export const frameOf = (d: Vec3, roll: number): Vec3[] => {
-  const f = unit(d);
-  const s: Vec3 = [Math.cos(roll), Math.sin(roll), 0];
-  const r = unit(sum([s, 1], [f, -dot(s, f)]));
-  return [r, cross(f, r), f];
-};
-
-/**
- * The cuts. Each is keys of [share of the swing, grip x, y, z, blade direction x, y, z, roll] in
- * the camera's space (right, up, forward), the guard first and last: a wind-up, the strike at its
- * tick (every cut passes the middle of the view there) and a follow-through, with the hands taking
- * the slope between their neighbours' keys (fastest through the strike). Both hands hold the grip,
- * the left BEHIND the right. The wind-ups and follow-throughs go out of the view. The guard is
- * rolled a little, its flat toward the eye.
- */
-export const GUARD = [0.12, -0.13, 0.42, -0.08, 0.33, 0.94, -0.45];
+export const GUARD = [0.06, -0.13, 0.45, 0.18, 0.87, 0.45];
 /** The share of cut `c`'s swing at which it strikes. */
 const strikeAt = (c: number) => CUTS[c].strike / CUTS[c].ticks;
-/** From behind the left shoulder, through the middle, to low at the right. */
+/** Out to the left and a little back, across the middle, out to the right and round behind. */
 const ACROSS = (s: number) => [
   [0, ...GUARD],
-  [0.1, -0.04, -0.1, 0.3, -0.45, 0.85, 0.1, 0.4],
-  [0.22, -0.2, 0, 0.16, -0.5, 0.45, -0.74, 1.3],
-  [0.31, -0.12, -0.06, 0.3, -0.95, 0.25, 0.2, 1.2],
-  [s, 0, -0.13, 0.39, 0, 0.06, 1, 1.1],
-  [0.47, 0.12, -0.3, 0.32, 0.9, -0.3, 0.35, 1],
-  [0.6, 0.14, -0.5, 0.18, 0.75, -0.6, -0.1, 0.9],
+  [0.12, 0.04, -0.08, 0.36, -0.7, 0.7, 0.15],
+  [0.24, -0.02, -0.06, 0.34, -0.95, 0.25, -0.2],
+  [s, 0.07, -0.15, 0.46, 0, 0.06, 1],
+  [0.5, 0.17, -0.2, 0.4, 0.95, -0.1, 0.1],
+  [0.62, 0.18, -0.24, 0.32, 0.8, -0.3, -0.45],
   [1, ...GUARD],
 ];
 const KEYS: number[][][] = [
-  // Pulled back to the right hip, lunged out along the look, held a beat.
+  // Pulled back level, lunged out along the look, held a beat.
   [
     [0, ...GUARD],
-    [0.22, 0.2, -0.33, 0.2, -0.08, 0.3, 0.95, 1.4],
-    [strikeAt(0), 0.04, -0.15, 0.42, -0.03, 0.1, 1, 1.4],
-    [strikeAt(0) + 0.2, 0.04, -0.16, 0.42, -0.03, 0.1, 1, 1.4],
+    [0.3, 0.13, -0.2, 0.2, -0.05, 0.3, 1],
+    [strikeAt(0), 0.02, -0.15, 0.42, -0.02, 0.08, 1],
+    [strikeAt(0) + 0.2, 0.02, -0.15, 0.42, -0.02, 0.08, 1],
     [1, ...GUARD],
   ],
   ACROSS(strikeAt(1)),
   // The cut from the right is the cut from the left in a mirror.
   ACROSS(strikeAt(2)).map((k, i, all) =>
-    i && i < all.length - 1 ? [k[0], 0.06 - k[1], k[2], k[3], -k[4], k[5], k[6], -k[7]] : k,
+    i && i < all.length - 1 ? [k[0], 0.14 - k[1], k[2], k[3], -k[4], k[5], k[6]] : k,
   ),
-  // Raised over the head, down through the middle to below the view, held a beat.
+  // Raised over the head, down through the middle to low ahead, held a beat.
   [
     [0, ...GUARD],
-    [0.13, 0.08, 0.06, 0.28, 0, 1, 0.15, 0],
-    [0.27, 0.02, 0.32, 0.12, 0, 0.55, -0.83, 0],
-    [0.34, 0.03, 0.16, 0.3, 0, 1, 0.1, 0],
-    [strikeAt(3), 0.02, -0.12, 0.41, 0, 0.08, 1, 0],
-    [0.55, 0.03, -0.5, 0.3, 0, -0.75, 0.66, 0],
-    [0.66, 0.03, -0.52, 0.3, 0, -0.78, 0.62, 0],
+    [0.14, 0.08, -0.04, 0.36, -0.05, 0.95, -0.05],
+    [0.28, 0.03, 0.02, 0.32, 0, 0.6, -0.8],
+    [0.34, 0.06, -0.02, 0.38, 0, 1, 0.1],
+    [strikeAt(3), 0.06, -0.15, 0.46, 0, 0.08, 1],
+    [0.52, 0.06, -0.3, 0.42, 0, -0.7, 0.7],
+    [0.64, 0.06, -0.32, 0.4, 0, -0.75, 0.65],
     [1, ...GUARD],
   ],
 ];
 const NOW: number[] = [];
 
-/** The grip and the blade direction (x, y, z each) and the roll of cut `cut` at `p` of the swing: one array, rewritten by each call. */
+/** The grip and the blade direction (x, y, z each) of cut `cut` at `p` of the swing: one array, rewritten by each call. */
 export const stroke = (cut: number, p: number): number[] => {
   const K = KEYS[cut];
   let i = K.length - 2;
@@ -328,7 +316,7 @@ export const stroke = (cut: number, p: number): number[] => {
   const h = b[0] - a[0];
   const u = clamp((p - a[0]) / h);
   const [u2, u3] = [u * u, u * u * u];
-  for (let j = 1; j < 8; j++) {
+  for (let j = 1; j < 7; j++) {
     const m0 = i ? (b[j] - K[i - 1][j]) / (b[0] - K[i - 1][0]) : 0;
     const m1 = K[i + 2] ? (K[i + 2][j] - a[j]) / (K[i + 2][0] - a[0]) : 0;
     NOW[j - 1] =

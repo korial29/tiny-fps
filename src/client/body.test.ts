@@ -7,7 +7,7 @@ import { createBody, finger, hand, phalanges } from './body';
 import type { Body } from './body';
 import { MUZZLE, REAR, grip, gun, readout } from './gun';
 import { BEHIND, axes, ends } from './katana';
-import { STRIDE, add, basis, dot, sub } from './mesh';
+import { STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, rest, solve, turn } from './rig';
 import { CUFF, CUFF_SIDES, body as skinOf, palette } from './skin';
@@ -1077,27 +1077,42 @@ describe('the katana in both hands', () => {
     expect(raw(watch(a, 60), a)).toHaveLength(raw(watch(b, 60), b).length);
   });
 
-  it('rests angled up and forward at the right of the view, in both hands, not filling the screen', () => {
+  it('rests upright in the middle of the view, both fists on the grip at the bottom of it', () => {
     const p = blade();
     const body = watch(p, 60);
     const s = pose(body, p);
     const tip = local(p, ends(s.pos[J.HAND_R], s.rot[J.HAND_R])[1]);
-    expect(tip[0]).toBeGreaterThan(0.02);
-    expect(tip[0]).toBeLessThan(0.4);
-    expect(tip[1]).toBeGreaterThan(0.05);
-    expect(tip[2]).toBeGreaterThan(1.2);
-    // The right hand is low at the right of the view, the left is on the grip a hand behind it.
+    expect(Math.abs(tip[0])).toBeLessThan(0.4);
+    expect(tip[1]).toBeGreaterThan(0.7);
+    expect(tip[2]).toBeGreaterThan(0.6);
+    // The right hand low in the view, the left on the grip a hand below it, both seen.
     const [l, r] = hands(p, body);
-    expect(r[0]).toBeGreaterThan(0.05);
-    expect(r[1]).toBeLessThan(-0.08);
-    // Both fists show at the bottom of the view.
+    expect(r[1]).toBeLessThan(-0.05);
+    expect(l[1]).toBeLessThan(r[1]);
     expect(seen(r)).toBe(true);
-    expect(leftOff(body, p)).toBeLessThan(0.03);
-    expect(l[0]).toBeGreaterThan(-0.05);
-    // Nothing of it left of the middle of the view, and a thin line of the screen.
+    expect(seen(l)).toBe(true);
+    expect(leftOff(body, p)).toBeLessThan(0.015);
+    // Most of the blade's light is in the view.
     const g = glow(draw(body, p)).map(q => local(p, q.at));
-    expect(g.filter(v => v[0] < -0.02)).toHaveLength(0);
     expect(g.filter(seen).length).toBeGreaterThan(g.length * 0.5);
+  });
+
+  it('keeps the wrists near straight and the elbows below the hands in the guard', () => {
+    const p = blade();
+    const s = pose(watch(p, 60), p);
+    for (const [arm, hand] of [
+      [J.ARM_R, J.HAND_R],
+      [J.ARM_L, J.HAND_L],
+    ]) {
+      const [e, w] = [s.pos[arm + 1], s.pos[hand]];
+      expect(e[1]).toBeLessThan(w[1]);
+      // The hand's axis carries on the forearm's line within 45 degrees.
+      const fore = unit(w.map((v, i) => v - e[i]) as Vec3);
+      const fing = turn(s.rot[hand], [0, -1, 0]);
+      expect(fore[0] * fing[0] + fore[1] * fing[1] + fore[2] * fing[2]).toBeGreaterThan(
+        Math.cos(Math.PI / 4),
+      );
+    }
   });
 
   it('is held on the grip: the right hand is where the sword puts its grip, with the point at the end of the blade', () => {
@@ -1133,20 +1148,20 @@ describe('the katana in both hands', () => {
       expect(path[strike][2]).toBeGreaterThan(Math.max(...path.map(v => v[2])) - 0.05);
     } else if (cut == CUT.SLASH) {
       // Over the head, behind the eye, then down through the middle to far below the view.
-      expect(path[tick(0.27)][1]).toBeGreaterThan(0.7);
-      expect(path[tick(0.27)][2]).toBeLessThan(0);
+      expect(path[tick(0.28)][1]).toBeGreaterThan(0.5);
+      expect(path[tick(0.28)][2]).toBeLessThan(0);
       expect(path[strike - 2][1]).toBeGreaterThan(path[strike][1]);
       expect(path[strike][1]).toBeGreaterThan(path[strike + 2][1]);
-      expect(path[tick(0.55)][1]).toBeLessThan(-1);
+      expect(path[tick(0.55)][1]).toBeLessThan(-0.8);
     } else {
-      // From behind the shoulder on one side to far across and low on the other.
+      // From out at one side, level with the hands, to out at the other and a little low.
       const sign = cut == CUT.LEFT ? 1 : -1;
-      expect(sign * path[tick(0.22)][0]).toBeLessThan(-0.5);
-      expect(path[tick(0.22)][2]).toBeLessThan(0);
+      expect(sign * path[tick(0.24)][0]).toBeLessThan(-0.5);
+      expect(path[tick(0.24)][2]).toBeLessThan(0.4);
       expect(sign * path[strike - 2][0]).toBeLessThan(sign * path[strike][0]);
       expect(sign * path[strike][0]).toBeLessThan(sign * path[strike + 2][0]);
       expect(sign * path[tick(0.6)][0]).toBeGreaterThan(0.6);
-      expect(path[tick(0.6)][1]).toBeLessThan(-0.8);
+      expect(path[tick(0.6)][1]).toBeLessThan(-0.2);
     }
     // And back at the guard at the end.
     const rest = tipOf(cut, CUTS[cut].ticks - 1);

@@ -61,7 +61,8 @@ export const createCombat = (
   let before: PlayerState | undefined;
   let held = false;
   let seq = 0;
-  const seen = new Map<number, PlayerState>();
+  /** The `shots` of each other player at the last frame. */
+  const seen = new Map<number, number>();
   /** A little off the pitch each time, so that a burst does not drone. */
   const rate = () => 0.94 + 0.12 * ((seq++ * 0.618) % 1);
   const laser = (at?: Vec3) => audio.play(SOUND.LASER, at, at ? 0.7 : 0.5, rate());
@@ -126,7 +127,8 @@ export const createCombat = (
       }
       pending = 0;
       for (const p of others) {
-        const n = Math.min(fired(seen.get(p.id), p), BURST);
+        const was = seen.get(p.id);
+        const n = Math.min(was === undefined ? 0 : (p.shots - was) & 255, BURST);
         const [grip, ax] = aimed(p);
         const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
         for (let i = 0; i < n; i++) {
@@ -138,7 +140,7 @@ export const createCombat = (
           );
           laser(eye);
         }
-        seen.set(p.id, p);
+        seen.set(p.id, p.shots);
       }
       for (const id of seen.keys()) {
         if (!others.some(p => p.id == id)) {

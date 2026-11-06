@@ -46,8 +46,8 @@ export interface Tracer {
 
 /** [halo, core] widths in metres and colours: unlit and above 1, so that the bloom picks them up. */
 const RIBBONS: [number, number[], number][] = [
-  [0.022, [0.5, 0.2, 1.7], 0],
-  [0.007, [0.9, 2.1, 2.6], 0.02],
+  [0.022, [0.4, 0.15, 1.3], 0],
+  [0.007, [0.7, 1.7, 2.2], 0.02],
 ];
 
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -86,7 +86,9 @@ const ribbon = (
   ].map(([c, k]) => {
     // Toward the eye by `lift`, so that the core is not lost in the halo.
     const to = norm(sub(eye, c as Vec3));
-    return (c as Vec3).map((v, i) => v + s[i] * w * (k as number) + to[i] * lift) as Vec3;
+    // Beyond 5 m the ribbon grows with the distance, so that it stays a line of pixels, not a hair.
+    const wide = w * Math.min(Math.max(Math.hypot(...sub(eye, c as Vec3)) / 5, 1), 2.5);
+    return (c as Vec3).map((v, i) => v + s[i] * wide * (k as number) + to[i] * lift) as Vec3;
   });
   for (const v of [p, q, r, p, r, t]) {
     vert(out, v, rgb);
@@ -177,8 +179,8 @@ export const createTracer = (): Tracer => {
         .flatMap(b => {
           const k = 1 - b.age / FLASH;
           return [
-            point(b.a, 7, 2.4 * k, [0.35, 0.8, 1.5]),
-            ...(b.hit ? [point(b.b, 3.5, 1.4 * k, [0.3, 0.7, 1.3])] : []),
+            point(b.a, 6, 1.3 * k, [0.35, 0.8, 1.5]),
+            ...(b.hit ? [point(b.b, 3.5, 0.9 * k, [0.3, 0.7, 1.3])] : []),
           ];
         });
     },

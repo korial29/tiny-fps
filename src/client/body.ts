@@ -25,8 +25,8 @@ export type Solved = ReturnType<typeof solve>;
 export interface Body {
   /** The own player's id, -1 before the first snapshot. */
   readonly id: number;
-  /** Advances dt seconds: the own player, eased (undefined before the first snapshot), and the kick of the gun (0 to 1). */
-  update(me: PlayerState | undefined, dt: number, kick?: number): void;
+  /** Advances dt seconds: the own player, eased (undefined before the first snapshot), the kick of the gun (0 to 1) and the aspect of the screen, which keeps the gun in a narrow one. */
+  update(me: PlayerState | undefined, dt: number, kick?: number, aspect?: number): void;
   /** The muzzle of the gun in the right hand, in the camera's space (right, up, forward), as of the last update. */
   muzzle(): Vec3;
   /** The joints for a camera at `eye`; undefined without a player, or with the camera away from the body. */
@@ -200,7 +200,7 @@ export const createBody = (world?: World): Body => {
     gun: 0,
   };
   /** The kick of the last shot, 0 to 1, and how much of the right hand's pose the gun takes, as of the last pose(). */
-  let [kick, hold] = [0, 0];
+  let [kick, hold, wide] = [0, 0, 1.6];
   /** Seconds, for the flailing of a stumble. */
   let clock = 0;
   /** Which hand the wall is on: -1 left, 1 right, eased. */
@@ -210,8 +210,9 @@ export const createBody = (world?: World): Body => {
   /** How closed each hand is, left then right, as of the last pose(). */
   const curls = [0, 0];
 
-  const update: Body['update'] = (p, dt, k = 0) => {
+  const update: Body['update'] = (p, dt, k = 0, aspect = 1.6) => {
     kick = k;
+    wide = aspect;
     if (!p) {
       me = undefined;
       return;
@@ -248,17 +249,17 @@ export const createBody = (world?: World): Body => {
 
   /**
    * The gun in camera space: where its grip is (lower right, rising from below as it is taken, kicked
-   * back by a shot, swaying with the run) and its axes, aimed at the crosshair 3 m out.
+   * back by a shot, swaying with the run) and its axes, aimed at the crosshair 2.5 m out.
    */
   const holster = (): [Vec3, Vec3[]] => {
     const a = w.amp * (1 + 0.5 * w.sprint);
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     const at: Vec3 = [
-      0.21 + 0.012 * a * s,
-      -0.19 + 0.018 * a * c - 0.3 * (1 - w.gun),
-      0.45 - 0.05 * kick,
+      Math.min(0.27, 0.21 * wide) + 0.012 * a * s,
+      -0.2 + 0.018 * a * c - 0.3 * (1 - w.gun),
+      0.5 - 0.05 * kick,
     ];
-    const d = unit([-at[0], 0.1 * kick - at[1], 3 - at[2]]);
+    const d = unit([-at[0], 0.1 * kick - at[1], 2.5 - at[2]]);
     return [at, aim(d, X)];
   };
 
@@ -308,6 +309,10 @@ export const createBody = (world?: World): Body => {
       // The numbers are for the right hand, mirrored below.
       let h = mix([0.25, -0.17, 0.36], [0.2, -0.14, 0.42], w.sprint);
       h = [h[0], h[1] + 0.07 * a * k, h[2] + 0.12 * a * k];
+      // While the gun is held and he stands or walks, the left hand drops out of view.
+      if (sd < 0) {
+        h = mix(h, [-0.2, -0.65, 0.2], w.gun * (1 - clamp(w.amp * 2.5)));
+      }
       h = mix(h, [0.38, -0.2, 0.34], w.air);
       h = mix(h, [0.3, 0.02, 0.45], w.rise);
       h = mix(h, [0.14, -0.1, 0.5], w.dash);

@@ -225,7 +225,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     hud.hurt(fx.hurt);
     foley.me(me, hit, fx.stride);
     foley.others(others);
-    body.update(me, dt, fx.kick);
+    body.update(me, dt, fx.kick, canvas.clientWidth / (canvas.clientHeight || 1));
     // The camera moves for the eye only: the inputs keep sending the real height and angles.
     const cam: [number, number, number] = [eye[0], eye[1] + fx.dy, eye[2]];
     const pitch = ctl.pitch + fx.pitch;

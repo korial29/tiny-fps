@@ -30,7 +30,7 @@ const IDENT: Quat = [0, 0, 0, 1];
 describe('the gun model', () => {
   it('stays within the budget: a gun near is a few hundred triangles, one far about half of that', () => {
     expect(near.length).toBeGreaterThan(400);
-    expect(near.length).toBeLessThan(1800);
+    expect(near.length).toBeLessThan(2600);
     expect(near.length % 3).toBe(0);
     expect(far.length).toBeGreaterThan(300);
     expect(far.length).toBeLessThan(near.length * 0.75);

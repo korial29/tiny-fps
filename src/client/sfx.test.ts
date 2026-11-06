@@ -221,7 +221,7 @@ describe('seam', () => {
 });
 
 describe('music', () => {
-  // Best of three, loose: the other test files compete for the CPU (about 40 ms when alone).
+  // Best of three, loose: the other test files compete for the CPU (about 50 ms when alone).
   const times: number[] = [];
   const m = Array.from({ length: 3 }, () => {
     const t0 = performance.now();
@@ -229,24 +229,44 @@ describe('music', () => {
     times.push(performance.now() - t0);
     return out;
   })[0];
-  const beats = (m.length * 108) / (RATE * 60);
+  const beats = (m.length * 84) / (RATE * 60);
 
   it('is deterministic', () => {
     expect(Buffer.from(music().buffer).equals(Buffer.from(m.buffer))).toBe(true);
   });
 
-  it('is a whole number of beats at 108 bpm, a few bars long', () => {
+  it('is a whole number of beats at 84 bpm, sixteen bars: three quarters of a minute', () => {
     expect(beats).toBe(Math.round(beats));
-    expect(beats / 4).toBeGreaterThanOrEqual(4);
+    expect(beats / 4).toBe(16);
+    expect(m.length / RATE).toBeGreaterThan(45);
   });
 
   it('is quiet, but not silent', () => {
     expect(peak(m)).toBeLessThanOrEqual(0.35 + 1e-6);
     expect(peak(m)).toBeGreaterThan(0.3);
+    expect(rms(m)).toBeLessThan(0.1);
   });
 
-  it('loops without a jump', () => {
-    expect(Math.abs(m[0] - m[m.length - 1])).toBeLessThan(0.01);
+  it('loops without a jump: the step from the end to the start is no bigger than any other', () => {
+    let most = 0;
+    for (let i = 1; i < m.length; i++) {
+      most = Math.max(most, Math.abs(m[i] - m[i - 1]));
+    }
+    expect(Math.abs(m[0] - m[m.length - 1])).toBeLessThanOrEqual(most);
+    expect(Math.abs(m[0] - m[m.length - 1])).toBeLessThan(0.02);
+  });
+
+  it('is light: under a third of its energy below 200 Hz', () => {
+    // Two one-pole low-passes at 200 Hz.
+    const a = 1 - Math.exp((-2 * Math.PI * 200) / RATE);
+    let [y1, y2, low, all] = [0, 0, 0, 0];
+    for (const x of m) {
+      y1 += (x - y1) * a;
+      y2 += (y1 - y2) * a;
+      low += y2 * y2;
+      all += x * x;
+    }
+    expect(low / all).toBeLessThan(1 / 3);
   });
 
   it('renders fast', () => {

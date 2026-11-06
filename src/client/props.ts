@@ -2,8 +2,9 @@
 // it) and the health packs (a white box with a glowing green cross, bobbing). Pure functions of the
 // place and the clock, in the renderer's vertex format. Lit and shadowed, but the glow parts.
 import { RACK_R } from '../shared/constants';
-import { GLOW, glow, ring, tri } from './flag';
+import { GLOW, glow, ring, teamRgb, tri } from './flag';
 import { gun } from './gun';
+import { sword } from './katana';
 import { STRIDE, basis, place, segment, solid } from './mesh';
 import type { Vec3 } from './mesh';
 
@@ -14,8 +15,8 @@ import type { Vec3 } from './mesh';
 export const packsOf = (all: readonly Vec3[] = [], mask = 0, from = 0): Vec3[] =>
   all.filter((_, n) => from + n < 32 && (mask >>> (from + n)) & 1);
 
-/** A rack at `at` (a point on a top): a post and a dish, a ring on the roof of the radius that gives the gun, the gun over it. */
-export const rack = (out: number[], at: Vec3, rgb: number[], t: number) => {
+/** A rack at `at` (a point on a top): a post and a dish, a ring on the roof of the radius that gives the gun, the gun over it, or with `blade` the katana, crackling. */
+export const rack = (out: number[], at: Vec3, rgb: number[], t: number, blade = false) => {
   const dark = rgb.map(c => c * 0.45);
   segment(
     out,
@@ -32,7 +33,25 @@ export const rack = (out: number[], at: Vec3, rgb: number[], t: number) => {
   const from = out.length;
   ring(out, [x, y + 0.045, z], RACK_R - 0.07, RACK_R, rgb);
   glow(out, from, 1.2 * GLOW * (0.7 + 0.3 * Math.sin(t * 2.5)));
-  place(out, gun(0), [x, y + 1.05 + 0.04 * Math.sin(t * 2), z], basis(t * 0.8, 0), [0, 0, 0], 1.5);
+  const over: Vec3 = [x, y + 1.05 + 0.04 * Math.sin(t * 2), z];
+  const ax = basis(t * 0.8, 0);
+  if (blade) {
+    // Lying level, turning about its middle: 32 cm of the 98 cm are behind the grip.
+    sword(out, over.map((v, i) => v - ax[2][i] * 0.32) as Vec3, ax, 0, t);
+  } else {
+    place(out, gun(0), over, ax, [0, 0, 0], 1.5);
+  }
+};
+
+/** Each team's gun rack and katana rack, where it has them. */
+export const racks = (
+  out: number[],
+  guns: readonly (Vec3 | undefined)[] = [],
+  blades: readonly (Vec3 | undefined)[] = [],
+  t = 0,
+) => {
+  guns.forEach((at, team) => at && rack(out, at, teamRgb(team), t));
+  blades.forEach((at, team) => at && rack(out, at, teamRgb(team), t, true));
 };
 
 /** The faces of a cube: the normal and the two edges. */

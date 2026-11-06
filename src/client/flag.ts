@@ -45,6 +45,8 @@ export interface CtfScene {
   flags: readonly FlagDraw[];
   /** Each team's gun rack, where it has one, and the health packs that are there to take. */
   racks?: readonly (Vec3 | undefined)[];
+  /** Each team's katana rack, where it has one. */
+  blades?: readonly (Vec3 | undefined)[];
   packs?: readonly Vec3[];
   /** The ammo packs that are there to take. */
   ammo?: readonly Vec3[];

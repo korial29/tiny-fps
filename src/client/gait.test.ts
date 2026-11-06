@@ -283,6 +283,31 @@ describe('gait: the stride', () => {
     expect(spread(hand)).toBeGreaterThan(0.4);
   });
 
+  it('hangs the arms along the body at rest, and swings them like a pendulum in a stride', () => {
+    const [still] = jog(0, 3).frames.slice(-1);
+    for (const [hand, shoulder] of [
+      [J.HAND_L, J.ARM_L],
+      [J.HAND_R, J.ARM_R],
+    ]) {
+      const d = sub(still.pos[hand], still.pos[shoulder]);
+      // Straight down from the shoulder, a little bent and out: nowhere near the front of the body.
+      expect(d[1]).toBeLessThan(-0.45);
+      expect(Math.abs(d[0])).toBeLessThan(0.15);
+      expect(Math.abs(d[2])).toBeLessThan(0.15);
+    }
+    // Running, the same hands go up and forward and back and down, by a good half metre.
+    const frames = stride(jog(6, 5).frames);
+    const [fore, up] = [J.HAND_R].flatMap(j => [
+      frames.map(f => -(f.pos[j][2] - f.pos[J.ARM_R][2])),
+      frames.map(f => f.pos[j][1] - f.pos[J.ARM_R][1]),
+    ]);
+    expect(spread(fore)).toBeGreaterThan(0.4);
+    expect(spread(up)).toBeGreaterThan(0.2);
+    // It pumps higher the faster it goes.
+    const rise = (v: number) => spread(stride(jog(v, 5).frames).map(f => f.pos[J.HAND_L][1]));
+    expect(rise(9)).toBeGreaterThan(rise(3));
+  });
+
   it('takes more steps per second and longer ones as it speeds up', () => {
     const rate: number[] = [];
     const length: number[] = [];

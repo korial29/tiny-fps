@@ -3,6 +3,7 @@
 // toward it; the dash streaks are the only thing drawn here that the gait does not pose. A
 // player's (x, y, z) is the bottom of the feet. No DOM.
 import { DASH_COOLDOWN, DASH_TICKS, STEP_H } from '../shared/constants';
+import { TAU, eyeHeight } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
@@ -10,11 +11,14 @@ import { inv, reach } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
 import { TILT, aimed, focus, held } from './gun';
-import { basis, unit } from './mesh';
+import { cutting, ends, fingers, frameOf, held as sword, progress, stroke, wrists } from './katana';
+import { add, basis, mix, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, mul, slerp, solve } from './rig';
+import { JOINT as J, axis, mul, slerp, solve } from './rig';
 import type { Pose } from './rig';
 import { body, palette, skin } from './skin';
+import { createTrail } from './trail';
+import type { Trail } from './trail';
 
 /** How fast the dash streaks grow and fade, 1 / s. */
 const DASH_RATE = 14;
@@ -37,6 +41,10 @@ export interface Runner {
   aim: number;
   /** Where its last shot went, which its gun points at. */
   focus: Vec3;
+  /** How far through its katana cut it is, -1 when it is not cutting, the light the blade leaves and the clock of its crackle. */
+  prog: number;
+  trail: Trail;
+  t: number;
 }
 
 /** Seconds after a shot that the gun stays up. */
@@ -48,7 +56,17 @@ const dashing = (p: PlayerState) => p.dash > DASH_COOLDOWN - DASH_TICKS;
 export const createRunner = (p: PlayerState): Runner => {
   const gait = createGait();
   gait.update(p, 0);
-  return { p: { ...p }, gait, dash: +dashing(p), since: 1e3, aim: 0, focus: far(p) };
+  return {
+    p: { ...p },
+    gait,
+    dash: +dashing(p),
+    since: 1e3,
+    aim: 0,
+    focus: far(p),
+    prog: -1,
+    trail: createTrail(),
+    t: 0,
+  };
 };
 
 /** The floor under a player standing at height `y`: the first top within a step above or below it. */
@@ -84,6 +102,9 @@ export const animate = (
       // A shot raises the gun at once, so that it points at the shot when the beam is drawn.
       r.aim = r.since == 0 ? 1 : r.aim + (+(r.since < AIMING) - r.aim) * (1 - Math.exp(-dt * 12));
       r.focus = r.since < AIMING ? (world ? focus(p, world)[0] : far(p)) : r.focus;
+      r.prog = progress(r.prog, p, dt);
+      r.trail.update(dt);
+      r.t += dt;
       r.p = { ...p };
     } else {
       book.set(p.id, createRunner(p));
@@ -113,6 +134,54 @@ const lifted = (
     pole,
   );
   rot[J.HAND_R] = slerp(rot[J.HAND_R], mul(inv(solve(q).rot[J.FOREARM_R]), frame(uh, fh)), k);
+  return q;
+};
+
+/** The katana carried: the grip at the right hip, the blade back and low, in the guard's numbers (see katana.ts) from the eye. */
+const CARRY = [0.26, -0.66, 0.12, 0.05, -0.4, -0.91, 2.2];
+const ease = (v: number) => (v = Math.min(Math.max(v, 0), 1)) * v * (3 - 2 * v);
+
+/**
+ * The pose with the katana in the right hand: carried back and low, or in a cut, which is the first
+ * person's cut seen from the runner's eye (the share `e` of it, so that it is drawn from the carry
+ * and back to it), the left hand joining the grip and the trunk turning and leaning into it.
+ */
+const brandish = (pose: Pose, p: PlayerState, prog: number, ph: number): Pose => {
+  const e = prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
+  const k = stroke(p.cut ?? 0, Math.max(prog, 0));
+  const g = CARRY.map((v, i) => v + (k[i] - v) * e);
+  g[1] += 0.02 * Math.sin(TAU * ph) * (1 - e);
+  const [r, u, f] = basis(p.yaw, p.pitch * e);
+  /** The camera's space at the eye (right, up, forward) to the world. */
+  const turn = ([a, b, c]: number[]): Vec3 => [
+    r[0] * a + u[0] * b + f[0] * c,
+    r[1] * a + u[1] * b + f[1] * c,
+    r[2] * a + u[2] * b + f[2] * c,
+  ];
+  const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
+  const ax = frameOf(g.slice(3, 6) as Vec3, g[6]);
+  const [rw, lw] = wrists(g.slice(0, 3) as Vec3, ax).map(w => add(eye, turn(w)));
+  const rot = pose.rot.slice();
+  const q = { ...pose, rot };
+  for (const j of [J.SPINE, J.CHEST]) {
+    rot[j] = mul(
+      rot[j],
+      mul(
+        axis([0, 1, 0], -0.2 * g[3] * e),
+        axis([1, 0, 0], -0.15 * Math.min(Math.max(g[2] * 2.5 - 0.75, 0), 0.3) * e),
+      ),
+    );
+  }
+  const s = solve(q);
+  reach(q, s, J.ARM_R, rw, turn([0.7, -1, -0.5]));
+  if (e > 0) {
+    reach(q, s, J.ARM_L, mix(s.pos[J.HAND_L], lw, e), turn([-0.7, -1, -0.5]));
+  }
+  const [hand, arms] = [frame(turn(ax[0]), turn(fingers(ax))), solve(q)];
+  rot[J.HAND_R] = mul(inv(arms.rot[J.FOREARM_R]), hand);
+  if (e > 0) {
+    rot[J.HAND_L] = slerp(rot[J.HAND_L], mul(inv(arms.rot[J.FOREARM_L]), hand), e);
+  }
   return q;
 };
 
@@ -153,12 +222,19 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
     };
   }
   let s = solve(pose);
-  if (r.aim > 0.01 && p.ammo >= 0) {
+  const blade = p.wield && !p.down;
+  if (blade) {
+    pose = brandish(pose, p, r.prog, r.gait.phase);
+    s = solve(pose);
+  } else if (r.aim > 0.01 && p.ammo >= 0) {
     pose = lifted(pose, s, p, r.focus, r.aim);
     s = solve(pose);
   }
   skin(out, body(lod), s, palette(color));
-  if (p.ammo >= 0 && !p.down) {
+  if (blade) {
+    sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], lod, r.t);
+    r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));
+  } else if (p.ammo >= 0 && !p.down) {
     held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], lod);
   }
   if (r.dash > 0.15) {

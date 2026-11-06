@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RACK_R } from '../shared/constants';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
-import { cell, kit, packsOf, rack } from './props';
+import { cell, kit, packsOf, rack, racks } from './props';
 
 const PACKS: Vec3[] = [
   [1, 0, 0],
@@ -158,5 +158,73 @@ describe('a rack', () => {
 
   it('is cheap', () => {
     expect(v.length).toBeLessThan(2300);
+  });
+});
+
+describe('a katana rack', () => {
+  const [gun, blade] = [false, true].map(b =>
+    drawn(out => rack(out, [4, 3, 8], [1, 0.2, 0.2], 0, b)),
+  );
+
+  it('is the same stand with a katana over it instead of the gun: a ring as wide as the pickup, the blade glowing', () => {
+    const ring = blade.filter(x => x[8] == -2 && x[1] < 3.1);
+    expect(ring.length).toBe(gun.filter(x => x[8] == -2 && x[1] < 3.1).length);
+    expect(Math.max(...ring.map(x => Math.hypot(x[0] - 4, x[2] - 8)))).toBeCloseTo(RACK_R, 1);
+    // The katana is longer than the gun and lies level: nearly a metre across, 1 m above the roof.
+    const over = blade.filter(x => x[1] > 3.8);
+    expect(over.length).toBeGreaterThan(200);
+    const span = Math.max(...over.map(x => Math.hypot(x[0] - 4, x[2] - 8)));
+    expect(span).toBeGreaterThan(0.45);
+    expect(span).toBeLessThan(0.7);
+    // Cyan light along the edge, which the gun's own rack does not have at that height.
+    const edge = over.filter(x => x[8] == -2 && x[7] > 1.5 && x[9] > x[6] * 2);
+    expect(edge.length).toBeGreaterThan(100);
+    expect(blade.length).toBeLessThan(5000);
+  });
+
+  it('turns about its middle, and crackles with the clock', () => {
+    const later = drawn(out => rack(out, [4, 3, 8], [1, 0.2, 0.2], 1.3, true));
+    const middle = (v: number[][]) =>
+      [0, 2].map(k => {
+        const o = v.filter(x => x[1] > 3.8);
+        return (Math.max(...o.map(x => x[k])) + Math.min(...o.map(x => x[k]))) / 2;
+      });
+    expect(middle(later)[0]).toBeCloseTo(4, 0);
+    expect(middle(later)[1]).toBeCloseTo(8, 0);
+    expect(later.map(x => x[0]).join()).not.toBe(blade.map(x => x[0]).join());
+  });
+});
+
+describe('the racks of a scene', () => {
+  const count = (guns?: (Vec3 | undefined)[], blades?: (Vec3 | undefined)[]) =>
+    drawn(out => racks(out, guns, blades, 0)).length;
+
+  it('draws a katana rack only where a team has a blade point, and the gun rack where it has one', () => {
+    const [g, b] = [
+      [4, 3, 8],
+      [20, 3, 8],
+    ] as Vec3[];
+    const gunOnly = count([g, undefined]);
+    expect(gunOnly).toBe(drawn(out => rack(out, g, [1, 0.2, 0.2], 0)).length);
+    expect(count([], [])).toBe(0);
+    expect(count([undefined, undefined], [undefined, undefined])).toBe(0);
+    expect(count([g, undefined], [undefined, undefined])).toBe(gunOnly);
+    expect(count([g, undefined], undefined)).toBe(gunOnly);
+    // A blade point adds one katana rack: the same stand and a katana.
+    const withBlade = count([g, undefined], [b, undefined]);
+    expect(withBlade).toBe(gunOnly + drawn(out => rack(out, b, [1, 0.2, 0.2], 0, true)).length);
+    // Only the second team has one: it is drawn in its colour.
+    expect(count([], [undefined, b])).toBe(
+      drawn(out => rack(out, b, [1, 0.2, 0.2], 0, true)).length,
+    );
+    expect(count(undefined, undefined)).toBe(0);
+  });
+
+  it('paints each rack in the colour of its team', () => {
+    const blue = drawn(out => racks(out, [], [undefined, [4, 3, 8]], 0));
+    const red = drawn(out => racks(out, [], [[4, 3, 8]], 0));
+    const dish = (v: number[][]) => v.find(x => x[1] > 3.7 && x[1] < 3.8 && x[8] == -1)!;
+    expect(dish(blue)[9]).toBeGreaterThan(dish(blue)[6]);
+    expect(dish(red)[6]).toBeGreaterThan(dish(red)[9]);
   });
 });

@@ -23,12 +23,13 @@ import type { Runner } from './soldier';
 import { skyline } from './skyline';
 import { deepen, street } from './street';
 import { LAYERS, SIZE, textures } from './textures';
+import { traffic } from './traffic';
 import { vision, zones } from './vision';
 
 /** Tints a world can use at once, white included (see palette). */
 export const MAX_TINTS = 16;
 /** Bytes the dynamic tail starts with; it grows when a frame needs more. */
-const TAIL = 1 << 18;
+const TAIL = 1 << 19;
 /** Metres one texture covers. */
 const TILE = 2;
 /** Shadow map side in texels. */
@@ -461,6 +462,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const size = () => backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
   // What is drawn is the world plus a city, a street and the runner's red; the physics knows only `world`.
   const ground = scenery(world);
+  const drive = traffic(world.def);
   const { sun, sky } = world.def;
   const sunDir = sun.dir.map(v => v / Math.hypot(...sun.dir)) as Vec3;
   const pixels = textures();
@@ -701,6 +703,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       clock = now;
       animate(runners, others, dt, world);
       const [right, up, fwd] = basis(yaw, pitch, fx.roll);
+      drive(v, eye, fwd, Date.now() / 1000);
       ctf?.bases.forEach((at, team) => base(v, at, teamRgb(team), now));
       ctf?.flags.forEach(f => flag(v, f, teamRgb(f.team), now));
       ctf?.racks?.forEach((at, team) => at && rack(v, at, teamRgb(team), now));

@@ -433,6 +433,7 @@ describe('ROOFTOPS, racks and packs', () => {
       [17, 12.4, -1.2],
     ]);
     expect(ROOFTOPS.packs).toHaveLength(3);
+    expect(ROOFTOPS.ammo).toHaveLength(3);
   });
 });
 

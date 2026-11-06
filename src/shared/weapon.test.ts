@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AMMO_MAX,
+  AMMO_PACK,
   DOWN_TICKS,
   END_SCREEN,
   FLAG_LOCK,
@@ -48,6 +49,10 @@ const ARENA: WorldDef = {
   packs: [
     [20, 1, 20],
     [-20, 1, 20],
+  ],
+  ammo: [
+    [20, 1, -20],
+    [-20, 1, -20],
   ],
   floor: -20,
   sun: { dir: [0, 1, 0], color: [1, 1, 1] },
@@ -423,7 +428,8 @@ describe('health packs', () => {
   const PACKS = 0b11;
   const packs = (m: ReturnType<typeof match>) => {
     m.ticks(SNAP_EVERY);
-    return m.snap(m.ann).packs;
+    // The health packs' bits only: the ammo packs follow them.
+    return m.snap(m.ann).packs! & 0b11;
   };
 
   it('are all there at the start, and show in the snapshot', () => {
@@ -492,6 +498,83 @@ describe('health packs', () => {
     m.put(m.ann, -20, 20, { hp: 3 });
     m.ticks(1);
     expect(m.state(m.ann).hp).toBe(5);
+  });
+});
+
+describe('ammo packs', () => {
+  const bits = (m: ReturnType<typeof match>) => {
+    m.ticks(SNAP_EVERY);
+    return m.snap(m.ann).packs;
+  };
+
+  it('come after the health packs in the snapshot, all there at the start', () => {
+    const m = match();
+    expect(bits(m)).toBe(0b1111);
+    // A health pack taken clears bit 0; an ammo pack bit 2 (health packs: 2).
+    m.put(m.bob, 20, 20, { hp: 1 });
+    m.put(m.dee, -20, -20, { ammo: 5 });
+    m.ticks(1);
+    expect(bits(m)).toBe(0b0110);
+  });
+
+  it('give AMMO_PACK shots up to AMMO_MAX, and are gone PACK_BACK seconds', () => {
+    const m = match();
+    m.put(m.cy, 20, -20, { ammo: 10 });
+    m.ticks(1);
+    expect(m.state(m.cy).ammo).toBe(10 + AMMO_PACK);
+    expect(AMMO_PACK).toBe(20);
+    expect(bits(m)! & 0b0100).toBe(0);
+    // A second player with a gun gets nothing from the gone pack...
+    m.put(m.ann, 20, -20, { ammo: 10 });
+    m.ticks(SNAP_EVERY * 2);
+    expect(m.state(m.ann).ammo).toBe(10);
+    // ...until it is back, after PACK_BACK s from the pick-up.
+    m.ticks(PACK_BACK * TICK_HZ - SNAP_EVERY * 4 - 5);
+    expect(m.state(m.ann).ammo).toBe(10);
+    m.ticks(10);
+    expect(m.state(m.ann).ammo).toBe(10 + AMMO_PACK);
+  });
+
+  it('stops at AMMO_MAX, and is not taken with a full gun', () => {
+    const m = match();
+    m.put(m.cy, 20, -20, { ammo: AMMO_MAX - 5 });
+    m.ticks(1);
+    expect(m.state(m.cy).ammo).toBe(AMMO_MAX);
+    const n = match();
+    n.put(n.cy, -20, -20, { ammo: AMMO_MAX });
+    n.ticks(SNAP_EVERY * 3);
+    expect(n.snap(n.ann).packs).toBe(0b1111);
+  });
+
+  it('are not taken without the gun, nor by a player who lies down, nor from out of reach', () => {
+    const m = match();
+    m.put(m.cy, 20, -20);
+    m.put(m.bob, -20, -20, { ammo: 3, hp: 0, down: 30 });
+    // 1 m off, past PACK_R, and 3 m above the pack.
+    m.put(m.dee, 21, -20, { ammo: 3 });
+    m.put(m.ann, 20, -20, { ammo: 3, y: 4, ground: false, mode: MODE.AIR });
+    m.ticks(SNAP_EVERY * 2);
+    expect([
+      m.state(m.cy).ammo,
+      m.state(m.bob).ammo,
+      m.state(m.dee).ammo,
+      m.state(m.ann).ammo,
+    ]).toEqual([-1, 3, 3, 3]);
+    expect(bits(m)).toBe(0b1111);
+    // An empty gun (0 shots) is a gun: it takes it.
+    m.put(m.cy, 20, -20, { ammo: 0 });
+    m.ticks(1);
+    expect(m.state(m.cy).ammo).toBe(AMMO_PACK);
+  });
+
+  it('are back for a new match, which also takes the guns', () => {
+    const m = match({ timeLimit: 1 });
+    m.put(m.cy, 20, -20, { ammo: 10 });
+    m.ticks(1);
+    expect(m.room['gone'][2]).toBeGreaterThan(0);
+    m.ticks(TICK_HZ + END_SCREEN * TICK_HZ + 2);
+    expect(m.snap(m.ann).packs).toBe(0b1111);
+    expect(m.state(m.cy).ammo).toBe(-1);
   });
 });
 
@@ -577,7 +660,7 @@ describe('a match', () => {
       });
     }
     expect([m.state(m.cy).shots, m.state(m.cy).hits]).toEqual([40, 30]);
-    expect(m.snap(m.ann).packs).toBe(0b11);
+    expect(m.snap(m.ann).packs).toBe(0b1111);
   });
 
   it('resets the packs when the room empties', () => {
@@ -588,7 +671,7 @@ describe('a match', () => {
     for (const c of [m.ann, m.bob, m.cy, m.dee]) {
       m.room.disconnect(c);
     }
-    expect(m.room['gone']).toEqual([0, 0]);
+    expect(m.room['gone']).toEqual([0, 0, 0, 0]);
   });
 });
 
@@ -609,6 +692,7 @@ describe('random fire', () => {
     let hits = 0;
     let went = 0;
     let respawned = 0;
+    let taken = 0;
     let prev = all.map(c => ({ ...m.state(c) }));
     for (let k = 0; k < 6000; k++) {
       all.forEach((c, n) => {
@@ -653,9 +737,10 @@ describe('random fire', () => {
         hits += (p.hits - prev[n].hits) & 255;
         went += +(p.down > 0 && prev[n].down === 0);
         respawned += +(p.down === 0 && prev[n].down > 0);
-        // Nobody takes the gun again without a rack: ammo only goes up at one.
+        // Ammo only goes up at a rack or an ammo pack.
         if (p.ammo > prev[n].ammo) {
-          expect(p.ammo, label).toBe(AMMO_MAX);
+          expect(p.ammo === AMMO_MAX || p.ammo - prev[n].ammo === AMMO_PACK, label).toBe(true);
+          taken += +(p.ammo - prev[n].ammo === AMMO_PACK);
         }
         prev[n] = { ...p };
       });
@@ -688,12 +773,18 @@ describe('random fire', () => {
           });
         }
         prev = all.map(c => ({ ...m.state(c) }));
+        // Now and then one with a half empty gun stands on an ammo pack (they are far off the fight).
+        if (k % 200 === 0 && !m.state(all[1]).down) {
+          Object.assign(m.state(all[1]), { x: 20, z: -20, ammo: 10 });
+        }
+        prev = all.map(c => ({ ...m.state(c) }));
       }
     }
     // The run is not a trivial one: shots hit, players went down and came back.
     expect(hits).toBeGreaterThan(50);
     expect(went).toBeGreaterThan(3);
     expect(respawned).toBeGreaterThan(1);
+    expect(taken).toBeGreaterThan(2);
     expect(down.size).toBeGreaterThan(1);
   }, 60_000);
 });

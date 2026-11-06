@@ -1,4 +1,6 @@
 import {
+  AMMO_MAX,
+  AMMO_PACK,
   DOWN_TICKS,
   HP_MAX,
   INPUT_BURST,
@@ -106,7 +108,7 @@ export class Room {
     this.rules = { ...RULES, ...rules };
     this.world = build(map);
     this.ctf = new Ctf(this.world, this.rules);
-    this.gone = (map.packs ?? []).map(() => 0);
+    this.gone = [...(map.packs ?? []), ...(map.ammo ?? [])].map(() => 0);
   }
 
   /** Number of joined players. */
@@ -319,18 +321,33 @@ export class Room {
     }
   }
 
-  /** The packs: one that is gone comes back after PACK_BACK s; a hurt player standing at one takes it. */
+  /**
+   * The packs, health ones first, then the ammo ones: one that is gone comes back after PACK_BACK
+   * s. A health pack goes to a hurt player standing at it, an ammo pack to one with the gun and
+   * less than AMMO_MAX shots. Both change the state between two inputs, like a hit: the snapshot
+   * carries the result and the predictor replays its unacked inputs on it.
+   */
   private heal(players: Player[]): void {
-    this.world.def.packs?.forEach((at, k) => {
+    const { packs = [], ammo = [] } = this.world.def;
+    [...packs, ...ammo].forEach((at, k) => {
       if (this.gone[k] > 0) {
         this.gone[k]--;
         return;
       }
+      const health = k < packs.length;
       const p = players.find(
-        q => q.state.hp < HP_MAX && !q.state.down && within(q.state, at, PACK_R),
+        ({ state: q }) =>
+          !q.down &&
+          (health ? q.hp < HP_MAX : q.ammo >= 0 && q.ammo < AMMO_MAX) &&
+          within(q, at, PACK_R),
       );
       if (p) {
-        p.state.hp = Math.min(HP_MAX, p.state.hp + PACK_HP);
+        const q = p.state;
+        if (health) {
+          q.hp = Math.min(HP_MAX, q.hp + PACK_HP);
+        } else {
+          q.ammo = Math.min(AMMO_MAX, q.ammo + AMMO_PACK);
+        }
         this.gone[k] = PACK_BACK * TICK_HZ;
       }
     });

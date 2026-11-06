@@ -205,6 +205,8 @@ export const DOWN_TICKS = 120;
 /** Health a pack gives, up to HP_MAX, and seconds before a taken pack is back. */
 export const PACK_HP = 2;
 export const PACK_BACK = 20;
+/** Shots an ammo pack gives, up to AMMO_MAX. */
+export const AMMO_PACK = 20;
 /** Metres from a pack or a rack, feet to point on the floor plane, that take it. */
 export const PACK_R = 0.9;
 export const RACK_R = 1.2;

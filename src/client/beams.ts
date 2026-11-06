@@ -47,6 +47,8 @@ export interface Tracer {
   shock(at: Vec3): void;
   /** One frame of the crackle around a shocked runner whose middle is `at`: a few bolts, flickering. */
   crackle(at: Vec3): void;
+  /** One spark out of `at`, up and a little aside: a cut limb's stump spitting. */
+  spit(at: Vec3): void;
   /** Where the own muzzle is now: the own beams start there, so that a kick of the view does not swing them. */
   mount(a: Vec3): void;
   /** Ages everything by dt seconds and drops what is over. */
@@ -142,6 +144,9 @@ export const createTracer = (): Tracer => {
           bolt([at[0] + rnd() * 0.4, at[1] + rnd() * 0.7, at[2] + rnd() * 0.4], 0.35);
         }
       }
+    },
+    spit(at) {
+      sparks.push({ p: at, v: [rnd(), rnd() + 2, rnd()], age: 0 });
     },
     mount(a) {
       beams.forEach(b => b.own && (b.a = a));

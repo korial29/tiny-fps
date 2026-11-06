@@ -82,6 +82,14 @@ export const SOUND = {
   /** A tackle: the impact, and the grunt of the one tackled. */
   TACKLE: 14,
   GRUNT: 15,
+  /** The gun: a shot, the shooter's hit sound, hurt, going down, taking the gun or a refill, a health pack, an empty click. */
+  LASER: 16,
+  HIT: 17,
+  HURT: 18,
+  DOWN: 19,
+  GUN: 20,
+  PACK: 21,
+  DRY: 22,
 } as const;
 
 /**
@@ -162,6 +170,46 @@ export const LAYERS: Voice[][] = [
   [
     [1, 170, -0.9, 0.012, 0.05, 0.17, 0.06, 0.2, 0, 1, 0.5],
     [3, 3000, 0, 0.01, 0.04, 0.14, 0.4, 0.12, 0, 1, 0.5],
+  ],
+  // LASER: a bright saw falling an octave in a tenth of a second, a lower square under it and a crackle.
+  [
+    [1, 3600, -10, 0.001, 0.01, 0.09, 0, 0.5, 0, 1, 0.4],
+    [0, 1900, -8, 0.001, 0, 0.06, 0, 0.3, 0, 1, 0.25],
+    [3, 9000, 0, 0.001, 0, 0.03, 0, 0.4, 0, 1, 0.25],
+  ],
+  // HIT, as in Quake 3: a short metallic ping, a sine at 1.7 kHz with an inharmonic overtone, decaying fast.
+  [
+    [2, 1700, 0, 0.001, 0, 0.13, 0, 1, 0, 1, 0.6],
+    [2, 4700, 0, 0.001, 0, 0.05, 0, 1, 0, 1, 0.3],
+    [2, 1790, 0, 0.001, 0, 0.09, 0, 1, 0, 1, 0.3],
+  ],
+  // HURT: a low thud and a breath.
+  [
+    [2, 110, -2.5, 0.002, 0.01, 0.2, 0, 1, 0, 1, 0.9],
+    [3, 2500, 0, 0.02, 0.03, 0.17, 0.3, 0.12, 0, 1, 0.5, 0.04],
+  ],
+  // DOWN: a heavy thump, a saw falling with a wobble and a rustle of the fall.
+  [
+    [2, 90, -1.2, 0.002, 0.04, 0.45, 0, 1, 0, 1, 0.9],
+    [1, 180, -1.5, 0.01, 0.06, 0.4, 0.05, 0.2, 0, 1, 0.45],
+    [3, 3000, 0, 0.02, 0, 0.35, 0.3, 0.1, 0, 1, 0.4, 0.12],
+  ],
+  // GUN: a click, a square rising and a shimmer over it.
+  [
+    [3, 5000, 0, 0.001, 0, 0.02, 0, 0.5, 0, 1, 0.5],
+    [0, 260, 1.5, 0.005, 0.06, 0.12, 0, 0.25, 0, 1, 0.4, 0.02],
+    [2, 1040, 0.5, 0.003, 0.03, 0.18, 0.01, 1, 0, 1, 0.25, 0.1],
+  ],
+  // PACK: three sines up an arpeggio.
+  [
+    [2, 523, 0, 0.003, 0.03, 0.1, 0, 1, 0, 1, 0.4],
+    [2, 659, 0, 0.003, 0.03, 0.1, 0, 1, 0, 1, 0.4, 0.07],
+    [2, 880, 0, 0.003, 0.05, 0.2, 0.01, 1, 0, 1, 0.45, 0.14],
+  ],
+  // DRY: the hammer on nothing.
+  [
+    [0, 190, -3, 0.001, 0, 0.04, 0, 0.6, 0, 1, 0.6],
+    [3, 6000, 0, 0.001, 0, 0.02, 0, 0.5, 0, 1, 0.5],
   ],
 ];
 

@@ -385,6 +385,7 @@ describe('createRenderer', () => {
       id: 7,
       update: vi.fn(),
       pose: vi.fn(),
+      muzzle: () => [0, 0, 0] as [number, number, number],
       draw,
     });
 
@@ -549,6 +550,66 @@ describe('createRenderer', () => {
       // The base pads and rings, a pole and its cloth: a few hundred vertices more than the room.
       expect(depth[1]).toBeGreaterThan(FLOOR_VERTS + 300);
       expect(depth[1]).toBe(world[1]);
+    });
+
+    it('draws the racks and the health packs that are there with the other things, and they cast shadows', () => {
+      const rd = createRenderer(canvas, ROOM);
+      const bases: [number, number, number][] = [
+        [0, 0, 0],
+        [4, 0, 4],
+      ];
+      const scene = (
+        racks: ([number, number, number] | undefined)[],
+        packs: [number, number, number][],
+      ) => {
+        calls.length = 0;
+        rd.frame([1, 1.6, 1], 0, 0, [], new Map(), createEffects(), [], undefined, {
+          bases,
+          flags: [],
+          racks,
+          packs,
+        });
+        return draws()[0][1] - FLOOR_VERTS;
+      };
+      // The two bases alone.
+      const none = scene([undefined, undefined], []);
+      const pack = scene([undefined, undefined], [[2, 0, 2]]) - none;
+      const rack = scene([[1, 0, 1], undefined], []) - none;
+      expect(pack).toBeGreaterThan(50);
+      expect(rack).toBeGreaterThan(300);
+      // Each one more is one more.
+      expect(
+        scene(
+          [undefined, undefined],
+          [
+            [2, 0, 2],
+            [3, 0, 3],
+          ],
+        ) - none,
+      ).toBe(2 * pack);
+      const [depth, world] = draws();
+      expect(depth[1]).toBe(world[1]);
+    });
+
+    it('draws the laser beams after everything that casts a shadow: lit by themselves, in the colour pass only', () => {
+      const rd = createRenderer(canvas, ROOM);
+      frame(rd);
+      calls.length = 0;
+      const draw = vi.fn((out: number[]) =>
+        out.push(...Array.from({ length: 6 * STRIDE }, () => 0)),
+      );
+      rd.frame([1, 1.6, 1], 0, 0, [], new Map(), createEffects(), [], undefined, undefined, {
+        shoot: vi.fn(),
+        mount: vi.fn(),
+        update: vi.fn(),
+        draw,
+        lights: () => [],
+        count: 1,
+      });
+      expect(draw).toHaveBeenCalledWith(expect.any(Array), [1, 1.6, 1]);
+      const [depth, world] = draws();
+      expect(depth[1]).toBe(FLOOR_VERTS);
+      expect(world[1]).toBe(FLOOR_VERTS + 6);
     });
 
     it('uploads its direction and colour, and the daylight, with the world', () => {

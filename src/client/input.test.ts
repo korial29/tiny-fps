@@ -267,6 +267,65 @@ describe('createInput', () => {
     });
   });
 
+  describe('the trigger', () => {
+    const button = (type: string, b: number) =>
+      document.dispatchEvent(new MouseEvent(type, { button: b }));
+
+    it('is the left button: held while it is down, under the lock', () => {
+      make();
+      lock(true);
+      button('mousedown', 0);
+      expect(ctl.keys).toBe(KEY.FIRE);
+      expect(KEY.FIRE).toBe(256);
+      key('keydown', 'KeyW');
+      expect(ctl.keys).toBe(KEY.FIRE | KEY.FORWARD);
+      expect(ctl.take()).toBe(KEY.FIRE | KEY.FORWARD);
+      button('mouseup', 0);
+      expect(ctl.keys).toBe(KEY.FORWARD);
+    });
+
+    it('is not on the right button, nor the middle one', () => {
+      make();
+      lock(true);
+      button('mousedown', 2);
+      button('mousedown', 1);
+      expect(ctl.keys).toBe(0);
+      button('mousedown', 0);
+      button('mouseup', 2);
+      expect(ctl.keys).toBe(KEY.FIRE);
+    });
+
+    it('does nothing before the lock: the click that takes it does not fire', () => {
+      make();
+      button('mousedown', 0);
+      expect(ctl.keys).toBe(0);
+    });
+
+    it('lets go with the button even if the lock is lost first, and with the lock and the window', () => {
+      make();
+      lock(true);
+      button('mousedown', 0);
+      lock(false);
+      expect(ctl.keys).toBe(0);
+      lock(true);
+      button('mousedown', 0);
+      window.dispatchEvent(new Event('blur'));
+      expect(ctl.keys).toBe(0);
+      lock(true);
+      button('mousedown', 0);
+      lock(false);
+      button('mouseup', 0);
+      expect(ctl.keys).toBe(0);
+    });
+
+    it('is not a dash, nor a move: only the fire bit', () => {
+      make();
+      lock(true);
+      button('mousedown', 0);
+      expect(ctl.keys & ~KEY.FIRE).toBe(0);
+    });
+  });
+
   it('calls onMute once per press of M, by code, under the lock only', () => {
     let n = 0;
     make(() => n++);

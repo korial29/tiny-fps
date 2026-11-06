@@ -6,8 +6,10 @@ import type { ServerText } from '../shared/protocol';
 import type { PlayerInfo, SocketLike, Snapshot } from '../shared/types';
 import { build, hidden } from '../shared/world';
 import { createAudio, savedMute, toggleMute } from './audio';
+import { createTracer } from './beams';
 import { beats, cues, say } from './beats';
 import { createBody } from './body';
+import { createCombat } from './combat';
 import { createEffects } from './effects';
 import { flagDraws } from './flag';
 import { createFoley } from './foley';
@@ -17,6 +19,7 @@ import { createInput } from './input';
 import { createPredictor } from './predict';
 import { gather } from './lights';
 import { marks } from './marks';
+import { packsOf } from './props';
 import { createRenderer } from './render';
 import type { Renderer } from './render';
 
@@ -81,6 +84,8 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const fx = createEffects();
   const foley = createFoley(audio);
   const body = createBody(world);
+  const tracer = createTracer();
+  const combat = createCombat(world, audio, hud, fx, tracer, ctl);
   let rd: Renderer | undefined;
   try {
     rd = createRenderer(canvas, world);
@@ -88,6 +93,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     // No WebGL2: stay connected, say so on the title screen.
   }
   const bases = world.def.teams.map(t => t.base);
+  const racks = world.def.teams.map(t => t.rack);
   let roster: PlayerInfo[] = [];
   /** The own player's id and team, from the roster. */
   let you = { id: -1, team: 0 };
@@ -192,7 +198,9 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       acc = 0;
     }
     for (; ready && acc >= STEP; acc -= STEP) {
+      const was = predictor.me(1);
       const input = predictor.step({ keys: ctl.take(), yaw: ctl.yaw, pitch: ctl.pitch }, now);
+      combat.step(was, predictor.me(1));
       if (open) {
         ws.send(encodeInput(input));
       }
@@ -205,18 +213,30 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     const dt = Math.min((now - before) / 1000, 0.1);
     // The flags and the bases for the renderer and the lights, and the HUD that goes with them.
     const who = (id: number) => (id == you.id ? me : others.find(p => p.id == id));
-    const ctf = match && { bases, flags: flagDraws(match.flags, bases, who) };
+    const ctf = match && {
+      bases,
+      flags: flagDraws(match.flags, bases, who),
+      racks,
+      packs: packsOf(world.def.packs, match.packs),
+    };
     // What the live steps did, once: the camera and the sounds read it, the inputs sent do not.
     const hit = predictor.events();
     fx.update(me, ctl.keys, dt, hit);
     hud.hurt(fx.hurt);
     foley.me(me, hit, fx.stride);
     foley.others(others);
-    body.update(me, dt);
+    body.update(me, dt, fx.kick);
+    // The camera moves for the eye only: the inputs keep sending the real height and angles.
+    const cam: [number, number, number] = [eye[0], eye[1] + fx.dy, eye[2]];
+    const pitch = ctl.pitch + fx.pitch;
+    combat.frame(
+      me && { eye, cam, yaw: ctl.yaw, pitch: ctl.pitch, drawn: pitch, muzzle: body.muzzle() },
+      me,
+      others,
+      ctl.keys,
+      dt,
+    );
     if (me && rd) {
-      // The camera moves for the eye only: the inputs keep sending the real height and angles.
-      const cam: [number, number, number] = [eye[0], eye[1] + fx.dy, eye[2]];
-      const pitch = ctl.pitch + fx.pitch;
       rd.frame(
         cam,
         ctl.yaw,
@@ -224,9 +244,13 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         others,
         colors,
         fx,
-        gather({ eye: cam, yaw: ctl.yaw, pitch, others, t: now / 1000, ctf }),
+        [
+          ...gather({ eye: cam, yaw: ctl.yaw, pitch, others, t: now / 1000, ctf }),
+          ...tracer.lights(),
+        ],
         body,
         ctf,
+        tracer,
       );
     }
     if (match) {

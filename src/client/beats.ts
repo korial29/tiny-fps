@@ -1,7 +1,7 @@
 // What happened in the match, read off two snapshots in a row: the banners and the sounds of the
-// flags and of the tackles. The wire carries states, not events: a take, a drop, a return, a capture,
-// a new match and a tackle are the differences between the flags, the score and the stumble timers
-// of one snapshot and the next. No DOM.
+// flags, of the tackles and of the katana's shocks. The wire carries states, not events: a take, a
+// drop, a return, a capture, a new match, a tackle and a shock are the differences between the flags,
+// the score and the stumble timers of one snapshot and the next. No DOM.
 import { TEAM_NAME } from '../shared/constants';
 import { FLAG } from '../shared/types';
 import type { Snapshot } from '../shared/types';
@@ -16,7 +16,9 @@ export type Beat =
   | { kind: 'capture'; team: number }
   | { kind: 'start' }
   /** Player `who` was tackled by player `by`, at `at` (the middle of his body in the snapshot). */
-  | { kind: 'tackle'; who: number; by: number; at: Vec3 };
+  | { kind: 'tackle'; who: number; by: number; at: Vec3 }
+  /** Player `who` was shocked by the katana of player `by`: a stumble with `zap` set. */
+  | { kind: 'shock'; who: number; by: number; at: Vec3 };
 
 /**
  * The beats from snapshot `a` to `b`. Nothing at the first snapshot, nothing while a match is
@@ -24,7 +26,8 @@ export type Beat =
  * its flags and score reset from. A capture is one beat: the carried flag going home with it is
  * not a return. A carried flag that is home in the next snapshot without a capture was dropped and
  * sent home by its tackler within the same two ticks: one return. A tackle is a player whose
- * stumble timer is higher than it was (a new stumble), one beat each, after the flag beats.
+ * stumble timer is higher than it was (a new stumble), one beat each, after the flag beats; a
+ * stumble with `zap` is a shock of the katana, not a tackle.
  */
 export const beats = (a: Snapshot | undefined, b: Snapshot): Beat[] => {
   if (!a) {
@@ -55,7 +58,12 @@ export const beats = (a: Snapshot | undefined, b: Snapshot): Beat[] => {
   });
   for (const p of b.players) {
     if (p.stun > (a.players.find(q => q.id === p.id)?.stun ?? Infinity)) {
-      out.push({ kind: 'tackle', who: p.id, by: p.by, at: [p.x, p.y + 1, p.z] });
+      out.push({
+        kind: p.zap ? 'shock' : 'tackle',
+        who: p.id,
+        by: p.by,
+        at: [p.x, p.y + 1, p.z],
+      });
     }
   }
   return out;
@@ -63,7 +71,7 @@ export const beats = (a: Snapshot | undefined, b: Snapshot): Beat[] => {
 
 /**
  * A line for the banner, and the team whose colour it is in, or none: a tackle is told to the
- * tackler only. `me` is the own player.
+ * tackler only, a shock to nobody. `me` is the own player.
  */
 export const say = (
   beat: Beat,
@@ -100,6 +108,8 @@ export const say = (
       return { team: beat.team, text: `${TEAM_NAME[beat.team]} scored` };
     case 'tackle':
       return beat.by === me.id ? { team: me.team, text: `Tackled ${name(beat.who)}!` } : undefined;
+    case 'shock':
+      return undefined;
     default:
       return { text: 'New match' };
   }
@@ -117,7 +127,8 @@ export interface Cue {
  * The sounds of a beat: a lower pitch for bad news for the own team (its flag taken, the enemy
  * flag dropped or returned, a point for the other side), the plain one for good news. A tackle
  * is an impact at the spot for the others, a close one for the tackler, and for the one tackled
- * an impact and a grunt, centred. None for a new match.
+ * an impact and a grunt, centred. A shock is a zap, centred for the one shocked and at the spot
+ * for the others; the attacker hears his own with the hit (combat.ts). None for a new match.
  */
 export const cues = (beat: Beat, me: { id: number; team: number }): Cue[] => {
   const { team } = me;
@@ -136,6 +147,12 @@ export const cues = (beat: Beat, me: { id: number; team: number }): Cue[] => {
         : beat.by === me.id
           ? [{ id: SOUND.TACKLE, gain: 0.8, rate: 1.1 }]
           : [{ id: SOUND.TACKLE, at: beat.at }];
+    case 'shock':
+      return beat.who === me.id
+        ? [{ id: SOUND.ZAP }]
+        : beat.by === me.id
+          ? []
+          : [{ id: SOUND.ZAP, at: beat.at }];
     default:
       return [];
   }

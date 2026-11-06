@@ -325,6 +325,7 @@ describe('the gun on the HUD', () => {
   afterEach(() => vi.useRealTimers());
   const pips = () => [...screen.querySelectorAll('li')].map(li => !li.classList.contains('e'));
   const ammo = () => screen.querySelector<HTMLElement>('dl')!;
+  const count = () => screen.querySelector<HTMLElement>('data')!;
 
   it('shows the health as HP_MAX pips, the empty ones outlined', () => {
     expect(pips()).toHaveLength(HP_MAX);
@@ -350,10 +351,10 @@ describe('the gun on the HUD', () => {
     expect(ammo().hidden).toBe(true);
     hud.vitals(5, 60);
     expect(ammo().hidden).toBe(false);
-    expect(ammo().textContent).toBe('60');
+    expect(count().textContent).toBe('60');
     expect(ammo().querySelector('svg')).not.toBeNull();
     hud.vitals(5, 41);
-    expect(ammo().textContent).toBe('41');
+    expect(count().textContent).toBe('41');
     hud.vitals(5, -1);
     expect(ammo().hidden).toBe(true);
   });
@@ -361,10 +362,82 @@ describe('the gun on the HUD', () => {
   it('marks an empty gun, and reads 0', () => {
     hud.vitals(5, 0);
     expect(ammo().hidden).toBe(false);
-    expect(ammo().textContent).toBe('0');
+    expect(count().textContent).toBe('0');
     expect(ammo().classList.contains('e')).toBe(true);
     hud.vitals(5, 3);
     expect(ammo().classList.contains('e')).toBe(false);
+  });
+
+  describe('the weapon in hand', () => {
+    const glyphs = () => [...ammo().querySelectorAll('svg')];
+    const slots = () => screen.querySelector<HTMLElement>('dl small')!;
+    const lit = () =>
+      [...slots().children].filter(k => k.classList.contains('a')).map(k => k.textContent);
+
+    it('has a gun glyph and a katana glyph, in the same place', () => {
+      expect(glyphs()).toHaveLength(2);
+      expect(ammo().querySelector('data')).not.toBeNull();
+    });
+
+    it('shows the katana in hand with no counter, and the gun with it', () => {
+      hud.vitals(5, 30, true, true);
+      expect(ammo().hidden).toBe(false);
+      expect(ammo().classList.contains('k')).toBe(true);
+      hud.vitals(5, 30, true, false);
+      expect(ammo().classList.contains('k')).toBe(false);
+      expect(count().textContent).toBe('30');
+    });
+
+    it('shows the katana alone whatever `wield` says: it is all there is', () => {
+      hud.vitals(5, -1, true, false);
+      expect(ammo().hidden).toBe(false);
+      expect(ammo().classList.contains('k')).toBe(true);
+      hud.vitals(5, -1, true, true);
+      expect(ammo().classList.contains('k')).toBe(true);
+    });
+
+    it('hides the whole block with neither, and for the gun alone as before', () => {
+      hud.vitals(5, -1, false, false);
+      expect(ammo().hidden).toBe(true);
+      hud.vitals(5, 12, false, false);
+      expect(ammo().hidden).toBe(false);
+      expect(ammo().classList.contains('k')).toBe(false);
+    });
+
+    it('does not mark the katana in hand as an empty gun', () => {
+      hud.vitals(5, 0, true, true);
+      expect(ammo().classList.contains('e')).toBe(false);
+      hud.vitals(5, 0, true, false);
+      expect(ammo().classList.contains('e')).toBe(true);
+    });
+
+    it('tells the slots, 1 gun and 2 katana, only while both are carried, the one in hand lit', () => {
+      hud.vitals(5, 30, false, false);
+      expect(slots().hidden).toBe(true);
+      hud.vitals(5, -1, true, true);
+      expect(slots().hidden).toBe(true);
+      hud.vitals(5, 30, true, false);
+      expect(slots().hidden).toBe(false);
+      expect(slots().textContent).toBe('1 gun2 katana');
+      expect(lit()).toEqual(['1 gun']);
+      hud.vitals(5, 30, true, true);
+      expect(lit()).toEqual(['2 katana']);
+    });
+
+    it('keeps the slots out of the counter, above it and not below, where the Leave button is', () => {
+      expect(HUD_CSS).toMatch(/dl small\{position:absolute;bottom:100%/);
+      expect(HUD_CSS).not.toMatch(/dl small\{[^}]*top:100%/);
+    });
+
+    it('says on the title screen how to pick and how to cut', () => {
+      hud.title('Click to play', 'Rooftops');
+      const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
+      expect(rows).toContain('1, 2, wheelgun, katana');
+      expect(rows).toContain('Katana + Wthrust');
+      expect(rows).toContain('Katana + A or Dcut across');
+      expect(rows).toContain('Katana aloneslash');
+      expect(screen.querySelector('aside')!.textContent).toMatch(/katana at the one beside it/);
+    });
   });
 
   it('flashes a hit marker on the crosshair for a moment, and again on the next hit', () => {

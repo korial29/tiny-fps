@@ -90,6 +90,10 @@ export const SOUND = {
   GUN: 20,
   PACK: 21,
   DRY: 22,
+  /** The katana: the shing of drawing or sheathing it, the swish of a cut (played faster for a thrust, slower for a slash), the electric zap of a hit. */
+  SHING: 23,
+  SWISH: 24,
+  ZAP: 25,
 } as const;
 
 /**
@@ -210,6 +214,25 @@ export const LAYERS: Voice[][] = [
   [
     [0, 190, -3, 0.001, 0, 0.04, 0, 0.6, 0, 1, 0.6],
     [3, 6000, 0, 0.001, 0, 0.02, 0, 0.5, 0, 1, 0.5],
+  ],
+  // SHING: a steel scrape rising, and the ring of the blade over it, three inharmonic partials.
+  [
+    [3, 6000, 1.5, 0.002, 0.04, 0.07, 0.2, 0.6, 0, 1, 0.5],
+    [2, 3300, 0.05, 0.004, 0.02, 0.32, 0.012, 1, 0, 1, 0.3, 0.04],
+    [2, 5250, 0, 0.003, 0, 0.22, 0, 1, 0, 1, 0.18, 0.04],
+    [2, 7900, 0, 0.003, 0, 0.12, 0, 1, 0, 1, 0.1, 0.04],
+  ],
+  // SWISH: a noise sweep that rises, and a falling tail of it.
+  [
+    [3, 1800, 7, 0.07, 0, 0.09, 0, 0.5, 0, 1, 0.6],
+    [3, 5000, -6, 0.01, 0, 0.12, 0.2, 0.3, 0, 1, 0.4, 0.08],
+  ],
+  // ZAP: a crackle of held noise that tears upward, a warbling buzz under it, a short ping and a sizzle.
+  [
+    [3, 900, 1.5, 0.001, 0.05, 0.14, 0.9, 1, 0, 1, 0.55],
+    [1, 95, 0.6, 0.001, 0.07, 0.12, 0.6, 0.5, 0.05, 2, 0.35],
+    [2, 2600, -4, 0.001, 0, 0.1, 0.3, 1, 0, 1, 0.25],
+    [3, 7000, 0, 0.001, 0, 0.04, 0, 0.6, 0, 1, 0.3, 0.1],
   ],
 ];
 

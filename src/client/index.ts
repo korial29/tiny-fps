@@ -151,6 +151,11 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
             } else if (beat.by == you.id) {
               fx.punch();
             }
+          } else if (beat.kind == 'shock') {
+            tracer.shock(beat.at);
+            if (beat.who == you.id) {
+              fx.jolt();
+            }
           }
         }
         match = s;
@@ -201,6 +206,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       const was = predictor.me(1);
       const input = predictor.step({ keys: ctl.take(), yaw: ctl.yaw, pitch: ctl.pitch }, now);
       combat.step(was, predictor.me(1));
+      ctl.track(was, predictor.me(1));
       if (open) {
         ws.send(encodeInput(input));
       }

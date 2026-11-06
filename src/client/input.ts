@@ -1,5 +1,6 @@
 import { MAX_PITCH } from '../shared/constants';
 import { KEY } from '../shared/types';
+import type { PlayerState } from '../shared/types';
 
 /** Radians per pixel of mouse movement. */
 const SENS = 0.0025;
@@ -33,6 +34,24 @@ export const dashKeys = (keys: number, dir: number): number => (keys & ~DIRS) | 
 /** The KEY bit of a KeyboardEvent.code, 0 for a key the game ignores. */
 export const keyBit = (code: string): number => BITS[code] ?? 0;
 
+/** The wheel swaps the weapon at most this often (ms): a trackpad's flick is a hundred events, one swap. */
+export const WHEEL_MS = 250;
+
+/** Whether the katana is the choice after a key: 1 the gun, 2 the katana, any other key keeps it. */
+export const picked = (blade: boolean, code: string): boolean =>
+  code == 'Digit1' ? false : code == 'Digit2' ? true : blade;
+
+/**
+ * The choice after a step of the own player. Picking the katana up switches to it, once; losing
+ * both weapons (going down) goes back to the gun; anything else, the gun picked up included, keeps it.
+ */
+export const chosen = (blade: boolean, was?: PlayerState, now?: PlayerState): boolean =>
+  !now || (!now.blade && now.ammo < 0) ? false : !!now.blade && !!was && !was.blade ? true : blade;
+
+/** The keys of a step with KEY.BLADE set while the katana is the choice. */
+export const withBlade = (keys: number, blade: boolean): number =>
+  blade ? keys | KEY.BLADE : keys;
+
 /** Live look angles and held keys; the loop reads them once per step and per frame. */
 export interface Controls {
   /** Radians, [0, 2π). Mouse right turns right, which lowers yaw. */
@@ -41,12 +60,16 @@ export interface Controls {
   pitch: number;
   /** KEY bits held now. */
   keys: number;
+  /** The katana is the chosen weapon (1, 2 and the wheel), the gun otherwise. */
+  blade: boolean;
   /**
-   * The KEY bits of the next step, read once per step. Same as `keys`, except for the step right
-   * after a double tap: it carries DASH and only the tapped direction, so the dash goes that way
-   * whatever else is held, and nothing else is on the wire.
+   * The KEY bits of the next step, read once per step. Same as `keys`, plus BLADE while the katana
+   * is chosen, except for the step right after a double tap: it carries DASH and only the tapped
+   * direction, so the dash goes that way whatever else is held, and nothing else is on the wire.
    */
   take(): number;
+  /** One live step of the own player, its state before and after: a katana picked up is chosen, losing both weapons chooses the gun. */
+  track(was?: PlayerState, now?: PlayerState): void;
   /** The canvas holds the pointer lock. */
   locked(): boolean;
   /** Removes every listener. */
@@ -56,25 +79,28 @@ export interface Controls {
 /**
  * Click the canvas to lock the pointer; while locked the mouse looks, the keys move (WASD, Shift
  * sprints, Space jumps, C crouches, a direction key pressed twice within DOUBLE_TAP_MS dashes that
- * way, the left button fires) and M calls `onMute`.
+ * way, the left button fires or cuts, 1 and 2 or the wheel pick the gun or the katana) and M calls `onMute`.
  */
 export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Controls => {
   const ac = new AbortController();
-  const on = <T extends EventTarget>(t: T, type: string, cb: (e: never) => void) =>
-    t.addEventListener(type, cb as EventListener, { signal: ac.signal });
+  const on = <T extends EventTarget>(t: T, type: string, cb: (e: never) => void, o = {}) =>
+    t.addEventListener(type, cb as EventListener, { signal: ac.signal, ...o });
   /** Direction keys down now, when each was last pressed (ms), and the dash waiting for its step. */
   const down = new Set<string>();
   const tapped = new Map<string, number>();
   let pending = 0;
+  let swapped = -Infinity;
   const c: Controls = {
     yaw: 0,
     pitch: 0,
     keys: 0,
+    blade: false,
     take() {
       const keys = pending ? dashKeys(c.keys, pending) : c.keys;
       pending = 0;
-      return keys;
+      return withBlade(keys, c.blade);
     },
+    track: (was, now) => void (c.blade = chosen(c.blade, was, now)),
     locked: () => (canvas.getRootNode() as Document | ShadowRoot).pointerLockElement == canvas,
     destroy: () => ac.abort(),
   };
@@ -99,8 +125,27 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
       c.keys &= ~KEY.FIRE;
     }
   });
+  // The wheel swaps the two weapons, under the lock only.
+  on(
+    document,
+    'wheel',
+    (e: WheelEvent) => {
+      const now = performance.now();
+      if (c.locked() && e.deltaY) {
+        e.preventDefault();
+        if (now - swapped >= WHEEL_MS) {
+          swapped = now;
+          c.blade = !c.blade;
+        }
+      }
+    },
+    { passive: false },
+  );
   on(document, 'keydown', (e: KeyboardEvent) => {
     const bit = keyBit(e.code);
+    if (c.locked()) {
+      c.blade = picked(c.blade, e.code);
+    }
     if (e.code == 'KeyM' && !e.repeat && c.locked()) {
       onMute();
     }

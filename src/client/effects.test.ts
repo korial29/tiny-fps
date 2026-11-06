@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DASH_COOLDOWN, DASH_TICKS } from '../shared/constants';
 import { STILL } from '../shared/physics';
-import { EV, KEY, MODE, SIDE } from '../shared/types';
+import { CUT, EV, KEY, MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { createEffects, stepLength, stepping } from './effects';
 import type { Effects } from './effects';
@@ -371,6 +371,7 @@ describe('tackle', () => {
 describe('shape', () => {
   it('holds the numbers the camera draws and the stride, and update', () => {
     expect(Object.keys(createEffects()).sort()).toEqual([
+      'cut',
       'dy',
       'fire',
       'fov',
@@ -438,5 +439,54 @@ describe('the gun', () => {
     run(fx, me(), 120);
     expect(fx.lie).toBeLessThan(0.01);
     expect(Math.abs(fx.dy)).toBeLessThan(0.05);
+  });
+});
+
+describe('the katana', () => {
+  /** The extremes of pitch, roll and fov over half a second after a cut struck, on a player standing still. */
+  const strike = (c: number) => {
+    const fx = createEffects();
+    run(fx, me(), 0.3);
+    fx.cut(c);
+    const out = { pitch: [0, 0], roll: [0, 0], fov: 0, hurt: 0 };
+    for (let t = 0; t < 0.5; t += DT) {
+      fx.update(me(), 0, DT);
+      out.pitch = [Math.min(out.pitch[0], fx.pitch), Math.max(out.pitch[1], fx.pitch)];
+      out.roll = [Math.min(out.roll[0], fx.roll), Math.max(out.roll[1], fx.roll)];
+      out.fov = Math.max(out.fov, fx.fov);
+      out.hurt = Math.max(out.hurt, fx.hurt);
+    }
+    return out;
+  };
+
+  it('dips the look for a slash, punches the field of view for a thrust, and leaves the rest alone', () => {
+    expect(strike(CUT.SLASH).pitch[0]).toBeLessThan(-0.02);
+    expect(strike(CUT.SLASH).fov).toBeLessThan(0.1);
+    expect(strike(CUT.THRUST).fov).toBeGreaterThan(1);
+    expect(strike(CUT.THRUST).pitch[0]).toBeGreaterThan(-0.01);
+    expect(strike(CUT.THRUST).roll).toEqual([0, 0]);
+  });
+
+  it('rolls toward the side a cut across ends on: right for the one from the left', () => {
+    const left = strike(CUT.LEFT);
+    const right = strike(CUT.RIGHT);
+    expect(left.roll[1]).toBeGreaterThan(0.02);
+    expect(left.roll[0]).toBeGreaterThan(-0.02);
+    expect(right.roll[0]).toBeLessThan(-0.02);
+    expect(right.roll[1]).toBeLessThan(0.02);
+  });
+
+  it('stays a small camera punch: no vignette, well under a jolt, and settles', () => {
+    for (const c of [CUT.THRUST, CUT.LEFT, CUT.RIGHT, CUT.SLASH]) {
+      const s = strike(c);
+      expect(s.hurt).toBe(0);
+      expect(s.pitch[0]).toBeGreaterThan(-0.08);
+      expect(s.roll[1]).toBeLessThan(0.08);
+    }
+    const fx = createEffects();
+    fx.cut(CUT.SLASH);
+    run(fx, me(), 1.5);
+    expect(Math.abs(fx.pitch)).toBeLessThan(0.005);
+    expect(fx.fov).toBeCloseTo(0, 1);
   });
 });

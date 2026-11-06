@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AMMO_MAX,
   DASH_COOLDOWN,
   DASH_TICKS,
+  DOWN_TICKS,
+  GUN_COOLDOWN,
+  HP_MAX,
   INTERP_DELAY,
   PLAYER_H,
   RUN_SPEED,
@@ -46,6 +50,8 @@ const snapshot = (tick: number, ...players: SnapPlayer[]): Snapshot => ({
   ...IDLE,
 });
 const fwd = { keys: KEY.FORWARD, yaw: 0, pitch: 0 };
+/** What a hit on the host does to a player who has run out of health. */
+const fell = (p: PlayerState) => Object.assign(p, { hp: 0, down: DOWN_TICKS, ammo: -1, cool: 0 });
 /** The way a tackler of these tests goes: north-east. */
 const TACKLE_WAY = [0.6, -0.8];
 
@@ -128,7 +134,15 @@ describe('prediction against the room', () => {
    * with no network at all, the worst gap to the host's own snapshot at the end, and how far the
    * raw host state was behind the prediction (what the replay had to make up).
    */
-  const race = (lag: (k: number) => number, steps = SCRIPT, team = 0, tackles: number[] = []) => {
+  const race = (
+    lag: (k: number) => number,
+    steps = SCRIPT,
+    team = 0,
+    tackles: number[] = [],
+    /** Inputs after which the host puts the player down, as a hit would; and whether he is alone in the room. */
+    downs: number[] = [],
+    alone = false,
+  ) => {
     const n = steps.length;
     const room = new Room({}, ROOFTOPS);
     const sent: ArrayBuffer[] = [];
@@ -150,6 +164,10 @@ describe('prediction against the room', () => {
     if (!team) {
       join(other, 'other');
     }
+    if (alone) {
+      // Nobody to shoot, nobody to shoot him: the counters of hits stay his own.
+      room.disconnect(other);
+    }
 
     const pred = createPredictor(world);
     pred.you(team, team);
@@ -160,6 +178,10 @@ describe('prediction against the room', () => {
     let applied = 0;
     let stunned = 0;
     let checked = 0;
+    let shots = 0;
+    let respawns = 0;
+    let gun = -1;
+    let lying = 0;
     let worst = 0;
     let behind = 0;
     /** Fields of the own player, after a snapshot, that differ from the reference. */
@@ -169,9 +191,13 @@ describe('prediction against the room', () => {
     const flush = (k: number, snapAt: (k: number) => number) => {
       while (inputs.length && inputs[0].at <= k) {
         room.receive(conn, inputs.shift()!.data);
-        // A tackle lands on the host between two inputs, after the n-th it applied.
-        if (tackles.includes(applied++)) {
+        // A tackle or a hit lands on the host between two inputs, after the n-th it applied.
+        const n = applied++;
+        if (tackles.includes(n)) {
           stumble(room['peers'].get(conn)!.state, TACKLE_WAY[0], TACKLE_WAY[1]);
+        }
+        if (downs.includes(n)) {
+          fell(room['peers'].get(conn)!.state);
         }
       }
       room.tick();
@@ -182,11 +208,12 @@ describe('prediction against the room', () => {
         const s = decodeSnapshot(snaps.shift()!.data)!;
         const own = s.players.find(p => p.id === team)!;
         stunned += +(own.stun > 0);
+        lying += +(own.down > 0);
         pred.snapshot(s, k * STEP);
         // A tackle the host has applied and this snapshot does not carry yet (after the ack, up to
         // the steps taken) is not predictable: the replay cannot know it, the reference does.
         const ack = own.ack === 0xffff ? -1 : own.ack;
-        if (tackles.some(t => t > ack && t <= k)) {
+        if ([...tackles, ...downs].some(t => t > ack && t <= k)) {
           continue;
         }
         checked++;
@@ -207,9 +234,15 @@ describe('prediction against the room', () => {
     let last = 0;
     steps.forEach((i, k) => {
       const input = pred.step(i, k * STEP);
-      step(ref, input, world, team);
+      const fired = step(ref, input, world, team);
+      shots += +fired;
+      respawns += +((ref.ev & EV.RESPAWN) !== 0);
+      gun = Math.max(gun, ref.ammo);
       if (tackles.includes(k)) {
         stumble(ref, TACKLE_WAY[0], TACKLE_WAY[1]);
+      }
+      if (downs.includes(k)) {
+        fell(ref);
       }
       sent.push(encodeInput(input));
       // In order: never delivered before the previous one.
@@ -231,6 +264,11 @@ describe('prediction against the room', () => {
       /** Own snapshots that showed a stumble, the ones compared, and where the reference ended. */
       stunned,
       checked,
+      /** Shots the reference fired, respawns it went through, the fullest its gun was, and own snapshots that showed him down. */
+      shots,
+      respawns,
+      gun,
+      lying,
       at: [ref.x, ref.y, ref.z],
     };
   };
@@ -378,6 +416,92 @@ describe('prediction against the room', () => {
     }
   }, 60_000);
 
+  /**
+   * Random play with the trigger: from the start roof to the rack, then keys at random in bursts
+   * (a run, a sprint, hops, a crouch, a dash), the look wandering, FIRE held half the time. Some
+   * runs fall off the roof and come back without the gun, and fetch it again.
+   */
+  const play = (seed: number, team = 0, n = 1800): Omit<Input, 'seq'>[] => {
+    let s = seed;
+    const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const rack = ROOFTOPS.teams[team].rack!;
+    const from = ROOFTOPS.teams[team].spawns[0];
+    const out: Omit<Input, 'seq'>[] = [];
+    // Toward the rack, at a run.
+    const yaw0 = Math.atan2(-(rack[0] - from[0]), -(rack[2] - from[2]));
+    const walk = Math.ceil(Math.hypot(rack[0] - from[0], rack[2] - from[2]) * 10) + 20;
+    for (let k = 0; k < walk; k++) {
+      out.push({ keys: KEY.FORWARD | (k > 20 ? KEY.FIRE : 0), yaw: yaw0, pitch: 0 });
+    }
+    let keys = 0;
+    let yaw = yaw0;
+    let turn = 0;
+    for (let k = out.length; k < n; k++) {
+      if (k % 9 === 0) {
+        keys =
+          (rnd() < 0.8 ? KEY.FORWARD : 0) |
+          (rnd() < 0.3 ? KEY.SPRINT : 0) |
+          (rnd() < 0.2 ? KEY.JUMP : 0) |
+          (rnd() < 0.1 ? KEY.CROUCH : 0) |
+          (rnd() < 0.05 ? KEY.DASH : 0) |
+          (rnd() < 0.5 ? KEY.FIRE : 0);
+        turn = (rnd() - 0.5) * 0.1;
+      }
+      yaw += turn;
+      out.push({ keys, yaw: ((yaw % 6.2832) + 6.2832) % 6.2832, pitch: Math.sin(k / 30) * 0.6 });
+    }
+    return out;
+  };
+
+  it('agrees with the host exactly on a run of random fire: ammo, cool and shots, under every lag', () => {
+    for (const team of [0, 1]) {
+      for (const seed of [7, 99, 2024]) {
+        const steps = play(seed, team);
+        for (const [name, lag] of LAGS) {
+          const r = race(lag, steps, team, [], [], true);
+          const label = `team ${team}, seed ${seed}, ${name} lag`;
+          expect([r.worst, r.end, r.final, r.differing], label).toEqual([0, 0, 0, []]);
+          // The guards: the gun was fetched at the rack and fired, many times, and went on after a fall.
+          expect(r.gun, label).toBe(AMMO_MAX);
+          expect(r.shots, label).toBeGreaterThan(10);
+          expect(r.checked, label).toBeGreaterThan(500);
+        }
+      }
+    }
+  }, 60_000);
+
+  it('agrees with the host exactly through down and respawn, under every lag: no move, no shot, then the spawn', () => {
+    for (const team of [0, 1]) {
+      for (const seed of [7, 99]) {
+        const steps = play(seed, team);
+        // Hit while firing and running, twice close together (the second lands on a body that is down) and later.
+        const downs = [150, 160, 700, 701 + DOWN_TICKS, 1300];
+        for (const [name, lag] of LAGS) {
+          const r = race(lag, steps, team, [], downs, true);
+          const label = `team ${team}, seed ${seed}, ${name} lag`;
+          expect([r.worst, r.end, r.final, r.differing], label).toEqual([0, 0, 0, []]);
+          // He lay down in the snapshots, and got up again at a spawn each time.
+          expect(r.lying, label).toBeGreaterThan(DOWN_TICKS / 2);
+          expect(r.respawns, label).toBeGreaterThanOrEqual(downs.length - 1);
+          expect(r.checked, label).toBeGreaterThan(300);
+        }
+      }
+    }
+  }, 60_000);
+
+  it('agrees with the host exactly on the course of every move with fire held and hits taken on it', () => {
+    const steps = COURSE.inputs.map((i, k) => ({
+      ...i,
+      keys: i.keys | (k % 40 < 25 ? KEY.FIRE : 0),
+    }));
+    const downs = [MOMENTS[1], MOMENTS[3], MOMENTS[5]];
+    for (const [name, lag] of LAGS) {
+      const r = race(lag, steps, 0, [], downs, true);
+      expect([r.worst, r.end, r.final, r.differing], `${name} lag`).toEqual([0, 0, 0, []]);
+      expect(r.lying, `${name} lag`).toBeGreaterThan(DOWN_TICKS);
+    }
+  }, 60_000);
+
   it('agrees exactly over many seeds of route noise, under every lag', () => {
     // Stops at the first seed and lag that disagree, naming it, so a regression fails fast.
     let bad = '';
@@ -450,6 +574,92 @@ describe('prediction against the room', () => {
       expect(c.bump, `seed ${seed}, bumps`).toBeGreaterThanOrEqual(2);
       expect(c.walls, `seed ${seed}, walls`).toBeGreaterThan(10);
     }
+  });
+});
+
+describe('the gun, predicted', () => {
+  const FIRE = { keys: KEY.FIRE, yaw: 0, pitch: 0 };
+  /** A snapshot of the own player (id 0) standing on the start roof, with the gun fields over. */
+  const shown = (over: Partial<SnapPlayer>, ack = 0xffff, over2: Partial<Snapshot> = {}) => ({
+    ...snapshot(1, snapPlayer(0, { vz: 0, ack, ...over })),
+    ...over2,
+  });
+
+  it('fires at once on a held FIRE, every GUN_COOLDOWN steps, and shows it in the own state', () => {
+    const pred = createPredictor(world);
+    pred.you(0);
+    pred.snapshot(shown({ ammo: 10, shots: 254 }), 0);
+    const seen: number[] = [];
+    for (let k = 0; k < 15; k++) {
+      pred.step(FIRE);
+      seen.push(pred.me(1)!.shots);
+    }
+    // Shots 254 -> 255 -> 0 -> 1, on steps 0, 7 and 14.
+    expect(seen.filter((v, k) => v !== (seen[k - 1] ?? 254))).toEqual([255, 0, 1]);
+    expect(pred.me(1)).toMatchObject({ ammo: 7, cool: GUN_COOLDOWN, shots: 1 });
+  });
+
+  it('resets to the host ammo and counters on a snapshot and replays the unacked fire on them', () => {
+    const pred = createPredictor(world);
+    pred.you(0);
+    pred.snapshot(shown({ ammo: 10, shots: 0 }), 0);
+    for (let k = 0; k < 20; k++) {
+      pred.step(FIRE);
+    }
+    expect(pred.me(1)).toMatchObject({ ammo: 7, shots: 3 });
+    // The host applied the first 8 inputs (ack 7): two shots, the second on the last of them. 12
+    // are left to replay: a shot on the 15th and the cooldown 5 steps into its run.
+    pred.snapshot(shown({ ammo: 8, shots: 2, cool: GUN_COOLDOWN }, 7), 50);
+    expect(pred.me(1)).toMatchObject({ ammo: 7, shots: 3, cool: GUN_COOLDOWN - 5 });
+    // The host and the shots it did not predict: a snapshot with fewer shots wins.
+    pred.snapshot(shown({ ammo: 8, shots: 2, cool: GUN_COOLDOWN - 1 }, 19), 100);
+    expect(pred.me(1)).toMatchObject({ ammo: 8, shots: 2 });
+  });
+
+  it('does not fire without a gun, and keeps its hands off hp, which is the host’s', () => {
+    const pred = createPredictor(world);
+    pred.you(0);
+    pred.snapshot(shown({ ammo: -1, hp: 2 }), 0);
+    for (let k = 0; k < 20; k++) {
+      pred.step(FIRE);
+    }
+    expect(pred.me(1)).toMatchObject({ ammo: -1, shots: 0, hp: 2 });
+  });
+
+  it('does not fire while the match is over, and takes the gun again when a new one starts', () => {
+    const pred = createPredictor(world);
+    pred.you(0);
+    pred.snapshot(shown({ ammo: 10 }, 0xffff, { over: true }), 0);
+    pred.step(FIRE);
+    expect(pred.me(1)).toMatchObject({ ammo: 10, shots: 0 });
+    pred.snapshot(shown({ ammo: 10 }, 0xffff, { over: false }), 30);
+    pred.step(FIRE);
+    expect(pred.me(1)).toMatchObject({ ammo: 9, shots: 1 });
+  });
+
+  it('plays a player who is down with no keys, and puts him at his spawn when he gets up', () => {
+    const pred = createPredictor(world);
+    pred.you(0, 0);
+    pred.snapshot(shown({ hp: 0, down: 3, ammo: -1, vz: 0 }), 0);
+    const down = { keys: KEY.FORWARD | KEY.FIRE | KEY.JUMP, yaw: 0, pitch: 0 };
+    pred.step(down);
+    pred.step(down);
+    expect(pred.me(1)).toMatchObject({ x: 8, y: 10, z: 70, down: 1, hp: 0, shots: 0 });
+    pred.step(down);
+    const [sx, sy, sz] = ROOFTOPS.teams[0].spawns[0];
+    expect(pred.me(1)).toMatchObject({ x: sx, y: sy, z: sz, down: 0, hp: HP_MAX, ammo: -1 });
+    expect(pred.events().ev & EV.RESPAWN).toBe(EV.RESPAWN);
+  });
+
+  it('keeps the ammo of the own state when others fire: the others’ shots are only counters', () => {
+    const pred = createPredictor(world);
+    pred.you(0);
+    pred.snapshot(snapshot(1, snapPlayer(0), snapPlayer(1, { shots: 3, ammo: 20, hp: 4 })), 0);
+    pred.snapshot(snapshot(3, snapPlayer(0), snapPlayer(1, { shots: 4, ammo: 19, hp: 3 })), 66);
+    expect(pred.others(66 + INTERP_DELAY)[0]).toMatchObject({ id: 1, shots: 4, ammo: 19, hp: 3 });
+    // Between two snapshots the gun fields are the newer one's, like the other discrete fields.
+    expect(pred.others(33 + INTERP_DELAY)[0]).toMatchObject({ shots: 4, hp: 3 });
+    expect(AMMO_MAX).toBe(60);
   });
 });
 

@@ -320,40 +320,62 @@ describe('focus', () => {
 
 describe('the readout on the back of the gun', () => {
   const v = (n: number) => verts(readout(n));
+  const digits = (n: number) => v(n).filter(x => x.layer == -2);
+  const housing = (n: number) => v(n).filter(x => x.layer == -1);
   const SEGS = [6, 2, 5, 5, 4, 5, 6, 3, 7, 6];
 
-  it('is two digits of thin glowing quads, a pair of triangles to a segment', () => {
+  it('is a dark display and two digits of thick quads, a pair of triangles to a segment', () => {
     for (const n of [0, 7, 40, 59, 60, 99]) {
       const [a, b] = `${n}`.padStart(2, '0');
-      expect(v(n)).toHaveLength((SEGS[+a] + SEGS[+b]) * 6);
+      expect(digits(n)).toHaveLength((SEGS[+a] + SEGS[+b]) * 6);
+      // Five faces of the slab, two triangles each.
+      expect(housing(n)).toHaveLength(30);
     }
   });
 
-  it('is unlit and glowing (layer -2, above 1 for the bloom), cyan above ten and red at ten and under', () => {
-    for (const x of v(40)) {
+  it('has dark backing behind the digits: the display is much darker than the metal and the digits', () => {
+    for (const x of housing(40)) {
+      expect(Math.max(...x.c)).toBeLessThan(0.1);
+    }
+  });
+
+  it('is glowing but modest (unlit, layer -2, near 1 so the bloom does not smear it): cyan above ten, red at ten and under', () => {
+    for (const x of digits(40)) {
       expect(x.layer).toBe(-2);
       expect(x.c[2]).toBeGreaterThan(x.c[0] * 2);
-      expect(Math.max(...x.c)).toBeGreaterThan(1);
+      expect(Math.max(...x.c)).toBeGreaterThan(0.8);
+      expect(Math.max(...x.c)).toBeLessThan(1.3);
     }
     for (const n of [10, 5, 0]) {
-      for (const x of v(n)) {
-        expect(x.layer).toBe(-2);
+      for (const x of digits(n)) {
         expect(x.c[0]).toBeGreaterThan(x.c[1] * 3);
+        expect(Math.max(...x.c)).toBeLessThan(1.3);
       }
     }
-    expect(v(11)[0].c[0]).toBeLessThan(v(11)[0].c[2]);
+    expect(digits(11)[0].c[0]).toBeLessThan(digits(11)[0].c[2]);
   });
 
-  it('lies on the back of the top of the body, within its width, facing up and back toward the player', () => {
+  it('is big: each digit is about 3 cm wide and 4 cm high, with segments of a centimetre', () => {
+    const xs = digits(88).map(x => x.p[0]);
+    // Two digits side by side on a display that is a little turned.
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.055);
+    const ys = digits(88).map(x => x.p[1]);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.035);
+  });
+
+  it('is a small display on the back of the body, facing back and up toward the eye, over the top', () => {
     for (const x of v(88)) {
-      expect(Math.abs(x.p[0])).toBeLessThan(0.03);
+      expect(Math.abs(x.p[0])).toBeLessThan(0.05);
       expect(x.p[2]).toBeGreaterThan(0);
-      expect(x.p[2]).toBeLessThan(0.06);
-      expect(x.p[1]).toBeGreaterThan(0.115);
-      expect(x.p[1]).toBeLessThan(0.15);
+      expect(x.p[2]).toBeLessThan(0.07);
+      expect(x.p[1]).toBeGreaterThan(0.11);
+      expect(x.p[1]).toBeLessThan(0.2);
+    }
+    for (const x of digits(88)) {
+      // Back is +z: it faces the player, tipped up (about 25 degrees) and a little to the left.
+      expect(x.n[2]).toBeGreaterThan(0.7);
       expect(x.n[1]).toBeGreaterThan(0.3);
-      // The back of the gun is +z.
-      expect(x.n[2]).toBeGreaterThan(0);
+      expect(x.n[0]).toBeLessThan(0);
     }
   });
 

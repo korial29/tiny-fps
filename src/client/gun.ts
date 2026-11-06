@@ -106,6 +106,7 @@ const metal =
     );
     return [r, g, -1, b];
   };
+const DARK = [0.035, 0.025, 0.08];
 const glow: Paint = () => [GLOW[0], GLOW[1], -2, GLOW[2]];
 
 /**
@@ -246,25 +247,6 @@ export const grip = (pos: Vec3, q: Quat): Vec3 => {
   return pos.map((v, i) => v + fing[i] * 0.078 - back[i] * 0.022) as Vec3;
 };
 
-/** The surface of the top of the body at x across and f ahead, in metres: the bulb's rings, as the tube makes them. */
-const top = (x: number, f: number): number => {
-  const i = Math.min(
-    Math.max(
-      BULB.findIndex((s, k) => f <= BULB[k + 1][0] && f >= s[0]),
-      0,
-    ),
-    BULB.length - 2,
-  );
-  const [p, q] = [BULB[i], BULB[i + 1]];
-  const t = Math.min(Math.max((f - p[0]) / (q[0] - p[0]), 0), 1);
-  const [yc, hw, hh] = [
-    p[1] + (q[1] - p[1]) * t,
-    p[2] + (q[2] - p[2]) * t,
-    p[3] + (q[3] - p[3]) * t,
-  ];
-  return yc + hh * (1 - Math.min(Math.abs(x) / (hw || 1), 1) ** 2.5) ** 0.4;
-};
-
 /** The segments of the digits 0 to 9, a to g: top, top right, bottom right, bottom, bottom left, top left, middle. */
 const DIGITS = [
   'abcdef',
@@ -277,10 +259,10 @@ const DIGITS = [
   'abc',
   'abcdefg',
   'abcdfg',
-  'g',
 ];
-const [DW, DH, DT, DGAP, DBACK] = [0.024, 0.038, 0.0075, 0.005, -0.046];
-/** The rectangle of each segment in a digit: across and ahead from its back left corner. */
+/** A digit: width, height, thickness of a segment, gap between the two digits. */
+const [DW, DH, DT, DGAP] = [0.028, 0.042, 0.0085, 0.006];
+/** The rectangle of each segment in a digit: across and up from its bottom left corner. */
 const SEGMENTS: Record<string, [number, number, number, number]> = {
   a: [0, DH - DT, DW, DH],
   b: [DW - DT, DH / 2, DW, DH],
@@ -290,34 +272,63 @@ const SEGMENTS: Record<string, [number, number, number, number]> = {
   f: [0, DH / 2, DT, DH],
   g: [0, (DH - DT) / 2, DW, (DH + DT) / 2],
 };
+/**
+ * The display: a small slab on the back of the top of the body, half width, half height and half
+ * thickness, its middle, and how it faces: tipped back and up toward the eye of the player holding
+ * the gun (about 25 degrees up, and 15 to the left, as the gun is held at the right), so that the
+ * digits are seen nearly head on.
+ */
+const [PW, PH, PD] = [0.039, 0.029, 0.005];
+const PLATE: Vec3 = [0, 0.15, 0.03];
+const [TIPPED, TURNED] = [0.5, -0.2];
 const readouts = new Map<number, number[]>();
 
 /**
- * The ammo as two glowing seven-segment digits on the top of the body, in model space, facing up
- * and read from behind: cyan, red at 10 or fewer. Thin quads laid on the bulb's surface. 99 at most.
+ * The ammo as two glowing seven-segment digits on a dark display on the back of the body, in model
+ * space: cyan, red at 10 or fewer, thick segments that bloom only a little. 99 at most.
  */
 export const readout = (ammo: number): number[] => {
   const n = Math.min(Math.max(Math.floor(ammo), 0), 99);
   let out = readouts.get(n);
   if (!out) {
     const v: number[] = (out = []);
-    const text = `${n}`.padStart(2, '0');
-    [...text].forEach((c, i) => {
+    // The display's axes: across, up its face, and out of it.
+    const [s, c, sy, cy] = [Math.sin(TIPPED), Math.cos(TIPPED), Math.sin(TURNED), Math.cos(TURNED)];
+    const turn = ([x, y, z]: Vec3): Vec3 => [x * cy + z * sy, y, -x * sy + z * cy];
+    const [X, U, N] = [turn([1, 0, 0]), turn([0, c, -s]), turn([0, s, c])];
+    const at = (a: number, b: number, k: number): Vec3 =>
+      [0, 1, 2].map(i => PLATE[i] + X[i] * a + U[i] * b + N[i] * k) as Vec3;
+    /** A quad of the display, wound so that its normal points along `hint`. */
+    const face = (pts: Vec3[], hint: Vec3) => {
+      const [u, w] = [sub(pts[1], pts[0]), sub(pts[2], pts[0])];
+      const f: Vec3 = [
+        u[1] * w[2] - u[2] * w[1],
+        u[2] * w[0] - u[0] * w[2],
+        u[0] * w[1] - u[1] * w[0],
+      ];
+      const p = dot(f, hint) < 0 ? [pts[0], pts[3], pts[2], pts[1]] : pts;
+      tri(v, p[0], p[1], p[2], DARK);
+      tri(v, p[0], p[2], p[3], DARK);
+    };
+    const neg = (a: Vec3): Vec3 => [-a[0], -a[1], -a[2]];
+    face([at(-PW, -PH, PD), at(PW, -PH, PD), at(PW, PH, PD), at(-PW, PH, PD)], N);
+    face([at(-PW, -PH, -PD), at(PW, -PH, -PD), at(PW, PH, -PD), at(-PW, PH, -PD)], neg(N));
+    face([at(-PW, PH, -PD), at(PW, PH, -PD), at(PW, PH, PD), at(-PW, PH, PD)], U);
+    face([at(-PW, -PH, -PD), at(-PW, PH, -PD), at(-PW, PH, PD), at(-PW, -PH, PD)], neg(X));
+    face([at(PW, -PH, -PD), at(PW, PH, -PD), at(PW, PH, PD), at(PW, -PH, PD)], X);
+    const from = v.length;
+    [...`${n}`.padStart(2, '0')].forEach((ch, i) => {
       const x0 = -DW - DGAP / 2 + i * (DW + DGAP);
-      for (const s of DIGITS[+c]) {
-        const [a, b, d, e] = SEGMENTS[s];
-        // A quad lifted a hair off the surface, up, wound so that its normal points up.
-        const at = (x: number, t: number): Vec3 => [
-          x0 + x,
-          top(x0 + x, DBACK + t) + 0.0012,
-          -(DBACK + t),
-        ];
-        const [p, q, r, u] = [at(a, b), at(d, b), at(d, e), at(a, e)];
-        tri(v, p, q, r, n > 10 ? [0.2, 0.75, 0.9] : [0.9, 0.12, 0.1]);
-        tri(v, p, r, u, n > 10 ? [0.2, 0.75, 0.9] : [0.9, 0.12, 0.1]);
+      for (const seg of DIGITS[+ch]) {
+        const [a, b, d, e] = SEGMENTS[seg];
+        // Segments lie on the display, a hair out of it.
+        const p = (x: number, t: number) => at(x0 + x, t - DH / 2, PD + 0.0015);
+        const rgb = n > 10 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
+        tri(v, p(a, b), p(d, b), p(d, e), rgb);
+        tri(v, p(a, b), p(d, e), p(a, e), rgb);
       }
     });
-    lit(v, 0, 1.25);
+    lit(v, from, 1);
     readouts.set(n, out);
   }
   return out;

@@ -728,28 +728,36 @@ describe('the ammo on the back of the gun', () => {
   });
 
   it('are cyan, and red at ten and under', () => {
-    const cyan = digits(armed(30));
-    const red = digits(armed(8));
-    expect(cyan[7]).toBeGreaterThan(cyan[6]);
-    expect(red[6]).toBeGreaterThan(red[7]);
-    expect(digits(armed(11))[7]).toBeGreaterThan(digits(armed(11))[6]);
-    expect(digits(armed(10))[6]).toBeGreaterThan(digits(armed(10))[7]);
+    /** The last vertex drawn: a digit's. */
+    const last = (n: number) => digits(armed(n)).slice(-STRIDE);
+    expect(last(30)[7]).toBeGreaterThan(last(30)[6]);
+    expect(last(8)[6]).toBeGreaterThan(last(8)[7]);
+    expect(last(11)[7]).toBeGreaterThan(last(11)[6]);
+    expect(last(10)[6]).toBeGreaterThan(last(10)[7]);
   });
 
-  it('face the player: on the back of the top, in front of the camera and on the screen, not read from the wrong side', () => {
+  it('face the eye: the digits are on a display turned toward the camera, nearly head on, on the screen', () => {
     const p = armed(42);
     const out = digits(p);
-    const quads = Array.from({ length: out.length / STRIDE }, (_, i) =>
-      local(p, [out[i * STRIDE], out[i * STRIDE + 1], out[i * STRIDE + 2]]),
-    );
-    expect(quads.filter(seen).length).toBeGreaterThan(quads.length * 0.9);
-    // Their normals point up, toward the camera above the gun, not down into it.
+    const eye = eyeOf(p);
+    const glow: number[][] = [];
     for (let i = 0; i < out.length; i += STRIDE) {
-      expect(out[i + 4]).toBeGreaterThan(0.3);
+      if (out[i + 8] == -2) {
+        glow.push(out.slice(i, i + STRIDE));
+      }
     }
-    // Two digits side by side: the tens left of the units.
-    const xs = quads.map(l => l[0]);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.04);
+    expect(glow.length).toBeGreaterThan(40);
+    const on = glow.filter(g => seen(local(p, [g[0], g[1], g[2]])));
+    expect(on.length).toBe(glow.length);
+    for (const g of glow) {
+      const to = [eye[0] - g[0], eye[1] - g[1], eye[2] - g[2]];
+      const cos = (to[0] * g[3] + to[1] * g[4] + to[2] * g[5]) / Math.hypot(...to);
+      // Within about 45 degrees of head on.
+      expect(cos).toBeGreaterThan(0.7);
+    }
+    // Two digits side by side, big on the screen: wider than 4 cm in the camera's space.
+    const xs = glow.map(g => local(p, [g[0], g[1], g[2]])[0]);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.05);
   });
 
   it('are not drawn without the gun', () => {

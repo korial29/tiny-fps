@@ -3,7 +3,7 @@
 // toward it; the dash streaks are the only thing drawn here that the gait does not pose. A
 // player's (x, y, z) is the bottom of the feet. No DOM.
 import { DASH_COOLDOWN, DASH_TICKS, STEP_H } from '../shared/constants';
-import { TAU, eyeHeight } from '../shared/physics';
+import { TAU } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
@@ -12,7 +12,7 @@ import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
 import { TILT, aimed, focus, held } from './gun';
 import { cutting, ends, fingers, frameOf, held as sword, progress, stroke, wrists } from './katana';
-import { add, basis, mix, unit } from './mesh';
+import { add, basis, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, mul, slerp, solve } from './rig';
 import type { Pose } from './rig';
@@ -137,16 +137,16 @@ const lifted = (
   return q;
 };
 
-/** The katana carried: the grip at the right hip, the blade back and low, in the guard's numbers (see katana.ts) from the eye. */
-const CARRY = [0.26, -0.66, 0.12, 0.05, -0.4, -0.91, 2.2];
+/** The katana carried in both hands, upright before the right shoulder, the edge forward: the guard's numbers (see katana.ts) from the eye. */
+const CARRY = [0.08, -0.3, 0.26, 0.1, 0.92, -0.3, 0];
 const ease = (v: number) => (v = Math.min(Math.max(v, 0), 1)) * v * (3 - 2 * v);
 
 /**
- * The pose with the katana in the right hand: carried back and low, or in a cut, which is the first
- * person's cut seen from the runner's eye (the share `e` of it, so that it is drawn from the carry
- * and back to it), the left hand joining the grip and the trunk turning and leaning into it.
+ * The pose with the katana in both hands: carried, or in a cut, which is the first person's cut
+ * seen from the runner's eye (the share `e` of it, so that it is drawn from the carry and back to
+ * it), the trunk turning with the blade and leaning into the lunge and the low finish.
  */
-const brandish = (pose: Pose, p: PlayerState, prog: number, ph: number): Pose => {
+export const brandish = (pose: Pose, p: PlayerState, prog: number, ph: number): Pose => {
   const e = prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
   const k = stroke(p.cut ?? 0, Math.max(prog, 0));
   const g = CARRY.map((v, i) => v + (k[i] - v) * e);
@@ -158,7 +158,8 @@ const brandish = (pose: Pose, p: PlayerState, prog: number, ph: number): Pose =>
     r[1] * a + u[1] * b + f[1] * c,
     r[2] * a + u[2] * b + f[2] * c,
   ];
-  const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
+  // The eye of the gait's head, which a run leans forward: the hands go with it.
+  const eye = solve(pose).pos[J.HEAD];
   const ax = frameOf(g.slice(3, 6) as Vec3, g[6]);
   const [rw, lw] = wrists(g.slice(0, 3) as Vec3, ax).map(w => add(eye, turn(w)));
   const rot = pose.rot.slice();
@@ -167,21 +168,17 @@ const brandish = (pose: Pose, p: PlayerState, prog: number, ph: number): Pose =>
     rot[j] = mul(
       rot[j],
       mul(
-        axis([0, 1, 0], -0.2 * g[3] * e),
-        axis([1, 0, 0], -0.15 * Math.min(Math.max(g[2] * 2.5 - 0.75, 0), 0.3) * e),
+        axis([0, 1, 0], -0.35 * g[3] * e),
+        axis([1, 0, 0], -(Math.max(g[2] - 0.32, 0) + 0.2 * Math.max(-g[4], 0)) * e),
       ),
     );
   }
   const s = solve(q);
   reach(q, s, J.ARM_R, rw, turn([0.7, -1, -0.5]));
-  if (e > 0) {
-    reach(q, s, J.ARM_L, mix(s.pos[J.HAND_L], lw, e), turn([-0.7, -1, -0.5]));
-  }
+  reach(q, s, J.ARM_L, lw, turn([-0.7, -1, -0.5]));
   const [hand, arms] = [frame(turn(ax[0]), turn(fingers(ax))), solve(q)];
   rot[J.HAND_R] = mul(inv(arms.rot[J.FOREARM_R]), hand);
-  if (e > 0) {
-    rot[J.HAND_L] = slerp(rot[J.HAND_L], mul(inv(arms.rot[J.FOREARM_L]), hand), e);
-  }
+  rot[J.HAND_L] = mul(inv(arms.rot[J.FOREARM_L]), hand);
   return q;
 };
 

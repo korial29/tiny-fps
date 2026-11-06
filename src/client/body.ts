@@ -309,7 +309,6 @@ const RATES = {
   stun: 14,
   gun: 10,
   blade: 10,
-  swing: 14,
 };
 
 export const createBody = (world?: World): Body => {
@@ -328,7 +327,6 @@ export const createBody = (world?: World): Body => {
     stun: 0,
     gun: 0,
     blade: 0,
-    swing: 0,
   };
   /** The kick of the last shot, 0 to 1, and how much of the right hand's pose the gun and the katana take, as of the last pose(). */
   let [kick, hold, grasp, wide] = [0, 0, 0, 1.6];
@@ -373,7 +371,6 @@ export const createBody = (world?: World): Body => {
       stun: +(p.stun > 0),
       gun: +(p.ammo >= 0 && !p.down && !p.wield),
       blade: +(!!p.wield && !p.down),
-      swing: +(prog >= 0),
     };
     for (const n of Object.keys(RATES) as (keyof typeof RATES)[]) {
       w[n] += (to[n] - w[n]) * (1 - Math.exp(-dt * RATES[n]));
@@ -493,20 +490,19 @@ export const createBody = (world?: World): Body => {
         const [px, py, pz] = view(sub(at, eye));
         h = mix(h, [px * sd, Math.max(py, -0.28), Math.max(pz, 0.4)], w.plant);
       }
-      // The weapons take the hand unless it is on a ledge or a wall or reeling. The left hand
-      // joins the katana's grip while he stands or walks, and in a cut.
+      // The weapons take the hand unless it is on a ledge or a wall or reeling. The katana takes
+      // both hands.
       const free = 1 - clamp(w.plant + toWall + w.stun);
-      let [taken, onSword] = [0, 0];
+      const onSword = sw ? w.blade * free : 0;
+      let taken = onSword;
       if (sd > 0) {
         hold = w.gun * free;
         h = mix(h, wrist, hold);
-        grasp = sw ? w.blade * free : 0;
-        h = sw ? mix(h, sw.r as Vec3, grasp) : h;
+        grasp = onSword;
         taken = Math.max(hold, grasp);
-        onSword = grasp;
-      } else {
-        onSword = taken = sw ? w.blade * free * Math.max(1 - clamp((w.amp - 0.3) * 3), w.swing) : 0;
-        h = sw ? mix(h, [-sw.l[0], sw.l[1], sw.l[2]], onSword) : h;
+      }
+      if (sw) {
+        h = mix(h, sd > 0 ? sw.r : [-sw.l[0], sw.l[1], sw.l[2]], onSword);
       }
       // A loose fist, tighter as the pace goes up; open to catch the air, flat on a ledge, a wall or the floor.
       let curl = 0.75 + 0.25 * w.sprint;

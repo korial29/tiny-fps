@@ -116,6 +116,12 @@ export const ROOFTOPS: WorldDef = {
     [18, 12.4, 29],
     [42, 8, 24],
   ],
+  // One on each of the roofs B, C and E, elsewhere on them.
+  ammo: [
+    [8, 10, 40.5],
+    [8, 12.4, 33],
+    [41, 8, 44],
+  ],
   floor: -25,
   // A warm bright sun, low in the east: long sharp shadows across the roofs.
   sun: { dir: [0.6, 0.64, 0.48], color: [2.6, 2.3, 1.8] },
@@ -317,6 +323,15 @@ const PACKS: Vec3[] = [
   [88, 14.5, 198],
 ];
 
+/** Ammo packs in red's half: the Spine, two in Midtown, two on the Lowline. Their twins are across the line. */
+const AMMO: Vec3[] = [
+  [21, 26, 168],
+  [46, 19, 144],
+  [36, 21.2, 178],
+  [88, 14.5, 216],
+  [88, 14.5, 172],
+];
+
 export const HIGHLINE: WorldDef = {
   name: 'Highline',
   brushes: [...half, ...half.map(flip), ...centre],
@@ -331,6 +346,7 @@ export const HIGHLINE: WorldDef = {
     [24, 15, 112],
     [24, 15, 128],
   ],
+  ammo: [...AMMO, ...AMMO.map(([x, y, z]): Vec3 => [x, y, ZED - z])],
   floor: -25,
   // A warm sun low in the east, along the roofs' short side: the same light for both teams.
   sun: { dir: [0.8, 0.6, 0], color: [2.6, 2.3, 1.8] },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AMMO_MAX,
+  AMMO_PACK,
   DASH_COOLDOWN,
   DASH_TICKS,
   DOWN_TICKS,
@@ -20,6 +21,7 @@ import { Room } from '../shared/room';
 import { EV, KEY, MODE } from '../shared/types';
 import type { Conn, Input, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
 import { build } from '../shared/world';
+import type { WorldDef } from '../shared/world';
 import * as lines from '../../test/lines';
 import { Sim } from '../../test/pilot';
 import { createPredictor } from './predict';
@@ -50,6 +52,12 @@ const snapshot = (tick: number, ...players: SnapPlayer[]): Snapshot => ({
   ...IDLE,
 });
 const fwd = { keys: KEY.FORWARD, yaw: 0, pitch: 0 };
+/** What an ammo pack does on the host: 20 shots more up to the full gun, for a gun that is there. */
+const grant = (p: PlayerState): boolean => {
+  const had = p.ammo;
+  p.ammo = p.ammo < 0 ? p.ammo : Math.min(AMMO_MAX, p.ammo + AMMO_PACK);
+  return p.ammo !== had;
+};
 /** What a hit on the host does to a player who has run out of health. */
 const fell = (p: PlayerState) => Object.assign(p, { hp: 0, down: DOWN_TICKS, ammo: -1, cool: 0 });
 /** The way a tackler of these tests goes: north-east. */
@@ -142,9 +150,15 @@ describe('prediction against the room', () => {
     /** Inputs after which the host puts the player down, as a hit would; and whether he is alone in the room. */
     downs: number[] = [],
     alone = false,
+    /**
+     * `grants`: inputs after which the host adds an ammo pack to his gun, as it does at one; `def`:
+     * the map the room and the predictor play, ROOFTOPS unless told.
+     */
+    { grants = [], def = ROOFTOPS }: { grants?: number[]; def?: WorldDef } = {},
   ) => {
     const n = steps.length;
-    const room = new Room({}, ROOFTOPS);
+    const map = def === ROOFTOPS ? world : build(def);
+    const room = new Room({}, def);
     const sent: ArrayBuffer[] = [];
     const conn: Conn & { bins: ArrayBuffer[] } = {
       bins: [],
@@ -169,7 +183,7 @@ describe('prediction against the room', () => {
       room.disconnect(other);
     }
 
-    const pred = createPredictor(world);
+    const pred = createPredictor(map);
     pred.you(team, team);
     const ref: PlayerState = spawn(team, world, 0, team);
     const inputs: { at: number; data: ArrayBuffer }[] = [];
@@ -180,6 +194,7 @@ describe('prediction against the room', () => {
     let checked = 0;
     let shots = 0;
     let fills = 0;
+    let granted = 0;
     let respawns = 0;
     let gun = -1;
     let lying = 0;
@@ -200,6 +215,9 @@ describe('prediction against the room', () => {
         if (downs.includes(n)) {
           fell(room['peers'].get(conn)!.state);
         }
+        if (grants.includes(n)) {
+          grant(room['peers'].get(conn)!.state);
+        }
       }
       room.tick();
       for (; seen < conn.bins.length; seen++) {
@@ -214,7 +232,7 @@ describe('prediction against the room', () => {
         // A tackle the host has applied and this snapshot does not carry yet (after the ack, up to
         // the steps taken) is not predictable: the replay cannot know it, the reference does.
         const ack = own.ack === 0xffff ? -1 : own.ack;
-        if ([...tackles, ...downs].some(t => t > ack && t <= k)) {
+        if ([...tackles, ...downs, ...grants].some(t => t > ack && t <= k)) {
           continue;
         }
         checked++;
@@ -236,7 +254,7 @@ describe('prediction against the room', () => {
     steps.forEach((i, k) => {
       const input = pred.step(i, k * STEP);
       const had = ref.ammo;
-      const fired = step(ref, input, world, team);
+      const fired = step(ref, input, map, team);
       shots += +fired;
       fills += +(ref.ammo > had);
       respawns += +((ref.ev & EV.RESPAWN) !== 0);
@@ -246,6 +264,9 @@ describe('prediction against the room', () => {
       }
       if (downs.includes(k)) {
         fell(ref);
+      }
+      if (grants.includes(k)) {
+        granted += +grant(ref);
       }
       sent.push(encodeInput(input));
       // In order: never delivered before the previous one.
@@ -270,6 +291,12 @@ describe('prediction against the room', () => {
       /** Shots the reference fired, respawns it went through, the fullest its gun was, and own snapshots that showed him down. */
       shots,
       fills,
+      /** Ammo packs the reference took, and the fields of the host's last snapshot that the prediction does not match. */
+      granted,
+      hostAmmo: final.ammo,
+      lastDiffering: (Object.keys(ref) as (keyof PlayerState)[]).filter(
+        key => !['ev', 'fall', 'yaw', 'pitch'].includes(key) && final[key] !== pred.me(1)![key],
+      ),
       /** Times the reference's gun was filled, and the ammo it ends with. */
       ammo: ref.ammo,
       respawns,
@@ -500,6 +527,46 @@ describe('prediction against the room', () => {
       expect(r.fills, `${name} lag`).toBe(2);
       expect(r.ammo, `${name} lag`).toBe(AMMO_MAX);
       expect(r.shots, `${name} lag`).toBeGreaterThan(25);
+    }
+  }, 60_000);
+
+  it('agrees with the host exactly when an ammo pack lands between two inputs, under every lag', () => {
+    // The pick-up is the host's, like a hit: the snapshot carries the new ammo and the replay of the
+    // unacked inputs goes on from it. Here it lands at known inputs, the reference with it.
+    for (const team of [0, 1]) {
+      for (const seed of [7, 99]) {
+        const steps = play(seed, team);
+        for (const [name, lag] of LAGS) {
+          const r = race(lag, steps, team, [], [], true, { grants: [300, 301, 700, 1100] });
+          const label = `team ${team}, seed ${seed}, ${name} lag`;
+          expect([r.worst, r.end, r.final, r.differing], label).toEqual([0, 0, 0, []]);
+          expect(r.granted, label).toBeGreaterThanOrEqual(1);
+          expect(r.checked, label).toBeGreaterThan(500);
+        }
+      }
+    }
+  }, 60_000);
+
+  it('agrees with the host in the end when a real ammo pack on the start roof is run over with the gun half empty', () => {
+    const rack = ROOFTOPS.teams[0].rack!;
+    const pack: [number, number, number] = [14, 10, 66];
+    const from = ROOFTOPS.teams[0].spawns[0];
+    const to = (a: number[], b: number[]) => Math.atan2(-(b[0] - a[0]), -(b[2] - a[2]));
+    const d = Math.hypot(rack[0] - from[0], rack[2] - from[2]);
+    const put = (n: number, keys: number, yaw: number) =>
+      Array.from({ length: n }, () => ({ keys, yaw, pitch: 0 }));
+    // To the rack, 200 steps of fire on it, then over the pack with FIRE held, and still.
+    const steps = [
+      ...put(Math.round((d - 0.5) * 10) + 3, KEY.FORWARD, to(from, rack)),
+      ...put(200, KEY.FIRE, to(from, rack)),
+      ...put(60, KEY.FORWARD | KEY.FIRE, to(rack, pack)),
+      ...put(60, KEY.FIRE, to(rack, pack)),
+    ];
+    for (const [name, lag] of LAGS) {
+      const r = race(lag, steps, 0, [], [], true, { def: { ...ROOFTOPS, ammo: [pack] } });
+      // The reference has no pack: the host's gun is fuller, and the prediction matches the host.
+      expect(r.hostAmmo, `${name} lag`).toBeGreaterThan(r.ammo);
+      expect(r.lastDiffering, `${name} lag`).toEqual([]);
     }
   }, 60_000);
 

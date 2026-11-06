@@ -63,13 +63,31 @@ export const problems = (def: WorldDef): string[] => {
   };
   def.packs?.forEach((p, k) => {
     stands(`pack ${k}`, p, PACK_R);
-    def.packs?.forEach((q, j) => {
+  });
+  def.ammo?.forEach((p, k) => stands(`ammo pack ${k}`, p, PACK_R));
+  // Every pack, health and ammo, is clear of the others, of the racks and of the flag bases.
+  const all = [...(def.packs ?? []), ...(def.ammo ?? [])];
+  const names = all.map((_, k) =>
+    k < (def.packs?.length ?? 0) ? `pack ${k}` : `ammo pack ${k - (def.packs?.length ?? 0)}`,
+  );
+  all.forEach((p, k) => {
+    all.forEach((q, j) => {
       if (j > k && Math.hypot(p[0] - q[0], p[2] - q[2]) < 4 * PACK_R) {
-        out.push(`packs ${k} and ${j} are too close`);
+        out.push(`${names[k]} and ${names[j]} are too close`);
       }
     });
+    for (const [t, { base, rack }] of def.teams.entries()) {
+      for (const [what, at] of [
+        ['base', base],
+        ['rack', rack],
+      ] as const) {
+        if (at && Math.hypot(p[0] - at[0], p[2] - at[2]) < 4 * PACK_R) {
+          out.push(`${names[k]} is by the ${what} of team ${t}`);
+        }
+      }
+    }
   });
-  if ((def.packs?.length ?? 0) > 32) {
+  if (all.length > 32) {
     out.push('more than 32 packs');
   }
   def.teams.forEach(({ base, spawns, rack }, team) => {

@@ -15,7 +15,7 @@ import {
   SNAP_EVERY,
   TICK_HZ,
 } from './constants';
-import { EYE, PLAYER_H } from './constants';
+import { PLAYER_H } from './constants';
 import { cutOf } from './blade';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
@@ -1020,8 +1020,8 @@ describe('a cut, down', () => {
 });
 
 describe('a cut, the limb', () => {
-  /** The pitch that puts the look line at a share of a standing foe's height, 1.5 m ahead. */
-  const aim = (share: number) => Math.atan((share * PLAYER_H - EYE) / 1.5);
+  /** The pitch that puts the blade's line, from the chest, at a share of a standing foe's height, 1.5 m ahead. */
+  const aim = (share: number) => Math.atan(((share - 0.7) * PLAYER_H) / 1.5);
 
   it('takes off the limb the blade crosses when the cut puts him down, and shows it in the snapshot', () => {
     // Bob has his back to Cy (both face east), 1.5 m ahead.
@@ -1029,7 +1029,8 @@ describe('a cut, the limb', () => {
       [LEFT, aim(0.6), 0, 2, LIMB.ARM_L],
       [RIGHT, aim(0.6), 0, 2, LIMB.ARM_R],
       [RIGHT, aim(0.25), 0, 2, LIMB.LEG_R],
-      [FORWARD, 0, 0, 2, LIMB.HEAD],
+      // The thrust carries Cy about 0.8 m closer: a steep look up.
+      [FORWARD, 0.8, 0, 2, LIMB.HEAD],
       [FORWARD, aim(0.6), 0, 2, LIMB.NONE],
       [FORWARD, aim(0.6), 0.3, 2, LIMB.ARM_L],
       [0, aim(0.25), 0, 3, LIMB.HEAD],

@@ -5,7 +5,7 @@ import { step } from './gun';
 import { HIGHLINE, ROOFTOPS } from './map';
 import { spawn } from './physics';
 import { onWire } from './protocol';
-import { CUTS, EYE, HIPS, LOW_EYE, LOW_H, MIDLINE, NECK, PLAYER_H, PLAYER_R } from './constants';
+import { CUTS, HIPS, LOW_H, MIDLINE, NECK, PLAYER_H, PLAYER_R } from './constants';
 import { CUT, KEY, LIMB, MODE, TEX } from './types';
 import type { PlayerState } from './types';
 import { build } from './world';
@@ -272,17 +272,25 @@ describe('limbOf', () => {
     const f = Object.assign(at(d * fx - l * fz, d * fz + l * fx, yaw + turn).p, him);
     return limbOf(p, f);
   };
-  /** The pitch that puts the look line at `h` m over the feet, 1.5 m ahead. */
-  const aim = (h: number, eye = EYE) => Math.atan((h - eye) / 1.5);
+  /** The pitch that puts the blade's line, from the chest at `from` m, at `h` m over the feet, 1.5 m ahead. */
+  const aim = (h: number, from = CHEST_H) => Math.atan((h - from) / 1.5);
+  const CHEST_H = 0.7 * PLAYER_H;
   const [HEAD, ARMS, LEGS] = [aim(0.95 * PLAYER_H), aim(0.6 * PLAYER_H), aim(0.25 * PLAYER_H)];
   const ACROSS = [CUT.THRUST, CUT.LEFT, CUT.RIGHT];
 
-  it('takes the head of a standing foe from a level look: the eye is above the neck', () => {
-    expect(EYE / PLAYER_H).toBeGreaterThan(NECK);
+  it('takes an arm of a standing foe from a level look, the head looking up, a leg looking down', () => {
     for (const cut of ACROSS) {
-      expect(limb(cut), `cut ${cut}`).toBe(LIMB.HEAD);
+      expect([LIMB.ARM_L, LIMB.ARM_R], `cut ${cut}`).toContain(limb(cut, { l: 0.3 }));
       expect(limb(cut, { pitch: HEAD, l: 0.3 }), `cut ${cut}`).toBe(LIMB.HEAD);
+      expect([LIMB.LEG_L, LIMB.LEG_R], `cut ${cut}`).toContain(limb(cut, { pitch: LEGS, l: 0.3 }));
     }
+  });
+
+  it('thrusts into the side facing the attacker when the foe stands side-on to him', () => {
+    // His right toward the attacker, then his left; the line through his middle.
+    expect(limb(CUT.THRUST, { pitch: ARMS, turn: -Math.PI / 2 })).toBe(LIMB.ARM_R);
+    expect(limb(CUT.THRUST, { pitch: ARMS, turn: Math.PI / 2 })).toBe(LIMB.ARM_L);
+    expect(limb(CUT.SLASH, { turn: -Math.PI / 2 })).toBe(LIMB.ARM_R);
   });
 
   it('splits the body at NECK and HIPS of his height, for the thrust and the cuts across', () => {
@@ -346,19 +354,20 @@ describe('limbOf', () => {
 
   it('follows the pitch: looking up raises the line, looking down lowers it', () => {
     // A crouched attacker looks level into the legs of a standing foe.
-    expect(LOW_EYE / PLAYER_H).toBeLessThan(HIPS);
+    expect((0.7 * LOW_H) / PLAYER_H).toBeLessThan(HIPS);
     const low = { mode: MODE.CROUCH };
     expect(limb(CUT.LEFT, {}, low)).toBe(LIMB.LEG_R);
-    expect(limb(CUT.LEFT, { pitch: aim(0.6 * PLAYER_H, LOW_EYE) }, low)).toBe(LIMB.ARM_R);
-    expect(limb(CUT.LEFT, { pitch: aim(0.95 * PLAYER_H, LOW_EYE) }, low)).toBe(LIMB.HEAD);
-    // Farther away, the same pitch reaches lower.
-    expect(limb(CUT.LEFT, { pitch: -0.06 })).toBe(LIMB.HEAD);
-    expect(limb(CUT.LEFT, { pitch: -0.06, d: 3 })).toBe(LIMB.ARM_R);
+    expect(limb(CUT.LEFT, { pitch: aim(0.6 * PLAYER_H, 0.7 * LOW_H) }, low)).toBe(LIMB.ARM_R);
+    expect(limb(CUT.LEFT, { pitch: aim(0.95 * PLAYER_H, 0.7 * LOW_H) }, low)).toBe(LIMB.HEAD);
+    // Farther away, the same pitch reaches higher.
+    expect(limb(CUT.LEFT, { pitch: 0.1 })).toBe(LIMB.ARM_R);
+    expect(limb(CUT.LEFT, { pitch: 0.1, d: 3 })).toBe(LIMB.HEAD);
   });
 
   it('measures the share on the foe as he is: his feet and his height', () => {
-    // A level look at a foe standing 0.5 m higher: 1.1 m over his feet, an arm.
-    expect(limb(CUT.LEFT, {}, {}, { y: 0.5 })).toBe(LIMB.ARM_R);
+    // A level look at a foe standing 0.6 m higher: 0.66 m over his feet, a leg; 0.6 m lower, the head.
+    expect(limb(CUT.LEFT, {}, {}, { y: 0.6 })).toBe(LIMB.LEG_R);
+    expect(limb(CUT.LEFT, {}, {}, { y: -0.6 })).toBe(LIMB.HEAD);
     // A line 0.7 m over the feet is at the arms of a crouched foe, the legs of a standing one.
     expect(limb(CUT.LEFT, { pitch: aim(0.7) }, {}, { mode: MODE.CROUCH })).toBe(LIMB.ARM_R);
     expect(limb(CUT.LEFT, { pitch: aim(0.7) })).toBe(LIMB.LEG_R);

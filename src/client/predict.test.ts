@@ -8,6 +8,7 @@ import {
   STEP_H,
   TICK_HZ,
 } from '../shared/constants';
+import { step } from '../shared/gun';
 import { ROOFTOPS } from '../shared/map';
 import { STILL, move, spawn, stumble } from '../shared/physics';
 import { decodeInput, decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
@@ -206,7 +207,7 @@ describe('prediction against the room', () => {
     let last = 0;
     steps.forEach((i, k) => {
       const input = pred.step(i, k * STEP);
-      move(ref, input, world, team);
+      step(ref, input, world, team);
       if (tackles.includes(k)) {
         stumble(ref, TACKLE_WAY[0], TACKLE_WAY[1]);
       }

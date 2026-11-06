@@ -12,6 +12,7 @@ export const duo = (red: Spawn[], blue: Spawn[] = red): WorldDef['teams'] => [
 export const IDLE = {
   score: [0, 0] as [number, number],
   clock: 480,
+  packs: 0,
   over: false,
   flags: [
     { state: 0, by: 0, x: 0, y: 0, z: 0, left: 0 },

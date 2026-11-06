@@ -2,13 +2,14 @@
 // Text frames carry rare JSON messages (join, roster, full, end).
 // Binary frames carry the hot path: inputs (client → host) and snapshots (host → client).
 //
-// Input, 11 bytes: [type u8 = MSG_INPUT][seq u16][keys u8][yaw u16][pitch i16][view u16][frac u8]
+// Input, 12 bytes: [type u8 = MSG_INPUT][seq u16][keys u16][yaw u16][pitch i16][view u16][frac u8]
 //   yaw in 65536ths of a turn, decoded in [0, 2π); pitch in 1/10000 rad; view is the host tick
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
-//   keys is a u8: KEY bits 0 to 7 (forward, back, left, right, jump, sprint, dash, crouch).
-// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 40 bytes:
+//   keys is a u16: KEY bits 0 to 8 (forward, back, left, right, jump, sprint, dash, crouch, fire).
+// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 45 bytes:
 //   [id u8][x f32][y f32][z f32][vx f32][vy f32][vz f32][edge f32]
 //   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8][stun u8]
+//   [gun u24][shots u8][hits u8]
 //   mode: bits 0-2 MODE, bits 3-5 wall (SIDE), bit 6 jumps left, bit 7 air dashes left
 //   dash: bits 0-5 the dash timer, bits 6-7 the high bits of the tackler's id (see stun)
 //   timers: bits 0-2 coyote ticks, bits 3-5 jump buffer ticks, bit 6 jump held, bit 7 dash held
@@ -17,15 +18,17 @@
 //   The floats are the host's float32 state, exact (see move in physics.ts), and with the rest
 //   they are all a move needs to continue from. ground comes from the mode; ev and fall (what the
 //   animation reads) are not sent, they read 0.
+//   gun, 24 bits, big-endian: bits 0-2 hp, bits 3-5 cool (ticks to the next shot), bits 6-12 ammo
+//   (127: no gun), bits 13-19 down (ticks left lying, 0 when up), the top 4 bits unused. shots and
+//   hits are the wrapping counters of the shots fired and the hits landed.
 //   Then the match, after the players: [red u8][blue u8][clock u16] the captures of each team, and
 //   the whole seconds to the end of the match (bit 15: it is over, and the clock counts to the next
-//   one); then the red and the blue flag, each [state u8 = FLAG] and by state:
+//   one), [packs u32] bit n set when health pack n is there to take; then the red and the blue flag, each [state u8 = FLAG] and by state:
 //     HOME: nothing more (2 bytes in all for the two flags);
 //     CARRIED: [by u8] the carrier's player id;
 //     DROPPED: [x i16][y i16][z i16] in 1/16 m, [left u8] whole seconds before it goes home.
-//   A snapshot is 4 + 40 × players + 4 + 2 to 16 bytes: 6 on top of the players when both flags are home.
+//   A snapshot is 4 + 45 × players + 8 + 2 to 16 bytes: 10 on top of the players when both flags are home.
 // Every multi-byte field is big-endian (DataView's default).
-import { HP_MAX } from './constants';
 import { FLAG, KEY, MODE } from './types';
 import type { FlagState, Input, PlayerInfo, Snapshot } from './types';
 
@@ -49,11 +52,14 @@ export type ServerText =
 export const MSG_INPUT = 1;
 export const MSG_SNAPSHOT = 2;
 
-export const INPUT_BYTES = 11;
+export const INPUT_BYTES = 12;
 export const SNAP_HEAD = 4;
-export const SNAP_PLAYER = 40;
-/** The match block after the players: the captures, the clock; the flags follow (2 to 16 bytes). */
-export const SNAP_MATCH = 4;
+export const SNAP_PLAYER = 45;
+/** The match block after the players: the captures, the clock, the packs; the flags follow (2 to 16 bytes). */
+export const SNAP_MATCH = 8;
+
+/** The no-gun value of the ammo's 7 bits. */
+const NO_GUN = 127;
 
 /** A flag's resting place on the wire: 1/16 m in an i16, so ±2 km. */
 const POS = 16;
@@ -85,12 +91,12 @@ export const encodeInput = (i: Input): ArrayBuffer => {
   const v = new DataView(new ArrayBuffer(INPUT_BYTES));
   v.setUint8(0, MSG_INPUT);
   v.setUint16(1, i.seq & 0xffff);
-  v.setUint8(3, i.keys & 0xff);
-  v.setUint16(4, toTurn(i.yaw));
-  v.setInt16(6, toPitch(i.pitch));
+  v.setUint16(3, i.keys & 0x1ff);
+  v.setUint16(5, toTurn(i.yaw));
+  v.setInt16(7, toPitch(i.pitch));
   const view = toView(i.view);
-  v.setUint16(8, view >> 8);
-  v.setUint8(10, view & 0xff);
+  v.setUint16(9, view >> 8);
+  v.setUint8(11, view & 0xff);
   return v.buffer;
 };
 
@@ -105,10 +111,10 @@ export const decodeInput = (buf: ArrayBuffer): Input | null => {
   }
   return {
     seq: v.getUint16(1),
-    keys: v.getUint8(3),
-    yaw: fromTurn(v.getUint16(4)),
-    pitch: fromPitch(v.getInt16(6)),
-    view: (v.getUint16(8) * 256 + v.getUint8(10)) / 256,
+    keys: v.getUint16(3) & 0x1ff,
+    yaw: fromTurn(v.getUint16(5)),
+    pitch: fromPitch(v.getInt16(7)),
+    view: (v.getUint16(9) * 256 + v.getUint8(11)) / 256,
   };
 };
 
@@ -148,10 +154,16 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
         (p.held & KEY.DASH ? 128 : 0),
     );
     v.setUint8(o + 39, p.stun | ((p.by & 3) << 6));
+    const gun = p.hp | (p.cool << 3) | ((p.ammo < 0 ? NO_GUN : p.ammo) << 6) | (p.down << 13);
+    v.setUint8(o + 40, gun >> 16);
+    v.setUint16(o + 41, gun & 0xffff);
+    v.setUint8(o + 43, p.shots);
+    v.setUint8(o + 44, p.hits);
   });
   v.setUint8(end, s.score[0]);
   v.setUint8(end + 1, s.score[1]);
   v.setUint16(end + 2, (s.clock & 0x7fff) | (s.over ? 0x8000 : 0));
+  v.setUint32(end + 4, s.packs ?? 0);
   let o = end + SNAP_MATCH;
   for (const f of s.flags) {
     v.setUint8(o, f.state);
@@ -186,6 +198,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     const timers = v.getUint8(o + 38);
     const [dash, stun] = [v.getUint8(o + 37), v.getUint8(o + 39)];
     const m = mode & 7;
+    const gun = (v.getUint8(o + 40) << 16) | v.getUint16(o + 41);
     players.push({
       id: v.getUint8(o),
       x: v.getFloat32(o + 1),
@@ -212,13 +225,12 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       held: (timers & 64 ? KEY.JUMP : 0) | (timers & 128 ? KEY.DASH : 0),
       ev: 0,
       fall: 0,
-      // Not on the wire yet (WEAPON.md step 1 puts them there).
-      hp: HP_MAX,
-      ammo: -1,
-      cool: 0,
-      down: 0,
-      shots: 0,
-      hits: 0,
+      hp: gun & 7,
+      cool: (gun >> 3) & 7,
+      ammo: ((gun >> 6) & 127) === NO_GUN ? -1 : (gun >> 6) & 127,
+      down: (gun >> 13) & 127,
+      shots: v.getUint8(o + 43),
+      hits: v.getUint8(o + 44),
     });
   }
   const clock = v.getUint16(end + 2);
@@ -249,6 +261,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     clock: clock & 0x7fff,
     over: (clock & 0x8000) !== 0,
     flags: flags as Snapshot['flags'],
+    packs: v.getUint32(end + 4),
   };
 };
 

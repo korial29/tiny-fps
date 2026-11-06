@@ -187,7 +187,8 @@ export const FLAG_REACH = 1.5;
 export const FLAG_H = 2.2;
 /** Seconds a dropped flag lies before it goes home by itself. */
 export const FLAG_RETURN = 10;
-// The gun (gun.ts) and health. Ticks of 1 / TICK_HZ s.
+// The gun (gun.ts) and health. Ticks of 1 / TICK_HZ s. On the wire (protocol.ts) HP_MAX and
+// GUN_COOLDOWN take 3 bits, AMMO_MAX 7 bits less the no-gun value, DOWN_TICKS 7 bits.
 
 /** Health of a player; a hit takes 1, so HP_MAX hits put him down. */
 export const HP_MAX = 5;
@@ -207,6 +208,8 @@ export const PACK_BACK = 20;
 /** Metres from a pack or a rack, feet to point on the floor plane, that take it. */
 export const PACK_R = 0.9;
 export const RACK_R = 1.2;
+/** Metres the feet may be above or below a pack or a rack to take it. */
+export const PICK_H = 1;
 
 /** Seconds a carrier who is made to drop the flag cannot take it again: he would pick it up where he stands. */
 export const FLAG_LOCK = 2;

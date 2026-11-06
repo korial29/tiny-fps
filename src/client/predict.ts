@@ -4,7 +4,8 @@
 // host's state and the unacked inputs are replayed on top. Other players are drawn
 // INTERP_DELAY in the past, interpolated between the two snapshots around that time.
 import { INTERP_DELAY } from '../shared/constants';
-import { TAU, move, norm } from '../shared/physics';
+import { step } from '../shared/gun';
+import { TAU, norm } from '../shared/physics';
 import { onWire } from '../shared/protocol';
 import type { Input, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
 import type { World } from '../shared/world';
@@ -89,6 +90,8 @@ export const createPredictor = (world: World): Predictor => {
   const snaps: { t: number; s: Snapshot }[] = [];
   let ev = 0;
   let fall = 0;
+  /** The match is on (the last snapshot): the gun works. */
+  let armed = true;
 
   /**
    * The snapshots around the time the others are drawn at, and how far between them (0 to 1). The
@@ -144,7 +147,7 @@ export const createPredictor = (world: World): Predictor => {
       }
       if (own) {
         prev = state(own);
-        move(own, input, world, team);
+        step(own, input, world, team, armed);
         ev |= own.ev;
         fall = Math.max(fall, own.fall);
       }
@@ -160,6 +163,7 @@ export const createPredictor = (world: World): Predictor => {
       if (!me) {
         return;
       }
+      armed = !s.over;
       pending = pending.filter(i => !acked(i.seq, me.ack));
       own = state(me);
       prev = state(own);
@@ -167,7 +171,7 @@ export const createPredictor = (world: World): Predictor => {
         if (k === pending.length - 1) {
           prev = state(own!);
         }
-        move(own!, i, world, team);
+        step(own!, i, world, team, armed);
       });
     },
 

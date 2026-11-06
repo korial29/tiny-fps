@@ -11,12 +11,15 @@ import { inv, reach } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
 import { TILT, aimed, focus, held } from './gun';
+import type { Tracer } from './beams';
 import { cutting, ends, fingers, frameOf, held as sword, progress, stroke, wrists } from './katana';
-import { add, basis, mix, unit } from './mesh';
+import { ground, piece, track } from './limbs';
+import type { Piece } from './limbs';
+import { STRIDE, add, basis, mix, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, mul, slerp, solve } from './rig';
 import type { Pose } from './rig';
-import { body, palette, skin } from './skin';
+import { body, cut, palette, skin } from './skin';
 import { createTrail } from './trail';
 import type { Trail } from './trail';
 
@@ -45,6 +48,8 @@ export interface Runner {
   prog: number;
   trail: Trail;
   t: number;
+  /** The limb a katana's cut took off, while he is down (see limbs.ts). */
+  cut?: Piece;
 }
 
 /** Seconds after a shot that the gun stays up. */
@@ -80,13 +85,14 @@ const floorOf =
 /**
  * Moves each runner of `book` to its player in `others` after dt seconds: a new player gets a
  * runner already in pose, one that left loses it. With a `world` the feet stand on the brushes
- * under them.
+ * under them. The `tracer` gets the sparks of a limb cut off.
  */
 export const animate = (
   book: Map<number, Runner>,
   others: PlayerState[],
   dt: number,
   world?: World,
+  tracer?: Pick<Tracer, 'shock' | 'spit'>,
 ) => {
   for (const id of book.keys()) {
     if (!others.some(p => p.id == id)) {
@@ -109,6 +115,7 @@ export const animate = (
     } else {
       book.set(p.id, createRunner(p));
     }
+    track(book.get(p.id)!, dt, ground(world, p.y), !r, tracer);
   }
 };
 
@@ -214,11 +221,13 @@ const streaks = (out: number[], r: Runner, color: number[], at: (v: Vec3) => Vec
 export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   let pose = r.gait.pose();
   const { p } = r;
+  const colors = palette(color);
   // Lying down, it sinks into the roof for the last half second.
+  const sink = p.down ? 0.5 * Math.min(Math.max(1 - p.down / 30, 0), 1) : 0;
   if (p.down) {
     pose = {
       ...pose,
-      at: [pose.at[0], pose.at[1] - 0.5 * Math.min(Math.max(1 - p.down / 30, 0), 1), pose.at[2]],
+      at: [pose.at[0], pose.at[1] - sink, pose.at[2]],
     };
   }
   let s = solve(pose);
@@ -230,7 +239,14 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
     pose = lifted(pose, s, p, r.focus, r.aim);
     s = solve(pose);
   }
-  skin(out, body(lod), s, palette(color));
+  if (r.cut) {
+    skin(out, cut(lod, r.cut.limb)[0], s, colors);
+    // The stump's face is the last vertex drawn.
+    r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
+    piece(out, r.cut, colors, lod, sink);
+  } else {
+    skin(out, body(lod), s, colors);
+  }
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], lod, r.t);
     r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));

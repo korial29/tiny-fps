@@ -11,14 +11,14 @@ import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
 
-/** Where the blade starts and ends along the model's forward axis, metres from the right hand. */
-export const [BASE, TIP] = [0.07, 0.812];
+/** Where the blade starts and ends along the model's forward axis, metres from the right hand: a metre from the guard to the point. */
+export const [BASE, TIP] = [0.07, 1.07];
 /** How far the point is bent below the line of the blade's root. */
-const SORI = 0.022;
+const SORI = 0.03;
 /** Blade half height at its root: where it narrows, its middle rises, so that the point rides the spine side. */
-const TALL = 0.0155;
-/** The left hand grips this far behind the right one. */
-const BEHIND = 0.095;
+const TALL = 0.019;
+/** The left hand grips this far behind the right one: a gap between the two fists. */
+export const BEHIND = 0.14;
 /** The tilt between the grip and the hand's thumb: the blade rises off the forearm's line. */
 const [S, C] = [Math.sin(0.55), Math.cos(0.55)];
 
@@ -40,21 +40,21 @@ const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
 /** The y of the blade's middle at `f` ahead of the grip: it bends toward the edge, most at the point. */
 const bend = (f: number) => -SORI * ((f - BASE) / (TIP - BASE)) ** 2;
 
-/** [ahead, half height, half thickness] along the blade: it tapers to a point, the thickness too. */
+/** [share of the blade, half height, half thickness] from the root: it tapers to a point, the thickness too. */
 const STATIONS = [
-  [BASE, TALL, 0.0034],
-  [0.12, TALL, 0.0034],
-  [0.2, 0.0153, 0.0034],
-  [0.3, 0.0149, 0.0033],
-  [0.4, 0.0145, 0.0032],
-  [0.5, 0.014, 0.003],
-  [0.6, 0.0135, 0.0028],
-  [0.68, 0.013, 0.0026],
-  [0.74, 0.0122, 0.0022],
-  [0.78, 0.01, 0.0016],
-  [0.8, 0.006, 0.0008],
-  [TIP, 0, 0],
-];
+  [0, TALL, 0.0041],
+  [0.07, TALL, 0.0041],
+  [0.17, 0.0188, 0.0041],
+  [0.31, 0.0183, 0.004],
+  [0.44, 0.0178, 0.0039],
+  [0.58, 0.0172, 0.0036],
+  [0.71, 0.0166, 0.0034],
+  [0.82, 0.016, 0.0031],
+  [0.9, 0.015, 0.0026],
+  [0.96, 0.0122, 0.0019],
+  [0.984, 0.0074, 0.001],
+  [1, 0, 0],
+].map(([t, b, a]) => [BASE + (TIP - BASE) * t, b, a]);
 
 /** A ring of `n` points about (x, y) at `f` ahead, a superellipse of exponent e. */
 const circ = (f: number, x: number, y: number, a: number, b: number, n: number, e = 1): Vec3[] =>
@@ -150,12 +150,12 @@ export const katana = (lod: number): number[] => {
     out,
     [
       cap(BASE - 0.026),
-      ...[0.056, 0.066, 0.084].map(f => circ(f, 0, 0, 0.0052, 0.0185, 6)),
+      ...[0.056, 0.066, 0.084].map(f => circ(f, 0, 0, 0.0066, 0.023, 6)),
       cap(0.084),
     ],
     () => BRASS,
   );
-  const rim = (f: number, k: number) => circ(f, 0, 0, 0.036 * k, 0.036 * k, lod ? 16 : 8, 0.6);
+  const rim = (f: number, k: number) => circ(f, 0, 0, 0.038 * k, 0.038 * k, lod ? 16 : 8, 0.6);
   loft(
     out,
     [cap(0.05), rim(0.05, 0.9), rim(0.053, 1), rim(0.06, 1), rim(0.063, 0.9), cap(0.063)],
@@ -170,15 +170,15 @@ export const katana = (lod: number): number[] => {
         const t = i / (rings - 1);
         // A little fuller in the middle than at its ends.
         const k = 1 + 0.1 * Math.sin(Math.PI * t);
-        return circ(0.052 - 0.212 * t, 0, 0, 0.0108 * k, 0.0128 * k, n);
+        return circ(0.052 - 0.262 * t, 0, 0, 0.0114 * k, 0.0136 * k, n);
       }),
     ],
     (i, k) => WRAP[(i + k) & 1],
   );
-  const pommel = (f: number) => circ(f, 0, 0, 0.0125, 0.0145, n);
-  loft(out, [cap(-0.152), pommel(-0.156), pommel(-0.168), cap(-0.17)], () => IRON);
+  const pommel = (f: number) => circ(f, 0, 0, 0.013, 0.0154, n);
+  loft(out, [cap(-0.202), pommel(-0.206), pommel(-0.218), cap(-0.22)], () => IRON);
   const bead = out.length;
-  loft(out, [cap(-0.17), circ(-0.172, 0, 0, 0.006, 0.006, 5), cap(-0.18)], () => GLOW);
+  loft(out, [cap(-0.22), circ(-0.222, 0, 0, 0.006, 0.006, 5), cap(-0.23)], () => GLOW);
   lit(out, bead, 1);
   return (built[lod] = out);
 };
@@ -192,8 +192,8 @@ export const arcs = (out: number[], at: Vec3, [r, u, f]: Vec3[], t: number, lod:
     if (h(0) < 0.3) {
       continue;
     }
-    const len = 0.1 + 0.15 * h(2);
-    const f0 = 0.12 + (0.67 - len) * h(1);
+    const len = 0.12 + 0.2 * h(2);
+    const f0 = 0.12 + (TIP - 0.17 - len) * h(1);
     const P = Array.from({ length: 5 }, (_, j) => {
       const d = f0 + (len * j) / 4;
       const [x, y] = j ? [(h(3 + j) - 0.5) * 0.04, (h(8 + j) - 0.5) * 0.04] : [0, 0];
@@ -269,39 +269,49 @@ export const frameOf = (d: Vec3, roll: number): Vec3[] => {
 
 /**
  * The cuts. Each is keys of [share of the swing, grip x, y, z, blade direction x, y, z, roll] in
- * the camera's space (right, up, forward), the guard first, and the same guard last: a wind-up,
- * the strike at its tick (every cut passes the middle of the view there, the point 81 cm from
- * the grip) and a follow-through, with the hand taking the slope between its neighbours' keys
- * (fastest through the strike). The right hand holds the grip, the left 9.5 cm behind it.
+ * the camera's space (right, up, forward), the guard first and last: a wind-up, the strike at its
+ * tick (every cut passes the middle of the view there) and a follow-through, with the hands taking
+ * the slope between their neighbours' keys (fastest through the strike). Both hands hold the grip,
+ * the left BEHIND the right. The wind-ups and follow-throughs go out of the view. The guard is
+ * rolled a little, its flat toward the eye.
  */
-export const GUARD = [0.14, -0.28, 0.4, -0.03, 0.5, 0.865, 0];
+export const GUARD = [0.1, -0.25, 0.4, -0.05, 0.42, 0.9, -0.45];
 /** The share of cut `c`'s swing at which it strikes. */
 const strikeAt = (c: number) => CUTS[c].strike / CUTS[c].ticks;
+/** From behind the left shoulder, through the middle, to low at the right. */
 const ACROSS = (s: number) => [
   [0, ...GUARD],
-  [0.22, 0, -0.2, 0.34, -0.65, 0.12, 0.75, 0.5],
-  [s, 0.08, -0.17, 0.43, 0, 0.17, 0.985, 1],
-  [0.5, 0.2, -0.2, 0.38, 0.8, 0.1, 0.6, 1.1],
+  [0.1, -0.04, -0.1, 0.3, -0.45, 0.85, 0.1, 0.4],
+  [0.22, -0.2, 0, 0.16, -0.5, 0.45, -0.74, 1.3],
+  [0.31, -0.12, -0.06, 0.3, -0.95, 0.25, 0.2, 1.2],
+  [s, 0, -0.13, 0.39, 0, 0.06, 1, 1.1],
+  [0.47, 0.12, -0.3, 0.32, 0.9, -0.3, 0.35, 1],
+  [0.6, 0.14, -0.5, 0.18, 0.75, -0.6, -0.1, 0.9],
   [1, ...GUARD],
 ];
 const KEYS: number[][][] = [
+  // Pulled back to the right hip, lunged out along the look, held a beat.
   [
     [0, ...GUARD],
-    [strikeAt(0) / 2, 0.2, -0.4, 0.24, -0.1, 0.4, 0.91, 0],
-    [strikeAt(0), 0.06, -0.14, 0.42, -0.075, 0.175, 0.98, 0],
-    [strikeAt(0) + 0.15, 0.06, -0.15, 0.44, -0.075, 0.175, 0.98, 0],
+    [0.22, 0.2, -0.33, 0.2, -0.08, 0.3, 0.95, 1.4],
+    [strikeAt(0), 0.04, -0.15, 0.41, -0.03, 0.1, 1, 1.4],
+    [strikeAt(0) + 0.2, 0.04, -0.16, 0.41, -0.03, 0.1, 1, 1.4],
     [1, ...GUARD],
   ],
   ACROSS(strikeAt(1)),
   // The cut from the right is the cut from the left in a mirror.
   ACROSS(strikeAt(2)).map((k, i, all) =>
-    i && i < all.length - 1 ? [k[0], 0.24 - k[1], k[2], k[3], -k[4], k[5], k[6], -k[7]] : k,
+    i && i < all.length - 1 ? [k[0], 0.06 - k[1], k[2], k[3], -k[4], k[5], k[6], -k[7]] : k,
   ),
+  // Raised over the head, down through the middle to below the view, held a beat.
   [
     [0, ...GUARD],
-    [0.27, 0.1, 0, 0.3, 0.08, 0.86, 0.5, 0],
-    [strikeAt(3), 0.07, -0.14, 0.42, 0, 0.17, 0.985, 0],
-    [0.55, 0.1, -0.3, 0.4, 0, -0.42, 0.9, 0],
+    [0.13, 0.08, 0.06, 0.28, 0, 1, 0.15, 0],
+    [0.27, 0.02, 0.32, 0.12, 0, 0.55, -0.83, 0],
+    [0.34, 0.03, 0.16, 0.3, 0, 1, 0.1, 0],
+    [strikeAt(3), 0.02, -0.12, 0.41, 0, 0.08, 1, 0],
+    [0.55, 0.03, -0.5, 0.3, 0, -0.75, 0.66, 0],
+    [0.66, 0.03, -0.52, 0.3, 0, -0.78, 0.62, 0],
     [1, ...GUARD],
   ],
 ];
@@ -345,5 +355,5 @@ export const progress = (was: number, p: Pick<PlayerState, 'swing' | 'cut'>, dt:
   return was < 0 ? at : Math.min(Math.max(was + (dt * TICK_HZ) / t, at), at + 2 / t, 1);
 };
 
-/** Whether the blade is cutting at `p` of its swing: the wind-up and the recovery leave no trail. */
-export const cutting = (p: number) => p > 0.12 && p < 0.6;
+/** Whether the blade is cutting at `p` of its swing: the wind-up, over by 0.22 to 0.27, and the recovery leave no trail. */
+export const cutting = (p: number) => p > 0.24 && p < 0.6;

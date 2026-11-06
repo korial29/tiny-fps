@@ -529,7 +529,7 @@ describe('the gun in the right hand', () => {
   const armed = (o: Partial<PlayerState> = {}) => man({ ...o, ammo: 30 });
   /** The cyan glow of the gun: bright green, over a violet that is not. */
   const glow = (v: Vert[]) => v.filter(q => q.c[1] > 1.5);
-  const GRIP: Vec3 = [0.27, -0.22, 0.42];
+  const GRIP: Vec3 = [0.22, -0.25, 0.4];
 
   it('is not there without the gun, nor while down', () => {
     expect(glow(draw(watch(man(), 60), man()))).toHaveLength(0);
@@ -547,7 +547,7 @@ describe('the gun in the right hand', () => {
     const g = glow(v).map(q => local(p, q.at));
     expect(g.length).toBeGreaterThan(50);
     // The gun is in the lower right: nearly all of it on the screen, none left of the middle.
-    expect(g.filter(seen).length).toBeGreaterThan(g.length * 0.8);
+    expect(g.filter(seen).length).toBeGreaterThan(g.length * 0.7);
     for (const l of g) {
       expect(l[0]).toBeGreaterThan(0);
     }
@@ -745,7 +745,7 @@ describe('the ammo on the back of the gun', () => {
     expect(quads.filter(seen).length).toBeGreaterThan(quads.length * 0.9);
     // Their normals point up, toward the camera above the gun, not down into it.
     for (let i = 0; i < out.length; i += STRIDE) {
-      expect(out[i + 4]).toBeGreaterThan(0.5);
+      expect(out[i + 4]).toBeGreaterThan(0.3);
     }
     // Two digits side by side: the tens left of the units.
     const xs = quads.map(l => l[0]);

@@ -279,7 +279,7 @@ const DIGITS = [
   'abcdfg',
   'g',
 ];
-const [DW, DH, DT, DGAP, DBACK] = [0.024, 0.045, 0.007, 0.006, -0.03];
+const [DW, DH, DT, DGAP, DBACK] = [0.024, 0.038, 0.0075, 0.005, -0.046];
 /** The rectangle of each segment in a digit: across and ahead from its back left corner. */
 const SEGMENTS: Record<string, [number, number, number, number]> = {
   a: [0, DH - DT, DW, DH],

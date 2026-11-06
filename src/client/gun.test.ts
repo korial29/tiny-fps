@@ -344,14 +344,16 @@ describe('the readout on the back of the gun', () => {
     expect(v(11)[0].c[0]).toBeLessThan(v(11)[0].c[2]);
   });
 
-  it('lies on the top of the body, facing up, within its width and over its back half', () => {
+  it('lies on the back of the top of the body, within its width, facing up and back toward the player', () => {
     for (const x of v(88)) {
       expect(Math.abs(x.p[0])).toBeLessThan(0.03);
-      expect(x.p[2]).toBeGreaterThan(-0.02);
-      expect(x.p[2]).toBeLessThan(0.04);
-      expect(x.p[1]).toBeGreaterThan(0.125);
+      expect(x.p[2]).toBeGreaterThan(0);
+      expect(x.p[2]).toBeLessThan(0.06);
+      expect(x.p[1]).toBeGreaterThan(0.115);
       expect(x.p[1]).toBeLessThan(0.15);
-      expect(x.n[1]).toBeGreaterThan(0.9);
+      expect(x.n[1]).toBeGreaterThan(0.3);
+      // The back of the gun is +z.
+      expect(x.n[2]).toBeGreaterThan(0);
     }
   });
 

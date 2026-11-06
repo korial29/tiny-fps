@@ -262,9 +262,9 @@ export const createBody = (world?: World): Body => {
     const a = w.amp * (1 + 0.5 * w.sprint);
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     const at: Vec3 = [
-      Math.min(0.27, 0.22 * wide) + 0.012 * a * s,
-      -0.22 + 0.018 * a * c - 0.3 * (1 - w.gun),
-      0.42 - 0.05 * kick,
+      Math.min(0.22, 0.18 * wide) + 0.012 * a * s,
+      -0.25 + 0.018 * a * c - 0.3 * (1 - w.gun),
+      0.4 - 0.05 * kick,
     ];
     // A shot kicks the nose up.
     const to: Vec3 = [target[0], target[1] + 0.1 * kick * Math.hypot(...target), target[2]];

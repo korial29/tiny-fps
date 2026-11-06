@@ -60,6 +60,9 @@ describe('render', () => {
 });
 
 const rms = (s: Float32Array) => Math.sqrt(s.reduce((m, x) => m + x * x, 0) / s.length);
+/** Zero crossings a second. */
+const crossings = (s: Float32Array) =>
+  s.reduce((n, x, i) => n + +(i > 0 && s[i - 1] < 0 !== x < 0), 0) / (s.length / RATE);
 /** The sound by its name in SOUND. */
 const sound = (name: keyof typeof SOUND) => render(SOUND[name], LAYERS);
 
@@ -92,8 +95,6 @@ describe('the sounds of the game', () => {
     expect(sound('CAPTURE').length).toBeGreaterThan(sound('TAKE').length * 3);
     expect(sound('CAPTURE').length).toBeGreaterThan(0.6 * RATE);
     // Zero crossings: the drop is a fall from 330 Hz, the return a chime from 659 up.
-    const crossings = (s: Float32Array) =>
-      s.reduce((n, x, i) => n + +(i > 0 && s[i - 1] < 0 !== x < 0), 0) / (s.length / RATE);
     expect(crossings(sound('DROP'))).toBeLessThan(crossings(sound('RETURN')));
   });
 
@@ -102,18 +103,24 @@ describe('the sounds of the game', () => {
     expect(gun.map(n => SOUND[n])).toEqual([16, 17, 18, 19, 20, 21, 22]);
   });
 
-  it('make the shot short enough for 8.6 a second, and a falling sweep', () => {
+  it('make the shot a deep plasma thump, short and clean enough for 8.6 a second', () => {
     const s = sound('LASER');
-    // Under the 116 ms between two shots.
-    expect(s.length / RATE).toBeLessThan(0.116);
-    // Zero crossings a second, early against late: the pitch comes down.
-    const rate = (a: number, b: number) =>
-      s
-        .subarray(a * RATE, b * RATE)
-        .reduce((n, x, i, v) => n + +(i > 0 && v[i - 1] < 0 !== x < 0), 0) /
-      (b - a);
-    expect(rate(0, 0.03)).toBeGreaterThan(rate(0.06, 0.09) * 1.3);
+    // Under the 116 ms between two shots, even played at the lowest pitch combat.ts gives it.
+    expect(s.length / RATE / 0.94).toBeLessThan(0.116);
+    // The attack is clean: the loudest sample in the first 5 ms, and the last third dies away.
+    expect(peak(s.subarray(0, 0.005 * RATE))).toBe(peak(s));
+    expect(rms(s.subarray(0.06 * RATE))).toBeLessThan(0.3 * rms(s.subarray(0, 0.03 * RATE)));
+    // Low: zero crossings give a pitch under 300 Hz (the old laser was over 2 kHz).
+    expect(crossings(s) / 2).toBeLessThan(300);
     expect(rms(s)).toBeLessThan(0.5);
+  });
+
+  it('make the splash of a plasma ball short, loud and noisy, far above the shot', () => {
+    expect(SOUND.SPLASH).toBe(LAYERS.length - 1);
+    const s = sound('SPLASH');
+    expect(s.length / RATE).toBeLessThan(0.25);
+    expect(peak(s)).toBeGreaterThan(0.5);
+    expect(crossings(s)).toBeGreaterThan(crossings(sound('LASER')) * 4);
   });
 
   it('make the hit a short high ping of one to two kHz that dies away fast, like Quake 3', () => {
@@ -133,8 +140,6 @@ describe('the sounds of the game', () => {
   });
 
   it('make hurt lower than the hit, and going down the longest of the gun sounds', () => {
-    const crossings = (s: Float32Array) =>
-      s.reduce((n, x, i) => n + +(i > 0 && s[i - 1] < 0 !== x < 0), 0) / (s.length / RATE);
     expect(crossings(sound('HURT'))).toBeLessThan(crossings(sound('HIT')));
     for (const n of ['LASER', 'HIT', 'HURT', 'GUN', 'PACK', 'DRY'] as const) {
       expect(sound('DOWN').length).toBeGreaterThan(sound(n).length);

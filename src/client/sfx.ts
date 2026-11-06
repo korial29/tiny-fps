@@ -94,6 +94,8 @@ export const SOUND = {
   SHING: 23,
   SWISH: 24,
   ZAP: 25,
+  /** A plasma ball bursting on a wall or a body. */
+  SPLASH: 26,
 } as const;
 
 /**
@@ -175,11 +177,11 @@ export const LAYERS: Voice[][] = [
     [1, 170, -0.9, 0.012, 0.05, 0.17, 0.06, 0.2, 0, 1, 0.5],
     [3, 3000, 0, 0.01, 0.04, 0.14, 0.4, 0.12, 0, 1, 0.5],
   ],
-  // LASER: a bright saw falling an octave in a tenth of a second, a lower square under it and a crackle.
+  // LASER, a plasma shot after the Doom 3 rifle: a sine thump falling from 190 Hz, a warbling square hum at 75 Hz and a crackle of noise held at 500 Hz.
   [
-    [1, 3600, -10, 0.001, 0.01, 0.09, 0, 0.5, 0, 1, 0.4],
-    [0, 1900, -8, 0.001, 0, 0.06, 0, 0.3, 0, 1, 0.25],
-    [3, 9000, 0, 0.001, 0, 0.03, 0, 0.4, 0, 1, 0.25],
+    [2, 190, -6, 0.001, 0.01, 0.08, 0, 1, 0, 1, 0.7],
+    [0, 75, -2, 0.001, 0.02, 0.07, 0.3, 0.12, 0, 1, 0.45],
+    [3, 500, -2, 0.001, 0.01, 0.05, 0, 0.6, 0, 1, 0.3],
   ],
   // HIT, as in Quake 3: a short metallic ping, a sine at 1.7 kHz with an inharmonic overtone, decaying fast.
   [
@@ -233,6 +235,12 @@ export const LAYERS: Voice[][] = [
     [1, 95, 0.6, 0.001, 0.07, 0.12, 0.6, 0.5, 0.05, 2, 0.35],
     [2, 2600, -4, 0.001, 0, 0.1, 0.3, 1, 0, 1, 0.25],
     [3, 7000, 0, 0.001, 0, 0.04, 0, 0.6, 0, 1, 0.3, 0.1],
+  ],
+  // SPLASH: a hiss of held noise falling fast, a bubble that chirps up twice, and a crackle.
+  [
+    [3, 8000, -3, 0.001, 0.02, 0.15, 0, 0.5, 0, 1, 0.6],
+    [2, 500, 8, 0.002, 0.01, 0.05, 0, 1, 0.03, 1.5, 0.45, 0.01],
+    [3, 1500, -1, 0.001, 0.03, 0.1, 0.9, 1, 0, 1, 0.3, 0.01],
   ],
 ];
 

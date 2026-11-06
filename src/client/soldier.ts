@@ -6,11 +6,14 @@ import { DASH_COOLDOWN, DASH_TICKS, STEP_H } from '../shared/constants';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
-import { createGait } from './gait';
+import { inv, reach } from './body';
+import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
+import { aimed, held } from './gun';
 import { unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { solve } from './rig';
+import { JOINT as J, mul, slerp, solve } from './rig';
+import type { Pose } from './rig';
 import { body, palette, skin } from './skin';
 
 /** How fast the dash streaks grow and fade, 1 / s. */
@@ -23,7 +26,13 @@ export interface Runner {
   gait: Gait;
   /** How much of a dash it is in, eased from 0 to 1: the length of the streaks. */
   dash: number;
+  /** Seconds since its last shot, and how far its gun arm is raised to aim, eased from 0 to 1. */
+  since: number;
+  aim: number;
 }
+
+/** Seconds after a shot that the gun stays up. */
+const AIMING = 0.5;
 
 const dashing = (p: PlayerState) => p.dash > DASH_COOLDOWN - DASH_TICKS;
 
@@ -31,7 +40,7 @@ const dashing = (p: PlayerState) => p.dash > DASH_COOLDOWN - DASH_TICKS;
 export const createRunner = (p: PlayerState): Runner => {
   const gait = createGait();
   gait.update(p, 0);
-  return { p: { ...p }, gait, dash: +dashing(p) };
+  return { p: { ...p }, gait, dash: +dashing(p), since: 1e3, aim: 0 };
 };
 
 /** The floor under a player standing at height `y`: the first top within a step above or below it. */
@@ -63,11 +72,32 @@ export const animate = (
     if (r) {
       r.gait.update(p, dt, world && floorOf(world, p.y));
       r.dash += (+dashing(p) - r.dash) * (1 - Math.exp(-dt * DASH_RATE));
+      r.since = p.shots == r.p.shots ? r.since + dt : 0;
+      r.aim += (+(r.since < AIMING) - r.aim) * (1 - Math.exp(-dt * 12));
       r.p = { ...p };
     } else {
       book.set(p.id, createRunner(p));
     }
   }
+};
+
+/** The pose with the right arm `k` of the way to holding the gun out along the look of `p`. */
+const lifted = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState, k: number): Pose => {
+  const [grip, ax] = aimed(p);
+  const rot = pose.rot.slice();
+  const q = { ...pose, rot };
+  const [uh, fh] = [ax[0], ax[2].map((v, i) => v * 0.92 - ax[1][i] * 0.38) as Vec3];
+  const wrist = grip.map((v, i) => v - 0.078 * fh[i] + 0.022 * uh[i]) as Vec3;
+  const pole: Vec3 = [uh[0] * 0.7, -1, uh[2] * 0.7];
+  reach(
+    q,
+    s,
+    J.ARM_R,
+    wrist.map((v, i) => s.pos[J.HAND_R][i] + (v - s.pos[J.HAND_R][i]) * k) as Vec3,
+    pole,
+  );
+  rot[J.HAND_R] = slerp(rot[J.HAND_R], mul(inv(solve(q).rot[J.FOREARM_R]), frame(uh, fh)), k);
+  return q;
 };
 
 /** A dash trails three streaks: thin glowing (layer -2) spikes, a pair of crossed triangles each. */
@@ -97,8 +127,24 @@ const streaks = (out: number[], r: Runner, color: number[], at: (v: Vec3) => Vec
  * trousers, skin, hair and light shoes, posed by its gait. A dash trails a few glowing streaks.
  */
 export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
-  const pose = r.gait.pose();
-  skin(out, body(lod), solve(pose), palette(color));
+  let pose = r.gait.pose();
+  const { p } = r;
+  // Lying down, it sinks into the roof for the last half second.
+  if (p.down) {
+    pose = {
+      ...pose,
+      at: [pose.at[0], pose.at[1] - 0.5 * Math.min(Math.max(1 - p.down / 30, 0), 1), pose.at[2]],
+    };
+  }
+  let s = solve(pose);
+  if (r.aim > 0.01 && p.ammo >= 0) {
+    pose = lifted(pose, s, p, r.aim);
+    s = solve(pose);
+  }
+  skin(out, body(lod), s, palette(color));
+  if (p.ammo >= 0 && !p.down) {
+    held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], lod);
+  }
   if (r.dash > 0.15) {
     const [s, c] = [Math.sin(pose.yaw), Math.cos(pose.yaw)];
     const { x, y, z } = r.p;

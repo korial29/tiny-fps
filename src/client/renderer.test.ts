@@ -11,6 +11,8 @@ import type { Light } from './lights';
 import { STRIDE } from './mesh';
 import { LAYERS } from './textures';
 import {
+  FOG_LAYER,
+  FOG_RISE,
   HAZE,
   MAX_PIXELS,
   MAX_TINTS,
@@ -20,6 +22,7 @@ import {
   createRenderer,
   daylight,
   fogOf,
+  fogRef,
   palette,
   scenery,
   sunProj,
@@ -701,6 +704,17 @@ describe('createRenderer', () => {
       expect(frag).toContain(`G[${MAX_TINTS}]`);
       expect(frag).toContain('H[5]');
       expect(frag).not.toMatch(/undefined|NaN|\[object/);
+    });
+
+    it('sets the height of the fog layer to the lowest roof, and integrates the layer along the ray', () => {
+      createRenderer(canvas, ROOM);
+      const frag = calls
+        .filter(c => c[0] == 'shaderSource')
+        .map(c => String(c[2]))
+        .find(s => s.includes('sampler2DArray'))!;
+      expect(frag).toContain('uniform float U;');
+      expect(frag).toContain(`${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))`);
+      expect(set('U').map(c => c.slice(2))).toEqual([[fogRef(ROOM.def)]]);
     });
   });
 

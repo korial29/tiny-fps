@@ -92,7 +92,7 @@ export const uses = ({ brushes, floor }: WorldDef, b: Brush): Use => {
 };
 
 /** One face of the box min..max (flat on `axis` when min and max agree there) as two triangles, pushed in the map's vertex format. */
-const face = (
+export const face = (
   out: number[],
   min: Vec3,
   max: Vec3,

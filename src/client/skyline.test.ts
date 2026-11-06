@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ROOFTOPS } from '../shared/map';
+import { HIGHLINE, ROOFTOPS } from '../shared/map';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
 import { MAX_TINTS, city, palette } from './render';
 import { skyline } from './skyline';
+import { ROAD, STREET, grid } from './street';
 
 const towers = skyline(ROOFTOPS);
 /** The play area: the box over the footprints of the brushes. */
@@ -13,8 +14,8 @@ const area = [0, 2].map(a => [
 ]);
 
 describe('skyline', () => {
-  it('is a ring of towers, dozens of them, and not an empty list', () => {
-    expect(towers.length).toBeGreaterThanOrEqual(30);
+  it('is a city of towers, a few dozen of them, and not an empty list', () => {
+    expect(towers.length).toBeGreaterThanOrEqual(20);
     expect(towers.length).toBeLessThan(120);
   });
 
@@ -37,6 +38,38 @@ describe('skyline', () => {
     }
   });
 
+  it('stands on the street, and in the blocks between the roads: none on a road', () => {
+    for (const def of [ROOFTOPS, HIGHLINE]) {
+      const { xs, zs } = grid(def);
+      const all = skyline(def);
+      for (const t of all) {
+        // A tower goes down to the street, a cap stands on a tower.
+        expect(
+          t.tint
+            ? all.some(
+                o =>
+                  !o.tint && o.max[1] == t.min[1] && o.min[0] <= t.min[0] && o.max[0] >= t.max[0],
+              )
+            : t.min[1] == STREET,
+        ).toBe(true);
+        const roads = [...xs.map(x => [x, 0, 2] as const), ...zs.map(z => [z, 2, 0] as const)];
+        for (const [at, a] of roads) {
+          expect(t.max[a] <= at - ROAD / 2 || t.min[a] >= at + ROAD / 2).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('keeps the tops below the lowest roof round the play area, so no tower rises over the course next to it', () => {
+    const roof = Math.min(...ROOFTOPS.brushes.map(b => b.max[1]));
+    for (const t of towers) {
+      const apart = [0, 2].map((a, i) => Math.max(area[i][0] - t.max[a], t.min[a] - area[i][1], 0));
+      if (Math.hypot(...apart) < 40) {
+        expect(t.max[1]).toBeLessThan(roof);
+      }
+    }
+  });
+
   it('is the same every time', () => {
     expect(skyline(ROOFTOPS)).toEqual(towers);
   });
@@ -56,7 +89,7 @@ describe('skyline', () => {
     expect(sides).toContain(TEX.GLASS);
     expect(sides).toContain(TEX.CONCRETE);
     expect(towers.filter(t => t.tint).length).toBeGreaterThanOrEqual(3);
-    expect(new Set(towers.map(t => Math.round(t.max[1]))).size).toBeGreaterThan(20);
+    expect(new Set(towers.map(t => Math.round(t.max[1]))).size).toBeGreaterThanOrEqual(15);
   });
 
   it('keeps its tints within the shader palette, with the map', () => {

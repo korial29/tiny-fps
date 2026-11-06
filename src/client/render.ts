@@ -21,6 +21,7 @@ import { cell, kit, rack } from './props';
 import { animate, soldier } from './soldier';
 import type { Runner } from './soldier';
 import { skyline } from './skyline';
+import { deepen, street } from './street';
 import { LAYERS, SIZE, textures } from './textures';
 import { vision, zones } from './vision';
 
@@ -38,6 +39,13 @@ export const SUN_AREA = 64;
 export const SUN_DEPTH = 100;
 /** How far the fog colour is pulled toward the sky's horizon, 0 to 1: a fog unlike the horizon draws an edge against the sky. */
 export const HAZE = 0.6;
+/**
+ * The height fog: besides the haze at the density of the world's fog, a layer of FOG_LAYER times that
+ * density at the lowest roof, which grows by e every 1 / FOG_RISE metres down: 2 % more at the roofs,
+ * about three times the haze on the street 94 m under them.
+ */
+export const FOG_LAYER = 0.02;
+export const FOG_RISE = 0.05;
 /** The vertical field of view at rest, degrees, and the tangent of its half. */
 export const FOV_DEG = 70;
 export const FOV = Math.tan((FOV_DEG * Math.PI) / 360);
@@ -120,11 +128,13 @@ const RELIEF = 0.06;
 // haze band, the sun's disc and glow, bright enough to bloom (K0, the sky along a direction). The
 // glass layer adds K0 along the reflected view, strong at a grazing angle (Fresnel), after the
 // lighting. On a texture C.w is 2 * the brush's tint index + its light (see level); G is the
-// palette. F: fog colour and density.
+// palette. F: fog colour and density, U the height the fog layer is anchored at: the density is
+// F.a * (1 + FOG_LAYER * exp(FOG_RISE * (U - y))) at height y, integrated along the view ray in closed
+// form (x is the climb along it, times FOG_RISE; the branch is its limit at 0).
 const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T,Z,Y;uniform int Q;
-uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
+uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F;uniform float U;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;out vec4 o;
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
@@ -167,7 +177,8 @@ l+=K[i].rgb*w;
 sp+=K[i].rgb*w*pow(max(dot(m,normalize(d+V)),0.),R.y);}
 c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
 c+=step(abs(L-${TEX.GLASS}.),.5)*K0(reflect(-V,m))*(.1+.9*pow(1.-max(dot(m,V),0.),4.));
-o=vec4(mix(c,F.rgb,1.-exp(-F.a*length(P-E))),1.);}`;
+float D=length(P-E),x=${FOG_RISE}*(P.y-E.y);
+o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),1.);}`;
 
 /**
  * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
@@ -180,7 +191,7 @@ export const viewProj = (
   aspect: number,
   roll = 0,
   t = FOV,
-  [N, F] = [0.1, 400],
+  [N, F] = [0.1, 900],
 ) => {
   const [r, u, f] = basis(yaw, pitch, roll);
   const k = (F + N) / (F - N);
@@ -344,18 +355,36 @@ export const daylight = ({ sky: [zenith, horizon] }: WorldDef): Vec3[] => [
   horizon,
 ];
 
-/** The world as it is drawn: its brushes and a distant city around them. The physics knows only the brushes. */
+/** The world as it is drawn: its buildings down to the street, and a city around them. The physics knows only `world`. */
 export const city = (world: World): World => ({
   ...world,
-  def: { ...world.def, brushes: [...world.def.brushes, ...skyline(world.def)] },
+  def: { ...world.def, brushes: [...deepen(world.def), ...skyline(world.def)] },
 });
 
-/** All the map's vertices, drawn once: the city, the brushes, the runner's red and the team zones. */
+/** All the map's vertices, drawn once: the city, the brushes, the street under them, the runner's red and the team zones. */
 export const scenery = (world: World): number[] => [
   ...level(city(world)),
+  ...street(world.def),
   ...vision(world.def),
   ...zones(world.def),
 ];
+
+/** The height the fog layer is anchored at: the lowest top of the world, so that at a roof the layer is a few percent of the haze at most. */
+export const fogRef = ({ brushes }: WorldDef) => Math.min(...brushes.map(b => b.max[1]));
+
+/**
+ * The fog's optical depth from `eye` to `p`, what the shader integrates: the haze plus the layer,
+ * for a world whose fog density is `density` and whose layer sits at `ref`.
+ */
+export const fogDepth = (density: number, ref: number, eye: Vec3, p: Vec3) => {
+  const x = FOG_RISE * (p[1] - eye[1]);
+  const climb = Math.abs(x) < 1e-3 ? 1 - x / 2 : (1 - Math.exp(-x)) / x;
+  return (
+    density *
+    Math.hypot(p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]) *
+    (1 + FOG_LAYER * Math.exp(FOG_RISE * (ref - eye[1])) * climb)
+  );
+};
 
 /** The shader's fog uniform: the world's fog colour pulled toward its horizon by HAZE, and its density; none when the world has no fog. */
 export const fogOf = ({ fog, sky }: WorldDef): [number, number, number, number] =>
@@ -430,12 +459,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   };
 
   const size = () => backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
-  // What is drawn is the world plus a distant city and the runner's red; the physics knows only `world`.
-  const seen = {
-    ...world,
-    def: { ...world.def, brushes: [...world.def.brushes, ...skyline(world.def)] },
-  };
-  const ground = [...level(seen), ...vision(world.def), ...zones(world.def)];
+  // What is drawn is the world plus a city, a street and the runner's red; the physics knows only `world`.
+  const ground = scenery(world);
   const { sun, sky } = world.def;
   const sunDir = sun.dir.map(v => v / Math.hypot(...sun.dir)) as Vec3;
   const pixels = textures();
@@ -563,6 +588,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       'M',
       'D',
       'F',
+      'U',
       'G',
       'W',
       'H',
@@ -631,6 +657,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const climate = () => {
     const tints = palette(city(world));
     gl.uniform4fv(u.F, fogOf(world.def));
+    gl.uniform1f(u.U, fogRef(world.def));
     gl.uniform3fv(u.H, daylight(world.def).flat());
     gl.uniform3fv(u.O, sunDir);
     gl.uniform3fv(u.X, sun.color);
@@ -673,6 +700,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const dt = Math.min(0.1, now - clock);
       clock = now;
       animate(runners, others, dt, world);
+      const [right, up, fwd] = basis(yaw, pitch, fx.roll);
       ctf?.bases.forEach((at, team) => base(v, at, teamRgb(team), now));
       ctf?.flags.forEach(f => flag(v, f, teamRgb(f.team), now));
       ctf?.racks?.forEach((at, team) => at && rack(v, at, teamRgb(team), now));
@@ -730,8 +758,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.uniformMatrix4fv(u.M, false, pk.m);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       // The sky first, at depth 1: the view ray of each pixel from the camera's axes.
-      const [r, up, fwd] = basis(yaw, pitch, fx.roll);
-      gl.uniform3fv(u.J, [r.map(c => c * tan * (w / h)), up.map(c => c * tan), fwd].flat());
+      gl.uniform3fv(u.J, [right.map(c => c * tan * (w / h)), up.map(c => c * tan), fwd].flat());
       gl.uniform1f(u.Y, 1);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.uniform1f(u.Y, 0);

@@ -220,7 +220,7 @@ The game is the movement and a capture the flag on top of it, with a tackle to s
 ## How it works
 
 - **The host is authoritative**: the Node server, or the host tab in local mode. It runs the players on the map.
-- **Inputs, not positions**: each client sends one 11-byte input per step at 60 Hz, holding its keys, view angles and the moment it sees the others at. It predicts its own player at once and replays what the host has not acknowledged yet.
+- **Inputs, not positions**: each client sends one 12-byte input per step at 60 Hz, holding its keys, view angles and the moment it sees the others at. It predicts its own player at once and replays what the host has not acknowledged yet.
 - **Snapshots** go out at 30 Hz: a 4-byte head, 39 bytes per player (position, speed, look angles, the movement state and its timers), then the match: the captures, the clock and the two flags, 6 bytes when both are home, in a compact binary format. The other players are drawn 100 ms in the past, interpolated between snapshots.
 - **Rendering**: one WebGL2 shader program and one vertex buffer, up to 16 lights, with up to 4 shadow maps drawn by the same program.
 

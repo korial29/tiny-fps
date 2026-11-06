@@ -232,7 +232,7 @@ export const createCombat = (
       tracer.orbs(orbs);
       for (const at of bursts) {
         tracer.burst(at);
-        audio.play(SOUND.ZAP, at);
+        audio.play(SOUND.SPLASH, at);
       }
     },
   };

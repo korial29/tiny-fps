@@ -4,7 +4,8 @@ import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT, JOINTS, PARENT, axis, rest, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
-import { body, palette, skin } from './skin';
+import { body, cut, palette, skin } from './skin';
+import { LIMB } from '../shared/types';
 
 const JACKET = [0.1, 0.8, 0.2];
 const [, TRIM, PANTS, FLESH, HAIR, UPPER, SOLE, GLOVE] = palette(JACKET);
@@ -368,5 +369,93 @@ describe('skin', () => {
       skin(out, body(1), solve(p), palette(JACKET));
     }
     expect((performance.now() - t) / 200).toBeLessThan(2);
+  });
+
+  describe('cut', () => {
+    const LIMBS = [LIMB.HEAD, LIMB.ARM_L, LIMB.ARM_R, LIMB.LEG_L, LIMB.LEG_R];
+    const CAP = palette(JACKET).length - 1;
+    const tris = (s: { t: Uint16Array }, n = s.t.length / 3) =>
+      Array.from({ length: n }, (_, i) => [...s.t.slice(i * 3, i * 3 + 3)].join());
+
+    it('splits the skin into the body and the limb: every triangle once, plus the cut faces', () => {
+      for (const lod of [0, 1]) {
+        const whole = body(lod);
+        for (const limb of LIMBS) {
+          const [rest, piece] = cut(lod, limb);
+          const caps = [rest, piece].map(s => [...s.c].filter(c => c == CAP).length);
+          expect(caps[0]).toBeGreaterThanOrEqual(4);
+          expect(caps[1]).toBe(caps[0]);
+          // The caps come last, so the rest is whole's triangles, each once.
+          const kept = [
+            ...tris(rest, rest.c.length - caps[0]),
+            ...tris(piece, piece.c.length - caps[1]),
+          ];
+          expect(kept.sort()).toEqual(tris(whole).sort());
+          expect(rest.w.length).toBe(whole.w.length + 1);
+          // Both faces fan from the one new vertex, the same edge each way round.
+          const fan = (s: { t: Uint16Array }, k: number) => s.t[s.t.length - 3 * k + 2];
+          expect(fan(rest, 1)).toBe(whole.w.length);
+          expect(fan(piece, 1)).toBe(whole.w.length);
+        }
+      }
+    });
+
+    it('cuts where the limb meets the trunk: the head at the neck, an arm at the shoulder, a leg at the hip', () => {
+      const ys = (limb: number) => {
+        const [, piece] = cut(1, limb);
+        return [...piece.t].map(i => piece.v[i * 6 + 1]);
+      };
+      const xs = (limb: number) => {
+        const [, piece] = cut(1, limb);
+        return [...piece.t].map(i => piece.v[i * 6]);
+      };
+      expect(Math.min(...ys(LIMB.HEAD))).toBeGreaterThan(1.54);
+      expect(Math.max(...ys(LIMB.HEAD))).toBeCloseTo(1.8, 2);
+      expect(Math.min(...ys(LIMB.ARM_R))).toBeCloseTo(0.772, 2);
+      expect(Math.max(...ys(LIMB.ARM_R))).toBeLessThan(1.4);
+      expect(Math.min(...xs(LIMB.ARM_R))).toBeGreaterThan(0.1);
+      expect(Math.max(...xs(LIMB.ARM_L))).toBeLessThan(-0.1);
+      expect(Math.max(...ys(LIMB.LEG_L))).toBeLessThan(0.95);
+      expect(Math.min(...ys(LIMB.LEG_L))).toBeCloseTo(0, 2);
+      expect(Math.max(...xs(LIMB.LEG_L))).toBeLessThan(0.01);
+      expect(Math.min(...xs(LIMB.LEG_R))).toBeGreaterThan(-0.01);
+    });
+
+    it('closes both pieces: every edge has a twin, but the buried base of the nose', () => {
+      for (const limb of LIMBS) {
+        for (const s of cut(1, limb)) {
+          const dir = new Set<string>();
+          for (let i = 0; i < s.t.length; i += 3) {
+            for (let k = 0; k < 3; k++) {
+              dir.add(`${s.t[i + k]} ${s.t[i + ((k + 1) % 3)]}`);
+            }
+          }
+          for (const key of dir) {
+            const [a, b] = key.split(' ');
+            if (!dir.has(`${b} ${a}`)) {
+              expect(s.v[+a * 6 + 2] < -0.07 && s.v[+a * 6 + 1] > 1.6).toBe(true);
+            }
+          }
+        }
+      }
+    });
+
+    it('draws the cut faces glowing red-orange, unlit, and the rest of the skin lit', () => {
+      const out: number[] = [];
+      skin(out, cut(1, LIMB.ARM_R)[0], solve(rest()), palette(JACKET));
+      const rows = (v: number[]) =>
+        Array.from({ length: v.length / STRIDE }, (_, i) => v.slice(i * STRIDE, (i + 1) * STRIDE));
+      const [glowing, lit] = [-2, -1].map(l => rows(out).filter(r => r[8] == l));
+      expect(glowing.length).toBeGreaterThan(15);
+      expect(lit.length + glowing.length).toBe(out.length / STRIDE);
+      for (const r of glowing) {
+        expect(r[6]).toBeGreaterThan(1);
+        expect(r[6]).toBeGreaterThan(r[7] * 2);
+        expect(r[7]).toBeGreaterThan(r[9]);
+      }
+      const plain: number[] = [];
+      skin(plain, body(1), solve(rest()), palette(JACKET));
+      expect(rows(plain).every(r => r[8] == -1)).toBe(true);
+    });
   });
 });

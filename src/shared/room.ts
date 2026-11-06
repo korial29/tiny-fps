@@ -19,7 +19,7 @@ import {
   TEAM_COLOR,
   TICK_HZ,
 } from './constants';
-import { knock, strike } from './blade';
+import { knock, limbOf, strike } from './blade';
 import { Ctf } from './ctf';
 import { STRIKE, step, within } from './gun';
 import { HIGHLINE } from './map';
@@ -29,6 +29,7 @@ import type { Flying } from './plasma';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
 import { reaches, tackling } from './tackle';
+import { LIMB } from './types';
 import type { Conn, Every, PlayerInfo, PlayerState, Rules } from './types';
 import { build } from './world';
 import type { World, WorldDef } from './world';
@@ -334,7 +335,8 @@ export class Room {
 
   /**
    * `hp` of damage to `foe`; the last one puts him down: he lies where he fell, without the gun or
-   * the katana, and a flag he carries drops with the lock. True when he went down.
+   * the katana, a flag he carries drops with the lock, and `lost` is NONE (a cut sets it after).
+   * True when he went down.
    */
   private harm(foe: Player, hp: number): boolean {
     if ((foe.state.hp -= hp) > 0) {
@@ -348,6 +350,7 @@ export class Room {
       blade: false,
       wield: false,
       swing: 0,
+      lost: LIMB.NONE,
     });
     this.ctf.drop(foe.state);
     return true;
@@ -395,18 +398,22 @@ export class Room {
    * A cut of `p` struck at the view tick `view`: every enemy it reaches as `p` drew him is hit
    * (`strike`), and the `hits` count goes up once. Each takes the cut's hp; one it does not put
    * down is shocked: a stumble of SHOCK_TICKS thrown SHOCK_KNOCK m/s the way the blade goes, with
-   * `zap`, and `by` the attacker. A shock drops no flag.
+   * `zap`, and `by` the attacker. A shock drops no flag. One it puts down loses the limb the blade
+   * crosses where `p` drew him (`limbOf`).
    */
   private cut(p: Player, view: number | undefined): void {
-    const seen = strike(this.world, p.state, this.enemies(p, view)).map(s => s.id);
-    const foes = this.players().filter(q => seen.includes(q.info.id));
+    const seen = strike(this.world, p.state, this.enemies(p, view));
+    const foes = this.players().filter(q => seen.some(s => s.id === q.info.id));
     if (!foes.length) {
       return;
     }
     p.state.hits = (p.state.hits + 1) & 255;
     const [dx, dz] = knock(p.state);
     for (const foe of foes) {
-      if (!this.harm(foe, CUTS[p.state.cut ?? 0].hp)) {
+      if (this.harm(foe, CUTS[p.state.cut ?? 0].hp)) {
+        const drawn = seen.find(s => s.id === foe.info.id)!;
+        foe.state.lost = limbOf(p.state, drawn);
+      } else {
         stumble(foe.state, dx, dz, SHOCK_TICKS, SHOCK_KNOCK);
         foe.state.zap = true;
         foe.by = p.info.id;

@@ -701,7 +701,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const now = performance.now() / 1000;
       const dt = Math.min(0.1, now - clock);
       clock = now;
-      animate(runners, others, dt, world);
+      animate(runners, others, dt, world, tracer);
       const [right, up, fwd] = basis(yaw, pitch, fx.roll);
       drive(v, eye, fwd, Date.now() / 1000);
       ctf?.bases.forEach((at, team) => base(v, at, teamRgb(team), now));

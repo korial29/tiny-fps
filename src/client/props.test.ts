@@ -170,11 +170,11 @@ describe('a katana rack', () => {
     const ring = blade.filter(x => x[8] == -2 && x[1] < 3.1);
     expect(ring.length).toBe(gun.filter(x => x[8] == -2 && x[1] < 3.1).length);
     expect(Math.max(...ring.map(x => Math.hypot(x[0] - 4, x[2] - 8)))).toBeCloseTo(RACK_R, 1);
-    // The katana is longer than the gun and lies level: nearly a metre across, 1 m above the roof.
+    // The katana is longer than the gun and lies level: 1.3 m across, about its middle, 1 m above the roof.
     const over = blade.filter(x => x[1] > 3.8);
     expect(over.length).toBeGreaterThan(200);
     const span = Math.max(...over.map(x => Math.hypot(x[0] - 4, x[2] - 8)));
-    expect(span).toBeGreaterThan(0.45);
+    expect(span).toBeGreaterThan(0.62);
     expect(span).toBeLessThan(0.7);
     // Cyan light along the edge, which the gun's own rack does not have at that height.
     const edge = over.filter(x => x[8] == -2 && x[7] > 1.5 && x[9] > x[6] * 2);

@@ -6,10 +6,10 @@
 //   yaw in 65536ths of a turn, decoded in [0, 2π); pitch in 1/10000 rad; view is the host tick
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
 //   keys is a u16: KEY bits 0 to 9 (forward, back, left, right, jump, sprint, dash, crouch, fire, blade).
-// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 46 bytes:
+// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 47 bytes:
 //   [id u8][x f32][y f32][z f32][vx f32][vy f32][vz f32][edge f32]
 //   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8][stun u8]
-//   [gun u24][shots u8][hits u8][swing u8]
+//   [gun u24][shots u8][hits u8][swing u8][lost u8]
 //   mode: bits 0-2 MODE, bits 3-5 wall (SIDE), bit 6 jumps left, bit 7 air dashes left
 //   dash: bits 0-5 the dash timer, bits 6-7 the high bits of the tackler's id (see stun)
 //   timers: bits 0-2 coyote ticks, bits 3-5 jump buffer ticks, bit 6 jump held, bit 7 dash held
@@ -24,6 +24,7 @@
 //   (the stumble is a katana's shock). shots and hits are the wrapping counters of the shots fired
 //   and the hits landed (a plasma ball or a cut).
 //   swing: bits 0-5 the ticks left in the katana's swing, bits 6-7 its cut (CUT).
+//   lost: bits 0-2 the LIMB a katana's cut took off when it put him down (NONE once up), the rest 0.
 //   Then the match, after the players: [red u8][blue u8][clock u16] the captures of each team, and
 //   the whole seconds to the end of the match (bit 15: it is over, and the clock counts to the next
 //   one), [packs u32] bit n set when health pack n is there to take; then the red and the blue flag, each [state u8 = FLAG] and by state:
@@ -35,7 +36,7 @@
 //     id: the shooter's `shots` after the shot; by: bits 0-6 the shooter's id, bit 7 burst (it burst
 //     where it is: the last snapshot that carries it); x, y, z in 1/32 m; the direction as a yaw in
 //     256ths of a turn and a pitch in 127ths of a quarter turn.
-//   A snapshot is 4 + 46 × players + 8 + 2 to 16 bytes: 10 on top of the players when both flags are
+//   A snapshot is 4 + 47 × players + 8 + 2 to 16 bytes: 10 on top of the players when both flags are
 //   home and no ball flies; with balls, 1 + 10 × balls more.
 // Every multi-byte field is big-endian (DataView's default).
 import { FLAG, KEY, MODE } from './types';
@@ -63,7 +64,7 @@ export const MSG_SNAPSHOT = 2;
 
 export const INPUT_BYTES = 12;
 export const SNAP_HEAD = 4;
-export const SNAP_PLAYER = 46;
+export const SNAP_PLAYER = 47;
 /** The match block after the players: the captures, the clock, the packs; the flags follow (2 to 16 bytes). */
 export const SNAP_MATCH = 8;
 
@@ -184,6 +185,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint8(o + 43, p.shots);
     v.setUint8(o + 44, p.hits);
     v.setUint8(o + 45, ((p.swing ?? 0) & 63) | (((p.cut ?? 0) & 3) << 6));
+    v.setUint8(o + 46, (p.lost ?? 0) & 7);
   });
   v.setUint8(end, s.score[0]);
   v.setUint8(end + 1, s.score[1]);
@@ -273,6 +275,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       zap: ((gun >> 23) & 1) === 1,
       swing: v.getUint8(o + 45) & 63,
       cut: v.getUint8(o + 45) >> 6,
+      lost: v.getUint8(o + 46) & 7,
     });
   }
   const clock = v.getUint16(end + 2);

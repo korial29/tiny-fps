@@ -5,10 +5,12 @@ import { CUT, MODE, SIDE, TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
-import { MUZZLE, REAR, aimed, gun, tip } from './gun';
+import { MUZZLE, REAR, aimed, grip, gun, tip } from './gun';
+import { BEHIND, axes } from './katana';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
-import { animate, createRunner, soldier } from './soldier';
+import { JOINT as J, solve, turn } from './rig';
+import { animate, brandish, createRunner, soldier } from './soldier';
 import type { Runner } from './soldier';
 import { palette } from './skin';
 
@@ -515,28 +517,60 @@ describe('a runner with the katana', () => {
     expect(far).toBeLessThan(near * 0.6);
   });
 
-  it('carries it blade back and low, running or standing, at the right', () => {
+  it('carries it upright in both hands before its right shoulder, running or standing', () => {
     for (const vz of [0, -6, -9]) {
       const out: number[] = [];
       const r = hold(blade({ vz }), 90);
       soldier(out, r, GREEN, 1);
-      const [x, y, z] = tipOf(out, { z: r.p.z });
-      // Behind it (it runs toward -z), below the hip, to its right.
-      expect(z).toBeGreaterThan(r.p.z + 0.3);
-      expect(y).toBeLessThan(r.p.y + 0.95);
-      expect(x).toBeGreaterThan(r.p.x - 0.1);
-      // Never in front of it.
-      expect(Math.min(...light(out).map(q => q[2]))).toBeGreaterThan(r.p.z - 0.3);
+      // The point is the highest light: over its head, at its right (+x).
+      const [x, y, z] = light(out).reduce((m, q) => (q[1] > m[1] ? q : m));
+      expect(y).toBeGreaterThan(r.p.y + 2.1);
+      expect(x).toBeGreaterThan(r.p.x);
+      expect(x).toBeLessThan(r.p.x + 0.45);
+      expect(Math.abs(z - r.p.z)).toBeLessThan(0.4);
+      // Nothing of it low: the blade stands above the hands at the chest, the pommel at the belt.
+      expect(Math.min(...light(out).map(q => q[1]))).toBeGreaterThan(r.p.y + 0.95);
+    }
+  });
+
+  it('holds the grip in both hands in the carry and all through every cut, standing or running', () => {
+    /** How far the left hand's grip is from its place on the handle, BEHIND the right hand's. */
+    const apart = (r: Runner) => {
+      const s = solve(brandish(r.gait.pose(), r.p, r.prog, r.gait.phase));
+      const [at, ax] = [grip(s.pos[J.HAND_R], s.rot[J.HAND_R]), axes(s.rot[J.HAND_R])];
+      const [fing, back] = [turn(s.rot[J.HAND_L], [0, -1, 0]), turn(s.rot[J.HAND_L], [1, 0, 0])];
+      return Math.hypot(
+        ...[0, 1, 2].map(
+          i => s.pos[J.HAND_L][i] + fing[i] * 0.078 + back[i] * 0.022 - (at[i] - BEHIND * ax[2][i]),
+        ),
+      );
+    };
+    for (const cut of [0, 1, 2, 3]) {
+      for (const vz of [0, -6, -9]) {
+        const book = new Map<number, Runner>();
+        let z = -3;
+        for (let i = 0; i < 60; i++) {
+          animate(book, [blade({ cut, vz, z: (z += vz * DT) })], DT);
+        }
+        expect(apart(book.get(1)!)).toBeLessThan(0.005);
+        for (let i = 0; i < CUTS[cut].ticks; i++) {
+          animate(book, [blade({ cut, vz, z: (z += vz * DT), swing: CUTS[cut].ticks - i })], DT);
+          expect(apart(book.get(1)!)).toBeLessThan(0.005);
+        }
+      }
     }
   });
 
   it.each([
-    [CUT.THRUST, 8, 'thrusts: the point goes out ahead of it, toward -z'],
-    [CUT.LEFT, 11, 'cuts from its left to its right, toward +x'],
-    [CUT.RIGHT, 11, 'cuts from its right to its left, toward -x'],
-    [CUT.SLASH, 14, 'slashes down from over its head'],
-  ])('does cut %i with the arm: %s', (cut, strike, _name) => {
+    [CUT.THRUST, 'thrusts: the point goes out ahead of it, toward -z'],
+    [CUT.LEFT, 'cuts from its left to its right, toward +x'],
+    [CUT.RIGHT, 'cuts from its right to its left, toward -x'],
+    [CUT.SLASH, 'slashes down from over its head'],
+  ])('does cut %i with the arms: %s', (cut, _name) => {
     const { out } = frames(cut);
+    const { ticks, strike } = CUTS[cut];
+    /** The frame at the share `k` of the swing. */
+    const tick = (k: number) => Math.round(k * ticks);
     const path = out.map(v => tipOf(v));
     // A big move: over a metre and a half of the point, readable from far away.
     const total = path
@@ -546,43 +580,40 @@ describe('a runner with the katana', () => {
     // Where it is at the strike: ahead of the runner (z = -3, ahead is -z), around the height of the eyes.
     expect(path[strike][2]).toBeLessThan(-3 - 0.7);
     if (cut == CUT.THRUST) {
-      expect(path[strike][2]).toBeLessThan(path[3][2] - 0.2);
+      expect(path[strike][2]).toBeLessThan(path[tick(0.22)][2] - 0.2);
     } else if (cut == CUT.SLASH) {
-      expect(path[9][1]).toBeGreaterThan(path[strike][1] + 0.4);
-      expect(path[strike][1]).toBeGreaterThan(path[20][1] + 0.3);
+      // Raised over the head and behind it, then down to below the hips.
+      expect(path[tick(0.27)][1]).toBeGreaterThan(path[strike][1] + 0.6);
+      expect(path[tick(0.27)][2]).toBeGreaterThan(-3);
+      expect(path[strike][1]).toBeGreaterThan(path[tick(0.55)][1] + 0.8);
     } else {
       const s = cut == CUT.LEFT ? 1 : -1;
       expect(s * path[strike + 3][0]).toBeGreaterThan(s * path[strike - 4][0] + 0.8);
-      // The runner faces -z: its right is +x.
-      expect(s * (path[6][0] - 5)).toBeLessThan(0);
-      expect(s * (path[17][0] - 5)).toBeGreaterThan(0);
+      // The runner faces -z: its right is +x. Wound up behind the shoulder, finished low on the other side.
+      expect(s * (path[tick(0.22)][0] - 5)).toBeLessThan(-0.3);
+      expect(path[tick(0.22)][2]).toBeGreaterThan(-3);
+      expect(s * (path[tick(0.6)][0] - 5)).toBeGreaterThan(0.3);
+      expect(path[tick(0.6)][1]).toBeLessThan(1 + 1.2);
     }
-    // The cut ends where the carry was: the blade back and low.
-    expect(path.at(-1)![2]).toBeGreaterThan(-3 - 0.2);
+    // The cut ends where the carry was: the blade upright.
+    expect(path.at(-1)![1]).toBeGreaterThan(1 + 2.1);
   });
 
   it('turns the trunk into the cut: the shoulders go with the blade', () => {
-    /** Which way the jacket's chest faces, from the front of the torso: the mean x of its upper vertices, in front and behind. */
-    const turned = (v: number[]) => {
-      const [, , , JACKET] = [0, 0, 0, palette(GREEN)[0]];
-      const chest = rows(v).filter(
-        p =>
-          p[4] == JACKET[0] &&
-          p[5] == JACKET[1] &&
-          p[6] == JACKET[2] &&
-          p[1] > 1 + 1.25 &&
-          p[1] < 1 + 1.4 &&
-          Math.abs(p[0] - 5) < 0.3 &&
-          Math.abs(p[2] + 3) < 0.2,
-      );
-      const [a, b] = [chest.filter(p => p[2] < -3), chest.filter(p => p[2] >= -3)];
-      const m = (r: number[][]) => r.reduce((s, p) => s + p[0], 0) / r.length;
-      return m(a) - m(b);
+    /** How far the right shoulder is ahead of the left (it faces -z): the chest turned to its left when positive. */
+    const turned = (cut: number, k: number) => {
+      const book = new Map<number, Runner>();
+      animate(book, [blade({ cut })], DT);
+      animate(book, [blade({ cut, swing: Math.round(CUTS[cut].ticks * (1 - k)) })], DT);
+      const r = book.get(1)!;
+      const s = solve(brandish(r.gait.pose(), r.p, r.prog, r.gait.phase));
+      return s.pos[J.ARM_L][2] - s.pos[J.ARM_R][2];
     };
-    const { out } = frames(CUT.LEFT);
-    // Wound up to the left, then through to the right.
-    expect(turned(out[6])).not.toBeCloseTo(turned(out[16]), 2);
-    expect(turned(out[6]) - turned(out[16])).toBeLessThan(-0.01);
+    // Wound up to the left, then through to the right, and the other way from the right.
+    expect(turned(CUT.LEFT, 0.22)).toBeGreaterThan(0.04);
+    expect(turned(CUT.LEFT, 0.6)).toBeLessThan(-0.06);
+    expect(turned(CUT.RIGHT, 0.22)).toBeLessThan(-0.04);
+    expect(turned(CUT.RIGHT, 0.6)).toBeGreaterThan(0.06);
   });
 
   it('leaves a ribbon of light behind the blade through the cut only, which fades after it', () => {
@@ -597,9 +628,9 @@ describe('a runner with the katana', () => {
     }
     expect(marks[1]).toBe(0);
     expect(marks[12]).toBeGreaterThan(3);
-    // The cut is over at 0.6 of the swing: the ribbon fades in about 0.15 s, and is gone.
+    // The cut is over at 0.6 of the swing (tick 20): the ribbon fades in about 0.15 s, and is gone.
     expect(marks[20]).toBeGreaterThan(0);
-    expect(marks[29]).toBe(0);
+    expect(marks[31]).toBe(0);
     // A runner with the gun never makes one.
     const gunner = new Map<number, Runner>();
     animate(gunner, [man({ ammo: 30, swing: 5, cut: CUT.LEFT })], DT);

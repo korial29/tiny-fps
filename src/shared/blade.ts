@@ -1,9 +1,10 @@
 // The electric katana, the host's rule: which cut the keys give, which enemies a cut hits and the
 // way its shock throws them. The swing timer is in `step()` (gun.ts); the room applies the result
-// (damage, `stumble()`). No DOM, no Node API.
-import { CUTS, PLAYER_R } from './constants';
+// (damage, `stumble()`) and, when the cut puts the foe down, the limb it takes off (`limbOf()`).
+// No DOM, no Node API.
+import { CUTS, HIPS, MIDLINE, NECK, PLAYER_R } from './constants';
 import { forward, heightOf } from './physics';
-import { CUT, KEY } from './types';
+import { CUT, KEY, LIMB } from './types';
 import type { PlayerState } from './types';
 import { hidden } from './world';
 import type { World } from './world';
@@ -52,4 +53,43 @@ export const knock = (p: PlayerState): [x: number, z: number] => {
   const [fx, fz] = forward(p.yaw);
   const c = p.cut ?? 0;
   return c === CUT.LEFT ? [-fz, fx] : c === CUT.RIGHT ? [fz, -fx] : [fx, fz];
+};
+
+/**
+ * The LIMB the cut of `p` (the state after the step that struck) takes off `f` (as he saw him) when
+ * it puts him down. The blade's line is his look from his chest (CHEST of his height), so a level
+ * cut meets the foe's arms. It enters the foe's body (a circle of PLAYER_R on the floor plane) on
+ * the near side; the side is the foe's own, measured where it enters, on his right axis. A slash
+ * takes the head within MIDLINE of his middle, else the arm on that side. A thrust and a cut across
+ * go by the line's height at the foe's distance, as a share of his height: above NECK the head,
+ * below HIPS a leg, else an arm. A cut across takes the side facing where it comes from; a thrust
+ * the side it enters, and no arm within MIDLINE of his middle.
+ */
+export const limbOf = (p: PlayerState, f: PlayerState): number => {
+  const [fx, fz] = forward(p.yaw);
+  const [gx, gz] = forward(f.yaw);
+  const [dx, dz] = [f.x - p.x, f.z - p.z];
+  // The foe's middle on the attacker's right (-fz, fx), and the way in from the line's closest
+  // point to it, back along the look.
+  const o = -fz * dx + fx * dz;
+  const back = Math.sqrt(Math.max(PLAYER_R * PLAYER_R - o * o, 0));
+  const [ex, ez] = [fz * o - fx * back, -fx * o - fz * back];
+  // Where it enters on his right (-gz, gx).
+  const s = -gz * ex + gx * ez;
+  const c = p.cut ?? 0;
+  if (c === CUT.SLASH) {
+    return Math.abs(s) <= MIDLINE ? LIMB.HEAD : s > 0 ? LIMB.ARM_R : LIMB.ARM_L;
+  }
+  const y = p.y + CHEST * heightOf(p) + Math.tan(p.pitch) * Math.hypot(dx, dz);
+  const share = (y - f.y) / heightOf(f);
+  if (share > NECK) {
+    return LIMB.HEAD;
+  }
+  // A LEFT cut meets the side facing the attacker's left: his right when they face each other
+  // (the looks opposed), his left when they look the same way. RIGHT is the other way round.
+  const right = c === CUT.THRUST ? s > 0 : (c === CUT.LEFT ? 1 : -1) * (fx * gx + fz * gz) < 0;
+  if (share < HIPS) {
+    return right ? LIMB.LEG_R : LIMB.LEG_L;
+  }
+  return c === CUT.THRUST && Math.abs(s) <= MIDLINE ? LIMB.NONE : right ? LIMB.ARM_R : LIMB.ARM_L;
 };

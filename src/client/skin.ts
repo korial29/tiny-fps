@@ -4,6 +4,7 @@
 // trunk runs from the crotch to the crown; the arms hang on it at the armpits and the legs at the
 // crotch by sharing its vertices, so normals flow over the joins. Clothes are colour regions of
 // the triangles. See rig.ts for the joints and the pose.
+import { LIMB } from '../shared/types';
 import { JOINT as J, JOINTS, mul, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
 import type { Vec3 } from './mesh';
@@ -11,9 +12,11 @@ import type { Vec3 } from './mesh';
 const SKIN = [0.66, 0.45, 0.35];
 
 /** The colour regions of a palette. */
-const [JACKET, TRIM, PANTS, FLESH, HAIR, UPPER, SOLE, GLOVE, SHADES] = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+const [JACKET, TRIM, PANTS, FLESH, HAIR, UPPER, SOLE, GLOVE, SHADES, CAP] = [
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+];
 
-/** Jacket, its darker trim, trousers, skin, hair, shoe upper, sole, gloves and shades. */
+/** Jacket, its darker trim, trousers, skin, hair, shoe upper, sole, gloves, shades and the cut's cauterized face, which glows. */
 export const palette = (jacket: number[]): number[][] => [
   jacket,
   jacket.map(v => v * 0.5),
@@ -24,6 +27,7 @@ export const palette = (jacket: number[]): number[][] => [
   [0.93, 0.93, 0.94],
   [0.26, 0.26, 0.3],
   [0.03, 0.03, 0.04],
+  [2.8, 0.5, 0.12],
 ];
 
 /**
@@ -160,13 +164,15 @@ export interface Skin {
   /** Three vertex indices per triangle, and the palette colour of each. */
   t: Uint16Array;
   c: Uint8Array;
+  /** Per triangle the LIMB it comes off with, NONE for the trunk's. */
+  l?: Uint8Array;
 }
 
 const sgn = (v: number, e: number) => Math.sign(v) * Math.abs(v) ** (2 / e);
 const clamp = (v: number) => Math.min(Math.max(v, 0), 1);
 
 const generate = (lod: number): Skin => {
-  const [v, j, w, t, c]: number[][] = [[], [], [], [], []];
+  const [v, j, w, t, c, l]: number[][] = [[], [], [], [], [], []];
   const N = TRUNK.n[Math.min(lod, 1)];
   /** The back vertex of a ring, and the last of the shoulder's side. */
   const [H, A] = [N / 2, N / 2 - 1];
@@ -283,7 +289,15 @@ const generate = (lod: number): Skin => {
           return;
         }
         const a = grid[k];
-        const [, , , , , , col, ...rules] = rings[k];
+        const [y, , , , , , col, ...rules] = rings[k];
+        // The head comes off at the neck, an arm at the shoulder, a leg at the hip: where its loft
+        // meets the trunk.
+        const part =
+          L === TRUNK
+            ? +(y > 1.55)
+            : L === NOSE
+              ? LIMB.HEAD
+              : (L === ARM ? LIMB.ARM_L : LIMB.LEG_L) + +(m > 0);
         for (let i = 0; i < n; i++) {
           const [p, q, r, s] = [
             a[i % a.length],
@@ -300,6 +314,7 @@ const generate = (lod: number): Skin => {
             if (new Set(tri).size > 2) {
               t.push(...(up !== m < 0 ? [tri[0], tri[2], tri[1]] : tri));
               c.push(h < 0 ? col : rules[h + 1]);
+              l.push(part);
             }
           }
         }
@@ -333,12 +348,69 @@ const generate = (lod: number): Skin => {
     w: new Float32Array(w),
     t: new Uint16Array(t),
     c: new Uint8Array(c),
+    l: new Uint8Array(l),
   };
 };
 
 const skins: Skin[] = [];
 /** The skin at a level of detail (see DETAIL in mesh.ts): 0 far, 1 near, 2 near, headless and handless, for the eye. Built once. */
 export const body = (lod: number) => (skins[lod] ??= generate(lod));
+
+/** Per LIMB the joint the centre of its cut face hangs on. */
+const ROOT = [0, J.NECK, J.CHEST, J.CHEST, J.PELVIS, J.PELVIS];
+
+/**
+ * The skin less a limb, and the limb alone. The edges of the limb's triangles whose other side is
+ * the body's are the cut; a fan from one new vertex at its middle closes each side in CAP.
+ */
+const sever = (s: Skin, limb: number): Skin[] => {
+  const n = s.w.length;
+  const [t, c]: number[][][] = [
+    [[], []],
+    [[], []],
+  ];
+  const [own, other] = [new Set<number>(), new Set<number>()];
+  s.c.forEach((col, i) => {
+    const k = +(s.l![i] == limb);
+    for (let e = 0; e < 3; e++) {
+      t[k].push(s.t[i * 3 + e]);
+      [other, own][k].add((s.t[i * 3 + e] << 16) | s.t[i * 3 + ((e + 1) % 3)]);
+    }
+    c[k].push(col);
+  });
+  const v = new Float32Array(n * 6 + 6);
+  v.set(s.v);
+  let m = 0;
+  for (const e of own) {
+    const [a, b] = [e >> 16, e & 65535];
+    // The nose's base is open, buried in the face: no other side, no cut.
+    if (other.has((b << 16) | a)) {
+      t[0].push(a, b, n);
+      t[1].push(b, a, n);
+      c[0].push(CAP);
+      c[1].push(CAP);
+      for (let r = 0; r < 3; r++) {
+        v[n * 6 + r] += s.v[a * 6 + r];
+      }
+      m++;
+    }
+  }
+  for (let r = 0; r < 3; r++) {
+    v[n * 6 + r] /= m;
+  }
+  v[n * 6 + 4] = 1;
+  const j = new Uint8Array([...s.j, ROOT[limb], ROOT[limb]]);
+  const w = new Float32Array([...s.w, 0]);
+  return t.map((x, k) => ({ v, j, w, t: new Uint16Array(x), c: new Uint8Array(c[k]) }));
+};
+
+const parts: Skin[][] = [];
+/**
+ * The skin at a level of detail without the LIMB `limb`, then the limb alone, each closed by a
+ * glowing cut face whose middle is the last vertex of the last triangle. Built once.
+ */
+export const cut = (lod: number, limb: number) =>
+  (parts[lod * 8 + limb] ??= sever(body(lod), limb));
 
 const BIND = solve(rest()).pos;
 /** Per joint the dual quaternion that carries the rest pose to the pose: the rotation, then its dual. */
@@ -399,9 +471,11 @@ export const skin = (
   }
   for (let i = 0; i < s.t.length; i += 3) {
     const [r, g, b] = colors[s.c[i / 3]];
+    // The cut's face glows: unlit.
+    const e = s.c[i / 3] == CAP ? -2 : -1;
     for (let h = i; h < i + 3; h++) {
       const k = s.t[h] * 6;
-      out.push(Q[k], Q[k + 1], Q[k + 2], Q[k + 3], Q[k + 4], Q[k + 5], r, g, -1, b);
+      out.push(Q[k], Q[k + 1], Q[k + 2], Q[k + 3], Q[k + 4], Q[k + 5], r, g, e, b);
     }
   }
 };

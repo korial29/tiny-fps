@@ -6,7 +6,7 @@ import type { PlayerState } from '../shared/types';
 import { createBody, finger, hand, phalanges } from './body';
 import type { Body } from './body';
 import { MUZZLE, REAR, grip, gun, readout } from './gun';
-import { axes, ends } from './katana';
+import { BEHIND, axes, ends } from './katana';
 import { STRIDE, add, basis, dot, sub } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, rest, solve, turn } from './rig';
@@ -1056,13 +1056,13 @@ describe('the katana in both hands', () => {
     const s = pose(body, p);
     return local(p, ends(s.pos[J.HAND_R], s.rot[J.HAND_R])[1]);
   };
-  /** How far the left hand's grip is from the place on the handle 9.5 cm behind the right hand's. */
+  /** How far the left hand's grip is from its place on the handle, BEHIND the right hand's. */
   const leftOff = (body: Body, p: PlayerState) => {
     const s = pose(body, p);
     const [gr, ax] = [grip(s.pos[J.HAND_R], s.rot[J.HAND_R]), axes(s.rot[J.HAND_R])];
     const [fing, back] = [turn(s.rot[J.HAND_L], [0, -1, 0]), turn(s.rot[J.HAND_L], [1, 0, 0])];
     const gl = [0, 1, 2].map(i => s.pos[J.HAND_L][i] + fing[i] * 0.078 + back[i] * 0.022) as Vec3;
-    return away(gl, gr.map((v, i) => v - 0.095 * ax[2][i]) as Vec3);
+    return away(gl, gr.map((v, i) => v - BEHIND * ax[2][i]) as Vec3);
   };
 
   it('is not there without it, nor while down, and the gun is not drawn with it', () => {
@@ -1082,14 +1082,16 @@ describe('the katana in both hands', () => {
     const body = watch(p, 60);
     const s = pose(body, p);
     const tip = local(p, ends(s.pos[J.HAND_R], s.rot[J.HAND_R])[1]);
-    expect(tip[0]).toBeGreaterThan(0.05);
+    expect(tip[0]).toBeGreaterThan(0.02);
     expect(tip[0]).toBeLessThan(0.4);
     expect(tip[1]).toBeGreaterThan(0.05);
-    expect(tip[2]).toBeGreaterThan(0.9);
+    expect(tip[2]).toBeGreaterThan(1.2);
     // The right hand is low at the right of the view, the left is on the grip a hand behind it.
     const [l, r] = hands(p, body);
     expect(r[0]).toBeGreaterThan(0.05);
-    expect(r[1]).toBeLessThan(-0.15);
+    expect(r[1]).toBeLessThan(-0.08);
+    // Both fists show at the bottom of the view.
+    expect(seen(r)).toBe(true);
     expect(leftOff(body, p)).toBeLessThan(0.03);
     expect(l[0]).toBeGreaterThan(-0.05);
     // Nothing of it left of the middle of the view, and a thin line of the screen.
@@ -1111,32 +1113,40 @@ describe('the katana in both hands', () => {
   });
 
   it.each([
-    [CUT.THRUST, 'thrusts: the point goes forward to the crosshair', 8],
-    [CUT.LEFT, 'cuts from the left to the right', 11],
-    [CUT.RIGHT, 'cuts from the right to the left', 11],
-    [CUT.SLASH, 'slashes down through the middle', 14],
-  ])('does cut %i: %s', (cut, _name, strike) => {
-    const path = Array.from({ length: CUTS[cut].ticks }, (_, i) => tipOf(cut, i));
+    [CUT.THRUST, 'thrusts: the point goes forward to the crosshair'],
+    [CUT.LEFT, 'cuts from the left to the right'],
+    [CUT.RIGHT, 'cuts from the right to the left'],
+    [CUT.SLASH, 'slashes down through the middle'],
+  ])('does cut %i: %s', (cut, _name) => {
+    const { ticks, strike } = CUTS[cut];
+    const path = Array.from({ length: ticks }, (_, i) => tipOf(cut, i));
+    /** The tick at the share `k` of the swing. */
+    const tick = (k: number) => Math.round(k * ticks);
     const at = path[strike];
     // Through the middle of the view at the strike, in front of the camera.
     expect(Math.abs(at[0])).toBeLessThan(0.25);
     expect(Math.abs(at[1])).toBeLessThan(0.15);
     expect(at[2]).toBeGreaterThan(1);
     if (cut == CUT.THRUST) {
-      // Out: from the wind-up to the strike, forward.
-      expect(path[strike][2]).toBeGreaterThan(path[4][2] + 0.2);
+      // Out: from the pull back to the strike, forward.
+      expect(path[strike][2]).toBeGreaterThan(path[tick(0.22)][2] + 0.2);
       expect(path[strike][2]).toBeGreaterThan(Math.max(...path.map(v => v[2])) - 0.05);
     } else if (cut == CUT.SLASH) {
-      expect(path[10][1]).toBeGreaterThan(0.4);
+      // Over the head, behind the eye, then down through the middle to far below the view.
+      expect(path[tick(0.27)][1]).toBeGreaterThan(0.7);
+      expect(path[tick(0.27)][2]).toBeLessThan(0);
       expect(path[strike - 2][1]).toBeGreaterThan(path[strike][1]);
       expect(path[strike][1]).toBeGreaterThan(path[strike + 2][1]);
-      expect(path[20][1]).toBeLessThan(-0.4);
+      expect(path[tick(0.55)][1]).toBeLessThan(-1);
     } else {
+      // From behind the shoulder on one side to far across and low on the other.
       const sign = cut == CUT.LEFT ? 1 : -1;
-      expect(sign * path[6][0]).toBeLessThan(-0.3);
+      expect(sign * path[tick(0.22)][0]).toBeLessThan(-0.5);
+      expect(path[tick(0.22)][2]).toBeLessThan(0);
       expect(sign * path[strike - 2][0]).toBeLessThan(sign * path[strike][0]);
       expect(sign * path[strike][0]).toBeLessThan(sign * path[strike + 2][0]);
-      expect(sign * path[17][0]).toBeGreaterThan(0.4);
+      expect(sign * path[tick(0.6)][0]).toBeGreaterThan(0.6);
+      expect(path[tick(0.6)][1]).toBeLessThan(-0.8);
     }
     // And back at the guard at the end.
     const rest = tipOf(cut, CUTS[cut].ticks - 1);
@@ -1144,13 +1154,21 @@ describe('the katana in both hands', () => {
     expect(away(rest, guard)).toBeLessThan(0.15);
   });
 
-  it('keeps both hands on the grip through every cut, the arms within their length', () => {
-    for (const cut of [CUT.THRUST, CUT.LEFT, CUT.RIGHT, CUT.SLASH]) {
-      const body = watch(blade({ cut }), 60);
+  it('keeps both hands on the grip through every cut, standing or running, the arms within their length', () => {
+    for (const [cut, v] of [CUT.THRUST, CUT.LEFT, CUT.RIGHT, CUT.SLASH].flatMap(c => [
+      [c, 0],
+      [c, 6],
+    ])) {
+      const body = createBody();
+      let z = 0;
+      for (let i = 0; i < 60; i++) {
+        body.update(blade({ cut, vz: -v, z: (z -= v * DT) }), DT);
+      }
       for (let i = 0; i < CUTS[cut].ticks; i++) {
-        const p = blade({ cut, swing: CUTS[cut].ticks - i });
+        const p = blade({ cut, swing: CUTS[cut].ticks - i, vz: -v, z: (z -= v * DT) });
         body.update(p, DT);
-        expect(leftOff(body, p)).toBeLessThan(0.04);
+        // On the grip in the guard and all through the cut: within a centimetre and a half.
+        expect(leftOff(body, p)).toBeLessThan(0.015);
         const s = pose(body, p);
         for (const [h, a] of [
           [J.HAND_L, J.ARM_L],
@@ -1162,18 +1180,17 @@ describe('the katana in both hands', () => {
     }
   });
 
-  it('lets the left hand go to run, the right one keeps it, and joins it again to cut on the run', () => {
+  it('keeps both hands on the grip on a run too, once it is drawn', () => {
     const p = blade({ vz: -8 });
     const body = createBody();
     for (let i = 0; i < 90; i++) {
       p.z -= 8 * DT;
       body.update(p, DT);
+      if (i > 40) {
+        expect(leftOff(body, p)).toBeLessThan(0.01);
+      }
     }
-    expect(leftOff(body, p)).toBeGreaterThan(0.15);
     expect(glow(draw(body, p)).length).toBeGreaterThan(200);
-    // A cut brings it back to the grip, the guard of the right hand where it was.
-    const { body: b2, p: q } = into(CUT.SLASH, 16, { vz: -8 });
-    expect(leftOff(b2, q)).toBeLessThan(0.08);
   });
 
   it('draws the katana up from below when it is taken, and out of sight again when it goes', () => {
@@ -1217,7 +1234,8 @@ describe('the katana in both hands', () => {
       seenAt.push(trail(body, p));
     }
     expect(seenAt[1]).toBe(0);
-    expect(seenAt[12]).toBeGreaterThan(30);
+    expect(seenAt[7]).toBe(0);
+    expect(seenAt[CUTS[CUT.LEFT].strike + 2]).toBeGreaterThan(30);
     // A quarter of a second after the last swing, the light is gone.
     for (let i = 0; i < 16; i++) {
       body.update(rest, DT);

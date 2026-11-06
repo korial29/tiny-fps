@@ -31,7 +31,7 @@ import {
   STUMBLE_TICKS,
 } from './constants';
 import { STILL } from './physics';
-import { CUT, FLAG, KEY, MODE, SIDE } from './types';
+import { CUT, FLAG, KEY, LIMB, MODE, SIDE } from './types';
 import type { Ball, FlagState, SnapPlayer, Snapshot } from './types';
 import { IDLE } from '../../test/teams';
 
@@ -151,7 +151,7 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 4-byte head, 46 bytes per player, then the match: 8 bytes and a byte per flag at home', () => {
+  it('has a 4-byte head, 47 bytes per player, then the match: 8 bytes and a byte per flag at home', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [
@@ -187,6 +187,7 @@ describe('snapshot frame', () => {
           zap: true,
           swing: 20,
           cut: CUT.RIGHT,
+          lost: LIMB.LEG_L,
           // What the animation reads is not sent.
           ev: 0xffff,
           fall: 9,
@@ -195,7 +196,7 @@ describe('snapshot frame', () => {
       ...IDLE,
       packs: 0x8000_0005,
     });
-    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 46, 8]);
+    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 47, 8]);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + SNAP_MATCH + 2);
     expect(bytes(buf)).toEqual([
       ...[MSG_SNAPSHOT, 0x12, 0x34, 1],
@@ -224,6 +225,7 @@ describe('snapshot frame', () => {
       250, // shots
       7, // hits
       0b10010100, // swing 20, cut RIGHT (2) << 6
+      4, // lost LEG_L
       ...[0, 0, 0x01, 0xe0], // red 0, blue 0, clock 480 s, not over
       ...[0x80, 0, 0, 5], // packs 0 and 2, and 31
       ...[0, 0], // both flags at home
@@ -481,7 +483,8 @@ describe('snapshot frame', () => {
     expect(GUN_COOLDOWN).toBeLessThanOrEqual(7);
     expect(DOWN_TICKS).toBeLessThanOrEqual(127);
     expect(AMMO_MAX).toBeLessThan(127);
-    // The katana: a swing's ticks in 6 bits, the cut in 2, a shock inside the stun's 6.
+    // The katana: a swing's ticks in 6 bits, the cut in 2, a shock inside the stun's 6, the limb in 3.
+    expect(Math.max(...Object.values(LIMB))).toBeLessThanOrEqual(7);
     expect(Math.max(...CUTS.map(c => c.ticks))).toBeLessThanOrEqual(63);
     expect(CUTS).toHaveLength(Object.keys(CUT).length);
     expect(Object.keys(CUT).length).toBeLessThanOrEqual(4);
@@ -506,6 +509,7 @@ describe('snapshot frame', () => {
         zap: rnd(2) === 1,
         swing: rnd(CUTS[3].ticks + 1),
         cut: rnd(4),
+        lost: rnd(6),
         // The gun bits sit among the movement ones: those must not move.
         mode: rnd(7),
         stun: rnd(STUMBLE_TICKS + 1),
@@ -529,6 +533,7 @@ describe('snapshot frame', () => {
         'zap',
         'swing',
         'cut',
+        'lost',
         'mode',
         'stun',
         'by',
@@ -552,6 +557,7 @@ describe('snapshot frame', () => {
       { hp: 7, ammo: 126, cool: 7, down: 127, rack: true, blade: true, wield: true, zap: true },
       { blade: true, wield: true, swing: 36, cut: CUT.SLASH },
       { blade: false, wield: false, zap: false, swing: 63, cut: CUT.THRUST },
+      { swing: 63, cut: CUT.SLASH, lost: LIMB.LEG_R },
     ]) {
       const [b] = decodeSnapshot(
         encodeSnapshot({ tick: 0, players: [player(2, over)], ...IDLE }),
@@ -560,13 +566,29 @@ describe('snapshot frame', () => {
     }
   });
 
-  it('writes a state with no katana fields as no katana: not wielded, no swing, no shock', () => {
+  it('writes a state with no katana fields as no katana: not wielded, no swing, no shock, no limb lost', () => {
     const bare: SnapPlayer = player(1);
-    for (const k of ['blade', 'wield', 'swing', 'cut', 'zap'] as const) {
+    for (const k of ['blade', 'wield', 'swing', 'cut', 'zap', 'lost'] as const) {
       delete bare[k];
     }
-    const [b] = decodeSnapshot(encodeSnapshot({ tick: 0, players: [bare], ...IDLE }))!.players;
+    const buf = encodeSnapshot({ tick: 0, players: [bare], ...IDLE });
+    const [b] = decodeSnapshot(buf)!.players;
     expect(b).toMatchObject({ blade: false, wield: false, zap: false, swing: 0, cut: 0 });
+    expect(b.lost).toBe(LIMB.NONE);
+    expect(bytes(buf)[SNAP_HEAD + SNAP_PLAYER - 1]).toBe(0);
+  });
+
+  it('round-trips every limb in the last byte of the player, bits 0-2, the rest 0', () => {
+    for (const lost of Object.values(LIMB)) {
+      const buf = encodeSnapshot({
+        tick: 0,
+        players: [player(3, { lost, swing: 63, cut: CUT.SLASH }), player(4)],
+        ...IDLE,
+      });
+      expect(bytes(buf)[SNAP_HEAD + SNAP_PLAYER - 1], `limb ${lost}`).toBe(lost);
+      const [a, b] = decodeSnapshot(buf)!.players;
+      expect([a.lost, a.swing, a.cut, b.id, b.lost]).toEqual([lost, 63, CUT.SLASH, 4, LIMB.NONE]);
+    }
   });
 
   it('reads the packs as 0 when the snapshot has none', () => {

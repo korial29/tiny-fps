@@ -192,8 +192,8 @@ describe('the own shots', () => {
     expect(bursts).toHaveLength(1);
     expect(bursts[0][2]).toBeCloseTo(-20 + PLASMA_R, 6);
     expect(orbs()).toEqual([]);
-    expect(ids()).toEqual([SOUND.LASER, SOUND.ZAP]);
-    expect(audio.play).toHaveBeenLastCalledWith(SOUND.ZAP, bursts[0]);
+    expect(ids()).toEqual([SOUND.LASER, SOUND.SPLASH]);
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, bursts[0]);
   });
 
   it('start at the muzzle in the camera, kicked and shaken with it', () => {
@@ -328,7 +328,7 @@ describe('the others shots', () => {
       frame(player(), [p]);
     }
     expect(bursts).toEqual([[5, 1.6, -7]]);
-    expect(audio.play).toHaveBeenLastCalledWith(SOUND.ZAP, [5, 1.6, -7]);
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, [5, 1.6, -7]);
     expect(orbs()).toEqual([]);
   });
 });

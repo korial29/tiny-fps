@@ -28,7 +28,7 @@ const CLOTH: [number, number] = [1, 0.62];
 const PIECES = 8;
 const SIDES = 28;
 /** The glow of an unlit part, as a multiple of its colour: above 1 it blooms. */
-const GLOW = 2.2;
+export const GLOW = 2.2;
 /** How far a pad stands out of the roof, and a ring over it, metres. */
 const PAD = 0.04;
 const RING = 0.045;
@@ -43,6 +43,9 @@ export const teamRgb = (team: number): number[] => {
 export interface CtfScene {
   bases: readonly Vec3[];
   flags: readonly FlagDraw[];
+  /** Each team's gun rack, where it has one, and the health packs that are there to take. */
+  racks?: readonly (Vec3 | undefined)[];
+  packs?: readonly Vec3[];
 }
 
 /** The flags to draw from a snapshot: each at its base, where it lies, or on the back of its carrier (none if he is not drawn). */
@@ -69,7 +72,7 @@ const AXES: Vec3[] = [
 ];
 
 /** Makes the vertices from `from` on glow: the colour gets brighter by `k` and loses its shading. */
-const glow = (out: number[], from: number, k: number) => {
+export const glow = (out: number[], from: number, k: number) => {
   for (let i = from; i < out.length; i += STRIDE) {
     out[i + 6] *= k;
     out[i + 7] *= k;
@@ -79,7 +82,7 @@ const glow = (out: number[], from: number, k: number) => {
 };
 
 /** A triangle with its flat normal, of one colour (r, g, b). */
-const tri = (out: number[], a: Vec3, b: Vec3, c: Vec3, [r, g, bl]: number[]) => {
+export const tri = (out: number[], a: Vec3, b: Vec3, c: Vec3, [r, g, bl]: number[]) => {
   const [ux, uy, uz] = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
   const [vx, vy, vz] = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
   const n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
@@ -90,7 +93,7 @@ const tri = (out: number[], a: Vec3, b: Vec3, c: Vec3, [r, g, bl]: number[]) => 
 };
 
 /** A ring between the radii r0 and r1 on the horizontal at `at`, facing up: SIDES quads. */
-const ring = (out: number[], at: Vec3, r0: number, r1: number, rgb: number[]) => {
+export const ring = (out: number[], at: Vec3, r0: number, r1: number, rgb: number[]) => {
   for (let i = 0; i < SIDES; i++) {
     const [a, b] = [i, i + 1].map(k => (k * 2 * Math.PI) / SIDES);
     const p = (r: number, t: number): Vec3 => [

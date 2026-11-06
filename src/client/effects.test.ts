@@ -4,6 +4,7 @@ import { STILL } from '../shared/physics';
 import { EV, KEY, MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { createEffects, stepLength, stepping } from './effects';
+import type { Effects } from './effects';
 
 const DT = 1 / 60;
 const me = (over: Partial<PlayerState> = {}): PlayerState => ({
@@ -371,15 +372,71 @@ describe('shape', () => {
   it('holds the numbers the camera draws and the stride, and update', () => {
     expect(Object.keys(createEffects()).sort()).toEqual([
       'dy',
+      'fire',
       'fov',
       'hurt',
       'jolt',
+      'kick',
+      'lie',
       'lines',
       'pitch',
       'punch',
       'roll',
       'stride',
       'update',
+      'wound',
     ]);
+  });
+});
+
+describe('the gun', () => {
+  const run = (fx: Effects, p: PlayerState, n: number) => {
+    for (let i = 0; i < n; i++) {
+      fx.update(p, 0, 1 / 60);
+    }
+  };
+
+  it('kicks the gun with a shot and lets it settle in a fraction of a second', () => {
+    const fx = createEffects();
+    run(fx, me(), 5);
+    fx.fire();
+    expect(fx.kick).toBe(1);
+    run(fx, me(), 12);
+    expect(fx.kick).toBeLessThan(0.2);
+  });
+
+  it('shakes the look and the roll a little with each shot, not by more than a degree or two', () => {
+    const fx = createEffects();
+    run(fx, me(), 5);
+    let [pitch, roll] = [0, 0];
+    for (let i = 0; i < 30; i++) {
+      if (i % 7 == 0) {
+        fx.fire();
+      }
+      run(fx, me(), 1);
+      [pitch, roll] = [Math.max(pitch, Math.abs(fx.pitch)), Math.max(roll, Math.abs(fx.roll))];
+    }
+    expect(pitch).toBeGreaterThan(0.002);
+    expect(pitch).toBeLessThan(0.06);
+    expect(roll).toBeLessThan(0.06);
+  });
+
+  it('shows the red vignette when wounded', () => {
+    const fx = createEffects();
+    fx.wound();
+    expect(fx.hurt).toBe(1);
+  });
+
+  it('takes the view down to the floor and over on its side while down, and back up after', () => {
+    const fx = createEffects();
+    run(fx, me(), 5);
+    expect(fx.lie).toBe(0);
+    run(fx, me({ down: 60 }), 90);
+    expect(fx.lie).toBeGreaterThan(0.95);
+    expect(fx.dy).toBeLessThan(-1.2);
+    expect(fx.roll).toBeGreaterThan(0.8);
+    run(fx, me(), 120);
+    expect(fx.lie).toBeLessThan(0.01);
+    expect(Math.abs(fx.dy)).toBeLessThan(0.05);
   });
 });

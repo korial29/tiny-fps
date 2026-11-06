@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDLE } from '../../test/teams';
 import { FLAG } from '../shared/types';
 import type { FlagState } from '../shared/types';
-import { BANNER_MS, HUD_CSS, clock, createHud } from './hud';
+import { HP_MAX } from '../shared/constants';
+import { BANNER_MS, HIT_MS, HUD_CSS, clock, createHud } from './hud';
 import type { Hud, Summary } from './hud';
 import type { Mark } from './marks';
 
@@ -54,10 +55,11 @@ describe('createHud', () => {
       expect(menu().textContent).toMatch(/enemy flag.*your own base/);
     });
 
-    it('lists no way to fire', () => {
-      expect(menu().textContent).not.toMatch(/fire|click to shoot/i);
+    it('says the left button fires the gun, taken at the rack', () => {
       hud.title('Click to play', 'Rooftops');
-      expect(menu().textContent).not.toMatch(/fire/i);
+      const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
+      expect(rows).toContain('Left clickfire the gun');
+      expect(menu().textContent).toMatch(/gun at your rack/);
     });
 
     it('hides when the status is empty, and is back for the next pause', () => {
@@ -309,5 +311,94 @@ describe('createHud', () => {
       hud.end(sum({ players: [] }), 9);
       expect(rows()).toEqual([]);
     });
+  });
+});
+
+describe('the gun on the HUD', () => {
+  let screen: HTMLElement;
+  let hud: Hud;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    screen = document.createElement('div');
+    hud = createHud(screen);
+  });
+  afterEach(() => vi.useRealTimers());
+  const pips = () => [...screen.querySelectorAll('li')].map(li => !li.classList.contains('e'));
+  const ammo = () => screen.querySelector<HTMLElement>('dl')!;
+
+  it('shows the health as HP_MAX pips, the empty ones outlined', () => {
+    expect(pips()).toHaveLength(HP_MAX);
+    hud.vitals(5, -1);
+    expect(pips()).toEqual([true, true, true, true, true]);
+    hud.vitals(3, -1);
+    expect(pips()).toEqual([true, true, true, false, false]);
+    hud.vitals(0, -1);
+    expect(pips()).toEqual([false, false, false, false, false]);
+  });
+
+  it('turns the pips red on the last one', () => {
+    const ul = screen.querySelector('ul')!;
+    hud.vitals(2, -1);
+    expect(ul.classList.contains('low')).toBe(false);
+    hud.vitals(1, -1);
+    expect(ul.classList.contains('low')).toBe(true);
+    hud.vitals(4, -1);
+    expect(ul.classList.contains('low')).toBe(false);
+  });
+
+  it('shows the ammo counter, with the gun glyph, only while holding the gun', () => {
+    expect(ammo().hidden).toBe(true);
+    hud.vitals(5, 60);
+    expect(ammo().hidden).toBe(false);
+    expect(ammo().textContent).toBe('60');
+    expect(ammo().querySelector('svg')).not.toBeNull();
+    hud.vitals(5, 41);
+    expect(ammo().textContent).toBe('41');
+    hud.vitals(5, -1);
+    expect(ammo().hidden).toBe(true);
+  });
+
+  it('marks an empty gun, and reads 0', () => {
+    hud.vitals(5, 0);
+    expect(ammo().hidden).toBe(false);
+    expect(ammo().textContent).toBe('0');
+    expect(ammo().classList.contains('e')).toBe(true);
+    hud.vitals(5, 3);
+    expect(ammo().classList.contains('e')).toBe(false);
+  });
+
+  it('flashes a hit marker on the crosshair for a moment, and again on the next hit', () => {
+    const marker = screen.querySelector<HTMLElement>('s')!;
+    expect(marker.hidden).toBe(true);
+    hud.hit();
+    expect(marker.hidden).toBe(false);
+    vi.advanceTimersByTime(HIT_MS - 10);
+    expect(marker.hidden).toBe(false);
+    // A second hit restarts it.
+    hud.hit();
+    vi.advanceTimersByTime(HIT_MS - 10);
+    expect(marker.hidden).toBe(false);
+    vi.advanceTimersByTime(20);
+    expect(marker.hidden).toBe(true);
+  });
+
+  it('greys the screen and says DOWN with the time left while down, and is gone when up', () => {
+    const veil = screen.querySelector<HTMLElement>('mark')!;
+    expect(veil.hidden).toBe(true);
+    hud.down(0.5, 1.46);
+    expect(veil.hidden).toBe(false);
+    expect(veil.style.opacity).toBe('0.5');
+    expect(veil.textContent).toBe('DOWN\nBack in 1.5');
+    hud.down(1, 0.04);
+    expect(veil.textContent).toBe('DOWN\nBack in 0.0');
+    hud.down(0, 0);
+    expect(veil.hidden).toBe(true);
+    expect(veil.textContent).toBe('');
+  });
+
+  it('is styled: the pips, the counter, the marker and the veil all have rules', () => {
+    for (const sel of ['ul{', 'li{', 'dl{', 's{', 'mark{']) {
+      expect(HUD_CSS).toContain(sel);
+    }
   });
 });

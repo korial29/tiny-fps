@@ -918,6 +918,36 @@ describe('gait: the contacts', () => {
     }
   });
 
+  it('lies on the floor when down: knees give, then the body goes over, the head with it', () => {
+    const { f, p } = hold({ down: 100 }, 120);
+    const floor = p.y;
+    for (let j = 0; j < JOINTS; j++) {
+      expect(f.pos[j].every(Number.isFinite)).toBe(true);
+      expect(f.pos[j][1] - floor).toBeGreaterThan(-0.03);
+      expect(f.pos[j][1] - floor).toBeLessThan(0.5);
+    }
+    expect(f.pos[J.HEAD][1] - floor).toBeLessThan(0.4);
+    // Stood up again a moment after the respawn.
+    const { f: up } = hold({ down: 0 }, 120);
+    expect(up.pos[J.HEAD][1] - floor).toBeGreaterThan(1.4);
+  });
+
+  it('keeps the knees giving before the body is over: half a second in, the pelvis is low but the head is not yet on the floor', () => {
+    const g = createGait();
+    const p = state({ id: 3, ...at, down: 100 });
+    g.update(p, DT);
+    // The first state of a player is its pose at once; follow the fall from the state before it.
+    const q = state({ id: 3, ...at });
+    const h = createGait();
+    h.update(q, DT);
+    for (let i = 0; i < 12; i++) {
+      h.update(p, DT);
+    }
+    const early = solve(h.pose());
+    expect(early.pos[J.PELVIS][1] - at.y).toBeLessThan(0.85);
+    expect(early.pos[J.HEAD][1] - at.y).toBeGreaterThan(0.7);
+  });
+
   it('keeps every bone its length in every move, the IK included', () => {
     const states: Partial<PlayerState>[] = [
       { mode: MODE.HANG, wall: 3, edge: 3 },
@@ -928,6 +958,8 @@ describe('gait: the contacts', () => {
       { mode: MODE.AIR, vy: 5, vz: -6 },
       { mode: MODE.CROUCH, vz: -2 },
       { stun: 30 },
+      { down: 100 },
+      { down: 100, mode: MODE.CROUCH },
     ];
     for (const o of states) {
       const { f } = hold(o, 80, p => (p.z += (p.vz ?? 0) * DT));

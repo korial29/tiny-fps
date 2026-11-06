@@ -56,7 +56,7 @@ export interface Controls {
 /**
  * Click the canvas to lock the pointer; while locked the mouse looks, the keys move (WASD, Shift
  * sprints, Space jumps, C crouches, a direction key pressed twice within DOUBLE_TAP_MS dashes that
- * way) and M calls `onMute`.
+ * way, the left button fires) and M calls `onMute`.
  */
 export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Controls => {
   const ac = new AbortController();
@@ -86,6 +86,17 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     if (c.locked()) {
       c.yaw = (((c.yaw - e.movementX * SENS) % TAU) + TAU) % TAU;
       c.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, c.pitch - e.movementY * SENS));
+    }
+  });
+  // The left button fires, under the lock only; a release always counts. The right one does nothing.
+  on(document, 'mousedown', (e: MouseEvent) => {
+    if (c.locked() && !e.button) {
+      c.keys |= KEY.FIRE;
+    }
+  });
+  on(document, 'mouseup', (e: MouseEvent) => {
+    if (!e.button) {
+      c.keys &= ~KEY.FIRE;
     }
   });
   on(document, 'keydown', (e: KeyboardEvent) => {

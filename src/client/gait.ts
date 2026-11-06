@@ -62,7 +62,7 @@ const low = (a: number, b: number, k: number) => {
 };
 
 /** The rotation whose x axis is `x` and whose y axis points up the bone, opposite to `d`. */
-const frame = (x: Vec3, d: Vec3): Quat => {
+export const frame = (x: Vec3, d: Vec3): Quat => {
   const y: Vec3 = [-d[0], -d[1], -d[2]];
   const z = cross(x, y);
   // The matrix of the axes as a quaternion, through its largest term, which stays sound at a half turn.
@@ -165,6 +165,8 @@ export const MOVE = {
   SLIDE: 7,
   STUN: 8,
   TUCK: 9,
+  /** Out of health: the knees give and the body topples (see `lie` in build). */
+  DOWN: 10,
 } as const;
 
 /**
@@ -185,6 +187,7 @@ export const MOVES: number[][] = [
   [-0.78, -1.1, 0, 1.1, 1.8, 1.4, 0.1, 0.5, 0.8, 0.4, 0.5, 0.8, 0, 0],
   [0, 0, 0, 0, 0, 0, 0, 0.8, 1.6, 0.8, 1.6, 0.2, 0, 0],
   [-0.05, 0.9, 0, 1.7, 2, 1.7, 2, 0.8, 1.6, 0.8, 1.6, 0.2, 0, 0],
+  [-0.5, 0.35, 0, 1.3, 0.3, 1.1, 0.2, 0.4, 0.4, 0.2, 0.3, 0.6, 0, 0],
 ];
 // A wall on the left is the wall on the right seen in a mirror.
 const m = MOVES[MOVE.WALL_R];
@@ -400,6 +403,7 @@ export const createGait = (): Gait => {
       p.stun > 0,
       flip && Math.sqrt(Math.sin(Math.PI * flip)),
     ].forEach((g, i) => set(W + 2 * i, +g, 12));
+    set(W + 2 * MOVE.DOWN, +(p.down > 0), 5);
     set(LOW, +(p.mode == MODE.CROUCH), 12);
     set(UP, hold ? clamp((1.7 - lip[4] + p.y) / 1.2) : 0, 14);
     set(DIP, kick, 26);
@@ -770,11 +774,23 @@ export const createGait = (): Gait => {
       rot[J.CHEST] = mul(rot[J.CHEST], axis(Y, 0.3 * stun * Math.sin(time * 8)));
     }
     reach();
+    // Down: the knees buckle, then the body goes over about the pelvis onto the floor.
+    const lie = ease((sw(MOVE.DOWN) - 0.35) / 0.65);
+    if (lie) {
+      rot[J.PELVIS] = mul(axis(X, -1.45 * lie), rot[J.PELVIS]);
+      out.hips[1] += (0.17 - REST[0][1] - out.hips[1]) * lie;
+      // The hips straighten as the body goes over, so that the legs trail behind it.
+      [J.THIGH_L, J.THIGH_R].forEach(j => (rot[j] = mul(rot[j], axis(X, -1.25 * lie))));
+      [J.ARM_L, J.ARM_R].forEach(j => (rot[j] = mul(rot[j], axis(X, -0.5 * lie))));
+    }
 
     // The head holds the way the player looks, whatever the trunk does.
     const chest = mul(mul(R, rot[J.PELVIS]), mul(rot[J.SPINE], rot[J.CHEST]));
     const aim = mul(axis(Y, look), axis(X, clamp(pitch, -1, 1) * 0.9));
-    const rel = mul(inv(chest), slerp(chest, aim, 0.85 * (1 - sw(MOVE.TUCK)) * (1 - 0.5 * stun)));
+    const rel = mul(
+      inv(chest),
+      slerp(chest, aim, 0.85 * (1 - sw(MOVE.TUCK)) * (1 - 0.5 * stun) * (1 - sw(MOVE.DOWN))),
+    );
     rot[J.NECK] = slerp([0, 0, 0, 1], rel, 0.4);
     rot[J.HEAD] = mul(inv(rot[J.NECK]), rel);
     dirty = false;

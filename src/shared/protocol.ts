@@ -22,7 +22,7 @@
 //   (127: no gun), bits 13-19 down (ticks left lying, 0 when up), bit 20 rack (inside the circle of
 //   the team's rack), bit 21 blade (has the katana), bit 22 wield (the katana is in hand), bit 23 zap
 //   (the stumble is a katana's shock). shots and hits are the wrapping counters of the shots fired
-//   and the hits landed (a laser or a cut).
+//   and the hits landed (a plasma ball or a cut).
 //   swing: bits 0-5 the ticks left in the katana's swing, bits 6-7 its cut (CUT).
 //   Then the match, after the players: [red u8][blue u8][clock u16] the captures of each team, and
 //   the whole seconds to the end of the match (bit 15: it is over, and the clock counts to the next

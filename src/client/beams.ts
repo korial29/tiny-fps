@@ -1,36 +1,44 @@
-// The laser shots on screen: each a bright cyan-violet ribbon from the muzzle to where the shot
-// ended, thinning to nothing in LIFE seconds, with a flash of light at the muzzle and, when a wall
-// stopped it, a few sparks and a glow where it hit. Ribbons turn to face the camera. No DOM, no GL.
+// What the weapons light up: the plasma balls, each a blue-white core in a soft halo with a short
+// trail, a blue flash at the muzzle of a shot, a splash of light and sparks where a ball bursts,
+// and the bolts and sparks of the katana's shock. Everything turns to face the camera and is
+// unlit and above 1, so that the bloom makes it glow. No DOM, no GL.
 import { LIGHT } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 
-/** Seconds a beam lasts, and a flash of light and a spark. */
-export const LIFE = 0.08;
-const FLASH = 0.06;
+/** A ball as drawn this frame: its centre, its unit direction, and the metres of trail behind it. */
+export interface Orb {
+  p: Vec3;
+  d: Vec3;
+  tail: number;
+}
+
+/** Seconds a muzzle flash, a splash and a spark last. */
+export const FLASH = 0.06;
+export const SPLASH = 0.16;
 const SPARK = 0.22;
-/** Sparks to an impact. */
-const SPARKS = 7;
-/** Beams kept at most: the oldest goes. */
+/** Sparks to a burst, and kept at most. */
+const SPARKS = 12;
 const MAX = 16;
 /** Seconds a bolt lasts, bolts kept at most, and the sparks of a shock. */
 const BOLT = 0.05;
 const BOLTS = 24;
 const SHOCK_SPARKS = 10;
+/** Balls that light what they pass, the nearest first. */
+const LIT = 4;
 
-/** One shot: from `a` to `b`, `age` seconds old; `hit` when a wall stopped it. */
-interface Beam {
-  a: Vec3;
-  b: Vec3;
-  age: number;
-  hit: boolean;
-  /** The own player's: its start follows the muzzle. */
-  own: boolean;
-}
 interface Spark {
   p: Vec3;
   v: Vec3;
   age: number;
+}
+/** A flash at a muzzle or a splash at a burst: where, how old, and which. */
+interface Glow {
+  p: Vec3;
+  age: number;
+  /** The own muzzle's: it follows the muzzle. */
+  own?: boolean;
+  splash?: boolean;
 }
 /** A jagged bolt: two segments, a to m to b. */
 interface Bolt {
@@ -41,28 +49,35 @@ interface Bolt {
 }
 
 export interface Tracer {
-  /** A shot from `a` to `b`; `hit` when it ended on a wall, which sparks; `own` for the player's, which stays on its muzzle. */
-  shoot(a: Vec3, b: Vec3, hit: boolean, own?: boolean): void;
+  /** A shot's flash at the muzzle `a`; `own` for the player's, which stays on its muzzle. */
+  flash(a: Vec3, own?: boolean): void;
+  /** A ball burst at `at`: a splash of light and a spray of sparks. */
+  burst(at: Vec3): void;
+  /** The balls to draw this frame. */
+  orbs(list: Orb[]): void;
   /** The katana's shock at `at`: a burst of sparks and bolts. */
   shock(at: Vec3): void;
   /** One frame of the crackle around a shocked runner whose middle is `at`: a few bolts, flickering. */
   crackle(at: Vec3): void;
-  /** Where the own muzzle is now: the own beams start there, so that a kick of the view does not swing them. */
+  /** Where the own muzzle is now: its flash stays there, so that a kick of the view does not leave it behind. */
   mount(a: Vec3): void;
   /** Ages everything by dt seconds and drops what is over. */
   update(dt: number): void;
-  /** Appends the ribbons and the sparks, turned to the camera at `eye`. */
+  /** Appends the balls, the flashes, the bolts and the sparks, turned to the camera at `eye`. */
   draw(out: number[], eye: Vec3): void;
-  /** The lights of the flashes at the muzzles and the impacts, for gather(). */
+  /** The lights of the flashes, the splashes, the bolts and the nearest balls, for gather(). */
   lights(): Light[];
-  /** The beams alive now. */
-  readonly count: number;
 }
 
-/** [halo, core] widths in metres and colours: unlit and above 1, so that the bloom picks them up. */
+/** The katana's bolts: [halo, core] widths in metres and colours, and the lift of the core. */
 const RIBBONS: [number, number[], number][] = [
   [0.022, [0.4, 0.15, 1.3], 0],
   [0.007, [0.7, 1.7, 2.2], 0.02],
+];
+/** A ball's halo and core: radius, colour, lift toward the eye; its trail is as wide as each at the head. */
+const BALL: [number, number[], number][] = [
+  [0.22, [0.2, 0.45, 1.6], 0],
+  [0.08, [2, 2.6, 3.6], 0.04],
 ];
 
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -76,8 +91,18 @@ const norm = (a: Vec3): Vec3 => {
   return [a[0] / l, a[1] / l, a[2] / l];
 };
 const vert = (out: number[], p: Vec3, [r, g, b]: number[]) => out.push(...p, 0, 1, 0, r, g, -2, b);
+/**
+ * What glows is drawn at its size times this: beyond 5 m it grows with the distance (at most 2.5
+ * times), so that it stays a few pixels; nearer it may shrink down to `lo`, so that a ball or a
+ * flash at the own muzzle does not fill the view.
+ */
+const far = (eye: Vec3, c: Vec3, lo: number) =>
+  Math.min(Math.max(Math.hypot(...sub(eye, c)) / 5, lo), 2.5);
 
-/** A flat ribbon of half width w along a to b, its width turned across the view from eye. */
+/**
+ * A flat ribbon along a to b, of half width w at a and wb at b, its width turned across the view
+ * from eye and lifted toward it by `lift`.
+ */
 const ribbon = (
   out: number[],
   a: Vec3,
@@ -86,6 +111,8 @@ const ribbon = (
   rgb: number[],
   eye: Vec3,
   lift: number,
+  wb = w,
+  lo = 1,
 ) => {
   const d = sub(b, a);
   let s = cross(d, sub(a, eye));
@@ -94,26 +121,45 @@ const ribbon = (
   }
   s = norm(s);
   const [p, q, r, t] = [
-    [a, 1],
-    [a, -1],
-    [b, -1],
-    [b, 1],
+    [a, w],
+    [a, -w],
+    [b, -wb],
+    [b, wb],
   ].map(([c, k]) => {
-    // Toward the eye by `lift`, so that the core is not lost in the halo.
     const to = norm(sub(eye, c as Vec3));
-    // Beyond 5 m the ribbon grows with the distance, so that it stays a line of pixels, not a hair.
-    const wide = w * Math.min(Math.max(Math.hypot(...sub(eye, c as Vec3)) / 5, 1), 2.5);
-    return (c as Vec3).map((v, i) => v + s[i] * wide * (k as number) + to[i] * lift) as Vec3;
+    const wide = (k as number) * far(eye, c as Vec3, lo);
+    return (c as Vec3).map((v, i) => v + s[i] * wide + to[i] * lift) as Vec3;
   });
   for (const v of [p, q, r, p, r, t]) {
     vert(out, v, rgb);
   }
 };
 
+/** A disc of radius r round c facing the eye, lifted toward it, as a fan of n triangles. */
+const disc = (out: number[], c: Vec3, r: number, rgb: number[], eye: Vec3, lift = 0, n = 8) => {
+  const to = sub(c, eye);
+  const s = norm(cross(to, [0, 1, 0]));
+  const u = norm(cross(s, to));
+  const k = r * far(eye, c, 0.1);
+  const l = norm(to).map((v, i) => c[i] - v * lift) as Vec3;
+  const rim = (i: number): Vec3 => {
+    const [x, y] = [Math.cos((i * 2 * Math.PI) / n) * k, Math.sin((i * 2 * Math.PI) / n) * k];
+    return [0, 1, 2].map(j => l[j] + s[j] * x + u[j] * y) as Vec3;
+  };
+  for (let i = 0; i < n; i++) {
+    for (const v of [l, rim(i), rim(i + 1)]) {
+      vert(out, v, rgb);
+    }
+  }
+};
+
 export const createTracer = (): Tracer => {
-  let beams: Beam[] = [];
+  let glows: Glow[] = [];
   let sparks: Spark[] = [];
   let bolts: Bolt[] = [];
+  let balls: Orb[] = [];
+  /** The eye of the last frame drawn: the balls nearest to it light the scene. */
+  let seen: Vec3 = [0, 0, 0];
   let seed = 7;
   /** A number in [-1, 1) from a small generator: the same run draws the same sparks. */
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
@@ -125,16 +171,30 @@ export const createTracer = (): Tracer => {
     const m = [0, 1, 2].map(i => p[i] + d[i] / 2 + rnd() * len * 0.3) as Vec3;
     bolts = [...bolts, { a: p, m, b, age: 0 }].slice(-BOLTS);
   };
+  /** n sparks from `at`, at `speed` m/s each way and a little up. */
+  const spray = (at: Vec3, n: number, speed: number) => {
+    for (let i = 0; i < n; i++) {
+      sparks.push({ p: at, v: [rnd() * speed, rnd() * speed + 1.5, rnd() * speed], age: 0 });
+    }
+    sparks = sparks.slice(-MAX * SPARKS);
+  };
 
   return {
+    flash(a, own) {
+      glows = [...glows, { p: a, age: 0, own }].slice(-MAX);
+    },
+    burst(at) {
+      glows = [...glows, { p: at, age: 0, splash: true }].slice(-MAX);
+      spray(at, SPARKS, 4);
+    },
+    orbs(list) {
+      balls = list;
+    },
     shock(at) {
-      for (let i = 0; i < SHOCK_SPARKS; i++) {
-        sparks.push({ p: at, v: [rnd() * 4, rnd() * 3 + 1, rnd() * 4], age: 0 });
-        if (i % 2 == 0) {
-          bolt(at, 0.6);
-        }
+      spray(at, SHOCK_SPARKS, 4);
+      for (let i = 0; i < SHOCK_SPARKS; i += 2) {
+        bolt(at, 0.6);
       }
-      sparks = sparks.slice(-MAX * SPARKS);
     },
     crackle(at) {
       for (let i = 0; i < 2; i++) {
@@ -144,28 +204,13 @@ export const createTracer = (): Tracer => {
       }
     },
     mount(a) {
-      beams.forEach(b => b.own && (b.a = a));
-    },
-    shoot(a, b, hit, own = false) {
-      beams.push({ a, b, age: 0, hit, own });
-      beams = beams.slice(-MAX);
-      if (hit) {
-        const d = norm(sub(a, b));
-        for (let i = 0; i < SPARKS; i++) {
-          sparks.push({
-            p: b,
-            v: [0, 1, 2].map(k => d[k] * 3 + rnd() * 3 + (k == 1 ? 2 : 0)) as Vec3,
-            age: 0,
-          });
-        }
-        sparks = sparks.slice(-MAX * SPARKS);
-      }
+      glows.forEach(g => g.own && (g.p = a));
     },
     update(dt) {
-      for (const x of [...beams, ...sparks, ...bolts]) {
+      for (const x of [...glows, ...sparks, ...bolts]) {
         x.age += dt;
       }
-      beams = beams.filter(b => b.age < LIFE);
+      glows = glows.filter(g => g.age < (g.splash ? SPLASH : FLASH));
       sparks = sparks.filter(s => s.age < SPARK);
       bolts = bolts.filter(b => b.age < BOLT);
       for (const s of sparks) {
@@ -174,16 +219,25 @@ export const createTracer = (): Tracer => {
       }
     },
     draw(out, eye) {
-      for (const { a, b, age } of beams) {
-        // Thinner and a little dimmer as it goes: nothing is blended, so it can only shrink.
-        const k = 1 - age / LIFE;
-        RIBBONS.forEach(([w, rgb, lift]) =>
-          ribbon(
+      seen = eye;
+      for (const { p, d, tail } of balls) {
+        const end = p.map((v, i) => v - d[i] * tail) as Vec3;
+        BALL.forEach(([r, rgb, lift]) => {
+          disc(out, p, r, rgb, eye, lift);
+          if (tail > 0.01) {
+            ribbon(out, p, end, r * 0.5, rgb, eye, lift, 0, 0.1);
+          }
+        });
+      }
+      for (const { p, age, splash } of glows) {
+        // A flash shrinks; a splash swells as it fades.
+        const k = 1 - age / (splash ? SPLASH : FLASH);
+        BALL.forEach(([r, rgb, lift]) =>
+          disc(
             out,
-            a,
-            b,
-            w * k ** 0.7,
-            rgb.map(c => c * (0.6 + 0.4 * k)),
+            p,
+            splash ? r * (3 - 2 * k) : r * 0.7 * k,
+            rgb.map(c => c * (0.4 + 0.6 * k)),
             eye,
             lift,
           ),
@@ -200,17 +254,7 @@ export const createTracer = (): Tracer => {
       }
       for (const { p, age } of sparks) {
         const k = 1 - age / SPARK;
-        const s = norm(cross(sub(p, eye), [0, 1, 0]));
-        const u = norm(cross(s, sub(p, eye)));
-        const [x, y] = [0.022 * k, 0.022 * k];
-        const c = (a: number, b: number): Vec3 => [
-          p[0] + s[0] * a + u[0] * b,
-          p[1] + s[1] * a + u[1] * b,
-          p[2] + s[2] * a + u[2] * b,
-        ];
-        for (const v of [c(-x, 0), c(0, y), c(x, 0), c(-x, 0), c(x, 0), c(0, -y)]) {
-          vert(out, v, [1.4 * k + 0.4, 2.2 * k + 0.3, 3]);
-        }
+        disc(out, p, 0.022 * k, [1.4 * k + 0.4, 2.2 * k + 0.3, 3], eye, 0, 4);
       }
     },
     lights() {
@@ -223,23 +267,21 @@ export const createTracer = (): Tracer => {
         color: rgb.map(c => c * k) as Vec3,
         shadow: false,
       });
-      const arcs = bolts
-        .slice(-2)
-        .map(b => point(b.m, 3, 0.8 * (1 - b.age / BOLT), [0.3, 0.7, 1.3]));
-      const flashes = beams
-        .filter(b => b.age < FLASH)
-        .slice(-3)
-        .flatMap(b => {
-          const k = 1 - b.age / FLASH;
-          return [
-            point(b.a, 6, 1.3 * k, [0.35, 0.8, 1.5]),
-            ...(b.hit ? [point(b.b, 3.5, 0.9 * k, [0.3, 0.7, 1.3])] : []),
-          ];
-        });
-      return [...arcs, ...flashes];
-    },
-    get count() {
-      return beams.length;
+      const dist = (o: Orb) => Math.hypot(...sub(o.p, seen));
+      return [
+        ...bolts.slice(-2).map(b => point(b.m, 3, 0.8 * (1 - b.age / BOLT), [0.3, 0.7, 1.3])),
+        ...glows
+          .slice(-4)
+          .map(g =>
+            g.splash
+              ? point(g.p, 7, 2 * (1 - g.age / SPLASH), [0.35, 0.7, 1.6])
+              : point(g.p, 6, 1.3 * (1 - g.age / FLASH), [0.25, 0.55, 1.6]),
+          ),
+        ...[...balls]
+          .sort((a, b) => dist(a) - dist(b))
+          .slice(0, LIT)
+          .map(o => point(o.p, 4, 1, [0.25, 0.5, 1.4])),
+      ];
     },
   };
 };

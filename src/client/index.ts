@@ -6,6 +6,7 @@ import type { ServerText } from '../shared/protocol';
 import type { PlayerInfo, SocketLike, Snapshot } from '../shared/types';
 import { build, hidden } from '../shared/world';
 import { createAudio, savedMute, toggleMute } from './audio';
+import { createBalls } from './balls';
 import { createTracer } from './beams';
 import { beats, cues, say } from './beats';
 import { createBody } from './body';
@@ -85,7 +86,8 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const foley = createFoley(audio);
   const body = createBody(world);
   const tracer = createTracer();
-  const combat = createCombat(world, audio, hud, fx, tracer, ctl);
+  const balls = createBalls(world);
+  const combat = createCombat(world, audio, hud, fx, tracer, ctl, balls);
   let rd: Renderer | undefined;
   try {
     rd = createRenderer(canvas, world);
@@ -133,6 +135,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       const s = decodeSnapshot(data);
       if (s) {
         predictor.snapshot(s, performance.now());
+        balls.snapshot(s.balls ?? [], you.id, performance.now());
         for (const beat of beats(match, s)) {
           const line = say(beat, you, id => names.get(id) ?? 'Someone');
           if (line) {
@@ -257,6 +260,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       others,
       ctl.keys,
       dt,
+      now,
     );
     if (me && rd) {
       rd.frame(

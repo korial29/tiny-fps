@@ -623,7 +623,7 @@ describe('createRenderer', () => {
       expect(depth[1]).toBe(world[1]);
     });
 
-    it('draws the laser beams after everything that casts a shadow: lit by themselves, in the colour pass only', () => {
+    it('draws the plasma balls and flashes after everything that casts a shadow: lit by themselves, in the colour pass only', () => {
       const rd = createRenderer(canvas, ROOM);
       frame(rd);
       calls.length = 0;
@@ -631,14 +631,15 @@ describe('createRenderer', () => {
         out.push(...Array.from({ length: 6 * STRIDE }, () => 0)),
       );
       rd.frame([1, 1.6, 1], 0, 0, [], new Map(), createEffects(), [], undefined, undefined, {
-        shoot: vi.fn(),
+        flash: vi.fn(),
+        burst: vi.fn(),
+        orbs: vi.fn(),
         shock: vi.fn(),
         crackle: vi.fn(),
         mount: vi.fn(),
         update: vi.fn(),
         draw,
         lights: () => [],
-        count: 1,
       });
       expect(draw).toHaveBeenCalledWith(expect.any(Array), [1, 1.6, 1]);
       const [depth, world] = draws();

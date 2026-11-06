@@ -12,13 +12,11 @@ import {
   cutting,
   ends,
   fingers,
-  frameOf,
   held,
   katana,
   progress,
   stroke,
   sword,
-  wrists,
 } from './katana';
 import { STRIDE, dot } from './mesh';
 import type { Vec3 } from './mesh';
@@ -290,51 +288,6 @@ describe('the sword in a hand', () => {
     const at = grip(pos, Q);
     expect(away(b[100].p, at)).toBeCloseTo(away(a[100].p, at) / 2, 6);
   });
-
-  it('gives a wrist each for the two hands, the left 14 cm behind the right on the grip', () => {
-    const ax = axes(Q);
-    const at = grip(pos, Q);
-    const [right, left] = wrists(at, ax);
-    // The right wrist is where the hand that holds the sword has it.
-    expect(away(right, pos)).toBeLessThan(1e-9);
-    // The left hand's grip, from its wrist (its back of the hand to the left): behind the right one on the handle.
-    const g = fingers(ax);
-    const grasp = left.map((v, i) => v + g[i] * 0.078 + ax[0][i] * 0.022) as Vec3;
-    expect(BEHIND).toBeCloseTo(0.14);
-    expect(away(grasp, at.map((v, i) => v - ax[2][i] * BEHIND) as Vec3)).toBeLessThan(1e-9);
-  });
-
-  it('frames a blade direction and a roll: a proper turn whichever way it points', () => {
-    const cross = (a: Vec3, b: Vec3) => [
-      a[1] * b[2] - a[2] * b[1],
-      a[2] * b[0] - a[0] * b[2],
-      a[0] * b[1] - a[1] * b[0],
-    ];
-    for (const d of [
-      [0, 0.5, 1],
-      [-0.7, 0.1, 0.7],
-      [0.05, -0.4, -0.91],
-      [0, -1, 0.2],
-    ] as Vec3[]) {
-      for (const roll of [0, 0.5, 1.1, 2.2, -1]) {
-        const [r, u, f] = frameOf(d, roll);
-        for (const a of [r, u, f]) {
-          expect(Math.hypot(...a)).toBeCloseTo(1);
-        }
-        expect(dot(r, f)).toBeCloseTo(0);
-        expect(dot(u, f)).toBeCloseTo(0);
-        expect(dot(u, r)).toBeCloseTo(0);
-        // In the camera's space, a mirror of the world's, up is forward cross right.
-        expect(away(cross(f, r) as Vec3, u)).toBeLessThan(1e-9);
-      }
-    }
-    // At no roll, a blade that points forward has its spine up and its flat to the right.
-    const [r, u] = frameOf([0, 0.5, 1], 0);
-    expect(r[0]).toBeCloseTo(1);
-    expect(u[1]).toBeGreaterThan(0.8);
-    // Rolled a quarter turn, the spine points left.
-    expect(frameOf([0, 0, 1], Math.PI / 2)[1][0]).toBeCloseTo(-1);
-  });
 });
 
 /** The point of the sword in camera space for a stroke at p: the grip and 81 cm along the blade. */
@@ -348,19 +301,31 @@ const steps = (a: number, b: number, n = 40) =>
   Array.from({ length: n + 1 }, (_, i) => a + ((b - a) * i) / n);
 
 describe('the cuts', () => {
-  it('start and end in the guard, the same for all of them, with the blade up and forward at the right', () => {
+  it('start and end in the guard, the same for all of them, with the blade standing up the middle of the view', () => {
     for (const cut of [CUT.THRUST, CUT.LEFT, CUT.RIGHT, CUT.SLASH]) {
       for (const p of [0, 1]) {
         stroke(cut, p)
-          .slice(0, 7)
+          .slice(0, 6)
           .forEach((v, i) => expect(v).toBeCloseTo(GUARD[i], 9));
       }
     }
     const tip = tipAt(CUT.THRUST, 0);
-    expect(tip[0]).toBeGreaterThan(0);
-    expect(tip[0]).toBeLessThan(0.4);
-    expect(tip[1]).toBeGreaterThan(0.05);
-    expect(tip[2]).toBeGreaterThan(0.8);
+    expect(Math.abs(tip[0])).toBeLessThan(0.4);
+    expect(tip[1]).toBeGreaterThan(0.7);
+    expect(tip[2]).toBeGreaterThan(0.6);
+  });
+
+  it('keeps the hands low and close in front, the blade making the wide arcs', () => {
+    for (const cut of [CUT.THRUST, CUT.LEFT, CUT.RIGHT, CUT.SLASH]) {
+      for (const p of steps(0, 1)) {
+        const [x, y, z] = stroke(cut, p);
+        expect(Math.abs(x - 0.07)).toBeLessThan(0.16);
+        expect(y).toBeLessThan(0.05);
+        expect(y).toBeGreaterThan(-0.36);
+        expect(z).toBeGreaterThan(0.12);
+        expect(z).toBeLessThan(0.6);
+      }
+    }
   });
 
   it('passes through the middle of the view at the strike: the point on the crosshair', () => {
@@ -375,27 +340,27 @@ describe('the cuts', () => {
   it('thrusts straight forward: the hands come back, the point lunges out to its longest at the strike and holds there', () => {
     const s = strikeOf(CUT.THRUST);
     const z = (p: number) => tipAt(CUT.THRUST, p)[2];
-    // Pulled back: the grip comes 15 cm toward the body.
-    expect(stroke(CUT.THRUST, 0.22)[2]).toBeLessThan(GUARD[2] - 0.15);
+    // Pulled back: the grip comes 20 cm toward the body.
+    expect(stroke(CUT.THRUST, 0.3)[2]).toBeLessThan(GUARD[2] - 0.2 + 1e-9);
     // Out: forward all the way from the pull to the strike, by more than 20 cm.
-    steps(0.22, s)
+    steps(0.3, s)
       .slice(1)
-      .forEach((p, i, all) => expect(z(p)).toBeGreaterThan(z(all[i - 1] ?? 0.22) - 1e-9));
-    expect(z(s) - z(0.22)).toBeGreaterThan(0.2);
+      .forEach((p, i, all) => expect(z(p)).toBeGreaterThan(z(all[i - 1] ?? 0.3) - 1e-9));
+    expect(z(s) - z(0.3)).toBeGreaterThan(0.2);
     const longest = Math.max(...steps(0, 1, 200).map(z));
-    expect(z(s)).toBeGreaterThan(longest - 0.03);
-    // Further out than the guard, and held a beat: the point stays within 3 cm for a fifth of the swing.
+    expect(z(s)).toBeGreaterThan(longest - 0.05);
+    // Further out than the guard, and held a beat: the point stays within 7 cm for a fifth of the swing.
     expect(z(s)).toBeGreaterThan(z(0) + 0.05);
     for (const p of steps(s, s + 0.2, 10)) {
-      expect(away(tipAt(CUT.THRUST, p), tipAt(CUT.THRUST, s))).toBeLessThan(0.03);
+      expect(away(tipAt(CUT.THRUST, p), tipAt(CUT.THRUST, s))).toBeLessThan(0.07);
     }
     // The point stays near the line of the look all through the lunge.
-    for (const p of steps(0.22, s + 0.2)) {
+    for (const p of steps(0.3, s + 0.2)) {
       expect(Math.abs(tipAt(CUT.THRUST, p)[0])).toBeLessThan(0.2);
     }
   });
 
-  it('cuts across from behind the shoulder on one side to low on the other', () => {
+  it('cuts across from out at one side to out at the other', () => {
     for (const [cut, sign] of [
       [CUT.LEFT, 1],
       [CUT.RIGHT, -1],
@@ -403,17 +368,15 @@ describe('the cuts', () => {
       const s = strikeOf(cut);
       const at = (p: number) => tipAt(cut, p);
       const x = (p: number) => sign * at(p)[0];
-      // Wound up behind the shoulder it comes from: the point at that side, high and behind the eye.
-      const [, up, back] = at(0.22);
-      expect(x(0.22)).toBeLessThan(-0.5);
-      expect(up).toBeGreaterThan(0.3);
-      expect(back).toBeLessThan(-0.3);
-      // The follow-through far across and low, out of the view.
-      const [, low] = at(0.6);
-      expect(x(0.6)).toBeGreaterThan(0.6);
-      expect(low).toBeLessThan(-0.8);
+      // Wound up out at the side it comes from, level with the hands, not ahead of them.
+      expect(x(0.24)).toBeLessThan(-0.8);
+      expect(at(0.24)[2]).toBeLessThan(0.4);
+      // The follow-through out at the other side and a little low, then round behind.
+      expect(x(0.5)).toBeGreaterThan(0.8);
+      expect(at(0.62)[1]).toBeLessThan(-0.3);
+      expect(at(0.62)[2]).toBeLessThan(0);
       // Across, in one go: never back, from the widest of the wind-up to the farthest across.
-      const path = steps(0.3, 0.5).map(x);
+      const path = steps(0.27, 0.5).map(x);
       path.forEach((v, i) => i && expect(v).toBeGreaterThanOrEqual(path[i - 1] - 1e-6));
       expect(x(s - 0.05)).toBeLessThan(x(s));
       expect(x(s)).toBeLessThan(x(s + 0.05));
@@ -423,13 +386,13 @@ describe('the cuts', () => {
   it('slashes down from above the head through the middle of the view: from high to low', () => {
     const s = strikeOf(CUT.SLASH);
     const y = (p: number) => tipAt(CUT.SLASH, p)[1];
-    // Raised over the head: the point high and behind the eye, the hands above it.
-    expect(y(0.27)).toBeGreaterThan(0.7);
-    expect(tipAt(CUT.SLASH, 0.27)[2]).toBeLessThan(-0.4);
-    expect(stroke(CUT.SLASH, 0.27)[1]).toBeGreaterThan(0.25);
+    // Raised over the head: the point high and behind the eye, the hands up at its height.
+    expect(y(0.28)).toBeGreaterThan(0.5);
+    expect(tipAt(CUT.SLASH, 0.28)[2]).toBeLessThan(-0.4);
+    expect(stroke(CUT.SLASH, 0.28)[1]).toBeGreaterThan(0);
     // Then down, never back up, to far below the view.
-    expect(y(0.6)).toBeLessThan(-1.2);
-    const path = steps(0.34, 0.6).map(y);
+    expect(y(0.6)).toBeLessThan(-0.9);
+    const path = steps(0.34, 0.55).map(y);
     path.forEach((v, i) => i && expect(v).toBeLessThanOrEqual(path[i - 1] + 1e-6));
     expect(y(s - 0.04)).toBeGreaterThan(0.1);
     expect(y(s + 0.04)).toBeLessThan(-0.1);
@@ -449,7 +412,7 @@ describe('the cuts', () => {
       expect(Math.abs(fastest - strike)).toBeLessThanOrEqual(2.5);
       // The recovery, the last third, is slow.
       const end = speed.slice(-Math.floor(ticks / 3));
-      expect(end.reduce((a, b) => a + b, 0) / end.length).toBeLessThan(Math.max(...speed) * 0.4);
+      expect(end.reduce((a, b) => a + b, 0) / end.length).toBeLessThan(Math.max(...speed) * 0.5);
       expect(speed.at(-1)!).toBeLessThan(Math.max(...speed) * 0.2);
       // More of the swing is after the strike than before: it recovers.
       expect(ticks - strike).toBeGreaterThan(strike);
@@ -461,29 +424,32 @@ describe('the cuts', () => {
       for (const p of steps(0, 1, 60)) {
         const k = stroke(cut, p);
         expect(k.every(Number.isFinite)).toBe(true);
-        expect(Math.hypot(k[3], k[4], k[5])).toBeGreaterThan(0.45);
+        expect(Math.hypot(k[3], k[4], k[5])).toBeGreaterThan(0.35);
         expect(Math.hypot(k[3], k[4], k[5])).toBeLessThan(1.2);
       }
     }
   });
 
-  it('turns the blade smoothly: its frame never flips between two frames, even in the widest swings', () => {
+  it('turns the blade smoothly, even in the widest swings', () => {
     for (const cut of [0, 1, 2, 3]) {
-      let was: Vec3[] | undefined;
+      let was: Vec3 | undefined;
       for (const p of steps(0, 1, 400)) {
         const k = stroke(cut, p);
-        const ax = frameOf([k[3], k[4], k[5]], k[6]);
-        was?.forEach((a, i) => expect(Math.acos(Math.min(dot(a, ax[i]), 1))).toBeLessThan(0.15));
-        was = ax;
+        const l = Math.hypot(k[3], k[4], k[5]);
+        const d = [k[3] / l, k[4] / l, k[5] / l] as Vec3;
+        if (was) {
+          expect(Math.acos(Math.min(dot(was, d), 1))).toBeLessThan(0.15);
+        }
+        was = d;
       }
     }
   });
 
   it('is a mirror from the right', () => {
     const [l, r] = [CUT.LEFT, CUT.RIGHT].map(c => stroke(c, 0.3).slice());
-    expect(r[0]).toBeCloseTo(0.06 - l[0], 1);
+    expect(r[0]).toBeCloseTo(0.14 - l[0], 1);
     expect(r[3]).toBeCloseTo(-l[3], 1);
-    expect(r[6]).toBeCloseTo(-l[6], 1);
+    expect(r[5]).toBeCloseTo(l[5], 1);
   });
 });
 

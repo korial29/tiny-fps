@@ -7,12 +7,12 @@ import { TAU } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
-import { inv, reach } from './body';
+import { inv, reach, wield } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
 import { TILT, aimed, focus, held } from './gun';
 import type { Tracer } from './beams';
-import { cutting, ends, fingers, frameOf, held as sword, progress, stroke, wrists } from './katana';
+import { BEHIND, cutting, ends, held as sword, progress, stroke } from './katana';
 import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
 import { STRIDE, add, basis, unit } from './mesh';
@@ -145,7 +145,7 @@ const lifted = (
 };
 
 /** The katana carried in both hands, upright before the right shoulder, the edge forward: the guard's numbers (see katana.ts) from the eye. */
-const CARRY = [0.08, -0.3, 0.26, 0.1, 0.92, -0.3, 0];
+const CARRY = [0.08, -0.3, 0.26, 0.1, 0.92, -0.3];
 const ease = (v: number) => (v = Math.min(Math.max(v, 0), 1)) * v * (3 - 2 * v);
 
 /**
@@ -167,8 +167,8 @@ export const brandish = (pose: Pose, p: PlayerState, prog: number, ph: number): 
   ];
   // The eye of the gait's head, which a run leans forward: the hands go with it.
   const eye = solve(pose).pos[J.HEAD];
-  const ax = frameOf(g.slice(3, 6) as Vec3, g[6]);
-  const [rw, lw] = wrists(g.slice(0, 3) as Vec3, ax).map(w => add(eye, turn(w)));
+  const d = unit(turn(g.slice(3, 6)));
+  const at = add(eye, turn(g.slice(0, 3)));
   const rot = pose.rot.slice();
   const q = { ...pose, rot };
   for (const j of [J.SPINE, J.CHEST]) {
@@ -181,11 +181,9 @@ export const brandish = (pose: Pose, p: PlayerState, prog: number, ph: number): 
     );
   }
   const s = solve(q);
-  reach(q, s, J.ARM_R, rw, turn([0.7, -1, -0.5]));
-  reach(q, s, J.ARM_L, lw, turn([-0.7, -1, -0.5]));
-  const [hand, arms] = [frame(turn(ax[0]), turn(fingers(ax))), solve(q)];
-  rot[J.HAND_R] = mul(inv(arms.rot[J.FOREARM_R]), hand);
-  rot[J.HAND_L] = mul(inv(arms.rot[J.FOREARM_L]), hand);
+  // Both hands round the grip, the left one BEHIND the right, the elbows down and out.
+  wield(q, s, J.ARM_R, at, d, turn([0.5, -1, -0.35]));
+  wield(q, s, J.ARM_L, add(at, d.map(v => -BEHIND * v) as Vec3), d, turn([-0.5, -1, -0.35]));
   return q;
 };
 

@@ -22,7 +22,7 @@
 //   (127: no gun), bits 13-19 down (ticks left lying, 0 when up), bit 20 rack (inside the circle of
 //   the team's rack), bit 21 blade (has the katana), bit 22 wield (the katana is in hand), bit 23 zap
 //   (the stumble is a katana's shock). shots and hits are the wrapping counters of the shots fired
-//   and the hits landed (a laser or a cut).
+//   and the hits landed (a plasma ball or a cut).
 //   swing: bits 0-5 the ticks left in the katana's swing, bits 6-7 its cut (CUT).
 //   lost: bits 0-2 the LIMB a katana's cut took off when it put him down (NONE once up), the rest 0.
 //   Then the match, after the players: [red u8][blue u8][clock u16] the captures of each team, and
@@ -31,10 +31,16 @@
 //     HOME: nothing more (2 bytes in all for the two flags);
 //     CARRIED: [by u8] the carrier's player id;
 //     DROPPED: [x i16][y i16][z i16] in 1/16 m, [left u8] whole seconds before it goes home.
-//   A snapshot is 4 + 47 × players + 8 + 2 to 16 bytes: 10 on top of the players when both flags are home.
+//   Then, only when there are any, the plasma balls: [count u8], count × 10 bytes:
+//     [id u8][by u8][x i16][y i16][z i16][yaw u8][pitch i8]
+//     id: the shooter's `shots` after the shot; by: bits 0-6 the shooter's id, bit 7 burst (it burst
+//     where it is: the last snapshot that carries it); x, y, z in 1/32 m; the direction as a yaw in
+//     256ths of a turn and a pitch in 127ths of a quarter turn.
+//   A snapshot is 4 + 47 × players + 8 + 2 to 16 bytes: 10 on top of the players when both flags are
+//   home and no ball flies; with balls, 1 + 10 × balls more.
 // Every multi-byte field is big-endian (DataView's default).
 import { FLAG, KEY, MODE } from './types';
-import type { FlagState, Input, PlayerInfo, Snapshot } from './types';
+import type { Ball, FlagState, Input, PlayerInfo, Snapshot } from './types';
 
 export type ClientText = { t: 'join'; name: string };
 
@@ -62,11 +68,18 @@ export const SNAP_PLAYER = 47;
 /** The match block after the players: the captures, the clock, the packs; the flags follow (2 to 16 bytes). */
 export const SNAP_MATCH = 8;
 
+/** Bytes of a plasma ball. */
+export const SNAP_BALL = 10;
+
 /** The no-gun value of the ammo's 7 bits. */
 const NO_GUN = 127;
 
-/** A flag's resting place on the wire: 1/16 m in an i16, so ±2 km. */
+/** A flag's resting place on the wire: 1/16 m in an i16, so ±2 km. A ball's: 1/32 m, ±1 km. */
 const POS = 16;
+const BALL_POS = 32;
+/** A ball's yaw: 256ths of a turn; its pitch: 127ths of a quarter turn. */
+const YAW8 = 128 / Math.PI;
+const PITCH8 = 254 / Math.PI;
 
 const TURN = 65536 / (2 * Math.PI);
 /** Radians to 65536ths of a turn; the mask also folds negative and ≥ 2π angles into one turn. */
@@ -128,9 +141,9 @@ const flagBytes = (state: number): number =>
 
 export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
   const end = SNAP_HEAD + SNAP_PLAYER * s.players.length;
-  const v = new DataView(
-    new ArrayBuffer(end + SNAP_MATCH + s.flags.reduce((n, f) => n + flagBytes(f.state), 0)),
-  );
+  const balls = s.balls ?? [];
+  const tail = end + SNAP_MATCH + s.flags.reduce((n, f) => n + flagBytes(f.state), 0);
+  const v = new DataView(new ArrayBuffer(tail + (balls.length && 1 + SNAP_BALL * balls.length)));
   v.setUint8(0, MSG_SNAPSHOT);
   v.setUint16(1, s.tick & 0xffff);
   v.setUint8(3, s.players.length);
@@ -190,6 +203,17 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
       v.setUint8(o + 7, Math.min(255, f.left));
     }
     o += flagBytes(f.state);
+  }
+  if (balls.length) {
+    v.setUint8(o++, balls.length);
+  }
+  for (const b of balls) {
+    v.setUint8(o, b.id);
+    v.setUint8(o + 1, (b.by & 127) | (b.burst ? 128 : 0));
+    [b.x, b.y, b.z].forEach((c, k) => v.setInt16(o + 2 + 2 * k, clamp16(c * BALL_POS)));
+    v.setUint8(o + 8, Math.round(Math.atan2(-b.dx, -b.dz) * YAW8) & 255);
+    v.setInt8(o + 9, Math.round(Math.asin(Math.max(-1, Math.min(1, b.dy))) * PITCH8));
+    o += SNAP_BALL;
   }
   return v.buffer;
 };
@@ -272,8 +296,25 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     flags.push(f);
     o += flagBytes(state);
   }
-  if (o !== buf.byteLength) {
+  // A count of 0 is never written: a zero byte there is padding.
+  const n = o < buf.byteLength ? v.getUint8(o++) || -1 : 0;
+  if (o + n * SNAP_BALL !== buf.byteLength) {
     return null;
+  }
+  const balls: Ball[] = [];
+  for (let k = 0; k < n; k++, o += SNAP_BALL) {
+    const [yaw, pitch] = [v.getUint8(o + 8) / YAW8, v.getInt8(o + 9) / PITCH8];
+    balls.push({
+      id: v.getUint8(o),
+      by: v.getUint8(o + 1) & 127,
+      x: v.getInt16(o + 2) / BALL_POS,
+      y: v.getInt16(o + 4) / BALL_POS,
+      z: v.getInt16(o + 6) / BALL_POS,
+      dx: -Math.sin(yaw) * Math.cos(pitch),
+      dy: Math.sin(pitch),
+      dz: -Math.cos(yaw) * Math.cos(pitch),
+      burst: v.getUint8(o + 1) > 127,
+    });
   }
   return {
     tick: v.getUint16(1),
@@ -283,6 +324,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     over: (clock & 0x8000) !== 0,
     flags: flags as Snapshot['flags'],
     packs: v.getUint32(end + 4),
+    ...(n ? { balls } : {}),
   };
 };
 

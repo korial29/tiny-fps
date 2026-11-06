@@ -38,7 +38,7 @@ export interface Effects {
   lie: number;
   /** The own player fired: a small shake of the eye, the look and the roll, and the kick of the gun. */
   fire(): void;
-  /** The own player was hit by a laser: the red vignette and a small knock. */
+  /** The own player was hit: the red vignette and a small knock. */
   wound(): void;
   /** The own player was tackled: a hard jolt of the eye, the look and the roll, and the vignette. */
   jolt(): void;
@@ -102,7 +102,7 @@ const PUNCH_FOV = 4;
 const SHOT = [-0.25, 0.4, 0.5];
 /** A cut's strike: the eye's speed, then the look's (a slash) and the roll's (across). */
 const STRIKE = [-0.5, 1.5, 1.2];
-/** A laser hit: the same, and a floor at which the view lies, tilted (radians) and lowered to a hand's width. */
+/** A hit: the same, and a floor at which the view lies, tilted (radians) and lowered to a hand's width. */
 const WOUND = [-1.5, 0.8, 1.5];
 const LIE = [0.9, 0.3];
 

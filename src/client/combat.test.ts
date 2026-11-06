@@ -1,10 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AMMO_PACK, CUTS, GUN_RANGE, MAX_PITCH, RECOIL } from '../shared/constants';
+import {
+  AMMO_PACK,
+  CUTS,
+  GUN_RANGE,
+  INTERP_DELAY,
+  MAX_PITCH,
+  PLASMA_R,
+  PLASMA_SPEED,
+  RECOIL,
+} from '../shared/constants';
 import { STILL } from '../shared/physics';
 import { CUT, KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
+import { TRAIL, createBalls } from './balls';
 import { createTracer } from './beams';
+import type { Orb } from './beams';
 import { createCombat, fired, sight, struck, swung } from './combat';
 import { aimed, focus, tip } from './gun';
 import type { Vec3 } from './mesh';
@@ -50,8 +61,7 @@ const mk = (o: Partial<Pick<View, 'yaw' | 'cam' | 'drawn' | 'pitch'>> = {}): Vie
     drawn: 0,
     ...o,
   };
-  const s = sight(WORLD, v.eye, v.cam, v.yaw, v.pitch, v.drawn);
-  return { ...v, muzzle: [0.2, -0.1, 0.6], end: s.end, hit: s.hit };
+  return { ...v, muzzle: [0.2, -0.1, 0.6] };
 };
 const VIEW = mk();
 
@@ -61,15 +71,40 @@ const setup = () => {
   const fx = { fire: vi.fn(), cut: vi.fn(), wound: vi.fn(), lie: 0 };
   const tracer = createTracer();
   const ctl = { pitch: 0 };
-  const combat = createCombat(WORLD, audio, hud, fx, tracer, ctl);
+  const balls = createBalls(WORLD);
+  const combat = createCombat(WORLD, audio, hud, fx, tracer, ctl, balls);
   const ids = () => audio.play.mock.calls.map(c => c[0]);
+  /** The time of the frames, ms: each one 1/60 s on. */
+  let now = 1000;
   const frame = (
     me: PlayerState | undefined,
     others: PlayerState[] = [],
     keys = 0,
     v: View | undefined = me && VIEW,
-  ) => combat.frame(v, me, others, keys, 1 / 60);
-  return { audio, hud, fx, tracer, ctl, combat, ids, frame };
+  ) => combat.frame(v, me, others, keys, 1 / 60, (now += 1000 / 60));
+  /** What the tracer is given and does: the flashes, the bursts and the balls of the last frame. */
+  const flashes: [Vec3, boolean | undefined][] = [];
+  const bursts: Vec3[] = [];
+  let orbs: Orb[] = [];
+  const [flash, burst, list] = [tracer.flash, tracer.burst, tracer.orbs];
+  tracer.flash = (a, own) => (flashes.push([a, own]), flash(a, own));
+  tracer.burst = at => (bursts.push(at), burst(at));
+  tracer.orbs = l => ((orbs = l), list(l));
+  return {
+    audio,
+    hud,
+    fx,
+    tracer,
+    ctl,
+    balls,
+    combat,
+    ids,
+    frame,
+    flashes,
+    bursts,
+    orbs: () => orbs,
+    at: () => now,
+  };
 };
 
 describe('fired', () => {
@@ -114,60 +149,70 @@ describe('the recoil', () => {
 });
 
 describe('the own shots', () => {
-  it('draw one beam per shot from the muzzle, and play the laser each time', () => {
-    const { combat, frame, tracer, ids } = setup();
+  it('flash the muzzle and play the shot once each, and launch a ball from the eye along the look', () => {
+    const { combat, frame, ids, flashes, orbs } = setup();
     frame(player());
-    combat.step(player({ shots: 0 }), player({ shots: 2 }));
-    frame(player({ shots: 2 }));
-    expect(tracer.count).toBe(2);
-    expect(ids()).toEqual([SOUND.LASER, SOUND.LASER]);
-    // Once only: the next frame adds nothing.
-    frame(player({ shots: 2 }));
-    expect(tracer.count).toBe(2);
-  });
-
-  it('end the beam on the wall the look ray meets, or at the range in the open', () => {
-    const { combat, frame, tracer } = setup();
-    const ends: number[][] = [];
-    const shoot = tracer.shoot.bind(tracer);
-    tracer.shoot = (a, b, hit, own) => {
-      ends.push([...b, +hit]);
-      shoot(a, b, hit, own);
-    };
     combat.step(player({ shots: 0 }), player({ shots: 1 }));
     frame(player({ shots: 1 }));
-    // Looking along -z at z = -20.
-    expect(ends[0][2]).toBeCloseTo(-20, 3);
-    expect(ends[0][3]).toBe(1);
-    // Looking the other way: nothing within the range.
-    combat.step(player({ shots: 1 }), player({ shots: 2 }));
-    frame(player({ shots: 2 }), [], 0, mk({ yaw: Math.PI }));
-    expect(ends[1][2]).toBeCloseTo(GUN_RANGE * 1, 0);
-    expect(ends[1][3]).toBe(0);
+    expect(flashes).toHaveLength(1);
+    expect(flashes[0][1]).toBe(true);
+    expect(ids()).toEqual([SOUND.LASER]);
+    // Drawn from the muzzle at first.
+    expect(orbs()).toHaveLength(1);
+    expect(orbs()[0].p).toEqual([
+      expect.closeTo(0.2, 6),
+      expect.closeTo(1.5, 6),
+      expect.closeTo(-0.6, 6),
+    ]);
+    expect(orbs()[0].d).toEqual([expect.closeTo(0, 9), expect.closeTo(0, 9), -1]);
+    // Once only.
+    frame(player({ shots: 1 }));
+    expect(flashes).toHaveLength(1);
+    expect(ids()).toEqual([SOUND.LASER]);
+  });
+
+  it('fly at PLASMA_SPEED onto the look line, and burst on the wall it meets, with the zap there', () => {
+    const { combat, frame, ids, audio, orbs, bursts } = setup();
+    frame(player());
+    combat.step(player({ shots: 0 }), player({ shots: 1 }));
+    frame(player({ shots: 1 }));
+    // A quarter of a second on: 10 m out, on the line from the eye (x 0, y 1.6).
+    for (let k = 0; k < 15; k++) {
+      frame(player({ shots: 1 }));
+    }
+    const [o] = orbs();
+    expect(o.p[0]).toBeCloseTo(0, 6);
+    expect(o.p[1]).toBeCloseTo(1.6, 6);
+    expect(o.p[2]).toBeCloseTo(-PLASMA_SPEED / 4, 0);
+    expect(o.tail).toBeCloseTo(TRAIL, 6);
+    // The wall at z = -20, 20 m from the eye: half a second.
+    for (let k = 0; k < 20 && !bursts.length; k++) {
+      frame(player({ shots: 1 }));
+    }
+    expect(bursts).toHaveLength(1);
+    expect(bursts[0][2]).toBeCloseTo(-20 + PLASMA_R, 6);
+    expect(orbs()).toEqual([]);
+    expect(ids()).toEqual([SOUND.LASER, SOUND.SPLASH]);
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, bursts[0]);
   });
 
   it('start at the muzzle in the camera, kicked and shaken with it', () => {
-    const { combat, frame, tracer } = setup();
-    const from: number[][] = [];
-    const shoot = tracer.shoot.bind(tracer);
-    tracer.shoot = (a, b, hit, own) => {
-      from.push(a);
-      shoot(a, b, hit, own);
-    };
+    const { combat, frame, flashes } = setup();
     combat.step(player({ shots: 0 }), player({ shots: 1 }));
     frame(player({ shots: 1 }), [], 0, mk({ cam: [0, 1.7, 0] }));
-    expect(from[0]).toEqual([
+    expect(flashes[0][0]).toEqual([
       expect.closeTo(0.2, 6),
       expect.closeTo(1.6, 6),
       expect.closeTo(-0.6, 6),
     ]);
   });
 
-  it('draw no beam and play nothing without a view', () => {
-    const { combat, frame, tracer, ids } = setup();
+  it('flash nothing and play nothing without a view', () => {
+    const { combat, frame, ids, flashes, orbs } = setup();
     combat.step(player({ shots: 0 }), player({ shots: 1 }));
     frame(undefined, [], 0, undefined);
-    expect(tracer.count).toBe(0);
+    expect(flashes).toEqual([]);
+    expect(orbs()).toEqual([]);
     expect(ids()).toEqual([]);
   });
 });
@@ -184,45 +229,24 @@ describe('where the shots go', () => {
       180) /
     Math.PI;
 
-  it('start at the emitter of the gun of a runner, and the gun points along them', () => {
+  it('flash at the emitter of the gun of a runner, and the gun points along his look', () => {
     for (const [yaw, pitch] of [
       [0, 0],
       [0.5, 0.2],
       [Math.PI, -0.1],
     ]) {
-      const { frame, tracer } = setup();
-      const beams: [Vec3, Vec3][] = [];
-      const shoot = tracer.shoot.bind(tracer);
-      tracer.shoot = (a, b, hit, own) => {
-        beams.push([a, b]);
-        shoot(a, b, hit, own);
-      };
+      const { frame, flashes } = setup();
       const at = (shots: number) => player({ id: 2, x: 5, z: -3, yaw, pitch, shots });
       frame(player(), [at(1)]);
       frame(player(), [at(2)]);
       const [to] = focus(at(2), WORLD);
       const [grip, ax] = aimed(at(2), to);
-      expect(beams).toHaveLength(1);
-      expect(beams[0][0]).toEqual(tip(grip, ax));
-      expect(beams[0][1]).toEqual(to);
-      // The long axis of the gun, from the back of its body to the emitter, lies along the beam.
+      expect(flashes).toHaveLength(1);
+      expect(flashes[0]).toEqual([tip(grip, ax), undefined]);
+      // The long axis of the gun, from the back of its body to the emitter, points where he looks.
       const rear: Vec3 = [0, 1, 2].map(i => grip[i] + ax[1][i] * 0.095 - ax[2][i] * 0.06) as Vec3;
-      expect(angle(dir(rear, beams[0][0]), dir(beams[0][0], to))).toBeLessThan(0.5);
+      expect(angle(dir(rear, flashes[0][0]), dir(flashes[0][0], to))).toBeLessThan(0.5);
     }
-  });
-
-  it('are along the beam of the own gun too: from the muzzle to the end of the look ray', () => {
-    const { combat, frame, tracer } = setup();
-    const beams: [Vec3, Vec3][] = [];
-    const shoot = tracer.shoot.bind(tracer);
-    tracer.shoot = (a, b, hit, own) => {
-      beams.push([a, b]);
-      shoot(a, b, hit, own);
-    };
-    combat.step(player({ shots: 0 }), player({ shots: 1 }));
-    frame(player({ shots: 1 }));
-    expect(beams[0][1]).toEqual(VIEW.end);
-    expect(beams[0][1][2]).toBeCloseTo(-20, 3);
   });
 });
 
@@ -253,12 +277,12 @@ describe('sight', () => {
 describe('the others shots', () => {
   const other = (shots: number) => player({ id: 2, x: 5, z: -3, shots });
 
-  it('draw a beam from the shooter and play the laser at his place, for each change', () => {
-    const { frame, tracer, audio } = setup();
+  it('flash his muzzle and play the shot at his place, once for a change', () => {
+    const { frame, flashes, audio } = setup();
     frame(player(), [other(10)]);
-    expect(tracer.count).toBe(0);
+    expect(flashes).toEqual([]);
     frame(player(), [other(11)]);
-    expect(tracer.count).toBe(1);
+    expect(flashes).toHaveLength(1);
     expect(audio.play).toHaveBeenCalledWith(
       SOUND.LASER,
       [5, 1.6, -3],
@@ -266,35 +290,46 @@ describe('the others shots', () => {
       expect.any(Number),
     );
     frame(player(), [other(11)]);
-    expect(tracer.count).toBe(1);
-  });
-
-  it('draw one beam per increment, a few at most for a long gap', () => {
-    const { frame, tracer } = setup();
-    frame(player(), [other(10)]);
-    frame(player(), [other(12)]);
-    expect(tracer.count).toBe(2);
+    // A long gap in the snapshots is one flash.
     frame(player(), [other(200)]);
-    expect(tracer.count).toBe(5);
+    expect(flashes).toHaveLength(2);
   });
 
   it('forget a player who left: he is new when he is back', () => {
-    const { frame, tracer } = setup();
+    const { frame, flashes } = setup();
     frame(player(), [other(10)]);
     frame(player(), []);
     frame(player(), [other(40)]);
-    expect(tracer.count).toBe(0);
+    expect(flashes).toEqual([]);
   });
 
-  it('fade: the beams are gone in 80 ms', () => {
-    const { frame, tracer } = setup();
-    frame(player(), [other(1)]);
-    frame(player(), [other(2)]);
-    expect(tracer.count).toBe(1);
-    for (let i = 0; i < 6; i++) {
-      frame(player(), [other(2)]);
+  it('draw his balls from the snapshots, out of his muzzle, and burst them where the host says', () => {
+    const { frame, balls, orbs, bursts, audio, at } = setup();
+    const p = other(1);
+    frame(player(), [p]);
+    const ball = { id: 1, by: 2, x: 5, y: 1.6, z: -5, dx: 0, dy: 0, dz: -1, burst: false };
+    balls.snapshot([ball], 1, at());
+    // Drawn INTERP_DELAY late, like him.
+    frame(player(), [p]);
+    expect(orbs()).toEqual([]);
+    const sent = at();
+    for (let k = 0; k < 10 && !orbs().length; k++) {
+      frame(player(), [p]);
     }
-    expect(tracer.count).toBe(0);
+    expect(at() - sent).toBeGreaterThanOrEqual(INTERP_DELAY - 1000 / 60);
+    expect(orbs()).toHaveLength(1);
+    const [grip, ax] = aimed(p, focus(p, WORLD)[0]);
+    expect(orbs()[0].tail).toBeLessThan(0.1);
+    const muzzle = tip(grip, ax);
+    expect(Math.hypot(...orbs()[0].p.map((v, i) => v - muzzle[i]))).toBeLessThan(0.1);
+    balls.snapshot([{ ...ball, z: -6 }], 1, at());
+    balls.snapshot([{ ...ball, z: -7, burst: true }], 1, at());
+    for (let k = 0; k < 10 && !bursts.length; k++) {
+      frame(player(), [p]);
+    }
+    expect(bursts).toEqual([[5, 1.6, -7]]);
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, [5, 1.6, -7]);
+    expect(orbs()).toEqual([]);
   });
 });
 
@@ -496,14 +531,14 @@ describe('the own cuts', () => {
     expect(fx.cut).toHaveBeenCalledTimes(1);
   });
 
-  it('give the katana no recoil, no shot and no beam', () => {
-    const { combat, frame, ctl, fx, tracer, ids } = setup();
+  it('give the katana no recoil, no shot and no ball', () => {
+    const { combat, frame, ctl, fx, flashes, orbs, ids } = setup();
     frame(cutting(CUT.THRUST, 0));
     combat.step(cutting(CUT.THRUST, 0), cutting(CUT.THRUST, 24));
     frame(cutting(CUT.THRUST, 24));
     expect(ctl.pitch).toBe(0);
     expect(fx.fire).not.toHaveBeenCalled();
-    expect(tracer.count).toBe(0);
+    expect([flashes, orbs()]).toEqual([[], []]);
     expect(ids()).not.toContain(SOUND.LASER);
   });
 });

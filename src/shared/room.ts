@@ -10,6 +10,7 @@ import {
   PACK_BACK,
   PACK_HP,
   PACK_R,
+  PLASMA_MAX,
   RULES,
   SHOCK_KNOCK,
   SHOCK_TICKS,
@@ -20,9 +21,11 @@ import {
 } from './constants';
 import { knock, limbOf, strike } from './blade';
 import { Ctf } from './ctf';
-import { STRIKE, shoot, step, within } from './gun';
+import { STRIKE, step, within } from './gun';
 import { HIGHLINE } from './map';
 import { forward, spawn, speedOf, stumble } from './physics';
+import { PLASMA_LAG, PLASMA_STEP, fly, launch } from './plasma';
+import type { Flying } from './plasma';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
 import { reaches, tackling } from './tackle';
@@ -107,6 +110,8 @@ export class Room {
   private rr = [0, 0];
   /** Ticks before each health pack of the map is back: 0 when it is there to take. */
   private gone: number[];
+  /** The plasma balls in flight, and the ones that burst since the last snapshot, which sends them once more. */
+  private balls: Flying[] = [];
 
   /** Missing rules fall back to RULES. */
   public constructor(rules: Partial<Rules> = {}, map: WorldDef = HIGHLINE) {
@@ -179,11 +184,17 @@ export class Room {
   public tick(): void {
     const players = this.players();
     if (!players.length) {
+      this.balls = [];
       return;
     }
     const now = ++this.ticks;
     for (const p of players) {
       p.bank = Math.min(INPUT_BURST, p.bank + 1);
+    }
+    for (const b of this.balls) {
+      if (!b.burst && b.left > 0) {
+        this.fly(b, PLASMA_STEP);
+      }
     }
     this.heal(players);
     // Someone lying down touches no flag.
@@ -208,8 +219,11 @@ export class Room {
         players: players.map(p => ({ ...p.state, ack: p.ack, by: p.state.stun ? p.by : 0 })),
         ...this.ctf.wire(),
         packs: this.gone.reduce((m, t, k) => (t ? m : m | (1 << k)), 0) >>> 0,
+        balls: this.balls,
       });
       players.forEach(p => p.conn.send(snap));
+      // Every snapshot reaches every peer (WebSocket, BroadcastChannel): a burst is sent once.
+      this.balls = this.balls.filter(b => !b.burst && b.left > 0);
     }
   }
 
@@ -343,18 +357,40 @@ export class Room {
   }
 
   /**
-   * A shot of `p` went off at the view tick `view`: it hits the first enemy on its way as `p` drew
-   * him, and takes 1 hp.
+   * A shot of `p` went off at the view tick `view`: its ball starts where `p` saw it start, flown
+   * on by his lag (the view tick to now, at most PLASMA_LAG ticks) against the others as they are
+   * now. Past PLASMA_MAX balls in flight, the oldest bursts.
    */
-  private shoot(p: Player, view: number | undefined): void {
+  private shoot(p: Player, view = 0): void {
+    const b = launch(p.state, p.info.team);
+    // Ticks back, on the u16 circle; a view ahead of now is no lag.
+    const lag = (this.ticks - view + 0x10000) % 0x10000;
+    this.balls.push(b);
+    this.fly(b, Math.min(lag < 0x8000 ? lag : 0, PLASMA_LAG) * PLASMA_STEP);
+    const live = this.balls.filter(q => !q.burst);
+    if (live.length > PLASMA_MAX) {
+      live[0].burst = true;
+    }
+  }
+
+  /** Flies the ball `b` on by `m` metres: one that bursts on an enemy who is up takes 1 hp from him, and counts a hit to its shooter. */
+  private fly(b: Flying, m: number): void {
     const peers = this.players();
-    const foe = peers.find(
-      q => q.info.id === shoot(this.world, p.state, this.enemies(p, view))?.id,
+    const foes = peers.filter(q => q.info.team !== b.team && !q.state.down);
+    const hit = fly(
+      this.world,
+      b,
+      m,
+      foes.map(f => f.state),
     );
+    const foe = foes.find(q => q.state === hit);
     if (!foe) {
       return;
     }
-    p.state.hits = (p.state.hits + 1) & 255;
+    const by = peers.find(q => q.info.id === b.by);
+    if (by) {
+      by.state.hits = (by.state.hits + 1) & 255;
+    }
     this.harm(foe, 1);
   }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { LIFE, createTracer } from './beams';
+import { FLASH, SPLASH, createTracer } from './beams';
+import type { Orb } from './beams';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 
@@ -16,136 +17,151 @@ const drawn = (t: ReturnType<typeof createTracer>) => {
     out.slice(i * STRIDE, (i + 1) * STRIDE),
   );
 };
-/** The width of the widest ribbon, from its first two corners. */
-const width = (v: number[][]) =>
-  Math.hypot(v[0][0] - v[1][0], v[0][1] - v[1][1], v[0][2] - v[1][2]);
 
-describe('the tracer', () => {
-  it('draws nothing until a shot, then a halo and a core: two glowing ribbons, unlit and above 1', () => {
+describe('the plasma balls', () => {
+  const BALL: Orb = { p: [0, 1.6, -10], d: [0, 0, -1], tail: 1 };
+
+  it('draw nothing until there is one, then a halo and a core with their trails, unlit and above 1', () => {
     const t = createTracer();
     expect(drawn(t)).toEqual([]);
-    t.shoot(FROM, TO, false);
+    t.orbs([BALL]);
     const v = drawn(t);
-    expect(v).toHaveLength(12);
-    expect(t.count).toBe(1);
+    // Two discs of 8 triangles and two trails of 2.
+    expect(v).toHaveLength(2 * (24 + 6));
     for (const x of v) {
       expect(x[8]).toBe(-2);
       expect(Math.max(x[6], x[7], x[9])).toBeGreaterThan(1);
     }
-    // The core is cyan-white, the halo violet.
-    expect(v[6][7]).toBeGreaterThan(v[6][6]);
-    expect(v[0][9]).toBeGreaterThan(v[0][7]);
-  });
-
-  it('runs from the muzzle to where the shot ended', () => {
-    const t = createTracer();
-    t.shoot(FROM, TO, false);
-    const zs = drawn(t).map(v => v[2]);
-    expect(Math.max(...zs)).toBeCloseTo(-0.6, 1);
-    expect(Math.min(...zs)).toBeCloseTo(-40, 1);
-  });
-
-  it('turns its width across the view, whatever the way it goes', () => {
-    for (const to of [TO, [30, 1.6, 0], [0, 40, -1], [0.2, 1.4, 10]] as Vec3[]) {
-      const t = createTracer();
-      t.shoot(FROM, to, false);
-      const v = drawn(t);
-      const [a, b] = [v[0], v[1]];
-      const side = [0, 1, 2].map(k => a[k] - b[k]);
-      const d = [0, 1, 2].map(k => to[k] - FROM[k]);
-      const toEye = [0, 1, 2].map(k => EYE[k] - FROM[k]);
-      const dot = (p: number[], q: number[]) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
-      expect(Math.abs(dot(side, d)) / (Math.hypot(...side) * Math.hypot(...d))).toBeLessThan(1e-6);
-      expect(
-        Math.abs(dot(side, toEye)) / (Math.hypot(...side) * Math.hypot(...toEye) || 1),
-      ).toBeLessThan(1e-6);
-    }
-  });
-
-  it('thins to nothing in LIFE seconds, and is then gone', () => {
-    const t = createTracer();
-    t.shoot(FROM, TO, false);
-    expect(LIFE).toBeCloseTo(0.08, 6);
-    const w0 = width(drawn(t));
-    t.update(LIFE / 2);
-    const w1 = width(drawn(t));
-    expect(w1).toBeLessThan(w0);
-    expect(w1).toBeGreaterThan(0);
-    t.update(LIFE / 2 + 0.001);
+    // The halo is blue, the core blue-white and brighter.
+    const [halo, core] = [v[0], v[30]];
+    expect(halo[9]).toBeGreaterThan(2 * halo[7]);
+    expect(core[7]).toBeGreaterThan(halo[7]);
+    expect(core[6]).toBeGreaterThan(1);
+    // Gone once the list is empty.
+    t.orbs([]);
     expect(drawn(t)).toEqual([]);
-    expect(t.count).toBe(0);
   });
 
-  it('keeps one beam per shot, each with its own age', () => {
-    const t = createTracer();
-    t.shoot(FROM, TO, false);
-    t.update(0.03);
-    t.shoot(FROM, TO, false);
-    t.shoot(FROM, TO, false);
-    expect(t.count).toBe(3);
-    expect(drawn(t)).toHaveLength(36);
-    t.update(0.06);
-    // Only the first has gone.
-    expect(t.count).toBe(2);
-  });
-
-  it('sparks where a wall stopped it, and not into the open', () => {
-    const open = createTracer();
-    open.shoot(FROM, TO, false);
-    const wall = createTracer();
-    wall.shoot(FROM, TO, true);
-    expect(drawn(wall).length).toBeGreaterThan(drawn(open).length);
-    expect(drawn(open)).toHaveLength(12);
-    // The sparks outlast the beam, a little.
-    wall.update(LIFE + 0.02);
-    expect(drawn(wall).length).toBeGreaterThan(0);
-    wall.update(0.5);
-    expect(drawn(wall)).toEqual([]);
-  });
-
-  it('keeps the sparks near the impact', () => {
-    const t = createTracer();
-    t.shoot(FROM, TO, true);
-    t.update(0.1);
-    for (const v of drawn(t).slice(12)) {
-      expect(Math.hypot(v[0] - TO[0], v[1] - TO[1], v[2] - TO[2])).toBeLessThan(2);
+  it('turn their discs to the eye, round the ball', () => {
+    for (const p of [BALL.p, [8, 3, 2], [0, 10, 0.5]] as Vec3[]) {
+      const t = createTracer();
+      t.orbs([{ ...BALL, p, tail: 0 }]);
+      const v = drawn(t);
+      expect(v).toHaveLength(48);
+      const to = [0, 1, 2].map(k => p[k] - EYE[k]);
+      const n = Math.hypot(...to);
+      for (const disc of [v.slice(0, 24), v.slice(24)]) {
+        const c = disc[0];
+        for (const x of disc) {
+          const r = [0, 1, 2].map(k => x[k] - c[k]);
+          expect(Math.abs(r[0] * to[0] + r[1] * to[1] + r[2] * to[2]) / n).toBeLessThan(1e-9);
+        }
+      }
     }
   });
 
-  it('lights the muzzle for a moment, and the impact when there is one', () => {
+  it('trail back along their way for `tail` metres, to a point', () => {
     const t = createTracer();
-    expect(t.lights()).toEqual([]);
-    t.shoot(FROM, TO, true);
-    const [flash, hit] = t.lights();
-    expect(flash.p).toEqual(FROM);
-    expect(hit.p).toEqual(TO);
-    expect(flash.color[2]).toBeGreaterThan(1);
-    t.update(0.03);
-    expect(t.lights()[0].color[2]).toBeLessThan(flash.color[2]);
-    t.update(0.03);
-    // The beam is still there, but the flash is over.
-    expect(t.count).toBe(1);
+    t.orbs([{ ...BALL, tail: 1.2 }]);
+    const trail = drawn(t).slice(24, 30);
+    const zs = trail.map(x => x[2]);
+    expect(Math.min(...zs)).toBeCloseTo(-10, 1);
+    expect(Math.max(...zs)).toBeCloseTo(-8.8, 1);
+    // The far end of the halo's trail is one point.
+    const end = trail.filter(x => x[2] > -9);
+    expect(new Set(end.map(x => x.slice(0, 3).join())).size).toBe(1);
+  });
+
+  it('grow with the distance, so that they stay a few pixels, and shrink near the eye', () => {
+    const size = (p: Vec3) => {
+      const t = createTracer();
+      t.orbs([{ p, d: [0, 0, -1], tail: 0 }]);
+      const v = drawn(t);
+      return Math.hypot(...[0, 1, 2].map(k => v[1][k] - v[0][k]));
+    };
+    const [near, mid, far, farther] = [0.6, 5, 12.5, 40].map(z => size([0, 1.6, -z]));
+    expect(near).toBeLessThan(mid / 5);
+    expect(far / mid).toBeCloseTo(2.5, 6);
+    expect(farther).toBeCloseTo(far, 6);
+  });
+
+  it('light what they pass: the LIT nearest to the last eye drawn from', () => {
+    const t = createTracer();
+    const at = (z: number): Orb => ({ ...BALL, p: [0, 1.6, z] });
+    t.orbs([at(-50), at(-3), at(-20), at(-8), at(-30), at(-1)]);
+    drawn(t);
+    const zs = t.lights().map(l => l.p[2]);
+    expect(zs).toEqual([-1, -3, -8, -20]);
+    for (const l of t.lights()) {
+      expect(l.color[2]).toBeGreaterThan(l.color[0]);
+    }
+  });
+});
+
+describe('the flash of a shot', () => {
+  it('glows at the muzzle and lights it, smaller and dimmer as it goes, gone in FLASH seconds', () => {
+    const t = createTracer();
+    t.flash(FROM);
+    const v = drawn(t);
+    expect(v).toHaveLength(48);
+    const [light] = t.lights();
+    expect(light.p).toEqual(FROM);
+    expect(light.color[2]).toBeGreaterThan(2 * light.color[0]);
+    expect(FLASH).toBeCloseTo(0.06, 6);
+    const w = (x: number[][]) => Math.hypot(...[0, 1, 2].map(k => x[1][k] - x[0][k]));
+    t.update(FLASH / 2);
+    expect(w(drawn(t))).toBeLessThan(w(v));
+    expect(t.lights()[0].color[2]).toBeLessThan(light.color[2]);
+    t.update(FLASH / 2 + 0.001);
+    expect(drawn(t)).toEqual([]);
     expect(t.lights()).toEqual([]);
   });
 
-  it('keeps the own beams on the muzzle as it moves, and the others where they were shot', () => {
+  it('stays on the own muzzle as it moves, and where it was for the others', () => {
     const t = createTracer();
-    t.shoot(FROM, TO, false, true);
-    t.shoot(FROM, TO, false);
+    t.flash(FROM, true);
+    t.flash(TO);
     t.mount([1, 1, 1]);
-    const near = drawn(t).filter(v => v[2] > -2);
-    const xs = near.map(v => v[0]);
-    expect(Math.max(...xs)).toBeGreaterThan(0.9);
-    expect(Math.min(...xs)).toBeLessThan(0.3);
+    const v = drawn(t);
+    expect(v.slice(0, 24).every(x => Math.hypot(x[0] - 1, x[1] - 1, x[2] - 1) < 0.1)).toBe(true);
+    expect(v.slice(48).every(x => Math.hypot(x[0] - TO[0], x[1] - TO[1], x[2] - TO[2]) < 2)).toBe(
+      true,
+    );
+  });
+});
+
+describe('the burst of a ball', () => {
+  it('splashes: a glow that swells as it fades, a bright light, and sparks round it', () => {
+    const t = createTracer();
+    t.burst(TO);
+    const v = drawn(t);
+    // The two discs of the splash, then 12 sparks of 4 triangles.
+    expect(v).toHaveLength(48 + 12 * 12);
+    const [splash] = t.lights();
+    expect(splash.p).toEqual(TO);
+    expect(splash.range).toBeGreaterThan(6);
+    const w = (x: number[][]) => Math.hypot(...[0, 1, 2].map(k => x[1][k] - x[0][k]));
+    t.update(SPLASH / 2);
+    expect(w(drawn(t))).toBeGreaterThan(w(v));
+    for (const x of drawn(t)) {
+      expect(Math.hypot(x[0] - TO[0], x[1] - TO[1], x[2] - TO[2])).toBeLessThan(2);
+    }
+    t.update(SPLASH / 2 + 0.001);
+    expect(t.lights()).toEqual([]);
+    // The sparks outlast the splash, a little.
+    expect(drawn(t).length).toBeGreaterThan(0);
+    t.update(0.5);
+    expect(drawn(t)).toEqual([]);
   });
 
-  it('keeps at most a handful of beams', () => {
+  it('keeps at most a handful of flashes and splashes, and of sparks', () => {
     const t = createTracer();
     for (let i = 0; i < 100; i++) {
-      t.shoot(FROM, TO, true);
+      t.burst(TO);
+      t.flash(FROM);
     }
-    expect(t.count).toBeLessThanOrEqual(16);
-    expect(drawn(t).length).toBeLessThan(2000);
+    expect(drawn(t).length).toBeLessThan(16 * 48 + 16 * 12 * 12 + 1);
+    expect(t.lights().length).toBeLessThanOrEqual(4);
   });
 });
 
@@ -166,7 +182,6 @@ describe('the shock of the katana', () => {
     for (const x of v) {
       expect(Math.hypot(x[0] - AT[0], x[1] - AT[1], x[2] - AT[2])).toBeLessThan(2);
     }
-    expect(t.count).toBe(0);
   });
 
   it('flickers out: the bolts in a tenth of a second, the sparks in a quarter', () => {

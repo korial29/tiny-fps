@@ -157,7 +157,7 @@ export interface PlayerState {
   rack?: boolean;
   /** Ticks left lying down after the health ran out; at 0 the player is back at a spawn. 0 when up. */
   down: number;
-  /** Shots fired and hits landed (a laser or a cut), u8 counters that wrap: the clients draw a beam and play the hit sound on each change. */
+  /** Shots fired and hits landed (a plasma ball or a cut), u8 counters that wrap: the clients flash the muzzle and play the hit sound on each change. */
   shots: number;
   hits: number;
   /** Has the katana (taken at the team's katana rack, lost on going down). Absent reads false. */
@@ -209,6 +209,23 @@ export interface SnapPlayer extends PlayerState {
   by: number;
 }
 
+/** A plasma ball as a snapshot carries it (plasma.ts). */
+export interface Ball {
+  /** The shooter's `shots` count after the shot that fired it, u8: with `by`, it names the ball. */
+  id: number;
+  /** The shooter's player id. */
+  by: number;
+  /** Its centre, metres (the wire keeps 1/32 m), and its unit direction of flight. */
+  x: number;
+  y: number;
+  z: number;
+  dx: number;
+  dy: number;
+  dz: number;
+  /** It burst where it is: the last snapshot that carries it. */
+  burst: boolean;
+}
+
 /** The flag of a team as a snapshot carries it: only the fields of its state are meaningful, the rest read 0. */
 export interface FlagState {
   /** FLAG. */
@@ -239,6 +256,8 @@ export interface Snapshot {
    * packs of WorldDef.ammo (bit packs.length + n). Absent: none.
    */
   packs?: number;
+  /** The plasma balls in flight, and those that burst since the last snapshot. Absent: none. */
+  balls?: Ball[];
 }
 
 /** Room rules, set by the host. Defaults in constants.ts (RULES). */

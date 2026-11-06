@@ -1,6 +1,7 @@
 // The gun as the client lives it: what a change in the numbers of a player's state means. The own
-// shots (from the live steps of the predictor) kick the look and the camera; a change of `shots`
-// draws a beam and plays the laser, for the own player and the others; the own `hits`, health and
+// shots (from the live steps of the predictor) kick the look and the camera and launch their balls
+// at once; a change of `shots` flashes the muzzle and plays the shot, for the own player and the
+// others; a ball's burst splashes and zaps where it is; the own `hits`, health and
 // ammo play the hit sound, the hurt and the pickups and feed the HUD. The katana's side: the start of
 // a swing (a change of `swing` or `cut`) plays the swish, the own cut's strike tick punches the
 // camera, drawing or sheathing it plays the shing, a hit of the own player with the katana in hand
@@ -12,6 +13,7 @@ import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import type { Audio } from './audio';
+import type { Balls } from './balls';
 import type { Tracer } from './beams';
 import type { Effects } from './effects';
 import { aimed, focus, tip } from './gun';
@@ -30,9 +32,6 @@ export interface View {
   drawn: number;
   /** The own muzzle (the emitter) in the camera's space. */
   muzzle: Vec3;
-  /** Where the look ray ends, from sight(): the beam goes there. */
-  end: Vec3;
-  hit: boolean;
 }
 
 /**
@@ -63,13 +62,14 @@ export const sight = (
 export interface Combat {
   /** One live step of the own player, its state before and after: the recoil and the kick of each shot it fired, the swish and the punch of a cut. */
   step(a?: PlayerState, b?: PlayerState): void;
-  /** One frame: the beams and the sounds of what changed since the last one, and the HUD. */
+  /** One frame at `now` (ms): the balls, the flashes and the sounds of what changed since the last one, and the HUD. */
   frame(
     v: View | undefined,
     me: PlayerState | undefined,
     others: PlayerState[],
     keys: number,
     dt: number,
+    now?: number,
   ): void;
 }
 
@@ -98,19 +98,17 @@ export const struck = (a?: Blade, b?: Blade): boolean => {
 /** The swish of a cut, by CUT: higher and quieter for a thrust, lower and fuller for a slash. */
 const SWISH = { rate: [1.3, 1.05, 0.95, 0.8], gain: [0.6, 0.8, 0.8, 1] };
 
-/** Beams drawn for one change at most: a long gap in the snapshots is not a burst. */
-const BURST = 3;
-
 export const createCombat = (
   world: World,
   audio: Pick<Audio, 'play'>,
   hud: Pick<Hud, 'vitals' | 'hit' | 'down'>,
   fx: Pick<Effects, 'fire' | 'cut' | 'wound' | 'lie'>,
-  tracer: Pick<Tracer, 'shoot' | 'update' | 'mount' | 'crackle'>,
+  tracer: Pick<Tracer, 'flash' | 'burst' | 'orbs' | 'update' | 'mount' | 'crackle'>,
   ctl: { pitch: number },
+  balls: Pick<Balls, 'fire' | 'frame'>,
 ): Combat => {
-  /** Own shots fired in the live steps since the last frame. */
-  let pending = 0;
+  /** The own player after each live step that fired, since the last frame. */
+  let pending: PlayerState[] = [];
   let before: PlayerState | undefined;
   let held = false;
   let seq = 0;
@@ -122,6 +120,8 @@ export const createCombat = (
   /** A little off the pitch each time, so that a burst does not drone. */
   const rate = () => 0.94 + 0.12 * ((seq++ * 0.618) % 1);
   const laser = (at?: Vec3) => audio.play(SOUND.LASER, at, at ? 0.7 : 0.5, rate());
+  /** The muzzle of a runner's gun, as he fires at what he looks at. */
+  const gun = (p: PlayerState) => tip(...aimed(p, focus(p, world)[0]));
   const swish = (c: number, at?: Vec3) => audio.play(SOUND.SWISH, at, SWISH.gain[c], SWISH.rate[c]);
   /** The shing of the katana coming into the hand or leaving it (not when it is lost). */
   const shing = (was: Blade, now: Blade, at?: Vec3) =>
@@ -132,7 +132,9 @@ export const createCombat = (
   return {
     step(a, b) {
       const n = fired(a, b);
-      pending += n;
+      if (n && b) {
+        pending.push({ ...b });
+      }
       for (let i = 0; i < n; i++) {
         ctl.pitch = Math.min(MAX_PITCH, ctl.pitch + RECOIL);
         fx.fire();
@@ -146,7 +148,7 @@ export const createCombat = (
       }
     },
 
-    frame(v, me, others, keys, dt) {
+    frame(v, me, others, keys, dt, now = 0) {
       tracer.update(dt);
       if (me) {
         const was = before;
@@ -181,29 +183,26 @@ export const createCombat = (
       } else {
         before = undefined;
       }
+      let from: Vec3 | undefined;
       if (v) {
-        // The shots of the own player: out of the muzzle, to where the look ray ends.
+        // The own shots: a flash on the muzzle, and their balls, which leave it.
         const [r, u, f] = basis(v.yaw, v.drawn);
         const m = v.muzzle;
-        const from: Vec3 = [0, 1, 2].map(
-          i => v.cam[i] + r[i] * m[0] + u[i] * m[1] + f[i] * m[2],
-        ) as Vec3;
+        from = [0, 1, 2].map(i => v.cam[i] + r[i] * m[0] + u[i] * m[1] + f[i] * m[2]) as Vec3;
         tracer.mount(from);
-        for (; pending > 0; pending--) {
-          tracer.shoot(from, v.end, v.hit, true);
+        for (const p of pending) {
+          balls.fire(p, now);
+          tracer.flash(from, true);
           laser();
         }
       }
-      pending = 0;
+      pending = [];
       cuts = [];
       for (const p of others) {
         const was = seen.get(p.id);
-        const n = Math.min(was === undefined ? 0 : (p.shots - was) & 255, BURST);
-        const [to, hit] = focus(p, world);
-        const [grip, ax] = aimed(p, to);
         const at: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
-        for (let i = 0; i < n; i++) {
-          tracer.shoot(tip(grip, ax), to, hit);
+        if (was !== undefined && p.shots != was) {
+          tracer.flash(gun(p));
           laser(at);
         }
         seen.set(p.id, p.shots);
@@ -225,6 +224,15 @@ export const createCombat = (
           seen.delete(id);
           blades.delete(id);
         }
+      }
+      const { orbs, bursts } = balls.frame(now, id => {
+        const p = others.find(q => q.id == id);
+        return id == me?.id ? from : p && gun(p);
+      });
+      tracer.orbs(orbs);
+      for (const at of bursts) {
+        tracer.burst(at);
+        audio.play(SOUND.SPLASH, at);
       }
     },
   };

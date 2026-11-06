@@ -418,7 +418,7 @@ export interface Renderer {
     body?: Body,
     /** The bases, the flags, the racks and the health packs: drawn lit, casting shadows, with the other players. */
     ctf?: CtfScene,
-    /** The laser beams: glowing ribbons that cast no shadow. */
+    /** The plasma balls, the flashes and the sparks: they glow and cast no shadow. */
     tracer?: Tracer,
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
@@ -717,7 +717,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           +(Math.hypot(p.x - eye[0], p.z - eye[2]) < NEAR),
         );
       }
-      // The beams glow and cast nothing: they come after the last thing that casts a shadow.
+      // What glows casts nothing: it comes after the last thing that casts a shadow.
       const beamAt = v.length;
       tracer?.draw(v, eye);
       for (const p of others) {

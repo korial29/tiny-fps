@@ -7,9 +7,13 @@ import {
   END_SCREEN,
   FLAG_LOCK,
   GUN_COOLDOWN,
+  GUN_RANGE,
   HP_MAX,
   PACK_BACK,
   PACK_HP,
+  PLASMA_MAX,
+  PLASMA_R,
+  PLAYER_R,
   SHOCK_KNOCK,
   SHOCK_TICKS,
   SNAP_EVERY,
@@ -20,6 +24,7 @@ import { cutOf } from './blade';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
 import { STILL, spawn } from './physics';
+import { PLASMA_LAG, PLASMA_STEP, launch } from './plasma';
 import { CUT, FLAG, KEY, LIMB, MODE, TEAM, TEX } from './types';
 import type { Conn, PlayerState, Rules, Snapshot } from './types';
 import type { Spawn, WorldDef } from './world';
@@ -130,14 +135,22 @@ const match = (rules: Partial<Rules> = {}) => {
       }
     },
     /**
-     * Holds FIRE until the player has fired `n` more shots. The history the host rewinds to is
-     * written at snapshot ticks, so two ticks first let it see the puts of the test.
+     * Holds FIRE until the player has fired `n` more shots, then ticks until their balls are
+     * spent. The history the host rewinds to is written at snapshot ticks, so two ticks first let
+     * it see the puts of the test.
      */
     fire: (c: Peer, n = 1, look: Look = {}) => {
       api.ticks(SNAP_EVERY);
       const to = (state(c).shots + n) & 255;
       for (let k = 0; k < 200 && state(c).shots !== to; k++) {
         api.hold(c, 1, FIRE, look);
+      }
+      api.land();
+    },
+    /** Ticks until no ball flies. */
+    land: () => {
+      for (let k = 0; k < 300 && room['balls'].length; k++) {
+        room.tick();
       }
     },
     snap: (c: Peer): Snapshot => decodeSnapshot(c.bins.at(-1)!)!,
@@ -269,58 +282,160 @@ describe('a shot', () => {
   });
 });
 
-describe('a shot as the shooter saw it', () => {
-  it('hits where the target was on the shooter’s screen, though he has moved on', () => {
+describe('a ball and the shooter’s lag', () => {
+  /** Where the ball of Cy's next shot starts: the eye, flown on by his lag (`back` ticks). */
+  const start = (back: number, view?: number) => {
     const m = match();
     m.put(m.cy, 0, 0, GUN);
-    m.put(m.bob, 10);
-    const seen = m.even();
-    // Eight metres off the line on the host by the time the input arrives...
-    m.put(m.bob, 10, 8);
-    m.ticks(SNAP_EVERY * 2);
-    // ...but Cy fired at where he drew him.
-    m.send(m.cy, FIRE, { view: seen });
-    expect(m.state(m.cy).shots).toBe(1);
-    expect(m.state(m.bob).hp).toBe(HP_MAX - 1);
-    expect(m.state(m.bob).z).toBe(8);
+    m.ticks(40);
+    m.send(m.cy, FIRE, { view: view ?? m.room['ticks'] - back });
+    return m.room['balls'][0];
+  };
+
+  it('starts where the shooter saw it start: flown on by the ticks from his view to now', () => {
+    expect(start(0).x).toBe(0);
+    expect(start(6).x).toBeCloseTo(6 * PLASMA_STEP, 9);
+    expect(start(2.5).x).toBeCloseTo(2.5 * PLASMA_STEP, 9);
+    // At most PLASMA_LAG ticks, and none for a view ahead of now.
+    expect(PLASMA_LAG).toBe(12);
+    expect(start(30).x).toBeCloseTo(PLASMA_LAG * PLASMA_STEP, 9);
+    expect(start(-3).x).toBe(0);
+    // An input with no view (it saw no snapshot) reads 0: far back, the most.
+    expect(start(0, 0).x).toBeCloseTo(PLASMA_LAG * PLASMA_STEP, 9);
   });
 
-  it('misses one who was off the line on the shooter’s screen, though he is on it now', () => {
+  it('hits on that stretch an enemy who is on it now, and bursts on a brush there', () => {
     const m = match();
     m.put(m.cy, 0, 0, GUN);
-    m.put(m.bob, 10, 8);
-    const seen = m.even();
-    m.put(m.bob, 10);
-    m.ticks(SNAP_EVERY * 2);
-    m.send(m.cy, FIRE, { view: seen });
-    expect(m.state(m.cy).shots).toBe(1);
-    expect(m.state(m.bob).hp).toBe(HP_MAX);
-    // With the view of now, the same shot hits.
-    m.hold(m.cy, GUN_COOLDOWN, 0);
+    m.put(m.bob, 4);
+    m.ticks(SNAP_EVERY);
+    m.send(m.cy, FIRE, { view: m.room['ticks'] - 6 });
+    // At once, with the input: no tick has run.
+    expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([HP_MAX - 1, 1]);
+    expect(m.room['balls'][0]).toMatchObject({
+      burst: true,
+      x: expect.closeTo(4 - PLAYER_R - PLASMA_R, 6),
+    });
+    const n = match();
+    // The wall at x = 30.
+    n.put(n.cy, 25, 0, GUN);
+    n.ticks(SNAP_EVERY);
+    n.send(n.cy, FIRE, { view: n.room['ticks'] - 8 });
+    expect(n.room['balls'][0]).toMatchObject({ burst: true, x: expect.closeTo(30 - PLASMA_R, 6) });
+  });
+
+  it('can be dodged: a target that steps off the line before the ball arrives is not hit', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, GUN);
+    m.put(m.bob, 30);
+    m.ticks(SNAP_EVERY);
     m.send(m.cy, FIRE);
-    expect(m.state(m.bob).hp).toBe(HP_MAX - 1);
+    // The ball takes 45 ticks to come 30 m; after 20 he steps a metre aside.
+    m.ticks(20);
+    expect(m.room['balls'][0].x).toBeCloseTo(20 * PLASMA_STEP, 9);
+    m.put(m.bob, 30, 1);
+    m.land();
+    expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([HP_MAX, 0]);
+    // One who steps into its way is hit.
+    m.put(m.cy, 0, 0, GUN);
+    m.put(m.bob, 30, 3);
+    m.ticks(SNAP_EVERY);
+    m.send(m.cy, FIRE);
+    m.ticks(20);
+    m.put(m.bob, 30, 0);
+    m.land();
+    expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([HP_MAX - 1, 1]);
   });
 
-  it('cannot hit one who lies down now, nor one who was down then', () => {
+  it('passes through one who lies down, to the next one', () => {
     const m = match();
     m.put(m.cy, 0, 0, GUN);
-    m.put(m.bob, 10, 0, { hp: 0, down: 50 });
+    m.put(m.bob, 10, 0, { hp: 0, down: 80 });
     m.fire(m.cy);
     expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([0, 0]);
-    // Behind a body that lies down: the laser goes over him to the next one.
     m.put(m.dee, 14);
     m.fire(m.cy);
     expect([m.state(m.dee).hp, m.state(m.cy).hits]).toEqual([HP_MAX - 1, 1]);
-    // He was down at the tick the shooter drew, up again now: the shooter saw a body on the floor.
-    const n = match();
-    n.put(n.cy, 0, 0, GUN);
-    n.put(n.bob, 10, 0, { hp: 0, down: 50 });
-    const seen = n.even();
-    n.ticks(SNAP_EVERY);
-    n.put(n.bob, 10);
-    n.ticks(SNAP_EVERY * 2);
-    n.send(n.cy, FIRE, { view: seen });
-    expect([n.state(n.cy).shots, n.state(n.bob).hp]).toEqual([1, HP_MAX]);
+  });
+});
+
+describe('the balls on the wire', () => {
+  it('go in every snapshot while they fly, named by the shooter’s shots, and once more where they burst', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, { ...GUN, shots: 41 });
+    m.put(m.bob, 20);
+    m.even();
+    m.send(m.cy, FIRE);
+    const seen: Snapshot[] = [];
+    for (let k = 0; k < 40; k++) {
+      m.room.tick();
+      if (m.room['ticks'] % SNAP_EVERY === 0) {
+        seen.push(m.snap(m.ann));
+      }
+    }
+    const flying = seen.filter(s => s.balls?.some(b => !b.burst));
+    const burst = seen.filter(s => s.balls?.some(b => b.burst));
+    expect(flying.length).toBeGreaterThan(10);
+    expect(burst).toHaveLength(1);
+    expect(seen.at(-1)!.balls).toBeUndefined();
+    const [b] = flying[0].balls!;
+    expect(b).toMatchObject({ id: 42, by: 2, burst: false, y: 2.59375, z: 0 });
+    expect([b.dx, b.dy, b.dz]).toEqual([
+      expect.closeTo(1, 9),
+      expect.closeTo(0, 9),
+      expect.closeTo(0, 9),
+    ]);
+    // Each snapshot 2 ticks further on, to 1/32 m.
+    const x = flying.map(s => s.balls![0].x);
+    x.slice(1).forEach((v, k) => expect(v - x[k]).toBeCloseTo(2 * PLASMA_STEP, 1));
+    // It burst in front of Bob, who lost 1 hp.
+    expect(burst[0].balls![0].x).toBeCloseTo(20 - PLAYER_R - PLASMA_R, 1);
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 1);
+  });
+
+  it('are gone without a burst when they have flown GUN_RANGE', () => {
+    const m = match();
+    m.put(m.cy, -50, 50, { ...GUN, yaw: EAST });
+    m.send(m.cy, FIRE);
+    let last: Snapshot | undefined;
+    for (let k = 0; k < 130; k++) {
+      const flies = m.room['balls'].length > 0;
+      m.room.tick();
+      if (flies && m.room['ticks'] % SNAP_EVERY === 0) {
+        last = m.snap(m.ann);
+      }
+    }
+    expect(m.room['balls']).toHaveLength(0);
+    expect(last!.balls!.every(b => !b.burst)).toBe(true);
+    expect(last!.balls![0].x).toBeCloseTo(-50 + GUN_RANGE, 0);
+  });
+
+  it('are PLASMA_MAX in flight at most: past it, the oldest bursts', () => {
+    const m = match();
+    m.put(m.cy, 0, -50, GUN);
+    const many = Array.from({ length: PLASMA_MAX }, (_, k) =>
+      Object.assign(launch(m.state(m.cy)), { id: k, x: k, z: 60 }),
+    );
+    m.room['balls'].push(...many);
+    m.send(m.cy, FIRE);
+    expect(m.room['balls']).toHaveLength(PLASMA_MAX + 1);
+    expect(m.room['balls'].filter(b => b.burst).map(b => b.id)).toEqual([0]);
+    m.even();
+    const { balls } = m.snap(m.ann);
+    expect(balls).toHaveLength(PLASMA_MAX + 1);
+    expect(balls!.filter(b => b.burst).map(b => b.id)).toEqual([0]);
+    expect(m.room['balls']).toHaveLength(PLASMA_MAX);
+  });
+
+  it('are dropped with the last player', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, GUN);
+    m.send(m.cy, FIRE);
+    for (const c of [m.ann, m.bob, m.cy, m.dee]) {
+      m.room.disconnect(c);
+    }
+    m.room.tick();
+    expect(m.room['balls']).toHaveLength(0);
   });
 });
 

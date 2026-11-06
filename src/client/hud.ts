@@ -66,7 +66,7 @@ export interface Hud {
    * katana carried; both carried show the slots (1 gun, 2 katana) over the glyph, none hides it.
    */
   vitals(hp: number, ammo: number, blade?: boolean, wield?: boolean): void;
-  /** A hit marker on the crosshair for a moment: a laser of the own player hit. */
+  /** A hit marker on the crosshair for a moment: a ball or a cut of the own player hit. */
   hit(): void;
   /** The state of being down: `level` 0 (up) to 1 hides or greys the screen, `left` seconds till the respawn. */
   down(level: number, left: number): void;

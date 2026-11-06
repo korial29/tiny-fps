@@ -3,6 +3,7 @@ import {
   INPUT_BYTES,
   MSG_INPUT,
   MSG_SNAPSHOT,
+  SNAP_BALL,
   SNAP_HEAD,
   SNAP_MATCH,
   SNAP_PLAYER,
@@ -31,7 +32,7 @@ import {
 } from './constants';
 import { STILL } from './physics';
 import { CUT, FLAG, KEY, LIMB, MODE, SIDE } from './types';
-import type { FlagState, SnapPlayer, Snapshot } from './types';
+import type { Ball, FlagState, SnapPlayer, Snapshot } from './types';
 import { IDLE } from '../../test/teams';
 
 const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
@@ -312,6 +313,92 @@ describe('snapshot frame', () => {
       const bad = new Uint8Array(ok.slice(0));
       bad[SNAP_HEAD + SNAP_MATCH] = 3;
       expect(decodeSnapshot(bad.buffer)).toBeNull();
+    });
+  });
+
+  describe('the plasma balls', () => {
+    const ball = (over: Partial<Ball> = {}): Ball => ({
+      id: 200,
+      by: 15,
+      x: 12.5,
+      y: -80.25,
+      z: 231.96875,
+      dx: 0,
+      dy: 0,
+      dz: -1,
+      burst: false,
+      ...over,
+    });
+    const snap = (balls: Ball[], players = 0): Snapshot => ({
+      tick: 3,
+      players: Array.from({ length: players }, (_, k) => player(k)),
+      ...IDLE,
+      balls,
+    });
+
+    it('come after the flags, a count and 10 bytes each, and only when there are any', () => {
+      expect(SNAP_BALL).toBe(10);
+      const none = SNAP_HEAD + SNAP_MATCH + 2;
+      expect(encodeSnapshot(snap([])).byteLength).toBe(none);
+      expect(encodeSnapshot(snap([ball()])).byteLength).toBe(none + 1 + SNAP_BALL);
+      expect(encodeSnapshot(snap([ball(), ball(), ball()])).byteLength).toBe(none + 1 + 30);
+      expect(bytes(encodeSnapshot(snap([ball({ burst: true, dz: 1 })]))).slice(none)).toEqual([
+        ...[1, 200, 15 | 128],
+        ...[0x01, 0x90, 0xf5, 0xf8, 0x1c, 0xff],
+        ...[128, 0],
+      ]);
+      // No ball, no key in the snapshot read back.
+      expect(decodeSnapshot(encodeSnapshot(snap([])))).not.toHaveProperty('balls');
+    });
+
+    it('round-trip the id, the shooter, the burst bit, the place to 1/32 m and the way to about a degree', () => {
+      const ways: [number, number][] = [
+        [0, 0],
+        [1, 0.3],
+        [3, -1.2],
+        [5.9, 1.5],
+        [Math.PI, -0.01],
+      ];
+      const sent = ways.map(([yaw, pitch], k) =>
+        ball({
+          id: k * 60,
+          by: k * 3,
+          burst: k % 2 === 1,
+          x: -500 + k * 77.77,
+          y: k * 3.3,
+          z: 900 - k * 123.4,
+          dx: -Math.sin(yaw) * Math.cos(pitch),
+          dy: Math.sin(pitch),
+          dz: -Math.cos(yaw) * Math.cos(pitch),
+        }),
+      );
+      const got = decodeSnapshot(encodeSnapshot(snap(sent, 8)))!;
+      expect(got.players).toHaveLength(8);
+      expect(got.balls).toHaveLength(sent.length);
+      got.balls!.forEach((b, k) => {
+        const s = sent[k];
+        expect([b.id, b.by, b.burst]).toEqual([s.id, s.by, s.burst]);
+        for (const c of ['x', 'y', 'z'] as const) {
+          expect(Math.abs(b[c] - s[c])).toBeLessThanOrEqual(1 / 64);
+        }
+        expect(Math.hypot(b.dx, b.dy, b.dz)).toBeCloseTo(1, 9);
+        const cos = b.dx * s.dx + b.dy * s.dy + b.dz * s.dz;
+        expect(Math.acos(Math.min(1, cos))).toBeLessThan(0.02);
+      });
+    });
+
+    it('clamps a place out of the i16 range, and rejects a cut, padded or zero-counted tail', () => {
+      const [b] = decodeSnapshot(encodeSnapshot(snap([ball({ x: 5000, z: -5000 })])))!.balls!;
+      expect([b.x, b.z]).toEqual([32767 / 32, -1024]);
+      const ok = encodeSnapshot(snap([ball(), ball({ id: 1 })], 2));
+      expect(decodeSnapshot(ok)!.balls).toHaveLength(2);
+      // Cut before the count, it is a snapshot without balls; anywhere after it, nothing.
+      for (let n = ok.byteLength - 2 * SNAP_BALL; n < ok.byteLength; n++) {
+        expect(decodeSnapshot(ok.slice(0, n)), `cut at ${n}`).toBeNull();
+      }
+      expect(decodeSnapshot(new Uint8Array([...bytes(ok), 0]).buffer)).toBeNull();
+      const zero = new Uint8Array([...bytes(encodeSnapshot(snap([]))), 0]);
+      expect(decodeSnapshot(zero.buffer)).toBeNull();
     });
   });
 

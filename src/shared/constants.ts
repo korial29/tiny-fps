@@ -196,8 +196,17 @@ export const HP_MAX = 5;
 export const AMMO_MAX = 60;
 /** Ticks between two shots while the trigger is held: 8.6 shots a second. */
 export const GUN_COOLDOWN = 7;
-/** Metres a laser reaches. */
+/** Metres a shot reaches: a plasma ball that has flown this far is gone. */
 export const GUN_RANGE = 80;
+/**
+ * A shot is a plasma ball (the user, 2026-11-06, Doom-like): it leaves the eye along the look at
+ * PLASMA_SPEED m/s, is a sphere of PLASMA_R metres, and bursts on the first brush or enemy body it
+ * touches (teammates and the shooter let it through). It lives GUN_RANGE / PLASMA_SPEED s.
+ */
+export const PLASMA_SPEED = 40;
+export const PLASMA_R = 0.12;
+/** Plasma balls in flight in a room at most: past it the oldest bursts. They go on the wire. */
+export const PLASMA_MAX = 64;
 /** Radians the view kicks up per shot (client side: the kick is in the pitch the inputs carry). */
 export const RECOIL = 0.012;
 /** Ticks a player lies down after the health ran out, then he is back at a spawn of his team. */

@@ -79,7 +79,7 @@ import {
   WALL_REACH,
   WALL_TURN_KEEP,
 } from './constants';
-import { EV, KEY, MODE, SIDE } from './types';
+import { EV, KEY, LIMB, MODE, SIDE } from './types';
 import type { Input, PlayerState } from './types';
 import { near } from './world';
 import type { Brush, World } from './world';
@@ -151,6 +151,7 @@ export const STILL = {
   swing: 0,
   cut: 0,
   zap: false,
+  lost: LIMB.NONE as number,
   ev: 0,
   fall: 0,
 };

@@ -36,8 +36,8 @@ export const rack = (out: number[], at: Vec3, rgb: number[], t: number, blade = 
   const over: Vec3 = [x, y + 1.05 + 0.04 * Math.sin(t * 2), z];
   const ax = basis(t * 0.8, 0);
   if (blade) {
-    // Lying level, turning about its middle: 32 cm of the 98 cm are behind the grip.
-    sword(out, over.map((v, i) => v - ax[2][i] * 0.32) as Vec3, ax, 0, t);
+    // Lying level, turning about its middle, 42 cm ahead of the grip.
+    sword(out, over.map((v, i) => v - ax[2][i] * 0.42) as Vec3, ax, 0, t);
   } else {
     place(out, gun(0), over, ax, [0, 0, 0], 1.5);
   }

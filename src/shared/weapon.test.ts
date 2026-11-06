@@ -15,11 +15,12 @@ import {
   SNAP_EVERY,
   TICK_HZ,
 } from './constants';
+import { PLAYER_H } from './constants';
 import { cutOf } from './blade';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
 import { STILL, spawn } from './physics';
-import { CUT, FLAG, KEY, MODE, TEAM, TEX } from './types';
+import { CUT, FLAG, KEY, LIMB, MODE, TEAM, TEX } from './types';
 import type { Conn, PlayerState, Rules, Snapshot } from './types';
 import type { Spawn, WorldDef } from './world';
 import { duo } from '../../test/teams';
@@ -761,7 +762,8 @@ describe('a cut', () => {
   it('hits nobody out of reach, off the line, behind, or a teammate: a swing, no hit', () => {
     const m = match();
     m.put(m.cy, 0, 0, SWORD);
-    m.put(m.bob, 3.5);
+    // Out of reach once FORWARD has carried Cy 0.8 m on to the strike.
+    m.put(m.bob, 4);
     m.put(m.dee, 1.5, 3);
     m.put(m.ann, 1.5);
     swing(m, m.cy, FORWARD);
@@ -1017,6 +1019,78 @@ describe('a cut, down', () => {
   });
 });
 
+describe('a cut, the limb', () => {
+  /** The pitch that puts the blade's line, from the chest, at a share of a standing foe's height, 1.5 m ahead. */
+  const aim = (share: number) => Math.atan(((share - 0.7) * PLAYER_H) / 1.5);
+
+  it('takes off the limb the blade crosses when the cut puts him down, and shows it in the snapshot', () => {
+    // Bob has his back to Cy (both face east), 1.5 m ahead.
+    for (const [keys, pitch, z, hp, lost] of [
+      [LEFT, aim(0.6), 0, 2, LIMB.ARM_L],
+      [RIGHT, aim(0.6), 0, 2, LIMB.ARM_R],
+      [RIGHT, aim(0.25), 0, 2, LIMB.LEG_R],
+      // The thrust carries Cy about 0.8 m closer: a steep look up.
+      [FORWARD, 0.8, 0, 2, LIMB.HEAD],
+      [FORWARD, aim(0.6), 0, 2, LIMB.NONE],
+      [FORWARD, aim(0.6), 0.3, 2, LIMB.ARM_L],
+      [0, aim(0.25), 0, 3, LIMB.HEAD],
+      [0, 0, -0.3, 3, LIMB.ARM_R],
+    ] as const) {
+      const label = `keys ${keys} pitch ${pitch} z ${z}`;
+      const m = match();
+      m.put(m.cy, 0, 0, SWORD);
+      m.put(m.bob, 1.5, z, { hp });
+      swing(m, m.cy, keys, { pitch });
+      expect(m.state(m.bob).down, label).toBe(DOWN_TICKS);
+      expect(m.state(m.bob).lost, label).toBe(lost);
+      m.ticks(SNAP_EVERY);
+      expect(m.snap(m.ann).players.find(p => p.id === 1)?.lost, label).toBe(lost);
+    }
+  });
+
+  it('takes none on a cut that does not put him down: a shock', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 1.5, 0, { hp: 3 });
+    swing(m, m.cy, LEFT, { pitch: aim(0.6) });
+    expect(m.state(m.bob)).toMatchObject({ hp: 1, down: 0, zap: true, lost: LIMB.NONE });
+  });
+
+  it('is back on when he is back up', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 1.5, 0, { hp: 2 });
+    swing(m, m.cy, LEFT, { pitch: aim(0.6) });
+    expect(m.state(m.bob).lost).toBe(LIMB.ARM_L);
+    m.hold(m.bob, DOWN_TICKS - 1, 0);
+    expect(m.state(m.bob)).toMatchObject({ down: 1, lost: LIMB.ARM_L });
+    m.hold(m.bob, 1, 0);
+    expect(m.state(m.bob)).toMatchObject({ down: 0, hp: HP_MAX, lost: LIMB.NONE });
+    m.ticks(SNAP_EVERY);
+    expect(m.snap(m.ann).players.find(p => p.id === 1)?.lost).toBe(LIMB.NONE);
+  });
+
+  it('is never taken by a shot, whatever was left on the state', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, GUN);
+    m.put(m.bob, 10, 0, { hp: 1, lost: LIMB.HEAD });
+    m.fire(m.cy);
+    expect(m.state(m.bob)).toMatchObject({ hp: 0, down: DOWN_TICKS, lost: LIMB.NONE });
+  });
+
+  it('is taken from the foe as the cutter saw him', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 1.5, 0.3, { hp: 2 });
+    const seen = m.even();
+    // He has stepped to the other side of the line since: on the host, the line passes his left.
+    m.put(m.bob, 1.5, -0.3, { hp: 2 });
+    m.ticks(SNAP_EVERY * 2);
+    m.hold(m.cy, CUTS[CUT.THRUST].strike + 1, FIRE | FORWARD, { view: seen, pitch: aim(0.6) });
+    expect(m.state(m.bob)).toMatchObject({ down: DOWN_TICKS, lost: LIMB.ARM_L });
+  });
+});
+
 describe('a cut as the cutter saw it', () => {
   it('hits where the target was on the cutter’s screen, though he has moved on', () => {
     const m = match();
@@ -1114,6 +1188,7 @@ describe('random cuts', () => {
     let hits = 0;
     let went = 0;
     let zaps = 0;
+    let limbs = 0;
     let prev = all.map(c => ({ ...m.state(c) }));
     for (let k = 0; k < 6000; k++) {
       all.forEach((c, n) => {
@@ -1151,6 +1226,9 @@ describe('random cuts', () => {
         if (p.down) {
           expect([p.blade, p.wield, p.swing], label).toEqual([false, false, 0]);
         }
+        // A limb is lost only while down.
+        expect(!p.lost || p.down > 0, label).toBe(true);
+        limbs += +(!!p.lost && !prev[n].lost);
         // In hand only with the katana, and the swing runs only with the katana in hand.
         expect(!p.wield || p.blade, label).toBe(true);
         expect(!p.swing || p.wield, label).toBe(true);
@@ -1184,6 +1262,7 @@ describe('random cuts', () => {
             zap: !!p.zap,
             stun: p.stun,
             hits: p.hits,
+            lost: p.lost ?? 0,
           });
         }
         prev = all.map(c => ({ ...m.state(c) }));
@@ -1192,6 +1271,7 @@ describe('random cuts', () => {
     expect(hits).toBeGreaterThan(30);
     expect(went).toBeGreaterThan(2);
     expect(zaps).toBeGreaterThan(10);
+    expect(limbs).toBeGreaterThan(0);
   }, 60_000);
 });
 

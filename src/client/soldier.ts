@@ -3,7 +3,7 @@
 // toward it; the dash streaks are the only thing drawn here that the gait does not pose. A
 // player's (x, y, z) is the bottom of the feet. No DOM.
 import { DASH_COOLDOWN, DASH_TICKS, STEP_H } from '../shared/constants';
-import { TAU, eyeHeight } from '../shared/physics';
+import { TAU } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
@@ -11,12 +11,15 @@ import { inv, reach } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
 import { TILT, aimed, focus, held } from './gun';
+import type { Tracer } from './beams';
 import { cutting, ends, fingers, frameOf, held as sword, progress, stroke, wrists } from './katana';
-import { add, basis, mix, unit } from './mesh';
+import { ground, piece, track } from './limbs';
+import type { Piece } from './limbs';
+import { STRIDE, add, basis, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, mul, slerp, solve } from './rig';
 import type { Pose } from './rig';
-import { body, palette, skin } from './skin';
+import { body, cut, palette, skin } from './skin';
 import { createTrail } from './trail';
 import type { Trail } from './trail';
 
@@ -45,6 +48,8 @@ export interface Runner {
   prog: number;
   trail: Trail;
   t: number;
+  /** The limb a katana's cut took off, while he is down (see limbs.ts). */
+  cut?: Piece;
 }
 
 /** Seconds after a shot that the gun stays up. */
@@ -80,13 +85,14 @@ const floorOf =
 /**
  * Moves each runner of `book` to its player in `others` after dt seconds: a new player gets a
  * runner already in pose, one that left loses it. With a `world` the feet stand on the brushes
- * under them.
+ * under them. The `tracer` gets the sparks of a limb cut off.
  */
 export const animate = (
   book: Map<number, Runner>,
   others: PlayerState[],
   dt: number,
   world?: World,
+  tracer?: Pick<Tracer, 'shock' | 'spit'>,
 ) => {
   for (const id of book.keys()) {
     if (!others.some(p => p.id == id)) {
@@ -109,6 +115,7 @@ export const animate = (
     } else {
       book.set(p.id, createRunner(p));
     }
+    track(book.get(p.id)!, dt, ground(world, p.y), !r, tracer);
   }
 };
 
@@ -137,16 +144,16 @@ const lifted = (
   return q;
 };
 
-/** The katana carried: the grip at the right hip, the blade back and low, in the guard's numbers (see katana.ts) from the eye. */
-const CARRY = [0.26, -0.66, 0.12, 0.05, -0.4, -0.91, 2.2];
+/** The katana carried in both hands, upright before the right shoulder, the edge forward: the guard's numbers (see katana.ts) from the eye. */
+const CARRY = [0.08, -0.3, 0.26, 0.1, 0.92, -0.3, 0];
 const ease = (v: number) => (v = Math.min(Math.max(v, 0), 1)) * v * (3 - 2 * v);
 
 /**
- * The pose with the katana in the right hand: carried back and low, or in a cut, which is the first
- * person's cut seen from the runner's eye (the share `e` of it, so that it is drawn from the carry
- * and back to it), the left hand joining the grip and the trunk turning and leaning into it.
+ * The pose with the katana in both hands: carried, or in a cut, which is the first person's cut
+ * seen from the runner's eye (the share `e` of it, so that it is drawn from the carry and back to
+ * it), the trunk turning with the blade and leaning into the lunge and the low finish.
  */
-const brandish = (pose: Pose, p: PlayerState, prog: number, ph: number): Pose => {
+export const brandish = (pose: Pose, p: PlayerState, prog: number, ph: number): Pose => {
   const e = prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
   const k = stroke(p.cut ?? 0, Math.max(prog, 0));
   const g = CARRY.map((v, i) => v + (k[i] - v) * e);
@@ -158,7 +165,8 @@ const brandish = (pose: Pose, p: PlayerState, prog: number, ph: number): Pose =>
     r[1] * a + u[1] * b + f[1] * c,
     r[2] * a + u[2] * b + f[2] * c,
   ];
-  const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
+  // The eye of the gait's head, which a run leans forward: the hands go with it.
+  const eye = solve(pose).pos[J.HEAD];
   const ax = frameOf(g.slice(3, 6) as Vec3, g[6]);
   const [rw, lw] = wrists(g.slice(0, 3) as Vec3, ax).map(w => add(eye, turn(w)));
   const rot = pose.rot.slice();
@@ -167,21 +175,17 @@ const brandish = (pose: Pose, p: PlayerState, prog: number, ph: number): Pose =>
     rot[j] = mul(
       rot[j],
       mul(
-        axis([0, 1, 0], -0.2 * g[3] * e),
-        axis([1, 0, 0], -0.15 * Math.min(Math.max(g[2] * 2.5 - 0.75, 0), 0.3) * e),
+        axis([0, 1, 0], -0.35 * g[3] * e),
+        axis([1, 0, 0], -(Math.max(g[2] - 0.32, 0) + 0.2 * Math.max(-g[4], 0)) * e),
       ),
     );
   }
   const s = solve(q);
   reach(q, s, J.ARM_R, rw, turn([0.7, -1, -0.5]));
-  if (e > 0) {
-    reach(q, s, J.ARM_L, mix(s.pos[J.HAND_L], lw, e), turn([-0.7, -1, -0.5]));
-  }
+  reach(q, s, J.ARM_L, lw, turn([-0.7, -1, -0.5]));
   const [hand, arms] = [frame(turn(ax[0]), turn(fingers(ax))), solve(q)];
   rot[J.HAND_R] = mul(inv(arms.rot[J.FOREARM_R]), hand);
-  if (e > 0) {
-    rot[J.HAND_L] = slerp(rot[J.HAND_L], mul(inv(arms.rot[J.FOREARM_L]), hand), e);
-  }
+  rot[J.HAND_L] = mul(inv(arms.rot[J.FOREARM_L]), hand);
   return q;
 };
 
@@ -214,11 +218,13 @@ const streaks = (out: number[], r: Runner, color: number[], at: (v: Vec3) => Vec
 export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   let pose = r.gait.pose();
   const { p } = r;
+  const colors = palette(color);
   // Lying down, it sinks into the roof for the last half second.
+  const sink = p.down ? 0.5 * Math.min(Math.max(1 - p.down / 30, 0), 1) : 0;
   if (p.down) {
     pose = {
       ...pose,
-      at: [pose.at[0], pose.at[1] - 0.5 * Math.min(Math.max(1 - p.down / 30, 0), 1), pose.at[2]],
+      at: [pose.at[0], pose.at[1] - sink, pose.at[2]],
     };
   }
   let s = solve(pose);
@@ -230,7 +236,14 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
     pose = lifted(pose, s, p, r.focus, r.aim);
     s = solve(pose);
   }
-  skin(out, body(lod), s, palette(color));
+  if (r.cut) {
+    skin(out, cut(lod, r.cut.limb)[0], s, colors);
+    // The stump's face is the last vertex drawn.
+    r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
+    piece(out, r.cut, colors, lod, sink);
+  } else {
+    skin(out, body(lod), s, colors);
+  }
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], lod, r.t);
     r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));

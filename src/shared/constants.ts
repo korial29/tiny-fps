@@ -223,13 +223,20 @@ export const PICK_H = 1;
  */
 export const CUTS = [
   /** THRUST: quick and the longest, a narrow line. */
-  { ticks: 24, strike: 8, reach: 2.4, arc: 0.3, hp: 2 },
+  { ticks: 28, strike: 10, reach: 2.65, arc: 0.3, hp: 2 },
   /** LEFT, then RIGHT: across, a wide arc. */
-  { ticks: 30, strike: 11, reach: 1.9, arc: 1.2, hp: 2 },
-  { ticks: 30, strike: 11, reach: 1.9, arc: 1.2, hp: 2 },
+  { ticks: 34, strike: 13, reach: 2.15, arc: 1.2, hp: 2 },
+  { ticks: 34, strike: 13, reach: 2.15, arc: 1.2, hp: 2 },
   /** SLASH: down from above, the slowest and the hardest. */
-  { ticks: 36, strike: 14, reach: 1.9, arc: 0.45, hp: 3 },
+  { ticks: 40, strike: 16, reach: 2.15, arc: 0.45, hp: 3 },
 ];
+/**
+ * Where a finishing cut crosses the body, as a share of its height from the feet, picks the limb
+ * (limbOf(), blade.ts): above NECK the head, below HIPS a leg, between them an arm. A thrust or a
+ * slash whose line passes within MIDLINE metres of the body's middle takes no arm: the slash takes
+ * the head, the thrust nothing unless it is above NECK.
+ */
+export const [NECK, HIPS, MIDLINE] = [0.82, 0.45, 0.12];
 /**
  * A cut that does not put the enemy down shocks him: a stumble (`stumble()`, physics.ts) of
  * SHOCK_TICKS (0.4 s), thrown SHOCK_KNOCK m/s the way the blade goes.

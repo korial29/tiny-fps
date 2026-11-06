@@ -23,7 +23,8 @@ export const within = (p: PlayerState, at: Vec3, r: number): boolean => {
 /**
  * One input: the move, then the gun. Returns whether a shot went off, for the host to resolve it.
  * - Down: the keys are dropped, and when `down` runs out the player is back at a spawn.
- * - The team's rack gives the gun, and fills it again.
+ * - The team's rack fills the gun when the player steps into its circle (`rack` tells he is in it),
+ *   and again each time he comes back; staying gives nothing.
  * - The trigger: `cool` runs down, and at 0 a held FIRE with ammo fires, unless the hands are busy
  *   (a hang, a climb). The look is the input's, so the shot goes where the player sees.
  * `armed` is false while the match is over: no gun, no rack.
@@ -38,10 +39,13 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
     }
     return false;
   }
+  // The rack fills the gun on arrival, not on every step spent in its circle.
   const rack = w.def.teams[team].rack;
-  if (armed && rack && p.ammo < AMMO_MAX && within(p, rack, RACK_R)) {
+  const inside = !!rack && within(p, rack, RACK_R);
+  if (armed && inside && !p.rack) {
     p.ammo = AMMO_MAX;
   }
+  p.rack = inside;
   p.cool = Math.max(0, p.cool - 1);
   if (
     armed &&

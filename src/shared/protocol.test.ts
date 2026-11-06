@@ -398,6 +398,7 @@ describe('snapshot frame', () => {
         ammo: rnd(AMMO_MAX + 2) - 1,
         cool: rnd(GUN_COOLDOWN + 1),
         down: rnd(DOWN_TICKS + 1),
+        rack: rnd(2) === 1,
         shots: rnd(256),
         hits: rnd(256),
         // The gun bits sit among the movement ones: those must not move.
@@ -415,6 +416,7 @@ describe('snapshot frame', () => {
         'ammo',
         'cool',
         'down',
+        'rack',
         'shots',
         'hits',
         'mode',
@@ -430,8 +432,8 @@ describe('snapshot frame', () => {
 
   it('puts every extreme of the gun on the wire: no gun, a full gun, down, the highest counters', () => {
     for (const over of [
-      { hp: 0, ammo: -1, cool: 0, down: DOWN_TICKS, shots: 255, hits: 255 },
-      { hp: HP_MAX, ammo: AMMO_MAX, cool: GUN_COOLDOWN, down: 0, shots: 0, hits: 0 },
+      { hp: 0, ammo: -1, cool: 0, down: DOWN_TICKS, rack: true, shots: 255, hits: 255 },
+      { hp: HP_MAX, ammo: AMMO_MAX, cool: GUN_COOLDOWN, down: 0, rack: false, shots: 0, hits: 0 },
       { hp: 7, ammo: 126, cool: 7, down: 127, shots: 1, hits: 254 },
     ]) {
       const [b] = decodeSnapshot(

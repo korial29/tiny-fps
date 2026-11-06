@@ -142,6 +142,7 @@ export const STILL = {
   hp: HP_MAX,
   ammo: -1,
   cool: 0,
+  rack: false,
   down: 0,
   shots: 0,
   hits: 0,

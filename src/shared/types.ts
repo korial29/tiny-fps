@@ -135,6 +135,8 @@ export interface PlayerState {
   ammo: number;
   /** Ticks to the next shot. */
   cool: number;
+  /** Standing inside the circle of the team's rack as of the last step: the gun is filled on arrival only. Absent reads false. */
+  rack?: boolean;
   /** Ticks left lying down after the health ran out; at 0 the player is back at a spawn. 0 when up. */
   down: number;
   /** Shots fired and hits landed, u8 counters that wrap: the clients draw a beam and play the hit sound on each change. */

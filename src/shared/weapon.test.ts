@@ -510,6 +510,40 @@ describe('the rack through the room', () => {
   });
 });
 
+describe('the rack, arrival only', () => {
+  it('fills on arrival, lets him stay and fire to the end of the gun, shows the bit in the snapshot', () => {
+    const m = match();
+    m.put(m.cy, -30, 40);
+    m.hold(m.cy, 1, 0);
+    expect(m.state(m.cy)).toMatchObject({ ammo: -1, rack: false });
+    m.state(m.cy).x = -20;
+    m.hold(m.cy, 1, 0);
+    expect(m.state(m.cy)).toMatchObject({ ammo: AMMO_MAX, rack: true });
+    // On the rack, FIRE held for 100 steps: 15 shots, no refill.
+    m.hold(m.cy, 100, FIRE);
+    expect([m.state(m.cy).shots, m.state(m.cy).ammo]).toEqual([15, AMMO_MAX - 15]);
+    m.ticks(SNAP_EVERY);
+    expect(m.snap(m.ann).players.find(p => p.id === 2)).toMatchObject({
+      rack: true,
+      ammo: AMMO_MAX - 15,
+    });
+    // He leaves the circle and comes back: filled again.
+    m.state(m.cy).x = -10;
+    m.hold(m.cy, 1, 0);
+    expect(m.state(m.cy).rack).toBe(false);
+    m.state(m.cy).x = -20;
+    m.hold(m.cy, 1, 0);
+    expect(m.state(m.cy).ammo).toBe(AMMO_MAX);
+  });
+
+  it('does not count a respawn at a far spawn as being on the rack', () => {
+    const m = match();
+    m.put(m.cy, -20, 40, { hp: 0, down: 1, rack: true });
+    m.hold(m.cy, 1, 0);
+    expect(m.state(m.cy)).toMatchObject({ rack: false, ammo: -1, hp: HP_MAX });
+  });
+});
+
 describe('a match', () => {
   it('does not let anyone fire or take a rack while the end screen shows', () => {
     const m = match({ timeLimit: 1 });

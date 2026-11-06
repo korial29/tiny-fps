@@ -179,6 +179,7 @@ describe('prediction against the room', () => {
     let stunned = 0;
     let checked = 0;
     let shots = 0;
+    let fills = 0;
     let respawns = 0;
     let gun = -1;
     let lying = 0;
@@ -234,8 +235,10 @@ describe('prediction against the room', () => {
     let last = 0;
     steps.forEach((i, k) => {
       const input = pred.step(i, k * STEP);
+      const had = ref.ammo;
       const fired = step(ref, input, world, team);
       shots += +fired;
+      fills += +(ref.ammo > had);
       respawns += +((ref.ev & EV.RESPAWN) !== 0);
       gun = Math.max(gun, ref.ammo);
       if (tackles.includes(k)) {
@@ -266,6 +269,9 @@ describe('prediction against the room', () => {
       checked,
       /** Shots the reference fired, respawns it went through, the fullest its gun was, and own snapshots that showed him down. */
       shots,
+      fills,
+      /** Times the reference's gun was filled, and the ammo it ends with. */
+      ammo: ref.ammo,
       respawns,
       gun,
       lying,
@@ -462,11 +468,38 @@ describe('prediction against the room', () => {
           const label = `team ${team}, seed ${seed}, ${name} lag`;
           expect([r.worst, r.end, r.final, r.differing], label).toEqual([0, 0, 0, []]);
           // The guards: the gun was fetched at the rack and fired, many times, and went on after a fall.
-          expect(r.gun, label).toBe(AMMO_MAX);
+          // Filled on arrival, and the step it arrives on may already fire.
+          expect(r.gun, label).toBeGreaterThanOrEqual(AMMO_MAX - 1);
           expect(r.shots, label).toBeGreaterThan(10);
           expect(r.checked, label).toBeGreaterThan(500);
         }
       }
+    }
+  }, 60_000);
+
+  it('agrees with the host exactly through the arrival at the rack, a long stay firing, a leave and a return', () => {
+    const rack = ROOFTOPS.teams[0].rack!;
+    const from = ROOFTOPS.teams[0].spawns[0];
+    const yaw = Math.atan2(-(rack[0] - from[0]), -(rack[2] - from[2]));
+    const d = Math.hypot(rack[0] - from[0], rack[2] - from[2]);
+    const put = (n: number, keys: number) =>
+      Array.from({ length: n }, () => ({ keys, yaw, pitch: 0 }));
+    // In to half a metre of the rack, 200 steps standing on it with FIRE held, 40 back out of the
+    // circle, 40 in again, and still.
+    const steps = [
+      ...put(Math.round((d - 0.5) * 10) + 3, KEY.FORWARD),
+      ...put(200, KEY.FIRE),
+      ...put(40, KEY.BACK),
+      ...put(40, KEY.FORWARD),
+      ...put(30, 0),
+    ];
+    for (const [name, lag] of LAGS) {
+      const r = race(lag, steps, 0, [], [], true);
+      expect([r.worst, r.end, r.final, r.differing], `${name} lag`).toEqual([0, 0, 0, []]);
+      // Filled on arrival and on the return, and not in between: 200 steps of fire emptied it.
+      expect(r.fills, `${name} lag`).toBe(2);
+      expect(r.ammo, `${name} lag`).toBe(AMMO_MAX);
+      expect(r.shots, `${name} lag`).toBeGreaterThan(25);
     }
   }, 60_000);
 

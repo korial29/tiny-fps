@@ -19,7 +19,8 @@
 //   they are all a move needs to continue from. ground comes from the mode; ev and fall (what the
 //   animation reads) are not sent, they read 0.
 //   gun, 24 bits, big-endian: bits 0-2 hp, bits 3-5 cool (ticks to the next shot), bits 6-12 ammo
-//   (127: no gun), bits 13-19 down (ticks left lying, 0 when up), the top 4 bits unused. shots and
+//   (127: no gun), bits 13-19 down (ticks left lying, 0 when up), bit 20 rack (inside the circle of
+//   the team's rack), the top 3 bits unused. shots and
 //   hits are the wrapping counters of the shots fired and the hits landed.
 //   Then the match, after the players: [red u8][blue u8][clock u16] the captures of each team, and
 //   the whole seconds to the end of the match (bit 15: it is over, and the clock counts to the next
@@ -154,7 +155,12 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
         (p.held & KEY.DASH ? 128 : 0),
     );
     v.setUint8(o + 39, p.stun | ((p.by & 3) << 6));
-    const gun = p.hp | (p.cool << 3) | ((p.ammo < 0 ? NO_GUN : p.ammo) << 6) | (p.down << 13);
+    const gun =
+      p.hp |
+      (p.cool << 3) |
+      ((p.ammo < 0 ? NO_GUN : p.ammo) << 6) |
+      (p.down << 13) |
+      (+!!p.rack << 20);
     v.setUint8(o + 40, gun >> 16);
     v.setUint16(o + 41, gun & 0xffff);
     v.setUint8(o + 43, p.shots);
@@ -229,6 +235,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       cool: (gun >> 3) & 7,
       ammo: ((gun >> 6) & 127) === NO_GUN ? -1 : (gun >> 6) & 127,
       down: (gun >> 13) & 127,
+      rack: ((gun >> 20) & 1) === 1,
       shots: v.getUint8(o + 43),
       hits: v.getUint8(o + 44),
     });

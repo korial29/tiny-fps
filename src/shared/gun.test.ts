@@ -139,17 +139,63 @@ describe('the rack', () => {
   const at5 = (over: Partial<PlayerState> = {}) =>
     Object.assign(at(5, 0, EAST).p, { ammo: -1 }, over);
 
-  it("gives the team's rack gun with AMMO_MAX when the feet are within RACK_R, and fills it again", () => {
+  it("gives the team's rack gun with AMMO_MAX on arrival: once, the gun is full before the step fires", () => {
     const p = at5();
     go(p, 0, EAST, 0, racked);
-    expect(p.ammo).toBe(AMMO_MAX);
-    p.ammo = 12;
-    go(p, 0, EAST, 0, racked);
-    expect(p.ammo).toBe(AMMO_MAX);
-    // Not the shot of the step it is filled in: the gun is full before it fires.
+    expect([p.ammo, p.rack]).toEqual([AMMO_MAX, true]);
     const q = at5({ ammo: 1 });
     go(q, FIRE, EAST, 0, racked);
     expect([q.ammo, q.shots]).toEqual([AMMO_MAX - 1, 1]);
+  });
+
+  it('gives nothing while he stays and fires, and fills again each time he leaves and comes back', () => {
+    const p = at5();
+    for (let k = 0; k < 100; k++) {
+      go(p, FIRE, EAST, 0, racked);
+    }
+    // 15 shots in 100 steps, from the one fill.
+    expect([p.shots, p.ammo]).toEqual([15, AMMO_MAX - 15]);
+    // Out of the circle and back in.
+    p.x = 5 + RACK_R + 0.5;
+    go(p, 0, EAST, 0, racked);
+    expect([p.rack, p.ammo]).toEqual([false, AMMO_MAX - 15]);
+    p.x = 5;
+    go(p, 0, EAST, 0, racked);
+    expect([p.rack, p.ammo]).toEqual([true, AMMO_MAX]);
+    // Standing still does nothing more.
+    p.ammo = 3;
+    go(p, 0, EAST, 0, racked);
+    expect(p.ammo).toBe(3);
+  });
+
+  it('does not count a spawn far from the rack, or a respawn, as being inside', () => {
+    const p = at5();
+    go(p, 0, EAST, 0, racked);
+    expect(p.rack).toBe(true);
+    // Down on the rack, he gets up at the spawn (0, 0, 0), 5 m off: no gun, not inside.
+    Object.assign(p, { hp: 0, down: 2, ammo: -1 });
+    go(p, 0, EAST, 0, racked);
+    go(p, 0, EAST, 0, racked);
+    expect([p.x, p.rack, p.ammo]).toEqual([0, false, -1]);
+    go(p, 0, EAST, 0, racked);
+    expect([p.rack, p.ammo]).toEqual([false, -1]);
+    // The kill floor does the same.
+    const q = at5();
+    go(q, 0, EAST, 0, racked);
+    q.y = -60;
+    go(q, 0, EAST, 0, racked);
+    expect([q.x, q.rack, q.ammo]).toEqual([0, false, -1]);
+  });
+
+  it('fills a player who respawns inside the circle on his first step there, as an arrival', () => {
+    const w = build({
+      ...yard.def,
+      teams: [{ ...yard.def.teams[0], spawns: [[5, 0, 0, 0]], rack: [5, 0, 0] }, yard.def.teams[1]],
+    });
+    const p = Object.assign(spawn(0, w, 0, 0), { ammo: -1 });
+    expect(p.rack).toBe(false);
+    go(p, 0, EAST, 0, w);
+    expect(p.ammo).toBe(AMMO_MAX);
   });
 
   it('walks over it: a run through the circle is enough', () => {

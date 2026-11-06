@@ -1,7 +1,7 @@
 // The city round the roofs: towers standing in the blocks of the street grid, from a fixed seed. They
 // are only drawn (the renderer adds them to its own copy of the world), never built into the physics
 // grid. Glass or concrete facades, some with a coloured cap; the near blocks are low, the far ones tall
-// enough to rise out of the haze.
+// enough to rise out of the haze. Lawns in the lots with no tower, and round some towers.
 import { TEX } from '../shared/types';
 import type { Brush, WorldDef } from '../shared/world';
 import { ROAD, STREET, grid } from './street';
@@ -20,6 +20,9 @@ const CAPS = [
   [0.9, 0.15, 0.2],
   [0.25, 0.85, 0.55],
 ];
+/** A lawn's green on the paint, and its height over the street: the lots with no tower, and some round one. */
+const GRASS = [0.22, 0.5, 0.14];
+const TURF = 0.3;
 
 /** The towers of a world's skyline, in the blocks round its play area; the same ones every time. */
 export const skyline = (def: WorldDef): Brush[] => {
@@ -57,10 +60,20 @@ export const skyline = (def: WorldDef): Brush[] => {
           side,
         };
         const cap = tower.max[1];
+        // A paved walk of 2 m round the lawn, to the road's crossings.
+        const lawn: Brush = {
+          min: [a0 + 2, STREET, b0 + 2],
+          max: [a1 - 2, STREET + TURF, b1 - 2],
+          top: TEX.PAINT,
+          side: TEX.PAINT,
+          tint: GRASS as Brush['tint'],
+        };
+        const green = r(10) < 0.3 ? [lawn] : [];
         return r(0) > 0.75
-          ? []
+          ? [lawn]
           : r(7) < 0.35
             ? [
+                ...green,
                 tower,
                 {
                   min: [x - (a1 - a0) / 6, cap, z - (b1 - b0) / 6],
@@ -70,7 +83,7 @@ export const skyline = (def: WorldDef): Brush[] => {
                   tint: CAPS[Math.floor(r(9) * CAPS.length)] as Brush['tint'],
                 },
               ]
-            : [tower];
+            : [...green, tower];
       }).flat();
     }),
   );

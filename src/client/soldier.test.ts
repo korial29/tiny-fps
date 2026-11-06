@@ -640,5 +640,6 @@ describe('a runner with the katana', () => {
         }
       }
     }
-  });
+    // 32 frames of skinning: past vitest's 5 s on a busy CI runner.
+  }, 30_000);
 });

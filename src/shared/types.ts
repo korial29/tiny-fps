@@ -26,6 +26,8 @@ export const KEY = {
   DASH: 64,
   /** Hold to crouch, or to slide when fast. */
   CROUCH: 128,
+  /** Hold to fire the gun: one shot every GUN_COOLDOWN ticks while there is ammo. */
+  FIRE: 256,
 } as const;
 
 /** The movement state of a player: what the body is doing, one of these. */
@@ -127,6 +129,17 @@ export interface PlayerState {
   buffer: number;
   /** KEY.JUMP and KEY.DASH as held in the last step, to tell a press from a hold. */
   held: number;
+  /** Health, 0 to HP_MAX. */
+  hp: number;
+  /** Shots left in the gun; -1 without the gun (taken at the team's rack, lost on death). */
+  ammo: number;
+  /** Ticks to the next shot. */
+  cool: number;
+  /** Ticks left lying down after the health ran out; at 0 the player is back at a spawn. 0 when up. */
+  down: number;
+  /** Shots fired and hits landed, u8 counters that wrap: the clients draw a beam and play the hit sound on each change. */
+  shots: number;
+  hits: number;
   /** For the animation, not sent: the EV bits of the last step, and the speed of a landing. */
   ev: number;
   fall: number;
@@ -189,6 +202,8 @@ export interface Snapshot {
   over: boolean;
   /** The flag of each team, red then blue. */
   flags: [FlagState, FlagState];
+  /** Bit n set: health pack n of WorldDef.packs is there to take. Absent: none. */
+  packs?: number;
 }
 
 /** Room rules, set by the host. Defaults in constants.ts (RULES). */

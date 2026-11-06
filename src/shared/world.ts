@@ -25,6 +25,8 @@ export interface TeamDef {
   base: Vec3;
   /** Where its players start, and come back to after a fall. */
   spawns: Spawn[];
+  /** The gun rack near the spawns, a point on a top: walking within RACK_R gives the gun with AMMO_MAX shots. */
+  rack?: Vec3;
 }
 
 export interface WorldDef {
@@ -35,6 +37,8 @@ export interface WorldDef {
   teams: [red: TeamDef, blue: TeamDef];
   /** Feet below this height have fallen off the roofs: the player is put back at a spawn of the team. */
   floor: number;
+  /** Health packs, points on tops (at most 32): walking within PACK_R gives PACK_HP, then it is gone PACK_BACK seconds. */
+  packs?: Vec3[];
   /** Unit direction toward the sun, and its colour (linear RGB, may exceed 1). */
   sun: { dir: Vec3; color: Vec3 };
   /** Sky colours at the zenith and the horizon, linear RGB. */

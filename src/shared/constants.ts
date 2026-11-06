@@ -187,6 +187,27 @@ export const FLAG_REACH = 1.5;
 export const FLAG_H = 2.2;
 /** Seconds a dropped flag lies before it goes home by itself. */
 export const FLAG_RETURN = 10;
+// The gun (gun.ts) and health. Ticks of 1 / TICK_HZ s.
+
+/** Health of a player; a hit takes 1, so HP_MAX hits put him down. */
+export const HP_MAX = 5;
+/** Shots the rack loads. */
+export const AMMO_MAX = 60;
+/** Ticks between two shots while the trigger is held: 8.6 shots a second. */
+export const GUN_COOLDOWN = 7;
+/** Metres a laser reaches. */
+export const GUN_RANGE = 80;
+/** Radians the view kicks up per shot (client side: the kick is in the pitch the inputs carry). */
+export const RECOIL = 0.012;
+/** Ticks a player lies down after the health ran out, then he is back at a spawn of his team. */
+export const DOWN_TICKS = 120;
+/** Health a pack gives, up to HP_MAX, and seconds before a taken pack is back. */
+export const PACK_HP = 2;
+export const PACK_BACK = 20;
+/** Metres from a pack or a rack, feet to point on the floor plane, that take it. */
+export const PACK_R = 0.9;
+export const RACK_R = 1.2;
+
 /** Seconds a carrier who is made to drop the flag cannot take it again: he would pick it up where he stands. */
 export const FLAG_LOCK = 2;
 /** Seconds the end screen of a match stays, then a new match starts. */

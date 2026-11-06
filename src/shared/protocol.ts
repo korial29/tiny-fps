@@ -25,6 +25,7 @@
 //     DROPPED: [x i16][y i16][z i16] in 1/16 m, [left u8] whole seconds before it goes home.
 //   A snapshot is 4 + 40 × players + 4 + 2 to 16 bytes: 6 on top of the players when both flags are home.
 // Every multi-byte field is big-endian (DataView's default).
+import { HP_MAX } from './constants';
 import { FLAG, KEY, MODE } from './types';
 import type { FlagState, Input, PlayerInfo, Snapshot } from './types';
 
@@ -211,6 +212,13 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       held: (timers & 64 ? KEY.JUMP : 0) | (timers & 128 ? KEY.DASH : 0),
       ev: 0,
       fall: 0,
+      // Not on the wire yet (WEAPON.md step 1 puts them there).
+      hp: HP_MAX,
+      ammo: -1,
+      cool: 0,
+      down: 0,
+      shots: 0,
+      hits: 0,
     });
   }
   const clock = v.getUint16(end + 2);

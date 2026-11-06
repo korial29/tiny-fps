@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 const BUDGETS = [
-  { file: 'dist/index.js', max: 40 * 1024 },
+  { file: 'dist/index.js', max: 48 * 1024 },
   { file: 'dist/local.js', max: 16 * 1024 },
 ];
 

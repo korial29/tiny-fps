@@ -93,6 +93,8 @@ export const ROOFTOPS: WorldDef = {
       ],
       // Behind the spawn rows, 3 m from the nearest.
       rack: [11, 10, 69],
+      // 2.5 m from the gun rack, between the two rows of spawns.
+      blade: [13.5, 10, 69],
     },
     // Blue holds F across the chasm, facing south, its flag 4.8 m from the chasm's edge.
     {
@@ -108,6 +110,7 @@ export const ROOFTOPS: WorldDef = {
         [20, 12.4, 0.5, Math.PI],
       ],
       rack: [17, 12.4, -1.2],
+      blade: [14.5, 12.4, -1.2],
     },
   ],
   // One on each of the roofs B, C and E, away from the edges.
@@ -336,9 +339,19 @@ export const HIGHLINE: WorldDef = {
   name: 'Highline',
   brushes: [...half, ...half.map(flip), ...centre],
   teams: [
-    // The rack is at the side of the spawn rows, 5 m from the nearest spawn.
-    { base: [32, 26, 224], spawns: row(0, 236, 231), rack: [47, 26, 234] },
-    { base: [32, 26, ZED - 224], spawns: row(Math.PI, ZED - 236, ZED - 231), rack: [47, 26, 6] },
+    // The rack is at the side of the spawn rows, 5 m from the nearest spawn; the katana's is 2.5 m from it.
+    {
+      base: [32, 26, 224],
+      spawns: row(0, 236, 231),
+      rack: [47, 26, 234],
+      blade: [47, 26, 231.5],
+    },
+    {
+      base: [32, 26, ZED - 224],
+      spawns: row(Math.PI, ZED - 236, ZED - 231),
+      rack: [47, 26, 6],
+      blade: [47, 26, ZED - 231.5],
+    },
   ],
   packs: [
     ...PACKS,

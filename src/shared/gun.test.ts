@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EAST, at, yard } from '../../test/yard';
 import {
   AMMO_MAX,
+  CUTS,
   DOWN_TICKS,
   EYE,
   GUN_COOLDOWN,
@@ -14,10 +15,10 @@ import {
   PLAYER_R,
   RACK_R,
 } from './constants';
-import { shoot, step, within } from './gun';
+import { STRIKE, shoot, step, within } from './gun';
 import { spawn } from './physics';
 import { onWire } from './protocol';
-import { EV, KEY, MODE, TEX } from './types';
+import { CUT, EV, KEY, MODE, TEX } from './types';
 import type { PlayerState } from './types';
 import { build } from './world';
 import type { Brush } from './world';
@@ -33,9 +34,13 @@ const racked = build({
   ],
 });
 
-/** One input through the gun's step, on the yard unless told. */
-const go = (p: PlayerState, keys: number, yaw = EAST, pitch = 0, w = yard, team = 0): boolean =>
+/** One input through the step, on the yard unless told: what struck. */
+const hit = (p: PlayerState, keys: number, yaw = EAST, pitch = 0, w = yard, team = 0) =>
   step(p, onWire({ keys, yaw, pitch, seq: 0 }), w, team);
+
+/** The same, whether a shot went off. */
+const go = (p: PlayerState, keys: number, yaw = EAST, pitch = 0, w = yard, team = 0): boolean =>
+  hit(p, keys, yaw, pitch, w, team) === STRIKE.SHOT;
 
 /** A red player standing at (x, z) on the yard with a full gun. */
 const armed = (x = 0, z = 0, over: Partial<PlayerState> = {}): PlayerState =>
@@ -129,7 +134,7 @@ describe('the trigger', () => {
   it('does not fire when the match is over', () => {
     const p = armed();
     expect(step(p, onWire({ keys: FIRE, yaw: EAST, pitch: 0, seq: 0 }), yard, 0, false)).toBe(
-      false,
+      STRIKE.NONE,
     );
     expect(p.shots).toBe(0);
   });
@@ -432,5 +437,341 @@ describe('the laser', () => {
   it('reaches GUN_RANGE and no further', () => {
     expect(shoot(flat, shooter(), [foe(GUN_RANGE - 1)])).toBeDefined();
     expect(shoot(flat, shooter(), [foe(GUN_RANGE + 1)])).toBeUndefined();
+  });
+});
+
+/** A yard with a katana rack for red at (5, 0, 3) and a blue one at (-5, 0, 3), beside the gun racks. */
+const bladed = build({
+  ...yard.def,
+  teams: [
+    { ...yard.def.teams[0], rack: [5, 0, 0], blade: [5, 0, 3] },
+    { ...yard.def.teams[1], rack: [-5, 0, 0], blade: [-5, 0, 3] },
+  ],
+});
+
+/** A red player standing at (x, z) on the yard with the katana and no gun. */
+const sword = (x = 0, z = 0, over: Partial<PlayerState> = {}): PlayerState =>
+  Object.assign(at(x, z, EAST).p, { blade: true }, over);
+
+const { LEFT, RIGHT, BLADE } = KEY;
+
+describe('the katana rack', () => {
+  const at53 = (over: Partial<PlayerState> = {}) => Object.assign(at(5, 3, EAST).p, over);
+
+  it('gives the katana when he steps into its circle, and he keeps it on leaving', () => {
+    const p = at53();
+    expect(p.blade).toBe(false);
+    go(p, 0, EAST, 0, bladed);
+    expect(p.blade).toBe(true);
+    p.x = 5 + RACK_R + 1;
+    go(p, 0, EAST, 0, bladed);
+    expect(p.blade).toBe(true);
+  });
+
+  it('gives no ammo and takes none: it is not the gun rack', () => {
+    const p = at53({ ammo: 7 });
+    go(p, 0, EAST, 0, bladed);
+    expect([p.blade, p.ammo]).toEqual([true, 7]);
+    const q = Object.assign(at(5, 0, EAST).p, { ammo: -1 });
+    go(q, 0, EAST, 0, bladed);
+    expect([q.blade, q.ammo]).toEqual([false, AMMO_MAX]);
+  });
+
+  it('is the own team’s only, and out of reach beyond RACK_R sideways or PICK_H up', () => {
+    const blue = at53();
+    go(blue, 0, EAST, 0, bladed, 1);
+    expect(blue.blade).toBe(false);
+    const mine = Object.assign(at(-5, 3, EAST).p, {});
+    go(mine, 0, EAST, 0, bladed, 1);
+    expect(mine.blade).toBe(true);
+    const far = at(5 + RACK_R + 0.05, 3, EAST).p;
+    go(far, 0, EAST, 0, bladed);
+    expect(far.blade).toBe(false);
+    const high = at(5, 3, EAST, PICK_H + 0.2).p;
+    high.mode = MODE.AIR;
+    go(high, 0, EAST, 0, bladed);
+    expect(high.blade).toBe(false);
+    // A map with no katana rack gives nothing.
+    const none = at(5, 3, EAST).p;
+    go(none, 0, EAST, 0, racked);
+    expect(none.blade).toBe(false);
+  });
+
+  it('is not taken when the match is over', () => {
+    const p = at53();
+    step(p, onWire({ keys: 0, yaw: EAST, pitch: 0, seq: 0 }), bladed, 0, false);
+    expect(p.blade).toBe(false);
+  });
+
+  it('is taken by walking through the circle, and a player with the gun takes it too', () => {
+    const p = at(5, 8, EAST).p;
+    p.ammo = AMMO_MAX;
+    let k = 0;
+    for (; k < 100 && !p.blade; k++) {
+      go(p, FORWARD, 0, 0, bladed);
+    }
+    expect(p.blade).toBe(true);
+    expect(p.ammo).toBe(AMMO_MAX);
+    expect(p.z).toBeLessThan(3 + RACK_R);
+  });
+});
+
+describe('the weapon in hand', () => {
+  /** wield after one step of a player with/without the blade and the gun, with/without BLADE held. */
+  const wield = (blade: boolean, gun: boolean, held: boolean) => {
+    const p = armed(0, 0, { blade, ammo: gun ? AMMO_MAX : -1 });
+    go(p, held ? BLADE : 0);
+    return p.wield;
+  };
+
+  it('is the katana with it and BLADE held, or with it and no gun, else the gun', () => {
+    expect(wield(true, true, true)).toBe(true);
+    expect(wield(true, true, false)).toBe(false);
+    expect(wield(true, false, false)).toBe(true);
+    expect(wield(true, false, true)).toBe(true);
+    // An empty gun is still a gun: the katana waits for BLADE.
+    const p = armed(0, 0, { blade: true, ammo: 0 });
+    go(p, 0);
+    expect(p.wield).toBe(false);
+    // Without the katana BLADE is ignored.
+    expect(wield(false, true, true)).toBe(false);
+    expect(wield(false, true, false)).toBe(false);
+    expect(wield(false, false, true)).toBe(false);
+  });
+
+  it('is the katana on the step he takes it, when he has no gun', () => {
+    const p = Object.assign(at(5, 3, EAST).p, { ammo: -1 });
+    go(p, 0, EAST, 0, bladed);
+    expect([p.blade, p.wield]).toEqual([true, true]);
+    // With a gun, the gun stays in hand until he asks.
+    const q = Object.assign(at(5, 3, EAST).p, { ammo: AMMO_MAX });
+    go(q, 0, EAST, 0, bladed);
+    expect([q.blade, q.wield]).toEqual([true, false]);
+    go(q, BLADE, EAST, 0, bladed);
+    expect(q.wield).toBe(true);
+    go(q, 0, EAST, 0, bladed);
+    expect(q.wield).toBe(false);
+  });
+
+  it('stays in hand through a swing, then follows the keys again', () => {
+    const p = armed(0, 0, { blade: true });
+    go(p, BLADE | FIRE);
+    expect([p.wield, p.swing]).toEqual([true, CUTS[CUT.SLASH].ticks]);
+    // BLADE let go in mid swing: the katana is still in hand, and the gun cannot fire.
+    for (let k = 1; k < CUTS[CUT.SLASH].ticks; k++) {
+      expect(go(p, FIRE)).toBe(false);
+      expect([p.wield, p.swing], `step ${k}`).toEqual([true, CUTS[CUT.SLASH].ticks - k]);
+    }
+    // The swing is over on the next step: the gun is back.
+    expect(go(p, FIRE)).toBe(true);
+    expect([p.wield, p.swing]).toEqual([false, 0]);
+  });
+});
+
+describe('the swing', () => {
+  /** The strikes of `n` steps holding `keys`, as the steps they came on. */
+  const struck = (p: PlayerState, n: number, keys: number): number[] =>
+    Array.from({ length: n }, (_, k) => (hit(p, keys) === STRIKE.CUT ? k : -1)).filter(k => k >= 0);
+
+  it('starts with FIRE and a katana in hand: the swing is the cut’s ticks, the cut is the keys’', () => {
+    for (const [keys, cut] of [
+      [FIRE | FORWARD, CUT.THRUST],
+      [FIRE | LEFT, CUT.LEFT],
+      [FIRE | RIGHT, CUT.RIGHT],
+      [FIRE, CUT.SLASH],
+      [FIRE | KEY.BACK, CUT.SLASH],
+      [FIRE | LEFT | RIGHT, CUT.SLASH],
+      [FIRE | FORWARD | LEFT | RIGHT, CUT.THRUST],
+    ]) {
+      const p = sword();
+      expect(hit(p, keys), `keys ${keys}`).toBe(STRIKE.NONE);
+      expect([p.cut, p.swing], `keys ${keys}`).toEqual([cut, CUTS[cut].ticks]);
+    }
+  });
+
+  it('counts down one a step, strikes once on the step CUTS[cut].strike ticks in, and ends after ticks', () => {
+    for (const cut of [CUT.THRUST, CUT.LEFT, CUT.RIGHT, CUT.SLASH]) {
+      const { ticks, strike } = CUTS[cut];
+      const keys = [FORWARD, LEFT, RIGHT, 0][cut];
+      const p = sword();
+      hit(p, FIRE | keys);
+      const hits: number[] = [];
+      for (let k = 1; k < ticks; k++) {
+        // The tick the swing says the strike is on: `ticks - swing === strike`, after the step.
+        const r = hit(p, keys);
+        expect(p.swing, `cut ${cut} step ${k}`).toBe(ticks - k);
+        if (r === STRIKE.CUT) {
+          hits.push(k);
+          expect(ticks - (p.swing ?? 0)).toBe(strike);
+        }
+        expect(r).not.toBe(STRIKE.SHOT);
+      }
+      expect(hits, `cut ${cut}`).toEqual([strike]);
+      // One more step ends it.
+      expect(hit(p, keys)).toBe(STRIKE.NONE);
+      expect(p.swing).toBe(0);
+    }
+  });
+
+  it('is not cancelled or repeated by FIRE: held, it swings back to back; tapped, one swing is one cut', () => {
+    const held = sword();
+    const { ticks, strike } = CUTS[CUT.SLASH];
+    expect(struck(held, ticks * 3, FIRE)).toEqual([strike, ticks + strike, 2 * ticks + strike]);
+    // A tap and nothing after: the cut still comes.
+    const tap = sword();
+    hit(tap, FIRE);
+    expect(struck(tap, ticks * 2, 0)).toEqual([strike - 1]);
+    expect(tap.swing).toBe(0);
+    // FIRE pressed again in the middle of a swing starts nothing.
+    const again = sword();
+    hit(again, FIRE);
+    for (let k = 0; k < 5; k++) {
+      hit(again, 0);
+    }
+    hit(again, FIRE | FORWARD);
+    expect([again.cut, again.swing]).toEqual([CUT.SLASH, ticks - 6]);
+  });
+
+  it('keeps the cut of the swing whatever the keys do after it starts', () => {
+    const p = sword();
+    hit(p, FIRE | FORWARD);
+    for (let k = 0; k < 10; k++) {
+      hit(p, LEFT | RIGHT | KEY.BACK);
+    }
+    expect(p.cut).toBe(CUT.THRUST);
+  });
+
+  it('does not fire the gun while the katana is in hand', () => {
+    const p = armed(0, 0, { blade: true });
+    for (let k = 0; k < 120; k++) {
+      expect(hit(p, FIRE | BLADE)).not.toBe(STRIKE.SHOT);
+    }
+    expect([p.shots, p.ammo, p.cool]).toEqual([0, AMMO_MAX, 0]);
+    // No gun at all: the katana is in hand, and swings.
+    const q = sword();
+    for (let k = 0; k < 120; k++) {
+      hit(q, FIRE);
+    }
+    expect(q.shots).toBe(0);
+    // With the gun in hand the katana does not swing.
+    const r = armed(0, 0, { blade: true });
+    expect(hit(r, FIRE)).toBe(STRIKE.SHOT);
+    expect([r.swing, r.shots]).toEqual([0, 1]);
+  });
+
+  it('never counts a cut as a shot, and a shot as a cut', () => {
+    const p = armed(0, 0, { blade: true });
+    const seen = new Set<number>();
+    for (let k = 0; k < 300; k++) {
+      const before = p.shots;
+      // Swap the weapon every 40 steps: FIRE held all the while.
+      const r = hit(p, FIRE | (k % 80 < 40 ? BLADE : 0));
+      seen.add(r);
+      expect(r === STRIKE.SHOT, `step ${k}`).toBe(((p.shots - before) & 255) === 1);
+    }
+    expect([...seen].sort()).toEqual([STRIKE.NONE, STRIKE.SHOT, STRIKE.CUT]);
+  });
+
+  it('does not start in a hang or a climb, and does before and after', () => {
+    const p = sword(8.5, 0);
+    go(p, FORWARD | JUMP | FIRE);
+    const modes = new Set<number>();
+    let busy = 0;
+    let swung = 0;
+    for (let k = 0; k < 90; k++) {
+      const before = p.swing ?? 0;
+      // Never a new swing in the hands-busy steps: a swing only runs down there.
+      hit(p, FORWARD | FIRE);
+      modes.add(p.mode);
+      if (p.mode === MODE.HANG || p.mode === MODE.CLIMB) {
+        busy++;
+        expect(p.swing, `step ${k}`).toBeLessThanOrEqual(Math.max(0, before - 1));
+      }
+      swung += +((p.swing ?? 0) > 0);
+    }
+    expect(modes.has(MODE.HANG) && modes.has(MODE.CLIMB)).toBe(true);
+    expect(busy).toBeGreaterThan(5);
+    expect(swung).toBeGreaterThan(20);
+    // A player already in a hang cannot start one.
+    const q = sword(0, 0, { mode: MODE.HANG, edge: 2, wall: 1 });
+    hit(q, FIRE);
+    expect(q.swing).toBe(0);
+  });
+
+  it('swings on the move: running, in the air, wall-running, sliding and crouching', () => {
+    for (const mode of [MODE.GROUND, MODE.AIR, MODE.WALLRUN, MODE.SLIDE, MODE.CROUCH]) {
+      const p = sword(0, 0, { mode });
+      hit(p, FIRE | FORWARD);
+      expect(p.swing, `mode ${mode}`).toBe(CUTS[CUT.THRUST].ticks);
+    }
+  });
+
+  it('does not swing, strike or finish a swing in a match that is over, and not while down', () => {
+    const p = sword();
+    expect(step(p, onWire({ keys: FIRE, yaw: EAST, pitch: 0, seq: 0 }), yard, 0, false)).toBe(
+      STRIKE.NONE,
+    );
+    expect(p.swing).toBe(0);
+    const q = sword(0, 0, { swing: 20, cut: CUT.SLASH });
+    for (let k = 0; k < 30; k++) {
+      expect(step(q, onWire({ keys: 0, yaw: EAST, pitch: 0, seq: 0 }), yard, 0, false)).toBe(
+        STRIKE.NONE,
+      );
+    }
+    // Down: the keys are dropped, nothing starts.
+    const d = sword(0, 0, { down: 30, hp: 0 });
+    for (let k = 0; k < 10; k++) {
+      expect(hit(d, FIRE)).toBe(STRIKE.NONE);
+    }
+    expect(d.swing).toBe(0);
+  });
+
+  it('is replayed the same twice: the step is deterministic', () => {
+    const run = () => {
+      const p = armed(0, 0, { blade: true });
+      const out: number[] = [];
+      for (let k = 0; k < 400; k++) {
+        const keys =
+          (k % 97 < 60 ? FIRE : 0) | (k % 31 < 15 ? BLADE : 0) | [FORWARD, LEFT, 0, RIGHT][k % 4];
+        out.push(
+          hit(p, keys, EAST + k * 0.01),
+          p.swing ?? 0,
+          p.cut ?? 0,
+          +!!p.wield,
+          p.ammo,
+          p.shots,
+        );
+      }
+      return out;
+    };
+    expect(run()).toEqual(run());
+  });
+});
+
+describe('the katana through a respawn and the shock', () => {
+  it('is gone, with the swing, when he gets up at a spawn', () => {
+    const p = sword(0, 0, { swing: 20, cut: CUT.RIGHT, hp: 0, down: 2, wield: true });
+    go(p, 0);
+    go(p, 0);
+    expect(p).toMatchObject({ blade: false, wield: false, swing: 0, cut: 0, down: 0, hp: HP_MAX });
+    // The kill floor does the same.
+    const q = sword(0, 0, { swing: 20, cut: CUT.RIGHT });
+    q.y = -60;
+    go(q, 0);
+    expect(q).toMatchObject({ blade: false, wield: false, swing: 0 });
+  });
+
+  it('clears zap when the stumble runs out, and not before', () => {
+    const p = armed(0, 0, { stun: 5, zap: true });
+    for (let k = 0; k < 4; k++) {
+      go(p, 0);
+      expect(p.zap, `step ${k}`).toBe(true);
+    }
+    go(p, 0);
+    expect([p.stun, p.zap]).toEqual([0, false]);
+    // A zap with no stumble (a stale flag) is dropped at once.
+    const q = armed(0, 0, { zap: true });
+    go(q, 0);
+    expect(q.zap).toBe(false);
   });
 });

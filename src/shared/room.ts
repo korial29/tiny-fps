@@ -1,6 +1,7 @@
 import {
   AMMO_MAX,
   AMMO_PACK,
+  CUTS,
   DOWN_TICKS,
   HP_MAX,
   INPUT_BURST,
@@ -10,13 +11,16 @@ import {
   PACK_HP,
   PACK_R,
   RULES,
+  SHOCK_KNOCK,
+  SHOCK_TICKS,
   SNAP_EVERY,
   TACKLE_COOLDOWN,
   TEAM_COLOR,
   TICK_HZ,
 } from './constants';
+import { knock, strike } from './blade';
 import { Ctf } from './ctf';
-import { shoot, step, within } from './gun';
+import { STRIKE, shoot, step, within } from './gun';
 import { HIGHLINE } from './map';
 import { forward, spawn, speedOf, stumble } from './physics';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
@@ -135,11 +139,13 @@ export class Room {
     // An input beyond the bank is dropped, and not acked.
     if (input && p.bank > 0) {
       p.bank--;
-      const fired = step(p.state, input, this.world, p.info.team, !this.ctf.over);
+      const struck = step(p.state, input, this.world, p.info.team, !this.ctf.over);
       this.ctf.moved(p.state);
       this.tackle(p, input.view);
-      if (fired) {
+      if (struck === STRIKE.SHOT) {
         this.shoot(p, input.view);
+      } else if (struck === STRIKE.CUT) {
+        this.cut(p, input.view);
       }
       p.ack = input.seq;
     }
@@ -295,29 +301,80 @@ export class Room {
     const v = speedOf(me);
     const [dx, dz] = v > 1e-3 ? [me.vx / v, me.vz / v] : forward(me.yaw);
     stumble(foe.state, dx, dz);
+    foe.state.zap = false;
     foe.by = p.info.id;
     p.tackled = this.ticks;
   }
 
   /**
-   * A shot of `p` went off at the view tick `view`: it hits the first enemy on its way as `p` drew
-   * him (lag compensation), unless he lies down now or did then. A hit takes 1 hp; the last one puts
-   * him down: he lies where he fell, without the gun, and a flag he carries drops with the lock.
+   * The enemies of `p` as `p` drew them at the view tick `view` (lag compensation), without one who
+   * lies down now or did then.
    */
-  private shoot(p: Player, view: number | undefined): void {
+  private enemies(p: Player, view: number | undefined): PlayerState[] {
     const peers = this.players();
-    const foes = this.rewind(p.info.id, view).filter(seen => {
+    return this.rewind(p.info.id, view).filter(seen => {
       const q = peers.find(r => r.info.id === seen.id);
       return q && q.info.team !== p.info.team && !q.state.down && !seen.down;
     });
-    const foe = peers.find(q => q.info.id === shoot(this.world, p.state, foes)?.id);
+  }
+
+  /**
+   * `hp` of damage to `foe`; the last one puts him down: he lies where he fell, without the gun or
+   * the katana, and a flag he carries drops with the lock. True when he went down.
+   */
+  private harm(foe: Player, hp: number): boolean {
+    if ((foe.state.hp -= hp) > 0) {
+      return false;
+    }
+    Object.assign(foe.state, {
+      hp: 0,
+      down: DOWN_TICKS,
+      ammo: -1,
+      cool: 0,
+      blade: false,
+      wield: false,
+      swing: 0,
+    });
+    this.ctf.drop(foe.state);
+    return true;
+  }
+
+  /**
+   * A shot of `p` went off at the view tick `view`: it hits the first enemy on its way as `p` drew
+   * him, and takes 1 hp.
+   */
+  private shoot(p: Player, view: number | undefined): void {
+    const peers = this.players();
+    const foe = peers.find(
+      q => q.info.id === shoot(this.world, p.state, this.enemies(p, view))?.id,
+    );
     if (!foe) {
       return;
     }
     p.state.hits = (p.state.hits + 1) & 255;
-    if (--foe.state.hp <= 0) {
-      Object.assign(foe.state, { hp: 0, down: DOWN_TICKS, ammo: -1, cool: 0 });
-      this.ctf.drop(foe.state);
+    this.harm(foe, 1);
+  }
+
+  /**
+   * A cut of `p` struck at the view tick `view`: every enemy it reaches as `p` drew him is hit
+   * (`strike`), and the `hits` count goes up once. Each takes the cut's hp; one it does not put
+   * down is shocked: a stumble of SHOCK_TICKS thrown SHOCK_KNOCK m/s the way the blade goes, with
+   * `zap`, and `by` the attacker. A shock drops no flag.
+   */
+  private cut(p: Player, view: number | undefined): void {
+    const seen = strike(this.world, p.state, this.enemies(p, view)).map(s => s.id);
+    const foes = this.players().filter(q => seen.includes(q.info.id));
+    if (!foes.length) {
+      return;
+    }
+    p.state.hits = (p.state.hits + 1) & 255;
+    const [dx, dz] = knock(p.state);
+    for (const foe of foes) {
+      if (!this.harm(foe, CUTS[p.state.cut ?? 0].hp)) {
+        stumble(foe.state, dx, dz, SHOCK_TICKS, SHOCK_KNOCK);
+        foe.state.zap = true;
+        foe.by = p.info.id;
+      }
     }
   }
 

@@ -13,7 +13,7 @@ import {
   STEP_H,
   TICK_HZ,
 } from '../shared/constants';
-import { step } from '../shared/gun';
+import { STRIKE, step } from '../shared/gun';
 import { ROOFTOPS } from '../shared/map';
 import { STILL, move, spawn, stumble } from '../shared/physics';
 import { decodeInput, decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
@@ -59,7 +59,16 @@ const grant = (p: PlayerState): boolean => {
   return p.ammo !== had;
 };
 /** What a hit on the host does to a player who has run out of health. */
-const fell = (p: PlayerState) => Object.assign(p, { hp: 0, down: DOWN_TICKS, ammo: -1, cool: 0 });
+const fell = (p: PlayerState) =>
+  Object.assign(p, {
+    hp: 0,
+    down: DOWN_TICKS,
+    ammo: -1,
+    cool: 0,
+    blade: false,
+    wield: false,
+    swing: 0,
+  });
 /** The way a tackler of these tests goes: north-east. */
 const TACKLE_WAY = [0.6, -0.8];
 
@@ -193,6 +202,8 @@ describe('prediction against the room', () => {
     let stunned = 0;
     let checked = 0;
     let shots = 0;
+    let cuts = 0;
+    let wielded = 0;
     let fills = 0;
     let granted = 0;
     let respawns = 0;
@@ -255,7 +266,9 @@ describe('prediction against the room', () => {
       const input = pred.step(i, k * STEP);
       const had = ref.ammo;
       const fired = step(ref, input, map, team);
-      shots += +fired;
+      shots += +(fired === STRIKE.SHOT);
+      cuts += +(fired === STRIKE.CUT);
+      wielded += +!!ref.wield;
       fills += +(ref.ammo > had);
       respawns += +((ref.ev & EV.RESPAWN) !== 0);
       gun = Math.max(gun, ref.ammo);
@@ -290,6 +303,9 @@ describe('prediction against the room', () => {
       checked,
       /** Shots the reference fired, respawns it went through, the fullest its gun was, and own snapshots that showed him down. */
       shots,
+      /** Cuts that struck, and the steps the reference had the katana in hand. */
+      cuts,
+      wielded,
       fills,
       /** Ammo packs the reference took, and the fields of the host's last snapshot that the prediction does not match. */
       granted,
@@ -585,6 +601,80 @@ describe('prediction against the room', () => {
           expect(r.respawns, label).toBeGreaterThanOrEqual(downs.length - 1);
           expect(r.checked, label).toBeGreaterThan(300);
         }
+      }
+    }
+  }, 60_000);
+
+  /**
+   * Random play with both weapons: from the spawn to the gun rack, then to the katana rack beside
+   * it, then keys at random in bursts (a walk, a hop, a side step, FIRE half of the time, BLADE
+   * half of the time), the look wandering over the roof.
+   */
+  const fence = (seed: number, team = 0, n = 1800): Omit<Input, 'seq'>[] => {
+    let s = seed;
+    const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const { rack, blade, spawns } = ROOFTOPS.teams[team];
+    const to = (a: number[], b: number[]) => Math.atan2(-(b[0] - a[0]), -(b[2] - a[2]));
+    const out: Omit<Input, 'seq'>[] = [];
+    const walk = (a: number[], b: number[], keep: number) => {
+      const yaw = to(a, b);
+      const steps = Math.ceil((Math.hypot(b[0] - a[0], b[2] - a[2]) - keep) * 10) + 3;
+      for (let k = 0; k < steps; k++) {
+        out.push({ keys: KEY.FORWARD, yaw, pitch: 0 });
+      }
+    };
+    walk(spawns[0], rack!, 0.5);
+    walk(rack!, blade!, 0.5);
+    let keys = 0;
+    let yaw = to(rack!, blade!);
+    let turn = 0;
+    for (let k = out.length; k < n; k++) {
+      if (k % 9 === 0) {
+        keys =
+          (rnd() < 0.3 ? KEY.FORWARD : 0) |
+          (rnd() < 0.15 ? KEY.BACK : 0) |
+          (rnd() < 0.25 ? KEY.LEFT : 0) |
+          (rnd() < 0.25 ? KEY.RIGHT : 0) |
+          (rnd() < 0.05 ? KEY.JUMP : 0) |
+          (rnd() < 0.05 ? KEY.CROUCH : 0) |
+          (rnd() < 0.7 ? KEY.FIRE : 0) |
+          (rnd() < 0.5 ? KEY.BLADE : 0);
+        turn = (rnd() - 0.5) * 0.08;
+      }
+      yaw += turn;
+      out.push({ keys, yaw: ((yaw % 6.2832) + 6.2832) % 6.2832, pitch: Math.sin(k / 30) * 0.3 });
+    }
+    return out;
+  };
+
+  it('agrees with the host exactly with the katana: the rack, the weapon in hand, the swing and its strike, under every lag', () => {
+    for (const team of [0, 1]) {
+      for (const seed of [7, 99, 2024]) {
+        const steps = fence(seed, team);
+        for (const [name, lag] of LAGS) {
+          const r = race(lag, steps, team, [], [], true);
+          const label = `team ${team}, seed ${seed}, ${name} lag`;
+          expect([r.worst, r.end, r.final, r.differing], label).toEqual([0, 0, 0, []]);
+          // The guards: he took the katana and swung it, struck many times, and fired the gun too.
+          expect(r.cuts, label).toBeGreaterThan(8);
+          expect(r.wielded, label).toBeGreaterThan(300);
+          expect(r.shots, label).toBeGreaterThan(10);
+          expect(r.checked, label).toBeGreaterThan(500);
+        }
+      }
+    }
+  }, 60_000);
+
+  it('agrees with the host exactly when he goes down with the katana in hand and swinging, and gets up without it', () => {
+    for (const team of [0, 1]) {
+      const steps = fence(31, team);
+      const downs = [400, 401, 800, 801 + DOWN_TICKS, 1300];
+      for (const [name, lag] of LAGS) {
+        const r = race(lag, steps, team, [], downs, true);
+        const label = `team ${team}, ${name} lag`;
+        expect([r.worst, r.end, r.final, r.differing], label).toEqual([0, 0, 0, []]);
+        expect(r.respawns, label).toBeGreaterThanOrEqual(downs.length - 1);
+        expect(r.cuts, label).toBeGreaterThan(5);
       }
     }
   }, 60_000);

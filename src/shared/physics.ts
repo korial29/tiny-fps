@@ -146,6 +146,11 @@ export const STILL = {
   down: 0,
   shots: 0,
   hits: 0,
+  blade: false,
+  wield: false,
+  swing: 0,
+  cut: 0,
+  zap: false,
   ev: 0,
   fall: 0,
 };
@@ -455,14 +460,21 @@ const enter = (p: PlayerState, mode: number): void => {
 };
 
 /**
- * A tackle lands on the player: he stumbles for STUMBLE_TICKS and is thrown STUMBLE_KNOCK m/s along
- * (dx, dz), a unit vector (the tackler's way). It ends a dash, a wall-run, a hang and a climb, and
- * clears a jump press and the coyote window. For the host to call between two steps.
+ * A tackle lands on the player: he stumbles for `ticks` (STUMBLE_TICKS) and is thrown `knock`
+ * (STUMBLE_KNOCK) m/s along (dx, dz), a unit vector (the tackler's way). It ends a dash, a wall-run,
+ * a hang and a climb, and clears a jump press and the coyote window. For the host to call between
+ * two steps. The katana's shock calls it with its own ticks and knock.
  */
-export const stumble = (p: PlayerState, dx: number, dz: number): void => {
-  p.stun = STUMBLE_TICKS;
-  p.vx = f32(dx * STUMBLE_KNOCK);
-  p.vz = f32(dz * STUMBLE_KNOCK);
+export const stumble = (
+  p: PlayerState,
+  dx: number,
+  dz: number,
+  ticks = STUMBLE_TICKS,
+  knock = STUMBLE_KNOCK,
+): void => {
+  p.stun = ticks;
+  p.vx = f32(dx * knock);
+  p.vz = f32(dz * knock);
   p.dash = Math.min(p.dash, DASH_COOLDOWN - DASH_TICKS);
   p.coyote = 0;
   p.buffer = 0;

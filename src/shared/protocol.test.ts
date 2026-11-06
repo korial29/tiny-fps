@@ -16,6 +16,7 @@ import {
 import type { ServerText } from './protocol';
 import {
   AIR_JUMPS,
+  CUTS,
   AMMO_MAX,
   COYOTE_TICKS,
   DASH_COOLDOWN,
@@ -24,11 +25,12 @@ import {
   HP_MAX,
   JUMP_BUFFER_TICKS,
   MAX_PLAYERS,
+  SHOCK_TICKS,
   SLIDE_TICKS,
   STUMBLE_TICKS,
 } from './constants';
 import { STILL } from './physics';
-import { FLAG, KEY, MODE, SIDE } from './types';
+import { CUT, FLAG, KEY, MODE, SIDE } from './types';
 import type { FlagState, SnapPlayer, Snapshot } from './types';
 import { IDLE } from '../../test/teams';
 
@@ -51,10 +53,10 @@ const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
 const bytes = (buf: ArrayBuffer): number[] => [...new Uint8Array(buf)];
 
 describe('input frame', () => {
-  it('is 12 bytes: type, seq, keys in 9 bits, yaw in turns, pitch in 1/10000 rad, view in 1/256 tick', () => {
+  it('is 12 bytes: type, seq, keys in 10 bits, yaw in turns, pitch in 1/10000 rad, view in 1/256 tick', () => {
     const buf = encodeInput({
       seq: 0x0102,
-      keys: 0b1_0011_0101,
+      keys: 0b11_0011_0101,
       yaw: Math.PI,
       pitch: -0.5,
       view: 0x1234 + 0.5,
@@ -62,7 +64,7 @@ describe('input frame', () => {
     expect(buf.byteLength).toBe(INPUT_BYTES);
     // Half a turn is 0x8000; -0.5 rad is -5000 = 0xec78; the view is 0x1234, then 128/256.
     expect(bytes(buf)).toEqual([
-      ...[MSG_INPUT, 0x01, 0x02, 0x01, 0b00110101, 0x80, 0x00, 0xec, 0x78],
+      ...[MSG_INPUT, 0x01, 0x02, 0x03, 0b00110101, 0x80, 0x00, 0xec, 0x78],
       ...[0x12, 0x34, 0x80],
     ]);
   });
@@ -85,9 +87,9 @@ describe('input frame', () => {
 
   it('round-trips within the fixed point', () => {
     for (const yaw of [0, 0.001, 1, Math.PI, 5, 6.28]) {
-      const back = decodeInput(encodeInput({ seq: 65535, keys: 0x1ff, yaw, pitch: 1.55 }))!;
+      const back = decodeInput(encodeInput({ seq: 65535, keys: 0x3ff, yaw, pitch: 1.55 }))!;
       expect(back.seq).toBe(65535);
-      expect(back.keys).toBe(0x1ff);
+      expect(back.keys).toBe(0x3ff);
       expect(Math.abs(back.yaw - yaw)).toBeLessThanOrEqual(Math.PI / 65536 + 1e-12);
       expect(back.pitch).toBeCloseTo(1.55, 4);
     }
@@ -119,7 +121,7 @@ describe('input frame', () => {
     for (let k = 0; k < 2000; k++) {
       const i = {
         seq: k,
-        keys: k & 0x1ff,
+        keys: k & 0x3ff,
         yaw: (rnd() - 0.3) * 20,
         pitch: (rnd() - 0.5) * 8,
         view: rnd() * 65535,
@@ -148,7 +150,7 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 4-byte head, 45 bytes per player, then the match: 8 bytes and a byte per flag at home', () => {
+  it('has a 4-byte head, 46 bytes per player, then the match: 8 bytes and a byte per flag at home', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [
@@ -179,6 +181,11 @@ describe('snapshot frame', () => {
           down: 99,
           shots: 250,
           hits: 7,
+          blade: true,
+          wield: false,
+          zap: true,
+          swing: 20,
+          cut: CUT.RIGHT,
           // What the animation reads is not sent.
           ev: 0xffff,
           fall: 9,
@@ -187,7 +194,7 @@ describe('snapshot frame', () => {
       ...IDLE,
       packs: 0x8000_0005,
     });
-    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 45, 8]);
+    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 46, 8]);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + SNAP_MATCH + 2);
     expect(bytes(buf)).toEqual([
       ...[MSG_SNAPSHOT, 0x12, 0x34, 1],
@@ -211,10 +218,11 @@ describe('snapshot frame', () => {
       0b10100001, // dash 33, the high bits of the tackler 10 << 6
       0b01011101, // coyote 5, buffer 3 << 3, jump held << 6
       0b11101000, // stun 40, the low bits of the tackler 11 << 6
-      // hp 3, cool 6 << 3, ammo 44 << 6, down 99 << 13: 0x0c6b33
-      ...[0x0c, 0x6b, 0x33],
+      // hp 3, cool 6 << 3, ammo 44 << 6, down 99 << 13, blade 1 << 21, zap 1 << 23: 0xac6b33
+      ...[0xac, 0x6b, 0x33],
       250, // shots
       7, // hits
+      0b10010100, // swing 20, cut RIGHT (2) << 6
       ...[0, 0, 0x01, 0xe0], // red 0, blue 0, clock 480 s, not over
       ...[0x80, 0, 0, 5], // packs 0 and 2, and 31
       ...[0, 0], // both flags at home
@@ -378,14 +386,19 @@ describe('snapshot frame', () => {
     expect(MAX_PLAYERS).toBeLessThanOrEqual(16);
     expect(Object.keys(MODE).length).toBeLessThanOrEqual(8);
     expect(Object.keys(SIDE).length).toBeLessThanOrEqual(8);
-    // A slide, a wall-run and a climb end long before t saturates, and the key bits are nine.
+    // A slide, a wall-run and a climb end long before t saturates, and the key bits are ten.
     expect(SLIDE_TICKS).toBeLessThan(255);
-    expect(Math.max(...Object.values(KEY))).toBeLessThanOrEqual(0x100);
+    expect(Math.max(...Object.values(KEY))).toBeLessThanOrEqual(0x200);
     // The gun: 3 bits for hp and cool, 7 for down, 7 for ammo with 127 for no gun, 32 packs.
     expect(HP_MAX).toBeLessThanOrEqual(7);
     expect(GUN_COOLDOWN).toBeLessThanOrEqual(7);
     expect(DOWN_TICKS).toBeLessThanOrEqual(127);
     expect(AMMO_MAX).toBeLessThan(127);
+    // The katana: a swing's ticks in 6 bits, the cut in 2, a shock inside the stun's 6.
+    expect(Math.max(...CUTS.map(c => c.ticks))).toBeLessThanOrEqual(63);
+    expect(CUTS).toHaveLength(Object.keys(CUT).length);
+    expect(Object.keys(CUT).length).toBeLessThanOrEqual(4);
+    expect(SHOCK_TICKS).toBeLessThanOrEqual(63);
   });
 
   it('round-trips the gun fields: health, ammo or no gun, cool, down, the counters, the packs', () => {
@@ -401,6 +414,11 @@ describe('snapshot frame', () => {
         rack: rnd(2) === 1,
         shots: rnd(256),
         hits: rnd(256),
+        blade: rnd(2) === 1,
+        wield: rnd(2) === 1,
+        zap: rnd(2) === 1,
+        swing: rnd(CUTS[3].ticks + 1),
+        cut: rnd(4),
         // The gun bits sit among the movement ones: those must not move.
         mode: rnd(7),
         stun: rnd(STUMBLE_TICKS + 1),
@@ -419,6 +437,11 @@ describe('snapshot frame', () => {
         'rack',
         'shots',
         'hits',
+        'blade',
+        'wield',
+        'zap',
+        'swing',
+        'cut',
         'mode',
         'stun',
         'by',
@@ -435,12 +458,28 @@ describe('snapshot frame', () => {
       { hp: 0, ammo: -1, cool: 0, down: DOWN_TICKS, rack: true, shots: 255, hits: 255 },
       { hp: HP_MAX, ammo: AMMO_MAX, cool: GUN_COOLDOWN, down: 0, rack: false, shots: 0, hits: 0 },
       { hp: 7, ammo: 126, cool: 7, down: 127, shots: 1, hits: 254 },
+      // The katana's bits on their own, then all at their highest: none spills into its neighbour.
+      { hp: 0, ammo: -1, cool: 0, down: 0, rack: false, blade: true, wield: false, zap: false },
+      { hp: 0, ammo: -1, cool: 0, down: 0, rack: false, blade: false, wield: true, zap: false },
+      { hp: 0, ammo: -1, cool: 0, down: 0, rack: false, blade: false, wield: false, zap: true },
+      { hp: 7, ammo: 126, cool: 7, down: 127, rack: true, blade: true, wield: true, zap: true },
+      { blade: true, wield: true, swing: 36, cut: CUT.SLASH },
+      { blade: false, wield: false, zap: false, swing: 63, cut: CUT.THRUST },
     ]) {
       const [b] = decodeSnapshot(
         encodeSnapshot({ tick: 0, players: [player(2, over)], ...IDLE }),
       )!.players;
       expect(b).toMatchObject(over);
     }
+  });
+
+  it('writes a state with no katana fields as no katana: not wielded, no swing, no shock', () => {
+    const bare: SnapPlayer = player(1);
+    for (const k of ['blade', 'wield', 'swing', 'cut', 'zap'] as const) {
+      delete bare[k];
+    }
+    const [b] = decodeSnapshot(encodeSnapshot({ tick: 0, players: [bare], ...IDLE }))!.players;
+    expect(b).toMatchObject({ blade: false, wield: false, zap: false, swing: 0, cut: 0 });
   });
 
   it('reads the packs as 0 when the snapshot has none', () => {

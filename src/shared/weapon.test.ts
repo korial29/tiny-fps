@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AMMO_MAX,
   AMMO_PACK,
+  CUTS,
   DOWN_TICKS,
   END_SCREEN,
   FLAG_LOCK,
@@ -9,18 +10,21 @@ import {
   HP_MAX,
   PACK_BACK,
   PACK_HP,
+  SHOCK_KNOCK,
+  SHOCK_TICKS,
   SNAP_EVERY,
   TICK_HZ,
 } from './constants';
+import { cutOf } from './blade';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
 import { STILL, spawn } from './physics';
-import { FLAG, KEY, MODE, TEAM, TEX } from './types';
+import { CUT, FLAG, KEY, MODE, TEAM, TEX } from './types';
 import type { Conn, PlayerState, Rules, Snapshot } from './types';
 import type { Spawn, WorldDef } from './world';
 import { duo } from '../../test/teams';
 
-const { FORWARD, LEFT, FIRE, SPRINT, JUMP } = KEY;
+const { FORWARD, LEFT, RIGHT, BACK, FIRE, SPRINT, JUMP, DASH, BLADE } = KEY;
 const EAST = (3 * Math.PI) / 2;
 
 const SPAWNS: Spawn[] = [
@@ -31,7 +35,7 @@ const SPAWNS: Spawn[] = [
 ];
 /**
  * A flat slab at y = 1, x and z from -100 to 100, with a wall across x = 30 that is 6 m high and
- * 20 m wide, a rack for each team and two health packs.
+ * 20 m wide, a gun rack and a katana rack for each team and two health packs, two ammo packs.
  */
 const ARENA: WorldDef = {
   brushes: [
@@ -39,11 +43,12 @@ const ARENA: WorldDef = {
     { min: [30, 1, -10], max: [30.5, 7, 10], top: TEX.STEEL, side: TEX.STEEL },
   ],
   teams: [
-    { ...duo(SPAWNS)[0], base: [-60, 1, 4], rack: [-20, 1, 40] },
+    { ...duo(SPAWNS)[0], base: [-60, 1, 4], rack: [-20, 1, 40], blade: [-20, 1, 43] },
     {
       base: [60, 1, 4],
       spawns: SPAWNS.map(([x, y, z, yaw]): Spawn => [x + 40, y, z, yaw]),
       rack: [60, 1, 40],
+      blade: [60, 1, 43],
     },
   ],
   packs: [
@@ -673,6 +678,521 @@ describe('a match', () => {
     }
     expect(m.room['gone']).toEqual([0, 0, 0, 0]);
   });
+});
+
+const SWORD = { blade: true, ammo: -1 };
+
+/**
+ * The player holds FIRE with `keys` up to the strike tick of the cut those keys give, and the room
+ * has resolved it when this returns. The history the host rewinds to is written at snapshot ticks,
+ * so two ticks first let it see the puts of the test.
+ */
+const swing = (m: ReturnType<typeof match>, c: Peer, keys = 0, look: Look = {}) => {
+  m.ticks(SNAP_EVERY);
+  m.hold(c, CUTS[cutOf(keys)].strike + 1, FIRE | keys, look);
+};
+
+describe('a cut', () => {
+  it('thrusts into the enemy in front: he loses 2 hp, the cutter counts one hit and no shot', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 2);
+    swing(m, m.cy, FORWARD);
+    expect(m.state(m.bob).hp).toBe(HP_MAX - CUTS[CUT.THRUST].hp);
+    expect(m.state(m.bob).down).toBe(0);
+    expect([m.state(m.cy).hits, m.state(m.cy).shots, m.state(m.cy).ammo]).toEqual([1, 0, -1]);
+    // Nobody else paid for it.
+    expect([m.state(m.ann).hp, m.state(m.dee).hp, m.state(m.cy).hp]).toEqual([
+      HP_MAX,
+      HP_MAX,
+      HP_MAX,
+    ]);
+    // The snapshot shows the hit, the swing under way and the shock.
+    m.ticks(SNAP_EVERY);
+    const players = m.snap(m.ann).players;
+    expect(players.find(p => p.id === 2)).toMatchObject({
+      hits: 1,
+      blade: true,
+      wield: true,
+      cut: CUT.THRUST,
+      swing: CUTS[CUT.THRUST].ticks - CUTS[CUT.THRUST].strike,
+    });
+    expect(players.find(p => p.id === 1)).toMatchObject({
+      hp: HP_MAX - 2,
+      zap: true,
+      stun: SHOCK_TICKS,
+      by: 2,
+    });
+  });
+
+  it('slashes for 3 hp, and cuts across for 2', () => {
+    for (const [keys, hp] of [
+      [0, CUTS[CUT.SLASH].hp],
+      [LEFT, CUTS[CUT.LEFT].hp],
+      [RIGHT, CUTS[CUT.RIGHT].hp],
+    ]) {
+      const m = match();
+      m.put(m.cy, 0, 0, SWORD);
+      m.put(m.bob, 1.5);
+      swing(m, m.cy, keys);
+      expect(m.state(m.bob).hp, `keys ${keys}`).toBe(HP_MAX - hp);
+      expect(m.state(m.cy).hits, `keys ${keys}`).toBe(1);
+    }
+    expect([CUTS[CUT.SLASH].hp, CUTS[CUT.LEFT].hp]).toEqual([3, 2]);
+  });
+
+  it('does nothing before the strike tick, and strikes exactly once per swing', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 2);
+    m.ticks(SNAP_EVERY);
+    const { strike, ticks } = CUTS[CUT.THRUST];
+    m.hold(m.cy, strike, FIRE | FORWARD);
+    expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([HP_MAX, 0]);
+    expect(m.state(m.cy).swing).toBe(ticks - strike + 1);
+    m.hold(m.cy, 1, FIRE | FORWARD);
+    expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([HP_MAX - 2, 1]);
+    // The rest of the swing hits nothing more, he is only out of reach by then or not: one strike.
+    m.put(m.bob, 4);
+    m.hold(m.cy, ticks - strike, 0);
+    expect([m.state(m.bob).hp, m.state(m.cy).hits, m.state(m.cy).swing]).toEqual([HP_MAX, 1, 0]);
+  });
+
+  it('hits nobody out of reach, off the line, behind, or a teammate: a swing, no hit', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 3.5);
+    m.put(m.dee, 1.5, 3);
+    m.put(m.ann, 1.5);
+    swing(m, m.cy, FORWARD);
+    expect([m.state(m.bob).hp, m.state(m.dee).hp, m.state(m.ann).hp]).toEqual([
+      HP_MAX,
+      HP_MAX,
+      HP_MAX,
+    ]);
+    expect([m.state(m.cy).hits, m.state(m.cy).swing]).toEqual([
+      0,
+      CUTS[CUT.THRUST].ticks - CUTS[CUT.THRUST].strike,
+    ]);
+    expect(m.state(m.bob).stun).toBe(0);
+    // Behind him.
+    const n = match();
+    n.put(n.cy, 0, 0, SWORD);
+    n.put(n.bob, -1.5);
+    swing(n, n.cy, 0);
+    expect(n.state(n.bob).hp).toBe(HP_MAX);
+  });
+
+  it('hits every enemy in the arc at once, and counts a single hit', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 1.5, 0.6);
+    m.put(m.dee, 1.5, -0.6);
+    m.put(m.ann, 1.5);
+    swing(m, m.cy, LEFT);
+    expect([m.state(m.bob).hp, m.state(m.dee).hp]).toEqual([HP_MAX - 2, HP_MAX - 2]);
+    expect(m.state(m.ann).hp).toBe(HP_MAX);
+    expect(m.state(m.cy).hits).toBe(1);
+    expect([m.state(m.bob).zap, m.state(m.dee).zap]).toEqual([true, true]);
+    // Both are shocked by the cutter.
+    expect([m.room['peers'].get(m.bob)!.by, m.room['peers'].get(m.dee)!.by]).toEqual([2, 2]);
+  });
+
+  it('does not cut through a wall', () => {
+    const m = match();
+    // The wall of the arena, x 30 to 30.5, 6 m high.
+    m.put(m.cy, 28.2, 0, SWORD);
+    m.put(m.bob, 31.2);
+    swing(m, m.cy, FORWARD);
+    expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([HP_MAX, 0]);
+    // The same two without the wall between them.
+    const n = match();
+    n.put(n.cy, 22, 0, SWORD);
+    n.put(n.bob, 24.8);
+    swing(n, n.cy, FORWARD);
+    expect(n.state(n.bob).hp).toBe(HP_MAX - 2);
+  });
+
+  it('counts the hits modulo 256, and the same counter as the laser', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, { ...SWORD, hits: 255 });
+    m.put(m.bob, 2);
+    swing(m, m.cy, FORWARD);
+    expect(m.state(m.cy).hits).toBe(0);
+  });
+
+  it('is not made by a player whose hands are busy, who is down, or while the match is over', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, { ...SWORD, hp: 0, down: 50 });
+    m.put(m.bob, 2);
+    m.hold(m.cy, 40, FIRE | FORWARD);
+    expect([m.state(m.bob).hp, m.state(m.cy).hits, m.state(m.cy).swing]).toEqual([HP_MAX, 0, 0]);
+    const n = match({ timeLimit: 1 });
+    n.put(n.cy, 0, 0, SWORD);
+    n.put(n.bob, 2);
+    n.ticks(TICK_HZ + 1);
+    expect(n.snap(n.ann).over).toBe(true);
+    n.hold(n.cy, 40, FIRE | FORWARD);
+    expect([n.state(n.bob).hp, n.state(n.cy).swing]).toEqual([HP_MAX, 0]);
+  });
+});
+
+describe('the shock', () => {
+  it('stumbles him for SHOCK_TICKS, thrown SHOCK_KNOCK m/s along the look for a thrust and a slash', () => {
+    // A slash with no key held: the cutter stands where he is.
+    for (const keys of [FORWARD, 0]) {
+      const m = match();
+      m.put(m.cy, 0, 0, SWORD);
+      m.put(m.bob, 1.8);
+      swing(m, m.cy, keys);
+      const bob = m.state(m.bob);
+      expect([bob.stun, bob.zap, bob.vx], `keys ${keys}`).toEqual([
+        SHOCK_TICKS,
+        true,
+        Math.fround(SHOCK_KNOCK),
+      ]);
+      expect(bob.vz).toBeCloseTo(0, 5);
+    }
+    expect(SHOCK_TICKS).toBe(24);
+    expect(SHOCK_KNOCK).toBe(4);
+  });
+
+  it('throws a cut from the left to the cutter’s right and one from the right to his left', () => {
+    // Looking east, his right is +z.
+    for (const [keys, way] of [
+      [LEFT, 1],
+      [RIGHT, -1],
+    ]) {
+      const m = match();
+      m.put(m.cy, 0, 0, SWORD);
+      m.put(m.bob, 1.5);
+      swing(m, m.cy, keys);
+      const bob = m.state(m.bob);
+      expect(bob.vz, `keys ${keys}`).toBeCloseTo(way * SHOCK_KNOCK, 4);
+      expect(bob.vx, `keys ${keys}`).toBeCloseTo(0, 4);
+      expect([bob.stun, bob.zap]).toEqual([SHOCK_TICKS, true]);
+    }
+    // And along a look to the north: a thrust goes north.
+    const n = match();
+    n.put(n.cy, 0, 0, SWORD);
+    n.put(n.bob, 0, -1.8);
+    swing(n, n.cy, FORWARD, { yaw: 0 });
+    expect(n.state(n.bob).vz).toBeCloseTo(-SHOCK_KNOCK, 4);
+    expect(n.state(n.bob).vx).toBeCloseTo(0, 4);
+  });
+
+  it('runs out: the stumble counts down on his own steps, and zap goes with it', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 2);
+    swing(m, m.cy, FORWARD);
+    for (let k = 1; k < SHOCK_TICKS; k++) {
+      m.hold(m.bob, 1, 0);
+      expect([m.state(m.bob).stun, m.state(m.bob).zap], `step ${k}`).toEqual([
+        SHOCK_TICKS - k,
+        true,
+      ]);
+    }
+    m.hold(m.bob, 1, 0);
+    expect([m.state(m.bob).stun, m.state(m.bob).zap]).toEqual([0, false]);
+    m.ticks(SNAP_EVERY);
+    expect(m.snap(m.ann).players.find(p => p.id === 1)).toMatchObject({
+      stun: 0,
+      zap: false,
+      by: 0,
+    });
+  });
+
+  it('keeps a carried flag: only going down drops it', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 1.8);
+    m.carry(m.bob);
+    swing(m, m.cy, FORWARD);
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 2);
+    expect(m.flag(TEAM.RED)).toMatchObject({ state: FLAG.CARRIED, by: 1 });
+    // The next cut, 3 hp: he is down, and the flag lies where he fell.
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 1.8, 0, { hp: 3 });
+    m.carry(m.bob);
+    swing(m, m.cy, 0);
+    expect(m.state(m.bob).down).toBe(DOWN_TICKS);
+    expect(m.flag(TEAM.RED).state).toBe(FLAG.DROPPED);
+  });
+
+  it('is not a tackle: a tackle’s stumble is not a zap, and a shock after a tackle is one', () => {
+    const m = match();
+    m.put(m.cy, 0);
+    m.put(m.bob, 2, 0, { zap: true, stun: 10 });
+    m.carry(m.bob);
+    m.ticks(SNAP_EVERY);
+    for (let k = 0; k < 20 && m.flag(TEAM.RED).state !== FLAG.DROPPED; k++) {
+      m.send(m.cy, FORWARD | DASH);
+    }
+    expect(m.flag(TEAM.RED).state).toBe(FLAG.DROPPED);
+    expect(m.state(m.bob)).toMatchObject({ stun: 48, zap: false });
+    // A cut on a stumbling player shocks him: the stumble becomes a zap of SHOCK_TICKS.
+    const n = match();
+    n.put(n.cy, 0, 0, SWORD);
+    n.put(n.bob, 1.8, 0, { stun: 40, zap: false });
+    swing(n, n.cy, FORWARD);
+    expect(n.state(n.bob)).toMatchObject({ stun: SHOCK_TICKS, zap: true });
+  });
+});
+
+describe('a cut, down', () => {
+  it('goes down on the cut that takes the last hp: 2 from 2, 3 from 3, and not 2 from 3', () => {
+    for (const [keys, hp, down] of [
+      [FORWARD, 2, true],
+      [FORWARD, 3, false],
+      [0, 3, true],
+      [0, 4, false],
+      [LEFT, 1, true],
+    ] as const) {
+      const m = match();
+      m.put(m.cy, 0, 0, SWORD);
+      m.put(m.bob, 1.5, 0, { hp });
+      swing(m, m.cy, keys);
+      expect(m.state(m.bob).down > 0, `keys ${keys} hp ${hp}`).toBe(down);
+      expect(m.state(m.bob).hp, `keys ${keys} hp ${hp}`).toBe(down ? 0 : hp - CUTS[cutOf(keys)].hp);
+    }
+  });
+
+  it('lies down like after a laser: DOWN_TICKS, health 0, and the gun, the katana and the swing gone', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 1.8, 0, {
+      hp: 2,
+      ammo: 20,
+      cool: 3,
+      blade: true,
+      wield: true,
+      swing: 9,
+      cut: CUT.LEFT,
+    });
+    swing(m, m.cy, FORWARD);
+    expect(m.state(m.bob)).toMatchObject({
+      hp: 0,
+      down: DOWN_TICKS,
+      ammo: -1,
+      cool: 0,
+      blade: false,
+      wield: false,
+      swing: 0,
+    });
+    expect(m.state(m.cy).hits).toBe(1);
+    // A body that is down takes no shock, and no more cuts.
+    expect(m.state(m.bob).zap).toBe(false);
+    m.hold(m.cy, CUTS[CUT.THRUST].ticks, FIRE | FORWARD);
+    expect(m.state(m.cy).hits).toBe(1);
+    // He is back at a spawn with neither weapon.
+    m.hold(m.bob, DOWN_TICKS, 0);
+    expect(m.state(m.bob)).toMatchObject({ down: 0, hp: HP_MAX, ammo: -1, blade: false, swing: 0 });
+  });
+
+  it('loses the katana to a laser too', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, GUN);
+    m.put(m.bob, 10, 0, { hp: 1, blade: true, wield: true, swing: 5 });
+    m.fire(m.cy);
+    expect(m.state(m.bob)).toMatchObject({ hp: 0, blade: false, wield: false, swing: 0 });
+  });
+
+  it('is not made by a cutter who went down in mid swing: the swing went with him', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 2);
+    m.ticks(SNAP_EVERY);
+    m.hold(m.cy, 4, FIRE | FORWARD);
+    expect(m.state(m.cy).swing).toBeGreaterThan(0);
+    // A laser from Dee takes the last hp.
+    m.put(m.dee, 10, 0, GUN);
+    Object.assign(m.state(m.cy), { hp: 1, x: 0, z: 0 });
+    m.state(m.dee).yaw = (Math.PI * 1) / 2;
+    m.fire(m.dee, 1, { yaw: Math.PI / 2 });
+    expect(m.state(m.cy).down).toBeGreaterThan(0);
+    expect(m.state(m.cy).swing).toBe(0);
+    m.hold(m.cy, 12, FIRE | FORWARD);
+    expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([HP_MAX, 0]);
+  });
+});
+
+describe('a cut as the cutter saw it', () => {
+  it('hits where the target was on the cutter’s screen, though he has moved on', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 2);
+    const seen = m.even();
+    m.put(m.bob, 2, 8);
+    m.ticks(SNAP_EVERY * 2);
+    m.hold(m.cy, CUTS[CUT.THRUST].strike + 1, FIRE | FORWARD, { view: seen });
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 2);
+    expect(m.state(m.bob).z).toBe(8);
+  });
+
+  it('misses one who was out of reach on the cutter’s screen, though he is in it now', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 2, 8);
+    const seen = m.even();
+    m.put(m.bob, 2);
+    m.ticks(SNAP_EVERY * 2);
+    m.hold(m.cy, CUTS[CUT.THRUST].strike + 1, FIRE | FORWARD, { view: seen });
+    expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([HP_MAX, 0]);
+  });
+
+  it('cannot hit one who lies down now, nor one who was down then', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 2, 0, { hp: 0, down: 50 });
+    swing(m, m.cy, FORWARD);
+    expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([0, 0]);
+    const n = match();
+    n.put(n.cy, 0, 0, SWORD);
+    n.put(n.bob, 2, 0, { hp: 0, down: 50 });
+    const seen = n.even();
+    n.ticks(SNAP_EVERY);
+    n.put(n.bob, 2);
+    n.ticks(SNAP_EVERY * 2);
+    n.hold(n.cy, CUTS[CUT.THRUST].strike + 1, FIRE | FORWARD, { view: seen });
+    expect([n.state(n.cy).hits, n.state(n.bob).hp]).toEqual([0, HP_MAX]);
+  });
+});
+
+describe('the katana rack through the room', () => {
+  it('gives the katana at the team’s rack, the other team’s rack nothing, and shows it in the snapshot', () => {
+    const m = match();
+    m.put(m.cy, -20, 43);
+    m.put(m.bob, -20, 43);
+    m.hold(m.cy, 1, 0);
+    m.hold(m.bob, 1, 0);
+    expect([m.state(m.cy).blade, m.state(m.bob).blade]).toEqual([true, false]);
+    // No gun, so it is in hand.
+    expect([m.state(m.cy).wield, m.state(m.bob).wield]).toEqual([true, false]);
+    m.ticks(SNAP_EVERY);
+    expect(m.snap(m.ann).players.find(p => p.id === 2)).toMatchObject({ blade: true, wield: true });
+    // Down, he has none and takes none.
+    m.put(m.ann, -20, 43, { hp: 0, down: 20 });
+    m.hold(m.ann, 1, 0);
+    expect(m.state(m.ann).blade).toBe(false);
+  });
+
+  it('is kept on the move, and a player with the gun swaps with BLADE', () => {
+    const m = match();
+    m.put(m.cy, -20, 43, GUN);
+    m.hold(m.cy, 1, 0);
+    expect([m.state(m.cy).blade, m.state(m.cy).wield]).toEqual([true, false]);
+    m.hold(m.cy, 1, BLADE);
+    expect(m.state(m.cy).wield).toBe(true);
+    // Far from the rack, the gun is the one that fires with BLADE let go.
+    m.state(m.cy).x = 0;
+    m.state(m.cy).z = 0;
+    m.hold(m.cy, 10, FIRE | FORWARD);
+    expect([m.state(m.cy).blade, m.state(m.cy).shots]).toEqual([true, 2]);
+  });
+
+  it('is not taken while the end screen shows, and a new match takes it with the rest', () => {
+    const m = match({ timeLimit: 1 });
+    m.put(m.cy, 0, 0, { ...SWORD, swing: 10, wield: true });
+    m.put(m.ann, -20, 43);
+    m.ticks(TICK_HZ + 1);
+    m.hold(m.ann, 3, 0);
+    expect(m.state(m.ann).blade).toBe(false);
+    m.ticks(TICK_HZ + END_SCREEN * TICK_HZ + 2);
+    expect(m.state(m.cy)).toMatchObject({ blade: false, wield: false, swing: 0 });
+  });
+});
+
+describe('random cuts', () => {
+  it('keeps the katana fields in range, and the snapshot equal to the state, whoever cuts whom', () => {
+    const m = match();
+    const all = [m.ann, m.bob, m.cy, m.dee];
+    let s = 777;
+    const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
+    all.forEach((c, k) => m.put(c, 4 + k * 2, 2 + k, { ...SWORD, ...(k % 2 ? GUN : {}) }));
+    const keys = new Map(all.map(c => [c, 0]));
+    let hits = 0;
+    let went = 0;
+    let zaps = 0;
+    let prev = all.map(c => ({ ...m.state(c) }));
+    for (let k = 0; k < 6000; k++) {
+      all.forEach((c, n) => {
+        if (k % 5 === 0) {
+          keys.set(
+            c,
+            (rnd() < 0.7 ? FIRE : 0) |
+              (rnd() < 0.5 ? BLADE : 0) |
+              (rnd() < 0.3 ? FORWARD : 0) |
+              (rnd() < 0.2 ? LEFT : 0) |
+              (rnd() < 0.2 ? RIGHT : 0) |
+              (rnd() < 0.1 ? BACK : 0),
+          );
+        }
+        const foes = all.filter((_, j) => j % 2 !== n % 2);
+        const f = m.state(foes[Math.floor(rnd() * foes.length)]);
+        const me = m.state(c);
+        const yaw =
+          rnd() < 0.8 ? Math.atan2(-(f.x - me.x), -(f.z - me.z)) + (rnd() - 0.5) * 0.4 : rnd() * 6;
+        m.send(c, keys.get(c)!, { yaw, pitch: (rnd() - 0.5) * 0.2 });
+      });
+      m.ticks(1);
+      all.forEach((c, n) => {
+        const p = m.state(c);
+        const label = `tick ${k}, player ${p.id}`;
+        expect(p.hp, label).toBeGreaterThanOrEqual(0);
+        expect(p.hp, label).toBeLessThanOrEqual(HP_MAX);
+        expect(p.swing, label).toBeGreaterThanOrEqual(0);
+        expect(p.swing, label).toBeLessThanOrEqual(CUTS[p.cut ?? 0].ticks);
+        expect(p.cut, label).toBeLessThan(4);
+        expect(p.stun, label).toBeLessThanOrEqual(48);
+        // A zap is a stumble; down is health 0 with nothing in hand.
+        expect(!p.zap || p.stun > 0, label).toBe(true);
+        expect(p.down > 0, label).toBe(p.hp === 0);
+        if (p.down) {
+          expect([p.blade, p.wield, p.swing], label).toEqual([false, false, 0]);
+        }
+        // In hand only with the katana, and the swing runs only with the katana in hand.
+        expect(!p.wield || p.blade, label).toBe(true);
+        expect(!p.swing || p.wield, label).toBe(true);
+        expect((p.hits - prev[n].hits) & 255, label).toBeLessThanOrEqual(1);
+        hits += (p.hits - prev[n].hits) & 255;
+        went += +(p.down > 0 && prev[n].down === 0);
+        zaps += +(!!p.zap && !prev[n].zap);
+        prev[n] = { ...p };
+      });
+      if (k % 50 === 0) {
+        // Give the dead their katana back, and keep everyone near each other.
+        all.forEach((c, n) => {
+          const p = m.state(c);
+          if (!p.down && !p.blade) {
+            p.blade = true;
+          }
+          if (Math.hypot(p.x - 12, p.z - 8) > 10) {
+            Object.assign(p, { x: 4 + n * 2, z: 2 + n });
+          }
+        });
+        m.even();
+        const back = new Map(m.snap(m.ann).players.map(p => [p.id, p]));
+        for (const c of all) {
+          const p = m.state(c);
+          expect(back.get(p.id), `tick ${k}`).toMatchObject({
+            hp: p.hp,
+            blade: !!p.blade,
+            wield: !!p.wield,
+            swing: p.swing ?? 0,
+            cut: p.cut ?? 0,
+            zap: !!p.zap,
+            stun: p.stun,
+            hits: p.hits,
+          });
+        }
+        prev = all.map(c => ({ ...m.state(c) }));
+      }
+    }
+    expect(hits).toBeGreaterThan(30);
+    expect(went).toBeGreaterThan(2);
+    expect(zaps).toBeGreaterThan(10);
+  }, 60_000);
 });
 
 /** The world of a match's room. */

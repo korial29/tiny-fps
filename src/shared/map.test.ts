@@ -10,6 +10,7 @@ import {
   JUMP_SPEED,
   PLAYER_H,
   PLAYER_R,
+  RACK_R,
   RUN_SPEED,
   STEP_H,
 } from './constants';
@@ -434,6 +435,20 @@ describe('ROOFTOPS, racks and packs', () => {
     ]);
     expect(ROOFTOPS.packs).toHaveLength(3);
     expect(ROOFTOPS.ammo).toHaveLength(3);
+  });
+
+  it('has a katana rack 2.5 m from each gun rack, on its roof, outside its circle and the spawns’', () => {
+    expect(teams.map(t => t.blade)).toEqual([
+      [13.5, 10, 69],
+      [14.5, 12.4, -1.2],
+    ]);
+    for (const { rack, blade, spawns } of teams) {
+      expect(Math.hypot(blade![0] - rack![0], blade![2] - rack![2])).toBeCloseTo(2.5, 6);
+      expect(blade![1]).toBe(rack![1]);
+      for (const [x, y, z] of spawns) {
+        expect(y === blade![1] && Math.hypot(x - blade![0], z - blade![2]) < RACK_R).toBe(false);
+      }
+    }
   });
 });
 

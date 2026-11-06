@@ -528,7 +528,7 @@ describe('the gun in the right hand', () => {
   const armed = (o: Partial<PlayerState> = {}) => man({ ...o, ammo: 30 });
   /** The cyan glow of the gun: bright green, over a violet that is not. */
   const glow = (v: Vert[]) => v.filter(q => q.c[1] > 1.5);
-  const GRIP: Vec3 = [0.21, -0.19, 0.45];
+  const GRIP: Vec3 = [0.27, -0.2, 0.5];
 
   it('is not there without the gun, nor while down', () => {
     expect(glow(draw(watch(man(), 60), man()))).toHaveLength(0);
@@ -670,5 +670,38 @@ describe('the gun in the right hand', () => {
       body.draw(out, eyeOf(p), p.yaw, 0.5, 0, TEAM);
       expect(out.every(Number.isFinite)).toBe(true);
     }
+  });
+
+  it('drops the left hand out of view while it stands with the gun, and brings it back to run', () => {
+    const idle = armed();
+    const [still] = hands(idle, watch(idle, 90));
+    expect(seen(still)).toBe(false);
+    expect(still[1]).toBeLessThan(-0.45);
+    // Without the gun the same stance keeps it in view.
+    const [free] = hands(man(), watch(man(), 90));
+    expect(seen(free)).toBe(true);
+    // Running, it swings in view again.
+    const run = armed({ vz: -9 });
+    const body = createBody();
+    for (let i = 0; i < 90; i++) {
+      run.z -= 9 * DT;
+      body.update(run, DT);
+    }
+    expect(seen(hands(run, body)[0])).toBe(true);
+  });
+
+  it('keeps the gun in a narrow screen: the grip comes in with the aspect', () => {
+    const p = armed();
+    const side = (aspect: number) => {
+      const body = createBody();
+      for (let i = 0; i < 90; i++) {
+        body.update(p, DT, 0, aspect);
+      }
+      return body.muzzle()[0];
+    };
+    expect(side(1.6)).toBeGreaterThan(0.1);
+    expect(side(0.55)).toBeLessThan(side(1.6) - 0.1);
+    // Inside the view of a phone held upright.
+    expect(side(0.55)).toBeLessThan(0.45 * TAN * 0.55 * 2);
   });
 });

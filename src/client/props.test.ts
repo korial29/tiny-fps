@@ -92,6 +92,6 @@ describe('a rack', () => {
   });
 
   it('is cheap', () => {
-    expect(v.length).toBeLessThan(1600);
+    expect(v.length).toBeLessThan(2300);
   });
 });

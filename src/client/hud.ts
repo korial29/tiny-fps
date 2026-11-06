@@ -26,7 +26,8 @@ export const HUD_CSS =
   `filter:drop-shadow(0 3px 0 #500) drop-shadow(0 0 14px #f604)}` +
   `ul{left:12px;bottom:30px;display:flex;gap:4px;list-style:none}li{width:16px;height:6px;background:#fff;box-shadow:0 0 0 1px #0008}` +
   `li.e{background:#0000;box-shadow:inset 0 0 0 1px #fffb,0 0 0 1px #0008}ul.low li{background:#f55}ul.low li.e{background:#0000}` +
-  `dl{right:16px;bottom:8px;display:flex;align-items:center;gap:10px}dl svg{width:38px;fill:#fff;filter:drop-shadow(0 1px 1px #000)}` +
+  `dl{left:50%;bottom:10px;transform:translateX(-50%);display:flex;align-items:center;gap:10px}dl svg{width:38px;fill:#fff;filter:drop-shadow(0 1px 1px #000)}` +
+  `@media(max-width:520px){dl{left:auto;right:12px;bottom:46px;transform:none}}` +
   `dl data{font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}dl.e data{color:#f66}` +
   `s{left:50%;top:50%;width:28px;height:28px;margin:-14px 0 0 -14px;` +
   `background:linear-gradient(45deg,#0000 44%,#fff 44% 56%,#0000 56%),linear-gradient(-45deg,#0000 44%,#fff 44% 56%,#0000 56%);` +

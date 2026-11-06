@@ -105,27 +105,41 @@ const metal =
 const glow: Paint = () => [GLOW[0], GLOW[1], -2, GLOW[2]];
 
 /** Where the muzzle is, between the two jaws; and the grip's tilt: its lower end goes back by TILT[0] for each TILT[1] down. */
-export const MUZZLE: Vec3 = [0, 0.052, -0.21];
+export const MUZZLE: Vec3 = [0, 0.04, -0.225];
 export const TILT = [Math.sin(0.4), Math.cos(0.4)];
 
-// The side view, forward then up, in metres from the middle of the grip. The bulb is a swept-back
-// crescent, highest and widest a third of the way along, falling toward the front.
+// The side view, forward then up, in metres from the middle of the grip. The hand sits in the gap
+// between the upper body and the lower shell, round the short grip that joins them.
+// The upper body: a bulb widest at the back and top, tapering to the front.
 const BULB: Station[] = [
   [-0.06, 0.095, 0, 0],
-  [-0.054, 0.098, 0.017, 0.02],
-  [-0.03, 0.105, 0.032, 0.035],
-  [0.01, 0.108, 0.038, 0.041],
-  [0.055, 0.1, 0.036, 0.038],
-  [0.1, 0.086, 0.03, 0.032],
-  [0.14, 0.07, 0.022, 0.024],
-  [0.155, 0.062, 0, 0],
+  [-0.055, 0.098, 0.022, 0.022],
+  [-0.035, 0.103, 0.042, 0.036],
+  [-0.005, 0.104, 0.048, 0.04],
+  [0.035, 0.098, 0.044, 0.038],
+  [0.08, 0.088, 0.036, 0.034],
+  [0.12, 0.074, 0.028, 0.028],
+  [0.135, 0.066, 0, 0],
+];
+/** The lower shell, a hull that runs from under the jaws back under the hand. */
+const HULL: Station[] = [
+  [-0.05, -0.02, 0, 0],
+  [-0.045, -0.025, 0.018, 0.012],
+  [-0.025, -0.052, 0.032, 0.018],
+  [0.01, -0.066, 0.036, 0.02],
+  [0.06, -0.06, 0.034, 0.02],
+  [0.11, -0.042, 0.028, 0.018],
+  [0.16, -0.012, 0.02, 0.014],
+  [0.2, 0.018, 0.012, 0.01],
+  [0.222, 0.032, 0, 0],
 ];
 const built: number[][] = [];
 
 /**
- * The gun at a level of detail (0 far, 1 near), built once, in the vertex format of mesh.ts: a
- * swept-back bulb with a split front like open jaws around a glowing emitter, a curved grip and a
- * guard under it that joins the jaws, with cyan strips along the sides and at the muzzle.
+ * The gun at a level of detail (0 far, 1 near), built once, in the vertex format of mesh.ts, after
+ * the Halo plasma pistol: a bulbous upper body that splits into two jaws around a glowing
+ * emitter, a chunky lower shell under the hand, a short thick grip between them, ridges and a fin
+ * on the back, and cyan strips along the sides.
  */
 export const gun = (lod: number): number[] => {
   if (built[lod]) {
@@ -134,21 +148,71 @@ export const gun = (lod: number): number[] => {
   const n = lod ? 8 : 5;
   const out: number[] = [];
   tube(out, BULB, n, metal());
+  tube(out, HULL, n, metal(0.25));
+  // The grip.
+  tube(
+    out,
+    [
+      [0.03, 0.06, 0, 0],
+      [0.02, 0.046, 0.021, 0.022],
+      [0, 0, 0.021, 0.023],
+      [-0.02, -0.046, 0.021, 0.022],
+      [-0.03, -0.06, 0, 0],
+    ],
+    n,
+    metal(0.1),
+  );
+  // The dorsal ridge, and the fin at the back, with a bead of light on its tip.
+  tube(
+    out,
+    [
+      [-0.045, 0.136, 0, 0],
+      [-0.035, 0.139, 0.006, 0.007],
+      [-0.005, 0.144, 0.008, 0.009],
+      [0.035, 0.137, 0.008, 0.008],
+      [0.08, 0.123, 0.006, 0.007],
+      [0.1, 0.115, 0, 0],
+    ],
+    lod ? 6 : 4,
+    metal(-0.3),
+  );
+  tube(
+    out,
+    [
+      [-0.03, 0.14, 0, 0],
+      [-0.04, 0.148, 0.005, 0.012],
+      [-0.062, 0.162, 0.004, 0.01],
+      [-0.085, 0.176, 0, 0],
+    ],
+    4,
+    metal(0.05),
+  );
+  tube(
+    out,
+    [
+      [-0.08, 0.173, 0, 0],
+      [-0.085, 0.175, 0.005, 0.005],
+      [-0.092, 0.18, 0, 0],
+    ],
+    4,
+    glow,
+  );
   for (const s of [-1, 1]) {
-    // The jaws: a prong curving down and in from each side of the front of the bulb.
+    // A jaw: a stout prong that curves down and in from the front of the bulb.
     tube(
       out,
       [
-        [0.07, 0.092, 0.015, 0.026, 0.021 * s],
-        [0.11, 0.08, 0.014, 0.024, 0.021 * s],
-        [0.15, 0.062, 0.012, 0.02, 0.018 * s],
-        [0.19, 0.042, 0.01, 0.015, 0.013 * s],
-        [0.215, 0.032, 0, 0, 0.012 * s],
+        [0.06, 0.092, 0.018, 0.03, 0.026 * s],
+        [0.1, 0.084, 0.017, 0.028, 0.027 * s],
+        [0.15, 0.07, 0.015, 0.024, 0.024 * s],
+        [0.19, 0.052, 0.012, 0.018, 0.019 * s],
+        [0.222, 0.036, 0.008, 0.012, 0.015 * s],
+        [0.232, 0.032, 0, 0, 0.014 * s],
       ],
       n,
       metal(0.05),
     );
-    // A strip of light along each side of the bulb, a bead on each prong.
+    // A strip of light along each side of the bulb and of the hull; a raised plate above the strip.
     tube(
       out,
       BULB.slice(1, 6).map(([f, y, a, b]): Station => [
@@ -163,54 +227,38 @@ export const gun = (lod: number): number[] => {
     );
     tube(
       out,
-      [
-        [0.2, 0.038, 0, 0, 0.012 * s],
-        [0.21, 0.033, 0.007, 0.007, 0.012 * s],
-        [0.219, 0.03, 0, 0, 0.012 * s],
-      ],
-      4,
+      HULL.slice(1, 7).map(([f, y, a, b]): Station => [
+        f,
+        y + 0.3 * b,
+        0.0035,
+        0.005,
+        s * a * 0.92,
+      ]),
+      lod ? 5 : 3,
       glow,
     );
+    tube(
+      out,
+      BULB.slice(1, 5).map(([f, y, a, b]): Station => [
+        f,
+        y + 0.55 * b,
+        0.007,
+        0.011,
+        s * a * 0.86,
+      ]),
+      lod ? 5 : 3,
+      metal(-0.25),
+    );
   }
-  // The grip curves back from the belly of the bulb to a pommel.
-  tube(
-    out,
-    [
-      [0.025, 0.07, 0, 0],
-      [0.022, 0.06, 0.018, 0.022],
-      [0.012, 0.025, 0.02, 0.023],
-      [0, -0.01, 0.02, 0.023],
-      [-0.015, -0.045, 0.02, 0.023],
-      [-0.035, -0.072, 0.019, 0.022],
-      [-0.055, -0.088, 0.016, 0.018],
-      [-0.065, -0.09, 0, 0],
-    ],
-    n,
-    metal(0.12),
-  );
-  // The guard: a thick curved shell under the bulb, parallel to it, joined to the jaws at the front.
-  tube(
-    out,
-    [
-      [0.03, 0.02, 0, 0],
-      [0.04, 0.022, 0.016, 0.01],
-      [0.09, 0.014, 0.021, 0.012],
-      [0.14, 0.016, 0.019, 0.011],
-      [0.19, 0.026, 0.013, 0.009],
-      [0.215, 0.032, 0, 0],
-    ],
-    n,
-    metal(0.2),
-  );
   // The emitter between the jaws.
   tube(
     out,
     [
-      [0.1, 0.066, 0, 0],
-      [0.115, 0.066, 0.011, 0.011],
-      [0.14, 0.06, 0.011, 0.011],
-      [0.16, 0.052, 0.008, 0.008],
-      [0.172, 0.05, 0, 0],
+      [0.09, 0.082, 0, 0],
+      [0.1, 0.082, 0.009, 0.009],
+      [0.15, 0.068, 0.009, 0.009],
+      [0.2, 0.05, 0.007, 0.007],
+      [0.21, 0.047, 0, 0],
     ],
     n,
     glow,

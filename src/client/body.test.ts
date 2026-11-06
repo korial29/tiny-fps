@@ -3,13 +3,13 @@ import { DASH_COOLDOWN, EYE, GRAB_GAP, LOW_EYE, PLAYER_R } from '../shared/const
 import { STILL } from '../shared/physics';
 import { MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { createBody } from './body';
+import { createBody, finger, hand, phalanges } from './body';
 import type { Body } from './body';
 import { MUZZLE, REAR, gun, readout } from './gun';
-import { STRIDE, basis } from './mesh';
+import { STRIDE, add, basis, dot, sub } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, turn } from './rig';
-import { palette } from './skin';
+import { JOINT as J, rest, solve, turn } from './rig';
+import { CUFF, CUFF_SIDES, body as skinOf, palette } from './skin';
 
 const DT = 1 / 60;
 const TEAM = [0.1, 0.8, 0.2];
@@ -95,6 +95,9 @@ const draw = (body: Body, p: PlayerState, pitch = 0, color = TEAM): Vert[] => {
   });
 };
 const colored = (v: Vert[], c: number[]) => v.filter(q => c.every((n, i) => q.c[i] == n));
+/** Vertices of the palm, of a finger or the thumb, and of a hand: a tube of the cuff's sides and 5 rings, one of 6 sides and 6. */
+const [PALM, FINGER] = [21 * CUFF_SIDES, 162];
+const HAND = PALM + 5 * FINGER;
 const away = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
 describe('body', () => {
@@ -137,8 +140,8 @@ describe('body', () => {
     ]) {
       for (const pitch of [0, -1.2, 1]) {
         const v = draw(watch(p, 40), p, pitch);
-        // The near runner minus its head, neck and fists, plus two hands of 1026 vertices each.
-        expect(v.length).toBeGreaterThan(4000);
+        // The near runner minus its head, neck and fists, plus two hands of under a thousand vertices each.
+        expect(v.length).toBeGreaterThan(3500);
         expect(v.length).toBeLessThanOrEqual(5000);
         for (const { at, n } of v) {
           expect(at.every(Number.isFinite)).toBe(true);
@@ -438,8 +441,169 @@ describe('body', () => {
     it('are a palm, four fingers and a thumb in the glove colour, on a thinner wrist', () => {
       const p = man();
       const v = draw(watch(p, 60), p);
-      // 126 vertices of palm and ten segments of 90 a hand, besides the cuffs.
-      expect(colored(v, GLOVE).length).toBeGreaterThanOrEqual(2 * (126 + 10 * 90));
+      // The sleeve's cuff, which is glove too, is a few dozen vertices; the hands are the rest.
+      const glove = colored(v, GLOVE).length;
+      expect(glove).toBeGreaterThanOrEqual(2 * HAND);
+      expect(glove).toBeLessThan(2 * HAND + 200);
+    });
+
+    describe('as meshes', () => {
+      /** The vertices of a tube as it is drawn: the first and last are its root ring and its tip. */
+      const edgeKey = (a: Vec3, b: Vec3) => {
+        const k = (v: Vec3) => v.map(c => Math.round(c * 1e6)).join();
+        return [k(a), k(b)].sort().join('|');
+      };
+      /** The tubes of a hand at `curl` in its own space: the palm, then the four fingers and the thumb. */
+      const tubes = (curl: number) => {
+        const out: number[] = [];
+        hand(out, [0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0], curl, [1, 1, 1]);
+        const v = Array.from({ length: out.length / STRIDE }, (_, i) => ({
+          at: out.slice(i * STRIDE, i * STRIDE + 3) as Vec3,
+          n: out.slice(i * STRIDE + 3, i * STRIDE + 6) as Vec3,
+        }));
+        expect(v).toHaveLength(HAND);
+        return [
+          v.slice(0, PALM),
+          ...Array.from({ length: 5 }, (_, i) =>
+            v.slice(PALM + i * FINGER, PALM + (i + 1) * FINGER),
+          ),
+        ];
+      };
+      const curls = [0, 0.4, 0.75, 1];
+
+      it('stay under the 1026 vertices of the segments they replace', () => {
+        expect(HAND).toBeLessThanOrEqual(1026);
+      });
+
+      it('make each finger and the thumb one closed surface: no cap or face between its phalanges', () => {
+        for (const curl of curls) {
+          for (const t of tubes(curl).slice(1)) {
+            const uses = new Map<string, number>();
+            for (let i = 0; i < t.length; i += 3) {
+              for (let j = 0; j < 3; j++) {
+                const k = edgeKey(t[i + j].at, t[i + ((j + 1) % 3)].at);
+                uses.set(k, (uses.get(k) ?? 0) + 1);
+              }
+            }
+            const open = [...uses.values()].filter(n => n != 2);
+            // Every edge joins two triangles but the six of the root ring, which the palm closes.
+            expect(open).toHaveLength(6);
+            expect(open.every(n => n == 1)).toBe(true);
+          }
+        }
+      });
+
+      /** Whether `p` is inside the closed mesh `t` (triangles as vertices three by three): a ray along +x crosses it an odd number of times. */
+      const inside = (t: { at: Vec3 }[], p: Vec3) => {
+        let hits = 0;
+        for (let i = 0; i < t.length; i += 3) {
+          const [a, b, c] = [t[i].at, t[i + 1].at, t[i + 2].at];
+          const [e1, e2] = [sub(b, a), sub(c, a)];
+          // Moller-Trumbore with the direction (1, 0, 0).
+          const h: Vec3 = [0, -e2[2], e2[1]];
+          const det = e1[1] * h[1] + e1[2] * h[2];
+          if (Math.abs(det) < 1e-15) {
+            continue;
+          }
+          const s = sub(p, a);
+          const u = (s[1] * h[1] + s[2] * h[2]) / det;
+          const q: Vec3 = [
+            s[1] * e1[2] - s[2] * e1[1],
+            s[2] * e1[0] - s[0] * e1[2],
+            s[0] * e1[1] - s[1] * e1[0],
+          ];
+          const v = q[0] / det;
+          const d = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
+          if (u >= 0 && v >= 0 && u + v <= 1 && d > 0) {
+            hits++;
+          }
+        }
+        return hits % 2 == 1;
+      };
+
+      it('grow out of the palm: the middle of each root ring is in it, in a fist and open', () => {
+        for (const curl of curls) {
+          const [palm, ...rest] = tubes(curl);
+          for (const t of rest) {
+            // The root ring is the open end of the tube: the vertices of the edges used once.
+            const uses = new Map<string, Vec3[]>();
+            for (let i = 0; i < t.length; i += 3) {
+              for (let j = 0; j < 3; j++) {
+                const [a, b] = [t[i + j].at, t[i + ((j + 1) % 3)].at];
+                const k = edgeKey(a, b);
+                uses.set(k, uses.has(k) ? [] : [a, b]);
+              }
+            }
+            const root = [...uses.values()].filter(e => e.length);
+            expect(root).toHaveLength(6);
+            const mid = root
+              .reduce((m, [a]) => add(m, a), [0, 0, 0] as Vec3)
+              .map(c => c / 6) as Vec3;
+            // A millimetre back: the ring lies in the plane of the palm's last ring, where a ray is ambiguous.
+            expect(inside(palm, add(mid, [0, 0, -0.001]))).toBe(true);
+          }
+        }
+      });
+
+      it('share their vertices smoothly: one normal where triangles meet, turning gently along a finger', () => {
+        for (const curl of curls) {
+          for (const t of tubes(curl)) {
+            const at = new Map<string, Vec3>();
+            for (const { at: a, n } of t) {
+              expect(Math.hypot(...n)).toBeCloseTo(1);
+              const k = a.map(c => Math.round(c * 1e6)).join();
+              const was = at.get(k);
+              if (was) {
+                expect(away(was, n)).toBeLessThan(1e-5);
+              }
+              at.set(k, n);
+            }
+            // Along a finger's edge the normal never turns more than 80 degrees, the knuckle of a fist included;
+            // the palm's side, a flat edge of the few-sided ring, 110.
+            const most = t.length == PALM ? 110 : 80;
+            for (let i = 0; i < t.length; i += 3) {
+              for (let j = 0; j < 3; j++) {
+                expect(dot(t[i + j].n, t[i + ((j + 1) % 3)].n)).toBeGreaterThan(
+                  Math.cos((most * Math.PI) / 180),
+                );
+              }
+            }
+          }
+        }
+      });
+
+      it('keep the length of the fingers from an open hand to a fist, the thumb too', () => {
+        const length = (curl: number, i: number) => {
+          const rings = finger([0, 0, 0], ...phalanges(curl, i), 0.04, 0.01, [0, 0, 1]);
+          return rings.slice(1).reduce((n, [c], k) => n + away(c, rings[k][0]), 0);
+        };
+        for (let i = 0; i < 4; i++) {
+          const open = length(0, i);
+          expect(open).toBeCloseTo(0.086, 2);
+          // The knuckle is a curve, which takes a little of the length.
+          expect(length(1, i)).toBeLessThan(open);
+          expect(length(1, i)).toBeGreaterThan(open * 0.82);
+        }
+      });
+
+      it('start at the sleeve: the palm begins on the ring of the cuff, vertex for vertex', () => {
+        const [rim, wrist] = [skinOf(2).v, solve(rest()).pos[J.HAND_R]];
+        const cuff: Vec3[] = [];
+        for (let i = 0; i < rim.length; i += 6) {
+          // The right arm's ring at y = 0.925 (the sleeve ends there), in the hand's space.
+          if (rim[i] > 0 && Math.abs(rim[i + 1] - CUFF[0]) < 1e-6) {
+            cuff.push([-rim[i + 2], rim[i] - wrist[0], wrist[1] - rim[i + 1]]);
+          }
+        }
+        expect(cuff).toHaveLength(CUFF_SIDES);
+        const [palm] = tubes(0.5);
+        const ring = palm
+          .filter(v => Math.abs(v.at[2] - (wrist[1] - CUFF[0])) < 1e-6)
+          .map(v => v.at);
+        for (const c of cuff) {
+          expect(Math.min(...ring.map(r => away(r, c)))).toBeLessThan(1e-4);
+        }
+      });
     });
   });
 

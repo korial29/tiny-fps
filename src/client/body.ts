@@ -14,11 +14,11 @@ import type { World } from '../shared/world';
 import { createGait, frame } from './gait';
 import type { Floor } from './gait';
 import { TILT, held, pointed, tip } from './gun';
-import { add, basis, dot, mix, place, segment, solid, sub, unit } from './mesh';
+import { add, basis, dot, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, PARENT, axis, mul, slerp, solve, turn as spin } from './rig';
+import { JOINT as J, PARENT, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
-import { body, palette, skin } from './skin';
+import { CUFF, CUFF_SIDES, body, palette, skin } from './skin';
 
 export type Solved = ReturnType<typeof solve>;
 
@@ -108,8 +108,6 @@ const TOWARD = [
   [0, -1],
 ];
 
-/** A finger segment, 4 cm, in the coarsest level: it is small, and there are ten a hand. */
-const FINGER = () => solid(0, 0.04, [0.0105, 0.0095], [1, 2]);
 /** Finger lengths against 4 cm, index to little. */
 const LENGTH = [1, 1.1, 1, 0.82];
 /** The thumb's two segments open and in a fist, as directions in the hand (x toward the thumb). */
@@ -123,13 +121,116 @@ const THUMB: [Vec3, Vec3][] = [
     [-0.55, -0.5, 0.65],
   ],
 ];
+/** Sides around a finger. */
+const FINGER_SIDES = 6;
+/** The wrist joint at rest: the cuff's ring is placed from it. */
+const WRIST = solve(rest()).pos[J.HAND_R];
+
+/** A ring of a tube: its centre and its two half axes. */
+type Ring = [c: Vec3, x: Vec3, y: Vec3];
+
+const cross = ([a, b, c]: Vec3, [d, e, f]: Vec3): Vec3 => [
+  b * f - c * e,
+  c * d - a * f,
+  a * e - b * d,
+];
+
+/**
+ * Appends, through `put(position, normal)`, the tube through `rings`: `sides` around, the normals
+ * smooth along it and around it (from the rings either side), a ring of no extent a point that
+ * closes the tube. The first ring's normals are its radial ones with `lean` along the tube, to meet
+ * the surface it grows out of.
+ */
+const tube = (rings: Ring[], sides: number, put: (p: Vec3, n: Vec3) => void, lean?: number) => {
+  const P = rings.map(([c, x, y]) =>
+    x.some(Boolean)
+      ? Array.from({ length: sides }, (_, i) => {
+          const [s, k] = [Math.sin((i * TAU) / sides), Math.cos((i * TAU) / sides)];
+          return [0, 1, 2].map(d => c[d] + x[d] * k + y[d] * s) as Vec3;
+        })
+      : [c],
+  );
+  /** Vertex i of ring r in a grid, the rings clamped and a point the same for every i. */
+  const at = (G: Vec3[][], r: number, i: number) => {
+    const row = G[Math.min(Math.max(r, 0), G.length - 1)];
+    return row[(i + row.length) % row.length];
+  };
+  const N = P.map((row, r) =>
+    row.map((_, i): Vec3 => {
+      if (lean != null && !r) {
+        const a = (i * TAU) / sides;
+        return unit([Math.cos(a), Math.sin(a), lean]);
+      }
+      // A point has no ring to go round: its normal is the way the tube runs into it.
+      if (row.length < 2) {
+        return unit(sub(row[0], rings[r - 1][0]));
+      }
+      return unit(
+        cross(sub(at(P, r, i + 1), at(P, r, i - 1)), sub(at(P, r + 1, i), at(P, r - 1, i))),
+      );
+    }),
+  );
+  for (let r = 1; r < P.length; r++) {
+    for (let i = 0; i < sides; i++) {
+      const [p, q, a, b] = [
+        [r - 1, i],
+        [r - 1, i + 1],
+        [r, i + 1],
+        [r, i],
+      ];
+      for (const t of P[r].length > 1
+        ? [
+            [p, q, a],
+            [p, a, b],
+          ]
+        : [[p, q, a]]) {
+        for (const [j, k] of t) {
+          put(at(P, j, k), at(N, j, k));
+        }
+      }
+    }
+  }
+};
+
+/**
+ * The rings of a finger, in the hand's space: from `p` along `d1` for `l`, then along `d2` for `l`,
+ * `r` thick at the root, the first ring across `t`. The bend is a curve through the joint, not a
+ * corner, so that a fist keeps a round knuckle.
+ */
+export const finger = (p: Vec3, d1: Vec3, d2: Vec3, l: number, r: number, t: Vec3): Ring[] => {
+  const joint = along(p, d1, l);
+  const [a, b] = [along(joint, d1, -l / 2), along(joint, d2, l / 2)];
+  const ring = (c: Vec3, d: Vec3, k: number): Ring => {
+    const [t, y] = [unit(d), unit(cross(d, X))];
+    return [c, cross(y, t).map(v => v * r * k) as Vec3, y.map(v => v * r * k) as Vec3];
+  };
+  return [
+    ring(p, t, 1.03),
+    ring(a, d1, 1),
+    ring(mix(joint, mix(a, b, 0.5), 0.5), sub(b, a), 0.94),
+    ring(b, d2, 0.9),
+    ring(along(joint, d2, l - 0.001), d2, 0.74),
+    ring(along(joint, d2, l + 0.006), d2, 0),
+  ];
+};
+
+/** The directions of the two phalanges of the finger i (index to little) at `curl`, in the hand's space. */
+export const phalanges = (curl: number, i: number): [Vec3, Vec3] => {
+  const splay = -(i - 1.5) * 0.08 * (1 - curl);
+  const [a, b] = [0.1 + 1.3 * curl, 0.2 + 3 * curl].map(n =>
+    unit([splay, -Math.sin(n), Math.cos(n)]),
+  );
+  return [a, b];
+};
 
 /**
  * A gloved hand at the wrist `end`: the fingers along `f`, the back of the hand along `u`, the thumb
  * toward `th` (unit vectors). `curl` runs from 0, a flat open hand with the fingers spread, to 1, a
- * fist: a palm, four fingers of two segments and a thumb of two, each a smooth solid.
+ * fist. The palm is one tube that starts as the sleeve's cuff ends and spreads to the knuckles,
+ * and each finger and the thumb one tube from there, bent at its joints: no solid meets another
+ * in a line, and the normals are smooth all over.
  */
-const hand = (
+export const hand = (
   out: number[],
   end: Vec3,
   f: Vec3,
@@ -138,32 +239,51 @@ const hand = (
   curl: number,
   tint: number[],
 ) => {
-  /** Hand space (x toward the thumb, y the back, z toward the fingers) to the world. */
-  const at = ([x, y, z]: Vec3): Vec3 => [
-    end[0] + th[0] * x + u[0] * y + f[0] * z,
-    end[1] + th[1] * x + u[1] * y + f[1] * z,
-    end[2] + th[2] * x + u[2] * y + f[2] * z,
+  /** Hand space (x toward the thumb, y the back, z toward the fingers), a point and a direction, to the world. */
+  const put = ([x, y, z]: Vec3, [m, n, w]: Vec3) =>
+    out.push(
+      ...[0, 1, 2].map(d => end[d] + th[d] * x + u[d] * y + f[d] * z),
+      ...[0, 1, 2].map(d => th[d] * m + u[d] * n + f[d] * w),
+      tint[0],
+      tint[1],
+      -1,
+      tint[2],
+    );
+  // The palm starts as the sleeve's cuff does, vertex for vertex, its normals leaning to the fingers.
+  const palm = ([z, y, a, b]: number[]): Ring => [
+    [0, y, z],
+    [a, 0, 0],
+    [0, b, 0],
   ];
-  /** Segments of lengths `l` from `from` along `dirs` (hand space), `k` times as wide. */
-  const chain = (from: Vec3, dirs: Vec3[], l: number, k: number) =>
-    dirs.reduce((p, d, i) => {
-      const q: Vec3 = [p[0] + d[0] * l, p[1] + d[1] * l, p[2] + d[2] * l];
-      segment(out, FINGER(), at(p), at(q), th, 0.04, k * 0.88 ** i, tint);
-      return q;
-    }, from);
-  place(out, solid(1, 0, [1, 1]), end, [th, u, f], [0, 0, 0.045], [0.0425, 0.02, 0.058], tint);
-  for (let i = 0; i < 4; i++) {
-    const [a, b] = [0.1 + 1.3 * curl, 0.2 + 3 * curl];
-    const splay = -(i - 1.5) * 0.08 * (1 - curl);
-    const dirs = [a, b].map(n => unit([splay, -Math.sin(n), Math.cos(n)]));
-    chain([0.0315 - 0.021 * i, -0.004, 0.092], dirs, 0.04 * LENGTH[i], 1);
-  }
-  chain(
-    [0.034, -0.012, 0.025],
-    THUMB.map(([open, fist]) => unit(mix(open, fist, curl))),
-    0.037,
-    1.25,
+  tube(
+    [
+      palm([WRIST[1] - CUFF[0], CUFF[1] - WRIST[0], CUFF[3], CUFF[4]]),
+      palm([0.025, 0, 0.04, 0.021]),
+      palm([0.06, -0.002, 0.0425, 0.017]),
+      palm([0.092, -0.004, 0.0425, 0.0105]),
+      palm([0.104, -0.004, 0, 0]),
+    ],
+    CUFF_SIDES,
+    put,
+    0.75,
   );
+  for (let i = 0; i < 4; i++) {
+    const [d1, d2] = phalanges(curl, i);
+    tube(
+      finger(
+        [0.0315 - 0.021 * i, -0.004, 0.092],
+        d1,
+        d2,
+        0.04 * LENGTH[i],
+        0.0105,
+        unit(add(d1, [0, 0, 1])),
+      ),
+      FINGER_SIDES,
+      put,
+    );
+  }
+  const [d1, d2] = THUMB.map(([open, fist]) => unit(mix(open, fist, curl)));
+  tube(finger([0.029, -0.01, 0.025], d1, d2, 0.037, 0.0118, d1), FINGER_SIDES, put);
 };
 
 /** The floor under a player standing at height `y`: the first top within a step above or below it. */

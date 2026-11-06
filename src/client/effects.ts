@@ -8,7 +8,7 @@ import {
   STUMBLE_TICKS,
 } from '../shared/constants';
 import { eyeHeight, speedOf } from '../shared/physics';
-import { EV, KEY, MODE } from '../shared/types';
+import { CUT, EV, KEY, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 
 /** What happened in the live steps since the last frame: predictor.events(). */
@@ -44,6 +44,8 @@ export interface Effects {
   jolt(): void;
   /** The own player tackled someone: a small punch of the look and the field of view. */
   punch(): void;
+  /** The own katana's cut struck: a thrust punches the field of view, a slash dips the look, a cut across rolls toward the side it ends on. */
+  cut(c: number): void;
   /** Advances dt seconds: the own player (eased, undefined before the first snapshot), the held keys, the events. */
   update(me: PlayerState | undefined, keys: number, dt: number, hit?: Hit): void;
 }
@@ -98,6 +100,8 @@ const PUNCH = [-1, 1.2];
 const PUNCH_FOV = 4;
 /** A shot: the eye's, the look's and the roll's speed it is kicked with, and how much the roll's goes either way. */
 const SHOT = [-0.25, 0.4, 0.5];
+/** A cut's strike: the eye's speed, then the look's (a slash) and the roll's (across). */
+const STRIKE = [-0.5, 1.5, 1.2];
 /** A laser hit: the same, and a floor at which the view lies, tilted (radians) and lowered to a hand's width. */
 const WOUND = [-1.5, 0.8, 1.5];
 const LIE = [0.9, 0.3];
@@ -171,6 +175,13 @@ export const createEffects = (): Effects => {
       y[1] += PUNCH[0];
       p[1] += PUNCH[1];
       thump = 1;
+    },
+
+    cut(c) {
+      y[1] += STRIKE[0];
+      p[1] -= c == CUT.SLASH ? STRIKE[1] : 0;
+      r[1] += c == CUT.LEFT ? STRIKE[2] : c == CUT.RIGHT ? -STRIKE[2] : 0;
+      thump = c == CUT.THRUST ? 1 : thump;
     },
 
     update(me, keys, dt, hit = { ev: 0, fall: 0 }) {

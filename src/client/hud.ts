@@ -27,7 +27,9 @@ export const HUD_CSS =
   `ul{left:12px;bottom:30px;display:flex;gap:4px;list-style:none}li{width:16px;height:6px;background:#fff;box-shadow:0 0 0 1px #0008}` +
   `li.e{background:#0000;box-shadow:inset 0 0 0 1px #fffb,0 0 0 1px #0008}ul.low li{background:#f55}ul.low li.e{background:#0000}` +
   `dl{left:50%;bottom:10px;transform:translateX(-50%);display:flex;align-items:center;gap:10px}dl svg{width:38px;fill:#fff;filter:drop-shadow(0 1px 1px #000)}` +
-  `@media(max-width:520px){dl{left:auto;right:12px;bottom:46px;transform:none}}` +
+  `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data{display:none}dl.k svg{width:64px;fill:#8ef}` +
+  `dl small{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);display:flex;gap:10px;font-size:11px;white-space:nowrap}dl kbd{font:inherit;opacity:.5}dl kbd.a{opacity:1}` +
+  `@media(max-width:520px){dl{left:auto;right:12px;bottom:46px;transform:none}dl small{left:auto;right:0;transform:none}}` +
   `dl data{font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}dl.e data{color:#f66}` +
   `s{left:50%;top:50%;width:28px;height:28px;margin:-14px 0 0 -14px;` +
   `background:linear-gradient(45deg,#0000 44%,#fff 44% 56%,#0000 56%),linear-gradient(-45deg,#0000 44%,#fff 44% 56%,#0000 56%);` +
@@ -58,8 +60,12 @@ export interface Hud {
   marks(list: Mark[]): void;
   /** The red vignette of a tackle, 0 (none) to 1 (full). */
   hurt(level: number): void;
-  /** The health as pips out of HP_MAX, and the ammo counter with the gun glyph; -1 ammo (no gun) hides the counter. */
-  vitals(hp: number, ammo: number): void;
+  /**
+   * The health as pips out of HP_MAX, and the weapon in hand: the ammo counter with the gun glyph,
+   * or the katana glyph when `wield` (or when it is all there is). -1 ammo is no gun, `blade` is a
+   * katana carried; both carried show the slots (1 gun, 2 katana) over the glyph, none hides it.
+   */
+  vitals(hp: number, ammo: number, blade?: boolean, wield?: boolean): void;
   /** A hit marker on the crosshair for a moment: a laser of the own player hit. */
   hit(): void;
   /** The state of being down: `level` 0 (up) to 1 hides or greys the screen, `left` seconds till the respawn. */
@@ -83,12 +89,15 @@ export const createHud = (screen: HTMLElement): Hud => {
     'beforeend',
     `<aside hidden><h6>TINY FPS</h6><span></span><table>` +
       `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Shift<td>sprint<tr><td>Space<td>jump, again in the air` +
-      `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>Left click<td>fire the gun<tr><td>M<td>mute</table>` +
-      `<span>Take the enemy flag to your own base while yours is home. Take the gun at your rack.</span>` +
+      `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>Left click<td>fire the gun<tr><td>1, 2, wheel<td>gun, katana` +
+      `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>M<td>mute</table>` +
+      `<span>Take the enemy flag to your own base while yours is home. Take the gun at your rack, the katana at the one beside it.</span>` +
       `<strong></strong></aside>` +
       `<u></u><h5 hidden>Muted (M)</h5>` +
       `<ul>${'<li></li>'.repeat(HP_MAX)}</ul>` +
-      `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg><data></data></dl>` +
+      `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
+      `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
+      `<data></data><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd></small></dl>` +
       `<s hidden></s><mark hidden></mark>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav>` +
       `<output hidden></output>` +
@@ -103,6 +112,7 @@ export const createHud = (screen: HTMLElement): Hud => {
   const [redFlag, blueFlag] = [...bar.querySelectorAll<HTMLElement>('small')];
   const pips = [...screen.querySelectorAll('li')];
   const [life, ammo, marker, fallen] = [one('ul'), one('dl'), one('s'), one('mark')];
+  const [count, slots] = [one('data'), one('dl small')];
   let ticker: ReturnType<typeof setTimeout> | undefined;
   const banner = one('output');
   const vignette = one('u');
@@ -166,12 +176,17 @@ export const createHud = (screen: HTMLElement): Hud => {
         vignette.style.opacity = v;
       }
     },
-    vitals(hp, rounds) {
+    vitals(hp, rounds, blade = false, wield = false) {
       pips.forEach((li, i) => li.classList.toggle('e', i >= hp));
       life.classList.toggle('low', hp <= 1);
-      ammo.hidden = rounds < 0;
-      ammo.classList.toggle('e', !rounds);
-      set(ammo.lastElementChild as HTMLElement, `${Math.max(rounds, 0)}`);
+      const gun = rounds >= 0;
+      const k = blade && (wield || !gun);
+      ammo.hidden = !gun && !blade;
+      ammo.classList.toggle('k', k);
+      ammo.classList.toggle('e', !k && !rounds);
+      set(count, `${Math.max(rounds, 0)}`);
+      slots.hidden = !(gun && blade);
+      [...slots.children].forEach((kbd, i) => kbd.classList.toggle('a', !!i == k));
     },
     hit() {
       marker.hidden = false;

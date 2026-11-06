@@ -385,7 +385,7 @@ describe('the cuts', () => {
     const longest = Math.max(...steps(0, 1, 200).map(z));
     expect(z(s)).toBeGreaterThan(longest - 0.03);
     // Further out than the guard, and held a beat: the point stays within 3 cm for a fifth of the swing.
-    expect(z(s)).toBeGreaterThan(z(0) + 0.08);
+    expect(z(s)).toBeGreaterThan(z(0) + 0.05);
     for (const p of steps(s, s + 0.2, 10)) {
       expect(away(tipAt(CUT.THRUST, p), tipAt(CUT.THRUST, s))).toBeLessThan(0.03);
     }

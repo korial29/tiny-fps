@@ -1089,7 +1089,7 @@ describe('the katana in both hands', () => {
     // The right hand is low at the right of the view, the left is on the grip a hand behind it.
     const [l, r] = hands(p, body);
     expect(r[0]).toBeGreaterThan(0.05);
-    expect(r[1]).toBeLessThan(-0.15);
+    expect(r[1]).toBeLessThan(-0.08);
     // Both fists show at the bottom of the view.
     expect(seen(r)).toBe(true);
     expect(leftOff(body, p)).toBeLessThan(0.03);

@@ -275,7 +275,7 @@ export const frameOf = (d: Vec3, roll: number): Vec3[] => {
  * the left BEHIND the right. The wind-ups and follow-throughs go out of the view. The guard is
  * rolled a little, its flat toward the eye.
  */
-export const GUARD = [0.1, -0.25, 0.4, -0.05, 0.42, 0.9, -0.45];
+export const GUARD = [0.12, -0.13, 0.42, -0.08, 0.33, 0.94, -0.45];
 /** The share of cut `c`'s swing at which it strikes. */
 const strikeAt = (c: number) => CUTS[c].strike / CUTS[c].ticks;
 /** From behind the left shoulder, through the middle, to low at the right. */
@@ -294,8 +294,8 @@ const KEYS: number[][][] = [
   [
     [0, ...GUARD],
     [0.22, 0.2, -0.33, 0.2, -0.08, 0.3, 0.95, 1.4],
-    [strikeAt(0), 0.04, -0.15, 0.41, -0.03, 0.1, 1, 1.4],
-    [strikeAt(0) + 0.2, 0.04, -0.16, 0.41, -0.03, 0.1, 1, 1.4],
+    [strikeAt(0), 0.04, -0.15, 0.42, -0.03, 0.1, 1, 1.4],
+    [strikeAt(0) + 0.2, 0.04, -0.16, 0.42, -0.03, 0.1, 1, 1.4],
     [1, ...GUARD],
   ],
   ACROSS(strikeAt(1)),

@@ -6,7 +6,11 @@ import { MAX_TINTS, city, palette } from './render';
 import { skyline } from './skyline';
 import { ROAD, STREET, grid } from './street';
 
-const towers = skyline(ROOFTOPS);
+const city_ = skyline(ROOFTOPS);
+/** The lawns are the flat ones, half a metre at most. */
+const flat = (b: { min: number[]; max: number[] }) => b.max[1] - b.min[1] <= 0.5;
+const towers = city_.filter(b => !flat(b));
+const lawns = city_.filter(flat);
 /** The play area: the box over the footprints of the brushes. */
 const area = [0, 2].map(a => [
   Math.min(...ROOFTOPS.brushes.map(b => b.min[a])),
@@ -20,7 +24,7 @@ describe('skyline', () => {
   });
 
   it('stands outside the play area: no tower touches the box over the brushes, with room to spare', () => {
-    for (const t of towers) {
+    for (const t of city_) {
       const apart = [0, 2].map((a, i) => Math.max(area[i][0] - t.max[a], t.min[a] - area[i][1]));
       expect(Math.max(...apart)).toBeGreaterThan(10);
     }
@@ -28,7 +32,7 @@ describe('skyline', () => {
 
   it('is well formed: min under max, textures that exist, tints that are colours', () => {
     const ids: number[] = Object.values(TEX);
-    for (const t of towers) {
+    for (const t of city_) {
       for (let a = 0; a < 3; a++) {
         expect(t.min[a]).toBeLessThan(t.max[a]);
       }
@@ -43,9 +47,9 @@ describe('skyline', () => {
       const { xs, zs } = grid(def);
       const all = skyline(def);
       for (const t of all) {
-        // A tower goes down to the street, a cap stands on a tower.
+        // A tower and a lawn go down to the street, a cap stands on a tower.
         expect(
-          t.tint
+          t.min[1] > STREET
             ? all.some(
                 o =>
                   !o.tint && o.max[1] == t.min[1] && o.min[0] <= t.min[0] && o.max[0] >= t.max[0],
@@ -71,7 +75,7 @@ describe('skyline', () => {
   });
 
   it('is the same every time', () => {
-    expect(skyline(ROOFTOPS)).toEqual(towers);
+    expect(skyline(ROOFTOPS)).toEqual(city_);
   });
 
   it('is not in the physics world: build() sees the brushes of the map alone', () => {
@@ -80,7 +84,7 @@ describe('skyline', () => {
     const indices = new Set([...world.grid.values()].flat());
     expect(Math.max(...indices)).toBe(ROOFTOPS.brushes.length - 1);
     // The renderer's copy has them, the original is untouched.
-    expect(city(world).def.brushes).toHaveLength(ROOFTOPS.brushes.length + towers.length);
+    expect(city(world).def.brushes).toHaveLength(ROOFTOPS.brushes.length + city_.length);
     expect(world.def.brushes).toHaveLength(ROOFTOPS.brushes.length);
   });
 
@@ -104,6 +108,28 @@ describe('skyline', () => {
     for (const t of skyline(def as never)) {
       const [cx, cz] = [(t.min[0] + t.max[0]) / 2, (t.min[2] + t.max[2]) / 2];
       expect(Math.hypot(cx - 105, cz - 110)).toBeGreaterThan(45);
+    }
+  });
+});
+
+describe('the lawns', () => {
+  it('green some of the lots: flat, green, on the street, with a walk round them', () => {
+    expect(lawns.length).toBeGreaterThanOrEqual(10);
+    expect(lawns.length / (lawns.length + towers.length)).toBeLessThan(0.6);
+    for (const l of lawns) {
+      expect(l.min[1]).toBe(STREET);
+      const [r, g, b] = l.tint!;
+      expect(g).toBeGreaterThan(Math.max(r, b));
+      expect(Math.min(l.max[0] - l.min[0], l.max[2] - l.min[2])).toBeGreaterThan(10);
+    }
+  });
+
+  it('lie under a tower or alone in an empty lot, never on top of another lawn', () => {
+    for (const [i, a] of lawns.entries()) {
+      for (const b of lawns.slice(i + 1)) {
+        const apart = [0, 2].some(k => a.max[k] <= b.min[k] || b.max[k] <= a.min[k]);
+        expect(apart).toBe(true);
+      }
     }
   });
 });

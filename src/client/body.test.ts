@@ -5,6 +5,7 @@ import { MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { createBody } from './body';
 import type { Body } from './body';
+import { MUZZLE, REAR, gun, readout } from './gun';
 import { STRIDE, basis } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, turn } from './rig';
@@ -528,7 +529,7 @@ describe('the gun in the right hand', () => {
   const armed = (o: Partial<PlayerState> = {}) => man({ ...o, ammo: 30 });
   /** The cyan glow of the gun: bright green, over a violet that is not. */
   const glow = (v: Vert[]) => v.filter(q => q.c[1] > 1.5);
-  const GRIP: Vec3 = [0.27, -0.2, 0.5];
+  const GRIP: Vec3 = [0.22, -0.25, 0.4];
 
   it('is not there without the gun, nor while down', () => {
     expect(glow(draw(watch(man(), 60), man()))).toHaveLength(0);
@@ -545,8 +546,9 @@ describe('the gun in the right hand', () => {
     const v = draw(watch(p, 60), p);
     const g = glow(v).map(q => local(p, q.at));
     expect(g.length).toBeGreaterThan(50);
+    // The gun is in the lower right: nearly all of it on the screen, none left of the middle.
+    expect(g.filter(seen).length).toBeGreaterThan(g.length * 0.7);
     for (const l of g) {
-      expect(seen(l)).toBe(true);
       expect(l[0]).toBeGreaterThan(0);
     }
     const body = watch(p, 60);
@@ -704,4 +706,120 @@ describe('the gun in the right hand', () => {
     // Inside the view of a phone held upright.
     expect(side(0.55)).toBeLessThan(0.45 * TAN * 0.55 * 2);
   });
+});
+
+describe('the ammo on the back of the gun', () => {
+  const armed = (ammo: number) => man({ ammo });
+  /** The digits drawn last: their vertices as the body drew them. */
+  const digits = (p: PlayerState, body = watch(p, 60)) => {
+    const out: number[] = [];
+    body.draw(out, eyeOf(p), 0, 0, 0, TEAM);
+    return out.slice(out.length - readout(p.ammo).length);
+  };
+
+  it('shows the digits of the ammo, from the predicted state of each frame', () => {
+    const p = armed(30);
+    const body = watch(p, 60);
+    expect(digits(p, body).length).toBe(readout(30).length);
+    const q = armed(31);
+    body.update(q, DT);
+    expect(digits(q, body).length).toBe(readout(31).length);
+    expect(readout(31).length).not.toBe(readout(30).length);
+  });
+
+  it('are cyan, and red at ten and under', () => {
+    const cyan = digits(armed(30));
+    const red = digits(armed(8));
+    expect(cyan[7]).toBeGreaterThan(cyan[6]);
+    expect(red[6]).toBeGreaterThan(red[7]);
+    expect(digits(armed(11))[7]).toBeGreaterThan(digits(armed(11))[6]);
+    expect(digits(armed(10))[6]).toBeGreaterThan(digits(armed(10))[7]);
+  });
+
+  it('face the player: on the back of the top, in front of the camera and on the screen, not read from the wrong side', () => {
+    const p = armed(42);
+    const out = digits(p);
+    const quads = Array.from({ length: out.length / STRIDE }, (_, i) =>
+      local(p, [out[i * STRIDE], out[i * STRIDE + 1], out[i * STRIDE + 2]]),
+    );
+    expect(quads.filter(seen).length).toBeGreaterThan(quads.length * 0.9);
+    // Their normals point up, toward the camera above the gun, not down into it.
+    for (let i = 0; i < out.length; i += STRIDE) {
+      expect(out[i + 4]).toBeGreaterThan(0.3);
+    }
+    // Two digits side by side: the tens left of the units.
+    const xs = quads.map(l => l[0]);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.04);
+  });
+
+  it('are not drawn without the gun', () => {
+    const out: number[] = [];
+    const p = man();
+    watch(p, 60).draw(out, eyeOf(p), 0, 0, 0, TEAM);
+    expect(out.length / STRIDE).toBeLessThan(5000);
+    expect(out.slice(-6).every(v => Number.isFinite(v))).toBe(true);
+  });
+});
+
+describe('the gun points where the beam goes', () => {
+  const armed = (o: Partial<PlayerState> = {}) => man({ ...o, ammo: 30 });
+  /** The model vertex of the gun that is nearest to a model point, and where the body drew it. */
+  const spot = (out: number[], model: Vec3): Vec3 => {
+    const m = gun(1);
+    const first = out.length / STRIDE - m.length / STRIDE - readout(30).length / STRIDE;
+    let best = 0;
+    let d = Infinity;
+    for (let i = 0; i < m.length / STRIDE; i++) {
+      const e = Math.hypot(
+        m[i * STRIDE] - model[0],
+        m[i * STRIDE + 1] - model[1],
+        m[i * STRIDE + 2] - model[2],
+      );
+      if (e < d) {
+        [best, d] = [i, e];
+      }
+    }
+    const k = (first + best) * STRIDE;
+    return [out[k], out[k + 1], out[k + 2]];
+  };
+  const angle = (a: Vec3, b: Vec3) =>
+    (Math.acos(
+      Math.min(
+        1,
+        (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (Math.hypot(...a) * Math.hypot(...b)),
+      ),
+    ) *
+      180) /
+    Math.PI;
+
+  it.each([
+    ['a near wall', [0.1, 0.05, 3.5]],
+    ['a wall at 8 m', [-0.5, 0.4, 8]],
+    ['far', [0, 0.2, 60]],
+    ['far and to the side', [4, -1, 70]],
+  ] as [string, Vec3][])(
+    'along the long axis, from the back of the body to the emitter: %s',
+    (_, target) => {
+      const p = armed();
+      const body = createBody();
+      body.aim(target);
+      for (let i = 0; i < 90; i++) {
+        body.update(p, DT);
+      }
+      const eye = eyeOf(p);
+      const out: number[] = [];
+      body.draw(out, eye, 0, 0, 0, TEAM);
+      const emitter = spot(out, [0, MUZZLE[1], MUZZLE[2]]);
+      const rear = spot(out, REAR);
+      const axis: Vec3 = [emitter[0] - rear[0], emitter[1] - rear[1], emitter[2] - rear[2]];
+      // The camera space of the muzzle, from the world: eye is at the origin, yaw 0 looks along -z.
+      const m = body.muzzle();
+      const wm: Vec3 = [eye[0] + m[0], eye[1] + m[1], eye[2] - m[2]];
+      expect(away(wm, emitter)).toBeLessThan(0.03);
+      // The beam: from the emitter to the target (the target is in the camera's space: forward is -z).
+      const end: Vec3 = [eye[0] + target[0], eye[1] + target[1], eye[2] - target[2]];
+      const beam: Vec3 = [end[0] - wm[0], end[1] - wm[1], end[2] - wm[2]];
+      expect(angle(axis, beam)).toBeLessThan(2);
+    },
+  );
 });

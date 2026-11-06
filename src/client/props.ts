@@ -7,9 +7,12 @@ import { gun } from './gun';
 import { STRIDE, basis, place, segment, solid } from './mesh';
 import type { Vec3 } from './mesh';
 
-/** The health packs of `all` whose bit is set in `mask`, if any: the ones that are there to take. */
-export const packsOf = (all: readonly Vec3[] = [], mask = 0): Vec3[] =>
-  all.filter((_, n) => (mask >>> n) & 1);
+/**
+ * The packs of `all` whose bit is set in `mask`, if any: the ones that are there to take. The bits
+ * count from `from`: the ammo packs come after the health packs.
+ */
+export const packsOf = (all: readonly Vec3[] = [], mask = 0, from = 0): Vec3[] =>
+  all.filter((_, n) => from + n < 32 && (mask >>> (from + n)) & 1);
 
 /** A rack at `at` (a point on a top): a post and a dish, a ring on the roof of the radius that gives the gun, the gun over it. */
 export const rack = (out: number[], at: Vec3, rgb: number[], t: number) => {
@@ -66,35 +69,68 @@ const FACES: Vec3[][] = [
   ],
 ];
 
-/** A health pack at `at` (on a top): a box turning and bobbing a little over it, a green cross glowing on each side. */
-export const kit = (out: number[], at: Vec3, t: number) => {
-  const [h, c] = [0.17, 0.13];
+/** A glyph on a face: triangles of points across and up the face, in metres from its middle. */
+type Glyph = [number, number][][];
+/** A rectangle as two triangles. */
+const rect = (a: number, b: number, d: number, e: number): Glyph => [
+  [
+    [a, b],
+    [d, b],
+    [d, e],
+  ],
+  [
+    [a, b],
+    [d, e],
+    [a, e],
+  ],
+];
+const CROSS: Glyph = [...rect(-0.13, -0.04, 0.13, 0.04), ...rect(-0.04, -0.13, 0.04, 0.13)];
+/** A cartridge: a round, a pointed tip and a rim. */
+const BULLET: Glyph = [
+  ...rect(-0.035, -0.09, 0.035, 0.04),
+  [
+    [-0.035, 0.04],
+    [0.035, 0.04],
+    [0, 0.11],
+  ],
+  ...rect(-0.05, -0.12, 0.05, -0.095),
+];
+
+/** A box of half side `h` turning and bobbing a little over `at` (on a top), `glyph` glowing in `lit` on each face. */
+const crate = (
+  out: number[],
+  at: Vec3,
+  t: number,
+  h: number,
+  rgb: number[],
+  glyph: Glyph,
+  lit: number[],
+) => {
   const [r, , f] = basis(t * 0.9, 0);
   const o: Vec3 = [at[0], at[1] + 0.45 + 0.07 * Math.sin(t * 2.2 + at[0]), at[2]];
   /** A box-space vector to the world. */
   const w = ([a, b, d]: Vec3): Vec3 => [r[0] * a - f[0] * d, b, r[2] * a - f[2] * d];
   for (const [n, u, v] of FACES) {
-    const q = (a: number, b: number, k = 1): Vec3 => {
-      const p = [0, 1, 2].map(i => n[i] * h * k + u[i] * a + v[i] * b) as Vec3;
-      const [X, Y, Z] = w(p);
+    const q = (a: number, b: number, k: number): Vec3 => {
+      const [X, Y, Z] = w([0, 1, 2].map(i => n[i] * h * k + u[i] * a + v[i] * b) as Vec3);
       return [o[0] + X, o[1] + Y, o[2] + Z];
     };
-    const nn = w(n);
-    for (const [a, b, d, e, rgb, k] of [
-      [-h, -h, h, h, [0.86, 0.9, 0.88], 1],
-      [-c, -0.04, c, 0.04, [0.1, 1.2, 0.4], 1.01],
-      [-0.04, -c, 0.04, c, [0.1, 1.2, 0.4], 1.01],
-    ] as const) {
-      const from = out.length;
-      const [p0, p1, p2, p3] = [q(a, b, k), q(d, b, k), q(d, e, k), q(a, e, k)];
-      tri(out, p0, p1, p2, rgb as unknown as number[]);
-      tri(out, p0, p2, p3, rgb as unknown as number[]);
-      if (k > 1) {
-        for (let i = from; i < out.length; i += STRIDE) {
-          out[i + 8] = -2;
-        }
-      }
-      void nn;
+    tri(out, q(-h, -h, 1), q(h, -h, 1), q(h, h, 1), rgb);
+    tri(out, q(-h, -h, 1), q(h, h, 1), q(-h, h, 1), rgb);
+    const from = out.length;
+    for (const [a, b, c] of glyph) {
+      tri(out, q(...a, 1.01), q(...b, 1.01), q(...c, 1.01), lit);
+    }
+    for (let i = from; i < out.length; i += STRIDE) {
+      out[i + 8] = -2;
     }
   }
 };
+
+/** A health pack at `at`: a white box with a glowing green cross on each side. */
+export const kit = (out: number[], at: Vec3, t: number) =>
+  crate(out, at, t, 0.17, [0.86, 0.9, 0.88], CROSS, [0.1, 1.2, 0.4]);
+
+/** An ammo pack at `at`: a violet box with a glowing cyan cartridge on each side, the gun's colours. */
+export const cell = (out: number[], at: Vec3, t: number) =>
+  crate(out, at, t, 0.15, [0.34, 0.14, 0.58], BULLET, [0.3, 1.4, 1.8]);

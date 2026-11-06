@@ -9,7 +9,7 @@ import { createAudio, savedMute, toggleMute } from './audio';
 import { createTracer } from './beams';
 import { beats, cues, say } from './beats';
 import { createBody } from './body';
-import { createCombat } from './combat';
+import { createCombat, sight } from './combat';
 import { createEffects } from './effects';
 import { flagDraws } from './flag';
 import { createFoley } from './foley';
@@ -218,6 +218,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       flags: flagDraws(match.flags, bases, who),
       racks,
       packs: packsOf(world.def.packs, match.packs),
+      ammo: packsOf(world.def.ammo, match.packs, world.def.packs?.length),
     };
     // What the live steps did, once: the camera and the sounds read it, the inputs sent do not.
     const hit = predictor.events();
@@ -229,8 +230,21 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     // The camera moves for the eye only: the inputs keep sending the real height and angles.
     const cam: [number, number, number] = [eye[0], eye[1] + fx.dy, eye[2]];
     const pitch = ctl.pitch + fx.pitch;
+    const look = me && sight(world, eye, cam, ctl.yaw, ctl.pitch, pitch);
+    if (look) {
+      body.aim(look.local);
+    }
     combat.frame(
-      me && { eye, cam, yaw: ctl.yaw, pitch: ctl.pitch, drawn: pitch, muzzle: body.muzzle() },
+      me &&
+        look && {
+          eye,
+          cam,
+          yaw: ctl.yaw,
+          pitch: ctl.pitch,
+          drawn: pitch,
+          muzzle: body.muzzle(),
+          ...look,
+        },
       me,
       others,
       ctl.keys,

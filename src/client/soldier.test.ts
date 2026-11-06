@@ -5,7 +5,9 @@ import { MODE, SIDE, TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
+import { MUZZLE, REAR, aimed, gun, tip } from './gun';
 import { STRIDE } from './mesh';
+import type { Vec3 } from './mesh';
 import { animate, createRunner, soldier } from './soldier';
 import type { Runner } from './soldier';
 import { palette } from './skin';
@@ -357,14 +359,14 @@ describe('the gun on a runner', () => {
     expect(later.since).toBeGreaterThan(0.5);
   });
 
-  it('eases the arm up and down, never jumps', () => {
+  it('raises the arm with the shot and eases it down after', () => {
     const book = new Map<number, Runner>();
     animate(book, [armed()], DT);
     animate(book, [armed({ shots: 1 })], DT);
     const r = book.get(1)!;
     expect(r.since).toBe(0);
-    expect(r.aim).toBeGreaterThan(0);
-    expect(r.aim).toBeLessThan(0.5);
+    // Up at once: the beam leaves a gun that already points at the shot.
+    expect(r.aim).toBe(1);
     animate(book, [armed({ shots: 1 })], DT);
     expect(r.since).toBeCloseTo(DT, 6);
   });
@@ -403,5 +405,59 @@ describe('the gun on a runner', () => {
     expect(lowest(100)).toBeGreaterThan(1 - 0.05);
     expect(top(2)).toBeLessThan(top(100) - 0.3);
     expect(lowest(2)).toBeLessThan(0.7);
+  });
+
+  it('points its gun at where it shoots: the long axis of the drawn gun lies along the line from its emitter to the focus', () => {
+    const model = gun(1);
+    const spot = (v: number[], at: Vec3): Vec3 => {
+      const first = v.length / STRIDE - model.length / STRIDE;
+      let [best, d] = [0, Infinity];
+      for (let i = 0; i < model.length / STRIDE; i++) {
+        const e = Math.hypot(
+          model[i * STRIDE] - at[0],
+          model[i * STRIDE + 1] - at[1],
+          model[i * STRIDE + 2] - at[2],
+        );
+        if (e < d) {
+          [best, d] = [i, e];
+        }
+      }
+      const k = (first + best) * STRIDE;
+      return [v[k], v[k + 1], v[k + 2]];
+    };
+    for (const [yaw, pitch] of [
+      [0, 0],
+      [0.8, 0.3],
+      [-2, -0.2],
+    ]) {
+      const r = run(i => armed({ yaw, pitch, shots: i > 40 ? 1 : 0 }), 50);
+      const v: number[] = [];
+      soldier(v, r, [0.1, 0.8, 0.2], 1);
+      const emitter = spot(v, [0, MUZZLE[1], MUZZLE[2]]);
+      const rear = spot(v, REAR);
+      const [grip, ax] = aimed(r.p, r.focus);
+      expect(Math.hypot(...[0, 1, 2].map(k => emitter[k] - tip(grip, ax)[k]))).toBeLessThan(0.06);
+      const [a, b] = [
+        [0, 1, 2].map(k => emitter[k] - rear[k]),
+        [0, 1, 2].map(k => r.focus[k] - emitter[k]),
+      ];
+      const deg =
+        (Math.acos(
+          Math.min(
+            1,
+            (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (Math.hypot(...a) * Math.hypot(...b)),
+          ),
+        ) *
+          180) /
+        Math.PI;
+      expect(deg).toBeLessThan(2);
+    }
+  });
+
+  it('keeps the gun on the shot at once: a shot raises it with no ease, and it points at the last focus', () => {
+    const book = new Map<number, Runner>();
+    animate(book, [armed()], DT);
+    animate(book, [armed({ shots: 1 })], DT);
+    expect(book.get(1)!.aim).toBe(1);
   });
 });

@@ -11,7 +11,7 @@ import type { World } from '../shared/world';
 import type { Audio } from './audio';
 import type { Tracer } from './beams';
 import type { Effects } from './effects';
-import { aimed, tip } from './gun';
+import { aimed, focus, tip } from './gun';
 import type { Hud } from './hud';
 import { basis } from './mesh';
 import type { Vec3 } from './mesh';
@@ -25,8 +25,37 @@ export interface View {
   pitch: number;
   /** The pitch the camera draws at: the look plus the shake. */
   drawn: number;
+  /** The own muzzle (the emitter) in the camera's space. */
   muzzle: Vec3;
+  /** Where the look ray ends, from sight(): the beam goes there. */
+  end: Vec3;
+  hit: boolean;
 }
+
+/**
+ * Where the own shots end: the first wall along the look ray from the eye, or the range. `local` is
+ * that point in the camera's space (right, up, forward), which is turned by the drawn pitch, so
+ * that the gun can point at it.
+ */
+export const sight = (
+  world: World,
+  eye: Vec3,
+  cam: Vec3,
+  yaw: number,
+  pitch: number,
+  drawn: number,
+): { end: Vec3; hit: boolean; local: Vec3 } => {
+  const look = basis(yaw, pitch)[2];
+  const d = ray(world, eye, look, GUN_RANGE);
+  const end = [0, 1, 2].map(i => eye[i] + look[i] * d) as Vec3;
+  return {
+    end,
+    hit: d < GUN_RANGE,
+    local: basis(yaw, drawn).map(
+      a => (end[0] - cam[0]) * a[0] + (end[1] - cam[1]) * a[1] + (end[2] - cam[2]) * a[2],
+    ) as Vec3,
+  };
+};
 
 export interface Combat {
   /** One live step of the own player, its state before and after: the recoil and the kick of each shot it fired. */
@@ -112,16 +141,9 @@ export const createCombat = (
         const from: Vec3 = [0, 1, 2].map(
           i => v.cam[i] + r[i] * m[0] + u[i] * m[1] + f[i] * m[2],
         ) as Vec3;
-        const look = basis(v.yaw, v.pitch)[2];
-        const d = ray(world, v.eye, look, GUN_RANGE);
         tracer.mount(from);
         for (; pending > 0; pending--) {
-          tracer.shoot(
-            from,
-            [0, 1, 2].map(i => v.eye[i] + look[i] * d) as Vec3,
-            d < GUN_RANGE,
-            true,
-          );
+          tracer.shoot(from, v.end, v.hit, true);
           laser();
         }
       }
@@ -129,16 +151,11 @@ export const createCombat = (
       for (const p of others) {
         const was = seen.get(p.id);
         const n = Math.min(was === undefined ? 0 : (p.shots - was) & 255, BURST);
-        const [grip, ax] = aimed(p);
-        const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
+        const [to, hit] = focus(p, world);
+        const [grip, ax] = aimed(p, to);
         for (let i = 0; i < n; i++) {
-          const d = ray(world, eye, ax[2], GUN_RANGE);
-          tracer.shoot(
-            tip(grip, ax),
-            [0, 1, 2].map(k => eye[k] + ax[2][k] * d) as Vec3,
-            d < GUN_RANGE,
-          );
-          laser(eye);
+          tracer.shoot(tip(grip, ax), to, hit);
+          laser([p.x, p.y + eyeHeight(p), p.z]);
         }
         seen.set(p.id, p.shots);
       }

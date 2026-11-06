@@ -1,9 +1,13 @@
 // The gun: a curved alien sidearm lofted from rings (violet metal, cyan glow), and the maths of the
 // hand that holds it. Model space has the middle of the grip at the origin, x right, y up, the
 // muzzle toward -z (like mesh.ts); place() carries it to the world. No DOM.
+import { GUN_RANGE } from '../shared/constants';
 import { TAU, eyeHeight } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
-import { basis, place } from './mesh';
+import { ray } from '../shared/world';
+import type { World } from '../shared/world';
+import { glow as lit, tri } from './flag';
+import { add, basis, dot, place, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
@@ -104,22 +108,27 @@ const metal =
   };
 const glow: Paint = () => [GLOW[0], GLOW[1], -2, GLOW[2]];
 
-/** Where the muzzle is, between the two jaws; and the grip's tilt: its lower end goes back by TILT[0] for each TILT[1] down. */
-export const MUZZLE: Vec3 = [0, 0.04, -0.225];
+/**
+ * The back of the body and the muzzle, between the jaws, in model space (the tail and the front of
+ * the emitter): the line through them is the gun's long axis, the way it points and the way the
+ * beam leaves. The grip's tilt: its lower end goes back by TILT[0] for each TILT[1] down.
+ */
+export const REAR: Vec3 = [0, 0.095, 0.06];
+export const MUZZLE: Vec3 = [0, 0.075, -0.21];
 export const TILT = [Math.sin(0.4), Math.cos(0.4)];
 
 // The side view, forward then up, in metres from the middle of the grip. The hand sits in the gap
 // between the upper body and the lower shell, round the short grip that joins them.
-// The upper body: a bulb widest at the back and top, tapering to the front.
+// The upper body: a smooth bulb widest at the back and top, tapering to the front.
 const BULB: Station[] = [
   [-0.06, 0.095, 0, 0],
   [-0.055, 0.098, 0.022, 0.022],
   [-0.035, 0.103, 0.042, 0.036],
   [-0.005, 0.104, 0.048, 0.04],
-  [0.035, 0.098, 0.044, 0.038],
-  [0.08, 0.088, 0.036, 0.034],
-  [0.12, 0.074, 0.028, 0.028],
-  [0.135, 0.066, 0, 0],
+  [0.035, 0.1, 0.044, 0.038],
+  [0.08, 0.094, 0.036, 0.034],
+  [0.12, 0.088, 0.028, 0.028],
+  [0.135, 0.084, 0, 0],
 ];
 /** The lower shell, a hull that runs from under the jaws back under the hand. */
 const HULL: Station[] = [
@@ -128,24 +137,25 @@ const HULL: Station[] = [
   [-0.025, -0.052, 0.032, 0.018],
   [0.01, -0.066, 0.036, 0.02],
   [0.06, -0.06, 0.034, 0.02],
-  [0.11, -0.042, 0.028, 0.018],
-  [0.16, -0.012, 0.02, 0.014],
-  [0.2, 0.018, 0.012, 0.01],
-  [0.222, 0.032, 0, 0],
+  [0.11, -0.04, 0.028, 0.018],
+  [0.16, 0, 0.02, 0.014],
+  [0.2, 0.04, 0.012, 0.01],
+  [0.222, 0.065, 0, 0],
 ];
 const built: number[][] = [];
 
 /**
  * The gun at a level of detail (0 far, 1 near), built once, in the vertex format of mesh.ts, after
- * the Halo plasma pistol: a bulbous upper body that splits into two jaws around a glowing
- * emitter, a chunky lower shell under the hand, a short thick grip between them, ridges and a fin
- * on the back, and cyan strips along the sides.
+ * the Halo plasma pistol: a smooth bulbous upper body that splits into two jaws around a glowing
+ * emitter, a chunky lower shell under the hand, a short thick grip between them, and cyan strips
+ * along the sides.
  */
 export const gun = (lod: number): number[] => {
   if (built[lod]) {
     return built[lod];
   }
-  const n = lod ? 8 : 5;
+  // The body and the hull have the most rings round, the top is a smooth curve.
+  const [n, m] = lod ? [12, 8] : [8, 5];
   const out: number[] = [];
   tube(out, BULB, n, metal());
   tube(out, HULL, n, metal(0.25));
@@ -159,60 +169,25 @@ export const gun = (lod: number): number[] => {
       [-0.02, -0.046, 0.021, 0.022],
       [-0.03, -0.06, 0, 0],
     ],
-    n,
+    m,
     metal(0.1),
   );
-  // The dorsal ridge, and the fin at the back, with a bead of light on its tip.
-  tube(
-    out,
-    [
-      [-0.045, 0.136, 0, 0],
-      [-0.035, 0.139, 0.006, 0.007],
-      [-0.005, 0.144, 0.008, 0.009],
-      [0.035, 0.137, 0.008, 0.008],
-      [0.08, 0.123, 0.006, 0.007],
-      [0.1, 0.115, 0, 0],
-    ],
-    lod ? 6 : 4,
-    metal(-0.3),
-  );
-  tube(
-    out,
-    [
-      [-0.03, 0.14, 0, 0],
-      [-0.04, 0.148, 0.005, 0.012],
-      [-0.062, 0.162, 0.004, 0.01],
-      [-0.085, 0.176, 0, 0],
-    ],
-    4,
-    metal(0.05),
-  );
-  tube(
-    out,
-    [
-      [-0.08, 0.173, 0, 0],
-      [-0.085, 0.175, 0.005, 0.005],
-      [-0.092, 0.18, 0, 0],
-    ],
-    4,
-    glow,
-  );
   for (const s of [-1, 1]) {
-    // A jaw: a stout prong that curves down and in from the front of the bulb.
+    // A jaw: a stout prong from the front of the bulb, level, with its tip turned down a little.
     tube(
       out,
       [
-        [0.06, 0.092, 0.018, 0.03, 0.026 * s],
-        [0.1, 0.084, 0.017, 0.028, 0.027 * s],
-        [0.15, 0.07, 0.015, 0.024, 0.024 * s],
-        [0.19, 0.052, 0.012, 0.018, 0.019 * s],
-        [0.222, 0.036, 0.008, 0.012, 0.015 * s],
-        [0.232, 0.032, 0, 0, 0.014 * s],
+        [0.06, 0.095, 0.018, 0.03, 0.026 * s],
+        [0.1, 0.093, 0.017, 0.028, 0.027 * s],
+        [0.15, 0.088, 0.015, 0.024, 0.024 * s],
+        [0.19, 0.081, 0.012, 0.018, 0.019 * s],
+        [0.222, 0.074, 0.008, 0.012, 0.015 * s],
+        [0.232, 0.07, 0, 0, 0.014 * s],
       ],
-      n,
+      m,
       metal(0.05),
     );
-    // A strip of light along each side of the bulb and of the hull; a raised plate above the strip.
+    // A strip of light along each side of the bulb and of the hull.
     tube(
       out,
       BULB.slice(1, 6).map(([f, y, a, b]): Station => [
@@ -237,30 +212,18 @@ export const gun = (lod: number): number[] => {
       lod ? 5 : 3,
       glow,
     );
-    tube(
-      out,
-      BULB.slice(1, 5).map(([f, y, a, b]): Station => [
-        f,
-        y + 0.55 * b,
-        0.007,
-        0.011,
-        s * a * 0.86,
-      ]),
-      lod ? 5 : 3,
-      metal(-0.25),
-    );
   }
   // The emitter between the jaws.
   tube(
     out,
     [
-      [0.09, 0.082, 0, 0],
-      [0.1, 0.082, 0.009, 0.009],
-      [0.15, 0.068, 0.009, 0.009],
-      [0.2, 0.05, 0.007, 0.007],
-      [0.21, 0.047, 0, 0],
+      [0.09, 0.088, 0, 0],
+      [0.1, 0.088, 0.009, 0.009],
+      [0.15, 0.084, 0.009, 0.009],
+      [0.2, 0.078, 0.007, 0.007],
+      [-MUZZLE[2], MUZZLE[1], 0, 0],
     ],
-    n,
+    m,
     glow,
   );
   return (built[lod] = out);
@@ -283,20 +246,136 @@ export const grip = (pos: Vec3, q: Quat): Vec3 => {
   return pos.map((v, i) => v + fing[i] * 0.078 - back[i] * 0.022) as Vec3;
 };
 
-/** Appends the gun held in the hand at `pos` with the world rotation `q`, `k` times its size about the grip. */
-export const held = (out: number[], pos: Vec3, q: Quat, lod: number, k = 1) =>
-  place(out, gun(lod), grip(pos, q), axes(q), [0, 0, 0], k);
+/** The surface of the top of the body at x across and f ahead, in metres: the bulb's rings, as the tube makes them. */
+const top = (x: number, f: number): number => {
+  const i = Math.min(
+    Math.max(
+      BULB.findIndex((s, k) => f <= BULB[k + 1][0] && f >= s[0]),
+      0,
+    ),
+    BULB.length - 2,
+  );
+  const [p, q] = [BULB[i], BULB[i + 1]];
+  const t = Math.min(Math.max((f - p[0]) / (q[0] - p[0]), 0), 1);
+  const [yc, hw, hh] = [
+    p[1] + (q[1] - p[1]) * t,
+    p[2] + (q[2] - p[2]) * t,
+    p[3] + (q[3] - p[3]) * t,
+  ];
+  return yc + hh * (1 - Math.min(Math.abs(x) / (hw || 1), 1) ** 2.5) ** 0.4;
+};
+
+/** The segments of the digits 0 to 9, a to g: top, top right, bottom right, bottom, bottom left, top left, middle. */
+const DIGITS = [
+  'abcdef',
+  'bc',
+  'abdeg',
+  'abcdg',
+  'bcfg',
+  'acdfg',
+  'acdefg',
+  'abc',
+  'abcdefg',
+  'abcdfg',
+  'g',
+];
+const [DW, DH, DT, DGAP, DBACK] = [0.024, 0.038, 0.0075, 0.005, -0.046];
+/** The rectangle of each segment in a digit: across and ahead from its back left corner. */
+const SEGMENTS: Record<string, [number, number, number, number]> = {
+  a: [0, DH - DT, DW, DH],
+  b: [DW - DT, DH / 2, DW, DH],
+  c: [DW - DT, 0, DW, DH / 2],
+  d: [0, 0, DW, DT],
+  e: [0, 0, DT, DH / 2],
+  f: [0, DH / 2, DT, DH],
+  g: [0, (DH - DT) / 2, DW, (DH + DT) / 2],
+};
+const readouts = new Map<number, number[]>();
+
+/**
+ * The ammo as two glowing seven-segment digits on the top of the body, in model space, facing up
+ * and read from behind: cyan, red at 10 or fewer. Thin quads laid on the bulb's surface. 99 at most.
+ */
+export const readout = (ammo: number): number[] => {
+  const n = Math.min(Math.max(Math.floor(ammo), 0), 99);
+  let out = readouts.get(n);
+  if (!out) {
+    const v: number[] = (out = []);
+    const text = `${n}`.padStart(2, '0');
+    [...text].forEach((c, i) => {
+      const x0 = -DW - DGAP / 2 + i * (DW + DGAP);
+      for (const s of DIGITS[+c]) {
+        const [a, b, d, e] = SEGMENTS[s];
+        // A quad lifted a hair off the surface, up, wound so that its normal points up.
+        const at = (x: number, t: number): Vec3 => [
+          x0 + x,
+          top(x0 + x, DBACK + t) + 0.0012,
+          -(DBACK + t),
+        ];
+        const [p, q, r, u] = [at(a, b), at(d, b), at(d, e), at(a, e)];
+        tri(v, p, q, r, n > 10 ? [0.2, 0.75, 0.9] : [0.9, 0.12, 0.1]);
+        tri(v, p, r, u, n > 10 ? [0.2, 0.75, 0.9] : [0.9, 0.12, 0.1]);
+      }
+    });
+    lit(v, 0, 1.25);
+    readouts.set(n, out);
+  }
+  return out;
+};
+
+/**
+ * Appends the gun held in the hand at `pos` with the world rotation `q`, `k` times its size about
+ * the grip, with the ammo on its back when given.
+ */
+export const held = (out: number[], pos: Vec3, q: Quat, lod: number, k = 1, ammo?: number) => {
+  const [at, ax] = [grip(pos, q), axes(q)];
+  place(out, gun(lod), at, ax, [0, 0, 0], k);
+  if (ammo !== undefined) {
+    place(out, readout(ammo), at, ax, [0, 0, 0], k);
+  }
+};
 
 /** The muzzle of a gun whose grip is at `at` and whose axes are [right, up, forward]. */
 export const tip = (at: Vec3, [, u, f]: Vec3[]): Vec3 =>
   [0, 1, 2].map(i => at[i] + u[i] * MUZZLE[1] - f[i] * MUZZLE[2]) as Vec3;
 
-/** Where a runner holds the gun when it fires: the grip, a little right of and below the eye, and the gun's axes along the look. */
-export const aimed = (p: PlayerState): [Vec3, Vec3[]] => {
-  const ax = basis(p.yaw, p.pitch);
+/** How far the model's long axis (REAR to MUZZLE) points below the gun's own forward, radians. */
+const SAG = Math.atan2(REAR[1] - MUZZLE[1], REAR[2] - MUZZLE[2]);
+
+/**
+ * The axes [right, up, forward] of a gun held with its grip at `at` so that its long axis, from the
+ * back of the body to the emitter, points at `to`: the beam leaves the emitter along it. `side` is
+ * where the right axis points, `up` where up is. The emitter is off the grip, so the axes are found
+ * in three rounds.
+ */
+export const pointed = (at: Vec3, to: Vec3, side: Vec3, up: Vec3): Vec3[] => {
+  const scale = (v: Vec3, k: number): Vec3 => [v[0] * k, v[1] * k, v[2] * k];
+  let ax: Vec3[] = [side, up, unit(sub(to, at))];
+  for (let k = 0; k < 3; k++) {
+    const d = unit(sub(to, k ? tip(at, ax) : at));
+    // Right and up as near `side` and `up` as they can be, across d: no cross product, so the
+    // handedness of the space does not matter (the camera's space is a mirror of the world's).
+    const r = unit(sub(side, scale(d, dot(side, d))));
+    const u = unit(sub(sub(up, scale(d, dot(up, d))), scale(r, dot(up, r))));
+    // The long axis dips below the gun's forward: turned about r, so that it lies along d.
+    const [s, c] = [Math.sin(SAG), Math.cos(SAG)];
+    ax = [r, add(scale(u, c), scale(d, -s)), add(scale(d, c), scale(u, s))];
+  }
+  return ax;
+};
+
+/** Where a runner's shots end: the first wall along its look from the eye, or the range. */
+export const focus = (p: PlayerState, world: World): [Vec3, boolean] => {
   const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
-  return [
-    [0, 1, 2].map(i => eye[i] + ax[0][i] * 0.2 - ax[1][i] * 0.17 + ax[2][i] * 0.42) as Vec3,
-    ax,
-  ];
+  const f = basis(p.yaw, p.pitch)[2];
+  const d = ray(world, eye, f, GUN_RANGE);
+  return [[0, 1, 2].map(i => eye[i] + f[i] * d) as Vec3, d < GUN_RANGE];
+};
+
+/** Where a runner holds the gun when it fires at `to`: the grip, a little right of and below the eye, and the gun's axes. */
+export const aimed = (p: PlayerState, to: Vec3): [Vec3, Vec3[]] => {
+  const [r, u, f] = basis(p.yaw, p.pitch);
+  const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
+  const grip = [0, 1, 2].map(i => eye[i] + r[i] * 0.2 - u[i] * 0.17 + f[i] * 0.42) as Vec3;
+  return [grip, pointed(grip, to, r, u)];
 };

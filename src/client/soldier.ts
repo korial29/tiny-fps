@@ -9,8 +9,8 @@ import type { World } from '../shared/world';
 import { inv, reach } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
-import { aimed, held } from './gun';
-import { unit } from './mesh';
+import { TILT, aimed, focus, held } from './gun';
+import { basis, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, mul, slerp, solve } from './rig';
 import type { Pose } from './rig';
@@ -18,6 +18,12 @@ import { body, palette, skin } from './skin';
 
 /** How fast the dash streaks grow and fade, 1 / s. */
 const DASH_RATE = 14;
+
+/** A point 30 m along the look of `p`, for a runner that has not shot yet. */
+const far = (p: PlayerState): Vec3 => {
+  const f = basis(p.yaw, p.pitch)[2];
+  return [p.x + f[0] * 30, p.y + 1.6 + f[1] * 30, p.z + f[2] * 30];
+};
 
 /** What a runner keeps between frames. */
 export interface Runner {
@@ -29,6 +35,8 @@ export interface Runner {
   /** Seconds since its last shot, and how far its gun arm is raised to aim, eased from 0 to 1. */
   since: number;
   aim: number;
+  /** Where its last shot went, which its gun points at. */
+  focus: Vec3;
 }
 
 /** Seconds after a shot that the gun stays up. */
@@ -40,7 +48,7 @@ const dashing = (p: PlayerState) => p.dash > DASH_COOLDOWN - DASH_TICKS;
 export const createRunner = (p: PlayerState): Runner => {
   const gait = createGait();
   gait.update(p, 0);
-  return { p: { ...p }, gait, dash: +dashing(p), since: 1e3, aim: 0 };
+  return { p: { ...p }, gait, dash: +dashing(p), since: 1e3, aim: 0, focus: far(p) };
 };
 
 /** The floor under a player standing at height `y`: the first top within a step above or below it. */
@@ -73,7 +81,9 @@ export const animate = (
       r.gait.update(p, dt, world && floorOf(world, p.y));
       r.dash += (+dashing(p) - r.dash) * (1 - Math.exp(-dt * DASH_RATE));
       r.since = p.shots == r.p.shots ? r.since + dt : 0;
-      r.aim += (+(r.since < AIMING) - r.aim) * (1 - Math.exp(-dt * 12));
+      // A shot raises the gun at once, so that it points at the shot when the beam is drawn.
+      r.aim = r.since == 0 ? 1 : r.aim + (+(r.since < AIMING) - r.aim) * (1 - Math.exp(-dt * 12));
+      r.focus = r.since < AIMING ? (world ? focus(p, world)[0] : far(p)) : r.focus;
       r.p = { ...p };
     } else {
       book.set(p.id, createRunner(p));
@@ -82,11 +92,17 @@ export const animate = (
 };
 
 /** The pose with the right arm `k` of the way to holding the gun out along the look of `p`. */
-const lifted = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState, k: number): Pose => {
-  const [grip, ax] = aimed(p);
+const lifted = (
+  pose: Pose,
+  s: ReturnType<typeof solve>,
+  p: PlayerState,
+  focused: Vec3,
+  k: number,
+): Pose => {
+  const [grip, ax] = aimed(p, focused);
   const rot = pose.rot.slice();
   const q = { ...pose, rot };
-  const [uh, fh] = [ax[0], ax[2].map((v, i) => v * 0.92 - ax[1][i] * 0.38) as Vec3];
+  const [uh, fh] = [ax[0], ax[2].map((v, i) => v * TILT[1] - ax[1][i] * TILT[0]) as Vec3];
   const wrist = grip.map((v, i) => v - 0.078 * fh[i] + 0.022 * uh[i]) as Vec3;
   const pole: Vec3 = [uh[0] * 0.7, -1, uh[2] * 0.7];
   reach(
@@ -138,7 +154,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   }
   let s = solve(pose);
   if (r.aim > 0.01 && p.ammo >= 0) {
-    pose = lifted(pose, s, p, r.aim);
+    pose = lifted(pose, s, p, r.focus, r.aim);
     s = solve(pose);
   }
   skin(out, body(lod), s, palette(color));

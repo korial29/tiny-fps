@@ -46,6 +46,8 @@ export interface CtfScene {
   /** Each team's gun rack, where it has one, and the health packs that are there to take. */
   racks?: readonly (Vec3 | undefined)[];
   packs?: readonly Vec3[];
+  /** The ammo packs that are there to take. */
+  ammo?: readonly Vec3[];
 }
 
 /** The flags to draw from a snapshot: each at its base, where it lies, or on the back of its carrier (none if he is not drawn). */

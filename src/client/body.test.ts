@@ -8,8 +8,8 @@ import type { Body } from './body';
 import { MUZZLE, REAR, gun, readout } from './gun';
 import { STRIDE, add, basis, dot, sub } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, turn } from './rig';
-import { body as skinOf, palette } from './skin';
+import { JOINT as J, rest, solve, turn } from './rig';
+import { CUFF, CUFF_SIDES, body as skinOf, palette } from './skin';
 
 const DT = 1 / 60;
 const TEAM = [0.1, 0.8, 0.2];
@@ -95,8 +95,8 @@ const draw = (body: Body, p: PlayerState, pitch = 0, color = TEAM): Vert[] => {
   });
 };
 const colored = (v: Vert[], c: number[]) => v.filter(q => c.every((n, i) => q.c[i] == n));
-/** Vertices of the palm, of a finger or the thumb, and of a hand: a tube of 7 sides and 5 rings, one of 6 sides and 6. */
-const [PALM, FINGER] = [147, 162];
+/** Vertices of the palm, of a finger or the thumb, and of a hand: a tube of the cuff's sides and 5 rings, one of 6 sides and 6. */
+const [PALM, FINGER] = [21 * CUFF_SIDES, 162];
 const HAND = PALM + 5 * FINGER;
 const away = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
@@ -140,7 +140,7 @@ describe('body', () => {
     ]) {
       for (const pitch of [0, -1.2, 1]) {
         const v = draw(watch(p, 40), p, pitch);
-        // The near runner minus its head, neck and fists, plus two hands of 957 vertices each.
+        // The near runner minus its head, neck and fists, plus two hands of under a thousand vertices each.
         expect(v.length).toBeGreaterThan(3500);
         expect(v.length).toBeLessThanOrEqual(5000);
         for (const { at, n } of v) {
@@ -559,7 +559,7 @@ describe('body', () => {
               at.set(k, n);
             }
             // Along a finger's edge the normal never turns more than 80 degrees, the knuckle of a fist included;
-            // the palm's side, a flat 7-gon edge, 110.
+            // the palm's side, a flat edge of the few-sided ring, 110.
             const most = t.length == PALM ? 110 : 80;
             for (let i = 0; i < t.length; i += 3) {
               for (let j = 0; j < 3; j++) {
@@ -587,17 +587,19 @@ describe('body', () => {
       });
 
       it('start at the sleeve: the palm begins on the ring of the cuff, vertex for vertex', () => {
-        const rim = skinOf(2).v;
+        const [rim, wrist] = [skinOf(2).v, solve(rest()).pos[J.HAND_R]];
         const cuff: Vec3[] = [];
         for (let i = 0; i < rim.length; i += 6) {
           // The right arm's ring at y = 0.925 (the sleeve ends there), in the hand's space.
-          if (rim[i] > 0 && Math.abs(rim[i + 1] - 0.925) < 1e-6) {
-            cuff.push([-rim[i + 2], rim[i] - 0.22, 0.92 - rim[i + 1]]);
+          if (rim[i] > 0 && Math.abs(rim[i + 1] - CUFF[0]) < 1e-6) {
+            cuff.push([-rim[i + 2], rim[i] - wrist[0], wrist[1] - rim[i + 1]]);
           }
         }
-        expect(cuff).toHaveLength(7);
+        expect(cuff).toHaveLength(CUFF_SIDES);
         const [palm] = tubes(0.5);
-        const ring = palm.filter(v => Math.abs(v.at[2] + 0.005) < 1e-6).map(v => v.at);
+        const ring = palm
+          .filter(v => Math.abs(v.at[2] - (wrist[1] - CUFF[0])) < 1e-6)
+          .map(v => v.at);
         for (const c of cuff) {
           expect(Math.min(...ring.map(r => away(r, c)))).toBeLessThan(1e-4);
         }

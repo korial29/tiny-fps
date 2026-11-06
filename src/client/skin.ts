@@ -133,6 +133,10 @@ const ARM: Loft = {
   ],
 };
 
+/** The ring where the eye's sleeve ends in the glove, which body.ts starts the palm on, and its sides. */
+export const CUFF = [0.925, 0.222, 0, 0.027, 0.027, 2, GLOVE];
+export const CUFF_SIDES = TRUNK.n[1] - 4;
+
 // The nose is a small piece of its own, buried in the face.
 const NOSE: Loft = {
   chain: [J.HEAD],
@@ -191,7 +195,7 @@ const generate = (lod: number): Skin => {
           ? [
               ...L.rings.slice(0, 5),
               [0.95, 0.222, 0, 0.037, 0.037, 1.6, GLOVE],
-              [0.925, 0.222, 0, 0.027, 0.027, 2, GLOVE],
+              CUFF,
               [0.91, 0.222, 0, 0, 0, 2, GLOVE],
             ]
           : lod

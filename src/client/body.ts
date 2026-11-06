@@ -16,9 +16,9 @@ import type { Floor } from './gait';
 import { TILT, held, pointed, tip } from './gun';
 import { add, basis, dot, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, PARENT, axis, mul, slerp, solve, turn as spin } from './rig';
+import { JOINT as J, PARENT, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
-import { body, palette, skin } from './skin';
+import { CUFF, CUFF_SIDES, body, palette, skin } from './skin';
 
 export type Solved = ReturnType<typeof solve>;
 
@@ -121,8 +121,10 @@ const THUMB: [Vec3, Vec3][] = [
     [-0.55, -0.5, 0.65],
   ],
 ];
-/** Sides around a finger and around the palm: the palm's are those of the sleeve's cuff, vertex for vertex. */
-const [FINGER_SIDES, PALM_SIDES] = [6, 7];
+/** Sides around a finger. */
+const FINGER_SIDES = 6;
+/** The wrist joint at rest: the cuff's ring is placed from it. */
+const WRIST = solve(rest()).pos[J.HAND_R];
 
 /** A ring of a tube: its centre and its two half axes. */
 type Ring = [c: Vec3, x: Vec3, y: Vec3];
@@ -247,7 +249,7 @@ export const hand = (
       -1,
       tint[2],
     );
-  // The cuff's rim: a 2.7 cm circle just behind the wrist joint, its normals leaning to the fingers.
+  // The palm starts as the sleeve's cuff does, vertex for vertex, its normals leaning to the fingers.
   const palm = ([z, y, a, b]: number[]): Ring => [
     [0, y, z],
     [a, 0, 0],
@@ -255,13 +257,13 @@ export const hand = (
   ];
   tube(
     [
-      palm([-0.005, 0.002, 0.027, 0.027]),
+      palm([WRIST[1] - CUFF[0], CUFF[1] - WRIST[0], CUFF[3], CUFF[4]]),
       palm([0.025, 0, 0.04, 0.021]),
       palm([0.06, -0.002, 0.0425, 0.017]),
       palm([0.092, -0.004, 0.0425, 0.0105]),
       palm([0.104, -0.004, 0, 0]),
     ],
-    PALM_SIDES,
+    CUFF_SIDES,
     put,
     0.75,
   );

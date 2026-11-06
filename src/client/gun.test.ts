@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { STILL } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
-import { MUZZLE, TILT, aimed, grip, gun, held, tip } from './gun';
+import { GUN_RANGE } from '../shared/constants';
+import { build } from '../shared/world';
+import { MUZZLE, REAR, TILT, aimed, focus, grip, gun, held, pointed, readout, tip } from './gun';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { axis, turn } from './rig';
@@ -81,6 +83,21 @@ describe('the gun model', () => {
     // The finish is iridescent: the metal is not one colour.
     const reds = metal.map(v => v.c[0]);
     expect(Math.max(...reds) - Math.min(...reds)).toBeGreaterThan(0.1);
+  });
+
+  it('has a smooth top: no ridge, plate or fin over the body, and rings enough round it', () => {
+    // The highest point is the body's own top; every vertex above the grip stays within 4 mm of it.
+    const topY = Math.max(...near.map(v => v.p[1]));
+    expect(topY).toBeLessThan(0.15);
+    // Round the body there are at least 12 sides: its widest ring has 12 vertices at one place.
+    const ring = near.filter(v => Math.abs(v.p[2] - 0.005) < 1e-9 && v.layer == -1);
+    expect(ring.length).toBeGreaterThanOrEqual(12);
+    // No sharp edge on top: the normals of the top vertices all face up.
+    const crest = near.filter(v => v.p[1] > 0.135 && v.layer == -1);
+    expect(crest.length).toBeGreaterThan(20);
+    for (const v of crest) {
+      expect(v.n[1]).toBeGreaterThan(0.7);
+    }
   });
 
   it('is about a hand and a half long, with the muzzle at the front between two jaws', () => {
@@ -167,6 +184,57 @@ describe('the hand that holds it', () => {
   });
 });
 
+describe('the long axis', () => {
+  /** The model's back of the body and emitter carried by axes `ax` at the grip `at`: the gun's long axis in the world. */
+  const axis = (at: Vec3, ax: Vec3[]): { from: Vec3; dir: Vec3 } => {
+    const [, u, f] = ax;
+    const rear = [0, 1, 2].map(i => at[i] + u[i] * REAR[1] - f[i] * REAR[2]);
+    const e = tip(at, ax);
+    return { from: e, dir: [e[0] - rear[0], e[1] - rear[1], e[2] - rear[2]] };
+  };
+  const angle = (a: number[], b: number[]) =>
+    (Math.acos(
+      Math.min(
+        1,
+        (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (Math.hypot(...a) * Math.hypot(...b)),
+      ),
+    ) *
+      180) /
+    Math.PI;
+
+  it.each([[[0, 0, 4]], [[0, 0, 80]], [[3, 1, 6]], [[-5, -2, 30]], [[0, 9, 10]]] as [Vec3][])(
+    'points from the back of the body through the emitter at the target %j, wherever the grip is',
+    to => {
+      for (const at of [
+        [0.3, -0.2, 0.45],
+        [0.2, -0.17, 0.42],
+        [-0.3, -0.1, 0.5],
+      ] as Vec3[]) {
+        const ax = pointed(at, to, [1, 0, 0], [0, 1, 0]);
+        const { from, dir } = axis(at, ax);
+        expect(
+          angle(
+            dir,
+            to.map((v, i) => v - from[i]),
+          ),
+        ).toBeLessThan(0.1);
+        // An orthonormal frame, up still up and right still right.
+        for (const a of ax) {
+          expect(Math.hypot(...a)).toBeCloseTo(1, 6);
+        }
+        expect(ax[0][0] * ax[1][0] + ax[0][1] * ax[1][1] + ax[0][2] * ax[1][2]).toBeCloseTo(0, 6);
+        expect(ax[1][1]).toBeGreaterThan(0.6);
+        expect(ax[0][0]).toBeGreaterThan(0.85);
+      }
+    },
+  );
+
+  it('does not depend on the handedness of the space: the camera space (a mirror of the world) gives the same angle', () => {
+    const ax = pointed([0.27, -0.22, 0.42], [0, 0, 5], [1, 0, 0], [0, 1, 0]);
+    expect(ax[1][1]).toBeGreaterThan(0.9);
+  });
+});
+
 describe('aimed', () => {
   const p = (o: Partial<PlayerState> = {}): PlayerState => ({
     id: 1,
@@ -180,21 +248,140 @@ describe('aimed', () => {
     ...STILL,
     ...o,
   });
+  const far: Vec3 = [4, 3.6, -86];
 
-  it('holds the gun out ahead of the eye, a little right and below, along the look', () => {
-    const [at, [r, u, f]] = aimed(p());
+  it('holds the gun out ahead of the eye, a little right and below it', () => {
+    const [at] = aimed(p(), far);
     expect(at[0]).toBeCloseTo(4.2, 6);
     expect(at[1]).toBeCloseTo(2 + 1.6 - 0.17, 6);
     expect(at[2]).toBeCloseTo(-6.42, 6);
-    expect(f).toEqual([expect.closeTo(0, 6), expect.closeTo(0, 6), expect.closeTo(-1, 6)]);
-    expect(r[0]).toBeCloseTo(1, 6);
-    expect(u[1]).toBeCloseTo(1, 6);
+  });
+
+  it('points the gun at the target, near or far: the beam from its emitter to it is along its long axis', () => {
+    for (const to of [far, [6, 3, -9], [1, 3.6, -3.5], [4, 20, -20]] as Vec3[]) {
+      const [at, ax] = aimed(p({ yaw: 0.4, pitch: 0.1 }), to);
+      const e = tip(at, ax);
+      const rear = [0, 1, 2].map(i => at[i] + ax[1][i] * REAR[1] - ax[2][i] * REAR[2]);
+      const [a, b] = [[0, 1, 2].map(i => e[i] - rear[i]), [0, 1, 2].map(i => to[i] - e[i])];
+      expect(
+        (Math.acos(
+          (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (Math.hypot(...a) * Math.hypot(...b)),
+        ) *
+          180) /
+          Math.PI,
+      ).toBeLessThan(0.1);
+    }
   });
 
   it('follows the pitch: looking up raises the muzzle', () => {
-    const [a] = aimed(p());
-    const [b, ax] = aimed(p({ pitch: 0.6 }));
-    expect(b[1]).toBeGreaterThan(a[1] - 0.2);
-    expect(tip(b, ax)[1]).toBeGreaterThan(tip(a, aimed(p())[1])[1] + 0.1);
+    const [a, ax] = aimed(p(), far);
+    const to: Vec3 = [4, 40, -80];
+    const [b, bx] = aimed(p({ pitch: 0.5 }), to);
+    expect(tip(b, bx)[1]).toBeGreaterThan(tip(a, ax)[1] + 0.1);
+  });
+});
+
+describe('focus', () => {
+  const world = build({
+    brushes: [{ min: [-10, -5, -30], max: [10, 10, -20], top: 0, side: 0 }],
+    teams: [
+      { base: [0, 0, 0], spawns: [[0, 0, 0, 0]] },
+      { base: [0, 0, 0], spawns: [[0, 0, 0, 0]] },
+    ],
+    floor: -25,
+    sun: { dir: [0, 1, 0], color: [1, 1, 1] },
+    sky: [
+      [0, 0, 1],
+      [1, 1, 1],
+    ],
+  });
+  const man = (o: Partial<PlayerState>): PlayerState => ({
+    id: 1,
+    x: 0,
+    y: 0,
+    z: 0,
+    vy: 0,
+    yaw: 0,
+    pitch: 0,
+    ground: true,
+    ...STILL,
+    ...o,
+  });
+
+  it('is the first wall along the look from the eye, or the range in the open', () => {
+    const [near, hit] = focus(man({}), world);
+    expect(hit).toBe(true);
+    expect(near[2]).toBeCloseTo(-20, 3);
+    const [open, out] = focus(man({ yaw: Math.PI }), world);
+    expect(out).toBe(false);
+    expect(open[2]).toBeCloseTo(GUN_RANGE, 3);
+  });
+});
+
+describe('the readout on the back of the gun', () => {
+  const v = (n: number) => verts(readout(n));
+  const SEGS = [6, 2, 5, 5, 4, 5, 6, 3, 7, 6];
+
+  it('is two digits of thin glowing quads, a pair of triangles to a segment', () => {
+    for (const n of [0, 7, 40, 59, 60, 99]) {
+      const [a, b] = `${n}`.padStart(2, '0');
+      expect(v(n)).toHaveLength((SEGS[+a] + SEGS[+b]) * 6);
+    }
+  });
+
+  it('is unlit and glowing (layer -2, above 1 for the bloom), cyan above ten and red at ten and under', () => {
+    for (const x of v(40)) {
+      expect(x.layer).toBe(-2);
+      expect(x.c[2]).toBeGreaterThan(x.c[0] * 2);
+      expect(Math.max(...x.c)).toBeGreaterThan(1);
+    }
+    for (const n of [10, 5, 0]) {
+      for (const x of v(n)) {
+        expect(x.layer).toBe(-2);
+        expect(x.c[0]).toBeGreaterThan(x.c[1] * 3);
+      }
+    }
+    expect(v(11)[0].c[0]).toBeLessThan(v(11)[0].c[2]);
+  });
+
+  it('lies on the top of the body, facing up, within its width and over its back half', () => {
+    for (const x of v(88)) {
+      expect(Math.abs(x.p[0])).toBeLessThan(0.03);
+      expect(x.p[2]).toBeGreaterThan(-0.02);
+      expect(x.p[2]).toBeLessThan(0.04);
+      expect(x.p[1]).toBeGreaterThan(0.125);
+      expect(x.p[1]).toBeLessThan(0.15);
+      expect(x.n[1]).toBeGreaterThan(0.9);
+    }
+  });
+
+  it('shows a different number differently, and the same number the same', () => {
+    expect(readout(12)).toBe(readout(12));
+    expect(readout(12)).not.toEqual(readout(21));
+    expect(readout(12)).not.toEqual(readout(13));
+  });
+
+  it('reads left to right as the player sees it from behind: the tens on the left', () => {
+    const x = (n: number) => v(n).map(q => q.p[0]);
+    expect(Math.min(...x(10))).toBeLessThan(-0.009);
+    // 1 is two bars on the right of its digit: all of the left digit's marks are left of the right one's.
+    const left = v(10).filter(q => q.p[0] < -0.001);
+    expect(left.length).toBeGreaterThan(0);
+    expect(Math.max(...left.map(q => q.p[0]))).toBeLessThan(0.002);
+    expect(Math.max(...x(10))).toBeGreaterThan(0.01);
+  });
+
+  it('is clamped to two digits and to zero', () => {
+    expect(readout(250)).toBe(readout(99));
+    expect(readout(-3)).toBe(readout(0));
+  });
+
+  it('is drawn with the gun when given the ammo, and not without', () => {
+    const [a, b, c] = [0, 1, 2].map(() => [] as number[]);
+    held(a, [0, 0, 0], IDENT, 1);
+    held(b, [0, 0, 0], IDENT, 1, 1, 30);
+    held(c, [0, 0, 0], IDENT, 0, 1, 30);
+    expect(b.length).toBe(a.length + readout(30).length);
+    expect(c.length).toBeGreaterThan(readout(30).length);
   });
 });

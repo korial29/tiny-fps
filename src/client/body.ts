@@ -13,8 +13,8 @@ import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { createGait, frame } from './gait';
 import type { Floor } from './gait';
-import { held, TILT, tip } from './gun';
-import { add, aim, basis, dot, mix, place, segment, solid, sub, unit } from './mesh';
+import { TILT, held, pointed, tip } from './gun';
+import { add, basis, dot, mix, place, segment, solid, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, axis, mul, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
@@ -27,6 +27,11 @@ export interface Body {
   readonly id: number;
   /** Advances dt seconds: the own player, eased (undefined before the first snapshot), the kick of the gun (0 to 1) and the aspect of the screen, which keeps the gun in a narrow one. */
   update(me: PlayerState | undefined, dt: number, kick?: number, aspect?: number): void;
+  /**
+   * Where the look ray ends, in the camera's space (right, up, forward), each frame: the gun points
+   * at it, at least 3 m out, so that the beam leaves the emitter along its long axis.
+   */
+  aim(target: Vec3): void;
   /** The muzzle of the gun in the right hand, in the camera's space (right, up, forward), as of the last update. */
   muzzle(): Vec3;
   /** The joints for a camera at `eye`; undefined without a player, or with the camera away from the body. */
@@ -201,6 +206,8 @@ export const createBody = (world?: World): Body => {
   };
   /** The kick of the last shot, 0 to 1, and how much of the right hand's pose the gun takes, as of the last pose(). */
   let [kick, hold, wide] = [0, 0, 1.6];
+  /** Where the gun points, in the camera's space. */
+  let target: Vec3 = [0, 0, 8];
   /** Seconds, for the flailing of a stumble. */
   let clock = 0;
   /** Which hand the wall is on: -1 left, 1 right, eased. */
@@ -249,18 +256,19 @@ export const createBody = (world?: World): Body => {
 
   /**
    * The gun in camera space: where its grip is (lower right, rising from below as it is taken, kicked
-   * back by a shot, swaying with the run) and its axes, aimed at the crosshair 2.5 m out.
+   * back by a shot, swaying with the run) and its axes, pointing at `target`.
    */
   const holster = (): [Vec3, Vec3[]] => {
     const a = w.amp * (1 + 0.5 * w.sprint);
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     const at: Vec3 = [
-      Math.min(0.27, 0.21 * wide) + 0.012 * a * s,
-      -0.2 + 0.018 * a * c - 0.3 * (1 - w.gun),
-      0.5 - 0.05 * kick,
+      Math.min(0.27, 0.22 * wide) + 0.012 * a * s,
+      -0.22 + 0.018 * a * c - 0.3 * (1 - w.gun),
+      0.42 - 0.05 * kick,
     ];
-    const d = unit([-at[0], 0.1 * kick - at[1], 2.5 - at[2]]);
-    return [at, aim(d, X)];
+    // A shot kicks the nose up.
+    const to: Vec3 = [target[0], target[1] + 0.1 * kick * Math.hypot(...target), target[2]];
+    return [at, pointed(at, to, X, Y)];
   };
 
   const pose: Body['pose'] = (eye, yaw, pitch, roll = 0) => {
@@ -396,9 +404,13 @@ export const createBody = (world?: World): Body => {
           );
         });
         if (hold > 0.2) {
-          held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], 1, clamp(hold * 1.5 - 0.5));
+          held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], 1, clamp(hold * 1.5 - 0.5), me?.ammo);
         }
       }
+    },
+    aim(t) {
+      const l = Math.hypot(...t);
+      target = l < 3 ? (l ? (t.map(v => (v * 3) / l) as Vec3) : [0, 0, 3]) : t;
     },
     muzzle: () => tip(...holster()),
   };

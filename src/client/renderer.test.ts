@@ -386,6 +386,7 @@ describe('createRenderer', () => {
       update: vi.fn(),
       pose: vi.fn(),
       muzzle: () => [0, 0, 0] as [number, number, number],
+      aim: vi.fn(),
       draw,
     });
 
@@ -577,6 +578,20 @@ describe('createRenderer', () => {
       const rack = scene([[1, 0, 1], undefined], []) - none;
       expect(pack).toBeGreaterThan(50);
       expect(rack).toBeGreaterThan(300);
+      // An ammo pack is drawn with the others, and one more is one more.
+      const ammoPack = (n: number) => {
+        calls.length = 0;
+        rd.frame([1, 1.6, 1], 0, 0, [], new Map(), createEffects(), [], undefined, {
+          bases,
+          flags: [],
+          racks: [undefined, undefined],
+          packs: [],
+          ammo: Array.from({ length: n }, (_, i): [number, number, number] => [2, 0, 2 + i]),
+        });
+        return draws()[0][1] - FLOOR_VERTS - none;
+      };
+      expect(ammoPack(1)).toBeGreaterThan(100);
+      expect(ammoPack(2)).toBe(2 * ammoPack(1));
       // Each one more is one more.
       expect(
         scene(

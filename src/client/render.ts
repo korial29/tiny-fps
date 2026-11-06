@@ -17,7 +17,7 @@ import { STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
-import { kit, rack } from './props';
+import { cell, kit, rack } from './props';
 import { animate, soldier } from './soldier';
 import type { Runner } from './soldier';
 import { skyline } from './skyline';
@@ -677,6 +677,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       ctf?.flags.forEach(f => flag(v, f, teamRgb(f.team), now));
       ctf?.racks?.forEach((at, team) => at && rack(v, at, teamRgb(team), now));
       ctf?.packs?.forEach(at => kit(v, at, now));
+      ctf?.ammo?.forEach(at => cell(v, at, now));
       for (const p of others) {
         soldier(
           v,

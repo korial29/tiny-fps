@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EAST, NORTH, Sim } from '../../test/pilot';
+import { problems } from '../../test/pickups';
 import { HIGH, LOW, MID, UP, above, fly, go, leap, plain, trip } from '../../test/routes';
 import type { Leg, Route } from '../../test/routes';
 import { palette, MAX_TINTS } from '../client/render';
@@ -276,6 +277,38 @@ const flown = (r: Route, from: 'red' | 'blue', walk = false) => {
   const back = fly(s, slow(legs.back));
   return { s, there, back, took, home: touches(s.p, mine), evThere };
 };
+
+describe('HIGHLINE, racks and packs', () => {
+  const packs = HIGHLINE.packs!;
+
+  it('stands each rack and pack on a top clear of brushes, off the flag bases', () => {
+    expect(problems(HIGHLINE)).toEqual([]);
+  });
+
+  it('has a rack for each team, side by side with the spawn rows on the tower and mirrored', () => {
+    const [red, blue] = teams.map(t => t.rack!);
+    expect(red).toEqual([47, 26, 234]);
+    expect(blue).toEqual([red[0], red[1], ZED - red[2]]);
+  });
+
+  it('has 8 to 12 health packs, each with a twin across the line, and a few on every route of each half', () => {
+    expect(packs.length).toBeGreaterThanOrEqual(8);
+    expect(packs.length).toBeLessThanOrEqual(12);
+    for (const [x, y, z] of packs) {
+      expect(
+        packs.some(q => q[0] === x && q[1] === y && q[2] === ZED - z),
+        `a twin of ${x}, ${y}, ${z}`,
+      ).toBe(true);
+    }
+    // The Spine (26), Midtown (19 to 21.2) and the Lowline (14.5), in red's half.
+    const half = packs.filter(p => p[2] > 120);
+    expect(half.some(p => p[1] === 26)).toBe(true);
+    expect(half.some(p => p[1] === 19 || p[1] === 21.2)).toBe(true);
+    expect(half.some(p => p[1] === 14.5)).toBe(true);
+    // And the plaza, where the routes meet, has its own pair.
+    expect(packs.filter(p => p[2] > 100 && p[2] < 140)).toHaveLength(2);
+  });
+});
 
 describe('HIGHLINE, the three routes, flown with the real physics', () => {
   const routes: [string, Route][] = [

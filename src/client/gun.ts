@@ -223,8 +223,6 @@ export const gun = (lod: number): number[] => {
 export const RAIL_MUZZLE: Vec3 = [0, 0.048, -0.575];
 /** The electrodes' tips stand this far above and below the muzzle. */
 const SPREAD = 0.05;
-/** How much higher the counter stands on the rail gun than on the pistol, its base just inside the receiver's top. */
-const RISE = 0.022;
 /** The middle of the rail gun's front grip, under the barrel, where the left hand holds it. */
 export const FOREGRIP: Vec3 = [0, 0.012, -0.19];
 /** The height of the long axis at `f` ahead of the grip, in the side view. */
@@ -465,14 +463,14 @@ const readouts = new Map<number, number[]>();
 
 /**
  * The ammo as two glowing seven-segment digits on a dark screen set in the back of a small block
- * on top of the body, in model space: cyan (violet on the rail gun's steel, `tesla`), red at `low` or fewer, thick segments that bloom only a
+ * on top of the body, in model space: cyan, red at 10 or fewer, thick segments that bloom only a
  * little. The block is part of the readout, so only a gun that shows the ammo carries it. 99 at most.
  * While the gun charges, a gauge of CHARGE_MAX cells under the digits lights `level` of them, the
  * strength the shot would have; all orange at the full charge.
  */
-export const readout = (ammo: number, level = 0, low = 10, tesla = false): number[] => {
+export const readout = (ammo: number, level = 0): number[] => {
   const n = Math.min(Math.max(Math.floor(ammo), 0), 99);
-  const key = ((n * 8 + Math.min(Math.max(level, 0), CHARGE_MAX)) * 2 + +(n > low)) * 2 + +tesla;
+  const key = n * 8 + Math.min(Math.max(level, 0), CHARGE_MAX);
   let out = readouts.get(key);
   if (!out) {
     const v: number[] = (out = []);
@@ -490,10 +488,7 @@ export const readout = (ammo: number, level = 0, low = 10, tesla = false): numbe
       ];
       const c = sub(pts[0], mid);
       const p = dot(f, c) < 0 ? [pts[0], pts[3], pts[2], pts[1]] : pts;
-      const [r, g, , b] = (tesla ? steel : metal(0.15))(
-        p[0],
-        unit(dot(f, c) < 0 ? [-f[0], -f[1], -f[2]] : f),
-      );
+      const [r, g, , b] = metal(0.15)(p[0], unit(dot(f, c) < 0 ? [-f[0], -f[1], -f[2]] : f));
       tri(v, p[0], p[1], p[2], rgb ?? [r, g, b]);
       tri(v, p[0], p[2], p[3], rgb ?? [r, g, b]);
     };
@@ -543,7 +538,7 @@ export const readout = (ammo: number, level = 0, low = 10, tesla = false): numbe
         const [a, b, d, e] = SEGMENTS[seg];
         // Segments lie on the screen, a hair out of it.
         const p = (x: number, t: number) => at(x0 + x, STO - DH - 0.0003 + t, 0.0027);
-        const rgb = n <= low ? [1, 0.18, 0.12] : tesla ? [0.8, 0.62, 1.4] : [0.25, 0.9, 1];
+        const rgb = n > 10 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
         tri(v, p(a, b), p(d, b), p(d, e), rgb);
         tri(v, p(a, b), p(d, e), p(a, e), rgb);
       }
@@ -554,6 +549,60 @@ export const readout = (ammo: number, level = 0, low = 10, tesla = false): numbe
     readouts.set(key, out);
   }
   return out;
+};
+
+const lcds = new Map<number, number[]>();
+/**
+ * The LCD on the rail gun: its middle on the upper left edge of the receiver, its half width and
+ * height, and the way it faces (out to the left and up, toward the eye) and its up across that.
+ */
+const LCD: Vec3 = [-0.0262, 0.1195, -0.07];
+const [LW, LH] = [0.016, 0.011];
+const [LN, LU]: Vec3[] = [
+  [-0.78, 0.62, 0],
+  [0.62, 0.78, 0],
+];
+
+/**
+ * The rail gun's counter, a small LCD on the upper left edge of its receiver, angled to the eye, in
+ * model space (the user, 2026-11-08: more discreet than the pistol's block, on the left side): two
+ * dark segment digits on a pale green screen, amber at 15 or less, in a thin dark bezel. The screen
+ * is lit like the metal round it: a glow would bloom over the digits. The digits run toward the
+ * back, so that they read from the left, where the player sees that side.
+ */
+export const lcd = (ammo: number): number[] => {
+  const n = Math.min(Math.max(Math.floor(ammo), 0), 99);
+  let v = lcds.get(n);
+  if (!v) {
+    const out: number[] = (v = []);
+    /** A point on the screen, `a` toward the back and `b` up it from its middle, `d` out of it. */
+    const p = (a: number, b: number, d = 0): Vec3 =>
+      [0, 1, 2].map(i => LCD[i] + LU[i] * b + LN[i] * d + (i == 2 ? a : 0)) as Vec3;
+    const quad = (a0: number, b0: number, a1: number, b1: number, d: number, rgb: number[]) => {
+      tri(out, p(a0, b0, d), p(a1, b0, d), p(a1, b1, d), rgb);
+      tri(out, p(a0, b0, d), p(a1, b1, d), p(a0, b1, d), rgb);
+    };
+    quad(-LW - 0.002, -LH - 0.002, LW + 0.002, LH + 0.002, 0.0004, DARK);
+    quad(-LW, -LH, LW, LH, 0.0008, n > 15 ? [0.42, 0.55, 0.36] : [0.7, 0.42, 0.14]);
+    // The digits, scaled from the pistol's: 1.4 cm tall.
+    const k = (2 * LH * 0.65) / DH;
+    [...`${n}`.padStart(2, '0')].forEach((ch, i) => {
+      const a0 = -(DW + DGAP / 2) * k + i * (DW + DGAP) * k;
+      for (const seg of DIGITS[+ch]) {
+        const [x0, y0, x1, y1] = SEGMENTS[seg];
+        quad(
+          a0 + x0 * k,
+          (y0 - DH / 2) * k,
+          a0 + x1 * k,
+          (y1 - DH / 2) * k,
+          0.0014,
+          [0.04, 0.06, 0.05],
+        );
+      }
+    });
+    lcds.set(n, out);
+  }
+  return v;
 };
 
 /**
@@ -578,8 +627,7 @@ export const held = (
     place(out, arc(t), at, ax, [0, 0, 0], k);
   }
   if (ammo !== undefined) {
-    // The rail gun's receiver is taller than the pistol's body: its counter stands higher, on top of it.
-    place(out, readout(ammo, level, rail ? 15 : 10, rail), at, ax, [0, rail ? RISE * k : 0, 0], k);
+    place(out, rail ? lcd(ammo) : readout(ammo, level), at, ax, [0, 0, 0], k);
   }
 };
 

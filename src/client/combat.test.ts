@@ -252,7 +252,7 @@ describe('the rail gun’s bolts', () => {
   };
   const RAILED = { rail: 100, railed: true, ammo: -1 };
 
-  it('go from the own muzzle to the wall the look meets on every frame it is held, crackling, with no ball', () => {
+  it('go from the own muzzle to the wall the look meets on every frame it is held, with no ball', () => {
     const { frame, ids, orbs, zaps } = rig();
     frame(player({ ...RAILED, zapping: true }));
     expect(zaps()).toHaveLength(1);
@@ -264,16 +264,44 @@ describe('the rail gun’s bolts', () => {
     ]);
     expect(zaps()[0].a[2]).toBeCloseTo(-0.6, 6);
     expect(orbs()).toHaveLength(0);
-    expect(ids()).toEqual([SOUND.RAIL]);
-    // Held a second: a crackle every 0.09 s or so, the bolt on every frame.
     for (let k = 0; k < 59; k++) {
       frame(player({ ...RAILED, zapping: true }));
       expect(zaps()).toHaveLength(1);
     }
-    expect(ids().length).toBeGreaterThan(9);
-    expect(ids().length).toBeLessThan(13);
+    // The own is heard as the looped buzz, not as crackles.
+    expect(ids()).toEqual([]);
     frame(player({ ...RAILED, zapping: false }));
     expect(zaps()).toHaveLength(0);
+  });
+
+  it('buzz in a loop while the own rail gun is in hand, up and down in pitch while the bolt goes out', () => {
+    const t = setup();
+    const loops = new Map<number, { v: number; r: number }[]>();
+    const audio = {
+      ...t.audio,
+      loop: (id: number) => {
+        loops.set(id, []);
+        return { set: (v: number, r: number) => loops.get(id)!.push({ v, r }) };
+      },
+    };
+    const combat = createCombat(WORLD, audio, t.hud, t.fx, t.tracer, t.ctl, t.balls);
+    for (let k = 0; k < 60; k++) {
+      combat.frame(
+        VIEW,
+        player({ ...RAILED, zapping: k >= 10 }),
+        [],
+        0,
+        1 / 60,
+        1000 + (k * 1000) / 60,
+      );
+    }
+    const [hum, buzz] = [loops.get(SOUND.HUM)!, loops.get(SOUND.BUZZ)!];
+    expect(hum.every(s => s.v > 0)).toBe(true);
+    expect(buzz.slice(0, 10).every(s => s.v == 0)).toBe(true);
+    expect(buzz.slice(10).every(s => s.v > 0)).toBe(true);
+    const rates = buzz.slice(10).map(s => s.r);
+    expect(Math.max(...rates)).toBeGreaterThan(1.2);
+    expect(Math.min(...rates)).toBeLessThan(0.8);
   });
 
   it('go from an other runner’s rail gun while he holds it, with the crackle where he is', () => {

@@ -109,6 +109,8 @@ export const struck = (a?: Blade, b?: Blade): boolean => {
 /** Seconds between two buzzes of a saber lock, and two crackles of a rail gun's bolt. */
 const BUZZ = 0.16;
 const CRACKLE = 0.09;
+/** A bolt's buzz goes up and down 1.6 times a second, by 35 % of its pitch either way. */
+const WAIL = [1.6, 0.35];
 
 /** The swish of a cut, by CUT: higher and quieter for a thrust, lower and fuller for a slash. */
 const SWISH = { rate: [1.3, 1.05, 0.95, 0.8], gain: [0.6, 0.8, 0.8, 1] };
@@ -165,18 +167,33 @@ export const createCombat = (
     const { o, d, t } = beam(world, p);
     return [0, 1, 2].map(i => o[i] + d[i] * t) as Vec3;
   };
-  /** The own rail gun's hum, started when it is first in hand. */
+  /** The own rail gun's hum and its bolt's buzz, started when it is first in hand. */
   let hum: Loop | undefined;
-  /** Seconds to the next crackle of each player's bolt, the own one under -1. */
+  let buzzing: Loop | undefined;
+  /** The pitch of a bolt's buzz at `now` (ms): up and down WAIL[0] times a second, by WAIL[1] either way. */
+  const wail = (now: number) => 1 + WAIL[1] * Math.sin(2 * Math.PI * WAIL[0] * (now / 1000));
+  /** Seconds to the next crackle of each other player's bolt. */
   const crackles = new Map<number, number>();
-  /** The bolt of `p` this frame, from `from`, and its crackle every CRACKLE seconds, at `at` (the own: none). */
-  const zap = (list: { a: Vec3; b: Vec3 }[], p: PlayerState, from: Vec3, dt: number, at?: Vec3) => {
+  /**
+   * The bolt of `p` this frame, from `from`. An other's, at `at`, crackles every CRACKLE seconds, up
+   * and down in pitch as the own buzz goes; the own is the buzz.
+   */
+  const zap = (
+    list: { a: Vec3; b: Vec3 }[],
+    p: PlayerState,
+    from: Vec3,
+    dt: number,
+    now: number,
+    at?: Vec3,
+  ) => {
     list.push({ a: from, b: end(p) });
-    const id = at ? p.id : -1;
-    const left = (crackles.get(id) ?? 0) - dt;
-    crackles.set(id, left > 0 ? left : CRACKLE);
+    if (!at) {
+      return;
+    }
+    const left = (crackles.get(p.id) ?? 0) - dt;
+    crackles.set(p.id, left > 0 ? left : CRACKLE);
     if (left <= 0) {
-      audio.play(SOUND.RAIL, at, at ? 0.7 : 0.45, rate());
+      audio.play(SOUND.RAIL, at, 0.7, wail(now));
     }
   };
   const swish = (c: number, at?: Vec3) => audio.play(SOUND.SWISH, at, SWISH.gain[c], SWISH.rate[c]);
@@ -239,10 +256,14 @@ export const createCombat = (
           audio.play(SOUND.DRY);
         }
         held = trigger;
-        // A soft hum while the rail gun is in hand, louder and higher while its bolt goes out.
+        // A soft hum while the rail gun is in hand; while its bolt goes out, an electric buzz
+        // over it, its pitch going up and down.
         if (me.railed || hum) {
           hum ??= audio.loop?.(SOUND.HUM);
-          hum?.set(me.railed && !me.down ? (me.zapping ? 0.5 : 0.18) : 0, me.zapping ? 1.25 : 1);
+          buzzing ??= audio.loop?.(SOUND.BUZZ);
+          const on = me.railed && !me.down;
+          hum?.set(on ? 0.18 : 0, 1);
+          buzzing?.set(on && me.zapping ? 0.55 : 0, wail(now));
         }
         const rail = me.rail ?? -1;
         hud.vitals(
@@ -259,6 +280,7 @@ export const createCombat = (
       } else {
         before = undefined;
         hum?.set(0, 1);
+        buzzing?.set(0, 1);
       }
       let from: Vec3 | undefined;
       if (v) {
@@ -283,13 +305,13 @@ export const createCombat = (
       // The rail guns' bolts: the own from its muzzle, the others' from theirs.
       const zaps: { a: Vec3; b: Vec3 }[] = [];
       if (from && me?.zapping) {
-        zap(zaps, me, from, dt);
+        zap(zaps, me, from, dt, now);
       }
       for (const p of others) {
         const was = seen.get(p.id);
         const at: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
         if (p.zapping) {
-          zap(zaps, p, gun(p), dt, at);
+          zap(zaps, p, gun(p), dt, now, at);
         }
         if (was !== undefined && p.shots != was) {
           // His charge at the last frame gives the strength of the shot.

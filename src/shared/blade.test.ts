@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EAST, at, yard } from '../../test/yard';
-import { cutOf, knock, limbOf, strike } from './blade';
+import { crossing, cutOf, knock, limbOf, strike } from './blade';
 import { step } from './gun';
 import { HIGHLINE, ROOFTOPS } from './map';
 import { spawn } from './physics';
@@ -9,6 +9,8 @@ import {
   CUTS,
   DASH_COOLDOWN,
   HIPS,
+  LOCK_FACING,
+  LOCK_WINDOW,
   LOW_H,
   MIDLINE,
   NECK,
@@ -54,6 +56,47 @@ const hits = (cut: number, x: number, z = 0, over: Partial<PlayerState> = {}, w 
   const { me, foe } = duel(cut, x, z, over);
   return strike(w, me, [foe]).length === 1;
 };
+
+describe('crossing', () => {
+  const WEST = Math.PI / 2;
+  /** Cy at the origin facing east striking a thrust now; the foe at x facing `yaw`, `elapsed` ticks into a thrust. */
+  const pair = (x: number, yaw: number, elapsed: number, over: Partial<PlayerState> = {}) => {
+    const c = CUTS[CUT.THRUST];
+    const me = Object.assign(at(0, 0, EAST).p, {
+      blade: true,
+      wield: true,
+      cut: CUT.THRUST,
+      swing: c.ticks - c.strike,
+    });
+    const foe = Object.assign(at(x, 0, yaw).p, {
+      blade: true,
+      wield: true,
+      cut: CUT.THRUST,
+      swing: c.ticks - elapsed,
+      ...over,
+    });
+    return crossing(me, foe);
+  };
+  const strike = CUTS[CUT.THRUST].strike;
+
+  it('locks two thrusts face to face that strike within LOCK_WINDOW ticks of each other', () => {
+    expect(pair(2, WEST, strike)).toBe(true);
+    expect(pair(2, WEST, strike - LOCK_WINDOW)).toBe(true);
+    expect(pair(2, WEST, strike + LOCK_WINDOW)).toBe(true);
+    expect(pair(2, WEST, strike - LOCK_WINDOW - 1)).toBe(false);
+    expect(pair(2, WEST, strike + LOCK_WINDOW + 1)).toBe(false);
+  });
+
+  it('needs both facing each other, both in reach, and neither locked or without the katana', () => {
+    expect(pair(2, EAST, strike)).toBe(false);
+    expect(pair(2, WEST + LOCK_FACING + 0.1, strike)).toBe(false);
+    expect(pair(2, WEST + LOCK_FACING - 0.1, strike)).toBe(true);
+    expect(pair(CUTS[CUT.THRUST].reach + PLAYER_R + 0.1, WEST, strike)).toBe(false);
+    expect(pair(2, WEST, strike, { lock: 5 })).toBe(false);
+    expect(pair(2, WEST, strike, { wield: false })).toBe(false);
+    expect(pair(2, WEST, strike, { swing: 0 })).toBe(false);
+  });
+});
 
 describe('cutOf', () => {
   it('cuts across from the side held, LEFT or RIGHT alone', () => {

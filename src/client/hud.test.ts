@@ -476,3 +476,22 @@ describe('the gun on the HUD', () => {
     }
   });
 });
+
+describe('the saber lock gauge', () => {
+  it('shows the tug of war while locked, the knot at the own lead, and hides after', () => {
+    const screen = document.createElement('div');
+    const hud = createHud(screen);
+    const rope = screen.querySelector('b')!;
+    const knot = screen.querySelector<HTMLElement>('b i')!;
+    expect(rope.hidden).toBe(true);
+    hud.duel(0);
+    expect([rope.hidden, knot.style.left]).toEqual([false, '50%']);
+    hud.duel(0.5);
+    expect(knot.style.left).toBe('75%');
+    hud.duel(-3);
+    expect(knot.style.left).toBe('0%');
+    hud.duel(undefined);
+    expect(rope.hidden).toBe(true);
+    expect(HUD_CSS).toMatch(/b::before\{content:'CLICK!'/);
+  });
+});

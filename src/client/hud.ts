@@ -8,7 +8,7 @@ import type { Snapshot } from '../shared/types';
 import type { Mark } from './marks';
 
 export const HUD_CSS =
-  `h5,aside,nav,output,section,em,u,ul,dl,s,mark{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,b{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
@@ -37,6 +37,11 @@ export const HUD_CSS =
   `mark{inset:0;z-index:1;padding-top:30vh;text-align:center;color:#ddd;` +
   `background:radial-gradient(ellipse at center,#6668 0%,#4a0c0ce8 130%);backdrop-filter:grayscale(1)}` +
   `mark::first-line{font:900 clamp(30px,8vw,64px)/1 system-ui,sans-serif;letter-spacing:.24em}` +
+  `b{left:50%;top:64%;width:min(320px,70vw);height:12px;transform:translateX(-50%);border-radius:6px;` +
+  `background:linear-gradient(90deg,#e23b3b,#fff3 50%,#8ef);box-shadow:0 0 0 1px #0008}` +
+  `b::before{content:'CLICK!';position:absolute;bottom:150%;left:50%;transform:translateX(-50%);` +
+  `font:900 clamp(18px,3.4vw,28px)/1 system-ui,sans-serif;letter-spacing:.1em;color:#fff;text-shadow:0 2px 0 #000a}` +
+  `b i{position:absolute;top:-5px;width:6px;height:22px;margin-left:-3px;border-radius:3px;background:#fff;box-shadow:0 0 8px #8ef}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}`;
 
@@ -68,6 +73,11 @@ export interface Hud {
   vitals(hp: number, ammo: number, blade?: boolean, wield?: boolean): void;
   /** A hit marker on the crosshair for a moment: a ball or a cut of the own player hit. */
   hit(): void;
+  /**
+   * A saber lock: the gauge of the tug of war under the crosshair, with `lead` the own side's, -1
+   * (the foe wins) to 1 (he wins), and a call to click; undefined hides it.
+   */
+  duel(lead: number | undefined): void;
   /** The state of being down: `level` 0 (up) to 1 hides or greys the screen, `left` seconds till the respawn. */
   down(level: number, left: number): void;
   /** A line in the middle of the top of the screen in `team`'s colour, for a few seconds; a newer one replaces it. */
@@ -90,7 +100,7 @@ export const createHud = (screen: HTMLElement): Hud => {
     `<aside hidden><h6>TINY FPS</h6><span></span><table>` +
       `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Shift<td>sprint<tr><td>Space<td>jump, again in the air` +
       `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>Left click<td>fire, hold to charge<tr><td>1, 2, wheel<td>gun, katana` +
-      `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>special: lunge, spin, leap<tr><td>M<td>mute</table>` +
+      `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>special: lunge, spin, leap<tr><td>Blades locked<td>click fast; step aside to break<tr><td>M<td>mute</table>` +
       `<span>Take the enemy flag to your own base while yours is home. Jump onto the armoury past your flag for the gun and the katana.</span>` +
       `<strong></strong></aside>` +
       `<u></u><h5 hidden>Muted (M)</h5>` +
@@ -98,7 +108,7 @@ export const createHud = (screen: HTMLElement): Hud => {
       `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
       `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
       `<data></data><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd></small></dl>` +
-      `<s hidden></s><mark hidden></mark>` +
+      `<s hidden></s><mark hidden></mark><b hidden><i></i></b>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav>` +
       `<output hidden></output>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
@@ -112,6 +122,7 @@ export const createHud = (screen: HTMLElement): Hud => {
   const [redFlag, blueFlag] = [...bar.querySelectorAll<HTMLElement>('small')];
   const pips = [...screen.querySelectorAll('li')];
   const [life, ammo, marker, fallen] = [one('ul'), one('dl'), one('s'), one('mark')];
+  const [rope, knot] = [one('b'), one('b i')];
   const [count, slots] = [one('data'), one('dl small')];
   let ticker: ReturnType<typeof setTimeout> | undefined;
   const banner = one('output');
@@ -192,6 +203,10 @@ export const createHud = (screen: HTMLElement): Hud => {
       marker.hidden = false;
       clearTimeout(ticker);
       ticker = setTimeout(() => (marker.hidden = true), HIT_MS);
+    },
+    duel(lead) {
+      rope.hidden = lead === undefined;
+      knot.style.left = `${50 + 50 * Math.max(-1, Math.min(1, lead ?? 0))}%`;
     },
     down(level, left) {
       fallen.hidden = level < 0.02;

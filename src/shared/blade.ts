@@ -2,7 +2,7 @@
 // way its shock throws them. The swing timer is in `step()` (gun.ts); the room applies the result
 // (damage, `stumble()`) and, when the cut puts the foe down, the limb it takes off (`limbOf()`).
 // No DOM, no Node API.
-import { CUTS, HIPS, MIDLINE, NECK, PLAYER_R } from './constants';
+import { CUTS, HIPS, LOCK_FACING, LOCK_WINDOW, MIDLINE, NECK, PLAYER_R } from './constants';
 import { forward, heightOf } from './physics';
 import { CUT, KEY, LIMB, SPECIAL_CUT } from './types';
 import type { PlayerState } from './types';
@@ -42,6 +42,34 @@ export const strike = (w: World, p: PlayerState, foes: PlayerState[]): PlayerSta
     const wide = d > PLAYER_R ? Math.asin(PLAYER_R / d) : Math.PI;
     return off <= arc + wide && !hidden(w, o, [f.x, f.y + CHEST * heightOf(f), f.z]);
   });
+};
+
+/**
+ * Whether the cut of `p`, striking now, meets the cut of the foe `f` (where `p` drew him) and the
+ * two lock blades: `f` swings the katana and strikes within LOCK_WINDOW ticks of now, before or
+ * after; each is within the other's reach and faces him within LOCK_FACING of his look; neither is
+ * locked already.
+ */
+export const crossing = (p: PlayerState, f: PlayerState): boolean => {
+  if (!f.wield || !f.swing || p.lock || f.lock) {
+    return false;
+  }
+  const c = CUTS[f.cut ?? 0];
+  if (Math.abs(c.strike - (c.ticks - f.swing)) > LOCK_WINDOW) {
+    return false;
+  }
+  const [dx, dz] = [f.x - p.x, f.z - p.z];
+  const d = Math.hypot(dx, dz);
+  /** Whether `q` looks at most LOCK_FACING away from (x, z). */
+  const faces = (q: PlayerState, x: number, z: number) => {
+    const [fx, fz] = forward(q.yaw);
+    return d < 1e-6 || (fx * x + fz * z) / d >= Math.cos(LOCK_FACING);
+  };
+  return (
+    d - PLAYER_R <= Math.min(c.reach, CUTS[p.cut ?? 0].reach) &&
+    faces(p, dx, dz) &&
+    faces(f, -dx, -dz)
+  );
 };
 
 /**

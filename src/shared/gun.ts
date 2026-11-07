@@ -15,6 +15,7 @@ import {
   DASH_COOLDOWN,
   GUN_COOLDOWN,
   LEAP_SPEED,
+  LOCK_BREAK,
   LUNGE_SPEED,
   PICK_H,
   RACK_R,
@@ -77,7 +78,8 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  */
 export const step = (p: PlayerState, i: Input, w: World, team: number, armed = true): Strike => {
   const down = p.down > 0;
-  move(p, down ? { ...i, keys: 0 } : i, w, team);
+  const locked = !down && (p.lock ?? 0) > 0;
+  move(p, down || locked ? { ...i, keys: 0 } : i, w, team);
   p.zap = !!p.stun && !!p.zap;
   if (down) {
     // A fall under the kill floor has already put him back, and cleared `down`.
@@ -85,6 +87,9 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
       respawn(p, w, team);
     }
     return STRIKE.NONE;
+  }
+  if (locked) {
+    return duel(p, i);
   }
   // The rack fills the gun on arrival, not on every step spent in its circle.
   const { rack, blade } = w.def.teams[team];
@@ -133,6 +138,21 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
     p.cool = GUN_COOLDOWN;
     return STRIKE.SHOT;
   }
+  return STRIKE.NONE;
+};
+
+/**
+ * A step in a saber lock: the blade stays in hand and no cut starts. Each FIRE press (FIRE held
+ * now, not at the last step) pushes; a side or back key held counts `away`, up to LOCK_BREAK. The
+ * lock runs down to 1, where it waits for the host, who parts the two (room.ts).
+ */
+const duel = (p: PlayerState, i: Input): Strike => {
+  const fire = !!(i.keys & KEY.FIRE);
+  p.pushes = ((p.pushes ?? 0) + +(fire && !p.pressed)) & 255;
+  p.pressed = fire;
+  p.away = i.keys & (KEY.LEFT | KEY.RIGHT | KEY.BACK) ? Math.min((p.away ?? 0) + 1, LOCK_BREAK) : 0;
+  p.lock = Math.max(1, p.lock! - 1);
+  [p.wield, p.swing, p.charge] = [true, 0, 0];
   return STRIKE.NONE;
 };
 

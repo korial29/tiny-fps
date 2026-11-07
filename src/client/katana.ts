@@ -271,6 +271,18 @@ export const ends = (pos: Vec3, q: Quat): Vec3[] => {
 /** The most the katana tips down with the look, radians: looking further down, it stays in the guard, upright before the body. */
 export const BOW = 0.3;
 export const GUARD = [0.06, -0.24, 0.45, 0.16, 0.74, 0.65];
+/**
+ * The saber lock's hold, like GUARD: the hands up before the chest and the blade rising ahead,
+ * leaning to the left, so that it crosses the foe's, which leans to his own left.
+ */
+export const LOCK = [0.03, -0.22, 0.45, -0.32, 0.8, 0.5];
+/** The lock's hold shaking with the clock `t` (s), the hands out by `push` (0 to 1) of 6 cm: a press drives the blade on. */
+export const locked = (t: number, push = 0): number[] => [
+  LOCK[0] + 0.004 * Math.sin(t * 37),
+  LOCK[1] + 0.004 * Math.sin(t * 43 + 1),
+  LOCK[2] + 0.06 * push,
+  ...LOCK.slice(3),
+];
 /** The share of cut `c`'s swing at which it strikes. */
 const strikeAt = (c: number) => CUTS[c].strike / CUTS[c].ticks;
 /** Up over the left shoulder with the blade cocked back, round across the middle, out low to the right and round behind, then back up. */

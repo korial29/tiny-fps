@@ -166,21 +166,21 @@ The subset of `WebSocket` the client uses: `binaryType`, `onopen`, `onclose`, `o
 
 ## Controls
 
-| Action | Keys                                                                    |
-| ------ | ----------------------------------------------------------------------- |
-| Look   | Mouse (click the game to lock the pointer, Esc to release it)           |
-| Move   | WASD, or the arrow keys                                                 |
-| Sprint | Shift, with forward: the top speed builds over about a second           |
-| Jump   | Space. Press it again in the air for a second jump                      |
-| Dash   | A move key pressed twice quickly: a short burst that way, once a second |
-| Crouch | C. At sprint speed it is a slide, low enough to go under a 1.2 m slot   |
-| Fire   | Left button: hold it to fire the gun, click it to cut with the katana   |
-| Weapon | 1 the gun, 2 the katana, or the wheel to swap                           |
-| Mute   | M (remembered)                                                          |
+| Action | Keys                                                                                |
+| ------ | ----------------------------------------------------------------------------------- |
+| Look   | Mouse (click the game to lock the pointer, Esc to release it)                       |
+| Move   | WASD, or the arrow keys                                                             |
+| Sprint | Shift, with forward: the top speed builds over about a second                       |
+| Jump   | Space. Press it again in the air for a second jump                                  |
+| Dash   | A move key pressed twice quickly: a short burst that way, once a second             |
+| Crouch | C. At sprint speed it is a slide, low enough to go under a 1.2 m slot               |
+| Fire   | Left button: click to fire the gun, hold to charge it; click to cut with the katana |
+| Weapon | 1 the gun, 2 the katana, or the wheel to swap                                       |
+| Mute   | M (remembered)                                                                      |
 
 Facing a ledge between 1.2 and 2.4 m above your feet in the air, you take hold of it: forward or Space climbs, back or C lets go, and Space looking away jumps off it. Jumping while running next to a wall, up to half a metre away and not more than about 50 degrees off it, starts a wall-run along its side (about a second, hold forward, Space kicks off). Ctrl is not used, since Ctrl+W closes the tab.
 
-The katana's cut follows the move key held: left or right cuts across from that side, forward thrusts, otherwise it slashes down. A double click turns the cut into its special: the thrust into a lunge (it spends the dash), the cut across into a spin that reaches all round, the slash into a leap and a blow down before landing.
+The katana's cut follows the move key held: left or right cuts across from that side, forward thrusts, otherwise it slashes down. A double click turns the cut into its special: the thrust into a lunge (it spends the dash), the cut across into a spin that reaches all round, the slash into a leap and a blow down before landing. Two cuts that strike at the same time face to face lock the blades, as in Jedi Outcast: both click as fast as they can, and the first 8 clicks ahead throws the other back for 3 health; holding a side or back key for 0.4 s steps out of the lock.
 
 Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard WASD is ZQSD with nothing to set.
 

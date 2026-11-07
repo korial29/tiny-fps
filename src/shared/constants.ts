@@ -275,6 +275,21 @@ export const [NECK, HIPS, MIDLINE] = [0.82, 0.45, 0.12];
 export const SHOCK_TICKS = 24;
 export const SHOCK_KNOCK = 4;
 
+/**
+ * The saber lock (the user, 2026-11-07, after Jedi Outcast): two foes whose cuts strike within
+ * LOCK_WINDOW ticks (0.15 s) of each other, each in the other's reach and facing him (within
+ * LOCK_FACING radians of his look), lock blades instead of cutting. Each FIRE press pushes, and the
+ * first to lead by LOCK_WIN presses wins: the other takes LOCK_HP and the katana's shock. LOCK_TICKS
+ * (4 s) without a winner part them, stumbling; LOCK_BREAK ticks (0.4 s) of a side or back key held
+ * step one out and free both. Ticks and presses are u8 on the wire.
+ */
+export const LOCK_WINDOW = 9;
+export const LOCK_FACING = 0.9;
+export const LOCK_WIN = 8;
+export const LOCK_HP = 3;
+export const LOCK_TICKS = 240;
+export const LOCK_BREAK = 24;
+
 /** Seconds a carrier who is made to drop the flag cannot take it again: he would pick it up where he stands. */
 export const FLAG_LOCK = 2;
 /** Seconds the end screen of a match stays, then a new match starts. */

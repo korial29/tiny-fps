@@ -105,6 +105,9 @@ export const struck = (a?: Blade, b?: Blade): boolean => {
   return !!a && !!b && (a.swing ?? 0) > ticks - strike && (b.swing ?? 0) <= ticks - strike;
 };
 
+/** Seconds between two buzzes of a saber lock. */
+const BUZZ = 0.16;
+
 /** The swish of a cut, by CUT: higher and quieter for a thrust, lower and fuller for a slash. */
 const SWISH = { rate: [1.3, 1.05, 0.95, 0.8], gain: [0.6, 0.8, 0.8, 1] };
 
@@ -122,6 +125,8 @@ export const createCombat = (
   let before: PlayerState | undefined;
   let held = false;
   let seq = 0;
+  /** Seconds since the last buzz of the saber locks. */
+  let buzz = 0;
   /** The `shots` of each other player at the last frame, and what the katana reads of him. */
   const seen = new Map<number, number>();
   const blades = new Map<number, Blade>();
@@ -262,6 +267,20 @@ export const createCombat = (
         }
       }
       tracer.charging(hot);
+      // Each saber lock, once: sparks where the blades cross, between the two, and a buzz.
+      buzz += dt;
+      const all = me ? [me, ...others] : others;
+      for (const p of all) {
+        const f = p.lock ? all.find(q => q.id === p.foe) : undefined;
+        if (f && (p.id < f.id || !f.lock)) {
+          const at: Vec3 = [(p.x + f.x) / 2, (p.y + f.y) / 2 + 1.45, (p.z + f.z) / 2];
+          tracer.crackle(at);
+          if (buzz > BUZZ) {
+            audio.play(SOUND.ZAP, at, 0.35, 0.8 + 0.4 * ((seq++ * 0.618) % 1));
+          }
+        }
+      }
+      buzz = buzz > BUZZ ? 0 : buzz;
       for (const id of seen.keys()) {
         if (!others.some(p => p.id == id)) {
           seen.delete(id);

@@ -19,6 +19,7 @@ import {
   cutting,
   ends,
   held as sword,
+  locked,
   progress,
   stroke,
   trunk,
@@ -165,13 +166,18 @@ const ease = (v: number) => (v = Math.min(Math.max(v, 0), 1)) * v * (3 - 2 * v);
  * it), the trunk twisting, bending and leaning through it (trunk()), and the whole body turning
  * round in a spin.
  */
-export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number): Pose => {
-  const e = prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
-  const k = stroke(p.cut ?? 0, Math.max(prog, 0));
+export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number, t = 0): Pose => {
+  // In a saber lock the blade crosses the foe's, shaking, and the trunk leans into him.
+  const e = p.lock ? 1 : prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
+  const k = p.lock ? locked(t) : stroke(p.cut ?? 0, Math.max(prog, 0));
   const g = CARRY.map((v, i) => v + (k[i] - v) * e);
   g[1] += 0.02 * Math.sin(TAU * ph) * (1 - e);
   // A spin turns the whole body round on its feet; a cut turns it with a share of the trunk's twist.
-  const [tw, bd, ln] = prog < 0 ? [0, 0, 0] : trunk(p.cut ?? 0, prog).map(v => v * e);
+  const [tw, bd, ln] = p.lock
+    ? [0, 0.15, 0]
+    : prog < 0
+      ? [0, 0, 0]
+      : trunk(p.cut ?? 0, prog).map(v => v * e);
   const spin = prog < 0 ? 0 : whirl(p.cut ?? 0, prog) + SWAY * tw;
   const pose = { ...from, yaw: from.yaw + spin };
   // The hands go round with the chest's whole twist and down and up with its bend.
@@ -251,7 +257,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   let s = solve(pose);
   const blade = p.wield && !p.down;
   if (blade) {
-    pose = brandish(pose, p, r.prog, r.gait.phase);
+    pose = brandish(pose, p, r.prog, r.gait.phase, r.t);
     s = solve(pose);
   } else if (r.aim > 0.01 && p.ammo >= 0) {
     pose = lifted(pose, s, p, r.focus, r.aim);

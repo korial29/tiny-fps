@@ -151,7 +151,7 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 4-byte head, 48 bytes per player, then the match: 8 bytes and a byte per flag at home', () => {
+  it('has a 4-byte head, 52 bytes per player, then the match: 8 bytes and a byte per flag at home', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [
@@ -189,6 +189,11 @@ describe('snapshot frame', () => {
           cut: CUT.RIGHT,
           lost: LIMB.LEG_L,
           charge: 42,
+          lock: 200,
+          foe: 5,
+          pressed: true,
+          pushes: 17,
+          away: 3,
           // What the animation reads is not sent, nor the last shot's power.
           power: 3,
           ev: 0xffff,
@@ -198,7 +203,7 @@ describe('snapshot frame', () => {
       ...IDLE,
       packs: 0x8000_0005,
     });
-    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 48, 8]);
+    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 52, 8]);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + SNAP_MATCH + 2);
     expect(bytes(buf)).toEqual([
       ...[MSG_SNAPSHOT, 0x12, 0x34, 1],
@@ -229,6 +234,10 @@ describe('snapshot frame', () => {
       0b10010100, // swing 20, cut RIGHT (2) << 6
       4, // lost LEG_L
       42, // charge
+      200, // lock
+      5 | 128, // foe 5, FIRE held at the last step
+      17, // pushes
+      3, // away
       ...[0, 0, 0x01, 0xe0], // red 0, blue 0, clock 480 s, not over
       ...[0x80, 0, 0, 5], // packs 0 and 2, and 31
       ...[0, 0], // both flags at home
@@ -576,17 +585,17 @@ describe('snapshot frame', () => {
     const [b] = decodeSnapshot(buf)!.players;
     expect(b).toMatchObject({ blade: false, wield: false, zap: false, swing: 0, cut: 0 });
     expect(b.lost).toBe(LIMB.NONE);
-    expect(bytes(buf)[SNAP_HEAD + SNAP_PLAYER - 2]).toBe(0);
+    expect(bytes(buf)[SNAP_HEAD + 46]).toBe(0);
   });
 
-  it('round-trips every limb in the next to last byte of the player, bits 0-2, the rest 0', () => {
+  it('round-trips every limb in byte 46 of the player, bits 0-2, the rest 0', () => {
     for (const lost of Object.values(LIMB)) {
       const buf = encodeSnapshot({
         tick: 0,
         players: [player(3, { lost, swing: 63, cut: CUT.SLASH }), player(4)],
         ...IDLE,
       });
-      expect(bytes(buf)[SNAP_HEAD + SNAP_PLAYER - 2], `limb ${lost}`).toBe(lost);
+      expect(bytes(buf)[SNAP_HEAD + 46], `limb ${lost}`).toBe(lost);
       const [a, b] = decodeSnapshot(buf)!.players;
       expect([a.lost, a.swing, a.cut, b.id, b.lost]).toEqual([lost, 63, CUT.SLASH, 4, LIMB.NONE]);
     }

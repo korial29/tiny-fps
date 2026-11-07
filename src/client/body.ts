@@ -27,12 +27,13 @@ import {
   BASE,
   BEHIND as BACK,
   BOW,
-  SWAY,
   C,
   S,
+  SWAY,
   cutting,
   ends,
   held as sword,
+  locked,
   progress,
   stroke,
   trunk,
@@ -555,6 +556,8 @@ export const createBody = (world?: World): Body => {
   let [kick, hold, grasp, wide] = [0, 0, 0, 1.6];
   /** How far through its cut the katana is, -1 when it is not cutting; and the light it leaves. */
   let prog = -1;
+  /** In a saber lock: the presses seen so far, and the jolt of the last one (1, easing to 0). */
+  let [pushes, jolt] = [0, 0];
   const trail = createTrail();
   /** Where the gun points, in the camera's space. */
   let target: Vec3 = [0, 0, 8];
@@ -580,6 +583,8 @@ export const createBody = (world?: World): Body => {
     me = { ...p };
     clock += dt;
     prog = progress(prog, p, dt);
+    jolt = (p.pushes ?? 0) !== pushes && p.lock ? 1 : jolt * Math.exp(-dt * 12);
+    pushes = p.pushes ?? 0;
     trail.update(dt);
     const walks = p.mode == MODE.GROUND || p.mode == MODE.CROUCH || p.mode == MODE.WALLRUN;
     const dash = p.dash > DASH_COOLDOWN - DASH_TICKS;
@@ -638,7 +643,8 @@ export const createBody = (world?: World): Body => {
   const blade = () => {
     const a = w.amp * (1 + 0.5 * w.sprint);
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
-    const k = stroke(me?.cut ?? 0, Math.max(prog, 0));
+    // In a saber lock the blade crosses the foe's, shaking, and each press drives it on.
+    const k = me?.lock ? locked(clock, jolt) : stroke(me?.cut ?? 0, Math.max(prog, 0));
     const at: Vec3 = [k[0] + 0.012 * a * s, k[1] + 0.018 * a * c - 0.35 * (1 - w.blade), k[2]];
     return { at, g: unit([k[3], k[4], k[5]]) };
   };
@@ -665,8 +671,13 @@ export const createBody = (world?: World): Body => {
     // The trunk follows the look a little, and moves through the katana's cut (trunk()): it
     // twists, bends and leans, the chest more than the waist, so the shoulders carry the arms.
     const sw = w.blade > 0.002 ? blade() : undefined;
+    // Locked, the trunk leans into the foe.
     const [tw, bd, ln] =
-      sw && prog >= 0 ? trunk(me.cut ?? 0, prog).map(v => v * w.blade) : [0, 0, 0];
+      sw && me.lock
+        ? [0, 0.15 * w.blade, 0]
+        : sw && prog >= 0
+          ? trunk(me.cut ?? 0, prog).map(v => v * w.blade)
+          : [0, 0, 0];
     // The body turns on its feet as the view does: round in a spin, and a share of the twist.
     q.yaw += sw && prog >= 0 ? whirl(me.cut ?? 0, prog) * w.blade + SWAY * tw : 0;
     // The katana's space: the camera's, tipped down BOW at most, so the guard stays upright, and

@@ -18,9 +18,45 @@ const area = [0, 2].map(a => [
 ]);
 
 describe('skyline', () => {
-  it('is a city of towers, a few dozen of them, and not an empty list', () => {
-    expect(towers.length).toBeGreaterThanOrEqual(20);
-    expect(towers.length).toBeLessThan(120);
+  it('is a city of towers, a few dozen near the play area, and a few hundred out to the horizon', () => {
+    const { reach } = grid(ROOFTOPS);
+    const [cx, cz] = [(area[0][0] + area[0][1]) / 2, (area[1][0] + area[1][1]) / 2];
+    const near = towers.filter(
+      t => Math.hypot((t.min[0] + t.max[0]) / 2 - cx, (t.min[2] + t.max[2]) / 2 - cz) < reach,
+    );
+    expect(near.length).toBeGreaterThanOrEqual(20);
+    expect(near.length).toBeLessThan(120);
+    expect(towers.length).toBeLessThan(500);
+  });
+
+  it('carries the city on to the horizon all round: towers out past 600 m in every direction, inside the far clip', () => {
+    for (const def of [ROOFTOPS, HIGHLINE]) {
+      const { box } = grid(def);
+      const [cx, cz] = [(box[0] + box[1]) / 2, (box[2] + box[3]) / 2];
+      const far = skyline(def).map(t => {
+        const [x, z] = [(t.min[0] + t.max[0]) / 2 - cx, (t.min[2] + t.max[2]) / 2 - cz];
+        return { t, d: Math.hypot(x, z), a: Math.atan2(z, x) };
+      });
+      for (let k = 0; k < 8; k++) {
+        const sector = far.filter(f => Math.floor(((f.a + Math.PI) / (2 * Math.PI)) * 8) % 8 === k);
+        expect(sector.some(f => f.d > 600)).toBe(true);
+      }
+      // The farthest corner of every one is inside the far clip (900 m) from the centre, where the haze has all but hidden it.
+      for (const { t } of far) {
+        const corner = Math.max(
+          ...[t.min[0], t.max[0]].flatMap(x =>
+            [t.min[2], t.max[2]].map(z => Math.hypot(x - cx, z - cz)),
+          ),
+        );
+        expect(corner).toBeLessThan(900);
+      }
+      // Further out, taller: the tops rise out of the haze row after row.
+      const mean = (lo: number, hi: number) => {
+        const tops = far.filter(f => f.d >= lo && f.d < hi && f.t.max[1] - f.t.min[1] > 0.5);
+        return tops.reduce((s, f) => s + f.t.max[1], 0) / tops.length;
+      };
+      expect(mean(600, 900)).toBeGreaterThan(mean(300, 450) + 15);
+    }
   });
 
   it('stands outside the play area: no tower touches the box over the brushes, with room to spare', () => {

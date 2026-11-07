@@ -239,7 +239,8 @@ const streaks = (out: number[], r: Runner, color: number[], at: (v: Vec3) => Vec
 };
 
 /**
- * Appends a runner at level of detail `lod` (see body()): the jacket in `color` (r, g, b), dark
+ * Appends a runner at level of detail `lod` (see body(): 0 far, 1 near, 3 close; its weapon is near
+ * when the runner is close): the jacket in `color` (r, g, b), dark
  * trousers, skin, hair in his own colour (hairOf()) and light shoes, posed by its gait. A dash trails a few glowing streaks.
  */
 export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
@@ -272,10 +273,10 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
     skin(out, body(lod), s, colors);
   }
   if (blade) {
-    sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], lod, r.t);
+    sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);
     r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));
   } else if (p.ammo >= 0 && !p.down) {
-    held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], lod);
+    held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1));
   }
   if (r.dash > 0.15) {
     const [s, c] = [Math.sin(pose.yaw), Math.cos(pose.yaw)];

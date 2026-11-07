@@ -50,8 +50,8 @@ export const FOG_RISE = 0.05;
 /** The vertical field of view at rest, degrees, and the tangent of its half. */
 export const FOV_DEG = 70;
 export const FOV = Math.tan((FOV_DEG * Math.PI) / 360);
-/** Metres within which another player is drawn with the near level of detail (see DETAIL). */
-const NEAR = 10;
+/** Metres within which another player is drawn with the near level of detail (see DETAIL), and within which with the close one (see body()). */
+const [NEAR, CLOSE] = [10, 4];
 /** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
 const SAMPLES = 4;
 
@@ -710,11 +710,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       ctf?.packs?.forEach(at => kit(v, at, now));
       ctf?.ammo?.forEach(at => cell(v, at, now));
       for (const p of others) {
+        const d = Math.hypot(p.x - eye[0], p.z - eye[2]);
         soldier(
           v,
           runners.get(p.id)!,
           rgb(colors.get(p.id) ?? '#888'),
-          +(Math.hypot(p.x - eye[0], p.z - eye[2]) < NEAR),
+          d < CLOSE ? 3 : +(d < NEAR),
         );
       }
       // What glows casts nothing: it comes after the last thing that casts a shadow.

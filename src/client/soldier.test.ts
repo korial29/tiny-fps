@@ -167,14 +167,23 @@ describe('soldier', () => {
     { stun: 40, vz: -3 },
   ];
 
-  it('stays under 3900 vertices near and about 40% of that far, in every move, as whole triangles', () => {
+  it('stays under 7600 vertices near and about a quarter of that far, in every move, as whole triangles', () => {
     for (const o of MOVES) {
       const [near, far] = [1, 0].map(lod => draw(o, lod).length / STRIDE);
-      expect(near).toBeLessThan(3900);
-      expect(near).toBeGreaterThan(2000);
-      expect(far).toBeLessThan(near * 0.45);
+      expect(near).toBeLessThan(7600);
+      expect(near).toBeGreaterThan(5000);
+      expect(far).toBeLessThan(near * 0.3);
       expect(near % 3).toBe(0);
       expect(far % 3).toBe(0);
+    }
+  });
+
+  it('draws a close runner with the close skin and its weapons near, the gun or the katana', () => {
+    for (const o of [{ ammo: 12 }, { wield: true, blade: true }]) {
+      const [near, close] = [1, 3].map(lod => draw(o, lod).length / STRIDE);
+      expect(close - near).toBeGreaterThan(12000);
+      expect(close % 3).toBe(0);
+      expect(draw(o, 3).every(Number.isFinite)).toBe(true);
     }
   });
 

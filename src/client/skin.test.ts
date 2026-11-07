@@ -36,17 +36,27 @@ const edges = (v: number[]) => {
   return e;
 };
 
+/** Whether vertex k is on the base of an eye, open and buried in the socket. */
+const eyeBase = (v: Float32Array, k: number) =>
+  Math.abs(Math.abs(v[k * 6]) - 0.032) < 0.014 &&
+  Math.abs(v[k * 6 + 1] - 1.69) < 0.007 &&
+  v[k * 6 + 2] < -0.065;
+
 describe('skin', () => {
-  it('stays within the budgets: near under 3900 vertices drawn (the eyes and the armpits took 400), far under half of that', () => {
-    const [far, near] = [0, 1].map(lod => draw(lod).length / STRIDE);
-    expect(near).toBeLessThanOrEqual(3900);
-    expect(near).toBeGreaterThan(2000);
-    expect(far).toBeLessThan(near * 0.45);
-    expect(body(1).w.length).toBeLessThan(700);
+  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 7600, close (within CLOSE) under 22000', () => {
+    const [far, near, close] = [0, 1, 3].map(lod => draw(lod).length / STRIDE);
+    expect(far).toBeLessThan(1800);
+    expect(near).toBeLessThanOrEqual(7600);
+    expect(close).toBeLessThanOrEqual(22000);
+    expect(far).toBeLessThan(near * 0.3);
+    expect(near).toBeLessThan(close * 0.4);
+    expect(body(1).w.length).toBeLessThan(1300);
+    // The eye's own body stays as it was: no head, and the near rings.
+    expect(draw(2).length / STRIDE).toBeLessThan(2700);
   });
 
   it('is a 1.8 m runner on the floor, narrower than the player cylinder', () => {
-    for (const lod of [0, 1]) {
+    for (const lod of [0, 1, 3]) {
       const v = draw(lod);
       const [xs, ys, zs] = [0, 1, 2].map(k => v.filter((_, i) => i % STRIDE == k));
       expect(Math.min(...ys)).toBeGreaterThan(-0.01);
@@ -61,7 +71,7 @@ describe('skin', () => {
   });
 
   it('weights each vertex to one joint or two that touch, on its own side, summing to one', () => {
-    for (const lod of [0, 1]) {
+    for (const lod of [0, 1, 3]) {
       const s = body(lod);
       const mean = new Array(JOINTS).fill(0);
       const count = new Array(JOINTS).fill(0);
@@ -145,7 +155,7 @@ describe('skin', () => {
   });
 
   it('is one closed surface: every edge joins two triangles wound the same way round', () => {
-    for (const lod of [0, 1, 2]) {
+    for (const lod of [0, 1, 2, 3]) {
       const s = body(lod);
       const dir = new Set<string>();
       for (let i = 0; i < s.t.length; i += 3) {
@@ -159,9 +169,9 @@ describe('skin', () => {
       for (const key of dir) {
         const [a, b] = key.split(' ');
         if (!dir.has(`${b} ${a}`)) {
-          // Only the nose's base, buried in the face.
+          // Only the eyes' bases, buried in the face.
           for (const k of [a, b]) {
-            expect(s.v[+k * 6 + 2] < -0.07 && s.v[+k * 6 + 1] > 1.6).toBe(true);
+            expect(eyeBase(s.v, +k)).toBe(true);
           }
         }
       }
@@ -390,6 +400,43 @@ describe('skin', () => {
     ).toBe(false);
   });
 
+  it('carves a face into the close head: a nose, lids over the irises, lips, a jaw over the neck, ears', () => {
+    const { v, t, c } = body(3);
+    const [FLESH_, IRIS_, LIP] = [3, 9, 10];
+    const corners = (col: number) =>
+      [...t].filter((_, i) => c[i] == col).map(k => [v[k * 6], v[k * 6 + 1], v[k * 6 + 2]]);
+    const flesh = corners(FLESH_);
+    // The nose's tip is the front of the face, 2.5 cm out of the lips and the brow.
+    const tip = flesh.reduce((a, b) => (b[2] < a[2] ? b : a));
+    expect(Math.abs(tip[0])).toBeLessThan(0.002);
+    expect(tip[1]).toBeGreaterThan(1.645);
+    expect(tip[1]).toBeLessThan(1.66);
+    const front = (y: number) =>
+      Math.min(
+        ...flesh.filter(p => Math.abs(p[0]) < 0.002 && Math.abs(p[1] - y) < 0.003).map(p => p[2]),
+      );
+    expect(front(1.62) - tip[2]).toBeGreaterThan(0.018);
+    expect(front(1.708) - tip[2]).toBeGreaterThan(0.02);
+    // The chin stands 2.5 cm over the throat under it.
+    expect(front(1.575) - front(1.594)).toBeGreaterThan(0.02);
+    // The upper lid comes down in front of the top of the iris.
+    const irisFront = Math.min(...corners(IRIS_).map(p => p[2]));
+    expect(
+      flesh.some(
+        p => Math.abs(p[0] - 0.032) < 0.004 && p[1] > 1.6935 && p[1] < 1.697 && p[2] < irisFront,
+      ),
+    ).toBe(true);
+    // Lips under the nose, ears out of the sides.
+    const lips = corners(LIP);
+    expect(lips.length).toBeGreaterThan(30);
+    expect(lips.every(p => Math.abs(p[0]) < 0.025 && p[1] > 1.605 && p[1] < 1.63)).toBe(true);
+    for (const side of [1, -1]) {
+      expect(flesh.some(p => p[0] * side > 0.083 && p[1] > 1.66 && p[1] < 1.7)).toBe(true);
+    }
+    // Far, none of it: the far head is a plain one.
+    expect([...body(0).c].includes(LIP)).toBe(false);
+  });
+
   it('hangs the arms from armpits 10 cm under the shoulder joints, not from the chest', () => {
     const shoulder = solve(rest()).pos[JOINT.ARM_R][1];
     const { v, t, l } = body(1);
@@ -414,7 +461,7 @@ describe('skin', () => {
     expect(palette(JACKET)[4]).toEqual([0.09, 0.07, 0.06]);
   });
 
-  it('skins a runner in well under a millisecond', () => {
+  it('skins a runner near in under a millisecond, close in a few', () => {
     const p = bend(JOINT.THIGH_R, axis([1, 0, 0], 1));
     const out: number[] = [];
     skin(out, body(1), solve(p), palette(JACKET));
@@ -423,7 +470,14 @@ describe('skin', () => {
       out.length = 0;
       skin(out, body(1), solve(p), palette(JACKET));
     }
-    expect((performance.now() - t) / 200).toBeLessThan(2);
+    // A shared CI runner is some five times slower than a desk: 0.4 ms near, 1.5 ms close there.
+    expect((performance.now() - t) / 200).toBeLessThan(4);
+    const u = performance.now();
+    for (let i = 0; i < 50; i++) {
+      out.length = 0;
+      skin(out, body(3), solve(p), palette(JACKET));
+    }
+    expect((performance.now() - u) / 50).toBeLessThan(12);
   });
 
   describe('cut', () => {
@@ -433,17 +487,17 @@ describe('skin', () => {
       Array.from({ length: n }, (_, i) => [...s.t.slice(i * 3, i * 3 + 3)].join());
 
     it('splits the skin into the body and the limb: every triangle once, plus the cut faces', () => {
-      for (const lod of [0, 1]) {
+      for (const lod of [0, 1, 3]) {
         const whole = body(lod);
         for (const limb of LIMBS) {
           const [rest, piece] = cut(lod, limb);
-          const caps = [rest, piece].map(s => [...s.c].filter(c => c == CAP).length);
+          const caps = [rest, piece].map(s => [...s.c].filter(c => c == CAP).length / 3);
           expect(caps[0]).toBeGreaterThanOrEqual(4);
           expect(caps[1]).toBe(caps[0]);
           // The caps come last, so the rest is whole's triangles, each once.
           const kept = [
-            ...tris(rest, rest.c.length - caps[0]),
-            ...tris(piece, piece.c.length - caps[1]),
+            ...tris(rest, rest.c.length / 3 - caps[0]),
+            ...tris(piece, piece.c.length / 3 - caps[1]),
           ];
           expect(kept.sort()).toEqual(tris(whole).sort());
           expect(rest.w.length).toBe(whole.w.length + 1);
@@ -476,7 +530,7 @@ describe('skin', () => {
       expect(Math.min(...xs(LIMB.LEG_R))).toBeGreaterThan(-0.01);
     });
 
-    it('closes both pieces: every edge has a twin, but the buried base of the nose', () => {
+    it('closes both pieces: every edge has a twin, but the buried bases of the eyes', () => {
       for (const limb of LIMBS) {
         for (const s of cut(1, limb)) {
           const dir = new Set<string>();
@@ -488,7 +542,7 @@ describe('skin', () => {
           for (const key of dir) {
             const [a, b] = key.split(' ');
             if (!dir.has(`${b} ${a}`)) {
-              expect(s.v[+a * 6 + 2] < -0.07 && s.v[+a * 6 + 1] > 1.6).toBe(true);
+              expect(eyeBase(s.v, +a)).toBe(true);
             }
           }
         }

@@ -47,6 +47,8 @@ export interface CtfScene {
   racks?: readonly (Vec3 | undefined)[];
   /** Each team's katana rack, where it has one. */
   blades?: readonly (Vec3 | undefined)[];
+  /** Each team's rail gun rack, where it has one. */
+  rails?: readonly (Vec3 | undefined)[];
   packs?: readonly Vec3[];
   /** The ammo packs that are there to take. */
   ammo?: readonly Vec3[];

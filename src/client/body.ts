@@ -599,7 +599,7 @@ export const createBody = (world?: World): Body => {
       wall: +(p.mode == MODE.WALLRUN),
       slide: +(p.mode == MODE.SLIDE),
       stun: +(p.stun > 0),
-      gun: +(p.ammo >= 0 && !p.down && !p.wield),
+      gun: +(!p.down && !p.wield && (p.ammo >= 0 || !!p.railed)),
       blade: +(!!p.wield && !p.down),
     };
     for (const n of Object.keys(RATES) as (keyof typeof RATES)[]) {
@@ -855,7 +855,17 @@ export const createBody = (world?: World): Body => {
           // The gauge lights once a press is more than a tap: the strength the shot would have.
           const level =
             me && (me.charge ?? 0) >= CHARGE_TAP ? Math.min(powerOf(me.charge!), me.ammo) : 0;
-          held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], 1, clamp(hold * 1.5 - 0.5), me?.ammo, level);
+          const rail = !!me?.railed;
+          held(
+            out,
+            s.pos[J.HAND_R],
+            s.rot[J.HAND_R],
+            1,
+            clamp(hold * 1.5 - 0.5),
+            rail ? me!.rail : me?.ammo,
+            level,
+            rail,
+          );
         }
         if (grasp > 0.2) {
           sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], 1, clock, clamp(grasp * 1.5 - 0.5));
@@ -869,7 +879,7 @@ export const createBody = (world?: World): Body => {
       const l = Math.hypot(...t);
       target = l < 3 ? (l ? (t.map(v => (v * 3) / l) as Vec3) : [0, 0, 3]) : t;
     },
-    muzzle: () => tip(...holster()),
+    muzzle: () => tip(...holster(), !!me?.railed),
     spun: () =>
       me && prog >= 0 ? whirl(me.cut ?? 0, prog) + SWAY * trunk(me.cut ?? 0, prog)[0] * w.blade : 0,
   };

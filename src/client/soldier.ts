@@ -260,7 +260,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   if (blade) {
     pose = brandish(pose, p, r.prog, r.gait.phase, r.t);
     s = solve(pose);
-  } else if (r.aim > 0.01 && p.ammo >= 0) {
+  } else if (r.aim > 0.01 && (p.ammo >= 0 || p.railed)) {
     pose = lifted(pose, s, p, r.focus, r.aim);
     s = solve(pose);
   }
@@ -275,8 +275,8 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);
     r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));
-  } else if (p.ammo >= 0 && !p.down) {
-    held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1));
+  } else if ((p.ammo >= 0 || p.railed) && !p.down) {
+    held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, undefined, 0, p.railed);
   }
   if (r.dash > 0.15) {
     const [s, c] = [Math.sin(pose.yaw), Math.cos(pose.yaw)];

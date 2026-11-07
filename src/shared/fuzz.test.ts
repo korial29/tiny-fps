@@ -9,6 +9,8 @@ import {
   GUN_COOLDOWN,
   HP_MAX,
   MAX_PITCH,
+  RAIL_COOLDOWN,
+  RAIL_MAX,
 } from './constants';
 import { STRIKE, step } from './gun';
 import { ROOFTOPS } from './map';
@@ -117,6 +119,7 @@ describe('random fire on ROOFTOPS', () => {
     // random (health down, down for DOWN_TICKS, the weapons gone), and a gun and a katana handed
     // back now and then.
     let shots = 0;
+    let rails = 0;
     let cuts = 0;
     let wielded = 0;
     let downs = 0;
@@ -134,7 +137,7 @@ describe('random fire on ROOFTOPS', () => {
       let yaw = p.yaw;
       for (let k = 0; k < 20000; k++) {
         if (k % 6 === 0) {
-          keys = (rnd() < 0.8 ? KEY.FORWARD : 0) | (Math.floor(rnd() * 0x400) & ~KEY.FORWARD);
+          keys = (rnd() < 0.8 ? KEY.FORWARD : 0) | (Math.floor(rnd() * 0x1000) & ~KEY.FORWARD);
           yaw += (rnd() - 0.5) * 1.5;
         }
         const before = p.shots;
@@ -145,14 +148,26 @@ describe('random fire on ROOFTOPS', () => {
           team,
         );
         const label = `seed ${seed}, step ${k}`;
-        expect(struck === STRIKE.SHOT, label).toBe(((p.shots - before) & 255) === 1);
+        // A plasma shot or a rail beam counts a shot.
+        expect(struck === STRIKE.SHOT || struck === STRIKE.RAIL, label).toBe(
+          ((p.shots - before) & 255) === 1,
+        );
+        expect(struck !== STRIKE.RAIL || !!p.railed, label).toBe(true);
         shots += +(struck === STRIKE.SHOT);
+        rails += +(struck === STRIKE.RAIL);
         cuts += +(struck === STRIKE.CUT);
         wielded += +!!p.wield;
-        // In hand: with the katana, and wanted (BLADE), or no gun, or in mid swing.
-        expect(!!p.wield, label).toBe(
-          !!p.blade && (!!p.swing || (keys & KEY.BLADE) !== 0 || p.ammo < 0),
-        );
+        // In hand: the katana with it, wanted (BLADE) or in mid swing, or with no gun and the
+        // rail gun not wanted; the rail gun wanted (RAIL, not BLADE), or what is left.
+        const rail = (p.rail ?? -1) >= 0;
+        const railWanted = (keys & KEY.RAIL) !== 0 && (keys & KEY.BLADE) === 0;
+        if (!p.down && !p.lock) {
+          expect(!!p.wield, label).toBe(
+            !!p.blade &&
+              (!!p.swing || (keys & KEY.BLADE) !== 0 || (p.ammo < 0 && !(railWanted && rail))),
+          );
+          expect(!!p.railed, label).toBe(rail && !p.wield && (railWanted || p.ammo < 0));
+        }
         if (!p.down && rnd() < 0.002) {
           Object.assign(p, {
             hp: 0,
@@ -162,6 +177,8 @@ describe('random fire on ROOFTOPS', () => {
             blade: false,
             wield: false,
             swing: 0,
+            rail: -1,
+            railed: false,
           });
         } else if (!p.down && p.hp > 1 && rnd() < 0.01) {
           p.hp--;
@@ -172,6 +189,9 @@ describe('random fire on ROOFTOPS', () => {
         }
         if (!p.down && !p.blade && rnd() < 0.01) {
           p.blade = true;
+        }
+        if (!p.down && (p.rail ?? -1) <= 0 && rnd() < 0.01) {
+          p.rail = RAIL_MAX;
         }
         downs += +(p.down > 0 && !wasDown);
         wasDown = p.down > 0;
@@ -196,6 +216,10 @@ describe('random fire on ROOFTOPS', () => {
         expect(!p.wield || p.blade, label).toBe(true);
         expect(!p.swing || p.wield, label).toBe(true);
         expect(!p.down || (!p.blade && !p.wield && !p.swing), label).toBe(true);
+        expect(p.rail ?? -1, label).toBeGreaterThanOrEqual(-1);
+        expect(p.rail ?? -1, label).toBeLessThanOrEqual(RAIL_MAX);
+        expect(p.reload ?? 0, label).toBeLessThanOrEqual(RAIL_COOLDOWN);
+        expect(!p.railed || (p.rail ?? -1) >= 0, label).toBe(true);
         if (k % 5 === 0) {
           const [back] = decodeSnapshot(
             encodeSnapshot({ tick: 0, players: [{ ...p, ack: 0, by: 0 }], ...IDLE }),
@@ -212,12 +236,16 @@ describe('random fire on ROOFTOPS', () => {
             swing: p.swing ?? 0,
             cut: p.cut ?? 0,
             zap: !!p.zap,
+            rail: p.rail ?? -1,
+            railed: !!p.railed,
+            reload: p.reload ?? 0,
           });
         }
       }
     }
     // The run fired and went down and got up many times: or it proves little.
-    expect(shots).toBeGreaterThan(500);
+    expect(shots).toBeGreaterThan(300);
+    expect(rails).toBeGreaterThan(100);
     expect(cuts).toBeGreaterThan(300);
     expect(wielded).toBeGreaterThan(5000);
     expect(downs).toBeGreaterThan(20);

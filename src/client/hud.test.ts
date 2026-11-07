@@ -371,6 +371,10 @@ describe('the gun on the HUD', () => {
   describe('the weapon in hand', () => {
     const glyphs = () => [...ammo().querySelectorAll('svg')];
     const slots = () => screen.querySelector<HTMLElement>('dl small')!;
+    const shown = () =>
+      [...slots().querySelectorAll<HTMLElement>('kbd')]
+        .filter(k => !k.hidden)
+        .map(k => k.textContent);
     const lit = () =>
       [...slots().children].filter(k => k.classList.contains('a')).map(k => k.textContent);
 
@@ -418,10 +422,26 @@ describe('the gun on the HUD', () => {
       expect(slots().hidden).toBe(true);
       hud.vitals(5, 30, true, false);
       expect(slots().hidden).toBe(false);
-      expect(slots().textContent).toBe('1 gun2 katana');
+      expect(shown()).toEqual(['1 gun', '2 katana']);
       expect(lit()).toEqual(['1 gun']);
       hud.vitals(5, 30, true, true);
       expect(lit()).toEqual(['2 katana']);
+    });
+
+    it('shows the rail gun’s shots in green with the gun glyph, and its slot 3 when it is carried', () => {
+      hud.vitals(5, -1, false, false, 7, true);
+      expect([
+        ammo().hidden,
+        ammo().classList.contains('r'),
+        ammo().classList.contains('k'),
+      ]).toEqual([false, true, false]);
+      expect(count().textContent).toBe('7');
+      expect(slots().hidden).toBe(true);
+      hud.vitals(5, 30, true, false, 0, true);
+      expect(shown()).toEqual(['1 gun', '2 katana', '3 rail']);
+      expect(lit()).toEqual(['3 rail']);
+      expect(ammo().classList.contains('e')).toBe(true);
+      expect(HUD_CSS).toMatch(/dl\.r svg\{fill:#7f9\}/);
     });
 
     it('keeps the slots out of the counter, above it and not below, where the Leave button is', () => {
@@ -432,7 +452,7 @@ describe('the gun on the HUD', () => {
     it('says on the title screen how to pick and how to cut', () => {
       hud.title('Click to play', 'Rooftops');
       const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
-      expect(rows).toContain('1, 2, wheelgun, katana');
+      expect(rows).toContain('1, 2, 3, wheelgun, katana, rail gun');
       expect(rows).toContain('Katana + Wthrust');
       expect(rows).toContain('Katana + A or Dcut across');
       expect(rows).toContain('Katana aloneslash');

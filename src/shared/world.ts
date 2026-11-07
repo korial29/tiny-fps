@@ -29,6 +29,8 @@ export interface TeamDef {
   rack?: Vec3;
   /** The katana rack, next to the gun rack, a point on a top: walking within RACK_R gives the katana. */
   blade?: Vec3;
+  /** The rail gun rack, on the other side of the gun rack: walking within RACK_R gives the rail gun with RAIL_MAX shots. */
+  rail?: Vec3;
 }
 
 export interface WorldDef {

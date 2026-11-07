@@ -15,6 +15,8 @@ import {
   PACK_HP,
   PACK_R,
   PLASMA_MAX,
+  RAIL_DRAIN,
+  RAIL_TICKS,
   RULES,
   SHOCK_KNOCK,
   SHOCK_TICKS,
@@ -32,6 +34,7 @@ import { PLASMA_LAG, PLASMA_STEP, fly, launch } from './plasma';
 import type { Flying } from './plasma';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
+import { beam } from './rail';
 import { reaches, tackling } from './tackle';
 import { LIMB } from './types';
 import type { Conn, Every, PlayerInfo, PlayerState, Rules } from './types';
@@ -154,6 +157,7 @@ export class Room {
     // An input beyond the bank is dropped, and not acked.
     if (input && p.bank > 0) {
       p.bank--;
+      const slow = p.state.slow ?? 0;
       const struck = step(p.state, input, this.world, p.info.team, !this.ctf.over);
       this.ctf.moved(p.state);
       this.tackle(p, input.view);
@@ -161,6 +165,13 @@ export class Room {
         this.shoot(p, input.view);
       } else if (struck === STRIKE.CUT) {
         this.cut(p, input.view);
+      } else if (struck === STRIKE.RAIL) {
+        this.rail(p, input.view);
+      }
+      // A rail hit drains him: 1 hp each RAIL_DRAIN ticks of it after the first.
+      const left = p.state.slow ?? 0;
+      if (slow && left && !(left % RAIL_DRAIN)) {
+        this.harm(p, 1);
       }
       this.duel(p);
       p.ack = input.seq;
@@ -362,6 +373,10 @@ export class Room {
       wield: false,
       swing: 0,
       lost: LIMB.NONE,
+      rail: -1,
+      railed: false,
+      reload: 0,
+      slow: 0,
     });
     this.ctf.drop(foe.state);
     return true;
@@ -443,6 +458,20 @@ export class Room {
         foe.state.zap = true;
         foe.by = p.info.id;
       }
+    }
+  }
+
+  /**
+   * A rail beam of `p` went off at the view tick `view`: the first enemy it enters as `p` drew him
+   * takes 1 hp and is drained (`slow`, RAIL_TICKS), and the `hits` count goes up.
+   */
+  private rail(p: Player, view: number | undefined): void {
+    const { hit } = beam(this.world, p.state, this.enemies(p, view));
+    const foe = this.players().find(q => q.info.id === hit?.id);
+    if (foe) {
+      p.state.hits = (p.state.hits + 1) & 255;
+      foe.state.slow = RAIL_TICKS;
+      this.harm(foe, 1);
     }
   }
 

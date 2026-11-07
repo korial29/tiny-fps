@@ -10,7 +10,7 @@
 
 **▶ Play it now: https://korial29.github.io/tiny-fps/**
 
-A tiny multiplayer first-person game for the browser, written in TypeScript with raw WebGL2, no game library and no runtime dependency. It is becoming an open-air capture-the-flag between two teams of players on rooftops, inspired by Mirror's Edge: parkour movement and no CPU enemies. Today two teams play capture the flag on Highline, a symmetric rooftop map, with the parkour moves, a tackle, a plasma gun and an electric katana ([`docs/PLAN.md`](docs/PLAN.md), [`docs/WEAPON.md`](docs/WEAPON.md)). Everything is generated in code: geometry, textures, lights. There are no images, fonts or assets to serve.
+A tiny multiplayer first-person game for the browser, written in TypeScript with raw WebGL2, no game library and no runtime dependency. It is becoming an open-air capture-the-flag between two teams of players on rooftops, inspired by Mirror's Edge: parkour movement and no CPU enemies. Today two teams play capture the flag on Highline, a symmetric rooftop map, with the parkour moves, a tackle, a plasma gun, an electric katana and a rail gun ([`docs/PLAN.md`](docs/PLAN.md), [`docs/WEAPON.md`](docs/WEAPON.md)). Everything is generated in code: geometry, textures, lights. There are no images, fonts or assets to serve.
 
 It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](https://github.com/carlini/js13k2019-yet-another-doom-clone) (js13k 2019). Only the ideas were reused, not the code. The renderer, the netcode and the sound come from that first game.
 
@@ -28,7 +28,7 @@ It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](htt
 | `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~12.7 KB    |
 | `@korial29/tiny-fps/server` | Node WebSocket server (needs `ws`)                                     | Node only   |
 
-CI checks the budgets (60 KB and 16 KB) on every pull request.
+CI checks the budgets (64 KB and 16 KB) on every pull request.
 
 ## Live demo
 
@@ -175,7 +175,7 @@ The subset of `WebSocket` the client uses: `binaryType`, `onopen`, `onclose`, `o
 | Dash   | A move key pressed twice quickly: a short burst that way, once a second             |
 | Crouch | C. At sprint speed it is a slide, low enough to go under a 1.2 m slot               |
 | Fire   | Left button: click to fire the gun, hold to charge it; click to cut with the katana |
-| Weapon | 1 the gun, 2 the katana, or the wheel to swap                                       |
+| Weapon | 1 the gun, 2 the katana, 3 the rail gun, or the wheel to the next one               |
 | Mute   | M (remembered)                                                                      |
 
 Facing a ledge between 1.2 and 2.4 m above your feet in the air, you take hold of it: forward or Space climbs, back or C lets go, and Space looking away jumps off it. Jumping while running next to a wall, up to half a metre away and not more than about 50 degrees off it, starts a wall-run along its side (about a second, hold forward, Space kicks off). Ctrl is not used, since Ctrl+W closes the tab.
@@ -194,10 +194,11 @@ The game is the movement and a capture the flag on top of it, with a tackle, a g
 - **Capture the flag**: touch the enemy flag, at its base or where it was dropped, to take it, and carry it to your own base while your own flag is there: that is a capture, and the flag goes home. Touch your own dropped flag to send it home at once; left alone it goes home after 10 seconds. A carrier who falls off the roofs or leaves drops it where he last stood. A tackled carrier drops it too, and it lies there for 2 seconds: nobody can send it home, and the carrier's teammates can grab it. There is a ring of light on each base, a marker toward each flag (and toward your base while you carry), a banner for each event and a sound for a take, a drop, a return and a capture.
 - **A match** ends at 3 captures or after 8 minutes, then everyone sees the result and each player's captures and returns for 10 seconds, and a new match starts with everyone back at their spawn.
 - **The map**: Highline, 94 by 240 m under an open sky, the same for both teams (the blue half is the mirror of the red one). Each team holds a 26 m tower with its flag and eight spawns. Three routes lead to the other tower, and they meet at the plaza in the middle. The **Spine** (west, 26 m) is the fast one, about 25 s by sprint: an 11 m gap that takes a dash or a double jump, a 17 m viaduct along a wall that takes a wall-run and a dash, a beam over the plaza. **Midtown** (centre, 19 to 21 m) is roofs, short gaps and ledges to grab, about 36 s. The **Lowline** (east, 14.5 m) is stairs, short gaps and a sign to slide under, about 39 s, and needs no special move. A miss costs time: roofs under the gaps and ladders of ledges lead back up, and only a fall into the street puts you back at your tower.
-- **Weapons**: each team's armoury is a plinth 1.5 m high past its flag, in sight of the spawns, with a gun rack and a katana rack: run and jump up to take them. You spawn with neither and carry both once taken.
+- **Weapons**: each team's armoury is a plinth 1.5 m high past its flag, in sight of the spawns, with a gun rack, a katana rack and a rail gun rack: run and jump up to take them. You spawn with none and carry each once taken.
   - The **plasma gun** holds 60 shots. A click fires a plasma ball at 40 m/s that bursts on the first wall or enemy it touches, and the view kicks up with each one. Held, the button charges the next ball, shown by a gauge under the ammo counter, and letting go fires it: up to 5 shots' worth in one second, which takes 5 health and puts any enemy down.
   - The **electric katana** needs no ammo. A cut takes 2 to 4 health by the cut, reaches 2.2 to 3.2 m, and shocks a foe it does not put down: a short stumble the way the blade goes. A cut that puts a foe down takes off the limb the blade crosses, head, arm or leg, drawn only, with no blood.
-- **Health**: 5 points, a plasma hit takes 1, no friendly fire, no regeneration. At 0 a player lies down for 2 seconds, drops a carried flag, loses both weapons and comes back at a team spawn. Health packs give 2 points and ammo packs 20 shots; a taken pack is back after 20 seconds.
+  - The **rail gun** holds 10 shots, one every 1.2 s while the button is held. Its green beam is instant and stops at the first wall or enemy. An enemy hit loses 1 health at once and 1 more each second for 3 seconds, and walks no faster than 3 m/s meanwhile; a new hit starts the 3 seconds again.
+- **Health**: 5 points, a plasma hit takes 1, no friendly fire, no regeneration. At 0 a player lies down for 2 seconds, drops a carried flag, loses every weapon and comes back at a team spawn. Health packs give 2 points and ammo packs 20 shots; a taken pack is back after 20 seconds.
 - **Moving**: momentum, sprint, dash, double jump, ledge grab and climb, wall-run, slide, coyote time and a jump buffer. The host decides where everyone is. Your own moves show at once (the client predicts them) and are corrected to the host's state, to the bit.
 - **The others**: drawn 100 ms in the past, interpolated between snapshots, as runners with one continuous skinned body, a natural gait and every parkour move, in their team colour, with the weapon in their hands.
 - **The city**: the street lies far below the roofs, with roads, traffic and a fog that thickens toward it, lawns in the empty lots and a skyline of towers around the map.

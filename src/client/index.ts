@@ -97,6 +97,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const bases = world.def.teams.map(t => t.base);
   const racks = world.def.teams.map(t => t.rack);
   const blades = world.def.teams.map(t => t.blade);
+  const rails = world.def.teams.map(t => t.rail);
   let roster: PlayerInfo[] = [];
   /** The own player's id and team, from the roster. */
   let you = { id: -1, team: 0 };
@@ -228,6 +229,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       flags: flagDraws(match.flags, bases, who),
       racks,
       blades,
+      rails,
       packs: packsOf(world.def.packs, match.packs),
       ammo: packsOf(world.def.ammo, match.packs, world.def.packs?.length),
     };

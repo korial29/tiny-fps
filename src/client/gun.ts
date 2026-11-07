@@ -219,6 +219,111 @@ export const gun = (lod: number): number[] => {
   return (built[lod] = out);
 };
 
+/** The rail gun's muzzle: on the gun's long axis (REAR to MUZZLE), 25 cm further out. */
+export const RAIL_MUZZLE: Vec3 = [0, 0.0565, -0.46];
+/** The height of the long axis at `f` ahead of the grip, in the side view. */
+const axisY = (f: number) => 0.0906 - 0.0741 * f;
+/** Green that blooms, the rail gun's glow. */
+const GREEN = [0.5, 2.4, 0.9];
+const green: Paint = () => [GREEN[0], GREEN[1], -2, GREEN[2]];
+const dim: Paint = () => [GREEN[0] * 0.3, GREEN[1] * 0.3, -2, GREEN[2] * 0.3];
+/** Dark gunmetal with a green cast, lit by its normal as the gun's metal is. */
+const steel: Paint = (_, n) => {
+  const [r, g, b] = mix([0.07, 0.09, 0.085], [0.42, 0.5, 0.46], Math.max(n[1], 0) ** 1.5 * 0.8);
+  return [r, g, -1, b];
+};
+/** A station on the long axis, `up` above it. */
+const on = (f: number, up: number, a: number, b: number, x = 0): Station => [
+  f,
+  axisY(f) + up,
+  a,
+  b,
+  x,
+];
+const railed: number[][] = [];
+
+/**
+ * The rail gun at a level of detail (0 far, 1 near), built once like gun(): a long gunmetal
+ * receiver over the same grip, two flat rails running out in front of it above and below a glowing
+ * green core, four coils round the core between them, and a green strip down each side.
+ */
+export const railgun = (lod: number): number[] => {
+  if (railed[lod]) {
+    return railed[lod];
+  }
+  const [n, m] = lod ? [10, 6] : [6, 4];
+  const out: number[] = [];
+  tube(
+    out,
+    [
+      on(-0.12, 0.012, 0, 0),
+      on(-0.115, 0.012, 0.022, 0.026),
+      on(-0.09, 0.012, 0.03, 0.036),
+      on(0.12, 0.008, 0.03, 0.034),
+      on(0.15, 0.006, 0.022, 0.024),
+      on(0.155, 0.006, 0, 0),
+    ],
+    n,
+    steel,
+  );
+  tube(
+    out,
+    [
+      [0.03, 0.07, 0, 0],
+      [0.02, 0.05, 0.02, 0.022],
+      [0, 0, 0.02, 0.023],
+      [-0.02, -0.046, 0.021, 0.022],
+      [-0.03, -0.06, 0, 0],
+    ],
+    m,
+    steel,
+  );
+  for (const s of [-1, 1]) {
+    tube(
+      out,
+      [
+        on(0.14, s * 0.024, 0, 0),
+        on(0.15, s * 0.024, 0.013, 0.006),
+        on(0.44, s * 0.024, 0.013, 0.006),
+        on(0.45, s * 0.024, 0, 0),
+      ],
+      4,
+      steel,
+    );
+    tube(
+      out,
+      [on(-0.06, -0.004, 0.002, 0.003, s * 0.03), on(0.1, -0.004, 0.002, 0.003, s * 0.03)],
+      3,
+      dim,
+    );
+  }
+  tube(
+    out,
+    [
+      on(0.14, 0, 0, 0),
+      on(0.15, 0, 0.006, 0.006),
+      on(0.455, 0, 0.006, 0.006),
+      on(-RAIL_MUZZLE[2], 0, 0, 0),
+    ],
+    m,
+    green,
+  );
+  for (const f of [0.19, 0.26, 0.33, 0.4]) {
+    tube(
+      out,
+      [
+        on(f - 0.007, 0, 0, 0),
+        on(f - 0.006, 0, 0.019, 0.019),
+        on(f + 0.006, 0, 0.019, 0.019),
+        on(f + 0.007, 0, 0, 0),
+      ],
+      n,
+      steel,
+    );
+  }
+  return (railed[lod] = out);
+};
+
 /** The gun's axes [right, up, forward] for a hand turned by `q` (see body.ts: its thumb is the hand's -z, the back of the hand its x, its fingers its -y). */
 const axes = (q: Quat): Vec3[] => {
   const [th, back, fing] = [turn(q, [0, 0, -1]), turn(q, [1, 0, 0]), turn(q, [0, -1, 0])];
@@ -283,14 +388,14 @@ const readouts = new Map<number, number[]>();
 
 /**
  * The ammo as two glowing seven-segment digits on a dark screen set in the back of a small block
- * on top of the body, in model space: cyan, red at 10 or fewer, thick segments that bloom only a
+ * on top of the body, in model space: cyan, red at `low` or fewer, thick segments that bloom only a
  * little. The block is part of the readout, so only a gun that shows the ammo carries it. 99 at most.
  * While the gun charges, a gauge of CHARGE_MAX cells under the digits lights `level` of them, the
  * strength the shot would have; all orange at the full charge.
  */
-export const readout = (ammo: number, level = 0): number[] => {
+export const readout = (ammo: number, level = 0, low = 10): number[] => {
   const n = Math.min(Math.max(Math.floor(ammo), 0), 99);
-  const key = n * 8 + Math.min(Math.max(level, 0), CHARGE_MAX);
+  const key = (n * 8 + Math.min(Math.max(level, 0), CHARGE_MAX)) * 2 + +(n > low);
   let out = readouts.get(key);
   if (!out) {
     const v: number[] = (out = []);
@@ -358,7 +463,7 @@ export const readout = (ammo: number, level = 0): number[] => {
         const [a, b, d, e] = SEGMENTS[seg];
         // Segments lie on the screen, a hair out of it.
         const p = (x: number, t: number) => at(x0 + x, STO - DH - 0.0003 + t, 0.0027);
-        const rgb = n > 10 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
+        const rgb = n > low ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
         tri(v, p(a, b), p(d, b), p(d, e), rgb);
         tri(v, p(a, b), p(d, e), p(a, e), rgb);
       }
@@ -372,8 +477,9 @@ export const readout = (ammo: number, level = 0): number[] => {
 };
 
 /**
- * Appends the gun held in the hand at `pos` with the world rotation `q`, `k` times its size about
- * the grip, with the ammo on its back when given, and the charge gauge at `level`.
+ * Appends the gun (the rail gun when `rail`) held in the hand at `pos` with the world rotation `q`,
+ * `k` times its size about the grip, with the ammo on its back when given, and the charge gauge at
+ * `level`.
  */
 export const held = (
   out: number[],
@@ -383,17 +489,20 @@ export const held = (
   k = 1,
   ammo?: number,
   level = 0,
+  rail = false,
 ) => {
   const [at, ax] = [grip(pos, q), axes(q)];
-  place(out, gun(lod), at, ax, [0, 0, 0], k);
+  place(out, rail ? railgun(lod) : gun(lod), at, ax, [0, 0, 0], k);
   if (ammo !== undefined) {
-    place(out, readout(ammo, level), at, ax, [0, 0, 0], k);
+    place(out, readout(ammo, level, rail ? 2 : 10), at, ax, [0, 0, 0], k);
   }
 };
 
-/** The muzzle of a gun whose grip is at `at` and whose axes are [right, up, forward]. */
-export const tip = (at: Vec3, [, u, f]: Vec3[]): Vec3 =>
-  [0, 1, 2].map(i => at[i] + u[i] * MUZZLE[1] - f[i] * MUZZLE[2]) as Vec3;
+/** The muzzle of a gun (the rail gun's when `rail`) whose grip is at `at` and whose axes are [right, up, forward]. */
+export const tip = (at: Vec3, [, u, f]: Vec3[], rail = false): Vec3 => {
+  const m = rail ? RAIL_MUZZLE : MUZZLE;
+  return [0, 1, 2].map(i => at[i] + u[i] * m[1] - f[i] * m[2]) as Vec3;
+};
 
 /** How far the model's long axis (REAR to MUZZLE) points below the gun's own forward, radians. */
 const SAG = Math.atan2(REAR[1] - MUZZLE[1], REAR[2] - MUZZLE[2]);

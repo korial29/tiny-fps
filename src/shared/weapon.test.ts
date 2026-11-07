@@ -20,6 +20,11 @@ import {
   PLASMA_MAX,
   PLASMA_R,
   PLAYER_R,
+  RAIL_COOLDOWN,
+  RAIL_MAX,
+  RAIL_TICKS,
+  RUN_SPEED,
+  SLOW_SPEED,
   SHOCK_KNOCK,
   SHOCK_TICKS,
   SNAP_EVERY,
@@ -29,14 +34,14 @@ import { PLAYER_H } from './constants';
 import { cutOf } from './blade';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
-import { STILL, spawn } from './physics';
+import { STILL, spawn, speedOf } from './physics';
 import { PLASMA_LAG, PLASMA_STEP, launch } from './plasma';
 import { CUT, FLAG, KEY, LIMB, MODE, TEAM, TEX } from './types';
 import type { Conn, PlayerState, Rules, Snapshot } from './types';
 import type { Spawn, WorldDef } from './world';
 import { duo } from '../../test/teams';
 
-const { FORWARD, LEFT, RIGHT, BACK, FIRE, SPRINT, JUMP, DASH, BLADE } = KEY;
+const { FORWARD, LEFT, RIGHT, BACK, FIRE, SPRINT, JUMP, DASH, BLADE, RAIL } = KEY;
 const EAST = (3 * Math.PI) / 2;
 
 const SPAWNS: Spawn[] = [
@@ -47,7 +52,7 @@ const SPAWNS: Spawn[] = [
 ];
 /**
  * A flat slab at y = 1, x and z from -100 to 100, with a wall across x = 30 that is 6 m high and
- * 20 m wide, a gun rack and a katana rack for each team and two health packs, two ammo packs.
+ * 20 m wide, a gun rack, a katana rack and a rail rack for each team and two health packs, two ammo packs.
  */
 const ARENA: WorldDef = {
   brushes: [
@@ -55,12 +60,19 @@ const ARENA: WorldDef = {
     { min: [30, 1, -10], max: [30.5, 7, 10], top: TEX.STEEL, side: TEX.STEEL },
   ],
   teams: [
-    { ...duo(SPAWNS)[0], base: [-60, 1, 4], rack: [-20, 1, 40], blade: [-20, 1, 43] },
+    {
+      ...duo(SPAWNS)[0],
+      base: [-60, 1, 4],
+      rack: [-20, 1, 40],
+      blade: [-20, 1, 43],
+      rail: [-20, 1, 46],
+    },
     {
       base: [60, 1, 4],
       spawns: SPAWNS.map(([x, y, z, yaw]): Spawn => [x + 40, y, z, yaw]),
       rack: [60, 1, 40],
       blade: [60, 1, 43],
+      rail: [60, 1, 46],
     },
   ],
   packs: [
@@ -178,6 +190,109 @@ const match = (rules: Partial<Rules> = {}) => {
 };
 
 const GUN = { ammo: AMMO_MAX };
+const RAILGUN = { rail: RAIL_MAX };
+
+describe('the rail gun', () => {
+  /** One beam of `c` with the rail gun in hand, after two ticks for the history to see the puts. */
+  const beam = (m: ReturnType<typeof match>, c: Peer, look: Look = {}) => {
+    m.ticks(SNAP_EVERY);
+    m.send(c, RAIL | FIRE, look);
+  };
+
+  it('is taken at its rack on arrival with RAIL_MAX shots, and is in hand when wanted', () => {
+    const m = match();
+    m.put(m.cy, -20, 46);
+    m.hold(m.cy, 1, RAIL);
+    expect(m.state(m.cy)).toMatchObject({ rail: RAIL_MAX, railed: true, inRail: true, ammo: -1 });
+    // With the gun too, the gun is in hand unless the rail gun is wanted.
+    m.put(m.cy, 0, 0, GUN);
+    m.hold(m.cy, 1, 0);
+    expect(m.state(m.cy)).toMatchObject({ railed: false, wield: false });
+    m.hold(m.cy, 1, RAIL);
+    expect(m.state(m.cy).railed).toBe(true);
+  });
+
+  it('hits the first enemy on the look at once: 1 hp, drained and slowed, a hit counted', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, RAILGUN);
+    m.put(m.bob, 10);
+    m.put(m.dee, 20);
+    beam(m, m.cy);
+    expect(m.state(m.bob)).toMatchObject({ hp: HP_MAX - 1, slow: RAIL_TICKS });
+    expect(m.state(m.dee)).toMatchObject({ hp: HP_MAX });
+    expect(m.state(m.cy)).toMatchObject({ shots: 1, hits: 1, rail: RAIL_MAX - 1 });
+    // No ball: the beam is instant.
+    expect(m.room['balls']).toHaveLength(0);
+  });
+
+  it('drains 1 hp a second for 3 s, 3 in all; a new hit starts the 3 s again', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, RAILGUN);
+    m.put(m.bob, 10);
+    beam(m, m.cy);
+    const hp = () => m.state(m.bob).hp;
+    m.hold(m.bob, 59, 0);
+    expect(hp()).toBe(HP_MAX - 1);
+    m.hold(m.bob, 1, 0);
+    expect(hp()).toBe(HP_MAX - 2);
+    m.hold(m.bob, 60, 0);
+    expect(hp()).toBe(HP_MAX - 3);
+    m.hold(m.bob, 60, 0);
+    expect([hp(), m.state(m.bob).slow]).toEqual([HP_MAX - 3, 0]);
+    // A second beam: 1 at once, then the drain from the top.
+    m.hold(m.cy, RAIL_COOLDOWN, 0);
+    beam(m, m.cy);
+    expect([hp(), m.state(m.bob).slow]).toEqual([HP_MAX - 4, RAIL_TICKS]);
+  });
+
+  it('slows him under SLOW_SPEED while drained, and he runs again after', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, RAILGUN);
+    m.put(m.bob, 10, 0, { hp: HP_MAX });
+    beam(m, m.cy);
+    m.hold(m.bob, 60, FORWARD | SPRINT, { yaw: Math.PI });
+    expect(speedOf(m.state(m.bob))).toBeLessThanOrEqual(SLOW_SPEED + 1e-6);
+    m.hold(m.bob, RAIL_TICKS, FORWARD, { yaw: Math.PI });
+    expect(speedOf(m.state(m.bob))).toBeCloseTo(RUN_SPEED, 3);
+  });
+
+  it('fires every RAIL_COOLDOWN ticks while FIRE is held, and not with no shot left', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, RAILGUN);
+    m.hold(m.cy, 2 * RAIL_COOLDOWN + 1, RAIL | FIRE, { yaw: 0 });
+    expect(m.state(m.cy)).toMatchObject({ shots: 3, rail: RAIL_MAX - 3 });
+    m.put(m.cy, 0, 0, { rail: 0 });
+    m.hold(m.cy, RAIL_COOLDOWN + 1, RAIL | FIRE, { yaw: 0 });
+    expect(m.state(m.cy)).toMatchObject({ shots: 0, rail: 0 });
+  });
+
+  it('stops at a brush, and passes over a teammate to the enemy behind', () => {
+    const m = match();
+    m.put(m.cy, 25, 0, RAILGUN);
+    m.put(m.bob, 35);
+    beam(m, m.cy);
+    expect(m.state(m.bob).hp).toBe(HP_MAX);
+    m.put(m.cy, 0, 0, { ...RAILGUN, reload: 0 });
+    m.put(m.ann, 5);
+    m.put(m.bob, 10);
+    beam(m, m.cy);
+    expect([m.state(m.ann).hp, m.state(m.bob).hp]).toEqual([HP_MAX, HP_MAX - 1]);
+  });
+
+  it('puts down a foe at 1 hp: the drain ends with him, and he loses his own rail gun', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, RAILGUN);
+    m.put(m.bob, 10, 0, { hp: 1, rail: 4, railed: true });
+    beam(m, m.cy);
+    expect(m.state(m.bob)).toMatchObject({
+      hp: 0,
+      down: DOWN_TICKS,
+      slow: 0,
+      rail: -1,
+      railed: false,
+    });
+  });
+});
 
 describe('a shot', () => {
   it('hits the enemy in front: he loses 1 hp and the shooter counts a hit', () => {

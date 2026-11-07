@@ -38,6 +38,11 @@ export const KEY = {
    * of the cut the keys give (see CUT). Ignored without the katana in hand.
    */
   SPECIAL: 1024,
+  /**
+   * Set while the player wants the rail gun in hand (the client's choice: 3 or the wheel), with
+   * KEY.BLADE clear. Ignored without the rail gun.
+   */
+  RAIL: 2048,
 } as const;
 
 /**
@@ -203,6 +208,16 @@ export interface PlayerState {
   pushes?: number;
   pressed?: boolean;
   away?: number;
+  /** Shots left in the rail gun; absent or -1 without it (taken at the team's rail rack, lost on going down). */
+  rail?: number;
+  /** The rail gun is in hand (see KEY.RAIL). Absent reads false. */
+  railed?: boolean;
+  /** Standing inside the circle of the team's rail rack as of the last step: it fills on arrival only. Absent reads false. */
+  inRail?: boolean;
+  /** Ticks to the next rail shot. Absent reads 0. */
+  reload?: number;
+  /** Ticks left drained by a rail hit: slowed under SLOW_SPEED, and the host takes 1 hp each RAIL_DRAIN. Absent reads 0. */
+  slow?: number;
   /** While down after a katana's cut put him down: the LIMB it took off, for the clients to draw. NONE once up. Absent reads NONE. */
   lost?: number;
   /** For the animation, not sent: the EV bits of the last step, and the speed of a landing. */

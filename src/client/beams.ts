@@ -1,6 +1,6 @@
 // What the weapons light up: the plasma balls, each a blue-white core in a soft halo with a short
 // trail, a blue flash at the muzzle of a shot, a splash of light and sparks where a ball bursts,
-// and the bolts and sparks of the katana's shock. Everything turns to face the camera and is
+// the bolts and sparks of the katana's shock, and the rail gun's green beam wound in a spiral. Everything turns to face the camera and is
 // unlit and above 1, so that the bloom makes it glow. No DOM, no GL.
 import { LIGHT } from './lights';
 import type { Light } from './lights';
@@ -26,6 +26,10 @@ const MAX = 16;
 const BOLT = 0.05;
 const BOLTS = 24;
 const SHOCK_SPARKS = 10;
+/** Seconds a rail beam fades over, rail beams kept at most, and the metres of one turn of its spiral. */
+export const RAIL_FADE = 0.7;
+const RAILS = 8;
+const TURN = 0.3;
 /** Balls that light what they pass, the nearest first. */
 const LIT = 4;
 
@@ -57,6 +61,8 @@ export interface Tracer {
   flash(a: Vec3, own?: boolean, hot?: number): void;
   /** The muzzles charging this frame and how far, 0 to 1: an orange light swelling at each. */
   charging(list: { p: Vec3; k: number }[]): void;
+  /** A rail beam from `a` to `b`: a green core in a spiral that widens as it fades, sparks where it ends. */
+  rail(a: Vec3, b: Vec3): void;
   /** A ball burst at `at`: a splash of light and a spray of sparks. */
   burst(at: Vec3): void;
   /** The balls to draw this frame. */
@@ -182,6 +188,7 @@ export const createTracer = (): Tracer => {
   let sparks: Spark[] = [];
   let bolts: Bolt[] = [];
   let balls: Orb[] = [];
+  let rails: { a: Vec3; b: Vec3; age: number }[] = [];
   let hot: { p: Vec3; k: number }[] = [];
   /** The eye of the last frame drawn: the balls nearest to it light the scene. */
   let seen: Vec3 = [0, 0, 0];
@@ -211,6 +218,10 @@ export const createTracer = (): Tracer => {
     charging(list) {
       hot = list;
     },
+    rail(a, b) {
+      rails = [...rails, { a, b, age: 0 }].slice(-RAILS);
+      spray(b, SPARKS, 3);
+    },
     burst(at) {
       glows = [...glows, { p: at, age: 0, splash: true }].slice(-MAX);
       spray(at, SPARKS, 4);
@@ -238,12 +249,13 @@ export const createTracer = (): Tracer => {
       glows.forEach(g => g.own && (g.p = a));
     },
     update(dt) {
-      for (const x of [...glows, ...sparks, ...bolts]) {
+      for (const x of [...glows, ...sparks, ...bolts, ...rails]) {
         x.age += dt;
       }
       glows = glows.filter(g => g.age < (g.splash ? SPLASH : FLASH));
       sparks = sparks.filter(s => s.age < SPARK);
       bolts = bolts.filter(b => b.age < BOLT);
+      rails = rails.filter(r => r.age < RAIL_FADE);
       for (const s of sparks) {
         s.v[1] -= 9 * dt;
         s.p = s.p.map((v, i) => v + s.v[i] * dt) as Vec3;
@@ -294,6 +306,26 @@ export const createTracer = (): Tracer => {
           ),
         );
       }
+      for (const { a, b, age } of rails) {
+        const k = 1 - age / RAIL_FADE;
+        const d = sub(b, a);
+        const l = Math.hypot(...d);
+        ribbon(out, a, b, 0.05 * k, [0.08 * k, 0.5 * k, 0.2 * k], eye, 0);
+        ribbon(out, a, b, 0.01 * k, [1.4 * k, 2.8 * k, 1.8 * k], eye, 0.02);
+        // The spiral: two axes across the beam, a point every 1/12 of a turn, 400 at most.
+        const u = norm(cross(d, Math.abs(d[1]) < 0.9 * l ? [0, 1, 0] : [1, 0, 0]));
+        const v = norm(cross(d, u));
+        const r = 0.03 + 0.08 * (1 - k);
+        const n = Math.min(400, Math.ceil((l / TURN) * 12));
+        let last = a;
+        for (let i = 1; i <= n; i++) {
+          const [t, q] = [i / n, (i / n) * (l / TURN) * 2 * Math.PI];
+          const [c, s] = [Math.cos(q) * r, Math.sin(q) * r];
+          const p = [0, 1, 2].map(j => a[j] + d[j] * t + u[j] * c + v[j] * s) as Vec3;
+          ribbon(out, last, p, 0.005 * k, [0.3 * k, 2.2 * k, 0.7 * k], eye, 0.01);
+          last = p;
+        }
+      }
       for (const { a, m, b, age } of bolts) {
         const k = 1 - age / BOLT;
         for (const [p, q] of [
@@ -321,6 +353,7 @@ export const createTracer = (): Tracer => {
       const dist = (o: Orb) => Math.hypot(...sub(o.p, seen));
       return [
         ...bolts.slice(-2).map(b => point(b.m, 3, 0.8 * (1 - b.age / BOLT), [0.3, 0.7, 1.3])),
+        ...rails.slice(-2).map(r => point(r.b, 5, 1.5 * (1 - r.age / RAIL_FADE), [0.3, 1.5, 0.5])),
         ...glows
           .slice(-4)
           .map(g =>

@@ -40,20 +40,45 @@ export const DOUBLE_CLICK_MS = 300;
 /** The wheel swaps the weapon at most this often (ms): a trackpad's flick is a hundred events, one swap. */
 export const WHEEL_MS = 250;
 
-/** Whether the katana is the choice after a key: 1 the gun, 2 the katana, any other key keeps it. */
-export const picked = (blade: boolean, code: string): boolean =>
-  code == 'Digit1' ? false : code == 'Digit2' ? true : blade;
+/** The weapon chosen: 1, 2 and 3 on the keyboard. */
+export const WEAPON = { GUN: 0, BLADE: 1, RAIL: 2 } as const;
+
+/** The choice after a key: 1 the gun, 2 the katana, 3 the rail gun, any other key keeps it. */
+export const picked = (weapon: number, code: string): number => {
+  const k = ['Digit1', 'Digit2', 'Digit3'].indexOf(code);
+  return k < 0 ? weapon : k;
+};
+
+/** Which of the gun, the katana and the rail gun a player has; all of them when there is no state yet. */
+export const owned = (p?: PlayerState): boolean[] =>
+  p ? [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0] : [true, true, true];
 
 /**
- * The choice after a step of the own player. Picking the katana up switches to it, once; losing
- * both weapons (going down) goes back to the gun; anything else, the gun picked up included, keeps it.
+ * The choice after a step of the own player. Picking the katana or the rail gun up switches to
+ * it, once; losing every weapon (going down) goes back to the gun; anything else, the gun picked
+ * up included, keeps it.
  */
-export const chosen = (blade: boolean, was?: PlayerState, now?: PlayerState): boolean =>
-  !now || (!now.blade && now.ammo < 0) ? false : !!now.blade && !!was && !was.blade ? true : blade;
+export const chosen = (weapon: number, was?: PlayerState, now?: PlayerState): number => {
+  const [a, b] = [owned(was), owned(now)];
+  return !now || !b.some(Boolean)
+    ? WEAPON.GUN
+    : ((was && [WEAPON.BLADE, WEAPON.RAIL].find(k => b[k] && !a[k])) ?? weapon);
+};
 
-/** The keys of a step with KEY.BLADE set while the katana is the choice. */
-export const withBlade = (keys: number, blade: boolean): number =>
-  blade ? keys | KEY.BLADE : keys;
+/** The keys of a step with KEY.BLADE set while the katana is the choice, KEY.RAIL while the rail gun is. */
+export const withWeapon = (keys: number, weapon: number): number =>
+  keys | [0, KEY.BLADE, KEY.RAIL][weapon];
+
+/** The choice the wheel turns to, `dir` 1 or -1: the next weapon he has, round the three. */
+export const turned = (weapon: number, dir: number, have: boolean[]): number => {
+  for (let k = 1; k <= 3; k++) {
+    const n = (weapon + dir * k + 3) % 3;
+    if (have[n]) {
+      return n;
+    }
+  }
+  return weapon;
+};
 
 /** Live look angles and held keys; the loop reads them once per step and per frame. */
 export interface Controls {
@@ -63,16 +88,16 @@ export interface Controls {
   pitch: number;
   /** KEY bits held now. */
   keys: number;
-  /** The katana is the chosen weapon (1, 2 and the wheel), the gun otherwise. */
-  blade: boolean;
+  /** The chosen weapon (WEAPON: 1, 2, 3 and the wheel). */
+  weapon: number;
   /**
    * The KEY bits of the next step, read once per step. Same as `keys`, plus BLADE while the katana
-   * is chosen, except for the step right after a double tap: it carries DASH and only the tapped
+   * is chosen and RAIL while the rail gun is, except for the step right after a double tap: it carries DASH and only the tapped
    * direction, so the dash goes that way whatever else is held, and nothing else is on the wire.
    * The step after a double click carries FIRE and SPECIAL, however short the click was.
    */
   take(): number;
-  /** One live step of the own player, its state before and after: a katana picked up is chosen, losing both weapons chooses the gun. */
+  /** One live step of the own player, its state before and after: a katana or a rail gun picked up is chosen, losing every weapon chooses the gun. */
   track(was?: PlayerState, now?: PlayerState): void;
   /** The canvas holds the pointer lock. */
   locked(): boolean;
@@ -83,8 +108,8 @@ export interface Controls {
 /**
  * Click the canvas to lock the pointer; while locked the mouse looks, the keys move (WASD, Shift
  * sprints, Space jumps, C crouches, a direction key pressed twice within DOUBLE_TAP_MS dashes that
- * way, the left button fires or cuts and a double click cuts the special, 1 and 2 or the wheel pick
- * the gun or the katana) and M calls `onMute`.
+ * way, the left button fires or cuts and a double click cuts the special, 1, 2 and 3 or the wheel pick
+ * the gun, the katana or the rail gun) and M calls `onMute`.
  */
 export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Controls => {
   const ac = new AbortController();
@@ -98,19 +123,24 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   /** When the left button was last pressed (ms), and a double click waiting for its step. */
   let clicked = -Infinity;
   let special = false;
+  /** The weapons the own player has as of the last step, for the wheel. */
+  let have = owned();
   const c: Controls = {
     yaw: 0,
     pitch: 0,
     keys: 0,
-    blade: false,
+    weapon: WEAPON.GUN,
     take() {
       const keys =
         (pending ? dashKeys(c.keys, pending) : c.keys) | (special ? KEY.FIRE | KEY.SPECIAL : 0);
       pending = 0;
       special = false;
-      return withBlade(keys, c.blade);
+      return withWeapon(keys, c.weapon);
     },
-    track: (was, now) => void (c.blade = chosen(c.blade, was, now)),
+    track: (was, now) => {
+      c.weapon = chosen(c.weapon, was, now);
+      have = owned(now);
+    },
     locked: () => (canvas.getRootNode() as Document | ShadowRoot).pointerLockElement == canvas,
     destroy: () => ac.abort(),
   };
@@ -138,7 +168,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
       c.keys &= ~KEY.FIRE;
     }
   });
-  // The wheel swaps the two weapons, under the lock only.
+  // The wheel turns to the next weapon he has, down forward and up back, under the lock only.
   on(
     document,
     'wheel',
@@ -148,7 +178,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
         e.preventDefault();
         if (now - swapped >= WHEEL_MS) {
           swapped = now;
-          c.blade = !c.blade;
+          c.weapon = turned(c.weapon, Math.sign(e.deltaY), have);
         }
       }
     },
@@ -157,7 +187,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   on(document, 'keydown', (e: KeyboardEvent) => {
     const bit = keyBit(e.code);
     if (c.locked()) {
-      c.blade = picked(c.blade, e.code);
+      c.weapon = picked(c.weapon, e.code);
     }
     if (e.code == 'KeyM' && !e.repeat && c.locked()) {
       onMute();

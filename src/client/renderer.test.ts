@@ -636,6 +636,7 @@ describe('createRenderer', () => {
         burst: vi.fn(),
         orbs: vi.fn(),
         shock: vi.fn(),
+        rail: vi.fn(),
         charging: vi.fn(),
         crackle: vi.fn(),
         spit: vi.fn(),

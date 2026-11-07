@@ -5,7 +5,7 @@
 // Input, 12 bytes: [type u8 = MSG_INPUT][seq u16][keys u16][yaw u16][pitch i16][view u16][frac u8]
 //   yaw in 65536ths of a turn, decoded in [0, 2π); pitch in 1/10000 rad; view is the host tick
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
-//   keys is a u16: KEY bits 0 to 9 (forward, back, left, right, jump, sprint, dash, crouch, fire, blade).
+//   keys is a u16: KEY bits 0 to 10 (forward, back, left, right, jump, sprint, dash, crouch, fire, blade, special).
 // Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 47 bytes:
 //   [id u8][x f32][y f32][z f32][vx f32][vy f32][vz f32][edge f32]
 //   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8][stun u8]
@@ -23,8 +23,9 @@
 //   the team's rack), bit 21 blade (has the katana), bit 22 wield (the katana is in hand), bit 23 zap
 //   (the stumble is a katana's shock). shots and hits are the wrapping counters of the shots fired
 //   and the hits landed (a plasma ball or a cut).
-//   swing: bits 0-5 the ticks left in the katana's swing, bits 6-7 its cut (CUT).
-//   lost: bits 0-2 the LIMB a katana's cut took off when it put him down (NONE once up), the rest 0.
+//   swing: bits 0-5 the ticks left in the katana's swing, bits 6-7 the low two bits of its cut (CUT).
+//   lost: bits 0-2 the LIMB a katana's cut took off when it put him down (NONE once up), bit 3 the
+//   high bit of the cut (a special), the rest 0.
 //   Then the match, after the players: [red u8][blue u8][clock u16] the captures of each team, and
 //   the whole seconds to the end of the match (bit 15: it is over, and the clock counts to the next
 //   one), [packs u32] bit n set when health pack n is there to take; then the red and the blue flag, each [state u8 = FLAG] and by state:
@@ -108,7 +109,7 @@ export const encodeInput = (i: Input): ArrayBuffer => {
   const v = new DataView(new ArrayBuffer(INPUT_BYTES));
   v.setUint8(0, MSG_INPUT);
   v.setUint16(1, i.seq & 0xffff);
-  v.setUint16(3, i.keys & 0x3ff);
+  v.setUint16(3, i.keys & 0x7ff);
   v.setUint16(5, toTurn(i.yaw));
   v.setInt16(7, toPitch(i.pitch));
   const view = toView(i.view);
@@ -128,7 +129,7 @@ export const decodeInput = (buf: ArrayBuffer): Input | null => {
   }
   return {
     seq: v.getUint16(1),
-    keys: v.getUint16(3) & 0x3ff,
+    keys: v.getUint16(3) & 0x7ff,
     yaw: fromTurn(v.getUint16(5)),
     pitch: fromPitch(v.getInt16(7)),
     view: (v.getUint16(9) * 256 + v.getUint8(11)) / 256,
@@ -185,7 +186,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint8(o + 43, p.shots);
     v.setUint8(o + 44, p.hits);
     v.setUint8(o + 45, ((p.swing ?? 0) & 63) | (((p.cut ?? 0) & 3) << 6));
-    v.setUint8(o + 46, (p.lost ?? 0) & 7);
+    v.setUint8(o + 46, ((p.lost ?? 0) & 7) | (((p.cut ?? 0) & 4) << 1));
   });
   v.setUint8(end, s.score[0]);
   v.setUint8(end + 1, s.score[1]);
@@ -274,7 +275,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       wield: ((gun >> 22) & 1) === 1,
       zap: ((gun >> 23) & 1) === 1,
       swing: v.getUint8(o + 45) & 63,
-      cut: v.getUint8(o + 45) >> 6,
+      cut: (v.getUint8(o + 45) >> 6) | ((v.getUint8(o + 46) >> 1) & 4),
       lost: v.getUint8(o + 46) & 7,
     });
   }

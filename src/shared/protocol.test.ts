@@ -54,10 +54,10 @@ const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
 const bytes = (buf: ArrayBuffer): number[] => [...new Uint8Array(buf)];
 
 describe('input frame', () => {
-  it('is 12 bytes: type, seq, keys in 10 bits, yaw in turns, pitch in 1/10000 rad, view in 1/256 tick', () => {
+  it('is 12 bytes: type, seq, keys in 11 bits, yaw in turns, pitch in 1/10000 rad, view in 1/256 tick', () => {
     const buf = encodeInput({
       seq: 0x0102,
-      keys: 0b11_0011_0101,
+      keys: 0b111_0011_0101,
       yaw: Math.PI,
       pitch: -0.5,
       view: 0x1234 + 0.5,
@@ -65,7 +65,7 @@ describe('input frame', () => {
     expect(buf.byteLength).toBe(INPUT_BYTES);
     // Half a turn is 0x8000; -0.5 rad is -5000 = 0xec78; the view is 0x1234, then 128/256.
     expect(bytes(buf)).toEqual([
-      ...[MSG_INPUT, 0x01, 0x02, 0x03, 0b00110101, 0x80, 0x00, 0xec, 0x78],
+      ...[MSG_INPUT, 0x01, 0x02, 0x07, 0b00110101, 0x80, 0x00, 0xec, 0x78],
       ...[0x12, 0x34, 0x80],
     ]);
   });
@@ -88,9 +88,9 @@ describe('input frame', () => {
 
   it('round-trips within the fixed point', () => {
     for (const yaw of [0, 0.001, 1, Math.PI, 5, 6.28]) {
-      const back = decodeInput(encodeInput({ seq: 65535, keys: 0x3ff, yaw, pitch: 1.55 }))!;
+      const back = decodeInput(encodeInput({ seq: 65535, keys: 0x7ff, yaw, pitch: 1.55 }))!;
       expect(back.seq).toBe(65535);
-      expect(back.keys).toBe(0x3ff);
+      expect(back.keys).toBe(0x7ff);
       expect(Math.abs(back.yaw - yaw)).toBeLessThanOrEqual(Math.PI / 65536 + 1e-12);
       expect(back.pitch).toBeCloseTo(1.55, 4);
     }
@@ -475,19 +475,19 @@ describe('snapshot frame', () => {
     expect(MAX_PLAYERS).toBeLessThanOrEqual(16);
     expect(Object.keys(MODE).length).toBeLessThanOrEqual(8);
     expect(Object.keys(SIDE).length).toBeLessThanOrEqual(8);
-    // A slide, a wall-run and a climb end long before t saturates, and the key bits are ten.
+    // A slide, a wall-run and a climb end long before t saturates, and the key bits are eleven.
     expect(SLIDE_TICKS).toBeLessThan(255);
-    expect(Math.max(...Object.values(KEY))).toBeLessThanOrEqual(0x200);
+    expect(Math.max(...Object.values(KEY))).toBeLessThanOrEqual(0x400);
     // The gun: 3 bits for hp and cool, 7 for down, 7 for ammo with 127 for no gun, 32 packs.
     expect(HP_MAX).toBeLessThanOrEqual(7);
     expect(GUN_COOLDOWN).toBeLessThanOrEqual(7);
     expect(DOWN_TICKS).toBeLessThanOrEqual(127);
     expect(AMMO_MAX).toBeLessThan(127);
-    // The katana: a swing's ticks in 6 bits, the cut in 2, a shock inside the stun's 6, the limb in 3.
+    // The katana: a swing's ticks in 6 bits, the cut in 3, a shock inside the stun's 6, the limb in 3.
     expect(Math.max(...Object.values(LIMB))).toBeLessThanOrEqual(7);
     expect(Math.max(...CUTS.map(c => c.ticks))).toBeLessThanOrEqual(63);
     expect(CUTS).toHaveLength(Object.keys(CUT).length);
-    expect(Object.keys(CUT).length).toBeLessThanOrEqual(4);
+    expect(Object.keys(CUT).length).toBeLessThanOrEqual(8);
     expect(SHOCK_TICKS).toBeLessThanOrEqual(63);
   });
 
@@ -507,8 +507,8 @@ describe('snapshot frame', () => {
         blade: rnd(2) === 1,
         wield: rnd(2) === 1,
         zap: rnd(2) === 1,
-        swing: rnd(CUTS[3].ticks + 1),
-        cut: rnd(4),
+        swing: rnd(64),
+        cut: rnd(8),
         lost: rnd(6),
         // The gun bits sit among the movement ones: those must not move.
         mode: rnd(7),

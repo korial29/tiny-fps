@@ -238,9 +238,11 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     foley.me(me, hit, fx.stride);
     foley.others(others);
     body.update(me, dt, fx.kick, canvas.clientWidth / (canvas.clientHeight || 1));
-    // The camera moves for the eye only: the inputs keep sending the real height and angles.
+    // The camera moves for the eye only: the inputs keep sending the real height and angles. A
+    // spin turns the drawn view round with the body.
     const cam: [number, number, number] = [eye[0], eye[1] + fx.dy, eye[2]];
     const pitch = ctl.pitch + fx.pitch;
+    const view = ctl.yaw + body.spun();
     const look = me && sight(world, eye, cam, ctl.yaw, ctl.pitch, pitch);
     if (look) {
       body.aim(look.local);
@@ -265,15 +267,12 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     if (me && rd) {
       rd.frame(
         cam,
-        ctl.yaw,
+        view,
         pitch,
         others,
         colors,
         fx,
-        [
-          ...gather({ eye: cam, yaw: ctl.yaw, pitch, others, t: now / 1000, ctf }),
-          ...tracer.lights(),
-        ],
+        [...gather({ eye: cam, yaw: view, pitch, others, t: now / 1000, ctf }), ...tracer.lights()],
         body,
         ctf,
         tracer,
@@ -287,7 +286,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
               eye,
               id: you.id,
               team: you.team,
-              yaw: ctl.yaw,
+              yaw: view,
               flags: match.flags,
               bases,
               where: id => {

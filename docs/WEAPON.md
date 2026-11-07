@@ -86,6 +86,22 @@ The user found the katana badly held and the arms twisted, and pointed at Jedi K
 - The guard holds the hands low, at the bottom of the view, the blade leaning forward: more blade than hands (the user, 2026-11-07).
 - The cuts swing the whole arms (the user, 2026-11-07: "the moves start from the wrist only"). The hands go round a wide arc with the blade pointing out along it: over the left shoulder, across the middle and out low to the right for the cut from the left (40 to 55 cm of travel), above the head and down to the bottom of the view for the slash, back to the right hip and out for the thrust. The cut from the right is written apart, shorter on its wind-up, where the left arm reaches across the chest. Every key keeps both grips within 0.6 m of their shoulders, so the arms reach them standing and running.
 
+## Wider swings, special cuts, the curve (the user, 2026-11-07)
+
+The user asked for even wider swings with the arms, a special move on a double click (a full turn while cutting for the cut across, the others left to us), and the blade's curve the right way round.
+
+- The curve: the point rises toward the spine and the edge is on the outside of the curve, as on a katana. In the guard the spine faces the wielder, so the blade curves slightly toward him.
+- Wider: the first-person trunk turns toward the hands (0.6 rad per metre of the grip off the guard, `body.ts`), as the runners' already did. The shoulders follow and the keys go further: the cut across travels 64 cm, and the slash rises higher.
+- A double click (`DOUBLE_CLICK_MS`, 300 ms, `input.ts`) sends one step with FIRE and `KEY.SPECIAL`. The keys pick the special of their cut, the cut plus `SPECIAL_CUT`. A second press within `SPECIAL_LATE` (18 ticks) of a cut's start turns that cut into its special. A special is never turned again.
+
+| Special | Keys   | Rule                                                                                                                                                                                                                                                                                   |
+| ------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lunge   | W      | 36 ticks, strikes at 12, reach 3.2 m, 3 hp. From a floor he is thrown along the look at `LUNGE_SPEED` (13 m/s) for a dash's burst; it spends the dash. Drawn back deep to the hip, then the arms straight out, held through the throw.                                                 |
+| Spin    | A or D | 48 ticks, strikes at 24, reach 2.3 m all round him (arc π), 3 hp, and the shock throws out from him. The drawn body and the own view turn a full turn (`whirl()`, render only: the look and the inputs do not turn), right for A, left for D, the blade out ahead on the leading side. |
+| Leap    | none   | 58 ticks, strikes at 40, reach 2.4 m, 4 hp. From a floor he jumps `LEAP_SPEED` (7.5 m/s, 1.4 m up): the arms raised high through the jump, the blow down just before the landing.                                                                                                      |
+
+The cut is 3 bits on the wire (bits 6-7 of the swing byte and bit 3 of the `lost` byte), the keys 11 bits. A special goes as its base cut for the limb it takes off.
+
 ## Plasma balls (the user, 2026-11-06)
 
 The gun stops being a hitscan laser: like Doom's plasma gun it fires glowing balls that fly, so a shot is led and can be dodged. Its sound gets much deeper, like the Doom 3 plasma rifle.

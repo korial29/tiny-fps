@@ -437,6 +437,37 @@ describe('skin', () => {
     expect([...body(0).c].includes(LIP)).toBe(false);
   });
 
+  it('sets the arms off the chest: the armpits and the insides of the sleeves are in shadow', () => {
+    for (const lod of [0, 1, 3]) {
+      const { v, o } = body(lod);
+      /** The mean light of the vertices whose position and normal pass `pick`. */
+      const light = (pick: (p: number[], n: number[]) => boolean) => {
+        const g = Array.from(o).filter((_, i) =>
+          pick([...v.slice(i * 6, i * 6 + 3)], [...v.slice(i * 6 + 3, i * 6 + 6)]),
+        );
+        expect(g.length).toBeGreaterThan(0);
+        return g.reduce((a, b) => a + b, 0) / g.length;
+      };
+      const chest = light(([x, y], n) => Math.abs(x) < 0.08 && y > 1.15 && y < 1.4 && n[2] < -0.8);
+      const side = light(
+        ([x, y], n) => y > 1.15 && y < 1.37 && Math.abs(x) < 0.175 && x * n[0] > 0.8 * Math.abs(x),
+      );
+      const inner = light(
+        ([x, y], n) => y > 1.1 && y < 1.3 && Math.abs(x) > 0.17 && x * n[0] < -0.8 * Math.abs(x),
+      );
+      const outer = light(
+        ([x, y], n) => y > 1.1 && y < 1.3 && Math.abs(x) > 0.2 && x * n[0] > 0.8 * Math.abs(x),
+      );
+      expect(chest).toBeGreaterThan(0.95);
+      expect(outer).toBeGreaterThan(0.95);
+      expect(side).toBeLessThan(0.75);
+      expect(inner).toBeLessThan(0.75);
+    }
+    // In the open, it is the palette's own colour; the cut's middle too.
+    expect(Math.max(...body(1).o)).toBe(1);
+    expect(cut(1, LIMB.ARM_R)[0].o.at(-1)).toBe(1);
+  });
+
   it('hangs the arms from armpits 10 cm under the shoulder joints, not from the chest', () => {
     const shoulder = solve(rest()).pos[JOINT.ARM_R][1];
     const { v, t, l } = body(1);

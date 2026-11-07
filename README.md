@@ -10,7 +10,7 @@
 
 **▶ Play it now: https://korial29.github.io/tiny-fps/**
 
-A tiny multiplayer first-person game for the browser, written in TypeScript with raw WebGL2, no game library and no runtime dependency. It is becoming an open-air capture-the-flag between two teams of players on rooftops, inspired by Mirror's Edge: parkour movement, no weapons, no CPU enemies. The game is being rebuilt step by step toward that ([`docs/PLAN.md`](docs/PLAN.md)): today two teams play capture the flag on Highline, a symmetric rooftop map, with the parkour moves, a tackle and no weapons. Everything is generated in code: geometry, textures, lights. There are no images, fonts or assets to serve.
+A tiny multiplayer first-person game for the browser, written in TypeScript with raw WebGL2, no game library and no runtime dependency. It is becoming an open-air capture-the-flag between two teams of players on rooftops, inspired by Mirror's Edge: parkour movement and no CPU enemies. Today two teams play capture the flag on Highline, a symmetric rooftop map, with the parkour moves, a tackle, a plasma gun and an electric katana ([`docs/PLAN.md`](docs/PLAN.md), [`docs/WEAPON.md`](docs/WEAPON.md)). Everything is generated in code: geometry, textures, lights. There are no images, fonts or assets to serve.
 
 It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](https://github.com/carlini/js13k2019-yet-another-doom-clone) (js13k 2019). Only the ideas were reused, not the code. The renderer, the netcode and the sound come from that first game; the screenshots below are from it.
 
@@ -26,8 +26,8 @@ It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](htt
 
 | Entry                       | What it is                                                             | Size (gzip) |
 | --------------------------- | ---------------------------------------------------------------------- | ----------- |
-| `@korial29/tiny-fps`        | The game client: rendering, lights and shadows, input, prediction, HUD | ~26 KB      |
-| `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~8.4 KB     |
+| `@korial29/tiny-fps`        | The game client: rendering, lights and shadows, input, prediction, HUD | ~54 KB      |
+| `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~12.7 KB    |
 | `@korial29/tiny-fps/server` | Node WebSocket server (needs `ws`)                                     | Node only   |
 
 CI checks the budgets (56 KB and 16 KB) on every pull request.
@@ -176,9 +176,13 @@ The subset of `WebSocket` the client uses: `binaryType`, `onopen`, `onclose`, `o
 | Jump   | Space. Press it again in the air for a second jump                      |
 | Dash   | A move key pressed twice quickly: a short burst that way, once a second |
 | Crouch | C. At sprint speed it is a slide, low enough to go under a 1.2 m slot   |
+| Fire   | Left button: hold it to fire the gun, click it to cut with the katana   |
+| Weapon | 1 the gun, 2 the katana, or the wheel to swap                           |
 | Mute   | M (remembered)                                                          |
 
 Facing a ledge between 1.2 and 2.4 m above your feet in the air, you take hold of it: forward or Space climbs, back or C lets go, and Space looking away jumps off it. Jumping while running next to a wall, up to half a metre away and not more than about 50 degrees off it, starts a wall-run along its side (about a second, hold forward, Space kicks off). Ctrl is not used, since Ctrl+W closes the tab.
+
+The katana's cut follows the move key held: left or right cuts across from that side, forward thrusts, otherwise it slashes down. A double click turns the cut into its special: the thrust into a lunge (it spends the dash), the cut across into a spin that reaches all round, the slash into a leap and a blow down before landing.
 
 Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard WASD is ZQSD with nothing to set.
 
@@ -186,15 +190,20 @@ Keys are read by their position (`KeyboardEvent.code`), so on an AZERTY keyboard
 
 ## How a game plays
 
-The game is the movement and a capture the flag on top of it, with a tackle to stop a carrier ([`docs/PLAN.md`](docs/PLAN.md)).
+The game is the movement and a capture the flag on top of it, with a tackle, a gun and a katana to stop a carrier ([`docs/PLAN.md`](docs/PLAN.md), [`docs/WEAPON.md`](docs/WEAPON.md)).
 
 - **Teams**: red and blue. A joiner goes to the smaller team (red on a tie), up to 16 players in all. Each team starts on its own tower and wears its colour, name tags included.
 - **Capture the flag**: touch the enemy flag, at its base or where it was dropped, to take it, and carry it to your own base while your own flag is there: that is a capture, and the flag goes home. Touch your own dropped flag to send it home at once; left alone it goes home after 10 seconds. A carrier who falls off the roofs or leaves drops it where he last stood. A tackled carrier drops it too, and it lies there for 2 seconds: nobody can send it home, and the carrier's teammates can grab it. There is a ring of light on each base, a marker toward each flag (and toward your base while you carry), a banner for each event and a sound for a take, a drop, a return and a capture.
 - **A match** ends at 3 captures or after 8 minutes, then everyone sees the result and each player's captures and returns for 10 seconds, and a new match starts with everyone back at their spawn.
 - **The map**: Highline, 94 by 240 m under an open sky, the same for both teams (the blue half is the mirror of the red one). Each team holds a 26 m tower with its flag and eight spawns. Three routes lead to the other tower, and they meet at the plaza in the middle. The **Spine** (west, 26 m) is the fast one, about 25 s by sprint: an 11 m gap that takes a dash or a double jump, a 17 m viaduct along a wall that takes a wall-run and a dash, a beam over the plaza. **Midtown** (centre, 19 to 21 m) is roofs, short gaps and ledges to grab, about 36 s. The **Lowline** (east, 14.5 m) is stairs, short gaps and a sign to slide under, about 39 s, and needs no special move. A miss costs time: roofs under the gaps and ladders of ledges lead back up, and only a fall into the street puts you back at your tower.
+- **Weapons**: each team's armoury is a plinth 1.5 m high past its flag, in sight of the spawns, with a gun rack and a katana rack: run and jump up to take them. You spawn with neither and carry both once taken.
+  - The **plasma gun** holds 60 shots and fires 8.6 a second while the button is held. Each shot is a plasma ball at 40 m/s that bursts on the first wall or enemy it touches, and the view kicks up with each one.
+  - The **electric katana** needs no ammo. A cut takes 2 to 4 health by the cut, reaches 2.2 to 3.2 m, and shocks a foe it does not put down: a short stumble the way the blade goes. A cut that puts a foe down takes off the limb the blade crosses, head, arm or leg, drawn only, with no blood.
+- **Health**: 5 points, a plasma hit takes 1, no friendly fire, no regeneration. At 0 a player lies down for 2 seconds, drops a carried flag, loses both weapons and comes back at a team spawn. Health packs give 2 points and ammo packs 20 shots; a taken pack is back after 20 seconds.
 - **Moving**: momentum, sprint, dash, double jump, ledge grab and climb, wall-run, slide, coyote time and a jump buffer. The host decides where everyone is. Your own moves show at once (the client predicts them) and are corrected to the host's state, to the bit.
-- **The others**: drawn 100 ms in the past, interpolated between snapshots, as soldiers with swinging arms and legs. Each carries a flashlight that casts shadows.
-- **Sound**: a synthesiser and a mixer that places sounds left or right by where they come from, and a dark music loop. The sound starts with the click that locks the pointer. There are no sound effects yet.
+- **The others**: drawn 100 ms in the past, interpolated between snapshots, as runners with one continuous skinned body, a natural gait and every parkour move, in their team colour, with the weapon in their hands.
+- **The city**: the street lies far below the roofs, with roads, traffic and a fog that thickens toward it, lawns in the empty lots and a skyline of towers around the map.
+- **Sound**: a synthesiser and a mixer that places sounds left or right by where they come from, and an airy music loop of slow pads and soft bells. Steps, jumps, the deep plasma shot, the katana's draw, swish and zap, hits, pickups and the flag events all have their sound. The sound starts with the click that locks the pointer.
 
 ---
 
@@ -209,7 +218,9 @@ The game is the movement and a capture the flag on top of it, with a tackle to s
 - [x] Post-processing: bloom, tone mapping, vignette, film grain, 4x antialiasing
 - [x] Parkour moves, predicted exactly: momentum, sprint, dash, double jump, ledge grab and climb, wall-run, slide, coyote time and jump buffer
 - [x] Your own body in first person, Mirror's Edge style: arms that pump with the stride, hands on the ledge, legs when you look down; a camera that kicks its field of view, dips on landings, leans into wall-runs; speed lines
-- [x] A model for the other players: jointed legs and arms that follow their stride
+- [x] The other players as skinned runners: one continuous skin on a rig, a natural walk, run and sprint with planted feet, and every parkour move
+- [x] A plasma gun and an electric katana taken at each team's armoury: plasma balls, three cuts and their specials, a shock, limb cuts, health and ammo packs, all predicted on the client and resolved by the host with lag compensation
+- [x] A city around the roofs: a street far below with traffic, a height fog, lawns and a skyline
 - [x] Sound: a jsfxr-style synthesiser for steps, jumps, dashes, landings, grabs, climbs, slides and the wind of speed, placed in stereo; a looped music; M mutes
 - [x] A title screen with the controls, a muted mark, a player count and name tags
 - [x] Teams and capture the flag: bases with a glowing ring, flags that wave and ride on a carrier's back, a score and a clock, markers toward the flags, banners, an end screen and synth sounds
@@ -221,7 +232,7 @@ The game is the movement and a capture the flag on top of it, with a tackle to s
 
 - **The host is authoritative**: the Node server, or the host tab in local mode. It runs the players on the map.
 - **Inputs, not positions**: each client sends one 12-byte input per step at 60 Hz, holding its keys, view angles and the moment it sees the others at. It predicts its own player at once and replays what the host has not acknowledged yet.
-- **Snapshots** go out at 30 Hz: a 4-byte head, 39 bytes per player (position, speed, look angles, the movement state and its timers), then the match: the captures, the clock and the two flags, 6 bytes when both are home, in a compact binary format. The other players are drawn 100 ms in the past, interpolated between snapshots.
+- **Snapshots** go out at 30 Hz: a 4-byte head, 47 bytes per player (position, speed, look angles, the movement state and its timers, health, ammo, weapons and swing), then the match: the captures, the clock, the packs and the two flags, 10 bytes when both are home, then the plasma balls in flight, 10 bytes each, in a compact binary format. The other players are drawn 100 ms in the past, interpolated between snapshots.
 - **Rendering**: one WebGL2 shader program and one vertex buffer, up to 16 lights, with up to 4 shadow maps drawn by the same program.
 
 ---

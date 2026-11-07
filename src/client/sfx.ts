@@ -100,6 +100,8 @@ export const SOUND = {
   ZAP: 25,
   /** A plasma ball bursting on a wall or a body. */
   SPLASH: 26,
+  /** A charged shot, under the plain one: a long deep blast. */
+  BLAST: 27,
 } as const;
 
 /**
@@ -246,6 +248,14 @@ export const LAYERS: Voice[][] = [
     [3, 8000, -3, 0.001, 0.02, 0.15, 0, 0.5, 0, 1, 0.6],
     [2, 500, 8, 0.002, 0.01, 0.05, 0, 1, 0.03, 1.5, 0.45, 0.01],
     [3, 1500, -1, 0.001, 0.03, 0.1, 0.9, 1, 0, 1, 0.3, 0.01],
+  ],
+  // BLAST: a square and a saw a few hertz apart diving from 900 Hz to under 50 Hz over half a
+  // second, a rumble of noise falling with them, and a sub thump under it all.
+  [
+    [0, 900, -7, 0.002, 0.05, 0.5, 0.04, 0.3, 0, 1, 0.32],
+    [1, 930, -7, 0.002, 0.05, 0.5, 0.04, 0.25, 0, 1, 0.26],
+    [3, 600, -3, 0.002, 0.08, 0.45, 0, 0.15, 0, 1, 0.4],
+    [2, 120, -2.5, 0.001, 0.05, 0.4, 0, 1, 0, 1, 0.5],
   ],
 ];
 

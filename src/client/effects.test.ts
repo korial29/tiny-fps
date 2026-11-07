@@ -406,6 +406,24 @@ describe('the gun', () => {
     expect(fx.kick).toBeLessThan(0.2);
   });
 
+  it('kicks a charged shot much harder: 3 times the gun kick and 3.4 times the look at the full charge', () => {
+    const peak = (power: number) => {
+      const fx = createEffects();
+      run(fx, me(), 5);
+      fx.fire(power);
+      const kick = fx.kick;
+      let pitch = 0;
+      for (let i = 0; i < 20; i++) {
+        run(fx, me(), 1);
+        pitch = Math.max(pitch, Math.abs(fx.pitch));
+      }
+      return { kick, pitch };
+    };
+    const [plain, full] = [peak(1), peak(5)];
+    expect([plain.kick, full.kick]).toEqual([1, 3]);
+    expect(full.pitch / plain.pitch).toBeCloseTo(3.4, 1);
+  });
+
   it('shakes the look and the roll a little with each shot, not by more than a degree or two', () => {
     const fx = createEffects();
     run(fx, me(), 5);

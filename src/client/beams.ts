@@ -41,6 +41,8 @@ interface Glow {
   /** The own muzzle's: it follows the muzzle. */
   own?: boolean;
   splash?: boolean;
+  /** How charged the shot was, 0 to 1: orange and bigger as it goes up. */
+  hot?: number;
 }
 /** A jagged bolt: two segments, a to m to b. */
 interface Bolt {
@@ -51,8 +53,10 @@ interface Bolt {
 }
 
 export interface Tracer {
-  /** A shot's flash at the muzzle `a`; `own` for the player's, which stays on its muzzle. */
-  flash(a: Vec3, own?: boolean): void;
+  /** A shot's flash at the muzzle `a`; `own` for the player's, which stays on its muzzle; `hot` how charged it was, 0 to 1. */
+  flash(a: Vec3, own?: boolean, hot?: number): void;
+  /** The muzzles charging this frame and how far, 0 to 1: an orange light swelling at each. */
+  charging(list: { p: Vec3; k: number }[]): void;
   /** A ball burst at `at`: a splash of light and a spray of sparks. */
   burst(at: Vec3): void;
   /** The balls to draw this frame. */
@@ -83,6 +87,13 @@ const BALL: [number, number[], number][] = [
   [0.22, [0.2, 0.45, 1.6], 0],
   [0.08, [2, 2.6, 3.6], 0.04],
 ];
+/** The same in orange, for a charged ball, a charged flash and a charging muzzle. */
+const HOT = [
+  [1.1, 0.26, 0.04],
+  [1.5, 0.42, 0.06],
+];
+/** Ball's colour `k` of the way (0 to 1) from cyan to orange. */
+const tint = (rgb: number[], i: number, k: number) => rgb.map((c, j) => c + (HOT[i][j] - c) * k);
 
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const cross = (a: Vec3, b: Vec3): Vec3 => [
@@ -140,11 +151,20 @@ const ribbon = (
 };
 
 /** A disc of radius r round c facing the eye, lifted toward it, as a fan of n triangles. */
-const disc = (out: number[], c: Vec3, r: number, rgb: number[], eye: Vec3, lift = 0, n = 8) => {
+const disc = (
+  out: number[],
+  c: Vec3,
+  r: number,
+  rgb: number[],
+  eye: Vec3,
+  lift = 0,
+  n = 8,
+  lo = 0.1,
+) => {
   const to = sub(c, eye);
   const s = norm(cross(to, [0, 1, 0]));
   const u = norm(cross(s, to));
-  const k = r * far(eye, c, 0.1);
+  const k = r * far(eye, c, lo);
   const l = norm(to).map((v, i) => c[i] - v * lift) as Vec3;
   const rim = (i: number): Vec3 => {
     const [x, y] = [Math.cos((i * 2 * Math.PI) / n) * k, Math.sin((i * 2 * Math.PI) / n) * k];
@@ -162,6 +182,7 @@ export const createTracer = (): Tracer => {
   let sparks: Spark[] = [];
   let bolts: Bolt[] = [];
   let balls: Orb[] = [];
+  let hot: { p: Vec3; k: number }[] = [];
   /** The eye of the last frame drawn: the balls nearest to it light the scene. */
   let seen: Vec3 = [0, 0, 0];
   let seed = 7;
@@ -184,8 +205,11 @@ export const createTracer = (): Tracer => {
   };
 
   return {
-    flash(a, own) {
-      glows = [...glows, { p: a, age: 0, own }].slice(-MAX);
+    flash(a, own, k = 0) {
+      glows = [...glows, { p: a, age: 0, own, hot: k }].slice(-MAX);
+    },
+    charging(list) {
+      hot = list;
     },
     burst(at) {
       glows = [...glows, { p: at, age: 0, splash: true }].slice(-MAX);
@@ -229,24 +253,42 @@ export const createTracer = (): Tracer => {
       seen = eye;
       for (const { p, d, tail, power = 1 } of balls) {
         const end = p.map((v, i) => v - d[i] * tail) as Vec3;
-        // A charged ball swells, up to twice the size at the full charge.
+        // A charged ball swells, up to twice the size at the full charge, and turns orange.
         const big = 1 + 0.25 * (power - 1);
-        BALL.forEach(([r, rgb, lift]) => {
+        BALL.forEach(([r, c, lift], i) => {
+          const rgb = tint(c, i, Math.min(1, (power - 1) / 2));
           disc(out, p, r * big, rgb, eye, lift);
           if (tail > 0.01) {
             ribbon(out, p, end, r * 0.5 * big, rgb, eye, lift, 0, 0.1);
           }
         });
       }
-      for (const { p, age, splash } of glows) {
-        // A flash shrinks; a splash swells as it fades.
-        const k = 1 - age / (splash ? SPLASH : FLASH);
-        BALL.forEach(([r, rgb, lift]) =>
+      // A charging muzzle: an orange light swelling to 6 cm and flickering, its own size even
+      // at the own muzzle, a hand's length from the eye.
+      for (const { p, k } of hot) {
+        const f = 0.8 + 0.2 * rnd();
+        HOT.forEach((rgb, i) =>
           disc(
             out,
             p,
-            splash ? r * (3 - 2 * k) : r * 0.7 * k,
-            rgb.map(c => c * (0.4 + 0.6 * k)),
+            (i ? 0.012 + 0.018 * k : 0.02 + 0.04 * k) * f,
+            rgb.map(c => c * (0.5 + 0.5 * k)),
+            eye,
+            0.01 * i,
+            8,
+            1,
+          ),
+        );
+      }
+      for (const { p, age, splash, hot: h = 0 } of glows) {
+        // A flash shrinks; a splash swells as it fades. A charged one is orange and bigger.
+        const k = 1 - age / (splash ? SPLASH : FLASH);
+        BALL.forEach(([r, rgb, lift], i) =>
+          disc(
+            out,
+            p,
+            (splash ? r * (3 - 2 * k) : r * 0.7 * k) * (1 + h),
+            tint(rgb, i, h).map(c => c * (0.4 + 0.6 * k)),
             eye,
             lift,
           ),
@@ -289,7 +331,12 @@ export const createTracer = (): Tracer => {
         ...[...balls]
           .sort((a, b) => dist(a) - dist(b))
           .slice(0, LIT)
-          .map(o => point(o.p, 4, 1, [0.25, 0.5, 1.4])),
+          .map(o =>
+            (o.power ?? 1) > 1
+              ? point(o.p, 6, 1.5, [1.4, 0.55, 0.15])
+              : point(o.p, 4, 1, [0.25, 0.5, 1.4]),
+          ),
+        ...hot.slice(0, 2).map(({ p, k }) => point(p, 2 + 3 * k, 0.4 + 1.2 * k, [1.4, 0.55, 0.15])),
       ];
     },
   };

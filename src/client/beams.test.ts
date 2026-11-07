@@ -98,6 +98,50 @@ describe('the plasma balls', () => {
   });
 });
 
+describe('the charge', () => {
+  it('turns a charged ball orange and bigger, its light too', () => {
+    const t = createTracer();
+    t.orbs([{ p: [0, 1.6, -10], d: [0, 0, -1], tail: 1, power: 5 }]);
+    const v = drawn(t);
+    for (const x of v) {
+      expect(x[6]).toBeGreaterThan(x[9] * 5);
+    }
+    const plain = createTracer();
+    plain.orbs([{ p: [0, 1.6, -10], d: [0, 0, -1], tail: 1 }]);
+    const w = (x: number[][]) => Math.hypot(...[0, 1, 2].map(k => x[1][k] - x[0][k]));
+    expect(w(v) / w(drawn(plain))).toBeCloseTo(2, 6);
+    expect(t.lights()[0].color[0]).toBeGreaterThan(t.lights()[0].color[2]);
+  });
+
+  it('lights a charging muzzle orange, swelling with the charge, a few centimetres even at the eye', () => {
+    const t = createTracer();
+    const size = (k: number) => {
+      t.charging([{ p: FROM, k }]);
+      const v = drawn(t);
+      return Math.max(...v.map(x => Math.hypot(x[0] - FROM[0], x[1] - FROM[1], x[2] - FROM[2])));
+    };
+    t.charging([]);
+    expect(drawn(t)).toEqual([]);
+    const [low, full] = [size(0), size(1)];
+    expect(full).toBeGreaterThan(low * 2);
+    expect(full).toBeGreaterThan(0.04);
+    expect(full).toBeLessThan(0.08);
+    for (const x of drawn(t)) {
+      expect(x[6]).toBeGreaterThan(x[9] * 5);
+    }
+    expect(t.lights().some(l => l.color[0] > l.color[2] * 5)).toBe(true);
+  });
+
+  it('flashes a charged shot orange and bigger', () => {
+    const [plain, hot] = [createTracer(), createTracer()];
+    plain.flash(TO);
+    hot.flash(TO, false, 1);
+    const w = (x: number[][]) => Math.hypot(...[0, 1, 2].map(k => x[1][k] - x[0][k]));
+    expect(w(drawn(hot)) / w(drawn(plain))).toBeCloseTo(2, 6);
+    expect(drawn(hot)[0][6]).toBeGreaterThan(drawn(hot)[0][9]);
+  });
+});
+
 describe('the flash of a shot', () => {
   it('glows at the muzzle and lights it, smaller and dimmer as it goes, gone in FLASH seconds', () => {
     const t = createTracer();

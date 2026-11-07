@@ -32,12 +32,12 @@ export interface Effects {
   stride: number;
   /** 0 to 1: the red vignette of a tackle, full at the hit and gone in under a second. */
   hurt: number;
-  /** 0 to 1: the kick of the gun in the hand, full at a shot and gone in a tenth of a second. */
+  /** The kick of the gun in the hand, 1 at a shot (up to 3 for a charged one) and gone in a tenth of a second. */
   kick: number;
   /** 0 to 1: how far the view has gone down to the floor, while the own player is down. */
   lie: number;
-  /** The own player fired: a small shake of the eye, the look and the roll, and the kick of the gun. */
-  fire(): void;
+  /** The own player fired a shot of `power` (1 to CHARGE_MAX): a shake of the eye, the look and the roll, and the kick of the gun, much stronger for a charged one. */
+  fire(power?: number): void;
   /** The own player was hit: the red vignette and a small knock. */
   wound(): void;
   /** The own player was tackled: a hard jolt of the eye, the look and the roll, and the vignette. */
@@ -148,13 +148,14 @@ export const createEffects = (): Effects => {
     kick: 0,
     lie: 0,
 
-    fire() {
-      // The roll's kick alternates sides.
+    fire(power = 1) {
+      // The roll's kick alternates sides; a full charge kicks 3.4 times as hard.
+      const k = 1 + 0.6 * (power - 1);
       shots++;
-      y[1] += SHOT[0];
-      p[1] += SHOT[1];
-      r[1] += SHOT[2] * Math.sin(shots * 2.4);
-      fx.kick = 1;
+      y[1] += SHOT[0] * k;
+      p[1] += SHOT[1] * k;
+      r[1] += SHOT[2] * k * Math.sin(shots * 2.4);
+      fx.kick = 1 + 0.5 * (power - 1);
     },
 
     wound() {

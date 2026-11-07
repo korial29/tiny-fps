@@ -7,6 +7,7 @@
 // model. No DOM, pure but for the state it keeps.
 import {
   CHARGE_TAP,
+  CHARGE_TICKS,
   DASH_COOLDOWN,
   DASH_TICKS,
   GRAB_GAP,
@@ -610,14 +611,19 @@ export const createBody = (world?: World): Body => {
 
   /**
    * The gun in camera space: where its grip is (lower right, rising from below as it is taken, kicked
-   * back by a shot, swaying with the run) and its axes, pointing at `target`.
+   * back by a shot, swaying with the run, shaking with a charge) and its axes, pointing at `target`.
    */
   const holster = (): [Vec3, Vec3[]] => {
     const a = w.amp * (1 + 0.5 * w.sprint);
+    // A charge past a tap shakes the gun, harder as it grows: 4.5 mm at the full charge.
+    const shake =
+      me && !me.wield && (me.charge ?? 0) >= CHARGE_TAP
+        ? 0.0045 * Math.min(1, (me.charge! - CHARGE_TAP) / (CHARGE_TICKS - CHARGE_TAP))
+        : 0;
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     const at: Vec3 = [
-      Math.min(0.22, 0.18 * wide) + 0.012 * a * s + lift[0],
-      -0.25 + 0.018 * a * c - 0.3 * (1 - w.gun) + lift[1],
+      Math.min(0.22, 0.18 * wide) + 0.012 * a * s + lift[0] + shake * Math.sin(clock * 53),
+      -0.25 + 0.018 * a * c - 0.3 * (1 - w.gun) + lift[1] + shake * Math.sin(clock * 61 + 1),
       0.4 - 0.05 * kick + lift[2],
     ];
     // A shot kicks the nose up.

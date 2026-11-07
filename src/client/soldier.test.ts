@@ -527,7 +527,8 @@ describe('a runner with the katana', () => {
       expect(y).toBeGreaterThan(r.p.y + 2.1);
       expect(x).toBeGreaterThan(r.p.x);
       expect(x).toBeLessThan(r.p.x + 0.45);
-      expect(Math.abs(z - r.p.z)).toBeLessThan(0.4);
+      // Leaning a little forward with its straight wrists (lock()).
+      expect(Math.abs(z - r.p.z)).toBeLessThan(0.65);
       // Nothing of it low: the blade stands above the hands at the chest, the pommel at the belt.
       expect(Math.min(...light(out).map(q => q[1]))).toBeGreaterThan(r.p.y + 0.95);
     }
@@ -596,7 +597,7 @@ describe('a runner with the katana', () => {
       expect(path[strike][2]).toBeLessThan(path[tick(0.3)][2] - 0.2);
     } else if (cut == CUT.SLASH) {
       // Raised over the head and behind it, then down to below the hips.
-      expect(path[tick(0.28)][1]).toBeGreaterThan(path[strike][1] + 0.6);
+      expect(path[tick(0.28)][1]).toBeGreaterThan(path[strike][1] + 0.55);
       expect(path[tick(0.28)][2]).toBeGreaterThan(-3);
       expect(path[strike][1]).toBeGreaterThan(path[tick(0.55)][1] + 0.8);
     } else {
@@ -605,7 +606,7 @@ describe('a runner with the katana', () => {
       // The runner faces -z: its right is +x. Wound up out at one side, finished out at the other.
       expect(s * (path[tick(0.24)][0] - 5)).toBeLessThan(-0.3);
       expect(s * (path[tick(0.6)][0] - 5)).toBeGreaterThan(0.3);
-      expect(path[tick(0.6)][1]).toBeLessThan(1 + 1.2);
+      expect(path[tick(0.6)][1]).toBeLessThan(1 + 1.3);
     }
     // The cut ends where the carry was: the blade upright.
     expect(path.at(-1)![1]).toBeGreaterThan(1 + 2.1);

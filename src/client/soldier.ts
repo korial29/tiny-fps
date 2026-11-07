@@ -7,7 +7,7 @@ import { TAU } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
-import { inv, reach, wield } from './body';
+import { inv, lock, reach, wield } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
 import { TILT, aimed, focus, held } from './gun';
@@ -197,10 +197,14 @@ export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number): 
   const s = solve(q);
   // The eye of the head, which a run leans forward and the trunk carries: the hands go with it.
   const eye = s.pos[J.HEAD];
-  const d = unit(turn(g.slice(3, 6)));
+  // Both hands round the grip, the left one BEHIND the right, the elbows down and out, the right
+  // wrist straight: the blade goes where the arms carry it (lock()).
   const at = add(eye, turn(g.slice(0, 3)));
-  // Both hands round the grip, the left one BEHIND the right, the elbows down and out.
-  wield(q, s, J.ARM_R, at, d, turn([0.5, -1, -0.35]));
+  const [d, fing] = lock(s, at, unit(turn(g.slice(3, 6))), [
+    turn([0.5, -1, -0.35]),
+    turn([-0.5, -1, -0.35]),
+  ]);
+  wield(q, s, J.ARM_R, at, d, turn([0.5, -1, -0.35]), fing);
   wield(q, s, J.ARM_L, add(at, d.map(v => -BEHIND * v) as Vec3), d, turn([-0.5, -1, -0.35]));
   return q;
 };

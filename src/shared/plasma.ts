@@ -22,7 +22,8 @@ export interface Flying extends Ball {
 
 /**
  * The ball of the shot `p` has just fired (`p` is the state after the step that fired): from the
- * eye of the mode along the look, GUN_RANGE metres to go, named by his `shots` count.
+ * eye of the mode along the look, GUN_RANGE metres to go, named by his `shots` count, as strong
+ * as the shot (`power`).
  */
 export const launch = (p: PlayerState, team = 0): Flying => {
   const [sy, cy, sp, cp] = [Math.sin(p.yaw), Math.cos(p.yaw), Math.sin(p.pitch), Math.cos(p.pitch)];
@@ -38,6 +39,7 @@ export const launch = (p: PlayerState, team = 0): Flying => {
     dz: -cy * cp,
     left: GUN_RANGE,
     burst: false,
+    power: p.power ?? 1,
   };
 };
 

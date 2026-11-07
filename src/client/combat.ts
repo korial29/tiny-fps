@@ -119,7 +119,14 @@ export const createCombat = (
   let cuts: number[] = [];
   /** A little off the pitch each time, so that a burst does not drone. */
   const rate = () => 0.94 + 0.12 * ((seq++ * 0.618) % 1);
-  const laser = (at?: Vec3) => audio.play(SOUND.LASER, at, at ? 0.7 : 0.5, rate());
+  /** A shot; a charged one (`power` over 1) deeper and louder. */
+  const laser = (at?: Vec3, power = 1) =>
+    audio.play(
+      SOUND.LASER,
+      at,
+      (at ? 0.7 : 0.5) * (1 + 0.15 * (power - 1)),
+      rate() * (1 - 0.1 * (power - 1)),
+    );
   /** The muzzle of a runner's gun, as he fires at what he looks at. */
   const gun = (p: PlayerState) => tip(...aimed(p, focus(p, world)[0]));
   const swish = (c: number, at?: Vec3) => audio.play(SOUND.SWISH, at, SWISH.gain[c], SWISH.rate[c]);
@@ -193,7 +200,7 @@ export const createCombat = (
         for (const p of pending) {
           balls.fire(p, now);
           tracer.flash(from, true);
-          laser();
+          laser(undefined, p.power);
         }
       }
       pending = [];

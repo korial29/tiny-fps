@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { EAST, at, yard } from '../../test/yard';
-import { AMMO_MAX, CUTS, DOWN_TICKS, GUN_COOLDOWN, HP_MAX, PICK_H, RACK_R } from './constants';
-import { STRIKE, step, within } from './gun';
+import {
+  AMMO_MAX,
+  CHARGE_MAX,
+  CHARGE_TAP,
+  CHARGE_TICKS,
+  CUTS,
+  DOWN_TICKS,
+  GUN_COOLDOWN,
+  HP_MAX,
+  PICK_H,
+  RACK_R,
+} from './constants';
+import { STRIKE, powerOf, step, within } from './gun';
 import { spawn } from './physics';
 import { onWire } from './protocol';
 import { CUT, EV, KEY, MODE } from './types';
@@ -27,27 +38,98 @@ const hit = (p: PlayerState, keys: number, yaw = EAST, pitch = 0, w = yard, team
 const go = (p: PlayerState, keys: number, yaw = EAST, pitch = 0, w = yard, team = 0): boolean =>
   hit(p, keys, yaw, pitch, w, team) === STRIKE.SHOT;
 
+/** A tap of FIRE: pressed on one step, let go on the next (with `keys` on both); whether the release fired. */
+const tap = (p: PlayerState, keys = 0, yaw = EAST, pitch = 0, w = yard, team = 0): boolean => {
+  hit(p, keys | FIRE, yaw, pitch, w, team);
+  return go(p, keys, yaw, pitch, w, team);
+};
+
+/** `n` steps tapping FIRE every other step, from a press: the steps that fired. */
+const taps = (p: PlayerState, n: number, keys = 0, w = yard): number[] =>
+  Array.from({ length: n }, (_, k) => go(p, keys | (k % 2 ? 0 : FIRE), EAST, 0, w)).flatMap(
+    (f, k) => (f ? [k] : []),
+  );
+
 /** A red player standing at (x, z) on the yard with a full gun. */
 const armed = (x = 0, z = 0, over: Partial<PlayerState> = {}): PlayerState =>
   Object.assign(at(x, z, EAST).p, { ammo: AMMO_MAX }, over);
 
 describe('the trigger', () => {
-  it('fires at once, then every GUN_COOLDOWN ticks while FIRE is held, one ammo each', () => {
+  it('fires a tap when it is let go, one ammo, and the next tap once the cooldown is over', () => {
     const p = armed();
-    const fired = Array.from({ length: 30 }, () => go(p, FIRE));
-    expect(fired.flatMap((f, k) => (f ? [k] : []))).toEqual([0, 7, 14, 21, 28]);
-    expect([p.ammo, p.shots]).toEqual([AMMO_MAX - 5, 5]);
-    expect(p.cool).toBe(GUN_COOLDOWN - 1);
+    // Pressed: nothing yet, it charges. Let go: the shot.
+    expect(go(p, FIRE)).toBe(false);
+    expect(p.charge).toBe(1);
+    expect(go(p, 0)).toBe(true);
+    expect([p.ammo, p.shots, p.power, p.charge, p.cool]).toEqual([
+      AMMO_MAX - 1,
+      1,
+      1,
+      0,
+      GUN_COOLDOWN,
+    ]);
     expect(GUN_COOLDOWN).toBe(7);
+    // Tapping on, every other step: a press in the cooldown charges nothing, so the next shot is
+    // the first release after it, 8 steps on.
+    const p2 = armed();
+    expect(taps(p2, 30)).toEqual([1, 9, 17, 25]);
+    expect([p2.ammo, p2.shots]).toEqual([AMMO_MAX - 4, 4]);
   });
 
-  it('keeps the cooldown running when FIRE is let go: a tap is not a faster gun', () => {
+  it('charges while FIRE is held, holds the charge at the top, and fires it once when let go', () => {
     const p = armed();
-    expect(go(p, FIRE)).toBe(true);
-    // A tap every other tick: the first tap after the cooldown fires, 7 ticks after the first shot.
-    const fired = Array.from({ length: 12 }, (_, k) => go(p, k % 2 ? FIRE : 0));
-    expect(fired.indexOf(true)).toBe(GUN_COOLDOWN);
-    expect(p.shots).toBe(2);
+    for (let k = 1; k <= CHARGE_TICKS + 30; k++) {
+      expect(go(p, FIRE), `step ${k}`).toBe(false);
+      expect(p.charge).toBe(Math.min(k, CHARGE_TICKS));
+    }
+    expect([p.ammo, p.shots]).toEqual([AMMO_MAX, 0]);
+    // Let go: one ball of the full strength, CHARGE_MAX shots spent.
+    expect(go(p, 0)).toBe(true);
+    expect([p.power, p.ammo, p.shots, p.charge]).toEqual([CHARGE_MAX, AMMO_MAX - CHARGE_MAX, 1, 0]);
+    expect(CHARGE_MAX).toBe(HP_MAX);
+  });
+
+  it('grows the strength with the charge: 1 under CHARGE_TAP, CHARGE_MAX at CHARGE_TICKS, never back', () => {
+    expect([0, 1, CHARGE_TAP - 1].map(powerOf)).toEqual([1, 1, 1]);
+    expect(powerOf(CHARGE_TICKS)).toBe(CHARGE_MAX);
+    const all = Array.from({ length: CHARGE_TICKS + 1 }, (_, k) => powerOf(k));
+    all.forEach((v, k) => k && expect(v).toBeGreaterThanOrEqual(all[k - 1]));
+    expect(new Set(all)).toEqual(new Set([1, 2, 3, 4, 5]));
+    // Held half way: a middling ball.
+    const p = armed();
+    for (let k = 0; k < 35; k++) {
+      go(p, FIRE);
+    }
+    go(p, 0);
+    expect([p.power, p.ammo]).toEqual([powerOf(35), AMMO_MAX - powerOf(35)]);
+    expect(p.power).toBe(3);
+  });
+
+  it('spends no more than the shots left: a full charge with 2 left is a ball of 2', () => {
+    const p = armed(0, 0, { ammo: 2 });
+    for (let k = 0; k < CHARGE_TICKS; k++) {
+      go(p, FIRE);
+    }
+    expect(go(p, 0)).toBe(true);
+    expect([p.power, p.ammo]).toEqual([2, 0]);
+  });
+
+  it('drops the charge when the katana comes to hand, or the match ends', () => {
+    const p = armed(0, 0, { blade: true });
+    for (let k = 0; k < 30; k++) {
+      go(p, FIRE);
+    }
+    expect(p.charge).toBe(30);
+    go(p, KEY.BLADE);
+    expect(p.charge).toBe(0);
+    go(p, 0);
+    expect(p.shots).toBe(0);
+    const q = armed();
+    for (let k = 0; k < 30; k++) {
+      go(q, FIRE);
+    }
+    step(q, onWire({ keys: 0, yaw: EAST, pitch: 0, seq: 0 }), yard, 0, false);
+    expect([q.charge, q.shots]).toEqual([0, 0]);
   });
 
   it('does not fire without the key, without the gun, or with an empty one', () => {
@@ -67,25 +149,24 @@ describe('the trigger', () => {
 
   it('empties the gun and stops at 0', () => {
     const p = armed(0, 0, { ammo: 3 });
-    for (let k = 0; k < 100; k++) {
-      go(p, FIRE);
-    }
+    expect(taps(p, 100)).toHaveLength(3);
     expect([p.ammo, p.shots]).toEqual([0, 3]);
   });
 
   it('wraps the shot counter at 256', () => {
     const p = armed(0, 0, { shots: 255 });
-    go(p, FIRE);
+    tap(p);
     expect(p.shots).toBe(0);
   });
 
   it('fires on the move: running, in the air, wall-running, sliding and crouching', () => {
     for (const mode of [MODE.GROUND, MODE.AIR, MODE.WALLRUN, MODE.SLIDE, MODE.CROUCH]) {
       const p = armed(0, 0, { mode });
-      expect(go(p, FIRE | FORWARD), `mode ${mode}`).toBe(true);
+      expect(tap(p, FORWARD), `mode ${mode}`).toBe(true);
     }
     const p = armed();
-    go(p, FORWARD | JUMP | FIRE);
+    hit(p, FORWARD | JUMP | FIRE);
+    go(p, FORWARD);
     expect(p.mode).toBe(MODE.AIR);
     expect(p.shots).toBe(1);
   });
@@ -98,7 +179,7 @@ describe('the trigger', () => {
     let last = 0;
     for (let k = 0; k < 90; k++) {
       const before = p.shots;
-      go(p, FORWARD | FIRE);
+      go(p, FORWARD | (k % 2 ? 0 : FIRE));
       modes.add(p.mode);
       if (p.mode === MODE.HANG || p.mode === MODE.CLIMB) {
         busy++;
@@ -131,21 +212,19 @@ describe('the rack', () => {
     go(p, 0, EAST, 0, racked);
     expect([p.ammo, p.rack]).toEqual([AMMO_MAX, true]);
     const q = at5({ ammo: 1 });
-    go(q, FIRE, EAST, 0, racked);
+    tap(q, 0, EAST, 0, racked);
     expect([q.ammo, q.shots]).toEqual([AMMO_MAX - 1, 1]);
   });
 
   it('gives nothing while he stays and fires, and fills again each time he leaves and comes back', () => {
     const p = at5();
-    for (let k = 0; k < 100; k++) {
-      go(p, FIRE, EAST, 0, racked);
-    }
-    // 15 shots in 100 steps, from the one fill.
-    expect([p.shots, p.ammo]).toEqual([15, AMMO_MAX - 15]);
+    // 13 taps' shots in 100 steps, from the one fill.
+    expect(taps(p, 100, 0, racked)).toHaveLength(13);
+    expect([p.shots, p.ammo]).toEqual([13, AMMO_MAX - 13]);
     // Out of the circle and back in.
     p.x = 5 + RACK_R + 0.5;
     go(p, 0, EAST, 0, racked);
-    expect([p.rack, p.ammo]).toEqual([false, AMMO_MAX - 15]);
+    expect([p.rack, p.ammo]).toEqual([false, AMMO_MAX - 13]);
     p.x = 5;
     go(p, 0, EAST, 0, racked);
     expect([p.rack, p.ammo]).toEqual([true, AMMO_MAX]);
@@ -291,7 +370,7 @@ describe('down', () => {
       expect(p.pitch).toBeCloseTo(0.3, 4);
       // And he plays again.
       p.ammo = 5;
-      expect(go(p, FIRE, EAST, 0, w, team)).toBe(true);
+      expect(tap(p, 0, EAST, 0, w, team)).toBe(true);
     }
   });
 
@@ -446,8 +525,8 @@ describe('the weapon in hand', () => {
       expect(go(p, FIRE)).toBe(false);
       expect([p.wield, p.swing], `step ${k}`).toEqual([true, CUTS[CUT.SLASH].ticks - k]);
     }
-    // The swing is over on the next step: the gun is back.
-    expect(go(p, FIRE)).toBe(true);
+    // The swing is over on the next step: the gun is back, and a tap fires it.
+    expect(tap(p)).toBe(true);
     expect([p.wield, p.swing]).toEqual([false, 0]);
   });
 });
@@ -537,9 +616,9 @@ describe('the swing', () => {
       hit(q, FIRE);
     }
     expect(q.shots).toBe(0);
-    // With the gun in hand the katana does not swing.
+    // With the gun in hand the katana does not swing: a tap fires the gun.
     const r = armed(0, 0, { blade: true });
-    expect(hit(r, FIRE)).toBe(STRIKE.SHOT);
+    expect(tap(r)).toBe(true);
     expect([r.swing, r.shots]).toEqual([0, 1]);
   });
 
@@ -548,8 +627,8 @@ describe('the swing', () => {
     const seen = new Set<number>();
     for (let k = 0; k < 300; k++) {
       const before = p.shots;
-      // Swap the weapon every 40 steps: FIRE held all the while.
-      const r = hit(p, FIRE | (k % 80 < 40 ? BLADE : 0));
+      // Swap the weapon every 40 steps, tapping FIRE all the while.
+      const r = hit(p, (k % 2 ? 0 : FIRE) | (k % 80 < 40 ? BLADE : 0));
       seen.add(r);
       expect(r === STRIKE.SHOT, `step ${k}`).toBe(((p.shots - before) & 255) === 1);
     }

@@ -26,7 +26,7 @@ export const KEY = {
   DASH: 64,
   /** Hold to crouch, or to slide when fast. */
   CROUCH: 128,
-  /** Hold to fire the gun: one shot every GUN_COOLDOWN ticks while there is ammo. With the katana in hand: a cut (see CUT). */
+  /** Hold to charge the gun, let go to fire (see CHARGE_TICKS); with the katana in hand, a cut (see CUT). */
   FIRE: 256,
   /**
    * Set while the player wants the katana in hand (the client's choice: 1, 2 or the wheel), clear
@@ -171,6 +171,10 @@ export interface PlayerState {
   ammo: number;
   /** Ticks to the next shot. */
   cool: number;
+  /** Ticks FIRE has been held with the gun, up to CHARGE_TICKS, 0 when not charging. Absent reads 0. */
+  charge?: number;
+  /** The strength of the last shot, 1 to CHARGE_MAX: the shots it spent and the health it takes. Set by the step that fires; not on the wire. */
+  power?: number;
   /** Standing inside the circle of the team's rack as of the last step: the gun is filled on arrival only. Absent reads false. */
   rack?: boolean;
   /** Ticks left lying down after the health ran out; at 0 the player is back at a spawn. 0 when up. */
@@ -242,6 +246,8 @@ export interface Ball {
   dz: number;
   /** It burst where it is: the last snapshot that carries it. */
   burst: boolean;
+  /** Its strength, 1 to CHARGE_MAX: the health it takes. Absent reads 1. */
+  power?: number;
 }
 
 /** The flag of a team as a snapshot carries it: only the fields of its state are meaningful, the rest read 0. */

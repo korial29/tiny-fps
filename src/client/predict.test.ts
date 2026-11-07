@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   AMMO_MAX,
   AMMO_PACK,
+  CHARGE_MAX,
+  CHARGE_TICKS,
   DASH_COOLDOWN,
   DASH_TICKS,
   DOWN_TICKS,
@@ -249,9 +251,10 @@ describe('prediction against the room', () => {
         checked++;
         worst = Math.max(worst, gap(pred.me(1)!, ref));
         // Every field the move continues from, not only the place: speed, mode, timers. Not the
-        // look angles (me() eases them along the shortest arc, a rounding apart) nor the events.
+        // look angles (me() eases them along the shortest arc, a rounding apart) nor what a step
+        // leaves for the host to read (the events, the fall, the last shot's power).
         const me = pred.me(1)!;
-        const skip = ['ev', 'fall', 'yaw', 'pitch'];
+        const skip = ['ev', 'fall', 'power', 'yaw', 'pitch'];
         for (const key of Object.keys(ref) as (keyof PlayerState)[]) {
           if (!skip.includes(key) && me[key] !== ref[key]) {
             differing.add(key);
@@ -311,7 +314,8 @@ describe('prediction against the room', () => {
       granted,
       hostAmmo: final.ammo,
       lastDiffering: (Object.keys(ref) as (keyof PlayerState)[]).filter(
-        key => !['ev', 'fall', 'yaw', 'pitch'].includes(key) && final[key] !== pred.me(1)![key],
+        key =>
+          !['ev', 'fall', 'power', 'yaw', 'pitch'].includes(key) && final[key] !== pred.me(1)![key],
       ),
       /** Times the reference's gun was filled, and the ammo it ends with. */
       ammo: ref.ammo,
@@ -467,8 +471,9 @@ describe('prediction against the room', () => {
 
   /**
    * Random play with the trigger: from the start roof to the rack, then keys at random in bursts
-   * (a run, a sprint, hops, a crouch, a dash), the look wandering, FIRE held half the time. Some
-   * runs fall off the roof and come back without the gun, and fetch it again.
+   * (a run, a sprint, hops, a crouch, a dash), the look wandering, FIRE tapped in a third of them
+   * and held (a charge, let go at the burst's end) in a third. Some runs fall off the roof and come
+   * back without the gun, and fetch it again.
    */
   const play = (seed: number, team = 0, n = 1800): Omit<Input, 'seq'>[] => {
     let s = seed;
@@ -480,9 +485,10 @@ describe('prediction against the room', () => {
     const yaw0 = Math.atan2(-(rack[0] - from[0]), -(rack[2] - from[2]));
     const walk = Math.ceil(Math.hypot(rack[0] - from[0], rack[2] - from[2]) * 10) + 20;
     for (let k = 0; k < walk; k++) {
-      out.push({ keys: KEY.FORWARD | (k > 20 ? KEY.FIRE : 0), yaw: yaw0, pitch: 0 });
+      out.push({ keys: KEY.FORWARD | (k > 20 && k % 2 ? KEY.FIRE : 0), yaw: yaw0, pitch: 0 });
     }
     let keys = 0;
+    let fire = 0;
     let yaw = yaw0;
     let turn = 0;
     for (let k = out.length; k < n; k++) {
@@ -492,12 +498,18 @@ describe('prediction against the room', () => {
           (rnd() < 0.3 ? KEY.SPRINT : 0) |
           (rnd() < 0.2 ? KEY.JUMP : 0) |
           (rnd() < 0.1 ? KEY.CROUCH : 0) |
-          (rnd() < 0.05 ? KEY.DASH : 0) |
-          (rnd() < 0.5 ? KEY.FIRE : 0);
+          (rnd() < 0.05 ? KEY.DASH : 0);
+        fire = Math.floor(rnd() * 3);
         turn = (rnd() - 0.5) * 0.1;
       }
       yaw += turn;
-      out.push({ keys, yaw: ((yaw % 6.2832) + 6.2832) % 6.2832, pitch: Math.sin(k / 30) * 0.6 });
+      // Tapped, or held to the burst's last step.
+      const held = fire === 1 ? k % 2 === 0 : fire === 2 && k % 9 < 8;
+      out.push({
+        keys: keys | (held ? KEY.FIRE : 0),
+        yaw: ((yaw % 6.2832) + 6.2832) % 6.2832,
+        pitch: Math.sin(k / 30) * 0.6,
+      });
     }
     return out;
   };
@@ -526,8 +538,12 @@ describe('prediction against the room', () => {
     const yaw = Math.atan2(-(rack[0] - from[0]), -(rack[2] - from[2]));
     const d = Math.hypot(rack[0] - from[0], rack[2] - from[2]);
     const put = (n: number, keys: number) =>
-      Array.from({ length: n }, () => ({ keys, yaw, pitch: 0 }));
-    // In to half a metre of the rack, 200 steps standing on it with FIRE held, 40 back out of the
+      Array.from({ length: n }, (_, k) => ({
+        keys: keys & (k % 2 ? ~KEY.FIRE : ~0),
+        yaw,
+        pitch: 0,
+      }));
+    // In to half a metre of the rack, 200 steps standing on it tapping FIRE, 40 back out of the
     // circle, 40 in again, and still.
     const steps = [
       ...put(Math.round((d - 0.5) * 10) + 3, KEY.FORWARD),
@@ -539,10 +555,10 @@ describe('prediction against the room', () => {
     for (const [name, lag] of LAGS) {
       const r = race(lag, steps, 0, [], [], true);
       expect([r.worst, r.end, r.final, r.differing], `${name} lag`).toEqual([0, 0, 0, []]);
-      // Filled on arrival and on the return, and not in between: 200 steps of fire emptied it.
+      // Filled on arrival and on the return, and not in between: 200 steps of taps spent 25.
       expect(r.fills, `${name} lag`).toBe(2);
       expect(r.ammo, `${name} lag`).toBe(AMMO_MAX);
-      expect(r.shots, `${name} lag`).toBeGreaterThan(25);
+      expect(r.shots, `${name} lag`).toBeGreaterThanOrEqual(24);
     }
   }, 60_000);
 
@@ -570,8 +586,12 @@ describe('prediction against the room', () => {
     const to = (a: number[], b: number[]) => Math.atan2(-(b[0] - a[0]), -(b[2] - a[2]));
     const d = Math.hypot(rack[0] - from[0], rack[2] - from[2]);
     const put = (n: number, keys: number, yaw: number) =>
-      Array.from({ length: n }, () => ({ keys, yaw, pitch: 0 }));
-    // To the rack, 200 steps of fire on it, then over the pack with FIRE held, and still.
+      Array.from({ length: n }, (_, k) => ({
+        keys: keys & (k % 2 ? ~KEY.FIRE : ~0),
+        yaw,
+        pitch: 0,
+      }));
+    // To the rack, 200 steps of taps on it, then over the pack tapping on, and still.
     const steps = [
       ...put(Math.round((d - 0.5) * 10) + 3, KEY.FORWARD, to(from, rack)),
       ...put(200, KEY.FIRE, to(from, rack)),
@@ -642,7 +662,12 @@ describe('prediction against the room', () => {
         turn = (rnd() - 0.5) * 0.08;
       }
       yaw += turn;
-      out.push({ keys, yaw: ((yaw % 6.2832) + 6.2832) % 6.2832, pitch: Math.sin(k / 30) * 0.3 });
+      // FIRE tapped: a swing starts on a press, and the gun fires on a release.
+      out.push({
+        keys: keys & (k % 2 ? ~KEY.FIRE : ~0),
+        yaw: ((yaw % 6.2832) + 6.2832) % 6.2832,
+        pitch: Math.sin(k / 30) * 0.3,
+      });
     }
     return out;
   };
@@ -658,7 +683,7 @@ describe('prediction against the room', () => {
           // The guards: he took the katana and swung it, struck many times, and fired the gun too.
           expect(r.cuts, label).toBeGreaterThan(8);
           expect(r.wielded, label).toBeGreaterThan(300);
-          expect(r.shots, label).toBeGreaterThan(10);
+          expect(r.shots, label).toBeGreaterThan(6);
           expect(r.checked, label).toBeGreaterThan(500);
         }
       }
@@ -769,24 +794,39 @@ describe('prediction against the room', () => {
 
 describe('the gun, predicted', () => {
   const FIRE = { keys: KEY.FIRE, yaw: 0, pitch: 0 };
+  const LET_GO = { keys: 0, yaw: 0, pitch: 0 };
+  /** FIRE pressed on even steps and let go on odd ones: a tap fires on its release. */
+  const tapping = (k: number) => (k % 2 ? LET_GO : FIRE);
   /** A snapshot of the own player (id 0) standing on the start roof, with the gun fields over. */
   const shown = (over: Partial<SnapPlayer>, ack = 0xffff, over2: Partial<Snapshot> = {}) => ({
     ...snapshot(1, snapPlayer(0, { vz: 0, ack, ...over })),
     ...over2,
   });
 
-  it('fires at once on a held FIRE, every GUN_COOLDOWN steps, and shows it in the own state', () => {
+  it('fires a tap on its release, the next after the cooldown, and shows it in the own state', () => {
     const pred = createPredictor(world);
     pred.you(0);
     pred.snapshot(shown({ ammo: 10, shots: 254 }), 0);
     const seen: number[] = [];
-    for (let k = 0; k < 15; k++) {
-      pred.step(FIRE);
+    for (let k = 0; k < 18; k++) {
+      pred.step(tapping(k));
       seen.push(pred.me(1)!.shots);
     }
-    // Shots 254 -> 255 -> 0 -> 1, on steps 0, 7 and 14.
-    expect(seen.filter((v, k) => v !== (seen[k - 1] ?? 254))).toEqual([255, 0, 1]);
+    // Shots 254 -> 255 -> 0 -> 1, on the releases of steps 1, 9 and 17.
+    expect(seen.flatMap((v, k) => (v !== (seen[k - 1] ?? 254) ? [k] : []))).toEqual([1, 9, 17]);
     expect(pred.me(1)).toMatchObject({ ammo: 7, cool: GUN_COOLDOWN, shots: 1 });
+  });
+
+  it('charges on a held FIRE, shows the charge in the own state, and fires it whole when let go', () => {
+    const pred = createPredictor(world);
+    pred.you(0);
+    pred.snapshot(shown({ ammo: 10 }), 0);
+    for (let k = 0; k < CHARGE_TICKS; k++) {
+      pred.step(FIRE);
+    }
+    expect(pred.me(1)).toMatchObject({ ammo: 10, shots: 0, charge: CHARGE_TICKS });
+    pred.step(LET_GO);
+    expect(pred.me(1)).toMatchObject({ ammo: 10 - CHARGE_MAX, shots: 1, charge: 0 });
   });
 
   it('resets to the host ammo and counters on a snapshot and replays the unacked fire on them', () => {
@@ -794,13 +834,14 @@ describe('the gun, predicted', () => {
     pred.you(0);
     pred.snapshot(shown({ ammo: 10, shots: 0 }), 0);
     for (let k = 0; k < 20; k++) {
-      pred.step(FIRE);
+      pred.step(tapping(k));
     }
     expect(pred.me(1)).toMatchObject({ ammo: 7, shots: 3 });
-    // The host applied the first 8 inputs (ack 7): two shots, the second on the last of them. 12
-    // are left to replay: a shot on the 15th and the cooldown 5 steps into its run.
-    pred.snapshot(shown({ ammo: 8, shots: 2, cool: GUN_COOLDOWN }, 7), 50);
-    expect(pred.me(1)).toMatchObject({ ammo: 7, shots: 3, cool: GUN_COOLDOWN - 5 });
+    // The host applied the first 8 inputs (ack 7): one shot, on the release of step 1, and the
+    // cooldown down to 1. 12 are left to replay: shots on steps 9 and 17, and the cooldown 2 steps
+    // into its run.
+    pred.snapshot(shown({ ammo: 9, shots: 1, cool: 1 }, 7), 50);
+    expect(pred.me(1)).toMatchObject({ ammo: 7, shots: 3, cool: GUN_COOLDOWN - 2 });
     // The host and the shots it did not predict: a snapshot with fewer shots wins.
     pred.snapshot(shown({ ammo: 8, shots: 2, cool: GUN_COOLDOWN - 1 }, 19), 100);
     expect(pred.me(1)).toMatchObject({ ammo: 8, shots: 2 });
@@ -824,6 +865,7 @@ describe('the gun, predicted', () => {
     expect(pred.me(1)).toMatchObject({ ammo: 10, shots: 0 });
     pred.snapshot(shown({ ammo: 10 }, 0xffff, { over: false }), 30);
     pred.step(FIRE);
+    pred.step(LET_GO);
     expect(pred.me(1)).toMatchObject({ ammo: 9, shots: 1 });
   });
 

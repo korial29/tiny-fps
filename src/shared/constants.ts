@@ -196,6 +196,15 @@ export const HP_MAX = 5;
 export const AMMO_MAX = 60;
 /** Ticks between two shots while the trigger is held: 8.6 shots a second. */
 export const GUN_COOLDOWN = 7;
+/**
+ * The charged shot (the user, 2026-11-07): FIRE held with the gun charges it, and letting go fires
+ * one ball. Let go before CHARGE_TAP ticks it is a plain shot; held on, it grows to CHARGE_MAX
+ * shots' worth at CHARGE_TICKS (1 s), spends that many and takes that much health, so a full one
+ * (HP_MAX) puts any foe down. The charge holds at the top until let go. u8 on the wire.
+ */
+export const CHARGE_TAP = 10;
+export const CHARGE_TICKS = 60;
+export const CHARGE_MAX = 5;
 /** Metres a shot reaches: a plasma ball that has flown this far is gone. */
 export const GUN_RANGE = 80;
 /**

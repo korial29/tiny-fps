@@ -347,6 +347,7 @@ export class Room {
       down: DOWN_TICKS,
       ammo: -1,
       cool: 0,
+      charge: 0,
       blade: false,
       wield: false,
       swing: 0,
@@ -373,7 +374,7 @@ export class Room {
     }
   }
 
-  /** Flies the ball `b` on by `m` metres: one that bursts on an enemy who is up takes 1 hp from him, and counts a hit to its shooter. */
+  /** Flies the ball `b` on by `m` metres: one that bursts on an enemy who is up takes its power in hp from him, and counts a hit to its shooter. */
   private fly(b: Flying, m: number): void {
     const peers = this.players();
     const foes = peers.filter(q => q.info.team !== b.team && !q.state.down);
@@ -391,7 +392,7 @@ export class Room {
     if (by) {
       by.state.hits = (by.state.hits + 1) & 255;
     }
-    this.harm(foe, 1);
+    this.harm(foe, b.power ?? 1);
   }
 
   /**

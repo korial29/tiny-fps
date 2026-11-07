@@ -33,6 +33,8 @@ interface Flight {
   /** The muzzle it is drawn from, and the time it was first drawn. */
   from?: Vec3;
   born?: number;
+  /** Its strength (Ball.power). */
+  power: number;
 }
 
 export interface Balls {
@@ -73,6 +75,7 @@ export const createBalls = (world: World): Balls => {
         end: o.map((v, i) => v + d[i] * r) as Vec3,
         pop: r < GUN_RANGE,
         due: Infinity,
+        power: b.power ?? 1,
       });
     },
 
@@ -103,6 +106,7 @@ export const createBalls = (world: World): Balls => {
               d: [0, 0, 0],
               pop: false,
               due: Infinity,
+              power: b.power ?? 1,
             }),
           );
         }
@@ -151,6 +155,7 @@ export const createBalls = (world: World): Balls => {
           p: q,
           d: f.d,
           tail: Math.min(TRAIL, Math.hypot(...q.map((v, i) => v - from[i]))),
+          power: f.power,
         });
       }
       return { orbs, bursts };

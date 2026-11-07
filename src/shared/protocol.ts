@@ -31,7 +31,8 @@
 //   last step (`pressed`); pushes: the FIRE presses in the lock; away: the ticks a side or back key
 //   has been held in it. rail: the rail gun's ticks of lightning plus one (0: no rail gun);
 //   railing: bit 0 railed (it is in hand), bit 1 inRail (inside the circle of the rail rack), bit 2
-//   zapping (its bolt went out); slow: the ticks left drained by the bolt. Bit 4 of lost: fried.
+//   zapping (its bolt went out); slow: the ticks left drained by the bolt. Bit 4 of lost: fried; bit
+//   5: heavy (the katana's charged cut let go). charge is the katana's too, held at a cut's top.
 //   Then the match, after the players: [red u8][blue u8][clock u16] the captures of each team, and
 //   the whole seconds to the end of the match (bit 15: it is over, and the clock counts to the next
 //   one), [packs u32] bit n set when health pack n is there to take; then the red and the blue flag, each [state u8 = FLAG] and by state:
@@ -192,7 +193,10 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint8(o + 43, p.shots);
     v.setUint8(o + 44, p.hits);
     v.setUint8(o + 45, ((p.swing ?? 0) & 63) | (((p.cut ?? 0) & 3) << 6));
-    v.setUint8(o + 46, ((p.lost ?? 0) & 7) | (((p.cut ?? 0) & 4) << 1) | (p.fried ? 16 : 0));
+    v.setUint8(
+      o + 46,
+      ((p.lost ?? 0) & 7) | (((p.cut ?? 0) & 4) << 1) | (p.fried ? 16 : 0) | (p.heavy ? 32 : 0),
+    );
     v.setUint8(o + 47, p.charge ?? 0);
     v.setUint8(o + 48, p.lock ?? 0);
     v.setUint8(o + 49, ((p.foe ?? 0) & 15) | (p.pressed ? 128 : 0));
@@ -303,6 +307,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       inRail: (v.getUint8(o + 53) & 2) > 0,
       zapping: (v.getUint8(o + 53) & 4) > 0,
       fried: (v.getUint8(o + 46) & 16) > 0,
+      heavy: (v.getUint8(o + 46) & 32) > 0,
       slow: v.getUint8(o + 54),
     });
   }

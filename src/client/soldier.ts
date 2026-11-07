@@ -16,13 +16,13 @@ import {
   BEHIND,
   BOW,
   SWAY,
+  bent,
   cutting,
   ends,
   held as sword,
   locked,
+  poised,
   progress,
-  stroke,
-  trunk,
   whirl,
 } from './katana';
 import { ground, piece, track } from './limbs';
@@ -183,15 +183,11 @@ const ease = (v: number) => (v = Math.min(Math.max(v, 0), 1)) * v * (3 - 2 * v);
 export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number, t = 0): Pose => {
   // In a saber lock the blade crosses the foe's, shaking, and the trunk leans into him.
   const e = p.lock ? 1 : prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
-  const k = p.lock ? locked(t) : stroke(p.cut ?? 0, Math.max(prog, 0));
+  const k = p.lock ? locked(t) : poised(p, Math.max(prog, 0), t);
   const g = CARRY.map((v, i) => v + (k[i] - v) * e);
   g[1] += 0.02 * Math.sin(TAU * ph) * (1 - e);
   // A spin turns the whole body round on its feet; a cut turns it with a share of the trunk's twist.
-  const [tw, bd, ln] = p.lock
-    ? [0, 0.15, 0]
-    : prog < 0
-      ? [0, 0, 0]
-      : trunk(p.cut ?? 0, prog).map(v => v * e);
+  const [tw, bd, ln] = p.lock ? [0, 0.15, 0] : prog < 0 ? [0, 0, 0] : bent(p, prog).map(v => v * e);
   const spin = prog < 0 ? 0 : whirl(p.cut ?? 0, prog) + SWAY * tw;
   const pose = { ...from, yaw: from.yaw + spin };
   // The hands go round with the chest's whole twist and down and up with its bend.

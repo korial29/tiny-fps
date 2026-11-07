@@ -159,6 +159,7 @@ export const STILL = {
   zapping: false,
   slow: 0,
   fried: false,
+  heavy: false,
   ev: 0,
   fall: 0,
 };

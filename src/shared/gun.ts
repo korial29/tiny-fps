@@ -5,7 +5,7 @@
 // and swing are predicted exactly. Health and the packs are the host's: they never feed back into movement.
 // A player who is down is moved with no keys (`down` is in the snapshot), so the predictor replays
 // a fall and a respawn the way the host plays them.
-import { cutOf } from './blade';
+import { cutOf, swingOf } from './blade';
 import {
   AMMO_MAX,
   CHARGE_MAX,
@@ -14,6 +14,8 @@ import {
   CUTS,
   DASH_COOLDOWN,
   GUN_COOLDOWN,
+  HEAVY_MAX,
+  HEAVY_TAP,
   LEAP_SPEED,
   LOCK_BREAK,
   LUNGE_SPEED,
@@ -110,33 +112,48 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
   }
   p.inRail = inRail;
   p.cool = Math.max(0, p.cool - 1);
-  p.swing = Math.max(0, (p.swing ?? 0) - 1);
+  const busy = p.mode === MODE.HANG || p.mode === MODE.CLIMB;
+  // The katana's swing runs down, but stays at the top of a cut's wind-up while FIRE is held there:
+  // a charge. Let go after HEAVY_TAP, the rest of the cut is the heavy release, its own timer; busy
+  // hands or the end of the match drop the charge and the cut goes on.
+  const { ticks, hold } = CUTS[p.cut ?? 0];
+  const top = !!p.swing && !p.heavy && ticks - (p.swing ?? 0) === hold;
+  if (top && p.wield && armed && !busy && i.keys & KEY.FIRE) {
+    p.charge = Math.min((p.charge ?? 0) + 1, HEAVY_MAX);
+  } else if (top && armed && !busy && (p.charge ?? 0) >= HEAVY_TAP) {
+    [p.heavy, p.charge] = [true, 0];
+    p.swing = swingOf(p).ticks;
+  } else {
+    p.charge = top ? 0 : p.charge;
+    p.swing = Math.max(0, (p.swing ?? 0) - 1);
+    p.heavy = !!p.swing && !!p.heavy;
+  }
   const has = [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0];
   const want = i.keys & KEY.BLADE ? 1 : i.keys & KEY.RAIL ? 2 : 0;
   const hand = p.swing && p.blade ? 1 : has[want] ? want : has.indexOf(true);
   [p.wield, p.railed] = [hand == 1, hand == 2];
-  const busy = p.mode === MODE.HANG || p.mode === MODE.CLIMB;
   if (!armed) {
     p.charge = 0;
     return STRIKE.NONE;
   }
-  const c = CUTS[p.cut ?? 0];
+  const c = swingOf(p);
   if (p.swing && c.ticks - p.swing === c.strike) {
     return STRIKE.CUT;
   }
-  // The charge goes with the katana in hand, the hands busy, or no shot left.
-  if (p.wield || p.railed || busy || p.ammo <= 0) {
+  // The gun's charge goes with the katana in hand and not charging, the rail gun, the hands busy,
+  // or no shot left.
+  if ((p.wield && !top) || p.railed || busy || (!p.wield && p.ammo <= 0)) {
     p.charge = 0;
   }
   if (i.keys & KEY.FIRE && !busy) {
     // A double click's second press turns a cut just started into its special.
-    const late = CUTS[p.cut ?? 0].ticks - p.swing;
+    const late = CUTS[p.cut ?? 0].ticks - (p.swing ?? 0);
     const special =
       !!(i.keys & KEY.SPECIAL) &&
-      (!p.swing || ((p.cut ?? 0) < SPECIAL_CUT && late <= SPECIAL_LATE));
+      (!p.swing || (!p.heavy && (p.cut ?? 0) < SPECIAL_CUT && late <= SPECIAL_LATE));
     if (p.wield && (!p.swing || special)) {
       p.cut = cutOf(i.keys) + (special ? SPECIAL_CUT : 0);
-      p.swing = CUTS[p.cut].ticks;
+      [p.swing, p.charge] = [CUTS[p.cut].ticks, 0];
       launch(p);
     } else if (p.railed) {
       if (p.rail! > 0) {

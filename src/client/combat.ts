@@ -10,12 +10,12 @@ import {
   CHARGE_MAX,
   CHARGE_TAP,
   CHARGE_TICKS,
-  CUTS,
   GUN_RANGE,
   MAX_PITCH,
   RECOIL,
   TICK_HZ,
 } from '../shared/constants';
+import { swingOf } from '../shared/blade';
 import { powerOf } from '../shared/gun';
 import { eyeHeight } from '../shared/physics';
 import { KEY } from '../shared/types';
@@ -89,7 +89,7 @@ export const fired = (a?: PlayerState, b?: PlayerState): number =>
   a && b ? (b.shots - a.shots) & 255 : 0;
 
 /** What the katana's sounds read of a player: the swing, the cut and whether it is in hand. */
-type Blade = Pick<PlayerState, 'swing' | 'cut' | 'wield' | 'blade'>;
+type Blade = Pick<PlayerState, 'swing' | 'cut' | 'wield' | 'blade' | 'heavy'>;
 
 /**
  * The CUT of a swing that started between two states of a player, or -1: `swing` jumped up (it
@@ -102,7 +102,7 @@ export const swung = (a?: Blade, b?: Blade): number =>
 
 /** Whether the step from a to b is the strike of its cut: `swing` went down through the strike tick (CUTS). */
 export const struck = (a?: Blade, b?: Blade): boolean => {
-  const { ticks, strike } = CUTS[b?.cut ?? 0];
+  const { ticks, strike } = swingOf(b ?? {});
   return !!a && !!b && (a.swing ?? 0) > ticks - strike && (b.swing ?? 0) <= ticks - strike;
 };
 
@@ -112,6 +112,8 @@ const CRACKLE = 0.09;
 /** A bolt's buzz goes up and down 1.6 times a second, by 35 % of its pitch either way. */
 const WAIL = [1.6, 0.35];
 
+/** A heavy release's swish is told by its cut plus this. */
+const HEAVY_CUE = 8;
 /** The swish of a cut, by CUT: higher and quieter for a thrust, lower and fuller for a slash. */
 const SWISH = { rate: [1.3, 1.05, 0.95, 0.8], gain: [0.6, 0.8, 0.8, 1] };
 
@@ -196,7 +198,16 @@ export const createCombat = (
       audio.play(SOUND.RAIL, at, 0.7, wail(now));
     }
   };
-  const swish = (c: number, at?: Vec3) => audio.play(SOUND.SWISH, at, SWISH.gain[c], SWISH.rate[c]);
+  /** The swish of the cut `c`, at `at`; a heavy release's (c + HEAVY_CUE) louder and much deeper. */
+  const swish = (c: number, at?: Vec3) => {
+    const [k, heavy] = [c % HEAVY_CUE, c >= HEAVY_CUE];
+    audio.play(
+      SOUND.SWISH,
+      at,
+      SWISH.gain[k] * (heavy ? 1.5 : 1),
+      SWISH.rate[k] * (heavy ? 0.55 : 1),
+    );
+  };
   /** The shing of the katana coming into the hand or leaving it (not when it is lost). */
   const shing = (was: Blade, now: Blade, at?: Vec3) =>
     !!was.wield != !!now.wield &&
@@ -217,7 +228,7 @@ export const createCombat = (
       }
       const c = swung(a, b);
       if (c >= 0) {
-        cuts.push(c);
+        cuts.push(c + (b?.heavy ? HEAVY_CUE : 0));
       }
       if (b && struck(a, b)) {
         fx.cut(b.cut ?? 0);
@@ -328,12 +339,18 @@ export const createCombat = (
         const old = blades.get(p.id);
         const c = swung(old, p);
         if (c >= 0) {
-          swish(c, at);
+          swish(c + (p.heavy ? HEAVY_CUE : 0), at);
         }
         if (old) {
           shing(old, p, at);
         }
-        blades.set(p.id, { swing: p.swing, cut: p.cut, wield: p.wield, blade: p.blade });
+        blades.set(p.id, {
+          swing: p.swing,
+          cut: p.cut,
+          wield: p.wield,
+          blade: p.blade,
+          heavy: p.heavy,
+        });
         // A runner drained by the rail gun's bolt, or shocked by the katana, crackles.
         if ((p.zap && p.stun > 0) || p.slow) {
           tracer.crackle([p.x, p.y + 1, p.z]);

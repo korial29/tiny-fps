@@ -25,19 +25,19 @@ import type { Floor } from './gait';
 import { REAR, TILT, charge, fore, held, pointed, tip } from './gun';
 import {
   BASE,
-  BEHIND as BACK,
   BOW,
   C,
   S,
   SWAY,
+  bent,
   cutting,
   ends,
   held as sword,
   locked,
+  poised,
   progress,
-  stroke,
-  trunk,
   whirl,
+  BEHIND as BACK,
 } from './katana';
 import { add, basis, dot, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
@@ -653,7 +653,7 @@ export const createBody = (world?: World): Body => {
     const a = w.amp * (1 + 0.5 * w.sprint);
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     // In a saber lock the blade crosses the foe's, shaking, and each press drives it on.
-    const k = me?.lock ? locked(clock, jolt) : stroke(me?.cut ?? 0, Math.max(prog, 0));
+    const k = me?.lock ? locked(clock, jolt) : poised(me ?? {}, Math.max(prog, 0), clock);
     const at: Vec3 = [k[0] + 0.012 * a * s, k[1] + 0.018 * a * c - 0.35 * (1 - w.blade), k[2]];
     return { at, g: unit([k[3], k[4], k[5]]) };
   };
@@ -685,7 +685,7 @@ export const createBody = (world?: World): Body => {
       sw && me.lock
         ? [0, 0.15 * w.blade, 0]
         : sw && prog >= 0
-          ? trunk(me.cut ?? 0, prog).map(v => v * w.blade)
+          ? bent(me, prog).map(v => v * w.blade)
           : [0, 0, 0];
     // The body turns on its feet as the view does: round in a spin, and a share of the twist.
     q.yaw += sw && prog >= 0 ? whirl(me.cut ?? 0, prog) * w.blade + SWAY * tw : 0;
@@ -903,6 +903,6 @@ export const createBody = (world?: World): Body => {
     },
     muzzle: () => tip(...holster(), !!me?.railed),
     spun: () =>
-      me && prog >= 0 ? whirl(me.cut ?? 0, prog) + SWAY * trunk(me.cut ?? 0, prog)[0] * w.blade : 0,
+      me && prog >= 0 ? whirl(me.cut ?? 0, prog) + SWAY * bent(me, prog)[0] * w.blade : 0,
   };
 };

@@ -2,6 +2,7 @@
 // built from rings, and the hands that cut with it: where the grip goes in each of the three cuts.
 // Model space has the right hand's grip at the origin, x right, y up, the point toward -z (like
 // gun.ts); place() carries it to the world. No DOM.
+import { swingOf } from '../shared/blade';
 import { CUTS, TICK_HZ } from '../shared/constants';
 import { TAU } from '../shared/physics';
 import { CUT } from '../shared/types';
@@ -504,15 +505,63 @@ export const SWAY = 0.2;
  * in ticks, and the snapshots of the others come every second tick: the answer runs on with the
  * time, never more than two ticks ahead of the count, never behind it. `was` is the last answer.
  */
-export const progress = (was: number, p: Pick<PlayerState, 'swing' | 'cut'>, dt: number) => {
+export const progress = (
+  was: number,
+  p: Pick<PlayerState, 'swing' | 'cut' | 'heavy' | 'charge'>,
+  dt: number,
+) => {
   const n = p.swing ?? 0;
   if (!n) {
     return -1;
   }
-  const t = CUTS[p.cut ?? 0].ticks;
-  const at = 1 - n / t;
-  return was < 0 ? at : Math.min(Math.max(was + (dt * TICK_HZ) / t, at), at + 2 / t, 1);
+  const { ticks: t, hold } = CUTS[p.cut ?? 0];
+  // A heavy release runs the rest of the cut from the top of its wind-up on its own, longer timer.
+  const h = swingOf(p).ticks;
+  const [at, rate] = p.heavy
+    ? [(hold + (1 - n / h) * (t - hold)) / t, (t - hold) / (h * t)]
+    : [1 - n / t, 1 / t];
+  // Held at the top, charging: it waits there.
+  if (!p.heavy && p.charge) {
+    return at;
+  }
+  return was < 0 ? at : Math.min(Math.max(was + dt * TICK_HZ * rate, at), at + 2 * rate, 1);
 };
+
+/** How much wider a heavy release swings than its cut: the hands round the guard, and the trunk. */
+export const [AMPLE, AMPLE_TRUNK] = [1.3, 1.5];
+
+/**
+ * The grip and the blade (see stroke()) of the cut `p` swings at `prog`, as drawn: a heavy
+ * release goes AMPLE times as far from the guard, across and up; held at the top, charging, the hands tremble
+ * with the clock `t` (s).
+ */
+export const poised = (
+  p: Pick<PlayerState, 'cut' | 'heavy' | 'charge'>,
+  prog: number,
+  t: number,
+) => {
+  const k = stroke(p.cut ?? 0, prog);
+  // Across and up only, and from the strike on: nearer the eye, or wider in the wind-up over the
+  // shoulder, the arms would fill the view.
+  const big = p.heavy ? 1 + (AMPLE - 1) * ample(p.cut ?? 0, prog) : 1;
+  for (let j = 0; j < 2; j++) {
+    k[j] = GUARD[j] + (k[j] - GUARD[j]) * big;
+  }
+  if (!p.heavy && p.charge) {
+    k[0] += 0.004 * Math.sin(t * 47);
+    k[1] += 0.004 * Math.sin(t * 53 + 1);
+  }
+  return k;
+};
+
+/** The trunk's twist, bend and lean (see trunk()) for the cut `p` swings at `prog`: AMPLE_TRUNK times a heavy release's, from its strike on. */
+export const bent = (p: Pick<PlayerState, 'cut' | 'heavy'>, prog: number) =>
+  trunk(p.cut ?? 0, prog).map(
+    v => v * (p.heavy ? 1 + (AMPLE_TRUNK - 1) * ample(p.cut ?? 0, prog) : 1),
+  );
+
+/** How much of a heavy release's width is on at `prog` of cut `cut`: none in the wind-up, all from just before the strike. */
+const ample = (cut: number, prog: number) => clamp((prog - strikeAt(cut) + 0.08) / 0.08);
 
 /** Whether the blade is cutting at `p` of its swing: the wind-up, over by 0.22 to 0.27, and the recovery leave no trail. */
 export const cutting = (p: number) => p > 0.24 && p < 0.6;

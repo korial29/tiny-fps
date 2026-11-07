@@ -216,6 +216,8 @@ const half: Brush[] = [
   box([19, 26, 222], [22, 27.4, 225], TEX.STEEL),
   box([42, 26, 222], [45, 27.4, 225], TEX.STEEL),
   box([29, 26, 229], [35, 27.1, 229.6], TEX.CONCRETE),
+  // The armoury, a red plinth 1.5 m high ahead of the spawns: the racks stand on it, so a run and a jump take them.
+  box([29, 26, 215], [35, 27.5, 219], TEX.STEEL, TEX.PAINT, RED),
   // The Spine (high route): roofs at 26 m, the viaduct with its wall to run along, a catch roof
   // under each gap and a ladder back up.
   roof(6, 164, 26, 201, 26, TEX.GLASS),
@@ -339,18 +341,18 @@ export const HIGHLINE: WorldDef = {
   name: 'Highline',
   brushes: [...half, ...half.map(flip), ...centre],
   teams: [
-    // The rack is at the side of the spawn rows, 5 m from the nearest spawn; the katana's is 2.5 m from it.
+    // The racks stand on the armoury, past the flag ahead of the spawns, 2.5 m apart.
     {
       base: [32, 26, 224],
       spawns: row(0, 236, 231),
-      rack: [47, 26, 234],
-      blade: [47, 26, 231.5],
+      rack: [30.75, 27.5, 217],
+      blade: [33.25, 27.5, 217],
     },
     {
       base: [32, 26, ZED - 224],
       spawns: row(Math.PI, ZED - 236, ZED - 231),
-      rack: [47, 26, 6],
-      blade: [47, 26, ZED - 231.5],
+      rack: [30.75, 27.5, ZED - 217],
+      blade: [33.25, 27.5, ZED - 217],
     },
   ],
   packs: [

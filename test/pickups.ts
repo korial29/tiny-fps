@@ -1,5 +1,13 @@
 // Test helper: what a map must get right about its gun and katana racks and its packs.
-import { FLAG_REACH, PACK_R, PICK_H, PLAYER_H, PLAYER_R, RACK_R } from '../src/shared/constants';
+import {
+  EYE,
+  FLAG_REACH,
+  PACK_R,
+  PICK_H,
+  PLAYER_H,
+  PLAYER_R,
+  RACK_R,
+} from '../src/shared/constants';
 import { build, hidden } from '../src/shared/world';
 import type { WorldDef } from '../src/shared/world';
 
@@ -7,13 +15,16 @@ type Vec3 = [number, number, number];
 
 /** Metres of roof a pick-up keeps to the edge of the top it stands on: nobody has to hang off it. */
 const EDGE = 1;
+/** The highest top above a spawn a rack may stand on: a standing jump lands on 1.7 m. */
+const JUMP_UP = 1.7;
 
 /**
  * What is wrong with the racks and packs of a map, one line each; nothing when all is right. Each
  * stands on a top, at least EDGE from its edge, with room for a body above it and not inside a
- * brush; packs are 2 PACK_R apart and a rack is off its team's flag base and within 8 m of a spawn
- * it can walk to in a straight line on the spawn's roof, without being at one. The katana rack is
- * 2 to 3 m from the gun rack, outside its circle, and outside the circle of every spawn.
+ * brush; packs are 2 PACK_R apart and a rack is off its team's flag base and within 20 m of a spawn,
+ * on its roof or on a top a jump above it (JUMP_UP), in sight of the eyes there, without being at
+ * one. The katana rack is 2 to 3 m from the gun rack, outside its circle, and outside the circle of
+ * every spawn.
  */
 export const problems = (def: WorldDef): string[] => {
   const out: string[] = [];
@@ -118,16 +129,17 @@ export const problems = (def: WorldDef): string[] => {
       out.push(`rack ${team}: on the flag base`);
     }
     const near = spawns.filter(
-      ([x, y, z]) => y === rack[1] && Math.hypot(x - rack[0], z - rack[2]) < 8,
+      ([x, y, z]) =>
+        rack[1] >= y && rack[1] - y <= JUMP_UP && Math.hypot(x - rack[0], z - rack[2]) < 20,
     );
     if (!near.length) {
-      out.push(`rack ${team}: not on the spawn roof, within 8 m of a spawn`);
+      out.push(`rack ${team}: not within 20 m of a spawn and a jump above it`);
     }
     for (const [x, y, z] of near) {
       if (Math.hypot(x - rack[0], z - rack[2]) < RACK_R) {
         out.push(`rack ${team}: a spawn stands in its circle`);
       }
-      if (hidden(w, [x, y + 1, z], [rack[0], rack[1] + 1, rack[2]])) {
+      if (hidden(w, [x, y + EYE, z], [rack[0], rack[1] + 1, rack[2]])) {
         out.push(`rack ${team}: not in sight of the spawn at ${x}, ${z}`);
       }
     }

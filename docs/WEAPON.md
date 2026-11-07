@@ -83,7 +83,8 @@ Steps 5, 6 and 7 are done. The blade is 1.0 m with a 26 cm grip, the left hand 1
 The user found the katana badly held and the arms twisted, and pointed at Jedi Knight 2's first-person saber fights. Measured before the fix: the wrist turned up to 127° against the forearm and bent up to 171°, and the elbow twisted up to 177°. The hands were placed from the blade alone, both with the right hand's turn, so the mirrored left hand held the grip backwards, and the arm only swung the shortest way to them.
 
 - `wield()` in `body.ts` places one arm on the grip for both the own body and the runners. The hand comes first: its axis leaves the handle on the shoulder's side, the thumb along the handle. The elbow goes where the forearm carries on that axis, and it is a hinge. The forearm's turn about itself is split half at the elbow, half at the wrist.
-- The cut keys (`katana.ts`) keep the hands low and close in front, 10 cm apart on the grip, and the blade makes the wide arcs, as in Jedi Knight 2. The guard stands the blade up the middle of the view with both fists at the bottom of it.
+- The guard holds the hands low, at the bottom of the view, the blade leaning forward: more blade than hands (the user, 2026-11-07).
+- The cuts swing the whole arms (the user, 2026-11-07: "the moves start from the wrist only"). The hands go round a wide arc with the blade pointing out along it: over the left shoulder, across the middle and out low to the right for the cut from the left (40 to 55 cm of travel), above the head and down to the bottom of the view for the slash, back to the right hip and out for the thrust. The cut from the right is written apart, shorter on its wind-up, where the left arm reaches across the chest. Every key keeps both grips within 0.6 m of their shoulders, so the arms reach them standing and running.
 
 ## Plasma balls (the user, 2026-11-06)
 

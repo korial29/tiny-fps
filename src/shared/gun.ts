@@ -19,6 +19,8 @@ import {
   LUNGE_SPEED,
   PICK_H,
   RACK_R,
+  RAIL_COOLDOWN,
+  RAIL_MAX,
   SPECIAL_LATE,
 } from './constants';
 import { forward, move, respawn } from './physics';
@@ -54,8 +56,8 @@ const launch = (p: PlayerState): void => {
   }
 };
 
-/** What a step struck, for the host to resolve: nothing, a shot (a plasma ball), or the katana's cut. */
-export const STRIKE = { NONE: 0, SHOT: 1, CUT: 2 } as const;
+/** What a step struck, for the host to resolve: nothing, a shot (a plasma ball), the katana's cut, or a rail gun's beam. */
+export const STRIKE = { NONE: 0, SHOT: 1, CUT: 2, RAIL: 3 } as const;
 export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
 
 /**
@@ -65,8 +67,11 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  * - The team's rack fills the gun when the player steps into its circle (`rack` tells he is in it),
  *   and again each time he comes back; staying gives nothing. The katana rack gives the katana,
  *   once and for good: it stays until he goes down.
- * - In hand (`wield`) is the katana when he has it and wants it (KEY.BLADE) or has no gun, and
- *   it stays in hand for the length of a swing.
+ * - The rail rack fills the rail gun with RAIL_MAX shots on arrival, as the gun's does.
+ * - In hand is the weapon he wants (KEY.BLADE the katana, KEY.RAIL the rail gun, neither the gun)
+ *   when he has it, else the first he has of the gun, the katana and the rail gun; the katana
+ *   stays in hand for the length of a swing. `wield` is the katana in hand, `railed` the rail gun.
+ * - The rail gun fires a beam every RAIL_COOLDOWN ticks while FIRE is held, with a shot left.
  * - The trigger: `cool` and `swing` run down, and at 0 a held FIRE charges the gun, with ammo, and
  *   letting it go fires a ball as strong as the charge (powerOf()), spending as many shots; or it
  *   starts the katana's swing (`cut` from the keys), unless the hands are busy (a hang, a climb).
@@ -92,16 +97,25 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
     return duel(p, i);
   }
   // The rack fills the gun on arrival, not on every step spent in its circle.
-  const { rack, blade } = w.def.teams[team];
+  const { rack, blade, rail } = w.def.teams[team];
   const inside = !!rack && within(p, rack, RACK_R);
   if (armed && inside && !p.rack) {
     p.ammo = AMMO_MAX;
   }
   p.rack = inside;
   p.blade = !!p.blade || (armed && !!blade && within(p, blade, RACK_R));
+  const inRail = !!rail && within(p, rail, RACK_R);
+  if (armed && inRail && !p.inRail) {
+    p.rail = RAIL_MAX;
+  }
+  p.inRail = inRail;
   p.cool = Math.max(0, p.cool - 1);
+  p.reload = Math.max(0, (p.reload ?? 0) - 1);
   p.swing = Math.max(0, (p.swing ?? 0) - 1);
-  p.wield = p.blade && (p.swing > 0 || !!(i.keys & KEY.BLADE) || p.ammo < 0);
+  const has = [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0];
+  const want = i.keys & KEY.BLADE ? 1 : i.keys & KEY.RAIL ? 2 : 0;
+  const hand = p.swing && p.blade ? 1 : has[want] ? want : has.indexOf(true);
+  [p.wield, p.railed] = [hand == 1, hand == 2];
   const busy = p.mode === MODE.HANG || p.mode === MODE.CLIMB;
   if (!armed) {
     p.charge = 0;
@@ -112,7 +126,7 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
     return STRIKE.CUT;
   }
   // The charge goes with the katana in hand, the hands busy, or no shot left.
-  if (p.wield || busy || p.ammo <= 0) {
+  if (p.wield || p.railed || busy || p.ammo <= 0) {
     p.charge = 0;
   }
   if (i.keys & KEY.FIRE && !busy) {
@@ -125,6 +139,13 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
       p.cut = cutOf(i.keys) + (special ? SPECIAL_CUT : 0);
       p.swing = CUTS[p.cut].ticks;
       launch(p);
+    } else if (p.railed) {
+      if (!p.reload && p.rail! > 0) {
+        p.rail!--;
+        p.shots = (p.shots + 1) & 255;
+        p.reload = RAIL_COOLDOWN;
+        return STRIKE.RAIL;
+      }
     } else if (!p.wield && !p.cool && p.ammo > 0) {
       // Held, the gun charges; let go, it fires (below).
       p.charge = Math.min((p.charge ?? 0) + 1, CHARGE_TICKS);

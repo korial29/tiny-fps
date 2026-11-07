@@ -241,6 +241,49 @@ describe('the own shots', () => {
   });
 });
 
+describe('the rail beams', () => {
+  /** The setup, with the beams the tracer is given. */
+  const rig = () => {
+    const t = setup();
+    const beams: [Vec3, Vec3][] = [];
+    const rail = t.tracer.rail;
+    t.tracer.rail = (a, b) => (beams.push([a, b]), rail(a, b));
+    return { ...t, beams };
+  };
+  const RAILED = { rail: 5, railed: true, ammo: -1 };
+
+  it('go from the own muzzle to the wall the look meets, at once, with no ball, a flash and the crack', () => {
+    const { combat, frame, ids, flashes, orbs, beams, ctl } = rig();
+    frame(player(RAILED));
+    combat.step(player({ ...RAILED, shots: 0 }), player({ ...RAILED, shots: 1, rail: 4 }));
+    frame(player({ ...RAILED, shots: 1, rail: 4 }));
+    expect(beams).toHaveLength(1);
+    expect(beams[0][0]).toEqual(flashes[0][0]);
+    // The wall at z = -20, straight ahead of the eye.
+    expect(beams[0][1]).toEqual([
+      expect.closeTo(0, 6),
+      expect.closeTo(1.6, 6),
+      expect.closeTo(-20, 3),
+    ]);
+    expect(orbs()).toHaveLength(0);
+    expect(ids()).toEqual([SOUND.RAIL]);
+    // It kicks the look as a charge of 3 does.
+    expect(ctl.pitch).toBeCloseTo(RECOIL * 2.2, 9);
+  });
+
+  it('go from an other runner’s rail gun when his shots change, with the crack where he is', () => {
+    const { frame, ids, audio, beams } = rig();
+    const me = player();
+    const him = (shots: number) => player({ id: 4, x: 3, z: -2, ...RAILED, shots });
+    frame(me, [him(0)]);
+    frame(me, [him(1)]);
+    expect(beams).toHaveLength(1);
+    expect(beams[0][1][2]).toBeCloseTo(-20, 3);
+    expect(ids()).toEqual([SOUND.RAIL]);
+    expect(audio.play.mock.calls[0][1]).toEqual([3, expect.any(Number), -2]);
+  });
+});
+
 describe('where the shots go', () => {
   const dir = (a: Vec3, b: Vec3): Vec3 => [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
   const angle = (a: Vec3, b: Vec3) =>
@@ -463,10 +506,10 @@ describe('the sounds and the screen of what happens to the own player', () => {
   it('feeds the HUD each frame: health, ammo, and how far down', () => {
     const { frame, hud } = setup();
     frame(player({ hp: 3, ammo: 12, down: 0 }));
-    expect(hud.vitals).toHaveBeenLastCalledWith(3, 12, false, false);
+    expect(hud.vitals).toHaveBeenLastCalledWith(3, 12, false, false, -1, false);
     expect(hud.down).toHaveBeenLastCalledWith(0, 0);
     frame(player({ hp: 0, ammo: -1, down: 90 }));
-    expect(hud.vitals).toHaveBeenLastCalledWith(0, -1, false, false);
+    expect(hud.vitals).toHaveBeenLastCalledWith(0, -1, false, false, -1, false);
     expect(hud.down).toHaveBeenLastCalledWith(0, 1.5);
   });
 });
@@ -604,9 +647,9 @@ describe('the own hits with the katana', () => {
   it('feed the HUD with the katana carried and in hand', () => {
     const { frame, hud } = setup();
     frame(player({ ammo: 12, blade: true, wield: true }));
-    expect(hud.vitals).toHaveBeenLastCalledWith(expect.any(Number), 12, true, true);
+    expect(hud.vitals).toHaveBeenLastCalledWith(expect.any(Number), 12, true, true, -1, false);
     frame(player({ ammo: 12, blade: true, wield: false }));
-    expect(hud.vitals).toHaveBeenLastCalledWith(expect.any(Number), 12, true, false);
+    expect(hud.vitals).toHaveBeenLastCalledWith(expect.any(Number), 12, true, false, -1, false);
   });
 });
 

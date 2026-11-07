@@ -162,9 +162,7 @@ describe('a rack', () => {
 });
 
 describe('a katana rack', () => {
-  const [gun, blade] = [false, true].map(b =>
-    drawn(out => rack(out, [4, 3, 8], [1, 0.2, 0.2], 0, b)),
-  );
+  const [gun, blade] = [0, 1].map(b => drawn(out => rack(out, [4, 3, 8], [1, 0.2, 0.2], 0, b)));
 
   it('is the same stand with a katana over it instead of the gun: a ring as wide as the pickup, the blade glowing', () => {
     const ring = blade.filter(x => x[8] == -2 && x[1] < 3.1);
@@ -183,7 +181,7 @@ describe('a katana rack', () => {
   });
 
   it('turns about its middle, and crackles with the clock', () => {
-    const later = drawn(out => rack(out, [4, 3, 8], [1, 0.2, 0.2], 1.3, true));
+    const later = drawn(out => rack(out, [4, 3, 8], [1, 0.2, 0.2], 1.3, 1));
     const middle = (v: number[][]) =>
       [0, 2].map(k => {
         const o = v.filter(x => x[1] > 3.8);
@@ -192,6 +190,19 @@ describe('a katana rack', () => {
     expect(middle(later)[0]).toBeCloseTo(4, 0);
     expect(middle(later)[1]).toBeCloseTo(8, 0);
     expect(later.map(x => x[0]).join()).not.toBe(blade.map(x => x[0]).join());
+  });
+});
+
+describe('a rail gun rack', () => {
+  it('is the same stand with the rail gun over it: longer than the gun, with its green glow', () => {
+    const [gun, rail] = [0, 2].map(k => drawn(out => rack(out, [4, 3, 8], [1, 0.2, 0.2], 0, k)));
+    const over = (v: number[][]) => v.filter(x => x[1] > 3.8);
+    const span = (v: number[][]) => Math.max(...over(v).map(x => Math.hypot(x[0] - 4, x[2] - 8)));
+    expect(span(rail)).toBeGreaterThan(span(gun) * 1.5);
+    expect(
+      over(rail).filter(x => x[8] == -2 && x[7] > 2 * x[6] && x[7] > 2 * x[9]).length,
+    ).toBeGreaterThan(50);
+    expect(drawn(out => racks(out, [], [], 0, [[4, 3, 8]])).length).toBe(rail.length);
   });
 });
 
@@ -212,11 +223,9 @@ describe('the racks of a scene', () => {
     expect(count([g, undefined], undefined)).toBe(gunOnly);
     // A blade point adds one katana rack: the same stand and a katana.
     const withBlade = count([g, undefined], [b, undefined]);
-    expect(withBlade).toBe(gunOnly + drawn(out => rack(out, b, [1, 0.2, 0.2], 0, true)).length);
+    expect(withBlade).toBe(gunOnly + drawn(out => rack(out, b, [1, 0.2, 0.2], 0, 1)).length);
     // Only the second team has one: it is drawn in its colour.
-    expect(count([], [undefined, b])).toBe(
-      drawn(out => rack(out, b, [1, 0.2, 0.2], 0, true)).length,
-    );
+    expect(count([], [undefined, b])).toBe(drawn(out => rack(out, b, [1, 0.2, 0.2], 0, 1)).length);
     expect(count(undefined, undefined)).toBe(0);
   });
 

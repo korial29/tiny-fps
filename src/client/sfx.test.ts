@@ -117,8 +117,19 @@ describe('the sounds of the game', () => {
     expect(rms(s)).toBeLessThan(0.5);
   });
 
+  it('make the rail gun crack loud and bright, then ring under a second', () => {
+    expect(SOUND.RAIL).toBe(LAYERS.length - 1);
+    const s = sound('RAIL');
+    expect(s.length / RATE).toBeGreaterThan(0.4);
+    expect(s.length / RATE).toBeLessThan(1);
+    expect(peak(s.subarray(0, 0.02 * RATE))).toBeGreaterThan(0.4);
+    expect(crossings(s.subarray(0, 0.02 * RATE))).toBeGreaterThan(
+      crossings(s.subarray(0.3 * RATE, 0.32 * RATE)),
+    );
+  });
+
   it('make the splash of a plasma ball short, loud and noisier than the shot', () => {
-    expect(SOUND.SPLASH).toBe(LAYERS.length - 2);
+    expect(SOUND.SPLASH).toBe(LAYERS.length - 3);
     const s = sound('SPLASH');
     expect(s.length / RATE).toBeLessThan(0.25);
     expect(peak(s)).toBeGreaterThan(0.5);
@@ -126,7 +137,7 @@ describe('the sounds of the game', () => {
   });
 
   it('make the blast of a charged shot long and deep: half a second and more, diving under the plain shot', () => {
-    expect(SOUND.BLAST).toBe(LAYERS.length - 1);
+    expect(SOUND.BLAST).toBe(LAYERS.length - 2);
     const s = sound('BLAST');
     expect(s.length / RATE).toBeGreaterThan(0.5);
     expect(s.length / RATE).toBeGreaterThan((sound('LASER').length / RATE) * 4);

@@ -290,6 +290,20 @@ export const LOCK_HP = 3;
 export const LOCK_TICKS = 240;
 export const LOCK_BREAK = 24;
 
+/**
+ * The rail gun (rail.ts, the user, 2026-11-07): taken at the team's third rack with RAIL_MAX shots,
+ * it fires an instant beam every RAIL_COOLDOWN ticks that goes RAIL_RANGE metres to the first wall
+ * or enemy. An enemy it hits is drained for RAIL_TICKS (3 s): 1 hp at once, then 1 more each
+ * RAIL_DRAIN ticks, and his speed on the floor plane is held under SLOW_SPEED. A new hit starts
+ * the 3 s again. Ticks are u8 on the wire, RAIL_MAX 5 bits.
+ */
+export const RAIL_MAX = 10;
+export const RAIL_COOLDOWN = 72;
+export const RAIL_RANGE = 120;
+export const RAIL_TICKS = 180;
+export const RAIL_DRAIN = 60;
+export const SLOW_SPEED = 3;
+
 /** Seconds a carrier who is made to drop the flag cannot take it again: he would pick it up where he stands. */
 export const FLAG_LOCK = 2;
 /** Seconds the end screen of a match stays, then a new match starts. */

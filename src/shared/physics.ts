@@ -54,6 +54,7 @@ import {
   SLIDE_END_SPEED,
   SLIDE_MIN_SPEED,
   SLIDE_TICKS,
+  SLOW_SPEED,
   SPRINT_ACCEL,
   SPRINT_SPEED,
   STEP_H,
@@ -947,6 +948,11 @@ export const move = (p: PlayerState, i: Input, w: World, team = 0): void => {
     free(p, w, c);
   }
 
+  // Drained by a rail hit: slowed on the floor plane.
+  if (p.slow) {
+    p.slow--;
+    cap(p, SLOW_SPEED);
+  }
   if (p.y < w.def.floor) {
     // Fallen off the roofs: back at the spawn of the player's id in his team.
     respawn(p, w, team);

@@ -706,7 +706,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       drive(v, eye, fwd, Date.now() / 1000);
       ctf?.bases.forEach((at, team) => base(v, at, teamRgb(team), now));
       ctf?.flags.forEach(f => flag(v, f, teamRgb(f.team), now));
-      racks(v, ctf?.racks, ctf?.blades, now);
+      racks(v, ctf?.racks, ctf?.blades, now, ctf?.rails);
       ctf?.packs?.forEach(at => kit(v, at, now));
       ctf?.ammo?.forEach(at => cell(v, at, now));
       for (const p of others) {

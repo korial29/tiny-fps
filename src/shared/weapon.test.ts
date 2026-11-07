@@ -20,6 +20,7 @@ import {
   PLASMA_MAX,
   PLASMA_R,
   PLAYER_R,
+  RAIL_CELL,
   RAIL_MAX,
   RAIL_RANGE,
   RAIL_TICKS,
@@ -102,8 +103,8 @@ interface Look {
  * Four players, who join in this order: Ann (id 0) and Cy (2) are red, Bob (1) and Dee (3) blue.
  * Nobody carries a flag and everyone stands still on the slab, with no gun, facing east.
  */
-const match = (rules: Partial<Rules> = {}) => {
-  const room = new Room(rules, ARENA);
+const match = (rules: Partial<Rules> = {}, def = ARENA) => {
+  const room = new Room(rules, def);
   const seqs = new Map<Peer, number>();
   const join = (name: string): Peer => {
     const c: Peer = { bins: [], send: d => typeof d !== 'string' && c.bins.push(d) };
@@ -821,6 +822,43 @@ describe('health packs', () => {
     m.put(m.ann, -20, 20, { hp: 3 });
     m.ticks(1);
     expect(m.state(m.ann).hp).toBe(5);
+  });
+});
+
+describe('rail cells', () => {
+  /** The arena with two rail cells, after its two health packs and two ammo packs. */
+  const CELLED: WorldDef = {
+    ...ARENA,
+    cells: [
+      [0, 1, -30],
+      [10, 1, -30],
+    ],
+  };
+  const bits = (m: ReturnType<typeof match>) => {
+    m.ticks(SNAP_EVERY);
+    return m.snap(m.ann).packs;
+  };
+
+  it('come after the ammo packs in the snapshot, and give RAIL_CELL of lightning up to RAIL_MAX', () => {
+    const m = match({}, CELLED);
+    expect(bits(m)).toBe(0b111111);
+    m.put(m.cy, 0, -30, { rail: 10, railed: true });
+    m.ticks(1);
+    expect(m.state(m.cy).rail).toBe(10 + RAIL_CELL);
+    expect(bits(m)).toBe(0b101111);
+    m.put(m.cy, 10, -30, { rail: RAIL_MAX - 5 });
+    m.ticks(1);
+    expect(m.state(m.cy).rail).toBe(RAIL_MAX);
+    expect(bits(m)).toBe(0b001111);
+  });
+
+  it('are not taken without the rail gun, nor with a full one, nor by a gun or a hurt player', () => {
+    const m = match({}, CELLED);
+    m.put(m.cy, 0, -30, { ammo: 5, hp: 2 });
+    m.put(m.dee, 10, -30, { rail: RAIL_MAX });
+    m.ticks(SNAP_EVERY * 2);
+    expect([m.state(m.cy).ammo, m.state(m.cy).hp, m.state(m.dee).rail]).toEqual([5, 2, RAIL_MAX]);
+    expect(bits(m)).toBe(0b111111);
   });
 });
 

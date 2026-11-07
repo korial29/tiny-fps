@@ -377,6 +377,27 @@ describe('HIGHLINE, ammo packs', () => {
   });
 });
 
+describe('HIGHLINE, rail cells', () => {
+  const cells = HIGHLINE.cells!;
+
+  it('has one on every route of each half, each with a twin across the line, and one in the plaza', () => {
+    expect(cells.length).toBeGreaterThanOrEqual(9);
+    for (const [x, y, z] of cells) {
+      expect(
+        cells.some(q => q[0] === x && q[1] === y && q[2] === ZED - z),
+        `a twin of ${x}, ${y}, ${z}`,
+      ).toBe(true);
+    }
+    const half = cells.filter(p => p[2] > 120);
+    expect(half.some(p => p[1] === 26)).toBe(true);
+    expect(half.some(p => p[1] === 19 || p[1] === 21.2)).toBe(true);
+    expect(half.some(p => p[1] === 14.5)).toBe(true);
+    expect(cells.filter(p => p[2] === ZED / 2)).toHaveLength(1);
+    // Health, ammo and rail cells together fit the 32 bits of Snapshot.packs.
+    expect(cells.length + HIGHLINE.ammo!.length + HIGHLINE.packs!.length).toBeLessThanOrEqual(32);
+  });
+});
+
 describe('HIGHLINE, the three routes, flown with the real physics', () => {
   const routes: [string, Route][] = [
     ['high', HIGH],

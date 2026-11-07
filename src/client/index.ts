@@ -232,6 +232,11 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       rails,
       packs: packsOf(world.def.packs, match.packs),
       ammo: packsOf(world.def.ammo, match.packs, world.def.packs?.length),
+      cells: packsOf(
+        world.def.cells,
+        match.packs,
+        (world.def.packs?.length ?? 0) + (world.def.ammo?.length ?? 0),
+      ),
     };
     // What the live steps did, once: the camera and the sounds read it, the inputs sent do not.
     const hit = predictor.events();

@@ -77,22 +77,27 @@ export const problems = (def: WorldDef): string[] => {
     stands(`pack ${k}`, p, PACK_R);
   });
   def.ammo?.forEach((p, k) => stands(`ammo pack ${k}`, p, PACK_R));
-  // Every pack, health and ammo, is clear of the others, of the racks and of the flag bases.
-  const all = [...(def.packs ?? []), ...(def.ammo ?? [])];
-  const names = all.map((_, k) =>
-    k < (def.packs?.length ?? 0) ? `pack ${k}` : `ammo pack ${k - (def.packs?.length ?? 0)}`,
-  );
+  def.cells?.forEach((p, k) => stands(`rail cell ${k}`, p, PACK_R));
+  // Every pack, health, ammo and rail cell, is clear of the others, of the racks and of the flag bases.
+  const kinds: [string, Vec3[]][] = [
+    ['pack', def.packs ?? []],
+    ['ammo pack', def.ammo ?? []],
+    ['rail cell', def.cells ?? []],
+  ];
+  const all = kinds.flatMap(([, l]) => l);
+  const names = kinds.flatMap(([name, l]) => l.map((_, k) => `${name} ${k}`));
   all.forEach((p, k) => {
     all.forEach((q, j) => {
       if (j > k && Math.hypot(p[0] - q[0], p[2] - q[2]) < 4 * PACK_R) {
         out.push(`${names[k]} and ${names[j]} are too close`);
       }
     });
-    for (const [t, { base, rack, blade }] of def.teams.entries()) {
+    for (const [t, { base, rack, blade, rail }] of def.teams.entries()) {
       for (const [what, at] of [
         ['base', base],
         ['rack', rack],
         ['katana rack', blade],
+        ['rail rack', rail],
       ] as const) {
         if (at && Math.hypot(p[0] - at[0], p[2] - at[2]) < 4 * PACK_R) {
           out.push(`${names[k]} is by the ${what} of team ${t}`);

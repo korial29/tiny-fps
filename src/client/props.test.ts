@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RACK_R } from '../shared/constants';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
-import { cell, kit, packsOf, rack, racks } from './props';
+import { battery, cell, kit, packsOf, rack, racks } from './props';
 
 const PACKS: Vec3[] = [
   [1, 0, 0],
@@ -235,5 +235,15 @@ describe('the racks of a scene', () => {
     const dish = (v: number[][]) => v.find(x => x[1] > 3.7 && x[1] < 3.8 && x[8] == -1)!;
     expect(dish(blue)[9]).toBeGreaterThan(dish(blue)[6]);
     expect(dish(red)[6]).toBeGreaterThan(dish(red)[9]);
+  });
+});
+
+describe('a rail cell', () => {
+  it('is a gunmetal box like the ammo pack, its bolts glowing violet', () => {
+    const v = drawn(out => battery(out, [4, 3, 8], 0));
+    expect(v.length).toBe(drawn(out => cell(out, [4, 3, 8], 0)).length - 6 * 3 * 3);
+    const glow = v.filter(x => x[8] == -2);
+    expect(glow.length).toBe(6 * 2 * 3);
+    expect(glow.every(x => x[9] > 2 * x[6] && x[9] > 2 * x[7])).toBe(true);
   });
 });

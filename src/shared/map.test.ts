@@ -435,6 +435,7 @@ describe('ROOFTOPS, racks and packs', () => {
     ]);
     expect(ROOFTOPS.packs).toHaveLength(3);
     expect(ROOFTOPS.ammo).toHaveLength(3);
+    expect(ROOFTOPS.cells).toHaveLength(3);
   });
 
   it('has a katana rack 2.5 m from each gun rack, on its roof, outside its circle and the spawns’', () => {

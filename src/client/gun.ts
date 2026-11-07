@@ -219,10 +219,14 @@ export const gun = (lod: number): number[] => {
   return (built[lod] = out);
 };
 
-/** The rail gun's muzzle, between its electrodes' tips: on the gun's long axis (REAR to MUZZLE), 25 cm further out. */
-export const RAIL_MUZZLE: Vec3 = [0, 0.0569, -0.455];
+/** The rail gun's muzzle, between its electrodes' tips: on the gun's long axis (REAR to MUZZLE), 36 cm further out. */
+export const RAIL_MUZZLE: Vec3 = [0, 0.048, -0.575];
 /** The electrodes' tips stand this far above and below the muzzle. */
-const SPREAD = 0.03;
+const SPREAD = 0.05;
+/** How much higher the counter stands on the rail gun than on the pistol, its base just inside the receiver's top. */
+const RISE = 0.022;
+/** The middle of the rail gun's front grip, under the barrel, where the left hand holds it. */
+export const FOREGRIP: Vec3 = [0, 0.01, -0.225];
 /** The height of the long axis at `f` ahead of the grip, in the side view. */
 const axisY = (f: number) => 0.0906 - 0.0741 * f;
 /** The violet white of a Tesla arc, which blooms. */
@@ -244,9 +248,10 @@ const on = (f: number, up: number, a: number, b = a, x = 0): Station => [f, axis
 const railed: number[][] = [];
 
 /**
- * The rail gun at a level of detail (0 far, 1 near), built once like gun(), after a Tesla gun: a
- * gunmetal receiver over the same grip, a barrel in three copper coils, and two electrodes forking
- * out of its end, up and down, each tipped with a glowing ball. arc() is the spark between them.
+ * The rail gun at a level of detail (0 far, 1 near), built once like gun(), after a Tesla gun held
+ * in both hands: a stock to the shoulder, a gunmetal receiver over the same grip, a front grip under
+ * a barrel in three copper coils, and two electrodes forking out of its end, up and down, each
+ * tipped with a glowing ball. arc() is the spark between them.
  */
 export const railgun = (lod: number): number[] => {
   if (railed[lod]) {
@@ -254,15 +259,29 @@ export const railgun = (lod: number): number[] => {
   }
   const [n, m] = lod ? [10, 6] : [6, 4];
   const out: number[] = [];
+  // The stock, from the butt plate to the receiver, a little under the long axis.
   tube(
     out,
     [
-      on(-0.12, 0.012, 0, 0),
-      on(-0.115, 0.012, 0.022, 0.026),
-      on(-0.09, 0.012, 0.03, 0.036),
-      on(0.12, 0.008, 0.03, 0.034),
-      on(0.15, 0.004, 0.02),
-      on(0.155, 0.004, 0),
+      on(-0.392, -0.045, 0),
+      on(-0.39, -0.045, 0.024, 0.05),
+      on(-0.36, -0.042, 0.024, 0.05),
+      on(-0.25, -0.025, 0.02, 0.034),
+      on(-0.13, -0.006, 0.024, 0.032),
+      on(-0.1, 0, 0),
+    ],
+    m,
+    steel,
+  );
+  tube(
+    out,
+    [
+      on(-0.13, 0.004, 0),
+      on(-0.125, 0.004, 0.026, 0.03),
+      on(-0.1, 0.004, 0.034, 0.04),
+      on(0.13, 0.002, 0.034, 0.038),
+      on(0.16, 0, 0.024),
+      on(0.165, 0, 0),
     ],
     n,
     steel,
@@ -281,41 +300,58 @@ export const railgun = (lod: number): number[] => {
   );
   tube(
     out,
-    [on(0.14, 0, 0), on(0.145, 0, 0.014), on(0.32, 0, 0.014), on(0.335, 0, 0.018), on(0.345, 0, 0)],
+    [
+      [0.215, axisY(0.215) - 0.015, 0, 0],
+      [0.218, axisY(0.218) - 0.02, 0.013, 0.015],
+      [0.232, -0.035, 0.012, 0.014],
+      [0.235, -0.04, 0, 0],
+    ],
+    m,
+    steel,
+  );
+  tube(
+    out,
+    [on(0.15, 0, 0), on(0.155, 0, 0.019), on(0.42, 0, 0.019), on(0.43, 0, 0.025), on(0.44, 0, 0)],
     n,
     steel,
   );
-  for (const f of [0.19, 0.235, 0.28]) {
+  for (const f of [0.31, 0.355, 0.4]) {
     tube(
       out,
-      [on(f - 0.009, 0, 0), on(f - 0.008, 0, 0.022), on(f + 0.008, 0, 0.022), on(f + 0.009, 0, 0)],
+      [on(f - 0.011, 0, 0), on(f - 0.01, 0, 0.03), on(f + 0.01, 0, 0.03), on(f + 0.011, 0, 0)],
       n,
       copper,
     );
   }
+  const f = -RAIL_MUZZLE[2];
   for (const s of [-1, 1]) {
     const up = s * SPREAD;
     tube(
       out,
       [
-        on(0.33, s * 0.01, 0.006),
-        on(0.37, up * 0.85, 0.005),
-        on(0.42, up * 1.08, 0.0042),
-        on(0.45, up, 0.0036),
-        on(0.452, up, 0),
+        on(0.42, s * 0.014, 0.008),
+        on(0.47, up * 0.8, 0.007),
+        on(0.53, up * 1.1, 0.006),
+        on(f - 0.006, up, 0.0055),
+        on(f - 0.004, up, 0),
       ],
       m,
       steel,
     );
     tube(
       out,
-      [on(0.444, up, 0), on(0.449, up, 0.0075), on(0.461, up, 0.0075), on(0.466, up, 0)],
+      [
+        on(f - 0.012, up, 0),
+        on(f - 0.008, up, 0.012),
+        on(f + 0.008, up, 0.012),
+        on(f + 0.012, up, 0),
+      ],
       m,
       arcing,
     );
     tube(
       out,
-      [on(-0.06, -0.004, 0.002, 0.003, s * 0.03), on(0.1, -0.004, 0.002, 0.003, s * 0.03)],
+      [on(-0.08, -0.004, 0.002, 0.003, s * 0.034), on(0.12, -0.004, 0.002, 0.003, s * 0.034)],
       3,
       dim,
     );
@@ -333,12 +369,24 @@ export const arc = (t: number): number[] => {
   const f = -RAIL_MUZZLE[2];
   const out: number[] = [];
   const st = [-1, -0.5, 0, 0.5, 1].map((k, i): Station => {
-    const j = i % 4 ? 0.007 : 0;
-    return [f + rnd() * j, RAIL_MUZZLE[1] + k * SPREAD * 0.85, 0.0012, 0.0012, rnd() * j];
+    const j = i % 4 ? 0.014 : 0;
+    return [f + rnd() * j, RAIL_MUZZLE[1] + k * SPREAD * 0.85, 0.0022, 0.0022, rnd() * j];
   });
   tube(out, st, 3, arcing);
   return out;
 };
+
+/**
+ * Where the left hand holds a rail gun whose grip is at `at` and whose axes are [right, up,
+ * forward]: the middle of its front grip, and the way the grip runs, down and a little forward.
+ */
+export const fore = (at: Vec3, [r, u, f]: Vec3[]): [Vec3, Vec3] => [
+  [0, 1, 2].map(i => at[i] + r[i] * FOREGRIP[0] + u[i] * FOREGRIP[1] - f[i] * FOREGRIP[2]) as Vec3,
+  unit([0, 1, 2].map(i => -u[i] + 0.25 * f[i]) as Vec3),
+];
+
+/** fore() for the hand at `pos` turned by `q`, which holds the grip. */
+export const foregrip = (pos: Vec3, q: Quat): [Vec3, Vec3] => fore(grip(pos, q), axes(q));
 
 /** The rail gun's lightning left as the counters show it: 99 when full, 0 when spent. */
 export const charge = (rail: number): number => Math.ceil((Math.max(rail, 0) * 99) / RAIL_MAX);
@@ -529,7 +577,8 @@ export const held = (
     place(out, arc(t), at, ax, [0, 0, 0], k);
   }
   if (ammo !== undefined) {
-    place(out, readout(ammo, level, rail ? 15 : 10, rail), at, ax, [0, 0, 0], k);
+    // The rail gun's receiver is taller than the pistol's body: its counter stands higher, on top of it.
+    place(out, readout(ammo, level, rail ? 15 : 10, rail), at, ax, [0, rail ? RISE * k : 0, 0], k);
   }
 };
 

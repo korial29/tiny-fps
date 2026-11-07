@@ -10,7 +10,7 @@ import type { World } from '../shared/world';
 import { clasp, inv, reach, shrug, wield } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
-import { ARC, TILT, aimed, focus, held } from './gun';
+import { ARC, TILT, aimed, focus, foregrip, held } from './gun';
 import type { Tracer } from './beams';
 import {
   BEHIND,
@@ -167,6 +167,9 @@ const lifted = (
   return q;
 };
 
+/** How far a runner's rail gun is up toward his look when he is not firing it. */
+const READY = 0.6;
+
 /** The katana carried in both hands, upright before the right shoulder, the edge forward: the guard's numbers (see katana.ts) from the eye. */
 const CARRY = [0.08, -0.3, 0.26, 0.1, 0.92, -0.3];
 const ease = (v: number) => (v = Math.min(Math.max(v, 0), 1)) * v * (3 - 2 * v);
@@ -309,7 +312,16 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   if (blade) {
     pose = brandish(pose, p, r.prog, r.gait.phase, r.t);
     s = solve(pose);
-  } else if (r.aim > 0.01 && (p.ammo >= 0 || p.railed)) {
+  } else if (p.railed && !p.down) {
+    // The rail gun in both hands, at the ready when not firing: the left on its front grip, the
+    // elbow down and out.
+    pose = lifted(pose, s, p, r.focus, Math.max(r.aim, READY));
+    s = solve(pose);
+    const [at, g] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R]);
+    const [x, u, f] = basis(p.yaw, 0);
+    wield(pose, s, J.ARM_L, at, g, [0, 1, 2].map(i => -0.5 * x[i] - u[i] - 0.35 * f[i]) as Vec3);
+    s = solve(pose);
+  } else if (r.aim > 0.01 && p.ammo >= 0) {
     pose = lifted(pose, s, p, r.focus, r.aim);
     s = solve(pose);
   }

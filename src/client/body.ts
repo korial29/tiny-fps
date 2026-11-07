@@ -22,7 +22,7 @@ import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { createGait, frame } from './gait';
 import type { Floor } from './gait';
-import { REAR, TILT, charge, held, pointed, tip } from './gun';
+import { REAR, TILT, charge, fore, held, pointed, tip } from './gun';
 import {
   BASE,
   BEHIND as BACK,
@@ -733,6 +733,8 @@ export const createBody = (world?: World): Body => {
     const [gp, ga] = holster();
     const fh = [0, 1, 2].map(i => TILT[1] * ga[2][i] - TILT[0] * ga[1][i]) as Vec3;
     const wrist = [0, 1, 2].map(i => gp[i] - 0.078 * fh[i] + 0.022 * ga[0][i]) as Vec3;
+    // The rail gun's front grip, for the left hand.
+    const [fc, fd] = fore(gp, ga);
     // The katana and both fists as one piece, the wrists straight, the shoulders gone with the
     // hands (clasp()).
     const kq = { ...q, rot: q.rot.slice() };
@@ -823,6 +825,16 @@ export const createBody = (world?: World): Body => {
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], onSword);
         }
+      }
+      // The rail gun takes the left hand too, on its front grip, the elbow down and out.
+      const two = sd < 0 && me?.railed ? w.gun * free : 0;
+      if (two > 0.002) {
+        const held = { ...q, rot: q.rot.slice() };
+        wield(held, s, arm, add(eye, turn(fc)), unit(turn(fd)), turn([-0.5, -1, -0.35]));
+        for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
+          q.rot[k] = slerp(q.rot[k], held.rot[k], two);
+        }
+        curls[0] += (0.9 - curls[0]) * two;
       }
     }
     return solve(q);

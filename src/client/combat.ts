@@ -23,7 +23,7 @@ import type { PlayerState } from '../shared/types';
 import { beam } from '../shared/rail';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
-import type { Audio } from './audio';
+import type { Audio, Loop } from './audio';
 import type { Balls } from './balls';
 import type { Tracer } from './beams';
 import type { Effects } from './effects';
@@ -115,7 +115,7 @@ const SWISH = { rate: [1.3, 1.05, 0.95, 0.8], gain: [0.6, 0.8, 0.8, 1] };
 
 export const createCombat = (
   world: World,
-  audio: Pick<Audio, 'play'>,
+  audio: Pick<Audio, 'play'> & Partial<Pick<Audio, 'loop'>>,
   hud: Pick<Hud, 'vitals' | 'hit' | 'down'>,
   fx: Pick<Effects, 'fire' | 'cut' | 'wound' | 'lie'>,
   tracer: Pick<
@@ -165,6 +165,8 @@ export const createCombat = (
     const { o, d, t } = beam(world, p);
     return [0, 1, 2].map(i => o[i] + d[i] * t) as Vec3;
   };
+  /** The own rail gun's hum, started when it is first in hand. */
+  let hum: Loop | undefined;
   /** Seconds to the next crackle of each player's bolt, the own one under -1. */
   const crackles = new Map<number, number>();
   /** The bolt of `p` this frame, from `from`, and its crackle every CRACKLE seconds, at `at` (the own: none). */
@@ -237,6 +239,11 @@ export const createCombat = (
           audio.play(SOUND.DRY);
         }
         held = trigger;
+        // A soft hum while the rail gun is in hand, louder and higher while its bolt goes out.
+        if (me.railed || hum) {
+          hum ??= audio.loop?.(SOUND.HUM);
+          hum?.set(me.railed && !me.down ? (me.zapping ? 0.5 : 0.18) : 0, me.zapping ? 1.25 : 1);
+        }
         const rail = me.rail ?? -1;
         hud.vitals(
           me.hp,
@@ -251,6 +258,7 @@ export const createCombat = (
         before = { ...me };
       } else {
         before = undefined;
+        hum?.set(0, 1);
       }
       let from: Vec3 | undefined;
       if (v) {

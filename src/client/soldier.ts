@@ -12,7 +12,7 @@ import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
 import { TILT, aimed, focus, held } from './gun';
 import type { Tracer } from './beams';
-import { BEHIND, cutting, ends, held as sword, progress, stroke, whirl } from './katana';
+import { BEHIND, BOW, cutting, ends, held as sword, progress, stroke, whirl } from './katana';
 import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
 import { STRIDE, add, basis, unit } from './mesh';
@@ -162,7 +162,7 @@ export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number): 
   // A spin turns the whole body round on its feet.
   const spin = prog < 0 ? 0 : whirl(p.cut ?? 0, prog);
   const pose = { ...from, yaw: from.yaw + spin };
-  const [r, u, f] = basis(p.yaw + spin, p.pitch * e);
+  const [r, u, f] = basis(p.yaw + spin, Math.max(p.pitch, -BOW) * e);
   /** The camera's space at the eye (right, up, forward) to the world. */
   const turn = ([a, b, c]: number[]): Vec3 => [
     r[0] * a + u[0] * b + f[0] * c,

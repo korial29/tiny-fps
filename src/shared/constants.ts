@@ -238,7 +238,20 @@ export const CUTS = [
   { ticks: 34, strike: 13, reach: 2.15, arc: 1.2, hp: 2 },
   /** SLASH: down from above, the slowest and the hardest. */
   { ticks: 40, strike: 16, reach: 2.15, arc: 0.45, hp: 3 },
+  /** LUNGE: thrown forward on the point (LUNGE_SPEED), the longest reach. */
+  { ticks: 36, strike: 12, reach: 3.2, arc: 0.3, hp: 3 },
+  /** SPIN_L, then SPIN_R: a full turn on himself, the blade out all round him. */
+  { ticks: 48, strike: 24, reach: 2.3, arc: Math.PI, hp: 3 },
+  { ticks: 48, strike: 24, reach: 2.3, arc: Math.PI, hp: 3 },
+  /** LEAP: up (LEAP_SPEED) and down on the foe as he lands, the hardest blow. */
+  { ticks: 58, strike: 40, reach: 2.4, arc: 0.6, hp: 4 },
 ];
+/** Ticks into a cut's swing in which a double click's second press still turns it into its special. */
+export const SPECIAL_LATE = 18;
+/** The lunge's throw along the look (m/s), held for the burst of a dash: it spends the dash. */
+export const LUNGE_SPEED = 13;
+/** The leap's jump (m/s up), from a floor only: 1.4 m up and down in 45 ticks, the blow (LEAP's strike) just before the landing. */
+export const LEAP_SPEED = 7.5;
 /**
  * Where a finishing cut crosses the body, as a share of its height from the feet, picks the limb
  * (limbOf(), blade.ts): above NECK the head, below HIPS a leg, between them an arm. A thrust or a

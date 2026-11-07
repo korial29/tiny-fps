@@ -33,14 +33,32 @@ export const KEY = {
    * for the gun. Ignored without the katana; without the gun the katana is in hand whatever it says.
    */
   BLADE: 512,
+  /**
+   * Set with FIRE by a double click (the client's choice): the katana's special cut, the special
+   * of the cut the keys give (see CUT). Ignored without the katana in hand.
+   */
+  SPECIAL: 1024,
 } as const;
 
 /**
  * The katana's cuts (PlayerState.cut, constants CUTS), chosen by the keys held when FIRE starts
  * one: LEFT or RIGHT (one of them) cuts across from that side, else FORWARD thrusts, else (back or
- * no key) it slashes down from above.
+ * no key) it slashes down from above. With SPECIAL (a double click) each has its special, the cut
+ * plus SPECIAL_CUT: the thrust a LUNGE (a dash forward on the point), a cut across a SPIN (a full
+ * turn on himself, the blade out all round), the slash a LEAP (a jump and a blow down on landing).
  */
-export const CUT = { THRUST: 0, LEFT: 1, RIGHT: 2, SLASH: 3 } as const;
+export const CUT = {
+  THRUST: 0,
+  LEFT: 1,
+  RIGHT: 2,
+  SLASH: 3,
+  LUNGE: 4,
+  SPIN_L: 5,
+  SPIN_R: 6,
+  LEAP: 7,
+} as const;
+/** A cut plus this is its special; a cut's base cut is the cut less it. */
+export const SPECIAL_CUT = 4;
 
 /**
  * The limb a katana's cut takes off when it puts a player down (PlayerState.lost), by where the

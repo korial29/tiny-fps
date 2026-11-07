@@ -12,7 +12,7 @@ import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
 import { TILT, aimed, focus, held } from './gun';
 import type { Tracer } from './beams';
-import { BEHIND, cutting, ends, held as sword, progress, stroke } from './katana';
+import { BEHIND, cutting, ends, held as sword, progress, stroke, whirl } from './katana';
 import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
 import { STRIDE, add, basis, unit } from './mesh';
@@ -151,14 +151,18 @@ const ease = (v: number) => (v = Math.min(Math.max(v, 0), 1)) * v * (3 - 2 * v);
 /**
  * The pose with the katana in both hands: carried, or in a cut, which is the first person's cut
  * seen from the runner's eye (the share `e` of it, so that it is drawn from the carry and back to
- * it), the trunk turning with the blade and leaning into the lunge and the low finish.
+ * it), the trunk turning with the blade and leaning into the lunge and the low finish, and the
+ * whole body turning round in a spin.
  */
-export const brandish = (pose: Pose, p: PlayerState, prog: number, ph: number): Pose => {
+export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number): Pose => {
   const e = prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
   const k = stroke(p.cut ?? 0, Math.max(prog, 0));
   const g = CARRY.map((v, i) => v + (k[i] - v) * e);
   g[1] += 0.02 * Math.sin(TAU * ph) * (1 - e);
-  const [r, u, f] = basis(p.yaw, p.pitch * e);
+  // A spin turns the whole body round on its feet.
+  const spin = prog < 0 ? 0 : whirl(p.cut ?? 0, prog);
+  const pose = { ...from, yaw: from.yaw + spin };
+  const [r, u, f] = basis(p.yaw + spin, p.pitch * e);
   /** The camera's space at the eye (right, up, forward) to the world. */
   const turn = ([a, b, c]: number[]): Vec3 => [
     r[0] * a + u[0] * b + f[0] * c,

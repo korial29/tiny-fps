@@ -34,6 +34,9 @@ export const dashKeys = (keys: number, dir: number): number => (keys & ~DIRS) | 
 /** The KEY bit of a KeyboardEvent.code, 0 for a key the game ignores. */
 export const keyBit = (code: string): number => BITS[code] ?? 0;
 
+/** A second left press within this of the first (ms) is a double click: the katana's special cut. */
+export const DOUBLE_CLICK_MS = 300;
+
 /** The wheel swaps the weapon at most this often (ms): a trackpad's flick is a hundred events, one swap. */
 export const WHEEL_MS = 250;
 
@@ -66,6 +69,7 @@ export interface Controls {
    * The KEY bits of the next step, read once per step. Same as `keys`, plus BLADE while the katana
    * is chosen, except for the step right after a double tap: it carries DASH and only the tapped
    * direction, so the dash goes that way whatever else is held, and nothing else is on the wire.
+   * The step after a double click carries FIRE and SPECIAL, however short the click was.
    */
   take(): number;
   /** One live step of the own player, its state before and after: a katana picked up is chosen, losing both weapons chooses the gun. */
@@ -79,7 +83,8 @@ export interface Controls {
 /**
  * Click the canvas to lock the pointer; while locked the mouse looks, the keys move (WASD, Shift
  * sprints, Space jumps, C crouches, a direction key pressed twice within DOUBLE_TAP_MS dashes that
- * way, the left button fires or cuts, 1 and 2 or the wheel pick the gun or the katana) and M calls `onMute`.
+ * way, the left button fires or cuts and a double click cuts the special, 1 and 2 or the wheel pick
+ * the gun or the katana) and M calls `onMute`.
  */
 export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Controls => {
   const ac = new AbortController();
@@ -90,14 +95,19 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   const tapped = new Map<string, number>();
   let pending = 0;
   let swapped = -Infinity;
+  /** When the left button was last pressed (ms), and a double click waiting for its step. */
+  let clicked = -Infinity;
+  let special = false;
   const c: Controls = {
     yaw: 0,
     pitch: 0,
     keys: 0,
     blade: false,
     take() {
-      const keys = pending ? dashKeys(c.keys, pending) : c.keys;
+      const keys =
+        (pending ? dashKeys(c.keys, pending) : c.keys) | (special ? KEY.FIRE | KEY.SPECIAL : 0);
       pending = 0;
+      special = false;
       return withBlade(keys, c.blade);
     },
     track: (was, now) => void (c.blade = chosen(c.blade, was, now)),
@@ -118,6 +128,9 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   on(document, 'mousedown', (e: MouseEvent) => {
     if (c.locked() && !e.button) {
       c.keys |= KEY.FIRE;
+      const now = performance.now();
+      special ||= now - clicked <= DOUBLE_CLICK_MS;
+      clicked = special ? -Infinity : now;
     }
   });
   on(document, 'mouseup', (e: MouseEvent) => {

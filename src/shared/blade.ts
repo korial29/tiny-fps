@@ -4,7 +4,7 @@
 // No DOM, no Node API.
 import { CUTS, HIPS, MIDLINE, NECK, PLAYER_R } from './constants';
 import { forward, heightOf } from './physics';
-import { CUT, KEY, LIMB } from './types';
+import { CUT, KEY, LIMB, SPECIAL_CUT } from './types';
 import type { PlayerState } from './types';
 import { hidden } from './world';
 import type { World } from './world';
@@ -45,13 +45,18 @@ export const strike = (w: World, p: PlayerState, foes: PlayerState[]): PlayerSta
 };
 
 /**
- * The way the shock of the cut of `p` throws a foe, a unit vector on the floor plane: along his
- * look for a thrust and a slash; a cut across ends on the opposite side to the one it starts from,
- * so LEFT throws to his right and RIGHT to his left.
+ * The way the shock of the cut of `p` throws the foe `f`, a unit vector on the floor plane: along
+ * his look for a thrust, a slash and their specials; a cut across ends on the opposite side to the
+ * one it starts from, so LEFT throws to his right and RIGHT to his left; a spin throws out from him.
  */
-export const knock = (p: PlayerState): [x: number, z: number] => {
+export const knock = (p: PlayerState, f: PlayerState): [x: number, z: number] => {
   const [fx, fz] = forward(p.yaw);
   const c = p.cut ?? 0;
+  if (c === CUT.SPIN_L || c === CUT.SPIN_R) {
+    const [dx, dz] = [f.x - p.x, f.z - p.z];
+    const d = Math.hypot(dx, dz);
+    return d > 1e-6 ? [dx / d, dz / d] : [fx, fz];
+  }
   return c === CUT.LEFT ? [-fz, fx] : c === CUT.RIGHT ? [fz, -fx] : [fx, fz];
 };
 
@@ -63,7 +68,7 @@ export const knock = (p: PlayerState): [x: number, z: number] => {
  * takes the head within MIDLINE of his middle, else the arm on that side. A thrust and a cut across
  * go by the line's height at the foe's distance, as a share of his height: above NECK the head,
  * below HIPS a leg, else an arm. A cut across takes the side facing where it comes from; a thrust
- * the side it enters, and no arm within MIDLINE of his middle.
+ * the side it enters, and no arm within MIDLINE of his middle. A special goes as its base cut.
  */
 export const limbOf = (p: PlayerState, f: PlayerState): number => {
   const [fx, fz] = forward(p.yaw);
@@ -76,7 +81,7 @@ export const limbOf = (p: PlayerState, f: PlayerState): number => {
   const [ex, ez] = [fz * o - fx * back, -fx * o - fz * back];
   // Where it enters on his right (-gz, gx).
   const s = -gz * ex + gx * ez;
-  const c = p.cut ?? 0;
+  const c = (p.cut ?? 0) % SPECIAL_CUT;
   if (c === CUT.SLASH) {
     return Math.abs(s) <= MIDLINE ? LIMB.HEAD : s > 0 ? LIMB.ARM_R : LIMB.ARM_L;
   }

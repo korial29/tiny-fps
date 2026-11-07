@@ -5,13 +5,23 @@ import { step } from './gun';
 import { HIGHLINE, ROOFTOPS } from './map';
 import { spawn } from './physics';
 import { onWire } from './protocol';
-import { CUTS, HIPS, LOW_H, MIDLINE, NECK, PLAYER_H, PLAYER_R } from './constants';
-import { CUT, KEY, LIMB, MODE, TEX } from './types';
+import {
+  CUTS,
+  DASH_COOLDOWN,
+  HIPS,
+  LOW_H,
+  MIDLINE,
+  NECK,
+  PLAYER_H,
+  PLAYER_R,
+  SPECIAL_LATE,
+} from './constants';
+import { CUT, KEY, LIMB, MODE, SPECIAL_CUT, TEX } from './types';
 import type { PlayerState } from './types';
 import { build } from './world';
 import type { Brush } from './world';
 
-const { FORWARD, BACK, LEFT, RIGHT, JUMP, SPRINT, DASH, CROUCH, FIRE, BLADE } = KEY;
+const { FORWARD, BACK, LEFT, RIGHT, JUMP, SPRINT, DASH, CROUCH, FIRE, BLADE, SPECIAL } = KEY;
 
 /** Only the ground of the yard: nothing stands between two players. */
 const flat = build({ ...yard.def, brushes: [yard.def.brushes[0]] });
@@ -393,7 +403,8 @@ describe('limbOf', () => {
 
 describe('knock', () => {
   /** The way the shock of a cut of an attacker looking along `yaw` throws. */
-  const thrown = (cut: number, yaw: number) => knock(Object.assign(at(0, 0, yaw).p, { cut, yaw }));
+  const thrown = (cut: number, yaw: number, foe = at(-Math.sin(yaw), -Math.cos(yaw), 0).p) =>
+    knock(Object.assign(at(0, 0, yaw).p, { cut, yaw }), foe);
   const is = (v: [number, number], x: number, z: number) => {
     expect(v[0]).toBeCloseTo(x, 9);
     expect(v[1]).toBeCloseTo(z, 9);
@@ -412,8 +423,18 @@ describe('knock', () => {
     is(thrown(CUT.RIGHT, 0), -1, 0);
   });
 
+  it('throws a lunge and a leap along the look, and a spin out from the attacker, whichever way the foe is', () => {
+    is(thrown(CUT.LUNGE, EAST), 1, 0);
+    is(thrown(CUT.LEAP, 0), 0, -1);
+    for (const cut of [CUT.SPIN_L, CUT.SPIN_R]) {
+      // Behind him (looking north, +z is behind), and at his right.
+      is(thrown(cut, 0, at(0, 2, 0).p), 0, 1);
+      is(thrown(cut, 0, at(3, 0, 0).p), 1, 0);
+    }
+  });
+
   it('is a unit vector for any look', () => {
-    for (const cut of [CUT.THRUST, CUT.LEFT, CUT.RIGHT, CUT.SLASH]) {
+    for (const cut of Object.values(CUT)) {
       for (let yaw = 0; yaw < 6.3; yaw += 0.7) {
         const [x, z] = thrown(cut, yaw);
         expect(Math.hypot(x, z)).toBeCloseTo(1, 9);
@@ -446,4 +467,90 @@ describe('the katana racks of the maps', () => {
       }
     },
   );
+});
+
+describe('the special cuts', () => {
+  /** A player on the yard with the katana in hand, the gun in the bag, looking north. */
+  const armed = () => Object.assign(at(0, 0).p, { blade: true, ammo: -1 });
+  const go = (p: PlayerState, keys: number) =>
+    step(p, onWire({ keys, yaw: p.yaw, pitch: 0, seq: 0 }), yard, 0);
+
+  it('come with a double click: each cut’s special is the cut plus SPECIAL_CUT', () => {
+    for (const [keys, cut] of [
+      [FORWARD, CUT.LUNGE],
+      [LEFT, CUT.SPIN_L],
+      [RIGHT, CUT.SPIN_R],
+      [0, CUT.LEAP],
+    ]) {
+      const p = armed();
+      go(p, keys | FIRE | SPECIAL);
+      expect([p.cut, p.swing]).toEqual([cut, CUTS[cut].ticks]);
+      expect(cut).toBe(cutOf(keys) + SPECIAL_CUT);
+    }
+  });
+
+  it('turns a cut just started into its special, up to SPECIAL_LATE ticks into it, not later and not twice', () => {
+    for (const [late, turned] of [
+      [3, true],
+      [SPECIAL_LATE, true],
+      [SPECIAL_LATE + 1, false],
+    ] as const) {
+      const p = armed();
+      go(p, LEFT | FIRE);
+      for (let i = 1; i < late; i++) {
+        go(p, 0);
+      }
+      go(p, LEFT | FIRE | SPECIAL);
+      expect(p.cut, `${late} ticks in`).toBe(turned ? CUT.SPIN_L : CUT.LEFT);
+    }
+    const p = armed();
+    go(p, FIRE | SPECIAL);
+    go(p, 0);
+    go(p, LEFT | FIRE | SPECIAL);
+    expect([p.cut, p.swing]).toEqual([CUT.LEAP, CUTS[CUT.LEAP].ticks - 2]);
+  });
+
+  it('throws a lunge forward, spending the dash, and jumps a leap up; in the air neither moves him', () => {
+    const p = armed();
+    go(p, FORWARD | FIRE | SPECIAL);
+    expect(p.dash).toBe(DASH_COOLDOWN);
+    for (let i = 0; i < 30; i++) {
+      go(p, 0);
+    }
+    expect(-p.z).toBeGreaterThan(2.5);
+    const q = armed();
+    go(q, FIRE | SPECIAL);
+    let top = 0;
+    for (let i = 0; i < 60; i++) {
+      go(q, 0);
+      top = Math.max(top, q.y);
+    }
+    expect(top).toBeGreaterThan(1.2);
+    expect(q.ground).toBe(true);
+    // Off the floor: the cut, no throw.
+    const r = Object.assign(armed(), { mode: MODE.AIR, ground: false, y: 3 });
+    go(r, FIRE | SPECIAL);
+    expect(r.cut).toBe(CUT.LEAP);
+    expect(r.vy).toBeLessThan(0.1);
+  });
+
+  it('reaches all round in a spin: a foe behind him is hit, as he is in front', () => {
+    for (const cut of [CUT.SPIN_L, CUT.SPIN_R]) {
+      for (const x of [-2, 2]) {
+        expect(hits(cut, x), `cut ${cut} at ${x}`).toBe(true);
+      }
+      expect(hits(cut, -2.9)).toBe(false);
+    }
+    // The lunge reaches the furthest, straight ahead.
+    expect(hits(CUT.LUNGE, 3.3)).toBe(true);
+    expect(hits(CUT.THRUST, 3.3)).toBe(false);
+  });
+
+  it('strike while the swing runs, each once, and every swing fits the wire’s 6 bits', () => {
+    for (const c of CUTS) {
+      expect(c.ticks).toBeLessThan(64);
+      expect(c.strike).toBeGreaterThan(0);
+      expect(c.strike).toBeLessThan(c.ticks);
+    }
+  });
 });

@@ -3,6 +3,8 @@
 // Model space has the right hand's grip at the origin, x right, y up, the point toward -z (like
 // gun.ts); place() carries it to the world. No DOM.
 import { CUTS, TICK_HZ } from '../shared/constants';
+import { TAU } from '../shared/physics';
+import { CUT } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { glow as lit, tri } from './flag';
 import { grip } from './gun';
@@ -37,8 +39,8 @@ const rnd = (n: number) => {
 };
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
 
-/** The y of the blade's middle at `f` ahead of the grip: it bends toward the edge, most at the point. */
-const bend = (f: number) => -SORI * ((f - BASE) / (TIP - BASE)) ** 2;
+/** The y of the blade's middle at `f` ahead of the grip: it bends toward the spine, most at the point, the edge on the outside of the curve. */
+const bend = (f: number) => SORI * ((f - BASE) / (TIP - BASE)) ** 2;
 
 /** [share of the blade, half height, half thickness] from the root: it tapers to a point, the thickness too. */
 const STATIONS = [
@@ -272,13 +274,13 @@ const strikeAt = (c: number) => CUTS[c].strike / CUTS[c].ticks;
 /** Up over the left shoulder with the blade cocked back, round across the middle, out low to the right and round behind, then back up. */
 const ACROSS = (s: number) => [
   [0, ...GUARD],
-  [0.12, -0.1, -0.12, 0.38, -0.55, 0.75, -0.35],
-  [0.24, -0.22, -0.06, 0.3, -0.6, 0.35, -0.72],
-  [s - 0.07, -0.14, -0.12, 0.38, -0.98, 0.15, 0.1],
+  [0.12, -0.14, -0.08, 0.38, -0.55, 0.75, -0.35],
+  [0.24, -0.3, 0, 0.28, -0.6, 0.35, -0.72],
+  [s - 0.07, -0.22, -0.1, 0.38, -0.98, 0.15, 0.1],
   [s, 0.02, -0.16, 0.43, 0, 0.1, 1],
-  [0.5, 0.24, -0.2, 0.4, 0.95, -0.1, 0.15],
-  [0.62, 0.25, -0.24, 0.25, 0.6, -0.35, -0.7],
-  [0.8, 0.18, -0.26, 0.38, 0.45, 0.6, 0.2],
+  [0.5, 0.32, -0.18, 0.38, 0.95, -0.1, 0.15],
+  [0.62, 0.34, -0.22, 0.24, 0.6, -0.35, -0.7],
+  [0.8, 0.22, -0.26, 0.36, 0.45, 0.6, 0.2],
   [1, ...GUARD],
 ];
 const KEYS: number[][][] = [
@@ -295,27 +297,83 @@ const KEYS: number[][][] = [
   // the left arm reaches across the chest to the wind-up.
   [
     [0, ...GUARD],
-    [0.12, 0.2, -0.12, 0.36, 0.55, 0.75, -0.35],
-    [0.24, 0.26, -0.06, 0.24, 0.6, 0.35, -0.72],
-    [strikeAt(2) - 0.07, 0.2, -0.12, 0.36, 0.98, 0.15, 0.1],
+    [0.12, 0.24, -0.08, 0.36, 0.55, 0.75, -0.35],
+    [0.24, 0.34, 0, 0.24, 0.6, 0.35, -0.72],
+    [strikeAt(2) - 0.07, 0.26, -0.1, 0.36, 0.98, 0.15, 0.1],
     [strikeAt(2), 0.08, -0.16, 0.43, 0, 0.1, 1],
-    [0.5, -0.1, -0.2, 0.36, -0.95, -0.1, 0.15],
-    [0.62, -0.14, -0.24, 0.3, -0.6, -0.35, -0.7],
-    [0.8, -0.04, -0.26, 0.38, -0.3, 0.6, 0.2],
+    [0.5, -0.16, -0.18, 0.36, -0.95, -0.1, 0.15],
+    [0.62, -0.2, -0.22, 0.28, -0.6, -0.35, -0.7],
+    [0.8, -0.08, -0.26, 0.38, -0.3, 0.6, 0.2],
     [1, ...GUARD],
   ],
   // Raised high over the head with the blade down the back, down through the middle to low ahead.
   [
     [0, ...GUARD],
-    [0.14, 0.05, -0.06, 0.34, -0.05, 0.95, -0.1],
-    [0.28, 0.04, 0.06, 0.3, 0, 0.5, -0.86],
-    [0.34, 0.05, 0.02, 0.36, 0, 1, 0.15],
+    [0.14, 0.05, -0.02, 0.34, -0.05, 0.95, -0.1],
+    [0.28, 0.04, 0.14, 0.26, 0, 0.5, -0.86],
+    [0.34, 0.05, 0.08, 0.34, 0, 1, 0.15],
     [strikeAt(3), 0.05, -0.16, 0.43, 0, 0.08, 1],
     [0.52, 0.04, -0.26, 0.42, 0, -0.55, 0.85],
     [0.64, 0.03, -0.3, 0.38, 0, -0.65, 0.75],
     [1, ...GUARD],
   ],
+  // The lunge: drawn back deep to the hip, then the arms straight out on the point, held through
+  // the throw forward.
+  [
+    [0, ...GUARD],
+    [0.2, 0.18, -0.26, 0.16, -0.08, 0.3, 1],
+    [strikeAt(4), 0.03, -0.18, 0.41, -0.02, 0.1, 1],
+    [strikeAt(4) + 0.3, 0.03, -0.18, 0.41, -0.02, 0.1, 1],
+    [1, ...GUARD],
+  ],
+  // The spin from the left: wound up over the left shoulder, then the blade out level ahead and to
+  // the right, leading, while the body turns round to the right (whirl()), then low behind and back up.
+  [
+    [0, ...GUARD],
+    [0.15, -0.3, 0, 0.28, -0.6, 0.35, -0.72],
+    [0.25, -0.1, -0.12, 0.4, -0.7, 0.1, 0.7],
+    [0.35, 0.24, -0.14, 0.38, 0.7, 0.05, 0.7],
+    [0.65, 0.26, -0.14, 0.36, 0.72, 0, 0.68],
+    [0.78, 0.3, -0.24, 0.26, 0.6, -0.35, -0.7],
+    [0.9, 0.2, -0.26, 0.36, 0.45, 0.6, 0.2],
+    [1, ...GUARD],
+  ],
+  // The spin from the right: over the right shoulder, the blade out ahead and to the left, turning left.
+  [
+    [0, ...GUARD],
+    [0.15, 0.34, 0, 0.24, 0.6, 0.35, -0.72],
+    [0.25, 0.2, -0.12, 0.38, 0.7, 0.1, 0.7],
+    [0.35, -0.12, -0.14, 0.38, -0.7, 0.05, 0.7],
+    [0.65, -0.14, -0.14, 0.36, -0.72, 0, 0.68],
+    [0.78, -0.2, -0.22, 0.28, -0.6, -0.35, -0.7],
+    [0.9, -0.12, -0.26, 0.38, -0.45, 0.6, 0.2],
+    [1, ...GUARD],
+  ],
+  // The leap: raised high over the head as he jumps, held there to the top, then down on the foe
+  // as he comes down, low ahead.
+  [
+    [0, ...GUARD],
+    [0.12, 0.05, 0.02, 0.32, -0.05, 0.95, -0.1],
+    [0.3, 0.04, 0.14, 0.26, 0, 0.5, -0.86],
+    [0.55, 0.04, 0.14, 0.26, 0, 0.5, -0.86],
+    [strikeAt(7) - 0.07, 0.05, 0.08, 0.34, 0, 1, 0.15],
+    [strikeAt(7), 0.05, -0.16, 0.43, 0, 0.08, 1],
+    [0.8, 0.04, -0.28, 0.42, 0, -0.6, 0.8],
+    [0.9, 0.03, -0.3, 0.38, 0, -0.65, 0.75],
+    [1, ...GUARD],
+  ],
 ];
+
+/**
+ * How far round a spin has turned the body at `p` of its swing (radians, added to the look's yaw for
+ * the drawing only): a full turn, eased, between the wind-up and the follow-through; to the right
+ * (yaw down) for SPIN_L, to the left for SPIN_R; 0 for any other cut.
+ */
+export const whirl = (cut: number, p: number): number => {
+  const way = cut === CUT.SPIN_L ? -1 : cut === CUT.SPIN_R ? 1 : 0;
+  const u = clamp((p - 0.3) / 0.45);
+  return way * TAU * u * u * (3 - 2 * u);
+};
 const NOW: number[] = [];
 
 /** The grip and the blade direction (x, y, z each) of cut `cut` at `p` of the swing: one array, rewritten by each call. */

@@ -6,6 +6,7 @@ import { EV, KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { STILL } from '../shared/physics';
 import {
+  DOUBLE_CLICK_MS,
   DOUBLE_TAP_MS,
   WHEEL_MS,
   chosen,
@@ -395,6 +396,29 @@ describe('createInput', () => {
       lock(true);
       button('mousedown', 0);
       expect(ctl.keys & ~KEY.FIRE).toBe(0);
+    });
+
+    it('sends one step of FIRE and SPECIAL after a double click, however short, and not after two slow clicks', () => {
+      let clock = 1000;
+      vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      make();
+      lock(true);
+      const click = (gap: number) => {
+        clock += gap;
+        button('mousedown', 0);
+        button('mouseup', 0);
+      };
+      click(0);
+      click(DOUBLE_CLICK_MS + 1);
+      expect(ctl.take()).toBe(0);
+      click(DOUBLE_CLICK_MS);
+      expect(ctl.take()).toBe(KEY.FIRE | KEY.SPECIAL);
+      expect(ctl.take()).toBe(0);
+      // A third click right after is a new first one, not another special.
+      click(50);
+      expect(ctl.take()).toBe(0);
+      click(50);
+      expect(ctl.take()).toBe(KEY.FIRE | KEY.SPECIAL);
     });
   });
 

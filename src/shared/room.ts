@@ -397,7 +397,7 @@ export class Room {
   /**
    * A cut of `p` struck at the view tick `view`: every enemy it reaches as `p` drew him is hit
    * (`strike`), and the `hits` count goes up once. Each takes the cut's hp; one it does not put
-   * down is shocked: a stumble of SHOCK_TICKS thrown SHOCK_KNOCK m/s the way the blade goes, with
+   * down is shocked: a stumble of SHOCK_TICKS thrown SHOCK_KNOCK m/s the way the blade throws him, with
    * `zap`, and `by` the attacker. A shock drops no flag. One it puts down loses the limb the blade
    * crosses where `p` drew him (`limbOf`).
    */
@@ -408,12 +408,12 @@ export class Room {
       return;
     }
     p.state.hits = (p.state.hits + 1) & 255;
-    const [dx, dz] = knock(p.state);
     for (const foe of foes) {
+      const drawn = seen.find(s => s.id === foe.info.id)!;
       if (this.harm(foe, CUTS[p.state.cut ?? 0].hp)) {
-        const drawn = seen.find(s => s.id === foe.info.id)!;
         foe.state.lost = limbOf(p.state, drawn);
       } else {
+        const [dx, dz] = knock(p.state, drawn);
         stumble(foe.state, dx, dz, SHOCK_TICKS, SHOCK_KNOCK);
         foe.state.zap = true;
         foe.by = p.info.id;

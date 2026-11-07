@@ -14,7 +14,17 @@ import type { World } from '../shared/world';
 import { createGait, frame } from './gait';
 import type { Floor } from './gait';
 import { TILT, held, pointed, tip } from './gun';
-import { BEHIND as BACK, C, S, cutting, ends, held as sword, progress, stroke } from './katana';
+import {
+  BEHIND as BACK,
+  C,
+  S,
+  cutting,
+  ends,
+  held as sword,
+  progress,
+  stroke,
+  whirl,
+} from './katana';
 import { add, basis, dot, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin } from './rig';
@@ -36,6 +46,8 @@ export interface Body {
   aim(target: Vec3): void;
   /** The muzzle of the gun in the right hand, in the camera's space (right, up, forward), as of the last update. */
   muzzle(): Vec3;
+  /** How far round a spin has turned the body as of the last update (radians, whirl()): the drawn view turns with it. */
+  spun(): number;
   /** The joints for a camera at `eye`; undefined without a player, or with the camera away from the body. */
   pose(eye: Vec3, yaw: number, pitch: number, roll?: number): Solved | undefined;
   /** Appends the body's vertices (see STRIDE) in the jacket `color`; nothing when pose() has none. */
@@ -477,9 +489,12 @@ export const createBody = (world?: World): Body => {
       r[2] * a + u[2] * b + f[2] * c,
     ];
     const view = (v: Vec3): Vec3 => [dot(v, r), dot(v, u), dot(v, f)];
-    // The trunk follows the look a little.
+    // The trunk follows the look a little, and turns with the katana's swing, so the arms carry the
+    // hands further round.
+    const sw = w.blade > 0.002 ? blade() : undefined;
+    const round = sw ? -0.6 * (sw.at[0] - 0.06) * w.blade : 0;
     for (const j of [J.SPINE, J.CHEST]) {
-      q.rot[j] = mul(q.rot[j], axis(X, 0.12 * clamp(pitch, -1.3, 1.3)));
+      q.rot[j] = mul(q.rot[j], mul(axis(Y, round), axis(X, 0.12 * clamp(pitch, -1.3, 1.3))));
     }
     // The head goes to the camera, the planted feet stay where they are.
     const s0 = solve(q);
@@ -498,7 +513,6 @@ export const createBody = (world?: World): Body => {
     const [gp, ga] = holster();
     const fh = [0, 1, 2].map(i => TILT[1] * ga[2][i] - TILT[0] * ga[1][i]) as Vec3;
     const wrist = [0, 1, 2].map(i => gp[i] - 0.078 * fh[i] + 0.022 * ga[0][i]) as Vec3;
-    const sw = w.blade > 0.002 ? blade() : undefined;
     for (const sd of [-1, 1]) {
       const k = Math.cos(TAU * gait.phase) * sd;
       // The numbers are for the right hand, mirrored below. The arms hang along the body, out of
@@ -620,5 +634,6 @@ export const createBody = (world?: World): Body => {
       target = l < 3 ? (l ? (t.map(v => (v * 3) / l) as Vec3) : [0, 0, 3]) : t;
     },
     muzzle: () => tip(...holster()),
+    spun: () => (me && prog >= 0 ? whirl(me.cut ?? 0, prog) : 0),
   };
 };

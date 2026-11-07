@@ -6,9 +6,19 @@
 // A player who is down is moved with no keys (`down` is in the snapshot), so the predictor replays
 // a fall and a respawn the way the host plays them.
 import { cutOf } from './blade';
-import { AMMO_MAX, CUTS, GUN_COOLDOWN, PICK_H, RACK_R } from './constants';
-import { move, respawn } from './physics';
-import { KEY, MODE } from './types';
+import {
+  AMMO_MAX,
+  CUTS,
+  DASH_COOLDOWN,
+  GUN_COOLDOWN,
+  LEAP_SPEED,
+  LUNGE_SPEED,
+  PICK_H,
+  RACK_R,
+  SPECIAL_LATE,
+} from './constants';
+import { forward, move, respawn } from './physics';
+import { CUT, EV, KEY, MODE, SPECIAL_CUT } from './types';
 import type { Input, PlayerState } from './types';
 import type { World } from './world';
 
@@ -18,6 +28,26 @@ type Vec3 = [number, number, number];
 export const within = (p: PlayerState, at: Vec3, r: number): boolean => {
   const [dx, dz] = [p.x - at[0], p.z - at[2]];
   return dx * dx + dz * dz < r * r && Math.abs(p.y - at[1]) < PICK_H;
+};
+
+/**
+ * The start of a cut that moves the body, from a floor only: the lunge throws him along the look at
+ * LUNGE_SPEED for the burst of a dash, and spends the dash; the leap jumps him LEAP_SPEED up.
+ */
+const launch = (p: PlayerState): void => {
+  if (p.mode !== MODE.GROUND) {
+    return;
+  }
+  if (p.cut === CUT.LUNGE) {
+    const [fx, fz] = forward(p.yaw);
+    p.vx = fx * LUNGE_SPEED;
+    p.vz = fz * LUNGE_SPEED;
+    p.dash = DASH_COOLDOWN;
+    p.ev |= EV.DASH;
+  } else if (p.cut === CUT.LEAP) {
+    p.vy = LEAP_SPEED;
+    p.ev |= EV.JUMP;
+  }
 };
 
 /** What a step struck, for the host to resolve: nothing, a shot (a plasma ball), or the katana's cut. */
@@ -35,8 +65,9 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  *   it stays in hand for the length of a swing.
  * - The trigger: `cool` and `swing` run down, and at 0 a held FIRE fires the gun, with ammo, or
  *   starts the katana's swing (`cut` from the keys), unless the hands are busy (a hang, a climb).
- *   The cut strikes `CUTS[cut].strike` ticks into its swing. The look is the input's, so both go
- *   where the player sees.
+ *   With SPECIAL (a double click) the swing is the cut's special; its press within SPECIAL_LATE
+ *   ticks of a cut's start turns that cut into it. The cut strikes `CUTS[cut].strike` ticks into
+ *   its swing. The look is the input's, so both go where the player sees.
  * `armed` is false while the match is over: no weapon, no rack.
  */
 export const step = (p: PlayerState, i: Input, w: World, team: number, armed = true): Strike => {
@@ -70,9 +101,15 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
     return STRIKE.CUT;
   }
   if (i.keys & KEY.FIRE && !busy) {
-    if (p.wield && !p.swing) {
-      p.cut = cutOf(i.keys);
+    // A double click's second press turns a cut just started into its special.
+    const late = CUTS[p.cut ?? 0].ticks - p.swing;
+    const special =
+      !!(i.keys & KEY.SPECIAL) &&
+      (!p.swing || ((p.cut ?? 0) < SPECIAL_CUT && late <= SPECIAL_LATE));
+    if (p.wield && (!p.swing || special)) {
+      p.cut = cutOf(i.keys) + (special ? SPECIAL_CUT : 0);
       p.swing = CUTS[p.cut].ticks;
+      launch(p);
     } else if (!p.wield && !p.cool && p.ammo > 0) {
       p.ammo--;
       p.shots = (p.shots + 1) & 255;

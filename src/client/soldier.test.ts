@@ -167,10 +167,10 @@ describe('soldier', () => {
     { stun: 40, vz: -3 },
   ];
 
-  it('stays under 3600 vertices near and about 40% of that far, in every move, as whole triangles', () => {
+  it('stays under 3900 vertices near and about 40% of that far, in every move, as whole triangles', () => {
     for (const o of MOVES) {
       const [near, far] = [1, 0].map(lod => draw(o, lod).length / STRIDE);
-      expect(near).toBeLessThan(3600);
+      expect(near).toBeLessThan(3900);
       expect(near).toBeGreaterThan(2000);
       expect(far).toBeLessThan(near * 0.45);
       expect(near % 3).toBe(0);
@@ -231,10 +231,10 @@ describe('soldier', () => {
     expect(head.some(p => p[4] + p[5] + p[6] < 0.35)).toBe(true);
   });
 
-  it('turns with its yaw: the shades, at the front of the face, go where it looks', () => {
-    const shades = (yaw: number) =>
-      rows(draw({ yaw })).filter(p => p[1] > 1 + 1.55 && p[4] + p[5] + p[6] < 0.15);
-    const [a, b] = [shades(0), shades(Math.PI / 2)];
+  it('turns with its yaw: the whites of the eyes, at the front of the face, go where it looks', () => {
+    const eyes = (yaw: number) =>
+      rows(draw({ yaw })).filter(p => p[1] > 1 + 1.55 && p[4] + p[5] + p[6] > 2.4);
+    const [a, b] = [eyes(0), eyes(Math.PI / 2)];
     const mean = (v: number[][], i: number) => v.reduce((s, p) => s + p[i], 0) / v.length;
     expect(a.length).toBeGreaterThan(10);
     expect(mean(a, 2) + 3).toBeLessThan(-0.05);

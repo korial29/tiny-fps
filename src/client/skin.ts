@@ -12,21 +12,38 @@ import type { Vec3 } from './mesh';
 const SKIN = [0.66, 0.45, 0.35];
 
 /** The colour regions of a palette. */
-const [JACKET, TRIM, PANTS, FLESH, HAIR, UPPER, SOLE, GLOVE, SHADES, CAP] = [
-  0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+const [JACKET, TRIM, PANTS, FLESH, HAIR, UPPER, SOLE, GLOVE, WHITE, IRIS, CAP] = [
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
 ];
 
-/** Jacket, its darker trim, trousers, skin, hair, shoe upper, sole, gloves, shades and the cut's cauterized face, which glows. */
-export const palette = (jacket: number[]): number[][] => [
+/** Hair colours, one per runner (hairOf()): black, dark and mid brown, chestnut, red, dark and light blond, grey. */
+const HAIRS = [
+  [0.03, 0.03, 0.035],
+  [0.09, 0.07, 0.06],
+  [0.2, 0.12, 0.07],
+  [0.36, 0.18, 0.08],
+  [0.55, 0.16, 0.06],
+  [0.58, 0.43, 0.2],
+  [0.86, 0.72, 0.44],
+  [0.6, 0.6, 0.58],
+];
+
+/** A hair colour for the runner `id`, picked at random from HAIRS but the same for everyone who sees him. */
+export const hairOf = (id: number): number[] =>
+  HAIRS[(Math.imul(id + 1, 0x9e3779b1) >>> 29) % HAIRS.length];
+
+/** Jacket, its darker trim, trousers, skin, hair, shoe upper, sole, gloves, the whites of the eyes and their irises, and the cut's cauterized face, which glows. */
+export const palette = (jacket: number[], hair = HAIRS[1]): number[][] => [
   jacket,
   jacket.map(v => v * 0.5),
   [0.12, 0.13, 0.17],
   SKIN,
-  [0.09, 0.07, 0.06],
+  hair,
   [0.74, 0.74, 0.77],
   [0.93, 0.93, 0.94],
   [0.26, 0.26, 0.3],
-  [0.03, 0.03, 0.04],
+  [0.85, 0.83, 0.8],
+  [0.1, 0.06, 0.04],
   [2.8, 0.5, 0.12],
 ];
 
@@ -56,24 +73,25 @@ interface Loft {
 
 // Metres, rest pose, +x the runner's right, the right limbs written and the left mirrored.
 // Trunk: from the crotch to the crown. Its first ring is the pelvis, whose halves are the tops of
-// the legs. Two rings at the armpits' height are the split: the first is the torso alone, the second
-// takes in the shoulders, and the sleeves hang from the shoulders' sides, ending in the torso's own
-// side vertices.
+// the legs. Two rings at the armpits' height, 10 cm under the shoulder joint, are the split: the
+// first is the torso alone, the second takes in the shoulders, and the sleeves hang from the
+// shoulders' sides, ending in the torso's own side vertices.
 const TRUNK: Loft = {
   chain: [J.PELVIS, J.SPINE, J.CHEST, J.NECK, J.HEAD],
   n: [8, 12],
   e: 2.3,
-  far: [0, 2, 4, 5, 6, 8, 11, 13, 14, 16, 18, 20],
+  far: [0, 2, 4, 6, 7, 9, 12, 14, 15, 17, 19, 21],
   rings: [
     [0.93, 0, 0.01, 0.187, 0.108, 0, PANTS],
     [0.99, 0, 0.005, 0.18, 0.106, 0.25, TRIM],
     [1.03, 0, 0, 0.17, 0.102, 0.5, JACKET],
     [1.12, 0, 0, 0.155, 0.097, 1, JACKET],
     [1.24, 0, -0.003, 0.176, 0.112, 1.7, JACKET],
-    [1.29, 0, -0.004, 0.18, 0.118, 1.85, JACKET],
-    [1.29, 0, -0.004, 0.262, 0.118, 1.85, JACKET],
-    [1.35, 0, -0.005, 0.268, 0.126, 2, JACKET],
-    [1.44, 0, -0.004, 0.262, 0.116, 2, JACKET],
+    [1.3, 0, -0.004, 0.182, 0.12, 1.85, JACKET],
+    [1.37, 0, -0.005, 0.186, 0.124, 2, JACKET],
+    [1.37, 0, -0.005, 0.264, 0.124, 2, JACKET],
+    [1.41, 0, -0.005, 0.268, 0.123, 2, JACKET],
+    [1.45, 0, -0.004, 0.26, 0.114, 2, JACKET],
     [1.485, 0, 0, 0.235, 0.098, 2.05, JACKET],
     [1.502, 0, 0, 0.185, 0.09, 2.08, JACKET],
     [1.512, 0, 0, 0.125, 0.08, 2.1, JACKET],
@@ -83,7 +101,7 @@ const TRUNK: Loft = {
     // the nape to the crown.
     [1.6, 0, -0.0165, 0.058, 0.0665, 3.5, FLESH],
     [1.635, 0, -0.0085, 0.072, 0.0785, 4, FLESH, 150, HAIR],
-    [1.675, 0, -0.001, 0.08, 0.089, 4, FLESH, -36, SHADES, 110, HAIR],
+    [1.675, 0, -0.001, 0.08, 0.089, 4, FLESH, 110, HAIR],
     [1.71, 0, 0.0035, 0.083, 0.0935, 4, FLESH, 72, HAIR],
     [1.75, 0, 0.0065, 0.08, 0.0885, 4, HAIR],
     [1.785, 0, 0.011, 0.056, 0.061, 4, HAIR],
@@ -122,9 +140,10 @@ const ARM: Loft = {
   chain: [J.ARM_R, J.FOREARM_R, J.HAND_R],
   n: [0, 0],
   m: true,
-  far: [0, 2, 3, 4, 5, 7, 9],
+  far: [0, 2, 4, 5, 6, 8, 10],
   rings: [
-    [1.29, 0.222, 0, 0, 0, 0, JACKET],
+    [1.37, 0.222, 0, 0, 0, 0, JACKET],
+    [1.3, 0.222, 0, 0.053, 0.056, 0.1, JACKET],
     [1.22, 0.222, 0, 0.049, 0.052, 0.2, JACKET],
     [1.18, 0.222, 0, 0.043, 0.046, 0.5, JACKET],
     [1.09, 0.222, -0.002, 0.046, 0.048, 0.8, JACKET],
@@ -141,6 +160,23 @@ const ARM: Loft = {
 export const CUFF = [0.925, 0.222, 0, 0.027, 0.027, 2, GLOVE];
 export const CUFF_SIDES = TRUNK.n[1] - 4;
 
+// The eyes are small pieces of their own, the left the right one mirrored, buried in the face: a
+// white almond with a dark iris at its front.
+const EYE: Loft = {
+  chain: [J.HEAD],
+  n: [0, 5],
+  z: true,
+  m: true,
+  far: [],
+  rings: [
+    [-0.07, 0.031, 1.692, 0.0145, 0.0088, 0, WHITE],
+    [-0.088, 0.031, 1.692, 0.0145, 0.0088, 0, WHITE],
+    [-0.0915, 0.031, 1.692, 0.0105, 0.0072, 0, IRIS],
+    [-0.0932, 0.031, 1.692, 0.0055, 0.0055, 0, IRIS],
+    [-0.094, 0.031, 1.692, 0, 0, 0, IRIS],
+  ],
+};
+
 // The nose is a small piece of its own, buried in the face.
 const NOSE: Loft = {
   chain: [J.HEAD],
@@ -154,7 +190,7 @@ const NOSE: Loft = {
   ],
 };
 
-const LOFTS = [TRUNK, LEG, ARM, NOSE];
+const LOFTS = [TRUNK, LEG, ARM, NOSE, EYE];
 
 /** The rest mesh: per vertex a position and a normal, two joints and the weight of the second. */
 export interface Skin {
@@ -189,17 +225,17 @@ const generate = (lod: number): Skin => {
   for (const L of LOFTS) {
     const n = L === ARM ? N - 4 : L.n[Math.min(lod, 1)];
     // The eye's own body has no head.
-    if (!n || (lod > 1 && L === NOSE)) {
+    if (!n || (lod > 1 && (L === NOSE || L === EYE))) {
       continue;
     }
     // The eye's own body ends the trunk in a cap on the shoulders and each sleeve in a cuff over a
     // thin wrist, where body.ts puts a hand.
     const rings =
       lod > 1 && L === TRUNK
-        ? [...L.rings.slice(0, 9), [1.455, 0, 0, 0, 0, 2, JACKET]]
+        ? [...L.rings.slice(0, 10), [1.462, 0, 0, 0, 0, 2, JACKET]]
         : lod > 1 && L === ARM
           ? [
-              ...L.rings.slice(0, 5),
+              ...L.rings.slice(0, 6),
               [0.95, 0.222, 0, 0.037, 0.037, 1.6, GLOVE],
               CUFF,
               [0.91, 0.222, 0, 0, 0, 2, GLOVE],
@@ -225,7 +261,7 @@ const generate = (lod: number): Skin => {
           L === TRUNK
             ? clamp((Math.abs(x) - 0.14) / 0.1) *
               clamp((1.53 - y) / 0.15) *
-              clamp((y - 1.27) / 0.02)
+              clamp((y - 1.35) / 0.02)
             : 0;
         return q
           ? put([x, y, z], J.CHEST, x < 0 ? J.ARM_L : J.ARM_R, q)
@@ -295,7 +331,7 @@ const generate = (lod: number): Skin => {
         const part =
           L === TRUNK
             ? +(y > 1.55)
-            : L === NOSE
+            : L === NOSE || L === EYE
               ? LIMB.HEAD
               : (L === ARM ? LIMB.ARM_L : LIMB.LEG_L) + +(m > 0);
         for (let i = 0; i < n; i++) {

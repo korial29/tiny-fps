@@ -12,13 +12,11 @@
 
 A tiny multiplayer first-person game for the browser, written in TypeScript with raw WebGL2, no game library and no runtime dependency. It is becoming an open-air capture-the-flag between two teams of players on rooftops, inspired by Mirror's Edge: parkour movement and no CPU enemies. Today two teams play capture the flag on Highline, a symmetric rooftop map, with the parkour moves, a tackle, a plasma gun and an electric katana ([`docs/PLAN.md`](docs/PLAN.md), [`docs/WEAPON.md`](docs/WEAPON.md)). Everything is generated in code: geometry, textures, lights. There are no images, fonts or assets to serve.
 
-It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](https://github.com/carlini/js13k2019-yet-another-doom-clone) (js13k 2019). Only the ideas were reused, not the code. The renderer, the netcode and the sound come from that first game; the screenshots below are from it.
+It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](https://github.com/carlini/js13k2019-yet-another-doom-clone) (js13k 2019). Only the ideas were reused, not the code. The renderer, the netcode and the sound come from that first game.
 
-![Sector rooms in the flashlight's beam](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-corridor.jpg)
+![The plasma gun on a Highline roof, a health pack ahead and the blue flag's marker in the distance](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-gun.jpg)
 
-![A stair down to a lit room](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-goal.jpg)
-
-![An open doorway glowing green at the end of a corridor](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-exit.jpg)
+![The electric katana over the roofs of Highline, from the red armoury](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-katana.jpg)
 
 ## Framework-agnostic, light to add
 

@@ -5,7 +5,15 @@
 // planted feet and the hands are put on goals placed in the view: the frame edges on a run, the
 // ledge on a hang, the wall on a wall-run. Drawn by the renderer over a cleared depth, like a view
 // model. No DOM, pure but for the state it keeps.
-import { DASH_COOLDOWN, DASH_TICKS, GRAB_GAP, PLAYER_R, STEP_H } from '../shared/constants';
+import {
+  CHARGE_TAP,
+  DASH_COOLDOWN,
+  DASH_TICKS,
+  GRAB_GAP,
+  PLAYER_R,
+  STEP_H,
+} from '../shared/constants';
+import { powerOf } from '../shared/gun';
 import { TAU, eyeHeight, speedOf, sprinting } from '../shared/physics';
 import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -707,7 +715,10 @@ export const createBody = (world?: World): Body => {
           );
         });
         if (hold > 0.2) {
-          held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], 1, clamp(hold * 1.5 - 0.5), me?.ammo);
+          // The gauge lights once a press is more than a tap: the strength the shot would have.
+          const level =
+            me && (me.charge ?? 0) >= CHARGE_TAP ? Math.min(powerOf(me.charge!), me.ammo) : 0;
+          held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], 1, clamp(hold * 1.5 - 0.5), me?.ammo, level);
         }
         if (grasp > 0.2) {
           sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], 1, clock, clamp(grasp * 1.5 - 0.5));

@@ -1,7 +1,7 @@
 // The gun: a curved alien sidearm lofted from rings (violet metal, cyan glow), and the maths of the
 // hand that holds it. Model space has the middle of the grip at the origin, x right, y up, the
 // muzzle toward -z (like mesh.ts); place() carries it to the world. No DOM.
-import { GUN_RANGE } from '../shared/constants';
+import { CHARGE_MAX, GUN_RANGE } from '../shared/constants';
 import { TAU, eyeHeight } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
@@ -250,7 +250,7 @@ const DIGITS = [
   'abcdfg',
 ];
 /** A digit: width, height, thickness of a segment, gap between the two digits. */
-const [DW, DH, DT, DGAP] = [0.019, 0.026, 0.0055, 0.004];
+const [DW, DH, DT, DGAP] = [0.019, 0.0205, 0.005, 0.004];
 /** The rectangle of each segment in a digit: across and up from its bottom left corner. */
 const SEGMENTS: Record<string, [number, number, number, number]> = {
   a: [0, DH - DT, DW, DH],
@@ -277,16 +277,21 @@ const BLOCK_TOP: [Vec3, Vec3] = [
 ];
 /** The dark screen set in the back face: half width, and from where to where up the face, in metres. */
 const [SW, SFROM, STO] = [0.023, 0.0175, 0.0455];
+/** The charge gauge under the digits, up the screen from its foot: where it starts and ends, and the gap between its cells. */
+const [GFROM, GTO, GGAP] = [0.0016, 0.0056, 0.0015];
 const readouts = new Map<number, number[]>();
 
 /**
  * The ammo as two glowing seven-segment digits on a dark screen set in the back of a small block
  * on top of the body, in model space: cyan, red at 10 or fewer, thick segments that bloom only a
  * little. The block is part of the readout, so only a gun that shows the ammo carries it. 99 at most.
+ * While the gun charges, a gauge of CHARGE_MAX cells under the digits lights `level` of them, the
+ * strength the shot would have; all orange at the full charge.
  */
-export const readout = (ammo: number): number[] => {
+export const readout = (ammo: number, level = 0): number[] => {
   const n = Math.min(Math.max(Math.floor(ammo), 0), 99);
-  let out = readouts.get(n);
+  const key = n * 8 + Math.min(Math.max(level, 0), CHARGE_MAX);
+  let out = readouts.get(key);
   if (!out) {
     const v: number[] = (out = []);
     const mirror = (p: Vec3): Vec3 => [-p[0], p[1], p[2]];
@@ -328,33 +333,61 @@ export const readout = (ammo: number): number[] => {
       [at(-SW, SFROM, 0.0012), at(SW, SFROM, 0.0012), at(SW, STO, 0.0012), at(-SW, STO, 0.0012)],
       DARK,
     );
+    /** The gauge's cells, the lit ones or the dim ones, while it charges. */
+    const gauge = (on: boolean) => {
+      const w = (2 * DW + DGAP - (CHARGE_MAX - 1) * GGAP) / CHARGE_MAX;
+      for (let c = 0; level > 0 && c < CHARGE_MAX; c++) {
+        if (c < level === on) {
+          const x = -DW - DGAP / 2 + c * (w + GGAP);
+          const p = (a: number, b: number) => at(a, SFROM + b, 0.0027);
+          const rgb = !on
+            ? [0.04, 0.12, 0.16]
+            : level >= CHARGE_MAX
+              ? [1.3, 0.6, 0.15]
+              : [0.25, 0.9, 1];
+          tri(v, p(x, GFROM), p(x + w, GFROM), p(x + w, GTO), rgb);
+          tri(v, p(x, GFROM), p(x + w, GTO), p(x, GTO), rgb);
+        }
+      }
+    };
+    gauge(false);
     const from = v.length;
     [...`${n}`.padStart(2, '0')].forEach((ch, i) => {
       const x0 = -DW - DGAP / 2 + i * (DW + DGAP);
       for (const seg of DIGITS[+ch]) {
         const [a, b, d, e] = SEGMENTS[seg];
         // Segments lie on the screen, a hair out of it.
-        const p = (x: number, t: number) => at(x0 + x, (SFROM + STO - DH) / 2 + t, 0.0027);
+        const p = (x: number, t: number) => at(x0 + x, STO - DH - 0.0003 + t, 0.0027);
         const rgb = n > 10 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
         tri(v, p(a, b), p(d, b), p(d, e), rgb);
         tri(v, p(a, b), p(d, e), p(a, e), rgb);
       }
     });
+    // The lit cells glow with the digits.
+    gauge(true);
     lit(v, from, 1);
-    readouts.set(n, out);
+    readouts.set(key, out);
   }
   return out;
 };
 
 /**
  * Appends the gun held in the hand at `pos` with the world rotation `q`, `k` times its size about
- * the grip, with the ammo on its back when given.
+ * the grip, with the ammo on its back when given, and the charge gauge at `level`.
  */
-export const held = (out: number[], pos: Vec3, q: Quat, lod: number, k = 1, ammo?: number) => {
+export const held = (
+  out: number[],
+  pos: Vec3,
+  q: Quat,
+  lod: number,
+  k = 1,
+  ammo?: number,
+  level = 0,
+) => {
   const [at, ax] = [grip(pos, q), axes(q)];
   place(out, gun(lod), at, ax, [0, 0, 0], k);
   if (ammo !== undefined) {
-    place(out, readout(ammo), at, ax, [0, 0, 0], k);
+    place(out, readout(ammo, level), at, ax, [0, 0, 0], k);
   }
 };
 

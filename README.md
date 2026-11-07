@@ -30,7 +30,7 @@ It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](htt
 | `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~12.7 KB    |
 | `@korial29/tiny-fps/server` | Node WebSocket server (needs `ws`)                                     | Node only   |
 
-CI checks the budgets (56 KB and 16 KB) on every pull request.
+CI checks the budgets (60 KB and 16 KB) on every pull request.
 
 ## Live demo
 
@@ -197,7 +197,7 @@ The game is the movement and a capture the flag on top of it, with a tackle, a g
 - **A match** ends at 3 captures or after 8 minutes, then everyone sees the result and each player's captures and returns for 10 seconds, and a new match starts with everyone back at their spawn.
 - **The map**: Highline, 94 by 240 m under an open sky, the same for both teams (the blue half is the mirror of the red one). Each team holds a 26 m tower with its flag and eight spawns. Three routes lead to the other tower, and they meet at the plaza in the middle. The **Spine** (west, 26 m) is the fast one, about 25 s by sprint: an 11 m gap that takes a dash or a double jump, a 17 m viaduct along a wall that takes a wall-run and a dash, a beam over the plaza. **Midtown** (centre, 19 to 21 m) is roofs, short gaps and ledges to grab, about 36 s. The **Lowline** (east, 14.5 m) is stairs, short gaps and a sign to slide under, about 39 s, and needs no special move. A miss costs time: roofs under the gaps and ladders of ledges lead back up, and only a fall into the street puts you back at your tower.
 - **Weapons**: each team's armoury is a plinth 1.5 m high past its flag, in sight of the spawns, with a gun rack and a katana rack: run and jump up to take them. You spawn with neither and carry both once taken.
-  - The **plasma gun** holds 60 shots and fires 8.6 a second while the button is held. Each shot is a plasma ball at 40 m/s that bursts on the first wall or enemy it touches, and the view kicks up with each one.
+  - The **plasma gun** holds 60 shots. A click fires a plasma ball at 40 m/s that bursts on the first wall or enemy it touches, and the view kicks up with each one. Held, the button charges the next ball, shown by a gauge under the ammo counter, and letting go fires it: up to 5 shots' worth in one second, which takes 5 health and puts any enemy down.
   - The **electric katana** needs no ammo. A cut takes 2 to 4 health by the cut, reaches 2.2 to 3.2 m, and shocks a foe it does not put down: a short stumble the way the blade goes. A cut that puts a foe down takes off the limb the blade crosses, head, arm or leg, drawn only, with no blood.
 - **Health**: 5 points, a plasma hit takes 1, no friendly fire, no regeneration. At 0 a player lies down for 2 seconds, drops a carried flag, loses both weapons and comes back at a team spawn. Health packs give 2 points and ammo packs 20 shots; a taken pack is back after 20 seconds.
 - **Moving**: momentum, sprint, dash, double jump, ledge grab and climb, wall-run, slide, coyote time and a jump buffer. The host decides where everyone is. Your own moves show at once (the client predicts them) and are corrected to the host's state, to the bit.

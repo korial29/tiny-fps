@@ -11,6 +11,8 @@ export interface Orb {
   p: Vec3;
   d: Vec3;
   tail: number;
+  /** Its strength, 1 to CHARGE_MAX: a charged ball is bigger. Absent reads 1. */
+  power?: number;
 }
 
 /** Seconds a muzzle flash, a splash and a spark last. */
@@ -225,12 +227,14 @@ export const createTracer = (): Tracer => {
     },
     draw(out, eye) {
       seen = eye;
-      for (const { p, d, tail } of balls) {
+      for (const { p, d, tail, power = 1 } of balls) {
         const end = p.map((v, i) => v - d[i] * tail) as Vec3;
+        // A charged ball swells, up to twice the size at the full charge.
+        const big = 1 + 0.25 * (power - 1);
         BALL.forEach(([r, rgb, lift]) => {
-          disc(out, p, r, rgb, eye, lift);
+          disc(out, p, r * big, rgb, eye, lift);
           if (tail > 0.01) {
-            ribbon(out, p, end, r * 0.5, rgb, eye, lift, 0, 0.1);
+            ribbon(out, p, end, r * 0.5 * big, rgb, eye, lift, 0, 0.1);
           }
         });
       }

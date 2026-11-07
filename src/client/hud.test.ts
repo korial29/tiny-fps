@@ -58,7 +58,7 @@ describe('createHud', () => {
     it('says the left button fires the gun, taken on the armoury', () => {
       hud.title('Click to play', 'Rooftops');
       const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
-      expect(rows).toContain('Left clickfire the gun');
+      expect(rows).toContain('Left clickfire, hold to charge');
       expect(menu().textContent).toMatch(/armoury past your flag for the gun/);
     });
 

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   AMMO_MAX,
   AMMO_PACK,
+  CHARGE_MAX,
+  CHARGE_TICKS,
   CUTS,
   DOWN_TICKS,
   END_SCREEN,
@@ -127,6 +129,18 @@ const match = (rules: Partial<Rules> = {}) => {
       seqs.set(c, seq + 1);
       room.receive(c, encodeInput({ seq, keys, yaw, pitch, view }));
     },
+    /** A tap of FIRE: pressed, then let go on a second input, both seeing `look`: the release fires. */
+    tap: (c: Peer, look: Look = {}) => {
+      api.send(c, FIRE, look);
+      api.send(c, 0, look);
+    },
+    /** n inputs of the player with `keys`, one a tick, tapping FIRE: pressed on one, let go on the next. */
+    taps: (c: Peer, n: number, keys = 0, look: Look = {}) => {
+      for (let k = 0; k < n; k++) {
+        api.send(c, keys | (k % 2 ? 0 : FIRE), look);
+        room.tick();
+      }
+    },
     /** n inputs of the player, one a tick. */
     hold: (c: Peer, n: number, keys: number, look: Look = {}) => {
       for (let k = 0; k < n; k++) {
@@ -135,15 +149,15 @@ const match = (rules: Partial<Rules> = {}) => {
       }
     },
     /**
-     * Holds FIRE until the player has fired `n` more shots, then ticks until their balls are
+     * Taps FIRE until the player has fired `n` more shots, then ticks until their balls are
      * spent. The history the host rewinds to is written at snapshot ticks, so two ticks first let
      * it see the puts of the test.
      */
     fire: (c: Peer, n = 1, look: Look = {}) => {
       api.ticks(SNAP_EVERY);
       const to = (state(c).shots + n) & 255;
-      for (let k = 0; k < 200 && state(c).shots !== to; k++) {
-        api.hold(c, 1, FIRE, look);
+      for (let k = 0; k < 400 && state(c).shots !== to; k++) {
+        api.hold(c, 1, k % 2 ? 0 : FIRE, look);
       }
       api.land();
     },
@@ -282,13 +296,56 @@ describe('a shot', () => {
   });
 });
 
+describe('a charged shot', () => {
+  /** Cy holds FIRE `n` steps at Bob, 10 m east, then lets go; then the ball lands. */
+  const charged = (n: number) => {
+    const m = match();
+    m.put(m.cy, 0, 0, GUN);
+    m.put(m.bob, 10);
+    m.ticks(SNAP_EVERY);
+    m.hold(m.cy, n, FIRE);
+    const held = { ...m.state(m.cy) };
+    m.tap(m.cy);
+    // The tap's own press starts a new charge of 1; its release fires nothing more: the cooldown.
+    const ball = m.room['balls'].find(b => b.by === 2);
+    m.land();
+    return { m, held, ball };
+  };
+
+  it('puts any foe down at the full charge, spending CHARGE_MAX shots on one ball', () => {
+    const { m, held, ball } = charged(CHARGE_TICKS + 20);
+    expect([held.charge, held.shots, held.ammo]).toEqual([CHARGE_TICKS, 0, AMMO_MAX]);
+    expect(ball!.power).toBe(CHARGE_MAX);
+    expect(m.state(m.cy)).toMatchObject({ shots: 1, hits: 1, ammo: AMMO_MAX - CHARGE_MAX });
+    expect(m.state(m.bob)).toMatchObject({ hp: 0, down: DOWN_TICKS, ammo: -1 });
+  });
+
+  it('takes as much health as its strength: half a charge is 3', () => {
+    const { m, ball } = charged(35);
+    expect(ball!.power).toBe(3);
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 3);
+    expect(m.state(m.cy).ammo).toBe(AMMO_MAX - 3);
+  });
+
+  it('shows the charge and the ball’s strength in the snapshot', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, GUN);
+    m.hold(m.cy, 40, FIRE);
+    m.ticks(SNAP_EVERY);
+    expect(m.snap(m.ann).players.find(p => p.id === 2)!.charge).toBe(40);
+    m.send(m.cy, 0);
+    m.ticks(SNAP_EVERY);
+    expect(m.snap(m.ann).balls?.[0]).toMatchObject({ by: 2, power: 3 });
+  });
+});
+
 describe('a ball and the shooter’s lag', () => {
   /** Where the ball of Cy's next shot starts: the eye, flown on by his lag (`back` ticks). */
   const start = (back: number, view?: number) => {
     const m = match();
     m.put(m.cy, 0, 0, GUN);
     m.ticks(40);
-    m.send(m.cy, FIRE, { view: view ?? m.room['ticks'] - back });
+    m.tap(m.cy, { view: view ?? m.room['ticks'] - back });
     return m.room['balls'][0];
   };
 
@@ -309,7 +366,7 @@ describe('a ball and the shooter’s lag', () => {
     m.put(m.cy, 0, 0, GUN);
     m.put(m.bob, 4);
     m.ticks(SNAP_EVERY);
-    m.send(m.cy, FIRE, { view: m.room['ticks'] - 6 });
+    m.tap(m.cy, { view: m.room['ticks'] - 6 });
     // At once, with the input: no tick has run.
     expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([HP_MAX - 1, 1]);
     expect(m.room['balls'][0]).toMatchObject({
@@ -320,7 +377,7 @@ describe('a ball and the shooter’s lag', () => {
     // The wall at x = 30.
     n.put(n.cy, 25, 0, GUN);
     n.ticks(SNAP_EVERY);
-    n.send(n.cy, FIRE, { view: n.room['ticks'] - 8 });
+    n.tap(n.cy, { view: n.room['ticks'] - 8 });
     expect(n.room['balls'][0]).toMatchObject({ burst: true, x: expect.closeTo(30 - PLASMA_R, 6) });
   });
 
@@ -329,7 +386,7 @@ describe('a ball and the shooter’s lag', () => {
     m.put(m.cy, 0, 0, GUN);
     m.put(m.bob, 30);
     m.ticks(SNAP_EVERY);
-    m.send(m.cy, FIRE);
+    m.tap(m.cy);
     // The ball takes 45 ticks to come 30 m; after 20 he steps a metre aside.
     m.ticks(20);
     expect(m.room['balls'][0].x).toBeCloseTo(20 * PLASMA_STEP, 9);
@@ -340,7 +397,7 @@ describe('a ball and the shooter’s lag', () => {
     m.put(m.cy, 0, 0, GUN);
     m.put(m.bob, 30, 3);
     m.ticks(SNAP_EVERY);
-    m.send(m.cy, FIRE);
+    m.tap(m.cy);
     m.ticks(20);
     m.put(m.bob, 30, 0);
     m.land();
@@ -365,7 +422,7 @@ describe('the balls on the wire', () => {
     m.put(m.cy, 0, 0, { ...GUN, shots: 41 });
     m.put(m.bob, 20);
     m.even();
-    m.send(m.cy, FIRE);
+    m.tap(m.cy);
     const seen: Snapshot[] = [];
     for (let k = 0; k < 40; k++) {
       m.room.tick();
@@ -396,7 +453,7 @@ describe('the balls on the wire', () => {
   it('are gone without a burst when they have flown GUN_RANGE', () => {
     const m = match();
     m.put(m.cy, -50, 50, { ...GUN, yaw: EAST });
-    m.send(m.cy, FIRE);
+    m.tap(m.cy);
     let last: Snapshot | undefined;
     for (let k = 0; k < 130; k++) {
       const flies = m.room['balls'].length > 0;
@@ -417,7 +474,7 @@ describe('the balls on the wire', () => {
       Object.assign(launch(m.state(m.cy)), { id: k, x: k, z: 60 }),
     );
     m.room['balls'].push(...many);
-    m.send(m.cy, FIRE);
+    m.tap(m.cy);
     expect(m.room['balls']).toHaveLength(PLASMA_MAX + 1);
     expect(m.room['balls'].filter(b => b.burst).map(b => b.id)).toEqual([0]);
     m.even();
@@ -430,7 +487,7 @@ describe('the balls on the wire', () => {
   it('are dropped with the last player', () => {
     const m = match();
     m.put(m.cy, 0, 0, GUN);
-    m.send(m.cy, FIRE);
+    m.tap(m.cy);
     for (const c of [m.ann, m.bob, m.cy, m.dee]) {
       m.room.disconnect(c);
     }
@@ -723,13 +780,13 @@ describe('the rack, arrival only', () => {
     m.state(m.cy).x = -20;
     m.hold(m.cy, 1, 0);
     expect(m.state(m.cy)).toMatchObject({ ammo: AMMO_MAX, rack: true });
-    // On the rack, FIRE held for 100 steps: 15 shots, no refill.
-    m.hold(m.cy, 100, FIRE);
-    expect([m.state(m.cy).shots, m.state(m.cy).ammo]).toEqual([15, AMMO_MAX - 15]);
+    // On the rack, FIRE tapped for 100 steps: 13 shots, no refill.
+    m.taps(m.cy, 100);
+    expect([m.state(m.cy).shots, m.state(m.cy).ammo]).toEqual([13, AMMO_MAX - 13]);
     m.ticks(SNAP_EVERY);
     expect(m.snap(m.ann).players.find(p => p.id === 2)).toMatchObject({
       rack: true,
-      ammo: AMMO_MAX - 15,
+      ammo: AMMO_MAX - 13,
     });
     // He leaves the circle and comes back: filled again.
     m.state(m.cy).x = -10;
@@ -755,7 +812,7 @@ describe('a match', () => {
     m.put(m.bob, 10);
     m.ticks(TICK_HZ + 1);
     expect(m.snap(m.ann).over).toBe(true);
-    m.hold(m.cy, GUN_COOLDOWN * 2, FIRE);
+    m.taps(m.cy, GUN_COOLDOWN * 4);
     expect([m.state(m.cy).shots, m.state(m.bob).hp, m.state(m.cy).ammo]).toEqual([0, HP_MAX, 60]);
     m.put(m.ann, -20, 40);
     m.hold(m.ann, 3, 0);
@@ -1276,7 +1333,7 @@ describe('the katana rack through the room', () => {
     // Far from the rack, the gun is the one that fires with BLADE let go.
     m.state(m.cy).x = 0;
     m.state(m.cy).z = 0;
-    m.hold(m.cy, 10, FIRE | FORWARD);
+    m.taps(m.cy, 10, FORWARD);
     expect([m.state(m.cy).blade, m.state(m.cy).shots]).toEqual([true, 2]);
   });
 
@@ -1446,9 +1503,10 @@ describe('random fire', () => {
         for (const v of [p.shots, p.hits]) {
           expect(Number.isInteger(v) && v >= 0 && v < 256, label).toBe(true);
         }
-        // A counter moves forward by one at most per tick (a shot every GUN_COOLDOWN inputs).
+        // Shots go up by one at most a tick (one every GUN_COOLDOWN inputs); hits by two, for two
+        // balls in flight, a near one after a far one, can land on the same tick.
         expect((p.shots - prev[n].shots) & 255, label).toBeLessThanOrEqual(1);
-        expect((p.hits - prev[n].hits) & 255, label).toBeLessThanOrEqual(1);
+        expect((p.hits - prev[n].hits) & 255, label).toBeLessThanOrEqual(2);
         hits += (p.hits - prev[n].hits) & 255;
         went += +(p.down > 0 && prev[n].down === 0);
         respawned += +(p.down === 0 && prev[n].down > 0);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { STILL } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
-import { GUN_RANGE } from '../shared/constants';
+import { CHARGE_MAX, GUN_RANGE } from '../shared/constants';
 import { build } from '../shared/world';
 import { MUZZLE, REAR, TILT, aimed, focus, grip, gun, held, pointed, readout, tip } from './gun';
 import { STRIDE } from './mesh';
@@ -387,12 +387,35 @@ describe('the readout on the back of the gun', () => {
     expect(digits(11)[0].c[0]).toBeLessThan(digits(11)[0].c[2]);
   });
 
-  it('is as big as the screen allows: each digit about 2 cm wide and 2.5 cm high with segments of half a centimetre', () => {
+  it('is as big as the screen allows over the gauge: each digit about 2 cm wide and 2 cm high with segments of half a centimetre', () => {
     const xs = digits(88).map(x => x.p[0]);
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.04);
     expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.046);
     const ys = digits(88).map(x => x.p[1]);
-    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.02);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.017);
+  });
+
+  it('shows no gauge unless the gun charges, and then CHARGE_MAX cells under the digits, `level` of them lit', () => {
+    expect(readout(40, 0)).toBe(readout(40));
+    const glowing = (n: number, level: number) =>
+      verts(readout(n, level)).filter(x => x.layer == -2);
+    const extra = (level: number) => glowing(40, level).length - glowing(40, 0).length;
+    // A cell is two triangles: the lit ones glow, the others are dim.
+    expect(extra(3)).toBe(3 * 6);
+    expect(extra(CHARGE_MAX)).toBe(CHARGE_MAX * 6);
+    const cells = (level: number) => glowing(40, level).slice(glowing(40, 0).length);
+    // Under every digit segment, and within the screen's width.
+    const low = Math.min(...digits(40).map(x => x.p[1]));
+    for (const x of cells(3)) {
+      expect(x.p[1]).toBeLessThan(low);
+      expect(Math.abs(x.p[0])).toBeLessThan(0.023);
+    }
+    // Cyan while it grows, orange at the full charge.
+    expect(cells(3)[0].c[2]).toBeGreaterThan(cells(3)[0].c[0]);
+    expect(cells(CHARGE_MAX)[0].c[0]).toBeGreaterThan(cells(CHARGE_MAX)[0].c[2] * 3);
+    // Cached by both: the same pair is the same array.
+    expect(readout(40, 2)).toBe(readout(40, 2));
+    expect(readout(40, 2)).not.toBe(readout(40, 3));
   });
 
   it('keeps the digits inside the screen, and the screen inside the back face of the block', () => {

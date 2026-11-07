@@ -103,6 +103,18 @@ The user asked for even wider swings with the arms, a special move on a double c
 
 The cut is 3 bits on the wire (bits 6-7 of the swing byte and bit 3 of the `lost` byte), the keys 11 bits. A special goes as its base cut for the limb it takes off.
 
+## The charged shot (the user, 2026-11-07)
+
+Held, the gun's button charges a shot, and letting go fires it. A full charge spends 5 shots and puts any foe down. A gauge under the ammo counter shows the charge. The client budget goes to 60 KB for it (the user, 2026-11-07).
+
+| Rule     | Value                                                                                                                                                                                                                                                                                        |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trigger  | FIRE held with the gun, the cooldown over and a shot left, counts `charge` up to `CHARGE_TICKS` (60, 1 s), and holds it there. Letting go fires one ball. A tap is a plain shot, on its release; tapping can fire every 8 steps (the cooldown, 7, then a press). There is no more full auto. |
+| Strength | `powerOf(charge)`: 1 under `CHARGE_TAP` (10 ticks), then up to `CHARGE_MAX` (5) at `CHARGE_TICKS`, and no more than the shots left. The ball spends that many shots and takes that much health: 5 is `HP_MAX`, a one-shot.                                                                   |
+| Drops    | The katana in hand, a hang or a climb, no shot left, going down or the end of the match drop the charge without a shot.                                                                                                                                                                      |
+| Wire     | `charge` is a byte at the end of the player (48 bytes), so the own charge is predicted exactly. A ball carries its `power` (11 bytes a ball). `power` on the player is the last shot's, set by the step that fires, and is not sent.                                                         |
+| Feel     | The gauge on the gun's screen, 5 cells under the digits, lights once a press is more than a tap: cyan as it grows, all orange at the full charge. A charged ball is up to twice the size, and its shot is deeper and louder.                                                                 |
+
 ## Plasma balls (the user, 2026-11-06)
 
 The gun stops being a hitscan laser: like Doom's plasma gun it fires glowing balls that fly, so a shot is led and can be dodged. Its sound gets much deeper, like the Doom 3 plasma rifle.

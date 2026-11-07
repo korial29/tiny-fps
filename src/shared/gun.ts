@@ -8,6 +8,9 @@
 import { cutOf } from './blade';
 import {
   AMMO_MAX,
+  CHARGE_MAX,
+  CHARGE_TAP,
+  CHARGE_TICKS,
   CUTS,
   DASH_COOLDOWN,
   GUN_COOLDOWN,
@@ -63,8 +66,10 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  *   once and for good: it stays until he goes down.
  * - In hand (`wield`) is the katana when he has it and wants it (KEY.BLADE) or has no gun, and
  *   it stays in hand for the length of a swing.
- * - The trigger: `cool` and `swing` run down, and at 0 a held FIRE fires the gun, with ammo, or
+ * - The trigger: `cool` and `swing` run down, and at 0 a held FIRE charges the gun, with ammo, and
+ *   letting it go fires a ball as strong as the charge (powerOf()), spending as many shots; or it
  *   starts the katana's swing (`cut` from the keys), unless the hands are busy (a hang, a climb).
+ *   The katana in hand, busy hands or no shot left drop the charge.
  *   With SPECIAL (a double click) the swing is the cut's special; its press within SPECIAL_LATE
  *   ticks of a cut's start turns that cut into it. The cut strikes `CUTS[cut].strike` ticks into
  *   its swing. The look is the input's, so both go where the player sees.
@@ -94,11 +99,16 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
   p.wield = p.blade && (p.swing > 0 || !!(i.keys & KEY.BLADE) || p.ammo < 0);
   const busy = p.mode === MODE.HANG || p.mode === MODE.CLIMB;
   if (!armed) {
+    p.charge = 0;
     return STRIKE.NONE;
   }
   const c = CUTS[p.cut ?? 0];
   if (p.swing && c.ticks - p.swing === c.strike) {
     return STRIKE.CUT;
+  }
+  // The charge goes with the katana in hand, the hands busy, or no shot left.
+  if (p.wield || busy || p.ammo <= 0) {
+    p.charge = 0;
   }
   if (i.keys & KEY.FIRE && !busy) {
     // A double click's second press turns a cut just started into its special.
@@ -111,11 +121,23 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
       p.swing = CUTS[p.cut].ticks;
       launch(p);
     } else if (!p.wield && !p.cool && p.ammo > 0) {
-      p.ammo--;
-      p.shots = (p.shots + 1) & 255;
-      p.cool = GUN_COOLDOWN;
-      return STRIKE.SHOT;
+      // Held, the gun charges; let go, it fires (below).
+      p.charge = Math.min((p.charge ?? 0) + 1, CHARGE_TICKS);
     }
+  } else if (p.charge) {
+    // Let go: one ball as strong as the charge, spending as many shots.
+    p.power = Math.min(powerOf(p.charge), p.ammo);
+    p.charge = 0;
+    p.ammo -= p.power;
+    p.shots = (p.shots + 1) & 255;
+    p.cool = GUN_COOLDOWN;
+    return STRIKE.SHOT;
   }
   return STRIKE.NONE;
 };
+
+/** The strength a charge of `ticks` gives, 1 to CHARGE_MAX: 1 under CHARGE_TAP, CHARGE_MAX at CHARGE_TICKS. */
+export const powerOf = (ticks: number): number =>
+  ticks < CHARGE_TAP
+    ? 1
+    : 1 + Math.floor(((CHARGE_MAX - 1) * (ticks - CHARGE_TAP)) / (CHARGE_TICKS - CHARGE_TAP));

@@ -12,8 +12,13 @@ export const ROAD = 16;
 export const PITCH = 72;
 /** The paving between the play area and its first road. */
 const PLAZA = 10;
-/** How far the roads reach past the circle round the play area, metres. */
+/** How far the roads with their markings reach past the circle round the play area, metres. */
 const REACH = 150;
+/**
+ * How far from the centre the city goes on, metres, inside the far clip (900 m): the grid carried
+ * on, its roads plain asphalt (the markings would be under a pixel), and a tower to a block (skyline.ts).
+ */
+export const FAR = 820;
 /** The crosswalks at a crossing: a stripe across the road, and its depth. */
 const ZEBRA = 3;
 /** The pavement round a building, metres. */
@@ -56,9 +61,13 @@ export const grid = (def: WorldDef, out = REACH) => {
 export const deepen = ({ brushes, floor }: WorldDef): Brush[] =>
   brushes.map(b => (b.min[1] <= floor ? { ...b, min: [b.min[0], STREET, b.min[2]] } : b));
 
-/** The paving, the asphalt of every road, its lane markings and the crosswalks at its crossings. */
+/**
+ * The paving, the asphalt of every road, its lane markings and the crosswalks at its crossings; then
+ * the far roads, the grid carried on out to FAR, plain asphalt.
+ */
 export const street = (def: WorldDef): number[] => {
   const { box, xs, zs } = grid(def);
+  const far = grid(def, FAR);
   const out: number[] = [];
   const rect = (x0: number, z0: number, x1: number, z1: number, lift: number, rgb: number[]) =>
     face(out, [x0, STREET + lift, z0], [x1, STREET + lift, z1], 1, 1, -1, rgb);
@@ -96,6 +105,24 @@ export const street = (def: WorldDef): number[] => {
           }
         }
       });
+    }
+  }
+  // The far roads, past the ends of the near ones: a near road carries on at both ends, a far one runs
+  // the whole grid.
+  for (const [a, lines, cross, mine, theirs] of [
+    [0, far.xs, far.zs, xs, zs],
+    [1, far.zs, far.xs, zs, xs],
+  ] as const) {
+    const [lo, hi] = [cross[0] - h, cross[cross.length - 1] + h];
+    for (const c of lines) {
+      const at = (s0: number, s1: number) =>
+        a ? rect(s0, c - h, s1, c + h, 0.12, ASPHALT) : rect(c - h, s0, c + h, s1, 0.12, ASPHALT);
+      if (mine.includes(c)) {
+        at(lo, theirs[0] - h);
+        at(theirs[theirs.length - 1] + h, hi);
+      } else {
+        at(lo, hi);
+      }
     }
   }
   return out;

@@ -3,7 +3,6 @@ import { Sim } from '../../test/pilot';
 import {
   AIR_JUMPS,
   AMMO_MAX,
-  CUTS,
   DASH_COOLDOWN,
   DOWN_TICKS,
   GUN_COOLDOWN,
@@ -11,6 +10,7 @@ import {
   MAX_PITCH,
   RAIL_MAX,
 } from './constants';
+import { swingOf } from './blade';
 import { STRIKE, step } from './gun';
 import { ROOFTOPS } from './map';
 import { spawn } from './physics';
@@ -210,7 +210,7 @@ describe('random fire on ROOFTOPS', () => {
         // The katana: the swing runs in the katana's ticks, only with the katana in hand, and
         // only a katana that is there is in hand.
         expect(p.swing, label).toBeGreaterThanOrEqual(0);
-        expect(p.swing, label).toBeLessThanOrEqual(CUTS[p.cut ?? 0].ticks);
+        expect(p.swing, label).toBeLessThanOrEqual(swingOf(p).ticks);
         expect(!p.wield || p.blade, label).toBe(true);
         expect(!p.swing || p.wield, label).toBe(true);
         expect(!p.down || (!p.blade && !p.wield && !p.swing), label).toBe(true);

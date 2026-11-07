@@ -1,8 +1,8 @@
 import {
   AMMO_MAX,
   AMMO_PACK,
-  CUTS,
   DOWN_TICKS,
+  HEAVY,
   HP_MAX,
   INPUT_BURST,
   LOCK_BREAK,
@@ -27,7 +27,7 @@ import {
   TEAM_COLOR,
   TICK_HZ,
 } from './constants';
-import { crossing, knock, limbOf, strike } from './blade';
+import { crossing, knock, limbOf, strike, swingOf } from './blade';
 import { Ctf } from './ctf';
 import { STRIKE, step, within } from './gun';
 import { HIGHLINE } from './map';
@@ -454,11 +454,11 @@ export class Room {
     p.state.hits = (p.state.hits + 1) & 255;
     for (const foe of foes) {
       const drawn = seen.find(s => s.id === foe.info.id)!;
-      if (this.harm(foe, CUTS[p.state.cut ?? 0].hp)) {
+      if (this.harm(foe, swingOf(p.state).hp)) {
         foe.state.lost = limbOf(p.state, drawn);
       } else {
         const [dx, dz] = knock(p.state, drawn);
-        stumble(foe.state, dx, dz, SHOCK_TICKS, SHOCK_KNOCK);
+        stumble(foe.state, dx, dz, SHOCK_TICKS, SHOCK_KNOCK * (p.state.heavy ? HEAVY : 1));
         foe.state.zap = true;
         foe.by = p.info.id;
       }

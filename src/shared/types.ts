@@ -220,6 +220,8 @@ export interface PlayerState {
   slow?: number;
   /** While down: the bolt's drain put him down, and he is disintegrated. Absent reads false. */
   fried?: boolean;
+  /** The katana's cut is a charged one let go (see HEAVY): its swing is the heavy release's. Absent reads false. */
+  heavy?: boolean;
   /** While down after a katana's cut put him down: the LIMB it took off, for the clients to draw. NONE once up. Absent reads NONE. */
   lost?: number;
   /** For the animation, not sent: the EV bits of the last step, and the speed of a landing. */

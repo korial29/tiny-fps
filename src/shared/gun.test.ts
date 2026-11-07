@@ -13,7 +13,11 @@ import {
   LOCK_TICKS,
   PICK_H,
   RACK_R,
+  HEAVY,
+  HEAVY_MAX,
+  HEAVY_TAP,
 } from './constants';
+import { swingOf } from './blade';
 import { STRIKE, powerOf, step, within } from './gun';
 import { spawn } from './physics';
 import { onWire } from './protocol';
@@ -474,7 +478,7 @@ const bladed = build({
 const sword = (x = 0, z = 0, over: Partial<PlayerState> = {}): PlayerState =>
   Object.assign(at(x, z, EAST).p, { blade: true }, over);
 
-const { LEFT, RIGHT, BLADE } = KEY;
+const { LEFT, RIGHT, BLADE, SPECIAL } = KEY;
 
 describe('the katana rack', () => {
   const at53 = (over: Partial<PlayerState> = {}) => Object.assign(at(5, 3, EAST).p, over);
@@ -580,7 +584,7 @@ describe('the weapon in hand', () => {
     expect([p.wield, p.swing]).toEqual([true, CUTS[CUT.SLASH].ticks]);
     // BLADE let go in mid swing: the katana is still in hand, and the gun cannot fire.
     for (let k = 1; k < CUTS[CUT.SLASH].ticks; k++) {
-      expect(go(p, FIRE)).toBe(false);
+      expect(go(p, k == CUTS[CUT.SLASH].hold + 2 ? FIRE : 0)).toBe(false);
       expect([p.wield, p.swing], `step ${k}`).toEqual([true, CUTS[CUT.SLASH].ticks - k]);
     }
     // The swing is over on the next step: the gun is back, and a tap fires it.
@@ -634,10 +638,11 @@ describe('the swing', () => {
     }
   });
 
-  it('is not cancelled or repeated by FIRE: held, it swings back to back; tapped, one swing is one cut', () => {
+  it('is not cancelled or repeated by FIRE: held, it waits at the top of its wind-up; tapped, one swing is one cut', () => {
     const held = sword();
-    const { ticks, strike } = CUTS[CUT.SLASH];
-    expect(struck(held, ticks * 3, FIRE)).toEqual([strike, ticks + strike, 2 * ticks + strike]);
+    const { ticks, strike, hold } = CUTS[CUT.SLASH];
+    expect(struck(held, ticks * 3, FIRE)).toEqual([]);
+    expect([held.swing, held.charge]).toEqual([ticks - hold, HEAVY_MAX]);
     // A tap and nothing after: the cut still comes.
     const tap = sword();
     hit(tap, FIRE);
@@ -651,6 +656,43 @@ describe('the swing', () => {
     }
     hit(again, FIRE | FORWARD);
     expect([again.cut, again.swing]).toEqual([CUT.SLASH, ticks - 6]);
+  });
+
+  it('charges at the top of its wind-up while FIRE is held, and lets a heavy cut go: slower, its own timer', () => {
+    for (const [cut, keys] of [
+      [CUT.THRUST, FORWARD],
+      [CUT.LEFT, LEFT],
+      [CUT.SLASH, 0],
+    ]) {
+      const { ticks, hold } = CUTS[cut];
+      const p = sword();
+      // Held well past the top: it stays there, the charge capped.
+      expect(struck(p, hold + HEAVY_MAX + 20, FIRE | keys)).toEqual([]);
+      expect([p.cut, p.swing, p.charge, !!p.heavy]).toEqual([cut, ticks - hold, HEAVY_MAX, false]);
+      // Let go: the heavy release from the top, HEAVY times as slow, one strike at its own tick.
+      const heavy = swingOf({ cut, heavy: true });
+      expect(heavy.ticks).toBe(Math.round((ticks - hold) * HEAVY));
+      expect(hit(p, keys)).toBe(STRIKE.NONE);
+      expect([p.swing, p.charge, p.heavy]).toEqual([heavy.ticks, 0, true]);
+      expect(struck(p, heavy.ticks + 5, keys)).toEqual([heavy.strike - 1]);
+      expect([p.swing, p.heavy]).toEqual([0, false]);
+    }
+  });
+
+  it('goes on as it was when let go before HEAVY_TAP, and charges neither a special nor in a hang', () => {
+    const { ticks, strike, hold } = CUTS[CUT.SLASH];
+    const p = sword();
+    struck(p, hold + 1 + HEAVY_TAP - 2, FIRE);
+    expect(p.charge).toBe(HEAVY_TAP - 2);
+    expect(struck(p, ticks, 0)).toEqual([strike - hold - 1]);
+    expect(p.heavy).toBe(false);
+    // A double click's special runs through its top with FIRE held.
+    const q = sword();
+    hit(q, FIRE | SPECIAL);
+    const special = CUTS[q.cut!];
+    expect(special.hold).toBe(-1);
+    expect(struck(q, special.ticks - 1, FIRE)).toEqual([special.strike - 1]);
+    expect(q.heavy ?? false).toBe(false);
   });
 
   it('keeps the cut of the swing whatever the keys do after it starts', () => {

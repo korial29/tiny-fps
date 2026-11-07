@@ -1,19 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { CUTS } from '../shared/constants';
+import { swingOf } from '../shared/blade';
+import { CUTS, HEAVY } from '../shared/constants';
 import { CUT, SPECIAL_CUT } from '../shared/types';
 import { grip } from './gun';
 import {
+  AMPLE,
+  AMPLE_TRUNK,
   BASE,
   BEHIND,
   GUARD,
   TIP,
   arcs,
   axes,
+  bent,
   cutting,
   ends,
   fingers,
   held,
   katana,
+  poised,
   progress,
   stroke,
   trunk,
@@ -588,5 +593,42 @@ describe('progress', () => {
     }
     expect(cutting(0.55)).toBe(true);
     expect(cutting(0.9)).toBe(false);
+  });
+});
+
+describe('the charged cut, as drawn', () => {
+  const { ticks, hold } = CUTS[CUT.LEFT];
+
+  it('waits at the top of the wind-up while it charges, and runs on slower from there when let go', () => {
+    const top = { cut: CUT.LEFT, swing: ticks - hold, charge: 20 };
+    // However long the frames, it stays at the top.
+    expect(progress(hold / ticks, top, 0.5)).toBeCloseTo(hold / ticks, 9);
+    // Let go: the heavy release starts at the top and ends at the end of the cut, HEAVY times as slow.
+    const h = swingOf({ cut: CUT.LEFT, heavy: true }).ticks;
+    const at = (n: number) => progress(-1, { cut: CUT.LEFT, swing: n, heavy: true }, 0);
+    expect(at(h)).toBeCloseTo(hold / ticks, 9);
+    expect(at(1)).toBeLessThan(1);
+    expect(at(1)).toBeGreaterThan(0.95);
+    // A frame of one tick moves it on by a HEAVY-th of a plain tick.
+    const one = progress(at(h), { cut: CUT.LEFT, swing: h - 1, heavy: true }, 1 / 60) - at(h);
+    expect(one).toBeCloseTo(1 / ticks / HEAVY, 2);
+  });
+
+  it('swings the hands AMPLE times as far from the guard across and up on a heavy release, and the trunk AMPLE_TRUNK times', () => {
+    // Past the strike, where the release is all its width.
+    const p = 0.45;
+    const plain = poised({ cut: CUT.LEFT }, p, 0).slice();
+    const heavy = poised({ cut: CUT.LEFT, heavy: true }, p, 0).slice();
+    for (let j = 0; j < 2; j++) {
+      expect(heavy[j] - GUARD[j]).toBeCloseTo((plain[j] - GUARD[j]) * AMPLE, 9);
+    }
+    expect(heavy.slice(2)).toEqual(plain.slice(2));
+    const [t0, t1] = [bent({ cut: CUT.LEFT }, p), bent({ cut: CUT.LEFT, heavy: true }, p)];
+    t1.forEach((v, i) => expect(v).toBeCloseTo(t0[i] * AMPLE_TRUNK, 9));
+    // Charging at the top, the hands tremble with the clock, a few millimetres.
+    const top = hold / ticks;
+    const [a, b] = [0.1, 0.13].map(t => poised({ cut: CUT.LEFT, charge: 10 }, top, t).slice(0, 2));
+    expect(Math.hypot(a[0] - b[0], a[1] - b[1])).toBeGreaterThan(0.0005);
+    expect(Math.hypot(a[0] - b[0], a[1] - b[1])).toBeLessThan(0.012);
   });
 });

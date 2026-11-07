@@ -235,26 +235,36 @@ export const PICK_H = 1;
 
 /**
  * The cuts, by CUT. A swing lasts `ticks`, during which no other starts, and strikes once, `strike`
- * ticks after its start. It hits every enemy whose body comes within `reach` metres of the
+ * ticks after its start. `hold` is the top of its wind-up, where FIRE held keeps it (a charge; -1:
+ * a special, which does not charge). It hits every enemy whose body comes within `reach` metres of the
  * attacker's (centre to centre less PLAYER_R, on the floor plane), within `arc` radians either side
  * of his look, at a height his body overlaps, with no brush between. A hit takes `hp`.
  */
 export const CUTS = [
   /** THRUST: quick and the longest, a narrow line. */
-  { ticks: 28, strike: 10, reach: 2.65, arc: 0.3, hp: 2 },
+  { ticks: 28, strike: 10, reach: 2.65, arc: 0.3, hp: 2, hold: 8 },
   /** LEFT, then RIGHT: across, a wide arc. */
-  { ticks: 34, strike: 13, reach: 2.15, arc: 1.2, hp: 2 },
-  { ticks: 34, strike: 13, reach: 2.15, arc: 1.2, hp: 2 },
+  { ticks: 34, strike: 13, reach: 2.15, arc: 1.2, hp: 2, hold: 4 },
+  { ticks: 34, strike: 13, reach: 2.15, arc: 1.2, hp: 2, hold: 4 },
   /** SLASH: down from above, the slowest and the hardest. */
-  { ticks: 40, strike: 16, reach: 2.15, arc: 0.45, hp: 3 },
+  { ticks: 40, strike: 16, reach: 2.15, arc: 0.45, hp: 3, hold: 11 },
   /** LUNGE: thrown forward on the point (LUNGE_SPEED), the longest reach. */
-  { ticks: 36, strike: 12, reach: 3.2, arc: 0.3, hp: 3 },
+  { ticks: 36, strike: 12, reach: 3.2, arc: 0.3, hp: 3, hold: -1 },
   /** SPIN_L, then SPIN_R: a full turn on himself, the blade out all round him. */
-  { ticks: 48, strike: 24, reach: 2.3, arc: Math.PI, hp: 3 },
-  { ticks: 48, strike: 24, reach: 2.3, arc: Math.PI, hp: 3 },
+  { ticks: 48, strike: 24, reach: 2.3, arc: Math.PI, hp: 3, hold: -1 },
+  { ticks: 48, strike: 24, reach: 2.3, arc: Math.PI, hp: 3, hold: -1 },
   /** LEAP: up (LEAP_SPEED) and down on the foe as he lands, the hardest blow. */
-  { ticks: 58, strike: 40, reach: 2.4, arc: 0.6, hp: 4 },
+  { ticks: 58, strike: 40, reach: 2.4, arc: 0.6, hp: 4, hold: -1 },
 ];
+/**
+ * The charged cut (the user, 2026-11-08): FIRE held on a cut keeps it at the top of its wind-up
+ * (`hold`), counting `charge` up to HEAVY_MAX. Let go after HEAVY_TAP ticks, the rest of the cut is
+ * heavy: HEAVY times as slow (its own swing timer), HEAVY_HP more health, HEAVY_REACH metres
+ * further, an arc HEAVY_ARC times as wide, a shock HEAVY times as hard. Let go sooner, it goes on
+ * as it was.
+ */
+export const [HEAVY, HEAVY_TAP, HEAVY_MAX] = [1.8, 15, 60];
+export const [HEAVY_HP, HEAVY_REACH, HEAVY_ARC] = [2, 0.5, 1.4];
 /** Ticks into a cut's swing in which a double click's second press still turns it into its special. */
 export const SPECIAL_LATE = 18;
 /** The lunge's throw along the look (m/s), held for the burst of a dash: it spends the dash. */

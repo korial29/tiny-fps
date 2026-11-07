@@ -2,7 +2,19 @@
 // way its shock throws them. The swing timer is in `step()` (gun.ts); the room applies the result
 // (damage, `stumble()`) and, when the cut puts the foe down, the limb it takes off (`limbOf()`).
 // No DOM, no Node API.
-import { CUTS, HIPS, LOCK_FACING, LOCK_WINDOW, MIDLINE, NECK, PLAYER_R } from './constants';
+import {
+  CUTS,
+  HEAVY,
+  HEAVY_ARC,
+  HEAVY_HP,
+  HEAVY_REACH,
+  HIPS,
+  LOCK_FACING,
+  LOCK_WINDOW,
+  MIDLINE,
+  NECK,
+  PLAYER_R,
+} from './constants';
 import { forward, heightOf } from './physics';
 import { CUT, KEY, LIMB, SPECIAL_CUT } from './types';
 import type { PlayerState } from './types';
@@ -22,13 +34,32 @@ export const cutOf = (keys: number): number => {
 };
 
 /**
+ * The swing `p` is in, its numbers as CUTS has them: the cut's own, or, for a heavy release (`heavy`),
+ * the rest of it from the top of its wind-up, HEAVY times as slow, with its own timer from there,
+ * and harder and wider.
+ */
+export const swingOf = (p: Pick<PlayerState, 'cut' | 'heavy'>) => {
+  const c = CUTS[p.cut ?? 0];
+  return p.heavy
+    ? {
+        ...c,
+        ticks: Math.round((c.ticks - c.hold) * HEAVY),
+        strike: Math.round((c.strike - c.hold) * HEAVY),
+        reach: c.reach + HEAVY_REACH,
+        arc: c.arc * HEAVY_ARC,
+        hp: c.hp + HEAVY_HP,
+      }
+    : c;
+};
+
+/**
  * The enemies the cut of `p` (`p.cut`, `p` the state after the step that struck) hits, of `foes`
  * (as he saw them): each within CUTS reach of his centre less PLAYER_R on the floor plane, inside
  * the arc round his look (the foe's own angular radius counts: his edge in the arc is a hit), with
  * the heights of the two bodies overlapping and no brush between the chests.
  */
 export const strike = (w: World, p: PlayerState, foes: PlayerState[]): PlayerState[] => {
-  const { reach, arc } = CUTS[p.cut ?? 0];
+  const { reach, arc } = swingOf(p);
   const [fx, fz] = forward(p.yaw);
   const o: [number, number, number] = [p.x, p.y + CHEST * heightOf(p), p.z];
   return foes.filter(f => {
@@ -54,7 +85,7 @@ export const crossing = (p: PlayerState, f: PlayerState): boolean => {
   if (!f.wield || !f.swing || p.lock || f.lock) {
     return false;
   }
-  const c = CUTS[f.cut ?? 0];
+  const c = swingOf(f);
   if (Math.abs(c.strike - (c.ticks - f.swing)) > LOCK_WINDOW) {
     return false;
   }
@@ -66,9 +97,7 @@ export const crossing = (p: PlayerState, f: PlayerState): boolean => {
     return d < 1e-6 || (fx * x + fz * z) / d >= Math.cos(LOCK_FACING);
   };
   return (
-    d - PLAYER_R <= Math.min(c.reach, CUTS[p.cut ?? 0].reach) &&
-    faces(p, dx, dz) &&
-    faces(f, -dx, -dz)
+    d - PLAYER_R <= Math.min(c.reach, swingOf(p).reach) && faces(p, dx, dz) && faces(f, -dx, -dz)
   );
 };
 

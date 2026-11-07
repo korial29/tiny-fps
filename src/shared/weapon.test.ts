@@ -14,6 +14,8 @@ import {
   FLAG_LOCK,
   GUN_COOLDOWN,
   GUN_RANGE,
+  HEAVY_HP,
+  HEAVY_TAP,
   HP_MAX,
   PACK_BACK,
   PACK_HP,
@@ -32,7 +34,7 @@ import {
   TICK_HZ,
 } from './constants';
 import { PLAYER_H } from './constants';
-import { cutOf } from './blade';
+import { cutOf, swingOf } from './blade';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
 import { STILL, spawn, speedOf } from './physics';
@@ -155,6 +157,13 @@ const match = (rules: Partial<Rules> = {}, def = ARENA) => {
     taps: (c: Peer, n: number, keys = 0, look: Look = {}) => {
       for (let k = 0; k < n; k++) {
         api.send(c, keys | (k % 2 ? 0 : FIRE), look);
+        room.tick();
+      }
+    },
+    /** A click of FIRE that starts a cut with `keys`, then n - 1 more inputs of `keys` alone, one a tick. */
+    cut: (c: Peer, n: number, keys: number, look: Look = {}) => {
+      for (let k = 0; k < n; k++) {
+        api.send(c, keys | (k ? 0 : FIRE), look);
         room.tick();
       }
     },
@@ -1039,13 +1048,13 @@ describe('a match', () => {
 const SWORD = { blade: true, ammo: -1 };
 
 /**
- * The player holds FIRE with `keys` up to the strike tick of the cut those keys give, and the room
+ * The player clicks FIRE with `keys` and holds the keys up to the strike tick of the cut they give, and the room
  * has resolved it when this returns. The history the host rewinds to is written at snapshot ticks,
  * so two ticks first let it see the puts of the test.
  */
 const swing = (m: ReturnType<typeof match>, c: Peer, keys = 0, look: Look = {}) => {
   m.ticks(SNAP_EVERY);
-  m.hold(c, CUTS[cutOf(keys)].strike + 1, FIRE | keys, look);
+  m.cut(c, CUTS[cutOf(keys)].strike + 1, keys, look);
 };
 
 describe('a saber lock', () => {
@@ -1060,8 +1069,8 @@ describe('a saber lock', () => {
     m.put(m.bob, 2, 0, { ...SWORD, yaw: WEST });
     m.ticks(SNAP_EVERY);
     for (let k = 0; k <= CUTS[CUT.THRUST].strike; k++) {
-      m.send(m.cy, FIRE | FORWARD);
-      m.send(m.bob, FIRE | FORWARD, { yaw: WEST });
+      m.send(m.cy, k ? FORWARD : FIRE | FORWARD);
+      m.send(m.bob, k ? FORWARD : FIRE | FORWARD, { yaw: WEST });
       m.ticks(1);
     }
     return m;
@@ -1199,8 +1208,8 @@ describe('a saber lock', () => {
     n.put(n.bob, 2, 0, { ...SWORD, yaw: EAST });
     n.ticks(SNAP_EVERY);
     for (let k = 0; k <= CUTS[CUT.THRUST].strike; k++) {
-      n.send(n.cy, FIRE | FORWARD);
-      n.send(n.bob, FIRE | FORWARD);
+      n.send(n.cy, k ? FORWARD : FIRE | FORWARD);
+      n.send(n.bob, k ? FORWARD : FIRE | FORWARD);
       n.ticks(1);
     }
     expect(n.state(n.cy).lock ?? 0).toBe(0);
@@ -1217,6 +1226,38 @@ describe('a saber lock', () => {
       () => 0,
     );
     expect(m.state(m.cy).lock).toBe(0);
+  });
+});
+
+describe('a charged cut', () => {
+  it('reaches HEAVY_REACH further and takes HEAVY_HP more, where a plain cut misses', () => {
+    const { reach, hp, hold } = CUTS[CUT.LEFT];
+    const far = PLAYER_R + reach + 0.3;
+    const plain = match();
+    plain.put(plain.cy, 0, 0, SWORD);
+    plain.put(plain.bob, far);
+    // The side key only picks the cut: he stands still after it.
+    plain.ticks(SNAP_EVERY);
+    plain.hold(plain.cy, 1, FIRE | LEFT);
+    plain.hold(plain.cy, CUTS[CUT.LEFT].strike, 0);
+    expect(plain.state(plain.bob).hp).toBe(HP_MAX);
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, far);
+    m.ticks(SNAP_EVERY);
+    // Held at the top past HEAVY_TAP, then let go: the heavy release strikes at its own tick.
+    m.hold(m.cy, 1, FIRE | LEFT);
+    m.hold(m.cy, hold + HEAVY_TAP, FIRE);
+    expect(m.state(m.cy).charge).toBe(HEAVY_TAP);
+    const heavy = swingOf({ cut: CUT.LEFT, heavy: true });
+    m.hold(m.cy, heavy.strike + 1, 0);
+    expect(m.state(m.cy).heavy).toBe(true);
+    expect(m.state(m.bob).hp).toBe(HP_MAX - hp - HEAVY_HP);
+    // Not down: the shock throws him, harder than a plain cut's.
+    expect(m.state(m.bob).stun).toBeGreaterThan(0);
+    expect(Math.hypot(m.state(m.bob).vx, m.state(m.bob).vz)).toBeGreaterThan(SHOCK_KNOCK * 1.3);
+    m.ticks(SNAP_EVERY);
+    expect(m.snap(m.ann).players.find(p => p.id === 2)).toMatchObject({ heavy: true });
   });
 });
 
@@ -1275,10 +1316,10 @@ describe('a cut', () => {
     m.put(m.bob, 2);
     m.ticks(SNAP_EVERY);
     const { strike, ticks } = CUTS[CUT.THRUST];
-    m.hold(m.cy, strike, FIRE | FORWARD);
+    m.cut(m.cy, strike, FORWARD);
     expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([HP_MAX, 0]);
     expect(m.state(m.cy).swing).toBe(ticks - strike + 1);
-    m.hold(m.cy, 1, FIRE | FORWARD);
+    m.cut(m.cy, 1, FORWARD);
     expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([HP_MAX - 2, 1]);
     // The rest of the swing hits nothing more, he is only out of reach by then or not: one strike.
     m.put(m.bob, 4);
@@ -1354,14 +1395,14 @@ describe('a cut', () => {
     const m = match();
     m.put(m.cy, 0, 0, { ...SWORD, hp: 0, down: 50 });
     m.put(m.bob, 2);
-    m.hold(m.cy, 40, FIRE | FORWARD);
+    m.cut(m.cy, 40, FORWARD);
     expect([m.state(m.bob).hp, m.state(m.cy).hits, m.state(m.cy).swing]).toEqual([HP_MAX, 0, 0]);
     const n = match({ timeLimit: 1 });
     n.put(n.cy, 0, 0, SWORD);
     n.put(n.bob, 2);
     n.ticks(TICK_HZ + 1);
     expect(n.snap(n.ann).over).toBe(true);
-    n.hold(n.cy, 40, FIRE | FORWARD);
+    n.cut(n.cy, 40, FORWARD);
     expect([n.state(n.bob).hp, n.state(n.cy).swing]).toEqual([HP_MAX, 0]);
   });
 });
@@ -1512,7 +1553,7 @@ describe('a cut, down', () => {
     expect(m.state(m.cy).hits).toBe(1);
     // A body that is down takes no shock, and no more cuts.
     expect(m.state(m.bob).zap).toBe(false);
-    m.hold(m.cy, CUTS[CUT.THRUST].ticks, FIRE | FORWARD);
+    m.cut(m.cy, CUTS[CUT.THRUST].ticks, FORWARD);
     expect(m.state(m.cy).hits).toBe(1);
     // He is back at a spawn with neither weapon.
     m.hold(m.bob, DOWN_TICKS, 0);
@@ -1532,7 +1573,7 @@ describe('a cut, down', () => {
     m.put(m.cy, 0, 0, SWORD);
     m.put(m.bob, 2);
     m.ticks(SNAP_EVERY);
-    m.hold(m.cy, 4, FIRE | FORWARD);
+    m.cut(m.cy, 4, FORWARD);
     expect(m.state(m.cy).swing).toBeGreaterThan(0);
     // A laser from Dee takes the last hp.
     m.put(m.dee, 10, 0, GUN);
@@ -1541,7 +1582,7 @@ describe('a cut, down', () => {
     m.fire(m.dee, 1, { yaw: Math.PI / 2 });
     expect(m.state(m.cy).down).toBeGreaterThan(0);
     expect(m.state(m.cy).swing).toBe(0);
-    m.hold(m.cy, 12, FIRE | FORWARD);
+    m.cut(m.cy, 12, FORWARD);
     expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([HP_MAX, 0]);
   });
 });
@@ -1613,7 +1654,7 @@ describe('a cut, the limb', () => {
     // He has stepped to the other side of the line since: on the host, the line passes his left.
     m.put(m.bob, 1.5, -0.3, { hp: 2 });
     m.ticks(SNAP_EVERY * 2);
-    m.hold(m.cy, CUTS[CUT.THRUST].strike + 1, FIRE | FORWARD, { view: seen, pitch: aim(0.6) });
+    m.cut(m.cy, CUTS[CUT.THRUST].strike + 1, FORWARD, { view: seen, pitch: aim(0.6) });
     expect(m.state(m.bob)).toMatchObject({ down: DOWN_TICKS, lost: LIMB.ARM_L });
   });
 });
@@ -1626,7 +1667,7 @@ describe('a cut as the cutter saw it', () => {
     const seen = m.even();
     m.put(m.bob, 2, 8);
     m.ticks(SNAP_EVERY * 2);
-    m.hold(m.cy, CUTS[CUT.THRUST].strike + 1, FIRE | FORWARD, { view: seen });
+    m.cut(m.cy, CUTS[CUT.THRUST].strike + 1, FORWARD, { view: seen });
     expect(m.state(m.bob).hp).toBe(HP_MAX - 2);
     expect(m.state(m.bob).z).toBe(8);
   });
@@ -1638,7 +1679,7 @@ describe('a cut as the cutter saw it', () => {
     const seen = m.even();
     m.put(m.bob, 2);
     m.ticks(SNAP_EVERY * 2);
-    m.hold(m.cy, CUTS[CUT.THRUST].strike + 1, FIRE | FORWARD, { view: seen });
+    m.cut(m.cy, CUTS[CUT.THRUST].strike + 1, FORWARD, { view: seen });
     expect([m.state(m.bob).hp, m.state(m.cy).hits]).toEqual([HP_MAX, 0]);
   });
 
@@ -1655,7 +1696,7 @@ describe('a cut as the cutter saw it', () => {
     n.ticks(SNAP_EVERY);
     n.put(n.bob, 2);
     n.ticks(SNAP_EVERY * 2);
-    n.hold(n.cy, CUTS[CUT.THRUST].strike + 1, FIRE | FORWARD, { view: seen });
+    n.cut(n.cy, CUTS[CUT.THRUST].strike + 1, FORWARD, { view: seen });
     expect([n.state(n.cy).hits, n.state(n.bob).hp]).toEqual([0, HP_MAX]);
   });
 });
@@ -1744,7 +1785,7 @@ describe('random cuts', () => {
         expect(p.hp, label).toBeGreaterThanOrEqual(0);
         expect(p.hp, label).toBeLessThanOrEqual(HP_MAX);
         expect(p.swing, label).toBeGreaterThanOrEqual(0);
-        expect(p.swing, label).toBeLessThanOrEqual(CUTS[p.cut ?? 0].ticks);
+        expect(p.swing, label).toBeLessThanOrEqual(swingOf(p).ticks);
         expect(p.cut, label).toBeLessThan(4);
         expect(p.stun, label).toBeLessThanOrEqual(48);
         // A zap is a stumble; down is health 0 with nothing in hand.

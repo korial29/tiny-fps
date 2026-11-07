@@ -298,6 +298,8 @@ export const LOCK_BREAK = 24;
  * speed on the floor plane held under SLOW_SPEED. Ticks are u8 on the wire.
  */
 export const RAIL_MAX = 240;
+/** Ticks of lightning a rail cell gives (WorldDef.cells), up to RAIL_MAX: a third of a load. */
+export const RAIL_CELL = 80;
 export const RAIL_RANGE = 30;
 export const RAIL_TICKS = 180;
 export const RAIL_DRAIN = 60;

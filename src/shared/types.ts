@@ -305,7 +305,8 @@ export interface Snapshot {
   flags: [FlagState, FlagState];
   /**
    * Bit n set: pack n is there to take, the health packs of WorldDef.packs first, then the ammo
-   * packs of WorldDef.ammo (bit packs.length + n). Absent: none.
+   * packs of WorldDef.ammo (bit packs.length + n), then the rail cells of WorldDef.cells (after
+   * both). Absent: none.
    */
   packs?: number;
   /** The plasma balls in flight, and those that burst since the last snapshot. Absent: none. */

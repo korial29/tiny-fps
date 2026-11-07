@@ -15,7 +15,9 @@ import {
   PACK_HP,
   PACK_R,
   PLASMA_MAX,
+  RAIL_CELL,
   RAIL_DRAIN,
+  RAIL_MAX,
   RAIL_TICKS,
   RULES,
   SHOCK_KNOCK,
@@ -132,7 +134,7 @@ export class Room {
     this.rules = { ...RULES, ...rules };
     this.world = build(map);
     this.ctf = new Ctf(this.world, this.rules);
-    this.gone = [...(map.packs ?? []), ...(map.ammo ?? [])].map(() => 0);
+    this.gone = [...(map.packs ?? []), ...(map.ammo ?? []), ...(map.cells ?? [])].map(() => 0);
   }
 
   /** Number of joined players. */
@@ -529,31 +531,36 @@ export class Room {
   }
 
   /**
-   * The packs, health ones first, then the ammo ones: one that is gone comes back after PACK_BACK
-   * s. A health pack goes to a hurt player standing at it, an ammo pack to one with the gun and
-   * less than AMMO_MAX shots. Both change the state between two inputs, like a hit: the snapshot
+   * The packs, health ones first, then the ammo ones, then the rail cells: one that is gone comes
+   * back after PACK_BACK s. A health pack goes to a hurt player standing at it, an ammo pack to one
+   * with the gun and less than AMMO_MAX shots, a rail cell to one with the rail gun and less than
+   * RAIL_MAX of lightning. Both change the state between two inputs, like a hit: the snapshot
    * carries the result and the predictor replays its unacked inputs on it.
    */
   private heal(players: Player[]): void {
-    const { packs = [], ammo = [] } = this.world.def;
-    [...packs, ...ammo].forEach((at, k) => {
+    const { packs = [], ammo = [], cells = [] } = this.world.def;
+    [...packs, ...ammo, ...cells].forEach((at, k) => {
       if (this.gone[k] > 0) {
         this.gone[k]--;
         return;
       }
-      const health = k < packs.length;
-      const p = players.find(
-        ({ state: q }) =>
-          !q.down &&
-          (health ? q.hp < HP_MAX : q.ammo >= 0 && q.ammo < AMMO_MAX) &&
-          within(q, at, PACK_R),
-      );
+      // 0 health, 1 ammo, 2 a rail cell.
+      const kind = +(k >= packs.length) + +(k >= packs.length + ammo.length);
+      const wants = (q: PlayerState) =>
+        [
+          q.hp < HP_MAX,
+          q.ammo >= 0 && q.ammo < AMMO_MAX,
+          (q.rail ?? -1) >= 0 && q.rail! < RAIL_MAX,
+        ][kind];
+      const p = players.find(({ state: q }) => !q.down && wants(q) && within(q, at, PACK_R));
       if (p) {
         const q = p.state;
-        if (health) {
+        if (kind == 0) {
           q.hp = Math.min(HP_MAX, q.hp + PACK_HP);
-        } else {
+        } else if (kind == 1) {
           q.ammo = Math.min(AMMO_MAX, q.ammo + AMMO_PACK);
+        } else {
+          q.rail = Math.min(RAIL_MAX, q.rail! + RAIL_CELL);
         }
         this.gone[k] = PACK_BACK * TICK_HZ;
       }

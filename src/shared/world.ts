@@ -45,6 +45,8 @@ export interface WorldDef {
   packs?: Vec3[];
   /** Ammo packs, points on tops (health and ammo packs together at most 32): within PACK_R a player with the gun and fewer than AMMO_MAX shots takes AMMO_PACK, then it is gone PACK_BACK seconds. */
   ammo?: Vec3[];
+  /** Rail cells, points on tops (with the health and ammo packs at most 32): within PACK_R a player with the rail gun and less than RAIL_MAX of lightning takes RAIL_CELL, then it is gone PACK_BACK seconds. */
+  cells?: Vec3[];
   /** Unit direction toward the sun, and its colour (linear RGB, may exceed 1). */
   sun: { dir: Vec3; color: Vec3 };
   /** Sky colours at the zenith and the horizon, linear RGB. */

@@ -52,6 +52,8 @@ export interface CtfScene {
   packs?: readonly Vec3[];
   /** The ammo packs that are there to take. */
   ammo?: readonly Vec3[];
+  /** The rail cells that are there to take. */
+  cells?: readonly Vec3[];
 }
 
 /** The flags to draw from a snapshot: each at its base, where it lies, or on the back of its carrier (none if he is not drawn). */

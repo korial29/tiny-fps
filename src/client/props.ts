@@ -120,6 +120,20 @@ const BULLET: Glyph = [
   ...rect(-0.05, -0.12, 0.05, -0.095),
 ];
 
+/** A bolt of lightning: a stroke down to the left, then one down to the right. */
+const BOLT: Glyph = [
+  [
+    [0.03, 0.13],
+    [-0.06, 0],
+    [0.02, 0],
+  ],
+  [
+    [-0.02, 0.01],
+    [0.06, 0.01],
+    [-0.03, -0.13],
+  ],
+];
+
 /** A box of half side `h` turning and bobbing a little over `at` (on a top), `glyph` glowing in `lit` on each face. */
 const crate = (
   out: number[],
@@ -158,3 +172,7 @@ export const kit = (out: number[], at: Vec3, t: number) =>
 /** An ammo pack at `at`: a violet box with a glowing cyan cartridge on each side, the gun's colours. */
 export const cell = (out: number[], at: Vec3, t: number) =>
   crate(out, at, t, 0.15, [0.34, 0.14, 0.58], BULLET, [0.3, 1.4, 1.8]);
+
+/** A rail cell at `at`: a gunmetal box with a glowing violet-white bolt on each side, the rail gun's colours. */
+export const battery = (out: number[], at: Vec3, t: number) =>
+  crate(out, at, t, 0.15, [0.14, 0.15, 0.18], BOLT, [1.1, 0.85, 2.6]);

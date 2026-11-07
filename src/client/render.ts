@@ -17,7 +17,7 @@ import { STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
-import { cell, kit, racks } from './props';
+import { battery, cell, kit, racks } from './props';
 import { animate, soldier } from './soldier';
 import type { Runner } from './soldier';
 import { skyline } from './skyline';
@@ -709,6 +709,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       racks(v, ctf?.racks, ctf?.blades, now, ctf?.rails);
       ctf?.packs?.forEach(at => kit(v, at, now));
       ctf?.ammo?.forEach(at => cell(v, at, now));
+      ctf?.cells?.forEach(at => battery(v, at, now));
       for (const p of others) {
         const d = Math.hypot(p.x - eye[0], p.z - eye[2]);
         soldier(

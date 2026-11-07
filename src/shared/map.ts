@@ -127,6 +127,12 @@ export const ROOFTOPS: WorldDef = {
     [8, 12.4, 33],
     [41, 8, 44],
   ],
+  // One on each of the roofs B, C and E, between their packs.
+  cells: [
+    [14, 10, 46],
+    [13, 12.4, 31],
+    [41.5, 8, 34.5],
+  ],
   floor: -25,
   // A warm bright sun, low in the east: long sharp shadows across the roofs.
   sun: { dir: [0.6, 0.64, 0.48], color: [2.6, 2.3, 1.8] },
@@ -339,6 +345,18 @@ const AMMO: Vec3[] = [
   [88, 14.5, 172],
 ];
 
+/**
+ * Rail cells in red's half, between the packs on every route: the Spine, two in Midtown, two on the
+ * Lowline. Their twins are across the line, and one stands in the middle of the plaza.
+ */
+const CELLS: Vec3[] = [
+  [19.5, 26, 179],
+  [46, 19, 152],
+  [39.5, 21.2, 172],
+  [88, 14.5, 186],
+  [88, 14.5, 207],
+];
+
 export const HIGHLINE: WorldDef = {
   name: 'Highline',
   brushes: [...half, ...half.map(flip), ...centre],
@@ -366,6 +384,7 @@ export const HIGHLINE: WorldDef = {
     [24, 15, 128],
   ],
   ammo: [...AMMO, ...AMMO.map(([x, y, z]): Vec3 => [x, y, ZED - z])],
+  cells: [...CELLS, ...CELLS.map(([x, y, z]): Vec3 => [x, y, ZED - z]), [28, 15, ZED / 2]],
   floor: -25,
   // A warm sun low in the east, along the roofs' short side: the same light for both teams.
   sun: { dir: [0.8, 0.6, 0], color: [2.6, 2.3, 1.8] },

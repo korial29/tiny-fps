@@ -1266,20 +1266,27 @@ describe('the katana in both hands', () => {
     expect(away(rest, guard)).toBeLessThan(0.15);
   });
 
-  it('cuts with the arms and not the wrist: the right wrist bends a few degrees at most through every cut', () => {
+  it('cuts with the arms and not the wrists: neither wrist bends, through every cut', () => {
     for (const cut of Object.values(CUT)) {
       const body = watch(blade({ cut }), 60);
       const bends: number[] = [];
       for (let i = 0; i < CUTS[cut].ticks; i++) {
         const p = blade({ cut, swing: CUTS[cut].ticks - i });
         body.update(p, DT);
-        const s = pose(body, p);
-        // The forearm against the hand's axis, from the wrist to the knuckles.
+        // The camera turns with a spin, as the game turns it.
+        const s = body.pose(eyeOf(p), p.yaw + body.spun(), 0)!;
+        // The forearm against the hand's axis, from the wrist to the knuckles, the left hand's too.
         const fore = sub(s.pos[J.HAND_R], s.pos[J.FOREARM_R]);
-        bends.push((Math.acos(dot(unit(fore), turn(s.rot[J.HAND_R], [0, -1, 0]))) * 180) / Math.PI);
+        const left = sub(s.pos[J.HAND_L], s.pos[J.FOREARM_L]);
+        const cl = dot(unit(left), unit(turn(s.rot[J.HAND_L], [0, -1, 0])));
+        expect(
+          (Math.acos(Math.min(1, Math.max(-1, cl))) * 180) / Math.PI,
+          `cut ${cut}, left`,
+        ).toBeLessThan(2);
+        const c = dot(unit(fore), unit(turn(s.rot[J.HAND_R], [0, -1, 0])));
+        bends.push((Math.acos(Math.min(1, Math.max(-1, c))) * 180) / Math.PI);
       }
-      expect(Math.max(...bends) - Math.min(...bends), `cut ${cut}`).toBeLessThan(35);
-      expect(Math.max(...bends), `cut ${cut}`).toBeLessThan(35);
+      expect(Math.max(...bends), `cut ${cut}`).toBeLessThan(2);
     }
   });
 

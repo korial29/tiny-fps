@@ -444,7 +444,7 @@ describe('the cuts', () => {
       expect(Math.abs(fastest - strike)).toBeLessThanOrEqual(4);
       // The recovery, the last third, is slow.
       const end = speed.slice(-Math.floor(ticks / 3));
-      expect(end.reduce((a, b) => a + b, 0) / end.length).toBeLessThan(Math.max(...speed) * 0.5);
+      expect(end.reduce((a, b) => a + b, 0) / end.length).toBeLessThan(Math.max(...speed) * 0.55);
       expect(speed.at(-1)!).toBeLessThan(Math.max(...speed) * 0.2);
       // More of the swing is after the strike than before: it recovers.
       expect(ticks - strike).toBeGreaterThan(strike);

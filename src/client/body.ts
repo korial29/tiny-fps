@@ -171,6 +171,17 @@ const outOf = (s: Solved, yaw: number, eye: Vec3, p: Vec3): number => {
   return Math.max(0, need - front(d));
 };
 
+/** The shoulder of arm `j` of `q` (`s` solved) goes with the hand at `at`: up as it rises over it, forward as it reaches out. */
+export const shrug = (q: Pose, s: Solved, j: number, at: Vec3) => {
+  const sd = j === J.ARM_L ? -1 : 1;
+  const d = sub(at, s.pos[j]);
+  const [up, out] = [
+    clamp((d[1] + 0.12) * 1.6, 0, 0.5),
+    clamp((Math.hypot(...d) - 0.4) * 2.5, 0, 0.45),
+  ];
+  q.rot[j - 1] = mul(q.rot[j - 1], mul(axis(Y, sd * out), axis(Z, sd * up)));
+};
+
 /**
  * Puts the arm of shoulder joint `j` (ARM_R or ARM_L) of `q` on a handle running along the unit
  * `g`, the hand round the point `at`, the elbow toward `pole`; `solved` is q solved. The shoulder
@@ -189,19 +200,15 @@ export const wield = (
   pole: Vec3,
   held?: Vec3,
 ) => {
-  // The shoulder goes with the hand: up as it rises over it, forward as it reaches out.
-  const sd = j === J.ARM_L ? -1 : 1;
-  const d = sub(at, solved.pos[j]);
-  const [up, out] = [
-    clamp((d[1] + 0.12) * 1.6, 0, 0.5),
-    clamp((Math.hypot(...d) - 0.4) * 2.5, 0, 0.45),
-  ];
-  q.rot[j - 1] = mul(q.rot[j - 1], mul(axis(Y, sd * out), axis(Z, sd * up)));
+  if (!held) {
+    shrug(q, solved, j, at);
+  }
   const s = solve(q);
   const a = s.pos[j];
   const [l1, l2] = [dist(a, s.pos[j + 1]), dist(s.pos[j + 1], s.pos[j + 2])];
   // Away from the elbow too, for a handle that points at the shoulder or away from it; or the
-  // side that puts the fingers along `held`, a straight wrist (lock()).
+  // side that puts the fingers along `held`, a straight wrist (clasp()), the shoulder already
+  // shrugged by the caller.
   const side = held
     ? unit(along(held, g, -S))
     : unit(add(across(unit(sub(at, a)), g), along([0, 0, 0], unit(across(pole, g)), -0.3)));
@@ -228,56 +235,92 @@ export const wield = (
   q.rot[j + 2] = mul(inv(r2), hand);
 };
 
-/** The fingers of a straight wrist for a hand round `at`: along the forearm of the arm of shoulder `j` of `s`, its elbow toward `pole`, from a first guess `fing`. */
-const straight = (s: Solved, j: number, at: Vec3, fing: Vec3, pole: Vec3): Vec3 => {
-  const a = s.pos[j];
-  const [l1, l2] = [dist(a, s.pos[j + 1]), dist(s.pos[j + 1], s.pos[j + 2])];
-  // Three rounds: the wrist from the fingers, the elbow from the wrist, the forearm from the elbow.
-  for (let k = 0; k < 3; k++) {
-    const wrist = along(at, fing, -0.078);
-    const [e] = ik(a, wrist, add(sub(along(wrist, fing, -l2), a), pole), l1, l2);
-    fing = unit(sub(wrist, e));
+/** `v` turned by the rotation vector `w` (its length the angle, radians). */
+const rotate = (v: Vec3, w: Vec3): Vec3 => {
+  const t = Math.hypot(...w);
+  if (t < 1e-12) {
+    return v;
   }
-  return fing;
+  const k = mix([0, 0, 0], w, 1 / t);
+  const [c, sn] = [Math.cos(t), Math.sin(t)];
+  return add(
+    add(mix([0, 0, 0], v, c), mix([0, 0, 0], cross(k, v), sn)),
+    mix([0, 0, 0], k, dot(k, v) * (1 - c)),
+  );
 };
 
 /**
- * The katana held with straight wrists, so that the cut is the arms' and not the wrists' (the
- * user, 2026-11-07): the right hand round the grip at `at`, the left BEHIND it, the elbows toward
- * `poles`. The right forearm, as its arm holds it, sets the fingers, and the blade leaves the fist
- * at the grip's fixed angle to them: of the ways round that cone, the one where the left wrist is
- * straightest too, and nearest `g`. Returns the blade and the right hand's fingers.
+ * The katana and both fists as one rigid piece, the wrists straight, so that a cut is the arms'
+ * alone (the user, 2026-11-07): the right hand round the grip, the left BEHIND it, each turned a
+ * fixed way about the handle (from `at`, `g` and the elbows' `poles`) and its forearm carrying on
+ * along its fingers, so that each elbow is a forearm's length back from its wrist. The piece goes
+ * the least way from where the cut puts it (a radian of the blade weighs as 10 cm of the hands) to
+ * where both elbows are an upper arm's length from their shoulders. Returns the grip, the blade,
+ * and the fingers of the right hand and of the left.
  */
-export const lock = (s: Solved, at: Vec3, g: Vec3, poles: [Vec3, Vec3]): [Vec3, Vec3] => {
-  const free = unit(
-    add(along([0, 0, 0], g, S), along([0, 0, 0], unit(across(sub(at, s.pos[J.ARM_R]), g)), C)),
+export const clasp = (
+  s: Solved,
+  at: Vec3,
+  g: Vec3,
+  poles: [Vec3, Vec3],
+): [Vec3, Vec3, Vec3, Vec3] => {
+  const arms = [J.ARM_R, J.ARM_L];
+  const len = arms.map(j => [dist(s.pos[j], s.pos[j + 1]), dist(s.pos[j + 1], s.pos[j + 2])]);
+  // Each hand's turn about the handle, as a free hand would take it where the cut puts it.
+  const sides = arms.map((j, k) =>
+    unit(
+      add(
+        across(unit(sub(k ? along(at, g, -BACK) : at, s.pos[j])), g),
+        along([0, 0, 0], unit(across(poles[k], g)), -0.3),
+      ),
+    ),
   );
-  const fing = straight(s, J.ARM_R, at, free, poles[0]);
-  const e1 = unit(across(g, fing));
-  const e2 = cross(fing, e1);
-  const way = (t: number): Vec3 =>
-    add(
-      along([0, 0, 0], fing, S),
-      add(along([0, 0, 0], e1, C * Math.cos(t)), along([0, 0, 0], e2, C * Math.sin(t))),
-    );
-  /** How far from straight the left wrist is, and the blade from `g`, radians: squared, the blade's at half weight, summed. */
-  const cost = (t: number) => {
-    const b = way(t);
-    const left = along(at, b, -BACK);
-    const f = straight(s, J.ARM_L, left, unit(sub(left, s.pos[J.ARM_L])), poles[1]);
-    const bend = Math.acos(clamp(dot(b, f), -1, 1)) - Math.acos(S);
-    return bend * bend + 1 * Math.acos(clamp(dot(b, g), -1, 1)) ** 2;
+  /** The piece moved by `x`: the grip on by x[0..2], the blade and the hands turned by x[3..5]. */
+  const place = (x: number[]) => {
+    const w: Vec3 = [x[3], x[4], x[5]];
+    const b = unit(rotate(g, w));
+    const f = sides.map(sd => {
+      const side = unit(across(rotate(sd, w), b));
+      return add(along([0, 0, 0], b, S), along([0, 0, 0], side, C));
+    });
+    return { p: add(at, [x[0], x[1], x[2]]), b, f };
   };
-  // Round the cone in 16 steps, then halved twice about the best.
-  let [best, step] = [0, Math.PI / 8];
-  for (let t = -Math.PI; t < Math.PI; t += step) {
-    best = cost(t) < cost(best) ? t : best;
+  /** How far each elbow, a forearm back from its wrist, is from an upper arm's length off its shoulder. */
+  const miss = (x: number[]) => {
+    const { p, b, f } = place(x);
+    return arms.map((j, k) => {
+      const side = unit(along(f[k], b, -S));
+      const back = cross(f[k], add(along([0, 0, 0], b, C), along([0, 0, 0], side, -S)));
+      const wrist = along(
+        along(k ? along(p, b, -BACK) : p, f[k], -0.078),
+        back,
+        k ? -0.022 : 0.022,
+      );
+      return dist(along(wrist, f[k], -len[k][1]), s.pos[j]) - len[k][0];
+    });
+  };
+  // Gauss-Newton, the least weighed step that takes both misses to 0: a radian of the blade
+  // weighs as 10 cm of the hands.
+  const free = [1, 1, 1, 100, 100, 100];
+  const x = [0, 0, 0, 0, 0, 0];
+  for (let n = 0; n < 12; n++) {
+    const r = miss(x);
+    if (Math.abs(r[0]) + Math.abs(r[1]) < 1e-4) {
+      break;
+    }
+    const J = x.map((_, i) => {
+      const y = x.slice();
+      y[i] += 1e-5;
+      return miss(y).map((v, k) => (v - r[k]) / 1e-5);
+    });
+    // M = J W J^T, 2 by 2, and the step -W J^T M^-1 r.
+    const m = [0, 1].map(a => [0, 1].map(c => J.reduce((t, d, i) => t + d[a] * free[i] * d[c], 0)));
+    const det = m[0][0] * m[1][1] - m[0][1] * m[1][0] || 1e-12;
+    const y = [(m[1][1] * r[0] - m[0][1] * r[1]) / det, (m[0][0] * r[1] - m[1][0] * r[0]) / det];
+    x.forEach((_, i) => (x[i] -= free[i] * (J[i][0] * y[0] + J[i][1] * y[1])));
   }
-  for (let k = 0; k < 2; k++) {
-    step /= 2;
-    best = [best - step, best, best + step].reduce((m, t) => (cost(t) < cost(m) ? t : m));
-  }
-  return [way(best), fing];
+  const { p, b, f } = place(x);
+  return [p, b, f[0], f[1]];
 };
 
 /** The unit vector toward a wall on each SIDE, on the floor plane. */
@@ -673,11 +716,19 @@ export const createBody = (world?: World): Body => {
     const [gp, ga] = holster();
     const fh = [0, 1, 2].map(i => TILT[1] * ga[2][i] - TILT[0] * ga[1][i]) as Vec3;
     const wrist = [0, 1, 2].map(i => gp[i] - 0.078 * fh[i] + 0.022 * ga[0][i]) as Vec3;
-    // The katana's grip in the right hand, and the blade as straight wrists hold it there.
-    const grip0 = sw ? add(add(eye, keep(sw.at)), clear) : eye;
-    const [blade0, fing0] = sw
-      ? lock(s, grip0, keep(sw.g), [keep([0.5, -1, -0.35]), keep([-0.5, -1, -0.35])])
-      : [Y, Y];
+    // The katana and both fists as one piece, the wrists straight, the shoulders gone with the
+    // hands (clasp()).
+    const kq = { ...q, rot: q.rot.slice() };
+    let [grip0, blade0, fingR, fingL]: Vec3[] = [eye, Y, Y, Y];
+    if (sw) {
+      const [at, g] = [add(add(eye, keep(sw.at)), clear), keep(sw.g)];
+      shrug(kq, s, J.ARM_R, at);
+      shrug(kq, s, J.ARM_L, along(at, g, -BACK));
+      [grip0, blade0, fingR, fingL] = clasp(solve(kq), at, g, [
+        keep([0.5, -1, -0.35]),
+        keep([-0.5, -1, -0.35]),
+      ]);
+    }
     for (const sd of [-1, 1]) {
       const k = Math.cos(TAU * gait.phase) * sd;
       // The numbers are for the right hand, mirrored below. The arms hang along the body, out of
@@ -747,11 +798,11 @@ export const createBody = (world?: World): Body => {
         q.rot[arm + 2] = slerp(q.rot[arm + 2], mul(inv(solve(q).rot[J.FOREARM_R]), rot), hold);
       }
       if (sw && onSword > 0.002) {
-        // Both hands round the grip, the left one BACK behind the right, the elbows down and out,
-        // the right wrist straight (lock()).
+        // Both hands round the grip, the left one BACK behind the right, the wrists straight.
         const at = along(grip0, blade0, sd > 0 ? 0 : -BACK);
         const held = { ...q, rot: q.rot.slice() };
-        wield(held, s, arm, at, blade0, keep([0.5 * sd, -1, -0.35]), sd > 0 ? fing0 : undefined);
+        held.rot[arm - 1] = kq.rot[arm - 1];
+        wield(held, s, arm, at, blade0, keep([0.5 * sd, -1, -0.35]), sd > 0 ? fingR : fingL);
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], onSword);
         }

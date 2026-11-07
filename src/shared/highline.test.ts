@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { EAST, NORTH, Sim } from '../../test/pilot';
+import { EAST, NORTH, Sim, toward } from '../../test/pilot';
 import { problems } from '../../test/pickups';
 import { HIGH, LOW, MID, UP, above, fly, go, leap, plain, trip } from '../../test/routes';
 import type { Leg, Route } from '../../test/routes';
 import { palette, MAX_TINTS } from '../client/render';
 import { FLAG_H, FLAG_REACH, MAX_PITCH, PLAYER_H, PLAYER_R, RACK_R, SNAP_EVERY } from './constants';
 import { touches } from './ctf';
+import { within } from './gun';
 import { HIGHLINE, TEAM_TINT } from './map';
 import { move, spawn } from './physics';
 import { decodeSnapshot, encodeInput } from './protocol';
@@ -285,21 +286,53 @@ describe('HIGHLINE, racks and packs', () => {
     expect(problems(HIGHLINE)).toEqual([]);
   });
 
-  it('has a rack for each team, side by side with the spawn rows on the tower and mirrored', () => {
-    const [red, blue] = teams.map(t => t.rack!);
-    expect(red).toEqual([47, 26, 234]);
-    expect(blue).toEqual([red[0], red[1], ZED - red[2]]);
+  it('stands both racks on the armoury, 1.5 m up, past the flag ahead of the spawns, and mirrored', () => {
+    const [red, blue] = teams.map(t => [t.rack!, t.blade!]);
+    expect(red).toEqual([
+      [30.75, 27.5, 217],
+      [33.25, 27.5, 217],
+    ]);
+    expect(blue).toEqual(red.map(([x, y, z]) => [x, y, ZED - z]));
+    for (const [team, { rack, blade, spawns, base }] of teams.entries()) {
+      const ahead = team ? 1 : -1;
+      for (const at of [rack!, blade!]) {
+        // On the plinth's top, the roof 1.5 m under it, the flag between the racks and the spawns.
+        expect(
+          world.def.brushes.some(
+            b => b.max[1] === at[1] && meets(b, at[0], at[1] - 0.1, at[2], 0.05),
+          ),
+        ).toBe(true);
+        expect((at[2] - base[2]) * ahead).toBeGreaterThan(4);
+        for (const [, , z] of spawns) {
+          expect((at[2] - z) * ahead).toBeGreaterThan(12);
+        }
+      }
+      expect(Math.hypot(blade![0] - rack![0], blade![2] - rack![2])).toBeCloseTo(2.5, 6);
+      expect(Math.hypot(blade![0] - rack![0], blade![2] - rack![2])).toBeGreaterThan(2 * RACK_R);
+    }
   });
 
-  it('has a katana rack for each team, 2.5 m from its gun rack toward the spawns, and mirrored', () => {
-    const [red, blue] = teams.map(t => t.blade!);
-    expect(red).toEqual([47, 26, 231.5]);
-    expect(blue).toEqual([red[0], red[1], ZED - red[2]]);
-    for (const { rack, blade, spawns } of teams) {
-      expect(Math.hypot(blade![0] - rack![0], blade![2] - rack![2])).toBeCloseTo(2.5, 6);
-      expect(blade![1]).toBe(rack![1]);
-      for (const [x, y, z] of spawns) {
-        expect(y === blade![1] && Math.hypot(x - blade![0], z - blade![2]) < RACK_R).toBe(false);
+  it('takes a run and a jump from every spawn to reach the racks, which the roof under them does not', () => {
+    for (const [team, { rack, blade, spawns }] of teams.entries()) {
+      for (const [n, [x, y, z0, yaw]] of spawns.entries()) {
+        for (const at of [rack!, blade!]) {
+          const s = Sim.at(world).put(x, y, z0, yaw);
+          // Round the low wall, then along the roof to the plinth's foot: not there yet.
+          const z = (v: number) => (team ? ZED - v : v);
+          expect(s.goTo(s.p.x < 32 ? 27 : 37, z(227), { sprint: true, r: 0.4 })).toBeGreaterThan(0);
+          expect(s.goTo(at[0], z(220), { sprint: true, r: 0.4 })).toBeGreaterThan(0);
+          expect(s.p.y).toBe(26);
+          expect(within(s.p, at, RACK_R)).toBe(false);
+          // A jump onto it, then within the circle.
+          const k = s.until(
+            p => within(p, at, RACK_R),
+            p => KEY.FORWARD | (p.ground && p.y < 27 ? KEY.JUMP : 0),
+            p => toward(p.x, p.z, at[0], at[2]),
+            120,
+          );
+          expect(k, `team ${team}, spawn ${n}`).toBeGreaterThan(0);
+          expect(s.p.y).toBeCloseTo(27.5, 6);
+        }
       }
     }
   });

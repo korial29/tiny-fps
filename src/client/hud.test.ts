@@ -55,11 +55,11 @@ describe('createHud', () => {
       expect(menu().textContent).toMatch(/enemy flag.*your own base/);
     });
 
-    it('says the left button fires the gun, taken at the rack', () => {
+    it('says the left button fires the gun, taken on the armoury', () => {
       hud.title('Click to play', 'Rooftops');
       const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
       expect(rows).toContain('Left clickfire the gun');
-      expect(menu().textContent).toMatch(/gun at your rack/);
+      expect(menu().textContent).toMatch(/armoury past your flag for the gun/);
     });
 
     it('hides when the status is empty, and is back for the next pause', () => {
@@ -436,7 +436,7 @@ describe('the gun on the HUD', () => {
       expect(rows).toContain('Katana + Wthrust');
       expect(rows).toContain('Katana + A or Dcut across');
       expect(rows).toContain('Katana aloneslash');
-      expect(screen.querySelector('aside')!.textContent).toMatch(/katana at the one beside it/);
+      expect(screen.querySelector('aside')!.textContent).toMatch(/armoury past your flag/);
     });
   });
 

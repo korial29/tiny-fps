@@ -53,6 +53,8 @@ A second weapon: a katana with a cyan electric glow along the blade. Its cut dep
 
 Step 3 is done: racks on HIGHLINE (47, 26, 231.5 and its mirror) and ROOFTOPS (13.5, 10, 69 and 14.5, 12.4, -1.2), 2.5 m from the gun rack.
 
+The racks stand on the armoury (the user, 2026-11-07): on HIGHLINE a plinth 1.5 m high in the team colour, past the flag ahead of the spawns, with the gun rack at (30.75, 27.5, 217) and the katana rack 2.5 m from it, and their mirrors. They are in sight from the spawns, and a player takes them by running there and jumping up, as in the Hunger Games: `PICK_H` keeps the roof under them out of reach. ROOFTOPS keeps its racks on the spawn roof.
+
 Step 4 is done: `katana.ts` (the model, its hold and the cut keys in camera space), `trail.ts`, the cuts in `body.ts` and `soldier.ts`, the rack in `props.ts`. The weapon choice is in `input.ts`, the shock beat in `beats.ts`, the sparks and crackle in `beams.ts`. With empty hands the own arms hang out of view and swing with the stride (the user, 2026-11-06).
 
 ## A longer katana, two hands, limb cuts (the user, 2026-11-06)

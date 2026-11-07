@@ -256,51 +256,63 @@ export const ends = (pos: Vec3, q: Quat): Vec3[] => {
 };
 
 /**
- * The cuts, held the way Jedi Knight 2 holds its saber in the first person: the hands stay low at
- * the right, close together on the grip, and the blade makes the wide arcs. Each cut is keys of
- * [share of the swing, grip x, y, z, blade direction x, y, z] in the camera's space (right, up,
- * forward), the guard first and last: a wind-up, the strike at its tick (every cut passes the
+ * The cuts, swung the way Jedi Knight 2 swings its saber in the first person: the whole arms carry
+ * the hands round a wide arc, up over a shoulder, across the view and out low on the other side,
+ * and the blade points out along the arc from them, as a body swings a long sword. Each cut is
+ * keys of [share of the swing, grip x, y, z, blade direction x, y, z] in the camera's space (right,
+ * up, forward), the guard first and last: a wind-up, the strike at its tick (every cut passes the
  * middle of the view there) and a follow-through, with the hands taking the slope between their
- * neighbours' keys (fastest through the strike). The right hand holds the grip at the guard, the
- * left BEHIND it. In the guard the hands sit at the bottom of the view and the blade rises ahead,
- * leaning forward and to the left, so the view shows more blade than hands.
+ * neighbours' keys (fastest through the strike). The right hand holds the grip, the left BEHIND
+ * it. In the guard the hands sit at the bottom of the view and the blade rises ahead, leaning
+ * forward and to the left, so the view shows more blade than hands.
  */
 export const GUARD = [0.06, -0.24, 0.45, 0.16, 0.74, 0.65];
 /** The share of cut `c`'s swing at which it strikes. */
 const strikeAt = (c: number) => CUTS[c].strike / CUTS[c].ticks;
-/** Out to the left and a little back, across the middle, out to the right and round behind. */
+/** Up over the left shoulder with the blade cocked back, round across the middle, out low to the right and round behind, then back up. */
 const ACROSS = (s: number) => [
   [0, ...GUARD],
-  [0.12, 0.04, -0.18, 0.36, -0.7, 0.7, 0.15],
-  [0.24, -0.02, -0.16, 0.34, -0.95, 0.25, -0.2],
-  [s, 0.07, -0.15, 0.46, 0, 0.06, 1],
-  [0.5, 0.17, -0.2, 0.4, 0.95, -0.1, 0.1],
-  [0.62, 0.18, -0.24, 0.32, 0.8, -0.3, -0.45],
+  [0.12, -0.1, -0.12, 0.38, -0.55, 0.75, -0.35],
+  [0.24, -0.22, -0.06, 0.3, -0.6, 0.35, -0.72],
+  [s - 0.07, -0.14, -0.12, 0.38, -0.98, 0.15, 0.1],
+  [s, 0.02, -0.16, 0.43, 0, 0.1, 1],
+  [0.5, 0.24, -0.2, 0.4, 0.95, -0.1, 0.15],
+  [0.62, 0.25, -0.24, 0.25, 0.6, -0.35, -0.7],
+  [0.8, 0.18, -0.26, 0.38, 0.45, 0.6, 0.2],
   [1, ...GUARD],
 ];
 const KEYS: number[][][] = [
-  // Pulled back level, lunged out along the look, held a beat.
+  // Drawn back to the right hip, lunged out along the look with the arms straight, held a beat.
   [
     [0, ...GUARD],
-    [0.3, 0.13, -0.3, 0.2, -0.05, 0.3, 1],
-    [strikeAt(0), 0.02, -0.25, 0.42, -0.02, 0.18, 1],
-    [strikeAt(0) + 0.2, 0.02, -0.25, 0.42, -0.02, 0.18, 1],
+    [0.3, 0.17, -0.28, 0.17, -0.08, 0.25, 1],
+    [strikeAt(0), 0.03, -0.2, 0.43, -0.02, 0.12, 1],
+    [strikeAt(0) + 0.2, 0.03, -0.2, 0.43, -0.02, 0.12, 1],
     [1, ...GUARD],
   ],
   ACROSS(strikeAt(1)),
-  // The cut from the right is the cut from the left in a mirror.
-  ACROSS(strikeAt(2)).map((k, i, all) =>
-    i && i < all.length - 1 ? [k[0], 0.14 - k[1], k[2], k[3], -k[4], k[5], k[6]] : k,
-  ),
-  // Raised over the head, down through the middle to low ahead, held a beat.
+  // The cut from the right: the cut from the left turned round, shorter on the right side, where
+  // the left arm reaches across the chest to the wind-up.
   [
     [0, ...GUARD],
-    [0.14, 0.08, -0.04, 0.36, -0.05, 0.95, -0.05],
-    [0.28, 0.03, 0.02, 0.32, 0, 0.6, -0.8],
-    [0.34, 0.06, -0.02, 0.38, 0, 1, 0.1],
-    [strikeAt(3), 0.06, -0.15, 0.46, 0, 0.08, 1],
-    [0.52, 0.06, -0.3, 0.42, 0, -0.7, 0.7],
-    [0.64, 0.06, -0.32, 0.4, 0, -0.75, 0.65],
+    [0.12, 0.2, -0.12, 0.36, 0.55, 0.75, -0.35],
+    [0.24, 0.26, -0.06, 0.24, 0.6, 0.35, -0.72],
+    [strikeAt(2) - 0.07, 0.2, -0.12, 0.36, 0.98, 0.15, 0.1],
+    [strikeAt(2), 0.08, -0.16, 0.43, 0, 0.1, 1],
+    [0.5, -0.1, -0.2, 0.36, -0.95, -0.1, 0.15],
+    [0.62, -0.14, -0.24, 0.3, -0.6, -0.35, -0.7],
+    [0.8, -0.04, -0.26, 0.38, -0.3, 0.6, 0.2],
+    [1, ...GUARD],
+  ],
+  // Raised high over the head with the blade down the back, down through the middle to low ahead.
+  [
+    [0, ...GUARD],
+    [0.14, 0.05, -0.06, 0.34, -0.05, 0.95, -0.1],
+    [0.28, 0.04, 0.06, 0.3, 0, 0.5, -0.86],
+    [0.34, 0.05, 0.02, 0.36, 0, 1, 0.15],
+    [strikeAt(3), 0.05, -0.16, 0.43, 0, 0.08, 1],
+    [0.52, 0.04, -0.26, 0.42, 0, -0.55, 0.85],
+    [0.64, 0.03, -0.3, 0.38, 0, -0.65, 0.75],
     [1, ...GUARD],
   ],
 ];

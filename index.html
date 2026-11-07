@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tiny-fps</title>
+    <style>:root{--lightningcss-light: ;--lightningcss-dark:initial;color-scheme:dark;--bg:#0e151c;--fg:#e6edf3;--muted:#8b98a5;--field:#18222c;--line:#2c3a47;--accent:#e8590c}*{box-sizing:border-box}body{background:var(--bg);color:var(--fg);margin:0;font:16px/1.5 system-ui,sans-serif}main{gap:16px;max-width:640px;margin:0 auto;padding:24px 16px;display:grid}h1{margin:0;font-size:22px}p{color:var(--muted);margin:0}form{flex-wrap:wrap;align-items:end;gap:12px;display:flex}label{color:var(--muted);flex:200px;gap:4px;font-size:14px;display:grid}input,select,button{font:inherit;border:1px solid var(--line);background:var(--field);min-height:40px;color:var(--fg);border-radius:8px;min-width:0;padding:6px 10px}button{background:var(--accent);border-color:var(--accent);color:#fff;cursor:pointer;padding:6px 20px;font-weight:600}[hidden]{display:none!important}#game{position:fixed;inset:0}#bar{text-shadow:0 1px 2px #000;align-items:center;gap:12px;font-size:14px;display:flex;position:fixed;bottom:8px;right:12px}#bar button{background:#0008;border-color:#fff4;min-height:32px;padding:2px 14px}</style>
+    <script type="module" crossorigin src="/tiny-fps/assets/index-CoSU2D6-.js"></script>
+  </head>
+  <body>
+    <main id="menu">
+      <h1>tiny-fps</h1>
+      <p>
+        Click the game to look around with the mouse, WASD (ZQSD on AZERTY) to move, Shift to
+        sprint, Space to jump (again in the air), a direction key pressed twice to dash that way, C
+        to crouch or slide, Esc to get the mouse back. Take the enemy flag to your own base while
+        yours is home. Open this page in another tab to join the other team.
+      </p>
+      <form id="form">
+        <label>Name <input name="name" maxlength="16" required autocomplete="nickname" /></label>
+        <label
+          >Mode
+          <select name="mode">
+            <option value="local">Local (tabs of this browser)</option>
+            <option value="server">Server</option>
+          </select>
+        </label>
+        <label id="url" hidden
+          >Server URL <input name="url" type="url" value="ws://localhost:8787/demo"
+        /></label>
+        <button>Join</button>
+      </form>
+    </main>
+    <div id="game" hidden></div>
+    <div id="bar" hidden>
+      <span id="status"></span>
+      <button id="leave" type="button">Leave</button>
+    </div>
+  </body>
+</html>

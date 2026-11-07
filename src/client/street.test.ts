@@ -5,7 +5,7 @@ import type { WorldDef } from '../shared/world';
 import { STRIDE } from './mesh';
 import { city, level, scenery } from './render';
 import { skyline } from './skyline';
-import { PITCH, ROAD, STREET, area, deepen, grid, street } from './street';
+import { FAR, PITCH, ROAD, STREET, area, deepen, grid, street } from './street';
 
 const MAPS: [string, WorldDef][] = [
   ['HIGHLINE', HIGHLINE],
@@ -72,16 +72,18 @@ describe.each(MAPS)('the street of %s', (_, def) => {
   it('puts no marking on a building: every stripe of paint is outside every footprint', () => {
     const paint = quads(street(def)).filter(q => Math.abs(q.y - STREET - 0.24) < 1e-6);
     expect(paint.length).toBeGreaterThan(100);
-    for (const q of paint) {
-      for (const b of everything) {
-        const apart =
-          b.min[0] >= q.max[0] ||
-          b.max[0] <= q.min[0] ||
-          b.min[2] >= q.max[1] ||
-          b.max[2] <= q.min[1];
-        expect(apart).toBe(true);
-      }
-    }
+    // The markings are on the near roads only: the buildings over their grid are the ones to check.
+    const [x0, x1, z0, z1] = [xs[0] - h, xs[xs.length - 1] + h, zs[0] - h, zs[zs.length - 1] + h];
+    const there = everything.filter(
+      b => b.max[0] > x0 && b.min[0] < x1 && b.max[2] > z0 && b.min[2] < z1,
+    );
+    const on = paint.flatMap(q =>
+      there.filter(
+        b =>
+          b.min[0] < q.max[0] && b.max[0] > q.min[0] && b.min[2] < q.max[1] && b.max[2] > q.min[1],
+      ),
+    );
+    expect(on).toEqual([]);
   });
 
   it('has the markings: a dashed yellow centre line, white edge lines, and crosswalks at every crossing', () => {
@@ -109,6 +111,40 @@ describe.each(MAPS)('the street of %s', (_, def) => {
       const inZ = zs.some(z => b.min[1] >= z - h && b.max[1] <= z + h);
       expect(inX || inZ).toBe(true);
     }
+  });
+
+  it('carries the grid on to FAR in plain asphalt: every far road paved end to end, no tower on it, no marking past the near roads', () => {
+    const far = grid(def, FAR);
+    const q = quads(street(def));
+    const tar = q.filter(s => s.rgb[0] < 0.1 && Math.abs(s.y - STREET - 0.12) < 1e-6);
+    const [lo, hi] = [far.zs[0] - h, far.zs[far.zs.length - 1] + h];
+    for (const x of far.xs) {
+      // The pieces of asphalt along this road cover it from one end of the far grid to the other.
+      const along = tar
+        .filter(s => Math.abs(s.min[0] - (x - h)) < 1e-6 && Math.abs(s.max[0] - (x + h)) < 1e-6)
+        .map(s => [s.min[1], s.max[1]])
+        .sort((a, b) => a[0] - b[0]);
+      expect(along[0][0]).toBeCloseTo(lo, 6);
+      expect(along[along.length - 1][1]).toBeCloseTo(hi, 6);
+      along.slice(1).forEach(([a], i) => expect(a).toBeLessThanOrEqual(along[i][1] + 1e-6));
+    }
+    expect(Math.max(...far.xs.map(Math.abs), ...far.zs.map(Math.abs))).toBeGreaterThan(600);
+    // No tower stands on a far road.
+    const towers = skyline(def).filter(t => t.max[1] - t.min[1] > 0.5);
+    for (const [lines, a] of [
+      [far.xs, 0],
+      [far.zs, 2],
+    ] as const) {
+      const on = towers.filter(t => lines.some(c => t.max[a] > c - h && t.min[a] < c + h));
+      expect(on).toEqual([]);
+    }
+    // The markings stay on the near grid (the crosswalks at its last crossings 3 m past its ends).
+    const e = h + 3;
+    const [x0, x1, z0, z1] = [xs[0] - e, xs[xs.length - 1] + e, zs[0] - e, zs[zs.length - 1] + e];
+    const paint = q.filter(s => Math.abs(s.y - STREET - 0.24) < 1e-6);
+    expect(
+      paint.filter(s => s.min[0] < x0 || s.max[0] > x1 || s.min[1] < z0 || s.max[1] > z1),
+    ).toEqual([]);
   });
 
   it('is flat, lit paint of whole triangles, on the street: faces up, at most half a metre above it', () => {

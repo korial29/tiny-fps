@@ -4,7 +4,7 @@
 // enough to rise out of the haze. Lawns in the lots with no tower, and round some towers.
 import { TEX } from '../shared/types';
 import type { Brush, WorldDef } from '../shared/world';
-import { ROAD, STREET, grid } from './street';
+import { FAR, ROAD, STREET, grid } from './street';
 import { hash } from './textures';
 
 const SEED = 8;
@@ -20,12 +20,6 @@ const CAPS = [
   [0.9, 0.15, 0.2],
   [0.25, 0.85, 0.55],
 ];
-/**
- * The far city, past the roads out to FAR from the centre (inside the far clip, 900 m): one tower to
- * a block of the grid carried on, taller further out, so that their tops rise out of the haze in
- * fainter and fainter rows down to the horizon and the city does not stop at the last road.
- */
-const FAR = 820;
 /** A lawn's green on the paint, and its height over the street: the lots with no tower, and some round one. */
 const GRASS = [0.22, 0.5, 0.14];
 const TURF = 0.3;
@@ -33,7 +27,11 @@ const TURF = 0.3;
 /** The towers of a world's skyline, in the blocks round its play area and out to the horizon; the same ones every time. */
 export const skyline = (def: WorldDef): Brush[] => [...near(def), ...far(def)];
 
-/** The far towers: one to a block of the grid carried on past the roads, out to FAR. */
+/**
+ * The far towers, out to FAR: one to a block of the grid carried on past the marked roads, taller
+ * further out, so that their tops rise out of the haze in fainter and fainter rows down to the
+ * horizon and the city does not stop at the last road.
+ */
 const far = (def: WorldDef): Brush[] => {
   const { reach } = grid(def);
   const { box, xs, zs } = grid(def, FAR);

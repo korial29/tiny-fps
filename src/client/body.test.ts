@@ -1025,6 +1025,50 @@ describe('the gun points where the beam goes', () => {
   );
 });
 
+describe('looking down with a weapon in hand', () => {
+  /** A point's place against the trunk: on the body's right and ahead of the line from the pelvis to the neck, at its height. */
+  const against = (s: { pos: Vec3[] }, p: Vec3) => {
+    const [a, b] = [s.pos[J.PELVIS], s.pos[J.NECK]];
+    const t = (p[1] - a[1]) / (b[1] - a[1]);
+    return [p[0] - a[0] - (b[0] - a[0]) * t, -(p[2] - a[2] - (b[2] - a[2]) * t)];
+  };
+  /** Each weapon and the hands on it: the gun in the right one, the katana in both. */
+  const weapons: [string, Partial<PlayerState>, number[]][] = [
+    ['the gun', { ammo: 30 }, [J.HAND_R]],
+    ['the katana', { blade: true, wield: true }, [J.HAND_L, J.HAND_R]],
+  ];
+
+  it.each(weapons)(
+    'keeps the hands out of the chest and in sight with %s, down to the feet',
+    (_, o, on) => {
+      const p = man(o);
+      const body = watch(p, 90);
+      for (const pitch of [-0.8, -1.1, -1.4, -1.55]) {
+        const s = pose(body, p, pitch);
+        for (const j of on) {
+          const [x, ahead] = against(s, s.pos[j]);
+          // Within the shoulders, a hand is ahead of the chest's front (12 cm) and a fist.
+          if (Math.abs(x) < 0.25) {
+            expect(ahead, `pitch ${pitch}, joint ${j}`).toBeGreaterThan(0.13);
+          }
+        }
+        // The right fist, on the grip, is on the screen.
+        expect(seen(hands(p, body, pitch)[1]), `pitch ${pitch}`).toBe(true);
+      }
+    },
+  );
+
+  it.each(weapons)('leaves %s where it was when looking ahead', (_, o) => {
+    const p = man(o);
+    const body = watch(p, 90);
+    // Level and a little down, the hands sit as low and as close as they did.
+    for (const pitch of [0, -0.3]) {
+      const [, r] = hands(p, body, pitch);
+      expect(r[2]).toBeLessThan(0.45);
+    }
+  });
+});
+
 describe('the katana in both hands', () => {
   const blade = (o: Partial<PlayerState> = {}) =>
     man({ wield: true, blade: true, cut: CUT.THRUST, swing: 0, ...o });

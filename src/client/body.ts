@@ -13,8 +13,9 @@ import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { createGait, frame } from './gait';
 import type { Floor } from './gait';
-import { TILT, held, pointed, tip } from './gun';
+import { REAR, TILT, held, pointed, tip } from './gun';
 import {
+  BASE,
   BEHIND as BACK,
   C,
   S,
@@ -122,6 +123,39 @@ const twist = (q: Quat, b: Vec3): number => {
 };
 /** The rotation `r` turned the shortest way so that its bone of rest offset `rest` lies along `d`. */
 const lay = (r: Quat, rest: Vec3, d: Vec3): Quat => mul(arc(spin(r, rest), d), r);
+
+/** The trunk seen from above, with a fist round it: half its width and half its depth, metres. */
+const [TRUNK_W, TRUNK_D] = [0.22, 0.17];
+/** How far under the neck the chest stands out the most, and half the width it hides across, to the shoulders. */
+const [CHEST_AT, SHOULDERS] = [0.16, 0.3];
+/**
+ * How far forward (along the body's front, `yaw`) the point `p` must go to be in sight from `eye`
+ * and out of the trunk of `s`: an upright ellipse TRUNK_W by TRUNK_D round the line from under the
+ * hips to the neck. Under the chest, the line from the eye over its front hides what is behind it,
+ * so a point there must be ahead of that line. 0 when it is clear already, or beside the trunk.
+ */
+const outOf = (s: Solved, yaw: number, eye: Vec3, p: Vec3): number => {
+  const [a, b] = [add(s.pos[J.PELVIS], [0, -0.25, 0]), s.pos[J.NECK]];
+  if (p[1] > b[1] + 0.05) {
+    return 0;
+  }
+  const c = mix(a, b, clamp((p[1] - a[1]) / (b[1] - a[1])));
+  /** On the body's right and front, from the trunk's line at that height. */
+  const [side, front] = [
+    (v: Vec3) => v[0] * Math.cos(yaw) - v[2] * Math.sin(yaw),
+    (v: Vec3) => -v[0] * Math.sin(yaw) - v[2] * Math.cos(yaw),
+  ];
+  const d = sub(p, c);
+  const k = Math.abs(side(d)) / TRUNK_W;
+  let need = k < 1 && p[1] >= a[1] ? TRUNK_D * Math.sqrt(1 - k * k) : -Infinity;
+  // The chest stands out as far all the way to the shoulders: the line from the eye over it.
+  const top = b[1] - CHEST_AT;
+  if (k < SHOULDERS / TRUNK_W && p[1] < top && eye[1] > top) {
+    const e = front(sub(eye, c));
+    need = Math.max(need, e + ((TRUNK_D - e) * (eye[1] - p[1])) / (eye[1] - top));
+  }
+  return Math.max(0, need - front(d));
+};
 
 /**
  * Puts the arm of shoulder joint `j` (ARM_R or ARM_L) of `q` on a handle running along the unit
@@ -392,6 +426,8 @@ export const createBody = (world?: World): Body => {
   const trail = createTrail();
   /** Where the gun points, in the camera's space. */
   let target: Vec3 = [0, 0, 8];
+  /** How far the gun is pushed out of the trunk, in the camera's space, as of the last pose(). */
+  let lift: Vec3 = [0, 0, 0];
   /** Seconds, for the flailing of a stumble. */
   let clock = 0;
   /** Which hand the wall is on: -1 left, 1 right, eased. */
@@ -449,9 +485,9 @@ export const createBody = (world?: World): Body => {
     const a = w.amp * (1 + 0.5 * w.sprint);
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     const at: Vec3 = [
-      Math.min(0.22, 0.18 * wide) + 0.012 * a * s,
-      -0.25 + 0.018 * a * c - 0.3 * (1 - w.gun),
-      0.4 - 0.05 * kick,
+      Math.min(0.22, 0.18 * wide) + 0.012 * a * s + lift[0],
+      -0.25 + 0.018 * a * c - 0.3 * (1 - w.gun) + lift[1],
+      0.4 - 0.05 * kick + lift[2],
     ];
     // A shot kicks the nose up.
     const to: Vec3 = [target[0], target[1] + 0.1 * kick * Math.hypot(...target), target[2]];
@@ -509,6 +545,18 @@ export const createBody = (world?: World): Body => {
     for (const j of [J.THIGH_L, J.THIGH_R]) {
       reach(q, s, j, s0.pos[j + 2], fwd, true);
     }
+    // The weapons stay out of the trunk and in sight: looking down, their grips would sink into the
+    // chest or under it, so they go forward until they are clear. The katana's two grips and its
+    // guard go together.
+    const out = (pts: Vec3[]) =>
+      along([0, 0, 0], fwd, Math.max(...pts.map(p => outOf(s, q.yaw, eye, add(eye, turn(p))))));
+    lift = [0, 0, 0];
+    const [g0, gx] = holster();
+    // The gun's grip, the back of its body and the top of its counter, which lie toward the chest.
+    const on = ([x, y, z]: Vec3): Vec3 =>
+      [0, 1, 2].map(i => g0[i] + gx[0][i] * x + gx[1][i] * y - gx[2][i] * z) as Vec3;
+    lift = view(out([g0, on(REAR), on([0, 0.156, 0.04])]));
+    const clear = sw ? out([sw.at, along(sw.at, sw.g, -BACK), along(sw.at, sw.g, BASE)]) : lift;
     // The gun hand's wrist: the grip is 8 cm along the fingers from it and 2 cm toward the palm.
     const [gp, ga] = holster();
     const fh = [0, 1, 2].map(i => TILT[1] * ga[2][i] - TILT[0] * ga[1][i]) as Vec3;
@@ -584,7 +632,7 @@ export const createBody = (world?: World): Body => {
       if (sw && onSword > 0.002) {
         // Both hands round the grip, the left one BACK behind the right, the elbows down and out.
         const g = turn(sw.g);
-        const at = along(add(eye, turn(sw.at)), g, sd > 0 ? 0 : -BACK);
+        const at = along(add(add(eye, turn(sw.at)), clear), g, sd > 0 ? 0 : -BACK);
         const held = { ...q, rot: q.rot.slice() };
         wield(held, s, arm, at, g, turn([0.5 * sd, -1, -0.35]));
         for (const k of [arm, arm + 1, arm + 2]) {

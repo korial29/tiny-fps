@@ -87,9 +87,9 @@ const TRUNK: Loft = {
     [0.99, 0, 0.005, 0.18, 0.106, 0.25, TRIM],
     [1.03, 0, 0, 0.17, 0.102, 0.5, JACKET],
     [1.12, 0, 0, 0.155, 0.097, 1, JACKET],
-    [1.24, 0, -0.003, 0.176, 0.112, 1.7, JACKET],
-    [1.3, 0, -0.004, 0.182, 0.12, 1.85, JACKET],
-    [1.37, 0, -0.005, 0.186, 0.124, 2, JACKET],
+    [1.24, 0, -0.003, 0.164, 0.112, 1.7, JACKET],
+    [1.3, 0, -0.004, 0.166, 0.12, 1.85, JACKET],
+    [1.37, 0, -0.005, 0.17, 0.124, 2, JACKET],
     [1.37, 0, -0.005, 0.264, 0.124, 2, JACKET],
     [1.41, 0, -0.005, 0.268, 0.123, 2, JACKET],
     [1.45, 0, -0.004, 0.26, 0.114, 2, JACKET],
@@ -135,8 +135,8 @@ const ARM: Loft = {
   far: [0, 2, 4, 5, 6, 8, 10],
   rings: [
     [1.37, 0.222, 0, 0, 0, 0, JACKET],
-    [1.3, 0.222, 0, 0.053, 0.056, 0.1, JACKET],
-    [1.22, 0.222, 0, 0.049, 0.052, 0.2, JACKET],
+    [1.3, 0.227, 0, 0.049, 0.056, 0.1, JACKET],
+    [1.22, 0.225, 0, 0.046, 0.052, 0.2, JACKET],
     [1.18, 0.222, 0, 0.043, 0.046, 0.5, JACKET],
     [1.09, 0.222, -0.002, 0.046, 0.048, 0.8, JACKET],
     [0.975, 0.222, 0, 0.034, 0.034, 1.2, TRIM],
@@ -374,6 +374,8 @@ export interface Skin {
   /** Three vertex indices per triangle, and the palette colour of each of its corners: the colour blends across it. */
   t: Uint16Array;
   c: Uint8Array;
+  /** Per vertex the light it gets, 1 in the open and less in another part's shadow. */
+  o: Float32Array;
   /** Per triangle the LIMB it comes off with, NONE for the trunk's. */
   l?: Uint8Array;
 }
@@ -627,8 +629,32 @@ const generate = (lod: number): Skin => {
       v[k + r] /= l;
     }
   }
+  // Occlusion, baked in the rest pose so the arms stand off the chest: the torso's sides in the
+  // shadow of the upper arms hanging by them, the insides of the sleeves and the armpits in the
+  // torso's. Each occluder shades a vertex by the cosine toward its closest point and by how near
+  // its surface is.
+  const ARMS: number[] = [J.ARM_L, J.FOREARM_L, J.HAND_L, J.ARM_R, J.FOREARM_R, J.HAND_R];
+  const o = new Float32Array(w.length);
+  for (let i = 0; i < w.length; i++) {
+    const [x, y, z, nx, ny, nz] = v.slice(i * 6, i * 6 + 6);
+    const arm = +ARMS.includes(j[2 * i]) * (1 - w[i]) + +ARMS.includes(j[2 * i + 1]) * w[i];
+    const at = (lo: number, hi: number) => Math.min(Math.max(y, lo), hi);
+    // The torso, an elliptic cylinder from the waist to the armpits; the upper arm, a capsule.
+    // The torso's fades out under the elbow: the hands swing far from it.
+    const [cx, cy, cz, r, k, reach] =
+      arm > 0.5
+        ? [0, at(1.05, 1.33), 0, 0.166, 0.166 / 0.12, 0.15 * clamp((y - 0.97) / 0.1)]
+        : [Math.sign(x) * 0.226, at(1.08, 1.3), 0, 0.048, 1, 0.1];
+    const d = [cx - x, cy - y, (cz - z) * k];
+    const l = Math.hypot(...d);
+    // Half the sphere still shades a vertex turned a little away from its centre.
+    const cos = clamp(((nx * d[0] + ny * d[1] + nz * d[2]) / l + 0.6) / 1.6);
+    // Gone some centimetres off its surface, so the rest of the body keeps the palette's colours.
+    o[i] = reach ? 1 - 0.9 * cos * clamp((r + reach - l) / reach) ** 0.8 : 1;
+  }
   return {
     v: new Float32Array(v),
+    o,
     j: new Uint8Array(j),
     w: new Float32Array(w),
     t: new Uint16Array(t),
@@ -690,7 +716,8 @@ const sever = (s: Skin, limb: number): Skin[] => {
   v[n * 6 + 4] = 1;
   const j = new Uint8Array([...s.j, ROOT[limb], ROOT[limb]]);
   const w = new Float32Array([...s.w, 0]);
-  return t.map((x, k) => ({ v, j, w, t: new Uint16Array(x), c: new Uint8Array(c[k]) }));
+  const o = new Float32Array([...s.o, 1]);
+  return t.map((x, k) => ({ v, o, j, w, t: new Uint16Array(x), c: new Uint8Array(c[k]) }));
 };
 
 const parts: Skin[][] = [];
@@ -761,17 +788,17 @@ export const skin = (
   // Written by index rather than pushed: the close skin is some 20 000 vertices.
   let o = out.length;
   for (let h = 0; h < s.t.length; h++, o += 10) {
-    const [col, k] = [colors[s.c[h]], s.t[h] * 6];
+    const [col, k, g] = [colors[s.c[h]], s.t[h] * 6, s.o[s.t[h]]];
     out[o] = Q[k];
     out[o + 1] = Q[k + 1];
     out[o + 2] = Q[k + 2];
     out[o + 3] = Q[k + 3];
     out[o + 4] = Q[k + 4];
     out[o + 5] = Q[k + 5];
-    out[o + 6] = col[0];
-    out[o + 7] = col[1];
+    out[o + 6] = col[0] * g;
+    out[o + 7] = col[1] * g;
     // The cut's face glows: unlit.
     out[o + 8] = s.c[h] == CAP ? -2 : -1;
-    out[o + 9] = col[2];
+    out[o + 9] = col[2] * g;
   }
 };

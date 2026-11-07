@@ -104,6 +104,8 @@ export const SOUND = {
   BLAST: 27,
   /** A crackle of the rail gun's bolt, played again and again while it is held. */
   RAIL: 28,
+  /** The rail gun in hand: a soft electric hum, looped, louder while its bolt goes out. */
+  HUM: 29,
 } as const;
 
 /**
@@ -265,10 +267,16 @@ export const LAYERS: Voice[][] = [
     [1, 110, 0, 0.001, 0.09, 0.03, 0.3, 0.6, 0, 1, 0.35],
     [3, 9000, -3, 0.001, 0, 0.03, 0, 0.8, 0, 1, 0.35],
   ],
+  // HUM: a 60 Hz mains buzz, a sine an octave up, a faint fizz of held noise; held, to loop.
+  [
+    [1, 60, 0, 0.001, 2.1, 0.001, 0, 0.15, 0, 1, 0.3],
+    [2, 120, 0, 0.001, 2.1, 0.001, 0, 1, 0, 1, 0.25],
+    [3, 3000, 0, 0.001, 2.1, 0.001, 0.4, 0.2, 0, 1, 0.15],
+  ],
 ];
 
 /** The sounds played in a loop: their buffers go through seam. */
-export const LOOPED: number[] = [SOUND.WIND, SOUND.SCRAPE];
+export const LOOPED: number[] = [SOUND.WIND, SOUND.SCRAPE, SOUND.HUM];
 
 /**
  * Renders the sound `id` of `layers` as mono samples in [-1, 1] at RATE, deterministic (seeded

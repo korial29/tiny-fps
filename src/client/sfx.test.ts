@@ -103,24 +103,26 @@ describe('the sounds of the game', () => {
     expect(gun.map(n => SOUND[n])).toEqual([16, 17, 18, 19, 20, 21, 22]);
   });
 
-  it('make the shot a deep plasma thump, short and clean enough for 8.6 a second', () => {
+  it('make the shot fall from the treble to the bass, short and clean enough for 8.6 a second', () => {
     const s = sound('LASER');
     // Under the 116 ms between two shots, even played at the lowest pitch combat.ts gives it.
     expect(s.length / RATE / 0.94).toBeLessThan(0.116);
     // The attack is clean: the loudest sample in the first 5 ms, and the last third dies away.
     expect(peak(s.subarray(0, 0.005 * RATE))).toBe(peak(s));
-    expect(rms(s.subarray(0.06 * RATE))).toBeLessThan(0.3 * rms(s.subarray(0, 0.03 * RATE)));
-    // Low: zero crossings give a pitch under 300 Hz (the old laser was over 2 kHz).
-    expect(crossings(s) / 2).toBeLessThan(300);
+    expect(rms(s.subarray(0.07 * RATE))).toBeLessThan(0.3 * rms(s.subarray(0, 0.03 * RATE)));
+    // High at the start, low at the end: zero crossings give the pitch.
+    const hz = (a: number, b: number) => crossings(s.subarray(a * RATE, b * RATE)) / 2;
+    expect(hz(0.001, 0.015)).toBeGreaterThan(1000);
+    expect(hz(0.06, 0.09)).toBeLessThan(500);
     expect(rms(s)).toBeLessThan(0.5);
   });
 
-  it('make the splash of a plasma ball short, loud and noisy, far above the shot', () => {
+  it('make the splash of a plasma ball short, loud and noisier than the shot', () => {
     expect(SOUND.SPLASH).toBe(LAYERS.length - 1);
     const s = sound('SPLASH');
     expect(s.length / RATE).toBeLessThan(0.25);
     expect(peak(s)).toBeGreaterThan(0.5);
-    expect(crossings(s)).toBeGreaterThan(crossings(sound('LASER')) * 4);
+    expect(crossings(s)).toBeGreaterThan(crossings(sound('LASER')) * 1.5);
   });
 
   it('make the hit a short high ping of one to two kHz that dies away fast, like Quake 3', () => {

@@ -181,11 +181,12 @@ export const LAYERS: Voice[][] = [
     [1, 170, -0.9, 0.012, 0.05, 0.17, 0.06, 0.2, 0, 1, 0.5],
     [3, 3000, 0, 0.01, 0.04, 0.14, 0.4, 0.12, 0, 1, 0.5],
   ],
-  // LASER, a plasma shot after the Doom 3 rifle: a sine thump falling from 190 Hz, a warbling square hum at 75 Hz and a crackle of noise held at 500 Hz.
+  // LASER, a plasma shot that falls from the treble to the bass: a square and a saw a few hertz
+  // apart diving from 2.4 kHz to under 200 Hz, their beating a flanger's sweep, over a short sine thump.
   [
-    [2, 190, -6, 0.001, 0.01, 0.08, 0, 1, 0, 1, 0.7],
-    [0, 75, -2, 0.001, 0.02, 0.07, 0.3, 0.12, 0, 1, 0.45],
-    [3, 500, -2, 0.001, 0.01, 0.05, 0, 0.6, 0, 1, 0.3],
+    [0, 2400, -36, 0.001, 0.012, 0.09, 0.02, 0.35, 0, 1, 0.32],
+    [1, 2470, -36, 0.001, 0.012, 0.09, 0.02, 0.3, 0, 1, 0.26],
+    [2, 190, -6, 0.001, 0.01, 0.06, 0, 1, 0, 1, 0.45],
   ],
   // HIT, as in Quake 3: a short metallic ping, a sine at 1.7 kHz with an inharmonic overtone, decaying fast.
   [

@@ -27,7 +27,7 @@ import type { Audio } from './audio';
 import type { Balls } from './balls';
 import type { Tracer } from './beams';
 import type { Effects } from './effects';
-import { aimed, focus, tip } from './gun';
+import { aimed, charge, focus, tip } from './gun';
 import type { Hud } from './hud';
 import { basis } from './mesh';
 import type { Vec3 } from './mesh';
@@ -106,8 +106,9 @@ export const struck = (a?: Blade, b?: Blade): boolean => {
   return !!a && !!b && (a.swing ?? 0) > ticks - strike && (b.swing ?? 0) <= ticks - strike;
 };
 
-/** Seconds between two buzzes of a saber lock. */
+/** Seconds between two buzzes of a saber lock, and two crackles of a rail gun's bolt. */
 const BUZZ = 0.16;
+const CRACKLE = 0.09;
 
 /** The swish of a cut, by CUT: higher and quieter for a thrust, lower and fuller for a slash. */
 const SWISH = { rate: [1.3, 1.05, 0.95, 0.8], gain: [0.6, 0.8, 0.8, 1] };
@@ -119,7 +120,7 @@ export const createCombat = (
   fx: Pick<Effects, 'fire' | 'cut' | 'wound' | 'lie'>,
   tracer: Pick<
     Tracer,
-    'flash' | 'burst' | 'orbs' | 'update' | 'mount' | 'crackle' | 'charging' | 'rail'
+    'flash' | 'burst' | 'orbs' | 'update' | 'mount' | 'crackle' | 'charging' | 'lightning'
   >,
   ctl: { pitch: number },
   balls: Pick<Balls, 'fire' | 'frame'>,
@@ -159,11 +160,22 @@ export const createCombat = (
   const charges = new Map<number, number>();
   /** The muzzle of a runner's gun (his rail gun's in hand), as he fires at what he looks at. */
   const gun = (p: PlayerState) => tip(...aimed(p, focus(p, world)[0]), !!p.railed);
-  /** A rail beam of `p` from the muzzle `from` to the wall his look meets, with its sound. */
-  const rail = (p: PlayerState, from: Vec3, at?: Vec3) => {
+  /** Where the rail gun's bolt of `p` ends: the wall his look meets, or its range. */
+  const end = (p: PlayerState): Vec3 => {
     const { o, d, t } = beam(world, p);
-    tracer.rail(from, [0, 1, 2].map(i => o[i] + d[i] * t) as Vec3);
-    audio.play(SOUND.RAIL, at, at ? 0.8 : 0.6, rate());
+    return [0, 1, 2].map(i => o[i] + d[i] * t) as Vec3;
+  };
+  /** Seconds to the next crackle of each player's bolt, the own one under -1. */
+  const crackles = new Map<number, number>();
+  /** The bolt of `p` this frame, from `from`, and its crackle every CRACKLE seconds, at `at` (the own: none). */
+  const zap = (list: { a: Vec3; b: Vec3 }[], p: PlayerState, from: Vec3, dt: number, at?: Vec3) => {
+    list.push({ a: from, b: end(p) });
+    const id = at ? p.id : -1;
+    const left = (crackles.get(id) ?? 0) - dt;
+    crackles.set(id, left > 0 ? left : CRACKLE);
+    if (left <= 0) {
+      audio.play(SOUND.RAIL, at, at ? 0.7 : 0.45, rate());
+    }
   };
   const swish = (c: number, at?: Vec3) => audio.play(SOUND.SWISH, at, SWISH.gain[c], SWISH.rate[c]);
   /** The shing of the katana coming into the hand or leaving it (not when it is lost). */
@@ -179,11 +191,10 @@ export const createCombat = (
         pending.push({ ...b });
       }
       for (let i = 0; i < n; i++) {
-        // A charged shot kicks the look up to 3.4 times as far; a rail beam as a charge of 3.
-        const power = b?.railed ? 3 : b?.power;
-        const k = 1 + 0.6 * ((power ?? 1) - 1);
+        // A charged shot kicks the look up to 3.4 times as far.
+        const k = 1 + 0.6 * ((b?.power ?? 1) - 1);
         ctl.pitch = Math.min(MAX_PITCH, ctl.pitch + RECOIL * k);
-        fx.fire(power);
+        fx.fire(b?.power);
       }
       const c = swung(a, b);
       if (c >= 0) {
@@ -226,7 +237,15 @@ export const createCombat = (
           audio.play(SOUND.DRY);
         }
         held = trigger;
-        hud.vitals(me.hp, me.ammo, !!me.blade, !!me.wield, me.rail ?? -1, !!me.railed);
+        const rail = me.rail ?? -1;
+        hud.vitals(
+          me.hp,
+          me.ammo,
+          !!me.blade,
+          !!me.wield,
+          rail < 0 ? -1 : charge(rail),
+          !!me.railed,
+        );
         cuts.forEach(c => swish(c));
         hud.down(fx.lie, me.down / TICK_HZ);
         before = { ...me };
@@ -241,11 +260,6 @@ export const createCombat = (
         from = [0, 1, 2].map(i => v.cam[i] + r[i] * m[0] + u[i] * m[1] + f[i] * m[2]) as Vec3;
         tracer.mount(from);
         for (const p of pending) {
-          if (p.railed) {
-            tracer.flash(from, true);
-            rail(p, from);
-            continue;
-          }
           balls.fire(p, now);
           tracer.flash(from, true, heat(p.power));
           laser(undefined, p.power);
@@ -258,12 +272,18 @@ export const createCombat = (
       }
       pending = [];
       cuts = [];
+      // The rail guns' bolts: the own from its muzzle, the others' from theirs.
+      const zaps: { a: Vec3; b: Vec3 }[] = [];
+      if (from && me?.zapping) {
+        zap(zaps, me, from, dt);
+      }
       for (const p of others) {
         const was = seen.get(p.id);
         const at: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
-        if (was !== undefined && p.shots != was && p.railed) {
-          rail(p, gun(p), at);
-        } else if (was !== undefined && p.shots != was) {
+        if (p.zapping) {
+          zap(zaps, p, gun(p), dt, at);
+        }
+        if (was !== undefined && p.shots != was) {
           // His charge at the last frame gives the strength of the shot.
           const c = charges.get(p.id) ?? 0;
           const power = c >= CHARGE_TAP ? Math.min(powerOf(c), CHARGE_MAX) : 1;
@@ -284,12 +304,13 @@ export const createCombat = (
           shing(old, p, at);
         }
         blades.set(p.id, { swing: p.swing, cut: p.cut, wield: p.wield, blade: p.blade });
-        // A runner drained by a rail beam, or shocked by the katana, crackles.
+        // A runner drained by the rail gun's bolt, or shocked by the katana, crackles.
         if ((p.zap && p.stun > 0) || p.slow) {
           tracer.crackle([p.x, p.y + 1, p.z]);
         }
       }
       tracer.charging(hot);
+      tracer.lightning(zaps);
       // Each saber lock, once: sparks where the blades cross, between the two, and a buzz.
       buzz += dt;
       const all = me ? [me, ...others] : others;

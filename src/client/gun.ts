@@ -1,7 +1,7 @@
 // The gun: a curved alien sidearm lofted from rings (violet metal, cyan glow), and the maths of the
 // hand that holds it. Model space has the middle of the grip at the origin, x right, y up, the
 // muzzle toward -z (like mesh.ts); place() carries it to the world. No DOM.
-import { CHARGE_MAX, GUN_RANGE } from '../shared/constants';
+import { CHARGE_MAX, GUN_RANGE, RAIL_MAX } from '../shared/constants';
 import { TAU, eyeHeight } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
@@ -219,33 +219,34 @@ export const gun = (lod: number): number[] => {
   return (built[lod] = out);
 };
 
-/** The rail gun's muzzle: on the gun's long axis (REAR to MUZZLE), 25 cm further out. */
-export const RAIL_MUZZLE: Vec3 = [0, 0.0565, -0.46];
+/** The rail gun's muzzle, between its electrodes' tips: on the gun's long axis (REAR to MUZZLE), 25 cm further out. */
+export const RAIL_MUZZLE: Vec3 = [0, 0.0569, -0.455];
+/** The electrodes' tips stand this far above and below the muzzle. */
+const SPREAD = 0.03;
 /** The height of the long axis at `f` ahead of the grip, in the side view. */
 const axisY = (f: number) => 0.0906 - 0.0741 * f;
-/** Green that blooms, the rail gun's glow. */
-const GREEN = [0.5, 2.4, 0.9];
-const green: Paint = () => [GREEN[0], GREEN[1], -2, GREEN[2]];
-const dim: Paint = () => [GREEN[0] * 0.3, GREEN[1] * 0.3, -2, GREEN[2] * 0.3];
-/** Dark gunmetal with a green cast, lit by its normal as the gun's metal is. */
-const steel: Paint = (_, n) => {
-  const [r, g, b] = mix([0.07, 0.09, 0.085], [0.42, 0.5, 0.46], Math.max(n[1], 0) ** 1.5 * 0.8);
-  return [r, g, -1, b];
-};
+/** The violet white of a Tesla arc, which blooms. */
+export const ARC = [1.1, 0.85, 2.6];
+const arcing: Paint = () => [ARC[0], ARC[1], -2, ARC[2]];
+const dim: Paint = () => [ARC[0] * 0.3, ARC[1] * 0.3, -2, ARC[2] * 0.3];
+/** Paint lit by its normal, from `lo` facing down to `hi` facing up. */
+const shade =
+  (lo: number[], hi: number[]): Paint =>
+  (_, n) => {
+    const [r, g, b] = mix(lo, hi, Math.max(n[1], 0) ** 1.5 * 0.8);
+    return [r, g, -1, b];
+  };
+/** Dark gunmetal, and the copper of the coils. */
+const steel = shade([0.07, 0.075, 0.09], [0.42, 0.45, 0.52]);
+const copper = shade([0.3, 0.12, 0.05], [1, 0.58, 0.32]);
 /** A station on the long axis, `up` above it. */
-const on = (f: number, up: number, a: number, b: number, x = 0): Station => [
-  f,
-  axisY(f) + up,
-  a,
-  b,
-  x,
-];
+const on = (f: number, up: number, a: number, b = a, x = 0): Station => [f, axisY(f) + up, a, b, x];
 const railed: number[][] = [];
 
 /**
- * The rail gun at a level of detail (0 far, 1 near), built once like gun(): a long gunmetal
- * receiver over the same grip, two flat rails running out in front of it above and below a glowing
- * green core, four coils round the core between them, and a green strip down each side.
+ * The rail gun at a level of detail (0 far, 1 near), built once like gun(), after a Tesla gun: a
+ * gunmetal receiver over the same grip, a barrel in three copper coils, and two electrodes forking
+ * out of its end, up and down, each tipped with a glowing ball. arc() is the spark between them.
  */
 export const railgun = (lod: number): number[] => {
   if (railed[lod]) {
@@ -260,8 +261,8 @@ export const railgun = (lod: number): number[] => {
       on(-0.115, 0.012, 0.022, 0.026),
       on(-0.09, 0.012, 0.03, 0.036),
       on(0.12, 0.008, 0.03, 0.034),
-      on(0.15, 0.006, 0.022, 0.024),
-      on(0.155, 0.006, 0, 0),
+      on(0.15, 0.004, 0.02),
+      on(0.155, 0.004, 0),
     ],
     n,
     steel,
@@ -278,17 +279,39 @@ export const railgun = (lod: number): number[] => {
     m,
     steel,
   );
+  tube(
+    out,
+    [on(0.14, 0, 0), on(0.145, 0, 0.014), on(0.32, 0, 0.014), on(0.335, 0, 0.018), on(0.345, 0, 0)],
+    n,
+    steel,
+  );
+  for (const f of [0.19, 0.235, 0.28]) {
+    tube(
+      out,
+      [on(f - 0.009, 0, 0), on(f - 0.008, 0, 0.022), on(f + 0.008, 0, 0.022), on(f + 0.009, 0, 0)],
+      n,
+      copper,
+    );
+  }
   for (const s of [-1, 1]) {
+    const up = s * SPREAD;
     tube(
       out,
       [
-        on(0.14, s * 0.024, 0, 0),
-        on(0.15, s * 0.024, 0.013, 0.006),
-        on(0.44, s * 0.024, 0.013, 0.006),
-        on(0.45, s * 0.024, 0, 0),
+        on(0.33, s * 0.01, 0.006),
+        on(0.37, up * 0.85, 0.005),
+        on(0.42, up * 1.08, 0.0042),
+        on(0.45, up, 0.0036),
+        on(0.452, up, 0),
       ],
-      4,
+      m,
       steel,
+    );
+    tube(
+      out,
+      [on(0.444, up, 0), on(0.449, up, 0.0075), on(0.461, up, 0.0075), on(0.466, up, 0)],
+      m,
+      arcing,
     );
     tube(
       out,
@@ -297,32 +320,37 @@ export const railgun = (lod: number): number[] => {
       dim,
     );
   }
-  tube(
-    out,
-    [
-      on(0.14, 0, 0, 0),
-      on(0.15, 0, 0.006, 0.006),
-      on(0.455, 0, 0.006, 0.006),
-      on(-RAIL_MUZZLE[2], 0, 0, 0),
-    ],
-    m,
-    green,
-  );
-  for (const f of [0.19, 0.26, 0.33, 0.4]) {
-    tube(
-      out,
-      [
-        on(f - 0.007, 0, 0, 0),
-        on(f - 0.006, 0, 0.019, 0.019),
-        on(f + 0.006, 0, 0.019, 0.019),
-        on(f + 0.007, 0, 0, 0),
-      ],
-      n,
-      steel,
-    );
-  }
   return (railed[lod] = out);
 };
+
+/**
+ * The spark between the electrodes' tips at the time `t` (s), in model space: a thin glowing line
+ * through four jagged points, a new shape 30 times a second.
+ */
+export const arc = (t: number): number[] => {
+  let seed = (Math.floor(t * 30) % 9973) + 1;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
+  const f = -RAIL_MUZZLE[2];
+  const out: number[] = [];
+  const st = [-1, -0.5, 0, 0.5, 1].map((k, i): Station => {
+    const j = i % 4 ? 0.007 : 0;
+    return [f + rnd() * j, RAIL_MUZZLE[1] + k * SPREAD * 0.85, 0.0012, 0.0012, rnd() * j];
+  });
+  tube(out, st, 3, arcing);
+  return out;
+};
+
+/** The rail gun's lightning left as the counters show it: 99 when full, 0 when spent. */
+export const charge = (rail: number): number => Math.ceil((Math.max(rail, 0) * 99) / RAIL_MAX);
+
+/** The electrodes' tips of a gun whose grip is at `at` and whose axes are [right, up, forward]. */
+export const electrodes = (at: Vec3, [, u, f]: Vec3[]): Vec3[] =>
+  [-1, 1].map(
+    s =>
+      [0, 1, 2].map(
+        i => at[i] + u[i] * (RAIL_MUZZLE[1] + s * SPREAD) - f[i] * RAIL_MUZZLE[2],
+      ) as Vec3,
+  );
 
 /** The gun's axes [right, up, forward] for a hand turned by `q` (see body.ts: its thumb is the hand's -z, the back of the hand its x, its fingers its -y). */
 const axes = (q: Quat): Vec3[] => {
@@ -388,14 +416,14 @@ const readouts = new Map<number, number[]>();
 
 /**
  * The ammo as two glowing seven-segment digits on a dark screen set in the back of a small block
- * on top of the body, in model space: cyan, red at `low` or fewer, thick segments that bloom only a
+ * on top of the body, in model space: cyan (violet on the rail gun's steel, `tesla`), red at `low` or fewer, thick segments that bloom only a
  * little. The block is part of the readout, so only a gun that shows the ammo carries it. 99 at most.
  * While the gun charges, a gauge of CHARGE_MAX cells under the digits lights `level` of them, the
  * strength the shot would have; all orange at the full charge.
  */
-export const readout = (ammo: number, level = 0, low = 10): number[] => {
+export const readout = (ammo: number, level = 0, low = 10, tesla = false): number[] => {
   const n = Math.min(Math.max(Math.floor(ammo), 0), 99);
-  const key = (n * 8 + Math.min(Math.max(level, 0), CHARGE_MAX)) * 2 + +(n > low);
+  const key = ((n * 8 + Math.min(Math.max(level, 0), CHARGE_MAX)) * 2 + +(n > low)) * 2 + +tesla;
   let out = readouts.get(key);
   if (!out) {
     const v: number[] = (out = []);
@@ -413,7 +441,10 @@ export const readout = (ammo: number, level = 0, low = 10): number[] => {
       ];
       const c = sub(pts[0], mid);
       const p = dot(f, c) < 0 ? [pts[0], pts[3], pts[2], pts[1]] : pts;
-      const [r, g, , b] = metal(0.15)(p[0], unit(dot(f, c) < 0 ? [-f[0], -f[1], -f[2]] : f));
+      const [r, g, , b] = (tesla ? steel : metal(0.15))(
+        p[0],
+        unit(dot(f, c) < 0 ? [-f[0], -f[1], -f[2]] : f),
+      );
       tri(v, p[0], p[1], p[2], rgb ?? [r, g, b]);
       tri(v, p[0], p[2], p[3], rgb ?? [r, g, b]);
     };
@@ -463,7 +494,7 @@ export const readout = (ammo: number, level = 0, low = 10): number[] => {
         const [a, b, d, e] = SEGMENTS[seg];
         // Segments lie on the screen, a hair out of it.
         const p = (x: number, t: number) => at(x0 + x, STO - DH - 0.0003 + t, 0.0027);
-        const rgb = n > low ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
+        const rgb = n <= low ? [1, 0.18, 0.12] : tesla ? [0.8, 0.62, 1.4] : [0.25, 0.9, 1];
         tri(v, p(a, b), p(d, b), p(d, e), rgb);
         tri(v, p(a, b), p(d, e), p(a, e), rgb);
       }
@@ -477,9 +508,9 @@ export const readout = (ammo: number, level = 0, low = 10): number[] => {
 };
 
 /**
- * Appends the gun (the rail gun when `rail`) held in the hand at `pos` with the world rotation `q`,
- * `k` times its size about the grip, with the ammo on its back when given, and the charge gauge at
- * `level`.
+ * Appends the gun (the rail gun when `rail`, its spark at the time `t`) held in the hand at `pos`
+ * with the world rotation `q`, `k` times its size about the grip, with the ammo on its back when
+ * given, and the charge gauge at `level`.
  */
 export const held = (
   out: number[],
@@ -490,11 +521,15 @@ export const held = (
   ammo?: number,
   level = 0,
   rail = false,
+  t = 0,
 ) => {
   const [at, ax] = [grip(pos, q), axes(q)];
   place(out, rail ? railgun(lod) : gun(lod), at, ax, [0, 0, 0], k);
+  if (rail) {
+    place(out, arc(t), at, ax, [0, 0, 0], k);
+  }
   if (ammo !== undefined) {
-    place(out, readout(ammo, level, rail ? 2 : 10), at, ax, [0, 0, 0], k);
+    place(out, readout(ammo, level, rail ? 15 : 10, rail), at, ax, [0, 0, 0], k);
   }
 };
 

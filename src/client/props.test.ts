@@ -194,13 +194,13 @@ describe('a katana rack', () => {
 });
 
 describe('a rail gun rack', () => {
-  it('is the same stand with the rail gun over it: longer than the gun, with its green glow', () => {
+  it('is the same stand with the rail gun over it: longer than the gun, its electrodes glowing violet', () => {
     const [gun, rail] = [0, 2].map(k => drawn(out => rack(out, [4, 3, 8], [1, 0.2, 0.2], 0, k)));
     const over = (v: number[][]) => v.filter(x => x[1] > 3.8);
     const span = (v: number[][]) => Math.max(...over(v).map(x => Math.hypot(x[0] - 4, x[2] - 8)));
     expect(span(rail)).toBeGreaterThan(span(gun) * 1.5);
     expect(
-      over(rail).filter(x => x[8] == -2 && x[7] > 2 * x[6] && x[7] > 2 * x[9]).length,
+      over(rail).filter(x => x[8] == -2 && x[9] > 2 * x[6] && x[9] > 2 * x[7]).length,
     ).toBeGreaterThan(50);
     expect(drawn(out => racks(out, [], [], 0, [[4, 3, 8]])).length).toBe(rail.length);
   });

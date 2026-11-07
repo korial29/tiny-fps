@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUTS, DASH_COOLDOWN, PLAYER_H, PLAYER_R } from '../shared/constants';
+import { CUTS, DASH_COOLDOWN, DOWN_TICKS, PLAYER_H, PLAYER_R, TICK_HZ } from '../shared/constants';
 import { STILL } from '../shared/physics';
 import { CUT, MODE, SIDE, TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -10,7 +10,7 @@ import { BEHIND, axes } from './katana';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, solve, turn } from './rig';
-import { animate, brandish, createRunner, soldier } from './soldier';
+import { FRY, animate, brandish, createRunner, dissolve, fried, soldier } from './soldier';
 import type { Runner } from './soldier';
 import { palette } from './skin';
 
@@ -695,4 +695,39 @@ describe('a runner with the katana', () => {
     }
     // 32 frames of skinning: past vitest's 5 s on a busy CI runner.
   }, 30_000);
+});
+
+describe('a runner the rail gun’s bolt puts down', () => {
+  it('comes apart over FRY seconds from the moment he goes down, and only when fried', () => {
+    const down = (left: number, fry = true) =>
+      fried({ ...STILL, fried: fry, down: left } as PlayerState);
+    expect(down(DOWN_TICKS)).toBe(0);
+    expect(down(DOWN_TICKS - (FRY * TICK_HZ) / 2)).toBeCloseTo(0.5, 6);
+    expect(down(1)).toBe(1);
+    expect(down(DOWN_TICKS / 2, false)).toBe(0);
+    expect(down(0)).toBe(0);
+  });
+
+  it('glows, drifts up and thins to nothing', () => {
+    const tris = 400;
+    const make = () =>
+      Array.from({ length: tris * 3 }, () => [0, 1, 0, 0, 1, 0, 0.5, 0.2, -1, 0.1]).flat();
+    const whole = make();
+    dissolve(whole, 0, 0);
+    expect(whole).toEqual(make());
+    const half = [1, 2, 3, ...make()];
+    dissolve(half, 3, 0.5);
+    // The vertices before `from` are not touched.
+    expect(half.slice(0, 3)).toEqual([1, 2, 3]);
+    const n = (half.length - 3) / (3 * STRIDE);
+    expect(n).toBeGreaterThan(tris * 0.4);
+    expect(n).toBeLessThan(tris * 0.6);
+    for (let o = 3; o < half.length; o += STRIDE) {
+      expect(half[o + 8]).toBe(-2);
+      expect(half[o + 1]).toBeGreaterThanOrEqual(1);
+    }
+    const gone = make();
+    dissolve(gone, 0, 1);
+    expect(gone).toHaveLength(0);
+  });
 });

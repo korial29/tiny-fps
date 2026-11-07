@@ -10,7 +10,7 @@
 //   [id u8][x f32][y f32][z f32][vx f32][vy f32][vz f32][edge f32]
 //   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8][stun u8]
 //   [gun u24][shots u8][hits u8][swing u8][lost u8][charge u8][lock u8][foe u8][pushes u8][away u8]
-//   [rail u8][reload u8][slow u8]
+//   [rail u8][railing u8][slow u8]
 //   mode: bits 0-2 MODE, bits 3-5 wall (SIDE), bit 6 jumps left, bit 7 air dashes left
 //   dash: bits 0-5 the dash timer, bits 6-7 the high bits of the tackler's id (see stun)
 //   timers: bits 0-2 coyote ticks, bits 3-5 jump buffer ticks, bit 6 jump held, bit 7 dash held
@@ -29,9 +29,9 @@
 //   high bit of the cut (a special), the rest 0. charge: the ticks FIRE has been held with the gun.
 //   lock: the ticks left in a saber lock; foe: bits 0-3 the id locked with, bit 7 FIRE held at the
 //   last step (`pressed`); pushes: the FIRE presses in the lock; away: the ticks a side or back key
-//   has been held in it. rail: bits 0-4 the rail gun's shots plus one (0: no rail gun), bit 5
-//   railed (it is in hand), bit 6 inRail (inside the circle of the rail rack); reload: the ticks to
-//   the next rail shot; slow: the ticks left drained by a rail hit.
+//   has been held in it. rail: the rail gun's ticks of lightning plus one (0: no rail gun);
+//   railing: bit 0 railed (it is in hand), bit 1 inRail (inside the circle of the rail rack), bit 2
+//   zapping (its bolt went out); slow: the ticks left drained by the bolt. Bit 4 of lost: fried.
 //   Then the match, after the players: [red u8][blue u8][clock u16] the captures of each team, and
 //   the whole seconds to the end of the match (bit 15: it is over, and the clock counts to the next
 //   one), [packs u32] bit n set when health pack n is there to take; then the red and the blue flag, each [state u8 = FLAG] and by state:
@@ -192,14 +192,14 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint8(o + 43, p.shots);
     v.setUint8(o + 44, p.hits);
     v.setUint8(o + 45, ((p.swing ?? 0) & 63) | (((p.cut ?? 0) & 3) << 6));
-    v.setUint8(o + 46, ((p.lost ?? 0) & 7) | (((p.cut ?? 0) & 4) << 1));
+    v.setUint8(o + 46, ((p.lost ?? 0) & 7) | (((p.cut ?? 0) & 4) << 1) | (p.fried ? 16 : 0));
     v.setUint8(o + 47, p.charge ?? 0);
     v.setUint8(o + 48, p.lock ?? 0);
     v.setUint8(o + 49, ((p.foe ?? 0) & 15) | (p.pressed ? 128 : 0));
     v.setUint8(o + 50, p.pushes ?? 0);
     v.setUint8(o + 51, p.away ?? 0);
-    v.setUint8(o + 52, ((p.rail ?? -1) + 1) | (p.railed ? 32 : 0) | (p.inRail ? 64 : 0));
-    v.setUint8(o + 53, p.reload ?? 0);
+    v.setUint8(o + 52, (p.rail ?? -1) + 1);
+    v.setUint8(o + 53, +!!p.railed | (+!!p.inRail << 1) | (+!!p.zapping << 2));
     v.setUint8(o + 54, p.slow ?? 0);
   });
   v.setUint8(end, s.score[0]);
@@ -298,10 +298,11 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       pressed: v.getUint8(o + 49) > 127,
       pushes: v.getUint8(o + 50),
       away: v.getUint8(o + 51),
-      rail: (v.getUint8(o + 52) & 31) - 1,
-      railed: (v.getUint8(o + 52) & 32) > 0,
-      inRail: (v.getUint8(o + 52) & 64) > 0,
-      reload: v.getUint8(o + 53),
+      rail: v.getUint8(o + 52) - 1,
+      railed: (v.getUint8(o + 53) & 1) > 0,
+      inRail: (v.getUint8(o + 53) & 2) > 0,
+      zapping: (v.getUint8(o + 53) & 4) > 0,
+      fried: (v.getUint8(o + 46) & 16) > 0,
       slow: v.getUint8(o + 54),
     });
   }

@@ -26,7 +26,6 @@ import {
   HP_MAX,
   JUMP_BUFFER_TICKS,
   MAX_PLAYERS,
-  RAIL_COOLDOWN,
   RAIL_MAX,
   RAIL_TICKS,
   SHOCK_TICKS,
@@ -199,7 +198,8 @@ describe('snapshot frame', () => {
           away: 3,
           rail: 7,
           railed: true,
-          reload: 50,
+          zapping: true,
+          fried: true,
           slow: 130,
           // What the animation reads is not sent, nor the last shot's power.
           power: 3,
@@ -239,14 +239,14 @@ describe('snapshot frame', () => {
       250, // shots
       7, // hits
       0b10010100, // swing 20, cut RIGHT (2) << 6
-      4, // lost LEG_L
+      4 | 16, // lost LEG_L, fried << 4
       42, // charge
       200, // lock
       5 | 128, // foe 5, FIRE held at the last step
       17, // pushes
       3, // away
-      8 | 32, // rail 7 shots plus one, railed << 5
-      50, // reload
+      8, // rail: 7 ticks plus one
+      1 | 4, // railed, zapping << 2
       130, // slow
       ...[0, 0, 0x01, 0xe0], // red 0, blue 0, clock 480 s, not over
       ...[0x80, 0, 0, 5], // packs 0 and 2, and 31
@@ -498,9 +498,9 @@ describe('snapshot frame', () => {
     // A slide, a wall-run and a climb end long before t saturates, and the key bits are twelve.
     expect(SLIDE_TICKS).toBeLessThan(255);
     expect(Math.max(...Object.values(KEY))).toBeLessThanOrEqual(0x800);
-    // The rail gun: its shots plus one in 5 bits, its reload and its drain in a byte.
-    expect(RAIL_MAX + 1).toBeLessThanOrEqual(31);
-    expect(Math.max(RAIL_COOLDOWN, RAIL_TICKS)).toBeLessThanOrEqual(255);
+    // The rail gun: its ticks plus one and its drain in a byte.
+    expect(RAIL_MAX + 1).toBeLessThanOrEqual(255);
+    expect(RAIL_TICKS).toBeLessThanOrEqual(255);
     // The gun: 3 bits for hp and cool, 7 for down, 7 for ammo with 127 for no gun, 32 packs.
     expect(HP_MAX).toBeLessThanOrEqual(7);
     expect(GUN_COOLDOWN).toBeLessThanOrEqual(7);
@@ -536,7 +536,8 @@ describe('snapshot frame', () => {
         rail: rnd(RAIL_MAX + 2) - 1,
         railed: rnd(2) === 1,
         inRail: rnd(2) === 1,
-        reload: rnd(RAIL_COOLDOWN + 1),
+        zapping: rnd(2) === 1,
+        fried: rnd(2) === 1,
         slow: rnd(RAIL_TICKS + 1),
         // The gun bits sit among the movement ones: those must not move.
         mode: rnd(7),
@@ -565,7 +566,8 @@ describe('snapshot frame', () => {
         'rail',
         'railed',
         'inRail',
-        'reload',
+        'zapping',
+        'fried',
         'slow',
         'mode',
         'stun',

@@ -53,6 +53,8 @@ interface Player {
   by: number;
   /** The host tick of the last tackle this player made. */
   tackled: number;
+  /** Ticks drained by the rail gun's bolt since its first touch, while `slow` runs. */
+  burn?: number;
 }
 
 /** Ticks run at most this many times per timer callback, so a stalled host does not spiral. */
@@ -168,10 +170,10 @@ export class Room {
       } else if (struck === STRIKE.RAIL) {
         this.rail(p, input.view);
       }
-      // A rail hit drains him: 1 hp each RAIL_DRAIN ticks of it after the first.
-      const left = p.state.slow ?? 0;
-      if (slow && left && !(left % RAIL_DRAIN)) {
-        this.harm(p, 1);
+      // The bolt drains him: 1 hp each RAIL_DRAIN ticks after its first touch.
+      p.burn = slow ? (p.burn ?? 0) + 1 : 0;
+      if (slow && !(p.burn % RAIL_DRAIN)) {
+        this.fry(p);
       }
       this.duel(p);
       p.ack = input.seq;
@@ -375,7 +377,7 @@ export class Room {
       lost: LIMB.NONE,
       rail: -1,
       railed: false,
-      reload: 0,
+      zapping: false,
       slow: 0,
     });
     this.ctf.drop(foe.state);
@@ -462,17 +464,27 @@ export class Room {
   }
 
   /**
-   * A rail beam of `p` went off at the view tick `view`: the first enemy it enters as `p` drew him
-   * takes 1 hp and is drained (`slow`, RAIL_TICKS), and the `hits` count goes up.
+   * The rail gun's bolt of `p` at the view tick `view`: the first enemy it enters as `p` drew him is
+   * drained for RAIL_TICKS more (`slow`). A first touch, when he was not drained, takes 1 hp at once
+   * and counts a hit.
    */
   private rail(p: Player, view: number | undefined): void {
     const { hit } = beam(this.world, p.state, this.enemies(p, view));
     const foe = this.players().find(q => q.info.id === hit?.id);
     if (foe) {
-      p.state.hits = (p.state.hits + 1) & 255;
+      const fresh = !foe.state.slow;
       foe.state.slow = RAIL_TICKS;
-      this.harm(foe, 1);
+      if (fresh) {
+        p.state.hits = (p.state.hits + 1) & 255;
+        foe.burn = 0;
+        this.fry(foe);
+      }
     }
+  }
+
+  /** 1 hp of the bolt's drain to `foe`; if it puts him down he is disintegrated (`fried`). */
+  private fry(foe: Player): void {
+    foe.state.fried = this.harm(foe, 1);
   }
 
   /**

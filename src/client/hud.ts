@@ -27,7 +27,7 @@ export const HUD_CSS =
   `ul{left:12px;bottom:30px;display:flex;gap:4px;list-style:none}li{width:16px;height:6px;background:#fff;box-shadow:0 0 0 1px #0008}` +
   `li.e{background:#0000;box-shadow:inset 0 0 0 1px #fffb,0 0 0 1px #0008}ul.low li{background:#f55}ul.low li.e{background:#0000}` +
   `dl{left:50%;bottom:10px;transform:translateX(-50%);display:flex;align-items:center;gap:10px}dl svg{width:38px;fill:#fff;filter:drop-shadow(0 1px 1px #000)}` +
-  `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data{display:none}dl.k svg{width:64px;fill:#8ef}dl.r svg{fill:#7f9}` +
+  `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data{display:none}dl.k svg{width:64px;fill:#8ef}dl.r svg{fill:#c9f}dl.r data{color:#dcf}` +
   `dl small{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);display:flex;gap:10px;font-size:11px;white-space:nowrap}dl kbd{font:inherit;opacity:.5}dl kbd.a{opacity:1}` +
   `@media(max-width:520px){dl{left:auto;right:12px;bottom:46px;transform:none}dl small{left:auto;right:0;transform:none}}` +
   `dl data{font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}dl.e data{color:#f66}` +
@@ -65,9 +65,9 @@ export interface Hud {
   hurt(level: number): void;
   /**
    * The health as pips out of HP_MAX, and the weapon in hand: the ammo counter with the gun glyph,
-   * the katana glyph when `wield` (or when it is all there is), or the rail gun's shots with the
-   * gun glyph in green when `railed`. -1 ammo is no gun, `blade` is a katana carried, `rail` the
-   * rail gun's shots (-1 none); two or more carried show their slots (1 gun, 2 katana, 3 rail gun)
+   * the katana glyph when `wield` (or when it is all there is), or the rail gun's lightning left
+   * (charge(), 99 full) with the gun glyph in violet when `railed`. -1 ammo is no gun, `blade` is a
+   * katana carried, `rail` the rail gun's lightning (-1 none); two or more carried show their slots (1 gun, 2 katana, 3 rail gun)
    * over the glyph, none hides it.
    */
   vitals(
@@ -108,7 +108,7 @@ export const createHud = (screen: HTMLElement): Hud => {
       `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Shift<td>sprint<tr><td>Space<td>jump, again in the air` +
       `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>Left click<td>fire, hold to charge<tr><td>1, 2, 3, wheel<td>gun, katana, rail gun` +
       `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>special: lunge, spin, leap<tr><td>Blades locked<td>click fast; step aside to break<tr><td>M<td>mute</table>` +
-      `<span>Take the enemy flag to your own base while yours is home. Jump onto the armoury past your flag for the gun, the katana and the rail gun. The rail gun slows a foe and drains 1 health a second for 3 s.</span>` +
+      `<span>Take the enemy flag to your own base while yours is home. Jump onto the armoury past your flag for the gun, the katana and the rail gun. Hold the rail gun's lightning on a foe: it slows him and drains 1 health a second, and 3 s more after it lets go.</span>` +
       `<strong></strong></aside>` +
       `<u></u><h5 hidden>Muted (M)</h5>` +
       `<ul>${'<li></li>'.repeat(HP_MAX)}</ul>` +

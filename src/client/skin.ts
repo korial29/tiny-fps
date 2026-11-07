@@ -90,12 +90,12 @@ const TRUNK: Loft = {
     [1.24, 0, -0.003, 0.164, 0.112, 1.7, JACKET],
     [1.3, 0, -0.004, 0.166, 0.12, 1.85, JACKET],
     [1.37, 0, -0.005, 0.17, 0.124, 2, JACKET],
-    [1.37, 0, -0.005, 0.264, 0.124, 2, JACKET],
-    [1.41, 0, -0.005, 0.268, 0.123, 2, JACKET],
-    [1.45, 0, -0.004, 0.26, 0.114, 2, JACKET],
-    [1.485, 0, 0, 0.235, 0.098, 2.05, JACKET],
-    [1.502, 0, 0, 0.185, 0.09, 2.08, JACKET],
-    [1.512, 0, 0, 0.125, 0.08, 2.1, JACKET],
+    [1.37, 0, -0.005, 0.262, 0.12, 2, JACKET],
+    [1.41, 0, -0.005, 0.265, 0.116, 2, JACKET],
+    [1.445, 0, -0.004, 0.254, 0.108, 2, JACKET],
+    [1.475, 0, -0.002, 0.23, 0.097, 2.03, JACKET],
+    [1.495, 0, 0, 0.195, 0.089, 2.07, JACKET],
+    [1.512, 0, 0, 0.135, 0.08, 2.1, JACKET],
     [1.532, 0, 0, 0.07, 0.068, 2.25, TRIM],
     [1.555, 0, 0, 0.06, 0.062, 2.6, FLESH],
   ],
@@ -455,10 +455,17 @@ const generate = (lod: number): Skin => {
         const top = clamp((1.535 - y) / 0.05);
         // The arm's side of a slanting line through the humerus' head (0.19, 1.47), from the
         // armpit up over the point of the shoulder; the folds in front of the armpit and behind
-        // it (the chest's and the back's muscles to the arm) stretch between, half and half.
+        // it (the chest's and the back's muscles to the arm) stretch between, half and half, and
+        // the deltoid over them, round the joint, is the arm's.
         const q =
           L === TRUNK
-            ? ease((0.85 * (ax - 0.19) - 0.53 * (y - 1.47) - 1.2 * Math.abs(z) + 0.03) / 0.13) *
+            ? ease(
+                (0.85 * (ax - 0.19) -
+                  0.53 * (y - 1.47) -
+                  1.2 * Math.abs(z) * clamp((1.47 - y) / 0.08) +
+                  0.03) /
+                  0.13,
+              ) *
               top *
               clamp((y - 1.34) / 0.04)
             : 0;
@@ -512,7 +519,11 @@ const generate = (lod: number): Skin => {
             }
             const q = (i * 2 * Math.PI) / n;
             // The shoe is squarer than the leg, so its toe is not a point.
-            const e = (L.e ?? 2) * (L === LEG && at < 0.12 ? 2 : 1);
+            // The shoulders are rounder than the chest under them: the deltoids' caps.
+            const e =
+              L === TRUNK && at > 1.38 && rx > 0.19
+                ? 2
+                : (L.e ?? 2) * (L === LEG && at < 0.12 ? 2 : 1);
             const [x, o] = [cx + rx * sgn(Math.sin(q), e), co + ro * sgn(Math.cos(q), e)];
             row.push(L.z ? vertex(m * x, o, at, u) : vertex(m * x, at, -o, u));
           }

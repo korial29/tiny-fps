@@ -6,7 +6,7 @@ import type { PlayerState } from '../shared/types';
 import { createBody, finger, hand, phalanges } from './body';
 import type { Body } from './body';
 import { MUZZLE, REAR, grip, gun, readout } from './gun';
-import { BEHIND, axes, ends } from './katana';
+import { BEHIND, BOW, axes, ends } from './katana';
 import { STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, rest, solve, turn } from './rig';
@@ -1026,21 +1026,22 @@ describe('the gun points where the beam goes', () => {
 });
 
 describe('looking down with a weapon in hand', () => {
+  const blade0 = () => man({ blade: true, wield: true });
   /** A point's place against the trunk: on the body's right and ahead of the line from the pelvis to the neck, at its height. */
   const against = (s: { pos: Vec3[] }, p: Vec3) => {
     const [a, b] = [s.pos[J.PELVIS], s.pos[J.NECK]];
     const t = (p[1] - a[1]) / (b[1] - a[1]);
     return [p[0] - a[0] - (b[0] - a[0]) * t, -(p[2] - a[2] - (b[2] - a[2]) * t)];
   };
-  /** Each weapon and the hands on it: the gun in the right one, the katana in both. */
-  const weapons: [string, Partial<PlayerState>, number[]][] = [
-    ['the gun', { ammo: 30 }, [J.HAND_R]],
-    ['the katana', { blade: true, wield: true }, [J.HAND_L, J.HAND_R]],
+  /** Each weapon and the hands on it, and whether it follows the look down: the gun in the right hand does, the katana in both does not. */
+  const weapons: [string, Partial<PlayerState>, number[], boolean][] = [
+    ['the gun', { ammo: 30 }, [J.HAND_R], true],
+    ['the katana', { blade: true, wield: true }, [J.HAND_L, J.HAND_R], false],
   ];
 
   it.each(weapons)(
     'keeps the hands out of the chest and in sight with %s, down to the feet',
-    (_, o, on) => {
+    (_, o, on, follows) => {
       const p = man(o);
       const body = watch(p, 90);
       for (const pitch of [-0.8, -1.1, -1.4, -1.55]) {
@@ -1052,8 +1053,10 @@ describe('looking down with a weapon in hand', () => {
             expect(ahead, `pitch ${pitch}, joint ${j}`).toBeGreaterThan(0.13);
           }
         }
-        // The right fist, on the grip, is on the screen.
-        expect(seen(hands(p, body, pitch)[1]), `pitch ${pitch}`).toBe(true);
+        // The gun, following the look, is on the screen in the right fist.
+        if (follows) {
+          expect(seen(hands(p, body, pitch)[1]), `pitch ${pitch}`).toBe(true);
+        }
       }
     },
   );
@@ -1066,6 +1069,32 @@ describe('looking down with a weapon in hand', () => {
       const [, r] = hands(p, body, pitch);
       expect(r[2]).toBeLessThan(0.45);
     }
+  });
+
+  it('keeps the katana upright in the guard however far down the look goes, the hands at their height', () => {
+    const p = blade0();
+    const body = watch(p, 90);
+    const at = (pitch: number) => {
+      const s = pose(body, p, pitch);
+      return { hand: s.pos[J.HAND_R], ends: ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) };
+    };
+    const guard = at(-BOW);
+    for (const pitch of [-0.6, -1, -1.4, -1.55]) {
+      const {
+        hand,
+        ends: [root, point],
+      } = at(pitch);
+      // The blade stands up as in the guard: its point half a metre and more over its root.
+      const rise = point[1] - root[1];
+      expect(rise, `pitch ${pitch}`).toBeGreaterThan(0.45);
+      expect(Math.abs(rise - (guard.ends[1][1] - guard.ends[0][1])), `pitch ${pitch}`).toBeLessThan(
+        0.03,
+      );
+      // The hands no lower than in the guard, and not sunk toward the body.
+      expect(hand[1], `pitch ${pitch}`).toBeGreaterThan(guard.hand[1] - 0.03);
+    }
+    // In sight down to well past the guard's tilt.
+    expect(seen(hands(p, body, -1.2)[1])).toBe(true);
   });
 });
 

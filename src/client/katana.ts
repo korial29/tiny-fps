@@ -268,6 +268,8 @@ export const ends = (pos: Vec3, q: Quat): Vec3[] => {
  * it. In the guard the hands sit at the bottom of the view and the blade rises ahead, leaning
  * forward and to the left, so the view shows more blade than hands.
  */
+/** The most the katana tips down with the look, radians: looking further down, it stays in the guard, upright before the body. */
+export const BOW = 0.3;
 export const GUARD = [0.06, -0.24, 0.45, 0.16, 0.74, 0.65];
 /** The share of cut `c`'s swing at which it strikes. */
 const strikeAt = (c: number) => CUTS[c].strike / CUTS[c].ticks;

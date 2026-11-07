@@ -17,6 +17,7 @@ import { REAR, TILT, held, pointed, tip } from './gun';
 import {
   BASE,
   BEHIND as BACK,
+  BOW,
   C,
   S,
   cutting,
@@ -525,6 +526,13 @@ export const createBody = (world?: World): Body => {
       r[2] * a + u[2] * b + f[2] * c,
     ];
     const view = (v: Vec3): Vec3 => [dot(v, r), dot(v, u), dot(v, f)];
+    // The katana's space: the camera's, tipped down BOW at most, so the guard stays upright.
+    const [kr, ku, kf] = basis(yaw, Math.max(pitch, -BOW), roll);
+    const keep = ([a, b, c]: Vec3): Vec3 => [
+      kr[0] * a + ku[0] * b + kf[0] * c,
+      kr[1] * a + ku[1] * b + kf[1] * c,
+      kr[2] * a + ku[2] * b + kf[2] * c,
+    ];
     // The trunk follows the look a little, and turns with the katana's swing, so the arms carry the
     // hands further round.
     const sw = w.blade > 0.002 ? blade() : undefined;
@@ -548,15 +556,17 @@ export const createBody = (world?: World): Body => {
     // The weapons stay out of the trunk and in sight: looking down, their grips would sink into the
     // chest or under it, so they go forward until they are clear. The katana's two grips and its
     // guard go together.
-    const out = (pts: Vec3[]) =>
-      along([0, 0, 0], fwd, Math.max(...pts.map(p => outOf(s, q.yaw, eye, add(eye, turn(p))))));
+    const out = (pts: Vec3[], to = turn) =>
+      along([0, 0, 0], fwd, Math.max(...pts.map(p => outOf(s, q.yaw, eye, add(eye, to(p))))));
     lift = [0, 0, 0];
     const [g0, gx] = holster();
     // The gun's grip, the back of its body and the top of its counter, which lie toward the chest.
     const on = ([x, y, z]: Vec3): Vec3 =>
       [0, 1, 2].map(i => g0[i] + gx[0][i] * x + gx[1][i] * y - gx[2][i] * z) as Vec3;
     lift = view(out([g0, on(REAR), on([0, 0.156, 0.04])]));
-    const clear = sw ? out([sw.at, along(sw.at, sw.g, -BACK), along(sw.at, sw.g, BASE)]) : lift;
+    const clear = sw
+      ? out([sw.at, along(sw.at, sw.g, -BACK), along(sw.at, sw.g, BASE)], keep)
+      : lift;
     // The gun hand's wrist: the grip is 8 cm along the fingers from it and 2 cm toward the palm.
     const [gp, ga] = holster();
     const fh = [0, 1, 2].map(i => TILT[1] * ga[2][i] - TILT[0] * ga[1][i]) as Vec3;
@@ -631,10 +641,10 @@ export const createBody = (world?: World): Body => {
       }
       if (sw && onSword > 0.002) {
         // Both hands round the grip, the left one BACK behind the right, the elbows down and out.
-        const g = turn(sw.g);
-        const at = along(add(add(eye, turn(sw.at)), clear), g, sd > 0 ? 0 : -BACK);
+        const g = keep(sw.g);
+        const at = along(add(add(eye, keep(sw.at)), clear), g, sd > 0 ? 0 : -BACK);
         const held = { ...q, rot: q.rot.slice() };
-        wield(held, s, arm, at, g, turn([0.5 * sd, -1, -0.35]));
+        wield(held, s, arm, at, g, keep([0.5 * sd, -1, -0.35]));
         for (const k of [arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], onSword);
         }

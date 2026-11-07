@@ -76,7 +76,9 @@ describe('skin', () => {
       const mean = new Array(JOINTS).fill(0);
       const count = new Array(JOINTS).fill(0);
       for (let i = 0; i < s.w.length; i++) {
-        const [a, b, w] = [s.j[i * 2], s.j[i * 2 + 1], s.w[i]];
+        // The skin's own joints after the rig's are the upper arms without their twist.
+        const real = (k: number) => (k == JOINTS ? JOINT.ARM_R : k == JOINTS + 1 ? JOINT.ARM_L : k);
+        const [a, b, w] = [real(s.j[i * 2]), real(s.j[i * 2 + 1]), s.w[i]];
         expect(w).toBeGreaterThanOrEqual(0);
         expect(w).toBeLessThanOrEqual(1);
         // The shoulder's side hangs on the chest and the arm, across the clavicle.
@@ -229,7 +231,7 @@ describe('skin', () => {
         // pelvis' sides. The crotch and the armpit are creases on purpose.
         const at = (v: number, y: number, x: number) =>
           Math.abs(s.v[v * 6 + 1] - y) < 1e-4 && Math.abs(s.v[v * 6]) > x;
-        const join = [a, b].some(v => at(v, 1.29, 0.2) || at(v, 0.93, 0.1));
+        const join = [a, b].some(v => at(v, 1.31, 0.2) || at(v, 0.93, 0.1));
         turned[join ? 'join' : 'loft'] = Math.max(turned[join ? 'join' : 'loft'], angle);
       }
     }
@@ -319,7 +321,10 @@ describe('skin', () => {
         const dual = new Map<number, Vec3>();
         s.t.forEach((k, h) => dual.set(k, at(v, h)));
         const linear = (i: number): Vec3 => {
-          const [a, b, w] = [s.j[i * 2], s.j[i * 2 + 1], s.w[i]];
+          // The skin's own joints after the rig's are the upper arms without their twist.
+          const real = (k: number) =>
+            k == JOINTS ? JOINT.ARM_R : k == JOINTS + 1 ? JOINT.ARM_L : k;
+          const [a, b, w] = [real(s.j[i * 2]), real(s.j[i * 2 + 1]), s.w[i]];
           const p = Array.from(s.v.slice(i * 6, i * 6 + 3)) as Vec3;
           const to = (k: number) =>
             turn(solved.rot[k], p.map((c, r) => c - bind[k][r]) as Vec3).map(
@@ -435,6 +440,43 @@ describe('skin', () => {
     }
     // Far, none of it: the far head is a plain one.
     expect([...body(0).c].includes(LIP)).toBe(false);
+  });
+
+  it('bends an arm like one: a straight forearm under a folded elbow, a deltoid that does not spin', () => {
+    for (const lod of [1, 3]) {
+      const s = body(lod);
+      /** Per drawn corner of the part (the right arm's by default) its rest place and where it is drawn. */
+      const corners = (v: number[], pick: (p: number[]) => boolean, part: number = LIMB.ARM_R) =>
+        Array.from(s.t, (k, h) => ({ p: [...s.v.slice(k * 6, k * 6 + 3)], q: at(v, h), h }))
+          .filter(({ p, h }) => s.l![Math.floor(h / 3)] == part && pick(p))
+          .map(({ p, q }) => [p, q] as [number[], Vec3]);
+      // The elbow folded 130 degrees: the forearm's sleeve, from just under the elbow to the cuff,
+      // stays as far from the forearm's bone as it is at rest, all along it.
+      const p = bend(JOINT.FOREARM_R, axis([1, 0, 0], 2.3));
+      const { pos } = solve(p);
+      const [e, w] = [pos[JOINT.FOREARM_R], pos[JOINT.HAND_R]];
+      const d = [w[0] - e[0], w[1] - e[1], w[2] - e[2]];
+      const n = Math.hypot(...d);
+      const off = (q: Vec3) => {
+        const r = [q[0] - e[0], q[1] - e[1], q[2] - e[2]];
+        const k = (r[0] * d[0] + r[1] * d[1] + r[2] * d[2]) / (n * n);
+        return Math.hypot(r[0] - k * d[0], r[1] - k * d[1], r[2] - k * d[2]);
+      };
+      for (const [, q] of corners(draw(lod, p), ([x, y]) => x > 0.15 && y > 0.98 && y < 1.14)) {
+        expect(off(q)).toBeGreaterThan(0.02);
+        expect(off(q)).toBeLessThan(0.065);
+      }
+      // The upper arm turned a radian about itself: the sleeve turns, the shoulder's cap and the
+      // torso under it hardly move.
+      const t = bend(JOINT.ARM_R, axis([0.103, -0.995, 0], 1));
+      const [rest0, turned] = [draw(lod), draw(lod, t)];
+      const moved = (pick: (p: number[]) => boolean, part?: number) => {
+        const before = corners(rest0, pick, part);
+        return Math.max(...corners(turned, pick, part).map(([, q], i) => dist(q, before[i][1])));
+      };
+      expect(moved(([x, y]) => x > 0.15 && y > 1.36 && y < 1.55, LIMB.NONE)).toBeLessThan(0.01);
+      expect(moved(([x, y]) => x > 0.15 && y > 1.15 && y < 1.25)).toBeGreaterThan(0.03);
+    }
   });
 
   it('sets the arms off the chest: the armpits and the insides of the sleeves are in shadow', () => {

@@ -291,15 +291,14 @@ export const LOCK_TICKS = 240;
 export const LOCK_BREAK = 24;
 
 /**
- * The rail gun (rail.ts, the user, 2026-11-07): taken at the team's third rack with RAIL_MAX shots,
- * it fires an instant beam every RAIL_COOLDOWN ticks that goes RAIL_RANGE metres to the first wall
- * or enemy. An enemy it hits is drained for RAIL_TICKS (3 s): 1 hp at once, then 1 more each
- * RAIL_DRAIN ticks, and his speed on the floor plane is held under SLOW_SPEED. A new hit starts
- * the 3 s again. Ticks are u8 on the wire, RAIL_MAX 5 bits.
+ * The rail gun (rail.ts, the user, 2026-11-07), a Tesla gun: taken at the team's third rack with
+ * RAIL_MAX ticks of lightning (4 s), it throws a bolt RAIL_RANGE metres to the first wall or enemy
+ * on every step FIRE is held, one tick spent each. An enemy the bolt touches is drained while it
+ * does and RAIL_TICKS (3 s) after: 1 hp at the first touch, then 1 more each RAIL_DRAIN ticks, his
+ * speed on the floor plane held under SLOW_SPEED. Ticks are u8 on the wire.
  */
-export const RAIL_MAX = 10;
-export const RAIL_COOLDOWN = 72;
-export const RAIL_RANGE = 120;
+export const RAIL_MAX = 240;
+export const RAIL_RANGE = 30;
 export const RAIL_TICKS = 180;
 export const RAIL_DRAIN = 60;
 export const SLOW_SPEED = 3;

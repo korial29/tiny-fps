@@ -241,46 +241,51 @@ describe('the own shots', () => {
   });
 });
 
-describe('the rail beams', () => {
-  /** The setup, with the beams the tracer is given. */
+describe('the rail gun’s bolts', () => {
+  /** The setup, with the bolts the tracer is given at the last frame. */
   const rig = () => {
     const t = setup();
-    const beams: [Vec3, Vec3][] = [];
-    const rail = t.tracer.rail;
-    t.tracer.rail = (a, b) => (beams.push([a, b]), rail(a, b));
-    return { ...t, beams };
+    let zaps: { a: Vec3; b: Vec3 }[] = [];
+    const lightning = t.tracer.lightning;
+    t.tracer.lightning = l => ((zaps = l), lightning(l));
+    return { ...t, zaps: () => zaps };
   };
-  const RAILED = { rail: 5, railed: true, ammo: -1 };
+  const RAILED = { rail: 100, railed: true, ammo: -1 };
 
-  it('go from the own muzzle to the wall the look meets, at once, with no ball, a flash and the crack', () => {
-    const { combat, frame, ids, flashes, orbs, beams, ctl } = rig();
-    frame(player(RAILED));
-    combat.step(player({ ...RAILED, shots: 0 }), player({ ...RAILED, shots: 1, rail: 4 }));
-    frame(player({ ...RAILED, shots: 1, rail: 4 }));
-    expect(beams).toHaveLength(1);
-    expect(beams[0][0]).toEqual(flashes[0][0]);
+  it('go from the own muzzle to the wall the look meets on every frame it is held, crackling, with no ball', () => {
+    const { frame, ids, orbs, zaps } = rig();
+    frame(player({ ...RAILED, zapping: true }));
+    expect(zaps()).toHaveLength(1);
     // The wall at z = -20, straight ahead of the eye.
-    expect(beams[0][1]).toEqual([
+    expect(zaps()[0].b).toEqual([
       expect.closeTo(0, 6),
       expect.closeTo(1.6, 6),
       expect.closeTo(-20, 3),
     ]);
+    expect(zaps()[0].a[2]).toBeCloseTo(-0.6, 6);
     expect(orbs()).toHaveLength(0);
     expect(ids()).toEqual([SOUND.RAIL]);
-    // It kicks the look as a charge of 3 does.
-    expect(ctl.pitch).toBeCloseTo(RECOIL * 2.2, 9);
+    // Held a second: a crackle every 0.09 s or so, the bolt on every frame.
+    for (let k = 0; k < 59; k++) {
+      frame(player({ ...RAILED, zapping: true }));
+      expect(zaps()).toHaveLength(1);
+    }
+    expect(ids().length).toBeGreaterThan(9);
+    expect(ids().length).toBeLessThan(13);
+    frame(player({ ...RAILED, zapping: false }));
+    expect(zaps()).toHaveLength(0);
   });
 
-  it('go from an other runner’s rail gun when his shots change, with the crack where he is', () => {
-    const { frame, ids, audio, beams } = rig();
+  it('go from an other runner’s rail gun while he holds it, with the crackle where he is', () => {
+    const { frame, ids, audio, zaps } = rig();
     const me = player();
-    const him = (shots: number) => player({ id: 4, x: 3, z: -2, ...RAILED, shots });
-    frame(me, [him(0)]);
-    frame(me, [him(1)]);
-    expect(beams).toHaveLength(1);
-    expect(beams[0][1][2]).toBeCloseTo(-20, 3);
+    frame(me, [player({ id: 4, x: 3, z: -2, ...RAILED, zapping: true })]);
+    expect(zaps()).toHaveLength(1);
+    expect(zaps()[0].b[2]).toBeCloseTo(-20, 3);
     expect(ids()).toEqual([SOUND.RAIL]);
     expect(audio.play.mock.calls[0][1]).toEqual([3, expect.any(Number), -2]);
+    frame(me, [player({ id: 4, x: 3, z: -2, ...RAILED, zapping: false })]);
+    expect(zaps()).toHaveLength(0);
   });
 });
 

@@ -20,8 +20,8 @@ import {
   PLASMA_MAX,
   PLASMA_R,
   PLAYER_R,
-  RAIL_COOLDOWN,
   RAIL_MAX,
+  RAIL_RANGE,
   RAIL_TICKS,
   RUN_SPEED,
   SLOW_SPEED,
@@ -193,104 +193,130 @@ const GUN = { ammo: AMMO_MAX };
 const RAILGUN = { rail: RAIL_MAX };
 
 describe('the rail gun', () => {
-  /** One beam of `c` with the rail gun in hand, after two ticks for the history to see the puts. */
-  const beam = (m: ReturnType<typeof match>, c: Peer, look: Look = {}) => {
+  /**
+   * n steps of `c` holding the bolt, one a tick, after two ticks for the history to see the puts;
+   * `also` sends a step of each of them with no keys at each tick, so their drain runs.
+   */
+  const bolt = (
+    m: ReturnType<typeof match>,
+    c: Peer,
+    n = 1,
+    also: Peer[] = [],
+    look: Look = {},
+  ) => {
     m.ticks(SNAP_EVERY);
-    m.send(c, RAIL | FIRE, look);
+    for (let k = 0; k < n; k++) {
+      m.send(c, RAIL | FIRE, look);
+      also.forEach(o => m.send(o, 0));
+      m.room.tick();
+    }
   };
 
-  it('is taken at its rack on arrival with RAIL_MAX shots, and is in hand when wanted', () => {
+  it('is taken at its rack on arrival with RAIL_MAX ticks of lightning, and is in hand when wanted', () => {
     const m = match();
     m.put(m.cy, -20, 46);
     m.hold(m.cy, 1, RAIL);
     expect(m.state(m.cy)).toMatchObject({ rail: RAIL_MAX, railed: true, inRail: true, ammo: -1 });
     // With the gun too, the gun is in hand unless the rail gun is wanted.
-    m.put(m.cy, 0, 0, GUN);
+    m.put(m.cy, 0, 0, { ...GUN, ...RAILGUN });
     m.hold(m.cy, 1, 0);
     expect(m.state(m.cy)).toMatchObject({ railed: false, wield: false });
     m.hold(m.cy, 1, RAIL);
     expect(m.state(m.cy).railed).toBe(true);
   });
 
-  it('hits the first enemy on the look at once: 1 hp, drained and slowed, a hit counted', () => {
+  it('spends a tick of lightning on each step held, and goes out when let go or empty', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, RAILGUN);
+    m.hold(m.cy, 30, RAIL | FIRE, { yaw: 0 });
+    expect(m.state(m.cy)).toMatchObject({ rail: RAIL_MAX - 30, zapping: true, shots: 0 });
+    m.hold(m.cy, 1, RAIL, { yaw: 0 });
+    expect(m.state(m.cy)).toMatchObject({ rail: RAIL_MAX - 30, zapping: false });
+    m.put(m.cy, 0, 0, { rail: 1 });
+    m.hold(m.cy, 2, RAIL | FIRE, { yaw: 0 });
+    expect(m.state(m.cy)).toMatchObject({ rail: 0, zapping: false });
+  });
+
+  it('touches the first enemy on the look: 1 hp and a hit at the first touch, drained and slowed', () => {
     const m = match();
     m.put(m.cy, 0, 0, RAILGUN);
     m.put(m.bob, 10);
     m.put(m.dee, 20);
-    beam(m, m.cy);
+    bolt(m, m.cy, 5);
     expect(m.state(m.bob)).toMatchObject({ hp: HP_MAX - 1, slow: RAIL_TICKS });
     expect(m.state(m.dee)).toMatchObject({ hp: HP_MAX });
-    expect(m.state(m.cy)).toMatchObject({ shots: 1, hits: 1, rail: RAIL_MAX - 1 });
-    // No ball: the beam is instant.
+    // One hit for the touch, however long it is held; no ball.
+    expect(m.state(m.cy)).toMatchObject({ hits: 1, rail: RAIL_MAX - 5 });
     expect(m.room['balls']).toHaveLength(0);
   });
 
-  it('drains 1 hp a second for 3 s, 3 in all; a new hit starts the 3 s again', () => {
+  it('drains 1 hp a second while it holds him, and for 3 s after it lets go', () => {
     const m = match();
     m.put(m.cy, 0, 0, RAILGUN);
     m.put(m.bob, 10);
-    beam(m, m.cy);
     const hp = () => m.state(m.bob).hp;
-    m.hold(m.bob, 59, 0);
+    bolt(m, m.cy, 59, [m.bob]);
     expect(hp()).toBe(HP_MAX - 1);
-    m.hold(m.bob, 1, 0);
+    bolt(m, m.cy, 1, [m.bob]);
     expect(hp()).toBe(HP_MAX - 2);
-    m.hold(m.bob, 60, 0);
-    expect(hp()).toBe(HP_MAX - 3);
-    m.hold(m.bob, 60, 0);
-    expect([hp(), m.state(m.bob).slow]).toEqual([HP_MAX - 3, 0]);
-    // A second beam: 1 at once, then the drain from the top.
-    m.hold(m.cy, RAIL_COOLDOWN, 0);
-    beam(m, m.cy);
-    expect([hp(), m.state(m.bob).slow]).toEqual([HP_MAX - 4, RAIL_TICKS]);
+    // Let go: 179 ticks of drain left, two more seconds of it.
+    m.hold(m.bob, 200, 0);
+    expect([hp(), m.state(m.bob).slow]).toEqual([HP_MAX - 4, 0]);
   });
 
   it('slows him under SLOW_SPEED while drained, and he runs again after', () => {
     const m = match();
     m.put(m.cy, 0, 0, RAILGUN);
     m.put(m.bob, 10, 0, { hp: HP_MAX });
-    beam(m, m.cy);
+    bolt(m, m.cy);
     m.hold(m.bob, 60, FORWARD | SPRINT, { yaw: Math.PI });
     expect(speedOf(m.state(m.bob))).toBeLessThanOrEqual(SLOW_SPEED + 1e-6);
     m.hold(m.bob, RAIL_TICKS, FORWARD, { yaw: Math.PI });
     expect(speedOf(m.state(m.bob))).toBeCloseTo(RUN_SPEED, 3);
   });
 
-  it('fires every RAIL_COOLDOWN ticks while FIRE is held, and not with no shot left', () => {
-    const m = match();
-    m.put(m.cy, 0, 0, RAILGUN);
-    m.hold(m.cy, 2 * RAIL_COOLDOWN + 1, RAIL | FIRE, { yaw: 0 });
-    expect(m.state(m.cy)).toMatchObject({ shots: 3, rail: RAIL_MAX - 3 });
-    m.put(m.cy, 0, 0, { rail: 0 });
-    m.hold(m.cy, RAIL_COOLDOWN + 1, RAIL | FIRE, { yaw: 0 });
-    expect(m.state(m.cy)).toMatchObject({ shots: 0, rail: 0 });
-  });
-
-  it('stops at a brush, and passes over a teammate to the enemy behind', () => {
+  it('stops at a brush and at RAIL_RANGE, and passes over a teammate to the enemy behind', () => {
     const m = match();
     m.put(m.cy, 25, 0, RAILGUN);
     m.put(m.bob, 35);
-    beam(m, m.cy);
+    bolt(m, m.cy);
     expect(m.state(m.bob).hp).toBe(HP_MAX);
-    m.put(m.cy, 0, 0, { ...RAILGUN, reload: 0 });
+    m.put(m.cy, -10, 0, RAILGUN);
+    m.put(m.bob, -10 + RAIL_RANGE + 1);
+    bolt(m, m.cy);
+    expect(m.state(m.bob).hp).toBe(HP_MAX);
+    m.put(m.cy, 0, 0, RAILGUN);
     m.put(m.ann, 5);
     m.put(m.bob, 10);
-    beam(m, m.cy);
+    bolt(m, m.cy);
     expect([m.state(m.ann).hp, m.state(m.bob).hp]).toEqual([HP_MAX, HP_MAX - 1]);
   });
 
-  it('puts down a foe at 1 hp: the drain ends with him, and he loses his own rail gun', () => {
+  it('disintegrates a foe it puts down: fried, the drain over, his own rail gun gone', () => {
     const m = match();
     m.put(m.cy, 0, 0, RAILGUN);
     m.put(m.bob, 10, 0, { hp: 1, rail: 4, railed: true });
-    beam(m, m.cy);
+    bolt(m, m.cy);
     expect(m.state(m.bob)).toMatchObject({
       hp: 0,
       down: DOWN_TICKS,
       slow: 0,
       rail: -1,
-      railed: false,
+      fried: true,
     });
+    m.ticks(SNAP_EVERY);
+    expect(m.snap(m.ann).players.find(p => p.id === 1)).toMatchObject({ fried: true });
+    // Back up, he is whole again.
+    m.hold(m.bob, DOWN_TICKS + 1, 0);
+    expect(m.state(m.bob)).toMatchObject({ down: 0, fried: false });
+  });
+
+  it('does not disintegrate one it does not put down', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, RAILGUN);
+    m.put(m.bob, 10, 0, { hp: 3 });
+    bolt(m, m.cy);
+    expect(m.state(m.bob).fried).toBe(false);
   });
 });
 

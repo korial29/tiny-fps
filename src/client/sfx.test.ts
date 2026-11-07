@@ -117,15 +117,13 @@ describe('the sounds of the game', () => {
     expect(rms(s)).toBeLessThan(0.5);
   });
 
-  it('make the rail gun crack loud and bright, then ring under a second', () => {
+  it('make the rail gun’s crackle short, to play again and again, loud and noisy', () => {
     expect(SOUND.RAIL).toBe(LAYERS.length - 1);
     const s = sound('RAIL');
-    expect(s.length / RATE).toBeGreaterThan(0.4);
-    expect(s.length / RATE).toBeLessThan(1);
-    expect(peak(s.subarray(0, 0.02 * RATE))).toBeGreaterThan(0.4);
-    expect(crossings(s.subarray(0, 0.02 * RATE))).toBeGreaterThan(
-      crossings(s.subarray(0.3 * RATE, 0.32 * RATE)),
-    );
+    expect(s.length / RATE).toBeLessThan(0.15);
+    expect(peak(s)).toBeGreaterThan(0.3);
+    // Noisy: it crosses zero thousands of times a second.
+    expect(crossings(s) / (s.length / RATE)).toBeGreaterThan(3000);
   });
 
   it('make the splash of a plasma ball short, loud and noisier than the shot', () => {

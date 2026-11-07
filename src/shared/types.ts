@@ -208,16 +208,18 @@ export interface PlayerState {
   pushes?: number;
   pressed?: boolean;
   away?: number;
-  /** Shots left in the rail gun; absent or -1 without it (taken at the team's rail rack, lost on going down). */
+  /** Ticks of lightning left in the rail gun; absent or -1 without it (taken at the team's rail rack, lost on going down). */
   rail?: number;
   /** The rail gun is in hand (see KEY.RAIL). Absent reads false. */
   railed?: boolean;
   /** Standing inside the circle of the team's rail rack as of the last step: it fills on arrival only. Absent reads false. */
   inRail?: boolean;
-  /** Ticks to the next rail shot. Absent reads 0. */
-  reload?: number;
-  /** Ticks left drained by a rail hit: slowed under SLOW_SPEED, and the host takes 1 hp each RAIL_DRAIN. Absent reads 0. */
+  /** The rail gun's bolt went out on the last step. Absent reads false. */
+  zapping?: boolean;
+  /** Ticks left drained by the bolt: slowed under SLOW_SPEED, and the host takes 1 hp each RAIL_DRAIN. Absent reads 0. */
   slow?: number;
+  /** While down: the bolt's drain put him down, and he is disintegrated. Absent reads false. */
+  fried?: boolean;
   /** While down after a katana's cut put him down: the LIMB it took off, for the clients to draw. NONE once up. Absent reads NONE. */
   lost?: number;
   /** For the animation, not sent: the EV bits of the last step, and the speed of a landing. */

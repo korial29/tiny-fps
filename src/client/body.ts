@@ -22,7 +22,7 @@ import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { createGait, frame } from './gait';
 import type { Floor } from './gait';
-import { REAR, TILT, held, pointed, tip } from './gun';
+import { REAR, TILT, charge, held, pointed, tip } from './gun';
 import {
   BASE,
   BEHIND as BACK,
@@ -862,9 +862,10 @@ export const createBody = (world?: World): Body => {
             s.rot[J.HAND_R],
             1,
             clamp(hold * 1.5 - 0.5),
-            rail ? me!.rail : me?.ammo,
+            rail ? charge(me!.rail!) : me?.ammo,
             level,
             rail,
+            clock,
           );
         }
         if (grasp > 0.2) {

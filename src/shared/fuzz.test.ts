@@ -9,7 +9,6 @@ import {
   GUN_COOLDOWN,
   HP_MAX,
   MAX_PITCH,
-  RAIL_COOLDOWN,
   RAIL_MAX,
 } from './constants';
 import { STRIKE, step } from './gun';
@@ -148,11 +147,10 @@ describe('random fire on ROOFTOPS', () => {
           team,
         );
         const label = `seed ${seed}, step ${k}`;
-        // A plasma shot or a rail beam counts a shot.
-        expect(struck === STRIKE.SHOT || struck === STRIKE.RAIL, label).toBe(
-          ((p.shots - before) & 255) === 1,
-        );
-        expect(struck !== STRIKE.RAIL || !!p.railed, label).toBe(true);
+        // A plasma shot counts a shot; the rail gun's bolt is a step spent zapping.
+        expect(struck === STRIKE.SHOT, label).toBe(((p.shots - before) & 255) === 1);
+        expect(struck === STRIKE.RAIL, label).toBe(!!p.zapping);
+        expect(!p.zapping || !!p.railed, label).toBe(true);
         shots += +(struck === STRIKE.SHOT);
         rails += +(struck === STRIKE.RAIL);
         cuts += +(struck === STRIKE.CUT);
@@ -218,7 +216,6 @@ describe('random fire on ROOFTOPS', () => {
         expect(!p.down || (!p.blade && !p.wield && !p.swing), label).toBe(true);
         expect(p.rail ?? -1, label).toBeGreaterThanOrEqual(-1);
         expect(p.rail ?? -1, label).toBeLessThanOrEqual(RAIL_MAX);
-        expect(p.reload ?? 0, label).toBeLessThanOrEqual(RAIL_COOLDOWN);
         expect(!p.railed || (p.rail ?? -1) >= 0, label).toBe(true);
         if (k % 5 === 0) {
           const [back] = decodeSnapshot(
@@ -238,7 +235,7 @@ describe('random fire on ROOFTOPS', () => {
             zap: !!p.zap,
             rail: p.rail ?? -1,
             railed: !!p.railed,
-            reload: p.reload ?? 0,
+            zapping: !!p.zapping,
           });
         }
       }

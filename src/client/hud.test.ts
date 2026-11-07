@@ -428,7 +428,7 @@ describe('the gun on the HUD', () => {
       expect(lit()).toEqual(['2 katana']);
     });
 
-    it('shows the rail gun’s shots in green with the gun glyph, and its slot 3 when it is carried', () => {
+    it('shows the rail gun’s lightning left in violet with the gun glyph, and its slot 3 when it is carried', () => {
       hud.vitals(5, -1, false, false, 7, true);
       expect([
         ammo().hidden,
@@ -441,7 +441,7 @@ describe('the gun on the HUD', () => {
       expect(shown()).toEqual(['1 gun', '2 katana', '3 rail']);
       expect(lit()).toEqual(['3 rail']);
       expect(ammo().classList.contains('e')).toBe(true);
-      expect(HUD_CSS).toMatch(/dl\.r svg\{fill:#7f9\}/);
+      expect(HUD_CSS).toMatch(/dl\.r svg\{fill:#c9f\}/);
     });
 
     it('keeps the slots out of the counter, above it and not below, where the Leave button is', () => {

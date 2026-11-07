@@ -153,6 +153,12 @@ export const STILL = {
   cut: 0,
   zap: false,
   lost: LIMB.NONE as number,
+  rail: -1,
+  railed: false,
+  inRail: false,
+  zapping: false,
+  slow: 0,
+  fried: false,
   ev: 0,
   fall: 0,
 };

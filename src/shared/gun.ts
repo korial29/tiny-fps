@@ -19,7 +19,6 @@ import {
   LUNGE_SPEED,
   PICK_H,
   RACK_R,
-  RAIL_COOLDOWN,
   RAIL_MAX,
   SPECIAL_LATE,
 } from './constants';
@@ -67,11 +66,11 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  * - The team's rack fills the gun when the player steps into its circle (`rack` tells he is in it),
  *   and again each time he comes back; staying gives nothing. The katana rack gives the katana,
  *   once and for good: it stays until he goes down.
- * - The rail rack fills the rail gun with RAIL_MAX shots on arrival, as the gun's does.
+ * - The rail rack fills the rail gun with RAIL_MAX ticks of lightning on arrival, as the gun's does.
  * - In hand is the weapon he wants (KEY.BLADE the katana, KEY.RAIL the rail gun, neither the gun)
  *   when he has it, else the first he has of the gun, the katana and the rail gun; the katana
  *   stays in hand for the length of a swing. `wield` is the katana in hand, `railed` the rail gun.
- * - The rail gun fires a beam every RAIL_COOLDOWN ticks while FIRE is held, with a shot left.
+ * - The rail gun throws its bolt on every step FIRE is held, spending a tick of it (`zapping`).
  * - The trigger: `cool` and `swing` run down, and at 0 a held FIRE charges the gun, with ammo, and
  *   letting it go fires a ball as strong as the charge (powerOf()), spending as many shots; or it
  *   starts the katana's swing (`cut` from the keys), unless the hands are busy (a hang, a climb).
@@ -85,6 +84,7 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
   const down = p.down > 0;
   const locked = !down && (p.lock ?? 0) > 0;
   move(p, down || locked ? { ...i, keys: 0 } : i, w, team);
+  p.zapping = false;
   p.zap = !!p.stun && !!p.zap;
   if (down) {
     // A fall under the kill floor has already put him back, and cleared `down`.
@@ -110,7 +110,6 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
   }
   p.inRail = inRail;
   p.cool = Math.max(0, p.cool - 1);
-  p.reload = Math.max(0, (p.reload ?? 0) - 1);
   p.swing = Math.max(0, (p.swing ?? 0) - 1);
   const has = [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0];
   const want = i.keys & KEY.BLADE ? 1 : i.keys & KEY.RAIL ? 2 : 0;
@@ -140,10 +139,9 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
       p.swing = CUTS[p.cut].ticks;
       launch(p);
     } else if (p.railed) {
-      if (!p.reload && p.rail! > 0) {
+      if (p.rail! > 0) {
         p.rail!--;
-        p.shots = (p.shots + 1) & 255;
-        p.reload = RAIL_COOLDOWN;
+        p.zapping = true;
         return STRIKE.RAIL;
       }
     } else if (!p.wield && !p.cool && p.ammo > 0) {

@@ -2,7 +2,7 @@
 // renderer's vertex format. A runner is the last PlayerState seen and the gait that eases the body
 // toward it; the dash streaks are the only thing drawn here that the gait does not pose. A
 // player's (x, y, z) is the bottom of the feet. No DOM.
-import { DASH_COOLDOWN, DASH_TICKS, STEP_H } from '../shared/constants';
+import { DASH_COOLDOWN, DASH_TICKS, DOWN_TICKS, STEP_H, TICK_HZ } from '../shared/constants';
 import { TAU } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
@@ -10,7 +10,7 @@ import type { World } from '../shared/world';
 import { clasp, inv, reach, shrug, wield } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
-import { TILT, aimed, focus, held } from './gun';
+import { ARC, TILT, aimed, focus, held } from './gun';
 import type { Tracer } from './beams';
 import {
   BEHIND,
@@ -116,11 +116,22 @@ export const animate = (
     if (r) {
       r.gait.update(p, dt, world && floorOf(world, p.y));
       r.dash += (+dashing(p) - r.dash) * (1 - Math.exp(-dt * DASH_RATE));
-      r.since = p.shots == r.p.shots ? r.since + dt : 0;
+      r.since = p.shots == r.p.shots && !p.zapping ? r.since + dt : 0;
       // A shot raises the gun at once, so that it points at the shot when the beam is drawn.
       r.aim = r.since == 0 ? 1 : r.aim + (+(r.since < AIMING) - r.aim) * (1 - Math.exp(-dt * 12));
       r.focus = r.since < AIMING ? (world ? focus(p, world)[0] : far(p)) : r.focus;
       r.prog = progress(r.prog, p, dt);
+      // Put down by the bolt: a burst of sparks, then more as he comes apart.
+      const k = fried(p);
+      if (k > 0 && k < 1) {
+        if (!r.p.fried) {
+          tracer?.shock([p.x, p.y + 1, p.z]);
+        }
+        for (let i = 0; i < 3; i++) {
+          const h = (r.t * 7.3 + i * 0.37) % 1;
+          tracer?.spit([p.x + Math.sin(h * 40) * 0.3, p.y + 1.8 * h, p.z + Math.cos(h * 40) * 0.3]);
+        }
+      }
       r.trail.update(dt);
       r.t += dt;
       r.p = { ...p };
@@ -238,6 +249,40 @@ const streaks = (out: number[], r: Runner, color: number[], at: (v: Vec3) => Vec
   });
 };
 
+/** Seconds a runner the rail gun's bolt put down takes to come apart. */
+export const FRY = 0.9;
+
+/** How far a runner has come apart, 0 (whole, or not fried) to 1 (gone). */
+export const fried = (p: PlayerState): number =>
+  p.fried && p.down ? Math.min((DOWN_TICKS - p.down) / TICK_HZ / FRY, 1) : 0;
+
+/**
+ * The triangles of `out` from `from` coming apart `k` of the way (0 to 1): they glow violet white
+ * at once, each drifts up and out on its own, and goes when `k` passes its own share, so the body
+ * thins to nothing.
+ */
+export const dissolve = (out: number[], from: number, k: number) => {
+  const T = 3 * STRIDE;
+  let w = from;
+  for (let o = from, i = 0; o < out.length; o += T, i++) {
+    const h = ((Math.imul(i + 1, 0x9e3779b1) >>> 0) % 1000) / 1000;
+    if (h < k) {
+      continue;
+    }
+    const lift = [Math.sin(i) * 0.3, 1.2 * h, Math.cos(i) * 0.3].map(v => v * k * k);
+    const glow = Math.min(1, k * 4);
+    for (let v = 0; v < T; v += STRIDE) {
+      for (let j = 0; j < STRIDE; j++) {
+        out[w + v + j] = out[o + v + j] + (j < 3 ? lift[j] : 0);
+      }
+      [6, 7, 9].forEach((j, c) => (out[w + v + j] += (ARC[c] * (1 - k) - out[w + v + j]) * glow));
+      out[w + v + 8] = glow > 0.5 ? -2 : out[w + v + 8];
+    }
+    w += T;
+  }
+  out.length = w;
+};
+
 /**
  * Appends a runner at level of detail `lod` (see body(): 0 far, 1 near, 3 close; its weapon is near
  * when the runner is close): the jacket in `color` (r, g, b), dark
@@ -246,6 +291,10 @@ const streaks = (out: number[], r: Runner, color: number[], at: (v: Vec3) => Vec
 export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   let pose = r.gait.pose();
   const { p } = r;
+  const k = fried(p);
+  if (k >= 1) {
+    return;
+  }
   const colors = palette(color, hairOf(p.id));
   // Lying down, it sinks into the roof for the last half second.
   const sink = p.down ? 0.5 * Math.min(Math.max(1 - p.down / 30, 0), 1) : 0;
@@ -270,13 +319,17 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
     r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
     piece(out, r.cut, colors, lod, sink);
   } else {
+    const from = out.length;
     skin(out, body(lod), s, colors);
+    if (k > 0) {
+      dissolve(out, from, k);
+    }
   }
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);
     r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));
   } else if ((p.ammo >= 0 || p.railed) && !p.down) {
-    held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, undefined, 0, p.railed);
+    held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, undefined, 0, p.railed, r.t);
   }
   if (r.dash > 0.15) {
     const [s, c] = [Math.sin(pose.yaw), Math.cos(pose.yaw)];

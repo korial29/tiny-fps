@@ -5,7 +5,7 @@
 // crotch by sharing its vertices, so normals flow over the joins. Clothes are colour regions of
 // the triangles. See rig.ts for the joints and the pose.
 import { LIMB } from '../shared/types';
-import { JOINT as J, JOINTS, mul, rest, solve, turn } from './rig';
+import { JOINT as J, JOINTS, REST, mul, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
 import type { Vec3 } from './mesh';
 
@@ -127,29 +127,41 @@ const LEG: Loft = {
   ],
 };
 
+/**
+ * Two joints of the skin's own after the rig's, the right then the left: the upper arm without its
+ * turn about itself, which the deltoid over the shoulder takes (skin() makes them). A humerus
+ * turns in its socket under the shoulder's cap; the turn shows down the arm, to the elbow.
+ */
+const [SWING_R, SWING_L] = [JOINTS, JOINTS + 1];
+
 // A sleeve to the glove. Its first ring is the shoulder's, and it is not written here either.
+// Shaped on the arm under it: the deltoid at the shoulder, the biceps' belly, a narrower elbow
+// with its point a little behind, the forearm's muscles swelling just below it and tapering to the
+// wrist. Each segment hangs on its own bone alone; only the rings around the elbow blend the arm
+// and the forearm, and those around the wrist the forearm and the hand, so a bent elbow folds in
+// one place and both segments stay straight.
 const ARM: Loft = {
-  chain: [J.ARM_R, J.FOREARM_R, J.HAND_R],
+  chain: [SWING_R, J.ARM_R, J.FOREARM_R, J.HAND_R],
   n: [0, 0, 0],
   m: true,
-  far: [0, 2, 4, 5, 6, 8, 10],
+  far: [0, 1, 3, 4, 5, 6, 8, 10],
   rings: [
-    [1.37, 0.222, 0, 0, 0, 0, JACKET],
-    [1.3, 0.227, 0, 0.049, 0.056, 0.1, JACKET],
-    [1.22, 0.225, 0, 0.046, 0.052, 0.2, JACKET],
-    [1.18, 0.222, 0, 0.043, 0.046, 0.5, JACKET],
-    [1.09, 0.222, -0.002, 0.046, 0.048, 0.8, JACKET],
-    [0.975, 0.222, 0, 0.034, 0.034, 1.2, TRIM],
-    [0.935, 0.222, 0, 0.03, 0.03, 1.8, GLOVE],
-    [0.885, 0.222, -0.004, 0.027, 0.037, 2, GLOVE],
-    [0.84, 0.222, -0.008, 0.029, 0.042, 2, GLOVE],
-    [0.795, 0.222, -0.012, 0.025, 0.034, 2, GLOVE],
-    [0.772, 0.222, -0.014, 0, 0, 2, GLOVE],
+    [1.37, 0.224, 0, 0, 0, 0, JACKET],
+    [1.31, 0.225, -0.003, 0.05, 0.056, 0.5, JACKET],
+    [1.225, 0.224, -0.002, 0.045, 0.05, 1.12, JACKET],
+    [1.18, 0.222, 0.003, 0.041, 0.045, 1.5, JACKET],
+    [1.135, 0.222, -0.002, 0.045, 0.047, 1.9, JACKET],
+    [0.975, 0.222, 0, 0.034, 0.034, 2.05, TRIM],
+    [0.935, 0.222, 0, 0.03, 0.03, 2.6, GLOVE],
+    [0.885, 0.222, -0.004, 0.027, 0.037, 3, GLOVE],
+    [0.84, 0.222, -0.008, 0.029, 0.042, 3, GLOVE],
+    [0.795, 0.222, -0.012, 0.025, 0.034, 3, GLOVE],
+    [0.772, 0.222, -0.014, 0, 0, 3, GLOVE],
   ],
 };
 
 /** The ring where the eye's sleeve ends in the glove, which body.ts starts the palm on, and its sides. */
-export const CUFF = [0.925, 0.222, 0, 0.027, 0.027, 2, GLOVE];
+export const CUFF = [0.925, 0.222, 0, 0.027, 0.027, 3, GLOVE];
 export const CUFF_SIDES = TRUNK.n[1] - 4;
 
 // The eyes are small pieces of their own, the left the right one mirrored, buried in the sockets
@@ -414,9 +426,9 @@ const generate = (lod: number): Skin => {
         : lod == 2 && L === ARM
           ? [
               ...L.rings.slice(0, 6),
-              [0.95, 0.222, 0, 0.037, 0.037, 1.6, GLOVE],
+              [0.95, 0.222, 0, 0.037, 0.037, 2.6, GLOVE],
               CUFF,
-              [0.91, 0.222, 0, 0, 0, 2, GLOVE],
+              [0.91, 0.222, 0, 0, 0, 3, GLOVE],
             ]
           : lod
             ? L.rings
@@ -428,28 +440,40 @@ const generate = (lod: number): Skin => {
     }
     for (const m of L.m ? [1, -1] : [1]) {
       /** The left joints are the right ones' four ids before. */
-      const side = (b: number) => (m < 0 && b > J.HEAD ? b - 4 : b);
+      const side = (b: number) => (m > 0 ? b : b == SWING_R ? SWING_L : b > J.HEAD ? b - 4 : b);
       /** A vertex of a trunk row, seen from this side. */
       const col = (row: number[], i: number) => row[m < 0 ? (N - i) % N : i];
       const vertex = (x: number, y: number, z: number, u: number) => {
         // The toe bends the front of the foot.
         u = L === LEG && y < 0.12 ? 3 + clamp((-z - 0.04) / 0.14) : u;
         const g = Math.min(Math.floor(u), L.chain.length - 2);
-        // The shoulder's side follows the arm.
+        // The shoulder is a chain like the arm under it: the chest, the collarbone and the shoulder
+        // blade (the top of the shoulder, up to the neck, which rises in a shrug), then the
+        // deltoid's cap over the joint, which goes with the arm, the armpit's skin half.
+        const ax = Math.abs(x);
+        const ease = (k: number) => clamp(k) ** 2 * (3 - 2 * clamp(k));
+        const top = clamp((1.535 - y) / 0.05);
+        // The arm's side of a slanting line through the humerus' head (0.19, 1.47), from the
+        // armpit up over the point of the shoulder; the folds in front of the armpit and behind
+        // it (the chest's and the back's muscles to the arm) stretch between, half and half.
         const q =
           L === TRUNK
-            ? clamp((Math.abs(x) - 0.14) / 0.1) *
-              clamp((1.53 - y) / 0.15) *
-              clamp((y - 1.35) / 0.02)
+            ? ease((0.85 * (ax - 0.19) - 0.53 * (y - 1.47) - 1.2 * Math.abs(z) + 0.03) / 0.13) *
+              top *
+              clamp((y - 1.34) / 0.04)
             : 0;
+        const k = L === TRUNK ? ease((ax - 0.06) / 0.08) * top * clamp((y - 1.39) / 0.03) : 0;
+        const [clav, arm] = x < 0 ? [J.CLAVICLE_L, SWING_L] : [J.CLAVICLE_R, SWING_R];
         return q
-          ? put([x, y, z], J.CHEST, x < 0 ? J.ARM_L : J.ARM_R, q)
-          : put(
-              [x, y, z],
-              side(L.chain[Math.max(g, 0)]),
-              side(L.chain[g + 1] ?? L.chain[0]),
-              g < 0 ? 0 : u - g,
-            );
+          ? put([x, y, z], k > 0.5 ? clav : J.CHEST, arm, q)
+          : k
+            ? put([x, y, z], J.CHEST, clav, k)
+            : put(
+                [x, y, z],
+                side(L.chain[Math.max(g, 0)]),
+                side(L.chain[g + 1] ?? L.chain[0]),
+                g < 0 ? 0 : u - g,
+              );
       };
       const grid = rings.map(([at, cx, co, rx, ro, u], r) => {
         const row: number[] = [];
@@ -729,8 +753,24 @@ export const cut = (lod: number, limb: number) =>
   (parts[lod * 8 + limb] ??= sever(body(lod), limb));
 
 const BIND = solve(rest()).pos;
+BIND.push(BIND[J.ARM_R], BIND[J.ARM_L]);
+
+/**
+ * The upper arm of shoulder joint `j` in the world without its turn about itself: the swing of
+ * its rotation from the collarbone's, about the bone's rest axis, on the collarbone's.
+ */
+const swing = (rot: Quat[], j: number): Quat => {
+  const c = rot[j - 1];
+  const l = mul([-c[0], -c[1], -c[2], c[3]], rot[j]);
+  const b = REST[j + 1];
+  const n = Math.hypot(...b);
+  const p = (l[0] * b[0] + l[1] * b[1] + l[2] * b[2]) / (n * n);
+  const t = [b[0] * p, b[1] * p, b[2] * p, l[3]];
+  const h = Math.hypot(...t) || 1;
+  return mul(c, mul(l, [-t[0] / h, -t[1] / h, -t[2] / h, t[3] / h]));
+};
 /** Per joint the dual quaternion that carries the rest pose to the pose: the rotation, then its dual. */
-const D = new Float64Array(JOINTS * 8);
+const D = new Float64Array((JOINTS + 2) * 8);
 const E = new Float64Array(8);
 let Q = new Float32Array(0);
 
@@ -746,13 +786,12 @@ export const skin = (
   { pos, rot }: { pos: Vec3[]; rot: Quat[] },
   colors: number[][],
 ) => {
-  for (let k = 0; k < JOINTS; k++) {
-    const t = turn(rot[k], BIND[k]);
-    D.set(rot[k], k * 8);
-    D.set(
-      mul([(pos[k][0] - t[0]) / 2, (pos[k][1] - t[1]) / 2, (pos[k][2] - t[2]) / 2, 0], rot[k]),
-      k * 8 + 4,
-    );
+  for (let k = 0; k < JOINTS + 2; k++) {
+    const r = k < JOINTS ? rot[k] : swing(rot, k == SWING_R ? J.ARM_R : J.ARM_L);
+    const p = pos[k < JOINTS ? k : k == SWING_R ? J.ARM_R : J.ARM_L];
+    const t = turn(r, BIND[k]);
+    D.set(r, k * 8);
+    D.set(mul([(p[0] - t[0]) / 2, (p[1] - t[1]) / 2, (p[2] - t[2]) / 2, 0], r), k * 8 + 4);
   }
   const n = s.w.length;
   if (Q.length < n * 6) {

@@ -301,7 +301,7 @@ const steps = (a: number, b: number, n = 40) =>
   Array.from({ length: n + 1 }, (_, i) => a + ((b - a) * i) / n);
 
 describe('the cuts', () => {
-  it('start and end in the guard, the same for all of them, with the blade standing up the middle of the view', () => {
+  it('start and end in the guard, the same for all of them, the blade rising ahead from the bottom of the view', () => {
     for (const cut of [CUT.THRUST, CUT.LEFT, CUT.RIGHT, CUT.SLASH]) {
       for (const p of [0, 1]) {
         stroke(cut, p)
@@ -311,8 +311,10 @@ describe('the cuts', () => {
     }
     const tip = tipAt(CUT.THRUST, 0);
     expect(Math.abs(tip[0])).toBeLessThan(0.4);
-    expect(tip[1]).toBeGreaterThan(0.7);
-    expect(tip[2]).toBeGreaterThan(0.6);
+    expect(tip[1]).toBeGreaterThan(0.45);
+    expect(tip[2]).toBeGreaterThan(1);
+    // The hands low, a quarter of a metre under the eye.
+    expect(GUARD[1]).toBeLessThan(-0.2);
   });
 
   it('keeps the hands low and close in front, the blade making the wide arcs', () => {

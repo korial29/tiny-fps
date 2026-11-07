@@ -262,16 +262,17 @@ export const ends = (pos: Vec3, q: Quat): Vec3[] => {
  * forward), the guard first and last: a wind-up, the strike at its tick (every cut passes the
  * middle of the view there) and a follow-through, with the hands taking the slope between their
  * neighbours' keys (fastest through the strike). The right hand holds the grip at the guard, the
- * left BEHIND it. In the guard the blade rises across the view, up and to the left.
+ * left BEHIND it. In the guard the hands sit at the bottom of the view and the blade rises ahead,
+ * leaning forward and to the left, so the view shows more blade than hands.
  */
-export const GUARD = [0.06, -0.13, 0.45, 0.18, 0.87, 0.45];
+export const GUARD = [0.06, -0.24, 0.45, 0.16, 0.74, 0.65];
 /** The share of cut `c`'s swing at which it strikes. */
 const strikeAt = (c: number) => CUTS[c].strike / CUTS[c].ticks;
 /** Out to the left and a little back, across the middle, out to the right and round behind. */
 const ACROSS = (s: number) => [
   [0, ...GUARD],
-  [0.12, 0.04, -0.08, 0.36, -0.7, 0.7, 0.15],
-  [0.24, -0.02, -0.06, 0.34, -0.95, 0.25, -0.2],
+  [0.12, 0.04, -0.18, 0.36, -0.7, 0.7, 0.15],
+  [0.24, -0.02, -0.16, 0.34, -0.95, 0.25, -0.2],
   [s, 0.07, -0.15, 0.46, 0, 0.06, 1],
   [0.5, 0.17, -0.2, 0.4, 0.95, -0.1, 0.1],
   [0.62, 0.18, -0.24, 0.32, 0.8, -0.3, -0.45],
@@ -281,9 +282,9 @@ const KEYS: number[][][] = [
   // Pulled back level, lunged out along the look, held a beat.
   [
     [0, ...GUARD],
-    [0.3, 0.13, -0.2, 0.2, -0.05, 0.3, 1],
-    [strikeAt(0), 0.02, -0.15, 0.42, -0.02, 0.08, 1],
-    [strikeAt(0) + 0.2, 0.02, -0.15, 0.42, -0.02, 0.08, 1],
+    [0.3, 0.13, -0.3, 0.2, -0.05, 0.3, 1],
+    [strikeAt(0), 0.02, -0.25, 0.42, -0.02, 0.18, 1],
+    [strikeAt(0) + 0.2, 0.02, -0.25, 0.42, -0.02, 0.18, 1],
     [1, ...GUARD],
   ],
   ACROSS(strikeAt(1)),

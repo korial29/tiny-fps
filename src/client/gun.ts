@@ -226,7 +226,7 @@ const SPREAD = 0.05;
 /** How much higher the counter stands on the rail gun than on the pistol, its base just inside the receiver's top. */
 const RISE = 0.022;
 /** The middle of the rail gun's front grip, under the barrel, where the left hand holds it. */
-export const FOREGRIP: Vec3 = [0, 0.01, -0.225];
+export const FOREGRIP: Vec3 = [0, 0.012, -0.19];
 /** The height of the long axis at `f` ahead of the grip, in the side view. */
 const axisY = (f: number) => 0.0906 - 0.0741 * f;
 /** The violet white of a Tesla arc, which blooms. */
@@ -301,10 +301,10 @@ export const railgun = (lod: number): number[] => {
   tube(
     out,
     [
-      [0.215, axisY(0.215) - 0.015, 0, 0],
-      [0.218, axisY(0.218) - 0.02, 0.013, 0.015],
-      [0.232, -0.035, 0.012, 0.014],
-      [0.235, -0.04, 0, 0],
+      [0.18, axisY(0.18) - 0.015, 0, 0],
+      [0.183, axisY(0.183) - 0.02, 0.013, 0.015],
+      [0.197, -0.035, 0.012, 0.014],
+      [0.2, -0.04, 0, 0],
     ],
     m,
     steel,
@@ -378,11 +378,12 @@ export const arc = (t: number): number[] => {
 
 /**
  * Where the left hand holds a rail gun whose grip is at `at` and whose axes are [right, up,
- * forward]: the middle of its front grip, and the way the grip runs, down and a little forward.
+ * forward]: the middle of its front grip, and the way the grip runs from its foot up to the barrel,
+ * which the thumb points along (see wield() in body.ts).
  */
 export const fore = (at: Vec3, [r, u, f]: Vec3[]): [Vec3, Vec3] => [
   [0, 1, 2].map(i => at[i] + r[i] * FOREGRIP[0] + u[i] * FOREGRIP[1] - f[i] * FOREGRIP[2]) as Vec3,
-  unit([0, 1, 2].map(i => -u[i] + 0.25 * f[i]) as Vec3),
+  unit([0, 1, 2].map(i => u[i] - 0.19 * f[i]) as Vec3),
 ];
 
 /** fore() for the hand at `pos` turned by `q`, which holds the grip. */
@@ -621,10 +622,15 @@ export const focus = (p: PlayerState, world: World): [Vec3, boolean] => {
   return [[0, 1, 2].map(i => eye[i] + f[i] * d) as Vec3, d < GUN_RANGE];
 };
 
-/** Where a runner holds the gun when it fires at `to`: the grip, a little right of and below the eye, and the gun's axes. */
+/**
+ * Where a runner holds the gun when it fires at `to`: the grip, a little right of and below the eye,
+ * and the gun's axes. The rail gun, in both hands like a rifle, is nearer the chest, so that the
+ * left hand reaches its front grip.
+ */
 export const aimed = (p: PlayerState, to: Vec3): [Vec3, Vec3[]] => {
   const [r, u, f] = basis(p.yaw, p.pitch);
   const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
-  const grip = [0, 1, 2].map(i => eye[i] + r[i] * 0.2 - u[i] * 0.17 + f[i] * 0.42) as Vec3;
+  const [x, y, z] = p.railed ? [0.12, 0.2, 0.28] : [0.2, 0.17, 0.42];
+  const grip = [0, 1, 2].map(i => eye[i] + r[i] * x - u[i] * y + f[i] * z) as Vec3;
   return [grip, pointed(grip, to, r, u)];
 };

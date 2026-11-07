@@ -614,6 +614,9 @@ export const createBody = (world?: World): Body => {
     }
   };
 
+  /** The rail gun's grip against the gun's: the share of the way in toward the middle, and the metres back. */
+  const RIFLE = [0.45, 0.14];
+
   /**
    * The gun in camera space: where its grip is (lower right, rising from below as it is taken, kicked
    * back by a shot, swaying with the run, shaking with a charge) and its axes, pointing at `target`.
@@ -626,10 +629,16 @@ export const createBody = (world?: World): Body => {
         ? 0.0045 * Math.min(1, (me.charge! - CHARGE_TAP) / (CHARGE_TICKS - CHARGE_TAP))
         : 0;
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
+    // The rail gun is held in both hands like a rifle: nearer the middle and the chest, so that
+    // the left hand reaches its front grip.
+    const r = me?.railed ? 1 : 0;
     const at: Vec3 = [
-      Math.min(0.22, 0.18 * wide) + 0.012 * a * s + lift[0] + shake * Math.sin(clock * 53),
+      Math.min(0.22, 0.18 * wide) * (1 - RIFLE[0] * r) +
+        0.012 * a * s +
+        lift[0] +
+        shake * Math.sin(clock * 53),
       -0.25 + 0.018 * a * c - 0.3 * (1 - w.gun) + lift[1] + shake * Math.sin(clock * 61 + 1),
-      0.4 - 0.05 * kick + lift[2],
+      0.4 - RIFLE[1] * r - 0.05 * kick + lift[2],
     ];
     // A shot kicks the nose up.
     const to: Vec3 = [target[0], target[1] + 0.1 * kick * Math.hypot(...target), target[2]];

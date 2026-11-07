@@ -291,14 +291,10 @@ export const dissolve = (out: number[], from: number, k: number) => {
  * when the runner is close): the jacket in `color` (r, g, b), dark
  * trousers, skin, hair in his own colour (hairOf()) and light shoes, posed by its gait. A dash trails a few glowing streaks.
  */
-export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
+/** The runner's pose this frame, solved: the gait, the fall and sink of one down, and the weapon's hold; and the way the body faces. */
+export const stance = (r: Runner) => {
   let pose = r.gait.pose();
   const { p } = r;
-  const k = fried(p);
-  if (k >= 1) {
-    return;
-  }
-  const colors = palette(color, hairOf(p.id));
   // Lying down, it sinks into the roof for the last half second.
   const sink = p.down ? 0.5 * Math.min(Math.max(1 - p.down / 30, 0), 1) : 0;
   if (p.down) {
@@ -308,8 +304,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
     };
   }
   let s = solve(pose);
-  const blade = p.wield && !p.down;
-  if (blade) {
+  if (p.wield && !p.down) {
     pose = brandish(pose, p, r.prog, r.gait.phase, r.t);
     s = solve(pose);
   } else if (p.railed && !p.down) {
@@ -325,6 +320,18 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
     pose = lifted(pose, s, p, r.focus, r.aim);
     s = solve(pose);
   }
+  return { s, sink, yaw: pose.yaw };
+};
+
+export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
+  const { p } = r;
+  const k = fried(p);
+  if (k >= 1) {
+    return;
+  }
+  const colors = palette(color, hairOf(p.id));
+  const { s, sink, yaw } = stance(r);
+  const blade = p.wield && !p.down;
   if (r.cut) {
     skin(out, cut(lod, r.cut.limb)[0], s, colors);
     // The stump's face is the last vertex drawn.
@@ -344,7 +351,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
     held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, undefined, 0, p.railed, r.t);
   }
   if (r.dash > 0.15) {
-    const [s, c] = [Math.sin(pose.yaw), Math.cos(pose.yaw)];
+    const [s, c] = [Math.sin(yaw), Math.cos(yaw)];
     const { x, y, z } = r.p;
     streaks(out, r, color, ([a, u, f]) => [x + a * c - f * s, y + u, z - a * s - f * c]);
   }

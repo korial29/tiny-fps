@@ -5,12 +5,12 @@ import { CUT, MODE, SIDE, TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
-import { MUZZLE, REAR, aimed, grip, gun, tip } from './gun';
+import { MUZZLE, REAR, aimed, foregrip, grip, gun, tip } from './gun';
 import { BEHIND, axes } from './katana';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, solve, turn } from './rig';
-import { FRY, animate, brandish, createRunner, dissolve, fried, soldier } from './soldier';
+import { FRY, animate, brandish, createRunner, dissolve, fried, soldier, stance } from './soldier';
 import type { Runner } from './soldier';
 import { palette } from './skin';
 
@@ -729,5 +729,42 @@ describe('a runner the rail gun’s bolt puts down', () => {
     const gone = make();
     dissolve(gone, 0, 1);
     expect(gone).toHaveLength(0);
+  });
+});
+
+describe('a runner with the rail gun', () => {
+  it('holds it in both hands, the left round the front grip, standing, running and looking up or down', () => {
+    for (const [vz, pitch] of [
+      [0, 0],
+      [0, -0.5],
+      [0, 0.5],
+      [-6, 0],
+      [-9, 0],
+    ]) {
+      const p = {
+        id: 1,
+        x: 0,
+        y: 0,
+        z: 0,
+        vy: 0,
+        yaw: 0,
+        ground: true,
+        ...STILL,
+        vz,
+        pitch,
+        rail: 100,
+        railed: true,
+      } as PlayerState;
+      const book = new Map<number, Runner>();
+      for (let i = 0; i < 60; i++) {
+        animate(book, [p], 1 / 60);
+      }
+      const { s } = stance(book.get(p.id)!);
+      const [at] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R]);
+      const q = s.rot[J.HAND_L];
+      const [fing, x] = [turn(q, [0, -1, 0]), turn(q, [1, 0, 0])];
+      const palm = [0, 1, 2].map(i => s.pos[J.HAND_L][i] + fing[i] * 0.078 + x[i] * 0.022);
+      expect(Math.hypot(...palm.map((v, i) => v - at[i]))).toBeLessThan(0.01);
+    }
   });
 });

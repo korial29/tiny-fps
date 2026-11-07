@@ -19,7 +19,7 @@ import { STRIDE, add, basis, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, mul, slerp, solve } from './rig';
 import type { Pose } from './rig';
-import { body, cut, palette, skin } from './skin';
+import { body, cut, hairOf, palette, skin } from './skin';
 import { createTrail } from './trail';
 import type { Trail } from './trail';
 
@@ -215,12 +215,12 @@ const streaks = (out: number[], r: Runner, color: number[], at: (v: Vec3) => Vec
 
 /**
  * Appends a runner at level of detail `lod` (see body()): the jacket in `color` (r, g, b), dark
- * trousers, skin, hair and light shoes, posed by its gait. A dash trails a few glowing streaks.
+ * trousers, skin, hair in his own colour (hairOf()) and light shoes, posed by its gait. A dash trails a few glowing streaks.
  */
 export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   let pose = r.gait.pose();
   const { p } = r;
-  const colors = palette(color);
+  const colors = palette(color, hairOf(p.id));
   // Lying down, it sinks into the roof for the last half second.
   const sink = p.down ? 0.5 * Math.min(Math.max(1 - p.down / 30, 0), 1) : 0;
   if (p.down) {

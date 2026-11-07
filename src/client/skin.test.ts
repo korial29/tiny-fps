@@ -4,7 +4,7 @@ import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT, JOINTS, PARENT, axis, rest, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
-import { body, cut, palette, skin } from './skin';
+import { body, cut, hairOf, palette, skin } from './skin';
 import { LIMB } from '../shared/types';
 
 const JACKET = [0.1, 0.8, 0.2];
@@ -37,9 +37,9 @@ const edges = (v: number[]) => {
 };
 
 describe('skin', () => {
-  it('stays within the budgets: near about 3400 vertices drawn, far under half of that', () => {
+  it('stays within the budgets: near under 3900 vertices drawn (the eyes and the armpits took 400), far under half of that', () => {
     const [far, near] = [0, 1].map(lod => draw(lod).length / STRIDE);
-    expect(near).toBeLessThanOrEqual(3600);
+    expect(near).toBeLessThanOrEqual(3900);
     expect(near).toBeGreaterThan(2000);
     expect(far).toBeLessThan(near * 0.45);
     expect(body(1).w.length).toBeLessThan(700);
@@ -357,6 +357,61 @@ describe('skin', () => {
     const gloves = of(GLOVE);
     expect(gloves.length).toBeGreaterThan(60);
     expect(gloves.every(r => Math.abs(r.x) > 0.15 && r.y < 0.96 && r.y > 0.7)).toBe(true);
+  });
+
+  it('gives the runner two eyes, whites with a dark iris at the front of each, and no shades', () => {
+    const [WHITE, IRIS] = palette(JACKET).slice(8, 10);
+    const v = draw(1);
+    const rows = Array.from({ length: v.length / STRIDE }, (_, i) => at(v, i));
+    const colour = (i: number) => [v[i * STRIDE + 6], v[i * STRIDE + 7], v[i * STRIDE + 9]];
+    const of = (c: number[]) => rows.filter((_, i) => same(colour(i), c));
+    for (const c of [WHITE, IRIS]) {
+      const p = of(c);
+      // Both sides of the nose, at the eyes' height, on the front of the face (-z).
+      expect(p.some(q => q[0] > 0.015)).toBe(true);
+      expect(p.some(q => q[0] < -0.015)).toBe(true);
+      expect(p.every(q => q[1] > 1.67 && q[1] < 1.71 && q[2] < -0.06)).toBe(true);
+    }
+    // The iris is in front of the white, and dark.
+    expect(Math.min(...of(IRIS).map(q => q[2]))).toBeLessThan(
+      Math.min(...of(WHITE).map(q => q[2])),
+    );
+    expect(IRIS.reduce((a, b) => a + b)).toBeLessThan(0.4);
+    // Nothing dark across the eyes but the irises: the shades are gone.
+    expect(
+      rows.filter((q, i) => q[1] > 1.66 && q[1] < 1.7 && colour(i).reduce((a, b) => a + b) < 0.1),
+    ).toHaveLength(0);
+    // The eye's own body, headless, has no eyes.
+    const own = draw(2);
+    expect(
+      Array.from({ length: own.length / STRIDE }, (_, i) => i).some(i =>
+        same([own[i * STRIDE + 6], own[i * STRIDE + 7], own[i * STRIDE + 9]], WHITE),
+      ),
+    ).toBe(false);
+  });
+
+  it('hangs the arms from armpits 10 cm under the shoulder joints, not from the chest', () => {
+    const shoulder = solve(rest()).pos[JOINT.ARM_R][1];
+    const { v, t, l } = body(1);
+    // The trunk's triangles (not an arm's, a leg's or the head's) out at the shoulders' width: the
+    // shoulder's side, which the sleeve hangs from. Its lowest point is the armpit.
+    const low = Math.min(
+      ...Array.from(t, (k, i) => [k, l![Math.floor(i / 3)]])
+        .filter(([k, part]) => part === LIMB.NONE && Math.abs(v[k * 6]) > 0.2)
+        .map(([k]) => v[k * 6 + 1]),
+    );
+    expect(shoulder - low).toBeGreaterThan(0.08);
+    expect(shoulder - low).toBeLessThan(0.12);
+  });
+
+  it('picks a hair colour per runner at random, the same for every viewer', () => {
+    const ids = Array.from({ length: 16 }, (_, i) => i + 1);
+    const hair = ids.map(hairOf);
+    expect(ids.map(hairOf)).toEqual(hair);
+    expect(new Set(hair.map(String)).size).toBeGreaterThanOrEqual(5);
+    // Into the palette's hair region; the default is the old dark brown.
+    expect(palette(JACKET, hair[3])[4]).toBe(hair[3]);
+    expect(palette(JACKET)[4]).toEqual([0.09, 0.07, 0.06]);
   });
 
   it('skins a runner in well under a millisecond', () => {

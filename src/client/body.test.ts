@@ -1077,24 +1077,24 @@ describe('the katana in both hands', () => {
     expect(raw(watch(a, 60), a)).toHaveLength(raw(watch(b, 60), b).length);
   });
 
-  it('rests upright in the middle of the view, both fists on the grip at the bottom of it', () => {
+  it('rises from the bottom of the view, both fists on the grip low under it, more blade than hands', () => {
     const p = blade();
     const body = watch(p, 60);
     const s = pose(body, p);
     const tip = local(p, ends(s.pos[J.HAND_R], s.rot[J.HAND_R])[1]);
     expect(Math.abs(tip[0])).toBeLessThan(0.4);
-    expect(tip[1]).toBeGreaterThan(0.7);
-    expect(tip[2]).toBeGreaterThan(0.6);
-    // The right hand low in the view, the left on the grip a hand below it, both seen.
+    expect(tip[1]).toBeGreaterThan(0.45);
+    expect(tip[2]).toBeGreaterThan(1);
+    // The right fist at the bottom of the view, the left on the grip a hand below it, under the edge.
     const [l, r] = hands(p, body);
-    expect(r[1]).toBeLessThan(-0.05);
+    expect(r[1]).toBeLessThan(-0.2);
     expect(l[1]).toBeLessThan(r[1]);
     expect(seen(r)).toBe(true);
-    expect(seen(l)).toBe(true);
+    expect(seen(l)).toBe(false);
     expect(leftOff(body, p)).toBeLessThan(0.015);
-    // Most of the blade's light is in the view.
+    // Nearly all the blade's light is in the view.
     const g = glow(draw(body, p)).map(q => local(p, q.at));
-    expect(g.filter(seen).length).toBeGreaterThan(g.length * 0.5);
+    expect(g.filter(seen).length).toBeGreaterThan(g.length * 0.85);
   });
 
   it('keeps the wrists near straight and the elbows below the hands in the guard', () => {

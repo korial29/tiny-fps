@@ -492,6 +492,6 @@ describe('the saber lock gauge', () => {
     expect(knot.style.left).toBe('0%');
     hud.duel(undefined);
     expect(rope.hidden).toBe(true);
-    expect(HUD_CSS).toMatch(/b::before\{content:'CLICK!'/);
+    expect(HUD_CSS).not.toMatch(/CLICK/);
   });
 });

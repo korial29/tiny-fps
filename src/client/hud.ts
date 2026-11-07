@@ -39,8 +39,6 @@ export const HUD_CSS =
   `mark::first-line{font:900 clamp(30px,8vw,64px)/1 system-ui,sans-serif;letter-spacing:.24em}` +
   `b{left:50%;top:64%;width:min(320px,70vw);height:12px;transform:translateX(-50%);border-radius:6px;` +
   `background:linear-gradient(90deg,#e23b3b,#fff3 50%,#8ef);box-shadow:0 0 0 1px #0008}` +
-  `b::before{content:'CLICK!';position:absolute;bottom:150%;left:50%;transform:translateX(-50%);` +
-  `font:900 clamp(18px,3.4vw,28px)/1 system-ui,sans-serif;letter-spacing:.1em;color:#fff;text-shadow:0 2px 0 #000a}` +
   `b i{position:absolute;top:-5px;width:6px;height:22px;margin-left:-3px;border-radius:3px;background:#fff;box-shadow:0 0 8px #8ef}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}`;
@@ -75,7 +73,7 @@ export interface Hud {
   hit(): void;
   /**
    * A saber lock: the gauge of the tug of war under the crosshair, with `lead` the own side's, -1
-   * (the foe wins) to 1 (he wins), and a call to click; undefined hides it.
+   * (the foe wins) to 1 (he wins); undefined hides it.
    */
   duel(lead: number | undefined): void;
   /** The state of being down: `level` 0 (up) to 1 hides or greys the screen, `left` seconds till the respawn. */

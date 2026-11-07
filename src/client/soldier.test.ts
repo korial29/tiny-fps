@@ -533,6 +533,18 @@ describe('a runner with the katana', () => {
     }
   });
 
+  it('twists the chest through a cut across, so the shoulders carry the arms', () => {
+    const facing = (prog: number) => {
+      const p = blade({ cut: CUT.LEFT, swing: 1 });
+      const r = createRunner(p);
+      const s = solve(brandish(r.gait.pose(), p, prog, 0));
+      const f = turn(s.rot[J.CHEST], [0, 0, -1]);
+      return Math.atan2(-f[0], -f[2]);
+    };
+    // From turned left over the wind-up to turned right in the follow-through: 75 degrees and more.
+    expect(facing(0.24) - facing(0.6)).toBeGreaterThan(1.2);
+  });
+
   it('holds the grip in both hands in the carry and all through every cut, standing or running', () => {
     /** How far the left hand's grip is from its place on the handle, BEHIND the right hand's. */
     const apart = (r: Runner) => {

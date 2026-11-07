@@ -378,9 +378,8 @@ export const whirl = (cut: number, p: number): number => {
 };
 const NOW: number[] = [];
 
-/** The grip and the blade direction (x, y, z each) of cut `cut` at `p` of the swing: one array, rewritten by each call. */
-export const stroke = (cut: number, p: number): number[] => {
-  const K = KEYS[cut];
+/** The keys `K` of [share, values...] at `p`, each value through its neighbours' slope (Catmull-Rom), into `out`. */
+const through = (K: number[][], p: number, out: number[]): number[] => {
   let i = K.length - 2;
   while (i > 0 && K[i][0] > p) {
     i--;
@@ -389,17 +388,104 @@ export const stroke = (cut: number, p: number): number[] => {
   const h = b[0] - a[0];
   const u = clamp((p - a[0]) / h);
   const [u2, u3] = [u * u, u * u * u];
-  for (let j = 1; j < 7; j++) {
+  for (let j = 1; j < a.length; j++) {
     const m0 = i ? (b[j] - K[i - 1][j]) / (b[0] - K[i - 1][0]) : 0;
     const m1 = K[i + 2] ? (K[i + 2][j] - a[j]) / (K[i + 2][0] - a[0]) : 0;
-    NOW[j - 1] =
+    out[j - 1] =
       (2 * u3 - 3 * u2 + 1) * a[j] +
       (u3 - 2 * u2 + u) * h * m0 +
       (3 * u2 - 2 * u3) * b[j] +
       (u3 - u2) * h * m1;
   }
-  return NOW;
+  return out;
 };
+
+/** The grip and the blade direction (x, y, z each) of cut `cut` at `p` of the swing: one array, rewritten by each call. */
+export const stroke = (cut: number, p: number): number[] => through(KEYS[cut], p, NOW);
+
+/**
+ * How the trunk moves through each cut, so that the shoulders and the arms carry the blade and not
+ * the forearms alone: keys of [share, twist, bend, lean] in radians, the twist turning the chest
+ * to the left, the bend forward and the lean to the left; all 0 in the guard. It coils the way the
+ * wind-up goes and unwinds through the strike: a cut from the left turns left, then hard to the
+ * right; a slash arches back, then folds over; a thrust draws the right shoulder back, then drives
+ * it out with a lean into the point.
+ */
+const ACROSS_TRUNK = (s: number) => [
+  [0, 0, 0, 0],
+  [0.12, 0.3, -0.04, 0.06],
+  [0.24, 0.55, -0.06, 0.1],
+  [s - 0.07, 0.32, 0, 0.04],
+  [s, 0, 0.06, -0.04],
+  [0.5, -0.45, 0.12, -0.1],
+  [0.62, -0.55, 0.14, -0.12],
+  [0.8, -0.25, 0.06, -0.04],
+  [1, 0, 0, 0],
+];
+/** A key of the cut from the left turned round: the twist and the lean the other way. */
+const other = (k: number[]) => [k[0], -k[1], k[2], -k[3]];
+const SLASH_TRUNK = (s: number) => [
+  [0, 0, 0, 0],
+  [0.14, 0, -0.1, 0],
+  [0.28, 0.04, -0.26, 0],
+  [0.34, 0.04, -0.2, 0],
+  [s, 0, 0.16, 0],
+  [0.52, 0, 0.4, 0],
+  [0.64, 0, 0.42, 0],
+  [1, 0, 0, 0],
+];
+const TRUNK: number[][][] = [
+  [
+    [0, 0, 0, 0],
+    [0.3, -0.32, -0.04, 0],
+    [strikeAt(0), 0.36, 0.2, 0.04],
+    [strikeAt(0) + 0.2, 0.36, 0.2, 0.04],
+    [1, 0, 0, 0],
+  ],
+  ACROSS_TRUNK(strikeAt(1)),
+  ACROSS_TRUNK(strikeAt(2)).map(other),
+  SLASH_TRUNK(strikeAt(3)),
+  [
+    [0, 0, 0, 0],
+    [0.2, -0.4, -0.06, 0],
+    [strikeAt(4), 0.46, 0.3, 0.06],
+    [strikeAt(4) + 0.3, 0.46, 0.3, 0.06],
+    [1, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0],
+    [0.15, 0.5, -0.04, 0.08],
+    [0.35, -0.3, 0.06, -0.08],
+    [0.65, -0.3, 0.06, -0.08],
+    [0.78, -0.5, 0.12, -0.1],
+    [1, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0],
+    [0.15, -0.5, -0.04, -0.08],
+    [0.35, 0.3, 0.06, 0.08],
+    [0.65, 0.3, 0.06, 0.08],
+    [0.78, 0.5, 0.12, 0.1],
+    [1, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0],
+    [0.3, 0, -0.26, 0],
+    [0.55, 0, -0.26, 0],
+    [strikeAt(7) - 0.07, 0, -0.1, 0],
+    [strikeAt(7), 0, 0.2, 0],
+    [0.8, 0, 0.45, 0],
+    [0.9, 0, 0.45, 0],
+    [1, 0, 0, 0],
+  ],
+];
+const BODY: number[] = [];
+
+/** The trunk's [twist, bend, lean] (radians, see TRUNK) of cut `cut` at `p` of its swing: one array, rewritten by each call. */
+export const trunk = (cut: number, p: number): number[] => through(TRUNK[cut], p, BODY);
+
+/** The share of the trunk's twist the view turns with in the first person, and the runner's whole body. */
+export const SWAY = 0.2;
 
 /**
  * How far through its cut a player is, 0 to 1, or -1 when it is not cutting. `swing` counts down

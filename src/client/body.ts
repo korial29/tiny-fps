@@ -18,6 +18,7 @@ import {
   BASE,
   BEHIND as BACK,
   BOW,
+  SWAY,
   C,
   S,
   cutting,
@@ -25,6 +26,7 @@ import {
   held as sword,
   progress,
   stroke,
+  trunk,
   whirl,
 } from './katana';
 import { add, basis, dot, mix, sub, unit } from './mesh';
@@ -48,7 +50,7 @@ export interface Body {
   aim(target: Vec3): void;
   /** The muzzle of the gun in the right hand, in the camera's space (right, up, forward), as of the last update. */
   muzzle(): Vec3;
-  /** How far round a spin has turned the body as of the last update (radians, whirl()): the drawn view turns with it. */
+  /** How far round a spin, and a share of the trunk's twist in a cut, have turned the body as of the last update (radians, whirl(), trunk()): the drawn view turns with it. */
   spun(): number;
   /** The joints for a camera at `eye`; undefined without a player, or with the camera away from the body. */
   pose(eye: Vec3, yaw: number, pitch: number, roll?: number): Solved | undefined;
@@ -60,9 +62,10 @@ export interface Body {
 const AWAY = 1;
 /** On a ledge the camera sits this far behind the head and below it, so that the arms reach the ledge. */
 const [BEHIND, DROP] = [0.12, 0.03];
-const [X, Y]: Vec3[] = [
+const [X, Y, Z]: Vec3[] = [
   [1, 0, 0],
   [0, 1, 0],
+  [0, 0, 1],
 ];
 const POLE: Vec3 = [0.7, -1, -0.5];
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
@@ -125,6 +128,8 @@ const twist = (q: Quat, b: Vec3): number => {
 /** The rotation `r` turned the shortest way so that its bone of rest offset `rest` lies along `d`. */
 const lay = (r: Quat, rest: Vec3, d: Vec3): Quat => mul(arc(spin(r, rest), d), r);
 
+/** The share of the trunk's twist the hands go round with in the first person, on top of the view's SWAY. */
+const HANDS = 0.3;
 /** The trunk seen from above, with a fist round it: half its width and half its depth, metres. */
 const [TRUNK_W, TRUNK_D] = [0.22, 0.17];
 /** How far under the neck the chest stands out the most, and half the width it hides across, to the shoulders. */
@@ -160,13 +165,23 @@ const outOf = (s: Solved, yaw: number, eye: Vec3, p: Vec3): number => {
 
 /**
  * Puts the arm of shoulder joint `j` (ARM_R or ARM_L) of `q` on a handle running along the unit
- * `g`, the hand round the point `at`, the elbow toward `pole`; `s` is q solved. The hand comes
+ * `g`, the hand round the point `at`, the elbow toward `pole`; `solved` is q solved. The shoulder
+ * (the clavicle) rises with a hand over it and comes forward with a long reach. The hand comes
  * first: its axis leaves the handle on the shoulder's side, the thumb along the handle (the tilt of
  * katana.ts), and the elbow goes where the forearm carries on that axis, as near as the bones
  * allow. The elbow is a hinge, and the forearm's turn about itself goes half to the elbow and half
  * to the wrist, as a forearm's twist does. Out of reach the hand stops short.
  */
-export const wield = (q: Pose, s: Solved, j: number, at: Vec3, g: Vec3, pole: Vec3) => {
+export const wield = (q: Pose, solved: Solved, j: number, at: Vec3, g: Vec3, pole: Vec3) => {
+  // The shoulder goes with the hand: up as it rises over it, forward as it reaches out.
+  const sd = j === J.ARM_L ? -1 : 1;
+  const d = sub(at, solved.pos[j]);
+  const [up, out] = [
+    clamp((d[1] + 0.12) * 1.6, 0, 0.5),
+    clamp((Math.hypot(...d) - 0.4) * 2.5, 0, 0.45),
+  ];
+  q.rot[j - 1] = mul(q.rot[j - 1], mul(axis(Y, sd * out), axis(Z, sd * up)));
+  const s = solve(q);
   const a = s.pos[j];
   const [l1, l2] = [dist(a, s.pos[j + 1]), dist(s.pos[j + 1], s.pos[j + 2])];
   // Away from the elbow too, for a handle that points at the shoulder or away from it.
@@ -526,19 +541,34 @@ export const createBody = (world?: World): Body => {
       r[2] * a + u[2] * b + f[2] * c,
     ];
     const view = (v: Vec3): Vec3 => [dot(v, r), dot(v, u), dot(v, f)];
-    // The katana's space: the camera's, tipped down BOW at most, so the guard stays upright.
-    const [kr, ku, kf] = basis(yaw, Math.max(pitch, -BOW), roll);
+    // The trunk follows the look a little, and moves through the katana's cut (trunk()): it
+    // twists, bends and leans, the chest more than the waist, so the shoulders carry the arms.
+    const sw = w.blade > 0.002 ? blade() : undefined;
+    const [tw, bd, ln] =
+      sw && prog >= 0 ? trunk(me.cut ?? 0, prog).map(v => v * w.blade) : [0, 0, 0];
+    // The body turns on its feet as the view does: round in a spin, and a share of the twist.
+    q.yaw += sw && prog >= 0 ? whirl(me.cut ?? 0, prog) * w.blade + SWAY * tw : 0;
+    // The katana's space: the camera's, tipped down BOW at most, so the guard stays upright, and
+    // carried round by the chest: the view turns SWAY of its twist and the hands HANDS of it on
+    // top (any more and they leave the view in a wind-up). The bend is the trunk's alone, so the
+    // strike stays on the crosshair.
+    const [kr, ku, kf] = basis(yaw + HANDS * tw, Math.max(pitch, -BOW), roll);
     const keep = ([a, b, c]: Vec3): Vec3 => [
       kr[0] * a + ku[0] * b + kf[0] * c,
       kr[1] * a + ku[1] * b + kf[1] * c,
       kr[2] * a + ku[2] * b + kf[2] * c,
     ];
-    // The trunk follows the look a little, and turns with the katana's swing, so the arms carry the
-    // hands further round.
-    const sw = w.blade > 0.002 ? blade() : undefined;
-    const round = sw ? -0.6 * (sw.at[0] - 0.06) * w.blade : 0;
-    for (const j of [J.SPINE, J.CHEST]) {
-      q.rot[j] = mul(q.rot[j], mul(axis(Y, round), axis(X, 0.12 * clamp(pitch, -1.3, 1.3))));
+    for (const [j, k] of [
+      [J.SPINE, 0.4],
+      [J.CHEST, 0.6],
+    ]) {
+      q.rot[j] = mul(
+        q.rot[j],
+        mul(
+          mul(axis(Y, tw * k), axis(X, 0.12 * clamp(pitch, -1.3, 1.3) - bd * k)),
+          axis(Z, ln * k),
+        ),
+      );
     }
     // The head goes to the camera, the planted feet stay where they are.
     const s0 = solve(q);
@@ -645,7 +675,7 @@ export const createBody = (world?: World): Body => {
         const at = along(add(add(eye, keep(sw.at)), clear), g, sd > 0 ? 0 : -BACK);
         const held = { ...q, rot: q.rot.slice() };
         wield(held, s, arm, at, g, keep([0.5 * sd, -1, -0.35]));
-        for (const k of [arm, arm + 1, arm + 2]) {
+        for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], onSword);
         }
       }
@@ -692,6 +722,7 @@ export const createBody = (world?: World): Body => {
       target = l < 3 ? (l ? (t.map(v => (v * 3) / l) as Vec3) : [0, 0, 3]) : t;
     },
     muzzle: () => tip(...holster()),
-    spun: () => (me && prog >= 0 ? whirl(me.cut ?? 0, prog) : 0),
+    spun: () =>
+      me && prog >= 0 ? whirl(me.cut ?? 0, prog) + SWAY * trunk(me.cut ?? 0, prog)[0] * w.blade : 0,
   };
 };

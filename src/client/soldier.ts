@@ -12,7 +12,18 @@ import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
 import { TILT, aimed, focus, held } from './gun';
 import type { Tracer } from './beams';
-import { BEHIND, BOW, cutting, ends, held as sword, progress, stroke, whirl } from './katana';
+import {
+  BEHIND,
+  BOW,
+  SWAY,
+  cutting,
+  ends,
+  held as sword,
+  progress,
+  stroke,
+  trunk,
+  whirl,
+} from './katana';
 import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
 import { STRIDE, add, basis, unit } from './mesh';
@@ -151,40 +162,43 @@ const ease = (v: number) => (v = Math.min(Math.max(v, 0), 1)) * v * (3 - 2 * v);
 /**
  * The pose with the katana in both hands: carried, or in a cut, which is the first person's cut
  * seen from the runner's eye (the share `e` of it, so that it is drawn from the carry and back to
- * it), the trunk turning with the blade and leaning into the lunge and the low finish, and the
- * whole body turning round in a spin.
+ * it), the trunk twisting, bending and leaning through it (trunk()), and the whole body turning
+ * round in a spin.
  */
 export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number): Pose => {
   const e = prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
   const k = stroke(p.cut ?? 0, Math.max(prog, 0));
   const g = CARRY.map((v, i) => v + (k[i] - v) * e);
   g[1] += 0.02 * Math.sin(TAU * ph) * (1 - e);
-  // A spin turns the whole body round on its feet.
-  const spin = prog < 0 ? 0 : whirl(p.cut ?? 0, prog);
+  // A spin turns the whole body round on its feet; a cut turns it with a share of the trunk's twist.
+  const [tw, bd, ln] = prog < 0 ? [0, 0, 0] : trunk(p.cut ?? 0, prog).map(v => v * e);
+  const spin = prog < 0 ? 0 : whirl(p.cut ?? 0, prog) + SWAY * tw;
   const pose = { ...from, yaw: from.yaw + spin };
-  const [r, u, f] = basis(p.yaw + spin, Math.max(p.pitch, -BOW) * e);
+  // The hands go round with the chest's whole twist and down and up with its bend.
+  const [r, u, f] = basis(p.yaw + spin + (1 - SWAY) * tw, Math.max(p.pitch, -BOW) * e - 0.6 * bd);
   /** The camera's space at the eye (right, up, forward) to the world. */
   const turn = ([a, b, c]: number[]): Vec3 => [
     r[0] * a + u[0] * b + f[0] * c,
     r[1] * a + u[1] * b + f[1] * c,
     r[2] * a + u[2] * b + f[2] * c,
   ];
-  // The eye of the gait's head, which a run leans forward: the hands go with it.
-  const eye = solve(pose).pos[J.HEAD];
-  const d = unit(turn(g.slice(3, 6)));
-  const at = add(eye, turn(g.slice(0, 3)));
   const rot = pose.rot.slice();
   const q = { ...pose, rot };
-  for (const j of [J.SPINE, J.CHEST]) {
+  // The trunk twists, bends and leans through the cut (trunk()), the chest more than the waist.
+  for (const [j, k] of [
+    [J.SPINE, 0.4],
+    [J.CHEST, 0.6],
+  ]) {
     rot[j] = mul(
       rot[j],
-      mul(
-        axis([0, 1, 0], -0.35 * g[3] * e),
-        axis([1, 0, 0], -(Math.max(g[2] - 0.32, 0) + 0.2 * Math.max(-g[4], 0)) * e),
-      ),
+      mul(mul(axis([0, 1, 0], tw * k), axis([1, 0, 0], -bd * k)), axis([0, 0, 1], ln * k)),
     );
   }
   const s = solve(q);
+  // The eye of the head, which a run leans forward and the trunk carries: the hands go with it.
+  const eye = s.pos[J.HEAD];
+  const d = unit(turn(g.slice(3, 6)));
+  const at = add(eye, turn(g.slice(0, 3)));
   // Both hands round the grip, the left one BEHIND the right, the elbows down and out.
   wield(q, s, J.ARM_R, at, d, turn([0.5, -1, -0.35]));
   wield(q, s, J.ARM_L, add(at, d.map(v => -BEHIND * v) as Vec3), d, turn([-0.5, -1, -0.35]));

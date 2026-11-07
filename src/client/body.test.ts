@@ -1188,6 +1188,29 @@ describe('the katana in both hands', () => {
     }
   });
 
+  it('moves the shoulders and the chest with the blade, not the forearms alone', () => {
+    const guard = (() => {
+      const p = blade();
+      return pose(watch(p, 60), p);
+    })();
+    /** The chest's facing on the floor plane, radians to the left of the look. */
+    const facing = (s: ReturnType<typeof pose>) => {
+      const f = turn(s.rot[J.CHEST], [0, 0, -1]);
+      return Math.atan2(-f[0], -f[2]);
+    };
+    // The slash raised over the head: the right shoulder up with the hands.
+    const up = into(CUT.SLASH, Math.round(0.28 * CUTS[CUT.SLASH].ticks));
+    const raised = pose(up.body, up.p);
+    expect(raised.pos[J.ARM_R][1] - guard.pos[J.ARM_R][1]).toBeGreaterThan(0.03);
+    // The cut from the left: the chest turned left in the wind-up, right in the follow-through.
+    const [wind, after] = [8, 21].map(t => {
+      const { body, p } = into(CUT.LEFT, t);
+      return facing(pose(body, p));
+    });
+    expect(wind - facing(guard)).toBeGreaterThan(0.2);
+    expect(after - facing(guard)).toBeLessThan(-0.2);
+  });
+
   it('is held on the grip: the right hand is where the sword puts its grip, with the point at the end of the blade', () => {
     const p = blade();
     const body = watch(p, 60);

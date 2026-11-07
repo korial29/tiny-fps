@@ -16,6 +16,7 @@ import {
   katana,
   progress,
   stroke,
+  trunk,
   sword,
   whirl,
 } from './katana';
@@ -502,6 +503,44 @@ describe('whirl', () => {
       for (const p of steps(0, 1, 10)) {
         expect(whirl(cut, p)).toBe(0);
       }
+    }
+  });
+});
+
+describe('the trunk through a cut', () => {
+  const ALL = Object.values(CUT);
+
+  it('is still in the guard, at the start and the end of every cut', () => {
+    for (const cut of ALL) {
+      for (const p of [0, 1]) {
+        trunk(cut, p).forEach(v => expect(v).toBeCloseTo(0, 9));
+      }
+    }
+  });
+
+  it('coils the way a cut across winds up, then unwinds hard through the strike', () => {
+    // From the left: turned left over the wind-up, right through the follow-through.
+    expect(trunk(CUT.LEFT, 0.24)[0]).toBeGreaterThan(0.4);
+    expect(trunk(CUT.LEFT, 0.6)[0]).toBeLessThan(-0.4);
+    // From the right: the other way round.
+    expect(trunk(CUT.RIGHT, 0.24)[0]).toBeLessThan(-0.4);
+    expect(trunk(CUT.RIGHT, 0.6)[0]).toBeGreaterThan(0.4);
+    // The chest leans after the blade.
+    expect(trunk(CUT.LEFT, 0.6)[2]).toBeLessThan(0);
+  });
+
+  it('arches back over a slash and folds over after it', () => {
+    expect(trunk(CUT.SLASH, 0.28)[1]).toBeLessThan(-0.2);
+    expect(trunk(CUT.SLASH, 0.6)[1]).toBeGreaterThan(0.35);
+    expect(trunk(CUT.LEAP, 0.85)[1]).toBeGreaterThan(0.35);
+  });
+
+  it('draws the right shoulder back for a thrust, then drives it out with a lean into the point', () => {
+    for (const cut of [CUT.THRUST, CUT.LUNGE]) {
+      const s = CUTS[cut].strike / CUTS[cut].ticks;
+      expect(trunk(cut, s * 0.7)[0]).toBeLessThan(0);
+      expect(trunk(cut, s)[0]).toBeGreaterThan(0.3);
+      expect(trunk(cut, s)[1]).toBeGreaterThan(0.15);
     }
   });
 });

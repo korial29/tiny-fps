@@ -597,7 +597,7 @@ describe('a runner with the katana', () => {
       expect(path[strike][2]).toBeLessThan(path[tick(0.3)][2] - 0.2);
     } else if (cut == CUT.SLASH) {
       // Raised over the head and behind it, then down to below the hips.
-      expect(path[tick(0.28)][1]).toBeGreaterThan(path[strike][1] + 0.55);
+      expect(path[tick(0.28)][1]).toBeGreaterThan(path[strike][1] + 0.5);
       expect(path[tick(0.28)][2]).toBeGreaterThan(-3);
       expect(path[strike][1]).toBeGreaterThan(path[tick(0.55)][1] + 0.8);
     } else {

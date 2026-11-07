@@ -37,10 +37,11 @@ export const area = ({ brushes }: WorldDef) =>
  * The road grid: the x of each road that runs along z (`xs`) and the z of each that runs along x
  * (`zs`), sorted. Two roads hug the play area at PLAZA from its box and the rest follow every PITCH
  * out to `reach` from its centre, so no road crosses a building and every road crosses every other.
+ * `out` is how far past the circle round the play area it goes: REACH for the roads that are drawn.
  */
-export const grid = (def: WorldDef) => {
+export const grid = (def: WorldDef, out = REACH) => {
   const box = area(def);
-  const reach = Math.hypot(box[1] - box[0], box[3] - box[2]) / 2 + REACH;
+  const reach = Math.hypot(box[1] - box[0], box[3] - box[2]) / 2 + out;
   const lines = (lo: number, hi: number) => {
     const out: number[] = [];
     for (let k = 0; (hi - lo) / 2 + PLAZA + ROAD / 2 + k * PITCH <= reach; k++) {

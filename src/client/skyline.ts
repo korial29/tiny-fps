@@ -20,12 +20,48 @@ const CAPS = [
   [0.9, 0.15, 0.2],
   [0.25, 0.85, 0.55],
 ];
+/**
+ * The far city, past the roads out to FAR from the centre (inside the far clip, 900 m): one tower to
+ * a block of the grid carried on, taller further out, so that their tops rise out of the haze in
+ * fainter and fainter rows down to the horizon and the city does not stop at the last road.
+ */
+const FAR = 820;
 /** A lawn's green on the paint, and its height over the street: the lots with no tower, and some round one. */
 const GRASS = [0.22, 0.5, 0.14];
 const TURF = 0.3;
 
-/** The towers of a world's skyline, in the blocks round its play area; the same ones every time. */
-export const skyline = (def: WorldDef): Brush[] => {
+/** The towers of a world's skyline, in the blocks round its play area and out to the horizon; the same ones every time. */
+export const skyline = (def: WorldDef): Brush[] => [...near(def), ...far(def)];
+
+/** The far towers: one to a block of the grid carried on past the roads, out to FAR. */
+const far = (def: WorldDef): Brush[] => {
+  const { reach } = grid(def);
+  const { box, xs, zs } = grid(def, FAR);
+  const [cx, cz] = [(box[0] + box[1]) / 2, (box[2] + box[3]) / 2];
+  const h = ROAD / 2;
+  return xs.slice(1).flatMap((xb, i) =>
+    zs.slice(1).flatMap((zb, j): Brush[] => {
+      const r = (k: number) => hash(i, j, SEED + 20 + k);
+      const [x0, x1, z0, z1] = [xs[i] + h, xb - h, zs[j] + h, zb - h];
+      const d = Math.hypot((x0 + x1) / 2 - cx, (z0 + z1) / 2 - cz);
+      if (d <= reach || d > FAR || r(0) < 0.12) {
+        return [];
+      }
+      const [w, e] = [(x1 - x0) * (0.05 + r(1) * 0.2), (z1 - z0) * (0.05 + r(2) * 0.2)];
+      return [
+        {
+          min: [x0 + w, STREET, z0 + e],
+          max: [x1 - w, -30 + r(3) ** 1.3 * (90 + 0.2 * (d - reach)), z1 - e],
+          top: TEX.CONCRETE,
+          side: [TEX.GLASS, TEX.STEEL, TEX.CONCRETE][+(r(4) > 0.6) + +(r(4) > 0.8)],
+        },
+      ];
+    }),
+  );
+};
+
+/** The near towers and lawns, in the blocks between the roads. */
+const near = (def: WorldDef): Brush[] => {
   const { box, reach, xs, zs } = grid(def);
   const [cx, cz] = [(box[0] + box[1]) / 2, (box[2] + box[3]) / 2];
   const roof = Math.min(...def.brushes.map(b => b.max[1]));

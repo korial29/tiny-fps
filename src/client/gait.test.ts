@@ -671,7 +671,7 @@ describe('gait: the other moves', () => {
     expect(yawOf(side.rot[J.PELVIS])).toBeCloseTo(Math.PI / 2, 1);
   });
 
-  it('somersaults on a double jump, and the head stays level to the look', () => {
+  it('tucks on a double jump without a somersault (the user, 2026-11-08): the body stays upright', () => {
     const g = createGait();
     const p = state({ mode: MODE.AIR, vy: 3, y: 2, jumps: 1 });
     const frames = sim(g, p, 1.5, (q, t) => {
@@ -687,10 +687,8 @@ describe('gait: the other moves', () => {
         Math.atan2(turn(f.rot[J.PELVIS], [0, 1, 0])[2], turn(f.rot[J.PELVIS], [0, 1, 0])[1]),
       ),
     );
-    // Most of a turn at the mid-flip, none before it and none after it.
-    expect(Math.max(...turned)).toBeGreaterThan(2);
-    expect(turned[10]).toBeLessThan(0.5);
-    expect(turned[frames.length - 1]).toBeLessThan(0.5);
+    // Upright all through: no turn of the pelvis past what a jump's lean gives.
+    expect(Math.max(...turned)).toBeLessThan(0.5);
   });
 
   it('starts over after a respawn: no easing across the jump', () => {

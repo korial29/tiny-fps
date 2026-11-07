@@ -747,9 +747,6 @@ export const createGait = (): Gait => {
         }
       }
     });
-    if (flip) {
-      rot[J.PELVIS] = mul(axis(X, -TAU * (3 - 2 * flip) * flip * flip), rot[J.PELVIS]);
-    }
     const hang = sw(MOVE.HANG);
     if (hang > 0.002) {
       // A hang sways: the body swings about the hands, a metre above the pelvis, the legs a little more. The hands go back on the lip in `reach`.

@@ -67,10 +67,10 @@ const crossings = (s: Float32Array) =>
 const sound = (name: keyof typeof SOUND) => render(SOUND[name], LAYERS);
 
 describe('the sounds of the game', () => {
-  it('are one entry per id, and the looped ones are the wind, the scrape and the hum', () => {
+  it('are one entry per id, and the looped ones are the wind, the scrape, the hum and the buzz', () => {
     expect(LAYERS).toHaveLength(Object.keys(SOUND).length);
     expect(Object.values(SOUND).sort((a, b) => a - b)).toEqual(LAYERS.map((_, i) => i));
-    expect(LOOPED).toEqual([SOUND.WIND, SOUND.SCRAPE, SOUND.HUM]);
+    expect(LOOPED).toEqual([SOUND.WIND, SOUND.SCRAPE, SOUND.HUM, SOUND.BUZZ]);
   });
 
   describe.each(Object.entries(SOUND).filter(([, id]) => !LOOPED.includes(id)))('%s', (_, id) => {
@@ -118,7 +118,7 @@ describe('the sounds of the game', () => {
   });
 
   it('make the rail gun’s crackle short, to play again and again, loud and noisy', () => {
-    expect(SOUND.RAIL).toBe(LAYERS.length - 2);
+    expect(SOUND.RAIL).toBe(LAYERS.length - 3);
     const s = sound('RAIL');
     expect(s.length / RATE).toBeLessThan(0.15);
     expect(peak(s)).toBeGreaterThan(0.3);
@@ -127,7 +127,7 @@ describe('the sounds of the game', () => {
   });
 
   it('make the splash of a plasma ball short, loud and noisier than the shot', () => {
-    expect(SOUND.SPLASH).toBe(LAYERS.length - 4);
+    expect(SOUND.SPLASH).toBe(LAYERS.length - 5);
     const s = sound('SPLASH');
     expect(s.length / RATE).toBeLessThan(0.25);
     expect(peak(s)).toBeGreaterThan(0.5);
@@ -135,7 +135,7 @@ describe('the sounds of the game', () => {
   });
 
   it('make the blast of a charged shot long and deep: half a second and more, diving under the plain shot', () => {
-    expect(SOUND.BLAST).toBe(LAYERS.length - 3);
+    expect(SOUND.BLAST).toBe(LAYERS.length - 4);
     const s = sound('BLAST');
     expect(s.length / RATE).toBeGreaterThan(0.5);
     expect(s.length / RATE).toBeGreaterThan((sound('LASER').length / RATE) * 4);

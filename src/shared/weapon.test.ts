@@ -4,6 +4,10 @@ import {
   AMMO_PACK,
   CHARGE_MAX,
   CHARGE_TICKS,
+  LOCK_BREAK,
+  LOCK_HP,
+  LOCK_TICKS,
+  LOCK_WIN,
   CUTS,
   DOWN_TICKS,
   END_SCREEN,
@@ -864,6 +868,178 @@ const swing = (m: ReturnType<typeof match>, c: Peer, keys = 0, look: Look = {}) 
   m.ticks(SNAP_EVERY);
   m.hold(c, CUTS[cutOf(keys)].strike + 1, FIRE | keys, look);
 };
+
+describe('a saber lock', () => {
+  const WEST = Math.PI / 2;
+  /**
+   * Cy (red, at 0 facing east) and Bob (blue, 2 m east facing west) both thrust on the same ticks,
+   * to the strike: the blades lock. Returns the match.
+   */
+  const lock = () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 2, 0, { ...SWORD, yaw: WEST });
+    m.ticks(SNAP_EVERY);
+    for (let k = 0; k <= CUTS[CUT.THRUST].strike; k++) {
+      m.send(m.cy, FIRE | FORWARD);
+      m.send(m.bob, FIRE | FORWARD, { yaw: WEST });
+      m.ticks(1);
+    }
+    return m;
+  };
+  /** n steps of each, Cy's keys and Bob's. */
+  const both = (
+    m: ReturnType<typeof match>,
+    n: number,
+    cy: (k: number) => number,
+    bob: (k: number) => number,
+  ) => {
+    for (let k = 0; k < n; k++) {
+      m.send(m.cy, cy(k));
+      m.send(m.bob, bob(k), { yaw: WEST });
+      m.ticks(1);
+    }
+  };
+
+  it('locks the blades when two foes face to face strike at the same time: no cut lands', () => {
+    const m = lock();
+    for (const [c, foe] of [
+      [m.cy, 1],
+      [m.bob, 2],
+    ] as const) {
+      expect(m.state(c)).toMatchObject({ foe, hp: HP_MAX, swing: 0, wield: true });
+      expect(m.state(c).lock).toBeGreaterThan(LOCK_TICKS - 5);
+    }
+    expect([m.state(m.cy).hits, m.state(m.bob).hits]).toEqual([0, 0]);
+    // It is in the snapshot.
+    m.ticks(SNAP_EVERY);
+    expect(m.snap(m.ann).players.find(p => p.id === 2)).toMatchObject({ foe: 1 });
+  });
+
+  it('holds both where they stand: the keys do not move them', () => {
+    const m = lock();
+    const [x, z] = [m.state(m.cy).x, m.state(m.cy).z];
+    both(
+      m,
+      20,
+      () => FORWARD | SPRINT,
+      () => FORWARD,
+    );
+    expect([m.state(m.cy).x, m.state(m.cy).z]).toEqual([x, z]);
+  });
+
+  it('is won by the faster clicker: LOCK_WIN presses ahead, and the other takes LOCK_HP and the shock', () => {
+    const m = lock();
+    // Cy taps every other step, Bob every fourth: Cy pulls ahead.
+    let k = 0;
+    for (; k < 200 && m.state(m.cy).lock; k++) {
+      both(
+        m,
+        1,
+        () => (k % 2 ? 0 : FIRE),
+        () => (k % 4 ? 0 : FIRE),
+      );
+    }
+    expect(m.state(m.cy)).toMatchObject({ lock: 0, hp: HP_MAX });
+    expect(m.state(m.bob)).toMatchObject({ lock: 0, hp: HP_MAX - LOCK_HP, zap: true });
+    expect(m.state(m.bob).stun).toBeGreaterThan(0);
+    // Thrown back along Cy's look, east.
+    expect(m.state(m.bob).vx).toBeGreaterThan(0);
+    expect(m.state(m.cy).hits).toBe(1);
+    // Some 2 x LOCK_WIN steps for Cy to lead by LOCK_WIN, the two clicking at 2 to 1.
+    expect(k).toBeLessThan(4 * LOCK_WIN + 4);
+  });
+
+  it('counts a press, not a held button: holding FIRE wins nothing', () => {
+    const m = lock();
+    for (let k = 0; k < 60 && m.state(m.cy).lock; k++) {
+      both(
+        m,
+        1,
+        () => FIRE,
+        () => (k % 2 ? 0 : FIRE),
+      );
+    }
+    expect(m.state(m.bob).lock).toBe(0);
+    expect([m.state(m.cy).hp, m.state(m.bob).hp]).toEqual([HP_MAX - LOCK_HP, HP_MAX]);
+  });
+
+  it('lets one step out with a side or back key held LOCK_BREAK steps: both free, no harm', () => {
+    for (const key of [LEFT, RIGHT, BACK]) {
+      const m = lock();
+      both(
+        m,
+        LOCK_BREAK - 1,
+        () => key,
+        () => 0,
+      );
+      expect(m.state(m.cy).lock).toBeGreaterThan(0);
+      both(
+        m,
+        1,
+        () => key,
+        () => 0,
+      );
+      expect([m.state(m.cy).lock, m.state(m.bob).lock]).toEqual([0, 0]);
+      expect([m.state(m.cy).hp, m.state(m.bob).hp]).toEqual([HP_MAX, HP_MAX]);
+      expect([m.state(m.cy).stun, m.state(m.bob).stun]).toEqual([0, 0]);
+      // And he walks away.
+      both(
+        m,
+        20,
+        () => key,
+        () => 0,
+      );
+      expect(Math.hypot(m.state(m.cy).x, m.state(m.cy).z)).toBeGreaterThan(0.5);
+    }
+  });
+
+  it('parts them after LOCK_TICKS without a winner, each stumbling back from the other', () => {
+    const m = lock();
+    both(
+      m,
+      LOCK_TICKS,
+      () => 0,
+      () => 0,
+    );
+    expect([m.state(m.cy).lock, m.state(m.bob).lock]).toEqual([0, 0]);
+    expect([m.state(m.cy).hp, m.state(m.bob).hp]).toEqual([HP_MAX, HP_MAX]);
+    expect(m.state(m.cy).vx).toBeLessThan(0);
+    expect(m.state(m.bob).vx).toBeGreaterThan(0);
+  });
+
+  it('does not lock a cut on a foe who is not cutting, nor on one who is not facing him', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 2, 0, { ...SWORD, yaw: WEST });
+    swing(m, m.cy, FORWARD);
+    expect([m.state(m.cy).lock ?? 0, m.state(m.bob).hp]).toEqual([0, HP_MAX - CUTS[CUT.THRUST].hp]);
+    // Bob cuts at the same time but faces away.
+    const n = match();
+    n.put(n.cy, 0, 0, SWORD);
+    n.put(n.bob, 2, 0, { ...SWORD, yaw: EAST });
+    n.ticks(SNAP_EVERY);
+    for (let k = 0; k <= CUTS[CUT.THRUST].strike; k++) {
+      n.send(n.cy, FIRE | FORWARD);
+      n.send(n.bob, FIRE | FORWARD);
+      n.ticks(1);
+    }
+    expect(n.state(n.cy).lock ?? 0).toBe(0);
+    expect(n.state(n.bob).hp).toBe(HP_MAX - CUTS[CUT.THRUST].hp);
+  });
+
+  it('ends when the other goes down or leaves', () => {
+    const m = lock();
+    m.room.disconnect(m.bob);
+    both(
+      m,
+      1,
+      () => 0,
+      () => 0,
+    );
+    expect(m.state(m.cy).lock).toBe(0);
+  });
+});
 
 describe('a cut', () => {
   it('thrusts into the enemy in front: he loses 2 hp, the cutter counts one hit and no shot', () => {

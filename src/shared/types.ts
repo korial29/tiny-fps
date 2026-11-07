@@ -192,6 +192,17 @@ export interface PlayerState {
   cut?: number;
   /** The running stumble (`stun`) is a katana's shock, not a tackle. Absent reads false. */
   zap?: boolean;
+  /**
+   * Ticks left in a saber lock (LOCK_TICKS at its start, held at 1 until the host parts it), 0 when
+   * not locked; while locked the keys do not move him, FIRE presses push (`pushes`) and a side or back
+   * key held counts `away`. `foe` is the id of the one he is locked with, and `pressed` whether FIRE
+   * was held at the last step, to tell a press. All absent read 0 or false.
+   */
+  lock?: number;
+  foe?: number;
+  pushes?: number;
+  pressed?: boolean;
+  away?: number;
   /** While down after a katana's cut put him down: the LIMB it took off, for the clients to draw. NONE once up. Absent reads NONE. */
   lost?: number;
   /** For the animation, not sent: the EV bits of the last step, and the speed of a landing. */

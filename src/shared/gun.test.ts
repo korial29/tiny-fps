@@ -9,6 +9,8 @@ import {
   DOWN_TICKS,
   GUN_COOLDOWN,
   HP_MAX,
+  LOCK_BREAK,
+  LOCK_TICKS,
   PICK_H,
   RACK_R,
 } from './constants';
@@ -200,6 +202,62 @@ describe('the trigger', () => {
       STRIKE.NONE,
     );
     expect(p.shots).toBe(0);
+  });
+});
+
+describe('a saber lock', () => {
+  const locked = (over: Partial<PlayerState> = {}) =>
+    armed(0, 0, {
+      blade: true,
+      wield: true,
+      lock: LOCK_TICKS,
+      foe: 1,
+      pushes: 0,
+      pressed: true,
+      away: 0,
+      ...over,
+    });
+
+  it('holds him where he is, the katana in hand, and starts no cut nor shot', () => {
+    const p = locked();
+    for (let k = 0; k < 30; k++) {
+      expect(hit(p, FORWARD | KEY.SPRINT | (k % 2 ? 0 : FIRE))).toBe(STRIKE.NONE);
+    }
+    expect([p.x, p.z, p.swing, p.shots, p.wield]).toEqual([0, 0, 0, 0, true]);
+  });
+
+  it('counts a press of FIRE, not a hold: one push for each time it goes down', () => {
+    const p = locked({ pressed: false });
+    for (const keys of [FIRE, FIRE, FIRE, 0, FIRE, 0, 0, FIRE]) {
+      hit(p, keys);
+    }
+    expect(p.pushes).toBe(3);
+    // Held at the start of the lock (the press that cut), the first does not count.
+    const q = locked();
+    hit(q, FIRE);
+    expect(q.pushes).toBe(0);
+  });
+
+  it('counts the steps a side or back key is held, up to LOCK_BREAK, and starts again when let go', () => {
+    const p = locked();
+    for (let k = 0; k < 10; k++) {
+      hit(p, KEY.LEFT);
+    }
+    expect(p.away).toBe(10);
+    hit(p, FORWARD);
+    expect(p.away).toBe(0);
+    for (let k = 0; k < LOCK_BREAK + 10; k++) {
+      hit(p, KEY.BACK | KEY.RIGHT);
+    }
+    expect(p.away).toBe(LOCK_BREAK);
+  });
+
+  it('runs down to 1 and waits there for the host', () => {
+    const p = locked({ lock: 3 });
+    for (let k = 0; k < 5; k++) {
+      hit(p, 0);
+    }
+    expect(p.lock).toBe(1);
   });
 });
 

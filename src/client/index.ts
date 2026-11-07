@@ -1,4 +1,4 @@
-import { PLAYER_H, TICK_HZ } from '../shared/constants';
+import { LOCK_WIN, PLAYER_H, TICK_HZ } from '../shared/constants';
 import { HIGHLINE } from '../shared/map';
 import { eyeHeight } from '../shared/physics';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
@@ -235,6 +235,9 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     const hit = predictor.events();
     fx.update(me, ctl.keys, dt, hit);
     hud.hurt(fx.hurt);
+    // A saber lock: the gauge of the tug of war, the own presses against the foe's.
+    const foe = me?.lock ? who(me.foe ?? -1) : undefined;
+    hud.duel(foe ? ((me!.pushes ?? 0) - (foe.pushes ?? 0)) / LOCK_WIN : undefined);
     foley.me(me, hit, fx.stride);
     foley.others(others);
     body.update(me, dt, fx.kick, canvas.clientWidth / (canvas.clientHeight || 1));

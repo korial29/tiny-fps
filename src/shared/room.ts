@@ -5,6 +5,10 @@ import {
   DOWN_TICKS,
   HP_MAX,
   INPUT_BURST,
+  LOCK_BREAK,
+  LOCK_HP,
+  LOCK_TICKS,
+  LOCK_WIN,
   MAX_NAME,
   MAX_REWIND,
   PACK_BACK,
@@ -19,7 +23,7 @@ import {
   TEAM_COLOR,
   TICK_HZ,
 } from './constants';
-import { knock, limbOf, strike } from './blade';
+import { crossing, knock, limbOf, strike } from './blade';
 import { Ctf } from './ctf';
 import { STRIKE, step, within } from './gun';
 import { HIGHLINE } from './map';
@@ -96,6 +100,11 @@ const setEvery: Every = (cb, ms) => {
  *   seconds, then everyone is put back at a spawn of his team and the score starts again.
  *   drop(id) makes a carrier drop the flag: the hook of the tackle (step 7).
  */
+/** A player out of any saber lock. */
+const FREE = { lock: 0, foe: 0, pushes: 0, pressed: false, away: 0 };
+/** Where a rewound copy of a player stood and looked, to put over his live state. */
+const pick = ({ x, y, z, yaw }: PlayerState) => ({ x, y, z, yaw });
+
 export class Room {
   /** Every connected peer; null until it joins. */
   private peers = new Map<Conn, Player | null>();
@@ -153,6 +162,7 @@ export class Room {
       } else if (struck === STRIKE.CUT) {
         this.cut(p, input.view);
       }
+      this.duel(p);
       p.ack = input.seq;
     }
   }
@@ -404,7 +414,21 @@ export class Room {
    */
   private cut(p: Player, view: number | undefined): void {
     const seen = strike(this.world, p.state, this.enemies(p, view));
-    const foes = this.players().filter(q => seen.some(s => s.id === q.info.id));
+    let foes = this.players().filter(q => seen.some(s => s.id === q.info.id));
+    // A foe whose own cut meets this one locks blades with him instead (crossing()).
+    const locked = foes.find(q =>
+      crossing(p.state, { ...q.state, ...pick(seen.find(s => s.id === q.info.id)!) }),
+    );
+    if (locked) {
+      for (const [a, b] of [
+        [p, locked],
+        [locked, p],
+      ]) {
+        Object.assign(a.state, { ...FREE, lock: LOCK_TICKS, foe: b.info.id, pressed: true });
+        Object.assign(a.state, { swing: 0, charge: 0, stun: 0, zap: false, vx: 0, vz: 0 });
+      }
+      foes = foes.filter(q => q !== locked);
+    }
     if (!foes.length) {
       return;
     }
@@ -419,6 +443,47 @@ export class Room {
         foe.state.zap = true;
         foe.by = p.info.id;
       }
+    }
+  }
+
+  /**
+   * A saber lock of `p`, after his input: it ends when a side leads by LOCK_WIN presses (the other
+   * takes LOCK_HP and the katana's shock, thrown along the winner's look), when one has stepped out
+   * (LOCK_BREAK ticks of a side or back key: both are free), or when it has run its LOCK_TICKS (both
+   * stumble apart). A lock whose other side is gone, down or no longer locked with him ends too.
+   */
+  private duel(p: Player): void {
+    const q = p.state;
+    if (!q.lock) {
+      return;
+    }
+    const o = this.players().find(r => r.info.id === q.foe);
+    if (!o || o.state.foe !== p.info.id || !o.state.lock || o.state.down || q.down) {
+      Object.assign(q, FREE);
+      return;
+    }
+    const lead = (q.pushes ?? 0) - (o.state.pushes ?? 0);
+    const out = (q.away ?? 0) >= LOCK_BREAK || (o.state.away ?? 0) >= LOCK_BREAK;
+    if (Math.abs(lead) < LOCK_WIN && !out && q.lock > 1) {
+      return;
+    }
+    Object.assign(q, FREE);
+    Object.assign(o.state, FREE);
+    if (Math.abs(lead) >= LOCK_WIN) {
+      const [w, l] = lead > 0 ? [p, o] : [o, p];
+      w.state.hits = (w.state.hits + 1) & 255;
+      if (!this.harm(l, LOCK_HP)) {
+        const [dx, dz] = forward(w.state.yaw);
+        stumble(l.state, dx, dz, SHOCK_TICKS, SHOCK_KNOCK);
+        l.state.zap = true;
+        l.by = w.info.id;
+      }
+    } else if (!out) {
+      // Run out: each thrown back from the other.
+      const [dx, dz] = [o.state.x - q.x, o.state.z - q.z];
+      const d = Math.hypot(dx, dz) || 1;
+      stumble(q, -dx / d, -dz / d);
+      stumble(o.state, dx / d, dz / d);
     }
   }
 

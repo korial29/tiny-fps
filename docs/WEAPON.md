@@ -104,6 +104,18 @@ The user asked for even wider swings with the arms, a special move on a double c
 
 The cut is 3 bits on the wire (bits 6-7 of the swing byte and bit 3 of the `lost` byte), the keys 11 bits. A special goes as its base cut for the limb it takes off.
 
+## Saber locks (the user, 2026-11-07)
+
+After Jedi Outcast: when two foes cut at the same time, the blades lock; the faster clicker wins, and either can step out by going a few steps aside or back. The user chose: the loser is hit and thrown back, and a lock needs the two cuts at the same time, face to face.
+
+| Rule    | Value                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trigger | `crossing()` in `blade.ts`, when a cut strikes and reaches a foe who swings the katana too: his strike is within `LOCK_WINDOW` ticks (9, 0.15 s) of now, before or after, each is in the other's reach and faces him within `LOCK_FACING` (0.9 rad), and neither is locked. The room locks both: no cut lands, the swings stop, they stand still. Specials count.                                    |
+| In it   | `step()` keeps the locked player where he is with the katana in hand and starts nothing. Each FIRE press counts one `pushes` (a press, not a hold: `pressed` keeps the last step's FIRE). A side or back key held counts `away`. `lock` runs down from `LOCK_TICKS` (240, 4 s) to 1 and waits for the host.                                                                                          |
+| Ends    | The room checks after each input. The first to lead by `LOCK_WIN` (8) presses wins: the other takes `LOCK_HP` (3), and if he stays up, the katana's shock thrown along the winner's look. `LOCK_BREAK` steps (24, 0.4 s) of a side or back key free both, unharmed, and he walks off. At the end of `LOCK_TICKS` they stumble back from each other. It also ends when the other goes down or leaves. |
+| Wire    | 4 bytes more a player (52): `lock`, `foe` with `pressed`, `pushes`, `away`. The own lock is predicted from the snapshot on: the hold, the presses, the counting.                                                                                                                                                                                                                                     |
+| Feel    | The hold (`LOCK`, `locked()` in `katana.ts`): the hands before the chest, the blade rising and leaning to the left, so that the two blades cross in an X between the runners. It shakes, and each own press drives it on. The trunk leans into the foe. Sparks crackle where the blades cross, with a buzz of zaps. The HUD shows a tug-of-war gauge under the crosshair, with "CLICK!".             |
+
 ## The charged shot (the user, 2026-11-07)
 
 Held, the gun's button charges a shot, and letting go fires it. A full charge spends 5 shots and puts any foe down. A gauge under the ammo counter shows the charge. The client budget goes to 60 KB for it (the user, 2026-11-07).

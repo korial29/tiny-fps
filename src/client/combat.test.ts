@@ -126,6 +126,30 @@ describe('the recoil', () => {
     expect(fx.fire).toHaveBeenCalledTimes(2);
   });
 
+  it('kicks a charged shot up much further, and plays the long blast under it', () => {
+    const { combat, ctl, fx, frame, ids } = setup();
+    combat.step(player({ shots: 0 }), player({ shots: 1, power: 5 }));
+    expect(ctl.pitch).toBeCloseTo(RECOIL * 3.4, 9);
+    expect(fx.fire).toHaveBeenLastCalledWith(5);
+    frame(player({ shots: 1 }));
+    expect(ids()).toEqual([SOUND.LASER, SOUND.BLAST]);
+    // A plain shot has no blast.
+    combat.step(player({ shots: 1 }), player({ shots: 2, power: 1 }));
+    frame(player({ shots: 2 }));
+    expect(ids().filter(i => i === SOUND.BLAST)).toHaveLength(1);
+  });
+
+  it('lights the muzzles that charge, the own and the others', () => {
+    const { frame, tracer } = setup();
+    const charging = vi.spyOn(tracer, 'charging');
+    const him = (charge: number) => player({ id: 2, x: 5, z: -3, ammo: 30, charge });
+    frame(player({ ammo: 30, charge: 2 }), [him(0)]);
+    expect(charging).toHaveBeenLastCalledWith([]);
+    frame(player({ ammo: 30, charge: 60 }), [him(35)]);
+    const [list] = charging.mock.lastCall!;
+    expect(list.map(h => h.k)).toEqual([1, 0.5]);
+  });
+
   it('climbs with sustained fire, and the player pulls down to compensate', () => {
     const { combat, ctl } = setup();
     for (let i = 0; i < 20; i++) {
@@ -242,7 +266,7 @@ describe('where the shots go', () => {
       const [to] = focus(at(2), WORLD);
       const [grip, ax] = aimed(at(2), to);
       expect(flashes).toHaveLength(1);
-      expect(flashes[0]).toEqual([tip(grip, ax), undefined]);
+      expect(flashes[0].slice(0, 2)).toEqual([tip(grip, ax), false]);
       // The long axis of the gun, from the back of its body to the emitter, points where he looks.
       const rear: Vec3 = [0, 1, 2].map(i => grip[i] + ax[1][i] * 0.095 - ax[2][i] * 0.06) as Vec3;
       expect(angle(dir(rear, flashes[0][0]), dir(flashes[0][0], to))).toBeLessThan(0.5);
@@ -275,7 +299,8 @@ describe('sight', () => {
 });
 
 describe('the others shots', () => {
-  const other = (shots: number) => player({ id: 2, x: 5, z: -3, shots });
+  const other = (shots: number, o: Partial<PlayerState> = {}) =>
+    player({ id: 2, x: 5, z: -3, shots, ...o });
 
   it('flash his muzzle and play the shot at his place, once for a change', () => {
     const { frame, flashes, audio } = setup();
@@ -290,9 +315,19 @@ describe('the others shots', () => {
       expect.any(Number),
     );
     frame(player(), [other(11)]);
+    // A shot let go from a full charge: the long blast under it, at his place.
+    frame(player(), [other(11, { charge: 60 })]);
+    frame(player(), [other(12)]);
+    expect(audio.play).toHaveBeenCalledWith(
+      SOUND.BLAST,
+      [5, 1.6, -3],
+      expect.any(Number),
+      expect.any(Number),
+    );
+    frame(player(), [other(12)]);
     // A long gap in the snapshots is one flash.
     frame(player(), [other(200)]);
-    expect(flashes).toHaveLength(2);
+    expect(flashes).toHaveLength(3);
   });
 
   it('forget a player who left: he is new when he is back', () => {

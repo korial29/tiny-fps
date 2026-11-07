@@ -118,11 +118,22 @@ describe('the sounds of the game', () => {
   });
 
   it('make the splash of a plasma ball short, loud and noisier than the shot', () => {
-    expect(SOUND.SPLASH).toBe(LAYERS.length - 1);
+    expect(SOUND.SPLASH).toBe(LAYERS.length - 2);
     const s = sound('SPLASH');
     expect(s.length / RATE).toBeLessThan(0.25);
     expect(peak(s)).toBeGreaterThan(0.5);
     expect(crossings(s)).toBeGreaterThan(crossings(sound('LASER')) * 1.5);
+  });
+
+  it('make the blast of a charged shot long and deep: half a second and more, diving under the plain shot', () => {
+    expect(SOUND.BLAST).toBe(LAYERS.length - 1);
+    const s = sound('BLAST');
+    expect(s.length / RATE).toBeGreaterThan(0.5);
+    expect(s.length / RATE).toBeGreaterThan((sound('LASER').length / RATE) * 4);
+    // Clean at the start, and lower at the end than at the start.
+    expect(peak(s.subarray(0, 0.01 * RATE))).toBeGreaterThan(0.3);
+    const hz = (a: number, b: number) => crossings(s.subarray(a * RATE, b * RATE)) / 2;
+    expect(hz(0.3, 0.45)).toBeLessThan(hz(0.005, 0.05));
   });
 
   it('make the hit a short high ping of one to two kHz that dies away fast, like Quake 3', () => {

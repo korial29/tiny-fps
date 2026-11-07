@@ -6,7 +6,17 @@
 // a swing (a change of `swing` or `cut`) plays the swish, the own cut's strike tick punches the
 // camera, drawing or sheathing it plays the shing, a hit of the own player with the katana in hand
 // adds the zap, and a runner shocked by it crackles. No DOM.
-import { CUTS, GUN_RANGE, MAX_PITCH, RECOIL, TICK_HZ } from '../shared/constants';
+import {
+  CHARGE_MAX,
+  CHARGE_TAP,
+  CHARGE_TICKS,
+  CUTS,
+  GUN_RANGE,
+  MAX_PITCH,
+  RECOIL,
+  TICK_HZ,
+} from '../shared/constants';
+import { powerOf } from '../shared/gun';
 import { eyeHeight } from '../shared/physics';
 import { KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -103,7 +113,7 @@ export const createCombat = (
   audio: Pick<Audio, 'play'>,
   hud: Pick<Hud, 'vitals' | 'hit' | 'down'>,
   fx: Pick<Effects, 'fire' | 'cut' | 'wound' | 'lie'>,
-  tracer: Pick<Tracer, 'flash' | 'burst' | 'orbs' | 'update' | 'mount' | 'crackle'>,
+  tracer: Pick<Tracer, 'flash' | 'burst' | 'orbs' | 'update' | 'mount' | 'crackle' | 'charging'>,
   ctl: { pitch: number },
   balls: Pick<Balls, 'fire' | 'frame'>,
 ): Combat => {
@@ -119,14 +129,25 @@ export const createCombat = (
   let cuts: number[] = [];
   /** A little off the pitch each time, so that a burst does not drone. */
   const rate = () => 0.94 + 0.12 * ((seq++ * 0.618) % 1);
-  /** A shot; a charged one (`power` over 1) deeper and louder. */
-  const laser = (at?: Vec3, power = 1) =>
+  /** A shot; a charged one (`power` over 1) deeper and louder, with the long blast under it. */
+  const laser = (at?: Vec3, power = 1) => {
     audio.play(
       SOUND.LASER,
       at,
       (at ? 0.7 : 0.5) * (1 + 0.15 * (power - 1)),
       rate() * (1 - 0.1 * (power - 1)),
     );
+    if (power > 1) {
+      audio.play(SOUND.BLAST, at, (at ? 0.5 : 0.35) * (0.4 + 0.15 * power), 1.2 - 0.06 * power);
+    }
+  };
+  /** How charged a shot of `power` is, 0 to 1. */
+  const heat = (power = 1) => (power - 1) / (CHARGE_MAX - 1);
+  /** How far a charge of `ticks` has gone past a tap, 0 to 1. */
+  const filled = (ticks = 0) =>
+    Math.min(1, Math.max(0, (ticks - CHARGE_TAP) / (CHARGE_TICKS - CHARGE_TAP)));
+  /** Each other player's charge at the last frame: the strength of his next shot. */
+  const charges = new Map<number, number>();
   /** The muzzle of a runner's gun, as he fires at what he looks at. */
   const gun = (p: PlayerState) => tip(...aimed(p, focus(p, world)[0]));
   const swish = (c: number, at?: Vec3) => audio.play(SOUND.SWISH, at, SWISH.gain[c], SWISH.rate[c]);
@@ -143,8 +164,10 @@ export const createCombat = (
         pending.push({ ...b });
       }
       for (let i = 0; i < n; i++) {
-        ctl.pitch = Math.min(MAX_PITCH, ctl.pitch + RECOIL);
-        fx.fire();
+        // A charged shot kicks the look up to 3.4 times as far.
+        const k = 1 + 0.6 * ((b?.power ?? 1) - 1);
+        ctl.pitch = Math.min(MAX_PITCH, ctl.pitch + RECOIL * k);
+        fx.fire(b?.power);
       }
       const c = swung(a, b);
       if (c >= 0) {
@@ -199,9 +222,14 @@ export const createCombat = (
         tracer.mount(from);
         for (const p of pending) {
           balls.fire(p, now);
-          tracer.flash(from, true);
+          tracer.flash(from, true, heat(p.power));
           laser(undefined, p.power);
         }
+      }
+      // The muzzles charging: the own, and every other gun in hand.
+      const hot: { p: Vec3; k: number }[] = [];
+      if (from && me && !me.wield && (me.charge ?? 0) >= CHARGE_TAP) {
+        hot.push({ p: from, k: filled(me.charge) });
       }
       pending = [];
       cuts = [];
@@ -209,10 +237,17 @@ export const createCombat = (
         const was = seen.get(p.id);
         const at: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
         if (was !== undefined && p.shots != was) {
-          tracer.flash(gun(p));
-          laser(at);
+          // His charge at the last frame gives the strength of the shot.
+          const c = charges.get(p.id) ?? 0;
+          const power = c >= CHARGE_TAP ? Math.min(powerOf(c), CHARGE_MAX) : 1;
+          tracer.flash(gun(p), false, heat(power));
+          laser(at, power);
         }
         seen.set(p.id, p.shots);
+        charges.set(p.id, p.charge ?? 0);
+        if ((p.charge ?? 0) >= CHARGE_TAP && p.ammo >= 0 && !p.wield && !p.down) {
+          hot.push({ p: gun(p), k: filled(p.charge) });
+        }
         const old = blades.get(p.id);
         const c = swung(old, p);
         if (c >= 0) {
@@ -226,10 +261,12 @@ export const createCombat = (
           tracer.crackle([p.x, p.y + 1, p.z]);
         }
       }
+      tracer.charging(hot);
       for (const id of seen.keys()) {
         if (!others.some(p => p.id == id)) {
           seen.delete(id);
           blades.delete(id);
+          charges.delete(id);
         }
       }
       const { orbs, bursts } = balls.frame(now, id => {

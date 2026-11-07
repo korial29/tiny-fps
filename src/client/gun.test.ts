@@ -342,12 +342,33 @@ describe('the readout on the back of the gun', () => {
     }
   });
 
-  it('has the block in the violet of the gun, a shade darker, and a dark screen behind the digits', () => {
+  it('paints the block in the gun’s own metal, lit by each face, so it does not stand apart from the body', () => {
+    const paint = verts(gun(1)).map(x => x.c);
     for (const x of metal(40)) {
+      // Violet: blue over red over green, as the body's metal is.
       expect(x.c[2]).toBeGreaterThan(x.c[0]);
       expect(x.c[0]).toBeGreaterThan(x.c[1]);
-      expect(x.c[2]).toBeLessThan(0.5);
+      // Within the range of the body's colours.
+      for (const k of [0, 1, 2]) {
+        expect(x.c[k]).toBeLessThanOrEqual(Math.max(...paint.map(c => c[k])) + 1e-9);
+      }
     }
+    // The top catches the light more than the back face, as the body's top does.
+    const lum = (c: number[]) => c[0] + c[1] + c[2];
+    const top = metal(40).filter(x => x.n[1] > 0.9);
+    const back = metal(40).filter(x => x.n[2] > 0.85);
+    expect(lum(top[0].c)).toBeGreaterThan(lum(back[0].c));
+  });
+
+  it('keeps the block’s base inside the body: no corner sticks out of it', () => {
+    // The body's half width at the block's back, from its rings, is wider than the block's base there.
+    const base = metal(40).filter(x => x.p[1] < 0.113);
+    const back = Math.max(...base.map(x => x.p[2]));
+    const half = Math.max(...base.filter(x => x.p[2] > back - 1e-6).map(x => Math.abs(x.p[0])));
+    const body = verts(gun(1)).filter(
+      x => x.layer == -1 && Math.abs(x.p[2] - back) < 0.004 && Math.abs(x.p[1] - 0.112) < 0.01,
+    );
+    expect(Math.max(...body.map(x => Math.abs(x.p[0])))).toBeGreaterThan(half);
   });
 
   it('is glowing but modest (unlit, layer -2, near 1 so the bloom does not smear it): cyan above ten, red at ten and under', () => {

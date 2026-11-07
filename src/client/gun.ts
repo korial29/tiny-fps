@@ -122,9 +122,10 @@ export const TILT = [Math.sin(0.4), Math.cos(0.4)];
 // between the upper body and the lower shell, round the short grip that joins them.
 // The upper body: a smooth bulb widest at the back and top, tapering to the muzzle.
 const BULB: Station[] = [
-  [-0.06, 0.095, 0, 0],
-  [-0.055, 0.098, 0.022, 0.022],
-  [-0.035, 0.103, 0.042, 0.036],
+  [-0.063, 0.1, 0, 0],
+  [-0.062, 0.098, 0.026, 0.016],
+  [-0.055, 0.1, 0.04, 0.02],
+  [-0.035, 0.103, 0.046, 0.038],
   [-0.005, 0.104, 0.048, 0.04],
   [0.035, 0.1, 0.044, 0.038],
   [0.08, 0.094, 0.036, 0.034],
@@ -262,19 +263,18 @@ const SEGMENTS: Record<string, [number, number, number, number]> = {
 };
 /**
  * The display block: a low trapezoidal wedge on the back of the top of the body, in the gun's
- * violet, a shade darker. Its base is a rectangle sunk into the body, its top a smaller one, so that
+ * metal, so it reads as part of it; the body is full at the back so the block's base stays inside. Its base is a rectangle sunk into the body, its top a smaller one, so that
  * the sides slope in; its back face leans toward the eye of the player holding the gun. Corners as
  * [across, up, back] of the back edge and of the front edge, base then top.
  */
 const BLOCK_BASE: [Vec3, Vec3] = [
-  [0.036, 0.112, 0.056],
+  [0.032, 0.112, 0.056],
   [0.036, 0.112, 0.012],
 ];
 const BLOCK_TOP: [Vec3, Vec3] = [
   [0.028, 0.156, 0.036],
   [0.028, 0.152, 0.02],
 ];
-const BLOCK = [0.2, 0.075, 0.36];
 /** The dark screen set in the back face: half width, and from where to where up the face, in metres. */
 const [SW, SFROM, STO] = [0.023, 0.0175, 0.0455];
 const readouts = new Map<number, number[]>();
@@ -293,8 +293,8 @@ export const readout = (ammo: number): number[] => {
     const [b0, b1, t0, t1] = [BLOCK_BASE[0], BLOCK_BASE[1], BLOCK_TOP[0], BLOCK_TOP[1]];
     const all = [b0, b1, t0, t1].flatMap(p => [p, mirror(p)]);
     const mid = [0, 1, 2].map(k => all.reduce((s, p) => s + p[k], 0) / all.length) as Vec3;
-    /** A quad, wound so that it faces away from the middle of the block. */
-    const face = (pts: Vec3[], rgb: number[]) => {
+    /** A quad, wound so that it faces away from the middle of the block, in `rgb` or else the gun's metal lit by its normal. */
+    const face = (pts: Vec3[], rgb?: number[]) => {
       const [u, w] = [sub(pts[1], pts[0]), sub(pts[2], pts[0])];
       const f: Vec3 = [
         u[1] * w[2] - u[2] * w[1],
@@ -303,15 +303,16 @@ export const readout = (ammo: number): number[] => {
       ];
       const c = sub(pts[0], mid);
       const p = dot(f, c) < 0 ? [pts[0], pts[3], pts[2], pts[1]] : pts;
-      tri(v, p[0], p[1], p[2], rgb);
-      tri(v, p[0], p[2], p[3], rgb);
+      const [r, g, , b] = metal(0.15)(p[0], unit(dot(f, c) < 0 ? [-f[0], -f[1], -f[2]] : f));
+      tri(v, p[0], p[1], p[2], rgb ?? [r, g, b]);
+      tri(v, p[0], p[2], p[3], rgb ?? [r, g, b]);
     };
     // The back, the front, the two sloping sides and the top; the base is in the body.
-    face([b0, mirror(b0), mirror(t0), t0], BLOCK);
-    face([b1, mirror(b1), mirror(t1), t1], BLOCK);
-    face([b0, b1, t1, t0], BLOCK);
-    face([mirror(b0), mirror(b1), mirror(t1), mirror(t0)], BLOCK);
-    face([t0, mirror(t0), mirror(t1), t1], BLOCK);
+    face([b0, mirror(b0), mirror(t0), t0]);
+    face([b1, mirror(b1), mirror(t1), t1]);
+    face([b0, b1, t1, t0]);
+    face([mirror(b0), mirror(b1), mirror(t1), mirror(t0)]);
+    face([t0, mirror(t0), mirror(t1), t1]);
     // The back face's axes: across, up its slope and out of it. Points on it from the middle of its base.
     const slope = unit(sub(t0, b0));
     const [O, N]: [Vec3, Vec3] = [

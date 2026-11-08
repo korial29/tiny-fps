@@ -23,6 +23,9 @@ import {
   LUNGE_SPEED,
   PICK_H,
   RACK_R,
+  HEAT_COOL,
+  HEAT_LOCK,
+  HEAT_MAX,
   RAIL_CAP,
   RAIL_MAX,
   RAIL_SPEND,
@@ -85,7 +88,8 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  *   KEY.RELOAD with room in it, swaps it for a full one from what he carries: `reload` ticks
  *   without firing, then it holds GUN_MAG (RAIL_CAP) or what is left. A switch of weapon drops it.
  *   The racks fill both.
- * - The rail gun throws its bolt on every step FIRE is held, spending a tick of it (`zapping`).
+ * - The rail gun throws its bolt on every step FIRE is held, spending a tick of it (`zapping`),
+ *   unless it is `hot`: its `heat` rises while it fires and falls when it does not (HEAT_MAX).
  * - The laser rifle (KEY.RIFLE, `rifled`), filled at its rack on arrival, fires a round from its
  *   cell (`clip`) each RIFLE_COOL ticks while FIRE is held (STRIKE.LASER).
  * - The trigger: `cool` and `swing` run down, and at 0 a held FIRE charges the gun, with ammo, and
@@ -101,6 +105,9 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
   const down = p.down > 0;
   const locked = !down && (p.lock ?? 0) > 0;
   move(p, down || locked ? { ...i, keys: 0 } : i, w, team);
+  // The rail gun cools on each step its bolt did not go out, slower while it is hot.
+  p.heat = Math.max(0, (p.heat ?? 0) - (p.zapping ? 0 : p.hot ? 1 : HEAT_COOL));
+  p.hot = !!p.hot && p.heat > HEAT_LOCK;
   p.zapping = false;
   p.zap = !!p.stun && !!p.zap;
   if (down) {
@@ -204,8 +211,11 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
         return STRIKE.LASER;
       }
     } else if (p.railed) {
-      if (p.cap && !p.reload) {
-        // The bolt goes out every step; `cool` makes it spend a tick each RAIL_SPEND of them.
+      if (p.cap && !p.reload && !p.hot) {
+        // The bolt goes out every step; `cool` makes it spend a tick each RAIL_SPEND of them. It
+        // heats the gun, which overheats at HEAT_MAX.
+        p.heat = (p.heat ?? 0) + 1;
+        p.hot = p.heat >= HEAT_MAX;
         if (!p.cool) {
           p.rail!--;
           p.cap--;

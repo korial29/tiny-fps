@@ -6,6 +6,7 @@ import {
   RUN_SPEED,
   SPRINT_SPEED,
   STUMBLE_TICKS,
+  HEAT_MAX,
 } from '../shared/constants';
 import { eyeHeight, floored, speedOf } from '../shared/physics';
 import { CUT, EV, KEY, MODE } from '../shared/types';
@@ -131,6 +132,7 @@ export const createEffects = (): Effects => {
   let reel = 0;
   let fall = 0;
   let shots = 0;
+  let zap = 1;
   /** The eye height as drawn; undefined until the first state, which it starts at. */
   let h: number | undefined;
   let last: PlayerState | undefined;
@@ -215,6 +217,15 @@ export const createEffects = (): Effects => {
       }
       if (hit.ev & EV.GRAB) {
         p[1] -= SETTLE;
+      }
+      // The rail gun's bolt jolts the view at each pulse of the arc, harder as the gun heats.
+      zap = me?.zapping ? zap + dt : 1;
+      if (zap > 1 / 7) {
+        zap = me?.zapping ? 0 : 1;
+        const k = me?.zapping ? 1 + (me.heat ?? 0) / HEAT_MAX : 0;
+        y[1] -= 0.05 * k;
+        p[1] += 0.15 * k;
+        r[1] += 0.12 * k * Math.sin(shots++ * 2.4);
       }
       spring(y, dt);
       spring(p, dt);

@@ -126,6 +126,14 @@ describe('the sounds of the game', () => {
     expect(crossings(s) / (s.length / RATE)).toBeGreaterThan(3000);
   });
 
+  it('make the laser rifle’s shot short and deep in the bass, under the gun’s', () => {
+    const s = sound('LASE');
+    expect(s.length / RATE).toBeLessThan(0.1);
+    expect(peak(s)).toBeGreaterThan(0.3);
+    // About 160 crossings a second, two octaves under the old shot's 600.
+    expect(crossings(s)).toBeLessThan(crossings(sound('LASER')) / 5);
+  });
+
   it('make the splash of a plasma ball short, loud and noisier than the shot', () => {
     expect(SOUND.SPLASH).toBe(26);
     const s = sound('SPLASH');

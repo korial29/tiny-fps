@@ -187,7 +187,7 @@ export const createCombat = (
   const lase = (p: PlayerState, from: Vec3, at?: Vec3) => {
     tracer.laser(from, ray(p));
     tracer.flash(from, !at, 1);
-    audio.play(SOUND.LASE, at, at ? 0.6 : 0.45, rate());
+    audio.play(SOUND.LASE, at, at ? 0.5 : 0.4, rate());
   };
   /** The own rail gun's hum and its bolt's buzz, started when it is first in hand. */
   let hum: Loop | undefined;
@@ -253,8 +253,8 @@ export const createCombat = (
         pending.push({ ...b });
       }
       for (let i = 0; i < n; i++) {
-        // A charged shot kicks the look up to 3.4 times as far.
-        const k = 1 + 0.6 * ((b?.power ?? 1) - 1);
+        // A charged shot kicks the look up to 3.4 times as far; the laser rifle's, 20 a second, a third as far.
+        const k = b?.rifled ? 0.3 : 1 + 0.6 * ((b?.power ?? 1) - 1);
         ctl.pitch = Math.min(MAX_PITCH, ctl.pitch + RECOIL * k);
         fx.fire(b?.power);
       }

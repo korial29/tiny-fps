@@ -198,6 +198,23 @@ describe('the burst of a ball', () => {
     expect(drawn(t)).toEqual([]);
   });
 
+  it('of the laser rifle splashes red, bigger, lights red, and throws twice the sparks', () => {
+    const [blue, red] = [createTracer(), createTracer()];
+    blue.burst(TO);
+    red.burst(TO, true);
+    const [b, r] = [drawn(blue), drawn(red)];
+    // The two discs of the splash, then 24 sparks of 4 triangles.
+    expect(r).toHaveLength(48 + 24 * 12);
+    const w = (x: number[][]) => Math.hypot(...[0, 1, 2].map(k => x[1][k] - x[0][k]));
+    expect(w(r)).toBeCloseTo(w(b) * 1.6, 6);
+    // Red over blue: in the splash's core, and every spark.
+    expect(r[0][6]).toBeGreaterThan(r[0][9]);
+    expect(r[r.length - 1][6]).toBeGreaterThan(r[r.length - 1][9]);
+    const [light] = red.lights();
+    expect(light.color[0]).toBeGreaterThan(light.color[2]);
+    expect(blue.lights()[0].color[2]).toBeGreaterThan(blue.lights()[0].color[0]);
+  });
+
   it('keeps at most a handful of flashes and splashes, and of sparks', () => {
     const t = createTracer();
     for (let i = 0; i < 100; i++) {

@@ -4,7 +4,7 @@ import type { PlayerState } from '../shared/types';
 import { CHARGE_MAX, GUN_RANGE } from '../shared/constants';
 import { build } from '../shared/world';
 import { MUZZLE, REAR, TILT, aimed, focus, grip, gun, held, pointed, readout, tip } from './gun';
-import { STRIDE } from './mesh';
+import { SHINE, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { axis, turn } from './rig';
 import type { Quat } from './rig';
@@ -66,7 +66,7 @@ describe('the gun model', () => {
 
   it('is violet metal with cyan glow: unlit parts above 1 for the bloom, lit parts below it', () => {
     const glow = near.filter(v => v.layer == -2);
-    const metal = near.filter(v => v.layer == -1);
+    const metal = near.filter(v => v.layer == SHINE);
     expect(glow.length).toBeGreaterThan(60);
     expect(metal.length + glow.length).toBe(near.length);
     for (const v of glow) {
@@ -90,10 +90,10 @@ describe('the gun model', () => {
     const topY = Math.max(...near.map(v => v.p[1]));
     expect(topY).toBeLessThan(0.15);
     // Round the body there are at least 12 sides: its widest ring has 12 vertices at one place.
-    const ring = near.filter(v => Math.abs(v.p[2] - 0.005) < 1e-9 && v.layer == -1);
+    const ring = near.filter(v => Math.abs(v.p[2] - 0.005) < 1e-9 && v.layer == SHINE);
     expect(ring.length).toBeGreaterThanOrEqual(12);
     // No sharp edge on top: the normals of the top vertices all face up.
-    const crest = near.filter(v => v.p[1] > 0.135 && v.layer == -1);
+    const crest = near.filter(v => v.p[1] > 0.135 && v.layer == SHINE);
     expect(crest.length).toBeGreaterThan(20);
     for (const v of crest) {
       expect(v.n[1]).toBeGreaterThan(0.7);
@@ -123,7 +123,9 @@ describe('the gun model', () => {
   it('has a smooth top: from its highest point the top only falls toward the muzzle, with no prongs', () => {
     // The highest metal at each ring of the bulb, from its widest to the nose.
     const top = (f: number) =>
-      Math.max(...near.filter(v => v.layer == -1 && Math.abs(v.p[2] + f) < 0.004).map(v => v.p[1]));
+      Math.max(
+        ...near.filter(v => v.layer == SHINE && Math.abs(v.p[2] + f) < 0.004).map(v => v.p[1]),
+      );
     const rings = [0.035, 0.08, 0.12, 0.16, 0.19, 0.205].map(top);
     rings.slice(1).forEach((h, i) => expect(h).toBeLessThan(rings[i]));
     // Nothing of the body sticks out ahead of the muzzle above the hull's tip.
@@ -366,7 +368,7 @@ describe('the readout on the back of the gun', () => {
     const back = Math.max(...base.map(x => x.p[2]));
     const half = Math.max(...base.filter(x => x.p[2] > back - 1e-6).map(x => Math.abs(x.p[0])));
     const body = verts(gun(1)).filter(
-      x => x.layer == -1 && Math.abs(x.p[2] - back) < 0.004 && Math.abs(x.p[1] - 0.112) < 0.01,
+      x => x.layer == SHINE && Math.abs(x.p[2] - back) < 0.004 && Math.abs(x.p[1] - 0.112) < 0.01,
     );
     expect(Math.max(...body.map(x => Math.abs(x.p[0])))).toBeGreaterThan(half);
   });

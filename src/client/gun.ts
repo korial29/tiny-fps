@@ -7,7 +7,7 @@ import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { glow as lit, tri } from './flag';
-import { add, basis, dot, place, sub, unit } from './mesh';
+import { SHINE, add, basis, dot, place, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
@@ -104,7 +104,7 @@ const metal =
       [...DEEP.slice(0, 2), 0, DEEP[2]],
       clamp(-n[1] * 0.5 + dark),
     );
-    return [r, g, -1, b];
+    return [r, g, SHINE, b];
   };
 const DARK = [0.035, 0.025, 0.08];
 const glow: Paint = () => [GLOW[0], GLOW[1], -2, GLOW[2]];
@@ -236,7 +236,7 @@ const shade =
   (lo: number[], hi: number[]): Paint =>
   (_, n) => {
     const [r, g, b] = mix(lo, hi, Math.max(n[1], 0) ** 1.5 * 0.8);
-    return [r, g, -1, b];
+    return [r, g, SHINE, b];
   };
 /** Dark gunmetal, and the copper of the coils. */
 const steel = shade([0.07, 0.075, 0.09], [0.42, 0.45, 0.52]);
@@ -554,11 +554,12 @@ export const readout = (ammo: number, level = 0): number[] => {
 const lcds = new Map<number, number[]>();
 /**
  * The LCD on the rail gun: the middle of its screen, its half width and height, and the way it faces
- * (back, up and left, to the eye in first person), with its right and up across that.
+ * (out of the receiver's left flank, tilted up and back to the eye in first person), with its right
+ * and up across that.
  */
-const LCD: Vec3 = [-0.008, 0.147, -0.03];
+const LCD: Vec3 = [-0.045, 0.104, -0.012];
 const [LW, LH] = [0.019, 0.013];
-const LN = unit([-0.32, 0.22, 0.92]);
+const LN = unit([-0.6, 0.38, 0.7]);
 const LR = unit([LN[2], 0, -LN[0]]);
 const LU: Vec3 = [LN[1] * LR[2], LN[2] * LR[0] - LN[0] * LR[2], -LN[1] * LR[0]];
 
@@ -594,8 +595,7 @@ export const lcd = (ammo: number): number[] => {
         tri(out, p(x0, y0, d0), p(x1, y1, d1), p(x0, y0, d1), DARK);
       }
     };
-    box(-LW - 0.003, -LH - 0.003, LW + 0.003, LH + 0.003, -0.005, 0.0004);
-    box(-0.007, -LH - 0.015, 0.007, -LH - 0.003, -0.004, -0.001);
+    box(-LW - 0.003, -LH - 0.003, LW + 0.003, LH + 0.003, -0.016, 0.0004);
     quad(-LW, -LH, LW, LH, 0.0008, n > 15 ? [0.42, 0.55, 0.36] : [0.7, 0.42, 0.14]);
     // The digits, scaled from the pistol's: 1.4 cm tall.
     const k = (2 * LH * 0.65) / DH;

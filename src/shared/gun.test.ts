@@ -11,6 +11,9 @@ import {
   GUN_COOLDOWN,
   GUN_MAG,
   GUN_RELOAD,
+  HEAT_COOL,
+  HEAT_LOCK,
+  HEAT_MAX,
   RAIL_CAP,
   RAIL_MAX,
   RAIL_SPEND,
@@ -282,6 +285,8 @@ describe('the magazines', () => {
     let zaps = 0;
     // A tick spent on the first of each RAIL_SPEND steps of the bolt: the last one has a step.
     for (let k = 0; k < RAIL_CAP * RAIL_SPEND; k++) {
+      // Kept cool: the capsule, not the heat, is under test.
+      p.heat = 0;
       zaps += +(hit(p, RAIL | FIRE) === STRIKE.RAIL);
       expect(p.cap).toBe(RAIL_CAP - Math.ceil((k + 1) / RAIL_SPEND));
     }
@@ -297,6 +302,26 @@ describe('the magazines', () => {
     }
     expect(hit(p, RAIL | FIRE)).toBe(STRIKE.RAIL);
     expect([p.reload, p.cap]).toEqual([0, RAIL_CAP - 1]);
+  });
+
+  it('overheats after HEAT_MAX steps of fire, cannot fire for 2 s, and cools when let go', () => {
+    const p = Object.assign(at(0, 0, EAST).p, { rail: RAIL_MAX, cap: RAIL_CAP });
+    for (let k = 0; k < HEAT_MAX; k++) {
+      expect(hit(p, RAIL | FIRE)).toBe(STRIKE.RAIL);
+    }
+    expect([p.heat, p.hot]).toEqual([HEAT_MAX, true]);
+    // Hot: no bolt while FIRE is held, the heat falling 1 a step until HEAT_LOCK.
+    let locked = 0;
+    while (hit(p, RAIL | FIRE) !== STRIKE.RAIL) {
+      locked++;
+    }
+    expect(locked).toBe(HEAT_MAX - HEAT_LOCK);
+    // Fired a little and let go, it cools HEAT_COOL a step.
+    p.heat = 40;
+    hit(p, RAIL);
+    hit(p, RAIL);
+    expect(p.heat).toBe(40 - HEAT_COOL);
+    expect(p.hot).toBe(false);
   });
 
   it('fills the battery at the rack', () => {

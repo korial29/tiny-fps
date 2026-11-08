@@ -5,6 +5,7 @@ import {
   CHARGE_MAX,
   GUN_RANGE,
   GUN_RELOAD,
+  RAIL_CAP,
   RAIL_MAX,
   RAIL_RELOAD,
   RIFLE_RELOAD,
@@ -14,9 +15,9 @@ import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { glow as lit, tri } from './flag';
-import { SHINE, add, basis, dim as dimmed, dot, place, sub, unit } from './mesh';
+import { SHINE, STRIDE, add, basis, dim as dimmed, dot, place, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { turn } from './rig';
+import { axis, turn } from './rig';
 import type { Quat } from './rig';
 
 /** A ring of a loft: how far ahead, how high, half width, half height, and the offset to the side. */
@@ -252,6 +253,16 @@ const chrome = shade([0.16, 0.17, 0.18], [0.66, 0.68, 0.72]);
 /** Dark gunmetal, and the copper of the coils. */
 const steel = shade([0.07, 0.075, 0.09], [0.42, 0.45, 0.52]);
 const copper = shade([0.3, 0.12, 0.05], [1, 0.58, 0.32]);
+/** The rail gun's olive drab receiver, its wooden stock, its red cables and its ceramic insulators. */
+const drab = shade([0.1, 0.1, 0.05], [0.5, 0.48, 0.26]);
+const wood = shade([0.15, 0.07, 0.03], [0.55, 0.32, 0.15]);
+const cable = shade([0.18, 0.02, 0.02], [0.75, 0.12, 0.08]);
+const CERAMIC = [
+  [0.16, 0.19, 0.17],
+  [0.62, 0.68, 0.62],
+];
+/** The glowing orange red of a hot insulator. */
+const EMBER = [1.2, 0.32, 0.06];
 /** A station on the long axis, `up` above it. */
 const on = (f: number, up: number, a: number, b = a, x = 0): Station => [f, axisY(f) + up, a, b, x];
 const railed: number[][] = [];
@@ -280,7 +291,7 @@ export const railgun = (lod: number): number[] => {
       on(-0.1, 0, 0),
     ],
     m,
-    steel,
+    wood,
   );
   tube(
     out,
@@ -293,7 +304,7 @@ export const railgun = (lod: number): number[] => {
       on(0.165, 0, 0),
     ],
     n,
-    steel,
+    drab,
   );
   tube(
     out,
@@ -365,21 +376,132 @@ export const railgun = (lod: number): number[] => {
       dim,
     );
   }
-  // The socket the capsule screws into: a steel collar on the receiver's top, its hole the capsule's thread.
-  tube(
-    out,
+  // A steel collar for each cell, along it: on the top the socket the cell in use screws into, its
+  // hole the cell's thread; on each flank the cradle of a smaller one.
+  for (let i = 0; i < 3; i++) {
+    tube(
+      out,
+      [
+        [-0.017, 0],
+        [-0.016, 0.024],
+        [0.005, 0.024],
+        [0.007, 0.0215],
+        [0.0075, 0.0195],
+        [0.008, 0],
+      ].map(([h, a]): Station => {
+        const [f, y, x] = onCell(i, h);
+        return [f, y, a * SLOTS[i][5], a * SLOTS[i][5], x];
+      }),
+      n,
+      steel,
+    );
+  }
+  // Red cables, punk (the user, 2026-11-08): from the socket over the insulators (insulators()) to
+  // the first coil, from each flank cell's terminal up to the socket, a loop sticking out of the
+  // right flank and a loose one off the back.
+  const wires = [
     [
-      [SOCKET[0], 0.104, 0, 0],
-      [SOCKET[0], 0.105, 0.024, 0.024],
-      [SOCKET[0], 0.126, 0.024, 0.024],
-      [SOCKET[0], 0.128, 0.0215, 0.0215],
-      [SOCKET[0], 0.1285, 0.0195, 0.0195],
-      [SOCKET[0], 0.129, 0, 0],
+      [0.123, 0.118, 0.008],
+      [0.16, 0.175, 0.01],
+      [0.2, 0.142, 0],
     ],
-    n,
-    steel,
-  );
+    [
+      [0.2, 0.142, 0],
+      [0.228, 0.17, 0],
+      [0.255, 0.138, 0],
+    ],
+    [
+      [0.255, 0.138, 0],
+      [0.29, 0.16, 0],
+      [0.31, 0.097, 0],
+    ],
+    [onCell(1, 0.08), [0.13, 0.1, -0.07], onCell(0, 0.004, -0.022)],
+    [onCell(2, 0.08), [0.13, 0.14, 0.08], onCell(0, 0.004, 0.022)],
+    [
+      [0.09, 0.094, 0.034],
+      [0.07, 0.16, 0.09],
+      [0.03, 0.09, 0.035],
+    ],
+    [
+      [-0.08, 0.13, 0.01],
+      [-0.11, 0.22, -0.01],
+      [-0.15, 0.17, -0.03],
+    ],
+  ];
+  for (const [a, c, b] of wires) {
+    tube(
+      out,
+      [0, 1, 2, 3, 4, 5, 6].map((k): Station => {
+        const t = k / 6;
+        const p = [0, 1, 2].map(j => (1 - t) ** 2 * a[j] + 2 * t * (1 - t) * c[j] + t * t * b[j]);
+        return [p[0], p[1], 0.0028, 0.0028, p[2]];
+      }),
+      lod ? 5 : 3,
+      cable,
+    );
+  }
   return (railed[lod] = out);
+};
+
+/**
+ * The feet of the rail gun's three cells (the user, 2026-11-08): the one in use standing on the
+ * receiver's top, the capsule a swap replaces, and two smaller ones lying along its flanks low,
+ * between the hands and under the counter, pointing forward. Each forward, up and across, how far it leans back and aside
+ * (radians), and its size.
+ */
+const SLOTS = [
+  [0.1, 0.121, 0, 0, 0, 1],
+  [0.03, 0.072, -0.046, -Math.PI / 2, 0, 0.7],
+  [0.03, 0.072, 0.046, -Math.PI / 2, 0, 0.7],
+];
+/** The point `h` up the axis of cell `i` from its foot (in the cell's size) and `x` across, forward, up and across in model space. */
+const onCell = (i: number, h: number, x = 0): number[] => {
+  const [f, y, xo, b, s, k] = SLOTS[i];
+  h *= k;
+  const [c, ax] = [Math.cos(b), [Math.cos(b) * Math.sin(s), -Math.sin(b)]];
+  return [f + h * ax[1], y + h * c * Math.cos(s), xo + x + h * ax[0]];
+};
+/** The two insulators on the barrel, forward and the height of their foot. */
+const POSTS = [
+  [0.2, 0.091],
+  [0.255, 0.087],
+];
+const posts: number[][] = [];
+
+/**
+ * The rail gun's two ceramic insulators standing on its barrel, stacks of four ribbed discs, built
+ * once for each of 5 steps of `heat` (0 to 1): from grey green to orange as the gun heats, glowing
+ * in its last quarter.
+ */
+export const insulators = (lod: number, heat = 0): number[] => {
+  const h = Math.round(Math.min(Math.max(heat, 0), 1) * 4);
+  return (posts[lod * 5 + h] ??= ((out: number[]) => {
+    const glows = h > 2;
+    const paint: Paint = (_, n) => {
+      const lit = mix(CERAMIC[0], CERAMIC[1], Math.max(n[1], 0) ** 1.5 * 0.8);
+      const [r, g, b] = mix(glows ? EMBER.map(c => c * 0.5) : lit, EMBER, h / 4);
+      return [r, g, glows ? -2 : SHINE, b];
+    };
+    for (const [f, y] of POSTS) {
+      tube(
+        out,
+        [
+          [f, y, 0, 0],
+          ...[0, 1, 2, 3].flatMap((k): Station[] => [
+            [f, y + 0.002 + k * 0.011, 0.008, 0.008],
+            [f, y + 0.005 + k * 0.011, 0.016, 0.016],
+            [f, y + 0.008 + k * 0.011, 0.016, 0.016],
+            [f, y + 0.011 + k * 0.011, 0.008, 0.008],
+          ]),
+          [f, y + 0.05, 0.005, 0.005],
+          [f, y + 0.053, 0, 0],
+        ],
+        lod ? 8 : 5,
+        paint,
+      );
+    }
+    return out;
+  })([]));
 };
 
 /** The weapon a gun model is, from a player or a flag: 0 the gun, 2 the rail gun (or true), 3 the laser rifle. */
@@ -598,12 +720,14 @@ export const battery = (lod: number): number[] =>
 const cells: number[][] = [];
 
 /**
- * The rail gun's capsule, built once: a threaded copper base (it screws into the socket on the gun),
- * a violet core of lightning in a cage of three steel posts, and a cap, standing along its own
- * forward from its base.
+ * The rail gun's cell (the user, 2026-11-08: its batteries in view), built once for each of 9 steps
+ * of `level` (0 to 1): a threaded copper base (it screws into the socket on the gun), a column of
+ * violet lightning as high as the level in a dark glass tube, in a cage of three steel posts, and a
+ * cap with its terminal, standing along its own forward from its base.
  */
-export const capsule = (lod: number): number[] =>
-  (caps[lod] ??= ((out: number[]) => {
+export const capsule = (lod: number, level = 1): number[] => {
+  const l = Math.round(Math.min(Math.max(level, 0), 1) * 8);
+  return (caps[lod * 9 + l] ??= ((out: number[]) => {
     const n = lod ? 10 : 6;
     tube(
       out,
@@ -620,16 +744,32 @@ export const capsule = (lod: number): number[] =>
       n,
       copper,
     );
-    tube(
-      out,
-      [
-        [0.014, 0, 0.009, 0.009],
-        [0.062, 0, 0.009, 0.009],
-        [0.066, 0, 0, 0],
-      ],
-      n,
-      core,
-    );
+    const top = 0.014 + 0.006 * l;
+    if (l) {
+      tube(
+        out,
+        [
+          [0.014, 0, 0.009, 0.009],
+          [top, 0, 0.009, 0.009],
+          [top + 0.001, 0, 0, 0],
+        ],
+        n,
+        core,
+      );
+    }
+    if (l < 8) {
+      tube(
+        out,
+        [
+          [top, 0, 0, 0],
+          [top + 0.001, 0, 0.0095, 0.0095],
+          [0.062, 0, 0.0095, 0.0095],
+          [0.066, 0, 0, 0],
+        ],
+        n,
+        shade(DARK, [0.2, 0.18, 0.3]),
+      );
+    }
     for (let k = 0; k < 3; k++) {
       const [c, s] = [Math.cos((k * TAU) / 3), Math.sin((k * TAU) / 3)];
       tube(
@@ -647,20 +787,21 @@ export const capsule = (lod: number): number[] =>
       [
         [0.064, 0, 0.019, 0.019],
         [0.072, 0, 0.017, 0.017],
-        [0.074, 0, 0, 0],
+        [0.074, 0, 0.005, 0.005],
+        [0.08, 0, 0.005, 0.005],
+        [0.081, 0, 0, 0],
       ],
       n,
       steel,
     );
     return out;
   })([]));
+};
 const caps: number[][] = [];
 
 /** Where the battery's foot sits seated, forward and up of the grip, and the way it goes up the grip (unit, forward and up). */
 const SEAT = [-0.0434, -0.0868];
 const UP_GRIP = [0.447, 0.894];
-/** The capsule's base on the receiver's top, forward of the grip and up. */
-const SOCKET = [0.1, 0.121];
 /** The rifle's cell: its foot under the body behind the grip, and the way it goes up into it. */
 const WELL = [-0.13, -0.075];
 const UP_WELL = [-0.1, 0.995];
@@ -745,12 +886,13 @@ export const loadFrame = (
   kind: boolean | number,
   s = -1,
   k = 1,
+  i = 0,
 ): [Vec3, Vec3[]] => {
   const [r, u, f] = ax;
   const w = kindOf(kind);
   const rail = w == 2;
   const [c, sn] = rail ? [0, 1] : w == 3 ? UP_WELL : UP_GRIP;
-  const [fo, up] = rail ? SOCKET : w == 3 ? WELL : SEAT;
+  const [fo, up, xo = 0, back = 0, side = 0] = rail ? SLOTS[i] : w == 3 ? WELL : SEAT;
   const [out, twist, tumble] = swapped(s, w);
   // Forward up the grip (up), up across it: a turn about the gun's right.
   const fw = [0, 1, 2].map(i => f[i] * c + u[i] * sn) as Vec3;
@@ -766,9 +908,11 @@ export const loadFrame = (
   const fw2 = fw.map((v, i) => v * bc + uw[i] * bs) as Vec3;
   uw = uw.map((v, i) => v * bc - fw[i] * bs) as Vec3;
   const foot = [0, 1, 2].map(
-    i => at[i] + k * (f[i] * fo + u[i] * up + fw[i] * (rail ? out : -out)),
+    i => at[i] + k * (r[i] * xo + f[i] * fo + u[i] * up + fw[i] * (rail ? out : -out)),
   ) as Vec3;
-  return [foot, [rw, uw, fw2]];
+  // A flank cell lies along the gun: turned about the gun's right, then about its forward.
+  const [qb, qs] = [axis(r, back), axis(f, side)];
+  return [foot, [rw, uw, fw2].map(v => turn(qs, turn(qb, v)))];
 };
 
 /**
@@ -1154,7 +1298,8 @@ export const scope = (n: number, shown = true): number[] => {
 /**
  * How a gun is drawn beyond its place: its glow from 0 (off) to 1, the swap under way (0 to 1, -1
  * none), whether its battery or capsule holds any, how far the gun's counter stands up (0 folded
- * back flat, 1 up) and whether its digits show.
+ * back flat, 1 up) and whether its digits show; for the rail gun the level of its three cells (the
+ * one in use, then the two in reserve), its heat (0 to 1) and whether it overheated.
  */
 export interface Lit {
   light?: number;
@@ -1162,7 +1307,16 @@ export interface Lit {
   empty?: boolean;
   stand?: number;
   digits?: boolean;
+  cells?: number[];
+  heat?: number;
+  hot?: boolean;
 }
+
+/** The levels of the rail gun's three cells for `p` (0 to 1): the capsule in use, then what it carries beside, a capsule's worth to each. */
+export const cellsOf = (p: Pick<PlayerState, 'rail' | 'cap'>): number[] => {
+  const [c, r] = [p.cap ?? 0, Math.max(0, (p.rail ?? 0) - (p.cap ?? 0))];
+  return [c, r, r - RAIL_CAP].map(v => clamp(v / RAIL_CAP));
+};
 
 /** Where the gun's counter folds: the front edge of its foot, up and back of the grip. */
 const HINGE = [0.112, 0.02];
@@ -1202,28 +1356,59 @@ export const held = (
   level = 0,
   kind: boolean | number = 0,
   t = 0,
-  { light = 1, swap = -1, empty = false, stand = 1, digits = true }: Lit = {},
+  {
+    light = 1,
+    swap = -1,
+    empty = false,
+    stand = 1,
+    digits = true,
+    cells = [1, 1, 1],
+    heat = 0,
+    hot = false,
+  }: Lit = {},
 ) => {
   const [at, ax] = [grip(pos, q), axes(q)];
   const w = kindOf(kind);
   const rail = w == 2;
   const d = 0.08 + 0.92 * light;
   const from = out.length;
+  // The rail gun's cell in use shows its level: none as the old one goes, full as the new one comes.
   place(
     out,
-    [battery, cell, capsule, cell][w](lod),
+    rail
+      ? capsule(lod, swap < 0 ? cells[0] : +(swap > 0.42))
+      : [battery, cell, capsule, cell][w](lod),
     ...loadFrame(at, ax, w, swap, k),
     [0, 0, 0],
     k,
   );
-  dimmed(out, from, empty ? 0.08 : 1);
+  dimmed(out, from, empty && !rail ? 0.08 : 1);
+  // Overheated, the cells flicker red and the counter blinks; no spark idles between the electrodes.
+  const blink = hot && t * 9 - Math.floor(t * 9) < 0.5;
+  if (rail) {
+    for (const i of [1, 2]) {
+      place(
+        out,
+        capsule(lod, cells[i]),
+        ...loadFrame(at, ax, w, -1, k, i),
+        [0, 0, 0],
+        k * SLOTS[i][5],
+      );
+    }
+    for (let i = from + 8; blink && i < out.length; i += STRIDE) {
+      if (out[i] == -2) {
+        [out[i - 2], out[i - 1], out[i + 1]] = EMBER;
+      }
+    }
+    place(out, insulators(lod, heat), at, ax, [0, 0, 0], k);
+  }
   place(out, [gun, gun, railgun, rifle][w](lod), at, ax, [0, 0, 0], k);
-  if (rail && light > 0.98 && swap < 0) {
+  if (rail && light > 0.98 && swap < 0 && !hot) {
     place(out, arc(t), at, ax, [0, 0, 0], k);
   }
   if (ammo !== undefined && w == 3) {
     place(out, scope(ammo, digits && light > 0.5), at, ax, [0, 0, 0], k);
-  } else if (ammo !== undefined && rail && light > 0.3) {
+  } else if (ammo !== undefined && rail && light > 0.3 && !blink) {
     place(out, lcd(ammo), at, ax, [0, 0, 0], k);
   } else if (ammo !== undefined && !rail) {
     place(

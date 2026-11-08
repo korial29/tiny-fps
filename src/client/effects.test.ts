@@ -508,3 +508,21 @@ describe('the katana', () => {
     expect(fx.fov).toBeCloseTo(0, 1);
   });
 });
+
+describe('the rail gun’s bolt', () => {
+  const jolt = (over: Partial<PlayerState>) => {
+    const fx = createEffects();
+    let most = 0;
+    for (let t = 0; t < 0.5; t += DT) {
+      fx.update(me(over), 0, DT);
+      most = Math.max(most, Math.abs(fx.pitch));
+    }
+    return most;
+  };
+
+  it('jolts the view while it goes out, harder as the gun heats, and not when it does not', () => {
+    expect(jolt({})).toBe(0);
+    expect(jolt({ zapping: true })).toBeGreaterThan(0.004);
+    expect(jolt({ zapping: true, heat: 110 })).toBeGreaterThan(jolt({ zapping: true }) * 1.5);
+  });
+});

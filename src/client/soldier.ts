@@ -2,7 +2,14 @@
 // renderer's vertex format. A runner is the last PlayerState seen and the gait that eases the body
 // toward it; the dash streaks are the only thing drawn here that the gait does not pose. A
 // player's (x, y, z) is the bottom of the feet. No DOM.
-import { DASH_COOLDOWN, DASH_TICKS, DOWN_TICKS, STEP_H, TICK_HZ } from '../shared/constants';
+import {
+  DASH_COOLDOWN,
+  DASH_TICKS,
+  DOWN_TICKS,
+  HEAT_MAX,
+  STEP_H,
+  TICK_HZ,
+} from '../shared/constants';
 import { TAU, floored } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
@@ -10,7 +17,7 @@ import type { World } from '../shared/world';
 import { clasp, inv, reach, shrug, stowed, wield } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
-import { ARC, TILT, aimed, focus, foregrip, held, kindOf, span, swapOf } from './gun';
+import { ARC, TILT, aimed, cellsOf, focus, foregrip, held, kindOf, span, swapOf } from './gun';
 import type { Tracer } from './beams';
 import {
   BEHIND,
@@ -364,6 +371,9 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
     held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, undefined, 0, kindOf(p), r.t, {
       swap: sp,
       light: sp < 0 ? 1 : 1 - ease(span(sp, 0.1, 0.2)),
+      cells: cellsOf(p),
+      heat: (p.heat ?? 0) / HEAT_MAX,
+      hot: p.hot,
     });
   }
   if (r.dash > 0.15) {

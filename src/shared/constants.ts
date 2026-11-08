@@ -339,6 +339,15 @@ export const RAIL_SPEND = 2;
 /** Ticks of lightning a rail cell gives (WorldDef.cells), up to RAIL_MAX: a third of a load. */
 export const RAIL_CELL = 80;
 export const RAIL_RANGE = 30;
+/**
+ * The rail gun overheats (the user, 2026-11-08): `heat` grows by 1 each step its bolt goes out and
+ * cools by HEAT_COOL each step it does not. At HEAT_MAX (2 s of fire, under a capsule's 2.7 s, so
+ * a capsule cannot be emptied in one go) it is `hot` and cannot fire until it has cooled, 1 a
+ * step, to HEAT_LOCK: 2 s. Full, it cools in 1 s. u8 on the wire.
+ */
+export const HEAT_MAX = 120;
+export const HEAT_COOL = 2;
+export const HEAT_LOCK = 0;
 export const RAIL_TICKS = 180;
 export const RAIL_DRAIN = 60;
 export const SLOW_SPEED = 3;

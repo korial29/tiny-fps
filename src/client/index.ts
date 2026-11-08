@@ -59,11 +59,12 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   root.innerHTML =
     `<style>:host{display:block;width:100%;height:100%}div{position:relative;width:100%;height:100%;overflow:hidden;background:#000;font:600 14px system-ui,sans-serif;color:#fff;text-shadow:0 1px 2px #000}` +
     `canvas{display:block;width:100%;height:100%;cursor:pointer}` +
-    `i,p,b{position:absolute;pointer-events:none;user-select:none;margin:0}` +
+    // Its own children only: the HUD's elements inside have their own rules.
+    `div>:is(i,p,b){position:absolute;pointer-events:none;user-select:none;margin:0}` +
     HUD_CSS +
-    `i{left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #0008}` +
-    `p{bottom:8px;left:12px}` +
-    `b{transform:translate(-50%,-100%);font-size:12px;white-space:nowrap}[hidden]{display:none}</style>` +
+    `div>i{left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #0008}` +
+    `div>p{bottom:8px;left:12px}` +
+    `div>b{transform:translate(-50%,-100%);font-size:12px;white-space:nowrap}[hidden]{display:none}</style>` +
     `<div><canvas></canvas><i></i><p></p></div>`;
   container.append(wrap);
   const canvas = root.querySelector('canvas')!;

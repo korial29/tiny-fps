@@ -25,6 +25,7 @@ import {
   RACK_R,
   RAIL_CAP,
   RAIL_MAX,
+  RAIL_SPEND,
   RAIL_RELOAD,
   RIFLE_CLIP,
   RIFLE_COOL,
@@ -204,8 +205,12 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
       }
     } else if (p.railed) {
       if (p.cap && !p.reload) {
-        p.rail!--;
-        p.cap--;
+        // The bolt goes out every step; `cool` makes it spend a tick each RAIL_SPEND of them.
+        if (!p.cool) {
+          p.rail!--;
+          p.cap--;
+          p.cool = RAIL_SPEND;
+        }
         p.zapping = true;
         return STRIKE.RAIL;
       }

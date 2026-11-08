@@ -43,14 +43,14 @@ const eyeBase = (v: Float32Array, k: number) =>
   v[k * 6 + 2] < -0.065;
 
 describe('skin', () => {
-  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 7600, close (within CLOSE) under 22000', () => {
+  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 8000 (with the pouches), close (within CLOSE) under 22500', () => {
     const [far, near, close] = [0, 1, 3].map(lod => draw(lod).length / STRIDE);
     expect(far).toBeLessThan(1800);
-    expect(near).toBeLessThanOrEqual(7600);
-    expect(close).toBeLessThanOrEqual(22000);
+    expect(near).toBeLessThanOrEqual(8000);
+    expect(close).toBeLessThanOrEqual(22500);
     expect(far).toBeLessThan(near * 0.3);
     expect(near).toBeLessThan(close * 0.4);
-    expect(body(1).w.length).toBeLessThan(1300);
+    expect(body(1).w.length).toBeLessThan(1350);
     // The eye's own body stays as it was: no head, and the near rings.
     expect(draw(2).length / STRIDE).toBeLessThan(2700);
   });
@@ -199,9 +199,9 @@ describe('skin', () => {
           a[2] * (b[0] * c[1] - b[1] * c[0])) /
         6;
     }
-    // A trunk, arms and legs of those widths, a soldier's build: about 0.08 m3 with no head.
+    // A trunk, arms and legs of those widths, a soldier's build: about 0.095 m3 with no head.
     expect(volume).toBeGreaterThan(0.05);
-    expect(volume).toBeLessThan(0.09);
+    expect(volume).toBeLessThan(0.1);
   });
 
   it('shades the joins as one surface: the shoulders and the hips turn no more than the rest', () => {
@@ -352,7 +352,8 @@ describe('skin', () => {
     const of = (c: number[]) => rows.filter(r => same(r.c, c));
     expect(rows.every(r => r.layer == -1)).toBe(true);
     const jacket = of(JACKET);
-    expect(jacket.length).toBeGreaterThan(700);
+    // Less of it since the webbing (UPPER, like the boots) covers the chest and the waist.
+    expect(jacket.length).toBeGreaterThan(500);
     expect(Math.min(...jacket.map(r => r.y))).toBeGreaterThan(0.9);
     expect(Math.max(...jacket.map(r => r.y))).toBeLessThan(1.55);
     expect(JACKET.map(c => c * 0.5)).toEqual(TRIM);
@@ -360,18 +361,23 @@ describe('skin', () => {
     expect(trim.length).toBeGreaterThan(50);
     expect(trim.every(r => r.y > 0.9 && r.y < 1.56)).toBe(true);
     const pants = of(PANTS);
-    expect(pants.length).toBeGreaterThan(600);
+    // To mid-calf, where the boots start.
+    expect(pants.length).toBeGreaterThan(500);
     expect(Math.max(...pants.map(r => r.y))).toBeLessThan(1.02);
     const skin = of(FLESH);
     expect(skin.length).toBeGreaterThan(100);
     expect(Math.min(...skin.map(r => r.y))).toBeGreaterThan(1.5);
     expect(Math.min(...of(HAIR).map(r => r.y))).toBeGreaterThan(1.62);
     expect(of(HAIR).length).toBeGreaterThan(30);
-    expect(Math.max(...of(UPPER).map(r => r.y))).toBeLessThan(0.12);
+    // Boots to mid-calf; the webbing on the trunk, from the belt to the shoulder straps.
+    const [boots, webbing] = [of(UPPER).filter(r => r.y < 0.9), of(UPPER).filter(r => r.y > 0.9)];
+    expect(Math.max(...boots.map(r => r.y))).toBeLessThan(0.43);
+    expect(webbing.length).toBeGreaterThan(100);
+    expect(webbing.every(r => r.y > 1.1 && r.y < 1.54)).toBe(true);
     expect(Math.max(...of(SOLE).map(r => r.y))).toBeLessThan(0.07);
     const gloves = of(GLOVE);
     expect(gloves.length).toBeGreaterThan(60);
-    expect(gloves.every(r => Math.abs(r.x) > 0.15 && r.y < 0.96 && r.y > 0.7)).toBe(true);
+    expect(gloves.every(r => Math.abs(r.x) > 0.15 && r.y < 0.99 && r.y > 0.7)).toBe(true);
   });
 
   it('gives the runner two eyes, whites with a dark iris at the front of each, and no shades', () => {
@@ -464,7 +470,8 @@ describe('skin', () => {
       };
       for (const [, q] of corners(draw(lod, p), ([x, y]) => x > 0.15 && y > 0.98 && y < 1.14)) {
         expect(off(q)).toBeGreaterThan(0.02);
-        expect(off(q)).toBeLessThan(0.065);
+        // A soldier's forearm, thick by the elbow.
+        expect(off(q)).toBeLessThan(0.09);
       }
       // The upper arm turned a radian about itself: the sleeve turns, the shoulder's cap and the
       // torso under it hardly move.

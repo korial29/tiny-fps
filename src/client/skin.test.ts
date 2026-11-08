@@ -52,8 +52,9 @@ describe('skin', () => {
     // Near carries the measured rings too, so it is less far below close than it was.
     expect(near).toBeLessThan(close * 0.45);
     expect(body(1).w.length).toBeLessThan(2000);
-    // The eye's own body stays as it was: no head, and the near rings.
-    expect(draw(2).length / STRIDE).toBeLessThan(4700);
+    // The eye's own body stays as it was: no head, and the near rings; its sleeves rounder, 10 sides
+    // (the user, 2026-11-08).
+    expect(draw(2).length / STRIDE).toBeLessThan(4800);
   });
 
   it('is a 1.8 m runner on the floor, narrower than the player cylinder', () => {

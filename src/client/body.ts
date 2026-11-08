@@ -500,9 +500,9 @@ export const hand = (
   tube(
     [
       palm([WRIST[1] - CUFF[0], CUFF[1] - WRIST[0], CUFF[3], CUFF[4]]),
-      palm([0.025, 0, 0.045, 0.025]),
-      palm([0.06, -0.002, 0.048, 0.02]),
-      palm([0.092, -0.004, 0.048, 0.013]),
+      palm([0.025, 0, 0.043, 0.024]),
+      palm([0.06, -0.002, 0.046, 0.019]),
+      palm([0.092, -0.004, 0.046, 0.0125]),
       palm([0.104, -0.004, 0, 0]),
     ],
     CUFF_SIDES,
@@ -513,11 +513,11 @@ export const hand = (
     const [d1, d2] = phalanges(curl, i);
     tube(
       finger(
-        [0.035 - 0.0235 * i, -0.004, 0.092],
+        [0.034 - 0.0225 * i, -0.004, 0.092],
         d1,
         d2,
         0.04 * LENGTH[i],
-        0.0118,
+        0.0112,
         unit(add(d1, [0, 0, 1])),
       ),
       FINGER_SIDES,
@@ -525,7 +525,7 @@ export const hand = (
     );
   }
   const [d1, d2] = THUMB.map(([open, fist]) => unit(mix(open, fist, curl)));
-  tube(finger([0.033, -0.01, 0.025], d1, d2, 0.037, 0.013, d1), FINGER_SIDES, put);
+  tube(finger([0.032, -0.01, 0.025], d1, d2, 0.037, 0.0124, d1), FINGER_SIDES, put);
 };
 
 /** The floor under a player standing at height `y`: the first top within a step above or below it. */

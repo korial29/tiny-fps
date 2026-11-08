@@ -483,8 +483,8 @@ describe('body', () => {
       // The sleeve's cuff, which is glove too, is a few dozen vertices; the hands are the rest.
       const glove = colored(v, GLOVE).length;
       expect(glove).toBeGreaterThanOrEqual(2 * HAND);
-      // The glove's cuff over the wrist too.
-      expect(glove).toBeLessThan(2 * HAND + 260);
+      // The glove's cuff over the wrist too: three strips of the sleeve's sides a hand.
+      expect(glove).toBeLessThan(2 * HAND + 33 * CUFF_SIDES);
     });
 
     describe('as meshes', () => {

@@ -65,7 +65,7 @@ const synth = (
   return out;
 };
 
-/** The ids of the sounds: an index into LAYERS. The last two are loops (see LOOPED). */
+/** The ids of the sounds: an index into LAYERS. LOOPED lists the loops. */
 export const SOUND = {
   STEP: 0,
   /** The lighter tap of a step on a wall. */
@@ -108,6 +108,15 @@ export const SOUND = {
   HUM: 29,
   /** The rail gun's bolt as its holder hears it: an electric buzz, looped, its pitch swung up and down by the player. */
   BUZZ: 30,
+  /**
+   * The swaps (gun.ts CUES): the gun's battery let go and sliding out, the new one clicked home;
+   * the rail gun's capsule jumping off, a turn of the screw on the new one; and a gun powering up.
+   */
+  EJECT: 31,
+  CLICK: 32,
+  POP: 33,
+  SCREW: 34,
+  BOOT: 35,
 } as const;
 
 /**
@@ -280,6 +289,38 @@ export const LAYERS: Voice[][] = [
     [1, 110, 0, 0.001, 2.1, 0.001, 0, 0.5, 0, 1, 0.35],
     [0, 113, 0, 0.001, 2.1, 0.001, 0, 0.3, 0, 1, 0.22],
     [3, 4000, 0, 0.001, 2.1, 0.001, 0.6, 0.25, 0, 1, 0.18],
+  ],
+  // EJECT: the latch, a falling square chip; the cell's hiss sliding out; its light dying, a sine falling.
+  [
+    [0, 320, -4, 0.001, 0, 0.035, 0, 0.6, 0, 1, 0.5],
+    [3, 3000, -2, 0.005, 0.03, 0.1, 0, 0.5, 0, 1, 0.35, 0.02],
+    [2, 900, -4, 0.003, 0.02, 0.2, 0, 1, 0, 1, 0.3, 0.01],
+  ],
+  // CLICK: the new cell home, a hard tick of noise and a knock, then the latch's smaller tick.
+  [
+    [3, 9000, 0, 0.001, 0, 0.015, 0, 0.7, 0, 1, 0.7],
+    [0, 520, -3, 0.001, 0, 0.03, 0, 0.6, 0, 1, 0.5],
+    [3, 7000, 0, 0.001, 0, 0.02, 0, 0.6, 0, 1, 0.5, 0.05],
+  ],
+  // POP: a thump that kicks up, the hiss of the seal let go, the ring of the spring, a fizz.
+  [
+    [2, 110, 3, 0.002, 0.02, 0.08, 0, 1, 0, 1, 0.6],
+    [3, 2000, 4, 0.002, 0.05, 0.15, 0, 0.6, 0, 1, 0.45],
+    [2, 1800, 0, 0.002, 0, 0.25, 0.02, 1, 0, 1, 0.25, 0.03],
+    [3, 8000, -2, 0.001, 0.02, 0.1, 0.8, 0.8, 0, 1, 0.2, 0.05],
+  ],
+  // SCREW: a turn of the wrist, three ratchet ticks over the rub of the thread.
+  [
+    [3, 9000, 0, 0.001, 0, 0.012, 0, 0.8, 0, 1, 0.6],
+    [3, 9000, 0, 0.001, 0, 0.012, 0, 0.8, 0, 1, 0.55, 0.05],
+    [3, 9000, 0, 0.001, 0, 0.012, 0, 0.8, 0, 1, 0.5, 0.1],
+    [3, 2500, 0, 0.02, 0.08, 0.05, 0, 0.3, 0, 1, 0.25],
+  ],
+  // BOOT: a whine that rises two octaves, a sine over it, and a soft beep once it is up.
+  [
+    [1, 180, 2.2, 0.05, 0.4, 0.2, 0.02, 0.25, 0, 1, 0.3],
+    [2, 360, 2.2, 0.05, 0.4, 0.2, 0, 1, 0, 1, 0.22],
+    [2, 1760, 0, 0.003, 0.05, 0.15, 0, 1, 0, 1, 0.35, 0.6],
   ],
 ];
 

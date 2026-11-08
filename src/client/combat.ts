@@ -27,11 +27,17 @@ import type { Audio, Loop } from './audio';
 import type { Balls } from './balls';
 import type { Tracer } from './beams';
 import type { Effects } from './effects';
-import { aimed, charge, focus, tip } from './gun';
+import { CUES, aimed, charge, focus, swapOf, tip } from './gun';
 import type { Hud } from './hud';
 import { basis } from './mesh';
 import type { Vec3 } from './mesh';
 import { SOUND } from './sfx';
+
+/** The sound of each cue of a swap (CUES): the gun's, then the rail gun's. */
+const RELOADS = [
+  [SOUND.EJECT, SOUND.CLICK],
+  [SOUND.POP, SOUND.SCREW, SOUND.SCREW, SOUND.SCREW],
+];
 
 /** What the frame draws from: the own eye and the camera (the eye plus the shake), the look, the own muzzle in the camera's space. */
 export interface View {
@@ -89,7 +95,10 @@ export const fired = (a?: PlayerState, b?: PlayerState): number =>
   a && b ? (b.shots - a.shots) & 255 : 0;
 
 /** What the katana's sounds read of a player: the swing, the cut and whether it is in hand. */
-type Blade = Pick<PlayerState, 'swing' | 'cut' | 'wield' | 'blade' | 'heavy'>;
+type Blade = Pick<
+  PlayerState,
+  'swing' | 'cut' | 'wield' | 'blade' | 'heavy' | 'down' | 'railed' | 'ammo' | 'reload'
+>;
 
 /**
  * The CUT of a swing that started between two states of a player, or -1: `swing` jumped up (it
@@ -208,6 +217,17 @@ export const createCombat = (
       SWISH.rate[k] * (heavy ? 0.55 : 1),
     );
   };
+  /** The weapon in the hand of `p`: 0 the gun, 1 the katana, 2 the rail gun, -1 none. */
+  const inHand = (p: Blade) => (p.down ? -1 : p.wield ? 1 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1);
+  /** The sounds of a swap as it passes its cues (CUES), and the boot of a gun that comes to hand or whose swap is done, at `at`. */
+  const reloads = (was: Blade, now: Blade, at?: Vec3) => {
+    const [a, b, r] = [swapOf(was), swapOf(now), +!!now.railed];
+    CUES[r].forEach((c, i) => a < c && b >= c && audio.play(RELOADS[r][i], at, 0.7));
+    const h = inHand(now);
+    if ((h == 0 || h == 2) && (inHand(was) != h || (a >= 0 && b < 0))) {
+      audio.play(SOUND.BOOT, at, 0.5, r ? 1.4 : 1);
+    }
+  };
   /** The shing of the katana coming into the hand or leaving it (not when it is lost). */
   const shing = (was: Blade, now: Blade, at?: Vec3) =>
     !!was.wield != !!now.wield &&
@@ -248,6 +268,7 @@ export const createCombat = (
         }
         if (was) {
           shing(was, me);
+          reloads(was, me);
         }
         if (was && me.hp < was.hp) {
           audio.play(me.down && !was.down ? SOUND.DOWN : SOUND.HURT);
@@ -345,6 +366,7 @@ export const createCombat = (
         }
         if (old) {
           shing(old, p, at);
+          reloads(old, p, at);
         }
         blades.set(p.id, {
           swing: p.swing,
@@ -352,6 +374,10 @@ export const createCombat = (
           wield: p.wield,
           blade: p.blade,
           heavy: p.heavy,
+          down: p.down,
+          railed: p.railed,
+          ammo: p.ammo,
+          reload: p.reload,
         });
         // A runner drained by the rail gun's bolt, or shocked by the katana, crackles.
         if ((p.zap && p.stun > 0) || p.slow) {

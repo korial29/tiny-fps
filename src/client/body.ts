@@ -24,6 +24,7 @@ import type { World } from '../shared/world';
 import { createGait, frame } from './gait';
 import type { Floor } from './gait';
 import {
+  GUN_ON,
   REAR,
   TILT,
   charge,
@@ -31,6 +32,7 @@ import {
   fore,
   held,
   loadFrame,
+  screwed,
   pointed,
   power,
   span,
@@ -891,16 +893,26 @@ export const createBody = (world?: World): Body => {
           ? w.gun *
             free *
             (rail
-              ? ease(span(sp, 0.04, 0.12)) * (1 - ease(span(sp, 0.85, 0.95)))
+              ? ease(span(sp, 0.34, 0.46)) * (1 - ease(span(sp, 0.88, 0.96)))
               : ease(span(sp, 0.22, 0.38)) * (1 - ease(span(sp, 0.75, 0.88))))
           : 0;
       if (onLoad > 0.002) {
-        // On the old capsule until it is thrown, then up where the new one comes from; on the new battery.
-        const at = rail ? (sp < 0.3 || sp > 0.45 ? sp : 0.3) : Math.max(sp, 0.4);
-        const [foot, [, , up]] = loadFrame(gp, ga, rail, at);
+        // On the new battery or capsule, which comes with the hand. The capsule is held round its
+        // side, the wrist turning about it as it screws it in.
+        const [foot, [, , up]] = loadFrame(gp, ga, rail, Math.max(sp, rail ? 0.42 : 0.4));
         const mid = [0, 1, 2].map(i => foot[i] + up[i] * (rail ? 0.04 : -0.01)) as Vec3;
+        let fing: Vec3 | undefined;
+        if (rail) {
+          // From the capsule's axis out to its left, turned with the wrist.
+          const o = rotate(mix([0, 0, 0], ga[0], -1), mix([0, 0, 0], up, screwed(sp)[1]));
+          [0, 1, 2].forEach(i => (mid[i] += o[i] * 0.026));
+          fing = turn(mix([0, 0, 0], o, -1));
+        }
         const held = { ...q, rot: q.rot.slice() };
-        wield(held, s, arm, add(eye, turn(mid)), unit(turn(up)), turn([-0.5, -1, -0.35]));
+        if (fing) {
+          shrug(held, s, arm, add(eye, turn(mid)));
+        }
+        wield(held, s, arm, add(eye, turn(mid)), unit(turn(up)), turn([-0.5, -1, -0.35]), fing);
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], onLoad);
         }
@@ -950,10 +962,16 @@ export const createBody = (world?: World): Body => {
             rail,
             clock,
             {
-              // Dark from when the old one comes out until the new one is in.
-              light: sp < 0 ? power(since) : 1 - ease(span(sp, 0.1, 0.2)),
+              // Dark from when the old one comes out until the new one is in, the gun's counter
+              // folded down with it; then the gun boots: the counter stands up, its digits show,
+              // and the light comes on slowly.
+              light:
+                sp < 0 ? power(since, rail ? undefined : GUN_ON.lit) : 1 - ease(span(sp, 0.1, 0.2)),
               swap: sp,
               empty: !(rail ? me?.cap : me?.mag),
+              stand:
+                sp < 0 ? ease(span(since, GUN_ON.from, GUN_ON.up)) : 1 - ease(span(sp, 0.15, 0.35)),
+              digits: sp < 0 && since >= GUN_ON.digits,
             },
           );
         }

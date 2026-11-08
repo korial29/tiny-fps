@@ -7,7 +7,7 @@ import { TAU } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
-import { clasp, inv, reach, shrug, wield } from './body';
+import { clasp, inv, reach, shrug, stowed, wield } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
 import { ARC, TILT, aimed, focus, foregrip, held } from './gun';
@@ -305,7 +305,10 @@ export const stance = (r: Runner) => {
     s = solve(pose);
   } else if (p.railed && !p.down) {
     // The rail gun in both hands, at the ready when not firing: the left on its front grip, the
-    // elbow down and out.
+    // elbow down and out. On a wall it is put away, unless its bolt is going out (stowed()).
+    if (stowed(p)) {
+      return { s, sink, yaw: pose.yaw };
+    }
     pose = lifted(pose, s, p, r.focus, Math.max(r.aim, READY));
     s = solve(pose);
     const [at, g] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R]);
@@ -343,7 +346,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);
     r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));
-  } else if ((p.ammo >= 0 || p.railed) && !p.down) {
+  } else if ((p.railed ? !stowed(p) : p.ammo >= 0) && !p.down) {
     held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, undefined, 0, p.railed, r.t);
   }
   if (r.dash > 0.15) {

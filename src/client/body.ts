@@ -14,6 +14,7 @@ import {
   PLAYER_R,
   RAIL_CAP,
   STEP_H,
+  HEAT_MAX,
 } from '../shared/constants';
 import { powerOf } from '../shared/gun';
 import { TAU, eyeHeight, speedOf, sprinting } from '../shared/physics';
@@ -39,6 +40,7 @@ import {
   span,
   swapOf,
   tip,
+  cellsOf,
 } from './gun';
 import {
   BASE,
@@ -654,10 +656,17 @@ export const createBody = (world?: World): Body => {
   const holster = (): [Vec3, Vec3[]] => {
     const a = w.amp * (1 + 0.5 * w.sprint);
     // A charge past a tap shakes the gun, harder as it grows: 4.5 mm at the full charge.
+    // The rail gun's bolt kicks it at each pulse of the arc, 7 a second, and shakes it, harder as
+    // it heats; overheated it trembles (the user, 2026-11-08).
+    const zap = +!!me?.zapping;
+    const heat = (me?.heat ?? 0) / HEAT_MAX;
+    const kicked = kick + 0.6 * zap * Math.max(0, Math.sin(clock * TAU * 7)) ** 6;
     const shake =
-      me && !me.wield && (me.charge ?? 0) >= CHARGE_TAP
+      (me && !me.wield && (me.charge ?? 0) >= CHARGE_TAP
         ? 0.0045 * Math.min(1, (me.charge! - CHARGE_TAP) / (CHARGE_TICKS - CHARGE_TAP))
-        : 0;
+        : 0) +
+      zap * (0.0012 + 0.004 * heat) +
+      (me?.hot ? 0.002 : 0);
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     // The rail gun is held in both hands like a rifle: nearer the middle and the chest, so that
     // the left hand reaches its front grip.
@@ -672,7 +681,7 @@ export const createBody = (world?: World): Body => {
         lift[0] +
         shake * Math.sin(clock * 53),
       -0.25 + 0.018 * a * c - 0.3 * (1 - w.gun) + lift[1] + shake * Math.sin(clock * 61 + 1),
-      0.4 - RIFLE[1] * r - 0.05 * kick + lift[2],
+      0.4 - RIFLE[1] * r - 0.05 * kicked + lift[2],
     ];
     // The rifle sits further out and higher than the rail gun, its counter in the lower view.
     const rf = me?.rifled ? 1 : 0;
@@ -685,7 +694,11 @@ export const createBody = (world?: World): Body => {
     at[1] += (r ? 0.03 : 0.17) * tipped;
     // A shot kicks the nose up; a swap lifts it too, the rail gun's down.
     const l = Math.hypot(...target);
-    const to: Vec3 = [target[0], target[1] + (0.1 * kick + (r ? 0 : 0.2) * tipped) * l, target[2]];
+    const to: Vec3 = [
+      target[0],
+      target[1] + (0.1 * kicked + (r ? 0 : 0.2) * tipped) * l,
+      target[2],
+    ];
     const [rc, rs] = [Math.cos(roll), Math.sin(roll)];
     return [at, pointed(at, to, [rc, rs, 0], [-rs, rc, 0])];
   };
@@ -996,6 +1009,9 @@ export const createBody = (world?: World): Body => {
               stand:
                 sp < 0 ? ease(span(since, GUN_ON.from, GUN_ON.up)) : 1 - ease(span(sp, 0.15, 0.35)),
               digits: sp < 0 && since >= GUN_ON.digits,
+              cells: me && cellsOf(me),
+              heat: (me?.heat ?? 0) / HEAT_MAX,
+              hot: me?.hot,
             },
           );
         }

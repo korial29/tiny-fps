@@ -235,6 +235,9 @@ export interface PlayerState {
   inRail?: boolean;
   /** The rail gun's bolt went out on the last step. Absent reads false. */
   zapping?: boolean;
+  /** The rail gun's heat, 0 to HEAT_MAX, and whether it overheated and cannot fire until it cools (gun.ts). Absent reads 0. */
+  heat?: number;
+  hot?: boolean;
   /** Ticks left drained by the bolt: slowed under SLOW_SPEED, and the host takes 1 hp each RAIL_DRAIN. Absent reads 0. */
   slow?: number;
   /** While down: the bolt's drain put him down, and he is disintegrated. Absent reads false. */

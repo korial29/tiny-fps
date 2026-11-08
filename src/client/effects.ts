@@ -7,7 +7,7 @@ import {
   SPRINT_SPEED,
   STUMBLE_TICKS,
 } from '../shared/constants';
-import { eyeHeight, speedOf } from '../shared/physics';
+import { eyeHeight, floored, speedOf } from '../shared/physics';
 import { CUT, EV, KEY, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 
@@ -129,6 +129,7 @@ export const createEffects = (): Effects => {
   let arc = 0;
   let thump = 0;
   let reel = 0;
+  let fall = 0;
   let shots = 0;
   /** The eye height as drawn; undefined until the first state, which it starts at. */
   let h: number | undefined;
@@ -179,10 +180,14 @@ export const createEffects = (): Effects => {
     },
 
     cut(c) {
+      // The arc's cut comes down across, as hard as a thrust.
+      const arc = c == CUT.ARC_L || c == CUT.ARC_R;
       y[1] += STRIKE[0];
-      p[1] -= c == CUT.SLASH ? STRIKE[1] : 0;
-      r[1] += c == CUT.LEFT ? STRIKE[2] : c == CUT.RIGHT ? -STRIKE[2] : 0;
-      thump = c == CUT.THRUST ? 1 : thump;
+      p[1] -= c == CUT.SLASH || arc ? STRIKE[1] : 0;
+      r[1] +=
+        (c == CUT.LEFT || c == CUT.ARC_L ? 1 : c == CUT.RIGHT || c == CUT.ARC_R ? -1 : 0) *
+        STRIKE[2];
+      thump = c == CUT.THRUST || arc ? 1 : thump;
     },
 
     update(me, keys, dt, hit = { ev: 0, fall: 0 }) {
@@ -218,6 +223,9 @@ export const createEffects = (): Effects => {
       thump *= Math.exp(-dt * 10);
       fx.kick *= Math.exp(-dt * 22);
       fx.lie += (+!!me?.down - fx.lie) * ease(5);
+      // Floored by an arc: down on the roof as fast as he fell, then up again.
+      fall += (+(!!me && floored(me)) - fall) * ease(8);
+      const lie = Math.max(fx.lie, fall);
       // Stumbling: the view reels, in and out of balance as long as the timer runs.
       reel += dt * REEL[2];
       const stun = me ? Math.min(1, me.stun / STUMBLE_TICKS) : 0;
@@ -228,7 +236,7 @@ export const createEffects = (): Effects => {
         want +
         y[0] -
         Math.cos(fx.stride * 2 * Math.PI) * bob(v) * amt -
-        fx.lie * (want - LIE[1]);
+        lie * (want - LIE[1]);
       arc +=
         ((me?.mode === MODE.CLIMB ? ARC * Math.sin(Math.PI * clamp(me.t / ARC_TICKS)) : 0) - arc) *
         ease(10);
@@ -245,7 +253,7 @@ export const createEffects = (): Effects => {
         Math.sin(fx.stride * Math.PI) * SWAY * amt +
         r[0] +
         Math.sin(reel) * REEL[0] * stun +
-        fx.lie * LIE[0];
+        lie * LIE[0];
 
       // The dash is a burst of its first ticks; the speed part saturates at the sprint's.
       const burst = !!me && me.dash > DASH_COOLDOWN - DASH_TICKS;

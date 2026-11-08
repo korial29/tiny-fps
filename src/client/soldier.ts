@@ -3,7 +3,7 @@
 // toward it; the dash streaks are the only thing drawn here that the gait does not pose. A
 // player's (x, y, z) is the bottom of the feet. No DOM.
 import { DASH_COOLDOWN, DASH_TICKS, DOWN_TICKS, STEP_H, TICK_HZ } from '../shared/constants';
-import { TAU } from '../shared/physics';
+import { TAU, floored } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
@@ -23,7 +23,6 @@ import {
   locked,
   poised,
   progress,
-  whirl,
 } from './katana';
 import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
@@ -177,8 +176,7 @@ const ease = (v: number) => (v = Math.min(Math.max(v, 0), 1)) * v * (3 - 2 * v);
 /**
  * The pose with the katana in both hands: carried, or in a cut, which is the first person's cut
  * seen from the runner's eye (the share `e` of it, so that it is drawn from the carry and back to
- * it), the trunk twisting, bending and leaning through it (trunk()), and the whole body turning
- * round in a spin.
+ * it), and the trunk twisting, bending and leaning through it (trunk()).
  */
 export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number, t = 0): Pose => {
   // In a saber lock the blade crosses the foe's, shaking, and the trunk leans into him.
@@ -186,9 +184,9 @@ export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number, t
   const k = p.lock ? locked(t) : poised(p, Math.max(prog, 0), t);
   const g = CARRY.map((v, i) => v + (k[i] - v) * e);
   g[1] += 0.02 * Math.sin(TAU * ph) * (1 - e);
-  // A spin turns the whole body round on its feet; a cut turns it with a share of the trunk's twist.
+  // A cut turns the whole body on its feet with a share of the trunk's twist.
   const [tw, bd, ln] = p.lock ? [0, 0.15, 0] : prog < 0 ? [0, 0, 0] : bent(p, prog).map(v => v * e);
-  const spin = prog < 0 ? 0 : whirl(p.cut ?? 0, prog) + SWAY * tw;
+  const spin = prog < 0 ? 0 : SWAY * tw;
   const pose = { ...from, yaw: from.yaw + spin };
   // The hands go round with the chest's whole twist and down and up with its bend.
   const [r, u, f] = basis(p.yaw + spin + (1 - SWAY) * tw, Math.max(p.pitch, -BOW) * e - 0.6 * bd);
@@ -300,10 +298,12 @@ export const stance = (r: Runner) => {
     };
   }
   let s = solve(pose);
-  if (p.wield && !p.down) {
+  // Down or floored, the weapon stays in the hand as it falls.
+  const lying = !!p.down || floored(p);
+  if (p.wield && !lying) {
     pose = brandish(pose, p, r.prog, r.gait.phase, r.t);
     s = solve(pose);
-  } else if ((p.railed || p.rifled) && !p.down) {
+  } else if ((p.railed || p.rifled) && !lying) {
     // The rail gun or the rifle in both hands, at the ready when not firing: the left on its front grip, the
     // elbow down and out. On a wall it is put away, unless its bolt is going out (stowed()).
     if (p.railed && stowed(p)) {

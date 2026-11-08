@@ -2,7 +2,10 @@ import {
   AMMO_MAX,
   AMMO_BACK,
   AMMO_PACK,
+  ARC_KNOCK,
+  CUTS,
   DOWN_TICKS,
+  FLOOR_TICKS,
   HEAVY,
   HP_MAX,
   INPUT_BURST,
@@ -31,18 +34,18 @@ import {
   TEAM_COLOR,
   TICK_HZ,
 } from './constants';
-import { crossing, knock, limbOf, strike, swingOf } from './blade';
+import { CHEST, crossing, knock, limbOf, strike, swingOf } from './blade';
 import { Ctf } from './ctf';
 import { STRIKE, step, within } from './gun';
 import { HIGHLINE } from './map';
-import { forward, spawn, speedOf, stumble } from './physics';
-import { PLASMA_LAG, PLASMA_STEP, fly, launch } from './plasma';
+import { forward, heightOf, spawn, speedOf, stumble } from './physics';
+import { PLASMA_LAG, fly, launch, stepOf, wave } from './plasma';
 import type { Flying } from './plasma';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
 import { beam, laser } from './rail';
 import { reaches, tackling } from './tackle';
-import { LIMB } from './types';
+import { CUT, LIMB } from './types';
 import type { Conn, Every, PlayerInfo, PlayerState, Rules } from './types';
 import { build } from './world';
 import type { World, WorldDef } from './world';
@@ -226,7 +229,7 @@ export class Room {
     }
     for (const b of this.balls) {
       if (!b.burst && b.left > 0) {
-        this.fly(b, PLASMA_STEP);
+        this.fly(b, stepOf(b));
       }
     }
     this.heal(players);
@@ -402,23 +405,26 @@ export class Room {
   }
 
   /**
-   * A shot of `p` went off at the view tick `view`: its ball starts where `p` saw it start, flown
-   * on by his lag (the view tick to now, at most PLASMA_LAG ticks) against the others as they are
-   * now. Past PLASMA_MAX balls in flight, the oldest bursts.
+   * A shot of `p` went off at the view tick `view`: its ball (or the arc `b` of an ARC cut) starts
+   * where `p` saw it start, flown on by his lag (the view tick to now, at most PLASMA_LAG ticks)
+   * against the others as they are now. Past PLASMA_MAX balls in flight, the oldest bursts.
    */
-  private shoot(p: Player, view = 0): void {
-    const b = launch(p.state, p.info.team);
+  private shoot(p: Player, view = 0, b = launch(p.state, p.info.team)): void {
     // Ticks back, on the u16 circle; a view ahead of now is no lag.
     const lag = (this.ticks - view + 0x10000) % 0x10000;
     this.balls.push(b);
-    this.fly(b, Math.min(lag < 0x8000 ? lag : 0, PLASMA_LAG) * PLASMA_STEP);
+    this.fly(b, Math.min(lag < 0x8000 ? lag : 0, PLASMA_LAG) * stepOf(b));
     const live = this.balls.filter(q => !q.burst);
     if (live.length > PLASMA_MAX) {
       live[0].burst = true;
     }
   }
 
-  /** Flies the ball `b` on by `m` metres: one that bursts on an enemy who is up takes its power in hp from him, and counts a hit to its shooter. */
+  /**
+   * Flies the ball `b` on by `m` metres: one that bursts on an enemy who is up takes its power in hp
+   * from him, and counts a hit to its shooter. An arc takes its cut's hp; one it does not put down
+   * is floored (FLOOR_TICKS, `zap`), thrown ARC_KNOCK m/s the way it flies, and drops the flag.
+   */
   private fly(b: Flying, m: number): void {
     const peers = this.players();
     const foes = peers.filter(q => q.info.team !== b.team && !q.state.down);
@@ -436,7 +442,29 @@ export class Room {
     if (by) {
       by.state.hits = (by.state.hits + 1) & 255;
     }
-    this.harm(foe, b.power ?? 1);
+    if (!b.arc) {
+      this.harm(foe, b.power ?? 1);
+    } else if (this.harm(foe, CUTS[b.arc].hp)) {
+      // The limb a blade would take along the arc's line, swung from a metre back on it.
+      const from = by && { ...by.state, cut: b.arc, yaw: Math.atan2(-b.dx, -b.dz) };
+      foe.state.lost = from
+        ? limbOf(
+            Object.assign(from, {
+              x: b.x - b.dx,
+              y: b.y - b.dy - CHEST * heightOf(from),
+              z: b.z - b.dz,
+              pitch: Math.asin(b.dy),
+            }),
+            foe.state,
+          )
+        : LIMB.NONE;
+    } else {
+      const n = Math.hypot(b.dx, b.dz) || 1;
+      stumble(foe.state, b.dx / n, b.dz / n, FLOOR_TICKS, ARC_KNOCK);
+      foe.state.zap = true;
+      foe.by = b.by;
+      this.ctf.drop(foe.state);
+    }
   }
 
   /**
@@ -447,6 +475,10 @@ export class Room {
    * crosses where `p` drew him (`limbOf`).
    */
   private cut(p: Player, view: number | undefined): void {
+    if (p.state.cut === CUT.ARC_L || p.state.cut === CUT.ARC_R) {
+      this.shoot(p, view, wave(p.state, p.info.team));
+      return;
+    }
     const seen = strike(this.world, p.state, this.enemies(p, view));
     let foes = this.players().filter(q => seen.some(s => s.id === q.info.id));
     // A foe whose own cut meets this one locks blades with him instead (crossing()).
@@ -472,7 +504,7 @@ export class Room {
       if (this.harm(foe, swingOf(p.state).hp)) {
         foe.state.lost = limbOf(p.state, drawn);
       } else {
-        const [dx, dz] = knock(p.state, drawn);
+        const [dx, dz] = knock(p.state);
         stumble(foe.state, dx, dz, SHOCK_TICKS, SHOCK_KNOCK * (p.state.heavy ? HEAVY : 1));
         foe.state.zap = true;
         foe.by = p.info.id;

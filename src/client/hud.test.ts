@@ -473,7 +473,7 @@ describe('the gun on the HUD', () => {
       expect(rows).toContain('Katana + Wthrust');
       expect(rows).toContain('Katana + A or Dcut across');
       expect(rows).toContain('Katana aloneslash');
-      expect(rows).toContain('Double clickspecial: lunge, spin, leap');
+      expect(rows).toContain('Double clickspecial: lunge, energy arc, leap');
       expect(screen.querySelector('aside')!.textContent).toMatch(/armoury past your flag/);
     });
   });

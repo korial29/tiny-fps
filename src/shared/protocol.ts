@@ -41,11 +41,12 @@
 //     HOME: nothing more (2 bytes in all for the two flags);
 //     CARRIED: [by u8] the carrier's player id;
 //     DROPPED: [x i16][y i16][z i16] in 1/16 m, [left u8] whole seconds before it goes home.
-//   Then, only when there are any, the plasma balls: [count u8], count × 11 bytes:
+//   Then, only when there are any, the plasma balls and the katana's arcs: [count u8], count × 11 bytes:
 //     [id u8][by u8][x i16][y i16][z i16][yaw u8][pitch i8][power u8]
 //     id: the shooter's `shots` after the shot; by: bits 0-6 the shooter's id, bit 7 burst (it burst
 //     where it is: the last snapshot that carries it); x, y, z in 1/32 m; the direction as a yaw in
-//     256ths of a turn and a pitch in 127ths of a quarter turn; power: the health it takes.
+//     256ths of a turn and a pitch in 127ths of a quarter turn; power: the health it takes, or for an
+//     arc of energy bit 7 set and the CUT that threw it (Ball.arc) in bits 0-6.
 //   A snapshot is 4 + 55 × players + 8 + 2 to 16 bytes: 10 on top of the players when both flags are
 //   home and no ball flies; with balls, 1 + 11 × balls more.
 // Every multi-byte field is big-endian (DataView's default).
@@ -248,7 +249,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     [b.x, b.y, b.z].forEach((c, k) => v.setInt16(o + 2 + 2 * k, clamp16(c * BALL_POS)));
     v.setUint8(o + 8, Math.round(Math.atan2(-b.dx, -b.dz) * YAW8) & 255);
     v.setInt8(o + 9, Math.round(Math.asin(Math.max(-1, Math.min(1, b.dy))) * PITCH8));
-    v.setUint8(o + 10, b.power ?? 1);
+    v.setUint8(o + 10, b.arc ? 128 | b.arc : (b.power ?? 1));
     o += SNAP_BALL;
   }
   return v.buffer;
@@ -370,7 +371,9 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       dy: Math.sin(pitch),
       dz: -Math.cos(yaw) * Math.cos(pitch),
       burst: v.getUint8(o + 1) > 127,
-      power: v.getUint8(o + 10),
+      ...(v.getUint8(o + 10) > 127
+        ? { power: 1, arc: v.getUint8(o + 10) & 127 }
+        : { power: v.getUint8(o + 10) }),
     });
   }
   return {

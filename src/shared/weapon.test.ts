@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   AMMO_MAX,
   AMMO_PACK,
+  ARC_KNOCK,
+  ARC_R,
+  ARC_RANGE,
+  FLOOR_TICKS,
   CHARGE_MAX,
   CHARGE_TICKS,
   LOCK_BREAK,
@@ -46,7 +50,7 @@ import { drift } from './rail';
 import { cutOf, swingOf } from './blade';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
-import { STILL, spawn, speedOf } from './physics';
+import { STILL, floored, spawn, speedOf } from './physics';
 import { PLASMA_LAG, PLASMA_STEP, launch } from './plasma';
 import { CUT, FLAG, KEY, LIMB, MODE, TEAM, TEX } from './types';
 import type { Conn, PlayerState, Rules, Snapshot } from './types';
@@ -1493,6 +1497,109 @@ describe('a cut', () => {
     expect(n.snap(n.ann).over).toBe(true);
     n.cut(n.cy, 40, FORWARD);
     expect([n.state(n.bob).hp, n.state(n.cy).swing]).toEqual([HP_MAX, 0]);
+  });
+});
+
+describe('the arc of energy', () => {
+  const { SPECIAL } = KEY;
+  /** Cy, the katana in hand, double clicks a cut across (`keys`, let go at once: he does not step aside) and waits for its strike; the arc then flies out. */
+  const throwArc = (m: ReturnType<typeof match>, keys: number = LEFT) => {
+    m.ticks(SNAP_EVERY);
+    m.send(m.cy, keys | FIRE | SPECIAL);
+    m.ticks(1);
+    m.hold(m.cy, CUTS[CUT.ARC_L].strike, 0);
+  };
+
+  it('goes out of a double click on a cut across, and hits Bob 8 m away: the cut’s hp, and he is floored, thrown along its flight', () => {
+    for (const keys of [LEFT, RIGHT]) {
+      const m = match();
+      m.put(m.cy, 0, 0, SWORD);
+      m.put(m.bob, 8);
+      throwArc(m, keys);
+      expect(m.state(m.cy).cut, `keys ${keys}`).toBe(keys == LEFT ? CUT.ARC_L : CUT.ARC_R);
+      m.land();
+      const bob = m.state(m.bob);
+      expect(bob.hp).toBe(HP_MAX - CUTS[CUT.ARC_L].hp);
+      expect([bob.stun, bob.zap, floored(bob)]).toEqual([FLOOR_TICKS, true, true]);
+      expect(bob.vx).toBeCloseTo(ARC_KNOCK, 4);
+      expect(bob.vz).toBeCloseTo(0, 4);
+      expect(m.state(m.cy).hits).toBe(1);
+    }
+    // The blade alone does not reach him: a plain cut across there does nothing.
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 8);
+    swing(m, m.cy, LEFT);
+    m.land();
+    expect(m.state(m.bob).hp).toBe(HP_MAX);
+  });
+
+  it('flies on the wire as a ball with the cut in `arc`, ARC_RANGE metres at most, and stops on a wall', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 50);
+    throwArc(m);
+    m.ticks(SNAP_EVERY);
+    const [b] = m.snap(m.ann).balls!;
+    expect([b.by, b.arc, b.burst]).toEqual([2, CUT.ARC_L, false]);
+    m.land();
+    // Out of range, and behind the wall at x = 30 within range.
+    expect(m.state(m.bob).hp).toBe(HP_MAX);
+    m.put(m.bob, ARC_RANGE + 2);
+    throwArc(m);
+    m.land();
+    expect(m.state(m.bob).hp).toBe(HP_MAX);
+    m.put(m.cy, 22, 0, SWORD);
+    m.put(m.bob, 33);
+    throwArc(m);
+    m.land();
+    expect(m.state(m.bob).hp).toBe(HP_MAX);
+  });
+
+  it('meets a body off its line, up to ARC_R metres wider than a ball', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 8, PLAYER_R + ARC_R - 0.05);
+    throwArc(m);
+    m.land();
+    expect(m.state(m.bob).hp).toBe(HP_MAX - CUTS[CUT.ARC_L].hp);
+    const n = match();
+    n.put(n.cy, 0, 0, SWORD);
+    n.put(n.bob, 8, PLAYER_R + ARC_R + 0.1);
+    throwArc(n);
+    n.land();
+    expect(n.state(n.bob).hp).toBe(HP_MAX);
+  });
+
+  it('makes a carrier drop the flag, and keeps the floored still on his keys until he is up', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 6);
+    m.carry(m.bob);
+    throwArc(m);
+    m.land();
+    expect(m.flag(0).state).toBe(FLAG.DROPPED);
+    // Stopped where he fell: running and jumping move him no more while floored.
+    const bob = Object.assign(m.state(m.bob), { vx: 0, vz: 0 });
+    const x = bob.x;
+    let k = 0;
+    for (; floored(bob); k++) {
+      m.hold(m.bob, 1, FORWARD | JUMP);
+    }
+    expect(k).toBe(FLOOR_TICKS - SHOCK_TICKS);
+    expect(bob.x).toBeCloseTo(x, 5);
+    expect(bob.y).toBe(1);
+  });
+
+  it('puts down one it takes the last health of, with a limb off', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, SWORD);
+    m.put(m.bob, 8, 0, { hp: 2 });
+    throwArc(m);
+    m.land();
+    expect(m.state(m.bob).down).toBeGreaterThan(DOWN_TICKS - 40);
+    expect(m.state(m.bob).stun).toBe(0);
+    expect(m.state(m.bob).lost).not.toBe(LIMB.NONE);
   });
 });
 

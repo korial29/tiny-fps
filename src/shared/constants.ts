@@ -263,9 +263,14 @@ export const CUTS = [
   { ticks: 40, strike: 16, reach: 2.15, arc: 0.45, hp: 3, hold: 11 },
   /** LUNGE: thrown forward on the point (LUNGE_SPEED), the longest reach. */
   { ticks: 36, strike: 12, reach: 3.2, arc: 0.3, hp: 3, hold: -1 },
-  /** SPIN_L, then SPIN_R: a full turn on himself, the blade out all round him. */
-  { ticks: 48, strike: 24, reach: 2.3, arc: Math.PI, hp: 3, hold: -1 },
-  { ticks: 48, strike: 24, reach: 2.3, arc: Math.PI, hp: 3, hold: -1 },
+  /**
+   * ARC_L, then ARC_R (the user, 2026-11-08): a heavy cut down across, from high on its side to low
+   * on the other. It strikes no one itself: at its strike it throws an arc of energy (wave(),
+   * plasma.ts) that takes `hp` and floors the foe it meets (FLOOR_TICKS). Its reach and arc count
+   * only for a saber lock.
+   */
+  { ticks: 46, strike: 20, reach: 2.15, arc: 0.6, hp: 3, hold: -1 },
+  { ticks: 46, strike: 20, reach: 2.15, arc: 0.6, hp: 3, hold: -1 },
   /** LEAP: up (LEAP_SPEED) and down on the foe as he lands, the hardest blow. */
   { ticks: 58, strike: 40, reach: 2.4, arc: 0.6, hp: 4, hold: -1 },
 ];
@@ -278,6 +283,15 @@ export const CUTS = [
  */
 export const [HEAVY, HEAVY_TAP, HEAVY_MAX] = [1.8, 15, 60];
 export const [HEAVY_HP, HEAVY_REACH, HEAVY_ARC] = [2, 0.5, 1.4];
+/**
+ * The arc of energy an ARC cut throws: it leaves the eye along the look at ARC_SPEED m/s, flies
+ * ARC_RANGE metres at most, stops on the first brush, and meets a body ARC_R metres off its line
+ * (it is about 1.5 m wide). The foe it meets is floored: a stumble of FLOOR_TICKS (a second on the
+ * ground, no move: floored(), physics.ts; the stun field holds 63 at most), thrown ARC_KNOCK m/s the way it flies, and he drops the flag.
+ * ARC_RANGE / ARC_SPEED stays under an ARC cut's ticks: one arc is gone before the next is thrown.
+ */
+export const [ARC_SPEED, ARC_RANGE, ARC_R] = [24, 15, 0.6];
+export const [FLOOR_TICKS, ARC_KNOCK] = [63, 7];
 /** Ticks into a cut's swing in which a double click's second press still turns it into its special. */
 export const SPECIAL_LATE = 18;
 /** The lunge's throw along the look (m/s), held for the burst of a dash: it spends the dash. */

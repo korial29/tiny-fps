@@ -4,6 +4,7 @@
 // it. The other moves are static poses (MOVES) eased in by critically damped springs, so a switch
 // never pops. Everything is in the runner's frame: x right, y up, -z ahead. No DOM.
 import { DASH_COOLDOWN, DASH_TICKS } from '../shared/constants';
+import { floored } from '../shared/physics';
 import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import type { Vec3 } from './mesh';
@@ -403,7 +404,8 @@ export const createGait = (): Gait => {
       p.stun > 0,
       flip && Math.sqrt(Math.sin(Math.PI * flip)),
     ].forEach((g, i) => set(W + 2 * i, +g, 12));
-    set(W + 2 * MOVE.DOWN, +(p.down > 0), 5);
+    // Floored by an arc, he lies as one down, falling faster.
+    set(W + 2 * MOVE.DOWN, +(p.down > 0 || floored(p)), floored(p) ? 9 : 5);
     set(LOW, +(p.mode == MODE.CROUCH), 12);
     set(UP, hold ? clamp((1.7 - lip[4] + p.y) / 1.2) : 0, 14);
     set(DIP, kick, 26);

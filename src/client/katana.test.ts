@@ -23,7 +23,6 @@ import {
   stroke,
   trunk,
   sword,
-  whirl,
 } from './katana';
 import { STRIDE, dot, unit } from './mesh';
 import type { Vec3 } from './mesh';
@@ -491,24 +490,28 @@ describe('the cuts', () => {
   });
 });
 
-describe('whirl', () => {
-  it('turns the body a full turn over a spin, right for the spin from the left, left for the other', () => {
-    expect(whirl(CUT.SPIN_L, 0)).toBeCloseTo(0, 9);
-    expect(whirl(CUT.SPIN_L, 1)).toBeCloseTo(-2 * Math.PI, 9);
-    expect(whirl(CUT.SPIN_R, 1)).toBeCloseTo(2 * Math.PI, 9);
-    expect(whirl(CUT.SPIN_L, 0.5)).toBeLessThan(-1);
-    // Smoothly, never back, and still while the blade winds up and follows through.
-    const path = steps(0, 1).map(p => whirl(CUT.SPIN_L, p));
-    path.forEach((v, i) => i && expect(v).toBeLessThanOrEqual(path[i - 1] + 1e-9));
-    expect(whirl(CUT.SPIN_L, 0.25)).toBeCloseTo(0, 9);
-    expect(whirl(CUT.SPIN_L, 0.8)).toBeCloseTo(-2 * Math.PI, 9);
-  });
-
-  it('does not turn any other cut', () => {
-    for (const cut of [CUT.THRUST, CUT.LEFT, CUT.RIGHT, CUT.SLASH, CUT.LUNGE, CUT.LEAP]) {
-      for (const p of steps(0, 1, 10)) {
-        expect(whirl(cut, p)).toBe(0);
-      }
+describe('the arc’s cut', () => {
+  it('comes down across from high on its side, and the cut from the right is the one from the left turned round', () => {
+    for (const [cut, sign] of [
+      [CUT.ARC_L, 1],
+      [CUT.ARC_R, -1],
+    ]) {
+      const s = CUTS[cut].strike / CUTS[cut].ticks;
+      const [up, low] = [stroke(cut, 0.3).slice(), stroke(cut, 0.56).slice()];
+      // The hands high and out on its side, then low and out on the other.
+      expect(sign * up[0]).toBeLessThan(-0.2);
+      expect(up[1]).toBeGreaterThan(0.05);
+      expect(sign * low[0]).toBeGreaterThan(0.2);
+      expect(low[1]).toBeLessThan(-0.2);
+      // The blade forward at the strike.
+      expect(stroke(cut, s)[5]).toBeGreaterThan(0.9);
+    }
+    // Between the guards, which are the same for both.
+    for (const p of steps(0.3, 0.68, 20)) {
+      const [l, r] = [stroke(CUT.ARC_L, p).slice(), stroke(CUT.ARC_R, p)];
+      expect(r[0]).toBeCloseTo(-l[0], 9);
+      expect(r[3]).toBeCloseTo(-l[3], 9);
+      expect(r[1]).toBeCloseTo(l[1], 9);
     }
   });
 });

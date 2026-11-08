@@ -7,7 +7,7 @@ import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
 import { MUZZLE, REAR, aimed, foregrip, grip, gun, tip } from './gun';
 import { BEHIND, axes } from './katana';
-import { STRIDE } from './mesh';
+import { SHINE, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, solve, turn } from './rig';
 import { FRY, animate, brandish, createRunner, dissolve, fried, soldier, stance } from './soldier';
@@ -733,6 +733,28 @@ describe('a runner the rail gun’s bolt puts down', () => {
 });
 
 describe('a runner with the rail gun', () => {
+  it('puts it away on a wall-run, and takes it back while its bolt goes out', () => {
+    for (const zapping of [false, true]) {
+      const r = hold({
+        mode: MODE.WALLRUN,
+        ground: false,
+        y: 1.2,
+        wall: SIDE.EAST,
+        vz: -8,
+        rail: 100,
+        railed: true,
+        zapping,
+      });
+      const out: number[] = [];
+      soldier(out, r, [0.1, 0.8, 0.2], 3);
+      const shine = out.filter((v, i) => i % STRIDE == 8 && v == SHINE).length;
+      expect(shine > 0).toBe(zapping);
+      const { s } = stance(r);
+      const [at] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R]);
+      expect(Math.hypot(...s.pos[J.HAND_L].map((v, i) => v - at[i])) < 0.1).toBe(zapping);
+    }
+  });
+
   it('holds it in both hands, the left round the front grip, standing, running and looking up or down', () => {
     for (const [vz, pitch] of [
       [0, 0],

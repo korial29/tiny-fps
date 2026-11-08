@@ -520,6 +520,9 @@ const floorOf =
     return d > 0 && d < 2 * STEP_H ? y + STEP_H - d : y;
   };
 
+/** On a wall run the rail gun is put away, unless its bolt is going out. */
+export const stowed = (p: PlayerState): boolean => p.mode == MODE.WALLRUN && !p.zapping;
+
 /** The blends the animation eases, each toward 0 or 1, and how fast (1 / s). */
 const RATES = {
   amp: 8,
@@ -599,7 +602,9 @@ export const createBody = (world?: World): Body => {
       wall: +(p.mode == MODE.WALLRUN),
       slide: +(p.mode == MODE.SLIDE),
       stun: +(p.stun > 0),
-      gun: +(!p.down && !p.wield && (p.ammo >= 0 || !!p.railed)),
+      // The rail gun is put away on a wall unless its bolt is going out: a hand on the wall, the
+      // other swinging with the stride.
+      gun: +(!p.down && !p.wield && (p.ammo >= 0 || (!!p.railed && !stowed(p)))),
       blade: +(!!p.wield && !p.down),
     };
     for (const n of Object.keys(RATES) as (keyof typeof RATES)[]) {
@@ -767,7 +772,8 @@ export const createBody = (world?: World): Body => {
       h = mix(h, [0.38, -0.2, 0.34], w.air);
       h = mix(h, [0.3, 0.02, 0.45], w.rise);
       h = mix(h, [0.14, -0.1, 0.5], w.dash);
-      const toWall = w.wall * clamp(side * sd);
+      // Firing the rail gun on a wall takes both hands off it.
+      const toWall = w.wall * clamp(side * sd) * (me?.railed ? 1 - w.gun : 1);
       h = mix(h, [0.42, -0.16, 0.42], toWall);
       h = mix(h, sd > 0 ? [0.36, -0.26, 0.38] : [0.28, -0.1, 0.42], w.slide);
       // Reeling from a tackle: the hands thrown out and up, flailing against each other.

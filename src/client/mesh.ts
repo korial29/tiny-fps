@@ -22,6 +22,11 @@ export const unit = (a: Vec3): Vec3 => {
  * the same colour, bright and unlit (dust, visors, markers).
  */
 export const STRIDE = 10;
+/**
+ * The layer of polished metal (the guns): a flat colour lit like -1, with a sharp highlight and the
+ * sky reflected in it, more at a grazing angle.
+ */
+export const SHINE = -1.25;
 
 /**
  * Camera axes [right, up, forward]: forward is (-sin yaw cos pitch, sin pitch, -cos yaw cos pitch),

@@ -8,7 +8,7 @@ import type { Brush, WorldDef } from '../shared/world';
 import { createEffects } from './effects';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
-import { STRIDE } from './mesh';
+import { SHINE, STRIDE } from './mesh';
 import { LAYERS } from './textures';
 import {
   FOG_LAYER,
@@ -135,8 +135,8 @@ describe('createRenderer', () => {
     const src = calls.filter(c => c[0] == 'shaderSource').map(c => String(c[2]));
     const frag = src.find(s => s.includes('sampler2DArray'))!;
     const rows = frag.match(/const vec2 SP\[(\d+)\]=vec2\[\]\((.*)\);/)!;
-    expect(Number(rows[1])).toBe(LAYERS + 1);
-    expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 1);
+    expect(Number(rows[1])).toBe(LAYERS + 2);
+    expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 2);
     expect(frag).not.toMatch(/undefined|NaN|\[object/);
   });
 
@@ -704,14 +704,15 @@ describe('createRenderer', () => {
       expect(pal.slice(used.length).every(v => v == 1)).toBe(true);
     });
 
-    it('reflects the sky in the glass layer, and nowhere else', () => {
+    it('reflects the sky in the glass layer and in polished metal, and nowhere else', () => {
       createRenderer(canvas, ROOM);
       const frag = calls
         .filter(c => c[0] == 'shaderSource')
         .map(c => String(c[2]))
         .find(s => s.includes('sampler2DArray'))!;
       expect(frag).toContain(`abs(L-${TEX.GLASS}.)`);
-      expect(frag).toMatch(/K0\(reflect\(-V,m\)\)/);
+      expect(frag).toContain(`abs(L-(${SHINE}))`);
+      expect(frag).toMatch(/r=reflect\(-V,m\),k=K0\(r\)/);
       // The sky pass and the reflection are the one function.
       expect(frag.match(/K0\(/g)).toHaveLength(3);
     });

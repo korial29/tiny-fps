@@ -26,6 +26,7 @@ import {
   HP_MAX,
   JUMP_BUFFER_TICKS,
   MAX_PLAYERS,
+  PACK_BITS,
   RAIL_MAX,
   RAIL_TICKS,
   SHOCK_TICKS,
@@ -153,7 +154,7 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 4-byte head, 55 bytes per player, then the match: 8 bytes and a byte per flag at home', () => {
+  it('has a 4-byte head, 55 bytes per player, then the match: 10 bytes and a byte per flag at home', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [
@@ -208,9 +209,9 @@ describe('snapshot frame', () => {
         }),
       ],
       ...IDLE,
-      packs: 0x8000_0005,
+      packs: 2 ** 47 + 0x8000_0005,
     });
-    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 55, 8]);
+    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 55, 10]);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + SNAP_MATCH + 2);
     expect(bytes(buf)).toEqual([
       ...[MSG_SNAPSHOT, 0x12, 0x34, 1],
@@ -249,7 +250,7 @@ describe('snapshot frame', () => {
       1 | 4, // railed, zapping << 2
       130, // slow
       ...[0, 0, 0x01, 0xe0], // red 0, blue 0, clock 480 s, not over
-      ...[0x80, 0, 0, 5], // packs 0 and 2, and 31
+      ...[0x80, 0, 0x80, 0, 0, 5], // packs 0 and 2, 31 and 47
       ...[0, 0], // both flags at home
     ]);
   });
@@ -278,7 +279,7 @@ describe('snapshot frame', () => {
       );
       expect(bytes(buf).slice(SNAP_HEAD)).toEqual([
         ...[2, 3, 0x81, 0x23],
-        ...[0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0],
         ...[FLAG.CARRIED, 5],
         ...[FLAG.DROPPED, 0, 24, 0xff, 0xe0, 0x06, 0x41, 7],
       ]);
@@ -501,7 +502,7 @@ describe('snapshot frame', () => {
     // The rail gun: its ticks plus one and its drain in a byte.
     expect(RAIL_MAX + 1).toBeLessThanOrEqual(255);
     expect(RAIL_TICKS).toBeLessThanOrEqual(255);
-    // The gun: 3 bits for hp and cool, 7 for down, 7 for ammo with 127 for no gun, 32 packs.
+    // The gun: 3 bits for hp and cool, 7 for down, 7 for ammo with 127 for no gun, PACK_BITS packs.
     expect(HP_MAX).toBeLessThanOrEqual(7);
     expect(GUN_COOLDOWN).toBeLessThanOrEqual(7);
     expect(DOWN_TICKS).toBeLessThanOrEqual(127);
@@ -545,7 +546,8 @@ describe('snapshot frame', () => {
         by: rnd(16),
         held: KEY.JUMP,
       });
-      const packs = k < 4 ? [0, 1, 0x8000_0000, 0xffff_ffff][k] : rnd(2 ** 32);
+      const packs =
+        k < 5 ? [0, 1, 0x8000_0000, 0xffff_ffff, 2 ** PACK_BITS - 1][k] : rnd(2 ** PACK_BITS);
       const back = decodeSnapshot(
         encodeSnapshot({ tick: k, players: [p, player(15, { hp: 1, ammo: -1 })], ...IDLE, packs }),
       )!;

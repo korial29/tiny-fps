@@ -1,5 +1,6 @@
 import {
   AMMO_MAX,
+  AMMO_BACK,
   AMMO_PACK,
   DOWN_TICKS,
   HEAVY,
@@ -243,7 +244,7 @@ export class Room {
         tick: now,
         players: players.map(p => ({ ...p.state, ack: p.ack, by: p.state.stun ? p.by : 0 })),
         ...this.ctf.wire(),
-        packs: this.gone.reduce((m, t, k) => (t ? m : m | (1 << k)), 0) >>> 0,
+        packs: this.gone.reduce((m, t, k) => (t ? m : m + 2 ** k), 0),
         balls: this.balls,
       });
       players.forEach(p => p.conn.send(snap));
@@ -532,7 +533,7 @@ export class Room {
 
   /**
    * The packs, health ones first, then the ammo ones, then the rail cells: one that is gone comes
-   * back after PACK_BACK s. A health pack goes to a hurt player standing at it, an ammo pack to one
+   * back after PACK_BACK s, an ammo pack after AMMO_BACK s. A health pack goes to a hurt player standing at it, an ammo pack to one
    * with the gun and less than AMMO_MAX shots, a rail cell to one with the rail gun and less than
    * RAIL_MAX of lightning. Both change the state between two inputs, like a hit: the snapshot
    * carries the result and the predictor replays its unacked inputs on it.
@@ -562,7 +563,7 @@ export class Room {
         } else {
           q.rail = Math.min(RAIL_MAX, q.rail! + RAIL_CELL);
         }
-        this.gone[k] = PACK_BACK * TICK_HZ;
+        this.gone[k] = (kind == 1 ? AMMO_BACK : PACK_BACK) * TICK_HZ;
       }
     });
   }

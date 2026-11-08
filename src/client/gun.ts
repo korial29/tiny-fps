@@ -365,6 +365,20 @@ export const railgun = (lod: number): number[] => {
       dim,
     );
   }
+  // The socket the capsule screws into: a steel collar on the receiver's top, its hole the capsule's thread.
+  tube(
+    out,
+    [
+      [SOCKET[0], 0.104, 0, 0],
+      [SOCKET[0], 0.105, 0.024, 0.024],
+      [SOCKET[0], 0.126, 0.024, 0.024],
+      [SOCKET[0], 0.128, 0.0215, 0.0215],
+      [SOCKET[0], 0.1285, 0.0195, 0.0195],
+      [SOCKET[0], 0.129, 0, 0],
+    ],
+    n,
+    steel,
+  );
   return (railed[lod] = out);
 };
 
@@ -584,8 +598,9 @@ export const battery = (lod: number): number[] =>
 const cells: number[][] = [];
 
 /**
- * The rail gun's capsule, built once: a copper screw base, a violet core of lightning in a cage of
- * three steel posts, and a cap, standing along its own forward from its base.
+ * The rail gun's capsule, built once: a threaded copper base (it screws into the socket on the gun),
+ * a violet core of lightning in a cage of three steel posts, and a cap, standing along its own
+ * forward from its base.
  */
 export const capsule = (lod: number): number[] =>
   (caps[lod] ??= ((out: number[]) => {
@@ -594,8 +609,12 @@ export const capsule = (lod: number): number[] =>
       out,
       [
         [0, 0, 0, 0],
-        [0.001, 0, 0.019, 0.019],
-        [0.014, 0, 0.019, 0.019],
+        ...[0.001, 0.003, 0.005, 0.007, 0.009, 0.011, 0.014].map((f, i): Station => [
+          f,
+          0,
+          0.0175 + 0.0015 * (i % 2),
+          0.0175 + 0.0015 * (i % 2),
+        ]),
         [0.016, 0, 0.012, 0.012],
       ],
       n,
@@ -850,29 +869,43 @@ const SEGMENTS: Record<string, [number, number, number, number]> = {
   g: [0, (DH - DT) / 2, DW, (DH + DT) / 2],
 };
 /**
- * The display block: a low trapezoidal wedge on the back of the top of the body, in the gun's
- * metal, so it reads as part of it; the body is full at the back so the block's base stays inside. Its base is a rectangle sunk into the body, its top a smaller one, so that
- * the sides slope in; its back face leans toward the eye of the player holding the gun. Corners as
- * [across, up, back] of the back edge and of the front edge, base then top.
+ * The display block: a low wedge on the back of the top of the body, in the gun's metal, so it
+ * reads as part of it. Its back face leans toward the eye of the player holding the gun from a
+ * straight knee (KNEE, the user, 2026-11-08: the body's round back cut the face's foot into an
+ * arch, and its middle came up through the screen), high enough to clear it, under which the
+ * block goes straight down into the body. Corners as [across, up, back] of
+ * the back edge and of the front edge, base (sunk in the body) then top.
  */
 const BLOCK_BASE: [Vec3, Vec3] = [
-  [0.026, 0.112, 0.056],
-  [0.028, 0.112, 0.02],
+  [0.0243, 0.1, 0.0483],
+  [0.0243, 0.1, 0.02],
 ];
+const KNEE: Vec3 = [0.0243, 0.131, 0.0483];
 const BLOCK_TOP: [Vec3, Vec3] = [
-  [0.022, 0.146, 0.038],
-  [0.022, 0.143, 0.026],
+  [0.022, 0.1504, 0.038],
+  [0.022, 0.1474, 0.026],
 ];
-/** The dark screen set in the back face: half width, middle up the face, half height, corner radius, in metres; its digits' scale. */
-const [SW, SM, SHH, SR, DK] = [0.015, 0.0275, 0.009, 0.0035, 0.6];
-/** The charge gauge under the digits, up the back face: where it starts and ends, and the gap between its cells; the digits' foot. */
-const [GFROM, GTO, GGAP, DY] = [0.0195, 0.0225, 0.0012, 0.0232];
+/**
+ * The dark screen set in the back face: half width (the face's top less 5 mm a side, the user,
+ * 2026-11-08), middle up the face from the knee (halfway up it), half height, corner radius, in
+ * metres; its digits' scale.
+ */
+const [SW, SM, SHH, SR, DK] = [
+  BLOCK_TOP[0][0] - 0.005,
+  Math.hypot(BLOCK_TOP[0][1] - KNEE[1], BLOCK_TOP[0][2] - KNEE[2]) / 2,
+  0.009,
+  0.0035,
+  0.6,
+];
+/** The digits' foot, so that they are in the middle of the screen; the charge gauge, a thin bar under them up the back face: where it starts and ends, and the gap between its cells. */
+const DY = SM - (DH * DK) / 2;
+const [GFROM, GTO, GGAP] = [SM - SHH + 0.0008, DY - 0.0006, 0.0012];
 const readouts = new Map<number, number[]>();
 
 /**
  * The shots in the battery as two glowing seven-segment digits on a dark screen set in the back of
  * a small block on top of the body, in model space: cyan, red at 4 or fewer, thick segments that bloom only a
- * little. The block is part of the readout, so only a gun that shows the ammo carries it. 99 at most.
+ * little, the screen framed in a line of their colour. The block is part of the readout, so only a gun that shows the ammo carries it. 99 at most.
  * While the gun charges, a gauge of CHARGE_MAX cells under the digits lights `level` of them, the
  * strength the shot would have; all orange at the full charge. Not `shown`: the block and the dark
  * screen only, the gun still booting.
@@ -884,33 +917,35 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
   if (!out) {
     const v: number[] = (out = []);
     const mirror = (p: Vec3): Vec3 => [-p[0], p[1], p[2]];
-    const [b0, b1, t0, t1] = [BLOCK_BASE[0], BLOCK_BASE[1], BLOCK_TOP[0], BLOCK_TOP[1]];
+    const [b0, b1, t0, t1, k0] = [BLOCK_BASE[0], BLOCK_BASE[1], BLOCK_TOP[0], BLOCK_TOP[1], KNEE];
     const all = [b0, b1, t0, t1].flatMap(p => [p, mirror(p)]);
     const mid = [0, 1, 2].map(k => all.reduce((s, p) => s + p[k], 0) / all.length) as Vec3;
-    /** A quad, wound so that it faces away from the middle of the block, in `rgb` or else the gun's metal lit by its normal. */
-    const face = (pts: Vec3[], rgb?: number[]) => {
+    /** A flat polygon, wound so that it faces away from the middle of the block, in the gun's metal lit by its normal. */
+    const face = (pts: Vec3[]) => {
       const [u, w] = [sub(pts[1], pts[0]), sub(pts[2], pts[0])];
       const f: Vec3 = [
         u[1] * w[2] - u[2] * w[1],
         u[2] * w[0] - u[0] * w[2],
         u[0] * w[1] - u[1] * w[0],
       ];
-      const c = sub(pts[0], mid);
-      const p = dot(f, c) < 0 ? [pts[0], pts[3], pts[2], pts[1]] : pts;
-      const [r, g, , b] = metal(0.15)(p[0], unit(dot(f, c) < 0 ? [-f[0], -f[1], -f[2]] : f));
-      tri(v, p[0], p[1], p[2], rgb ?? [r, g, b]);
-      tri(v, p[0], p[2], p[3], rgb ?? [r, g, b]);
+      const out = dot(f, sub(pts[0], mid)) > 0;
+      const p = out ? pts : [pts[0], ...pts.slice(1).reverse()];
+      const [r, g, , b] = metal(0.15)(p[0], unit(out ? f : [-f[0], -f[1], -f[2]]));
+      for (let i = 2; i < p.length; i++) {
+        tri(v, p[0], p[i - 1], p[i], [r, g, b]);
+      }
     };
-    // The back, the front, the two sloping sides and the top; the base is in the body.
-    face([b0, mirror(b0), mirror(t0), t0]);
+    // The back below the knee and above it, the front, the two sides and the top; the base is in the body.
+    face([b0, mirror(b0), mirror(k0), k0]);
+    face([k0, mirror(k0), mirror(t0), t0]);
     face([b1, mirror(b1), mirror(t1), t1]);
-    face([b0, b1, t1, t0]);
-    face([mirror(b0), mirror(b1), mirror(t1), mirror(t0)]);
+    face([b0, b1, t1, t0, k0]);
+    face([mirror(b0), mirror(b1), mirror(t1), mirror(t0), mirror(k0)]);
     face([t0, mirror(t0), mirror(t1), t1]);
-    // The back face's axes: across, up its slope and out of it. Points on it from the middle of its base.
-    const slope = unit(sub(t0, b0));
+    // The back face's axes: across, up its slope and out of it. Points on it from the middle of the knee.
+    const slope = unit([0, t0[1] - k0[1], t0[2] - k0[2]]);
     const [O, N]: [Vec3, Vec3] = [
-      [0, b0[1], b0[2]],
+      [0, k0[1], k0[2]],
       [0, -slope[2], slope[1]],
     ];
     const at = (a: number, b: number, k: number): Vec3 => [
@@ -918,13 +953,15 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
       O[1] + slope[1] * b + N[1] * k,
       O[2] + slope[2] * b + N[2] * k,
     ];
-    // The dark screen, a fan of 12 round its middle, three steps to each rounded corner.
-    const r = (c: number, h: number) => Math.sign(c) * (h - SR) + SR * c;
-    const rim = (i: number) =>
-      at(r(Math.cos(i * 0.5236 + 0.26), SW), SM + r(Math.sin(i * 0.5236 + 0.26), SHH), 0.0012);
+    // The dark screen, a fan of 12 round its middle, three steps to each rounded corner; `g` grows
+    // it, for its frame.
+    const r = (c: number, h: number, g: number) => Math.sign(c) * (h - SR) + (SR + g) * c;
+    const rim = (i: number, g = 0, d = 0.0012) =>
+      at(r(Math.cos(i * 0.5236 + 0.26), SW, g), SM + r(Math.sin(i * 0.5236 + 0.26), SHH, g), d);
     for (let i = 0; i < 12; i++) {
       tri(v, at(0, SM, 0.0012), rim(i), rim(i + 1), DARK);
     }
+    const rgb = n > 4 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
     /** The gauge's cells, the lit ones or the dim ones, while it charges. */
     const gauge = (on: boolean) => {
       const w = ((2 * DW + DGAP) * DK - (CHARGE_MAX - 1) * GGAP) / CHARGE_MAX;
@@ -950,14 +987,23 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
         const [a, b, d, e] = SEGMENTS[seg];
         // Segments lie on the screen, a hair out of it.
         const p = (x: number, t: number) => at(x0 + x * DK, DY + t * DK, 0.0027);
-        const rgb = n > 4 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
         tri(v, p(a, b), p(d, b), p(d, e), rgb);
         tri(v, p(a, b), p(d, e), p(a, e), rgb);
       }
     });
-    // The lit cells glow with the digits.
+    // The lit cells and the frame glow with the digits.
     if (shown) {
       gauge(true);
+      for (let i = 0; i < 12; i++) {
+        const [a, b, c, d] = [
+          rim(i, 0, 0.0027),
+          rim(i + 1, 0, 0.0027),
+          rim(i + 1, 0.0012, 0.0027),
+          rim(i, 0.0012, 0.0027),
+        ];
+        tri(v, a, d, c, rgb);
+        tri(v, a, c, b, rgb);
+      }
     }
     lit(v, from, 1);
     readouts.set(key, out);
@@ -968,17 +1014,17 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
 const lcds = new Map<number, number[]>();
 /**
  * The LCD on the rail gun: the middle of its screen, its half width and height, and the way it faces
- * (out of the receiver's left flank, tilted up and back to the eye in first person), with its right
- * and up across that.
+ * (the user, 2026-11-08: square to the receiver's left flank, standing out of it like a camera's
+ * screen opened out, facing back to the eye, a little up), with its right and up across that.
  */
-const LCD: Vec3 = [-0.045, 0.104, -0.012];
+const LCD: Vec3 = [-0.054, 0.104, -0.012];
 const [LW, LH] = [0.019, 0.013];
-const LN = unit([-0.6, 0.38, 0.7]);
+const LN = unit([0, 0.25, 1]);
 const LR = unit([LN[2], 0, -LN[0]]);
 const LU: Vec3 = [LN[1] * LR[2], LN[2] * LR[0] - LN[0] * LR[2], -LN[1] * LR[0]];
 
 /**
- * The rail gun's counter, a small LCD on top of its receiver turned to the player, in model space
+ * The rail gun's counter, a small LCD out of the left of its receiver turned to the player, in model space
  * (the user, 2026-11-08: like the screen on the back of a digital camera): two dark segment digits on
  * a pale green screen, amber at 15 or less, in a dark case on a short hinge. The screen is lit like
  * the metal round it: a glow would bloom over the digits.
@@ -1041,8 +1087,8 @@ const [SH, SB, ST] = [0.014, 0.0145, 0.011];
 
 /**
  * The laser rifle's counter (`n` rounds in its cell), in model space: a trapezoid screen, narrow at
- * the top, set in the sloped back of the housing and turned to the eye, ringed in cyan, with two
- * cyan digits once `shown`. All glow but the dark screen.
+ * the top, set in the sloped back of the housing and turned to the eye, ringed in a line of the
+ * digits' colour (cyan, red at 7 or fewer), with the two digits once `shown`. All glow but the dark screen.
  */
 export const scope = (n: number, shown = true): number[] => {
   n = Math.min(Math.max(Math.floor(n), 0), 99);
@@ -1064,7 +1110,8 @@ export const scope = (n: number, shown = true): number[] => {
     tri(out, p(-h, -SH, 0.004), p(h, -SH, 0.004), p(t, SH, 0.004), DARK);
     tri(out, p(-h, -SH, 0.004), p(t, SH, 0.004), p(-t, SH, 0.004), DARK);
     const from = out.length;
-    // The cyan ring: each side a thin band.
+    const rgb = n > 7 ? [0.25, 0.75, 1.05] : [1.2, 0.3, 0.12];
+    // The ring: each side a thin band.
     const ring = 0.0014;
     for (const s of [-1, 1]) {
       const [x0, x1] = [s * half(-SH), s * half(SH)];
@@ -1073,22 +1120,16 @@ export const scope = (n: number, shown = true): number[] => {
         p(x0, -SH, 0.0045),
         p(x0 - s * ring, -SH, 0.0045),
         p(x1 - s * ring, SH, 0.0045),
-        [0.15, 0.45, 0.7],
+        rgb,
       );
-      tri(
-        out,
-        p(x0, -SH, 0.0045),
-        p(x1 - s * ring, SH, 0.0045),
-        p(x1, SH, 0.0045),
-        [0.15, 0.45, 0.7],
-      );
+      tri(out, p(x0, -SH, 0.0045), p(x1 - s * ring, SH, 0.0045), p(x1, SH, 0.0045), rgb);
       quad(
         -half(s * SH),
         s * SH - (s > 0 ? ring : 0),
         half(s * SH),
         s * SH + (s < 0 ? ring : 0),
         0.0045,
-        [0.15, 0.45, 0.7],
+        rgb,
       );
     }
     if (shown) {
@@ -1098,7 +1139,6 @@ export const scope = (n: number, shown = true): number[] => {
         const a0 = -(DW + DGAP / 2) * k + i * (DW + DGAP) * k;
         for (const seg of DIGITS[+ch]) {
           const [x0, y0, x1, y1] = SEGMENTS[seg];
-          const rgb = n > 7 ? [0.25, 0.75, 1.05] : [1.2, 0.3, 0.12];
           quad(a0 + x0 * k, (y0 - DH / 2) * k, a0 + x1 * k, (y1 - DH / 2) * k, 0.005, rgb);
         }
       });

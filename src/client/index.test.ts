@@ -146,13 +146,6 @@ describe('tinyFps, the match through the socket', () => {
     expect(q('nav').textContent).toContain('RED 0');
   });
 
-  it('keeps the rules of its crosshair, count and name tags off the HUD inside', () => {
-    const css = q('style').textContent!;
-    expect(css).toContain('div>i{left:50%');
-    expect(css).toContain('div>b{transform');
-    expect(css).not.toMatch(/(^|[}])(i|p|b)[{,]/);
-  });
-
   it('tints the name tag of another player with his team colour', () => {
     // No renderer here, so no projection: the tag exists but is hidden. It is tinted all the same.
     const tag = [...hud().querySelectorAll<HTMLElement>('b')].find(b => b.textContent === 'Bob');

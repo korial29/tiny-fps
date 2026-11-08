@@ -359,19 +359,17 @@ describe('the gun on the HUD', () => {
     expect(ammo().hidden).toBe(true);
   });
 
-  it('draws the rest as magazines, the last one part full, over its count', () => {
-    const pips = () =>
-      [...screen.querySelectorAll<HTMLElement>('dl samp ins')]
-        .filter(el => !el.hidden)
-        .map(el => el.style.getPropertyValue('--f'));
-    const left = () => screen.querySelector('dl code')!.textContent;
+  it('draws the rest as magazines, an open one for a part, over its count', () => {
+    const rest = () => screen.querySelector('dl span')!.textContent;
     hud.vitals(5, 12 + 2 * GUN_MAG + 3, false, false, -1, false, 12);
-    expect([count().textContent, pips(), left()]).toEqual(['12', ['100%', '100%', '20%'], '33']);
+    expect([count().textContent, rest()]).toEqual(['12', '▮▮▯\n33']);
+    hud.vitals(5, 12 + GUN_MAG, false, false, -1, false, 12);
+    expect(rest()).toBe(`▮\n${GUN_MAG}`);
     hud.vitals(5, 12, false, false, -1, false, 12);
-    expect([pips(), left()]).toEqual([[], '0']);
+    expect(rest()).toBe('\n0');
     // The laser rifle counts in its own power cells.
     hud.vitals(5, -1, false, false, -1, false, 50, false, 50 + RIFLE_CLIP + 30, true);
-    expect([pips(), left()]).toEqual([['100%', '50%'], `${RIFLE_CLIP + 30}`]);
+    expect(rest()).toBe(`▮▯\n${RIFLE_CLIP + 30}`);
     // Not the crosshair's dot, nor anything else, over the big count.
     expect(screen.querySelector('dl i')).toBeNull();
   });
@@ -518,8 +516,8 @@ describe('the saber lock gauge', () => {
   it('shows the tug of war while locked, the knot at the own lead, and hides after', () => {
     const screen = document.createElement('div');
     const hud = createHud(screen);
-    const rope = screen.querySelector('figure')!;
-    const knot = screen.querySelector<HTMLElement>('figure i')!;
+    const rope = screen.querySelector('ins')!;
+    const knot = screen.querySelector<HTMLElement>('ins i')!;
     expect(rope.hidden).toBe(true);
     hud.duel(0);
     expect([rope.hidden, knot.style.left]).toEqual([false, '50%']);

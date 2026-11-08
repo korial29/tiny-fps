@@ -16,7 +16,7 @@ import type { Snapshot } from '../shared/types';
 import type { Mark } from './marks';
 
 export const HUD_CSS =
-  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,figure{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
@@ -35,7 +35,7 @@ export const HUD_CSS =
   `ul{left:12px;bottom:30px;display:flex;gap:4px;list-style:none}li{width:16px;height:6px;background:#fff;box-shadow:0 0 0 1px #0008}` +
   `li.e{background:#0000;box-shadow:inset 0 0 0 1px #fffb,0 0 0 1px #0008}ul.low li{background:#f55}ul.low li.e{background:#0000}` +
   `dl{left:50%;bottom:10px;transform:translateX(-50%);display:flex;align-items:center;gap:10px}dl svg{width:38px;fill:#fff;filter:drop-shadow(0 1px 1px #000)}` +
-  `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data,dl.k span{display:none}dl.w data{opacity:.35}dl.k svg{width:64px;fill:#8ef}dl.r svg{fill:#c9f}dl.r :is(data,span){color:#dcf}dl.f svg{fill:#f86}dl.f :is(data,span){color:#fdb}dl span{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-left:-4px}dl samp{display:flex;gap:3px;min-height:16px}dl ins{width:8px;height:16px;border-radius:2px;background:linear-gradient(0deg,currentColor var(--f),#0000 0);box-shadow:inset 0 0 0 1.5px currentColor,0 0 0 1px #0008}dl code{font:700 13px/1 system-ui,sans-serif;font-variant-numeric:tabular-nums;opacity:.8}` +
+  `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data,dl.k span{display:none}dl.w data{opacity:.35}dl.k svg{width:64px;fill:#8ef}dl.r svg{fill:#c9f}dl.r data{color:#dcf}dl.f svg{fill:#f86}dl.f data{color:#fdb}dl span::first-line{font-size:22px}` +
   `dl small{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);display:flex;gap:10px;font-size:11px;white-space:nowrap}dl kbd{font:inherit;opacity:.5}dl kbd.a{opacity:1}` +
   `@media(max-width:520px){dl{left:auto;right:12px;bottom:46px;transform:none}dl small{left:auto;right:0;transform:none}}` +
   `dl data{font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}dl.e data{color:#f66}` +
@@ -45,9 +45,9 @@ export const HUD_CSS =
   `mark{inset:0;z-index:1;padding-top:30vh;text-align:center;color:#ddd;` +
   `background:radial-gradient(ellipse at center,#6668 0%,#4a0c0ce8 130%);backdrop-filter:grayscale(1)}` +
   `mark::first-line{font:900 clamp(30px,8vw,64px)/1 system-ui,sans-serif;letter-spacing:.24em}` +
-  `figure{left:50%;top:64%;width:min(320px,70vw);height:12px;transform:translateX(-50%);border-radius:6px;` +
+  `ins{left:50%;top:64%;width:min(320px,70vw);height:12px;transform:translateX(-50%);border-radius:6px;` +
   `background:linear-gradient(90deg,#e23b3b,#fff3 50%,#8ef);box-shadow:0 0 0 1px #0008}` +
-  `figure i{position:absolute;top:-5px;width:6px;height:22px;margin-left:-3px;border-radius:3px;background:#fff;box-shadow:0 0 8px #8ef}` +
+  `ins i{position:absolute;top:-5px;width:6px;height:22px;margin-left:-3px;border-radius:3px;background:#fff;box-shadow:0 0 8px #8ef}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}`;
 
@@ -77,8 +77,8 @@ export interface Hud {
    * (charge(), 99 full) with the gun glyph in violet when `railed`. -1 ammo is no gun, `blade` is a
    * katana carried, `rail` the rail gun's lightning (-1 none); two or more carried show their slots (1 gun, 2 katana, 3 rail gun)
    * over the glyph, none hides it. `loaded` is what the battery or the capsule of the gun in hand
-   * holds, in the same count: big, with the rest after it as the magazines it makes (the last part
-   * full) over its count; faded while `swapping` it. `rifle` is the
+   * holds, in the same count: big, with the rest after it as the magazines it makes (an open one for
+   * a part) over its count; faded while `swapping` it. `rifle` is the
    * laser rifle's rounds (-1 none), shown with the glyph in red when `rifled` (slot 4).
    */
   vitals(
@@ -108,9 +108,6 @@ export interface Hud {
   end(sum: Summary | undefined, next: number): void;
 }
 
-/** The spare magazines the counter draws at most. */
-export const MAGS = 8;
-
 /** Milliseconds a banner stays, and a hit marker. */
 export const BANNER_MS = 2800;
 export const HIT_MS = 140;
@@ -132,8 +129,8 @@ export const createHud = (screen: HTMLElement): Hud => {
       `<ul>${'<li></li>'.repeat(HP_MAX)}</ul>` +
       `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
       `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
-      `<data></data><span><samp></samp><code></code></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
-      `<s hidden></s><mark hidden></mark><figure hidden><i></i></figure>` +
+      `<data></data><span></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
+      `<s hidden></s><mark hidden></mark><ins hidden><i></i></ins>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav>` +
       `<output hidden></output>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
@@ -147,13 +144,8 @@ export const createHud = (screen: HTMLElement): Hud => {
   const [redFlag, blueFlag] = [...bar.querySelectorAll<HTMLElement>('small')];
   const pips = [...screen.querySelectorAll('li')];
   const [life, ammo, marker, fallen] = [one('ul'), one('dl'), one('s'), one('mark')];
-  const [rope, knot] = [one('figure'), one('figure i')];
-  const [count, spare, left, slots] = [
-    one('data'),
-    one('dl samp'),
-    one('dl code'),
-    one('dl small'),
-  ];
+  const [rope, knot] = [one('ins'), one('ins i')];
+  const [count, spare, slots] = [one('data'), one('dl span'), one('dl small')];
   let ticker: ReturnType<typeof setTimeout> | undefined;
   const banner = one('output');
   const vignette = one('u');
@@ -242,21 +234,10 @@ export const createHud = (screen: HTMLElement): Hud => {
       ammo.classList.toggle('e', !k && !m);
       ammo.classList.toggle('w', swapping);
       set(count, `${m}`);
-      // The rest as the magazines it makes, the last one part full, and its count under them.
+      // The rest as the magazines it makes, full ones and an open one for a part, over its count.
       const rest = Math.max(n - m, 0);
-      const size = rifled ? RIFLE_CLIP : railed ? Math.ceil((RAIL_CAP * 99) / RAIL_MAX) : GUN_MAG;
-      const fills = Array.from({ length: Math.min(Math.ceil(rest / size), MAGS) }, (_, i) =>
-        Math.min(rest / size - i, 1),
-      );
-      while (spare.children.length < fills.length) {
-        spare.append(document.createElement('ins'));
-      }
-      [...spare.children].forEach((pip, i) => {
-        const el = pip as HTMLElement;
-        el.hidden = i >= fills.length;
-        el.style.setProperty('--f', `${Math.round((fills[i] ?? 0) * 100)}%`);
-      });
-      set(left, `${rest}`);
+      const size = rifled ? RIFLE_CLIP : railed ? (RAIL_CAP * 99) / RAIL_MAX : GUN_MAG;
+      set(spare, `${'▮'.repeat(rest / size)}${rest % size ? '▯' : ''}\n${rest}`);
       slots.hidden = have.filter(Boolean).length < 2;
       [...slots.children].forEach((kbd, i) => {
         (kbd as HTMLElement).hidden = !have[i];

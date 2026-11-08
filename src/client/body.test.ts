@@ -190,6 +190,7 @@ describe('body', () => {
       man({ stun: 40 }),
     ];
 
+    // 1.4 s on a desk, five times that on a shared CI runner since the body grew (#86).
     it('never has a vertex in front of the near plane or inside the head', () => {
       for (const p of states) {
         const body = watch(p, 60);
@@ -202,7 +203,7 @@ describe('body', () => {
           }
         }
       }
-    });
+    }, 20_000);
 
     it('puts the head where the camera is', () => {
       for (const p of states) {

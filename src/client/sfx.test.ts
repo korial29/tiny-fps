@@ -295,3 +295,17 @@ describe('music', () => {
     expect(Math.min(...times)).toBeLessThan(400);
   });
 });
+
+describe('the laser rifle\u2019s shot', () => {
+  it('is short enough for 20 a second, and low: in the bass and the middle', () => {
+    const s = render(SOUND.LASE);
+    expect(s.length / RATE).toBeLessThan(0.08);
+    // Zero crossings: under 1 kHz on average over its loud part.
+    const loud = s.subarray(0, Math.round(0.04 * RATE));
+    let n = 0;
+    for (let i = 1; i < loud.length; i++) {
+      n += +(Math.sign(loud[i]) !== Math.sign(loud[i - 1]));
+    }
+    expect(n / 2 / 0.04).toBeLessThan(1000);
+  });
+});

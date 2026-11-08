@@ -21,7 +21,7 @@ import {
   RAIL_MAX,
   RAIL_TICKS,
   RIFLE_CLIP,
-  RIFLE_HP,
+  RIFLE_HITS,
   RIFLE_MAX,
   RULES,
   SHOCK_KNOCK,
@@ -61,6 +61,8 @@ interface Player {
   tackled: number;
   /** Ticks drained by the rail gun's bolt since its first touch, while `slow` runs. */
   burn?: number;
+  /** The laser rifle's hits on him toward the next hp: every RIFLE_HITS take one. */
+  graze?: number;
 }
 
 /** Ticks run at most this many times per timer callback, so a stalled host does not spiral. */
@@ -373,6 +375,7 @@ export class Room {
     if ((foe.state.hp -= hp) > 0) {
       return false;
     }
+    foe.graze = 0;
     Object.assign(foe.state, {
       hp: 0,
       down: DOWN_TICKS,
@@ -496,13 +499,19 @@ export class Room {
     }
   }
 
-  /** The laser rifle's shot of `p` at the view tick `view`: RIFLE_HP to the first enemy it enters as `p` drew him, and a hit. */
+  /**
+   * The laser rifle's shot of `p` at the view tick `view`: a hit on the first enemy it enters as `p`
+   * drew him, and every RIFLE_HITS hits on him (from anyone, until he goes down) take 1 hp.
+   */
   private laser(p: Player, view: number | undefined): void {
     const { hit } = laser(this.world, p.state, this.enemies(p, view));
     const foe = this.players().find(q => q.info.id === hit?.id);
     if (foe) {
       p.state.hits = (p.state.hits + 1) & 255;
-      this.harm(foe, RIFLE_HP);
+      foe.graze = ((foe.graze ?? 0) + 1) % RIFLE_HITS;
+      if (!foe.graze) {
+        this.harm(foe, 1);
+      }
     }
   }
 

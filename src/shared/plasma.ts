@@ -1,7 +1,18 @@
 // Plasma balls (the user, 2026-11-06, Doom-like): a shot is a ball that leaves the eye along the
-// look at PLASMA_SPEED and bursts on the first brush or enemy body it touches. The room keeps the
-// balls and flies them each tick; the shooter's client flies its own the same way. No DOM, no Node API.
-import { GUN_RANGE, PLASMA_R, PLASMA_SPEED, PLAYER_R, TICK_HZ } from './constants';
+// look at PLASMA_SPEED and bursts on the first brush or enemy body it touches. The katana's ARC cut
+// throws an arc of energy that flies the same way, slower, shorter and wider (wave()). The room
+// keeps both and flies them each tick; the shooter's client flies its own the same way. No DOM, no
+// Node API.
+import {
+  ARC_R,
+  ARC_RANGE,
+  ARC_SPEED,
+  GUN_RANGE,
+  PLASMA_R,
+  PLASMA_SPEED,
+  PLAYER_R,
+  TICK_HZ,
+} from './constants';
 import { eyeHeight, heightOf } from './physics';
 import type { Ball, PlayerState } from './types';
 import { ray } from './world';
@@ -9,8 +20,9 @@ import type { World } from './world';
 
 type Vec3 = [number, number, number];
 
-/** Metres a ball flies in a tick. */
+/** Metres a ball flies in a tick, and an arc. */
 export const PLASMA_STEP = PLASMA_SPEED / TICK_HZ;
+export const ARC_STEP = ARC_SPEED / TICK_HZ;
 /** Ticks of the shooter's lag a new ball is flown at most on the host before its first tick. */
 export const PLASMA_LAG = 12;
 
@@ -42,6 +54,22 @@ export const launch = (p: PlayerState, team = 0): Flying => {
     power: p.power ?? 1,
   };
 };
+
+/**
+ * The arc of energy the ARC cut of `p` throws at its strike (`p` the state after that step): from
+ * the eye along the look like a ball, ARC_RANGE metres to go, its CUT in `arc`. Its id is the
+ * `shots` count with the top bit turned, apart from his balls' (one arc is gone before the next).
+ */
+export const wave = (p: PlayerState, team = 0): Flying => ({
+  ...launch(p, team),
+  id: p.shots ^ 128,
+  left: ARC_RANGE,
+  power: 1,
+  arc: p.cut,
+});
+
+/** Metres the flight `b` goes in a tick. */
+export const stepOf = (b: Ball): number => (b.arc ? ARC_STEP : PLASMA_STEP);
 
 /**
  * Distance at which the ray from `o` along the unit `d` enters the upright cylinder of radius `r`
@@ -76,8 +104,8 @@ export const cylinder = (o: Vec3, d: Vec3, c: PlayerState, r: number, h: number)
 
 /**
  * Flies `b` on by `m` metres (at most what it has left) as a sphere of PLASMA_R: it stops and
- * bursts on the first brush, or on the first of `foes` whose body (a cylinder PLASMA_R wider) it
- * enters. Returns the foe it burst on.
+ * bursts on the first brush, or on the first of `foes` whose body (a cylinder PLASMA_R wider, ARC_R
+ * for an arc) it enters. Returns the foe it burst on.
  */
 export const fly = (
   w: World,
@@ -91,7 +119,7 @@ export const fly = (
   let t = ray(w, o, d, go, PLASMA_R);
   let hit: PlayerState | undefined;
   for (const f of foes) {
-    const u = cylinder(o, d, f, PLAYER_R + PLASMA_R, heightOf(f));
+    const u = cylinder(o, d, f, PLAYER_R + (b.arc ? ARC_R : PLASMA_R), heightOf(f));
     if (u < t) {
       [t, hit] = [u, f];
     }

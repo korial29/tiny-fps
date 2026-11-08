@@ -79,6 +79,7 @@ import {
   WALL_PULL,
   WALL_REACH,
   WALL_TURN_KEEP,
+  SHOCK_TICKS,
 } from './constants';
 import { EV, KEY, LIMB, MODE, SIDE } from './types';
 import type { Input, PlayerState } from './types';
@@ -474,6 +475,10 @@ const enter = (p: PlayerState, mode: number): void => {
   p.mode = mode;
   p.t = 0;
 };
+
+/** Whether an arc of energy floored `p` (FLOOR_TICKS): he lies down for the stun's ticks over SHOCK_TICKS, and does not move. */
+export const floored = (p: Pick<PlayerState, 'zap' | 'stun'>): boolean =>
+  !!p.zap && p.stun > SHOCK_TICKS;
 
 /**
  * A tackle lands on the player: he stumbles for `ticks` (STUMBLE_TICKS) and is thrown `knock`
@@ -918,7 +923,8 @@ export const move = (p: PlayerState, i: Input, w: World, team = 0): void => {
 
   const f = (i.keys & KEY.FORWARD ? 1 : 0) - (i.keys & KEY.BACK ? 1 : 0);
   const s = (i.keys & KEY.RIGHT ? 1 : 0) - (i.keys & KEY.LEFT ? 1 : 0);
-  const n = len(f, s) || 1;
+  // Floored, the keys move him no more.
+  const n = floored(p) ? Infinity : len(f, s) || 1;
   const [fx, fz] = forward(p.yaw);
   const pressed = (bit: number): boolean => (i.keys & bit) !== 0 && (p.held & bit) === 0;
   // A stumble (STUMBLE_TICKS steps from the tackle) drops the jump and dash presses.

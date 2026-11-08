@@ -18,7 +18,7 @@ import {
 import { swingOf } from '../shared/blade';
 import { powerOf } from '../shared/gun';
 import { eyeHeight } from '../shared/physics';
-import { KEY } from '../shared/types';
+import { CUT, KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { beam, laser as shot } from '../shared/rail';
 import { ray } from '../shared/world';
@@ -264,6 +264,10 @@ export const createCombat = (
       }
       if (b && struck(a, b)) {
         fx.cut(b.cut ?? 0);
+        // The ARC cut throws its arc of energy at its strike.
+        if (b.cut == CUT.ARC_L || b.cut == CUT.ARC_R) {
+          pending.push({ ...b });
+        }
       }
     },
 
@@ -338,6 +342,10 @@ export const createCombat = (
         from = [0, 1, 2].map(i => v.cam[i] + r[i] * m[0] + u[i] * m[1] + f[i] * m[2]) as Vec3;
         tracer.mount(from);
         for (const p of pending) {
+          if (p.wield) {
+            balls.fire(p, now);
+            continue;
+          }
           if (p.rifled) {
             lase(p, from);
             continue;

@@ -427,6 +427,18 @@ describe('snapshot frame', () => {
       });
     });
 
+    it('carry the katana’s arcs of energy in the power byte: bit 7 and the cut that threw it', () => {
+      const none = SNAP_HEAD + SNAP_MATCH + 2;
+      const sent = [ball({ arc: CUT.ARC_L }), ball({ id: 7, arc: CUT.ARC_R }), ball({ power: 5 })];
+      expect(bytes(encodeSnapshot(snap(sent))).at(none + SNAP_BALL)).toBe(128 | CUT.ARC_L);
+      const got = decodeSnapshot(encodeSnapshot(snap(sent)))!.balls!;
+      expect(got.map(b => [b.arc, b.power])).toEqual([
+        [CUT.ARC_L, 1],
+        [CUT.ARC_R, 1],
+        [undefined, 5],
+      ]);
+    });
+
     it('clamps a place out of the i16 range, and rejects a cut, padded or zero-counted tail', () => {
       const [b] = decodeSnapshot(encodeSnapshot(snap([ball({ x: 5000, z: -5000 })])))!.balls!;
       expect([b.x, b.z]).toEqual([32767 / 32, -1024]);

@@ -446,8 +446,7 @@ describe('limbOf', () => {
 
 describe('knock', () => {
   /** The way the shock of a cut of an attacker looking along `yaw` throws. */
-  const thrown = (cut: number, yaw: number, foe = at(-Math.sin(yaw), -Math.cos(yaw), 0).p) =>
-    knock(Object.assign(at(0, 0, yaw).p, { cut, yaw }), foe);
+  const thrown = (cut: number, yaw: number) => knock(Object.assign(at(0, 0, yaw).p, { cut, yaw }));
   const is = (v: [number, number], x: number, z: number) => {
     expect(v[0]).toBeCloseTo(x, 9);
     expect(v[1]).toBeCloseTo(z, 9);
@@ -466,14 +465,9 @@ describe('knock', () => {
     is(thrown(CUT.RIGHT, 0), -1, 0);
   });
 
-  it('throws a lunge and a leap along the look, and a spin out from the attacker, whichever way the foe is', () => {
+  it('throws a lunge and a leap along the look', () => {
     is(thrown(CUT.LUNGE, EAST), 1, 0);
     is(thrown(CUT.LEAP, 0), 0, -1);
-    for (const cut of [CUT.SPIN_L, CUT.SPIN_R]) {
-      // Behind him (looking north, +z is behind), and at his right.
-      is(thrown(cut, 0, at(0, 2, 0).p), 0, 1);
-      is(thrown(cut, 0, at(3, 0, 0).p), 1, 0);
-    }
   });
 
   it('is a unit vector for any look', () => {
@@ -521,8 +515,8 @@ describe('the special cuts', () => {
   it('come with a double click: each cut’s special is the cut plus SPECIAL_CUT', () => {
     for (const [keys, cut] of [
       [FORWARD, CUT.LUNGE],
-      [LEFT, CUT.SPIN_L],
-      [RIGHT, CUT.SPIN_R],
+      [LEFT, CUT.ARC_L],
+      [RIGHT, CUT.ARC_R],
       [0, CUT.LEAP],
     ]) {
       const p = armed();
@@ -544,7 +538,7 @@ describe('the special cuts', () => {
         go(p, 0);
       }
       go(p, LEFT | FIRE | SPECIAL);
-      expect(p.cut, `${late} ticks in`).toBe(turned ? CUT.SPIN_L : CUT.LEFT);
+      expect(p.cut, `${late} ticks in`).toBe(turned ? CUT.ARC_L : CUT.LEFT);
     }
     const p = armed();
     go(p, FIRE | SPECIAL);
@@ -577,14 +571,7 @@ describe('the special cuts', () => {
     expect(r.vy).toBeLessThan(0.1);
   });
 
-  it('reaches all round in a spin: a foe behind him is hit, as he is in front', () => {
-    for (const cut of [CUT.SPIN_L, CUT.SPIN_R]) {
-      for (const x of [-2, 2]) {
-        expect(hits(cut, x), `cut ${cut} at ${x}`).toBe(true);
-      }
-      expect(hits(cut, -2.9)).toBe(false);
-    }
-    // The lunge reaches the furthest, straight ahead.
+  it('reaches furthest with the lunge, straight ahead', () => {
     expect(hits(CUT.LUNGE, 3.3)).toBe(true);
     expect(hits(CUT.THRUST, 3.3)).toBe(false);
   });

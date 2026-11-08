@@ -1,7 +1,7 @@
-// The rail gun's beam (the user, 2026-11-07), and the laser rifle's shots: instant, from the eye along the look to the first
+// The rail gun's beam (the user, 2026-11-07): instant, from the eye along the look to the first
 // wall, or the first enemy body on the way. The host resolves it against the enemies as the
 // shooter saw them; every client draws it to the wall. No DOM, no Node API.
-import { PLAYER_R, RAIL_RANGE, RIFLE_DRIFT, RIFLE_RANGE } from './constants';
+import { PLAYER_R, RAIL_RANGE } from './constants';
 import { eyeHeight, heightOf } from './physics';
 import { cylinder } from './plasma';
 import type { PlayerState } from './types';
@@ -36,13 +36,3 @@ export const beam = (
   }
   return { o, d, t, hit };
 };
-
-/** How far shot `n` of the laser rifle drifts off the look, yaw and pitch: a pattern within RIFLE_DRIFT, the same for the host and every client. */
-export const drift = (n: number): [number, number] => [
-  RIFLE_DRIFT * Math.sin(n * 2.4),
-  RIFLE_DRIFT * Math.cos(n * 1.7),
-];
-
-/** The laser rifle's beam of `p`, its last shot (`shots`): drifted, to RIFLE_RANGE. */
-export const laser = (w: World, p: PlayerState, foes: PlayerState[] = []) =>
-  beam(w, p, foes, RIFLE_RANGE, drift(p.shots));

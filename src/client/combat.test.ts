@@ -197,21 +197,16 @@ describe('the own shots', () => {
     expect(ids()).toEqual([SOUND.LASER]);
   });
 
-  it('of the laser rifle draw a red line from the muzzle, flash orange and zip, with no ball', () => {
-    const { combat, frame, ids, flashes, orbs, tracer } = setup();
-    const lase = vi.spyOn(tracer, 'laser');
+  it('of the laser rifle launch a red ball (power 0) from the muzzle, with a red flash and its punch', () => {
+    const { combat, frame, ids, flashes, orbs } = setup();
     const rifled = { ammo: -1, rifle: 50, clip: 20, rifled: true };
     frame(player(rifled));
     combat.step(player({ ...rifled, shots: 0 }), player({ ...rifled, shots: 1 }));
     frame(player({ ...rifled, shots: 1 }));
     expect(ids()).toEqual([SOUND.LASE]);
-    expect(orbs()).toHaveLength(0);
     expect(flashes).toHaveLength(1);
-    expect(lase).toHaveBeenCalledTimes(1);
-    const [a, b] = lase.mock.calls[0];
-    // Out along the look, drifted a little, to the wall or the range.
-    expect(b[2]).toBeLessThan(a[2] - 1);
-    expect(Math.abs(b[0] - a[0])).toBeLessThan(0.05 * Math.abs(b[2] - a[2]) + 0.3);
+    expect(orbs()).toHaveLength(1);
+    expect(orbs()[0].power).toBe(0);
   });
 
   it('fly at PLASMA_SPEED onto the look line, and burst on the wall it meets, with the zap there', () => {

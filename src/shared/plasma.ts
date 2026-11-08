@@ -11,6 +11,8 @@ import {
   PLASMA_R,
   PLASMA_SPEED,
   PLAYER_R,
+  RIFLE_DRIFT,
+  RIFLE_RANGE,
   TICK_HZ,
 } from './constants';
 import { eyeHeight, heightOf } from './physics';
@@ -32,13 +34,22 @@ export interface Flying extends Ball {
   left: number;
 }
 
+/** How far shot `n` of the laser rifle drifts off the look, yaw and pitch: a pattern within RIFLE_DRIFT, the same for the host and every client. */
+export const drift = (n: number): [number, number] => [
+  RIFLE_DRIFT * Math.sin(n * 2.4),
+  RIFLE_DRIFT * Math.cos(n * 1.7),
+];
+
 /**
  * The ball of the shot `p` has just fired (`p` is the state after the step that fired): from the
  * eye of the mode along the look, GUN_RANGE metres to go, named by his `shots` count, as strong
- * as the shot (`power`).
+ * as the shot (`power`). The laser rifle's (the user, 2026-11-08: the gun's balls, in red) has
+ * power 0, RIFLE_RANGE to go, and leaves along the look drifted by its shot's pattern.
  */
 export const launch = (p: PlayerState, team = 0): Flying => {
-  const [sy, cy, sp, cp] = [Math.sin(p.yaw), Math.cos(p.yaw), Math.sin(p.pitch), Math.cos(p.pitch)];
+  const [dy, dp] = p.rifled ? drift(p.shots) : [0, 0];
+  const [yaw, pitch] = [p.yaw + dy, p.pitch + dp];
+  const [sy, cy, sp, cp] = [Math.sin(yaw), Math.cos(yaw), Math.sin(pitch), Math.cos(pitch)];
   return {
     id: p.shots,
     by: p.id,
@@ -49,9 +60,9 @@ export const launch = (p: PlayerState, team = 0): Flying => {
     dx: -sy * cp,
     dy: sp,
     dz: -cy * cp,
-    left: GUN_RANGE,
+    left: p.rifled ? RIFLE_RANGE : GUN_RANGE,
     burst: false,
-    power: p.power ?? 1,
+    power: p.rifled ? 0 : (p.power ?? 1),
   };
 };
 

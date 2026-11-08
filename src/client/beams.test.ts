@@ -287,17 +287,22 @@ describe('the shock of the katana', () => {
 });
 
 describe('the laser rifle\u2019s shots', () => {
-  it('draw a red line, unlit, that fades out in a few frames', () => {
+  it('are balls in red, smaller than the gun\u2019s, with a red flash', () => {
     const t = createTracer();
-    t.laser(FROM, TO);
-    const v = drawn(t);
-    expect(v.length).toBeGreaterThan(0);
-    for (const x of v) {
-      expect(x[8]).toBe(-2);
-      expect(x[6]).toBeGreaterThan(x[7]);
+    t.orbs([{ p: [0, 1.6, -10], d: [0, 0, -1], tail: 1, power: 0 }]);
+    const red = drawn(t);
+    expect(red.length).toBeGreaterThan(0);
+    for (const x of red) {
+      expect(x[6]).toBeGreaterThan(x[9]);
     }
-    expect(t.lights().length).toBeGreaterThan(0);
-    t.update(0.2);
-    expect(drawn(t)).toHaveLength(0);
+    const blue = createTracer();
+    blue.orbs([{ p: [0, 1.6, -10], d: [0, 0, -1], tail: 1 }]);
+    const span = (v: number[][]) => Math.max(...v.map(x => x[0])) - Math.min(...v.map(x => x[0]));
+    expect(span(red)).toBeLessThan(span(drawn(blue)));
+    const f = createTracer();
+    f.flash(FROM, true, -1);
+    for (const x of drawn(f)) {
+      expect(x[6]).toBeGreaterThan(x[9]);
+    }
   });
 });

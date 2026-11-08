@@ -97,7 +97,17 @@ export const fired = (a?: PlayerState, b?: PlayerState): number =>
 /** What the katana's sounds read of a player: the swing, the cut and whether it is in hand. */
 type Blade = Pick<
   PlayerState,
-  'swing' | 'cut' | 'wield' | 'blade' | 'heavy' | 'down' | 'railed' | 'ammo' | 'reload' | 'rifled'
+  | 'swing'
+  | 'cut'
+  | 'wield'
+  | 'blade'
+  | 'heavy'
+  | 'down'
+  | 'railed'
+  | 'ammo'
+  | 'reload'
+  | 'rifled'
+  | 'hot'
 >;
 
 /**
@@ -228,13 +238,17 @@ export const createCombat = (
   /** The weapon in the hand of `p`: 0 the gun, 1 the katana, 2 the rail gun, -1 none. */
   const inHand = (p: Blade) =>
     p.down ? -1 : p.wield ? 1 : p.rifled ? 3 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
-  /** The sounds of a swap as it passes its cues (CUES), and the boot of a gun that comes to hand or whose swap is done, at `at`. */
+  /** The sounds of a swap as it passes its cues (CUES), the boot of a gun that comes to hand or whose swap is done, and the hiss of an overheating, at `at`. */
   const reloads = (was: Blade, now: Blade, at?: Vec3) => {
     const [a, b, r] = [swapOf(was), swapOf(now), +!!now.railed];
     CUES[r].forEach((c, i) => a < c && b >= c && audio.play(RELOADS[r][i], at, 0.7));
     const h = inHand(now);
     if (h != 1 && h >= 0 && (inHand(was) != h || (a >= 0 && b < 0))) {
       audio.play(SOUND.BOOT, at, 0.5, r ? 1.4 : 1);
+    }
+    // The rail gun overheating hisses.
+    if (now.hot && !was.hot) {
+      audio.play(SOUND.HISS, at, 0.8);
     }
   };
   /** The shing of the katana coming into the hand or leaving it (not when it is lost). */

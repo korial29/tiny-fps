@@ -200,6 +200,19 @@ describe('the own shots', () => {
     expect(ids()).toEqual([SOUND.LASER]);
   });
 
+  it('hiss once when the rail gun overheats, the own one and another one where he is', () => {
+    const { frame, ids, audio } = setup();
+    const railed = { ammo: -1, rail: 200, cap: 40, railed: true };
+    const other = player({ ...railed, id: 2, x: 5 });
+    frame(player(railed), [other]);
+    frame(player({ ...railed, hot: true }), [other]);
+    frame(player({ ...railed, hot: true }), [other]);
+    expect(ids()).toEqual([SOUND.HISS]);
+    frame(player({ ...railed, hot: true }), [{ ...other, hot: true }]);
+    expect(ids()).toEqual([SOUND.HISS, SOUND.HISS]);
+    expect(audio.play.mock.calls[1][1]).toBeDefined();
+  });
+
   it('of the laser rifle launch a red ball (power 0) from the muzzle, with a red flash and its punch', () => {
     const { combat, frame, ids, flashes, orbs } = setup();
     const rifled = { ammo: -1, rifle: 50, clip: 20, rifled: true };

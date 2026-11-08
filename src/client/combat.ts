@@ -438,9 +438,10 @@ export const createCombat = (
         return id == me?.id ? from : p && gun(p);
       });
       tracer.orbs(orbs);
-      for (const at of bursts) {
-        tracer.burst(at);
-        audio.play(SOUND.SPLASH, at);
+      // The laser rifle's (power 0) burst red, with a deeper, louder thud.
+      for (const [at, k] of bursts) {
+        tracer.burst(at, !k);
+        audio.play(SOUND.SPLASH, at, k ? 1 : 1.3, k ? 1 : 0.6);
       }
     },
   };

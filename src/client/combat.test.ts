@@ -87,10 +87,12 @@ const setup = () => {
   /** What the tracer is given and does: the flashes, the bursts and the balls of the last frame. */
   const flashes: [Vec3, boolean | undefined][] = [];
   const bursts: Vec3[] = [];
+  /** Which of them were red. */
+  const reds: boolean[] = [];
   let orbs: Orb[] = [];
   const [flash, burst, list] = [tracer.flash, tracer.burst, tracer.orbs];
   tracer.flash = (a, own) => (flashes.push([a, own]), flash(a, own));
-  tracer.burst = at => (bursts.push(at), burst(at));
+  tracer.burst = (at, red) => (bursts.push(at), reds.push(!!red), burst(at, red));
   tracer.orbs = l => ((orbs = l), list(l));
   return {
     audio,
@@ -104,6 +106,7 @@ const setup = () => {
     frame,
     flashes,
     bursts,
+    reds,
     orbs: () => orbs,
     at: () => now,
   };
@@ -209,6 +212,19 @@ describe('the own shots', () => {
     expect(orbs()[0].power).toBe(0);
   });
 
+  it('of the laser rifle burst red on the wall, with a deeper, louder thud', () => {
+    const { combat, frame, audio, orbs, bursts, reds } = setup();
+    const rifled = { ammo: -1, rifle: 50, clip: 20, rifled: true };
+    frame(player(rifled));
+    combat.step(player({ ...rifled, shots: 0 }), player({ ...rifled, shots: 1 }));
+    for (let k = 0; k < 40 && !bursts.length; k++) {
+      frame(player({ ...rifled, shots: 1 }));
+    }
+    expect(orbs()).toEqual([]);
+    expect(reds).toEqual([true]);
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, bursts[0], 1.3, 0.6);
+  });
+
   it('fly at PLASMA_SPEED onto the look line, and burst on the wall it meets, with the zap there', () => {
     const { combat, frame, ids, audio, orbs, bursts } = setup();
     frame(player());
@@ -231,7 +247,7 @@ describe('the own shots', () => {
     expect(bursts[0][2]).toBeCloseTo(-20 + PLASMA_R, 6);
     expect(orbs()).toEqual([]);
     expect(ids()).toEqual([SOUND.LASER, SOUND.SPLASH]);
-    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, bursts[0]);
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, bursts[0], 1, 1);
   });
 
   it('start at the muzzle in the camera, kicked and shaken with it', () => {
@@ -453,7 +469,7 @@ describe('the others shots', () => {
       frame(player(), [p]);
     }
     expect(bursts).toEqual([[5, 1.6, -7]]);
-    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, [5, 1.6, -7]);
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, [5, 1.6, -7], 1, 1);
     expect(orbs()).toEqual([]);
   });
 });

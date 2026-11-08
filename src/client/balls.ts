@@ -48,7 +48,10 @@ export interface Balls {
    * The balls to draw at `now` (ms) and the places where one burst since the last frame. `muzzle`
    * gives the muzzle of a player's gun, where a new ball is first drawn.
    */
-  frame(now: number, muzzle: (id: number) => Vec3 | undefined): { orbs: Orb[]; bursts: Vec3[] };
+  frame(
+    now: number,
+    muzzle: (id: number) => Vec3 | undefined,
+  ): { orbs: Orb[]; bursts: [Vec3, number][] };
 }
 
 const at = (b: { x: number; y: number; z: number }): Vec3 => [b.x, b.y, b.z];
@@ -130,13 +133,13 @@ export const createBalls = (world: World): Balls => {
 
     frame(now, muzzle) {
       const orbs: Orb[] = [];
-      const bursts: Vec3[] = [];
+      const bursts: [Vec3, number][] = [];
       for (const [key, f] of live) {
         const t = f.own ? now : now - INTERP_DELAY;
         const s = ((t - f.t) * (f.arc ? ARC_SPEED : PLASMA_SPEED)) / 1000;
         if ((f.end && s >= dot(f.end.map((v, i) => v - f.o[i]) as Vec3, f.d)) || t >= f.due) {
           if (f.pop) {
-            bursts.push(f.end!);
+            bursts.push([f.end!, f.power]);
           }
           if (f.own) {
             spent.add(key);

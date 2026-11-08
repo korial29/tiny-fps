@@ -452,7 +452,7 @@ describe('the gun on the HUD', () => {
     it('says on the title screen how to pick and how to cut', () => {
       hud.title('Click to play', 'Rooftops');
       const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
-      expect(rows).toContain('1, 2, 3, wheelgun, katana, rail gun');
+      expect(rows).toContain('1, 2, 3, 4, wheelgun, katana, rail gun, laser rifle');
       expect(rows).toContain('Katana + Wthrust');
       expect(rows).toContain('Katana + A or Dcut across');
       expect(rows).toContain('Katana aloneslash');

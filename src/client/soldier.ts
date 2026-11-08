@@ -10,7 +10,7 @@ import type { World } from '../shared/world';
 import { clasp, inv, reach, shrug, stowed, wield } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
-import { ARC, TILT, aimed, focus, foregrip, held, span, swapOf } from './gun';
+import { ARC, TILT, aimed, focus, foregrip, held, kindOf, span, swapOf } from './gun';
 import type { Tracer } from './beams';
 import {
   BEHIND,
@@ -303,17 +303,28 @@ export const stance = (r: Runner) => {
   if (p.wield && !p.down) {
     pose = brandish(pose, p, r.prog, r.gait.phase, r.t);
     s = solve(pose);
-  } else if (p.railed && !p.down) {
-    // The rail gun in both hands, at the ready when not firing: the left on its front grip, the
+  } else if ((p.railed || p.rifled) && !p.down) {
+    // The rail gun or the rifle in both hands, at the ready when not firing: the left on its front grip, the
     // elbow down and out. On a wall it is put away, unless its bolt is going out (stowed()).
-    if (stowed(p)) {
+    if (p.railed && stowed(p)) {
       return { s, sink, yaw: pose.yaw };
     }
     pose = lifted(pose, s, p, r.focus, Math.max(r.aim, READY));
     s = solve(pose);
-    const [at, g] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R]);
+    const [at, g, up] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R], kindOf(p));
     const [x, u, f] = basis(p.yaw, 0);
-    wield(pose, s, J.ARM_L, at, g, [0, 1, 2].map(i => -0.5 * x[i] - u[i] - 0.35 * f[i]) as Vec3);
+    if (up) {
+      shrug(pose, s, J.ARM_L, at);
+    }
+    wield(
+      pose,
+      s,
+      J.ARM_L,
+      at,
+      g,
+      [0, 1, 2].map(i => -0.5 * x[i] - u[i] - 0.35 * f[i]) as Vec3,
+      up,
+    );
     s = solve(pose);
   } else if (r.aim > 0.01 && p.ammo >= 0) {
     pose = lifted(pose, s, p, r.focus, r.aim);
@@ -346,10 +357,10 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);
     r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));
-  } else if ((p.railed ? !stowed(p) : p.ammo >= 0) && !p.down) {
+  } else if ((p.railed ? !stowed(p) : p.ammo >= 0 || p.rifled) && !p.down) {
     // A swap shows: the battery or the capsule out and in, the glow off until it is.
     const sp = swapOf(p);
-    held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, undefined, 0, p.railed, r.t, {
+    held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, undefined, 0, kindOf(p), r.t, {
       swap: sp,
       light: sp < 0 ? 1 : 1 - ease(span(sp, 0.1, 0.2)),
     });

@@ -3,7 +3,7 @@
 // place and the clock, in the renderer's vertex format. Lit and shadowed, but the glow parts.
 import { RACK_R } from '../shared/constants';
 import { GLOW, glow, ring, teamRgb, tri } from './flag';
-import { gun, railgun } from './gun';
+import { gun, railgun, rifle } from './gun';
 import { sword } from './katana';
 import { STRIDE, basis, place, segment, solid } from './mesh';
 import type { Vec3 } from './mesh';
@@ -17,8 +17,8 @@ export const packsOf = (all: readonly Vec3[] = [], mask = 0, from = 0): Vec3[] =
 
 /**
  * A rack at `at` (a point on a top): a post and a dish, a ring on the roof of the radius that gives
- * the weapon, and the weapon over it: the gun, or by `kind` the katana (1), crackling, or the rail
- * gun (2).
+ * the weapon, and the weapon over it: the gun, or by `kind` the katana (1), crackling, the rail
+ * gun (2) or the laser rifle (3).
  */
 export const rack = (out: number[], at: Vec3, rgb: number[], t: number, kind = 0) => {
   const dark = rgb.map(c => c * 0.45);
@@ -43,19 +43,20 @@ export const rack = (out: number[], at: Vec3, rgb: number[], t: number, kind = 0
     // Lying level, turning about its middle, 42 cm ahead of the grip.
     sword(out, over.map((v, i) => v - ax[2][i] * 0.42) as Vec3, ax, 0, t);
   } else {
-    place(out, kind ? railgun(0) : gun(0), over, ax, [0, 0, 0], 1.5);
+    place(out, [gun, gun, railgun, rifle][kind](0), over, ax, [0, 0, 0], kind == 3 ? 1.2 : 1.5);
   }
 };
 
-/** Each team's gun rack, katana rack and rail gun rack, where it has them. */
+/** Each team's gun rack, katana rack, rail gun rack and laser rifle rack, where it has them. */
 export const racks = (
   out: number[],
   guns: readonly (Vec3 | undefined)[] = [],
   blades: readonly (Vec3 | undefined)[] = [],
   t = 0,
   rails: readonly (Vec3 | undefined)[] = [],
+  rifles: readonly (Vec3 | undefined)[] = [],
 ) =>
-  [guns, blades, rails].forEach((list, kind) =>
+  [guns, blades, rails, rifles].forEach((list, kind) =>
     list.forEach((at, team) => at && rack(out, at, teamRgb(team), t, kind)),
   );
 

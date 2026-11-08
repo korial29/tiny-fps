@@ -9,6 +9,10 @@ import {
   TILT,
   aimed,
   battery,
+  cell,
+  fore,
+  rifle,
+  scope,
   focus,
   grip,
   gun,
@@ -22,7 +26,7 @@ import {
   swapped,
   tip,
 } from './gun';
-import { SHINE, STRIDE } from './mesh';
+import { SHINE, STRIDE, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { axis, turn } from './rig';
 import type { Quat } from './rig';
@@ -585,5 +589,52 @@ describe('the battery and the capsule', () => {
     expect(power(0.35)).toBeLessThan(1);
     expect(power(0.6)).toBe(1);
     expect(power(9)).toBe(1);
+  });
+});
+
+describe('the laser rifle', () => {
+  it('has its red lens where tip() puts its muzzle, and the hold of the left hand under the body, ahead of the grip', () => {
+    const vs = verts(rifle(1));
+    const lens = vs.filter(v => v.layer === -2 && v.c[0] > 2);
+    expect(lens.length).toBeGreaterThan(10);
+    const ax: Vec3[] = [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, -1],
+    ];
+    const m = tip([0, 0, 0], ax, 3);
+    const nearest = Math.min(...lens.map(v => Math.hypot(...v.p.map((x, k) => x - m[k]))));
+    expect(nearest).toBeLessThan(0.02);
+    const [at] = fore([0, 0, 0], ax, 3);
+    // Under the body's front (its axis 6 cm up, its underside 2.5 cm under that).
+    expect(at[1]).toBeLessThan(0.035);
+    expect(at[2]).toBeLessThan(-0.1);
+  });
+
+  it('shows its rounds on the counter once it is booted, and only its ring before', () => {
+    expect(scope(24).length).toBeGreaterThan(scope(24, false).length);
+    expect(scope(8).length).not.toBe(scope(24).length);
+  });
+
+  it('keeps the digits of its counter inside the screen, clear of the ring', () => {
+    // Red at 3: the digits apart from the cyan ring. In the screen's plane: across, and up it.
+    const v = scope(3);
+    const up = unit([0, 0.08, -0.05]);
+    const mid: Vec3 = [0, 0.13, 0.095];
+    for (let i = 0; i < v.length; i += STRIDE) {
+      if (v[i + 6] > 1) {
+        const b = (v[i + 1] - mid[1]) * up[1] + (v[i + 2] - mid[2]) * up[2];
+        // The screen's half width at b, less its ring.
+        const half = 0.027 - (0.009 * (b + 0.03)) / 0.06 - 0.0022;
+        expect(Math.abs(v[i])).toBeLessThan(half - 0.002);
+        expect(Math.abs(b)).toBeLessThan(0.03 - 0.004);
+      }
+    }
+  });
+
+  it('is drawn in the hand with its cell, by kind 3', () => {
+    const out: number[] = [];
+    held(out, [0, 0, 0], IDENT, 1, 1, 24, 0, 3);
+    expect(out.length).toBe(cell(1).length + rifle(1).length + scope(24).length);
   });
 });

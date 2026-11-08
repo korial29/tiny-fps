@@ -45,6 +45,8 @@ export const KEY = {
   RAIL: 2048,
   /** Press to swap the battery or the capsule of the gun in hand (see GUN_MAG). */
   RELOAD: 4096,
+  /** Set while the player wants the laser rifle in hand (4 or the wheel), with BLADE and RAIL clear. Ignored without it. */
+  RIFLE: 8192,
 } as const;
 
 /**
@@ -184,6 +186,14 @@ export interface PlayerState {
   cap?: number;
   /** Ticks left swapping the battery or the capsule of the gun in hand, 0 when not. Absent reads 0. */
   reload?: number;
+  /** Rounds left in the laser rifle; absent or -1 without it (taken at the team's fourth rack, lost on going down). */
+  rifle?: number;
+  /** Rounds in the laser rifle's power cell, of `rifle` (RIFLE_CLIP at most). Absent reads 0. */
+  clip?: number;
+  /** The laser rifle is in hand (see KEY.RIFLE). Absent reads false. */
+  rifled?: boolean;
+  /** Standing inside the circle of the team's rifle rack as of the last step. Absent reads false. */
+  inRifle?: boolean;
   /** Ticks FIRE has been held with the gun, up to CHARGE_TICKS, 0 when not charging. Absent reads 0. */
   charge?: number;
   /** The strength of the last shot, 1 to CHARGE_MAX: the shots it spent and the health it takes. Set by the step that fires; not on the wire. */

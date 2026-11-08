@@ -30,6 +30,7 @@ import {
   charge,
   ease,
   fore,
+  kindOf,
   held,
   loadFrame,
   screwed,
@@ -605,7 +606,7 @@ export const createBody = (world?: World): Body => {
       return;
     }
     gait.update(p, dt, world && floorOf(world, p.y));
-    const now = p.down ? -1 : p.wield ? 1 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
+    const now = p.down ? -1 : p.wield ? 1 : p.rifled ? 3 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
     since = now !== drawn || (me?.reload && !p.reload) ? 0 : since + dt;
     drawn = now;
     me = { ...p };
@@ -629,7 +630,7 @@ export const createBody = (world?: World): Body => {
       stun: +(p.stun > 0),
       // The rail gun is put away on a wall unless its bolt is going out: a hand on the wall, the
       // other swinging with the stride.
-      gun: +(!p.down && !p.wield && (p.ammo >= 0 || (!!p.railed && !stowed(p)))),
+      gun: +(!p.down && !p.wield && (p.ammo >= 0 || !!p.rifled || (!!p.railed && !stowed(p)))),
       blade: +(!!p.wield && !p.down),
     };
     for (const n of Object.keys(RATES) as (keyof typeof RATES)[]) {
@@ -661,11 +662,11 @@ export const createBody = (world?: World): Body => {
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     // The rail gun is held in both hands like a rifle: nearer the middle and the chest, so that
     // the left hand reaches its front grip.
-    const r = me?.railed ? 1 : 0;
+    const r = me?.railed || me?.rifled ? 1 : 0;
     // A swap tips the gun over to show the battery under it, or the capsule on its top, and back.
     const sp = me ? swapOf(me) : -1;
     const tipped = sp < 0 ? 0 : ease(span(sp, 0, 0.15)) * (1 - ease(span(sp, 0.85, 1)));
-    const roll = tipped * (r ? 0.35 : -1.25);
+    const roll = tipped * (me?.rifled ? -1.1 : r ? 0.35 : -1.25);
     const at: Vec3 = [
       Math.min(0.22, 0.18 * wide) * (1 - RIFLE[0] * r) +
         0.012 * a * s +
@@ -674,7 +675,14 @@ export const createBody = (world?: World): Body => {
       -0.25 + 0.018 * a * c - 0.3 * (1 - w.gun) + lift[1] + shake * Math.sin(clock * 61 + 1),
       0.4 - RIFLE[1] * r - 0.05 * kick + lift[2],
     ];
-    at[0] -= (r ? 0.04 : 0.12) * tipped;
+    // The rifle sits further out and higher than the rail gun, its counter in the lower view.
+    const rf = me?.rifled ? 1 : 0;
+    at[0] += 0.02 * rf;
+    at[1] += 0.045 * rf;
+    at[2] += 0.02 * rf;
+    at[0] -= (rf ? 0.1 : r ? 0.04 : 0.12) * tipped;
+    at[1] += 0.03 * rf * tipped;
+    at[2] += 0.1 * rf * tipped;
     at[1] += (r ? 0.03 : 0.17) * tipped;
     // A shot kicks the nose up; a swap lifts it too, the rail gun's down.
     const l = Math.hypot(...target);
@@ -781,7 +789,7 @@ export const createBody = (world?: World): Body => {
     const fh = [0, 1, 2].map(i => TILT[1] * ga[2][i] - TILT[0] * ga[1][i]) as Vec3;
     const wrist = [0, 1, 2].map(i => gp[i] - 0.078 * fh[i] + 0.022 * ga[0][i]) as Vec3;
     // The rail gun's front grip, for the left hand.
-    const [fc, fd] = fore(gp, ga);
+    const [fc, fd, fu] = fore(gp, ga, me ? kindOf(me) : 2);
     // The katana and both fists as one piece, the wrists straight, the shoulders gone with the
     // hands (clasp()).
     const kq = { ...q, rot: q.rot.slice() };
@@ -875,10 +883,21 @@ export const createBody = (world?: World): Body => {
         }
       }
       // The rail gun takes the left hand too, on its front grip, the elbow down and out.
-      const two = sd < 0 && me?.railed ? w.gun * free : 0;
+      const two = sd < 0 && (me?.railed || me?.rifled) ? w.gun * free : 0;
       if (two > 0.002) {
         const held = { ...q, rot: q.rot.slice() };
-        wield(held, s, arm, add(eye, turn(fc)), unit(turn(fd)), turn([-0.5, -1, -0.35]));
+        if (fu) {
+          shrug(held, s, arm, add(eye, turn(fc)));
+        }
+        wield(
+          held,
+          s,
+          arm,
+          add(eye, turn(fc)),
+          unit(turn(fd)),
+          turn([-0.5, -1, -0.35]),
+          fu && turn(fu),
+        );
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], two);
         }
@@ -899,7 +918,12 @@ export const createBody = (world?: World): Body => {
       if (onLoad > 0.002) {
         // On the new battery or capsule, which comes with the hand. The capsule is held round its
         // side, the wrist turning about it as it screws it in.
-        const [foot, [, , up]] = loadFrame(gp, ga, rail, Math.max(sp, rail ? 0.42 : 0.4));
+        const [foot, [, , up]] = loadFrame(
+          gp,
+          ga,
+          me ? kindOf(me) : 0,
+          Math.max(sp, rail ? 0.42 : 0.4),
+        );
         const mid = [0, 1, 2].map(i => foot[i] + up[i] * (rail ? 0.04 : -0.01)) as Vec3;
         let fing: Vec3 | undefined;
         if (rail) {
@@ -949,7 +973,8 @@ export const createBody = (world?: World): Body => {
           // The gauge lights once a press is more than a tap: the strength the shot would have.
           const level =
             me && (me.charge ?? 0) >= CHARGE_TAP ? Math.min(powerOf(me.charge!), me.mag ?? 0) : 0;
-          const rail = !!me?.railed;
+          const kind = me ? kindOf(me) : 0;
+          const rail = kind == 2;
           const sp = me ? swapOf(me) : -1;
           held(
             out,
@@ -957,18 +982,18 @@ export const createBody = (world?: World): Body => {
             s.rot[J.HAND_R],
             1,
             clamp(hold * 1.5 - 0.5),
-            rail ? charge(me!.cap ?? 0, RAIL_CAP) : me?.mag,
+            kind == 3 ? me!.clip : rail ? charge(me!.cap ?? 0, RAIL_CAP) : me?.mag,
             level,
-            rail,
+            kind,
             clock,
             {
               // Dark from when the old one comes out until the new one is in, the gun's counter
               // folded down with it; then the gun boots: the counter stands up, its digits show,
               // and the light comes on slowly.
               light:
-                sp < 0 ? power(since, rail ? undefined : GUN_ON.lit) : 1 - ease(span(sp, 0.1, 0.2)),
+                sp < 0 ? power(since, kind ? undefined : GUN_ON.lit) : 1 - ease(span(sp, 0.1, 0.2)),
               swap: sp,
-              empty: !(rail ? me?.cap : me?.mag),
+              empty: !(kind == 3 ? me?.clip : rail ? me?.cap : me?.mag),
               stand:
                 sp < 0 ? ease(span(since, GUN_ON.from, GUN_ON.up)) : 1 - ease(span(sp, 0.15, 0.35)),
               digits: sp < 0 && since >= GUN_ON.digits,
@@ -995,7 +1020,7 @@ export const createBody = (world?: World): Body => {
       const l = Math.hypot(...t);
       target = l < 3 ? (l ? (t.map(v => (v * 3) / l) as Vec3) : [0, 0, 3]) : t;
     },
-    muzzle: () => tip(...holster(), !!me?.railed),
+    muzzle: () => tip(...holster(), me ? kindOf(me) : 0),
     spun: () =>
       me && prog >= 0 ? whirl(me.cut ?? 0, prog) + SWAY * bent(me, prog)[0] * w.blade : 0,
   };

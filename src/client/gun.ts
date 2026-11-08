@@ -1,7 +1,14 @@
 // The gun: a curved alien sidearm lofted from rings (violet metal, cyan glow), and the maths of the
 // hand that holds it. Model space has the middle of the grip at the origin, x right, y up, the
 // muzzle toward -z (like mesh.ts); place() carries it to the world. No DOM.
-import { CHARGE_MAX, GUN_RANGE, GUN_RELOAD, RAIL_MAX, RAIL_RELOAD } from '../shared/constants';
+import {
+  CHARGE_MAX,
+  GUN_RANGE,
+  GUN_RELOAD,
+  RAIL_MAX,
+  RAIL_RELOAD,
+  RIFLE_RELOAD,
+} from '../shared/constants';
 import { TAU, eyeHeight } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
@@ -359,6 +366,157 @@ export const railgun = (lod: number): number[] => {
   return (railed[lod] = out);
 };
 
+/** The weapon a gun model is, from a player or a flag: 0 the gun, 2 the rail gun (or true), 3 the laser rifle. */
+export const kindOf = (p: Pick<PlayerState, 'railed' | 'rifled'> | boolean | number): number =>
+  typeof p == 'number' ? p : typeof p == 'boolean' ? +p * 2 : p.rifled ? 3 : p.railed ? 2 : 0;
+
+/** The rifle's housing: the height of its foot and of its top, the half width and the back of each. */
+const HB = [0.09, 0.17, 0.031, 0.12, 0.02, 0.07];
+
+/** The laser rifle's muzzle, the lens at the end of its shroud, and where the left hand holds the shroud from under it: the middle of the fist. */
+export const RIFLE_MUZZLE: Vec3 = [0, 0.06, -0.5];
+export const RIFLE_GRIP: Vec3 = [0, 0.025, -0.16];
+/** The red of the laser, which blooms. */
+export const LASER = [2.6, 0.55, 0.22];
+const red: Paint = () => [LASER[0], LASER[1], -2, LASER[2]];
+/** Dark olive gunmetal, lighter on its top faces. */
+const olive = shade([0.05, 0.055, 0.05], [0.34, 0.36, 0.32]);
+const rifled: number[][] = [];
+
+/**
+ * The laser rifle (the user, 2026-11-08), built once like gun(), after Halo's assault rifle held in
+ * both hands: a long angular body from the butt at the shoulder past the grip (a bullpup), a tall
+ * housing over the grip whose sloped back carries the counter (scope()), a square shroud to a red
+ * lens, held from under it by the left hand, and a strip of red light along each side.
+ */
+export const rifle = (lod: number): number[] => {
+  if (rifled[lod]) {
+    return rifled[lod];
+  }
+  const [n, m] = lod ? [8, 6] : [4, 4];
+  const out: number[] = [];
+  // The body, the butt to the front of the receiver, a box with soft edges.
+  tube(
+    out,
+    [
+      [-0.33, 0.04, 0, 0],
+      [-0.328, 0.04, 0.03, 0.05],
+      [-0.2, 0.045, 0.032, 0.052],
+      [0.05, 0.055, 0.032, 0.045],
+      [0.2, 0.06, 0.03, 0.035],
+      [0.21, 0.06, 0, 0],
+    ],
+    n,
+    olive,
+  );
+  // The housing on top: a block with flat faces, narrower at its top, its back sloping down
+  // toward the eye (the counter's face) and its front down to the body.
+  const corner = (x: number, y: number, z: number): Vec3 => [x, y, z];
+  const [b0, b1, t0, t1] = [
+    corner(HB[2], HB[0], HB[3]),
+    corner(HB[2], HB[0], -0.06),
+    corner(HB[4], HB[1], HB[5]),
+    corner(HB[4], HB[1], -0.02),
+  ];
+  const mirror = ([x, y, z]: Vec3): Vec3 => [-x, y, z];
+  const mid: Vec3 = [0, (HB[0] + HB[1]) / 2, 0.03];
+  for (const f of [
+    [b0, mirror(b0), mirror(t0), t0],
+    [b1, mirror(b1), mirror(t1), t1],
+    [b0, b1, t1, t0],
+    [mirror(b0), mirror(b1), mirror(t1), mirror(t0)],
+    [t0, t1, mirror(t1), mirror(t0)],
+  ]) {
+    const [u, w] = [sub(f[1], f[0]), sub(f[2], f[0])];
+    let nn = unit([
+      u[1] * w[2] - u[2] * w[1],
+      u[2] * w[0] - u[0] * w[2],
+      u[0] * w[1] - u[1] * w[0],
+    ]);
+    const out_ = dot(nn, sub(f[0], mid)) < 0;
+    const p = out_ ? [f[0], f[3], f[2], f[1]] : f;
+    nn = out_ ? [-nn[0], -nn[1], -nn[2]] : nn;
+    const [r, gg, , bb] = olive(p[0], nn);
+    tri(out, p[0], p[1], p[2], [r, gg, bb]);
+    tri(out, p[0], p[2], p[3], [r, gg, bb]);
+  }
+  // The shroud to the lens, and the lens.
+  tube(
+    out,
+    [
+      [0.2, 0.06, 0, 0],
+      [0.205, 0.06, 0.024, 0.026],
+      [0.48, 0.06, 0.022, 0.024],
+      [0.485, 0.06, 0, 0],
+    ],
+    n,
+    olive,
+  );
+  tube(
+    out,
+    [
+      [0.483, 0.06, 0, 0],
+      [0.486, 0.06, 0.012, 0.012],
+      [0.5, 0.06, 0, 0],
+    ],
+    m,
+    red,
+  );
+  // The pistol grip; the left hand holds the shroud from under it.
+  tube(
+    out,
+    [
+      [0.03, 0.07, 0, 0],
+      [0.02, 0.05, 0.02, 0.022],
+      [0, 0, 0.02, 0.023],
+      [-0.02, -0.046, 0.021, 0.022],
+      [-0.03, -0.06, 0, 0],
+    ],
+    m,
+    steel,
+  );
+  for (const s of [-1, 1]) {
+    tube(
+      out,
+      [
+        [-0.25, 0.05, 0.002, 0.003, s * 0.033],
+        [0.18, 0.06, 0.002, 0.003, s * 0.031],
+      ],
+      3,
+      red,
+    );
+  }
+  return (rifled[lod] = out);
+};
+
+/** The rifle's power cell, built once: a box of olive metal along its own forward from its foot, a red band near the foot. */
+export const cell = (lod: number): number[] =>
+  (packs[lod] ??= ((out: number[]) => {
+    const n = lod ? 8 : 4;
+    tube(
+      out,
+      [
+        [0, 0, 0, 0],
+        [0.003, 0, 0.022, 0.03],
+        [0.1, 0, 0.022, 0.03],
+        [0.102, 0, 0, 0],
+      ],
+      n,
+      olive,
+    );
+    tube(
+      out,
+      [
+        [0.01, 0, 0.0228, 0.0308],
+        [0.02, 0, 0.0228, 0.0308],
+      ],
+      n,
+      red,
+    );
+    return out;
+  })([]));
+const packs: number[][] = [];
+
 /**
  * The gun's battery (the user, 2026-11-08), built once: a gunmetal cell in the grip, along its own
  * forward from its foot, which stands out under the lower shell with a band of glow round it.
@@ -449,6 +607,9 @@ const SEAT = [-0.0434, -0.0868];
 const UP_GRIP = [0.447, 0.894];
 /** The capsule's base on the receiver's top, forward of the grip and up. */
 const SOCKET = [0.1, 0.121];
+/** The rifle's cell: its foot under the body behind the grip, and the way it goes up into it. */
+const WELL = [-0.13, -0.075];
+const UP_WELL = [-0.1, 0.995];
 
 export const ease = (t: number) => {
   const u = clamp(t);
@@ -458,8 +619,8 @@ export const ease = (t: number) => {
 export const span = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
 
 /** How far through the swap of the gun in hand `p` is, 0 to 1; -1 when it is not swapping. */
-export const swapOf = (p: Pick<PlayerState, 'reload' | 'railed'>): number =>
-  p.reload ? 1 - p.reload / (p.railed ? RAIL_RELOAD : GUN_RELOAD) : -1;
+export const swapOf = (p: Pick<PlayerState, 'reload' | 'railed' | 'rifled'>): number =>
+  p.reload ? 1 - p.reload / [GUN_RELOAD, 0, RAIL_RELOAD, RIFLE_RELOAD][kindOf(p)] : -1;
 
 /**
  * The glow of a weapon `t` seconds after it came to hand: dark as it rises, then flickering up to
@@ -476,11 +637,11 @@ export const GUN_ON = { lit: 1.4, from: 0.35, up: 1, digits: 1.05 };
  * along its axis (metres), how far round its axis (radians, the capsule's screw), and how far it
  * tumbles (radians). The old one comes out and goes, the new one comes in, the left hand bringing it.
  */
-export const swapped = (s: number, rail: boolean): number[] => {
+export const swapped = (s: number, kind: boolean | number): number[] => {
   if (s < 0) {
     return [0, 0, 0];
   }
-  if (!rail) {
+  if (kindOf(kind) != 2) {
     // Slid out down the grip and dropped, then a new one up into it and clicked home.
     return s < 0.4
       ? [0.1 * ease(span(s, 0.15, 0.3)) + 0.6 * span(s, 0.3, 0.4) ** 2, 0, 0]
@@ -524,11 +685,19 @@ export const CUES = [
  * are `ax`, `k` times its size, at `s` of a swap: its foot (base) and its axes, its forward along
  * the grip (up).
  */
-export const loadFrame = (at: Vec3, ax: Vec3[], rail: boolean, s = -1, k = 1): [Vec3, Vec3[]] => {
+export const loadFrame = (
+  at: Vec3,
+  ax: Vec3[],
+  kind: boolean | number,
+  s = -1,
+  k = 1,
+): [Vec3, Vec3[]] => {
   const [r, u, f] = ax;
-  const [c, sn] = rail ? [0, 1] : UP_GRIP;
-  const [fo, up] = rail ? SOCKET : SEAT;
-  const [out, twist, tumble] = swapped(s, rail);
+  const w = kindOf(kind);
+  const rail = w == 2;
+  const [c, sn] = rail ? [0, 1] : w == 3 ? UP_WELL : UP_GRIP;
+  const [fo, up] = rail ? SOCKET : w == 3 ? WELL : SEAT;
+  const [out, twist, tumble] = swapped(s, w);
   // Forward up the grip (up), up across it: a turn about the gun's right.
   const fw = [0, 1, 2].map(i => f[i] * c + u[i] * sn) as Vec3;
   let uw = [0, 1, 2].map(i => u[i] * c - f[i] * sn) as Vec3;
@@ -568,15 +737,27 @@ export const arc = (t: number): number[] => {
 /**
  * Where the left hand holds a rail gun whose grip is at `at` and whose axes are [right, up,
  * forward]: the middle of its front grip, and the way the grip runs from its foot up to the barrel,
- * which the thumb points along (see wield() in body.ts).
+ * which the thumb points along (see wield() in body.ts). For the laser rifle (`kind` 3): under its
+ * shroud, the thumb along it, and the way the hand goes, across under it and up its right side.
  */
-export const fore = (at: Vec3, [r, u, f]: Vec3[]): [Vec3, Vec3] => [
-  [0, 1, 2].map(i => at[i] + r[i] * FOREGRIP[0] + u[i] * FOREGRIP[1] - f[i] * FOREGRIP[2]) as Vec3,
-  unit([0, 1, 2].map(i => u[i] - 0.19 * f[i]) as Vec3),
-];
+export const fore = (
+  at: Vec3,
+  [r, u, f]: Vec3[],
+  kind: boolean | number = 2,
+): [Vec3, Vec3, Vec3?] => {
+  const rifle = kindOf(kind) == 3;
+  const g = rifle ? RIFLE_GRIP : FOREGRIP;
+  const p = [0, 1, 2].map(i => at[i] + r[i] * g[0] + u[i] * g[1] - f[i] * g[2]) as Vec3;
+  // The rifle's shroud is held from under it, the palm up: the thumb along it on its left, the
+  // hand across under it and the fingers up round its right side.
+  return rifle
+    ? [p, f, unit([0, 1, 2].map(i => 0.8 * r[i] + 0.6 * u[i]) as Vec3)]
+    : [p, unit([0, 1, 2].map(i => u[i] - 0.19 * f[i]) as Vec3)];
+};
 
 /** fore() for the hand at `pos` turned by `q`, which holds the grip. */
-export const foregrip = (pos: Vec3, q: Quat): [Vec3, Vec3] => fore(grip(pos, q), axes(q));
+export const foregrip = (pos: Vec3, q: Quat, kind: boolean | number = 2) =>
+  fore(grip(pos, q), axes(q), kind);
 
 /** The rail gun's lightning left as the counters show it: 99 when full (of `max`, a load by default), 0 when spent. */
 export const charge = (rail: number, max = RAIL_MAX): number =>
@@ -813,6 +994,90 @@ export const lcd = (ammo: number): number[] => {
   return v;
 };
 
+const scopes = new Map<number, number[]>();
+/** The counter's screen on the housing's sloped back: its middle, the way it faces (back and up), its up; half its height, half its width at the foot and at the top. */
+const SC: Vec3 = [0, (HB[0] + HB[1]) / 2, (HB[3] + HB[5]) / 2];
+const SU = unit([0, HB[1] - HB[0], HB[5] - HB[3]]);
+const SN: Vec3 = [0, -SU[2], SU[1]];
+const [SH, SB, ST] = [0.03, 0.027, 0.018];
+
+/**
+ * The laser rifle's counter (`n` rounds in its cell), in model space: a trapezoid screen, narrow at
+ * the top, set in the sloped back of the housing and turned to the eye, ringed in cyan, with two
+ * cyan digits once `shown`. All glow but the dark screen.
+ */
+export const scope = (n: number, shown = true): number[] => {
+  n = Math.min(Math.max(Math.floor(n), 0), 99);
+  const key = n * 2 + +shown;
+  let v = scopes.get(key);
+  if (!v) {
+    const out: number[] = (v = []);
+    /** A point `a` right of the middle, `b` up the screen, `d` out of it. */
+    const p = (a: number, b: number, d: number): Vec3 =>
+      [0, 1, 2].map(i => SC[i] + (i ? 0 : a) + SU[i] * b + SN[i] * d) as Vec3;
+    /** Half the width at `b` up the screen, `k` times it. */
+    const half = (b: number, k = 1) => k * (SB + ((ST - SB) * (b + SH)) / (2 * SH));
+    const quad = (a0: number, b0: number, a1: number, b1: number, d: number, rgb: number[]) => {
+      tri(out, p(a0, b0, d), p(a1, b0, d), p(a1, b1, d), rgb);
+      tri(out, p(a0, b0, d), p(a1, b1, d), p(a0, b1, d), rgb);
+    };
+    // The dark screen, its corners on the trapezoid.
+    const [h, t] = [half(-SH), half(SH)];
+    tri(out, p(-h, -SH, 0.004), p(h, -SH, 0.004), p(t, SH, 0.004), DARK);
+    tri(out, p(-h, -SH, 0.004), p(t, SH, 0.004), p(-t, SH, 0.004), DARK);
+    const from = out.length;
+    // The cyan ring: each side a thin band.
+    const ring = 0.0022;
+    for (const s of [-1, 1]) {
+      const [x0, x1] = [s * half(-SH), s * half(SH)];
+      tri(
+        out,
+        p(x0, -SH, 0.0045),
+        p(x0 - s * ring, -SH, 0.0045),
+        p(x1 - s * ring, SH, 0.0045),
+        [0.3, 0.9, 1.3],
+      );
+      tri(
+        out,
+        p(x0, -SH, 0.0045),
+        p(x1 - s * ring, SH, 0.0045),
+        p(x1, SH, 0.0045),
+        [0.3, 0.9, 1.3],
+      );
+      quad(
+        -half(s * SH),
+        s * SH - (s > 0 ? ring : 0),
+        half(s * SH),
+        s * SH + (s < 0 ? ring : 0),
+        0.0045,
+        [0.3, 0.9, 1.3],
+      );
+    }
+    if (shown) {
+      // Two digits well inside the trapezoid, its ring clear of them.
+      const k = (SH * 0.48) / DH;
+      [...`${n}`.padStart(2, '0')].forEach((ch, i) => {
+        const a0 = -(DW + DGAP / 2) * k + i * (DW + DGAP) * k;
+        for (const seg of DIGITS[+ch]) {
+          const [x0, y0, x1, y1] = SEGMENTS[seg];
+          const rgb = n > 7 ? [0.3, 0.95, 1.3] : [1.4, 0.35, 0.15];
+          quad(
+            a0 + x0 * k,
+            (y0 - DH / 2) * k - 0.002,
+            a0 + x1 * k,
+            (y1 - DH / 2) * k - 0.002,
+            0.005,
+            rgb,
+          );
+        }
+      });
+    }
+    lit(out, from, 1);
+    scopes.set(key, out);
+  }
+  return v;
+};
+
 /**
  * How a gun is drawn beyond its place: its glow from 0 (off) to 1, the swap under way (0 to 1, -1
  * none), whether its battery or capsule holds any, how far the gun's counter stands up (0 folded
@@ -849,7 +1114,7 @@ const folded = (at: Vec3, [r, u, f]: Vec3[], a: number, k: number): [Vec3, Vec3[
 };
 
 /**
- * Appends the gun (the rail gun when `rail`, its spark at the time `t`) held in the hand at `pos`
+ * Appends the gun (the rail gun or the laser rifle by `kind`, the rail gun's spark at the time `t`) held in the hand at `pos`
  * with the world rotation `q`, `k` times its size about the grip, with the ammo on its back when
  * given, and the charge gauge at `level`; its battery (capsule) where the swap has it, its glow and
  * its counter dimmed with `light`, and the spark only when it is all on.
@@ -862,20 +1127,30 @@ export const held = (
   k = 1,
   ammo?: number,
   level = 0,
-  rail = false,
+  kind: boolean | number = 0,
   t = 0,
   { light = 1, swap = -1, empty = false, stand = 1, digits = true }: Lit = {},
 ) => {
   const [at, ax] = [grip(pos, q), axes(q)];
+  const w = kindOf(kind);
+  const rail = w == 2;
   const d = 0.08 + 0.92 * light;
   const from = out.length;
-  place(out, rail ? capsule(lod) : battery(lod), ...loadFrame(at, ax, rail, swap, k), [0, 0, 0], k);
+  place(
+    out,
+    [battery, cell, capsule, cell][w](lod),
+    ...loadFrame(at, ax, w, swap, k),
+    [0, 0, 0],
+    k,
+  );
   dimmed(out, from, empty ? 0.08 : 1);
-  place(out, rail ? railgun(lod) : gun(lod), at, ax, [0, 0, 0], k);
+  place(out, [gun, gun, railgun, rifle][w](lod), at, ax, [0, 0, 0], k);
   if (rail && light > 0.98 && swap < 0) {
     place(out, arc(t), at, ax, [0, 0, 0], k);
   }
-  if (ammo !== undefined && rail && light > 0.3) {
+  if (ammo !== undefined && w == 3) {
+    place(out, scope(ammo, digits && light > 0.5), at, ax, [0, 0, 0], k);
+  } else if (ammo !== undefined && rail && light > 0.3) {
     place(out, lcd(ammo), at, ax, [0, 0, 0], k);
   } else if (ammo !== undefined && !rail) {
     place(
@@ -889,9 +1164,9 @@ export const held = (
   dimmed(out, from, d);
 };
 
-/** The muzzle of a gun (the rail gun's when `rail`) whose grip is at `at` and whose axes are [right, up, forward]. */
-export const tip = (at: Vec3, [, u, f]: Vec3[], rail = false): Vec3 => {
-  const m = rail ? RAIL_MUZZLE : MUZZLE;
+/** The muzzle of a gun (the rail gun's or the rifle's by `kind`) whose grip is at `at` and whose axes are [right, up, forward]. */
+export const tip = (at: Vec3, [, u, f]: Vec3[], kind: boolean | number = 0): Vec3 => {
+  const m = [MUZZLE, MUZZLE, RAIL_MUZZLE, RIFLE_MUZZLE][kindOf(kind)];
   return [0, 1, 2].map(i => at[i] + u[i] * m[1] - f[i] * m[2]) as Vec3;
 };
 
@@ -936,7 +1211,7 @@ export const focus = (p: PlayerState, world: World): [Vec3, boolean] => {
 export const aimed = (p: PlayerState, to: Vec3): [Vec3, Vec3[]] => {
   const [r, u, f] = basis(p.yaw, p.pitch);
   const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
-  const [x, y, z] = p.railed ? [0.12, 0.2, 0.28] : [0.2, 0.17, 0.42];
+  const [x, y, z] = p.railed || p.rifled ? [0.12, 0.2, 0.28] : [0.2, 0.17, 0.42];
   const grip = [0, 1, 2].map(i => eye[i] + r[i] * x - u[i] * y + f[i] * z) as Vec3;
   return [grip, pointed(grip, to, r, u)];
 };

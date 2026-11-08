@@ -26,6 +26,10 @@ import {
   RAIL_CAP,
   RAIL_MAX,
   RAIL_RELOAD,
+  RIFLE_CLIP,
+  RIFLE_COOL,
+  RIFLE_MAX,
+  RIFLE_RELOAD,
   SPECIAL_LATE,
 } from './constants';
 import { forward, move, respawn } from './physics';
@@ -61,8 +65,8 @@ const launch = (p: PlayerState): void => {
   }
 };
 
-/** What a step struck, for the host to resolve: nothing, a shot (a plasma ball), the katana's cut, or a rail gun's beam. */
-export const STRIKE = { NONE: 0, SHOT: 1, CUT: 2, RAIL: 3 } as const;
+/** What a step struck, for the host to resolve: nothing, a shot (a plasma ball), the katana's cut, a rail gun's beam, or a laser rifle's shot. */
+export const STRIKE = { NONE: 0, SHOT: 1, CUT: 2, RAIL: 3, LASER: 4 } as const;
 export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
 
 /**
@@ -81,6 +85,8 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  *   without firing, then it holds GUN_MAG (RAIL_CAP) or what is left. A switch of weapon drops it.
  *   The racks fill both.
  * - The rail gun throws its bolt on every step FIRE is held, spending a tick of it (`zapping`).
+ * - The laser rifle (KEY.RIFLE, `rifled`), filled at its rack on arrival, fires a round from its
+ *   cell (`clip`) each RIFLE_COOL ticks while FIRE is held (STRIKE.LASER).
  * - The trigger: `cool` and `swing` run down, and at 0 a held FIRE charges the gun, with ammo, and
  *   letting it go fires a ball as strong as the charge (powerOf()), spending as many shots; or it
  *   starts the katana's swing (`cut` from the keys), unless the hands are busy (a hang, a climb).
@@ -107,7 +113,7 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
     return duel(p, i);
   }
   // The rack fills the gun on arrival, not on every step spent in its circle.
-  const { rack, blade, rail } = w.def.teams[team];
+  const { rack, blade, rail, rifle } = w.def.teams[team];
   const inside = !!rack && within(p, rack, RACK_R);
   if (armed && inside && !p.rack) {
     [p.ammo, p.mag] = [AMMO_MAX, GUN_MAG];
@@ -119,6 +125,11 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
     [p.rail, p.cap] = [RAIL_MAX, RAIL_CAP];
   }
   p.inRail = inRail;
+  const inRifle = !!rifle && within(p, rifle, RACK_R);
+  if (armed && inRifle && !p.inRifle) {
+    [p.rifle, p.clip] = [RIFLE_MAX, RIFLE_CLIP];
+  }
+  p.inRifle = inRifle;
   p.cool = Math.max(0, p.cool - 1);
   const busy = p.mode === MODE.HANG || p.mode === MODE.CLIMB;
   // The katana's swing runs down, but stays at the top of a cut's wind-up while FIRE is held there:
@@ -136,29 +147,33 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
     p.swing = Math.max(0, (p.swing ?? 0) - 1);
     p.heavy = !!p.swing && !!p.heavy;
   }
-  const has = [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0];
-  const want = i.keys & KEY.BLADE ? 1 : i.keys & KEY.RAIL ? 2 : 0;
+  const has = [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0];
+  const want = i.keys & KEY.BLADE ? 1 : i.keys & KEY.RAIL ? 2 : i.keys & KEY.RIFLE ? 3 : 0;
   const hand = p.swing && p.blade ? 1 : has[want] ? want : has.indexOf(true);
   // A switch of weapon drops the swap under way.
-  if (hand != (p.railed ? 2 : +!!p.wield)) {
+  if (hand != (p.rifled ? 3 : p.railed ? 2 : +!!p.wield)) {
     p.reload = 0;
   }
-  [p.wield, p.railed] = [hand == 1, hand == 2];
+  [p.wield, p.railed, p.rifled] = [hand == 1, hand == 2, hand == 3];
   if (!armed) {
     [p.charge, p.reload] = [0, 0];
     return STRIKE.NONE;
   }
-  // The battery or the capsule of the gun in hand: swapped when empty or on KEY.RELOAD, then full.
-  const loads = hand == 0 ? p.ammo >= 0 : hand == 2;
-  const [load, full] = p.railed
-    ? [p.cap ?? 0, Math.min(RAIL_CAP, p.rail!)]
-    : [p.mag ?? 0, Math.min(GUN_MAG, p.ammo)];
+  // The battery, the capsule or the cell of the gun in hand: swapped when empty or on KEY.RELOAD,
+  // then full.
+  const [key, size, carried, ticks2] =
+    hand == 3
+      ? (['clip', RIFLE_CLIP, p.rifle!, RIFLE_RELOAD] as const)
+      : hand == 2
+        ? (['cap', RAIL_CAP, p.rail!, RAIL_RELOAD] as const)
+        : (['mag', GUN_MAG, p.ammo, GUN_RELOAD] as const);
+  const [load, full] = [p[key] ?? 0, Math.min(size, carried)];
   if (p.reload) {
     if (!--p.reload) {
-      p[p.railed ? 'cap' : 'mag'] = full;
+      p[key] = full;
     }
-  } else if (loads && !busy && load < full && (!load || i.keys & KEY.RELOAD)) {
-    [p.reload, p.charge] = [p.railed ? RAIL_RELOAD : GUN_RELOAD, 0];
+  } else if (hand != 1 && carried >= 0 && !busy && load < full && (!load || i.keys & KEY.RELOAD)) {
+    [p.reload, p.charge] = [ticks2, 0];
   }
   const c = swingOf(p);
   if (p.swing && c.ticks - p.swing === c.strike) {
@@ -166,7 +181,7 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
   }
   // The gun's charge goes with the katana in hand and not charging, the rail gun, the hands busy,
   // or no shot left.
-  if ((p.wield && !top) || p.railed || busy || p.reload || (!p.wield && !p.mag)) {
+  if ((p.wield && !top) || p.railed || p.rifled || busy || p.reload || (!p.wield && !p.mag)) {
     p.charge = 0;
   }
   if (i.keys & KEY.FIRE && !busy) {
@@ -179,6 +194,14 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
       p.cut = cutOf(i.keys) + (special ? SPECIAL_CUT : 0);
       [p.swing, p.charge] = [CUTS[p.cut].ticks, 0];
       launch(p);
+    } else if (p.rifled) {
+      if (!p.cool && p.clip && !p.reload) {
+        p.rifle!--;
+        p.clip--;
+        p.cool = RIFLE_COOL;
+        p.shots = (p.shots + 1) & 255;
+        return STRIKE.LASER;
+      }
     } else if (p.railed) {
       if (p.cap && !p.reload) {
         p.rail!--;

@@ -96,6 +96,7 @@ export const ROOFTOPS: WorldDef = {
       // 2.5 m from the gun rack, between the two rows of spawns.
       blade: [13.5, 10, 69],
       rail: [16, 10, 69],
+      rifle: [18.5, 10, 69],
     },
     // Blue holds F across the chasm, facing south, its flag 4.8 m from the chasm's edge.
     {
@@ -113,6 +114,7 @@ export const ROOFTOPS: WorldDef = {
       rack: [17, 12.4, -1.2],
       blade: [14.5, 12.4, -1.2],
       rail: [12, 12.4, -1.2],
+      rifle: [9.5, 12.4, -1.2],
     },
   ],
   // One on each of the roofs B, C and E, away from the edges.
@@ -225,7 +227,7 @@ const half: Brush[] = [
   box([42, 26, 222], [45, 27.4, 225], TEX.STEEL),
   box([29, 26, 229], [35, 27.1, 229.6], TEX.CONCRETE),
   // The armoury, a red plinth 1.5 m high ahead of the spawns: the racks stand on it, so a run and a jump take them.
-  box([27, 26, 215], [35, 27.5, 219], TEX.STEEL, TEX.PAINT, RED),
+  box([24.5, 26, 215], [35, 27.5, 219], TEX.STEEL, TEX.PAINT, RED),
   // The Spine (high route): roofs at 26 m, the viaduct with its wall to run along, a catch roof
   // under each gap and a ladder back up.
   roof(6, 164, 26, 201, 26, TEX.GLASS),
@@ -372,6 +374,7 @@ export const HIGHLINE: WorldDef = {
       rack: [30.75, 27.5, 217],
       blade: [33.25, 27.5, 217],
       rail: [28.25, 27.5, 217],
+      rifle: [25.75, 27.5, 217],
     },
     {
       base: [32, 26, ZED - 224],
@@ -379,6 +382,7 @@ export const HIGHLINE: WorldDef = {
       rack: [30.75, 27.5, ZED - 217],
       blade: [33.25, 27.5, ZED - 217],
       rail: [28.25, 27.5, ZED - 217],
+      rifle: [25.75, 27.5, ZED - 217],
     },
   ],
   packs: [

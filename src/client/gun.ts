@@ -247,6 +247,8 @@ const shade =
     const [r, g, b] = mix(lo, hi, Math.max(n[1], 0) ** 1.5 * 0.8);
     return [r, g, SHINE, b];
   };
+/** Polished grey metal, for the rifle's housing. */
+const chrome = shade([0.16, 0.17, 0.18], [0.66, 0.68, 0.72]);
 /** Dark gunmetal, and the copper of the coils. */
 const steel = shade([0.07, 0.075, 0.09], [0.42, 0.45, 0.52]);
 const copper = shade([0.3, 0.12, 0.05], [1, 0.58, 0.32]);
@@ -370,8 +372,23 @@ export const railgun = (lod: number): number[] => {
 export const kindOf = (p: Pick<PlayerState, 'railed' | 'rifled'> | boolean | number): number =>
   typeof p == 'number' ? p : typeof p == 'boolean' ? +p * 2 : p.rifled ? 3 : p.railed ? 2 : 0;
 
-/** The rifle's housing: the height of its foot and of its top, the half width and the back of each. */
-const HB = [0.09, 0.17, 0.031, 0.12, 0.02, 0.07];
+/**
+ * The rifle's housing as tube stations: a point, then at once a full ring (the flat back, turned up
+ * toward the eye as the line of middles goes down ahead of it), then along the top to the end.
+ */
+const HOUSING: Station[] = [
+  [-0.09, 0.129, 0, 0],
+  [-0.0895, 0.1287, 0.018, 0.02],
+  [-0.086, 0.1255, 0.0195, 0.0215],
+  [-0.06, 0.117, 0.02, 0.022],
+  [0.05, 0.114, 0.02, 0.021],
+  [0.2, 0.108, 0.018, 0.018],
+  [0.33, 0.101, 0.016, 0.014],
+  [0.42, 0.094, 0.013, 0.01],
+  [0.47, 0.089, 0.01, 0.007],
+  [0.49, 0.086, 0.007, 0.004],
+  [0.495, 0.085, 0, 0],
+];
 
 /** The rifle's body from the butt to the end, as tube stations: forward, the middle's height, half its width and half its height. */
 const PROFILE: Station[] = [
@@ -412,54 +429,10 @@ export const rifle = (lod: number): number[] => {
   // The body in one piece, the butt to the lens, its edges rounded: a trapezoid seen from the
   // side, tall at the butt, its underside rising toward the front and curving up into the end.
   tube(out, [[-0.34, PROFILE[0][1], 0, 0], ...PROFILE, [0.502, 0.079, 0, 0]], n, olive);
-  // The housing on top (the user, 2026-11-08): its back a short wedge with flat faces, sloping
-  // down toward the eye (the counter's face), and from it a rounded trapezoid along the top to the
-  // end of the barrel, tall behind, its top sloping down and curving onto the barrel's end.
-  const corner = (x: number, y: number, z: number): Vec3 => [x, y, z];
-  const [b0, b1, t0, t1] = [
-    corner(HB[2], HB[0], HB[3]),
-    corner(HB[2], HB[0], 0.03),
-    corner(HB[4], HB[1], HB[5]),
-    corner(HB[4], HB[1], 0.035),
-  ];
-  const mirror = ([x, y, z]: Vec3): Vec3 => [-x, y, z];
-  const mid: Vec3 = [0, (HB[0] + HB[1]) / 2, 0.07];
-  for (const f of [
-    [b0, mirror(b0), mirror(t0), t0],
-    [b1, mirror(b1), mirror(t1), t1],
-    [b0, b1, t1, t0],
-    [mirror(b0), mirror(b1), mirror(t1), mirror(t0)],
-    [t0, t1, mirror(t1), mirror(t0)],
-  ]) {
-    const [u, w] = [sub(f[1], f[0]), sub(f[2], f[0])];
-    let nn = unit([
-      u[1] * w[2] - u[2] * w[1],
-      u[2] * w[0] - u[0] * w[2],
-      u[0] * w[1] - u[1] * w[0],
-    ]);
-    const out_ = dot(nn, sub(f[0], mid)) < 0;
-    const p = out_ ? [f[0], f[3], f[2], f[1]] : f;
-    nn = out_ ? [-nn[0], -nn[1], -nn[2]] : nn;
-    const [r, gg, , bb] = olive(p[0], nn);
-    tri(out, p[0], p[1], p[2], [r, gg, bb]);
-    tri(out, p[0], p[2], p[3], [r, gg, bb]);
-  }
-  tube(
-    out,
-    [
-      [-0.05, 0.13, 0, 0],
-      [-0.04, 0.13, 0.024, 0.04],
-      [0.1, 0.127, 0.025, 0.037],
-      [0.25, 0.12, 0.022, 0.03],
-      [0.36, 0.112, 0.019, 0.022],
-      [0.43, 0.104, 0.016, 0.015],
-      [0.47, 0.097, 0.013, 0.01],
-      [0.49, 0.092, 0.009, 0.006],
-      [0.495, 0.09, 0, 0],
-    ],
-    n,
-    olive,
-  );
+  // The housing on top in one piece (the user, 2026-11-08): polished grey metal, its back a flat
+  // face tilted up toward the eye that carries the counter, then a rounded trapezoid along the top
+  // to the end of the barrel, its top curving down onto it.
+  tube(out, HOUSING, lod ? 16 : 6, chrome);
   // The lens at the end.
   tube(
     out,
@@ -1002,11 +975,11 @@ export const lcd = (ammo: number): number[] => {
 };
 
 const scopes = new Map<number, number[]>();
-/** The counter's screen on the housing's sloped back: its middle, the way it faces (back and up), its up; half its height, half its width at the foot and at the top. */
-const SC: Vec3 = [0, (HB[0] + HB[1]) / 2, (HB[3] + HB[5]) / 2];
-const SU = unit([0, HB[1] - HB[0], HB[5] - HB[3]]);
+/** The counter's screen on the housing's flat back: its middle, its up (across the line of middles), the way it faces; half its height, half its width at the foot and at the top. */
+const SC: Vec3 = [0, HOUSING[1][1], -HOUSING[1][0]];
+const SU = unit([0, HOUSING[2][0] - HOUSING[0][0], HOUSING[2][1] - HOUSING[0][1]]);
 const SN: Vec3 = [0, -SU[2], SU[1]];
-const [SH, SB, ST] = [0.018, 0.016, 0.011];
+const [SH, SB, ST] = [0.0135, 0.0125, 0.009];
 
 /**
  * The laser rifle's counter (`n` rounds in its cell), in model space: a trapezoid screen, narrow at

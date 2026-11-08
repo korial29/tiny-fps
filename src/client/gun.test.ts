@@ -18,6 +18,7 @@ import {
   power,
   readout,
   swapOf,
+  screwed,
   swapped,
   tip,
 } from './gun';
@@ -531,13 +532,28 @@ describe('the battery and the capsule', () => {
 
   it('unscrews the capsule, throws it up spinning, and screws a new one on', () => {
     const [up, turn, tumble] = [0, 1, 2].map(i => (s: number) => swapped(s, true)[i]);
-    expect(up(0.3)).toBeCloseTo(0.02, 6);
-    expect(Math.abs(turn(0.3))).toBeCloseTo(3 * Math.PI, 6);
-    expect(up(0.44)).toBeGreaterThan(0.25);
-    expect(tumble(0.44)).toBeGreaterThan(2);
+    // It unscrews itself and jumps off.
+    expect(up(0.28)).toBeCloseTo(0.02, 6);
+    expect(Math.abs(turn(0.28))).toBeCloseTo(3 * Math.PI, 6);
+    expect(up(0.41)).toBeGreaterThan(0.25);
+    expect(tumble(0.41)).toBeGreaterThan(2);
+    // The new one comes down, and turns in by strokes: still between them, while the wrist goes back.
     expect(up(0.5)).toBeGreaterThan(up(0.7));
+    expect(turn(0.58)).toBeCloseTo(Math.PI, 6);
     expect(turn(0.7)).toBeGreaterThan(0);
+    expect(turn(0.66)).toBeCloseTo(turn(0.67), 6);
+    expect(turn(0.88)).toBeCloseTo(0, 6);
     expect(tumble(0.7)).toBe(0);
+  });
+
+  it('turns the wrist with each stroke of the screw, then back while it lets go', () => {
+    const wrist = (s: number) => screwed(s)[1];
+    expect(wrist(0.58)).toBeCloseTo(0, 6);
+    expect(wrist(0.64)).toBeCloseTo(-Math.PI / 3, 6);
+    expect(wrist(0.68)).toBeCloseTo(0, 6);
+    expect(wrist(0.88)).toBeCloseTo(0, 6);
+    // The capsule turns only while the wrist turns forward.
+    expect(screwed(0.64)[0]).toBeCloseTo(screwed(0.66)[0], 6);
   });
 
   it('puts the battery under the grip and the capsule on top, going out along their axes', () => {
@@ -553,7 +569,7 @@ describe('the battery and the capsule', () => {
     const [base, [, , up]] = loadFrame([0, 0, 0], ax, true);
     expect(base[1]).toBeGreaterThan(0.1);
     expect(up[1]).toBeCloseTo(1, 6);
-    expect(loadFrame([0, 0, 0], ax, true, 0.44)[0][1]).toBeGreaterThan(base[1] + 0.25);
+    expect(loadFrame([0, 0, 0], ax, true, 0.41)[0][1]).toBeGreaterThan(base[1] + 0.25);
   });
 
   it('counts the swap of the gun in hand from 0 to 1, and -1 without one', () => {

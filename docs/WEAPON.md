@@ -199,3 +199,11 @@ Holding the button on a cut keeps it locked in a high position. The release is a
 | Counters | The gun's back shows the battery (red at 4 or fewer), the rail LCD the capsule (99 full). The HUD shows the magazine big, the rest after it, faded through a swap. |
 | Budget | The client budget goes to 68 KB gzip (the user's choice): the change took it 203 B past 64 KB. |
 
+## Reload sounds, the gun's boot, the capsule screwed by hand (the user, 2026-11-08)
+
+| Change | Detail |
+| --- | --- |
+| Sounds | `EJECT` (the battery let go), `CLICK` (the new one home), `POP` (the capsule jumping off), `SCREW` (a turn of the wrist, three ratchet ticks), `BOOT` (a gun powering up: a rising whine and a beep). `reloads()` (combat.ts) plays them as a swap passes its `CUES` (gun.ts), for the own player and the others, and `BOOT` when a gun or the rail gun comes to hand or a swap ends. |
+| The gun's boot | `GUN_ON`: the counter rises out of the gun about the front edge of its foot (`folded()`), 0.35 to 1 s; its digits show from 1.05 s (`readout(…, shown)`); the light reaches full at 1.4 s (`power(t, 1.4)`). In a swap the counter sinks back as the battery comes out, and boots again once the new one is in. The katana and the rail gun keep 0.6 s. |
+| The capsule | It unscrews itself and jumps off, no hand on it (0.1 to 0.42 of the swap). The left hand comes from 0.34, brings the new one down onto the socket, and screws it in three strokes of a sixth of a turn (`screwed()`): the wrist and the capsule turn together, then the fingers let go and the wrist turns back. |
+

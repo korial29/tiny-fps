@@ -12,8 +12,8 @@ import type { Vec3 } from './mesh';
 const SKIN = [0.66, 0.45, 0.35];
 
 /** The colour regions of a palette. */
-const [JACKET, TRIM, PANTS, FLESH, HAIR, UPPER, SOLE, GLOVE, WHITE, IRIS, LIP, CAP] = [
-  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+const [JACKET, TRIM, PANTS, FLESH, HAIR, UPPER, SOLE, GLOVE, WHITE, IRIS, LIP, SHADE, BROW, CAP] = [
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
 ];
 
 /** Hair colours, one per runner (hairOf()): black, dark and mid brown, chestnut, red, dark and light blond, grey. */
@@ -32,7 +32,7 @@ const HAIRS = [
 export const hairOf = (id: number): number[] =>
   HAIRS[(Math.imul(id + 1, 0x9e3779b1) >>> 29) % HAIRS.length];
 
-/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots and webbing, sole, gloves, the whites of the eyes and their irises, the lips, and the cut's cauterized face, which glows. */
+/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots and webbing, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, darker than the hair, and the cut's cauterized face, which glows. */
 export const palette = (jacket: number[], hair = HAIRS[1]): number[][] => [
   jacket,
   jacket.map(v => v * 0.5),
@@ -44,7 +44,9 @@ export const palette = (jacket: number[], hair = HAIRS[1]): number[][] => [
   [0.22, 0.21, 0.16],
   [0.85, 0.83, 0.8],
   [0.2, 0.12, 0.06],
-  [0.6, 0.35, 0.3],
+  [0.58, 0.3, 0.27],
+  SKIN.map(v => v * 0.55),
+  hair.map((v, i) => v * 0.45 + [0.03, 0.02, 0.015][i]),
   [2.8, 0.5, 0.12],
 ];
 
@@ -211,13 +213,29 @@ const EAR: Loft = {
   m: true,
   far: [],
   rings: [
-    [1.646, 0.071, -0.006, 0, 0, 0, FLESH],
-    [1.652, 0.073, -0.008, 0.005, 0.007, 0, FLESH],
-    [1.664, 0.076, -0.011, 0.0075, 0.011, 0, FLESH],
-    [1.683, 0.078, -0.015, 0.008, 0.0135, 0, FLESH],
-    [1.701, 0.077, -0.019, 0.0075, 0.012, 0, FLESH],
-    [1.71, 0.075, -0.021, 0.0055, 0.008, 0, FLESH],
-    [1.714, 0.073, -0.022, 0, 0, 0, FLESH],
+    [1.646, 0.075, -0.006, 0, 0, 0, FLESH],
+    [1.652, 0.077, -0.008, 0.005, 0.007, 0, FLESH],
+    [1.664, 0.08, -0.011, 0.0075, 0.011, 0, FLESH],
+    [1.683, 0.082, -0.015, 0.008, 0.0135, 0, FLESH],
+    [1.701, 0.081, -0.019, 0.0075, 0.012, 0, FLESH],
+    [1.71, 0.079, -0.021, 0.0055, 0.008, 0, FLESH],
+    [1.714, 0.077, -0.022, 0, 0, 0, FLESH],
+  ],
+};
+
+// The hollow of each ear, a dark oval just out of its outer face, under the rim.
+const CONCHA: Loft = {
+  chain: [J.HEAD],
+  n: [0, 0, 8],
+  m: true,
+  far: [],
+  rings: [
+    [1.657, 0.0875, -0.011, 0, 0, 0, SHADE],
+    [1.662, 0.0878, -0.012, 0.0016, 0.0041, 0, SHADE],
+    [1.675, 0.0882, -0.014, 0.0021, 0.007, 0, SHADE],
+    [1.69, 0.0882, -0.016, 0.0019, 0.0061, 0, SHADE],
+    [1.699, 0.0878, -0.018, 0.0014, 0.0037, 0, SHADE],
+    [1.703, 0.0875, -0.019, 0, 0, 0, SHADE],
   ],
 };
 
@@ -277,7 +295,7 @@ const GEAR = [
   ].map(pouch),
 ];
 
-const LOFTS = [TRUNK, LEG, ARM, EYE, EAR, ...GEAR];
+const LOFTS = [TRUNK, LEG, ARM, EYE, EAR, CONCHA, ...GEAR];
 
 /**
  * The rings with one more between each two, on a Catmull-Rom curve through them, for the near
@@ -428,6 +446,18 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
       0.002 * bell(x, 0.016) * bell(y - 1.6035, 0.003) +
       0.0075 * bell(x, 0.026) * bell(y - 1.593, 0.008) -
       0.006 * step(1.715, 1.75, y));
+  // The nostrils set in under the tip, the groove from the nose to the upper lip, the line between
+  // the lips, and a fold each side from the nose's wing to the corner of the mouth.
+  const fold = clamp((1.646 - y) / 0.028);
+  d +=
+    f ** 4 *
+    (-0.0022 * bell(ax - 0.0085, 0.003) * bell(y - 1.6425, 0.0022) -
+      0.0008 * bell(x, 0.0025) * bell(y - 1.633, 0.006) -
+      0.0015 * bell(x, 0.02) * bell(y - 1.6168, 0.0012) -
+      0.0016 *
+        bell(ax - 0.018 - 0.01 * fold, 0.0028) *
+        step(1.614, 1.62, y) *
+        (1 - step(1.644, 1.65, y)));
   // The lids over the eyes, narrowed: the upper one down over the top of the iris, the lower one
   // up to its bottom.
   d +=
@@ -447,7 +477,11 @@ const tint = (x: number, y: number, aq: number, fine: boolean) => {
   if (fine && aq < 1) {
     const arch = 1.7125 + 0.0035 * (1 - ((ax - 0.03) / 0.022) ** 2);
     if (ax > 0.01 && ax < 0.051 && Math.abs(y - arch) < 0.0042 - 0.03 * Math.max(ax - 0.035, 0)) {
-      return HAIR;
+      return BROW;
+    }
+    const [nx, ny] = [(ax - 0.0085) / 0.0035, (y - 1.6428) / 0.0018];
+    if (nx * nx + ny * ny < 1 || (Math.abs(y - 1.6168) < 0.0009 && ax < 0.019)) {
+      return SHADE;
     }
     const dy = (y - 1.6168) / 0.0082;
     if (dy * dy < 1 && ax < 0.021 * Math.sqrt(1 - dy * dy)) {
@@ -494,7 +528,7 @@ const generate = (lod: number): Skin => {
   for (const L of LOFTS) {
     const n = L.n[tier];
     // The eye's own body has no head.
-    if (!n || (lod == 2 && (L.z || L.k || L === EAR))) {
+    if (!n || (lod == 2 && (L.z || L.k || L === EAR || L === CONCHA))) {
       continue;
     }
     // The eye's own body ends the trunk in a cap on the shoulders and each sleeve in a cuff over a
@@ -635,7 +669,7 @@ const generate = (lod: number): Skin => {
         const part =
           L === TRUNK || L.k
             ? LIMB.NONE
-            : L === EYE || L === EAR
+            : L === EYE || L === EAR || L === CONCHA
               ? LIMB.HEAD
               : (L === ARM ? LIMB.ARM_L : LIMB.LEG_L) + +(m > 0);
         const emit = (tri: number[], u: number) => {
@@ -686,9 +720,10 @@ const generate = (lod: number): Skin => {
   }
   if (lod != 2) {
     // The head, from the trunk's last row (the neck) to a point at the crown. Its first ring has
-    // twice the neck's sides, on the neck's angles and between them; the next crowd to the face.
+    // twice the neck's sides, on the neck's angles and between them (2.5 times close, for the
+    // face's detail: 3 times cost 80 % more skinning for no visible gain); the next crowd to the face.
     const fine = tier > 0;
-    const M = 2 * N;
+    const M = (tier > 1 ? 2.5 : 2) * N;
     const rows: number[][] = [T[T.length - 1]];
     const tri = (a: number, b: number, d: number, col: number) => {
       if (new Set([a, b, d]).size < 3) {
@@ -714,7 +749,7 @@ const generate = (lod: number): Skin => {
       y += [
         [0.035, 0.035, 0.035],
         [0.014, 0.009, 0.007],
-        [0.0075, 0.005, 0.0035],
+        [0.006, 0.0042, 0.003],
       ][tier][+(y > 1.575 && y < 1.725) + +((y > 1.6 && y < 1.66) || (y > 1.678 && y < 1.702))];
       if (y > CROWN - 0.003) {
         break;
@@ -743,6 +778,19 @@ const generate = (lod: number): Skin => {
     rows.push([hang([0, CROWN, 0.012])]);
     rows.slice(1).forEach((b, r) => {
       const a = rows[r];
+      if (b.length > 2 * a.length) {
+        // From the neck to the close head's first ring: each step along whichever ring is behind.
+        for (let i = 0, j = 0; i < a.length || j < b.length;) {
+          if (i >= a.length || (j < b.length && (j + 1) / b.length <= (i + 1) / a.length)) {
+            tri(a[i % a.length], b[(j + 1) % b.length], b[j], FLESH);
+            j++;
+          } else {
+            tri(a[i], a[(i + 1) % a.length], b[j % b.length], FLESH);
+            i++;
+          }
+        }
+        return;
+      }
       for (let i = 0; i < a.length; i++) {
         const j = (i + 1) % a.length;
         if (b.length == 2 * a.length) {

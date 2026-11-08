@@ -74,7 +74,9 @@ interface Loft {
 
 // Metres, rest pose, +x the runner's right, the right limbs written and the left mirrored.
 // The trunk's sections and the limbs' widths down to the wrists and ankles are measured on a rigged
-// low-poly base mesh (the user, 2026-11-08), each limb along its own bone, carried onto this rig.
+// low-poly base mesh (the user, 2026-11-08), each limb along its own bone, carried onto this rig,
+// then taken half way to a muscular soldier in a tactical vest (the user: toned down): broader
+// shoulders and chest, thicker arms, knee pads. The arms hang a little further out to clear it.
 // Trunk: from the crotch to the crown. Its first ring is the pelvis, whose halves are the tops of
 // the legs. Two rings at the armpits' height, 10 cm under the shoulder joint, are the split: the
 // first is the torso alone, the second takes in the shoulders, and the sleeves hang from the
@@ -85,20 +87,20 @@ const TRUNK: Loft = {
   e: 2.3,
   far: [0, 2, 4, 6, 7, 9, 12, 14],
   rings: [
-    [0.93, 0, 0.011, 0.188, 0.091, 0, PANTS],
-    [0.99, 0, 0.017, 0.179, 0.112, 0.25, TRIM],
-    [1.03, 0, 0.009, 0.17, 0.121, 0.5, JACKET],
-    [1.12, 0, -0.014, 0.153, 0.117, 1, JACKET],
-    [1.24, 0, -0.001, 0.152, 0.113, 1.7, JACKET],
-    [1.3, 0, 0.001, 0.168, 0.128, 1.85, JACKET],
-    [1.37, 0, 0, 0.172, 0.141, 2, JACKET],
-    [1.37, 0, 0, 0.268, 0.141, 2, JACKET],
-    [1.41, 0, 0.01, 0.267, 0.134, 2, JACKET],
-    [1.445, 0, 0.018, 0.262, 0.121, 2, JACKET],
-    [1.475, 0, 0.024, 0.241, 0.107, 2.03, JACKET],
-    [1.495, 0, 0.027, 0.21, 0.095, 2.07, JACKET],
-    [1.512, 0, 0.02, 0.154, 0.085, 2.1, JACKET],
-    [1.532, 0, 0, 0.093, 0.071, 2.25, TRIM],
+    [0.93, 0, -0.001, 0.198, 0.106, 0, PANTS],
+    [0.99, 0, 0.001, 0.197, 0.117, 0.25, TRIM],
+    [1.03, 0, -0.001, 0.193, 0.13, 0.5, JACKET],
+    [1.12, 0, -0.013, 0.173, 0.132, 1, JACKET],
+    [1.24, 0, -0.017, 0.17, 0.129, 1.7, JACKET],
+    [1.3, 0, -0.012, 0.167, 0.13, 1.85, JACKET],
+    [1.37, 0, -0.008, 0.175, 0.153, 2, JACKET],
+    [1.37, 0, -0.005, 0.302, 0.156, 2, JACKET],
+    [1.41, 0, 0.006, 0.293, 0.159, 2, JACKET],
+    [1.445, 0, 0.023, 0.283, 0.142, 2, JACKET],
+    [1.475, 0, 0.027, 0.265, 0.128, 2.03, JACKET],
+    [1.495, 0, 0.032, 0.239, 0.113, 2.07, JACKET],
+    [1.512, 0, 0.032, 0.186, 0.096, 2.1, JACKET],
+    [1.532, 0, 0, 0.112, 0.092, 2.25, TRIM],
     [1.555, 0, 0, 0.06, 0.062, 2.6, FLESH],
   ],
 };
@@ -112,13 +114,13 @@ const LEG: Loft = {
   far: [0, 2, 4, 6, 8, 10, 12, 14],
   rings: [
     [0.93, 0.1, 0, 0, 0, 0, PANTS],
-    [0.85, 0.1, 0.006, 0.084, 0.086, 0.6, PANTS],
-    [0.72, 0.1, -0.002, 0.075, 0.08, 1, PANTS],
-    [0.55, 0.1, -0.003, 0.055, 0.075, 1.25, PANTS],
-    [0.49, 0.1, -0.004, 0.055, 0.067, 1.5, PANTS],
-    [0.42, 0.1, 0.002, 0.054, 0.064, 1.8, PANTS],
-    [0.33, 0.1, 0.012, 0.055, 0.057, 2, PANTS],
-    [0.19, 0.1, 0.003, 0.034, 0.038, 2.05, PANTS],
+    [0.85, 0.1, 0.006, 0.092, 0.1, 0.6, PANTS],
+    [0.72, 0.1, -0.002, 0.079, 0.087, 1, PANTS],
+    [0.55, 0.1, -0.003, 0.073, 0.083, 1.25, PANTS],
+    [0.49, 0.1, -0.004, 0.074, 0.079, 1.5, PANTS],
+    [0.42, 0.1, 0.002, 0.068, 0.073, 1.8, PANTS],
+    [0.33, 0.1, 0.012, 0.059, 0.063, 2, PANTS],
+    [0.19, 0.1, 0.003, 0.042, 0.05, 2.05, PANTS],
     [0.105, 0.1, 0, 0.038, 0.045, 2.3, UPPER],
     [0.085, 0.1, 0.0025, 0.038, 0.0425, 2.5, UPPER],
     [0.065, 0.1, 0.02, 0.043, 0.098, 3, UPPER],
@@ -149,11 +151,11 @@ const ARM: Loft = {
   far: [0, 1, 3, 4, 5, 6, 8, 10],
   rings: [
     [1.37, 0.224, 0, 0, 0, 0, JACKET],
-    [1.31, 0.225, -0.003, 0.055, 0.063, 0.5, JACKET],
-    [1.225, 0.224, -0.002, 0.05, 0.05, 1.12, JACKET],
-    [1.18, 0.222, 0.003, 0.046, 0.046, 1.5, JACKET],
-    [1.135, 0.222, -0.002, 0.042, 0.044, 1.9, JACKET],
-    [0.975, 0.222, 0, 0.034, 0.034, 2.05, TRIM],
+    [1.31, 0.237, -0.003, 0.063, 0.074, 0.5, JACKET],
+    [1.225, 0.236, -0.002, 0.059, 0.063, 1.12, JACKET],
+    [1.18, 0.227, 0.003, 0.056, 0.055, 1.5, JACKET],
+    [1.135, 0.225, -0.002, 0.053, 0.054, 1.9, JACKET],
+    [0.975, 0.225, 0, 0.034, 0.034, 2.05, TRIM],
     [0.935, 0.222, 0, 0.03, 0.03, 2.6, GLOVE],
     [0.885, 0.222, -0.004, 0.027, 0.037, 3, GLOVE],
     [0.84, 0.222, -0.008, 0.029, 0.042, 3, GLOVE],

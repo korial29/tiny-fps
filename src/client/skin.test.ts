@@ -199,9 +199,9 @@ describe('skin', () => {
           a[2] * (b[0] * c[1] - b[1] * c[0])) /
         6;
     }
-    // A trunk, arms and legs of those widths: about 0.068 m3 with no head.
+    // A trunk, arms and legs of those widths, a soldier's build: about 0.08 m3 with no head.
     expect(volume).toBeGreaterThan(0.05);
-    expect(volume).toBeLessThan(0.08);
+    expect(volume).toBeLessThan(0.09);
   });
 
   it('shades the joins as one surface: the shoulders and the hips turn no more than the rest', () => {

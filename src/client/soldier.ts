@@ -333,6 +333,7 @@ export const stance = (r: Runner) => {
   return { s, sink, yaw: pose.yaw };
 };
 
+/** Draws the runner and gives back its solved skeleton, or nothing once a bolt has burnt it away. */
 export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   const { p } = r;
   const k = fried(p);
@@ -370,4 +371,5 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
     const { x, y, z } = r.p;
     streaks(out, r, color, ([a, u, f]) => [x + a * c - f * s, y + u, z - a * s - f * c]);
   }
+  return s;
 };

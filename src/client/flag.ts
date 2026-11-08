@@ -7,6 +7,8 @@ import { FLAG } from '../shared/types';
 import type { FlagState, PlayerState } from '../shared/types';
 import { STRIDE, place, segment, solid } from './mesh';
 import type { Vec3 } from './mesh';
+import { axis, turn } from './rig';
+import type { Quat } from './rig';
 
 /** One flag to draw. */
 export interface FlagDraw {
@@ -14,8 +16,8 @@ export interface FlagDraw {
   team: number;
   /** The foot of the pole: the base, where it lies, or the feet of the carrier. */
   at: Vec3;
-  /** On a carrier's back: where he looks (yaw) and his speed on x and z, which the cloth trails against. */
-  by?: { yaw: number; vx: number; vz: number };
+  /** On a carrier's back: who he is, where he looks (yaw) and his speed on x and z, which the cloth trails against. */
+  by?: { id: number; yaw: number; vx: number; vz: number };
   /** Lying where it was dropped. */
   dropped?: boolean;
 }
@@ -70,7 +72,9 @@ export const flagDraws = (
     }
     if (f.state === FLAG.CARRIED) {
       const p = who(f.by);
-      return p ? [{ team, at: [p.x, p.y, p.z], by: { yaw: p.yaw, vx: p.vx, vz: p.vz } }] : [];
+      return p
+        ? [{ team, at: [p.x, p.y, p.z], by: { id: f.by, yaw: p.yaw, vx: p.vx, vz: p.vz } }]
+        : [];
     }
     return [{ team, at: bases[team] }];
   });
@@ -208,11 +212,19 @@ const pole = (out: number[], a: Vec3, b: Vec3, rgb: number[]) => {
 
 /**
  * A flag. At rest on its base it stands upright with the cloth blowing out to one side. On a
- * carrier's back it leans out behind him and the cloth trails away from where he runs, more
- * stretched the faster he goes. Dropped, it lies on the ground, the pole leaning, with a ring
- * on the ground where it is to be touched. `t` is the clock in seconds.
+ * carrier it is strapped to his back, from the belt up over his head, and leans and turns with
+ * his `chest` (where it is and how it turns, from his skeleton; standing upright where he looks
+ * without one); the cloth trails away from where he runs, more stretched the faster he goes.
+ * Dropped, it lies on the ground, the pole leaning, with a ring on the ground where it is to be
+ * touched. `t` is the clock in seconds.
  */
-export const flag = (out: number[], f: FlagDraw, rgb: number[], t: number) => {
+export const flag = (
+  out: number[],
+  f: FlagDraw,
+  rgb: number[],
+  t: number,
+  chest?: [Vec3, Quat],
+) => {
   const [x, y, z] = f.at;
   const phase = t + f.team * 1.7;
   if (f.by) {
@@ -220,9 +232,12 @@ export const flag = (out: number[], f: FlagDraw, rgb: number[], t: number) => {
     const fx = -Math.sin(yaw);
     const fz = -Math.cos(yaw);
     const speed = Math.hypot(vx, vz);
-    // The pole is strapped to the back and leans away from him; the cloth streams against the run.
-    const foot: Vec3 = [x - fx * 0.28, y + 0.55, z - fz * 0.28];
-    const top: Vec3 = [x - fx * 0.38, y + 0.55 + POLE - 0.2, z - fz * 0.38];
+    // The pole lies along the back, off the webbing, and leans a little away from the head; the
+    // cloth streams against the run.
+    const [c, q] = chest ?? [[x, y + 1.3, z], axis([0, 1, 0], yaw)];
+    const on = (v: Vec3) => turn(q, v).map((o, i) => c[i] + o) as Vec3;
+    const foot = on([0, -0.4, 0.2]);
+    const top = on([0, POLE - 0.85, 0.42]);
     const [dx, dz] = speed > 1 ? [-vx / speed, -vz / speed] : [-fx, -fz];
     pole(out, foot, top, rgb);
     const wind = Math.min(1, speed / 8);

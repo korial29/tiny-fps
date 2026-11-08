@@ -7,6 +7,8 @@ import { POLE, base, flag, flagDraws, teamRgb } from './flag';
 import type { FlagDraw } from './flag';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
+import { axis } from './rig';
+import type { Quat } from './rig';
 
 interface Vertex {
   p: Vec3;
@@ -100,7 +102,7 @@ describe('flagDraws', () => {
     const [d] = flagDraws([flagState({}), f], bases, id => (id === 3 ? p : undefined));
     expect(d).toEqual({ team: 0, at: bases[0] });
     const [, e] = flagDraws([flagState({}), f], bases, id => (id === 3 ? p : undefined));
-    expect(e).toEqual({ team: 1, at: [1, 2, 3], by: { yaw: 0.5, vx: 4, vz: -2 } });
+    expect(e).toEqual({ team: 1, at: [1, 2, 3], by: { id: 3, yaw: 0.5, vx: 4, vz: -2 } });
   });
 
   it('leaves a flag out whose carrier is not drawn', () => {
@@ -221,27 +223,43 @@ describe('flag at home', () => {
 describe('flag carried', () => {
   /** The carrier is at AT looking along yaw; forward(yaw) is (-sin, -cos). */
   const carried = (yaw: number, vx: number, vz: number, t = 0.4) =>
-    draw(out => flag(out, { team: TEAM.BLUE, at: AT, by: { yaw, vx, vz } }, BLUE, t));
+    draw(out => flag(out, { team: TEAM.BLUE, at: AT, by: { id: 1, yaw, vx, vz } }, BLUE, t));
   const cloth = (vs: Vertex[]) =>
     vs.filter(v => v.layer === -1 && v.rgb[0] === BLUE[0] && v.rgb[1] === BLUE[1]);
 
-  it('rides on the back, reaching over the head, behind the way he looks', () => {
+  it('rides on the back, from the belt up over the head, behind the way he looks', () => {
     const vs = carried(0, 0, 0);
-    // Looking toward -z: the back is +z.
+    // Looking toward -z: the back is +z, the jacket and its webbing reach 0.16 behind the spine.
     const pole = vs.filter(v => v.layer === -1 && v.rgb[0] !== BLUE[0]);
     expect(pole.length).toBeGreaterThan(10);
     for (const v of pole) {
-      expect(v.p[2]).toBeGreaterThan(AT[2] + 0.2);
+      expect(v.p[2]).toBeGreaterThan(AT[2] + 0.15);
       expect(v.p[2]).toBeLessThan(AT[2] + 0.5);
     }
     const [lo, hi] = range(vs, 1);
-    expect(lo).toBeGreaterThan(AT[1] + 0.4);
+    expect(lo).toBeGreaterThan(AT[1] + 0.8);
+    expect(lo).toBeLessThan(AT[1] + 1);
     expect(hi).toBeGreaterThan(AT[1] + 2.2);
     // Turn him around and the flag turns with him.
     const back = carried(Math.PI, 0, 0).filter(v => v.layer === -1 && v.rgb[0] !== BLUE[0]);
     for (const v of back) {
-      expect(v.p[2]).toBeLessThan(AT[2] - 0.2);
+      expect(v.p[2]).toBeLessThan(AT[2] - 0.15);
     }
+  });
+
+  it('is strapped to his chest: it leans and moves with it', () => {
+    const pole = (chest?: [Vec3, Quat]) =>
+      draw(out =>
+        flag(out, { team: TEAM.BLUE, at: AT, by: { id: 1, yaw: 0, vx: 0, vz: 0 } }, BLUE, 0, chest),
+      ).filter(v => v.layer === -1 && v.rgb[0] !== BLUE[0]);
+    const upright = pole([[AT[0], AT[1] + 1.3, AT[2]], axis([0, 1, 0], 0)]);
+    // Without a skeleton it stands where an upright chest would put it.
+    expect(pole()).toEqual(upright);
+    // Bent forward: the foot stays on the back, the top goes over his head and ahead of it.
+    const bent = pole([[AT[0], AT[1] + 1.2, AT[2]], axis([1, 0, 0], -0.6)]);
+    const top = (vs: Vertex[]) => vs.reduce((a, v) => (v.p[1] > a.p[1] ? v : a));
+    expect(top(bent).p[2]).toBeLessThan(top(upright).p[2] - 0.5);
+    expect(top(bent).p[1]).toBeLessThan(top(upright).p[1] - 0.1);
   });
 
   it('trails the cloth against his run, further when he is fast', () => {

@@ -1025,9 +1025,9 @@ const LU: Vec3 = [LN[1] * LR[2], LN[2] * LR[0] - LN[0] * LR[2], -LN[1] * LR[0]];
 
 /**
  * The rail gun's counter, a small LCD out of the left of its receiver turned to the player, in model space
- * (the user, 2026-11-08: like the screen on the back of a digital camera): two dark segment digits on
- * a pale green screen, amber at 15 or less, in a dark case on a short hinge. The screen is lit like
- * the metal round it: a glow would bloom over the digits.
+ * (the user, 2026-11-08: like the screen on the back of a digital camera), in a dark case: neon like
+ * the others' (the user, 2026-11-08), two glowing violet digits on a dark screen framed in a line of
+ * their colour, red at 15 or less.
  */
 export const lcd = (ammo: number): number[] => {
   const n = Math.min(Math.max(Math.floor(ammo), 0), 99);
@@ -1056,23 +1056,25 @@ export const lcd = (ammo: number): number[] => {
       }
     };
     box(-LW - 0.003, -LH - 0.003, LW + 0.003, LH + 0.003, -0.016, 0.0004);
-    quad(-LW, -LH, LW, LH, 0.0008, n > 15 ? [0.42, 0.55, 0.36] : [0.7, 0.42, 0.14]);
-    // The digits, scaled from the pistol's: 1.4 cm tall.
-    const k = (2 * LH * 0.65) / DH;
+    quad(-LW, -LH, LW, LH, 0.0008, DARK);
+    const from = out.length;
+    const rgb = n > 15 ? [0.7, 0.45, 1.1] : [1.2, 0.3, 0.12];
+    // The frame, a band just inside the screen's edge.
+    const f = 0.0012;
+    quad(-LW, -LH, LW, f - LH, 0.0014, rgb);
+    quad(-LW, LH - f, LW, LH, 0.0014, rgb);
+    quad(-LW, f - LH, f - LW, LH - f, 0.0014, rgb);
+    quad(LW - f, f - LH, LW, LH - f, 0.0014, rgb);
+    // The digits, scaled from the pistol's: 1.6 cm tall.
+    const k = (2 * LH * 0.6) / DH;
     [...`${n}`.padStart(2, '0')].forEach((ch, i) => {
       const a0 = -(DW + DGAP / 2) * k + i * (DW + DGAP) * k;
       for (const seg of DIGITS[+ch]) {
         const [x0, y0, x1, y1] = SEGMENTS[seg];
-        quad(
-          a0 + x0 * k,
-          (y0 - DH / 2) * k,
-          a0 + x1 * k,
-          (y1 - DH / 2) * k,
-          0.0014,
-          [0.04, 0.06, 0.05],
-        );
+        quad(a0 + x0 * k, (y0 - DH / 2) * k, a0 + x1 * k, (y1 - DH / 2) * k, 0.0014, rgb);
       }
     });
+    lit(out, from, 1);
     lcds.set(n, out);
   }
   return v;

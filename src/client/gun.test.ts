@@ -572,6 +572,23 @@ describe('the rail gun’s counter and socket', () => {
     expect(Math.max(...v.map(x => x.p[0]))).toBeLessThan(-0.03);
   });
 
+  it('glows in neon: violet digits and frame on a dark screen, red at 15 or less', () => {
+    const neon = (n: number) => verts(lcd(n)).filter(x => x.layer == -2);
+    // The frame's four bands, then the digits: 30 is 5 + 6 segments.
+    expect(neon(30)).toHaveLength((4 + 11) * 6);
+    for (const x of neon(30)) {
+      expect(x.c[2]).toBeGreaterThan(x.c[0]);
+      expect(x.c[0]).toBeGreaterThan(x.c[1]);
+    }
+    for (const x of neon(15)) {
+      expect(x.c[0]).toBeGreaterThan(x.c[2] * 3);
+    }
+    // Nothing else is lit: the case and the screen are dark.
+    for (const x of verts(lcd(30)).filter(x => x.layer != -2)) {
+      expect(Math.max(...x.c)).toBeLessThan(0.1);
+    }
+  });
+
   it('screws the capsule’s thread into a steel collar on the receiver', () => {
     // The collar stands over the receiver's top round the capsule's foot.
     const near = verts(railgun(1)).filter(

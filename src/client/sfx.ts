@@ -119,6 +119,8 @@ export const SOUND = {
   BOOT: 35,
   /** The laser rifle's shot: a punch in the bass and the middle, short enough for 20 a second. */
   LASE: 36,
+  /** The rail gun overheating: a burst of steam hissing out and a whistle falling under it. */
+  HISS: 37,
 } as const;
 
 /**
@@ -332,6 +334,13 @@ export const LAYERS: Voice[][] = [
     [0, 160, -5, 0.001, 0.008, 0.05, 0, 0.2, 0, 1, 0.5],
     [1, 80, -3, 0.001, 0.01, 0.05, 0, 0.2, 0, 1, 0.4],
     [3, 500, -2, 0.001, 0, 0.025, 0, 0.15, 0, 1, 0.3],
+  ],
+  // HISS (the user, 2026-11-08): a pop of the valve, steam hissing out and dying within the second, a
+  // kettle's whistle sliding down under it, wavering.
+  [
+    [3, 1500, -2, 0.001, 0, 0.05, 0, 0.7, 0, 1, 0.45],
+    [3, 7000, -0.5, 0.02, 0.35, 0.55, 0, 0.7, 0, 1, 0.5],
+    [2, 2900, -0.6, 0.05, 0.4, 0.4, 0.05, 1, 0, 1, 0.22, 0.03],
   ],
 ];
 

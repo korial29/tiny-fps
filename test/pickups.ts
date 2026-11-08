@@ -2,6 +2,7 @@
 import {
   EYE,
   FLAG_REACH,
+  PACK_BITS,
   PACK_R,
   PICK_H,
   PLAYER_H,
@@ -105,8 +106,8 @@ export const problems = (def: WorldDef): string[] => {
       }
     }
   });
-  if (all.length > 32) {
-    out.push('more than 32 packs');
+  if (all.length > PACK_BITS) {
+    out.push(`more than ${PACK_BITS} packs`);
   }
   def.teams.forEach(({ base, spawns, rack, blade }, team) => {
     if (!rack) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RACK_R } from '../shared/constants';
+import { PACK_BITS, RACK_R } from '../shared/constants';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { battery, cell, kit, packsOf, rack, racks } from './props';
@@ -46,7 +46,7 @@ describe('packsOf', () => {
     expect(packsOf(PACKS.slice(0, 3), 0b11000)).toEqual([]);
   });
 
-  it('keeps the bits within the 32 of the mask: a pack past the last bit is never there', () => {
+  it('reads past the 32 bits of the bitwise operators, up to the 48 of the mask', () => {
     const ammo: Vec3[] = [
       [1, 0, 0],
       [2, 0, 0],
@@ -54,11 +54,13 @@ describe('packsOf', () => {
     ];
     expect(packsOf(ammo, 0xffffffff, 30)).toEqual([ammo[0], ammo[1]]);
     expect(packsOf(ammo, 0xffffffff, 32)).toEqual([]);
+    expect(packsOf(ammo, 2 ** 33 + 2 ** 34, 32)).toEqual([ammo[1], ammo[2]]);
   });
 
-  it('reads all 32 bits, the top one included', () => {
-    const many = Array.from({ length: 32 }, (_, i): Vec3 => [i, 0, 0]);
-    expect(packsOf(many, 0xffffffff)).toHaveLength(32);
+  it('reads all 48 bits, the top one included', () => {
+    const many = Array.from({ length: PACK_BITS }, (_, i): Vec3 => [i, 0, 0]);
+    expect(packsOf(many, 2 ** PACK_BITS - 1)).toHaveLength(PACK_BITS);
+    expect(packsOf(many, 2 ** 47)).toEqual([many[47]]);
     expect(packsOf(many, 0x80000000)).toEqual([many[31]]);
   });
 });

@@ -18,6 +18,7 @@ import {
   HEAVY_TAP,
   HP_MAX,
   PACK_BACK,
+  AMMO_BACK,
   PACK_HP,
   PLASMA_MAX,
   PLASMA_R,
@@ -887,7 +888,7 @@ describe('ammo packs', () => {
     expect(bits(m)).toBe(0b0110);
   });
 
-  it('give AMMO_PACK shots up to AMMO_MAX, and are gone PACK_BACK seconds', () => {
+  it('give AMMO_PACK shots up to AMMO_MAX, and are gone AMMO_BACK seconds', () => {
     const m = match();
     m.put(m.cy, 20, -20, { ammo: 10 });
     m.ticks(1);
@@ -898,8 +899,9 @@ describe('ammo packs', () => {
     m.put(m.ann, 20, -20, { ammo: 10 });
     m.ticks(SNAP_EVERY * 2);
     expect(m.state(m.ann).ammo).toBe(10);
-    // ...until it is back, after PACK_BACK s from the pick-up.
-    m.ticks(PACK_BACK * TICK_HZ - SNAP_EVERY * 4 - 5);
+    // ...until it is back, after AMMO_BACK (10) s from the pick-up.
+    expect(AMMO_BACK).toBe(10);
+    m.ticks(AMMO_BACK * TICK_HZ - SNAP_EVERY * 4 - 5);
     expect(m.state(m.ann).ammo).toBe(10);
     m.ticks(10);
     expect(m.state(m.ann).ammo).toBe(10 + AMMO_PACK);

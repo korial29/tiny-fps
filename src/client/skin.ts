@@ -720,10 +720,10 @@ const generate = (lod: number): Skin => {
   }
   if (lod != 2) {
     // The head, from the trunk's last row (the neck) to a point at the crown. Its first ring has
-    // twice the neck's sides, on the neck's angles and between them (three times close, for the
-    // face's detail); the next crowd to the face.
+    // twice the neck's sides, on the neck's angles and between them (2.5 times close, for the
+    // face's detail: 3 times cost 80 % more skinning for no visible gain); the next crowd to the face.
     const fine = tier > 0;
-    const M = (tier > 1 ? 3 : 2) * N;
+    const M = (tier > 1 ? 2.5 : 2) * N;
     const rows: number[][] = [T[T.length - 1]];
     const tri = (a: number, b: number, d: number, col: number) => {
       if (new Set([a, b, d]).size < 3) {
@@ -749,7 +749,7 @@ const generate = (lod: number): Skin => {
       y += [
         [0.035, 0.035, 0.035],
         [0.014, 0.009, 0.007],
-        [0.005, 0.0035, 0.0025],
+        [0.006, 0.0042, 0.003],
       ][tier][+(y > 1.575 && y < 1.725) + +((y > 1.6 && y < 1.66) || (y > 1.678 && y < 1.702))];
       if (y > CROWN - 0.003) {
         break;

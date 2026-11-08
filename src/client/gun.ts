@@ -553,36 +553,49 @@ export const readout = (ammo: number, level = 0): number[] => {
 
 const lcds = new Map<number, number[]>();
 /**
- * The LCD on the rail gun: its middle on the upper left edge of the receiver, its half width and
- * height, and the way it faces (out to the left and up, toward the eye) and its up across that.
+ * The LCD on the rail gun: the middle of its screen, its half width and height, and the way it faces
+ * (back, up and left, to the eye in first person), with its right and up across that.
  */
-const LCD: Vec3 = [-0.0262, 0.1195, -0.07];
-const [LW, LH] = [0.016, 0.011];
-const [LN, LU]: Vec3[] = [
-  [-0.78, 0.62, 0],
-  [0.62, 0.78, 0],
-];
+const LCD: Vec3 = [-0.008, 0.147, -0.03];
+const [LW, LH] = [0.019, 0.013];
+const LN = unit([-0.32, 0.22, 0.92]);
+const LR = unit([LN[2], 0, -LN[0]]);
+const LU: Vec3 = [LN[1] * LR[2], LN[2] * LR[0] - LN[0] * LR[2], -LN[1] * LR[0]];
 
 /**
- * The rail gun's counter, a small LCD on the upper left edge of its receiver, angled to the eye, in
- * model space (the user, 2026-11-08: more discreet than the pistol's block, on the left side): two
- * dark segment digits on a pale green screen, amber at 15 or less, in a thin dark bezel. The screen
- * is lit like the metal round it: a glow would bloom over the digits. The digits run toward the
- * back, so that they read from the left, where the player sees that side.
+ * The rail gun's counter, a small LCD on top of its receiver turned to the player, in model space
+ * (the user, 2026-11-08: like the screen on the back of a digital camera): two dark segment digits on
+ * a pale green screen, amber at 15 or less, in a dark case on a short hinge. The screen is lit like
+ * the metal round it: a glow would bloom over the digits.
  */
 export const lcd = (ammo: number): number[] => {
   const n = Math.min(Math.max(Math.floor(ammo), 0), 99);
   let v = lcds.get(n);
   if (!v) {
     const out: number[] = (v = []);
-    /** A point on the screen, `a` toward the back and `b` up it from its middle, `d` out of it. */
+    /** A point on the screen, `a` right and `b` up from its middle, `d` out of it. */
     const p = (a: number, b: number, d = 0): Vec3 =>
-      [0, 1, 2].map(i => LCD[i] + LU[i] * b + LN[i] * d + (i == 2 ? a : 0)) as Vec3;
+      [0, 1, 2].map(i => LCD[i] + LR[i] * a + LU[i] * b + LN[i] * d) as Vec3;
     const quad = (a0: number, b0: number, a1: number, b1: number, d: number, rgb: number[]) => {
       tri(out, p(a0, b0, d), p(a1, b0, d), p(a1, b1, d), rgb);
       tri(out, p(a0, b0, d), p(a1, b1, d), p(a0, b1, d), rgb);
     };
-    quad(-LW - 0.002, -LH - 0.002, LW + 0.002, LH + 0.002, 0.0004, DARK);
+    /** A dark box across the screen's plane, from `d0` behind to `d1` in front. */
+    const box = (a0: number, b0: number, a1: number, b1: number, d0: number, d1: number) => {
+      quad(a0, b0, a1, b1, d1, DARK);
+      quad(a1, b0, a0, b1, d0, DARK);
+      for (const [x0, y0, x1, y1] of [
+        [a0, b1, a0, b0],
+        [a1, b0, a1, b1],
+        [a0, b0, a1, b0],
+        [a1, b1, a0, b1],
+      ]) {
+        tri(out, p(x0, y0, d0), p(x1, y1, d0), p(x1, y1, d1), DARK);
+        tri(out, p(x0, y0, d0), p(x1, y1, d1), p(x0, y0, d1), DARK);
+      }
+    };
+    box(-LW - 0.003, -LH - 0.003, LW + 0.003, LH + 0.003, -0.005, 0.0004);
+    box(-0.007, -LH - 0.015, 0.007, -LH - 0.003, -0.004, -0.001);
     quad(-LW, -LH, LW, LH, 0.0008, n > 15 ? [0.42, 0.55, 0.36] : [0.7, 0.42, 0.14]);
     // The digits, scaled from the pistol's: 1.4 cm tall.
     const k = (2 * LH * 0.65) / DH;

@@ -551,8 +551,9 @@ describe('skin', () => {
       out.length = 0;
       skin(out, body(1), solve(p), palette(JACKET));
     }
-    // A shared CI runner is some five times slower than a desk: 0.4 ms near, 1.5 ms close there.
-    expect((performance.now() - t) / 200).toBeLessThan(4);
+    // A shared CI runner is some five times slower than a desk, and the body grew (#86): 0.8 ms
+    // near on a desk, up to 5.3 on a runner.
+    expect((performance.now() - t) / 200).toBeLessThan(8);
     const u = performance.now();
     for (let i = 0; i < 50; i++) {
       out.length = 0;

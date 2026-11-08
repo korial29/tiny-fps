@@ -360,9 +360,9 @@ describe('the readout on the back of the gun', () => {
     for (const n of [0, 7, 40, 59, 60, 99]) {
       const [a, b] = `${n}`.padStart(2, '0');
       expect(digits(n)).toHaveLength((SEGS[+a] + SEGS[+b]) * 6);
-      // The block: back, front, two sloping sides and the top, two triangles each; the screen one quad.
+      // The block: back, front, two sloping sides and the top, two triangles each; the screen a fan of 12.
       expect(metal(n)).toHaveLength(30);
-      expect(screen(n)).toHaveLength(6);
+      expect(screen(n)).toHaveLength(36);
     }
   });
 
@@ -411,12 +411,23 @@ describe('the readout on the back of the gun', () => {
     expect(digits(5)[0].c[0]).toBeLessThan(digits(5)[0].c[2]);
   });
 
-  it('is as big as the screen allows over the gauge: each digit about 2 cm wide and 2 cm high with segments of half a centimetre', () => {
+  it('sits on a small screen with rounded corners, digits about 1.2 cm wide and 1.2 cm high inside it', () => {
     const xs = digits(88).map(x => x.p[0]);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.04);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.046);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.024);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.026);
     const ys = digits(88).map(x => x.p[1]);
-    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.017);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.01);
+    // The screen is 3 cm wide, under the old 4.6 cm, and no corner is square.
+    const sx = screen(88).map(x => x.p[0]);
+    expect(Math.max(...sx) - Math.min(...sx)).toBeGreaterThan(0.029);
+    expect(Math.max(...sx) - Math.min(...sx)).toBeLessThan(0.0301);
+    const sy = screen(88).map(x => x.p[1]);
+    const top = Math.max(...sy);
+    expect(screen(88).some(x => Math.abs(x.p[0]) > 0.0149 && top - x.p[1] < 0.001)).toBe(false);
+    // The digits stay inside it.
+    expect(Math.max(...xs.map(Math.abs))).toBeLessThan(0.015);
+    expect(Math.max(...ys)).toBeLessThan(top);
+    expect(Math.min(...ys)).toBeGreaterThan(Math.min(...sy));
   });
 
   it('shows no gauge unless the gun charges, and then CHARGE_MAX cells under the digits, `level` of them lit', () => {

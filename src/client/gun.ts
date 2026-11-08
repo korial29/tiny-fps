@@ -856,17 +856,17 @@ const SEGMENTS: Record<string, [number, number, number, number]> = {
  * [across, up, back] of the back edge and of the front edge, base then top.
  */
 const BLOCK_BASE: [Vec3, Vec3] = [
-  [0.032, 0.112, 0.056],
-  [0.036, 0.112, 0.012],
+  [0.026, 0.112, 0.056],
+  [0.028, 0.112, 0.02],
 ];
 const BLOCK_TOP: [Vec3, Vec3] = [
-  [0.028, 0.156, 0.036],
-  [0.028, 0.152, 0.02],
+  [0.022, 0.146, 0.038],
+  [0.022, 0.143, 0.026],
 ];
-/** The dark screen set in the back face: half width, and from where to where up the face, in metres. */
-const [SW, SFROM, STO] = [0.023, 0.0175, 0.0455];
-/** The charge gauge under the digits, up the screen from its foot: where it starts and ends, and the gap between its cells. */
-const [GFROM, GTO, GGAP] = [0.0016, 0.0056, 0.0015];
+/** The dark screen set in the back face: half width, middle up the face, half height, corner radius, in metres; its digits' scale. */
+const [SW, SM, SHH, SR, DK] = [0.015, 0.0275, 0.009, 0.0035, 0.6];
+/** The charge gauge under the digits, up the back face: where it starts and ends, and the gap between its cells; the digits' foot. */
+const [GFROM, GTO, GGAP, DY] = [0.0195, 0.0225, 0.0012, 0.0232];
 const readouts = new Map<number, number[]>();
 
 /**
@@ -918,17 +918,20 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
       O[1] + slope[1] * b + N[1] * k,
       O[2] + slope[2] * b + N[2] * k,
     ];
-    face(
-      [at(-SW, SFROM, 0.0012), at(SW, SFROM, 0.0012), at(SW, STO, 0.0012), at(-SW, STO, 0.0012)],
-      DARK,
-    );
+    // The dark screen, a fan of 12 round its middle, three steps to each rounded corner.
+    const r = (c: number, h: number) => Math.sign(c) * (h - SR) + SR * c;
+    const rim = (i: number) =>
+      at(r(Math.cos(i * 0.5236 + 0.26), SW), SM + r(Math.sin(i * 0.5236 + 0.26), SHH), 0.0012);
+    for (let i = 0; i < 12; i++) {
+      tri(v, at(0, SM, 0.0012), rim(i), rim(i + 1), DARK);
+    }
     /** The gauge's cells, the lit ones or the dim ones, while it charges. */
     const gauge = (on: boolean) => {
-      const w = (2 * DW + DGAP - (CHARGE_MAX - 1) * GGAP) / CHARGE_MAX;
+      const w = ((2 * DW + DGAP) * DK - (CHARGE_MAX - 1) * GGAP) / CHARGE_MAX;
       for (let c = 0; level > 0 && c < CHARGE_MAX; c++) {
         if (c < level === on) {
-          const x = -DW - DGAP / 2 + c * (w + GGAP);
-          const p = (a: number, b: number) => at(a, SFROM + b, 0.0027);
+          const x = (-DW - DGAP / 2) * DK + c * (w + GGAP);
+          const p = (a: number, b: number) => at(a, b, 0.0027);
           const rgb = !on
             ? [0.04, 0.12, 0.16]
             : level >= CHARGE_MAX
@@ -942,11 +945,11 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
     gauge(false);
     const from = v.length;
     [...(shown ? `${n}`.padStart(2, '0') : '')].forEach((ch, i) => {
-      const x0 = -DW - DGAP / 2 + i * (DW + DGAP);
+      const x0 = (-DW - DGAP / 2 + i * (DW + DGAP)) * DK;
       for (const seg of DIGITS[+ch]) {
         const [a, b, d, e] = SEGMENTS[seg];
         // Segments lie on the screen, a hair out of it.
-        const p = (x: number, t: number) => at(x0 + x, STO - DH - 0.0003 + t, 0.0027);
+        const p = (x: number, t: number) => at(x0 + x * DK, DY + t * DK, 0.0027);
         const rgb = n > 4 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
         tri(v, p(a, b), p(d, b), p(d, e), rgb);
         tri(v, p(a, b), p(d, e), p(a, e), rgb);
@@ -1096,14 +1099,7 @@ export const scope = (n: number, shown = true): number[] => {
         for (const seg of DIGITS[+ch]) {
           const [x0, y0, x1, y1] = SEGMENTS[seg];
           const rgb = n > 7 ? [0.25, 0.75, 1.05] : [1.2, 0.3, 0.12];
-          quad(
-            a0 + x0 * k,
-            (y0 - DH / 2) * k - 0.002,
-            a0 + x1 * k,
-            (y1 - DH / 2) * k - 0.002,
-            0.005,
-            rgb,
-          );
+          quad(a0 + x0 * k, (y0 - DH / 2) * k, a0 + x1 * k, (y1 - DH / 2) * k, 0.005, rgb);
         }
       });
     }
@@ -1127,7 +1123,7 @@ export interface Lit {
 }
 
 /** Where the gun's counter folds: the front edge of its foot, up and back of the grip. */
-const HINGE = [0.112, 0.012];
+const HINGE = [0.112, 0.02];
 
 /**
  * The frame that draws a model of the gun with its counter turned back by `a` radians about the

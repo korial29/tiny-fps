@@ -42,6 +42,8 @@ interface Spark {
   p: Vec3;
   v: Vec3;
   age: number;
+  /** A laser rifle's: red. */
+  red?: boolean;
 }
 /** A flash at a muzzle or a splash at a burst: where, how old, and which. */
 interface Glow {
@@ -68,8 +70,8 @@ export interface Tracer {
   charging(list: { p: Vec3; k: number }[]): void;
   /** The rail guns' bolts this frame, each from its muzzle `a` to where it ends `b`: jagged, with a branch, sparks at the end. */
   lightning(list: { a: Vec3; b: Vec3 }[]): void;
-  /** A ball burst at `at`: a splash of light and a spray of sparks. */
-  burst(at: Vec3): void;
+  /** A ball burst at `at`: a splash of light and a spray of sparks; a laser rifle's, `red`, bigger and fiercer. */
+  burst(at: Vec3, red?: boolean): void;
   /** The balls to draw this frame. */
   orbs(list: Orb[]): void;
   /** The katana's shock at `at`: a burst of sparks and bolts. */
@@ -265,9 +267,9 @@ export const createTracer = (): Tracer => {
     bolts = [...bolts, { a: p, m, b, age: 0 }].slice(-BOLTS);
   };
   /** n sparks from `at`, at `speed` m/s each way and a little up. */
-  const spray = (at: Vec3, n: number, speed: number) => {
+  const spray = (at: Vec3, n: number, speed: number, red?: boolean) => {
     for (let i = 0; i < n; i++) {
-      sparks.push({ p: at, v: [rnd() * speed, rnd() * speed + 1.5, rnd() * speed], age: 0 });
+      sparks.push({ p: at, v: [rnd() * speed, rnd() * speed + 1.5, rnd() * speed], age: 0, red });
     }
     sparks = sparks.slice(-MAX * SPARKS);
   };
@@ -283,9 +285,9 @@ export const createTracer = (): Tracer => {
       zaps = list;
       list.forEach(({ b }) => rnd() > 0.4 && spray(b, 2, 3));
     },
-    burst(at) {
-      glows = [...glows, { p: at, age: 0, splash: true }].slice(-MAX);
-      spray(at, SPARKS, 4);
+    burst(at, red) {
+      glows = [...glows, { p: at, age: 0, splash: true, hot: red ? -0.6 : 0 }].slice(-MAX);
+      spray(at, red ? 2 * SPARKS : SPARKS, red ? 7 : 4, red);
     },
     orbs(list) {
       balls = list;
@@ -358,13 +360,14 @@ export const createTracer = (): Tracer => {
         );
       }
       for (const { p, age, splash, hot: h = 0 } of glows) {
-        // A flash shrinks; a splash swells as it fades. A charged one is orange and bigger.
+        // A flash shrinks; a splash swells as it fades. A charged one is orange and bigger, a
+        // laser rifle's red and bigger.
         const k = 1 - age / (splash ? SPLASH : FLASH);
         BALL.forEach(([r, rgb, lift], i) =>
           disc(
             out,
             p,
-            (splash ? r * (3 - 2 * k) : r * 0.7 * k) * (1 + Math.max(h, 0)),
+            (splash ? r * (3 - 2 * k) : r * 0.7 * k) * (1 + Math.abs(h)),
             (h < 0 ? RED[i] : tint(rgb, i, h)).map(c => c * (0.4 + 0.6 * k)),
             eye,
             lift,
@@ -410,9 +413,9 @@ export const createTracer = (): Tracer => {
           RIBBONS.forEach(([w, rgb, lift]) => ribbon(out, p, q, w * 0.5 * k, rgb, eye, lift));
         }
       }
-      for (const { p, age } of sparks) {
+      for (const { p, age, red } of sparks) {
         const k = 1 - age / SPARK;
-        disc(out, p, 0.022 * k, [1.4 * k + 0.4, 2.2 * k + 0.3, 3], eye, 0, 4);
+        disc(out, p, 0.022 * k, red ? RED[1] : [1.4 * k + 0.4, 2.2 * k + 0.3, 3], eye, 0, 4);
       }
     },
     lights() {
@@ -433,7 +436,12 @@ export const createTracer = (): Tracer => {
           .slice(-4)
           .map(g =>
             g.splash
-              ? point(g.p, 7, 2 * (1 - g.age / SPLASH), [0.35, 0.7, 1.6])
+              ? point(
+                  g.p,
+                  7,
+                  2 * (1 - g.age / SPLASH),
+                  (g.hot! < 0 ? RED[0] : [0.35, 0.7, 1.6]) as Vec3,
+                )
               : point(g.p, 6, 1.3 * (1 - g.age / FLASH), [0.25, 0.55, 1.6]),
           ),
         ...[...balls]

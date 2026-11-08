@@ -97,15 +97,15 @@ const TRUNK: Loft = {
     [1.13, 0, 0.013, 0.174, 0.145, 1.05, UPPER],
     [1.25, 0, 0.02, 0.174, 0.143, 1.73, UPPER],
     [1.262, 0, 0.02, 0.172, 0.135, 1.78, JACKET],
-    [1.3, 0, 0.024, 0.165, 0.131, 1.85, UPPER, 50, JACKET],
+    [1.3, 0, 0.024, 0.165, 0.131, 1.85, JACKET],
     [1.37, 0, 0.015, 0.172, 0.155, 2, JACKET],
-    [1.37, 0, 0.009, 0.315, 0.16, 2, UPPER, 155, JACKET, 135, UPPER, 50, JACKET],
-    [1.39, 0, 0.004, 0.314, 0.163, 2, UPPER, 155, JACKET, 135, UPPER, 50, JACKET],
-    [1.41, 0, -0.001, 0.312, 0.165, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.445, 0, -0.027, 0.303, 0.163, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.475, 0, -0.03, 0.289, 0.149, 2.03, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.495, 0, -0.036, 0.268, 0.131, 2.07, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.512, 0, -0.044, 0.217, 0.106, 2.1, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.37, 0, 0.009, 0.295, 0.16, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.39, 0, 0.004, 0.294, 0.163, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.41, 0, -0.001, 0.292, 0.165, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.445, 0, -0.027, 0.283, 0.163, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.475, 0, -0.03, 0.27, 0.149, 2.03, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.495, 0, -0.036, 0.25, 0.131, 2.07, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.512, 0, -0.044, 0.205, 0.106, 2.1, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
     [1.532, 0, 0, 0.12, 0.1, 2.25, TRIM],
     [1.555, 0, 0, 0.068, 0.066, 2.6, FLESH],
   ],
@@ -165,14 +165,14 @@ const ARM: Loft = {
   far: [0, 1, 3, 6, 8, 9, 11, 13],
   rings: [
     [1.37, 0.224, 0, 0, 0, 0, JACKET],
-    [1.31, 0.245, -0.003, 0.068, 0.08, 0.5, JACKET],
-    [1.225, 0.243, -0.002, 0.067, 0.075, 1.12, JACKET],
-    [1.18, 0.24, 0.003, 0.068, 0.077, 1.5, JACKET],
-    [1.135, 0.238, -0.002, 0.066, 0.068, 1.9, JACKET],
-    [1.09, 0.235, -0.001, 0.061, 0.071, 2, JACKET],
-    [1.05, 0.233, -0.001, 0.051, 0.065, 2, JACKET],
-    [1.01, 0.23, 0, 0.045, 0.057, 2, JACKET],
-    [0.975, 0.228, 0, 0.049, 0.055, 2.05, GLOVE],
+    [1.31, 0.237, 0.006, 0.062, 0.07, 0.5, JACKET],
+    [1.225, 0.235, -0.002, 0.063, 0.073, 1.12, JACKET],
+    [1.18, 0.232, 0.003, 0.06, 0.072, 1.5, JACKET],
+    [1.135, 0.23, -0.002, 0.058, 0.066, 1.9, JACKET],
+    [1.09, 0.228, -0.001, 0.058, 0.068, 2, JACKET],
+    [1.05, 0.226, -0.001, 0.051, 0.065, 2, JACKET],
+    [1.01, 0.225, 0, 0.045, 0.057, 2, JACKET],
+    [0.975, 0.224, 0, 0.049, 0.055, 2.05, GLOVE],
     [0.935, 0.222, 0, 0.03, 0.03, 2.6, GLOVE],
     [0.885, 0.222, -0.004, 0.027, 0.037, 3, GLOVE],
     [0.84, 0.222, -0.008, 0.029, 0.042, 3, GLOVE],
@@ -221,8 +221,8 @@ const EAR: Loft = {
 };
 
 // The soldier's webbing, pieces of their own on the trunk like the eyes on the head, measured on
-// the user's soldier mesh: a strap from the chest rig over each shoulder, one up each side of the
-// back, two pouches each side on the chest and on the belt, the buckle. Too small to draw far.
+// the user's soldier mesh: a strap up the chest and over each shoulder, one up each side of the back,
+// two pouches each side on the belt, the buckle (the user: none on the chest). Too small to draw far.
 /** A strap along the trunk, the left one the right one mirrored: rings of [height, x, depth, half width, half thickness]. */
 const strap = (rings: number[][]): Loft => ({
   chain: [J.CHEST],
@@ -245,13 +245,18 @@ const pouch = ([x, y0, y1, o, rx, ro, j, m]: number[]): Loft => ({
 });
 const GEAR = [
   strap([
-    [1.418, 0.12, 0.146, 0, 0],
-    [1.42, 0.12, 0.144, 0.036, 0.004],
-    [1.445, 0.12, 0.124, 0.036, 0.004],
-    [1.47, 0.12, 0.109, 0.036, 0.004],
-    [1.49, 0.12, 0.088, 0.036, 0.004],
-    [1.505, 0.12, 0.061, 0.036, 0.004],
-    [1.507, 0.12, 0.056, 0, 0],
+    [1.308, 0.12, 0.125, 0, 0],
+    [1.31, 0.12, 0.125, 0.036, 0.004],
+    [1.34, 0.12, 0.131, 0.036, 0.004],
+    [1.365, 0.12, 0.136, 0.036, 0.004],
+    [1.372, 0.12, 0.161, 0.036, 0.004],
+    [1.39, 0.12, 0.154, 0.036, 0.004],
+    [1.42, 0.12, 0.142, 0.036, 0.004],
+    [1.445, 0.12, 0.122, 0.036, 0.004],
+    [1.47, 0.12, 0.107, 0.036, 0.004],
+    [1.49, 0.12, 0.086, 0.036, 0.004],
+    [1.505, 0.12, 0.058, 0.036, 0.004],
+    [1.507, 0.12, 0.054, 0, 0],
   ]),
   strap([
     [1.265, 0.125, -0.082, 0, 0],
@@ -265,8 +270,6 @@ const GEAR = [
     [1.518, 0.105, -0.123, 0, 0],
   ]),
   ...[
-    [0.095, 1.31, 1.365, 0.152, 0.028, 0.028, J.CHEST, 1],
-    [0.155, 1.31, 1.365, 0.093, 0.026, 0.026, J.CHEST, 1],
     [0.1, 1.142, 1.243, 0.154, 0.03, 0.033, J.SPINE, 1],
     [0.15, 1.145, 1.24, 0.111, 0.024, 0.03, J.SPINE, 1],
     [0, 1.17, 1.215, 0.158, 0.022, 0.017, J.SPINE, 0],

@@ -775,7 +775,7 @@ export const createGait = (): Gait => {
     const lie = ease((sw(MOVE.DOWN) - 0.35) / 0.65);
     if (lie) {
       rot[J.PELVIS] = mul(axis(X, -1.45 * lie), rot[J.PELVIS]);
-      out.hips[1] += (0.17 - REST[0][1] - out.hips[1]) * lie;
+      out.hips[1] += (0.21 - REST[0][1] - out.hips[1]) * lie;
       // The hips straighten as the body goes over, so that the legs trail behind it.
       [J.THIGH_L, J.THIGH_R].forEach(j => (rot[j] = mul(rot[j], axis(X, -1.25 * lie))));
       [J.ARM_L, J.ARM_R].forEach(j => (rot[j] = mul(rot[j], axis(X, -0.5 * lie))));

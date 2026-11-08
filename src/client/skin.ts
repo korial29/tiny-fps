@@ -32,16 +32,16 @@ const HAIRS = [
 export const hairOf = (id: number): number[] =>
   HAIRS[(Math.imul(id + 1, 0x9e3779b1) >>> 29) % HAIRS.length];
 
-/** Jacket, its darker trim, trousers, skin, hair, shoe upper, sole, gloves, the whites of the eyes and their irises, the lips, and the cut's cauterized face, which glows. */
+/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots and webbing, sole, gloves, the whites of the eyes and their irises, the lips, and the cut's cauterized face, which glows. */
 export const palette = (jacket: number[], hair = HAIRS[1]): number[][] => [
   jacket,
   jacket.map(v => v * 0.5),
-  [0.12, 0.13, 0.17],
+  jacket.map(v => v * 0.62),
   SKIN,
   hair,
-  [0.74, 0.74, 0.77],
-  [0.93, 0.93, 0.94],
-  [0.26, 0.26, 0.3],
+  [0.2, 0.19, 0.14],
+  [0.09, 0.085, 0.07],
+  [0.22, 0.21, 0.16],
   [0.85, 0.83, 0.8],
   [0.2, 0.12, 0.06],
   [0.6, 0.35, 0.3],
@@ -70,6 +70,8 @@ interface Loft {
   z?: boolean;
   /** Built twice, the second time mirrored for the left side. */
   m?: boolean;
+  /** Gear on the trunk: it comes off with it. */
+  k?: boolean;
 }
 
 // Metres, rest pose, +x the runner's right, the right limbs written and the left mirrored.
@@ -87,21 +89,21 @@ const TRUNK: Loft = {
   e: 2.3,
   far: [0, 2, 4, 6, 7, 9, 12, 14],
   rings: [
-    [0.93, 0, -0.001, 0.198, 0.106, 0, PANTS],
-    [0.99, 0, 0.001, 0.197, 0.117, 0.25, TRIM],
-    [1.03, 0, -0.001, 0.193, 0.13, 0.5, JACKET],
-    [1.12, 0, -0.013, 0.173, 0.132, 1, JACKET],
-    [1.24, 0, -0.017, 0.17, 0.129, 1.7, JACKET],
-    [1.3, 0, -0.012, 0.167, 0.13, 1.85, JACKET],
-    [1.37, 0, -0.008, 0.175, 0.153, 2, JACKET],
-    [1.37, 0, -0.005, 0.302, 0.156, 2, JACKET],
-    [1.41, 0, 0.006, 0.293, 0.159, 2, JACKET],
-    [1.445, 0, 0.023, 0.283, 0.142, 2, JACKET],
-    [1.475, 0, 0.027, 0.265, 0.128, 2.03, JACKET],
-    [1.495, 0, 0.032, 0.239, 0.113, 2.07, JACKET],
-    [1.512, 0, 0.032, 0.186, 0.096, 2.1, JACKET],
-    [1.532, 0, 0, 0.112, 0.092, 2.25, TRIM],
-    [1.555, 0, 0, 0.06, 0.062, 2.6, FLESH],
+    [0.93, 0, -0.013, 0.198, 0.121, 0, PANTS],
+    [0.99, 0, -0.015, 0.198, 0.121, 0.25, JACKET],
+    [1.03, 0, -0.011, 0.19, 0.139, 0.5, JACKET],
+    [1.12, 0, -0.012, 0.18, 0.137, 1, UPPER],
+    [1.24, 0, -0.02, 0.172, 0.135, 1.7, JACKET],
+    [1.3, 0, -0.024, 0.165, 0.131, 1.85, UPPER, 50, JACKET],
+    [1.37, 0, -0.015, 0.172, 0.155, 2, JACKET],
+    [1.37, 0, -0.009, 0.315, 0.16, 2, UPPER, 155, JACKET, 135, UPPER, 50, JACKET],
+    [1.41, 0, 0.001, 0.312, 0.165, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.445, 0, 0.027, 0.303, 0.163, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.475, 0, 0.03, 0.289, 0.149, 2.03, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.495, 0, 0.036, 0.268, 0.131, 2.07, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.512, 0, 0.044, 0.217, 0.106, 2.1, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.532, 0, 0, 0.12, 0.1, 2.25, TRIM],
+    [1.555, 0, 0, 0.068, 0.066, 2.6, FLESH],
   ],
 };
 
@@ -114,19 +116,19 @@ const LEG: Loft = {
   far: [0, 2, 4, 6, 8, 10, 12, 14],
   rings: [
     [0.93, 0.1, 0, 0, 0, 0, PANTS],
-    [0.85, 0.1, 0.006, 0.092, 0.1, 0.6, PANTS],
-    [0.72, 0.1, -0.002, 0.079, 0.087, 1, PANTS],
-    [0.55, 0.1, -0.003, 0.073, 0.083, 1.25, PANTS],
-    [0.49, 0.1, -0.004, 0.074, 0.079, 1.5, PANTS],
-    [0.42, 0.1, 0.002, 0.068, 0.073, 1.8, PANTS],
-    [0.33, 0.1, 0.012, 0.059, 0.063, 2, PANTS],
-    [0.19, 0.1, 0.003, 0.042, 0.05, 2.05, PANTS],
-    [0.105, 0.1, 0, 0.038, 0.045, 2.3, UPPER],
-    [0.085, 0.1, 0.0025, 0.038, 0.0425, 2.5, UPPER],
-    [0.065, 0.1, 0.02, 0.043, 0.098, 3, UPPER],
-    [0.045, 0.1, 0.039, 0.046, 0.133, 3, UPPER],
-    [0.026, 0.1, 0.059, 0.046, 0.149, 3, SOLE],
-    [0.008, 0.1, 0.062, 0.03, 0.138, 3, SOLE],
+    [0.85, 0.1, 0.006, 0.099, 0.114, 0.6, PANTS],
+    [0.72, 0.1, -0.002, 0.082, 0.093, 1, PANTS],
+    [0.55, 0.1, -0.003, 0.09, 0.09, 1.25, PANTS],
+    [0.49, 0.1, -0.004, 0.092, 0.091, 1.5, PANTS],
+    [0.42, 0.1, 0.002, 0.082, 0.081, 1.8, UPPER],
+    [0.33, 0.1, 0.012, 0.063, 0.069, 2, UPPER],
+    [0.19, 0.1, 0.003, 0.06, 0.073, 2.05, UPPER],
+    [0.105, 0.1, 0, 0.048, 0.05, 2.3, UPPER],
+    [0.085, 0.1, 0.0025, 0.048, 0.047, 2.5, UPPER],
+    [0.065, 0.1, 0.02, 0.054, 0.108, 3, UPPER],
+    [0.045, 0.1, 0.039, 0.057, 0.146, 3, UPPER],
+    [0.026, 0.1, 0.059, 0.057, 0.164, 3, SOLE],
+    [0.008, 0.1, 0.062, 0.037, 0.152, 3, SOLE],
     [0, 0.1, 0.062, 0, 0, 3, SOLE],
   ],
 };
@@ -151,11 +153,11 @@ const ARM: Loft = {
   far: [0, 1, 3, 4, 5, 6, 8, 10],
   rings: [
     [1.37, 0.224, 0, 0, 0, 0, JACKET],
-    [1.31, 0.237, -0.003, 0.063, 0.074, 0.5, JACKET],
-    [1.225, 0.236, -0.002, 0.059, 0.063, 1.12, JACKET],
-    [1.18, 0.227, 0.003, 0.056, 0.055, 1.5, JACKET],
-    [1.135, 0.225, -0.002, 0.053, 0.054, 1.9, JACKET],
-    [0.975, 0.225, 0, 0.034, 0.034, 2.05, TRIM],
+    [1.31, 0.245, -0.003, 0.068, 0.08, 0.5, JACKET],
+    [1.225, 0.243, -0.002, 0.065, 0.072, 1.12, JACKET],
+    [1.18, 0.24, 0.003, 0.062, 0.065, 1.5, JACKET],
+    [1.135, 0.238, -0.002, 0.065, 0.07, 1.9, JACKET],
+    [0.975, 0.228, 0, 0.048, 0.052, 2.05, GLOVE],
     [0.935, 0.222, 0, 0.03, 0.03, 2.6, GLOVE],
     [0.885, 0.222, -0.004, 0.027, 0.037, 3, GLOVE],
     [0.84, 0.222, -0.008, 0.029, 0.042, 3, GLOVE],
@@ -203,7 +205,36 @@ const EAR: Loft = {
   ],
 };
 
-const LOFTS = [TRUNK, LEG, ARM, EYE, EAR];
+// The soldier's webbing, pieces of their own on the trunk like the eyes on the head: a pouch block
+// on the chest in two halves, a big pouch on the belt each side of the buckle: boxes with their
+// backs in the body, the left one the right one mirrored. Too small to draw far.
+const POUCHES: Loft = {
+  chain: [J.CHEST],
+  n: [0, 8, 8],
+  e: 5,
+  z: true,
+  m: true,
+  k: true,
+  far: [],
+  rings: [
+    [-0.11, 0.085, 1.374, 0, 0, 0, UPPER],
+    [-0.11, 0.085, 1.374, 0.08, 0.042, 0, UPPER],
+    [-0.183, 0.085, 1.374, 0.08, 0.042, 0, UPPER],
+    [-0.183, 0.085, 1.374, 0, 0, 0, UPPER],
+  ],
+};
+const BELT: Loft = {
+  ...POUCHES,
+  chain: [J.SPINE],
+  rings: [
+    [-0.078, 0.12, 1.195, 0, 0, 0, UPPER],
+    [-0.078, 0.12, 1.195, 0.05, 0.06, 0, UPPER],
+    [-0.182, 0.12, 1.195, 0.05, 0.06, 0, UPPER],
+    [-0.182, 0.12, 1.195, 0, 0, 0, UPPER],
+  ],
+};
+
+const LOFTS = [TRUNK, LEG, ARM, EYE, EAR, POUCHES, BELT];
 
 /**
  * The rings with one more between each two, on a Catmull-Rom curve through them, for the near
@@ -232,19 +263,19 @@ const finer = (rings: Ring[], limb: boolean): Ring[] => {
 // crowd to the front and its rings to the face.
 const [NECK_Y, CROWN] = [1.555, 1.803];
 const SKULL = [
-  [1.555, 0.058, 0.085, 0.07],
-  [1.575, 0.059, 0.088, 0.07],
-  [1.59, 0.06, 0.091, 0.072],
-  [1.605, 0.0635, 0.093, 0.075],
-  [1.625, 0.067, 0.095, 0.08],
-  [1.645, 0.071, 0.095, 0.086],
-  [1.665, 0.0745, 0.094, 0.092],
-  [1.69, 0.077, 0.093, 0.098],
-  [1.715, 0.0775, 0.092, 0.102],
-  [1.74, 0.076, 0.087, 0.102],
+  [1.555, 0.068, 0.085, 0.07],
+  [1.575, 0.068, 0.088, 0.07],
+  [1.59, 0.07, 0.091, 0.072],
+  [1.605, 0.072, 0.093, 0.075],
+  [1.625, 0.075, 0.095, 0.08],
+  [1.645, 0.078, 0.095, 0.086],
+  [1.665, 0.08, 0.094, 0.092],
+  [1.69, 0.08, 0.093, 0.098],
+  [1.715, 0.079, 0.092, 0.102],
+  [1.74, 0.077, 0.087, 0.102],
 ];
 /** The neck's section under the jaw (half width, front and back depth), the trunk's last ring's. */
-const NECK = [0.06, 0.062, 0.062];
+const NECK = [0.068, 0.066, 0.066];
 
 /**
  * The jaw line by the angle from the front: under the chin, rising to the corner of the jaw under
@@ -320,7 +351,7 @@ const step = (a: number, b: number, v: number) => {
  * the hair's thickness, fuller on top, and near the features of the face (centimetres, as bells).
  */
 const face = (x: number, y: number, aq: number, fine: boolean) => {
-  let d = (0.005 + 0.006 * step(1.72, 1.78, y)) * step(-0.003, 0.004, y - hairline(aq));
+  let d = (0.0015 + 0.0015 * step(1.72, 1.78, y)) * step(-0.003, 0.004, y - hairline(aq));
   if (!fine) {
     return d;
   }
@@ -338,28 +369,29 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
         : 0.002 * bell(y - bridge, 0.004);
   d +=
     f ** 4 *
-    (h * bell(x, 0.0068 + 0.0062 * k) +
-      0.0065 * bell(ax - 0.0145, 0.0055) * bell(y - 1.6475, 0.005));
-  // The brow over sockets, cheekbones and the hollow under them, the lips, the chin; the forehead
-  // leaning back over the brow.
+    (h * bell(x, 0.008 + 0.007 * k) + 0.0065 * bell(ax - 0.0145, 0.0055) * bell(y - 1.6475, 0.005));
+  // The brow over deep sockets, cheekbones and the hollow under them, the jaw's corners, the lips,
+  // a square chin; the forehead leaning back over the brow. A soldier's face (the user, 2026-11-08).
   d +=
     f ** 2 *
-    (-0.0085 * bell(ax - 0.032, 0.013) * bell(y - 1.69, 0.008) +
-      0.005 * bell(ax - 0.026, 0.028) * bell(y - 1.709, 0.006) +
-      0.005 * bell(ax - 0.048, 0.012) * bell(y - 1.668, 0.011) -
+    (-0.013 * bell(ax - 0.032, 0.014) * bell(y - 1.69, 0.009) +
+      0.01 * bell(ax - 0.026, 0.03) * bell(y - 1.708, 0.007) +
+      0.0065 * bell(ax - 0.048, 0.012) * bell(y - 1.668, 0.011) +
+      0.006 * bell(ax - 0.056, 0.014) * bell(y - 1.598, 0.013) -
       0.002 * bell(ax - 0.05, 0.012) * bell(y - 1.632, 0.01) +
       0.006 * bell(x, 0.021) * bell(y - 1.627, 0.007) +
       0.003 * bell(x, 0.019) * bell(y - 1.6215, 0.003) +
       0.004 * bell(x, 0.018) * bell(y - 1.6115, 0.0035) -
       0.002 * bell(x, 0.016) * bell(y - 1.6035, 0.003) +
-      0.0045 * bell(x, 0.017) * bell(y - 1.593, 0.007) -
+      0.0075 * bell(x, 0.026) * bell(y - 1.593, 0.008) -
       0.006 * step(1.715, 1.75, y));
-  // The lids over the eyes: the upper one down over the top of the iris, the lower one under it.
+  // The lids over the eyes, narrowed: the upper one down over the top of the iris, the lower one
+  // up to its bottom.
   d +=
     f ** 2 *
     bell(ax - 0.032, 0.0105) *
-    (0.0068 * step(1.6922, 1.6942, y) * (1 - step(1.697, 1.703, y)) +
-      0.0042 * (1 - step(1.6848, 1.6862, y)) * step(1.679, 1.683, y));
+    (0.0068 * step(1.6902, 1.6922, y) * (1 - step(1.697, 1.703, y)) +
+      0.0042 * (1 - step(1.6858, 1.6872, y)) * step(1.679, 1.683, y));
   return d;
 };
 
@@ -419,7 +451,7 @@ const generate = (lod: number): Skin => {
   for (const L of LOFTS) {
     const n = L === ARM ? N - 4 : L.n[tier];
     // The eye's own body has no head.
-    if (!n || (lod == 2 && (L === EYE || L === EAR))) {
+    if (!n || (lod == 2 && (L.z || L === EAR))) {
       continue;
     }
     // The eye's own body ends the trunk in a cap on the shoulders and each sleeve in a cuff over a
@@ -437,7 +469,7 @@ const generate = (lod: number): Skin => {
           : lod
             ? L.rings
             : L.far.map(i => L.rings[i]);
-    const rings = tier > 1 && L !== EYE && L !== EAR ? finer(base, L !== TRUNK) : base;
+    const rings = tier > 1 && !L.z && L !== EAR ? finer(base, L !== TRUNK) : base;
     const up = rings[rings.length - 1][0] > rings[0][0];
     if (L === TRUNK) {
       S = rings.findIndex((r, i) => i && r[0] == rings[i - 1][0]);
@@ -547,7 +579,7 @@ const generate = (lod: number): Skin => {
         // The head comes off at the neck, an arm at the shoulder, a leg at the hip: where its loft
         // meets the trunk.
         const part =
-          L === TRUNK
+          L === TRUNK || L.k
             ? LIMB.NONE
             : L === EYE || L === EAR
               ? LIMB.HEAD

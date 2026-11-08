@@ -233,7 +233,8 @@ describe('body', () => {
         expect(shown(-1.2, c)).toBeGreaterThan(30);
       }
       // The chest too, looking steeply down.
-      expect(shown(-1.5, JACKET)).toBeGreaterThan(100);
+      // Between the webbing's straps.
+      expect(shown(-1.5, JACKET)).toBeGreaterThan(50);
     });
 
     it('leans the trunk with the look', () => {
@@ -481,7 +482,8 @@ describe('body', () => {
       // The sleeve's cuff, which is glove too, is a few dozen vertices; the hands are the rest.
       const glove = colored(v, GLOVE).length;
       expect(glove).toBeGreaterThanOrEqual(2 * HAND);
-      expect(glove).toBeLessThan(2 * HAND + 200);
+      // The glove's cuff over the wrist too.
+      expect(glove).toBeLessThan(2 * HAND + 260);
     });
 
     describe('as meshes', () => {

@@ -43,11 +43,12 @@ const eyeBase = (v: Float32Array, k: number) =>
   v[k * 6 + 2] < -0.065;
 
 describe('skin', () => {
-  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 12000 (rings measured on the soldier, his webbing), close (within CLOSE) under 26000', () => {
+  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 12000 (rings measured on the soldier, his webbing), close (within CLOSE, the face finest) under 40000', () => {
     const [far, near, close] = [0, 1, 3].map(lod => draw(lod).length / STRIDE);
     expect(far).toBeLessThan(1800);
     expect(near).toBeLessThanOrEqual(12000);
-    expect(close).toBeLessThanOrEqual(26000);
+    // 26000 until the close head took three times the neck's sides and finer rows (the user, 2026-11-08).
+    expect(close).toBeLessThanOrEqual(40000);
     expect(far).toBeLessThan(near * 0.3);
     // Near carries the measured rings too, so it is less far below close than it was.
     expect(near).toBeLessThan(close * 0.45);

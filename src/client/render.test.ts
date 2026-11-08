@@ -75,8 +75,15 @@ describe('viewProj and project', () => {
 });
 
 describe('SPEC', () => {
-  it('has a row per texture layer, and one for the flat bodies', () => {
-    expect(SPEC).toHaveLength(LAYERS + 1);
+  it('has a row per texture layer, one for the flat bodies and one for polished metal', () => {
+    expect(SPEC).toHaveLength(LAYERS + 2);
+  });
+
+  it('gives polished metal a stronger, sharper highlight than the flat bodies and any texture but glass', () => {
+    const [k, e] = SPEC[LAYERS + 1];
+    expect(k).toBeGreaterThan(SPEC[TEX.METAL][0]);
+    expect(e).toBeGreaterThan(SPEC[TEX.STEEL][1]);
+    expect(k).toBeGreaterThan(SPEC[LAYERS][0] * 10);
   });
 
   it('makes metal and grating shinier than brick and wood, and sharper', () => {

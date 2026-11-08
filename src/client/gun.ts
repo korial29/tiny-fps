@@ -557,9 +557,9 @@ const lcds = new Map<number, number[]>();
  * (out of the receiver's left flank, tilted up and back to the eye in first person), with its right
  * and up across that.
  */
-const LCD: Vec3 = [-0.047, 0.1, -0.035];
+const LCD: Vec3 = [-0.045, 0.104, -0.012];
 const [LW, LH] = [0.019, 0.013];
-const LN = unit([-0.8, 0.35, 0.5]);
+const LN = unit([-0.6, 0.38, 0.7]);
 const LR = unit([LN[2], 0, -LN[0]]);
 const LU: Vec3 = [LN[1] * LR[2], LN[2] * LR[0] - LN[0] * LR[2], -LN[1] * LR[0]];
 

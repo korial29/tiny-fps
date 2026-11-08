@@ -9,7 +9,7 @@ import { CUT } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { glow as lit, tri } from './flag';
 import { grip } from './gun';
-import { place } from './mesh';
+import { dim, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
@@ -221,11 +221,21 @@ export const arcs = (out: number[], at: Vec3, [r, u, f]: Vec3[], t: number, lod:
 
 /**
  * Appends the katana with its right-hand grip at `at`, axes `[right, up, forward]`, `k` times its
- * size; with the clock `t` (s) it crackles.
+ * size; with the clock `t` (s) it crackles, once its glow is all on (`light`, 0 off to 1).
  */
-export const sword = (out: number[], at: Vec3, ax: Vec3[], lod: number, t?: number, k = 1) => {
+export const sword = (
+  out: number[],
+  at: Vec3,
+  ax: Vec3[],
+  lod: number,
+  t?: number,
+  k = 1,
+  light = 1,
+) => {
+  const from = out.length;
   place(out, katana(lod), at, ax, [0, 0, 0], k);
-  if (t !== undefined) {
+  dim(out, from, 0.08 + 0.92 * light);
+  if (t !== undefined && light > 0.98) {
     arcs(out, at, ax, t, lod, k);
   }
 };
@@ -249,8 +259,15 @@ export const wrists = (at: Vec3, ax: Vec3[]): Vec3[] => {
 };
 
 /** Appends the katana held in the right hand at `pos` turned by `q`. */
-export const held = (out: number[], pos: Vec3, q: Quat, lod: number, t?: number, k = 1) =>
-  sword(out, grip(pos, q), axes(q), lod, t, k);
+export const held = (
+  out: number[],
+  pos: Vec3,
+  q: Quat,
+  lod: number,
+  t?: number,
+  k = 1,
+  light = 1,
+) => sword(out, grip(pos, q), axes(q), lod, t, k, light);
 
 /** The root of the blade and its point, in the world, for the hand at `pos` turned by `q`. */
 export const ends = (pos: Vec3, q: Quat): Vec3[] => {

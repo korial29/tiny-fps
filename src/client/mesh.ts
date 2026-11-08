@@ -222,6 +222,17 @@ export const place = (
   }
 };
 
+/** Dims by `k` the glow (layer -2) of the vertices of `out` from the float `from` on: a light that is off, or coming on. */
+export const dim = (out: number[], from: number, k: number) => {
+  for (let i = from; k < 1 && i < out.length; i += STRIDE) {
+    if (out[i + 8] == -2) {
+      out[i + 6] *= k;
+      out[i + 7] *= k;
+      out[i + 9] *= k;
+    }
+  }
+};
+
 /**
  * Axes [r, u, f] with f along the unit vector `to` and r as near `side` as it can be: the frame of
  * a bone, which `place` takes. Right-handed like `basis`.

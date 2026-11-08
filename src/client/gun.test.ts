@@ -1,9 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { STILL } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
-import { CHARGE_MAX, GUN_RANGE } from '../shared/constants';
+import { CHARGE_MAX, GUN_RANGE, GUN_RELOAD, RAIL_RELOAD } from '../shared/constants';
 import { build } from '../shared/world';
-import { MUZZLE, REAR, TILT, aimed, focus, grip, gun, held, pointed, readout, tip } from './gun';
+import {
+  MUZZLE,
+  REAR,
+  TILT,
+  aimed,
+  battery,
+  focus,
+  grip,
+  gun,
+  held,
+  loadFrame,
+  pointed,
+  power,
+  readout,
+  swapOf,
+  swapped,
+  tip,
+} from './gun';
 import { SHINE, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { axis, turn } from './rig';
@@ -147,9 +164,9 @@ describe('the hand that holds it', () => {
     );
   });
 
-  it('carries the model there: its vertices are the model, turned and moved', () => {
+  it('carries the model there, after its battery: its vertices are the model, turned and moved', () => {
     const at = grip([1, 2, 3], IDENT);
-    const vs = hand(IDENT);
+    const vs = hand(IDENT).slice(battery(1).length / STRIDE);
     expect(vs).toHaveLength(near.length);
     vs.forEach((v, i) => {
       // Distances from the grip are kept.
@@ -373,20 +390,20 @@ describe('the readout on the back of the gun', () => {
     expect(Math.max(...body.map(x => Math.abs(x.p[0])))).toBeGreaterThan(half);
   });
 
-  it('is glowing but modest (unlit, layer -2, near 1 so the bloom does not smear it): cyan above ten, red at ten and under', () => {
+  it('is glowing but modest (unlit, layer -2, near 1 so the bloom does not smear it): cyan above four, red at four and under', () => {
     for (const x of digits(40)) {
       expect(x.layer).toBe(-2);
       expect(x.c[2]).toBeGreaterThan(x.c[0] * 2);
       expect(Math.max(...x.c)).toBeGreaterThan(0.8);
       expect(Math.max(...x.c)).toBeLessThan(1.3);
     }
-    for (const n of [10, 5, 0]) {
+    for (const n of [4, 2, 0]) {
       for (const x of digits(n)) {
         expect(x.c[0]).toBeGreaterThan(x.c[1] * 3);
         expect(Math.max(...x.c)).toBeLessThan(1.3);
       }
     }
-    expect(digits(11)[0].c[0]).toBeLessThan(digits(11)[0].c[2]);
+    expect(digits(5)[0].c[0]).toBeLessThan(digits(5)[0].c[2]);
   });
 
   it('is as big as the screen allows over the gauge: each digit about 2 cm wide and 2 cm high with segments of half a centimetre', () => {
@@ -491,5 +508,66 @@ describe('the readout on the back of the gun', () => {
     held(c, [0, 0, 0], IDENT, 0, 1, 30);
     expect(b.length).toBe(a.length + readout(30).length);
     expect(c.length).toBeGreaterThan(readout(30).length);
+  });
+});
+
+describe('the battery and the capsule', () => {
+  it('sit home with no swap, and at its end', () => {
+    for (const rail of [false, true]) {
+      expect(swapped(-1, rail)).toEqual([0, 0, 0]);
+      expect(swapped(1, rail).map(v => Math.abs(v))).toEqual([0, 0, 0]);
+    }
+  });
+
+  it('slides the battery out and drops it, then brings a new one up into the grip', () => {
+    const out = (s: number) => swapped(s, false)[0];
+    expect(out(0.1)).toBe(0);
+    expect(out(0.3)).toBeCloseTo(0.1, 6);
+    expect(out(0.39)).toBeGreaterThan(0.5);
+    expect(out(0.4)).toBeCloseTo(0.22, 6);
+    expect(out(0.6)).toBeLessThan(out(0.45));
+    expect(out(0.8)).toBe(0);
+  });
+
+  it('unscrews the capsule, throws it up spinning, and screws a new one on', () => {
+    const [up, turn, tumble] = [0, 1, 2].map(i => (s: number) => swapped(s, true)[i]);
+    expect(up(0.3)).toBeCloseTo(0.02, 6);
+    expect(Math.abs(turn(0.3))).toBeCloseTo(3 * Math.PI, 6);
+    expect(up(0.44)).toBeGreaterThan(0.25);
+    expect(tumble(0.44)).toBeGreaterThan(2);
+    expect(up(0.5)).toBeGreaterThan(up(0.7));
+    expect(turn(0.7)).toBeGreaterThan(0);
+    expect(tumble(0.7)).toBe(0);
+  });
+
+  it('puts the battery under the grip and the capsule on top, going out along their axes', () => {
+    const ax: Vec3[] = [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, -1],
+    ];
+    const [foot, [, , fw]] = loadFrame([0, 0, 0], ax, false);
+    expect(foot[1]).toBeLessThan(-0.06);
+    expect(fw[1]).toBeGreaterThan(0.8);
+    expect(loadFrame([0, 0, 0], ax, false, 0.3)[0][1]).toBeLessThan(foot[1] - 0.08);
+    const [base, [, , up]] = loadFrame([0, 0, 0], ax, true);
+    expect(base[1]).toBeGreaterThan(0.1);
+    expect(up[1]).toBeCloseTo(1, 6);
+    expect(loadFrame([0, 0, 0], ax, true, 0.44)[0][1]).toBeGreaterThan(base[1] + 0.25);
+  });
+
+  it('counts the swap of the gun in hand from 0 to 1, and -1 without one', () => {
+    expect(swapOf({ reload: 0 })).toBe(-1);
+    expect(swapOf({ reload: GUN_RELOAD })).toBe(0);
+    expect(swapOf({ reload: RAIL_RELOAD / 2, railed: true })).toBeCloseTo(0.5, 9);
+  });
+
+  it('lights a weapon up over 0.6 s after it comes to hand: dark first, flickering, then full', () => {
+    expect(power(0)).toBe(0);
+    expect(power(0.1)).toBe(0);
+    expect(power(0.35)).toBeGreaterThan(0.2);
+    expect(power(0.35)).toBeLessThan(1);
+    expect(power(0.6)).toBe(1);
+    expect(power(9)).toBe(1);
   });
 });

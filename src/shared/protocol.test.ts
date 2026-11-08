@@ -25,9 +25,13 @@ import {
   GUN_COOLDOWN,
   HP_MAX,
   JUMP_BUFFER_TICKS,
+  GUN_MAG,
+  GUN_RELOAD,
   MAX_PLAYERS,
   PACK_BITS,
+  RAIL_CAP,
   RAIL_MAX,
+  RAIL_RELOAD,
   RAIL_TICKS,
   SHOCK_TICKS,
   SLIDE_TICKS,
@@ -154,7 +158,7 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 4-byte head, 55 bytes per player, then the match: 10 bytes and a byte per flag at home', () => {
+  it('has a 4-byte head, 58 bytes per player, then the match: 10 bytes and a byte per flag at home', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [
@@ -202,6 +206,9 @@ describe('snapshot frame', () => {
           zapping: true,
           fried: true,
           slow: 130,
+          mag: 12,
+          cap: 70,
+          reload: 33,
           // What the animation reads is not sent, nor the last shot's power.
           power: 3,
           ev: 0xffff,
@@ -211,7 +218,7 @@ describe('snapshot frame', () => {
       ...IDLE,
       packs: 2 ** 47 + 0x8000_0005,
     });
-    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 55, 10]);
+    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 58, 10]);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + SNAP_MATCH + 2);
     expect(bytes(buf)).toEqual([
       ...[MSG_SNAPSHOT, 0x12, 0x34, 1],
@@ -249,6 +256,9 @@ describe('snapshot frame', () => {
       8, // rail: 7 ticks plus one
       1 | 4, // railed, zapping << 2
       130, // slow
+      12, // mag
+      70, // cap
+      33, // reload
       ...[0, 0, 0x01, 0xe0], // red 0, blue 0, clock 480 s, not over
       ...[0x80, 0, 0x80, 0, 0, 5], // packs 0 and 2, 31 and 47
       ...[0, 0], // both flags at home
@@ -496,9 +506,11 @@ describe('snapshot frame', () => {
     expect(MAX_PLAYERS).toBeLessThanOrEqual(16);
     expect(Object.keys(MODE).length).toBeLessThanOrEqual(8);
     expect(Object.keys(SIDE).length).toBeLessThanOrEqual(8);
-    // A slide, a wall-run and a climb end long before t saturates, and the key bits are twelve.
+    // A slide, a wall-run and a climb end long before t saturates, and the key bits are thirteen.
     expect(SLIDE_TICKS).toBeLessThan(255);
-    expect(Math.max(...Object.values(KEY))).toBeLessThanOrEqual(0x800);
+    expect(Math.max(...Object.values(KEY))).toBeLessThanOrEqual(0x1000);
+    // The battery, the capsule and the swap in a byte each.
+    expect(Math.max(GUN_MAG, RAIL_CAP, GUN_RELOAD, RAIL_RELOAD)).toBeLessThanOrEqual(255);
     // The rail gun: its ticks plus one and its drain in a byte.
     expect(RAIL_MAX + 1).toBeLessThanOrEqual(255);
     expect(RAIL_TICKS).toBeLessThanOrEqual(255);

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { CUTS, DASH_COOLDOWN, EYE, GRAB_GAP, LOW_EYE, PLAYER_R } from '../shared/constants';
+import {
+  AMMO_MAX,
+  CUTS,
+  DASH_COOLDOWN,
+  EYE,
+  GRAB_GAP,
+  LOW_EYE,
+  PLAYER_R,
+} from '../shared/constants';
 import { STILL } from '../shared/physics';
 import { CUT, MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -719,7 +727,7 @@ describe('body', () => {
 });
 
 describe('the gun in the right hand', () => {
-  const armed = (o: Partial<PlayerState> = {}) => man({ ...o, ammo: 30 });
+  const armed = (o: Partial<PlayerState> = {}) => man({ ...o, ammo: 30, mag: 15 });
   /** The cyan glow of the gun: bright green, over a violet that is not. */
   const glow = (v: Vert[]) => v.filter(q => q.c[1] > 1.5);
   const GRIP: Vec3 = [0.22, -0.25, 0.4];
@@ -734,13 +742,30 @@ describe('the gun in the right hand', () => {
     expect(out).toEqual([]);
   });
 
+  it('comes to hand dark and lights up, and goes dark through a swap until the new battery is in', () => {
+    const p = armed();
+    const bright = (body: Body, q = p) => glow(draw(body, q)).length;
+    const lit = bright(watch(p, 60));
+    expect(bright(watch(p, 4))).toBeLessThan(lit * 0.2);
+    const body = watch(p, 60);
+    body.update({ ...p, reload: 20 }, DT);
+    expect(bright(body, { ...p, reload: 20 })).toBeLessThan(lit * 0.2);
+    body.update(p, DT);
+    expect(bright(body)).toBeLessThan(lit * 0.2);
+    for (let i = 0; i < 40; i++) {
+      body.update(p, DT);
+    }
+    expect(bright(body)).toBe(lit);
+  });
+
   it('is in the lower right of the view, in front of the camera, aimed at the crosshair', () => {
     const p = armed();
     const v = draw(watch(p, 60), p);
     const g = glow(v).map(q => local(p, q.at));
     expect(g.length).toBeGreaterThan(50);
-    // The gun is in the lower right: nearly all of it on the screen, none left of the middle.
-    expect(g.filter(seen).length).toBeGreaterThan(g.length * 0.7);
+    // The gun is in the lower right: nearly all of it on the screen, none left of the middle; the
+    // band round the battery's foot, under the grip, is below the view.
+    expect(g.filter(seen).length).toBeGreaterThan(g.length * 0.65);
     for (const l of g) {
       expect(l[0]).toBeGreaterThan(0);
     }
@@ -902,31 +927,31 @@ describe('the gun in the right hand', () => {
 });
 
 describe('the ammo on the back of the gun', () => {
-  const armed = (ammo: number) => man({ ammo });
+  const armed = (mag: number) => man({ ammo: AMMO_MAX, mag });
   /** The digits drawn last: their vertices as the body drew them. */
   const digits = (p: PlayerState, body = watch(p, 60)) => {
     const out: number[] = [];
     body.draw(out, eyeOf(p), 0, 0, 0, TEAM);
-    return out.slice(out.length - readout(p.ammo).length);
+    return out.slice(out.length - readout(p.mag!).length);
   };
 
-  it('shows the digits of the ammo, from the predicted state of each frame', () => {
-    const p = armed(30);
+  it('shows the digits of the shots in the battery, from the predicted state of each frame', () => {
+    const p = armed(12);
     const body = watch(p, 60);
-    expect(digits(p, body).length).toBe(readout(30).length);
-    const q = armed(31);
+    expect(digits(p, body).length).toBe(readout(12).length);
+    const q = armed(11);
     body.update(q, DT);
-    expect(digits(q, body).length).toBe(readout(31).length);
-    expect(readout(31).length).not.toBe(readout(30).length);
+    expect(digits(q, body).length).toBe(readout(11).length);
+    expect(readout(11).length).not.toBe(readout(12).length);
   });
 
-  it('are cyan, and red at ten and under', () => {
+  it('are cyan, and red at four and under', () => {
     /** The last vertex drawn: a digit's. */
     const last = (n: number) => digits(armed(n)).slice(-STRIDE);
-    expect(last(30)[7]).toBeGreaterThan(last(30)[6]);
-    expect(last(8)[6]).toBeGreaterThan(last(8)[7]);
-    expect(last(11)[7]).toBeGreaterThan(last(11)[6]);
-    expect(last(10)[6]).toBeGreaterThan(last(10)[7]);
+    expect(last(15)[7]).toBeGreaterThan(last(15)[6]);
+    expect(last(3)[6]).toBeGreaterThan(last(3)[7]);
+    expect(last(5)[7]).toBeGreaterThan(last(5)[6]);
+    expect(last(4)[6]).toBeGreaterThan(last(4)[7]);
   });
 
   it('face the eye: the digits are on a display turned toward the camera, nearly head on, on the screen', () => {
@@ -963,11 +988,11 @@ describe('the ammo on the back of the gun', () => {
 });
 
 describe('the gun points where the beam goes', () => {
-  const armed = (o: Partial<PlayerState> = {}) => man({ ...o, ammo: 30 });
+  const armed = (o: Partial<PlayerState> = {}) => man({ ...o, ammo: 30, mag: 15 });
   /** The model vertex of the gun that is nearest to a model point, and where the body drew it. */
   const spot = (out: number[], model: Vec3): Vec3 => {
     const m = gun(1);
-    const first = out.length / STRIDE - m.length / STRIDE - readout(30).length / STRIDE;
+    const first = out.length / STRIDE - m.length / STRIDE - readout(15).length / STRIDE;
     let best = 0;
     let d = Infinity;
     for (let i = 0; i < m.length / STRIDE; i++) {

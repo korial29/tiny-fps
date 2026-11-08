@@ -539,10 +539,10 @@ describe('the sounds and the screen of what happens to the own player', () => {
   it('feeds the HUD each frame: health, ammo, and how far down', () => {
     const { frame, hud } = setup();
     frame(player({ hp: 3, ammo: 12, down: 0 }));
-    expect(hud.vitals).toHaveBeenLastCalledWith(3, 12, false, false, -1, false);
+    expect(hud.vitals).toHaveBeenLastCalledWith(3, 12, false, false, -1, false, 0, false);
     expect(hud.down).toHaveBeenLastCalledWith(0, 0);
     frame(player({ hp: 0, ammo: -1, down: 90 }));
-    expect(hud.vitals).toHaveBeenLastCalledWith(0, -1, false, false, -1, false);
+    expect(hud.vitals).toHaveBeenLastCalledWith(0, -1, false, false, -1, false, 0, false);
     expect(hud.down).toHaveBeenLastCalledWith(0, 1.5);
   });
 });
@@ -680,9 +680,27 @@ describe('the own hits with the katana', () => {
   it('feed the HUD with the katana carried and in hand', () => {
     const { frame, hud } = setup();
     frame(player({ ammo: 12, blade: true, wield: true }));
-    expect(hud.vitals).toHaveBeenLastCalledWith(expect.any(Number), 12, true, true, -1, false);
+    expect(hud.vitals).toHaveBeenLastCalledWith(
+      expect.any(Number),
+      12,
+      true,
+      true,
+      -1,
+      false,
+      0,
+      false,
+    );
     frame(player({ ammo: 12, blade: true, wield: false }));
-    expect(hud.vitals).toHaveBeenLastCalledWith(expect.any(Number), 12, true, false, -1, false);
+    expect(hud.vitals).toHaveBeenLastCalledWith(
+      expect.any(Number),
+      12,
+      true,
+      false,
+      -1,
+      false,
+      0,
+      false,
+    );
   });
 });
 

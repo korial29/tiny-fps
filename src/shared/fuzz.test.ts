@@ -3,12 +3,16 @@ import { Sim } from '../../test/pilot';
 import {
   AIR_JUMPS,
   AMMO_MAX,
+  GUN_MAG,
   DASH_COOLDOWN,
   DOWN_TICKS,
   GUN_COOLDOWN,
+  GUN_RELOAD,
   HP_MAX,
   MAX_PITCH,
+  RAIL_CAP,
   RAIL_MAX,
+  RAIL_RELOAD,
 } from './constants';
 import { swingOf } from './blade';
 import { STRIKE, step } from './gun';
@@ -177,13 +181,16 @@ describe('random fire on ROOFTOPS', () => {
             swing: 0,
             rail: -1,
             railed: false,
+            mag: 0,
+            cap: 0,
+            reload: 0,
           });
         } else if (!p.down && p.hp > 1 && rnd() < 0.01) {
           p.hp--;
         }
         // A rack is far off on these roofs: the gun comes back at random now and then.
         if (!p.down && p.ammo <= 0 && rnd() < 0.02) {
-          p.ammo = AMMO_MAX;
+          [p.ammo, p.mag] = [AMMO_MAX, GUN_MAG];
         }
         if (!p.down && !p.blade && rnd() < 0.01) {
           p.blade = true;
@@ -206,6 +213,12 @@ describe('random fire on ROOFTOPS', () => {
         expect(p.down, label).toBeLessThanOrEqual(DOWN_TICKS);
         expect(p.down > 0, label).toBe(p.hp === 0);
         expect(p.down > 0 ? p.ammo : -1, label).toBe(-1);
+        // The battery holds no more than the gun has, nor the capsule than the rail gun.
+        expect(p.mag, label).toBeLessThanOrEqual(Math.min(GUN_MAG, Math.max(p.ammo, 0)));
+        expect(p.cap ?? 0, label).toBeLessThanOrEqual(
+          Math.min(RAIL_CAP, Math.max(p.rail ?? -1, 0)),
+        );
+        expect(p.reload, label).toBeLessThanOrEqual(Math.max(GUN_RELOAD, RAIL_RELOAD));
         expect(p.shots & 255, label).toBe(p.shots);
         // The katana: the swing runs in the katana's ticks, only with the katana in hand, and
         // only a katana that is there is in hand.

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { loaded } from '../../test/loaded';
 import { EAST, at, yard } from '../../test/yard';
 import {
   AMMO_MAX,
@@ -8,6 +9,11 @@ import {
   CUTS,
   DOWN_TICKS,
   GUN_COOLDOWN,
+  GUN_MAG,
+  GUN_RELOAD,
+  RAIL_CAP,
+  RAIL_MAX,
+  RAIL_RELOAD,
   HP_MAX,
   LOCK_BREAK,
   LOCK_TICKS,
@@ -58,7 +64,7 @@ const taps = (p: PlayerState, n: number, keys = 0, w = yard): number[] =>
 
 /** A red player standing at (x, z) on the yard with a full gun. */
 const armed = (x = 0, z = 0, over: Partial<PlayerState> = {}): PlayerState =>
-  Object.assign(at(x, z, EAST).p, { ammo: AMMO_MAX }, over);
+  Object.assign(at(x, z, EAST).p, loaded({ ammo: AMMO_MAX, ...over }));
 
 describe('the trigger', () => {
   it('fires a tap when it is let go, one ammo, and the next tap once the cooldown is over', () => {
@@ -209,6 +215,91 @@ describe('the trigger', () => {
   });
 });
 
+describe('the magazines', () => {
+  const { RELOAD, RAIL } = KEY;
+
+  it('fires a battery of GUN_MAG shots, swaps it by itself, then fires again once it is in', () => {
+    const p = armed();
+    expect(p.mag).toBe(GUN_MAG);
+    let fired = 0;
+    for (let k = 0; k < 4 * GUN_MAG * GUN_COOLDOWN && p.mag; k++) {
+      fired += +tap(p);
+    }
+    expect(fired).toBe(GUN_MAG);
+    expect([p.mag, p.ammo]).toEqual([0, AMMO_MAX - GUN_MAG]);
+    // Empty: the next step starts the swap, and no shot goes through its GUN_RELOAD ticks.
+    let dry = 0;
+    while (!go(p, dry % 2 ? 0 : FIRE)) {
+      dry++;
+    }
+    expect(dry).toBeGreaterThanOrEqual(GUN_RELOAD);
+    expect(dry).toBeLessThanOrEqual(GUN_RELOAD + 2);
+    expect([p.mag, p.ammo]).toEqual([GUN_MAG - 1, AMMO_MAX - GUN_MAG - 1]);
+    expect(p.reload).toBe(0);
+  });
+
+  it('takes GUN_RELOAD ticks, and loads what is left when it is less than a battery', () => {
+    const p = armed(0, 0, { ammo: 4, mag: 0 });
+    go(p, 0);
+    expect(p.reload).toBe(GUN_RELOAD);
+    for (let k = 1; k < GUN_RELOAD; k++) {
+      go(p, 0);
+    }
+    expect([p.reload, p.mag]).toEqual([1, 0]);
+    go(p, 0);
+    expect([p.reload, p.mag, p.ammo]).toEqual([0, 4, 4]);
+  });
+
+  it('swaps on KEY.RELOAD with room in the battery, not when it is full or nothing more is carried', () => {
+    const p = armed();
+    go(p, RELOAD);
+    expect(p.reload).toBe(0);
+    tap(p);
+    go(p, RELOAD);
+    expect(p.reload).toBe(GUN_RELOAD);
+    const q = armed(0, 0, { ammo: 5, mag: 5 });
+    go(q, RELOAD);
+    expect(q.reload).toBe(0);
+  });
+
+  it('drops the charge for a swap, and a switch of weapon drops the swap', () => {
+    const p = armed(0, 0, { blade: true });
+    tap(p);
+    for (let k = 0; k < 20; k++) {
+      go(p, FIRE);
+    }
+    expect(p.charge).toBeGreaterThan(0);
+    go(p, FIRE | RELOAD);
+    expect([p.charge, p.reload]).toEqual([0, GUN_RELOAD]);
+    expect(go(p, 0)).toBe(false);
+    go(p, KEY.BLADE);
+    expect([p.wield, p.reload, p.mag]).toEqual([true, 0, GUN_MAG - 1]);
+  });
+
+  it('throws the bolt from a capsule of RAIL_CAP ticks, then swaps it in RAIL_RELOAD with the bolt out', () => {
+    const p = Object.assign(at(0, 0, EAST).p, { rail: RAIL_MAX, cap: RAIL_CAP });
+    let zaps = 0;
+    for (let k = 0; k < RAIL_CAP + 10; k++) {
+      zaps += +(hit(p, RAIL | FIRE) === STRIKE.RAIL);
+    }
+    expect(zaps).toBe(RAIL_CAP);
+    expect([p.cap, p.rail]).toEqual([0, RAIL_MAX - RAIL_CAP]);
+    // The swap began on the step after the last tick: RAIL_RELOAD steps without the bolt in all.
+    expect(p.reload).toBe(RAIL_RELOAD - 9);
+    while (p.reload! > 1) {
+      expect(hit(p, RAIL | FIRE)).toBe(STRIKE.NONE);
+    }
+    expect(hit(p, RAIL | FIRE)).toBe(STRIKE.RAIL);
+    expect([p.reload, p.cap]).toEqual([0, RAIL_CAP - 1]);
+  });
+
+  it('fills the battery at the rack', () => {
+    const p = Object.assign(at(5, 0, EAST).p, { ammo: -1 });
+    go(p, 0, EAST, 0, racked);
+    expect([p.ammo, p.mag]).toEqual([AMMO_MAX, GUN_MAG]);
+  });
+});
+
 describe('a saber lock', () => {
   const locked = (over: Partial<PlayerState> = {}) =>
     armed(0, 0, {
@@ -267,7 +358,7 @@ describe('a saber lock', () => {
 
 describe('the rack', () => {
   const at5 = (over: Partial<PlayerState> = {}) =>
-    Object.assign(at(5, 0, EAST).p, { ammo: -1 }, over);
+    Object.assign(at(5, 0, EAST).p, loaded({ ammo: -1, ...over }));
 
   it("gives the team's rack gun with AMMO_MAX on arrival: once, the gun is full before the step fires", () => {
     const p = at5();
@@ -431,7 +522,7 @@ describe('down', () => {
       // Looking where the input says.
       expect(p.pitch).toBeCloseTo(0.3, 4);
       // And he plays again.
-      p.ammo = 5;
+      [p.ammo, p.mag] = [5, 5];
       expect(tap(p, 0, EAST, 0, w, team)).toBe(true);
     }
   });
@@ -476,12 +567,12 @@ const bladed = build({
 
 /** A red player standing at (x, z) on the yard with the katana and no gun. */
 const sword = (x = 0, z = 0, over: Partial<PlayerState> = {}): PlayerState =>
-  Object.assign(at(x, z, EAST).p, { blade: true }, over);
+  Object.assign(at(x, z, EAST).p, loaded({ blade: true, ...over }));
 
 const { LEFT, RIGHT, BLADE, SPECIAL } = KEY;
 
 describe('the katana rack', () => {
-  const at53 = (over: Partial<PlayerState> = {}) => Object.assign(at(5, 3, EAST).p, over);
+  const at53 = (over: Partial<PlayerState> = {}) => Object.assign(at(5, 3, EAST).p, loaded(over));
 
   it('gives the katana when he steps into its circle, and he keeps it on leaving', () => {
     const p = at53();
@@ -569,7 +660,7 @@ describe('the weapon in hand', () => {
     go(p, 0, EAST, 0, bladed);
     expect([p.blade, p.wield]).toEqual([true, true]);
     // With a gun, the gun stays in hand until he asks.
-    const q = Object.assign(at(5, 3, EAST).p, { ammo: AMMO_MAX });
+    const q = Object.assign(at(5, 3, EAST).p, loaded({ ammo: AMMO_MAX }));
     go(q, 0, EAST, 0, bladed);
     expect([q.blade, q.wield]).toEqual([true, false]);
     go(q, BLADE, EAST, 0, bladed);

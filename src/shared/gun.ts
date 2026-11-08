@@ -14,6 +14,8 @@ import {
   CUTS,
   DASH_COOLDOWN,
   GUN_COOLDOWN,
+  GUN_MAG,
+  GUN_RELOAD,
   HEAVY_MAX,
   HEAVY_TAP,
   LEAP_SPEED,
@@ -21,7 +23,9 @@ import {
   LUNGE_SPEED,
   PICK_H,
   RACK_R,
+  RAIL_CAP,
   RAIL_MAX,
+  RAIL_RELOAD,
   SPECIAL_LATE,
 } from './constants';
 import { forward, move, respawn } from './physics';
@@ -72,6 +76,10 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  * - In hand is the weapon he wants (KEY.BLADE the katana, KEY.RAIL the rail gun, neither the gun)
  *   when he has it, else the first he has of the gun, the katana and the rail gun; the katana
  *   stays in hand for the length of a swing. `wield` is the katana in hand, `railed` the rail gun.
+ * - The gun fires from its battery (`mag`), the rail gun from its capsule (`cap`). An empty one, or
+ *   KEY.RELOAD with room in it, swaps it for a full one from what he carries: `reload` ticks
+ *   without firing, then it holds GUN_MAG (RAIL_CAP) or what is left. A switch of weapon drops it.
+ *   The racks fill both.
  * - The rail gun throws its bolt on every step FIRE is held, spending a tick of it (`zapping`).
  * - The trigger: `cool` and `swing` run down, and at 0 a held FIRE charges the gun, with ammo, and
  *   letting it go fires a ball as strong as the charge (powerOf()), spending as many shots; or it
@@ -102,13 +110,13 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
   const { rack, blade, rail } = w.def.teams[team];
   const inside = !!rack && within(p, rack, RACK_R);
   if (armed && inside && !p.rack) {
-    p.ammo = AMMO_MAX;
+    [p.ammo, p.mag] = [AMMO_MAX, GUN_MAG];
   }
   p.rack = inside;
   p.blade = !!p.blade || (armed && !!blade && within(p, blade, RACK_R));
   const inRail = !!rail && within(p, rail, RACK_R);
   if (armed && inRail && !p.inRail) {
-    p.rail = RAIL_MAX;
+    [p.rail, p.cap] = [RAIL_MAX, RAIL_CAP];
   }
   p.inRail = inRail;
   p.cool = Math.max(0, p.cool - 1);
@@ -131,10 +139,26 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
   const has = [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0];
   const want = i.keys & KEY.BLADE ? 1 : i.keys & KEY.RAIL ? 2 : 0;
   const hand = p.swing && p.blade ? 1 : has[want] ? want : has.indexOf(true);
+  // A switch of weapon drops the swap under way.
+  if (hand != (p.railed ? 2 : +!!p.wield)) {
+    p.reload = 0;
+  }
   [p.wield, p.railed] = [hand == 1, hand == 2];
   if (!armed) {
-    p.charge = 0;
+    [p.charge, p.reload] = [0, 0];
     return STRIKE.NONE;
+  }
+  // The battery or the capsule of the gun in hand: swapped when empty or on KEY.RELOAD, then full.
+  const loads = hand == 0 ? p.ammo >= 0 : hand == 2;
+  const [load, full] = p.railed
+    ? [p.cap ?? 0, Math.min(RAIL_CAP, p.rail!)]
+    : [p.mag ?? 0, Math.min(GUN_MAG, p.ammo)];
+  if (p.reload) {
+    if (!--p.reload) {
+      p[p.railed ? 'cap' : 'mag'] = full;
+    }
+  } else if (loads && !busy && load < full && (!load || i.keys & KEY.RELOAD)) {
+    [p.reload, p.charge] = [p.railed ? RAIL_RELOAD : GUN_RELOAD, 0];
   }
   const c = swingOf(p);
   if (p.swing && c.ticks - p.swing === c.strike) {
@@ -142,7 +166,7 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
   }
   // The gun's charge goes with the katana in hand and not charging, the rail gun, the hands busy,
   // or no shot left.
-  if ((p.wield && !top) || p.railed || busy || (!p.wield && p.ammo <= 0)) {
+  if ((p.wield && !top) || p.railed || busy || p.reload || (!p.wield && !p.mag)) {
     p.charge = 0;
   }
   if (i.keys & KEY.FIRE && !busy) {
@@ -156,20 +180,22 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
       [p.swing, p.charge] = [CUTS[p.cut].ticks, 0];
       launch(p);
     } else if (p.railed) {
-      if (p.rail! > 0) {
+      if (p.cap && !p.reload) {
         p.rail!--;
+        p.cap--;
         p.zapping = true;
         return STRIKE.RAIL;
       }
-    } else if (!p.wield && !p.cool && p.ammo > 0) {
+    } else if (!p.wield && !p.cool && p.mag && !p.reload) {
       // Held, the gun charges; let go, it fires (below).
       p.charge = Math.min((p.charge ?? 0) + 1, CHARGE_TICKS);
     }
   } else if (p.charge) {
     // Let go: one ball as strong as the charge, spending as many shots.
-    p.power = Math.min(powerOf(p.charge), p.ammo);
+    p.power = Math.min(powerOf(p.charge), p.mag!);
     p.charge = 0;
     p.ammo -= p.power;
+    p.mag = p.mag! - p.power;
     p.shots = (p.shots + 1) & 255;
     p.cool = GUN_COOLDOWN;
     return STRIKE.SHOT;

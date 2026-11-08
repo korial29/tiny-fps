@@ -324,12 +324,14 @@ export const LAYERS: Voice[][] = [
     [2, 360, 2.2, 0.05, 0.4, 0.2, 0, 1, 0, 1, 0.22],
     [2, 1760, 0, 0.003, 0.05, 0.15, 0, 1, 0, 1, 0.35, 0.6],
   ],
-  // LASE: in the bass and the middle, a muffled square punch falling from 320 Hz, a saw an octave
-  // under it, and a soft thud of low-passed noise; 60 ms, for 20 a second.
+  // LASE: deep in the bass (the user, 2026-11-08): a sub sine thump falling from 75 Hz, a muffled
+  // square punch from 160 Hz, a saw an octave under it, and a dull thud of low-passed noise; 75 ms,
+  // for 20 a second.
   [
-    [0, 320, -6, 0.001, 0.008, 0.05, 0, 0.3, 0, 1, 0.55],
-    [1, 160, -4, 0.001, 0.01, 0.05, 0, 0.25, 0, 1, 0.45],
-    [3, 900, -2, 0.001, 0, 0.025, 0, 0.3, 0, 1, 0.35],
+    [2, 75, -3, 0.001, 0.015, 0.06, 0, 1, 0, 1, 0.8],
+    [0, 160, -5, 0.001, 0.008, 0.05, 0, 0.2, 0, 1, 0.5],
+    [1, 80, -3, 0.001, 0.01, 0.05, 0, 0.2, 0, 1, 0.4],
+    [3, 500, -2, 0.001, 0, 0.025, 0, 0.15, 0, 1, 0.3],
   ],
 ];
 

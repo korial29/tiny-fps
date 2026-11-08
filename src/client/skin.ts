@@ -97,8 +97,8 @@ const TRUNK: Loft = {
     [1.13, 0, 0.013, 0.152, 0.128, 1.05, UPPER],
     [1.25, 0, 0.02, 0.155, 0.13, 1.73, UPPER],
     [1.262, 0, 0.02, 0.154, 0.127, 1.78, JACKET],
-    [1.3, 0, 0.022, 0.153, 0.129, 1.85, JACKET],
-    [1.37, 0, 0.015, 0.157, 0.138, 2, JACKET],
+    [1.3, 0, 0.02, 0.153, 0.134, 1.85, JACKET],
+    [1.37, 0, 0.014, 0.157, 0.144, 2, JACKET],
     [1.37, 0, 0.014, 0.253, 0.144, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
     [1.39, 0, 0.0105, 0.252, 0.1455, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
     [1.41, 0, 0.0065, 0.249, 0.1465, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
@@ -599,11 +599,21 @@ const generate = (lod: number): Skin => {
             const q = (i * 2 * Math.PI) / n;
             // The shoe is squarer than the leg, so its toe is not a point.
             // The shoulders are rounder than the chest under them: the deltoids' caps.
+            // Eased over 8 cm, or the back creases in a line across the shoulder blades.
             const e =
-              L === TRUNK && at > 1.38 && rx > 0.19
-                ? 2
+              L === TRUNK && rx > 0.19
+                ? 2.3 - 0.3 * clamp((at - 1.37) / 0.08)
                 : (L.e ?? 2) * (L === LEG && at < 0.12 ? 2 : 1);
-            const x = cx + rx * sgn(Math.sin(q), e);
+            // The back and the chest widen over the 12 cm under the armpits toward the shoulders'
+            // ring, whose vertices they take at the split: no ridge across the shoulder blades.
+            const flare =
+              L === TRUNK && rx < 0.2 && at <= 1.37
+                ? 1 +
+                  (at < 1.37 ? 0.65 : 0.3) *
+                    clamp((at - 1.25) / 0.12) *
+                    clamp((Math.abs(Math.cos(q)) - 0.6) / 0.27)
+                : 1;
+            const x = cx + rx * sgn(Math.sin(q), e) * flare;
             const o = co + ro * sgn(Math.cos(q), e);
             row.push(L.z ? vertex(m * x, o, at, u) : vertex(m * x, at, -o, u));
           }

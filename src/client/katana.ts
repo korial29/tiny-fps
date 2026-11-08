@@ -274,19 +274,17 @@ export const ends = (pos: Vec3, q: Quat): Vec3[] => {
 };
 
 /**
- * The cuts, swung the way Jedi Knight 2 swings its saber in the first person: the whole arms carry
- * the hands round a wide arc, up over a shoulder, across the view and out low on the other side,
- * and the blade points out along the arc from them, as a body swings a long sword. Each cut is
- * keys of [share of the swing, grip x, y, z, blade direction x, y, z] in the camera's space (right,
- * up, forward), the guard first and last: a wind-up, the strike at its tick (every cut passes the
- * middle of the view there) and a follow-through, with the hands taking the slope between their
- * neighbours' keys (fastest through the strike). The right hand holds the grip, the left BEHIND
- * it. In the guard the hands sit at the bottom of the view and the blade rises ahead, leaning
- * forward and to the left, so the view shows more blade than hands.
+ * The cuts. Each is keys of [share of the swing, grip x, y, z, blade direction x, y, z] in the
+ * camera’s space (right, up, forward), the guard first and last: a wind-up, the strike at its tick
+ * (every cut passes the middle of the view there) and a follow-through, with the hands taking the
+ * slope between their neighbours’ keys (fastest through the strike). The right hand holds the
+ * grip, the left BEHIND it. In the guard the hands sit at the bottom of the view and the blade rises
+ * ahead, leaning forward and to the left, so the view shows more blade than hands.
  */
 /** The most the katana tips down with the look, radians: looking further down, it stays in the guard, upright before the body. */
 export const BOW = 0.3;
-export const GUARD = [0.06, -0.24, 0.45, 0.16, 0.74, 0.65];
+/** The guard as the arms hold it: the hands low, the blade near upright. */
+export const GUARD = [0.06, -0.25, 0.42, 0.14, 0.82, 0.55];
 /**
  * The saber lock's hold, like GUARD: the hands up before the chest and the blade rising ahead,
  * leaning to the left, so that it crosses the foe's, which leans to his own left.
@@ -301,94 +299,101 @@ export const locked = (t: number, push = 0): number[] => [
 ];
 /** The share of cut `c`'s swing at which it strikes. */
 const strikeAt = (c: number) => CUTS[c].strike / CUTS[c].ticks;
-/** Up over the left shoulder with the blade cocked back, round across the middle, out low to the right and round behind, then back up. */
-const ACROSS = (s: number) => [
-  [0, ...GUARD],
-  [0.12, -0.22, -0.03, 0.4, -0.55, 0.75, -0.35],
-  [0.24, -0.34, 0.07, 0.28, -0.6, 0.35, -0.72],
-  [s - 0.07, -0.24, -0.14, 0.46, -0.98, 0.15, 0.1],
-  [s, -0.04, -0.1, 0.38, -0.05, 0.08, 1],
-  [0.5, 0.3, -0.25, 0.42, 0.95, -0.1, 0.15],
-  [0.62, 0.3, -0.3, 0.3, 0.85, -0.4, -0.3],
-  [0.8, 0.27, -0.27, 0.38, 0.45, 0.6, 0.2],
-  [1, ...GUARD],
-];
+/** The middle of the shoulders in the keys' space, which turns with the chest. */
+const SHOULDERS = [0, -0.17, -0.08];
+/** The angle the locked wrists hold the blade at, above the line from the shoulders to the grip, all through a cut. */
+const WRISTS = 1;
 /**
- * The arc's cut from the left: raised high over the left shoulder, the blade cocked back and up,
- * then down across the body through the middle of the view, out low to the right and round
- * behind, then back up to the guard.
+ * The keys of a cut that the arms swing and the wrists do not (the user, 2026-11-08: "the arms and
+ * the chest go with the cut, the wrists do not move"): [share, grip x, y, z] between the guards,
+ * the blade added to each, WRISTS above the line from the shoulders to the grip, in the plane of
+ * the cut rolled `roll` radians to the left of upright. The blade stays ahead in that plane; it
+ * rises with the hands over the head and comes down as they drop, and never swings out to a side.
  */
-const DIAGONAL = (s: number) => [
+const swung = (roll: number, keys: number[][]) => [
   [0, ...GUARD],
-  [0.14, -0.2, 0, 0.38, -0.45, 0.85, -0.25],
-  [0.3, -0.27, 0.1, 0.3, -0.55, 0.6, -0.6],
-  [s - 0.07, -0.21, 0, 0.42, -0.92, 0.35, 0.15],
-  [s, -0.04, -0.12, 0.4, 0.1, -0.1, 1],
-  [0.56, 0.26, -0.3, 0.4, 0.8, -0.55, 0.2],
-  [0.68, 0.26, -0.32, 0.32, 0.65, -0.6, -0.4],
-  [0.84, 0.24, -0.27, 0.4, 0.4, 0.6, 0.2],
+  ...keys.map(([s, x, y, z]) => {
+    const n: Vec3 = [Math.cos(roll), Math.sin(roll), 0];
+    const a: Vec3 = [x, y - SHOULDERS[1], z - SHOULDERS[2]];
+    const o = sum([a, 1], [n, -a[0] * n[0] - a[1] * n[1]]);
+    const l = sum([o, 1 / Math.hypot(...o)]);
+    return [s, x, y, z, ...sum([l, Math.cos(WRISTS)], [cross(l, n), Math.sin(WRISTS)])];
+  }),
   [1, ...GUARD],
 ];
-/** A key of a cut turned round, left for right: the grip's x and the blade's. */
-const mirror = (k: number[]) => [k[0], -k[1], k[2], k[3], -k[4], k[5], k[6]];
+/** A key of a cut turned round, left for right: the grip's x. */
+const mirror = ([s, x, y, z]: number[]) => [s, -x, y, z];
+/**
+ * The cut from the left, on a diagonal: the hands drawn to the left with the blade raised over the
+ * left shoulder, then down across the body, the blade through the middle of the view at the strike,
+ * to low on the right with the point ahead. `k` of the way across on the far side.
+ */
+const ACROSS = (s: number, k = 1) => [
+  [0.12, -0.14, -0.12, 0.44],
+  [0.24, -0.26, -0.06, 0.4],
+  [s - 0.07, -0.16, -0.1, 0.46],
+  [s, 0.18 * k, -0.38, 0.4],
+  [0.5, 0.22 * k, -0.46, 0.3],
+  [0.62, 0.24 * k, -0.5, 0.2],
+  [0.8, 0.16 * k, -0.4, 0.3],
+];
+/** The arc's cut from the left: the cut across wound up further out, on a wider diagonal. */
+const DIAGONAL = (s: number, k = 1) => [
+  [0.14, -0.16, -0.1, 0.42],
+  [0.3, -0.3, -0.02, 0.36],
+  [s - 0.07, -0.18, -0.08, 0.44],
+  [s, 0.21 * k, -0.36, 0.4],
+  [0.56, 0.22 * k, -0.46, 0.3],
+  [0.68, 0.24 * k, -0.5, 0.2],
+  [0.84, 0.2 * k, -0.4, 0.3],
+];
+/** Raised over the head, the blade upright, down through the middle to the hands low at the hips and the point ahead. */
+const SLASH = (s: number) => [
+  [0.14, 0.03, -0.06, 0.44],
+  [0.28, 0.02, 0.2, 0.28],
+  [0.34, 0.02, 0.06, 0.44],
+  [s, 0, -0.45, 0.4],
+  [0.52, 0, -0.62, 0.16],
+  [0.64, 0, -0.64, 0.12],
+];
+/** How far the plane of a cut across leans, and the arc's. */
+const [ROLL, WIDE] = [0.7, 0.85];
+/** How far across the cuts from the right go on their far side, where the right arm reaches across the body. */
+const FAR = 0.5;
 const KEYS: number[][][] = [
   // Drawn back to the right hip, lunged out along the look with the arms straight, held a beat.
   [
     [0, ...GUARD],
-    [0.3, 0.12, -0.16, 0.28, -0.08, 0.25, 1],
+    [0.3, 0.12, -0.16, 0.24, -0.08, 0.25, 1],
     [strikeAt(0), 0.04, -0.12, 0.38, -0.02, 0.1, 1],
     [strikeAt(0) + 0.2, 0.04, -0.12, 0.38, -0.02, 0.1, 1],
     [1, ...GUARD],
   ],
-  ACROSS(strikeAt(1)),
-  // The cut from the right: the cut from the left turned round, shorter on the right side, where
-  // the left arm reaches across the chest to the wind-up.
-  [
-    [0, ...GUARD],
-    [0.12, 0.28, -0.03, 0.33, 0.55, 0.75, -0.35],
-    [0.24, 0.34, 0, 0.24, 0.45, 0.65, -0.6],
-    [strikeAt(2) - 0.07, 0.38, -0.15, 0.39, 0.98, 0.15, 0.1],
-    [strikeAt(2), 0, -0.1, 0.37, -0.05, 0.08, 1],
-    [0.5, -0.06, -0.06, 0.32, -0.95, -0.1, 0.15],
-    [0.62, -0.22, -0.3, 0.38, -0.85, -0.4, -0.3],
-    [0.8, -0.16, -0.27, 0.45, -0.3, 0.6, 0.2],
-    [1, ...GUARD],
-  ],
-  // Raised high over the head with the blade down the back, down through the middle to low ahead.
-  [
-    [0, ...GUARD],
-    [0.14, 0.03, -0.05, 0.38, -0.05, 0.95, -0.1],
-    [0.28, 0.04, 0.14, 0.26, 0, 0.65, -0.76],
-    [0.34, 0.02, 0.04, 0.47, 0, 1, 0.15],
-    [strikeAt(3), 0, -0.1, 0.38, 0, 0.08, 1],
-    [0.52, 0.03, -0.29, 0.43, 0, -0.55, 0.85],
-    [0.64, 0.03, -0.34, 0.4, 0, -0.65, 0.75],
-    [1, ...GUARD],
-  ],
+  swung(ROLL, ACROSS(strikeAt(1))),
+  swung(-ROLL, ACROSS(strikeAt(2), FAR).map(mirror)),
+  swung(0, SLASH(strikeAt(3))),
   // The lunge: drawn back deep to the hip, then the arms straight out on the point, held through
   // the throw forward.
   [
     [0, ...GUARD],
-    [0.2, 0.13, -0.13, 0.28, -0.08, 0.3, 1],
+    [0.2, 0.13, -0.13, 0.26, -0.08, 0.3, 1],
     [strikeAt(4), 0.04, -0.12, 0.38, -0.02, 0.1, 1],
     [strikeAt(4) + 0.3, 0.04, -0.12, 0.38, -0.02, 0.1, 1],
     [1, ...GUARD],
   ],
-  DIAGONAL(strikeAt(5)),
-  DIAGONAL(strikeAt(6)).map((k, i, all) => (i && i < all.length - 1 ? mirror(k) : k)),
-  // The leap: raised high over the head as he jumps, held there to the top, then down on the foe
-  // as he comes down, low ahead.
-  [
-    [0, ...GUARD],
-    [0.12, 0.03, -0.02, 0.38, -0.05, 0.95, -0.1],
-    [0.3, 0.04, 0.14, 0.26, 0, 0.5, -0.86],
-    [0.55, 0.04, 0.14, 0.26, 0, 0.5, -0.86],
-    [strikeAt(7) - 0.07, 0.02, 0.03, 0.47, 0, 1, 0.15],
-    [strikeAt(7), 0, -0.1, 0.38, 0, 0.08, 1],
-    [0.8, 0.04, -0.3, 0.43, 0, -0.6, 0.8],
-    [0.9, 0.03, -0.34, 0.4, 0, -0.65, 0.75],
-    [1, ...GUARD],
-  ],
+  swung(WIDE, DIAGONAL(strikeAt(5))),
+  swung(-WIDE, DIAGONAL(strikeAt(6), FAR).map(mirror)),
+  // The leap: raised over the head as he jumps, held there to the top, then down on the foe as he
+  // comes down, to the hands low and the point ahead.
+  swung(0, [
+    [0.12, 0.03, -0.04, 0.42],
+    [0.3, 0.02, 0.2, 0.28],
+    [0.55, 0.02, 0.2, 0.28],
+    [strikeAt(7) - 0.07, 0.02, 0.04, 0.44],
+    [strikeAt(7), 0, -0.45, 0.4],
+    [0.8, 0, -0.62, 0.16],
+    [0.9, 0, -0.64, 0.12],
+  ]),
 ];
 
 const NOW: number[] = [];

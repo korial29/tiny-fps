@@ -612,10 +612,10 @@ describe('a runner with the katana', () => {
     } else {
       const s = cut == CUT.LEFT ? 1 : -1;
       expect(s * path[strike + 3][0]).toBeGreaterThan(s * path[strike - 4][0] + 0.8);
-      // The runner faces -z: its right is +x. Wound up out at one side, finished out at the other.
+      // The runner faces -z: its right is +x. Wound up high on one side, finished low on the other.
       expect(s * (path[tick(0.24)][0] - 5)).toBeLessThan(-0.3);
       expect(s * (path[tick(0.6)][0] - 5)).toBeGreaterThan(0.3);
-      expect(path[tick(0.6)][1]).toBeLessThan(1 + 1.3);
+      expect(path[tick(0.6)][1]).toBeLessThan(path[tick(0.24)][1] - 0.5);
     }
     // The cut ends where the carry was: the blade upright.
     expect(path.at(-1)![1]).toBeGreaterThan(1 + 2.1);

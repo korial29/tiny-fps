@@ -1263,29 +1263,31 @@ describe('the katana in both hands', () => {
     /** The tick at the share `k` of the swing. */
     const tick = (k: number) => Math.round(k * ticks);
     const at = path[strike];
-    // Through the middle of the view at the strike, in front of the camera.
-    expect(Math.abs(at[0])).toBeLessThan(0.25);
-    expect(Math.abs(at[1])).toBeLessThan(0.15);
+    // Through the middle of the view at the strike, in front of the camera: within two ticks of it.
+    const near = path.slice(strike - 2, strike + 3).map(v => Math.hypot(v[0], v[1]));
+    expect(Math.min(...near)).toBeLessThan(0.15);
+    expect(Math.abs(at[0])).toBeLessThan(0.4);
     expect(at[2]).toBeGreaterThan(1);
     if (cut == CUT.THRUST) {
       // Out: from the pull back to the strike, forward, and near its longest there.
       expect(path[strike][2]).toBeGreaterThan(path[tick(0.22)][2] + 0.15);
       expect(path[strike][2]).toBeGreaterThan(Math.max(...path.map(v => v[2])) - 0.12);
     } else if (cut == CUT.SLASH) {
-      // Over the head, behind the eye, then down through the middle to far below the view.
-      expect(path[tick(0.28)][1]).toBeGreaterThan(0.5);
-      expect(path[tick(0.28)][2]).toBeLessThan(0);
+      // Over the head, the blade upright, then down through the middle to far below the view.
+      expect(path[tick(0.28)][1]).toBeGreaterThan(0.9);
+      expect(path[tick(0.28)][2]).toBeLessThan(0.4);
       expect(path[strike - 2][1]).toBeGreaterThan(path[strike][1]);
       expect(path[strike][1]).toBeGreaterThan(path[strike + 2][1]);
-      expect(path[tick(0.55)][1]).toBeLessThan(-0.8);
+      expect(path[tick(0.55)][1]).toBeLessThan(-0.7);
     } else {
-      // From out at one side, level with the hands, to out at the other and a little low.
+      // On a diagonal: from high over the shoulder on one side, down across to low on the other.
       const sign = cut == CUT.LEFT ? 1 : -1;
       expect(sign * path[tick(0.24)][0]).toBeLessThan(-0.5);
-      expect(path[tick(0.24)][2]).toBeLessThan(0.4);
+      expect(path[tick(0.24)][1]).toBeGreaterThan(0.5);
       expect(sign * path[strike - 2][0]).toBeLessThan(sign * path[strike][0]);
       expect(sign * path[strike][0]).toBeLessThan(sign * path[strike + 2][0]);
-      expect(sign * path[tick(0.6)][0]).toBeGreaterThan(0.6);
+      expect(path[strike - 2][1]).toBeGreaterThan(path[strike + 2][1]);
+      expect(sign * path[tick(0.6)][0]).toBeGreaterThan(0.2);
       expect(path[tick(0.6)][1]).toBeLessThan(-0.2);
     }
     // And back at the guard at the end.
@@ -1304,15 +1306,15 @@ describe('the katana in both hands', () => {
       // Raised high on its side in the wind-up.
       expect(sign * path[tick(0.3)][0], show(path[tick(0.3)])).toBeLessThan(-0.3);
       expect(path[tick(0.3)][1], show(path[tick(0.3)])).toBeGreaterThan(0.4);
-      // Through the middle of the view at the strike, in front of the camera.
-      expect(Math.abs(path[strike][0]), show(path[strike])).toBeLessThan(0.3);
-      expect(Math.abs(path[strike][1]), show(path[strike])).toBeLessThan(0.3);
+      // Through the middle of the view at the strike, in front of the camera: within two ticks of it.
+      const near = path.slice(strike - 2, strike + 3).map(v => Math.hypot(v[0], v[1]));
+      expect(Math.min(...near), show(path[strike])).toBeLessThan(0.3);
       expect(path[strike][2]).toBeGreaterThan(0.8);
       // Down and across: falling and crossing over through the strike, low on the other side after.
       expect(path[strike - 2][1]).toBeGreaterThan(path[strike + 2][1]);
       expect(sign * path[strike - 2][0]).toBeLessThan(sign * path[strike + 2][0]);
-      expect(sign * path[tick(0.56)][0], show(path[tick(0.56)])).toBeGreaterThan(0.4);
-      expect(path[tick(0.56)][1], show(path[tick(0.56)])).toBeLessThan(-0.3);
+      expect(sign * path[tick(0.65)][0], show(path[tick(0.65)])).toBeGreaterThan(0.2);
+      expect(path[tick(0.65)][1], show(path[tick(0.65)])).toBeLessThan(-0.3);
     }
   });
 

@@ -43,16 +43,17 @@ const eyeBase = (v: Float32Array, k: number) =>
   v[k * 6 + 2] < -0.065;
 
 describe('skin', () => {
-  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 8000 (with the pouches), close (within CLOSE) under 22500', () => {
+  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 12000 (rings measured on the soldier, his webbing), close (within CLOSE) under 26000', () => {
     const [far, near, close] = [0, 1, 3].map(lod => draw(lod).length / STRIDE);
     expect(far).toBeLessThan(1800);
-    expect(near).toBeLessThanOrEqual(8000);
-    expect(close).toBeLessThanOrEqual(22500);
+    expect(near).toBeLessThanOrEqual(12000);
+    expect(close).toBeLessThanOrEqual(26000);
     expect(far).toBeLessThan(near * 0.3);
-    expect(near).toBeLessThan(close * 0.4);
-    expect(body(1).w.length).toBeLessThan(1350);
+    // Near carries the measured rings too, so it is less far below close than it was.
+    expect(near).toBeLessThan(close * 0.45);
+    expect(body(1).w.length).toBeLessThan(2000);
     // The eye's own body stays as it was: no head, and the near rings.
-    expect(draw(2).length / STRIDE).toBeLessThan(2700);
+    expect(draw(2).length / STRIDE).toBeLessThan(4700);
   });
 
   it('is a 1.8 m runner on the floor, narrower than the player cylinder', () => {

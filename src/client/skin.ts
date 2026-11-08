@@ -85,23 +85,27 @@ interface Loft {
 // shoulders' sides, ending in the torso's own side vertices.
 const TRUNK: Loft = {
   chain: [J.PELVIS, J.SPINE, J.CHEST, J.NECK, J.HEAD],
-  n: [8, 12, 18],
+  n: [8, 12, 20],
   e: 2.3,
-  far: [0, 2, 4, 6, 7, 9, 12, 14],
+  far: [0, 2, 5, 6, 9, 10, 13, 18],
   rings: [
-    [0.93, 0, -0.013, 0.198, 0.121, 0, PANTS],
-    [0.99, 0, -0.015, 0.198, 0.121, 0.25, JACKET],
-    [1.03, 0, -0.011, 0.19, 0.139, 0.5, JACKET],
-    [1.12, 0, -0.012, 0.18, 0.137, 1, UPPER],
-    [1.24, 0, -0.02, 0.172, 0.135, 1.7, JACKET],
-    [1.3, 0, -0.024, 0.165, 0.131, 1.85, UPPER, 50, JACKET],
-    [1.37, 0, -0.015, 0.172, 0.155, 2, JACKET],
-    [1.37, 0, -0.009, 0.315, 0.16, 2, UPPER, 155, JACKET, 135, UPPER, 50, JACKET],
-    [1.41, 0, 0.001, 0.312, 0.165, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.445, 0, 0.027, 0.303, 0.163, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.475, 0, 0.03, 0.289, 0.149, 2.03, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.495, 0, 0.036, 0.268, 0.131, 2.07, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.512, 0, 0.044, 0.217, 0.106, 2.1, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [0.93, 0, 0.013, 0.198, 0.121, 0, PANTS],
+    [0.99, 0, 0.015, 0.198, 0.121, 0.25, JACKET],
+    [1.03, 0, 0.011, 0.19, 0.139, 0.5, JACKET],
+    [1.075, 0, 0.012, 0.185, 0.138, 0.75, JACKET],
+    [1.12, 0, 0.012, 0.18, 0.137, 1, UPPER],
+    [1.13, 0, 0.013, 0.174, 0.145, 1.05, UPPER],
+    [1.25, 0, 0.02, 0.174, 0.143, 1.73, UPPER],
+    [1.262, 0, 0.02, 0.172, 0.135, 1.78, JACKET],
+    [1.3, 0, 0.024, 0.165, 0.131, 1.85, UPPER, 50, JACKET],
+    [1.37, 0, 0.015, 0.172, 0.155, 2, JACKET],
+    [1.37, 0, 0.009, 0.315, 0.16, 2, UPPER, 155, JACKET, 135, UPPER, 50, JACKET],
+    [1.39, 0, 0.004, 0.314, 0.163, 2, UPPER, 155, JACKET, 135, UPPER, 50, JACKET],
+    [1.41, 0, -0.001, 0.312, 0.165, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.445, 0, -0.027, 0.303, 0.163, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.475, 0, -0.03, 0.289, 0.149, 2.03, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.495, 0, -0.036, 0.268, 0.131, 2.07, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.512, 0, -0.044, 0.217, 0.106, 2.1, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
     [1.532, 0, 0, 0.12, 0.1, 2.25, TRIM],
     [1.555, 0, 0, 0.068, 0.066, 2.6, FLESH],
   ],
@@ -111,17 +115,25 @@ const TRUNK: Loft = {
 // written here.
 const LEG: Loft = {
   chain: [J.PELVIS, J.THIGH_R, J.SHIN_R, J.FOOT_R, J.TOE_R],
-  n: [6, 8, 14],
+  n: [6, 10, 16],
   m: true,
-  far: [0, 2, 4, 6, 8, 10, 12, 14],
+  far: [0, 3, 8, 11, 15, 18, 20, 22],
   rings: [
     [0.93, 0.1, 0, 0, 0, 0, PANTS],
-    [0.85, 0.1, 0.006, 0.099, 0.114, 0.6, PANTS],
+    [0.85, 0.1, 0.006, 0.097, 0.114, 0.6, PANTS],
+    [0.79, 0.1, 0.002, 0.088, 0.103, 0.785, PANTS],
     [0.72, 0.1, -0.002, 0.082, 0.093, 1, PANTS],
+    [0.66, 0.1, -0.002, 0.08, 0.096, 1.088, PANTS],
+    [0.6, 0.1, -0.003, 0.08, 0.098, 1.176, PANTS],
     [0.55, 0.1, -0.003, 0.09, 0.09, 1.25, PANTS],
+    [0.52, 0.1, -0.004, 0.092, 0.091, 1.375, PANTS],
     [0.49, 0.1, -0.004, 0.092, 0.091, 1.5, PANTS],
-    [0.42, 0.1, 0.002, 0.082, 0.081, 1.8, UPPER],
+    [0.455, 0.1, -0.001, 0.089, 0.088, 1.65, PANTS],
+    [0.425, 0.1, 0.002, 0.091, 0.089, 1.779, UPPER],
+    [0.415, 0.1, 0.003, 0.088, 0.087, 1.811, UPPER],
+    [0.375, 0.1, 0.007, 0.071, 0.075, 1.9, UPPER],
     [0.33, 0.1, 0.012, 0.063, 0.069, 2, UPPER],
+    [0.26, 0.1, 0.008, 0.056, 0.064, 2.025, UPPER],
     [0.19, 0.1, 0.003, 0.06, 0.073, 2.05, UPPER],
     [0.105, 0.1, 0, 0.048, 0.05, 2.3, UPPER],
     [0.085, 0.1, 0.0025, 0.048, 0.047, 2.5, UPPER],
@@ -150,14 +162,17 @@ const ARM: Loft = {
   chain: [SWING_R, J.ARM_R, J.FOREARM_R, J.HAND_R],
   n: [0, 0, 0],
   m: true,
-  far: [0, 1, 3, 4, 5, 6, 8, 10],
+  far: [0, 1, 3, 6, 8, 9, 11, 13],
   rings: [
     [1.37, 0.224, 0, 0, 0, 0, JACKET],
     [1.31, 0.245, -0.003, 0.068, 0.08, 0.5, JACKET],
-    [1.225, 0.243, -0.002, 0.065, 0.072, 1.12, JACKET],
-    [1.18, 0.24, 0.003, 0.062, 0.065, 1.5, JACKET],
-    [1.135, 0.238, -0.002, 0.065, 0.07, 1.9, JACKET],
-    [0.975, 0.228, 0, 0.048, 0.052, 2.05, GLOVE],
+    [1.225, 0.243, -0.002, 0.067, 0.075, 1.12, JACKET],
+    [1.18, 0.24, 0.003, 0.068, 0.077, 1.5, JACKET],
+    [1.135, 0.238, -0.002, 0.066, 0.068, 1.9, JACKET],
+    [1.09, 0.235, -0.001, 0.061, 0.071, 2, JACKET],
+    [1.05, 0.233, -0.001, 0.051, 0.065, 2, JACKET],
+    [1.01, 0.23, 0, 0.045, 0.057, 2, JACKET],
+    [0.975, 0.228, 0, 0.049, 0.055, 2.05, GLOVE],
     [0.935, 0.222, 0, 0.03, 0.03, 2.6, GLOVE],
     [0.885, 0.222, -0.004, 0.027, 0.037, 3, GLOVE],
     [0.84, 0.222, -0.008, 0.029, 0.042, 3, GLOVE],
@@ -205,36 +220,60 @@ const EAR: Loft = {
   ],
 };
 
-// The soldier's webbing, pieces of their own on the trunk like the eyes on the head: a pouch block
-// on the chest in two halves, a big pouch on the belt each side of the buckle: boxes with their
-// backs in the body, the left one the right one mirrored. Too small to draw far.
-const POUCHES: Loft = {
+// The soldier's webbing, pieces of their own on the trunk like the eyes on the head, measured on
+// the user's soldier mesh: a strap from the chest rig over each shoulder, one up each side of the
+// back, two pouches each side on the chest and on the belt, the buckle. Too small to draw far.
+/** A strap along the trunk, the left one the right one mirrored: rings of [height, x, depth, half width, half thickness]. */
+const strap = (rings: number[][]): Loft => ({
   chain: [J.CHEST],
-  n: [0, 8, 8],
-  e: 5,
-  z: true,
+  n: [0, 6, 8],
+  e: 4,
   m: true,
   k: true,
   far: [],
-  rings: [
-    [-0.11, 0.085, 1.374, 0, 0, 0, UPPER],
-    [-0.11, 0.085, 1.374, 0.08, 0.042, 0, UPPER],
-    [-0.183, 0.085, 1.374, 0.08, 0.042, 0, UPPER],
-    [-0.183, 0.085, 1.374, 0, 0, 0, UPPER],
-  ],
-};
-const BELT: Loft = {
-  ...POUCHES,
-  chain: [J.SPINE],
-  rings: [
-    [-0.078, 0.12, 1.195, 0, 0, 0, UPPER],
-    [-0.078, 0.12, 1.195, 0.05, 0.06, 0, UPPER],
-    [-0.182, 0.12, 1.195, 0.05, 0.06, 0, UPPER],
-    [-0.182, 0.12, 1.195, 0, 0, 0, UPPER],
-  ],
-};
+  rings: rings.map(r => [...r, 0, UPPER]),
+});
+/** A pouch standing out of the trunk: x, bottom, top, depth, half width, half depth, joint, mirrored. */
+const pouch = ([x, y0, y1, o, rx, ro, j, m]: number[]): Loft => ({
+  chain: [j],
+  n: [0, 8, 8],
+  e: 5,
+  m: !!m,
+  k: true,
+  far: [],
+  rings: [y0, y0, y1, y1].map((y, i) => [y, x, o, i % 3 && rx, i % 3 && ro, 0, UPPER]),
+});
+const GEAR = [
+  strap([
+    [1.418, 0.12, 0.146, 0, 0],
+    [1.42, 0.12, 0.144, 0.036, 0.004],
+    [1.445, 0.12, 0.124, 0.036, 0.004],
+    [1.47, 0.12, 0.109, 0.036, 0.004],
+    [1.49, 0.12, 0.088, 0.036, 0.004],
+    [1.505, 0.12, 0.061, 0.036, 0.004],
+    [1.507, 0.12, 0.056, 0, 0],
+  ]),
+  strap([
+    [1.265, 0.125, -0.082, 0, 0],
+    [1.268, 0.125, -0.081, 0.034, 0.004],
+    [1.31, 0.121, -0.079, 0.034, 0.004],
+    [1.36, 0.117, -0.104, 0.034, 0.004],
+    [1.41, 0.114, -0.156, 0.034, 0.004],
+    [1.45, 0.11, -0.178, 0.034, 0.004],
+    [1.49, 0.107, -0.16, 0.034, 0.004],
+    [1.515, 0.105, -0.128, 0.034, 0.004],
+    [1.518, 0.105, -0.123, 0, 0],
+  ]),
+  ...[
+    [0.095, 1.31, 1.365, 0.152, 0.028, 0.028, J.CHEST, 1],
+    [0.155, 1.31, 1.365, 0.093, 0.026, 0.026, J.CHEST, 1],
+    [0.1, 1.142, 1.243, 0.154, 0.03, 0.033, J.SPINE, 1],
+    [0.15, 1.145, 1.24, 0.111, 0.024, 0.03, J.SPINE, 1],
+    [0, 1.17, 1.215, 0.158, 0.022, 0.017, J.SPINE, 0],
+  ].map(pouch),
+];
 
-const LOFTS = [TRUNK, LEG, ARM, EYE, EAR, POUCHES, BELT];
+const LOFTS = [TRUNK, LEG, ARM, EYE, EAR, ...GEAR];
 
 /**
  * The rings with one more between each two, on a Catmull-Rom curve through them, for the near
@@ -451,17 +490,17 @@ const generate = (lod: number): Skin => {
   for (const L of LOFTS) {
     const n = L === ARM ? N - 4 : L.n[tier];
     // The eye's own body has no head.
-    if (!n || (lod == 2 && (L.z || L === EAR))) {
+    if (!n || (lod == 2 && (L.z || L.k || L === EAR))) {
       continue;
     }
     // The eye's own body ends the trunk in a cap on the shoulders and each sleeve in a cuff over a
     // thin wrist, where body.ts puts a hand.
     const base =
       lod == 2 && L === TRUNK
-        ? [...L.rings.slice(0, 10), [1.462, 0, 0, 0, 0, 2, JACKET]]
+        ? [...L.rings.filter(r => r[0] < 1.45), [1.462, 0, 0, 0, 0, 2, JACKET]]
         : lod == 2 && L === ARM
           ? [
-              ...L.rings.slice(0, 6),
+              ...L.rings.filter(r => r[0] > 0.96),
               [0.95, 0.222, 0, 0.037, 0.037, 2.6, GLOVE],
               CUFF,
               [0.91, 0.222, 0, 0, 0, 3, GLOVE],
@@ -469,7 +508,7 @@ const generate = (lod: number): Skin => {
           : lod
             ? L.rings
             : L.far.map(i => L.rings[i]);
-    const rings = tier > 1 && !L.z && L !== EAR ? finer(base, L !== TRUNK) : base;
+    const rings = tier > 1 && L === TRUNK ? finer(base, false) : base;
     const up = rings[rings.length - 1][0] > rings[0][0];
     if (L === TRUNK) {
       S = rings.findIndex((r, i) => i && r[0] == rings[i - 1][0]);

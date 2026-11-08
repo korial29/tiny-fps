@@ -412,17 +412,18 @@ export const rifle = (lod: number): number[] => {
   // The body in one piece, the butt to the lens, its edges rounded: a trapezoid seen from the
   // side, tall at the butt, its underside rising toward the front and curving up into the end.
   tube(out, [[-0.34, PROFILE[0][1], 0, 0], ...PROFILE, [0.502, 0.079, 0, 0]], n, olive);
-  // The housing on top: a block with flat faces, narrower at its top, its back sloping down
-  // toward the eye (the counter's face) and its front down to the body.
+  // The housing on top (the user, 2026-11-08): its back a short wedge with flat faces, sloping
+  // down toward the eye (the counter's face), and from it a rounded trapezoid along the top to the
+  // end of the barrel, tall behind, its top sloping down and curving onto the barrel's end.
   const corner = (x: number, y: number, z: number): Vec3 => [x, y, z];
   const [b0, b1, t0, t1] = [
     corner(HB[2], HB[0], HB[3]),
-    corner(HB[2], HB[0], -0.06),
+    corner(HB[2], HB[0], 0.03),
     corner(HB[4], HB[1], HB[5]),
-    corner(HB[4], HB[1], -0.02),
+    corner(HB[4], HB[1], 0.035),
   ];
   const mirror = ([x, y, z]: Vec3): Vec3 => [-x, y, z];
-  const mid: Vec3 = [0, (HB[0] + HB[1]) / 2, 0.03];
+  const mid: Vec3 = [0, (HB[0] + HB[1]) / 2, 0.07];
   for (const f of [
     [b0, mirror(b0), mirror(t0), t0],
     [b1, mirror(b1), mirror(t1), t1],
@@ -443,6 +444,22 @@ export const rifle = (lod: number): number[] => {
     tri(out, p[0], p[1], p[2], [r, gg, bb]);
     tri(out, p[0], p[2], p[3], [r, gg, bb]);
   }
+  tube(
+    out,
+    [
+      [-0.05, 0.13, 0, 0],
+      [-0.04, 0.13, 0.024, 0.04],
+      [0.1, 0.127, 0.025, 0.037],
+      [0.25, 0.12, 0.022, 0.03],
+      [0.36, 0.112, 0.019, 0.022],
+      [0.43, 0.104, 0.016, 0.015],
+      [0.47, 0.097, 0.013, 0.01],
+      [0.49, 0.092, 0.009, 0.006],
+      [0.495, 0.09, 0, 0],
+    ],
+    n,
+    olive,
+  );
   // The lens at the end.
   tube(
     out,
@@ -989,7 +1006,7 @@ const scopes = new Map<number, number[]>();
 const SC: Vec3 = [0, (HB[0] + HB[1]) / 2, (HB[3] + HB[5]) / 2];
 const SU = unit([0, HB[1] - HB[0], HB[5] - HB[3]]);
 const SN: Vec3 = [0, -SU[2], SU[1]];
-const [SH, SB, ST] = [0.03, 0.027, 0.018];
+const [SH, SB, ST] = [0.018, 0.016, 0.011];
 
 /**
  * The laser rifle's counter (`n` rounds in its cell), in model space: a trapezoid screen, narrow at
@@ -1017,7 +1034,7 @@ export const scope = (n: number, shown = true): number[] => {
     tri(out, p(-h, -SH, 0.004), p(t, SH, 0.004), p(-t, SH, 0.004), DARK);
     const from = out.length;
     // The cyan ring: each side a thin band.
-    const ring = 0.0022;
+    const ring = 0.0014;
     for (const s of [-1, 1]) {
       const [x0, x1] = [s * half(-SH), s * half(SH)];
       tri(
@@ -1025,14 +1042,14 @@ export const scope = (n: number, shown = true): number[] => {
         p(x0, -SH, 0.0045),
         p(x0 - s * ring, -SH, 0.0045),
         p(x1 - s * ring, SH, 0.0045),
-        [0.3, 0.9, 1.3],
+        [0.15, 0.45, 0.7],
       );
       tri(
         out,
         p(x0, -SH, 0.0045),
         p(x1 - s * ring, SH, 0.0045),
         p(x1, SH, 0.0045),
-        [0.3, 0.9, 1.3],
+        [0.15, 0.45, 0.7],
       );
       quad(
         -half(s * SH),
@@ -1040,7 +1057,7 @@ export const scope = (n: number, shown = true): number[] => {
         half(s * SH),
         s * SH + (s < 0 ? ring : 0),
         0.0045,
-        [0.3, 0.9, 1.3],
+        [0.15, 0.45, 0.7],
       );
     }
     if (shown) {
@@ -1050,7 +1067,7 @@ export const scope = (n: number, shown = true): number[] => {
         const a0 = -(DW + DGAP / 2) * k + i * (DW + DGAP) * k;
         for (const seg of DIGITS[+ch]) {
           const [x0, y0, x1, y1] = SEGMENTS[seg];
-          const rgb = n > 7 ? [0.3, 0.95, 1.3] : [1.4, 0.35, 0.15];
+          const rgb = n > 7 ? [0.25, 0.75, 1.05] : [1.2, 0.3, 0.12];
           quad(
             a0 + x0 * k,
             (y0 - DH / 2) * k - 0.002,

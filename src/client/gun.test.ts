@@ -622,12 +622,12 @@ describe('the laser rifle', () => {
     const up = unit([0, 0.08, -0.05]);
     const mid: Vec3 = [0, 0.13, 0.095];
     for (let i = 0; i < v.length; i += STRIDE) {
-      if (v[i + 6] > 1) {
+      if (v[i + 6] > 1 && v[i + 7] < 0.5) {
         const b = (v[i + 1] - mid[1]) * up[1] + (v[i + 2] - mid[2]) * up[2];
         // The screen's half width at b, less its ring.
-        const half = 0.027 - (0.009 * (b + 0.03)) / 0.06 - 0.0022;
-        expect(Math.abs(v[i])).toBeLessThan(half - 0.002);
-        expect(Math.abs(b)).toBeLessThan(0.03 - 0.004);
+        const half = 0.016 - (0.005 * (b + 0.018)) / 0.036 - 0.0014;
+        expect(Math.abs(v[i])).toBeLessThan(half - 0.001);
+        expect(Math.abs(b)).toBeLessThan(0.018 - 0.002);
       }
     }
   });

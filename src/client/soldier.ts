@@ -170,7 +170,7 @@ const lifted = (
 const READY = 0.6;
 
 /** The katana carried in both hands, upright before the right shoulder, the edge forward: the guard's numbers (see katana.ts) from the eye. */
-const CARRY = [0.08, -0.3, 0.26, 0.1, 0.92, -0.3];
+const CARRY = [0.08, -0.28, 0.25, 0.27, 0.94, 0.21];
 const ease = (v: number) => (v = Math.min(Math.max(v, 0), 1)) * v * (3 - 2 * v);
 
 /**

@@ -272,7 +272,7 @@ const rotate = (v: Vec3, w: Vec3): Vec3 => {
  * alone (the user, 2026-11-07): the right hand round the grip, the left BEHIND it, each turned a
  * fixed way about the handle (from `at`, `g` and the elbows' `poles`) and its forearm carrying on
  * along its fingers, so that each elbow is a forearm's length back from its wrist. The piece goes
- * the least way from where the cut puts it (a radian of the blade weighs as 10 cm of the hands) to
+ * the least way from where the cut puts it (a radian of the blade weighs as 3 m of the hands) to
  * where both elbows are an upper arm's length from their shoulders. Returns the grip, the blade,
  * and the fingers of the right hand and of the left.
  */
@@ -318,8 +318,8 @@ export const clasp = (
     });
   };
   // Gauss-Newton, the least weighed step that takes both misses to 0: a radian of the blade
-  // weighs as 10 cm of the hands.
-  const free = [1, 1, 1, 100, 100, 100];
+  // weighs as 3 m of the hands, so the hands move and the blade keeps the line of its cut.
+  const free = [1, 1, 1, 0.1, 0.1, 0.1];
   const x = [0, 0, 0, 0, 0, 0];
   for (let n = 0; n < 12; n++) {
     const r = miss(x);

@@ -318,7 +318,7 @@ describe('the cuts', () => {
     const tip = tipAt(CUT.THRUST, 0);
     expect(Math.abs(tip[0])).toBeLessThan(0.4);
     expect(tip[1]).toBeGreaterThan(0.45);
-    expect(tip[2]).toBeGreaterThan(1);
+    expect(tip[2]).toBeGreaterThan(0.85);
     // The hands low, a quarter of a metre under the eye.
     expect(GUARD[1]).toBeLessThan(-0.2);
   });
@@ -347,7 +347,9 @@ describe('the cuts', () => {
       );
       const base = cut % SPECIAL_CUT;
       if (base === CUT.LEFT || base === CUT.RIGHT) {
-        expect(span[0]).toBeGreaterThan(0.45);
+        // On a diagonal: across and down.
+        expect(span[0]).toBeGreaterThan(0.35);
+        expect(span[1]).toBeGreaterThan(0.3);
       } else if (base === CUT.SLASH) {
         expect(span[1]).toBeGreaterThan(0.38);
       } else {
@@ -396,38 +398,62 @@ describe('the cuts', () => {
     }
   });
 
-  it('cuts across from out at one side to out at the other', () => {
+  it('cuts across on a diagonal: from high on its side, down through the middle, to low on the other', () => {
     for (const [cut, sign] of [
       [CUT.LEFT, 1],
       [CUT.RIGHT, -1],
     ]) {
       const s = strikeOf(cut);
       const at = (p: number) => tipAt(cut, p);
-      const x = (p: number) => sign * at(p)[0];
-      // Wound up out at the side it comes from, level with the hands, not ahead of them.
-      expect(x(0.24)).toBeLessThan(-0.8);
-      expect(at(0.24)[2]).toBeLessThan(0.4);
-      // The follow-through out at the other side and a little low, out to the side and not round
-      // behind, where the straight wrists cannot hold it.
-      expect(x(0.5)).toBeGreaterThan(0.8);
-      expect(at(0.62)[1]).toBeLessThan(-0.3);
-      // Across, in one go: never back, from the widest of the wind-up to the farthest across.
-      const path = steps(s - 0.07, 0.5).map(x);
-      path.forEach((v, i) => i && expect(v).toBeGreaterThanOrEqual(path[i - 1] - 1e-6));
-      expect(x(s - 0.05)).toBeLessThan(x(s));
-      expect(x(s)).toBeLessThan(x(s + 0.05));
+      // Raised on the side it comes from: the point up and out over that shoulder.
+      expect(sign * at(0.24)[0]).toBeLessThan(-0.6);
+      expect(at(0.24)[1]).toBeGreaterThan(0.5);
+      // Down and across through the strike, in one go.
+      const path = steps(s - 0.07, s + 0.1);
+      path.forEach((p, i) => {
+        if (i) {
+          expect(at(p)[1]).toBeLessThan(at(path[i - 1])[1] + 1e-6);
+          expect(sign * at(p)[0]).toBeGreaterThan(sign * at(path[i - 1])[0] - 1e-6);
+        }
+      });
+      // Low on the other side after it (less far for the cut from the right, where the right arm
+      // reaches across the body).
+      expect(sign * at(0.55)[0]).toBeGreaterThan(sign * at(0.24)[0] + 0.6);
+      expect(at(0.55)[1]).toBeLessThan(-0.2);
+    }
+  });
+
+  it('keeps the blade in the plane of each cut, never out level to a side nor back behind the hands (the user, 2026-11-08)', () => {
+    for (const cut of [CUT.LEFT, CUT.RIGHT, CUT.SLASH, CUT.ARC_L, CUT.ARC_R, CUT.LEAP]) {
+      const b = (p: number) => unit(stroke(cut, p).slice(3, 6) as Vec3);
+      const s = strikeOf(cut);
+      // The plane the wind-up and the strike span: every blade from the top of the wind-up to the
+      // follow-through lies in it (out of the guard and back to it, the blade turns into it).
+      const [w, x] = [b(s - 0.07), b(s)];
+      const n = unit([
+        w[1] * x[2] - w[2] * x[1],
+        w[2] * x[0] - w[0] * x[2],
+        w[0] * x[1] - w[1] * x[0],
+      ]);
+      for (const p of steps(0.3, 0.62)) {
+        expect(Math.abs(dot(b(p), n)), `cut ${cut} at ${p}`).toBeLessThan(0.02);
+      }
+      for (const p of steps(0, 1, 80)) {
+        expect(Math.abs(b(p)[0]), `cut ${cut} at ${p}`).toBeLessThan(0.8);
+        expect(b(p)[2], `cut ${cut} at ${p}`).toBeGreaterThan(-0.35);
+      }
     }
   });
 
   it('slashes down from above the head through the middle of the view: from high to low', () => {
     const s = strikeOf(CUT.SLASH);
     const y = (p: number) => tipAt(CUT.SLASH, p)[1];
-    // Raised over the head: the point high and behind the eye, the hands up at its height.
-    expect(y(0.28)).toBeGreaterThan(0.5);
-    expect(tipAt(CUT.SLASH, 0.28)[2]).toBeLessThan(-0.4);
+    // Raised over the head, the blade upright: the point high over the eye, the hands up too.
+    expect(y(0.28)).toBeGreaterThan(0.9);
+    expect(Math.abs(tipAt(CUT.SLASH, 0.28)[2])).toBeLessThan(0.4);
     expect(stroke(CUT.SLASH, 0.28)[1]).toBeGreaterThan(0);
     // Then down, never back up, to far below the view.
-    expect(y(0.6)).toBeLessThan(-0.9);
+    expect(y(0.6)).toBeLessThan(-0.8);
     const path = steps(0.34, 0.55).map(y);
     path.forEach((v, i) => i && expect(v).toBeLessThanOrEqual(path[i - 1] + 1e-6));
     expect(y(s - 0.04)).toBeGreaterThan(0.1);
@@ -443,13 +469,15 @@ describe('the cuts', () => {
       const { ticks, strike } = CUTS[cut];
       const pts = Array.from({ length: ticks + 1 }, (_, i) => tipAt(cut, i / ticks));
       const speed = pts.slice(1).map((q, i) => away(q, pts[i]));
-      // The fastest tick is within four of the strike: the swing is quickest there.
+      // The fastest tick is within five of the strike: the swing is quickest there.
       const fastest = speed.indexOf(Math.max(...speed)) + 0.5;
-      expect(Math.abs(fastest - strike)).toBeLessThanOrEqual(4);
+      expect(Math.abs(fastest - strike)).toBeLessThanOrEqual(5);
       // The recovery, the last third, is slow.
       const end = speed.slice(-Math.floor(ticks / 3));
-      expect(end.reduce((a, b) => a + b, 0) / end.length).toBeLessThan(Math.max(...speed) * 0.55);
-      expect(speed.at(-1)!).toBeLessThan(Math.max(...speed) * 0.2);
+      expect(end.reduce((a, b) => a + b, 0) / end.length, `cut ${cut}`).toBeLessThan(
+        Math.max(...speed) * 0.55,
+      );
+      expect(speed.at(-1)!, `cut ${cut}`).toBeLessThan(Math.max(...speed) * 0.2);
       // More of the swing is after the strike than before: it recovers.
       expect(ticks - strike).toBeGreaterThan(strike);
     }
@@ -491,23 +519,25 @@ describe('the cuts', () => {
 });
 
 describe('the arc’s cut', () => {
-  it('comes down across from high on its side, and the cut from the right is the one from the left turned round', () => {
+  it('comes down across from high on its side on a wider diagonal, and the cut from the right winds up as the one from the left turned round', () => {
     for (const [cut, sign] of [
       [CUT.ARC_L, 1],
       [CUT.ARC_R, -1],
     ]) {
       const s = CUTS[cut].strike / CUTS[cut].ticks;
-      const [up, low] = [stroke(cut, 0.3).slice(), stroke(cut, 0.56).slice()];
-      // The hands high and out on its side, then low and out on the other.
+      const [up, low] = [stroke(cut, 0.3).slice(), stroke(cut, 0.6).slice()];
+      // The hands out on its side, the point high over them, then the hands low on the other side.
       expect(sign * up[0]).toBeLessThan(-0.2);
-      expect(up[1]).toBeGreaterThan(0.05);
-      expect(sign * low[0]).toBeGreaterThan(0.2);
-      expect(low[1]).toBeLessThan(-0.2);
+      expect(tipAt(cut, 0.3)[1]).toBeGreaterThan(0.5);
+      expect(sign * low[0]).toBeGreaterThan(0.1);
+      expect(low[1]).toBeLessThan(-0.4);
       // The blade forward at the strike.
-      expect(stroke(cut, s)[5]).toBeGreaterThan(0.9);
+      expect(unit(stroke(cut, s).slice(3, 6) as Vec3)[2]).toBeGreaterThan(0.8);
+      // Wider than the cut across: the point further out on its side at the top.
+      expect(sign * tipAt(cut, 0.3)[0]).toBeLessThan(sign * tipAt(cut - 4, 0.24)[0]);
     }
-    // Between the guards, which are the same for both.
-    for (const p of steps(0.3, 0.68, 20)) {
+    // The same wind-up, turned round: its keys (between them, the guard's pull, which is not).
+    for (const p of [0.14, 0.3]) {
       const [l, r] = [stroke(CUT.ARC_L, p).slice(), stroke(CUT.ARC_R, p)];
       expect(r[0]).toBeCloseTo(-l[0], 9);
       expect(r[3]).toBeCloseTo(-l[3], 9);

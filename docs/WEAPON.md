@@ -88,6 +88,20 @@ The user found the katana badly held and the arms twisted, and pointed at Jedi K
 - The wrists do not bend at all (the user, 2026-11-07: "the wrists still bend; arm movement only", after a slow-motion video of real cuts). `clasp()` in `body.ts` holds the katana and both fists as one rigid piece: each hand at a fixed turn about the handle, its forearm carrying on along its fingers, so each elbow is a forearm's length back from its wrist. The piece goes the least way from where the cut puts it (a radian of the blade weighing as 10 cm of the hands) to where both elbows are an upper arm's length from their shoulders: two equations in six unknowns, a few Gauss-Newton steps. The shoulders shrug first (`shrug()`), so the solve sees them where they end. Both wrists stay within a degree of straight through every cut, in the first person and on the runners; the cut keys' hand positions were searched for it, and the strikes aim level again.
 - The body moves with the cut (the user, 2026-11-07: "only the forearms move"). `trunk()` in `katana.ts` gives the trunk a twist, a bend and a lean through each cut, 0 in the guard. The chest takes 60 % of it and the waist 40 %. A cut across coils toward its wind-up and unwinds hard through the strike (±0.55 rad). A slash arches back, then folds over. A thrust draws the right shoulder back, then drives it out with a lean into the point. The body on its feet turns `SWAY` (20 %) of the twist. The runner's hands go round with the whole twist; in the first person the view turns `SWAY` of it and the hands 30 % more, so they stay on screen. The bend stays the trunk's own, so a strike stays on the crosshair. `wield()` raises the clavicle with a hand over the shoulder and brings it forward with a long reach.
 
+## The blade stays in the plane of the cut (the user, 2026-11-08)
+
+The user saw the wrist bend and the blade swing out sideways in the cuts: "the katana stays straight ahead, the arms and the chest go with the cut, the wrists do not move; a diagonal is fine". Two causes:
+
+- The keys gave the blade its own direction, which turned round the hands: back over the head, then out level to the right after a cut across.
+- `clasp()` turned the blade freely to reach the arms' length (a radian weighed as 10 cm of the hands): up to 0.6 rad out of its line.
+
+The fix:
+
+- `swung()` in `katana.ts` keys the cuts by the grip alone. The blade lies in the plane of the cut, `WRISTS` (1 rad) above the line from the shoulders to the grip, so it rises and falls with the arms.
+- The planes: upright for the slash and the leap, leaning 0.7 rad for the cuts across (now diagonals, from high on one side to low on the other), 0.85 rad for the arc's cut. The cuts from the right go half as far on the far side (`FAR`), where the right arm reaches across the body. A test fails if the blade leaves its plane, lies out level to a side or points back.
+- `clasp()` now weighs a radian of the blade as 3 m of the hands: the hands move, the blade keeps its line. `GUARD` and the runners' `CARRY` became the hold the old solve drew, so the guard and the carry do not change.
+- Left as it is: in a cut from the right, the left elbow comes up into the left of the view at the strike for a few frames.
+
 ## Wider swings, special cuts, the curve (the user, 2026-11-07)
 
 The user asked for even wider swings with the arms, a special move on a double click (a full turn while cutting for the cut across, the others left to us), and the blade's curve the right way round.

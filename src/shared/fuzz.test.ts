@@ -13,6 +13,8 @@ import {
   RAIL_CAP,
   RAIL_MAX,
   RAIL_RELOAD,
+  RIFLE_CLIP,
+  RIFLE_RELOAD,
 } from './constants';
 import { swingOf } from './blade';
 import { STRIKE, step } from './gun';
@@ -151,24 +153,29 @@ describe('random fire on ROOFTOPS', () => {
           team,
         );
         const label = `seed ${seed}, step ${k}`;
-        // A plasma shot counts a shot; the rail gun's bolt is a step spent zapping.
-        expect(struck === STRIKE.SHOT, label).toBe(((p.shots - before) & 255) === 1);
+        // A plasma shot and a laser shot count a shot; the rail gun's bolt is a step spent zapping.
+        expect(struck === STRIKE.SHOT || struck === STRIKE.LASER, label).toBe(
+          ((p.shots - before) & 255) === 1,
+        );
+        expect(struck !== STRIKE.LASER || !!p.rifled, label).toBe(true);
         expect(struck === STRIKE.RAIL, label).toBe(!!p.zapping);
         expect(!p.zapping || !!p.railed, label).toBe(true);
         shots += +(struck === STRIKE.SHOT);
         rails += +(struck === STRIKE.RAIL);
         cuts += +(struck === STRIKE.CUT);
         wielded += +!!p.wield;
-        // In hand: the katana with it, wanted (BLADE) or in mid swing, or with no gun and the
-        // rail gun not wanted; the rail gun wanted (RAIL, not BLADE), or what is left.
-        const rail = (p.rail ?? -1) >= 0;
-        const railWanted = (keys & KEY.RAIL) !== 0 && (keys & KEY.BLADE) === 0;
+        // In hand: the katana in mid swing, else the weapon wanted (BLADE, RAIL, RIFLE, or none for
+        // the gun) when he has it, else the first he has of the gun, the katana, the rail gun and
+        // the rifle; one at most.
+        const has = [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0];
+        const want = keys & KEY.BLADE ? 1 : keys & KEY.RAIL ? 2 : keys & KEY.RIFLE ? 3 : 0;
+        const hand = p.swing && p.blade ? 1 : has[want] ? want : has.indexOf(true);
         if (!p.down && !p.lock) {
-          expect(!!p.wield, label).toBe(
-            !!p.blade &&
-              (!!p.swing || (keys & KEY.BLADE) !== 0 || (p.ammo < 0 && !(railWanted && rail))),
-          );
-          expect(!!p.railed, label).toBe(rail && !p.wield && (railWanted || p.ammo < 0));
+          expect([!!p.wield, !!p.railed, !!p.rifled], label).toEqual([
+            hand == 1,
+            hand == 2,
+            hand == 3,
+          ]);
         }
         if (!p.down && rnd() < 0.002) {
           Object.assign(p, {
@@ -184,6 +191,9 @@ describe('random fire on ROOFTOPS', () => {
             mag: 0,
             cap: 0,
             reload: 0,
+            rifle: -1,
+            clip: 0,
+            rifled: false,
           });
         } else if (!p.down && p.hp > 1 && rnd() < 0.01) {
           p.hp--;
@@ -218,7 +228,12 @@ describe('random fire on ROOFTOPS', () => {
         expect(p.cap ?? 0, label).toBeLessThanOrEqual(
           Math.min(RAIL_CAP, Math.max(p.rail ?? -1, 0)),
         );
-        expect(p.reload, label).toBeLessThanOrEqual(Math.max(GUN_RELOAD, RAIL_RELOAD));
+        expect(p.reload, label).toBeLessThanOrEqual(
+          Math.max(GUN_RELOAD, RAIL_RELOAD, RIFLE_RELOAD),
+        );
+        expect(p.clip ?? 0, label).toBeLessThanOrEqual(
+          Math.min(RIFLE_CLIP, Math.max(p.rifle ?? -1, 0)),
+        );
         expect(p.shots & 255, label).toBe(p.shots);
         // The katana: the swing runs in the katana's ticks, only with the katana in hand, and
         // only a katana that is there is in hand.

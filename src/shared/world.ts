@@ -31,6 +31,8 @@ export interface TeamDef {
   blade?: Vec3;
   /** The rail gun rack, on the other side of the gun rack: walking within RACK_R gives the rail gun with RAIL_MAX shots. */
   rail?: Vec3;
+  /** The laser rifle rack, past the rail gun's: walking within RACK_R gives the rifle with RIFLE_MAX rounds. */
+  rifle?: Vec3;
 }
 
 export interface WorldDef {

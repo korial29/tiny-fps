@@ -197,6 +197,23 @@ describe('the own shots', () => {
     expect(ids()).toEqual([SOUND.LASER]);
   });
 
+  it('of the laser rifle draw a red line from the muzzle, flash orange and zip, with no ball', () => {
+    const { combat, frame, ids, flashes, orbs, tracer } = setup();
+    const lase = vi.spyOn(tracer, 'laser');
+    const rifled = { ammo: -1, rifle: 50, clip: 20, rifled: true };
+    frame(player(rifled));
+    combat.step(player({ ...rifled, shots: 0 }), player({ ...rifled, shots: 1 }));
+    frame(player({ ...rifled, shots: 1 }));
+    expect(ids()).toEqual([SOUND.LASE]);
+    expect(orbs()).toHaveLength(0);
+    expect(flashes).toHaveLength(1);
+    expect(lase).toHaveBeenCalledTimes(1);
+    const [a, b] = lase.mock.calls[0];
+    // Out along the look, drifted a little, to the wall or the range.
+    expect(b[2]).toBeLessThan(a[2] - 1);
+    expect(Math.abs(b[0] - a[0])).toBeLessThan(0.05 * Math.abs(b[2] - a[2]) + 0.3);
+  });
+
   it('fly at PLASMA_SPEED onto the look line, and burst on the wall it meets, with the zap there', () => {
     const { combat, frame, ids, audio, orbs, bursts } = setup();
     frame(player());
@@ -542,10 +559,32 @@ describe('the sounds and the screen of what happens to the own player', () => {
   it('feeds the HUD each frame: health, ammo, and how far down', () => {
     const { frame, hud } = setup();
     frame(player({ hp: 3, ammo: 12, down: 0 }));
-    expect(hud.vitals).toHaveBeenLastCalledWith(3, 12, false, false, -1, false, 0, false);
+    expect(hud.vitals).toHaveBeenLastCalledWith(
+      3,
+      12,
+      false,
+      false,
+      -1,
+      false,
+      0,
+      false,
+      -1,
+      false,
+    );
     expect(hud.down).toHaveBeenLastCalledWith(0, 0);
     frame(player({ hp: 0, ammo: -1, down: 90 }));
-    expect(hud.vitals).toHaveBeenLastCalledWith(0, -1, false, false, -1, false, 0, false);
+    expect(hud.vitals).toHaveBeenLastCalledWith(
+      0,
+      -1,
+      false,
+      false,
+      -1,
+      false,
+      0,
+      false,
+      -1,
+      false,
+    );
     expect(hud.down).toHaveBeenLastCalledWith(0, 1.5);
   });
 });
@@ -692,6 +731,8 @@ describe('the own hits with the katana', () => {
       false,
       0,
       false,
+      -1,
+      false,
     );
     frame(player({ ammo: 12, blade: true, wield: false }));
     expect(hud.vitals).toHaveBeenLastCalledWith(
@@ -702,6 +743,8 @@ describe('the own hits with the katana', () => {
       -1,
       false,
       0,
+      false,
+      -1,
       false,
     );
   });

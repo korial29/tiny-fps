@@ -20,14 +20,14 @@ import { powerOf } from '../shared/gun';
 import { eyeHeight } from '../shared/physics';
 import { KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { beam } from '../shared/rail';
+import { beam, laser as shot } from '../shared/rail';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import type { Audio, Loop } from './audio';
 import type { Balls } from './balls';
 import type { Tracer } from './beams';
 import type { Effects } from './effects';
-import { CUES, aimed, charge, focus, swapOf, tip } from './gun';
+import { CUES, aimed, charge, focus, kindOf, swapOf, tip } from './gun';
 import type { Hud } from './hud';
 import { basis } from './mesh';
 import type { Vec3 } from './mesh';
@@ -97,7 +97,7 @@ export const fired = (a?: PlayerState, b?: PlayerState): number =>
 /** What the katana's sounds read of a player: the swing, the cut and whether it is in hand. */
 type Blade = Pick<
   PlayerState,
-  'swing' | 'cut' | 'wield' | 'blade' | 'heavy' | 'down' | 'railed' | 'ammo' | 'reload'
+  'swing' | 'cut' | 'wield' | 'blade' | 'heavy' | 'down' | 'railed' | 'ammo' | 'reload' | 'rifled'
 >;
 
 /**
@@ -133,7 +133,7 @@ export const createCombat = (
   fx: Pick<Effects, 'fire' | 'cut' | 'wound' | 'lie'>,
   tracer: Pick<
     Tracer,
-    'flash' | 'burst' | 'orbs' | 'update' | 'mount' | 'crackle' | 'charging' | 'lightning'
+    'flash' | 'burst' | 'orbs' | 'update' | 'mount' | 'crackle' | 'charging' | 'lightning' | 'laser'
   >,
   ctl: { pitch: number },
   balls: Pick<Balls, 'fire' | 'frame'>,
@@ -172,11 +172,22 @@ export const createCombat = (
   /** Each other player's charge at the last frame: the strength of his next shot. */
   const charges = new Map<number, number>();
   /** The muzzle of a runner's gun (his rail gun's in hand), as he fires at what he looks at. */
-  const gun = (p: PlayerState) => tip(...aimed(p, focus(p, world)[0]), !!p.railed);
+  const gun = (p: PlayerState) => tip(...aimed(p, focus(p, world)[0]), kindOf(p));
   /** Where the rail gun's bolt of `p` ends: the wall his look meets, or its range. */
   const end = (p: PlayerState): Vec3 => {
     const { o, d, t } = beam(world, p);
     return [0, 1, 2].map(i => o[i] + d[i] * t) as Vec3;
+  };
+  /** Where the laser rifle's last shot of `p` ends: drifted, the wall it meets or its range. */
+  const ray = (p: PlayerState): Vec3 => {
+    const { o, d, t } = shot(world, p);
+    return [0, 1, 2].map(i => o[i] + d[i] * t) as Vec3;
+  };
+  /** A laser rifle's shot of `p` from `from`, heard at `at` (the own when not given): the red line, an orange flash and its zip. */
+  const lase = (p: PlayerState, from: Vec3, at?: Vec3) => {
+    tracer.laser(from, ray(p));
+    tracer.flash(from, !at, 1);
+    audio.play(SOUND.LASE, at, at ? 0.6 : 0.45, rate());
   };
   /** The own rail gun's hum and its bolt's buzz, started when it is first in hand. */
   let hum: Loop | undefined;
@@ -218,13 +229,14 @@ export const createCombat = (
     );
   };
   /** The weapon in the hand of `p`: 0 the gun, 1 the katana, 2 the rail gun, -1 none. */
-  const inHand = (p: Blade) => (p.down ? -1 : p.wield ? 1 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1);
+  const inHand = (p: Blade) =>
+    p.down ? -1 : p.wield ? 1 : p.rifled ? 3 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
   /** The sounds of a swap as it passes its cues (CUES), and the boot of a gun that comes to hand or whose swap is done, at `at`. */
   const reloads = (was: Blade, now: Blade, at?: Vec3) => {
     const [a, b, r] = [swapOf(was), swapOf(now), +!!now.railed];
     CUES[r].forEach((c, i) => a < c && b >= c && audio.play(RELOADS[r][i], at, 0.7));
     const h = inHand(now);
-    if ((h == 0 || h == 2) && (inHand(was) != h || (a >= 0 && b < 0))) {
+    if (h != 1 && h >= 0 && (inHand(was) != h || (a >= 0 && b < 0))) {
       audio.play(SOUND.BOOT, at, 0.5, r ? 1.4 : 1);
     }
   };
@@ -305,8 +317,10 @@ export const createCombat = (
           !!me.wield,
           rail < 0 ? -1 : charge(rail),
           !!me.railed,
-          me.railed ? charge(me.cap ?? 0) : (me.mag ?? 0),
+          me.rifled ? (me.clip ?? 0) : me.railed ? charge(me.cap ?? 0) : (me.mag ?? 0),
           !!me.reload,
+          me.rifle ?? -1,
+          !!me.rifled,
         );
         cuts.forEach(c => swish(c));
         hud.down(fx.lie, me.down / TICK_HZ);
@@ -324,6 +338,10 @@ export const createCombat = (
         from = [0, 1, 2].map(i => v.cam[i] + r[i] * m[0] + u[i] * m[1] + f[i] * m[2]) as Vec3;
         tracer.mount(from);
         for (const p of pending) {
+          if (p.rifled) {
+            lase(p, from);
+            continue;
+          }
           balls.fire(p, now);
           tracer.flash(from, true, heat(p.power));
           laser(undefined, p.power);
@@ -347,7 +365,9 @@ export const createCombat = (
         if (p.zapping) {
           zap(zaps, p, gun(p), dt, now, at);
         }
-        if (was !== undefined && p.shots != was) {
+        if (was !== undefined && p.shots != was && p.rifled) {
+          lase(p, gun(p), at);
+        } else if (was !== undefined && p.shots != was) {
           // His charge at the last frame gives the strength of the shot.
           const c = charges.get(p.id) ?? 0;
           const power = c >= CHARGE_TAP ? Math.min(powerOf(c), CHARGE_MAX) : 1;
@@ -378,6 +398,7 @@ export const createCombat = (
           railed: p.railed,
           ammo: p.ammo,
           reload: p.reload,
+          rifled: p.rifled,
         });
         // A runner drained by the rail gun's bolt, or shocked by the katana, crackles.
         if ((p.zap && p.stun > 0) || p.slow) {

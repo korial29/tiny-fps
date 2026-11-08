@@ -5,12 +5,12 @@
 // Input, 12 bytes: [type u8 = MSG_INPUT][seq u16][keys u16][yaw u16][pitch i16][view u16][frac u8]
 //   yaw in 65536ths of a turn, decoded in [0, 2π); pitch in 1/10000 rad; view is the host tick
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
-//   keys is a u16: KEY bits 0 to 12 (forward, back, left, right, jump, sprint, dash, crouch, fire, blade, special, rail, reload).
-// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 58 bytes:
+//   keys is a u16: KEY bits 0 to 13 (forward, back, left, right, jump, sprint, dash, crouch, fire, blade, special, rail, reload, rifle).
+// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 60 bytes:
 //   [id u8][x f32][y f32][z f32][vx f32][vy f32][vz f32][edge f32]
 //   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8][stun u8]
 //   [gun u24][shots u8][hits u8][swing u8][lost u8][charge u8][lock u8][foe u8][pushes u8][away u8]
-//   [rail u8][railing u8][slow u8][mag u8][cap u8][reload u8]
+//   [rail u8][railing u8][slow u8][mag u8][cap u8][reload u8][rifle u8][clip u8]
 //   mode: bits 0-2 MODE, bits 3-5 wall (SIDE), bit 6 jumps left, bit 7 air dashes left
 //   dash: bits 0-5 the dash timer, bits 6-7 the high bits of the tackler's id (see stun)
 //   timers: bits 0-2 coyote ticks, bits 3-5 jump buffer ticks, bit 6 jump held, bit 7 dash held
@@ -31,10 +31,10 @@
 //   last step (`pressed`); pushes: the FIRE presses in the lock; away: the ticks a side or back key
 //   has been held in it. rail: the rail gun's ticks of lightning plus one (0: no rail gun);
 //   railing: bit 0 railed (it is in hand), bit 1 inRail (inside the circle of the rail rack), bit 2
-//   zapping (its bolt went out); slow: the ticks left drained by the bolt. Bit 4 of lost: fried; bit
+//   zapping (its bolt went out), bit 3 rifled (the laser rifle in hand), bit 4 inRifle; slow: the ticks left drained by the bolt. Bit 4 of lost: fried; bit
 //   5: heavy (the katana's charged cut let go). charge is the katana's too, held at a cut's top.
 //   mag: the shots in the gun's battery; cap: the ticks in the rail gun's capsule; reload: the ticks
-//   left swapping the one in hand.
+//   left swapping the one in hand; rifle: the laser rifle's rounds plus one (0: none); clip: its cell.
 //   Then the match, after the players: [red u8][blue u8][clock u16] the captures of each team, and
 //   the whole seconds to the end of the match (bit 15: it is over, and the clock counts to the next
 //   one), [packs u48: high u16, low u32] bit n set when pack n is there to take (Snapshot.packs); then the red and the blue flag, each [state u8 = FLAG] and by state:
@@ -74,7 +74,7 @@ export const MSG_SNAPSHOT = 2;
 
 export const INPUT_BYTES = 12;
 export const SNAP_HEAD = 4;
-export const SNAP_PLAYER = 58;
+export const SNAP_PLAYER = 60;
 /** The match block after the players: the captures, the clock, the packs; the flags follow (2 to 16 bytes). */
 export const SNAP_MATCH = 10;
 
@@ -118,7 +118,7 @@ export const encodeInput = (i: Input): ArrayBuffer => {
   const v = new DataView(new ArrayBuffer(INPUT_BYTES));
   v.setUint8(0, MSG_INPUT);
   v.setUint16(1, i.seq & 0xffff);
-  v.setUint16(3, i.keys & 0x1fff);
+  v.setUint16(3, i.keys & 0x3fff);
   v.setUint16(5, toTurn(i.yaw));
   v.setInt16(7, toPitch(i.pitch));
   const view = toView(i.view);
@@ -138,7 +138,7 @@ export const decodeInput = (buf: ArrayBuffer): Input | null => {
   }
   return {
     seq: v.getUint16(1),
-    keys: v.getUint16(3) & 0x1fff,
+    keys: v.getUint16(3) & 0x3fff,
     yaw: fromTurn(v.getUint16(5)),
     pitch: fromPitch(v.getInt16(7)),
     view: (v.getUint16(9) * 256 + v.getUint8(11)) / 256,
@@ -205,11 +205,20 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint8(o + 50, p.pushes ?? 0);
     v.setUint8(o + 51, p.away ?? 0);
     v.setUint8(o + 52, (p.rail ?? -1) + 1);
-    v.setUint8(o + 53, +!!p.railed | (+!!p.inRail << 1) | (+!!p.zapping << 2));
+    v.setUint8(
+      o + 53,
+      +!!p.railed |
+        (+!!p.inRail << 1) |
+        (+!!p.zapping << 2) |
+        (+!!p.rifled << 3) |
+        (+!!p.inRifle << 4),
+    );
     v.setUint8(o + 54, p.slow ?? 0);
     v.setUint8(o + 55, p.mag ?? 0);
     v.setUint8(o + 56, p.cap ?? 0);
     v.setUint8(o + 57, p.reload ?? 0);
+    v.setUint8(o + 58, (p.rifle ?? -1) + 1);
+    v.setUint8(o + 59, p.clip ?? 0);
   });
   v.setUint8(end, s.score[0]);
   v.setUint8(end + 1, s.score[1]);
@@ -319,6 +328,10 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       mag: v.getUint8(o + 55),
       cap: v.getUint8(o + 56),
       reload: v.getUint8(o + 57),
+      rifle: v.getUint8(o + 58) - 1,
+      clip: v.getUint8(o + 59),
+      rifled: (v.getUint8(o + 53) & 8) > 0,
+      inRifle: (v.getUint8(o + 53) & 16) > 0,
     });
   }
   const clock = v.getUint16(end + 2);

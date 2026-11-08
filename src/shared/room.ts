@@ -20,6 +20,9 @@ import {
   RAIL_DRAIN,
   RAIL_MAX,
   RAIL_TICKS,
+  RIFLE_CLIP,
+  RIFLE_HP,
+  RIFLE_MAX,
   RULES,
   SHOCK_KNOCK,
   SHOCK_TICKS,
@@ -37,7 +40,7 @@ import { PLASMA_LAG, PLASMA_STEP, fly, launch } from './plasma';
 import type { Flying } from './plasma';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
-import { beam } from './rail';
+import { beam, laser } from './rail';
 import { reaches, tackling } from './tackle';
 import { LIMB } from './types';
 import type { Conn, Every, PlayerInfo, PlayerState, Rules } from './types';
@@ -172,6 +175,8 @@ export class Room {
         this.cut(p, input.view);
       } else if (struck === STRIKE.RAIL) {
         this.rail(p, input.view);
+      } else if (struck === STRIKE.LASER) {
+        this.laser(p, input.view);
       }
       // The bolt drains him: 1 hp each RAIL_DRAIN ticks after its first touch.
       p.burn = slow ? (p.burn ?? 0) + 1 : 0;
@@ -383,6 +388,9 @@ export class Room {
       lost: LIMB.NONE,
       rail: -1,
       railed: false,
+      rifle: -1,
+      clip: 0,
+      rifled: false,
       zapping: false,
       slow: 0,
     });
@@ -488,6 +496,16 @@ export class Room {
     }
   }
 
+  /** The laser rifle's shot of `p` at the view tick `view`: RIFLE_HP to the first enemy it enters as `p` drew him, and a hit. */
+  private laser(p: Player, view: number | undefined): void {
+    const { hit } = laser(this.world, p.state, this.enemies(p, view));
+    const foe = this.players().find(q => q.info.id === hit?.id);
+    if (foe) {
+      p.state.hits = (p.state.hits + 1) & 255;
+      this.harm(foe, RIFLE_HP);
+    }
+  }
+
   /** 1 hp of the bolt's drain to `foe`; if it puts him down he is disintegrated (`fried`). */
   private fry(foe: Player): void {
     foe.state.fried = this.harm(foe, 1);
@@ -537,7 +555,7 @@ export class Room {
   /**
    * The packs, health ones first, then the ammo ones, then the rail cells: one that is gone comes
    * back after PACK_BACK s, an ammo pack after AMMO_BACK s. A health pack goes to a hurt player standing at it, an ammo pack to one
-   * with the gun and less than AMMO_MAX shots, a rail cell to one with the rail gun and less than
+   * with the gun short of AMMO_MAX or the laser rifle short of RIFLE_MAX (RIFLE_CLIP more rounds), a rail cell to one with the rail gun and less than
    * RAIL_MAX of lightning. Both change the state between two inputs, like a hit: the snapshot
    * carries the result and the predictor replays its unacked inputs on it.
    */
@@ -553,7 +571,7 @@ export class Room {
       const wants = (q: PlayerState) =>
         [
           q.hp < HP_MAX,
-          q.ammo >= 0 && q.ammo < AMMO_MAX,
+          (q.ammo >= 0 && q.ammo < AMMO_MAX) || ((q.rifle ?? -1) >= 0 && q.rifle! < RIFLE_MAX),
           (q.rail ?? -1) >= 0 && q.rail! < RAIL_MAX,
         ][kind];
       const p = players.find(({ state: q }) => !q.down && wants(q) && within(q, at, PACK_R));
@@ -562,7 +580,9 @@ export class Room {
         if (kind == 0) {
           q.hp = Math.min(HP_MAX, q.hp + PACK_HP);
         } else if (kind == 1) {
-          q.ammo = Math.min(AMMO_MAX, q.ammo + AMMO_PACK);
+          // It fills the gun and the laser rifle, whichever he has.
+          q.ammo = q.ammo < 0 ? -1 : Math.min(AMMO_MAX, q.ammo + AMMO_PACK);
+          q.rifle = (q.rifle ?? -1) < 0 ? -1 : Math.min(RIFLE_MAX, q.rifle! + RIFLE_CLIP);
         } else {
           q.rail = Math.min(RAIL_MAX, q.rail! + RAIL_CELL);
         }

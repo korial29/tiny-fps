@@ -41,21 +41,23 @@ export const DOUBLE_CLICK_MS = 300;
 /** The wheel swaps the weapon at most this often (ms): a trackpad's flick is a hundred events, one swap. */
 export const WHEEL_MS = 250;
 
-/** The weapon chosen: 1, 2 and 3 on the keyboard. */
-export const WEAPON = { GUN: 0, BLADE: 1, RAIL: 2 } as const;
+/** The weapon chosen: 1, 2, 3 and 4 on the keyboard. */
+export const WEAPON = { GUN: 0, BLADE: 1, RAIL: 2, RIFLE: 3 } as const;
 
-/** The choice after a key: 1 the gun, 2 the katana, 3 the rail gun, any other key keeps it. */
+/** The choice after a key: 1 the gun, 2 the katana, 3 the rail gun, 4 the laser rifle, any other key keeps it. */
 export const picked = (weapon: number, code: string): number => {
-  const k = ['Digit1', 'Digit2', 'Digit3'].indexOf(code);
+  const k = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(code);
   return k < 0 ? weapon : k;
 };
 
-/** Which of the gun, the katana and the rail gun a player has; all of them when there is no state yet. */
+/** Which of the gun, the katana, the rail gun and the laser rifle a player has; all of them when there is no state yet. */
 export const owned = (p?: PlayerState): boolean[] =>
-  p ? [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0] : [true, true, true];
+  p
+    ? [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0]
+    : [true, true, true, true];
 
 /**
- * The choice after a step of the own player. Picking the katana or the rail gun up switches to
+ * The choice after a step of the own player. Picking the katana, the rail gun or the rifle up switches to
  * it, once; losing every weapon (going down) goes back to the gun; anything else, the gun picked
  * up included, keeps it.
  */
@@ -63,17 +65,17 @@ export const chosen = (weapon: number, was?: PlayerState, now?: PlayerState): nu
   const [a, b] = [owned(was), owned(now)];
   return !now || !b.some(Boolean)
     ? WEAPON.GUN
-    : ((was && [WEAPON.BLADE, WEAPON.RAIL].find(k => b[k] && !a[k])) ?? weapon);
+    : ((was && [WEAPON.BLADE, WEAPON.RAIL, WEAPON.RIFLE].find(k => b[k] && !a[k])) ?? weapon);
 };
 
-/** The keys of a step with KEY.BLADE set while the katana is the choice, KEY.RAIL while the rail gun is. */
+/** The keys of a step with KEY.BLADE set while the katana is the choice, KEY.RAIL while the rail gun is, KEY.RIFLE while the rifle is. */
 export const withWeapon = (keys: number, weapon: number): number =>
-  keys | [0, KEY.BLADE, KEY.RAIL][weapon];
+  keys | [0, KEY.BLADE, KEY.RAIL, KEY.RIFLE][weapon];
 
-/** The choice the wheel turns to, `dir` 1 or -1: the next weapon he has, round the three. */
+/** The choice the wheel turns to, `dir` 1 or -1: the next weapon he has, round the four. */
 export const turned = (weapon: number, dir: number, have: boolean[]): number => {
-  for (let k = 1; k <= 3; k++) {
-    const n = (weapon + dir * k + 3) % 3;
+  for (let k = 1; k <= 4; k++) {
+    const n = (weapon + dir * k + 4) % 4;
     if (have[n]) {
       return n;
     }

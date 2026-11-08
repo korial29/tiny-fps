@@ -285,3 +285,19 @@ describe('the shock of the katana', () => {
     expect(l[0].color[2]).toBeGreaterThan(l[0].color[0]);
   });
 });
+
+describe('the laser rifle\u2019s shots', () => {
+  it('draw a red line, unlit, that fades out in a few frames', () => {
+    const t = createTracer();
+    t.laser(FROM, TO);
+    const v = drawn(t);
+    expect(v.length).toBeGreaterThan(0);
+    for (const x of v) {
+      expect(x[8]).toBe(-2);
+      expect(x[6]).toBeGreaterThan(x[7]);
+    }
+    expect(t.lights().length).toBeGreaterThan(0);
+    t.update(0.2);
+    expect(drawn(t)).toHaveLength(0);
+  });
+});

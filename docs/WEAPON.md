@@ -207,3 +207,17 @@ Holding the button on a cut keeps it locked in a high position. The release is a
 | The gun's boot | `GUN_ON`: the counter rises out of the gun about the front edge of its foot (`folded()`), 0.35 to 1 s; its digits show from 1.05 s (`readout(…, shown)`); the light reaches full at 1.4 s (`power(t, 1.4)`). In a swap the counter sinks back as the battery comes out, and boots again once the new one is in. The katana and the rail gun keep 0.6 s. |
 | The capsule | It unscrews itself and jumps off, no hand on it (0.1 to 0.42 of the swap). The left hand comes from 0.34, brings the new one down onto the socket, and screws it in three strokes of a sixth of a turn (`screwed()`): the wrist and the capsule turn together, then the fingers let go and the wrist turns back. |
 
+## The laser rifle (the user, 2026-11-08)
+
+An automatic two-handed rifle after Halo's assault rifle (a reference picture: an angular dark body, a tall housing with the ammo counter on its sloped back).
+
+| Rule | Detail |
+| --- | --- |
+| Taking it | A fourth rack on the armoury, `TeamDef.rifle`, 2.5 m past the rail gun's (the plinth is 2 m wider). On arrival: `RIFLE_MAX` (120) rounds and a full cell. Key 4 (`KEY.RIFLE`), or the wheel. |
+| Fire | FIRE held: one round each `RIFLE_COOL` (7) ticks from the cell (`clip`, `RIFLE_CLIP` 30), `STRIKE.LASER`. The host casts `laser()` (rail.ts): the look turned by `drift(shots)`, a pattern within `RIFLE_DRIFT` (0.012 rad), to `RIFLE_RANGE` (60 m); the first enemy takes `RIFLE_HP` (1) and it counts a hit. No ball. |
+| Cell | Swapped like the others (`RIFLE_RELOAD` 96 ticks). An ammo pack gives the rifle `RIFLE_CLIP` rounds too. |
+| Wire | `rifle` (+1) and `clip` u8 after `reload`, `rifled` and `inRifle` in bits 3 and 4 of `railing`: 60 bytes a player; keys 14 bits. |
+| Model | `rifle()` (gun.ts): a bullpup body in olive gunmetal, a flat-faced housing whose sloped back carries `scope()` (a trapezoid screen ringed in cyan, cyan digits, red at 7 or fewer), a square shroud to a red lens (`RIFLE_MUZZLE`), red strips along the sides; the left hand holds the shroud from under it (`RIFLE_GRIP`: the thumb along it, the fingers up round its sides). The cell (`cell()`) sits under the body behind the grip. |
+| Animations | Held in both hands, a little further out and higher than the rail gun. A shot: the red line from the muzzle to where it ends (`tracer.laser()`, 80 ms), an orange flash, `SOUND.LASE`, the recoil. A swap: the rifle tips over and goes dark, the cell drops, the left hand brings a new one up into it (EJECT, CLICK), then it boots. Others hold it in both hands too. |
+| HUD | Slot 4, the gun glyph in red, the cell big and the rest after it. |
+

@@ -1455,6 +1455,26 @@ describe('the katana in both hands', () => {
   });
 });
 
+describe('the laser rifle in both hands', () => {
+  it('holds the left hand under its shroud, the thumb along it and the hand across and up its right side, looking level, down or up', () => {
+    const body = watch(man({ ammo: -1, rifle: 100, clip: 20, rifled: true }), 90);
+    for (const pitch of [0, -0.6, 0.5]) {
+      const s = body.pose([0, EYE, 0], 0, pitch)!;
+      const [at, g, across] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R], 3);
+      const q = s.rot[J.HAND_L];
+      const [fing, x, thumb] = [turn(q, [0, -1, 0]), turn(q, [1, 0, 0]), turn(q, [0, 0, -1])];
+      const palm = add(
+        add(s.pos[J.HAND_L], fing.map(v => v * 0.078) as Vec3),
+        x.map(v => v * 0.022) as Vec3,
+      );
+      // Within 2.5 cm: the hand turned to a given way (wield()'s `held`), as the katana's left hand is.
+      expect(away(palm, at), `pitch ${pitch}`).toBeLessThan(0.025);
+      expect(dot(thumb, g)).toBeGreaterThan(0.7);
+      expect(dot(fing, across!)).toBeGreaterThan(0.7);
+    }
+  });
+});
+
 describe('the rail gun in both hands', () => {
   it('holds the left hand round its front grip, the thumb up toward the barrel, looking level, down or up', () => {
     const body = watch(man({ rail: 100, railed: true }), 90);

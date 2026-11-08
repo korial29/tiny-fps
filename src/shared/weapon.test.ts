@@ -27,6 +27,13 @@ import {
   RAIL_MAX,
   RAIL_RANGE,
   RAIL_TICKS,
+  RIFLE_CLIP,
+  RIFLE_COOL,
+  RIFLE_DRIFT,
+  RIFLE_HP,
+  RIFLE_MAX,
+  RIFLE_RANGE,
+  RIFLE_RELOAD,
   RUN_SPEED,
   SLOW_SPEED,
   SHOCK_KNOCK,
@@ -35,6 +42,7 @@ import {
   TICK_HZ,
 } from './constants';
 import { PLAYER_H } from './constants';
+import { drift } from './rail';
 import { cutOf, swingOf } from './blade';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
@@ -71,6 +79,7 @@ const ARENA: WorldDef = {
       rack: [-20, 1, 40],
       blade: [-20, 1, 43],
       rail: [-20, 1, 46],
+      rifle: [-20, 1, 49],
     },
     {
       base: [60, 1, 4],
@@ -203,6 +212,79 @@ const match = (rules: Partial<Rules> = {}, def = ARENA) => {
 
 const GUN = { ammo: AMMO_MAX };
 const RAILGUN = { rail: RAIL_MAX };
+
+describe('the laser rifle', () => {
+  const RIFLED = { rifle: RIFLE_MAX };
+  const { RIFLE } = KEY;
+
+  it('is taken at its rack on arrival with RIFLE_MAX rounds, a full cell, and is in hand when wanted', () => {
+    const m = match();
+    m.put(m.cy, -20, 49);
+    m.hold(m.cy, 1, RIFLE);
+    expect(m.state(m.cy)).toMatchObject({
+      rifle: RIFLE_MAX,
+      clip: RIFLE_CLIP,
+      rifled: true,
+      ammo: -1,
+    });
+    m.put(m.cy, 0, 0, { ...GUN, ...RIFLED });
+    m.hold(m.cy, 1, 0);
+    expect(m.state(m.cy).rifled).toBe(false);
+    m.hold(m.cy, 1, RIFLE);
+    expect(m.state(m.cy).rifled).toBe(true);
+  });
+
+  it('fires a round each RIFLE_COOL ticks while FIRE is held, from its cell, then swaps the cell', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, RIFLED);
+    m.hold(m.cy, 1, RIFLE);
+    m.hold(m.cy, RIFLE_COOL * 10, RIFLE | FIRE, { yaw: 0 });
+    expect(m.state(m.cy)).toMatchObject({
+      shots: 10,
+      clip: RIFLE_CLIP - 10,
+      rifle: RIFLE_MAX - 10,
+    });
+    // Let go, it stops; held to the end of the cell, it swaps it and fires again after.
+    m.hold(m.cy, 20, RIFLE, { yaw: 0 });
+    expect(m.state(m.cy).shots).toBe(10);
+    while (m.state(m.cy).clip) {
+      m.hold(m.cy, 1, RIFLE | FIRE, { yaw: 0 });
+    }
+    expect(m.state(m.cy).shots).toBe(RIFLE_CLIP);
+    m.hold(m.cy, RIFLE_RELOAD, RIFLE | FIRE, { yaw: 0 });
+    expect(m.state(m.cy).shots).toBe(RIFLE_CLIP);
+    m.hold(m.cy, 1, RIFLE | FIRE, { yaw: 0 });
+    expect(m.state(m.cy)).toMatchObject({ shots: RIFLE_CLIP + 1, clip: RIFLE_CLIP - 1 });
+  });
+
+  it('takes RIFLE_HP from the first enemy on the drifted look, and counts a hit, with no ball', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, RIFLED);
+    m.put(m.bob, 10);
+    m.put(m.dee, 20);
+    m.hold(m.cy, 1, RIFLE);
+    m.ticks(SNAP_EVERY);
+    m.hold(m.cy, RIFLE_COOL * 3, RIFLE | FIRE);
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 3 * RIFLE_HP);
+    expect(m.state(m.dee).hp).toBe(HP_MAX);
+    expect(m.state(m.cy).hits).toBe(3);
+    expect(m.room['balls']).toHaveLength(0);
+  });
+
+  it('misses past the drift: at RIFLE_RANGE the pattern strays wider than a body', () => {
+    const offs = Array.from({ length: 30 }, (_, n) => Math.hypot(...drift(n)) * RIFLE_RANGE);
+    expect(Math.max(...offs)).toBeGreaterThan(PLAYER_R);
+    expect(Math.max(...offs)).toBeLessThanOrEqual(RIFLE_DRIFT * Math.SQRT2 * RIFLE_RANGE);
+  });
+
+  it('is refilled by an ammo pack, RIFLE_CLIP rounds up to RIFLE_MAX', () => {
+    const m = match();
+    m.put(m.cy, 20, -20, { rifle: 10 });
+    m.ticks(1);
+    expect(m.state(m.cy).rifle).toBe(10 + RIFLE_CLIP);
+    expect(m.state(m.cy).ammo).toBe(-1);
+  });
+});
 
 describe('the rail gun', () => {
   /**

@@ -30,7 +30,7 @@ import {
   RIFLE_CLIP,
   RIFLE_COOL,
   RIFLE_DRIFT,
-  RIFLE_HP,
+  RIFLE_HITS,
   RIFLE_MAX,
   RIFLE_RANGE,
   RIFLE_RELOAD,
@@ -257,7 +257,7 @@ describe('the laser rifle', () => {
     expect(m.state(m.cy)).toMatchObject({ shots: RIFLE_CLIP + 1, clip: RIFLE_CLIP - 1 });
   });
 
-  it('takes RIFLE_HP from the first enemy on the drifted look, and counts a hit, with no ball', () => {
+  it('takes 1 hp from the first enemy on the drifted look for every RIFLE_HITS hits, each counted, with no ball', () => {
     const m = match();
     m.put(m.cy, 0, 0, RIFLED);
     m.put(m.bob, 10);
@@ -265,9 +265,13 @@ describe('the laser rifle', () => {
     m.hold(m.cy, 1, RIFLE);
     m.ticks(SNAP_EVERY);
     m.hold(m.cy, RIFLE_COOL * 3, RIFLE | FIRE);
-    expect(m.state(m.bob).hp).toBe(HP_MAX - 3 * RIFLE_HP);
-    expect(m.state(m.dee).hp).toBe(HP_MAX);
+    // Three hits: one hp, and a hit toward the next.
+    expect(RIFLE_HITS).toBe(2);
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 1);
     expect(m.state(m.cy).hits).toBe(3);
+    m.hold(m.cy, RIFLE_COOL, RIFLE | FIRE);
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 2);
+    expect(m.state(m.dee).hp).toBe(HP_MAX);
     expect(m.room['balls']).toHaveLength(0);
   });
 

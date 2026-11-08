@@ -373,9 +373,23 @@ export const kindOf = (p: Pick<PlayerState, 'railed' | 'rifled'> | boolean | num
 /** The rifle's housing: the height of its foot and of its top, the half width and the back of each. */
 const HB = [0.09, 0.17, 0.031, 0.12, 0.02, 0.07];
 
+/** The rifle's body from the butt to the end, as tube stations: forward, the middle's height, half its width and half its height. */
+const PROFILE: Station[] = [
+  [-0.336, 0.036, 0.024, 0.048],
+  [-0.326, 0.035, 0.031, 0.058],
+  [-0.2, 0.04, 0.033, 0.058],
+  [0, 0.048, 0.033, 0.05],
+  [0.2, 0.056, 0.03, 0.04],
+  [0.32, 0.063, 0.027, 0.032],
+  [0.39, 0.071, 0.024, 0.024],
+  [0.44, 0.077, 0.021, 0.018],
+  [0.48, 0.079, 0.02, 0.016],
+  [0.497, 0.079, 0.017, 0.013],
+];
+
 /** The laser rifle's muzzle, the lens at the end of its shroud, and where the left hand holds the shroud from under it: the middle of the fist. */
-export const RIFLE_MUZZLE: Vec3 = [0, 0.06, -0.5];
-export const RIFLE_GRIP: Vec3 = [0, 0.025, -0.16];
+export const RIFLE_MUZZLE: Vec3 = [0, 0.079, -0.512];
+export const RIFLE_GRIP: Vec3 = [0, 0.005, -0.15];
 /** The red of the laser, which blooms. */
 export const LASER = [2.6, 0.55, 0.22];
 const red: Paint = () => [LASER[0], LASER[1], -2, LASER[2]];
@@ -393,22 +407,11 @@ export const rifle = (lod: number): number[] => {
   if (rifled[lod]) {
     return rifled[lod];
   }
-  const [n, m] = lod ? [8, 6] : [4, 4];
+  const [n, m] = lod ? [12, 6] : [6, 4];
   const out: number[] = [];
-  // The body, the butt to the front of the receiver, a box with soft edges.
-  tube(
-    out,
-    [
-      [-0.33, 0.04, 0, 0],
-      [-0.328, 0.04, 0.03, 0.05],
-      [-0.2, 0.045, 0.032, 0.052],
-      [0.05, 0.055, 0.032, 0.045],
-      [0.2, 0.06, 0.03, 0.035],
-      [0.21, 0.06, 0, 0],
-    ],
-    n,
-    olive,
-  );
+  // The body in one piece, the butt to the lens, its edges rounded: a trapezoid seen from the
+  // side, tall at the butt, its underside rising toward the front and curving up into the end.
+  tube(out, [[-0.34, PROFILE[0][1], 0, 0], ...PROFILE, [0.502, 0.079, 0, 0]], n, olive);
   // The housing on top: a block with flat faces, narrower at its top, its back sloping down
   // toward the eye (the counter's face) and its front down to the body.
   const corner = (x: number, y: number, z: number): Vec3 => [x, y, z];
@@ -440,24 +443,13 @@ export const rifle = (lod: number): number[] => {
     tri(out, p[0], p[1], p[2], [r, gg, bb]);
     tri(out, p[0], p[2], p[3], [r, gg, bb]);
   }
-  // The shroud to the lens, and the lens.
+  // The lens at the end.
   tube(
     out,
     [
-      [0.2, 0.06, 0, 0],
-      [0.205, 0.06, 0.024, 0.026],
-      [0.48, 0.06, 0.022, 0.024],
-      [0.485, 0.06, 0, 0],
-    ],
-    n,
-    olive,
-  );
-  tube(
-    out,
-    [
-      [0.483, 0.06, 0, 0],
-      [0.486, 0.06, 0.012, 0.012],
-      [0.5, 0.06, 0, 0],
+      [0.5, 0.079, 0, 0],
+      [0.501, 0.079, 0.011, 0.01],
+      [-RIFLE_MUZZLE[2], RIFLE_MUZZLE[1], 0, 0],
     ],
     m,
     red,
@@ -475,13 +467,11 @@ export const rifle = (lod: number): number[] => {
     m,
     steel,
   );
+  // A strip of red light along each side, on the body's middle line.
   for (const s of [-1, 1]) {
     tube(
       out,
-      [
-        [-0.25, 0.05, 0.002, 0.003, s * 0.033],
-        [0.18, 0.06, 0.002, 0.003, s * 0.031],
-      ],
+      PROFILE.slice(2, 8).map(([f, y, a]): Station => [f, y, 0.002, 0.003, s * (a + 0.0012)]),
       3,
       red,
     );

@@ -117,7 +117,7 @@ export const SOUND = {
   POP: 33,
   SCREW: 34,
   BOOT: 35,
-  /** The laser rifle's shot: a bright zip that falls, short enough for 8.6 a second. */
+  /** The laser rifle's shot: a punch in the bass and the middle, short enough for 20 a second. */
   LASE: 36,
 } as const;
 
@@ -324,11 +324,12 @@ export const LAYERS: Voice[][] = [
     [2, 360, 2.2, 0.05, 0.4, 0.2, 0, 1, 0, 1, 0.22],
     [2, 1760, 0, 0.003, 0.05, 0.15, 0, 1, 0, 1, 0.35, 0.6],
   ],
-  // LASE: a saw zipping down from 2.4 kHz, a square an octave under it, a tick of noise on the attack.
+  // LASE: in the bass and the middle, a muffled square punch falling from 320 Hz, a saw an octave
+  // under it, and a soft thud of low-passed noise; 60 ms, for 20 a second.
   [
-    [1, 2400, -9, 0.001, 0.01, 0.07, 0, 0.6, 0, 1, 0.4],
-    [0, 1200, -8, 0.001, 0.01, 0.06, 0, 0.3, 0, 1, 0.25],
-    [3, 9000, 0, 0.001, 0, 0.012, 0, 0.7, 0, 1, 0.4],
+    [0, 320, -6, 0.001, 0.008, 0.05, 0, 0.3, 0, 1, 0.55],
+    [1, 160, -4, 0.001, 0.01, 0.05, 0, 0.25, 0, 1, 0.45],
+    [3, 900, -2, 0.001, 0, 0.025, 0, 0.3, 0, 1, 0.35],
   ],
 ];
 

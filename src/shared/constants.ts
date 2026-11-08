@@ -331,17 +331,18 @@ export const SLOW_SPEED = 3;
 /**
  * The laser rifle (the user, 2026-11-08), held in both hands, after Halo's assault rifle: taken at
  * the team's fourth rack with RIFLE_MAX rounds, it fires while FIRE is held, one round each
- * RIFLE_COOL ticks from a power cell of RIFLE_CLIP (RIFLE_RELOAD to swap). Each shot is an instant
- * beam RIFLE_RANGE metres along the look, drifted by up to RIFLE_DRIFT radians in a pattern of the
- * shot count, and takes RIFLE_HP from the first enemy it enters. Rounds and the cell are u8 on the wire.
+ * RIFLE_COOL ticks (20 a second) from a power cell of RIFLE_CLIP (RIFLE_RELOAD to swap). Each shot
+ * is an instant beam RIFLE_RANGE metres along the look, drifted by up to RIFLE_DRIFT radians in a
+ * pattern of the shot count; every RIFLE_HITS of them that enter an enemy take 1 hp from him.
+ * Rounds and the cell are u8 on the wire.
  */
-export const RIFLE_MAX = 120;
-export const RIFLE_CLIP = 30;
+export const RIFLE_MAX = 240;
+export const RIFLE_CLIP = 60;
 export const RIFLE_RELOAD = 96;
-export const RIFLE_COOL = 7;
+export const RIFLE_COOL = 3;
 export const RIFLE_RANGE = 60;
 export const RIFLE_DRIFT = 0.012;
-export const RIFLE_HP = 1;
+export const RIFLE_HITS = 2;
 
 /** Seconds a carrier who is made to drop the flag cannot take it again: he would pick it up where he stands. */
 export const FLAG_LOCK = 2;

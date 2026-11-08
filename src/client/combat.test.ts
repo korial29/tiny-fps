@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   AMMO_PACK,
+  GUN_RELOAD,
+  RAIL_RELOAD,
   CUTS,
   GUN_RANGE,
   INTERP_DELAY,
@@ -495,12 +497,13 @@ describe('the sounds and the screen of what happens to the own player', () => {
     const { frame, ids } = setup();
     frame(player({ ammo: -1 }));
     frame(player({ ammo: 60 }));
-    expect(ids()).toEqual([SOUND.GUN]);
+    // Taken, it comes to hand and powers up.
+    expect(ids()).toEqual([SOUND.BOOT, SOUND.GUN]);
     frame(player({ ammo: 59 }));
     frame(player({ ammo: 58 }));
-    expect(ids()).toEqual([SOUND.GUN]);
+    expect(ids()).toEqual([SOUND.BOOT, SOUND.GUN]);
     frame(player({ ammo: 60 }));
-    expect(ids()).toEqual([SOUND.GUN, SOUND.GUN]);
+    expect(ids()).toEqual([SOUND.BOOT, SOUND.GUN, SOUND.GUN]);
   });
 
   it('plays it too for an ammo pack: plus AMMO_PACK from any count, at once', () => {
@@ -713,8 +716,25 @@ describe('drawing and sheathing the katana', () => {
     frame(player({ blade: true, wield: true }));
     expect(audio.play).toHaveBeenCalledTimes(1);
     frame(player({ blade: true, wield: false }));
-    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SHING, undefined, expect.any(Number), 0.85);
-    expect(audio.play).toHaveBeenCalledTimes(2);
+    expect(audio.play).toHaveBeenCalledWith(SOUND.SHING, undefined, expect.any(Number), 0.85);
+    // The gun back in hand powers up.
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.BOOT, undefined, expect.any(Number), 1);
+    expect(audio.play).toHaveBeenCalledTimes(3);
+  });
+
+  it('play the swaps: the battery out and home, the capsule popped and screwed in three turns', () => {
+    const { frame, ids } = setup();
+    frame(player({ ammo: 40, mag: 0 }));
+    for (let r = GUN_RELOAD; r >= 0; r--) {
+      frame(player({ ammo: 40, mag: r ? 0 : 15, reload: r }));
+    }
+    expect(ids()).toEqual([SOUND.EJECT, SOUND.CLICK, SOUND.BOOT]);
+    const rail = setup();
+    rail.frame(player({ ammo: -1, rail: 160, railed: true, cap: 0 }));
+    for (let r = RAIL_RELOAD; r >= 0; r--) {
+      rail.frame(player({ ammo: -1, rail: 160, railed: true, cap: r ? 0 : 80, reload: r }));
+    }
+    expect(rail.ids()).toEqual([SOUND.POP, SOUND.SCREW, SOUND.SCREW, SOUND.SCREW, SOUND.BOOT]);
   });
 
   it('play the draw for a katana picked up with no gun, which is in hand at once', () => {
@@ -771,15 +791,11 @@ describe('the others and the katana', () => {
     frame(player(), [other(0, 0, { blade: true, wield: true })]);
     expect(audio.play).toHaveBeenLastCalledWith(SOUND.SHING, [5, 1.6, -3], expect.any(Number), 1);
     frame(player(), [other(0, 0, { blade: true, wield: false })]);
-    expect(audio.play).toHaveBeenLastCalledWith(
-      SOUND.SHING,
-      [5, 1.6, -3],
-      expect.any(Number),
-      0.85,
-    );
+    expect(audio.play).toHaveBeenCalledWith(SOUND.SHING, [5, 1.6, -3], expect.any(Number), 0.85);
     frame(player(), [other(0, 0, { blade: true, wield: true })]);
     frame(player(), [other(0, 0, { blade: false, wield: false })]);
-    expect(audio.play).toHaveBeenCalledTimes(3);
+    const shings = vi.mocked(audio.play).mock.calls.filter(([id]) => id === SOUND.SHING);
+    expect(shings).toHaveLength(3);
   });
 
   it('crackle around a runner while his stumble is a shock, and not for a tackle or when it ends', () => {

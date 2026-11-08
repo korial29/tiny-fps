@@ -461,9 +461,15 @@ export const span = (t: number, a: number, b: number) => clamp((t - a) / (b - a)
 export const swapOf = (p: Pick<PlayerState, 'reload' | 'railed'>): number =>
   p.reload ? 1 - p.reload / (p.railed ? RAIL_RELOAD : GUN_RELOAD) : -1;
 
-/** The glow of a weapon `t` seconds after it came to hand: dark as it rises, then flickering up to full at 0.6 s. */
-export const power = (t: number): number =>
-  t >= 0.6 ? 1 : clamp((t - 0.15) / 0.45) * (0.65 + 0.35 * Math.sin(t * 95) ** 2);
+/**
+ * The glow of a weapon `t` seconds after it came to hand: dark as it rises, then flickering up to
+ * full at `end` (0.6 s; the gun's 1.4 s, its counter standing up first).
+ */
+export const power = (t: number, end = 0.6): number =>
+  t >= end ? 1 : clamp((t - end / 4) / (end * 0.75)) * (0.65 + 0.35 * Math.sin(t * 95) ** 2);
+
+/** The gun's boot `t` seconds after it came to hand or its new battery went in: its counter stands up over 0.35 to 1 s, then its digits show. */
+export const GUN_ON = { lit: 1.4, from: 0.35, up: 1, digits: 1.05 };
 
 /**
  * Where the battery or the capsule is at `s` of a swap (0 to 1; -1 none): how far out of its seat
@@ -480,19 +486,38 @@ export const swapped = (s: number, rail: boolean): number[] => {
       ? [0.1 * ease(span(s, 0.15, 0.3)) + 0.6 * span(s, 0.3, 0.4) ** 2, 0, 0]
       : [0.22 * (1 - ease(span(s, 0.4, 0.75))), 0, 0];
   }
-  // Unscrewed a turn and a half, thrown up spinning, then a new one down and screwed in.
-  return s < 0.45
+  // It unscrews itself a turn and a half and jumps up spinning; then the hand brings a new one
+  // down onto the socket and screws it in, three turns of the wrist.
+  return s < 0.42
     ? [
-        0.02 * ease(span(s, 0.12, 0.3)) + 0.35 * span(s, 0.3, 0.45) ** 1.5,
-        -3 * Math.PI * ease(span(s, 0.12, 0.3)) - 9 * span(s, 0.3, 0.45),
-        2.5 * span(s, 0.3, 0.45),
+        0.02 * ease(span(s, 0.1, 0.28)) + 0.35 * span(s, 0.28, 0.42) ** 1.5,
+        -3 * Math.PI * ease(span(s, 0.1, 0.28)) - 9 * span(s, 0.28, 0.42),
+        2.5 * span(s, 0.28, 0.42),
       ]
-    : [
-        0.1 * (1 - ease(span(s, 0.45, 0.6))) + 0.02 * (1 - ease(span(s, 0.6, 0.85))),
-        3 * Math.PI * (1 - ease(span(s, 0.6, 0.85))),
-        0,
-      ];
+    : [0.09 * (1 - ease(span(s, 0.42, 0.58))) + 0.03 * (1 - span(s, 0.58, 0.88)), screwed(s)[0], 0];
 };
+
+/** The sixth of a turn of each of the three turns of the wrist that screw the capsule in. */
+const STROKE = Math.PI / 3;
+
+/**
+ * The screwing of a new capsule at `s` of a swap: how far round it still is (radians, to 0 when it
+ * is in), and how far the wrist has turned from where it took hold: with it through each stroke,
+ * then back while the fingers let go.
+ */
+export const screwed = (s: number): number[] => {
+  const u = span(s, 0.58, 0.88);
+  const k = Math.min(Math.floor(u * 3), 2);
+  const f = u * 3 - k;
+  const turn = ease(f / 0.6);
+  return [STROKE * (3 - k - turn), -STROKE * (f < 0.6 ? turn : 1 - ease((f - 0.6) / 0.4))];
+};
+
+/** The moments of a swap that sound, as shares of it: the battery let go and clicked home; the capsule jumping off and each turn of the screw. */
+export const CUES = [
+  [0.15, 0.72],
+  [0.28, 0.58, 0.68, 0.78],
+];
 
 /**
  * The frame of the battery (the capsule when `rail`) of a gun whose grip is at `at` and whose axes
@@ -633,11 +658,12 @@ const readouts = new Map<number, number[]>();
  * a small block on top of the body, in model space: cyan, red at 4 or fewer, thick segments that bloom only a
  * little. The block is part of the readout, so only a gun that shows the ammo carries it. 99 at most.
  * While the gun charges, a gauge of CHARGE_MAX cells under the digits lights `level` of them, the
- * strength the shot would have; all orange at the full charge.
+ * strength the shot would have; all orange at the full charge. Not `shown`: the block and the dark
+ * screen only, the gun still booting.
  */
-export const readout = (ammo: number, level = 0): number[] => {
+export const readout = (ammo: number, level = 0, shown = true): number[] => {
   const n = Math.min(Math.max(Math.floor(ammo), 0), 99);
-  const key = n * 8 + Math.min(Math.max(level, 0), CHARGE_MAX);
+  const key = (n * 8 + Math.min(Math.max(level, 0), CHARGE_MAX)) * 2 + +shown;
   let out = readouts.get(key);
   if (!out) {
     const v: number[] = (out = []);
@@ -699,7 +725,7 @@ export const readout = (ammo: number, level = 0): number[] => {
     };
     gauge(false);
     const from = v.length;
-    [...`${n}`.padStart(2, '0')].forEach((ch, i) => {
+    [...(shown ? `${n}`.padStart(2, '0') : '')].forEach((ch, i) => {
       const x0 = -DW - DGAP / 2 + i * (DW + DGAP);
       for (const seg of DIGITS[+ch]) {
         const [a, b, d, e] = SEGMENTS[seg];
@@ -711,7 +737,9 @@ export const readout = (ammo: number, level = 0): number[] => {
       }
     });
     // The lit cells glow with the digits.
-    gauge(true);
+    if (shown) {
+      gauge(true);
+    }
     lit(v, from, 1);
     readouts.set(key, out);
   }
@@ -785,12 +813,40 @@ export const lcd = (ammo: number): number[] => {
   return v;
 };
 
-/** How a gun is drawn beyond its place: its glow from 0 (off) to 1, the swap under way (0 to 1, -1 none), and whether its battery or capsule holds any. */
+/**
+ * How a gun is drawn beyond its place: its glow from 0 (off) to 1, the swap under way (0 to 1, -1
+ * none), whether its battery or capsule holds any, how far the gun's counter stands up (0 folded
+ * back flat, 1 up) and whether its digits show.
+ */
 export interface Lit {
   light?: number;
   swap?: number;
   empty?: boolean;
+  stand?: number;
+  digits?: boolean;
 }
+
+/** Where the gun's counter folds: the front edge of its foot, up and back of the grip. */
+const HINGE = [0.112, 0.012];
+
+/**
+ * The frame that draws a model of the gun with its counter turned back by `a` radians about the
+ * front edge of its foot (the gun's right): the top toward the back and down, flat at π/2.
+ */
+const folded = (at: Vec3, [r, u, f]: Vec3[], a: number, k: number): [Vec3, Vec3[]] => {
+  const [c, s] = [Math.cos(a), Math.sin(a)];
+  const [hy, hz] = HINGE;
+  // The hinge minus the hinge turned, in model space (y, z), carried to the world.
+  const [dy, dz] = [hy - (hy * c - hz * s), hz - (hy * s + hz * c)];
+  return [
+    [0, 1, 2].map(i => at[i] + k * (u[i] * dy - f[i] * dz)) as Vec3,
+    [
+      r,
+      [0, 1, 2].map(i => u[i] * c - f[i] * s) as Vec3,
+      [0, 1, 2].map(i => u[i] * s + f[i] * c) as Vec3,
+    ],
+  ];
+};
 
 /**
  * Appends the gun (the rail gun when `rail`, its spark at the time `t`) held in the hand at `pos`
@@ -808,7 +864,7 @@ export const held = (
   level = 0,
   rail = false,
   t = 0,
-  { light = 1, swap = -1, empty = false }: Lit = {},
+  { light = 1, swap = -1, empty = false, stand = 1, digits = true }: Lit = {},
 ) => {
   const [at, ax] = [grip(pos, q), axes(q)];
   const d = 0.08 + 0.92 * light;
@@ -819,8 +875,16 @@ export const held = (
   if (rail && light > 0.98 && swap < 0) {
     place(out, arc(t), at, ax, [0, 0, 0], k);
   }
-  if (ammo !== undefined && light > 0.3) {
-    place(out, rail ? lcd(ammo) : readout(ammo, level), at, ax, [0, 0, 0], k);
+  if (ammo !== undefined && rail && light > 0.3) {
+    place(out, lcd(ammo), at, ax, [0, 0, 0], k);
+  } else if (ammo !== undefined && !rail) {
+    place(
+      out,
+      readout(ammo, level, digits),
+      ...folded(at, ax, (1 - stand) * Math.PI * 0.5, k),
+      [0, 0, 0],
+      k,
+    );
   }
   dimmed(out, from, d);
 };

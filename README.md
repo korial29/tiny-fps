@@ -203,7 +203,7 @@ The game is the movement and a capture the flag on top of it, with a tackle, a g
 - **Moving**: momentum, sprint, dash, double jump, ledge grab and climb, wall-run, slide, coyote time and a jump buffer. The host decides where everyone is. Your own moves show at once (the client predicts them) and are corrected to the host's state, to the bit.
 - **The others**: drawn 100 ms in the past, interpolated between snapshots, as runners with one continuous skinned body, a natural gait and every parkour move, in their team colour, with the weapon in their hands.
 - **The city**: the street lies far below the roofs, with roads, traffic and a fog that thickens toward it, lawns in the empty lots and a skyline of towers around the map.
-- **Sound**: a synthesiser and a mixer that places sounds left or right by where they come from, and an airy music loop of slow pads and soft bells. Steps, jumps, the deep plasma shot, the katana's draw, swish and zap, hits, pickups and the flag events all have their sound. The sound starts with the click that locks the pointer.
+- **Sound**: a synthesiser and a mixer that places sounds left or right by where they come from, and an airy music loop of slow pads and soft bells. Steps, jumps, the deep plasma shot, the katana's draw, swish and zap, the guns' reloads and power-up, hits, pickups and the flag events all have their sound. The sound starts with the click that locks the pointer.
 
 ---
 

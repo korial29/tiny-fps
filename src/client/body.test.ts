@@ -747,14 +747,14 @@ describe('the gun in the right hand', () => {
   it('comes to hand dark and lights up, and goes dark through a swap until the new battery is in', () => {
     const p = armed();
     const bright = (body: Body, q = p) => glow(draw(body, q)).length;
-    const lit = bright(watch(p, 60));
+    const lit = bright(watch(p, 90));
     expect(bright(watch(p, 4))).toBeLessThan(lit * 0.2);
-    const body = watch(p, 60);
+    const body = watch(p, 90);
     body.update({ ...p, reload: 20 }, DT);
     expect(bright(body, { ...p, reload: 20 })).toBeLessThan(lit * 0.2);
     body.update(p, DT);
     expect(bright(body)).toBeLessThan(lit * 0.2);
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 90; i++) {
       body.update(p, DT);
     }
     expect(bright(body)).toBe(lit);
@@ -762,7 +762,7 @@ describe('the gun in the right hand', () => {
 
   it('is in the lower right of the view, in front of the camera, aimed at the crosshair', () => {
     const p = armed();
-    const v = draw(watch(p, 60), p);
+    const v = draw(watch(p, 90), p);
     const g = glow(v).map(q => local(p, q.at));
     expect(g.length).toBeGreaterThan(50);
     // The gun is in the lower right: nearly all of it on the screen, none left of the middle; the
@@ -931,7 +931,7 @@ describe('the gun in the right hand', () => {
 describe('the ammo on the back of the gun', () => {
   const armed = (mag: number) => man({ ammo: AMMO_MAX, mag });
   /** The digits drawn last: their vertices as the body drew them. */
-  const digits = (p: PlayerState, body = watch(p, 60)) => {
+  const digits = (p: PlayerState, body = watch(p, 90)) => {
     const out: number[] = [];
     body.draw(out, eyeOf(p), 0, 0, 0, TEAM);
     return out.slice(out.length - readout(p.mag!).length);
@@ -939,7 +939,7 @@ describe('the ammo on the back of the gun', () => {
 
   it('shows the digits of the shots in the battery, from the predicted state of each frame', () => {
     const p = armed(12);
-    const body = watch(p, 60);
+    const body = watch(p, 90);
     expect(digits(p, body).length).toBe(readout(12).length);
     const q = armed(11);
     body.update(q, DT);

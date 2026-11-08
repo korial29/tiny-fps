@@ -592,7 +592,8 @@ describe('gait: the other moves', () => {
     const steps = frames.map((f, i) => (i ? step(f, frames[i - 1]) : 0));
     // 60 frames of standing, then the move: the first frame hardly moves, none jumps.
     expect(steps[60]).toBeLessThan(0.04);
-    expect(Math.max(...steps.slice(60))).toBeLessThan(0.16);
+    // The feet come in from the guard's spread: a hang draws them up 16 cm in a frame at most.
+    expect(Math.max(...steps.slice(60))).toBeLessThan(0.17);
     // The changes of speed between frames are small too: no frame is a kink.
     const kink = steps.map((s, i) => (i > 1 ? Math.abs(s - steps[i - 1]) : 0));
     expect(Math.max(...kink)).toBeLessThan(0.08);
@@ -1094,8 +1095,10 @@ describe('gait: the poses of the other moves', () => {
     const diff = fs.slice(20, 40).map(f => f.pos[J.HAND_L][1] - f.pos[J.HAND_R][1]);
     expect(Math.max(...diff)).toBeGreaterThan(0.1);
     expect(Math.min(...diff)).toBeLessThan(-0.1);
+    // Still again, the runner stands in its guard: leaning forward a little, not reeling.
     const end = frames({}, 3).pop()!;
-    expect(Math.abs(lean(end))).toBeLessThan(0.1);
+    expect(lean(end)).toBeGreaterThan(0.05);
+    expect(lean(end)).toBeLessThan(0.25);
   });
 
   describe('a knock', () => {
@@ -1146,10 +1149,13 @@ describe('gait: the poses of the other moves', () => {
       const peak = Math.max(...a);
       expect(peak).toBeGreaterThan(0.14);
       expect(a.indexOf(peak)).toBeLessThan(24);
-      // Out again with the knock, and upright before the stun is over.
-      expect(a[36]).toBeLessThan(peak * 0.5);
-      expect(Math.abs(a[48])).toBeLessThan(0.03);
-      expect(Math.abs(a[a.length - 1])).toBeLessThan(0.03);
+      // Out again with the knock, and back in the guard before the stun is over.
+      // The same runner (its own tilt) left standing: the neck ahead of the pelvis in its guard.
+      const still = sim(createGait(), state({ id: 2 }), 2, () => {}).at(-1)!;
+      const guard = -sub(still.pos[J.NECK], still.pos[J.PELVIS])[2];
+      expect(a[36] - guard).toBeLessThan((peak - guard) * 0.5);
+      expect(Math.abs(a[48] - guard)).toBeLessThan(0.03);
+      expect(Math.abs(a[a.length - 1] - guard)).toBeLessThan(0.03);
     });
 
     it('never pops: no joint jumps between two frames, whichever way it is thrown', () => {

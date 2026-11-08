@@ -262,8 +262,14 @@ const [LEAN, BANK, YAW, DIP, LOW, VX, VZ, HY, UP, KA, KR, W] = [
 ];
 /** Metres a respawn moves a player in a frame, at the least. */
 const TELEPORT = 5;
-/** Half of a hip joint's distance from the middle: the feet stand this far apart when idle. */
+/** Half of a hip joint's distance from the middle: the feet stand under the hips on the move. */
 const HIP = 0.1;
+/**
+ * The guard a still runner stands in, not straight as a post (the user, 2026-11-08): half the
+ * feet's spread (metres), how far the right foot stands ahead and the left behind (metres), the
+ * trunk's lean forward (radians), and how far the legs give.
+ */
+const [WIDE, STEP, BOW, GIVE] = [0.16, 0.12, 0.2, 0.05];
 
 interface Foot {
   /** The ankle now. */
@@ -290,7 +296,8 @@ interface Foot {
   on: boolean;
 }
 
-export const createGait = (): Gait => {
+/** `bow` is the guard's lean forward: none for the eye's own body, whose arms hold to the view. */
+export const createGait = (bow = BOW): Gait => {
   const out = rest();
   const P = {} as Record<Key, number>;
   const sp = new Array<number>(W + 2 * MOVES.length).fill(0);
@@ -456,7 +463,11 @@ export const createGait = (): Gait => {
     feet.forEach((f, n) => {
       const s = n ? 1 : -1;
       const u = (ph + n / 2) % 1;
-      const [hx, hz] = [p.x + rx * s * HIP, p.z + rz * s * HIP];
+      const [wide, ahead] = idle ? [WIDE, s * STEP] : [HIP, 0];
+      const [hx, hz] = [
+        p.x + rx * s * wide - Math.sin(yaw) * ahead,
+        p.z + rz * s * wide - Math.cos(yaw) * ahead,
+      ];
       const fy = yaw - s * who[4];
       const [fx, fz] = [-Math.sin(fy), -Math.cos(fy)];
       if (!walks) {
@@ -658,6 +669,7 @@ export const createGait = (): Gait => {
     const idle = 1 - g;
     const breath = idle * 0.012 * Math.sin(TAU * 0.28 * time);
     const shift = idle * 0.012 * Math.sin(TAU * 0.17 * time + who[1] * 9);
+    const guard = idle * bow;
     const hipX = P.sw * g * side + shift;
     out.at[0] = at[0];
     out.at[1] = at[1];
@@ -666,9 +678,9 @@ export const createGait = (): Gait => {
 
     rot[J.PELVIS] = mul(
       mul(axis(Y, -P.pr * g * c1), axis(Z, obl + 0.4 * bank)),
-      axis(X, -(tilt + 0.25 * lean + 0.3 * crouch + 0.5 * dip)),
+      axis(X, -(tilt + 0.25 * (lean + guard) + 0.3 * crouch + 0.5 * dip)),
     );
-    const body = tilt + 0.25 * lean - lean - 0.7 * crouch - 0.8 * dip;
+    const body = tilt - 0.75 * (lean + guard) - 0.7 * crouch - 0.8 * dip;
     rot[J.SPINE] = mul(
       mul(axis(Y, 0.4 * turn_ - 0.25 * yo), axis(Z, 0.25 * bank - 0.8 * obl + 0.5 * shift)),
       axis(X, 0.45 * body + breath * 0.5),
@@ -699,7 +711,7 @@ export const createGait = (): Gait => {
     const [rx, rz] = [Math.cos(yaw), -Math.sin(yaw)];
     const base: Vec3 = [at[0] + rx * hipX, 0, at[2] + rz * hipX];
     const off = [J.THIGH_L, J.THIGH_R].map(j => turn(pw, REST[j]));
-    const stand = 1 - 0.25 * crouch - 0.7 * dip;
+    const stand = 1 - 0.25 * crouch - 0.7 * dip - GIVE * idle;
     const flight =
       at[1] +
       0.05 +

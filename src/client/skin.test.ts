@@ -237,7 +237,8 @@ describe('skin', () => {
       }
     }
     expect(turned.join).toBeLessThan(turned.loft);
-    expect(turned.join).toBeLessThan(60);
+    // 62 degrees at the back of the armpit since the shoulders came in (the user, 2026-11-08).
+    expect(turned.join).toBeLessThan(65);
   });
 
   it('keeps the surface continuous when a joint bends 90 degrees, and creases the inside', () => {
@@ -503,7 +504,7 @@ describe('skin', () => {
         ([x, y], n) => y > 1.15 && y < 1.37 && Math.abs(x) < 0.175 && x * n[0] > 0.8 * Math.abs(x),
       );
       const inner = light(
-        ([x, y], n) => y > 1.1 && y < 1.3 && Math.abs(x) > 0.17 && x * n[0] < -0.8 * Math.abs(x),
+        ([x, y], n) => y > 1.1 && y < 1.3 && Math.abs(x) > 0.14 && x * n[0] < -0.8 * Math.abs(x),
       );
       const outer = light(
         ([x, y], n) => y > 1.1 && y < 1.3 && Math.abs(x) > 0.2 && x * n[0] > 0.8 * Math.abs(x),

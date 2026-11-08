@@ -215,7 +215,8 @@ describe('soldier', () => {
     for (const lod of [0, 1]) {
       const v = rows(draw(undefined, lod));
       expect(Math.min(...v.map(p => p[1]))).toBeCloseTo(1, 1);
-      expect(Math.max(...v.map(p => p[1]))).toBeCloseTo(1 + PLAYER_H, 1);
+      // In its guard, the knees bent and the trunk leaning forward: a little under PLAYER_H.
+      expect(Math.max(...v.map(p => p[1]))).toBeGreaterThan(1 + PLAYER_H - 0.1);
       expect(Math.max(...v.map(p => p[1]))).toBeLessThanOrEqual(1 + PLAYER_H + 1e-6);
       for (const p of v) {
         expect(Math.hypot(p[0] - 5, p[2] + 3)).toBeLessThan(PLAYER_R);

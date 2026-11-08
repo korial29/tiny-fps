@@ -373,22 +373,78 @@ export const kindOf = (p: Pick<PlayerState, 'railed' | 'rifled'> | boolean | num
   typeof p == 'number' ? p : typeof p == 'boolean' ? +p * 2 : p.rifled ? 3 : p.railed ? 2 : 0;
 
 /**
- * The rifle's housing as tube stations: a point, then at once a full ring (the flat back, turned up
- * toward the eye as the line of middles goes down ahead of it), then along the top to the end.
+ * The rifle's housing (the user, 2026-11-08): a block of one trapezoid section, wide at its foot in
+ * the body, a little narrower at its top, the top corners rounded a little: forward, the height of
+ * its top, half its width at the foot and at the top. Its foot is HOUSING_FOOT high, and its back
+ * a flat face sloping up and forward from the foot by HOUSING_SLOPE (forward per up), which
+ * carries the counter.
  */
-const HOUSING: Station[] = [
-  [-0.09, 0.129, 0, 0],
-  [-0.0895, 0.1287, 0.018, 0.02],
-  [-0.086, 0.1255, 0.0195, 0.0215],
-  [-0.06, 0.117, 0.02, 0.022],
-  [0.05, 0.114, 0.02, 0.021],
-  [0.2, 0.108, 0.018, 0.018],
-  [0.33, 0.101, 0.016, 0.014],
-  [0.42, 0.094, 0.013, 0.01],
-  [0.47, 0.089, 0.01, 0.007],
-  [0.49, 0.086, 0.007, 0.004],
-  [0.495, 0.085, 0, 0],
+const HOUSING: number[][] = [
+  [-0.07, 0.135, 0.022, 0.016],
+  [0.05, 0.134, 0.022, 0.016],
+  [0.2, 0.128, 0.021, 0.015],
+  [0.33, 0.118, 0.019, 0.013],
+  [0.42, 0.108, 0.016, 0.011],
+  [0.47, 0.1, 0.013, 0.008],
+  [0.495, 0.093, 0.009, 0.005],
 ];
+const [HOUSING_FOOT, HOUSING_BACK, HOUSING_SLOPE] = [0.085, -0.115, 0.8];
+
+/** Appends the housing: its sides, its top and its two ends, in polished grey metal, the normals smooth round the top corners. */
+const housing = (out: number[], lod: number) => {
+  const r = 0.003;
+  const turns = lod ? 4 : 1;
+  /** One section at `f`: its outline from the right foot up, over the top, down to the left foot, in model space. */
+  const ring = ([f, top, wb, wt]: number[], back: boolean): Vec3[] => {
+    const pts: [number, number][] = [[wb, HOUSING_FOOT]];
+    // The rounded top corners, right then left.
+    for (const s of [1, -1]) {
+      for (let k = 0; k <= turns; k++) {
+        const a = ((s > 0 ? k : turns - k) / turns) * (Math.PI / 2);
+        pts.push([s * (wt - r + r * Math.cos(a)), top - r + r * Math.sin(a)]);
+      }
+    }
+    pts.push([-wb, HOUSING_FOOT]);
+    // On the back, each point lies on the sloping face.
+    return pts.map(([x, y]) => [
+      x,
+      y,
+      -(back ? HOUSING_BACK + HOUSING_SLOPE * (y - HOUSING_FOOT) : f),
+    ]);
+  };
+  const rings = [ring(HOUSING[0], true), ...HOUSING.map(h => ring(h, false))];
+  const quad = (a: Vec3, b: Vec3, c: Vec3, d: Vec3) => {
+    for (const [p, q, w] of [
+      [a, b, c],
+      [a, c, d],
+    ]) {
+      const [u, v] = [sub(q, p), sub(w, p)];
+      const n = unit([
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+      ]);
+      for (const x of [p, q, w]) {
+        out.push(...x, ...n, ...chrome(x, n));
+      }
+    }
+  };
+  for (let k = 1; k < rings.length; k++) {
+    for (let i = 1; i < rings[k].length; i++) {
+      quad(rings[k - 1][i - 1], rings[k][i - 1], rings[k][i], rings[k - 1][i]);
+    }
+  }
+  // The two ends: a fan from the middle of each.
+  for (const [e, flip] of [
+    [rings[0], true],
+    [rings[rings.length - 1], false],
+  ] as [Vec3[], boolean][]) {
+    const c = e.reduce((m, p) => add(m, p.map(v => v / e.length) as Vec3), [0, 0, 0] as Vec3);
+    for (let i = 1; i < e.length; i++) {
+      quad(c, flip ? e[i] : e[i - 1], flip ? e[i - 1] : e[i], c);
+    }
+  }
+};
 
 /** The rifle's body from the butt to the end, as tube stations: forward, the middle's height, half its width and half its height. */
 const PROFILE: Station[] = [
@@ -429,10 +485,9 @@ export const rifle = (lod: number): number[] => {
   // The body in one piece, the butt to the lens, its edges rounded: a trapezoid seen from the
   // side, tall at the butt, its underside rising toward the front and curving up into the end.
   tube(out, [[-0.34, PROFILE[0][1], 0, 0], ...PROFILE, [0.502, 0.079, 0, 0]], n, olive);
-  // The housing on top in one piece (the user, 2026-11-08): polished grey metal, its back a flat
-  // face tilted up toward the eye that carries the counter, then a rounded trapezoid along the top
-  // to the end of the barrel, its top curving down onto it.
-  tube(out, HOUSING, lod ? 16 : 6, chrome);
+  // The housing on top: one block of polished grey metal along the top to the end of the barrel,
+  // its back a flat sloping face that carries the counter.
+  housing(out, lod);
   // The lens at the end.
   tube(
     out,
@@ -975,11 +1030,11 @@ export const lcd = (ammo: number): number[] => {
 };
 
 const scopes = new Map<number, number[]>();
-/** The counter's screen on the housing's flat back: its middle, its up (across the line of middles), the way it faces; half its height, half its width at the foot and at the top. */
-const SC: Vec3 = [0, HOUSING[1][1], -HOUSING[1][0]];
-const SU = unit([0, HOUSING[2][0] - HOUSING[0][0], HOUSING[2][1] - HOUSING[0][1]]);
+/** The counter's screen on the housing's sloping back: its middle, its up, the way it faces; half its height, half its width at the foot and at the top. */
+const SC: Vec3 = [0, 0.112, -(HOUSING_BACK + HOUSING_SLOPE * (0.112 - HOUSING_FOOT))];
+const SU = unit([0, 1, -HOUSING_SLOPE]);
 const SN: Vec3 = [0, -SU[2], SU[1]];
-const [SH, SB, ST] = [0.0135, 0.0125, 0.009];
+const [SH, SB, ST] = [0.014, 0.0145, 0.011];
 
 /**
  * The laser rifle's counter (`n` rounds in its cell), in model space: a trapezoid screen, narrow at

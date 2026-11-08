@@ -47,7 +47,7 @@ import {
   TICK_HZ,
 } from './constants';
 import { PLAYER_H } from './constants';
-import { drift } from './rail';
+import { drift } from './plasma';
 import { cutOf, swingOf } from './blade';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
@@ -262,7 +262,7 @@ describe('the laser rifle', () => {
     expect(m.state(m.cy)).toMatchObject({ shots: RIFLE_CLIP + 1, clip: RIFLE_CLIP - 1 });
   });
 
-  it('takes 1 hp from the first enemy on the drifted look for every RIFLE_HITS hits, each counted, with no ball', () => {
+  it('fires red balls (power 0) along the drifted look: every RIFLE_HITS on the first enemy take 1 hp', () => {
     const m = match();
     m.put(m.cy, 0, 0, RIFLED);
     m.put(m.bob, 10);
@@ -270,14 +270,17 @@ describe('the laser rifle', () => {
     m.hold(m.cy, 1, RIFLE);
     m.ticks(SNAP_EVERY);
     m.hold(m.cy, RIFLE_COOL * 3, RIFLE | FIRE);
-    // Three hits: one hp, and a hit toward the next.
+    expect(m.room['balls'].length).toBeGreaterThan(0);
+    expect(m.room['balls'].every((b: { power?: number }) => b.power === 0)).toBe(true);
+    // Let them fly the 10 m: three hits, one hp and a hit toward the next.
+    m.hold(m.cy, 30, RIFLE);
     expect(RIFLE_HITS).toBe(2);
-    expect(m.state(m.bob).hp).toBe(HP_MAX - 1);
     expect(m.state(m.cy).hits).toBe(3);
-    m.hold(m.cy, RIFLE_COOL, RIFLE | FIRE);
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 1);
+    m.hold(m.cy, 1, RIFLE | FIRE);
+    m.hold(m.cy, 30, RIFLE);
     expect(m.state(m.bob).hp).toBe(HP_MAX - 2);
     expect(m.state(m.dee).hp).toBe(HP_MAX);
-    expect(m.room['balls']).toHaveLength(0);
   });
 
   it('misses past the drift: at RIFLE_RANGE the pattern strays wider than a body', () => {

@@ -20,7 +20,7 @@ import { powerOf } from '../shared/gun';
 import { eyeHeight } from '../shared/physics';
 import { CUT, KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { beam, laser as shot } from '../shared/rail';
+import { beam } from '../shared/rail';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import type { Audio, Loop } from './audio';
@@ -133,7 +133,7 @@ export const createCombat = (
   fx: Pick<Effects, 'fire' | 'cut' | 'wound' | 'lie'>,
   tracer: Pick<
     Tracer,
-    'flash' | 'burst' | 'orbs' | 'update' | 'mount' | 'crackle' | 'charging' | 'lightning' | 'laser'
+    'flash' | 'burst' | 'orbs' | 'update' | 'mount' | 'crackle' | 'charging' | 'lightning'
   >,
   ctl: { pitch: number },
   balls: Pick<Balls, 'fire' | 'frame'>,
@@ -178,15 +178,12 @@ export const createCombat = (
     const { o, d, t } = beam(world, p);
     return [0, 1, 2].map(i => o[i] + d[i] * t) as Vec3;
   };
-  /** Where the laser rifle's last shot of `p` ends: drifted, the wall it meets or its range. */
-  const ray = (p: PlayerState): Vec3 => {
-    const { o, d, t } = shot(world, p);
-    return [0, 1, 2].map(i => o[i] + d[i] * t) as Vec3;
-  };
-  /** A laser rifle's shot of `p` from `from`, heard at `at` (the own when not given): the red line, an orange flash and its zip. */
-  const lase = (p: PlayerState, from: Vec3, at?: Vec3) => {
-    tracer.laser(from, ray(p));
-    tracer.flash(from, !at, 1);
+  /** A laser rifle's shot of `p` from `from`, heard at `at` (the own when not given): a red flash and its punch. Its ball is the snapshot's, or the own launched now. */
+  const lase = (p: PlayerState, from: Vec3, now: number, at?: Vec3) => {
+    if (!at) {
+      balls.fire(p, now);
+    }
+    tracer.flash(from, !at, -1);
     audio.play(SOUND.LASE, at, at ? 0.5 : 0.4, rate());
   };
   /** The own rail gun's hum and its bolt's buzz, started when it is first in hand. */
@@ -347,7 +344,7 @@ export const createCombat = (
             continue;
           }
           if (p.rifled) {
-            lase(p, from);
+            lase(p, from, now);
             continue;
           }
           balls.fire(p, now);
@@ -374,7 +371,7 @@ export const createCombat = (
           zap(zaps, p, gun(p), dt, now, at);
         }
         if (was !== undefined && p.shots != was && p.rifled) {
-          lase(p, gun(p), at);
+          lase(p, gun(p), now, at);
         } else if (was !== undefined && p.shots != was) {
           // His charge at the last frame gives the strength of the shot.
           const c = charges.get(p.id) ?? 0;

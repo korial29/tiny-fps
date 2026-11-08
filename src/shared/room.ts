@@ -43,7 +43,7 @@ import { PLASMA_LAG, fly, launch, stepOf, wave } from './plasma';
 import type { Flying } from './plasma';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
-import { beam, laser } from './rail';
+import { beam } from './rail';
 import { reaches, tackling } from './tackle';
 import { CUT, LIMB } from './types';
 import type { Conn, Every, PlayerInfo, PlayerState, Rules } from './types';
@@ -181,7 +181,7 @@ export class Room {
       } else if (struck === STRIKE.RAIL) {
         this.rail(p, input.view);
       } else if (struck === STRIKE.LASER) {
-        this.laser(p, input.view);
+        this.shoot(p, input.view);
       }
       // The bolt drains him: 1 hp each RAIL_DRAIN ticks after its first touch.
       p.burn = slow ? (p.burn ?? 0) + 1 : 0;
@@ -442,7 +442,13 @@ export class Room {
     if (by) {
       by.state.hits = (by.state.hits + 1) & 255;
     }
-    if (!b.arc) {
+    if (b.power === 0) {
+      // The laser rifle's: every RIFLE_HITS on him (from anyone, until he goes down) take 1 hp.
+      foe.graze = ((foe.graze ?? 0) + 1) % RIFLE_HITS;
+      if (!foe.graze) {
+        this.harm(foe, 1);
+      }
+    } else if (!b.arc) {
       this.harm(foe, b.power ?? 1);
     } else if (this.harm(foe, CUTS[b.arc].hp)) {
       // The limb a blade would take along the arc's line, swung from a metre back on it.
@@ -527,22 +533,6 @@ export class Room {
         p.state.hits = (p.state.hits + 1) & 255;
         foe.burn = 0;
         this.fry(foe);
-      }
-    }
-  }
-
-  /**
-   * The laser rifle's shot of `p` at the view tick `view`: a hit on the first enemy it enters as `p`
-   * drew him, and every RIFLE_HITS hits on him (from anyone, until he goes down) take 1 hp.
-   */
-  private laser(p: Player, view: number | undefined): void {
-    const { hit } = laser(this.world, p.state, this.enemies(p, view));
-    const foe = this.players().find(q => q.info.id === hit?.id);
-    if (foe) {
-      p.state.hits = (p.state.hits + 1) & 255;
-      foe.graze = ((foe.graze ?? 0) + 1) % RIFLE_HITS;
-      if (!foe.graze) {
-        this.harm(foe, 1);
       }
     }
   }

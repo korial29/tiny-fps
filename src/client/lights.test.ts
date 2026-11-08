@@ -79,7 +79,7 @@ describe('gather, with the match', () => {
       scene({
         ctf: ctf([
           { team: 0, at: bases[0] },
-          { team: 1, at: [3, 3, 3], by: { yaw: 0, vx: 0, vz: 0 } },
+          { team: 1, at: [3, 3, 3], by: { id: 1, yaw: 0, vx: 0, vz: 0 } },
         ]),
       }),
     );

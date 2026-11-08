@@ -18,6 +18,8 @@ import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { battery, cell, kit, racks } from './props';
+import { JOINT } from './rig';
+import type { Quat } from './rig';
 import { animate, soldier } from './soldier';
 import type { Runner } from './soldier';
 import { skyline } from './skyline';
@@ -710,20 +712,25 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const [right, up, fwd] = basis(yaw, pitch, fx.roll);
       drive(v, eye, fwd, Date.now() / 1000);
       ctf?.bases.forEach((at, team) => base(v, at, teamRgb(team), now));
-      ctf?.flags.forEach(f => flag(v, f, teamRgb(f.team), now));
       racks(v, ctf?.racks, ctf?.blades, now, ctf?.rails, ctf?.rifles);
       ctf?.packs?.forEach(at => kit(v, at, now));
       ctf?.ammo?.forEach(at => cell(v, at, now));
       ctf?.cells?.forEach(at => battery(v, at, now));
+      // A carried flag is strapped to its carrier's chest.
+      const chests = new Map<number, [Vec3, Quat]>();
       for (const p of others) {
         const d = Math.hypot(p.x - eye[0], p.z - eye[2]);
-        soldier(
+        const s = soldier(
           v,
           runners.get(p.id)!,
           rgb(colors.get(p.id) ?? '#888'),
           d < CLOSE ? 3 : +(d < NEAR),
         );
+        if (s) {
+          chests.set(p.id, [s.pos[JOINT.CHEST], s.rot[JOINT.CHEST]]);
+        }
       }
+      ctf?.flags.forEach(f => flag(v, f, teamRgb(f.team), now, f.by && chests.get(f.by.id)));
       // What glows casts nothing: it comes after the last thing that casts a shadow.
       const beamAt = v.length;
       tracer?.draw(v, eye);

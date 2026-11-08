@@ -779,7 +779,7 @@ export const createBody = (world?: World): Body => {
     // The gun's grip, the back of its body and the top of its counter, which lie toward the chest.
     const on = ([x, y, z]: Vec3): Vec3 =>
       [0, 1, 2].map(i => g0[i] + gx[0][i] * x + gx[1][i] * y - gx[2][i] * z) as Vec3;
-    lift = view(out([g0, on(REAR), on([0, 0.156, 0.04])]));
+    lift = view(out([g0, on(REAR), on([0, 0.146, 0.038])]));
     const clear = sw
       ? out([sw.at, along(sw.at, sw.g, -BACK), along(sw.at, sw.g, BASE)], keep)
       : lift;

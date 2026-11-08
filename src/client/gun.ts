@@ -888,18 +888,18 @@ const BLOCK_TOP: [Vec3, Vec3] = [
 /**
  * The dark screen set in the back face: half width (the face's top less 5 mm a side, the user,
  * 2026-11-08), middle up the face from the knee (halfway up it), half height, corner radius, in
- * metres; its digits' scale.
+ * metres; its digits' scale, so that they fill it (the user, 2026-11-08) but for 2 mm round them.
  */
 const [SW, SM, SHH, SR, DK] = [
   BLOCK_TOP[0][0] - 0.005,
   Math.hypot(BLOCK_TOP[0][1] - KNEE[1], BLOCK_TOP[0][2] - KNEE[2]) / 2,
   0.009,
   0.0035,
-  0.6,
+  0.7,
 ];
 /** The digits' foot, so that they are in the middle of the screen; the charge gauge, a thin bar under them up the back face: where it starts and ends, and the gap between its cells. */
 const DY = SM - (DH * DK) / 2;
-const [GFROM, GTO, GGAP] = [SM - SHH + 0.0008, DY - 0.0006, 0.0012];
+const [GFROM, GTO, GGAP] = [SM - SHH + 0.0008, DY - 0.0004, 0.0012];
 const readouts = new Map<number, number[]>();
 
 /**

@@ -329,12 +329,13 @@ export const LOCK_BREAK = 24;
 
 /**
  * The rail gun (rail.ts, the user, 2026-11-07), a Tesla gun: taken at the team's third rack with
- * RAIL_MAX ticks of lightning (4 s), it throws a bolt RAIL_RANGE metres to the first wall or enemy
- * on every step FIRE is held, one tick spent each. An enemy the bolt touches is drained while it
+ * RAIL_MAX ticks of lightning, it throws a bolt RAIL_RANGE metres to the first wall or enemy on
+ * every step FIRE is held, one tick spent each RAIL_SPEND steps (8 s in all, the user 2026-11-08). An enemy the bolt touches is drained while it
  * does and RAIL_TICKS (3 s) after: 1 hp at the first touch, then 1 more each RAIL_DRAIN ticks, his
  * speed on the floor plane held under SLOW_SPEED. Ticks are u8 on the wire.
  */
 export const RAIL_MAX = 240;
+export const RAIL_SPEND = 2;
 /** Ticks of lightning a rail cell gives (WorldDef.cells), up to RAIL_MAX: a third of a load. */
 export const RAIL_CELL = 80;
 export const RAIL_RANGE = 30;

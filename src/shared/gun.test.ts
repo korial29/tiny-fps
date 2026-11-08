@@ -13,6 +13,7 @@ import {
   GUN_RELOAD,
   RAIL_CAP,
   RAIL_MAX,
+  RAIL_SPEND,
   RAIL_RELOAD,
   HP_MAX,
   LOCK_BREAK,
@@ -279,13 +280,18 @@ describe('the magazines', () => {
   it('throws the bolt from a capsule of RAIL_CAP ticks, then swaps it in RAIL_RELOAD with the bolt out', () => {
     const p = Object.assign(at(0, 0, EAST).p, { rail: RAIL_MAX, cap: RAIL_CAP });
     let zaps = 0;
-    for (let k = 0; k < RAIL_CAP + 10; k++) {
+    // A tick spent on the first of each RAIL_SPEND steps of the bolt: the last one has a step.
+    for (let k = 0; k < RAIL_CAP * RAIL_SPEND; k++) {
+      zaps += +(hit(p, RAIL | FIRE) === STRIKE.RAIL);
+      expect(p.cap).toBe(RAIL_CAP - Math.ceil((k + 1) / RAIL_SPEND));
+    }
+    for (let k = 0; k < 10; k++) {
       zaps += +(hit(p, RAIL | FIRE) === STRIKE.RAIL);
     }
-    expect(zaps).toBe(RAIL_CAP);
+    expect(zaps).toBe((RAIL_CAP - 1) * RAIL_SPEND + 1);
     expect([p.cap, p.rail]).toEqual([0, RAIL_MAX - RAIL_CAP]);
     // The swap began on the step after the last tick: RAIL_RELOAD steps without the bolt in all.
-    expect(p.reload).toBe(RAIL_RELOAD - 9);
+    expect(p.reload).toBe(RAIL_RELOAD - 10);
     while (p.reload! > 1) {
       expect(hit(p, RAIL | FIRE)).toBe(STRIKE.NONE);
     }

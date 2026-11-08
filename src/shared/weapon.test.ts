@@ -30,6 +30,7 @@ import {
   RAIL_CELL,
   RAIL_MAX,
   RAIL_RANGE,
+  RAIL_SPEND,
   RAIL_TICKS,
   RIFLE_CLIP,
   RIFLE_COOL,
@@ -327,10 +328,10 @@ describe('the rail gun', () => {
     expect(m.state(m.cy).railed).toBe(true);
   });
 
-  it('spends a tick of lightning on each step held, and goes out when let go or empty', () => {
+  it('spends a tick of lightning each RAIL_SPEND steps held, and goes out when let go or empty', () => {
     const m = match();
     m.put(m.cy, 0, 0, RAILGUN);
-    m.hold(m.cy, 30, RAIL | FIRE, { yaw: 0 });
+    m.hold(m.cy, 30 * RAIL_SPEND, RAIL | FIRE, { yaw: 0 });
     expect(m.state(m.cy)).toMatchObject({ rail: RAIL_MAX - 30, zapping: true, shots: 0 });
     m.hold(m.cy, 1, RAIL, { yaw: 0 });
     expect(m.state(m.cy)).toMatchObject({ rail: RAIL_MAX - 30, zapping: false });
@@ -348,7 +349,7 @@ describe('the rail gun', () => {
     expect(m.state(m.bob)).toMatchObject({ hp: HP_MAX - 1, slow: RAIL_TICKS });
     expect(m.state(m.dee)).toMatchObject({ hp: HP_MAX });
     // One hit for the touch, however long it is held; no ball.
-    expect(m.state(m.cy)).toMatchObject({ hits: 1, rail: RAIL_MAX - 5 });
+    expect(m.state(m.cy)).toMatchObject({ hits: 1, rail: RAIL_MAX - Math.ceil(5 / RAIL_SPEND) });
     expect(m.room['balls']).toHaveLength(0);
   });
 

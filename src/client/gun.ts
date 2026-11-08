@@ -877,25 +877,25 @@ const SEGMENTS: Record<string, [number, number, number, number]> = {
  * the back edge and of the front edge, base (sunk in the body) then top.
  */
 const BLOCK_BASE: [Vec3, Vec3] = [
-  [0.0243, 0.1, 0.0483],
-  [0.0243, 0.1, 0.02],
+  [0.0223, 0.1, 0.0483],
+  [0.0223, 0.1, 0.02],
 ];
-const KNEE: Vec3 = [0.0243, 0.131, 0.0483];
+const KNEE: Vec3 = [0.0223, 0.131, 0.0483];
 const BLOCK_TOP: [Vec3, Vec3] = [
-  [0.022, 0.1504, 0.038],
-  [0.022, 0.1474, 0.026],
+  [0.02, 0.1504, 0.038],
+  [0.02, 0.1474, 0.026],
 ];
 /**
  * The dark screen set in the back face: half width (the face's top less 5 mm a side, the user,
  * 2026-11-08), middle up the face from the knee (halfway up it), half height, corner radius, in
- * metres; its digits' scale, so that they fill it (the user, 2026-11-08) but for 2 mm round them.
+ * metres; its digits' scale, so that they fill it (the user, 2026-11-08) but for 1 to 2 mm round them.
  */
 const [SW, SM, SHH, SR, DK] = [
   BLOCK_TOP[0][0] - 0.005,
   Math.hypot(BLOCK_TOP[0][1] - KNEE[1], BLOCK_TOP[0][2] - KNEE[2]) / 2,
   0.009,
   0.0035,
-  0.7,
+  0.66,
 ];
 /** The digits' foot, so that they are in the middle of the screen; the charge gauge, a thin bar under them up the back face: where it starts and ends, and the gap between its cells. */
 const DY = SM - (DH * DK) / 2;

@@ -43,6 +43,7 @@ import { PLASMA_LAG, PLASMA_STEP, launch } from './plasma';
 import { CUT, FLAG, KEY, LIMB, MODE, TEAM, TEX } from './types';
 import type { Conn, PlayerState, Rules, Snapshot } from './types';
 import type { Spawn, WorldDef } from './world';
+import { loaded } from '../../test/loaded';
 import { duo } from '../../test/teams';
 
 const { FORWARD, LEFT, RIGHT, BACK, FIRE, SPRINT, JUMP, DASH, BLADE, RAIL } = KEY;
@@ -126,7 +127,7 @@ const match = (rules: Partial<Rules> = {}, def = ARENA) => {
     state,
     /** Stands the player at (x, z) on the slab, at rest, facing east, with the gun when `ammo` says. */
     put: (c: Peer, x: number, z = 0, over: Partial<PlayerState> = {}) =>
-      Object.assign(state(c), STILL, { x, y: 1, z, vy: 0, yaw: EAST, ground: true }, over),
+      Object.assign(state(c), STILL, { x, y: 1, z, vy: 0, yaw: EAST, ground: true }, loaded(over)),
     carry: (c: Peer) => {
       const { id, team } = room['peers'].get(c)!.info;
       room['ctf'].flags[1 - team] = { state: FLAG.CARRIED, by: id, x: 0, y: 0, z: 0, left: 0 };

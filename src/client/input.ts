@@ -20,6 +20,7 @@ const BITS: Record<string, number> = {
   ShiftRight: KEY.SPRINT,
   // Not Ctrl: Ctrl+W closes the tab and the browser keeps it.
   KeyC: KEY.CROUCH,
+  KeyR: KEY.RELOAD,
 };
 
 /** The four direction bits. */

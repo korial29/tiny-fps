@@ -10,7 +10,7 @@ import type { World } from '../shared/world';
 import { clasp, inv, reach, shrug, stowed, wield } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
-import { ARC, TILT, aimed, focus, foregrip, held } from './gun';
+import { ARC, TILT, aimed, focus, foregrip, held, span, swapOf } from './gun';
 import type { Tracer } from './beams';
 import {
   BEHIND,
@@ -347,7 +347,12 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);
     r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));
   } else if ((p.railed ? !stowed(p) : p.ammo >= 0) && !p.down) {
-    held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, undefined, 0, p.railed, r.t);
+    // A swap shows: the battery or the capsule out and in, the glow off until it is.
+    const sp = swapOf(p);
+    held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, undefined, 0, p.railed, r.t, {
+      swap: sp,
+      light: sp < 0 ? 1 : 1 - ease(span(sp, 0.1, 0.2)),
+    });
   }
   if (r.dash > 0.15) {
     const [s, c] = [Math.sin(yaw), Math.cos(yaw)];

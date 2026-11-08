@@ -194,6 +194,16 @@ export const FLAG_RETURN = 10;
 export const HP_MAX = 5;
 /** Shots the rack loads. */
 export const AMMO_MAX = 60;
+/**
+ * The magazines (the user, 2026-11-08): the gun fires from a battery in its grip, GUN_MAG shots,
+ * the rail gun from a capsule on its top, RAIL_CAP ticks of lightning (a third of a load). An empty
+ * one, or KEY.RELOAD, swaps it from what the player carries (`ammo`, `rail`): GUN_RELOAD and
+ * RAIL_RELOAD ticks without firing. u8 each on the wire.
+ */
+export const GUN_MAG = 15;
+export const GUN_RELOAD = 54;
+export const RAIL_CAP = 80;
+export const RAIL_RELOAD = 90;
 /** Ticks between two shots while the trigger is held: 8.6 shots a second. */
 export const GUN_COOLDOWN = 7;
 /**

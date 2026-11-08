@@ -1,13 +1,13 @@
 // The gun: a curved alien sidearm lofted from rings (violet metal, cyan glow), and the maths of the
 // hand that holds it. Model space has the middle of the grip at the origin, x right, y up, the
 // muzzle toward -z (like mesh.ts); place() carries it to the world. No DOM.
-import { CHARGE_MAX, GUN_RANGE, RAIL_MAX } from '../shared/constants';
+import { CHARGE_MAX, GUN_RANGE, GUN_RELOAD, RAIL_MAX, RAIL_RELOAD } from '../shared/constants';
 import { TAU, eyeHeight } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { glow as lit, tri } from './flag';
-import { SHINE, add, basis, dot, place, sub, unit } from './mesh';
+import { SHINE, add, basis, dim as dimmed, dot, place, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
@@ -231,6 +231,8 @@ const axisY = (f: number) => 0.0906 - 0.0741 * f;
 export const ARC = [1.1, 0.85, 2.6];
 const arcing: Paint = () => [ARC[0], ARC[1], -2, ARC[2]];
 const dim: Paint = () => [ARC[0] * 0.3, ARC[1] * 0.3, -2, ARC[2] * 0.3];
+/** The capsule's core of lightning: violet, less than a spark. */
+const core: Paint = () => [ARC[0] * 0.45, ARC[1] * 0.3, -2, ARC[2] * 0.6];
 /** Paint lit by its normal, from `lo` facing down to `hi` facing up. */
 const shade =
   (lo: number[], hi: number[]): Paint =>
@@ -358,6 +360,170 @@ export const railgun = (lod: number): number[] => {
 };
 
 /**
+ * The gun's battery (the user, 2026-11-08), built once: a gunmetal cell in the grip, along its own
+ * forward from its foot, which stands out under the lower shell with a band of glow round it.
+ */
+export const battery = (lod: number): number[] =>
+  (cells[lod] ??= ((out: number[]) => {
+    const n = lod ? 10 : 6;
+    tube(
+      out,
+      [
+        [0, 0, 0, 0],
+        [0.003, 0, 0.016, 0.016],
+        [0.09, 0, 0.016, 0.016],
+        [0.092, 0, 0, 0],
+      ],
+      n,
+      metal(0.35),
+    );
+    tube(
+      out,
+      [
+        [0.008, 0, 0.0168, 0.0168],
+        [0.018, 0, 0.0168, 0.0168],
+      ],
+      n,
+      glow,
+    );
+    return out;
+  })([]));
+const cells: number[][] = [];
+
+/**
+ * The rail gun's capsule, built once: a copper screw base, a violet core of lightning in a cage of
+ * three steel posts, and a cap, standing along its own forward from its base.
+ */
+export const capsule = (lod: number): number[] =>
+  (caps[lod] ??= ((out: number[]) => {
+    const n = lod ? 10 : 6;
+    tube(
+      out,
+      [
+        [0, 0, 0, 0],
+        [0.001, 0, 0.019, 0.019],
+        [0.014, 0, 0.019, 0.019],
+        [0.016, 0, 0.012, 0.012],
+      ],
+      n,
+      copper,
+    );
+    tube(
+      out,
+      [
+        [0.014, 0, 0.009, 0.009],
+        [0.062, 0, 0.009, 0.009],
+        [0.066, 0, 0, 0],
+      ],
+      n,
+      core,
+    );
+    for (let k = 0; k < 3; k++) {
+      const [c, s] = [Math.cos((k * TAU) / 3), Math.sin((k * TAU) / 3)];
+      tube(
+        out,
+        [
+          [0.014, 0.016 * s, 0.0025, 0.0025, 0.016 * c],
+          [0.066, 0.016 * s, 0.0025, 0.0025, 0.016 * c],
+        ],
+        3,
+        steel,
+      );
+    }
+    tube(
+      out,
+      [
+        [0.064, 0, 0.019, 0.019],
+        [0.072, 0, 0.017, 0.017],
+        [0.074, 0, 0, 0],
+      ],
+      n,
+      steel,
+    );
+    return out;
+  })([]));
+const caps: number[][] = [];
+
+/** Where the battery's foot sits seated, forward and up of the grip, and the way it goes up the grip (unit, forward and up). */
+const SEAT = [-0.0434, -0.0868];
+const UP_GRIP = [0.447, 0.894];
+/** The capsule's base on the receiver's top, forward of the grip and up. */
+const SOCKET = [0.1, 0.121];
+
+export const ease = (t: number) => {
+  const u = clamp(t);
+  return u * u * (3 - 2 * u);
+};
+/** `t` from `a` to `b` as 0 to 1. */
+export const span = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
+
+/** How far through the swap of the gun in hand `p` is, 0 to 1; -1 when it is not swapping. */
+export const swapOf = (p: Pick<PlayerState, 'reload' | 'railed'>): number =>
+  p.reload ? 1 - p.reload / (p.railed ? RAIL_RELOAD : GUN_RELOAD) : -1;
+
+/** The glow of a weapon `t` seconds after it came to hand: dark as it rises, then flickering up to full at 0.6 s. */
+export const power = (t: number): number =>
+  t >= 0.6 ? 1 : clamp((t - 0.15) / 0.45) * (0.65 + 0.35 * Math.sin(t * 95) ** 2);
+
+/**
+ * Where the battery or the capsule is at `s` of a swap (0 to 1; -1 none): how far out of its seat
+ * along its axis (metres), how far round its axis (radians, the capsule's screw), and how far it
+ * tumbles (radians). The old one comes out and goes, the new one comes in, the left hand bringing it.
+ */
+export const swapped = (s: number, rail: boolean): number[] => {
+  if (s < 0) {
+    return [0, 0, 0];
+  }
+  if (!rail) {
+    // Slid out down the grip and dropped, then a new one up into it and clicked home.
+    return s < 0.4
+      ? [0.1 * ease(span(s, 0.15, 0.3)) + 0.6 * span(s, 0.3, 0.4) ** 2, 0, 0]
+      : [0.22 * (1 - ease(span(s, 0.4, 0.75))), 0, 0];
+  }
+  // Unscrewed a turn and a half, thrown up spinning, then a new one down and screwed in.
+  return s < 0.45
+    ? [
+        0.02 * ease(span(s, 0.12, 0.3)) + 0.35 * span(s, 0.3, 0.45) ** 1.5,
+        -3 * Math.PI * ease(span(s, 0.12, 0.3)) - 9 * span(s, 0.3, 0.45),
+        2.5 * span(s, 0.3, 0.45),
+      ]
+    : [
+        0.1 * (1 - ease(span(s, 0.45, 0.6))) + 0.02 * (1 - ease(span(s, 0.6, 0.85))),
+        3 * Math.PI * (1 - ease(span(s, 0.6, 0.85))),
+        0,
+      ];
+};
+
+/**
+ * The frame of the battery (the capsule when `rail`) of a gun whose grip is at `at` and whose axes
+ * are `ax`, `k` times its size, at `s` of a swap: its foot (base) and its axes, its forward along
+ * the grip (up).
+ */
+export const loadFrame = (at: Vec3, ax: Vec3[], rail: boolean, s = -1, k = 1): [Vec3, Vec3[]] => {
+  const [r, u, f] = ax;
+  const [c, sn] = rail ? [0, 1] : UP_GRIP;
+  const [fo, up] = rail ? SOCKET : SEAT;
+  const [out, twist, tumble] = swapped(s, rail);
+  // Forward up the grip (up), up across it: a turn about the gun's right.
+  const fw = [0, 1, 2].map(i => f[i] * c + u[i] * sn) as Vec3;
+  let uw = [0, 1, 2].map(i => u[i] * c - f[i] * sn) as Vec3;
+  let rw = r;
+  // The screw turns it about its own axis, the throw tips it over about the gun's right.
+  const [tc, ts] = [Math.cos(twist), Math.sin(twist)];
+  [rw, uw] = [
+    rw.map((v, i) => v * tc + uw[i] * ts) as Vec3,
+    uw.map((v, i) => v * tc - rw[i] * ts) as Vec3,
+  ];
+  const [bc, bs] = [Math.cos(tumble), Math.sin(tumble)];
+  const fw2 = fw.map((v, i) => v * bc + uw[i] * bs) as Vec3;
+  uw = uw.map((v, i) => v * bc - fw[i] * bs) as Vec3;
+  const foot = [0, 1, 2].map(
+    i => at[i] + k * (f[i] * fo + u[i] * up + fw[i] * (rail ? out : -out)),
+  ) as Vec3;
+  return [foot, [rw, uw, fw2]];
+};
+
+/**
  * The spark between the electrodes' tips at the time `t` (s), in model space: a thin glowing line
  * through four jagged points, a new shape 30 times a second.
  */
@@ -387,8 +553,9 @@ export const fore = (at: Vec3, [r, u, f]: Vec3[]): [Vec3, Vec3] => [
 /** fore() for the hand at `pos` turned by `q`, which holds the grip. */
 export const foregrip = (pos: Vec3, q: Quat): [Vec3, Vec3] => fore(grip(pos, q), axes(q));
 
-/** The rail gun's lightning left as the counters show it: 99 when full, 0 when spent. */
-export const charge = (rail: number): number => Math.ceil((Math.max(rail, 0) * 99) / RAIL_MAX);
+/** The rail gun's lightning left as the counters show it: 99 when full (of `max`, a load by default), 0 when spent. */
+export const charge = (rail: number, max = RAIL_MAX): number =>
+  Math.ceil((Math.max(rail, 0) * 99) / max);
 
 /** The electrodes' tips of a gun whose grip is at `at` and whose axes are [right, up, forward]. */
 export const electrodes = (at: Vec3, [, u, f]: Vec3[]): Vec3[] =>
@@ -462,8 +629,8 @@ const [GFROM, GTO, GGAP] = [0.0016, 0.0056, 0.0015];
 const readouts = new Map<number, number[]>();
 
 /**
- * The ammo as two glowing seven-segment digits on a dark screen set in the back of a small block
- * on top of the body, in model space: cyan, red at 10 or fewer, thick segments that bloom only a
+ * The shots in the battery as two glowing seven-segment digits on a dark screen set in the back of
+ * a small block on top of the body, in model space: cyan, red at 4 or fewer, thick segments that bloom only a
  * little. The block is part of the readout, so only a gun that shows the ammo carries it. 99 at most.
  * While the gun charges, a gauge of CHARGE_MAX cells under the digits lights `level` of them, the
  * strength the shot would have; all orange at the full charge.
@@ -538,7 +705,7 @@ export const readout = (ammo: number, level = 0): number[] => {
         const [a, b, d, e] = SEGMENTS[seg];
         // Segments lie on the screen, a hair out of it.
         const p = (x: number, t: number) => at(x0 + x, STO - DH - 0.0003 + t, 0.0027);
-        const rgb = n > 10 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
+        const rgb = n > 4 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
         tri(v, p(a, b), p(d, b), p(d, e), rgb);
         tri(v, p(a, b), p(d, e), p(a, e), rgb);
       }
@@ -618,10 +785,18 @@ export const lcd = (ammo: number): number[] => {
   return v;
 };
 
+/** How a gun is drawn beyond its place: its glow from 0 (off) to 1, the swap under way (0 to 1, -1 none), and whether its battery or capsule holds any. */
+export interface Lit {
+  light?: number;
+  swap?: number;
+  empty?: boolean;
+}
+
 /**
  * Appends the gun (the rail gun when `rail`, its spark at the time `t`) held in the hand at `pos`
  * with the world rotation `q`, `k` times its size about the grip, with the ammo on its back when
- * given, and the charge gauge at `level`.
+ * given, and the charge gauge at `level`; its battery (capsule) where the swap has it, its glow and
+ * its counter dimmed with `light`, and the spark only when it is all on.
  */
 export const held = (
   out: number[],
@@ -633,15 +808,21 @@ export const held = (
   level = 0,
   rail = false,
   t = 0,
+  { light = 1, swap = -1, empty = false }: Lit = {},
 ) => {
   const [at, ax] = [grip(pos, q), axes(q)];
+  const d = 0.08 + 0.92 * light;
+  const from = out.length;
+  place(out, rail ? capsule(lod) : battery(lod), ...loadFrame(at, ax, rail, swap, k), [0, 0, 0], k);
+  dimmed(out, from, empty ? 0.08 : 1);
   place(out, rail ? railgun(lod) : gun(lod), at, ax, [0, 0, 0], k);
-  if (rail) {
+  if (rail && light > 0.98 && swap < 0) {
     place(out, arc(t), at, ax, [0, 0, 0], k);
   }
-  if (ammo !== undefined) {
+  if (ammo !== undefined && light > 0.3) {
     place(out, rail ? lcd(ammo) : readout(ammo, level), at, ax, [0, 0, 0], k);
   }
+  dimmed(out, from, d);
 };
 
 /** The muzzle of a gun (the rail gun's when `rail`) whose grip is at `at` and whose axes are [right, up, forward]. */

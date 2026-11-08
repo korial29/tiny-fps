@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AMMO_MAX,
+  GUN_MAG,
   AMMO_PACK,
   CHARGE_MAX,
   CHARGE_TICKS,
@@ -25,6 +26,7 @@ import type { Conn, Input, PlayerState, SnapPlayer, Snapshot } from '../shared/t
 import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
 import * as lines from '../../test/lines';
+import { loaded } from '../../test/loaded';
 import { Sim } from '../../test/pilot';
 import { createPredictor } from './predict';
 import { IDLE } from '../../test/teams';
@@ -555,10 +557,11 @@ describe('prediction against the room', () => {
     for (const [name, lag] of LAGS) {
       const r = race(lag, steps, 0, [], [], true);
       expect([r.worst, r.end, r.final, r.differing], `${name} lag`).toEqual([0, 0, 0, []]);
-      // Filled on arrival and on the return, and not in between: 200 steps of taps spent 25.
+      // Filled on arrival and on the return, and not in between: 200 steps of taps spent a
+      // battery, swapped it and went on.
       expect(r.fills, `${name} lag`).toBe(2);
       expect(r.ammo, `${name} lag`).toBe(AMMO_MAX);
-      expect(r.shots, `${name} lag`).toBeGreaterThanOrEqual(24);
+      expect(r.shots, `${name} lag`).toBeGreaterThanOrEqual(GUN_MAG + 3);
     }
   }, 60_000);
 
@@ -799,7 +802,7 @@ describe('the gun, predicted', () => {
   const tapping = (k: number) => (k % 2 ? LET_GO : FIRE);
   /** A snapshot of the own player (id 0) standing on the start roof, with the gun fields over. */
   const shown = (over: Partial<SnapPlayer>, ack = 0xffff, over2: Partial<Snapshot> = {}) => ({
-    ...snapshot(1, snapPlayer(0, { vz: 0, ack, ...over })),
+    ...snapshot(1, snapPlayer(0, loaded({ vz: 0, ack, ...over }))),
     ...over2,
   });
 

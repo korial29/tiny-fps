@@ -43,6 +43,8 @@ export const KEY = {
    * KEY.BLADE clear. Ignored without the rail gun.
    */
   RAIL: 2048,
+  /** Press to swap the battery or the capsule of the gun in hand (see GUN_MAG). */
+  RELOAD: 4096,
 } as const;
 
 /**
@@ -176,6 +178,12 @@ export interface PlayerState {
   ammo: number;
   /** Ticks to the next shot. */
   cool: number;
+  /** Shots in the gun's battery, of `ammo` (GUN_MAG at most). Absent reads 0. */
+  mag?: number;
+  /** Ticks of lightning in the rail gun's capsule, of `rail` (RAIL_CAP at most). Absent reads 0. */
+  cap?: number;
+  /** Ticks left swapping the battery or the capsule of the gun in hand, 0 when not. Absent reads 0. */
+  reload?: number;
   /** Ticks FIRE has been held with the gun, up to CHARGE_TICKS, 0 when not charging. Absent reads 0. */
   charge?: number;
   /** The strength of the last shot, 1 to CHARGE_MAX: the shots it spent and the health it takes. Set by the step that fires; not on the wire. */

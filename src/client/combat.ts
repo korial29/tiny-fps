@@ -284,6 +284,8 @@ export const createCombat = (
           !!me.wield,
           rail < 0 ? -1 : charge(rail),
           !!me.railed,
+          me.railed ? charge(me.cap ?? 0) : (me.mag ?? 0),
+          !!me.reload,
         );
         cuts.forEach(c => swish(c));
         hud.down(fx.lie, me.down / TICK_HZ);

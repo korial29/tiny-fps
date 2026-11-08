@@ -184,3 +184,18 @@ Holding the button on a cut keeps it locked in a high position. The release is a
 | Hold    | FIRE held on a thrust, a cut across or a slash stops its swing at the top of the wind-up (`CUTS[cut].hold`: 8, 4, 4 and 11 ticks in), and `charge` counts up to `HEAVY_MAX` (60). Specials have no hold. Busy hands or the end of the match drop the charge, and the cut goes on.                                                                                                                                                                                            |
 | Release | Let go before `HEAVY_TAP` (15 ticks) and the cut goes on as it was. Let go after it and the rest of the cut is heavy (`heavy`, bit 5 of the `lost` byte): its own swing timer, `HEAVY` (1.8) times as slow from the top, `HEAVY_HP` (2) more health, `HEAVY_REACH` (0.5 m) further, an arc `HEAVY_ARC` (1.4) times as wide, and a shock `HEAVY` times as hard. `swingOf()` in `blade.ts` gives a swing's numbers either way.                                                 |
 | Feel    | While it charges, the hands wait at the top of the wind-up and tremble. The release runs from there at `HEAVY` times the time (`progress()`), and from the strike on the hands go `AMPLE` (1.3) times as far across and up, and the trunk `AMPLE_TRUNK` (1.5) times (`poised()`, `bent()` in `katana.ts`). The release's swish is louder and much deeper. The cut across holds early in its wind-up, the blade raised: held over the shoulder, the arms would fill the view. |
+
+## Magazines and the power-on (the user, 2026-11-08)
+
+| Rule | Detail |
+| --- | --- |
+| Gun battery | `mag`, `GUN_MAG` (15) shots of `ammo`, which stays the total carried. A shot spends both. The charge stops at what the battery holds. |
+| Rail capsule | `cap`, `RAIL_CAP` (80) ticks of `rail`, a third of a load (as a rail cell). The bolt spends both. |
+| Swap | Starts when the one in hand is empty and more is carried, or on `KEY.RELOAD` (R) with room in it. `reload` counts `GUN_RELOAD` (54) or `RAIL_RELOAD` (90) ticks without firing; the step that ends it loads `min(size, carried)` and may fire. It drops the charge. A switch of weapon drops the swap. |
+| Racks, packs | The racks fill the total and the magazine. Packs and rail cells add to the total only: an empty magazine then swaps by itself. |
+| Wire | `mag`, `cap`, `reload` as u8 after `slow`: 58 bytes a player. Keys are 13 bits. |
+| Drawing | `held()` (gun.ts) draws the battery (`battery()`) under the grip or the capsule (`capsule()`) on the receiver, where `swapped()` puts them: the battery slides out and drops, a new one comes up into the grip; the capsule unscrews a turn and a half, is thrown up spinning, a new one comes down and screws on. In the first person the gun tips over (`holster()`, body.ts) and the left hand brings the new one (`loadFrame()`). |
+| Power-on | A weapon that comes to hand, and a gun whose new battery is in, lights up over 0.6 s (`power()`): its glow dims in place (`dim()`, mesh.ts), the katana's too. The counter shows past 0.3, the spark and the crackle only at full. |
+| Counters | The gun's back shows the battery (red at 4 or fewer), the rail LCD the capsule (99 full). The HUD shows the magazine big, the rest after it, faded through a swap. |
+| Budget | The client budget goes to 68 KB gzip (the user's choice): the change took it 203 B past 64 KB. |
+

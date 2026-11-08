@@ -27,7 +27,7 @@ export const HUD_CSS =
   `ul{left:12px;bottom:30px;display:flex;gap:4px;list-style:none}li{width:16px;height:6px;background:#fff;box-shadow:0 0 0 1px #0008}` +
   `li.e{background:#0000;box-shadow:inset 0 0 0 1px #fffb,0 0 0 1px #0008}ul.low li{background:#f55}ul.low li.e{background:#0000}` +
   `dl{left:50%;bottom:10px;transform:translateX(-50%);display:flex;align-items:center;gap:10px}dl svg{width:38px;fill:#fff;filter:drop-shadow(0 1px 1px #000)}` +
-  `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data{display:none}dl.k svg{width:64px;fill:#8ef}dl.r svg{fill:#c9f}dl.r data{color:#dcf}` +
+  `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data,dl.k i{display:none}dl i{font:600 16px/1 system-ui,sans-serif;font-style:normal;opacity:.7;align-self:flex-end;margin-left:-6px}dl.w data{opacity:.35}dl.k svg{width:64px;fill:#8ef}dl.r svg{fill:#c9f}dl.r data{color:#dcf}` +
   `dl small{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);display:flex;gap:10px;font-size:11px;white-space:nowrap}dl kbd{font:inherit;opacity:.5}dl kbd.a{opacity:1}` +
   `@media(max-width:520px){dl{left:auto;right:12px;bottom:46px;transform:none}dl small{left:auto;right:0;transform:none}}` +
   `dl data{font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}dl.e data{color:#f66}` +
@@ -68,7 +68,8 @@ export interface Hud {
    * the katana glyph when `wield` (or when it is all there is), or the rail gun's lightning left
    * (charge(), 99 full) with the gun glyph in violet when `railed`. -1 ammo is no gun, `blade` is a
    * katana carried, `rail` the rail gun's lightning (-1 none); two or more carried show their slots (1 gun, 2 katana, 3 rail gun)
-   * over the glyph, none hides it.
+   * over the glyph, none hides it. `loaded` is what the battery or the capsule of the gun in hand
+   * holds, in the same count: big, with the rest after it; faded while `swapping` it.
    */
   vitals(
     hp: number,
@@ -77,6 +78,8 @@ export interface Hud {
     wield?: boolean,
     rail?: number,
     railed?: boolean,
+    loaded?: number,
+    swapping?: boolean,
   ): void;
   /** A hit marker on the crosshair for a moment: a ball or a cut of the own player hit. */
   hit(): void;
@@ -106,7 +109,7 @@ export const createHud = (screen: HTMLElement): Hud => {
     'beforeend',
     `<aside hidden><h6>TINY FPS</h6><span></span><table>` +
       `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Shift<td>sprint<tr><td>Space<td>jump, again in the air` +
-      `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>Left click<td>fire, hold to charge<tr><td>1, 2, 3, wheel<td>gun, katana, rail gun` +
+      `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>Left click<td>fire, hold to charge<tr><td>R<td>swap the battery<tr><td>1, 2, 3, wheel<td>gun, katana, rail gun` +
       `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>special: lunge, spin, leap<tr><td>Blades locked<td>click fast; step aside to break<tr><td>M<td>mute</table>` +
       `<span>Take the enemy flag to your own base while yours is home. Jump onto the armoury past your flag for the gun, the katana and the rail gun. Hold the rail gun's lightning on a foe: it slows him and drains 1 health a second, and 3 s more after it lets go.</span>` +
       `<strong></strong></aside>` +
@@ -114,7 +117,7 @@ export const createHud = (screen: HTMLElement): Hud => {
       `<ul>${'<li></li>'.repeat(HP_MAX)}</ul>` +
       `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
       `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
-      `<data></data><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd></small></dl>` +
+      `<data></data><i></i><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd></small></dl>` +
       `<s hidden></s><mark hidden></mark><b hidden><i></i></b>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav>` +
       `<output hidden></output>` +
@@ -130,7 +133,7 @@ export const createHud = (screen: HTMLElement): Hud => {
   const pips = [...screen.querySelectorAll('li')];
   const [life, ammo, marker, fallen] = [one('ul'), one('dl'), one('s'), one('mark')];
   const [rope, knot] = [one('b'), one('b i')];
-  const [count, slots] = [one('data'), one('dl small')];
+  const [count, rest, slots] = [one('data'), one('dl i'), one('dl small')];
   let ticker: ReturnType<typeof setTimeout> | undefined;
   const banner = one('output');
   const vignette = one('u');
@@ -194,7 +197,16 @@ export const createHud = (screen: HTMLElement): Hud => {
         vignette.style.opacity = v;
       }
     },
-    vitals(hp, rounds, blade = false, wield = false, rail = -1, railed = false) {
+    vitals(
+      hp,
+      rounds,
+      blade = false,
+      wield = false,
+      rail = -1,
+      railed = false,
+      loaded,
+      swapping = false,
+    ) {
       pips.forEach((li, i) => li.classList.toggle('e', i >= hp));
       life.classList.toggle('low', hp <= 1);
       const have = [rounds >= 0, blade, rail >= 0];
@@ -203,8 +215,11 @@ export const createHud = (screen: HTMLElement): Hud => {
       ammo.hidden = !have.some(Boolean);
       ammo.classList.toggle('k', k);
       ammo.classList.toggle('r', railed);
-      ammo.classList.toggle('e', !k && !n);
-      set(count, `${Math.max(n, 0)}`);
+      const m = Math.max(loaded ?? n, 0);
+      ammo.classList.toggle('e', !k && !m);
+      ammo.classList.toggle('w', swapping);
+      set(count, `${m}`);
+      set(rest, `/ ${Math.max(n - m, 0)}`);
       slots.hidden = have.filter(Boolean).length < 2;
       [...slots.children].forEach((kbd, i) => {
         (kbd as HTMLElement).hidden = !have[i];

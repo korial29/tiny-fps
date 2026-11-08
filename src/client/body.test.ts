@@ -1266,6 +1266,31 @@ describe('the katana in both hands', () => {
     expect(away(rest, guard)).toBeLessThan(0.15);
   });
 
+  it('holds the blade out level ahead through the turn of a spin, so that it sweeps all round him', () => {
+    for (const cut of [CUT.SPIN_L, CUT.SPIN_R]) {
+      const { ticks } = CUTS[cut];
+      const body = watch(blade({ cut }), 60);
+      for (let i = 0; i < ticks; i++) {
+        const p = blade({ cut, swing: ticks - i });
+        body.update(p, DT);
+        if (i < 0.36 * ticks || i > 0.7 * ticks) {
+          continue;
+        }
+        // The camera turns with the spin, as the game turns it.
+        const q = { ...p, yaw: p.yaw + body.spun() };
+        const s = pose(body, q);
+        const [root, tip] = ends(s.pos[J.HAND_R], s.rot[J.HAND_R]).map(e => local(q, e));
+        const way = unit(sub(tip, root));
+        // Level, out ahead, and on the screen to the point.
+        expect(Math.abs(way[1]), `cut ${cut} at ${i}`).toBeLessThan(0.3);
+        expect(way[2], `cut ${cut} at ${i}`).toBeGreaterThan(0.3);
+        expect(inside(tip), `cut ${cut} at ${i}: ${tip.map(v => v.toFixed(2))}`).toBe(true);
+        // Leading the turn: to the right for the spin from the left, which turns right.
+        expect((cut == CUT.SPIN_L ? 1 : -1) * way[0], `cut ${cut} at ${i}`).toBeGreaterThan(0.3);
+      }
+    }
+  });
+
   it('cuts with the arms and not the wrists: neither wrist bends, through every cut', () => {
     for (const cut of Object.values(CUT)) {
       const body = watch(blade({ cut }), 60);

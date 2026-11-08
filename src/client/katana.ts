@@ -341,27 +341,28 @@ const KEYS: number[][][] = [
     [strikeAt(4) + 0.3, 0.04, -0.12, 0.38, -0.02, 0.1, 1],
     [1, ...GUARD],
   ],
-  // The spin from the left: wound up over the left shoulder, then the blade out level ahead and to
-  // the right, leading, while the body turns round to the right (whirl()), then low behind and back up.
+  // The spin from the left: wound up over the left shoulder, round to the front, then the arms
+  // straight out and the blade level ahead, held there while the body turns round to the right
+  // (whirl()) so that it sweeps all round him, then out low to the right and back up.
   [
     [0, ...GUARD],
     [0.15, -0.34, 0.07, 0.28, -0.6, 0.35, -0.72],
-    [0.25, -0.01, -0.03, 0.28, -0.7, 0.1, 0.7],
-    [0.35, 0.24, -0.1, 0.38, 0.7, 0.05, 0.7],
-    [0.65, 0.3, -0.18, 0.28, 0.72, 0, 0.68],
-    [0.78, 0.3, -0.33, 0.36, 0.85, -0.4, -0.3],
-    [0.9, 0.26, -0.27, 0.39, 0.45, 0.6, 0.2],
+    [0.26, -0.14, -0.08, 0.4, -0.8, 0.1, 0.6],
+    [0.34, -0.1, -0.12, 0.42, 0.55, -0.06, 0.83],
+    [0.72, -0.1, -0.12, 0.42, 0.55, -0.06, 0.83],
+    [0.82, 0.3, -0.3, 0.36, 0.85, -0.4, -0.3],
+    [0.92, 0.26, -0.27, 0.39, 0.45, 0.6, 0.2],
     [1, ...GUARD],
   ],
-  // The spin from the right: over the right shoulder, the blade out ahead and to the left, turning left.
+  // The spin from the right: over the right shoulder, the blade level ahead through the turn to the left.
   [
     [0, ...GUARD],
     [0.15, 0.34, 0, 0.24, 0.45, 0.65, -0.6],
-    [0.25, 0.22, -0.11, 0.38, 0.7, 0.1, 0.7],
-    [0.35, -0.1, -0.11, 0.32, -0.7, 0.05, 0.7],
-    [0.65, -0.01, 0.04, 0.28, -0.72, 0, 0.68],
-    [0.78, -0.22, -0.3, 0.38, -0.85, -0.4, -0.3],
-    [0.9, -0.21, -0.27, 0.45, -0.45, 0.6, 0.2],
+    [0.26, 0.24, -0.1, 0.4, 0.8, 0.1, 0.6],
+    [0.34, 0, -0.1, 0.42, -0.55, 0.14, 0.82],
+    [0.72, 0, -0.1, 0.42, -0.55, 0.14, 0.82],
+    [0.82, -0.22, -0.3, 0.38, -0.85, -0.4, -0.3],
+    [0.92, -0.21, -0.27, 0.45, -0.45, 0.6, 0.2],
     [1, ...GUARD],
   ],
   // The leap: raised high over the head as he jumps, held there to the top, then down on the foe
@@ -468,17 +469,17 @@ const TRUNK: number[][][] = [
   [
     [0, 0, 0, 0],
     [0.15, 0.5, -0.04, 0.08],
-    [0.35, -0.3, 0.06, -0.08],
-    [0.65, -0.3, 0.06, -0.08],
-    [0.78, -0.5, 0.12, -0.1],
+    [0.34, -0.08, 0.06, -0.04],
+    [0.72, -0.08, 0.06, -0.04],
+    [0.82, -0.5, 0.12, -0.1],
     [1, 0, 0, 0],
   ],
   [
     [0, 0, 0, 0],
     [0.15, -0.5, -0.04, -0.08],
-    [0.35, 0.3, 0.06, 0.08],
-    [0.65, 0.3, 0.06, 0.08],
-    [0.78, 0.5, 0.12, 0.1],
+    [0.34, 0.08, 0.06, 0.04],
+    [0.72, 0.08, 0.06, 0.04],
+    [0.82, 0.5, 0.12, 0.1],
     [1, 0, 0, 0],
   ],
   [

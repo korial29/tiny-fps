@@ -7,7 +7,7 @@ import { createBody, finger, hand, phalanges } from './body';
 import type { Body } from './body';
 import { MUZZLE, REAR, foregrip, grip, gun, readout } from './gun';
 import { BEHIND, BOW, axes, ends } from './katana';
-import { STRIDE, add, basis, dot, sub, unit } from './mesh';
+import { SHINE, STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, rest, solve, turn } from './rig';
 import { CUFF, CUFF_SIDES, body as skinOf, palette } from './skin';
@@ -1443,6 +1443,44 @@ describe('the rail gun in both hands', () => {
       expect(away(palm, at)).toBeLessThan(0.015);
       expect(dot(thumb, g)).toBeGreaterThan(0.7);
       expect(g[1]).toBeGreaterThan(0.6);
+    }
+  });
+  /** The polished metal drawn: the gun's, none when it is put away. */
+  const metal = (body: Body, p: PlayerState) => {
+    const out: number[] = [];
+    body.draw(out, eyeOf(p), p.yaw, 0, 0, TEAM);
+    return out.filter((_, i) => i % STRIDE == 8).filter(l => l == SHINE).length;
+  };
+
+  it('puts it away on a wall-run: a hand on the wall, the other swinging with the stride', () => {
+    for (const side of [SIDE.EAST, SIDE.WEST]) {
+      const p = { ...wall, wall: side, rail: 100, railed: true };
+      const body = watch(p, 90);
+      expect(metal(body, p)).toBe(0);
+      // The hand away from the wall goes forward and back over a stride.
+      const free = side == SIDE.EAST ? 0 : 1;
+      const ahead: number[] = [];
+      for (let i = 0; i < 60; i++) {
+        body.update(p, DT);
+        ahead.push(hands(p, body)[free][2]);
+      }
+      expect(Math.max(...ahead) - Math.min(...ahead)).toBeGreaterThan(0.15);
+    }
+  });
+
+  it('takes it back in both hands on a wall while its bolt goes out, the wall on either side', () => {
+    for (const side of [SIDE.EAST, SIDE.WEST]) {
+      const p = { ...wall, wall: side, rail: 100, railed: true, zapping: true };
+      const body = watch(p, 90);
+      expect(metal(body, p)).toBeGreaterThan(100);
+      const s = pose(body, p);
+      const [at] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R]);
+      const q = s.rot[J.HAND_L];
+      const palm = add(
+        add(s.pos[J.HAND_L], turn(q, [0, -1, 0]).map(v => v * 0.078) as Vec3),
+        turn(q, [1, 0, 0]).map(v => v * 0.022) as Vec3,
+      );
+      expect(away(palm, at)).toBeLessThan(0.015);
     }
   });
 });

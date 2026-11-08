@@ -619,15 +619,15 @@ describe('the laser rifle', () => {
   it('keeps the digits of its counter inside the screen, clear of the ring', () => {
     // Red at 3: the digits apart from the cyan ring. In the screen's plane: across, and up it.
     const v = scope(3);
-    const up = unit([0, 0.08, -0.05]);
-    const mid: Vec3 = [0, 0.13, 0.095];
+    const up = unit([0, 1, -0.8]);
+    const mid: Vec3 = [0, 0.112, 0.115 - 0.8 * (0.112 - 0.085)];
     for (let i = 0; i < v.length; i += STRIDE) {
       if (v[i + 6] > 1 && v[i + 7] < 0.5) {
         const b = (v[i + 1] - mid[1]) * up[1] + (v[i + 2] - mid[2]) * up[2];
         // The screen's half width at b, less its ring.
-        const half = 0.016 - (0.005 * (b + 0.018)) / 0.036 - 0.0014;
+        const half = 0.0145 - (0.0035 * (b + 0.014)) / 0.028 - 0.0014;
         expect(Math.abs(v[i])).toBeLessThan(half - 0.001);
-        expect(Math.abs(b)).toBeLessThan(0.018 - 0.002);
+        expect(Math.abs(b)).toBeLessThan(0.014 - 0.0015);
       }
     }
   });

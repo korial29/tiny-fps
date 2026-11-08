@@ -3,9 +3,9 @@
 // burst, when that is short of the wall (a body). The others' come from the snapshots and are
 // drawn INTERP_DELAY in the past like the players, flying on at PLASMA_SPEED from the last place
 // a snapshot gave. A ball is drawn from the muzzle that fired it and joins its true line in CATCH
-// seconds. No DOM.
-import { GUN_RANGE, INTERP_DELAY, PLASMA_R, PLASMA_SPEED } from '../shared/constants';
-import { launch } from '../shared/plasma';
+// seconds. The katana's arcs of energy fly the same way, at ARC_SPEED, from the eye. No DOM.
+import { ARC_SPEED, INTERP_DELAY, PLASMA_R, PLASMA_SPEED } from '../shared/constants';
+import { launch, wave } from '../shared/plasma';
 import type { Ball, PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
@@ -35,10 +35,12 @@ interface Flight {
   born?: number;
   /** Its strength (Ball.power). */
   power: number;
+  /** An arc of energy: the CUT that threw it (Ball.arc). */
+  arc?: number;
 }
 
 export interface Balls {
-  /** The own player fired: `p` is his state after the step, `now` the time of the step (ms). */
+  /** The own player fired, or threw an arc with the katana: `p` is his state after the step, `now` the time of the step (ms). */
   fire(p: PlayerState, now: number): void;
   /** The balls of a snapshot received at `now` (ms); `me` is the own id. */
   snapshot(balls: Ball[], me: number, now: number): void;
@@ -59,11 +61,11 @@ export const createBalls = (world: World): Balls => {
 
   return {
     fire(p, now) {
-      const b = launch(p);
+      const b = p.wield ? wave(p) : launch(p);
       const [o, d]: Vec3[] = [at(b), [b.dx, b.dy, b.dz]];
       // The wall it bursts on, as the host's fly() finds it.
-      const r = ray(world, o, d, GUN_RANGE, PLASMA_R);
-      const key = (p.id << 8) | p.shots;
+      const r = ray(world, o, d, b.left, PLASMA_R);
+      const key = (p.id << 8) | b.id;
       spent.delete(key);
       live.set(key, {
         own: true,
@@ -73,9 +75,10 @@ export const createBalls = (world: World): Balls => {
         t: now,
         d,
         end: o.map((v, i) => v + d[i] * r) as Vec3,
-        pop: r < GUN_RANGE,
+        pop: r < b.left,
         due: Infinity,
         power: b.power ?? 1,
+        arc: b.arc,
       });
     },
 
@@ -107,6 +110,7 @@ export const createBalls = (world: World): Balls => {
               pop: false,
               due: Infinity,
               power: b.power ?? 1,
+              arc: b.arc,
             }),
           );
         }
@@ -129,7 +133,7 @@ export const createBalls = (world: World): Balls => {
       const bursts: Vec3[] = [];
       for (const [key, f] of live) {
         const t = f.own ? now : now - INTERP_DELAY;
-        const s = ((t - f.t) * PLASMA_SPEED) / 1000;
+        const s = ((t - f.t) * (f.arc ? ARC_SPEED : PLASMA_SPEED)) / 1000;
         if ((f.end && s >= dot(f.end.map((v, i) => v - f.o[i]) as Vec3, f.d)) || t >= f.due) {
           if (f.pop) {
             bursts.push(f.end!);
@@ -146,7 +150,8 @@ export const createBalls = (world: World): Balls => {
         }
         const p = f.o.map((v, i) => v + f.d[i] * s) as Vec3;
         f.born ??= now;
-        f.from ??= muzzle(f.by) ?? p;
+        // An arc leaves the eye, not a muzzle.
+        f.from ??= (!f.arc && muzzle(f.by)) || p;
         // Eased out of the muzzle onto the line.
         const k = Math.min(1, (now - f.born) / 1000 / CATCH);
         const from = f.from;
@@ -156,6 +161,7 @@ export const createBalls = (world: World): Balls => {
           d: f.d,
           tail: Math.min(TRAIL, Math.hypot(...q.map((v, i) => v - from[i]))),
           power: f.power,
+          arc: f.arc,
         });
       }
       return { orbs, bursts };

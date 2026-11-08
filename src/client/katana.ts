@@ -4,8 +4,6 @@
 // gun.ts); place() carries it to the world. No DOM.
 import { swingOf } from '../shared/blade';
 import { CUTS, TICK_HZ } from '../shared/constants';
-import { TAU } from '../shared/physics';
-import { CUT } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { glow as lit, tri } from './flag';
 import { grip } from './gun';
@@ -315,6 +313,24 @@ const ACROSS = (s: number) => [
   [0.8, 0.27, -0.27, 0.38, 0.45, 0.6, 0.2],
   [1, ...GUARD],
 ];
+/**
+ * The arc's cut from the left: raised high over the left shoulder, the blade cocked back and up,
+ * then down across the body through the middle of the view, out low to the right and round
+ * behind, then back up to the guard.
+ */
+const DIAGONAL = (s: number) => [
+  [0, ...GUARD],
+  [0.14, -0.2, 0, 0.38, -0.45, 0.85, -0.25],
+  [0.3, -0.27, 0.1, 0.3, -0.55, 0.6, -0.6],
+  [s - 0.07, -0.21, 0, 0.42, -0.92, 0.35, 0.15],
+  [s, -0.04, -0.12, 0.4, 0.1, -0.1, 1],
+  [0.56, 0.26, -0.3, 0.4, 0.8, -0.55, 0.2],
+  [0.68, 0.26, -0.32, 0.32, 0.65, -0.6, -0.4],
+  [0.84, 0.24, -0.27, 0.4, 0.4, 0.6, 0.2],
+  [1, ...GUARD],
+];
+/** A key of a cut turned round, left for right: the grip's x and the blade's. */
+const mirror = (k: number[]) => [k[0], -k[1], k[2], k[3], -k[4], k[5], k[6]];
 const KEYS: number[][][] = [
   // Drawn back to the right hip, lunged out along the look with the arms straight, held a beat.
   [
@@ -358,30 +374,8 @@ const KEYS: number[][][] = [
     [strikeAt(4) + 0.3, 0.04, -0.12, 0.38, -0.02, 0.1, 1],
     [1, ...GUARD],
   ],
-  // The spin from the left: wound up over the left shoulder, round to the front, then the arms
-  // straight out and the blade level ahead, held there while the body turns round to the right
-  // (whirl()) so that it sweeps all round him, then out low to the right and back up.
-  [
-    [0, ...GUARD],
-    [0.15, -0.34, 0.07, 0.28, -0.6, 0.35, -0.72],
-    [0.26, -0.14, -0.08, 0.4, -0.8, 0.1, 0.6],
-    [0.34, -0.1, -0.12, 0.42, 0.55, -0.06, 0.83],
-    [0.72, -0.1, -0.12, 0.42, 0.55, -0.06, 0.83],
-    [0.82, 0.3, -0.3, 0.36, 0.85, -0.4, -0.3],
-    [0.92, 0.26, -0.27, 0.39, 0.45, 0.6, 0.2],
-    [1, ...GUARD],
-  ],
-  // The spin from the right: over the right shoulder, the blade level ahead through the turn to the left.
-  [
-    [0, ...GUARD],
-    [0.15, 0.34, 0, 0.24, 0.45, 0.65, -0.6],
-    [0.26, 0.24, -0.1, 0.4, 0.8, 0.1, 0.6],
-    [0.34, 0, -0.1, 0.42, -0.55, 0.14, 0.82],
-    [0.72, 0, -0.1, 0.42, -0.55, 0.14, 0.82],
-    [0.82, -0.22, -0.3, 0.38, -0.85, -0.4, -0.3],
-    [0.92, -0.21, -0.27, 0.45, -0.45, 0.6, 0.2],
-    [1, ...GUARD],
-  ],
+  DIAGONAL(strikeAt(5)),
+  DIAGONAL(strikeAt(6)).map((k, i, all) => (i && i < all.length - 1 ? mirror(k) : k)),
   // The leap: raised high over the head as he jumps, held there to the top, then down on the foe
   // as he comes down, low ahead.
   [
@@ -397,16 +391,6 @@ const KEYS: number[][][] = [
   ],
 ];
 
-/**
- * How far round a spin has turned the body at `p` of its swing (radians, added to the look's yaw for
- * the drawing only): a full turn, eased, between the wind-up and the follow-through; to the right
- * (yaw down) for SPIN_L, to the left for SPIN_R; 0 for any other cut.
- */
-export const whirl = (cut: number, p: number): number => {
-  const way = cut === CUT.SPIN_L ? -1 : cut === CUT.SPIN_R ? 1 : 0;
-  const u = clamp((p - 0.3) / 0.45);
-  return way * TAU * u * u * (3 - 2 * u);
-};
 const NOW: number[] = [];
 
 /** The keys `K` of [share, values...] at `p`, each value through its neighbours' slope (Catmull-Rom), into `out`. */
@@ -465,6 +449,18 @@ const SLASH_TRUNK = (s: number) => [
   [0.64, 0, 0.42, 0],
   [1, 0, 0, 0],
 ];
+/** The arc's cut: the cut across coiled further, folding forward as it comes down. */
+const DIAGONAL_TRUNK = (s: number) => [
+  [0, 0, 0, 0],
+  [0.14, 0.35, -0.08, 0.1],
+  [0.3, 0.6, -0.14, 0.16],
+  [s - 0.07, 0.4, -0.04, 0.1],
+  [s, 0, 0.14, -0.06],
+  [0.56, -0.5, 0.26, -0.14],
+  [0.68, -0.58, 0.28, -0.14],
+  [0.84, -0.25, 0.1, -0.05],
+  [1, 0, 0, 0],
+];
 const TRUNK: number[][][] = [
   [
     [0, 0, 0, 0],
@@ -483,22 +479,8 @@ const TRUNK: number[][][] = [
     [strikeAt(4) + 0.3, 0.46, 0.3, 0.06],
     [1, 0, 0, 0],
   ],
-  [
-    [0, 0, 0, 0],
-    [0.15, 0.5, -0.04, 0.08],
-    [0.34, -0.08, 0.06, -0.04],
-    [0.72, -0.08, 0.06, -0.04],
-    [0.82, -0.5, 0.12, -0.1],
-    [1, 0, 0, 0],
-  ],
-  [
-    [0, 0, 0, 0],
-    [0.15, -0.5, -0.04, -0.08],
-    [0.34, 0.08, 0.06, 0.04],
-    [0.72, 0.08, 0.06, 0.04],
-    [0.82, 0.5, 0.12, 0.1],
-    [1, 0, 0, 0],
-  ],
+  DIAGONAL_TRUNK(strikeAt(5)),
+  DIAGONAL_TRUNK(strikeAt(6)).map(other),
   [
     [0, 0, 0, 0],
     [0.3, 0, -0.26, 0],

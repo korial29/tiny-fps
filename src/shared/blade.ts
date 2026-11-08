@@ -22,7 +22,7 @@ import { hidden } from './world';
 import type { World } from './world';
 
 /** Where on the body the blade is, as a share of its height: the chest, which a brush must not cover. */
-const CHEST = 0.7;
+export const CHEST = 0.7;
 
 /**
  * The cut the keys held when FIRE starts a swing give: LEFT or RIGHT, one of them, cuts across from
@@ -104,16 +104,11 @@ export const crossing = (p: PlayerState, f: PlayerState): boolean => {
 /**
  * The way the shock of the cut of `p` throws the foe `f`, a unit vector on the floor plane: along
  * his look for a thrust, a slash and their specials; a cut across ends on the opposite side to the
- * one it starts from, so LEFT throws to his right and RIGHT to his left; a spin throws out from him.
+ * one it starts from, so LEFT throws to his right and RIGHT to his left.
  */
-export const knock = (p: PlayerState, f: PlayerState): [x: number, z: number] => {
+export const knock = (p: PlayerState): [x: number, z: number] => {
   const [fx, fz] = forward(p.yaw);
   const c = p.cut ?? 0;
-  if (c === CUT.SPIN_L || c === CUT.SPIN_R) {
-    const [dx, dz] = [f.x - p.x, f.z - p.z];
-    const d = Math.hypot(dx, dz);
-    return d > 1e-6 ? [dx / d, dz / d] : [fx, fz];
-  }
   return c === CUT.LEFT ? [-fz, fx] : c === CUT.RIGHT ? [fz, -fx] : [fx, fz];
 };
 

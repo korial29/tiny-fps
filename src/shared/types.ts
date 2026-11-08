@@ -53,8 +53,9 @@ export const KEY = {
  * The katana's cuts (PlayerState.cut, constants CUTS), chosen by the keys held when FIRE starts
  * one: LEFT or RIGHT (one of them) cuts across from that side, else FORWARD thrusts, else (back or
  * no key) it slashes down from above. With SPECIAL (a double click) each has its special, the cut
- * plus SPECIAL_CUT: the thrust a LUNGE (a dash forward on the point), a cut across a SPIN (a full
- * turn on himself, the blade out all round), the slash a LEAP (a jump and a blow down on landing).
+ * plus SPECIAL_CUT: the thrust a LUNGE (a dash forward on the point), a cut across an ARC (a heavy
+ * cut down across the body that throws an arc of energy ahead, see wave(), plasma.ts), the slash a
+ * LEAP (a jump and a blow down on landing).
  */
 export const CUT = {
   THRUST: 0,
@@ -62,8 +63,8 @@ export const CUT = {
   RIGHT: 2,
   SLASH: 3,
   LUNGE: 4,
-  SPIN_L: 5,
-  SPIN_R: 6,
+  ARC_L: 5,
+  ARC_R: 6,
   LEAP: 7,
 } as const;
 /** A cut plus this is its special; a cut's base cut is the cut less it. */
@@ -296,6 +297,8 @@ export interface Ball {
   burst: boolean;
   /** Its strength, 1 to CHARGE_MAX: the health it takes. Absent reads 1. */
   power?: number;
+  /** An arc of energy, not a ball: the CUT that threw it (ARC_L or ARC_R). Absent for a ball. */
+  arc?: number;
 }
 
 /** The flag of a team as a snapshot carries it: only the fields of its state are meaningful, the rest read 0. */

@@ -1,7 +1,8 @@
 // What the weapons light up: the plasma balls, each a blue-white core in a soft halo with a short
 // trail, a blue flash at the muzzle of a shot, a splash of light and sparks where a ball bursts,
-// the bolts and sparks of the katana's shock, and the rail gun's lightning, a new shape each frame. Everything turns to face the camera and is
+// the bolts and sparks of the katana's shock, the katana's arcs of energy, and the rail gun's lightning, a new shape each frame. Everything turns to face the camera and is
 // unlit and above 1, so that the bloom makes it glow. No DOM, no GL.
+import { CUT } from '../shared/types';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
@@ -13,6 +14,8 @@ export interface Orb {
   tail: number;
   /** Its strength, 1 to CHARGE_MAX: a charged ball is bigger. Absent reads 1. */
   power?: number;
+  /** An arc of energy, not a ball: the CUT that threw it (Ball.arc). */
+  arc?: number;
 }
 
 /** Seconds a muzzle flash, a splash and a spark last. */
@@ -193,6 +196,57 @@ const disc = (
   }
 };
 
+/** The arc of energy's crescent: its half span (m), the radians it bends round, its tilt off level, and its glow and core. */
+const [CRESCENT, BOW, TILT] = [0.8, 1.2, 0.6];
+const WAVE: [number, number[]][] = [
+  [0.1, [0.15, 0.7, 1.6]],
+  [0.035, [1.4, 2.6, 3]],
+];
+
+/**
+ * An arc of energy at `c` flying along `d`, thrown by the cut `cut`: a crescent across its flight,
+ * tilted the way the blade came down (from the top left for ARC_L), bowed out the way the blade
+ * went and its tips bent back, thick in the middle, with a fainter one trailing.
+ */
+const crescent = (out: number[], c: Vec3, d: Vec3, cut: number, eye: Vec3) => {
+  const r = norm(cross(d, [0, 1, 0]));
+  const u = cross(r, d);
+  const t = cut == CUT.ARC_L ? -TILT : TILT;
+  const ax = r.map((v, i) => v * Math.cos(t) + u[i] * Math.sin(t)) as Vec3;
+  // Across the flight and square to the span, toward the bottom of the swing.
+  const bow = cross(ax, d).map(v => (cut == CUT.ARC_L ? v : -v)) as Vec3;
+  const N = 6;
+  for (const [back, k] of [
+    [0, 1],
+    [0.35, 0.55],
+  ]) {
+    const at = (j: number): Vec3 => {
+      const a = (j / N) * BOW;
+      return c.map(
+        (v, i) =>
+          v +
+          (ax[i] * Math.sin(a) - bow[i] * (1 - Math.cos(a)) * 0.6) * CRESCENT * k -
+          d[i] * ((1 - Math.cos(a)) * CRESCENT * 0.5 + back),
+      ) as Vec3;
+    };
+    for (let j = -N; j < N; j++) {
+      const w = (n: number) => 1 - (Math.abs(n) / N) ** 2 * 0.85;
+      WAVE.forEach(([h, rgb], i) =>
+        ribbon(
+          out,
+          at(j),
+          at(j + 1),
+          h * k * w(j),
+          rgb.map(v => v * k),
+          eye,
+          0.02 * i,
+          h * k * w(j + 1),
+        ),
+      );
+    }
+  }
+};
+
 export const createTracer = (): Tracer => {
   let glows: Glow[] = [];
   let sparks: Spark[] = [];
@@ -277,7 +331,11 @@ export const createTracer = (): Tracer => {
     },
     draw(out, eye) {
       seen = eye;
-      for (const { p, d, tail, power = 1 } of balls) {
+      for (const { p, d, tail, power = 1, arc } of balls) {
+        if (arc) {
+          crescent(out, p, d, arc, eye);
+          continue;
+        }
         const end = p.map((v, i) => v - d[i] * tail) as Vec3;
         // A charged ball swells, up to twice the size at the full charge, and turns orange.
         const big = 1 + 0.25 * (power - 1);

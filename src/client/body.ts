@@ -53,7 +53,6 @@ import {
   locked,
   poised,
   progress,
-  whirl,
   BEHIND as BACK,
 } from './katana';
 import { add, basis, dot, mix, sub, unit } from './mesh';
@@ -77,7 +76,7 @@ export interface Body {
   aim(target: Vec3): void;
   /** The muzzle of the gun in the right hand, in the camera's space (right, up, forward), as of the last update. */
   muzzle(): Vec3;
-  /** How far round a spin, and a share of the trunk's twist in a cut, have turned the body as of the last update (radians, whirl(), trunk()): the drawn view turns with it. */
+  /** How far a share of the trunk's twist in a cut has turned the body as of the last update (radians, trunk()): the drawn view turns with it. */
   spun(): number;
   /** The joints for a camera at `eye`; undefined without a player, or with the camera away from the body. */
   pose(eye: Vec3, yaw: number, pitch: number, roll?: number): Solved | undefined;
@@ -733,8 +732,8 @@ export const createBody = (world?: World): Body => {
         : sw && prog >= 0
           ? bent(me, prog).map(v => v * w.blade)
           : [0, 0, 0];
-    // The body turns on its feet as the view does: round in a spin, and a share of the twist.
-    q.yaw += sw && prog >= 0 ? whirl(me.cut ?? 0, prog) * w.blade + SWAY * tw : 0;
+    // The body turns on its feet as the view does: a share of the twist.
+    q.yaw += sw && prog >= 0 ? SWAY * tw : 0;
     // The katana's space: the camera's, tipped down BOW at most, so the guard stays upright, and
     // carried round by the chest: the view turns SWAY of its twist and the hands HANDS of it on
     // top (any more and they leave the view in a wind-up). The bend is the trunk's alone, so the
@@ -1021,7 +1020,6 @@ export const createBody = (world?: World): Body => {
       target = l < 3 ? (l ? (t.map(v => (v * 3) / l) as Vec3) : [0, 0, 3]) : t;
     },
     muzzle: () => tip(...holster(), me ? kindOf(me) : 0),
-    spun: () =>
-      me && prog >= 0 ? whirl(me.cut ?? 0, prog) + SWAY * bent(me, prog)[0] * w.blade : 0,
+    spun: () => (me && prog >= 0 ? SWAY * bent(me, prog)[0] * w.blade : 0),
   };
 };

@@ -1294,28 +1294,25 @@ describe('the katana in both hands', () => {
     expect(away(rest, guard)).toBeLessThan(0.15);
   });
 
-  it('holds the blade out level ahead through the turn of a spin, so that it sweeps all round him', () => {
-    for (const cut of [CUT.SPIN_L, CUT.SPIN_R]) {
-      const { ticks } = CUTS[cut];
-      const body = watch(blade({ cut }), 60);
-      for (let i = 0; i < ticks; i++) {
-        const p = blade({ cut, swing: ticks - i });
-        body.update(p, DT);
-        if (i < 0.36 * ticks || i > 0.7 * ticks) {
-          continue;
-        }
-        // The camera turns with the spin, as the game turns it.
-        const q = { ...p, yaw: p.yaw + body.spun() };
-        const s = pose(body, q);
-        const [root, tip] = ends(s.pos[J.HAND_R], s.rot[J.HAND_R]).map(e => local(q, e));
-        const way = unit(sub(tip, root));
-        // Level, out ahead, and on the screen to the point.
-        expect(Math.abs(way[1]), `cut ${cut} at ${i}`).toBeLessThan(0.3);
-        expect(way[2], `cut ${cut} at ${i}`).toBeGreaterThan(0.3);
-        expect(inside(tip), `cut ${cut} at ${i}: ${tip.map(v => v.toFixed(2))}`).toBe(true);
-        // Leading the turn: to the right for the spin from the left, which turns right.
-        expect((cut == CUT.SPIN_L ? 1 : -1) * way[0], `cut ${cut} at ${i}`).toBeGreaterThan(0.3);
-      }
+  it('brings the blade down across in the arc’s cut: from high on its side, through the middle, to low on the other', () => {
+    for (const cut of [CUT.ARC_L, CUT.ARC_R]) {
+      const { ticks, strike } = CUTS[cut];
+      const path = Array.from({ length: ticks }, (_, i) => tipOf(cut, i));
+      const tick = (k: number) => Math.round(k * ticks);
+      const sign = cut == CUT.ARC_L ? 1 : -1;
+      const show = (v: Vec3) => `cut ${cut}: ${v.map(c => c.toFixed(2))}`;
+      // Raised high on its side in the wind-up.
+      expect(sign * path[tick(0.3)][0], show(path[tick(0.3)])).toBeLessThan(-0.3);
+      expect(path[tick(0.3)][1], show(path[tick(0.3)])).toBeGreaterThan(0.4);
+      // Through the middle of the view at the strike, in front of the camera.
+      expect(Math.abs(path[strike][0]), show(path[strike])).toBeLessThan(0.3);
+      expect(Math.abs(path[strike][1]), show(path[strike])).toBeLessThan(0.3);
+      expect(path[strike][2]).toBeGreaterThan(0.8);
+      // Down and across: falling and crossing over through the strike, low on the other side after.
+      expect(path[strike - 2][1]).toBeGreaterThan(path[strike + 2][1]);
+      expect(sign * path[strike - 2][0]).toBeLessThan(sign * path[strike + 2][0]);
+      expect(sign * path[tick(0.56)][0], show(path[tick(0.56)])).toBeGreaterThan(0.4);
+      expect(path[tick(0.56)][1], show(path[tick(0.56)])).toBeLessThan(-0.3);
     }
   });
 

@@ -308,7 +308,8 @@ export interface Snapshot {
   /**
    * Bit n set: pack n is there to take, the health packs of WorldDef.packs first, then the ammo
    * packs of WorldDef.ammo (bit packs.length + n), then the rail cells of WorldDef.cells (after
-   * both). Absent: none.
+   * both). PACK_BITS bits, past the 32 of the bitwise operators: read a bit with arithmetic.
+   * Absent: none.
    */
   packs?: number;
   /** The plasma balls in flight, and those that burst since the last snapshot. Absent: none. */

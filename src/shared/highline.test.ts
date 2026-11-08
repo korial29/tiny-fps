@@ -4,7 +4,16 @@ import { problems } from '../../test/pickups';
 import { HIGH, LOW, MID, UP, above, fly, go, leap, plain, trip } from '../../test/routes';
 import type { Leg, Route } from '../../test/routes';
 import { palette, MAX_TINTS } from '../client/render';
-import { FLAG_H, FLAG_REACH, MAX_PITCH, PLAYER_H, PLAYER_R, RACK_R, SNAP_EVERY } from './constants';
+import {
+  FLAG_H,
+  FLAG_REACH,
+  MAX_PITCH,
+  PACK_BITS,
+  PLAYER_H,
+  PLAYER_R,
+  RACK_R,
+  SNAP_EVERY,
+} from './constants';
 import { touches } from './ctf';
 import { within } from './gun';
 import { HIGHLINE, TEAM_TINT } from './map';
@@ -359,9 +368,9 @@ describe('HIGHLINE, racks and packs', () => {
 describe('HIGHLINE, ammo packs', () => {
   const ammo = HIGHLINE.ammo!;
 
-  it('has 8 to 12, each with a twin across the line, a few on every route of each half', () => {
-    expect(ammo.length).toBeGreaterThanOrEqual(8);
-    expect(ammo.length).toBeLessThanOrEqual(12);
+  it('has 16 to 24, each with a twin across the line, a few on every route of each half', () => {
+    expect(ammo.length).toBeGreaterThanOrEqual(16);
+    expect(ammo.length).toBeLessThanOrEqual(24);
     for (const [x, y, z] of ammo) {
       expect(
         ammo.some(q => q[0] === x && q[1] === y && q[2] === ZED - z),
@@ -372,8 +381,7 @@ describe('HIGHLINE, ammo packs', () => {
     expect(half.some(p => p[1] === 26)).toBe(true);
     expect(half.some(p => p[1] === 19 || p[1] === 21.2)).toBe(true);
     expect(half.some(p => p[1] === 14.5)).toBe(true);
-    // Health and ammo together fit the 32 bits of Snapshot.packs.
-    expect(ammo.length + HIGHLINE.packs!.length).toBeLessThanOrEqual(32);
+    expect(half.filter(p => p[1] === 26).length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -393,8 +401,10 @@ describe('HIGHLINE, rail cells', () => {
     expect(half.some(p => p[1] === 19 || p[1] === 21.2)).toBe(true);
     expect(half.some(p => p[1] === 14.5)).toBe(true);
     expect(cells.filter(p => p[2] === ZED / 2)).toHaveLength(1);
-    // Health, ammo and rail cells together fit the 32 bits of Snapshot.packs.
-    expect(cells.length + HIGHLINE.ammo!.length + HIGHLINE.packs!.length).toBeLessThanOrEqual(32);
+    // Health, ammo and rail cells together fit the bits of Snapshot.packs.
+    expect(cells.length + HIGHLINE.ammo!.length + HIGHLINE.packs!.length).toBeLessThanOrEqual(
+      PACK_BITS,
+    );
   });
 });
 

@@ -336,13 +336,17 @@ const PACKS: Vec3[] = [
   [88, 14.5, 198],
 ];
 
-/** Ammo packs in red's half: the Spine, two in Midtown, two on the Lowline. Their twins are across the line. */
+/** Ammo packs in red's half: two on the Spine, four in Midtown, three on the Lowline. Their twins are across the line, and the plaza has a pair. */
 const AMMO: Vec3[] = [
   [21, 26, 168],
+  [16, 26, 140],
   [46, 19, 144],
   [36, 21.2, 178],
+  [58, 19, 156],
+  [64, 19, 196],
   [88, 14.5, 216],
   [88, 14.5, 172],
+  [90, 14.5, 150],
 ];
 
 /**
@@ -383,7 +387,7 @@ export const HIGHLINE: WorldDef = {
     [24, 15, 112],
     [24, 15, 128],
   ],
-  ammo: [...AMMO, ...AMMO.map(([x, y, z]): Vec3 => [x, y, ZED - z])],
+  ammo: [...AMMO, ...AMMO.map(([x, y, z]): Vec3 => [x, y, ZED - z]), [12, 15, 116], [12, 15, 124]],
   cells: [...CELLS, ...CELLS.map(([x, y, z]): Vec3 => [x, y, ZED - z]), [28, 15, ZED / 2]],
   floor: -25,
   // A warm sun low in the east, along the roofs' short side: the same light for both teams.

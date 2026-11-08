@@ -13,7 +13,7 @@ import type { Vec3 } from './mesh';
  * count from `from`: the ammo packs come after the health packs.
  */
 export const packsOf = (all: readonly Vec3[] = [], mask = 0, from = 0): Vec3[] =>
-  all.filter((_, n) => from + n < 32 && (mask >>> (from + n)) & 1);
+  all.filter((_, n) => Math.floor(mask / 2 ** (from + n)) % 2 === 1);
 
 /**
  * A rack at `at` (a point on a top): a post and a dish, a ring on the roof of the radius that gives

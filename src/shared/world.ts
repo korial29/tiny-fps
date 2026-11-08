@@ -41,11 +41,11 @@ export interface WorldDef {
   teams: [red: TeamDef, blue: TeamDef];
   /** Feet below this height have fallen off the roofs: the player is put back at a spawn of the team. */
   floor: number;
-  /** Health packs, points on tops (at most 32): walking within PACK_R gives PACK_HP, then it is gone PACK_BACK seconds. */
+  /** Health packs, points on tops (with the ammo packs and the rail cells at most PACK_BITS): walking within PACK_R gives PACK_HP, then it is gone PACK_BACK seconds. */
   packs?: Vec3[];
-  /** Ammo packs, points on tops (health and ammo packs together at most 32): within PACK_R a player with the gun and fewer than AMMO_MAX shots takes AMMO_PACK, then it is gone PACK_BACK seconds. */
+  /** Ammo packs, points on tops (with the health packs and the rail cells at most PACK_BITS): within PACK_R a player with the gun and fewer than AMMO_MAX shots takes AMMO_PACK, then it is gone AMMO_BACK seconds. */
   ammo?: Vec3[];
-  /** Rail cells, points on tops (with the health and ammo packs at most 32): within PACK_R a player with the rail gun and less than RAIL_MAX of lightning takes RAIL_CELL, then it is gone PACK_BACK seconds. */
+  /** Rail cells, points on tops (with the health and ammo packs at most PACK_BITS): within PACK_R a player with the rail gun and less than RAIL_MAX of lightning takes RAIL_CELL, then it is gone PACK_BACK seconds. */
   cells?: Vec3[];
   /** Unit direction toward the sun, and its colour (linear RGB, may exceed 1). */
   sun: { dir: Vec3; color: Vec3 };

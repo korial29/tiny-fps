@@ -35,7 +35,7 @@
 //   5: heavy (the katana's charged cut let go). charge is the katana's too, held at a cut's top.
 //   Then the match, after the players: [red u8][blue u8][clock u16] the captures of each team, and
 //   the whole seconds to the end of the match (bit 15: it is over, and the clock counts to the next
-//   one), [packs u32] bit n set when health pack n is there to take; then the red and the blue flag, each [state u8 = FLAG] and by state:
+//   one), [packs u48: high u16, low u32] bit n set when pack n is there to take (Snapshot.packs); then the red and the blue flag, each [state u8 = FLAG] and by state:
 //     HOME: nothing more (2 bytes in all for the two flags);
 //     CARRIED: [by u8] the carrier's player id;
 //     DROPPED: [x i16][y i16][z i16] in 1/16 m, [left u8] whole seconds before it goes home.
@@ -74,7 +74,7 @@ export const INPUT_BYTES = 12;
 export const SNAP_HEAD = 4;
 export const SNAP_PLAYER = 55;
 /** The match block after the players: the captures, the clock, the packs; the flags follow (2 to 16 bytes). */
-export const SNAP_MATCH = 8;
+export const SNAP_MATCH = 10;
 
 /** Bytes of a plasma ball. */
 export const SNAP_BALL = 11;
@@ -209,7 +209,9 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
   v.setUint8(end, s.score[0]);
   v.setUint8(end + 1, s.score[1]);
   v.setUint16(end + 2, (s.clock & 0x7fff) | (s.over ? 0x8000 : 0));
-  v.setUint32(end + 4, s.packs ?? 0);
+  const packs = s.packs ?? 0;
+  v.setUint16(end + 4, Math.floor(packs / 2 ** 32));
+  v.setUint32(end + 6, packs % 2 ** 32);
   let o = end + SNAP_MATCH;
   for (const f of s.flags) {
     v.setUint8(o, f.state);
@@ -357,7 +359,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     clock: clock & 0x7fff,
     over: (clock & 0x8000) !== 0,
     flags: flags as Snapshot['flags'],
-    packs: v.getUint32(end + 4),
+    packs: v.getUint16(end + 4) * 2 ** 32 + v.getUint32(end + 6),
     ...(n ? { balls } : {}),
   };
 };

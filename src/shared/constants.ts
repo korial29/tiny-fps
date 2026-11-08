@@ -223,8 +223,11 @@ export const DOWN_TICKS = 120;
 /** Health a pack gives, up to HP_MAX, and seconds before a taken pack is back. */
 export const PACK_HP = 2;
 export const PACK_BACK = 20;
-/** Shots an ammo pack gives, up to AMMO_MAX. */
+/** Shots an ammo pack gives, up to AMMO_MAX, and seconds before a taken one is back. */
 export const AMMO_PACK = 20;
+export const AMMO_BACK = 10;
+/** Health packs, ammo packs and rail cells a map has at most: the bits of Snapshot.packs. */
+export const PACK_BITS = 48;
 /** Metres from a pack or a rack, feet to point on the floor plane, that take it. */
 export const PACK_R = 0.9;
 export const RACK_R = 1.2;

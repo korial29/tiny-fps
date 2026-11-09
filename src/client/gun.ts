@@ -1029,13 +1029,13 @@ export const swapOf = (p: Pick<PlayerState, 'reload' | 'railed' | 'rifled'>): nu
 
 /**
  * The glow of a weapon `t` seconds after it came to hand: dark as it rises, then flickering up to
- * full at `end` (0.6 s; the gun's 1.4 s, its counter standing up first).
+ * full at `end` (0.6 s; the gun's 1.4 s).
  */
 export const power = (t: number, end = 0.6): number =>
   t >= end ? 1 : clamp((t - end / 4) / (end * 0.75)) * (0.65 + 0.35 * Math.sin(t * 95) ** 2);
 
-/** The gun's boot `t` seconds after it came to hand or its new battery went in: its counter stands up over 0.35 to 1 s, then its digits show. */
-export const GUN_ON = { lit: 1.4, from: 0.35, up: 1, digits: 1.05 };
+/** The gun's boot `t` seconds after it came to hand or its new battery went in: its light up by `lit`, its counter fading in from `from` to `up` (the user, 2026-11-09: a slow fade in); the rifle's digits show at `digits`. */
+export const GUN_ON = { lit: 1.4, from: 0.3, up: 1.8, digits: 1.05 };
 
 /**
  * Where the battery or the capsule is at `s` of a swap (0 to 1; -1 none): how far out of its seat
@@ -1228,20 +1228,11 @@ const segments = (
 });
 const SEGMENTS = segments(DW, DH, DT);
 /**
- * The screen on the gun's flat back, a rounded trapezoid filling it (the user, 2026-11-09): the half
- * width of its glowing frame at its middle, its middle up the face from BACK, its half height, its
- * corner radius, in metres; its digits' scale; how much narrower its top is and wider its foot, as
- * a share of its width. Round the frame a black of the same shape, BLACK further out, corner
- * radius BLACK_R.
+ * The counter on the gun's glossy black cut, in the middle of its outline (the user, 2026-11-09: no
+ * screen or support of its own, the frame round and near the edge): the digits' middle up the face
+ * from BACK, the half height the charge gauge counts from, the digits' scale.
  */
-const [SW, SM, SHH, SR, DK, TAPER] = [0.0255, -0.012, 0.0163, 0.0025, 1, 0.12];
-/**
- * The support under the screen (the user, 2026-11-09: a rounded trapezoid filling the cut face),
- * glossy black, round the screen's middle: half its width at the middle, half its height, its
- * corner radius, its taper (narrower at the top by that share of its width), its thickness.
- */
-const [PW, PH, PR, PTAPER, PT] = [0.032, 0.026, 0.008, 0.1, 0.0015];
-const [BLACK, BLACK_R] = [0.0027, 0.0008];
+const [SM, SHH, DK] = [FACE[0], 0.0163, 1];
 /** The digits' foot, so that they are in the middle of the screen; the charge gauge, a thin bar under them up the back face: where it starts and ends, and the gap between its cells. */
 const DY = SM - (DH * DK) / 2;
 const [GFROM, GTO, GGAP] = [SM - SHH + 0.0008, DY - 0.0004, 0.0012];
@@ -1263,54 +1254,12 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
     const v: number[] = (out = []);
     // The back face's axes: up its slope and out of it, from BACK.
     const slope: Vec3 = [0, BACK_N[2], -BACK_N[1]];
-    // From the top of the support, PT out of the face.
     const N = BACK_N;
-    const O = add(BACK, N.map(c => c * PT) as Vec3);
     const at = (a: number, b: number, k: number): Vec3 => [
-      O[0] + a,
-      O[1] + slope[1] * b + N[1] * k,
-      O[2] + slope[2] * b + N[2] * k,
+      BACK[0] + a,
+      BACK[1] + slope[1] * b + N[1] * k,
+      BACK[2] + slope[2] * b + N[2] * k,
     ];
-    // The dark square, a fan of 24 round its middle; `g` grows the rounded rectangle of the frame
-    // out from the screen, and `rad` sets its corner.
-    const r = (c: number, h: number, rad: number) => Math.sign(c) * (h - rad) + rad * c;
-    // A rounded trapezoid (the user, 2026-11-09), narrow at the top: across scaled by TAPER per
-    // half height up from the middle.
-    const rim = (i: number, g = 0, d = 0.0012, rad = SR + g) => {
-      const b = r(Math.sin(i * 0.2618 + 0.13), SHH + g, rad);
-      return at(r(Math.cos(i * 0.2618 + 0.13), SW + g, rad) * (1 - (TAPER * b) / SHH), SM + b, d);
-    };
-    // The support: a glossy black rounded trapezoid standing PT out of the face, its top and its
-    // sides, each side lit by its way out from the middle.
-    const plate = (i: number, k: number) => {
-      const b = r(Math.sin(i * 0.2618 + 0.13), PH, PR);
-      return at(r(Math.cos(i * 0.2618 + 0.13), PW, PR) * (1 - (PTAPER * b) / PH), SM + b, k);
-    };
-    const glossy = (p: Vec3, n: Vec3) => v.push(...p, ...n, ...GLOSS);
-    for (let i = 0; i < 24; i++) {
-      const [a, b, a0, b0] = [
-        plate(i, 0),
-        plate(i + 1, 0),
-        plate(i, -PT - 0.0005),
-        plate(i + 1, -PT - 0.0005),
-      ];
-      for (const p of [at(0, SM, 0), a, b]) {
-        glossy(p, N);
-      }
-      const out = unit(sub(add(a, b), add(at(0, SM, 0), at(0, SM, 0))));
-      for (const p of [a0, b0, b, a0, b, a]) {
-        glossy(p, out);
-      }
-    }
-    for (let i = 0; i < 24; i++) {
-      tri(
-        v,
-        at(0, SM, 0.0012),
-        rim(i, BLACK, 0.0012, BLACK_R),
-        rim(i + 1, BLACK, 0.0012, BLACK_R),
-        DARK,
-      );
-    }
     const rgb = n > 4 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
     /** The gauge's cells, the lit ones or the dim ones, while it charges. */
     const gauge = (on: boolean) => {
@@ -1344,15 +1293,23 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
     // The lit cells and the frame glow with the digits.
     if (shown) {
       gauge(true);
-      for (let i = 0; i < 24; i++) {
+      // Round, 2 mm inside the cut's smooth outline (the user, 2026-11-09), a band 1.2 mm wide, 1 mm
+      // out of the face, clear of the outline 0.2 mm out.
+      const ring = (j: number, g: number) =>
+        at(
+          (FACE[1] - g) * sgn(Math.cos((j * TAU) / 32)),
+          FACE[0] + (FACE[2] - g) * sgn(Math.sin((j * TAU) / 32)),
+          0.001,
+        );
+      for (let i = 0; i < 32; i++) {
         const [a, b, c, d] = [
-          rim(i, 0, 0.0027),
-          rim(i + 1, 0, 0.0027),
-          rim(i + 1, 0.0012, 0.0027),
-          rim(i, 0.0012, 0.0027),
+          ring(i, 0.002),
+          ring(i + 1, 0.002),
+          ring(i + 1, 0.0032),
+          ring(i, 0.0032),
         ];
-        tri(v, a, d, c, rgb);
-        tri(v, a, c, b, rgb);
+        tri(v, a, b, c, rgb);
+        tri(v, a, c, d, rgb);
       }
     }
     lit(v, from, 1);
@@ -1514,15 +1471,15 @@ export const scope = (n: number, shown = true): number[] => {
 
 /**
  * How a gun is drawn beyond its place: its glow from 0 (off) to 1, the swap under way (0 to 1, -1
- * none), whether its battery or capsule holds any, how far the gun's counter stands up (0 folded
- * back flat, 1 up) and whether its digits show; for the rail gun the level of its three cells (the
+ * none), whether its battery or capsule holds any, how far the gun's counter has faded in (0 dark,
+ * 1 lit) and whether the rifle's digits show; for the rail gun the level of its three cells (the
  * one in use, then the two in reserve), its heat (0 to 1) and whether it overheated.
  */
 export interface Lit {
   light?: number;
   swap?: number;
   empty?: boolean;
-  stand?: number;
+  screen?: number;
   digits?: boolean;
   cells?: number[];
   heat?: number;
@@ -1533,28 +1490,6 @@ export interface Lit {
 export const cellsOf = (p: Pick<PlayerState, 'rail' | 'cap'>): number[] => {
   const [c, r] = [p.cap ?? 0, Math.max(0, (p.rail ?? 0) - (p.cap ?? 0))];
   return [c, r, r - RAIL_CAP].map(v => clamp(v / RAIL_CAP));
-};
-
-/** Where the gun's counter folds: the front edge of its foot, up and back of the grip. */
-const HINGE = [0.112, 0.02];
-
-/**
- * The frame that draws a model of the gun with its counter turned back by `a` radians about the
- * front edge of its foot (the gun's right): the top toward the back and down, flat at π/2.
- */
-const folded = (at: Vec3, [r, u, f]: Vec3[], a: number, k: number): [Vec3, Vec3[]] => {
-  const [c, s] = [Math.cos(a), Math.sin(a)];
-  const [hy, hz] = HINGE;
-  // The hinge minus the hinge turned, in model space (y, z), carried to the world.
-  const [dy, dz] = [hy - (hy * c - hz * s), hz - (hy * s + hz * c)];
-  return [
-    [0, 1, 2].map(i => at[i] + k * (u[i] * dy - f[i] * dz)) as Vec3,
-    [
-      r,
-      [0, 1, 2].map(i => u[i] * c - f[i] * s) as Vec3,
-      [0, 1, 2].map(i => u[i] * s + f[i] * c) as Vec3,
-    ],
-  ];
 };
 
 /**
@@ -1577,7 +1512,7 @@ export const held = (
     light = 1,
     swap = -1,
     empty = false,
-    stand = 1,
+    screen = 1,
     digits = true,
     cells = [1, 1, 1],
     heat = 0,
@@ -1627,16 +1562,14 @@ export const held = (
     place(out, scope(ammo, digits && light > 0.5), at, ax, [0, 0, 0], k);
   } else if (ammo !== undefined && rail && light > 0.3 && !blink) {
     place(out, lcd(ammo), at, ax, [0, 0, 0], k);
-  } else if (ammo !== undefined && !rail) {
-    place(
-      out,
-      readout(ammo, level, digits),
-      ...folded(at, ax, (1 - stand) * Math.PI * 0.5, k),
-      [0, 0, 0],
-      k,
-    );
   }
   dimmed(out, from, d);
+  // The gun's counter fades in on its own, slowly, without the gun's flicker (the user, 2026-11-09).
+  if (ammo !== undefined && w < 2) {
+    const c = out.length;
+    place(out, readout(ammo, level), at, ax, [0, 0, 0], k);
+    dimmed(out, c, screen);
+  }
 };
 
 /** The muzzle of a gun (the rail gun's or the rifle's by `kind`) whose grip is at `at` and whose axes are [right, up, forward]. */

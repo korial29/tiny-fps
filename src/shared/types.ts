@@ -347,6 +347,8 @@ export interface Rules {
   scoreLimit: number;
   /** Seconds a match lasts: the team with more captures wins, a tie is a draw. */
   timeLimit: number;
+  /** The map's key in MAPS (maps.ts); an unknown one plays 'highline'. */
+  map?: string;
 }
 
 /**

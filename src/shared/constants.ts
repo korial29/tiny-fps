@@ -381,4 +381,5 @@ export const RULES: Rules = {
   maxPlayers: MAX_PLAYERS,
   scoreLimit: 3,
   timeLimit: 480,
+  map: 'highline',
 };

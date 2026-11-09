@@ -1,5 +1,5 @@
 import { HP_MAX, LOCK_WIN, PLAYER_H, TICK_HZ } from '../shared/constants';
-import { HIGHLINE } from '../shared/map';
+import { MAPS, mapKey, mapOf } from '../shared/maps';
 import { eyeHeight } from '../shared/physics';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
@@ -35,6 +35,8 @@ export interface TinyFpsOptions {
   url?: string;
   /** Any WebSocket-like socket, e.g. localSocket('room') from '@korial29/tiny-fps/local'. */
   socket?: SocketLike;
+  /** The map's key: 'highline' (the default) or 'tranquility'. It has to be the room's. */
+  map?: string;
 }
 
 export type TinyFpsEvent = 'roster' | 'open' | 'close';
@@ -77,7 +79,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const listeners: Record<TinyFpsEvent, (() => void)[]> = { roster: [], open: [], close: [] };
   const emit = (ev: TinyFpsEvent) => listeners[ev].forEach(cb => cb());
 
-  const world = build(HIGHLINE);
+  const world = build(mapOf(opts.map));
   const predictor = createPredictor(world);
   const audio = createAudio();
   audio.mute(savedMute());
@@ -186,6 +188,10 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       names = new Map(roster.map(p => [p.id, p.name]));
       you = { id: m.you, team: roster.find(p => p.id == m.you)?.team ?? 0 };
       predictor.you(you.id, you.team);
+      // A room on another map than the one built here: say so, the title screen shows it.
+      if (m.map !== undefined && m.map !== mapKey(opts.map)) {
+        msg = `This room plays ${MAPS[m.map]?.name ?? m.map}`;
+      }
       count.textContent = `Players: ${roster.length}`;
       emit('roster');
     } else if (m?.t == 'end') {

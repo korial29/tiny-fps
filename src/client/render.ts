@@ -15,6 +15,7 @@ import { base, flag, teamRgb } from './flag';
 import type { CtfScene } from './flag';
 import { SHINE, STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
+import { moonscape } from './moonscape';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { battery, cell, kit, racks } from './props';
@@ -372,14 +373,17 @@ export const city = (world: World): World => ({
   def: { ...world.def, brushes: [...deepen(world.def), ...skyline(world.def)] },
 });
 
-/** All the map's vertices, drawn once: the city, the brushes, the street under them, the parks' trees, the runner's red and the team zones. */
-export const scenery = (world: World): number[] => [
-  ...level(city(world)),
-  ...street(world.def),
-  ...trees(world.def),
-  ...vision(world.def),
-  ...zones(world.def),
-];
+/** All the map's vertices, drawn once: the city (on the moon, its scenery instead), the brushes, the street under them, the parks' trees, the runner's red and the team zones. */
+export const scenery = (world: World): number[] =>
+  world.def.scenery === 'moon'
+    ? [...level(world), ...moonscape(world.def), ...vision(world.def), ...zones(world.def)]
+    : [
+        ...level(city(world)),
+        ...street(world.def),
+        ...trees(world.def),
+        ...vision(world.def),
+        ...zones(world.def),
+      ];
 
 /** The height the fog layer is anchored at: the lowest top of the world, so that at a roof the layer is a few percent of the haze at most. */
 export const fogRef = ({ brushes }: WorldDef) => Math.min(...brushes.map(b => b.max[1]));
@@ -475,7 +479,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const size = () => backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
   // What is drawn is the world plus a city, a street and the runner's red; the physics knows only `world`.
   const ground = scenery(world);
-  const drive = traffic(world.def);
+  // The moon has no traffic.
+  const drive = world.def.scenery === 'moon' ? () => {} : traffic(world.def);
   const { sun, sky } = world.def;
   const sunDir = sun.dir.map(v => v / Math.hypot(...sun.dir)) as Vec3;
   const pixels = textures();

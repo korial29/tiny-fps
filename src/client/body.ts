@@ -223,12 +223,12 @@ export const FIST = [0.078, 0.022];
  */
 export const KATANA_LEFT = [0.086, 0.016];
 /**
- * How far the left fist's fingers lean toward the blade, as [sin, cos] (the right's is [S, C], 0.55
- * rad): the grip runs across its palm on the slant and its wrist comes from under the grip, not
- * beside it, seen from the eye (the user, 2026-11-09). The arms are still solved for a hand held as
- * the right (clasp()); the left wrist then cocks by the difference, a set angle.
+ * How far the left fist's fingers lean toward the blade, as [sin, cos]: less than the right's [S, C]
+ * (0.55 rad), so the grip runs along the curl of its fingers, through the fist (the user,
+ * 2026-11-09: at 0.9 it left the fist). The arms are still solved for a hand held as the right
+ * (clasp()); the left wrist bends slightly by the difference, a set angle.
  */
-export const KATANA_TILT = [Math.sin(0.9), Math.cos(0.9)];
+export const KATANA_TILT = [Math.sin(0.25), Math.cos(0.25)];
 const [S0, C0] = [S, C];
 /**
  * Puts the arm of shoulder joint `j` (ARM_R or ARM_L) of `q` on a handle running along the unit

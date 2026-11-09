@@ -668,35 +668,3 @@ describe('the charged cut, as drawn', () => {
     expect(Math.hypot(a[0] - b[0], a[1] - b[1])).toBeLessThan(0.012);
   });
 });
-
-describe('the blade coming on, a light saber’s (the user, 2026-11-09)', () => {
-  /** How far ahead of the grip the sword reaches, its blade out by `grow`. */
-  const reachOf = (grow: number) => {
-    const out: number[] = [];
-    sword(
-      out,
-      [0, 0, 0],
-      [
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1],
-      ],
-      1,
-      undefined,
-      1,
-      1,
-      grow,
-    );
-    let most = 0;
-    for (let i = 0; i < out.length; i += STRIDE) {
-      most = Math.max(most, out[i + 2]);
-    }
-    return most;
-  };
-
-  it('grows out of the guard to its full length', () => {
-    expect(reachOf(1)).toBeCloseTo(TIP, 2);
-    expect(reachOf(0.5)).toBeCloseTo(BASE + (TIP - BASE) / 2, 2);
-    expect(reachOf(0)).toBeLessThan(BASE + 0.03);
-  });
-});

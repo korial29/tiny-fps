@@ -121,7 +121,7 @@ export const SOUND = {
   LASE: 36,
   /** The rail gun overheating: a burst of steam hissing out and a whistle falling under it. */
   HISS: 37,
-  /** The katana coming on: its button clicked, then the blade out of the guard with a light saber's snap and hum. */
+  /** The katana coming on: its button clicked, then its edge's current crackling and buzzing. */
   IGNITE: 38,
   /** The plasma gun charging, held: a whine played higher as the charge grows (combat.ts), looped. */
   CHARGE: 39,
@@ -324,13 +324,13 @@ export const LAYERS: Voice[][] = [
     [3, 9000, 0, 0.001, 0, 0.012, 0, 0.8, 0, 1, 0.5, 0.1],
     [3, 2500, 0, 0.02, 0.08, 0.05, 0, 0.3, 0, 1, 0.25],
   ],
-  // BOOT: the click of the button on the gun's side as the thumb presses it (PRESS, gun.ts), then a
-  // whine that rises two octaves, a sine over it, and a soft beep once it is up.
+  // BOOT: the click of the gun's button (combat.ts plays it at the press, PRESS, the first time),
+  // then a whine that rises two octaves, a sine over it, and a soft beep once it is up.
   [
-    [3, 5000, 0, 0.001, 0.004, 0.025, 0, 0.6, 0, 1, 0.4, 0.45],
-    [1, 180, 2.2, 0.05, 0.25, 0.2, 0.02, 0.25, 0, 1, 0.3, 0.45],
-    [2, 360, 2.2, 0.05, 0.25, 0.2, 0, 1, 0, 1, 0.22, 0.45],
-    [2, 1760, 0, 0.003, 0.04, 0.05, 0, 1, 0, 1, 0.35, 0.9],
+    [3, 5000, 0, 0.001, 0.004, 0.025, 0, 0.6, 0, 1, 0.4],
+    [1, 180, 2.2, 0.05, 0.25, 0.2, 0.02, 0.25, 0, 1, 0.3],
+    [2, 360, 2.2, 0.05, 0.25, 0.2, 0, 1, 0, 1, 0.22],
+    [2, 1760, 0, 0.003, 0.04, 0.05, 0, 1, 0, 1, 0.35, 0.45],
   ],
   // LASE: deep in the bass (the user, 2026-11-08): a sub sine thump falling from 75 Hz, a muffled
   // square punch from 160 Hz, a saw an octave under it, and a dull thud of low-passed noise; 75 ms,
@@ -348,13 +348,15 @@ export const LAYERS: Voice[][] = [
     [3, 7000, -0.5, 0.02, 0.35, 0.55, 0, 0.7, 0, 1, 0.5],
     [2, 2900, -0.6, 0.05, 0.4, 0.4, 0.05, 1, 0, 1, 0.22, 0.03],
   ],
-  // IGNITE (the user, 2026-11-09: like a light saber): the click of the button on the hilt at PRESS,
-  // then the blade's snap and hiss, a deep saw swelling up an octave and a sine over it, the hum.
+  // IGNITE (the user, 2026-11-09: the katana lights up, it is no light saber): the click of the
+  // button on the hilt, then the edge's current: three crackles of bright noise and an electric
+  // buzz rising a little, dying in half a second.
   [
-    [3, 5000, 0, 0.001, 0.004, 0.025, 0, 0.6, 0, 1, 0.4, 0.45],
-    [3, 2600, -1.5, 0.002, 0.03, 0.14, 0, 0.45, 0, 1, 0.45, 0.46],
-    [1, 70, 1.4, 0.02, 0.15, 0.32, 0.03, 0.22, 0, 1, 0.55, 0.46],
-    [2, 140, 1.2, 0.03, 0.18, 0.3, 0.02, 1, 0, 1, 0.3, 0.46],
+    [3, 5000, 0, 0.001, 0.004, 0.025, 0, 0.6, 0, 1, 0.4],
+    [3, 7000, -1, 0.001, 0.01, 0.04, 0, 0.6, 0, 1, 0.4, 0.01],
+    [3, 6000, -1, 0.001, 0.01, 0.04, 0, 0.6, 0, 1, 0.35, 0.07],
+    [3, 8000, -1, 0.001, 0.01, 0.05, 0, 0.6, 0, 1, 0.3, 0.15],
+    [0, 110, 0.6, 0.01, 0.15, 0.3, 0.3, 0.3, 0, 1, 0.3, 0.01],
   ],
   // CHARGE (the user, 2026-11-09): a sine at 330 Hz with a quick vibrato, a soft saw an octave under
   // it, a fizz of held noise; held, to loop, its pitch raised with the charge.

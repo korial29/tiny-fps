@@ -25,11 +25,12 @@ import { createGait, frame } from './gait';
 import type { Floor } from './gait';
 import {
   GUN_ON,
-  PRESS,
   pressAt,
   buttonAt,
+  firsts,
   poke,
   thumbTo,
+  tune,
   REAR,
   TILT,
   charge,
@@ -628,6 +629,11 @@ export const createBody = (world?: World): Body => {
    */
   let drawn = -1;
   let since = 9;
+  /** Whether the weapon in hand came to it for the first time (firsts()): only then is it switched on, by hand (the user, 2026-11-09). */
+  const fresh = firsts();
+  let first = false;
+  /** When the weapon of `kind` in hand is switched on, seconds after it came; -1, at once, when it is not new. */
+  const pressOf = (kind: number) => (first ? pressAt(kind) : -1);
 
   const update: Body['update'] = (p, dt, k = 0, aspect = 1.6) => {
     kick = k;
@@ -638,6 +644,8 @@ export const createBody = (world?: World): Body => {
     }
     gait.update(p, dt, world && floorOf(world, p.y));
     const now = p.down ? -1 : p.wield ? 1 : p.rifled ? 3 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
+    const f = fresh(p);
+    first = now !== drawn ? f : first && !(me?.reload && !p.reload);
     since = now !== drawn || (me?.reload && !p.reload) ? 0 : since + dt;
     drawn = now;
     me = { ...p };
@@ -996,10 +1004,36 @@ export const createBody = (world?: World): Body => {
         }
         curls[0] += (0.9 - curls[0]) * onLoad;
       }
-      // The left index presses the button of the gun in hand as it powers on (the user,
-      // 2026-11-09): the hand comes off where it was, turns, the index out, onto the button, and
-      // back. The katana's is the right thumb's (draw()).
-      const pw = sd < 0 && me && sp < 0 && !me.wield ? poke(since, pressAt(pk)) * w.gun * free : 0;
+      // Each weapon comes on its own way (the user, 2026-11-09): the left index presses the laser
+      // rifle's button, the hand off its front grip, flat, the index out, and back; the right thumb
+      // presses the plasma gun's and the katana's (draw()); the left hand turns the rail gun's
+      // capsule (below).
+      const pw = sd < 0 && me && sp < 0 && pk == 3 ? poke(since, pressOf(pk)) * w.gun * free : 0;
+      // The rail gun's capsule: the left hand off the front grip onto its side, turning it a
+      // quarter of a turn with the wrist, as it screws a new one in, and back.
+      const tw = sd < 0 && me && sp < 0 && pk == 2 ? poke(since, pressOf(2)) * w.gun * free : 0;
+      if (tw > 0.002) {
+        const th = tune(since, pressOf(2));
+        const [foot, [, , up]] = loadFrame(gp, ga, 2, -1, 1, 0, th);
+        const mid = [0, 1, 2].map(i => foot[i] + up[i] * 0.04) as Vec3;
+        const o = rotate(mix([0, 0, 0], ga[0], -1), mix([0, 0, 0], up, th));
+        [0, 1, 2].forEach(i => (mid[i] += o[i] * 0.026));
+        const held = { ...q, rot: q.rot.slice() };
+        shrug(held, s, arm, add(eye, turn(mid)));
+        wield(
+          held,
+          s,
+          arm,
+          add(eye, turn(mid)),
+          unit(turn(up)),
+          turn([-0.5, -1, -0.35]),
+          turn(mix([0, 0, 0], o, -1)),
+        );
+        for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
+          q.rot[k] = slerp(q.rot[k], held.rot[k], tw);
+        }
+        curls[0] += (0.9 - curls[0]) * tw;
+      }
       if (sd < 0) {
         pointing = pw;
       }
@@ -1043,8 +1077,12 @@ export const createBody = (world?: World): Body => {
       if (s) {
         const colors = palette(color);
         skin(out, body(2), s, colors);
-        // The right thumb presses the katana's button as it comes on.
-        const push = me?.wield && swapOf(me) < 0 && grasp > 0.2 ? poke(since) : 0;
+        // The right thumb presses the button of the katana or the plasma gun as it comes on.
+        const tk = me?.wield ? 1 : me ? kindOf(me) : -1;
+        const push =
+          me && swapOf(me) < 0 && ((tk == 1 && grasp > 0.2) || (tk == 0 && hold > 0.2))
+            ? poke(since, pressOf(tk))
+            : 0;
         [J.HAND_L, J.HAND_R].forEach((j, i) => {
           const q = s.rot[j];
           hand(
@@ -1057,7 +1095,7 @@ export const createBody = (world?: World): Body => {
             colors[7],
             i ? 0 : pointing,
             i * push,
-            thumbTo(1),
+            thumbTo(Math.max(tk, 0)),
           );
         });
         if (hold > 0.2) {
@@ -1067,7 +1105,7 @@ export const createBody = (world?: World): Body => {
           const kind = me ? kindOf(me) : 0;
           const rail = kind == 2;
           const sp = me ? swapOf(me) : -1;
-          const on = since - pressAt(kind);
+          const on = since - Math.max(pressOf(kind), 0);
           held(
             out,
             s.pos[J.HAND_R],
@@ -1088,7 +1126,8 @@ export const createBody = (world?: World): Body => {
               empty: !(kind == 3 ? me?.clip : rail ? me?.cap : me?.mag),
               screen: sp < 0 ? span(on, GUN_ON.from, GUN_ON.up) : 1 - ease(span(sp, 0.1, 0.2)),
               digits: sp < 0 && on >= GUN_ON.digits,
-              press: sp < 0 ? span(poke(since, pressAt(kind)), 0.8, 1) : 0,
+              press: sp < 0 && kind != 2 ? span(poke(since, pressOf(kind)), 0.8, 1) : 0,
+              tune: rail && sp < 0 ? tune(since, pressOf(2)) : 0,
               cells: me && cellsOf(me),
               heat: (me?.heat ?? 0) / HEAT_MAX,
               hot: me?.hot,
@@ -1103,10 +1142,10 @@ export const createBody = (world?: World): Body => {
             1,
             clock,
             clamp(grasp * 1.5 - 0.5),
-            // The thumb presses the button on the hilt, and the blade comes out of the guard, a light saber's.
-            power(since - PRESS, 0.3),
-            ease(span(since, PRESS, PRESS + 0.25)),
-            span(poke(since), 0.8, 1),
+            // The thumb presses the button on the hilt and the blade lights up, all of it: it is no
+            // light saber (the user, 2026-11-09).
+            power(since - Math.max(pressOf(1), 0), 0.3),
+            span(poke(since, pressOf(1)), 0.8, 1),
           );
         }
         const [base, point] = ends(s.pos[J.HAND_R], s.rot[J.HAND_R]);

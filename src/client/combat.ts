@@ -27,7 +27,7 @@ import type { Audio, Loop } from './audio';
 import type { Balls } from './balls';
 import type { Tracer } from './beams';
 import type { Effects } from './effects';
-import { CUES, aimed, charge, focus, kindOf, swapOf, tip } from './gun';
+import { CUES, aimed, charge, firsts, focus, kindOf, pressAt, swapOf, tip } from './gun';
 import type { Hud } from './hud';
 import { basis } from './mesh';
 import type { Vec3 } from './mesh';
@@ -239,13 +239,23 @@ export const createCombat = (
   /** The weapon in the hand of `p`: 0 the gun, 1 the katana, 2 the rail gun, -1 none. */
   const inHand = (p: Blade) =>
     p.down ? -1 : p.wield ? 1 : p.rifled ? 3 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
+  /** Whether the weapon in a player's hand has just come to it for the first time (firsts()). */
+  const fresh = firsts();
+  /** Sounds to play later: when (ms), which, where, and how loud and fast. */
+  const later: [number, number, Vec3 | undefined, number, number][] = [];
+  let clock = 0;
+  /** Plays `id` now, or once the thumb or the finger presses the button of a weapon taken for the first time, `first` its kind. */
+  const boot = (id: number, at: Vec3 | undefined, g: number, r: number, first: number) =>
+    first < 0
+      ? audio.play(id, at, g, r)
+      : later.push([clock + 1000 * pressAt(first), id, at, g, r]);
   /** The sounds of a swap as it passes its cues (CUES), the boot of a gun that comes to hand or whose swap is done, and the hiss of an overheating, at `at`. */
-  const reloads = (was: Blade, now: Blade, at?: Vec3) => {
+  const reloads = (was: Blade, now: Blade, at?: Vec3, first = -1) => {
     const [a, b, r] = [swapOf(was), swapOf(now), +!!now.railed];
     CUES[r].forEach((c, i) => a < c && b >= c && audio.play(RELOADS[r][i], at, 0.7));
     const h = inHand(now);
     if (h != 1 && h >= 0 && (inHand(was) != h || (a >= 0 && b < 0))) {
-      audio.play(SOUND.BOOT, at, 0.5, r ? 1.4 : 1);
+      boot(SOUND.BOOT, at, 0.5, r ? 1.4 : 1, first);
     }
     // The rail gun overheating hisses.
     if (now.hot && !was.hot) {
@@ -253,10 +263,10 @@ export const createCombat = (
     }
   };
   /** The shing of the katana coming into the hand or leaving it (not when it is lost). */
-  const shing = (was: Blade, now: Blade, at?: Vec3) =>
+  const shing = (was: Blade, now: Blade, at?: Vec3, first = -1) =>
     !!was.wield != !!now.wield &&
     (now.wield || now.blade) &&
-    audio.play(now.wield ? SOUND.IGNITE : SOUND.SHING, at, 0.6, now.wield ? 1 : 0.85);
+    (now.wield ? boot(SOUND.IGNITE, at, 0.6, 1, first) : audio.play(SOUND.SHING, at, 0.6, 0.85));
 
   return {
     step(a, b) {
@@ -284,6 +294,15 @@ export const createCombat = (
     },
 
     frame(v, me, others, keys, dt, now = 0) {
+      clock = now;
+      // The boots waiting for their press.
+      for (let i = later.length; i--;) {
+        const [t, id, at, g, r] = later[i];
+        if (now >= t) {
+          audio.play(id, at, g, r);
+          later.splice(i, 1);
+        }
+      }
       tracer.update(dt);
       if (me) {
         const was = before;
@@ -294,9 +313,10 @@ export const createCombat = (
             audio.play(SOUND.ZAP);
           }
         }
+        const f = fresh(me) ? inHand(me) : -1;
         if (was) {
-          shing(was, me);
-          reloads(was, me);
+          shing(was, me, undefined, f);
+          reloads(was, me, undefined, f);
         }
         if (was && me.hp < was.hp) {
           audio.play(me.down && !was.down ? SOUND.DOWN : SOUND.HURT);
@@ -412,9 +432,10 @@ export const createCombat = (
         if (c >= 0) {
           swish(c + (p.heavy ? HEAVY_CUE : 0), at);
         }
+        const f = fresh(p) ? inHand(p) : -1;
         if (old) {
-          shing(old, p, at);
-          reloads(old, p, at);
+          shing(old, p, at, f);
+          reloads(old, p, at, f);
         }
         blades.set(p.id, {
           swing: p.swing,

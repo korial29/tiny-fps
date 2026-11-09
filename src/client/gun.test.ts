@@ -28,6 +28,7 @@ import {
   PRESS,
   pressAt,
   buttonAt,
+  firsts,
   poke,
   railgun,
   readout,
@@ -911,6 +912,30 @@ describe('the laser rifle', () => {
 });
 
 describe('the button that powers a weapon on (the user, 2026-11-09)', () => {
+  it('is pressed only when a weapon comes to hand the first time, again once lost and taken again', () => {
+    const fresh = firsts();
+    const p = {
+      id: 1,
+      ammo: 15,
+      blade: true,
+      rail: -1,
+      rifle: -1,
+      down: 0,
+      wield: false,
+      rifled: false,
+      railed: false,
+    };
+    expect(fresh(p)).toBe(true);
+    expect(fresh(p)).toBe(false);
+    // The katana drawn, then the gun back in hand: only the katana is new.
+    expect(fresh({ ...p, wield: true })).toBe(true);
+    expect(fresh(p)).toBe(false);
+    // Down, every weapon lost; taken again, the gun is new again, and another player's are his own.
+    expect(fresh({ ...p, ammo: -1, blade: false, down: 60 })).toBe(false);
+    expect(fresh(p)).toBe(true);
+    expect(fresh({ ...p, id: 2 })).toBe(true);
+  });
+
   it('is pressed by the left index: the hand where it was, on the button by PRESS, then back', () => {
     expect(poke(0)).toBe(0);
     expect(poke(PRESS - 0.2)).toBe(0);

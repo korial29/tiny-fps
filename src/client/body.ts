@@ -994,9 +994,10 @@ export const createBody = (world?: World): Body => {
         // The gun's model frame in the world, from the holster.
         const [bat, bax]: [Vec3, Vec3[]] = [add(eye, turn(gp)), ga.map(turn)];
         const [b, n] = buttonAt(pk, bat, bax);
-        // The index into the button along its face, the thumb down the gun: the back of the hand to the view (the user, 2026-11-09).
-        const into = mix([0, 0, 0], n, -1);
-        const g = unit(across(mix([0, 0, 0], bax[1], -1), into));
+        // The index level with the gun, into the button, the thumb back toward the player: the hand
+        // flat, its back up (the user, 2026-11-09).
+        const into = unit(across(mix([0, 0, 0], n, -1), bax[1]));
+        const g = unit(across(mix([0, 0, 0], bax[2], -1), into));
         const sid = unit(along(into, g, -S));
         const fing = along(mix([0, 0, 0], g, S), sid, C);
         const th = along(mix([0, 0, 0], g, C), sid, -S);

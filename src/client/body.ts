@@ -888,6 +888,10 @@ export const createBody = (world?: World): Body => {
     at[1] += 0.03 * rf * tipped;
     at[2] += 0.1 * rf * tipped;
     at[1] += (r ? 0.03 : 0.17) * tipped;
+    // The slap home jolts the gun or the rifle up 1.5 cm, and it settles.
+    if (sp >= 0 && !me?.railed) {
+      at[1] += 0.015 * Math.max(0, 1 - Math.abs(sp - TAP - 0.02) / 0.04);
+    }
     // A shot kicks the nose up; a swap lifts it too, the rail gun's down.
     const l = Math.hypot(...target);
     const to: Vec3 = [
@@ -1134,10 +1138,11 @@ export const createBody = (world?: World): Body => {
           me ? kindOf(me) : 0,
           Math.max(sp, rail ? 0.42 : 0.4),
         );
-        // The battery in but for its last 6 mm, the palm drops 6 cm off it and slaps it home at TAP.
+        // The battery in but for its last 12 mm, the palm drops 12 cm off it and slaps it home at
+        // TAP, faster and faster (the user, 2026-11-09: insist on the slap).
         const tap =
-          0.06 *
-          (sp < TAP - 0.04 ? ease(span(sp, 0.72, TAP - 0.04)) : 1 - span(sp, TAP - 0.04, TAP) ** 2);
+          0.12 *
+          (sp < TAP - 0.05 ? ease(span(sp, 0.7, TAP - 0.05)) : 1 - span(sp, TAP - 0.05, TAP) ** 3);
         const mid = [0, 1, 2].map(i => foot[i] + up[i] * (rail ? 0.04 : -0.01 - tap)) as Vec3;
         let fing: Vec3 | undefined;
         if (rail) {

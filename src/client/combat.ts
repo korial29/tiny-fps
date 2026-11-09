@@ -252,7 +252,8 @@ export const createCombat = (
   /** The sounds of a swap as it passes its cues (CUES), the boot of a gun that comes to hand or whose swap is done, and the hiss of an overheating, at `at`. */
   const reloads = (was: Blade, now: Blade, at?: Vec3, first = -1) => {
     const [a, b, r] = [swapOf(was), swapOf(now), +!!now.railed];
-    CUES[r].forEach((c, i) => a < c && b >= c && audio.play(RELOADS[r][i], at, 0.7));
+    // The click of the slap home loud (the user, 2026-11-09).
+    CUES[r].forEach((c, i) => a < c && b >= c && audio.play(RELOADS[r][i], at, !r && i ? 1 : 0.7));
     const h = inHand(now);
     if (h != 1 && h >= 0 && (inHand(was) != h || (a >= 0 && b < 0))) {
       boot(SOUND.BOOT, at, 0.5, r ? 1.4 : 1, first);

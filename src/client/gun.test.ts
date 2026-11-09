@@ -761,9 +761,9 @@ describe('the battery and the capsule', () => {
     expect(out(0.39)).toBeGreaterThan(0.5);
     expect(out(0.4)).toBeCloseTo(0.22, 6);
     expect(out(0.6)).toBeLessThan(out(0.45));
-    // In but for its last 6 mm until the palm slaps it home at TAP, when it clicks (the user, 2026-11-09).
-    expect(out(0.75)).toBeCloseTo(0.006, 6);
-    expect(out(TAP - 0.021)).toBeCloseTo(0.006, 6);
+    // In but for its last 12 mm until the palm slaps it home at TAP, when it clicks (the user, 2026-11-09).
+    expect(out(0.75)).toBeCloseTo(0.012, 6);
+    expect(out(TAP - 0.013)).toBeCloseTo(0.012, 6);
     expect(out(TAP)).toBe(0);
     expect(out(0.9)).toBe(0);
     expect(CUES[0][1]).toBe(TAP);

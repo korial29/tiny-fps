@@ -32,7 +32,7 @@ import {
   tip,
 } from './gun';
 import type { Lit } from './gun';
-import { SHINE, STRIDE, unit } from './mesh';
+import { SHINE, STRIDE, dot, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { axis, turn } from './rig';
 import type { Quat } from './rig';
@@ -121,11 +121,29 @@ describe('the gun model', () => {
     const ring = near.filter(v => Math.abs(v.p[2] - 0.005) < 1e-9 && v.layer == SHINE);
     expect(ring.length).toBeGreaterThanOrEqual(12);
     // No sharp edge on top: the normals of the top vertices all face up.
-    const crest = near.filter(v => v.p[1] > 0.135 && v.layer == SHINE);
+    // (The back rounds over onto the counter's flat, behind 2 cm.)
+    const crest = near.filter(v => v.p[1] > 0.135 && v.p[2] < 0.02 && v.layer == SHINE);
     expect(crest.length).toBeGreaterThan(20);
     for (const v of crest) {
       expect(v.n[1]).toBeGreaterThan(0.7);
     }
+  });
+
+  it('flattens its back into a glossy black face leaning toward the player, the screen’s support', () => {
+    // The face: through (0, 0.125, 0.04), facing back and up.
+    const n = unit([0, 0.469, 0.883]);
+    const out = (p: Vec3) => (p[1] - 0.125) * n[1] + (p[2] - 0.04) * n[2];
+    // Nothing of the body behind it.
+    expect(Math.max(...near.map(v => out(v.p)))).toBeLessThanOrEqual(0);
+    // On it, glossy black facing out of it.
+    const face = near.filter(v => v.layer == SHINE && Math.max(...v.c) < 0.03);
+    expect(face.length).toBeGreaterThan(20);
+    // At its edge it rounds into the metal; most of it faces straight out.
+    for (const v of face) {
+      expect(out(v.p)).toBeGreaterThan(-0.0015);
+      expect(dot(v.n, n)).toBeGreaterThan(0.7);
+    }
+    expect(face.filter(v => dot(v.n, n) > 0.95).length).toBeGreaterThan(face.length / 2);
   });
 
   it('is about a hand and a half long, with the muzzle on the tip of its nose', () => {
@@ -365,45 +383,14 @@ describe('the readout on the back of the gun', () => {
   const screen = (n: number) => v(n).filter(x => x.layer == -1 && Math.max(...x.c) <= 0.1);
   const SEGS = [6, 2, 5, 5, 4, 5, 6, 3, 7, 6];
 
-  it('is a small block with a dark screen and two digits of thick quads, a pair of triangles to a segment', () => {
+  it('is a dark screen and two digits of thick quads on the gun’s own back, a pair of triangles to a segment', () => {
     for (const n of [0, 7, 40, 59, 60, 99]) {
       const [a, b] = `${n}`.padStart(2, '0');
       expect(digits(n)).toHaveLength((SEGS[+a] + SEGS[+b]) * 6);
-      // The block: five spans of rings of 16 (two triangles a step), a fan of 16 over its top;
-      // the screen a fan of 24.
-      expect(metal(n)).toHaveLength(5 * 16 * 6 + 16 * 3);
+      // No block of its own: the screen, a fan of 24, lies on the gun's flat back.
+      expect(metal(n)).toHaveLength(0);
       expect(screen(n)).toHaveLength(72);
     }
-  });
-
-  it('paints the block in the gun’s own metal, lit by each face, so it does not stand apart from the body', () => {
-    const paint = verts(gun(1)).map(x => x.c);
-    for (const x of metal(40)) {
-      // Violet: blue over red over green, as the body's metal is.
-      expect(x.c[2]).toBeGreaterThan(x.c[0]);
-      expect(x.c[0]).toBeGreaterThan(x.c[1]);
-      // Within the range of the body's colours: the block's flat top faces straight up, a hair
-      // more than any of the body's faces.
-      for (const k of [0, 1, 2]) {
-        expect(x.c[k]).toBeLessThanOrEqual(Math.max(...paint.map(c => c[k])) + 0.002);
-      }
-    }
-    // The top catches the light more than the back face, as the body's top does.
-    const lum = (c: number[]) => c[0] + c[1] + c[2];
-    const top = metal(40).filter(x => x.n[1] > 0.9);
-    const back = metal(40).filter(x => x.n[2] > 0.85);
-    expect(lum(top[0].c)).toBeGreaterThan(lum(back[0].c));
-  });
-
-  it('keeps the block’s base inside the body: no corner sticks out of it', () => {
-    // The body's half width at the block's back, from its rings, is wider than the block's base there.
-    const base = metal(40).filter(x => x.p[1] < 0.101);
-    const back = Math.max(...base.map(x => x.p[2]));
-    const half = Math.max(...base.filter(x => x.p[2] > back - 1e-6).map(x => Math.abs(x.p[0])));
-    const body = verts(gun(1)).filter(
-      x => x.layer == SHINE && Math.abs(x.p[2] - back) < 0.008 && Math.abs(x.p[1] - 0.1) < 0.01,
-    );
-    expect(Math.max(...body.map(x => Math.abs(x.p[0])))).toBeGreaterThan(half);
   });
 
   it('is glowing but modest (unlit, layer -2, near 1 so the bloom does not smear it): cyan above four, red at four and under', () => {
@@ -422,23 +409,30 @@ describe('the readout on the back of the gun', () => {
     expect(digits(5)[0].c[0]).toBeLessThan(digits(5)[0].c[2]);
   });
 
-  it('sits on a black square filling the face, digits about 2.8 cm wide and 1.35 cm high', () => {
+  it('sits on a black rounded trapezoid, narrow at the top, digits about 4.2 cm wide and 2 cm high', () => {
     const xs = digits(88).map(x => x.p[0]);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.027);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.029);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.041);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.043);
     const ys = digits(88).map(x => x.p[1]);
-    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.011);
-    // The square is the face's width less its rounded edges, 3.6 cm, its corners barely rounded.
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.016);
     const sx = screen(88).map(x => x.p[0]);
-    expect(Math.max(...sx) - Math.min(...sx)).toBeGreaterThan(0.0355);
-    expect(Math.max(...sx) - Math.min(...sx)).toBeLessThan(0.0362);
+    expect(Math.max(...sx) - Math.min(...sx)).toBeGreaterThan(0.055);
+    expect(Math.max(...sx) - Math.min(...sx)).toBeLessThan(0.065);
+    // Narrower near its top than near its foot.
     const sy = screen(88).map(x => x.p[1]);
-    const top = Math.max(...sy);
-    expect(screen(88).some(x => Math.abs(x.p[0]) > 0.0175 && top - x.p[1] < 0.001)).toBe(true);
+    const [lo, hi] = [Math.min(...sy), Math.max(...sy)];
+    // The corners of its upper half sit further in than those of its lower half.
+    const mid = (lo + hi) / 2;
+    const half = (up: boolean) =>
+      Math.max(
+        ...screen(88)
+          .filter(x => x.p[1] > mid === up)
+          .map(x => Math.abs(x.p[0])),
+      );
+    expect(half(true)).toBeLessThan(half(false) - 0.004);
     // The digits stay inside it.
-    expect(Math.max(...xs.map(Math.abs))).toBeLessThan(0.0149);
-    expect(Math.max(...ys)).toBeLessThan(top);
-    expect(Math.min(...ys)).toBeGreaterThan(Math.min(...sy));
+    expect(Math.max(...ys)).toBeLessThan(hi);
+    expect(Math.min(...ys)).toBeGreaterThan(lo);
   });
 
   it('shows no gauge unless the gun charges, and then CHARGE_MAX cells under the digits, `level` of them lit', () => {
@@ -454,7 +448,7 @@ describe('the readout on the back of the gun', () => {
     const low = Math.min(...digits(40).map(x => x.p[1]));
     for (const x of cells(3)) {
       expect(x.p[1]).toBeLessThan(low);
-      expect(Math.abs(x.p[0])).toBeLessThan(0.023);
+      expect(Math.abs(x.p[0])).toBeLessThan(0.03);
     }
     // Cyan while it grows, orange at the full charge.
     expect(cells(3)[0].c[2]).toBeGreaterThan(cells(3)[0].c[0]);
@@ -464,31 +458,24 @@ describe('the readout on the back of the gun', () => {
     expect(readout(40, 2)).not.toBe(readout(40, 3));
   });
 
-  it('keeps the digits inside the screen, and the screen inside the back face of the block', () => {
+  it('keeps the digits inside the screen', () => {
     const sx = screen(88).map(x => x.p[0]);
     const dx = digits(88).map(x => x.p[0]);
     expect(Math.min(...dx)).toBeGreaterThan(Math.min(...sx));
     expect(Math.max(...dx)).toBeLessThan(Math.max(...sx));
-    // The back face is 4 cm wide at the top.
-    expect(Math.max(...sx) - Math.min(...sx)).toBeLessThan(0.04);
   });
 
-  it('centres the screen up the face, and the digits up the screen', () => {
-    // Along the face's slope, from its knee: the screen's ends, and the digits'.
-    const up = unit([0, 0.1504 - 0.131, 0.038 - 0.0483]);
-    const along = (x: { p: number[] }) => (x.p[1] - 0.131) * up[1] + (x.p[2] - 0.0483) * up[2];
+  it('centres the digits up the screen, the screen on the flat of the gun’s back', () => {
+    // Along the face's slope, from BACK: the screen's ends, and the digits'.
+    const up = unit([0, 0.883, -0.469]);
+    const along = (x: { p: number[] }) => (x.p[1] - 0.125) * up[1] + (x.p[2] - 0.04) * up[2];
     const span = (xs: { p: number[] }[]) => [
       Math.min(...xs.map(along)),
       Math.max(...xs.map(along)),
     ];
     const [s0, s1] = span(screen(88));
     const [d0, d1] = span(digits(88));
-    // The face's flat part: from the knee to the top's rounded edge, 1.5 mm under the top.
-    const face = (0.1535 - 0.0015 - 0.131) / up[1];
-    expect(s0).toBeGreaterThan(0);
-    expect(s0).toBeLessThan(0.0005);
-    expect(s1).toBeLessThan(face);
-    expect(s1).toBeGreaterThan(face - 0.0005);
+    expect((s0 + s1) / 2).toBeCloseTo(-0.006, 3);
     expect(Math.abs(d0 - s0 - (s1 - d1))).toBeLessThan(1e-4);
   });
 
@@ -499,36 +486,20 @@ describe('the readout on the back of the gun', () => {
       }
     }
     const fx = frame(88).map(x => Math.abs(x.p[0]));
-    expect(Math.max(...fx)).toBeGreaterThan(0.0155);
-    expect(Math.max(...fx)).toBeLessThan(0.017);
+    expect(Math.max(...fx)).toBeGreaterThan(0.025);
+    expect(Math.max(...fx)).toBeLessThan(0.031);
     expect(Math.max(...fx)).toBeLessThan(
       Math.max(...screen(88).map(x => Math.abs(x.p[0]))) - 0.001,
     );
   });
 
-  it('is low on the body, not a sign: the block stands at most 2 cm over its top', () => {
-    const top = Math.max(...v(88).map(x => x.p[1]));
-    // The body's highest point, 0.144, and the block's top, a little over it at the back.
-    expect(top).toBeLessThan(0.16);
-    expect(top).toBeGreaterThan(0.145);
-  });
-
-  it('has the block tapering: narrow at the top, wider at the base, so the sides slope in', () => {
-    const m = metal(88);
-    const widthAt = (lo: number, hi: number) => {
-      const xs = m.filter(x => x.p[1] >= lo && x.p[1] <= hi).map(x => x.p[0]);
-      return Math.max(...xs) - Math.min(...xs);
-    };
-    expect(widthAt(0.15, 0.2)).toBeLessThan(widthAt(0.1, 0.13));
-  });
-
-  it('sits on the back of the top of the body, over its back half', () => {
+  it('sits on the back of the body, facing the player', () => {
     for (const x of v(88)) {
-      expect(Math.abs(x.p[0])).toBeLessThan(0.04);
-      expect(x.p[2]).toBeGreaterThan(0);
-      expect(x.p[2]).toBeLessThan(0.06);
-      expect(x.p[1]).toBeGreaterThan(0.099);
-      expect(x.p[1]).toBeLessThan(0.16);
+      expect(Math.abs(x.p[0])).toBeLessThan(0.035);
+      expect(x.p[2]).toBeGreaterThan(0.03);
+      expect(x.p[2]).toBeLessThan(0.07);
+      expect(x.p[1]).toBeGreaterThan(0.09);
+      expect(x.p[1]).toBeLessThan(0.15);
     }
   });
 

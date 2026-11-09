@@ -14,6 +14,8 @@ export interface Brush {
   side: number;
   /** Colour of its ambient light, linear RGB 0 to 1. Absent: white. */
   tint?: Vec3;
+  /** Collided with but not drawn: the shape under a drawn-only mesh (the moon's domes). */
+  ghost?: boolean;
 }
 
 /** Feet x, y, z (standing on a top) and the yaw to face. */

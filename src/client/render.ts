@@ -322,6 +322,9 @@ export const level = (world: World): number[] => {
   const out: number[] = [];
   const keys = palette(world).map(String);
   brushes.forEach((b, bi) => {
+    if (b.ghost) {
+      return;
+    }
     const light = 1 + 2 * Math.max(0, keys.indexOf(`${b.tint}`));
     for (let a = 0; a < 3; a++) {
       const [p, q] = [(a + 1) % 3, (a + 2) % 3];
@@ -331,6 +334,7 @@ export const level = (world: World): number[] => {
         const covered = brushes.some(
           (c, j) =>
             j != bi &&
+            !c.ghost &&
             (up ? c.min[a] : c.max[a]) == at &&
             c.min[p] <= b.min[p] &&
             c.max[p] >= b.max[p] &&

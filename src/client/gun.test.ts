@@ -609,6 +609,23 @@ describe('the rail gun’s counter and socket', () => {
     }
   });
 
+  it('details the rail gun’s tube near: grooves round it, seams, cross-head screws; none far', () => {
+    /** Near-black on the receiver (z 0.1 back to -0.13 forward) and the barrel. */
+    const dark = (v: number[], z0: number, z1: number) =>
+      verts(v).filter(x => x.layer != -2 && Math.max(...x.c) < 0.07 && x.p[2] < z0 && x.p[2] > z1)
+        .length;
+    expect(dark(railgun(1), 0.1, -0.13)).toBeGreaterThan(800);
+    expect(dark(railgun(0), 0.1, -0.13)).toBe(0);
+    // Three grooves round the barrel, between the insulators and the coils.
+    expect(dark(railgun(1), -0.17, -0.29)).toBeGreaterThan(3 * 10 * 6);
+    // The grooves follow the receiver's faces: none sunk in it, none off it.
+    for (const x of verts(railgun(1)).filter(
+      x => Math.max(...x.c) < 0.07 && x.layer != -2 && x.p[2] < 0.09 && x.p[2] > -0.12,
+    )) {
+      expect(Math.abs(x.p[0])).toBeLessThan(0.0365);
+    }
+  });
+
   it('screws the capsule’s thread into a steel collar on the receiver', () => {
     // The collar stands over the receiver's top round the capsule's foot.
     const near = verts(railgun(1)).filter(

@@ -84,6 +84,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const audio = createAudio();
   audio.mute(savedMute());
   hud.mute(audio.muted);
+  hud.visor(!!world.def.helmets);
   const ctl = createInput(canvas, () => hud.mute(toggleMute(audio)));
   // The click that takes the pointer lock is the gesture that lets the sound start.
   canvas.addEventListener('click', () => audio.unlock());

@@ -739,6 +739,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           runners.get(p.id)!,
           rgb(colors.get(p.id) ?? '#888'),
           d < CLOSE ? 3 : +(d < NEAR),
+          world.def.helmets,
         );
         if (s) {
           chests.set(p.id, [s.pos[JOINT.CHEST], s.rot[JOINT.CHEST]]);

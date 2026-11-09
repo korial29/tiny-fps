@@ -519,6 +519,18 @@ export interface Skin {
   l?: Uint8Array;
   /** Per vertex how far it turns with the jaw when the mouth opens (radians, see skin()). */
   d: Float32Array;
+  /**
+   * The eye's own body only: the vertices round its shoulders that skin() relaxes once posed, how
+   * much (0 to 1), and per each (offsets into the lists) its neighbours and its triangles.
+   */
+  r?: {
+    k: Uint32Array;
+    g: Float32Array;
+    no: Uint32Array;
+    n: Uint32Array;
+    to: Uint32Array;
+    t: Uint32Array;
+  };
 }
 
 const sgn = (v: number, e: number) => Math.sign(v) * Math.abs(v) ** (2 / e);
@@ -955,6 +967,44 @@ const generate = (lod: number): Skin => {
     // Gone some centimetres off its surface, so the rest of the body keeps the palette's colours.
     o[i] = reach ? 1 - 0.9 * cos * clamp((r + reach - l) / reach) ** 0.8 : 1;
   }
+  // The eye's own shoulders bend hard when its arms come up (a katana held before it), on few
+  // rows: the vertices round them are relaxed once posed, in skin() (the user, 2026-11-09).
+  let r: Skin['r'];
+  if (lod == 2) {
+    const tris = Array.from({ length: w.length }, () => [] as number[]);
+    for (let i = 0; i < t.length; i += 3) {
+      for (let e = 0; e < 3; e++) {
+        tris[t[i + e]].push(i);
+      }
+    }
+    const ks: number[] = [];
+    const gs: number[] = [];
+    for (let k = 0; k < w.length; k++) {
+      const [ax, y] = [Math.abs(v[k * 6]), v[k * 6 + 1]];
+      const g =
+        soft(Math.min(ax - 0.07, 0.34 - ax) / 0.04) * soft(Math.min(y - 1.2, 1.6 - y) / 0.06);
+      // Not the poles, where many triangles meet: drawn to their ring, they would sink in a dimple.
+      if (g > 0 && near[k].size && near[k].size <= 8) {
+        ks.push(k);
+        gs.push(g);
+      }
+    }
+    const [no, n, to, tt] = [[0], [] as number[], [0], [] as number[]];
+    for (const k of ks) {
+      n.push(...near[k]);
+      no.push(n.length);
+      tt.push(...tris[k]);
+      to.push(tt.length);
+    }
+    r = {
+      k: new Uint32Array(ks),
+      g: new Float32Array(gs),
+      no: new Uint32Array(no),
+      n: new Uint32Array(n),
+      to: new Uint32Array(to),
+      t: new Uint32Array(tt),
+    };
+  }
   return {
     v: new Float32Array(v),
     o,
@@ -964,6 +1014,7 @@ const generate = (lod: number): Skin => {
     c: new Uint8Array(c),
     l: new Uint8Array(l),
     d: new Float32Array(d),
+    r,
   };
 };
 
@@ -1053,6 +1104,46 @@ const swing = (rot: Quat[], j: number): Quat => {
 /** The inside of an open mouth. */
 const MOUTH = [0.09, 0.03, 0.03];
 
+/**
+ * The posed vertices `r` lists (Q) relaxed: drawn toward the mean of their neighbours, the
+ * shrinking undone every other pass (Taubin), then their normals the area-weighted mean of their
+ * triangles' again.
+ */
+const relax = (s: Skin, r: NonNullable<Skin['r']>) => {
+  const P = new Float32Array(r.k.length * 3);
+  for (let pass = 0; pass < 14; pass++) {
+    const f = pass % 2 ? -0.53 : 0.5;
+    r.k.forEach((k, i) => {
+      for (let d = 0; d < 3; d++) {
+        let m = 0;
+        for (let e = r.no[i]; e < r.no[i + 1]; e++) {
+          m += Q[r.n[e] * 6 + d];
+        }
+        P[i * 3 + d] = Q[k * 6 + d] + r.g[i] * f * (m / (r.no[i + 1] - r.no[i]) - Q[k * 6 + d]);
+      }
+    });
+    r.k.forEach((k, i) => {
+      for (let d = 0; d < 3; d++) {
+        Q[k * 6 + d] = P[i * 3 + d];
+      }
+    });
+  }
+  r.k.forEach((k, i) => {
+    const n = [0, 0, 0];
+    for (let e = r.to[i]; e < r.to[i + 1]; e++) {
+      const [a, b, c] = [0, 1, 2].map(j => s.t[r.t[e] + j] * 6);
+      const [u, v] = [b, c].map(o => [0, 1, 2].map(d => Q[o + d] - Q[a + d]));
+      n[0] += u[1] * v[2] - u[2] * v[1];
+      n[1] += u[2] * v[0] - u[0] * v[2];
+      n[2] += u[0] * v[1] - u[1] * v[0];
+    }
+    const l = Math.hypot(...n) || 1;
+    for (let d = 0; d < 3; d++) {
+      Q[k * 6 + 3 + d] = n[d] / l;
+    }
+  });
+};
+
 /** Per joint the dual quaternion that carries the rest pose to the pose: the rotation, then its dual. */
 const D = new Float64Array((JOINTS + 2) * 8);
 const E = new Float64Array(8);
@@ -1115,6 +1206,9 @@ export const skin = (
       Q[h + 1] = y + 2 * (E[3] * q + E[2] * p - E[0] * r) + e * m[1];
       Q[h + 2] = z + 2 * (E[3] * r + E[0] * q - E[1] * p) + e * m[2];
     }
+  }
+  if (s.r) {
+    relax(s, s.r);
   }
   // Eyes `shut`: the lids, the skin, over the whites, the irises and their specks (unlit). Open,
   // the line between the lips is the mouth's dark.

@@ -6,6 +6,7 @@ import { STILL, spawn } from '../shared/physics';
 import { encodeSnapshot } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import { HIGHLINE, ROOFTOPS } from '../shared/map';
+import { MOON } from '../shared/moon';
 import { FLAG, TEAM } from '../shared/types';
 import type { FlagState, PlayerInfo, SnapPlayer, SocketLike, Snapshot } from '../shared/types';
 import { build } from '../shared/world';
@@ -144,6 +145,52 @@ describe('tinyFps, the match through the socket', () => {
     expect(q('section').hidden).toBe(true);
     expect(q('output').textContent).toBe('New match');
     expect(q('nav').textContent).toContain('RED 0');
+  });
+
+  it('shows the maps read-only to a player who does not host, with the host named', () => {
+    text({ t: 'roster', you: 0, players: roster, map: 'highline', host: 1 });
+    frames();
+    expect(q('menu').hidden).toBe(false);
+    expect(q('menu').textContent).toContain('Bob hosts');
+    const buttons = [...hud().querySelectorAll('button')];
+    expect(buttons.map(b => b.textContent)).toEqual([HIGHLINE.name, MOON.name]);
+    expect(buttons.every(b => b.disabled)).toBe(true);
+    expect(buttons[0].className).toBe('n');
+  });
+
+  it('lets the host pick the map of the next match, and shows the pick', () => {
+    text({ t: 'roster', you: 0, players: roster, map: 'highline', host: 0 });
+    frames();
+    expect(q('menu').textContent).toContain('You host');
+    hud().querySelectorAll('button')[1].click();
+    expect(JSON.parse(sent.at(-1) as string)).toEqual({ t: 'map', map: 'tranquility' });
+    text({ t: 'roster', you: 0, players: roster, map: 'highline', host: 0, next: 'tranquility' });
+    const [now, next] = [...hud().querySelectorAll('button')];
+    expect([now.textContent, now.className]).toEqual([`${HIGHLINE.name} (now)`, '']);
+    expect(next.className).toBe('n');
+    text({ t: 'end', score: [0, 0], players: [] });
+    snap({ over: true, clock: 7 });
+    frames();
+    expect(q('section').textContent).toContain(`Next match in 7 on ${MOON.name}`);
+  });
+
+  it('follows the room to another map on the same socket, without joining again', () => {
+    const told = vi.fn();
+    game.on('roster', told);
+    text({ t: 'roster', you: 0, players: roster, map: 'tranquility', host: 0 });
+    expect(told).toHaveBeenCalledOnce();
+    expect(host.childElementCount).toBe(1);
+    expect(game.players()).toEqual(roster);
+    snap();
+    frames();
+    expect(q('aside').textContent).toContain(MOON.name);
+    expect(q('nav').hidden).toBe(false);
+    expect(sent.filter(d => typeof d == 'string' && JSON.parse(d).t == 'join')).toHaveLength(1);
+    // The new scene sends its inputs on the socket.
+    const before = sent.length;
+    frames();
+    expect(sent.length).toBeGreaterThan(before);
+    expect(sent.at(-1)).toBeInstanceOf(ArrayBuffer);
   });
 
   it('tints the name tag of another player with his team colour', () => {

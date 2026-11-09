@@ -1,5 +1,5 @@
 // Wire format.
-// Text frames carry rare JSON messages (join, roster, full, end).
+// Text frames carry rare JSON messages (join, map, roster, full, end).
 // Binary frames carry the hot path: inputs (client → host) and snapshots (host → client).
 //
 // Input, 12 bytes: [type u8 = MSG_INPUT][seq u16][keys u16][yaw u16][pitch i16][view u16][frac u8]
@@ -54,7 +54,8 @@
 import { FLAG, KEY, MODE } from './types';
 import type { Ball, FlagState, Input, PlayerInfo, Snapshot } from './types';
 
-export type ClientText = { t: 'join'; name: string };
+/** join: the first frame of a peer. map: the host picks the map of the next match (MAPS key). */
+export type ClientText = { t: 'join'; name: string } | { t: 'map'; map: string };
 
 /** What a player did in a match, for the end screen: it carries the name and the team, which a leaver takes out of the roster. */
 export interface Result {
@@ -66,7 +67,18 @@ export interface Result {
 }
 
 export type ServerText =
-  | { t: 'roster'; you: number; players: PlayerInfo[]; map?: string }
+  /**
+   * Everyone in the room, `you` among them, the map played (MAPS key), the host's id (who picks
+   * the map) and the map he picked for the next match, when it is another one.
+   */
+  | {
+      t: 'roster';
+      you: number;
+      players: PlayerInfo[];
+      map?: string;
+      host?: number;
+      next?: string;
+    }
   | { t: 'full' }
   /** The match is over: the final captures of red and blue, and every player's result. */
   | { t: 'end'; score: [number, number]; players: Result[] };

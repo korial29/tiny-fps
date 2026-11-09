@@ -99,7 +99,13 @@ Each URL path is its own room: `/my-room` and `/other` are two separate games. A
 PORT=8787 npx tiny-fps-server
 ```
 
-`MAP=tranquility` plays the moon map (the default is `highline`). In local mode the host picks it with the client's `map` option, which the demo's Map menu sets.
+`MAP=tranquility` starts a new room on the moon map (the default is `highline`). In local mode the tab that hosts the room starts it on its client's `map` option, which the demo's Map menu sets.
+
+### The host picks the map
+
+The player in the room the longest is its **host**; when they leave, the next oldest player takes over. Press Esc in a game: the maps sit at the top of the screen. The host's are buttons, and the one they pick is played from the next match on, never in the middle of one (or from the next join when the room empties). Everyone else sees the maps read-only, with the host's name and pick, and the end screen says the map of the next match. The server checks that the pick comes from the host: anyone else's is ignored.
+
+The client follows the room: when the roster names another map, it builds that map on the same connection, so players keep their id, their team and the host role. The `map` option is only the map built until the roster comes.
 
 ### Sizing
 
@@ -199,7 +205,7 @@ The game is the movement and a capture the flag on top of it, with a tackle, a g
 
 - **Teams**: red and blue. A joiner goes to the smaller team (red on a tie), up to 16 players in all. Each team starts on its own tower and wears its colour, name tags included.
 - **Capture the flag**: touch the enemy flag, at its base or where it was dropped, to take it, and carry it to your own base while your own flag is there: that is a capture, and the flag goes home. Touch your own dropped flag to send it home at once; left alone it goes home after 10 seconds. A carrier who falls off the roofs or leaves drops it where he last stood. A tackled carrier drops it too, and it lies there for 2 seconds: nobody can send it home, and the carrier's teammates can grab it. There is a ring of light on each base, a marker toward each flag (and toward your base while you carry), a banner for each event and a sound for a take, a drop, a return and a capture.
-- **A match** ends at 3 captures or after 8 minutes, then everyone sees the result and each player's captures and returns for 10 seconds, and a new match starts with everyone back at their spawn.
+- **A match** ends at 3 captures or after 8 minutes, then everyone sees the result and each player's captures and returns for 10 seconds, and a new match starts with everyone back at their spawn, on the map the host picked.
 - **The map**: Highline, 94 by 240 m under an open sky, the same for both teams (the blue half is the mirror of the red one). Each team holds a 26 m tower with its flag and eight spawns. Three routes lead to the other tower, and they meet at the plaza in the middle. The **Spine** (west, 26 m) is the fast one, about 25 s by sprint: an 11 m gap that takes a dash or a double jump, a 17 m viaduct along a wall that takes a wall-run and a dash, a beam over the plaza. **Midtown** (centre, 19 to 21 m) is roofs, short gaps and ledges to grab, about 36 s. The **Lowline** (east, 14.5 m) is stairs, short gaps and a sign to slide under, about 39 s, and needs no special move. A miss costs time: roofs under the gaps and ladders of ledges lead back up, and only a fall into the street puts you back at your tower.
 - **Tranquility**, the moon map: 160 by 280 m on the floor of a crater, under a black sky with the Earth and the stars, in a hard low sun. Gravity is half the Earth's, so a jump floats twice as high and twice as long, and everyone wears a space helmet with a glowing visor. Each team has a round dome with its flag in front, a landing pad with its shuttle, two modules joined by tubes, light masts and rovers. A rille cuts the middle: a bridge, a long jump on the west side, stepping stones on the east.
 - **Weapons**: each team's armoury is a plinth 1.5 m high past its flag, in sight of the spawns, with a gun rack, a katana rack, a rail gun rack and a laser rifle rack: run and jump up to take them. You spawn with none and carry each once taken. The first time a weapon comes to hand you switch it on, each its own way: the right thumb presses the plasma gun's button and the katana's, the left index the laser rifle's, the left hand turns the rail gun's capsule; it lights up with its sound. Drawn again, or after a swap, it lights up at once.

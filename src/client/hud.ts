@@ -1,4 +1,4 @@
-// The HUD, in the game's Shadow DOM: the title screen with the controls, the muted mark, the score
+// The HUD, in the game's Shadow DOM: the title screen with the controls and the maps, the muted mark, the score
 // and the clock with the state of both flags, the markers toward the flags, the banner of the last
 // event and the end screen of a match.
 import {
@@ -17,7 +17,7 @@ import { FH, FW, PALETTE, sprite } from './face';
 import type { Mark } from './marks';
 
 export const HUD_CSS =
-  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
@@ -57,7 +57,11 @@ export const HUD_CSS =
   `del{inset:0;background:radial-gradient(ellipse 74% 80% at 50% 54%,#0000 62%,#000c 100%)}` +
   `del::before{content:"";position:absolute;inset:3% 4% 6%;border-radius:42% 42% 30% 30%/34% 34% 24% 24%;box-shadow:inset 0 0 0 2px #fff1,inset 0 10px 16px #fff1,inset 0 -8px 14px #0006}` +
   `strong{font-size:22px}` +
-  `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}`;
+  `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}` +
+  // The maps over the title screen, and over the end screen when the pointer is free: the host's buttons.
+  `menu{top:10px;left:50%;transform:translateX(-50%);z-index:3;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px;width:max-content;max-width:calc(100% - 24px);font-size:12px}` +
+  `menu button{font:700 13px system-ui,sans-serif;color:#fff;background:#0008;border:1px solid #fff5;border-radius:4px;padding:5px 12px;cursor:pointer;pointer-events:auto}` +
+  `menu .n{border-color:#fe6;color:#fe6;box-shadow:0 0 8px #f924}menu button:disabled{cursor:default}`;
 
 /** What the end screen shows: the final captures and what each player did. */
 export interface Summary {
@@ -68,6 +72,19 @@ export interface Summary {
 export interface Hud {
   /** The title screen with `status` under the controls, "Click to play" or why not; '' hides it. */
   title(status: string, name: string): void;
+  /**
+   * The maps over the title screen, [key, name] each: the one the next match plays (`next`, else
+   * `played`) stands out. They are buttons that `pick` when the own player is the host (`mine`),
+   * read-only for the others; `host` is his name.
+   */
+  maps(
+    list: [string, string][],
+    played: string,
+    next: string | undefined,
+    host: string,
+    mine: boolean,
+    pick: (key: string) => void,
+  ): void;
   /** Shows or hides the muted mark. */
   mute(on: boolean): void;
   /**
@@ -134,9 +151,9 @@ export const createHud = (screen: HTMLElement): Hud => {
     `<aside hidden><h6>TINY FPS</h6><span></span><table>` +
       `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Shift<td>sprint<tr><td>Space<td>jump, again in the air` +
       `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>Left click<td>fire, hold to charge<tr><td>R<td>swap the battery<tr><td>1, 2, 3, 4, wheel<td>gun, katana, rail gun, laser rifle` +
-      `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>special: lunge, energy arc, leap<tr><td>Blades locked<td>click fast; step aside to break<tr><td>M<td>mute</table>` +
+      `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>special: lunge, energy arc, leap<tr><td>Blades locked<td>click fast; step aside to break<tr><td>M<td>mute<tr><td>Esc<td>this screen: the host picks the map at the top</table>` +
       `<span>Take the enemy flag to your own base while yours is home. Jump onto the armoury past your flag for the gun, the katana and the rail gun. Hold the rail gun's lightning on a foe: it slows him and drains 1 health a second, and 3 s more after it lets go.</span>` +
-      `<strong></strong></aside>` +
+      `<strong></strong></aside><menu hidden></menu>` +
       `<del hidden></del><u></u><h5 hidden>Muted (M)</h5>` +
       `<ul>${'<li></li>'.repeat(HP_MAX)}</ul><figure hidden><canvas width="${FW}" height="${FH}"></canvas></figure>` +
       `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
@@ -148,7 +165,9 @@ export const createHud = (screen: HTMLElement): Hud => {
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
   );
   const one = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
-  const [muted, menu] = ['h5', 'aside'].map(t => one(t));
+  const [muted, menu, maps] = ['h5', 'aside', 'menu'].map(t => one(t));
+  /** The name of the map the host picked for the next match, for the end screen. */
+  let soon = '';
   const [name, status] = ['aside span', 'aside strong'].map(t => one(t));
   const set = (el: HTMLElement, text: string) => el.textContent != text && (el.textContent = text);
   const bar = one('nav');
@@ -180,8 +199,24 @@ export const createHud = (screen: HTMLElement): Hud => {
   return {
     title(text, map) {
       menu.hidden = !text;
+      maps.hidden = !text || !maps.childElementCount;
       set(name, map);
       set(status, text);
+    },
+    maps(list, played, next, host, mine, pick) {
+      const label = document.createElement('span');
+      label.textContent = mine ? 'You host. Map of the next match:' : `${host} hosts. Map:`;
+      maps.replaceChildren(label);
+      soon = '';
+      for (const [key, name] of list) {
+        const b = document.createElement('button');
+        b.textContent = key == played && next ? `${name} (now)` : name;
+        b.disabled = !mine;
+        b.className = key == (next ?? played) ? 'n' : '';
+        b.onclick = () => pick(key);
+        maps.append(b);
+        soon = key == next ? name : soon;
+      }
     },
     mute: on => (muted.hidden = !on),
     match(m, who) {
@@ -325,7 +360,7 @@ export const createHud = (screen: HTMLElement): Hud => {
           tr.style.color = TEAM_COLOR[p.team];
         }
       }
-      set(next, `Next match in ${left}`);
+      set(next, `Next match in ${left}${soon && ` on ${soon}`}`);
     },
   };
 };

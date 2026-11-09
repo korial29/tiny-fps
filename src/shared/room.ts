@@ -37,7 +37,7 @@ import {
 import { CHEST, crossing, knock, limbOf, strike, swingOf } from './blade';
 import { Ctf } from './ctf';
 import { STRIKE, step, within } from './gun';
-import { mapKey, mapOf } from './maps';
+import { MAPS, mapKey, mapOf } from './maps';
 import { forward, heightOf, spawn, speedOf, stumble } from './physics';
 import { PLASMA_LAG, fly, launch, stepOf, wave } from './plasma';
 import type { Flying } from './plasma';
@@ -54,6 +54,8 @@ interface Player {
   conn: Conn;
   info: PlayerInfo;
   state: PlayerState;
+  /** The order he joined in: the oldest player is the host. */
+  since: number;
   /** Inputs the player may still apply: +1 per tick, at most INPUT_BURST. */
   bank: number;
   /** Seq of the last applied input. Starts at 65535, the seq before the client's first (0). */
@@ -115,6 +117,9 @@ const setEvery: Every = (cb, ms) => {
  *   rules.scoreLimit or rules.timeLimit ('end' text to everyone), the end screen runs END_SCREEN
  *   seconds, then everyone is put back at a spawn of his team and the score starts again.
  *   drop(id) makes a carrier drop the flag: the hook of the tackle (step 7).
+ * - The host is the player in the room the longest; when he leaves, the next oldest. Only his
+ *   { t: 'map', map } counts: the map (a MAPS key) is played from the next match on, or from the
+ *   next join once the room is empty. The roster tells everyone the host and the map picked.
  */
 /** A player out of any saber lock. */
 const FREE = { lock: 0, foe: 0, pushes: 0, pressed: false, away: 0 };
@@ -140,15 +145,50 @@ export class Room {
 
   /** The key of the map being played, which the roster tells the clients. */
   private mapName: string;
+  /** The map the host picked for the next match, when it is another one. */
+  private next: string | undefined;
+  /** Joins so far: each player's `since`. */
+  private joins = 0;
 
   /** Missing rules fall back to RULES. The map is the rules' one, unless a definition is given. */
   public constructor(rules: Partial<Rules> = {}, def?: WorldDef) {
     this.rules = { ...RULES, ...rules };
     this.mapName = mapKey(this.rules.map);
-    const map = def ?? mapOf(this.mapName);
-    this.world = build(map);
+    this.world = build(def ?? mapOf(this.mapName));
     this.ctf = new Ctf(this.world, this.rules);
-    this.gone = [...(map.packs ?? []), ...(map.ammo ?? []), ...(map.cells ?? [])].map(() => 0);
+    this.gone = this.spots();
+  }
+
+  /** The health, ammo and cell packs of the map, all there (0 ticks before each is back). */
+  private spots(): number[] {
+    const { packs = [], ammo = [], cells = [] } = this.world.def;
+    return [...packs, ...ammo, ...cells].map(() => 0);
+  }
+
+  /** The host: the player in the room the longest. */
+  private host(): Player | undefined {
+    return this.players().reduce<Player | undefined>(
+      (h, p) => (h && h.since < p.since ? h : p),
+      undefined,
+    );
+  }
+
+  /** The map the host picked, from now on: a new world and a new match, the players in it. */
+  private load(): void {
+    if (this.next === undefined) {
+      return;
+    }
+    this.mapName = this.next;
+    this.next = undefined;
+    this.world = build(mapOf(this.mapName));
+    this.ctf = new Ctf(this.world, this.rules);
+    this.gone = this.spots();
+    this.history = [];
+    this.balls = [];
+    for (const p of this.players()) {
+      this.ctf.join(p.info.id, p.info.team, p.state);
+    }
+    this.roster();
   }
 
   /** Number of joined players. */
@@ -168,6 +208,9 @@ export class Room {
       const msg = parseText<ClientText>(data);
       if (p === null && msg?.t === 'join') {
         this.join(conn, msg.name);
+      } else if (p && msg?.t === 'map' && p === this.host() && Object.hasOwn(MAPS, msg.map)) {
+        this.next = msg.map === this.mapName ? undefined : msg.map;
+        this.roster();
       }
       return;
     }
@@ -207,6 +250,7 @@ export class Room {
       if (!this.size) {
         this.ctf.reset();
         this.gone.fill(0);
+        this.load();
       }
       this.roster();
     }
@@ -247,6 +291,7 @@ export class Room {
     if (turn === 'end') {
       this.end(players);
     } else if (turn === 'start') {
+      this.load();
       this.restart(players);
     }
     if (now % SNAP_EVERY === 0) {
@@ -698,6 +743,7 @@ export class Room {
         team,
         players.map(p => p.state),
       ),
+      since: this.joins++,
       bank: INPUT_BURST,
       ack: 0xffff,
       by: 0,
@@ -719,6 +765,8 @@ export class Room {
           you: p.info.id,
           players: list,
           map: this.mapName,
+          host: this.host()?.info.id,
+          next: this.next,
         } satisfies ServerText),
       ),
     );

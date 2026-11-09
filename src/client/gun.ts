@@ -163,9 +163,11 @@ const built: number[][] = [];
  */
 const BACK: Vec3 = [0, 0.125, 0.04];
 const BACK_N = unit([0, 0.469, 0.883]);
+/** Glossy black, the cut face and the screen's support on it: [r, g, layer, b]. */
+const GLOSS = [0.012, 0.012, SHINE, 0.018];
 /**
  * Cuts `out` (triangles) by the back face: what lies in front stays, what lies behind is laid on the
- * face, in the gun's metal facing out of it. A triangle across it is split along it, so the edge is clean.
+ * face, glossy black facing out of it (the user, 2026-11-09). A triangle across it is split along it, so the edge is clean.
  */
 const cutBack = (out: number[]) => {
   const v = out.splice(0);
@@ -186,7 +188,7 @@ const cutBack = (out: number[]) => {
       x[1] - BACK_N[1] * d,
       x[2] - BACK_N[2] * d,
       ...BACK_N,
-      ...(x[8] == -2 ? x.slice(6) : metal(0.15)(x as unknown as Vec3, BACK_N)),
+      ...(x[8] == -2 ? x.slice(6) : GLOSS),
     ];
   };
   const fan = (poly: number[][]) => {
@@ -1219,7 +1221,6 @@ const [SW, SM, SHH, SR, DK, TAPER] = [0.0255, -0.012, 0.0163, 0.0025, 1, 0.12];
  * corner radius, its taper (narrower at the top by that share of its width), its thickness.
  */
 const [PW, PH, PR, PTAPER, PT] = [0.032, 0.026, 0.008, 0.1, 0.0015];
-const GLOSS = [0.012, 0.012, SHINE, 0.018];
 const [BLACK, BLACK_R] = [0.0027, 0.0008];
 /** The digits' foot, so that they are in the middle of the screen; the charge gauge, a thin bar under them up the back face: where it starts and ends, and the gap between its cells. */
 const DY = SM - (DH * DK) / 2;

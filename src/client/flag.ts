@@ -232,7 +232,7 @@ export const flag = (
     const fx = -Math.sin(yaw);
     const fz = -Math.cos(yaw);
     const speed = Math.hypot(vx, vz);
-    // The pole lies along the back, off the webbing, and leans a little away from the head; the
+    // The pole lies along the back, off the jacket, and leans a little away from the head; the
     // cloth streams against the run.
     const [c, q] = chest ?? [[x, y + 1.3, z], axis([0, 1, 0], yaw)];
     const on = (v: Vec3) => turn(q, v).map((o, i) => c[i] + o) as Vec3;

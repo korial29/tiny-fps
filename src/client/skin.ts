@@ -64,7 +64,7 @@ export const hairOf = (id: number): number[] => HAIRS[pick(id, 0, HAIRS.length)]
 /** An iris colour for the runner `id`, as hairOf(). */
 export const eyesOf = (id: number): number[] => IRISES[pick(id, 0x2468, IRISES.length)];
 
-/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots and webbing, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, between the hair and the skin, the shaved beard's shadow and its edge, the line between the lips (as the folds), the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
+/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, between the hair and the skin, the shaved beard's shadow and its edge, the line between the lips (as the folds), the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
 export const palette = (jacket: number[], hair = HAIRS[1], iris = IRISES[0]): number[][] => [
   jacket,
   jacket.map(v => v * 0.5),
@@ -110,8 +110,6 @@ interface Loft {
   x?: boolean;
   /** Built twice, the second time mirrored for the left side. */
   m?: boolean;
-  /** Gear on the trunk: it comes off with it. */
-  k?: boolean;
 }
 
 // Metres, rest pose, +x the runner's right, the right limbs written and the left mirrored.
@@ -123,29 +121,33 @@ interface Loft {
 // the legs. Two rings at the armpits' height, 10 cm under the shoulder joint, are the split: the
 // first is the torso alone, the second takes in the shoulders, and the sleeves hang from the
 // shoulders' sides, ending in the torso's own side vertices.
+/** The height of the armpits, where the trunk splits into the shoulders and the arms hang. */
+const SPLIT = 1.41;
+
 const TRUNK: Loft = {
   chain: [J.PELVIS, J.SPINE, J.CHEST, J.NECK, J.HEAD],
   n: [8, 12, 20],
   e: 2.3,
-  far: [0, 2, 5, 6, 9, 10, 13, 18],
+  far: [0, 2, 4, 5, 8, 9, 10, 15],
+  // A bare bust (the user, 2026-11-09: no pieces on the trunk, smooth, a human one): the waist, the
+  // ribs, the chest fullest at 1.37 m under the armpits, which are at 1.41 (4 cm higher than they
+  // were), the shoulders falling gently to the neck. Each ring's centre forward and half depth from
+  // the front and the back it is measured to.
   rings: [
     [0.93, 0, 0.013, 0.178, 0.111, 0, PANTS],
     [0.99, 0, 0.015, 0.176, 0.111, 0.25, JACKET],
     [1.03, 0, 0.011, 0.165, 0.12, 0.5, JACKET],
     [1.075, 0, 0.012, 0.159, 0.12, 0.75, JACKET],
-    [1.12, 0, 0.012, 0.156, 0.121, 1, UPPER],
-    [1.13, 0, 0.013, 0.152, 0.128, 1.05, UPPER],
-    [1.25, 0, 0.02, 0.155, 0.13, 1.73, UPPER],
-    [1.262, 0, 0.02, 0.154, 0.127, 1.78, JACKET],
-    [1.3, 0, 0.02, 0.153, 0.134, 1.85, JACKET],
-    [1.37, 0, 0.014, 0.157, 0.144, 2, JACKET],
-    [1.37, 0, 0.014, 0.253, 0.144, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.39, 0, 0.0105, 0.252, 0.1455, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.41, 0, 0.0065, 0.249, 0.1465, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.445, 0, -0.01, 0.238, 0.135, 2, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.475, 0, -0.014, 0.223, 0.126, 2.03, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.495, 0, -0.015, 0.205, 0.115, 2.07, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
-    [1.512, 0, -0.0125, 0.173, 0.1025, 2.1, JACKET, 155, JACKET, 135, UPPER, 45, JACKET, 25, UPPER],
+    [1.12, 0, 0.012, 0.156, 0.121, 1, JACKET],
+    [1.25, 0, 0.011, 0.158, 0.127, 1.73, JACKET],
+    [1.3, 0, 0.014, 0.162, 0.131, 1.85, JACKET],
+    [1.37, 0, 0.015, 0.166, 0.137, 1.97, JACKET],
+    [1.41, 0, 0.007, 0.172, 0.138, 2, JACKET],
+    [1.41, 0, 0.007, 0.249, 0.138, 2, JACKET],
+    [1.445, 0, -0.003, 0.238, 0.135, 2, JACKET],
+    [1.475, 0, -0.0085, 0.223, 0.1265, 2.03, JACKET],
+    [1.495, 0, -0.0115, 0.205, 0.1165, 2.07, JACKET],
+    [1.512, 0, -0.011, 0.173, 0.103, 2.1, JACKET],
     [1.532, 0, -0.01, 0.12, 0.085, 2.25, TRIM],
     [1.555, 0, 0, 0.068, 0.066, 2.6, FLESH],
   ],
@@ -204,9 +206,10 @@ const ARM: Loft = {
   // 2026-11-08); close, the eye's own arms included, 24 (17 until the user, 2026-11-09: fewer angles).
   n: [4, 10, 24],
   m: true,
-  far: [0, 1, 3, 6, 8, 9, 11, 13],
+  far: [0, 2, 4, 7, 9, 10, 12, 14],
   rings: [
-    [1.37, 0.195, 0, 0, 0, 0, JACKET],
+    [SPLIT, 0.195, 0, 0, 0, 0, JACKET],
+    [1.36, 0.2, 0.004, 0.054, 0.063, 0.38, JACKET],
     [1.31, 0.2, 0.006, 0.053, 0.061, 0.5, JACKET],
     [1.225, 0.208, -0.002, 0.055, 0.063, 1.12, JACKET],
     [1.18, 0.214, 0.003, 0.052, 0.062, 1.5, JACKET],
@@ -291,62 +294,6 @@ const CONCHA: Loft = {
     [1.703, 0.0875, -0.019, 0, 0, 0, SHADE],
   ],
 };
-
-// The soldier's webbing, pieces of their own on the trunk like the eyes on the head, measured on
-// the user's soldier mesh: a strap up the chest and over each shoulder, one up each side of the back,
-// two pouches each side on the belt, the buckle (the user: none on the chest). Too small to draw far.
-/** A strap along the trunk, the left one the right one mirrored: rings of [height, x, depth, half width, half thickness]. */
-const strap = (rings: number[][]): Loft => ({
-  chain: [J.CHEST],
-  n: [0, 6, 8],
-  e: 4,
-  m: true,
-  k: true,
-  far: [],
-  rings: rings.map(r => [...r, 0, UPPER]),
-});
-/** A pouch standing out of the trunk: x, bottom, top, depth, half width, half depth, joint, mirrored. */
-const pouch = ([x, y0, y1, o, rx, ro, j, m]: number[]): Loft => ({
-  chain: [j],
-  n: [0, 8, 8],
-  e: 5,
-  m: !!m,
-  k: true,
-  far: [],
-  rings: [y0, y0, y1, y1].map((y, i) => [y, x, o, i % 3 && rx, i % 3 && ro, 0, UPPER]),
-});
-const GEAR = [
-  strap([
-    [1.308, 0.11, 0.115, 0, 0],
-    [1.31, 0.11, 0.115, 0.036, 0.004],
-    [1.34, 0.11, 0.121, 0.036, 0.004],
-    [1.365, 0.11, 0.125, 0.036, 0.004],
-    [1.372, 0.11, 0.148, 0.036, 0.004],
-    [1.39, 0.11, 0.143, 0.036, 0.004],
-    [1.42, 0.11, 0.132, 0.036, 0.004],
-    [1.445, 0.11, 0.112, 0.036, 0.004],
-    [1.47, 0.11, 0.1, 0.036, 0.004],
-    [1.49, 0.11, 0.087, 0.036, 0.004],
-    [1.505, 0.11, 0.075, 0.036, 0.004],
-    [1.507, 0.11, 0.073, 0, 0],
-  ]),
-  strap([
-    [1.265, 0.115, -0.075, 0, 0],
-    [1.268, 0.115, -0.075, 0.034, 0.004],
-    [1.31, 0.111, -0.073, 0.034, 0.004],
-    [1.36, 0.108, -0.096, 0.034, 0.004],
-    [1.41, 0.105, -0.128, 0.034, 0.004],
-    [1.45, 0.101, -0.133, 0.034, 0.004],
-    [1.49, 0.098, -0.121, 0.034, 0.004],
-    [1.515, 0.097, -0.099, 0.034, 0.004],
-    [1.518, 0.097, -0.099, 0, 0],
-  ]),
-  ...[
-    [0.09, 1.142, 1.243, 0.137, 0.03, 0.033, J.SPINE, 1],
-    [0.135, 1.145, 1.24, 0.098, 0.024, 0.03, J.SPINE, 1],
-    [0, 1.17, 1.215, 0.141, 0.022, 0.017, J.SPINE, 0],
-  ].map(pouch),
-];
 
 /**
  * The rings with one more between each two, on a Catmull-Rom curve through them, for the near
@@ -609,7 +556,7 @@ const BROWS: Loft = {
   }),
 };
 
-const LOFTS = [TRUNK, LEG, ARM, EYE, SPECK, BROWS, EAR, CONCHA, ...GEAR];
+const LOFTS = [TRUNK, LEG, ARM, EYE, SPECK, BROWS, EAR, CONCHA];
 
 const generate = (lod: number): Skin => {
   const [v, j, w, t, c, l, d]: number[][] = [[], [], [], [], [], [], []];
@@ -635,7 +582,7 @@ const generate = (lod: number): Skin => {
     const arm = lod == 2 && L === ARM;
     const n = L.n[arm ? 2 : tier];
     // The eye's own body has no head.
-    if (!n || (lod == 2 && (L.z || L.x || L.k || L === EAR || L === CONCHA))) {
+    if (!n || (lod == 2 && (L.z || L.x || L === EAR || L === CONCHA))) {
       continue;
     }
     // The eye's own body ends the trunk in a cap on the shoulders and each sleeve in a cuff over a
@@ -688,9 +635,10 @@ const generate = (lod: number): Skin => {
                   0.13,
               ) *
               top *
-              clamp((y - 1.34) / 0.04)
+              clamp((y - SPLIT + 0.03) / 0.04)
             : 0;
-        const k = L === TRUNK ? ease((ax - 0.06) / 0.08) * top * clamp((y - 1.39) / 0.03) : 0;
+        const k =
+          L === TRUNK ? ease((ax - 0.06) / 0.08) * top * clamp((y - SPLIT - 0.02) / 0.03) : 0;
         const [clav, arm] = x < 0 ? [J.CLAVICLE_L, SWING_L] : [J.CLAVICLE_R, SWING_R];
         return q
           ? put([x, y, z], k > 0.5 ? clav : J.CHEST, arm, q)
@@ -744,16 +692,17 @@ const generate = (lod: number): Skin => {
             // Eased over 8 cm, or the back creases in a line across the shoulder blades.
             const e =
               L === TRUNK && rx > 0.19
-                ? 2.3 - 0.3 * clamp((at - 1.37) / 0.08)
+                ? 1.9 + 0.1 * clamp((at - SPLIT) / 0.07)
                 : (L.e ?? 2) * (L === LEG && at < 0.12 ? 2 : 1);
-            // The back and the chest widen over the 12 cm under the armpits toward the shoulders'
-            // ring, whose vertices they take at the split: no ridge across the shoulder blades.
+            // The back widens over the 12 cm under the armpits toward the shoulders' ring, whose
+            // vertices it takes at the split: no ridge across the shoulder blades. The chest does
+            // not: it would stand out of the shoulders' front (the user, 2026-11-09: no shelf).
             const flare =
-              L === TRUNK && rx < 0.2 && at <= 1.37
+              L === TRUNK && rx < 0.2 && at <= SPLIT && Math.cos(q) < 0
                 ? 1 +
-                  (at < 1.37 ? 0.65 : 0.3) *
-                    clamp((at - 1.25) / 0.12) *
-                    clamp((Math.abs(Math.cos(q)) - 0.6) / 0.27)
+                  0.65 *
+                    clamp((at - SPLIT + 0.12) / 0.12) *
+                    clamp((Math.abs(Math.cos(q)) - 0.83) / 0.03)
                 : 1;
             const x = cx + rx * sgn(Math.sin(q), e) * flare;
             const o = co + ro * sgn(Math.cos(q), e);
@@ -781,7 +730,7 @@ const generate = (lod: number): Skin => {
         // The head comes off at the neck, an arm at the shoulder, a leg at the hip: where its loft
         // meets the trunk.
         const part =
-          L === TRUNK || L.k
+          L === TRUNK
             ? LIMB.NONE
             : L === EYE || L === SPECK || L === BROWS || L === EAR || L === CONCHA
               ? LIMB.HEAD

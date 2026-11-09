@@ -203,8 +203,8 @@ describe('soldier', () => {
   it('adds only the streaks to a dash, and glows them', () => {
     const plain = draw({ vz: -14 }).length / STRIDE;
     const dash = rows(draw({ dash: DASH_BURST, vz: -14 }));
-    // The eyes' specks glow too, dash or not.
-    const speck = (p: number[]) => p[4] == 1.3;
+    // The eyes' specks glow too, dash or not, and the spare's top at the pouch's mouth.
+    const speck = (p: number[]) => p[4] == 1.3 || p[4] == 0.25;
     const glow = dash.filter(p => p[3] == -2 && !speck(p));
     expect(glow.length).toBeGreaterThan(15);
     expect(dash.length - glow.length).toBe(plain);

@@ -22,9 +22,11 @@ import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { createGait, frame } from './gait';
+import { fetched, pouch, pouchAt } from './pouch';
 import type { Floor } from './gait';
 import {
   GUN_ON,
+  axes as gunAxes,
   grip as gunGrip,
   pressAt,
   buttonAt,
@@ -41,6 +43,7 @@ import {
   held,
   loadFrame,
   TAP,
+  BROUGHT,
   screwed,
   pointed,
   power,
@@ -63,7 +66,6 @@ import {
   poised,
   progress,
   BEHIND as BACK,
-  axes as gunAxes,
 } from './katana';
 import { add, basis, dot, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
@@ -795,6 +797,8 @@ export const createBody = (world?: World): Body => {
   /** How closed each hand is, left then right, as of the last pose(); how far the left index is out, pressing a button. */
   const curls = [0, 0];
   let pointing = 0;
+  /** The new battery in the left hand as it brings it from the pouch, in the world; undefined when it is not carrying one. */
+  let carried: [Vec3, Vec3[]] | undefined;
   /**
    * The weapon in hand as last seen (0 the gun, 1 the katana, 2 the rail gun, -1 none), and the
    * seconds since it came to hand or a swap put its new battery in: it lights up over them (power()).
@@ -1151,8 +1155,34 @@ export const createBody = (world?: World): Body => {
             free *
             (rail
               ? ease(span(sp, 0.34, 0.46)) * (1 - ease(span(sp, 0.88, 0.96)))
-              : ease(span(sp, 0.16, 0.3)) * (1 - ease(span(sp, TAP + 0.03, 0.9))))
+              : ease(span(sp, BROUGHT - 0.03, BROUGHT)) * (1 - ease(span(sp, TAP + 0.03, 0.9))))
           : 0;
+      // The gun's or the rifle's new battery from the pouch on the left hip (the user, 2026-11-09):
+      // the hand off the gun down to it, into it and the battery out, then up with it under the
+      // grip, where the gun takes it (above BROUGHT). The battery is drawn in the hand (carried).
+      const fetch =
+        sd < 0 && sp >= 0 && !rail
+          ? w.gun * free * ease(span(sp, 0.12, 0.2)) * (1 - ease(span(sp, BROUGHT - 0.03, BROUGHT)))
+          : 0;
+      if (sd < 0) {
+        carried = undefined;
+      }
+      if (fetch > 0.002 && me) {
+        const [foot, ax] = loadFrame(gp, ga, kindOf(me), BROUGHT);
+        const f = fetched(
+          sp,
+          pouchAt(s.pos[J.PELVIS], s.rot[J.PELVIS]),
+          [add(eye, turn(foot)), ax.map(turn)],
+          add(eye, turn(along(gp, ga[1], -0.12))),
+        );
+        carried = f.carry;
+        const held = { ...q, rot: q.rot.slice() };
+        wield(held, s, arm, f.at, f.g, turn([-0.5, -1, -0.35]));
+        for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
+          q.rot[k] = slerp(q.rot[k], held.rot[k], fetch);
+        }
+        curls[0] += (f.curl - curls[0]) * fetch;
+      }
       if (onLoad > 0.002) {
         // On the new battery or capsule, which comes with the hand. The capsule is held round its
         // side, the wrist turning about it as it screws it in.
@@ -1303,6 +1333,7 @@ export const createBody = (world?: World): Body => {
       if (s) {
         const colors = palette(color);
         skin(out, body(2), s, colors);
+        pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
         // The right thumb presses the button of the katana or the plasma gun as it comes on.
         const tk = me?.wield ? 1 : me ? kindOf(me) : -1;
         const push =
@@ -1355,6 +1386,10 @@ export const createBody = (world?: World): Body => {
               digits: sp < 0 && on >= GUN_ON.digits,
               press: sp < 0 && kind != 2 ? span(poke(since, pressOf(kind)), 0.8, 1) : 0,
               tune: rail && sp < 0 ? tune(since, pressOf(2)) : 0,
+              id: me?.id,
+              floor: me?.ground ? me.y : undefined,
+              vel: me && [me.vx, me.vy, me.vz],
+              carry: carried,
               cells: me && cellsOf(me),
               heat: (me?.heat ?? 0) / HEAT_MAX,
               hot: me?.hot,

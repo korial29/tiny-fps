@@ -156,7 +156,8 @@ describe('body', () => {
         const v = draw(watch(p, 40), p, pitch);
         // The near runner minus its head, neck and fists, its arms close, plus two hands of under 6000 vertices each.
         expect(v.length).toBeGreaterThan(3500);
-        expect(v.length).toBeLessThanOrEqual(22000);
+        // The pouch on the hip adds about 200 (the user, 2026-11-09).
+        expect(v.length).toBeLessThanOrEqual(22400);
         for (const { at, n } of v) {
           expect(at.every(Number.isFinite)).toBe(true);
           expect(Math.hypot(...n)).toBeCloseTo(1);
@@ -1035,7 +1036,7 @@ describe('the ammo on the back of the gun', () => {
     const out: number[] = [];
     const p = man();
     watch(p, 60).draw(out, eyeOf(p), 0, 0, 0, TEAM);
-    expect(out.length / STRIDE).toBeLessThan(22000);
+    expect(out.length / STRIDE).toBeLessThan(22400);
     expect(out.slice(-6).every(v => Number.isFinite(v))).toBe(true);
   });
 });

@@ -36,6 +36,8 @@ import {
   TRACKS,
   screwed,
   swapped,
+  RELEASE,
+  BROUGHT,
   CUES,
   TAP,
   tip,
@@ -757,13 +759,12 @@ describe('the battery and the capsule', () => {
   it('slides the battery out and drops it, then brings a new one up into the grip', () => {
     const out = (s: number) => swapped(s, false)[0];
     expect(out(0.1)).toBe(0);
-    expect(out(0.22)).toBeCloseTo(0.1, 6);
-    expect(out(0.29)).toBeGreaterThan(0.5);
-    expect(out(0.3)).toBeCloseTo(0.22, 6);
-    expect(out(0.45)).toBeLessThan(out(0.35));
-    // Placed by 0.52 but for its last 12 mm, held there a moment, until the palm slaps it home at
-    // TAP, when it clicks (the user, 2026-11-09).
-    expect(out(0.53)).toBeCloseTo(0.012, 6);
+    // Slid 10 cm out by RELEASE, where it drops; the new one from the hand, 5 cm under its seat at
+    // BROUGHT, in but for 12 mm by 0.54, held there until the palm slaps it home at TAP, when it
+    // clicks (the user, 2026-11-09).
+    expect(out(RELEASE - 1e-9)).toBeCloseTo(0.1, 6);
+    expect(out(BROUGHT)).toBeCloseTo(0.05, 6);
+    expect(out(0.54)).toBeCloseTo(0.012, 6);
     expect(out(0.7)).toBeCloseTo(0.012, 6);
     expect(out(TAP - 0.013)).toBeCloseTo(0.012, 6);
     expect(out(TAP)).toBe(0);
@@ -809,7 +810,7 @@ describe('the battery and the capsule', () => {
     const [foot, [, , fw]] = loadFrame([0, 0, 0], ax, false);
     expect(foot[1]).toBeLessThan(-0.06);
     expect(fw[1]).toBeGreaterThan(0.8);
-    expect(loadFrame([0, 0, 0], ax, false, 0.3)[0][1]).toBeLessThan(foot[1] - 0.08);
+    expect(loadFrame([0, 0, 0], ax, false, RELEASE - 0.001)[0][1]).toBeLessThan(foot[1] - 0.08);
     const [base, [, , up]] = loadFrame([0, 0, 0], ax, true);
     expect(base[1]).toBeGreaterThan(0.1);
     expect(up[1]).toBeCloseTo(1, 6);

@@ -30,6 +30,7 @@ import {
   unit,
 } from './mesh';
 import type { Vec3 } from './mesh';
+import { drop } from './drops';
 import { axis, turn } from './rig';
 import type { Quat } from './rig';
 
@@ -1393,6 +1394,15 @@ export const button = (out: number[], kind: number, push: number, light: number,
 
 /** When, in the swap of the gun or the rifle, the palm slaps the new battery home: it clicks then. */
 export const TAP = 0.76;
+/**
+ * The swap's moments (the user, 2026-11-09: let the battery fall to the floor, take a new one out
+ * of a pouch on the belt and put it in): the old battery or cell let go and thrown out (the rail
+ * gun's capsule, off its socket); the left hand at the pouch, holding the new one, and with it
+ * under the grip, where it goes in.
+ */
+export const [RELEASE, RAIL_RELEASE, AT_POUCH, TAKEN, BROUGHT] = [0.18, 0.28, 0.28, 0.34, 0.5];
+/** What each player's gun was last drawn at in its swap: the drop is thrown as it passes RELEASE. */
+const swaps = new Map<number, number>();
 
 /**
  * Where the battery or the capsule is at `s` of a swap (0 to 1; -1 none): how far out of its seat
@@ -1404,12 +1414,16 @@ export const swapped = (s: number, kind: boolean | number): number[] => {
     return [0, 0, 0];
   }
   if (kindOf(kind) != 2) {
-    // Slid out down the grip and dropped, then a new one up into it, 12 mm short of home, and
-    // slapped home by the palm at TAP, a jump in the last instant (the user, 2026-11-09: a hard slap).
-    // Placed by 0.52, held there a moment, then slapped (the user, 2026-11-09).
-    return s < 0.3
-      ? [0.1 * ease(span(s, 0.1, 0.22)) + 0.6 * span(s, 0.22, 0.3) ** 2, 0, 0]
-      : [0.012 * (1 - span(s, TAP - 0.012, TAP)) + 0.208 * (1 - ease(span(s, 0.3, 0.52))), 0, 0];
+    // Slid 10 cm out down the grip and let go at RELEASE (drops.ts has it then); the new one, from
+    // the hand, up into it from 5 cm by 0.54, 12 mm short of home, held there, then slapped home by
+    // the palm at TAP, a jump in the last instant (the user, 2026-11-09).
+    return s < RELEASE
+      ? [0.1 * ease(span(s, 0.1, RELEASE)), 0, 0]
+      : [
+          0.012 * (1 - span(s, TAP - 0.012, TAP)) + 0.038 * (1 - ease(span(s, BROUGHT, 0.54))),
+          0,
+          0,
+        ];
   }
   // It unscrews itself a turn and a half and jumps up spinning; then the hand brings a new one
   // down onto the socket and screws it in, three turns of the wrist.
@@ -1542,7 +1556,7 @@ export const electrodes = (at: Vec3, [, u, f]: Vec3[]): Vec3[] =>
   );
 
 /** The gun's axes [right, up, forward] for a hand turned by `q` (see body.ts: its thumb is the hand's -z, the back of the hand its x, its fingers its -y). */
-const axes = (q: Quat): Vec3[] => {
+export const axes = (q: Quat): Vec3[] => {
   const [th, back, fing] = [turn(q, [0, 0, -1]), turn(q, [1, 0, 0]), turn(q, [0, -1, 0])];
   const [s, c] = TILT;
   return [
@@ -1976,6 +1990,15 @@ export interface Lit {
   press?: number;
   /** How far the rail gun's capsule is turned on (radians, tune()). */
   tune?: number;
+  /**
+   * The player whose gun it is, the floor under him and his speed: the spent battery, cell or
+   * capsule is thrown out to fall there as the swap passes RELEASE (drops.ts).
+   */
+  id?: number;
+  floor?: number;
+  vel?: Vec3;
+  /** Where the hand holds the new battery or cell while it brings it from the pouch (its foot and axes, as loadFrame()). */
+  carry?: [Vec3, Vec3[]];
 }
 
 /** The levels of the rail gun's three cells for `p` (0 to 1): the capsule in use, then what it carries beside, a capsule's worth to each. */
@@ -2011,6 +2034,10 @@ export const held = (
     hot = false,
     press = 0,
     tune = 0,
+    id,
+    floor,
+    vel = [0, 0, 0],
+    carry,
   }: Lit = {},
 ) => {
   const [at, ax] = [grip(pos, q), axes(q)];
@@ -2018,16 +2045,40 @@ export const held = (
   const rail = w == 2;
   const d = 0.08 + 0.92 * light;
   const from = out.length;
+  // The spent one thrown out as the swap passes its release, once for each player.
+  const rel = rail ? RAIL_RELEASE : RELEASE;
+  if (id !== undefined) {
+    const was = swaps.get(id) ?? -1;
+    swaps.set(id, swap);
+    if (was >= 0 && was < rel && swap >= rel) {
+      const [foot, fax] = loadFrame(at, ax, w, rel - 1e-4, k, 0, tune);
+      // Out of the grip or the well and ahead, in sight as it falls; the capsule up off its socket.
+      const o = rail ? fax[2].map(v => 2.4 * v) : [0, -0.6, 0];
+      drop(
+        rail ? capsule(1, 0) : [battery, cell, capsule, cell][w](1),
+        foot,
+        fax,
+        [0, 1, 2].map(i => vel[i] + o[i] + (rail ? 0.8 : 1.2) * ax[2][i] + 0.2 * ax[0][i]) as Vec3,
+        fax[0].map(v => (rail ? 9 : 5) * v) as Vec3,
+        floor ?? foot[1] - 1.2,
+      );
+    }
+  }
   // The rail gun's cell in use shows its level: none as the old one goes, full as the new one comes.
-  place(
-    out,
-    rail
-      ? capsule(lod, swap < 0 ? cells[0] : +(swap > 0.42))
-      : [battery, cell, capsule, cell][w](lod),
-    ...loadFrame(at, ax, w, swap, k, 0, tune),
-    [0, 0, 0],
-    k,
-  );
+  // Between its release and BROUGHT the battery is the drop's and then the hand's (`carry`).
+  const away = swap >= rel && swap < (rail ? 0.42 : BROUGHT);
+  const seat = away ? (rail ? undefined : carry) : loadFrame(at, ax, w, swap, k, 0, tune);
+  if (seat) {
+    place(
+      out,
+      rail
+        ? capsule(lod, swap < 0 ? cells[0] : +(swap > 0.42))
+        : [battery, cell, capsule, cell][w](lod),
+      ...seat,
+      [0, 0, 0],
+      k,
+    );
+  }
   dimmed(out, from, empty && !rail ? 0.08 : 1);
   // Overheated, the cells flicker red and smoke rises off the coils (smoke()); no spark idles
   // between the electrodes. The counter stays steady (the user, 2026-11-09).

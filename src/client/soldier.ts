@@ -17,7 +17,23 @@ import type { World } from '../shared/world';
 import { clasp, inv, reach, shrug, stowed, wield } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
-import { ARC, TILT, aimed, cellsOf, focus, foregrip, held, kindOf, span, swapOf } from './gun';
+import {
+  ARC,
+  BROUGHT,
+  TILT,
+  aimed,
+  axes,
+  cellsOf,
+  focus,
+  foregrip,
+  grip,
+  held,
+  kindOf,
+  loadFrame,
+  span,
+  swapOf,
+} from './gun';
+import { fetched, pouch, pouchAt } from './pouch';
 import type { Tracer } from './beams';
 import {
   BEHIND,
@@ -341,7 +357,39 @@ export const stance = (r: Runner) => {
     pose = lifted(pose, s, p, r.focus, r.aim);
     s = solve(pose);
   }
-  return { s, sink, yaw: pose.yaw };
+  // In a swap of the gun or the rifle the left hand fetches the new battery from the pouch on the
+  // hip and brings it up under the grip (pouch.ts, the user, 2026-11-09).
+  const sp = swapOf(p);
+  const w =
+    lying || p.wield || p.railed || sp < 0
+      ? 0
+      : ease(span(sp, 0.12, 0.2)) * (1 - ease(span(sp, BROUGHT - 0.03, BROUGHT)));
+  let carry: [Vec3, Vec3[]] | undefined;
+  if (w > 0.002) {
+    const q = s.rot[J.HAND_R];
+    const f = fetched(
+      sp,
+      pouchAt(s.pos[J.PELVIS], s.rot[J.PELVIS]),
+      loadFrame(grip(s.pos[J.HAND_R], q), axes(q), kindOf(p), BROUGHT),
+      s.pos[J.HAND_L],
+    );
+    carry = f.carry;
+    const [x, u, fw] = basis(p.yaw, 0);
+    const arm = { ...pose, rot: pose.rot.slice() };
+    wield(
+      arm,
+      s,
+      J.ARM_L,
+      f.at,
+      f.g,
+      [0, 1, 2].map(i => -0.5 * x[i] - u[i] - 0.35 * fw[i]) as Vec3,
+    );
+    for (const k of [J.ARM_L - 1, J.ARM_L, J.FOREARM_L, J.HAND_L]) {
+      pose.rot[k] = slerp(pose.rot[k], arm.rot[k], w);
+    }
+    s = solve(pose);
+  }
+  return { s, sink, yaw: pose.yaw, carry };
 };
 
 /** Draws the runner and gives back its solved skeleton, or nothing once a bolt has burnt it away. */
@@ -352,7 +400,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
     return;
   }
   const colors = palette(color, hairOf(p.id), eyesOf(p.id));
-  const { s, sink, yaw } = stance(r);
+  const { s, sink, yaw, carry } = stance(r);
   const blade = p.wield && !p.down;
   if (r.cut) {
     skin(out, cut(lod, r.cut.limb)[0], s, colors, 1, 0.3);
@@ -372,6 +420,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
       +(down || r.hurt > 0 || (r.t + p.id * 0.7) % 3.7 < 0.13),
       r.prog >= 0 ? 1 : r.hurt > 0 ? 0.6 : down ? 0.3 : r.dash * 0.5,
     );
+    pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
     if (k > 0) {
       dissolve(out, from, k);
     }
@@ -388,6 +437,10 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
       cells: cellsOf(p),
       heat: (p.heat ?? 0) / HEAT_MAX,
       hot: p.hot,
+      id: p.id,
+      floor: p.ground ? p.y : undefined,
+      vel: [p.vx, p.vy, p.vz],
+      carry,
     });
   }
   if (r.dash > 0.15) {

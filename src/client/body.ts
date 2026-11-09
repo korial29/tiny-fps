@@ -12,7 +12,6 @@ import {
   DASH_TICKS,
   GRAB_GAP,
   PLAYER_R,
-  RAIL_CAP,
   STEP_H,
   HEAT_MAX,
 } from '../shared/constants';
@@ -994,7 +993,7 @@ export const createBody = (world?: World): Body => {
             s.rot[J.HAND_R],
             1,
             clamp(hold * 1.5 - 0.5),
-            kind == 3 ? me!.clip : rail ? charge(me!.cap ?? 0, RAIL_CAP) : me?.mag,
+            kind == 3 ? me!.clip : rail ? charge(me!.cap ?? 0) : me?.mag,
             level,
             kind,
             clock,

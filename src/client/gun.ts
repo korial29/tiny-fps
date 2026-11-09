@@ -1422,7 +1422,7 @@ const LU: Vec3 = [LN[1] * LR[2], LN[2] * LR[0] - LN[0] * LR[2], -LN[1] * LR[0]];
  * The rail gun's counter, a small LCD out of the left of its receiver turned to the player, in model space
  * (the user, 2026-11-08: like the screen on the back of a digital camera), in a dark case: neon like
  * the others' (the user, 2026-11-08), two glowing violet digits on a dark screen framed in a line of
- * their colour, red at 15 or less.
+ * their colour, red at 5 or less. It counts as the HUD does (charge()): a full capsule is 33.
  */
 export const lcd = (ammo: number): number[] => {
   const n = Math.min(Math.max(Math.floor(ammo), 0), 99);
@@ -1453,7 +1453,8 @@ export const lcd = (ammo: number): number[] => {
     box(-LW - 0.003, -LH - 0.003, LW + 0.003, LH + 0.003, -0.016, 0.0004);
     quad(-LW, -LH, LW, LH, 0.0008, DARK);
     const from = out.length;
-    const rgb = n > 15 ? [0.7, 0.45, 1.1] : [1.2, 0.3, 0.12];
+    // Red under a sixth of a capsule (33 full): the HUD's count.
+    const rgb = n > 5 ? [0.7, 0.45, 1.1] : [1.2, 0.3, 0.12];
     // The frame, a band just inside the screen's edge.
     const f = 0.0012;
     quad(-LW, -LH, LW, f - LH, 0.0014, rgb);

@@ -1783,6 +1783,44 @@ export const scope = (n: number, shown = true): number[] => {
   return v;
 };
 
+/** A puff of smoke, built once: a ball of radius 1, a soft flat light grey, unlit so it reads as a puff and not as a ball. */
+const PUFF: number[] = [];
+tube(
+  PUFF,
+  [
+    [-1, 0, 0, 0],
+    [-0.7, 0, 0.71, 0.71],
+    [0, 0, 1, 1],
+    [0.7, 0, 0.71, 0.71],
+    [1, 0, 0, 0],
+  ],
+  8,
+  () => [0.6, 0.6, -2, 0.63],
+);
+/**
+ * The smoke off the overheated rail gun (the user, 2026-11-09) at the time `t`, for the gun whose
+ * grip is at `at`, turned by `ax` and `k` times its size: SMOKE puffs, each born on the coils, rising
+ * 25 cm straight up and drifting aside as it swells and then thins away, over 1.1 s, one after another.
+ */
+const SMOKE = 7;
+const WORLD: Vec3[] = [
+  [1, 0, 0],
+  [0, 1, 0],
+  [0, 0, 1],
+];
+const smoke = (out: number[], at: Vec3, [r, u, f]: Vec3[], k: number, t: number) => {
+  for (let i = 0; i < SMOKE; i++) {
+    const p = (t * 0.9 + i / SMOKE) % 1;
+    const g = 0.3 + 0.12 * ((i * 0.618) % 1);
+    const m: Vec3 = [0, axisY(g) + 0.025, -g];
+    const side = Math.sin(i * 2.4) * 0.06 * p;
+    const c = [0, 1, 2].map(
+      j => at[j] + k * (r[j] * (m[0] + side) + u[j] * m[1] - f[j] * m[2]) + (j == 1 ? 0.25 * p : 0),
+    ) as Vec3;
+    place(out, PUFF, c, WORLD, [0, 0, 0], k * (0.004 + 0.016 * Math.sin(Math.PI * p) ** 0.7));
+  }
+};
+
 /**
  * How a gun is drawn beyond its place: its glow from 0 (off) to 1, the swap under way (0 to 1, -1
  * none), whether its battery or capsule holds any, how far the gun's counter has faded in (0 dark,
@@ -1849,7 +1887,8 @@ export const held = (
     k,
   );
   dimmed(out, from, empty && !rail ? 0.08 : 1);
-  // Overheated, the cells flicker red and the counter blinks; no spark idles between the electrodes.
+  // Overheated, the cells flicker red and smoke rises off the coils (smoke()); no spark idles
+  // between the electrodes. The counter stays steady (the user, 2026-11-09).
   const blink = hot && t * 9 - Math.floor(t * 9) < 0.5;
   if (rail) {
     for (const i of [1, 2]) {
@@ -1867,6 +1906,9 @@ export const held = (
       }
     }
     place(out, insulators(lod, heat), at, ax, [0, 0, 0], k);
+    if (hot) {
+      smoke(out, at, ax, k, t);
+    }
   }
   place(out, [gun, gun, railgun, rifle][w](lod), at, ax, [0, 0, 0], k);
   if (rail && light > 0.98 && swap < 0 && !hot) {
@@ -1874,7 +1916,7 @@ export const held = (
   }
   if (ammo !== undefined && w == 3) {
     place(out, scope(ammo, digits && light > 0.5), at, ax, [0, 0, 0], k);
-  } else if (ammo !== undefined && rail && light > 0.3 && !blink) {
+  } else if (ammo !== undefined && rail && light > 0.3) {
     place(out, lcd(ammo), at, ax, [0, 0, 0], k);
   }
   dimmed(out, from, d);

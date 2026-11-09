@@ -54,9 +54,9 @@ describe('skin', () => {
     // Near carries the measured rings too, so it is less far below close than it was.
     expect(near).toBeLessThan(close * 0.45);
     expect(body(1).w.length).toBeLessThan(2000);
-    // The eye's own body: no head, the near rings; its arms close, 24 sides and their rings
+    // The eye's own body: no head; the close sides (a round chest looking down), its arms' rings
     // doubled, and a thin wrist (the user, 2026-11-09: fewer angles, whatever the budget).
-    expect(draw(2).length / STRIDE).toBeLessThan(9800);
+    expect(draw(2).length / STRIDE).toBeLessThan(12000);
   });
 
   it('is a 1.8 m runner on the floor, narrower than the player cylinder', () => {
@@ -147,7 +147,8 @@ describe('skin', () => {
       expect(colors.has(c.join())).toBe(false);
     }
     expect(Math.max(...v.filter((_, i) => i % STRIDE == 1))).toBeLessThan(1.52);
-    expect(v.length).toBeLessThan(draw(1).length);
+    // Close sides like the close runner's (the user, 2026-11-09: a round chest looking down), its trunk's rings not doubled.
+    expect(v.length).toBeLessThan(draw(3).length);
     const s = body(2);
     const seen = new Map<string, number>();
     for (let i = 0; i < s.t.length; i += 3) {

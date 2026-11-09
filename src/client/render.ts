@@ -119,7 +119,8 @@ export const SPEC = [
 const RELIEF = 0.06;
 
 // s: 1 on a texture, 0 on a flat colour. g: lava (which also drifts)
-// and layer -2, which glow: no light, no shade. The texture's alpha is a height: its screen-space derivatives tilt the normal
+// and layers -2 and -3, which glow: no light, no shade. Layer -3 is smoke: grey C.x (and C.w for
+// blue), its opacity C.y, fading where it is seen edge-on (z), alpha to coverage; it casts no shadow. The texture's alpha is a height: its screen-space derivatives tilt the normal
 // (bump mapping without tangents), faded out as a pixel covers more than a texel or two so the
 // mipmapped relief does not shimmer. n is the surface normal, m the bumped one. y: the brush tint,
 // which colours the daylight (ambient and sun) but not the highlights. l: the light, the hemisphere
@@ -150,7 +151,7 @@ vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
 c=mix(c,H[4]*1.08,exp(-abs(h)*7.));
 return c+X*(.2*pow(k,24.)+.05*pow(k,4.)+2.*smoothstep(.9993,.9997,k));}
 void main(){
-if(Z<0.)return;
+if(Z<0.){if(C.z<-2.5)discard;return;}
 if(Y>.5){o=vec4(K0(normalize(P)),1);return;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
@@ -185,8 +186,9 @@ c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
 vec3 r=reflect(-V,m),k=K0(r);float fr=pow(1.-max(dot(m,V),0.),4.);
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
 c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr));
-float D=length(P-E),x=${FOG_RISE}*(P.y-E.y);
-o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),1.);}`;
+float D=length(P-E),x=${FOG_RISE}*(P.y-E.y),z=step(L,-2.5);
+c.g=mix(c.g,c.r,z);
+o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z));}`;
 
 /**
  * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
@@ -780,6 +782,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.uniform4fv(u.K, pk.k);
       gl.uniformMatrix4fv(u.M, false, pk.m);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      // Smoke (layer -3) is see-through: its alpha covers that share of the samples.
+      gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
       // The sky first, at depth 1: the view ray of each pixel from the camera's axes.
       gl.uniform3fv(u.J, [right.map(c => c * tan * (w / h)), up.map(c => c * tan), fwd].flat());
       gl.uniform1f(u.Y, 1);
@@ -791,6 +795,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.clear(gl.DEPTH_BUFFER_BIT);
         gl.drawArrays(gl.TRIANGLES, first + bodyAt / STRIDE, (v.length - bodyAt) / STRIDE);
       }
+      gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaa);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, hdr.f);
       gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);

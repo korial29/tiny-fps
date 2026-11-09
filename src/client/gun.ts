@@ -1404,11 +1404,11 @@ export const swapped = (s: number, kind: boolean | number): number[] => {
     return [0, 0, 0];
   }
   if (kindOf(kind) != 2) {
-    // Slid out down the grip and dropped, then a new one up into it, 6 mm short of home, and
-    // slapped home by the palm at TAP (the user, 2026-11-09).
+    // Slid out down the grip and dropped, then a new one up into it, 12 mm short of home, and
+    // slapped home by the palm at TAP, a jump in the last instant (the user, 2026-11-09: a hard slap).
     return s < 0.4
       ? [0.1 * ease(span(s, 0.15, 0.3)) + 0.6 * span(s, 0.3, 0.4) ** 2, 0, 0]
-      : [0.006 * (1 - span(s, TAP - 0.02, TAP)) + 0.214 * (1 - ease(span(s, 0.4, 0.72))), 0, 0];
+      : [0.012 * (1 - span(s, TAP - 0.012, TAP)) + 0.208 * (1 - ease(span(s, 0.4, 0.72))), 0, 0];
   }
   // It unscrews itself a turn and a half and jumps up spinning; then the hand brings a new one
   // down onto the socket and screws it in, three turns of the wrist.

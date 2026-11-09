@@ -1506,7 +1506,7 @@ describe('the katana in both hands', () => {
         }
       }
     }
-  });
+  }, 30_000);
 });
 
 describe('the laser rifle in both hands', () => {

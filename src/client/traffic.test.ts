@@ -3,8 +3,20 @@ import { HIGHLINE, ROOFTOPS } from '../shared/map';
 import type { WorldDef } from '../shared/world';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
-import { PITCH, ROAD, STREET } from './street';
-import { CARS, CYCLE, GAP, LENGTH, MODEL, STOP, carAt, cars, facing, traffic } from './traffic';
+import { FAR as CITY, MARKS, PITCH, ROAD, STREET, grid } from './street';
+import {
+  CARS,
+  CYCLE,
+  FAR_CARS,
+  GAP,
+  LENGTH,
+  MODEL,
+  STOP,
+  carAt,
+  cars,
+  facing,
+  traffic,
+} from './traffic';
 
 const MAPS: [string, WorldDef][] = [
   ['HIGHLINE', HIGHLINE],
@@ -16,12 +28,34 @@ const TIMES = Array.from({ length: 700 }, (_, i) => 1.7e5 + i * 0.37);
 describe.each(MAPS)('the traffic of %s', (_, def) => {
   const list = cars(def);
 
-  it('has a few dozen cars, as many as asked, every one on a lane of a road round the play area', () => {
-    expect(list).toHaveLength(CARS);
+  it('has a few dozen cars round the play area, as many as asked, and more on the grid out to MARKS', () => {
+    expect(list).toHaveLength(CARS + FAR_CARS);
     expect(CARS).toBeGreaterThanOrEqual(40);
     expect(CARS).toBeLessThanOrEqual(80);
+    expect(FAR_CARS).toBeLessThanOrEqual(200);
     expect(new Set(list.map(c => c.paint)).size).toBeGreaterThanOrEqual(4);
     expect(list.every(c => c.stops.length >= 2)).toBe(true);
+    // The first CARS on the four roads round the play area, between their four crossings.
+    const { box, xs, zs } = grid(def);
+    const mid = (lines: number[]) => lines.slice(lines.length / 2 - 2, lines.length / 2 + 2);
+    for (const c of list.slice(0, CARS)) {
+      expect(mid(c.axis ? zs : xs)).toContain(c.at);
+      expect([...c.stops].sort((a, b) => a - b)).toEqual(mid(c.axis ? xs : zs));
+    }
+    // The others on the far grid's lanes, a piece of a few crossings each, out to MARKS from the centre.
+    const far = grid(def, CITY);
+    const [cx, cz] = [(box[0] + box[1]) / 2, (box[2] + box[3]) / 2];
+    let most = 0;
+    for (const c of list.slice(CARS)) {
+      expect((c.axis ? far.zs : far.xs).includes(c.at)).toBe(true);
+      expect(c.stops.length).toBeLessThanOrEqual(5);
+      for (const s of c.stops) {
+        const [x, z] = c.axis ? [s, c.at] : [c.at, s];
+        most = Math.max(most, Math.hypot(x - cx, z - cz));
+        expect(Math.hypot(x - cx, z - cz)).toBeLessThan(MARKS + 2 * PITCH);
+      }
+    }
+    expect(most).toBeGreaterThan(MARKS - PITCH);
   });
 
   it('is deterministic from the time alone: the same cars, the same places, for any client', () => {
@@ -207,12 +241,12 @@ describe('the cars drawn', () => {
     for (const [, def] of MAPS) {
       const v = draw(def, [eye[0], 400, eye[2]], down, 1.7e5 + 3);
       expect(v.length % (3 * STRIDE)).toBe(0);
-      expect(v.length / STRIDE).toBeLessThanOrEqual(CARS * per);
+      expect(v.length / STRIDE).toBeLessThanOrEqual((CARS + FAR_CARS) * per);
       expect(v.every(Number.isFinite)).toBe(true);
     }
   });
 
-  it('costs at most 64 cars of about 100 vertices a frame, and far less with the view turned away or the cars far', () => {
+  it('costs at most the near cars of about 100 vertices a frame and the far ones of a body, far less with the view turned away or the cars far', () => {
     const [x, z] = [HIGHLINE.teams[0].base[0], HIGHLINE.teams[0].base[2]];
     let most = 0;
     let least = Infinity;
@@ -223,7 +257,7 @@ describe('the cars drawn', () => {
       // Looking away from the street, up: nothing of it, but a car right under the eye.
       expect(draw(HIGHLINE, [x, 60, z], [0, 1, 0], t).length / STRIDE).toBeLessThan(near / 2 + 1);
     }
-    expect(most).toBeLessThanOrEqual(CARS * per);
+    expect(most).toBeLessThanOrEqual(CARS * per + (FAR_CARS * MODEL.body.length) / STRIDE);
     expect(most).toBeGreaterThan(10 * per);
     // From far away, beyond the distance where the haze has taken everything, nothing at all.
     expect(draw(HIGHLINE, [5000, 27, 5000], down, 1.7e5)).toEqual([]);

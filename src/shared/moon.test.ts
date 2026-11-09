@@ -16,7 +16,7 @@ import {
   TICK_HZ,
 } from './constants';
 import { TEAM_TINT } from './map';
-import { MOON, WEST_GAP, ZED } from './moon';
+import { LAYOUT, MOON, WEST_GAP, ZED } from './moon';
 import { move, spawn } from './physics';
 import { KEY, TEX } from './types';
 import { build } from './world';
@@ -73,7 +73,7 @@ describe('MOON', () => {
   });
 
   it('has brushes with min below max, known textures and tints, under 250 of them', () => {
-    expect(brushes.length).toBeGreaterThan(100);
+    expect(brushes.length).toBeGreaterThan(60);
     expect(brushes.length).toBeLessThan(250);
     const tex: number[] = Object.values(TEX);
     for (const [i, b] of brushes.entries()) {
@@ -91,7 +91,7 @@ describe('MOON', () => {
     const stone = brushes.filter(b => b.top === TEX.STONE).length;
     expect(stone).toBeGreaterThan(brushes.length * 0.1);
     const count = (id: number) => brushes.filter(b => b.top === id || b.side === id).length;
-    expect(count(TEX.CONCRETE)).toBeGreaterThan(40);
+    expect(count(TEX.CONCRETE)).toBeGreaterThan(20);
     expect(count(TEX.METAL)).toBeGreaterThanOrEqual(4);
     expect(count(TEX.STEEL)).toBeGreaterThanOrEqual(4);
     expect(count(TEX.BRICK) + count(TEX.WOOD) + count(TEX.LAVA)).toBe(0);
@@ -109,7 +109,8 @@ describe('MOON', () => {
         const overlap = [0, 1, 2].every(
           k => a.min[k] < b.max[k] - 1e-9 && b.min[k] < a.max[k] - 1e-9,
         );
-        expect(i === j || !overlap, `brushes ${i} and ${j}`).toBe(true);
+        // The two crossed boxes of a ghost octagon overlap by design.
+        expect(i === j || !overlap || (a.ghost && b.ghost), `brushes ${i} and ${j}`).toBe(true);
       }
     }
   });
@@ -291,7 +292,7 @@ describe('MOON, racks and packs', () => {
 
   it('stands every pack on the floor, a tier, a module, a tube or a stone: no pack on the landing pad', () => {
     for (const [x, y, z] of [...MOON.packs!, ...MOON.ammo!, ...MOON.cells!]) {
-      expect(y === 0 || y === 6 || y === 5 || y === 3.5 || y === 16).toBe(true);
+      expect(y === 0 || y === 5 || y === 3.5).toBe(true);
       expect(x).toBeGreaterThan(20);
       expect(z).toBeGreaterThan(0);
     }
@@ -307,6 +308,118 @@ const topAt = (x: number, z: number) =>
       .map(b => b.max[1]),
   );
 
+describe('MOON, the dome and the layout the scenery follows', () => {
+  const ghosts = brushes.filter(b => b.ghost);
+  const shell = (y: number) => (y < 5 ? 22.4 : 22.4 * Math.sqrt(1 - ((y - 5) / 12) ** 2));
+
+  it('has ghost bands only over the domes, 4 bands of 4 stepped boxes each, the first up to 10.5 m', () => {
+    expect(ghosts).toHaveLength(32);
+    for (const [cz, sign] of [
+      [236, 1],
+      [44, -1],
+    ]) {
+      const mine = ghosts.filter(b => Math.abs((b.min[2] + b.max[2]) / 2 - cz) < 1e-6);
+      expect(mine).toHaveLength(16);
+      expect(Math.max(...mine.map(b => b.max[1]))).toBe(17);
+      expect(Math.min(...mine.filter(b => b.min[1] === 0).map(b => b.max[1]))).toBe(10.5);
+      expect(sign * (cz - 140)).toBeGreaterThan(0);
+    }
+    // Higher than a double jump from a module roof: 5 + apex + the second jump's rise, with a margin.
+    expect(10.5).toBeGreaterThan(5 + APEX + 6 ** 2 / (2 * HALF) + 0.5);
+  });
+
+  it('covers the drawn shell from outside: every point of its surface is inside a band', () => {
+    for (const [cx, cz] of LAYOUT.domes) {
+      for (let y = 0.1; y < 17; y += 0.4) {
+        for (let deg = 0; deg < 360; deg += 1) {
+          const r = shell(y) - 0.01;
+          const [x, z] = [
+            cx + r * Math.cos((deg * Math.PI) / 180),
+            cz + r * Math.sin((deg * Math.PI) / 180),
+          ];
+          expect(
+            ghosts.some(
+              b =>
+                b.min[0] <= x &&
+                x <= b.max[0] &&
+                b.min[2] <= z &&
+                z <= b.max[2] &&
+                b.min[1] <= y &&
+                y <= b.max[1],
+            ),
+            `${x.toFixed(2)}, ${y.toFixed(1)}, ${z.toFixed(2)}`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('lays out what the scenery draws on its boxes: both halves, the blue one mirrored', () => {
+    const { domes, pads, shuttles, modules, tubes, masts } = LAYOUT;
+    expect([
+      domes.length,
+      pads.length,
+      shuttles.length,
+      modules.length,
+      tubes.length,
+      masts.length,
+    ]).toEqual([2, 2, 2, 4, 4, 12]);
+    expect(domes[1]).toEqual([80, ZED - 236]);
+    expect(pads[1]).toEqual([40, ZED - 220, 13]);
+    const has = (b: { min: number[]; max: number[] }) =>
+      brushes.some(c => [0, 1, 2].every(k => c.min[k] === b.min[k] && c.max[k] === b.max[k]));
+    for (const b of [...shuttles, ...modules, ...tubes]) {
+      expect(has(b)).toBe(true);
+    }
+    for (const [x, z] of masts) {
+      expect(
+        brushes.some(
+          b => b.min[0] < x && x < b.max[0] && b.min[2] < z && z < b.max[2] && b.max[1] >= 10,
+        ),
+      ).toBe(true);
+    }
+    // Each tube reaches the module it joins (the first its west face, the second its north face).
+    expect(tubes[0].max[0]).toBe(modules[0].min[0]);
+    expect(tubes[1].min[2]).toBe(modules[1].max[2]);
+    expect(tubes[0].min[2]).toBeGreaterThanOrEqual(modules[0].min[2]);
+    expect(tubes[1].min[0]).toBeGreaterThanOrEqual(modules[1].min[0]);
+    // And each touches the dome's ghost shell, a metre or so short of the drawn one.
+    for (const t of tubes.slice(0, 2)) {
+      const [cx, cz] = domes[0];
+      const touching = ghosts.some(
+        g =>
+          g.min[1] === 0 &&
+          Math.abs(cz - (g.min[2] + g.max[2]) / 2) < 30 &&
+          [0, 2].some(
+            a =>
+              Math.abs(t.min[a] - g.max[a]) < 1e-6 ||
+              Math.abs(t.max[a] - g.min[a]) < 1e-6 ||
+              Math.abs(t.min[a] - g.min[a]) < 1e-6 ||
+              Math.abs(t.max[a] - g.max[a]) < 1e-6,
+          ) &&
+          t.min[0] <= g.max[0] + 1e-6 &&
+          t.max[0] >= g.min[0] - 1e-6 &&
+          t.min[2] <= g.max[2] + 1e-6 &&
+          t.max[2] >= g.min[2] - 1e-6,
+      );
+      expect(touching, `tube at ${t.min}`).toBe(true);
+      expect(cx).toBe(80);
+    }
+  });
+
+  it('has a rim of one band, 14 m, all round: more than a double jump reaches', () => {
+    for (const [x, z] of [
+      [-5, 100],
+      [165, 100],
+      [80, -5],
+      [80, 285],
+    ]) {
+      expect(topAt(x, z)).toBe(14);
+    }
+    expect(14).toBeGreaterThan(5 + APEX + 6 ** 2 / (2 * HALF));
+  });
+});
+
 describe('MOON, the rille', () => {
   it('is open to the kill floor from x 0 to 160, but at its three crossings', () => {
     let open = 0;
@@ -315,7 +428,7 @@ describe('MOON, the rille', () => {
       for (let z = RILLE0 + 2.1; z < RILLE1 - 2.1; z += 0.5) {
         total++;
         const top = topAt(x, z);
-        if (top === 30 || top === 60) {
+        if (top === 14) {
           continue;
         }
         if (top === -Infinity) {
@@ -507,41 +620,24 @@ describe('MOON, flown with the real physics', () => {
     expect(s.low).toBe(0);
   });
 
-  it('climbs the dome by its stairs, tier after tier, to the third, and jumps on to the fourth', () => {
-    const s = Sim.at(world).put(56, 0, 210, NORTH);
-    const to = (x: number, z: number, y: number) => {
-      expect(s.goTo(x, z, { r: 0.3 }), `to ${x}, ${z}`).toBeGreaterThanOrEqual(0);
-      expect(s.p.y).toBeCloseTo(y, 2);
-    };
-    // The west stairs to the first tier, round the south of it to the east stairs of the second.
-    to(56, 227.6, 6);
-    to(60, 227.6, 6);
-    to(61, 217, 6);
-    to(98, 217, 6);
-    to(98, 236, 6);
-    to(98, 248.6, 11);
-    to(94, 248.6, 11);
-    // The third tier's stairs, climbed southward from the second tier's ring.
-    to(93, 245.5, 11);
-    to(93, 236.6, 14.5);
-    to(88, 236.6, 14.5);
-    // A jump of 1.5 m on the fourth tier: 2.45 m of apex at half gravity.
-    expect(flyTo(s, [80, 16, 236])).toBeGreaterThanOrEqual(0);
+  it('cannot be stood on or in at the domes: a double jump from a module roof stays under the first band', () => {
+    const m = Sim.at(world).put(118, 5, 226, WEST);
+    let high = 0;
+    m.step(KEY.JUMP, WEST);
+    m.until(p => p.vy <= 0, 0, WEST, 100);
+    m.step(0, WEST);
+    for (let k = 0; k < 100; k++) {
+      m.step(k === 0 ? KEY.JUMP : 0, WEST);
+      high = Math.max(high, m.p.y);
+    }
+    expect(high).toBeLessThan(10.5);
+    expect(high).toBeGreaterThan(9);
   });
 
-  it('climbs onto the tube tops by the ramps, then jumps up to the modules and, by the crate, the first tier', () => {
+  it('climbs onto the tube tops by the ramps, then jumps up to the module roofs', () => {
     const s = Sim.at(world).put(107, 0, 211, NORTH);
     expect(s.goTo(107, 226, { r: 0.3 })).toBeGreaterThan(0);
     expect(s.p.y).toBeCloseTo(3.5, 2);
-    // The crate (1 m), then the dome first tier (1.5 m more, a jump or a ledge grab).
-    expect(flyTo(s, [103.2, 4.5, 226])).toBeGreaterThanOrEqual(0);
-    const up = s.until(
-      p => p.ground && p.y === 6,
-      p => KEY.FORWARD | (p.ground ? KEY.JUMP : 0),
-      WEST,
-      200,
-    );
-    expect(up).toBeGreaterThanOrEqual(0);
     // And the other way: from the tube top up to the first module's roof, 1.5 m.
     const m = Sim.at(world).put(107, 3.5, 226, EAST);
     expect(flyTo(m, [118, 5, 226])).toBeGreaterThanOrEqual(0);

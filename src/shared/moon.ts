@@ -32,6 +32,66 @@ const box = (
   side = top,
   tint?: Vec3,
 ): Brush => ({ min: [x0, y0, z0], max: [x1, y1, z1], top, side, tint });
+const fromBx = ({ min, max }: Bx, top: number, side = top): Brush => ({ min, max, top, side });
+
+/** A box by its corners. */
+interface Bx {
+  min: Vec3;
+  max: Vec3;
+}
+const bx = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): Bx => ({
+  min: [x0, y0, z0],
+  max: [x1, y1, z1],
+});
+/** The twin of a box across the centre line. */
+const mirror = ({ min, max }: Bx): Bx =>
+  bx(min[0], min[1], ZED - max[2], max[0], max[1], ZED - min[2]);
+
+/** The drawn dome (moonscape.ts): a drum of radius R up to y 5, then a shell to the apex at y 17. */
+const R = 22.4;
+const shell = (y: number) => (y < 5 ? R : R * Math.sqrt(1 - ((y - 5) / 12) ** 2));
+const q = (v: number) => Math.round(v * 10) / 10;
+/** Height bands of the ghost collision over the dome: the first is above a double jump from a module top. */
+const BANDS = [0, 10.5, 13.5, 15.5, 17];
+/**
+ * The half sides (x, z) of the boxes that cover the circle of radius r, centred: four, stepped,
+ * the first two crossed with the last two (a union of axis-aligned boxes: its corners stick out of
+ * the circle by up to 17 %, the ghosts are not drawn).
+ */
+const around = (r: number) =>
+  [
+    [1, 0.39],
+    [0.93, 0.71],
+    [0.71, 0.93],
+    [0.39, 1],
+  ].map(([a, b]) => [q(a * r), q(b * r)]);
+const first = around(R + 0.2);
+
+/** The domes' centres, the landing pads (x, z, radius), the shuttles, the modules, the tubes and the masts (centres), red's then blue's: what the scenery draws on. */
+const DOME = [80, 236];
+const PAD = [40, 220, 13];
+const SHUTTLE = bx(33, 0.25, 218, 47, 3.25, 222);
+const MODULES = [bx(111, 0, 222, 125, 5, 230), bx(96, 0, 196, 110, 5, 204)];
+const TUBES = [
+  bx(DOME[0] + first[1][0], 0, DOME[1] - first[0][1] - 4, 111, 3.5, DOME[1] - first[0][1]),
+  bx(98, 0, 204, 102, 3.5, DOME[1] - first[1][1]),
+];
+const MASTS = [
+  [27.3, 207.3],
+  [52.7, 207.3],
+  [27.3, 232.7],
+  [52.7, 232.7],
+  [106.2, 230.4],
+  [103.2, 212.4],
+];
+export const LAYOUT = {
+  domes: [DOME, [DOME[0], ZED - DOME[1]]],
+  pads: [PAD, [PAD[0], ZED - PAD[1], PAD[2]]],
+  shuttles: [SHUTTLE, mirror(SHUTTLE)],
+  modules: [...MODULES, ...MODULES.map(mirror)],
+  tubes: [...TUBES, ...TUBES.map(mirror)],
+  masts: [...MASTS, ...MASTS.map(([x, z]) => [x, ZED - z])],
+};
 
 /**
  * Stairs from `a` to `b` along z (axis 2) or x (0), across `w0` to `w1`, rising from `y` to `top`
@@ -69,37 +129,29 @@ const both = (l: Vec3[], ...mid: Vec3[]) => [...l, ...l.map(flipPoint), ...mid];
 const half: Brush[] = [
   // The crater floor, regolith, from the rille to the rim.
   box(0, -30, 148, 160, 0, 280, STONE),
-  // The dome, four white tiers (tops 6, 11, 14.5, 16), its stairs west and east of the first tier and on to the third.
-  box(58, 0, 214, 102, 6, 258, CONCRETE),
-  box(64, 6, 220, 96, 11, 252, CONCRETE),
-  box(69, 11, 225, 91, 14.5, 247, CONCRETE),
-  box(74, 14.5, 230, 86, 16, 242, CONCRETE),
-  ...stairs(2, 214, 228, 54, 58, 0, 6),
-  ...stairs(2, 232, 246, 102, 106, 0, 6),
-  ...stairs(2, 238, 249, 96, 100, 6, 11),
-  ...stairs(2, 244, 236, 91, 95, 11, 14.5),
+  // The dome, drawn round and not to be stood on: ghost bands over its shell, each a union of four stepped boxes.
+  ...BANDS.slice(1).flatMap((y1, i) =>
+    around(shell(BANDS[i]) + 0.2).map(([a, b]) => ({
+      ...box(DOME[0] - a, BANDS[i], DOME[1] - b, DOME[0] + a, y1, DOME[1] + b, CONCRETE),
+      ghost: true,
+    })),
+  ),
   // The flag's pad ahead of the dome: a red step of 0.5 m and a dais at 1 m.
   box(74, 0, 199, 86, 0.5, 211, PAINT, CONCRETE, RED),
   box(76, 0.5, 201, 84, 1, 209, PAINT, CONCRETE, RED),
   // The armoury, a red plinth behind the dome: the racks stand on it.
   box(60, 0, 259, 70, 1.5, 265, STEEL, PAINT, RED),
-  // The landing pad, a shuttle on it (cover), two modules, the tubes joining them to the dome
-  // (tops 3.5 m up) with their ramps, and a crate on the first tube: a step to the dome.
+  // The landing pad, a shuttle on it (cover), two modules, the tubes to the dome (tops 3.5 m up)
+  // with their ramps, and masts at the pad's corners and by the tubes.
   box(27, 0, 207, 53, 0.25, 233, METAL),
-  box(33, 0.25, 218, 47, 3.25, 222, PAINT, PAINT, [0.82, 0.84, 0.88]),
-  box(111, 0, 222, 125, 5, 230, METAL, CONCRETE),
-  box(96, 0, 196, 110, 5, 204, METAL, CONCRETE),
-  box(102, 0, 224, 111, 3.5, 228, STEEL, METAL),
-  box(98, 0, 204, 102, 3.5, 214, STEEL, METAL),
-  ...stairs(2, 214, 224, 105, 109, 0, 3.5),
+  { ...fromBx(SHUTTLE, PAINT), tint: [0.82, 0.84, 0.88] },
+  ...MODULES.map(m => fromBx(m, METAL, CONCRETE)),
+  ...TUBES.map(t => fromBx(t, STEEL, METAL)),
+  ...stairs(2, 214, TUBES[0].min[2], 105, 109, 0, 3.5),
   ...stairs(0, 108, 102, 206, 210, 0, 3.5),
-  box(102, 3.5, 224.5, 104.4, 4.5, 227.5, METAL),
-  // Light masts at the pad's corners (on it) and by the tubes.
-  ...[27.1, 52.5].flatMap(x =>
-    [207.1, 232.5].map(z => box(x, 0.25, z, x + 0.4, 10.25, z + 0.4, STEEL)),
+  ...MASTS.map(([x, z]) =>
+    box(x - 0.2, x < 60 ? 0.25 : 0, z - 0.2, x + 0.2, x < 60 ? 10.25 : 10, z + 0.2, STEEL),
   ),
-  box(106, 0, 229, 106.4, 10, 229.4, STEEL),
-  box(103, 0, 212.2, 103.4, 10, 212.6, STEEL),
   // The west long jump: a spur of the lip into the rille, orange.
   box(12, -30, 148 - (16 - WEST_GAP) / 2, 24, 0, 148, PAINT, STONE, [1, 0.42, 0.08]),
   // Boulders in the field (x, z, width, depth, height).
@@ -123,16 +175,11 @@ const centre: Brush[] = [
   box(126, -30, 143, 131, 1.2, 147, STONE),
   box(130, -30, 138.5, 135, 2.4, 141.5, STONE),
   box(126, -30, 133, 131, 1.2, 137, STONE),
-  // The rim: two steps, 30 m and 60 m, all round the play area.
-  ...[0, 10].flatMap(o => {
-    const h = 30 + 3 * o;
-    return [
-      box(-10 - o, -30, -10 - o, -o, h, 290 + o, STONE),
-      box(160 + o, -30, -10 - o, 170 + o, h, 290 + o, STONE),
-      box(-o, -30, -10 - o, 160 + o, h, -o, STONE),
-      box(-o, -30, 280 + o, 160 + o, h, 290 + o, STONE),
-    ];
-  }),
+  // The rim, the boundary: one band 14 m high all round the play area.
+  box(-10, -30, -10, 0, 14, 290, STONE),
+  box(160, -30, -10, 170, 14, 290, STONE),
+  box(0, -30, -10, 160, 14, 0, STONE),
+  box(0, -30, 280, 160, 14, 290, STONE),
 ];
 
 /** Red's spawns behind the dome facing blue (yaw 0 looks toward -z): five in a row, three in front. */
@@ -164,7 +211,7 @@ export const MOON: WorldDef = {
   // Health 3, ammo 3 and rail cells 2 in a half, and by the rille two of each pack and one cell.
   packs: both(
     [
-      [99, 6, 218],
+      [90, 0, 210],
       [118, 5, 226],
       [30, 0, 185],
     ],
@@ -173,7 +220,7 @@ export const MOON: WorldDef = {
   ),
   ammo: both(
     [
-      [61, 6, 226],
+      [50, 0, 246],
       [103, 5, 200],
       [135, 0, 190],
     ],
@@ -183,7 +230,7 @@ export const MOON: WorldDef = {
   cells: both(
     [
       [106.5, 3.5, 226],
-      [80, 16, 236],
+      [35, 0, 244],
     ],
     [80, 0, 140],
   ),

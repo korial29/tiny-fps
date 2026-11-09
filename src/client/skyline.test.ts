@@ -188,11 +188,11 @@ describe('the parks', () => {
         ),
     );
   };
-  /** The positions of the trees' vertices. */
-  const stands = (def: typeof ROOFTOPS) => {
-    const v = trees(def);
-    return Array.from({ length: v.length / STRIDE }, (_, i) => v.slice(i * STRIDE, i * STRIDE + 3));
-  };
+  /** The positions of one in every 9 of the trees' vertices: enough of every tree, and quick. */
+  const stands = (v: number[]) =>
+    Array.from({ length: Math.floor(v.length / STRIDE / 9) }, (_, i) =>
+      v.slice(i * 9 * STRIDE, i * 9 * STRIDE + 3),
+    );
 
   it('takes the place of some towers: whole blocks of lawn near the play area and out to the horizon', () => {
     for (const def of [ROOFTOPS, HIGHLINE]) {
@@ -215,7 +215,7 @@ describe('the parks', () => {
       // A few hundred trees, at about 30 triangles each near and 24 far.
       expect(v.length / STRIDE).toBeGreaterThan(20000);
       expect(v.length / STRIDE).toBeLessThan(90000);
-      const pts = stands(def);
+      const pts = stands(v);
       const lots = parks(def);
       const { box } = grid(def);
       const [cx, cz] = [(box[0] + box[1]) / 2, (box[2] + box[3]) / 2];

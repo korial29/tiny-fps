@@ -13,10 +13,11 @@ import {
 import type { Result } from '../shared/protocol';
 import { FLAG } from '../shared/types';
 import type { Snapshot } from '../shared/types';
+import { FH, FW, PALETTE, sprite } from './face';
 import type { Mark } from './marks';
 
 export const HUD_CSS =
-  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
@@ -48,6 +49,7 @@ export const HUD_CSS =
   `ins{left:50%;top:64%;width:min(320px,70vw);height:12px;transform:translateX(-50%);border-radius:6px;` +
   `background:linear-gradient(90deg,#e23b3b,#fff3 50%,#8ef);box-shadow:0 0 0 1px #0008}` +
   `ins i{position:absolute;top:-5px;width:6px;height:22px;margin-left:-3px;border-radius:3px;background:#fff;box-shadow:0 0 8px #8ef}` +
+  `figure{left:12px;bottom:44px}figure canvas{display:block;width:72px;height:87px;image-rendering:pixelated;filter:drop-shadow(0 2px 2px #000a)}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}`;
 
@@ -95,6 +97,8 @@ export interface Hud {
   ): void;
   /** A hit marker on the crosshair for a moment: a ball or a cut of the own player hit. */
   hit(): void;
+  /** The face over the health, frame `n` of face.ts (-1 hides it). */
+  face(n: number): void;
   /**
    * A saber lock: the gauge of the tug of war under the crosshair, with `lead` the own side's, -1
    * (the foe wins) to 1 (he wins); undefined hides it.
@@ -126,7 +130,7 @@ export const createHud = (screen: HTMLElement): Hud => {
       `<span>Take the enemy flag to your own base while yours is home. Jump onto the armoury past your flag for the gun, the katana and the rail gun. Hold the rail gun's lightning on a foe: it slows him and drains 1 health a second, and 3 s more after it lets go.</span>` +
       `<strong></strong></aside>` +
       `<u></u><h5 hidden>Muted (M)</h5>` +
-      `<ul>${'<li></li>'.repeat(HP_MAX)}</ul>` +
+      `<ul>${'<li></li>'.repeat(HP_MAX)}</ul><figure hidden><canvas width="${FW}" height="${FH}"></canvas></figure>` +
       `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
       `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
       `<data></data><span></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
@@ -147,6 +151,9 @@ export const createHud = (screen: HTMLElement): Hud => {
   const [rope, knot] = [one('ins'), one('ins i')];
   const [count, spare, slots] = [one('data'), one('dl span'), one('dl small')];
   let ticker: ReturnType<typeof setTimeout> | undefined;
+  const [frame, mug] = [one('figure'), one<HTMLCanvasElement>('figure canvas')];
+  let pen: CanvasRenderingContext2D | null | undefined;
+  let shown = -1;
   const banner = one('output');
   const vignette = one('u');
   const end = one('section');
@@ -243,6 +250,20 @@ export const createHud = (screen: HTMLElement): Hud => {
         (kbd as HTMLElement).hidden = !have[i];
         kbd.classList.toggle('a', i == (k ? 1 : rifled ? 3 : railed ? 2 : 0));
       });
+    },
+    face(n) {
+      frame.hidden = n < 0;
+      if (n < 0 || n == shown) {
+        return;
+      }
+      shown = n;
+      pen ??= mug.getContext('2d');
+      if (pen) {
+        const img = pen.createImageData(FW, FH);
+        const px = new Uint32Array(img.data.buffer);
+        sprite(n).forEach((c, i) => (px[i] = PALETTE[c]));
+        pen.putImageData(img, 0, 0);
+      }
     },
     hit() {
       marker.hidden = false;

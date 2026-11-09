@@ -1,9 +1,10 @@
-import { LOCK_WIN, PLAYER_H, TICK_HZ } from '../shared/constants';
+import { HP_MAX, LOCK_WIN, PLAYER_H, TICK_HZ } from '../shared/constants';
 import { HIGHLINE } from '../shared/map';
 import { eyeHeight } from '../shared/physics';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
-import type { PlayerInfo, SocketLike, Snapshot } from '../shared/types';
+import { FLAG, KEY } from '../shared/types';
+import type { PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
 import { build, hidden } from '../shared/world';
 import { createAudio, savedMute, toggleMute } from './audio';
 import { createBalls } from './balls';
@@ -14,6 +15,7 @@ import { createCombat, sight } from './combat';
 import { createEffects } from './effects';
 import { flagDraws } from './flag';
 import { createFoley } from './foley';
+import { mood } from './face';
 import { HUD_CSS, createHud } from './hud';
 import type { Summary } from './hud';
 import { createInput } from './input';
@@ -115,6 +117,9 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   let msg = rd ? '' : 'WebGL2 is not available';
   /** The own player is known, and the look angles start from where the host spawned it. */
   let ready = false;
+  /** The face in the HUD: its mind, the own player as last framed, and how long the trigger has been held. */
+  const feel = mood();
+  let [felt, firing]: [PlayerState | undefined, number] = [undefined, 0];
   let last = performance.now();
   let acc = 0;
   let raf = 0;
@@ -245,6 +250,36 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     // The bob goes with the legs as last drawn.
     fx.update(me, ctl.keys, dt, hit, body.phase);
     hud.hurt(fx.hurt);
+    if (me) {
+      // A hit comes from the nearest foe up: the angle to him off the view, to the right.
+      const lost = felt && !felt.down ? Math.max(0, felt.hp - me.hp) : 0;
+      const team = new Map(roster.map(p => [p.id, p.team]));
+      let [from, near] = [undefined as number | undefined, Infinity];
+      for (const p of others) {
+        const [dx, dz] = [p.x - me.x, p.z - me.z];
+        const d = Math.hypot(dx, dz);
+        if (lost && !p.down && team.get(p.id) != you.team && d < near) {
+          const [s, c] = [Math.sin(ctl.yaw), Math.cos(ctl.yaw)];
+          [from, near] = [Math.atan2(dx * c - dz * s, -dx * s - dz * c), d];
+        }
+      }
+      const has = (q?: PlayerState) =>
+        q ? +(q.ammo >= 0) + +!!q.blade + +((q.rail ?? -1) >= 0) + +((q.rifle ?? -1) >= 0) : 0;
+      firing = ctl.keys & KEY.FIRE && !me.down ? firing + dt : 0;
+      hud.face(
+        feel(dt, {
+          hp: me.hp,
+          max: HP_MAX,
+          down: me.down > 0,
+          flag: !!match?.flags.some(f => f.state === FLAG.CARRIED && f.by == you.id),
+          lost,
+          from,
+          got: !!felt && has(me) > has(felt),
+          firing,
+        }),
+      );
+    }
+    felt = me && { ...me };
     // A saber lock: the gauge of the tug of war, the own presses against the foe's.
     const foe = me?.lock ? who(me.foe ?? -1) : undefined;
     hud.duel(foe ? ((me!.pushes ?? 0) - (foe.pushes ?? 0)) / LOCK_WIN : undefined);

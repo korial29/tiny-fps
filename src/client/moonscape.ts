@@ -2,6 +2,7 @@
 // hash: red's half (the dome and its windows, the tubes, the pad and its shuttle, masts, rovers,
 // boulders) mirrored for blue, then the crater rim, the stars and the Earth. Nothing here is collided
 // with. Every part is lit paint (layer -1) or glow (layer -2: windows, lamps, stars, the Earth).
+import { LAYOUT } from '../shared/moon';
 import { TAU } from '../shared/physics';
 import type { WorldDef } from '../shared/world';
 import { GLOW, glow, ring, tri } from './flag';
@@ -9,8 +10,10 @@ import { STRIDE, dot, dress, mix, place, segment, smooth, sub, unit } from './me
 import type { Vec3 } from './mesh';
 import { hash } from './textures';
 
-/** The play area is x 0..W, z 0..Z, its middle C. The rim runs D metres out, the plain beyond it. */
-const [W, Z, D] = [160, 280, 300];
+/** The play area is x 0..W, z 0..Z, its middle C. The crater wall runs REACH metres out from the stone wall, the plain beyond it. */
+const [W, Z] = [160, 280];
+/** The stone wall round the play area is WALL thick and TOP high; the crater wall rises from its outer edge and ends REACH out. */
+const [WALL, TOP, REACH] = [10, 14, 400];
 const C: Vec3 = [80, 0, 140];
 /** Radius of the star dome and the Earth's distance, metres: 700 from the middle is 540..860 from any spot of the play area, inside the far clip of 900. */
 const SKY = 700;
@@ -246,38 +249,31 @@ const dome = (o: number[], x: number, z: number) => {
   }
 };
 
-/** The tubes from the dome to the modules, rounded, with a rib every 5 m. */
-const TUBES: [Vec3, Vec3][] = [
-  [
-    [80, 1.75, 236],
-    [112, 1.75, 226],
-  ],
-  [
-    [80, 1.75, 236],
-    [106, 1.75, 200],
-  ],
-];
+/** A rounded tube over each tube box of the map, from the module to inside the dome, with a rib every 5 m. */
 const tubes = (o: number[]) =>
-  TUBES.forEach(([a, b]) => {
-    const l = Math.hypot(...sub(b, a));
-    segment(o, TUBE, a, b, [0, 1, 0], 1, [1.75, 2.1]);
-    for (let d = 5; d < l - 1; d += 5) {
-      const p = a.map((v, i) => v + ((b[i] - v) * d) / l) as Vec3;
-      const q = a.map((v, i) => v + ((b[i] - v) * (d + 0.3)) / l) as Vec3;
-      segment(o, RIB, p, q, [0, 1, 0], 0.3, [1.75, 2.1]);
+  LAYOUT.tubes.slice(0, 2).forEach(({ min, max }) => {
+    const k = max[0] - min[0] > max[2] - min[2] ? 0 : 2;
+    const [lo, hi, mid] = [min[k], max[k], (min[2 - k] + max[2 - k]) / 2];
+    const dome = LAYOUT.domes[0][k / 2];
+    const [a0, b0] =
+      Math.abs(lo - dome) < Math.abs(hi - dome) ? [lo - 4, hi + 0.5] : [lo - 0.5, hi + 4];
+    const at = (t: number): Vec3 => (k ? [mid, 1.75, t] : [t, 1.75, mid]);
+    const [a, b] = [at(a0), at(b0)];
+    const w = (max[2 - k] - min[2 - k]) / 2 + 0.1;
+    segment(o, TUBE, a, b, [0, 1, 0], 1, [1.75, w]);
+    for (let d = 5; d < b0 - a0 - 1; d += 5) {
+      segment(o, RIB, at(a0 + d), at(a0 + d + 0.3), [0, 1, 0], 0.3, [1.75, w]);
     }
   });
 
-/** The strips of windows on the long faces of the two modules (14 x 5 x 8 at these centres). */
+/** The strips of windows on the long faces of the two module boxes of the map. */
 const modules = (o: number[]) => {
-  for (const [cx, cz] of [
-    [118, 226],
-    [112, 200],
-  ]) {
+  for (const { min, max } of LAYOUT.modules.slice(0, 2)) {
+    const mid: Vec3 = [(min[0] + max[0]) / 2, 2.5, (min[2] + max[2]) / 2];
     for (const s of [-1, 1]) {
-      const z = cz + s * 4.05;
+      const z = s > 0 ? max[2] : min[2];
       for (let k = 0; k < 7; k++) {
-        const x = cx - 6 + 2 * k;
+        const x = min[0] + 1 + 2 * k;
         const quad = (w: number, y0: number, y1: number, e: number): Vec3[] =>
           [
             [-w, y0],
@@ -285,15 +281,15 @@ const modules = (o: number[]) => {
             [w, y1],
             [-w, y1],
           ].map(([a, y]) => [x + a, y, z + s * e]);
-        face(o, quad(0.72, 2.6, 3.8, 0), [0.06, 0.06, 0.08], [cx, 2.5, cz]);
-        lit(o, 0.5, () => face(o, quad(0.6, 2.7, 3.7, 0.03), [0.9, 0.95, 1], [cx, 2.5, cz]));
+        face(o, quad(0.72, 2.6, 3.8, 0.02), [0.06, 0.06, 0.08], mid);
+        lit(o, 0.5, () => face(o, quad(0.6, 2.7, 3.7, 0.04), [0.9, 0.95, 1], mid));
       }
     }
   }
 };
 
-/** A landing pad (radius 13) with its painted rings and 24 lights, and a shuttle lying on it, nose toward +x. */
-const pad = (o: number[], px: number, pz: number) => {
+/** A landing pad (radius 13) with its painted rings and 24 lights, and a shuttle lying on it from x = s, nose toward +x. */
+const pad = (o: number[], px: number, pz: number, s: number) => {
   place(
     o,
     dress(
@@ -326,7 +322,6 @@ const pad = (o: number[], px: number, pz: number) => {
       ),
     );
   }
-  const s = px - 7;
   const hull: [number, number][] = [
     [0, 0],
     [0.5, 1.6],
@@ -367,12 +362,12 @@ const pad = (o: number[], px: number, pz: number) => {
   );
 };
 
-/** A light mast: a pole 10 m high, a foot, a glowing lamp. */
-const mast = (o: number[], x: number, z: number) => {
-  place(o, POLE, [x, 0, z], UP, [0, 0, 0], [0.2, 0.2, 10]);
-  place(o, POLE, [x, 0, z], UP, [0, 0, 0], [0.5, 0.5, 0.5]);
+/** A light mast standing at height y: a pole 10 m high, a foot, a glowing lamp. */
+const mast = (o: number[], x: number, z: number, y: number) => {
+  place(o, POLE, [x, y, z], UP, [0, 0, 0], [0.2, 0.2, 10]);
+  place(o, POLE, [x, y, z], UP, [0, 0, 0], [0.5, 0.5, 0.5]);
   lit(o, GLOW, () =>
-    place(o, BLOB, [x, 10.4, z], UP, [0, 0, 0], [0.55, 0.55, 0.45], [1, 0.93, 0.75]),
+    place(o, BLOB, [x, y + 10.4, z], UP, [0, 0, 0], [0.55, 0.55, 0.45], [1, 0.93, 0.75]),
   );
 };
 
@@ -404,70 +399,75 @@ const rover = (o: number[], x: number, z: number, yaw: number) => {
   put(o, m, [x, 0, z], yaw);
 };
 
-/** Red's half: everything but the crater, the stars and the Earth. */
+/** Red's half: everything but the crater, the stars and the Earth, on the map's LAYOUT. */
 const base = (o: number[]) => {
-  dome(o, 80, 236);
+  dome(o, ...(LAYOUT.domes[0] as [number, number]));
   tubes(o);
   modules(o);
-  pad(o, 40, 220);
-  for (const [x, z] of [
-    [25, 205],
-    [55, 205],
-    [25, 235],
-    [55, 235],
-  ]) {
-    mast(o, x, z);
+  const [px, pz] = LAYOUT.pads[0];
+  pad(o, px, pz, LAYOUT.shuttles[0].min[0]);
+  for (const [x, z] of LAYOUT.masts.slice(0, 6)) {
+    mast(o, x, z, x < 60 ? 0.25 : 0);
   }
-  TUBES.forEach(([a, b], k) => {
-    const l = Math.hypot(b[0] - a[0], b[2] - a[2]);
-    for (const t of [0.4, 0.8]) {
-      const s = (k + (t > 0.5 ? 1 : 0)) % 2 ? 3.4 : -3.4;
-      mast(
-        o,
-        a[0] + (b[0] - a[0]) * t - ((b[2] - a[2]) / l) * s,
-        a[2] + (b[2] - a[2]) * t + ((b[0] - a[0]) / l) * s,
-      );
-    }
-  });
   rover(o, 100, 178, 0.6);
   rover(o, 30, 255, -0.4);
   // Boulders along the three walls of the half, small enough to be walked through.
   for (let i = 0; i < 36; i++) {
     const h = (k: number) => hash(i, k, 41);
     const b = Math.floor(h(1) * 3);
-    const [x, z] =
+    const [x, z0] =
       b < 2 ? [(b ? 151 : 0) + h(2) * 9, 150 + h(3) * 122] : [5 + h(2) * 150, 273 + h(3) * 7];
+    // Not on the map's own boulder at (4..8, 172..176).
+    const z = z0 + (b === 0 && Math.abs(z0 - 174) < 8 ? 16 : 0);
     const r = 0.6 + 2.4 * h(4) ** 2;
     rock(o, [x, r * 0.15, z], r, i, grey(0.2 + 0.15 * h(5)));
   }
 };
 
-/** Height of the crater wall outside the play area: from the top of the stone walls (58) to a ragged crest of 60..90 m about 80 m out, then down to the plain. */
+/** How far a point is from the outer face of the stone wall (0 over it). */
+const away = (x: number, z: number) =>
+  Math.hypot(Math.max(-WALL - x, 0, x - W - WALL), Math.max(-WALL - z, 0, z - Z - WALL));
+
+/**
+ * Height of the crater wall: TOP at the stone wall, rising concave and gently to a ragged crest of
+ * 60..90 m some 200..250 m out, then down to the plain.
+ */
 const height = (x: number, z: number) => {
-  const d = Math.hypot(Math.max(-x, 0, x - W), Math.max(-z, 0, z - Z));
+  const d = away(x, z);
+  const dc = 225 + 50 * (fbm(x / 150, z / 150, 9) - 0.5);
   const crest = 60 + 30 * sm((fbm(x / 70, z / 70, 3) - 0.25) * 2);
-  const ridge =
-    (1 - Math.abs(2 * fbm(x / 11, z / 11, 7) - 1) - 0.5) *
-    18 *
-    sm(d / 25) *
-    (1 - sm((d - 200) / 100));
-  return (d < 80 ? 58 + (crest - 58) * sm(d / 80) : crest * (1 - sm((d - 80) / (D - 80)))) + ridge;
+  const fall = 1 - sm((d - dc) / (REACH - dc));
+  const ridge = (1 - Math.abs(2 * fbm(x / 11, z / 11, 7) - 1) - 0.5) * 20 * sm(d / 60) * fall;
+  return (d < dc ? TOP + (crest - TOP) * (d / dc) ** 1.8 : crest * fall) + ridge;
 };
 
-/** The crater wall: a grid of 10 m cells round the play area, flat shaded; the plain out to the stars beyond. */
+/** Grid lines from lo to hi every 10 m, and outward from both ends in steps that grow with the distance: 10, 20 then 40 m. */
+const lines = (lo: number, hi: number) => {
+  const out = (a: number, s: number) => {
+    const r = [a];
+    for (let d = 0; d < REACH;) {
+      d += d < 100 ? 10 : d < 200 ? 20 : 40;
+      r.push(a + s * d);
+    }
+    return r;
+  };
+  const mid = Array.from({ length: (hi - lo) / 10 - 1 }, (_, i) => lo + 10 * (i + 1));
+  return [...out(lo, -1).reverse(), ...mid, ...out(hi, 1)];
+};
+
+/** The crater wall: a grid round the stone wall, flat shaded; the plain out to the stars beyond. */
 const crater = (o: number[]) => {
-  const c = 10;
-  for (let i = 0; i < (W + 2 * D) / c; i++) {
-    for (let j = 0; j < (Z + 2 * D) / c; j++) {
-      const [x, z] = [i * c - D, j * c - D];
-      if (x >= 0 && x + c <= W && z >= 0 && z + c <= Z) {
+  const [xs, zs] = [lines(-WALL, W + WALL), lines(-WALL, Z + WALL)];
+  for (let i = 0; i < xs.length - 1; i++) {
+    for (let j = 0; j < zs.length - 1; j++) {
+      const [x, z] = [xs[i], zs[j]];
+      if (x >= -WALL && xs[i + 1] <= W + WALL && z >= -WALL && zs[j + 1] <= Z + WALL) {
         continue;
       }
-      const p = (a: number, b: number): Vec3 => [
-        x + a * c,
-        height(x + a * c, z + b * c),
-        z + b * c,
-      ];
+      const p = (a: number, b: number): Vec3 => {
+        const [u, v] = [xs[i + a], zs[j + b]];
+        return [u, height(u, v), v];
+      };
       const q = [p(0, 0), p(1, 0), p(1, 1), p(0, 1)];
       const g = (k: number) => 0.2 + 0.1 * hash(i, j, k) + (0.06 * (q[0][1] + q[2][1])) / 180;
       const below: Vec3 = [x, -500, z];
@@ -495,29 +495,30 @@ const crater = (o: number[]) => {
       );
     }
   }
-  for (const [x0, x1, z0, z1] of [
-    [-720, -D, -660, 940],
-    [W + D, 880, -660, 940],
-    [-D, W + D, -660, -D],
-    [-D, W + D, Z + D, 940],
+  const [x0, x1, z0, z1] = [-WALL - REACH, W + WALL + REACH, -WALL - REACH, Z + WALL + REACH];
+  for (const [a, b, c, d] of [
+    [-720, x0, -660, 940],
+    [x1, 880, -660, 940],
+    [x0, x1, -660, z0],
+    [x0, x1, z1, 940],
   ]) {
     face(
       o,
       [
-        [x0, 0, z0],
-        [x1, 0, z0],
-        [x1, 0, z1],
-        [x0, 0, z1],
+        [a, 0, c],
+        [b, 0, c],
+        [b, 0, d],
+        [a, 0, d],
       ],
       grey(0.2),
-      [x0, -50, z0],
+      [a, -50, c],
     );
   }
-  // Boulders on the wall, big against it.
+  // Boulders on the slope, big against it.
   for (let k = 0, n = 0; n < 90 && k < 3000; k++) {
-    const [x, z] = [-D + (W + 2 * D) * hash(k, 1, 51), -D + (Z + 2 * D) * hash(k, 2, 51)];
-    const d = Math.hypot(Math.max(-x, 0, x - W), Math.max(-z, 0, z - Z));
-    if (d > 3 && d < 150) {
+    const [x, z] = [x0 + (x1 - x0) * hash(k, 1, 51), z0 + (z1 - z0) * hash(k, 2, 51)];
+    const d = away(x, z);
+    if (d > 3 && d < 200) {
       const r = 3 + 9 * hash(k, 3, 51) ** 3;
       rock(o, [x, height(x, z) + 0.2 * r, z], r, k, grey(0.2 + 0.12 * hash(k, 4, 51)));
       n++;

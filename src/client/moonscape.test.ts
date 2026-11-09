@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MOON } from '../shared/moon';
+import { LAYOUT, MOON } from '../shared/moon';
 import { STRIDE } from './mesh';
 import { moonscape } from './moonscape';
 
@@ -83,7 +83,7 @@ describe('moonscape', () => {
     );
     expect(Math.max(...inside.map(p => p[1]))).toBeLessThan(20);
     const out = verts.filter(
-      p => (p[0] < 0 || p[0] > 160 || p[2] < 0 || p[2] > 280) && dist(p, C) < 400,
+      p => p[8] === -1 && (p[0] < 0 || p[0] > 160 || p[2] < 0 || p[2] > 280) && dist(p, C) < 650,
     );
     const top = Math.max(...out.map(p => p[1]));
     expect(top).toBeGreaterThan(60);
@@ -95,6 +95,29 @@ describe('moonscape', () => {
       (p: number[]) => p[2] > 280,
     ]) {
       expect(Math.max(...out.filter(side).map(p => p[1]))).toBeGreaterThan(60);
+    }
+  });
+
+  it('rises from 14 m at the stone wall, gently, to a crest 200 to 250 m out', () => {
+    const wall = verts.filter(
+      p => p[8] === -1 && Math.abs(p[0] + 10) < 1e-6 && p[2] > 0 && p[2] < 280,
+    );
+    expect(wall.length).toBeGreaterThan(0);
+    expect(wall.every(p => Math.abs(p[1] - 14) < 1e-6)).toBe(true);
+    const west = verts.filter(p => p[8] === -1 && p[0] < -10 && p[2] > 0 && p[2] < 280);
+    expect(Math.max(...west.filter(p => p[0] > -50).map(p => p[1]))).toBeLessThan(30);
+    const crest = west.filter(p => p[1] > 55);
+    expect(Math.min(...crest.map(p => -p[0]))).toBeGreaterThan(120);
+    expect(Math.max(...west.map(p => -p[0]))).toBeGreaterThan(300);
+  });
+
+  it('puts the masts on the map layout: lamps 10 m up, pad masts on the pad', () => {
+    for (const [x, z] of LAYOUT.masts) {
+      const y0 = x < 60 ? 0.25 : 0;
+      const lamp = verts.filter(
+        p => p[8] === -2 && Math.hypot(p[0] - x, p[2] - z) < 0.6 && p[1] > y0 + 9.5,
+      );
+      expect(lamp.length).toBeGreaterThan(0);
     }
   });
 });

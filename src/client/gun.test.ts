@@ -422,19 +422,19 @@ describe('the readout on the back of the gun', () => {
     expect(digits(5)[0].c[0]).toBeLessThan(digits(5)[0].c[2]);
   });
 
-  it('sits on a small screen with rounded corners, digits about 2.8 cm wide and 1.35 cm high filling it', () => {
+  it('sits on a black square filling the face, digits about 2.8 cm wide and 1.35 cm high', () => {
     const xs = digits(88).map(x => x.p[0]);
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.027);
     expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.029);
     const ys = digits(88).map(x => x.p[1]);
     expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.011);
-    // The screen is the face's 4 cm less 5 mm a side, and no corner is square.
+    // The square is the face's width less its rounded edges, 3.6 cm, its corners barely rounded.
     const sx = screen(88).map(x => x.p[0]);
-    expect(Math.max(...sx) - Math.min(...sx)).toBeGreaterThan(0.0297);
-    expect(Math.max(...sx) - Math.min(...sx)).toBeLessThan(0.0301);
+    expect(Math.max(...sx) - Math.min(...sx)).toBeGreaterThan(0.0355);
+    expect(Math.max(...sx) - Math.min(...sx)).toBeLessThan(0.0362);
     const sy = screen(88).map(x => x.p[1]);
     const top = Math.max(...sy);
-    expect(screen(88).some(x => Math.abs(x.p[0]) > 0.0149 && top - x.p[1] < 0.001)).toBe(false);
+    expect(screen(88).some(x => Math.abs(x.p[0]) > 0.0175 && top - x.p[1] < 0.001)).toBe(true);
     // The digits stay inside it.
     expect(Math.max(...xs.map(Math.abs))).toBeLessThan(0.0149);
     expect(Math.max(...ys)).toBeLessThan(top);
@@ -483,12 +483,16 @@ describe('the readout on the back of the gun', () => {
     ];
     const [s0, s1] = span(screen(88));
     const [d0, d1] = span(digits(88));
-    const face = Math.hypot(0.1504 - 0.131, 0.038 - 0.0483);
-    expect(Math.abs(s0 - (face - s1))).toBeLessThan(1e-4);
+    // The face's flat part: from the knee to the top's rounded edge, 1.5 mm under the top.
+    const face = (0.1535 - 0.0015 - 0.131) / up[1];
+    expect(s0).toBeGreaterThan(0);
+    expect(s0).toBeLessThan(0.0005);
+    expect(s1).toBeLessThan(face);
+    expect(s1).toBeGreaterThan(face - 0.0005);
     expect(Math.abs(d0 - s0 - (s1 - d1))).toBeLessThan(1e-4);
   });
 
-  it('frames the screen in a glowing line of the digits colour, outside its edge', () => {
+  it('frames the digits in a glowing line of their colour, inside the black square', () => {
     for (const n of [40, 3]) {
       for (const x of frame(n)) {
         expect(x.c).toEqual(digits(n)[0].c);
@@ -497,6 +501,9 @@ describe('the readout on the back of the gun', () => {
     const fx = frame(88).map(x => Math.abs(x.p[0]));
     expect(Math.max(...fx)).toBeGreaterThan(0.0155);
     expect(Math.max(...fx)).toBeLessThan(0.017);
+    expect(Math.max(...fx)).toBeLessThan(
+      Math.max(...screen(88).map(x => Math.abs(x.p[0]))) - 0.001,
+    );
   });
 
   it('is low on the body, not a sign: the block stands at most 2 cm over its top', () => {

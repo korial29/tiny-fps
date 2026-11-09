@@ -11,6 +11,7 @@ import {
   TICK_HZ,
 } from '../shared/constants';
 import { TAU, floored } from '../shared/physics';
+import { LIMB } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
@@ -33,6 +34,7 @@ import {
   span,
   swapOf,
 } from './gun';
+import { helmet } from './helmet';
 import { fetched, pouch, pouchAt } from './pouch';
 import type { Tracer } from './beams';
 import {
@@ -393,7 +395,7 @@ export const stance = (r: Runner) => {
 };
 
 /** Draws the runner and gives back its solved skeleton, or nothing once a bolt has burnt it away. */
-export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
+export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helmets = false) => {
   const { p } = r;
   const k = fried(p);
   if (k >= 1) {
@@ -424,6 +426,10 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
     if (k > 0) {
       dissolve(out, from, k);
     }
+  }
+  // The helmet is on the head: not on one a katana cut has taken off.
+  if (helmets && r.cut?.limb !== LIMB.HEAD) {
+    helmet(out, s.pos[J.HEAD], s.rot[J.HEAD], color, lod);
   }
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);

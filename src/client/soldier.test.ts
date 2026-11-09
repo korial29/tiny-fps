@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CUTS, DASH_COOLDOWN, DOWN_TICKS, PLAYER_H, PLAYER_R, TICK_HZ } from '../shared/constants';
 import { STILL } from '../shared/physics';
-import { CUT, MODE, SIDE, TEX } from '../shared/types';
+import { CUT, LIMB, MODE, SIDE, TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
@@ -812,5 +812,25 @@ describe('a runner with the rail gun', () => {
       const palm = [0, 1, 2].map(i => s.pos[J.HAND_L][i] + fing[i] * 0.078 + x[i] * 0.022);
       expect(Math.hypot(...palm.map((v, i) => v - at[i]))).toBeLessThan(0.01);
     }
+  });
+
+  it('wears a helmet when asked, in the team colour, on the head, and not on a head that is cut off', () => {
+    const r = hold({}, 5);
+    const [bare, capped] = [[], []] as number[][];
+    soldier(bare, r, [0.9, 0.1, 0.1], 1);
+    soldier(capped, r, [0.9, 0.1, 0.1], 1, true);
+    expect(capped.length).toBeGreaterThan(bare.length);
+    // Every added vertex is around the head joint, no further than the helmet is big.
+    const head = solve(r.gait.pose()).pos[J.HEAD];
+    for (let i = bare.length; i < capped.length; i += STRIDE) {
+      expect(Math.hypot(...[0, 1, 2].map(k => capped[i + k] - head[k]))).toBeLessThan(0.35);
+    }
+    // A head the katana took off wears none.
+    const cut = hold({ down: 200, hp: 0, lost: LIMB.HEAD }, 30);
+    expect(cut.cut?.limb).toBe(LIMB.HEAD);
+    const [a, b] = [[], []] as number[][];
+    soldier(a, cut, [0.9, 0.1, 0.1], 1);
+    soldier(b, cut, [0.9, 0.1, 0.1], 1, true);
+    expect(b.length).toBe(a.length);
   });
 });

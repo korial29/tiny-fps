@@ -17,7 +17,7 @@ import { FH, FW, PALETTE, sprite } from './face';
 import type { Mark } from './marks';
 
 export const HUD_CSS =
-  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
@@ -53,6 +53,9 @@ export const HUD_CSS =
   `background:linear-gradient(90deg,#e23b3b,#fff3 50%,#8ef);box-shadow:0 0 0 1px #0008}` +
   `ins i{position:absolute;top:-5px;width:6px;height:22px;margin-left:-3px;border-radius:3px;background:#fff;box-shadow:0 0 8px #8ef}` +
   `figure{left:50%;bottom:24px;transform:translateX(-50%)}figure canvas{display:block;width:72px;height:87px;image-rendering:pixelated;filter:drop-shadow(0 2px 2px #000a)}` +
+  // The visor rim of a helmet: the dark of the shell at the corners, a curved edge and a sheen on it.
+  `del{inset:0;background:radial-gradient(ellipse 74% 80% at 50% 54%,#0000 62%,#000c 100%)}` +
+  `del::before{content:"";position:absolute;inset:3% 4% 6%;border-radius:42% 42% 30% 30%/34% 34% 24% 24%;box-shadow:inset 0 0 0 2px #fff1,inset 0 10px 16px #fff1,inset 0 -8px 14px #0006}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}`;
 
@@ -74,6 +77,8 @@ export interface Hud {
   match(m: Pick<Snapshot, 'score' | 'clock' | 'over' | 'flags'>, who: (id: number) => string): void;
   /** The markers of this frame (see marks.ts), in the order given; the ones before are removed. */
   marks(list: Mark[]): void;
+  /** The dark rim of a space helmet's visor around the screen: on while the own player wears one, off otherwise. */
+  visor(on: boolean): void;
   /** The red vignette of a tackle, 0 (none) to 1 (full). */
   hurt(level: number): void;
   /**
@@ -132,7 +137,7 @@ export const createHud = (screen: HTMLElement): Hud => {
       `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>special: lunge, energy arc, leap<tr><td>Blades locked<td>click fast; step aside to break<tr><td>M<td>mute</table>` +
       `<span>Take the enemy flag to your own base while yours is home. Jump onto the armoury past your flag for the gun, the katana and the rail gun. Hold the rail gun's lightning on a foe: it slows him and drains 1 health a second, and 3 s more after it lets go.</span>` +
       `<strong></strong></aside>` +
-      `<u></u><h5 hidden>Muted (M)</h5>` +
+      `<del hidden></del><u></u><h5 hidden>Muted (M)</h5>` +
       `<ul>${'<li></li>'.repeat(HP_MAX)}</ul><figure hidden><canvas width="${FW}" height="${FH}"></canvas></figure>` +
       `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
       `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
@@ -159,6 +164,7 @@ export const createHud = (screen: HTMLElement): Hud => {
   let shown = -1;
   const banner = one('output');
   const vignette = one('u');
+  const rim = one('del');
   const end = one('section');
   const [title, score, next] = ['h6', 'strong', 'span'].map(t =>
     end.querySelector<HTMLElement>(t)!,
@@ -213,6 +219,7 @@ export const createHud = (screen: HTMLElement): Hud => {
         set(text, `${m.kind === 'base' ? 'Base ' : ''}${m.text}`);
       });
     },
+    visor: on => (rim.hidden = !on),
     hurt(level) {
       const v = level < 0.01 ? '' : `${Math.min(1, level)}`;
       if (vignette.style.opacity != v) {

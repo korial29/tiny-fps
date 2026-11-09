@@ -101,6 +101,16 @@ describe('createHud', () => {
     expect(v()).toBe('');
   });
 
+  it('shows the dark rim of a helmet visor while the own player wears one', () => {
+    const rim = () => q('del');
+    expect(rim().hidden).toBe(true);
+    hud.visor(true);
+    expect(rim().hidden).toBe(false);
+    hud.visor(false);
+    expect(rim().hidden).toBe(true);
+    expect(HUD_CSS).toMatch(/del\{inset:0;background:radial-gradient/);
+  });
+
   it('shows the muted mark while muted', () => {
     expect(muted().hidden).toBe(true);
     hud.mute(true);

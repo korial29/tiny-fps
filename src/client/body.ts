@@ -456,10 +456,23 @@ export const finger = (p: Vec3, d1: Vec3, d2: Vec3, l: number, r: number, t: Vec
     const [t, y] = [unit(d), unit(cross(d, X))];
     return [c, cross(y, t).map(v => v * r * k) as Vec3, y.map(v => v * r * k) as Vec3];
   };
+  // The bend as a curve from a to b pulled halfway to the joint, two rings round it: no tighter
+  // than the finger is thick, even in a fist.
+  const c = mix(joint, mix(a, b, 0.5), 0.5);
+  const bent = [1 / 3, 2 / 3].map(k =>
+    ring(
+      mix(mix(a, c, k), mix(c, b, k), k),
+      add(mix(sub(c, a), [0, 0, 0], k), mix(sub(b, c), [0, 0, 0], 1 - k)),
+      1 - 0.1 * k,
+    ),
+  );
+  // The root sunk 12 mm in the palm and flared, a fillet that leaves it at a slant with no seam
+  // (the user, 2026-11-09).
   return [
-    ring(p, t, 1.03),
+    ring(along(p, unit(t), -0.012), t, 1.35),
+    ring(p, t, 1.1),
     ring(a, d1, 1),
-    ring(mix(joint, mix(a, b, 0.5), 0.5), sub(b, a), 0.94),
+    ...bent,
     ring(b, d2, 0.9),
     ring(along(joint, d2, l - 0.001), d2, 0.74),
     ring(along(joint, d2, l + 0.006), d2, 0),

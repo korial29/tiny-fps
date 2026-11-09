@@ -244,6 +244,31 @@ describe('skin', () => {
     expect(turned.join).toBeLessThan(65);
   });
 
+  it('relaxes the close armpits into a fold: nothing in front of them turned back, no row crossed', () => {
+    const s = body(3);
+    const P = (k: number) => [0, 1, 2].map(d => s.v[k * 6 + d]);
+    let n = 0;
+    for (let i = 0; i < s.t.length; i += 3) {
+      const t = [s.t[i], s.t[i + 1], s.t[i + 2]].map(P);
+      const c = [0, 1, 2].map(d => (t[0][d] + t[1][d] + t[2][d]) / 3);
+      if (
+        Math.abs(c[0]) > 0.05 &&
+        Math.abs(c[0]) < 0.13 &&
+        c[1] > 1.38 &&
+        c[1] < 1.44 &&
+        c[2] < -0.08
+      ) {
+        const [u, v] = [1, 2].map(j => [0, 1, 2].map(d => t[j][d] - t[0][d]));
+        const z = u[0] * v[1] - u[1] * v[0];
+        const l = Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], z);
+        // The front of the chest faces forward (-z), wound outward.
+        expect(z / l).toBeLessThan(-0.3);
+        n++;
+      }
+    }
+    expect(n).toBeGreaterThan(20);
+  });
+
   it('keeps the surface continuous when a joint bends 90 degrees, and creases the inside', () => {
     const base = draw(1);
     const rest0 = edges(base);

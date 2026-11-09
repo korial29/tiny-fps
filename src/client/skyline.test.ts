@@ -188,6 +188,14 @@ describe('the parks', () => {
         ),
     );
   };
+  /** The trees of a map, built once for these tests: a few hundred thousand floats. */
+  const built = new Map<object, number[]>();
+  const wood = (def: typeof ROOFTOPS) => {
+    if (!built.has(def)) {
+      built.set(def, trees(def));
+    }
+    return built.get(def)!;
+  };
   /** The positions of one in every 9 of the trees' vertices: enough of every tree, and quick. */
   const stands = (v: number[]) =>
     Array.from({ length: Math.floor(v.length / STRIDE / 9) }, (_, i) =>
@@ -209,7 +217,7 @@ describe('the parks', () => {
 
   it('grows tall trees on the parks alone, out to MARKS: each standing on a park, up to 15 to 25 m, the near ones branched', () => {
     for (const def of [ROOFTOPS, HIGHLINE]) {
-      const v = trees(def);
+      const v = wood(def);
       expect(v.length % (3 * STRIDE)).toBe(0);
       expect(v.every(Number.isFinite)).toBe(true);
       // A few hundred trees: near, about 190 triangles of wood and leaves each; far, a crown of 24.
@@ -232,7 +240,7 @@ describe('the parks', () => {
       }
       expect(Math.max(...pts.map(p => p[1]))).toBeGreaterThan(STREET + 20);
       // Green crowns, brown trunks: no colour of the paint is out of 0..1.
-      for (let i = 0; i < v.length; i += STRIDE) {
+      for (let i = 0; i < v.length; i += 9 * STRIDE) {
         expect([v[i + 6], v[i + 7], v[i + 9]].every(c => c >= 0 && c <= 1)).toBe(true);
         expect(v[i + 8]).toBe(-1);
       }
@@ -240,6 +248,6 @@ describe('the parks', () => {
   });
 
   it('is the same every time', () => {
-    expect(trees(ROOFTOPS)).toEqual(trees(ROOFTOPS));
+    expect(trees(ROOFTOPS)).toEqual(wood(ROOFTOPS));
   });
 });

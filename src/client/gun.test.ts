@@ -27,6 +27,7 @@ import {
   railgun,
   readout,
   swapOf,
+  TRACKS,
   screwed,
   swapped,
   tip,
@@ -122,7 +123,7 @@ describe('the gun model', () => {
     expect(ring.length).toBeGreaterThanOrEqual(12);
     // No sharp edge on top: the normals of the top vertices all face up.
     // (The back rounds over onto the counter's flat, behind 2 cm.)
-    const crest = near.filter(v => v.p[1] > 0.135 && v.p[2] < 0.02 && v.layer == SHINE);
+    const crest = near.filter(v => v.p[1] > 0.132 && v.p[2] < 0.02 && v.layer == SHINE);
     expect(crest.length).toBeGreaterThan(20);
     for (const v of crest) {
       expect(v.n[1]).toBeGreaterThan(0.7);
@@ -183,13 +184,14 @@ describe('the gun model', () => {
     ).toBeLessThan(0.01);
   });
 
-  it('has a smooth top: from its highest point the top only falls toward the muzzle, with no prongs', () => {
-    // The highest metal at each ring of the bulb, from its widest to the nose.
+  it('has a smooth top: from the counter, its highest point, the top only falls toward the muzzle, with no prongs', () => {
+    // The highest metal at each ring of the bulb, from the counter's edge to the nose (the user,
+    // 2026-11-09: no dip toward the counter).
     const top = (f: number) =>
       Math.max(
         ...near.filter(v => v.layer == SHINE && Math.abs(v.p[2] + f) < 0.004).map(v => v.p[1]),
       );
-    const rings = [0.035, 0.08, 0.12, 0.16, 0.19, 0.205].map(top);
+    const rings = [-0.028, -0.005, 0.035, 0.08, 0.12, 0.16, 0.19, 0.205].map(top);
     rings.slice(1).forEach((h, i) => expect(h).toBeLessThan(rings[i]));
     // Nothing of the body sticks out ahead of the muzzle above the hull's tip.
     expect(near.filter(v => v.p[2] < MUZZLE[2] - 0.005 && v.p[1] > 0.07)).toHaveLength(0);
@@ -392,10 +394,13 @@ describe('focus', () => {
 
 describe('the readout on the back of the gun', () => {
   const v = (n: number) => verts(readout(n));
-  // The glowing frame round the screen is drawn last: 32 quads.
+  // The glowing frame round the screen comes after the digits, 32 quads, then the circuit's tracks:
+  // a quad for each run of a track and its pad, twice, mirrored.
+  const T = TRACKS.reduce((s, t) => s + t.length, 0) * 12;
   const glowing = (n: number) => v(n).filter(x => x.layer == -2);
-  const digits = (n: number) => glowing(n).slice(0, -192);
-  const frame = (n: number) => glowing(n).slice(-192);
+  const digits = (n: number) => glowing(n).slice(0, -192 - T);
+  const frame = (n: number) => glowing(n).slice(-192 - T, -T);
+  const tracks = (n: number) => glowing(n).slice(-T);
   const metal = (n: number) => v(n).filter(x => x.layer == -1 && Math.max(...x.c) > 0.1);
   const screen = (n: number) => v(n).filter(x => x.layer == -1 && Math.max(...x.c) <= 0.1);
   const SEGS = [6, 2, 5, 5, 4, 5, 6, 3, 7, 6];
@@ -427,10 +432,10 @@ describe('the readout on the back of the gun', () => {
     expect(digits(5)[0].c[0]).toBeLessThan(digits(5)[0].c[2]);
   });
 
-  it('shows digits about 4.2 cm wide and 2 cm high', () => {
+  it('shows digits about 4.2 cm wide and 2 cm high, 4.6 cm wide with their forward lean', () => {
     const xs = digits(88).map(x => x.p[0]);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.041);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.043);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.044);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.047);
     const ys = digits(88).map(x => x.p[1]);
     expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.016);
   });
@@ -443,7 +448,7 @@ describe('the readout on the back of the gun', () => {
     // A cell is two triangles: the lit ones glow, the others are dim.
     expect(extra(3)).toBe(3 * 6);
     expect(extra(CHARGE_MAX)).toBe(CHARGE_MAX * 6);
-    const cells = (level: number) => glowing(40, level).slice(digits(40).length, -192);
+    const cells = (level: number) => glowing(40, level).slice(digits(40).length, -192 - T);
     // Under every digit segment, and within the screen's width.
     const low = Math.min(...digits(40).map(x => x.p[1]));
     for (const x of cells(3)) {
@@ -487,13 +492,37 @@ describe('the readout on the back of the gun', () => {
         expect(x.c).toEqual(digits(n)[0].c);
       }
     }
-    // Round, 2 to 3.2 mm inside the cut's outline (4.4 cm half wide), 1 mm out of the face.
+    // Round, 2 to 4.4 mm inside the cut's outline (4.4 cm half wide), 1 mm out of the face.
     const fx = frame(88).map(x => Math.abs(x.p[0]));
     expect(Math.max(...fx)).toBeGreaterThan(0.0405);
     expect(Math.max(...fx)).toBeLessThan(0.0421);
     const n = unit([0, 0.469, 0.883]);
     for (const x of frame(88)) {
       expect((x.p[1] - 0.125) * n[1] + (x.p[2] - 0.04) * n[2]).toBeCloseTo(0.001, 6);
+    }
+  });
+
+  it('runs printed circuit tracks from the digits to pads inside the frame, dim in their colour, the same both sides', () => {
+    for (const n of [40, 3]) {
+      const c = digits(n)[0].c;
+      for (const x of tracks(n)) {
+        // Dimmer than the digits, of their hue.
+        expect(Math.max(...x.c)).toBeLessThan(Math.max(...c) * 0.7);
+        expect(x.c[0] / x.c[2]).toBeCloseTo(c[0] / c[2], 5);
+      }
+    }
+    const t = tracks(88);
+    const xs = t.map(x => x.p[0]);
+    expect(Math.min(...xs)).toBeCloseTo(-Math.max(...xs), 5);
+    // Inside the frame's inner edge, a superellipse 3.96 by 2.9 cm half across, round -0.0145 up the face.
+    const up = unit([0, 0.883, -0.469]);
+    for (const x of t) {
+      const b = (x.p[1] - 0.125) * up[1] + (x.p[2] - 0.04) * up[2] + 0.0145;
+      expect(Math.abs(x.p[0] / 0.0396) ** 2.5 + Math.abs(b / 0.029) ** 2.5).toBeLessThan(1);
+    }
+    const n = unit([0, 0.469, 0.883]);
+    for (const x of t) {
+      expect((x.p[1] - 0.125) * n[1] + (x.p[2] - 0.04) * n[2]).toBeCloseTo(0.0008, 6);
     }
   });
 

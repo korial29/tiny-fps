@@ -128,15 +128,16 @@ export const TILT = [Math.sin(0.4), Math.cos(0.4)];
 
 // The side view, forward then up, in metres from the middle of the grip. The hand sits in the gap
 // between the upper body and the lower shell, round the short grip that joins them.
-// The upper body: a smooth bulb widest at the back and top, tapering to the muzzle.
+// The upper body: a smooth bulb widest at the back and top, tapering to the muzzle. Its top climbs
+// all the way back to the counter, the highest of the gun (the user, 2026-11-09: no dip before it).
 const BULB: Station[] = [
   [-0.063, 0.1, 0, 0],
   [-0.062, 0.098, 0.026, 0.016],
   [-0.055, 0.1, 0.04, 0.02],
   [-0.035, 0.103, 0.046, 0.038],
-  [-0.005, 0.104, 0.048, 0.04],
-  [0.035, 0.1, 0.044, 0.038],
-  [0.08, 0.094, 0.036, 0.034],
+  [-0.005, 0.10175, 0.048, 0.03775],
+  [0.035, 0.09775, 0.044, 0.03575],
+  [0.08, 0.093, 0.036, 0.033],
   [0.12, 0.088, 0.028, 0.028],
   [0.16, 0.082, 0.021, 0.021],
   [0.19, 0.078, 0.015, 0.015],
@@ -1050,8 +1051,8 @@ export const swapOf = (p: Pick<PlayerState, 'reload' | 'railed' | 'rifled'>): nu
 export const power = (t: number, end = 0.6): number =>
   t >= end ? 1 : clamp((t - end / 4) / (end * 0.75)) * (0.65 + 0.35 * Math.sin(t * 95) ** 2);
 
-/** The gun's boot `t` seconds after it came to hand or its new battery went in: its light up by `lit`, its counter fading in from `from` to `up` (the user, 2026-11-09: a slow fade in); the rifle's digits show at `digits`. */
-export const GUN_ON = { lit: 1.4, from: 0.3, up: 1.8, digits: 1.05 };
+/** The gun's boot `t` seconds after it came to hand or its new battery went in: its light up by `lit`, its counter fading in from `from` to `up`, with the BOOT sound's whine, full at its beep (the user, 2026-11-09); the rifle's digits show at `digits`. */
+export const GUN_ON = { lit: 1.4, from: 0.05, up: 0.6, digits: 1.05 };
 
 /**
  * Where the battery or the capsule is at `s` of a swap (0 to 1; -1 none): how far out of its seat
@@ -1253,6 +1254,49 @@ const [SM, SHH, DK] = [FACE[0], 0.0163, 1];
 const DY = SM - (DH * DK) / 2;
 const [GFROM, GTO, GGAP] = [SM - SHH + 0.0008, DY - 0.0004, 0.0012];
 const readouts = new Map<number, number[]>();
+/**
+ * Printed circuit tracks round the digits, inside the frame (the user, 2026-11-09): the right
+ * half's, mirrored to the left, each a run of [across, up from the middle] points ending in a pad.
+ */
+export const TRACKS = [
+  [
+    [0.0225, 0.004],
+    [0.028, 0.004],
+    [0.033, 0.009],
+    [0.036, 0.009],
+  ],
+  [
+    [0.0225, -0.004],
+    [0.026, -0.004],
+    [0.031, -0.009],
+    [0.031, -0.016],
+  ],
+  [
+    [0.0225, 0],
+    [0.035, 0],
+  ],
+  [
+    [0.004, 0.0125],
+    [0.004, 0.017],
+    [0.009, 0.022],
+    [0.019, 0.022],
+  ],
+  [
+    [0.014, 0.0125],
+    [0.014, 0.016],
+    [0.024, 0.016],
+    [0.028, 0.02],
+  ],
+  [
+    [0.008, -0.017],
+    [0.008, -0.021],
+    [0.013, -0.026],
+  ],
+  [
+    [0.0185, -0.017],
+    [0.0185, -0.023],
+  ],
+];
 
 /**
  * The shots in the battery as two glowing seven-segment digits on a dark screen set in the back of
@@ -1300,16 +1344,32 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
       const x0 = (-DW - DGAP / 2 + i * (DW + DGAP)) * DK;
       for (const seg of DIGITS[+ch]) {
         const [a, b, d, e] = SEGMENTS[seg];
-        // Segments lie on the screen, a hair out of it.
-        const p = (x: number, t: number) => at(x0 + x * DK, DY + t * DK, 0.0027);
-        tri(v, p(a, b), p(d, b), p(d, e), rgb);
-        tri(v, p(a, b), p(d, e), p(a, e), rgb);
+        // Alien glyphs (the user, 2026-11-09): each segment a thin slash, cut on the slant at both
+        // ends, apart from the next, the digit leaning forward. Segments lie on the screen, a hair out of it.
+        const p = (x: number, t: number) =>
+          at(x0 + (x + (t - DH / 2) * 0.3) * DK, DY + t * DK, 0.0027);
+        const h = d - a > e - b;
+        const [u0, u1, w0, w1] = h
+          ? [a + 0.0012, d - 0.0012, b, e]
+          : [b + 0.0012, e - 0.0012, a, d];
+        const [l, m, s] = [u1 - u0, (w0 + w1) / 2, (w1 - w0) * 0.32];
+        const slash = [
+          [0, m - s],
+          [0.7, m - s],
+          [1, m + s],
+          [0.3, m + s],
+        ].map(([k, w]) => (h ? p(u0 + k * l, w) : p(w, u0 + k * l)));
+        if (!h) {
+          slash.reverse();
+        }
+        tri(v, slash[0], slash[1], slash[2], rgb);
+        tri(v, slash[0], slash[2], slash[3], rgb);
       }
     });
     // The lit cells and the frame glow with the digits.
     if (shown) {
       gauge(true);
-      // Round, 2 mm inside the cut's smooth outline (the user, 2026-11-09), a band 1.2 mm wide, 1 mm
+      // Round, 2 mm inside the cut's smooth outline (the user, 2026-11-09), a band 2.4 mm wide (the user, 2026-11-09: wider), 1 mm
       // out of the face, clear of the outline 0.2 mm out.
       const ring = (j: number, g: number) =>
         at(
@@ -1321,11 +1381,39 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
         const [a, b, c, d] = [
           ring(i, 0.002),
           ring(i + 1, 0.002),
-          ring(i + 1, 0.0032),
-          ring(i, 0.0032),
+          ring(i + 1, 0.0044),
+          ring(i, 0.0044),
         ];
         tri(v, a, b, c, rgb);
         tri(v, a, c, d, rgb);
+      }
+      // The tracks, 0.6 mm wide and dim, each run ending in a pad 1.4 mm square, mirrored.
+      const dim = rgb.map(c => c * 0.35);
+      const quad = (o: number[], q: number[], w: number, c: number[]) => {
+        const l = Math.hypot(q[0] - o[0], q[1] - o[1]) || 1;
+        const [ux, uy] = [((q[0] - o[0]) / l) * w, ((q[1] - o[1]) / l) * w];
+        const p = (x: number, y: number) => at(x, SM + y, 0.0008);
+        const [a, b, c2, d] = [
+          p(o[0] - ux + uy, o[1] - uy - ux),
+          p(q[0] + ux + uy, q[1] + uy - ux),
+          p(q[0] + ux - uy, q[1] + uy + ux),
+          p(o[0] - ux - uy, o[1] - uy + ux),
+        ];
+        tri(v, a, b, c2, c);
+        tri(v, a, c2, d, c);
+      };
+      for (const s of [-1, 1]) {
+        for (const t of TRACKS) {
+          const m = t.map(([x, y]) => [s * x, y]);
+          m.slice(1).forEach((q, i) => quad(m[i], q, 0.0003, dim));
+          const e = m[m.length - 1];
+          quad(
+            e,
+            [e[0] + 1e-6, e[1]],
+            0.0007,
+            rgb.map(c => c * 0.6),
+          );
+        }
       }
     }
     lit(v, from, 1);
@@ -1581,7 +1669,7 @@ export const held = (
     place(out, lcd(ammo), at, ax, [0, 0, 0], k);
   }
   dimmed(out, from, d);
-  // The gun's counter fades in on its own, slowly, without the gun's flicker (the user, 2026-11-09).
+  // The gun's counter fades in on its own, with the boot sound, without the gun's flicker (the user, 2026-11-09).
   if (ammo !== undefined && w < 2) {
     const c = out.length;
     place(out, readout(ammo, level), at, ax, [0, 0, 0], k);

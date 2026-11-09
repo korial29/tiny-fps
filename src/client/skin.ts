@@ -561,7 +561,8 @@ const LOFTS = [TRUNK, LEG, ARM, EYE, SPECK, BROWS, EAR, CONCHA];
 const generate = (lod: number): Skin => {
   const [v, j, w, t, c, l, d]: number[][] = [[], [], [], [], [], [], []];
   /** Far, near, or close; the eye's own body is near: the camera's near plane and the hands' budget hold it. */
-  const tier = [0, 1, 1, 2][lod];
+  // The eye's own body is close too: its chest, seen looking down, is round (the user, 2026-11-09).
+  const tier = [0, 1, 2, 2][lod];
   const N = TRUNK.n[tier];
   /** The back vertex of a ring, and the last of the shoulder's side. */
   const [H, A] = [N / 2, N / 2 - 1];
@@ -577,10 +578,9 @@ const generate = (lod: number): Skin => {
     return w.length - 1;
   };
   for (const L of LOFTS) {
-    // The eye's own arms are close, the most sides and rings (the user, 2026-11-09: smoother arms);
-    // the rest of its body, out of sight under the camera, near.
+    // The eye's own arms have their rings doubled too (the user, 2026-11-09: smoother arms).
     const arm = lod == 2 && L === ARM;
-    const n = L.n[arm ? 2 : tier];
+    const n = L.n[tier];
     // The eye's own body has no head.
     if (!n || (lod == 2 && (L.z || L.x || L === EAR || L === CONCHA))) {
       continue;
@@ -601,7 +601,8 @@ const generate = (lod: number): Skin => {
             ? L.rings
             : L.far.map(i => L.rings[i]);
     // Close, the trunk's rings doubled; the eye's arms' too.
-    const rings = (tier > 1 && L === TRUNK) || arm ? finer(base, arm) : base;
+    // Not the eye's trunk: doubled, its rings would come in front of the near plane.
+    const rings = (lod == 3 && L === TRUNK) || arm ? finer(base, arm) : base;
     const up = rings[rings.length - 1][0] > rings[0][0];
     if (L === TRUNK) {
       S = rings.findIndex((r, i) => i && r[0] == rings[i - 1][0]);
@@ -692,7 +693,9 @@ const generate = (lod: number): Skin => {
             // Eased over 8 cm, or the back creases in a line across the shoulder blades.
             const e =
               L === TRUNK && rx > 0.19
-                ? 1.9 + 0.1 * clamp((at - SPLIT) / 0.07)
+                ? lod == 2
+                  ? 2.6
+                  : 1.9 + 0.1 * clamp((at - SPLIT) / 0.07)
                 : (L.e ?? 2) * (L === LEG && at < 0.12 ? 2 : 1);
             // The back widens over the 12 cm under the armpits toward the shoulders' ring, whose
             // vertices it takes at the split: no ridge across the shoulder blades. The chest does
@@ -893,7 +896,7 @@ const generate = (lod: number): Skin => {
     );
   });
   // Close only: farther the step does not show, and the eye's own body never sees its armpits.
-  for (let pass = 0; pass < (tier > 1 ? 24 : 0); pass++) {
+  for (let pass = 0; pass < (lod == 3 ? 24 : 0); pass++) {
     const k0 = pass % 2 ? -0.53 : 0.5;
     const next = v.slice();
     pull.forEach((g, k) => {

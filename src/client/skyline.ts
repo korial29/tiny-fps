@@ -4,7 +4,8 @@
 // enough to rise out of the haze. Lawns in the lots with no tower, and round some towers.
 import { TEX } from '../shared/types';
 import type { Brush, WorldDef } from '../shared/world';
-import { FAR, ROAD, STREET, grid } from './street';
+import { dress, place, smooth } from './mesh';
+import { FAR, MARKS, ROAD, SCALE, STREET, grid, scale } from './street';
 import { hash } from './textures';
 
 const SEED = 8;
@@ -23,6 +24,78 @@ const CAPS = [
 /** A lawn's green on the paint, and its height over the street: the lots with no tower, and some round one. */
 const GRASS = [0.22, 0.5, 0.14];
 const TURF = 0.3;
+/** A park's lawn: the same green, its own tint so that trees() finds it. Whole blocks, and the near lots with no tower. */
+const PARK = [...GRASS];
+
+/** A lawn over a lot or a block, a paved walk of 2 m round it to the road's crossings: a park's unless `tint` says. */
+const lawn = (x0: number, x1: number, z0: number, z1: number, tint = PARK): Brush => ({
+  min: [x0 + 2, STREET, z0 + 2],
+  max: [x1 - 2, STREET + TURF, z1 - 2],
+  top: TEX.PAINT,
+  side: TEX.PAINT,
+  tint: tint as Brush['tint'],
+});
+
+/** A tree, up from its foot: a trunk and a crown 19 m up, round from their smooth normals; a coarser crown alone past SCALE. */
+const TRUNK = dress(
+  smooth(
+    [
+      [0.55, 0],
+      [0.3, 8],
+    ],
+    4,
+  ),
+  [0.3, 0.2, 0.12],
+);
+const CROWN = [5, 4].map(n =>
+  dress(
+    smooth(
+      [
+        [0, 5],
+        [3.6, 7],
+        [5, 11],
+        [3.3, 16],
+        [0, 19],
+      ],
+      n,
+    ),
+    [1, 1, 1],
+  ),
+);
+const LEAVES = [
+  [0.17, 0.38, 0.11],
+  [0.13, 0.3, 0.1],
+  [0.24, 0.45, 0.13],
+  [0.32, 0.43, 0.12],
+];
+/** The model's length along -z goes up. */
+const UP = [
+  [1, 0, 0],
+  [0, 0, 1],
+  [0, 1, 0],
+] as [number, number, number][];
+
+/** The trees of the parks out to MARKS, every 11 m or so, of many sizes and greens: vertices, drawn once. */
+export const trees = (def: WorldDef): number[] => {
+  const out: number[] = [];
+  const k = scale(def);
+  for (const { min, max, tint } of skyline(def)) {
+    for (let x = min[0] + 6; tint == PARK && x < max[0] - 4; x += 11) {
+      for (let z = min[2] + 6; z < max[2] - 4; z += 11) {
+        const r = (n: number) => hash(Math.round(x), Math.round(z), SEED + 40 + n);
+        const at: [number, number, number] = [x + r(0) * 4 - 2, STREET + TURF, z + r(1) * 4 - 2];
+        const [m, size] = [k(at[0], at[2]), 0.7 + r(2) * 0.6];
+        if (r(3) > 0.15 && m * SCALE < MARKS) {
+          if (m == 1) {
+            place(out, TRUNK, at, UP, [0, 0, 0], size);
+          }
+          place(out, CROWN[+(m > 1)], at, UP, [0, 0, 0], size, LEAVES[Math.floor(r(4) * 4)]);
+        }
+      }
+    }
+  }
+  return out;
+};
 
 /** The towers of a world's skyline, in the blocks round its play area and out to the horizon; the same ones every time. */
 export const skyline = (def: WorldDef): Brush[] => [...near(def), ...far(def)];
@@ -42,8 +115,11 @@ const far = (def: WorldDef): Brush[] => {
       const r = (k: number) => hash(i, j, SEED + 20 + k);
       const [x0, x1, z0, z1] = [xs[i] + h, xb - h, zs[j] + h, zb - h];
       const d = Math.hypot((x0 + x1) / 2 - cx, (z0 + z1) / 2 - cz);
-      if (d <= reach || d > FAR || r(0) < 0.12) {
+      if (d <= reach || d > FAR) {
         return [];
+      }
+      if (r(0) < 0.2) {
+        return [lawn(x0, x1, z0, z1)];
       }
       const [w, e] = [(x1 - x0) * (0.05 + r(1) * 0.2), (z1 - z0) * (0.05 + r(2) * 0.2)];
       return [
@@ -73,6 +149,9 @@ const near = (def: WorldDef): Brush[] => {
       ) {
         return [];
       }
+      if (hash(i, j, SEED + 30) < 0.2) {
+        return [lawn(x0, x1, z0, z1)];
+      }
       const [nx, nz] = [x1 - x0, z1 - z0].map(n => Math.max(1, Math.round(n / LOT)));
       return Array.from({ length: nx * nz }, (_, lot): Brush[] => {
         const [u, v] = [lot % nx, Math.floor(lot / nx)];
@@ -94,17 +173,9 @@ const near = (def: WorldDef): Brush[] => {
           side,
         };
         const cap = tower.max[1];
-        // A paved walk of 2 m round the lawn, to the road's crossings.
-        const lawn: Brush = {
-          min: [a0 + 2, STREET, b0 + 2],
-          max: [a1 - 2, STREET + TURF, b1 - 2],
-          top: TEX.PAINT,
-          side: TEX.PAINT,
-          tint: GRASS as Brush['tint'],
-        };
-        const green = r(10) < 0.3 ? [lawn] : [];
+        const green = r(10) < 0.3 ? [lawn(a0, a1, b0, b1, GRASS)] : [];
         return r(0) > 0.75
-          ? [lawn]
+          ? [lawn(a0, a1, b0, b1)]
           : r(7) < 0.35
             ? [
                 ...green,

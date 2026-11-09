@@ -22,7 +22,7 @@ import { JOINT } from './rig';
 import type { Quat } from './rig';
 import { animate, soldier } from './soldier';
 import type { Runner } from './soldier';
-import { skyline } from './skyline';
+import { skyline, trees } from './skyline';
 import { deepen, street } from './street';
 import { LAYERS, SIZE, textures } from './textures';
 import { traffic } from './traffic';
@@ -369,10 +369,11 @@ export const city = (world: World): World => ({
   def: { ...world.def, brushes: [...deepen(world.def), ...skyline(world.def)] },
 });
 
-/** All the map's vertices, drawn once: the city, the brushes, the street under them, the runner's red and the team zones. */
+/** All the map's vertices, drawn once: the city, the brushes, the street under them, the parks' trees, the runner's red and the team zones. */
 export const scenery = (world: World): number[] => [
   ...level(city(world)),
   ...street(world.def),
+  ...trees(world.def),
   ...vision(world.def),
   ...zones(world.def),
 ];

@@ -3,8 +3,9 @@ import { HIGHLINE, ROOFTOPS } from '../shared/map';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
 import { MAX_TINTS, city, palette } from './render';
-import { skyline } from './skyline';
-import { ROAD, STREET, grid } from './street';
+import { STRIDE } from './mesh';
+import { skyline, trees } from './skyline';
+import { MARKS, ROAD, STREET, grid } from './street';
 
 const city_ = skyline(ROOFTOPS);
 /** The lawns are the flat ones, half a metre at most. */
@@ -167,5 +168,78 @@ describe('the lawns', () => {
         expect(apart).toBe(true);
       }
     }
+  });
+});
+
+describe('the parks', () => {
+  /** The lawns no tower stands on: the parks, whole blocks and empty lots. */
+  const parks = (def: typeof ROOFTOPS) => {
+    const all = skyline(def);
+    return all.filter(
+      l =>
+        flat(l) &&
+        !all.some(
+          t =>
+            !flat(t) &&
+            t.min[0] < l.max[0] &&
+            t.max[0] > l.min[0] &&
+            t.min[2] < l.max[2] &&
+            t.max[2] > l.min[2],
+        ),
+    );
+  };
+  /** The positions of the trees' vertices. */
+  const stands = (def: typeof ROOFTOPS) => {
+    const v = trees(def);
+    return Array.from({ length: v.length / STRIDE }, (_, i) => v.slice(i * STRIDE, i * STRIDE + 3));
+  };
+
+  it('takes the place of some towers: whole blocks of lawn near the play area and out to the horizon', () => {
+    for (const def of [ROOFTOPS, HIGHLINE]) {
+      const { box, reach } = grid(def);
+      const [cx, cz] = [(box[0] + box[1]) / 2, (box[2] + box[3]) / 2];
+      const big = parks(def).filter(l => l.max[0] - l.min[0] > 45 && l.max[2] - l.min[2] > 45);
+      const d = big.map(l =>
+        Math.hypot((l.min[0] + l.max[0]) / 2 - cx, (l.min[2] + l.max[2]) / 2 - cz),
+      );
+      expect(d.filter(x => x < reach).length).toBeGreaterThanOrEqual(2);
+      expect(d.filter(x => x > reach && x < MARKS).length).toBeGreaterThanOrEqual(10);
+    }
+  });
+
+  it('grows tall trees on the parks alone, out to MARKS: each standing on a park, up to 15 to 25 m', () => {
+    for (const def of [ROOFTOPS, HIGHLINE]) {
+      const v = trees(def);
+      expect(v.length % (3 * STRIDE)).toBe(0);
+      expect(v.every(Number.isFinite)).toBe(true);
+      // A few hundred trees, at about 30 triangles each near and 24 far.
+      expect(v.length / STRIDE).toBeGreaterThan(20000);
+      expect(v.length / STRIDE).toBeLessThan(90000);
+      const pts = stands(def);
+      const lots = parks(def);
+      const { box } = grid(def);
+      const [cx, cz] = [(box[0] + box[1]) / 2, (box[2] + box[3]) / 2];
+      for (const [x, y, z] of pts) {
+        // Over a park, crown and all, within a few metres of its edge; no higher than 25 m off the turf.
+        expect(
+          lots.some(
+            l => x > l.min[0] - 4 && x < l.max[0] + 4 && z > l.min[2] - 4 && z < l.max[2] + 4,
+          ),
+        ).toBe(true);
+        expect(y).toBeGreaterThanOrEqual(STREET);
+        expect(y).toBeLessThan(STREET + 25);
+        expect(Math.hypot(x - cx, z - cz)).toBeLessThan(MARKS + 10);
+      }
+      expect(Math.max(...pts.map(p => p[1]))).toBeGreaterThan(STREET + 20);
+      // Green crowns, brown trunks: no colour of the paint is out of 0..1.
+      for (let i = 0; i < v.length; i += STRIDE) {
+        expect([v[i + 6], v[i + 7], v[i + 9]].every(c => c >= 0 && c <= 1)).toBe(true);
+        expect(v[i + 8]).toBe(-1);
+      }
+    }
+  });
+
+  it('is the same every time', () => {
+    expect(trees(ROOFTOPS)).toEqual(trees(ROOFTOPS));
   });
 });

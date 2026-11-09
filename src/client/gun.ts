@@ -1167,22 +1167,18 @@ const BLOCK_TOP: [Vec3, Vec3] = [
   [0.02, 0.1474, 0.026],
 ];
 /**
- * The dark screen set in the back face: half width (the face's top less 5 mm a side, the user,
- * 2026-11-08), middle up the face from the knee (halfway up it), half height, corner radius (round, the user, 2026-11-09), in
- * metres; its digits' scale, so that they fill it (the user, 2026-11-08) but for 1 to 2 mm round them.
+ * The screen on the back face above the knee: the half width of its glowing frame, its middle up
+ * the face from the knee, its half height, its corner radius, in metres; its digits' scale, so that
+ * they fill it (the user, 2026-11-08). Round it, the dark square reaches the face's flat edges, within
+ * 1 mm, nearly square (the user, 2026-11-09): BLACK further out than the frame, corner radius BLACK_R.
  */
-const [SW, SM, SHH, SR, DK] = [
-  BLOCK_TOP[0][0] - 0.005,
-  Math.hypot(BLOCK_TOP[0][1] - KNEE[1], BLOCK_TOP[0][2] - KNEE[2]) / 2,
-  0.009,
-  0.0055,
-  0.66,
-];
+const [SW, SM, SHH, SR, DK] = [0.0153, 0.0119, 0.009, 0.0015, 0.66];
+const [BLACK, BLACK_R] = [0.0027, 0.0008];
 /** The digits' foot, so that they are in the middle of the screen; the charge gauge, a thin bar under them up the back face: where it starts and ends, and the gap between its cells. */
 const DY = SM - (DH * DK) / 2;
 const [GFROM, GTO, GGAP] = [SM - SHH + 0.0008, DY - 0.0004, 0.0012];
-/** The block's top, flat; the radius of its upright edges and of its top edges (the user, 2026-11-09: less square). */
-const [BTOP, BR, BRT] = [0.1535, 0.004, 0.003];
+/** The block's top, flat; the radius of its upright edges and of its top edges (the user, 2026-11-09: a little rounded). */
+const [BTOP, BR, BRT] = [0.1535, 0.002, 0.0015];
 
 /**
  * Appends the display block, in the gun's metal lit by its normal: rings of a rounded rectangle up
@@ -1297,13 +1293,23 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
       O[1] + slope[1] * b + N[1] * k,
       O[2] + slope[2] * b + N[2] * k,
     ];
-    // The dark screen, a fan of 24 round its middle, six steps to each rounded corner; `g` grows
-    // it, for its frame.
-    const r = (c: number, h: number, g: number) => Math.sign(c) * (h - SR) + (SR + g) * c;
-    const rim = (i: number, g = 0, d = 0.0012) =>
-      at(r(Math.cos(i * 0.2618 + 0.13), SW, g), SM + r(Math.sin(i * 0.2618 + 0.13), SHH, g), d);
+    // The dark square, a fan of 24 round its middle; `g` grows the rounded rectangle of the frame
+    // out from the screen, and `rad` sets its corner.
+    const r = (c: number, h: number, rad: number) => Math.sign(c) * (h - rad) + rad * c;
+    const rim = (i: number, g = 0, d = 0.0012, rad = SR + g) =>
+      at(
+        r(Math.cos(i * 0.2618 + 0.13), SW + g, rad),
+        SM + r(Math.sin(i * 0.2618 + 0.13), SHH + g, rad),
+        d,
+      );
     for (let i = 0; i < 24; i++) {
-      tri(v, at(0, SM, 0.0012), rim(i), rim(i + 1), DARK);
+      tri(
+        v,
+        at(0, SM, 0.0012),
+        rim(i, BLACK, 0.0012, BLACK_R),
+        rim(i + 1, BLACK, 0.0012, BLACK_R),
+        DARK,
+      );
     }
     const rgb = n > 4 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
     /** The gauge's cells, the lit ones or the dim ones, while it charges. */

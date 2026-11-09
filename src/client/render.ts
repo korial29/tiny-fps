@@ -138,7 +138,9 @@ const RELIEF = 0.06;
 // lighting. Polished metal (SHINE) turns partly into that reflection (k), tinted by its colour and
 // dark where r looks down at the ground, with a sharp bright streak where it mirrors just above the
 // horizon. On a texture C.w is 2 * the brush's tint index + its light (see level); G is the
-// palette. F: fog colour and density, U the height the fog layer is anchored at: the density is
+// palette. On stone (the regolith) the texture is mixed with itself 3.7 times larger and turned,
+// and lit up or darkened by its own 58 m mip (mk), so it shows no 2 m grid. F: fog colour and
+// density, U the height the fog layer is anchored at: the density is
 // F.a * (1 + FOG_LAYER * exp(FOG_RISE * (U - y))) at height y, integrated along the view ray in closed
 // form (x is the climb along it, times FOG_RISE; the branch is its limit at 0).
 const FRAG = `#version 300 es
@@ -158,6 +160,7 @@ if(Z<0.){if(C.z<-2.5)discard;return;}
 if(Y>.5){o=vec4(K0(normalize(P)),1);return;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
+vec3 t2=texture(S,vec3(mat2(.8,-.6,.6,.8)*C.xy*.135,L)).rgb;float ks=step(abs(L-${TEX.STONE}.),.5),mk=textureLod(S,vec3(C.xy*.017,L),5.).g-textureLod(S,vec3(0,0,L),9.).g;t.rgb=mix(t.rgb,mix(t.rgb,t2,.45)*(1.+6.*mk),ks);
 vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
 vec3 n=normalize(N),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float h=t.a*s*${RELIEF},det=dot(dx,a);

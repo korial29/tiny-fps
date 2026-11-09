@@ -1,9 +1,11 @@
 // What is drawn around and over the moon level (docs/MOON.md), once, from fixed numbers and a
 // hash: red's half (the dome and its windows, the tubes, the pad and its shuttle, masts, rovers,
 // boulders) mirrored for blue, then the crater rim, the stars and the Earth. Nothing here is collided
-// with. Every part is lit paint (layer -1) or glow (layer -2: windows, lamps, stars, the Earth).
+// with. Every part is lit paint (layer -1) or glow (layer -2: windows, lamps, stars, the Earth),
+// but the small craters on the floor, in the floor's own stone.
 import { LAYOUT } from '../shared/moon';
 import { TAU } from '../shared/physics';
+import { TEX } from '../shared/types';
 import type { WorldDef } from '../shared/world';
 import { GLOW, glow, ring, tri } from './flag';
 import { STRIDE, dot, dress, mix, place, segment, smooth, sub, unit } from './mesh';
@@ -424,6 +426,68 @@ const base = (o: number[]) => {
   }
 };
 
+/** Profile of a small crater, radius 1 across: [radius, height, light] from the bowl's middle to where it meets the floor. */
+const BOWL = [
+  [0, 0.02, 0.6],
+  [0.55, 0.04, 0.72],
+  [0.88, 0.2, 1.05],
+  [1, 0.24, 1.12],
+  [1.4, 0.015, 1],
+];
+
+/** Whether the floor at y 0, with nothing standing on it, runs under the whole circle. */
+const bare = ({ brushes }: WorldDef, x: number, z: number, r: number) =>
+  [0, 1, 2, 3, 4].every(k => {
+    const [u, v] = k ? [x + r * Math.cos(k * 1.57), z + r * Math.sin(k * 1.57)] : [x, z];
+    const over = (b: (typeof brushes)[0], m: number) =>
+      u > b.min[0] - m && u < b.max[0] + m && v > b.min[2] - m && v < b.max[2] + m;
+    return (
+      brushes.some(b => b.max[1] == 0 && over(b, 0)) &&
+      !brushes.some(b => b.max[1] > 0 && over(b, 0.5))
+    );
+  });
+
+/**
+ * Small craters on the floor, 60 of 1.2 to 5 m wide, where nothing stands: a shallow bowl
+ * darker than the floor and a raised lip, in its stone texture, the slopes' normals steepened
+ * so the sun lights one side of the lip and shades the other. They are not collided with.
+ */
+const craters = (o: number[], def: WorldDef) => {
+  const N = 12;
+  for (let k = 0, n = 0; n < 60 && k < 900; k++) {
+    const [x, z, r] = [W * hash(k, 1, 61), Z * hash(k, 2, 61), 0.6 + 2 * hash(k, 3, 61) ** 2];
+    if (
+      !bare(def, x, z, 1.5 * r) ||
+      [
+        [100, 178],
+        [30, 255],
+        [100, 102],
+        [30, 25],
+      ].some(([a, b]) => Math.hypot(x - a, z - b) < 6)
+    ) {
+      continue;
+    }
+    n++;
+    const at = (i: number, j: number) => {
+      const [f, y, l] = BOWL[i];
+      const a = (j * TAU) / N;
+      const [c, d] = [Math.cos(a), Math.sin(a)];
+      const [p, q] = [BOWL[Math.max(i - 1, 0)], BOWL[Math.min(i + 1, BOWL.length - 1)]];
+      // The slope along the radius, three times as steep for the light.
+      const s = (-3 * (q[1] - p[1])) / ((q[0] - p[0]) * r);
+      const m = Math.hypot(s, 1);
+      const [u, v] = [x + c * f * r, z + d * f * r];
+      return [u, y, v, (s * c) / m, 1 / m, (s * d) / m, u, v, TEX.STONE, l];
+    };
+    for (let i = 0; i < BOWL.length - 1; i++) {
+      for (let j = 0; j < N; j++) {
+        const [a, b, c, d] = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)];
+        o.push(...a, ...c, ...b, ...a, ...d, ...c);
+      }
+    }
+  }
+};
+
 /** How far a point is from the play area (0 in it). */
 const away = (x: number, z: number) => Math.hypot(Math.max(-x, 0, x - W), Math.max(-z, 0, z - Z));
 
@@ -598,10 +662,11 @@ const earth = (o: number[]) => {
 };
 
 /** The moon's scenery vertices, in the renderer's format. */
-export const moonscape = (_def: WorldDef): number[] => {
+export const moonscape = (def: WorldDef): number[] => {
   const red: number[] = [];
   base(red);
   const o = red.concat(mirror(red));
+  craters(o, def);
   crater(o);
   stars(o);
   earth(o);

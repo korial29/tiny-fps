@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LAYOUT, MOON } from '../shared/moon';
+import { TEX } from '../shared/types';
 import { STRIDE } from './mesh';
 import { moonscape } from './moonscape';
 
@@ -17,6 +18,22 @@ describe('moonscape', () => {
     expect(v.length % (3 * STRIDE)).toBe(0);
     expect(v.every(Number.isFinite)).toBe(true);
     expect(verts.every(p => Math.abs(Math.hypot(p[3], p[4], p[5]) - 1) < 1e-3)).toBe(true);
+  });
+
+  it("lays 60 small craters in the floor's stone, low, on bare floor only", () => {
+    const pits = verts.filter(p => p[8] === TEX.STONE);
+    expect(pits.length).toBe(60 * 4 * 12 * 6);
+    expect(pits.every(p => p[1] > 0.01 && p[1] <= 0.24 && p[6] === p[0] && p[7] === p[2])).toBe(
+      true,
+    );
+    const standing = MOON.brushes.filter(b => b.max[1] > 0);
+    for (const p of pits) {
+      expect(
+        standing.some(
+          b => p[0] > b.min[0] && p[0] < b.max[0] && p[2] > b.min[2] && p[2] < b.max[2],
+        ),
+      ).toBe(false);
+    }
   });
 
   it('stays within a vertex budget and is the same every time', () => {

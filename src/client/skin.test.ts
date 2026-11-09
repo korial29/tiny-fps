@@ -675,8 +675,9 @@ describe('skin', () => {
       out.length = 0;
       skin(out, body(3), solve(p), palette(JACKET));
     }
-    // Close, 2.6 ms on a desk with the hard face (#116); a runner took 12.6 once against 12.
-    expect((performance.now() - u) / 50).toBeLessThan(15);
+    // Close, 2.6 ms on a desk with the hard face (#116); runners took 12.6 against 12, then 16.2
+    // against 15 under coverage: the bound only catches a many-fold slowdown.
+    expect((performance.now() - u) / 50).toBeLessThan(25);
   });
 
   describe('cut', () => {

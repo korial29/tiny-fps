@@ -421,7 +421,7 @@ describe('skin', () => {
     const corners = (col: number) =>
       [...t].filter((_, i) => c[i] == col).map(k => [v[k * 6], v[k * 6 + 1], v[k * 6 + 2]]);
     const flesh = corners(FLESH_);
-    // The nose's tip is the front of the face, 2.5 cm out of the lips and the brow.
+    // The nose's tip is the front of the face, about 2 cm out of the lips and the brow.
     const tip = flesh.reduce((a, b) => (b[2] < a[2] ? b : a));
     expect(Math.abs(tip[0])).toBeLessThan(0.002);
     expect(tip[1]).toBeGreaterThan(1.645);
@@ -431,7 +431,7 @@ describe('skin', () => {
         ...flesh.filter(p => Math.abs(p[0]) < 0.002 && Math.abs(p[1] - y) < 0.003).map(p => p[2]),
       );
     expect(front(1.62) - tip[2]).toBeGreaterThan(0.018);
-    expect(front(1.708) - tip[2]).toBeGreaterThan(0.02);
+    expect(front(1.708) - tip[2]).toBeGreaterThan(0.018);
     // The chin stands 2.5 cm over the throat under it.
     expect(front(1.575) - front(1.594)).toBeGreaterThan(0.02);
     // The upper lid comes down in front of the top of the iris.

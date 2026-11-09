@@ -1273,35 +1273,44 @@ export const power = (t: number, end = 0.6): number =>
 export const GUN_ON = { lit: 0.95, from: 0.05, up: 0.45, digits: 1.05 };
 
 /**
- * Seconds after a weapon comes to hand, or a swap puts its new battery in, that the thumb presses
- * the button on its side: it powers on then, light and sound (the user, 2026-11-09). The rail gun's
- * boot plays 1.4 times as fast (combat.ts), so its press comes sooner.
+ * Seconds after a weapon comes to hand, or a swap puts its new battery in, that its button is
+ * pressed, by the left index on a gun's left flank, by the right thumb on the katana's grip: it
+ * powers on then, light and sound (the user, 2026-11-09). The rail gun's boot plays 1.4 times as
+ * fast (combat.ts), so its press comes sooner.
  */
 export const PRESS = 0.45;
 export const pressAt = (kind: number) => (kind == 2 ? PRESS / 1.4 : PRESS);
-/** The thumb `t` after a weapon came to hand, its press at `at`: at rest (0), reaching up onto the button (1) by `at`, then back. */
-export const thumb = (t: number, at = PRESS) =>
+/** The pressing finger `t` after a weapon came to hand, its press at `at`: where it was (0), on the button (1) by `at`, then back. */
+export const poke = (t: number, at = PRESS) =>
   t < at ? ease(span(t, at - 0.16, at)) : 1 - ease(span(t, at + 0.08, at + 0.24));
 
 /**
  * Each weapon's button by kind (the gun, the katana, the rail gun, the rifle), in its model space,
- * on its left flank where the thumb reaches up to it, in sight: its foot, the way it faces, how far
- * it stands out. The katana's on the top of its grip, on the thumb's side.
+ * on its left flank, in sight, for the left index: its foot, the way it faces, how far it stands
+ * out. The katana's on the top of its grip, under the right thumb.
  */
-const BUTTONS: [Vec3, Vec3, number][] = [
+export const BUTTONS: [Vec3, Vec3, number][] = [
   [[-0.0405, 0.08, -0.02], unit([-0.86, -0.5, 0]), 0.002],
   [[-0.0036, 0.013, -0.02], unit([-0.3, 0.95, 0]), 0.003],
   [[-0.0313, 0.08, -0.01], unit([-0.98, -0.2, 0]), 0.002],
   [[-0.0271, 0.08, -0.02], unit([-0.89, 0.45, 0]), 0.002],
 ];
-/** The thumb's middle joint in a weapon's model space, the hand round its grip. */
+/** The right thumb's middle joint in a weapon's model space, the hand round its grip. */
 const KNUCKLE: Vec3 = [-0.0148, 0.0463, -0.0198];
 const [TS, TC] = [Math.sin(0.55), Math.cos(0.55)];
-/** The way, in the hand (x toward the thumb, y its back, z the fingers), from the thumb's middle joint to weapon `kind`'s button. */
+/** The way, in the hand (x toward the thumb, y its back, z the fingers), from the right thumb's middle joint to weapon `kind`'s button: the katana's. */
 export const thumbTo = (kind: number): Vec3 => {
   const [foot, n, len] = BUTTONS[kind];
   const [x, y, z] = unit(sub(add(foot, n.map(v => v * len) as Vec3), KNUCKLE));
   return unit([y * TS - z * TC, x, -y * TC - z * TS]);
+};
+/** Weapon `kind`'s button for a model at `at` with axes [right, up, forward] (model -z forward): its top, and the way it faces. */
+export const buttonAt = (kind: number, at: Vec3, [r, u, f]: Vec3[]): Vec3[] => {
+  const [foot, n, len] = BUTTONS[kind];
+  const w = (p: Vec3, o: Vec3) =>
+    [0, 1, 2].map(i => o[i] + r[i] * p[0] + u[i] * p[1] - f[i] * p[2]) as Vec3;
+  const top = add(foot, n.map(v => v * len) as Vec3);
+  return [w(top, at), unit(w(n, [0, 0, 0]))];
 };
 const KNOB = dress(
   smooth(

@@ -564,6 +564,8 @@ export interface Skin {
   o: Float32Array;
   /** Per triangle the LIMB it comes off with, NONE for the trunk's. */
   l?: Uint8Array;
+  /** Per vertex how far it turns with the jaw when the mouth opens (radians, see skin()). */
+  d: Float32Array;
 }
 
 const sgn = (v: number, e: number) => Math.sign(v) * Math.abs(v) ** (2 / e);
@@ -604,7 +606,7 @@ const BROWS: Loft = {
 const LOFTS = [TRUNK, LEG, ARM, EYE, SPECK, BROWS, EAR, CONCHA, ...GEAR];
 
 const generate = (lod: number): Skin => {
-  const [v, j, w, t, c, l]: number[][] = [[], [], [], [], [], []];
+  const [v, j, w, t, c, l, d]: number[][] = [[], [], [], [], [], [], []];
   /** Far, near, or close; the eye's own body is near: the camera's near plane and the hands' budget hold it. */
   const tier = [0, 1, 1, 2][lod];
   const N = TRUNK.n[tier];
@@ -616,6 +618,7 @@ const generate = (lod: number): Skin => {
   const crotch: number[] = [];
   const put = (p: number[], a: number, b: number, k: number) => {
     v.push(...p, 0, 0, 0);
+    d.push(0);
     j.push(a, b);
     w.push(k);
     return w.length - 1;
@@ -872,7 +875,14 @@ const generate = (lod: number): Skin => {
           const [line, soft] = jaw(aq);
           const w = step(line - soft, line + soft, y);
           const [nx, nz] = [NECK[0] * sgn(sn, 2.3), -NECK[cs > 0 ? 1 : 2] * sgn(cs, 2.3)];
-          return hang([nx + (x + n[0] * k - nx) * w, y, nz + (cz + z + n[1] * k - nz) * w]);
+          const h = hang([nx + (x + n[0] * k - nx) * w, y, nz + (cz + z + n[1] * k - nz) * w]);
+          // The jaw: under the line between the lips, out from its corners down to the jaw's
+          // angle, the line itself half; the neck under it not.
+          const ax = Math.abs(x);
+          d[h] = fine
+            ? 0.22 * w * clamp((1.618 - 6 * ax * ax - 0.5 * Math.max(ax - 0.019, 0) - y) / 0.004)
+            : 0;
+          return h;
         }),
       );
     }
@@ -957,6 +967,7 @@ const generate = (lod: number): Skin => {
     t: new Uint16Array(t),
     c: new Uint8Array(c),
     l: new Uint8Array(l),
+    d: new Float32Array(d),
   };
 };
 
@@ -1014,7 +1025,8 @@ const sever = (s: Skin, limb: number): Skin[] => {
   const j = new Uint8Array([...s.j, ROOT[limb], ROOT[limb]]);
   const w = new Float32Array([...s.w, 0]);
   const o = new Float32Array([...s.o, 1]);
-  return t.map((x, k) => ({ v, o, j, w, t: new Uint16Array(x), c: new Uint8Array(c[k]) }));
+  const d = new Float32Array([...s.d, 0]);
+  return t.map((x, k) => ({ v, o, j, w, d, t: new Uint16Array(x), c: new Uint8Array(c[k]) }));
 };
 
 const parts: Skin[][] = [];
@@ -1042,6 +1054,9 @@ const swing = (rot: Quat[], j: number): Quat => {
   const h = Math.hypot(...t) || 1;
   return mul(c, mul(l, [-t[0] / h, -t[1] / h, -t[2] / h, t[3] / h]));
 };
+/** The inside of an open mouth. */
+const MOUTH = [0.09, 0.03, 0.03];
+
 /** Per joint the dual quaternion that carries the rest pose to the pose: the rotation, then its dual. */
 const D = new Float64Array((JOINTS + 2) * 8);
 const E = new Float64Array(8);
@@ -1058,6 +1073,8 @@ export const skin = (
   s: Skin,
   { pos, rot }: { pos: Vec3[]; rot: Quat[] },
   colors: number[][],
+  shut = 0,
+  open = 0,
 ) => {
   for (let k = 0; k < JOINTS + 2; k++) {
     const r = k < JOINTS ? rot[k] : swing(rot, k == SWING_R ? J.ARM_R : J.ARM_L);
@@ -1089,7 +1106,13 @@ export const skin = (
       E[3] * E[6] - E[7] * E[2] - (E[4] * E[1] - E[5] * E[0]),
     ];
     for (const h of [k, k + 3]) {
-      const [x, y, z] = [s.v[h], s.v[h + 1], s.v[h + 2]];
+      // The mouth `open` turns the jaw down about its hinge under the ears.
+      const a = h == k ? s.d[i] * open : 0;
+      const [x, y, z] = [
+        s.v[h],
+        s.v[h + 1] + a * s.v[h + 2],
+        s.v[h + 2] - a * (s.v[h + 1] - 1.665),
+      ];
       const [p, q, r] = [E[1] * z - E[2] * y, E[2] * x - E[0] * z, E[0] * y - E[1] * x];
       const e = h == k ? 2 : 0;
       Q[h] = x + 2 * (E[3] * p + E[1] * r - E[2] * q) + e * m[0];
@@ -1100,7 +1123,14 @@ export const skin = (
   // Written by index rather than pushed: the close skin is some 20 000 vertices.
   let o = out.length;
   for (let h = 0; h < s.t.length; h++, o += 10) {
-    const [col, k, g] = [colors[s.c[h]], s.t[h] * 6, s.o[s.t[h]]];
+    // Eyes `shut`: the lids, the skin, over the whites, the irises and their specks. Open, the
+    // line between the lips (the jaw's, unlike the nostrils) is the mouth's dark.
+    const q = shut && (s.c[h] == WHITE || s.c[h] == IRIS || s.c[h] == GLINT) ? FLESH : s.c[h];
+    const [col, k, g] = [
+      open > 0.2 && q == SHADE && s.d[s.t[h]] ? MOUTH : colors[q],
+      s.t[h] * 6,
+      s.o[s.t[h]],
+    ];
     out[o] = Q[k];
     out[o + 1] = Q[k + 1];
     out[o + 2] = Q[k + 2];
@@ -1110,7 +1140,7 @@ export const skin = (
     out[o + 6] = col[0] * g;
     out[o + 7] = col[1] * g;
     // The cut's face and the eyes' specks glow: unlit.
-    out[o + 8] = s.c[h] >= GLINT ? -2 : -1;
+    out[o + 8] = q >= GLINT ? -2 : -1;
     out[o + 9] = col[2] * g;
   }
 };

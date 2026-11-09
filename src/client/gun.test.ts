@@ -558,7 +558,7 @@ describe('the rail gun’s counter and socket', () => {
     expect(Math.max(...v.map(x => x.p[0]))).toBeLessThan(-0.03);
   });
 
-  it('glows in neon: violet digits and frame on a dark screen, red at 15 or less', () => {
+  it('glows in neon: violet digits and frame on a dark screen, red at 5 or less', () => {
     const neon = (n: number) => verts(lcd(n)).filter(x => x.layer == -2);
     // The frame's four bands, then the digits: 30 is 5 + 6 segments.
     expect(neon(30)).toHaveLength((4 + 11) * 6);
@@ -566,8 +566,11 @@ describe('the rail gun’s counter and socket', () => {
       expect(x.c[2]).toBeGreaterThan(x.c[0]);
       expect(x.c[0]).toBeGreaterThan(x.c[1]);
     }
-    for (const x of neon(15)) {
+    for (const x of neon(5)) {
       expect(x.c[0]).toBeGreaterThan(x.c[2] * 3);
+    }
+    for (const x of neon(6)) {
+      expect(x.c[2]).toBeGreaterThan(x.c[0]);
     }
     // Nothing else is lit: the case and the screen are dark.
     for (const x of verts(lcd(30)).filter(x => x.layer != -2)) {

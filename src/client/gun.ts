@@ -46,22 +46,28 @@ const clamp = (v: number) => Math.min(Math.max(v, 0), 1);
  * Appends the tube through `st`: a ring is `n` sides of a superellipse across the spine's side
  * view, a station with no width a point. Triangles with smooth normals, each vertex painted.
  */
+/** Vertex `k` of the `n` of station `i`'s ring in tube(). */
+const ring = (st: Station[], i: number, k: number, n: number): Vec3 => {
+  const [f, y, a, b, x = 0] = st[i];
+  const [p, q] = [st[Math.max(i - 1, 0)], st[Math.min(i + 1, st.length - 1)]];
+  const l = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+  const [tf, ty] = [(q[0] - p[0]) / l, (q[1] - p[1]) / l];
+  const [c, s] = [sgn(Math.cos((k * TAU) / n)), sgn(Math.sin((k * TAU) / n))];
+  // The ring stands across the spine: its height runs along the spine's normal.
+  return [x + a * c, y + b * s * tf, -(f - b * s * ty)];
+};
+
 const tube = (out: number[], st: Station[], n: number, paint: Paint) => {
   const P: Vec3[] = [];
   const N: Vec3[] = [];
   const T: number[] = [];
-  const rows = st.map(([f, y, a, b, x = 0], i) => {
-    const [p, q] = [st[Math.max(i - 1, 0)], st[Math.min(i + 1, st.length - 1)]];
-    const l = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
-    const [tf, ty] = [(q[0] - p[0]) / l, (q[1] - p[1]) / l];
-    return Array.from({ length: a ? n : 1 }, (_, k) => {
-      const [c, s] = [sgn(Math.cos((k * TAU) / n)), sgn(Math.sin((k * TAU) / n))];
-      // The ring stands across the spine: its height runs along the spine's normal.
-      P.push([x + a * c, y + b * s * tf, -(f - b * s * ty)]);
+  const rows = st.map((r, i) =>
+    Array.from({ length: r[2] ? n : 1 }, (_, k) => {
+      P.push(ring(st, i, k, n));
       N.push([0, 0, 0]);
       return P.length - 1;
-    });
-  });
+    }),
+  );
   rows.slice(1).forEach((r1, k) => {
     const r0 = rows[k];
     const mid = [
@@ -358,6 +364,79 @@ const EMBER = [1.2, 0.32, 0.06];
 /** A station on the long axis, `up` above it. */
 const on = (f: number, up: number, a: number, b = a, x = 0): Station => [f, axisY(f) + up, a, b, x];
 const railed: number[][] = [];
+/** The rail gun's receiver, a tube: its long middle from station 2 to 3. */
+const RECEIVER = [
+  on(-0.13, 0.004, 0),
+  on(-0.125, 0.004, 0.026, 0.03),
+  on(-0.1, 0.004, 0.034, 0.04),
+  on(0.13, 0.002, 0.034, 0.038),
+  on(0.16, 0, 0.024),
+  on(0.165, 0, 0),
+];
+
+/**
+ * The rail gun's small details (the user, 2026-11-09: lines and screw heads on its tube), near
+ * only: on the receiver's ten flat faces, grooves round it with a bright lip, a seam along each
+ * flank above and under its middle, cross-head screws; grooves round the barrel between the
+ * insulators and the coils.
+ */
+const teslaDetails = (out: number[]) => {
+  /** The receiver's surface at `f` forward, `k` round (of its 10 vertices, between them on a flat face), `d` out of it, and the face's normal. */
+  const at = (f: number, k: number, d = 0.0003): Vec3[] => {
+    const t = (f + 0.1) / 0.23;
+    const v = (j: number) => mix(ring(RECEIVER, 2, j, 10), ring(RECEIVER, 3, j, 10), t) as Vec3;
+    const [a, b] = [v(Math.floor(k)), v(Math.floor(k) + 1)];
+    const e = unit(sub(ring(RECEIVER, 3, 0, 10), ring(RECEIVER, 2, 0, 10)));
+    const w = unit(sub(b, a));
+    // Outward: the cross of the way along and the way round.
+    const n = unit([
+      e[1] * w[2] - e[2] * w[1],
+      e[2] * w[0] - e[0] * w[2],
+      e[0] * w[1] - e[1] * w[0],
+    ]);
+    const p = mix(a, b, k % 1);
+    return [p.map((c, i) => c + n[i] * d) as Vec3, n, e, w];
+  };
+  const band = (f0: number, f1: number, k0: number, k1: number, paint: Paint, d = 0.0003) =>
+    rect(out, (f, k) => at(f, k, d)[0], f0, f1, k0, k1, at(f0, k0)[1], paint);
+  for (const f of [-0.085, -0.035, 0.07, 0.118]) {
+    for (let k = 0; k < 10; k++) {
+      band(f - 0.0011, f + 0.0011, k, k + 0.999, slot);
+      band(f + 0.0011, f + 0.0019, k, k + 0.999, lip);
+    }
+  }
+  // Seams along the flanks, a screw at each end; a panel on the top between the first two
+  // grooves, a screw at each corner.
+  for (const k of [0.5, 4.5, 5.5, 9.5]) {
+    band(-0.095, 0.125, k - 0.02, k + 0.02, slot);
+    for (const f of [-0.06, 0.095]) {
+      const [c, n, e, w] = at(f, k + (k % 9 < 1 || k > 5 ? 0.25 : -0.25));
+      screw(out, c, e, w, n, 1.4);
+    }
+  }
+  for (const k of [2.12, 2.84]) {
+    band(-0.0839, -0.0361, k, k + 0.04, slot);
+  }
+  for (const f of [-0.074, -0.046]) {
+    for (const k of [2.3, 2.7]) {
+      const [c, n, e, w] = at(f, k);
+      screw(out, c, e, w, n, 1.2);
+    }
+  }
+  for (const f of [0.175, 0.228, 0.283]) {
+    tube(
+      out,
+      [
+        on(f - 0.001, 0, 0),
+        on(f - 0.001, 0, 0.0195),
+        on(f + 0.001, 0, 0.0195),
+        on(f + 0.001, 0, 0),
+      ],
+      10,
+      slot,
+    );
+  }
+};
 
 /**
  * The rail gun at a level of detail (0 far, 1 near), built once like gun(), after a Tesla gun held
@@ -385,19 +464,7 @@ export const railgun = (lod: number): number[] => {
     m,
     wood,
   );
-  tube(
-    out,
-    [
-      on(-0.13, 0.004, 0),
-      on(-0.125, 0.004, 0.026, 0.03),
-      on(-0.1, 0.004, 0.034, 0.04),
-      on(0.13, 0.002, 0.034, 0.038),
-      on(0.16, 0, 0.024),
-      on(0.165, 0, 0),
-    ],
-    n,
-    drab,
-  );
+  tube(out, RECEIVER, n, drab);
   tube(
     out,
     [
@@ -434,6 +501,9 @@ export const railgun = (lod: number): number[] => {
       n,
       copper,
     );
+  }
+  if (lod) {
+    teslaDetails(out);
   }
   const f = -RAIL_MUZZLE[2];
   for (const s of [-1, 1]) {
@@ -716,59 +786,63 @@ const LEDS = [LASER, [1.8, 0.9, 0.1], GLOW];
  * side with a bright lip under it, cross-head screws on the housing and the body, a dark panel of
  * three LEDs on each side of the housing at the back, and a vent of five slots on each side of the butt.
  */
+/** A flat quad `q` facing `n`, painted. */
+const flat = (out: number[], q: Vec3[], n: Vec3, paint: Paint) => {
+  for (const t of [
+    [q[0], q[1], q[2]],
+    [q[0], q[2], q[3]],
+  ]) {
+    for (const p of t) {
+      out.push(...p, ...n, ...paint(p, n));
+    }
+  }
+};
+/** A rectangle on a surface: `at(u, v)` the point `u` along and `v` across it. */
+const rect = (
+  out: number[],
+  at: (u: number, v: number) => Vec3,
+  u0: number,
+  u1: number,
+  v0: number,
+  v1: number,
+  n: Vec3,
+  paint: Paint,
+) => {
+  // In pieces of 2 cm at most along it, so that it follows a curved surface.
+  const k = Math.ceil(Math.abs(u1 - u0) / 0.02);
+  for (let i = 0; i < k; i++) {
+    const [a, b] = [u0 + ((u1 - u0) * i) / k, u0 + ((u1 - u0) * (i + 1)) / k];
+    flat(out, [at(a, v0), at(b, v0), at(b, v1), at(a, v1)], n, paint);
+  }
+};
+/** A cross-head screw at `c` on a surface of normal `n`, `e` and `w` across it, `k` times the rifle's. */
+const screw = (out: number[], c: Vec3, e: Vec3, w: Vec3, n: Vec3, k = 1) => {
+  const p = (a: number, b: number, d: number): Vec3 =>
+    [0, 1, 2].map(i => c[i] + (e[i] * a + w[i] * b) * k + n[i] * d) as Vec3;
+  for (let k = 0; k < 10; k++) {
+    const [a, b] = [k, k + 1].map(j => (j * TAU) / 10);
+    for (const [r, d, paint] of [
+      [0.0034, 0.0003, slot],
+      [0.0026, 0.0006, steel],
+    ] as const) {
+      flat(
+        out,
+        [
+          p(0, 0, d),
+          p(r * Math.cos(a), r * Math.sin(a), d),
+          p(r * Math.cos(b), r * Math.sin(b), d),
+          p(0, 0, d),
+        ],
+        n,
+        paint,
+      );
+    }
+  }
+  rect(out, (u, v) => p(u, v, 0.0008), -0.0019, 0.0019, -0.0003, 0.0003, n, slot);
+  rect(out, (u, v) => p(v, u, 0.0008), -0.0019, 0.0019, -0.0003, 0.0003, n, slot);
+};
+
 const details = (out: number[]) => {
-  const flat = (q: Vec3[], n: Vec3, paint: Paint) => {
-    for (const t of [
-      [q[0], q[1], q[2]],
-      [q[0], q[2], q[3]],
-    ]) {
-      for (const p of t) {
-        out.push(...p, ...n, ...paint(p, n));
-      }
-    }
-  };
-  /** A rectangle on a surface: `at(u, v)` the point `u` along and `v` across it. */
-  const rect = (
-    at: (u: number, v: number) => Vec3,
-    u0: number,
-    u1: number,
-    v0: number,
-    v1: number,
-    n: Vec3,
-    paint: Paint,
-  ) => {
-    // In pieces of 2 cm at most along it, so that it follows a curved surface.
-    const k = Math.ceil(Math.abs(u1 - u0) / 0.02);
-    for (let i = 0; i < k; i++) {
-      const [a, b] = [u0 + ((u1 - u0) * i) / k, u0 + ((u1 - u0) * (i + 1)) / k];
-      flat([at(a, v0), at(b, v0), at(b, v1), at(a, v1)], n, paint);
-    }
-  };
-  /** A cross-head screw at `c` on a surface of normal `n`, `e` and `w` across it. */
-  const screw = (c: Vec3, e: Vec3, w: Vec3, n: Vec3) => {
-    const p = (a: number, b: number, d: number): Vec3 =>
-      [0, 1, 2].map(i => c[i] + e[i] * a + w[i] * b + n[i] * d) as Vec3;
-    for (let k = 0; k < 10; k++) {
-      const [a, b] = [k, k + 1].map(j => (j * TAU) / 10);
-      for (const [r, d, paint] of [
-        [0.0034, 0.0003, slot],
-        [0.0026, 0.0006, steel],
-      ] as const) {
-        flat(
-          [
-            p(0, 0, d),
-            p(r * Math.cos(a), r * Math.sin(a), d),
-            p(r * Math.cos(b), r * Math.sin(b), d),
-            p(0, 0, d),
-          ],
-          n,
-          paint,
-        );
-      }
-    }
-    rect((u, v) => p(u, v, 0.0008), -0.0019, 0.0019, -0.0003, 0.0003, n, slot);
-    rect((u, v) => p(v, u, 0.0008), -0.0019, 0.0019, -0.0003, 0.0003, n, slot);
-  };
   /** The housing's side `s` at `f` and `y`, `d` out of it, and its normal. */
   const side = (s: number, f: number, y: number, d = 0.0003): Vec3 => {
     const [, top, wb, wt] = along(HOUSING, f);
@@ -783,6 +857,7 @@ const details = (out: number[]) => {
   const up: Vec3 = [0, 1, 0];
   for (const x of [-0.008, 0.008]) {
     rect(
+      out,
       (f, v) => [x + v, along(HOUSING, f)[1] + 0.0003, -f],
       -0.05,
       0.4,
@@ -791,21 +866,31 @@ const details = (out: number[]) => {
       up,
       slot,
     );
-    rect((f, v) => [x + v, along(HOUSING, f)[1] + 0.0003, -f], -0.05, 0.4, 0.0006, 0.0011, up, lip);
+    rect(
+      out,
+      (f, v) => [x + v, along(HOUSING, f)[1] + 0.0003, -f],
+      -0.05,
+      0.4,
+      0.0006,
+      0.0011,
+      up,
+      lip,
+    );
   }
-  screw([0, 0.1353, 0.045], [1, 0, 0], [0, 0, 1], up);
+  screw(out, [0, 0.1353, 0.045], [1, 0, 0], [0, 0, 1], up);
   for (const s of [-1, 1]) {
     const n = sideN(s);
-    rect((f, h) => side(s, f, along(HOUSING, f)[1] - h), 0.02, 0.36, 0.0085, 0.0097, n, slot);
-    rect((f, h) => side(s, f, along(HOUSING, f)[1] - h), 0.02, 0.36, 0.0097, 0.0103, n, lip);
+    rect(out, (f, h) => side(s, f, along(HOUSING, f)[1] - h), 0.02, 0.36, 0.0085, 0.0097, n, slot);
+    rect(out, (f, h) => side(s, f, along(HOUSING, f)[1] - h), 0.02, 0.36, 0.0097, 0.0103, n, lip);
     for (const f of [0.03, 0.3]) {
-      screw(side(s, f, along(HOUSING, f)[1] - 0.017), [0, 0, 1], [0, 1, 0], n);
+      screw(out, side(s, f, along(HOUSING, f)[1] - 0.017), [0, 0, 1], [0, 1, 0], n);
     }
     // The LED panel at the back of the housing's side.
-    rect((f, y) => side(s, f, y), -0.06, -0.025, 0.112, 0.124, n, slot);
+    rect(out, (f, y) => side(s, f, y), -0.06, -0.025, 0.112, 0.124, n, slot);
     LEDS.forEach((c, i) => {
       const f = -0.053 + i * 0.011;
       rect(
+        out,
         (f, y) => side(s, f, y, 0.0006),
         f - 0.0018,
         f + 0.0018,
@@ -818,11 +903,11 @@ const details = (out: number[]) => {
     // Screws on the body, under the red strip; a vent of slots on the butt.
     const fn: Vec3 = [s, 0, 0];
     for (const f of [-0.27, 0.08]) {
-      screw(flank(s, f, -0.022), [0, 0, 1], [0, 1, 0], fn);
+      screw(out, flank(s, f, -0.022), [0, 0, 1], [0, 1, 0], fn);
     }
     for (let k = 0; k < 5; k++) {
       const f = -0.29 + k * 0.012;
-      rect((u, h) => flank(s, u, h), f, f + 0.005, 0.012, 0.03, fn, slot);
+      rect(out, (u, h) => flank(s, u, h), f, f + 0.005, 0.012, 0.03, fn, slot);
     }
   }
 };

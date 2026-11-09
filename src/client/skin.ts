@@ -424,13 +424,14 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
   const k = clamp((bridge - y) / (bridge - tip));
   const h =
     y < tip
-      ? 0.027 * step(base, tip, y) ** 0.6
+      ? 0.023 * step(base, tip, y) ** 0.6
       : y < bridge
-        ? 0.002 + 0.025 * k ** 1.3
+        ? 0.002 + 0.021 * k ** 1.3
         : 0.002 * bell(y - bridge, 0.004);
   d +=
     f ** 4 *
-    (h * bell(x, 0.008 + 0.007 * k) + 0.0065 * bell(ax - 0.0145, 0.0055) * bell(y - 1.6475, 0.005));
+    (h * bell(x, 0.0045 + 0.004 * k) +
+      0.0042 * bell(ax - 0.0095, 0.0036) * bell(y - 1.6475, 0.0042));
   // The brow over deep sockets, cheekbones and the hollow under them, the jaw's corners, the lips,
   // a square chin; the forehead leaning back over the brow. A soldier's face (the user, 2026-11-08).
   d +=
@@ -451,11 +452,11 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
   const fold = clamp((1.646 - y) / 0.028);
   d +=
     f ** 4 *
-    (-0.0022 * bell(ax - 0.0085, 0.003) * bell(y - 1.6425, 0.0022) -
+    (-0.0022 * bell(ax - 0.006, 0.0022) * bell(y - 1.6425, 0.0022) -
       0.0008 * bell(x, 0.0025) * bell(y - 1.633, 0.006) -
       0.0015 * bell(x, 0.02) * bell(y - 1.6168, 0.0012) -
       0.0016 *
-        bell(ax - 0.018 - 0.01 * fold, 0.0028) *
+        bell(ax - 0.014 - 0.014 * fold, 0.0028) *
         step(1.614, 1.62, y) *
         (1 - step(1.644, 1.65, y)));
   // The lids over the eyes, narrowed: the upper one down over the top of the iris, the lower one
@@ -479,7 +480,7 @@ const tint = (x: number, y: number, aq: number, fine: boolean) => {
     if (ax > 0.01 && ax < 0.051 && Math.abs(y - arch) < 0.0042 - 0.03 * Math.max(ax - 0.035, 0)) {
       return BROW;
     }
-    const [nx, ny] = [(ax - 0.0085) / 0.0035, (y - 1.6428) / 0.0018];
+    const [nx, ny] = [(ax - 0.006) / 0.0025, (y - 1.6428) / 0.0018];
     if (nx * nx + ny * ny < 1 || (Math.abs(y - 1.6168) < 0.0009 && ax < 0.019)) {
       return SHADE;
     }

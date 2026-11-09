@@ -1280,6 +1280,33 @@ export const GUN_ON = { lit: 0.95, from: 0.05, up: 0.45, digits: 1.05 };
  */
 export const PRESS = 0.45;
 export const pressAt = (kind: number) => (kind == 2 ? PRESS / 1.4 : PRESS);
+/**
+ * A tracker of the weapons each player has had in hand since taking them: true when the weapon in
+ * `p`'s hand comes to it for the first time, the only time it is switched on (the user,
+ * 2026-11-09). A weapon the player no longer carries (lost going down) is forgotten.
+ */
+export const firsts = () => {
+  const had = new Map<number, Set<number>>();
+  return (
+    p: Pick<
+      PlayerState,
+      'id' | 'ammo' | 'blade' | 'rail' | 'rifle' | 'down' | 'wield' | 'rifled' | 'railed'
+    >,
+  ) => {
+    const h = had.get(p.id) ?? new Set<number>();
+    had.set(p.id, h);
+    [p.ammo >= 0, p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0].forEach(
+      (o, k) => o || h.delete(k),
+    );
+    const k = p.down ? -1 : p.wield ? 1 : p.rifled ? 3 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
+    return k >= 0 && !h.has(k) && !!h.add(k);
+  };
+};
+/**
+ * The rail gun's capsule `t` after the gun came to hand, the left hand on it at `at`: turned a
+ * quarter of a turn to tune it on (the user, 2026-11-09), radians, as the screw turns it.
+ */
+export const tune = (t: number, at = PRESS) => -(Math.PI / 2) * ease(span(t, at - 0.03, at + 0.08));
 /** The pressing finger `t` after a weapon came to hand, its press at `at`: where it was (0), on the button (1) by `at`, then back. */
 export const poke = (t: number, at = PRESS) =>
   t < at ? ease(span(t, at - 0.16, at)) : 1 - ease(span(t, at + 0.08, at + 0.24));
@@ -1403,13 +1430,15 @@ export const loadFrame = (
   s = -1,
   k = 1,
   i = 0,
+  tuned = 0,
 ): [Vec3, Vec3[]] => {
   const [r, u, f] = ax;
   const w = kindOf(kind);
   const rail = w == 2;
   const [c, sn] = rail ? [0, 1] : w == 3 ? UP_WELL : UP_GRIP;
   const [fo, up, xo = 0, back = 0, side = 0] = rail ? SLOTS[i] : w == 3 ? WELL : SEAT;
-  const [out, twist, tumble] = swapped(s, w);
+  const [out, screw, tumble] = swapped(s, w);
+  const twist = screw + tuned;
   // Forward up the grip (up), up across it: a turn about the gun's right.
   const fw = [0, 1, 2].map(i => f[i] * c + u[i] * sn) as Vec3;
   let uw = [0, 1, 2].map(i => u[i] * c - f[i] * sn) as Vec3;
@@ -1919,6 +1948,8 @@ export interface Lit {
   hot?: boolean;
   /** How far the thumb has its button in, 0 to 1. */
   press?: number;
+  /** How far the rail gun's capsule is turned on (radians, tune()). */
+  tune?: number;
 }
 
 /** The levels of the rail gun's three cells for `p` (0 to 1): the capsule in use, then what it carries beside, a capsule's worth to each. */
@@ -1953,6 +1984,7 @@ export const held = (
     heat = 0,
     hot = false,
     press = 0,
+    tune = 0,
   }: Lit = {},
 ) => {
   const [at, ax] = [grip(pos, q), axes(q)];
@@ -1966,7 +1998,7 @@ export const held = (
     rail
       ? capsule(lod, swap < 0 ? cells[0] : +(swap > 0.42))
       : [battery, cell, capsule, cell][w](lod),
-    ...loadFrame(at, ax, w, swap, k),
+    ...loadFrame(at, ax, w, swap, k, 0, tune),
     [0, 0, 0],
     k,
   );
@@ -2004,9 +2036,12 @@ export const held = (
     place(out, lcd(ammo), at, ax, [0, 0, 0], k);
   }
   dimmed(out, from, d);
-  const knob: number[] = [];
-  button(knob, w, press, light, w == 3 ? [1, 0.25, 0.15] : [0.25, 0.9, 1]);
-  place(out, knob, at, ax, [0, 0, 0], k);
+  // The button that switches it on; the rail gun is switched on by its capsule (tune()).
+  if (!rail) {
+    const knob: number[] = [];
+    button(knob, w, press, light, w == 3 ? [1, 0.25, 0.15] : [0.25, 0.9, 1]);
+    place(out, knob, at, ax, [0, 0, 0], k);
+  }
   // The gun's counter fades in on its own, with the boot sound, without the gun's flicker (the user, 2026-11-09).
   if (ammo !== undefined && w < 2) {
     const c = out.length;

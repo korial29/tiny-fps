@@ -564,13 +564,18 @@ describe('the sounds and the screen of what happens to the own player', () => {
     const { frame, ids } = setup();
     frame(player({ ammo: -1 }));
     frame(player({ ammo: 60 }));
-    // Taken, it comes to hand and powers up.
-    expect(ids()).toEqual([SOUND.BOOT, SOUND.GUN]);
+    // Taken, the pickup at once; it powers up as the thumb presses its button, PRESS later, this
+    // first time only.
+    expect(ids()).toEqual([SOUND.GUN]);
+    for (let i = 0; i < 28; i++) {
+      frame(player({ ammo: 60 }));
+    }
+    expect(ids()).toEqual([SOUND.GUN, SOUND.BOOT]);
     frame(player({ ammo: 59 }));
     frame(player({ ammo: 58 }));
-    expect(ids()).toEqual([SOUND.BOOT, SOUND.GUN]);
+    expect(ids()).toEqual([SOUND.GUN, SOUND.BOOT]);
     frame(player({ ammo: 60 }));
-    expect(ids()).toEqual([SOUND.BOOT, SOUND.GUN, SOUND.GUN]);
+    expect(ids()).toEqual([SOUND.GUN, SOUND.BOOT, SOUND.GUN]);
   });
 
   it('plays it too for an ammo pack: plus AMMO_PACK from any count, at once', () => {
@@ -801,10 +806,14 @@ describe('the own hits with the katana', () => {
 });
 
 describe('drawing and sheathing the katana', () => {
-  it('play the light saber ignition when it comes into the hand, and the shing when it leaves it', () => {
+  it('play the ignition when it comes into the hand, at the press the first time, and the shing when it leaves it', () => {
     const { frame, audio } = setup();
     frame(player({ blade: true, wield: false }));
     frame(player({ blade: true, wield: true }));
+    expect(audio.play).not.toHaveBeenCalled();
+    for (let i = 0; i < 28; i++) {
+      frame(player({ blade: true, wield: true }));
+    }
     expect(audio.play).toHaveBeenLastCalledWith(SOUND.IGNITE, undefined, expect.any(Number), 1);
     frame(player({ blade: true, wield: true }));
     expect(audio.play).toHaveBeenCalledTimes(1);
@@ -833,7 +842,9 @@ describe('drawing and sheathing the katana', () => {
   it('play the draw for a katana picked up with no gun, which is in hand at once', () => {
     const { frame, ids } = setup();
     frame(player({ ammo: -1 }));
-    frame(player({ ammo: -1, blade: true, wield: true }));
+    for (let i = 0; i < 29; i++) {
+      frame(player({ ammo: -1, blade: true, wield: true }));
+    }
     expect(ids()).toEqual([SOUND.IGNITE]);
   });
 
@@ -881,7 +892,10 @@ describe('the others and the katana', () => {
   it('ignite at the runner when he draws, shing when he sheathes, and nothing when he loses it', () => {
     const { frame, audio } = setup();
     frame(player(), [other(0, 0, { blade: true, wield: false })]);
-    frame(player(), [other(0, 0, { blade: true, wield: true })]);
+    // The first time at his press, PRESS later; the second at once.
+    for (let i = 0; i < 29; i++) {
+      frame(player(), [other(0, 0, { blade: true, wield: true })]);
+    }
     expect(audio.play).toHaveBeenLastCalledWith(SOUND.IGNITE, [5, 1.6, -3], expect.any(Number), 1);
     frame(player(), [other(0, 0, { blade: true, wield: false })]);
     expect(audio.play).toHaveBeenCalledWith(SOUND.SHING, [5, 1.6, -3], expect.any(Number), 0.85);

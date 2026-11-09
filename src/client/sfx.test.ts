@@ -319,12 +319,11 @@ describe('the laser rifle\u2019s shot', () => {
 });
 
 describe('the weapons coming on (the user, 2026-11-09)', () => {
-  it('stay silent until the thumb presses the button, then click and power up', () => {
+  it('begin with the click of the button at once (combat.ts plays them at the press), then power up', () => {
     for (const name of ['BOOT', 'IGNITE'] as const) {
       const s = sound(name);
-      expect(rms(s.subarray(0, 0.44 * RATE))).toBeLessThan(1e-6);
-      expect(rms(s.subarray(0.45 * RATE, 0.5 * RATE))).toBeGreaterThan(0.01);
-      expect(s.length).toBeLessThan(RATE);
+      expect(rms(s.subarray(0, 0.03 * RATE))).toBeGreaterThan(0.01);
+      expect(s.length).toBeLessThan(0.7 * RATE);
     }
   });
 });

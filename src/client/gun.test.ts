@@ -129,21 +129,20 @@ describe('the gun model', () => {
     }
   });
 
-  it('flattens its back into a glossy black face leaning toward the player, the screen’s support', () => {
+  it('cuts its top with a straight glossy black face leaning toward the player, the screen’s support', () => {
     // The face: through (0, 0.125, 0.04), facing back and up.
     const n = unit([0, 0.469, 0.883]);
     const out = (p: Vec3) => (p[1] - 0.125) * n[1] + (p[2] - 0.04) * n[2];
     // Nothing of the body behind it.
-    expect(Math.max(...near.map(v => out(v.p)))).toBeLessThanOrEqual(0);
+    expect(Math.max(...near.map(v => out(v.p)))).toBeLessThan(1e-9);
     // On it, glossy black facing out of it.
     const face = near.filter(v => v.layer == SHINE && Math.max(...v.c) < 0.03);
     expect(face.length).toBeGreaterThan(20);
-    // At its edge it rounds into the metal; most of it faces straight out.
+    // A straight cut: flat, facing straight out of it.
     for (const v of face) {
-      expect(out(v.p)).toBeGreaterThan(-0.0015);
-      expect(dot(v.n, n)).toBeGreaterThan(0.7);
+      expect(Math.abs(out(v.p))).toBeLessThan(1e-9);
+      expect(dot(v.n, n)).toBeGreaterThan(0.999);
     }
-    expect(face.filter(v => dot(v.n, n) > 0.95).length).toBeGreaterThan(face.length / 2);
   });
 
   it('is about a hand and a half long, with the muzzle on the tip of its nose', () => {

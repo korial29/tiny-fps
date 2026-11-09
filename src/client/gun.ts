@@ -157,41 +157,59 @@ const HULL: Station[] = [
 ];
 const built: number[][] = [];
 /**
- * The pistol's back (the user, 2026-11-09: like the rifle's counter, in the line of the gun, in one
- * piece, the body curving round onto the screen): the body flattened toward a face leaning
- * forward, through BACK and facing BACK_N, back and up toward the player, rounding into it over
- * BACK_ROUND. What it cuts off is a glossy black support, and the counter's screen fills it.
+ * The pistol's back (the user, 2026-11-09: like the rifle's counter, the top of the gun in one
+ * piece, cut by a straight leaning face that is the screen's support): the face through BACK,
+ * facing BACK_N, back and up toward the player, glossy black (GLOSS); the counter's screen sits on it.
  */
 const BACK: Vec3 = [0, 0.125, 0.04];
 const BACK_N = unit([0, 0.469, 0.883]);
-const BACK_ROUND = 0.004;
 /** Glossy black, the screen's support: [r, g, layer, b]. */
 const GLOSS = [0.012, 0.012, SHINE, 0.018];
 /**
- * Brings the points of `out` near or behind the back face onto it smoothly: a point `d` out of it
- * goes to -BACK_ROUND * e^-(d / BACK_ROUND + 1), so the surface is untouched BACK_ROUND inside the
- * face and flat on it, rounded in between; its normal bent with it, its metal lit by that.
+ * Cuts `out` (triangles) by the back face: what lies in front stays, what lies behind is laid on the
+ * face, glossy black, facing out of it. A triangle across it is split along it, so the edge is clean.
  */
-const flatBack = (out: number[]) => {
-  for (let i = 0; i < out.length; i += STRIDE) {
-    const d = (out[i + 1] - BACK[1]) * BACK_N[1] + (out[i + 2] - BACK[2]) * BACK_N[2];
-    if (d > -BACK_ROUND) {
-      const h = Math.exp(-(d / BACK_ROUND + 1));
-      const shift = -BACK_ROUND * h - d;
-      out[i + 1] += BACK_N[1] * shift;
-      out[i + 2] += BACK_N[2] * shift;
-      // The normal of the squeezed surface: its part along the face's normal grows by 1 / h.
-      const n = out.slice(i + 3, i + 6) as Vec3;
-      const k = dot(n, BACK_N) * (1 / h - 1);
-      const m = unit(add(n, BACK_N.map(c => c * k) as Vec3));
-      out.splice(i + 3, 3, ...m);
-      // What the face cuts off is the screen's support, glossy black (the user, 2026-11-09); the
-      // metal round it.
-      if (out[i + 8] != -2) {
-        const [r, g, l, b] = d > 0 ? GLOSS : metal()(out.slice(i, i + 3) as Vec3, m);
-        out.splice(i + 6, 4, r, g, l, b);
-      }
+const cutBack = (out: number[]) => {
+  const v = out.splice(0);
+  const side = (i: number) => (v[i + 1] - BACK[1]) * BACK_N[1] + (v[i + 2] - BACK[2]) * BACK_N[2];
+  /** The vertex at `i`, or between the ones at `i` and `j` where the face crosses. */
+  const vert = (i: number, j = i) => {
+    const [a, b] = [side(i), side(j)];
+    const t = i == j ? 0 : a / (a - b);
+    const x = v.slice(i, i + STRIDE).map((x, k) => x + (v[j + k] - x) * t);
+    x.splice(3, 3, ...unit(x.slice(3, 6) as Vec3));
+    return x;
+  };
+  /** On the face, black: the glow keeps its colour. */
+  const flat = (x: number[]) => {
+    const d = (x[1] - BACK[1]) * BACK_N[1] + (x[2] - BACK[2]) * BACK_N[2];
+    return [
+      x[0],
+      x[1] - BACK_N[1] * d,
+      x[2] - BACK_N[2] * d,
+      ...BACK_N,
+      ...(x[8] == -2 ? x.slice(6) : GLOSS),
+    ];
+  };
+  const fan = (poly: number[][]) => {
+    for (let k = 2; k < poly.length; k++) {
+      out.push(...poly[0], ...poly[k - 1], ...poly[k]);
     }
+  };
+  for (let t = 0; t < v.length; t += 3 * STRIDE) {
+    const ids = [t, t + STRIDE, t + 2 * STRIDE];
+    const [front, back]: number[][][] = [[], []];
+    ids.forEach((i, k) => {
+      const j = ids[(k + 1) % 3];
+      (side(i) > 0 ? back : front).push(vert(i));
+      if (side(i) > 0 !== side(j) > 0) {
+        const x = vert(i, j);
+        front.push(x);
+        back.push(x);
+      }
+    });
+    fan(front);
+    fan(back.map(flat));
   }
 };
 /**
@@ -262,7 +280,7 @@ export const gun = (lod: number): number[] => {
     m,
     glow,
   );
-  flatBack(out);
+  cutBack(out);
   return (built[lod] = out);
 };
 

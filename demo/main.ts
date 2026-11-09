@@ -6,7 +6,10 @@ const q = new URLSearchParams(location.search);
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>('form');
-const fields = form.elements as unknown as Record<'name' | 'mode' | 'url', HTMLInputElement>;
+const fields = form.elements as unknown as Record<
+  'name' | 'mode' | 'map' | 'url',
+  HTMLInputElement
+>;
 const status = $('status');
 /** Shown while playing; the menu the rest of the time. */
 const playing = (on: boolean) => {
@@ -24,8 +27,14 @@ const join = () => {
   const name = fields.name.value.trim();
   const server = fields.mode.value == 'server';
   const url = fields.url.value;
+  const map = fields.map.value;
   playing(true);
-  game = tinyFps($('game'), { name, ...(server ? { url } : { socket: localSocket('demo') }) });
+  // The map is the host's: local mode creates the room with it, a server has its own (MAP).
+  game = tinyFps($('game'), {
+    name,
+    map,
+    ...(server ? { url } : { socket: localSocket('demo', { map }) }),
+  });
   status.textContent = server ? `Playing on ${url}` : 'Playing locally';
   game.on('close', () => (status.textContent = 'Disconnected'));
 };
@@ -43,9 +52,10 @@ form.addEventListener('submit', e => {
 });
 $('leave').addEventListener('click', leave);
 
-// ?name=…&mode=local|server&url=… joins right away.
+// ?name=…&mode=local|server&map=highline|tranquility&url=… joins right away.
 fields.name.value = q.get('name') ?? `Player ${Math.floor(Math.random() * 900) + 100}`;
 fields.mode.value = q.get('mode') == 'server' ? 'server' : 'local';
+fields.map.value = q.get('map') == 'tranquility' ? 'tranquility' : 'highline';
 fields.url.value = q.get('url') ?? fields.url.value;
 syncMode();
 if (q.has('name')) {

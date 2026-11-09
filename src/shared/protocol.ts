@@ -66,7 +66,7 @@ export interface Result {
 }
 
 export type ServerText =
-  | { t: 'roster'; you: number; players: PlayerInfo[] }
+  | { t: 'roster'; you: number; players: PlayerInfo[]; map?: string }
   | { t: 'full' }
   /** The match is over: the final captures of red and blue, and every player's result. */
   | { t: 'end'; score: [number, number]; players: Result[] };

@@ -118,10 +118,10 @@ export const face = (
   }
 };
 
-/** The red of every use in the world, in the map's vertex format (layer -2 glows, -1 is lit). */
+/** The red of every use in the world, in the map's vertex format (layer -2 glows, -1 is lit). Not on ghosts: nothing shows them. */
 export const vision = (def: WorldDef): number[] => {
   const out: number[] = [];
-  for (const b of def.brushes) {
+  for (const b of def.brushes.filter(b => !b.ghost)) {
     const { beam, lips, stripes } = uses(def, b);
     const [lo, hi] = [b.min.map(v => v - OFF) as Vec3, b.max.map(v => v + OFF) as Vec3];
     if (beam) {

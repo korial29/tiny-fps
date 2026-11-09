@@ -13,6 +13,7 @@ import {
   TICK_HZ,
 } from './constants';
 import { HIGHLINE } from './map';
+import { MOON } from './moon';
 import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
@@ -246,6 +247,22 @@ describe('Room: the map', () => {
     const b = join(other);
     ticks(other, SNAP_EVERY);
     expect(snap(b).players[0]).toMatchObject({ x: ARENA.teams[0].spawns[0][0], y: 1 });
+  });
+
+  it('builds the map of the rules, and tells its key in the roster', () => {
+    expect(roster(join(new Room())).map).toBe('highline');
+    const moon = new Room({ map: 'tranquility' });
+    const a = join(moon);
+    expect(roster(a).map).toBe('tranquility');
+    ticks(moon, SNAP_EVERY);
+    expect(snap(a).players[0]).toMatchObject({
+      x: MOON.teams[0].spawns[0][0],
+      z: MOON.teams[0].spawns[0][2],
+    });
+  });
+
+  it('plays HIGHLINE on an unknown key', () => {
+    expect(roster(join(new Room({ map: 'nowhere' }))).map).toBe('highline');
   });
 });
 

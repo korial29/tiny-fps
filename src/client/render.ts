@@ -15,6 +15,7 @@ import { base, flag, teamRgb } from './flag';
 import type { CtfScene } from './flag';
 import { SHINE, STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
+import { moonscape } from './moonscape';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { battery, cell, kit, racks } from './props';
@@ -131,7 +132,8 @@ const RELIEF = 0.06;
 // is lit. A: position and range, B: direction and cone (-9 on a point: no cone), K: colour and
 // shadow slot (-1: none; slot k is layer k + 1), M: the slots' matrices. Z < 0 is the depth pass:
 // no colour. Y > 0 is the sky, from the colours in H[3] (zenith) and H[4] (horizon): a gradient, a
-// haze band, the sun's disc and glow, bright enough to bloom (K0, the sky along a direction). The
+// haze band, the sun's disc and glow, bright enough to bloom (K0, the sky along a direction; the glow
+// scattered by the air, so it fades with a dark horizon: the moon keeps a tenth of it). The
 // glass layer adds K0 along the reflected view r, strong at a grazing angle (Fresnel, fr), after the
 // lighting. Polished metal (SHINE) turns partly into that reflection (k), tinted by its colour and
 // dark where r looks down at the ground, with a sharp bright streak where it mirrors just above the
@@ -150,7 +152,7 @@ vec3 K0(vec3 d){
 float h=d.y,k=max(dot(d,O),0.);
 vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
 c=mix(c,H[4]*1.08,exp(-abs(h)*7.));
-return c+X*(.2*pow(k,24.)+.05*pow(k,4.)+2.*smoothstep(.9993,.9997,k));}
+return c+X*((.1+.9*clamp(H[4].g*1.2,0.,1.))*(.2*pow(k,24.)+.05*pow(k,4.))+2.*smoothstep(.9993,.9997,k));}
 void main(){
 if(Z<0.){if(C.z<-2.5)discard;return;}
 if(Y>.5){o=vec4(K0(normalize(P)),1);return;}
@@ -321,6 +323,9 @@ export const level = (world: World): number[] => {
   const out: number[] = [];
   const keys = palette(world).map(String);
   brushes.forEach((b, bi) => {
+    if (b.ghost) {
+      return;
+    }
     const light = 1 + 2 * Math.max(0, keys.indexOf(`${b.tint}`));
     for (let a = 0; a < 3; a++) {
       const [p, q] = [(a + 1) % 3, (a + 2) % 3];
@@ -330,6 +335,7 @@ export const level = (world: World): number[] => {
         const covered = brushes.some(
           (c, j) =>
             j != bi &&
+            !c.ghost &&
             (up ? c.min[a] : c.max[a]) == at &&
             c.min[p] <= b.min[p] &&
             c.max[p] >= b.max[p] &&
@@ -372,14 +378,17 @@ export const city = (world: World): World => ({
   def: { ...world.def, brushes: [...deepen(world.def), ...skyline(world.def)] },
 });
 
-/** All the map's vertices, drawn once: the city, the brushes, the street under them, the parks' trees, the runner's red and the team zones. */
-export const scenery = (world: World): number[] => [
-  ...level(city(world)),
-  ...street(world.def),
-  ...trees(world.def),
-  ...vision(world.def),
-  ...zones(world.def),
-];
+/** All the map's vertices, drawn once: the city (on the moon, its scenery instead), the brushes, the street under them, the parks' trees, the runner's red and the team zones. */
+export const scenery = (world: World): number[] =>
+  world.def.scenery === 'moon'
+    ? [...level(world), ...moonscape(world.def), ...vision(world.def), ...zones(world.def)]
+    : [
+        ...level(city(world)),
+        ...street(world.def),
+        ...trees(world.def),
+        ...vision(world.def),
+        ...zones(world.def),
+      ];
 
 /** The height the fog layer is anchored at: the lowest top of the world, so that at a roof the layer is a few percent of the haze at most. */
 export const fogRef = ({ brushes }: WorldDef) => Math.min(...brushes.map(b => b.max[1]));
@@ -475,7 +484,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const size = () => backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
   // What is drawn is the world plus a city, a street and the runner's red; the physics knows only `world`.
   const ground = scenery(world);
-  const drive = traffic(world.def);
+  // The moon has no traffic.
+  const drive = world.def.scenery === 'moon' ? () => {} : traffic(world.def);
   const { sun, sky } = world.def;
   const sunDir = sun.dir.map(v => v / Math.hypot(...sun.dir)) as Vec3;
   const pixels = textures();
@@ -734,6 +744,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           runners.get(p.id)!,
           rgb(colors.get(p.id) ?? '#888'),
           d < CLOSE ? 3 : +(d < NEAR),
+          world.def.helmets,
         );
         if (s) {
           chests.set(p.id, [s.pos[JOINT.CHEST], s.rot[JOINT.CHEST]]);

@@ -753,6 +753,16 @@ describe('the end of a match', () => {
   });
 });
 
+describe('the roster', () => {
+  it('carries the key of the map, and parses without one', () => {
+    const roster: ServerText = { t: 'roster', you: 0, players: [], map: 'tranquility' };
+    expect(parseText<ServerText>(JSON.stringify(roster))).toEqual(roster);
+    expect(parseText<ServerText>('{"t":"roster","you":0,"players":[]}')).toMatchObject({
+      t: 'roster',
+    });
+  });
+});
+
 describe('parseText', () => {
   it('parses a typed message and rejects the rest', () => {
     expect(parseText('{"t":"join","name":"a"}')).toEqual({ t: 'join', name: 'a' });

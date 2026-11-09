@@ -694,3 +694,14 @@ describe('backing', () => {
     expect(backing(2560, 1440, 2)[0]).toBeLessThan(2560);
   });
 });
+
+describe('ghost brushes', () => {
+  it('are collided with but not drawn, and hide no face of another brush', () => {
+    const base = build({ ...ROOFTOPS, brushes: [ROOFTOPS.brushes[0]] });
+    const ghosted = build({
+      ...ROOFTOPS,
+      brushes: [ROOFTOPS.brushes[0], { ...ROOFTOPS.brushes[0], ghost: true }],
+    });
+    expect(level(ghosted)).toEqual(level(base));
+  });
+});

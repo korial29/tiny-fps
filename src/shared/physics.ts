@@ -442,6 +442,9 @@ const over = (p: PlayerState, w: World): boolean => {
   });
 };
 
+/** The world's gravity: GRAVITY times the map's share (the moon's half gravity, the user, 2026-11-09). */
+const pull = (w: World): number => GRAVITY * (w.def.gravity ?? 1);
+
 /** Whether the player will be back on a floor within the jump buffer: a press now is kept for it. */
 const landingSoon = (p: PlayerState, w: World): boolean => {
   if (p.vy >= 0) {
@@ -449,7 +452,7 @@ const landingSoon = (p: PlayerState, w: World): boolean => {
   }
   const [floor] = span(p, w, PLAYER_H);
   const t = JUMP_BUFFER_TICKS * DT;
-  return p.y - floor <= -p.vy * t + 0.5 * GRAVITY * t * t;
+  return p.y - floor <= -p.vy * t + 0.5 * pull(w) * t * t;
 };
 
 /** What one input asks for, worked out once per step. */
@@ -575,7 +578,7 @@ const steer = (p: PlayerState, wish: [number, number], top: number): void => {
 
 /**
  * Moves the cylinder by its speed for one step: sideways (sliding along the boxes, which takes the
- * speed into them away), then up or down by g times GRAVITY (a ceiling stops a rise, a floor a
+ * speed into them away), then up or down by g times the world's gravity (a ceiling stops a rise, a floor a
  * fall). Returns the speed it came down on a floor at, or -1 when it is not on one. With `snap`
  * a drop of at most STEP_H stays on the ground (a stair going down is not a fall).
  */
@@ -594,7 +597,7 @@ const fly = (p: PlayerState, w: World, h: number, g: number, snap: boolean): num
   }
   const [floor, ceil] = span(p, w, h);
   // Constant acceleration, integrated exactly (average speed): the jump peaks at v² / 2g.
-  const vy = p.vy - g * GRAVITY * DT;
+  const vy = p.vy - g * pull(w) * DT;
   p.y += ((p.vy + vy) / 2) * DT;
   p.vy = vy;
   if (p.y + h > ceil) {

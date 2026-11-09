@@ -37,7 +37,7 @@ import {
 import { CHEST, crossing, knock, limbOf, strike, swingOf } from './blade';
 import { Ctf } from './ctf';
 import { STRIKE, step, within } from './gun';
-import { HIGHLINE } from './map';
+import { mapKey, mapOf } from './maps';
 import { forward, heightOf, spawn, speedOf, stumble } from './physics';
 import { PLASMA_LAG, fly, launch, stepOf, wave } from './plasma';
 import type { Flying } from './plasma';
@@ -138,9 +138,14 @@ export class Room {
   /** The plasma balls in flight, and the ones that burst since the last snapshot, which sends them once more. */
   private balls: Flying[] = [];
 
-  /** Missing rules fall back to RULES. */
-  public constructor(rules: Partial<Rules> = {}, map: WorldDef = HIGHLINE) {
+  /** The key of the map being played, which the roster tells the clients. */
+  private mapName: string;
+
+  /** Missing rules fall back to RULES. The map is the rules' one, unless a definition is given. */
+  public constructor(rules: Partial<Rules> = {}, def?: WorldDef) {
     this.rules = { ...RULES, ...rules };
+    this.mapName = mapKey(this.rules.map);
+    const map = def ?? mapOf(this.mapName);
     this.world = build(map);
     this.ctf = new Ctf(this.world, this.rules);
     this.gone = [...(map.packs ?? []), ...(map.ammo ?? []), ...(map.cells ?? [])].map(() => 0);
@@ -709,7 +714,12 @@ export class Room {
     const list = players.map(p => p.info).sort((a, b) => a.id - b.id);
     players.forEach(p =>
       p.conn.send(
-        JSON.stringify({ t: 'roster', you: p.info.id, players: list } satisfies ServerText),
+        JSON.stringify({
+          t: 'roster',
+          you: p.info.id,
+          players: list,
+          map: this.mapName,
+        } satisfies ServerText),
       ),
     );
   }

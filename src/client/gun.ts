@@ -1783,7 +1783,7 @@ export const scope = (n: number, shown = true): number[] => {
   return v;
 };
 
-/** A puff of smoke, built once: a ball of radius 1, a soft flat light grey, unlit so it reads as a puff and not as a ball. */
+/** A puff of smoke, built once: a ball of radius 1, light grey smoke (layer -3: see-through, soft where seen edge-on), its opacity in green. */
 const PUFF: number[] = [];
 tube(
   PUFF,
@@ -1795,14 +1795,15 @@ tube(
     [1, 0, 0, 0],
   ],
   8,
-  () => [0.6, 0.6, -2, 0.63],
+  () => [0.3, 0.95, -3, 0.32],
 );
 /**
  * The smoke off the overheated rail gun (the user, 2026-11-09) at the time `t`, for the gun whose
- * grip is at `at`, turned by `ax` and `k` times its size: SMOKE puffs, each born on the coils, rising
- * 25 cm straight up and drifting aside as it swells and then thins away, over 1.1 s, one after another.
+ * grip is at `at`, turned by `ax` and `k` times its size: SMOKE puffs, each born small and thick on
+ * the coils, rising 30 cm straight up and drifting aside as it swells and thins away over 1.4 s, one
+ * after another.
  */
-const SMOKE = 7;
+const SMOKE = 12;
 const WORLD: Vec3[] = [
   [1, 0, 0],
   [0, 1, 0],
@@ -1810,14 +1811,14 @@ const WORLD: Vec3[] = [
 ];
 const smoke = (out: number[], at: Vec3, [r, u, f]: Vec3[], k: number, t: number) => {
   for (let i = 0; i < SMOKE; i++) {
-    const p = (t * 0.9 + i / SMOKE) % 1;
+    const p = (t * 0.7 + i / SMOKE) % 1;
     const g = 0.3 + 0.12 * ((i * 0.618) % 1);
-    const m: Vec3 = [0, axisY(g) + 0.025, -g];
-    const side = Math.sin(i * 2.4) * 0.06 * p;
+    const m: Vec3 = [0, axisY(g) + 0.02, -g];
+    const side = Math.sin(i * 2.4) * 0.07 * p;
     const c = [0, 1, 2].map(
-      j => at[j] + k * (r[j] * (m[0] + side) + u[j] * m[1] - f[j] * m[2]) + (j == 1 ? 0.25 * p : 0),
+      j => at[j] + k * (r[j] * (m[0] + side) + u[j] * m[1] - f[j] * m[2]) + (j == 1 ? 0.3 * p : 0),
     ) as Vec3;
-    place(out, PUFF, c, WORLD, [0, 0, 0], k * (0.004 + 0.016 * Math.sin(Math.PI * p) ** 0.7));
+    place(out, PUFF, c, WORLD, [0, 0, 0], k * (0.015 + 0.07 * p), [1, (1 - p) ** 1.2, 1]);
   }
 };
 

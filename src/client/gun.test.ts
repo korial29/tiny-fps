@@ -697,8 +697,8 @@ describe('the rail gun’s cells and heat', () => {
       held(out, [0, 0, 0], IDENT, 1, 1, 50, 0, 2, t, lit);
       return out;
     };
-    const smoke = (v: number[]) =>
-      glowing(v).filter(x => x.c[0] == 0.6 && x.c[1] == 0.6 && x.c[2] == 0.63);
+    // Smoke is layer -3: see-through, its opacity in green.
+    const smoke = (v: number[]) => verts(v).filter(x => x.layer == -3);
     const cool = draw({}, 0.01);
     const [inBlink, outOfBlink] = [draw({ hot: true }, 0.01), draw({ hot: true }, 0.08)];
     // Red where it glowed violet in the blink.
@@ -708,10 +708,11 @@ describe('the rail gun’s cells and heat', () => {
     // Smoke only when hot.
     expect(smoke(cool)).toHaveLength(0);
     expect(smoke(inBlink).length).toBeGreaterThan(0);
-    // No spark: less glow than cool once the puffs are set aside.
-    expect(glowing(outOfBlink).length - smoke(outOfBlink).length).toBeLessThan(
-      glowing(cool).length,
-    );
+    // Each puff thins away as it rises: some thicker than others.
+    const thick = smoke(inBlink).map(x => x.c[1]);
+    expect(Math.max(...thick) - Math.min(...thick)).toBeGreaterThan(0.5);
+    // No spark: less glow than cool.
+    expect(glowing(outOfBlink).length).toBeLessThan(glowing(cool).length);
   });
 });
 

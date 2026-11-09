@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { pouch } from './pouch';
 import { STILL } from '../shared/physics';
 import { LIMB, TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -161,7 +162,10 @@ describe('a limb cut off', () => {
     const book = felled(LIMB.HEAD, 30);
     animate(book, [man({ down: 0 })], DT);
     expect(book.get(1)!.cut).toBeUndefined();
-    expect(drawn(book.get(1)!).length / STRIDE).toBe(body(1).t.length);
+    // The whole body again, and the pouch on its hip.
+    const bag: number[] = [];
+    pouch(bag, [0, 0, 0], [0, 0, 0, 1]);
+    expect(drawn(book.get(1)!).length / STRIDE).toBe(body(1).t.length + bag.length / STRIDE);
     const gone = felled(LIMB.HEAD, 30);
     animate(gone, [], DT);
     expect(gone.size).toBe(0);

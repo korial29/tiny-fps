@@ -25,6 +25,7 @@ import type { Runner } from './soldier';
 import { skyline, trees } from './skyline';
 import { deepen, street } from './street';
 import { LAYERS, SIZE, textures } from './textures';
+import { drawDrops, fall } from './drops';
 import { traffic } from './traffic';
 import { vision, zones } from './vision';
 
@@ -716,6 +717,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       animate(runners, others, dt, world, tracer);
       const [right, up, fwd] = basis(yaw, pitch, fx.roll);
       drive(v, eye, fwd, Date.now() / 1000);
+      // The spent batteries and capsules falling to the floor.
+      fall(dt);
+      drawDrops(v);
       ctf?.bases.forEach((at, team) => base(v, at, teamRgb(team), now));
       racks(v, ctf?.racks, ctf?.blades, now, ctf?.rails, ctf?.rifles);
       ctf?.packs?.forEach(at => kit(v, at, now));

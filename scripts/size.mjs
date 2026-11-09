@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 
 const BUDGETS = [
   // 76 KB until the detailed hands (the user, 2026-11-09: "peu importe le budget").
-  { file: 'dist/index.js', max: 80 * 1024 },
+  { file: 'dist/index.js', max: 84 * 1024 },
   { file: 'dist/local.js', max: 16 * 1024 },
 ];
 

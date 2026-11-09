@@ -454,7 +454,7 @@ describe('skin', () => {
     expect([...body(0).c].includes(LIP)).toBe(false);
   });
 
-  it('gives the close face a hard look: brows of their own, low, their inner ends drawn down; a shaved beard under the cheekbones', () => {
+  it('gives the close face a hard look: brows of their own along the arch of the brow ridge, their inner ends lower; a shaved beard under the cheekbones', () => {
     const { v, t, c } = body(3);
     const [BROW, STUBBLE, SHADOW] = [12, 13, 14];
     const corners = (...col: number[]) =>
@@ -463,7 +463,7 @@ describe('skin', () => {
     for (const side of [1, -1]) {
       const b = brows.filter(p => p[0] * side > 0);
       expect(b.length).toBeGreaterThan(30);
-      expect(b.every(p => Math.abs(p[0]) > 0.007 && Math.abs(p[0]) < 0.053 && p[2] < -0.07)).toBe(
+      expect(b.every(p => Math.abs(p[0]) > 0.007 && Math.abs(p[0]) < 0.056 && p[2] < -0.07)).toBe(
         true,
       );
       // Over the eyes (1.69), the inner end lower than the arch.

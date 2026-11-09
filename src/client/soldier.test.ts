@@ -314,10 +314,9 @@ describe('soldier', () => {
       }
       const flat = dist.filter(d => d.filter(x => Math.abs(x) < 0.03).length > 25);
       expect(flat.length).toBeGreaterThan(2);
-      // The sole is a patch parallel to the wall: the other shoe is far from it.
-      for (const d of flat) {
-        expect(d.filter(x => x > 0.3).length).toBeGreaterThan(20);
-      }
+      // Each foot takes the wall in turn (the user, 2026-11-09), both on it for a moment, and over
+      // the stride a shoe swings well off it.
+      expect(dist.some(d => d.filter(x => x > 0.1).length > 20)).toBe(true);
     }
   });
 });

@@ -190,11 +190,13 @@ describe('soldier', () => {
   it('adds only the streaks to a dash, and glows them', () => {
     const plain = draw({ vz: -14 }).length / STRIDE;
     const dash = rows(draw({ dash: DASH_BURST, vz: -14 }));
-    const glow = dash.filter(p => p[3] == -2);
+    // The eyes' specks glow too, dash or not.
+    const speck = (p: number[]) => p[4] == 1.3;
+    const glow = dash.filter(p => p[3] == -2 && !speck(p));
     expect(glow.length).toBeGreaterThan(15);
     expect(dash.length - glow.length).toBe(plain);
     expect(draw({ vz: -14 }).length / STRIDE).toBe(plain);
-    expect(rows(draw({ vz: -14 })).every(p => p[3] == -1)).toBe(true);
+    expect(rows(draw({ vz: -14 })).every(p => p[3] == -1 || speck(p))).toBe(true);
     // They trail behind the runner: the way it came from, +z.
     expect(Math.min(...glow.map(p => p[2]))).toBeGreaterThan(-3 - 0.4);
   });

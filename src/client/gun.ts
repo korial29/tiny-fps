@@ -674,9 +674,9 @@ const PROFILE: Station[] = [
   [0.497, 0.079, 0.017, 0.013],
 ];
 
-/** The laser rifle's muzzle, the lens at the end of its shroud, and the middle of its handguard, where the left hand holds it from under it: the middle of the fist. */
+/** The laser rifle's muzzle, the lens at the end of its shroud, and the middle of its handguard, the keel under its body where the left hand holds it from under it: the middle of the fist. */
 export const RIFLE_MUZZLE: Vec3 = [0, 0.079, -0.512];
-export const RIFLE_GRIP: Vec3 = [0, -0.008, -0.14];
+export const RIFLE_GRIP: Vec3 = [0, -0.004, -0.14];
 /** The red of the laser, which blooms. */
 export const LASER = [2.6, 0.55, 0.22];
 const red: Paint = () => [LASER[0], LASER[1], -2, LASER[2]];
@@ -845,20 +845,21 @@ export const rifle = (lod: number): number[] => {
     m,
     red,
   );
-  // A handguard under the body (the user, 2026-11-09: sized for the hollow of the left hand, which
-  // holds it from under it), round, 3 cm across, along the body; its middle is RIFLE_GRIP.
+  // The handguard (the user, 2026-11-09: part of the gun, smooth, sized for the hollow of the left
+  // hand, which holds it from under it): a rounded keel that swells out of the body's underside
+  // and sinks back into it, in the body's olive; its middle is RIFLE_GRIP.
   tube(
     out,
     [
-      [0.08, -0.008, 0, 0],
-      [0.082, -0.008, 0.013, 0.014],
-      [0.088, -0.008, 0.015, 0.016],
-      [0.192, -0.008, 0.015, 0.016],
-      [0.198, -0.008, 0.013, 0.014],
-      [0.2, -0.008, 0, 0],
+      [0.03, 0.02, 0, 0],
+      [0.05, 0.012, 0.012, 0.012],
+      [0.09, -0.004, 0.016, 0.016],
+      [0.19, -0.004, 0.016, 0.016],
+      [0.23, 0.012, 0.012, 0.012],
+      [0.25, 0.022, 0, 0],
     ],
-    m,
-    steel,
+    n,
+    olive,
   );
   // The pistol grip.
   tube(

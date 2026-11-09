@@ -483,6 +483,35 @@ describe('skin', () => {
     expect([...body(0).c].some(k => k == BROW || k == STUBBLE)).toBe(false);
   });
 
+  it('shuts the eyes in the skin of the lids and opens the mouth by turning the jaw down, dark inside', () => {
+    const colors = palette(JACKET);
+    const face = (shut: number, open: number) => {
+      const out: number[] = [];
+      skin(out, body(3), solve(rest()), colors, shut, open);
+      return Array.from({ length: out.length / STRIDE }, (_, i) =>
+        out.slice(i * STRIDE, (i + 1) * STRIDE),
+      );
+    };
+    const [still, shut, open] = [face(0, 0), face(1, 0), face(0, 1)];
+    const colour = (r: number[]) => [r[6], r[7], r[9]];
+    const has = (rs: number[][], c: number[]) => rs.some(r => same(colour(r), c));
+    const [WHITE, IRIS] = colors.slice(8, 10);
+    expect(has(still, WHITE) && has(still, IRIS)).toBe(true);
+    expect(still.some(r => r[8] == -2)).toBe(true);
+    // Shut: no white, no iris, no speck; nothing else moves.
+    expect(has(shut, WHITE) || has(shut, IRIS)).toBe(false);
+    expect(shut.every(r => r[8] == -1)).toBe(true);
+    expect(shut.map(r => r.slice(0, 3))).toEqual(still.map(r => r.slice(0, 3)));
+    // Open: the chin comes 1.5 cm down, the nose and the brow stay, the mouth dark between.
+    const drop = Math.max(...still.map((r, i) => r[1] - open[i][1]));
+    expect(drop).toBeGreaterThan(0.015);
+    expect(drop).toBeLessThan(0.025);
+    const above = (rs: number[][]) => rs.filter(r => r[1] > 1.63).map(r => r.slice(0, 3));
+    expect(above(open)).toEqual(above(still));
+    expect(open.some(r => r[6] < 0.1 && r[6] > 0.08 && r[9] < 0.04)).toBe(true);
+    expect(still.some(r => r[6] < 0.1 && r[6] > 0.08 && r[9] < 0.04)).toBe(false);
+  });
+
   it('gives each runner his own look, the same for everyone: one of nine hair colours, a shaved head among them, one of five irises', () => {
     const ids = Array.from({ length: 200 }, (_, i) => i);
     expect(new Set(ids.map(i => String(hairOf(i)))).size).toBe(9);

@@ -28,9 +28,10 @@ const [
   BROW,
   STUBBLE,
   SHADOW,
+  LINE,
   GLINT,
   CAP,
-] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
 
 /** Hair colours, one per runner (hairOf()): black, dark and mid brown, chestnut, red, dark and light blond, grey, and a shaved head, the skin's in its shadow. */
 const HAIRS = [
@@ -63,7 +64,7 @@ export const hairOf = (id: number): number[] => HAIRS[pick(id, 0, HAIRS.length)]
 /** An iris colour for the runner `id`, as hairOf(). */
 export const eyesOf = (id: number): number[] => IRISES[pick(id, 0x2468, IRISES.length)];
 
-/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots and webbing, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, between the hair and the skin, the shaved beard's shadow and its edge, the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
+/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots and webbing, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, between the hair and the skin, the shaved beard's shadow and its edge, the line between the lips (as the folds), the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
 export const palette = (jacket: number[], hair = HAIRS[1], iris = IRISES[0]): number[][] => [
   jacket,
   jacket.map(v => v * 0.5),
@@ -80,6 +81,7 @@ export const palette = (jacket: number[], hair = HAIRS[1], iris = IRISES[0]): nu
   hair.map((v, i) => v * 0.4 + SKIN[i] * 0.3),
   SKIN.map((v, i) => v * 0.62 + hair[i] * 0.1 + [0, 0.01, 0.03][i]),
   SKIN.map((v, i) => v * 0.81 + hair[i] * 0.05 + [0, 0.005, 0.015][i]),
+  SKIN.map(v => v * 0.55),
   [1.3, 1.3, 1.3],
   [2.8, 0.5, 0.12],
 ];
@@ -536,8 +538,11 @@ const tint = (x: number, y: number, aq: number, fine: boolean) => {
   const ax = Math.abs(x);
   if (fine && aq < 1) {
     const [nx, ny] = [(ax - 0.006) / 0.0025, (y - 1.6428) / 0.0018];
-    if (nx * nx + ny * ny < 1 || (Math.abs(y - 1.6168 + 6 * ax * ax) < 0.0009 && ax < 0.019)) {
+    if (nx * nx + ny * ny < 1) {
       return SHADE;
+    }
+    if (Math.abs(y - 1.6168 + 6 * ax * ax) < 0.0009 && ax < 0.019) {
+      return LINE;
     }
     const dy = (y - 1.6168) / 0.0082;
     if (dy * dy < 1 && ax < 0.021 * Math.sqrt(1 - dy * dy)) {
@@ -564,6 +569,8 @@ export interface Skin {
   o: Float32Array;
   /** Per triangle the LIMB it comes off with, NONE for the trunk's. */
   l?: Uint8Array;
+  /** Per vertex how far it turns with the jaw when the mouth opens (radians, see skin()). */
+  d: Float32Array;
 }
 
 const sgn = (v: number, e: number) => Math.sign(v) * Math.abs(v) ** (2 / e);
@@ -604,7 +611,7 @@ const BROWS: Loft = {
 const LOFTS = [TRUNK, LEG, ARM, EYE, SPECK, BROWS, EAR, CONCHA, ...GEAR];
 
 const generate = (lod: number): Skin => {
-  const [v, j, w, t, c, l]: number[][] = [[], [], [], [], [], []];
+  const [v, j, w, t, c, l, d]: number[][] = [[], [], [], [], [], [], []];
   /** Far, near, or close; the eye's own body is near: the camera's near plane and the hands' budget hold it. */
   const tier = [0, 1, 1, 2][lod];
   const N = TRUNK.n[tier];
@@ -616,6 +623,7 @@ const generate = (lod: number): Skin => {
   const crotch: number[] = [];
   const put = (p: number[], a: number, b: number, k: number) => {
     v.push(...p, 0, 0, 0);
+    d.push(0);
     j.push(a, b);
     w.push(k);
     return w.length - 1;
@@ -872,7 +880,14 @@ const generate = (lod: number): Skin => {
           const [line, soft] = jaw(aq);
           const w = step(line - soft, line + soft, y);
           const [nx, nz] = [NECK[0] * sgn(sn, 2.3), -NECK[cs > 0 ? 1 : 2] * sgn(cs, 2.3)];
-          return hang([nx + (x + n[0] * k - nx) * w, y, nz + (cz + z + n[1] * k - nz) * w]);
+          const h = hang([nx + (x + n[0] * k - nx) * w, y, nz + (cz + z + n[1] * k - nz) * w]);
+          // The jaw: under the line between the lips, out from its corners down to the jaw's
+          // angle, the line itself half; the neck under it not.
+          const ax = Math.abs(x);
+          d[h] = fine
+            ? 0.22 * w * clamp((1.618 - 6 * ax * ax - 0.5 * Math.max(ax - 0.019, 0) - y) / 0.004)
+            : 0;
+          return h;
         }),
       );
     }
@@ -957,6 +972,7 @@ const generate = (lod: number): Skin => {
     t: new Uint16Array(t),
     c: new Uint8Array(c),
     l: new Uint8Array(l),
+    d: new Float32Array(d),
   };
 };
 
@@ -1014,7 +1030,8 @@ const sever = (s: Skin, limb: number): Skin[] => {
   const j = new Uint8Array([...s.j, ROOT[limb], ROOT[limb]]);
   const w = new Float32Array([...s.w, 0]);
   const o = new Float32Array([...s.o, 1]);
-  return t.map((x, k) => ({ v, o, j, w, t: new Uint16Array(x), c: new Uint8Array(c[k]) }));
+  const d = new Float32Array([...s.d, 0]);
+  return t.map((x, k) => ({ v, o, j, w, d, t: new Uint16Array(x), c: new Uint8Array(c[k]) }));
 };
 
 const parts: Skin[][] = [];
@@ -1042,6 +1059,9 @@ const swing = (rot: Quat[], j: number): Quat => {
   const h = Math.hypot(...t) || 1;
   return mul(c, mul(l, [-t[0] / h, -t[1] / h, -t[2] / h, t[3] / h]));
 };
+/** The inside of an open mouth. */
+const MOUTH = [0.09, 0.03, 0.03];
+
 /** Per joint the dual quaternion that carries the rest pose to the pose: the rotation, then its dual. */
 const D = new Float64Array((JOINTS + 2) * 8);
 const E = new Float64Array(8);
@@ -1058,6 +1078,8 @@ export const skin = (
   s: Skin,
   { pos, rot }: { pos: Vec3[]; rot: Quat[] },
   colors: number[][],
+  shut = 0,
+  open = 0,
 ) => {
   for (let k = 0; k < JOINTS + 2; k++) {
     const r = k < JOINTS ? rot[k] : swing(rot, k == SWING_R ? J.ARM_R : J.ARM_L);
@@ -1088,19 +1110,34 @@ export const skin = (
       E[3] * E[5] - E[7] * E[1] - (E[6] * E[0] - E[4] * E[2]),
       E[3] * E[6] - E[7] * E[2] - (E[4] * E[1] - E[5] * E[0]),
     ];
+    // The mouth `open` turns the jaw down about its hinge under the ears: the position (e 2).
+    const dj = (s.d[i] * open) / 2;
     for (const h of [k, k + 3]) {
-      const [x, y, z] = [s.v[h], s.v[h + 1], s.v[h + 2]];
-      const [p, q, r] = [E[1] * z - E[2] * y, E[2] * x - E[0] * z, E[0] * y - E[1] * x];
       const e = h == k ? 2 : 0;
+      const [x, y, z] = [
+        s.v[h],
+        s.v[h + 1] + e * dj * s.v[h + 2],
+        s.v[h + 2] - e * dj * (s.v[h + 1] - 1.665),
+      ];
+      const [p, q, r] = [E[1] * z - E[2] * y, E[2] * x - E[0] * z, E[0] * y - E[1] * x];
       Q[h] = x + 2 * (E[3] * p + E[1] * r - E[2] * q) + e * m[0];
       Q[h + 1] = y + 2 * (E[3] * q + E[2] * p - E[0] * r) + e * m[1];
       Q[h + 2] = z + 2 * (E[3] * r + E[0] * q - E[1] * p) + e * m[2];
     }
   }
+  // Eyes `shut`: the lids, the skin, over the whites, the irises and their specks (unlit). Open,
+  // the line between the lips is the mouth's dark.
+  const pal = colors.slice();
+  if (shut) {
+    pal[WHITE] = pal[IRIS] = pal[GLINT] = colors[FLESH];
+  }
+  if (open > 0.2) {
+    pal[LINE] = MOUTH;
+  }
   // Written by index rather than pushed: the close skin is some 20 000 vertices.
   let o = out.length;
   for (let h = 0; h < s.t.length; h++, o += 10) {
-    const [col, k, g] = [colors[s.c[h]], s.t[h] * 6, s.o[s.t[h]]];
+    const [col, k, g] = [pal[s.c[h]], s.t[h] * 6, s.o[s.t[h]]];
     out[o] = Q[k];
     out[o + 1] = Q[k + 1];
     out[o + 2] = Q[k + 2];
@@ -1110,7 +1147,7 @@ export const skin = (
     out[o + 6] = col[0] * g;
     out[o + 7] = col[1] * g;
     // The cut's face and the eyes' specks glow: unlit.
-    out[o + 8] = s.c[h] >= GLINT ? -2 : -1;
+    out[o + 8] = s.c[h] >= GLINT + shut ? -2 : -1;
     out[o + 9] = col[2] * g;
   }
 };

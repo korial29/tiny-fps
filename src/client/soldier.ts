@@ -68,6 +68,8 @@ export interface Runner {
   t: number;
   /** The limb a katana's cut took off, while he is down (see limbs.ts). */
   cut?: Piece;
+  /** Seconds left of the grimace a hit puts on his face. */
+  hurt: number;
 }
 
 /** Seconds after a shot that the gun stays up. */
@@ -89,6 +91,7 @@ export const createRunner = (p: PlayerState): Runner => {
     prog: -1,
     trail: createTrail(),
     t: 0,
+    hurt: 0,
   };
 };
 
@@ -140,6 +143,7 @@ export const animate = (
       }
       r.trail.update(dt);
       r.t += dt;
+      r.hurt = p.hp < r.p.hp ? 0.4 : Math.max(r.hurt - dt, 0);
       r.p = { ...p };
     } else {
       book.set(p.id, createRunner(p));
@@ -351,13 +355,23 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   const { s, sink, yaw } = stance(r);
   const blade = p.wield && !p.down;
   if (r.cut) {
-    skin(out, cut(lod, r.cut.limb)[0], s, colors);
+    skin(out, cut(lod, r.cut.limb)[0], s, colors, 1, 0.3);
     // The stump's face is the last vertex drawn.
     r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
     piece(out, r.cut, colors, lod, sink);
   } else {
     const from = out.length;
-    skin(out, body(lod), s, colors);
+    // His face: the eyes shut down, in a grimace and in a blink every few seconds; the mouth open
+    // in a cut's shout, a dash's breath, a grimace, slack down.
+    const down = p.down > 0;
+    skin(
+      out,
+      body(lod),
+      s,
+      colors,
+      +(down || r.hurt > 0 || (r.t + p.id * 0.7) % 3.7 < 0.13),
+      r.prog >= 0 ? 1 : r.hurt > 0 ? 0.6 : down ? 0.3 : r.dash * 0.5,
+    );
     if (k > 0) {
       dissolve(out, from, k);
     }

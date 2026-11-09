@@ -57,6 +57,19 @@ const hold = (o: Partial<PlayerState>, n = 90) => {
 };
 
 describe('animate', () => {
+  it('puts a grimace on a runner who loses hp, for 0.4 s', () => {
+    const book = new Map<number, Runner>();
+    animate(book, [man({ hp: 100 })], DT);
+    animate(book, [man({ hp: 100 })], DT);
+    expect(book.get(1)!.hurt).toBe(0);
+    animate(book, [man({ hp: 80 })], DT);
+    expect(book.get(1)!.hurt).toBe(0.4);
+    for (let i = 0; i < 30; i++) {
+      animate(book, [man({ hp: 80 })], DT);
+    }
+    expect(book.get(1)!.hurt).toBe(0);
+  });
+
   it('keeps one runner per player and drops the ones that left', () => {
     const book = new Map<number, Runner>();
     animate(book, [man({ id: 1 }), man({ id: 2 })], DT);

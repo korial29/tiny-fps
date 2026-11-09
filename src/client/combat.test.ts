@@ -775,11 +775,11 @@ describe('the own hits with the katana', () => {
 });
 
 describe('drawing and sheathing the katana', () => {
-  it('play the shing when it comes into the hand, and a lower one when it leaves it', () => {
+  it('play the light saber ignition when it comes into the hand, and the shing when it leaves it', () => {
     const { frame, audio } = setup();
     frame(player({ blade: true, wield: false }));
     frame(player({ blade: true, wield: true }));
-    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SHING, undefined, expect.any(Number), 1);
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.IGNITE, undefined, expect.any(Number), 1);
     frame(player({ blade: true, wield: true }));
     expect(audio.play).toHaveBeenCalledTimes(1);
     frame(player({ blade: true, wield: false }));
@@ -808,7 +808,7 @@ describe('drawing and sheathing the katana', () => {
     const { frame, ids } = setup();
     frame(player({ ammo: -1 }));
     frame(player({ ammo: -1, blade: true, wield: true }));
-    expect(ids()).toEqual([SOUND.SHING]);
+    expect(ids()).toEqual([SOUND.IGNITE]);
   });
 
   it('play no sheath for a katana that is lost, going down', () => {
@@ -852,17 +852,18 @@ describe('the others and the katana', () => {
     expect(ids()).toEqual([]);
   });
 
-  it('shing at the runner when he draws or sheathes, and not when he loses it', () => {
+  it('ignite at the runner when he draws, shing when he sheathes, and nothing when he loses it', () => {
     const { frame, audio } = setup();
     frame(player(), [other(0, 0, { blade: true, wield: false })]);
     frame(player(), [other(0, 0, { blade: true, wield: true })]);
-    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SHING, [5, 1.6, -3], expect.any(Number), 1);
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.IGNITE, [5, 1.6, -3], expect.any(Number), 1);
     frame(player(), [other(0, 0, { blade: true, wield: false })]);
     expect(audio.play).toHaveBeenCalledWith(SOUND.SHING, [5, 1.6, -3], expect.any(Number), 0.85);
     frame(player(), [other(0, 0, { blade: true, wield: true })]);
     frame(player(), [other(0, 0, { blade: false, wield: false })]);
-    const shings = vi.mocked(audio.play).mock.calls.filter(([id]) => id === SOUND.SHING);
-    expect(shings).toHaveLength(3);
+    const calls = (s: number) => vi.mocked(audio.play).mock.calls.filter(([id]) => id === s);
+    expect(calls(SOUND.SHING)).toHaveLength(1);
+    expect(calls(SOUND.IGNITE)).toHaveLength(2);
   });
 
   it('crackle around a runner while his stumble is a shock, and not for a tackle or when it ends', () => {

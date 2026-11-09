@@ -255,7 +255,7 @@ export const createCombat = (
   const shing = (was: Blade, now: Blade, at?: Vec3) =>
     !!was.wield != !!now.wield &&
     (now.wield || now.blade) &&
-    audio.play(SOUND.SHING, at, 0.6, now.wield ? 1 : 0.85);
+    audio.play(now.wield ? SOUND.IGNITE : SOUND.SHING, at, 0.6, now.wield ? 1 : 0.85);
 
   return {
     step(a, b) {

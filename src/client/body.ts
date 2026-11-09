@@ -25,6 +25,10 @@ import { createGait, frame } from './gait';
 import type { Floor } from './gait';
 import {
   GUN_ON,
+  PRESS,
+  pressAt,
+  thumbTo,
+  thumb,
   REAR,
   TILT,
   charge,
@@ -482,6 +486,8 @@ export const hand = (
   th: Vec3,
   curl: number,
   tint: number[],
+  push = 0,
+  to?: Vec3,
 ) => {
   /** Hand space (x toward the thumb, y the back, z toward the fingers), a point and a direction, to the world. */
   const put = ([x, y, z]: Vec3, [m, n, w]: Vec3) =>
@@ -526,7 +532,11 @@ export const hand = (
       put,
     );
   }
-  const [d1, d2] = THUMB.map(([open, fist]) => unit(mix(open, fist, curl)));
+  // `push` (0 to 1) reaches the thumb's tip out along `to`, onto a weapon's button.
+  const [d1, d2] = THUMB.map(([open, fist], k) => {
+    const d = unit(mix(open, fist, curl));
+    return k && to ? unit(mix(d, to, push)) : d;
+  });
   tube(finger([0.032, -0.01, 0.025], d1, d2, 0.037, 0.0124, d1), FINGER_SIDES, put);
 };
 
@@ -973,6 +983,10 @@ export const createBody = (world?: World): Body => {
       if (s) {
         const colors = palette(color);
         skin(out, body(2), s, colors);
+        // The right thumb presses the button of the weapon in hand as it powers on.
+        const k = me?.wield ? 1 : me ? kindOf(me) : 0;
+        const push =
+          me && swapOf(me) < 0 && (hold > 0.2 || grasp > 0.2) ? thumb(since, pressAt(k)) : 0;
         [J.HAND_L, J.HAND_R].forEach((j, i) => {
           const q = s.rot[j];
           hand(
@@ -983,6 +997,8 @@ export const createBody = (world?: World): Body => {
             spin(q, [0, 0, -1]),
             curls[i],
             colors[7],
+            i * push,
+            thumbTo(k),
           );
         });
         if (hold > 0.2) {
@@ -992,6 +1008,7 @@ export const createBody = (world?: World): Body => {
           const kind = me ? kindOf(me) : 0;
           const rail = kind == 2;
           const sp = me ? swapOf(me) : -1;
+          const on = since - pressAt(kind);
           held(
             out,
             s.pos[J.HAND_R],
@@ -1004,13 +1021,15 @@ export const createBody = (world?: World): Body => {
             clock,
             {
               // Dark from when the old one comes out until the new one is in, the gun's counter
-              // dark with it; then the gun boots: the light comes on, and the counter fades in with the boot's whine.
+              // dark with it; then the thumb presses the button on its side and the gun boots: the
+              // light comes on, and the counter fades in with the boot's whine.
               light:
-                sp < 0 ? power(since, kind ? undefined : GUN_ON.lit) : 1 - ease(span(sp, 0.1, 0.2)),
+                sp < 0 ? power(on, kind ? undefined : GUN_ON.lit) : 1 - ease(span(sp, 0.1, 0.2)),
               swap: sp,
               empty: !(kind == 3 ? me?.clip : rail ? me?.cap : me?.mag),
-              screen: sp < 0 ? span(since, GUN_ON.from, GUN_ON.up) : 1 - ease(span(sp, 0.1, 0.2)),
-              digits: sp < 0 && since >= GUN_ON.digits,
+              screen: sp < 0 ? span(on, GUN_ON.from, GUN_ON.up) : 1 - ease(span(sp, 0.1, 0.2)),
+              digits: sp < 0 && on >= GUN_ON.digits,
+              press: sp < 0 ? span(thumb(since, pressAt(kind)), 0.8, 1) : 0,
               cells: me && cellsOf(me),
               heat: (me?.heat ?? 0) / HEAT_MAX,
               hot: me?.hot,
@@ -1025,7 +1044,10 @@ export const createBody = (world?: World): Body => {
             1,
             clock,
             clamp(grasp * 1.5 - 0.5),
-            power(since),
+            // The thumb presses the button on the hilt, and the blade comes out of the guard, a light saber's.
+            power(since - PRESS, 0.3),
+            ease(span(since, PRESS, PRESS + 0.25)),
+            span(thumb(since), 0.8, 1),
           );
         }
         const [base, point] = ends(s.pos[J.HAND_R], s.rot[J.HAND_R]);

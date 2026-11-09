@@ -5,7 +5,7 @@ import { CUT, MODE, SIDE, TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
-import { MUZZLE, REAR, aimed, foregrip, grip, gun, tip } from './gun';
+import { MUZZLE, REAR, aimed, button, foregrip, grip, gun, tip } from './gun';
 import { BEHIND, axes } from './katana';
 import { SHINE, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
@@ -437,7 +437,10 @@ describe('the gun on a runner', () => {
   it('points its gun at where it shoots: the long axis of the drawn gun lies along the line from its emitter to the focus', () => {
     const model = gun(1);
     const spot = (v: number[], at: Vec3): Vec3 => {
-      const first = v.length / STRIDE - model.length / STRIDE;
+      // The model, then its button, last.
+      const knob: number[] = [];
+      button(knob, 0, 0, 1, [1, 1, 1]);
+      const first = v.length / STRIDE - (model.length + knob.length) / STRIDE;
       let [best, d] = [0, Infinity];
       for (let i = 0; i < model.length / STRIDE; i++) {
         const e = Math.hypot(

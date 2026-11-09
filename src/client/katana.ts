@@ -6,8 +6,8 @@ import { swingOf } from '../shared/blade';
 import { CUTS, TICK_HZ } from '../shared/constants';
 import type { PlayerState } from '../shared/types';
 import { glow as lit, tri } from './flag';
-import { grip } from './gun';
-import { dim, place } from './mesh';
+import { button, grip } from './gun';
+import { STRIDE, dim, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
@@ -111,6 +111,29 @@ const built: number[][] = [];
  * blade (bevelled edge, a ridge, a spine, a point), a thin cyan glow along its edge, a collar, a
  * rounded-square guard, a grip wrapped in a violet check and a pommel with a glowing bead.
  */
+/** The floats of the blade and its edge's glow, the first of katana(lod)'s. */
+const blades: number[] = [];
+const ignited = new Map<number, number[]>();
+/**
+ * The katana with its blade out of the guard by `g` (0 to 1) of its length, as a light saber's
+ * comes on (the user, 2026-11-09): the blade shortened along its curve, in 24 steps.
+ */
+const ignite = (lod: number, g: number): number[] => {
+  const q = Math.round(g * 24);
+  let v = ignited.get(lod * 32 + q);
+  if (!v) {
+    v = katana(lod).slice();
+    for (let i = 0; i < blades[lod]; i += STRIDE) {
+      const f = -v[i + 2];
+      const to = BASE + ((f - BASE) * q) / 24;
+      v[i + 1] += bend(to) - bend(f);
+      v[i + 2] = -to;
+    }
+    ignited.set(lod * 32 + q, v);
+  }
+  return v;
+};
+
 export const katana = (lod: number): number[] => {
   if (built[lod]) {
     return built[lod];
@@ -144,6 +167,7 @@ export const katana = (lod: number): number[] => {
     () => GLOW,
   );
   lit(out, from, 1);
+  blades[lod] = out.length;
   // Collar, guard, grip and pommel, each closed at both ends by a point.
   const cap = (f: number, y = 0): Vec3[] => [[0, y, -f]];
   const n = lod ? 8 : 5;
@@ -229,10 +253,15 @@ export const sword = (
   t?: number,
   k = 1,
   light = 1,
+  grow = 1,
+  press = 0,
 ) => {
   const from = out.length;
-  place(out, katana(lod), at, ax, [0, 0, 0], k);
+  place(out, grow < 1 ? ignite(lod, grow) : katana(lod), at, ax, [0, 0, 0], k);
   dim(out, from, 0.08 + 0.92 * light);
+  const knob: number[] = [];
+  button(knob, 1, press, light, [0.25, 0.9, 1]);
+  place(out, knob, at, ax, [0, 0, 0], k);
   if (t !== undefined && light > 0.98) {
     arcs(out, at, ax, t, lod, k);
   }
@@ -265,7 +294,9 @@ export const held = (
   t?: number,
   k = 1,
   light = 1,
-) => sword(out, grip(pos, q), axes(q), lod, t, k, light);
+  grow = 1,
+  press = 0,
+) => sword(out, grip(pos, q), axes(q), lod, t, k, light, grow, press);
 
 /** The root of the blade and its point, in the world, for the hand at `pos` turned by `q`. */
 export const ends = (pos: Vec3, q: Quat): Vec3[] => {

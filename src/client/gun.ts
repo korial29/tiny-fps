@@ -1002,16 +1002,21 @@ const DIGITS = [
 ];
 /** A digit: width, height, thickness of a segment, gap between the two digits. */
 const [DW, DH, DT, DGAP] = [0.019, 0.0205, 0.005, 0.004];
-/** The rectangle of each segment in a digit: across and up from its bottom left corner. */
-const SEGMENTS: Record<string, [number, number, number, number]> = {
-  a: [0, DH - DT, DW, DH],
-  b: [DW - DT, DH / 2, DW, DH],
-  c: [DW - DT, 0, DW, DH / 2],
-  d: [0, 0, DW, DT],
-  e: [0, 0, DT, DH / 2],
-  f: [0, DH / 2, DT, DH],
-  g: [0, (DH - DT) / 2, DW, (DH + DT) / 2],
-};
+/** The rectangle of each segment in a digit `w` wide, `h` tall, its segments `t` thick: across and up from its bottom left corner. */
+const segments = (
+  w: number,
+  h: number,
+  t: number,
+): Record<string, [number, number, number, number]> => ({
+  a: [0, h - t, w, h],
+  b: [w - t, h / 2, w, h],
+  c: [w - t, 0, w, h / 2],
+  d: [0, 0, w, t],
+  e: [0, 0, t, h / 2],
+  f: [0, h / 2, t, h],
+  g: [0, (h - t) / 2, w, (h + t) / 2],
+});
+const SEGMENTS = segments(DW, DH, DT);
 /**
  * The display block: a low wedge on the back of the top of the body, in the gun's metal, so it
  * reads as part of it. Its back face leans toward the eye of the player holding the gun from a
@@ -1225,11 +1230,23 @@ export const lcd = (ammo: number): number[] => {
 };
 
 const scopes = new Map<number, number[]>();
-/** The counter's screen on the housing's sloping back: its middle, its up, the way it faces; half its height, half its width at the foot and at the top. */
-const SC: Vec3 = [0, 0.112, -(HOUSING_BACK + HOUSING_SLOPE * (0.112 - HOUSING_FOOT))];
+/**
+ * The counter's screen fills the housing's sloping back above the body (the user, 2026-11-09), but
+ * for 1.3 mm of metal round it: its foot and top heights, its middle, its up, the way it faces; half
+ * its height up the face, half its width at the foot and at the top (the face's, under its rounded top).
+ */
+const [S0, S1] = [0.099, 0.1325];
+const SC: Vec3 = [
+  0,
+  (S0 + S1) / 2,
+  -(HOUSING_BACK + HOUSING_SLOPE * ((S0 + S1) / 2 - HOUSING_FOOT)),
+];
 const SU = unit([0, 1, -HOUSING_SLOPE]);
 const SN: Vec3 = [0, -SU[2], SU[1]];
-const [SH, SB, ST] = [0.014, 0.0145, 0.011];
+const [SH, SB, ST] = [(S1 - S0) / 2 / SU[1], 0.019, 0.0145];
+/** The digits on it: width, height, thickness of a segment, gap between the two; tall, to fill the screen but for 1.5 mm inside its ring. */
+const [RW, RH, RT, RGAP] = [0.0112, 0.026, 0.0028, 0.003];
+const RSEG = segments(RW, RH, RT);
 
 /**
  * The laser rifle's counter (`n` rounds in its cell), in model space: a trapezoid screen, narrow at
@@ -1279,13 +1296,12 @@ export const scope = (n: number, shown = true): number[] => {
       );
     }
     if (shown) {
-      // Two digits well inside the trapezoid, its ring clear of them.
-      const k = (SH * 0.48) / DH;
+      // Two tall digits filling the screen, its ring clear of them.
       [...`${n}`.padStart(2, '0')].forEach((ch, i) => {
-        const a0 = -(DW + DGAP / 2) * k + i * (DW + DGAP) * k;
+        const a0 = -RW - RGAP / 2 + i * (RW + RGAP);
         for (const seg of DIGITS[+ch]) {
-          const [x0, y0, x1, y1] = SEGMENTS[seg];
-          quad(a0 + x0 * k, (y0 - DH / 2) * k, a0 + x1 * k, (y1 - DH / 2) * k, 0.005, rgb);
+          const [x0, y0, x1, y1] = RSEG[seg];
+          quad(a0 + x0, y0 - RH / 2, a0 + x1, y1 - RH / 2, 0.005, rgb);
         }
       });
     }

@@ -739,6 +739,21 @@ describe('the battery and the capsule', () => {
     }
   });
 
+  it('shows the dark hole of the battery’s seat under the grip while the battery is out, and not once it is home', () => {
+    const drawn = (swap: number) => {
+      const out: number[] = [];
+      held(out, [0, 0, 0], IDENT, 1, 1, 15, 0, 0, 0, { swap });
+      return verts(out).filter(v => Math.max(...v.c) < 0.02 && v.layer == -1);
+    };
+    expect(drawn(-1)).toHaveLength(0);
+    expect(drawn(0.05)).toHaveLength(0);
+    // Out from the first slide until the slap home.
+    for (const s of [0.2, 0.45, 0.7]) {
+      expect(drawn(s)).toHaveLength(3 * 36);
+    }
+    expect(drawn(TAP + 0.01)).toHaveLength(0);
+  });
+
   it('slides the battery out and drops it, then brings a new one up into the grip', () => {
     const out = (s: number) => swapped(s, false)[0];
     expect(out(0.1)).toBe(0);

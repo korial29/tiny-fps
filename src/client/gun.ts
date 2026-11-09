@@ -1134,6 +1134,31 @@ export const cell = (lod: number): number[] =>
 const packs: number[][] = [];
 
 /**
+ * The mouth of the gun's battery seat, in the battery's frame: a dark disc a little wider than it,
+ * laid on the slanted shell where the battery goes in, 2 mm out of it. The shell's distance from
+ * the battery's foot, in 0.1 mm, round two rings (measured on gun(1)).
+ */
+const WELL_HOLE = (() => {
+  const out: number[] = [];
+  const rims = [
+    [0.0086, [226, 239, 257, 260, 258, 239, 226, 227, 225, 221, 225, 227]],
+    [0.0172, [235, 278, 314, 320, 315, 278, 235, 237, 233, 225, 233, 237]],
+  ] as const;
+  const at = (k: number, j: number): Vec3 => [
+    rims[k][0] * Math.cos((j * TAU) / 12),
+    rims[k][0] * Math.sin((j * TAU) / 12),
+    0.002 - rims[k][1][j % 12] / 1e4,
+  ];
+  for (let j = 0; j < 12; j++) {
+    const c = [0.01, 0.01, 0.012];
+    tri(out, [0, 0, -0.0198], at(0, j), at(0, j + 1), c);
+    tri(out, at(0, j), at(1, j), at(1, j + 1), c);
+    tri(out, at(0, j), at(1, j + 1), at(0, j + 1), c);
+  }
+  return out;
+})();
+
+/**
  * The gun's battery (the user, 2026-11-08), built once: a gunmetal cell in the grip, along its own
  * forward from its foot, which stands out under the lower shell with a band of glow round it.
  */
@@ -2036,6 +2061,11 @@ export const held = (
     place(out, lcd(ammo), at, ax, [0, 0, 0], k);
   }
   dimmed(out, from, d);
+  // Through a swap of the gun, the dark hole of its battery's seat under the grip while the battery
+  // is out of it (the user, 2026-11-09); the battery covers it home.
+  if (!w && swap >= 0 && swapped(swap, 0)[0] > 0) {
+    place(out, WELL_HOLE, ...loadFrame(at, ax, 0, -1, k), [0, 0, 0], k);
+  }
   // The button that switches it on; the rail gun is switched on by its capsule (tune()).
   if (!rail) {
     const knob: number[] = [];

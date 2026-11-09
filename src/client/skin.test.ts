@@ -4,7 +4,7 @@ import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT, JOINTS, PARENT, axis, rest, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
-import { body, cut, hairOf, palette, skin } from './skin';
+import { body, cut, eyesOf, hairOf, palette, skin } from './skin';
 import { LIMB } from '../shared/types';
 
 const JACKET = [0.1, 0.8, 0.2];
@@ -43,12 +43,12 @@ const eyeBase = (v: Float32Array, k: number) =>
   v[k * 6 + 2] < -0.065;
 
 describe('skin', () => {
-  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 12000 (rings measured on the soldier, his webbing), close (within CLOSE, the face finest) under 32000', () => {
+  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 12000 (rings measured on the soldier, his webbing), close (within CLOSE, the face finest) under 34000', () => {
     const [far, near, close] = [0, 1, 3].map(lod => draw(lod).length / STRIDE);
     expect(far).toBeLessThan(1800);
     expect(near).toBeLessThanOrEqual(12000);
     // 26000 until the close head took 2.5 times the neck's sides and finer rows (the user, 2026-11-08).
-    expect(close).toBeLessThanOrEqual(32000);
+    expect(close).toBeLessThanOrEqual(34000);
     expect(far).toBeLessThan(near * 0.3);
     // Near carries the measured rings too, so it is less far below close than it was.
     expect(near).toBeLessThan(close * 0.45);
@@ -354,7 +354,8 @@ describe('skin', () => {
       c: [v[i * STRIDE + 6], v[i * STRIDE + 7], v[i * STRIDE + 9]],
     }));
     const of = (c: number[]) => rows.filter(r => same(r.c, c));
-    expect(rows.every(r => r.layer == -1)).toBe(true);
+    // Unlit only the light caught in the eyes.
+    expect(rows.every(r => r.layer == -1 || same(r.c, [1.3, 1.3, 1.3]))).toBe(true);
     const jacket = of(JACKET);
     // Less of it since the webbing (UPPER, like the boots) covers the chest and the waist.
     expect(jacket.length).toBeGreaterThan(500);
@@ -417,10 +418,11 @@ describe('skin', () => {
 
   it('carves a face into the close head: a nose, lids over the irises, lips, a jaw over the neck, ears', () => {
     const { v, t, c } = body(3);
-    const [FLESH_, IRIS_, LIP] = [3, 9, 10];
-    const corners = (col: number) =>
-      [...t].filter((_, i) => c[i] == col).map(k => [v[k * 6], v[k * 6 + 1], v[k * 6 + 2]]);
-    const flesh = corners(FLESH_);
+    const [FLESH_, IRIS_, LIP, STUBBLE, SHADOW] = [3, 9, 10, 13, 14];
+    const corners = (...col: number[]) =>
+      [...t].filter((_, i) => col.includes(c[i])).map(k => [v[k * 6], v[k * 6 + 1], v[k * 6 + 2]]);
+    // The skin, shaved or not.
+    const flesh = corners(FLESH_, STUBBLE, SHADOW);
     // The nose's tip is the front of the face, about 2 cm out of the lips and the brow.
     const tip = flesh.reduce((a, b) => (b[2] < a[2] ? b : a));
     expect(Math.abs(tip[0])).toBeLessThan(0.002);
@@ -450,6 +452,48 @@ describe('skin', () => {
     }
     // Far, none of it: the far head is a plain one.
     expect([...body(0).c].includes(LIP)).toBe(false);
+  });
+
+  it('gives the close face a hard look: brows of their own, low, their inner ends drawn down; a shaved beard under the cheekbones', () => {
+    const { v, t, c } = body(3);
+    const [BROW, STUBBLE, SHADOW] = [12, 13, 14];
+    const corners = (...col: number[]) =>
+      [...t].filter((_, i) => col.includes(c[i])).map(k => [v[k * 6], v[k * 6 + 1], v[k * 6 + 2]]);
+    const brows = corners(BROW);
+    for (const side of [1, -1]) {
+      const b = brows.filter(p => p[0] * side > 0);
+      expect(b.length).toBeGreaterThan(30);
+      expect(b.every(p => Math.abs(p[0]) > 0.007 && Math.abs(p[0]) < 0.053 && p[2] < -0.07)).toBe(
+        true,
+      );
+      // Over the eyes (1.69), the inner end lower than the arch.
+      const at = (x: number) =>
+        Math.max(...b.filter(p => Math.abs(Math.abs(p[0]) - x) < 0.003).map(p => p[1]));
+      expect(at(0.03)).toBeGreaterThan(1.712);
+      expect(at(0.03)).toBeLessThan(1.72);
+      expect(at(0.03) - at(0.011)).toBeGreaterThan(0.003);
+    }
+    // The beard, its edge softer: under the nose, around the mouth, along the jaw.
+    const beard = corners(STUBBLE, SHADOW);
+    expect(corners(STUBBLE).length).toBeGreaterThan(100);
+    expect(corners(SHADOW).length).toBeGreaterThan(50);
+    expect(beard.every(p => p[1] < 1.672 && p[1] > 1.57)).toBe(true);
+    expect(beard.some(p => p[0] > 0.04) && beard.some(p => p[0] < -0.04)).toBe(true);
+    // Far, the head is plain.
+    expect([...body(0).c].some(k => k == BROW || k == STUBBLE)).toBe(false);
+  });
+
+  it('gives each runner his own look, the same for everyone: one of nine hair colours, a shaved head among them, one of five irises', () => {
+    const ids = Array.from({ length: 200 }, (_, i) => i);
+    expect(new Set(ids.map(i => String(hairOf(i)))).size).toBe(9);
+    expect(new Set(ids.map(i => String(eyesOf(i)))).size).toBe(5);
+    expect(hairOf(7)).toBe(hairOf(7));
+    // A shaved head is the skin's colour in its shadow: reddish, darker than the skin.
+    const shaved = ids.map(hairOf).find(h => h[0] > 0.4 && h[0] < 0.55 && h[0] > h[2] * 1.5)!;
+    expect(shaved[0]).toBeLessThan(FLESH[0]);
+    // The irises run from dark brown to a pale blue.
+    const blue = ids.map(eyesOf).filter(e => e[2] > e[0]);
+    expect(blue.length).toBeGreaterThan(40);
   });
 
   it('bends an arm like one: a straight forearm under a folded elbow, a deltoid that does not spin', () => {
@@ -639,9 +683,11 @@ describe('skin', () => {
       skin(out, cut(1, LIMB.ARM_R)[0], solve(rest()), palette(JACKET));
       const rows = (v: number[]) =>
         Array.from({ length: v.length / STRIDE }, (_, i) => v.slice(i * STRIDE, (i + 1) * STRIDE));
-      const [glowing, lit] = [-2, -1].map(l => rows(out).filter(r => r[8] == l));
+      // The eyes' specks glow too, white.
+      const speck = (r: number[]) => r[6] == 1.3 && r[9] == 1.3;
+      const [glowing, lit] = [-2, -1].map(l => rows(out).filter(r => r[8] == l && !speck(r)));
       expect(glowing.length).toBeGreaterThan(15);
-      expect(lit.length + glowing.length).toBe(out.length / STRIDE);
+      expect(lit.length + glowing.length).toBe(rows(out).filter(r => !speck(r)).length);
       for (const r of glowing) {
         expect(r[6]).toBeGreaterThan(1);
         expect(r[6]).toBeGreaterThan(r[7] * 2);
@@ -649,7 +695,7 @@ describe('skin', () => {
       }
       const plain: number[] = [];
       skin(plain, body(1), solve(rest()), palette(JACKET));
-      expect(rows(plain).every(r => r[8] == -1)).toBe(true);
+      expect(rows(plain).every(r => r[8] == -1 || speck(r))).toBe(true);
     });
   });
 });

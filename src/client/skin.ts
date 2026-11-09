@@ -12,11 +12,27 @@ import type { Vec3 } from './mesh';
 const SKIN = [0.66, 0.45, 0.35];
 
 /** The colour regions of a palette. */
-const [JACKET, TRIM, PANTS, FLESH, HAIR, UPPER, SOLE, GLOVE, WHITE, IRIS, LIP, SHADE, BROW, CAP] = [
-  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
-];
+const [
+  JACKET,
+  TRIM,
+  PANTS,
+  FLESH,
+  HAIR,
+  UPPER,
+  SOLE,
+  GLOVE,
+  WHITE,
+  IRIS,
+  LIP,
+  SHADE,
+  BROW,
+  STUBBLE,
+  SHADOW,
+  GLINT,
+  CAP,
+] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 
-/** Hair colours, one per runner (hairOf()): black, dark and mid brown, chestnut, red, dark and light blond, grey. */
+/** Hair colours, one per runner (hairOf()): black, dark and mid brown, chestnut, red, dark and light blond, grey, and a shaved head, the skin's in its shadow. */
 const HAIRS = [
   [0.03, 0.03, 0.035],
   [0.09, 0.07, 0.06],
@@ -26,14 +42,29 @@ const HAIRS = [
   [0.58, 0.43, 0.2],
   [0.86, 0.72, 0.44],
   [0.6, 0.6, 0.58],
+  [0.47, 0.33, 0.27],
 ];
 
-/** A hair colour for the runner `id`, picked at random from HAIRS but the same for everyone who sees him. */
-export const hairOf = (id: number): number[] =>
-  HAIRS[(Math.imul(id + 1, 0x9e3779b1) >>> 29) % HAIRS.length];
+/** Iris colours, one per runner (eyesOf()): dark and mid brown, hazel, grey-blue, pale blue. */
+const IRISES = [
+  [0.12, 0.07, 0.04],
+  [0.25, 0.14, 0.06],
+  [0.3, 0.24, 0.1],
+  [0.3, 0.38, 0.45],
+  [0.38, 0.55, 0.75],
+];
 
-/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots and webbing, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, darker than the hair, and the cut's cauterized face, which glows. */
-export const palette = (jacket: number[], hair = HAIRS[1]): number[][] => [
+const pick = (id: number, salt: number, n: number) =>
+  (Math.imul(id + 1, 0x9e3779b1 + salt) >>> 0) % n;
+
+/** A hair colour for the runner `id`, picked at random from HAIRS but the same for everyone who sees him. */
+export const hairOf = (id: number): number[] => HAIRS[pick(id, 0, HAIRS.length)];
+
+/** An iris colour for the runner `id`, as hairOf(). */
+export const eyesOf = (id: number): number[] => IRISES[pick(id, 0x2468, IRISES.length)];
+
+/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots and webbing, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, darker than the hair, the shaved beard's shadow and its edge, the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
+export const palette = (jacket: number[], hair = HAIRS[1], iris = IRISES[0]): number[][] => [
   jacket,
   jacket.map(v => v * 0.5),
   jacket.map(v => v * 0.62),
@@ -43,10 +74,13 @@ export const palette = (jacket: number[], hair = HAIRS[1]): number[][] => [
   [0.09, 0.085, 0.07],
   [0.22, 0.21, 0.16],
   [0.85, 0.83, 0.8],
-  [0.2, 0.12, 0.06],
-  [0.58, 0.3, 0.27],
+  iris,
+  [0.5, 0.3, 0.26],
   SKIN.map(v => v * 0.55),
-  hair.map((v, i) => v * 0.45 + [0.03, 0.02, 0.015][i]),
+  hair.map((v, i) => v * 0.3 + [0.03, 0.022, 0.018][i]),
+  SKIN.map((v, i) => v * 0.62 + hair[i] * 0.1 + [0, 0.01, 0.03][i]),
+  SKIN.map((v, i) => v * 0.81 + hair[i] * 0.05 + [0, 0.005, 0.015][i]),
+  [1.3, 1.3, 1.3],
   [2.8, 0.5, 0.12],
 ];
 
@@ -70,6 +104,8 @@ interface Loft {
   e?: number;
   /** Rings run along z, not y. */
   z?: boolean;
+  /** Rings run along x (out to the right), across them y then z. */
+  x?: boolean;
   /** Built twice, the second time mirrored for the left side. */
   m?: boolean;
   /** Gear on the trunk: it comes off with it. */
@@ -199,9 +235,23 @@ const EYE: Loft = {
   rings: [
     [-0.068, 0.032, 1.69, 0.013, 0.0058, 0, WHITE],
     [-0.0832, 0.032, 1.69, 0.013, 0.0058, 0, WHITE],
-    [-0.0843, 0.032, 1.69, 0.0058, 0.0054, 0, IRIS],
+    [-0.0843, 0.032, 1.69, 0.0062, 0.0058, 0, IRIS],
     [-0.0849, 0.032, 1.69, 0.003, 0.003, 0, IRIS],
     [-0.0852, 0.032, 1.69, 0, 0, 0, IRIS],
+  ],
+};
+
+// The light caught in each eye, close only: a speck on the iris over the pupil, toward the nose. It glows.
+const SPECK: Loft = {
+  chain: [J.HEAD],
+  n: [0, 0, 6],
+  z: true,
+  m: true,
+  far: [],
+  rings: [
+    [-0.0851, 0.0305, 1.6905, 0, 0, 0, GLINT],
+    [-0.0855, 0.0305, 1.6905, 0.0011, 0.0011, 0, GLINT],
+    [-0.0857, 0.0305, 1.6905, 0, 0, 0, GLINT],
   ],
 };
 
@@ -294,8 +344,6 @@ const GEAR = [
     [0, 1.17, 1.215, 0.141, 0.022, 0.017, J.SPINE, 0],
   ].map(pouch),
 ];
-
-const LOFTS = [TRUNK, LEG, ARM, EYE, EAR, CONCHA, ...GEAR];
 
 /**
  * The rings with one more between each two, on a Catmull-Rom curve through them, for the near
@@ -439,7 +487,7 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
     (-0.013 * bell(ax - 0.032, 0.014) * bell(y - 1.69, 0.009) +
       0.01 * bell(ax - 0.026, 0.03) * bell(y - 1.708, 0.007) +
       0.0065 * bell(ax - 0.048, 0.012) * bell(y - 1.668, 0.011) +
-      0.006 * bell(ax - 0.056, 0.014) * bell(y - 1.598, 0.013) -
+      0.008 * bell(ax - 0.056, 0.014) * bell(y - 1.598, 0.013) -
       0.002 * bell(ax - 0.05, 0.012) * bell(y - 1.632, 0.01) +
       0.006 * bell(x, 0.021) * bell(y - 1.627, 0.007) +
       0.003 * bell(x, 0.019) * bell(y - 1.6215, 0.003) +
@@ -459,13 +507,21 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
         bell(ax - 0.014 - 0.014 * fold, 0.0028) *
         step(1.614, 1.62, y) *
         (1 - step(1.644, 1.65, y)));
+  // A hard look: the brows' inner ends drawn down and in over the nose, two furrows between them,
+  // two lines across the forehead, the mouth's corners pulled down.
+  d +=
+    f ** 4 *
+    (0.0035 * bell(ax - 0.012, 0.007) * bell(y - 1.704, 0.005) -
+      0.002 * bell(ax - 0.004, 0.0025) * bell(y - 1.708, 0.007) -
+      0.001 * bell(x, 0.035) * (bell(y - 1.727, 0.0022) + bell(y - 1.737, 0.0022)) -
+      0.0014 * bell(ax - 0.021, 0.003) * bell(y - 1.611, 0.004));
   // The lids over the eyes, narrowed: the upper one down over the top of the iris, the lower one
   // up to its bottom.
   d +=
     f ** 2 *
     bell(ax - 0.032, 0.0105) *
-    (0.0068 * step(1.6902, 1.6922, y) * (1 - step(1.697, 1.703, y)) +
-      0.0042 * (1 - step(1.6858, 1.6872, y)) * step(1.679, 1.683, y));
+    (0.0072 * step(1.6892, 1.6912, y) * (1 - step(1.697, 1.703, y)) +
+      0.0046 * (1 - step(1.6868, 1.6882, y)) * step(1.679, 1.683, y));
   return d;
 };
 
@@ -476,18 +532,19 @@ const tint = (x: number, y: number, aq: number, fine: boolean) => {
   }
   const ax = Math.abs(x);
   if (fine && aq < 1) {
-    const arch = 1.7125 + 0.0035 * (1 - ((ax - 0.03) / 0.022) ** 2);
-    if (ax > 0.01 && ax < 0.051 && Math.abs(y - arch) < 0.0042 - 0.03 * Math.max(ax - 0.035, 0)) {
-      return BROW;
-    }
     const [nx, ny] = [(ax - 0.006) / 0.0025, (y - 1.6428) / 0.0018];
-    if (nx * nx + ny * ny < 1 || (Math.abs(y - 1.6168) < 0.0009 && ax < 0.019)) {
+    if (nx * nx + ny * ny < 1 || (Math.abs(y - 1.6168 + 6 * ax * ax) < 0.0009 && ax < 0.019)) {
       return SHADE;
     }
     const dy = (y - 1.6168) / 0.0082;
     if (dy * dy < 1 && ax < 0.021 * Math.sqrt(1 - dy * dy)) {
       return LIP;
     }
+  }
+  // The shaved beard: under the nose and the cheekbones, along the jaw to the sideburns.
+  const b = Math.min(1.637 + 0.034 * clamp((aq - 0.35) / 0.95) - y, y - jaw(aq)[0] + 0.014);
+  if (fine && aq < 1.75 && b > 0) {
+    return b > 0.004 ? STUBBLE : SHADOW;
   }
   return FLESH;
 };
@@ -509,6 +566,40 @@ export interface Skin {
 const sgn = (v: number, e: number) => Math.sign(v) * Math.abs(v) ** (2 / e);
 const clamp = (v: number) => Math.min(Math.max(v, 0), 1);
 
+/** How far out the face is (its z) at x across, height y: the carved surface, found by halving. */
+const onHead = (x: number, y: number) => {
+  const [rx, zf] = section(y);
+  const e = 1.9 + 0.45 * clamp((y - 1.59) / 0.07);
+  let [lo, hi, z] = [0, 1.6, 0];
+  for (let i = 0; i < 24; i++) {
+    const q = (lo + hi) / 2;
+    const p = [rx * sgn(Math.sin(q), e), -zf * sgn(Math.cos(q), e)];
+    const n = [p[0] / rx ** 2, p[1] / zf ** 2];
+    const k = face(p[0], y, q, true) / Math.hypot(n[0], n[1]);
+    z = p[1] + n[1] * k;
+    [lo, hi] = p[0] + n[0] * k < x ? [q, hi] : [lo, q];
+  }
+  return z;
+};
+
+// The brows, pieces of their own along x laid on the brow ridge (a colour on the head's grid
+// steps): low over the eyes, the inner ends drawn down toward the nose, thick there, thin out to
+// the tail. A hard look.
+const BROWS: Loft = {
+  chain: [J.HEAD],
+  n: [0, 3, 6],
+  x: true,
+  m: true,
+  far: [],
+  rings: [0.008, 0.0095, 0.014, 0.02, 0.027, 0.034, 0.041, 0.047, 0.052].map((x, i) => {
+    const y = 1.711 + 0.0015 * (1 - ((x - 0.033) / 0.022) ** 2) - 0.22 * Math.max(0.024 - x, 0);
+    const h = i % 8 ? 0.005 - 0.11 * Math.max(x - 0.03, 0) : 0;
+    return [x, y, onHead(x, y), h, h && 0.0011, 0, BROW];
+  }),
+};
+
+const LOFTS = [TRUNK, LEG, ARM, EYE, SPECK, BROWS, EAR, CONCHA, ...GEAR];
+
 const generate = (lod: number): Skin => {
   const [v, j, w, t, c, l]: number[][] = [[], [], [], [], [], []];
   /** Far, near, or close; the eye's own body is near: the camera's near plane and the hands' budget hold it. */
@@ -529,7 +620,7 @@ const generate = (lod: number): Skin => {
   for (const L of LOFTS) {
     const n = L.n[tier];
     // The eye's own body has no head.
-    if (!n || (lod == 2 && (L.z || L.k || L === EAR || L === CONCHA))) {
+    if (!n || (lod == 2 && (L.z || L.x || L.k || L === EAR || L === CONCHA))) {
       continue;
     }
     // The eye's own body ends the trunk in a cap on the shoulders and each sleeve in a cuff over a
@@ -650,7 +741,13 @@ const generate = (lod: number): Skin => {
                 : 1;
             const x = cx + rx * sgn(Math.sin(q), e) * flare;
             const o = co + ro * sgn(Math.cos(q), e);
-            row.push(L.z ? vertex(m * x, o, at, u) : vertex(m * x, at, -o, u));
+            row.push(
+              L.x
+                ? vertex(m * at, x, o, u)
+                : L.z
+                  ? vertex(m * x, o, at, u)
+                  : vertex(m * x, at, -o, u),
+            );
           }
         }
         return row;
@@ -670,7 +767,7 @@ const generate = (lod: number): Skin => {
         const part =
           L === TRUNK || L.k
             ? LIMB.NONE
-            : L === EYE || L === EAR || L === CONCHA
+            : L === EYE || L === SPECK || L === BROWS || L === EAR || L === CONCHA
               ? LIMB.HEAD
               : (L === ARM ? LIMB.ARM_L : LIMB.LEG_L) + +(m > 0);
         const emit = (tri: number[], u: number) => {
@@ -751,7 +848,7 @@ const generate = (lod: number): Skin => {
         [0.035, 0.035, 0.035],
         [0.014, 0.009, 0.007],
         [0.006, 0.0042, 0.003],
-      ][tier][+(y > 1.575 && y < 1.725) + +((y > 1.6 && y < 1.66) || (y > 1.678 && y < 1.702))];
+      ][tier][+(y > 1.575 && y < 1.725) + +((y > 1.6 && y < 1.66) || (y > 1.678 && y < 1.745))];
       if (y > CROWN - 0.003) {
         break;
       }
@@ -1009,8 +1106,8 @@ export const skin = (
     out[o + 5] = Q[k + 5];
     out[o + 6] = col[0] * g;
     out[o + 7] = col[1] * g;
-    // The cut's face glows: unlit.
-    out[o + 8] = s.c[h] == CAP ? -2 : -1;
+    // The cut's face and the eyes' specks glow: unlit.
+    out[o + 8] = s.c[h] >= GLINT ? -2 : -1;
     out[o + 9] = col[2] * g;
   }
 };

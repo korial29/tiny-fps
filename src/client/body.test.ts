@@ -106,18 +106,18 @@ const draw = (body: Body, p: PlayerState, pitch = 0, color = TEAM): Vert[] => {
 const colored = (v: Vert[], c: number[]) => v.filter(q => c.every((n, i) => q.c[i] == n));
 /**
  * Vertices of the hand, in the order drawn: the palm, a tube of the cuff's sides and 3 rings; each
- * finger, one of FINGER_SIDES and 11 rings from where it leaves the palm (two rings round each bend,
+ * finger, one of FINGER_SIDES and 15 rings from where it leaves the palm (four rings round each bend,
  * the glove's edge), then a fan, and its nail; the weld from the palm's last ring to the fingers'
- * roots (the user, 2026-11-09: one piece), the palm's 24 and the roots' 40 vertices zipped; the thumb,
- * 10 rings from halfway along its first bone, and its nail; its mound, two strips from the palm;
+ * roots (the user, 2026-11-09: one piece), the palm's 24 and the roots' outline zipped (46 steps); the thumb,
+ * 14 rings from halfway along its first bone, and its nail; its mound, two strips from the palm;
  * the glove's gear (the knuckles' shell, the back's plate and its stitching, the strap and its buckle).
  */
 const [PALM, FINGER, THUMB, NAIL, WELD, MOUND, GEAR] = [
   12 * CUFF_SIDES,
-  570,
-  510,
+  810,
+  750,
   24,
-  (CUFF_SIDES + 40) * 3,
+  (CUFF_SIDES + 46) * 3,
   2 * FINGER_SIDES * 6,
   1764 + 18 * CUFF_SIDES,
 ];
@@ -167,7 +167,7 @@ describe('body', () => {
         // The near runner minus its head, neck and fists, its arms close, plus two hands of under 6000 vertices each.
         expect(v.length).toBeGreaterThan(3500);
         // The pouch on the hip adds about 200 (the user, 2026-11-09).
-        expect(v.length).toBeLessThanOrEqual(24000);
+        expect(v.length).toBeLessThanOrEqual(26000);
         for (const { at, n } of v) {
           expect(at.every(Number.isFinite)).toBe(true);
           expect(Math.hypot(...n)).toBeCloseTo(1);
@@ -542,7 +542,8 @@ describe('body', () => {
         const m = w + WELD + THUMB + NAIL;
         return [v.slice(w, w + WELD), v.slice(m, m + MOUND)];
       };
-      const curls = [0, 0.4, 0.75, 1];
+      // 0.9, every grip's.
+      const curls = [0, 0.4, 0.75, 0.9, 1];
 
       it('are fingerless tactical gloves: bare tips with a nail each, a shell over the knuckles, a stitched plate, a strap', () => {
         const out: number[] = [];
@@ -583,8 +584,9 @@ describe('body', () => {
         expect(of([0.2, 0.2, 0.2]).length).toBeGreaterThan(100);
       });
 
-      it('stay under 6000 vertices a hand, smooth fingers, nails and the glove’s gear', () => {
-        expect(HAND).toBeLessThanOrEqual(6000);
+      it('stay under 7200 vertices a hand, smooth fingers, nails and the glove’s gear', () => {
+        // 6000 until the fingers took four rings round each joint to close on a grip (the user, 2026-11-09).
+        expect(HAND).toBeLessThanOrEqual(7200);
       });
 
       it('make each finger and the thumb one closed surface: no cap or face between its phalanges', () => {
@@ -1046,7 +1048,7 @@ describe('the ammo on the back of the gun', () => {
     const out: number[] = [];
     const p = man();
     watch(p, 60).draw(out, eyeOf(p), 0, 0, 0, TEAM);
-    expect(out.length / STRIDE).toBeLessThan(24000);
+    expect(out.length / STRIDE).toBeLessThan(26000);
     expect(out.slice(-6).every(v => Number.isFinite(v))).toBe(true);
   });
 });

@@ -392,21 +392,22 @@ describe('focus', () => {
 
 describe('the readout on the back of the gun', () => {
   const v = (n: number) => verts(readout(n));
-  // The glowing frame round the screen is drawn last: 24 quads.
+  // The glowing frame round the screen is drawn last: 32 quads.
   const glowing = (n: number) => v(n).filter(x => x.layer == -2);
-  const digits = (n: number) => glowing(n).slice(0, -144);
-  const frame = (n: number) => glowing(n).slice(-144);
+  const digits = (n: number) => glowing(n).slice(0, -192);
+  const frame = (n: number) => glowing(n).slice(-192);
   const metal = (n: number) => v(n).filter(x => x.layer == -1 && Math.max(...x.c) > 0.1);
   const screen = (n: number) => v(n).filter(x => x.layer == -1 && Math.max(...x.c) <= 0.1);
   const SEGS = [6, 2, 5, 5, 4, 5, 6, 3, 7, 6];
 
-  it('is a dark screen and two digits of thick quads on the gun’s own back, a pair of triangles to a segment', () => {
+  it('is two digits of thick quads on the gun’s own glossy black back, a pair of triangles to a segment', () => {
     for (const n of [0, 7, 40, 59, 60, 99]) {
       const [a, b] = `${n}`.padStart(2, '0');
       expect(digits(n)).toHaveLength((SEGS[+a] + SEGS[+b]) * 6);
-      // No block of its own: the screen, a fan of 24, lies on the gun's flat back.
+      // No block, support or screen of its own (the user, 2026-11-09): the digits and the frame only.
       expect(metal(n)).toHaveLength(0);
-      expect(screen(n)).toHaveLength(72);
+      expect(screen(n)).toHaveLength(0);
+      expect(v(n).filter(x => x.layer != -2)).toHaveLength(0);
     }
   });
 
@@ -426,30 +427,12 @@ describe('the readout on the back of the gun', () => {
     expect(digits(5)[0].c[0]).toBeLessThan(digits(5)[0].c[2]);
   });
 
-  it('sits on a black rounded trapezoid, narrow at the top, digits about 4.2 cm wide and 2 cm high', () => {
+  it('shows digits about 4.2 cm wide and 2 cm high', () => {
     const xs = digits(88).map(x => x.p[0]);
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.041);
     expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.043);
     const ys = digits(88).map(x => x.p[1]);
     expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.016);
-    const sx = screen(88).map(x => x.p[0]);
-    expect(Math.max(...sx) - Math.min(...sx)).toBeGreaterThan(0.055);
-    expect(Math.max(...sx) - Math.min(...sx)).toBeLessThan(0.065);
-    // Narrower near its top than near its foot.
-    const sy = screen(88).map(x => x.p[1]);
-    const [lo, hi] = [Math.min(...sy), Math.max(...sy)];
-    // The corners of its upper half sit further in than those of its lower half.
-    const mid = (lo + hi) / 2;
-    const half = (up: boolean) =>
-      Math.max(
-        ...screen(88)
-          .filter(x => x.p[1] > mid === up)
-          .map(x => Math.abs(x.p[0])),
-      );
-    expect(half(true)).toBeLessThan(half(false) - 0.004);
-    // The digits stay inside it.
-    expect(Math.max(...ys)).toBeLessThan(hi);
-    expect(Math.min(...ys)).toBeGreaterThan(lo);
   });
 
   it('shows no gauge unless the gun charges, and then CHARGE_MAX cells under the digits, `level` of them lit', () => {
@@ -460,7 +443,7 @@ describe('the readout on the back of the gun', () => {
     // A cell is two triangles: the lit ones glow, the others are dim.
     expect(extra(3)).toBe(3 * 6);
     expect(extra(CHARGE_MAX)).toBe(CHARGE_MAX * 6);
-    const cells = (level: number) => glowing(40, level).slice(digits(40).length, -144);
+    const cells = (level: number) => glowing(40, level).slice(digits(40).length, -192);
     // Under every digit segment, and within the screen's width.
     const low = Math.min(...digits(40).map(x => x.p[1]));
     for (const x of cells(3)) {
@@ -475,66 +458,51 @@ describe('the readout on the back of the gun', () => {
     expect(readout(40, 2)).not.toBe(readout(40, 3));
   });
 
-  it('stands the screen on a glossy black rounded trapezoid, 1.5 mm out of the gun’s back and wider than it', () => {
-    const n = unit([0, 0.469, 0.883]);
-    const out = (p: number[]) => (p[1] - 0.125) * n[1] + (p[2] - 0.04) * n[2];
-    const gloss = v(88).filter(x => x.layer == SHINE);
-    expect(gloss.length).toBe(24 * 9);
-    for (const x of gloss) {
-      expect(Math.max(...x.c)).toBeLessThan(0.03);
-      expect(out(x.p)).toBeLessThan(0.0015 + 1e-9);
-      expect(out(x.p)).toBeGreaterThan(-0.0006);
-    }
-    const width = (xs: { p: number[] }[]) =>
-      Math.max(...xs.map(x => x.p[0])) - Math.min(...xs.map(x => x.p[0]));
-    expect(width(gloss)).toBeGreaterThan(width(screen(88)) + 0.003);
-    // Every bit of the screen stands over it.
-    for (const x of screen(88)) {
-      expect(out(x.p)).toBeGreaterThan(0.0015);
-    }
+  it('keeps the digits inside the round frame', () => {
+    const fx = frame(88).map(x => Math.abs(x.p[0]));
+    const dx = digits(88).map(x => Math.abs(x.p[0]));
+    expect(Math.max(...dx)).toBeLessThan(
+      Math.min(
+        ...frame(88)
+          .filter(x => Math.abs(x.p[1] - digits(88)[0].p[1]) < 0.01)
+          .map(x => Math.abs(x.p[0])),
+      ),
+    );
+    expect(Math.max(...fx)).toBeGreaterThan(Math.max(...dx));
   });
 
-  it('keeps the digits inside the screen', () => {
-    const sx = screen(88).map(x => x.p[0]);
-    const dx = digits(88).map(x => x.p[0]);
-    expect(Math.min(...dx)).toBeGreaterThan(Math.min(...sx));
-    expect(Math.max(...dx)).toBeLessThan(Math.max(...sx));
-  });
-
-  it('centres the digits up the screen, the screen on the flat of the gun’s back', () => {
-    // Along the face's slope, from BACK: the screen's ends, and the digits'.
+  it('centres the digits in the frame, up the gun’s cut back', () => {
+    // Along the face's slope, from BACK.
     const up = unit([0, 0.883, -0.469]);
     const along = (x: { p: number[] }) => (x.p[1] - 0.125) * up[1] + (x.p[2] - 0.04) * up[2];
-    const span = (xs: { p: number[] }[]) => [
-      Math.min(...xs.map(along)),
-      Math.max(...xs.map(along)),
-    ];
-    const [s0, s1] = span(screen(88));
-    const [d0, d1] = span(digits(88));
-    expect((s0 + s1) / 2).toBeCloseTo(-0.012, 3);
-    expect(Math.abs(d0 - s0 - (s1 - d1))).toBeLessThan(1e-4);
+    const mid = (xs: { p: number[] }[]) =>
+      (Math.min(...xs.map(along)) + Math.max(...xs.map(along))) / 2;
+    expect(mid(frame(88))).toBeCloseTo(-0.0145, 3);
+    expect(mid(digits(88))).toBeCloseTo(-0.0145, 3);
   });
 
-  it('frames the digits in a glowing line of their colour, inside the black square', () => {
+  it('frames the digits in a round glowing line of their colour, near the edge of the cut', () => {
     for (const n of [40, 3]) {
       for (const x of frame(n)) {
         expect(x.c).toEqual(digits(n)[0].c);
       }
     }
+    // Round, 2 to 3.2 mm inside the cut's outline (4.4 cm half wide), 1 mm out of the face.
     const fx = frame(88).map(x => Math.abs(x.p[0]));
-    expect(Math.max(...fx)).toBeGreaterThan(0.025);
-    expect(Math.max(...fx)).toBeLessThan(0.031);
-    expect(Math.max(...fx)).toBeLessThan(
-      Math.max(...screen(88).map(x => Math.abs(x.p[0]))) - 0.001,
-    );
+    expect(Math.max(...fx)).toBeGreaterThan(0.0405);
+    expect(Math.max(...fx)).toBeLessThan(0.0421);
+    const n = unit([0, 0.469, 0.883]);
+    for (const x of frame(88)) {
+      expect((x.p[1] - 0.125) * n[1] + (x.p[2] - 0.04) * n[2]).toBeCloseTo(0.001, 6);
+    }
   });
 
   it('sits on the back of the body, facing the player', () => {
     for (const x of v(88)) {
-      expect(Math.abs(x.p[0])).toBeLessThan(0.035);
+      expect(Math.abs(x.p[0])).toBeLessThan(0.043);
       expect(x.p[2]).toBeGreaterThan(0.03);
       expect(x.p[2]).toBeLessThan(0.07);
-      expect(x.p[1]).toBeGreaterThan(0.09);
+      expect(x.p[1]).toBeGreaterThan(0.08);
       expect(x.p[1]).toBeLessThan(0.15);
     }
   });

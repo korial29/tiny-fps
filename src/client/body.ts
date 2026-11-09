@@ -625,6 +625,24 @@ export const hand = (
     const [y, w, h] = [1, 2, 3].map(i => a[i] + (b[i] - a[i]) * t);
     return y + h * Math.sqrt(Math.max(1 - (x / w) ** 2, 0));
   };
+  // Under the knuckles, on the palm side, a padded ridge of the glove across the fingers' roots,
+  // swelling under each: it covers the palm's front edge where the fingers come out of it (the
+  // user, 2026-11-09).
+  paint = () => tint;
+  tube(
+    Array.from({ length: 8 }, (_, i) => -0.0475 + i * (0.095 / 7)).map((x, i, a): Ring => {
+      const swell = 1 + 0.08 * Math.cos(((x - 0.034) / 0.0225) * TAU);
+      const e = Math.min(Math.max((0.0475 - Math.abs(x)) / 0.0136, 0), 1);
+      const k = i == a.length - 1 ? 0 : swell * Math.max(Math.sqrt(e * (2 - e)), 0.1);
+      return [
+        [-x, 2 * PALM[3][1] - back(0.09, x) + 0.0005, 0.09],
+        [0, 0.0065 * k, 0],
+        [0, 0, 0.0095 * k],
+      ];
+    }),
+    5,
+    put,
+  );
   // The knuckles' shell: a hard ridge across their backs, swelling over each.
   paint = () => SHELL;
   tube(

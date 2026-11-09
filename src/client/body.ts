@@ -365,6 +365,8 @@ const TOWARD = [
   [0, -1],
 ];
 
+/** Finger thicknesses against FINGER_R, index to little: the little finger is thinner. */
+const THICK = [1, 1, 0.96, 0.86];
 /** Finger lengths against 4 cm, index to little. */
 const LENGTH = [1, 1.1, 1, 0.82];
 /** The thumb's two segments open and in a fist, as directions in the hand (x toward the thumb). */
@@ -454,10 +456,12 @@ const tube = (
   }
 };
 
+/** A finger's half thickness at its root (11.2 mm until the fingers closed round a grip, 2026-11-09). */
+const FINGER_R = 0.01;
 /** The lengths of a finger's three phalanges against `l`, the root one first. */
 const BONES = [1, 0.62, 0.42];
-/** The ring of a finger from which on it is bare: the glove's fingers end halfway along the middle phalanx. */
-export const BARE = 6;
+/** The ring of a finger from which on it is bare: the glove's fingers end 60 % along the middle phalanx. */
+export const BARE = 8;
 
 /**
  * The rings of a finger, in the hand's space: from `p` along `d1`, `d2` then `d3`, its three
@@ -477,29 +481,37 @@ export const finger = (
   const [l1, l2, l3] = BONES.map(k => k * l);
   const j1 = along(p, d1, l1);
   const j2 = along(j1, d2, l2);
-  const ring = (c: Vec3, d: Vec3, k: number): Ring => {
+  /** A ring at `c` across `d`, `k` thick, `h` of that from the palm side to the back. */
+  const ring = (c: Vec3, d: Vec3, k: number, h = 1): Ring => {
     const [t, y] = [unit(d), unit(cross(d, X))];
-    return [c, cross(y, t).map(v => v * r * k) as Vec3, y.map(v => v * r * k) as Vec3];
+    return [c, cross(y, t).map(v => v * r * k) as Vec3, y.map(v => v * r * k * h) as Vec3];
   };
-  /** The bend from `a` to `b` round the joint `j`, pulled halfway to it: two rings, `k0` to `k1` thick. */
-  const bend = (a: Vec3, j: Vec3, b: Vec3, k0: number, k1: number) => {
-    const c = mix(j, mix(a, b, 0.5), 0.5);
-    return [1 / 3, 2 / 3].map(k =>
+  /**
+   * The bend from `a` to `b` round the joint `j`, a curve on it (its ends along the two bones, no
+   * kink where it meets them): four rings, `k0` to `k1` thick.
+   */
+  const bend = (a: Vec3, j: Vec3, b: Vec3, k0: number, k1: number, flat = 0) => {
+    const c = j;
+    return [1 / 5, 2 / 5, 3 / 5, 4 / 5].map(k =>
       ring(
         mix(mix(a, c, k), mix(c, b, k), k),
         add(mix(sub(c, a), [0, 0, 0], k), mix(sub(b, c), [0, 0, 0], 1 - k)),
         k0 + (k1 - k0) * k,
+        // Flatter across the joint, most at its middle: the inside of the bend does not fold.
+        1 - flat * Math.sin(Math.PI * k),
       ),
     );
   };
-  const [a1, mid, b2] = [along(j1, d1, -l1 / 2), along(j1, d2, l2 / 2), along(j2, d3, l3 / 2)];
+  // The first bend from 60 % back along the first bone to 60 % along the second: a wide knuckle,
+  // its inside not folded.
+  const [a1, mid, b2] = [along(j1, d1, -0.6 * l1), along(j1, d2, 0.6 * l2), along(j2, d3, l3 / 2)];
   // The root sunk 12 mm in the palm and flared, a fillet that leaves it at a slant with no seam
   // (the user, 2026-11-09).
   return [
     ring(along(p, unit(t), -0.012), t, 1.35),
     ring(p, t, 1.1),
     ring(a1, d1, 1),
-    ...bend(a1, j1, mid, 0.98, 0.95),
+    ...bend(a1, j1, mid, 0.98, 0.95, 0.22),
     // The glove's edge, rolled, then the bare finger a hair beyond it.
     ring(mid, d2, 0.95),
     ring(along(mid, d2, 0.003), d2, 0.88),
@@ -510,13 +522,21 @@ export const finger = (
   ];
 };
 
-/** The directions of the three phalanges of the finger i (index to little) at `curl`, in the hand's space. */
+/**
+ * The directions of the three phalanges of the finger i (index to little) at `curl`, in the hand's
+ * space. At 0.9, the curl of every grip, they go round a handle 2.5 cm thick 7.8 cm along the
+ * fingers from the wrist and 2.2 cm toward the palm, their tips back at the heel of the palm (the
+ * user, 2026-11-09: the fingers stood off the katana's grip).
+ */
 export const phalanges = (curl: number, i: number): [Vec3, Vec3, Vec3] => {
   const splay = -(i - 1.5) * 0.08 * (1 - curl);
-  const [a, b, c] = [0.1 + 1.3 * curl, 0.18 + 2.6 * curl, 0.24 + 3.3 * curl].map(n =>
-    unit([splay, -Math.sin(n), Math.cos(n)]),
-  );
-  return [a, b, c];
+  // Past a grip's curl the joints bend no more (tighter, a bend folds into itself): the finger
+  // turns at its root.
+  const k = Math.min(curl, 0.9);
+  const a = 0.1 + 1.81 * curl;
+  const b = a + 0.08 + 1.74 * k;
+  const [x, y, z] = [a, b, b + 0.06 + 0.99 * k].map(n => unit([splay, -Math.sin(n), Math.cos(n)]));
+  return [x, y, z];
 };
 
 /** The knuckles' shell and the strap's buckle: near-black hard plastic. */
@@ -611,8 +631,8 @@ export const hand = (
     const ds = phalanges(i ? curl : curl * (1 - point), i);
     const at: Vec3 = [0.034 - 0.0225 * i, -0.004, 0.092];
     const t = unit(add(ds[0], [0, 0, 1]));
-    digit(at, ds, 0.04 * LENGTH[i], 0.0112, t);
-    const [, x, y] = finger(at, ...ds, 0.04 * LENGTH[i], 0.0112, t)[1];
+    digit(at, ds, 0.04 * LENGTH[i], FINGER_R * THICK[i], t);
+    const [, x, y] = finger(at, ...ds, 0.04 * LENGTH[i], FINGER_R * THICK[i], t)[1];
     roots.push([
       at,
 
@@ -645,7 +665,9 @@ export const hand = (
       .filter(([p, k]) => {
         const a = (k * TAU) / FINGER_SIDES;
         const side = i == 3 ? a <= Math.PI + 1e-6 : a < Math.PI - 1e-6;
-        return (top ? side : !side) && roots.every(([o], j) => j == i || dist(p, o) > 0.0112 * 1.1);
+        return (
+          (top ? side : !side) && roots.every(([o], j) => j == i || dist(p, o) > FINGER_R * 1.1)
+        );
       })
       .map(([p]): W => [p, unit(sub(p, c))]);
   };
@@ -1173,7 +1195,27 @@ export const createBody = (world?: World): Body => {
     const kq = { ...q, rot: q.rot.slice() };
     let [grip0, blade0, fingR, fingL]: Vec3[] = [eye, Y, Y, Y];
     if (sw) {
-      const [at, g] = [add(add(eye, keep(sw.at)), clear), keep(sw.g)];
+      // In the guard 6 cm toward the middle of the body, back in a cut: the left arm crosses less
+      // before the chest (the user, 2026-11-09).
+      const [at, g] = [
+        add(
+          add(
+            eye,
+            keep(
+              add(
+                sw.at,
+                mix(
+                  [0, 0, 0],
+                  [-0.05, 0.035, 0],
+                  prog < 0 ? 1 : (1 - Math.sin(Math.PI * clamp(prog))) ** 2,
+                ),
+              ),
+            ),
+          ),
+          clear,
+        ),
+        keep(sw.g),
+      ];
       shrug(kq, s, J.ARM_R, at);
       shrug(kq, s, J.ARM_L, along(at, g, -BACK));
       [grip0, blade0, fingR, fingL] = clasp(solve(kq), at, g, [

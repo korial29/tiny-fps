@@ -312,8 +312,9 @@ describe('MOON, the dome and the layout the scenery follows', () => {
   const ghosts = brushes.filter(b => b.ghost);
   const shell = (y: number) => (y < 5 ? 22.4 : 22.4 * Math.sqrt(1 - ((y - 5) / 12) ** 2));
 
-  it('has ghost bands only over the domes, 4 bands of 4 stepped boxes each, the first up to 10.5 m', () => {
-    expect(ghosts).toHaveLength(32);
+  it('has ghost bands over the domes, 4 bands of 4 stepped boxes each, the first up to 10.5 m, and the rim', () => {
+    expect(ghosts).toHaveLength(36);
+    expect(ghosts.filter(b => b.max[1] === 14)).toHaveLength(4);
     for (const [cz, sign] of [
       [236, 1],
       [44, -1],

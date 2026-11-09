@@ -12,7 +12,7 @@ import { hash } from './textures';
 
 /** The play area is x 0..W, z 0..Z, its middle C. The crater wall runs REACH metres out from the stone wall, the plain beyond it. */
 const [W, Z] = [160, 280];
-/** The stone wall round the play area is WALL thick and TOP high; the crater wall rises from its outer edge and ends REACH out. */
+/** The stone wall round the play area is WALL thick and TOP high, a ghost under the scree laid over it; the crater wall rises from its outer edge and ends REACH out. */
 const [WALL, TOP, REACH] = [10, 14, 400];
 const C: Vec3 = [80, 0, 140];
 /** Radius of the star dome and the Earth's distance, metres: 700 from the middle is 540..860 from any spot of the play area, inside the far clip of 900. */
@@ -424,16 +424,23 @@ const base = (o: number[]) => {
   }
 };
 
-/** How far a point is from the outer face of the stone wall (0 over it). */
-const away = (x: number, z: number) =>
-  Math.hypot(Math.max(-WALL - x, 0, x - W - WALL), Math.max(-WALL - z, 0, z - Z - WALL));
+/** How far a point is from the play area (0 in it). */
+const away = (x: number, z: number) => Math.hypot(Math.max(-x, 0, x - W), Math.max(-z, 0, z - Z));
 
 /**
- * Height of the crater wall: TOP at the stone wall, rising concave and gently to a ragged crest of
- * 60..90 m some 200..250 m out, then down to the plain.
+ * Height of the crater wall: a scree from the floor to TOP over the stone wall, then rising concave
+ * and gently to a ragged crest of 60..90 m some 200..250 m out, then down to the plain.
  */
 const height = (x: number, z: number) => {
-  const d = away(x, z);
+  const e = away(x, z);
+  if (e < WALL) {
+    return (
+      (TOP + 0.3) * (e / WALL) -
+      0.3 +
+      3 * (fbm(x / 4, z / 4, 5) - 0.5) * Math.sin((Math.PI * e) / WALL)
+    );
+  }
+  const d = e - WALL;
   const dc = 225 + 50 * (fbm(x / 150, z / 150, 9) - 0.5);
   const crest = 60 + 30 * sm((fbm(x / 70, z / 70, 3) - 0.25) * 2);
   const fall = 1 - sm((d - dc) / (REACH - dc));
@@ -441,12 +448,12 @@ const height = (x: number, z: number) => {
   return (d < dc ? TOP + (crest - TOP) * (d / dc) ** 1.8 : crest * fall) + ridge;
 };
 
-/** Grid lines from lo to hi every 10 m, and outward from both ends in steps that grow with the distance: 10, 20 then 40 m. */
+/** Grid lines from lo to hi every 10 m, and outward from both ends in steps that grow with the distance: 5 over the scree, 10, 20 then 40 m. */
 const lines = (lo: number, hi: number) => {
   const out = (a: number, s: number) => {
     const r = [a];
-    for (let d = 0; d < REACH;) {
-      d += d < 100 ? 10 : d < 200 ? 20 : 40;
+    for (let d = 0; d < REACH + WALL;) {
+      d += d < WALL ? 5 : d < 100 ? 10 : d < 200 ? 20 : 40;
       r.push(a + s * d);
     }
     return r;
@@ -457,11 +464,11 @@ const lines = (lo: number, hi: number) => {
 
 /** The crater wall: a grid round the stone wall, flat shaded; the plain out to the stars beyond. */
 const crater = (o: number[]) => {
-  const [xs, zs] = [lines(-WALL, W + WALL), lines(-WALL, Z + WALL)];
+  const [xs, zs] = [lines(0, W), lines(0, Z)];
   for (let i = 0; i < xs.length - 1; i++) {
     for (let j = 0; j < zs.length - 1; j++) {
       const [x, z] = [xs[i], zs[j]];
-      if (x >= -WALL && xs[i + 1] <= W + WALL && z >= -WALL && zs[j + 1] <= Z + WALL) {
+      if (x >= 0 && xs[i + 1] <= W && z >= 0 && zs[j + 1] <= Z) {
         continue;
       }
       const p = (a: number, b: number): Vec3 => {
@@ -518,7 +525,7 @@ const crater = (o: number[]) => {
   for (let k = 0, n = 0; n < 90 && k < 3000; k++) {
     const [x, z] = [x0 + (x1 - x0) * hash(k, 1, 51), z0 + (z1 - z0) * hash(k, 2, 51)];
     const d = away(x, z);
-    if (d > 3 && d < 200) {
+    if (d > WALL + 3 && d < 200) {
       const r = 3 + 9 * hash(k, 3, 51) ** 3;
       rock(o, [x, height(x, z) + 0.2 * r, z], r, k, grey(0.2 + 0.12 * hash(k, 4, 51)));
       n++;

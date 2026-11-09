@@ -146,6 +146,12 @@ describe('vision', () => {
   const verts = (v: number[]) =>
     Array.from({ length: v.length / STRIDE }, (_, i) => v.slice(i * STRIDE, (i + 1) * STRIDE));
 
+  it('marks nothing on a ghost brush: it is not drawn', () => {
+    const ledge = box([0, 0, 0], [2, 1.5, 2]);
+    expect(vision(worldOf(ledge)).length).toBeGreaterThan(0);
+    expect(vision(worldOf({ ...ledge, ghost: true }))).toEqual([]);
+  });
+
   it('is whole triangles, red, with unit normals', () => {
     const v = verts(vision(ROOFTOPS));
     expect(v.length).toBeGreaterThan(0);

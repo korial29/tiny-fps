@@ -175,11 +175,13 @@ const centre: Brush[] = [
   box(126, -30, 143, 131, 1.2, 147, STONE),
   box(130, -30, 138.5, 135, 2.4, 141.5, STONE),
   box(126, -30, 133, 131, 1.2, 137, STONE),
-  // The rim, the boundary: one band 14 m high all round the play area.
-  box(-10, -30, -10, 0, 14, 290, STONE),
-  box(160, -30, -10, 170, 14, 290, STONE),
-  box(0, -30, -10, 160, 14, 0, STONE),
-  box(0, -30, 280, 160, 14, 290, STONE),
+  // The rim, the boundary: one band 14 m high all round the play area, a ghost under the scree the scenery lays over it.
+  ...[
+    box(-10, -30, -10, 0, 14, 290, STONE),
+    box(160, -30, -10, 170, 14, 290, STONE),
+    box(0, -30, -10, 160, 14, 0, STONE),
+    box(0, -30, 280, 160, 14, 290, STONE),
+  ].map(b => ({ ...b, ghost: true })),
 ];
 
 /** Red's spawns behind the dome facing blue (yaw 0 looks toward -z): five in a row, three in front. */

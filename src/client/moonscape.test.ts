@@ -98,12 +98,13 @@ describe('moonscape', () => {
     }
   });
 
-  it('rises from 14 m at the stone wall, gently, to a crest 200 to 250 m out', () => {
-    const wall = verts.filter(
-      p => p[8] === -1 && Math.abs(p[0] + 10) < 1e-6 && p[2] > 0 && p[2] < 280,
-    );
-    expect(wall.length).toBeGreaterThan(0);
-    expect(wall.every(p => Math.abs(p[1] - 14) < 1e-6)).toBe(true);
+  it('lays a scree from the floor to 14 m over the stone wall, then rises gently to a crest 200 to 250 m out', () => {
+    const at = (x: number) =>
+      verts.filter(p => p[8] === -1 && Math.abs(p[0] - x) < 1e-6 && p[2] > 0 && p[2] < 280);
+    expect(at(0).length).toBeGreaterThan(0);
+    expect(at(0).every(p => Math.abs(p[1] + 0.3) < 1e-6)).toBe(true);
+    expect(at(-10).length).toBeGreaterThan(0);
+    expect(at(-10).every(p => Math.abs(p[1] - 14) < 1e-6)).toBe(true);
     const west = verts.filter(p => p[8] === -1 && p[0] < -10 && p[2] > 0 && p[2] < 280);
     expect(Math.max(...west.filter(p => p[0] > -50).map(p => p[1]))).toBeLessThan(30);
     const crest = west.filter(p => p[1] > 55);

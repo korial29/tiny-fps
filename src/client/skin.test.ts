@@ -245,6 +245,18 @@ describe('skin', () => {
     expect(turned.join).toBeLessThan(65);
   });
 
+  it('relaxes the eye’s own shoulders once posed, and only its: no pole, unit normals', () => {
+    const r = body(2).r!;
+    expect(r.k.length).toBeGreaterThan(200);
+    expect([0, 1, 3].every(lod => body(lod).r === undefined)).toBe(true);
+    // The arms up before the eye, as a katana holds them: the shoulders bend hard.
+    const p = bend(JOINT.ARM_R, axis([1, 0, 0], -1.4));
+    const v = draw(2, p);
+    for (let i = 0; i < v.length; i += STRIDE) {
+      expect(Math.hypot(v[i + 3], v[i + 4], v[i + 5])).toBeCloseTo(1, 4);
+    }
+  });
+
   it('relaxes the close armpits into a fold: nothing in front of them turned back, no row crossed', () => {
     const s = body(3);
     const P = (k: number) => [0, 1, 2].map(d => s.v[k * 6 + d]);

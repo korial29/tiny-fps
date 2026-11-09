@@ -1,4 +1,4 @@
-// The cars of the street: a few dozen, deterministic from the clock alone (the wall clock, so every
+// The cars of the street: a few dozen round the play area and more on the grid out in the haze, deterministic from the clock alone (the wall clock, so every
 // client sees the same ones), with no state. Each axis of roads has its own green: during it a car
 // hops from the stop line before one crossing to the one before the next, with an ease, and waits
 // there while the other axis has its green, so no two cars ever meet at a crossing. Cars keep
@@ -8,13 +8,16 @@ import type { WorldDef } from '../shared/world';
 import { glow, tri } from './flag';
 import { place } from './mesh';
 import type { Vec3 } from './mesh';
-import { PITCH, ROAD, STREET, grid } from './street';
+import { FAR as CITY, MARKS, PITCH, ROAD, STREET, grid, scale } from './street';
 import { hash } from './textures';
 
 /** How much bigger than a real car (4.4 m) the cars are drawn: they are seen from 100 m up. */
 const SIZE = 1.3;
-/** Cars on the street. */
+/** Cars on the roads round the play area, and on the rest of the grid out to MARKS, fewer to the kilometre. */
 export const CARS = 64;
+export const FAR_CARS = 160;
+/** Crossings a lane of the far grid is cut into: each piece has its own cars, carried back to its start. */
+const PIECE = 4;
 /** Seconds of a cycle, of one axis' green (the other's starts half a cycle later), and between the starts of two cars of a queue. */
 export const CYCLE = 16;
 const GREEN = 6.5;
@@ -27,8 +30,9 @@ export const GAP = 8;
 export const LENGTH = 4.4 * SIZE;
 /** Metres from the middle of the road to the middle of a lane. */
 const LANE = ROAD / 4;
-/** Beyond this distance a car is not drawn, beyond NEAR_CAR it has no cabin. */
-const FAR = 260;
+/** Beyond this distance a car is not drawn (the haze has it), beyond LIT it has no lamps, beyond NEAR_CAR no cabin. */
+const FAR = MARKS + 60;
+const LIT = 260;
 const NEAR_CAR = 90;
 /** Taxi yellow, white, black, red, blue, grey. */
 const PAINT = [
@@ -55,32 +59,65 @@ export interface Car {
   paint: number;
 }
 
-/** The cars of a world: CARS of the lanes' places, taken in the order of a hash, always the same. */
+/** CARS of the lanes' places of a list, taken in the order of a hash, always the same. */
+const pick = (all: Car[], n: number, seed: number) =>
+  all
+    .map((c, i) => [hash(i, c.cell, seed), c, hash(i, 1, seed + 1)] as const)
+    .sort((a, b) => a[0] - b[0])
+    .slice(0, n)
+    .map(([, c, p]) => ({ ...c, paint: Math.floor(p * PAINT.length) }));
+
+/**
+ * The cars of a world: CARS on the four roads round the play area, between their four crossings;
+ * then FAR_CARS on the far grid's other lanes, each cut into pieces of PIECE crossings, so a car
+ * shrinking away at the end of one piece is where the next one's grow from. Always the same.
+ */
 export const cars = (def: WorldDef): Car[] => {
   const { xs, zs } = grid(def);
+  const far = grid(def, CITY);
   /** The two roads each side of the play area: the traffic stays round it, where it is seen. */
   const near = (lines: number[]) => lines.slice(lines.length / 2 - 2, lines.length / 2 + 2);
-  const all: Car[] = [];
-  for (const [axis, lines, cross] of [
-    [0, xs, zs],
-    [1, zs, xs],
+  const [cx, cz] = [(far.box[0] + far.box[1]) / 2, (far.box[2] + far.box[3]) / 2];
+  const [inner, outer]: Car[][] = [[], []];
+  const lane = (to: Car[], axis: 0 | 1, at: number, d: 1 | -1, stops: number[]) =>
+    stops.forEach((_, cell) =>
+      Array.from({ length: SLOTS }, (_, slot) =>
+        to.push({ axis, at, d, stops, cell, slot, paint: 0 }),
+      ),
+    );
+  for (const [axis, lines, cross, all, wide] of [
+    [0, xs, zs, far.xs, far.zs],
+    [1, zs, xs, far.zs, far.xs],
   ] as const) {
-    for (const at of near(lines)) {
+    const mid = near(cross);
+    // The far grid's crossings in pieces outward from the near four, a short end joined to the piece before it.
+    const lo = wide.indexOf(mid[0]);
+    const pieces = [mid];
+    for (const side of [wide.slice(0, lo).reverse(), wide.slice(lo + mid.length)]) {
+      const run: number[][] = [];
+      for (let i = 0; i < side.length; i += PIECE) {
+        run.push(side.slice(i, i + PIECE));
+      }
+      if (run.length > 1 && run[run.length - 1].length < 2) {
+        run[run.length - 2].push(...run.pop()!);
+      }
+      pieces.push(...run.map(p => [...p].sort((a, b) => a - b)));
+    }
+    for (const at of all) {
       for (const d of [1, -1] as const) {
-        const stops = d > 0 ? near(cross) : near(cross).reverse();
-        stops.forEach((_, cell) =>
-          Array.from({ length: SLOTS }, (_, slot) =>
-            all.push({ axis, at, d, stops, cell, slot, paint: 0 }),
-          ),
-        );
+        for (const piece of pieces) {
+          const stops = d > 0 ? piece : [...piece].reverse();
+          const along = (piece[0] + piece[piece.length - 1]) / 2 - (axis ? cx : cz);
+          if (piece == mid && near(lines).includes(at)) {
+            lane(inner, axis, at, d, stops);
+          } else if (Math.hypot(along, at - (axis ? cz : cx)) < MARKS) {
+            lane(outer, axis, at, d, stops);
+          }
+        }
       }
     }
   }
-  return all
-    .map((c, i) => [hash(i, c.cell, 3), c, hash(i, 1, 4)] as const)
-    .sort((a, b) => a[0] - b[0])
-    .slice(0, CARS)
-    .map(([, c, p]) => ({ ...c, paint: Math.floor(p * PAINT.length) }));
+  return [...pick(inner, CARS, 3), ...pick(outer, FAR_CARS, 5)];
 };
 
 /** The way a car faces: x and z. */
@@ -168,10 +205,11 @@ export const MODEL = { body: BODY, cabin: CABIN, lamps: LAMPS };
 
 /**
  * The drawer of a world's traffic: appends the cars in view (in front of the camera, within FAR) at
- * time t. At most CARS of them, each BODY + CABIN + LAMPS vertices (the cabin only up to NEAR_CAR).
+ * time t, each BODY + CABIN + LAMPS vertices, the cabin only up to NEAR_CAR and the lamps up to LIT.
  */
 export const traffic = (def: WorldDef) => {
   const list = cars(def);
+  const k = scale(def);
   return (out: number[], eye: Vec3, fwd: Vec3, t: number) => {
     for (const car of list) {
       const [x, z, size] = carAt(car, t);
@@ -190,12 +228,15 @@ export const traffic = (def: WorldDef) => {
         [0, 1, 0],
         [fx, 0, fz],
       ];
-      const at: Vec3 = [x, STREET + 0.12, z];
+      // On the asphalt, which is raised with the distance (street.ts).
+      const at: Vec3 = [x, STREET + 0.12 * k(x, z) ** 2, z];
       place(out, BODY, at, axes, [0, 0, 0], SIZE * size, PAINT[car.paint]);
       if (far < NEAR_CAR ** 2) {
         place(out, CABIN, at, axes, [0, 0, 0], SIZE * size, PAINT[car.paint]);
       }
-      place(out, LAMPS, at, axes, [0, 0, 0], SIZE * size);
+      if (far < LIT ** 2) {
+        place(out, LAMPS, at, axes, [0, 0, 0], SIZE * size);
+      }
     }
   };
 };

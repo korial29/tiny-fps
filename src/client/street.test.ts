@@ -5,7 +5,7 @@ import type { WorldDef } from '../shared/world';
 import { STRIDE } from './mesh';
 import { city, level, scenery } from './render';
 import { skyline } from './skyline';
-import { FAR, PITCH, ROAD, STREET, area, deepen, grid, street } from './street';
+import { FAR, MARKS, PITCH, ROAD, STREET, area, deepen, grid, scale, street } from './street';
 
 const MAPS: [string, WorldDef][] = [
   ['HIGHLINE', HIGHLINE],
@@ -70,15 +70,10 @@ describe.each(MAPS)('the street of %s', (_, def) => {
   });
 
   it('puts no marking on a building: every stripe of paint is outside every footprint', () => {
-    const paint = quads(street(def)).filter(q => Math.abs(q.y - STREET - 0.24) < 1e-6);
+    const paint = quads(street(def)).filter(q => q.y > STREET + 0.2 && q.rgb[0] > 0.4);
     expect(paint.length).toBeGreaterThan(100);
-    // The markings are on the near roads only: the buildings over their grid are the ones to check.
-    const [x0, x1, z0, z1] = [xs[0] - h, xs[xs.length - 1] + h, zs[0] - h, zs[zs.length - 1] + h];
-    const there = everything.filter(
-      b => b.max[0] > x0 && b.min[0] < x1 && b.max[2] > z0 && b.min[2] < z1,
-    );
     const on = paint.flatMap(q =>
-      there.filter(
+      everything.filter(
         b =>
           b.min[0] < q.max[0] && b.max[0] > q.min[0] && b.min[2] < q.max[1] && b.max[2] > q.min[1],
       ),
@@ -90,13 +85,24 @@ describe.each(MAPS)('the street of %s', (_, def) => {
     const q = quads(street(def));
     const yellow = q.filter(s => s.rgb[2] < 0.2 && s.rgb[0] > 0.8);
     const white = q.filter(s => s.rgb.every(c => c > 0.75));
-    // Dashes are 4 m long with 5 m between them, centred on the road: yellow, 0.4 m wide.
+    // Dashes are 4 m long with 5 m between them, centred on the road: yellow, 0.4 m wide on the near
+    // grid; farther out as much bigger as the street's scale there, up to MARKS / 300 times.
+    const k = scale(def);
+    const [x0, x1, z0, z1] = [xs[0], xs[xs.length - 1], zs[0], zs[zs.length - 1]];
     expect(yellow.length).toBeGreaterThan(100);
+    let near = 0;
     for (const s of yellow) {
-      const [dx, dz] = [s.max[0] - s.min[0], s.max[1] - s.min[1]];
-      expect([dx, dz].sort((a, b) => a - b)[0]).toBeCloseTo(0.4);
-      expect([dx, dz].sort((a, b) => a - b)[1]).toBeCloseTo(4);
+      const [w, l] = [s.max[0] - s.min[0], s.max[1] - s.min[1]].sort((a, b) => a - b);
+      expect(l / w).toBeCloseTo(10);
+      expect(w).toBeGreaterThanOrEqual(0.4 - 1e-6);
+      expect(w).toBeLessThanOrEqual((0.4 * MARKS) / 300 + 1e-6);
+      const [x, z] = [(s.min[0] + s.max[0]) / 2, (s.min[1] + s.max[1]) / 2];
+      if (x > x0 && x < x1 && z > z0 && z < z1 && k(x, z) == 1) {
+        expect(w).toBeCloseTo(0.4);
+        near++;
+      }
     }
+    expect(near).toBeGreaterThan(50);
     // Four crosswalks of ROAD / 2 bars at each of the crossings, and two edge lines a stretch.
     const crossings = xs.length * zs.length;
     const bars = q.filter(s => {
@@ -113,10 +119,10 @@ describe.each(MAPS)('the street of %s', (_, def) => {
     }
   });
 
-  it('carries the grid on to FAR in plain asphalt: every far road paved end to end, no tower on it, no marking past the near roads', () => {
+  it('carries the grid on to FAR: every far road paved end to end, no tower on it, its markings out to MARKS', () => {
     const far = grid(def, FAR);
     const q = quads(street(def));
-    const tar = q.filter(s => s.rgb[0] < 0.1 && Math.abs(s.y - STREET - 0.12) < 1e-6);
+    const tar = q.filter(s => s.rgb[0] < 0.1 && s.y > STREET + 0.1);
     const [lo, hi] = [far.zs[0] - h, far.zs[far.zs.length - 1] + h];
     for (const x of far.xs) {
       // The pieces of asphalt along this road cover it from one end of the far grid to the other.
@@ -138,23 +144,56 @@ describe.each(MAPS)('the street of %s', (_, def) => {
       const on = towers.filter(t => lines.some(c => t.max[a] > c - h && t.min[a] < c + h));
       expect(on).toEqual([]);
     }
-    // The markings stay on the near grid (the crosswalks at its last crossings 3 m past its ends).
-    const e = h + 3;
-    const [x0, x1, z0, z1] = [xs[0] - e, xs[xs.length - 1] + e, zs[0] - e, zs[zs.length - 1] + e];
-    const paint = q.filter(s => Math.abs(s.y - STREET - 0.24) < 1e-6);
-    expect(
-      paint.filter(s => s.min[0] < x0 || s.max[0] > x1 || s.min[1] < z0 || s.max[1] > z1),
-    ).toEqual([]);
+    // The markings go on past the near grid to MARKS from the centre, where the haze has them, and
+    // no farther (a piece of a road or a crosswalk reaches past by its length at most).
+    const [cx, cz] = [(box[0] + box[1]) / 2, (box[2] + box[3]) / 2];
+    const paint = q.filter(s => s.rgb[0] > 0.4);
+    const from = paint.map(s =>
+      Math.hypot((s.min[0] + s.max[0]) / 2 - cx, (s.min[1] + s.max[1]) / 2 - cz),
+    );
+    expect(Math.max(...from)).toBeGreaterThan(MARKS - PITCH);
+    expect(Math.max(...from)).toBeLessThan(MARKS + PITCH / 2);
+    // Past the near grid a crosswalk is one band of the bars' mean colour, across the road.
+    const bands = paint.filter(s => {
+      const [w, l] = [s.max[0] - s.min[0], s.max[1] - s.min[1]].sort((a, b) => a - b);
+      return w == 3 && l == ROAD;
+    });
+    expect(bands.length).toBeGreaterThan(100);
+    for (const b of bands) {
+      expect(b.rgb[0]).toBeCloseTo((0.8 + 0.09) / 2);
+    }
   });
 
-  it('is flat, lit paint of whole triangles, on the street: faces up, at most half a metre above it', () => {
+  it('keeps the paint over the asphalt under it by more than the depth buffer can tell apart, seen from any roof', () => {
+    const q = quads(street(def));
+    const tar = q.filter(s => s.rgb[0] < 0.1 && s.y > STREET + 0.1);
+    const paint = q.filter(s => s.y > STREET + 0.2 && s.rgb[0] > 0.4);
+    const corners = [0, 1].flatMap(i => [2, 3].map(j => [box[i], box[j]]));
+    let worst = Infinity;
+    for (const s of paint) {
+      const [x, z] = [(s.min[0] + s.max[0]) / 2, (s.min[1] + s.max[1]) / 2];
+      const under = tar.filter(
+        t => t.min[0] <= x && t.max[0] >= x && t.min[1] <= z && t.max[1] >= z,
+      );
+      expect(under.length).toBeGreaterThan(0);
+      // The step of a 24-bit depth buffer with the near clip at 0.1 m, from the farthest corner of the play area.
+      const d = Math.max(...corners.map(([a, b]) => Math.hypot(x - a, z - b)));
+      const step = d ** 2 / (0.1 * 2 ** 24);
+      for (const t of under) {
+        worst = Math.min(worst, (s.y - t.y) / step);
+      }
+    }
+    expect(worst).toBeGreaterThan(1);
+  });
+
+  it('is flat, lit paint of whole triangles, on the street: faces up, at most a little over a metre above it', () => {
     const v = street(def);
     expect(v.length % (3 * STRIDE)).toBe(0);
     for (const q of quads(v)) {
       expect(q.normal).toEqual([0, 1, 0]);
       expect(q.layer).toBe(-1);
       expect(q.y).toBeGreaterThanOrEqual(STREET);
-      expect(q.y).toBeLessThan(STREET + 0.5);
+      expect(q.y).toBeLessThan(STREET + 0.24 * (MARKS / 300) ** 2 + 1e-6);
       expect(q.rgb.every(c => c >= 0 && c <= 1)).toBe(true);
     }
   });

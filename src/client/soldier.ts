@@ -37,7 +37,7 @@ import { STRIDE, add, basis, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, mul, slerp, solve } from './rig';
 import type { Pose } from './rig';
-import { body, cut, hairOf, palette, skin } from './skin';
+import { body, cut, eyesOf, hairOf, palette, skin } from './skin';
 import { createTrail } from './trail';
 import type { Trail } from './trail';
 
@@ -347,7 +347,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1) => {
   if (k >= 1) {
     return;
   }
-  const colors = palette(color, hairOf(p.id));
+  const colors = palette(color, hairOf(p.id), eyesOf(p.id));
   const { s, sink, yaw } = stance(r);
   const blade = p.wield && !p.down;
   if (r.cut) {

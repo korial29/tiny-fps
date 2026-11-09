@@ -228,6 +228,7 @@ The game is the movement and a capture the flag on top of it, with a tackle, a g
 - [x] A city around the roofs: a street far below with traffic and markings to the horizon, a height fog, parks of branched trees and a skyline
 - [x] Sound: a jsfxr-style synthesiser for steps, jumps, dashes, landings, grabs, climbs, slides and the wind of speed, placed in stereo; a looped music; M mutes
 - [x] A title screen with the controls, a muted mark, a player count and name tags
+- [x] A pixel face over the health, in the spirit of DOOM's (its own look, drawn in code): 42 frames, 5 levels of wounds, glances, a turn toward the side a hit comes from, an ouch, a grin at a new weapon, a rage with the trigger held, a glow carrying the flag, and dead
 - [x] Teams and capture the flag: bases with a glowing ring, flags that wave and ride on a carrier's back, a score and a clock, markers toward the flags, banners, an end screen and synth sounds
 - [x] Shadow DOM, zero runtime dependencies, size-gated in CI
 

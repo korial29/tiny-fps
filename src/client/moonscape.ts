@@ -226,16 +226,23 @@ const dome = (o: number[], x: number, z: number) => {
     [0, 0, 0],
     1,
   );
-  const p = (t: number, y: number): Vec3 => [
-    x + (R + 0.06) * Math.cos(t),
+  // 70 panes of 1.2 x 1 m, each in a dark frame.
+  const p = (t: number, y: number, e: number): Vec3 => [
+    x + (R + e) * Math.cos(t),
     y,
-    z + (R + 0.06) * Math.sin(t),
+    z + (R + e) * Math.sin(t),
   ];
-  for (let i = 0; i < 36; i++) {
-    const [a, b] = [(i * TAU) / 36, ((i + 0.6) * TAU) / 36];
-    lit(o, 1.6, () =>
-      face(o, [p(a, 1.4), p(b, 1.4), p(b, 3.4), p(a, 3.4)], [1, 0.85, 0.5], [x, 2.4, z]),
-    );
+  for (let i = 0; i < 70; i++) {
+    const t = (i * TAU) / 70;
+    const quad = (w: number, y0: number, y1: number, e: number) =>
+      [
+        [-w, y0],
+        [w, y0],
+        [w, y1],
+        [-w, y1],
+      ].map(([a, y]) => p(t + a / R, y, e));
+    face(o, quad(0.72, 1.5, 2.9, 0.04), [0.06, 0.06, 0.08], [x, 2.2, z]);
+    lit(o, 0.56, () => face(o, quad(0.6, 1.7, 2.7, 0.07), [1, 0.85, 0.5], [x, 2.2, z]));
   }
 };
 
@@ -270,20 +277,16 @@ const modules = (o: number[]) => {
     for (const s of [-1, 1]) {
       const z = cz + s * 4.05;
       for (let k = 0; k < 7; k++) {
-        const x = cx - 7 + 0.4 + 2 * k;
-        lit(o, 1.5, () =>
-          face(
-            o,
-            [
-              [x, 2.2, z],
-              [x + 1.2, 2.2, z],
-              [x + 1.2, 3.8, z],
-              [x, 3.8, z],
-            ],
-            [0.9, 0.95, 1],
-            [cx, 2.5, cz],
-          ),
-        );
+        const x = cx - 6 + 2 * k;
+        const quad = (w: number, y0: number, y1: number, e: number): Vec3[] =>
+          [
+            [-w, y0],
+            [w, y0],
+            [w, y1],
+            [-w, y1],
+          ].map(([a, y]) => [x + a, y, z + s * e]);
+        face(o, quad(0.72, 2.6, 3.8, 0), [0.06, 0.06, 0.08], [cx, 2.5, cz]);
+        lit(o, 0.5, () => face(o, quad(0.6, 2.7, 3.7, 0.03), [0.9, 0.95, 1], [cx, 2.5, cz]));
       }
     }
   }
@@ -348,7 +351,7 @@ const pad = (o: number[], px: number, pz: number) => {
     );
   }
   flat([s + 8, 3, pz], [s + 13.6, 2.5, pz], [s + 13.9, 5.6, pz], [0.9, 0.35, 0.15]);
-  lit(o, 1.4, () => box(o, [s + 2.2, 2.5, pz - 0.7], [s + 4.6, 2.95, pz + 0.7], [0.5, 0.8, 1]));
+  lit(o, 0.5, () => box(o, [s + 2.2, 2.5, pz - 0.7], [s + 4.6, 2.95, pz + 0.7], [0.5, 0.8, 1]));
   lit(o, 2, () =>
     face(
       o,

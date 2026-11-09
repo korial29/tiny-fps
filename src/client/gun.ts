@@ -158,16 +158,14 @@ const HULL: Station[] = [
 const built: number[][] = [];
 /**
  * The pistol's back (the user, 2026-11-09: like the rifle's counter, the top of the gun in one
- * piece, cut by a straight leaning face that is the screen's support): the face through BACK,
- * facing BACK_N, back and up toward the player, glossy black (GLOSS); the counter's screen sits on it.
+ * piece, cut by a straight leaning face): the face through BACK, facing BACK_N, back and up toward
+ * the player. The counter's support, a glossy black rounded trapezoid, sits on it (readout()).
  */
 const BACK: Vec3 = [0, 0.125, 0.04];
 const BACK_N = unit([0, 0.469, 0.883]);
-/** Glossy black, the screen's support: [r, g, layer, b]. */
-const GLOSS = [0.012, 0.012, SHINE, 0.018];
 /**
  * Cuts `out` (triangles) by the back face: what lies in front stays, what lies behind is laid on the
- * face, glossy black, facing out of it. A triangle across it is split along it, so the edge is clean.
+ * face, in the gun's metal facing out of it. A triangle across it is split along it, so the edge is clean.
  */
 const cutBack = (out: number[]) => {
   const v = out.splice(0);
@@ -188,7 +186,7 @@ const cutBack = (out: number[]) => {
       x[1] - BACK_N[1] * d,
       x[2] - BACK_N[2] * d,
       ...BACK_N,
-      ...(x[8] == -2 ? x.slice(6) : GLOSS),
+      ...(x[8] == -2 ? x.slice(6) : metal(0.15)(x as unknown as Vec3, BACK_N)),
     ];
   };
   const fan = (poly: number[][]) => {
@@ -225,7 +223,8 @@ export const gun = (lod: number): number[] => {
   // The body and the hull have the most rings round, the top is a smooth curve.
   const [n, m] = lod ? [12, 8] : [8, 5];
   const out: number[] = [];
-  tube(out, BULB, n, metal());
+  // Near, the body in more sides round, so the cut of its back has a round edge.
+  tube(out, BULB, lod ? 16 : n, metal());
   tube(out, HULL, n, metal(0.25));
   // The grip.
   tube(
@@ -1213,7 +1212,14 @@ const SEGMENTS = segments(DW, DH, DT);
  * a share of its width. Round the frame a black of the same shape, BLACK further out, corner
  * radius BLACK_R.
  */
-const [SW, SM, SHH, SR, DK, TAPER] = [0.0255, -0.006, 0.0165, 0.0025, 1, 0.12];
+const [SW, SM, SHH, SR, DK, TAPER] = [0.0255, -0.012, 0.0163, 0.0025, 1, 0.12];
+/**
+ * The support under the screen (the user, 2026-11-09: a rounded trapezoid filling the cut face),
+ * glossy black, round the screen's middle: half its width at the middle, half its height, its
+ * corner radius, its taper (narrower at the top by that share of its width), its thickness.
+ */
+const [PW, PH, PR, PTAPER, PT] = [0.032, 0.026, 0.008, 0.1, 0.0015];
+const GLOSS = [0.012, 0.012, SHINE, 0.018];
 const [BLACK, BLACK_R] = [0.0027, 0.0008];
 /** The digits' foot, so that they are in the middle of the screen; the charge gauge, a thin bar under them up the back face: where it starts and ends, and the gap between its cells. */
 const DY = SM - (DH * DK) / 2;
@@ -1236,7 +1242,9 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
     const v: number[] = (out = []);
     // The back face's axes: up its slope and out of it, from BACK.
     const slope: Vec3 = [0, BACK_N[2], -BACK_N[1]];
-    const [O, N] = [BACK, BACK_N];
+    // From the top of the support, PT out of the face.
+    const N = BACK_N;
+    const O = add(BACK, N.map(c => c * PT) as Vec3);
     const at = (a: number, b: number, k: number): Vec3 => [
       O[0] + a,
       O[1] + slope[1] * b + N[1] * k,
@@ -1251,6 +1259,28 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
       const b = r(Math.sin(i * 0.2618 + 0.13), SHH + g, rad);
       return at(r(Math.cos(i * 0.2618 + 0.13), SW + g, rad) * (1 - (TAPER * b) / SHH), SM + b, d);
     };
+    // The support: a glossy black rounded trapezoid standing PT out of the face, its top and its
+    // sides, each side lit by its way out from the middle.
+    const plate = (i: number, k: number) => {
+      const b = r(Math.sin(i * 0.2618 + 0.13), PH, PR);
+      return at(r(Math.cos(i * 0.2618 + 0.13), PW, PR) * (1 - (PTAPER * b) / PH), SM + b, k);
+    };
+    const glossy = (p: Vec3, n: Vec3) => v.push(...p, ...n, ...GLOSS);
+    for (let i = 0; i < 24; i++) {
+      const [a, b, a0, b0] = [
+        plate(i, 0),
+        plate(i + 1, 0),
+        plate(i, -PT - 0.0005),
+        plate(i + 1, -PT - 0.0005),
+      ];
+      for (const p of [at(0, SM, 0), a, b]) {
+        glossy(p, N);
+      }
+      const out = unit(sub(add(a, b), add(at(0, SM, 0), at(0, SM, 0))));
+      for (const p of [a0, b0, b, a0, b, a]) {
+        glossy(p, out);
+      }
+    }
     for (let i = 0; i < 24; i++) {
       tri(
         v,

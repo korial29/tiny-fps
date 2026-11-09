@@ -221,7 +221,8 @@ describe('body', () => {
           }
         }
       }
-    }, 20_000);
+      // 5 s alone, 14 to 22 s in CI under coverage: a slow runner must not fail it.
+    }, 60_000);
 
     it('puts the head where the camera is', () => {
       for (const p of states) {

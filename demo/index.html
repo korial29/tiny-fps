@@ -81,15 +81,21 @@
         position: fixed;
         inset: 0;
       }
+      /* Top left: the ammo is at the bottom right, the face and the health in the middle. */
       #bar {
         position: fixed;
-        bottom: 8px;
-        right: 12px;
+        top: 8px;
+        left: 12px;
         display: flex;
         align-items: center;
         gap: 12px;
         font-size: 14px;
         text-shadow: 0 1px 2px #000;
+      }
+      @media (max-width: 640px) {
+        #bar {
+          top: 64px;
+        }
       }
       #bar button {
         min-height: 32px;

@@ -132,7 +132,8 @@ const RELIEF = 0.06;
 // is lit. A: position and range, B: direction and cone (-9 on a point: no cone), K: colour and
 // shadow slot (-1: none; slot k is layer k + 1), M: the slots' matrices. Z < 0 is the depth pass:
 // no colour. Y > 0 is the sky, from the colours in H[3] (zenith) and H[4] (horizon): a gradient, a
-// haze band, the sun's disc and glow, bright enough to bloom (K0, the sky along a direction). The
+// haze band, the sun's disc and glow, bright enough to bloom (K0, the sky along a direction; the glow
+// scattered by the air, so it fades with a dark horizon: the moon keeps a tenth of it). The
 // glass layer adds K0 along the reflected view r, strong at a grazing angle (Fresnel, fr), after the
 // lighting. Polished metal (SHINE) turns partly into that reflection (k), tinted by its colour and
 // dark where r looks down at the ground, with a sharp bright streak where it mirrors just above the
@@ -151,7 +152,7 @@ vec3 K0(vec3 d){
 float h=d.y,k=max(dot(d,O),0.);
 vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
 c=mix(c,H[4]*1.08,exp(-abs(h)*7.));
-return c+X*(.2*pow(k,24.)+.05*pow(k,4.)+2.*smoothstep(.9993,.9997,k));}
+return c+X*((.1+.9*clamp(H[4].g*1.2,0.,1.))*(.2*pow(k,24.)+.05*pow(k,4.))+2.*smoothstep(.9993,.9997,k));}
 void main(){
 if(Z<0.){if(C.z<-2.5)discard;return;}
 if(Y>.5){o=vec4(K0(normalize(P)),1);return;}

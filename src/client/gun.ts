@@ -1392,7 +1392,7 @@ export const button = (out: number[], kind: number, push: number, light: number,
 };
 
 /** When, in the swap of the gun or the rifle, the palm slaps the new battery home: it clicks then. */
-export const TAP = 0.82;
+export const TAP = 0.76;
 
 /**
  * Where the battery or the capsule is at `s` of a swap (0 to 1; -1 none): how far out of its seat
@@ -1406,9 +1406,10 @@ export const swapped = (s: number, kind: boolean | number): number[] => {
   if (kindOf(kind) != 2) {
     // Slid out down the grip and dropped, then a new one up into it, 12 mm short of home, and
     // slapped home by the palm at TAP, a jump in the last instant (the user, 2026-11-09: a hard slap).
-    return s < 0.4
-      ? [0.1 * ease(span(s, 0.15, 0.3)) + 0.6 * span(s, 0.3, 0.4) ** 2, 0, 0]
-      : [0.012 * (1 - span(s, TAP - 0.012, TAP)) + 0.208 * (1 - ease(span(s, 0.4, 0.72))), 0, 0];
+    // Placed by 0.52, held there a moment, then slapped (the user, 2026-11-09).
+    return s < 0.3
+      ? [0.1 * ease(span(s, 0.1, 0.22)) + 0.6 * span(s, 0.22, 0.3) ** 2, 0, 0]
+      : [0.012 * (1 - span(s, TAP - 0.012, TAP)) + 0.208 * (1 - ease(span(s, 0.3, 0.52))), 0, 0];
   }
   // It unscrews itself a turn and a half and jumps up spinning; then the hand brings a new one
   // down onto the socket and screws it in, three turns of the wrist.
@@ -1439,7 +1440,7 @@ export const screwed = (s: number): number[] => {
 
 /** The moments of a swap that sound, as shares of it: the battery let go and clicked home; the capsule jumping off and each turn of the screw. */
 export const CUES = [
-  [0.15, TAP],
+  [0.1, TAP],
   [0.28, 0.58, 0.68, 0.78],
 ];
 

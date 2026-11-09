@@ -107,10 +107,10 @@ const colored = (v: Vert[], c: number[]) => v.filter(q => c.every((n, i) => q.c[
 /**
  * Vertices of the palm, of a finger or the thumb and its nail, of the glove's gear (the knuckles'
  * shell, the back's plate and its stitching, the strap and its buckle), and of a hand: a tube of
- * the cuff's sides and 5 rings; one of FINGER_SIDES and 12 rings (its root sunk in the palm, two
+ * the cuff's sides and 5 rings (the strap's too); one of FINGER_SIDES and 12 rings (its root sunk in the palm, two
  * rings round each bend, the glove's edge; the user, 2026-11-09), then a fan of 8.
  */
-const [PALM, FINGER, NAIL, GEAR] = [21 * CUFF_SIDES, 630, 24, 1944];
+const [PALM, FINGER, NAIL, GEAR] = [21 * CUFF_SIDES, 630, 24, 1764 + 18 * CUFF_SIDES];
 const HAND = PALM + 5 * (FINGER + NAIL) + GEAR;
 const away = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
@@ -154,9 +154,9 @@ describe('body', () => {
     ]) {
       for (const pitch of [0, -1.2, 1]) {
         const v = draw(watch(p, 40), p, pitch);
-        // The near runner minus its head, neck and fists, plus two hands of under 5600 vertices each.
+        // The near runner minus its head, neck and fists, its arms close, plus two hands of under 6000 vertices each.
         expect(v.length).toBeGreaterThan(3500);
-        expect(v.length).toBeLessThanOrEqual(16000);
+        expect(v.length).toBeLessThanOrEqual(22000);
         for (const { at, n } of v) {
           expect(at.every(Number.isFinite)).toBe(true);
           expect(Math.hypot(...n)).toBeCloseTo(1);
@@ -558,8 +558,8 @@ describe('body', () => {
         expect(of([0.2, 0.2, 0.2]).length).toBeGreaterThan(100);
       });
 
-      it('stay under 5600 vertices a hand, smooth fingers, nails and the glove’s gear', () => {
-        expect(HAND).toBeLessThanOrEqual(5600);
+      it('stay under 6000 vertices a hand, smooth fingers, nails and the glove’s gear', () => {
+        expect(HAND).toBeLessThanOrEqual(6000);
       });
 
       it('make each finger and the thumb one closed surface: no cap or face between its phalanges', () => {
@@ -1035,7 +1035,7 @@ describe('the ammo on the back of the gun', () => {
     const out: number[] = [];
     const p = man();
     watch(p, 60).draw(out, eyeOf(p), 0, 0, 0, TEAM);
-    expect(out.length / STRIDE).toBeLessThan(16000);
+    expect(out.length / STRIDE).toBeLessThan(22000);
     expect(out.slice(-6).every(v => Number.isFinite(v))).toBe(true);
   });
 });

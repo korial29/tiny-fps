@@ -43,19 +43,20 @@ const eyeBase = (v: Float32Array, k: number) =>
   v[k * 6 + 2] < -0.065;
 
 describe('skin', () => {
-  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 12000 (rings measured on the soldier, his webbing), close (within CLOSE, the face finest) under 34000', () => {
+  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 12000 (rings measured on the soldier, his webbing), close (within CLOSE, the face finest) under 36000', () => {
     const [far, near, close] = [0, 1, 3].map(lod => draw(lod).length / STRIDE);
     expect(far).toBeLessThan(1800);
     expect(near).toBeLessThanOrEqual(12000);
     // 26000 until the close head took 2.5 times the neck's sides and finer rows (the user, 2026-11-08).
-    expect(close).toBeLessThanOrEqual(34000);
+    // 34000 until the close arms took 24 sides (the user, 2026-11-09).
+    expect(close).toBeLessThanOrEqual(36000);
     expect(far).toBeLessThan(near * 0.3);
     // Near carries the measured rings too, so it is less far below close than it was.
     expect(near).toBeLessThan(close * 0.45);
     expect(body(1).w.length).toBeLessThan(2000);
-    // The eye's own body stays as it was: no head, and the near rings; its sleeves rounder, 10 sides
-    // (the user, 2026-11-08).
-    expect(draw(2).length / STRIDE).toBeLessThan(4800);
+    // The eye's own body: no head, the near rings; its arms close, 24 sides and their rings
+    // doubled, and a thin wrist (the user, 2026-11-09: fewer angles, whatever the budget).
+    expect(draw(2).length / STRIDE).toBeLessThan(9600);
   });
 
   it('is a 1.8 m runner on the floor, narrower than the player cylinder', () => {

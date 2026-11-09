@@ -218,10 +218,18 @@ export const shrug = (q: Pose, s: Solved, j: number, at: Vec3) => {
 /** Where a fist holds a handle, from the wrist: along the fingers, and toward the palm. */
 export const FIST = [0.078, 0.022];
 /**
- * The left fist on the katana's grip, 8 mm further along and 6 mm nearer the palm: the grip runs
- * through its curled fingers, not over them, seen from the eye (the user, 2026-11-09).
+ * The left fist on the katana's grip: 8 mm further along the fingers and 6 mm nearer the palm than
+ * FIST, so the grip runs through its curled fingers (the user, 2026-11-09).
  */
 export const KATANA_LEFT = [0.086, 0.016];
+/**
+ * How far the left fist's fingers lean toward the blade, as [sin, cos] (the right's is [S, C], 0.55
+ * rad): the grip runs across its palm on the slant and its wrist comes from under the grip, not
+ * beside it, seen from the eye (the user, 2026-11-09). The arms are still solved for a hand held as
+ * the right (clasp()); the left wrist then cocks by the difference, a set angle.
+ */
+export const KATANA_TILT = [Math.sin(0.9), Math.cos(0.9)];
+const [S0, C0] = [S, C];
 /**
  * Puts the arm of shoulder joint `j` (ARM_R or ARM_L) of `q` on a handle running along the unit
  * `g`, the hand round the point `at`, the elbow toward `pole`; `solved` is q solved. The shoulder
@@ -240,6 +248,9 @@ export const wield = (
   pole: Vec3,
   held?: Vec3,
   [reach, palm] = FIST,
+  [S, C]: number[] = [S0, C0],
+  /** The forearm on `held`'s line, not the hand's: the wrist cocked by the hand's own tilt. */
+  bent = false,
 ) => {
   if (!held) {
     shrug(q, solved, j, at);
@@ -251,7 +262,7 @@ export const wield = (
   // side that puts the fingers along `held`, a straight wrist (clasp()), the shoulder already
   // shrugged by the caller.
   const side = held
-    ? unit(along(held, g, -S))
+    ? unit(along(held, g, -dot(held, g)))
     : unit(add(across(unit(sub(at, a)), g), along([0, 0, 0], unit(across(pole, g)), -0.3)));
   const th = add(along([0, 0, 0], g, C), along([0, 0, 0], side, -S));
   const fing = add(along([0, 0, 0], g, S), along([0, 0, 0], side, C));
@@ -261,8 +272,8 @@ export const wield = (
   // the left hand, a mirror, has on its other side.
   const wrist = along(along(at, fing, -reach), x, j == J.ARM_L ? -palm : palm);
   // The elbow where the forearm carries on the hand's axis: toward the pole too for a free hand,
-  // exactly there for a held one.
-  const ideal = sub(along(wrist, fing, -l2), a);
+  // exactly there for a held one; bent, on the line `held` gave it (clasp()'s square hold).
+  const ideal = sub(along(wrist, bent && held ? unit(held) : fing, -l2), a);
   const [e, f] = ik(a, wrist, held ? ideal : add(ideal, pole), l1, l2);
   const [u, v] = [unit(sub(e, a)), unit(sub(f, e))];
   const bend = cross(u, v);
@@ -1313,6 +1324,8 @@ export const createBody = (world?: World): Body => {
           keep([0.5 * sd, -1, -0.35]),
           sd > 0 ? fingR : fingL,
           sd > 0 ? FIST : KATANA_LEFT,
+          sd > 0 ? [S, C] : KATANA_TILT,
+          sd < 0,
         );
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], onSword);

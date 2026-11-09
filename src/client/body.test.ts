@@ -1268,7 +1268,7 @@ describe('the katana in both hands', () => {
     expect(g.filter(seen).length).toBeGreaterThan(g.length * 0.65);
   });
 
-  it('keeps the wrists near straight and the elbows below the hands in the guard', () => {
+  it('keeps the wrists near straight and the elbows low in the guard', () => {
     const p = blade();
     const s = pose(watch(p, 60), p);
     for (const [arm, hand] of [
@@ -1276,7 +1276,8 @@ describe('the katana in both hands', () => {
       [J.ARM_L, J.HAND_L],
     ]) {
       const [e, w] = [s.pos[arm + 1], s.pos[hand]];
-      expect(e[1]).toBeLessThan(w[1]);
+      // The left forearm near level, its wrist cocked under the grip: its elbow 2 cm up at most.
+      expect(e[1]).toBeLessThan(w[1] + (hand == J.HAND_L ? 0.02 : 0));
       // The hand's axis carries on the forearm's line within 45 degrees.
       const fore = unit(w.map((v, i) => v - e[i]) as Vec3);
       const fing = turn(s.rot[hand], [0, -1, 0]);
@@ -1387,10 +1388,11 @@ describe('the katana in both hands', () => {
     }
   });
 
-  it('cuts with the arms and not the wrists: neither wrist bends, through every cut', () => {
+  it('cuts with the arms and not the wrists: the right wrist straight, the left cocked at a set angle, through every cut', () => {
     for (const cut of Object.values(CUT)) {
       const body = watch(blade({ cut }), 60);
       const bends: number[] = [];
+      const lefts: number[] = [];
       for (let i = 0; i < CUTS[cut].ticks; i++) {
         const p = blade({ cut, swing: CUTS[cut].ticks - i });
         body.update(p, DT);
@@ -1400,14 +1402,16 @@ describe('the katana in both hands', () => {
         const fore = sub(s.pos[J.HAND_R], s.pos[J.FOREARM_R]);
         const left = sub(s.pos[J.HAND_L], s.pos[J.FOREARM_L]);
         const cl = dot(unit(left), unit(turn(s.rot[J.HAND_L], [0, -1, 0])));
-        expect(
-          (Math.acos(Math.min(1, Math.max(-1, cl))) * 180) / Math.PI,
-          `cut ${cut}, left`,
-        ).toBeLessThan(2);
+        lefts.push((Math.acos(Math.min(1, Math.max(-1, cl))) * 180) / Math.PI);
         const c = dot(unit(fore), unit(turn(s.rot[J.HAND_R], [0, -1, 0])));
         bends.push((Math.acos(Math.min(1, Math.max(-1, c))) * 180) / Math.PI);
       }
       expect(Math.max(...bends), `cut ${cut}`).toBeLessThan(2);
+      // The left wrist is cocked, its hand turned along the grip (KATANA_TILT): a set angle that
+      // the cut hardly moves.
+      expect(Math.min(...lefts), `cut ${cut}, left`).toBeGreaterThan(15);
+      expect(Math.max(...lefts), `cut ${cut}, left`).toBeLessThan(30);
+      expect(Math.max(...lefts) - Math.min(...lefts), `cut ${cut}, left`).toBeLessThan(8);
     }
   });
 

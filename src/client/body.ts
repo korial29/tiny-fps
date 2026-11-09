@@ -25,6 +25,7 @@ import { createGait, frame } from './gait';
 import type { Floor } from './gait';
 import {
   GUN_ON,
+  grip as gunGrip,
   pressAt,
   buttonAt,
   firsts,
@@ -62,6 +63,7 @@ import {
   poised,
   progress,
   BEHIND as BACK,
+  axes as gunAxes,
 } from './katana';
 import { add, basis, dot, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
@@ -1017,6 +1019,8 @@ export const createBody = (world?: World): Body => {
         keep([-0.5, -1, -0.35]),
       ]);
     }
+    /** The left hand's slap of the gun's battery: its weight and how far off the battery it is. */
+    let [slapW, slapTap] = [0, 0];
     for (const sd of [-1, 1]) {
       const k = Math.cos(TAU * gait.phase) * sd;
       // The numbers are for the right hand, mirrored below. The arms hang along the body, out of
@@ -1158,26 +1162,9 @@ export const createBody = (world?: World): Body => {
         wield(held, s, arm, add(eye, turn(mid)), unit(turn(up)), turn([-0.5, -1, -0.35]), fing);
         // The battery in, the hand lets go of it and opens flat, the palm up to its foot, the
         // fingers along the gun, to slap it home with the palm (the user, 2026-11-09).
+        // The battery in, the hand lets go of it and opens flat to slap it home (below).
         const flat = rail ? 0 : ease(span(sp, 0.72, 0.76));
-        if (flat > 0.002) {
-          const F = unit(across(ga[2], up));
-          const T = cross(up, F);
-          const g = along(mix([0, 0, 0], T, C), F, S);
-          const slap = { ...q, rot: q.rot.slice() };
-          wield(
-            slap,
-            s,
-            arm,
-            // The palm's middle, 5 cm along the fingers, under the foot; its skin on it at TAP.
-            add(eye, turn(along(along(foot, up, 0.01 - tap), F, 0.028))),
-            unit(turn(g)),
-            turn([-0.5, -1, -0.35]),
-            turn(along(along(mix([0, 0, 0], T, -S), F, C), g, S)),
-          );
-          for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
-            held.rot[k] = slerp(held.rot[k], slap.rot[k], flat);
-          }
-        }
+        [slapW, slapTap] = [onLoad * flat, tap];
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], onLoad);
         }
@@ -1240,6 +1227,46 @@ export const createBody = (world?: World): Body => {
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], pw);
         }
+      }
+    }
+    // The slap, once the right hand has the gun (the user, 2026-11-09: the hand flat, the palm
+    // striking the battery): on the battery as drawn, the palm's middle 5 cm along the fingers from
+    // the wrist and its skin on the foot at TAP; the left hand's x, its palm side, up the battery.
+    if (slapW > 0.002 && me) {
+      const r = solve(q);
+      const ax = gunAxes(r.rot[J.HAND_R]);
+      const [foot, [, , up]] = loadFrame(
+        gunGrip(r.pos[J.HAND_R], r.rot[J.HAND_R]),
+        ax,
+        kindOf(me),
+        Math.max(swapOf(me), 0.4),
+      );
+      // The hand straight on the forearm (the user, 2026-11-09): the fingers carry on its line, the
+      // palm turned up the battery as far as that allows; the wrist set again from the forearm.
+      const slap = { ...q, rot: q.rot.slice() };
+      let d = unit(across(ax[0], up));
+      let x = up;
+      for (let k = 0; k < 3; k++) {
+        const palm = along(along(foot, up, -slapTap), d, -0.05);
+        reach(slap, r, J.ARM_L, along(palm, x, -0.012), turn([-0.5, -1, -0.35]));
+        const t = solve(slap);
+        d = unit(sub(t.pos[J.HAND_L], t.pos[J.FOREARM_L]));
+        x = unit(across(up, d));
+      }
+      // The wrist bent a little, half the way to the fingers square to the battery, so that the
+      // palm meets it flat and the hand still reads along the arm (the user, 2026-11-09).
+      const f = unit(mix(d, unit(across(d, up)), 0.5));
+      const xf = unit(across(up, f));
+      reach(
+        slap,
+        r,
+        J.ARM_L,
+        along(along(along(foot, up, -slapTap), f, -0.05), xf, -0.012),
+        turn([-0.5, -1, -0.35]),
+      );
+      slap.rot[J.HAND_L] = mul(inv(solve(slap).rot[J.FOREARM_L]), frame(xf, f));
+      for (const k of [J.ARM_L - 1, J.ARM_L, J.FOREARM_L, J.HAND_L]) {
+        q.rot[k] = slerp(q.rot[k], slap.rot[k], slapW);
       }
     }
     return solve(q);

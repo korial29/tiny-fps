@@ -85,6 +85,8 @@ describe('createHud', () => {
       for (const el of screen.children) {
         expect(tags).toContain(el.tagName.toLowerCase());
       }
+      // But the host's map buttons.
+      expect(HUD_CSS).toMatch(/menu button\{[^}]*pointer-events:auto/);
     });
   });
 

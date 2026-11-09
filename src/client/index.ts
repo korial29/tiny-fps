@@ -2,7 +2,7 @@ import { HP_MAX, LOCK_WIN, PLAYER_H, TICK_HZ } from '../shared/constants';
 import { MAPS, mapKey, mapOf } from '../shared/maps';
 import { eyeHeight } from '../shared/physics';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
-import type { ServerText } from '../shared/protocol';
+import type { ClientText, ServerText } from '../shared/protocol';
 import { FLAG, KEY } from '../shared/types';
 import type { PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
 import { build, hidden } from '../shared/world';
@@ -35,7 +35,10 @@ export interface TinyFpsOptions {
   url?: string;
   /** Any WebSocket-like socket, e.g. localSocket('room') from '@korial29/tiny-fps/local'. */
   socket?: SocketLike;
-  /** The map's key: 'highline' (the default) or 'tranquility'. It has to be the room's. */
+  /**
+   * The map's key, 'highline' (the default) or 'tranquility', built while the room is joined. The
+   * room's roster says the map it plays, and the game follows it: the host picks it.
+   */
   map?: string;
 }
 
@@ -57,8 +60,89 @@ const MAX_STEPS = 5;
  * Mounts the game in a Shadow DOM inside container: one WebGL2 canvas filling it, a click locks the
  * pointer, the mouse looks, WASD (ZQSD on AZERTY) moves, Shift sprints, Space jumps (again in the
  * air for a second jump), C crouches and slides, a direction key pressed twice dashes.
+ *
+ * The socket is this function's; the scene of one map is play()'s, behind a socket of its own.
+ * When the room plays another map, the scene goes and one of the new map takes its place on the
+ * same connection: the room keeps the player, his team and the host.
  */
 export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps => {
+  const listeners: Record<TinyFpsEvent, (() => void)[]> = { roster: [], open: [], close: [] };
+  const emit = (ev: TinyFpsEvent) => listeners[ev].forEach(cb => cb());
+  const ws = opts.socket ?? (new WebSocket(opts.url!) as unknown as SocketLike);
+  ws.binaryType = 'arraybuffer';
+  let map = mapKey(opts.map);
+  let roster: PlayerInfo[] = [];
+  /** The connection is open, and the last roster as it came: a new scene gets both. */
+  let up = false;
+  let told: string | undefined;
+  let port: SocketLike;
+  let scene: { destroy(): void };
+  let dead = false;
+  const mount = () => {
+    const p: SocketLike = {
+      binaryType: 'arraybuffer',
+      onopen: null,
+      onclose: null,
+      onmessage: null,
+      // A scene that is gone sends nothing more.
+      send: d => port == p && ws.send(d),
+      close: () => {},
+    };
+    port = p;
+    scene = play(container, map, p);
+    if (up) {
+      p.onopen?.();
+    }
+    if (told) {
+      p.onmessage?.({ data: told });
+    }
+  };
+  ws.onopen = () => {
+    up = true;
+    ws.send(JSON.stringify({ t: 'join', name: opts.name } satisfies ClientText));
+    port.onopen?.();
+    emit('open');
+  };
+  ws.onclose = () => {
+    up = false;
+    port.onclose?.();
+    emit('close');
+  };
+  ws.onmessage = ev => {
+    const m = typeof ev.data == 'string' ? parseText<ServerText>(ev.data) : null;
+    if (m?.t == 'roster') {
+      [told, roster] = [ev.data as string, m.players];
+      if (mapKey(m.map) != map) {
+        map = mapKey(m.map);
+        scene.destroy();
+        mount();
+        emit('roster');
+        return;
+      }
+    }
+    port.onmessage?.(ev);
+    if (m?.t == 'roster') {
+      emit('roster');
+    }
+  };
+  mount();
+  return {
+    on: (ev, cb) => void listeners[ev].push(cb),
+    players: () => roster,
+    destroy() {
+      if (dead) {
+        return;
+      }
+      dead = true;
+      scene.destroy();
+      ws.onopen = ws.onclose = ws.onmessage = null;
+      ws.close();
+    },
+  };
+};
+
+/** The game on one map, talking through `ws`: the scene, the HUD, the input, the sound. */
+const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy(): void } => {
   const wrap = document.createElement('div');
   const root = wrap.attachShadow({ mode: 'open' });
   root.innerHTML =
@@ -76,10 +160,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const screen = root.querySelector('div')!;
   const hud = createHud(screen);
 
-  const listeners: Record<TinyFpsEvent, (() => void)[]> = { roster: [], open: [], close: [] };
-  const emit = (ev: TinyFpsEvent) => listeners[ev].forEach(cb => cb());
-
-  const world = build(mapOf(opts.map));
+  const world = build(mapOf(key));
   const predictor = createPredictor(world);
   const audio = createAudio();
   audio.mute(savedMute());
@@ -130,17 +211,10 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   let raf = 0;
   let dead = false;
 
-  const ws = opts.socket ?? (new WebSocket(opts.url!) as unknown as SocketLike);
-  ws.binaryType = 'arraybuffer';
-  ws.onopen = () => {
-    open = true;
-    ws.send(JSON.stringify({ t: 'join', name: opts.name }));
-    emit('open');
-  };
+  ws.onopen = () => (open = true);
   ws.onclose = () => {
     open = false;
     msg ||= 'Connection closed';
-    emit('close');
   };
   ws.onmessage = ({ data }) => {
     if (typeof data != 'string') {
@@ -189,12 +263,15 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       names = new Map(roster.map(p => [p.id, p.name]));
       you = { id: m.you, team: roster.find(p => p.id == m.you)?.team ?? 0 };
       predictor.you(you.id, you.team);
-      // A room on another map than the one built here: say so, the title screen shows it.
-      if (m.map !== undefined && m.map !== mapKey(opts.map)) {
-        msg = `This room plays ${MAPS[m.map]?.name ?? m.map}`;
-      }
+      hud.maps(
+        Object.entries(MAPS).map(([k, d]) => [k, d.name ?? k]),
+        key,
+        m.next,
+        names.get(m.host ?? -1) ?? '?',
+        m.host == you.id,
+        map => ws.send(JSON.stringify({ t: 'map', map } satisfies ClientText)),
+      );
       count.textContent = `Players: ${roster.length}`;
-      emit('roster');
     } else if (m?.t == 'end') {
       ended = { score: m.score, players: m.players };
       audio.say(announcer.end(m.score, you.team));
@@ -397,8 +474,6 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   raf = requestAnimationFrame(frame);
 
   return {
-    on: (ev, cb) => void listeners[ev].push(cb),
-    players: () => roster,
     destroy() {
       if (dead) {
         return;

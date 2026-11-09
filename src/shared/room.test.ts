@@ -266,6 +266,74 @@ describe('Room: the map', () => {
   });
 });
 
+describe('Room: the host picks the map', () => {
+  const pick = (room: Room, c: Peer, map: unknown) =>
+    room.receive(c, JSON.stringify({ t: 'map', map }));
+
+  it('takes the pick of the host only, a known map, and tells everyone', () => {
+    const room = new Room();
+    const [a, b] = [join(room, 'Ann'), join(room, 'Bob')];
+    expect(roster(b)).toMatchObject({ host: 0, map: 'highline' });
+    expect(roster(b).next).toBeUndefined();
+    const sent = b.texts.length;
+    pick(room, b, 'tranquility');
+    pick(room, a, 'nowhere');
+    pick(room, a, '__proto__');
+    pick(room, a, 7);
+    expect(b.texts).toHaveLength(sent);
+    pick(room, a, 'tranquility');
+    expect(roster(b)).toMatchObject({ host: 0, map: 'highline', next: 'tranquility' });
+    // Picking the map played takes the pick back.
+    pick(room, a, 'highline');
+    expect(roster(b).next).toBeUndefined();
+  });
+
+  it('hands the host over to the oldest player left, whose pick then counts', () => {
+    const room = new Room();
+    const [a, b, c] = [join(room, 'Ann'), join(room, 'Bob'), join(room, 'Cid')];
+    room.disconnect(b);
+    // A new player takes the free id 1, but Cid has been there longer.
+    const d = join(room, 'Dan');
+    room.disconnect(a);
+    expect(roster(d).host).toBe(2);
+    pick(room, d, 'tranquility');
+    expect(roster(c).next).toBeUndefined();
+    pick(room, c, 'tranquility');
+    expect(roster(d).next).toBe('tranquility');
+  });
+
+  it('plays the pick from the next match on, never in the middle of one', () => {
+    const room = new Room({ timeLimit: 2 });
+    const a = join(room, 'Ann');
+    pick(room, a, 'tranquility');
+    ticks(room, 2 * TICK_HZ);
+    expect(snap(a)).toMatchObject({ over: true });
+    expect(roster(a)).toMatchObject({ map: 'highline', next: 'tranquility' });
+    // Still on red's tower of Highline for the whole end screen.
+    ticks(room, END_SCREEN * TICK_HZ - SNAP_EVERY);
+    expect(snap(a).players[0]).toMatchObject({ z: HIGHLINE.teams[0].spawns[0][2] });
+    ticks(room, 2 * SNAP_EVERY);
+    expect(roster(a)).toMatchObject({ map: 'tranquility', host: 0 });
+    expect(roster(a).next).toBeUndefined();
+    expect(snap(a)).toMatchObject({ over: false, score: [0, 0], clock: 2 });
+    expect(snap(a).players[0]).toMatchObject({
+      x: MOON.teams[0].spawns[0][0],
+      z: MOON.teams[0].spawns[0][2],
+    });
+  });
+
+  it('plays the pick at the next join once the room is empty', () => {
+    const room = new Room();
+    const a = join(room, 'Ann');
+    pick(room, a, 'tranquility');
+    room.disconnect(a);
+    const b = join(room, 'Bob');
+    expect(roster(b)).toMatchObject({ map: 'tranquility', host: 0 });
+    ticks(room, SNAP_EVERY);
+    expect(snap(b).players[0]).toMatchObject({ x: MOON.teams[0].spawns[0][0] });
+  });
+});
+
 describe('Room: inputs and snapshots', () => {
   it('moves a player with each input at once, and acks its seq', () => {
     const room = new Room({}, ARENA);

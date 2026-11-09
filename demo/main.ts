@@ -29,7 +29,7 @@ const join = () => {
   const url = fields.url.value;
   const map = fields.map.value;
   playing(true);
-  // The map is the host's: local mode creates the room with it, a server has its own (MAP).
+  // The first map of a new local room; a server has its own (MAP). In a game, the host picks.
   game = tinyFps($('game'), {
     name,
     map,

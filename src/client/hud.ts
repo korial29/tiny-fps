@@ -23,7 +23,11 @@ export const HUD_CSS =
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
   `nav span,nav time{font:900 clamp(16px,4.6vw,24px)/1 system-ui,sans-serif;letter-spacing:.03em;white-space:nowrap}nav time{min-width:4.2ch;font-variant-numeric:tabular-nums;font-size:clamp(14px,3.8vw,20px)}` +
   `nav small{font-size:clamp(10px,2.6vw,12px);white-space:nowrap;opacity:.95}nav small:first-of-type{text-align:right}nav small:last-of-type{text-align:left}` +
-  `output{top:20%;left:50%;transform:translateX(-50%);padding:6px 18px;font:900 clamp(18px,3.4vw,30px)/1.1 system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;background:#000a;border-bottom:3px solid currentColor}` +
+  // The banner of an event (the user, 2026-11-09: no underline, a nicer design): heavy italic in the
+  // team's colour, glowing, on a dark band fading out at both ends, popping in.
+  `output{top:18%;left:50%;transform:translateX(-50%);padding:12px 64px;font:900 italic clamp(20px,4.4vw,40px)/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;` +
+  `background:linear-gradient(90deg,#0000,#000c 24%,#000c 76%,#0000);text-shadow:0 0 18px currentColor,0 0 2px currentColor,0 3px 0 #000;animation:pop .4s cubic-bezier(.2,1.5,.4,1)}` +
+  `@keyframes pop{from{opacity:0;transform:translateX(-50%) scale(1.5)}}` +
   `em{font-style:normal;font-size:13px;font-weight:800;line-height:1.1;text-align:center;transform:translate(-50%,-50%)}em span{display:block;font-size:20px;line-height:1}` +
   `section{inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0 12px;text-align:center;background:#000c}` +
   `section h6{font:900 clamp(30px,9vw,72px)/1 system-ui,sans-serif;letter-spacing:.04em}section strong{font-size:34px}` +
@@ -280,6 +284,10 @@ export const createHud = (screen: HTMLElement): Hud => {
     },
     banner(text, team) {
       banner.hidden = false;
+      // Each banner pops in again.
+      banner.style.animation = 'none';
+      void banner.offsetWidth;
+      banner.style.animation = '';
       set(banner, text);
       banner.style.color = team === undefined ? '#fff' : TEAM_COLOR[team];
       clearTimeout(timer);

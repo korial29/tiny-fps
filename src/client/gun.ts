@@ -128,15 +128,16 @@ export const TILT = [Math.sin(0.4), Math.cos(0.4)];
 
 // The side view, forward then up, in metres from the middle of the grip. The hand sits in the gap
 // between the upper body and the lower shell, round the short grip that joins them.
-// The upper body: a smooth bulb widest at the back and top, tapering to the muzzle.
+// The upper body: a smooth bulb widest at the back and top, tapering to the muzzle. Its top climbs
+// all the way back to the counter, the highest of the gun (the user, 2026-11-09: no dip before it).
 const BULB: Station[] = [
   [-0.063, 0.1, 0, 0],
   [-0.062, 0.098, 0.026, 0.016],
   [-0.055, 0.1, 0.04, 0.02],
   [-0.035, 0.103, 0.046, 0.038],
-  [-0.005, 0.104, 0.048, 0.04],
-  [0.035, 0.1, 0.044, 0.038],
-  [0.08, 0.094, 0.036, 0.034],
+  [-0.005, 0.10175, 0.048, 0.03775],
+  [0.035, 0.09775, 0.044, 0.03575],
+  [0.08, 0.093, 0.036, 0.033],
   [0.12, 0.088, 0.028, 0.028],
   [0.16, 0.082, 0.021, 0.021],
   [0.19, 0.078, 0.015, 0.015],

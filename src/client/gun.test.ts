@@ -123,7 +123,7 @@ describe('the gun model', () => {
     expect(ring.length).toBeGreaterThanOrEqual(12);
     // No sharp edge on top: the normals of the top vertices all face up.
     // (The back rounds over onto the counter's flat, behind 2 cm.)
-    const crest = near.filter(v => v.p[1] > 0.135 && v.p[2] < 0.02 && v.layer == SHINE);
+    const crest = near.filter(v => v.p[1] > 0.132 && v.p[2] < 0.02 && v.layer == SHINE);
     expect(crest.length).toBeGreaterThan(20);
     for (const v of crest) {
       expect(v.n[1]).toBeGreaterThan(0.7);
@@ -184,13 +184,14 @@ describe('the gun model', () => {
     ).toBeLessThan(0.01);
   });
 
-  it('has a smooth top: from its highest point the top only falls toward the muzzle, with no prongs', () => {
-    // The highest metal at each ring of the bulb, from its widest to the nose.
+  it('has a smooth top: from the counter, its highest point, the top only falls toward the muzzle, with no prongs', () => {
+    // The highest metal at each ring of the bulb, from the counter's edge to the nose (the user,
+    // 2026-11-09: no dip toward the counter).
     const top = (f: number) =>
       Math.max(
         ...near.filter(v => v.layer == SHINE && Math.abs(v.p[2] + f) < 0.004).map(v => v.p[1]),
       );
-    const rings = [0.035, 0.08, 0.12, 0.16, 0.19, 0.205].map(top);
+    const rings = [-0.028, -0.005, 0.035, 0.08, 0.12, 0.16, 0.19, 0.205].map(top);
     rings.slice(1).forEach((h, i) => expect(h).toBeLessThan(rings[i]));
     // Nothing of the body sticks out ahead of the muzzle above the hull's tip.
     expect(near.filter(v => v.p[2] < MUZZLE[2] - 0.005 && v.p[1] > 0.07)).toHaveLength(0);

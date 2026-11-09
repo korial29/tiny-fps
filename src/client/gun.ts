@@ -674,9 +674,9 @@ const PROFILE: Station[] = [
   [0.497, 0.079, 0.017, 0.013],
 ];
 
-/** The laser rifle's muzzle, the lens at the end of its shroud, and where the left hand holds the shroud from under it: the middle of the fist. */
+/** The laser rifle's muzzle, the lens at the end of its shroud, and the middle of its handguard, the keel under its body where the left hand holds it from under it: the middle of the fist. */
 export const RIFLE_MUZZLE: Vec3 = [0, 0.079, -0.512];
-export const RIFLE_GRIP: Vec3 = [0, 0.005, -0.15];
+export const RIFLE_GRIP: Vec3 = [0, -0.004, -0.14];
 /** The red of the laser, which blooms. */
 export const LASER = [2.6, 0.55, 0.22];
 const red: Paint = () => [LASER[0], LASER[1], -2, LASER[2]];
@@ -845,7 +845,23 @@ export const rifle = (lod: number): number[] => {
     m,
     red,
   );
-  // The pistol grip; the left hand holds the shroud from under it.
+  // The handguard (the user, 2026-11-09: part of the gun, smooth, sized for the hollow of the left
+  // hand, which holds it from under it): a rounded keel that swells out of the body's underside
+  // and sinks back into it, in the body's olive; its middle is RIFLE_GRIP.
+  tube(
+    out,
+    [
+      [0.03, 0.02, 0, 0],
+      [0.05, 0.012, 0.012, 0.012],
+      [0.09, -0.004, 0.016, 0.016],
+      [0.19, -0.004, 0.016, 0.016],
+      [0.23, 0.012, 0.012, 0.012],
+      [0.25, 0.022, 0, 0],
+    ],
+    n,
+    olive,
+  );
+  // The pistol grip.
   tube(
     out,
     [
@@ -1146,7 +1162,7 @@ export const arc = (t: number): number[] => {
  * Where the left hand holds a rail gun whose grip is at `at` and whose axes are [right, up,
  * forward]: the middle of its front grip, and the way the grip runs from its foot up to the barrel,
  * which the thumb points along (see wield() in body.ts). For the laser rifle (`kind` 3): under its
- * shroud, the thumb along it, and the way the hand goes, across under it and up its right side.
+ * handguard, the thumb along it, and the way the hand goes, across under it and up its right side.
  */
 export const fore = (
   at: Vec3,
@@ -1156,7 +1172,7 @@ export const fore = (
   const rifle = kindOf(kind) == 3;
   const g = rifle ? RIFLE_GRIP : FOREGRIP;
   const p = [0, 1, 2].map(i => at[i] + r[i] * g[0] + u[i] * g[1] - f[i] * g[2]) as Vec3;
-  // The rifle's shroud is held from under it, the palm up: the thumb along it on its left, the
+  // The rifle's handguard is held from under it, the palm up: the thumb along it on its left, the
   // hand across under it and the fingers up round its right side.
   return rifle
     ? [p, f, unit([0, 1, 2].map(i => 0.8 * r[i] + 0.6 * u[i]) as Vec3)]

@@ -110,15 +110,59 @@ describe('helmet', () => {
       expect(shiny.length).toBeGreaterThan(20);
       for (const i of shiny) {
         const p = at(out, i).map((w, k) => w - HEAD[k]);
-        // The front half of the head, within the bubble.
-        expect(p[2]).toBeLessThan(VISOR.c[2] + 1e-6);
+        // On the front of the shell, within the opening.
+        expect(p[2]).toBeLessThan(-0.05);
         expect(Math.abs(p[0])).toBeLessThanOrEqual(VISOR.r[0] + 1e-6);
+        expect(Math.abs(p[1] - VISOR.c[1])).toBeLessThanOrEqual(VISOR.r[1] + 1e-6);
         // Dark.
         expect(out[i * STRIDE + 6] + out[i * STRIDE + 7] + out[i * STRIDE + 9]).toBeLessThan(0.3);
       }
       // It reaches past the nose of the face.
       const nose = Math.min(...headVertices(3).map(p => p[2]));
       expect(Math.min(...shiny.map(i => out[i * STRIDE + 2] - HEAD[2]))).toBeLessThan(nose - 0.01);
+    }
+  });
+
+  it('shows the visor across the whole opening: the first surface hit from the front is the visor', () => {
+    /** Distance along +z from (x, y, -1) to the nearest triangle of `v` it crosses, and its layer. */
+    const first = (v: number[], x: number, y: number) => {
+      let best = [Infinity, 0];
+      for (let i = 0; i < count(v); i += 3) {
+        const [p, q, r] = [0, 1, 2].map(k => at(v, i + k));
+        // Barycentric test in x, y, then the depth there.
+        const d = (q[0] - p[0]) * (r[1] - p[1]) - (r[0] - p[0]) * (q[1] - p[1]);
+        if (Math.abs(d) < 1e-12) {
+          continue;
+        }
+        const u = ((x - p[0]) * (r[1] - p[1]) - (r[0] - p[0]) * (y - p[1])) / d;
+        const w = ((q[0] - p[0]) * (y - p[1]) - (x - p[0]) * (q[1] - p[1])) / d;
+        if (u < 0 || w < 0 || u + w > 1) {
+          continue;
+        }
+        const z = p[2] + u * (q[2] - p[2]) + w * (r[2] - p[2]);
+        if (z < best[0]) {
+          best = [z, v[(i + 0) * STRIDE + 8]];
+        }
+      }
+      return best;
+    };
+    for (const lod of [0, 1, 3]) {
+      const out = make(lod);
+      let n = 0;
+      for (let a = -0.9; a <= 0.9; a += 0.15) {
+        for (let b = -0.9; b <= 0.9; b += 0.15) {
+          const [x, y] = [VISOR.r[0] * a, VISOR.c[1] + VISOR.r[1] * b];
+          if (a * a + b * b > 0.8) {
+            continue;
+          }
+          const [, layer] = first(out, HEAD[0] + x, HEAD[1] + y);
+          expect(layer).toBe(SHINE);
+          n++;
+        }
+      }
+      expect(n).toBeGreaterThan(60);
+      // Outside the opening the shell shows.
+      expect(first(out, HEAD[0], HEAD[1] + 0.17)[1]).toBe(-1);
     }
   });
 

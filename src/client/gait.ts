@@ -182,7 +182,7 @@ export const MOVES: number[][] = [
   [0, 0.1, 0, 1.2, 1.5, -0.35, 0.3, 2.4, 0.3, 2.2, 0.3, 0.35, 0, 0],
   [-0.35, 1.25, 0, 1.1, 1.3, -0.6, 0.25, -1, 0.3, -1, 0.3, 0.25, 0, 0],
   [],
-  [-0.02, 0.2, 0.4, 0.9, 1.2, 0.6, 1.3, 0.8, 1, 0.3, 0.5, 0.6, 0, 0.1],
+  [-0.02, 0.2, 0.7, 0.9, 1.2, 0.6, 1.3, 0.8, 1, 0.3, 0.5, 0.6, 0, 0.1],
   [0.07, 0.05, 0, 0.2, 0.3, 0.1, 0.2, 3, 0.2, 3, 0.2, 0.2, -0.22, 0],
   [0, 0.5, 0, 0.2, 0.4, 1.4, 1.7, 1, 1.4, 1, 1.4, 0.15, -0.1, 0],
   [-0.78, -1.1, 0, 1.1, 1.8, 1.4, 0.1, 0.5, 0.8, 0.4, 0.5, 0.8, 0, 0],
@@ -596,7 +596,8 @@ export const createGait = (bow = BOW): Gait => {
       const w = sw(s < 0 ? MOVE.WALL_L : MOVE.WALL_R);
       if (w > 0.002) {
         const [wx, wz] = wn;
-        // Near foot on the wall in the stance and off it in the swing; far foot and hand free.
+        // Each foot on the wall in its stance, flat against it, and off it in the swing, the body
+        // leaning out over them (the user, 2026-11-09); the far hand free.
         [s, -s].forEach((k, i) => {
           const u = (ph + 0.5 * i) % 1;
           const down = u < 0.55;
@@ -606,13 +607,9 @@ export const createGait = (bow = BOW): Gait => {
           goals.push([
             foot(k),
             w,
-            i
-              ? R(-s * 0.12, pel[1] - 0.7 + 0.4 * lift, z)
-              : R(s * (0.34 - 0.2 * lift), pel[1] - 0.52 + 0.3 * lift, z),
+            R(s * (0.34 - 0.2 * lift), pel[1] - (i ? 0.62 : 0.52) + 0.3 * lift, z),
             D(-s * 0.7, 1, -1),
-            i
-              ? mul(axis(Y, yaw), axis(X, -0.5))
-              : slerp(flat, frame(cross([wx, 0, wz], D(0, 0, -1)), [wx, 0, wz]), 1 - lift),
+            slerp(flat, frame(cross([wx, 0, wz], D(0, 0, -1)), [wx, 0, wz]), 1 - lift),
           ]);
           const v = Math.cos(TAU * (ph + 0.5 * (1 - i)));
           goals.push([
@@ -756,7 +753,10 @@ export const createGait = (bow = BOW): Gait => {
     MOVES.forEach((c, k) => {
       const w = sw(k);
       if (w > 0.002) {
-        const to = fk(c);
+        // Along a wall the body leans well out (the user, 2026-11-09), less with the rail gun's bolt
+        // going out, so that both hands keep it.
+        const out2 = (k == MOVE.WALL_L || k == MOVE.WALL_R) && q.railed && q.zapping;
+        const to = fk(out2 ? c.map((v, i) => (i == 2 ? v * 0.6 : v)) : c);
         const arms = k == MOVE.STUN;
         FK.slice(arms ? 3 : 0, arms ? 7 : 15).forEach(j => (rot[j] = slerp(rot[j], to[j], w)));
         if (!arms) {

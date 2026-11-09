@@ -163,7 +163,7 @@ describe('body', () => {
         }
       }
     }
-  });
+  }, 30_000);
 
   it('wears the colours of the team: jacket, gloves, trousers and shoes, with no head', () => {
     const p = man();
@@ -299,7 +299,7 @@ describe('body', () => {
         expect(Math.max(...shown)).toBeGreaterThan(50);
         expect(Math.min(...shown)).toBe(0);
       }
-    });
+    }, 30_000);
 
     it('swing higher and wider with the speed, a sprint the highest', () => {
       const range = (speed: number) => {

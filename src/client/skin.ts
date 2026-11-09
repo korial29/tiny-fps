@@ -28,9 +28,10 @@ const [
   BROW,
   STUBBLE,
   SHADOW,
+  LINE,
   GLINT,
   CAP,
-] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
 
 /** Hair colours, one per runner (hairOf()): black, dark and mid brown, chestnut, red, dark and light blond, grey, and a shaved head, the skin's in its shadow. */
 const HAIRS = [
@@ -63,7 +64,7 @@ export const hairOf = (id: number): number[] => HAIRS[pick(id, 0, HAIRS.length)]
 /** An iris colour for the runner `id`, as hairOf(). */
 export const eyesOf = (id: number): number[] => IRISES[pick(id, 0x2468, IRISES.length)];
 
-/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots and webbing, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, between the hair and the skin, the shaved beard's shadow and its edge, the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
+/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots and webbing, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, between the hair and the skin, the shaved beard's shadow and its edge, the line between the lips (as the folds), the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
 export const palette = (jacket: number[], hair = HAIRS[1], iris = IRISES[0]): number[][] => [
   jacket,
   jacket.map(v => v * 0.5),
@@ -80,6 +81,7 @@ export const palette = (jacket: number[], hair = HAIRS[1], iris = IRISES[0]): nu
   hair.map((v, i) => v * 0.4 + SKIN[i] * 0.3),
   SKIN.map((v, i) => v * 0.62 + hair[i] * 0.1 + [0, 0.01, 0.03][i]),
   SKIN.map((v, i) => v * 0.81 + hair[i] * 0.05 + [0, 0.005, 0.015][i]),
+  SKIN.map(v => v * 0.55),
   [1.3, 1.3, 1.3],
   [2.8, 0.5, 0.12],
 ];
@@ -536,8 +538,11 @@ const tint = (x: number, y: number, aq: number, fine: boolean) => {
   const ax = Math.abs(x);
   if (fine && aq < 1) {
     const [nx, ny] = [(ax - 0.006) / 0.0025, (y - 1.6428) / 0.0018];
-    if (nx * nx + ny * ny < 1 || (Math.abs(y - 1.6168 + 6 * ax * ax) < 0.0009 && ax < 0.019)) {
+    if (nx * nx + ny * ny < 1) {
       return SHADE;
+    }
+    if (Math.abs(y - 1.6168 + 6 * ax * ax) < 0.0009 && ax < 0.019) {
+      return LINE;
     }
     const dy = (y - 1.6168) / 0.0082;
     if (dy * dy < 1 && ax < 0.021 * Math.sqrt(1 - dy * dy)) {
@@ -1105,32 +1110,34 @@ export const skin = (
       E[3] * E[5] - E[7] * E[1] - (E[6] * E[0] - E[4] * E[2]),
       E[3] * E[6] - E[7] * E[2] - (E[4] * E[1] - E[5] * E[0]),
     ];
+    // The mouth `open` turns the jaw down about its hinge under the ears: the position (e 2).
+    const dj = (s.d[i] * open) / 2;
     for (const h of [k, k + 3]) {
-      // The mouth `open` turns the jaw down about its hinge under the ears.
-      const a = h == k ? s.d[i] * open : 0;
+      const e = h == k ? 2 : 0;
       const [x, y, z] = [
         s.v[h],
-        s.v[h + 1] + a * s.v[h + 2],
-        s.v[h + 2] - a * (s.v[h + 1] - 1.665),
+        s.v[h + 1] + e * dj * s.v[h + 2],
+        s.v[h + 2] - e * dj * (s.v[h + 1] - 1.665),
       ];
       const [p, q, r] = [E[1] * z - E[2] * y, E[2] * x - E[0] * z, E[0] * y - E[1] * x];
-      const e = h == k ? 2 : 0;
       Q[h] = x + 2 * (E[3] * p + E[1] * r - E[2] * q) + e * m[0];
       Q[h + 1] = y + 2 * (E[3] * q + E[2] * p - E[0] * r) + e * m[1];
       Q[h + 2] = z + 2 * (E[3] * r + E[0] * q - E[1] * p) + e * m[2];
     }
   }
+  // Eyes `shut`: the lids, the skin, over the whites, the irises and their specks (unlit). Open,
+  // the line between the lips is the mouth's dark.
+  const pal = colors.slice();
+  if (shut) {
+    pal[WHITE] = pal[IRIS] = pal[GLINT] = colors[FLESH];
+  }
+  if (open > 0.2) {
+    pal[LINE] = MOUTH;
+  }
   // Written by index rather than pushed: the close skin is some 20 000 vertices.
   let o = out.length;
   for (let h = 0; h < s.t.length; h++, o += 10) {
-    // Eyes `shut`: the lids, the skin, over the whites, the irises and their specks. Open, the
-    // line between the lips (the jaw's, unlike the nostrils) is the mouth's dark.
-    const q = shut && (s.c[h] == WHITE || s.c[h] == IRIS || s.c[h] == GLINT) ? FLESH : s.c[h];
-    const [col, k, g] = [
-      open > 0.2 && q == SHADE && s.d[s.t[h]] ? MOUTH : colors[q],
-      s.t[h] * 6,
-      s.o[s.t[h]],
-    ];
+    const [col, k, g] = [pal[s.c[h]], s.t[h] * 6, s.o[s.t[h]]];
     out[o] = Q[k];
     out[o + 1] = Q[k + 1];
     out[o + 2] = Q[k + 2];
@@ -1140,7 +1147,7 @@ export const skin = (
     out[o + 6] = col[0] * g;
     out[o + 7] = col[1] * g;
     // The cut's face and the eyes' specks glow: unlit.
-    out[o + 8] = q >= GLINT ? -2 : -1;
+    out[o + 8] = s.c[h] >= GLINT + shut ? -2 : -1;
     out[o + 9] = col[2] * g;
   }
 };

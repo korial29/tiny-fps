@@ -4,7 +4,8 @@
 // enough to rise out of the haze. Lawns in the lots with no tower, and round some towers.
 import { TEX } from '../shared/types';
 import type { Brush, WorldDef } from '../shared/world';
-import { dress, place, smooth } from './mesh';
+import { dress, place, segment, smooth } from './mesh';
+import type { Vec3 } from './mesh';
 import { FAR, MARKS, ROAD, SCALE, STREET, grid, scale } from './street';
 import { hash } from './textures';
 
@@ -36,31 +37,77 @@ const lawn = (x0: number, x1: number, z0: number, z1: number, tint = PARK): Brus
   tint: tint as Brush['tint'],
 });
 
-/** A tree, up from its foot: a trunk and a crown 19 m up, round from their smooth normals; a coarser crown alone past SCALE. */
-const TRUNK = dress(
+/** The model's length along -z goes up. */
+const UP: Vec3[] = [
+  [1, 0, 0],
+  [0, 0, 1],
+  [0, 1, 0],
+];
+
+/**
+ * A near tree, its foot at the origin, y up: the wood (a trunk, its leader, four limbs round it and
+ * two twigs at the end of each) and the leaves, a clump at each twig's end and one on top, each its
+ * own shade. Past SCALE a crown alone, coarse.
+ */
+const [WOOD, LEAF] = (() => {
+  const [wood, leaf]: number[][] = [[], []];
+  const tube = dress(
+    smooth(
+      [
+        [1, 0],
+        [0.6, 1],
+      ],
+      4,
+    ),
+    [0.3, 0.2, 0.12],
+  );
+  const blob = dress(
+    smooth(
+      [
+        [0, -1],
+        [1, 0],
+        [0, 1],
+      ],
+      5,
+    ),
+    [1, 1, 1],
+  );
+  const twig = (a: Vec3, b: Vec3, r: number) => segment(wood, tube, a, b, [1, 0, 0], 1, r);
+  const clump = (at: Vec3, r: number, i: number) =>
+    place(leaf, blob, at, UP, [0, 0, 0], [r, r, r * 0.8], [1, 1 - (i % 3) * 0.1, 1]);
+  /** The point `l` from `a` toward azimuth `t`, `e` from the vertical. */
+  const to = (a: Vec3, t: number, e: number, l: number): Vec3 => [
+    a[0] + Math.cos(t) * Math.sin(e) * l,
+    a[1] + Math.cos(e) * l,
+    a[2] + Math.sin(t) * Math.sin(e) * l,
+  ];
+  twig([0, 0, 0], [0, 7, 0], 0.5);
+  twig([0, 7, 0], [0, 12.5, 0], 0.3);
+  clump([0, 13.2, 0], 3.6, 0);
+  for (let i = 0; i < 4; i++) {
+    const [base, t] = [[0, 4.5 + i * 0.8, 0] as Vec3, i * 1.9 + 0.4];
+    const end = to(base, t, 0.85, 4.6);
+    twig(base, end, 0.26);
+    for (const s of [-0.6, 0.6]) {
+      const tip = to(end, t + s, 0.6, 2.6);
+      twig(end, tip, 0.12);
+      clump(tip, 2.9, i + s);
+    }
+  }
+  return [wood, leaf];
+})();
+const CROWN = dress(
   smooth(
     [
-      [0.55, 0],
-      [0.3, 8],
+      [0, 5],
+      [3.6, 7],
+      [5, 11],
+      [3.3, 16],
+      [0, 19],
     ],
     4,
   ),
-  [0.3, 0.2, 0.12],
-);
-const CROWN = [5, 4].map(n =>
-  dress(
-    smooth(
-      [
-        [0, 5],
-        [3.6, 7],
-        [5, 11],
-        [3.3, 16],
-        [0, 19],
-      ],
-      n,
-    ),
-    [1, 1, 1],
-  ),
+  [1, 1, 1],
 );
 const LEAVES = [
   [0.17, 0.38, 0.11],
@@ -68,28 +115,34 @@ const LEAVES = [
   [0.24, 0.45, 0.13],
   [0.32, 0.43, 0.12],
 ];
-/** The model's length along -z goes up. */
-const UP = [
-  [1, 0, 0],
-  [0, 0, 1],
-  [0, 1, 0],
-] as [number, number, number][];
-
 /** The trees of the parks out to MARKS, every 11 m or so, of many sizes and greens: vertices, drawn once. */
 export const trees = (def: WorldDef): number[] => {
   const out: number[] = [];
   const k = scale(def);
   for (const { min, max, tint } of skyline(def)) {
-    for (let x = min[0] + 6; tint == PARK && x < max[0] - 4; x += 11) {
-      for (let z = min[2] + 6; z < max[2] - 4; z += 11) {
+    for (let x = min[0] + 8; tint == PARK && x < max[0] - 6; x += 11) {
+      for (let z = min[2] + 8; z < max[2] - 6; z += 11) {
         const r = (n: number) => hash(Math.round(x), Math.round(z), SEED + 40 + n);
         const at: [number, number, number] = [x + r(0) * 4 - 2, STREET + TURF, z + r(1) * 4 - 2];
         const [m, size] = [k(at[0], at[2]), 0.7 + r(2) * 0.6];
+        const [c, n, green] = [
+          Math.cos(r(5) * 7),
+          Math.sin(r(5) * 7),
+          LEAVES[Math.floor(r(4) * 4)],
+        ];
         if (r(3) > 0.15 && m * SCALE < MARKS) {
-          if (m == 1) {
-            place(out, TRUNK, at, UP, [0, 0, 0], size);
+          if (m > 1) {
+            place(out, CROWN, at, UP, [0, 0, 0], size, green);
+          } else {
+            // Turned about the vertical, each its own way.
+            const turn: Vec3[] = [
+              [c, 0, n],
+              [0, 1, 0],
+              [n, 0, -c],
+            ];
+            place(out, WOOD, at, turn, [0, 0, 0], size);
+            place(out, LEAF, at, turn, [0, 0, 0], size, green);
           }
-          place(out, CROWN[+(m > 1)], at, UP, [0, 0, 0], size, LEAVES[Math.floor(r(4) * 4)]);
         }
       }
     }

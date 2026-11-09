@@ -1327,16 +1327,32 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
       const x0 = (-DW - DGAP / 2 + i * (DW + DGAP)) * DK;
       for (const seg of DIGITS[+ch]) {
         const [a, b, d, e] = SEGMENTS[seg];
-        // Segments lie on the screen, a hair out of it.
-        const p = (x: number, t: number) => at(x0 + x * DK, DY + t * DK, 0.0027);
-        tri(v, p(a, b), p(d, b), p(d, e), rgb);
-        tri(v, p(a, b), p(d, e), p(a, e), rgb);
+        // Alien glyphs (the user, 2026-11-09): each segment a thin slash, cut on the slant at both
+        // ends, apart from the next, the digit leaning forward. Segments lie on the screen, a hair out of it.
+        const p = (x: number, t: number) =>
+          at(x0 + (x + (t - DH / 2) * 0.3) * DK, DY + t * DK, 0.0027);
+        const h = d - a > e - b;
+        const [u0, u1, w0, w1] = h
+          ? [a + 0.0012, d - 0.0012, b, e]
+          : [b + 0.0012, e - 0.0012, a, d];
+        const [l, m, s] = [u1 - u0, (w0 + w1) / 2, (w1 - w0) * 0.32];
+        const slash = [
+          [0, m - s],
+          [0.7, m - s],
+          [1, m + s],
+          [0.3, m + s],
+        ].map(([k, w]) => (h ? p(u0 + k * l, w) : p(w, u0 + k * l)));
+        if (!h) {
+          slash.reverse();
+        }
+        tri(v, slash[0], slash[1], slash[2], rgb);
+        tri(v, slash[0], slash[2], slash[3], rgb);
       }
     });
     // The lit cells and the frame glow with the digits.
     if (shown) {
       gauge(true);
-      // Round, 2 mm inside the cut's smooth outline (the user, 2026-11-09), a band 1.2 mm wide, 1 mm
+      // Round, 2 mm inside the cut's smooth outline (the user, 2026-11-09), a band 2.4 mm wide (the user, 2026-11-09: wider), 1 mm
       // out of the face, clear of the outline 0.2 mm out.
       const ring = (j: number, g: number) =>
         at(
@@ -1348,8 +1364,8 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
         const [a, b, c, d] = [
           ring(i, 0.002),
           ring(i + 1, 0.002),
-          ring(i + 1, 0.0032),
-          ring(i, 0.0032),
+          ring(i + 1, 0.0044),
+          ring(i, 0.0044),
         ];
         tri(v, a, b, c, rgb);
         tri(v, a, c, d, rgb);
@@ -1635,7 +1651,7 @@ export const held = (
     place(out, lcd(ammo), at, ax, [0, 0, 0], k);
   }
   dimmed(out, from, d);
-  // The gun's counter fades in on its own, slowly, without the gun's flicker (the user, 2026-11-09).
+  // The gun's counter fades in on its own, with the boot sound, without the gun's flicker (the user, 2026-11-09).
   if (ammo !== undefined && w < 2) {
     const c = out.length;
     place(out, readout(ammo, level), at, ax, [0, 0, 0], k);

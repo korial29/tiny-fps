@@ -431,10 +431,10 @@ describe('the readout on the back of the gun', () => {
     expect(digits(5)[0].c[0]).toBeLessThan(digits(5)[0].c[2]);
   });
 
-  it('shows digits about 4.2 cm wide and 2 cm high', () => {
+  it('shows digits about 4.2 cm wide and 2 cm high, 4.6 cm wide with their forward lean', () => {
     const xs = digits(88).map(x => x.p[0]);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.041);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.043);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.044);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.047);
     const ys = digits(88).map(x => x.p[1]);
     expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.016);
   });
@@ -491,7 +491,7 @@ describe('the readout on the back of the gun', () => {
         expect(x.c).toEqual(digits(n)[0].c);
       }
     }
-    // Round, 2 to 3.2 mm inside the cut's outline (4.4 cm half wide), 1 mm out of the face.
+    // Round, 2 to 4.4 mm inside the cut's outline (4.4 cm half wide), 1 mm out of the face.
     const fx = frame(88).map(x => Math.abs(x.p[0]));
     expect(Math.max(...fx)).toBeGreaterThan(0.0405);
     expect(Math.max(...fx)).toBeLessThan(0.0421);
@@ -513,11 +513,11 @@ describe('the readout on the back of the gun', () => {
     const t = tracks(88);
     const xs = t.map(x => x.p[0]);
     expect(Math.min(...xs)).toBeCloseTo(-Math.max(...xs), 5);
-    // Inside the frame's inner edge, a superellipse 4.08 by 3.02 cm half across, round -0.0145 up the face.
+    // Inside the frame's inner edge, a superellipse 3.96 by 2.9 cm half across, round -0.0145 up the face.
     const up = unit([0, 0.883, -0.469]);
     for (const x of t) {
       const b = (x.p[1] - 0.125) * up[1] + (x.p[2] - 0.04) * up[2] + 0.0145;
-      expect(Math.abs(x.p[0] / 0.0408) ** 2.5 + Math.abs(b / 0.0302) ** 2.5).toBeLessThan(1);
+      expect(Math.abs(x.p[0] / 0.0396) ** 2.5 + Math.abs(b / 0.029) ** 2.5).toBeLessThan(1);
     }
     const n = unit([0, 0.469, 0.883]);
     for (const x of t) {

@@ -757,7 +757,7 @@ describe('the laser rifle', () => {
     expect(scope(8).length).not.toBe(scope(24).length);
   });
 
-  it('keeps the digits of its counter inside the screen, clear of the ring', () => {
+  it('keeps the digits of its counter small in the middle of the screen, well clear of the ring', () => {
     // Red at 3, like the ring: the digits stand a hair further out of the screen than it. In the
     // screen's plane: across, and up it.
     const v = scope(3);
@@ -771,8 +771,8 @@ describe('the laser rifle', () => {
         const b = (v[i + 1] - mid[1]) * up[1] + (v[i + 2] - mid[2]) * up[2];
         // The screen's half width at b, less its ring.
         const half = 0.019 - (0.0045 * (b + sh)) / (2 * sh) - 0.0014;
-        expect(Math.abs(v[i])).toBeLessThan(half - 0.001);
-        expect(Math.abs(b)).toBeLessThan(sh - 0.0015);
+        expect(Math.abs(v[i])).toBeLessThan(half - 0.004);
+        expect(Math.abs(b)).toBeLessThan(sh - 0.008);
       }
     }
   });

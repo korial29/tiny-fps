@@ -1244,8 +1244,8 @@ const SC: Vec3 = [
 const SU = unit([0, 1, -HOUSING_SLOPE]);
 const SN: Vec3 = [0, -SU[2], SU[1]];
 const [SH, SB, ST] = [(S1 - S0) / 2 / SU[1], 0.019, 0.0145];
-/** The digits on it: width, height, thickness of a segment, gap between the two; tall, to fill the screen but for 1.5 mm inside its ring. */
-const [RW, RH, RT, RGAP] = [0.0112, 0.026, 0.0028, 0.003];
+/** The digits on it: width, height, thickness of a segment, gap between the two; well inside the ring (the user, 2026-11-09). */
+const [RW, RH, RT, RGAP] = [0.0075, 0.0155, 0.0022, 0.0025];
 const RSEG = segments(RW, RH, RT);
 
 /**
@@ -1296,7 +1296,7 @@ export const scope = (n: number, shown = true): number[] => {
       );
     }
     if (shown) {
-      // Two tall digits filling the screen, its ring clear of them.
+      // Two digits in the middle of the screen, well clear of its ring.
       [...`${n}`.padStart(2, '0')].forEach((ch, i) => {
         const a0 = -RW - RGAP / 2 + i * (RW + RGAP);
         for (const seg of DIGITS[+ch]) {

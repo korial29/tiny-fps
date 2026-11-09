@@ -7,6 +7,7 @@ import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
 import { MUZZLE, REAR, aimed, button, foregrip, grip, gun, tip } from './gun';
 import { BEHIND, axes } from './katana';
+import { KATANA_LEFT } from './body';
 import { SHINE, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, solve, turn } from './rig';
@@ -553,7 +554,8 @@ describe('a runner with the katana', () => {
       const [x, y, z] = light(out).reduce((m, q) => (q[1] > m[1] ? q : m));
       expect(y).toBeGreaterThan(r.p.y + 2.1);
       expect(x).toBeGreaterThan(r.p.x);
-      expect(x).toBeLessThan(r.p.x + 0.45);
+      // (2 mm further since the left fist holds the grip through its curled fingers.)
+      expect(x).toBeLessThan(r.p.x + 0.46);
       // Leaning a little forward with its straight wrists (lock()).
       expect(Math.abs(z - r.p.z)).toBeLessThan(0.65);
       // Nothing of it low: the blade stands above the hands at the chest, the pommel at the belt.
@@ -581,7 +583,11 @@ describe('a runner with the katana', () => {
       const [fing, back] = [turn(s.rot[J.HAND_L], [0, -1, 0]), turn(s.rot[J.HAND_L], [1, 0, 0])];
       return Math.hypot(
         ...[0, 1, 2].map(
-          i => s.pos[J.HAND_L][i] + fing[i] * 0.078 + back[i] * 0.022 - (at[i] - BEHIND * ax[2][i]),
+          i =>
+            s.pos[J.HAND_L][i] +
+            fing[i] * KATANA_LEFT[0] +
+            back[i] * KATANA_LEFT[1] -
+            (at[i] - BEHIND * ax[2][i]),
         ),
       );
     };

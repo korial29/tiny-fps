@@ -215,6 +215,13 @@ export const shrug = (q: Pose, s: Solved, j: number, at: Vec3) => {
   q.rot[j - 1] = mul(q.rot[j - 1], mul(axis(Y, sd * out), axis(Z, sd * up)));
 };
 
+/** Where a fist holds a handle, from the wrist: along the fingers, and toward the palm. */
+export const FIST = [0.078, 0.022];
+/**
+ * The left fist on the katana's grip, 8 mm further along and 6 mm nearer the palm: the grip runs
+ * through its curled fingers, not over them, seen from the eye (the user, 2026-11-09).
+ */
+export const KATANA_LEFT = [0.086, 0.016];
 /**
  * Puts the arm of shoulder joint `j` (ARM_R or ARM_L) of `q` on a handle running along the unit
  * `g`, the hand round the point `at`, the elbow toward `pole`; `solved` is q solved. The shoulder
@@ -232,6 +239,7 @@ export const wield = (
   g: Vec3,
   pole: Vec3,
   held?: Vec3,
+  [reach, palm] = FIST,
 ) => {
   if (!held) {
     shrug(q, solved, j, at);
@@ -249,9 +257,9 @@ export const wield = (
   const fing = add(along([0, 0, 0], g, S), along([0, 0, 0], side, C));
   const x = cross(fing, th);
   const hand = frame(x, fing);
-  // The grip is 7.8 cm along the fingers from the wrist and 2.2 cm toward the palm, which the
-  // left hand, a mirror, has on its other side.
-  const wrist = along(along(at, fing, -0.078), x, j == J.ARM_L ? -0.022 : 0.022);
+  // The grip is `reach` along the fingers from the wrist and `palm` toward the palm (FIST), which
+  // the left hand, a mirror, has on its other side.
+  const wrist = along(along(at, fing, -reach), x, j == J.ARM_L ? -palm : palm);
   // The elbow where the forearm carries on the hand's axis: toward the pole too for a free hand,
   // exactly there for a held one.
   const ideal = sub(along(wrist, fing, -l2), a);
@@ -324,11 +332,8 @@ export const clasp = (
     return arms.map((j, k) => {
       const side = unit(along(f[k], b, -S));
       const back = cross(f[k], add(along([0, 0, 0], b, C), along([0, 0, 0], side, -S)));
-      const wrist = along(
-        along(k ? along(p, b, -BACK) : p, f[k], -0.078),
-        back,
-        k ? -0.022 : 0.022,
-      );
+      const [reach, palm] = k ? KATANA_LEFT : FIST;
+      const wrist = along(along(k ? along(p, b, -BACK) : p, f[k], -reach), back, k ? -palm : palm);
       return dist(along(wrist, f[k], -len[k][1]), s.pos[j]) - len[k][0];
     });
   };
@@ -1195,8 +1200,8 @@ export const createBody = (world?: World): Body => {
     const kq = { ...q, rot: q.rot.slice() };
     let [grip0, blade0, fingR, fingL]: Vec3[] = [eye, Y, Y, Y];
     if (sw) {
-      // In the guard 6 cm toward the middle of the body, back in a cut: the left arm crosses less
-      // before the chest (the user, 2026-11-09).
+      // In the guard 6 cm toward the middle of the body and 5 cm up, back in a cut: the left arm
+      // crosses less before the chest, the right fist stays in sight (the user, 2026-11-09).
       const [at, g] = [
         add(
           add(
@@ -1206,7 +1211,7 @@ export const createBody = (world?: World): Body => {
                 sw.at,
                 mix(
                   [0, 0, 0],
-                  [-0.05, 0.035, 0],
+                  [-0.05, 0.05, 0],
                   prog < 0 ? 1 : (1 - Math.sin(Math.PI * clamp(prog))) ** 2,
                 ),
               ),
@@ -1299,7 +1304,16 @@ export const createBody = (world?: World): Body => {
         const at = along(grip0, blade0, sd > 0 ? 0 : -BACK);
         const held = { ...q, rot: q.rot.slice() };
         held.rot[arm - 1] = kq.rot[arm - 1];
-        wield(held, s, arm, at, blade0, keep([0.5 * sd, -1, -0.35]), sd > 0 ? fingR : fingL);
+        wield(
+          held,
+          s,
+          arm,
+          at,
+          blade0,
+          keep([0.5 * sd, -1, -0.35]),
+          sd > 0 ? fingR : fingL,
+          sd > 0 ? FIST : KATANA_LEFT,
+        );
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], onSword);
         }

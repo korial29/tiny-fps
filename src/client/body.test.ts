@@ -11,7 +11,7 @@ import {
 import { STILL } from '../shared/physics';
 import { CUT, MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { FINGER_SIDES, createBody, finger, hand, phalanges } from './body';
+import { FINGER_SIDES, KATANA_LEFT, createBody, finger, hand, phalanges } from './body';
 import type { Body } from './body';
 import { MUZZLE, REAR, button, foregrip, grip, gun, readout } from './gun';
 import { BEHIND, BOW, axes, ends } from './katana';
@@ -1230,7 +1230,9 @@ describe('the katana in both hands', () => {
     const s = pose(body, p);
     const [gr, ax] = [grip(s.pos[J.HAND_R], s.rot[J.HAND_R]), axes(s.rot[J.HAND_R])];
     const [fing, back] = [turn(s.rot[J.HAND_L], [0, -1, 0]), turn(s.rot[J.HAND_L], [1, 0, 0])];
-    const gl = [0, 1, 2].map(i => s.pos[J.HAND_L][i] + fing[i] * 0.078 + back[i] * 0.022) as Vec3;
+    const gl = [0, 1, 2].map(
+      i => s.pos[J.HAND_L][i] + fing[i] * KATANA_LEFT[0] + back[i] * KATANA_LEFT[1],
+    ) as Vec3;
     return away(gl, gr.map((v, i) => v - BEHIND * ax[2][i]) as Vec3);
   };
 

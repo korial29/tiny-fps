@@ -165,6 +165,8 @@ const BACK: Vec3 = [0, 0.125, 0.04];
 const BACK_N = unit([0, 0.469, 0.883]);
 /** Glossy black, the cut face and the screen's support on it: [r, g, layer, b]. */
 const GLOSS = [0.012, 0.012, SHINE, 0.018];
+/** The smooth outline over the cut: its middle up the face from BACK, its half width and half height, holding the cut's polygon. */
+const FACE = [-0.0145, 0.044, 0.0334];
 /**
  * Cuts `out` (triangles) by the back face: what lies in front stays, what lies behind is laid on the
  * face, glossy black facing out of it (the user, 2026-11-09). A triangle across it is split along it, so the edge is clean.
@@ -282,6 +284,24 @@ export const gun = (lod: number): number[] => {
     glow,
   );
   cutBack(out);
+  // Over the cut a smooth glossy black outline, a hair out of it, so its polygon's corners don't show
+  // (the user, 2026-11-09): a superellipse round [0, FACE[0]] up the face, FACE[1] and FACE[2] its half axes.
+  const up: Vec3 = [0, BACK_N[2], -BACK_N[1]];
+  const on = (a: number, b: number): Vec3 =>
+    [a, ...[1, 2].map(k => BACK[k] + up[k] * b + BACK_N[k] * 0.0002)] as Vec3;
+  for (let k = 0; k < 32; k++) {
+    for (const p of [
+      on(0, FACE[0]),
+      ...[k, k + 1].map(j =>
+        on(
+          FACE[1] * sgn(Math.cos((j * TAU) / 32)),
+          FACE[0] + FACE[2] * sgn(Math.sin((j * TAU) / 32)),
+        ),
+      ),
+    ]) {
+      out.push(...p, ...BACK_N, ...GLOSS);
+    }
+  }
   return (built[lod] = out);
 };
 

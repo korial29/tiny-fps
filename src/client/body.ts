@@ -570,17 +570,19 @@ export const hand = (
     [a * k, 0, 0],
     [0, b * k, 0],
   ];
+  // The palm up to WELD; from there a skin welds it to the four fingers' roots (weld(), below).
   tube(
-    PALM.map(r => palm(r)),
+    PALM.slice(0, 3).map(r => palm(r)),
     CUFF_SIDES,
     put,
     0.75,
   );
   const nail = mix(bare as Vec3, [0.98, 0.74, 0.7], 0.4);
   /** A finger's tube, its glove to ring BARE and bare beyond, and the nail on its tip. */
-  const digit = (p: Vec3, ds: [Vec3, Vec3, Vec3], l: number, r: number, t: Vec3) => {
+  const digit = (p: Vec3, ds: [Vec3, Vec3, Vec3], l: number, r: number, t: Vec3, from = 1) => {
     paint = k => (k < BARE ? tint : bare);
-    tube(finger(p, ...ds, l, r, t), FINGER_SIDES, put);
+    // From where it leaves the palm, ring `from`: a weld skins its root.
+    tube(finger(p, ...ds, l, r, t).slice(from), FINGER_SIDES, (q, n, k) => put(q, n, k + from));
     paint = () => nail;
     // The nail: an oval on the back of the last phalanx, toward its tip, a hair out of it.
     const d = ds[2];
@@ -602,23 +604,177 @@ export const hand = (
       }
     }
   };
+  /** Each finger's ring where it leaves the palm: its middle and its vertices, as finger() places them. */
+  const roots: [Vec3, Vec3[], Vec3, Vec3][] = [];
   for (let i = 0; i < 4; i++) {
     // `point` straightens the index out of the fist, to press a button.
     const ds = phalanges(i ? curl : curl * (1 - point), i);
-    digit(
-      [0.034 - 0.0225 * i, -0.004, 0.092],
-      ds,
-      0.04 * LENGTH[i],
-      0.0112,
-      unit(add(ds[0], [0, 0, 1])),
+    const at: Vec3 = [0.034 - 0.0225 * i, -0.004, 0.092];
+    const t = unit(add(ds[0], [0, 0, 1]));
+    digit(at, ds, 0.04 * LENGTH[i], 0.0112, t);
+    const [, x, y] = finger(at, ...ds, 0.04 * LENGTH[i], 0.0112, t)[1];
+    roots.push([
+      at,
+
+      Array.from({ length: FINGER_SIDES }, (_, k) => {
+        const a = (k * TAU) / FINGER_SIDES;
+        return [0, 1, 2].map(d => at[d] + x[d] * Math.cos(a) + y[d] * Math.sin(a)) as Vec3;
+      }),
+      unit(y),
+      t,
+    ]);
+  }
+  // The weld (the user, 2026-11-09: one piece, no joint): the palm's last ring zipped to the outline
+  // of the four roots (their vertices that are not inside a neighbour), by angle round the palm's
+  // axis; between two fingers it dips into a web.
+  paint = () => tint;
+  const [wz, y0, a0, b0] = PALM[2];
+  type W = [Vec3, Vec3];
+  const palmLoop = Array.from({ length: CUFF_SIDES }, (_, k): W => {
+    const a = (k * TAU) / CUFF_SIDES;
+    return [
+      [a0 * Math.cos(a), y0 + b0 * Math.sin(a), wz],
+      unit([Math.cos(a) / a0, Math.sin(a) / b0, 0]),
+    ];
+  });
+  /** A finger's root vertices that are not inside a neighbour, on the back (`top`) or the palm side, round it the way the palm's loop goes. */
+  const arc = (i: number, top: boolean): W[] => {
+    const [c, ring] = roots[i];
+    return ring
+      .map((p, k): [Vec3, number] => [p, k])
+      .filter(([p, k]) => {
+        const a = (k * TAU) / FINGER_SIDES;
+        const side = i == 3 ? a <= Math.PI + 1e-6 : a < Math.PI - 1e-6;
+        return (top ? side : !side) && roots.every(([o], j) => j == i || dist(p, o) > 0.0112 * 1.1);
+      })
+      .map(([p]): W => [p, unit(sub(p, c))]);
+  };
+  /** The web's low point between fingers `i` and `i + 1`, on the back or the palm side: where their roots cross, a little back toward the palm. */
+  const web = (i: number, s: number): W => {
+    const [[c0, , y0r, t0], [c1, , y1r, t1]] = [roots[i], roots[i + 1]];
+    const up = unit(add(y0r, y1r));
+    const back = unit(add(t0, t1));
+    return [
+      add(
+        mix(c0, c1, 0.5),
+        add(up.map(c => c * s * 0.005) as Vec3, back.map(c => c * -0.003) as Vec3),
+      ),
+      [0, 0, 0],
+    ];
+  };
+  // The outline in order, from the index's outer side over the back to the little finger and
+  // round under the palm back to the index, the way the palm's loop goes (the user, 2026-11-09).
+  const outline: W[] = [
+    ...[0, 1, 2, 3].flatMap(i => (i ? [web(i - 1, 1), ...arc(i, true)] : arc(i, true))),
+    ...[3, 2, 1, 0].flatMap(i => (i < 3 ? [web(i, -1), ...arc(i, false)] : arc(i, false))),
+  ];
+  /** Each vertex of a closed loop with how far round it it is, 0 to 1, by length. */
+  const round = (l: W[]): [W, number][] => {
+    const d = l.map((w, k) => dist(w[0], l[(k + 1) % l.length][0]));
+    const all = d.reduce((a, b) => a + b, 0);
+    let run = 0;
+    return l.map((w, k) => {
+      const t = run / all;
+      run += d[k];
+      return [w, t];
+    });
+  };
+  const [A, B] = [round(palmLoop), round(outline)];
+  let [i, j] = [0, 0];
+  const v = (l: [W, number][], k: number): [W, number] =>
+    k >= l.length ? [l[k % l.length][0], l[k % l.length][1] + 1] : l[k];
+  const tris: W[][] = [];
+  while (i < A.length || j < B.length) {
+    // Advance on the loop whose next vertex comes first round it.
+    const ta = i < A.length ? v(A, i + 1)[1] : Infinity;
+    const tb = j < B.length ? v(B, j + 1)[1] : Infinity;
+    tris.push(
+      ta < tb ? [v(A, i)[0], v(A, i + 1)[0], v(B, j)[0]] : [v(A, i)[0], v(B, j + 1)[0], v(B, j)[0]],
     );
+    if (ta < tb) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  // Each vertex's normal: its own surface's, and the weld's faces round it, outward, as much.
+  const sum = new Map<Vec3, Vec3>();
+  for (const t of tris) {
+    const [p, q, w] = t.map(x => x[0]);
+    let n = unit(cross(sub(q, p), sub(w, p)));
+    if (dot(n, [p[0], p[1] - y0, 0]) < 0) {
+      n = n.map(c => -c) as Vec3;
+    }
+    for (const [x] of t) {
+      sum.set(x, add(sum.get(x) ?? [0, 0, 0], n));
+    }
+  }
+  for (const t of tris) {
+    for (const [p, n] of t) {
+      put(p, unit(add(n, unit(sum.get(p)!))));
+    }
   }
   // `push` (0 to 1) reaches the thumb's tip out along `to`, onto the katana's button.
   const [d1, d2] = THUMB.map(([open, fist], k) => {
     const d = unit(mix(open, fist, curl));
     return k && to ? unit(mix(d, to, push)) : d;
   });
-  digit([0.032, -0.01, 0.025], [d1, d2, d2], 0.037, 0.0124, d1);
+  const tp: Vec3 = [0.032, -0.01, 0.025];
+  digit(tp, [d1, d2, d2], 0.037, 0.0124, d1, 2);
+  // The thumb's mound (the user, 2026-11-09: the thumb shows the most, holding a gun): from a
+  // footprint on the palm round its root, its ring there pushed out onto the palm's surface, a
+  // skin swells into the thumb halfway along its first bone. One piece with the palm.
+  paint = () => tint;
+  {
+    const rings = finger(tp, d1, d2, d2, 0.037, 0.0124, d1);
+    const [, x1, y1] = rings[1];
+    const [c2, x2, y2] = rings[2];
+    /** The palm's ring at `z`: its middle's height, half its width and its height. */
+    const section = (z: number) => {
+      const k = Math.min(
+        Math.max(
+          PALM.findIndex(row => row[0] > z),
+          1,
+        ),
+        PALM.length - 2,
+      );
+      const [a, b] = [PALM[k - 1], PALM[k]];
+      const f = Math.min(Math.max((z - a[0]) / (b[0] - a[0]), 0), 1);
+      return [1, 2, 3].map(i => a[i] + (b[i] - a[i]) * f);
+    };
+    const foot = Array.from({ length: FINGER_SIDES }, (_, k): [Vec3, Vec3] => {
+      const a = (k * TAU) / FINGER_SIDES;
+      const q = [0, 1, 2].map(
+        d => tp[d] + 1.7 * (x1[d] * Math.cos(a) + y1[d] * Math.sin(a)),
+      ) as Vec3;
+      const [yc, w, h] = section(q[2]);
+      // Out from the palm's axis onto its surface.
+      const e = Math.hypot(q[0] / w, (q[1] - yc) / h) || 1;
+      const on: Vec3 = [q[0] / e, yc + (q[1] - yc) / e, q[2]];
+      return [on, unit([on[0] / (w * w), (on[1] - yc) / (h * h), 0])];
+    });
+    const top = Array.from({ length: FINGER_SIDES }, (_, k): [Vec3, Vec3] => {
+      const a = (k * TAU) / FINGER_SIDES;
+      const d: Vec3 = [0, 1, 2].map(i => x2[i] * Math.cos(a) + y2[i] * Math.sin(a)) as Vec3;
+      return [add(c2, d), unit(d)];
+    });
+    // A third ring between, swollen: the mound.
+    const mid = foot.map(([q, n], k): [Vec3, Vec3] => [
+      add(mix(q, top[k][0], 0.5), n.map(c => c * 0.003) as Vec3),
+      unit(add(n, top[k][1])),
+    ]);
+    for (const [a, b] of [
+      [foot, mid],
+      [mid, top],
+    ]) {
+      for (let k = 0; k < FINGER_SIDES; k++) {
+        const n = (k + 1) % FINGER_SIDES;
+        for (const [q, m] of [a[k], a[n], b[n], a[k], b[n], b[k]]) {
+          put(q, m);
+        }
+      }
+    }
+  }
   /** The back of the palm at `z` forward and `x` across, its height in the hand. */
   const back = (z: number, x = 0) => {
     const k = PALM.findIndex(r => r[0] > z);
@@ -627,24 +783,6 @@ export const hand = (
     const [y, w, h] = [1, 2, 3].map(i => a[i] + (b[i] - a[i]) * t);
     return y + h * Math.sqrt(Math.max(1 - (x / w) ** 2, 0));
   };
-  // Under the knuckles, on the palm side, a padded ridge of the glove across the fingers' roots,
-  // swelling under each: it covers the palm's front edge where the fingers come out of it (the
-  // user, 2026-11-09).
-  paint = () => tint;
-  tube(
-    Array.from({ length: 8 }, (_, i) => -0.0475 + i * (0.095 / 7)).map((x, i, a): Ring => {
-      const swell = 1 + 0.08 * Math.cos(((x - 0.034) / 0.0225) * TAU);
-      const e = Math.min(Math.max((0.0475 - Math.abs(x)) / 0.0136, 0), 1);
-      const k = i == a.length - 1 ? 0 : swell * Math.max(Math.sqrt(e * (2 - e)), 0.1);
-      return [
-        [-x, 2 * PALM[3][1] - back(0.09, x) + 0.0005, 0.09],
-        [0, 0.0065 * k, 0],
-        [0, 0, 0.0095 * k],
-      ];
-    }),
-    5,
-    put,
-  );
   // The knuckles' shell: a hard ridge across their backs, swelling over each.
   paint = () => SHELL;
   tube(

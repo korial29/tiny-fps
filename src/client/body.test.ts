@@ -105,13 +105,23 @@ const draw = (body: Body, p: PlayerState, pitch = 0, color = TEAM): Vert[] => {
 };
 const colored = (v: Vert[], c: number[]) => v.filter(q => c.every((n, i) => q.c[i] == n));
 /**
- * Vertices of the palm, of a finger or the thumb and its nail, of the glove's gear (the ridge under
- * the knuckles, 6 spans of 5 sides and a fan of 5; the knuckles' shell, the back's plate and its stitching, the strap and its buckle), and of a hand: a tube of
- * the cuff's sides and 5 rings (the strap's too); one of FINGER_SIDES and 12 rings (its root sunk in the palm, two
- * rings round each bend, the glove's edge; the user, 2026-11-09), then a fan of 8.
+ * Vertices of the hand, in the order drawn: the palm, a tube of the cuff's sides and 3 rings; each
+ * finger, one of FINGER_SIDES and 11 rings from where it leaves the palm (two rings round each bend,
+ * the glove's edge), then a fan, and its nail; the weld from the palm's last ring to the fingers'
+ * roots (the user, 2026-11-09: one piece), the palm's 24 and the roots' 40 vertices zipped; the thumb,
+ * 10 rings from halfway along its first bone, and its nail; its mound, two strips from the palm;
+ * the glove's gear (the knuckles' shell, the back's plate and its stitching, the strap and its buckle).
  */
-const [PALM, FINGER, NAIL, GEAR] = [21 * CUFF_SIDES, 630, 24, 1764 + 18 * CUFF_SIDES + 195];
-const HAND = PALM + 5 * (FINGER + NAIL) + GEAR;
+const [PALM, FINGER, THUMB, NAIL, WELD, MOUND, GEAR] = [
+  12 * CUFF_SIDES,
+  570,
+  510,
+  24,
+  (CUFF_SIDES + 40) * 3,
+  2 * FINGER_SIDES * 6,
+  1764 + 18 * CUFF_SIDES,
+];
+const HAND = PALM + 4 * (FINGER + NAIL) + WELD + THUMB + NAIL + MOUND + GEAR;
 const away = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
 describe('body', () => {
@@ -511,12 +521,26 @@ describe('body', () => {
           n: out.slice(i * STRIDE + 3, i * STRIDE + 6) as Vec3,
         }));
         expect(v).toHaveLength(HAND);
+        const thumb = PALM + 4 * (FINGER + NAIL) + WELD;
         return [
           v.slice(0, PALM),
-          ...Array.from({ length: 5 }, (_, i) =>
+          ...Array.from({ length: 4 }, (_, i) =>
             v.slice(PALM + i * (FINGER + NAIL), PALM + i * (FINGER + NAIL) + FINGER),
           ),
+          v.slice(thumb, thumb + THUMB),
         ];
+      };
+      /** The weld and the thumb's mound. */
+      const welds = (curl: number) => {
+        const out: number[] = [];
+        hand(out, [0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0], curl, [1, 1, 1]);
+        const v = Array.from(
+          { length: out.length / STRIDE },
+          (_, i) => out.slice(i * STRIDE, i * STRIDE + 3) as Vec3,
+        );
+        const w = PALM + 4 * (FINGER + NAIL);
+        const m = w + WELD + THUMB + NAIL;
+        return [v.slice(w, w + WELD), v.slice(m, m + MOUND)];
       };
       const curls = [0, 0.4, 0.75, 1];
 
@@ -559,8 +583,8 @@ describe('body', () => {
         expect(of([0.2, 0.2, 0.2]).length).toBeGreaterThan(100);
       });
 
-      it('stay under 6200 vertices a hand, smooth fingers, nails and the glove’s gear', () => {
-        expect(HAND).toBeLessThanOrEqual(6200);
+      it('stay under 6000 vertices a hand, smooth fingers, nails and the glove’s gear', () => {
+        expect(HAND).toBeLessThanOrEqual(6000);
       });
 
       it('make each finger and the thumb one closed surface: no cap or face between its phalanges', () => {
@@ -581,55 +605,41 @@ describe('body', () => {
         }
       });
 
-      /** Whether `p` is inside the closed mesh `t` (triangles as vertices three by three): a ray along +x crosses it an odd number of times. */
-      const inside = (t: { at: Vec3 }[], p: Vec3) => {
-        let hits = 0;
-        for (let i = 0; i < t.length; i += 3) {
-          const [a, b, c] = [t[i].at, t[i + 1].at, t[i + 2].at];
-          const [e1, e2] = [sub(b, a), sub(c, a)];
-          // Moller-Trumbore with the direction (1, 0, 0).
-          const h: Vec3 = [0, -e2[2], e2[1]];
-          const det = e1[1] * h[1] + e1[2] * h[2];
-          if (Math.abs(det) < 1e-15) {
-            continue;
-          }
-          const s = sub(p, a);
-          const u = (s[1] * h[1] + s[2] * h[2]) / det;
-          const q: Vec3 = [
-            s[1] * e1[2] - s[2] * e1[1],
-            s[2] * e1[0] - s[0] * e1[2],
-            s[0] * e1[1] - s[1] * e1[0],
-          ];
-          const v = q[0] / det;
-          const d = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
-          if (u >= 0 && v >= 0 && u + v <= 1 && d > 0) {
-            hits++;
-          }
-        }
-        return hits % 2 == 1;
-      };
-
-      it('grow out of the palm: the middle of each root ring is in it, in a fist and open', () => {
+      it('are one piece: the weld meets the palm’s last ring and the fingers’ roots vertex for vertex, in a fist and open', () => {
+        const key = (p: Vec3) => p.map(c => Math.round(c * 1e6)).join();
         for (const curl of curls) {
-          const [palm, ...rest] = tubes(curl);
-          for (const t of rest) {
-            // The root ring is the open end of the tube: the vertices of the edges used once.
-            const uses = new Map<string, Vec3[]>();
-            for (let i = 0; i < t.length; i += 3) {
-              for (let j = 0; j < 3; j++) {
-                const [a, b] = [t[i + j].at, t[i + ((j + 1) % 3)].at];
-                const k = edgeKey(a, b);
-                uses.set(k, uses.has(k) ? [] : [a, b]);
-              }
-            }
-            const root = [...uses.values()].filter(e => e.length);
-            expect(root).toHaveLength(FINGER_SIDES);
-            const mid = root
-              .reduce((m, [a]) => add(m, a), [0, 0, 0] as Vec3)
-              .map(c => c / FINGER_SIDES) as Vec3;
-            // A millimetre back: the ring lies in the plane of the palm's last ring, where a ray is ambiguous.
-            expect(inside(palm, add(mid, [0, 0, -0.001]))).toBe(true);
+          const [palm, ...digits] = tubes(curl);
+          const [weld] = welds(curl);
+          const front = Math.max(...palm.map(v => v.at[2]));
+          const ring = new Set(palm.filter(v => v.at[2] > front - 1e-9).map(v => key(v.at)));
+          const roots = new Set(digits.slice(0, 4).flatMap(t => t.map(v => key(v.at))));
+          const seen = new Set<string>();
+          for (const p of weld) {
+            seen.add(key(p));
           }
+          // Every vertex of the palm's last ring is welded.
+          for (const k of ring) {
+            expect(seen.has(k)).toBe(true);
+          }
+          // The weld's vertices are the palm's, the fingers' or one of the six low points of the webs.
+          const own = [...seen].filter(k => !ring.has(k) && !roots.has(k));
+          expect(own).toHaveLength(6);
+        }
+      });
+
+      it('swell the thumb out of the palm: its mound starts on the palm and ends on the thumb’s first ring', () => {
+        const key = (p: Vec3) => p.map(c => Math.round(c * 1e6)).join();
+        for (const curl of curls) {
+          const thumb = tubes(curl)[5];
+          const [, mound] = welds(curl);
+          const ring = new Set(thumb.map(v => key(v.at)));
+          // On the thumb: its first ring.
+          expect(mound.filter(p => ring.has(key(p))).length).toBeGreaterThan(0);
+          // Its foot on the palm, by the thumb's root and within the palm's width.
+          const foot = mound.filter(p => !ring.has(key(p)));
+          expect(foot.length).toBeGreaterThan(0);
+          expect(Math.min(...foot.map(p => p[2]))).toBeGreaterThan(0);
+          expect(Math.max(...foot.map(p => Math.abs(p[0])))).toBeLessThan(0.05);
         }
       });
 

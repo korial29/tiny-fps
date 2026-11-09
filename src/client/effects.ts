@@ -47,8 +47,12 @@ export interface Effects {
   punch(): void;
   /** The own katana's cut struck: a thrust punches the field of view, a slash dips the look, a cut across rolls toward the side it ends on. */
   cut(c: number): void;
-  /** Advances dt seconds: the own player (eased, undefined before the first snapshot), the held keys, the events. */
-  update(me: PlayerState | undefined, keys: number, dt: number, hit?: Hit): void;
+  /**
+   * Advances dt seconds: the own player (eased, undefined before the first snapshot), the held keys,
+   * the events, and the stride phase of its drawn legs (Gait.phase): with it the bob dips as a foot
+   * lands, without it the stride counts the distance.
+   */
+  update(me: PlayerState | undefined, keys: number, dt: number, hit?: Hit, phase?: number): void;
 }
 
 /** Metres from one footfall to the next at speed v: longer strides at a sprint. */
@@ -192,14 +196,17 @@ export const createEffects = (): Effects => {
       thump = c == CUT.THRUST || arc ? 1 : thump;
     },
 
-    update(me, keys, dt, hit = { ev: 0, fall: 0 }) {
+    update(me, keys, dt, hit = { ev: 0, fall: 0 }, phase) {
       const ease = (rate: number) => Math.min(1, dt * rate);
       const v = me ? speedOf(me) : 0;
 
       // Distance on the floor or a wall, a respawn (a jump of metres) excepted.
       const d =
         me && last && stepping(me) && stepping(last) ? Math.hypot(me.x - last.x, me.z - last.z) : 0;
-      if (d < 1) {
+      if (phase !== undefined) {
+        // A foot lands at each half of the legs' stride: the bob's whole steps.
+        fx.stride = 2 * phase;
+      } else if (d < 1) {
         fx.stride += d / stepLength(v);
       }
       amt += ((walks(me) && d > 0.5 * dt && d < 1 ? 1 : 0) - amt) * ease(10);

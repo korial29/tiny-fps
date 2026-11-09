@@ -87,6 +87,23 @@ describe('bob', () => {
     expect(stepLength(9)).toBeGreaterThan(stepLength(6));
   });
 
+  it('dips as a drawn foot lands when it has the legs’ phase: a whole step each half of it', () => {
+    const fx = createEffects();
+    const dy: number[] = [];
+    for (let i = 0; i < 120; i++) {
+      // The legs at 1.5 strides a second, a foot down at phases 0 and 0.5.
+      const phase = (i * DT * 1.5) % 1;
+      fx.update(me({ x: i * 0.1, vx: 6 }), 0, DT, undefined, phase);
+      expect(fx.stride).toBeCloseTo(2 * phase);
+      dy.push(fx.dy);
+    }
+    // In the last stride (frames 80 to 119), lowest at a foot down, highest between.
+    const at = (ph: number) =>
+      dy[80 + Math.round(((ph - ((80 * DT * 1.5) % 1) + 1) % 1) / (DT * 1.5))];
+    expect(at(0.5)).toBeLessThan(at(0.25));
+    expect(at(0.5)).toBeLessThan(at(0.75));
+  });
+
   it('counts the steps along a wall too, and not on a slide or in the air', () => {
     expect([MODE.GROUND, MODE.CROUCH, MODE.WALLRUN].map(mode => stepping(me({ mode })))).toEqual([
       true,

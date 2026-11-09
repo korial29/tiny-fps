@@ -242,14 +242,16 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     };
     // What the live steps did, once: the camera and the sounds read it, the inputs sent do not.
     const hit = predictor.events();
-    fx.update(me, ctl.keys, dt, hit);
+    // The bob goes with the legs as last drawn.
+    fx.update(me, ctl.keys, dt, hit, body.phase);
     hud.hurt(fx.hurt);
     // A saber lock: the gauge of the tug of war, the own presses against the foe's.
     const foe = me?.lock ? who(me.foe ?? -1) : undefined;
     hud.duel(foe ? ((me!.pushes ?? 0) - (foe.pushes ?? 0)) / LOCK_WIN : undefined);
-    foley.me(me, hit, fx.stride);
-    foley.others(others);
     body.update(me, dt, fx.kick, canvas.clientWidth / (canvas.clientHeight || 1));
+    // The steps sound as the drawn feet land: the own body's now, the others' as last drawn.
+    foley.me(me, hit, body.steps);
+    foley.others(others, id => rd?.steps(id));
     // The camera moves for the eye only: the inputs keep sending the real height and angles. A
     // cut's twist turns the drawn view a little with the body.
     const cam: [number, number, number] = [eye[0], eye[1] + fx.dy, eye[2]];

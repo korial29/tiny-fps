@@ -871,7 +871,8 @@ export const createBody = (world?: World): Body => {
     const r = me?.railed || me?.rifled ? 1 : 0;
     // A swap tips the gun over to show the battery under it, or the capsule on its top, and back.
     const sp = me ? swapOf(me) : -1;
-    const tipped = sp < 0 ? 0 : ease(span(sp, 0, 0.15)) * (1 - ease(span(sp, 0.85, 1)));
+    // Tipped over from the start, and back into aim after the slap (the user, 2026-11-09).
+    const tipped = sp < 0 ? 0 : ease(span(sp, 0, 0.12)) * (1 - ease(span(sp, 0.8, 1)));
     const roll = tipped * (me?.rifled ? -1.1 : r ? 0.35 : -1.25);
     const at: Vec3 = [
       Math.min(0.22, 0.18 * wide) * (1 - RIFLE[0] * r) +
@@ -890,15 +891,16 @@ export const createBody = (world?: World): Body => {
     at[1] += 0.03 * rf * tipped;
     at[2] += 0.1 * rf * tipped;
     at[1] += (r ? 0.03 : 0.17) * tipped;
-    // The slap home jolts the gun or the rifle up 1.5 cm, and it settles.
-    if (sp >= 0 && !me?.railed) {
-      at[1] += 0.015 * Math.max(0, 1 - Math.abs(sp - TAP - 0.02) / 0.04);
-    }
+    // The slap home jolts the gun or the rifle: up 1.5 cm and back 1 cm, the nose kicked up, and
+    // it settles (the user, 2026-11-09: a slight shock).
+    const jolt = sp >= 0 && !me?.railed ? Math.max(0, 1 - Math.abs(sp - TAP - 0.02) / 0.04) : 0;
+    at[1] += 0.015 * jolt;
+    at[2] += 0.01 * jolt;
     // A shot kicks the nose up; a swap lifts it too, the rail gun's down.
     const l = Math.hypot(...target);
     const to: Vec3 = [
       target[0],
-      target[1] + (0.1 * kicked + (r ? 0 : 0.2) * tipped) * l,
+      target[1] + (0.1 * kicked + (r ? 0 : 0.2) * tipped + 0.06 * jolt) * l,
       target[2],
     ];
     const [rc, rs] = [Math.cos(roll), Math.sin(roll)];
@@ -1131,7 +1133,7 @@ export const createBody = (world?: World): Body => {
             free *
             (rail
               ? ease(span(sp, 0.34, 0.46)) * (1 - ease(span(sp, 0.88, 0.96)))
-              : ease(span(sp, 0.22, 0.38)) * (1 - ease(span(sp, TAP + 0.03, 0.95))))
+              : ease(span(sp, 0.16, 0.3)) * (1 - ease(span(sp, TAP + 0.03, 0.9))))
           : 0;
       if (onLoad > 0.002) {
         // On the new battery or capsule, which comes with the hand. The capsule is held round its
@@ -1142,11 +1144,11 @@ export const createBody = (world?: World): Body => {
           me ? kindOf(me) : 0,
           Math.max(sp, rail ? 0.42 : 0.4),
         );
-        // The battery in but for its last 12 mm, the palm drops 12 cm off it and slaps it home at
-        // TAP, faster and faster (the user, 2026-11-09: insist on the slap).
+        // The battery in but for its last 12 mm, held there a moment; then the palm drops 12 cm off
+        // it and slaps it home at TAP, faster and faster (the user, 2026-11-09).
         const tap =
           0.12 *
-          (sp < TAP - 0.05 ? ease(span(sp, 0.7, TAP - 0.05)) : 1 - span(sp, TAP - 0.05, TAP) ** 3);
+          (sp < TAP - 0.04 ? ease(span(sp, 0.64, TAP - 0.04)) : 1 - span(sp, TAP - 0.04, TAP) ** 3);
         const mid = [0, 1, 2].map(i => foot[i] + up[i] * (rail ? 0.04 : -0.01 - tap)) as Vec3;
         let fing: Vec3 | undefined;
         if (rail) {
@@ -1163,7 +1165,7 @@ export const createBody = (world?: World): Body => {
         // The battery in, the hand lets go of it and opens flat, the palm up to its foot, the
         // fingers along the gun, to slap it home with the palm (the user, 2026-11-09).
         // The battery in, the hand lets go of it and opens flat to slap it home (below).
-        const flat = rail ? 0 : ease(span(sp, 0.72, 0.76));
+        const flat = rail ? 0 : ease(span(sp, 0.6, 0.64));
         [slapW, slapTap] = [onLoad * flat, tap];
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], onLoad);

@@ -155,6 +155,9 @@ export const step = (p: PlayerState, i: Input, w: World, team: number, armed = t
     p.swing = Math.max(0, (p.swing ?? 0) - 1);
     p.heavy = !!p.swing && !!p.heavy;
   }
+  // The battery holds no more than the player carries, and nothing without the gun: a shot never
+  // spends more than he has.
+  p.mag = Math.min(p.mag ?? 0, Math.max(p.ammo, 0));
   const has = [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0];
   const want = i.keys & KEY.BLADE ? 1 : i.keys & KEY.RAIL ? 2 : i.keys & KEY.RIFLE ? 3 : 0;
   const hand = p.swing && p.blade ? 1 : has[want] ? want : has.indexOf(true);

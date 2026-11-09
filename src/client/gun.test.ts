@@ -757,12 +757,14 @@ describe('the battery and the capsule', () => {
   it('slides the battery out and drops it, then brings a new one up into the grip', () => {
     const out = (s: number) => swapped(s, false)[0];
     expect(out(0.1)).toBe(0);
-    expect(out(0.3)).toBeCloseTo(0.1, 6);
-    expect(out(0.39)).toBeGreaterThan(0.5);
-    expect(out(0.4)).toBeCloseTo(0.22, 6);
-    expect(out(0.6)).toBeLessThan(out(0.45));
-    // In but for its last 12 mm until the palm slaps it home at TAP, when it clicks (the user, 2026-11-09).
-    expect(out(0.75)).toBeCloseTo(0.012, 6);
+    expect(out(0.22)).toBeCloseTo(0.1, 6);
+    expect(out(0.29)).toBeGreaterThan(0.5);
+    expect(out(0.3)).toBeCloseTo(0.22, 6);
+    expect(out(0.45)).toBeLessThan(out(0.35));
+    // Placed by 0.52 but for its last 12 mm, held there a moment, until the palm slaps it home at
+    // TAP, when it clicks (the user, 2026-11-09).
+    expect(out(0.53)).toBeCloseTo(0.012, 6);
+    expect(out(0.7)).toBeCloseTo(0.012, 6);
     expect(out(TAP - 0.013)).toBeCloseTo(0.012, 6);
     expect(out(TAP)).toBe(0);
     expect(out(0.9)).toBe(0);

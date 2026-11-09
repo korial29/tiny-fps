@@ -545,11 +545,11 @@ describe('prediction against the room', () => {
         yaw,
         pitch: 0,
       }));
-    // In to half a metre of the rack, 200 steps standing on it tapping FIRE, 40 back out of the
-    // circle, 40 in again, and still.
+    // In to half a metre of the rack, 240 steps standing on it tapping FIRE (a battery, its 1.3 s
+    // swap and on), 40 back out of the circle, 40 in again, and still.
     const steps = [
       ...put(Math.round((d - 0.5) * 10) + 3, KEY.FORWARD),
-      ...put(200, KEY.FIRE),
+      ...put(240, KEY.FIRE),
       ...put(40, KEY.BACK),
       ...put(40, KEY.FORWARD),
       ...put(30, 0),
@@ -557,7 +557,7 @@ describe('prediction against the room', () => {
     for (const [name, lag] of LAGS) {
       const r = race(lag, steps, 0, [], [], true);
       expect([r.worst, r.end, r.final, r.differing], `${name} lag`).toEqual([0, 0, 0, []]);
-      // Filled on arrival and on the return, and not in between: 200 steps of taps spent a
+      // Filled on arrival and on the return, and not in between: 240 steps of taps spent a
       // battery, swapped it and went on.
       expect(r.fills, `${name} lag`).toBe(2);
       expect(r.ammo, `${name} lag`).toBe(AMMO_MAX);

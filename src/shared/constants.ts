@@ -201,7 +201,8 @@ export const AMMO_MAX = 60;
  * RAIL_RELOAD ticks without firing. u8 each on the wire.
  */
 export const GUN_MAG = 15;
-export const GUN_RELOAD = 54;
+/** 1.3 s (the user, 2026-11-09: a slower swap, the battery placed, a pause, then the slap). */
+export const GUN_RELOAD = 78;
 export const RAIL_CAP = 80;
 export const RAIL_RELOAD = 90;
 /** Ticks between two shots while the trigger is held: 8.6 shots a second. */

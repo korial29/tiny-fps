@@ -14,7 +14,7 @@ import { TAU, floored } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
-import { KATANA_LEFT, clasp, inv, reach, shrug, stowed, wield } from './body';
+import { KATANA_LEFT, KATANA_TILT, clasp, inv, reach, shrug, stowed, wield } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait } from './gait';
 import {
@@ -247,7 +247,18 @@ export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number, t
   const poles: [Vec3, Vec3] = [turn([0.5, -1, -0.35]), turn([-0.5, -1, -0.35])];
   const [grip, d, right, left] = clasp(solve(q), at, dir, poles);
   wield(q, s, J.ARM_R, grip, d, poles[0], right);
-  wield(q, s, J.ARM_L, add(grip, d.map(v => -BEHIND * v) as Vec3), d, poles[1], left, KATANA_LEFT);
+  wield(
+    q,
+    s,
+    J.ARM_L,
+    add(grip, d.map(v => -BEHIND * v) as Vec3),
+    d,
+    poles[1],
+    left,
+    KATANA_LEFT,
+    KATANA_TILT,
+    true,
+  );
   return q;
 };
 

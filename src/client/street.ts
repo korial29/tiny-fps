@@ -64,7 +64,7 @@ export const deepen = ({ brushes, floor }: WorldDef): Brush[] =>
   brushes.map(b => (b.min[1] <= floor ? { ...b, min: [b.min[0], STREET, b.min[2]] } : b));
 
 /** Past this distance from the centre the markings are drawn wider, longer and higher, metres: they keep a pixel, and their depth over the asphalt. */
-const SCALE = 300;
+export const SCALE = 300;
 /**
  * How far from the centre the markings and the traffic go, metres: past it the haze leaves a
  * twentieth of them, so they fade into it instead of ending.

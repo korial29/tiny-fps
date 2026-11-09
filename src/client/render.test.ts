@@ -32,6 +32,7 @@ import {
   sunProj,
   viewProj,
 } from './render';
+import { trees } from './skyline';
 import { STREET, street } from './street';
 import { LAYERS } from './textures';
 import { vision, zones } from './vision';
@@ -446,19 +447,21 @@ describe('scenery', () => {
   const w = build(ROOFTOPS);
   const v = scenery(w);
 
-  it('draws the brushes, a distant city, the runner red and the team zones, in whole triangles', () => {
+  it('draws the brushes, a distant city, its trees, the runner red and the team zones, in whole triangles', () => {
     expect(v.length % (3 * STRIDE)).toBe(0);
-    const [brushes, tower, road, vis, zone] = [
+    const [brushes, tower, road, wood, vis, zone] = [
       level(w),
       level(city(w)),
       street(w.def),
+      trees(w.def),
       vision(w.def),
       zones(w.def),
     ].map(a => a.length);
     expect(tower).toBeGreaterThan(brushes);
     expect(road).toBeGreaterThan(0);
+    expect(wood).toBeGreaterThan(0);
     expect(vis).toBeGreaterThan(0);
-    expect(v).toHaveLength(tower + road + vis + zone);
+    expect(v).toHaveLength(tower + road + wood + vis + zone);
   });
 
   it('puts the map first and the red last, so the red is never hidden by the city', () => {

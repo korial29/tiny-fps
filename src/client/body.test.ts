@@ -1456,7 +1456,7 @@ describe('the katana in both hands', () => {
 });
 
 describe('the laser rifle in both hands', () => {
-  it('holds the left hand under its shroud, the thumb along it and the hand across and up its right side, looking level, down or up', () => {
+  it('holds the left hand under its handguard, the thumb along it and the hand across and up its right side, looking level, down or up', () => {
     const body = watch(man({ ammo: -1, rifle: 100, clip: 20, rifled: true }), 90);
     for (const pitch of [0, -0.6, 0.5]) {
       const s = body.pose([0, EYE, 0], 0, pitch)!;

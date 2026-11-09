@@ -1000,14 +1000,13 @@ export const createBody = (world?: World): Body => {
             clock,
             {
               // Dark from when the old one comes out until the new one is in, the gun's counter
-              // folded down with it; then the gun boots: the counter stands up, its digits show,
-              // and the light comes on slowly.
+              // dark with it; then the gun boots: the light comes on, and the counter fades in slowly.
               light:
                 sp < 0 ? power(since, kind ? undefined : GUN_ON.lit) : 1 - ease(span(sp, 0.1, 0.2)),
               swap: sp,
               empty: !(kind == 3 ? me?.clip : rail ? me?.cap : me?.mag),
-              stand:
-                sp < 0 ? ease(span(since, GUN_ON.from, GUN_ON.up)) : 1 - ease(span(sp, 0.15, 0.35)),
+              screen:
+                sp < 0 ? span(since, GUN_ON.from, GUN_ON.up) ** 2 : 1 - ease(span(sp, 0.1, 0.2)),
               digits: sp < 0 && since >= GUN_ON.digits,
               cells: me && cellsOf(me),
               heat: (me?.heat ?? 0) / HEAT_MAX,

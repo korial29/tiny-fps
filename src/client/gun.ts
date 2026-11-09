@@ -15,7 +15,20 @@ import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { glow as lit, tri } from './flag';
-import { SHINE, STRIDE, add, basis, dim as dimmed, dot, place, sub, unit } from './mesh';
+import {
+  SHINE,
+  STRIDE,
+  add,
+  aim,
+  basis,
+  dim as dimmed,
+  dot,
+  dress,
+  place,
+  smooth,
+  sub,
+  unit,
+} from './mesh';
 import type { Vec3 } from './mesh';
 import { axis, turn } from './rig';
 import type { Quat } from './rig';
@@ -1256,8 +1269,66 @@ export const swapOf = (p: Pick<PlayerState, 'reload' | 'railed' | 'rifled'>): nu
 export const power = (t: number, end = 0.6): number =>
   t >= end ? 1 : clamp((t - end / 4) / (end * 0.75)) * (0.65 + 0.35 * Math.sin(t * 95) ** 2);
 
-/** The gun's boot `t` seconds after it came to hand or its new battery went in: its light up by `lit`, its counter fading in from `from` to `up`, with the BOOT sound's whine, full at its beep (the user, 2026-11-09); the rifle's digits show at `digits`. */
-export const GUN_ON = { lit: 1.4, from: 0.05, up: 0.6, digits: 1.05 };
+/** The gun's boot `t` seconds after its button is pressed (PRESS): its light up by `lit`, its counter fading in from `from` to `up`, with the BOOT sound's whine, full at its beep (the user, 2026-11-09); the rifle's digits show at `digits`. */
+export const GUN_ON = { lit: 0.95, from: 0.05, up: 0.45, digits: 1.05 };
+
+/**
+ * Seconds after a weapon comes to hand, or a swap puts its new battery in, that the thumb presses
+ * the button on its side: it powers on then, light and sound (the user, 2026-11-09). The rail gun's
+ * boot plays 1.4 times as fast (combat.ts), so its press comes sooner.
+ */
+export const PRESS = 0.45;
+export const pressAt = (kind: number) => (kind == 2 ? PRESS / 1.4 : PRESS);
+/** The thumb `t` after a weapon came to hand, its press at `at`: at rest (0), reaching up onto the button (1) by `at`, then back. */
+export const thumb = (t: number, at = PRESS) =>
+  t < at ? ease(span(t, at - 0.16, at)) : 1 - ease(span(t, at + 0.08, at + 0.24));
+
+/**
+ * Each weapon's button by kind (the gun, the katana, the rail gun, the rifle), in its model space,
+ * on its left flank where the thumb reaches up to it, in sight: its foot, the way it faces, how far
+ * it stands out. The katana's on the top of its grip, on the thumb's side.
+ */
+const BUTTONS: [Vec3, Vec3, number][] = [
+  [[-0.0405, 0.08, -0.02], unit([-0.86, -0.5, 0]), 0.002],
+  [[-0.0036, 0.013, -0.02], unit([-0.3, 0.95, 0]), 0.003],
+  [[-0.0313, 0.08, -0.01], unit([-0.98, -0.2, 0]), 0.002],
+  [[-0.0271, 0.08, -0.02], unit([-0.89, 0.45, 0]), 0.002],
+];
+/** The thumb's middle joint in a weapon's model space, the hand round its grip. */
+const KNUCKLE: Vec3 = [-0.0148, 0.0463, -0.0198];
+const [TS, TC] = [Math.sin(0.55), Math.cos(0.55)];
+/** The way, in the hand (x toward the thumb, y its back, z the fingers), from the thumb's middle joint to weapon `kind`'s button. */
+export const thumbTo = (kind: number): Vec3 => {
+  const [foot, n, len] = BUTTONS[kind];
+  const [x, y, z] = unit(sub(add(foot, n.map(v => v * len) as Vec3), KNUCKLE));
+  return unit([y * TS - z * TC, x, -y * TC - z * TS]);
+};
+const KNOB = dress(
+  smooth(
+    [
+      [0.0035, 0],
+      [0.0035, 1],
+      [0, 1],
+    ],
+    8,
+  ),
+  [1, 1, 1],
+);
+/** Appends weapon `kind`'s button in model space, pushed in by `push` (0 to 1) of 1.5 mm, its glow `rgb` lit by `light`. */
+export const button = (out: number[], kind: number, push: number, light: number, rgb: number[]) => {
+  const [foot, n, len] = BUTTONS[kind];
+  const from = out.length;
+  place(
+    out,
+    KNOB,
+    sub(foot, n.map(v => v * push * 0.0015) as Vec3),
+    aim(n, [0, 1, 0]),
+    [0, 0, 0],
+    [1, 1, len],
+    rgb.map(c => c * (0.15 + 0.85 * light)),
+  );
+  lit(out, from, 1);
+};
 
 /** When, in the swap of the gun or the rifle, the palm slaps the new battery home: it clicks then. */
 export const TAP = 0.82;
@@ -1837,6 +1908,8 @@ export interface Lit {
   cells?: number[];
   heat?: number;
   hot?: boolean;
+  /** How far the thumb has its button in, 0 to 1. */
+  press?: number;
 }
 
 /** The levels of the rail gun's three cells for `p` (0 to 1): the capsule in use, then what it carries beside, a capsule's worth to each. */
@@ -1870,6 +1943,7 @@ export const held = (
     cells = [1, 1, 1],
     heat = 0,
     hot = false,
+    press = 0,
   }: Lit = {},
 ) => {
   const [at, ax] = [grip(pos, q), axes(q)];
@@ -1921,6 +1995,9 @@ export const held = (
     place(out, lcd(ammo), at, ax, [0, 0, 0], k);
   }
   dimmed(out, from, d);
+  const knob: number[] = [];
+  button(knob, w, press, light, w == 3 ? [1, 0.25, 0.15] : [0.25, 0.9, 1]);
+  place(out, knob, at, ax, [0, 0, 0], k);
   // The gun's counter fades in on its own, with the boot sound, without the gun's flicker (the user, 2026-11-09).
   if (ammo !== undefined && w < 2) {
     const c = out.length;

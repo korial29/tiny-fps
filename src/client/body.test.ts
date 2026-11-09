@@ -13,7 +13,7 @@ import { CUT, MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { createBody, finger, hand, phalanges } from './body';
 import type { Body } from './body';
-import { MUZZLE, REAR, foregrip, grip, gun, readout } from './gun';
+import { MUZZLE, REAR, button, foregrip, grip, gun, readout } from './gun';
 import { BEHIND, BOW, axes, ends } from './katana';
 import { SHINE, STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
@@ -750,6 +750,8 @@ describe('the gun in the right hand', () => {
     const bright = (body: Body, q = p) => glow(draw(body, q)).length;
     const lit = bright(watch(p, 90));
     expect(bright(watch(p, 4))).toBeLessThan(lit * 0.2);
+    // Still dark until the thumb presses its button (PRESS, 0.45 s).
+    expect(bright(watch(p, 24))).toBeLessThan(lit * 0.2);
     const body = watch(p, 90);
     body.update({ ...p, reload: 20 }, DT);
     expect(bright(body, { ...p, reload: 20 })).toBeLessThan(lit * 0.2);
@@ -995,7 +997,11 @@ describe('the gun points where the beam goes', () => {
   /** The model vertex of the gun that is nearest to a model point, and where the body drew it. */
   const spot = (out: number[], model: Vec3): Vec3 => {
     const m = gun(1);
-    const first = out.length / STRIDE - m.length / STRIDE - readout(15).length / STRIDE;
+    // The model, then its button, then the counter, last.
+    const knob: number[] = [];
+    button(knob, 0, 0, 1, [1, 1, 1]);
+    const first =
+      out.length / STRIDE - m.length / STRIDE - (knob.length + readout(15).length) / STRIDE;
     let best = 0;
     let d = Infinity;
     for (let i = 0; i < m.length / STRIDE; i++) {

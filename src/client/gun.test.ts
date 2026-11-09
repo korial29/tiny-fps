@@ -9,6 +9,7 @@ import {
   TILT,
   aimed,
   battery,
+  button,
   capsule,
   cellsOf,
   cell,
@@ -24,6 +25,10 @@ import {
   loadFrame,
   pointed,
   power,
+  PRESS,
+  pressAt,
+  thumb,
+  thumbTo,
   railgun,
   readout,
   swapOf,
@@ -59,6 +64,13 @@ const verts = (v: number[]): Vertex[] =>
 const near = verts(gun(1));
 const far = verts(gun(0));
 const IDENT: Quat = [0, 0, 0, 1];
+
+/** Weapon `kind`'s button alone, out and lit. */
+const knob = (kind: number) => {
+  const out: number[] = [];
+  button(out, kind, 0, 1, [1, 1, 1]);
+  return out;
+};
 
 describe('the gun model', () => {
   it('stays within the budget: a gun near is a few hundred triangles, one far about half of that', () => {
@@ -232,8 +244,10 @@ describe('the hand that holds it', () => {
 
   it('carries the model there, after its battery: its vertices are the model, turned and moved', () => {
     const at = grip([1, 2, 3], IDENT);
-    const vs = hand(IDENT).slice(battery(1).length / STRIDE);
-    expect(vs).toHaveLength(near.length);
+    const all = hand(IDENT);
+    const vs = all.slice(battery(1).length / STRIDE, battery(1).length / STRIDE + near.length);
+    // After the model, its button, and nothing else.
+    expect(all).toHaveLength(battery(1).length / STRIDE + near.length + knob(0).length / STRIDE);
     vs.forEach((v, i) => {
       // Distances from the grip are kept.
       expect(Math.hypot(...v.p.map((x, k) => x - at[k]))).toBeCloseTo(Math.hypot(...near[i].p), 4);
@@ -892,6 +906,44 @@ describe('the laser rifle', () => {
   it('is drawn in the hand with its cell, by kind 3', () => {
     const out: number[] = [];
     held(out, [0, 0, 0], IDENT, 1, 1, 24, 0, 3);
-    expect(out.length).toBe(cell(1).length + rifle(1).length + scope(24).length);
+    expect(out.length).toBe(cell(1).length + rifle(1).length + knob(3).length + scope(24).length);
+  });
+});
+
+describe('the button that powers a weapon on (the user, 2026-11-09)', () => {
+  it('is pressed by the thumb: at rest, reaching onto it by PRESS, then back', () => {
+    expect(thumb(0)).toBe(0);
+    expect(thumb(PRESS - 0.2)).toBe(0);
+    expect(thumb(PRESS - 0.08)).toBeGreaterThan(0.2);
+    expect(thumb(PRESS)).toBe(1);
+    expect(thumb(PRESS + 0.05)).toBe(1);
+    expect(thumb(PRESS + 0.3)).toBe(0);
+    // The rail gun's boot plays faster: its press comes sooner.
+    expect(pressAt(2)).toBeLessThan(PRESS);
+    expect(pressAt(0)).toBe(PRESS);
+    expect(thumb(pressAt(2), pressAt(2))).toBe(1);
+  });
+
+  it('sits on each weapon’s left, glowing, lit with the weapon, and goes in when pushed', () => {
+    for (const kind of [0, 1, 2, 3]) {
+      const b = (push: number, light: number) => {
+        const out: number[] = [];
+        button(out, kind, push, light, [0.25, 0.9, 1]);
+        return verts(out);
+      };
+      const on = b(0, 1);
+      expect(on.length).toBeGreaterThan(20);
+      expect(on.every(v => v.layer == -2 && v.p[0] < 0)).toBe(true);
+      // Dim with the weapon off.
+      expect(Math.max(...b(0, 0).map(v => v.c[2]))).toBeLessThan(
+        Math.max(...on.map(v => v.c[2])) * 0.2,
+      );
+      // Pushed, it goes 1.5 mm in toward the weapon's middle.
+      const mid = (vs: typeof on) => vs.reduce((s, v) => s + v.p[0], 0) / vs.length;
+      expect(mid(b(1, 1))).toBeGreaterThan(mid(on) + 0.0004);
+      // The thumb reaches toward it: a way in the hand, unit long, toward the thumb's side.
+      const t = thumbTo(kind);
+      expect(Math.hypot(...t)).toBeCloseTo(1, 6);
+    }
   });
 });

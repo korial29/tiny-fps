@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { swingOf } from '../shared/blade';
 import { CUTS, HEAVY } from '../shared/constants';
 import { CUT, SPECIAL_CUT } from '../shared/types';
-import { grip } from './gun';
+import { button, grip } from './gun';
 import {
   AMPLE,
   AMPLE_TRUNK,
@@ -235,7 +235,10 @@ describe('the crackle', () => {
       return out.length;
     });
     expect(live).toBeGreaterThan(still);
-    expect(still).toBe(katana(1).length);
+    // The katana and its button.
+    const knob: number[] = [];
+    button(knob, 1, 0, 1, [1, 1, 1]);
+    expect(still).toBe(katana(1).length + knob.length);
   });
 });
 
@@ -663,5 +666,37 @@ describe('the charged cut, as drawn', () => {
     const [a, b] = [0.1, 0.13].map(t => poised({ cut: CUT.LEFT, charge: 10 }, top, t).slice(0, 2));
     expect(Math.hypot(a[0] - b[0], a[1] - b[1])).toBeGreaterThan(0.0005);
     expect(Math.hypot(a[0] - b[0], a[1] - b[1])).toBeLessThan(0.012);
+  });
+});
+
+describe('the blade coming on, a light saber’s (the user, 2026-11-09)', () => {
+  /** How far ahead of the grip the sword reaches, its blade out by `grow`. */
+  const reachOf = (grow: number) => {
+    const out: number[] = [];
+    sword(
+      out,
+      [0, 0, 0],
+      [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+      ],
+      1,
+      undefined,
+      1,
+      1,
+      grow,
+    );
+    let most = 0;
+    for (let i = 0; i < out.length; i += STRIDE) {
+      most = Math.max(most, out[i + 2]);
+    }
+    return most;
+  };
+
+  it('grows out of the guard to its full length', () => {
+    expect(reachOf(1)).toBeCloseTo(TIP, 2);
+    expect(reachOf(0.5)).toBeCloseTo(BASE + (TIP - BASE) / 2, 2);
+    expect(reachOf(0)).toBeLessThan(BASE + 0.03);
   });
 });

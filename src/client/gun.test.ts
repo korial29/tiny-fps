@@ -807,6 +807,21 @@ describe('the laser rifle', () => {
     ).toBe(true);
   });
 
+  it('carries grooves, screws and three LEDs a side on its near model only', () => {
+    // The amber LED: glowing, more red than green, little blue.
+    const amber = (v: number[]) =>
+      verts(v).filter(
+        x => x.layer == -2 && x.c[0] > 1.5 && x.c[1] > 0.7 && x.c[1] < 1 && x.c[2] < 0.2,
+      );
+    const leds = amber(rifle(1));
+    expect(leds.length).toBe(12);
+    expect(new Set(leds.map(x => Math.sign(x.p[0]))).size).toBe(2);
+    expect(amber(rifle(0))).toHaveLength(0);
+    // Near-black grooves and slots on the housing's top.
+    const top = verts(rifle(1)).filter(x => x.n[1] > 0.99 && x.p[1] > 0.13 && x.c[0] < 0.06);
+    expect(top.length).toBeGreaterThan(0);
+  });
+
   it('is drawn in the hand with its cell, by kind 3', () => {
     const out: number[] = [];
     held(out, [0, 0, 0], IDENT, 1, 1, 24, 0, 3);

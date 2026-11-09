@@ -606,6 +606,135 @@ const red: Paint = () => [LASER[0], LASER[1], -2, LASER[2]];
 const olive = shade([0.05, 0.055, 0.05], [0.34, 0.36, 0.32]);
 const rifled: number[][] = [];
 
+/** Linear between the rows of `rows` (sorted by their first column) at `f`. */
+const along = (rows: number[][], f: number): number[] => {
+  const j = rows.findIndex(r => r[0] > f);
+  const i = j < 0 ? rows.length - 1 : Math.max(j, 1);
+  const [a, b] = [rows[i - 1], rows[i]];
+  return a.map((v, k) => v + (b[k] - v) * clamp((f - a[0]) / (b[0] - a[0])));
+};
+/** Near-black for the grooves and slots, a bright lip under them, and three LEDs that bloom. */
+const slot = shade([0.015, 0.015, 0.02], [0.05, 0.05, 0.06]);
+const lip = shade([0.4, 0.42, 0.45], [0.9, 0.92, 0.95]);
+const LEDS = [LASER, [1.8, 0.9, 0.1], GLOW];
+
+/**
+ * The rifle's small details (the user, 2026-11-09: grooves along it, screw heads, a little
+ * electronics), on the near model only: two grooves along the top of the housing and one along each
+ * side with a bright lip under it, cross-head screws on the housing and the body, a dark panel of
+ * three LEDs on each side of the housing at the back, and a vent of five slots on each side of the butt.
+ */
+const details = (out: number[]) => {
+  const flat = (q: Vec3[], n: Vec3, paint: Paint) => {
+    for (const t of [
+      [q[0], q[1], q[2]],
+      [q[0], q[2], q[3]],
+    ]) {
+      for (const p of t) {
+        out.push(...p, ...n, ...paint(p, n));
+      }
+    }
+  };
+  /** A rectangle on a surface: `at(u, v)` the point `u` along and `v` across it. */
+  const rect = (
+    at: (u: number, v: number) => Vec3,
+    u0: number,
+    u1: number,
+    v0: number,
+    v1: number,
+    n: Vec3,
+    paint: Paint,
+  ) => {
+    // In pieces of 2 cm at most along it, so that it follows a curved surface.
+    const k = Math.ceil(Math.abs(u1 - u0) / 0.02);
+    for (let i = 0; i < k; i++) {
+      const [a, b] = [u0 + ((u1 - u0) * i) / k, u0 + ((u1 - u0) * (i + 1)) / k];
+      flat([at(a, v0), at(b, v0), at(b, v1), at(a, v1)], n, paint);
+    }
+  };
+  /** A cross-head screw at `c` on a surface of normal `n`, `e` and `w` across it. */
+  const screw = (c: Vec3, e: Vec3, w: Vec3, n: Vec3) => {
+    const p = (a: number, b: number, d: number): Vec3 =>
+      [0, 1, 2].map(i => c[i] + e[i] * a + w[i] * b + n[i] * d) as Vec3;
+    for (let k = 0; k < 10; k++) {
+      const [a, b] = [k, k + 1].map(j => (j * TAU) / 10);
+      for (const [r, d, paint] of [
+        [0.0034, 0.0003, slot],
+        [0.0026, 0.0006, steel],
+      ] as const) {
+        flat(
+          [
+            p(0, 0, d),
+            p(r * Math.cos(a), r * Math.sin(a), d),
+            p(r * Math.cos(b), r * Math.sin(b), d),
+            p(0, 0, d),
+          ],
+          n,
+          paint,
+        );
+      }
+    }
+    rect((u, v) => p(u, v, 0.0008), -0.0019, 0.0019, -0.0003, 0.0003, n, slot);
+    rect((u, v) => p(v, u, 0.0008), -0.0019, 0.0019, -0.0003, 0.0003, n, slot);
+  };
+  /** The housing's side `s` at `f` and `y`, `d` out of it, and its normal. */
+  const side = (s: number, f: number, y: number, d = 0.0003): Vec3 => {
+    const [, top, wb, wt] = along(HOUSING, f);
+    return [s * (wb + ((wt - wb) * (y - HOUSING_FOOT)) / (top - HOUSING_FOOT) + d), y, -f];
+  };
+  const sideN = (s: number): Vec3 => unit([s, 0.12, 0]);
+  /** The body's side `s` at `f`, `h` up from its middle line, `d` out of it. */
+  const flank = (s: number, f: number, h: number, d = 0.0004): Vec3 => {
+    const [, y, a, b] = along(PROFILE as number[][], f);
+    return [s * (a * (1 - Math.abs(h / b) ** 2.5) ** 0.4 + d), y + h, -f];
+  };
+  const up: Vec3 = [0, 1, 0];
+  for (const x of [-0.008, 0.008]) {
+    rect(
+      (f, v) => [x + v, along(HOUSING, f)[1] + 0.0003, -f],
+      -0.05,
+      0.4,
+      -0.0006,
+      0.0006,
+      up,
+      slot,
+    );
+    rect((f, v) => [x + v, along(HOUSING, f)[1] + 0.0003, -f], -0.05, 0.4, 0.0006, 0.0011, up, lip);
+  }
+  screw([0, 0.1353, 0.045], [1, 0, 0], [0, 0, 1], up);
+  for (const s of [-1, 1]) {
+    const n = sideN(s);
+    rect((f, h) => side(s, f, along(HOUSING, f)[1] - h), 0.02, 0.36, 0.0085, 0.0097, n, slot);
+    rect((f, h) => side(s, f, along(HOUSING, f)[1] - h), 0.02, 0.36, 0.0097, 0.0103, n, lip);
+    for (const f of [0.03, 0.3]) {
+      screw(side(s, f, along(HOUSING, f)[1] - 0.017), [0, 0, 1], [0, 1, 0], n);
+    }
+    // The LED panel at the back of the housing's side.
+    rect((f, y) => side(s, f, y), -0.06, -0.025, 0.112, 0.124, n, slot);
+    LEDS.forEach((c, i) => {
+      const f = -0.053 + i * 0.011;
+      rect(
+        (f, y) => side(s, f, y, 0.0006),
+        f - 0.0018,
+        f + 0.0018,
+        0.1162,
+        0.1198,
+        n,
+        () => [c[0], c[1], -2, c[2]],
+      );
+    });
+    // Screws on the body, under the red strip; a vent of slots on the butt.
+    const fn: Vec3 = [s, 0, 0];
+    for (const f of [-0.27, 0.08]) {
+      screw(flank(s, f, -0.022), [0, 0, 1], [0, 1, 0], fn);
+    }
+    for (let k = 0; k < 5; k++) {
+      const f = -0.29 + k * 0.012;
+      rect((u, h) => flank(s, u, h), f, f + 0.005, 0.012, 0.03, fn, slot);
+    }
+  }
+};
+
 /**
  * The laser rifle (the user, 2026-11-08), built once like gun(), after Halo's assault rifle held in
  * both hands: a long angular body from the butt at the shoulder past the grip (a bullpup), a tall
@@ -624,6 +753,9 @@ export const rifle = (lod: number): number[] => {
   // The housing on top: one block of polished grey metal along the top to the end of the barrel,
   // its back a flat sloping face that carries the counter.
   housing(out, lod);
+  if (lod) {
+    details(out);
+  }
   // The lens at the end.
   tube(
     out,

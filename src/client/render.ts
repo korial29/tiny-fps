@@ -431,6 +431,8 @@ export interface Renderer {
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
+  /** The footsteps of the player `id`'s runner so far (Gait.steps), undefined before it is drawn. */
+  steps(id: number): number | undefined;
   destroy(): void;
 }
 
@@ -811,6 +813,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.useProgram(scene);
     },
     project: (x, y, z) => project(vp, x, y, z),
+    steps: id => runners.get(id)?.gait.steps,
     destroy() {
       canvas.removeEventListener('webglcontextlost', onLost);
       canvas.removeEventListener('webglcontextrestored', onRestored);

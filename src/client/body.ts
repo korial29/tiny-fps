@@ -80,6 +80,9 @@ export interface Body {
   muzzle(): Vec3;
   /** How far a share of the trunk's twist in a cut has turned the body as of the last update (radians, trunk()): the drawn view turns with it. */
   spun(): number;
+  /** Its gait's footsteps so far and stride phase (Gait.steps, Gait.phase): the sounds of its steps and the bob of the view go with its feet. */
+  readonly steps: number;
+  readonly phase: number;
   /** The joints for a camera at `eye`; undefined without a player, or with the camera away from the body. */
   pose(eye: Vec3, yaw: number, pitch: number, roll?: number): Solved | undefined;
   /** Appends the body's vertices (see STRIDE) in the jacket `color`; nothing when pose() has none. */
@@ -1039,5 +1042,11 @@ export const createBody = (world?: World): Body => {
     },
     muzzle: () => tip(...holster(), me ? kindOf(me) : 0),
     spun: () => (me && prog >= 0 ? SWAY * bent(me, prog)[0] * w.blade : 0),
+    get steps() {
+      return gait.steps;
+    },
+    get phase() {
+      return gait.phase;
+    },
   };
 };

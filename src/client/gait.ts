@@ -22,7 +22,7 @@ export interface Gait {
   pose(): Pose;
   /** Stride phase, in cycles: the left foot lands at 0 and the right one at a half. */
   readonly phase: number;
-  /** Footsteps so far. */
+  /** Footsteps so far: a foot set down, or along a wall each half of the stride. */
   readonly steps: number;
 }
 
@@ -458,7 +458,10 @@ export const createGait = (bow = BOW): Gait => {
     const idle = v <= 0.25;
     const advance = walks && (!idle || !feet[0].on || !feet[1].on);
     if (advance || wr) {
+      const h = Math.floor(ph * 2);
       ph = (ph + (idle && !wr ? 0.9 : cadence) * dt) % 1;
+      // Along a wall the feet plant nowhere: a step each half of the stride, as they swing.
+      steps += +(wr && Math.floor(ph * 2) != h);
     }
     feet.forEach((f, n) => {
       const s = n ? 1 : -1;

@@ -43,7 +43,7 @@ const eyeBase = (v: Float32Array, k: number) =>
   v[k * 6 + 2] < -0.065;
 
 describe('skin', () => {
-  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 12000 (rings measured on the soldier, his webbing), close (within CLOSE, the face finest) under 36000', () => {
+  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 12000 (rings measured on the soldier), close (within CLOSE, the face finest) under 36000', () => {
     const [far, near, close] = [0, 1, 3].map(lod => draw(lod).length / STRIDE);
     expect(far).toBeLessThan(1800);
     expect(near).toBeLessThanOrEqual(12000);
@@ -56,7 +56,7 @@ describe('skin', () => {
     expect(body(1).w.length).toBeLessThan(2000);
     // The eye's own body: no head, the near rings; its arms close, 24 sides and their rings
     // doubled, and a thin wrist (the user, 2026-11-09: fewer angles, whatever the budget).
-    expect(draw(2).length / STRIDE).toBeLessThan(9600);
+    expect(draw(2).length / STRIDE).toBeLessThan(9800);
   });
 
   it('is a 1.8 m runner on the floor, narrower than the player cylinder', () => {
@@ -375,11 +375,11 @@ describe('skin', () => {
     expect(Math.min(...skin.map(r => r.y))).toBeGreaterThan(1.5);
     expect(Math.min(...of(HAIR).map(r => r.y))).toBeGreaterThan(1.62);
     expect(of(HAIR).length).toBeGreaterThan(30);
-    // Boots to mid-calf; the webbing on the trunk, from the belt to the shoulder straps.
+    // Boots to mid-calf; nothing on the trunk (the user, 2026-11-09: no webbing).
     const [boots, webbing] = [of(UPPER).filter(r => r.y < 0.9), of(UPPER).filter(r => r.y > 0.9)];
     expect(Math.max(...boots.map(r => r.y))).toBeLessThan(0.43);
-    expect(webbing.length).toBeGreaterThan(100);
-    expect(webbing.every(r => r.y > 1.1 && r.y < 1.54)).toBe(true);
+    expect(boots.length).toBeGreaterThan(100);
+    expect(webbing).toHaveLength(0);
     expect(Math.max(...of(SOLE).map(r => r.y))).toBeLessThan(0.07);
     const gloves = of(GLOVE);
     expect(gloves.length).toBeGreaterThan(60);
@@ -595,7 +595,7 @@ describe('skin', () => {
     expect(cut(1, LIMB.ARM_R)[0].o.at(-1)).toBe(1);
   });
 
-  it('hangs the arms from armpits 10 cm under the shoulder joints, not from the chest', () => {
+  it('hangs the arms from armpits 6 cm under the shoulder joints, not from the chest', () => {
     const shoulder = solve(rest()).pos[JOINT.ARM_R][1];
     const { v, t, l } = body(1);
     // The trunk's triangles (not an arm's, a leg's or the head's) out at the shoulders' width: the
@@ -605,8 +605,9 @@ describe('skin', () => {
         .filter(([k, part]) => part === LIMB.NONE && Math.abs(v[k * 6]) > 0.2)
         .map(([k]) => v[k * 6 + 1]),
     );
-    expect(shoulder - low).toBeGreaterThan(0.08);
-    expect(shoulder - low).toBeLessThan(0.12);
+    // 10 cm until the user raised them (2026-11-09).
+    expect(shoulder - low).toBeGreaterThan(0.05);
+    expect(shoulder - low).toBeLessThan(0.08);
   });
 
   it('picks a hair colour per runner at random, the same for every viewer', () => {
@@ -681,7 +682,7 @@ describe('skin', () => {
       expect(Math.min(...ys(LIMB.HEAD))).toBeGreaterThan(1.54);
       expect(Math.max(...ys(LIMB.HEAD))).toBeCloseTo(1.8, 2);
       expect(Math.min(...ys(LIMB.ARM_R))).toBeCloseTo(0.772, 2);
-      expect(Math.max(...ys(LIMB.ARM_R))).toBeLessThan(1.4);
+      expect(Math.max(...ys(LIMB.ARM_R))).toBeLessThan(1.45);
       expect(Math.min(...xs(LIMB.ARM_R))).toBeGreaterThan(0.1);
       expect(Math.max(...xs(LIMB.ARM_L))).toBeLessThan(-0.1);
       expect(Math.max(...ys(LIMB.LEG_L))).toBeLessThan(0.95);

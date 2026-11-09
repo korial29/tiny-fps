@@ -75,10 +75,26 @@ const knob = (kind: number) => {
 describe('the gun model', () => {
   it('stays within the budget: a gun near is a few hundred triangles, one far about half of that', () => {
     expect(near.length).toBeGreaterThan(400);
-    expect(near.length).toBeLessThan(2600);
+    // 2600 until the printed circuit on its flanks (the user, 2026-11-09).
+    expect(near.length).toBeLessThan(3400);
     expect(near.length % 3).toBe(0);
     expect(far.length).toBeGreaterThan(300);
     expect(far.length).toBeLessThan(near.length * 0.75);
+  });
+
+  it('prints a dark violet circuit on both flanks and the top near, none far', () => {
+    const traced = (v: Vertex[]) =>
+      v.filter(x => x.c[2] > x.c[0] * 2 && x.c[2] < 0.5 && x.c[1] < 0.08 && x.layer == SHINE);
+    const t = traced(near);
+    expect(t.length).toBeGreaterThan(400);
+    // Far, only a few corners of the body's darkest metal are as dark.
+    expect(traced(far).length).toBeLessThan(12);
+    // Both sides, the top, clear of the cut back (z 0.04 up to 0.03 at the top).
+    expect(t.some(x => x.p[0] > 0.02) && t.some(x => x.p[0] < -0.02)).toBe(true);
+    expect(t.some(x => x.p[1] > 0.13)).toBe(true);
+    expect(Math.max(...t.map(x => x.p[2]))).toBeLessThan(0.012);
+    // On the body's surface, a hair out of it: inside its widest half width.
+    expect(Math.max(...t.map(x => Math.abs(x.p[0])))).toBeLessThan(0.049);
   });
 
   it('is built once per level', () => {

@@ -1253,7 +1253,18 @@ export const createBody = (world?: World): Body => {
         d = unit(sub(t.pos[J.HAND_L], t.pos[J.FOREARM_L]));
         x = unit(across(up, d));
       }
-      slap.rot[J.HAND_L] = mul(inv(solve(slap).rot[J.FOREARM_L]), frame(x, d));
+      // The wrist bent a little, half the way to the fingers square to the battery, so that the
+      // palm meets it flat and the hand still reads along the arm (the user, 2026-11-09).
+      const f = unit(mix(d, unit(across(d, up)), 0.5));
+      const xf = unit(across(up, f));
+      reach(
+        slap,
+        r,
+        J.ARM_L,
+        along(along(along(foot, up, -slapTap), f, -0.05), xf, -0.012),
+        turn([-0.5, -1, -0.35]),
+      );
+      slap.rot[J.HAND_L] = mul(inv(solve(slap).rot[J.FOREARM_L]), frame(xf, f));
       for (const k of [J.ARM_L - 1, J.ARM_L, J.FOREARM_L, J.HAND_L]) {
         q.rot[k] = slerp(q.rot[k], slap.rot[k], slapW);
       }

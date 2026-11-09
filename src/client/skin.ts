@@ -200,8 +200,9 @@ const [SWING_R, SWING_L] = [JOINTS, JOINTS + 1];
 // one place and both segments stay straight.
 const ARM: Loft = {
   chain: [SWING_R, J.ARM_R, J.FOREARM_R, J.HAND_R],
-  // More sides than the shoulder's side it hangs from (4, 8, 16) near and close: rounder (the user, 2026-11-08).
-  n: [4, 10, 17],
+  // More sides than the shoulder's side it hangs from (4, 8, 16) near and close: rounder (the user,
+  // 2026-11-08); close, the eye's own arms included, 24 (17 until the user, 2026-11-09: fewer angles).
+  n: [4, 10, 24],
   m: true,
   far: [0, 1, 3, 6, 8, 9, 11, 13],
   rings: [
@@ -222,9 +223,9 @@ const ARM: Loft = {
   ],
 };
 
-/** The ring where the eye's sleeve ends in the glove, which body.ts starts the palm on, and its sides. */
-export const CUFF = [0.925, 0.222, 0, 0.032, 0.032, 3, GLOVE];
-export const CUFF_SIDES = ARM.n[1];
+/** The ring where the eye's sleeve ends in the glove, which body.ts starts the palm on, and its sides: the close ones (the eye's body is close). A thin wrist (3.2 cm until the user, 2026-11-09). */
+export const CUFF = [0.925, 0.222, 0, 0.0265, 0.0265, 3, GLOVE];
+export const CUFF_SIDES = ARM.n[2];
 
 // The eyes are small pieces of their own, the left the right one mirrored, buried in the sockets
 // of the face (face()): a white almond just out of it with a dark iris at its front.
@@ -629,7 +630,10 @@ const generate = (lod: number): Skin => {
     return w.length - 1;
   };
   for (const L of LOFTS) {
-    const n = L.n[tier];
+    // The eye's own arms are close, the most sides and rings (the user, 2026-11-09: smoother arms);
+    // the rest of its body, out of sight under the camera, near.
+    const arm = lod == 2 && L === ARM;
+    const n = L.n[arm ? 2 : tier];
     // The eye's own body has no head.
     if (!n || (lod == 2 && (L.z || L.x || L.k || L === EAR || L === CONCHA))) {
       continue;
@@ -642,14 +646,15 @@ const generate = (lod: number): Skin => {
         : lod == 2 && L === ARM
           ? [
               ...L.rings.filter(r => r[0] > 0.96),
-              [0.95, 0.222, 0, 0.041, 0.041, 2.6, GLOVE],
+              [0.95, 0.222, 0, 0.035, 0.036, 2.6, GLOVE],
               CUFF,
               [0.91, 0.222, 0, 0, 0, 3, GLOVE],
             ]
           : lod
             ? L.rings
             : L.far.map(i => L.rings[i]);
-    const rings = tier > 1 && L === TRUNK ? finer(base, false) : base;
+    // Close, the trunk's rings doubled; the eye's arms' too.
+    const rings = (tier > 1 && L === TRUNK) || arm ? finer(base, arm) : base;
     const up = rings[rings.length - 1][0] > rings[0][0];
     if (L === TRUNK) {
       S = rings.findIndex((r, i) => i && r[0] == rings[i - 1][0]);

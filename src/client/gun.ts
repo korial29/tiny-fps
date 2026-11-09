@@ -309,7 +309,127 @@ export const gun = (lod: number): number[] => {
       out.push(...p, ...BACK_N, ...GLOSS);
     }
   }
+  if (lod) {
+    circuits(out);
+  }
   return (built[lod] = out);
+};
+
+/** Dark violet copper, lit by its normal, for the pistol's printed circuit (the user, 2026-11-09). */
+const trace: Paint = (p, n) => shade([0.09, 0.025, 0.2], [0.24, 0.07, 0.48])(p, n);
+/**
+ * The pistol's printed circuit on each flank of its body, mirrored: runs of [forward, up round from
+ * the side's middle] points (metres along the surface), a pad at each end. Above and under the
+ * light strip, clear of the cut back.
+ */
+export const CIRCUIT = [
+  [
+    [0.0, 0.012],
+    [0.05, 0.012],
+    [0.058, 0.02],
+    [0.11, 0.02],
+  ],
+  [
+    [0.0, 0.02],
+    [0.03, 0.02],
+    [0.04, 0.03],
+    [0.085, 0.03],
+  ],
+  [
+    [0.0, 0.03],
+    [0.02, 0.03],
+    [0.03, 0.04],
+    [0.06, 0.04],
+  ],
+  [
+    [0.065, 0.011],
+    [0.12, 0.011],
+    [0.128, 0.017],
+    [0.155, 0.017],
+  ],
+  [
+    [0.095, 0.027],
+    [0.125, 0.027],
+  ],
+  [
+    [0.01, -0.012],
+    [0.07, -0.012],
+    [0.078, -0.02],
+    [0.12, -0.02],
+  ],
+  [
+    [0.03, -0.024],
+    [0.062, -0.024],
+  ],
+  // Over the top, toward the middle line (which is some 6 cm round at the widest).
+  [
+    [0.0, 0.048],
+    [0.035, 0.048],
+    [0.042, 0.04],
+    [0.075, 0.04],
+  ],
+  [
+    [0.005, 0.057],
+    [0.05, 0.057],
+  ],
+  [
+    [0.06, 0.05],
+    [0.09, 0.05],
+    [0.095, 0.044],
+  ],
+];
+
+/**
+ * The body's surface `f` forward and `s` up round its side `x` (1 right, -1 left), `d` out of it:
+ * between BULB's rings, at the angle round of `s` over the ring's mean half axis; and its normal.
+ */
+const onBulb = (f: number, s: number, x: number, d = 0.0004): Vec3[] => {
+  const i = BULB.findIndex(r => r[0] > f) - 1;
+  const t = (f - BULB[i][0]) / (BULB[i + 1][0] - BULB[i][0]);
+  const R = (BULB[i][2] + BULB[i][3] + BULB[i + 1][2] + BULB[i + 1][3]) / 4;
+  const k = (((x > 0 ? 0 : Math.PI) + (x * s) / R) * 16) / TAU;
+  const p = (j: number, g: number) =>
+    mix(ring(BULB, i, g, 16), ring(BULB, i + 1, g, 16), j) as Vec3;
+  const c = p(t, k);
+  const e = sub(p(t + 0.01, k), c);
+  const w = sub(p(t, k + 0.01 * x), c);
+  const n = unit([e[1] * w[2] - e[2] * w[1], e[2] * w[0] - e[0] * w[2], e[0] * w[1] - e[1] * w[0]]);
+  // Outward, away from the body's middle.
+  const o = n[0] * x > 0 ? n : (n.map(v => -v) as Vec3);
+  return [c.map((v, j) => v + o[j] * d) as Vec3, o];
+};
+
+/** The printed circuit (CIRCUIT) on both flanks of the pistol's body. */
+const circuits = (out: number[]) => {
+  for (const x of [-1, 1]) {
+    /** A strip from `a` to `b` (forward, up round) `w` wide, in pieces of 3 cm at most. */
+    const run = (a: number[], b: number[], w: number) => {
+      const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const [ux, uy] = [((b[0] - a[0]) / l) * w, ((b[1] - a[1]) / l) * w];
+      const k = Math.ceil(l / 0.03);
+      for (let i = 0; i < k; i++) {
+        const [p, q] = [i / k, (i + 1) / k].map(t => [
+          a[0] + (b[0] - a[0]) * t,
+          a[1] + (b[1] - a[1]) * t,
+        ]);
+        // Squared ends: each piece reaches w past its ends, so the bends close.
+        const [p0, q0] = [i ? p : [p[0] - ux, p[1] - uy], i < k - 1 ? q : [q[0] + ux, q[1] + uy]];
+        const at = (o: number[], h: number) => onBulb(o[0] - uy * h, o[1] + ux * h, x)[0];
+        flat(
+          out,
+          [at(p0, -1), at(q0, -1), at(q0, 1), at(p0, 1)],
+          onBulb((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, x)[1],
+          trace,
+        );
+      }
+    };
+    for (const t of CIRCUIT) {
+      t.slice(1).forEach((q, i) => run(t[i], q, 0.0007));
+      for (const e of [t[0], t[t.length - 1]]) {
+        run([e[0] - 0.0014, e[1]], [e[0] + 0.0014, e[1]], 0.0014);
+      }
+    }
+  }
 };
 
 /** The rail gun's muzzle, between its electrodes' tips: on the gun's long axis (REAR to MUZZLE), 36 cm further out. */

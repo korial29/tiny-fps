@@ -10,13 +10,17 @@
 
 **▶ Play it now: https://korial29.github.io/tiny-fps/**
 
-A tiny multiplayer first-person game for the browser, written in TypeScript with raw WebGL2, no game library and no runtime dependency. It is becoming an open-air capture-the-flag between two teams of players on rooftops, inspired by Mirror's Edge: parkour movement and no CPU enemies. Today two teams play capture the flag on Highline, a symmetric rooftop map, with the parkour moves, a tackle, a plasma gun, an electric katana and a rail gun ([`docs/PLAN.md`](docs/PLAN.md), [`docs/WEAPON.md`](docs/WEAPON.md)). Everything is generated in code: geometry, textures, lights. There are no images, fonts or assets to serve.
+A tiny multiplayer first-person game for the browser, written in TypeScript with raw WebGL2, no game library and no runtime dependency. It is becoming an open-air capture-the-flag between two teams of players on rooftops, inspired by Mirror's Edge: parkour movement and no CPU enemies. Today two teams play capture the flag on Highline, a symmetric rooftop map, with the parkour moves, a tackle, a plasma gun, an electric katana, a rail gun and a laser rifle ([`docs/PLAN.md`](docs/PLAN.md), [`docs/WEAPON.md`](docs/WEAPON.md)). Everything is generated in code: geometry, textures, lights. There are no images, fonts or assets to serve.
 
 It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](https://github.com/carlini/js13k2019-yet-another-doom-clone) (js13k 2019). Only the ideas were reused, not the code. The renderer, the netcode and the sound come from that first game.
 
-![The plasma gun on a Highline roof, a health pack ahead and the blue flag's marker in the distance](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-gun.jpg)
+![The plasma gun and its counter over the edge of a Highline tower, the city, its parks and its streets far below](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-gun.jpg)
 
-![The electric katana over the roofs of Highline, from the red armoury](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-katana.jpg)
+![The electric katana over the edge of a roof, looking down on the towers and the parks](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-katana.jpg)
+
+| | |
+| --- | --- |
+| ![The rail gun on the red tower, its capsule glowing violet and its counter on its flank](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-rail.jpg) | ![The laser rifle over the city, its counter on its back](https://raw.githubusercontent.com/korial29/tiny-fps/master/docs/screenshot-rifle.jpg) |
 
 ## Framework-agnostic, light to add
 
@@ -24,8 +28,8 @@ It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](htt
 
 | Entry                       | What it is                                                             | Size (gzip) |
 | --------------------------- | ---------------------------------------------------------------------- | ----------- |
-| `@korial29/tiny-fps`        | The game client: rendering, lights and shadows, input, prediction, HUD | ~76 KB      |
-| `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~12.7 KB    |
+| `@korial29/tiny-fps`        | The game client: rendering, lights and shadows, input, prediction, HUD | ~78 KB      |
+| `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~15.5 KB    |
 | `@korial29/tiny-fps/server` | Node WebSocket server (needs `ws`)                                     | Node only   |
 
 CI checks the budgets (80 KB and 16 KB) on every pull request.
@@ -176,7 +180,7 @@ The subset of `WebSocket` the client uses: `binaryType`, `onopen`, `onclose`, `o
 | Crouch | C. At sprint speed it is a slide, low enough to go under a 1.2 m slot               |
 | Fire   | Left button: click to fire the gun, hold to charge it; click to cut with the katana |
 | Weapon | 1 the gun, 2 the katana, 3 the rail gun, 4 the laser rifle, or the wheel            |
-| Reload | R: a new battery in the gun, a new capsule on the rail gun (also when it runs dry)  |
+| Reload | R: a new battery in the gun or the rifle, a new capsule on the rail gun (also dry)  |
 | Mute   | M (remembered)                                                                      |
 
 Facing a ledge between 1.2 and 2.4 m above your feet in the air, you take hold of it: forward or Space climbs, back or C lets go, and Space looking away jumps off it. Jumping while running next to a wall, up to half a metre away and not more than about 50 degrees off it, starts a wall-run along its side (about a second, hold forward, Space kicks off). Ctrl is not used, since Ctrl+W closes the tab.
@@ -195,15 +199,15 @@ The game is the movement and a capture the flag on top of it, with a tackle, a g
 - **Capture the flag**: touch the enemy flag, at its base or where it was dropped, to take it, and carry it to your own base while your own flag is there: that is a capture, and the flag goes home. Touch your own dropped flag to send it home at once; left alone it goes home after 10 seconds. A carrier who falls off the roofs or leaves drops it where he last stood. A tackled carrier drops it too, and it lies there for 2 seconds: nobody can send it home, and the carrier's teammates can grab it. There is a ring of light on each base, a marker toward each flag (and toward your base while you carry), a banner for each event and a sound for a take, a drop, a return and a capture.
 - **A match** ends at 3 captures or after 8 minutes, then everyone sees the result and each player's captures and returns for 10 seconds, and a new match starts with everyone back at their spawn.
 - **The map**: Highline, 94 by 240 m under an open sky, the same for both teams (the blue half is the mirror of the red one). Each team holds a 26 m tower with its flag and eight spawns. Three routes lead to the other tower, and they meet at the plaza in the middle. The **Spine** (west, 26 m) is the fast one, about 25 s by sprint: an 11 m gap that takes a dash or a double jump, a 17 m viaduct along a wall that takes a wall-run and a dash, a beam over the plaza. **Midtown** (centre, 19 to 21 m) is roofs, short gaps and ledges to grab, about 36 s. The **Lowline** (east, 14.5 m) is stairs, short gaps and a sign to slide under, about 39 s, and needs no special move. A miss costs time: roofs under the gaps and ladders of ledges lead back up, and only a fall into the street puts you back at your tower.
-- **Weapons**: each team's armoury is a plinth 1.5 m high past its flag, in sight of the spawns, with a gun rack, a katana rack, a rail gun rack and a laser rifle rack: run and jump up to take them. You spawn with none and carry each once taken. A weapon comes to hand dark and lights up over half a second.
-  - The **plasma gun** holds 60 shots, 15 at a time in a battery in its grip: an empty one, or R, swaps it in 1.3 s, the gun dark until the new one is in: the new battery placed, a pause, a slap of the palm, a jolt and the gun back in aim. A click fires a plasma ball at 40 m/s that bursts on the first wall or enemy it touches, and the view kicks up with each one. Held, the button charges the next ball, shown by a gauge under the ammo counter, and letting go fires it: up to 5 shots' worth in one second, which takes 5 health and puts any enemy down.
-  - The **electric katana** needs no ammo. A cut takes 2 to 4 health by the cut, reaches 2.2 to 3.2 m, and shocks a foe it does not put down: a short stumble the way the blade goes. A cut that puts a foe down takes off the limb the blade crosses, head, arm or leg, drawn only, with no blood.
+- **Weapons**: each team's armoury is a plinth 1.5 m high past its flag, in sight of the spawns, with a gun rack, a katana rack, a rail gun rack and a laser rifle rack: run and jump up to take them. You spawn with none and carry each once taken. The first time a weapon comes to hand you switch it on, each its own way: the right thumb presses the plasma gun's button and the katana's, the left index the laser rifle's, the left hand turns the rail gun's capsule; it lights up with its sound. Drawn again, or after a swap, it lights up at once.
+  - The **plasma gun** holds 60 shots, 15 at a time in a battery in its grip: an empty one, or R, swaps it in 1.3 s, the gun dark until the new one is in: the new battery placed, a pause, a slap of the palm, a jolt and the gun back in aim. A click fires a plasma ball at 40 m/s that bursts on the first wall or enemy it touches, and the view kicks up with each one. Held, the button charges the next ball, with a rising whine and the gun shaking, shown by a gauge under the ammo counter, and letting go fires it: up to 5 shots' worth in one second, which takes 5 health and puts any enemy down.
+  - The **electric katana** needs no ammo; its whole blade lights up when it is switched on. A cut takes 2 to 4 health by the cut, reaches 2.2 to 3.2 m, and shocks a foe it does not put down: a short stumble the way the blade goes. A cut that puts a foe down takes off the limb the blade crosses, head, arm or leg, drawn only, with no blood.
   - The **rail gun** is a two-handed Tesla gun with a stock, humming in your hands: hold the button and a bolt of lightning goes out, up to 30 m, for 8 s in all, a glass cell screwed on its top holding a third of it, and two smaller ones along its flanks showing the rest, each lit as high as its charge: an empty one, or R, is thrown off and a new one screwed on in 1.5 s. Fired for 2 s on end it overheats: its insulators glow, its cells flicker red, smoke rises off its coils and it cannot fire for 2 s; its counter stays steady. Each pulse of the arc kicks it, and it shakes harder as it heats. An enemy it touches loses 1 health at once, then 1 a second while it holds him and for 3 seconds after, and walks no faster than 3 m/s meanwhile. One it kills is disintegrated. Rail cells on every route refill a third of it.
   - The **laser rifle**, after Halo's assault rifle, is held in both hands: hold the button and it fires 20 red plasma balls a second, to 60 m, every two hits taking 1 health, drifting a little off the crosshair. Each bursts in a big red splash of sparks with a heavy thud. It carries 240 rounds, 60 at a time in a power cell under its body (R or empty: 1.6 s to swap), its count on a counter on top. Ammo packs refill it too.
 - **Health**: 5 points, a plasma hit takes 1, no friendly fire, no regeneration. At 0 a player lies down for 2 seconds, drops a carried flag, loses every weapon and comes back at a team spawn. Health packs give 2 points, ammo packs 20 shots and rail cells a third of the rail gun's lightning; a taken pack is back after 20 seconds, an ammo pack after 10.
 - **Moving**: momentum, sprint, dash, double jump, ledge grab and climb, wall-run, slide, coyote time and a jump buffer. The host decides where everyone is. Your own moves show at once (the client predicts them) and are corrected to the host's state, to the bit.
-- **The others**: drawn 100 ms in the past, interpolated between snapshots, as runners with one continuous skinned body, a natural gait and every parkour move, in their team colour, with the weapon in their hands.
-- **The city**: the street lies far below the roofs, with roads, traffic and a fog that thickens toward it, lawns in the empty lots and a skyline of towers around the map.
+- **The others**: drawn 100 ms in the past, interpolated between snapshots, as runners with one continuous skinned body, a face that blinks and grimaces, a combat stance, a natural gait and every parkour move (leaning well out on a wall-run, the feet on it), in their team colour, with the weapon in their hands.
+- **The city**: the street lies far below the roofs, with roads, their markings and traffic out into the haze, and a fog that thickens toward it; parks of tall branched trees in some blocks, and a skyline of towers around the map.
 - **Sound**: a synthesiser and a mixer that places sounds left or right by where they come from, and an airy music loop of slow pads and soft bells. Steps, jumps, the deep plasma shot, the katana's draw, swish and zap, the guns' reloads and power-up, hits, pickups and the flag events all have their sound. The sound starts with the click that locks the pointer.
 
 ---
@@ -220,8 +224,8 @@ The game is the movement and a capture the flag on top of it, with a tackle, a g
 - [x] Parkour moves, predicted exactly: momentum, sprint, dash, double jump, ledge grab and climb, wall-run, slide, coyote time and jump buffer
 - [x] Your own body in first person, Mirror's Edge style: arms that pump with the stride, hands on the ledge, legs when you look down; a camera that kicks its field of view, dips on landings, leans into wall-runs; speed lines
 - [x] The other players as skinned runners: one continuous skin on a rig, a natural walk, run and sprint with planted feet, and every parkour move
-- [x] A plasma gun and an electric katana taken at each team's armoury: plasma balls, three cuts and their specials, a shock, limb cuts, health and ammo packs, all predicted on the client and resolved by the host with lag compensation
-- [x] A city around the roofs: a street far below with traffic, a height fog, lawns and a skyline
+- [x] Four weapons taken at each team's armoury, a plasma gun, an electric katana, a rail gun and a laser rifle: plasma balls, charged shots, three cuts and their specials, a bolt of lightning, a saber lock, a shock, limb cuts, health and ammo packs, all predicted on the client and resolved by the host with lag compensation; magazines and reloads drawn by hand, each weapon switched on its own way
+- [x] A city around the roofs: a street far below with traffic and markings to the horizon, a height fog, parks of branched trees and a skyline
 - [x] Sound: a jsfxr-style synthesiser for steps, jumps, dashes, landings, grabs, climbs, slides and the wind of speed, placed in stereo; a looped music; M mutes
 - [x] A title screen with the controls, a muted mark, a player count and name tags
 - [x] Teams and capture the flag: bases with a glowing ring, flags that wave and ride on a carrier's back, a score and a clock, markers toward the flags, banners, an end screen and synth sounds

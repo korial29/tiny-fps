@@ -134,7 +134,8 @@ describe('the gun model', () => {
     const n = unit([0, 0.469, 0.883]);
     const out = (p: Vec3) => (p[1] - 0.125) * n[1] + (p[2] - 0.04) * n[2];
     // Nothing of the body behind it.
-    expect(Math.max(...near.map(v => out(v.p)))).toBeLessThan(1e-9);
+    // Nothing of the body behind it but its smooth outline, 0.2 mm out.
+    expect(Math.max(...near.map(v => out(v.p)))).toBeLessThan(0.0002 + 1e-9);
     // On it, glossy black facing out of it.
     const face = near.filter(
       v => Math.abs(out(v.p)) < 1e-9 && v.layer == SHINE && Math.max(...v.c) < 0.03,
@@ -143,6 +144,23 @@ describe('the gun model', () => {
     // A straight cut: flat, facing straight out of it (its edge, shared with the body's metal,
     // keeps the body's normals there).
     expect(face.filter(v => dot(v.n, n) > 0.999).length).toBeGreaterThan(face.length / 2);
+  });
+
+  it('lays a smooth outline over its cut, holding all of it, so its polygon’s corners don’t show', () => {
+    const n = unit([0, 0.469, 0.883]);
+    const up = [0, n[2], -n[1]];
+    const out = (p: Vec3) => (p[1] - 0.125) * n[1] + (p[2] - 0.04) * n[2];
+    const b = (p: Vec3) => (p[1] - 0.125) * up[1] + (p[2] - 0.04) * up[2];
+    const outline = near.filter(v => Math.abs(out(v.p) - 0.0002) < 1e-9);
+    expect(outline).toHaveLength(32 * 3);
+    // The superellipse of the body's rings: |x / 4.4 cm|^2.5 + |b / 3.34 cm|^2.5 <= 1 round 1.45 cm down the face.
+    const inside = (p: Vec3) =>
+      Math.abs(p[0] / 0.044) ** 2.5 + Math.abs((b(p) + 0.0145) / 0.0334) ** 2.5 <= 1 + 1e-6;
+    const cut = near.filter(v => Math.abs(out(v.p)) < 1e-9);
+    expect(cut.length).toBeGreaterThan(40);
+    for (const v of cut) {
+      expect(inside(v.p)).toBe(true);
+    }
   });
 
   it('is about a hand and a half long, with the muzzle on the tip of its nose', () => {

@@ -33,6 +33,7 @@ import {
   kindOf,
   held,
   loadFrame,
+  TAP,
   screwed,
   pointed,
   power,
@@ -924,7 +925,7 @@ export const createBody = (world?: World): Body => {
             free *
             (rail
               ? ease(span(sp, 0.34, 0.46)) * (1 - ease(span(sp, 0.88, 0.96)))
-              : ease(span(sp, 0.22, 0.38)) * (1 - ease(span(sp, 0.75, 0.88))))
+              : ease(span(sp, 0.22, 0.38)) * (1 - ease(span(sp, TAP + 0.03, 0.95))))
           : 0;
       if (onLoad > 0.002) {
         // On the new battery or capsule, which comes with the hand. The capsule is held round its
@@ -935,7 +936,11 @@ export const createBody = (world?: World): Body => {
           me ? kindOf(me) : 0,
           Math.max(sp, rail ? 0.42 : 0.4),
         );
-        const mid = [0, 1, 2].map(i => foot[i] + up[i] * (rail ? 0.04 : -0.01)) as Vec3;
+        // The battery in but for its last 6 mm, the palm drops 6 cm off it and slaps it home at TAP.
+        const tap =
+          0.06 *
+          (sp < TAP - 0.04 ? ease(span(sp, 0.72, TAP - 0.04)) : 1 - span(sp, TAP - 0.04, TAP) ** 2);
+        const mid = [0, 1, 2].map(i => foot[i] + up[i] * (rail ? 0.04 : -0.01 - tap)) as Vec3;
         let fing: Vec3 | undefined;
         if (rail) {
           // From the capsule's axis out to its left, turned with the wrist.

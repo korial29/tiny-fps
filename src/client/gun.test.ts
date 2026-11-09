@@ -30,6 +30,8 @@ import {
   TRACKS,
   screwed,
   swapped,
+  CUES,
+  TAP,
   tip,
 } from './gun';
 import type { Lit } from './gun';
@@ -687,7 +689,15 @@ describe('the battery and the capsule', () => {
     expect(out(0.39)).toBeGreaterThan(0.5);
     expect(out(0.4)).toBeCloseTo(0.22, 6);
     expect(out(0.6)).toBeLessThan(out(0.45));
-    expect(out(0.8)).toBe(0);
+    // In but for its last 6 mm until the palm slaps it home at TAP, when it clicks (the user, 2026-11-09).
+    expect(out(0.75)).toBeCloseTo(0.006, 6);
+    expect(out(TAP - 0.021)).toBeCloseTo(0.006, 6);
+    expect(out(TAP)).toBe(0);
+    expect(out(0.9)).toBe(0);
+    expect(CUES[0][1]).toBe(TAP);
+    for (const k of [0, 3]) {
+      expect(swapped(TAP - 0.03, k)).toEqual(swapped(TAP - 0.03, false));
+    }
   });
 
   it('unscrews the capsule, throws it up spinning, and screws a new one on', () => {

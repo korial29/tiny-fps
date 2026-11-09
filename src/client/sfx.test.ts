@@ -67,10 +67,10 @@ const crossings = (s: Float32Array) =>
 const sound = (name: keyof typeof SOUND) => render(SOUND[name], LAYERS);
 
 describe('the sounds of the game', () => {
-  it('are one entry per id, and the looped ones are the wind, the scrape, the hum and the buzz', () => {
+  it('are one entry per id, and the looped ones are the wind, the scrape, the hum, the buzz and the gun’s charge', () => {
     expect(LAYERS).toHaveLength(Object.keys(SOUND).length);
     expect(Object.values(SOUND).sort((a, b) => a - b)).toEqual(LAYERS.map((_, i) => i));
-    expect(LOOPED).toEqual([SOUND.WIND, SOUND.SCRAPE, SOUND.HUM, SOUND.BUZZ]);
+    expect(LOOPED).toEqual([SOUND.WIND, SOUND.SCRAPE, SOUND.HUM, SOUND.BUZZ, SOUND.CHARGE]);
   });
 
   describe.each(Object.entries(SOUND).filter(([, id]) => !LOOPED.includes(id)))('%s', (_, id) => {

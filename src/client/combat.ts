@@ -199,6 +199,7 @@ export const createCombat = (
   /** The own rail gun's hum and its bolt's buzz, started when it is first in hand. */
   let hum: Loop | undefined;
   let buzzing: Loop | undefined;
+  let charging: Loop | undefined;
   /** The pitch of a bolt's buzz at `now` (ms): up and down WAIL[0] times a second, by WAIL[1] either way. */
   const wail = (now: number) => 1 + WAIL[1] * Math.sin(2 * Math.PI * WAIL[0] * (now / 1000));
   /** Seconds to the next crackle of each other player's bolt. */
@@ -324,6 +325,13 @@ export const createCombat = (
           hum?.set(on ? 0.18 : 0, 1);
           buzzing?.set(on && me.zapping ? 0.55 : 0, wail(now));
         }
+        // The plasma gun charging (the user, 2026-11-09): a whine past a tap, rising with the
+        // charge, louder as it fills.
+        if (me.ammo >= 0 || charging) {
+          charging ??= audio.loop?.(SOUND.CHARGE);
+          const c = me.wield || me.down || (me.charge ?? 0) < CHARGE_TAP ? -1 : filled(me.charge);
+          charging?.set(c < 0 ? 0 : 0.2 + 0.25 * c, 0.8 + 1.2 * Math.max(c, 0));
+        }
         const rail = me.rail ?? -1;
         hud.vitals(
           me.hp,
@@ -344,6 +352,7 @@ export const createCombat = (
         before = undefined;
         hum?.set(0, 1);
         buzzing?.set(0, 1);
+        charging?.set(0, 1);
       }
       let from: Vec3 | undefined;
       if (v) {

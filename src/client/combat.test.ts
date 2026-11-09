@@ -4,6 +4,7 @@ import {
   GUN_RELOAD,
   RAIL_RELOAD,
   CUTS,
+  CHARGE_TAP,
   GUN_RANGE,
   INTERP_DELAY,
   MAX_PITCH,
@@ -345,6 +346,31 @@ describe('the rail gun’s bolts', () => {
     const rates = buzz.slice(10).map(s => s.r);
     expect(Math.max(...rates)).toBeGreaterThan(1.2);
     expect(Math.min(...rates)).toBeLessThan(0.8);
+  });
+
+  it('whine in a loop while the own gun charges past a tap, higher and louder as it fills (the user, 2026-11-09)', () => {
+    const t = setup();
+    const loops = new Map<number, { v: number; r: number }[]>();
+    const audio = {
+      ...t.audio,
+      loop: (id: number) => {
+        loops.set(id, []);
+        return { set: (v: number, r: number) => loops.get(id)!.push({ v, r }) };
+      },
+    };
+    const combat = createCombat(WORLD, audio, t.hud, t.fx, t.tracer, t.ctl, t.balls);
+    // A tap, then a charge growing to full, then the shot.
+    const charges = [0, 2, ...Array.from({ length: 60 }, (_, k) => CHARGE_TAP + k), 0];
+    charges.forEach((charge, k) =>
+      combat.frame(VIEW, player({ charge }), [], 0, 1 / 60, 1000 + (k * 1000) / 60),
+    );
+    const whine = loops.get(SOUND.CHARGE)!;
+    expect(whine.slice(0, 2).every(s => s.v == 0)).toBe(true);
+    const on = whine.slice(2, -1);
+    expect(on.every(s => s.v > 0)).toBe(true);
+    expect(on[on.length - 1].r).toBeGreaterThan(on[0].r * 1.5);
+    expect(on[on.length - 1].v).toBeGreaterThan(on[0].v);
+    expect(whine[whine.length - 1].v).toBe(0);
   });
 
   it('go from an other runner’s rail gun while he holds it, with the crackle where he is', () => {

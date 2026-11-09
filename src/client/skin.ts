@@ -874,6 +874,40 @@ const generate = (lod: number): Skin => {
       }
     });
   }
+  // The armpits relaxed: each vertex round them drawn toward the mean of its neighbours, the
+  // shrinking undone every other pass (Taubin), fading out from the middle of the region. The
+  // trunk splits at one height, so the shoulder stood out over the armpit in a step; relaxed, it
+  // is a fold (the user, 2026-11-09).
+  const near = Array.from({ length: w.length }, () => new Set<number>());
+  for (let i = 0; i < t.length; i += 3) {
+    for (let e = 0; e < 3; e++) {
+      near[t[i + e]].add(t[i + ((e + 1) % 3)]).add(t[i + ((e + 2) % 3)]);
+    }
+  }
+  const soft = (k: number) => clamp(k) ** 2 * (3 - 2 * clamp(k));
+  const pull = Array.from({ length: w.length }, (_, k) => {
+    const [ax, y] = [Math.abs(v[k * 6]), v[k * 6 + 1]];
+    return (
+      soft((0.075 - Math.abs(y - SPLIT + 0.01)) / 0.035) *
+      soft(Math.min(ax - 0.05, 0.255 - ax) / 0.03)
+    );
+  });
+  // Close only: farther the step does not show, and the eye's own body never sees its armpits.
+  for (let pass = 0; pass < (tier > 1 ? 24 : 0); pass++) {
+    const k0 = pass % 2 ? -0.53 : 0.5;
+    const next = v.slice();
+    pull.forEach((g, k) => {
+      if (g > 0 && near[k].size) {
+        // Across and in depth only: each keeps its height, so no row crosses another.
+        for (const r of [0, 2]) {
+          let m = 0;
+          near[k].forEach(n => (m += v[n * 6 + r]));
+          next[k * 6 + r] += g * k0 * (m / near[k].size - v[k * 6 + r]);
+        }
+      }
+    });
+    next.forEach((c, i) => (v[i] = c));
+  }
   // Smooth normals: the area-weighted mean of the triangles around a vertex.
   for (let i = 0; i < t.length; i += 3) {
     const [a, b, d] = [t[i], t[i + 1], t[i + 2]].map(k => k * 6);

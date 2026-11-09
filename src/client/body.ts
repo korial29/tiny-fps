@@ -1156,10 +1156,32 @@ export const createBody = (world?: World): Body => {
           shrug(held, s, arm, add(eye, turn(mid)));
         }
         wield(held, s, arm, add(eye, turn(mid)), unit(turn(up)), turn([-0.5, -1, -0.35]), fing);
+        // The battery in, the hand lets go of it and opens flat, the palm up to its foot, the
+        // fingers along the gun, to slap it home with the palm (the user, 2026-11-09).
+        const flat = rail ? 0 : ease(span(sp, 0.72, 0.76));
+        if (flat > 0.002) {
+          const F = unit(across(ga[2], up));
+          const T = cross(up, F);
+          const g = along(mix([0, 0, 0], T, C), F, S);
+          const slap = { ...q, rot: q.rot.slice() };
+          wield(
+            slap,
+            s,
+            arm,
+            // The palm's middle, 5 cm along the fingers, under the foot; its skin on it at TAP.
+            add(eye, turn(along(along(foot, up, 0.01 - tap), F, 0.028))),
+            unit(turn(g)),
+            turn([-0.5, -1, -0.35]),
+            turn(along(along(mix([0, 0, 0], T, -S), F, C), g, S)),
+          );
+          for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
+            held.rot[k] = slerp(held.rot[k], slap.rot[k], flat);
+          }
+        }
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], onLoad);
         }
-        curls[0] += (0.9 - curls[0]) * onLoad;
+        curls[0] += (0.9 - 0.85 * flat - curls[0]) * onLoad;
       }
       // Each weapon comes on its own way (the user, 2026-11-09): the left index presses the laser
       // rifle's button, the hand off its front grip, flat, the index out, and back; the right thumb

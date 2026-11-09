@@ -304,11 +304,14 @@ export const LAYERS: Voice[][] = [
     [3, 3000, -2, 0.005, 0.03, 0.1, 0, 0.5, 0, 1, 0.35, 0.02],
     [2, 900, -4, 0.003, 0.02, 0.2, 0, 1, 0, 1, 0.3, 0.01],
   ],
-  // CLICK: the new cell home, a hard tick of noise and a knock, then the latch's smaller tick.
+  // CLICK: the new cell slapped home (the user, 2026-11-09: a click): the palm's dull slap, a hard
+  // sharp tick with a bright metal chip, a knock, then the latch's smaller tick.
   [
-    [3, 9000, 0, 0.001, 0, 0.015, 0, 0.7, 0, 1, 0.7],
+    [3, 900, -1, 0.001, 0.005, 0.05, 0, 0.3, 0, 1, 0.5],
+    [3, 9000, 0, 0.001, 0, 0.012, 0, 0.8, 0, 1, 0.8],
+    [0, 2400, -2, 0.001, 0, 0.012, 0, 0.6, 0, 1, 0.4],
     [0, 520, -3, 0.001, 0, 0.03, 0, 0.6, 0, 1, 0.5],
-    [3, 7000, 0, 0.001, 0, 0.02, 0, 0.6, 0, 1, 0.5, 0.05],
+    [3, 7000, 0, 0.001, 0, 0.02, 0, 0.6, 0, 1, 0.55, 0.04],
   ],
   // POP: a thump that kicks up, the hiss of the seal let go, the ring of the spring, a fizz.
   [

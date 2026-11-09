@@ -1,20 +1,20 @@
-// The sounds of movement. The own player's come from the events of its live steps and its stride;
-// the others' events are not on the wire, so their steps and landings are read off the motion
-// they are drawn with. No DOM, unit-tested against a fake Audio.
+// The sounds of movement. The own player's come from the events of its live steps; the others'
+// events are not on the wire, so their landings are read off the motion they are drawn with. A
+// footstep sounds as a drawn foot is set down (Gait.steps), the own body's or a runner's, so the
+// sound goes with the legs. No DOM, unit-tested against a fake Audio.
 import { speedOf, sprinting } from '../shared/physics';
 import { EV, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import type { Audio } from './audio';
-import { stepLength, stepping } from './effects';
 import type { Hit } from './effects';
 import type { Vec3 } from './mesh';
 import { SOUND } from './sfx';
 
 export interface Foley {
-  /** The own player as drawn (undefined before the first snapshot), what its live steps did, and the stride of the effects. */
-  me(p: PlayerState | undefined, hit: Hit, stride: number): void;
-  /** The other players as drawn: their steps and landings, at their position. */
-  others(ps: PlayerState[]): void;
+  /** The own player as drawn (undefined before the first snapshot), what its live steps did, and its body's footsteps so far. */
+  me(p: PlayerState | undefined, hit: Hit, steps: number): void;
+  /** The other players as drawn and their runners' footsteps so far: their steps and landings, at their position. */
+  others(ps: PlayerState[], steps: (id: number) => number | undefined): void;
 }
 
 /** A fall slower than this (m/s) makes no sound on the others. */
@@ -27,7 +27,7 @@ export const createFoley = (a: Audio): Foley => {
   const scrape = a.loop(SOUND.SCRAPE);
   /** Footfalls of the own player so far. */
   let feet = 0;
-  const seen = new Map<number, { p: PlayerState; stride: number }>();
+  const seen = new Map<number, { p: PlayerState; steps?: number }>();
 
   /** The footfall n of p: harder at a sprint, softer crouched, the two feet a little apart in pitch. */
   const tap = (p: PlayerState, n: number, at?: Vec3) => {
@@ -44,8 +44,8 @@ export const createFoley = (a: Audio): Foley => {
     a.play(SOUND.LAND, at, clamp(fall / 14, 0.2), 1.25 - 0.5 * clamp(fall / 20));
 
   return {
-    me(p, hit, stride) {
-      const n = Math.floor(stride);
+    me(p, hit, steps) {
+      const n = steps;
       const stepped = n > feet;
       feet = n;
       if (!p || a.muted) {
@@ -75,24 +75,20 @@ export const createFoley = (a: Audio): Foley => {
       scrape.set(p.mode === MODE.SLIDE ? 0.2 + 0.5 * v : 0, 0.8 + 0.4 * v);
     },
 
-    others(ps) {
+    others(ps, steps) {
       for (const p of ps) {
         const s = seen.get(p.id);
+        const n = steps(p.id);
         if (s && !a.muted) {
           const at: Vec3 = [p.x, p.y + 0.1, p.z];
-          const d = Math.hypot(p.x - s.p.x, p.z - s.p.z);
-          if (stepping(p) && stepping(s.p) && d < 1) {
-            const n = Math.floor(s.stride);
-            s.stride += d / stepLength(speedOf(p));
-            if (Math.floor(s.stride) > n) {
-              tap(p, n, at);
-            }
+          if (n !== undefined && s.steps !== undefined && n > s.steps) {
+            tap(p, n, at);
           }
           if (p.ground && !s.p.ground && s.p.vy < -SOFT) {
             land(-s.p.vy, at);
           }
         }
-        seen.set(p.id, { p, stride: s?.stride ?? 0 });
+        seen.set(p.id, { p, steps: n });
       }
       for (const id of seen.keys()) {
         if (!ps.some(p => p.id === id)) {

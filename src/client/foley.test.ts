@@ -3,8 +3,9 @@ import { STILL } from '../shared/physics';
 import { EV, MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import type { Audio } from './audio';
-import { createEffects, stepLength } from './effects';
 import { createFoley } from './foley';
+import { createGait } from './gait';
+import type { Gait } from './gait';
 import { SOUND } from './sfx';
 
 const DT = 1 / 60;
@@ -93,7 +94,7 @@ describe('the own player', () => {
   });
 
   describe('footsteps', () => {
-    const walk = (p: PlayerState, from: number, to: number, by = 0.05) => {
+    const walk = (p: PlayerState, from: number, to: number, by = 1) => {
       const { audio, played } = fake();
       const f = createFoley(audio);
       for (let s = from; s <= to; s += by) {
@@ -104,36 +105,41 @@ describe('the own player', () => {
     const run = player({ vx: 6 });
     const sprint = player({ vx: 9 });
 
-    it('fall on each whole step of the stride, none between', () => {
+    it('fall on each footstep of the body, none between', () => {
       const { audio, played } = fake();
       const f = createFoley(audio);
       f.me(run, { ev: 0, fall: 0 }, 0);
-      f.me(run, { ev: 0, fall: 0 }, 0.9);
+      f.me(run, { ev: 0, fall: 0 }, 0);
       expect(played).toHaveLength(0);
-      f.me(run, { ev: 0, fall: 0 }, 1.1);
+      f.me(run, { ev: 0, fall: 0 }, 1);
       expect(played).toHaveLength(1);
-      f.me(run, { ev: 0, fall: 0 }, 1.9);
+      f.me(run, { ev: 0, fall: 0 }, 1);
       expect(played).toHaveLength(1);
       f.me(run, { ev: 0, fall: 0 }, 2);
       expect(ids(played)).toEqual([SOUND.STEP, SOUND.STEP]);
       expect(played[0].at).toBeUndefined();
     });
 
-    it('come at the stride cadence: faster at a sprint, one every stepLength metres', () => {
+    it('sound the frame a drawn foot lands, one per foot: faster at a sprint', () => {
       const frames = (v: number) => {
-        const fx = createEffects();
+        const g = createGait(0);
         const { audio, played } = fake();
         const f = createFoley(audio);
+        let [last, synced] = [g.steps, true];
         for (let i = 0; i < 180; i++) {
           const p = player({ x: v * i * DT, vx: v });
-          fx.update(p, 0, DT);
-          f.me(p, { ev: 0, fall: 0 }, fx.stride);
+          g.update(p, DT);
+          const n = played.length;
+          f.me(p, { ev: 0, fall: 0 }, g.steps);
+          // A sound exactly when the gait sets a foot down.
+          synced &&= played.length - n == g.steps - last;
+          last = g.steps;
         }
+        expect(synced).toBe(true);
         return played.length;
       };
-      // Three seconds: 18 m at 6 m/s, 27 m at 9.
-      expect(Math.abs(frames(6) - 18 / stepLength(6))).toBeLessThanOrEqual(1);
-      expect(Math.abs(frames(9) - 27 / stepLength(9))).toBeLessThanOrEqual(1);
+      // Three seconds of running: a few steps a second.
+      expect(frames(6)).toBeGreaterThan(6);
       expect(frames(9)).toBeGreaterThan(frames(6));
     });
 
@@ -226,9 +232,9 @@ describe('the own player', () => {
       const f = createFoley(audio);
       f.me(player({ vx: 12 }), { ev: EV.JUMP | EV.LAND | EV.DASH, fall: 9 }, 0);
       f.me(player({ vx: 12 }), { ev: 0, fall: 0 }, 3);
-      f.others([player({ id: 2, x: 0 })]);
-      f.others([player({ id: 2, x: 0.5, mode: MODE.AIR, ground: false })]);
-      f.others([player({ id: 2, x: 1, vy: -9 })]);
+      f.others([player({ id: 2, x: 0 })], () => 0);
+      f.others([player({ id: 2, x: 0.5, mode: MODE.AIR, ground: false })], () => 1);
+      f.others([player({ id: 2, x: 1, vy: -9 })], () => 2);
       expect(played).toEqual([]);
       expect(sets[SOUND.WIND]).toEqual([]);
       expect(sets[SOUND.SCRAPE]).toEqual([]);
@@ -241,7 +247,7 @@ describe('the own player', () => {
       f.me(player({ vx: 6 }), { ev: 0, fall: 0 }, 0);
       f.me(player({ vx: 6 }), { ev: 0, fall: 0 }, 9);
       audio.mute(false);
-      f.me(player({ vx: 6 }), { ev: 0, fall: 0 }, 9.2);
+      f.me(player({ vx: 6 }), { ev: 0, fall: 0 }, 9);
       expect(played).toEqual([]);
     });
   });
@@ -250,57 +256,72 @@ describe('the own player', () => {
 const ids = (played: Played[]) => played.map(p => p.id);
 
 describe('the others', () => {
+  /** Draws `ps` at 60 Hz the way the renderer does: each a runner whose gait counts its footsteps. */
+  const drawn = (f: ReturnType<typeof createFoley>) => {
+    const gaits = new Map<number, Gait>();
+    return (ps: PlayerState[]) => {
+      for (const p of ps) {
+        if (!gaits.has(p.id)) {
+          gaits.set(p.id, createGait());
+        }
+        gaits.get(p.id)!.update(p, DT);
+      }
+      f.others(ps, id => gaits.get(id)?.steps);
+      return gaits;
+    };
+  };
   /** A player running along x at v m/s on the ground, drawn at 60 Hz for `seconds`. */
   const running = (
-    f: ReturnType<typeof createFoley>,
+    draw: ReturnType<typeof drawn>,
     id: number,
     v: number,
     seconds: number,
     x0 = 0,
   ) => {
     for (let i = 0; i <= seconds * 60; i++) {
-      f.others([player({ id, x: x0 + v * i * DT, vx: v })]);
+      draw([player({ id, x: x0 + v * i * DT, vx: v })]);
     }
   };
 
-  it('step at their position on the stride cadence, as the own player does', () => {
+  it('step at their position as their runner sets a foot down', () => {
     const { audio, played } = fake();
-    running(createFoley(audio), 2, 6, 3, 10);
-    expect(Math.abs(played.length - 18 / stepLength(6))).toBeLessThanOrEqual(1);
+    const draw = drawn(createFoley(audio));
+    const first = draw([player({ id: 2, x: 10, vx: 6 })]).get(2)!.steps;
+    running(draw, 2, 6, 3, 10);
+    const g = draw([player({ id: 2, x: 28, vx: 6 })]).get(2)!;
+    expect(played.length).toBe(g.steps - first);
+    expect(played.length).toBeGreaterThan(6);
     expect(played.every(p => p.id === SOUND.STEP)).toBe(true);
-    const [first] = played;
-    expect(first.at![0]).toBeGreaterThan(10);
-    expect(first.at![0]).toBeLessThan(10 + stepLength(6) + 0.3);
-    expect(first.at![1]).toBeCloseTo(0.1);
+    expect(played[0].at![0]).toBeGreaterThan(10);
+    expect(played[0].at![1]).toBeCloseTo(0.1);
   });
 
   it('are silent when standing, in the air and on a slide, and on their first frame', () => {
     const { audio, played } = fake();
-    const f = createFoley(audio);
-    f.others([player({ id: 2, x: 50 })]);
-    for (let i = 0; i < 60; i++) {
-      f.others([player({ id: 2, x: 50 })]);
+    const draw = drawn(createFoley(audio));
+    for (let i = 0; i < 61; i++) {
+      draw([player({ id: 2, x: 50 })]);
     }
     for (let i = 0; i < 60; i++) {
-      f.others([player({ id: 2, x: 50 + i * 0.1, mode: MODE.AIR, ground: false, vx: 6 })]);
+      draw([player({ id: 2, x: 50 + i * 0.1, mode: MODE.AIR, ground: false, vx: 6 })]);
     }
     for (let i = 0; i < 60; i++) {
-      f.others([player({ id: 2, x: 56 + i * 0.1, mode: MODE.SLIDE, vx: 6 })]);
+      draw([player({ id: 2, x: 56 + i * 0.1, mode: MODE.SLIDE, vx: 6 })]);
     }
     expect(played).toEqual([]);
   });
 
-  it('tap a wall-run, and take a respawn jump for no walk at all', () => {
+  it('tap a wall-run each half of their stride, and take a respawn jump for no walk at all', () => {
     const { audio, played } = fake();
-    const f = createFoley(audio);
+    const draw = drawn(createFoley(audio));
     for (let i = 0; i <= 120; i++) {
-      f.others([player({ id: 2, x: i * 0.13, mode: MODE.WALLRUN, vx: 8 })]);
+      draw([player({ id: 2, x: i * 0.13, mode: MODE.WALLRUN, wall: SIDE.NORTH, vx: 8 })]);
     }
     expect(played.length).toBeGreaterThan(2);
     expect(played.every(p => p.id === SOUND.WALLSTEP)).toBe(true);
     played.length = 0;
-    f.others([player({ id: 2, x: 500, mode: MODE.WALLRUN, vx: 8 })]);
-    f.others([player({ id: 2, x: 500.01, mode: MODE.WALLRUN, vx: 8 })]);
+    draw([player({ id: 2, x: 500, mode: MODE.WALLRUN, wall: SIDE.NORTH, vx: 8 })]);
+    draw([player({ id: 2, x: 500.01, mode: MODE.WALLRUN, wall: SIDE.NORTH, vx: 8 })]);
     expect(played).toEqual([]);
   });
 
@@ -308,36 +329,37 @@ describe('the others', () => {
     const { audio, played } = fake();
     const f = createFoley(audio);
     const air = (vy: number) => player({ id: 2, x: 4, y: 3, vy, mode: MODE.AIR, ground: false });
-    f.others([air(-2)]);
-    f.others([air(-12)]);
-    f.others([player({ id: 2, x: 4, y: 0 })]);
+    f.others([air(-2)], () => 0);
+    f.others([air(-12)], () => 0);
+    f.others([player({ id: 2, x: 4, y: 0 })], () => 0);
     expect(played).toHaveLength(1);
     expect(played[0]).toMatchObject({ id: SOUND.LAND, at: [4, 0.1, 0] });
     const hard = played[0].gain!;
     // A soft touchdown (stepping off a kerb) is not heard.
-    f.others([air(-2)]);
-    f.others([player({ id: 2, x: 4, y: 0 })]);
+    f.others([air(-2)], () => 0);
+    f.others([player({ id: 2, x: 4, y: 0 })], () => 0);
     expect(played).toHaveLength(1);
-    f.others([air(-6)]);
-    f.others([player({ id: 2, x: 4, y: 0 })]);
+    f.others([air(-6)], () => 0);
+    f.others([player({ id: 2, x: 4, y: 0 })], () => 0);
     expect(played).toHaveLength(2);
     expect(played[1].gain!).toBeLessThan(hard);
   });
 
-  it('keep each its own stride, and forget those who left', () => {
+  it('keep each its own steps, and forget those who left', () => {
     const { audio, played } = fake();
     const f = createFoley(audio);
-    // Two players half a step each frame apart: each steps on its own distance, not on the sum.
+    const draw = drawn(f);
+    // A sprinter and a jogger: each steps with its own runner's feet.
     for (let i = 0; i <= 120; i++) {
-      f.others([player({ id: 2, x: i * 0.1, vx: 6 }), player({ id: 3, x: 30 + i * 0.05, vx: 6 })]);
+      draw([player({ id: 2, x: i * 0.15, vx: 9 }), player({ id: 3, x: 30 + i * 0.03, vx: 2 })]);
     }
     const near = played.filter(p => p.at![0] < 20).length;
     const far = played.length - near;
     expect(near).toBeGreaterThan(far * 1.5);
     played.length = 0;
-    f.others([]);
+    f.others([], () => undefined);
     // Back, far from where they were: a new player, no landing and no step on the first frame.
-    f.others([player({ id: 2, x: 99, y: 0, vy: -20 })]);
+    f.others([player({ id: 2, x: 99, y: 0, vy: -20 })], () => 50);
     expect(played).toEqual([]);
   });
 });

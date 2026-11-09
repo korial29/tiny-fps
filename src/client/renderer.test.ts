@@ -404,6 +404,8 @@ describe('createRenderer', () => {
       pose: vi.fn(),
       muzzle: () => [0, 0, 0] as [number, number, number],
       spun: () => 0,
+      steps: 0,
+      phase: 0,
       aim: vi.fn(),
       draw,
     });

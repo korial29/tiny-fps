@@ -207,14 +207,14 @@ describe('the parks', () => {
     }
   });
 
-  it('grows tall trees on the parks alone, out to MARKS: each standing on a park, up to 15 to 25 m', () => {
+  it('grows tall trees on the parks alone, out to MARKS: each standing on a park, up to 15 to 25 m, the near ones branched', () => {
     for (const def of [ROOFTOPS, HIGHLINE]) {
       const v = trees(def);
       expect(v.length % (3 * STRIDE)).toBe(0);
       expect(v.every(Number.isFinite)).toBe(true);
-      // A few hundred trees, at about 30 triangles each near and 24 far.
+      // A few hundred trees: near, about 190 triangles of wood and leaves each; far, a crown of 24.
       expect(v.length / STRIDE).toBeGreaterThan(20000);
-      expect(v.length / STRIDE).toBeLessThan(90000);
+      expect(v.length / STRIDE).toBeLessThan(200000);
       const pts = stands(v);
       const lots = parks(def);
       const { box } = grid(def);

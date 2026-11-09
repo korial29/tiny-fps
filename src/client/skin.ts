@@ -63,7 +63,7 @@ export const hairOf = (id: number): number[] => HAIRS[pick(id, 0, HAIRS.length)]
 /** An iris colour for the runner `id`, as hairOf(). */
 export const eyesOf = (id: number): number[] => IRISES[pick(id, 0x2468, IRISES.length)];
 
-/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots and webbing, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, darker than the hair, the shaved beard's shadow and its edge, the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
+/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots and webbing, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, between the hair and the skin, the shaved beard's shadow and its edge, the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
 export const palette = (jacket: number[], hair = HAIRS[1], iris = IRISES[0]): number[][] => [
   jacket,
   jacket.map(v => v * 0.5),
@@ -77,7 +77,7 @@ export const palette = (jacket: number[], hair = HAIRS[1], iris = IRISES[0]): nu
   iris,
   [0.5, 0.3, 0.26],
   SKIN.map(v => v * 0.55),
-  hair.map((v, i) => v * 0.3 + [0.03, 0.022, 0.018][i]),
+  hair.map((v, i) => v * 0.4 + SKIN[i] * 0.3),
   SKIN.map((v, i) => v * 0.62 + hair[i] * 0.1 + [0, 0.01, 0.03][i]),
   SKIN.map((v, i) => v * 0.81 + hair[i] * 0.05 + [0, 0.005, 0.015][i]),
   [1.3, 1.3, 1.3],
@@ -583,7 +583,7 @@ const onHead = (x: number, y: number) => {
 };
 
 // The brows, pieces of their own along x laid on the brow ridge (a colour on the head's grid
-// steps): low over the eyes, the inner ends drawn down toward the nose, thick there, thin out to
+// steps): low over the eyes, the inner ends drawn down toward the nose, thin, thinner out to
 // the tail. A hard look.
 const BROWS: Loft = {
   chain: [J.HEAD],
@@ -593,8 +593,8 @@ const BROWS: Loft = {
   far: [],
   rings: [0.008, 0.0095, 0.014, 0.02, 0.027, 0.034, 0.041, 0.047, 0.052].map((x, i) => {
     const y = 1.711 + 0.0015 * (1 - ((x - 0.033) / 0.022) ** 2) - 0.22 * Math.max(0.024 - x, 0);
-    const h = i % 8 ? 0.005 - 0.11 * Math.max(x - 0.03, 0) : 0;
-    return [x, y, onHead(x, y), h, h && 0.0011, 0, BROW];
+    const h = i % 8 ? 0.0034 - 0.07 * Math.max(x - 0.03, 0) : 0;
+    return [x, y, onHead(x, y) + 0.0002, h, h && 0.0008, 0, BROW];
   }),
 };
 

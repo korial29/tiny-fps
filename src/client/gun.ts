@@ -156,7 +156,62 @@ const HULL: Station[] = [
   [0.222, 0.065, 0, 0],
 ];
 const built: number[][] = [];
-
+/**
+ * The pistol's back (the user, 2026-11-09: like the rifle's counter, the top of the gun in one
+ * piece, cut by a straight leaning face that is the screen's support): the face through BACK,
+ * facing BACK_N, back and up toward the player, glossy black (GLOSS); the counter's screen sits on it.
+ */
+const BACK: Vec3 = [0, 0.125, 0.04];
+const BACK_N = unit([0, 0.469, 0.883]);
+/** Glossy black, the screen's support: [r, g, layer, b]. */
+const GLOSS = [0.012, 0.012, SHINE, 0.018];
+/**
+ * Cuts `out` (triangles) by the back face: what lies in front stays, what lies behind is laid on the
+ * face, glossy black, facing out of it. A triangle across it is split along it, so the edge is clean.
+ */
+const cutBack = (out: number[]) => {
+  const v = out.splice(0);
+  const side = (i: number) => (v[i + 1] - BACK[1]) * BACK_N[1] + (v[i + 2] - BACK[2]) * BACK_N[2];
+  /** The vertex at `i`, or between the ones at `i` and `j` where the face crosses. */
+  const vert = (i: number, j = i) => {
+    const [a, b] = [side(i), side(j)];
+    const t = i == j ? 0 : a / (a - b);
+    const x = v.slice(i, i + STRIDE).map((x, k) => x + (v[j + k] - x) * t);
+    x.splice(3, 3, ...unit(x.slice(3, 6) as Vec3));
+    return x;
+  };
+  /** On the face, black: the glow keeps its colour. */
+  const flat = (x: number[]) => {
+    const d = (x[1] - BACK[1]) * BACK_N[1] + (x[2] - BACK[2]) * BACK_N[2];
+    return [
+      x[0],
+      x[1] - BACK_N[1] * d,
+      x[2] - BACK_N[2] * d,
+      ...BACK_N,
+      ...(x[8] == -2 ? x.slice(6) : GLOSS),
+    ];
+  };
+  const fan = (poly: number[][]) => {
+    for (let k = 2; k < poly.length; k++) {
+      out.push(...poly[0], ...poly[k - 1], ...poly[k]);
+    }
+  };
+  for (let t = 0; t < v.length; t += 3 * STRIDE) {
+    const ids = [t, t + STRIDE, t + 2 * STRIDE];
+    const [front, back]: number[][][] = [[], []];
+    ids.forEach((i, k) => {
+      const j = ids[(k + 1) % 3];
+      (side(i) > 0 ? back : front).push(vert(i));
+      if (side(i) > 0 !== side(j) > 0) {
+        const x = vert(i, j);
+        front.push(x);
+        back.push(x);
+      }
+    });
+    fan(front);
+    fan(back.map(flat));
+  }
+};
 /**
  * The gun at a level of detail (0 far, 1 near), built once, in the vertex format of mesh.ts, after
  * the Halo plasma pistol: a smooth bulbous upper body tapering to a glowing emitter on its nose, a
@@ -189,7 +244,8 @@ export const gun = (lod: number): number[] => {
     // A strip of light along each side of the bulb and of the hull.
     tube(
       out,
-      BULB.slice(1, 6).map(([f, y, a, b]): Station => [
+      // From in front of the flat back, which would smear their ends over it.
+      BULB.slice(2, 6).map(([f, y, a, b]): Station => [
         f,
         y - 0.1 * b,
         0.0035,
@@ -224,6 +280,7 @@ export const gun = (lod: number): number[] => {
     m,
     glow,
   );
+  cutBack(out);
   return (built[lod] = out);
 };
 
@@ -1150,120 +1207,17 @@ const segments = (
 });
 const SEGMENTS = segments(DW, DH, DT);
 /**
- * The display block: a low wedge on the back of the top of the body, in the gun's metal, so it
- * reads as part of it. Its back face leans toward the eye of the player holding the gun from a
- * straight knee (KNEE, the user, 2026-11-08: the body's round back cut the face's foot into an
- * arch, and its middle came up through the screen), high enough to clear it, under which the
- * block goes straight down into the body. Corners as [across, up, back] of
- * the back edge and of the front edge, base (sunk in the body) then top.
+ * The screen on the gun's flat back, a rounded trapezoid filling it (the user, 2026-11-09): the half
+ * width of its glowing frame at its middle, its middle up the face from BACK, its half height, its
+ * corner radius, in metres; its digits' scale; how much narrower its top is and wider its foot, as
+ * a share of its width. Round the frame a black of the same shape, BLACK further out, corner
+ * radius BLACK_R.
  */
-const BLOCK_BASE: [Vec3, Vec3] = [
-  [0.0223, 0.1, 0.0483],
-  [0.0223, 0.1, 0.02],
-];
-const KNEE: Vec3 = [0.0223, 0.131, 0.0483];
-const BLOCK_TOP: [Vec3, Vec3] = [
-  [0.02, 0.1504, 0.038],
-  [0.02, 0.1474, 0.026],
-];
-/**
- * The screen on the back face above the knee: the half width of its glowing frame, its middle up
- * the face from the knee, its half height, its corner radius, in metres; its digits' scale, so that
- * they fill it (the user, 2026-11-08). Round it, the dark square reaches the face's flat edges, within
- * 1 mm, nearly square (the user, 2026-11-09): BLACK further out than the frame, corner radius BLACK_R.
- */
-const [SW, SM, SHH, SR, DK] = [0.0153, 0.0119, 0.009, 0.0015, 0.66];
+const [SW, SM, SHH, SR, DK, TAPER] = [0.0255, -0.006, 0.0165, 0.0025, 1, 0.12];
 const [BLACK, BLACK_R] = [0.0027, 0.0008];
 /** The digits' foot, so that they are in the middle of the screen; the charge gauge, a thin bar under them up the back face: where it starts and ends, and the gap between its cells. */
 const DY = SM - (DH * DK) / 2;
 const [GFROM, GTO, GGAP] = [SM - SHH + 0.0008, DY - 0.0004, 0.0012];
-/** The block's top, flat; the radius of its upright edges and of its top edges (the user, 2026-11-09: a little rounded). */
-const [BTOP, BR, BRT] = [0.1535, 0.002, 0.0015];
-
-/**
- * Appends the display block, in the gun's metal lit by its normal: rings of a rounded rectangle up
- * from its base in the body, its back straight to the knee then leaning back as the face that
- * carries the screen, its top edges rounded over to a flat top. Normals smooth across the rings.
- */
-const block = (v: number[]) => {
-  const [b0, b1, t0, t1] = [BLOCK_BASE[0], BLOCK_BASE[1], BLOCK_TOP[0], BLOCK_TOP[1]];
-  const lerp = (y: number, y0: number, v0: number, y1: number, v1: number) =>
-    v0 + ((v1 - v0) * (y - y0)) / (y1 - y0);
-  /** The ring at `y`, shrunk by `i`: four corners of BR less `i`, four steps each, round the middle. */
-  const ring = (y: number, i: number): Vec3[] => {
-    const back = (y > KNEE[1] ? lerp(y, KNEE[1], KNEE[2], t0[1], t0[2]) : b0[2]) - i;
-    const front = lerp(y, b1[1], b1[2], t1[1], t1[2]) + i;
-    const a = lerp(y, b0[1], b0[0], t0[1], t0[0]) - i;
-    const r = Math.max(BR - i, 0.0005);
-    return [0, 1, 2, 3].flatMap(c =>
-      [0, 1, 2, 3].map(k => {
-        const t = ((c + k / 3) * Math.PI) / 2;
-        return [
-          (c == 0 || c == 3 ? 1 : -1) * (a - r) + r * Math.cos(t),
-          y,
-          (c < 2 ? back - r : front + r) + r * Math.sin(t),
-        ] as Vec3;
-      }),
-    );
-  };
-  const rings = [
-    ring(b0[1], 0),
-    ring(KNEE[1], 0),
-    ...[0, 1, 2, 3].map(k => {
-      const t = (k * Math.PI) / 6;
-      return ring(BTOP - BRT + BRT * Math.sin(t), BRT * (1 - Math.cos(t)));
-    }),
-  ];
-  const last = rings[rings.length - 1];
-  const top: Vec3 = [0, BTOP, last.reduce((s, p) => s + p[2], 0) / last.length];
-  const N = rings.map(r => r.map((): Vec3 => [0, 0, 0]));
-  const tris: [number, number][][] = [];
-  rings.slice(1).forEach((_, j) => {
-    for (let i = 0; i < 16; i++) {
-      const [a, b, c, d]: [number, number][] = [
-        [j, i],
-        [j, (i + 1) % 16],
-        [j + 1, (i + 1) % 16],
-        [j + 1, i],
-      ];
-      for (const t of [
-        [a, b, c],
-        [a, c, d],
-      ]) {
-        const [p, q, w] = t.map(([r, k]) => rings[r][k]);
-        const [u, e] = [sub(q, p), sub(w, p)];
-        let n = unit([
-          u[1] * e[2] - u[2] * e[1],
-          u[2] * e[0] - u[0] * e[2],
-          u[0] * e[1] - u[1] * e[0],
-        ]);
-        // Outward, away from the block's upright axis.
-        if (n[0] * p[0] + n[2] * (p[2] - top[2]) < 0) {
-          n = [-n[0], -n[1], -n[2]];
-          t.reverse();
-        }
-        tris.push(t);
-        for (const [r, k] of t) {
-          N[r][k] = add(N[r][k], n);
-        }
-      }
-    }
-  });
-  const put = (p: Vec3, n: Vec3) => {
-    const [r, g, , b] = metal(0.15)(p, n);
-    v.push(...p, ...n, r, g, -1, b);
-  };
-  for (const t of tris) {
-    for (const [r, k] of t) {
-      put(rings[r][k], unit(N[r][k]));
-    }
-  }
-  for (let i = 0; i < 16; i++) {
-    for (const p of [top, last[i], last[(i + 1) % 16]]) {
-      put(p, [0, 1, 0]);
-    }
-  }
-};
 const readouts = new Map<number, number[]>();
 
 /**
@@ -1280,14 +1234,9 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
   let out = readouts.get(key);
   if (!out) {
     const v: number[] = (out = []);
-    const [t0, k0] = [BLOCK_TOP[0], KNEE];
-    block(v);
-    // The back face's axes: across, up its slope and out of it. Points on it from the middle of the knee.
-    const slope = unit([0, t0[1] - k0[1], t0[2] - k0[2]]);
-    const [O, N]: [Vec3, Vec3] = [
-      [0, k0[1], k0[2]],
-      [0, -slope[2], slope[1]],
-    ];
+    // The back face's axes: up its slope and out of it, from BACK.
+    const slope: Vec3 = [0, BACK_N[2], -BACK_N[1]];
+    const [O, N] = [BACK, BACK_N];
     const at = (a: number, b: number, k: number): Vec3 => [
       O[0] + a,
       O[1] + slope[1] * b + N[1] * k,
@@ -1296,12 +1245,12 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
     // The dark square, a fan of 24 round its middle; `g` grows the rounded rectangle of the frame
     // out from the screen, and `rad` sets its corner.
     const r = (c: number, h: number, rad: number) => Math.sign(c) * (h - rad) + rad * c;
-    const rim = (i: number, g = 0, d = 0.0012, rad = SR + g) =>
-      at(
-        r(Math.cos(i * 0.2618 + 0.13), SW + g, rad),
-        SM + r(Math.sin(i * 0.2618 + 0.13), SHH + g, rad),
-        d,
-      );
+    // A rounded trapezoid (the user, 2026-11-09), narrow at the top: across scaled by TAPER per
+    // half height up from the middle.
+    const rim = (i: number, g = 0, d = 0.0012, rad = SR + g) => {
+      const b = r(Math.sin(i * 0.2618 + 0.13), SHH + g, rad);
+      return at(r(Math.cos(i * 0.2618 + 0.13), SW + g, rad) * (1 - (TAPER * b) / SHH), SM + b, d);
+    };
     for (let i = 0; i < 24; i++) {
       tri(
         v,

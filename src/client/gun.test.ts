@@ -129,20 +129,20 @@ describe('the gun model', () => {
     }
   });
 
-  it('cuts its top with a straight glossy black face leaning toward the player, the screen’s support', () => {
+  it('cuts its top with a straight glossy black face leaning toward the player', () => {
     // The face: through (0, 0.125, 0.04), facing back and up.
     const n = unit([0, 0.469, 0.883]);
     const out = (p: Vec3) => (p[1] - 0.125) * n[1] + (p[2] - 0.04) * n[2];
     // Nothing of the body behind it.
     expect(Math.max(...near.map(v => out(v.p)))).toBeLessThan(1e-9);
     // On it, glossy black facing out of it.
-    const face = near.filter(v => v.layer == SHINE && Math.max(...v.c) < 0.03);
-    expect(face.length).toBeGreaterThan(20);
-    // A straight cut: flat, facing straight out of it.
-    for (const v of face) {
-      expect(Math.abs(out(v.p))).toBeLessThan(1e-9);
-      expect(dot(v.n, n)).toBeGreaterThan(0.999);
-    }
+    const face = near.filter(
+      v => Math.abs(out(v.p)) < 1e-9 && v.layer == SHINE && Math.max(...v.c) < 0.03,
+    );
+    expect(face.length).toBeGreaterThan(40);
+    // A straight cut: flat, facing straight out of it (its edge, shared with the body's metal,
+    // keeps the body's normals there).
+    expect(face.filter(v => dot(v.n, n) > 0.999).length).toBeGreaterThan(face.length / 2);
   });
 
   it('is about a hand and a half long, with the muzzle on the tip of its nose', () => {
@@ -457,6 +457,25 @@ describe('the readout on the back of the gun', () => {
     expect(readout(40, 2)).not.toBe(readout(40, 3));
   });
 
+  it('stands the screen on a glossy black rounded trapezoid, 1.5 mm out of the gun’s back and wider than it', () => {
+    const n = unit([0, 0.469, 0.883]);
+    const out = (p: number[]) => (p[1] - 0.125) * n[1] + (p[2] - 0.04) * n[2];
+    const gloss = v(88).filter(x => x.layer == SHINE);
+    expect(gloss.length).toBe(24 * 9);
+    for (const x of gloss) {
+      expect(Math.max(...x.c)).toBeLessThan(0.03);
+      expect(out(x.p)).toBeLessThan(0.0015 + 1e-9);
+      expect(out(x.p)).toBeGreaterThan(-0.0006);
+    }
+    const width = (xs: { p: number[] }[]) =>
+      Math.max(...xs.map(x => x.p[0])) - Math.min(...xs.map(x => x.p[0]));
+    expect(width(gloss)).toBeGreaterThan(width(screen(88)) + 0.003);
+    // Every bit of the screen stands over it.
+    for (const x of screen(88)) {
+      expect(out(x.p)).toBeGreaterThan(0.0015);
+    }
+  });
+
   it('keeps the digits inside the screen', () => {
     const sx = screen(88).map(x => x.p[0]);
     const dx = digits(88).map(x => x.p[0]);
@@ -474,7 +493,7 @@ describe('the readout on the back of the gun', () => {
     ];
     const [s0, s1] = span(screen(88));
     const [d0, d1] = span(digits(88));
-    expect((s0 + s1) / 2).toBeCloseTo(-0.006, 3);
+    expect((s0 + s1) / 2).toBeCloseTo(-0.012, 3);
     expect(Math.abs(d0 - s0 - (s1 - d1))).toBeLessThan(1e-4);
   });
 

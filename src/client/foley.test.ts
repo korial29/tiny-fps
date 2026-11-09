@@ -38,6 +38,7 @@ const fake = () => {
     listen: () => {},
     play: (id, at, gain, rate) => void played.push({ id, at, gain, rate }),
     loop: id => ({ set: (v, r) => void sets[id].push([v, r]) }),
+    say: () => {},
     mute: on => {
       muted = on;
     },

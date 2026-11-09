@@ -209,6 +209,7 @@ The game is the movement and a capture the flag on top of it, with a tackle, a g
 - **The others**: drawn 100 ms in the past, interpolated between snapshots, as runners with one continuous skinned body, a face that blinks and grimaces, a combat stance, a natural gait and every parkour move (leaning well out on a wall-run, the feet on it), in their team colour, with the weapon in their hands.
 - **The city**: the street lies far below the roofs, with roads, their markings and traffic out into the haze, and a fog that thickens toward it; parks of tall branched trees in some blocks, and a skyline of towers around the map.
 - **Sound**: a synthesiser and a mixer that places sounds left or right by where they come from, and an airy music loop of slow pads and soft bells. Steps, jumps, the deep plasma shot, the katana's draw, swish and zap, the guns' reloads and power-up, hits, pickups and the flag events all have their sound. The sound starts with the click that locks the pointer.
+- **Announcer**: a calm voice tells the match starting and its last minute, the flags and the captures from your team's side, two or three takedowns in quick succession, five and ten in a row, a run of plasma shots that mostly hit, and the result. Its 16 lines are generated offline by `scripts/voice.py` and loaded after the first click, apart from the game: about 44 KB in Ogg Opus, or 74 KB in MP3 where the browser cannot decode Opus.
 
 ---
 
@@ -230,6 +231,7 @@ The game is the movement and a capture the flag on top of it, with a tackle, a g
 - [x] A title screen with the controls, a muted mark, a player count and name tags
 - [x] A pixel face over the health, in the spirit of DOOM's (its own look, drawn in code): 42 frames, 5 levels of wounds, glances, a turn toward the side a hit comes from, an ouch, a grin at a new weapon, a rage with the trigger held, a glow carrying the flag, and dead
 - [x] Teams and capture the flag: bases with a glowing ring, flags that wave and ride on a carrier's back, a score and a clock, markers toward the flags, banners, an end screen and synth sounds
+- [x] An announcer: a calm, generated voice for the match, the flags, takedown runs, the aim and the result
 - [x] Shadow DOM, zero runtime dependencies, size-gated in CI
 
 ---
@@ -266,3 +268,5 @@ Pull requests need one release label (`release:major`, `release:minor`, `release
 ## License
 
 [Apache-2.0](LICENSE)
+
+The announcer's voice is generated with [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0), voice `af_heart`.

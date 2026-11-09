@@ -2,6 +2,7 @@
 import type { Vec3 } from './mesh';
 import { LAYERS, LOOPED, MUSIC_RATE, RATE, music, render, seam } from './sfx';
 import type { Voice } from './sfx';
+import { CLIPS } from './voice/clips';
 
 /** A sound that plays on and on, started on its first set. */
 export interface Loop {
@@ -23,6 +24,11 @@ export interface Audio {
    * `rate` the speed and so the pitch.
    */
   play(id: number, at?: Vec3, gain?: number, rate?: number): void;
+  /**
+   * Says the announcer's line `id` (LINE), centred, the music lowered under it. Lines wait their
+   * turn, two at most and each once; none before the voice is decoded, a moment after unlock.
+   */
+  say(id: number): void;
   /** The sound `id` (one of LOOPED) as a loop, silent until its first set; the own player's, centred. */
   loop(id: number): Loop;
   /** Mutes or unmutes everything, music included. */
@@ -38,6 +44,18 @@ const RANGE = 40;
 const VOICES = 24;
 const MUSIC = 0.5;
 const STORE = 'tiny-fps:muted';
+/** The announcer's volume, and the music's share of its own under a line. */
+const SPEECH = 0.9;
+const DUCK = 0.35;
+
+/**
+ * The announcer's sprite (voice/clips.ts), each as base64 and loaded only when asked for: Ogg Opus,
+ * then MP3 where the browser cannot decode the first (older Safari).
+ */
+export const SPRITES: (() => Promise<string>)[] = [
+  () => import('./voice/opus').then(m => m.default),
+  () => import('./voice/mp3').then(m => m.default),
+];
 
 /** A silent Audio when the browser has no Web Audio. */
 const silent = (): Audio => {
@@ -47,6 +65,7 @@ const silent = (): Audio => {
     listen: () => {},
     play: () => {},
     loop: () => ({ set: () => {} }),
+    say: () => {},
     mute: on => {
       muted = on;
     },
@@ -57,7 +76,7 @@ const silent = (): Audio => {
   };
 };
 
-export const createAudio = (layers: Voice[][] = LAYERS): Audio => {
+export const createAudio = (layers: Voice[][] = LAYERS, sprites = SPRITES): Audio => {
   let ctx: AudioContext;
   try {
     ctx = new AudioContext();
@@ -79,6 +98,33 @@ export const createAudio = (layers: Voice[][] = LAYERS): Audio => {
   let eye: Vec3 = [0, 0, 0];
   let yaw = 0;
   let muted = false;
+  /** The announcer's sprite once decoded, the lines waiting, and whether one is being said. */
+  let speech: AudioBuffer | undefined;
+  const lines: number[] = [];
+  let talking = false;
+
+  /** The first sprite the browser decodes; none if it decodes neither. */
+  const decode = async () => {
+    for (const load of sprites) {
+      try {
+        const bytes = Uint8Array.from(atob(await load()), c => c.charCodeAt(0));
+        return (speech = await ctx.decodeAudioData(bytes.buffer));
+      } catch {
+        // The next format.
+      }
+    }
+  };
+  const next = () => {
+    const id = lines.shift();
+    talking = id !== undefined && !!speech;
+    bed.gain.setTargetAtTime(talking ? MUSIC * DUCK : MUSIC, ctx.currentTime, 0.15);
+    if (talking) {
+      const src = source(speech!);
+      src.connect(out(master, SPEECH));
+      src.onended = next;
+      src.start(0, ...CLIPS[id!]);
+    }
+  };
 
   const buffer = (samples: Float32Array, rate = RATE) => {
     const b = ctx.createBuffer(1, samples.length, rate);
@@ -104,6 +150,7 @@ export const createAudio = (layers: Voice[][] = LAYERS): Audio => {
         m.loop = true;
         m.connect(bed);
         m.start();
+        void decode();
       }
     },
     listen(at, y) {
@@ -140,6 +187,14 @@ export const createAudio = (layers: Voice[][] = LAYERS): Audio => {
       voices.add(v);
       src.onended = () => voices.delete(v);
       src.start();
+    },
+    say(id) {
+      if (speech && lines.length < 2 && !lines.includes(id)) {
+        lines.push(id);
+        if (!talking) {
+          next();
+        }
+      }
     },
     loop(id) {
       let src: AudioBufferSourceNode | undefined;

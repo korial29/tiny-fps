@@ -665,16 +665,22 @@ export const createBody = (world?: World): Body => {
    */
   const holster = (): [Vec3, Vec3[]] => {
     const a = w.amp * (1 + 0.5 * w.sprint);
-    // A charge past a tap shakes the gun, harder as it grows: 4.5 mm at the full charge.
+    // A charge past a tap shakes the gun like the rail gun's bolt (the user, 2026-11-09): 1.5 mm
+    // at once, 6 mm at the full charge, and kicks it 8 times a second, harder as it grows.
     // The rail gun's bolt kicks it at each pulse of the arc, 7 a second, and shakes it, harder as
     // it heats; overheated it trembles (the user, 2026-11-08).
     const zap = +!!me?.zapping;
     const heat = (me?.heat ?? 0) / HEAT_MAX;
-    const kicked = kick + 0.6 * zap * Math.max(0, Math.sin(clock * TAU * 7)) ** 6;
+    const held =
+      me && !me.wield && (me.charge ?? 0) >= CHARGE_TAP
+        ? Math.min(1, (me.charge! - CHARGE_TAP) / (CHARGE_TICKS - CHARGE_TAP))
+        : -1;
+    const kicked =
+      kick +
+      0.6 * zap * Math.max(0, Math.sin(clock * TAU * 7)) ** 6 +
+      0.35 * Math.max(held, 0) * Math.max(0, Math.sin(clock * TAU * 8)) ** 6;
     const shake =
-      (me && !me.wield && (me.charge ?? 0) >= CHARGE_TAP
-        ? 0.0045 * Math.min(1, (me.charge! - CHARGE_TAP) / (CHARGE_TICKS - CHARGE_TAP))
-        : 0) +
+      (held < 0 ? 0 : 0.0015 + 0.0045 * held) +
       zap * (0.0012 + 0.004 * heat) +
       (me?.hot ? 0.002 : 0);
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];

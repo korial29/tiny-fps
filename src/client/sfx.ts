@@ -123,6 +123,8 @@ export const SOUND = {
   HISS: 37,
   /** The katana coming on: its button clicked, then the blade out of the guard with a light saber's snap and hum. */
   IGNITE: 38,
+  /** The plasma gun charging, held: a whine played higher as the charge grows (combat.ts), looped. */
+  CHARGE: 39,
 } as const;
 
 /**
@@ -354,10 +356,17 @@ export const LAYERS: Voice[][] = [
     [1, 70, 1.4, 0.02, 0.15, 0.32, 0.03, 0.22, 0, 1, 0.55, 0.46],
     [2, 140, 1.2, 0.03, 0.18, 0.3, 0.02, 1, 0, 1, 0.3, 0.46],
   ],
+  // CHARGE (the user, 2026-11-09): a sine at 330 Hz with a quick vibrato, a soft saw an octave under
+  // it, a fizz of held noise; held, to loop, its pitch raised with the charge.
+  [
+    [2, 330, 0, 0.001, 2.1, 0.001, 0.25, 1, 0, 1, 0.3],
+    [1, 165, 0, 0.001, 2.1, 0.001, 0.1, 0.3, 0, 1, 0.2],
+    [3, 5000, 0, 0.001, 2.1, 0.001, 0.5, 0.2, 0, 1, 0.1],
+  ],
 ];
 
 /** The sounds played in a loop: their buffers go through seam. */
-export const LOOPED: number[] = [SOUND.WIND, SOUND.SCRAPE, SOUND.HUM, SOUND.BUZZ];
+export const LOOPED: number[] = [SOUND.WIND, SOUND.SCRAPE, SOUND.HUM, SOUND.BUZZ, SOUND.CHARGE];
 
 /**
  * Renders the sound `id` of `layers` as mono samples in [-1, 1] at RATE, deterministic (seeded

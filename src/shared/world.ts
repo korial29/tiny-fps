@@ -55,6 +55,12 @@ export interface WorldDef {
   sky: [zenith: Vec3, horizon: Vec3];
   /** Fog colour and density per metre. Absent: none. */
   fog?: [r: number, g: number, b: number, density: number];
+  /** The share of GRAVITY that pulls the players down. Absent: 1. */
+  gravity?: number;
+  /** What is drawn around the play area: the city (street, towers, parks, traffic) or the moon (crater rim, base, stars, the Earth). Absent: the city. */
+  scenery?: 'city' | 'moon';
+  /** Whether the runners wear space helmets. */
+  helmets?: boolean;
 }
 
 /** A world ready for physics and drawing: the definition and a grid of brushes on the floor plane. */

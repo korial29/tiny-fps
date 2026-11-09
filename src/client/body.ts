@@ -27,8 +27,9 @@ import {
   GUN_ON,
   PRESS,
   pressAt,
+  buttonAt,
+  poke,
   thumbTo,
-  thumb,
   REAR,
   TILT,
   charge,
@@ -489,6 +490,7 @@ export const hand = (
   th: Vec3,
   curl: number,
   tint: number[],
+  point = 0,
   push = 0,
   to?: Vec3,
 ) => {
@@ -521,7 +523,8 @@ export const hand = (
     0.75,
   );
   for (let i = 0; i < 4; i++) {
-    const [d1, d2] = phalanges(curl, i);
+    // `point` straightens the index out of the fist, to press a button.
+    const [d1, d2] = phalanges(i ? curl : curl * (1 - point), i);
     tube(
       finger(
         [0.034 - 0.0225 * i, -0.004, 0.092],
@@ -535,7 +538,7 @@ export const hand = (
       put,
     );
   }
-  // `push` (0 to 1) reaches the thumb's tip out along `to`, onto a weapon's button.
+  // `push` (0 to 1) reaches the thumb's tip out along `to`, onto the katana's button.
   const [d1, d2] = THUMB.map(([open, fist], k) => {
     const d = unit(mix(open, fist, curl));
     return k && to ? unit(mix(d, to, push)) : d;
@@ -603,8 +606,9 @@ export const createBody = (world?: World): Body => {
   let side = 0;
   /** The ledge the hands are on: the body's x and z, the height of its top, and the way the wall faces. */
   let grip: { x: number; y: number; z: number; dx: number; dz: number } | undefined;
-  /** How closed each hand is, left then right, as of the last pose(). */
+  /** How closed each hand is, left then right, as of the last pose(); how far the left index is out, pressing a button. */
   const curls = [0, 0];
+  let pointing = 0;
   /**
    * The weapon in hand as last seen (0 the gun, 1 the katana, 2 the rail gun, -1 none), and the
    * seconds since it came to hand or a swap put its new battery in: it lights up over them (power()).
@@ -817,6 +821,8 @@ export const createBody = (world?: World): Body => {
       : lift;
     // The gun hand's wrist: the grip is 8 cm along the fingers from it and 2 cm toward the palm.
     const [gp, ga] = holster();
+    /** The weapon in hand by kind, for its button: the gun, the katana, the rail gun, the rifle. */
+    const pk = me?.wield ? 1 : me ? kindOf(me) : 0;
     const fh = [0, 1, 2].map(i => TILT[1] * ga[2][i] - TILT[0] * ga[1][i]) as Vec3;
     const wrist = [0, 1, 2].map(i => gp[i] - 0.078 * fh[i] + 0.022 * ga[0][i]) as Vec3;
     // The rail gun's front grip, for the left hand.
@@ -977,6 +983,38 @@ export const createBody = (world?: World): Body => {
         }
         curls[0] += (0.9 - curls[0]) * onLoad;
       }
+      // The left index presses the button of the gun in hand as it powers on (the user,
+      // 2026-11-09): the hand comes off where it was, turns, the index out, onto the button, and
+      // back. The katana's is the right thumb's (draw()).
+      const pw = sd < 0 && me && sp < 0 && !me.wield ? poke(since, pressAt(pk)) * w.gun * free : 0;
+      if (sd < 0) {
+        pointing = pw;
+      }
+      if (pw > 0.002) {
+        // The gun's model frame in the world, from the holster.
+        const [bat, bax]: [Vec3, Vec3[]] = [add(eye, turn(gp)), ga.map(turn)];
+        const [b, n] = buttonAt(pk, bat, bax);
+        // The index level with the gun, into the button, the thumb back toward the player: the hand
+        // flat, its back up (the user, 2026-11-09).
+        const into = unit(across(mix([0, 0, 0], n, -1), bax[1]));
+        const g = unit(across(mix([0, 0, 0], bax[2], -1), into));
+        const sid = unit(along(into, g, -S));
+        const fing = along(mix([0, 0, 0], g, S), sid, C);
+        const th = along(mix([0, 0, 0], g, C), sid, -S);
+        const held = { ...q, rot: q.rot.slice() };
+        wield(
+          held,
+          s,
+          arm,
+          along(along(b, fing, -0.1), th, -0.034),
+          g,
+          turn([-0.5, -1, -0.35]),
+          into,
+        );
+        for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
+          q.rot[k] = slerp(q.rot[k], held.rot[k], pw);
+        }
+      }
     }
     return solve(q);
   };
@@ -992,10 +1030,8 @@ export const createBody = (world?: World): Body => {
       if (s) {
         const colors = palette(color);
         skin(out, body(2), s, colors);
-        // The right thumb presses the button of the weapon in hand as it powers on.
-        const k = me?.wield ? 1 : me ? kindOf(me) : 0;
-        const push =
-          me && swapOf(me) < 0 && (hold > 0.2 || grasp > 0.2) ? thumb(since, pressAt(k)) : 0;
+        // The right thumb presses the katana's button as it comes on.
+        const push = me?.wield && swapOf(me) < 0 && grasp > 0.2 ? poke(since) : 0;
         [J.HAND_L, J.HAND_R].forEach((j, i) => {
           const q = s.rot[j];
           hand(
@@ -1006,8 +1042,9 @@ export const createBody = (world?: World): Body => {
             spin(q, [0, 0, -1]),
             curls[i],
             colors[7],
+            i ? 0 : pointing,
             i * push,
-            thumbTo(k),
+            thumbTo(1),
           );
         });
         if (hold > 0.2) {
@@ -1038,7 +1075,7 @@ export const createBody = (world?: World): Body => {
               empty: !(kind == 3 ? me?.clip : rail ? me?.cap : me?.mag),
               screen: sp < 0 ? span(on, GUN_ON.from, GUN_ON.up) : 1 - ease(span(sp, 0.1, 0.2)),
               digits: sp < 0 && on >= GUN_ON.digits,
-              press: sp < 0 ? span(thumb(since, pressAt(kind)), 0.8, 1) : 0,
+              press: sp < 0 ? span(poke(since, pressAt(kind)), 0.8, 1) : 0,
               cells: me && cellsOf(me),
               heat: (me?.heat ?? 0) / HEAT_MAX,
               hot: me?.hot,
@@ -1056,7 +1093,7 @@ export const createBody = (world?: World): Body => {
             // The thumb presses the button on the hilt, and the blade comes out of the guard, a light saber's.
             power(since - PRESS, 0.3),
             ease(span(since, PRESS, PRESS + 0.25)),
-            span(thumb(since), 0.8, 1),
+            span(poke(since), 0.8, 1),
           );
         }
         const [base, point] = ends(s.pos[J.HAND_R], s.rot[J.HAND_R]);

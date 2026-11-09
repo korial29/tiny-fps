@@ -27,8 +27,8 @@ import {
   power,
   PRESS,
   pressAt,
-  thumb,
-  thumbTo,
+  buttonAt,
+  poke,
   railgun,
   readout,
   swapOf,
@@ -911,17 +911,17 @@ describe('the laser rifle', () => {
 });
 
 describe('the button that powers a weapon on (the user, 2026-11-09)', () => {
-  it('is pressed by the thumb: at rest, reaching onto it by PRESS, then back', () => {
-    expect(thumb(0)).toBe(0);
-    expect(thumb(PRESS - 0.2)).toBe(0);
-    expect(thumb(PRESS - 0.08)).toBeGreaterThan(0.2);
-    expect(thumb(PRESS)).toBe(1);
-    expect(thumb(PRESS + 0.05)).toBe(1);
-    expect(thumb(PRESS + 0.3)).toBe(0);
+  it('is pressed by the left index: the hand where it was, on the button by PRESS, then back', () => {
+    expect(poke(0)).toBe(0);
+    expect(poke(PRESS - 0.2)).toBe(0);
+    expect(poke(PRESS - 0.08)).toBeGreaterThan(0.2);
+    expect(poke(PRESS)).toBe(1);
+    expect(poke(PRESS + 0.05)).toBe(1);
+    expect(poke(PRESS + 0.3)).toBe(0);
     // The rail gun's boot plays faster: its press comes sooner.
     expect(pressAt(2)).toBeLessThan(PRESS);
     expect(pressAt(0)).toBe(PRESS);
-    expect(thumb(pressAt(2), pressAt(2))).toBe(1);
+    expect(poke(pressAt(2), pressAt(2))).toBe(1);
   });
 
   it('sits on each weapon’s left, glowing, lit with the weapon, and goes in when pushed', () => {
@@ -941,9 +941,24 @@ describe('the button that powers a weapon on (the user, 2026-11-09)', () => {
       // Pushed, it goes 1.5 mm in toward the weapon's middle.
       const mid = (vs: typeof on) => vs.reduce((s, v) => s + v.p[0], 0) / vs.length;
       expect(mid(b(1, 1))).toBeGreaterThan(mid(on) + 0.0004);
-      // The thumb reaches toward it: a way in the hand, unit long, toward the thumb's side.
-      const t = thumbTo(kind);
-      expect(Math.hypot(...t)).toBeCloseTo(1, 6);
+      // In the world it is where the model puts it, facing out of its left.
+      const [top, n] = buttonAt(
+        kind,
+        [1, 2, 3],
+        [
+          [1, 0, 0],
+          [0, 1, 0],
+          [0, 0, -1],
+        ],
+      );
+      const near = on.reduce(
+        (m, v) =>
+          Math.min(m, Math.hypot(v.p[0] + 1 - top[0], v.p[1] + 2 - top[1], v.p[2] + 3 - top[2])),
+        1,
+      );
+      expect(near).toBeLessThan(0.004);
+      expect(n[0]).toBeLessThan(0);
+      expect(Math.hypot(...n)).toBeCloseTo(1, 6);
     }
   });
 });

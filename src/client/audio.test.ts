@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createAudio, savedMute, toggleMute } from './audio';
+import { SPRITES, createAudio, savedMute, toggleMute } from './audio';
 import type { Audio } from './audio';
 import { MUSIC_RATE, RATE } from './sfx';
+import { CLIPS, LINE } from './voice/clips';
 import type { Voice } from './sfx';
 
 /** Two sounds, named here: the game has none yet. */
@@ -25,6 +26,8 @@ interface Node {
   buffer?: { length: number };
   loop?: boolean;
   started: number;
+  /** The arguments of the last start: when, and for a line its offset and length. */
+  args?: number[];
   stopped: number;
   onended?: () => void;
 }
@@ -52,7 +55,7 @@ class FakeContext {
     };
     return Object.assign(n, {
       connect: (to: Node) => (n.to = to),
-      start: () => n.started++,
+      start: (...args: number[]) => (n.started++, (n.args = args)),
       stop: () => n.stopped++,
     });
   }
@@ -71,6 +74,11 @@ class FakeContext {
     this.buffers.push({ length, rate });
     return { length, getChannelData: () => ({ set: () => {} }) };
   }
+  /** Decodes a sprite whose text is 'ok' (as base64) and fails any other. */
+  decodeAudioData = (b: ArrayBuffer) =>
+    new TextDecoder().decode(b) == 'ok'
+      ? Promise.resolve({ length: 999 })
+      : Promise.reject(new Error('no'));
   resume = () => (this.resumed++, Promise.resolve());
   close = () => (this.closed++, Promise.resolve());
 }
@@ -343,5 +351,65 @@ describe('mute memory', () => {
     expect(savedMute()).toBe(false);
     expect(toggleMute(a)).toBe(true);
     vi.restoreAllMocks();
+  });
+});
+
+describe('say', () => {
+  /** An unlocked Audio whose sprites are these texts, once the voice is decoded. */
+  const speaking = async (...sprites: string[]) => {
+    install();
+    const a = createAudio(
+      LAYERS,
+      sprites.map(t => () => Promise.resolve(btoa(t))),
+    );
+    a.unlock();
+    await vi.waitFor(() => {
+      a.say(LINE.START);
+      expect(lines()).toHaveLength(1);
+    });
+    return a;
+  };
+  /** The sources started from the voice's sprite. */
+  const lines = () => fake().sources.filter(s => s.buffer?.length == 999);
+  const bed = () => fake().sources.find(s => s.loop)!.to!;
+
+  it('says nothing before the voice is decoded', () => {
+    install();
+    const a = createAudio(LAYERS, [() => new Promise(() => {})]);
+    a.unlock();
+    a.say(LINE.WIN);
+    expect(fake().sources.filter(s => !s.loop)).toHaveLength(0);
+  });
+
+  it('plays the line from its place in the sprite, the music lowered under it', async () => {
+    await speaking('ok');
+    expect(lines()[0].args).toEqual([0, ...CLIPS[LINE.START]]);
+    expect(bed().gain.setTargetAtTime).toHaveBeenLastCalledWith(expect.closeTo(0.175), 3, 0.15);
+    lines()[0].onended!();
+    expect(bed().gain.setTargetAtTime).toHaveBeenLastCalledWith(0.5, 3, 0.15);
+  });
+
+  it('falls back on the next sprite when the browser cannot decode one', async () => {
+    await speaking('opus?', 'ok');
+    expect(lines()).toHaveLength(1);
+  });
+
+  it('keeps two lines waiting at most, each once, and says them in turn', async () => {
+    const a = await speaking('ok');
+    for (const id of [LINE.WIN, LINE.WIN, LINE.AIM, LINE.TEN]) {
+      a.say(id);
+    }
+    expect(lines()).toHaveLength(1);
+    lines()[0].onended!();
+    lines()[1].onended!();
+    expect(lines().map(s => s.args![1])).toEqual(
+      [LINE.START, LINE.WIN, LINE.AIM].map(id => CLIPS[id][0]),
+    );
+    lines()[2].onended!();
+    expect(lines()).toHaveLength(3);
+  });
+
+  it('loads the Opus sprite first', async () => {
+    expect(atob(await SPRITES[0]()).slice(0, 4)).toBe('OggS');
   });
 });

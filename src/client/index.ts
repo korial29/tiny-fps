@@ -6,6 +6,7 @@ import type { ServerText } from '../shared/protocol';
 import { FLAG, KEY } from '../shared/types';
 import type { PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
 import { build, hidden } from '../shared/world';
+import { createAnnouncer } from './announce';
 import { createAudio, savedMute, toggleMute } from './audio';
 import { createBalls } from './balls';
 import { createTracer } from './beams';
@@ -85,6 +86,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   // The click that takes the pointer lock is the gesture that lets the sound start.
   canvas.addEventListener('click', () => audio.unlock());
   const fx = createEffects();
+  const announcer = createAnnouncer();
   const foley = createFoley(audio);
   const body = createBody(world);
   const tracer = createTracer();
@@ -143,7 +145,8 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       if (s) {
         predictor.snapshot(s, performance.now());
         balls.snapshot(s.balls ?? [], you.id, performance.now());
-        for (const beat of beats(match, s)) {
+        const told = beats(match, s);
+        for (const beat of told) {
           const line = say(beat, you, id => names.get(id) ?? 'Someone');
           if (line) {
             hud.banner(line.text, line.team);
@@ -169,6 +172,9 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
             }
           }
         }
+        for (const line of announcer.step(match, s, told, you, performance.now() / 1000)) {
+          audio.say(line);
+        }
         match = s;
       }
       return;
@@ -184,6 +190,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       emit('roster');
     } else if (m?.t == 'end') {
       ended = { score: m.score, players: m.players };
+      audio.say(announcer.end(m.score, you.team));
     } else if (m?.t == 'full') {
       msg = 'Room is full';
     }

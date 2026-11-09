@@ -455,6 +455,9 @@ const step = (a: number, b: number, v: number) => {
   return t * t * (3 - 2 * t);
 };
 
+/** The brow ridge's crest at ax across: an arch over each eye, down to the nose and the temple. The brows follow it. */
+const arcade = (ax: number) => 1.708 + 0.004 * (1 - ((ax - 0.032) / 0.024) ** 2);
+
 /**
  * How far the surface of the head stands out of its section at (x, y), aq radians from the front:
  * the hair's thickness, fuller on top, and near the features of the face (centimetres, as bells).
@@ -485,7 +488,7 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
   d +=
     f ** 2 *
     (-0.013 * bell(ax - 0.032, 0.014) * bell(y - 1.69, 0.009) +
-      0.01 * bell(ax - 0.026, 0.03) * bell(y - 1.708, 0.007) +
+      0.01 * bell(ax - 0.026, 0.03) * bell(y - arcade(ax), 0.007) +
       0.0065 * bell(ax - 0.048, 0.012) * bell(y - 1.668, 0.011) +
       0.008 * bell(ax - 0.056, 0.014) * bell(y - 1.598, 0.013) -
       0.002 * bell(ax - 0.05, 0.012) * bell(y - 1.632, 0.01) +
@@ -583,7 +586,7 @@ const onHead = (x: number, y: number) => {
 };
 
 // The brows, pieces of their own along x laid on the brow ridge (a colour on the head's grid
-// steps): low over the eyes, the inner ends drawn down toward the nose, thin, thinner out to
+// steps), along the ridge's arch (arcade()): low over the eyes, the inner ends a little lower, thin, thinner out to
 // the tail. A hard look.
 const BROWS: Loft = {
   chain: [J.HEAD],
@@ -591,9 +594,9 @@ const BROWS: Loft = {
   x: true,
   m: true,
   far: [],
-  rings: [0.008, 0.0095, 0.014, 0.02, 0.027, 0.034, 0.041, 0.047, 0.052].map((x, i) => {
-    const y = 1.711 + 0.0015 * (1 - ((x - 0.033) / 0.022) ** 2) - 0.22 * Math.max(0.024 - x, 0);
-    const h = i % 8 ? 0.0034 - 0.07 * Math.max(x - 0.03, 0) : 0;
+  rings: [0.008, 0.0095, 0.014, 0.021, 0.028, 0.035, 0.042, 0.049, 0.055].map((x, i) => {
+    const y = arcade(x) + 0.0015 - 0.08 * Math.max(0.02 - x, 0);
+    const h = i % 8 ? 0.0034 - 0.06 * Math.max(x - 0.03, 0) : 0;
     return [x, y, onHead(x, y) + 0.0002, h, h && 0.0008, 0, BROW];
   }),
 };

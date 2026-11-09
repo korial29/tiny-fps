@@ -762,16 +762,35 @@ describe('the laser rifle', () => {
     // screen's plane: across, and up it.
     const v = scope(3);
     const up = unit([0, 1, -0.8]);
-    const mid: Vec3 = [0, 0.112, 0.115 - 0.8 * (0.112 - 0.085)];
+    const y = (0.099 + 0.1325) / 2;
+    const mid: Vec3 = [0, y, 0.115 - 0.8 * (y - 0.085)];
+    const sh = (0.1325 - 0.099) / 2 / up[1];
     const out = (i: number) => (v[i + 1] - mid[1]) * -up[2] + (v[i + 2] - mid[2]) * up[1];
     for (let i = 0; i < v.length; i += STRIDE) {
       if (v[i + 6] > 1 && v[i + 7] < 0.5 && out(i) > 0.00475) {
         const b = (v[i + 1] - mid[1]) * up[1] + (v[i + 2] - mid[2]) * up[2];
         // The screen's half width at b, less its ring.
-        const half = 0.0145 - (0.0035 * (b + 0.014)) / 0.028 - 0.0014;
+        const half = 0.019 - (0.0045 * (b + sh)) / (2 * sh) - 0.0014;
         expect(Math.abs(v[i])).toBeLessThan(half - 0.001);
-        expect(Math.abs(b)).toBeLessThan(0.014 - 0.0015);
+        expect(Math.abs(b)).toBeLessThan(sh - 0.0015);
       }
+    }
+  });
+
+  it('fills the back of its housing above the body with the counter, but for a thin rim of metal', () => {
+    // The dark screen, its first two triangles, set 4 mm out of the face: its corners brought back onto it.
+    const up = unit([0, 1, -0.8]);
+    const on = verts(scope(24))
+      .slice(0, 6)
+      .map(({ p }) => [p[0], p[1] + up[2] * 0.004, p[2] - up[1] * 0.004]);
+    const ys = on.map(p => p[1]);
+    expect(Math.min(...ys)).toBeCloseTo(0.099, 4);
+    expect(Math.max(...ys)).toBeCloseTo(0.1325, 4);
+    for (const p of on) {
+      // The face's half width at that height, wide at the foot, narrower at the top.
+      const face = 0.022 - (0.006 * (p[1] - 0.085)) / 0.05;
+      expect(Math.abs(p[0])).toBeGreaterThan(face - 0.002);
+      expect(Math.abs(p[0])).toBeLessThan(face);
     }
   });
 

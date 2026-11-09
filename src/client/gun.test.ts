@@ -691,19 +691,28 @@ describe('the rail gun’s cells and heat', () => {
     expect(hot[0].c[0]).toBeGreaterThan(hot[0].c[2] * 5);
   });
 
-  it('blinks its cells red and its counter off when overheated, with no spark at the muzzle', () => {
+  it('blinks its cells red when overheated, its counter steady, smoke rising off its coils, and no spark at the muzzle', () => {
     const draw = (lit: Lit, t: number) => {
       const out: number[] = [];
       held(out, [0, 0, 0], IDENT, 1, 1, 50, 0, 2, t, lit);
       return out;
     };
+    // Smoke is layer -3: see-through, its opacity in green.
+    const smoke = (v: number[]) => verts(v).filter(x => x.layer == -3);
     const cool = draw({}, 0.01);
-    const hot = draw({ hot: true }, 0.01);
-    // In the blink: shorter (no counter, no arc), and red where it glowed violet.
-    expect(hot.length).toBeLessThan(cool.length);
-    expect(glowing(hot).some(x => x.c[0] > x.c[2] * 5)).toBe(true);
-    // Out of the blink the counter is back, the arc still off.
-    expect(draw({ hot: true }, 0.08).length).toBeGreaterThan(hot.length);
+    const [inBlink, outOfBlink] = [draw({ hot: true }, 0.01), draw({ hot: true }, 0.08)];
+    // Red where it glowed violet in the blink.
+    expect(glowing(inBlink).some(x => x.c[0] > x.c[2] * 5)).toBe(true);
+    // The counter does not blink (the user, 2026-11-09): as much drawn in the blink as out of it.
+    expect(inBlink.length).toBe(outOfBlink.length);
+    // Smoke only when hot.
+    expect(smoke(cool)).toHaveLength(0);
+    expect(smoke(inBlink).length).toBeGreaterThan(0);
+    // Each puff thins away as it rises: some thicker than others.
+    const thick = smoke(inBlink).map(x => x.c[1]);
+    expect(Math.max(...thick) - Math.min(...thick)).toBeGreaterThan(0.5);
+    // No spark: less glow than cool.
+    expect(glowing(outOfBlink).length).toBeLessThan(glowing(cool).length);
   });
 });
 

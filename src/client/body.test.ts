@@ -11,7 +11,7 @@ import {
 import { STILL } from '../shared/physics';
 import { CUT, MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { createBody, finger, hand, phalanges } from './body';
+import { FINGER_SIDES, createBody, finger, hand, phalanges } from './body';
 import type { Body } from './body';
 import { MUZZLE, REAR, button, foregrip, grip, gun, readout } from './gun';
 import { BEHIND, BOW, axes, ends } from './katana';
@@ -104,9 +104,14 @@ const draw = (body: Body, p: PlayerState, pitch = 0, color = TEAM): Vert[] => {
   });
 };
 const colored = (v: Vert[], c: number[]) => v.filter(q => c.every((n, i) => q.c[i] == n));
-/** Vertices of the palm, of a finger or the thumb, and of a hand: a tube of the cuff's sides and 5 rings, one of 6 sides and 8 (its root sunk in the palm, two rings round the bend; the user, 2026-11-09). */
-const [PALM, FINGER] = [21 * CUFF_SIDES, 234];
-const HAND = PALM + 5 * FINGER;
+/**
+ * Vertices of the palm, of a finger or the thumb and its nail, of the glove's gear (the knuckles'
+ * shell, the back's plate and its stitching, the strap and its buckle), and of a hand: a tube of
+ * the cuff's sides and 5 rings; one of FINGER_SIDES and 12 rings (its root sunk in the palm, two
+ * rings round each bend, the glove's edge; the user, 2026-11-09), then a fan of 8.
+ */
+const [PALM, FINGER, NAIL, GEAR] = [21 * CUFF_SIDES, 630, 24, 1944];
+const HAND = PALM + 5 * (FINGER + NAIL) + GEAR;
 const away = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
 describe('body', () => {
@@ -149,9 +154,9 @@ describe('body', () => {
     ]) {
       for (const pitch of [0, -1.2, 1]) {
         const v = draw(watch(p, 40), p, pitch);
-        // The near runner minus its head, neck and fists, plus two hands of under 1400 vertices each.
+        // The near runner minus its head, neck and fists, plus two hands of under 5600 vertices each.
         expect(v.length).toBeGreaterThan(3500);
-        expect(v.length).toBeLessThanOrEqual(7800);
+        expect(v.length).toBeLessThanOrEqual(16000);
         for (const { at, n } of v) {
           expect(at.every(Number.isFinite)).toBe(true);
           expect(Math.hypot(...n)).toBeCloseTo(1);
@@ -167,9 +172,11 @@ describe('body', () => {
     for (const c of [JACKET, GLOVE, PANTS, UPPER, SOLE]) {
       expect(colored(v, c).length).toBeGreaterThan(30);
     }
-    for (const c of [FLESH, HAIR, SHADES]) {
+    for (const c of [HAIR, SHADES]) {
       expect(colored(v, c)).toHaveLength(0);
     }
+    // The skin only at the bare finger tips, out of the fingerless gloves.
+    expect(colored(v, FLESH).length).toBeLessThan(2 * 5 * FINGER);
     // Another team, another jacket, nothing else changes.
     const other = draw(body, p, -1.2, [0.9, 0.1, 0.1]);
     expect(other).toHaveLength(v.length);
@@ -444,8 +451,9 @@ describe('body', () => {
       ];
       const along = (v: Vert, a: Vec3) =>
         (v.at[0] - wrist[0]) * a[0] + (v.at[1] - wrist[1]) * a[1] + (v.at[2] - wrist[2]) * a[2];
-      // The glove around the right wrist, not the left hand's.
-      const glove = colored(draw(body, p), GLOVE).filter(
+      // The glove and the bare tips round the right wrist, not the left hand's.
+      const drawn = draw(body, p);
+      const glove = [...colored(drawn, GLOVE), ...colored(drawn, FLESH)].filter(
         v => away(v.at, wrist) < 0.25 && v.at[0] > eyeOf(p)[0],
       );
       const tips = glove.filter(v => along(v, f) > 0.1).map(v => along(v, thumb));
@@ -480,11 +488,11 @@ describe('body', () => {
     it('are a palm, four fingers and a thumb in the glove colour, on a thinner wrist', () => {
       const p = man();
       const v = draw(watch(p, 60), p);
-      // The sleeve's cuff, which is glove too, is a few dozen vertices; the hands are the rest.
+      // The palm and most of each finger in the glove colour (the tips bare, the gear darker); the
+      // sleeve's cuff too, a few dozen vertices.
       const glove = colored(v, GLOVE).length;
-      expect(glove).toBeGreaterThanOrEqual(2 * HAND);
-      // The glove's cuff over the wrist too: three strips of the sleeve's sides a hand.
-      expect(glove).toBeLessThan(2 * HAND + 33 * CUFF_SIDES);
+      expect(glove).toBeGreaterThanOrEqual(2 * (PALM + 5 * FINGER * 0.4));
+      expect(glove).toBeLessThan(2 * (PALM + 5 * FINGER) + 33 * CUFF_SIDES);
     });
 
     describe('as meshes', () => {
@@ -505,14 +513,53 @@ describe('body', () => {
         return [
           v.slice(0, PALM),
           ...Array.from({ length: 5 }, (_, i) =>
-            v.slice(PALM + i * FINGER, PALM + (i + 1) * FINGER),
+            v.slice(PALM + i * (FINGER + NAIL), PALM + i * (FINGER + NAIL) + FINGER),
           ),
         ];
       };
       const curls = [0, 0.4, 0.75, 1];
 
-      it('stay under 1400 vertices a hand, smooth fingers and all', () => {
-        expect(HAND).toBeLessThanOrEqual(1400);
+      it('are fingerless tactical gloves: bare tips with a nail each, a shell over the knuckles, a stitched plate, a strap', () => {
+        const out: number[] = [];
+        const bare = [0.8, 0.6, 0.5];
+        hand(
+          out,
+          [0, 0, 0],
+          [0, 0, 1],
+          [0, 1, 0],
+          [1, 0, 0],
+          0,
+          [0.4, 0.4, 0.4],
+          0,
+          0,
+          undefined,
+          bare,
+        );
+        const v = Array.from({ length: out.length / STRIDE }, (_, i) => ({
+          at: out.slice(i * STRIDE, i * STRIDE + 3) as Vec3,
+          c: [out[i * STRIDE + 6], out[i * STRIDE + 7], out[i * STRIDE + 9]],
+        }));
+        const of = (c: number[]) => v.filter(q => q.c.every((n, i) => Math.abs(n - c[i]) < 1e-6));
+        // The tips bare, past the glove's end, halfway along the middle phalanx (an open hand: z out along the fingers).
+        const tips = of(bare);
+        expect(tips.length).toBeGreaterThan(5 * 200);
+        expect(
+          Math.min(...tips.filter(q => Math.abs(q.at[0]) < 0.04).map(q => q.at[2])),
+        ).toBeGreaterThan(0.13);
+        // A nail on each, in a paler pink, on the back (+y).
+        const nails = v.filter(q => q.c[0] > 0.8 && q.c[0] < 0.9 && q.c[1] > 0.65);
+        expect(nails).toHaveLength(5 * NAIL);
+        // The shell stands out of the glove over the knuckles; the plate's stitching is lighter than the glove.
+        const shell = of([0.09, 0.09, 0.1]);
+        expect(shell.length).toBeGreaterThan(500);
+        expect(Math.max(...shell.map(q => q.at[1]))).toBeGreaterThan(0.015);
+        expect(of([0.58, 0.58, 0.58]).length).toBe(28 * 6);
+        // The strap, darker, round the wrist.
+        expect(of([0.2, 0.2, 0.2]).length).toBeGreaterThan(100);
+      });
+
+      it('stay under 5600 vertices a hand, smooth fingers, nails and the glove’s gear', () => {
+        expect(HAND).toBeLessThanOrEqual(5600);
       });
 
       it('make each finger and the thumb one closed surface: no cap or face between its phalanges', () => {
@@ -526,8 +573,8 @@ describe('body', () => {
               }
             }
             const open = [...uses.values()].filter(n => n != 2);
-            // Every edge joins two triangles but the six of the root ring, which the palm closes.
-            expect(open).toHaveLength(6);
+            // Every edge joins two triangles but those of the root ring, which the palm closes.
+            expect(open).toHaveLength(FINGER_SIDES);
             expect(open.every(n => n == 1)).toBe(true);
           }
         }
@@ -575,10 +622,10 @@ describe('body', () => {
               }
             }
             const root = [...uses.values()].filter(e => e.length);
-            expect(root).toHaveLength(6);
+            expect(root).toHaveLength(FINGER_SIDES);
             const mid = root
               .reduce((m, [a]) => add(m, a), [0, 0, 0] as Vec3)
-              .map(c => c / 6) as Vec3;
+              .map(c => c / FINGER_SIDES) as Vec3;
             // A millimetre back: the ring lies in the plane of the palm's last ring, where a ray is ambiguous.
             expect(inside(palm, add(mid, [0, 0, -0.001]))).toBe(true);
           }
@@ -988,7 +1035,7 @@ describe('the ammo on the back of the gun', () => {
     const out: number[] = [];
     const p = man();
     watch(p, 60).draw(out, eyeOf(p), 0, 0, 0, TEAM);
-    expect(out.length / STRIDE).toBeLessThan(7800);
+    expect(out.length / STRIDE).toBeLessThan(16000);
     expect(out.slice(-6).every(v => Number.isFinite(v))).toBe(true);
   });
 });

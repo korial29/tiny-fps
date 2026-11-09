@@ -1168,19 +1168,106 @@ const BLOCK_TOP: [Vec3, Vec3] = [
 ];
 /**
  * The dark screen set in the back face: half width (the face's top less 5 mm a side, the user,
- * 2026-11-08), middle up the face from the knee (halfway up it), half height, corner radius, in
+ * 2026-11-08), middle up the face from the knee (halfway up it), half height, corner radius (round, the user, 2026-11-09), in
  * metres; its digits' scale, so that they fill it (the user, 2026-11-08) but for 1 to 2 mm round them.
  */
 const [SW, SM, SHH, SR, DK] = [
   BLOCK_TOP[0][0] - 0.005,
   Math.hypot(BLOCK_TOP[0][1] - KNEE[1], BLOCK_TOP[0][2] - KNEE[2]) / 2,
   0.009,
-  0.0035,
+  0.0055,
   0.66,
 ];
 /** The digits' foot, so that they are in the middle of the screen; the charge gauge, a thin bar under them up the back face: where it starts and ends, and the gap between its cells. */
 const DY = SM - (DH * DK) / 2;
 const [GFROM, GTO, GGAP] = [SM - SHH + 0.0008, DY - 0.0004, 0.0012];
+/** The block's top, flat; the radius of its upright edges and of its top edges (the user, 2026-11-09: less square). */
+const [BTOP, BR, BRT] = [0.1535, 0.004, 0.003];
+
+/**
+ * Appends the display block, in the gun's metal lit by its normal: rings of a rounded rectangle up
+ * from its base in the body, its back straight to the knee then leaning back as the face that
+ * carries the screen, its top edges rounded over to a flat top. Normals smooth across the rings.
+ */
+const block = (v: number[]) => {
+  const [b0, b1, t0, t1] = [BLOCK_BASE[0], BLOCK_BASE[1], BLOCK_TOP[0], BLOCK_TOP[1]];
+  const lerp = (y: number, y0: number, v0: number, y1: number, v1: number) =>
+    v0 + ((v1 - v0) * (y - y0)) / (y1 - y0);
+  /** The ring at `y`, shrunk by `i`: four corners of BR less `i`, four steps each, round the middle. */
+  const ring = (y: number, i: number): Vec3[] => {
+    const back = (y > KNEE[1] ? lerp(y, KNEE[1], KNEE[2], t0[1], t0[2]) : b0[2]) - i;
+    const front = lerp(y, b1[1], b1[2], t1[1], t1[2]) + i;
+    const a = lerp(y, b0[1], b0[0], t0[1], t0[0]) - i;
+    const r = Math.max(BR - i, 0.0005);
+    return [0, 1, 2, 3].flatMap(c =>
+      [0, 1, 2, 3].map(k => {
+        const t = ((c + k / 3) * Math.PI) / 2;
+        return [
+          (c == 0 || c == 3 ? 1 : -1) * (a - r) + r * Math.cos(t),
+          y,
+          (c < 2 ? back - r : front + r) + r * Math.sin(t),
+        ] as Vec3;
+      }),
+    );
+  };
+  const rings = [
+    ring(b0[1], 0),
+    ring(KNEE[1], 0),
+    ...[0, 1, 2, 3].map(k => {
+      const t = (k * Math.PI) / 6;
+      return ring(BTOP - BRT + BRT * Math.sin(t), BRT * (1 - Math.cos(t)));
+    }),
+  ];
+  const last = rings[rings.length - 1];
+  const top: Vec3 = [0, BTOP, last.reduce((s, p) => s + p[2], 0) / last.length];
+  const N = rings.map(r => r.map((): Vec3 => [0, 0, 0]));
+  const tris: [number, number][][] = [];
+  rings.slice(1).forEach((_, j) => {
+    for (let i = 0; i < 16; i++) {
+      const [a, b, c, d]: [number, number][] = [
+        [j, i],
+        [j, (i + 1) % 16],
+        [j + 1, (i + 1) % 16],
+        [j + 1, i],
+      ];
+      for (const t of [
+        [a, b, c],
+        [a, c, d],
+      ]) {
+        const [p, q, w] = t.map(([r, k]) => rings[r][k]);
+        const [u, e] = [sub(q, p), sub(w, p)];
+        let n = unit([
+          u[1] * e[2] - u[2] * e[1],
+          u[2] * e[0] - u[0] * e[2],
+          u[0] * e[1] - u[1] * e[0],
+        ]);
+        // Outward, away from the block's upright axis.
+        if (n[0] * p[0] + n[2] * (p[2] - top[2]) < 0) {
+          n = [-n[0], -n[1], -n[2]];
+          t.reverse();
+        }
+        tris.push(t);
+        for (const [r, k] of t) {
+          N[r][k] = add(N[r][k], n);
+        }
+      }
+    }
+  });
+  const put = (p: Vec3, n: Vec3) => {
+    const [r, g, , b] = metal(0.15)(p, n);
+    v.push(...p, ...n, r, g, -1, b);
+  };
+  for (const t of tris) {
+    for (const [r, k] of t) {
+      put(rings[r][k], unit(N[r][k]));
+    }
+  }
+  for (let i = 0; i < 16; i++) {
+    for (const p of [top, last[i], last[(i + 1) % 16]]) {
+      put(p, [0, 1, 0]);
+    }
+  }
+};
 const readouts = new Map<number, number[]>();
 
 /**
@@ -1197,32 +1284,8 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
   let out = readouts.get(key);
   if (!out) {
     const v: number[] = (out = []);
-    const mirror = (p: Vec3): Vec3 => [-p[0], p[1], p[2]];
-    const [b0, b1, t0, t1, k0] = [BLOCK_BASE[0], BLOCK_BASE[1], BLOCK_TOP[0], BLOCK_TOP[1], KNEE];
-    const all = [b0, b1, t0, t1].flatMap(p => [p, mirror(p)]);
-    const mid = [0, 1, 2].map(k => all.reduce((s, p) => s + p[k], 0) / all.length) as Vec3;
-    /** A flat polygon, wound so that it faces away from the middle of the block, in the gun's metal lit by its normal. */
-    const face = (pts: Vec3[]) => {
-      const [u, w] = [sub(pts[1], pts[0]), sub(pts[2], pts[0])];
-      const f: Vec3 = [
-        u[1] * w[2] - u[2] * w[1],
-        u[2] * w[0] - u[0] * w[2],
-        u[0] * w[1] - u[1] * w[0],
-      ];
-      const out = dot(f, sub(pts[0], mid)) > 0;
-      const p = out ? pts : [pts[0], ...pts.slice(1).reverse()];
-      const [r, g, , b] = metal(0.15)(p[0], unit(out ? f : [-f[0], -f[1], -f[2]]));
-      for (let i = 2; i < p.length; i++) {
-        tri(v, p[0], p[i - 1], p[i], [r, g, b]);
-      }
-    };
-    // The back below the knee and above it, the front, the two sides and the top; the base is in the body.
-    face([b0, mirror(b0), mirror(k0), k0]);
-    face([k0, mirror(k0), mirror(t0), t0]);
-    face([b1, mirror(b1), mirror(t1), t1]);
-    face([b0, b1, t1, t0, k0]);
-    face([mirror(b0), mirror(b1), mirror(t1), mirror(t0), mirror(k0)]);
-    face([t0, mirror(t0), mirror(t1), t1]);
+    const [t0, k0] = [BLOCK_TOP[0], KNEE];
+    block(v);
     // The back face's axes: across, up its slope and out of it. Points on it from the middle of the knee.
     const slope = unit([0, t0[1] - k0[1], t0[2] - k0[2]]);
     const [O, N]: [Vec3, Vec3] = [
@@ -1234,12 +1297,12 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
       O[1] + slope[1] * b + N[1] * k,
       O[2] + slope[2] * b + N[2] * k,
     ];
-    // The dark screen, a fan of 12 round its middle, three steps to each rounded corner; `g` grows
+    // The dark screen, a fan of 24 round its middle, six steps to each rounded corner; `g` grows
     // it, for its frame.
     const r = (c: number, h: number, g: number) => Math.sign(c) * (h - SR) + (SR + g) * c;
     const rim = (i: number, g = 0, d = 0.0012) =>
-      at(r(Math.cos(i * 0.5236 + 0.26), SW, g), SM + r(Math.sin(i * 0.5236 + 0.26), SHH, g), d);
-    for (let i = 0; i < 12; i++) {
+      at(r(Math.cos(i * 0.2618 + 0.13), SW, g), SM + r(Math.sin(i * 0.2618 + 0.13), SHH, g), d);
+    for (let i = 0; i < 24; i++) {
       tri(v, at(0, SM, 0.0012), rim(i), rim(i + 1), DARK);
     }
     const rgb = n > 4 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
@@ -1275,7 +1338,7 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
     // The lit cells and the frame glow with the digits.
     if (shown) {
       gauge(true);
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 24; i++) {
         const [a, b, c, d] = [
           rim(i, 0, 0.0027),
           rim(i + 1, 0, 0.0027),

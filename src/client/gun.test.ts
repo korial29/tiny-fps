@@ -357,10 +357,10 @@ describe('focus', () => {
 
 describe('the readout on the back of the gun', () => {
   const v = (n: number) => verts(readout(n));
-  // The glowing frame round the screen is drawn last: 12 quads.
+  // The glowing frame round the screen is drawn last: 24 quads.
   const glowing = (n: number) => v(n).filter(x => x.layer == -2);
-  const digits = (n: number) => glowing(n).slice(0, -72);
-  const frame = (n: number) => glowing(n).slice(-72);
+  const digits = (n: number) => glowing(n).slice(0, -144);
+  const frame = (n: number) => glowing(n).slice(-144);
   const metal = (n: number) => v(n).filter(x => x.layer == -1 && Math.max(...x.c) > 0.1);
   const screen = (n: number) => v(n).filter(x => x.layer == -1 && Math.max(...x.c) <= 0.1);
   const SEGS = [6, 2, 5, 5, 4, 5, 6, 3, 7, 6];
@@ -369,10 +369,10 @@ describe('the readout on the back of the gun', () => {
     for (const n of [0, 7, 40, 59, 60, 99]) {
       const [a, b] = `${n}`.padStart(2, '0');
       expect(digits(n)).toHaveLength((SEGS[+a] + SEGS[+b]) * 6);
-      // The block: the back under the knee and over it, the front and the top, two triangles each,
-      // the two five-sided sides three each; the screen a fan of 12.
-      expect(metal(n)).toHaveLength(42);
-      expect(screen(n)).toHaveLength(36);
+      // The block: five spans of rings of 16 (two triangles a step), a fan of 16 over its top;
+      // the screen a fan of 24.
+      expect(metal(n)).toHaveLength(5 * 16 * 6 + 16 * 3);
+      expect(screen(n)).toHaveLength(72);
     }
   });
 
@@ -382,9 +382,10 @@ describe('the readout on the back of the gun', () => {
       // Violet: blue over red over green, as the body's metal is.
       expect(x.c[2]).toBeGreaterThan(x.c[0]);
       expect(x.c[0]).toBeGreaterThan(x.c[1]);
-      // Within the range of the body's colours.
+      // Within the range of the body's colours: the block's flat top faces straight up, a hair
+      // more than any of the body's faces.
       for (const k of [0, 1, 2]) {
-        expect(x.c[k]).toBeLessThanOrEqual(Math.max(...paint.map(c => c[k])) + 1e-9);
+        expect(x.c[k]).toBeLessThanOrEqual(Math.max(...paint.map(c => c[k])) + 0.002);
       }
     }
     // The top catches the light more than the back face, as the body's top does.
@@ -448,7 +449,7 @@ describe('the readout on the back of the gun', () => {
     // A cell is two triangles: the lit ones glow, the others are dim.
     expect(extra(3)).toBe(3 * 6);
     expect(extra(CHARGE_MAX)).toBe(CHARGE_MAX * 6);
-    const cells = (level: number) => glowing(40, level).slice(digits(40).length, -72);
+    const cells = (level: number) => glowing(40, level).slice(digits(40).length, -144);
     // Under every digit segment, and within the screen's width.
     const low = Math.min(...digits(40).map(x => x.p[1]));
     for (const x of cells(3)) {

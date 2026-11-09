@@ -104,8 +104,8 @@ const draw = (body: Body, p: PlayerState, pitch = 0, color = TEAM): Vert[] => {
   });
 };
 const colored = (v: Vert[], c: number[]) => v.filter(q => c.every((n, i) => q.c[i] == n));
-/** Vertices of the palm, of a finger or the thumb, and of a hand: a tube of the cuff's sides and 5 rings, one of 6 sides and 6. */
-const [PALM, FINGER] = [21 * CUFF_SIDES, 162];
+/** Vertices of the palm, of a finger or the thumb, and of a hand: a tube of the cuff's sides and 5 rings, one of 6 sides and 8 (its root sunk in the palm, two rings round the bend; the user, 2026-11-09). */
+const [PALM, FINGER] = [21 * CUFF_SIDES, 234];
 const HAND = PALM + 5 * FINGER;
 const away = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
@@ -149,9 +149,9 @@ describe('body', () => {
     ]) {
       for (const pitch of [0, -1.2, 1]) {
         const v = draw(watch(p, 40), p, pitch);
-        // The near runner minus its head, neck and fists, plus two hands of under a thousand vertices each.
+        // The near runner minus its head, neck and fists, plus two hands of under 1400 vertices each.
         expect(v.length).toBeGreaterThan(3500);
-        expect(v.length).toBeLessThanOrEqual(7000);
+        expect(v.length).toBeLessThanOrEqual(7800);
         for (const { at, n } of v) {
           expect(at.every(Number.isFinite)).toBe(true);
           expect(Math.hypot(...n)).toBeCloseTo(1);
@@ -511,8 +511,8 @@ describe('body', () => {
       };
       const curls = [0, 0.4, 0.75, 1];
 
-      it('stay under the 1026 vertices of the segments they replace', () => {
-        expect(HAND).toBeLessThanOrEqual(1026);
+      it('stay under 1400 vertices a hand, smooth fingers and all', () => {
+        expect(HAND).toBeLessThanOrEqual(1400);
       });
 
       it('make each finger and the thumb one closed surface: no cap or face between its phalanges', () => {
@@ -614,7 +614,8 @@ describe('body', () => {
 
       it('keep the length of the fingers from an open hand to a fist, the thumb too', () => {
         const length = (curl: number, i: number) => {
-          const rings = finger([0, 0, 0], ...phalanges(curl, i), 0.04, 0.01, [0, 0, 1]);
+          // From its root at the palm's front, past the ring sunk in the palm.
+          const rings = finger([0, 0, 0], ...phalanges(curl, i), 0.04, 0.01, [0, 0, 1]).slice(1);
           return rings.slice(1).reduce((n, [c], k) => n + away(c, rings[k][0]), 0);
         };
         for (let i = 0; i < 4; i++) {
@@ -987,7 +988,7 @@ describe('the ammo on the back of the gun', () => {
     const out: number[] = [];
     const p = man();
     watch(p, 60).draw(out, eyeOf(p), 0, 0, 0, TEAM);
-    expect(out.length / STRIDE).toBeLessThan(7000);
+    expect(out.length / STRIDE).toBeLessThan(7800);
     expect(out.slice(-6).every(v => Number.isFinite(v))).toBe(true);
   });
 });

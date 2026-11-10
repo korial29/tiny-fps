@@ -769,7 +769,7 @@ describe('MOON, the relief round the arena', () => {
     const lumps = [
       ...rocks.map(([x, z, r]) => [x, z, 0.6 * r]),
       ...dishes.map(([x, z]) => [x, z, 6]),
-      [bx, bz, 3],
+      [bx, bz, 3.5],
     ];
     for (const [x, z, up] of lumps) {
       const b = brushes.find(
@@ -827,8 +827,32 @@ describe('MOON, the relief with the real physics', () => {
     expect(reads).toBe(6);
   });
 
-  it('lets a runner walk off the arena onto the ground and back, anywhere along its edge', () => {
-    for (const [x, z, yaw] of [
+  it('lets a runner walk off the arena onto the ground and back, all along its edge between the boulders', () => {
+    /** The first lane from (x, z), stepping 1 m along the edge, that no boulder's ghost box comes within a metre of. */
+    const lane = (x: number, z: number, yaw: number): [number, number] => {
+      const across = yaw === WEST || yaw === EAST;
+      for (let d = 0; ; d++) {
+        const [u, w] = across ? [x, z + d] : [x + d, z];
+        const hit = brushes.some(
+          b =>
+            b.ghost &&
+            b.max[1] > 0 &&
+            b.min[1] <= 0 &&
+            // In the 1 m wide lane, within 15 m of the edge it starts by.
+            (across
+              ? b.min[2] < w + 1 && b.max[2] > w - 1 && Math.abs((b.min[0] + b.max[0]) / 2 - x) < 15
+              : b.min[0] < u + 1 &&
+                b.max[0] > u - 1 &&
+                Math.abs((b.min[2] + b.max[2]) / 2 - z) < 15),
+        );
+        if (!hit) {
+          // Never far: the boulders leave most of the edge open.
+          expect(d).toBeLessThan(12);
+          return [u, w];
+        }
+      }
+    };
+    for (const [x0, z0, yaw] of [
       [3, 60, WEST],
       [3, 215, WEST],
       [157, 100, EAST],
@@ -838,6 +862,7 @@ describe('MOON, the relief with the real physics', () => {
       [20, 277, SOUTH],
       [150, 277, SOUTH],
     ]) {
+      const [x, z] = lane(x0, z0, yaw);
       const s = Sim.at(world).put(x, 0, z, yaw);
       let out = 0;
       for (const way of [yaw, yaw + Math.PI]) {

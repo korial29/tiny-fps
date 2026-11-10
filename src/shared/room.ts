@@ -782,7 +782,7 @@ export class Room {
   }
 
   /**
-   * A press of USE on foot: the nearest rover within ROVER.ENTER_R (centre to feet) with a seat
+   * A press of USE on foot: the nearest rover within ROVER.ENTER_R on the floor plane with a seat
    * for him, the wheel first; a flag carrier only rides. Not while down, stumbling or in a lock.
    */
   private enter(p: Player): void {
@@ -791,11 +791,13 @@ export class Room {
       return;
     }
     const carrier = this.ctf.carrying(p.info.id) >= 0;
-    const d2 = (r: Rover) => (r.x - q.x) ** 2 + (r.y - q.y) ** 2 + (r.z - q.z) ** 2;
+    // On the floor plane, as the HUD's prompt judges it (boarding(), hud.ts), within the reach in height.
+    const d2 = (r: Rover) =>
+      Math.abs(r.y - q.y) > ROVER.ENTER_R ? Infinity : (r.x - q.x) ** 2 + (r.z - q.z) ** 2;
     const free = (r: Rover): 0 | 1 | -1 =>
       r.driver === NOBODY && !carrier ? 0 : r.rider === NOBODY ? 1 : -1;
     const r = this.rovers
-      .filter(r => d2(r) < ROVER.ENTER_R ** 2 && free(r) >= 0)
+      .filter(r => d2(r) <= ROVER.ENTER_R ** 2 && free(r) >= 0)
       .sort((a, b) => d2(a) - d2(b))[0];
     if (r) {
       board(q, r, free(r) as 0 | 1);

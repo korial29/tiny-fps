@@ -21,14 +21,17 @@ import { ROOFTOPS } from '../shared/map';
 import { STILL, move, spawn, stumble } from '../shared/physics';
 import { decodeInput, decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
 import { Room } from '../shared/room';
-import { EV, KEY, MODE } from '../shared/types';
-import type { Conn, Input, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
+import { ROVER, park, seat } from '../shared/rover';
+import { EV, KEY, MODE, NOBODY } from '../shared/types';
+import type { Conn, Input, PlayerState, Rover, SnapPlayer, Snapshot } from '../shared/types';
 import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
 import * as lines from '../../test/lines';
 import { loaded } from '../../test/loaded';
 import { Sim } from '../../test/pilot';
-import { createPredictor } from './predict';
+import * as ride from '../../test/ride';
+import { ramp } from '../../test/slope';
+import { ROVER_BLEND, createPredictor } from './predict';
 import { IDLE } from '../../test/teams';
 
 const STEP = 1000 / TICK_HZ;
@@ -1239,5 +1242,224 @@ describe('lag compensation through the room', () => {
     // 100 ms is 6 ticks; the delivery of the snapshots adds up to a snapshot interval.
     expect(ticksBack).toBeGreaterThan((INTERP_DELAY * TICK_HZ) / 1000 + LATENCY - 2);
     expect(ticksBack).toBeLessThan((INTERP_DELAY * TICK_HZ) / 1000 + LATENCY + 4);
+  });
+});
+
+describe('the rover, predicted against the room', () => {
+  const { EAST, STEP: DT } = ride;
+  /** The player's spawn at the origin, a rover 2.5 m east of it with its nose to the east. */
+  const flat = ride.lot();
+  /** The same with a 20 degree ramp across the way, from x = 40 to x = 60, and its drop. */
+  const jump = ride.lot(ramp(20));
+
+  it('agrees with the host while driving, under every lag', () => {
+    for (const [name, lag] of ride.LAGS) {
+      for (const seed of [7, 99]) {
+        const r = ride.drive(flat, ride.trip(420, seed), lag);
+        expect([name, r.differing]).toEqual([name, []]);
+        expect([name, r.final]).toEqual([name, []]);
+        expect(r.checked).toBeGreaterThan(100);
+        expect(r.driving).toBeGreaterThan(400);
+        expect(r.pred.riding()).toEqual({ rover: 0, seat: 0 });
+        expect(r.pred.rovers(1e9, 1)[0]).toEqual(r.car);
+        // He went somewhere, and his body is on the driver's seat.
+        expect(Math.hypot(r.car.x - 2.5, r.car.z)).toBeGreaterThan(30);
+        const sat = { ...r.host };
+        seat(sat, r.car, 0);
+        expect(r.pred.me(1)).toMatchObject({ x: sat.x, y: sat.y, z: sat.z, mode: MODE.RIDE });
+      }
+    }
+  });
+
+  it('agrees with the host through a jump and a landing', () => {
+    for (const [name, lag] of ride.LAGS) {
+      const r = ride.drive(jump, ride.trip(480, 7, true), lag);
+      expect([name, r.differing]).toEqual([name, []]);
+      expect([name, r.final]).toEqual([name, []]);
+      expect(r.flew).toBeGreaterThan(30);
+      expect(r.landed).toBeGreaterThan(60);
+      expect(r.car.x).toBeGreaterThan(70);
+      expect(r.pred.rovers(1e9, 1)[0]).toEqual(r.car);
+    }
+  });
+
+  it('agrees with the host through an enemy run over', () => {
+    for (const [name, lag] of ride.LAGS) {
+      const r = ride.drive(flat, ride.trip(240, 7, true), lag, {
+        setup: (_, foe) => Object.assign(foe, { x: 32, z: 0 }),
+      });
+      expect(r.foe.down).toBeGreaterThan(0);
+      expect(r.host.hits).toBe(1);
+      expect([name, r.differing]).toEqual([name, []]);
+      expect([name, r.final]).toEqual([name, []]);
+      expect(r.pred.rovers(1e9, 1)[0]).toEqual(r.car);
+    }
+  });
+
+  it('agrees with the host when the driver gets out at speed, and walks on', () => {
+    const out: ride.Keys[] = [
+      ...ride.trip(150, 7, true),
+      { keys: KEY.USE | KEY.FORWARD, yaw: EAST, pitch: 0 },
+      ...Array.from({ length: 240 }, (_, k) => ({
+        keys: KEY.FORWARD | (k % 30 === 10 ? KEY.JUMP : 0),
+        yaw: EAST + 0.4,
+        pitch: 0,
+      })),
+    ];
+    const exit = out.findIndex((i, k) => k > 10 && i.keys & KEY.USE);
+    for (const [name, lag] of ride.LAGS) {
+      /** The rover as drawn on each frame, and whether he was in it. */
+      const drawn: { x: number; in: boolean }[] = [];
+      const r = ride.drive(flat, out, lag, {
+        each: (pred, now) =>
+          drawn.push({ x: pred.rovers(now, 1)[0]?.x ?? 2.5, in: !!pred.riding() }),
+      });
+      expect([name, r.differing]).toEqual([name, []]);
+      expect([name, r.final]).toEqual([name, []]);
+      expect(r.checked).toBeGreaterThan(60);
+      // Out on the very step of the press, with no word from the host; then on his feet.
+      expect(drawn[exit - 1].in).toBe(true);
+      expect(drawn[exit].in).toBe(false);
+      expect(r.pred.riding()).toBeUndefined();
+      expect(r.host.mode).not.toBe(MODE.RIDE);
+      expect(r.car.driver).toBe(NOBODY);
+      // He left it doing more than 10 m/s; the rover he sees rolls on and never jumps back to
+      // where the snapshots have it: no frame moves it more than a step and a half at that speed.
+      const speed = (drawn[exit].x - drawn[exit - 1].x) / (DT / 1000);
+      expect(speed).toBeGreaterThan(10);
+      for (let k = exit; k < drawn.length - 1; k++) {
+        const d = drawn[k + 1].x - drawn[k].x;
+        expect(d).toBeGreaterThan(-0.05);
+        expect(d).toBeLessThan((speed * 1.5 * DT) / 1000);
+      }
+      // It comes to rest where the host's does.
+      expect(r.car.vx).toBe(0);
+      expect(drawn.at(-1)!.x).toBeCloseTo(r.car.x, 3);
+    }
+  });
+
+  it('waits for the host to seat him', () => {
+    const room = new Room({}, flat.def);
+    const conn: Conn & { bins: ArrayBuffer[] } = {
+      bins: [],
+      send: d => typeof d !== 'string' && conn.bins.push(d),
+    };
+    room.connect(conn);
+    room.receive(conn, JSON.stringify({ t: 'join', name: 'me' }));
+    const pred = createPredictor(flat);
+    pred.you(0, 0);
+    room.tick();
+    room.tick();
+    pred.snapshot(decodeSnapshot(conn.bins.at(-1)!)!, 0);
+    // The press, predicted: still on foot, the rover not his.
+    const press = pred.step({ keys: KEY.USE, yaw: EAST, pitch: 0 }, 0);
+    const next = pred.step({ keys: KEY.FORWARD, yaw: EAST, pitch: 0 }, DT);
+    expect(pred.riding()).toBeUndefined();
+    expect(pred.me(1)!.mode).toBe(MODE.GROUND);
+    expect(pred.rovers(DT, 1)[0]).toMatchObject({ driver: NOBODY, vx: 0 });
+    // The host seats him; its snapshot does, and the input after the press is replayed at the wheel.
+    room.receive(conn, encodeInput(press));
+    room.tick();
+    room.tick();
+    pred.snapshot(decodeSnapshot(conn.bins.at(-1)!)!, 2 * DT);
+    expect(pred.riding()).toEqual({ rover: 0, seat: 0 });
+    expect(pred.me(1)!.mode).toBe(MODE.RIDE);
+    room.receive(conn, encodeInput(next));
+    expect(pred.rovers(2 * DT, 1)[0]).toEqual(room['rovers'][0]);
+    expect(pred.rovers(2 * DT, 1)[0].vx).toBeGreaterThan(0);
+  });
+
+  it('draws a rider on the rover it draws', () => {
+    const room = new Room({}, flat.def);
+    const peers = ['driver', 'me'].map(name => {
+      const c: Conn & { bins: ArrayBuffer[] } = {
+        bins: [],
+        send: d => typeof d !== 'string' && c.bins.push(d),
+      };
+      room.connect(c);
+      room.receive(c, JSON.stringify({ t: 'join', name }));
+      return c;
+    });
+    const [driver, me] = peers;
+    // The own player, blue, stands by the rover at red's spawn.
+    Object.assign(room['peers'].get(me)!.state, { x: 2.5, z: 2 });
+    const pred = createPredictor(flat);
+    pred.you(1, 1);
+    let seen = 0;
+    let rode = 0;
+    let moved = 0;
+    for (let k = 0; k < 260; k++) {
+      const now = k * DT;
+      // The other takes the wheel first and drives off east; the own player gets in after him,
+      // and out at the end.
+      room.receive(
+        driver,
+        encodeInput({
+          seq: k,
+          keys: k < 3 ? KEY.USE : k > 20 ? KEY.FORWARD : 0,
+          yaw: EAST,
+          pitch: 0,
+        }),
+      );
+      const keys = (k >= 10 && k < 13) || k >= 240 ? KEY.USE : KEY.LEFT;
+      room.receive(me, encodeInput(pred.step({ keys, yaw: 1, pitch: 0 }, now)));
+      room.tick();
+      for (; seen < me.bins.length; seen++) {
+        pred.snapshot(decodeSnapshot(me.bins[seen])!, now);
+      }
+      const at = pred.riding();
+      if (k > 20 && k < 240) {
+        expect(at).toEqual({ rover: 0, seat: 1 });
+        // Half a step after the last one: his body is on the rider's seat of the rover drawn then.
+        const alpha = 0.5;
+        const body = pred.me(alpha)!;
+        const r = pred.rovers(now + alpha * DT, alpha)[0];
+        const sat = { ...body };
+        seat(sat, r, 1);
+        expect([body.x, body.y, body.z]).toEqual([sat.x, sat.y, sat.z]);
+        // His own look, and the rover drawn in the past, behind the host's.
+        expect(body.yaw).toBeCloseTo(1, 3);
+        expect(body.mode).toBe(MODE.RIDE);
+        rode++;
+        moved = Math.max(moved, room['rovers'][0].x - r.x);
+      }
+    }
+    expect(rode).toBeGreaterThan(200);
+    expect(moved).toBeGreaterThan(1);
+    // Out: the host's call, seen in a snapshot.
+    expect(pred.riding()).toBeUndefined();
+    expect(pred.me(1)!.mode).not.toBe(MODE.RIDE);
+  });
+
+  it('interpolates the rovers it does not drive', () => {
+    const [parked] = park(flat);
+    const car = (over: Partial<Rover>): Rover => ({ ...parked, ...over });
+    const snap = (tick: number, ...rovers: Rover[]): Snapshot => ({
+      ...snapshot(tick, snapPlayer(0)),
+      rovers,
+    });
+    const p = createPredictor(flat);
+    p.you(0);
+    expect(p.rovers(0, 0)).toEqual([]);
+    p.snapshot(snap(0, car({ x: 10, yaw: 6.2, pitch: 0.1, driver: 1 }), car({ z: 50 })), 1000);
+    p.snapshot(snap(2, car({ x: 12, yaw: 0.1, pitch: 0.3, rider: 1 }), car({ z: 50 })), 1100);
+    // Halfway between the two, INTERP_DELAY back.
+    const [a, b] = p.rovers(1050 + INTERP_DELAY, 0.7);
+    expect(a.x).toBeCloseTo(11, 6);
+    expect(a.pitch).toBeCloseTo(0.2, 6);
+    // The short way round, through 0.
+    expect(a.yaw).toBeCloseTo((6.2 + 0.1 + 2 * Math.PI) / 2 - 2 * Math.PI, 6);
+    // The seats of the newer one.
+    expect(a).toMatchObject({ driver: NOBODY, rider: 1 });
+    expect(b).toEqual(car({ z: 50 }));
+    // Clamped to the first and to the newest; nobody's seat is the own player's.
+    expect(p.rovers(0, 0)[0].x).toBe(10);
+    expect(p.rovers(9999, 0)[0].x).toBe(12);
+    expect(p.riding()).toBeUndefined();
+    // A map without rovers has none.
+    p.snapshot(snapshot(4, snapPlayer(0)), 1200);
+    expect(p.rovers(1300, 0)).toEqual([]);
+    expect(ROVER_BLEND).toBeGreaterThan(0);
+    expect(ROVER.ENTER_R).toBeGreaterThan(2.5);
   });
 });

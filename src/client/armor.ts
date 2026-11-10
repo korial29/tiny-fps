@@ -27,6 +27,8 @@ interface Region {
   dip?: number;
   /** How much further out the plate swells at the rest point (x, y): the chest plate's pecs. */
   swell?: (x: number, y: number) => number;
+  /** Where its angles are measured from, degrees (0 the front): 180 for a plate on the back. */
+  face?: number;
 }
 
 const smooth = (a: number, b: number, x: number) => {
@@ -59,6 +61,13 @@ export const REGIONS: Region[] = [
   { part: PART.LEG, cx: 0.1, y: [0.61, 0.85], a: [-62, 78] },
   { part: PART.LEG, cx: 0.1, y: [0.462, 0.565], a: [-55, 55] },
   { part: PART.ARM, cx: 0.222, y: [1.005, 1.15], a: [20, 160] },
+  // The user, 2026-11-10: a small plate on the biceps, under the shoulder plate; one on the back of
+  // each thigh; and the shorts: round the hips under the belt and on down over the top of the
+  // thighs, front, outside and back, not between them.
+  { part: PART.ARM, cx: 0.207, y: [1.215, 1.325], a: [-25, 95] },
+  { part: PART.LEG, cx: 0.1, y: [0.63, 0.84], a: [-58, 58], face: 180 },
+  { part: PART.TRUNK, cx: 0, y: [0.925, 0.982], a: [-181, 181] },
+  { part: PART.LEG, cx: 0.1, y: [0.868, 0.935], a: [-115, 115], face: 65 },
 ];
 
 /** How far the plates stand off the skin, and their edge; how much larger the edge's region is. */
@@ -81,10 +90,11 @@ const partOf = (l: number) =>
 /** A corner being clipped: its place at rest, then as drawn and its normal, then its normal at rest. */
 type Corner = number[];
 
-/** The angle of the rest point (x, z) round the region's middle line, degrees: + outward on a limb, toward +x on the trunk. */
+/** The angle of the rest point (x, z) round the region's middle line, degrees: + outward on a limb, toward +x on the trunk; from the region's face. */
 const angle = (g: Region, x: number, z: number) => {
   const side = g.part == PART.TRUNK ? 1 : Math.sign(x) || 1;
-  return (Math.atan2((x - g.cx * side) * side, -z) * 180) / Math.PI;
+  const a = (Math.atan2((x - g.cx * side) * side, -z) * 180) / Math.PI;
+  return g.face ? ((a - g.face + 540) % 360) - 180 : a;
 };
 
 /** The region's constraints on a rest point, each >= 0 inside, grown by `grow` (0 or 1 margin). */

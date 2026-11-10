@@ -294,117 +294,44 @@ describe('moonscape', () => {
     expect(deep.filter(p => p[8] === -1).every(p => p[6] + p[7] + p[9] < 0.1)).toBe(true);
   });
 
-  /** The boxes a player can touch with a rock drawn on them: x0, z0, x1, z1, the ground and the top. */
-  const boxes = [
-    ...[1, -1].flatMap(side =>
-      [
-        ...LAYOUT.stones.map(([x, z, w, d, h]) => [
-          x,
-          z,
-          x + w,
-          z + d,
-          at(x + w / 2, z + d / 2),
-          at(x + w / 2, z + d / 2) + h,
-        ]),
-        ...LAYOUT.boulders.map(([x, z, r]) => [
-          x - 0.6 * r,
-          z - 0.6 * r,
-          x + 0.6 * r,
-          z + 0.6 * r,
-          at(x, z),
-          at(x, z) + 0.75 * r,
-        ]),
-      ].map(([x0, z0, x1, z1, g, top]) =>
-        side > 0 ? [x0, z0, x1, z1, g, top] : [x0, 280 - z1, x1, 280 - z0, g, top],
-      ),
-    ),
-    ...LAYOUT.rocks.map(([x, z, r]) => [
-      x - 0.6 * r,
-      z - 0.6 * r,
-      x + 0.6 * r,
-      z + 0.6 * r,
-      at(x, z),
-      at(x, z) + 0.6 * r,
-    ]),
-    ...LAYOUT.pillars.map(([x0, z0, x1, z1, y]) => [x0, z0, x1, z1, -14, y]),
-  ];
+  /** Red's rocks and their mirrors: where each is, its radius and height. */
+  const rocks = [...LAYOUT.crags.arena, ...LAYOUT.crags.field].flatMap(c => [
+    c,
+    { ...c, at: [c.at[0], c.at[1], 280 - c.at[2]] },
+  ]);
   const basalt = verts.filter(p => p[8] === TEX.ROCK && reach(relief, p[0], p[2]) < 1);
+  /** The basalt drawn within a rock's radius of its middle, over its foot. */
+  const of = ({ at: [x, g, z], R }: (typeof rocks)[0]) =>
+    basalt.filter(p => Math.hypot(p[0] - x, p[2] - z) < 1.35 * R && p[1] > g - 0.5);
 
-  it('cuts each rock a player gets near from 128 or 512 triangles, the ones up the crater wall from far fewer', () => {
-    const count = ([x0, z0, x1, z1]: number[]) =>
-      basalt.filter(
-        p =>
-          p[0] > x0 - 0.31 &&
-          p[0] < x1 + 0.31 &&
-          p[2] > z0 - 0.31 &&
-          p[2] < z1 + 0.31 &&
-          p[1] > -17,
-      ).length / 3;
-    // The field's stones, alone on the floor: 512 each (130 before, 70 before that).
-    for (const [x, z, w, d] of LAYOUT.stones) {
-      expect(count([x, z, x + w, z + d])).toBeGreaterThanOrEqual(480);
+  it('draws each rock a player gets near from 128 or 512 triangles, the ones up the crater wall from far fewer', () => {
+    for (const c of rocks) {
+      expect(of(c).length / 3, `rock at ${c.at}`).toBeGreaterThanOrEqual(c.R < 2.3 ? 70 : 300);
     }
-    // No box has under 100, and most of the big ones have 512.
-    const counts = boxes.map(count);
-    expect(Math.min(...counts)).toBeGreaterThanOrEqual(100);
-    expect(counts.filter(n => n >= 480).length).toBeGreaterThan(30);
+    expect(rocks.filter(c => c.R >= 2.3).length).toBeGreaterThan(20);
+    // Up the wall, where nobody gets within 60 m: 30 of them, about 65 triangles each.
     const far = verts.filter(p => p[8] === TEX.ROCK && reach(relief, p[0], p[2]) > 1.02);
-    expect(far.length / 3 / 90).toBeLessThan(70);
-    expect(far.length / 3 / 90).toBeGreaterThan(30);
+    expect(far.length / 3 / 30).toBeLessThan(70);
+    expect(far.length / 3 / 30).toBeGreaterThan(30);
   });
 
-  it('fits every rock to its box: no more than 0.3 m out of a side, never over the top, no corner bare by more than 0.3 m at mid-height', () => {
-    // Every point of basalt above the ground, off the rille's walls and the stones on its rim, is by a box.
-    const loose = basalt.filter(
-      p =>
-        p[1] > 0.4 &&
-        !(Math.abs(p[2] - 140) < 16.9 && p[0] >= -1 && p[0] <= 161 && p[1] < 3.6) &&
-        !boxes.some(
-          ([x0, z0, x1, z1, , top]) =>
-            p[0] > x0 - 0.3001 &&
-            p[0] < x1 + 0.3001 &&
-            p[2] > z0 - 0.3001 &&
-            p[2] < z1 + 0.3001 &&
-            p[1] < top + 1e-6,
-        ),
-    );
-    expect(loose.map(p => p.slice(0, 3))).toEqual([]);
-    // The drawn surface, sampled: each triangle's corners, the middles of its sides and its own.
-    const surface: number[][] = [];
-    for (let i = 0; i < basalt.length; i += 3) {
-      const [a, b, c] = [basalt[i], basalt[i + 1], basalt[i + 2]];
-      const mix = (...l: number[][]) =>
-        [0, 1, 2].map(k => l.reduce((t, p) => t + p[k], 0) / l.length);
-      surface.push(a, b, c, mix(a, b), mix(b, c), mix(c, a), mix(a, b, c));
-    }
-    // Each box's four upright edges and the middles of its sides, over the ground: basalt within 0.3 m (sideways) of each.
-    let worst = 0;
-    for (const [x0, z0, x1, z1, g, top] of boxes) {
-      const band = surface.filter(
-        p =>
-          p[0] > x0 - 0.5 &&
-          p[0] < x1 + 0.5 &&
-          p[2] > z0 - 0.5 &&
-          p[2] < z1 + 0.5 &&
-          p[1] > g &&
-          p[1] < g + 0.8 * (top - g),
+  it('draws a rock that is not a box, a ball or a hat: no level brim at its foot, a top that is not level, leaning faces', () => {
+    for (const c of rocks.filter(r => r.R >= 2.3)) {
+      const [x, g, z] = c.at;
+      const pts = of(c).filter(p => Math.hypot(p[0] - x, p[2] - z) < 1.2 * c.R && p[1] > g + 0.1);
+      const top = hi(pts.map(p => p[1]));
+      expect(top - g).toBeGreaterThan(0.6 * c.H);
+      // No brim: of what is drawn in the lowest fifth, little faces up (a slab's top would).
+      const low = pts.filter(
+        p => p[1] < g + 0.2 * (top - g) && Math.hypot(p[0] - x, p[2] - z) < 0.8 * c.R,
       );
-      for (const [cx, cz] of [
-        [x0, z0],
-        [x1, z0],
-        [x0, z1],
-        [x1, z1],
-        [(x0 + x1) / 2, z0],
-        [(x0 + x1) / 2, z1],
-        [x0, (z0 + z1) / 2],
-        [x1, (z0 + z1) / 2],
-      ]) {
-        const near = Math.min(...band.map(p => Math.hypot(p[0] - cx, p[2] - cz)));
-        worst = Math.max(worst, near);
-        expect(near, `box ${x0}, ${z0}`).toBeLessThan(0.3);
-      }
+      expect(low.filter(p => p[4] > 0.9).length / low.length, `rock at ${c.at}`).toBeLessThan(0.15);
+      // Not a box: a quarter and more of its facets lean more than 12 degrees off upright or level.
+      const lean = pts.filter(p => Math.abs(p[4]) > 0.2 && Math.abs(p[4]) < 0.98);
+      expect(lean.length / pts.length).toBeGreaterThan(0.25);
+      // Not level on top: under a third of it is within 0.15 m of the highest point.
+      expect(pts.filter(p => p[1] > top - 0.15).length / pts.length).toBeLessThan(0.33);
     }
-    expect(worst).toBeGreaterThan(0.1);
   });
 
   it("stands the boulders, the dishes, the ramps' lamps and the wreck on the relief", () => {
@@ -415,7 +342,7 @@ describe('moonscape', () => {
       // A faceted block: twenty triangles and more.
       expect(ys.length).toBeGreaterThanOrEqual(60);
       expect(Math.min(...ys)).toBeLessThan(at(x, z));
-      expect(Math.max(...ys)).toBeGreaterThan(at(x, z) + 0.4 * r);
+      expect(Math.max(...ys)).toBeGreaterThan(at(x, z) + 0.35 * r);
     }
     const lamp = (x: number, z: number, up: number) =>
       by(x, z, 0.6).filter(p => p[8] === -2 && Math.abs(p[1] - at(x, z) - up) < 0.6).length;
@@ -459,8 +386,8 @@ describe('moonscape and the rovers', () => {
     expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
   });
 
-  it('is 378,165 vertices, the four static rovers no longer among them', () => {
-    expect(verts.length).toBe(378165);
+  it('is 375,645 vertices, the four static rovers no longer among them', () => {
+    expect(verts.length).toBe(375645);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {

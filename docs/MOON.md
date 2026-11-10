@@ -77,3 +77,13 @@ Known limits: a player on a moving rover is not carried, it drives out from unde
 Each flag stands in its own dome's hall, on a team-tinted step and dais 2 m from the dome's centre toward the door (red at (80, 1, 234), blue the mirror at z 46), clear of the crates (moved toward the walls) and of the stairs. The old outdoor pad is gone: the lit portal marks the door and the dais shows through it. The step and dais are ghosts with the team tint; `furnishing()` in `src/client/moonbase.ts`, drawn by `render.ts` beside the scenery, draws them indoors in their tint (moonscape mirrors red's half colour for colour, so they cannot go through `moonbase()`). The racks stay where they were, 28 m behind the flag.
 
 `KIT` in `src/shared/moonbase.ts` is the lab kit, each piece a ghost box that `furnishing()` dresses: in the hall a lab bench with screens and a table of rock samples under the west deck, server racks with status lights up to the east deck, a telescope and a sample analyser on the north deck; in the first module two greenhouse racks; in the second lockers and a spacesuit on its stand. Drawn only, no collision: panels on the hall's short walls, a sign over the door, cables under the east deck, cable trays and status lights in the tubes, hazard stripes and a beacon over each airlock. Everything stays off the door's way to the dais, the stairs, the tubes' mouth, the doorways and the packs (tested), and away from the middle of a module's wall, where vision.ts would band a ledge.
+
+## The base's outside (2026-11-10)
+
+`src/client/moonhull.ts` (`hull()`, called by moonscape.ts beside `moonbase()` and mirrored with it, so nothing in it is team-coloured) dresses red's half from outside, 10,620 vertices a half, drawn only:
+
+- Dome: grey seams 2 cm proud of the shell as drawn (eight rings, meridians staggered row on row, a band where the shell springs, plates between the drum's windows), a porthole over every other window, a dark foot with a strip of light, an amber frame round the portal, lights in the ground up to the door, an aerial on top (mast, three cross-bars, a red beacon at 25.4 m).
+- Tubes: hoops between the ribs, a lamp on each side of each.
+- Modules: a coping, a plinth, ribs between the windows, two portholes on each end wall (a pane inside too) and a vent, a lamp and a sensor cluster over each airlock, a dish on the first roof's corner, three whip aerials along the second's end.
+
+`PORTHOLES` lists them; none is over a doorway, an airlock or a tube (tested), and nothing stands in the door's way, the airlocks, the tube tops or the middle of a module's roof. No collision: the aerial's mast, the dish and the whips are walked through.

@@ -46,8 +46,8 @@ export const face = (o: number[], p: Vec3[], rgb: number[], away?: Vec3) => {
     tri(o, q[0], q[k], q[k + 1], rgb);
   }
 };
-/** A box of one colour between two corners, its faces outward. */
-export const box = (o: number[], lo: Vec3, hi: Vec3, rgb: number[]) => {
+/** A box of one colour between two corners, its faces outward, less those whose bit is in `skip`: 1 and 2 its low and high z, 4 and 8 y, 16 and 32 x. */
+export const box = (o: number[], lo: Vec3, hi: Vec3, rgb: number[], skip = 0) => {
   const mid = lo.map((v, i) => (v + hi[i]) / 2) as Vec3;
   const p = (i: number): Vec3 => [
     i & 1 ? hi[0] : lo[0],
@@ -61,7 +61,7 @@ export const box = (o: number[], lo: Vec3, hi: Vec3, rgb: number[]) => {
     [2, 3, 7, 6],
     [0, 2, 6, 4],
     [1, 3, 7, 5],
-  ]) {
+  ].filter((_, i) => !((skip >> i) & 1))) {
     face(o, f.map(p), rgb, mid);
   }
 };
@@ -545,7 +545,7 @@ const lining = (
 };
 
 /** The openings of the drawn drum, as angles about the centre and a height: the door, and the tubes' boxes where they come through. */
-const GAPS = [
+export const GAPS = [
   [-TAU / 4 - Math.asin(MOUTHS[0][2] / R), -TAU / 4 + Math.asin(MOUTHS[0][2] / R), MOUTHS[0][3]],
   [-Math.acos((TUBES[1].min[0] - CX) / R), Math.asin((TUBES[0].max[2] - CZ) / R), MOUTHS[1][3]],
 ];

@@ -57,9 +57,9 @@ describe('moonscape', () => {
 
   it('stays within a vertex budget and is the same every time', () => {
     // Drawn whole in every pass, with no culling: the lattice inside the bound is most of it, the
-    // faceted boulders about 20,000.
+    // faceted boulders about 20,000, the outside of the two bases (moonhull.ts) 21,240.
     expect(verts.length).toBeGreaterThan(150000);
-    expect(verts.length).toBeLessThan(260000);
+    expect(verts.length).toBeLessThan(265000);
     expect(moonscape(MOON)).toEqual(v);
   });
 
@@ -276,7 +276,7 @@ describe('moonscape and the rovers', () => {
   });
 
   it('is the 2,136 vertices of the four static rovers lighter', () => {
-    expect(verts.length).toBe(242223);
+    expect(verts.length).toBe(263463);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {

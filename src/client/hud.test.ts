@@ -4,7 +4,10 @@ import { IDLE } from '../../test/teams';
 import { FLAG } from '../shared/types';
 import type { FlagState } from '../shared/types';
 import { GUN_MAG, HP_MAX, RIFLE_CLIP } from '../shared/constants';
-import { BANNER_MS, HIT_MS, HUD_CSS, clock, createHud } from './hud';
+import { ROVER } from '../shared/rover';
+import { MODE, NOBODY } from '../shared/types';
+import type { Rover } from '../shared/types';
+import { BANNER_MS, HIT_MS, HUD_CSS, boarding, clock, createHud, kmh } from './hud';
 import type { Hud, Summary } from './hud';
 import type { Mark } from './marks';
 
@@ -542,5 +545,124 @@ describe('the saber lock gauge', () => {
     expect(HUD_CSS).not.toMatch(/CLICK/);
     // Not a b: the name tags are, and they would be drawn as gauges.
     expect(HUD_CSS).not.toMatch(/(^|[},])b[{ ]/);
+  });
+});
+
+describe('the rover on the HUD', () => {
+  const car = (over: Partial<Rover> = {}): Rover => ({
+    x: 0,
+    y: 1.1,
+    z: 0,
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    yaw: 0,
+    pitch: 0,
+    roll: 0,
+    wy: 0,
+    wp: 0,
+    wr: 0,
+    steer: 0,
+    driver: NOBODY,
+    rider: NOBODY,
+    ...over,
+  });
+  const foot = (x = 2, over = {}) => ({ x, y: 0, z: 0, mode: MODE.GROUND, down: 0, ...over });
+
+  describe('boarding', () => {
+    it('offers the wheel of a free rover within reach, and nothing out of reach', () => {
+      expect(boarding(foot(2), [car()])).toBe('drive');
+      expect(boarding(foot(ROVER.ENTER_R - 0.01), [car()])).toBe('drive');
+      expect(boarding(foot(ROVER.ENTER_R + 0.01), [car()])).toBe('');
+      expect(boarding(foot(2, { y: 6 }), [car()])).toBe('');
+      expect(boarding(foot(2), [])).toBe('');
+      expect(boarding(undefined, [car()])).toBe('');
+    });
+
+    it('offers the seat beside a driver, and nothing when both are taken', () => {
+      expect(boarding(foot(), [car({ driver: 3 })])).toBe('ride');
+      expect(boarding(foot(), [car({ driver: 3, rider: 4 })])).toBe('');
+      // The wheel is free even with a rider aboard.
+      expect(boarding(foot(), [car({ rider: 4 })])).toBe('drive');
+    });
+
+    it('offers a flag carrier the seat beside only', () => {
+      expect(boarding(foot(), [car()], true)).toBe('ride');
+      expect(boarding(foot(), [car({ rider: 4 })], true)).toBe('');
+    });
+
+    it('offers nothing to a player seated or down', () => {
+      expect(boarding(foot(0, { mode: MODE.RIDE }), [car({ driver: 1 })])).toBe('');
+      expect(boarding(foot(2, { down: 30 }), [car()])).toBe('');
+    });
+
+    it('goes by the nearest rover with a seat for him', () => {
+      const full = car({ x: 1, driver: 3, rider: 4 });
+      const ride = car({ x: 3, driver: 5 });
+      const free = car({ x: 4.5 });
+      expect(boarding(foot(2), [full, free, ride])).toBe('ride');
+      expect(boarding(foot(4), [full, ride, free])).toBe('drive');
+    });
+  });
+
+  it('reads the speed over the ground in whole km/h', () => {
+    expect(kmh(car())).toBe(0);
+    expect(kmh(car({ vx: 6, vz: -8 }))).toBe(36);
+    expect(kmh(car({ vz: ROVER.VMAX }))).toBe(84);
+  });
+
+  describe('createHud().rover', () => {
+    let screen: HTMLElement;
+    let hud: Hud;
+    beforeEach(() => {
+      screen = document.createElement('div');
+      screen.innerHTML = '<canvas></canvas><i></i>';
+      hud = createHud(screen);
+    });
+    const [prompt, meter] = ['samp', 'cite'].map(t => () => screen.querySelector<HTMLElement>(t)!);
+
+    it('shows nothing until told', () => {
+      expect(prompt().hidden).toBe(true);
+      expect(meter().hidden).toBe(true);
+      expect(screen.classList.contains('v')).toBe(false);
+    });
+
+    it.each(['drive', 'ride', 'get out'])('prompts "E %s", and hides it again', act => {
+      hud.rover(act);
+      expect(prompt().hidden).toBe(false);
+      expect(prompt().textContent).toBe(`E${act}`);
+      expect(prompt().querySelector('var')!.textContent).toBe('E');
+      expect(meter().hidden).toBe(true);
+      hud.rover('');
+      expect(prompt().hidden).toBe(true);
+    });
+
+    it('shows the speed at the wheel, with or without the prompt, and marks the screen so the gun and the crosshair hide', () => {
+      hud.rover('get out', 0);
+      expect(prompt().hidden).toBe(false);
+      expect(meter().hidden).toBe(false);
+      expect(meter().textContent).toBe('0km/h');
+      hud.rover('', 54);
+      expect(prompt().hidden).toBe(true);
+      expect(meter().textContent).toBe('54km/h');
+      expect(screen.classList.contains('v')).toBe(true);
+      // Out of the rover, or beside the driver: the gun is back.
+      hud.rover('');
+      expect(meter().hidden).toBe(true);
+      expect(screen.classList.contains('v')).toBe(false);
+    });
+
+    it('is styled by tag: the prompt, the speed, and the gun and crosshair hidden at the wheel', () => {
+      expect(HUD_CSS).toMatch(/samp\{[^}]*bottom/);
+      expect(HUD_CSS).toMatch(/cite\{[^}]*right/);
+      expect(HUD_CSS).toContain('div.v>i,.v dl,.v del{display:none}');
+      expect(HUD_CSS.split('{')[0].split(',')).toEqual(expect.arrayContaining(['samp', 'cite']));
+    });
+
+    it('tells the key on the title screen', () => {
+      hud.title('Click to play', 'Tranquility');
+      const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
+      expect(rows.some(r => /^Erover: get in, get out/.test(r!))).toBe(true);
+    });
   });
 });

@@ -31,13 +31,16 @@ describe('keyBit', () => {
     expect(keyBit('KeyQ')).toBe(0);
   });
 
-  it('maps Shift to the sprint and C to the crouch, and not Ctrl, nor E (the dash is a double tap)', () => {
+  it('maps Shift to the sprint and C to the crouch, and not Ctrl (the dash is a double tap)', () => {
     expect(keyBit('ShiftLeft')).toBe(KEY.SPRINT);
     expect(keyBit('ShiftRight')).toBe(KEY.SPRINT);
-    expect(keyBit('KeyE')).toBe(0);
     expect(keyBit('KeyC')).toBe(KEY.CROUCH);
     // Ctrl+W closes the tab: the game must not ask for it.
     expect(keyBit('ControlLeft')).toBe(0);
+  });
+
+  it('maps E to the use key: in and out of a rover', () => {
+    expect(keyBit('KeyE')).toBe(KEY.USE);
   });
 });
 
@@ -148,6 +151,23 @@ describe('createInput', () => {
     ctl.destroy();
     canvas.remove();
     lock(false);
+  });
+
+  it('holds KEY.USE while E is down, on every step, and drops it at the release', () => {
+    make();
+    lock(true);
+    key('keydown', 'KeyE');
+    expect(ctl.keys & KEY.USE).toBe(KEY.USE);
+    expect([ctl.take(), ctl.take()]).toEqual([KEY.USE, KEY.USE]);
+    key('keyup', 'KeyE');
+    expect(ctl.keys & KEY.USE).toBe(0);
+    expect(ctl.take()).toBe(0);
+  });
+
+  it('does not take E without the pointer lock', () => {
+    make();
+    key('keydown', 'KeyE');
+    expect(ctl.keys).toBe(0);
   });
 
   it('ignores the mouse and the keys until the pointer is locked', () => {

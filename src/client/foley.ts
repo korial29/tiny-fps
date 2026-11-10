@@ -3,9 +3,10 @@
 // footstep sounds as a drawn foot is set down (Gait.steps), the own body's or a runner's, so the
 // sound goes with the legs. No DOM, unit-tested against a fake Audio.
 import { speedOf, sprinting } from '../shared/physics';
-import { EV, MODE } from '../shared/types';
-import type { PlayerState } from '../shared/types';
-import type { Audio } from './audio';
+import { ROVER } from '../shared/rover';
+import { EV, KEY, MODE } from '../shared/types';
+import type { PlayerState, Rover } from '../shared/types';
+import type { Audio, Loop } from './audio';
 import type { Hit } from './effects';
 import type { Vec3 } from './mesh';
 import { SOUND } from './sfx';
@@ -15,10 +16,27 @@ export interface Foley {
   me(p: PlayerState | undefined, hit: Hit, steps: number): void;
   /** The other players as drawn and their runners' footsteps so far: their steps and landings, at their position. */
   others(ps: PlayerState[], steps: (id: number) => number | undefined): void;
+  /**
+   * The rover the own player sits in, as drawn (undefined on foot), `dt` seconds after the last
+   * call, and the keys he holds at its wheel (0 for the rider): the engine, the skid, the landings.
+   */
+  rover(r: Rover | undefined, dt: number, keys?: number): void;
 }
 
 /** A fall slower than this (m/s) makes no sound on the others. */
 const SOFT = 3;
+
+/** The rover: a sideways slide from this speed (m/s) skids, and is at its loudest this much over it. */
+export const SKID_FROM = 2.5;
+const SKID_SPAN = 8;
+/**
+ * A landing: the fall speeds up by at least FALL (m/s²) for AIR seconds, then the body is stopped
+ * harder than STOP (m/s²) from more than SOFT_THUD (m/s) down. Rolling over a crest does neither.
+ */
+const FALL = 2;
+const AIR = 0.3;
+const STOP = 8;
+const SOFT_THUD = 2;
 
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
 
@@ -28,6 +46,11 @@ export const createFoley = (a: Audio): Foley => {
   /** Footfalls of the own player so far. */
   let feet = 0;
   const seen = new Map<number, { p: PlayerState; steps?: number }>();
+  let engine: Loop | undefined;
+  let skid: Loop | undefined;
+  /** The rover at the last call, its time falling freely and the fastest it fell. */
+  let rode: Rover | undefined;
+  let [air, drop] = [0, 0];
 
   /** The footfall n of p: harder at a sprint, softer crouched, the two feet a little apart in pitch. */
   const tap = (p: PlayerState, n: number, at?: Vec3) => {
@@ -73,6 +96,42 @@ export const createFoley = (a: Audio): Foley => {
       wind.set(0.55 * u ** 1.5, 0.6 + 0.9 * u);
       const v = clamp(speedOf(p) / 9);
       scrape.set(p.mode === MODE.SLIDE ? 0.2 + 0.5 * v : 0, 0.8 + 0.4 * v);
+    },
+
+    rover(r, dt, keys = 0) {
+      const was = rode;
+      rode = r && { ...r };
+      if (!r || a.muted) {
+        engine?.set(0, 0.6);
+        skid?.set(0, 1);
+        air = drop = 0;
+        return;
+      }
+      engine ??= a.loop(SOUND.ENGINE);
+      skid ??= a.loop(SOUND.SKID);
+      const [fx, fz] = [-Math.sin(r.yaw), -Math.cos(r.yaw)];
+      const u = clamp(Math.abs(r.vx * fx + r.vz * fz) / ROVER.VMAX);
+      const gas = keys & (KEY.FORWARD | KEY.BACK) ? 1 : 0;
+      // It idles, revs with the speed and growls under the throttle.
+      engine.set(0.22 + 0.4 * u + 0.18 * gas, 0.6 + 1.1 * u + 0.12 * gas);
+      // Another rover, or this one parked again: nothing to compare.
+      const same = was && dt > 0 && Math.hypot(r.x - was.x, r.y - was.y, r.z - was.z) < 5;
+      const acc = same ? (r.vy - was.vy) / dt : 0;
+      if (!same) {
+        air = drop = 0;
+      } else if (acc < -FALL) {
+        air += dt;
+        drop = Math.max(drop, -r.vy);
+      } else {
+        if (acc > STOP && air >= AIR && drop > SOFT_THUD) {
+          a.play(SOUND.THUD, undefined, clamp(drop / 10, 0.25), 1.1 - 0.3 * clamp(drop / 12));
+        }
+        // A stop empties it at once; a frame between two leaves most of it.
+        air = acc > STOP ? 0 : Math.max(0, air - 2 * dt);
+        drop = air ? drop : 0;
+      }
+      const side = clamp((Math.abs(r.vz * fx - r.vx * fz) - SKID_FROM) / SKID_SPAN);
+      skid.set(air >= AIR || side <= 0 ? 0 : 0.25 + 0.45 * side, 0.8 + 0.4 * side);
     },
 
     others(ps, steps) {

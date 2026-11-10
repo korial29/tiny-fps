@@ -21,6 +21,8 @@ const BITS: Record<string, number> = {
   // Not Ctrl: Ctrl+W closes the tab and the browser keeps it.
   KeyC: KEY.CROUCH,
   KeyR: KEY.RELOAD,
+  // Held: the host and ride() read the press off it.
+  KeyE: KEY.USE,
 };
 
 /** The four direction bits. */
@@ -110,7 +112,7 @@ export interface Controls {
 
 /**
  * Click the canvas to lock the pointer; while locked the mouse looks, the keys move (WASD, Shift
- * sprints, Space jumps, C crouches, a direction key pressed twice within DOUBLE_TAP_MS dashes that
+ * sprints, Space jumps, C crouches, E gets in and out of a rover, a direction key pressed twice within DOUBLE_TAP_MS dashes that
  * way, the left button fires or cuts and a double click cuts the special, 1, 2 and 3 or the wheel pick
  * the gun, the katana or the rail gun) and M calls `onMute`.
  */

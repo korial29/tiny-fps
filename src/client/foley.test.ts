@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { STILL } from '../shared/physics';
 import { EV, MODE, SIDE } from '../shared/types';
-import type { PlayerState } from '../shared/types';
+import type { PlayerState, Rover } from '../shared/types';
+import { KEY, NOBODY } from '../shared/types';
+import { ROVER, drive } from '../shared/rover';
+import { land, rover as parked, run } from '../../test/slope';
 import type { Audio } from './audio';
-import { createFoley } from './foley';
+import { SKID_FROM, createFoley } from './foley';
 import { createGait } from './gait';
 import type { Gait } from './gait';
 import { SOUND } from './sfx';
@@ -31,7 +34,12 @@ interface Played {
 /** An Audio that writes down what it is asked: the sounds played, and what each loop is set to. */
 const fake = () => {
   const played: Played[] = [];
-  const sets: Record<number, [number, number][]> = { [SOUND.WIND]: [], [SOUND.SCRAPE]: [] };
+  const sets: Record<number, [number, number][]> = {
+    [SOUND.WIND]: [],
+    [SOUND.SCRAPE]: [],
+    [SOUND.ENGINE]: [],
+    [SOUND.SKID]: [],
+  };
   let muted = false;
   const audio: Audio = {
     unlock: () => {},
@@ -362,5 +370,161 @@ describe('the others', () => {
     // Back, far from where they were: a new player, no landing and no step on the first frame.
     f.others([player({ id: 2, x: 99, y: 0, vy: -20 })], () => 50);
     expect(played).toEqual([]);
+  });
+});
+
+describe('the rover the own player sits in', () => {
+  const car = (over: Partial<Rover> = {}): Rover => ({
+    x: 0,
+    y: 1.1,
+    z: 0,
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    yaw: 0,
+    pitch: 0,
+    roll: 0,
+    wy: 0,
+    wp: 0,
+    wr: 0,
+    steer: 0,
+    driver: 1,
+    rider: NOBODY,
+    ...over,
+  });
+  const last = (l: [number, number][]) => l.at(-1)!;
+
+  it('is silent on foot: no loop is even started, and a rover left goes quiet', () => {
+    const { audio, sets, played } = fake();
+    const f = createFoley(audio);
+    f.rover(undefined, DT);
+    expect(sets[SOUND.ENGINE]).toEqual([]);
+    f.rover(car({ vz: -10 }), DT, KEY.FORWARD);
+    expect(last(sets[SOUND.ENGINE])[0]).toBeGreaterThan(0);
+    f.rover(undefined, DT);
+    expect(last(sets[SOUND.ENGINE])[0]).toBe(0);
+    expect(last(sets[SOUND.SKID])[0]).toBe(0);
+    expect(played).toEqual([]);
+  });
+
+  it('idles at rest, and is louder and higher the faster it goes, more so under the throttle', () => {
+    const { audio, sets } = fake();
+    const f = createFoley(audio);
+    const at = (v: number, keys = 0) => {
+      f.rover(car({ vz: -v }), DT, keys);
+      return last(sets[SOUND.ENGINE]);
+    };
+    const [idle, slow, fast, top] = [at(0), at(6), at(15), at(ROVER.VMAX)];
+    expect(idle[0]).toBeGreaterThan(0.1);
+    for (const k of [0, 1]) {
+      expect(slow[k]).toBeGreaterThan(idle[k]);
+      expect(fast[k]).toBeGreaterThan(slow[k]);
+      expect(top[k]).toBeGreaterThan(fast[k]);
+      expect(at(6, KEY.FORWARD)[k]).toBeGreaterThan(slow[k]);
+      // Past the top speed it revs no higher.
+      expect(at(40)[k]).toBe(top[k]);
+    }
+    // In reverse as forward.
+    expect(at(-6)).toEqual(slow);
+  });
+
+  it('is silent while muted', () => {
+    const { audio, sets } = fake();
+    const f = createFoley(audio);
+    f.rover(car({ vz: -10 }), DT);
+    audio.mute(true);
+    f.rover(car({ vz: -10 }), DT);
+    expect(last(sets[SOUND.ENGINE])[0]).toBe(0);
+  });
+
+  it('skids while it slides sideways past the threshold, louder the wider, and not while it rolls straight', () => {
+    const { audio, sets } = fake();
+    const f = createFoley(audio);
+    const at = (vx: number, vz = -12) => {
+      f.rover(car({ vx, vz }), DT);
+      return last(sets[SOUND.SKID])[0];
+    };
+    expect(at(0)).toBe(0);
+    expect(at(SKID_FROM - 0.1)).toBe(0);
+    const some = at(SKID_FROM + 2);
+    expect(some).toBeGreaterThan(0);
+    expect(at(-(SKID_FROM + 6))).toBeGreaterThan(some);
+    // Across the look is along the nose once the nose has come round.
+    f.rover(car({ vx: -12, vz: 0, yaw: Math.PI / 2 }), DT);
+    expect(last(sets[SOUND.SKID])[0]).toBe(0);
+  });
+
+  /** A flight of `t` seconds under `g`, then the stop on the springs, then rolling on. */
+  const hop = (f: ReturnType<typeof createFoley>, t: number, g = 5, dt = DT) => {
+    let [y, vy] = [1.1, (g * t) / 2];
+    f.rover(car({ y, vy, vz: -10 }), dt);
+    for (let s = 0; s < t; s += dt) {
+      vy -= g * dt;
+      y += vy * dt;
+      f.rover(car({ y, vy, vz: -10 }), dt);
+    }
+    for (const k of [0.4, 0, -0.1, 0, 0, 0]) {
+      f.rover(car({ y: 1.1, vy: -vy * k, vz: -10 }), dt);
+    }
+  };
+
+  it.each([DT, 1 / 144, 1 / 30])('thuds once per landing (frames of %f s)', dt => {
+    const { audio, ids, played } = fake();
+    const f = createFoley(audio);
+    hop(f, 1.2, 5, dt);
+    expect(ids()).toEqual([SOUND.THUD]);
+    expect(played[0].at).toBeUndefined();
+    hop(f, 1.2, 5, dt);
+    expect(ids()).toEqual([SOUND.THUD, SOUND.THUD]);
+  });
+
+  it('thuds harder and lower after a longer fall', () => {
+    const { audio, played } = fake();
+    const f = createFoley(audio);
+    hop(f, 0.9);
+    hop(f, 3);
+    expect(played).toHaveLength(2);
+    expect(played[1].gain!).toBeGreaterThan(played[0].gain!);
+    expect(played[1].rate!).toBeLessThan(played[0].rate!);
+  });
+
+  it('does not thud on its springs, nor over a crest onto a downhill, nor when parked again', () => {
+    const { audio, played } = fake();
+    const f = createFoley(audio);
+    // The body bobbing on the springs: 2 Hz, a few centimetres.
+    for (let k = 0; k < 240; k++) {
+      f.rover(car({ vy: 0.4 * Math.cos(k * DT * 12), vz: -10 }), DT);
+    }
+    // Over a crest: the climb turns into a descent in half a second, which then holds.
+    for (let k = 0; k < 120; k++) {
+      f.rover(car({ vy: Math.max(-6, 6 - k * DT * 24), vz: -10 }), DT);
+    }
+    // Falling into the rille, then back on its spawn 100 m away.
+    for (let k = 0; k < 60; k++) {
+      f.rover(car({ y: -k, vy: -k * DT * 5 - 3 }), DT);
+    }
+    f.rover(car({ x: 100, vy: 0 }), DT);
+    f.rover(car({ x: 100, vy: 0 }), DT);
+    expect(played).toEqual([]);
+  });
+
+  it('thuds once when the real rover drives off a ledge and lands, and not while it drives on flat ground', () => {
+    const { audio, ids } = fake();
+    const f = createFoley(audio);
+    // Flat at 3 m up to x = 30, the ground at 0 beyond.
+    const w = land(x => (x < 30 ? 3 : 0));
+    const r = parked(w, 0, 0, -Math.PI / 2);
+    for (let k = 0; k < 150; k++) {
+      run(r, w, 1, KEY.FORWARD);
+      f.rover(r, DT, KEY.FORWARD);
+    }
+    expect(r.x).toBeLessThan(28);
+    expect(ids()).toEqual([]);
+    for (let k = 0; k < 300; k++) {
+      drive(r, undefined, w);
+      f.rover(r, DT);
+    }
+    expect(r.x).toBeGreaterThan(32);
+    expect(ids()).toEqual([SOUND.THUD]);
   });
 });

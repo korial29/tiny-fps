@@ -11,13 +11,14 @@ import {
   TEAM_NAME,
 } from '../shared/constants';
 import type { Result } from '../shared/protocol';
-import { FLAG } from '../shared/types';
-import type { Snapshot } from '../shared/types';
+import { ROVER } from '../shared/rover';
+import { FLAG, MODE, NOBODY } from '../shared/types';
+import type { PlayerState, Rover, Snapshot } from '../shared/types';
 import { FH, FW, PALETTE, sprite } from './face';
 import type { Mark } from './marks';
 
 export const HUD_CSS =
-  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,samp,cite{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
@@ -61,7 +62,43 @@ export const HUD_CSS =
   // The maps over the title screen, and over the end screen when the pointer is free: the host's buttons.
   `menu{top:10px;left:50%;transform:translateX(-50%);z-index:3;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px;width:max-content;max-width:calc(100% - 24px);font-size:12px}` +
   `menu button{font:700 13px system-ui,sans-serif;color:#fff;background:#0008;border:1px solid #fff5;border-radius:4px;padding:5px 12px;cursor:pointer;pointer-events:auto}` +
-  `menu .n{border-color:#fe6;color:#fe6;box-shadow:0 0 8px #f924}menu button:disabled{cursor:default}`;
+  `menu .n{border-color:#fe6;color:#fe6;box-shadow:0 0 8px #f924}menu button:disabled{cursor:default}` +
+  // The rover: the key to get in or out, over the face, and the speed where the gun's count is; at the wheel the gun, the crosshair and the visor's rim go.
+  `samp{left:50%;bottom:128px;transform:translateX(-50%);padding:6px 14px;border-radius:6px;background:#0008;font:inherit;font-size:15px;white-space:nowrap}` +
+  `samp var{display:inline-block;margin-right:8px;padding:1px 7px;border:1px solid #fffb;border-radius:4px;font-style:normal;font-weight:900}` +
+  `cite{right:12px;bottom:10px;font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}cite small{margin-left:6px;font-size:14px}` +
+  `div.v>i,.v dl,.v del{display:none}`;
+
+/** Seconds the way out is shown after sitting down. */
+export const OUT_HINT = 4;
+
+/**
+ * What E does for a player on foot: 'drive' within ROVER.ENTER_R of a rover whose wheel is free,
+ * 'ride' when only the seat beside it is, or when he carries a flag (a carrier does not drive),
+ * '' with no free seat in reach, seated or down. The nearest rover with a seat for him counts.
+ */
+export const boarding = (
+  me: Pick<PlayerState, 'x' | 'y' | 'z' | 'mode' | 'down'> | undefined,
+  rovers: readonly Rover[],
+  carrying = false,
+): '' | 'drive' | 'ride' => {
+  let [best, what]: [number, '' | 'drive' | 'ride'] = [ROVER.ENTER_R, ''];
+  if (!me || me.down || me.mode === MODE.RIDE) {
+    return what;
+  }
+  for (const r of rovers) {
+    const d = Math.hypot(r.x - me.x, r.z - me.z);
+    const seat = r.driver === NOBODY && !carrying ? 'drive' : r.rider === NOBODY ? 'ride' : '';
+    if (seat && d <= best && Math.abs(r.y - me.y) <= ROVER.ENTER_R) {
+      [best, what] = [d, seat];
+    }
+  }
+  return what;
+};
+
+/** The speed-o-meter's reading of a rover: whole km/h over the ground. */
+export const kmh = (r: Pick<Rover, 'vx' | 'vz'>): number =>
+  Math.round(Math.hypot(r.vx, r.vz) * 3.6);
 
 /** What the end screen shows: the final captures and what each player did. */
 export interface Summary {
@@ -133,6 +170,11 @@ export interface Hud {
   down(level: number, left: number): void;
   /** A line in the middle of the top of the screen in `team`'s colour, for a few seconds; a newer one replaces it. */
   banner(text: string, team?: number): void;
+  /**
+   * The rover: `act` is what E does now ('drive', 'ride', 'get out'; '' hides the prompt), and
+   * `speed` the km/h shown at the wheel, where the gun and the crosshair then hide; undefined off it.
+   */
+  rover(act: string, speed?: number): void;
   /** The end screen with the result and each player's captures and returns, `next` seconds before the next match; undefined hides it. */
   end(sum: Summary | undefined, next: number): void;
 }
@@ -151,7 +193,7 @@ export const createHud = (screen: HTMLElement): Hud => {
     `<aside hidden><h6>TINY FPS</h6><span></span><table>` +
       `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Shift<td>sprint<tr><td>Space<td>jump, again in the air` +
       `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>Left click<td>fire, hold to charge<tr><td>R<td>swap the battery<tr><td>1, 2, 3, 4, wheel<td>gun, katana, rail gun, laser rifle` +
-      `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>special: lunge, energy arc, leap<tr><td>Blades locked<td>click fast; step aside to break<tr><td>M<td>mute<tr><td>Esc<td>this screen: the host picks the map at the top</table>` +
+      `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>special: lunge, energy arc, leap<tr><td>Blades locked<td>click fast; step aside to break<tr><td>E<td>rover: get in, get out (W/S drive toward the look, Space handbrake)<tr><td>M<td>mute<tr><td>Esc<td>this screen: the host picks the map at the top</table>` +
       `<span>Take the enemy flag to your own base while yours is home. Jump onto the armoury past your flag for the gun, the katana and the rail gun. Hold the rail gun's lightning on a foe: it slows him and drains 1 health a second, and 3 s more after it lets go.</span>` +
       `<strong></strong></aside><menu hidden></menu>` +
       `<del hidden></del><u></u><h5 hidden>Muted (M)</h5>` +
@@ -161,7 +203,7 @@ export const createHud = (screen: HTMLElement): Hud => {
       `<data></data><span></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
       `<s hidden></s><mark hidden></mark><ins hidden><i></i></ins>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav>` +
-      `<output hidden></output>` +
+      `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
   );
   const one = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
@@ -182,6 +224,7 @@ export const createHud = (screen: HTMLElement): Hud => {
   let pen: CanvasRenderingContext2D | null | undefined;
   let shown = -1;
   const banner = one('output');
+  const [prompt, act, meter, speed] = ['samp', 'samp span', 'cite', 'cite span'].map(t => one(t));
   const vignette = one('u');
   const rim = one('del');
   const end = one('section');
@@ -334,6 +377,13 @@ export const createHud = (screen: HTMLElement): Hud => {
       banner.style.color = team === undefined ? '#fff' : TEAM_COLOR[team];
       clearTimeout(timer);
       timer = setTimeout(() => (banner.hidden = true), BANNER_MS);
+    },
+    rover(what, v) {
+      prompt.hidden = !what;
+      set(act, what);
+      meter.hidden = v === undefined;
+      set(speed, `${v ?? 0}`);
+      screen.classList.toggle('v', v !== undefined);
     },
     end(sum, left) {
       end.hidden = !sum;

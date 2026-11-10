@@ -73,9 +73,10 @@ describe('MOON', () => {
     expect(MOON.floor).toBe(-20);
   });
 
-  it('has brushes with min below max, known textures and tints, under 250 of them', () => {
+  it('has brushes with min below max, known textures and tints, under 450 of them', () => {
     expect(brushes.length).toBeGreaterThan(60);
-    expect(brushes.length).toBeLessThan(250);
+    // Room for a base with an inside: its walls are brushes too.
+    expect(brushes.length).toBeLessThan(450);
     const tex: number[] = Object.values(TEX);
     for (const [i, b] of brushes.entries()) {
       for (let a = 0; a < 3; a++) {
@@ -90,7 +91,8 @@ describe('MOON', () => {
 
   it('is regolith and rock with a white, metal and steel base and team colours near each flag', () => {
     const stone = brushes.filter(b => b.top === TEX.STONE).length;
-    expect(stone).toBeGreaterThan(brushes.length * 0.1);
+    // Counted, not a share: the base's walls would dilute it.
+    expect(stone).toBeGreaterThan(12);
     const count = (id: number) => brushes.filter(b => b.top === id || b.side === id).length;
     expect(count(TEX.CONCRETE)).toBeGreaterThan(20);
     expect(count(TEX.METAL)).toBeGreaterThanOrEqual(4);

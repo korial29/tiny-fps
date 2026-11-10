@@ -5,8 +5,9 @@
 // Input, 12 bytes: [type u8 = MSG_INPUT][seq u16][keys u16][yaw u16][pitch i16][view u16][frac u8]
 //   yaw in 65536ths of a turn, decoded in [0, 2π); pitch in 1/10000 rad; view is the host tick
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
-//   keys is a u16: KEY bits 0 to 13 (forward, back, left, right, jump, sprint, dash, crouch, fire, blade, special, rail, reload, rifle).
-// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][count u8], then count × 61 bytes:
+//   keys is a u16: KEY bits 0 to 14 (forward, back, left, right, jump, sprint, dash, crouch, fire, blade, special, rail, reload, rifle, use).
+// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][counts u8], counts: bits 0-4 the players, bits 5-7
+//   the rovers (0 on a map without any). Then players × 61 bytes:
 //   [id u8][x f32][y f32][z f32][vx f32][vy f32][vz f32][edge f32]
 //   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8][stun u8]
 //   [gun u24][shots u8][hits u8][swing u8][lost u8][charge u8][lock u8][foe u8][pushes u8][away u8]
@@ -31,12 +32,18 @@
 //   last step (`pressed`); pushes: the FIRE presses in the lock; away: the ticks a side or back key
 //   has been held in it. rail: the rail gun's ticks of lightning plus one (0: no rail gun);
 //   railing: bit 0 railed (it is in hand), bit 1 inRail (inside the circle of the rail rack), bit 2
-//   zapping (its bolt went out), bit 3 rifled (the laser rifle in hand), bit 4 inRifle, bit 5 hot (overheated); slow: the ticks left drained by the bolt. Bit 4 of lost: fried; bit
+//   zapping (its bolt went out), bit 3 rifled (the laser rifle in hand), bit 4 inRifle, bit 5 hot (overheated),
+//   bit 6 USE held (the third bit of `held`: the timers byte is full); slow: the ticks left drained by the bolt. Bit 4 of lost: fried; bit
 //   5: heavy (the katana's charged cut let go). charge is the katana's too, held at a cut's top.
 //   mag: the shots in the gun's battery; cap: the ticks in the rail gun's capsule; reload: the ticks
 //   left swapping the one in hand; rifle: the laser rifle's rounds plus one (0: none); clip: its cell;
 //   heat: the rail gun's heat (HEAT_MAX at most).
-//   Then the match, after the players: [red u8][blue u8][clock u16] the captures of each team, and
+//   Then the rovers, rovers × 54 bytes, in the order of WorldDef.rovers:
+//     [x f32][y f32][z f32][vx f32][vy f32][vz f32][yaw f32][pitch f32][roll f32][wy f32][wp f32]
+//     [wr f32][steer f32][driver u8][rider u8]
+//     All thirteen are the host's float32, exact, the angles too: the driver's client replays its
+//     inputs from them (drive in rover.ts). driver and rider are player ids, NOBODY (255) when empty.
+//   Then the match, after the rovers: [red u8][blue u8][clock u16] the captures of each team, and
 //   the whole seconds to the end of the match (bit 15: it is over, and the clock counts to the next
 //   one), [packs u48: high u16, low u32] bit n set when pack n is there to take (Snapshot.packs); then the red and the blue flag, each [state u8 = FLAG] and by state:
 //     HOME: nothing more (2 bytes in all for the two flags);
@@ -48,11 +55,11 @@
 //     where it is: the last snapshot that carries it); x, y, z in 1/32 m; the direction as a yaw in
 //     256ths of a turn and a pitch in 127ths of a quarter turn; power: the health it takes, or for an
 //     arc of energy bit 7 set and the CUT that threw it (Ball.arc) in bits 0-6.
-//   A snapshot is 4 + 61 × players + 8 + 2 to 16 bytes: 10 on top of the players when both flags are
-//   home and no ball flies; with balls, 1 + 11 × balls more.
+//   A snapshot is 4 + 61 × players + 54 × rovers + 10 + 2 to 16 bytes: 12 on top of the players and
+//   the rovers when both flags are home and no ball flies; with balls, 1 + 11 × balls more.
 // Every multi-byte field is big-endian (DataView's default).
 import { FLAG, KEY, MODE } from './types';
-import type { Ball, FlagState, Input, PlayerInfo, Snapshot } from './types';
+import type { Ball, FlagState, Input, PlayerInfo, Rover, Snapshot } from './types';
 
 /** join: the first frame of a peer. map: the host picks the map of the next match (MAPS key). */
 export type ClientText = { t: 'join'; name: string } | { t: 'map'; map: string };
@@ -89,7 +96,16 @@ export const MSG_SNAPSHOT = 2;
 export const INPUT_BYTES = 12;
 export const SNAP_HEAD = 4;
 export const SNAP_PLAYER = 61;
-/** The match block after the players: the captures, the clock, the packs; the flags follow (2 to 16 bytes). */
+/** Bytes of a rover: thirteen float32 and the two seats. */
+export const SNAP_ROVER = 54;
+/** The rover count has three bits of the head's count byte, the players the other five. */
+export const MAX_ROVERS = 7;
+/** A rover's floats, in wire order. */
+const ROVER_F = [
+  ...['x', 'y', 'z', 'vx', 'vy', 'vz', 'yaw'],
+  ...['pitch', 'roll', 'wy', 'wp', 'wr', 'steer'],
+] as const;
+/** The match block after the players and the rovers: the captures, the clock, the packs; the flags follow (2 to 16 bytes). */
 export const SNAP_MATCH = 10;
 
 /** Bytes of a plasma ball. */
@@ -164,13 +180,16 @@ const flagBytes = (state: number): number =>
   state === FLAG.CARRIED ? 2 : state === FLAG.DROPPED ? 8 : 1;
 
 export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
-  const end = SNAP_HEAD + SNAP_PLAYER * s.players.length;
+  // A rover past the count's three bits is not sent.
+  const rovers = (s.rovers ?? []).slice(0, MAX_ROVERS);
+  const mid = SNAP_HEAD + SNAP_PLAYER * s.players.length;
+  const end = mid + SNAP_ROVER * rovers.length;
   const balls = s.balls ?? [];
   const tail = end + SNAP_MATCH + s.flags.reduce((n, f) => n + flagBytes(f.state), 0);
   const v = new DataView(new ArrayBuffer(tail + (balls.length && 1 + SNAP_BALL * balls.length)));
   v.setUint8(0, MSG_SNAPSHOT);
   v.setUint16(1, s.tick & 0xffff);
-  v.setUint8(3, s.players.length);
+  v.setUint8(3, s.players.length | (rovers.length << 5));
   s.players.forEach((p, i) => {
     const o = SNAP_HEAD + i * SNAP_PLAYER;
     v.setUint8(o, p.id);
@@ -226,7 +245,8 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
         (+!!p.zapping << 2) |
         (+!!p.rifled << 3) |
         (+!!p.inRifle << 4) |
-        (+!!p.hot << 5),
+        (+!!p.hot << 5) |
+        (p.held & KEY.USE ? 64 : 0),
     );
     v.setUint8(o + 54, p.slow ?? 0);
     v.setUint8(o + 55, p.mag ?? 0);
@@ -235,6 +255,12 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint8(o + 58, (p.rifle ?? -1) + 1);
     v.setUint8(o + 59, p.clip ?? 0);
     v.setUint8(o + 60, p.heat ?? 0);
+  });
+  rovers.forEach((r, i) => {
+    const o = mid + i * SNAP_ROVER;
+    ROVER_F.forEach((k, j) => v.setFloat32(o + 4 * j, r[k]));
+    v.setUint8(o + 52, r.driver);
+    v.setUint8(o + 53, r.rider);
   });
   v.setUint8(end, s.score[0]);
   v.setUint8(end + 1, s.score[1]);
@@ -276,8 +302,9 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     return null;
   }
   const v = new DataView(buf);
-  const count = v.getUint8(3);
-  const end = SNAP_HEAD + SNAP_PLAYER * count;
+  const count = v.getUint8(3) & 31;
+  const mid = SNAP_HEAD + SNAP_PLAYER * count;
+  const end = mid + SNAP_ROVER * (v.getUint8(3) >> 5);
   if (v.getUint8(0) !== MSG_SNAPSHOT || buf.byteLength < end + SNAP_MATCH + 2) {
     return null;
   }
@@ -312,7 +339,10 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       by: ((dash >> 6) << 2) | (stun >> 6),
       coyote: timers & 7,
       buffer: (timers >> 3) & 7,
-      held: (timers & 64 ? KEY.JUMP : 0) | (timers & 128 ? KEY.DASH : 0),
+      held:
+        (timers & 64 ? KEY.JUMP : 0) |
+        (timers & 128 ? KEY.DASH : 0) |
+        (v.getUint8(o + 53) & 64 ? KEY.USE : 0),
       ev: 0,
       fall: 0,
       hp: gun & 7,
@@ -351,6 +381,12 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       hot: (v.getUint8(o + 53) & 32) > 0,
       heat: v.getUint8(o + 60),
     });
+  }
+  const rovers: Rover[] = [];
+  for (let o = mid; o < end; o += SNAP_ROVER) {
+    const r = { driver: v.getUint8(o + 52), rider: v.getUint8(o + 53) } as Rover;
+    ROVER_F.forEach((k, j) => (r[k] = v.getFloat32(o + 4 * j)));
+    rovers.push(r);
   }
   const clock = v.getUint16(end + 2);
   let o = end + SNAP_MATCH;
@@ -402,6 +438,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     flags: flags as Snapshot['flags'],
     packs: v.getUint16(end + 4) * 2 ** 32 + v.getUint32(end + 6),
     ...(n ? { balls } : {}),
+    ...(rovers.length ? { rovers } : {}),
   };
 };
 

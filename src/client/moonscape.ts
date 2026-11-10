@@ -3,7 +3,7 @@
 // stands on it, the stars and the Earth. Nothing here is collided with: shared/moon.ts has a ghost box
 // under each piece a player can reach. Every part is lit paint
 // (layer -1) or glow (layer -2: windows, lamps, stars, the Earth), but the relief and the small
-// craters on the floor, in the floor's own stone.
+// craters on the floor, in the floor's own stone, and the boulders, in basalt (TEX.ROCK).
 import { LAYOUT } from '../shared/moon';
 import { TAU } from '../shared/physics';
 import { raise } from '../shared/relief';
@@ -140,7 +140,14 @@ const clip = (faces: Vec3[][], n: Vec3, h: number) => {
             p[2] + (q[2] - p[2]) * t,
           ];
           kept.push(x);
-          cap.push(x);
+          // Each cut edge is in two faces: its point goes in the cap once.
+          if (
+            !cap.some(
+              c => Math.abs(c[0] - x[0]) + Math.abs(c[1] - x[1]) + Math.abs(c[2] - x[2]) < 1e-9,
+            )
+          ) {
+            cap.push(x);
+          }
         }
       });
       return kept;
@@ -185,10 +192,10 @@ const BLOCK: Vec3[][] = [0, 1, 2].flatMap(k =>
 /**
  * A boulder about `at`, radii (x, y, z), seed s: a block cut by a flat bed 0.35 of the height
  * under `at`, a top and three rings of planes at hashed bearings, tilts and distances, so flat facets
- * meet at sharp edges; stretched along a hashed bearing; each facet its own shade of the colour,
- * the ones facing down darker.
+ * meet at sharp edges; stretched along a hashed bearing; in basalt (TEX.ROCK) laid flat on each
+ * facet, `shade` its light, each facet a hash lighter or darker and the ones facing down darker.
  */
-const rock = (o: number[], at: Vec3, [rx, ry, rz]: number[], s: number, rgb: number[]) => {
+const rock = (o: number[], at: Vec3, [rx, ry, rz]: number[], s: number, shade: number) => {
   const h = (i: number, k: number) => hash(i, k, s);
   let f = clip(BLOCK, [0, -1, 0], 0.35);
   const tilt = (y: number, t: number, d: number) => {
@@ -215,15 +222,12 @@ const rock = (o: number[], at: Vec3, [rx, ry, rz]: number[], s: number, rgb: num
     return [at[0] + u * cb - w * sb, at[1] + y * ry, at[2] + u * sb + w * cb];
   };
   f.forEach((g, i) => {
-    // Without the points a cut left (almost) on top of each other or in line: no sliver triangles.
-    const p = g.map(pt).filter((q, j, l) => {
-      const [a, c] = [l[(j + l.length - 1) % l.length], l[(j + 1) % l.length]];
-      const d = cross(
-        [q[0] - a[0], q[1] - a[1], q[2] - a[2]],
-        [c[0] - q[0], c[1] - q[1], c[2] - q[2]],
+    // Without a point a cut left (almost) on the one before it: no sliver triangles.
+    const p = g
+      .map(pt)
+      .filter(
+        (q, j, l) => Math.hypot(...q.map((v, k) => v - l[(j + l.length - 1) % l.length][k])) > 1e-5,
       );
-      return Math.hypot(...d) > 1e-6;
-    });
     if (p.length < 3) {
       return;
     }
@@ -233,18 +237,29 @@ const rock = (o: number[], at: Vec3, [rx, ry, rz]: number[], s: number, rgb: num
         [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]],
       ),
     );
-    const k =
-      (0.85 + 0.3 * h(i, 7)) *
-      (0.72 + 0.28 * Math.sqrt(Math.max(Math.abs(n[1]) * Math.sign(n[1]) + 1, 0) / 2));
-    face(
-      o,
-      p,
-      rgb.map(v => v * k),
-      at,
-    );
+    // Outward, round from the rock's middle.
+    if (n[0] * (p[0][0] - at[0]) + n[1] * (p[0][1] - at[1]) + n[2] * (p[0][2] - at[2]) < 0) {
+      p.reverse();
+      n.forEach((v, k) => (n[k] = -v));
+    }
+    // The basalt laid flat on the facet, in metres, shifted by the seed; each facet a shade of the rock's own.
+    const t = unit(cross(n, Math.abs(n[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]));
+    const q = cross(n, t);
+    const w =
+      0.85 * shade * (0.88 + 0.24 * h(i, 7)) * (0.8 + 0.2 * Math.sqrt(Math.max(n[1] + 1, 0) / 2));
+    const vert = (a: Vec3) => [
+      ...a,
+      ...n,
+      a[0] * t[0] + a[1] * t[1] + a[2] * t[2] + 7 * h(0, 5),
+      a[0] * q[0] + a[1] * q[1] + a[2] * q[2] + 7 * h(0, 6),
+      TEX.ROCK,
+      w,
+    ];
+    for (let k = 1; k < p.length - 1; k++) {
+      o.push(...vert(p[0]), ...vert(p[k]), ...vert(p[k + 1]));
+    }
   });
 };
-const grey = (g: number) => [g, g, g * 0.95];
 
 /**
  * A landing pad (radius 13) with its painted rings and 24 lights, and a shuttle lying on it from x = s, nose toward +x.
@@ -330,7 +345,7 @@ const base = (o: number[]) => {
   }
   // Boulders along the three walls of the half, and the field's stones round their boxes (shared/moon.ts collides with both).
   LAYOUT.boulders.forEach(([x, z, r], i) =>
-    rock(o, [x, r * 0.15, z], [r, 0.7 * r, r], i, grey(0.2 + 0.15 * hash(i, 5, 41))),
+    rock(o, [x, r * 0.15, z], [r, 0.7 * r, r], i, 0.8 + 0.4 * hash(i, 5, 41)),
   );
   LAYOUT.stones.forEach(([x, z, w, d, h], i) =>
     rock(
@@ -338,7 +353,7 @@ const base = (o: number[]) => {
       [x + w / 2, 0.3 * h, z + d / 2],
       [0.66 * w, 1.05 * h, 0.66 * d],
       i + 61,
-      grey(0.27 + 0.06 * hash(i, 7, 41)),
+      0.95 + 0.2 * hash(i, 7, 41),
     ),
   );
 };
@@ -512,7 +527,7 @@ const terrain = (o: number[], def: WorldDef) => {
 const sites = (o: number[], def: WorldDef) => {
   const { at } = def.relief!;
   LAYOUT.rocks.forEach(([x, z, r], i) =>
-    rock(o, [x, at(x, z) + 0.15 * r, z], [r, 0.7 * r, r], i + 7, grey(0.24 + 0.1 * hash(i, 5, 43))),
+    rock(o, [x, at(x, z) + 0.15 * r, z], [r, 0.7 * r, r], i + 7, 0.85 + 0.35 * hash(i, 5, 43)),
   );
   // The dishes look at the Earth.
   const side = unit(cross([0, 1, 0], EARTH));
@@ -554,7 +569,7 @@ const sites = (o: number[], def: WorldDef) => {
     const [f, t] = [1.03 + 0.22 * hash(k, 1, 51), TAU * hash(k, 2, 51)];
     const [u, v] = [C[0] + 300 * f * Math.cos(t), C[2] + 360 * f * Math.sin(t)];
     const r = 3 + 9 * hash(k, 3, 51) ** 3;
-    rock(o, [u, at(u, v) - 0.4 * r, v], [r, 0.7 * r, r], k, grey(0.2 + 0.12 * hash(k, 4, 51)));
+    rock(o, [u, at(u, v) - 0.4 * r, v], [r, 0.7 * r, r], k, 0.8 + 0.4 * hash(k, 4, 51));
   }
 };
 

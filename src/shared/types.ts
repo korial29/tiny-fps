@@ -277,6 +277,8 @@ export const TEX = {
   STEEL: 10,
   /** A near white painted panel: the brush tint is its colour. */
   PAINT: 11,
+  /** Dark basalt: mottled, speckled with pits and light flecks, a few fine cracks. The moon's boulders. */
+  ROCK: 12,
 } as const;
 
 /** One player in a snapshot: the state (its ev and fall read 0) and the ack. */

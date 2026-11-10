@@ -110,7 +110,7 @@ o=vec4(c,1);}`;
 
 /**
  * Blinn-Phong strength and exponent: a row per TEX id in order (brick, tile, lava, stone, metal, wood,
- * moss, grate, concrete, glass, steel, paint), then the flat bodies, then polished metal (SHINE). Lava
+ * moss, grate, concrete, glass, steel, paint, rock), then the flat bodies, then polished metal (SHINE). Lava
  * and glows never get here: they light themselves.
  */
 export const SPEC = [
@@ -126,6 +126,7 @@ export const SPEC = [
   [1.5, 110],
   [0.9, 60],
   [0.25, 30],
+  [0.12, 16],
   [0.1, 24],
   [1.4, 90],
 ];

@@ -194,6 +194,30 @@ GEN[TEX.PAINT] = (u, v) => {
     : [scale([246, 246, 248], 0.96 + 0.06 * n), 0.85 + 0.04 * n];
 };
 
+// Basalt in a 2 m tile: dark mottled grey, small dark pits (vesicles) and pale flecks on a 64 cell
+// grid, hairline cracks where a ridged noise crosses its middle, only over a third of the tile;
+// pits and cracks lie low.
+GEN[TEX.ROCK] = (u, v) => {
+  const f = fbm(u * 4, v * 4, 4, 4, 21);
+  const where = clamp((noise(u * 2, v * 2, 2, 24) - 0.55) * 8);
+  const crack = where * Math.max(0, 1 - Math.abs(fbm(u * 2, v * 2, 2, 3, 23) - 0.5) * 110);
+  const [a, b] = [Math.floor(u * 64), Math.floor(v * 64)];
+  const [cu, cv] = [((u * 64) % 1) - 0.5, ((v * 64) % 1) - 0.5];
+  const r = hash(a, b, 25);
+  const pit = r < 0.06 ? clamp(1 - Math.hypot(cu, cv) / (0.2 + 3 * r)) : 0;
+  const fleck = r > 0.96 ? 0.35 : 0;
+  const grey = scale(
+    [84, 82, 79],
+    0.65 + 0.6 * f + 0.1 * hash(Math.floor(u * SIZE), Math.floor(v * SIZE), 27),
+  );
+  const c = mix(
+    mix(mix(grey, [150, 146, 140], fleck), [30, 29, 28], pit * 0.7),
+    [26, 25, 24],
+    crack * 0.7,
+  );
+  return [c, clamp(0.35 + 0.5 * f - 0.3 * pit - 0.25 * crack)];
+};
+
 /** All layers, RGBA, layer after layer, rows top to bottom: the upload of a texture array. */
 export const textures = (): Uint8ClampedArray => {
   const out = new Uint8ClampedArray(LAYERS * SIZE * SIZE * 4);

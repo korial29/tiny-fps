@@ -56,9 +56,10 @@ describe('moonscape', () => {
   });
 
   it('stays within a vertex budget and is the same every time', () => {
-    // Drawn whole in every pass, with no culling: the lattice inside the bound is most of it.
+    // Drawn whole in every pass, with no culling: the lattice inside the bound is most of it, the
+    // faceted boulders about 20,000.
     expect(verts.length).toBeGreaterThan(150000);
-    expect(verts.length).toBeLessThan(240000);
+    expect(verts.length).toBeLessThan(260000);
     expect(moonscape(MOON)).toEqual(v);
   });
 
@@ -227,7 +228,8 @@ describe('moonscape', () => {
       verts.filter(p => p[8] !== TEX.STONE && Math.hypot(p[0] - x, p[2] - z) < r);
     for (const [x, z, r] of LAYOUT.rocks) {
       const ys = by(x, z, 1.5 * r).map(p => p[1]);
-      expect(ys.length).toBeGreaterThanOrEqual(96);
+      // A faceted block: twenty triangles and more.
+      expect(ys.length).toBeGreaterThanOrEqual(60);
       expect(Math.min(...ys)).toBeLessThan(at(x, z));
       expect(Math.max(...ys)).toBeGreaterThan(at(x, z) + 0.4 * r);
     }
@@ -274,7 +276,7 @@ describe('moonscape and the rovers', () => {
   });
 
   it('is the 2,136 vertices of the four static rovers lighter', () => {
-    expect(verts.length).toBe(221271);
+    expect(verts.length).toBe(242223);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {

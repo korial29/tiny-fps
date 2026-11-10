@@ -2194,7 +2194,7 @@ const SAG = Math.atan2(REAR[1] - MUZZLE[1], REAR[2] - MUZZLE[2]);
  * where the right axis points, `up` where up is. The emitter is off the grip, so the axes are found
  * in three rounds.
  */
-export const pointed = (at: Vec3, to: Vec3, side: Vec3, up: Vec3): Vec3[] => {
+export const pointed = (at: Vec3, to: Vec3, side: Vec3, up: Vec3, sag = SAG): Vec3[] => {
   const scale = (v: Vec3, k: number): Vec3 => [v[0] * k, v[1] * k, v[2] * k];
   let ax: Vec3[] = [side, up, unit(sub(to, at))];
   for (let k = 0; k < 3; k++) {
@@ -2204,10 +2204,38 @@ export const pointed = (at: Vec3, to: Vec3, side: Vec3, up: Vec3): Vec3[] => {
     const r = unit(sub(side, scale(d, dot(side, d))));
     const u = unit(sub(sub(up, scale(d, dot(up, d))), scale(r, dot(up, r))));
     // The long axis dips below the gun's forward: turned about r, so that it lies along d.
-    const [s, c] = [Math.sin(SAG), Math.cos(SAG)];
+    const [s, c] = [Math.sin(sag), Math.cos(sag)];
     ax = [r, add(scale(u, c), scale(d, -s)), add(scale(d, c), scale(u, s))];
   }
   return ax;
+};
+
+/** The middle of the butt plate of the rail gun and of the laser rifle, in model space: what the shoulder takes. */
+export const BUTTS: Vec3[] = [
+  [0, axisY(-0.392) - 0.045, 0.392],
+  [0, 0.036, 0.336],
+];
+
+/**
+ * A long gun (`kind` 2 the rail gun, 3 the rifle) shouldered: its grip and its axes [right, up,
+ * forward] when its butt plate is at `butt` and its barrel points at `to`. The rail gun's barrel
+ * lies on the gun's long axis, the rifle's is level in its model.
+ */
+export const shouldered = (
+  butt: Vec3,
+  to: Vec3,
+  side: Vec3,
+  up: Vec3,
+  kind: number,
+): [Vec3, Vec3[]] => {
+  const b = BUTTS[kind - 2];
+  let at = butt;
+  let ax: Vec3[] = [];
+  for (let k = 0; k < 2; k++) {
+    ax = pointed(at, to, side, up, kind == 3 ? 0 : SAG);
+    at = butt.map((v, i) => v - ax[1][i] * b[1] + ax[2][i] * b[2]) as Vec3;
+  }
+  return [at, ax];
 };
 
 /** Where a runner's shots end: the first wall along its look from the eye, or the range. */

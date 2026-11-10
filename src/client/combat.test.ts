@@ -283,6 +283,25 @@ describe('the own shots', () => {
     expect(ids().at(-1)).toBe(SOUND.LASE);
   });
 
+  it('of another player’s long gun leave from its muzzle as his runner was drawn, from where he is now', () => {
+    const t = setup();
+    const combat = createCombat(WORLD, t.audio, t.hud, t.fx, t.tracer, t.ctl, t.balls, id =>
+      id == 5 ? [0.1, 1.4, -0.9] : undefined,
+    );
+    const foe = { id: 5, x: 3, z: -4, ammo: -1, rifle: 50, clip: 20, rifled: true };
+    const frame = (o: Partial<PlayerState>, now: number) =>
+      combat.frame(VIEW, player(), [player({ ...foe, ...o })], 0, 1 / 60, now);
+    frame({ shots: 4 }, 1000);
+    frame({ shots: 5, x: 3.5 }, 1016);
+    expect(t.flashes).toHaveLength(1);
+    t.flashes[0][0].forEach((v, i) => expect(v).toBeCloseTo([3.6, 1.4, -4.9][i]));
+    // The gun, in one hand, is not shouldered: its muzzle is where aimed() holds it out.
+    frame({ shots: 6, ammo: 9, rifled: false }, 1032);
+    expect(Math.hypot(...t.flashes[1][0].map((v, i) => v - [3.1, 1.4, -4.9][i]))).toBeGreaterThan(
+      0.1,
+    );
+  });
+
   it('of the laser rifle burst red on the wall, with a deeper, louder thud', () => {
     const { combat, frame, audio, orbs, bursts, reds } = setup();
     const rifled = { ammo: -1, rifle: 50, clip: 20, rifled: true };

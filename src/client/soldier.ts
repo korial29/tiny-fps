@@ -7,6 +7,7 @@ import {
   DASH_TICKS,
   DOWN_TICKS,
   HEAT_MAX,
+  RUN_SPEED,
   STEP_H,
   TICK_HZ,
 } from '../shared/constants';
@@ -33,7 +34,9 @@ import {
   held,
   kindOf,
   loadFrame,
+  shouldered,
   span,
+  tip,
   swapOf,
 } from './gun';
 import { helmet } from './helmet';
@@ -57,7 +60,7 @@ import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
 import { STRIDE, add, basis, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, axis, mul, slerp, solve } from './rig';
+import { JOINT as J, axis, mul, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
 import { body, cut, eyesOf, hairOf, palette, skin } from './skin';
 import { createTrail } from './trail';
@@ -94,6 +97,8 @@ export interface Runner {
   hurt: number;
   /** The seat he rides in, when he does and his rover is known. */
   seat?: Seat;
+  /** The muzzle of the long gun in his hands as last drawn, from his feet: where its shots are seen to leave (combat.ts). */
+  tip?: Vec3;
 }
 
 /**
@@ -193,16 +198,13 @@ export const animate = (
   }
 };
 
-/** The pose with the right arm `k` of the way to holding the gun out along the look of `p`. */
+/** The pose with the right arm `k` of the way to holding the gun's grip at `grip`, its axes `ax` (aimed(), shouldered()). */
 const lifted = (
   pose: Pose,
   s: ReturnType<typeof solve>,
-  p: PlayerState,
-  focused: Vec3,
+  [grip, ax]: [Vec3, Vec3[]],
   k: number,
 ): Pose => {
-  // Seated, the eye the gun is held out from is lower.
-  const [grip, ax] = aimed(p.mode == MODE.RIDE ? { ...p, y: p.y - SEATED } : p, focused);
   const rot = pose.rot.slice();
   const q = { ...pose, rot };
   const [uh, fh] = [ax[0], ax[2].map((v, i) => v * TILT[1] - ax[1][i] * TILT[0]) as Vec3];
@@ -219,12 +221,25 @@ const lifted = (
   return q;
 };
 
-/** How far a runner's rail gun is up toward his look when he is not firing it. */
-const READY = 0.6;
+/**
+ * A long gun's butt plate in the hollow of the right shoulder: from the shoulder joint, in the
+ * chest's frame (to its right, up, back). The gun goes from there along the look, so it is
+ * shouldered whatever the pitch (the user, 2026-11-10: it hung across the belly).
+ */
+export const POCKET: Vec3 = [-0.025, -0.01, -0.125];
+/** How much further ahead the butt is when the gun points straight up or down the chest: its plate, on end, clear of it. */
+const TIPPED = 0.05;
+/** How far the chest turns to the right behind a shouldered gun, the left shoulder toward its front grip: a rifleman's bladed stance, radians. */
+const BLADED = 0.5;
+/** The low ready of a sprint: the barrel this far under the horizon and to the left of the look, the butt still in the shoulder. */
+const LOW = [0.6, 0.35];
+const ease = (v: number) => (v = Math.min(Math.max(v, 0), 1)) * v * (3 - 2 * v);
+/** How far a runner has his long gun down to the low ready, 0 to 1: in a sprint, when he is not firing. */
+export const lowered = (r: Runner): number =>
+  ease((Math.hypot(r.p.vx, r.p.vz) - RUN_SPEED - 0.5) / 1.5) * (1 - r.aim);
 
 /** The katana carried in both hands, upright before the right shoulder, the edge forward: the guard's numbers (see katana.ts) from the eye. */
 const CARRY = [0.08, -0.28, 0.25, 0.27, 0.94, 0.21];
-const ease = (v: number) => (v = Math.min(Math.max(v, 0), 1)) * v * (3 - 2 * v);
 
 /**
  * The pose with the katana in both hands: carried, or in a cut, which is the first person's cut
@@ -376,7 +391,30 @@ export const stance = (r: Runner) => {
     if (p.railed && stowed(p)) {
       return { s, sink, yaw: pose.yaw };
     }
-    pose = lifted(pose, s, p, r.focus, Math.max(r.aim, READY));
+    // Bladed: the trunk turned behind the gun, the head still on the look.
+    const turned = p.mode == MODE.RIDE ? 0 : BLADED;
+    pose = { ...pose, rot: pose.rot.slice() };
+    pose.rot[J.SPINE] = mul(pose.rot[J.SPINE], axis([0, 1, 0], -0.4 * turned));
+    pose.rot[J.CHEST] = mul(pose.rot[J.CHEST], axis([0, 1, 0], -0.6 * turned));
+    pose.rot[J.NECK] = mul(inv(solve(pose).rot[J.CHEST]), s.rot[J.NECK]);
+    s = solve(pose);
+    // The butt in the shoulder, the barrel along the look (at the shot while it fires), or down
+    // and across at the low ready of a sprint.
+    const low = lowered(r);
+    const [side, top, look] = basis(p.yaw, p.pitch);
+    const d = basis(p.yaw + LOW[1], -LOW[0])[2];
+    const way = unit([0, 1, 2].map(i => look[i] + (d[i] - look[i]) * low) as Vec3);
+    const lean = turn(s.rot[J.CHEST], [0, 1, 0]);
+    const tipped = Math.abs(way[0] * lean[0] + way[1] * lean[1] + way[2] * lean[2]);
+    const butt = add(
+      s.pos[J.ARM_R],
+      turn(s.rot[J.CHEST], [POCKET[0], POCKET[1], POCKET[2] - TIPPED * tipped]),
+    );
+    const ahead = far(p);
+    const to = [0, 1, 2].map(
+      i => (ahead[i] + (r.focus[i] - ahead[i]) * r.aim) * (1 - low) + (butt[i] + 30 * d[i]) * low,
+    ) as Vec3;
+    pose = lifted(pose, s, shouldered(butt, to, side, top, kindOf(p)), 1);
     s = solve(pose);
     const [at, g, up] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R], kindOf(p));
     const [x, u, f] = basis(p.yaw, 0);
@@ -394,11 +432,17 @@ export const stance = (r: Runner) => {
       up ? RIFLE_HOLD : FIST,
       up ? RIFLE_TILT : undefined,
       false,
-      !!up,
+      true,
     );
     s = solve(pose);
   } else if (r.aim > 0.01 && p.ammo >= 0) {
-    pose = lifted(pose, s, p, r.focus, r.aim);
+    // Seated, the eye the gun is held out from is lower.
+    pose = lifted(
+      pose,
+      s,
+      aimed(p.mode == MODE.RIDE ? { ...p, y: p.y - SEATED } : p, r.focus),
+      r.aim,
+    );
     s = solve(pose);
   }
   // In a swap of the gun or the rifle the left hand fetches the new battery from the pouch on the
@@ -450,6 +494,7 @@ export const soldier = (
   if (k >= 1) {
     return;
   }
+  r.tip = undefined;
   const colors = palette(color, hairOf(p.id), eyesOf(p.id), armored);
   // The armour: white in space, else in the team's colour.
   const plate = helmets ? undefined : color;
@@ -523,6 +568,11 @@ export const soldier = (
       vel: [p.vx, p.vy, p.vz],
       carry,
     });
+    if (p.railed || p.rifled) {
+      const q = s.rot[J.HAND_R];
+      const m = tip(grip(s.pos[J.HAND_R], q), axes(q), kindOf(p));
+      r.tip = [m[0] - p.x, m[1] - p.y, m[2] - p.z];
+    }
   }
   if (r.dash > 0.15) {
     const [s, c] = [Math.sin(yaw), Math.cos(yaw)];

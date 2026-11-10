@@ -125,6 +125,12 @@ export const SOUND = {
   IGNITE: 38,
   /** The plasma gun charging, held: a whine played higher as the charge grows (combat.ts), looped. */
   CHARGE: 39,
+  /** The rover's electric turbine, looped: played higher as it goes faster. */
+  ENGINE: 40,
+  /** The rover's suspension taking a landing. */
+  THUD: 41,
+  /** The rover's tyres sliding sideways over the dust, looped: louder as it drifts wider. */
+  SKID: 42,
 } as const;
 
 /**
@@ -368,10 +374,40 @@ export const LAYERS: Voice[][] = [
     [1, 165, 0, 0.001, 2.1, 0.001, 0.1, 0.3, 0, 1, 0.2],
     [3, 5000, 0, 0.001, 2.1, 0.001, 0.5, 0.2, 0, 1, 0.1],
   ],
+  // ENGINE: a muffled saw at 49 Hz, the motor; its whine two octaves up and a turbine's whistle a
+  // twelfth over that, both wavering; a breath of held noise; held, to loop. Each tone is a quarter
+  // turn late where seam() joins the end to the start, so the loop keeps its level through the join.
+  [
+    [1, 49.08, 0, 0.001, 2.1, 0.001, 0, 0.12, 0, 1, 0.36],
+    [2, 195.93, 0, 0.001, 2.1, 0.001, 0.004, 1, 0, 1, 0.2],
+    [2, 588.04, 0, 0.001, 2.1, 0.001, 0.003, 1, 0, 1, 0.07],
+    [3, 6000, 0, 0.001, 2.1, 0.001, 0.3, 0.15, 0, 1, 0.25],
+  ],
+  // THUD: the body coming down on its springs, a deep sine thump; the dampers bottoming, a muffled
+  // square knock; the dust thrown up; and the springs' creak as they push back, late.
+  [
+    [2, 85, -2.2, 0.001, 0.02, 0.3, 0, 1, 0, 1, 1],
+    [0, 130, -3, 0.001, 0.01, 0.11, 0, 0.2, 0, 1, 0.6],
+    [3, 3500, -1.5, 0.001, 0.01, 0.18, 0, 0.3, 0, 1, 0.45],
+    [2, 300, -0.9, 0.01, 0.03, 0.2, 0.08, 1, 0, 1, 0.12, 0.07],
+  ],
+  // SKID: grit under the tyres, two bands of held noise that waver, the lower one the louder; held, to loop.
+  [
+    [3, 2600, 0, 0.001, 2.1, 0.001, 0.6, 0.35, 0, 1, 0.4],
+    [3, 700, 0, 0.001, 2.1, 0.001, 0.45, 0.25, 0, 1, 0.5],
+  ],
 ];
 
 /** The sounds played in a loop: their buffers go through seam. */
-export const LOOPED: number[] = [SOUND.WIND, SOUND.SCRAPE, SOUND.HUM, SOUND.BUZZ, SOUND.CHARGE];
+export const LOOPED: number[] = [
+  SOUND.WIND,
+  SOUND.SCRAPE,
+  SOUND.HUM,
+  SOUND.BUZZ,
+  SOUND.CHARGE,
+  SOUND.ENGINE,
+  SOUND.SKID,
+];
 
 /**
  * Renders the sound `id` of `layers` as mono samples in [-1, 1] at RATE, deterministic (seeded

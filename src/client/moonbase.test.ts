@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { MOON, ZED } from '../shared/moon';
-import { BASE, HALL, MOUTHS } from '../shared/moonbase';
+import { TEAM_TINT } from '../shared/map';
+import { BASE, HALL, KIT, MOUTHS } from '../shared/moonbase';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
 import { STRIDE } from './mesh';
-import { INDOORS, moonbase } from './moonbase';
+import { INDOORS, furnishing, moonbase } from './moonbase';
 import { moonscape } from './moonscape';
-import { scenery } from './render';
+import { palette, scenery } from './render';
 import { uses } from './vision';
 
 const v = moonscape(MOON);
@@ -105,6 +106,56 @@ describe('moonbase', () => {
       expect(beam).toBe(false);
       expect(stripes).toEqual([]);
       expect(lips.length === 0 || !!b.tint || b.max[1] === 5, `${b.min} to ${b.max}`).toBe(true);
+    }
+  });
+});
+
+describe('furnishing', () => {
+  const world = build(MOON);
+  const keys = palette(world).map(String);
+  const f = furnishing(MOON, keys);
+  const pts = Array.from({ length: f.length / STRIDE }, (_, i) =>
+    f.slice(i * STRIDE, (i + 1) * STRIDE),
+  );
+
+  it('is all indoors, mirrored: the indoor normal on every vertex, as many in each half', () => {
+    expect(f.length % (3 * STRIDE)).toBe(0);
+    expect(f.every(Number.isFinite)).toBe(true);
+    expect(pts.every(indoors)).toBe(true);
+    const red = pts.filter(p => p[2] > ZED / 2).length;
+    expect(red).toBe(pts.length / 2);
+    expect(red).toBeGreaterThan(3000);
+  });
+
+  it("draws each flag's dais in its team's tint, textured as the hall's fittings", () => {
+    for (const [team, { base }] of MOON.teams.entries()) {
+      const tint = 2 * keys.indexOf(`${TEAM_TINT[team]}`);
+      expect(tint).toBeGreaterThan(0);
+      const top = pts.filter(
+        p => p[1] === base[1] && Math.hypot(p[0] - base[0], p[2] - base[2]) < 6.1 && p[8] >= 0,
+      );
+      // The dais's top and the upper edges of its four sides, 4.25 m out each way.
+      expect(top).toHaveLength(18);
+      expect(top.every(p => Math.floor(p[9] / 2) * 2 === tint)).toBe(true);
+    }
+  });
+
+  it('draws every piece of the lab kit on its box, in both halves, with lights on it', () => {
+    for (const [, x0, z0, x1, z1, y0, y1] of KIT) {
+      for (const m of [(z: number) => z, (z: number) => ZED - z]) {
+        const [za, zb] = [m(z0), m(z1)].sort((a, b) => a - b);
+        const near = pts.filter(
+          p =>
+            p[0] > x0 - 0.3 &&
+            p[0] < x1 + 0.3 &&
+            p[2] > za - 0.3 &&
+            p[2] < zb + 0.3 &&
+            p[1] >= y0 - 0.01 &&
+            p[1] < y1 + 2,
+        );
+        expect(near.length, `${x0}, ${z0}`).toBeGreaterThan(30);
+        expect(near.some(p => p[8] === -2)).toBe(true);
+      }
     }
   });
 });

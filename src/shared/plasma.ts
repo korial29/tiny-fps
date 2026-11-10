@@ -14,6 +14,8 @@ import {
   RIFLE_DRIFT,
   RIFLE_RANGE,
   TICK_HZ,
+  BOLT,
+  BOLT_SPEED,
 } from './constants';
 import { eyeHeight, heightOf } from './physics';
 import type { Ball, PlayerState } from './types';
@@ -80,7 +82,8 @@ export const wave = (p: PlayerState, team = 0): Flying => ({
 });
 
 /** Metres the flight `b` goes in a tick. */
-export const stepOf = (b: Ball): number => (b.arc ? ARC_STEP : PLASMA_STEP);
+export const stepOf = (b: Ball): number =>
+  b.arc ? ARC_STEP : b.power === BOLT ? BOLT_SPEED / TICK_HZ : PLASMA_STEP;
 
 /**
  * Distance at which the ray from `o` along the unit `d` enters the upright cylinder of radius `r`

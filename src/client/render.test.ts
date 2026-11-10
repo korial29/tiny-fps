@@ -35,6 +35,7 @@ import {
   sunAt,
   sunProj,
   viewProj,
+  FRAG,
 } from './render';
 import { trees } from './skyline';
 import { STREET, street } from './street';
@@ -746,5 +747,13 @@ describe('sunAt', () => {
     expect(SUN_AHEAD + SUN_AREA / 2).toBeGreaterThan(3.3 * ROVER.VMAX);
     // No coarser than 10 cm a texel.
     expect(SUN_AREA / SHADOW).toBeLessThan(0.1);
+  });
+});
+
+describe('the regolith in the shader', () => {
+  it('fetches the stone tile twice at offsets drawn from a value noise, and darkens it on slopes', () => {
+    expect(FRAG).toContain('float vn(vec2 p)');
+    expect(FRAG).toMatch(/if\(ks>\.5\)\{[^}]*textureGrad\([^}]*textureGrad\(/s);
+    expect(FRAG).toMatch(/t\.rgb\*=mix\(\.6,1\.,smoothstep\(\.72,\.97,normalize\(N\)\.y\)\)/);
   });
 });

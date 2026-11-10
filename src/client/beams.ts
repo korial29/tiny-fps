@@ -2,6 +2,7 @@
 // trail, a blue flash at the muzzle of a shot, a splash of light and sparks where a ball bursts,
 // the bolts and sparks of the katana's shock, the katana's arcs of energy, and the rail gun's lightning, a new shape each frame. Everything turns to face the camera and is
 // unlit and above 1, so that the bloom makes it glow. No DOM, no GL.
+import { BOLT as ROVER_BOLT } from '../shared/constants';
 import { CUT } from '../shared/types';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
@@ -104,6 +105,11 @@ const BALL: [number, number[], number][] = [
 const RED = [
   [1.6, 0.12, 0.08],
   [2.8, 0.9, 0.6],
+];
+/** The same in green, for a rover's laser bolts (power BOLT). */
+const GREEN = [
+  [0.1, 1.5, 0.22],
+  [0.9, 3.2, 1.2],
 ];
 /** The same in orange, for a charged ball, a charged flash and a charging muzzle. */
 const HOT = [
@@ -330,12 +336,14 @@ export const createTracer = (): Tracer => {
           crescent(out, p, d, arc, eye);
           continue;
         }
-        const end = p.map((v, i) => v - d[i] * tail) as Vec3;
+        // A rover's bolt is a streak: four times the trail.
+        const end = p.map((v, i) => v - d[i] * tail * (power === ROVER_BOLT ? 4 : 1)) as Vec3;
         // A charged ball swells, up to twice the size at the full charge, and turns orange; the
         // laser rifle's (power 0) is red and smaller.
-        const big = power ? 1 + 0.25 * (power - 1) : 0.7;
+        const bolt = power === ROVER_BOLT;
+        const big = bolt ? 0.8 : power ? 1 + 0.25 * (power - 1) : 0.7;
         BALL.forEach(([r, c, lift], i) => {
-          const rgb = power ? tint(c, i, Math.min(1, (power - 1) / 2)) : RED[i];
+          const rgb = bolt ? GREEN[i] : power ? tint(c, i, Math.min(1, (power - 1) / 2)) : RED[i];
           disc(out, p, r * big, rgb, eye, lift);
           if (tail > 0.01) {
             ribbon(out, p, end, r * 0.5 * big, rgb, eye, lift, 0, 0.1);

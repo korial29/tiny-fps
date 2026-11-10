@@ -298,14 +298,67 @@ export const shove = (p: Pos, w: World, h: number, r: number): [x: number, z: nu
 };
 
 /**
+ * A solid that moves, which the players walk into and stand on: a rover's body (hull(), rover.ts).
+ * The stadium of radius r round the segment a to b on the floor plane, from the height of the
+ * segment (between those of a and b) up h.
+ */
+export interface Body {
+  a: [x: number, y: number, z: number];
+  b: [x: number, y: number, z: number];
+  r: number;
+  h: number;
+}
+
+/** The offset from the closest point of a body's axis to (x, z), and the height of its bottom there. */
+export const gapTo = (o: Body, x: number, z: number): [dx: number, dz: number, y: number] => {
+  const [[ax, ay, az], [bx, by, bz]] = [o.a, o.b];
+  const [ux, uz] = [bx - ax, bz - az];
+  const l2 = ux * ux + uz * uz;
+  const t = l2 ? clamp(((x - ax) * ux + (z - az) * uz) / l2, 0, 1) : 0;
+  return [x - ax - t * ux, z - az - t * uz, ay + t * (by - ay)];
+};
+
+/**
+ * push() for the bodies: the player's circle out of each body that blocks it (as blocks() a
+ * brush), along the line from its axis. A centre on the axis leaves by the body's right (a is its
+ * front). A body moves on its own clock and may be deep in him: the push is as deep as it needs.
+ */
+const jostle = (p: Pos, bodies: readonly Body[], h: number): [x: number, z: number] => {
+  let [tx, tz] = [0, 0];
+  for (const o of bodies) {
+    const [dx, dz, y] = gapTo(o, p.x, p.z);
+    const r = o.r + PLAYER_R;
+    const d2 = dx * dx + dz * dz;
+    if (d2 >= (r - EPS) ** 2 || y + o.h <= p.y + STEP_H + SKIN || y >= p.y + h - SKIN) {
+      continue;
+    }
+    const d = sqrt(d2);
+    const [ux, uz] = [o.b[0] - o.a[0], o.b[2] - o.a[2]];
+    const l = len(ux, uz);
+    const [nx, nz] = d ? [dx / d, dz / d] : l ? [uz / l, -ux / l] : [1, 0];
+    p.x += nx * (r - d);
+    p.z += nz * (r - d);
+    tx += nx * (r - d);
+    tz += nz * (r - d);
+  }
+  return [tx, tz];
+};
+
+/**
  * The floor and the ceiling under the player: the highest top the player can stand on (at most
- * STEP_H above the feet) and the lowest bottom above the head, among the boxes the circle overlaps.
+ * STEP_H above the feet) and the lowest bottom above the head, among the boxes and the bodies the
+ * circle overlaps.
  * Every top between the feet and the fall is a candidate and so is every bottom above the head,
  * however far: a fall of any speed stops on the first top under the circle, and a rise (at most
  * DOUBLE_JUMP_SPEED / TICK_HZ = 0.12 m a step) cannot pass a bottom. Only a corner clipped by under a
  * millimetre of overlap at one end of a step and none at the other could slip past.
  */
-const span = (p: Pos, w: World, h: number): [floor: number, ceil: number] => {
+const span = (
+  p: Pos,
+  w: World,
+  h: number,
+  bodies: readonly Body[] = [],
+): [floor: number, ceil: number] => {
   const { brushes } = w.def;
   const reach = (PLAYER_R - EPS) ** 2;
   // The relief is a floor whatever its height: a body is never inside the ground.
@@ -321,6 +374,17 @@ const span = (p: Pos, w: World, h: number): [floor: number, ceil: number] => {
       floor = Math.max(floor, b.max[1]);
     } else if (b.min[1] >= p.y + h - SKIN) {
       ceil = Math.min(ceil, b.min[1]);
+    }
+  }
+  for (const o of bodies) {
+    const [dx, dz, y] = gapTo(o, p.x, p.z);
+    if (dx * dx + dz * dz >= (o.r + PLAYER_R - EPS) ** 2) {
+      continue;
+    }
+    if (y + o.h <= p.y + STEP_H + SKIN) {
+      floor = Math.max(floor, y + o.h);
+    } else if (y >= p.y + h - SKIN) {
+      ceil = Math.min(ceil, y);
     }
   }
   return [floor, ceil];
@@ -491,6 +555,8 @@ interface Ctl {
   /** Facing. */
   fx: number;
   fz: number;
+  /** The rovers' bodies, where they stand for this step. */
+  bodies: readonly Body[];
 }
 
 /** Changes the mode, and starts counting the time in it. */
@@ -605,13 +671,27 @@ const steer = (p: PlayerState, wish: [number, number], top: number): void => {
  * Moves the cylinder by its speed for one step: sideways (sliding along the boxes, which takes the
  * speed into them away), then up or down by g times the world's gravity (a ceiling stops a rise, a floor a
  * fall). Returns the speed it came down on a floor at, or -1 when it is not on one. With `snap`
- * a drop of at most STEP_H stays on the ground (a stair going down is not a fall).
+ * a drop of at most STEP_H stays on the ground (a stair going down is not a fall). The bodies
+ * are walls and floors like the boxes; a brush wins over a body that shoves him into it.
  */
-const fly = (p: PlayerState, w: World, h: number, g: number, snap: boolean): number => {
+const fly = (
+  p: PlayerState,
+  w: World,
+  h: number,
+  g: number,
+  snap: boolean,
+  bodies: readonly Body[],
+): number => {
   const y0 = p.y;
   p.x += p.vx * DT;
   p.z += p.vz * DT;
-  const [cx, cz] = push(p, w, h);
+  let [cx, cz] = push(p, w, h);
+  const [jx, jz] = jostle(p, bodies, h);
+  if (jx || jz) {
+    const [ex, ez] = push(p, w, h);
+    cx += jx + ex;
+    cz += jz + ez;
+  }
   const d = len(cx, cz);
   if (d) {
     const into = (p.vx * cx + p.vz * cz) / d;
@@ -621,7 +701,7 @@ const fly = (p: PlayerState, w: World, h: number, g: number, snap: boolean): num
     }
   }
   bound(p, w);
-  const [floor, ceil] = span(p, w, h);
+  const [floor, ceil] = span(p, w, h, bodies);
   // Constant acceleration, integrated exactly (average speed): the jump peaks at v² / 2g.
   const vy = p.vy - g * gravity(w) * DT;
   p.y += ((p.vy + vy) / 2) * DT;
@@ -837,7 +917,7 @@ const free = (p: PlayerState, w: World, c: Ctl): void => {
   // A burst has no gravity, unless the dasher is rising (a jump out of a dash keeps its arc).
   const g = burst && p.vy <= 0 ? 0 : p.mode === MODE.WALLRUN ? WALLRUN_GRAVITY : 1;
   const was = p.mode;
-  const hit = fly(p, w, heightOf(p), g, onFloor(was));
+  const hit = fly(p, w, heightOf(p), g, onFloor(was), c.bodies);
 
   if (hit >= 0) {
     if (!onFloor(p.mode)) {
@@ -944,9 +1024,16 @@ const air = (p: PlayerState, w: World, c: Ctl, burst: boolean): void => {
 /**
  * Applies one input for 1 / TICK_HZ s, in place: yaw and pitch from the input (pitch clamped to
  * MAX_PITCH), then the step of the current mode (see the top of the file). Feet under the world's
- * kill floor put the player back at a spawn of his `team` (EV.RESPAWN).
+ * kill floor put the player back at a spawn of his `team` (EV.RESPAWN). `bodies` are the rovers'
+ * (hull(), rover.ts) as they stand when the step runs: walls and floors for this step alone.
  */
-export const move = (p: PlayerState, i: Input, w: World, team = 0): void => {
+export const move = (
+  p: PlayerState,
+  i: Input,
+  w: World,
+  team = 0,
+  bodies: readonly Body[] = [],
+): void => {
   p.yaw = norm(i.yaw);
   p.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, i.pitch));
 
@@ -970,6 +1057,7 @@ export const move = (p: PlayerState, i: Input, w: World, team = 0): void => {
     wz: (fz * f + fx * s) / n,
     fx,
     fz,
+    bodies,
   };
 
   const before = p.mode;

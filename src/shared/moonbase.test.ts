@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EAST, NORTH, Sim, WEST, toward } from '../../test/pilot';
 import { EYE, GRAVITY, JUMP_SPEED, PLAYER_H, PLAYER_R } from './constants';
 import { LAYOUT, MOON, ZED } from './moon';
-import { BASE, DOME, FIT, HALL, HEAD, MODULES, MOUTHS, ROOM, TUBES, WALL } from './moonbase';
+import { BASE, DOME, FIT, HALL, HEAD, KIT, MODULES, MOUTHS, ROOM, TUBES, WALL } from './moonbase';
 import { KEY } from './types';
 import { build, hidden, ray } from './world';
 import type { Brush } from './world';
@@ -22,7 +22,7 @@ const shell = (y: number) => (y < 5 ? 22.4 : 22.4 * Math.sqrt(1 - ((y - 5) / 12)
 const RECTS = [...HALL, ...HALL.map(([a, b]) => [b, a])];
 const inHall = (x: number, z: number, m = 0) =>
   RECTS.some(([a, b]) => Math.abs(x) < a - m && Math.abs(z) < b - m);
-const over = (b: Brush, x: number, z: number, r = 0) =>
+const over = (b: { min: number[]; max: number[] }, x: number, z: number, r = 0) =>
   b.min[0] < x + r && x - r < b.max[0] && b.min[2] < z + r && z - r < b.max[2];
 
 describe('MOON, the domes, the modules and the tubes', () => {
@@ -45,8 +45,8 @@ describe('MOON, the domes, the modules and the tubes', () => {
     }
     // Higher than a double jump from a module roof: 5 + apex + the second jump's rise, with a margin.
     expect(10.5).toBeGreaterThan(5 + APEX + 6 ** 2 / (2 * HALF) + 0.5);
-    // A half of the base stays under 100 brushes: the map's cap is 450.
-    expect(BASE.length).toBeLessThanOrEqual(100);
+    // A half of the base stays under 110 brushes, its lab kit in: the map's cap is 450.
+    expect(BASE.length).toBeLessThanOrEqual(110);
   });
 
   it('covers the drawn shell from outside: every point of its surface is in a ghost of the dome, in the door or in the tubes', () => {
@@ -175,6 +175,58 @@ describe('MOON, the domes, the modules and the tubes', () => {
   });
 });
 
+describe('MOON, the lab kit', () => {
+  const kit = KIT.map(([, x0, z0, x1, z1, y0, y1]) => ({
+    min: [x0, y0, z0],
+    max: [x1, y1, z1],
+  }));
+  const meets = (a: { min: number[]; max: number[] }, b: { min: number[]; max: number[] }, m = 0) =>
+    [0, 1, 2].every(k => a.min[k] < b.max[k] + m && b.min[k] < a.max[k] + m);
+
+  it('is a ghost brush of the base a piece, in the hall or a module, on its floor or the mezzanine', () => {
+    expect(kit.length).toBeGreaterThanOrEqual(10);
+    for (const k of kit) {
+      expect(
+        BASE.some(
+          b => b.ghost && [0, 1, 2].every(a => b.min[a] === k.min[a] && b.max[a] === k.max[a]),
+        ),
+      ).toBe(true);
+      const [x, z] = mid(k);
+      const room = MODULES.some(m => over(m, x, z));
+      expect(room || inHall(x - CX, z - CZ), `${k.min}`).toBe(true);
+      expect([0, 3.5]).toContain(k.min[1]);
+      // Under a module's roof with a body's room on top, or up to it.
+      if (room) {
+        expect(ROOM - k.max[1]).toBeGreaterThanOrEqual(PLAYER_H);
+      }
+    }
+  });
+
+  it("keeps off the flag's dais, the way in from the door, the stairs, the tubes' mouth, the doorways and the packs", () => {
+    const keep = [
+      ...brushes.filter(b => b.ghost && b.tint && b.min[2] > ZED / 2),
+      ...FIT.filter(b => b.min[1] === 0 && b.max[1] <= 3.5 && over(b, CX, CZ + 9, 4)),
+      // The door to the dais, the tubes' mouth to the stairs' foot and the mezzanine's edge over it.
+      { min: [CX - 2.5, 0, CZ - 22.6], max: [CX + 2.5, 3, CZ - 5] },
+      { min: [CX + 9, 0, CZ - 13.3], max: [CX + 18, 3.5, CZ - 8.3] },
+      ...LINTELS.map(l => ({
+        min: [l.min[0] - 1, 0, l.min[2] - 1],
+        max: [l.max[0] + 1, HEAD, l.max[2] + 1],
+      })),
+      ...[...MOON.packs!, ...MOON.ammo!, ...MOON.cells!].map(([x, y, z]) => ({
+        min: [x - 1.5, y, z - 1.5],
+        max: [x + 1.5, y + PLAYER_H, z + 1.5],
+      })),
+    ];
+    expect(keep.length).toBeGreaterThan(20);
+    for (const k of kit) {
+      for (const b of keep) {
+        expect(meets(k, b), `${k.min} and ${b.min}`).toBe(false);
+      }
+    }
+  });
+});
+
 /** The middle of a box, x and z. */
 const mid = (b: { min: number[]; max: number[] }): [number, number] => [
   (b.min[0] + b.max[0]) / 2,
@@ -244,11 +296,11 @@ describe('MOON, the base flown with the real physics', () => {
     expect(t.p.y).toBeCloseTo(3.5, 2);
   });
 
-  it('walks from the flag pad through the door into the hall, up the stairs to the mezzanine, through a tube into a module and out by its airlock', () => {
+  it("walks from the flag's dais out through the door and back in, up the stairs to the mezzanine, through a tube into a module and out by its airlock", () => {
     const [x, y, z] = MOON.teams[0].base;
     const s = Sim.at(world).put(x, y, z, NORTH);
     walk(s, [
-      // Off the pad, through the door, across the hall to the foot of the stairs.
+      // Off the dais, out through the door, back in and across the hall to the foot of the stairs.
       [80, 212, 0],
       [80, 218, 0],
       [80, 241, 0],
@@ -302,7 +354,7 @@ describe('MOON, the base flown with the real physics', () => {
   });
 
   it('stops a shot at the dome wall and lets it through the door and the tubes', () => {
-    // From the flag pad to the middle of the hall: through the door, not beside it, not over it.
+    // From ahead of the door to the middle of the hall: through the door, not beside it, not over it.
     expect(hidden(world, [80, 1.5, 205], [80, 1.5, 236])).toBe(false);
     expect(hidden(world, [70, 1.5, 205], [70, 1.5, 236])).toBe(true);
     expect(ray(world, [70, 1.5, 205], [0, 0, 1], 100)).toBeCloseTo(10, 6);
@@ -317,7 +369,7 @@ describe('MOON, the base flown with the real physics', () => {
 
   it('is closed all round and above: from the middle of the hall a ray leaves only by the two mouths', () => {
     const from: [number, number, number] = [CX, 1.5, CZ];
-    let [door, tubes, flag] = [0, 0, 0];
+    let [door, tubes, far] = [0, 0, 0];
     for (let deg = 0; deg < 360; deg += 0.5) {
       const [c, s] = [Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180)];
       // Level at the chest, then over the mouths, then up to the zenith.
@@ -339,14 +391,14 @@ describe('MOON, the base flown with the real physics', () => {
         expect(byDoor || byTubes, `${deg}°`).toBe(true);
         door += +byDoor;
         tubes += +byTubes;
-        // In the tubes it ends on a wall; through the door, on its side or past the flag pad.
+        // In the tubes it ends on a wall; through the door, on its side or out on the crater.
         expect(byDoor || d < 30, `${deg}°`).toBe(true);
-        flag += +(d > 31);
+        far += +(d > 31);
       }
     }
     expect(door).toBeGreaterThan(10);
     expect(tubes).toBeGreaterThan(10);
-    expect(flag).toBeGreaterThan(5);
+    expect(far).toBeGreaterThan(5);
   });
 
   it('cannot be entered from a tube top or over the wall: a runner who jumps at the dome stays out and under 10.5 m', () => {

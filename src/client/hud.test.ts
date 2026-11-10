@@ -637,6 +637,18 @@ describe('the rover on the HUD', () => {
       expect(prompt().hidden).toBe(true);
     });
 
+    it('puts the reticle where the lasers cross on screen, and hides it off the wheel', () => {
+      const q = () => screen.querySelector<HTMLElement>('q')!;
+      expect(q().hidden).toBe(true);
+      hud.aim([0.25, 0.4]);
+      expect(q().hidden).toBe(false);
+      expect([q().style.left, q().style.top]).toEqual(['25%', '40%']);
+      hud.aim();
+      expect(q().hidden).toBe(true);
+      expect(HUD_CSS).toMatch(/q\{[^}]*border-radius:50%/);
+      expect(HUD_CSS).toContain('q::before,q::after{content:none}');
+    });
+
     it('shows the speed at the wheel, with or without the prompt, and marks the screen so the gun and the crosshair hide', () => {
       hud.rover('get out', 0);
       expect(prompt().hidden).toBe(false);

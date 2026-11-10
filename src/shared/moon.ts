@@ -3,10 +3,11 @@
 // line, is written once, symmetric by hand. Round the arena (x 0..160, z 0..280) the crater floor
 // is a relief out to an ellipse of 600 by 720 m: at(). Compact on purpose: the local bundle carries
 // it (budget in scripts/size.mjs).
+import { PLAYER_R } from './constants';
 import { TEAM_TINT } from './map';
 import { BASE, DOME, MODULES, TUBES, box, bx, fromBx } from './moonbase';
 import type { Bx, Vec3 } from './moonbase';
-import { noise } from './relief';
+import { hash, noise } from './relief';
 import { TEX } from './types';
 import type { Brush, Spawn, WorldDef } from './world';
 
@@ -37,6 +38,9 @@ const MASTS = [
   [106.2, 230.4],
   [103.2, 212.4],
 ];
+
+/** Red's flag: in the hall, 2 m from the dome's centre toward the door. */
+const FLAG = DOME[1] - 2;
 
 const c1 = (t: number) => Math.min(Math.max(t, 0), 1);
 const sm = (t: number) => c1(t) * c1(t) * (3 - 2 * c1(t));
@@ -83,6 +87,33 @@ const DISHES = [
   [186, 347],
 ];
 const WRECK = [BOWLS[0][0], ZED / 2];
+/** Boulders in the arena's field, red's (x, z, width, depth, height): drawn as rocks round their box. */
+const STONES = [
+  [4, 172, 4, 4, 2.2],
+  [30, 154, 5, 5, 3],
+  [66, 158, 3, 3, 1.6],
+  [95, 164, 5, 4, 2.6],
+  [125, 175, 6, 5, 3.2],
+  [92, 186, 4, 4, 2.4],
+];
+/**
+ * Boulders along the three walls of red's half (x, z, radius), not on the field's first stone
+ * (4..8, 172..176). Each stands in a box of half side 0.6 r (the brushes below); one whose box
+ * would leave a crack a player could not get out of next to an earlier one is left out.
+ */
+const BOULDERS = Array.from({ length: 36 }, (_, i) => {
+  const h = (k: number) => hash(i, k, 41);
+  const b = Math.floor(h(1) * 3);
+  const [x, z0] =
+    b < 2 ? [(b ? 151 : 0) + h(2) * 9, 150 + h(3) * 122] : [5 + h(2) * 150, 273 + h(3) * 7];
+  return [x, z0 + (b === 0 && Math.abs(z0 - 174) < 8 ? 16 : 0), 0.6 + 2.4 * h(4) * h(4)];
+}).filter(
+  ([x, z, r], i, l) =>
+    !l.slice(0, i).some(([u, w, q]) => {
+      const gap = Math.max(Math.abs(x - u), Math.abs(z - w)) - 0.6 * (r + q);
+      return gap > 0 && gap < 2 * PLAYER_R + 0.2;
+    }),
+);
 
 /**
  * The height of the crater floor round the arena. Only + - * /, Math.sqrt, Math.abs, min, max, floor
@@ -140,6 +171,9 @@ export const LAYOUT = {
     (z ? [1, -1] : [1]).map(m => [x + 16 * ax, ZED / 2 + m * (z + 16 * az), ax, m * az + 0]),
   ),
   wreck: WRECK,
+  /** Red's boulders along its walls and the field's stones; blue's are their mirrors, drawn by the scenery's flip. */
+  boulders: BOULDERS,
+  stones: STONES,
   domes: [DOME, [DOME[0], ZED - DOME[1]]],
   pads: [PAD, [PAD[0], ZED - PAD[1], PAD[2]]],
   shuttles: [SHUTTLE, mirror(SHUTTLE)],
@@ -165,28 +199,31 @@ const half: Brush[] = [
   box(0, -30, 148, 160, 0, 280, STONE),
   // The base: the dome's ghosts, the modules, the tubes and their stairs.
   ...BASE,
-  // The flag's pad ahead of the dome: a red step of 0.5 m and a dais at 1 m.
-  box(74, 0, 199, 86, 0.5, 211, PAINT, CONCRETE, RED),
-  box(76, 0.5, 201, 84, 1, 209, PAINT, CONCRETE, RED),
+  // The flag's dais in the hall: a red step of 0.5 m and a dais at 1 m, ghosts as all in the hall,
+  // drawn by client/moonbase.ts (daises()), the zone's square of 8.4 m on top.
+  { ...box(75.25, 0, FLAG - 4.75, 84.75, 0.5, FLAG + 4.75, PAINT, CONCRETE, RED), ghost: true },
+  { ...box(75.75, 0.5, FLAG - 4.25, 84.25, 1, FLAG + 4.25, PAINT, CONCRETE, RED), ghost: true },
   // The armoury, a red plinth behind the dome: the racks stand on it.
   box(60, 0, 259, 70, 1.5, 265, STEEL, PAINT, RED),
   // The landing pad, a shuttle on it (cover), and masts at the pad's corners and by the tubes.
   box(27, 0, 207, 53, 0.25, 233, METAL),
   { ...fromBx(SHUTTLE, PAINT), tint: [0.82, 0.84, 0.88] },
+  // Its wings (y 1 to 1.2, 3.5 m out from the hull's sides) and its tail fin over the hull, as drawn by the scenery.
+  { ...box(42, 1, 222, 45.8, 1.25, 225.5, METAL), ghost: true },
+  { ...box(42, 1, 214.5, 45.8, 1.25, 218, METAL), ghost: true },
+  { ...box(43, 3.25, 219.9, 46.8, 5.4, 220.1, PAINT), ghost: true },
   ...MASTS.map(([x, z]) =>
     box(x - 0.2, x < 60 ? 0.25 : 0, z - 0.2, x + 0.2, x < 60 ? 10.25 : 10, z + 0.2, STEEL),
   ),
   // The west long jump: a spur of the lip into the rille, orange.
   box(12, -30, 148 - (16 - WEST_GAP) / 2, 24, 0, 148, PAINT, STONE, [1, 0.42, 0.08]),
-  // Boulders in the field (x, z, width, depth, height).
-  ...[
-    [4, 172, 4, 4, 2.2],
-    [30, 154, 5, 5, 3],
-    [66, 158, 3, 3, 1.6],
-    [95, 164, 5, 4, 2.6],
-    [125, 175, 6, 5, 3.2],
-    [92, 186, 4, 4, 2.4],
-  ].map(([x, z, w, d, h]) => box(x, 0, z, x + w, h, z + d, STONE)),
+  // Boulders in the field: their boxes, drawn as rocks by the scenery.
+  ...STONES.map(([x, z, w, d, h]) => ({ ...box(x, 0, z, x + w, h, z + d, STONE), ghost: true })),
+  // The boulders along the walls: a box inside each drawn rock (top 0.9 of its radius).
+  ...BOULDERS.map(([x, z, r]): Brush => ({
+    ...box(x - 0.6 * r, 0, z - 0.6 * r, x + 0.6 * r, 0.75 * r, z + 0.6 * r, STONE),
+    ghost: true,
+  })),
   // Out on the relief, ghosts under what the scenery draws: the boulder field and the dishes' masts.
   ...FIELD.map(([x, z, r]) => lump(x, z, 0.6 * r, 0.6 * r)),
   ...DISHES.map(([x, z]) => lump(x, z, 0.4, 6)),
@@ -205,8 +242,12 @@ const centre: Brush[] = [
   // The rille ends in the relief: a ghost plug under the ground at each end keeps a player in it.
   { ...box(-10, -30, 132, 0, 0, 148, STONE), ghost: true },
   { ...box(160, -30, 132, 170, 0, 148, STONE), ghost: true },
-  // The wrecked lander's hull.
-  lump(WRECK[0], WRECK[1], 3, 3),
+  // The wrecked lander's hull, wide enough to take in its beacon's mast (3.4 m west, 2.6 m south).
+  lump(WRECK[0], WRECK[1], 3.6, 3.5),
+  // The orange lamps each side of a ramp's lip.
+  ...LAYOUT.ramps.flatMap(([x, z, ax, az]) =>
+    [-8, 8].map(c => lump(x + c * az, z - c * ax, 0.2, 2.2)),
+  ),
 ];
 
 /** Red's spawns behind the dome facing blue (yaw 0 looks toward -z): five in a row, three in front. */
@@ -222,16 +263,16 @@ const racks = (z: number) =>
 const team = (z: number, s: Spawn[]) => ({
   base: [80, 1, z] as Vec3,
   spawns: s,
-  ...racks(z + (z > 140 ? 57 : -57)),
+  ...racks(z + (z > 140 ? 28 : -28)),
 });
 
 export const MOON: WorldDef = {
   name: 'Tranquility',
   brushes: [...half, ...half.map(flip), ...centre],
   teams: [
-    team(205, SPAWNS),
+    team(FLAG, SPAWNS),
     team(
-      ZED - 205,
+      ZED - FLAG,
       SPAWNS.map(([x, y, z]): Spawn => [x, y, ZED - z, Math.PI]),
     ),
   ],

@@ -8,10 +8,14 @@ import {
   MAX_NAME,
   MAX_PLAYERS,
   MAX_REWIND,
+  PLAYER_R,
   RUN_SPEED,
   SNAP_EVERY,
   TEAM_COLOR,
   TICK_HZ,
+  BOLT,
+  BOLT_SPEED,
+  RIFLE_HITS,
 } from './constants';
 import { HIGHLINE } from './map';
 import { MOON } from './moon';
@@ -1021,13 +1025,45 @@ describe('Room: the rovers', () => {
     expect(room['balls']).toHaveLength(1);
   });
 
-  it("does not fire the driver's gun", () => {
+  it("does not fire the driver's own gun, but the rover's two lasers, a salvo each GUN_COOL inputs", () => {
     const { room, a } = driven();
     Object.assign(st(room, a), loaded({ ammo: 10 }));
-    send(room, a, KEY.FIRE, 3);
-    send(room, a, 0, 3);
+    send(room, a, KEY.FIRE, 1);
     expect(st(room, a)).toMatchObject({ shots: 0, ammo: 10, charge: 0 });
-    expect(room['balls']).toHaveLength(0);
+    const balls = () => room['balls'].filter(b => !b.burst);
+    expect(balls()).toHaveLength(2);
+    expect(balls().every(b => b.power === BOLT && b.by === 0)).toBe(true);
+    expect(new Set(balls().map(b => b.id)).size).toBe(2);
+    // Held: nothing more until the cooldown is over, then the next salvo, named apart.
+    send(room, a, KEY.FIRE, ROVER.GUN_COOL - 1);
+    expect(balls()).toHaveLength(2);
+    send(room, a, KEY.FIRE, 1);
+    expect(balls()).toHaveLength(4);
+    expect(new Set(balls().map(b => b.id)).size).toBe(4);
+    // Let go: no more, and they fly at BOLT_SPEED.
+    const [b] = balls();
+    const x = b.x;
+    send(room, a, 0, 6);
+    expect(balls().length).toBeLessThanOrEqual(4);
+    expect(Math.hypot(b.x - x, 0)).toBeGreaterThan((5 * BOLT_SPEED * Math.abs(b.dx)) / TICK_HZ);
+  });
+
+  it("grazes an enemy with the rover's bolts like the laser rifle's, and spares a teammate", () => {
+    const { room, a, r } = driven();
+    const b = join(room, 'Bob');
+    const c = join(room, 'Cid');
+    // Bob (blue) and Cid (red) where the beams cross, east of the rover.
+    const feet = { y: 1, vx: 0, vz: 0 };
+    Object.assign(st(room, b), feet, { x: r.x + ROVER.GUN_AIM - 4, z: r.z });
+    Object.assign(st(room, c), feet, { x: r.x + ROVER.GUN_AIM - 8, z: r.z });
+    expect(who(room, b).info.team).not.toBe(who(room, a).info.team);
+    expect(who(room, c).info.team).toBe(who(room, a).info.team);
+    send(room, a, KEY.FIRE, 1);
+    send(room, a, 0, 40);
+    // Two bolts in him: RIFLE_HITS of them take one hp.
+    expect(st(room, b).hp).toBe(HP_MAX - 2 / RIFLE_HITS);
+    expect(st(room, c).hp).toBe(HP_MAX);
+    expect(st(room, a).hits).toBe(2);
   });
 
   it('frees the seat when the occupant leaves, goes down, respawns or disconnects', () => {
@@ -1227,6 +1263,34 @@ describe('Room: the rovers', () => {
     const sat = { ...st(room, b) };
     seat(sat, r, 1);
     expect(st(room, b).x).toBe(sat.x);
+  });
+
+  it('stops a player on foot at a parked rover, and lets him stand on it', () => {
+    const room = new Room({}, LOT);
+    const b = join(room, 'Ann');
+    stand(room, b, -5);
+    send(room, b, KEY.FORWARD, 90);
+    // Rover 0's tail is 1.15 + RB m west of its centre: he stops a body's radius short of it.
+    const tail = 6 - ROVER.BODY[0] - ROVER.RB - PLAYER_R;
+    expect(st(room, b).x).toBeCloseTo(tail, 3);
+    expect(st(room, b).mode).toBe(MODE.GROUND);
+    // Put on it, he stands on its top.
+    Object.assign(st(room, b), { x: 6, y: 4, z: 4 });
+    send(room, b, 0, 90);
+    expect(st(room, b).y).toBeCloseTo(cars(room)[0].y - ROVER.WR - ROVER.L0 + ROVER.BODY_H, 3);
+    expect(st(room, b).mode).toBe(MODE.GROUND);
+  });
+
+  it('stops a driven rover on a parked one, which stays where it is', () => {
+    const { room, a, r } = driven();
+    const other = cars(room)[1];
+    Object.assign(other, { x: 20, z: 4, y: r.y });
+    send(room, a, 0, 30);
+    const parked = [other.x, other.z];
+    send(room, a, KEY.FORWARD, 240);
+    expect(r.x).toBeLessThan(20 - 2 * (ROVER.BODY[0] + ROVER.RB) + 0.01);
+    expect(r.x).toBeGreaterThan(20 - 2 * (ROVER.BODY[0] + ROVER.RB) - 1);
+    expect([other.x, other.z]).toEqual(parked);
   });
 
   it('sends the rovers in every snapshot', () => {

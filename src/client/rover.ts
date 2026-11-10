@@ -7,7 +7,7 @@
 // the nose, the origin at the body's centre) and placed each frame; the wishbones and the dampers
 // are stretched between their ends.
 import { TAU, forward } from '../shared/physics';
-import { ROVER, seat, wheels } from '../shared/rover';
+import { GUNS, ROVER, seat, wheels } from '../shared/rover';
 import type { PlayerState, Rover } from '../shared/types';
 import type { World } from '../shared/world';
 import { GLOW, glow, tri } from './flag';
@@ -525,6 +525,15 @@ const body = (level: number): [number[], number[]] => {
     bar(hoop[i][0], sill, 0.03);
     bar(sill, cowl, 0.03);
     bar(rear[i], P(s * 0.4, 0.1, -1.9), 0.03);
+  }
+  // A laser along each side, on its pod: a dark barrel on two clamps, its mouth glowing green (GUNS, shared/rover.ts).
+  for (const [x, y, a] of GUNS) {
+    bar(P(x, y, a - 1.1), P(x, y, a - 0.06), 0.065, [0.16, 0.17, 0.2]);
+    bar(P(x, y, a - 1.2), P(x, y, a - 1.1), 0.085, ALU);
+    for (const at of [a - 0.85, a - 0.35]) {
+      bar(P(x * 0.8, y - 0.14, at), P(x, y, at), 0.03);
+    }
+    lit([0.2, 1, 0.35], GLOW, () => bar(P(x, y, a - 0.06), P(x, y, a), 0.05, [0.2, 1, 0.35]));
   }
   // A foil pod along each sill, between the wheels.
   for (const s of [-1, 1]) {

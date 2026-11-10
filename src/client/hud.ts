@@ -18,7 +18,7 @@ import { FH, FW, PALETTE, sprite } from './face';
 import type { Mark } from './marks';
 
 export const HUD_CSS =
-  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,samp,cite{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,samp,cite,q{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
@@ -66,6 +66,7 @@ export const HUD_CSS =
   // The rover: the key to get in or out, over the face, and the speed where the gun's count is; at the wheel the gun, the crosshair and the visor's rim go.
   `samp{left:50%;bottom:128px;transform:translateX(-50%);padding:6px 14px;border-radius:6px;background:#0008;font:inherit;font-size:15px;white-space:nowrap}` +
   `samp var{display:inline-block;margin-right:8px;padding:1px 7px;border:1px solid #fffb;border-radius:4px;font-style:normal;font-weight:900}` +
+  `q{width:26px;height:26px;margin:-13px 0 0 -13px;border:2px solid #5f8;border-radius:50%;box-shadow:0 0 6px #3f6,inset 0 0 4px #3f6;background:radial-gradient(#afc 0 1.5px,#0000 2px)}q::before,q::after{content:none}` +
   `cite{right:12px;bottom:10px;font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}cite small{margin-left:6px;font-size:14px}` +
   `div.v>i,.v dl,.v del{display:none}`;
 
@@ -175,6 +176,8 @@ export interface Hud {
    * `speed` the km/h shown at the wheel, where the gun and the crosshair then hide; undefined off it.
    */
   rover(act: string, speed?: number): void;
+  /** The rover's reticle, where its lasers cross: `at` on screen in [0, 1] from the top left; undefined hides it. */
+  aim(at?: [number, number]): void;
   /** The end screen with the result and each player's captures and returns, `next` seconds before the next match; undefined hides it. */
   end(sum: Summary | undefined, next: number): void;
 }
@@ -203,7 +206,7 @@ export const createHud = (screen: HTMLElement): Hud => {
       `<data></data><span></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
       `<s hidden></s><mark hidden></mark><ins hidden><i></i></ins>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav>` +
-      `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite>` +
+      `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
   );
   const one = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
@@ -377,6 +380,14 @@ export const createHud = (screen: HTMLElement): Hud => {
       banner.style.color = team === undefined ? '#fff' : TEAM_COLOR[team];
       clearTimeout(timer);
       timer = setTimeout(() => (banner.hidden = true), BANNER_MS);
+    },
+    aim(at) {
+      const q = one('q');
+      q.hidden = !at;
+      if (at) {
+        q.style.left = `${at[0] * 100}%`;
+        q.style.top = `${at[1] * 100}%`;
+      }
     },
     rover(what, v) {
       prompt.hidden = !what;

@@ -30,9 +30,9 @@ import * as lines from '../../test/lines';
 import { loaded } from '../../test/loaded';
 import { Sim } from '../../test/pilot';
 import * as ride from '../../test/ride';
-import { ramp } from '../../test/slope';
+import { land, ramp } from '../../test/slope';
 import { ROVER_BLEND, createPredictor } from './predict';
-import { IDLE } from '../../test/teams';
+import { IDLE, duo } from '../../test/teams';
 
 const STEP = 1000 / TICK_HZ;
 const world = build(ROOFTOPS);
@@ -1335,6 +1335,58 @@ describe('the rover, predicted against the room', () => {
       // It comes to rest where the host's does.
       expect(r.car.vx).toBe(0);
       expect(drawn.at(-1)!.x).toBeCloseTo(r.car.x, 3);
+    }
+  });
+
+  it('agrees with the host when he walks into the rover, jumps onto it and off it', () => {
+    // East into its tail, then round it to its left side, onto its top and off its right.
+    const walk: ride.Keys[] = [
+      ...Array.from({ length: 40 }, () => ({ keys: KEY.FORWARD, yaw: EAST, pitch: 0 })),
+      ...Array.from({ length: 30 }, () => ({ keys: KEY.FORWARD, yaw: 0, pitch: 0 })),
+      ...Array.from({ length: 20 }, () => ({ keys: KEY.FORWARD, yaw: EAST, pitch: 0 })),
+      ...Array.from({ length: 160 }, (_, k) => ({
+        keys: (k < 31 || k > 90 ? KEY.FORWARD : 0) | (k === 31 ? KEY.JUMP : 0),
+        yaw: Math.PI,
+        pitch: 0,
+      })),
+    ];
+    for (const [name, lag] of ride.LAGS) {
+      let top = 0;
+      const r = ride.drive(flat, walk, lag, {
+        each: pred => {
+          const me = pred.me(1);
+          top = me?.mode === MODE.GROUND ? Math.max(top, me.y) : top;
+        },
+      });
+      expect([name, r.differing]).toEqual([name, []]);
+      expect([name, r.final]).toEqual([name, []]);
+      expect(r.checked).toBeGreaterThan(30);
+      // He stood on it and got off the far side.
+      expect(top).toBeGreaterThan(ROVER.BODY_H - 0.2);
+      expect(r.host.mode).toBe(MODE.GROUND);
+      expect(r.host.y).toBe(0);
+      expect(r.host.z).toBeGreaterThan(ROVER.RB);
+      expect(r.car).toMatchObject({ x: 2.5, z: 0, driver: NOBODY });
+    }
+  });
+
+  it('agrees with the host when he drives into a parked rover', () => {
+    const pair = build({
+      ...land(undefined, [], 0.5, [
+        [2.5, 0, 0, EAST],
+        [30, 0, 0, 0],
+      ]).def,
+      teams: duo([[0, 0, 0, 0]], [[0, 0, 60, 0]]),
+    });
+    for (const [name, lag] of ride.LAGS) {
+      const r = ride.drive(pair, ride.trip(300, 7, true), lag);
+      expect([name, r.differing]).toEqual([name, []]);
+      expect([name, r.final]).toEqual([name, []]);
+      expect(r.checked).toBeGreaterThan(60);
+      // Against the side of the parked one, 30 m east, which stayed put.
+      expect(r.car.x).toBeLessThan(30 - ROVER.BODY[0] - ROVER.RB * 2 + 0.01);
+      expect(r.car.x).toBeGreaterThan(20);
+      expect(r.pred.rovers(1e9, 1)[1]).toMatchObject({ x: 30, z: 0 });
     }
   });
 

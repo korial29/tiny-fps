@@ -1,11 +1,13 @@
-import { HP_MAX, LOCK_WIN, PLAYER_H, TICK_HZ } from '../shared/constants';
+import { BOLT, HP_MAX, LOCK_WIN, PLAYER_H, TICK_HZ } from '../shared/constants';
 import { MAPS, mapKey, mapOf } from '../shared/maps';
 import { eyeHeight } from '../shared/physics';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ClientText, ServerText } from '../shared/protocol';
 import { FLAG, KEY } from '../shared/types';
 import type { PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
-import { build, hidden } from '../shared/world';
+import { SOUND } from './sfx';
+import { ROVER, aimOf } from '../shared/rover';
+import { build, hidden, ray } from '../shared/world';
 import { createAnnouncer } from './announce';
 import { createAudio, savedMute, toggleMute } from './audio';
 import { createBalls } from './balls';
@@ -195,6 +197,8 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
   let you = { id: -1, team: 0 };
   /** The latest snapshot, for the flags and the match; the one before it tells what just happened. */
   let match: Snapshot | undefined;
+  /** The rovers' laser bolts of the last snapshot, by shooter and id. */
+  let bolts = new Set<number>();
   /** The result of the match that has just ended, while its end screen shows. */
   let ended: Summary | undefined;
   let colors = new Map<number, string>();
@@ -226,6 +230,18 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
       const s = decodeSnapshot(data);
       if (s) {
         predictor.snapshot(s, performance.now());
+        // A rover's laser bolt, new in this snapshot: its shot is heard where it is.
+        const flying = new Set<number>();
+        for (const b of s.balls ?? []) {
+          if (b.power === BOLT) {
+            const key = (b.by << 8) | b.id;
+            flying.add(key);
+            if (!bolts.has(key) && !b.burst) {
+              audio.play(SOUND.LASE, [b.x, b.y, b.z], 0.35, 1.5);
+            }
+          }
+        }
+        bolts = flying;
         balls.snapshot(s.balls ?? [], you.id, performance.now());
         const told = beats(match, s);
         for (const beat of told) {
@@ -462,6 +478,19 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
         rovers,
         third ? me : undefined,
       );
+      // The rover's reticle: where its lasers cross along the look, or the ground or wall before it.
+      const car = driving ? rovers[wheel] : undefined;
+      if (car) {
+        const [o, to]: [number, number, number][] = [
+          [car.x, car.y, car.z],
+          aimOf(car, ctl.yaw, ctl.pitch),
+        ];
+        const d = to.map((v, k) => (v - o[k]) / ROVER.GUN_AIM) as [number, number, number];
+        const t = ray(world, o, d, ROVER.GUN_AIM);
+        hud.aim(rd.project(o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t));
+      } else {
+        hud.aim();
+      }
     }
     if (match) {
       hud.match(match, id => names.get(id) ?? '?');

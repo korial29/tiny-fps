@@ -347,6 +347,20 @@ describe('tackle', () => {
     expect(hit.hurt).toBeLessThanOrEqual(1);
   });
 
+  it('quakes with a grenade’s burst as hard as a jolt when it is on him, less further off, with no vignette', () => {
+    const [jolt, near, far, none] = [
+      peaks(fx => fx.jolt()),
+      peaks(fx => fx.quake(1)),
+      peaks(fx => fx.quake(0.3)),
+      peaks(fx => fx.quake(0)),
+    ];
+    expect([near.dy, near.pitch]).toEqual([jolt.dy, jolt.pitch]);
+    expect(near.hurt).toBe(0);
+    expect(far.dy).toBeGreaterThan(0.02);
+    expect(far.dy).toBeLessThan(near.dy / 2);
+    expect(none).toMatchObject({ dy: 0, pitch: 0, roll: 0 });
+  });
+
   it('fades the vignette in under a second, and the jolt settles', () => {
     const { fx } = peaks(f => f.jolt(), me(), 1.5);
     expect(fx.hurt).toBeLessThan(0.02);
@@ -399,6 +413,7 @@ describe('shape', () => {
       'lines',
       'pitch',
       'punch',
+      'quake',
       'roll',
       'stride',
       'update',

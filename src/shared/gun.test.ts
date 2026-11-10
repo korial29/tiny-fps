@@ -26,6 +26,13 @@ import {
   HEAVY,
   HEAVY_MAX,
   HEAVY_TAP,
+  NADE_COOL,
+  NADE_HOLD,
+  NADE_MAX,
+  RIFLE_MAX,
+  RIFLE_CLIP,
+  RIFLE_COOL,
+  RIFLE_RELOAD,
 } from './constants';
 import { swingOf } from './blade';
 import { STRIKE, powerOf, step, within } from './gun';
@@ -958,5 +965,88 @@ describe('the katana through a respawn and the shock', () => {
     const q = armed(0, 0, { zap: true });
     go(q, 0);
     expect(q.zap).toBe(false);
+  });
+});
+
+describe('the grenade launcher', () => {
+  const { RIFLE, SPECIAL } = KEY;
+  const CLICK = RIFLE | FIRE | SPECIAL;
+  /** A red player with the laser rifle in hand and a full launcher. */
+  const rifleman = (over: Partial<PlayerState> = {}) => {
+    const p = armed(0, 0, { ammo: -1, rifle: RIFLE_MAX, nades: NADE_MAX, ...over });
+    hit(p, RIFLE);
+    return p;
+  };
+
+  it('launches one grenade on a double click, not a round, and the rifle holds its fire NADE_HOLD ticks', () => {
+    const p = rifleman();
+    expect(hit(p, CLICK)).toBe(STRIKE.NADE);
+    expect(p).toMatchObject({
+      nades: NADE_MAX - 1,
+      lob: NADE_COOL,
+      cool: NADE_HOLD,
+      shots: 1,
+      rifle: RIFLE_MAX,
+      clip: RIFLE_CLIP,
+    });
+    // FIRE held on: nothing for NADE_HOLD - 1 more steps, then rounds again.
+    const next = Array.from({ length: NADE_HOLD }, () => hit(p, RIFLE | FIRE));
+    expect(next.indexOf(STRIKE.LASER)).toBe(NADE_HOLD - 1);
+    expect(next.filter(Boolean)).toEqual([STRIKE.LASER]);
+  });
+
+  it('waits NADE_COOL ticks between two: a double click before fires a round, as a click does', () => {
+    const p = rifleman();
+    hit(p, CLICK);
+    for (let k = 1; k < NADE_COOL; k++) {
+      expect(hit(p, k % 20 ? RIFLE : CLICK), `step ${k}`).not.toBe(STRIKE.NADE);
+    }
+    expect(p.lob).toBe(1);
+    expect(p.shots).toBe(3);
+    hit(p, RIFLE);
+    expect(hit(p, CLICK)).toBe(STRIKE.NADE);
+    expect(p.nades).toBe(NADE_MAX - 2);
+  });
+
+  it('holds NADE_MAX grenades: once spent, a double click fires the rifle', () => {
+    const p = rifleman();
+    let lobs = 0;
+    for (let k = 0; k < (NADE_MAX + 2) * (NADE_COOL + 1); k++) {
+      lobs += +(hit(p, k % (NADE_COOL + 1) ? RIFLE : CLICK) === STRIKE.NADE);
+    }
+    expect([lobs, p.nades]).toEqual([NADE_MAX, 0]);
+    expect(hit(p, CLICK)).toBe(STRIKE.LASER);
+  });
+
+  it('is the rifle’s: not with another weapon in hand, the hands busy or the match over, and it fires during a swap of the cell', () => {
+    const p = rifleman({ ammo: AMMO_MAX });
+    expect(hit(p, FIRE | SPECIAL)).toBe(STRIKE.NONE);
+    expect(p.rifled).toBe(false);
+    expect(step(p, onWire({ keys: CLICK, yaw: EAST, pitch: 0, seq: 0 }), yard, 0, false)).toBe(
+      STRIKE.NONE,
+    );
+    p.mode = MODE.HANG;
+    expect(hit(p, CLICK)).toBe(STRIKE.NONE);
+    expect(p.nades).toBe(NADE_MAX);
+    const q = rifleman({ clip: 0 });
+    hit(q, RIFLE);
+    expect(q.reload).toBeGreaterThan(0);
+    expect(q.reload).toBeLessThanOrEqual(RIFLE_RELOAD);
+    expect(hit(q, CLICK)).toBe(STRIKE.NADE);
+  });
+
+  it('is loaded at the rifle’s rack on arrival, with the rounds', () => {
+    const w = build({
+      ...yard.def,
+      teams: [{ ...yard.def.teams[0], rifle: [5, 0, 0] }, yard.def.teams[1]],
+    });
+    const p = armed(5, 0, { ammo: -1 });
+    hit(p, RIFLE, EAST, 0, w);
+    expect(p).toMatchObject({ rifle: RIFLE_MAX, nades: NADE_MAX, rifled: true });
+    expect(hit(p, CLICK, EAST, 0, w)).toBe(STRIKE.NADE);
+    // Staying gives nothing more.
+    hit(p, RIFLE, EAST, 0, w);
+    expect(p.nades).toBe(NADE_MAX - 1);
+    expect(RIFLE_COOL).toBeLessThan(NADE_HOLD);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FLASH, SPLASH, createTracer } from './beams';
+import { NADE, NADE_R } from '../shared/constants';
+import { BOOM, FLASH, SPLASH, createTracer } from './beams';
 import type { Orb } from './beams';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
@@ -321,5 +322,55 @@ describe('the laser rifle\u2019s shots', () => {
     for (const x of drawn(f)) {
       expect(x[6]).toBeGreaterThan(x[9]);
     }
+  });
+});
+
+describe('a grenade', () => {
+  it('is a small orange core with a thin trail in flight, and lights what it passes', () => {
+    const t = createTracer();
+    t.orbs([{ p: [0, 1.6, -10], d: [0, -0.6, -0.8], tail: 1, power: NADE }]);
+    const v = drawn(t);
+    expect(v).toHaveLength(2 * (24 + 6));
+    for (const x of v) {
+      expect(x[8]).toBe(-2);
+      expect(x[6]).toBeGreaterThan(2 * x[9]);
+    }
+    expect(t.lights()).toHaveLength(1);
+  });
+
+  it('bursts in a fireball that swells and shrinks away within NADE_R, with embers and a strong, wide light', () => {
+    const t = createTracer();
+    t.blast(TO);
+    /** The fireball's vertices (the embers come after them): how far the furthest is from the burst. */
+    const wide = () =>
+      Math.max(
+        ...drawn(t)
+          .slice(0, 6 * 24 + 3 * 48)
+          .map(x => Math.hypot(x[0] - TO[0], x[1] - TO[1], x[2] - TO[2])),
+      );
+    // Six puffs of 8 triangles, three discs of 16, and 40 embers of 4.
+    expect(drawn(t)).toHaveLength(6 * 24 + 3 * 48 + 40 * 12);
+    const [light] = t.lights();
+    expect(light.p).toEqual(TO);
+    expect(light.range).toBeGreaterThanOrEqual(3 * NADE_R);
+    expect(light.color[0]).toBeGreaterThan(light.color[2]);
+    // At its widest a quarter of the way, its true size even 40 m off; then it shrinks.
+    t.update(BOOM / 4);
+    const peak = wide();
+    expect(peak).toBeGreaterThan(0.3 * NADE_R);
+    expect(peak).toBeLessThan(NADE_R);
+    t.update(BOOM / 4);
+    expect(wide()).toBeLessThan(peak);
+    expect(t.lights()[0].color[0]).toBeLessThan(light.color[0]);
+    // Orange and white-hot: red over blue everywhere.
+    for (const x of drawn(t)) {
+      expect(x[6]).toBeGreaterThanOrEqual(x[9]);
+    }
+    t.update(BOOM / 2 + 0.001);
+    expect(t.lights()).toEqual([]);
+    // The embers outlast the fireball, falling, then nothing is left.
+    expect(drawn(t).length).toBeGreaterThan(0);
+    t.update(1);
+    expect(drawn(t)).toEqual([]);
   });
 });

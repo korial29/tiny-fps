@@ -5,19 +5,23 @@
 // ammo play the hit sound, the hurt and the pickups and feed the HUD. The katana's side: the start of
 // a swing (a change of `swing` or `cut`) plays the swish, the own cut's strike tick punches the
 // camera, drawing or sheathing it plays the shing, a hit of the own player with the katana in hand
-// adds the zap, and a runner shocked by it crackles. No DOM.
+// adds the zap, and a runner shocked by it crackles. A grenade of the rifle's launcher thumps out
+// of it, and its burst is a fireball that shakes the view of who stands near. No DOM.
 import {
   CHARGE_MAX,
   CHARGE_TAP,
   CHARGE_TICKS,
   GUN_RANGE,
   MAX_PITCH,
+  NADE,
+  NADE_R,
   RECOIL,
   TICK_HZ,
 } from '../shared/constants';
 import { swingOf } from '../shared/blade';
 import { powerOf } from '../shared/gun';
 import { eyeHeight } from '../shared/physics';
+import { lobbed } from '../shared/plasma';
 import { CUT, KEY, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { beam } from '../shared/rail';
@@ -27,7 +31,19 @@ import type { Audio, Loop } from './audio';
 import type { Balls } from './balls';
 import type { Tracer } from './beams';
 import type { Effects } from './effects';
-import { CUES, aimed, charge, firsts, focus, kindOf, pressAt, swapOf, tip } from './gun';
+import {
+  CUES,
+  NADE_MUZZLE,
+  RIFLE_MUZZLE,
+  aimed,
+  charge,
+  firsts,
+  focus,
+  kindOf,
+  pressAt,
+  swapOf,
+  tip,
+} from './gun';
 import type { Hud } from './hud';
 import { basis } from './mesh';
 import type { Vec3 } from './mesh';
@@ -140,10 +156,10 @@ export const createCombat = (
   world: World,
   audio: Pick<Audio, 'play'> & Partial<Pick<Audio, 'loop'>>,
   hud: Pick<Hud, 'vitals' | 'hit' | 'down'>,
-  fx: Pick<Effects, 'fire' | 'cut' | 'wound' | 'lie'>,
+  fx: Pick<Effects, 'fire' | 'cut' | 'wound' | 'lie' | 'quake'>,
   tracer: Pick<
     Tracer,
-    'flash' | 'burst' | 'orbs' | 'update' | 'mount' | 'crackle' | 'charging' | 'lightning'
+    'flash' | 'burst' | 'blast' | 'orbs' | 'update' | 'mount' | 'crackle' | 'charging' | 'lightning'
   >,
   ctl: { pitch: number },
   balls: Pick<Balls, 'fire' | 'frame'>,
@@ -195,6 +211,15 @@ export const createCombat = (
     }
     tracer.flash(from, !at, -1);
     audio.play(SOUND.LASE, at, at ? 0.5 : 0.4, rate());
+  };
+  /** A grenade leaves the launcher of `p` at `from`, heard at `at` (the own when not given): an orange flash and a hollow thump. */
+  const thump = (p: PlayerState, from: Vec3, now: number, at?: Vec3) => {
+    if (!at) {
+      balls.fire(p, now);
+    }
+    tracer.flash(from, !at, 1);
+    audio.play(SOUND.TACKLE, at, at ? 0.9 : 0.7, 0.55);
+    audio.play(SOUND.DASH, at, at ? 0.5 : 0.35, 0.7);
   };
   /** The own rail gun's hum and its bolt's buzz, started when it is first in hand. */
   let hum: Loop | undefined;
@@ -277,9 +302,11 @@ export const createCombat = (
       }
       for (let i = 0; i < n; i++) {
         // A charged shot kicks the look up to 3.4 times as far; the laser rifle's, 20 a second, a third as far.
-        const k = b?.rifled ? 0.3 : 1 + 0.6 * ((b?.power ?? 1) - 1);
+        // A grenade bucks the rifle in the left hand as hard as a half charge.
+        const nade = !!b && lobbed(b);
+        const k = nade ? 2 : b?.rifled ? 0.3 : 1 + 0.6 * ((b?.power ?? 1) - 1);
         ctl.pitch = Math.min(MAX_PITCH, ctl.pitch + RECOIL * k);
-        fx.fire(b?.power);
+        fx.fire(nade ? 3 : b?.power);
       }
       const c = swung(a, b);
       if (c >= 0) {
@@ -365,6 +392,7 @@ export const createCombat = (
           !!me.reload,
           me.rifle ?? -1,
           !!me.rifled,
+          me.nades ?? 0,
         );
         cuts.forEach(c => swish(c));
         hud.down(fx.lie, me.down / TICK_HZ);
@@ -385,6 +413,12 @@ export const createCombat = (
         for (const p of pending) {
           if (p.wield) {
             balls.fire(p, now);
+            continue;
+          }
+          if (lobbed(p)) {
+            // The launcher's mouth, under and behind the rifle's.
+            const [dy, dz] = [NADE_MUZZLE[1] - RIFLE_MUZZLE[1], RIFLE_MUZZLE[2] - NADE_MUZZLE[2]];
+            thump(p, from.map((c, i) => c + u[i] * dy + f[i] * dz) as Vec3, now);
             continue;
           }
           if (p.rifled) {
@@ -414,7 +448,9 @@ export const createCombat = (
         if (p.zapping) {
           zap(zaps, p, gun(p), dt, now, at);
         }
-        if (was !== undefined && p.shots != was && p.rifled) {
+        if (was !== undefined && p.shots != was && lobbed(p)) {
+          thump(p, gun(p), now, at);
+        } else if (was !== undefined && p.shots != was && p.rifled) {
           lase(p, gun(p), now, at);
         } else if (was !== undefined && p.shots != was) {
           // His charge at the last frame gives the strength of the shot.
@@ -486,6 +522,16 @@ export const createCombat = (
       tracer.orbs(orbs);
       // The laser rifle's (power 0) burst red, with a deeper, louder thud.
       for (const [at, k] of bursts) {
+        if (k === NADE) {
+          // A grenade: a fireball, a deep blast, and the view shaken within three radii of it.
+          tracer.blast(at);
+          audio.play(SOUND.BLAST, at, 1.6, 0.45);
+          audio.play(SOUND.TACKLE, at, 1.4, 0.4);
+          audio.play(SOUND.SPLASH, at, 1.2, 0.35);
+          const d = me ? Math.hypot(at[0] - me.x, at[1] - me.y - 1, at[2] - me.z) : Infinity;
+          fx.quake(Math.max(0, 1 - d / (3 * NADE_R)));
+          continue;
+        }
         tracer.burst(at, !k);
         audio.play(SOUND.SPLASH, at, k ? 1 : 1.3, k ? 1 : 0.6);
       }

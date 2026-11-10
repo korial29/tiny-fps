@@ -35,7 +35,8 @@ export const KEY = {
   BLADE: 512,
   /**
    * Set with FIRE by a double click (the client's choice): the katana's special cut, the special
-   * of the cut the keys give (see CUT). Ignored without the katana in hand.
+   * of the cut the keys give (see CUT); with the laser rifle in hand, a grenade from its launcher.
+   * Ignored with the other guns.
    */
   SPECIAL: 1024,
   /**
@@ -195,6 +196,10 @@ export interface PlayerState {
   rifle?: number;
   /** Rounds in the laser rifle's power cell, of `rifle` (RIFLE_CLIP at most). Absent reads 0. */
   clip?: number;
+  /** Grenades left in the laser rifle's launcher (NADE_MAX at its rack, none without the rifle). Absent reads 0. */
+  nades?: number;
+  /** Ticks before the launcher fires again (NADE_COOL after a grenade). Absent reads 0. */
+  lob?: number;
   /** The laser rifle is in hand (see KEY.RIFLE). Absent reads false. */
   rifled?: boolean;
   /** Standing inside the circle of the team's rifle rack as of the last step. Absent reads false. */
@@ -304,8 +309,10 @@ export interface Ball {
   dz: number;
   /** It burst where it is: the last snapshot that carries it. */
   burst: boolean;
-  /** Its strength, 1 to CHARGE_MAX: the health it takes. Absent reads 1. */
+  /** Its strength, 1 to CHARGE_MAX: the health it takes. Absent reads 1. 0 is a laser rifle's, BOLT a rover's, NADE a grenade. */
   power?: number;
+  /** A grenade's speed along its direction, m/s (the wire keeps whole m/s, 63 at most). Absent for the rest. */
+  v?: number;
   /** An arc of energy, not a ball: the CUT that threw it (ARC_L or ARC_R). Absent for a ball. */
   arc?: number;
 }

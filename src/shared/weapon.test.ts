@@ -45,9 +45,15 @@ import {
   SHOCK_TICKS,
   SNAP_EVERY,
   TICK_HZ,
+  NADE,
+  NADE_COOL,
+  NADE_MAX,
+  NADE_SPEED,
+  NADE_HP,
+  NADE_R,
 } from './constants';
 import { PLAYER_H } from './constants';
-import { drift } from './plasma';
+import { drift, lob, toss } from './plasma';
 import { cutOf, swingOf } from './blade';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
@@ -295,6 +301,152 @@ describe('the laser rifle', () => {
     m.ticks(1);
     expect(m.state(m.cy).rifle).toBe(10 + RIFLE_CLIP);
     expect(m.state(m.cy).ammo).toBe(-1);
+  });
+});
+
+describe('the grenade launcher', () => {
+  const { RIFLE, SPECIAL } = KEY;
+  const CLICK = RIFLE | FIRE | SPECIAL;
+  const LOADED = { rifle: RIFLE_MAX, nades: NADE_MAX };
+  /** Cy with the rifle in hand at the origin, after a snapshot tick that saw the puts. */
+  const ready = (m: ReturnType<typeof match>) => {
+    m.put(m.cy, 0, 0, LOADED);
+    m.hold(m.cy, 1, RIFLE);
+    m.ticks(SNAP_EVERY);
+  };
+
+  it('launches a grenade on a double click: one ball of power NADE in flight, a grenade and no round spent', () => {
+    const m = match();
+    ready(m);
+    m.send(m.cy, CLICK, { pitch: 0.3 });
+    expect(m.state(m.cy)).toMatchObject({
+      nades: NADE_MAX - 1,
+      lob: NADE_COOL,
+      shots: 1,
+      rifle: RIFLE_MAX,
+    });
+    expect(m.room['balls']).toHaveLength(1);
+    expect(m.room['balls'][0]).toMatchObject({ power: NADE, by: 2, id: 1, burst: false });
+    // It rises, then falls, and is gone once it burst.
+    const ys: number[] = [];
+    for (let k = 0; k < 200 && m.room['balls'].length; k++) {
+      ys.push(m.room['balls'][0].y);
+      m.room.tick();
+    }
+    const top = ys.indexOf(Math.max(...ys));
+    expect(top).toBeGreaterThan(5);
+    expect(top).toBeLessThan(ys.length - 5);
+  });
+
+  it('bursts on the enemy it meets: he, and every enemy near, lose more the nearer they are; no teammate does', () => {
+    const m = match();
+    ready(m);
+    m.put(m.bob, 8);
+    m.put(m.dee, 8, 2.5);
+    m.put(m.ann, 8, -1);
+    m.ticks(SNAP_EVERY);
+    m.hold(m.cy, 1, CLICK);
+    m.land();
+    // Bob takes it on the body; Dee, 2.5 m aside, the half of it; Ann is red, as Cy is.
+    expect(m.state(m.bob)).toMatchObject({ hp: 0, rifle: -1, nades: 0 });
+    expect(m.state(m.bob).down).toBeGreaterThan(0);
+    expect(m.state(m.dee).hp).toBe(HP_MAX - 3);
+    expect(m.state(m.ann).hp).toBe(HP_MAX);
+    expect(m.state(m.cy).hp).toBe(HP_MAX);
+    // One hit for the shooter, however many it hurt.
+    expect(m.state(m.cy).hits).toBe(1);
+  });
+
+  it('bursts on the floor and hurts who stands round the place, not one further than NADE_R', () => {
+    const m = match();
+    ready(m);
+    // Level from the eye it lands about 13.8 m out.
+    m.put(m.bob, 15.5);
+    m.put(m.dee, 20);
+    m.ticks(SNAP_EVERY);
+    m.hold(m.cy, 1, CLICK);
+    let end: { x: number; y: number } | undefined;
+    for (let k = 0; k < 100 && !end; k++) {
+      m.even();
+      end = m.snap(m.ann).balls?.find(b => b.burst);
+    }
+    expect(end!.y).toBeCloseTo(1 + PLASMA_R, 1);
+    expect(end!.x).toBeGreaterThan(13.5);
+    expect(end!.x).toBeLessThan(14.5);
+    // Bob, between 1 and 2 m from it, loses all but a fifth of NADE_HP.
+    expect(NADE_HP * (1 - 1.5 / NADE_R)).toBeGreaterThan(3);
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 4);
+    expect(m.state(m.dee).hp).toBe(HP_MAX);
+    expect(m.state(m.cy).hits).toBe(1);
+  });
+
+  it('hurts its owner: one fired at his own feet puts him down, with no hit counted', () => {
+    const m = match();
+    ready(m);
+    m.put(m.ann, 2);
+    m.ticks(SNAP_EVERY);
+    m.hold(m.cy, 1, CLICK, { pitch: -1.4 });
+    m.land();
+    expect(m.state(m.cy)).toMatchObject({ hp: 0, nades: 0, lob: 0, hits: 0 });
+    expect(m.state(m.cy).down).toBeGreaterThan(0);
+    expect(m.state(m.ann).hp).toBe(HP_MAX);
+  });
+
+  it('does not hurt through a wall', () => {
+    const m = match();
+    ready(m);
+    // The wall across x = 30: Bob right behind it, Dee on the near side, as far from the burst.
+    m.put(m.bob, 31.6);
+    m.put(m.dee, 28.3);
+    m.ticks(SNAP_EVERY);
+    m.hold(m.cy, 1, CLICK, { pitch: 0.25 });
+    m.land();
+    expect(m.state(m.bob).hp).toBe(HP_MAX);
+    expect(m.state(m.dee).hp).toBeLessThan(HP_MAX);
+  });
+
+  it('is flown on by the shooter’s lag, a tick of its arc at a time', () => {
+    const m = match();
+    ready(m);
+    const now = m.even();
+    m.send(m.cy, CLICK, { view: now - 6, pitch: 0.2 });
+    const ref = lob({ ...m.state(m.cy) });
+    for (let k = 0; k < 6; k++) {
+      toss(m.room['world'], ref, []);
+    }
+    const [b] = m.room['balls'];
+    expect([b.x, b.y, b.z, b.v]).toEqual([ref.x, ref.y, ref.z, ref.v]);
+    expect(b.x).toBeCloseTo((6 * NADE_SPEED * Math.cos(0.2)) / TICK_HZ, 1);
+  });
+
+  it('is on the wire: the ball with its speed, the burst sent once, and the launcher’s count', () => {
+    const m = match();
+    ready(m);
+    m.even();
+    m.hold(m.cy, 1, CLICK, { pitch: 0.25 });
+    m.even();
+    const s = m.snap(m.ann);
+    expect(s.players.find(p => p.id === 2)).toMatchObject({ nades: NADE_MAX - 1 });
+    expect(s.balls).toHaveLength(1);
+    expect(s.balls![0]).toMatchObject({ power: NADE, by: 2, burst: false });
+    expect(Math.abs(s.balls![0].v! - m.room['balls'][0].v!)).toBeLessThanOrEqual(0.5);
+    const bursts: number[] = [];
+    for (let k = 0; k < 200 && (m.room['balls'].length || !bursts.length); k++) {
+      m.room.tick();
+      const balls = m.room['ticks'] % SNAP_EVERY ? [] : (m.snap(m.ann).balls ?? []);
+      bursts.push(...balls.filter(b => b.burst).map(b => b.x));
+    }
+    expect(bursts).toHaveLength(1);
+    expect(Math.abs(bursts[0] - 30 + PLASMA_R / 2)).toBeLessThan(0.1);
+  });
+
+  it('is loaded at the rifle’s rack, and gone when he goes down', () => {
+    const m = match();
+    m.put(m.cy, -20, 49);
+    m.hold(m.cy, 1, RIFLE);
+    expect(m.state(m.cy).nades).toBe(NADE_MAX);
+    m.room['harm'](m.room['peers'].get(m.cy)!, HP_MAX);
+    expect(m.state(m.cy)).toMatchObject({ nades: 0, lob: 0, rifle: -1 });
   });
 });
 

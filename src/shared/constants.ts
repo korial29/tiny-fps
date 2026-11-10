@@ -372,6 +372,26 @@ export const RIFLE_RANGE = 60;
 export const RIFLE_DRIFT = 0.012;
 export const RIFLE_HITS = 2;
 
+/**
+ * The laser rifle's grenade launcher (the user, 2026-11-10: "a double click and it sends an
+ * explosive grenade at range, like on an M16"): the block under the barrel. The rifle's rack loads
+ * NADE_MAX grenades with the rounds. A double click (KEY.SPECIAL) with the rifle in hand launches
+ * one from the eye along the look at NADE_SPEED m/s, NADE_COOL ticks after the last, and the rifle
+ * holds its fire NADE_HOLD ticks. It falls under the map's gravity and bursts on the first brush or
+ * enemy body, or after NADE_RANGE metres of flight. The burst takes NADE_HP at its centre, falling
+ * off to nothing NADE_R metres away, from every enemy and from its owner (no teammate), unless a
+ * brush hides him. NADE is its Ball.power, past BOLT. NADE_COOL fits 6 bits and NADE_MAX 2 on the
+ * wire, NADE_HOLD the 3 of `cool`.
+ */
+export const NADE = 7;
+export const NADE_MAX = 3;
+export const NADE_COOL = 60;
+export const NADE_HOLD = 7;
+export const NADE_SPEED = 36;
+export const NADE_RANGE = 150;
+export const NADE_R = 5;
+export const NADE_HP = 5;
+
 /** Seconds a carrier who is made to drop the flag cannot take it again: he would pick it up where he stands. */
 export const FLAG_LOCK = 2;
 /** Seconds the end screen of a match stays, then a new match starts. */

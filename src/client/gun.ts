@@ -885,6 +885,8 @@ export const RIFLE_GRIP: Vec3 = [0, -0.008, -0.14];
 /** The handguard's half width and half height, and how much it rises forward, as the body's underside does. */
 export const GUARD: [number, number] = [0.03, 0.022];
 export const RIFLE_RISE = 0.096;
+/** The mouth of the grenade launcher, out of the front of the handguard: in the gun's space like RIFLE_MUZZLE. */
+export const NADE_MUZZLE: Vec3 = [0, RIFLE_GRIP[1] + RIFLE_RISE * 0.118, RIFLE_GRIP[2] - 0.118];
 /**
  * How the left hand carries the handguard (the user, 2026-11-10: the fist closed beside it): where
  * the block's middle is from the wrist, along the fingers and toward the palm (FIST's, in body.ts),
@@ -1099,6 +1101,32 @@ export const rifle = (lod: number): number[] => {
     ],
     n,
     olive,
+  );
+  // The block is a grenade launcher (the user, 2026-11-10): its steel barrel comes 3.8 cm out of
+  // the block's front to NADE_MUZZLE, a ring round its dark mouth, and its breech cap closes the back.
+  tube(
+    out,
+    [
+      guard(h1 - 0.004, 0.015, 0.015),
+      guard(h1 + 0.03, 0.015, 0.015),
+      guard(h1 + 0.031, 0.018, 0.018),
+      guard(h1 + 0.0375, 0.018, 0.018),
+      guard(h1 + 0.038, 0.0125, 0.0125),
+    ],
+    n,
+    steel,
+  );
+  tube(
+    out,
+    [guard(h1 + 0.038, 0.0125, 0.0125), guard(h1 + 0.0382, 0, 0)],
+    n,
+    shade([0.004, 0.004, 0.005], [0.02, 0.02, 0.025]),
+  );
+  tube(
+    out,
+    [guard(h0 - 0.014, 0, 0), guard(h0 - 0.012, 0.016, 0.016), guard(h0 + 0.004, 0.016, 0.016)],
+    m,
+    steel,
   );
   // The pistol grip.
   tube(

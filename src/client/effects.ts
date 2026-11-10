@@ -43,6 +43,8 @@ export interface Effects {
   wound(): void;
   /** The own player was tackled: a hard jolt of the eye, the look and the roll, and the vignette. */
   jolt(): void;
+  /** A grenade burst near the own player, `k` 0 to 1 as it is nearer: the view is shaken as hard as a tackle at 1. */
+  quake(k: number): void;
   /** The own player tackled someone: a small punch of the look and the field of view. */
   punch(): void;
   /** The own katana's cut struck: a thrust punches the field of view, a slash dips the look, a cut across rolls toward the side it ends on. */
@@ -177,6 +179,12 @@ export const createEffects = (): Effects => {
       p[1] += JOLT[1];
       r[1] += JOLT[2];
       fx.hurt = 1;
+    },
+
+    quake(k) {
+      y[1] += JOLT[0] * k;
+      p[1] += JOLT[1] * k;
+      r[1] += JOLT[2] * k * (shots++ % 2 ? -1 : 1);
     },
 
     punch() {

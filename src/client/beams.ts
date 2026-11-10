@@ -2,7 +2,7 @@
 // trail, a blue flash at the muzzle of a shot, a splash of light and sparks where a ball bursts,
 // the bolts and sparks of the katana's shock, the katana's arcs of energy, and the rail gun's lightning, a new shape each frame. Everything turns to face the camera and is
 // unlit and above 1, so that the bloom makes it glow. No DOM, no GL.
-import { BOLT as ROVER_BOLT } from '../shared/constants';
+import { NADE, NADE_R, BOLT as ROVER_BOLT } from '../shared/constants';
 import { CUT } from '../shared/types';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
@@ -23,6 +23,18 @@ export interface Orb {
 export const FLASH = 0.06;
 export const SPLASH = 0.16;
 const SPARK = 0.22;
+/** Seconds a grenade's fireball lasts, and its embers; the embers thrown. */
+export const BOOM = 0.45;
+const EMBER = 0.7;
+const EMBERS = 40;
+/** The fireball's radius at its widest, as a share of NADE_R, its puffs, and its colours from the outside in. */
+const FIRE = 0.35;
+const PUFFS = 6;
+const BLAZE = [
+  [1.3, 0.16, 0.02],
+  [2.2, 0.62, 0.08],
+  [3.2, 2.2, 1],
+];
 /** Sparks to a burst, and kept at most. */
 const SPARKS = 12;
 const MAX = 16;
@@ -45,6 +57,8 @@ interface Spark {
   age: number;
   /** A laser rifle's: red. */
   red?: boolean;
+  /** A grenade's ember: orange, and it lasts EMBER. */
+  hot?: boolean;
 }
 /** A flash at a muzzle or a splash at a burst: where, how old, and which. */
 interface Glow {
@@ -55,6 +69,9 @@ interface Glow {
   splash?: boolean;
   /** How charged the shot was, 0 to 1: orange and bigger as it goes up. */
   hot?: number;
+  /** A grenade's fireball: it lasts BOOM. Its puffs: where each sits, in radii from the centre. */
+  boom?: boolean;
+  puffs?: Vec3[];
 }
 /** A jagged bolt: two segments, a to m to b. */
 interface Bolt {
@@ -73,6 +90,8 @@ export interface Tracer {
   lightning(list: { a: Vec3; b: Vec3 }[]): void;
   /** A ball burst at `at`: a splash of light and a spray of sparks; a laser rifle's, `red`, bigger and fiercer. */
   burst(at: Vec3, red?: boolean): void;
+  /** A grenade burst at `at`: a white-hot fireball in orange puffs that swells and shrinks away, a shower of embers, a strong light. */
+  blast(at: Vec3): void;
   /** The balls to draw this frame. */
   orbs(list: Orb[]): void;
   /** The katana's shock at `at`: a burst of sparks and bolts. */
@@ -295,6 +314,18 @@ export const createTracer = (): Tracer => {
       glows = [...glows, { p: at, age: 0, splash: true, hot: red ? -0.6 : 0 }].slice(-MAX);
       spray(at, red ? 2 * SPARKS : SPARKS, red ? 7 : 4, red);
     },
+    blast(at) {
+      const puffs = Array.from({ length: PUFFS }, (): Vec3 => [
+        rnd() * 0.7,
+        rnd() * 0.5 + 0.2,
+        rnd() * 0.7,
+      ]);
+      glows = [...glows, { p: at, age: 0, boom: true, puffs }].slice(-MAX);
+      for (let i = 0; i < EMBERS; i++) {
+        sparks.push({ p: at, v: [rnd() * 9, rnd() * 7 + 5, rnd() * 9], age: 0, hot: true });
+      }
+      sparks = sparks.slice(-MAX * SPARKS);
+    },
     orbs(list) {
       balls = list;
     },
@@ -321,8 +352,8 @@ export const createTracer = (): Tracer => {
       for (const x of [...glows, ...sparks, ...bolts]) {
         x.age += dt;
       }
-      glows = glows.filter(g => g.age < (g.splash ? SPLASH : FLASH));
-      sparks = sparks.filter(s => s.age < SPARK);
+      glows = glows.filter(g => g.age < (g.boom ? BOOM : g.splash ? SPLASH : FLASH));
+      sparks = sparks.filter(s => s.age < (s.hot ? EMBER : SPARK));
       bolts = bolts.filter(b => b.age < BOLT);
       for (const s of sparks) {
         s.v[1] -= 9 * dt;
@@ -334,6 +365,24 @@ export const createTracer = (): Tracer => {
       for (const { p, d, tail, power = 1, arc } of balls) {
         if (arc) {
           crescent(out, p, d, arc, eye);
+          continue;
+        }
+        if (power === NADE) {
+          // A grenade: a small hot core in an orange glow, a thin trail of it behind.
+          HOT.forEach((rgb, i) => {
+            disc(out, p, i ? 0.035 : 0.09, rgb, eye, 0.02 * i);
+            ribbon(
+              out,
+              p,
+              sub(p, d.map(c => c * tail) as Vec3),
+              i ? 0.012 : 0.03,
+              rgb,
+              eye,
+              0.02 * i,
+              0,
+              0.1,
+            );
+          });
           continue;
         }
         // A rover's bolt is a streak: four times the trail.
@@ -367,7 +416,26 @@ export const createTracer = (): Tracer => {
           ),
         );
       }
-      for (const { p, age, splash, hot: h = 0 } of glows) {
+      for (const { p, age, puffs = [] } of glows.filter(g => g.boom)) {
+        // The fireball, at its true size: out to FIRE of NADE_R in a quarter of its time, then it
+        // shrinks away, white-hot inside orange, with a few puffs of the orange round it.
+        const k = age / BOOM;
+        const r = (FIRE * NADE_R * (k < 0.25 ? Math.sqrt(4 * k) : (1 - k) / 0.75)) / far(eye, p, 1);
+        puffs.forEach(d =>
+          disc(
+            out,
+            p.map((c, i) => c + d[i] * r * far(eye, p, 1)) as Vec3,
+            0.55 * r,
+            BLAZE[0],
+            eye,
+            0,
+            8,
+            1,
+          ),
+        );
+        BLAZE.forEach((rgb, i) => disc(out, p, r * (1 - 0.3 * i), rgb, eye, 0.05 * (i + 1), 16, 1));
+      }
+      for (const { p, age, splash, hot: h = 0 } of glows.filter(g => !g.boom)) {
         // A flash shrinks; a splash swells as it fades. A charged one is orange and bigger, a
         // laser rifle's red and bigger.
         const k = 1 - age / (splash ? SPLASH : FLASH);
@@ -421,9 +489,21 @@ export const createTracer = (): Tracer => {
           RIBBONS.forEach(([w, rgb, lift]) => ribbon(out, p, q, w * 0.5 * k, rgb, eye, lift));
         }
       }
-      for (const { p, age, red } of sparks) {
-        const k = 1 - age / SPARK;
-        disc(out, p, 0.022 * k, red ? RED[1] : [1.4 * k + 0.4, 2.2 * k + 0.3, 3], eye, 0, 4);
+      for (const { p, age, red, hot: ember } of sparks) {
+        const k = 1 - age / (ember ? EMBER : SPARK);
+        disc(
+          out,
+          p,
+          (ember ? 0.06 : 0.022) * k,
+          ember
+            ? [3 * k + 0.6, 1.4 * k, 0.2 * k]
+            : red
+              ? RED[1]
+              : [1.4 * k + 0.4, 2.2 * k + 0.3, 3],
+          eye,
+          0,
+          4,
+        );
       }
     },
     lights() {
@@ -443,21 +523,23 @@ export const createTracer = (): Tracer => {
         ...glows
           .slice(-4)
           .map(g =>
-            g.splash
-              ? point(
-                  g.p,
-                  7,
-                  2 * (1 - g.age / SPLASH),
-                  (g.hot! < 0 ? RED[0] : [0.35, 0.7, 1.6]) as Vec3,
-                )
-              : point(g.p, 6, 1.3 * (1 - g.age / FLASH), [0.25, 0.55, 1.6]),
+            g.boom
+              ? point(g.p, 4 * NADE_R, 6 * (1 - g.age / BOOM), [1.6, 0.8, 0.3])
+              : g.splash
+                ? point(
+                    g.p,
+                    7,
+                    2 * (1 - g.age / SPLASH),
+                    (g.hot! < 0 ? RED[0] : [0.35, 0.7, 1.6]) as Vec3,
+                  )
+                : point(g.p, 6, 1.3 * (1 - g.age / FLASH), [0.25, 0.55, 1.6]),
           ),
         ...[...balls]
           .sort((a, b) => dist(a) - dist(b))
           .slice(0, LIT)
           .map(o =>
             (o.power ?? 1) > 1
-              ? point(o.p, 6, 1.5, [1.4, 0.55, 0.15])
+              ? point(o.p, o.power === NADE ? 3 : 6, 1.5, [1.4, 0.55, 0.15])
               : point(o.p, 4, 1, o.power === 0 ? [1.4, 0.15, 0.1] : [0.25, 0.5, 1.4]),
           ),
         ...hot.slice(0, 2).map(({ p, k }) => point(p, 2 + 3 * k, 0.4 + 1.2 * k, [1.4, 0.55, 0.15])),

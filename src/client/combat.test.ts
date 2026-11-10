@@ -11,6 +11,8 @@ import {
   PLASMA_R,
   PLASMA_SPEED,
   RECOIL,
+  NADE,
+  NADE_COOL,
 } from '../shared/constants';
 import { STILL } from '../shared/physics';
 import { CUT, KEY } from '../shared/types';
@@ -71,7 +73,7 @@ const VIEW = mk();
 const setup = () => {
   const audio = { play: vi.fn() };
   const hud = { vitals: vi.fn(), hit: vi.fn(), down: vi.fn() };
-  const fx = { fire: vi.fn(), cut: vi.fn(), wound: vi.fn(), lie: 0 };
+  const fx = { fire: vi.fn(), cut: vi.fn(), wound: vi.fn(), quake: vi.fn(), lie: 0 };
   const tracer = createTracer();
   const ctl = { pitch: 0 };
   const balls = createBalls(WORLD);
@@ -224,6 +226,61 @@ describe('the own shots', () => {
     expect(flashes).toHaveLength(1);
     expect(orbs()).toHaveLength(1);
     expect(orbs()[0].power).toBe(0);
+  });
+
+  it('of the rifle’s launcher thump a grenade out under the muzzle: an orange flash, a hard kick, no laser', () => {
+    const { combat, frame, ids, flashes, orbs, fx, ctl } = setup();
+    const rifled = { ammo: -1, rifle: 50, clip: 20, rifled: true, nades: 2 };
+    const after = player({ ...rifled, shots: 1, lob: NADE_COOL, pitch: 0.3 });
+    frame(player(rifled));
+    combat.step(player({ ...rifled, shots: 0 }), after);
+    expect(fx.fire).toHaveBeenLastCalledWith(3);
+    expect(ctl.pitch).toBeGreaterThan(0);
+    frame(after);
+    expect(ids()).toEqual([SOUND.TACKLE, SOUND.DASH]);
+    expect(flashes).toHaveLength(1);
+    // Under the rifle's muzzle, and behind it.
+    const m = VIEW.muzzle;
+    expect(flashes[0][0][1]).toBeLessThan(VIEW.cam[1] + m[1] - 0.05);
+    expect(flashes[0][0][2]).toBeGreaterThan(VIEW.cam[2] - m[2] + 0.2);
+    expect(orbs()).toHaveLength(1);
+    expect(orbs()[0].power).toBe(NADE);
+  });
+
+  it('of the rifle’s launcher burst in a fireball with a blast, and shake the view of who is near', () => {
+    const { combat, frame, audio, orbs, bursts, tracer, fx } = setup();
+    const blast = vi.spyOn(tracer, 'blast');
+    const rifled = { ammo: -1, rifle: 50, clip: 20, rifled: true };
+    const after = player({ ...rifled, shots: 1, lob: NADE_COOL, pitch: -0.9 });
+    frame(player(rifled));
+    combat.step(player({ ...rifled, shots: 0 }), after);
+    for (let k = 0; k < 90 && !blast.mock.calls.length; k++) {
+      frame(after);
+    }
+    // On the roof at his feet: no plain splash, the three sounds of the blast there, a hard shake.
+    expect(blast).toHaveBeenCalledTimes(1);
+    const [at] = blast.mock.calls[0];
+    expect(at[1]).toBeCloseTo(0.12, 2);
+    expect(bursts).toEqual([]);
+    expect(orbs()).toEqual([]);
+    expect(audio.play.mock.calls.slice(-3).map(c => [c[0], c[1]])).toEqual([
+      [SOUND.BLAST, at],
+      [SOUND.TACKLE, at],
+      [SOUND.SPLASH, at],
+    ]);
+    expect(fx.quake).toHaveBeenCalledTimes(1);
+    expect(fx.quake.mock.calls[0][0]).toBeGreaterThan(0.8);
+  });
+
+  it('of another’s launcher thump at his gun, and not as a laser shot', () => {
+    const { frame, ids, flashes } = setup();
+    const foe = { id: 5, x: 3, z: -4, ammo: -1, rifle: 50, clip: 20, rifled: true };
+    frame(player(), [player({ ...foe, shots: 4 })]);
+    frame(player(), [player({ ...foe, shots: 5, lob: NADE_COOL - 2 })]);
+    expect(ids()).toEqual([SOUND.TACKLE, SOUND.DASH]);
+    expect(flashes).toHaveLength(1);
+    frame(player(), [player({ ...foe, shots: 6, lob: NADE_COOL - 9 })]);
+    expect(ids().at(-1)).toBe(SOUND.LASE);
   });
 
   it('of the laser rifle burst red on the wall, with a deeper, louder thud', () => {
@@ -625,6 +682,7 @@ describe('the sounds and the screen of what happens to the own player', () => {
       false,
       -1,
       false,
+      0,
     );
     expect(hud.down).toHaveBeenLastCalledWith(0, 0);
     frame(player({ hp: 0, ammo: -1, down: 90 }));
@@ -639,6 +697,7 @@ describe('the sounds and the screen of what happens to the own player', () => {
       false,
       -1,
       false,
+      0,
     );
     expect(hud.down).toHaveBeenLastCalledWith(0, 1.5);
   });
@@ -788,6 +847,7 @@ describe('the own hits with the katana', () => {
       false,
       -1,
       false,
+      0,
     );
     frame(player({ ammo: 12, blade: true, wield: false }));
     expect(hud.vitals).toHaveBeenLastCalledWith(
@@ -801,6 +861,7 @@ describe('the own hits with the katana', () => {
       false,
       -1,
       false,
+      0,
     );
   });
 });

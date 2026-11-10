@@ -10,9 +10,15 @@ import {
   PLAYER_H,
   PLAYER_R,
   TICK_HZ,
+  GRAVITY,
+  NADE,
+  NADE_HP,
+  NADE_R,
+  NADE_RANGE,
+  NADE_SPEED,
 } from './constants';
 import { spawn } from './physics';
-import { PLASMA_STEP, cylinder, fly, launch } from './plasma';
+import { PLASMA_STEP, blast, cylinder, fly, launch, lob, toss } from './plasma';
 import { MODE, TEX } from './types';
 import type { PlayerState } from './types';
 import { build } from './world';
@@ -188,5 +194,115 @@ describe('cylinder', () => {
     expect(cylinder([10, 1, 0], [1, 0, 0], c, 0.5, PLAYER_H)).toBe(0);
     // Straight down onto the head.
     expect(cylinder([10.1, 5, 0], [0, -1, 0], c, 0.5, PLAYER_H)).toBeCloseTo(5 - PLAYER_H, 9);
+  });
+});
+
+describe('a grenade', () => {
+  /** The grenade `p` launches, tossed to its burst: the places it went through, tick by tick, and the foe it burst on. */
+  const thrown = (w: World, p: PlayerState, foes: PlayerState[] = []) => {
+    const b = lob(p);
+    const path: [number, number, number][] = [[b.x, b.y, b.z]];
+    let hit: PlayerState | undefined;
+    while (!b.burst && path.length < 5000) {
+      hit = toss(w, b, foes);
+      path.push([b.x, b.y, b.z]);
+    }
+    return { b, path, hit };
+  };
+
+  it('leaves the eye along the look at NADE_SPEED, with no drift, named like a ball', () => {
+    const b = lob(shooter({ rifled: true, shots: 12, pitch: 0.2 }));
+    expect(b).toMatchObject({ id: 12, by: 0, power: NADE, v: NADE_SPEED, left: NADE_RANGE });
+    expect([b.dx, b.dy, b.dz]).toEqual([
+      expect.closeTo(Math.cos(0.2), 9),
+      expect.closeTo(Math.sin(0.2), 9),
+      expect.closeTo(0, 9),
+    ]);
+    expect(b.y).toBeCloseTo(EYE, 5);
+  });
+
+  it('falls in an arc under gravity and bursts on the floor where the parabola lands', () => {
+    const { b, path } = thrown(flat, shooter());
+    // Level from the eye: down to a ball's radius over the floor in sqrt(2 h / g) seconds.
+    const t = Math.sqrt((2 * (EYE - PLASMA_R)) / GRAVITY);
+    expect(b.burst).toBe(true);
+    expect(b.y).toBeCloseTo(PLASMA_R, 3);
+    expect(Math.abs(b.x - NADE_SPEED * t)).toBeLessThan(NADE_SPEED / TICK_HZ);
+    expect(Math.abs(path.length - 1 - t * TICK_HZ)).toBeLessThan(1.5);
+    // Higher it goes further, over a top where it flies level.
+    const up = thrown(flat, shooter({ pitch: 0.5 }));
+    const top = Math.max(...up.path.map(q => q[1]));
+    expect(top).toBeCloseTo(EYE + (NADE_SPEED * Math.sin(0.5)) ** 2 / (2 * GRAVITY), 0);
+    expect(up.b.x).toBeGreaterThan(50);
+    expect(up.b.z).toBeCloseTo(0, 5);
+  });
+
+  it('follows the map’s gravity: twice as far on the moon', () => {
+    const moon = build({ ...flat.def, gravity: 0.5 });
+    const [here, there] = [flat, moon].map(w => thrown(w, shooter({ pitch: 0.3 })).b.x);
+    expect(there / here).toBeGreaterThan(1.8);
+  });
+
+  it('bursts on the first wall, and on the first foe, not on one who is not handed in', () => {
+    const w = walled(wall(20, 21));
+    const onWall = thrown(w, shooter({ pitch: 0.2 }));
+    expect(onWall.b.burst).toBe(true);
+    // Within a ball's radius of the wall: the grid finds a brush in the cells the tick crosses.
+    expect(onWall.b.x).toBeGreaterThan(20 - PLASMA_R - 1e-3);
+    expect(onWall.b.x).toBeLessThanOrEqual(20);
+    expect(onWall.b.y).toBeGreaterThan(1);
+    const f = foe(8);
+    const onFoe = thrown(w, shooter(), [f]);
+    expect(onFoe.hit).toBe(f);
+    expect(onFoe.b.x).toBeCloseTo(8 - PLAYER_R - PLASMA_R, 3);
+    expect(thrown(w, shooter(), []).b.x).toBeGreaterThan(10);
+  });
+
+  it('bursts in the air at the end of its range', () => {
+    const w = build({ ...flat.def, gravity: 0.2 });
+    const { b } = thrown(w, shooter({ pitch: 1.5 }));
+    expect(b.burst).toBe(true);
+    expect(b.left).toBe(0);
+    expect(b.y).toBeGreaterThan(50);
+  });
+
+  it('keeps a float32 state, so two flights of the same launch are the same to the bit', () => {
+    const [a, c] = [0, 1].map(() => thrown(flat, shooter({ pitch: 0.37, yaw: 1.1 })).path);
+    expect(a).toEqual(c);
+    expect(
+      a
+        .slice(1)
+        .flat()
+        .every(v => v === Math.fround(v)),
+    ).toBe(true);
+  });
+
+  describe('its blast', () => {
+    const at = (x: number, y = 1): [number, number, number] => [x, y, 0];
+
+    it('takes NADE_HP at the body, less with the distance, nothing from NADE_R on', () => {
+      const f = foe(0);
+      expect(blast(flat, at(0.5), f)).toBe(NADE_HP);
+      expect(blast(flat, at(NADE_R / 2), f)).toBe(Math.ceil(NADE_HP / 2));
+      expect(blast(flat, at(NADE_R - 0.1), f)).toBe(1);
+      expect(blast(flat, at(NADE_R), f)).toBe(0);
+      const hp = Array.from({ length: 12 }, (_, k) => blast(flat, at(k * 0.5), f));
+      expect(hp).toEqual([...hp].sort((a, b) => b - a));
+    });
+
+    it('measures to the nearest of the body, feet to head', () => {
+      const f = foe(0);
+      // At his feet and just over his head it is as near as beside him.
+      expect(blast(flat, at(0.3, 0.1), f)).toBe(NADE_HP);
+      expect(blast(flat, at(0, 1.8 + NADE_R / 2), f)).toBe(Math.ceil(NADE_HP / 2));
+    });
+
+    it('does not go through a wall, and does over a low one', () => {
+      const f = foe(3);
+      expect(blast(walled(wall(1, 2)), at(0), f)).toBe(0);
+      const low = walled({ ...wall(1, 2), max: [2, 0.9, 5] });
+      expect(blast(low, at(0), f)).toBe(blast(flat, at(0), f));
+      expect(blast(low, at(0), f)).toBeGreaterThan(0);
+    });
   });
 });

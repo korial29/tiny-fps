@@ -3,16 +3,22 @@
 // burst, when that is short of the wall (a body). The others' come from the snapshots and are
 // drawn INTERP_DELAY in the past like the players, flying on at PLASMA_SPEED from the last place
 // a snapshot gave. A ball is drawn from the muzzle that fired it and joins its true line in CATCH
-// seconds. The katana's arcs of energy fly the same way, at ARC_SPEED, from the eye. No DOM.
+// seconds. The katana's arcs of energy fly the same way, at ARC_SPEED, from the eye. A grenade of
+// the rifle's launcher falls as it flies: the own one along the ticks the host's toss() gives it
+// from the predicted launch, the others' on the arc of the last snapshot's place, direction and
+// speed; it always ends in a burst. No DOM.
 import {
   ARC_SPEED,
   BOLT,
   BOLT_SPEED,
   INTERP_DELAY,
+  NADE,
   PLASMA_R,
   PLASMA_SPEED,
+  TICK_HZ,
 } from '../shared/constants';
-import { launch, wave } from '../shared/plasma';
+import { gravity } from '../shared/physics';
+import { launch, lob, lobbed, toss, wave } from '../shared/plasma';
 import type { Ball, PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
@@ -44,6 +50,10 @@ interface Flight {
   power: number;
   /** An arc of energy: the CUT that threw it (Ball.arc). */
   arc?: number;
+  /** An own grenade: its place at each tick from `t`, the last where it bursts. */
+  path?: Vec3[];
+  /** Another's grenade: its speed along `d` at `o`, m/s. */
+  v?: number;
 }
 
 export interface Balls {
@@ -71,11 +81,33 @@ export const createBalls = (world: World): Balls => {
 
   return {
     fire(p, now) {
-      const b = p.wield ? wave(p) : launch(p);
+      const b = p.wield ? wave(p) : lobbed(p) ? lob(p) : launch(p);
       const [o, d]: Vec3[] = [at(b), [b.dx, b.dy, b.dz]];
+      const key = (p.id << 8) | b.id;
+      if (b.power === NADE) {
+        // The whole arc, tick by tick as the host flies it, to the wall it bursts on.
+        const path = [o];
+        while (!b.burst) {
+          toss(world, b, []);
+          path.push(at(b));
+        }
+        spent.delete(key);
+        live.set(key, {
+          own: true,
+          by: p.id,
+          t0: now,
+          o,
+          t: now,
+          d,
+          pop: true,
+          due: Infinity,
+          power: NADE,
+          path,
+        });
+        return;
+      }
       // The wall it bursts on, as the host's fly() finds it.
       const r = ray(world, o, d, b.left, PLASMA_R);
-      const key = (p.id << 8) | b.id;
       spent.delete(key);
       live.set(key, {
         own: true,
@@ -101,7 +133,12 @@ export const createBalls = (world: World): Balls => {
         if (b.by == me && (f?.own || spent.has(key))) {
           if (b.burst) {
             spent.delete(key);
-            if (f) {
+            if (f?.path) {
+              // It burst on a body, short of the wall: the arc is cut where it comes nearest.
+              const gap = (q: Vec3) => Math.hypot(...q.map((c, i) => c - at(b)[i]));
+              const n = f.path.reduce((m, q, i, l) => (gap(q) < gap(l[m]) ? i : m), 0);
+              f.path = [...f.path.slice(0, n + 1), at(b)];
+            } else if (f) {
               [f.end, f.pop] = [at(b), true];
             }
           }
@@ -127,7 +164,7 @@ export const createBalls = (world: World): Balls => {
         if (b.burst) {
           [f.end, f.pop, f.due] = [at(b), true, now];
         } else {
-          [f.o, f.t, f.d] = [at(b), now, [b.dx, b.dy, b.dz]];
+          [f.o, f.t, f.d, f.v] = [at(b), now, [b.dx, b.dy, b.dz], b.v];
         }
       }
       // A ball the host no longer sends without a burst has flown its range.
@@ -143,11 +180,20 @@ export const createBalls = (world: World): Balls => {
       const bursts: [Vec3, number][] = [];
       for (const [key, f] of live) {
         const t = f.own ? now : now - INTERP_DELAY;
+        const nade = f.power === NADE;
+        const dt = (t - f.t) / 1000;
         const s =
           ((t - f.t) * (f.arc ? ARC_SPEED : f.power === BOLT ? BOLT_SPEED : PLASMA_SPEED)) / 1000;
-        if ((f.end && s >= dot(f.end.map((v, i) => v - f.o[i]) as Vec3, f.d)) || t >= f.due) {
+        const tick = Math.max(0, dt * TICK_HZ);
+        const last = f.path ? f.path.length - 1 : 0;
+        if (
+          (f.path
+            ? tick >= last
+            : !nade && f.end && s >= dot(f.end.map((v, i) => v - f.o[i]) as Vec3, f.d)) ||
+          t >= f.due
+        ) {
           if (f.pop) {
-            bursts.push([f.end!, f.power]);
+            bursts.push([f.path ? f.path[last] : f.end!, f.power]);
           }
           if (f.own) {
             spent.add(key);
@@ -159,7 +205,27 @@ export const createBalls = (world: World): Balls => {
           // Not fired yet, as the others are drawn.
           continue;
         }
-        const p = f.o.map((v, i) => v + f.d[i] * s) as Vec3;
+        let p = f.o.map((v, i) => v + f.d[i] * s) as Vec3;
+        let d = f.d;
+        if (nade) {
+          // Along its ticks, or down the arc gravity gives from the last snapshot.
+          const [a, b] = f.path
+            ? [f.path[Math.floor(tick)], f.path[Math.floor(tick) + 1]]
+            : [f.o, f.o];
+          const [k, v, g] = [tick % 1, f.v ?? 0, gravity(world)];
+          const to: Vec3 = f.path
+            ? (b.map((c, i) => c - a[i]) as Vec3)
+            : [f.d[0] * v, f.d[1] * v - g * dt, f.d[2] * v];
+          const n = Math.hypot(...to) || 1;
+          d = to.map(c => c / n) as Vec3;
+          p = f.path
+            ? (a.map((c, i) => c + to[i] * k) as Vec3)
+            : [
+                f.o[0] + f.d[0] * v * dt,
+                f.o[1] + f.d[1] * v * dt - 0.5 * g * dt * dt,
+                f.o[2] + f.d[2] * v * dt,
+              ];
+        }
         f.born ??= now;
         // An arc leaves the eye, not a muzzle.
         f.from ??= (!f.arc && muzzle(f.by)) || p;
@@ -169,7 +235,7 @@ export const createBalls = (world: World): Balls => {
         const q = p.map((v, i) => from[i] + (v - from[i]) * k * (2 - k)) as Vec3;
         orbs.push({
           p: q,
-          d: f.d,
+          d,
           tail: Math.min(TRAIL, Math.hypot(...q.map((v, i) => v - from[i]))),
           power: f.power,
           arc: f.arc,

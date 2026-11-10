@@ -24,6 +24,7 @@ import {
   RAIL_DRAIN,
   RAIL_MAX,
   RAIL_TICKS,
+  NADE,
   RIFLE_CLIP,
   RIFLE_HITS,
   RIFLE_MAX,
@@ -41,7 +42,7 @@ import { Ctf } from './ctf';
 import { STRIKE, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
 import { floorAt, forward, heightOf, respawn, spawn, speedOf, stumble } from './physics';
-import { PLASMA_LAG, fly, launch, stepOf, wave } from './plasma';
+import { PLASMA_LAG, blast, fly, launch, lob, stepOf, toss, wave } from './plasma';
 import type { Flying } from './plasma';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
@@ -281,6 +282,8 @@ export class Room {
           this.rail(p, input.view);
         } else if (struck === STRIKE.LASER) {
           this.shoot(p, input.view);
+        } else if (struck === STRIKE.NADE) {
+          this.shoot(p, input.view, lob(p.state, p.info.team));
         }
         Object.assign(p.state, here);
         if (use && r && p.state.mode === MODE.RIDE) {
@@ -528,6 +531,8 @@ export class Room {
       rifle: -1,
       clip: 0,
       rifled: false,
+      nades: 0,
+      lob: 0,
       zapping: false,
       slow: 0,
     });
@@ -538,13 +543,21 @@ export class Room {
   /**
    * A shot of `p` went off at the view tick `view`: its ball (or the arc `b` of an ARC cut) starts
    * where `p` saw it start, flown on by his lag (the view tick to now, at most PLASMA_LAG ticks)
-   * against the others as they are now. Past PLASMA_MAX balls in flight, the oldest bursts.
+   * against the others as they are now. Past PLASMA_MAX balls in flight, the oldest bursts. A
+   * grenade (lob()) is flown on the same way, a tick of its arc at a time.
    */
   private shoot(p: Player, view = 0, b = launch(p.state, p.info.team)): void {
     // Ticks back, on the u16 circle; a view ahead of now is no lag.
     const lag = (this.ticks - view + 0x10000) % 0x10000;
     this.balls.push(b);
-    this.fly(b, Math.min(lag < 0x8000 ? lag : 0, PLASMA_LAG) * stepOf(b));
+    const ticks = Math.min(lag < 0x8000 ? lag : 0, PLASMA_LAG);
+    if (b.power === NADE) {
+      for (let k = 0; k < ticks && !b.burst; k++) {
+        this.fly(b, 0);
+      }
+    } else {
+      this.fly(b, ticks * stepOf(b));
+    }
     const live = this.balls.filter(q => !q.burst);
     if (live.length > PLASMA_MAX) {
       live[0].burst = true;
@@ -555,10 +568,37 @@ export class Room {
    * Flies the ball `b` on by `m` metres: one that bursts on an enemy who is up takes its power in hp
    * from him, and counts a hit to its shooter. An arc takes its cut's hp; one it does not put down
    * is floored (FLOOR_TICKS, `zap`), thrown ARC_KNOCK m/s the way it flies, and drops the flag.
+   * A grenade flies one tick of its arc whatever `m`, and its burst is a blast: every enemy who is
+   * up, and its owner, lose what blast() gives where they stand now; one hit for the shooter when
+   * it hurt an enemy.
    */
   private fly(b: Flying, m: number): void {
     const peers = this.players();
     const foes = peers.filter(q => q.info.team !== b.team && !q.state.down);
+    if (b.power === NADE) {
+      toss(
+        this.world,
+        b,
+        foes.map(f => f.state),
+      );
+      let hit = false;
+      for (const q of b.burst ? peers : []) {
+        const own = q.info.id === b.by;
+        const hp =
+          !q.state.down && (own || q.info.team !== b.team)
+            ? blast(this.world, [b.x, b.y, b.z], q.state)
+            : 0;
+        if (hp) {
+          this.harm(q, hp);
+          hit ||= !own;
+        }
+      }
+      const by = peers.find(q => q.info.id === b.by);
+      if (hit && by) {
+        by.state.hits = (by.state.hits + 1) & 255;
+      }
+      return;
+    }
     const hit = fly(
       this.world,
       b,

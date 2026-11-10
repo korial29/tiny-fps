@@ -13,7 +13,19 @@ import {
   STEP_H,
   TICK_HZ,
 } from './constants';
-import { STILL, eyeHeight, forward, heightOf, move, speedOf, spawn } from './physics';
+import {
+  STILL,
+  eyeHeight,
+  floorAt,
+  forward,
+  gravity,
+  heightOf,
+  move,
+  shove,
+  speedOf,
+  spawn,
+  stumble,
+} from './physics';
 import { EV, KEY, MODE, TEX } from './types';
 import type { Input, PlayerState } from './types';
 import { build } from './world';
@@ -748,5 +760,77 @@ describe('landing', () => {
     });
     expect(air).toBe(0);
     expect(s.y).toBe(0);
+  });
+});
+
+describe('move: seated in a rover', () => {
+  const seated = (): PlayerState => ({
+    ...spawn(0, yard, 0),
+    x: 3,
+    y: 7,
+    z: 4,
+    vx: 5,
+    vy: 2,
+    vz: -1,
+    mode: MODE.RIDE,
+  });
+  const input = (keys: number, yaw = 1, pitch = 0.2): Input => ({ seq: 0, keys, yaw, pitch });
+
+  it('leaves the body where the seat put it, whatever the keys, and turns the look', () => {
+    const p = seated();
+    for (const keys of [FORWARD, JUMP, KEY.DASH | LEFT, KEY.CROUCH, 0]) {
+      move(p, input(keys), yard);
+    }
+    expect([p.x, p.y, p.z, p.vx, p.vy, p.vz]).toEqual([3, 7, 4, 5, 2, -1]);
+    expect(p.mode).toBe(MODE.RIDE);
+    expect(p.t).toBe(5);
+    expect(p.ground).toBe(false);
+    expect(p.yaw).toBeCloseTo(1, 6);
+    expect(p.pitch).toBeCloseTo(0.2, 6);
+    expect(p.buffer).toBe(0);
+    expect(p.ev).toBe(0);
+  });
+
+  it('keeps USE as held, to tell its press from a hold', () => {
+    const p = seated();
+    move(p, input(KEY.USE | JUMP), yard);
+    expect(p.held).toBe(KEY.USE | JUMP);
+    move(p, input(0), yard);
+    expect(p.held).toBe(0);
+  });
+
+  it('is thrown out of the seat by a stumble, into the air', () => {
+    const p = seated();
+    stumble(p, 1, 0);
+    expect(p.mode).toBe(MODE.AIR);
+    expect(p.t).toBe(0);
+  });
+});
+
+describe('floorAt, shove and gravity', () => {
+  it('finds the highest top under a point, at most as high as asked', () => {
+    // The step of 0.5 m at x 20 to 24, z 0 to 2 (see the yard).
+    const w = world([GROUND, box([20, 0, 0], [24, 0.5, 2]), box([20, 3, 0], [24, 4, 2])]);
+    expect(floorAt(w, 22, 1, 1)).toBe(0.5);
+    expect(floorAt(w, 22, 1, 0.2)).toBe(0);
+    expect(floorAt(w, 22, 1, 10)).toBe(4);
+    expect(floorAt(w, 30, 1, 10)).toBe(0);
+    expect(floorAt(w, 500, 1, 10)).toBe(-Infinity);
+  });
+
+  it('pushes a circle of any radius out of a wall', () => {
+    const w = world([GROUND, box([10, -5, -50], [11, 5, 50])]);
+    const p = { x: 9.5, y: 0, z: 0 };
+    expect(shove(p, w, 1.5, 1.05)).toEqual([expect.closeTo(-0.55, 9), 0]);
+    expect(p.x).toBeCloseTo(8.95, 9);
+    // The player's own radius leaves him where push() does.
+    const q = { x: 9.8, y: 0, z: 0 };
+    shove(q, w, PLAYER_H, PLAYER_R);
+    expect(q.x).toBeCloseTo(10 - PLAYER_R, 9);
+  });
+
+  it("is the map's share of GRAVITY", () => {
+    expect(gravity(world([GROUND]))).toBe(GRAVITY);
+    expect(gravity(build({ ...world([GROUND]).def, gravity: 0.5 }))).toBe(GRAVITY / 2);
   });
 });

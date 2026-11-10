@@ -587,7 +587,12 @@ describe('ROOFTOPS, the lines the course is laid out for', () => {
     expect(onRoof(s.p, 8, G)).toBe(true);
     // Never fell to the kill floor: every line was made, not rescued.
     expect(s.low).toBeGreaterThan(7.9);
-    expect([...s.modes].sort()).toEqual(Object.values(MODE).sort());
+    // Every mode a runner gets into on foot: RIDE is a rover's seat.
+    expect([...s.modes].sort()).toEqual(
+      Object.values(MODE)
+        .filter(m => m !== MODE.RIDE)
+        .sort(),
+    );
     // Every event but the respawn: nothing was rescued.
     expect(s.ev).toBe(Object.values(EV).reduce((a, b) => a | b, 0) & ~EV.RESPAWN);
   });

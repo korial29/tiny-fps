@@ -189,9 +189,9 @@ describe('MOON, symmetry', () => {
         ).toBe(true);
       }
     }
-    // Health 3, ammo 3, rail cells 2 in a half, and by the rille two of each pack and one cell.
+    // Health 4 (one in the dome), ammo 3, rail cells 2 in a half, and by the rille two of each pack and one cell.
     const half = (l: number[][]) => l.filter(p => p[2] > ZED / 2);
-    expect(half(MOON.packs!)).toHaveLength(4);
+    expect(half(MOON.packs!)).toHaveLength(5);
     expect(half(MOON.ammo!)).toHaveLength(4);
     expect(half(MOON.cells!)).toHaveLength(2);
     expect(MOON.cells).toHaveLength(5);
@@ -701,7 +701,7 @@ describe('MOON, the relief round the arena', () => {
       ...MOON.ammo!,
       ...MOON.cells!,
     ];
-    expect(points).toHaveLength(2 * 13 + 21);
+    expect(points).toHaveLength(2 * 13 + 23);
     for (const [x, , z] of points) {
       expect(ground(world, x, z), `${x}, ${z}`).toBe(-Infinity);
     }

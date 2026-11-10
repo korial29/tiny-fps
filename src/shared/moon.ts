@@ -235,12 +235,14 @@ export const MOON: WorldDef = {
       SPAWNS.map(([x, y, z]): Spawn => [x, y, ZED - z, Math.PI]),
     ),
   ],
-  // Health 3, ammo 3 and rail cells 2 in a half, and by the rille two of each pack and one cell.
+  // Health 4 (one in the dome), ammo 3 and rail cells 2 in a half, and by the rille two of each pack and one cell.
   packs: both(
     [
       [90, 0, 210],
       [118, 5, 226],
       [30, 0, 185],
+      // In the dome, on the mezzanine's north balcony.
+      [80, 3.5, 253.5],
     ],
     [45, 0, 152],
     [45, 0, 128],

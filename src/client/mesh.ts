@@ -27,6 +27,11 @@ export const STRIDE = 10;
  * sky reflected in it, more at a grazing angle.
  */
 export const SHINE = -1.25;
+/**
+ * The layer of a glossy hard shell (the space helmet, its pack): lit like -1 with polished
+ * metal's sharp highlight, but none of its sky reflection, which would grey it under a black sky.
+ */
+export const GLOSS = -1.12;
 
 /**
  * Camera axes [right, up, forward]: forward is (-sin yaw cos pitch, sin pitch, -cos yaw cos pitch),

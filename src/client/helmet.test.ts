@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LIMB } from '../shared/types';
 import { GLOW } from './flag';
 import { SHELL, WRAP, band, helmet, inside, uOf } from './helmet';
-import { SHINE, STRIDE, place } from './mesh';
+import { GLOSS, SHINE, STRIDE, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
@@ -167,7 +167,7 @@ describe('helmet', () => {
       }
       expect(n).toBeGreaterThan(60);
       // Outside the opening the shell shows.
-      expect(first(out, HEAD[0], HEAD[1] + 0.17)[1]).toBe(-1);
+      expect(first(out, HEAD[0], HEAD[1] + 0.17)[1]).toBe(GLOSS);
     }
   });
 

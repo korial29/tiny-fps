@@ -8,7 +8,7 @@
 // appended where the head is.
 import { TAU } from '../shared/physics';
 import { GLOW, glow } from './flag';
-import { SHINE, aim, dress, place, smooth } from './mesh';
+import { GLOSS, SHINE, STRIDE, aim, dress, place, smooth } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
@@ -68,18 +68,6 @@ const GUARD = [
   [-0.084, 0.035, 0.064, -0.166, -0.085],
 ];
 const GUARD_E = 6;
-
-/**
- * A hose out of each ear plate's lower back, curving out and down round the jaw to the back of
- * the neck (the right one; the left is mirrored): its Bezier points and its radius. Ribbed close.
- */
-const HOSE: Vec3[] = [
-  [0.124, -0.012, 0.055],
-  [0.175, -0.05, 0.07],
-  [0.15, -0.115, 0.1],
-  [0.075, -0.125, 0.105],
-];
-const HOSE_R = 0.0105;
 
 /**
  * The cheek blocks (the user, 2026-11-10): a raised band on each side, along the ear plate's front
@@ -142,7 +130,6 @@ const DETAIL = [
 
     vents: false,
     collar: 0,
-    hose: [0, 0],
   },
   {
     shell: [20, 8],
@@ -152,7 +139,6 @@ const DETAIL = [
 
     vents: false,
     collar: 12,
-    hose: [6, 8],
   },
   {
     shell: [32, 12],
@@ -162,7 +148,6 @@ const DETAIL = [
 
     vents: true,
     collar: 20,
-    hose: [10, 40],
   },
 ];
 
@@ -173,20 +158,20 @@ const IRON = [0.25, 0.27, 0.3];
 const VENT = [0.05, 0.05, 0.06];
 const TINT = [0.02, 0.03, 0.06];
 
-type Spot = [Vec3, Vec3];
+export type Spot = [Vec3, Vec3];
 
-const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const cross = (a: Vec3, b: Vec3): Vec3 => [
+export const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+export const cross = (a: Vec3, b: Vec3): Vec3 => [
   a[1] * b[2] - a[2] * b[1],
   a[2] * b[0] - a[0] * b[2],
   a[0] * b[1] - a[1] * b[0],
 ];
-const unit = (v: Vec3): Vec3 => {
+export const unit = (v: Vec3): Vec3 => {
   const l = Math.hypot(...v) || 1;
   return [v[0] / l, v[1] / l, v[2] / l];
 };
 /** A signed power: the superellipse's |t|^p keeping t's sign. */
-const pow = (t: number, p: number) => Math.sign(t) * Math.abs(t) ** p;
+export const pow = (t: number, p: number) => Math.sign(t) * Math.abs(t) ** p;
 
 /** A triangle over `p`, wound as its first normal faces, in `col` on `layer`; none if it has no area. */
 const face = (out: number[], col: number[], layer: number, p: Spot[]) => {
@@ -205,7 +190,7 @@ const face = (out: number[], col: number[], layer: number, p: Spot[]) => {
  * Triangles between the rows of points `rows`, each a closed ring of n (the first and the last may
  * be one point), in `col` on `layer`; wound as the normals face. Triangles of no area are left out.
  */
-const sheet = (rows: Spot[][], col: number[], layer: number, out: number[] = []) => {
+export const sheet = (rows: Spot[][], col: number[], layer: number, out: number[] = []) => {
   const tri = (...p: Spot[]) => face(out, col, layer, p);
   rows.slice(1).forEach((row, r) => {
     const prev = rows[r];
@@ -222,7 +207,7 @@ const sheet = (rows: Spot[][], col: number[], layer: number, out: number[] = [])
 };
 
 /** A flat quad over the corners `q` (in turn round it), facing `m`, in `col` on `layer`. */
-const quad = (out: number[], q: Vec3[], m: Vec3, col: number[], layer = -1) => {
+export const quad = (out: number[], q: Vec3[], m: Vec3, col: number[], layer = -1) => {
   const s = q.map(p => [p, m] as Spot);
   face(out, col, layer, [s[0], s[1], s[2]]);
   face(out, col, layer, [s[0], s[2], s[3]]);
@@ -233,7 +218,7 @@ const quad = (out: number[], q: Vec3[], m: Vec3, col: number[], layer = -1) => {
  * `n` points round and the rows at `along`; the ends closed by a point at `ends` (its first and
  * last). Normals by differences, away from the loft's middle line `mid(s)`.
  */
-const loft = (
+export const loft = (
   f: (t: number, s: number) => Vec3,
   mid: (s: number) => Vec3,
   n: number,
@@ -395,6 +380,71 @@ const guardOf = (y: number) => {
   return (i - 1 + (a - y) / (a - b)) / (GUARD.length - 1);
 };
 
+/** How many scratches the close helmet has, and their colours: the shell's paint worn to its grey, or scuffed paler. */
+const SCRATCHES = 70;
+const WORN = [
+  [0.46, 0.47, 0.5],
+  [0.6, 0.61, 0.64],
+  [0.97, 0.97, 0.98],
+];
+
+/**
+ * Thin scratches over the shell (the user, 2026-11-10), matte on the gloss: short strokes bent a
+ * little, at random but the same every time, kept off the visor; a hair over the shell's surface.
+ */
+const scratches = (out: number[]) => {
+  let seed = 0x5eed;
+  const rand = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let z = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    z = (z + Math.imul(z ^ (z >>> 7), 61 | z)) ^ z;
+    return ((z ^ (z >>> 14)) >>> 0) / 2 ** 32;
+  };
+  const a0 = Math.asin(pow((SHELL.rim + 0.015 - SHELL.c[1]) / SHELL.r[1], SHELL.e[1] / 2));
+  for (let n = 0; n < SCRATCHES;) {
+    const [lat, t] = [a0 + rand() * (1.35 - a0), rand()];
+    const p = shellAt(lat, t);
+    const keep = !(p[2] < -0.02 && inside(uOf(p), p[1], 1.6));
+    const [len, wide, turn, col] = [
+      0.01 + rand() * 0.03,
+      0.0006 + rand() * 0.0007,
+      rand() * TAU,
+      WORN[Math.floor(rand() * 3)],
+    ];
+    const bend = (rand() - 0.5) * 0.8;
+    if (!keep) {
+      continue;
+    }
+    n++;
+    const nn = normal(p);
+    const e1 = unit(cross(nn, Math.abs(nn[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0]));
+    const e2 = cross(nn, e1);
+    // A stroke of three pieces, on the plane touching the shell, carried back onto it.
+    const pts = Array.from({ length: 4 }, (_, i) => {
+      const s = (i / 3 - 0.5) * len;
+      const a = turn + bend * (i / 3 - 0.5);
+      const d = [0, 1, 2].map(k => p[k] + (e1[k] * Math.cos(a) + e2[k] * Math.sin(a)) * s) as Vec3;
+      const m = normal(d);
+      // Back onto the surface: along the normal to where the implicit form is 1, roughly.
+      const [A, B, Dd] = SHELL.r;
+      const [pp, q] = SHELL.e;
+      const [x, y, z] = sub(d, SHELL.c);
+      const f = (Math.abs(x / A) ** pp + Math.abs(z / Dd) ** pp) ** (q / pp) + Math.abs(y / B) ** q;
+      const k = f ** (-1 / q);
+      return [[SHELL.c[0] + x * k, SHELL.c[1] + y * k, SHELL.c[2] + z * k], m] as Spot;
+    });
+    for (let i = 0; i < 3; i++) {
+      const [[a, m], [b]] = [pts[i], pts[i + 1]];
+      const along = unit(sub(b, a));
+      const side = cross(m, along).map(v => v * wide) as Vec3;
+      const lift = m.map(v => v * 0.0007) as Vec3;
+      const c = (o: Vec3, sgn: number): Vec3 =>
+        [0, 1, 2].map(k => o[k] + lift[k] + side[k] * sgn) as Vec3;
+      quad(out, [c(a, -1), c(b, -1), c(b, 1), c(a, 1)], m, col);
+    }
+  }
+};
+
 interface Kit {
   shell: number[];
   visor: number[];
@@ -403,9 +453,9 @@ interface Kit {
   vents: number[];
   plates: number[];
   strips: number[];
-  hoses: number[];
   intakes: number[];
   cheeks: number[];
+  scratches: number[];
   collar: number[];
 }
 
@@ -493,9 +543,9 @@ const kit = (lod: number): Kit => {
     vents: [],
     plates: [],
     strips: [],
-    hoses: [],
     intakes: [],
     cheeks: [],
+    scratches: [],
     collar: [],
   };
   if (D.guard) {
@@ -693,43 +743,6 @@ const kit = (lod: number): Kit => {
       );
     }
   }
-  const [sides, steps] = D.hose;
-  if (sides) {
-    for (const side of [-1, 1]) {
-      const B = (s: number): Vec3 => {
-        const m = [(1 - s) ** 3, 3 * s * (1 - s) ** 2, 3 * s * s * (1 - s), s ** 3];
-        return [0, 1, 2].map(
-          k => HOSE.reduce((v, pt, j) => v + pt[k] * m[j], 0) * (k ? 1 : side),
-        ) as Vec3;
-      };
-      // A frame along it: the tangent, and the side across it nearest x.
-      const frame = (s: number): [Vec3, Vec3, Vec3] => {
-        const d = unit(sub(B(Math.min(s + 1e-3, 1)), B(Math.max(s - 1e-3, 0))));
-        const a = unit(cross(d, [0, 0, 1]));
-        return [d, a, cross(d, a)];
-      };
-      // Ribs close, a thicker cuff where it leaves the plate.
-      const radius = (s: number) =>
-        HOSE_R *
-        (1 +
-          (steps > 20 ? 0.13 * Math.cos(s * TAU * 14) ** 8 : 0) +
-          0.25 * Math.max(1 - s * 12, 0));
-      loft(
-        (t, s) => {
-          const [, a, b] = frame(s);
-          const [c, r] = [B(s), radius(s)];
-          const [x, y] = [Math.cos(t * TAU) * r, Math.sin(t * TAU) * r];
-          return [0, 1, 2].map(k => c[k] + a[k] * x + b[k] * y) as Vec3;
-        },
-        B,
-        sides,
-        Array.from({ length: steps + 1 }, (_, i) => i / steps),
-        [B(0), B(1)],
-        IRON,
-        kitOut.hoses,
-      );
-    }
-  }
   if (D.plate) {
     // The roof block: rings across it along z, each from its feet sunk in the shell to its flat top.
     const { w, h } = ROOF;
@@ -802,6 +815,15 @@ const kit = (lod: number): Kit => {
       [1, 1, 1],
     );
   }
+  // Hard and glossy (the user, 2026-11-10: reflections), then scratched close up.
+  for (const v of [kitOut.shell, kitOut.guard, kitOut.plates, kitOut.intakes, kitOut.cheeks]) {
+    for (let i = 8; i < v.length; i += STRIDE) {
+      v[i] = v[i] == -1 ? GLOSS : v[i];
+    }
+  }
+  if (D.vents) {
+    scratches(kitOut.scratches);
+  }
   kits.set(level, kitOut);
   return kitOut;
 };
@@ -838,9 +860,9 @@ export const helmet = (out: number[], at: Vec3, q: Quat, rgb: number[], lod: num
     k.guard,
     k.vents,
     k.plates,
-    k.hoses,
     k.intakes,
     k.cheeks,
+    k.scratches,
   ]) {
     asIs(src);
   }

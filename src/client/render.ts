@@ -20,7 +20,8 @@ import { moonscape } from './moonscape';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { battery, cell, kit, racks } from './props';
-import { JOINT } from './rig';
+import { PACK } from './pack';
+import { JOINT, turn } from './rig';
 import { rolled, rover } from './rover';
 import type { Quat } from './rig';
 import { animate, soldier } from './soldier';
@@ -797,7 +798,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           world.def.helmets,
         );
         if (s) {
-          chests.set(p.id, [s.pos[JOINT.CHEST], s.rot[JOINT.CHEST]]);
+          // A space suit's pack is on the back: the flag is strapped on the pack, further back.
+          const [c, q] = [s.pos[JOINT.CHEST], s.rot[JOINT.CHEST]];
+          const back = world.def.helmets ? turn(q, [0, 0, PACK.r[2] * 2]) : [0, 0, 0];
+          chests.set(p.id, [[c[0] + back[0], c[1] + back[1], c[2] + back[2]], q]);
         }
       }
       ctf?.flags.forEach(f => flag(v, f, teamRgb(f.team), now, f.by && chests.get(f.by.id)));

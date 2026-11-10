@@ -830,10 +830,13 @@ describe('a runner with the rail gun', () => {
     soldier(bare, r, [0.9, 0.1, 0.1], 1);
     soldier(capped, r, [0.9, 0.1, 0.1], 1, true);
     expect(capped.length).toBeGreaterThan(bare.length);
-    // Every added vertex is around the head joint, no further than the helmet is big.
-    const head = solve(r.gait.pose()).pos[J.HEAD];
+    // Every added vertex is around the head joint or the chest: the helmet and the space suit's
+    // pack, hose and shoulder pads.
+    const { pos } = solve(r.gait.pose());
+    const off = (i: number, j: number) =>
+      Math.hypot(...[0, 1, 2].map(k => capped[i + k] - pos[j][k]));
     for (let i = bare.length; i < capped.length; i += STRIDE) {
-      expect(Math.hypot(...[0, 1, 2].map(k => capped[i + k] - head[k]))).toBeLessThan(0.35);
+      expect(Math.min(off(i, J.HEAD), off(i, J.CHEST))).toBeLessThan(0.4);
     }
     // A head the katana took off wears none.
     const cut = hold({ down: 200, hp: 0, lost: LIMB.HEAD }, 30);

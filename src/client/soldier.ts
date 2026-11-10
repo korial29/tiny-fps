@@ -35,6 +35,7 @@ import {
   swapOf,
 } from './gun';
 import { helmet } from './helmet';
+import { hose, pack, shoulders } from './pack';
 import { fetched, pouch, pouchAt } from './pouch';
 import type { Tracer } from './beams';
 import {
@@ -54,7 +55,7 @@ import type { Piece } from './limbs';
 import { STRIDE, add, basis, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, mul, slerp, solve } from './rig';
-import type { Pose } from './rig';
+import type { Pose, Quat } from './rig';
 import { body, cut, eyesOf, hairOf, palette, skin } from './skin';
 import { createTrail } from './trail';
 import type { Trail } from './trail';
@@ -464,6 +465,16 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
   // The helmet is on the head: not on one a katana cut has taken off.
   if (helmets && r.cut?.limb !== LIMB.HEAD) {
     helmet(out, s.pos[J.HEAD], s.rot[J.HEAD], color, lod);
+    hose(out, s.pos[J.HEAD], s.rot[J.HEAD], s.pos[J.CHEST], s.rot[J.CHEST], lod);
+  }
+  // The life support pack on the back of a space suit.
+  if (helmets) {
+    pack(out, s.pos[J.CHEST], s.rot[J.CHEST], color, lod);
+    shoulders(
+      out,
+      [J.ARM_L, J.ARM_R].map(j => [s.pos[j], s.rot[j]] as [Vec3, Quat]),
+      lod,
+    );
   }
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);

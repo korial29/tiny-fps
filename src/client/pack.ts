@@ -5,6 +5,7 @@
 // back); the hose is built each frame between the head and the chest, which move apart.
 import { TAU } from '../shared/physics';
 import { GLOW, glow } from './flag';
+import { SCRATCHED } from './armor';
 import { cross, loft, pow, quad, sheet, shrunk, sub, unit } from './helmet';
 import { GLOSS, STRIDE, aim, place } from './mesh';
 import type { Vec3 } from './mesh';
@@ -397,7 +398,17 @@ const tintOf = (plate?: number[]) => plate?.map((v, i) => v / WHITE[i]);
 /** Appends both shoulder pads at level of detail `lod` on the arm joints (`arms`: the left's and the right's place and turn), in `plate` (white when absent). */
 export const shoulders = (out: number[], arms: [Vec3, Quat][], lod: number, plate?: number[]) => {
   const src = padOf(lod);
-  arms.forEach(([at, q], i) => put(out, src[i], at, q, tintOf(plate)));
+  arms.forEach(([at, q], i) => {
+    const from = out.length;
+    put(out, src[i], at, q, tintOf(plate));
+    // On coloured pads the scratches (the matte vertices) are white, not tinted.
+    for (let k = from; plate && k < out.length; k += STRIDE) {
+      if (out[k + 8] == -1) {
+        const [r, g, b] = SCRATCHED[1];
+        [out[k + 6], out[k + 7], out[k + 9]] = [r, g, b];
+      }
+    }
+  });
 };
 
 /**

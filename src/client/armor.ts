@@ -226,6 +226,11 @@ const WORN = [
   [0.46, 0.47, 0.5],
   [0.62, 0.63, 0.66],
 ];
+/** The scratches' colours on coloured plates: the white under the paint, and paler. */
+export const SCRATCHED = [
+  [0.86, 0.87, 0.89],
+  [0.97, 0.97, 0.98],
+];
 
 /**
  * A recipe: triangles of corners, each [skin triangle, its three weights, how far off the skin,
@@ -554,6 +559,9 @@ export const armor = (out: number[], from: number, s: Skin, fine = true, plate?:
       [cr, cg, cb] = plate;
     } else if (plate && t[i + 4]) {
       [cr, cg, cb] = [plate[0] * 0.75, plate[1] * 0.75, plate[2] * 0.75];
+    } else if (plate) {
+      // On coloured plates the scratches are white (the user, 2026-11-10); on white ones, grey.
+      [cr, cg, cb] = SCRATCHED[+(cr > 0.55)];
     }
     // Written by index rather than pushed: the close armour is some 20 000 vertices.
     for (let j = 0; j < 9; j += 3, w += STRIDE) {

@@ -180,7 +180,7 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
   const chase = createChase(world);
   const tracer = createTracer();
   const balls = createBalls(world);
-  const combat = createCombat(world, audio, hud, fx, tracer, ctl, balls);
+  const combat = createCombat(world, audio, hud, fx, tracer, ctl, balls, id => rd?.muzzle(id));
   let rd: Renderer | undefined;
   try {
     rd = createRenderer(canvas, world);

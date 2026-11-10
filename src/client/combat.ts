@@ -163,6 +163,8 @@ export const createCombat = (
   >,
   ctl: { pitch: number },
   balls: Pick<Balls, 'fire' | 'frame'>,
+  /** The muzzle of a runner's long gun as last drawn, from his feet (Renderer.muzzle()). */
+  drawn?: (id: number) => Vec3 | undefined,
 ): Combat => {
   /** The own player after each live step that fired, since the last frame. */
   let pending: PlayerState[] = [];
@@ -198,7 +200,13 @@ export const createCombat = (
   /** Each other player's charge at the last frame: the strength of his next shot. */
   const charges = new Map<number, number>();
   /** The muzzle of a runner's gun (his rail gun's in hand), as he fires at what he looks at. */
-  const gun = (p: PlayerState) => tip(...aimed(p, focus(p, world)[0]), kindOf(p));
+  const gun = (p: PlayerState): Vec3 => {
+    // A long gun is shouldered, which only the drawn runner knows (soldier.ts).
+    const d = p.railed || p.rifled ? drawn?.(p.id) : undefined;
+    return d
+      ? [p.x + d[0], p.y + d[1], p.z + d[2]]
+      : tip(...aimed(p, focus(p, world)[0]), kindOf(p));
+  };
   /** Where the rail gun's bolt of `p` ends: the wall his look meets, or its range. */
   const end = (p: PlayerState): Vec3 => {
     const { o, d, t } = beam(world, p);

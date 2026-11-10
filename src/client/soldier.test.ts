@@ -5,10 +5,24 @@ import { CUT, LIMB, MODE, NOBODY, SIDE, TEX } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
 import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
-import { MUZZLE, REAR, aimed, button, foregrip, grip, gun, tip } from './gun';
+import {
+  MUZZLE,
+  REAR,
+  RIFLE_HOLD,
+  aimed,
+  button,
+  foregrip,
+  axes as frameOf,
+  grip,
+  gun,
+  railgun,
+  rifle,
+  tip,
+} from './gun';
 import { BEHIND, axes } from './katana';
-import { KATANA_LEFT } from './body';
-import { GLOSS, SHINE, STRIDE } from './mesh';
+import { FIST, KATANA_LEFT, inv } from './body';
+import { SCALE, SHELL } from './helmet';
+import { GLOSS, SHINE, STRIDE, add, basis } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, solve, turn } from './rig';
 import type { Quat } from './rig';
@@ -24,7 +38,7 @@ import {
   stance,
 } from './soldier';
 import type { Runner } from './soldier';
-import { pack, shoulders } from './pack';
+import { PACK, pack, shoulders } from './pack';
 import { palette } from './skin';
 
 const DT = 1 / 60;
@@ -1006,4 +1020,154 @@ describe('riding a rover', () => {
     // By the head, not over it.
     expect(hand).toBeLessThan(s.pos[J.HEAD][1] - p.y + 0.12);
   });
+});
+
+describe('a runner shouldering a long gun (the user, 2026-11-10: it hung across the belly)', () => {
+  /** The rail gun and the laser rifle: what the state holds, the model, and the middle of its butt plate in it. */
+  const GUNS = [
+    {
+      name: 'rail gun',
+      kind: 2,
+      o: { rail: 100, railed: true },
+      model: railgun(1),
+      butt: [0, 0.0747, 0.392],
+    },
+    {
+      name: 'laser rifle',
+      kind: 3,
+      o: { rifle: 60, rifled: true },
+      model: rifle(1),
+      butt: [0, 0.036, 0.336],
+    },
+  ];
+  const POSES: [string, Partial<PlayerState>][] = [
+    ['standing', {}],
+    ['turned', { yaw: 2.2 }],
+    ['running', { vz: -6 }],
+    ['crouched', { mode: MODE.CROUCH }],
+    ['crouched and moving', { mode: MODE.CROUCH, vz: -3 }],
+    ['looking up', { pitch: 0.6 }],
+    ['looking far up', { pitch: 1.1 }],
+    ['looking down', { pitch: -0.6 }],
+    ['looking far down', { pitch: -1.1 }],
+    ['in the air', { mode: MODE.AIR, ground: false, vy: 2 }],
+  ];
+  const sub = (a: number[], b: number[]) => a.map((v, i) => v - b[i]);
+  const far = (a: number[], b: number[]) => Math.hypot(...sub(a, b));
+  const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  /** The angle between two directions, radians. */
+  const off = (a: number[], b: number[]) =>
+    Math.acos(Math.min(1, dot(a, b) / Math.hypot(...a) / Math.hypot(...b)));
+  /** The runner in the pose `o` through `n` more frames, firing on each when asked: his solved stance each frame. */
+  const frames = (o: Partial<PlayerState>, fires: boolean, n = 24) => {
+    const r = hold(o);
+    const book = new Map([[1, r]]);
+    return Array.from({ length: n }, (_, i) => {
+      const p = { ...r.p, z: r.p.z + (o.vz ?? 0) * DT, shots: r.p.shots + +(fires && i % 6 == 0) };
+      animate(book, [p], DT);
+      return { p, s: stance(r).s };
+    });
+  };
+  /** The gun in the right hand: a point of its model in the world, and its barrel's way. */
+  const gunOf = (s: ReturnType<typeof solve>, kind: number) => {
+    const q = s.rot[J.HAND_R];
+    const [at, ax] = [grip(s.pos[J.HAND_R], q), frameOf(q)];
+    const put = ([x, y, z]: number[]) =>
+      at.map((v, i) => v + ax[0][i] * x + ax[1][i] * y - ax[2][i] * z);
+    // The rail gun's barrel lies on the long axis, the rifle's along the model's forward.
+    return { put, barrel: kind == 2 ? sub(tip(at, ax, 2), put(REAR)) : ax[2] };
+  };
+  /** `v` in the frame of joint `j`, from the point `o`. */
+  const local = (s: ReturnType<typeof solve>, j: number, o: number[], v: number[]) =>
+    turn(inv(s.rot[j]), sub(v, o) as Vec3);
+  /**
+   * Whether the point `v` is in the trunk, the helmet or the pack. The trunk in the chest's frame
+   * from the middle of the shoulders at rest: as wide as them, from the hips to the top of the shoulders,
+   * its front the armour's as drawn (15 cm ahead in the middle, 9 at the shoulder joints).
+   */
+  const inBody = (s: ReturnType<typeof solve>, v: number[]) => {
+    // The shoulders' line at rest is 17 cm over the chest joint: an arm reaching out moves its own.
+    const [x, y, z] = local(s, J.CHEST, add(s.pos[J.CHEST], turn(s.rot[J.CHEST], [0, 0.17, 0])), v);
+    const trunk =
+      Math.abs(x) < 0.2 &&
+      y > -0.5 &&
+      y < 0.08 &&
+      z < 0.1 &&
+      z > -0.075 - 0.075 * (1 - (x / 0.2) ** 2);
+    const h = local(s, J.HEAD, s.pos[J.HEAD], v).map((a, i) => (a - SHELL.c[i]) / SCALE);
+    const helmet = h.every((a, i) => Math.abs(a) < SHELL.r[i]) && h[1] > SHELL.rim - SHELL.c[1];
+    const c = local(s, J.CHEST, s.pos[J.CHEST], v);
+    return trunk || helmet || c.every((a, i) => Math.abs(a - PACK.c[i]) < PACK.r[i]);
+  };
+  /** The checks of a shouldered gun in the stance `s`, its barrel meant along `way`. */
+  const shouldered = (s: ReturnType<typeof solve>, g: (typeof GUNS)[number], way: number[]) => {
+    const { put, barrel } = gunOf(s, g.kind);
+    // The butt plate in the hollow of the right shoulder, a hand's width from the joint at most.
+    expect(far(put(g.butt), s.pos[J.ARM_R])).toBeLessThan(0.18);
+    expect(off(barrel, way)).toBeLessThan(0.06);
+    // The right hand is on the grip, which the gun is drawn from: the arm reaches it, not stretched.
+    expect(far(s.pos[J.HAND_R], s.pos[J.ARM_R])).toBeLessThan(0.54);
+    // The left is round the front grip, the rifle's handguard in its palm.
+    const [at] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R], g.kind);
+    const q = s.rot[J.HAND_L];
+    const [fing, x] = [turn(q, [0, -1, 0]), turn(q, [1, 0, 0])];
+    const [reach, palm] = g.kind == 3 ? RIFLE_HOLD : FIST;
+    expect(
+      far(
+        s.pos[J.HAND_L].map((v, i) => v + fing[i] * reach + x[i] * palm),
+        at,
+      ),
+    ).toBeLessThan(0.01);
+    // Both elbows down: under the shoulder, or under the hand when it aims up over it.
+    for (const j of [J.ARM_L, J.ARM_R]) {
+      expect(s.pos[j + 1][1]).toBeLessThan(Math.max(s.pos[j][1], s.pos[j + 2][1]));
+    }
+    // Nothing of the gun in the trunk, the helmet or the pack.
+    const inside = rows(g.model).filter(v => inBody(s, put(v))).length;
+    expect(inside).toBe(0);
+  };
+
+  for (const g of GUNS) {
+    for (const [name, o] of POSES) {
+      for (const fires of [false, true]) {
+        it(`holds the ${g.name} ${name}${fires ? ', firing' : ''}: the butt in the shoulder, the barrel along the look, a hand on each grip, clear of the body`, () => {
+          for (const { p, s } of frames({ ...o, ...g.o }, fires)) {
+            shouldered(s, g, basis(p.yaw, p.pitch)[2]);
+          }
+        });
+      }
+    }
+
+    it(`carries the ${g.name} at the low ready in a sprint, the butt still in the shoulder, and brings it up to fire`, () => {
+      for (const { p, s } of frames({ vz: -9, ...g.o }, false)) {
+        // The barrel down and across to the left of the look.
+        shouldered(s, g, basis(p.yaw + 0.35, -0.6)[2]);
+      }
+      for (const { p, s } of frames({ vz: -9, ...g.o }, true).slice(1)) {
+        shouldered(s, g, basis(p.yaw, p.pitch)[2]);
+      }
+    });
+
+    it(`follows the look with the ${g.name}, not the last shot: fired at the floor, then looking up`, () => {
+      const book = new Map<number, Runner>();
+      const at = (i: number) => man({ ...g.o, pitch: i < 30 ? -0.7 : 0.4, shots: Math.min(i, 30) });
+      for (let i = 0; i < 120; i++) {
+        animate(book, [at(i)], DT);
+      }
+      const { barrel } = gunOf(stance(book.get(1)!).s, g.kind);
+      expect(off(barrel, basis(0, 0.4)[2])).toBeLessThan(0.06);
+    });
+
+    it(`keeps the muzzle of the ${g.name} as drawn, from the feet, for its shots to leave from`, () => {
+      const r = hold({ ...g.o, yaw: 0.7, pitch: 0.2 });
+      const s = soldier([], r, [0.1, 0.8, 0.2])!;
+      const q = s.rot[J.HAND_R];
+      const m = tip(grip(s.pos[J.HAND_R], q), frameOf(q), g.kind);
+      expect(far(r.tip!, sub(m, [r.p.x, r.p.y, r.p.z]))).toBeLessThan(1e-9);
+      // None with the gun, or with no gun in hand.
+      const armed = hold({ ammo: 30 });
+      soldier([], armed, [0.1, 0.8, 0.2]);
+      expect(armed.tip).toBeUndefined();
+    });
+  }
 });

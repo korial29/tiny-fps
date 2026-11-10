@@ -493,6 +493,8 @@ export interface Renderer {
   project(x: number, y: number, z: number): [number, number] | undefined;
   /** The footsteps of the player `id`'s runner so far (Gait.steps), undefined before it is drawn. */
   steps(id: number): number | undefined;
+  /** The muzzle of the long gun of the player `id`'s runner as last drawn, from his feet (Runner.tip). */
+  muzzle(id: number): Vec3 | undefined;
   destroy(): void;
 }
 
@@ -911,6 +913,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     },
     project: (x, y, z) => project(vp, x, y, z),
     steps: id => runners.get(id)?.gait.steps,
+    muzzle: id => runners.get(id)?.tip,
     destroy() {
       canvas.removeEventListener('webglcontextlost', onLost);
       canvas.removeEventListener('webglcontextrestored', onRestored);

@@ -35,6 +35,8 @@ import {
   swapOf,
 } from './gun';
 import { helmet } from './helmet';
+import { armor } from './armor';
+import { crotch, hose, pack, shoulders } from './pack';
 import { fetched, pouch, pouchAt } from './pouch';
 import type { Tracer } from './beams';
 import {
@@ -54,7 +56,7 @@ import type { Piece } from './limbs';
 import { STRIDE, add, basis, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, mul, slerp, solve } from './rig';
-import type { Pose } from './rig';
+import type { Pose, Quat } from './rig';
 import { body, cut, eyesOf, hairOf, palette, skin } from './skin';
 import { createTrail } from './trail';
 import type { Trail } from './trail';
@@ -429,33 +431,52 @@ export const stance = (r: Runner) => {
 };
 
 /** Draws the runner and gives back its solved skeleton, or nothing once a bolt has burnt it away. */
-export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helmets = false) => {
+export const soldier = (
+  out: number[],
+  r: Runner,
+  color: number[],
+  lod = 1,
+  helmets = false,
+  armored = helmets,
+) => {
   const { p } = r;
   const k = fried(p);
   if (k >= 1) {
     return;
   }
-  const colors = palette(color, hairOf(p.id), eyesOf(p.id));
+  const colors = palette(color, hairOf(p.id), eyesOf(p.id), armored);
+  // The armour: white in space, else in the team's colour.
+  const plate = helmets ? undefined : color;
   const { s, sink, yaw, carry } = stance(r);
   const blade = p.wield && !p.down && !driving(r);
   if (r.cut) {
-    skin(out, cut(lod, r.cut.limb)[0], s, colors, 1, 0.3);
+    const cs = cut(lod, r.cut.limb)[0];
+    const at = out.length;
+    skin(out, cs, s, colors, 1, 0.3);
     // The stump's face is the last vertex drawn.
     r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
+    if (armored) {
+      armor(out, at, cs, lod > 2, plate);
+    }
     piece(out, r.cut, colors, lod, sink);
   } else {
     const from = out.length;
     // His face: the eyes shut down, in a grimace and in a blink every few seconds; the mouth open
     // in a cut's shout, a dash's breath, a grimace, slack down.
     const down = p.down > 0;
+    const bs = body(lod);
     skin(
       out,
-      body(lod),
+      bs,
       s,
       colors,
       +(down || r.hurt > 0 || (r.t + p.id * 0.7) % 3.7 < 0.13),
       r.prog >= 0 ? 1 : r.hurt > 0 ? 0.6 : down ? 0.3 : r.dash * 0.5,
     );
+    // The armour, cut out of the skin just drawn.
+    if (armored) {
+      armor(out, from, bs, lod > 2, plate);
+    }
     pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
     if (k > 0) {
       dissolve(out, from, k);
@@ -464,6 +485,20 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
   // The helmet is on the head: not on one a katana cut has taken off.
   if (helmets && r.cut?.limb !== LIMB.HEAD) {
     helmet(out, s.pos[J.HEAD], s.rot[J.HEAD], color, lod);
+    hose(out, s.pos[J.HEAD], s.rot[J.HEAD], s.pos[J.CHEST], s.rot[J.CHEST], lod);
+  }
+  // The life support pack on the back of a space suit.
+  if (helmets) {
+    pack(out, s.pos[J.CHEST], s.rot[J.CHEST], color, lod);
+  }
+  if (armored) {
+    crotch(out, s.pos[J.PELVIS], s.rot[J.PELVIS], lod, plate);
+    shoulders(
+      out,
+      [J.ARM_L, J.ARM_R].map(j => [s.pos[j], s.rot[j]] as [Vec3, Quat]),
+      lod,
+      plate,
+    );
   }
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);

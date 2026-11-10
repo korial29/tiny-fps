@@ -8,9 +8,10 @@ import type { WorldDef } from '../shared/world';
 import { MUZZLE, REAR, aimed, button, foregrip, grip, gun, tip } from './gun';
 import { BEHIND, axes } from './katana';
 import { KATANA_LEFT } from './body';
-import { SHINE, STRIDE } from './mesh';
+import { GLOSS, SHINE, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, solve, turn } from './rig';
+import type { Quat } from './rig';
 import {
   FRY,
   animate,
@@ -23,6 +24,7 @@ import {
   stance,
 } from './soldier';
 import type { Runner } from './soldier';
+import { pack, shoulders } from './pack';
 import { palette } from './skin';
 
 const DT = 1 / 60;
@@ -830,18 +832,64 @@ describe('a runner with the rail gun', () => {
     soldier(bare, r, [0.9, 0.1, 0.1], 1);
     soldier(capped, r, [0.9, 0.1, 0.1], 1, true);
     expect(capped.length).toBeGreaterThan(bare.length);
-    // Every added vertex is around the head joint, no further than the helmet is big.
-    const head = solve(r.gait.pose()).pos[J.HEAD];
+    // Every added vertex is near a joint: the helmet, and the space suit's pack, hose, shoulder
+    // pads and armour plates.
+    const { pos } = solve(r.gait.pose());
+    const off = (i: number, j: number) =>
+      Math.hypot(...[0, 1, 2].map(k => capped[i + k] - pos[j][k]));
     for (let i = bare.length; i < capped.length; i += STRIDE) {
-      expect(Math.hypot(...[0, 1, 2].map(k => capped[i + k] - head[k]))).toBeLessThan(0.35);
+      expect(Math.min(...pos.map((_, j) => off(i, j)))).toBeLessThan(0.35);
     }
-    // A head the katana took off wears none.
+    // A head the katana took off wears no helmet and no hose: the body keeps its pack, pads and armour.
     const cut = hold({ down: 200, hp: 0, lost: LIMB.HEAD }, 30);
     expect(cut.cut?.limb).toBe(LIMB.HEAD);
-    const [a, b] = [[], []] as number[][];
+    const [a, b, suit] = [[], [], []] as number[][];
     soldier(a, cut, [0.9, 0.1, 0.1], 1);
-    soldier(b, cut, [0.9, 0.1, 0.1], 1, true);
-    expect(b.length).toBe(a.length);
+    const sk = soldier(b, cut, [0.9, 0.1, 0.1], 1, true)!;
+    pack(suit, sk.pos[J.CHEST], sk.rot[J.CHEST], [0.9, 0.1, 0.1], 1);
+    shoulders(
+      suit,
+      [J.ARM_L, J.ARM_R].map(j => [sk.pos[j], sk.rot[j]] as [Vec3, Quat]),
+      1,
+    );
+    // The armour is cut out of the stump's skin: it comes after it, so the rest is at least as much.
+    expect(b.length).toBeGreaterThanOrEqual(a.length + suit.length);
+  });
+});
+
+describe('armour without a helmet (Highline)', () => {
+  it('wears plates in the team colour, no helmet, no pack, and no white', () => {
+    const r = hold({}, 5);
+    const team = [0.15, 0.4, 1];
+    const [bare, armored, space] = [[], [], []] as number[][];
+    soldier(bare, r, team, 3);
+    soldier(armored, r, team, 3, false, true);
+    soldier(space, r, team, 3, true);
+    expect(armored.length).toBeGreaterThan(bare.length);
+    // No helmet: nothing added over the head's top.
+    const head = solve(r.gait.pose()).pos[J.HEAD];
+    const top = (v: number[]) => {
+      let m = -Infinity;
+      for (let i = 0; i < v.length; i += STRIDE) {
+        m = Math.max(m, v[i + 1]);
+      }
+      return m;
+    };
+    expect(top(armored)).toBeLessThan(head[1] + 0.25);
+    expect(top(space)).toBeGreaterThan(top(armored));
+    // The glossy plates in the team colour; the space suit's white.
+    const glossy = (v: number[]) => {
+      const c: number[][] = [];
+      for (let i = 0; i < v.length; i += STRIDE) {
+        if (v[i + 8] == GLOSS) {
+          c.push([v[i + 6], v[i + 7], v[i + 9]]);
+        }
+      }
+      return c;
+    };
+    expect(glossy(armored).some(([r0, g, b]) => b > r0 * 2 && b > g)).toBe(true);
+    expect(glossy(armored).some(([r0, g, b]) => r0 > 0.8 && g > 0.8 && b > 0.8)).toBe(false);
+    expect(glossy(space).some(([r0, g, b]) => r0 > 0.8 && g > 0.8 && b > 0.8)).toBe(true);
   });
 });
 

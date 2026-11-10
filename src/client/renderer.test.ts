@@ -141,8 +141,8 @@ describe('createRenderer', () => {
     const src = calls.filter(c => c[0] == 'shaderSource').map(c => String(c[2]));
     const frag = src.find(s => s.includes('sampler2DArray'))!;
     const rows = frag.match(/const vec2 SP\[(\d+)\]=vec2\[\]\((.*)\);/)!;
-    expect(Number(rows[1])).toBe(LAYERS + 2);
-    expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 2);
+    expect(Number(rows[1])).toBe(LAYERS + 3);
+    expect(rows[2].match(/vec2\(/g)).toHaveLength(LAYERS + 3);
     expect(frag).not.toMatch(/undefined|NaN|\[object/);
   });
 

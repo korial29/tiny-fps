@@ -6,10 +6,10 @@ const q = new URLSearchParams(location.search);
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>('form');
-const fields = form.elements as unknown as Record<
-  'name' | 'mode' | 'map' | 'url',
-  HTMLInputElement
->;
+const fields = form.elements as unknown as Record<'name' | 'mode' | 'url', HTMLInputElement> & {
+  /** The map cards' radios: its value is the checked one's. */
+  map: RadioNodeList;
+};
 const status = $('status');
 /** Shown while playing; the menu the rest of the time. */
 const playing = (on: boolean) => {

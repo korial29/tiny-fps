@@ -309,6 +309,13 @@ const HIP = 0.1;
  * trunk's lean forward (radians), and how far the legs give.
  */
 const [WIDE, STEP, BOW, GIVE] = [0.16, 0.12, 0.2, 0.05];
+/**
+ * The guard with the katana in hand, a swordsman's middle guard (the user, 2026-11-10: stand like
+ * a samurai): how much further ahead the right foot stands and behind the left (metres), the pitch
+ * of the left foot, its heel off the floor (radians), the share of the lean forward that is left,
+ * the back straight, and how much more the legs give, the knees soft.
+ */
+const KAMAE = [0.02, 0.28, 0.4, -0.025];
 
 interface Foot {
   /** The ankle now. */
@@ -335,11 +342,13 @@ interface Foot {
   on: boolean;
 }
 
-/** `bow` is the guard's lean forward: none for the eye's own body, whose arms hold to the view. */
+/** `bow` is the guard's lean forward: none for the eye's own body, whose arms hold to the view and which stands in no sword guard. */
 export const createGait = (bow = BOW): Gait => {
   const out = rest();
   const P = {} as Record<Key, number>;
-  const sp = new Array<number>(W + 2 * MOVES.length).fill(0);
+  /** After the moves' springs, the sword guard's. */
+  const KEN = W + 2 * MOVES.length;
+  const sp = new Array<number>(KEN + 2).fill(0);
   const feet: Foot[] = [0, 1].map(() => ({
     x: 0,
     y: 0,
@@ -459,6 +468,7 @@ export const createGait = (bow = BOW): Gait => {
     set(W + 2 * MOVE.RIDE, +rides, 14);
     sat = rides ? (seat ?? { yaw: p.yaw, pitch: 0, roll: 0, steer: 0, s: 1 }) : sat;
     armed = p.ammo >= 0 || !!p.railed || !!p.rifled || !!p.wield;
+    set(KEN, +(!!p.wield && bow > 0), 10);
     set(LOW, +(p.mode == MODE.CROUCH), 12);
     set(UP, hold ? clamp((1.7 - lip[4] + p.y) / 1.2) : 0, 14);
     set(DIP, kick, 26);
@@ -516,7 +526,7 @@ export const createGait = (bow = BOW): Gait => {
     feet.forEach((f, n) => {
       const s = n ? 1 : -1;
       const u = (ph + n / 2) % 1;
-      const [wide, ahead] = idle ? [WIDE, s * STEP] : [HIP, 0];
+      const [wide, ahead] = idle ? [WIDE, s * (STEP + KAMAE[0] * sp[KEN])] : [HIP, 0];
       const [hx, hz] = [
         p.x + rx * s * wide - Math.sin(yaw) * ahead,
         p.z + rz * s * wide - Math.cos(yaw) * ahead,
@@ -555,7 +565,10 @@ export const createGait = (bow = BOW): Gait => {
           f.gy += (ground(hx, hz) - f.gy) * k;
         }
         f.x0 = clamp(u / duty);
-        f.th = gate * (P.td * (1 - ease(f.x0 / 0.25)) + P.to * ease((f.x0 - 0.55) / 0.45));
+        // In the sword guard the left heel is off the floor.
+        f.th =
+          gate * (P.td * (1 - ease(f.x0 / 0.25)) + P.to * ease((f.x0 - 0.55) / 0.45)) -
+          (n ? 0 : KAMAE[1] * sp[KEN] * (1 - gate));
         const [df, dy] = roll(f.th);
         [f.x, f.y, f.z] = [f.px + fx * df, f.gy + SOLE + dy, f.pz + fz * df];
         f.w = 1 - gate * (1 - ease(Math.min(f.x0, 1 - f.x0) / 0.12));
@@ -766,7 +779,8 @@ export const createGait = (bow = BOW): Gait => {
     const idle = 1 - g;
     const breath = idle * 0.012 * Math.sin(TAU * 0.28 * time);
     const shift = idle * 0.012 * Math.sin(TAU * 0.17 * time + who[1] * 9);
-    const guard = idle * bow;
+    const ken = sp[KEN];
+    const guard = idle * bow * (1 - (1 - KAMAE[2]) * ken);
     const hipX = P.sw * g * side + shift;
     out.at[0] = at[0];
     out.at[1] = at[1];
@@ -808,7 +822,7 @@ export const createGait = (bow = BOW): Gait => {
     const [rx, rz] = [Math.cos(yaw), -Math.sin(yaw)];
     const base: Vec3 = [at[0] + rx * hipX, 0, at[2] + rz * hipX];
     const off = [J.THIGH_L, J.THIGH_R].map(j => turn(pw, REST[j]));
-    const stand = 1 - 0.25 * crouch - 0.7 * dip - GIVE * idle;
+    const stand = 1 - 0.25 * crouch - 0.7 * dip - (GIVE + KAMAE[3] * ken) * idle;
     const flight =
       at[1] +
       0.05 +

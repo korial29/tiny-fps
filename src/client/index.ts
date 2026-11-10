@@ -6,7 +6,8 @@ import type { ClientText, ServerText } from '../shared/protocol';
 import { FLAG, KEY } from '../shared/types';
 import type { PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
 import { SOUND } from './sfx';
-import { build, hidden } from '../shared/world';
+import { ROVER, aimOf } from '../shared/rover';
+import { build, hidden, ray } from '../shared/world';
 import { createAnnouncer } from './announce';
 import { createAudio, savedMute, toggleMute } from './audio';
 import { createBalls } from './balls';
@@ -474,6 +475,19 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
         rovers,
         third ? me : undefined,
       );
+      // The rover's reticle: where its lasers cross along the look, or the ground or wall before it.
+      const car = driving ? rovers[wheel] : undefined;
+      if (car) {
+        const [o, to]: [number, number, number][] = [
+          [car.x, car.y, car.z],
+          aimOf(car, ctl.yaw, ctl.pitch),
+        ];
+        const d = to.map((v, k) => (v - o[k]) / ROVER.GUN_AIM) as [number, number, number];
+        const t = ray(world, o, d, ROVER.GUN_AIM);
+        hud.aim(rd.project(o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t));
+      } else {
+        hud.aim();
+      }
     }
     if (match) {
       hud.match(match, id => names.get(id) ?? '?');

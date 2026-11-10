@@ -383,6 +383,12 @@ export const ride = (p: PlayerState, r: Rover, i: Input, w: World, team: number)
   return fell;
 };
 
+/** Where the rover's lasers cross: GUN_AIM metres from its centre along the driver's look. */
+export const aimOf = (r: Rover, yaw: number, pitch: number): [number, number, number] => {
+  const [sy, cy, sp, cp] = [Math.sin(yaw), Math.cos(yaw), Math.sin(pitch), Math.cos(pitch)];
+  return [r.x - sy * cp * ROVER.GUN_AIM, r.y + sp * ROVER.GUN_AIM, r.z - cy * cp * ROVER.GUN_AIM];
+};
+
 /**
  * The two bolts of one salvo of the rover's lasers, left then right: each from its muzzle toward
  * the point GUN_AIM metres along the driver's look (the yaw and pitch of his input) from the rover's
@@ -397,12 +403,7 @@ export const bolts = (
   id: number,
 ): Flying[] => {
   const [fx, fz] = forward(r.yaw);
-  const [sy, cy, sp, cp] = [Math.sin(yaw), Math.cos(yaw), Math.sin(pitch), Math.cos(pitch)];
-  const aim = [
-    r.x - sy * cp * ROVER.GUN_AIM,
-    r.y + sp * ROVER.GUN_AIM,
-    r.z - cy * cp * ROVER.GUN_AIM,
-  ];
+  const aim = aimOf(r, yaw, pitch);
   return GUNS.map(([side, up, ahead], k) => {
     const o = [r.x + fx * ahead - fz * side, r.y + up, r.z + fz * ahead + fx * side];
     const d = aim.map((v, a) => v - o[a]);

@@ -15,7 +15,7 @@ const PART = { TRUNK: 0, ARM: 1, LEG: 2 } as const;
 
 /**
  * A plate's region on the body at rest (metres, -z the front, +x the right): the part it is on,
- * the heights it spans (its top may dip with the angle, `dip` at the front), and the angles round
+ * the heights it spans, and the angles round
  * the part it spans (degrees from the front, + outward on a limb, toward +x on the trunk), round
  * the part's middle line at `cx` across (mirrored on the left).
  */
@@ -24,8 +24,6 @@ interface Region {
   cx: number;
   y: [number, number];
   a: [number, number];
-  /** How much the top comes down at the front: the neck's cut. */
-  dip?: number;
   /** How much further out the plate swells at the rest point (x, y): the chest plate's pecs. */
   swell?: (x: number, y: number) => number;
   /** Where its angles are measured from, degrees (0 the front): 180 for a plate on the back. */
@@ -91,12 +89,18 @@ const hips = (a: number) => {
 /** The gap between the briefs' thin sides and the thigh plates going up the hips: there is little room. */
 const SIDE_GAP = 0.01;
 
+/** The chest plate's top at angle a round the trunk (degrees, 0 the front): the neck's V. */
+const chestTop = (a: number) => 1.5 - 0.045 * Math.cos((a * Math.PI * 1.4) / 180) ** 2;
+
+/** The gap round the collar piece and over the back plate: there is little room up there. */
+const COLLAR_GAP = 0.012;
+
 /** The gap the user asked between the chest plate and the belly's plates, and between those. */
 export const GAP = 0.02;
 
 export const REGIONS: Region[] = [
   // The chest plate, from under the ribs to the collar, cut round the neck.
-  { part: PART.TRUNK, cx: 0, y: [1.195, 1.5], a: [-64, 64], dip: 0.045, swell: pecs },
+  { part: PART.TRUNK, cx: 0, y: [1.195, 1.5], a: [-64, 64], high: chestTop, swell: pecs },
   // The belly's two plates, GAP apart and GAP under the chest's.
   { part: PART.TRUNK, cx: 0, y: [1.115, 1.195 - GAP], a: [-54, 54] },
   { part: PART.TRUNK, cx: 0, y: [1.035, 1.115 - GAP], a: [-54, 54] },
@@ -113,6 +117,12 @@ export const REGIONS: Region[] = [
   { part: PART.ARM, cx: 0.207, y: [1.215, 1.325], a: [-25, 95] },
   { part: PART.LEG, cx: 0.1, y: [0.6, 0.94], a: [-58, 58], face: 180, high: thigh },
   { part: PART.TRUNK, cx: 0, y: [0.925, 0.982], a: [-181, 181], low: hips },
+  // The user, 2026-11-10: a piece over the collarbones up to the neck, following the chest plate's
+  // V a little over it, out to the shoulder plates; and one on each shoulder blade, over the back's,
+  // a groove down the spine between them.
+  { part: PART.TRUNK, cx: 0, y: [1.47, 1.528], a: [-78, 78], low: a => chestTop(a) + COLLAR_GAP },
+  { part: PART.TRUNK, cx: 0, y: [1.4 + COLLAR_GAP, 1.505], a: [-62, -5], face: 180 },
+  { part: PART.TRUNK, cx: 0, y: [1.4 + COLLAR_GAP, 1.505], a: [5, 62], face: 180 },
   // The back (the user, 2026-11-10, for Highline, where no pack covers it): a plate between the
   // shoulder blades and one on the small of the back, GAP apart.
   { part: PART.TRUNK, cx: 0, y: [1.2, 1.4], a: [-58, 58], face: 180 },
@@ -160,13 +170,7 @@ const limits = (g: Region) => {
   const raw = (c: Corner) => angle({ ...g, face: 0 }, c[0], c[2]);
   return [
     (c: Corner) => c[1] - (g.low ? g.low(raw(c)) : g.y[0]),
-    (c: Corner) => {
-      const a = angle(g, c[0], c[2]);
-      const top = g.high
-        ? Math.min(g.high(raw(c)), g.y[1])
-        : g.y[1] - (g.dip ?? 0) * Math.cos((a * Math.PI * 1.4) / 180) ** 2;
-      return top - c[1];
-    },
+    (c: Corner) => (g.high ? Math.min(g.high(raw(c)), g.y[1]) : g.y[1]) - c[1],
     (c: Corner) => angle(g, c[0], c[2]) - g.a[0],
     (c: Corner) => g.a[1] - angle(g, c[0], c[2]),
     ...(g.round

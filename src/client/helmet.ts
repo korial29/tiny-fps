@@ -23,7 +23,7 @@ export const SHELL = {
   c: [0, 0.05, 0.005] as Vec3,
   r: [0.125, 0.15, 0.145] as Vec3,
   e: [3.2, 3] as [number, number],
-  rim: -0.07,
+  rim: -0.08,
 };
 
 /**
@@ -42,6 +42,17 @@ export const VISOR = {
   up: 0.02,
   notch: [0.016, 0.05] as [number, number],
 };
+/**
+ * The whole helmet is drawn this much smaller than built, about the shell's middle (the user,
+ * 2026-11-10: a little smaller overall); the head still has room inside (its crown, the nearest,
+ * is at 0.89 of the shell).
+ */
+export const SCALE = 0.93;
+
+/** A point of the helmet as built to where it is drawn, in the head's frame. */
+export const shrunk = (p: Vec3): Vec3 =>
+  [0, 1, 2].map(k => SHELL.c[k] + (p[k] - SHELL.c[k]) * SCALE) as Vec3;
+
 /** Metres of u a radian of turn round the shell. */
 export const WRAP = 0.125;
 /** The visor's corners: the exponent of its superellipse. */
@@ -836,17 +847,17 @@ const kit = (lod: number): Kit => {
 export const helmet = (out: number[], at: Vec3, q: Quat, rgb: number[], lod: number) => {
   const k = kit(lod);
   const head = (v: Vec3) => turn(q, v);
-  /** Places `src` scaled by `s` at `p` in the head's frame, its axis along `to`, its x as near `side` as it can be. */
+  /** Places `src` scaled by `s` at `p` in the head's frame (shrunk by SCALE about the shell's middle), its axis along `to`, its x as near `side` as it can be. */
   const part = (src: number[], p: Vec3, to: Vec3, side: Vec3, s: Vec3, tint?: number[]) => {
     const [r, u, f] = aim(to, side);
-    const o = head(p);
+    const o = head(shrunk(p));
     place(
       out,
       src,
       [at[0] + o[0], at[1] + o[1], at[2] + o[2]],
       [head(r), head(u), head(f)],
       [0, 0, 0],
-      s,
+      s.map(v => v * SCALE) as Vec3,
       tint,
     );
   };

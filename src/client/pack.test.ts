@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GLOW } from './flag';
 import { GLOSS, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
+import { shrunk } from './helmet';
 import { HOSE, PACK, hose, pack, shoulders } from './pack';
 import { JOINT as J, axis, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
@@ -71,7 +72,7 @@ describe('the breathing hose', () => {
     for (const lod of [1, 3]) {
       const v = draw(lod);
       sound(v);
-      const from = turn(S.rot[J.HEAD], HOSE.from).map((w, k) => w + S.pos[J.HEAD][k]);
+      const from = turn(S.rot[J.HEAD], shrunk(HOSE.from)).map((w, k) => w + S.pos[J.HEAD][k]);
       const to = turn(S.rot[J.CHEST], HOSE.to).map((w, k) => w + S.pos[J.CHEST][k]);
       const near = (p: number[]) => {
         let best = Infinity;

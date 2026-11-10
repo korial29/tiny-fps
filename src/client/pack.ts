@@ -5,8 +5,8 @@
 // back); the hose is built each frame between the head and the chest, which move apart.
 import { TAU } from '../shared/physics';
 import { GLOW, glow } from './flag';
-import { cross, loft, pow, quad, sub, unit } from './helmet';
-import { GLOSS, STRIDE, aim, dress, place, smooth } from './mesh';
+import { cross, loft, pow, quad, shrunk, sub, unit } from './helmet';
+import { GLOSS, STRIDE, aim, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
@@ -174,7 +174,7 @@ export const hose = (out: number[], head: Vec3, hq: Quat, chest: Vec3, cq: Quat,
     return [at[0] + w[0], at[1] + w[1], at[2] + w[2]];
   };
   const way = (q: Quat, v: Vec3, k: number): Vec3 => turn(q, unit(v)).map(x => x * k) as Vec3;
-  const p0 = on(head, hq, HOSE.from);
+  const p0 = on(head, hq, shrunk(HOSE.from));
   const p3 = on(chest, cq, HOSE.to);
   const span = Math.hypot(...sub(p3, p0));
   const o = way(hq, HOSE.out, span * 0.5);
@@ -214,57 +214,129 @@ export const hose = (out: number[], head: Vec3, hq: Quat, chest: Vec3, cq: Quat,
 };
 
 /**
- * The shoulder pads (the user, 2026-11-10: white, glossy, round): a dome with a rolled lip over
- * each shoulder, on the arm's joint so it goes with the arm. Where on the right one (the left is
- * mirrored), the way its dome faces, and its half sizes across, along the arm and out.
+ * The shoulder pads (the user, 2026-11-10: white and glossy, then worked, less of a shell, cut a
+ * third of the way in from the neck, smaller): a plate over each shoulder, flat on top and rounded
+ * to its rim, which turns down; two grooves along its outer edge; its inner third, toward the
+ * neck, cut off straight. On the arm's joint so it goes with the arm. For the right one (the left
+ * is mirrored): its middle from the joint, the way it faces, its half length along the shoulder
+ * and half width across it, its height, and the cut (a share of the half length, from the middle
+ * toward the neck).
  */
 export const PAD = {
-  at: [0.008, -0.035, 0] as Vec3,
+  at: [0.012, -0.03, 0] as Vec3,
   out: [0.72, 0.7, 0] as Vec3,
-  r: [0.098, 0.165, 0.085] as Vec3,
+  r: [0.13, 0.085] as [number, number],
+  h: 0.05,
+  cut: 1 / 3,
 };
+/** How deep the grooves are and where across the plate (share of its radius), and their width. */
+const GROOVES = [0.62, 0.8];
+const GROOVE = [0.0035, 0.03];
+const LIP = 0.012;
+const GROOVED = [0.66, 0.67, 0.7];
 
-const pads = new Map<number, number[]>();
+/** Columns round, rows out from the middle, and whether it is grooved: far, near, close. */
+const PAD_DETAIL = [
+  [10, 3, 0],
+  [18, 10, 1],
+  [32, 24, 1],
+];
 
+const pads = new Map<number, number[][]>();
+
+/** The right pad and the left one, built in their arm joint's frame. */
 const padOf = (lod: number) => {
   const level = Math.min(lod, 2);
   let v = pads.get(level);
-  if (!v) {
-    const [sides, steps] = [[8, 12, 20][level], [2, 4, 7][level]];
-    // The lip, then the dome to its pole (radius, length along its axis).
-    const profile: [number, number][] = [
-      [0.9, -0.12],
-      [1.04, -0.08],
-      [1.06, 0],
-      ...Array.from({ length: steps + 1 }, (_, i): [number, number] => {
-        const a = ((i + 1) / (steps + 1)) * (TAU / 4);
-        return i == steps ? [0, 1] : [Math.cos(a), Math.sin(a)];
-      }),
-    ];
-    v = dress(smooth(profile, sides), [1, 1, 1]);
-    for (let i = 8; i < v.length; i += STRIDE) {
-      v[i] = GLOSS;
-    }
-    pads.set(level, v);
+  if (v) {
+    return v;
   }
+  const [cols, rows, grooved] = PAD_DETAIL[level];
+  const [Ra, Rb] = PAD.r;
+  const Z = unit(PAD.out);
+  const N: Vec3 = [-1, 0.25, 0];
+  const nz = N[0] * Z[0] + N[1] * Z[1] + N[2] * Z[2];
+  const X = unit([N[0] - Z[0] * nz, N[1] - Z[1] * nz, N[2] - Z[2] * nz]);
+  const Y = cross(Z, X);
+  const norm = (a: number, b: number) => ((a / Ra) ** 4 + (b / Rb) ** 4) ** 0.25;
+  const dip = (r: number) =>
+    grooved ? GROOVES.reduce((d, g) => d + Math.exp(-(((r - g) / GROOVE[1]) ** 2)), 0) : 0;
+  const height = (a: number, b: number) => {
+    const r = Math.min(norm(a, b), 1);
+    return PAD.h * Math.sqrt(Math.max(1 - r ** 3, 0)) - GROOVE[0] * dip(r);
+  };
+  const at = (a: number, b: number, h: number): Vec3 =>
+    [0, 1, 2].map(k => PAD.at[k] + X[k] * a + Y[k] * b + Z[k] * h) as Vec3;
+  /** The plate's edge at angle t round its middle: the superellipse, or the cut, nearer. */
+  const edge = (t: number) => {
+    const [c, s] = [Math.cos(t), Math.sin(t)];
+    const r = ((Math.abs(c) / Ra) ** 4 + (Math.abs(s) / Rb) ** 4) ** -0.25;
+    return c > 0 ? Math.min(r, (PAD.cut * Ra) / c) : r;
+  };
+  // Corners: [place, normal, colour], row by row from the middle out, then the lip.
+  type C = [Vec3, Vec3, number[]];
+  const corner = (a: number, b: number, lip = false): C => {
+    const e = 1e-4;
+    const h = height(a, b);
+    const p = at(a, b, lip ? Math.max(h, 0) - LIP : h);
+    let n: Vec3;
+    if (lip) {
+      n = unit(sub(at(a, b, 0), at(0, 0, 0)));
+    } else {
+      const du = sub(at(a + e, b, height(a + e, b)), at(a - e, b, height(a - e, b)));
+      const dv = sub(at(a, b + e, height(a, b + e)), at(a, b - e, height(a, b - e)));
+      n = unit(cross(du, dv));
+      if (n[0] * Z[0] + n[1] * Z[1] + n[2] * Z[2] < 0) {
+        n = [-n[0], -n[1], -n[2]];
+      }
+    }
+    const g = Math.min(dip(Math.min(norm(a, b), 1)), 1);
+    const col = WHITE.map((w, k) => w + (GROOVED[k] - w) * g);
+    return [p, n, col];
+  };
+  const grid: C[][] = Array.from({ length: rows + 1 }, (_, k) =>
+    Array.from({ length: cols }, (_, i) => {
+      const t = (i / cols) * TAU;
+      const r = (edge(t) * k) / rows;
+      return corner(r * Math.cos(t), r * Math.sin(t));
+    }),
+  );
+  grid.push(
+    Array.from({ length: cols }, (_, i) => {
+      const t = (i / cols) * TAU;
+      return corner(edge(t) * Math.cos(t), edge(t) * Math.sin(t), true);
+    }),
+  );
+  const build = (m: number) => {
+    const out: number[] = [];
+    const put = ([p, n, c]: C) =>
+      out.push(p[0] * m, p[1], p[2], n[0] * m, n[1], n[2], c[0], c[1], GLOSS, c[2]);
+    const tri = (a: C, b: C, c: C) => {
+      const f = cross(sub(b[0], a[0]), sub(c[0], a[0]));
+      if (Math.hypot(...f) < 1e-12) {
+        return;
+      }
+      // Wound as the normal faces; a mirror turns the winding over.
+      const facing = f[0] * a[1][0] + f[1] * a[1][1] + f[2] * a[1][2] >= 0;
+      (facing == m > 0 ? [a, b, c] : [a, c, b]).forEach(put);
+    };
+    grid.slice(1).forEach((row, k) => {
+      const prev = grid[k];
+      for (let i = 0; i < cols; i++) {
+        const j = (i + 1) % cols;
+        tri(prev[i], row[i], row[j]);
+        tri(prev[i], row[j], prev[j]);
+      }
+    });
+    return out;
+  };
+  v = [build(-1), build(1)];
+  pads.set(level, v);
   return v;
 };
 
 /** Appends both shoulder pads at level of detail `lod` on the arm joints (`arms`: the left's and the right's place and turn). */
 export const shoulders = (out: number[], arms: [Vec3, Quat][], lod: number) => {
   const src = padOf(lod);
-  arms.forEach(([at, q], i) => {
-    const x = i ? 1 : -1;
-    const [r, u, f] = aim(unit([PAD.out[0] * x, PAD.out[1], PAD.out[2]]), [0, 0, 1]);
-    const o = turn(q, [PAD.at[0] * x, PAD.at[1], PAD.at[2]]);
-    place(
-      out,
-      src,
-      [at[0] + o[0], at[1] + o[1], at[2] + o[2]],
-      [turn(q, r), turn(q, u), turn(q, f)],
-      [0, 0, 0],
-      PAD.r,
-      WHITE,
-    );
-  });
+  arms.forEach(([at, q], i) => put(out, src[i], at, q));
 };

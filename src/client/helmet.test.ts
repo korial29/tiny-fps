@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LIMB } from '../shared/types';
 import { GLOW } from './flag';
-import { SHELL, WRAP, band, helmet, inside, uOf } from './helmet';
+import { SCALE, SHELL, WRAP, band, helmet, inside, shrunk, uOf } from './helmet';
 import { GLOSS, SHINE, STRIDE, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, rest, solve, turn } from './rig';
@@ -81,11 +81,18 @@ describe('helmet', () => {
 
   it('encloses the head of the skin at rest, from the jaw up, in the shell, at every level of detail', () => {
     for (const lod of [0, 1, 3]) {
-      const { c, r } = SHELL;
+      const {
+        c,
+        e: [ep, eq],
+      } = SHELL;
+      const [A, B, D] = SHELL.r.map(v => v * SCALE);
       const out = make(lod);
-      // The shell's ellipsoid, less what its facets cut: no head vertex is out of 97 % of it.
+      // The shell as drawn (SCALE smaller), less what its facets cut: no head vertex is out of 97 % of it.
       for (const p of headVertices(lod).filter(p => p[1] > SHELL.rim + 0.01)) {
-        const e = Math.hypot(...[0, 1, 2].map(k => (p[k] - c[k]) / r[k]));
+        const [x, y, z] = [0, 1, 2].map(k => p[k] - c[k]);
+        const e =
+          ((Math.abs(x / A) ** ep + Math.abs(z / D) ** ep) ** (eq / ep) + Math.abs(y / B) ** eq) **
+          (1 / eq);
         expect(e).toBeLessThan(0.97);
       }
       // And inside the whole helmet's bounds, at the rest place.
@@ -110,7 +117,8 @@ describe('helmet', () => {
       );
       expect(shiny.length).toBeGreaterThan(20);
       for (const i of shiny) {
-        const p = at(out, i).map((w, k) => w - HEAD[k]);
+        // Back to the helmet as built.
+        const p = at(out, i).map((w, k) => SHELL.c[k] + (w - HEAD[k] - SHELL.c[k]) / SCALE);
         // On the front half of the shell, within the opening wrapped round it.
         expect(p[2]).toBeLessThan(-0.05);
         expect(inside(uOf(p as Vec3), p[1], 1.02)).toBe(true);
@@ -160,7 +168,8 @@ describe('helmet', () => {
           }
           // Where that point of the band is across, on the shell's widest ring.
           const x = SHELL.r[0] * Math.sign(u) * Math.abs(Math.sin(u / WRAP)) ** (2 / SHELL.e[0]);
-          const [, layer] = first(out, HEAD[0] + x, HEAD[1] + y);
+          const [sx, sy] = shrunk([x, y, 0]);
+          const [, layer] = first(out, HEAD[0] + sx, HEAD[1] + sy);
           expect(layer).toBe(SHINE);
           n++;
         }

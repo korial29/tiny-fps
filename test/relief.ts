@@ -12,16 +12,19 @@ export const ARENA = [0, 0, 160, 280];
 export const off = (x: number, z: number, [x0, z0, x1, z1] = ARENA): number =>
   Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(z0 - z, 0, z - z1));
 
-/** Whether the lattice square whose low corner is (x, z) has no ground: in the hole or in a pit. */
-export const empty = (r: Relief, x: number, z: number): boolean =>
-  [r.hole, ...r.pits].some(q => x >= q[0] && x < q[2] && z >= q[1] && z < q[3]);
+/**
+ * Whether the lattice square whose low corner is (x, z) is in the hole or within 8 m of its long
+ * sides: the moon's rille and the band of its lips, where the pits are and the scenery draws its own ground.
+ */
+export const empty = ({ hole: [x0, z0, x1, z1] }: Relief, x: number, z: number): boolean =>
+  x >= x0 && x < x1 && z >= z0 - 8 && z < z1 + 8;
 
 /** Every node as x, z and its height. */
 export const nodes = (r: Relief): [x: number, z: number, h: number][] =>
   Array.from(r.h, (h, n) => [r.x0 + (n % r.nx) * r.cell, r.z0 + Math.floor(n / r.nx) * r.cell, h]);
 
 /**
- * Every lattice square with ground and a corner inside the bound, as its corner (x, z) and the heights of
+ * Every lattice square clear of the hole's band (see empty) with a corner inside the bound, as its corner (x, z) and the heights of
  * (i, j), (i + 1, j), (i, j + 1) and (i + 1, j + 1): the ones a body inside the bound can stand on.
  */
 export const squares = (r: Relief): number[][] => {

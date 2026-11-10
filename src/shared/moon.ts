@@ -69,15 +69,53 @@ const [RIDGE, HILL] = [
   [248, 64],
   [180, 200],
 ];
-/**
- * The rille's lip on red's side, a number for each 4 m of x from 0: 0 is the straight lip at z 148,
- * n > 0 a notch n lattice cells back from it, n < 0 a spur that many metres into the rille (only at
- * the two ends, where it closes: a narrower rille is a new jump). Blue's lip is the mirror.
- */
-export const LIP = [
-  -6, -3, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 0, 0, 0, 0, 1, 2, 1, 0, 1, 2, 1, 0, 1, 0,
-  0, 0, 0, 0, 0, 0, -3, -6,
+/** Where the lip stays straight, x0 to x1: the west jump's spurs, a mound and its flanks, the bridge, the east stones and the other mound. */
+const STRAIGHT = [
+  [12, 24],
+  [36, 60],
+  [72, 88],
+  [124, 156],
 ];
+/**
+ * The rille's lip on red's side, a number for each metre of x from 0: how far it is behind z 148,
+ * in half metres. A meander from two octaves of noise, 0 on STRAIGHT, never more than half a
+ * metre from one metre to the next between the ends (so the rim the scenery draws through it is never more than
+ * that from a brush), at most 6.5 m. Under 0, a spur into the rille: only over the last 8 m of
+ * each end, where it closes (a narrower rille is a new jump). Blue's lip is the mirror.
+ */
+export const LIP = (() => {
+  const d = Array.from({ length: 160 }, (_, x) =>
+    STRAIGHT.some(([a, b]) => x >= a - 1 && x <= b)
+      ? 0
+      : Math.min(
+          Math.round(Math.max(26 * noise(x / 17, 0, 33) + 8 * noise(x / 5, 0, 35) - 11, 0)) / 2,
+          6.5,
+        ),
+  );
+  for (const k of [1, -1]) {
+    for (let x = k > 0 ? 1 : 158; x >= 0 && x < 160; x += k) {
+      d[x] = Math.min(d[x], d[x - k] + 0.5);
+    }
+  }
+  // The ends close as they did: 6 m in over the last 4 m, 3 m over the 4 m before.
+  return d.map((v, x) => {
+    const e = Math.min(x, 159 - x);
+    return e < 4 ? -6 : e < 8 ? -3 : v;
+  });
+})();
+/** Runs of a list of numbers a metre of x apart: first x, metres, value. */
+const runs = (l: number[]) =>
+  l.reduce<number[][]>((r, n, x) => {
+    if (r.at(-1)?.[2] === n) {
+      r.at(-1)![1]++;
+    } else {
+      r.push([x, 1, n]);
+    }
+    return r;
+  }, []);
+const RUNS = runs(LIP);
+/** A hollow in red's field, its middle x, z and how deep: the slab is lowered under it (HOLLOW's square), the relief is the floor there. */
+export const HOLLOW = [114, 176, 2];
 /**
  * The mounds by the rille, their middle x: a ramp up to the lip, RISE m long and MOUND m high (21
  * degrees), 8 m wide with 8 m of flank each side. A rover at speed flies the 16 m to the twin
@@ -104,6 +142,8 @@ export const FLATS = [
   [35, 104, 35, 104],
   [115, 22, 115, 22],
   [45, 20, 51, 62],
+  // The hollow's middle: the field is level round it, the bowl goes down from there.
+  [114, 36, 114, 36],
   [141, 20, 147, 66],
 ];
 /** The boulder field south-west: x, z, radius. */
@@ -118,6 +158,12 @@ const FIELD = [
   [22, -4, 2],
   [-12, 20, 2.4],
 ].map(([x, z, r]) => [x - 50, z + 330, r]);
+/** The east stepping stones in the rille, x0, z0, x1, z1 and the top. */
+const PILLARS = [
+  [126, 143, 131, 147, 1.2],
+  [130, 138.5, 135, 141.5, 2.4],
+  [126, 133, 131, 137, 1.2],
+];
 /** The three dishes on the hill and the lander wrecked in the Bowl. */
 const DISHES = [
   [180, 340],
@@ -154,6 +200,17 @@ const BOULDERS = Array.from({ length: 36 }, (_, i) => {
 );
 
 /**
+ * How much of a mound's height there is at x, across it: all of it for 4 m each side of its
+ * middle cx, none 8 m further, and none over the spurs that close the rille's east end. Straight
+ * between the lattice's lines, so the ground between two nodes is what at() says.
+ */
+const across = (cx: number, x: number) => {
+  const f = (u: number) => c1((12 - Math.abs(u - cx)) / 8) * c1((152 - u) / 4);
+  const x0 = 4 * Math.floor(x / 4);
+  return f(x0) + ((f(x0 + 4) - f(x0)) * (x - x0)) / 4;
+};
+
+/**
  * The height of the crater floor round the arena. Only + - * /, Math.sqrt, Math.abs, min, max, floor
  * and the integer hash: every engine builds the same lattice. In the arena, the field (see FLATS)
  * and the mounds; exactly 0 for 12 m round it (a rectangle on lattice lines, so between the nodes
@@ -177,7 +234,8 @@ const at = (x: number, z: number): number => {
       14.2);
   if (out < 0) {
     // The field: swells and mounds over the slabs, never under them, flat by the lips, the edge and the FLATS.
-    let m = sm((z - 20) / 10) * sm(-out / 10);
+    // It starts 16 to 26 m from the centre line, not along a ruled line.
+    let m = sm((z - 16 - 10 * noise(x / 19, 0.5, 37)) / 8) * sm(-out / 10);
     for (const [x0, z0, x1, z1] of FLATS) {
       m *= sm((far(Math.max(x0 - x, x - x1, 0), Math.max(z0 - z, z - z1, 0)) - 6) / 6);
     }
@@ -188,8 +246,11 @@ const at = (x: number, z: number): number => {
           Math.max(3 * noise(x / 31, z / 31, 23) - 0.6, 0),
         2.6,
       );
+    // The hollow: the field gives way to a bowl, back to 0 by the edge of its square.
+    const s = sm((10 - far(x - HOLLOW[0], z - (HOLLOW[1] - ZED / 2))) / 8);
+    h = h * (1 - s) - HOLLOW[2] * s;
     for (const cx of MOUNDS) {
-      h += MOUND * c1((8 + RISE - z) / RISE) * c1((12 - Math.abs(x - cx)) / 8);
+      h += MOUND * c1((8 + RISE - z) / RISE) * across(cx, x);
     }
     // No relief in the rille: its nodes are the lips'.
     h = z < 8 ? 0 : h;
@@ -236,6 +297,7 @@ export const LAYOUT = {
   /** Red's boulders along its walls and the field's stones; blue's are their mirrors, drawn by the scenery's flip. */
   boulders: BOULDERS,
   stones: STONES,
+  pillars: PILLARS,
   domes: [DOME, [DOME[0], ZED - DOME[1]]],
   pads: [PAD, [PAD[0], ZED - PAD[1], PAD[2]]],
   shuttles: [SHUTTLE, mirror(SHUTTLE)],
@@ -258,32 +320,34 @@ const both = (l: Vec3[], ...mid: Vec3[]) => [...l, ...l.map(flipPoint), ...mid];
 /** Red's half: z from 140 to 280. */
 const half: Brush[] = [
   // The crater floor, regolith, from the rille to the rim: ghosts, the scenery draws the relief
-  // over them and the rille's rock. One slab from 8 m behind the lip, then the lip's own pieces.
+  // over them and the rille's rock.
   ...[
-    box(0, -30, 156, 160, 0, 280, STONE),
-    ...LIP.reduce<number[][]>((l, n, c) => {
-      // Runs of the same lip: first column, columns, lip.
-      if (l.at(-1)?.[2] === n) {
-        l.at(-1)![1]++;
-      } else {
-        l.push([c, 1, n]);
-      }
-      return l;
-    }, [])
-      .filter(r => r[2] < 2)
-      .map(([c, w, n]) => box(4 * c, -30, 148 + (n > 0 ? 4 : n), 4 * (c + w), 0, 156, STONE)),
+    // The slab from 12 m behind the lip, in four round the hollow's square, and its floor 3 m down.
+    box(0, -30, 160, 160, 0, HOLLOW[1] - 12, STONE),
+    box(0, -30, HOLLOW[1] - 12, HOLLOW[0] - 12, 0, HOLLOW[1] + 12, STONE),
+    box(HOLLOW[0] + 12, -30, HOLLOW[1] - 12, 160, 0, HOLLOW[1] + 12, STONE),
+    box(0, -30, HOLLOW[1] + 12, 160, 0, 280, STONE),
+    box(HOLLOW[0] - 12, -30, HOLLOW[1] - 12, HOLLOW[0] + 12, -3, HOLLOW[1] + 12, STONE),
+    // The lip's own pieces: at each end a spur for each run, between them a strip half a metre
+    // deep for each depth of the notches, wherever the lip is no deeper, and what is behind them all.
+    ...RUNS.filter(r => r[2] < 0).map(([x, w, n]) => box(x, -30, 148 + n, x + w, 0, 160, STONE)),
+    ...Array.from({ length: 14 }, (_, k) =>
+      runs(LIP.map(n => (n < 0 ? 2 : n > k / 2 ? 1 : 0)))
+        .filter(r => !r[2])
+        .map(([x, w]) => box(x, -30, 148 + k / 2, x + w, 0, k < 13 ? 148.5 + k / 2 : 160, STONE)),
+    ).flat(),
     // A sill under each mound's lip, half a metre thick and as high as the ground behind it: a body
     // flying in under the crest meets rock. Past it the ground would lift it for free.
     ...MOUNDS.flatMap(x =>
-      [
-        [-4, 4, 1],
-        ...[0, 1, 2].flatMap(k => [
-          [4 + 2 * k, 6 + 2 * k, (3 - k) / 4],
-          [-6 - 2 * k, -4 - 2 * k, (3 - k) / 4],
-        ]),
-      ].map(([a, b, f]) =>
-        box(x + a, 0, 148, x + b, MOUND * f * (1 - 0.5 / RISE) - 0.12, 148.5, STONE),
-      ),
+      [-12, -10, -8, -6, -4, 4, 6, 8, 10]
+        .map(a => [a, a + (a === -4 ? 8 : 2)])
+        .map(([a, b]) => [
+          x + a,
+          x + b,
+          MOUND * Math.min(across(x, x + a), across(x, x + b)) * (1 - 0.5 / RISE) - 0.12,
+        ])
+        .filter(r => r[2] > 0.3)
+        .map(([a, b, y]) => box(a, 0, 148, b, y, 148.5, STONE)),
     ),
   ].map(b => ({ ...b, ghost: true })),
   // The base: the dome's ghosts, the modules, the tubes and their stairs.
@@ -328,10 +392,8 @@ const centre: Brush[] = [
   box(74, -1.5, 132, 86, 0, 148, METAL, STEEL),
   box(74, 0, 132, 74.4, 1.1, 148, CONCRETE),
   box(85.6, 0, 132, 86, 1.1, 148, CONCRETE),
-  // The east stones, 1.2 m, 2.4 m, 1.2 m high.
-  box(126, -30, 143, 131, 1.2, 147, STONE),
-  box(130, -30, 138.5, 135, 2.4, 141.5, STONE),
-  box(126, -30, 133, 131, 1.2, 137, STONE),
+  // The east stones, 1.2 m, 2.4 m, 1.2 m high: ghosts, the scenery draws a rock pillar round each.
+  ...PILLARS.map(([x0, z0, x1, z1, y]) => ({ ...box(x0, -30, z0, x1, y, z1, STONE), ghost: true })),
   // The rille ends in the relief: a ghost plug under the ground at each end keeps a player in it.
   { ...box(-10, -30, 132, 0, 0, 148, STONE), ghost: true },
   { ...box(160, -30, 132, 170, 0, 148, STONE), ghost: true },
@@ -401,11 +463,11 @@ export const MOON: WorldDef = {
   // The crater floor, out to an ellipse of 600 by 720 m nobody crosses: none in the rille and the notches of its lips.
   relief: {
     hole: [0, 132, 160, 148],
-    pits: LIP.flatMap((n, c): [number, number, number, number][] =>
+    pits: RUNS.flatMap(([x, w, n]): [number, number, number, number][] =>
       n > 0
         ? [
-            [4 * c, 148, 4 * c + 4, 148 + 4 * n],
-            [4 * c, 132 - 4 * n, 4 * c + 4, 132],
+            [x, 148, x + w, 148 + n],
+            [x, 132 - n, x + w, 132],
           ]
         : [],
     ),

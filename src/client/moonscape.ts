@@ -10,7 +10,7 @@ import { ground, raise } from '../shared/relief';
 import { TEX } from '../shared/types';
 import type { World, WorldDef } from '../shared/world';
 import { GLOW, glow, ring, tri } from './flag';
-import { STRIDE, dress, mix, place, smooth, unit } from './mesh';
+import { STRIDE, dot, dress, mix, place, smooth, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { UP, box, cross, face, lit, moonbase } from './moonbase';
 import { hull } from './moonhull';
@@ -273,6 +273,129 @@ const rock = (
   });
 };
 
+/** A unit sphere as triangles: an octahedron with each face cut in four, n times (8 * 4 ** n). */
+const ball = (n: number): Vec3[][] => {
+  let t: Vec3[][] = [];
+  for (const a of [-1, 1]) {
+    for (const b of [-1, 1]) {
+      for (const c of [-1, 1]) {
+        t.push([
+          [a, 0, 0],
+          [0, b, 0],
+          [0, 0, c],
+        ]);
+      }
+    }
+  }
+  for (; n > 0; n--) {
+    t = t.flatMap(([p, q, r]) => {
+      const m = (u: Vec3, v: Vec3) => unit([u[0] + v[0], u[1] + v[1], u[2] + v[2]]);
+      const [pq, qr, rp] = [m(p, q), m(q, r), m(r, p)];
+      return [
+        [p, pq, rp],
+        [pq, q, qr],
+        [rp, qr, r],
+        [pq, qr, rp],
+      ];
+    });
+  }
+  return t;
+};
+const BALLS = [1, 2, 3].map(ball);
+
+/**
+ * A boulder that fills the box lo..hi, the one shared/moon.ts collides with: a sphere of
+ * 8 * 4 ** lod triangles (lod 1 to 3) pressed into the box with its edges rounded (0.35 m), each
+ * point then moved by two octaves of noise of seed s, no more than 0.28 m out of a side nor 0.05 m
+ * into it, never over the top, and shaved by four planes for broad facets; below `sunk` (the
+ * ground) it is a skirt. Flat shaded basalt, each facet a hash lighter or darker, dark at the foot.
+ */
+const boulder = (
+  o: number[],
+  lo: Vec3,
+  hi: Vec3,
+  s: number,
+  lod: number,
+  shade: number,
+  sunk = lo[1],
+) => {
+  const mid = lo.map((v, k) => (v + hi[k]) / 2) as Vec3;
+  const half = lo.map((v, k) => (hi[k] - v) / 2) as Vec3;
+  const round = Math.min(0.35, 0.5 * Math.min(half[0], half[2]));
+  const cuts = [0, 1, 2, 3].map(k => {
+    const a = TAU * hash(s, k, 91);
+    const y = 0.25 + 0.6 * hash(s, k, 92);
+    const c = Math.sqrt(1 - y * y);
+    return [c * Math.cos(a), y, c * Math.sin(a), 0.06 + 0.2 * hash(s, k, 93)];
+  });
+  const far = cuts.map(() => -Infinity);
+  const pt = (u: Vec3): Vec3 => {
+    // On the cube, then on the box with round edges.
+    const m = Math.max(Math.abs(u[0]), Math.abs(u[1]), Math.abs(u[2]));
+    const p = u.map((v, k) => {
+      const c = (v / m) * half[k];
+      const core = Math.min(Math.max(c, round - half[k]), half[k] - round);
+      return [core, c - core];
+    });
+    const l = Math.hypot(p[0][1], p[1][1], p[2][1]) || 1;
+    const n =
+      0.65 * noise(3 * u[0] + 1.7 * u[1] + s, 3 * u[2] - 2.1 * u[1], s) +
+      0.35 * noise(7 * u[0] - 3 * u[1], 7 * u[2] + 4 * u[1] + s, s + 1);
+    // Out or in along the round edge's own way; the top only goes down.
+    const d = u[1] > 0.55 ? -0.2 * n : 0.33 * n - 0.05;
+    return p.map(([core, r], k) => mid[k] + core + (r / l) * (round + d)) as Vec3;
+  };
+  const tris = BALLS[lod - 1].map(t => t.map(pt));
+  tris.forEach(t =>
+    t.forEach(p =>
+      cuts.forEach((c, k) => (far[k] = Math.max(far[k], dot(p, c as unknown as Vec3)))),
+    ),
+  );
+  for (const t of tris) {
+    const q = t.map(p => {
+      let v = p;
+      cuts.forEach((c, k) => {
+        // Past the plane: back onto it.
+        const over = dot(v, c as unknown as Vec3) - (far[k] - c[3]);
+        // Only over its middle: the sides stay where a body hides behind them.
+        v = over > 0 && v[1] > mid[1] ? (v.map((x, j) => x - over * c[j]) as Vec3) : v;
+      });
+      return [v[0], Math.min(v[1], hi[1]), v[2]] as Vec3;
+    });
+    let n = cross(sub(q[1], q[0]), sub(q[2], q[0]));
+    if (Math.hypot(...n) < 1e-9) {
+      continue;
+    }
+    n = unit(n);
+    if (dot(n, sub(q[0], mid)) < 0) {
+      q.reverse();
+      n = n.map(v => -v) as Vec3;
+    }
+    const i = o.length;
+    const y = (q[0][1] + q[1][1] + q[2][1]) / 3;
+    const w =
+      0.85 *
+      shade *
+      (0.86 + 0.28 * hash(i, s, 7)) *
+      (0.55 + 0.45 * sm((y - sunk) / (0.3 * (hi[1] - sunk)))) *
+      (0.82 + 0.18 * Math.max(n[1], 0));
+    for (const v of q) {
+      o.push(
+        ...v,
+        ...n,
+        // The basalt laid along the facet's main plane.
+        ...(Math.abs(n[1]) > 0.7
+          ? [v[0], v[2]]
+          : Math.abs(n[0]) > Math.abs(n[2])
+            ? [v[2] + 3 * s, v[1]]
+            : [v[0] + 3 * s, v[1]]),
+        TEX.ROCK,
+        w,
+      );
+    }
+  }
+};
+
 /**
  * A landing pad (radius 13) with its painted rings and 24 lights, and a shuttle lying on it from x = s, nose toward +x.
  * The disc tops out 2 cm above the pad's metal brush (0.25): level with it, the two fought for the depth buffer.
@@ -358,15 +481,25 @@ const base = (o: number[], at: (x: number, z: number) => number) => {
   }
   // Boulders along the three walls of the half, and the field's stones round their boxes (shared/moon.ts collides with both).
   LAYOUT.boulders.forEach(([x, z, r], i) =>
-    rock(o, [x, at(x, z) + r * 0.15, z], [r, 0.7 * r, r], i, 0.8 + 0.4 * hash(i, 5, 41)),
+    boulder(
+      o,
+      [x - 0.6 * r, at(x, z) - 0.6, z - 0.6 * r],
+      [x + 0.6 * r, at(x, z) + 0.75 * r, z + 0.6 * r],
+      i,
+      r > 2.2 ? 3 : 2,
+      0.8 + 0.4 * hash(i, 5, 41),
+      at(x, z),
+    ),
   );
   LAYOUT.stones.forEach(([x, z, w, d, h], i) =>
-    rock(
+    boulder(
       o,
-      [x + w / 2, at(x + w / 2, z + d / 2) + 0.3 * h, z + d / 2],
-      [0.66 * w, 1.05 * h, 0.66 * d],
+      [x, at(x + w / 2, z + d / 2) - 0.6, z],
+      [x + w, at(x + w / 2, z + d / 2) + h, z + d],
       i + 61,
+      3,
       0.95 + 0.2 * hash(i, 7, 41),
+      at(x + w / 2, z + d / 2),
     ),
   );
 };
@@ -504,8 +637,8 @@ const terrain = (o: number[], def: WorldDef) => {
       if (k > 1) {
         for (let x = x0; x < x1; x += r.cell) {
           for (let z = z0; z < z1; z += r.cell) {
-            // No ground in the rille nor in a notch of its lips.
-            if ([r.hole, ...r.pits].some(q => x >= q[0] && x < q[2] && z >= q[1] && z < q[3])) {
+            // Not the rille, nor the 8 m behind each lip: ravine() draws the ground up to the rim.
+            if (x >= r.hole[0] && x < r.hole[2] && z >= r.hole[1] - 8 && z < r.hole[3] + 8) {
               continue;
             }
             const [p, q, s, t] = [
@@ -538,89 +671,141 @@ const terrain = (o: number[], def: WorldDef) => {
   }
 };
 
-/** Depths of the rille's rock, each row of its walls, and how light the row is: strata, darker down to black under the kill floor. */
+/**
+ * The rows of the rille's wall: depth, how far the rock stands out into the void there (under 0:
+ * back under the rim, which overhangs), how much more a buttress adds, and how light it is. Three
+ * strata, a ledge under each of the upper two (out of anyone's reach: nothing collides with the
+ * wall's form), then scree down to the bottom.
+ */
 const ROWS = [
-  [0, 1],
-  [-0.7, 0.8],
-  [-2.2, 0.95],
-  [-4.5, 0.6],
-  [-8, 0.7],
-  [-13, 0.4],
-  [-20, 0.3],
-  [-30, 0.08],
+  [0, 0, 0, 1],
+  [-0.6, -0.25, 0, 0.9],
+  [-3, -0.2, 0.7, 0.95],
+  [-7, 0.1, 0.9, 0.85],
+  [-7.4, 0.8, 0.9, 0.5],
+  [-14, 1, 1.2, 0.55],
+  [-14.5, 1.7, 1.2, 0.3],
+  [-22, 2.1, 1.5, 0.34],
+  [-30, 5.6, 1.5, 0.12],
 ];
 
 /**
- * Red's side of the rille, carved: the lip of shared/moon.ts (LIP) as rock walls in basalt, a
- * strip for each straight piece and each step between two columns, cut every 2 m and at each
- * stratum, every point but the top row's and a strip's ends pushed up to 0.3 m into the void (and
- * more under the kill floor), flat shaded; the top row is the ground's own edge, up over a mound.
- * Then the spurs' tops, the bottom, a seam that glows far down and rubble on it.
+ * Red's side of the rille. The rim is a line through the lip of shared/moon.ts (LIP): at each
+ * metre of x the nearer of the two columns' lips, a few centimetres further out, so the ground
+ * drawn reaches every brush's edge and is never more than a step (0.5 m) past it; where the ends
+ * close in steps of 1.5 m the line takes the steps (RIM). Behind the rim the
+ * ground (apron()); under it the wall, in basalt, flat shaded:
+ * buttresses and fractures from noise along x, the strata of ROWS. Then the bottom, a seam that
+ * glows far down, rubble, and stones along the rim.
  */
-const ravine = (o: number[], def: WorldDef) => {
+/** The rim's points on red's side, x and z, from the middle of the closed west end to the middle of the east one. */
+const RIM = (() => {
+  const lip = (x: number) => LIP[Math.min(Math.max(x, 0), LIP.length - 1)];
+  const rim: number[][] = [[0, 140]];
+  for (let x = 0; x <= LIP.length; x++) {
+    const [a, b] = [lip(x - 1), lip(x)];
+    if (Math.abs(a - b) > 0.5) {
+      // A step of an end's spurs: the line takes it.
+      rim.push([x, 148 + a], [x, 148 + b]);
+    } else {
+      rim.push([x, 148 + Math.min(a, b) - 0.12 * hash(x, 1, 71)]);
+    }
+  }
+  return [...rim, [LIP.length, 140]];
+})();
+
+/** The ground from the lattice's edge, 8 m behind the straight lip, to the rim, on both sides: in the floor's stone, laid where it lies (a mirrored copy would carry red's). */
+const apron = (o: number[], def: WorldDef) => {
   const { at } = def.relief!;
-  // The lip's z in each column; past both ends the rille is closed.
-  const lip = (c: number) => (c < 0 || c >= LIP.length ? 140 : 148 + (LIP[c] > 0 ? 4 : 1) * LIP[c]);
-  const strip = (x0: number, z0: number, x1: number, z1: number) => {
-    const len = Math.hypot(x1 - x0, z1 - z0);
-    // Into the void: the strip's right as it runs.
-    const n = [(z1 - z0) / len, 0, -(x1 - x0) / len];
-    const steps = Math.max(Math.round(len / 2), 1);
-    const pt = (i: number, k: number): Vec3 => {
-      const [x, z] = [x0 + ((x1 - x0) * i) / steps, z0 + ((z1 - z0) * i) / steps];
-      const d =
-        k && i % steps
-          ? (k > 6 ? 1.6 : 0.3) * hash(Math.round(x * 2 + z * 64), k, 71) * (k & 1 ? 1 : 0.45)
-          : 0;
-      return [x + n[0] * d, k ? ROWS[k][0] : Math.max(at(x, z), 0), z + n[2] * d];
+  const y = (x: number, z: number) => at(x, Math.max(z, 148));
+  for (const side of [1, -1]) {
+    const floor = (x: number, z: number) => {
+      const n = unit([y(x - 1, z) - y(x + 1, z), 2, side * (y(x, z - 1) - y(x, z + 1))]);
+      return [
+        x,
+        Math.max(y(x, z), 0),
+        140 + side * (z - 140),
+        ...n,
+        x,
+        140 + side * (z - 140),
+        TEX.STONE,
+        1,
+      ];
     };
-    for (let i = 0; i < steps; i++) {
-      for (let k = 0; k < ROWS.length - 1; k++) {
-        const q = [pt(i, k), pt(i + 1, k), pt(i + 1, k + 1), pt(i, k + 1)];
-        for (const [a, b, c] of (i + k) & 1
-          ? [
-              [0, 1, 2],
-              [0, 2, 3],
-            ]
-          : [
-              [0, 1, 3],
-              [1, 2, 3],
-            ]) {
-          const m = unit(
-            cross(q[b].map((v, j) => v - q[a][j]) as Vec3, q[c].map((v, j) => v - q[a][j]) as Vec3),
-          );
-          // Out of the rock, into the void.
-          const f = m[0] * n[0] + m[2] * n[2] < 0 ? -1 : 1;
-          const w = ROWS[k][1] * (0.85 + 0.3 * hash(i, k, 73));
-          for (const v of [q[a], q[b], q[c]]) {
-            o.push(...v, m[0] * f, m[1] * f, m[2] * f, v[0] + v[2], v[1], TEX.ROCK, w);
-          }
-        }
-      }
-    }
-  };
-  for (let c = 0; c <= LIP.length; c++) {
-    const [x, a, b] = [4 * c, lip(c - 1), lip(c)];
-    if (a !== b) {
-      // A step in the lip: the void is on the side of the column that stops short.
-      strip(x, a, x, b);
-    }
-    if (c < LIP.length) {
-      strip(x, b, x + 4, b);
-      if (LIP[c] < 0) {
-        // A spur's top, level with the lip.
-        const p = (u: number, v: number) => [u, 0, v, 0, 1, 0, u, v, TEX.STONE, 1];
-        o.push(
-          ...p(x, b),
-          ...p(x + 4, 148),
-          ...p(x + 4, b),
-          ...p(x, b),
-          ...p(x, 148),
-          ...p(x + 4, 148),
-        );
+    for (let i = 0; i < RIM.length - 1; i++) {
+      const [p, q] = [RIM[i], RIM[i + 1]];
+      if (p[0] !== q[0]) {
+        const [a, b, c, d] = [
+          floor(p[0], 156),
+          floor(q[0], 156),
+          floor(q[0], q[1]),
+          floor(p[0], p[1]),
+        ];
+        o.push(...a, ...c, ...b, ...a, ...d, ...c);
       }
     }
   }
+};
+
+const ravine = (o: number[], def: WorldDef) => {
+  const { at } = def.relief!;
+  const rim = RIM;
+  const ground = (x: number, z: number) => Math.max(at(x, Math.max(z, 148)), 0);
+  // How far a buttress stands out at x: wide ones, split by fractures.
+  const butt = (x: number) =>
+    sm((noise(x / 6, 0.5, 82) - 0.35) * 4) * (0.55 + 0.45 * noise(x / 1.7, 0.5, 83));
+  const wall = ([x, z]: number[], k: number): Vec3 => {
+    const [y, out, more] = ROWS[k];
+    return [x, k ? y : ground(x, z), z - out - more * butt(x) * (k ? 1 : 0)];
+  };
+  for (let i = 0; i < rim.length - 1; i++) {
+    const [p, q] = [rim[i], rim[i + 1]];
+    for (let k = 0; k < ROWS.length - 1; k++) {
+      const f = [wall(p, k), wall(q, k), wall(q, k + 1), wall(p, k + 1)];
+      for (const [a, b, c] of (i + k) & 1
+        ? [
+            [0, 1, 2],
+            [0, 2, 3],
+          ]
+        : [
+            [0, 1, 3],
+            [1, 2, 3],
+          ]) {
+        let n = cross(sub(f[b], f[a]), sub(f[c], f[a]));
+        if (Math.hypot(...n) < 1e-9) {
+          continue;
+        }
+        // Out of the rock: toward the centre line or, on a step, along x; never down.
+        n = unit(n);
+        n = n[2] > 0 || (Math.abs(n[2]) < 1e-9 && n[1] < 0) ? (n.map(v => -v) as Vec3) : n;
+        const w =
+          ROWS[k][3] * (0.82 + 0.3 * hash(i, k, 73)) * (0.7 + 0.3 * butt((p[0] + q[0]) / 2));
+        for (const v of [f[a], f[b], f[c]]) {
+          o.push(...v, ...n, v[0] + v[2], v[1], TEX.ROCK, w);
+        }
+      }
+    }
+  }
+  // Stones along the rim, a third of a metre high and less: its broken edge.
+  for (let i = 0; i < 44; i++) {
+    const [x, z] = rim[2 + Math.floor(hash(i, 1, 75) * (rim.length - 4))];
+    const r = 0.25 + 0.35 * hash(i, 2, 75);
+    const [u, v] = [x + 0.5 - hash(i, 3, 75), Math.max(z, 148) + 0.3 + r + 0.8 * hash(i, 4, 75)];
+    boulder(
+      o,
+      [u - r, at(u, v) - 0.3, v - r],
+      [u + r, at(u, v) + 0.7 * r, v + r],
+      i + 300,
+      1,
+      0.8 + 0.3 * hash(i, 5, 75),
+      at(u, v),
+    );
+  }
+  // The east stones on this side: a rock pillar round each box, down into the dark.
+  LAYOUT.pillars.forEach(
+    ([x0, z0, x1, z1, y], i) =>
+      z0 > 140 && boulder(o, [x0, -16, z0], [x1, y, z1], i + 400, 3, 0.9, -14),
+  );
   // The bottom, black, 30 m down; a seam of light in it along the middle; rubble.
   face(
     o,
@@ -654,7 +839,15 @@ const ravine = (o: number[], def: WorldDef) => {
 const sites = (o: number[], def: WorldDef) => {
   const { at } = def.relief!;
   LAYOUT.rocks.forEach(([x, z, r], i) =>
-    rock(o, [x, at(x, z) + 0.15 * r, z], [r, 0.7 * r, r], i + 7, 0.85 + 0.35 * hash(i, 5, 43)),
+    boulder(
+      o,
+      [x - 0.6 * r, at(x, z) - 1, z - 0.6 * r],
+      [x + 0.6 * r, at(x, z) + 0.6 * r, z + 0.6 * r],
+      i + 7,
+      r > 2.9 ? 3 : 2,
+      0.85 + 0.35 * hash(i, 5, 43),
+      at(x, z),
+    ),
   );
   // The dishes look at the Earth.
   const side = unit(cross([0, 1, 0], EARTH));
@@ -772,8 +965,15 @@ export const moonscape = (def: WorldDef): number[] => {
     ravine(red, def);
   }
   const o = red.concat(mirror(red));
+  // The stone on the centre line is its own twin.
+  for (const [x0, z0, x1, z1, y] of LAYOUT.pillars) {
+    if (z0 < 140 && z1 > 140) {
+      boulder(o, [x0, -16, z0], [x1, y, z1], 401, 3, 0.9, -14);
+    }
+  }
   craters(o, def);
   if (def.relief) {
+    apron(o, def);
     terrain(o, def);
     sites(o, def);
   }

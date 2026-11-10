@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { problems } from '../../test/pickups';
 import { EAST, NORTH, SOUTH, Sim, WEST, toward } from '../../test/pilot';
-import { checksum, empty, nodes, off, reach, squares } from '../../test/relief';
+import { checksum, nodes, off, reach, squares } from '../../test/relief';
 import { flying, rover, run } from '../../test/slope';
 import { level, palette, MAX_TINTS } from '../client/render';
 import {
@@ -21,7 +21,7 @@ import {
 } from './constants';
 import { Ctf } from './ctf';
 import { TEAM_TINT } from './map';
-import { FLATS, LAYOUT, LIP, MOON, MOUND, MOUNDS, WEST_GAP, ZED } from './moon';
+import { FLATS, HOLLOW, LAYOUT, LIP, MOON, MOUND, MOUNDS, WEST_GAP, ZED } from './moon';
 import { move, spawn } from './physics';
 import { ground } from './relief';
 import { EV, FLAG, KEY, MODE, TEAM, TEX } from './types';
@@ -78,10 +78,10 @@ describe('MOON', () => {
     expect(MOON.floor).toBe(-20);
   });
 
-  it('has brushes with min below max, known textures and tints, under 450 of them', () => {
+  it('has brushes with min below max, known textures and tints, under 500 of them', () => {
     expect(brushes.length).toBeGreaterThan(60);
-    // Room for a base with an inside: its walls are brushes too.
-    expect(brushes.length).toBeLessThan(450);
+    // Room for a base with an inside (its walls are brushes too) and for the lips of the rille, in strips half a metre deep.
+    expect(brushes.length).toBeLessThan(500);
     const tex: number[] = Object.values(TEX);
     for (const [i, b] of brushes.entries()) {
       for (let a = 0; a < 3; a++) {
@@ -646,32 +646,37 @@ describe('MOON, the relief round the arena', () => {
     });
     expect([relief.x0, relief.z0, relief.nx, relief.nz]).toEqual([-220, -220, 151, 181]);
     // Over the rille and its notches the brushes are the floor, and the void stays open.
+    const deepest = LIP.indexOf(Math.max(...LIP));
     for (const [x, z] of [
       [80, 140],
       [1, 140],
       [159.9, 132.1],
-      [66, 150],
-      [66, 148],
-      [64, 150],
-      [26, 130],
+      [deepest + 0.5, 148.2],
+      [deepest + 0.5, 148 + LIP[deepest] - 0.1],
+      [deepest, 149],
+      [deepest + 0.5, 132 - LIP[deepest] + 0.1],
     ]) {
       expect(ground(world, x, z), `${x}, ${z}`).toBe(-Infinity);
     }
-    // Everywhere else in the arena there is ground, on the slabs or over them.
+    expect(ground(world, deepest + 0.5, 148 + LIP[deepest] + 0.1)).toBe(0);
+    // Everywhere else in the arena there is ground, on the slabs or over them, but in the hollow.
     for (let x = 1.5; x < 160; x += 3) {
       for (let z = 1.5; z < ZED; z += 3) {
         const g = ground(world, x, z);
-        expect(
-          g === -Infinity ? empty(relief, x - (x % 4), z - (z % 4)) : g >= 0,
-          `${x}, ${z}`,
-        ).toBe(true);
+        const zf = Math.abs(z - 140);
+        const notch = zf >= 8 && zf <= 8 + LIP[Math.floor(x)];
+        const bowl = Math.hypot(x - HOLLOW[0], zf + 140 - HOLLOW[1]) < 14;
+        expect(g === -Infinity ? zf < 8 || notch : g >= 0 || bowl, `${x}, ${z}`).toBe(true);
       }
     }
     expect(ground(world, 0, 140)).toBe(0);
     expect(ground(world, 160, ZED)).toBe(0);
-    // A pit for each notch and its twin, on lattice lines.
-    expect(relief.pits).toHaveLength(2 * LIP.filter(n => n > 0).length);
-    expect(relief.pits.flat().every(v => v % 4 === 0)).toBe(true);
+    // A pit for each run of a notch and its twin.
+    expect(relief.pits.length).toBeGreaterThan(40);
+    expect(relief.pits.length % 2).toBe(0);
+    expect(
+      relief.pits.every(([x0, z0, x1, z1]) => x0 < x1 && z0 < z1 && (z0 === 148 || z1 === 132)),
+    ).toBe(true);
   });
 
   it('is exactly 0 for 12 m round the arena and on its edge, and rolls beyond', () => {
@@ -749,9 +754,11 @@ describe('MOON, the relief round the arena', () => {
         /\/\*[^]*?\*\/|\/\/.*/g,
         '',
       );
-      expect(src.match(/\*\*|Math\.(?!imul|sqrt|abs|min|max|floor|ceil|PI)\w+/g) ?? []).toEqual([]);
+      expect(
+        src.match(/\*\*|Math\.(?!imul|sqrt|abs|min|max|floor|ceil|round|PI)\w+/g) ?? [],
+      ).toEqual([]);
     }
-    expect(checksum(relief)).toBe(3565737253);
+    expect(checksum(relief)).toBe(853726663);
   });
 
   it('keeps every spawn, flag base, rack and pack on flat ground: the relief is exactly 0 under each', () => {
@@ -987,17 +994,16 @@ describe('MOON, the relief with the real physics', () => {
 
 describe('MOON, the field, the mounds and the carved rille', () => {
   /** The lip's z on red's side over x. */
-  const lip = (x: number) => {
-    const n = LIP[Math.floor(x / 4)];
-    return RILLE1 + (n > 0 ? 4 * n : n);
-  };
+  const lip = (x: number) => RILLE1 + LIP[Math.floor(x)];
+  const bowl = (x: number, z: number) =>
+    Math.hypot(x - HOLLOW[0], Math.abs(z - 140) + 140 - HOLLOW[1]) < 14;
 
   it('rolls the field: mounds of up to 2.6 m over the slabs, never under them, on a quarter of it and more', () => {
     let [high, rough, all] = [0, 0, 0];
     for (let x = 2; x < 160; x += 2) {
       for (let z = 162; z < 204; z += 2) {
         const h = at(x, z);
-        expect(h).toBeGreaterThanOrEqual(0);
+        expect(h >= 0 || bowl(x, z)).toBe(true);
         high = Math.max(high, h);
         rough += h > 0.3 ? 1 : 0;
         all++;
@@ -1012,13 +1018,14 @@ describe('MOON, the field, the mounds and the carved rille', () => {
       cut += hidden(world, [x, 1.6, 165], [x, 1.6, 200]) ? 1 : 0;
     }
     expect(cut).toBeGreaterThan(2);
-    // Nothing in the arena is under the floor.
-    expect(nodes(relief).some(([x, z, h]) => !off(x, z) && h < 0)).toBe(false);
+    // Nothing in the arena is under the floor, but the hollow.
+    expect(nodes(relief).some(([x, z, h]) => !off(x, z) && h < 0 && !bowl(x, z))).toBe(false);
   });
 
   it('stays exactly flat where a base, a rover, a pack or a jump needs it', () => {
     expect(FLATS.length).toBeGreaterThan(10);
-    for (const [x0, z0, x1, z1] of FLATS) {
+    // (The last but the hollow's middle, which only keeps the field's mounds off its rim.)
+    for (const [x0, z0, x1, z1] of FLATS.filter(f => f[0] !== HOLLOW[0])) {
       for (const side of [1, -1]) {
         for (let x = x0; x <= x1; x += 1) {
           for (let z = z0; z <= z1; z += 1) {
@@ -1056,27 +1063,38 @@ describe('MOON, the field, the mounds and the carved rille', () => {
     }
   });
 
-  it('carves the lips: notches of 4 and 8 m and closing ends, straight only where a crossing or a mound needs it', () => {
-    expect(LIP).toHaveLength(40);
-    expect(new Set(LIP).size).toBeGreaterThanOrEqual(5);
-    // Not a ruled line: the lip turns more than a dozen times along the rille.
-    expect(LIP.filter((n, c) => c && n !== LIP[c - 1]).length).toBeGreaterThan(12);
-    // No spur but at the ends: a narrower rille would be a new jump.
-    expect(LIP.every((n, c) => n >= 0 || c < 2 || c > 37)).toBe(true);
+  it('carves the lips along a meander: steps of half a metre a metre, at most 6.5 m back, straight only where a crossing or a mound needs it', () => {
+    expect(LIP).toHaveLength(160);
+    expect(LIP.every(n => (2 * n) % 1 === 0 && n <= 6.5)).toBe(true);
+    expect(Math.max(...LIP)).toBeGreaterThan(4);
+    // Between the closing ends no step is over half a metre: the staircase is under the rim the scenery draws.
+    for (let x = 9; x < 152; x++) {
+      expect(Math.abs(LIP[x] - LIP[x - 1]), `at ${x}`).toBeLessThanOrEqual(0.5);
+    }
+    // Not a ruled line: the lip is back from the straight over a quarter of the rille, in three bights and more.
+    expect(LIP.filter(n => n > 0).length).toBeGreaterThan(40);
+    expect(LIP.filter((n, x) => n > 0 && !(LIP[x - 1] > 0)).length).toBeGreaterThanOrEqual(3);
+    // Nowhere narrower than the 16 m it was, but over the last 8 m of each end, as before: 4 m, then 10 m.
+    expect(LIP.every((n, x) => n >= 0 || x < 8 || x > 151)).toBe(true);
+    expect([LIP[0], LIP[3], LIP[4], LIP[7], LIP[152], LIP[156], LIP[159]]).toEqual([
+      -6, -6, -3, -3, -3, -6, -6,
+    ]);
     for (const x of [
       12,
       16,
       20,
+      23,
       72,
       76,
       80,
       84,
+      87,
       124,
       128,
       132,
-      ...MOUNDS.flatMap(m => [m - 8, m, m + 4]),
+      ...MOUNDS.flatMap(m => [m - 12, m, m + 7]),
     ]) {
-      expect(LIP[Math.floor(x / 4)], `at ${x}`).toBe(0);
+      expect(LIP[x], `at ${x}`).toBe(0);
     }
     // The brushes and the relief follow it, on both sides.
     for (let x = 0.5; x < 160; x += 1) {
@@ -1096,6 +1114,49 @@ describe('MOON, the field, the mounds and the carved rille', () => {
         }
       }
     }
+  });
+
+  it('digs a hollow in each field: 2 m under the floor, the slab lowered under it, walked in and out of', () => {
+    const [hx, hz, deep] = HOLLOW;
+    for (const z of [hz, ZED - hz]) {
+      expect(ground(world, hx, z)).toBeCloseTo(-deep, 1);
+      // The slab is 3 m down under the square, level round it.
+      expect(topAt(hx, z)).toBe(-3);
+      expect(topAt(hx + 5, z + 11)).toBe(-3);
+      expect(topAt(hx - 13, z)).toBe(0);
+      for (const [dx, dz] of [
+        [12, 0],
+        [-12, 0],
+        [0, 12],
+        [0, -12],
+        [11, 11],
+      ]) {
+        expect(ground(world, hx + dx, z + dz)).toBeGreaterThanOrEqual(0);
+      }
+      // Across it on foot: down to the bottom and out, always on the ground.
+      const s = Sim.at(world).put(hx, ground(world, hx, z - 14), z - 14, SOUTH);
+      let low = 0;
+      for (let n = 0; n < 300 && s.p.z < z + 14; n++) {
+        s.step(KEY.FORWARD, SOUTH);
+        expect(s.p.mode).toBe(MODE.GROUND);
+        // On the ground, or on the slab's edge a hair over it.
+        expect(Math.abs(s.p.y - ground(world, s.p.x, s.p.z))).toBeLessThan(0.05);
+        low = Math.min(low, s.p.y);
+      }
+      expect(s.p.z).toBeGreaterThan(z + 13);
+      expect(low).toBeLessThan(-1.8);
+    }
+    // No pack, rack, spawn or rover within 4 m of it.
+    const things = [
+      ...MOON.packs!,
+      ...MOON.ammo!,
+      ...MOON.cells!,
+      ...MOON.rovers!,
+      ...teams.flatMap(t => t.spawns),
+    ];
+    expect(things.some(([x, , z]) => Math.hypot(x - hx, Math.abs(z - 140) + 140 - hz) < 14)).toBe(
+      false,
+    );
   });
 
   it('has two mounds a side by the rille, 21 degrees up to the lip, a sill under each lip no higher than the ground', () => {
@@ -1123,7 +1184,8 @@ describe('MOON, the field, the mounds and the carved rille', () => {
       }
     }
     const sills = brushes.filter(b => b.ghost && b.min[1] === 0 && b.max[2] - b.min[2] === 0.5);
-    expect(sills).toHaveLength(2 * 2 * 7);
+    // Seven under the west mound, five under the east one, whose flank stops at the closing end.
+    expect(sills).toHaveLength(2 * (7 + 5));
     for (const b of sills) {
       for (const bx of [b.min[0], (b.min[0] + b.max[0]) / 2, b.max[0]]) {
         for (const bz of [b.min[2] + 1e-3, b.max[2] - 1e-3]) {
@@ -1134,7 +1196,7 @@ describe('MOON, the field, the mounds and the carved rille', () => {
       }
       expect(
         at((b.min[0] + b.max[0]) / 2, b.min[2] < 140 ? RILLE0 : RILLE1) - b.max[1],
-      ).toBeLessThan(0.7);
+      ).toBeLessThan(1);
     }
   });
 

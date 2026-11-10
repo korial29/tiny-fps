@@ -24,6 +24,7 @@ import {
   stance,
 } from './soldier';
 import type { Runner } from './soldier';
+import { armor } from './armor';
 import { pack, shoulders } from './pack';
 import { palette } from './skin';
 
@@ -832,15 +833,15 @@ describe('a runner with the rail gun', () => {
     soldier(bare, r, [0.9, 0.1, 0.1], 1);
     soldier(capped, r, [0.9, 0.1, 0.1], 1, true);
     expect(capped.length).toBeGreaterThan(bare.length);
-    // Every added vertex is around the head joint or the chest: the helmet and the space suit's
-    // pack, hose and shoulder pads.
+    // Every added vertex is near a joint: the helmet, and the space suit's pack, hose, shoulder
+    // pads and armour plates.
     const { pos } = solve(r.gait.pose());
     const off = (i: number, j: number) =>
       Math.hypot(...[0, 1, 2].map(k => capped[i + k] - pos[j][k]));
     for (let i = bare.length; i < capped.length; i += STRIDE) {
-      expect(Math.min(off(i, J.HEAD), off(i, J.CHEST))).toBeLessThan(0.4);
+      expect(Math.min(...pos.map((_, j) => off(i, j)))).toBeLessThan(0.35);
     }
-    // A head the katana took off wears no helmet and no hose: the body keeps its pack and pads.
+    // A head the katana took off wears no helmet and no hose: the body keeps its pack, pads and armour.
     const cut = hold({ down: 200, hp: 0, lost: LIMB.HEAD }, 30);
     expect(cut.cut?.limb).toBe(LIMB.HEAD);
     const [a, b, suit] = [[], [], []] as number[][];
@@ -852,6 +853,7 @@ describe('a runner with the rail gun', () => {
       [J.ARM_L, J.ARM_R].map(j => [sk.pos[j], sk.rot[j]] as [Vec3, Quat]),
       1,
     );
+    armor(suit, sk.pos, sk.rot, 1);
     expect(b.length).toBe(a.length + suit.length);
   });
 });

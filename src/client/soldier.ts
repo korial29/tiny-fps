@@ -35,6 +35,7 @@ import {
   swapOf,
 } from './gun';
 import { helmet } from './helmet';
+import { armor } from './armor';
 import { hose, pack, shoulders } from './pack';
 import { fetched, pouch, pouchAt } from './pouch';
 import type { Tracer } from './beams';
@@ -470,6 +471,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
   // The life support pack on the back of a space suit.
   if (helmets) {
     pack(out, s.pos[J.CHEST], s.rot[J.CHEST], color, lod);
+    armor(out, s.pos, s.rot, lod);
     shoulders(
       out,
       [J.ARM_L, J.ARM_R].map(j => [s.pos[j], s.rot[j]] as [Vec3, Quat]),

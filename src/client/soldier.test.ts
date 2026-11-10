@@ -601,22 +601,104 @@ describe('a runner with the katana', () => {
     expect(far).toBeLessThan(near * 0.6);
   });
 
-  it('carries it upright in both hands before its right shoulder, running or standing', () => {
-    for (const vz of [0, -6, -9]) {
-      const out: number[] = [];
-      const r = hold(blade({ vz }), 90);
-      soldier(out, r, GREEN, 1);
-      // The point is the highest light: over its head, at its right (+x).
-      const [x, y, z] = light(out).reduce((m, q) => (q[1] > m[1] ? q : m));
-      expect(y).toBeGreaterThan(r.p.y + 2.1);
-      expect(x).toBeGreaterThan(r.p.x);
-      // (2 mm further since the left fist holds the grip through its curled fingers.)
-      expect(x).toBeLessThan(r.p.x + 0.46);
-      // Leaning a little forward with its straight wrists (lock()).
-      expect(Math.abs(z - r.p.z)).toBeLessThan(0.65);
-      // Nothing of it low: the blade stands above the hands at the chest, the pommel at the belt.
-      expect(Math.min(...light(out).map(q => q[1]))).toBeGreaterThan(r.p.y + 0.95);
-    }
+  describe('in the middle guard (the user, 2026-11-10: stand like a samurai)', () => {
+    const sub = (a: number[], b: number[]) => a.map((v, i) => v - b[i]);
+    const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    /** The angle between two directions, degrees. */
+    const off = (a: number[], b: number[]) =>
+      (Math.acos(Math.min(1, dot(a, b) / Math.hypot(...a) / Math.hypot(...b))) * 180) / Math.PI;
+    /** The runner in the guard and his stance; `at` puts a point in his own frame: to his right, up from his feet, ahead. */
+    const guard = (o: Partial<PlayerState> = {}) => {
+      const r = hold(blade(o), 90);
+      const { s } = stance(r);
+      const [c, sn] = [Math.cos(r.p.yaw), Math.sin(r.p.yaw)];
+      const at = (v: number[]) => {
+        const [x, y, z] = sub(v, [r.p.x, r.p.y, r.p.z]);
+        return [x * c - z * sn, y, -x * sn - z * c];
+      };
+      const hilt = grip(s.pos[J.HAND_R], s.rot[J.HAND_R]);
+      const way = axes(s.rot[J.HAND_R])[2];
+      return { s, at, hilt, way, dir: sub(at(add(hilt, way)), at(hilt)) };
+    };
+
+    it('stands with the right foot forward and the left heel off the floor, the feet a shoulder apart, the knees soft', () => {
+      for (const yaw of [0, 2.2]) {
+        const { s, at } = guard({ yaw });
+        const [left, right] = [at(s.pos[J.FOOT_L]), at(s.pos[J.FOOT_R])];
+        // Shoulder width: the shoulder joints are 38 cm apart.
+        expect(right[0] - left[0]).toBeGreaterThan(0.28);
+        expect(right[0] - left[0]).toBeLessThan(0.42);
+        // About a foot's length ahead.
+        expect(right[2] - left[2]).toBeGreaterThan(0.22);
+        expect(right[2] - left[2]).toBeLessThan(0.35);
+        // The left heel up on the ball of the foot, the toes of both on the floor.
+        expect(left[1] - right[1]).toBeGreaterThan(0.025);
+        expect(Math.abs(at(s.pos[J.TOE_L])[1] - at(s.pos[J.TOE_R])[1])).toBeLessThan(0.005);
+        for (const j of [J.THIGH_L, J.THIGH_R]) {
+          const knee = off(sub(s.pos[j], s.pos[j + 1]), sub(s.pos[j + 2], s.pos[j + 1]));
+          expect(knee).toBeGreaterThan(130);
+          expect(knee).toBeLessThan(165);
+        }
+      }
+    });
+
+    it('stands square and straight: the hips and the shoulders face the foe, the back upright', () => {
+      const { s } = guard();
+      for (const j of [J.PELVIS, J.CHEST]) {
+        expect(off(turn(s.rot[j], [0, 0, -1]), [0, 0, -1])).toBeLessThan(8);
+      }
+      expect(off(turn(s.rot[J.CHEST], [0, 1, 0]), [0, 1, 0])).toBeLessThan(7);
+      // The shoulders level and as far ahead as each other.
+      const across = sub(s.pos[J.ARM_R], s.pos[J.ARM_L]);
+      expect(Math.abs(across[1])).toBeLessThan(0.03);
+      expect(Math.abs(across[2])).toBeLessThan(0.03);
+    });
+
+    it('holds the grip before the navel on the middle of the body, the right hand at the guard and the left at the pommel', () => {
+      for (const vz of [0, -3, -6]) {
+        const { s, at, hilt, way } = guard({ vz });
+        const [x, y, z] = sub(at(hilt), at(s.pos[J.PELVIS]));
+        expect(Math.abs(x)).toBeLessThan(0.06);
+        // The navel is a hand over the hips' joint; a fist or two ahead of the belly, 13 cm ahead of the joint.
+        expect(y).toBeGreaterThan(0.03);
+        expect(y).toBeLessThan(0.2);
+        expect(z).toBeGreaterThan(0.3);
+        expect(z).toBeLessThan(0.48);
+        // The left hand's hold, BEHIND the right's down the grip, toward the pommel.
+        const q = s.rot[J.HAND_L];
+        const [fing, back] = [turn(q, [0, -1, 0]), turn(q, [1, 0, 0])];
+        const left = s.pos[J.HAND_L].map(
+          (v, i) => v + fing[i] * KATANA_LEFT[0] + back[i] * KATANA_LEFT[1],
+        );
+        expect(dot(sub(hilt, left), way)).toBeCloseTo(BEHIND, 2);
+        // Both elbows bent and down.
+        for (const j of [J.ARM_L, J.ARM_R]) {
+          const elbow = off(sub(s.pos[j], s.pos[j + 1]), sub(s.pos[j + 2], s.pos[j + 1]));
+          expect(elbow).toBeGreaterThan(90);
+          expect(elbow).toBeLessThan(140);
+          expect(s.pos[j + 1][1]).toBeLessThan(s.pos[j][1] - 0.1);
+        }
+      }
+    });
+
+    it("points the blade ahead and up at a foe's throat, running or standing", () => {
+      for (const vz of [0, -3, -6, -9]) {
+        const { at, hilt, dir } = guard({ vz });
+        // Some 28 degrees over the level, along the way he faces.
+        const rise = (Math.atan2(dir[1], Math.hypot(dir[0], dir[2])) * 180) / Math.PI;
+        expect(rise).toBeGreaterThan(20);
+        expect(rise).toBeLessThan(35);
+        expect(Math.abs(Math.atan2(dir[0], dir[2]))).toBeLessThan(0.1);
+        // The point between a throat and the eyes of a man his height, a blade's length ahead.
+        const out: number[] = [];
+        const r = hold(blade({ vz }), 90);
+        soldier(out, r, GREEN, 1);
+        const point = tipOf(out, r.p);
+        expect(point[1] - r.p.y).toBeGreaterThan(1.35);
+        expect(point[1] - r.p.y).toBeLessThan(1.7);
+        expect(r.p.z - point[2]).toBeGreaterThan(at(hilt)[2] + 0.8);
+      }
+    });
   });
 
   it('twists the chest through a cut across, so the shoulders carry the arms', () => {
@@ -697,8 +779,16 @@ describe('a runner with the katana', () => {
       expect(s * (path[tick(0.6)][0] - 5)).toBeGreaterThan(0.3);
       expect(path[tick(0.6)][1]).toBeLessThan(path[tick(0.24)][1] - 0.5);
     }
-    // The cut ends where the carry was: the blade upright.
-    expect(path.at(-1)![1]).toBeGreaterThan(1 + 2.1);
+    // The cut starts from the guard and ends in it, with no jump: the point at a throat's height, ahead.
+    for (const q of [path[0], path.at(-1)!]) {
+      expect(q[1]).toBeGreaterThan(1 + 1.35);
+      expect(q[1]).toBeLessThan(1 + 1.7);
+      expect(q[2]).toBeLessThan(-3 - 1.1);
+    }
+    // It eases out of the guard and back into it: the point goes centimetres a frame there.
+    const step = (i: number) => Math.hypot(...path.at(i)!.map((c, k) => c - path.at(i - 1)![k]));
+    [1, 2].forEach(i => expect(step(i)).toBeLessThan(0.3));
+    [-1, -2, -3, -4, -5, -6].forEach(i => expect(step(i)).toBeLessThan(0.2));
   });
 
   it('turns the trunk into the cut: the shoulders go with the blade', () => {

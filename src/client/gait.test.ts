@@ -1444,3 +1444,46 @@ describe('seated in a rover', () => {
     expect(solve(g.pose()).pos[J.HEAD][1]).toBeGreaterThan(1.5);
   });
 });
+
+describe('gait: the sword guard (the user, 2026-11-10: stand like a samurai)', () => {
+  /** The pose after `n` frames of standing with the state `o`. */
+  const stood = (g: Gait, o: Partial<PlayerState>, n = 90) => {
+    for (let i = 0; i < n; i++) {
+      g.update(state(o), DT);
+    }
+    return solve(g.pose());
+  };
+
+  it('lifts the left heel, sets the right foot further ahead and straightens the back, with the katana in hand only', () => {
+    const [bare, sword] = [stood(createGait(), {}), stood(createGait(), { wield: true })];
+    // The heel up on the ball of the foot: the ankle higher, the toes where they were.
+    expect(sword.pos[J.FOOT_L][1]).toBeGreaterThan(bare.pos[J.FOOT_L][1] + 0.025);
+    expect(sword.pos[J.TOE_L][1]).toBeCloseTo(bare.pos[J.TOE_L][1], 2);
+    expect(sword.pos[J.FOOT_R][1]).toBeCloseTo(bare.pos[J.FOOT_R][1], 3);
+    // Facing -z: ahead is less z.
+    expect(sword.pos[J.FOOT_R][2]).toBeLessThan(bare.pos[J.FOOT_R][2] - 0.015);
+    const lean = (s: ReturnType<typeof solve>) => Math.asin(-turn(s.rot[J.CHEST], [0, 1, 0])[2]);
+    expect(lean(sword)).toBeLessThan(lean(bare) - 0.08);
+    expect(lean(sword)).toBeGreaterThan(0);
+  });
+
+  it('eases into the guard and out of it: no joint jumps when the katana comes to hand or leaves it', () => {
+    const g = createGait();
+    let was = stood(g, {});
+    for (const wield of [true, false]) {
+      for (let i = 0; i < 60; i++) {
+        g.update(state({ wield }), DT);
+        const s = solve(g.pose());
+        s.pos.forEach((p, j) =>
+          expect(Math.hypot(...p.map((v, k) => v - was.pos[j][k]))).toBeLessThan(0.02),
+        );
+        was = s;
+      }
+    }
+  });
+
+  it("leaves the eye's own body as it stands", () => {
+    const [bare, sword] = [stood(createGait(0), {}), stood(createGait(0), { wield: true })];
+    expect(sword.pos).toEqual(bare.pos);
+  });
+});

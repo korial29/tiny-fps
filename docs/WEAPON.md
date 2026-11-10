@@ -76,7 +76,7 @@ Steps:
 6. Katana: the longer blade and grip in `katana.ts`, the two-hand guard and the wider cut keys, in the first person (`body.ts`) and on the runners (`soldier.ts`).
 7. Limb cuts: the severed piece (the skin's triangles of the limb's joints, see `skin.ts`), its fall, the caps and the sparks, drawn for a runner whose `lost` is set.
 
-Steps 5, 6 and 7 are done. The blade is 1.0 m with a 26 cm grip, the left hand 14 cm behind the right; the runners carry it upright in both hands. The skin is split along the rings where each limb's loft meets the trunk (`cut()` in `skin.ts`), and `limbs.ts` throws and lands the piece.
+Steps 5, 6 and 7 are done. The blade is 1.0 m with a 26 cm grip, the left hand 14 cm behind the right; the runners hold it in a swordsman's middle guard (the user, 2026-11-10: stand like a samurai; before, upright before the right shoulder): both hands on the grip before the navel, the blade rising ahead to a foe's throat (`CARRY` in `soldier.ts`), the right foot forward, the left heel up, the knees soft and the back straight (`KAMAE` in `gait.ts`); running, the legs stride and the hands stay in the guard. The cuts start from it and come back to it. The skin is split along the rings where each limb's loft meets the trunk (`cut()` in `skin.ts`), and `limbs.ts` throws and lands the piece.
 
 ## The hold, like Jedi Knight 2 (the user, 2026-11-07)
 

@@ -339,12 +339,16 @@ const carried = (from: Pose, s0: ReturnType<typeof solve>, r: Runner): Pose => {
   return h.q;
 };
 
-/** The katana carried in both hands, upright before the right shoulder, the edge forward: the guard's numbers (see katana.ts) from the eye. */
-const CARRY = [0.08, -0.28, 0.25, 0.27, 0.94, 0.21];
+/**
+ * The katana in a swordsman's middle guard (the user, 2026-11-10: stand like a samurai): both
+ * hands on the grip a fist before the navel, on the body's middle, the blade rising ahead toward a
+ * foe's throat. The guard's numbers (see katana.ts) from the eye.
+ */
+const CARRY = [-0.02, -0.5, 0.26, 0, 0.45, 0.89];
 
 /**
- * The pose with the katana in both hands: carried, or in a cut, which is the first person's cut
- * seen from the runner's eye (the share `e` of it, so that it is drawn from the carry and back to
+ * The pose with the katana in both hands: in the guard, or in a cut, which is the first person's cut
+ * seen from the runner's eye (the share `e` of it, so that it is drawn from the guard and back to
  * it), and the trunk twisting, bending and leaning through it (trunk()).
  */
 export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number, t = 0): Pose => {

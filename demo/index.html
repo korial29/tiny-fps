@@ -7,49 +7,220 @@
     <style>
       :root {
         color-scheme: dark;
-        --bg: #0e151c;
-        --fg: #e6edf3;
-        --muted: #8b98a5;
+        --bg: #0b1016;
+        --fg: #e9eef3;
+        --muted: #8d9aa7;
+        --card: #121a23;
         --field: #18222c;
-        --line: #2c3a47;
-        --accent: #e8590c;
+        --line: #26323e;
+        --accent: #f7782a;
+        --hot: #ffb347;
       }
       * {
         box-sizing: border-box;
       }
       body {
         margin: 0;
-        background: var(--bg);
+        min-height: 100vh;
+        background:
+          radial-gradient(1200px 600px at 50% -200px, #2a1a12 0%, #0000 70%),
+          radial-gradient(900px 500px at 100% 100%, #0f2233 0%, #0000 70%), var(--bg);
         color: var(--fg);
         font:
           16px/1.5 system-ui,
           sans-serif;
       }
       main {
-        max-width: 640px;
+        max-width: 920px;
         margin: 0 auto;
-        padding: 24px 16px;
+        padding: 40px 16px 48px;
         display: grid;
-        gap: 16px;
+        gap: 28px;
       }
+      header {
+        display: grid;
+        gap: 6px;
+        justify-items: center;
+        text-align: center;
+      }
+      /* The game's own title: heavy, leaning, in a fire gradient. */
       h1 {
         margin: 0;
-        font-size: 22px;
+        font:
+          900 clamp(44px, 11vw, 88px) / 1 system-ui,
+          sans-serif;
+        letter-spacing: 0.04em;
+        transform: skewX(-8deg);
+        background: linear-gradient(#fe6, #f92 45%, #d21);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        filter: drop-shadow(0 0 24px #f9620055);
       }
-      p {
+      header p {
         margin: 0;
+        color: var(--muted);
+        max-width: 560px;
+      }
+      h2 {
+        margin: 0 0 10px;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
         color: var(--muted);
       }
       form {
+        display: grid;
+        gap: 28px;
+      }
+      fieldset {
+        margin: 0;
+        padding: 0;
+        border: 0;
+        min-width: 0;
+      }
+      /* The game mode: one for now, shown as the chosen card with its goal. */
+      .mode {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 16px;
+        align-items: center;
+        padding: 16px 18px;
+        border: 1px solid var(--accent);
+        border-radius: 14px;
+        background: linear-gradient(90deg, #f7782a1f, #0000 60%), var(--card);
+        box-shadow: 0 0 0 1px #f7782a33 inset;
+      }
+      .mode b {
+        grid-row: span 2;
+        display: grid;
+        place-items: center;
+        width: 56px;
+        height: 56px;
+        border-radius: 12px;
+        background: #f7782a26;
+        color: var(--hot);
+        font:
+          900 18px/1 system-ui,
+          sans-serif;
+        letter-spacing: 0.06em;
+      }
+      .mode strong {
+        font-size: 18px;
+      }
+      .mode span {
+        color: var(--muted);
+        font-size: 15px;
+      }
+      .soon {
+        margin: 8px 2px 0;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      /* The maps: a card each, its picture, its name and a line of lore; the checked one lit. */
+      .maps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+      }
+      .map {
+        position: relative;
+        display: grid;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+        background: var(--card);
+        cursor: pointer;
+        transition:
+          transform 0.15s,
+          border-color 0.15s,
+          box-shadow 0.15s;
+      }
+      .map:hover {
+        transform: translateY(-2px);
+        border-color: #3a4a5a;
+      }
+      .map input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .map:has(input:checked) {
+        border-color: var(--accent);
+        box-shadow:
+          0 0 0 1px var(--accent),
+          0 10px 40px -12px #f7782a88;
+      }
+      .map:has(input:focus-visible) {
+        outline: 2px solid var(--hot);
+        outline-offset: 3px;
+      }
+      .map img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+        filter: saturate(0.9) brightness(0.85);
+        transition: filter 0.15s;
+      }
+      .map:has(input:checked) img,
+      .map:hover img {
+        filter: none;
+      }
+      .map div {
+        display: grid;
+        gap: 4px;
+        padding: 14px 16px 16px;
+      }
+      .map strong {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+      }
+      .map em {
+        font-style: normal;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--hot);
+      }
+      .map p {
+        margin: 2px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      /* The check mark on the chosen map. */
+      .map i {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: var(--accent);
+        display: none;
+        place-items: center;
+        color: #fff;
+        font:
+          900 15px/1 system-ui,
+          sans-serif;
+        font-style: normal;
+      }
+      .map:has(input:checked) i {
+        display: grid;
+      }
+      .play {
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
         align-items: end;
       }
-      label {
+      label.field {
         display: grid;
         gap: 4px;
-        font-size: 14px;
+        font-size: 13px;
         color: var(--muted);
         flex: 1 1 200px;
       }
@@ -57,21 +228,39 @@
       select,
       button {
         font: inherit;
-        min-height: 40px;
-        padding: 6px 10px;
+        min-height: 44px;
+        padding: 6px 12px;
         border: 1px solid var(--line);
-        border-radius: 8px;
+        border-radius: 10px;
         background: var(--field);
         color: var(--fg);
         min-width: 0;
       }
-      button {
-        background: var(--accent);
-        border-color: var(--accent);
+      input:focus,
+      select:focus {
+        outline: 2px solid #f7782a88;
+        outline-offset: 1px;
+      }
+      #join {
+        flex: 0 0 auto;
+        padding: 6px 32px;
+        border: 0;
+        background: linear-gradient(#ff9a4a, #e8590c);
         color: #fff;
-        font-weight: 600;
-        padding: 6px 20px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
         cursor: pointer;
+        box-shadow: 0 8px 24px -8px #e8590caa;
+      }
+      #join:hover {
+        filter: brightness(1.08);
+      }
+      .keys {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        text-align: center;
       }
       [hidden] {
         display: none !important;
@@ -93,8 +282,14 @@
         text-shadow: 0 1px 2px #000;
       }
       @media (max-width: 640px) {
+        main {
+          padding-top: 28px;
+        }
         #bar {
           top: 64px;
+        }
+        #join {
+          flex: 1 1 100%;
         }
       }
       #bar button {
@@ -107,33 +302,86 @@
   </head>
   <body>
     <main id="menu">
-      <h1>tiny-fps</h1>
-      <p>
-        Click the game to look around with the mouse, WASD (ZQSD on AZERTY) to move, Shift to
-        sprint, Space to jump (again in the air), a direction key pressed twice to dash that way, C
-        to crouch or slide, Esc to get the mouse back. Take the enemy flag to your own base while
-        yours is home. Open this page in another tab to join the other team.
-      </p>
+      <header>
+        <h1>TINY FPS</h1>
+        <p>
+          A tiny multiplayer parkour shooter in the browser. Open this page in another tab to join
+          the other team.
+        </p>
+      </header>
       <form id="form">
-        <label>Name <input name="name" maxlength="16" required autocomplete="nickname" /></label>
-        <label
-          >Mode
-          <select name="mode">
-            <option value="local">Local (tabs of this browser)</option>
-            <option value="server">Server</option>
-          </select>
-        </label>
-        <label
-          >Map
-          <select name="map">
-            <option value="highline">Highline</option>
-            <option value="tranquility">Tranquility</option>
-          </select>
-        </label>
-        <label id="url" hidden
-          >Server URL <input name="url" type="url" value="ws://localhost:8787/demo"
-        /></label>
-        <button>Join</button>
+        <section>
+          <h2>Game mode</h2>
+          <div class="mode">
+            <b>CTF</b>
+            <strong>Capture the flag</strong>
+            <span
+              >Two teams, two flags. Take the enemy flag from its base and run it home while your
+              own flag is there. First team to 3 captures wins, or the one ahead after 8
+              minutes.</span
+            >
+          </div>
+          <p class="soon">More modes are coming.</p>
+        </section>
+        <fieldset>
+          <h2>Map</h2>
+          <div class="maps">
+            <label class="map">
+              <input type="radio" name="map" value="highline" checked />
+              <img
+                src="./maps/highline.jpg"
+                alt="The red tower's roof on Highline, the city in the haze"
+              />
+              <i>✓</i>
+              <div>
+                <em>Rooftops · 94 × 240 m</em>
+                <strong>Highline</strong>
+                <p>
+                  The towers of an old business district, closed for years, far above streets that
+                  still have traffic. Two crews of runners have taken the roofs. Three routes cross
+                  between them, and a fall takes you back to your tower.
+                </p>
+              </div>
+            </label>
+            <label class="map">
+              <input type="radio" name="map" value="tranquility" />
+              <img
+                src="./maps/tranquility.jpg"
+                alt="The red dome of Tranquility on the crater floor, the Earth in a black sky"
+              />
+              <i>✓</i>
+              <div>
+                <em>Moon · half gravity</em>
+                <strong>Tranquility</strong>
+                <p>
+                  A mining base left in a lunar crater, its domes still lit. Two crews fight for it
+                  in space helmets, under the Earth and a black sky. Jumps float twice as high, and
+                  a rille cuts the base in two.
+                </p>
+              </div>
+            </label>
+          </div>
+        </fieldset>
+        <div class="play">
+          <label class="field"
+            >Name <input name="name" maxlength="16" required autocomplete="nickname"
+          /></label>
+          <label class="field"
+            >Connection
+            <select name="mode">
+              <option value="local">Local (tabs of this browser)</option>
+              <option value="server">Server</option>
+            </select>
+          </label>
+          <label class="field" id="url" hidden
+            >Server URL <input name="url" type="url" value="ws://localhost:8787/demo"
+          /></label>
+          <button id="join">Play</button>
+        </div>
+        <p class="keys">
+          Mouse to look · WASD (ZQSD) to move · Shift sprint · Space jump, twice in the air · a
+          direction twice to dash · C crouch or slide · Esc for every key
+        </p>
       </form>
     </main>
     <div id="game" hidden></div>

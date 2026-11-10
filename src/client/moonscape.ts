@@ -13,6 +13,7 @@ import { GLOW, glow, ring, tri } from './flag';
 import { STRIDE, dress, mix, place, smooth, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { UP, box, cross, face, lit, moonbase } from './moonbase';
+import { hull } from './moonhull';
 import { hash } from './textures';
 
 /** The arena is x 0..W, z 0..Z, its middle C. */
@@ -338,6 +339,7 @@ const mast = (o: number[], x: number, z: number, y: number, h = 10, rgb = [1, 0.
 /** Red's half: everything but the crater, the stars and the Earth, on the map's LAYOUT. */
 const base = (o: number[]) => {
   moonbase(o);
+  hull(o);
   const [px, pz] = LAYOUT.pads[0];
   pad(o, px, pz, LAYOUT.shuttles[0].min[0]);
   for (const [x, z] of LAYOUT.masts.slice(0, 6)) {

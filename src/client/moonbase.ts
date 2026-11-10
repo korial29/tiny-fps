@@ -4,7 +4,7 @@
 import { DOME, MODULES, TUBES } from '../shared/moonbase';
 import { TAU } from '../shared/physics';
 import { glow, tri } from './flag';
-import { dot, dress, place, segment, smooth, sub } from './mesh';
+import { STRIDE, dot, dress, place, segment, smooth, sub } from './mesh';
 import type { Vec3 } from './mesh';
 
 const PAINT = [0.8, 0.82, 0.86];
@@ -26,6 +26,40 @@ export const face = (o: number[], p: Vec3[], rgb: number[], away?: Vec3) => {
   const q = away && dot(n, sub(p[0], away)) < 0 ? [...p].reverse() : p;
   for (let k = 1; k < q.length - 1; k++) {
     tri(o, q[0], q[k], q[k + 1], rgb);
+  }
+};
+/** A box of one colour between two corners, its faces outward. */
+export const box = (o: number[], lo: Vec3, hi: Vec3, rgb: number[]) => {
+  const mid = lo.map((v, i) => (v + hi[i]) / 2) as Vec3;
+  const p = (i: number): Vec3 => [
+    i & 1 ? hi[0] : lo[0],
+    i & 2 ? hi[1] : lo[1],
+    i & 4 ? hi[2] : lo[2],
+  ];
+  for (const f of [
+    [0, 1, 3, 2],
+    [4, 5, 7, 6],
+    [0, 1, 5, 4],
+    [2, 3, 7, 6],
+    [0, 2, 6, 4],
+    [1, 3, 7, 5],
+  ]) {
+    face(o, f.map(p), rgb, mid);
+  }
+};
+/** Carries a model's vertices to (x, y, z), turned by `yaw` about y. */
+export const put = (o: number[], v: number[], [x, y, z]: Vec3, yaw = 0) => {
+  const [c, s] = [Math.cos(yaw), Math.sin(yaw)];
+  for (let i = 0; i < v.length; i += STRIDE) {
+    o.push(
+      x + c * v[i] + s * v[i + 2],
+      y + v[i + 1],
+      z - s * v[i] + c * v[i + 2],
+      c * v[i + 3] + s * v[i + 5],
+      v[i + 4],
+      c * v[i + 5] - s * v[i + 3],
+      ...v.slice(i + 6, i + 10),
+    );
   }
 };
 /** What `make` adds to `o` glows, k times its colour. */

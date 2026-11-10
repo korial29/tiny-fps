@@ -24,7 +24,7 @@ import { FIST, KATANA_LEFT, inv } from './body';
 import { SCALE, SHELL } from './helmet';
 import { GLOSS, SHINE, STRIDE, add, basis } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, solve, turn } from './rig';
+import { JOINT as J, REST, solve, turn } from './rig';
 import type { Quat } from './rig';
 import {
   FRY,
@@ -38,8 +38,8 @@ import {
   stance,
 } from './soldier';
 import type { Runner } from './soldier';
-import { PACK, pack, shoulders } from './pack';
-import { palette } from './skin';
+import { PACK, PAD, pack, shoulders } from './pack';
+import { capped, palette } from './skin';
 
 const DT = 1 / 60;
 const DASH_BURST = DASH_COOLDOWN - 2;
@@ -81,6 +81,36 @@ const hold = (o: Partial<PlayerState>, n = 90) => {
     p = man({ ...o, z: p.z + (o.vz ?? 0) * DT });
   }
   return book.get(1)!;
+};
+
+/**
+ * The shoulder plates an armoured runner is drawn with, the left's vertices then the right's, and
+ * his stance: the plates of shoulders() on his arm joints, turned by capped().
+ */
+const plates = (r: Runner) => {
+  const out: number[] = [];
+  const s = soldier(out, r, [0.1, 0.8, 0.2], 1, false, true)!;
+  const pads: number[] = [];
+  shoulders(
+    pads,
+    [J.ARM_L, J.ARM_R].map(j => [s.pos[j], capped(s.rot, j)] as [Vec3, Quat]),
+    1,
+  );
+  const same = (i: number) => {
+    for (let k = 0; k < pads.length; k += STRIDE) {
+      if (pads[k] != out[i + k] || pads[k + 1] != out[i + k + 1] || pads[k + 2] != out[i + k + 2]) {
+        return false;
+      }
+    }
+    return true;
+  };
+  let at = 0;
+  while (at < out.length && !same(at)) {
+    at += STRIDE;
+  }
+  expect(at).toBeLessThan(out.length);
+  const all = rows(pads).map(v => v.slice(0, 3));
+  return { s, pads: [all.slice(0, all.length / 2), all.slice(all.length / 2)] };
 };
 
 describe('animate', () => {
@@ -907,6 +937,40 @@ describe('armour without a helmet (Highline)', () => {
   });
 });
 
+describe('the shoulder plates on a runner', () => {
+  const far = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]));
+  it('stay on the shoulders in every move, with every weapon: each plate on its joint, clear of the head', () => {
+    const blade = { blade: true, wield: true, ammo: -1 };
+    const moves: Partial<PlayerState>[] = [
+      {},
+      { vz: -6 },
+      { vz: -9 },
+      { ammo: 30, zapping: true, pitch: 0.5 },
+      HANGS,
+      { ...HANGS, mode: MODE.CLIMB, y: 1.6 },
+      { mode: MODE.WALLRUN, ground: false, wall: SIDE.WEST, vz: -8 },
+      { mode: MODE.SLIDE, vz: -8 },
+      blade,
+      { ...blade, vz: -6 },
+      { ...blade, lock: 10 },
+      ...CUTS.flatMap((c, cut) =>
+        [0.2, 0.45, 0.7].map(k => ({ ...blade, cut, swing: Math.round(c.ticks * (1 - k)) })),
+      ),
+    ];
+    for (const o of moves) {
+      const { s, pads } = plates(hold(o, 40));
+      [J.ARM_L, J.ARM_R].forEach((j, n) => {
+        for (const w of pads[n]) {
+          expect(far(w, s.pos[j])).toBeLessThan(0.2);
+          expect(far(w, add(s.pos[J.HEAD], turn(s.rot[J.HEAD], [0, 0.09, 0])))).toBeGreaterThan(
+            0.13,
+          );
+        }
+      });
+    }
+  });
+});
+
 describe('riding a rover', () => {
   const rover = (o: Partial<Rover> = {}): Rover => ({
     x: 5,
@@ -1099,6 +1163,9 @@ describe('a runner shouldering a long gun (the user, 2026-11-10: it hung across 
     const c = local(s, J.CHEST, s.pos[J.CHEST], v);
     return trunk || helmet || c.every((a, i) => Math.abs(a - PACK.c[i]) < PACK.r[i]);
   };
+  /** Where the rig's rest puts the shoulder joint `j`: on its collarbone, unturned from the chest. */
+  const socket = (s: ReturnType<typeof solve>, j: number) =>
+    add(s.pos[j - 1], turn(s.rot[J.CHEST], REST[j]));
   /** The checks of a shouldered gun in the stance `s`, its barrel meant along `way`. */
   const shouldered = (s: ReturnType<typeof solve>, g: (typeof GUNS)[number], way: number[]) => {
     const { put, barrel } = gunOf(s, g.kind);
@@ -1121,7 +1188,21 @@ describe('a runner shouldering a long gun (the user, 2026-11-10: it hung across 
     // Both elbows down: under the shoulder, or under the hand when it aims up over it.
     for (const j of [J.ARM_L, J.ARM_R]) {
       expect(s.pos[j + 1][1]).toBeLessThan(Math.max(s.pos[j][1], s.pos[j + 2][1]));
+      // No arm stretches to its grip (the user, 2026-11-10): the shoulder is where the rig has
+      // it, the collarbone not turned, the bones are their length and the elbow is bent.
+      expect(far(s.pos[j], socket(s, j))).toBeLessThan(0.005);
+      expect(far(s.pos[j], s.pos[j + 1])).toBeCloseTo(Math.hypot(...REST[j + 1]), 6);
+      expect(far(s.pos[j + 1], s.pos[j + 2])).toBeCloseTo(Math.hypot(...REST[j + 2]), 6);
+      const bend = off(sub(s.pos[j], s.pos[j + 1]), sub(s.pos[j + 2], s.pos[j + 1]));
+      expect(bend).toBeGreaterThan(1.3);
+      expect(bend).toBeLessThan(2.35);
     }
+    // The butt in the pocket: before the joint, against the chest plate, a little inside it.
+    const [bx, by, bz] = local(s, J.CHEST, s.pos[J.ARM_R], put(g.butt));
+    expect(Math.abs(bx + 0.025)).toBeLessThan(0.03);
+    expect(Math.abs(by + 0.01)).toBeLessThan(0.03);
+    expect(bz).toBeLessThan(-0.1);
+    expect(bz).toBeGreaterThan(-0.2);
     // Nothing of the gun in the trunk, the helmet or the pack.
     const inside = rows(g.model).filter(v => inBody(s, put(v))).length;
     expect(inside).toBe(0);
@@ -1137,6 +1218,27 @@ describe('a runner shouldering a long gun (the user, 2026-11-10: it hung across 
         });
       }
     }
+
+    it(`wears the shoulder plates on the shoulders with the ${g.name} up, in every pose (the user, 2026-11-10: one sat before the chest)`, () => {
+      for (const [name, o] of [...POSES, ['sprinting', { vz: -9 }] as (typeof POSES)[number]]) {
+        const { s, pads } = plates(hold({ ...o, ...g.o }));
+        [J.ARM_L, J.ARM_R].forEach((j, n) => {
+          const v = pads[n];
+          const middle = v
+            .reduce((t, w) => t.map((x, k) => x + w[k]), [0, 0, 0])
+            .map(x => x / v.length);
+          // Its middle on the shoulder as the rig has it, not out with a reaching arm.
+          expect(far(middle, socket(s, j)), name).toBeLessThan(0.06);
+          // None of it ahead of the chest plate, 15 cm before the chest's joint, by more than a centimetre.
+          const front = Math.min(...v.map(w => local(s, J.CHEST, s.pos[J.CHEST], w)[2]));
+          expect(front, name).toBeGreaterThan(-0.16);
+          // It faces up and out from the trunk, as at rest: not round to the front.
+          const out = [n ? PAD.out[0] : -PAD.out[0], PAD.out[1], 0];
+          const faces = turn(inv(s.rot[J.CHEST]), turn(capped(s.rot, j), out as Vec3));
+          expect(off(faces, out), name).toBeLessThan(1.1);
+        });
+      }
+    });
 
     it(`carries the ${g.name} at the low ready in a sprint, the butt still in the shoulder, and brings it up to fire`, () => {
       for (const { p, s } of frames({ vz: -9, ...g.o }, false)) {

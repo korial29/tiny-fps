@@ -5,7 +5,7 @@
 // crotch by sharing its vertices, so normals flow over the joins. Clothes are colour regions of
 // the triangles. See rig.ts for the joints and the pose.
 import { LIMB } from '../shared/types';
-import { JOINT as J, JOINTS, REST, mul, rest, solve, turn } from './rig';
+import { JOINT as J, JOINTS, REST, mul, rest, slerp, solve, turn } from './rig';
 import type { Quat } from './rig';
 import type { Vec3 } from './mesh';
 
@@ -1130,6 +1130,21 @@ const swing = (rot: Quat[], j: number): Quat => {
   const t = [b[0] * p, b[1] * p, b[2] * p, l[3]];
   const h = Math.hypot(...t) || 1;
   return mul(c, mul(l, [-t[0] / h, -t[1] / h, -t[2] / h, t[3] / h]));
+};
+/** The share of the upper arm's swing its shoulder plate goes with, low at its side. */
+const CAPPED = 0.6;
+/**
+ * The turn of the shoulder plate of shoulder joint `j`: on the collarbone, it goes with a share of
+ * the upper arm's swing, all of it as the arm comes up over the shoulder, and with none of its
+ * turn about itself, as a plate strapped to the trunk does (the user, 2026-11-10: it rode a
+ * reaching arm round to the front of the chest).
+ */
+export const capped = (rot: Quat[], j: number): Quat => {
+  const [c, w] = [rot[j - 1], swing(rot, j)];
+  const th =
+    2 * Math.acos(Math.min(Math.abs(c[0] * w[0] + c[1] * w[1] + c[2] * w[2] + c[3] * w[3]), 1));
+  const k = clamp((th - 1) / 1.2);
+  return slerp(c, w, CAPPED + (1 - CAPPED) * k * k * (3 - 2 * k));
 };
 /** The inside of an open mouth. */
 const MOUTH = [0.09, 0.03, 0.03];

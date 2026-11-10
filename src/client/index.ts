@@ -401,6 +401,9 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     foley.me(me, hit, body.steps);
     foley.others(others, id => rd?.steps(id));
     foley.rover(seat && rovers[seat.rover], dt, driving ? ctl.keys : 0);
+    if (world.def.helmets) {
+      foley.breathe(me, dt);
+    }
     // The camera moves for the eye only: the inputs keep sending the real height and angles. A
     // cut's twist turns the drawn view a little with the body.
     const cam: [number, number, number] = [eye[0], eye[1] + fx.dy, eye[2]];

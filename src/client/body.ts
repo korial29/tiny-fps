@@ -613,7 +613,8 @@ export const hand = (
     put,
     0.75,
   );
-  const nail = mix(bare as Vec3, [0.98, 0.74, 0.7], 0.4);
+  // A whole glove (`bare` the glove's own colour, a space suit's) has no nails showing.
+  const nail = bare === tint ? tint : mix(bare as Vec3, [0.98, 0.74, 0.7], 0.4);
   /** A finger's tube, its glove to ring BARE and bare beyond, and the nail on its tip. */
   const digit = (p: Vec3, ds: [Vec3, Vec3, Vec3], l: number, r: number, t: Vec3, from = 1) => {
     paint = k => (k < BARE ? tint : bare);
@@ -1538,7 +1539,9 @@ export const createBody = (world?: World): Body => {
     draw(out, eye, yaw, pitch, roll = 0, color = [0.7, 0.7, 0.7]) {
       const s = pose(eye, yaw, pitch, roll);
       if (s) {
-        const colors = palette(color);
+        // A space suit with its helmet (see palette()): its gloves cover the fingers too.
+        const suit = !!world?.def.helmets;
+        const colors = palette(color, undefined, undefined, suit);
         skin(out, body(2), s, colors);
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
         // The right thumb presses the button of the katana or the plasma gun as it comes on.
@@ -1560,7 +1563,7 @@ export const createBody = (world?: World): Body => {
             i ? 0 : pointing,
             i * push,
             thumbTo(Math.max(tk, 0)),
-            colors[3],
+            suit ? colors[7] : colors[3],
           );
         });
         if (hold > 0.2) {

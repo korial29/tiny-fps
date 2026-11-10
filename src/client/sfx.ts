@@ -131,6 +131,9 @@ export const SOUND = {
   THUD: 41,
   /** The rover's tyres sliding sideways over the dust, looped: louder as it drifts wider. */
   SKID: 42,
+  /** Breathing in a space helmet (the user, 2026-11-10), in then out: air drawn through the regulator, and let out with its valve's hiss. */
+  INHALE: 43,
+  EXHALE: 44,
 } as const;
 
 /**
@@ -395,6 +398,19 @@ export const LAYERS: Voice[][] = [
   [
     [3, 2600, 0, 0.001, 2.1, 0.001, 0.6, 0.35, 0, 1, 0.4],
     [3, 700, 0, 0.001, 2.1, 0.001, 0.45, 0.25, 0, 1, 0.5],
+  ],
+  // INHALE: air drawn in through a mask, a soft band of noise swelling and rising a little, the
+  // regulator's thin hiss over it; under a second.
+  [
+    [3, 1600, 0.5, 0.32, 0.12, 0.38, 0.2, 0.16, 0, 1, 0.6],
+    [3, 6500, 0.3, 0.3, 0.1, 0.4, 0.3, 0.45, 0, 1, 0.16],
+  ],
+  // EXHALE: the breath let out, lower and quicker to start, falling; the valve's hiss, and a faint
+  // rasp of the throat under it.
+  [
+    [3, 1100, -0.5, 0.07, 0.18, 0.55, 0.25, 0.14, 0, 1, 0.65],
+    [3, 4500, -0.4, 0.07, 0.14, 0.55, 0.3, 0.4, 0, 1, 0.2],
+    [0, 95, -0.3, 0.05, 0.12, 0.4, 0.1, 0.06, 0, 1, 0.1],
   ],
 ];
 

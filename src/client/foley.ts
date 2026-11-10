@@ -21,7 +21,19 @@ export interface Foley {
    * call, and the keys he holds at its wheel (0 for the rider): the engine, the skid, the landings.
    */
   rover(r: Rover | undefined, dt: number, keys?: number): void;
+  /**
+   * The own player's breath in his space helmet, `dt` seconds after the last call: in and out,
+   * quicker and louder the harder he has been moving lately. None when down or without a player.
+   */
+  breathe(p: PlayerState | undefined, dt: number): void;
 }
+
+/** A breath's cycle at rest and at the hardest effort (s), and where in it he breathes out. */
+export const BREATH = [3.8, 1.5];
+const OUT_AT = 0.42;
+/** Seconds the effort takes to settle on a new pace: a sprint is still in the breath after it. */
+const WIND_UP = 1.5;
+const CALM_DOWN = 6;
 
 /** A fall slower than this (m/s) makes no sound on the others. */
 const SOFT = 3;
@@ -51,6 +63,8 @@ export const createFoley = (a: Audio): Foley => {
   /** The rover at the last call, its time falling freely and the fastest it fell. */
   let rode: Rover | undefined;
   let [air, drop] = [0, 0];
+  /** The breath: the effort eased from 0 to 1, and where in its cycle it is (0 to 1). */
+  let [effort, cycle] = [0, 0];
 
   /** The footfall n of p: harder at a sprint, softer crouched, the two feet a little apart in pitch. */
   const tap = (p: PlayerState, n: number, at?: Vec3) => {
@@ -132,6 +146,34 @@ export const createFoley = (a: Audio): Foley => {
       }
       const side = clamp((Math.abs(r.vz * fx - r.vx * fz) - SKID_FROM) / SKID_SPAN);
       skid.set(air >= AIR || side <= 0 ? 0 : 0.25 + 0.45 * side, 0.8 + 0.4 * side);
+    },
+
+    breathe(p, dt) {
+      if (!p || p.down > 0) {
+        cycle = 0;
+        return;
+      }
+      // Hard: sprinting, dashing, on a wall or in a jump; a walk is half that; standing, none.
+      const hard =
+        sprinting(p) || p.mode === MODE.WALLRUN || p.dash > 0 || !p.ground
+          ? 1
+          : speedOf(p) > 0.5
+            ? 0.4
+            : 0;
+      effort += (hard - effort) * Math.min(dt / (hard > effort ? WIND_UP : CALM_DOWN), 1);
+      const was = cycle;
+      cycle += dt / (BREATH[0] + (BREATH[1] - BREATH[0]) * effort);
+      if (a.muted) {
+        cycle %= 1;
+        return;
+      }
+      const [gain, rate] = [0.3 + 0.4 * effort, 1 + 0.15 * effort];
+      if (cycle >= 1) {
+        cycle %= 1;
+        a.play(SOUND.INHALE, undefined, gain, rate);
+      } else if (was < OUT_AT && cycle >= OUT_AT) {
+        a.play(SOUND.EXHALE, undefined, gain, rate);
+      }
     },
 
     others(ps, steps) {

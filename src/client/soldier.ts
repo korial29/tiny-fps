@@ -435,7 +435,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
   if (k >= 1) {
     return;
   }
-  const colors = palette(color, hairOf(p.id), eyesOf(p.id));
+  const colors = palette(color, hairOf(p.id), eyesOf(p.id), helmets);
   const { s, sink, yaw, carry } = stance(r);
   const blade = p.wield && !p.down && !driving(r);
   if (r.cut) {

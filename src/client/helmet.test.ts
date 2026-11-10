@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LIMB } from '../shared/types';
 import { GLOW } from './flag';
-import { SHELL, VISOR, helmet } from './helmet';
+import { SHELL, VISOR, WRAP, helmet, inside, uOf } from './helmet';
 import { SHINE, STRIDE, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, rest, solve, turn } from './rig';
@@ -71,10 +71,11 @@ describe('helmet', () => {
     });
   }
 
-  it('stays modest: under 150 vertices far, under 600 near', () => {
-    expect(count(make(0))).toBeLessThan(150);
-    expect(count(make(1))).toBeLessThan(600);
-    expect(count(make(3))).toBeLessThan(900);
+  // Detailed (the user, 2026-11-10: whatever it costs), still a fraction of a body (34 000 close).
+  it('stays modest: under 1 000 vertices far, 4 000 near, 12 000 close', () => {
+    expect(count(make(0))).toBeLessThan(1000);
+    expect(count(make(1))).toBeLessThan(4000);
+    expect(count(make(3))).toBeLessThan(12000);
     expect(count(make(0))).toBeLessThan(count(make(1)));
   });
 
@@ -110,10 +111,9 @@ describe('helmet', () => {
       expect(shiny.length).toBeGreaterThan(20);
       for (const i of shiny) {
         const p = at(out, i).map((w, k) => w - HEAD[k]);
-        // On the front of the shell, within the opening.
+        // On the front half of the shell, within the opening wrapped round it.
         expect(p[2]).toBeLessThan(-0.05);
-        expect(Math.abs(p[0])).toBeLessThanOrEqual(VISOR.r[0] + 1e-6);
-        expect(Math.abs(p[1] - VISOR.c[1])).toBeLessThanOrEqual(VISOR.r[1] + 1e-6);
+        expect(inside(uOf(p as Vec3), p[1], 1.02)).toBe(true);
         // Dark.
         expect(out[i * STRIDE + 6] + out[i * STRIDE + 7] + out[i * STRIDE + 9]).toBeLessThan(0.3);
       }
@@ -149,12 +149,17 @@ describe('helmet', () => {
     for (const lod of [0, 1, 3]) {
       const out = make(lod);
       let n = 0;
+      // Seen straight on, its middle: up to 40 degrees round each way.
       for (let a = -0.9; a <= 0.9; a += 0.15) {
         for (let b = -0.9; b <= 0.9; b += 0.15) {
-          const [x, y] = [VISOR.r[0] * a, VISOR.c[1] + VISOR.r[1] * b];
-          if (a * a + b * b > 0.8) {
+          const u = 0.7 * WRAP * a;
+          const y =
+            VISOR.c[1] + VISOR.r[1] * 0.8 * b - VISOR.drop * Math.min((u / VISOR.r[0]) ** 2, 1);
+          if (!inside(u, y, 0.85)) {
             continue;
           }
+          // Where that point of the band is across, on the shell's widest ring.
+          const x = SHELL.r[0] * Math.sign(u) * Math.abs(Math.sin(u / WRAP)) ** (2 / SHELL.e[0]);
           const [, layer] = first(out, HEAD[0] + x, HEAD[1] + y);
           expect(layer).toBe(SHINE);
           n++;

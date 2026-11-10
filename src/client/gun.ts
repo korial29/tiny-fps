@@ -882,6 +882,15 @@ const PROFILE: Station[] = [
 /** The laser rifle's muzzle, the lens at the end of its shroud, and the middle of its handguard, the keel under its body where the left hand holds it from under it: the middle of the fist. */
 export const RIFLE_MUZZLE: Vec3 = [0, 0.079, -0.512];
 export const RIFLE_GRIP: Vec3 = [0, -0.004, -0.14];
+/**
+ * How the left hand carries the handguard (the user, 2026-11-10: the fist closed beside it): where
+ * the keel's middle is from the wrist, along the fingers and toward the palm (FIST's, in body.ts),
+ * so that the keel lies in the palm and the fingers stand up the body's right side; the fingers
+ * square across it, as [sin, cos] of their lean; and how closed they are, a cup, not a fist.
+ */
+export const RIFLE_HOLD = [0.066, 0.036];
+export const RIFLE_TILT = [0, 1];
+export const RIFLE_CURL = 0.45;
 /** The red of the laser, which blooms. */
 export const LASER = [2.6, 0.55, 0.22];
 const red: Paint = () => [LASER[0], LASER[1], -2, LASER[2]];
@@ -1521,7 +1530,7 @@ export const arc = (t: number): number[] => {
  * Where the left hand holds a rail gun whose grip is at `at` and whose axes are [right, up,
  * forward]: the middle of its front grip, and the way the grip runs from its foot up to the barrel,
  * which the thumb points along (see wield() in body.ts). For the laser rifle (`kind` 3): under its
- * handguard, the thumb along it, and the way the hand goes, across under it and up its right side.
+ * handguard, the thumb along it, and the way the hand goes, across under it to its right.
  */
 export const fore = (
   at: Vec3,
@@ -1531,11 +1540,9 @@ export const fore = (
   const rifle = kindOf(kind) == 3;
   const g = rifle ? RIFLE_GRIP : FOREGRIP;
   const p = [0, 1, 2].map(i => at[i] + r[i] * g[0] + u[i] * g[1] - f[i] * g[2]) as Vec3;
-  // The rifle's handguard is held from under it, the palm up: the thumb along it on its left, the
-  // hand across under it and the fingers up round its right side.
-  return rifle
-    ? [p, f, unit([0, 1, 2].map(i => 0.8 * r[i] + 0.6 * u[i]) as Vec3)]
-    : [p, unit([0, 1, 2].map(i => u[i] - 0.19 * f[i]) as Vec3)];
+  // The rifle's handguard is carried from under it, the palm up: the thumb along it on its left,
+  // the hand square across under it and the fingers up its right side.
+  return rifle ? [p, f, r] : [p, unit([0, 1, 2].map(i => u[i] - 0.19 * f[i]) as Vec3)];
 };
 
 /** fore() for the hand at `pos` turned by `q`, which holds the grip. */

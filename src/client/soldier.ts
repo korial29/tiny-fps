@@ -15,11 +15,13 @@ import { LIMB, MODE } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
-import { KATANA_LEFT, KATANA_TILT, clasp, inv, reach, shrug, stowed, wield } from './body';
+import { FIST, KATANA_LEFT, KATANA_TILT, clasp, inv, reach, shrug, stowed, wield } from './body';
 import { createGait, frame } from './gait';
 import type { Floor, Gait, Seat } from './gait';
 import {
   ARC,
+  RIFLE_HOLD,
+  RIFLE_TILT,
   BROUGHT,
   TILT,
   aimed,
@@ -387,6 +389,10 @@ export const stance = (r: Runner) => {
       g,
       [0, 1, 2].map(i => -0.5 * x[i] - u[i] - 0.35 * f[i]) as Vec3,
       up,
+      up ? RIFLE_HOLD : FIST,
+      up ? RIFLE_TILT : undefined,
+      false,
+      !!up,
     );
     s = solve(pose);
   } else if (r.aim > 0.01 && p.ammo >= 0) {

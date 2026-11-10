@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { reach } from '../../test/relief';
-import { LAYOUT, MOON } from '../shared/moon';
+import { empty, reach } from '../../test/relief';
+import { LAYOUT, LIP, MOON } from '../shared/moon';
 import { ground } from '../shared/relief';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
@@ -23,11 +23,16 @@ const world = build(MOON);
 const relief = world.relief!;
 const { at } = MOON.relief!;
 const inArena = (p: number[]) => p[0] > 0 && p[0] < 160 && p[2] > 0 && p[2] < 280;
-/** The relief as drawn: the stone triangles that face up, outside the arena. */
+/** Off the lattice in the arena: a small crater's vertex, or a spur's top at the rille's end. */
+const loose = (p: number[]) =>
+  p[0] >= 0 && p[0] <= 160 && p[2] > 0 && p[2] < 280 && (p[0] % 4 !== 0 || p[2] % 4 !== 0);
+/** The small craters' vertices: in the floor's stone, off the lattice, over the floor. */
+const pitted = (p: number[]) => p[8] === TEX.STONE && loose(p) && p[1] > 0.01;
+/** The relief as drawn: the stone triangles that face up, on the lattice or past the bound. */
 const land: number[][][] = [];
 for (let i = 0; i < verts.length; i += 3) {
   const t = verts.slice(i, i + 3);
-  if (t.every(p => p[8] === TEX.STONE && p[4] > 0 && !inArena(p))) {
+  if (t.every(p => p[8] === TEX.STONE && p[4] > 0 && !loose(p))) {
     land.push(t);
   }
 }
@@ -40,11 +45,13 @@ describe('moonscape', () => {
   });
 
   it("lays 60 small craters in the floor's stone, low, on bare floor only", () => {
-    const pits = verts.filter(p => p[8] === TEX.STONE && inArena(p));
+    const pits = verts.filter(pitted);
     expect(pits.length).toBe(60 * 4 * 12 * 6);
     expect(pits.every(p => p[1] > 0.01 && p[1] <= 0.24 && p[6] === p[0] && p[7] === p[2])).toBe(
       true,
     );
+    // On the level: the relief is flat under each.
+    expect(pits.every(p => ground(world, p[0], p[2]) === 0)).toBe(true);
     const standing = MOON.brushes.filter(b => b.max[1] > 0);
     for (const p of pits) {
       expect(
@@ -58,8 +65,9 @@ describe('moonscape', () => {
   it('stays within a vertex budget and is the same every time', () => {
     // Drawn whole in every pass, with no culling: the lattice inside the bound is most of it, the
     // faceted boulders about 20,000, the outside of the two bases (moonhull.ts) 17,952.
-    expect(verts.length).toBeGreaterThan(150000);
-    expect(verts.length).toBeLessThan(262000);
+    // The arena's own relief is 16,000 more, the rille's rock 12,000, the finer boulders 26,000.
+    expect(verts.length).toBeGreaterThan(280000);
+    expect(verts.length).toBeLessThan(320000);
     expect(moonscape(MOON)).toEqual(v);
   });
 
@@ -141,27 +149,23 @@ describe('moonscape', () => {
       }
       drawn.add(`${t[0][0] + t[1][0] + t[2][0]},${t[0][2] + t[1][2] + t[2][2]}`);
     }
-    // Every square inside the bound and outside the arena is there, as its two triangles.
+    // Every square inside the bound with ground is there, as its two triangles: the arena's too.
     let squares = 0;
     for (let x = x0; x < x0 + (nx - 1) * cell; x += cell) {
       for (let z = z0; z < z0 + (relief.nz - 1) * cell; z += cell) {
         const corners = [0, 1, 2, 3].map(k => [x + (k & 1) * cell, z + (k >> 1) * cell]);
-        if (
-          corners.every(c => reach(relief, c[0], c[1]) <= 1) &&
-          !(x >= 0 && x < 160 && z >= 0 && z < 280)
-        ) {
+        if (corners.every(c => reach(relief, c[0], c[1]) <= 1) && !empty(relief, x, z)) {
           squares++;
           expect(drawn.has(`${3 * x + 2 * cell},${3 * z + cell}`), `${x}, ${z}`).toBe(true);
           expect(drawn.has(`${3 * x + cell},${3 * z + 2 * cell}`), `${x}, ${z}`).toBe(true);
         }
       }
     }
-    expect(squares).toBeGreaterThan(17000);
+    expect(squares).toBeGreaterThan(20500);
     expect(drawn.size).toBeGreaterThanOrEqual(2 * squares);
   }, 30_000);
 
-  it('leaves the arena to its brushes and closes the relief with no open edge but round it and at the far side of the wall', () => {
-    expect(land.some(t => t.some(inArena))).toBe(false);
+  it('closes the relief with no open edge but along the lips of the rille and at the far side of the wall', () => {
     const edges = new Map<string, number>();
     for (const t of land) {
       for (let k = 0; k < 3; k++) {
@@ -169,58 +173,117 @@ describe('moonscape', () => {
         edges.set(`${a}|${b}`, (edges.get(`${a}|${b}`) ?? 0) + 1);
       }
     }
-    let [rim, hole] = [0, 0];
+    let [rim, lips] = [0, 0];
     for (const [key, n] of edges) {
       expect(n, key).toBeLessThanOrEqual(2);
       if (n === 1) {
-        // A side with one triangle: the arena's edge, or where the wall is down on the plain.
+        // A side with one triangle: a lip of the rille, notches included, or where the wall is down on the plain.
         const ends = key.split('|').map(e => e.split(',').map(Number));
         const out = ends.every(([x, z]) => reach(relief, x, z) >= 1.65);
-        const edge = ends.every(
-          ([x, z, y]) => y === 0 && x >= 0 && x <= 160 && z >= 0 && z <= 280 && !inArena([x, y, z]),
+        const lip = ends.every(
+          ([x, z]) =>
+            x >= 0 &&
+            x <= 160 &&
+            Math.abs(z - 140) <= 16 &&
+            (Math.abs(z - 140) >= 8 || x === 0 || x === 160),
         );
-        expect(out || edge, key).toBe(true);
+        expect(out || lip, key).toBe(true);
         rim += out ? 1 : 0;
-        hole += edge ? 1 : 0;
+        lips += lip ? 1 : 0;
       }
     }
-    // The arena's 880 m of edge in 4 m steps.
-    expect(hole).toBe(220);
+    // Both lips, 160 m in 4 m steps, a side for each cell a notch is deeper than the next, and the rille's two ends.
+    const deep = [...LIP, 0].map(n => Math.max(n, 0));
+    const sides = deep.reduce((a, n, c) => a + Math.abs(n - (deep[c - 1] ?? 0)), 0);
+    expect(lips).toBe(2 * (40 + sides) + 8);
     expect(rim).toBeGreaterThan(100);
   });
 
-  it("walls the two ends of the rille under the ground's edge", () => {
-    for (const [x, n] of [
-      [0, 1],
-      [160, -1],
-    ]) {
-      const wall = verts.filter(p => p[8] === TEX.STONE && p[0] === x && p[3] === n);
-      expect(wall).toHaveLength(6);
-      expect([...new Set(wall.map(p => `${p[2]},${p[1]}`))].sort()).toEqual(
-        ['132,-30', '132,0', '148,-30', '148,0'].sort(),
+  it('carves the rille in rock that follows its brushes: within 0.3 m of them above the kill floor, never inside', () => {
+    // The basalt by the rille, without the boulders that stand near it.
+    const stones = [
+      ...LAYOUT.stones.map(([x, z, w, d]) => [x + w / 2, z + d / 2, w + d]),
+      ...LAYOUT.boulders.map(([x, z, r]) => [x, z, 2 * r]),
+    ];
+    const rock = verts.filter(
+      p =>
+        p[8] === TEX.ROCK &&
+        p[0] > -1 &&
+        p[0] < 161 &&
+        Math.abs(p[2] - 140) < 17 &&
+        p[1] <= 3 &&
+        !stones.some(
+          ([x, z, r]) => Math.hypot(p[0] - x, Math.abs(p[2] - 140) - Math.abs(z - 140)) < r,
+        ),
+    );
+    const solid = MOON.brushes.filter(b => b.ghost && b.min[1] <= -30);
+    /** How far (x, z) is from the rock the brushes make at depth y: under 0 inside it. */
+    const gap = (x: number, y: number, z: number) =>
+      Math.min(
+        ...solid
+          .filter(b => b.max[1] >= y)
+          .map(b => {
+            const [dx, dz] = [
+              Math.max(b.min[0] - x, x - b.max[0]),
+              Math.max(b.min[2] - z, z - b.max[2]),
+            ];
+            return dx <= 0 && dz <= 0
+              ? Math.max(dx, dz)
+              : Math.hypot(Math.max(dx, 0), Math.max(dz, 0));
+          }),
       );
+    const walls = rock.filter(p => p[1] <= 0 && p[1] >= -20 && Math.abs(p[4]) < 0.9);
+    expect(walls.length).toBeGreaterThan(8000);
+    let rough = 0;
+    for (const p of walls) {
+      const d = gap(p[0], p[1], p[2]);
+      expect(d, `${p.slice(0, 3)}`).toBeGreaterThan(-1e-6);
+      expect(d).toBeLessThan(0.3 + 1e-6);
+      rough += d > 0.05 ? 1 : 0;
     }
+    // Not flat faces: most of the points below the lip stand out of the brush.
+    expect(rough / walls.length).toBeGreaterThan(0.3);
+    // The top row is the ground's edge: on the lip, at the ground's height, a mound's crest included.
+    const top = rock.filter(p => Math.abs(p[4]) < 0.9 && p[1] > 0.5);
+    expect(top.length).toBeGreaterThan(20);
+    for (const p of top) {
+      expect(Math.abs(Math.abs(p[2] - 140) - 8)).toBe(0);
+      expect(p[1]).toBeCloseTo(at(p[0], p[2]), 9);
+    }
+    // And it is not a ruled line: the walls stand at six distances from the centre line.
+    expect(
+      new Set(walls.filter(p => p[1] === 0).map(p => Math.abs(p[2] - 140))).size,
+    ).toBeGreaterThan(5);
+    // A bottom 30 m down, dark, with a seam that glows.
+    const deep = verts.filter(p => inArena(p) && p[1] < -29);
+    expect(deep.some(p => p[8] === -2)).toBe(true);
+    expect(deep.filter(p => p[8] === -1).every(p => p[6] + p[7] + p[9] < 0.1)).toBe(true);
   });
 
-  it('raises the crater wall past the bound to a crest of 60 to 100 m all round, down on the plain behind it, and nothing as high inside', () => {
-    const inside = verts.filter(p => reach(relief, p[0], p[2]) <= 1 && !sky.has(p));
-    expect(hi(inside.map(p => p[1]))).toBeLessThan(30);
-    expect(lo(land.flat().map(p => p[1]))).toBeGreaterThan(-15);
-    const wall = land.flat().filter(p => reach(relief, p[0], p[2]) > 1);
-    // Twelve sectors round the middle: a crest in each.
-    for (let s = 0; s < 12; s++) {
-      const top = hi(
-        wall
-          .filter(p => Math.floor((Math.atan2(p[2] - 140, p[0] - 80) / Math.PI + 1) * 6) % 12 === s)
-          .map(p => p[1]),
-      );
-      expect(top, `sector ${s}`).toBeGreaterThan(60);
-      expect(top).toBeLessThan(100);
+  it('cuts the rocks a player gets near in more facets than the ones up the crater wall', () => {
+    const count = (x: number, z: number, r: number) =>
+      verts.filter(p => p[8] === TEX.ROCK && Math.hypot(p[0] - x, p[2] - z) < r).length / 3;
+    // About 70 triangles a rock before; near 130 now for the ones in the arena and the boulder field.
+    for (const [x, z, w, d] of LAYOUT.stones) {
+      expect(count(x + w / 2, z + d / 2, 0.4 * Math.min(w, d))).toBeGreaterThan(0);
     }
-    const foot = wall.filter(p => reach(relief, p[0], p[2]) >= 1.65);
-    expect(foot.length).toBeGreaterThan(100);
-    // Level but for what is left of the hills.
-    expect(foot.every(p => Math.abs(p[1]) < 4)).toBe(true);
+    const near = verts.filter(
+      p => p[8] === TEX.ROCK && reach(relief, p[0], p[2]) < 1 && p[1] > -20,
+    );
+    const far = verts.filter(p => p[8] === TEX.ROCK && reach(relief, p[0], p[2]) > 1.02);
+    const rocks = 2 * (LAYOUT.stones.length + LAYOUT.boulders.length) + LAYOUT.rocks.length;
+    const walls = verts.filter(
+      p =>
+        p[8] === TEX.ROCK &&
+        Math.abs(p[2] - 140) < 17 &&
+        inArena(p) &&
+        Math.abs(p[4]) < 0.9 &&
+        p[1] <= 3,
+    ).length;
+    expect((near.length - walls) / 3 / rocks).toBeGreaterThan(95);
+    expect(far.length / 3 / 90).toBeLessThan(70);
+    console.log('near', (near.length - walls) / 3 / rocks, 'far', far.length / 3 / 90);
+    expect(far.length / 3 / 90).toBeGreaterThan(30);
   });
 
   it("stands the boulders, the dishes, the ramps' lamps and the wreck on the relief", () => {
@@ -275,12 +338,12 @@ describe('moonscape and the rovers', () => {
     expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
   });
 
-  it('is the 2,136 vertices of the four static rovers lighter', () => {
-    expect(verts.length).toBe(260175);
+  it('is 307,341 vertices, the four static rovers no longer among them', () => {
+    expect(verts.length).toBe(307341);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {
-    const pits = verts.filter(p => p[8] === TEX.STONE && inArena(p));
+    const pits = verts.filter(pitted);
     const near = (list: number[][], x: number, z: number) =>
       list.filter(p => Math.hypot(p[0] - x, p[2] - z) < 2).length;
     for (const [x, , z] of MOON.rovers!) {
@@ -293,7 +356,7 @@ describe('moonscape and the rovers', () => {
     const again: number[][] = [];
     for (let i = 0; i < moved.length; i += STRIDE) {
       const p = moved.slice(i, i + STRIDE);
-      if (p[8] === TEX.STONE && inArena(p)) {
+      if (pitted(p)) {
         again.push(p);
       }
     }

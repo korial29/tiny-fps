@@ -4,11 +4,11 @@
 // under each piece a player can reach. Every part is lit paint
 // (layer -1) or glow (layer -2: windows, lamps, stars, the Earth), but the relief and the small
 // craters on the floor, in the floor's own stone, and the boulders, in basalt (TEX.ROCK).
-import { LAYOUT } from '../shared/moon';
+import { LAYOUT, LIP } from '../shared/moon';
 import { TAU } from '../shared/physics';
-import { raise } from '../shared/relief';
+import { ground, raise } from '../shared/relief';
 import { TEX } from '../shared/types';
-import type { WorldDef } from '../shared/world';
+import type { World, WorldDef } from '../shared/world';
 import { GLOW, glow, ring, tri } from './flag';
 import { STRIDE, dress, mix, place, smooth, unit } from './mesh';
 import type { Vec3 } from './mesh';
@@ -193,10 +193,17 @@ const BLOCK: Vec3[][] = [0, 1, 2].flatMap(k =>
 /**
  * A boulder about `at`, radii (x, y, z), seed s: a block cut by a flat bed 0.35 of the height
  * under `at`, a top and three rings of planes at hashed bearings, tilts and distances, so flat facets
- * meet at sharp edges; stretched along a hashed bearing; in basalt (TEX.ROCK) laid flat on each
+ * meet at sharp edges (with `fine`, three rings more: the rocks a player gets near); stretched along a hashed bearing; in basalt (TEX.ROCK) laid flat on each
  * facet, `shade` its light, each facet a hash lighter or darker and the ones facing down darker.
  */
-const rock = (o: number[], at: Vec3, [rx, ry, rz]: number[], s: number, shade: number) => {
+const rock = (
+  o: number[],
+  at: Vec3,
+  [rx, ry, rz]: number[],
+  s: number,
+  shade: number,
+  fine = true,
+) => {
   const h = (i: number, k: number) => hash(i, k, s);
   let f = clip(BLOCK, [0, -1, 0], 0.35);
   const tilt = (y: number, t: number, d: number) => {
@@ -209,6 +216,10 @@ const rock = (o: number[], at: Vec3, [rx, ry, rz]: number[], s: number, shade: n
     [7, -0.4, 0.2, 0.62, 0.2, 0],
     [8, -0.05, 0.25, 0.74, 0.18, 0.3],
     [6, 0.45, 0.3, 0.6, 0.2, 0.6],
+    // With `fine`, as many again between them: chips off the edges the first cuts left.
+    [fine ? 14 : 0, -0.22, 0.2, 0.78, 0.1, 0.5],
+    [fine ? 12 : 0, 0.24, 0.2, 0.76, 0.1, 0.15],
+    [fine ? 9 : 0, 0.66, 0.2, 0.74, 0.1, 0.4],
   ]) {
     for (let i = 0; i < n; i++) {
       const k = 10 * n + i;
@@ -337,7 +348,7 @@ const mast = (o: number[], x: number, z: number, y: number, h = 10, rgb = [1, 0.
 };
 
 /** Red's half: everything but the crater, the stars and the Earth, on the map's LAYOUT. */
-const base = (o: number[]) => {
+const base = (o: number[], at: (x: number, z: number) => number) => {
   moonbase(o);
   hull(o);
   const [px, pz] = LAYOUT.pads[0];
@@ -347,12 +358,12 @@ const base = (o: number[]) => {
   }
   // Boulders along the three walls of the half, and the field's stones round their boxes (shared/moon.ts collides with both).
   LAYOUT.boulders.forEach(([x, z, r], i) =>
-    rock(o, [x, r * 0.15, z], [r, 0.7 * r, r], i, 0.8 + 0.4 * hash(i, 5, 41)),
+    rock(o, [x, at(x, z) + r * 0.15, z], [r, 0.7 * r, r], i, 0.8 + 0.4 * hash(i, 5, 41)),
   );
   LAYOUT.stones.forEach(([x, z, w, d, h], i) =>
     rock(
       o,
-      [x + w / 2, 0.3 * h, z + d / 2],
+      [x + w / 2, at(x + w / 2, z + d / 2) + 0.3 * h, z + d / 2],
       [0.66 * w, 1.05 * h, 0.66 * d],
       i + 61,
       0.95 + 0.2 * hash(i, 7, 41),
@@ -371,30 +382,46 @@ const BOWL = [
 
 /** Whether the arena's floor at y 0, with nothing standing on it, runs under the whole circle, half a metre in from its edge. */
 const bare = ({ brushes }: WorldDef, x: number, z: number, r: number) =>
+  // No box that stands on the floor within half a metre of the circle.
+  !brushes.some(
+    b =>
+      b.max[1] > 0 &&
+      Math.hypot(Math.max(b.min[0] - x, x - b.max[0], 0), Math.max(b.min[2] - z, z - b.max[2], 0)) <
+        r + 0.5,
+  ) &&
   [0, 1, 2, 3, 4].every(k => {
     const [u, v] = k ? [x + r * Math.cos(k * 1.57), z + r * Math.sin(k * 1.57)] : [x, z];
-    const over = (b: (typeof brushes)[0], m: number) =>
-      u > b.min[0] - m && u < b.max[0] + m && v > b.min[2] - m && v < b.max[2] + m;
     return (
       Math.abs(u - C[0]) <= C[0] - 0.5 &&
       Math.abs(v - C[2]) <= C[2] - 0.5 &&
-      brushes.some(b => b.max[1] == 0 && over(b, 0)) &&
-      !brushes.some(b => b.max[1] > 0 && over(b, 0.5))
+      brushes.some(
+        b => b.max[1] == 0 && u > b.min[0] && u < b.max[0] && v > b.min[2] && v < b.max[2],
+      )
     );
   });
 
 /**
- * Small craters on the floor, 60 of 1.2 to 5 m wide, where nothing stands: a shallow bowl
+ * Small craters on the floor, 60 of 1.2 to 5 m wide, where it is level and nothing stands: a shallow bowl
  * darker than the floor and a raised lip, in its stone texture, the slopes' normals steepened
  * so the sun lights one side of the lip and shades the other, and none within 6 m of where a rover
  * is parked. They are not collided with.
  */
 const craters = (o: number[], def: WorldDef) => {
   const N = 12;
+  const land = { relief: def.relief && raise(def.relief) } as World;
+  /** Whether the relief is level, at 0, under the whole circle: its middle and 16 points round it. */
+  const level = (x: number, z: number, r: number) =>
+    !def.relief ||
+    Array.from({ length: 17 }, (_, k) => (k * TAU) / 16).every(
+      (a, k) => ground(land, x + (k ? r * Math.cos(a) : 0), z + (k ? r * Math.sin(a) : 0)) === 0,
+    );
   for (let k = 0, n = 0; n < 60 && k < 900; k++) {
     const [x, z, r] = [W * hash(k, 1, 61), Z * hash(k, 2, 61), 0.6 + 2 * hash(k, 3, 61) ** 2];
     if (
       !bare(def, x, z, 1.5 * r) ||
+      !level(x, z, 1.5 * r) ||
+      // Not by the rille's lips: the mounds' sills are there.
+      Math.abs(z - C[2]) < 24 ||
       (def.rovers ?? []).some(([a, , b]) => Math.hypot(x - a, z - b) < 6)
     ) {
       continue;
@@ -461,10 +488,7 @@ const terrain = (o: number[], def: WorldDef) => {
   /** The square (i, j) of the grid lines: 0 not drawn (the arena, the plain), 1 a fan, 2 the lattice. */
   const kind = (i: number, j: number) => {
     const [x0, x1, z0, z1] = [xs[i], xs[i + 1], zs[j], zs[j + 1]];
-    if (
-      !(x0 < x1 && z0 < z1) ||
-      (x0 >= r.hole[0] && x1 <= r.hole[2] && z0 >= r.hole[1] && z1 <= r.hole[3])
-    ) {
+    if (!(x0 < x1 && z0 < z1)) {
       return 0;
     }
     // Its nearest point to the middle, in the ellipse's own measure.
@@ -480,6 +504,10 @@ const terrain = (o: number[], def: WorldDef) => {
       if (k > 1) {
         for (let x = x0; x < x1; x += r.cell) {
           for (let z = z0; z < z1; z += r.cell) {
+            // No ground in the rille nor in a notch of its lips.
+            if ([r.hole, ...r.pits].some(q => x >= q[0] && x < q[2] && z >= q[1] && z < q[3])) {
+              continue;
+            }
             const [p, q, s, t] = [
               vert(x, z),
               vert(x + r.cell, z),
@@ -508,20 +536,117 @@ const terrain = (o: number[], def: WorldDef) => {
       }
     }
   }
-  // The rille's two ends, under the ground's edge: its end walls.
-  for (const [x, n] of [
-    [r.hole[0], 1],
-    [r.hole[2], -1],
-  ]) {
-    const p = (z: number, h: number) => [x, h, z, n, 0, 0, z, h, TEX.STONE, 1];
-    o.push(
-      ...p(132, -30),
-      ...p(148, -30),
-      ...p(148, 0),
-      ...p(132, -30),
-      ...p(148, 0),
-      ...p(132, 0),
+};
+
+/** Depths of the rille's rock, each row of its walls, and how light the row is: strata, darker down to black under the kill floor. */
+const ROWS = [
+  [0, 1],
+  [-0.7, 0.8],
+  [-2.2, 0.95],
+  [-4.5, 0.6],
+  [-8, 0.7],
+  [-13, 0.4],
+  [-20, 0.3],
+  [-30, 0.08],
+];
+
+/**
+ * Red's side of the rille, carved: the lip of shared/moon.ts (LIP) as rock walls in basalt, a
+ * strip for each straight piece and each step between two columns, cut every 2 m and at each
+ * stratum, every point but the top row's and a strip's ends pushed up to 0.3 m into the void (and
+ * more under the kill floor), flat shaded; the top row is the ground's own edge, up over a mound.
+ * Then the spurs' tops, the bottom, a seam that glows far down and rubble on it.
+ */
+const ravine = (o: number[], def: WorldDef) => {
+  const { at } = def.relief!;
+  // The lip's z in each column; past both ends the rille is closed.
+  const lip = (c: number) => (c < 0 || c >= LIP.length ? 140 : 148 + (LIP[c] > 0 ? 4 : 1) * LIP[c]);
+  const strip = (x0: number, z0: number, x1: number, z1: number) => {
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    // Into the void: the strip's right as it runs.
+    const n = [(z1 - z0) / len, 0, -(x1 - x0) / len];
+    const steps = Math.max(Math.round(len / 2), 1);
+    const pt = (i: number, k: number): Vec3 => {
+      const [x, z] = [x0 + ((x1 - x0) * i) / steps, z0 + ((z1 - z0) * i) / steps];
+      const d =
+        k && i % steps
+          ? (k > 6 ? 1.6 : 0.3) * hash(Math.round(x * 2 + z * 64), k, 71) * (k & 1 ? 1 : 0.45)
+          : 0;
+      return [x + n[0] * d, k ? ROWS[k][0] : Math.max(at(x, z), 0), z + n[2] * d];
+    };
+    for (let i = 0; i < steps; i++) {
+      for (let k = 0; k < ROWS.length - 1; k++) {
+        const q = [pt(i, k), pt(i + 1, k), pt(i + 1, k + 1), pt(i, k + 1)];
+        for (const [a, b, c] of (i + k) & 1
+          ? [
+              [0, 1, 2],
+              [0, 2, 3],
+            ]
+          : [
+              [0, 1, 3],
+              [1, 2, 3],
+            ]) {
+          const m = unit(
+            cross(q[b].map((v, j) => v - q[a][j]) as Vec3, q[c].map((v, j) => v - q[a][j]) as Vec3),
+          );
+          // Out of the rock, into the void.
+          const f = m[0] * n[0] + m[2] * n[2] < 0 ? -1 : 1;
+          const w = ROWS[k][1] * (0.85 + 0.3 * hash(i, k, 73));
+          for (const v of [q[a], q[b], q[c]]) {
+            o.push(...v, m[0] * f, m[1] * f, m[2] * f, v[0] + v[2], v[1], TEX.ROCK, w);
+          }
+        }
+      }
+    }
+  };
+  for (let c = 0; c <= LIP.length; c++) {
+    const [x, a, b] = [4 * c, lip(c - 1), lip(c)];
+    if (a !== b) {
+      // A step in the lip: the void is on the side of the column that stops short.
+      strip(x, a, x, b);
+    }
+    if (c < LIP.length) {
+      strip(x, b, x + 4, b);
+      if (LIP[c] < 0) {
+        // A spur's top, level with the lip.
+        const p = (u: number, v: number) => [u, 0, v, 0, 1, 0, u, v, TEX.STONE, 1];
+        o.push(
+          ...p(x, b),
+          ...p(x + 4, 148),
+          ...p(x + 4, b),
+          ...p(x, b),
+          ...p(x, 148),
+          ...p(x + 4, 148),
+        );
+      }
+    }
+  }
+  // The bottom, black, 30 m down; a seam of light in it along the middle; rubble.
+  face(
+    o,
+    [
+      [-2, -30, 140],
+      [162, -30, 140],
+      [162, -30, 158],
+      [-2, -30, 158],
+    ],
+    [0.012, 0.012, 0.015],
+  );
+  for (let i = 0; i < 9; i++) {
+    const x = 6 + 17 * i + 8 * hash(i, 1, 77);
+    lit(o, 0.1, () =>
+      face(
+        o,
+        [
+          [x, -29.9, 140],
+          [x + 9 + 6 * hash(i, 2, 77), -29.9, 140],
+          [x + 5, -29.9, 140.25 + 0.3 * hash(i, 3, 77)],
+        ],
+        [0.2, 0.55, 1],
+      ),
     );
+    const r = 1.5 + 2.5 * hash(i, 4, 77);
+    rock(o, [x, -29.6, 142.5 + 5 * hash(i, 5, 77)], [r, 0.7 * r, r], i + 200, 0.25, false);
   }
 };
 
@@ -571,7 +696,7 @@ const sites = (o: number[], def: WorldDef) => {
     const [f, t] = [1.03 + 0.22 * hash(k, 1, 51), TAU * hash(k, 2, 51)];
     const [u, v] = [C[0] + 300 * f * Math.cos(t), C[2] + 360 * f * Math.sin(t)];
     const r = 3 + 9 * hash(k, 3, 51) ** 3;
-    rock(o, [u, at(u, v) - 0.4 * r, v], [r, 0.7 * r, r], k, 0.8 + 0.4 * hash(k, 4, 51));
+    rock(o, [u, at(u, v) - 0.4 * r, v], [r, 0.7 * r, r], k, 0.8 + 0.4 * hash(k, 4, 51), false);
   }
 };
 
@@ -642,7 +767,10 @@ const earth = (o: number[]) => {
 /** The moon's scenery vertices, in the renderer's format. */
 export const moonscape = (def: WorldDef): number[] => {
   const red: number[] = [];
-  base(red);
+  base(red, def.relief?.at ?? (() => 0));
+  if (def.relief) {
+    ravine(red, def);
+  }
   const o = red.concat(mirror(red));
   craters(o, def);
   if (def.relief) {

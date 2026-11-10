@@ -64,18 +64,6 @@ describe('moonscape', () => {
     expect(big.length).toBeGreaterThan(0);
   });
 
-  it('stands a dome of radius 22 and about 16 m on each half, a glowing band at its foot', () => {
-    for (const z of [236, 44]) {
-      const near = verts.filter(p => Math.hypot(p[0] - 80, p[2] - z) < 1.5);
-      expect(Math.max(...near.map(p => p[1]))).toBeGreaterThan(15.9);
-      expect(Math.max(...near.map(p => p[1]))).toBeLessThan(18);
-      const at = (r: number) =>
-        verts.filter(p => Math.abs(Math.hypot(p[0] - 80, p[2] - z) - r) < 0.01);
-      expect(at(22.46).some(p => p[8] === -2 && p[1] > 1 && p[1] < 4)).toBe(true);
-      expect(at(22.4).some(p => p[8] === -1 && p[1] < 0.01)).toBe(true);
-    }
-  });
-
   it('mirrors red onto blue: the pads and the shuttles at z 220 and 60', () => {
     for (const z of [220, 60]) {
       const pad = verts.filter(

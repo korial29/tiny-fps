@@ -11,6 +11,7 @@ import { KATANA_LEFT } from './body';
 import { SHINE, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, solve, turn } from './rig';
+import type { Quat } from './rig';
 import {
   FRY,
   animate,
@@ -23,6 +24,7 @@ import {
   stance,
 } from './soldier';
 import type { Runner } from './soldier';
+import { pack, shoulders } from './pack';
 import { palette } from './skin';
 
 const DT = 1 / 60;
@@ -838,13 +840,19 @@ describe('a runner with the rail gun', () => {
     for (let i = bare.length; i < capped.length; i += STRIDE) {
       expect(Math.min(off(i, J.HEAD), off(i, J.CHEST))).toBeLessThan(0.4);
     }
-    // A head the katana took off wears none.
+    // A head the katana took off wears no helmet and no hose: the body keeps its pack and pads.
     const cut = hold({ down: 200, hp: 0, lost: LIMB.HEAD }, 30);
     expect(cut.cut?.limb).toBe(LIMB.HEAD);
-    const [a, b] = [[], []] as number[][];
+    const [a, b, suit] = [[], [], []] as number[][];
     soldier(a, cut, [0.9, 0.1, 0.1], 1);
-    soldier(b, cut, [0.9, 0.1, 0.1], 1, true);
-    expect(b.length).toBe(a.length);
+    const sk = soldier(b, cut, [0.9, 0.1, 0.1], 1, true)!;
+    pack(suit, sk.pos[J.CHEST], sk.rot[J.CHEST], [0.9, 0.1, 0.1], 1);
+    shoulders(
+      suit,
+      [J.ARM_L, J.ARM_R].map(j => [sk.pos[j], sk.rot[j]] as [Vec3, Quat]),
+      1,
+    );
+    expect(b.length).toBe(a.length + suit.length);
   });
 });
 

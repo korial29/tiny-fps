@@ -103,6 +103,10 @@ describe('moonscape', () => {
         p => Math.hypot(p[0] - 40, p[2] - z) < 13.1 && p[1] > 0.2 && p[1] < 0.3,
       );
       expect(pad.length).toBeGreaterThan(100);
+      // Above the pad's metal brush (top 0.25), not level with it: no z-fighting.
+      expect(
+        Math.min(...pad.filter(p => Math.hypot(p[0] - 40, p[2] - z) < 12).map(p => p[1])),
+      ).toBeGreaterThan(0.26);
       const hull = verts.filter(
         p => Math.abs(p[2] - z) < 2.1 && p[0] > 32.9 && p[0] < 47.1 && p[1] > 1,
       );

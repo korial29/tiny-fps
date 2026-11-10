@@ -157,7 +157,10 @@ const rock = (o: number[], at: Vec3, r: number, s: number, rgb: number[]) => {
 };
 const grey = (g: number) => [g, g, g * 0.95];
 
-/** A landing pad (radius 13) with its painted rings and 24 lights, and a shuttle lying on it from x = s, nose toward +x. */
+/**
+ * A landing pad (radius 13) with its painted rings and 24 lights, and a shuttle lying on it from x = s, nose toward +x.
+ * The disc tops out 2 cm above the pad's metal brush (0.25): level with it, the two fought for the depth buffer.
+ */
 const pad = (o: number[], px: number, pz: number, s: number) => {
   place(
     o,
@@ -165,8 +168,8 @@ const pad = (o: number[], px: number, pz: number, s: number) => {
       smooth(
         [
           [13, 0],
-          [13, 0.25],
-          [0, 0.25],
+          [13, 0.27],
+          [0, 0.27],
         ],
         32,
       ),
@@ -177,11 +180,11 @@ const pad = (o: number[], px: number, pz: number, s: number) => {
     [0, 0, 0],
     1,
   );
-  ring(o, [px, 0.27, pz], 7.6, 8, [0.8, 0.8, 0.82]);
+  ring(o, [px, 0.29, pz], 7.6, 8, [0.8, 0.8, 0.82]);
   for (let i = 0; i < 24; i++) {
     const t = (i * TAU) / 24;
     const [x, z] = [px + 11.6 * Math.cos(t), pz + 11.6 * Math.sin(t)];
-    const q = (a: number, b: number): Vec3 => [x + a, 0.3, z + b];
+    const q = (a: number, b: number): Vec3 => [x + a, 0.31, z + b];
     lit(o, 1.8, () =>
       face(
         o,

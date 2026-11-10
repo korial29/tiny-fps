@@ -1,7 +1,8 @@
 // The moon's space helmet, after the marine helmets of 90s shooters, not copied (the user,
 // 2026-11-10: the round one read as a diver's): a boxy hard shell, square seen from above and flat
 // on top; a band of dark visor across the eyes under a heavy brow; a mouth guard jutting out under
-// it with vents; a flat plate on each ear with a light strip; a flat crest in the team's colour and
+// it with vents; a flat plate on each ear with a light strip; L-shaped blocks down the sides, a big
+// vent block on top, and
 // a ring at the neck. A pure function of the head joint's place: no state, no DOM. Built once per
 // level of detail, in the head's own frame (the head joint's rest pose, metres, -z the front) and
 // appended where the head is.
@@ -37,27 +38,34 @@ export const VISOR = {
   c: [0, 0.072] as [number, number],
   r: [0.13, 0.031] as [number, number],
   rise: 0.03,
+  /** The notch in its lower edge where the guard comes up (the user: the mouth rises in the middle): how high, and the half widths of its flat top and of its foot. */
+  up: 0.02,
+  notch: [0.016, 0.05] as [number, number],
 };
 /** Metres of u a radian of turn round the shell. */
 export const WRAP = 0.125;
 /** The visor's corners: the exponent of its superellipse. */
 const CORNER = 5;
-const LIFT = 0.002;
+const LIFT = 0.003;
+/** How far past the visor's edge its rim covers the shell (it is RIM[0] + 0.6 RIM[2] wide). */
+const COVER = 0.012;
 /** The rim: how wide it is round the visor, how far it stands out, and how much more at the brow. */
 const RIM = [0.012, 0.005, 0.012];
 
 /**
  * The mouth guard: rings from its top under the visor to the chin, each [height, half width at its
- * front and at its back, front, back] (y, x, z): a jaw, narrower ahead, boxy (superellipses of
+ * front and at its back, front, back] (y, x, z): a snout jutting well ahead (the user, 2026-11-10),
+ * its front a rounded trapezoid, narrow at the top; wider behind, boxy (superellipses of
  * `GUARD_E`). Its back is inside the shell.
  */
 const GUARD = [
-  [0.028, 0.04, 0.07, -0.152, -0.085],
-  [0.018, 0.05, 0.085, -0.167, -0.085],
-  [-0.018, 0.055, 0.092, -0.177, -0.085],
-  [-0.052, 0.053, 0.09, -0.172, -0.085],
-  [-0.074, 0.046, 0.08, -0.158, -0.085],
-  [-0.082, 0.034, 0.064, -0.143, -0.085],
+  [0.056, 0.015, 0.045, -0.148, -0.085],
+  [0.04, 0.02, 0.065, -0.178, -0.085],
+  [0.015, 0.027, 0.08, -0.2, -0.085],
+  [-0.015, 0.033, 0.088, -0.211, -0.085],
+  [-0.05, 0.039, 0.09, -0.209, -0.085],
+  [-0.074, 0.042, 0.08, -0.19, -0.085],
+  [-0.084, 0.035, 0.064, -0.166, -0.085],
 ];
 const GUARD_E = 6;
 
@@ -80,27 +88,42 @@ const HOSE_R = 0.0105;
  */
 const CHEEK = {
   path: [
-    [0.172, 0.088],
-    [0.172, -0.045],
-    [0.078, -0.045],
+    [0.172, 0.118],
+    [0.172, -0.042],
+    [0.076, -0.042],
   ],
-  round: 0.009,
-  w: 0.017,
-  h: 0.012,
+  round: 0.01,
+  w: 0.024,
+  h: 0.024,
 };
 
 /**
  * The air intakes (the user, 2026-11-10: more vents on top and on the sides): framed openings
  * standing out of the shell, dark inside, crossed by slats. Each [u, y, half width, half height,
- * slats, slats upright]: a grille on the brow's top, one on each cheek beside the guard, one on
- * each temple past the visor's end.
+ * slats, slats upright, how far it stands out]: one small on each cheek beside the guard. The
+ * big one on top is a block of its own (ROOF).
  */
+/**
+ * The vent block on top (the user, 2026-11-10: just that on top, no crest, one block the helmet's
+ * whole length with a grille at its front only): a slab lying on the crown from the brow to the
+ * back, following its curve; its half width, its front and back (z), how far it stands over the
+ * shell, the grille's slats and how far back from the front the grille goes.
+ */
+const ROOF = { w: 0.05, z: [-0.138, 0.14], h: 0.017, slats: 7, grille: 0.045 };
+
+/** The height of the shell's top at (x, z). */
+const topAt = (x: number, z: number) => {
+  const [A, B, D] = SHELL.r;
+  const [p, q] = SHELL.e;
+  const g = Math.abs(x / A) ** p + Math.abs((z - SHELL.c[2]) / D) ** p;
+  return SHELL.c[1] + B * Math.max(1 - g ** (q / p), 0) ** (1 / q);
+};
+
+/** How deep in the shell the intakes' walls start, so a big one meets the curve all round. */
+const FOOT = -0.03;
 const INTAKES = [
-  [0, 0.168, 0.052, 0.016, 6, 1],
-  [0.094, 0.004, 0.011, 0.022, 0, 0],
-  [-0.094, 0.004, 0.011, 0.022, 0, 0],
-  [0.168, 0.118, 0.012, 0.022, 3, 0],
-  [-0.168, 0.118, 0.012, 0.022, 3, 0],
+  [0.094, 0.004, 0.011, 0.022, 0, 0, 0.007],
+  [-0.094, 0.004, 0.011, 0.022, 0, 0, 0.007],
 ];
 
 /** The ear plates: centre (y, z), half height and depth, and from where in the shell out to where. */
@@ -108,8 +131,7 @@ const PLATE = { c: [0.03, 0.022], r: [0.062, 0.056], x: [0.1, 0.133] };
 
 /**
  * Sides around and rows up of the shell; points round the visor's edge; sides of the guard, the
- * plates and the crest; whether there are vents and the collar. The far helmet is the shell, the
- * visor and the crest.
+ * plates; whether there are vents and the collar. The far helmet is the shell and the visor.
  */
 const DETAIL = [
   {
@@ -117,7 +139,7 @@ const DETAIL = [
     visor: 16,
     guard: 0,
     plate: 0,
-    crest: 4,
+
     vents: false,
     collar: 0,
     hose: [0, 0],
@@ -127,7 +149,7 @@ const DETAIL = [
     visor: 32,
     guard: 12,
     plate: 12,
-    crest: 8,
+
     vents: false,
     collar: 12,
     hose: [6, 8],
@@ -137,7 +159,7 @@ const DETAIL = [
     visor: 56,
     guard: 20,
     plate: 20,
-    crest: 12,
+
     vents: true,
     collar: 20,
     hose: [10, 40],
@@ -264,9 +286,13 @@ export const uOf = (pt: Vec3): number => {
   );
 };
 
-/** The visor's band at u: its middle height and half height, narrower to the sides as its lower edge rises. */
+/** The visor's band at u: its middle height and half height, its lower edge rising to the sides and in the notch. */
 export const band = (u: number): [number, number] => {
-  const k = (VISOR.rise / 2) * Math.min((u / VISOR.r[0]) ** 2, 1);
+  const [n0, n1] = VISOR.notch;
+  const a = Math.abs(u);
+  // The notch: where the guard comes up into it, between the eyes.
+  const up = a < n0 ? 1 : a < n1 ? (1 + Math.cos((Math.PI * (a - n0)) / (n1 - n0))) / 2 : 0;
+  const k = (VISOR.rise / 2) * Math.min((u / VISOR.r[0]) ** 2, 1) + (VISOR.up / 2) * up;
   return [VISOR.c[1] + k, VISOR.r[1] - k];
 };
 
@@ -380,7 +406,6 @@ interface Kit {
   hoses: number[];
   intakes: number[];
   cheeks: number[];
-  crest: number[];
   collar: number[];
 }
 
@@ -410,12 +435,15 @@ const kit = (lod: number): Kit => {
   const whole = sheet([...rows, [crown]], WHITE, -1);
   const shell: number[] = [];
   for (let i = 0; i < whole.length; i += 30) {
-    // Only the triangles the visor covers all of: the others show round it.
-    const hidden = [0, 10, 20].every(
-      j =>
-        whole[i + j + 2] < -0.02 &&
-        inside(uOf(whole.slice(i + j, i + j + 3) as Vec3), whole[i + j + 1], 1),
-    );
+    // The triangles the visor and its rim cover all of: the others show round it, and none is
+    // left just behind the visor to flicker through it.
+    const hidden = [0, 10, 20].every(j => {
+      const y = whole[i + j + 1];
+      const u = uOf(whole.slice(i + j, i + j + 3) as Vec3);
+      const m = band(u)[0];
+      const near = (v: number, c: number) => v - Math.max(-COVER, Math.min(COVER, v - c));
+      return whole[i + j + 2] < -0.02 && inside(near(u, VISOR.c[0]), near(y, m), 1);
+    });
     if (!hidden) {
       shell.push(...whole.slice(i, i + 30));
     }
@@ -468,7 +496,6 @@ const kit = (lod: number): Kit => {
     hoses: [],
     intakes: [],
     cheeks: [],
-    crest: [],
     collar: [],
   };
   if (D.guard) {
@@ -492,22 +519,23 @@ const kit = (lod: number): Kit => {
     );
   }
   if (D.vents) {
-    // Three slots a side across the guard's front, a hair out of it.
-    const on = (x: number, y: number): Vec3 => {
+    // Four slots across the guard's front, as wide as it is there, a hair out of it; each in
+    // pieces, so it follows the front's curve.
+    const on = (k: number, y: number): Vec3 => {
       const g = guardAt(guardOf(y));
       const [, , , front, back] = g;
       const [zc, d] = [(front + back) / 2, (back - front) / 2];
-      const w = wide(g, front);
-      return [x, y, zc - d * Math.max(1 - Math.abs(x / w) ** GUARD_E, 0) ** (1 / GUARD_E) - 0.0025];
+      const x = k * wide(g, front);
+      return [x, y, zc - d * Math.max(1 - Math.abs(k) ** GUARD_E, 0) ** (1 / GUARD_E) - 0.0025];
     };
-    for (const y of [0.002, -0.017, -0.036]) {
-      for (const side of [-1, 1]) {
-        const [x0, x1] = [0.012 * side, 0.038 * side];
-        const [y0, y1] = [y - 0.0035, y + 0.0035];
-        const q = [on(x0, y0), on(x1, y0), on(x1, y1), on(x0, y1)];
-        const m = unit(cross(sub(q[1], q[0]), sub(q[3], q[0])).map(v => v * side) as Vec3);
-        const fwd: Vec3 = m[2] > 0 ? [-m[0], -m[1], -m[2]] : m;
-        quad(kitOut.vents, q, fwd, VENT);
+    const PIECES = 6;
+    for (const y of [0.004, -0.016, -0.036, -0.056]) {
+      const [y0, y1] = [y - 0.0032, y + 0.0032];
+      for (let i = 0; i < PIECES; i++) {
+        const [k0, k1] = [-0.72 + (1.44 * i) / PIECES, -0.72 + (1.44 * (i + 1)) / PIECES];
+        const q = [on(k0, y0), on(k1, y0), on(k1, y1), on(k0, y1)];
+        const m = unit(cross(sub(q[1], q[0]), sub(q[3], q[0])));
+        quad(kitOut.vents, q, m[2] > 0 ? (m.map(v => -v) as Vec3) : m, VENT);
       }
     }
   }
@@ -562,7 +590,7 @@ const kit = (lod: number): Kit => {
         kitOut.cheeks,
       );
     }
-    for (const [u, y, w, h, slats, upright] of INTAKES) {
+    for (const [u, y, w, h, slats, upright, out] of INTAKES) {
       // A frame on the shell where it is: across its surface along `side` and up, out along `n`.
       const [o, n] = onShell(u, y, 0);
       const flat = n[1] > 0.9;
@@ -576,20 +604,19 @@ const kit = (lod: number): Kit => {
         const th = t * TAU;
         return at(w * k * pow(Math.cos(th), 2 / CORNER), h * k * pow(Math.sin(th), 2 / CORNER), c);
       };
-      const out = 0.007;
       // The frame: from inside the shell out to its lip, then in to the opening's edge.
       loft(
         (t, s) => {
           const [k, c] =
             s < 0.5
-              ? [1 + 0.25 * (1 - 2 * s), -0.004 + 0.011 * 2 * s]
-              : [1 - 0.3 * (2 * s - 1), out];
+              ? [1 + 0.06 * (1 - 2 * s), FOOT + (out - FOOT) * 2 * s]
+              : [1 - (0.3 * (2 * s - 1) * 0.012) / Math.min(w, h), out];
           return ring(t, k, c);
         },
-        s => at(0, 0, -0.005 + (out + 0.005) * s),
+        s => at(0, 0, FOOT + (out - FOOT) * s),
         D.plate,
-        [0, 0.5, 1],
-        [at(0, 0, -0.005), at(0, 0, out - 0.0001)],
+        [0, 0.45, 0.5, 1],
+        [at(0, 0, FOOT), at(0, 0, out - 0.0001)],
         PALE,
         kitOut.intakes,
       );
@@ -703,36 +730,66 @@ const kit = (lod: number): Kit => {
       );
     }
   }
-  // The crest: a flat ridge along the crown, front to back, its foot sunk in the shell.
-  const top = (z: number) => {
-    const [, B, Dd] = SHELL.r;
-    const [p, q] = SHELL.e;
-    const g = Math.abs((z - SHELL.c[2]) / Dd) ** p;
-    return SHELL.c[1] + B * Math.max(1 - g ** (q / p), 0) ** (1 / q);
-  };
-  const [za, zb] = [-0.1, 0.11];
-  const zOf = (s: number) => za + (zb - za) * s;
-  loft(
-    (t, s) => {
+  if (D.plate) {
+    // The roof block: rings across it along z, each from its feet sunk in the shell to its flat top.
+    const { w, h } = ROOF;
+    const [za, zb] = ROOF.z;
+    const zOf = (s: number) => za + (zb - za) * s;
+    // From the middle back it sinks into the shell (the user: fading into the mass at the back):
+    // its height falls under the surface and its top bends to the shell's curve.
+    const fade = (s: number) => (s < 0.4 ? 1 : (1 + Math.cos((Math.PI * (s - 0.4)) / 0.6)) / 2);
+    const tall = (s: number) => h * (fade(s) * 1.15 - 0.15);
+    const ring = (t: number, s: number): Vec3 => {
       const z = zOf(s);
       const th = t * TAU;
-      const taper = 1 - 0.5 * Math.abs(2 * s - 1) ** 4;
-      return [
-        0.018 * taper * pow(Math.cos(th), 2 / 4),
-        top(z) + 0.004 + 0.012 * taper * pow(Math.sin(th), 2 / 4),
-        z,
-      ];
-    },
-    s => [0, top(zOf(s)) + 0.004, zOf(s)],
-    D.crest,
-    [0, 0.1, 0.5, 0.9, 1],
-    [
-      [0, top(za) + 0.002, za - 0.004],
-      [0, top(zb) + 0.002, zb + 0.004],
-    ],
-    [1, 1, 1],
-    kitOut.crest,
-  );
+      const x = w * pow(Math.cos(th), 2 / 6);
+      const f = fade(s);
+      const yb = topAt(x, z) - 0.01;
+      const yt = topAt(0, z) * f + topAt(x, z) * (1 - f) + tall(s);
+      return [x, yb + ((yt - yb) * (1 + pow(Math.sin(th), 2 / 6))) / 2, z];
+    };
+    loft(
+      ring,
+      s => [0, topAt(0, zOf(s)) + tall(s) / 2 - 0.005, zOf(s)],
+      D.plate,
+      Array.from({ length: 25 }, (_, i) => i / 24),
+      [
+        [0, topAt(0, za) + h / 2, za - 0.002],
+        [0, topAt(0, zb) - 0.006, zb + 0.001],
+      ],
+      PALE,
+      kitOut.intakes,
+    );
+    // The grille on its top: a dark window, and slats along it over it.
+    const surf = (x: number, z: number, lift: number): Spot => {
+      const [p0, p1, p2] = [
+        [x, topAt(0, z) + h + lift, z],
+        [x, topAt(0, z + 1e-3) + h + lift, z + 1e-3],
+        [x + 1e-3, topAt(0, z) + h + lift, z],
+      ] as Vec3[];
+      const n = unit(cross(sub(p1, p0), sub(p2, p0)));
+      return [p0, n[1] < 0 ? (n.map(v => -v) as Vec3) : n];
+    };
+    const steps = 8;
+    const [ga, gb] = [za + 0.006, za + ROOF.grille];
+    for (let i = 0; i < steps; i++) {
+      const [z0, z1] = [ga + ((gb - ga) * i) / steps, ga + ((gb - ga) * (i + 1)) / steps];
+      const strip = (x0: number, x1: number, lift: number, col: number[]) => {
+        const c = [surf(x0, z0, lift), surf(x1, z0, lift), surf(x1, z1, lift), surf(x0, z1, lift)];
+        quad(
+          kitOut.intakes,
+          c.map(([q]) => q),
+          c[0][1],
+          col,
+        );
+      };
+      strip(-w * 0.78, w * 0.78, 0.0006, VENT);
+      for (let k = 0; k < ROOF.slats; k++) {
+        const x = -w * 0.78 + ((k + 0.5) * (1.56 * w)) / ROOF.slats;
+        strip(x - 0.0022, x + 0.0022, 0.0014, GREY);
+      }
+    }
+  }
   if (D.collar) {
     kitOut.collar = dress(
       smooth(
@@ -751,8 +808,8 @@ const kit = (lod: number): Kit => {
 
 /**
  * Appends the helmet at level of detail `lod` (0 far, 1 near, 2 and up close) on the head joint at
- * `at` turned by `q` (see solve() in rig.ts), in `rgb`, the team's colour (0 to 1): its crest and
- * the strips on the ear plates, which glow. The far helmet is the shell, the visor and the crest.
+ * `at` turned by `q` (see solve() in rig.ts), in `rgb`, the team's colour (0 to 1): the strips on
+ * the ear plates, which glow. The far helmet is the shell and the visor.
  */
 export const helmet = (out: number[], at: Vec3, q: Quat, rgb: number[], lod: number) => {
   const k = kit(lod);
@@ -787,7 +844,6 @@ export const helmet = (out: number[], at: Vec3, q: Quat, rgb: number[], lod: num
   ]) {
     asIs(src);
   }
-  asIs(k.crest, rgb);
   if (!lod) {
     return;
   }

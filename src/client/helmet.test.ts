@@ -72,10 +72,10 @@ describe('helmet', () => {
   }
 
   // Detailed (the user, 2026-11-10: whatever it costs), still a fraction of a body (34 000 close).
-  it('stays modest: under 1 000 vertices far, 8 000 near, 16 000 close', () => {
+  it('stays modest: under 1 000 vertices far, 8 000 near, 20 000 close', () => {
     expect(count(make(0))).toBeLessThan(1000);
     expect(count(make(1))).toBeLessThan(8000);
-    expect(count(make(3))).toBeLessThan(16000);
+    expect(count(make(3))).toBeLessThan(20000);
     expect(count(make(0))).toBeLessThan(count(make(1)));
   });
 
@@ -171,7 +171,7 @@ describe('helmet', () => {
     }
   });
 
-  it('wears a crest, and the beads on the ears glow, in the team colour', () => {
+  it('wears the team colour in the glowing strips on the ears, and no crest', () => {
     const near = make(1);
     const lit = Array.from({ length: count(near) }, (_, i) => i).filter(
       i => near[i * STRIDE + 8] == -2,
@@ -180,13 +180,14 @@ describe('helmet', () => {
     for (const i of lit) {
       expect(near[i * STRIDE + 6]).toBeCloseTo(TEAM[0] * GLOW, 5);
     }
-    // Both ears, one each side; the crest on top, in the team's red.
+    // Both ears, one each side.
     expect(lit.some(i => near[i * STRIDE] > HEAD[0] + 0.1)).toBe(true);
     expect(lit.some(i => near[i * STRIDE] < HEAD[0] - 0.1)).toBe(true);
+    // Nothing else in the team's red (the user, 2026-11-10: no crest on top).
     const red = Array.from({ length: count(near) }, (_, i) => i).filter(
       i => near[i * STRIDE + 8] == -1 && near[i * STRIDE + 6] == TEAM[0],
     );
-    expect(Math.max(...red.map(i => near[i * STRIDE + 1]))).toBeGreaterThan(HEAD[1] + 0.2);
+    expect(red).toEqual([]);
     // The far one has no ears.
     expect(make(0).some((_, i) => i % STRIDE == 8 && make(0)[i] == -2)).toBe(false);
   });

@@ -5,6 +5,7 @@ import {
   CHARGE_MAX,
   GUN_RANGE,
   GUN_RELOAD,
+  NADE_MAX,
   RAIL_CAP,
   RAIL_MAX,
   RAIL_RELOAD,
@@ -1915,15 +1916,24 @@ const [SH, SB, ST] = [(S1 - S0) / 2 / SU[1], 0.019, 0.0145];
 /** The digits on it: width, height, thickness of a segment, gap between the two; well inside the ring (the user, 2026-11-09). */
 const [RW, RH, RT, RGAP] = [0.0075, 0.0155, 0.0022, 0.0025];
 const RSEG = segments(RW, RH, RT);
+/** The grenade pips under the digits: their side, the step between two, their middle up the screen; orange when loaded, dim once spent. */
+const [PIP, PIP_GAP, PIP_AT] = [0.0034, 0.0062, -0.0128];
+const [PIP_ON, PIP_OFF] = [
+  [1.3, 0.55, 0.08],
+  [0.22, 0.09, 0.03],
+];
 
 /**
  * The laser rifle's counter (`n` rounds in its cell), in model space: a trapezoid screen, narrow at
  * the top, set in the sloped back of the housing and turned to the eye, ringed in a line of the
- * digits' colour (cyan, red at 7 or fewer), with the two digits once `shown`. All glow but the dark screen.
+ * digits' colour (cyan, red at 7 or fewer), with the two digits once `shown`; under them, when
+ * `nades` is given, NADE_MAX orange pips for the launcher's grenades, dim for the spent ones (the
+ * user, 2026-11-10). All glow but the dark screen.
  */
-export const scope = (n: number, shown = true): number[] => {
+export const scope = (n: number, shown = true, nades?: number): number[] => {
   n = Math.min(Math.max(Math.floor(n), 0), 99);
-  const key = n * 2 + +shown;
+  const g = nades === undefined ? -1 : Math.min(Math.max(Math.floor(nades), 0), NADE_MAX);
+  const key = (n * 2 + +shown) * (NADE_MAX + 2) + g + 1;
   let v = scopes.get(key);
   if (!v) {
     const out: number[] = (v = []);
@@ -1972,6 +1982,12 @@ export const scope = (n: number, shown = true): number[] => {
           quad(a0 + x0, y0 - RH / 2, a0 + x1, y1 - RH / 2, 0.005, rgb);
         }
       });
+      // The grenades: a row of square pips between the digits and the ring's foot.
+      for (let j = 0; j < (g < 0 ? 0 : NADE_MAX); j++) {
+        const a = (j - (NADE_MAX - 1) / 2) * PIP_GAP;
+        const c = j < g ? PIP_ON : PIP_OFF;
+        quad(a - PIP / 2, PIP_AT - PIP / 2, a + PIP / 2, PIP_AT + PIP / 2, 0.005, c);
+      }
     }
     lit(out, from, 1);
     scopes.set(key, out);
@@ -2033,6 +2049,8 @@ export interface Lit {
   cells?: number[];
   heat?: number;
   hot?: boolean;
+  /** The laser rifle's grenades left, shown under its rounds; none shown when absent. */
+  nades?: number;
   /** How far the thumb has its button in, 0 to 1. */
   press?: number;
   /** How far the rail gun's capsule is turned on (radians, tune()). */
@@ -2081,6 +2099,7 @@ export const held = (
     hot = false,
     press = 0,
     tune = 0,
+    nades,
     id,
     floor,
     vel = [0, 0, 0],
@@ -2155,7 +2174,7 @@ export const held = (
     place(out, arc(t), at, ax, [0, 0, 0], k);
   }
   if (ammo !== undefined && w == 3) {
-    place(out, scope(ammo, digits && light > 0.5), at, ax, [0, 0, 0], k);
+    place(out, scope(ammo, digits && light > 0.5, nades), at, ax, [0, 0, 0], k);
   } else if (ammo !== undefined && rail && light > 0.3) {
     place(out, lcd(ammo), at, ax, [0, 0, 0], k);
   }

@@ -489,9 +489,8 @@ describe('the gun on the HUD', () => {
       expect(rows).toContain('Katana + Wthrust');
       expect(rows).toContain('Katana + A or Dcut across');
       expect(rows).toContain('Katana aloneslash');
-      expect(rows).toContain(
-        'Double clickkatana special: lunge, energy arc, leap; laser rifle: a grenade from its launcher',
-      );
+      expect(rows).toContain('Double clickkatana special: lunge, energy arc, leap');
+      expect(rows).toContain('Glaser rifle: a grenade from its launcher');
       expect(screen.querySelector('aside')!.textContent).toMatch(/armoury past your flag/);
     });
   });

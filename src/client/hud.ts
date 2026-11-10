@@ -199,7 +199,7 @@ export const createHud = (screen: HTMLElement): Hud => {
     `<aside hidden><h6>TINY FPS</h6><span></span><table>` +
       `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Shift<td>sprint<tr><td>Space<td>jump, again in the air` +
       `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>Left click<td>fire, hold to charge<tr><td>R<td>swap the battery<tr><td>1, 2, 3, 4, wheel<td>gun, katana, rail gun, laser rifle` +
-      `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>katana special: lunge, energy arc, leap; laser rifle: a grenade from its launcher<tr><td>Blades locked<td>click fast; step aside to break<tr><td>E<td>rover: get in, get out (W/S drive toward the look, Space handbrake)<tr><td>M<td>mute<tr><td>Esc<td>this screen: the host picks the map at the top</table>` +
+      `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>katana special: lunge, energy arc, leap<tr><td>G<td>laser rifle: a grenade from its launcher<tr><td>Blades locked<td>click fast; step aside to break<tr><td>E<td>rover: get in, get out (W/S drive toward the look, Space handbrake)<tr><td>M<td>mute<tr><td>Esc<td>this screen: the host picks the map at the top</table>` +
       `<span>Take the enemy flag to your own base while yours is home. Jump onto the armoury past your flag for the gun, the katana and the rail gun. Hold the rail gun's lightning on a foe: it slows him and drains 1 health a second, and 3 s more after it lets go.</span>` +
       `<strong></strong></aside><menu hidden></menu>` +
       `<del hidden></del><u></u><h5 hidden>Muted (M)</h5>` +

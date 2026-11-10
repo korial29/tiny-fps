@@ -375,7 +375,7 @@ export const RIFLE_HITS = 2;
 /**
  * The laser rifle's grenade launcher (the user, 2026-11-10: "a double click and it sends an
  * explosive grenade at range, like on an M16"): the block under the barrel. The rifle's rack loads
- * NADE_MAX grenades with the rounds. A double click (KEY.SPECIAL) with the rifle in hand launches
+ * NADE_MAX grenades with the rounds. G (KEY.SPECIAL; a double click until the user, 2026-11-10) with the rifle in hand launches
  * one from the eye along the look at NADE_SPEED m/s, NADE_COOL ticks after the last, and the rifle
  * holds its fire NADE_HOLD ticks. It falls under the map's gravity and bursts on the first brush or
  * enemy body, or after NADE_RANGE metres of flight. The burst takes NADE_HP at its centre, falling

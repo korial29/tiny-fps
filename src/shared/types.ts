@@ -35,8 +35,8 @@ export const KEY = {
   BLADE: 512,
   /**
    * Set with FIRE by a double click (the client's choice): the katana's special cut, the special
-   * of the cut the keys give (see CUT); with the laser rifle in hand, a grenade from its launcher.
-   * Ignored with the other guns.
+   * of the cut the keys give (see CUT). Set alone by G with the laser rifle in hand: a grenade from
+   * its launcher. Ignored with the other guns.
    */
   SPECIAL: 1024,
   /**

@@ -99,7 +99,8 @@ export interface Controls {
    * The KEY bits of the next step, read once per step. Same as `keys`, plus BLADE while the katana
    * is chosen and RAIL while the rail gun is, except for the step right after a double tap: it carries DASH and only the tapped
    * direction, so the dash goes that way whatever else is held, and nothing else is on the wire.
-   * The step after a double click carries FIRE and SPECIAL, however short the click was.
+   * The step after a double click carries FIRE and SPECIAL, however short the click was, but with
+   * the rifle chosen; the step after a press of G carries SPECIAL with the rifle chosen: a grenade.
    */
   take(): number;
   /** One live step of the own player, its state before and after: a katana or a rail gun picked up is chosen, losing every weapon chooses the gun. */
@@ -113,7 +114,8 @@ export interface Controls {
 /**
  * Click the canvas to lock the pointer; while locked the mouse looks, the keys move (WASD, Shift
  * sprints, Space jumps, C crouches, E gets in and out of a rover, a direction key pressed twice within DOUBLE_TAP_MS dashes that
- * way, the left button fires or cuts and a double click cuts the special, 1, 2 and 3 or the wheel pick
+ * way, the left button fires or cuts and a double click cuts the special, G launches a grenade with the
+ * rifle, 1, 2 and 3 or the wheel pick
  * the gun, the katana or the rail gun) and M calls `onMute`.
  */
 export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Controls => {
@@ -128,6 +130,8 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   /** When the left button was last pressed (ms), and a double click waiting for its step. */
   let clicked = -Infinity;
   let special = false;
+  /** G pressed, waiting for its step: a grenade when the rifle is the choice. */
+  let nade = false;
   /** The weapons the own player has as of the last step, for the wheel. */
   let have = owned();
   const c: Controls = {
@@ -137,9 +141,16 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     weapon: WEAPON.GUN,
     take() {
       const keys =
-        (pending ? dashKeys(c.keys, pending) : c.keys) | (special ? KEY.FIRE | KEY.SPECIAL : 0);
+        (pending ? dashKeys(c.keys, pending) : c.keys) |
+        (c.weapon == WEAPON.RIFLE
+          ? nade
+            ? KEY.SPECIAL
+            : 0
+          : special
+            ? KEY.FIRE | KEY.SPECIAL
+            : 0);
       pending = 0;
-      special = false;
+      special = nade = false;
       return withWeapon(keys, c.weapon);
     },
     track: (was, now) => {
@@ -196,6 +207,9 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     }
     if (e.code == 'KeyM' && !e.repeat && c.locked()) {
       onMute();
+    }
+    if (e.code == 'KeyG' && !e.repeat && c.locked()) {
+      nade = true;
     }
     if (bit && c.locked()) {
       // A press is a key going down: an auto-repeat is a hold, not a second tap.

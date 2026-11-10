@@ -1665,6 +1665,7 @@ export const createBody = (world?: World): Body => {
               digits: sp < 0 && on >= GUN_ON.digits,
               press: sp < 0 && kind != 2 ? span(poke(since, pressOf(kind)), 0.8, 1) : 0,
               tune: rail && sp < 0 ? tune(since, pressOf(2)) : 0,
+              nades: kind == 3 ? (me?.nades ?? 0) : undefined,
               id: me?.id,
               floor: me?.ground ? me.y : undefined,
               vel: me && [me.vx, me.vy, me.vz],

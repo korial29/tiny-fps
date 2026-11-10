@@ -131,8 +131,8 @@ describe('createInput', () => {
     });
     document.dispatchEvent(new Event('pointerlockchange'));
   };
-  const key = (type: string, code: string) =>
-    document.dispatchEvent(new KeyboardEvent(type, { code, cancelable: true }));
+  const key = (type: string, code: string, repeat = false) =>
+    document.dispatchEvent(new KeyboardEvent(type, { code, repeat, cancelable: true }));
   const move = (movementX: number, movementY: number) => {
     const e = new MouseEvent('mousemove');
     Object.defineProperties(e, {
@@ -436,7 +436,7 @@ describe('createInput', () => {
       expect(ctl.keys & ~KEY.FIRE).toBe(0);
     });
 
-    it('sends the double click with the rifle chosen as FIRE, SPECIAL and RIFLE on one step: a grenade', () => {
+    it('sends G with the rifle chosen as SPECIAL and RIFLE on one step: a grenade; a double click is two clicks', () => {
       let clock = 1000;
       vi.spyOn(performance, 'now').mockImplementation(() => clock);
       make();
@@ -447,9 +447,18 @@ describe('createInput', () => {
       expect(ctl.take()).toBe(KEY.RIFLE);
       clock += DOUBLE_CLICK_MS - 1;
       button('mousedown', 0);
-      expect(ctl.take()).toBe(KEY.FIRE | KEY.SPECIAL | KEY.RIFLE);
-      // Held on, the rifle fires: FIRE without SPECIAL.
       expect(ctl.take()).toBe(KEY.FIRE | KEY.RIFLE);
+      button('mouseup', 0);
+      key('keydown', 'KeyG');
+      expect(ctl.take()).toBe(KEY.SPECIAL | KEY.RIFLE);
+      // Held, G is one grenade: the next steps carry nothing of it, auto-repeat included.
+      key('keydown', 'KeyG', true);
+      expect(ctl.take()).toBe(KEY.RIFLE);
+      key('keyup', 'KeyG');
+      // Another weapon chosen, G does nothing.
+      ctl.weapon = WEAPON.GUN;
+      key('keydown', 'KeyG');
+      expect(ctl.take()).toBe(0);
     });
 
     it('sends one step of FIRE and SPECIAL after a double click, however short, and not after two slow clicks', () => {

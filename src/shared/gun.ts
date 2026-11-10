@@ -37,6 +37,7 @@ import {
   SPECIAL_LATE,
 } from './constants';
 import { forward, move, respawn } from './physics';
+import type { Body } from './physics';
 import { CUT, EV, KEY, MODE, SPECIAL_CUT } from './types';
 import type { Input, PlayerState } from './types';
 import type { World } from './world';
@@ -99,12 +100,19 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  *   With SPECIAL (a double click) the swing is the cut's special; its press within SPECIAL_LATE
  *   ticks of a cut's start turns that cut into it. The cut strikes `CUTS[cut].strike` ticks into
  *   its swing. The look is the input's, so both go where the player sees.
- * `armed` is false while the match is over: no weapon, no rack.
+ * `armed` is false while the match is over: no weapon, no rack. `bodies` are move()'s.
  */
-export const step = (p: PlayerState, i: Input, w: World, team: number, armed = true): Strike => {
+export const step = (
+  p: PlayerState,
+  i: Input,
+  w: World,
+  team: number,
+  armed = true,
+  bodies: readonly Body[] = [],
+): Strike => {
   const down = p.down > 0;
   const locked = !down && (p.lock ?? 0) > 0;
-  move(p, down || locked ? { ...i, keys: 0 } : i, w, team);
+  move(p, down || locked ? { ...i, keys: 0 } : i, w, team, bodies);
   // The rail gun cools on each step its bolt did not go out, slower while it is hot.
   p.heat = Math.max(0, (p.heat ?? 0) - (p.zapping ? 0 : p.hot ? 1 : HEAT_COOL));
   p.hot = !!p.hot && p.heat > HEAT_LOCK;

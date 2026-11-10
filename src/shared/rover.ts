@@ -5,10 +5,14 @@
 //
 // One clock a rover: the driver's inputs (ride(), on arrival at the host and in the predictor), or
 // the host's tick while nobody drives. Nothing but drive() moves a driven rover, or the replay is
-// no longer exact: no rover pushes another, no player pushes one.
+// no longer exact: no rover pushes another, no player pushes one. They are solid all the same: a
+// rover stops on another as on a wall (drive()'s fleet), and a player on foot walks into its body
+// and stands on it (hull(), move()'s bodies). A driver who hits a parked rover or a player is
+// replayed exactly; one whose obstacle moves meanwhile is corrected by the next snapshot.
 import { BOLT, DASH_COOLDOWN, DASH_TICKS, PLAYER_H, PLAYER_R, TICK_HZ } from './constants';
 import { step } from './gun';
-import { floorAt, forward, gravity, norm, shove } from './physics';
+import { floorAt, forward, gapTo, gravity, norm, shove } from './physics';
+import type { Body } from './physics';
 import { bound } from './relief';
 import { KEY, MODE, NOBODY } from './types';
 import type { Flying } from './plasma';
@@ -64,6 +68,8 @@ export const ROVER = {
   BODY: [1.15, 0, -1.15],
   BODY_H: 1.5,
   WHEEL_STEP: 0.6,
+  /** The share of its speed into another rover a rover bounces back with. */
+  BOUNCE: 0.3,
   /** A player this close to a rover's centre gets in; a rover this fast hurts an enemy, and this fast puts him down. */
   ENTER_R: 3,
   SPLAT_MIN: 6,
@@ -147,6 +153,15 @@ export const wheels = (r: Rover, w: World): [...Vec3, c: number][] =>
  */
 export const footprint = (r: Rover): Vec3[] => ROVER.BODY.map(a => at(r, a, 0, -DROP));
 
+/**
+ * The body as the players on foot and the other rovers meet it: the stadium round the front and
+ * rear circles of footprint(), RB wide and BODY_H tall. A player walks into it and stands on it.
+ */
+export const hull = (r: Rover): Body => {
+  const [a, , b] = footprint(r);
+  return { a, b, r: ROVER.RB, h: ROVER.BODY_H };
+};
+
 /** The map's rovers at rest on their spawns, nobody aboard. */
 export const park = (w: World): Rover[] =>
   (w.def.rovers ?? []).map(([x, y, z, yaw]) => ({
@@ -170,7 +185,8 @@ export const park = (w: World): Rover[] =>
 /**
  * One step of 1 / TICK_HZ s, in place. `i` is the driver's input as the wire rounds it (FORWARD and
  * BACK the throttle, JUMP the handbrake, its yaw where the nose is steered to), or undefined with
- * nobody at the wheel: the brake is on. Reads only the rover, the input and the world. Returns
+ * nobody at the wheel: the brake is on. Reads only the rover, the input, the world and the
+ * `fleet` (the map's rovers, itself skipped: walls it stops on, BOUNCE back, never pushed). Returns
  * whether it fell under the world's kill floor: the caller parks it again.
  *
  * The body is a point with a pitch and a roll on four springs. Each wheel reads the floor under
@@ -179,7 +195,12 @@ export const park = (w: World): Rover[] =>
  * turns toward the look as fast as the speed allows, and the tyres' grip decides how much of the
  * speed follows it. The rest drifts.
  */
-export const drive = (r: Rover, i: Input | undefined, w: World): boolean => {
+export const drive = (
+  r: Rover,
+  i: Input | undefined,
+  w: World,
+  fleet: readonly Rover[] = [],
+): boolean => {
   const { A, B, CMAX, K, D, KP2, KR2, HC, MU, MUL, TILT } = ROVER;
   const g = gravity(w);
   const keys = i ? i.keys : 0;
@@ -293,6 +314,31 @@ export const drive = (r: Rover, i: Input | undefined, w: World): boolean => {
       r.vz -= v * pz;
     }
   }
+  // The other rovers, each circle against their hulls; on the axis, out by the other's right. A
+  // touch closer than a tenth of a millimetre is no overlap: the float32 rounding of the other's
+  // own way out does not push this one.
+  for (const o of fleet) {
+    if (o === r) {
+      continue;
+    }
+    const h = hull(o);
+    for (const a of ROVER.BODY) {
+      const [x, y, z] = at(r, a, 0, -DROP);
+      const [dx, dz, oy] = gapTo(h, x, z);
+      const reach = 2 * ROVER.RB;
+      const d = sqrt(dx * dx + dz * dz);
+      if (d >= reach - 1e-4 || oy >= y + ROVER.BODY_H || oy + ROVER.BODY_H <= y) {
+        continue;
+      }
+      const [ox, oz] = forward(o.yaw);
+      const [nx, nz] = d ? [dx / d, dz / d] : [-oz, ox];
+      r.x += nx * (reach - d);
+      r.z += nz * (reach - d);
+      const v = min(0, r.vx * nx + r.vz * nz) * (1 + ROVER.BOUNCE);
+      r.vx -= v * nx;
+      r.vz -= v * nz;
+    }
+  }
   bound(r, w);
   for (const k of FLOATS) {
     r[k] = f32(r[k]);
@@ -366,10 +412,18 @@ export const leave = (p: PlayerState, r: Rover, s: 0 | 1, w: World): void => {
  * The driver's whole step, on the host and in the predictor alike: the rover is driven by his
  * input, he follows on his seat, and a press of USE gets him out. Returns drive()'s answer. A step
  * that takes him off his seat (move() puts a body under the kill floor back at a spawn) frees it.
+ * `fleet` is drive()'s.
  */
-export const ride = (p: PlayerState, r: Rover, i: Input, w: World, team: number): boolean => {
+export const ride = (
+  p: PlayerState,
+  r: Rover,
+  i: Input,
+  w: World,
+  team: number,
+  fleet: readonly Rover[] = [],
+): boolean => {
   const out = (i.keys & KEY.USE) !== 0 && (p.held & KEY.USE) === 0;
-  const fell = drive(r, i, w);
+  const fell = drive(r, i, w, fleet);
   // Unarmed at the wheel; the step keeps his timers and `held` running.
   step(p, i, w, team, false);
   if (p.mode !== MODE.RIDE) {

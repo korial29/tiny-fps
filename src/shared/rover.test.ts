@@ -16,7 +16,9 @@ import {
 } from '../../test/slope';
 import { duo } from '../../test/teams';
 import { BOLT, DASH_COOLDOWN, DASH_TICKS, PLAYER_R, SPRINT_SPEED, STEP_H } from './constants';
-import { spawn } from './physics';
+import { step } from './gun';
+import { gapTo, move, spawn } from './physics';
+import type { Body } from './physics';
 import { onWire } from './protocol';
 import { ground } from './relief';
 import {
@@ -26,6 +28,7 @@ import {
   bolts,
   drive,
   footprint,
+  hull,
   leave,
   park,
   ride,
@@ -33,7 +36,7 @@ import {
   wheels,
 } from './rover';
 import { EV, KEY, MODE, NOBODY, TEX } from './types';
-import type { Input, Rover } from './types';
+import type { Input, PlayerState, Rover } from './types';
 import { build } from './world';
 import type { Spawn, World } from './world';
 
@@ -865,6 +868,188 @@ describe('bolts', () => {
         expect(b.x + b.dx * t).toBeCloseTo(aim[0], 6);
         expect(b.y + b.dy * t).toBeCloseTo(aim[1], 6);
         expect(b.z + b.dz * t).toBeCloseTo(aim[2], 6);
+      }
+    }
+  });
+});
+
+describe('collisions', () => {
+  /** How far the player's centre is from the body's axis on the floor plane. */
+  const from = (p: PlayerState, o: Body): number => Math.hypot(...gapTo(o, p.x, p.z).slice(0, 2));
+  /** The least distance from a circle of r's body to o's axis, and the overlap of their heights. */
+  const gap = (r: Rover, o: Rover): number =>
+    Math.min(...footprint(r).map(([x, , z]) => Math.hypot(...gapTo(hull(o), x, z).slice(0, 2))));
+  /** A player on foot at (x, z) of the moon's flat ground, standing. */
+  const walker = (x: number, z: number): PlayerState => ({ ...spawn(1, flat, 0), x, z });
+  /** `n` steps of a player on foot toward `yaw` among the bodies. */
+  const walk = (p: PlayerState, n: number, keys: number, yaw: number, bodies: Body[]): void => {
+    for (let k = 0; k < n; k++) {
+      move(p, onWire(input(keys, yaw)), flat, 0, bodies);
+    }
+  };
+
+  it('gives the body as the stadium round the front and rear circles of the footprint', () => {
+    const r = rover(flat, 3, 4, 0.7);
+    const [front, , rear] = footprint(r);
+    expect(hull(r)).toEqual({ a: front, b: rear, r: RB, h: BODY_H });
+  });
+
+  it('stops a player walking into a parked rover from every side, and he slides along it', () => {
+    const r = rover(flat, 0, 0, 0.6);
+    const body = hull(r);
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      const [x, z] = [10 * Math.sin(a), 10 * Math.cos(a)];
+      const yaw = toward(x, z, 0, 0);
+      const p = walker(x, z);
+      let least = Infinity;
+      for (let n = 0; n < 240; n++) {
+        walk(p, 1, KEY.FORWARD | KEY.SPRINT, yaw, [body]);
+        least = Math.min(least, from(p, body));
+      }
+      // He came against it and round it, never into it, on the ground.
+      expect(least).toBeGreaterThan(RB + PLAYER_R - 1e-4);
+      expect(least).toBeLessThan(RB + PLAYER_R + 0.01);
+      expect(p.mode).toBe(MODE.GROUND);
+      expect(p.y).toBe(0);
+      // Without it he walks through.
+      const ghost = walker(x, z);
+      let through = Infinity;
+      for (let n = 0; n < 240; n++) {
+        walk(ghost, 1, KEY.FORWARD | KEY.SPRINT, yaw, []);
+        through = Math.min(through, from(ghost, body));
+      }
+      expect(through).toBeLessThan(0.5);
+    }
+    // Along its side he is not held: he slides on past its nose.
+    const side = rover(flat, 0, 0, 0);
+    const p = walker(-5, 0.5);
+    walk(p, 120, KEY.FORWARD, toward(-5, 0, 0, -4), [hull(side)]);
+    expect(p.z).toBeLessThan(-ROVER.BODY[0] - RB);
+    expect(from(p, hull(side))).toBeGreaterThan(RB + PLAYER_R - 1e-4);
+  });
+
+  it('lets a player land on top, stand there, jump up onto it and walk off it', () => {
+    const r = rover(flat, 0, 0, EAST);
+    const body = hull(r);
+    const top = footprint(r)[1][1] + BODY_H;
+    const p = { ...walker(0.5, 0.2), y: 4 };
+    walk(p, 120, 0, 0, [body]);
+    expect(p.mode).toBe(MODE.GROUND);
+    expect(p.y).toBeCloseTo(top, 3);
+    // It is too tall to walk up: he jumps onto it from the ground (half gravity).
+    const q = walker(0, 5);
+    let on = false;
+    for (let n = 0; n < 120 && !on; n++) {
+      walk(q, 1, KEY.FORWARD | (n % 2 ? 0 : KEY.JUMP), 0, [body]);
+      on = q.mode === MODE.GROUND && q.y > top - 0.01;
+    }
+    expect(on).toBe(true);
+    expect(BODY_H).toBeGreaterThan(STEP_H);
+    // And off the far side, down to the ground.
+    walk(q, 120, KEY.FORWARD, 0, [body]);
+    expect(q.z).toBeLessThan(-RB - PLAYER_R);
+    expect(q.y).toBe(0);
+    expect(q.mode).toBe(MODE.GROUND);
+  });
+
+  it('pushes a player out of a rover that drove into him slowly', () => {
+    const r = rover(flat, 0, 0, EAST);
+    const p = walker(2.6, 0);
+    walk(p, 1, 0, 0, [hull(r)]);
+    expect(from(p, hull(r))).toBeGreaterThan(RB + PLAYER_R - 1e-4);
+    // Ahead of the nose, out ahead of it.
+    expect(p.x).toBeGreaterThan(ROVER.BODY[0] + RB);
+    // Dead on the axis: out by its right.
+    const q = walker(0, 0);
+    walk(q, 1, 0, 0, [hull(r)]);
+    expect(q.z).toBeCloseTo(RB + PLAYER_R, 4);
+  });
+
+  it('does not touch the players in its seats', () => {
+    const go = (bodies: boolean): [PlayerState, PlayerState, Rover] => {
+      const r = rover(flat, 0, 0, EAST);
+      const [d, s] = [spawn(1, flat, 0), spawn(2, flat, 1)];
+      board(d, r, 0);
+      board(s, r, 1);
+      for (let n = 0; n < 180; n++) {
+        const i = onWire(
+          input(KEY.FORWARD | (n % 40 === 0 ? KEY.JUMP : 0), EAST + Math.sin(n / 30)),
+        );
+        ride(d, r, i, flat, 0, bodies ? [r] : []);
+        step(s, i, flat, 0, true, bodies ? [hull(r)] : []);
+        seat(s, r, 1);
+        expect([d.mode, s.mode]).toEqual([MODE.RIDE, MODE.RIDE]);
+      }
+      return [d, s, r];
+    };
+    const [d, s, r] = go(true);
+    expect(speeds(r).all).toBeGreaterThan(8);
+    expect(go(false)).toEqual([d, s, r]);
+  });
+
+  it('stops a rover on another, which it does not push, and bounces it back a little', () => {
+    const go = (fleet: boolean, yaw = 0): { a: Rover; b: Rover; least: number; before: number } => {
+      const a = rover(flat, -20, 0, EAST);
+      const b = rover(flat, 0, 0, yaw);
+      const both = fleet ? [a, b] : [];
+      const still = (): number[] => [b.x, b.z, b.vx, b.vz, b.yaw];
+      const parked = still();
+      let [least, before] = [Infinity, 0];
+      for (let n = 0; n < 300; n++) {
+        // Its speed on the last step before the first touch.
+        before = least > 2 * RB + 0.5 ? speeds(a).along : before;
+        drive(a, onWire(input(KEY.FORWARD, EAST)), flat, both);
+        drive(b, undefined, flat, both);
+        least = Math.min(least, gap(a, b));
+        if (fleet) {
+          expect(still()).toEqual(parked);
+        }
+      }
+      return { a, b, least, before };
+    };
+    for (const yaw of [0, EAST, 0.8]) {
+      const { a, least, before } = go(true, yaw);
+      expect(least).toBeGreaterThan(2 * RB - 1e-3);
+      expect(before).toBeGreaterThan(10);
+      // Square on, against it at the end, its engine still pushing: no further on. At an angle it
+      // slides off the other's side.
+      if (yaw !== 0.8) {
+        expect(a.x).toBeLessThan(0);
+        expect(speeds(a).along).toBeLessThan(before / 2);
+      }
+      expect(go(true, yaw)).toEqual(go(true, yaw));
+    }
+    // The first contact sends it back: its speed toward the other turns round.
+    const a = rover(flat, -6, 0, EAST);
+    const b = rover(flat, 0, 0, 0);
+    Object.assign(a, { vx: 10 });
+    let back = false;
+    for (let n = 0; n < 60 && !back; n++) {
+      drive(a, undefined, flat, [a, b]);
+      back = a.vx < 0;
+    }
+    expect(back).toBe(true);
+    // Without a fleet the two pass through each other.
+    expect(go(false).least).toBeLessThan(0.5);
+  });
+
+  it('keeps two rovers driven at each other apart: head on they stop, off centre they scrape past', () => {
+    for (const dz of [0, 0.5]) {
+      const a = rover(flat, -20, 0, EAST);
+      const b = rover(flat, 20, dz, WEST);
+      let least = Infinity;
+      for (let n = 0; n < 300; n++) {
+        drive(a, onWire(input(KEY.FORWARD, EAST)), flat, [a, b]);
+        drive(b, onWire(input(KEY.FORWARD, WEST)), flat, [a, b]);
+        least = Math.min(least, gap(a, b), gap(b, a));
+      }
+      // Each moves out of the other on its own step: at most one step of the other's into it.
+      expect(least).toBeGreaterThan(2 * RB - 0.3);
+      if (dz) {
+        expect(Math.abs(b.z - a.z)).toBeGreaterThan(2 * RB);
+      } else {
+        expect(b.x - a.x).toBeGreaterThan(2 * (BODY[0] + RB) - 0.3);
       }
     }
   });

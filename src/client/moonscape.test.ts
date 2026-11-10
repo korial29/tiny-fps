@@ -110,6 +110,7 @@ describe('moonscape', () => {
     }
   });
 
+  // Every triangle of the terrain against the lattice: seconds on a slow runner.
   it("draws the lattice's own triangles inside the bound, split as ground() splits them", () => {
     const { x0, z0, nx, cell, h } = relief;
     const drawn = new Set<string>();
@@ -152,7 +153,7 @@ describe('moonscape', () => {
     }
     expect(squares).toBeGreaterThan(17000);
     expect(drawn.size).toBeGreaterThanOrEqual(2 * squares);
-  });
+  }, 30_000);
 
   it('leaves the arena to its brushes and closes the relief with no open edge but round it and at the far side of the wall', () => {
     expect(land.some(t => t.some(inArena))).toBe(false);

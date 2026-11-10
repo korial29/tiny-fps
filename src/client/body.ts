@@ -71,6 +71,7 @@ import { add, basis, dot, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
+import { armor } from './armor';
 import { CUFF, CUFF_SIDES, body, palette, skin } from './skin';
 import { createTrail } from './trail';
 
@@ -1542,7 +1543,11 @@ export const createBody = (world?: World): Body => {
         // A space suit with its helmet (see palette()): its gloves cover the fingers too.
         const suit = !!world?.def.helmets;
         const colors = palette(color, undefined, undefined, suit);
+        const from = out.length;
         skin(out, body(2), s, colors);
+        if (suit) {
+          armor(out, from, body(2));
+        }
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
         // The right thumb presses the button of the katana or the plasma gun as it comes on.
         const tk = me?.wield ? 1 : me ? kindOf(me) : -1;

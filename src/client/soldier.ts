@@ -441,23 +441,33 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
   const { s, sink, yaw, carry } = stance(r);
   const blade = p.wield && !p.down && !driving(r);
   if (r.cut) {
-    skin(out, cut(lod, r.cut.limb)[0], s, colors, 1, 0.3);
+    const cs = cut(lod, r.cut.limb)[0];
+    const at = out.length;
+    skin(out, cs, s, colors, 1, 0.3);
     // The stump's face is the last vertex drawn.
     r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
+    if (helmets) {
+      armor(out, at, cs);
+    }
     piece(out, r.cut, colors, lod, sink);
   } else {
     const from = out.length;
     // His face: the eyes shut down, in a grimace and in a blink every few seconds; the mouth open
     // in a cut's shout, a dash's breath, a grimace, slack down.
     const down = p.down > 0;
+    const bs = body(lod);
     skin(
       out,
-      body(lod),
+      bs,
       s,
       colors,
       +(down || r.hurt > 0 || (r.t + p.id * 0.7) % 3.7 < 0.13),
       r.prog >= 0 ? 1 : r.hurt > 0 ? 0.6 : down ? 0.3 : r.dash * 0.5,
     );
+    // The space suit's armour, cut out of the skin just drawn.
+    if (helmets) {
+      armor(out, from, bs);
+    }
     pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
     if (k > 0) {
       dissolve(out, from, k);
@@ -471,7 +481,6 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
   // The life support pack on the back of a space suit.
   if (helmets) {
     pack(out, s.pos[J.CHEST], s.rot[J.CHEST], color, lod);
-    armor(out, s.pos, s.rot, lod);
     shoulders(
       out,
       [J.ARM_L, J.ARM_R].map(j => [s.pos[j], s.rot[j]] as [Vec3, Quat]),

@@ -1,245 +1,178 @@
 // The armour of the moon's space suit (the user, 2026-11-10: the shoulder pads part of an armour,
-// white hard plates over the suit as the troopers of space operas wear, not copied): a chest plate
-// cut round the neck, three bands over the belly, a plate on each thigh, the knees and the
-// forearms. Each plate is a piece of the skin's own sections (skin.ts), grown out a little and
-// carried by one joint, so it goes with the body; a grey backing a little larger shows round it as
-// its edge. Built once per level of detail in each joint's rest frame (metres, -z the front).
-import { cross, pow, sub, unit } from './helmet';
-import type { Spot } from './helmet';
-import { GLOSS, STRIDE, aim, place } from './mesh';
-import type { Vec3 } from './mesh';
-import { JOINT as J, turn } from './rig';
-import type { Quat } from './rig';
+// white hard plates over the suit as the troopers of space operas wear, not copied; then: fitted to
+// the body's shape, the chest and the belly pieces 2 cm apart). Each plate is cut out of the skin
+// as drawn this frame: its triangles in the plate's region of the body at rest are clipped to the
+// region's edges exactly, then set off the skin along its normals, glossy white; a grey copy of a
+// slightly larger region, nearer the skin, shows round it as its edge. So a plate has the body's
+// own shape and bends with it. No state: a pure function of the skin just drawn.
+import { LIMB } from '../shared/types';
+import { GLOSS, STRIDE } from './mesh';
+import type { Skin } from './skin';
+
+/** Why a plate applies to a triangle: the trunk, an arm or a leg (both sides). */
+const PART = { TRUNK: 0, ARM: 1, LEG: 2 } as const;
 
 /**
- * A plate: the joint carrying it and that joint's rest place, then sections up its piece of the
- * body, each [height, centre ahead, half width, half depth] as the skin's rings (world rest pose,
- * the right side), the cross-section's exponent, the angles it spans round the body (0 the front,
- * 90 the right, degrees), its bottom and top at each angle (a), and how far out of the skin.
+ * A plate's region on the body at rest (metres, -z the front, +x the right): the part it is on,
+ * the heights it spans (its top may dip with the angle, `dip` at the front), and the angles round
+ * the part it spans (degrees from the front, + outward on a limb, toward +x on the trunk), round
+ * the part's middle line at `cx` across (mirrored on the left).
  */
-interface Plate {
-  joint: number;
-  at: Vec3;
-  rings: number[][];
-  e: number;
-  span: [number, number];
-  low: (a: number) => number;
-  high: (a: number) => number;
-  off: number;
-  /** Built for the right side, and again mirrored on the left joint. */
-  mirror?: number;
+interface Region {
+  part: number;
+  cx: number;
+  y: [number, number];
+  a: [number, number];
+  /** How much the top comes down at the front: the neck's cut. */
+  dip?: number;
 }
 
-const flat = (y: number) => () => y;
-const rad = (d: number) => (d * Math.PI) / 180;
+/** The gap the user asked between the chest plate and the belly's plates, and between those. */
+export const GAP = 0.02;
 
-export const PLATES: Plate[] = [
-  // The chest plate, from under the ribs to the collar, dipping round the neck.
-  {
-    joint: J.CHEST,
-    at: [0, 1.3, 0],
-    rings: [
-      [1.19, 0.012, 0.156, 0.122],
-      [1.25, 0.011, 0.158, 0.127],
-      [1.3, 0.014, 0.162, 0.131],
-      [1.37, 0.015, 0.166, 0.137],
-      [1.41, 0.007, 0.175, 0.138],
-      [1.445, -0.003, 0.2, 0.135],
-      [1.475, -0.0085, 0.19, 0.1265],
-      [1.5, -0.0115, 0.175, 0.114],
-    ],
-    e: 2.3,
-    span: [-64, 64],
-    low: flat(1.205),
-    high: a => 1.5 - 0.045 * Math.cos(rad(a) * 1.4) ** 2,
-    off: 0.014,
-  },
-  // The belly's three bands, a gap between each, on the spine.
-  ...[
-    [1.03, 1.077],
-    [1.085, 1.132],
-    [1.14, 1.19],
-  ].map(([lo, hi]): Plate => ({
-    joint: J.SPINE,
-    at: [0, 1.1, 0],
-    rings: [
-      [1.02, 0.011, 0.166, 0.12],
-      [1.075, 0.012, 0.159, 0.12],
-      [1.12, 0.012, 0.156, 0.121],
-      [1.2, 0.012, 0.157, 0.124],
-    ],
-    e: 2.3,
-    span: [-52, 52],
-    low: flat(lo),
-    high: flat(hi),
-    off: 0.012,
-  })),
-  // A plate down the front of each thigh.
-  {
-    joint: J.THIGH_R,
-    mirror: J.THIGH_L,
-    at: [0.1, 0.93, 0],
-    rings: [
-      [0.87, 0.008, 0.09, 0.106],
-      [0.85, 0.006, 0.087, 0.103],
-      [0.79, 0.002, 0.079, 0.093],
-      [0.72, -0.002, 0.074, 0.084],
-      [0.66, -0.002, 0.072, 0.086],
-      [0.6, -0.003, 0.072, 0.088],
-    ],
-    e: 2,
-    span: [-62, 78],
-    low: flat(0.61),
-    high: a => 0.85 + 0.012 * Math.sin(rad(a)),
-    off: 0.011,
-  },
-  // The knees.
-  {
-    joint: J.SHIN_R,
-    mirror: J.SHIN_L,
-    at: [0.1, 0.49, 0],
-    rings: [
-      [0.57, -0.003, 0.077, 0.084],
-      [0.55, -0.003, 0.081, 0.081],
-      [0.52, -0.004, 0.083, 0.082],
-      [0.49, -0.004, 0.083, 0.082],
-      [0.455, -0.001, 0.08, 0.079],
-    ],
-    e: 2,
-    span: [-55, 55],
-    low: a => 0.462 + 0.01 * Math.abs(rad(a)),
-    high: a => 0.565 - 0.012 * Math.abs(rad(a)),
-    off: 0.013,
-  },
-  // The outer side of each forearm.
-  {
-    joint: J.FOREARM_R,
-    mirror: J.FOREARM_L,
-    at: [0.222, 1.18, 0],
-    rings: [
-      [1.16, -0.002, 0.051, 0.058],
-      [1.135, -0.002, 0.049, 0.056],
-      [1.09, -0.001, 0.05, 0.058],
-      [1.05, -0.001, 0.044, 0.055],
-      [1.0, 0, 0.041, 0.05],
-    ],
-    e: 2,
-    span: [20, 160],
-    low: flat(1.005),
-    high: flat(1.15),
-    off: 0.009,
-  },
+export const REGIONS: Region[] = [
+  // The chest plate, from under the ribs to the collar, cut round the neck.
+  { part: PART.TRUNK, cx: 0, y: [1.195, 1.5], a: [-64, 64], dip: 0.045 },
+  // The belly's two plates, GAP apart and GAP under the chest's.
+  { part: PART.TRUNK, cx: 0, y: [1.115, 1.195 - GAP], a: [-54, 54] },
+  { part: PART.TRUNK, cx: 0, y: [1.035, 1.115 - GAP], a: [-54, 54] },
+  // The front of each thigh, the knees, the outer side of each forearm.
+  { part: PART.LEG, cx: 0.1, y: [0.61, 0.85], a: [-62, 78] },
+  { part: PART.LEG, cx: 0.1, y: [0.462, 0.565], a: [-55, 55] },
+  { part: PART.ARM, cx: 0.222, y: [1.005, 1.15], a: [20, 160] },
 ];
+
+/** How far the plates stand off the skin, and their edge; how much larger the edge's region is. */
+const OFF = 0.01;
+const EDGE_OFF = 0.005;
+const MARGIN = { y: 0.003, a: 2.5 };
 
 const WHITE = [0.9, 0.91, 0.93];
-const EDGE = [0.42, 0.44, 0.48];
+const EDGE = [0.26, 0.27, 0.3];
 
-/** Columns round and rows up of a plate, far, near, close. */
-const DETAIL = [
-  [5, 2],
-  [10, 4],
-  [18, 8],
-];
+const partOf = (l: number) =>
+  l == LIMB.NONE
+    ? PART.TRUNK
+    : l == LIMB.ARM_L || l == LIMB.ARM_R
+      ? PART.ARM
+      : l == LIMB.LEG_L || l == LIMB.LEG_R
+        ? PART.LEG
+        : -1;
 
-/** The section of `p` at height y, eased between its rings: [centre ahead, half width, half depth]. */
-const section = (p: Plate, y: number) => {
-  const r = p.rings;
-  const below = r.findIndex(q => q[0] < y);
-  const i = Math.max(0, Math.min((below < 0 ? r.length : below) - 1, r.length - 2));
-  const [a, b] = [r[i], r[i + 1]];
-  const k = Math.max(0, Math.min((a[0] - y) / (a[0] - b[0]), 1));
-  return [1, 2, 3].map(j => a[j] + (b[j] - a[j]) * k);
+/** A corner being clipped: its place at rest, then as drawn and its normal. */
+type Corner = number[];
+
+/** The angle of the rest point (x, z) round the region's middle line, degrees: + outward on a limb, toward +x on the trunk. */
+const angle = (g: Region, x: number, z: number) => {
+  const side = g.part == PART.TRUNK ? 1 : Math.sign(x) || 1;
+  return (Math.atan2((x - g.cx * side) * side, -z) * 180) / Math.PI;
 };
 
-/** The plate's surface at angle a (degrees) and height y, `off` out of the skin, in the joint's frame (the right side; `m` -1 mirrors it). */
-const point = (p: Plate, a: number, y: number, off: number, m: number): Vec3 => {
-  const [co, w, d] = section(p, y);
-  const t = rad(a);
+/** The region's constraints on a rest point, each >= 0 inside, grown by `grow` (0 or 1 margin). */
+const limits = (g: Region, grow: number) => {
+  const [dy, da] = [MARGIN.y * grow, MARGIN.a * grow];
   return [
-    m * (w + off) * pow(Math.sin(t), 2 / p.e),
-    y - p.at[1],
-    -co - (d + off) * pow(Math.cos(t), 2 / p.e),
+    (c: Corner) => c[1] - (g.y[0] - dy),
+    (c: Corner) => {
+      const a = angle(g, c[0], c[2]);
+      const top = g.y[1] - (g.dip ?? 0) * Math.cos((a * Math.PI * 1.4) / 180) ** 2;
+      return top + dy - c[1];
+    },
+    (c: Corner) => angle(g, c[0], c[2]) - (g.a[0] - da),
+    (c: Corner) => g.a[1] + da - angle(g, c[0], c[2]),
   ];
 };
 
-/** The plate as triangles: its face, and the grey backing round it. */
-const build = (p: Plate, m: number, [cols, rows]: number[]) => {
-  const out: number[] = [];
-  const grid = (grow: number, off: number, col: number[]) => {
-    const [a0, a1] = [p.span[0] - grow * 4, p.span[1] + grow * 4];
-    const at = (i: number, j: number) => {
-      const a = a0 + ((a1 - a0) * i) / cols;
-      const [lo, hi] = [p.low(a) - grow * 0.004, p.high(a) + grow * 0.004];
-      return point(p, a, lo + ((hi - lo) * j) / rows, off, m);
-    };
-    // Rows along the angle, open: each a strip of quads.
-    for (let j = 0; j < rows; j++) {
-      for (let i = 0; i < cols; i++) {
-        const q = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)];
-        const n = unit(cross(sub(q[1], q[0]), sub(q[3], q[0])));
-        // Out of the body: away from the section's middle.
-        const mid: Vec3 = [0, q[0][1], 0];
-        const o = sub(q[0], mid);
-        const s = n[0] * o[0] + n[2] * o[2] < 0 ? -1 : 1;
-        const nn: Vec3 = [n[0] * s, n[1] * s, n[2] * s];
-        const spots = q.map((v, k) => {
-          // Smooth across: the normal of the section's curve at each corner.
-          const [ii, jj] = [[i, i + 1, i + 1, i][k], [j, j, j + 1, j + 1][k]];
-          const [l, r] = [at(Math.max(ii - 0.5, 0), jj), at(Math.min(ii + 0.5, cols), jj)];
-          const [dn, up] = [at(ii, Math.max(jj - 0.5, 0)), at(ii, Math.min(jj + 0.5, rows))];
-          let c = unit(cross(sub(r, l), sub(up, dn)));
-          if (c[0] * nn[0] + c[1] * nn[1] + c[2] * nn[2] < 0) {
-            c = [-c[0], -c[1], -c[2]];
-          }
-          return [v, c] as Spot;
-        });
-        for (const tri of [
-          [spots[0], spots[1], spots[2]],
-          [spots[0], spots[2], spots[3]],
-        ]) {
-          const c = cross(sub(tri[1][0], tri[0][0]), sub(tri[2][0], tri[0][0]));
-          if (Math.hypot(...c) < 1e-10) {
-            continue;
-          }
-          const flip = c[0] * tri[0][1][0] + c[1] * tri[0][1][1] + c[2] * tri[0][1][2] < 0;
-          (flip ? [tri[0], tri[2], tri[1]] : tri).forEach(([v, n]) =>
-            out.push(...v, ...n, col[0], col[1], -1, col[2]),
-          );
-        }
-      }
+const mix = (p: Corner, q: Corner, t: number) => p.map((v, i) => v + (q[i] - v) * t);
+
+/** Clips the polygon `poly` to where `f` >= 0 (Sutherland-Hodgman, corners eased along the edges). */
+const clip = (poly: Corner[], f: (c: Corner) => number) => {
+  const out: Corner[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const [p, q] = [poly[i], poly[(i + 1) % poly.length]];
+    const [fp, fq] = [f(p), f(q)];
+    if (fp >= 0) {
+      out.push(p);
     }
-  };
-  grid(1, p.off - 0.004, EDGE);
-  const from = out.length;
-  grid(0, p.off, WHITE);
-  for (let i = from + 8; i < out.length; i += STRIDE) {
-    out[i] = GLOSS;
+    if (fp >= 0 != fq >= 0) {
+      out.push(mix(p, q, fp / (fp - fq)));
+    }
   }
   return out;
 };
 
-const kits = new Map<number, [number, number[]][]>();
-
-const kit = (lod: number) => {
-  const level = Math.min(lod, 2);
-  let k = kits.get(level);
-  if (!k) {
-    k = PLATES.flatMap(p => [
-      [p.joint, build(p, 1, DETAIL[level])] as [number, number[]],
-      ...(p.mirror === undefined
-        ? []
-        : [[p.mirror, build(p, -1, DETAIL[level])] as [number, number[]]]),
-    ]);
-    kits.set(level, k);
+/** Appends the polygon as a fan, each corner set `off` along its normal, in `col` on `layer`. */
+const emit = (out: number[], poly: Corner[], off: number, col: number[], layer: number) => {
+  const put = (c: Corner) => {
+    const l = Math.hypot(c[6], c[7], c[8]) || 1;
+    const [nx, ny, nz] = [c[6] / l, c[7] / l, c[8] / l];
+    out.push(
+      c[3] + nx * off,
+      c[4] + ny * off,
+      c[5] + nz * off,
+      nx,
+      ny,
+      nz,
+      col[0],
+      col[1],
+      layer,
+      col[2],
+    );
+  };
+  for (let i = 1; i + 1 < poly.length; i++) {
+    put(poly[0]);
+    put(poly[i]);
+    put(poly[i + 1]);
   }
-  return k;
 };
 
-/** Appends the armour at level of detail `lod` on the solved skeleton's joints (`pos`, `rot`). */
-export const armor = (out: number[], pos: Vec3[], rot: Quat[], lod: number) => {
-  const [r, u, f] = aim([0, 0, -1], [1, 0, 0]);
-  for (const [j, src] of kit(lod)) {
-    const q = rot[j];
-    place(out, src, pos[j], [turn(q, r), turn(q, u), turn(q, f)], [0, 0, 0], 1);
+const LIMITS = [0, 1].map(grow => REGIONS.map(g => limits(g, grow)));
+/** Each region's heights with its margin, to pass over the triangles out of all reach at once. */
+const SPANS = REGIONS.map(g => [g.y[0] - MARGIN.y, g.y[1] + MARGIN.y]);
+
+/**
+ * Appends the armour cut out of the skin `s` drawn into `out` from the float `from` on (skin()
+ * writes three vertices per triangle of s.t, in order).
+ */
+export const armor = (out: number[], from: number, s: Skin) => {
+  const { t, v, l } = s;
+  if (!l) {
+    return;
   }
+  const end = out.length;
+  for (let k = 0; k < t.length / 3; k++) {
+    const part = partOf(l[k]);
+    if (part < 0) {
+      continue;
+    }
+    const ys = [0, 1, 2].map(c => v[t[k * 3 + c] * 6 + 1]);
+    const [lo, hi] = [Math.min(...ys), Math.max(...ys)];
+    for (let g = 0; g < REGIONS.length; g++) {
+      if (REGIONS[g].part != part || hi < SPANS[g][0] || lo > SPANS[g][1]) {
+        continue;
+      }
+      const tri: Corner[] = [0, 1, 2].map(c => {
+        const i = t[k * 3 + c] * 6;
+        const o = from + (k * 3 + c) * STRIDE;
+        return [
+          v[i],
+          v[i + 1],
+          v[i + 2],
+          out[o],
+          out[o + 1],
+          out[o + 2],
+          out[o + 3],
+          out[o + 4],
+          out[o + 5],
+        ];
+      });
+      for (const grow of [1, 0]) {
+        const poly = LIMITS[grow][g].reduce(clip, tri);
+        if (poly.length >= 3) {
+          emit(out, poly, grow ? EDGE_OFF : OFF, grow ? EDGE : WHITE, grow ? -1 : GLOSS);
+        }
+      }
+    }
+  }
+  return out.length - end;
 };

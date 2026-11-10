@@ -11,9 +11,32 @@ import {
 import { STILL } from '../shared/physics';
 import { CUT, MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { FINGER_SIDES, KATANA_LEFT, createBody, finger, hand, phalanges } from './body';
+import {
+  CAPSULE_HOLD,
+  FINGER_SIDES,
+  KATANA_LEFT,
+  createBody,
+  finger,
+  hand,
+  phalanges,
+} from './body';
 import type { Body } from './body';
-import { MUZZLE, REAR, button, foregrip, grip, gun, readout } from './gun';
+import {
+  GUARD,
+  MUZZLE,
+  REAR,
+  RIFLE_GRIP,
+  RIFLE_HOLD,
+  RIFLE_RISE,
+  axes as gunAxes,
+  button,
+  foregrip,
+  grip,
+  gun,
+  loadFrame,
+  readout,
+  swapOf,
+} from './gun';
 import { BEHIND, BOW, axes, ends } from './katana';
 import { SHINE, STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
@@ -1530,21 +1553,74 @@ describe('the katana in both hands', () => {
 });
 
 describe('the laser rifle in both hands', () => {
-  it('holds the left hand under its handguard, the thumb along it and the hand across and up its right side, looking level, down or up', () => {
-    const body = watch(man({ ammo: -1, rifle: 100, clip: 20, rifled: true }), 90);
-    for (const pitch of [0, -0.6, 0.5]) {
-      const s = body.pose([0, EYE, 0], 0, pitch)!;
+  const rifle = (o: Partial<PlayerState> = {}) =>
+    man({ ammo: -1, rifle: 100, clip: 20, rifled: true, ...o });
+  /** The poses the rifle is held in: looking level, down and up, crouched, on a run, as a shot kicks. */
+  const POSES: [string, PlayerState, number, number][] = [
+    ['level', rifle(), 0, 0],
+    ['down', rifle(), -0.6, 0],
+    ['up', rifle(), 0.5, 0],
+    ['crouched', rifle({ mode: MODE.CROUCH }), 0, 0],
+    ['crouched, up', rifle({ mode: MODE.CROUCH }), 0.5, 0],
+    ['on a run', rifle({ vz: -6 }), 0, 0],
+    ['firing', rifle(), 0, 1],
+  ];
+
+  it('holds the left hand under its handguard, the thumb along it and the hand across under it, in every pose', () => {
+    for (const [name, p, pitch, kick] of POSES) {
+      const body = createBody();
+      for (let i = 0; i < 90; i++) {
+        body.update(p, DT, kick);
+      }
+      const s = pose(body, p, pitch);
       const [at, g, across] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R], 3);
       const q = s.rot[J.HAND_L];
       const [fing, x, thumb] = [turn(q, [0, -1, 0]), turn(q, [1, 0, 0]), turn(q, [0, 0, -1])];
       const palm = add(
-        add(s.pos[J.HAND_L], fing.map(v => v * 0.078) as Vec3),
-        x.map(v => v * 0.022) as Vec3,
+        add(s.pos[J.HAND_L], fing.map(v => v * RIFLE_HOLD[0]) as Vec3),
+        x.map(v => v * RIFLE_HOLD[1]) as Vec3,
       );
-      // Within 2.5 cm: the hand turned to a given way (wield()'s `held`), as the katana's left hand is.
-      expect(away(palm, at), `pitch ${pitch}`).toBeLessThan(0.025);
-      expect(dot(thumb, g)).toBeGreaterThan(0.7);
-      expect(dot(fing, across!)).toBeGreaterThan(0.7);
+      // Crouched the shoulder comes after the hand: it does not stop short of the handguard.
+      expect(away(palm, at), name).toBeLessThan(0.005);
+      expect(dot(thumb, g), name).toBeGreaterThan(0.9);
+      expect(dot(fing, across!), name).toBeGreaterThan(0.9);
+    }
+  });
+
+  it('carries the handguard in the palm, the fingers up its right side and the thumb closed on its left, none through it', () => {
+    // The rifle's section where the hand is, in its own right and up, along its underside: the
+    // handguard, a block GUARD round RIFLE_GRIP, under a body as wide.
+    const [HALF, UNDER] = [GUARD[0] + 0.001, RIFLE_GRIP[1] - GUARD[1]];
+    for (const [name, p, pitch, kick] of POSES) {
+      const body = createBody();
+      for (let i = 0; i < 90; i++) {
+        body.update(p, DT, kick);
+      }
+      const s = pose(body, p, pitch);
+      const at = grip(s.pos[J.HAND_R], s.rot[J.HAND_R]);
+      const ax = gunAxes(s.rot[J.HAND_R]);
+      const hand = draw(body, p, pitch)
+        .filter(v => [GLOVE, FLESH].some(c => c.every((n, i) => v.c[i] == n)))
+        .filter(v => away(v.at, s.pos[J.HAND_L]) < 0.16)
+        .map(v => ax.map(a => dot(sub(v.at, at), a)))
+        .filter(([, , f]) => f > 0.05)
+        .map(([r, u, f]) => [r, u - RIFLE_RISE * (f + RIFLE_GRIP[2]), f]);
+      /** How deep a point is in the rifle: negative outside. */
+      const deep = ([r, u]: number[]) => Math.min(HALF - Math.abs(r), u - UNDER);
+      expect(Math.max(...hand.map(deep)), name).toBeLessThan(0.008);
+      // The palm on the block's underside, across its whole width.
+      const under = hand.filter(([r, u]) => Math.abs(r) < HALF && u < UNDER);
+      expect(Math.min(...under.map(([, u]) => UNDER - u)), name).toBeLessThan(0.003);
+      expect(Math.max(...under.map(([r]) => r)), name).toBeGreaterThan(HALF - 0.005);
+      expect(Math.min(...under.map(([r]) => r)), name).toBeLessThan(0.005 - HALF);
+      // The fingers on the right flank and the thumb on the left one, both up past the block.
+      for (const side of [1, -1]) {
+        const on = hand.filter(
+          ([r, u]) => r * side > HALF && r * side < HALF + 0.03 && u > UNDER + 0.01,
+        );
+        expect(Math.min(...on.map(([r]) => r * side - HALF)), name).toBeLessThan(0.003);
+        expect(Math.max(...on.map(([, u]) => u)), name).toBeGreaterThan(UNDER + 0.03);
+      }
     }
   });
 });
@@ -1566,6 +1642,33 @@ describe('the rail gun in both hands', () => {
       expect(g[1]).toBeGreaterThan(0.6);
     }
   });
+  it('closes the left hand round the capsule as it screws a new one in, not beside it', () => {
+    for (const reload of [34, 30, 26, 21, 17, 13]) {
+      const p = man({ rail: 100, railed: true, reload });
+      const body = watch(p, 90);
+      const s = pose(body, p);
+      const [foot, [, , up]] = loadFrame(
+        grip(s.pos[J.HAND_R], s.rot[J.HAND_R]),
+        gunAxes(s.rot[J.HAND_R]),
+        2,
+        swapOf(p),
+      );
+      const q = s.rot[J.HAND_L];
+      const hollow = add(
+        add(s.pos[J.HAND_L], turn(q, [0, -1, 0]).map(v => v * CAPSULE_HOLD[0]) as Vec3),
+        turn(q, [1, 0, 0]).map(v => v * CAPSULE_HOLD[1]) as Vec3,
+      );
+      // The capsule's axis through the hollow of the hand, between its base and its cap.
+      const d = sub(hollow, foot);
+      const t = dot(d, up);
+      expect(t, `reload ${reload}`).toBeGreaterThan(0.02);
+      expect(t, `reload ${reload}`).toBeLessThan(0.06);
+      expect(Math.hypot(...sub(d, up.map(v => v * t) as Vec3)), `reload ${reload}`).toBeLessThan(
+        0.006,
+      );
+    }
+  });
+
   /** The polished metal drawn: the gun's, none when it is put away. */
   const metal = (body: Body, p: PlayerState) => {
     const out: number[] = [];

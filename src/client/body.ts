@@ -27,6 +27,9 @@ import type { Floor } from './gait';
 import {
   GUN_ON,
   axes as gunAxes,
+  RIFLE_CURL,
+  RIFLE_HOLD,
+  RIFLE_TILT,
   grip as gunGrip,
   pressAt,
   buttonAt,
@@ -216,8 +219,19 @@ export const shrug = (q: Pose, s: Solved, j: number, at: Vec3) => {
   q.rot[j - 1] = mul(q.rot[j - 1], mul(axis(Y, sd * out), axis(Z, sd * up)));
 };
 
+/** The most a clavicle turns for a held hand out of reach (wield()), radians. */
+const REACH = 0.75;
 /** Where a fist holds a handle, from the wrist: along the fingers, and toward the palm. */
 export const FIST = [0.078, 0.022];
+/**
+ * The left hand round the rail gun's capsule, 3.7 cm thick: its axis through the hollow of the
+ * hand, further from the palm than a handle's, the fingers less closed (the user, 2026-11-10: the
+ * fist closed beside it).
+ */
+export const CAPSULE_HOLD = [0.07, 0.038];
+export const CAPSULE_CURL = 0.6;
+/** How far up the capsule from its foot the middle of the hand is. */
+const CAPSULE_UP = 0.036;
 /**
  * The left fist on the katana's grip: 8 mm further along the fingers and 6 mm nearer the palm than
  * FIST, so the grip runs through its curled fingers (the user, 2026-11-09).
@@ -252,12 +266,14 @@ export const wield = (
   [S, C]: number[] = [S0, C0],
   /** The forearm on `held`'s line, not the hand's: the wrist cocked by the hand's own tilt. */
   bent = false,
+  /** The shoulder follows a hand out of reach. */
+  far = false,
 ) => {
   if (!held) {
     shrug(q, solved, j, at);
   }
-  const s = solve(q);
-  const a = s.pos[j];
+  let s = solve(q);
+  let a = s.pos[j];
   const [l1, l2] = [dist(a, s.pos[j + 1]), dist(s.pos[j + 1], s.pos[j + 2])];
   // Away from the elbow too, for a handle that points at the shoulder or away from it; or the
   // side that puts the fingers along `held`, a straight wrist (clasp()), the shoulder already
@@ -272,6 +288,20 @@ export const wield = (
   // The grip is `reach` along the fingers from the wrist and `palm` toward the palm (FIST), which
   // the left hand, a mirror, has on its other side.
   const wrist = along(along(at, fing, -reach), x, j == J.ARM_L ? -palm : palm);
+  // `far`: out of reach the shoulder comes after the hand (the clavicle turns toward the wrist,
+  // REACH at most) rather than the hand stop short: crouched, the shoulders are further back.
+  const c = s.pos[j - 1];
+  const [R, D, L] = [dist(a, c), dist(wrist, c), (l1 + l2) * 0.985];
+  if (far && dist(a, wrist) > L) {
+    const to = unit(sub(wrist, c));
+    const now = Math.acos(clamp(dot(unit(sub(a, c)), to), -1, 1));
+    const need = Math.acos(clamp((R * R + D * D - L * L) / (2 * R * D), -1, 1));
+    const w = axis(unit(cross(sub(a, c), to)), Math.min(now - need, REACH));
+    const up = s.rot[PARENT[j - 1]];
+    q.rot[j - 1] = mul(inv(up), mul(w, mul(up, q.rot[j - 1])));
+    s = solve(q);
+    a = s.pos[j];
+  }
   // The elbow where the forearm carries on the hand's axis: toward the pole too for a free hand,
   // exactly there for a held one; bent, on the line `held` gave it (clasp()'s square hold).
   const ideal = sub(along(wrist, bent && held ? unit(held) : fing, -l2), a);
@@ -386,6 +416,8 @@ const TOWARD = [
 const THICK = [1, 1, 0.96, 0.86];
 /** Finger lengths against 4 cm, index to little. */
 const LENGTH = [1, 1.1, 1, 0.82];
+/** The thumb's two segments when the palm carries the rifle's handguard: closed on its near side, along it (the user, 2026-11-10). */
+const CUP: Vec3[] = [unit([0.7, -0.7, 0]), unit([0.9, -0.4, 0.1])];
 /** The thumb's two segments open and in a fist, as directions in the hand (x toward the thumb). */
 const THUMB: [Vec3, Vec3][] = [
   [
@@ -580,6 +612,8 @@ export const hand = (
   push = 0,
   to?: Vec3,
   bare = tint,
+  /** 0 to 1: the thumb out of the fist to CUP, up the side of what the palm carries. */
+  cup = 0,
 ) => {
   let paint = (_: number) => tint;
   /** Hand space (x toward the thumb, y the back, z toward the fingers), a point and a direction, to the world, in `paint` of its ring. */
@@ -756,7 +790,7 @@ export const hand = (
   }
   // `push` (0 to 1) reaches the thumb's tip out along `to`, onto the katana's button.
   const [d1, d2] = THUMB.map(([open, fist], k) => {
-    const d = unit(mix(open, fist, curl));
+    const d = unit(mix(unit(mix(open, fist, curl)), CUP[k], cup));
     return k && to ? unit(mix(d, to, push)) : d;
   });
   const tp: Vec3 = [0.032, -0.01, 0.025];
@@ -975,6 +1009,8 @@ export const createBody = (world?: World): Body => {
   /** How closed each hand is, left then right, as of the last pose(); how far the left index is out, pressing a button. */
   const curls = [0, 0];
   let pointing = 0;
+  /** How much the left hand cups the rifle's handguard, 0 to 1, as of the last pose(). */
+  let cupping = 0;
   /** The new battery in the left hand as it brings it from the pouch, in the world; undefined when it is not carrying one. */
   let carried: [Vec3, Vec3[]] | undefined;
   /**
@@ -1333,7 +1369,8 @@ export const createBody = (world?: World): Body => {
           q.rot[k] = slerp(q.rot[k], held.rot[k], onSword);
         }
       }
-      // The rail gun takes the left hand too, on its front grip, the elbow down and out.
+      // The rail gun takes the left hand too, on its front grip, the elbow down and out; the
+      // rifle's handguard lies in its palm, a cup (RIFLE_HOLD).
       const two = sd < 0 && (me?.railed || me?.rifled) ? w.gun * free : 0;
       if (two > 0.002) {
         const held = { ...q, rot: q.rot.slice() };
@@ -1348,11 +1385,18 @@ export const createBody = (world?: World): Body => {
           unit(turn(fd)),
           turn([-0.5, -1, -0.35]),
           fu && turn(fu),
+          fu ? RIFLE_HOLD : FIST,
+          fu ? RIFLE_TILT : undefined,
+          false,
+          !!fu,
         );
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], two);
         }
-        curls[0] += (0.9 - curls[0]) * two;
+        curls[0] += ((fu ? RIFLE_CURL : 0.9) - curls[0]) * two;
+      }
+      if (sd < 0) {
+        cupping = fu ? two : 0;
       }
       // In a swap the left hand brings the new battery up under the grip, or takes the capsule
       // off the top and screws the new one on.
@@ -1391,6 +1435,7 @@ export const createBody = (world?: World): Body => {
           q.rot[k] = slerp(q.rot[k], held.rot[k], fetch);
         }
         curls[0] += (f.curl - curls[0]) * fetch;
+        cupping *= 1 - fetch;
       }
       if (onLoad > 0.002) {
         // On the new battery or capsule, which comes with the hand. The capsule is held round its
@@ -1406,19 +1451,30 @@ export const createBody = (world?: World): Body => {
         const tap =
           0.12 *
           (sp < TAP - 0.04 ? ease(span(sp, 0.64, TAP - 0.04)) : 1 - span(sp, TAP - 0.04, TAP) ** 3);
-        const mid = [0, 1, 2].map(i => foot[i] + up[i] * (rail ? 0.04 : -0.01 - tap)) as Vec3;
+        const mid = [0, 1, 2].map(i => foot[i] + up[i] * (rail ? CAPSULE_UP : -0.01 - tap)) as Vec3;
         let fing: Vec3 | undefined;
         if (rail) {
           // From the capsule's axis out to its left, turned with the wrist.
           const o = rotate(mix([0, 0, 0], ga[0], -1), mix([0, 0, 0], up, screwed(sp)[1]));
-          [0, 1, 2].forEach(i => (mid[i] += o[i] * 0.026));
           fing = turn(mix([0, 0, 0], o, -1));
         }
         const held = { ...q, rot: q.rot.slice() };
         if (fing) {
           shrug(held, s, arm, add(eye, turn(mid)));
         }
-        wield(held, s, arm, add(eye, turn(mid)), unit(turn(up)), turn([-0.5, -1, -0.35]), fing);
+        wield(
+          held,
+          s,
+          arm,
+          add(eye, turn(mid)),
+          unit(turn(up)),
+          turn([-0.5, -1, -0.35]),
+          fing,
+          rail ? CAPSULE_HOLD : FIST,
+          undefined,
+          false,
+          rail,
+        );
         // The battery in, the hand lets go of it and opens flat, the palm up to its foot, the
         // fingers along the gun, to slap it home with the palm (the user, 2026-11-09).
         // The battery in, the hand lets go of it and opens flat to slap it home (below).
@@ -1427,7 +1483,8 @@ export const createBody = (world?: World): Body => {
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], onLoad);
         }
-        curls[0] += (0.9 - 0.85 * flat - curls[0]) * onLoad;
+        curls[0] += ((rail ? CAPSULE_CURL : 0.9) - 0.85 * flat - curls[0]) * onLoad;
+        cupping *= 1 - onLoad;
       }
       // Each weapon comes on its own way (the user, 2026-11-09): the left index presses the laser
       // rifle's button, the hand off its front grip, flat, the index out, and back; the right thumb
@@ -1440,9 +1497,8 @@ export const createBody = (world?: World): Body => {
       if (tw > 0.002) {
         const th = tune(since, pressOf(2));
         const [foot, [, , up]] = loadFrame(gp, ga, 2, -1, 1, 0, th);
-        const mid = [0, 1, 2].map(i => foot[i] + up[i] * 0.04) as Vec3;
+        const mid = [0, 1, 2].map(i => foot[i] + up[i] * CAPSULE_UP) as Vec3;
         const o = rotate(mix([0, 0, 0], ga[0], -1), mix([0, 0, 0], up, th));
-        [0, 1, 2].forEach(i => (mid[i] += o[i] * 0.026));
         const held = { ...q, rot: q.rot.slice() };
         shrug(held, s, arm, add(eye, turn(mid)));
         wield(
@@ -1453,14 +1509,19 @@ export const createBody = (world?: World): Body => {
           unit(turn(up)),
           turn([-0.5, -1, -0.35]),
           turn(mix([0, 0, 0], o, -1)),
+          CAPSULE_HOLD,
+          undefined,
+          false,
+          true,
         );
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], tw);
         }
-        curls[0] += (0.9 - curls[0]) * tw;
+        curls[0] += (CAPSULE_CURL - curls[0]) * tw;
       }
       if (sd < 0) {
         pointing = pw;
+        cupping *= 1 - pw;
       }
       if (pw > 0.002) {
         // The gun's model frame in the world, from the holster.
@@ -1571,6 +1632,7 @@ export const createBody = (world?: World): Body => {
             i * push,
             thumbTo(Math.max(tk, 0)),
             suit ? colors[7] : colors[3],
+            i ? 0 : cupping,
           );
         });
         if (hold > 0.2) {

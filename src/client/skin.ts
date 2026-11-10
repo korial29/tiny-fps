@@ -11,8 +11,8 @@ import type { Vec3 } from './mesh';
 
 const SKIN = [0.66, 0.45, 0.35];
 
-/** The space suit's dark grey under its armour (the user, 2026-11-10: white, then dark grey so the plates stand out) and its black (gloves, boots, belt): see palette(). */
-const SUIT = [0.2, 0.21, 0.23];
+/** The space suit's dark grey under its armour (the user, 2026-11-10: white, then a mid grey so the plates stand out) and its black (gloves, boots, belt): see palette(). */
+const SUIT = [0.36, 0.37, 0.4];
 const BLACK = [0.05, 0.05, 0.055];
 
 /** The colour regions of a palette. */

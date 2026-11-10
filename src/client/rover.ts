@@ -6,9 +6,9 @@
 // DOM. The rigid parts are built once per level of detail in the body's frame (x right, y up, -z
 // the nose, the origin at the body's centre) and placed each frame; the wishbones and the dampers
 // are stretched between their ends.
-import { TAU, floorAt, forward } from '../shared/physics';
-import { ROVER } from '../shared/rover';
-import type { Rover } from '../shared/types';
+import { TAU, forward } from '../shared/physics';
+import { ROVER, seat, wheels } from '../shared/rover';
+import type { PlayerState, Rover } from '../shared/types';
 import type { World } from '../shared/world';
 import { GLOW, glow, tri } from './flag';
 import {
@@ -27,7 +27,7 @@ import {
 } from './mesh';
 import type { Vec3 } from './mesh';
 
-const { A, B, WR, L0, CMAX, WHEEL_STEP } = ROVER;
+const { A, B, WR, L0 } = ROVER;
 /** The wheels, front left, front right, rear left, rear right: metres along the nose and to the right. */
 const AT = [
   [A, -B],
@@ -610,15 +610,51 @@ const kit = (lod: number): Kit => {
 
 /**
  * How far each wheel's spring is squeezed, metres in 0..CMAX, in AT's order: the simulation's own
- * formula (shared/rover.ts), from the state and the world alone. 0 is a wheel hanging in the air.
+ * (wheels() in shared/rover.ts), from the state and the world alone. 0 is a wheel hanging in the air.
  */
-export const springs = (r: Rover, w: World): number[] => {
-  const [fx, fz] = forward(r.yaw);
-  return AT.map(([a, b]) => {
-    const y = r.y + a * Math.sin(r.pitch) - b * Math.sin(r.roll);
-    const g = floorAt(w, r.x + fx * a - fz * b, r.z + fz * a + fx * b, y + WHEEL_STEP);
-    return Math.min(Math.max(L0 - (y - WR - g), 0), CMAX);
+export const springs = (r: Rover, w: World): number[] => wheels(r, w).map(k => k[3]);
+
+/**
+ * The seats, driver then rider, as the simulation has them (seat()): metres right of the body's
+ * centre, above it (the feet of who sits) and ahead of it.
+ */
+export const SEATS: Vec3[] = ([0, 1] as const).map(s => {
+  const p = {} as PlayerState;
+  seat(p, { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0 } as Rover, s);
+  return [p.x, p.y, -p.z];
+});
+
+/**
+ * The middles of the yoke's two grips, left then right, with the front wheels turned by `steer`:
+ * metres right of, above and ahead of the driver's seat point, in the body's frame.
+ */
+export const grips = (steer: number): Vec3[] => {
+  // The column runs down and ahead; the bar turns about it.
+  const l = Math.hypot(0.14, 0.28);
+  const [fy, fa] = [-0.14 / l, 0.28 / l];
+  const [c, s] = [Math.cos(steer * GEAR), Math.sin(steer * GEAR)];
+  return [-1, 1].map(k => {
+    // Along the bar (x right, then up across the column), to the middle of a grip.
+    const [x, u] = [k * 0.17 * c + 0.04 * s, 0.04 * c - k * 0.17 * s];
+    return [
+      YOKE[0] + x - SEATS[0][0],
+      YOKE[1] + u * fa - SEATS[0][1],
+      YOKE[2] - u * fy - 0.013 - SEATS[0][2],
+    ] as Vec3;
   });
+};
+
+/** Metres a rover moves in a frame, at the least, when it is put back on its spawn: its wheels do not turn for it. */
+const PUT_BACK = 5;
+
+/**
+ * Radians the wheels roll as the rover goes from (x, z) to where it is now: the distance along its
+ * nose over the wheel's radius, negative in reverse. Sliding sideways turns nothing.
+ */
+export const rolled = (x: number, z: number, r: Rover): number => {
+  const [fx, fz] = forward(r.yaw);
+  const [dx, dz] = [r.x - x, r.z - z];
+  return dx * dx + dz * dz > PUT_BACK * PUT_BACK ? 0 : (dx * fx + dz * fz) / WR;
 };
 
 /** The rover's frame in the world: where a point right, up and ahead of its centre is, and its axes. */

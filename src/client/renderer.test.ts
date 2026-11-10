@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STILL } from '../shared/physics';
-import { TEX } from '../shared/types';
-import type { PlayerState } from '../shared/types';
+import { ROVER } from '../shared/rover';
+import { MODE, NOBODY, TEX } from '../shared/types';
+import type { PlayerState, Rover } from '../shared/types';
 import { build } from '../shared/world';
 import type { Brush, WorldDef } from '../shared/world';
 import { createEffects } from './effects';
-import { LIGHT } from './lights';
+import { teamRgb } from './flag';
+import { BEAM_RANGE, LIGHT } from './lights';
 import type { Light } from './lights';
 import { SHINE, STRIDE } from './mesh';
+import { headlights, rover } from './rover';
 import { LAYERS } from './textures';
 import {
   FOG_LAYER,
@@ -16,6 +19,8 @@ import {
   HAZE,
   MAX_PIXELS,
   MAX_TINTS,
+  ROVER_MID,
+  ROVER_NEAR,
   SHADOW,
   backing,
   city,
@@ -25,6 +30,7 @@ import {
   fogRef,
   palette,
   scenery,
+  sunAt,
   sunProj,
 } from './render';
 import type * as Traffic from './traffic';
@@ -522,7 +528,9 @@ describe('createRenderer', () => {
       expect(layers().map(c => c[5])).toEqual([0]);
       const pass = calls.findIndex(c => c[0] == 'framebufferTextureLayer');
       const m = calls.slice(pass).find(c => (c[1] as { u?: string }).u == 'm')!;
-      expect(Array.from(m[3] as Float32Array)).toEqual(Array.from(sunProj(SUN_DIR, [1, 1.6, 1])));
+      expect(Array.from(m[3] as Float32Array)).toEqual(
+        Array.from(sunProj(SUN_DIR, sunAt([1, 1.6, 1], 0))),
+      );
       expect(calls.find(c => c[0] == 'viewport')).toEqual(['viewport', 0, 0, SHADOW, SHADOW]);
       frame(rd);
       expect(layers()).toHaveLength(2);
@@ -530,9 +538,11 @@ describe('createRenderer', () => {
 
     it('moves with the eye, and the scene reads the same matrix', () => {
       const rd = createRenderer(canvas, ROOM);
-      rd.frame([30, 1.6, -5], 0, 0, [], new Map(), createEffects(), []);
+      rd.frame([30, 1.6, -5], 0.7, 0, [], new Map(), createEffects(), []);
       const w = Array.from(set('W').at(-1)![3] as Float32Array);
-      expect(w).toEqual(Array.from(sunProj(SUN_DIR, [30, 1.6, -5])));
+      // Ahead of the eye, the way it looks.
+      expect(w).toEqual(Array.from(sunProj(SUN_DIR, sunAt([30, 1.6, -5], 0.7))));
+      expect(w).not.toEqual(Array.from(sunProj(SUN_DIR, [30, 1.6, -5])));
     });
 
     it('is cast by the other players too, drawn after the brushes', () => {
@@ -739,6 +749,216 @@ describe('createRenderer', () => {
       expect(frag).toContain('uniform float U;');
       expect(frag).toContain(`${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))`);
       expect(set('U').map(c => c.slice(2))).toEqual([[fogRef(ROOM.def)]]);
+    });
+  });
+
+  describe('rovers', () => {
+    /** A rover at rest on the room's floor, its nose to -z. */
+    const parked = (o: Partial<Rover> = {}): Rover => ({
+      x: 2,
+      y: ROVER.L0 + ROVER.WR - 0.08,
+      z: 2,
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      yaw: 0,
+      pitch: 0,
+      roll: 0,
+      wy: 0,
+      wp: 0,
+      wr: 0,
+      steer: 0,
+      driver: NOBODY,
+      rider: NOBODY,
+      ...o,
+    });
+    const EYE: [number, number, number] = [2, 2, 8];
+    const man = (o: Partial<PlayerState> = {}): PlayerState => ({
+      id: 1,
+      x: 2,
+      y: 0,
+      z: 2,
+      vy: 0,
+      yaw: 0,
+      pitch: 0,
+      ground: true,
+      ...STILL,
+      ...o,
+    });
+    const show = (
+      rd: ReturnType<typeof createRenderer>,
+      rovers?: Rover[],
+      self?: PlayerState,
+      others: PlayerState[] = [],
+      eye = EYE,
+    ) => {
+      calls.length = 0;
+      rd.frame(
+        eye,
+        0,
+        0,
+        others,
+        new Map(),
+        createEffects(),
+        [],
+        undefined,
+        undefined,
+        undefined,
+        rovers,
+        self,
+      );
+      return draws();
+    };
+    /** The dynamic vertices of the last frame. */
+    const tail = () =>
+      Array.from(calls.filter(c => c[0] == 'bufferSubData').at(-1)![3] as Float32Array);
+    /** The model as rover.ts draws it, as the buffer holds it. */
+    const model = (r: Rover, spin: number, team: number, lod: number) => {
+      const out: number[] = [];
+      rover(out, r, ROOM, spin, teamRgb(team), lod);
+      return Array.from(new Float32Array(out));
+    };
+
+    it('draws none without `rovers`, and the ones given in the dynamic tail, before the beams, in the shadow pass', () => {
+      const rd = createRenderer(canvas, ROOM);
+      expect(show(rd)).toEqual([
+        [0, FLOOR_VERTS],
+        [0, FLOOR_VERTS],
+      ]);
+      expect(tail()).toHaveLength(0);
+      const r = parked();
+      const [depth, world] = show(rd, [r]);
+      const m = model(r, 0, 0, 2);
+      expect(m.length).toBeGreaterThan(1000 * STRIDE);
+      // Casting like the players: the depth pass draws them, and nothing that glows comes before.
+      expect(depth[1]).toBe(FLOOR_VERTS + m.length / STRIDE);
+      expect(world[1]).toBe(depth[1]);
+      expect(tail()).toEqual(m);
+      // Gone again with the list.
+      expect(show(rd)[0][1]).toBe(FLOOR_VERTS);
+    });
+
+    it("paints the first half of the map's rovers red and the second blue", () => {
+      const rd = createRenderer(canvas, ROOM);
+      const rs = [0, 1, 2, 3].map(i => parked({ x: 2 + 6 * i }));
+      show(rd, rs);
+      expect(tail()).toEqual(rs.flatMap((r, i) => model(r, 0, +(i > 1), 2)));
+    });
+
+    it('picks the level of detail by the distance to the eye', () => {
+      const rd = createRenderer(canvas, ROOM);
+      const r = parked();
+      const at = (d: number): [number, number, number] => [r.x, r.y, r.z + d];
+      for (const [d, lod] of [
+        [ROVER_NEAR - 1, 2],
+        [ROVER_NEAR + 1, 1],
+        [ROVER_MID - 1, 1],
+        [ROVER_MID + 1, 0],
+      ]) {
+        show(rd, [r], undefined, [], at(d));
+        expect(tail()).toEqual(model(r, 0, 0, lod));
+      }
+      expect(model(r, 0, 0, 0).length).toBeLessThan(model(r, 0, 0, 1).length);
+      expect(model(r, 0, 0, 1).length).toBeLessThan(model(r, 0, 0, 2).length);
+    });
+
+    it('rolls the wheels by the way driven along the nose: forward, back again in reverse, not at all sideways or when put back', () => {
+      const rd = createRenderer(canvas, ROOM);
+      const drive = (r: Rover, spin: number) => {
+        show(rd, [r]);
+        expect(tail()).toEqual(model(r, spin, 0, 2));
+      };
+      drive(parked(), 0);
+      // The nose looks to -z: half a metre that way is one radian of a wheel of radius 0.5.
+      drive(parked({ z: 1.5 }), 0.5 / ROVER.WR);
+      drive(parked({ z: 1 }), 1 / ROVER.WR);
+      drive(parked({ z: 2.5 }), -0.5 / ROVER.WR);
+      drive(parked({ z: 2.5, x: 3 }), -0.5 / ROVER.WR);
+      drive(parked({ z: 2.5, x: 3 + 6 }), -0.5 / ROVER.WR);
+      // Each rover has its own wheels.
+      show(rd, [parked({ z: 2.5, x: 9 }), parked({ x: 5 })]);
+      expect(tail()).toEqual([
+        ...model(parked({ z: 2.5, x: 9 }), -0.5 / ROVER.WR, 0, 2),
+        ...model(parked({ x: 5 }), 0, 1, 2),
+      ]);
+    });
+
+    it('draws the own player only when he is given, whole, like the others, and he casts a shadow', () => {
+      const rd = createRenderer(canvas, ROOM);
+      const bare = show(rd, [])[0][1];
+      const [depth, world] = show(rd, [], man({ id: 7 }));
+      expect(depth[1]).toBeGreaterThan(bare + 500);
+      expect(world[1]).toBe(depth[1]);
+      expect(rd.steps(7)).toBe(0);
+      const other = show(rd, [], undefined, [man({ id: 7 })])[0][1];
+      expect(other).toBe(depth[1]);
+      // Both: twice as many.
+      expect(show(rd, [], man({ id: 7 }), [man({ id: 8, x: 3 })])[0][1] - bare).toBe(
+        2 * (other - bare),
+      );
+      expect(show(rd, [])[0][1]).toBe(bare);
+      expect(rd.steps(7)).toBeUndefined();
+    });
+
+    it('seats who rides in his rover: lower than standing, and leaning with it', () => {
+      // A renderer each: a runner first seen is in its pose at once.
+      const top = (r: Rover, p: PlayerState) => {
+        const rd = createRenderer(canvas, ROOM);
+        show(rd, [r], p);
+        const v = tail().slice(model(r, 0, 0, 2).length);
+        let y = -Infinity;
+        for (let i = 1; i < v.length; i += STRIDE) {
+          y = Math.max(y, v[i]);
+        }
+        return y;
+      };
+      const p = man({ id: 7, y: 0.67 });
+      const stands = top(parked(), p);
+      const sits = top(parked({ driver: 7 }), { ...p, mode: MODE.RIDE });
+      expect(stands - p.y).toBeGreaterThan(1.7);
+      expect(sits - p.y).toBeGreaterThan(0.95);
+      expect(sits - p.y).toBeLessThan(1.3);
+      // Nose down, his head goes down with the seat.
+      const dives = top(parked({ driver: 7, pitch: -0.6 }), { ...p, mode: MODE.RIDE });
+      expect(dives).toBeLessThan(sits - 0.1);
+    });
+
+    it('lights the headlights of a rover that has a driver, and of no other', () => {
+      const rd = createRenderer(canvas, ROOM);
+      const q = () => set('Q').at(-1)![2];
+      show(rd, [parked(), parked({ x: 9, rider: 3 })]);
+      expect(q()).toBe(0);
+      const r = parked({ x: 9, driver: 3 });
+      show(rd, [parked(), r]);
+      expect(q()).toBe(1);
+      const a = Array.from(set('A').at(-1)![2] as Float32Array).slice(0, 4);
+      const [l, k] = headlights(r);
+      expect(a).toEqual(
+        Array.from(new Float32Array([...l.map((v, i) => (v + k[i]) / 2), BEAM_RANGE])),
+      );
+      // No shadow map for them: the sun's pass alone.
+      expect(calls.filter(c => c[0] == 'framebufferTextureLayer')).toHaveLength(1);
+    });
+
+    it('raises dust behind a rover that goes fast on the ground, after its model, and none from one in the air or at rest', () => {
+      const rd = createRenderer(canvas, ROOM);
+      let clock = 1e6;
+      const run = (o: Partial<Rover>) => {
+        let n = 0;
+        for (let i = 0; i < 8; i++) {
+          vi.spyOn(performance, 'now').mockReturnValue((clock += 50));
+          show(rd, [parked(o)]);
+          n = tail().length - model(parked(o), 0, 0, 2).length;
+        }
+        return n;
+      };
+      expect(run({})).toBe(0);
+      expect(run({ y: 6, vz: -15 })).toBe(0);
+      const puffs = run({ vz: -15 });
+      expect(puffs).toBeGreaterThan(0);
+      // Smoke, which the depth pass throws away.
+      const v = tail().slice(-puffs);
+      expect(v.filter((_, i) => i % STRIDE == 8).every(l => l == -3)).toBe(true);
     });
   });
 

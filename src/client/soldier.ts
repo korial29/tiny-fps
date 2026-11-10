@@ -11,13 +11,13 @@ import {
   TICK_HZ,
 } from '../shared/constants';
 import { TAU, floored } from '../shared/physics';
-import { LIMB } from '../shared/types';
-import type { PlayerState } from '../shared/types';
+import { LIMB, MODE } from '../shared/types';
+import type { PlayerState, Rover } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { KATANA_LEFT, KATANA_TILT, clasp, inv, reach, shrug, stowed, wield } from './body';
 import { createGait, frame } from './gait';
-import type { Floor, Gait } from './gait';
+import type { Floor, Gait, Seat } from './gait';
 import {
   ARC,
   BROUGHT,
@@ -88,7 +88,22 @@ export interface Runner {
   cut?: Piece;
   /** Seconds left of the grimace a hit puts on his face. */
   hurt: number;
+  /** The seat he rides in, when he does and his rover is known. */
+  seat?: Seat;
 }
+
+/**
+ * The seat of a player who rides: the rover whose `driver` or `rider` he is. Nothing for one on
+ * foot, or whose rover is not among `rovers`.
+ */
+export const seatOf = (p: PlayerState, rovers?: Rover[]): Seat | undefined => {
+  const r =
+    p.mode == MODE.RIDE ? rovers?.find(r => r.driver == p.id || r.rider == p.id) : undefined;
+  return r && { yaw: r.yaw, pitch: r.pitch, roll: r.roll, steer: r.steer, s: +(r.driver != p.id) };
+};
+
+/** How far under a standing eye a seated one is: his gun is held out from there. */
+const SEATED = 0.62;
 
 /** Seconds after a shot that the gun stays up. */
 const AIMING = 0.5;
@@ -96,10 +111,11 @@ const AIMING = 0.5;
 const dashing = (p: PlayerState) => p.dash > DASH_COOLDOWN - DASH_TICKS;
 
 /** A runner as first seen: in the pose its state asks for, no ease. */
-export const createRunner = (p: PlayerState): Runner => {
+export const createRunner = (p: PlayerState, seat?: Seat): Runner => {
   const gait = createGait();
-  gait.update(p, 0);
+  gait.update(p, 0, undefined, seat);
   return {
+    seat,
     p: { ...p },
     gait,
     dash: +dashing(p),
@@ -132,6 +148,7 @@ export const animate = (
   dt: number,
   world?: World,
   tracer?: Pick<Tracer, 'shock' | 'spit'>,
+  rovers?: Rover[],
 ) => {
   for (const id of book.keys()) {
     if (!others.some(p => p.id == id)) {
@@ -140,8 +157,10 @@ export const animate = (
   }
   for (const p of others) {
     const r = book.get(p.id);
+    const seat = seatOf(p, rovers);
     if (r) {
-      r.gait.update(p, dt, world && floorOf(world, p.y));
+      r.seat = seat;
+      r.gait.update(p, dt, world && floorOf(world, p.y), seat);
       r.dash += (+dashing(p) - r.dash) * (1 - Math.exp(-dt * DASH_RATE));
       r.since = p.shots == r.p.shots && !p.zapping ? r.since + dt : 0;
       // A shot raises the gun at once, so that it points at the shot when the beam is drawn.
@@ -164,7 +183,7 @@ export const animate = (
       r.hurt = p.hp < r.p.hp ? 0.4 : Math.max(r.hurt - dt, 0);
       r.p = { ...p };
     } else {
-      book.set(p.id, createRunner(p));
+      book.set(p.id, createRunner(p, seat));
     }
     track(book.get(p.id)!, dt, ground(world, p.y), !r, tracer);
   }
@@ -178,7 +197,8 @@ const lifted = (
   focused: Vec3,
   k: number,
 ): Pose => {
-  const [grip, ax] = aimed(p, focused);
+  // Seated, the eye the gun is held out from is lower.
+  const [grip, ax] = aimed(p.mode == MODE.RIDE ? { ...p, y: p.y - SEATED } : p, focused);
   const rot = pose.rot.slice();
   const q = { ...pose, rot };
   const [uh, fh] = [ax[0], ax[2].map((v, i) => v * TILT[1] - ax[1][i] * TILT[0]) as Vec3];
@@ -286,6 +306,9 @@ const streaks = (out: number[], r: Runner, color: number[], at: (v: Vec3) => Vec
   });
 };
 
+/** Whether the runner is at a rover's wheel: unarmed, his weapons put away. */
+const driving = (r: Runner) => r.p.mode == MODE.RIDE && r.seat?.s === 0;
+
 /** Seconds a runner the rail gun's bolt put down takes to come apart. */
 export const FRY = 0.9;
 
@@ -338,8 +361,8 @@ export const stance = (r: Runner) => {
     };
   }
   let s = solve(pose);
-  // Down or floored, the weapon stays in the hand as it falls.
-  const lying = !!p.down || floored(p);
+  // Down or floored, the weapon stays in the hand as it falls. At the wheel both hands are on the yoke.
+  const lying = !!p.down || floored(p) || driving(r);
   if (p.wield && !lying) {
     pose = brandish(pose, p, r.prog, r.gait.phase, r.t);
     s = solve(pose);
@@ -414,7 +437,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
   }
   const colors = palette(color, hairOf(p.id), eyesOf(p.id));
   const { s, sink, yaw, carry } = stance(r);
-  const blade = p.wield && !p.down;
+  const blade = p.wield && !p.down && !driving(r);
   if (r.cut) {
     skin(out, cut(lod, r.cut.limb)[0], s, colors, 1, 0.3);
     // The stump's face is the last vertex drawn.
@@ -445,7 +468,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);
     r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));
-  } else if ((p.railed ? !stowed(p) : p.ammo >= 0 || p.rifled) && !p.down) {
+  } else if ((p.railed ? !stowed(p) : p.ammo >= 0 || p.rifled) && !p.down && !driving(r)) {
     // A swap shows: the battery or the capsule out and in, the glow off until it is.
     const sp = swapOf(p);
     held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, undefined, 0, kindOf(p), r.t, {

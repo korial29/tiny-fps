@@ -11,15 +11,17 @@ import type { World, WorldDef } from '../shared/world';
 import type { Body } from './body';
 import type { Tracer } from './beams';
 import type { Effects } from './effects';
+import { createDust } from './dust';
 import { base, flag, teamRgb } from './flag';
 import type { CtfScene } from './flag';
 import { SHINE, STRIDE, basis } from './mesh';
-import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
+import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
 import { moonscape } from './moonscape';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { battery, cell, kit, racks } from './props';
 import { JOINT } from './rig';
+import { rolled, rover } from './rover';
 import type { Quat } from './rig';
 import { animate, soldier } from './soldier';
 import type { Runner } from './soldier';
@@ -38,8 +40,14 @@ const TAIL = 1 << 19;
 const TILE = 2;
 /** Shadow map side in texels. */
 export const SHADOW = 1024;
-/** Metres the sun's shadow window spans on a side, centred on the eye: 6 cm a texel. */
-export const SUN_AREA = 64;
+/** Metres the sun's shadow window spans on a side: 9 cm a texel. */
+export const SUN_AREA = 96;
+/**
+ * Metres the window's middle is ahead of the eye, along the look on the ground: what is behind the
+ * camera needs little of it. It reaches 19 m behind the eye and 77 m ahead: a rover at 20 m/s seen
+ * from a chase camera keeps its shadow, and those of the hills it drives at, for 4 s ahead.
+ */
+export const SUN_AHEAD = 29;
 /** Half the depth range of the sun's window, metres: what stands this far from the eye along the sun's direction still casts. */
 export const SUN_DEPTH = 100;
 /** How far the fog colour is pulled toward the sky's horizon, 0 to 1: a fog unlike the horizon draws an edge against the sky. */
@@ -58,6 +66,8 @@ export const FOV_DEG = 70;
 export const FOV = Math.tan((FOV_DEG * Math.PI) / 360);
 /** Metres within which another player is drawn with the near level of detail (see DETAIL), and within which with the close one (see body()). */
 const [NEAR, CLOSE] = [10, 4];
+/** Metres within which a rover is drawn with its near level of detail (rover.ts), and within which with the middle one. */
+export const [ROVER_NEAR, ROVER_MID] = [22, 70];
 /** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
 const SAMPLES = 4;
 
@@ -295,6 +305,13 @@ export const sunProj = (dir: Vec3, eye: Vec3, area = SUN_AREA, depth = SUN_DEPTH
   return Float32Array.from({ length: 16 }, (_, i) => rows[i & 3][i >> 2]);
 };
 
+/** The middle of the sun's shadow window for an eye looking along `yaw`: SUN_AHEAD metres ahead of it on the ground. */
+export const sunAt = (eye: Vec3, yaw: number): Vec3 => [
+  eye[0] - Math.sin(yaw) * SUN_AHEAD,
+  eye[1],
+  eye[2] - Math.cos(yaw) * SUN_AHEAD,
+];
+
 /** The tints of a world's brushes, white first and each once: the shader's palette, MAX_TINTS at most. */
 export const palette = ({ def }: World): Vec3[] =>
   [
@@ -470,6 +487,10 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 export const createRenderer = (canvas: HTMLCanvasElement, world: World): Renderer => {
   /** The animation state of each runner drawn. */
   const runners = new Map<number, Runner>();
+  /** Each rover's wheels: the angle they have rolled to, and where the rover was last frame. */
+  const spins: number[] = [];
+  const was: [number, number][] = [];
+  const dust = createDust();
   let clock = performance.now() / 1000;
   const gl = canvas.getContext('webgl2', { antialias: false, depth: false });
   if (!gl) {
@@ -715,7 +736,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   return {
-    frame(eye, yaw, pitch, others, colors, fx, lights, body, ctf, tracer) {
+    frame(eye, yaw, pitch, others, colors, fx, lights, body, ctf, tracer, rovers = [], self) {
       const [w, h] = size();
       if (lost || !w || !h) {
         return;
@@ -733,7 +754,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const now = performance.now() / 1000;
       const dt = Math.min(0.1, now - clock);
       clock = now;
-      animate(runners, others, dt, world, tracer);
+      // The own player, seen from outside his head, is one of the crowd.
+      const crowd = self ? [...others, self] : others;
+      animate(runners, crowd, dt, world, tracer, rovers);
       const [right, up, fwd] = basis(yaw, pitch, fx.roll);
       drive(v, eye, fwd, Date.now() / 1000);
       // The spent batteries and capsules falling to the floor.
@@ -744,9 +767,27 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       ctf?.packs?.forEach(at => kit(v, at, now));
       ctf?.ammo?.forEach(at => cell(v, at, now));
       ctf?.cells?.forEach(at => battery(v, at, now));
+      // The rovers: the first half of the map's are red's, the others blue's. Their wheels turn by
+      // the way they went along their nose since the last frame.
+      rovers.forEach((r, i) => {
+        spins[i] = (spins[i] ?? 0) + (was[i] ? rolled(...was[i], r) : 0);
+        was[i] = [r.x, r.z];
+        const d = Math.hypot(r.x - eye[0], r.y - eye[1], r.z - eye[2]);
+        rover(
+          v,
+          r,
+          world,
+          spins[i],
+          teamRgb(+(i >= rovers.length / 2)),
+          d < ROVER_NEAR ? 2 : +(d < ROVER_MID),
+        );
+      });
+      // The dust off their wheels is smoke: it casts nothing wherever it is in the list.
+      dust.update(rovers, world, dt, eye);
+      dust.draw(v);
       // A carried flag is strapped to its carrier's chest.
       const chests = new Map<number, [Vec3, Quat]>();
-      for (const p of others) {
+      for (const p of crowd) {
         const d = Math.hypot(p.x - eye[0], p.z - eye[2]);
         const s = soldier(
           v,
@@ -763,7 +804,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       // What glows casts nothing: it comes after the last thing that casts a shadow.
       const beamAt = v.length;
       tracer?.draw(v, eye);
-      for (const p of others) {
+      for (const p of crowd) {
         runners.get(p.id)?.trail.draw(v);
       }
       const bodyAt = v.length;
@@ -773,9 +814,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         alloc();
       }
       gl.bufferSubData(gl.ARRAY_BUFFER, tail, new Float32Array(v));
-      const pk = pack(lights);
+      // The headlights of the rovers that are driven, after the lights given.
+      const pk = pack([...lights, ...beams(rovers)]);
       const first = ground.length / STRIDE;
-      const sunM = sunProj(sunDir, eye);
+      const sunM = sunProj(sunDir, sunAt(eye, yaw));
       // Layer 0: the sun, once; then one layer per mapped light.
       gl.uniform1f(u.Z, -1);
       // Unit 1 is unbound meanwhile: sampling a map the framebuffer writes is a feedback loop.

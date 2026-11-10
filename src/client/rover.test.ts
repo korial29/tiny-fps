@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { duo } from '../../test/teams';
 import { forward, spawn } from '../shared/physics';
-import { ROVER, seat } from '../shared/rover';
+import { ROVER, seat, wheels } from '../shared/rover';
 import { NOBODY, TEX } from '../shared/types';
 import type { Rover } from '../shared/types';
 import { build } from '../shared/world';
@@ -10,7 +10,7 @@ import { GLOW } from './flag';
 import { SHINE, STRIDE, basis } from './mesh';
 import type { Vec3 } from './mesh';
 import type * as Mesh from './mesh';
-import { contacts, headlights, rover, springs } from './rover';
+import { SEATS, contacts, grips, headlights, rolled, rover, springs } from './rover';
 
 // The shapes are counted: a level of detail builds its meshes once.
 vi.mock('./mesh', async original => {
@@ -575,5 +575,78 @@ describe('rover', () => {
     for (const i of fixed.filter(i => at(v, i)[1] - REST < 0.9)) {
       expect(Math.abs(at(v, i)[2])).toBeLessThan(2.25);
     }
+  });
+});
+
+describe('the simulation in the model', () => {
+  it("squeezes the springs as the simulation's wheels() does, tilted and on a kerb too", () => {
+    for (const o of [
+      {},
+      { y: 0.8 },
+      { y: 3 },
+      { pitch: 0.4, roll: -0.3, yaw: 1 },
+      { x: 0.2 },
+      { x: -0.4, roll: 0.8, y: 1.7 },
+    ]) {
+      for (const w of [flat, kerb]) {
+        expect(springs(state(o), w)).toEqual(wheels(state(o), w).map(k => k[3]));
+      }
+    }
+  });
+
+  it('knows the seats where seat() puts the players: the driver on the left, the feet 0.35 m under the centre', () => {
+    const p = spawn(1, flat, 0);
+    ([0, 1] as const).forEach(s => {
+      seat(p, state({ x: 3, y: 2, z: -4, yaw: 0 }), s);
+      [p.x - 3, p.y - 2, -4 - p.z].forEach((v, i) => expect(v).toBeCloseTo(SEATS[s][i], 6));
+    });
+    expect(SEATS[0][0]).toBeLessThan(0);
+    expect(SEATS[1][0]).toBeGreaterThan(0);
+    expect(SEATS[0][1]).toBeCloseTo(-0.35, 6);
+  });
+
+  it("puts the driver's hands on the yoke's grips, which go round with the wheels", () => {
+    for (const steer of [0, 0.4, -0.5]) {
+      const wheels = rolling();
+      const [a, b] = [make({ steer: 0 }), make({ steer: 0.45 })];
+      const v = make({ steer });
+      // The yoke: what the steering moves in front of the left seat, and of it the dark grips at the bar's ends.
+      const yoke = all(a).filter(
+        i =>
+          !wheels.has(i) &&
+          dist(at(a, i), at(b, i)) > 1e-9 &&
+          at(a, i)[2] > -1 &&
+          Math.abs(at(a, i)[0]) < 0.7,
+      );
+      const dark = yoke.filter(i => colour(v, i)[0] < 0.15);
+      expect(dark.length).toBeGreaterThan(10);
+      const seat0: Vec3 = [SEATS[0][0], REST + SEATS[0][1], -SEATS[0][2]];
+      const hands = grips(steer).map(([x, y, f]): Vec3 => [
+        seat0[0] + x,
+        seat0[1] + y,
+        seat0[2] - f,
+      ]);
+      // Each grip's vertices are round its hand, and each hand has a grip.
+      for (const h of hands) {
+        const near = dark.filter(i => dist(at(v, i), h) < 0.1);
+        expect(near.length).toBeGreaterThan(5);
+        expect(dist(mean(near.map(i => at(v, i))), h)).toBeLessThan(0.035);
+      }
+      expect(dark.every(i => hands.some(h => dist(at(v, i), h) < 0.1))).toBe(true);
+    }
+    // A turn to the right: the right hand goes down, the left one up.
+    const [l, r] = grips(0.4);
+    expect(r[1]).toBeLessThan(grips(0)[1][1] - 0.05);
+    expect(l[1]).toBeGreaterThan(grips(0)[0][1] + 0.05);
+  });
+
+  it('rolls the wheels by the way gone along the nose over their radius: back in reverse, nothing sideways, nothing when put back', () => {
+    const r = state({ x: 10, z: 10, yaw: Math.PI / 2 });
+    // The nose looks to -x.
+    expect(rolled(11, 10, r)).toBeCloseTo(1 / WR, 9);
+    expect(rolled(9.5, 10, r)).toBeCloseTo(-0.5 / WR, 9);
+    expect(rolled(10, 12, r)).toBeCloseTo(0, 9);
+    expect(rolled(11, 13, r)).toBeCloseTo(1 / WR, 9);
+    expect(rolled(10 + 30, 10, r)).toBe(0);
   });
 });

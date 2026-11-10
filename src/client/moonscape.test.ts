@@ -253,3 +253,46 @@ describe('moonscape', () => {
     }
   });
 });
+
+describe('moonscape and the rovers', () => {
+  /** What is drawn in the arena that is not its stone floor's craters, the relief or the sky. */
+  const things = verts.filter(p => p[8] !== TEX.STONE && inArena(p));
+
+  it('draws no rover: where the map parks them the ground is bare, the renderer draws them there', () => {
+    expect(MOON.rovers).toHaveLength(4);
+    for (const [x, , z] of MOON.rovers!) {
+      expect(things.filter(p => Math.hypot(p[0] - x, p[2] - z) < 2.5 && p[1] < 3)).toHaveLength(0);
+    }
+    // A sanity check of the probe: the same one finds the masts.
+    const [mx, mz] = LAYOUT.masts[0];
+    expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
+  });
+
+  it('is the 2,136 vertices of the four static rovers lighter', () => {
+    expect(verts.length).toBe(221271);
+  });
+
+  it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {
+    const pits = verts.filter(p => p[8] === TEX.STONE && inArena(p));
+    const near = (list: number[][], x: number, z: number) =>
+      list.filter(p => Math.hypot(p[0] - x, p[2] - z) < 2).length;
+    for (const [x, , z] of MOON.rovers!) {
+      expect(near(pits, x, z)).toBe(0);
+    }
+    // Park one on a crater of today's map: the crater goes, and there are still 60.
+    const [x, , z] = pits[0];
+    expect(near(pits, x, z)).toBeGreaterThan(0);
+    const moved = moonscape({ ...MOON, rovers: [[x, 0, z, 0]] });
+    const again: number[][] = [];
+    for (let i = 0; i < moved.length; i += STRIDE) {
+      const p = moved.slice(i, i + STRIDE);
+      if (p[8] === TEX.STONE && inArena(p)) {
+        again.push(p);
+      }
+    }
+    expect(near(again, x, z)).toBe(0);
+    expect(again.length).toBe(pits.length);
+    // And none is kept away from where no rover is parked any more.
+    expect(moonscape({ ...MOON, rovers: undefined }).length).toBe(v.length);
+  });
+});

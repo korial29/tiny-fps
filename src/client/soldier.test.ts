@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CUTS, DASH_COOLDOWN, DOWN_TICKS, PLAYER_H, PLAYER_R, TICK_HZ } from '../shared/constants';
 import { STILL } from '../shared/physics';
-import { CUT, LIMB, MODE, SIDE, TEX } from '../shared/types';
-import type { PlayerState } from '../shared/types';
+import { CUT, LIMB, MODE, NOBODY, SIDE, TEX } from '../shared/types';
+import type { PlayerState, Rover } from '../shared/types';
 import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
 import { MUZZLE, REAR, aimed, button, foregrip, grip, gun, tip } from './gun';
@@ -11,7 +11,17 @@ import { KATANA_LEFT } from './body';
 import { SHINE, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, solve, turn } from './rig';
-import { FRY, animate, brandish, createRunner, dissolve, fried, soldier, stance } from './soldier';
+import {
+  FRY,
+  animate,
+  brandish,
+  createRunner,
+  dissolve,
+  fried,
+  seatOf,
+  soldier,
+  stance,
+} from './soldier';
 import type { Runner } from './soldier';
 import { palette } from './skin';
 
@@ -832,5 +842,120 @@ describe('a runner with the rail gun', () => {
     soldier(a, cut, [0.9, 0.1, 0.1], 1);
     soldier(b, cut, [0.9, 0.1, 0.1], 1, true);
     expect(b.length).toBe(a.length);
+  });
+});
+
+describe('riding a rover', () => {
+  const rover = (o: Partial<Rover> = {}): Rover => ({
+    x: 5,
+    y: 1.35,
+    z: -3,
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    yaw: 0.5,
+    pitch: 0.1,
+    roll: -0.2,
+    wy: 0,
+    wp: 0,
+    wr: 0,
+    steer: 0.3,
+    driver: NOBODY,
+    rider: NOBODY,
+    ...o,
+  });
+  const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const rides = (o: Partial<PlayerState> = {}) => man({ mode: MODE.RIDE, ground: false, ...o });
+
+  it('finds the seat of who rides by the ids of the rovers: the driver, the rider, nobody on foot or unknown', () => {
+    const rs = [
+      rover({ driver: 4, rider: 9 }),
+      rover({ yaw: -1, steer: -0.1, driver: 1, rider: 2 }),
+    ];
+    expect(seatOf(rides({ id: 1 }), rs)).toEqual({
+      yaw: -1,
+      pitch: 0.1,
+      roll: -0.2,
+      steer: -0.1,
+      s: 0,
+    });
+    expect(seatOf(rides({ id: 2 }), rs)).toEqual({
+      yaw: -1,
+      pitch: 0.1,
+      roll: -0.2,
+      steer: -0.1,
+      s: 1,
+    });
+    expect(seatOf(rides({ id: 9 }), rs)).toEqual({
+      yaw: 0.5,
+      pitch: 0.1,
+      roll: -0.2,
+      steer: 0.3,
+      s: 1,
+    });
+    expect(seatOf(rides({ id: 3 }), rs)).toBeUndefined();
+    expect(seatOf(rides({ id: 1 }))).toBeUndefined();
+    expect(seatOf(man({ id: 1 }), rs)).toBeUndefined();
+  });
+
+  it('seats a runner in his rover from the first frame, where his state is, facing the nose', () => {
+    const book = new Map<number, Runner>();
+    const p = rides({ yaw: 2 });
+    animate(book, [p], DT, undefined, undefined, [rover({ rider: 1 })]);
+    const r = book.get(1)!;
+    expect(r.seat?.s).toBe(1);
+    const { s, yaw } = stance(r);
+    expect(yaw).toBeCloseTo(0.5, 6);
+    // Seated: the head a metre over the seat point, not 1.7 m.
+    expect(s.pos[J.HEAD][1] - p.y).toBeLessThan(1.05);
+    expect(s.pos[J.HEAD][1] - p.y).toBeGreaterThan(0.7);
+    expect(Math.hypot(s.pos[J.PELVIS][0] - p.x, s.pos[J.PELVIS][2] - p.z)).toBeLessThan(0.3);
+    // Out of it, he is on his feet again.
+    for (let i = 0; i < 60; i++) {
+      animate(book, [man()], DT, undefined, undefined, [rover()]);
+    }
+    expect(book.get(1)!.seat).toBeUndefined();
+    expect(stance(book.get(1)!).s.pos[J.HEAD][1] - 1).toBeGreaterThan(1.5);
+  });
+
+  it('keeps both hands of the driver on the yoke and his weapons away, while a rider holds his', () => {
+    const draw = (o: Partial<PlayerState>, seat: Partial<Rover>) => {
+      const book = new Map<number, Runner>();
+      animate(book, [rides(o)], DT, undefined, undefined, [rover(seat)]);
+      const out: number[] = [];
+      const s = soldier(out, book.get(1)!, [0.1, 0.8, 0.2])!;
+      return { n: out.length / STRIDE, s };
+    };
+    const bare = draw({}, { driver: 1 }).n;
+    for (const o of [
+      { ammo: 5 },
+      { railed: true, rail: 3 },
+      { rifled: true },
+      { blade: true, wield: true },
+    ]) {
+      const driver = draw(o, { driver: 1 });
+      expect(driver.n).toBe(bare);
+      // On the grips, either side of the column.
+      expect(dist(driver.s.pos[J.HAND_L], driver.s.pos[J.HAND_R])).toBeLessThan(0.45);
+      expect(dist(driver.s.pos[J.HAND_L], driver.s.pos[J.HAND_R])).toBeGreaterThan(0.25);
+      expect(draw(o, { rider: 1 }).n).toBeGreaterThan(bare + 50);
+    }
+  });
+
+  it("holds a rider's gun out from his seated eye, not from where a standing one would be", () => {
+    const book = new Map<number, Runner>();
+    let p = rides({ ammo: 5, yaw: 0.5 });
+    const rs = [rover({ rider: 1, pitch: 0, roll: 0 })];
+    animate(book, [p], DT, undefined, undefined, rs);
+    for (let i = 0; i < 20; i++) {
+      p = { ...p, shots: p.shots + (i == 5 ? 1 : 0) };
+      animate(book, [p], DT, undefined, undefined, rs);
+    }
+    const { s } = stance(book.get(1)!);
+    const hand = s.pos[J.HAND_R][1] - p.y;
+    expect(hand).toBeGreaterThan(0.6);
+    expect(hand).toBeLessThan(1.05);
+    // By the head, not over it.
+    expect(hand).toBeLessThan(s.pos[J.HEAD][1] - p.y + 0.12);
   });
 });

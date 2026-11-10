@@ -10,14 +10,27 @@ import type { PlayerState } from '../shared/types';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
+import { grips } from './rover';
 import { damp } from './spring';
 
 /** The height of the ground at (x, z), for feet that stand on stairs and slopes. */
 export type Floor = (x: number, z: number) => number;
 
+/** The seat of a player in a rover (MODE.RIDE): the rover's attitude and its front wheels' angle, and the seat, 0 the driver's, 1 the rider's. */
+export interface Seat {
+  yaw: number;
+  pitch: number;
+  roll: number;
+  steer: number;
+  s: number;
+}
+
 export interface Gait {
-  /** Moves to the state `p` after dt seconds. Without `floor` the feet stand on y = p.y. */
-  update(p: PlayerState, dt: number, floor?: Floor): void;
+  /**
+   * Moves to the state `p` after dt seconds. Without `floor` the feet stand on y = p.y. `seat` is
+   * where a player who rides sits: without it he sits level, a rider, facing his look.
+   */
+  update(p: PlayerState, dt: number, floor?: Floor, seat?: Seat): void;
   /** The pose now: one object, rewritten by each call. */
   pose(): Pose;
   /** Stride phase, in cycles: the left foot lands at 0 and the right one at a half. */
@@ -168,7 +181,28 @@ export const MOVE = {
   TUCK: 9,
   /** Out of health: the knees give and the body topples (see `lie` in build). */
   DOWN: 10,
+  /** Seated in a rover: the rough of it, the hands and the feet are placed in `reach`. */
+  RIDE: 11,
 } as const;
+
+/**
+ * A seated body, from the seat point (the player's position, the feet of shared/rover.ts' seat())
+ * in the rover's frame: the pelvis above it and behind it (on a cushion whose top is 0.13 m up,
+ * before a back 0.3 m behind that leans away), the trunk's lean back, the ankles ahead and above,
+ * half the feet's spread, and the toes' pitch up against the footwell's slope.
+ */
+export const SIT = {
+  up: 0.25,
+  back: 0.15,
+  lean: 0.14,
+  ahead: 0.6,
+  ankle: 0.0,
+  wide: 0.11,
+  toes: 0.3,
+  /** The driver sits up to the yoke: his pelvis this far ahead of a rider's, his trunk this far forward of it. */
+  reach: 0.07,
+  hunch: 0.26,
+};
 
 /**
  * A move's pose, in radians (metres for the offsets): drop of the pelvis, lean forward, lean to the
@@ -189,6 +223,7 @@ export const MOVES: number[][] = [
   [0, 0, 0, 0, 0, 0, 0, 0.8, 1.6, 0.8, 1.6, 0.2, 0, 0],
   [-0.05, 0.9, 0, 1.7, 2, 1.7, 2, 0.8, 1.6, 0.8, 1.6, 0.2, 0, 0],
   [-0.5, 0.35, 0, 1.3, 0.3, 1.1, 0.2, 0.4, 0.4, 0.2, 0.3, 0.6, 0, 0],
+  [SIT.up - 0.98, -SIT.lean, 0, 1.75, 1.5, 1.75, 1.5, 0.75, 0.75, 0.75, 0.75, 0.1, SIT.back, 0],
 ];
 // A wall on the left is the wall on the right seen in a mirror.
 const m = MOVES[MOVE.WALL_R];
@@ -255,6 +290,10 @@ const TOWARD = [
   [0, 1],
   [0, -1],
 ];
+
+/** The rover's lean in the frame of its yaw, `k` of the way: the nose up by its pitch, the right side down by its roll (basis() in mesh.ts). */
+const tipped = (s: Seat, k: number): Quat =>
+  slerp(IDENT, mul(axis(X, s.pitch), axis(Z, -s.roll)), k);
 
 /** Spring slots, a value and its speed each: lean, bank, yaw offset, landing dip, crouch, the velocity the stride sees, the pelvis height, how far up a ledge the climb is, the knock ahead and to the right, then one per move. */
 const [LEAN, BANK, YAW, DIP, LOW, VX, VZ, HY, UP, KA, KR, W] = [
@@ -331,8 +370,11 @@ export const createGait = (bow = BOW): Gait => {
   let [look, pitch, at] = [0, 0, [0, 0, 0]];
   /** The wall of a wall-run: its side of the runner (-1 left, 1 right) and its normal. The ledge held: where the hands took it, the normal and the height of its top. */
   let [side, wn, lip, held] = [1, [1, 0], [0, 0, 0, -1, 0], false];
+  /** The seat he rides in, and whether a weapon keeps his right hand. */
+  let sat: Seat | undefined;
+  let armed = false;
 
-  const update = (p: PlayerState, dt: number, floor?: Floor) => {
+  const update = (p: PlayerState, dt: number, floor?: Floor, seat?: Seat) => {
     dt = clamp(dt, 0, 0.1);
     fresh = !known || Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) > TELEPORT;
     const walks = p.mode == MODE.GROUND || p.mode == MODE.CROUCH;
@@ -413,6 +455,10 @@ export const createGait = (bow = BOW): Gait => {
     ].forEach((g, i) => set(W + 2 * i, +g, 12));
     // Floored by an arc, he lies as one down, falling faster.
     set(W + 2 * MOVE.DOWN, +(p.down > 0 || floored(p)), floored(p) ? 9 : 5);
+    const rides = p.mode == MODE.RIDE;
+    set(W + 2 * MOVE.RIDE, +rides, 14);
+    sat = rides ? (seat ?? { yaw: p.yaw, pitch: 0, roll: 0, steer: 0, s: 1 }) : sat;
+    armed = p.ammo >= 0 || !!p.railed || !!p.rifled || !!p.wield;
     set(LOW, +(p.mode == MODE.CROUCH), 12);
     set(UP, hold ? clamp((1.7 - lip[4] + p.y) / 1.2) : 0, 14);
     set(DIP, kick, 26);
@@ -433,6 +479,10 @@ export const createGait = (bow = BOW): Gait => {
     const face = p.yaw + arc(p.yaw, way) * turned;
     yaw = face + arc(face, wall) * clamp(sw(MOVE.HANG) + sw(MOVE.CLIMB));
     yaw += sp[YAW] * (1 - turned);
+    // Seated, the body faces the rover's nose.
+    if (sat) {
+      yaw += arc(yaw, sat.yaw) * clamp(sw(MOVE.RIDE));
+    }
     // The push of a tackle in the body's frame, taken off the velocity as it lands and eased out as it slides away.
     const [kc, ks] = [Math.cos(yaw), Math.sin(yaw)];
     set(KA, p.stun > 0 ? clamp(-(p.vx * ks + p.vz * kc) / 4.2, -1, 1) : 0, 18);
@@ -640,6 +690,53 @@ export const createGait = (bow = BOW): Gait => {
         ],
       );
     }
+    const ride = clamp(sw(MOVE.RIDE));
+    if (ride > 0.002 && sat) {
+      // The feet in the footwell, the knees up; the driver's hands on the yoke, which turns with
+      // the wheels.
+      const q = mul(axis(Y, yaw), tipped(sat, ride));
+      const S = (x: number, y: number, a: number): Vec3 =>
+        lin(at as Vec3, 1, turn(q, [x, y, -a]), 1);
+      const V = (x: number, y: number, a: number) => turn(q, [x, y, -a]);
+      const flat = mul(q, axis(X, SIT.toes));
+      [-1, 1].forEach(s =>
+        goals.push([
+          foot(s),
+          ride,
+          S(s * SIT.wide, SIT.ankle, SIT.ahead),
+          V(s * 0.25, 1, 0.4),
+          flat,
+        ]),
+      );
+      const grip = frame(V(1, 0, 0), V(0, 0.35, 0.94));
+      if (!sat.s) {
+        grips(sat.steer).forEach(([x, y, a], i) =>
+          goals.push([
+            hand(i ? 1 : -1),
+            ride,
+            S(x, y, a - 0.075),
+            V(i ? 0.7 : -0.7, -1, -0.2),
+            grip,
+          ]),
+        );
+      } else {
+        // A rider's left hand lies on his thigh; the right one too with a weapon in it, its barrel
+        // ahead, and holds the rail beside him without.
+        const lap = frame(V(1, 0, 0), V(0, -0.25, 0.97));
+        goals.push([J.HAND_L, ride, S(-0.13, 0.4, 0.2), V(-0.8, -0.4, -1), lap]);
+        goals.push(
+          armed
+            ? [J.HAND_R, ride, S(0.15, 0.42, 0.22), V(0.8, -0.4, -1), lap]
+            : [
+                J.HAND_R,
+                ride,
+                S(0.27, 0.4, 0.22),
+                V(0.6, -0.5, -1),
+                frame(V(0, 0.3, 1), V(0.35, -0.5, 0.8)),
+              ],
+        );
+      }
+    }
     goals.forEach(([j, k, t, h, o]) => {
       const [a, arm, w] = [j - 2, j < J.THIGH_L, k * k];
       // The end and the bend of the limb as the pose built so far has them, moved toward the goal.
@@ -764,6 +861,22 @@ export const createGait = (bow = BOW): Gait => {
         }
       }
     });
+    const ride = clamp(sw(MOVE.RIDE));
+    if (ride > 0.002 && sat) {
+      // The seat leans with the rover: the pelvis, and all it carries, about the seat point.
+      const tilt = tipped(sat, ride);
+      rot[J.PELVIS] = mul(tilt, rot[J.PELVIS]);
+      const d = sat.s ? 0 : ride;
+      const h = turn(tilt, [out.hips[0], out.hips[1] + REST[0][1], out.hips[2] - SIT.reach * d]);
+      out.hips = [h[0], h[1] - REST[0][1], h[2]];
+      // The driver bends to the yoke; a rider turns his shoulders part of the way to where he looks.
+      if (d) {
+        [J.SPINE, J.CHEST].forEach(j => (rot[j] = mul(rot[j], axis(X, (-SIT.hunch * d) / 2))));
+      } else if (sat.s) {
+        const t = 0.3 * ride * clamp(arc(yaw, look), -1.3, 1.3);
+        [J.SPINE, J.CHEST].forEach(j => (rot[j] = mul(rot[j], axis(Y, t))));
+      }
+    }
     const hang = sw(MOVE.HANG);
     if (hang > 0.002) {
       // A hang sways: the body swings about the hands, a metre above the pelvis, the legs a little more. The hands go back on the lip in `reach`.
@@ -800,7 +913,11 @@ export const createGait = (bow = BOW): Gait => {
 
     // The head holds the way the player looks, whatever the trunk does.
     const chest = mul(mul(R, rot[J.PELVIS]), mul(rot[J.SPINE], rot[J.CHEST]));
-    const aim = mul(axis(Y, look), axis(X, clamp(pitch, -1, 1) * 0.9));
+    // A neck turns so far: seated, the trunk does not follow the look.
+    const aim = mul(
+      axis(Y, ride > 0.5 ? yaw + clamp(arc(yaw, look), -1.3, 1.3) : look),
+      axis(X, clamp(pitch, -1, 1) * 0.9),
+    );
     const rel = mul(
       inv(chest),
       slerp(chest, aim, 0.85 * (1 - sw(MOVE.TUCK)) * (1 - 0.5 * stun) * (1 - sw(MOVE.DOWN))),

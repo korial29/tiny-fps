@@ -1,6 +1,5 @@
 // What is drawn around and over the moon level (docs/MOON.md), once, from fixed numbers and a
-// hash: red's half (the dome and its windows, the tubes, the pad and its shuttle, masts, rovers,
-// boulders) mirrored for blue, then the relief round the arena out over the crater wall, what
+// hash: red's half (the dome and its windows, the tubes, the pad and its shuttle, masts, boulders) mirrored for blue, then the relief round the arena out over the crater wall, what
 // stands on it, the stars and the Earth. Nothing here is collided with. Every part is lit paint
 // (layer -1) or glow (layer -2: windows, lamps, stars, the Earth), but the relief and the small
 // craters on the floor, in the floor's own stone.
@@ -12,7 +11,7 @@ import type { WorldDef } from '../shared/world';
 import { GLOW, glow, ring, tri } from './flag';
 import { STRIDE, dress, mix, place, smooth, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { UP, box, cross, face, lit, moonbase, put } from './moonbase';
+import { UP, box, cross, face, lit, moonbase } from './moonbase';
 import { hash } from './textures';
 
 /** The arena is x 0..W, z 0..Z, its middle C. */
@@ -28,12 +27,7 @@ const OUT = 1.65;
 /** Toward the Earth. */
 const EARTH = unit([0.3, 0.62, -0.75]);
 const GREY = [0.52, 0.54, 0.58];
-/** Models whose length runs along z (wheels) or along x (hull): frames place() takes, with UP. */
-const ID: Vec3[] = [
-  [1, 0, 0],
-  [0, 1, 0],
-  [0, 0, 1],
-];
+/** A model whose length runs along x (the hull): a frame place() takes, like UP. */
 const HULL: Vec3[] = [
   [0, 0, 1],
   [0, 1, 0],
@@ -94,18 +88,6 @@ const BLOB = dress(
     6,
   ),
   [1, 1, 1],
-);
-const WHEEL = dress(
-  smooth(
-    [
-      [0, 0],
-      [0.5, 0],
-      [0.5, 0.45],
-      [0, 0.45],
-    ],
-    8,
-  ),
-  [0.12, 0.12, 0.13],
 );
 /** The shuttle's hull, its length along -z. */
 const SHIP = dress(
@@ -246,34 +228,6 @@ const mast = (o: number[], x: number, z: number, y: number, h = 10, rgb = [1, 0.
   lit(o, GLOW, () => place(o, BLOB, [x, y + h + 0.4, z], UP, [0, 0, 0], [0.55, 0.55, 0.45], rgb));
 };
 
-/** A rover facing +x turned by yaw: body, cab with a glowing visor, four wheels, an antenna. */
-const rover = (o: number[], x: number, z: number, yaw: number) => {
-  const m: number[] = [];
-  box(m, [-1.7, 0.5, -0.9], [1.7, 1.1, 0.9], [0.75, 0.76, 0.8]);
-  box(m, [-0.5, 1.1, -0.7], [1, 1.8, 0.7], [0.8, 0.8, 0.84]);
-  lit(m, 1.5, () =>
-    face(
-      m,
-      [
-        [1.01, 1.25, -0.55],
-        [1.01, 1.25, 0.55],
-        [1.01, 1.7, 0.55],
-        [1.01, 1.7, -0.55],
-      ],
-      [0.4, 0.7, 1],
-      [0, 1.5, 0],
-    ),
-  );
-  for (const a of [-1, 1]) {
-    for (const b of [-1, 1]) {
-      place(m, WHEEL, [a * 1.1, 0.5, b * 1.05 - 0.225], ID, [0, 0, 0], 1);
-    }
-  }
-  place(m, POLE, [-1.2, 1.1, 0.5], UP, [0, 0, 0], [0.04, 0.04, 1.3]);
-  place(m, BLOB, [-1.2, 2.45, 0.5], UP, [0, 0, 0], [0.4, 0.4, 0.12]);
-  put(o, m, [x, 0, z], yaw);
-};
-
 /** Red's half: everything but the crater, the stars and the Earth, on the map's LAYOUT. */
 const base = (o: number[]) => {
   moonbase(o);
@@ -282,8 +236,6 @@ const base = (o: number[]) => {
   for (const [x, z] of LAYOUT.masts.slice(0, 6)) {
     mast(o, x, z, x < 60 ? 0.25 : 0);
   }
-  rover(o, 100, 178, 0.6);
-  rover(o, 30, 255, -0.4);
   // Boulders along the three walls of the half, small enough to be walked through.
   for (let i = 0; i < 36; i++) {
     const h = (k: number) => hash(i, k, 41);
@@ -323,7 +275,8 @@ const bare = ({ brushes }: WorldDef, x: number, z: number, r: number) =>
 /**
  * Small craters on the floor, 60 of 1.2 to 5 m wide, where nothing stands: a shallow bowl
  * darker than the floor and a raised lip, in its stone texture, the slopes' normals steepened
- * so the sun lights one side of the lip and shades the other. They are not collided with.
+ * so the sun lights one side of the lip and shades the other, and none within 6 m of where a rover
+ * is parked. They are not collided with.
  */
 const craters = (o: number[], def: WorldDef) => {
   const N = 12;
@@ -331,12 +284,7 @@ const craters = (o: number[], def: WorldDef) => {
     const [x, z, r] = [W * hash(k, 1, 61), Z * hash(k, 2, 61), 0.6 + 2 * hash(k, 3, 61) ** 2];
     if (
       !bare(def, x, z, 1.5 * r) ||
-      [
-        [100, 178],
-        [30, 255],
-        [100, 102],
-        [30, 25],
-      ].some(([a, b]) => Math.hypot(x - a, z - b) < 6)
+      (def.rovers ?? []).some(([a, , b]) => Math.hypot(x - a, z - b) < 6)
     ) {
       continue;
     }

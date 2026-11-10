@@ -11,8 +11,8 @@ import type { Vec3 } from './mesh';
 
 const SKIN = [0.66, 0.45, 0.35];
 
-/** The space suit's white and its black (gloves, boots, belt): see palette(). */
-const SUIT = [0.86, 0.87, 0.88];
+/** The space suit's dark grey under its armour (the user, 2026-11-10: white, then dark grey so the plates stand out) and its black (gloves, boots, belt): see palette(). */
+const SUIT = [0.2, 0.21, 0.23];
 const BLACK = [0.05, 0.05, 0.055];
 
 /** The colour regions of a palette. */
@@ -73,8 +73,8 @@ export const eyesOf = (id: number): number[] => IRISES[pick(id, 0x2468, IRISES.l
 
 /** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, between the hair and the skin, the shaved beard's shadow and its edge, the line between the lips (as the folds), the side stripe on the jacket and on the trousers and the belt (the jacket's and the trousers' own colours but on a space suit), the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
 /**
- * With `suit` (the moon's, the user 2026-11-10), a white space suit: the team's colour only in a
- * stripe down each side, black gloves, boots and belt.
+ * With `suit` (the moon's, the user 2026-11-10), a dark grey space suit under white armour: the
+ * team's colour only in a stripe down each side, black gloves, boots and belt.
  */
 export const palette = (
   jacket: number[],

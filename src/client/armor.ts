@@ -25,14 +25,33 @@ interface Region {
   a: [number, number];
   /** How much the top comes down at the front: the neck's cut. */
   dip?: number;
+  /** How much further out the plate swells at the rest point (x, y): the chest plate's pecs. */
+  swell?: (x: number, y: number) => number;
 }
+
+const smooth = (a: number, b: number, x: number) => {
+  const t = Math.max(0, Math.min((x - a) / (b - a), 1));
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * The chest plate's pecs (the user, 2026-11-10: fuller toward the bottom): a lobe each side of the
+ * sternum, rising sharply from the line under the pecs, fullest just above it, fading to the
+ * collar; `PEC` metres at most.
+ */
+export const PEC = 0.017;
+const pecs = (x: number, y: number) =>
+  PEC *
+  Math.exp(-(((Math.abs(x) - 0.072) / 0.058) ** 2)) *
+  smooth(1.245, 1.285, y) *
+  (1 - smooth(1.36, 1.46, y));
 
 /** The gap the user asked between the chest plate and the belly's plates, and between those. */
 export const GAP = 0.02;
 
 export const REGIONS: Region[] = [
   // The chest plate, from under the ribs to the collar, cut round the neck.
-  { part: PART.TRUNK, cx: 0, y: [1.195, 1.5], a: [-64, 64], dip: 0.045 },
+  { part: PART.TRUNK, cx: 0, y: [1.195, 1.5], a: [-64, 64], dip: 0.045, swell: pecs },
   // The belly's two plates, GAP apart and GAP under the chest's.
   { part: PART.TRUNK, cx: 0, y: [1.115, 1.195 - GAP], a: [-54, 54] },
   { part: PART.TRUNK, cx: 0, y: [1.035, 1.115 - GAP], a: [-54, 54] },
@@ -59,7 +78,7 @@ const partOf = (l: number) =>
         ? PART.LEG
         : -1;
 
-/** A corner being clipped: its place at rest, then as drawn and its normal. */
+/** A corner being clipped: its place at rest, then as drawn and its normal, then its normal at rest. */
 type Corner = number[];
 
 /** The angle of the rest point (x, z) round the region's middle line, degrees: + outward on a limb, toward +x on the trunk. */
@@ -101,15 +120,57 @@ const clip = (poly: Corner[], f: (c: Corner) => number) => {
   return out;
 };
 
-/** Appends the polygon as a fan, each corner set `off` along its normal, in `col` on `layer`. */
-const emit = (out: number[], poly: Corner[], off: number, col: number[], layer: number) => {
+/**
+ * Appends the polygon as a fan, each corner set `off` along its normal (plus the region's swell),
+ * in `col` on `layer`. A swell tilts the normal by its slope, carried from the rest pose to the
+ * drawn one by the turn between the corner's two normals.
+ */
+const emit = (
+  out: number[],
+  poly: Corner[],
+  off: number,
+  col: number[],
+  layer: number,
+  swell?: (x: number, y: number) => number,
+) => {
   const put = (c: Corner) => {
-    const l = Math.hypot(c[6], c[7], c[8]) || 1;
-    const [nx, ny, nz] = [c[6] / l, c[7] / l, c[8] / l];
+    const unitOf = (x: number, y: number, z: number) => {
+      const l = Math.hypot(x, y, z) || 1;
+      return [x / l, y / l, z / l];
+    };
+    let [nx, ny, nz] = unitOf(c[6], c[7], c[8]);
+    let d = off;
+    if (swell) {
+      const e = 1e-3;
+      d += swell(c[0], c[1]);
+      // The slope at rest, in the plane touching the skin there.
+      const r = unitOf(c[9], c[10], c[11]);
+      let g = [
+        (swell(c[0] + e, c[1]) - swell(c[0] - e, c[1])) / (2 * e),
+        (swell(c[0], c[1] + e) - swell(c[0], c[1] - e)) / (2 * e),
+        0,
+      ];
+      const gn = g[0] * r[0] + g[1] * r[1];
+      g = g.map((v, i) => v - r[i] * gn);
+      // Turned as the normal turned from rest to drawn (Rodrigues).
+      const k = [r[1] * nz - r[2] * ny, r[2] * nx - r[0] * nz, r[0] * ny - r[1] * nx];
+      const sn = Math.hypot(...k);
+      const cs = r[0] * nx + r[1] * ny + r[2] * nz;
+      if (sn > 1e-6) {
+        const u = k.map(v => v / sn);
+        const ug = u[0] * g[0] + u[1] * g[1] + u[2] * g[2];
+        const x = [u[1] * g[2] - u[2] * g[1], u[2] * g[0] - u[0] * g[2], u[0] * g[1] - u[1] * g[0]];
+        g = g.map((v, i) => v * cs + x[i] * sn + u[i] * ug * (1 - cs));
+      }
+      const [px, py, pz] = [c[3] + nx * d, c[4] + ny * d, c[5] + nz * d];
+      [nx, ny, nz] = unitOf(nx - g[0], ny - g[1], nz - g[2]);
+      out.push(px, py, pz, nx, ny, nz, col[0], col[1], layer, col[2]);
+      return;
+    }
     out.push(
-      c[3] + nx * off,
-      c[4] + ny * off,
-      c[5] + nz * off,
+      c[3] + nx * d,
+      c[4] + ny * d,
+      c[5] + nz * d,
       nx,
       ny,
       nz,
@@ -164,12 +225,22 @@ export const armor = (out: number[], from: number, s: Skin) => {
           out[o + 3],
           out[o + 4],
           out[o + 5],
+          v[i + 3],
+          v[i + 4],
+          v[i + 5],
         ];
       });
       for (const grow of [1, 0]) {
         const poly = LIMITS[grow][g].reduce(clip, tri);
         if (poly.length >= 3) {
-          emit(out, poly, grow ? EDGE_OFF : OFF, grow ? EDGE : WHITE, grow ? -1 : GLOSS);
+          emit(
+            out,
+            poly,
+            grow ? EDGE_OFF : OFF,
+            grow ? EDGE : WHITE,
+            grow ? -1 : GLOSS,
+            REGIONS[g].swell,
+          );
         }
       }
     }

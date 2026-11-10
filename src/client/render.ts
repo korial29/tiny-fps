@@ -151,12 +151,13 @@ const RELIEF = 0.06;
 // lighting. Polished metal (SHINE) turns partly into that reflection (k), tinted by its colour and
 // dark where r looks down at the ground, with a sharp bright streak where it mirrors just above the
 // horizon. On a texture C.w is 2 * the brush's tint index + its light (see level); G is the
-// palette. On stone (the regolith) the texture is mixed with itself 3.7 times larger and turned,
+// palette. On stone (the regolith) the tile is fetched twice at offsets drawn from a 9 m value noise
+// (vn) and blended by it, so no two patches repeat, darkened on slopes; it is then mixed with itself 3.7 times larger and turned,
 // and lit up or darkened by its own 58 m mip (mk), so it shows no 2 m grid. F: fog colour and
 // density, U the height the fog layer is anchored at: the density is
 // F.a * (1 + FOG_LAYER * exp(FOG_RISE * (U - y))) at height y, integrated along the view ray in closed
 // form (x is the climb along it, times FOG_RISE; the branch is its limit at 0).
-const FRAG = `#version 300 es
+export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T,Z,Y;uniform int Q;
 uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F;uniform float U;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
@@ -168,12 +169,20 @@ float h=d.y,k=max(dot(d,O),0.);
 vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
 c=mix(c,H[4]*1.08,exp(-abs(h)*7.));
 return c+X*((.1+.9*clamp(H[4].g*1.2,0.,1.))*(.2*pow(k,24.)+.05*pow(k,4.))+2.*smoothstep(.9993,.9997,k));}
+float vh(vec2 q){return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5453);}
+float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(vh(i),vh(i+vec2(1,0)),f.x),mix(vh(i+vec2(0,1)),vh(i+vec2(1,1)),f.x),f.y);}
 void main(){
 if(Z<0.){if(C.z<-2.5)discard;return;}
 if(Y>.5){o=vec4(K0(normalize(P)),1);return;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
-vec3 t2=texture(S,vec3(mat2(.8,-.6,.6,.8)*C.xy*.135,L)).rgb;float ks=step(abs(L-${TEX.STONE}.),.5),mk=textureLod(S,vec3(C.xy*.017,L),5.).g-textureLod(S,vec3(0,0,L),9.).g;t.rgb=mix(t.rgb,mix(t.rgb,t2,.45)*(1.+6.*mk),ks);
+float ks=step(abs(L-${TEX.STONE}.),.5);
+if(ks>.5){
+vec2 uv=C.xy/${TILE}.,gx=dFdx(uv),gy=dFdy(uv);float q=vn(C.xy*.11)*8.,iq=floor(q);
+vec4 ta=textureGrad(S,vec3(uv+sin(vec2(3,7)*iq),L),gx,gy),tb=textureGrad(S,vec3(uv+sin(vec2(3,7)*(iq+1.)),L),gx,gy);
+t=mix(ta,tb,smoothstep(.2,.8,q-iq-.1*dot(ta.rgb-tb.rgb,vec3(1))));
+t.rgb*=mix(.6,1.,smoothstep(.72,.97,normalize(N).y));}
+vec3 t2=texture(S,vec3(mat2(.8,-.6,.6,.8)*C.xy*.135,L)).rgb;float mk=textureLod(S,vec3(C.xy*.017,L),5.).g-textureLod(S,vec3(0,0,L),9.).g;t.rgb=mix(t.rgb,mix(t.rgb,t2,.45)*(1.+6.*mk),ks);
 vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
 vec3 n=normalize(N),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float h=t.a*s*${RELIEF},det=dot(dx,a);

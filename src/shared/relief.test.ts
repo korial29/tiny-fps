@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { Sim, EAST, WEST } from '../../test/pilot';
 import { duo } from '../../test/teams';
 import { move, spawn } from './physics';
-import { bound, ground, raise, trace } from './relief';
+import { hash as textureHash } from '../client/textures';
+import { bound, ground, hash, noise, raise, trace } from './relief';
 import type { ReliefDef } from './relief';
 import { KEY, MODE, TEX } from './types';
 import { build, hidden, ray } from './world';
@@ -29,7 +30,39 @@ const world = (relief?: ReliefDef): World =>
   });
 const hills = world(SLOPE);
 
+describe('hash and noise', () => {
+  it("hashes as the textures' hash does, on integers alone", () => {
+    for (const [x, y, s] of [
+      [0, 0, 0],
+      [1, 2, 3],
+      [-7, 40, 9],
+      [123456, -654321, 77],
+    ]) {
+      expect(hash(x, y, s)).toBe(textureHash(x, y, s));
+      expect(hash(x, y, s)).toBeGreaterThanOrEqual(0);
+      expect(hash(x, y, s)).toBeLessThan(1);
+    }
+    // Pinned: any engine gives these bits.
+    expect(hash(1, 2, 3)).toBe(0.4897682995069772);
+  });
+
+  it('is the hash on the lattice points, smooth between them and flat across a lattice line', () => {
+    expect(noise(3, -2, 5)).toBe(hash(3, -2, 5));
+    const [a, b] = [hash(3, 4, 1), hash(4, 4, 1)];
+    expect(noise(3.5, 4, 1)).toBeCloseTo((a + b) / 2, 12);
+    // No crease where a map is folded along a lattice line: the same just before and after it.
+    expect(noise(3.3, 4 - 1e-4, 1)).toBeCloseTo(noise(3.3, 4 + 1e-4, 1), 6);
+    expect(Math.abs(noise(3.3, 4.4, 1) - noise(3.3, 4.4002, 1))).toBeGreaterThan(1e-6);
+  });
+});
+
 describe('raise', () => {
+  it('builds the lattice of a definition once', () => {
+    expect(raise(SLOPE)).toBe(raise(SLOPE));
+    expect(raise({ ...SLOPE })).not.toBe(raise(SLOPE));
+    expect(hills.relief).toBe(raise(SLOPE));
+  });
+
   it('lays nodes over the whole bound, a cell apart, and knows the highest', () => {
     const r = raise(SLOPE);
     expect([r.x0, r.z0, r.cell]).toEqual([-100, -60, 4]);
@@ -126,6 +159,38 @@ describe('trace and ray', () => {
     const t = ray(hills, [12, 5, 30], [1, 0, 0], 100, 1);
     expect(t).toBeGreaterThan(15.9);
     expect(t).toBeLessThanOrEqual(16);
+  });
+
+  it('skips the hole: a ray that stays over it takes no sample, one that leaves it or crosses it still lands', () => {
+    // Slopes on both sides of the slab, 1 in 2 from x = 20 and from x = -10.
+    const def = {
+      ...SLOPE,
+      at: (x: number) => (x > 20 ? (x - 20) / 2 : x < -10 ? (-10 - x) / 2 : 0),
+    };
+    const w = world(def);
+    let reads = 0;
+    const counted: World = {
+      ...w,
+      get relief() {
+        reads++;
+        return w.relief;
+      },
+    };
+    // From over the slab to over the slab: the one read is trace()'s own.
+    expect(trace(counted, [1, 3, 5], [1, 0, 0], 8)).toBe(8);
+    expect(trace(counted, [9, 3, 1], [-0.6, 0, 0.8], 9)).toBe(9);
+    expect(reads).toBe(2);
+    // Out of the hole at x = 10, onto the slope at x = 26.
+    const out = trace(counted, [1, 3, 5], [1, 0, 0], 100);
+    expect(out).toBeGreaterThan(24.9);
+    expect(out).toBeLessThanOrEqual(25);
+    expect(reads).toBeGreaterThan(10);
+    // From one side, over the hole, onto the other: 5 m up at x = -20.
+    const across = ray(w, [25, 5, 5], [-1, 0, 0], 100);
+    expect(across).toBeGreaterThan(44.9);
+    expect(across).toBeLessThanOrEqual(45);
+    // Under the ground past the hole: stopped where the ray leaves the hole.
+    expect(trace(w, [5, 3, 5], [0.8, -0.6, 0], 100)).toBe(6.25);
   });
 
   it('keeps the brushes first', () => {

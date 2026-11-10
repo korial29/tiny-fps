@@ -8,6 +8,7 @@ import { STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import {
+  FAR,
   HAZE,
   MAX_PIXELS,
   MAX_TINTS,
@@ -72,6 +73,17 @@ describe('viewProj and project', () => {
   it('moves with the eye', () => {
     const m = viewProj([10, 2, 10], 0, 0, 1);
     expect(project(m, 10, 2, 5)![0]).toBeCloseTo(0.5);
+  });
+
+  it('draws out to FAR, 1200 m, and clips what is past it', () => {
+    expect(FAR).toBe(1200);
+    const m = viewProj([0, 0, 0], 0, 0, 1);
+    // Depth over w straight ahead: 1 on the far plane, -1 on the near one.
+    const depth = (d: number) => (m[10] * -d + m[14]) / (m[11] * -d + m[15]);
+    expect(depth(FAR * 0.9)).toBeLessThan(1);
+    expect(depth(FAR * 1.1)).toBeGreaterThan(1);
+    expect(depth(0.11)).toBeGreaterThan(-1);
+    expect(depth(0.09)).toBeLessThan(-1);
   });
 });
 

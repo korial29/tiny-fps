@@ -1,10 +1,12 @@
 // What is drawn around and over the moon level (docs/MOON.md), once, from fixed numbers and a
 // hash: red's half (the dome and its windows, the tubes, the pad and its shuttle, masts, rovers,
-// boulders) mirrored for blue, then the crater rim, the stars and the Earth. Nothing here is collided
-// with. Every part is lit paint (layer -1) or glow (layer -2: windows, lamps, stars, the Earth),
-// but the small craters on the floor, in the floor's own stone.
+// boulders) mirrored for blue, then the relief round the arena out over the crater wall, what
+// stands on it, the stars and the Earth. Nothing here is collided with. Every part is lit paint
+// (layer -1) or glow (layer -2: windows, lamps, stars, the Earth), but the relief and the small
+// craters on the floor, in the floor's own stone.
 import { LAYOUT } from '../shared/moon';
 import { TAU } from '../shared/physics';
+import { raise } from '../shared/relief';
 import { TEX } from '../shared/types';
 import type { WorldDef } from '../shared/world';
 import { GLOW, glow, ring, tri } from './flag';
@@ -13,13 +15,18 @@ import type { Vec3 } from './mesh';
 import { UP, box, cross, face, lit, moonbase, put } from './moonbase';
 import { hash } from './textures';
 
-/** The play area is x 0..W, z 0..Z, its middle C. The crater wall runs REACH metres out from the stone wall, the plain beyond it. */
+/** The arena is x 0..W, z 0..Z, its middle C. */
 const [W, Z] = [160, 280];
-/** The stone wall round the play area is WALL thick and TOP high, a ghost under the scree laid over it; the crater wall rises from its outer edge and ends REACH out. */
-const [WALL, TOP, REACH] = [10, 14, 400];
 const C: Vec3 = [80, 0, 140];
-/** Radius of the star dome and the Earth's distance, metres: 700 from the middle is 540..860 from any spot of the play area, inside the far clip of 900. */
-const SKY = 700;
+/**
+ * Radius of the star dome and the Earth's distance, metres: past the crater wall (drawn to 1.65
+ * of the bound) and, at most 360 m more from a spot on the bound, inside the far clip (FAR).
+ */
+export const SKY = 800;
+/** The relief is drawn to this share of the bound, where the wall's far side is down on the plain: it hides the rest. */
+const OUT = 1.65;
+/** Toward the Earth. */
+const EARTH = unit([0.3, 0.62, -0.75]);
 const GREY = [0.52, 0.54, 0.58];
 /** Models whose length runs along z (wheels) or along x (hull): frames place() takes, with UP. */
 const ID: Vec3[] = [
@@ -100,6 +107,35 @@ const WHEEL = dress(
   ),
   [0.12, 0.12, 0.13],
 );
+/** The shuttle's hull, its length along -z. */
+const SHIP = dress(
+  smooth(
+    [
+      [0, 0],
+      [0.5, 1.6],
+      [0.85, 3.5],
+      [1, 6],
+      [1, 10],
+      [0.8, 12.5],
+      [0.55, 14],
+      [0, 14],
+    ],
+    12,
+  ),
+  [0.9, 0.9, 0.92],
+);
+/** An antenna's dish, a lens facing -z. */
+const DISH = dress(
+  smooth(
+    [
+      [0, 0],
+      [2.2, 0.6],
+      [0, 0.9],
+    ],
+    12,
+  ),
+  [0.8, 0.82, 0.86],
+);
 /** An octahedron cut once: 32 triangles, to be pushed out into a rock. */
 const OCT = (() => {
   const out: Vec3[][] = [];
@@ -173,17 +209,7 @@ const pad = (o: number[], px: number, pz: number, s: number) => {
       ),
     );
   }
-  const hull: [number, number][] = [
-    [0, 0],
-    [0.5, 1.6],
-    [0.85, 3.5],
-    [1, 6],
-    [1, 10],
-    [0.8, 12.5],
-    [0.55, 14],
-    [0, 14],
-  ];
-  place(o, dress(smooth(hull, 12), [0.9, 0.9, 0.92]), [s, 1.8, pz], HULL, [0, 0, 0], [2, 1.5, 1]);
+  place(o, SHIP, [s, 1.8, pz], HULL, [0, 0, 0], [2, 1.5, 1]);
   const flat = (a: Vec3, b: Vec3, c: Vec3, rgb: number[]) => {
     tri(o, a, b, c, rgb);
     tri(o, a, c, b, rgb);
@@ -213,13 +239,11 @@ const pad = (o: number[], px: number, pz: number, s: number) => {
   );
 };
 
-/** A light mast standing at height y: a pole 10 m high, a foot, a glowing lamp. */
-const mast = (o: number[], x: number, z: number, y: number) => {
-  place(o, POLE, [x, y, z], UP, [0, 0, 0], [0.2, 0.2, 10]);
+/** A light mast standing at height y: a pole h high, a foot, a glowing lamp. */
+const mast = (o: number[], x: number, z: number, y: number, h = 10, rgb = [1, 0.93, 0.75]) => {
+  place(o, POLE, [x, y, z], UP, [0, 0, 0], [0.2, 0.2, h]);
   place(o, POLE, [x, y, z], UP, [0, 0, 0], [0.5, 0.5, 0.5]);
-  lit(o, GLOW, () =>
-    place(o, BLOB, [x, y + 10.4, z], UP, [0, 0, 0], [0.55, 0.55, 0.45], [1, 0.93, 0.75]),
-  );
+  lit(o, GLOW, () => place(o, BLOB, [x, y + h + 0.4, z], UP, [0, 0, 0], [0.55, 0.55, 0.45], rgb));
 };
 
 /** A rover facing +x turned by yaw: body, cab with a glowing visor, four wheels, an antenna. */
@@ -282,13 +306,15 @@ const BOWL = [
   [1.4, 0.015, 1],
 ];
 
-/** Whether the floor at y 0, with nothing standing on it, runs under the whole circle. */
+/** Whether the arena's floor at y 0, with nothing standing on it, runs under the whole circle, half a metre in from its edge. */
 const bare = ({ brushes }: WorldDef, x: number, z: number, r: number) =>
   [0, 1, 2, 3, 4].every(k => {
     const [u, v] = k ? [x + r * Math.cos(k * 1.57), z + r * Math.sin(k * 1.57)] : [x, z];
     const over = (b: (typeof brushes)[0], m: number) =>
       u > b.min[0] - m && u < b.max[0] + m && v > b.min[2] - m && v < b.max[2] + m;
     return (
+      Math.abs(u - C[0]) <= C[0] - 0.5 &&
+      Math.abs(v - C[2]) <= C[2] - 0.5 &&
       brushes.some(b => b.max[1] == 0 && over(b, 0)) &&
       !brushes.some(b => b.max[1] > 0 && over(b, 0.5))
     );
@@ -335,112 +361,158 @@ const craters = (o: number[], def: WorldDef) => {
   }
 };
 
-/** How far a point is from the play area (0 in it). */
-const away = (x: number, z: number) => Math.hypot(Math.max(-x, 0, x - W), Math.max(-z, 0, z - Z));
+/** Grid lines 20 m apart over the lattice, from lo to hi, then outward from both ends over the crater wall: four of 20 m, then 40 m. */
+const lines = (lo: number, hi: number) => {
+  const out = [0, 20, 40, 60, 80, 120, 160, 200, 240];
+  return [
+    ...out.map(d => lo - d).reverse(),
+    ...Array.from({ length: (hi - lo) / 20 - 1 }, (_, i) => lo + 20 * (i + 1)),
+    ...out.map(d => hi + d),
+  ];
+};
 
 /**
- * Height of the crater wall: a scree from the floor to TOP over the stone wall, then rising concave
- * and gently to a ragged crest of 60..90 m some 200..250 m out, then down to the plain.
+ * The relief, in the floor's stone: inside the bound the lattice's own triangles, each square
+ * split as ground() splits it, so what is seen is what is stood on. Past the bound, where nobody
+ * goes, the same heights on squares of 20 m and more, a fan each, its sides cut where a finer
+ * square is next to it: no gap. Lighter up the wall, darker down the bowls.
  */
-const height = (x: number, z: number) => {
-  const e = away(x, z);
-  if (e < WALL) {
-    return (
-      (TOP + 0.3) * (e / WALL) -
-      0.3 +
-      3 * (fbm(x / 4, z / 4, 5) - 0.5) * Math.sin((Math.PI * e) / WALL)
-    );
-  }
-  const d = e - WALL;
-  const dc = 225 + 50 * (fbm(x / 150, z / 150, 9) - 0.5);
-  const crest = 60 + 30 * sm((fbm(x / 70, z / 70, 3) - 0.25) * 2);
-  const fall = 1 - sm((d - dc) / (REACH - dc));
-  const ridge = (1 - Math.abs(2 * fbm(x / 11, z / 11, 7) - 1) - 0.5) * 20 * sm(d / 60) * fall;
-  return (d < dc ? TOP + (crest - TOP) * (d / dc) ** 1.8 : crest * fall) + ridge;
-};
-
-/** Grid lines from lo to hi every 10 m, and outward from both ends in steps that grow with the distance: 5 over the scree, 10, 20 then 40 m. */
-const lines = (lo: number, hi: number) => {
-  const out = (a: number, s: number) => {
-    const r = [a];
-    for (let d = 0; d < REACH + WALL;) {
-      d += d < WALL ? 5 : d < 100 ? 10 : d < 200 ? 20 : 40;
-      r.push(a + s * d);
-    }
-    return r;
+const terrain = (o: number[], def: WorldDef) => {
+  const r = raise(def.relief!);
+  const [cx, cz, a, b] = r.bound;
+  const [xs, zs] = [lines(r.x0, cx + a), lines(r.z0, cz + b)];
+  const y = (x: number, z: number) => {
+    const [i, j] = [(x - r.x0) / r.cell, (z - r.z0) / r.cell];
+    return i % 1 || j % 1 || i < 0 || j < 0 || i >= r.nx || j >= r.nz
+      ? def.relief!.at(x, z)
+      : r.h[i + j * r.nx];
   };
-  const mid = Array.from({ length: (hi - lo) / 10 - 1 }, (_, i) => lo + 10 * (i + 1));
-  return [...out(lo, -1).reverse(), ...mid, ...out(hi, 1)];
-};
-
-/** The crater wall: a grid round the stone wall, flat shaded; the plain out to the stars beyond. */
-const crater = (o: number[]) => {
-  const [xs, zs] = [lines(0, W), lines(0, Z)];
+  const seen = new Map<number, number[]>();
+  const vert = (x: number, z: number) => {
+    const k = x * 4096 + z;
+    let v = seen.get(k);
+    if (!v) {
+      const h = y(x, z);
+      const n = unit([y(x - 4, z) - y(x + 4, z), 8, y(x, z - 4) - y(x, z + 4)]);
+      v = [x, h, z, ...n, x, z, TEX.STONE, Math.min(Math.max(1 + h / 60, 0.78), 1.2)];
+      seen.set(k, v);
+    }
+    return v;
+  };
+  /** The square (i, j) of the grid lines: 0 not drawn (the arena, the plain), 1 a fan, 2 the lattice. */
+  const kind = (i: number, j: number) => {
+    const [x0, x1, z0, z1] = [xs[i], xs[i + 1], zs[j], zs[j + 1]];
+    if (
+      !(x0 < x1 && z0 < z1) ||
+      (x0 >= r.hole[0] && x1 <= r.hole[2] && z0 >= r.hole[1] && z1 <= r.hole[3])
+    ) {
+      return 0;
+    }
+    // Its nearest point to the middle, in the ellipse's own measure.
+    const k = Math.hypot(
+      (Math.min(Math.max(cx, x0), x1) - cx) / a,
+      (Math.min(Math.max(cz, z0), z1) - cz) / b,
+    );
+    return k < 1 ? 2 : k < OUT ? 1 : 0;
+  };
   for (let i = 0; i < xs.length - 1; i++) {
     for (let j = 0; j < zs.length - 1; j++) {
-      const [x, z] = [xs[i], zs[j]];
-      if (x >= 0 && xs[i + 1] <= W && z >= 0 && zs[j + 1] <= Z) {
-        continue;
-      }
-      const p = (a: number, b: number): Vec3 => {
-        const [u, v] = [xs[i + a], zs[j + b]];
-        return [u, height(u, v), v];
-      };
-      const q = [p(0, 0), p(1, 0), p(1, 1), p(0, 1)];
-      const g = (k: number) => 0.2 + 0.1 * hash(i, j, k) + (0.06 * (q[0][1] + q[2][1])) / 180;
-      const below: Vec3 = [x, -500, z];
-      const [s, t] =
-        (i + j) & 1
-          ? [
-              [0, 1, 2],
-              [0, 2, 3],
-            ]
-          : [
-              [0, 1, 3],
-              [1, 2, 3],
+      const [x0, x1, z0, z1, k] = [xs[i], xs[i + 1], zs[j], zs[j + 1], kind(i, j)];
+      if (k > 1) {
+        for (let x = x0; x < x1; x += r.cell) {
+          for (let z = z0; z < z1; z += r.cell) {
+            const [p, q, s, t] = [
+              vert(x, z),
+              vert(x + r.cell, z),
+              vert(x + r.cell, z + r.cell),
+              vert(x, z + r.cell),
             ];
-      face(
-        o,
-        s.map(k => q[k]),
-        [g(5) * 1.04, g(5), g(5) * 0.95],
-        below,
-      );
-      face(
-        o,
-        t.map(k => q[k]),
-        [g(6) * 1.04, g(6), g(6) * 0.95],
-        below,
-      );
+            o.push(...p, ...s, ...q, ...p, ...t, ...s);
+          }
+        }
+      } else if (k) {
+        // Round the square, each side in steps of a cell where the lattice is across it.
+        const rim: number[][] = [];
+        for (const [ax, az, bx, bz, fine] of [
+          [x0, z0, x1, z0, kind(i, j - 1)],
+          [x1, z0, x1, z1, kind(i + 1, j)],
+          [x1, z1, x0, z1, kind(i, j + 1)],
+          [x0, z1, x0, z0, kind(i - 1, j)],
+        ]) {
+          const n = fine > 1 ? 5 : 1;
+          for (let m = 0; m < n; m++) {
+            rim.push(vert(ax + ((bx - ax) * m) / n, az + ((bz - az) * m) / n));
+          }
+        }
+        const mid = vert((x0 + x1) / 2, (z0 + z1) / 2);
+        rim.forEach((p, m) => o.push(...mid, ...rim[(m + 1) % rim.length], ...p));
+      }
     }
   }
-  const [x0, x1, z0, z1] = [-WALL - REACH, W + WALL + REACH, -WALL - REACH, Z + WALL + REACH];
-  for (const [a, b, c, d] of [
-    [-720, x0, -660, 940],
-    [x1, 880, -660, 940],
-    [x0, x1, -660, z0],
-    [x0, x1, z1, 940],
+  // The rille's two ends, under the ground's edge: its end walls.
+  for (const [x, n] of [
+    [r.hole[0], 1],
+    [r.hole[2], -1],
   ]) {
-    face(
-      o,
-      [
-        [a, 0, c],
-        [b, 0, c],
-        [b, 0, d],
-        [a, 0, d],
-      ],
-      grey(0.2),
-      [a, -50, c],
+    const p = (z: number, h: number) => [x, h, z, n, 0, 0, z, h, TEX.STONE, 1];
+    o.push(
+      ...p(132, -30),
+      ...p(148, -30),
+      ...p(148, 0),
+      ...p(132, -30),
+      ...p(148, 0),
+      ...p(132, 0),
     );
   }
-  // Boulders on the slope, big against it.
-  for (let k = 0, n = 0; n < 90 && k < 3000; k++) {
-    const [x, z] = [x0 + (x1 - x0) * hash(k, 1, 51), z0 + (z1 - z0) * hash(k, 2, 51)];
-    const d = away(x, z);
-    if (d > WALL + 3 && d < 200) {
-      const r = 3 + 9 * hash(k, 3, 51) ** 3;
-      rock(o, [x, height(x, z) + 0.2 * r, z], r, k, grey(0.2 + 0.12 * hash(k, 4, 51)));
-      n++;
+};
+
+/** What stands on the relief, on the map's LAYOUT: the boulder field, the dishes on their hill, an orange lamp each side of a ramp's lip, the wrecked lander in the Bowl, and boulders up the crater wall past the bound. */
+const sites = (o: number[], def: WorldDef) => {
+  const { at } = def.relief!;
+  LAYOUT.rocks.forEach(([x, z, r], i) =>
+    rock(o, [x, at(x, z) + 0.15 * r, z], r, i + 7, grey(0.24 + 0.1 * hash(i, 5, 43))),
+  );
+  // The dishes look at the Earth.
+  const side = unit(cross([0, 1, 0], EARTH));
+  const frame = [side, cross(EARTH, side), EARTH];
+  for (const [x, z] of LAYOUT.dishes) {
+    mast(o, x, z, at(x, z), 6, [1, 0.25, 0.15]);
+    place(o, DISH, [x, at(x, z) + 5.2, z], frame, [0, 0, -0.9], 1);
+  }
+  for (const [x, z, ax, az] of LAYOUT.ramps) {
+    for (const c of [-8, 8]) {
+      mast(o, x + c * az, z - c * ax, at(x + c * az, z - c * ax), 2.2, [1, 0.45, 0.1]);
     }
+  }
+  // The lander: its hull nose down in the regolith, a torn fin, a beacon still lit.
+  const [x, z] = LAYOUT.wreck;
+  const h = at(x, z);
+  const nose = unit([0.8, -0.35, 0.5]);
+  const wing = unit(cross([0, 1, 0], nose));
+  place(
+    o,
+    SHIP,
+    [x - 3, h + 3.1, z - 2],
+    [wing, cross(nose, wing), nose],
+    [0, 0, 0],
+    [1.6, 1.4, 0.55],
+    [0.6, 0.6, 0.62],
+  );
+  face(
+    o,
+    [
+      [x + 3, h, z + 4],
+      [x + 6.5, h + 0.2, z + 5],
+      [x + 4, h + 2.6, z + 5.5],
+    ],
+    [0.7, 0.3, 0.14],
+  );
+  mast(o, x - 3.4, z + 2.6, h, 3.5, [1, 0.12, 0.08]);
+  for (let k = 0; k < 90; k++) {
+    const [f, t] = [1.03 + 0.22 * hash(k, 1, 51), TAU * hash(k, 2, 51)];
+    const [u, v] = [C[0] + 300 * f * Math.cos(t), C[2] + 360 * f * Math.sin(t)];
+    const r = 3 + 9 * hash(k, 3, 51) ** 3;
+    rock(o, [u, at(u, v) - 0.4 * r, v], r, k, grey(0.2 + 0.12 * hash(k, 4, 51)));
   }
 };
 
@@ -468,9 +540,9 @@ const stars = (o: number[]) => {
   }
 };
 
-/** The Earth: a disc of 52 m about 40 degrees up, toward blue's side, its cells coloured from noise on a globe: oceans, green and brown land, white clouds and ice. */
+/** The Earth: a disc of 60 m about 40 degrees up, toward blue's side, its cells coloured from noise on a globe: oceans, green and brown land, white clouds and ice. */
 const earth = (o: number[]) => {
-  const dir = unit([0.3, 0.62, -0.75]);
+  const dir = EARTH;
   const n = dir.map(v => -v) as Vec3;
   const e = unit([n[2], 0, -n[0]]);
   const f = cross(n, e);
@@ -478,7 +550,7 @@ const earth = (o: number[]) => {
   const away = dir.map((v, k) => at[k] + v * 100) as Vec3;
   const [N, S] = [28, 64];
   const P = (r: number, a: number) =>
-    at.map((c, k) => c + 52 * r * (e[k] * Math.cos(a) + f[k] * Math.sin(a))) as Vec3;
+    at.map((c, k) => c + 60 * r * (e[k] * Math.cos(a) + f[k] * Math.sin(a))) as Vec3;
   const from = o.length;
   for (let i = 0; i < N; i++) {
     for (let j = 0; j < S; j++) {
@@ -514,7 +586,10 @@ export const moonscape = (def: WorldDef): number[] => {
   base(red);
   const o = red.concat(mirror(red));
   craters(o, def);
-  crater(o);
+  if (def.relief) {
+    terrain(o, def);
+    sites(o, def);
+  }
   stars(o);
   earth(o);
   return o;

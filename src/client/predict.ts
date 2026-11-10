@@ -7,7 +7,7 @@ import { INTERP_DELAY } from '../shared/constants';
 import { step } from '../shared/gun';
 import { TAU, norm } from '../shared/physics';
 import { onWire } from '../shared/protocol';
-import type { Input, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
+import type { Input, PlayerState, Rover, SnapPlayer, Snapshot } from '../shared/types';
 import type { World } from '../shared/world';
 
 export interface Predictor {
@@ -40,6 +40,13 @@ export interface Predictor {
   me(alpha: number): PlayerState | undefined;
   /** The other players at now - INTERP_DELAY; a player missing from the latest snapshot is gone. */
   others(now: number): PlayerState[];
+  /**
+   * The map's rovers, in the order of WorldDef.rovers: the one the own player drives predicted and
+   * eased by alpha like me(), the others at now - INTERP_DELAY. Empty on a map without rovers.
+   */
+  rovers(now: number, alpha: number): Rover[];
+  /** The rover the own player is seated in (its index) and his seat (0 the driver's), or undefined on foot. */
+  riding(): { rover: number; seat: 0 | 1 } | undefined;
 }
 
 /** Unacked inputs kept at most (2 s at 60 Hz): a stalled host does not grow the list. */
@@ -184,5 +191,8 @@ export const createPredictor = (world: World): Predictor => {
     me: alpha => (own && prev ? lerp(prev, own, Math.max(0, Math.min(1, alpha))) : undefined),
 
     others,
+    // The contract only: the rovers' prediction comes next.
+    rovers: () => [],
+    riding: () => undefined,
   };
 };

@@ -6,7 +6,7 @@
 // colour writes off. The scene goes into an offscreen target, then a second, small program (POST)
 // turns it into the picture on the canvas. No DOM beyond the canvas.
 import { TEX } from '../shared/types';
-import type { PlayerState } from '../shared/types';
+import type { PlayerState, Rover } from '../shared/types';
 import type { World, WorldDef } from '../shared/world';
 import type { Body } from './body';
 import type { Tracer } from './beams';
@@ -445,6 +445,10 @@ export interface Renderer {
     ctf?: CtfScene,
     /** The plasma balls, the flashes and the sparks: they glow and cast no shadow. */
     tracer?: Tracer,
+    /** The map's rovers (Predictor.rovers()): drawn lit, casting shadows, with the other players. */
+    rovers?: Rover[],
+    /** The own player when the camera is not in his head (seated in a rover): drawn whole, like the others. */
+    self?: PlayerState,
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;

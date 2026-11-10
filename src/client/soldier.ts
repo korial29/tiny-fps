@@ -431,13 +431,22 @@ export const stance = (r: Runner) => {
 };
 
 /** Draws the runner and gives back its solved skeleton, or nothing once a bolt has burnt it away. */
-export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helmets = false) => {
+export const soldier = (
+  out: number[],
+  r: Runner,
+  color: number[],
+  lod = 1,
+  helmets = false,
+  armored = helmets,
+) => {
   const { p } = r;
   const k = fried(p);
   if (k >= 1) {
     return;
   }
-  const colors = palette(color, hairOf(p.id), eyesOf(p.id), helmets);
+  const colors = palette(color, hairOf(p.id), eyesOf(p.id), armored);
+  // The armour: white in space, else in the team's colour.
+  const plate = helmets ? undefined : color;
   const { s, sink, yaw, carry } = stance(r);
   const blade = p.wield && !p.down && !driving(r);
   if (r.cut) {
@@ -446,8 +455,8 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
     skin(out, cs, s, colors, 1, 0.3);
     // The stump's face is the last vertex drawn.
     r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
-    if (helmets) {
-      armor(out, at, cs, lod > 2);
+    if (armored) {
+      armor(out, at, cs, lod > 2, plate);
     }
     piece(out, r.cut, colors, lod, sink);
   } else {
@@ -464,9 +473,9 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
       +(down || r.hurt > 0 || (r.t + p.id * 0.7) % 3.7 < 0.13),
       r.prog >= 0 ? 1 : r.hurt > 0 ? 0.6 : down ? 0.3 : r.dash * 0.5,
     );
-    // The space suit's armour, cut out of the skin just drawn.
-    if (helmets) {
-      armor(out, from, bs, lod > 2);
+    // The armour, cut out of the skin just drawn.
+    if (armored) {
+      armor(out, from, bs, lod > 2, plate);
     }
     pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
     if (k > 0) {
@@ -481,11 +490,14 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
   // The life support pack on the back of a space suit.
   if (helmets) {
     pack(out, s.pos[J.CHEST], s.rot[J.CHEST], color, lod);
-    crotch(out, s.pos[J.PELVIS], s.rot[J.PELVIS], lod);
+  }
+  if (armored) {
+    crotch(out, s.pos[J.PELVIS], s.rot[J.PELVIS], lod, plate);
     shoulders(
       out,
       [J.ARM_L, J.ARM_R].map(j => [s.pos[j], s.rot[j]] as [Vec3, Quat]),
       lod,
+      plate,
     );
   }
   if (blade) {

@@ -817,6 +817,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           rgb(colors.get(p.id) ?? '#888'),
           d < CLOSE ? 3 : +(d < NEAR),
           world.def.helmets,
+          !!world.def.armor,
         );
         if (s) {
           // A space suit's pack is on the back: the flag is strapped on the pack, further back.

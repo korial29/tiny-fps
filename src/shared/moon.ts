@@ -323,4 +323,5 @@ export const MOON: WorldDef = {
   ],
   scenery: 'moon',
   helmets: true,
+  armor: true,
 };

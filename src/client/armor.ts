@@ -113,6 +113,10 @@ export const REGIONS: Region[] = [
   { part: PART.ARM, cx: 0.207, y: [1.215, 1.325], a: [-25, 95] },
   { part: PART.LEG, cx: 0.1, y: [0.6, 0.94], a: [-58, 58], face: 180, high: thigh },
   { part: PART.TRUNK, cx: 0, y: [0.925, 0.982], a: [-181, 181], low: hips },
+  // The back (the user, 2026-11-10, for Highline, where no pack covers it): a plate between the
+  // shoulder blades and one on the small of the back, GAP apart.
+  { part: PART.TRUNK, cx: 0, y: [1.2, 1.4], a: [-58, 58], face: 180 },
+  { part: PART.TRUNK, cx: 0, y: [1.035, 1.2 - GAP], a: [-52, 52], face: 180 },
   // The thigh plates go on up the hips' sides, SIDE_GAP under the briefs' thin sides (the user).
   ...[90, -90].map((face): Region => ({
     part: PART.TRUNK,
@@ -308,6 +312,14 @@ const cook = (s: Skin, fine: boolean): Recipe => {
           0,
         ];
       });
+      // A triangle across the turn opposite the plate's face, where its angles jump by 360, would
+      // seem to cross the plate's edges: it is out of every plate short of a whole ring.
+      if (region.a[1] - region.a[0] < 360) {
+        const as = tri.map(c => angle(region, c[0], c[2]));
+        if (Math.max(...as) - Math.min(...as) > 180) {
+          continue;
+        }
+      }
       // A round or curved outline needs finer pieces than the skin's, close up.
       const pieces = fine && (region.round || region.low || region.high) ? split([tri]) : [tri];
       for (const piece of pieces) {
@@ -441,9 +453,10 @@ const recipes = [new WeakMap<Skin, Recipe>(), new WeakMap<Skin, Recipe>()];
 /**
  * Appends the armour cut out of the skin `s` drawn into `out` from the float `from` on (skin()
  * writes three vertices per triangle of s.t, in order). Not `fine` (a runner not close by), curved
- * outlines follow the skin's own triangles, unrefined, and there are no scratches.
+ * outlines follow the skin's own triangles, unrefined, and there are no scratches. `plate` is the
+ * plates' colour (their walls a shade darker): white when absent.
  */
-export const armor = (out: number[], from: number, s: Skin, fine = true) => {
+export const armor = (out: number[], from: number, s: Skin, fine = true, plate?: number[]) => {
   const book = recipes[+fine];
   let r = book.get(s);
   if (!r) {
@@ -535,6 +548,13 @@ export const armor = (out: number[], from: number, s: Skin, fine = true) => {
         N[j + 2] = fz / fl;
       }
     }
+    // The plates and their walls in `plate` when given; the scratches in their own.
+    let [cr, cg, cb] = [t[i], t[i + 1], t[i + 2]];
+    if (plate && t[i + 3] == GLOSS) {
+      [cr, cg, cb] = plate;
+    } else if (plate && t[i + 4]) {
+      [cr, cg, cb] = [plate[0] * 0.75, plate[1] * 0.75, plate[2] * 0.75];
+    }
     // Written by index rather than pushed: the close armour is some 20 000 vertices.
     for (let j = 0; j < 9; j += 3, w += STRIDE) {
       out[w] = P[j];
@@ -543,10 +563,10 @@ export const armor = (out: number[], from: number, s: Skin, fine = true) => {
       out[w + 3] = N[j];
       out[w + 4] = N[j + 1];
       out[w + 5] = N[j + 2];
-      out[w + 6] = t[i];
-      out[w + 7] = t[i + 1];
+      out[w + 6] = cr;
+      out[w + 7] = cg;
       out[w + 8] = t[i + 3];
-      out[w + 9] = t[i + 2];
+      out[w + 9] = cb;
     }
   }
 };

@@ -64,8 +64,10 @@ export interface WorldDef {
   gravity?: number;
   /** What is drawn around the play area: the city (street, towers, parks, traffic) or the moon (crater rim, base, stars, the Earth). Absent: the city. */
   scenery?: 'city' | 'moon';
-  /** Whether the runners wear space helmets. */
+  /** Whether the runners wear space helmets, with the pack on the back, its hose and the breath. */
   helmets?: boolean;
+  /** Whether the runners wear armour over a grey suit: white with space helmets, else in the team's colour. */
+  armor?: boolean;
   /** Ground that is not flat (relief.ts), round the brushes: the moon's crater floor. Absent: none. */
   relief?: ReliefDef;
   /** Where the rovers (rover.ts) are parked, each as a spawn: the middle of its wheels on the ground and the yaw of its nose. Absent: none. */

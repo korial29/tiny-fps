@@ -1540,13 +1540,15 @@ export const createBody = (world?: World): Body => {
     draw(out, eye, yaw, pitch, roll = 0, color = [0.7, 0.7, 0.7]) {
       const s = pose(eye, yaw, pitch, roll);
       if (s) {
-        // A space suit with its helmet (see palette()): its gloves cover the fingers too.
-        const suit = !!world?.def.helmets;
+        // An armoured suit (see palette()): its gloves cover the fingers too; white armour in space,
+        // else in the team's colour.
+        const suit = !!world?.def.armor;
+        const plate = world?.def.helmets ? undefined : color;
         const colors = palette(color, undefined, undefined, suit);
         const from = out.length;
         skin(out, body(2), s, colors);
         if (suit) {
-          armor(out, from, body(2));
+          armor(out, from, body(2), true, plate);
         }
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
         // The right thumb presses the button of the katana or the plasma gun as it comes on.

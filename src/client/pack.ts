@@ -391,10 +391,13 @@ const padOf = (lod: number) => {
   return v;
 };
 
-/** Appends both shoulder pads at level of detail `lod` on the arm joints (`arms`: the left's and the right's place and turn). */
-export const shoulders = (out: number[], arms: [Vec3, Quat][], lod: number) => {
+/** The tint that turns a white piece into `plate` (white when absent). */
+const tintOf = (plate?: number[]) => plate?.map((v, i) => v / WHITE[i]);
+
+/** Appends both shoulder pads at level of detail `lod` on the arm joints (`arms`: the left's and the right's place and turn), in `plate` (white when absent). */
+export const shoulders = (out: number[], arms: [Vec3, Quat][], lod: number, plate?: number[]) => {
   const src = padOf(lod);
-  arms.forEach(([at, q], i) => put(out, src[i], at, q));
+  arms.forEach(([at, q], i) => put(out, src[i], at, q, tintOf(plate)));
 };
 
 /**
@@ -412,8 +415,8 @@ const CUP = [
 
 const cups = new Map<number, number[]>();
 
-/** Appends the crotch cup at level of detail `lod` on the pelvis joint at `at` turned by `q`. */
-export const crotch = (out: number[], at: Vec3, q: Quat, lod: number) => {
+/** Appends the crotch cup at level of detail `lod` on the pelvis joint at `at` turned by `q`, in `plate` (white when absent). */
+export const crotch = (out: number[], at: Vec3, q: Quat, lod: number, plate?: number[]) => {
   const level = Math.min(lod, 2);
   let v = cups.get(level);
   if (!v) {
@@ -450,5 +453,5 @@ export const crotch = (out: number[], at: Vec3, q: Quat, lod: number) => {
     }
     cups.set(level, v);
   }
-  put(out, v, at, q);
+  put(out, v, at, q, tintOf(plate));
 };

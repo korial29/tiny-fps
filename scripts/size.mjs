@@ -5,8 +5,9 @@ import { gzipSync } from 'node:zlib';
 
 const BUDGETS = [
   // 76 KB until the detailed hands (the user, 2026-11-09: "peu importe le budget").
-  { file: 'dist/index.js', max: 92 * 1024 },
-  { file: 'dist/local.js', max: 18 * 1024 },
+  // 92 and 18 KB until the moon's crater, rovers and base (the user, 2026-11-10: weight does not matter).
+  { file: 'dist/index.js', max: 110 * 1024 },
+  { file: 'dist/local.js', max: 24 * 1024 },
 ];
 
 // An entry plus every chunk it statically imports, concatenated.

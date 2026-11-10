@@ -51,6 +51,8 @@ export const HAZE = 0.6;
  */
 export const FOG_LAYER = 0.02;
 export const FOG_RISE = 0.05;
+/** The far clip, metres: the moon's stars (moonscape.ts SKY) seen from the far end of its crater, the widest view of any map. */
+export const FAR = 1200;
 /** The vertical field of view at rest, degrees, and the tangent of its half. */
 export const FOV_DEG = 70;
 export const FOV = Math.tan((FOV_DEG * Math.PI) / 360);
@@ -207,7 +209,7 @@ export const viewProj = (
   aspect: number,
   roll = 0,
   t = FOV,
-  [N, F] = [0.1, 900],
+  [N, F] = [0.1, FAR],
 ) => {
   const [r, u, f] = basis(yaw, pitch, roll);
   const k = (F + N) / (F - N);

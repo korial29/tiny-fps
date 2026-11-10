@@ -1,10 +1,12 @@
 // Tranquility, the moon level (docs/MOON.md): a capture the flag in a crater, half gravity.
-// Red's half (z 140 to 280) is written and flipped across z = 140; the rille and the rim, which
-// stand on the line, are written once, symmetric by hand. Compact on purpose: the local bundle
-// carries it (budget in scripts/size.mjs).
+// Red's half (z 140 to 280) is written and flipped across z = 140; the rille, which stands on the
+// line, is written once, symmetric by hand. Round the arena (x 0..160, z 0..280) the crater floor
+// is a relief out to an ellipse of 600 by 720 m: at(). Compact on purpose: the local bundle carries
+// it (budget in scripts/size.mjs).
 import { TEAM_TINT } from './map';
 import { BASE, DOME, MODULES, TUBES, box, bx, fromBx } from './moonbase';
 import type { Bx, Vec3 } from './moonbase';
+import { noise } from './relief';
 import { TEX } from './types';
 import type { Brush, Spawn, WorldDef } from './world';
 
@@ -35,7 +37,109 @@ const MASTS = [
   [106.2, 230.4],
   [103.2, 212.4],
 ];
+
+const c1 = (t: number) => Math.min(Math.max(t, 0), 1);
+const sm = (t: number) => c1(t) * c1(t) * (3 - 2 * c1(t));
+const far = (a: number, b: number) => Math.sqrt(a * a + b * b);
+
+// The relief's pieces, x and the distance from the centre line (so blue's half is red's mirror).
+/** Craters, x, z, radius: a bowl 0.19 of the radius deep under a rim 0.06 of it high, flat for 4 m. The first is the Bowl. */
+const BOWLS = [
+  [-100, 0, 46],
+  [20, 215, 22],
+  [110, 236, 16],
+  [-112, 108, 14],
+  [236, 170, 13],
+  [-28, 228, 12],
+];
+/** Jump ramps, where the rise starts and the unit way up: 16 m long, 5.6 m high (19 degrees), 12 m wide, the lip flat for 4 m (no knife edge under a rover). */
+const RAMPS = [
+  [-20, 0, -1, 0],
+  [192, 124, 0, -1],
+  [64, 236, 1, 0],
+  [-60, 100, 0, 1],
+];
+/** The ridge east of the arena (x, the z its crest ends at) and the antennas' hill south-east (x, z). */
+const [RIDGE, HILL] = [
+  [248, 64],
+  [180, 200],
+];
+/** The boulder field south-west: x, z, radius. */
+const FIELD = [
+  [0, 0, 4.5],
+  [-14, 6, 3],
+  [10, -12, 3.5],
+  [16, 10, 2.5],
+  [-8, -16, 2.2],
+  [-20, -8, 3.8],
+  [6, 18, 3],
+  [22, -4, 2],
+  [-12, 20, 2.4],
+].map(([x, z, r]) => [x - 50, z + 330, r]);
+/** The three dishes on the hill and the lander wrecked in the Bowl. */
+const DISHES = [
+  [180, 340],
+  [173, 346],
+  [186, 347],
+];
+const WRECK = [BOWLS[0][0], ZED / 2];
+
+/**
+ * The height of the crater floor round the arena. Only + - * /, Math.sqrt, Math.abs, min, max, floor
+ * and the integer hash: every engine builds the same lattice. Exactly 0 for 12 m round the arena
+ * (a rectangle on lattice lines, so between the nodes too); rolling hills, the pieces above, then the crater wall: it starts 0.78 of the way to the bound,
+ * is 20 m high on it and, past it where nobody goes, climbs to a ragged crest of 60 to 95 m and
+ * falls to the plain at 1.65 of the bound.
+ */
+const at = (x: number, z: number): number => {
+  z = Math.abs(z - ZED / 2);
+  const k = far((x - 80) / 300, z / 360);
+  const t = Math.max((k - 0.78) / 0.22, 0);
+  let h =
+    sm((Math.max(Math.abs(x - 80) - 80, z - 140) - 12) / 48) *
+    (1 - 0.7 * sm(t)) *
+    (16 * noise(x / 96, z / 96, 1) +
+      5 * noise(x / 36, z / 36, 2) +
+      1.4 * noise(x / 22, z / 22, 3) -
+      11.2);
+  for (const [cx, cz, r] of BOWLS) {
+    const q = far(x - cx, z - cz) / r;
+    // The rim is flat for 4 m: a rover's belly clears it.
+    const s = 1 - c1((q - 1 - 4 / r) / 0.6);
+    h += r * (q < 1 ? 0.25 * q * q - 0.19 : 0.06 * s * s);
+  }
+  for (const [rx, rz, ax, az] of RAMPS) {
+    const [p, q] = [x - rx, z - rz];
+    const a = p * ax + q * az;
+    h += 5.6 * c1(Math.min(a / 16, (32 - a) / 12)) * c1((18 - Math.abs(p * az - q * ax)) / 12);
+  }
+  const d = c1(far(x - RIDGE[0], Math.max(z - RIDGE[1], 0)) / 36);
+  h += 12 * (1 - d * d) * (1 - d * d) + 8 * sm((36 - far(x - HILL[0], z - HILL[1])) / 24);
+  let w = 10 * t * (1 + t);
+  if (k > 1) {
+    w =
+      (w + (k - 1) * 60 * (Math.abs(2 * noise(x / 45, z / 45, 5) - 1) - 0.5)) *
+      (1 + (k - 1) * (1.2 * noise(x / 90, z / 90, 7) - 0.6)) *
+      (1 - sm((k - 1.25) / 0.4));
+  }
+  return h + w;
+};
+
+/** The ghost under a drawn rock or mast: a box of half side s from under the ground to h above it. */
+const lump = (x: number, z: number, s: number, h: number): Brush => ({
+  ...box(x - s, at(x, z) - 6, z - s, x + s, at(x, z) + h, z + s, STONE),
+  ghost: true,
+});
+
 export const LAYOUT = {
+  /** Outside the arena: the boulders (x, z, radius), the dishes, the ramps (the middle of the lip and the unit way up it), the wreck. */
+  rocks: [...FIELD, ...FIELD.map(([x, z, r]) => [x, ZED - z, r])],
+  dishes: [...DISHES, ...DISHES.map(([x, z]) => [x, ZED - z])],
+  // A ramp on the centre line is its own twin.
+  ramps: RAMPS.flatMap(([x, z, ax, az]) =>
+    (z ? [1, -1] : [1]).map(m => [x + 16 * ax, ZED / 2 + m * (z + 16 * az), ax, m * az + 0]),
+  ),
+  wreck: WRECK,
   domes: [DOME, [DOME[0], ZED - DOME[1]]],
   pads: [PAD, [PAD[0], ZED - PAD[1], PAD[2]]],
   shuttles: [SHUTTLE, mirror(SHUTTLE)],
@@ -83,9 +187,12 @@ const half: Brush[] = [
     [125, 175, 6, 5, 3.2],
     [92, 186, 4, 4, 2.4],
   ].map(([x, z, w, d, h]) => box(x, 0, z, x + w, h, z + d, STONE)),
+  // Out on the relief, ghosts under what the scenery draws: the boulder field and the dishes' masts.
+  ...FIELD.map(([x, z, r]) => lump(x, z, 0.6 * r, 0.6 * r)),
+  ...DISHES.map(([x, z]) => lump(x, z, 0.4, 6)),
 ];
 
-/** What stands on the centre line, symmetric as written: the bridge, the stones and the rim. */
+/** What stands on the centre line, symmetric as written: the bridge, the stones, the rille's plugs and the wreck. */
 const centre: Brush[] = [
   // The bridge: a deck level with the floor and a low wall on each side.
   box(74, -1.5, 132, 86, 0, 148, METAL, STEEL),
@@ -95,13 +202,11 @@ const centre: Brush[] = [
   box(126, -30, 143, 131, 1.2, 147, STONE),
   box(130, -30, 138.5, 135, 2.4, 141.5, STONE),
   box(126, -30, 133, 131, 1.2, 137, STONE),
-  // The rim, the boundary: one band 14 m high all round the play area, a ghost under the scree the scenery lays over it.
-  ...[
-    box(-10, -30, -10, 0, 14, 290, STONE),
-    box(160, -30, -10, 170, 14, 290, STONE),
-    box(0, -30, -10, 160, 14, 0, STONE),
-    box(0, -30, 280, 160, 14, 290, STONE),
-  ].map(b => ({ ...b, ghost: true })),
+  // The rille ends in the relief: a ghost plug under the ground at each end keeps a player in it.
+  { ...box(-10, -30, 132, 0, 0, 148, STONE), ghost: true },
+  { ...box(160, -30, 132, 170, 0, 148, STONE), ghost: true },
+  // The wrecked lander's hull.
+  lump(WRECK[0], WRECK[1], 3, 3),
 ];
 
 /** Red's spawns behind the dome facing blue (yaw 0 looks toward -z): five in a row, three in front. */
@@ -157,6 +262,8 @@ export const MOON: WorldDef = {
     [80, 0, 140],
   ),
   floor: -20,
+  // The crater floor round the arena, out to an ellipse of 600 by 720 m nobody crosses.
+  relief: { hole: [0, 0, 160, ZED], bound: [80, ZED / 2, 300, 360], cell: 4, at },
   // Low from the east, white and hard; a near black sky.
   sun: { dir: [0.87996, 0.40998, 0.23999], color: [3, 2.95, 2.85] },
   sky: [

@@ -34,8 +34,30 @@ export interface Relief {
   top: number;
 }
 
-/** Builds the lattice over the box of the bound. */
-export const raise = ({ hole, bound, cell, at }: ReliefDef): Relief => {
+/** Integer hash of a lattice point to [0, 1): the same on every engine. */
+export const hash = (x: number, y: number, s: number): number => {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 144665)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+};
+
+/** Smooth value noise on the integer lattice, in [0, 1): flat across every lattice line, so a fold along one leaves no crease. */
+export const noise = (x: number, y: number, s: number): number => {
+  const [i, j] = [Math.floor(x), Math.floor(y)];
+  const [u, v] = [x - i, y - j].map(t => t * t * (3 - 2 * t));
+  const h = (a: number, b: number) => hash(i + a, j + b, s);
+  return (h(0, 0) * (1 - u) + h(1, 0) * u) * (1 - v) + (h(0, 1) * (1 - u) + h(1, 1) * u) * v;
+};
+
+const made = new WeakMap<ReliefDef, Relief>();
+
+/** Builds the lattice over the box of the bound, once per definition. */
+export const raise = (def: ReliefDef): Relief => {
+  const old = made.get(def);
+  if (old) {
+    return old;
+  }
+  const { hole, bound, cell, at } = def;
   const [cx, cz, a, b] = bound;
   const x0 = Math.floor((cx - a) / cell) * cell;
   const z0 = Math.floor((cz - b) / cell) * cell;
@@ -49,7 +71,9 @@ export const raise = ({ hole, bound, cell, at }: ReliefDef): Relief => {
       top = Math.max(top, h[i + j * nx]);
     }
   }
-  return { x0, z0, cell, nx, nz, h, hole, bound, top };
+  const r = { x0, z0, cell, nx, nz, h, hole, bound, top };
+  made.set(def, r);
+  return r;
 };
 
 /**
@@ -101,35 +125,57 @@ const HALVINGS = 6;
 /**
  * Distance along the ray from o in the unit direction d to the ground, at most max: for ray(),
  * after the brushes. A ray that starts under the ground hits at 0. With `grow`, the path of a
- * sphere of that radius. Sampled every MARCH metres: a crest thinner than that is missed.
+ * sphere of that radius. Sampled every MARCH metres: a crest thinner than that is missed. The
+ * stretch over the hole is skipped: a ray that stays in the arena costs no sample.
  */
 export const trace = (w: World, o: Vec3, d: Vec3, max: number, grow = 0): number => {
   const r = w.relief;
   if (!r || Math.min(o[1], o[1] + d[1] * max) - grow > r.top) {
     return max;
   }
+  // Where the ray is over the hole, from t0 to t1 (the slabs of its rectangle).
+  let [t0, t1] = [0, max];
+  for (const a of [0, 1]) {
+    const [p, v, lo, hi] = [o[a * 2], d[a * 2], r.hole[a], r.hole[a + 2]];
+    if (v) {
+      const [m, n] = [(lo - p) / v, (hi - p) / v];
+      t0 = Math.max(t0, Math.min(m, n));
+      t1 = Math.min(t1, Math.max(m, n));
+    } else if (p <= lo || p >= hi) {
+      t1 = -1;
+    }
+  }
   const over = (t: number): number =>
     o[1] + d[1] * t - grow - ground(w, o[0] + d[0] * t, o[2] + d[2] * t);
-  if (over(0) < 0) {
-    return 0;
-  }
   if (!d[0] && !d[2]) {
     // Straight down (or up): one height.
-    return d[1] < 0 ? Math.min(max, over(0) / -d[1]) : max;
+    const h = over(0);
+    return h < 0 ? 0 : d[1] < 0 ? Math.min(max, h / -d[1]) : max;
   }
-  for (let t = 0; t < max; t += MARCH) {
-    const next = Math.min(t + MARCH, max);
-    if (over(next) < 0) {
-      let [lo, hi] = [t, next];
-      for (let n = 0; n < HALVINGS; n++) {
-        const mid = (lo + hi) / 2;
-        if (over(mid) < 0) {
-          hi = mid;
-        } else {
-          lo = mid;
+  // The stretches outside the hole: the whole ray, or what is before and after the hole.
+  for (const [from, to] of t0 < t1
+    ? [
+        [0, t0],
+        [t1, max],
+      ]
+    : [[0, max]]) {
+    if (from < to && over(from) < 0) {
+      return from;
+    }
+    for (let t = from; t < to; t += MARCH) {
+      const next = Math.min(t + MARCH, to);
+      if (over(next) < 0) {
+        let [lo, hi] = [t, next];
+        for (let n = 0; n < HALVINGS; n++) {
+          const mid = (lo + hi) / 2;
+          if (over(mid) < 0) {
+            hi = mid;
+          } else {
+            lo = mid;
+          }
         }
+        return lo;
       }
-      return lo;
     }
   }
   return max;

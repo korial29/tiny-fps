@@ -5,11 +5,13 @@
 // INTERP_DELAY in the past, interpolated between the two snapshots around that time.
 // A rover the own player drives is predicted with him: ride() per input, as the host runs it. The
 // other rovers are interpolated like the other players, and a rider is drawn on the seat of his.
+// The rovers his steps meet (the bodies he walks into, the fleet the predicted ones stop on) are
+// the latest snapshot's, with the predicted ones in their place: exact while they stand still.
 import { INTERP_DELAY, TICK_HZ } from '../shared/constants';
 import { step } from '../shared/gun';
 import { TAU, norm, respawn } from '../shared/physics';
 import { onWire } from '../shared/protocol';
-import { drive, park, ride, seat } from '../shared/rover';
+import { drive, hull, park, ride, seat } from '../shared/rover';
 import { MODE, NOBODY } from '../shared/types';
 import type { Input, PlayerState, Rover, SnapPlayer, Snapshot } from '../shared/types';
 import type { World } from '../shared/world';
@@ -138,10 +140,16 @@ export const createPredictor = (world: World): Predictor => {
   let clock = 0;
   let timed = false;
 
+  /** The map's rovers as the own steps meet them: the latest snapshot's, the predicted ones instead. */
+  const fleet = (): Rover[] =>
+    (snaps.at(-1)?.s.rovers ?? []).map((r, k) =>
+      car && k === carK ? car : ghost?.k === k ? ghost.r : r,
+    );
+
   /** One input of the own player, as the host applies it: at the wheel the rover's step, else his own. */
   const advance = (i: Input): void => {
     if (car && own!.mode === MODE.RIDE && car.driver === id) {
-      if (ride(own!, car, i, world, team)) {
+      if (ride(own!, car, i, world, team, fleet())) {
         // Under the kill floor: the host puts him at a spawn and parks the rover.
         if (car.driver === id) {
           respawn(own!, world, team);
@@ -149,7 +157,7 @@ export const createPredictor = (world: World): Predictor => {
         car = park(world)[carK];
       }
     } else {
-      step(own!, i, world, team, armed);
+      step(own!, i, world, team, armed, fleet().map(hull));
     }
   };
   const driving = (): boolean => !!car && own?.mode === MODE.RIDE && car.driver === id;
@@ -264,7 +272,7 @@ export const createPredictor = (world: World): Predictor => {
       if (ghost) {
         // The rover he left rolls on with nobody at the wheel, as the host's tick rolls it.
         ghost.prev = { ...ghost.r };
-        drive(ghost.r, undefined, world);
+        drive(ghost.r, undefined, world, fleet());
       }
       if (own) {
         prev = state(own);

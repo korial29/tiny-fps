@@ -46,7 +46,7 @@ import type { Flying } from './plasma';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
 import { beam } from './rail';
-import { board, bolts, drive, footprint, leave, park, ride, ROVER, seat } from './rover';
+import { board, bolts, drive, footprint, hull, leave, park, ride, ROVER, seat } from './rover';
 import { reaches, tackling } from './tackle';
 import { CUT, KEY, LIMB, MODE, NOBODY } from './types';
 import type { Conn, Every, Input, PlayerInfo, PlayerState, Rover, Rules } from './types';
@@ -136,6 +136,8 @@ const setEvery: Every = (cb, ms) => {
  *   next join once the room is empty. The roster tells everyone the host and the map picked.
  * - The map's rovers (rover.ts) are in every snapshot. A press of USE near one seats a player; a
  *   driven rover is stepped by its driver's inputs alone (ride()), a driverless one by the tick.
+ *   A player on foot walks into the rovers as they stand when his input arrives (hull()); a rover
+ *   stops on the others as they stand when it steps.
  *   seats() keeps the seats and the players' MODE.RIDE in step.
  */
 /** A player out of any saber lock. */
@@ -246,7 +248,7 @@ export class Room {
       const [r, s] = this.seatOf(p);
       if (r && !s) {
         // At the wheel: his input is the rover's clock, and nothing else moves it.
-        const fell = ride(p.state, r, input, this.world, p.info.team);
+        const fell = ride(p.state, r, input, this.world, p.info.team, this.rovers);
         this.ctf.moved(p.state);
         if (fell) {
           this.sink(r);
@@ -256,7 +258,14 @@ export class Room {
           this.lase(p, r, input);
         }
       } else {
-        const struck = step(p.state, input, this.world, p.info.team, !this.ctf.over);
+        const struck = step(
+          p.state,
+          input,
+          this.world,
+          p.info.team,
+          !this.ctf.over,
+          this.rovers.map(hull),
+        );
         this.ctf.moved(p.state);
         this.tackle(p, input.view);
         // A rider's strike starts from the seat he was drawn in at his view tick, not where the
@@ -351,7 +360,7 @@ export class Room {
       // A driven rover waits for its driver's inputs.
       if (r.driver !== NOBODY) {
         this.carry(r);
-      } else if (drive(r, undefined, this.world)) {
+      } else if (drive(r, undefined, this.world, this.rovers)) {
         this.sink(r);
       } else {
         this.carry(r);

@@ -8,6 +8,7 @@ import {
   MAX_NAME,
   MAX_PLAYERS,
   MAX_REWIND,
+  PLAYER_R,
   RUN_SPEED,
   SNAP_EVERY,
   TEAM_COLOR,
@@ -1262,6 +1263,34 @@ describe('Room: the rovers', () => {
     const sat = { ...st(room, b) };
     seat(sat, r, 1);
     expect(st(room, b).x).toBe(sat.x);
+  });
+
+  it('stops a player on foot at a parked rover, and lets him stand on it', () => {
+    const room = new Room({}, LOT);
+    const b = join(room, 'Ann');
+    stand(room, b, -5);
+    send(room, b, KEY.FORWARD, 90);
+    // Rover 0's tail is 1.15 + RB m west of its centre: he stops a body's radius short of it.
+    const tail = 6 - ROVER.BODY[0] - ROVER.RB - PLAYER_R;
+    expect(st(room, b).x).toBeCloseTo(tail, 3);
+    expect(st(room, b).mode).toBe(MODE.GROUND);
+    // Put on it, he stands on its top.
+    Object.assign(st(room, b), { x: 6, y: 4, z: 4 });
+    send(room, b, 0, 90);
+    expect(st(room, b).y).toBeCloseTo(cars(room)[0].y - ROVER.WR - ROVER.L0 + ROVER.BODY_H, 3);
+    expect(st(room, b).mode).toBe(MODE.GROUND);
+  });
+
+  it('stops a driven rover on a parked one, which stays where it is', () => {
+    const { room, a, r } = driven();
+    const other = cars(room)[1];
+    Object.assign(other, { x: 20, z: 4, y: r.y });
+    send(room, a, 0, 30);
+    const parked = [other.x, other.z];
+    send(room, a, KEY.FORWARD, 240);
+    expect(r.x).toBeLessThan(20 - 2 * (ROVER.BODY[0] + ROVER.RB) + 0.01);
+    expect(r.x).toBeGreaterThan(20 - 2 * (ROVER.BODY[0] + ROVER.RB) - 1);
+    expect([other.x, other.z]).toEqual(parked);
   });
 
   it('sends the rovers in every snapshot', () => {

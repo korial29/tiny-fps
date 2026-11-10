@@ -273,6 +273,13 @@ export const MOON: WorldDef = {
     [0.02, 0.02, 0.035],
   ],
   gravity: 0.5,
+  // Two rovers a base, by the field and behind the landing pad, their noses toward the other base.
+  rovers: [
+    [100, 0, 178, 0],
+    [30, 0, 255, 0],
+    [100, 0, ZED - 178, Math.PI],
+    [30, 0, ZED - 255, Math.PI],
+  ],
   scenery: 'moon',
   helmets: true,
 };

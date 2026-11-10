@@ -227,6 +227,9 @@ export const PLASMA_SPEED = 40;
 export const PLASMA_R = 0.12;
 /** Plasma balls in flight in a room at most: past it the oldest bursts. They go on the wire. */
 export const PLASMA_MAX = 64;
+/** Ball.power of a rover's laser bolt (rover.ts): past CHARGE_MAX, so it names the bolt. It flies at BOLT_SPEED m/s and grazes like the laser rifle's. */
+export const BOLT = 6;
+export const BOLT_SPEED = 120;
 /** Radians the view kicks up per shot (client side: the kick is in the pitch the inputs carry). */
 export const RECOIL = 0.012;
 /** Ticks a player lies down after the health ran out, then he is back at a spawn of his team. */

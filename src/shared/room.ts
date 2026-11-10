@@ -34,6 +34,7 @@ import {
   TACKLE_COOLDOWN,
   TEAM_COLOR,
   TICK_HZ,
+  BOLT,
 } from './constants';
 import { CHEST, crossing, knock, limbOf, strike, swingOf } from './blade';
 import { Ctf } from './ctf';
@@ -45,10 +46,10 @@ import type { Flying } from './plasma';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
 import { beam } from './rail';
-import { ROVER, board, drive, footprint, leave, park, ride, seat } from './rover';
+import { board, bolts, drive, footprint, leave, park, ride, ROVER, seat } from './rover';
 import { reaches, tackling } from './tackle';
 import { CUT, KEY, LIMB, MODE, NOBODY } from './types';
-import type { Conn, Every, PlayerInfo, PlayerState, Rover, Rules } from './types';
+import type { Conn, Every, Input, PlayerInfo, PlayerState, Rover, Rules } from './types';
 import { build } from './world';
 import type { World, WorldDef } from './world';
 
@@ -72,6 +73,9 @@ interface Player {
   burn?: number;
   /** The laser rifle's hits on him toward the next hp: every RIFLE_HITS take one. */
   graze?: number;
+  /** At a rover's wheel: his inputs left before its lasers fire again, and the count that names their bolts. */
+  gun?: number;
+  bolt?: number;
 }
 
 /** Ticks run at most this many times per timer callback, so a stalled host does not spiral. */
@@ -249,6 +253,7 @@ export class Room {
         } else {
           this.carry(r);
           this.splat(p, r, input.view);
+          this.lase(p, r, input);
         }
       } else {
         const struck = step(p.state, input, this.world, p.info.team, !this.ctf.over);
@@ -559,7 +564,7 @@ export class Room {
     if (by) {
       by.state.hits = (by.state.hits + 1) & 255;
     }
-    if (b.power === 0) {
+    if (b.power === 0 || b.power === BOLT) {
       // The laser rifle's: every RIFLE_HITS on him (from anyone, until he goes down) take 1 hp.
       foe.graze = ((foe.graze ?? 0) + 1) % RIFLE_HITS;
       if (!foe.graze) {
@@ -837,6 +842,22 @@ export class Room {
    * him down; from ROVER.SPLAT_MIN it takes 1 hp and throws him the rover's way in a stumble. Once
    * per SPLAT_COOLDOWN ticks a victim; a hit counts for the driver. The rover is never changed.
    */
+  /**
+   * The rover's lasers: while its driver holds FIRE, a salvo of two bolts each ROVER.GUN_COOL of his
+   * inputs, toward where he looks. Not once the match is over. The rover is not changed.
+   */
+  private lase(p: Player, r: Rover, i: Input): void {
+    p.gun = Math.max(0, (p.gun ?? 0) - 1);
+    if (!(i.keys & KEY.FIRE) || p.gun || this.ctf.over || p.state.mode !== MODE.RIDE) {
+      return;
+    }
+    p.gun = ROVER.GUN_COOL;
+    p.bolt = ((p.bolt ?? 0) + 2) & 255;
+    for (const b of bolts(r, p.info.id, p.info.team, i.yaw, i.pitch, p.bolt)) {
+      this.shoot(p, i.view, b);
+    }
+  }
+
   private splat(p: Player, r: Rover, view: number | undefined): void {
     if (len(r.vx, r.vz) < ROVER.SPLAT_MIN) {
       return;

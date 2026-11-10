@@ -155,7 +155,7 @@ const stairs = (
  * What stands in the hall, about the dome's centre: ghosts, since client/moonbase.ts draws them
  * with the hall (the sun's shadow map is 64 m wide, a brush across the hall would be drawn sunlit).
  * The mezzanine 3.5 m up along the walls (not over the door), the stairs up to it facing the door,
- * a console and two parapets on it, three crates on the floor.
+ * a console and two parapets on it, three crates on the floor clear of the flag's dais (moon.ts).
  */
 export const FIT: Brush[] = [
   ...turns([
@@ -171,9 +171,45 @@ export const FIT: Brush[] = [
   ghost([-3, 19, 3, C0], 3.5, 4.6, STEEL, METAL),
   ghost([-9, 12, -2.5, 12.5], 3.5, 4.6, STEEL, PAINT),
   ghost([2.5, 12, 9, 12.5], 3.5, 4.6, STEEL, PAINT),
-  ghost([-6, -8, -4, -6], 0, 1.4, STEEL),
-  ghost([4, -8, 6, -6], 0, 1.4, STEEL),
-  ghost([5.5, 1.5, 8, 4], 0, 2.4, STEEL),
+  ghost([-9.5, -10, -7.5, -8], 0, 1.4, STEEL),
+  ghost([7.5, -10, 9.5, -8], 0, 1.4, STEEL),
+  ghost([7.5, 3, 10, 5.5], 0, 2.4, STEEL),
+];
+
+/** The kinds of lab kit client/moonbase.ts draws. */
+export const KIND = {
+  BENCH: 0,
+  SAMPLES: 1,
+  RACKS: 2,
+  SCOPE: 3,
+  ANALYSER: 4,
+  PLANTS: 5,
+  LOCKERS: 6,
+  SUIT: 7,
+};
+const { BENCH, SAMPLES, RACKS, SCOPE, ANALYSER, PLANTS, LOCKERS, SUIT } = KIND;
+/**
+ * The lab kit in red's half: kind, x0, z0, x1, z1, y0, y1, and the way its front looks (0 +x, 1
+ * +z, 2 -x, 3 -z). Its box is a ghost, drawn by client/moonbase.ts as the hall's fittings are.
+ * Each stands flush on a wall or more than a body away from it (no crack to stick in), what stands
+ * under the mezzanine leaves a body room on top or reaches up to it, and none stands by the middle
+ * of a module's wall: vision.ts would band its top as a ledge.
+ */
+export const KIT = [
+  // The hall: a lab bench under the west deck and a table of rock samples by it, server racks up
+  // to the east deck, a telescope and a sample analyser on the north deck.
+  [BENCH, 60.2, 230.5, 61.2, 241.5, 0, 0.95, 0],
+  [SAMPLES, 65, 233.5, 66.5, 238.5, 0, 0.9, 0],
+  [RACKS, 98.8, 229.3, 99.8, 234.3, 0, 3.1, 2],
+  [RACKS, 98.8, 237.7, 99.8, 242.7, 0, 3.1, 2],
+  [SCOPE, 68.9, 250.8, 70.1, 252, 3.5, 4.5, 3],
+  [ANALYSER, 89.4, 250.8, 91.4, 252, 3.5, 4.8, 3],
+  // The first module: two greenhouse racks, off the doors.
+  [PLANTS, 115, 222.4, 121, 223.2, 0, 2, 1],
+  [PLANTS, 123.8, 226.4, 124.6, 229.6, 0, 2, 2],
+  // The second: lockers, and a spacesuit on its stand by the airlock.
+  [LOCKERS, 96.4, 200.4, 97, 203.6, 0, 2.1, 0],
+  [SUIT, 108.6, 197.4, 109.6, 198.4, 0, 2, 2],
 ];
 
 /**
@@ -239,6 +275,10 @@ export const BASE: Brush[] = [
     [C1, -B1, UX0 - DOME[0], TZ0 - DOME[1]],
   ].map(p => ghost(p, 0, BANDS[1])),
   ...FIT,
+  ...KIT.map(([, x0, z0, x1, z1, y0, y1]) => ({
+    ...box(x0, y0, z0, x1, y1, z1, STEEL),
+    ghost: true,
+  })),
   // Two modules: an airlock to the outside in a long wall, a door to the tube, a crate.
   ...room(
     MODULES[0],

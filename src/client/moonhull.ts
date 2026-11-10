@@ -15,7 +15,8 @@ export const TIP = 25.4;
 /** The angle of a side of the drawn dome. */
 const STEP = TAU / 48;
 /** Seams and ribs, dark fittings, bare metal, then the glows. */
-export const SEAM = [0.4, 0.42, 0.46];
+const SEAM = [0.4, 0.42, 0.46];
+const SPINE = [0.27, 0.29, 0.33];
 const [IRON, STEEL, WARM, COOL, AMBER, RED, GREEN] = [
   [0.16, 0.17, 0.2],
   [0.6, 0.62, 0.66],
@@ -86,17 +87,20 @@ const dot = (o: number[], x: number, z: number) =>
     ),
   );
 
+/** A ring of the shell as drawn: its radius, its height over the drum. */
+const ring = (j: number) => [R * Math.cos((j * TAU) / 40), 12 * Math.sin((j * TAU) / 40)];
 /**
- * A point of the dome as drawn (48 flat sides), `e` proud of it, at the angle t about its axis: h
- * metres up the drum, or past 5 the angle up the shell's arc more.
+ * A point of the dome as drawn (48 flat sides, 10 rows), `e` proud of it, at the angle t about its
+ * axis: h metres up the drum, or past 5 the rows up the shell more.
  */
 const skin = (t: number, h: number, e = 0.02): Vec3 => {
-  const a = Math.max(h - 5, 0);
-  const [c, s] = [Math.cos(a), Math.sin(a)];
-  const n = unit([c / R, s / 12, 0]);
-  const r =
-    (R * c * Math.cos(STEP / 2)) / Math.cos((((t % STEP) + STEP) % STEP) - STEP / 2) + e * n[0];
-  return [CX + r * Math.cos(t), Math.min(h, 5) + 12 * s + e * n[1], CZ + r * Math.sin(t)];
+  const u = Math.max(h - 5, 0);
+  const j = Math.floor(u);
+  const [p, q] = [ring(j), ring(j + 1)];
+  const [c, s] = [p[0] + (q[0] - p[0]) * (u - j), p[1] + (q[1] - p[1]) * (u - j)];
+  const n = unit([c / R / R, s / 144, 0]);
+  const r = (c * Math.cos(STEP / 2)) / Math.cos((((t % STEP) + STEP) % STEP) - STEP / 2) + e * n[0];
+  return [CX + r * Math.cos(t), Math.min(h, 5) + s + e * n[1], CZ + r * Math.sin(t)];
 };
 /** The drum's openings (the door, the tubes) and a margin, as angles; whether an angle is off them. */
 const OPEN = GAPS.map(([g0, g1]) => [g0 - 0.03, g1 + 0.03]);
@@ -163,8 +167,10 @@ const portholes = (o: number[]) => {
 };
 
 /**
- * The dome: seams between plates up the shell (rings, and meridians staggered row on row), a band
- * where the shell springs, plates round the drum's windows, a dark foot with a strip of light, a
+ * The dome: twelve dark spines from a trench where the shell springs up to a collar round the
+ * aerial, a trace of light up every other one and round the collar, angled panel cuts between them
+ * (a hexagon over a trapezoid, then a chevron under a trapezoid, sector after sector), a few hatches
+ * and vents, the drum's windows in panels of two and three, a dark foot with a strip of light, a
  * second lit frame round the door and lights in the ground up to it, an aerial on top.
  */
 const dome = (o: number[]) => {
@@ -185,26 +191,91 @@ const dome = (o: number[]) => {
     lit(o, 1.6, () => band(t0, t1, 0.16, 0.3, COOL, 0.035));
     band(t0, t1, 3.18, 3.32);
   }
-  band(0, TAU, 4.8, 5.012, IRON, 0.03);
-  // Between the windows.
+  band(0, TAU, 4.55, 5.01, IRON, 0.03);
+  [0.4, 1.9, 2.5, 3.7, 5.2].forEach(t => band(t, t + 0.05, 4.68, 4.86, STEEL, 0.045));
+  // Between the windows, two then three to a panel.
   for (let i = 0; i < 70; i++) {
     const t = ((i + 0.5) * TAU) / 70;
     const d = 0.07 / R;
-    if (free(t)) {
-      q([skin(t - d, 0.45), skin(t + d, 0.45), skin(t + d, 4.8), skin(t - d, 4.8)]);
+    if (free(t) && [0, 2].includes(i % 5)) {
+      q([skin(t - d, 0.45), skin(t + d, 0.45), skin(t + d, 4.55), skin(t - d, 4.55)]);
     }
   }
-  for (let j = 0; j < 9; j++) {
-    const [a, b] = [(j * TAU) / 40, ((j + 1) * TAU) / 40];
-    if (j) {
-      const d = 0.09 / Math.hypot(R * Math.sin(a), 12 * Math.cos(a));
-      band(0, TAU, 5 + a - d, 5 + a + d);
+  /** A line w wide each side through corners of the shell's sides (side, row), one side or row a step. */
+  const line = (l: number[][], w = 0.1, rgb?: number[], e = 0.03) =>
+    l.slice(1).forEach(([i1, j1], n) => {
+      const [i0, j0] = l[n];
+      const m = Math.max(Math.abs(i1 - i0), Math.abs(j1 - j0));
+      const at = (f: number, g: number) => {
+        const [i, j] = [i0 + ((i1 - i0) * f) / m, j0 + ((j1 - j0) * f) / m];
+        return i1 == i0
+          ? skin(i * STEP + (g * w) / ring(j)[0], 5 + j, e)
+          : skin(i * STEP, 5 + j + (g * w) / 2.5, e);
+      };
+      for (let f = 0; f < m; f++) {
+        q([at(f, -1), at(f, 1), at(f + 1, 1), at(f + 1, -1)], rgb);
+      }
+    });
+  for (let n = 0; n < 12; n++) {
+    const i = 4 * n;
+    line(
+      [
+        [i, 0],
+        [i, 9],
+      ],
+      0.22,
+      SPINE,
+      0.05,
+    );
+    if (n & 1) {
+      lit(o, 1.6, () =>
+        line(
+          [
+            [i, 1],
+            [i, 8],
+          ],
+          0.04,
+          COOL,
+          0.065,
+        ),
+      );
+      line([
+        [i, 4],
+        [i + 2, 2],
+        [i + 4, 4],
+      ]);
+      line([
+        [i, 6],
+        [i + 1, 7],
+        [i + 3, 7],
+        [i + 4, 6],
+      ]);
+    } else {
+      line([
+        [i, 2],
+        [i + 1, 3],
+        [i + 3, 3],
+        [i + 4, 2],
+      ]);
+      line([
+        [i + 1, 3],
+        [i + 1, 5],
+        [i + 2, 6],
+        [i + 3, 5],
+        [i + 3, 3],
+      ]);
     }
-    const m = j < 6 ? 2 : j < 8 ? 4 : 8;
-    for (let i = ((j % 2) * m) / 2; i < 48; i += m) {
-      const [t, d0, d1] = [i * STEP, 0.08 / (R * Math.cos(a)), 0.08 / (R * Math.cos(b))];
-      q([skin(t - d0, 5 + a), skin(t + d0, 5 + a), skin(t + d1, 5 + b), skin(t - d1, 5 + b)]);
-    }
+  }
+  band(0, TAU, 13.75, 14.15, SPINE, 0.05);
+  lit(o, 1.6, () => band(0, TAU, 13.9, 14, COOL, 0.065));
+  // Hatches, a status light on each.
+  for (const [i, j] of [
+    [5, 0],
+    [22, 1],
+    [34, 0],
+  ]) {
+    band(i * STEP + 0.02, (i + 2) * STEP - 0.02, 5.25 + j, 5.8 + j, IRON, 0.03);
+    lit(o, 2, () => band(i * STEP + 0.04, i * STEP + 0.05, 5.65 + j, 5.72 + j, GREEN, 0.045));
   }
   // Round the portal of moonbase.ts: two posts and a beam more, an amber strip on each.
   const [, mz, w, h, d] = MOUTHS[0];
@@ -288,7 +359,7 @@ const tubes = (o: number[]) =>
   });
 
 /**
- * The modules: a coping and a plinth round each, ribs between the windows of the long walls, a
+ * The modules: a coping and a plinth round each, angled panel cuts and a trace of light on the long walls, a
  * vent on an end wall with no door, a lamp and a sensor over each airlock and lights in the ground
  * out from it, a dish on the first roof's corner and whip aerials along the second's end.
  */
@@ -337,16 +408,30 @@ const modules = (o: number[]) =>
           : [[min[j], max[j]]]) {
           B(P(a, 0, 0), P(b, 0.3, 0.04), SEAM, IN | 4);
         }
-        for (let i = 1; k && i < 7; i++) {
-          const x = min[0] + 2 * i;
-          B(
-            P(x - 0.07, door && x > door[0] && x < door[1] ? door[2] : 0.3, 0),
-            P(x + 0.07, 4.7, 0.06),
-            SEAM,
-            IN | 12,
-          );
-        }
         const c = (min[j] + max[j]) / 2;
+        // On a long wall: a cut that steps up at 45 degrees from each corner toward the door, a trace of light along the coping.
+        for (const g of k ? [1, -1] : []) {
+          const a = g > 0 ? min[0] : max[0];
+          const end = door ? door[g > 0 ? 0 : 1] : c - 0.8 * g;
+          if ((end - a) * g > 4.2) {
+            F(a, 1, a + 3 * g, 1.1, 0.02, SEAM);
+            F(a + 4 * g, 2, end, 2.1, 0.02, SEAM);
+            face(
+              o,
+              [
+                P(a + 3 * g, 1, 0.02),
+                P(a + 4 * g, 2, 0.02),
+                P(a + 4 * g, 2.1, 0.02),
+                P(a + 3 * g, 1.1, 0.02),
+              ],
+              SEAM,
+              P(a, 1, -1),
+            );
+          }
+        }
+        if (k) {
+          lit(o, 1.6, () => F(min[0] + 0.3, 4.82, max[0] - 0.3, 4.9, 0.075, COOL));
+        }
         if (!k && !door) {
           F(c - 1.1, 0.9, c + 1.1, 1.9, 0.02, IRON);
           for (let i = 0; i < 4; i++) {

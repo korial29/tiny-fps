@@ -80,10 +80,10 @@ Each flag stands in its own dome's hall, on a team-tinted step and dais 2 m from
 
 ## The base's outside (2026-11-10)
 
-`src/client/moonhull.ts` (`hull()`, called by moonscape.ts beside `moonbase()` and mirrored with it, so nothing in it is team-coloured) dresses red's half from outside, 10,620 vertices a half, drawn only:
+`src/client/moonhull.ts` (`hull()`, called by moonscape.ts beside `moonbase()` and mirrored with it, so nothing in it is team-coloured) dresses red's half from outside, 8,976 vertices a half, drawn only. No brick bond (the user, 2026-11-10: science fiction, not masonry): few long lines, angled cuts, light as line work.
 
-- Dome: grey seams 2 cm proud of the shell as drawn (eight rings, meridians staggered row on row, a band where the shell springs, plates between the drum's windows), a porthole over every other window, a dark foot with a strip of light, an amber frame round the portal, lights in the ground up to the door, an aerial on top (mast, three cross-bars, a red beacon at 25.4 m).
+- Dome: twelve dark spines from a trench at the springing line up to a collar round the aerial, a trace of light up every other spine and round the collar, angled panel cuts between the spines through the corners of the shell's sides (a hexagon over a trapezoid, then a chevron under a trapezoid), three hatches, vents in the trench, the drum's windows in panels of two and three, a porthole over every other window, a dark foot with a strip of light, an amber frame round the portal, lights in the ground up to the door, an aerial on top (mast, three cross-bars, a red beacon at 25.4 m).
 - Tubes: hoops between the ribs, a lamp on each side of each.
-- Modules: a coping, a plinth, ribs between the windows, two portholes on each end wall (a pane inside too) and a vent, a lamp and a sensor cluster over each airlock, a dish on the first roof's corner, three whip aerials along the second's end.
+- Modules: a coping with a trace of light on the long walls, a plinth, a cut that steps up at 45 degrees from each corner toward the door, two portholes on each end wall (a pane inside too) and a vent, a lamp and a sensor cluster over each airlock, a dish on the first roof's corner, three whip aerials along the second's end.
 
 `PORTHOLES` lists them; none is over a doorway, an airlock or a tube (tested), and nothing stands in the door's way, the airlocks, the tube tops or the middle of a module's roof. No collision: the aerial's mast, the dish and the whips are walked through.

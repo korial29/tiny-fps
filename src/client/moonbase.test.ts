@@ -6,7 +6,7 @@ import { TEX } from '../shared/types';
 import { build } from '../shared/world';
 import { STRIDE } from './mesh';
 import { GAPS, INDOORS, LINTELS, furnishing, moonbase } from './moonbase';
-import { PORTHOLES, SEAM, TIP, hull } from './moonhull';
+import { PORTHOLES, TIP, hull } from './moonhull';
 import { moonscape } from './moonscape';
 import { palette, scenery } from './render';
 import { uses } from './vision';
@@ -123,7 +123,7 @@ describe('moonhull, the outside of the base', () => {
   const dist = (p: number[], c: number[]) => Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]);
   const r = (p: number[], z = 236) => Math.hypot(p[0] - 80, p[2] - z);
 
-  it('lays seams up the dome, rings and meridians, each just proud of the shell as drawn', () => {
+  it('ribs the dome with twelve spines from the trench to the collar, angled cuts between them and traces of light, all just proud of the shell as drawn', () => {
     const o: number[] = [];
     moonbase(o);
     /** The shell's triangles, by its paint. */
@@ -134,10 +134,11 @@ describe('moonhull, the outside of the base', () => {
         skin.push(t);
       }
     }
+    // What is laid on the shell: lit paint that is not its own, under the aerial.
     const seams = pts.filter(
-      p => p[8] === -1 && p[6] === SEAM[0] && p[9] === SEAM[2] && p[1] > 5.3 && r(p) < 22.5,
+      p => p[8] === -1 && p[1] > 5.3 && p[1] < 17.1 && r(p) > 2 && r(p) < 22.5,
     );
-    expect(seams.length).toBeGreaterThan(3000);
+    expect(seams.length).toBeGreaterThan(1200);
     // How far along the line from the dome's middle a seam's corner is past the shell.
     const c = [80, 5, 236];
     const proud = (p: number[]) => {
@@ -160,19 +161,55 @@ describe('moonhull, the outside of the base', () => {
     };
     const out = seams.filter((_, i) => i % 7 === 0).map(proud);
     expect(Math.min(...out)).toBeGreaterThan(0.008);
-    expect(Math.max(...out)).toBeLessThan(0.06);
-    // Eight rings round the shell, and meridians from one to the next.
+    expect(Math.max(...out)).toBeLessThan(0.09);
+    const turn = (p: number[]) => (Math.atan2(p[2] - 236, p[0] - 80) / Math.PI + 2) % 2;
+    /** The 48 sides of the dome that a list of vertices reaches. */
+    const sides = (l: number[][]) => new Set(l.map(p => Math.round(turn(p) * 24) % 48)).size;
+    const traces = pts.filter(
+      p => p[8] === -2 && p[1] > 6 && p[1] < 17.1 && r(p) > 2 && r(p) < 22.5,
+    );
+    for (let n = 0; n < 12; n++) {
+      // A spine is 0.44 m wide and runs from the trench to the collar; every other one carries a trace of light.
+      const on = (p: number[]) =>
+        r(p) * Math.abs(Math.sin((turn(p) - n / 6) * Math.PI)) < 0.25 &&
+        Math.cos((turn(p) - n / 6) * Math.PI) > 0;
+      const spine = pts.filter(p => p[8] === -1 && p[6] === 0.27 && on(p));
+      expect(Math.min(...spine.map(p => p[1])), `${n}`).toBeLessThan(5.31);
+      expect(Math.max(...spine.map(p => p[1]))).toBeGreaterThan(16.8);
+      const ys = traces.filter(p => on(p) && p[1] < 16.5).map(p => p[1]);
+      expect(ys.length > 0).toBe(n % 2 === 1);
+      if (n % 2) {
+        expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(8);
+      }
+    }
+    // No course of masonry: only the trench and the collar go all the way round, the collar with a ring of light.
     for (let j = 1; j < 9; j++) {
       const y = 5 + 12 * Math.sin((j * Math.PI) / 20);
-      expect(seams.filter(p => Math.abs(p[1] - y) < 0.2).length, `${j}`).toBeGreaterThan(280);
+      // The pieces that lie along the ring.
+      const flat: number[][] = [];
+      for (let i = 0; i < pts.length; i += 3) {
+        const t = pts.slice(i, i + 3);
+        if (t.every(p => seams.includes(p) && Math.abs(p[1] - y) < 0.25)) {
+          flat.push(...t);
+        }
+      }
+      expect(sides(flat), `${j}`).toBeLessThan(30);
     }
-    let up = 0;
+    expect(sides(pts.filter(p => p[8] === -1 && p[1] > 4.6 && p[1] < 5.2 && r(p) > 22))).toBe(48);
+    expect(sides(seams.filter(p => p[1] > 16.7))).toBe(48);
+    expect(sides(traces.filter(p => p[1] > 16.7))).toBe(48);
+    // The cuts between the spines run at an angle: across a side and up a row at once.
+    let slant = 0;
     for (let i = 0; i < pts.length; i += 3) {
       const t = pts.slice(i, i + 3);
       const ys = t.map(p => p[1]);
-      up += +(t.every(p => seams.includes(p)) && Math.max(...ys) - Math.min(...ys) > 0.8);
+      slant += +(
+        t.every(p => seams.includes(p) && p[6] > 0.3) &&
+        Math.max(...ys) - Math.min(...ys) > 0.8 &&
+        sides(t) > 1
+      );
     }
-    expect(up).toBeGreaterThan(250);
+    expect(slant).toBeGreaterThan(100);
   });
 
   it('cuts round portholes that glow warm in dark frames, on the drum and the modules, none across a doorway, an airlock or a tube', () => {
@@ -331,11 +368,11 @@ describe('moonhull, the outside of the base', () => {
     expect(probes.some(p => p[0] > 122.5 && p[1] > 6 && p[2] < 225)).toBe(true);
   });
 
-  it('stays within its vertices: under 10,700 a half, whole triangles of finite numbers', () => {
+  it('stays within its vertices: under 9,500 a half, whole triangles of finite numbers', () => {
     expect(h.length % (3 * STRIDE)).toBe(0);
     expect(h.every(Number.isFinite)).toBe(true);
     expect(pts.length).toBeGreaterThan(8000);
-    expect(pts.length).toBeLessThan(10700);
+    expect(pts.length).toBeLessThan(9500);
   });
 });
 

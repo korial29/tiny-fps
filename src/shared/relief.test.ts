@@ -100,6 +100,32 @@ describe('ground', () => {
     expect(ground(peak, 43, 21)).toBe(1);
   });
 
+  it('is absent in a pit and on its edge, so two pits side by side are one', () => {
+    const w = world({
+      ...SLOPE,
+      pits: [
+        [20, 20, 24, 28],
+        [24, 20, 28, 24],
+      ],
+    });
+    expect(w.relief!.box).toEqual([20, 20, 28, 28]);
+    for (const [x, z] of [
+      [22, 24],
+      [24, 22],
+      [20, 20],
+      [28, 24],
+      [26, 20.5],
+    ]) {
+      expect(ground(w, x, z), `${x}, ${z}`).toBe(-Infinity);
+    }
+    // Beside them, and in the corner the two leave, the ground is there.
+    expect(ground(w, 19.9, 24)).toBe(0);
+    expect(ground(w, 26, 26)).toBeCloseTo(3, 9);
+    expect(ground(w, 30, 22)).toBe(5);
+    expect(hills.relief!.pits).toEqual([]);
+    expect(ground(hills, 22, 24)).toBe(1);
+  });
+
   it('holds the edge height past the lattice', () => {
     expect(ground(hills, 500, 0)).toBe(40);
     expect(ground(hills, -500, 900)).toBe(0);

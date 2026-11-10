@@ -7,8 +7,10 @@ type Vec3 = [number, number, number];
 type Quad = [number, number, number, number];
 
 export interface ReliefDef {
-  /** The arena, x0, z0, x1, z1: no relief inside, the brushes are the floor there and a gap between them stays open. */
+  /** A rectangle with no relief, x0, z0, x1, z1: the brushes are the floor there and a gap between them stays open (the moon's rille). */
   hole: Quad;
+  /** More of them, small: the notches in the rille's lips. Absent: none. */
+  pits?: Quad[];
   /** The edge nobody crosses, an ellipse: its centre x, z and its half axes along x and z. */
   bound: Quad;
   /** Metres between two nodes. */
@@ -29,6 +31,9 @@ export interface Relief {
   nz: number;
   h: Float32Array;
   hole: Quad;
+  /** The definition's pits and the box round them all (none: an empty box). */
+  pits: Quad[];
+  box: Quad;
   bound: Quad;
   /** The highest node: a ray above it meets no ground. */
   top: number;
@@ -57,7 +62,16 @@ export const raise = (def: ReliefDef): Relief => {
   if (old) {
     return old;
   }
-  const { hole, bound, cell, at } = def;
+  const { hole, bound, cell, at, pits = [] } = def;
+  const box = pits.reduce<Quad>(
+    (b, q) => [
+      Math.min(b[0], q[0]),
+      Math.min(b[1], q[1]),
+      Math.max(b[2], q[2]),
+      Math.max(b[3], q[3]),
+    ],
+    [Infinity, Infinity, -Infinity, -Infinity],
+  );
   const [cx, cz, a, b] = bound;
   const x0 = Math.floor((cx - a) / cell) * cell;
   const z0 = Math.floor((cz - b) / cell) * cell;
@@ -71,18 +85,24 @@ export const raise = (def: ReliefDef): Relief => {
       top = Math.max(top, h[i + j * nx]);
     }
   }
-  const r = { x0, z0, cell, nx, nz, h, hole, bound, top };
+  const r = { x0, z0, cell, nx, nz, h, hole, pits, box, bound, top };
   made.set(def, r);
   return r;
 };
 
 /**
  * The height of the ground at (x, z), or -Infinity where there is none: a world without relief,
- * and inside the hole. Each lattice square is two triangles split from node (i, j) to (i + 1, j + 1).
+ * inside the hole and inside a pit. Each lattice square is two triangles split from node (i, j) to (i + 1, j + 1).
  */
 export const ground = (w: World, x: number, z: number): number => {
   const r = w.relief;
-  if (!r || (x > r.hole[0] && x < r.hole[2] && z > r.hole[1] && z < r.hole[3])) {
+  // A pit's edge has no ground either: two pits side by side leave no line to walk between them.
+  const pit = (q: Quad) => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3];
+  if (
+    !r ||
+    (x > r.hole[0] && x < r.hole[2] && z > r.hole[1] && z < r.hole[3]) ||
+    (pit(r.box) && r.pits.some(pit))
+  ) {
     return -Infinity;
   }
   const u = Math.min(Math.max((x - r.x0) / r.cell, 0), r.nx - 1);

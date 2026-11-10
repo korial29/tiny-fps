@@ -1,10 +1,13 @@
 // The extra lights of a frame, besides the sun and the sky (render.ts): daylight needs no
 // flashlight, so only the glow of the bases and of a flag lying on the ground, in their team's
 // colour. The list, its caps and its shadow slots stay for effects to come. No DOM, no GL.
-import type { PlayerState } from '../shared/types';
+import { NOBODY } from '../shared/types';
+import type { PlayerState, Rover } from '../shared/types';
 import { teamRgb } from './flag';
 import type { CtfScene } from './flag';
+import { basis } from './mesh';
 import type { Vec3 } from './mesh';
+import { headlights } from './rover';
 
 export const LIGHT = {
   /** A cone from p along d. */
@@ -50,6 +53,35 @@ export interface Scene {
 /** Metres a base's glow and a lying flag's reach on the roof. */
 const BASE_RANGE = 9;
 const FLAG_RANGE = 6;
+
+/** A rover's headlights: metres they reach, the cosine of the beam's half-angle, how far the beam dips under the nose (radians), and their colour. */
+export const BEAM_RANGE = 45;
+export const BEAM_CONE = 0.82;
+export const BEAM_DIP = 0.12;
+const BEAM: Vec3 = [2.6, 2.45, 2.1];
+
+/**
+ * The headlights of the rovers that have a driver: one beam a rover, from between its two lenses
+ * along its nose, dipped to the ground ahead. One and not two: every pixel pays for every light.
+ * They cast no shadow of their own (a shadow map is a pass over the whole map).
+ */
+export const beams = (rovers: Rover[] = []): Light[] =>
+  rovers
+    .filter(r => r.driver != NOBODY)
+    .map(r => {
+      const [a, b] = headlights(r);
+      const [, u, f] = basis(r.yaw, r.pitch, r.roll);
+      const [c, s] = [Math.cos(BEAM_DIP), Math.sin(BEAM_DIP)];
+      return {
+        kind: LIGHT.SPOT,
+        p: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2],
+        d: f.map((v, i) => v * c - u[i] * s) as Vec3,
+        cone: BEAM_CONE,
+        range: BEAM_RANGE,
+        color: BEAM,
+        shadow: false,
+      };
+    });
 
 /** The lights of this frame, most important first: the two bases, then the flags that lie on the ground. */
 export const gather = (scene: Scene): Light[] => {

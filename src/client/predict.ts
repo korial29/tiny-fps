@@ -3,11 +3,15 @@
 // physics and keeps it until the host acks it. On a snapshot the own player is reset to the
 // host's state and the unacked inputs are replayed on top. Other players are drawn
 // INTERP_DELAY in the past, interpolated between the two snapshots around that time.
-import { INTERP_DELAY } from '../shared/constants';
+// A rover the own player drives is predicted with him: ride() per input, as the host runs it. The
+// other rovers are interpolated like the other players, and a rider is drawn on the seat of his.
+import { INTERP_DELAY, TICK_HZ } from '../shared/constants';
 import { step } from '../shared/gun';
-import { TAU, norm } from '../shared/physics';
+import { TAU, norm, respawn } from '../shared/physics';
 import { onWire } from '../shared/protocol';
-import type { Input, PlayerState, SnapPlayer, Snapshot } from '../shared/types';
+import { drive, park, ride, seat } from '../shared/rover';
+import { MODE, NOBODY } from '../shared/types';
+import type { Input, PlayerState, Rover, SnapPlayer, Snapshot } from '../shared/types';
 import type { World } from '../shared/world';
 
 export interface Predictor {
@@ -35,17 +39,37 @@ export interface Predictor {
   /**
    * The own player, eased between the state before and after the last step by alpha in [0, 1]
    * (the share of a step elapsed since it), so the camera moves smoothly at any frame rate.
-   * Undefined until a snapshot shows the own player.
+   * Undefined until a snapshot shows the own player. Seated, his body is on the seat of the rover
+   * as rovers() draws it on the same frame: the predicted one at the wheel, the interpolated one
+   * beside it (at the time of the last step plus alpha of a step).
    */
   me(alpha: number): PlayerState | undefined;
   /** The other players at now - INTERP_DELAY; a player missing from the latest snapshot is gone. */
   others(now: number): PlayerState[];
+  /**
+   * The map's rovers, in the order of WorldDef.rovers: the one the own player drives predicted and
+   * eased by alpha like me(), the others at now - INTERP_DELAY. Empty on a map without rovers.
+   * The one he has just left rolls on as predicted until the snapshots' one, which rolls the same
+   * way a lag behind, has caught up with it.
+   */
+  rovers(now: number, alpha: number): Rover[];
+  /** The rover the own player is seated in (its index) and his seat (0 the driver's), or undefined on foot. */
+  riding(): { rover: number; seat: 0 | 1 } | undefined;
 }
 
 /** Unacked inputs kept at most (2 s at 60 Hz): a stalled host does not grow the list. */
 const MAX_PENDING = 120;
 /** Snapshots kept for interpolation (about 0.5 s at 30 Hz). */
 const MAX_SNAPS = 16;
+/**
+ * A rover the own player got out of is drawn as predicted, rolling on, until the snapshots' one is
+ * within GHOST_NEAR m of it or GHOST_MS have passed. One that will not get there (the host took
+ * him off the wheel, someone else drives it now) is eased to the snapshots' over ROVER_BLEND ms.
+ */
+export const ROVER_BLEND = 300;
+const GHOST_MS = 4000;
+const GHOST_NEAR = 0.05;
+const STEP = 1000 / TICK_HZ;
 
 type Point = { x: number; y: number; z: number };
 
@@ -79,6 +103,18 @@ const lerp = (a: PlayerState, b: PlayerState, t: number): PlayerState => ({
   pitch: a.pitch + (b.pitch - a.pitch) * t,
 });
 
+/** The rover a share t of the way from a to b: b itself from 1 on, the seats b's. */
+const mix = (a: Rover, b: Rover, t: number): Rover => {
+  const out = { ...b };
+  if (t < 1) {
+    for (const k of 'x y z vx vy vz pitch roll wy wp wr steer'.split(' ') as 'x'[]) {
+      out[k] = a[k] + (b[k] - a[k]) * t;
+    }
+    out.yaw = turn(a.yaw, b.yaw, t);
+  }
+  return out;
+};
+
 export const createPredictor = (world: World): Predictor => {
   let id: number | undefined;
   let team = 0;
@@ -92,6 +128,38 @@ export const createPredictor = (world: World): Predictor => {
   let fall = 0;
   /** The match is on (the last snapshot): the gun works. */
   let armed = true;
+  /** The rover the own player drives, after the last step and before it, and its index. */
+  let car: Rover | undefined;
+  let carPrev: Rover | undefined;
+  let carK = 0;
+  /** The rover he has just left, coasting on as predicted, and when he left it. */
+  let ghost: { k: number; r: Rover; prev: Rover; t: number; end?: number } | undefined;
+  /** The time of the last step, or of the last snapshot when steps carry none. */
+  let clock = 0;
+  let timed = false;
+
+  /** One input of the own player, as the host applies it: at the wheel the rover's step, else his own. */
+  const advance = (i: Input): void => {
+    if (car && own!.mode === MODE.RIDE && car.driver === id) {
+      if (ride(own!, car, i, world, team)) {
+        // Under the kill floor: the host puts him at a spawn and parks the rover.
+        if (car.driver === id) {
+          respawn(own!, world, team);
+        }
+        car = park(world)[carK];
+      }
+    } else {
+      step(own!, i, world, team, armed);
+    }
+  };
+  const driving = (): boolean => !!car && own?.mode === MODE.RIDE && car.driver === id;
+  /** The predicted rover is his no more: it coasts on as a ghost from `t`, eased out from `end` if given. */
+  const drop = (t: number, end?: number): void => {
+    if (car && !driving()) {
+      ghost = { k: carK, r: car, prev: carPrev ?? car, t, end };
+      car = carPrev = undefined;
+    }
+  };
 
   /**
    * The snapshots around the time the others are drawn at, and how far between them (0 to 1). The
@@ -133,6 +201,53 @@ export const createPredictor = (world: World): Predictor => {
       });
   };
 
+  const rovers = (now: number, alpha: number): Rover[] => {
+    const last = snaps.at(-1);
+    if (!last?.s.rovers) {
+      return [];
+    }
+    const { a, b, u } = around(now);
+    const t = Math.max(0, Math.min(1, alpha));
+    return last.s.rovers.map((r, k) => {
+      if (car && carPrev && k === carK) {
+        return mix(carPrev, car, t);
+      }
+      const [ra, rb] = [a.s.rovers?.[k], b.s.rovers?.[k]];
+      const drawn = ra && rb ? mix(ra, rb, u) : { ...(rb ?? ra ?? r) };
+      if (ghost?.k !== k) {
+        return drawn;
+      }
+      const g = mix(ghost.prev, ghost.r, t);
+      if (ghost.end === undefined) {
+        const near = (g.x - drawn.x) ** 2 + (g.y - drawn.y) ** 2 + (g.z - drawn.z) ** 2;
+        if (near < GHOST_NEAR ** 2) {
+          ghost = undefined;
+          return drawn;
+        }
+        if ((drawn.driver === NOBODY || drawn.driver === id) && now - ghost.t < GHOST_MS) {
+          return { ...g, driver: NOBODY, rider: drawn.rider };
+        }
+        ghost.end = now;
+      }
+      const w = (now - ghost.end) / ROVER_BLEND;
+      if (w >= 1) {
+        ghost = undefined;
+      }
+      return mix(g, drawn, Math.max(0, w));
+    });
+  };
+
+  const riding = (): { rover: number; seat: 0 | 1 } | undefined => {
+    if (own?.mode !== MODE.RIDE) {
+      return undefined;
+    }
+    if (driving()) {
+      return { rover: carK, seat: 0 };
+    }
+    const k = snaps.at(-1)?.s.rovers?.findIndex(r => r.rider === id) ?? -1;
+    return k < 0 ? undefined : { rover: k, seat: 1 };
+  };
+
   return {
     you: (n, t = 0) => {
       [id, team] = [n, t];
@@ -145,9 +260,17 @@ export const createPredictor = (world: World): Predictor => {
       if (pending.length > MAX_PENDING) {
         pending.shift();
       }
+      [clock, timed] = [now ?? clock, timed || now !== undefined];
+      if (ghost) {
+        // The rover he left rolls on with nobody at the wheel, as the host's tick rolls it.
+        ghost.prev = { ...ghost.r };
+        drive(ghost.r, undefined, world);
+      }
       if (own) {
         prev = state(own);
-        step(own, input, world, team, armed);
+        carPrev = car && { ...car };
+        advance(input);
+        drop(clock);
         ev |= own.ev;
         fall = Math.max(fall, own.fall);
       }
@@ -163,16 +286,34 @@ export const createPredictor = (world: World): Predictor => {
       if (!me) {
         return;
       }
+      clock = timed ? clock : now;
       armed = !s.over;
       pending = pending.filter(i => !acked(i.seq, me.ack));
+      const was = car;
       own = state(me);
       prev = state(own);
+      // The rover he drives is reset with him and replayed with him.
+      carK = s.rovers?.findIndex(r => r.driver === id) ?? -1;
+      car = me.mode === MODE.RIDE && carK >= 0 ? { ...s.rovers![carK] } : undefined;
+      carPrev = car && { ...car };
       pending.forEach((i, k) => {
         if (k === pending.length - 1) {
           prev = state(own!);
+          carPrev = car && { ...car };
         }
-        step(own!, i, world, team, armed);
+        advance(i);
       });
+      if (!driving()) {
+        // Off the wheel in the replay as in the live step that made the ghost; or the host took
+        // him off it, and the rover he was predicting is the ghost.
+        if (was && !ghost) {
+          [car, carPrev] = [was, was];
+          drop(clock, clock);
+        }
+        car = carPrev = undefined;
+      } else {
+        ghost = undefined;
+      }
     },
 
     events: () => {
@@ -181,8 +322,22 @@ export const createPredictor = (world: World): Predictor => {
       return out;
     },
 
-    me: alpha => (own && prev ? lerp(prev, own, Math.max(0, Math.min(1, alpha))) : undefined),
+    me: alpha => {
+      if (!own || !prev) {
+        return undefined;
+      }
+      const t = Math.max(0, Math.min(1, alpha));
+      const p = lerp(prev, own, t);
+      const at = riding();
+      const r = at && rovers(clock + t * STEP, t)[at.rover];
+      if (at && r && prev.mode === MODE.RIDE) {
+        seat(p, r, at.seat);
+      }
+      return p;
+    },
 
     others,
+    rovers,
+    riding,
   };
 };

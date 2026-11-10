@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { STILL } from '../shared/physics';
-import type { PlayerState } from '../shared/types';
+import { NOBODY } from '../shared/types';
+import type { PlayerState, Rover } from '../shared/types';
 import type { FlagDraw } from './flag';
-import { LIGHT, MAX_LIGHTS, gather } from './lights';
+import { BEAM_DIP, BEAM_RANGE, LIGHT, MAX_LIGHTS, beams, gather } from './lights';
 import type { Scene } from './lights';
+import { basis } from './mesh';
 import type { Vec3 } from './mesh';
+import { headlights } from './rover';
 
 const player = (id: number, x: number, yaw = 0): PlayerState => ({
   id,
@@ -99,5 +102,54 @@ describe('gather, with the match', () => {
       dropped: true,
     }));
     expect(gather(scene({ ctf: ctf(flags) })).length).toBeLessThanOrEqual(MAX_LIGHTS);
+  });
+});
+
+describe('beams', () => {
+  const rover = (o: Partial<Rover> = {}): Rover => ({
+    x: 10,
+    y: 1,
+    z: 20,
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    yaw: 0.8,
+    pitch: 0.1,
+    roll: -0.2,
+    wy: 0,
+    wp: 0,
+    wr: 0,
+    steer: 0,
+    driver: NOBODY,
+    rider: NOBODY,
+    ...o,
+  });
+
+  it('lights nothing for no rover, a parked one, or one with a rider alone', () => {
+    expect(beams()).toEqual([]);
+    expect(beams([rover(), rover({ rider: 4 })])).toEqual([]);
+  });
+
+  it('gives each driven rover one spot between its lenses, along its nose and dipped to the ground, with no shadow', () => {
+    const rs = [rover(), rover({ driver: 2, x: 30 }), rover({ driver: 0, yaw: -2 })];
+    const ls = beams(rs);
+    expect(ls).toHaveLength(2);
+    ls.forEach((l, i) => {
+      const r = rs[i + 1];
+      const [a, b] = headlights(r);
+      expect(l.kind).toBe(LIGHT.SPOT);
+      expect(l.shadow).toBe(false);
+      expect(l.p).toEqual(a.map((v, k) => (v + b[k]) / 2));
+      const [, u, f] = basis(r.yaw, r.pitch, r.roll);
+      const dot = (p: number[], q: number[]) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
+      expect(Math.hypot(...l.d)).toBeCloseTo(1, 9);
+      expect(Math.acos(dot(l.d, f))).toBeCloseTo(BEAM_DIP, 9);
+      expect(dot(l.d, u)).toBeLessThan(0);
+      // Both lenses' patches of ground are inside the one cone.
+      expect(l.cone).toBeGreaterThan(0.7);
+      expect(l.cone).toBeLessThan(0.9);
+      expect(l.range).toBe(BEAM_RANGE);
+      expect(Math.min(...l.color)).toBeGreaterThan(1);
+    });
   });
 });

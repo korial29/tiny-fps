@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   INPUT_BYTES,
+  MAX_ROVERS,
   MSG_INPUT,
   MSG_SNAPSHOT,
   SNAP_BALL,
   SNAP_HEAD,
   SNAP_MATCH,
   SNAP_PLAYER,
+  SNAP_ROVER,
   decodeInput,
   decodeSnapshot,
   encodeInput,
@@ -41,9 +43,10 @@ import {
   SLIDE_TICKS,
   STUMBLE_TICKS,
 } from './constants';
+import { MAPS } from './maps';
 import { STILL } from './physics';
-import { CUT, FLAG, KEY, LIMB, MODE, SIDE } from './types';
-import type { Ball, FlagState, SnapPlayer, Snapshot } from './types';
+import { CUT, FLAG, KEY, LIMB, MODE, NOBODY, SIDE } from './types';
+import type { Ball, FlagState, Rover, SnapPlayer, Snapshot } from './types';
 import { IDLE } from '../../test/teams';
 
 const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
@@ -63,6 +66,25 @@ const player = (id: number, over: Partial<SnapPlayer> = {}): SnapPlayer => ({
 });
 
 const bytes = (buf: ArrayBuffer): number[] => [...new Uint8Array(buf)];
+
+/** The floats of a rover, in wire order. */
+const ROVER_F = [
+  ...(['x', 'y', 'z', 'vx', 'vy', 'vz', 'yaw'] as const),
+  ...(['pitch', 'roll', 'wy', 'wp', 'wr', 'steer'] as const),
+];
+
+/** A rover whose thirteen floats are all different and need every bit of a float32. */
+const rover = (k = 0, over: Partial<Rover> = {}): Rover => ({
+  ...(Object.fromEntries(
+    ROVER_F.map((f, j) => [
+      f,
+      Math.fround((j % 2 ? -1 : 1) * (0.123456 + j * 1.7654321 + k * 31.3)),
+    ]),
+  ) as Record<(typeof ROVER_F)[number], number>),
+  driver: NOBODY,
+  rider: NOBODY,
+  ...over,
+});
 
 describe('input frame', () => {
   it('is 12 bytes: type, seq, keys in 11 bits, yaw in turns, pitch in 1/10000 rad, view in 1/256 tick', () => {
@@ -463,6 +485,180 @@ describe('snapshot frame', () => {
     });
   });
 
+  describe('the rovers', () => {
+    const snap = (rovers: Rover[] | undefined, players = 0, over: Partial<Snapshot> = {}) => ({
+      tick: 3,
+      players: Array.from({ length: players }, (_, k) => player(k)),
+      ...IDLE,
+      ...(rovers && { rovers }),
+      ...over,
+    });
+    const ball: Ball = { id: 9, by: 2, x: 1, y: 2, z: 3, dx: 0, dy: 0, dz: -1, burst: false };
+    const lying: FlagState = { state: FLAG.DROPPED, by: 0, x: 4, y: 5, z: 6, left: 7 };
+
+    it('keeps a map without rovers byte for byte', () => {
+      const rest = { balls: [ball], flags: [lying, IDLE.flags[1]] as Snapshot['flags'] };
+      const none = encodeSnapshot(snap(undefined, 3, rest));
+      // The frame of before the rovers: the bare player count, then the match right after the players.
+      expect(none.byteLength).toBe(SNAP_HEAD + 3 * SNAP_PLAYER + SNAP_MATCH + 9 + 1 + SNAP_BALL);
+      expect(bytes(none)[3]).toBe(3);
+      expect(bytes(none)[SNAP_HEAD + 3 * SNAP_PLAYER + SNAP_MATCH]).toBe(FLAG.DROPPED);
+      expect(bytes(encodeSnapshot(snap([], 3, rest)))).toEqual(bytes(none));
+      expect(decodeSnapshot(none)).not.toHaveProperty('rovers');
+      // A rover adds its count bit and its block after the players, and moves nothing else.
+      const one = bytes(encodeSnapshot(snap([rover()], 3, rest)));
+      expect(one.splice(SNAP_HEAD + 3 * SNAP_PLAYER, SNAP_ROVER)).toHaveLength(SNAP_ROVER);
+      one[3] &= 31;
+      expect(one).toEqual(bytes(none));
+    });
+
+    it('puts the rover count in the top three bits of the count byte, and the players in the low five', () => {
+      expect([SNAP_ROVER, MAX_ROVERS]).toEqual([54, 7]);
+      for (const players of [0, 1, 5, MAX_PLAYERS]) {
+        for (let n = 0; n <= MAX_ROVERS; n++) {
+          const sent = Array.from({ length: n }, (_, k) => rover(k));
+          const buf = encodeSnapshot(snap(sent, players));
+          expect(bytes(buf)[3]).toBe(players | (n << 5));
+          expect(buf.byteLength).toBe(
+            SNAP_HEAD + players * SNAP_PLAYER + n * SNAP_ROVER + SNAP_MATCH + 2,
+          );
+          const back = decodeSnapshot(buf)!;
+          expect(back.players.map(p => p.id)).toEqual(Array.from({ length: players }, (_, k) => k));
+          expect(back.rovers ?? []).toEqual(sent);
+          expect('rovers' in back).toBe(n > 0);
+        }
+      }
+      // The count has no fourth bit: an eighth rover is not sent, and the frame stays whole.
+      const eight = Array.from({ length: 8 }, (_, k) => rover(k));
+      const buf = encodeSnapshot(snap(eight, 2));
+      expect(bytes(buf)[3]).toBe(2 | (7 << 5));
+      expect(decodeSnapshot(buf)!.rovers).toEqual(eight.slice(0, 7));
+    });
+
+    it('round-trips a rover’s float32 state exactly, with both seats', () => {
+      const f = Math.fround;
+      const sent = [
+        rover(0, { driver: 3, rider: 15 }),
+        // Angles as they are, not in 65536ths of a turn: just under a turn, a hair, a negative one.
+        rover(1, { yaw: f(2 * Math.PI - 1e-6), pitch: f(1e-7), roll: f(-1.2345678), rider: 0 }),
+        rover(2, { x: f(-299.99), y: f(1e9), z: f(1e-30), vx: -0, steer: f(0.55), driver: 254 }),
+      ];
+      // No value survives the fixed points of the rest of the frame: 1/32 m, 1/10000 rad, a u16 turn.
+      for (const k of ROVER_F) {
+        for (const q of [32, 10000, 32768 / Math.PI]) {
+          expect(Math.round(sent[0][k] * q) / q, k).not.toBe(sent[0][k]);
+        }
+      }
+      const buf = encodeSnapshot(snap(sent, 2));
+      const back = decodeSnapshot(buf)!.rovers!;
+      expect(back).toEqual(sent);
+      expect(Object.is(back[2].vx, -0)).toBe(true);
+      // The block follows the players: thirteen big-endian float32 in order, then the two seats.
+      const v = new DataView(buf);
+      sent.forEach((r, i) => {
+        const o = SNAP_HEAD + 2 * SNAP_PLAYER + i * SNAP_ROVER;
+        expect(ROVER_F.map((_, j) => v.getFloat32(o + 4 * j))).toEqual(ROVER_F.map(k => r[k]));
+        expect([v.getUint8(o + 52), v.getUint8(o + 53)]).toEqual([r.driver, r.rider]);
+      });
+      // The match comes right after the last seat: no captures, 480 s.
+      const last = SNAP_HEAD + 2 * SNAP_PLAYER + 2 * SNAP_ROVER + 52;
+      expect(bytes(buf).slice(last, last + 6)).toEqual([254, NOBODY, 0, 0, 0x01, 0xe0]);
+      // A float64 goes to its nearest float32, no further.
+      const [r] = decodeSnapshot(
+        encodeSnapshot(snap([rover(0, { yaw: 4.2, wy: 1 / 3 })])),
+      )!.rovers!;
+      expect([r.yaw, r.wy]).toEqual([f(4.2), f(1 / 3)]);
+    });
+
+    it('carries rovers, balls and sixteen players together', () => {
+      const sent = snap(
+        [0, 1, 2, 3].map(k => rover(k, { driver: k, rider: 15 - k })),
+        16,
+        {
+          score: [2, 1],
+          flags: [{ ...IDLE.flags[0], state: FLAG.CARRIED, by: 15 }, lying],
+          balls: [ball, { ...ball, id: 10, burst: true }, { ...ball, id: 11, by: 15 }],
+        },
+      );
+      const buf = encodeSnapshot(sent);
+      expect(bytes(buf)[3]).toBe(16 | (4 << 5));
+      expect(buf.byteLength).toBe(
+        SNAP_HEAD + 16 * SNAP_PLAYER + 4 * SNAP_ROVER + SNAP_MATCH + 2 + 8 + 1 + 3 * SNAP_BALL,
+      );
+      const back = decodeSnapshot(buf)!;
+      expect(back.players.map(p => p.id)).toEqual(sent.players.map(p => p.id));
+      expect(back.players[15]).toMatchObject({ id: 15, x: Math.fround(12.3), ack: 1234 });
+      expect(back.rovers).toEqual(sent.rovers);
+      expect([back.score, back.flags]).toEqual([sent.score, sent.flags]);
+      expect(back.balls!.map(b => [b.id, b.by, b.burst, b.x, b.dz])).toEqual(
+        sent.balls!.map(b => [b.id, b.by, b.burst, b.x, b.dz]),
+      );
+    });
+
+    it('rejects a frame cut in a rover, and a rover count that does not fit the length', () => {
+      const ok = encodeSnapshot(snap([rover(0), rover(1)], 2));
+      expect(decodeSnapshot(ok)!.rovers).toHaveLength(2);
+      for (let n = SNAP_HEAD; n < ok.byteLength; n++) {
+        expect(decodeSnapshot(ok.slice(0, n)), `cut at ${n}`).toBeNull();
+      }
+      expect(decodeSnapshot(new Uint8Array([...bytes(ok), 0]).buffer)).toBeNull();
+      // One rover more or fewer than the bytes hold, none at all, and a rover counted as a player.
+      for (const count of [2 | (3 << 5), 2 | (1 << 5), 2, 3 | (1 << 5), 2 | (7 << 5)]) {
+        const bad = new Uint8Array(ok.slice(0));
+        bad[3] = count;
+        expect(decodeSnapshot(bad.buffer), `count ${count}`).toBeNull();
+      }
+      // A rover's worth of bytes with no count for it.
+      const bare = encodeSnapshot(snap(undefined, 2));
+      const fat = new Uint8Array([...bytes(bare), ...new Array<number>(SNAP_ROVER).fill(1)]);
+      expect(decodeSnapshot(fat.buffer)).toBeNull();
+    });
+  });
+
+  it('carries USE held beside jump and dash', () => {
+    const all = {
+      railed: true,
+      inRail: true,
+      zapping: true,
+      rifled: true,
+      inRifle: true,
+      hot: true,
+    };
+    for (let k = 0; k < 8; k++) {
+      const held = (k & 1 && KEY.JUMP) | (k & 2 && KEY.DASH) | (k & 4 && KEY.USE);
+      for (const flags of [{}, all]) {
+        const p = player(k, { held, coyote: 7, buffer: 7, ...flags });
+        const buf = encodeSnapshot({ tick: 0, players: [p, player(9)], ...IDLE });
+        // Jump and dash in bits 6 and 7 of the timers, USE in bit 6 of the rail gun's flags.
+        expect(bytes(buf)[SNAP_HEAD + 38]).toBe(63 | ((k & 3) << 6));
+        expect(bytes(buf)[SNAP_HEAD + 53]).toBe((flags === all ? 63 : 0) | (k & 4 ? 64 : 0));
+        const [a, b] = decodeSnapshot(buf)!.players;
+        expect(a.held).toBe(held);
+        expect(a).toMatchObject({ coyote: 7, buffer: 7, ...flags });
+        expect([a.hot, a.inRifle]).toEqual([flags === all, flags === all]);
+        expect(b.held).toBe(0);
+      }
+    }
+  });
+
+  it('round-trips MODE.RIDE', () => {
+    // Seated, the USE that got him in still held, every neighbour of the mode's three bits set.
+    const p = player(6, { mode: MODE.RIDE, wall: SIDE.NORTH, jumps: 1, dashes: 1, held: KEY.USE });
+    const buf = encodeSnapshot({
+      tick: 0,
+      players: [p],
+      ...IDLE,
+      rovers: [rover(0, { rider: 6 })],
+    });
+    expect(bytes(buf)[SNAP_HEAD + 35]).toBe(MODE.RIDE | (SIDE.NORTH << 3) | 64 | 128);
+    const back = decodeSnapshot(buf)!;
+    expect(back.players[0]).toMatchObject({
+      ...{ mode: MODE.RIDE, ground: false, wall: SIDE.NORTH, jumps: 1, dashes: 1 },
+      held: KEY.USE,
+    });
+    expect(back.rovers![0].rider).toBe(back.players[0].id);
+  });
+
   it('derives ground from the mode: ground, slide and crouch stand on a floor', () => {
     for (const mode of Object.values(MODE)) {
       const buf = encodeSnapshot({
@@ -534,6 +730,17 @@ describe('snapshot frame', () => {
     expect(STUMBLE_TICKS).toBeLessThanOrEqual(63);
     // The id of a tackler is 4 bits.
     expect(MAX_PLAYERS).toBeLessThanOrEqual(16);
+    // The count byte: 5 bits of players, 3 of rovers, and NOBODY is no player's id.
+    expect(MAX_PLAYERS).toBeLessThanOrEqual(31);
+    expect(MAX_ROVERS).toBe(7);
+    for (const def of Object.values(MAPS)) {
+      expect(def.rovers?.length ?? 0).toBeLessThanOrEqual(MAX_ROVERS);
+    }
+    expect(NOBODY).toBeGreaterThanOrEqual(MAX_PLAYERS);
+    expect(NOBODY).toBeLessThanOrEqual(255);
+    // The mode is 3 bits, RIDE the last value they hold.
+    expect(Math.max(...Object.values(MODE))).toBe(MODE.RIDE);
+    expect(MODE.RIDE).toBeLessThanOrEqual(7);
     expect(Object.keys(MODE).length).toBeLessThanOrEqual(8);
     expect(Object.keys(SIDE).length).toBeLessThanOrEqual(8);
     // A slide, a wall-run and a climb end long before t saturates, and the key bits are fifteen.

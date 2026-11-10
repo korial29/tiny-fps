@@ -10,7 +10,9 @@ import {
 import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { MOVE, MOVES, createGait } from './gait';
-import type { Floor, Gait } from './gait';
+import type { Floor, Gait, Seat } from './gait';
+import { basis } from './mesh';
+import { grips } from './rover';
 import type { Vec3 } from './mesh';
 import { JOINT as J, JOINTS, PARENT, REST, solve, turn } from './rig';
 import type { Quat } from './rig';
@@ -1274,5 +1276,171 @@ describe('gait: the contract', () => {
     }
     const per = ((performance.now() - t0) * 1000) / (600 * gaits.length);
     expect(per).toBeLessThan(150);
+  });
+});
+
+describe('seated in a rover', () => {
+  /** The seat point's frame: x right, y up, a ahead of it, as the rover leans. */
+  const local = (seat: Seat, p: PlayerState, [x, y, z]: Vec3): Vec3 => {
+    const [r, u, f] = basis(seat.yaw, seat.pitch, seat.roll);
+    const d = [x - p.x, y - p.y, z - p.z];
+    return [r, u, f].map(v => v[0] * d[0] + v[1] * d[1] + v[2] * d[2]) as Vec3;
+  };
+  const LEVEL: Seat = { yaw: 0, pitch: 0, roll: 0, steer: 0, s: 0 };
+  /** The pose of who has sat for a second, in the seat's frame. */
+  const sit = (seat: Seat | undefined, o: Partial<PlayerState> = {}) => {
+    const p = state({
+      mode: MODE.RIDE,
+      ground: false,
+      x: 3,
+      y: 2,
+      z: -5,
+      yaw: seat?.yaw ?? 0,
+      ...o,
+    });
+    const g = createGait();
+    for (let i = 0; i < 60; i++) {
+      g.update(p, DT, undefined, seat);
+    }
+    const s = solve(g.pose());
+    const ref = seat ?? { ...LEVEL, yaw: p.yaw };
+    return s.pos.map(q => local(ref, p, q));
+  };
+  // The seat of rover.ts, from the seat point: the cushion's top, the back's foot and top, the
+  // roll hoop's top and feet, the tub's floor and the dash.
+  const [CUSHION, BACK, BACK_TOP, HOOP, FLOOR, DASH] = [0.13, -0.3, 0.97, 1.45, -0.09, 0.8];
+
+  for (const s of [0, 1]) {
+    it(`sits ${s ? 'the rider' : 'the driver'} on the cushion, his back to the seat's, his head over it and under the hoop, his feet in the footwell`, () => {
+      const at = sit({ ...LEVEL, s });
+      const [, py, pa] = at[J.PELVIS];
+      // The pelvis: a buttock over the cushion, ahead of the back.
+      expect(py - CUSHION).toBeGreaterThan(0.06);
+      expect(py - CUSHION).toBeLessThan(0.17);
+      expect(pa).toBeGreaterThan(BACK + 0.08);
+      expect(pa).toBeLessThan(0);
+      // The chest stays ahead of the back, which leans away.
+      expect(at[J.CHEST][2]).toBeGreaterThan(BACK - 0.14 * (at[J.CHEST][1] / 0.84) + 0.08);
+      // The head: over the back's top, under the hoop, between its feet.
+      const [hx, hy, ha] = at[J.HEAD];
+      expect(hy + 0.1).toBeGreaterThan(BACK_TOP - 0.05);
+      expect(hy + 0.3).toBeLessThan(HOOP);
+      expect(Math.abs(hx)).toBeLessThan(0.1);
+      expect(ha).toBeGreaterThan(-0.45);
+      // Thighs level, knees up and ahead, ankles on the floor under the dash.
+      for (const leg of [J.THIGH_L, J.THIGH_R]) {
+        const [knee, ankle, toe] = [at[leg + 1], at[leg + 2], at[leg + 3]];
+        expect(knee[2]).toBeGreaterThan(0.25);
+        expect(knee[1]).toBeGreaterThan(py - 0.1);
+        expect(knee[1]).toBeLessThan(0.62);
+        expect(ankle[1]).toBeGreaterThan(FLOOR + 0.04);
+        expect(ankle[1]).toBeLessThan(FLOOR + 0.2);
+        expect(ankle[2]).toBeGreaterThan(0.45);
+        expect(toe[2]).toBeLessThan(DASH);
+        expect(toe[1]).toBeGreaterThan(FLOOR);
+        expect(Math.abs(ankle[0])).toBeLessThan(0.2);
+      }
+      expect(at[J.FOOT_L][0]).toBeLessThan(at[J.FOOT_R][0]);
+    });
+  }
+
+  it("puts the driver's hands on the yoke's grips, and they go round with the wheels", () => {
+    for (const steer of [0, 0.45, -0.3]) {
+      const at = sit({ ...LEVEL, steer });
+      const [l, r] = grips(steer);
+      // The wrist is a palm short of the grip.
+      for (const [hand, grip] of [
+        [at[J.HAND_L], l],
+        [at[J.HAND_R], r],
+      ]) {
+        expect(Math.hypot(hand[0] - grip[0], hand[1] - grip[1])).toBeLessThan(0.03);
+        expect(grip[2] - hand[2]).toBeGreaterThan(0.04);
+        expect(grip[2] - hand[2]).toBeLessThan(0.11);
+      }
+    }
+    // The elbows are bent: he is not at arm's length.
+    const at = sit(LEVEL);
+    expect(Math.hypot(...at[J.HAND_L].map((v, i) => v - at[J.ARM_L][i]))).toBeLessThan(0.52);
+    const [straight, right] = [sit(LEVEL), sit({ ...LEVEL, steer: 0.45 })];
+    expect(right[J.HAND_R][1]).toBeLessThan(straight[J.HAND_R][1] - 0.05);
+    expect(right[J.HAND_L][1]).toBeGreaterThan(straight[J.HAND_L][1] + 0.05);
+  });
+
+  it("rests the rider's free right hand on the rail beside him, and leaves it to his weapon when he has one", () => {
+    const free = sit({ ...LEVEL, s: 1 });
+    expect(free[J.HAND_R][0]).toBeGreaterThan(0.22);
+    expect(free[J.HAND_R][1]).toBeGreaterThan(0.33);
+    const armed = sit({ ...LEVEL, s: 1 }, { ammo: 5 });
+    expect(armed[J.HAND_R][0]).toBeLessThan(0.2);
+    // The other hand lies on his thigh, over the knee's height and inside the seat: not at a yoke.
+    for (const hand of [free[J.HAND_L], armed[J.HAND_L], armed[J.HAND_R]]) {
+      expect(hand[1]).toBeGreaterThan(0.33);
+      expect(hand[1]).toBeLessThan(0.48);
+      expect(hand[2]).toBeLessThan(0.3);
+      expect(Math.abs(hand[0])).toBeLessThan(0.2);
+    }
+  });
+
+  it('leans with the rover about the seat point, and faces its nose whatever the look and the speed', () => {
+    const level = sit(LEVEL);
+    for (const seat of [
+      { ...LEVEL, pitch: 0.5 },
+      { ...LEVEL, roll: -0.6 },
+      { yaw: 2, pitch: -0.4, roll: 0.3, steer: 0.2, s: 0 },
+    ]) {
+      const at = sit({ ...seat, steer: 0 }, { yaw: seat.yaw + 0.9, vx: 15, vz: -9 });
+      // The same pose in the seat's own frame: the trunk and the limbs. The head keeps to the look.
+      [J.PELVIS, J.CHEST, J.HAND_L, J.HAND_R, J.FOOT_L, J.FOOT_R, J.SHIN_R].forEach(j =>
+        at[j].forEach((v, i) => expect(v).toBeCloseTo(level[j][i], 2)),
+      );
+    }
+    // In the world, the head of a rover nose up is behind and lower.
+    const p = state({ mode: MODE.RIDE });
+    const g = createGait();
+    g.update(p, 0, undefined, { ...LEVEL, pitch: 0.6 });
+    const up = solve(g.pose()).pos[J.HEAD];
+    const g0 = createGait();
+    g0.update(p, 0, undefined, LEVEL);
+    const flat = solve(g0.pose()).pos[J.HEAD];
+    expect(up[2]).toBeGreaterThan(flat[2] + 0.3);
+    expect(up[1]).toBeLessThan(flat[1] - 0.05);
+  });
+
+  it('turns the head toward the look as far as a neck goes, and a rider turns his shoulders a part of the way', () => {
+    const facing = (look: number, s: number) => {
+      const p = state({ mode: MODE.RIDE, yaw: look });
+      const g = createGait();
+      g.update(p, 0, undefined, { ...LEVEL, s });
+      const { rot } = solve(g.pose());
+      const dir = (j: number) => {
+        const f = turn(rot[j], [0, 0, -1]);
+        return Math.atan2(-f[0], -f[2]);
+      };
+      return [dir(J.HEAD), dir(J.CHEST)];
+    };
+    const [head, chest] = facing(1, 1);
+    expect(head).toBeGreaterThan(0.7);
+    expect(chest).toBeGreaterThan(0.2);
+    expect(chest).toBeLessThan(0.7);
+    // Looking back over the shoulder: the head stops short.
+    const [back] = facing(3, 1);
+    expect(back).toBeGreaterThan(1);
+    expect(back).toBeLessThan(1.7);
+    // The driver's shoulders stay square to the yoke.
+    expect(Math.abs(facing(1, 0)[1])).toBeLessThan(0.1);
+  });
+
+  it('sits level, facing his look, when his rover is not known, and stands up again on foot', () => {
+    const at = sit(undefined, { yaw: 1.2 });
+    expect(at[J.PELVIS][1]).toBeLessThan(0.35);
+    expect(at[J.FOOT_L][2]).toBeGreaterThan(0.45);
+    const p = state({ mode: MODE.RIDE });
+    const g = createGait();
+    g.update(p, 0, undefined, LEVEL);
+    expect(solve(g.pose()).pos[J.HEAD][1]).toBeLessThan(1.1);
+    for (let i = 0; i < 60; i++) {
+      g.update({ ...p, mode: MODE.GROUND }, DT);
+    }
+    expect(solve(g.pose()).pos[J.HEAD][1]).toBeGreaterThan(1.5);
   });
 });

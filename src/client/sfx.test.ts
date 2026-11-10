@@ -67,10 +67,18 @@ const crossings = (s: Float32Array) =>
 const sound = (name: keyof typeof SOUND) => render(SOUND[name], LAYERS);
 
 describe('the sounds of the game', () => {
-  it('are one entry per id, and the looped ones are the wind, the scrape, the hum, the buzz and the gun’s charge', () => {
+  it('are one entry per id, and the looped ones are the wind, the scrape, the hum, the buzz, the gun’s charge and the rover’s engine and skid', () => {
     expect(LAYERS).toHaveLength(Object.keys(SOUND).length);
     expect(Object.values(SOUND).sort((a, b) => a - b)).toEqual(LAYERS.map((_, i) => i));
-    expect(LOOPED).toEqual([SOUND.WIND, SOUND.SCRAPE, SOUND.HUM, SOUND.BUZZ, SOUND.CHARGE]);
+    expect(LOOPED).toEqual([
+      SOUND.WIND,
+      SOUND.SCRAPE,
+      SOUND.HUM,
+      SOUND.BUZZ,
+      SOUND.CHARGE,
+      SOUND.ENGINE,
+      SOUND.SKID,
+    ]);
   });
 
   describe.each(Object.entries(SOUND).filter(([, id]) => !LOOPED.includes(id)))('%s', (_, id) => {
@@ -325,5 +333,75 @@ describe('the weapons coming on (the user, 2026-11-09)', () => {
       expect(rms(s.subarray(0, 0.03 * RATE))).toBeGreaterThan(0.01);
       expect(s.length).toBeLessThan(0.7 * RATE);
     }
+  });
+});
+
+describe('the rover', () => {
+  const engine = seam(render(SOUND.ENGINE));
+  const skid = seam(render(SOUND.SKID));
+  /** The level of each 50 ms of a loop over the level of the whole. */
+  const levels = (s: Float32Array) =>
+    Array.from(
+      { length: Math.floor(s.length / (0.05 * RATE)) },
+      (_, i) => rms(s.subarray(i * 0.05 * RATE, (i + 1) * 0.05 * RATE)) / rms(s),
+    );
+  /** How much of a tone at `hz` there is in `s`: its amplitude. */
+  const tone = (s: Float32Array, hz: number) => {
+    let [re, im] = [0, 0];
+    s.forEach((x, i) => {
+      re += x * Math.cos((2 * Math.PI * hz * i) / RATE);
+      im += x * Math.sin((2 * Math.PI * hz * i) / RATE);
+    });
+    return (2 * Math.hypot(re, im)) / s.length;
+  };
+
+  it('has three sounds after all the others, whose ids stay: an engine and a skid that loop, a thud that does not', () => {
+    expect([SOUND.ENGINE, SOUND.THUD, SOUND.SKID]).toEqual([40, 41, 42]);
+    expect(SOUND.CHARGE).toBe(39);
+    expect(LOOPED).toContain(SOUND.ENGINE);
+    expect(LOOPED).toContain(SOUND.SKID);
+    expect(LOOPED).not.toContain(SOUND.THUD);
+  });
+
+  it('has an engine of tones: a low motor, its whine two octaves up and a whistle over it', () => {
+    const body = engine.subarray(0.2 * RATE, 1.8 * RATE);
+    expect(tone(body, 49.08)).toBeGreaterThan(0.1);
+    expect(tone(body, 195.93)).toBeGreaterThan(0.1);
+    expect(tone(body, 588.04)).toBeGreaterThan(0.03);
+    // Nothing between them: tones, not a rumble.
+    expect(tone(body, 130)).toBeLessThan(0.02);
+    expect(tone(body, 400)).toBeLessThan(0.02);
+    // Low enough to be played an octave up at speed.
+    expect(crossings(engine)).toBeLessThan(1500);
+  });
+
+  it('keeps the engine’s level through the loop’s join, whatever pitch it is played at: no throb every two seconds', () => {
+    for (const l of levels(engine)) {
+      expect(l).toBeGreaterThan(0.85);
+      expect(l).toBeLessThan(1.2);
+    }
+  });
+
+  it('makes a landing a deep thud, longer and heavier than a step’s, that dies away', () => {
+    const s = sound('THUD');
+    expect(s.length).toBeGreaterThan(sound('LAND').length * 1.3);
+    expect(s.length / RATE).toBeLessThan(0.5);
+    expect(peak(s.subarray(0, 0.03 * RATE))).toBe(peak(s));
+    expect(peak(s)).toBeGreaterThan(0.8);
+    expect(rms(s)).toBeGreaterThan(rms(sound('LAND')));
+    // In the bass: a few hundred zero crossings a second in its loud part.
+    expect(crossings(s.subarray(0, 0.15 * RATE))).toBeLessThan(500);
+    expect(rms(s.subarray(0.22 * RATE))).toBeLessThan(0.25 * rms(s.subarray(0, 0.05 * RATE)));
+  });
+
+  it('makes the skid a steady bed of grit, lower than the scrape of a slide', () => {
+    expect(crossings(skid)).toBeGreaterThan(500);
+    expect(crossings(skid)).toBeLessThan(crossings(seam(render(SOUND.SCRAPE))) / 2);
+    for (const l of levels(skid)) {
+      expect(l).toBeGreaterThan(0.75);
+      expect(l).toBeLessThan(1.3);
+    }
+    // Noise, not a tone.
+    expect(tone(skid, 700)).toBeLessThan(0.05);
   });
 });

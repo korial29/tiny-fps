@@ -12,12 +12,13 @@ import { createBalls } from './balls';
 import { createTracer } from './beams';
 import { beats, cues, say } from './beats';
 import { createBody } from './body';
+import { chasePitch, createChase } from './chase';
 import { createCombat, sight } from './combat';
 import { createEffects } from './effects';
 import { flagDraws } from './flag';
 import { createFoley } from './foley';
 import { mood } from './face';
-import { HUD_CSS, createHud } from './hud';
+import { HUD_CSS, OUT_HINT, boarding, createHud, kmh } from './hud';
 import type { Summary } from './hud';
 import { createInput } from './input';
 import { createPredictor } from './predict';
@@ -59,7 +60,8 @@ const MAX_STEPS = 5;
 /**
  * Mounts the game in a Shadow DOM inside container: one WebGL2 canvas filling it, a click locks the
  * pointer, the mouse looks, WASD (ZQSD on AZERTY) moves, Shift sprints, Space jumps (again in the
- * air for a second jump), C crouches and slides, a direction key pressed twice dashes.
+ * air for a second jump), C crouches and slides, a direction key pressed twice dashes, E gets in
+ * and out of a rover.
  *
  * The socket is this function's; the scene of one map is play()'s, behind a socket of its own.
  * When the room plays another map, the scene goes and one of the new map takes its place on the
@@ -173,6 +175,7 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
   const announcer = createAnnouncer();
   const foley = createFoley(audio);
   const body = createBody(world);
+  const chase = createChase(world);
   const tracer = createTracer();
   const balls = createBalls(world);
   const combat = createCombat(world, audio, hud, fx, tracer, ctl, balls);
@@ -206,6 +209,8 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
   /** The face in the HUD: its mind, the own player as last framed, and how long the trigger has been held. */
   const feel = mood();
   let [felt, firing]: [PlayerState | undefined, number] = [undefined, 0];
+  /** The rover last driven (its index), whether the own player is seated, and since when (ms). */
+  let [wheel, seated, since] = [-1, false, 0];
   let last = performance.now();
   let acc = 0;
   let raf = 0;
@@ -317,6 +322,17 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     const me = predictor.me(acc / STEP);
     const others = predictor.others(now);
     const eye: [number, number, number] = me ? [me.x, me.y + eyeHeight(me), me.z] : [0, 0, 0];
+    // The rovers, and the own seat: at the wheel the camera chases the rover, beside it the view
+    // stays in the rider's head, where his shots leave from.
+    const rovers = predictor.rovers(now, acc / STEP);
+    const seat = predictor.riding();
+    const driving = seat?.seat === 0;
+    since = seat && !seated ? now : since;
+    seated = !!seat;
+    if (driving) {
+      wheel = seat.rover;
+      ctl.pitch = chasePitch(ctl.pitch);
+    }
     audio.listen(eye, ctl.yaw);
     const dt = Math.min((now - before) / 1000, 0.1);
     // The flags and the bases for the renderer and the lights, and the HUD that goes with them.
@@ -339,8 +355,14 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     // What the live steps did, once: the camera and the sounds read it, the inputs sent do not.
     const hit = predictor.events();
     // The bob goes with the legs as last drawn.
-    fx.update(me, ctl.keys, dt, hit, body.phase);
+    // Seated, the move keys are the rover's: no strafe leans the view.
+    fx.update(me, seat ? 0 : ctl.keys, dt, hit, body.phase);
     hud.hurt(fx.hurt);
+    const carrying = !!match?.flags.some(f => f.state === FLAG.CARRIED && f.by == you.id);
+    hud.rover(
+      seat ? (now - since < OUT_HINT * 1000 ? 'get out' : '') : boarding(me, rovers, carrying),
+      driving && rovers[wheel] ? kmh(rovers[wheel]) : undefined,
+    );
     if (me) {
       // A hit comes from the nearest foe up: the angle to him off the view, to the right.
       const lost = felt && !felt.down ? Math.max(0, felt.hp - me.hp) : 0;
@@ -362,7 +384,7 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
           hp: me.hp,
           max: HP_MAX,
           down: me.down > 0,
-          flag: !!match?.flags.some(f => f.state === FLAG.CARRIED && f.by == you.id),
+          flag: carrying,
           lost,
           from,
           got: !!felt && has(me) > has(felt),
@@ -378,12 +400,30 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     // The steps sound as the drawn feet land: the own body's now, the others' as last drawn.
     foley.me(me, hit, body.steps);
     foley.others(others, id => rd?.steps(id));
+    foley.rover(seat && rovers[seat.rover], dt, driving ? ctl.keys : 0);
     // The camera moves for the eye only: the inputs keep sending the real height and angles. A
     // cut's twist turns the drawn view a little with the body.
     const cam: [number, number, number] = [eye[0], eye[1] + fx.dy, eye[2]];
-    const pitch = ctl.pitch + fx.pitch;
-    const view = ctl.yaw + body.spun();
-    const look = me && sight(world, eye, cam, ctl.yaw, ctl.pitch, pitch);
+    // At the wheel the camera leaves the head for the chase view, and comes back on the way out:
+    // what shakes the head (the bob, the dips, the rolls) fades with the share of it.
+    const shot = chase.frame(
+      rovers[wheel],
+      driving,
+      cam,
+      ctl.pitch + fx.pitch,
+      ctl.yaw,
+      ctl.pitch,
+      dt,
+    );
+    const third = shot.k > 0;
+    const pov = shot.at;
+    const pitch = shot.pitch;
+    const view = ctl.yaw + body.spun() * (1 - shot.k);
+    const lens = third
+      ? { ...fx, roll: fx.roll * (1 - shot.k), fov: fx.fov * (1 - shot.k) + shot.fov }
+      : fx;
+    // The driver is unarmed and his body is the renderer's to draw whole: no sight, no muzzle.
+    const look = me && !third ? sight(world, eye, cam, ctl.yaw, ctl.pitch, pitch) : undefined;
     if (look) {
       body.aim(look.local);
     }
@@ -406,16 +446,18 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     );
     if (me && rd) {
       rd.frame(
-        cam,
+        pov,
         view,
         pitch,
         others,
         colors,
-        fx,
-        [...gather({ eye: cam, yaw: view, pitch, others, t: now / 1000, ctf }), ...tracer.lights()],
-        body,
+        lens,
+        [...gather({ eye: pov, yaw: view, pitch, others, t: now / 1000, ctf }), ...tracer.lights()],
+        third ? undefined : body,
         ctf,
         tracer,
+        rovers,
+        third ? me : undefined,
       );
     }
     if (match) {
@@ -444,7 +486,7 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     for (const p of others) {
       const top: [number, number, number] = [p.x, p.y + PLAYER_H + 0.3, p.z];
       // Behind a wall the tag would give the player away.
-      const at = me && !hidden(world, eye, top) ? rd?.project(...top) : undefined;
+      const at = me && !hidden(world, pov, top) ? rd?.project(...top) : undefined;
       const el = tag(p.id);
       seen.add(p.id);
       el.hidden = !at;

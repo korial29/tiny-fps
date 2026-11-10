@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HIGHLINE, ROOFTOPS } from '../shared/map';
 import { forward } from '../shared/physics';
+import { ROVER } from '../shared/rover';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
 import type { Brush, WorldDef } from '../shared/world';
@@ -14,6 +15,7 @@ import {
   MAX_TINTS,
   SHADOW,
   SPEC,
+  SUN_AHEAD,
   SUN_AREA,
   SUN_DEPTH,
   backing,
@@ -30,6 +32,7 @@ import {
   project,
   scenery,
   city,
+  sunAt,
   sunProj,
   viewProj,
 } from './render';
@@ -404,12 +407,15 @@ describe('sunProj', () => {
   it('holds still while the eye moves less than a texel, and steps a whole texel at a time', () => {
     const texel = SUN_AREA / SHADOW;
     const [r] = rows(sunProj(dir, eye)).map(v => v.map(c => c / Math.hypot(...v)));
-    const base = sunProj(dir, eye);
+    // From the middle of a texel.
+    const off = (Math.round(dot(r, eye) / texel) + 0.1) * texel - dot(r, eye);
+    const mid = eye.map((c, i) => c + r[i] * off) as typeof eye;
+    const base = sunProj(dir, mid);
     // Sliding the eye along the window's right axis by a quarter texel changes nothing...
-    const near = eye.map((c, i) => c + r[i] * texel * 0.2) as typeof eye;
+    const near = mid.map((c, i) => c + r[i] * texel * 0.2) as typeof eye;
     expect(Array.from(sunProj(dir, near))).toEqual(Array.from(base));
     // ... and by two texels moves the window by exactly two texels.
-    const far = eye.map((c, i) => c + r[i] * texel * 2) as typeof eye;
+    const far = mid.map((c, i) => c + r[i] * texel * 2) as typeof eye;
     const moved = sunProj(dir, far);
     expect((base[12] - moved[12]) / (2 / SHADOW)).toBeCloseTo(2, 2);
   });
@@ -715,5 +721,24 @@ describe('ghost brushes', () => {
       brushes: [ROOFTOPS.brushes[0], { ...ROOFTOPS.brushes[0], ghost: true }],
     });
     expect(level(ghosted)).toEqual(level(base));
+  });
+});
+
+describe('sunAt', () => {
+  it('puts the middle of the shadow window SUN_AHEAD metres ahead of the eye on the ground, the way it looks', () => {
+    for (const yaw of [0, 0.7, -2, Math.PI]) {
+      const [x, y, z] = sunAt([10, 3, -4], yaw);
+      const [fx, fz] = forward(yaw);
+      expect(y).toBe(3);
+      expect(x - 10).toBeCloseTo(fx * SUN_AHEAD, 9);
+      expect(z + 4).toBeCloseTo(fz * SUN_AHEAD, 9);
+    }
+  });
+
+  it('keeps the eye well inside the window, with four seconds of a rover at full speed ahead of it', () => {
+    expect(SUN_AHEAD).toBeLessThan(SUN_AREA / 2 - 10);
+    expect(SUN_AHEAD + SUN_AREA / 2).toBeGreaterThan(3.3 * ROVER.VMAX);
+    // No coarser than 10 cm a texel.
+    expect(SUN_AREA / SHADOW).toBeLessThan(0.1);
   });
 });

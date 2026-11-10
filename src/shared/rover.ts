@@ -6,11 +6,12 @@
 // One clock a rover: the driver's inputs (ride(), on arrival at the host and in the predictor), or
 // the host's tick while nobody drives. Nothing but drive() moves a driven rover, or the replay is
 // no longer exact: no rover pushes another, no player pushes one.
-import { DASH_COOLDOWN, DASH_TICKS, PLAYER_H, PLAYER_R, TICK_HZ } from './constants';
+import { BOLT, DASH_COOLDOWN, DASH_TICKS, PLAYER_H, PLAYER_R, TICK_HZ } from './constants';
 import { step } from './gun';
 import { floorAt, forward, gravity, norm, shove } from './physics';
 import { bound } from './relief';
 import { KEY, MODE, NOBODY } from './types';
+import type { Flying } from './plasma';
 import type { Input, PlayerState, Rover } from './types';
 import type { World } from './world';
 
@@ -67,7 +68,17 @@ export const ROVER = {
   ENTER_R: 3,
   SPLAT_MIN: 6,
   SPLAT_KILL: 12,
+  /** The two lasers, one each side: ticks between two salvos, the bolts' reach, and where the beams cross ahead of the driver's look. */
+  GUN_COOL: 8,
+  GUN_RANGE: 90,
+  GUN_AIM: 50,
 } as const;
+
+/** The lasers' muzzles: right of the centre, above it, ahead of it. */
+export const GUNS = [
+  [-1.05, 0.18, 0.6],
+  [1.05, 0.18, 0.6],
+];
 
 /** The seats, driver then rider: right of the centre, above it (the feet), ahead of it. */
 const SEATS = [
@@ -370,4 +381,45 @@ export const ride = (p: PlayerState, r: Rover, i: Input, w: World, team: number)
     }
   }
   return fell;
+};
+
+/**
+ * The two bolts of one salvo of the rover's lasers, left then right: each from its muzzle toward
+ * the point GUN_AIM metres along the driver's look (the yaw and pitch of his input) from the rover's
+ * centre, so the beams cross there, chest high on level ground with a level look. `id` names the first, `id + 1` the second.
+ */
+export const bolts = (
+  r: Rover,
+  by: number,
+  team: number,
+  yaw: number,
+  pitch: number,
+  id: number,
+): Flying[] => {
+  const [fx, fz] = forward(r.yaw);
+  const [sy, cy, sp, cp] = [Math.sin(yaw), Math.cos(yaw), Math.sin(pitch), Math.cos(pitch)];
+  const aim = [
+    r.x - sy * cp * ROVER.GUN_AIM,
+    r.y + sp * ROVER.GUN_AIM,
+    r.z - cy * cp * ROVER.GUN_AIM,
+  ];
+  return GUNS.map(([side, up, ahead], k) => {
+    const o = [r.x + fx * ahead - fz * side, r.y + up, r.z + fz * ahead + fx * side];
+    const d = aim.map((v, a) => v - o[a]);
+    const l = Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    return {
+      id: (id + k) & 255,
+      by,
+      team,
+      x: o[0],
+      y: o[1],
+      z: o[2],
+      dx: d[0] / l,
+      dy: d[1] / l,
+      dz: d[2] / l,
+      left: ROVER.GUN_RANGE,
+      burst: false,
+      power: BOLT,
+    };
+  });
 };

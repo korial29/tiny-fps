@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { duo } from '../../test/teams';
 import { forward, spawn } from '../shared/physics';
-import { ROVER, seat, wheels } from '../shared/rover';
+import { GUNS, ROVER, seat, wheels } from '../shared/rover';
 import { NOBODY, TEX } from '../shared/types';
 import type { Rover } from '../shared/types';
 import { build } from '../shared/world';
@@ -113,11 +113,11 @@ describe('rover', () => {
     });
   }
 
-  it('stays within 400 vertices far, 1,200 mid and 3,500 near, and any level past 2 is the near one', () => {
+  it('stays within 400 vertices far, 1,200 mid and 3,800 near, and any level past 2 is the near one', () => {
     const [far, mid, near] = [0, 1, 2].map(lod => count(make({}, lod)));
     expect(far).toBeLessThanOrEqual(400);
     expect(mid).toBeLessThanOrEqual(1200);
-    expect(near).toBeLessThanOrEqual(3500);
+    expect(near).toBeLessThanOrEqual(3800);
     expect(far).toBeLessThan(mid);
     expect(mid).toBeLessThan(near);
     // The detail is spent: a model a third the size would not be this one.
@@ -648,5 +648,21 @@ describe('the simulation in the model', () => {
     expect(rolled(10, 12, r)).toBeCloseTo(0, 9);
     expect(rolled(11, 13, r)).toBeCloseTo(1 / WR, 9);
     expect(rolled(10 + 30, 10, r)).toBe(0);
+  });
+
+  it('carries a laser on each side, its mouth glowing green at the muzzle the bolts leave from', () => {
+    const r = state();
+    const out = make();
+    for (const [x, y, a] of GUNS) {
+      // Glowing vertices (layer -2) within 10 cm of the muzzle, greener than red or blue.
+      let green = 0;
+      for (let i = 0; i < out.length; i += STRIDE) {
+        const d = Math.hypot(out[i] - (r.x + x), out[i + 1] - (r.y + y), out[i + 2] - (r.z - a));
+        if (d < 0.1 && out[i + 8] === -2 && out[i + 7] > out[i + 6] && out[i + 7] > out[i + 9]) {
+          green++;
+        }
+      }
+      expect(green).toBeGreaterThan(0);
+    }
   });
 });

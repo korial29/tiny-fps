@@ -18,7 +18,7 @@ import {
 import { swingOf } from '../shared/blade';
 import { powerOf } from '../shared/gun';
 import { eyeHeight } from '../shared/physics';
-import { CUT, KEY } from '../shared/types';
+import { CUT, KEY, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { beam } from '../shared/rail';
 import { ray } from '../shared/world';
@@ -479,8 +479,9 @@ export const createCombat = (
         }
       }
       const { orbs, bursts } = balls.frame(now, id => {
-        const p = others.find(q => q.id == id);
-        return id == me?.id ? from : p && gun(p);
+        const p = id == me?.id ? me : others.find(q => q.id == id);
+        // Seated, his balls are his rover's bolts: they leave from its lasers, where they are.
+        return !p || p.mode === MODE.RIDE ? undefined : p === me ? from : gun(p);
       });
       tracer.orbs(orbs);
       // The laser rifle's (power 0) burst red, with a deeper, louder thud.

@@ -15,11 +15,23 @@ import {
   upTo,
 } from '../../test/slope';
 import { duo } from '../../test/teams';
-import { DASH_COOLDOWN, DASH_TICKS, PLAYER_R, SPRINT_SPEED, STEP_H } from './constants';
+import { BOLT, DASH_COOLDOWN, DASH_TICKS, PLAYER_R, SPRINT_SPEED, STEP_H } from './constants';
 import { spawn } from './physics';
 import { onWire } from './protocol';
 import { ground } from './relief';
-import { ROVER, board, drive, footprint, leave, park, ride, seat, wheels } from './rover';
+import {
+  GUNS,
+  ROVER,
+  board,
+  bolts,
+  drive,
+  footprint,
+  leave,
+  park,
+  ride,
+  seat,
+  wheels,
+} from './rover';
 import { EV, KEY, MODE, NOBODY, TEX } from './types';
 import type { Input, Rover } from './types';
 import { build } from './world';
@@ -819,5 +831,41 @@ describe('ride', () => {
     expect(r.driver).toBe(NOBODY);
     expect(p.mode).toBe(MODE.GROUND);
     expect([p.x, p.y, p.z]).toEqual([0, 0, 0]);
+  });
+});
+
+describe('bolts', () => {
+  const r = { ...park(build({ ...land().def, rovers: [[10, 0, 5, 0]] }))[0] };
+
+  it('are two, one from each laser, named in a row, as strong as BOLT says', () => {
+    const [l, q] = bolts(r, 3, 1, 0, 0, 255);
+    expect([l.id, q.id]).toEqual([255, 0]);
+    expect([l.by, l.team, l.power, l.left, l.burst]).toEqual([3, 1, BOLT, ROVER.GUN_RANGE, false]);
+    // The nose points to -z: the left laser is on -x, both ahead of the centre.
+    expect(l.x).toBeCloseTo(r.x + GUNS[0][0], 5);
+    expect(q.x).toBeCloseTo(r.x + GUNS[1][0], 5);
+    expect(l.z).toBeCloseTo(r.z - GUNS[0][2], 5);
+    expect(l.y).toBeCloseTo(r.y + GUNS[0][1], 5);
+  });
+
+  it('cross where the driver looks, GUN_AIM metres from the centre, whatever the nose points at', () => {
+    for (const [yaw, pitch] of [
+      [0, 0],
+      [1.2, 0.25],
+      [4, -0.6],
+    ]) {
+      const aim = [
+        r.x - Math.sin(yaw) * Math.cos(pitch) * ROVER.GUN_AIM,
+        r.y + Math.sin(pitch) * ROVER.GUN_AIM,
+        r.z - Math.cos(yaw) * Math.cos(pitch) * ROVER.GUN_AIM,
+      ];
+      for (const b of bolts(r, 0, 0, yaw, pitch, 0)) {
+        expect(Math.hypot(b.dx, b.dy, b.dz)).toBeCloseTo(1, 9);
+        const t = Math.hypot(aim[0] - b.x, aim[1] - b.y, aim[2] - b.z);
+        expect(b.x + b.dx * t).toBeCloseTo(aim[0], 6);
+        expect(b.y + b.dy * t).toBeCloseTo(aim[1], 6);
+        expect(b.z + b.dz * t).toBeCloseTo(aim[2], 6);
+      }
+    }
   });
 });

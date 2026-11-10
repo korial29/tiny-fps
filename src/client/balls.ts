@@ -4,7 +4,14 @@
 // drawn INTERP_DELAY in the past like the players, flying on at PLASMA_SPEED from the last place
 // a snapshot gave. A ball is drawn from the muzzle that fired it and joins its true line in CATCH
 // seconds. The katana's arcs of energy fly the same way, at ARC_SPEED, from the eye. No DOM.
-import { ARC_SPEED, INTERP_DELAY, PLASMA_R, PLASMA_SPEED } from '../shared/constants';
+import {
+  ARC_SPEED,
+  BOLT,
+  BOLT_SPEED,
+  INTERP_DELAY,
+  PLASMA_R,
+  PLASMA_SPEED,
+} from '../shared/constants';
 import { launch, wave } from '../shared/plasma';
 import type { Ball, PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
@@ -136,7 +143,8 @@ export const createBalls = (world: World): Balls => {
       const bursts: [Vec3, number][] = [];
       for (const [key, f] of live) {
         const t = f.own ? now : now - INTERP_DELAY;
-        const s = ((t - f.t) * (f.arc ? ARC_SPEED : PLASMA_SPEED)) / 1000;
+        const s =
+          ((t - f.t) * (f.arc ? ARC_SPEED : f.power === BOLT ? BOLT_SPEED : PLASMA_SPEED)) / 1000;
         if ((f.end && s >= dot(f.end.map((v, i) => v - f.o[i]) as Vec3, f.d)) || t >= f.due) {
           if (f.pop) {
             bursts.push([f.end!, f.power]);

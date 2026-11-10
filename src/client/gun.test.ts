@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { STILL } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
-import { CHARGE_MAX, GUN_RANGE, GUN_RELOAD, RAIL_RELOAD } from '../shared/constants';
+import { CHARGE_MAX, GUN_RANGE, GUN_RELOAD, NADE_MAX, RAIL_RELOAD } from '../shared/constants';
 import { build } from '../shared/world';
 import {
   MUZZLE,
@@ -878,6 +878,21 @@ describe('the laser rifle', () => {
   it('shows its rounds on the counter once it is booted, and only its ring before', () => {
     expect(scope(24).length).toBeGreaterThan(scope(24, false).length);
     expect(scope(8).length).not.toBe(scope(24).length);
+  });
+
+  it('shows the grenades left under its rounds: NADE_MAX pips, orange when loaded, dim once spent (the user, 2026-11-10)', () => {
+    const orange = (v: number[]) =>
+      verts(v).filter(x => x.c[0] > 1.2 && x.c[1] > 0.5 && x.c[1] < 0.6 && x.c[2] < 0.1).length;
+    const dim = (v: number[]) =>
+      verts(v).filter(x => x.c[0] > 0.2 && x.c[0] < 0.25 && x.c[1] < 0.1 && x.c[2] < 0.05).length;
+    // Two triangles a pip.
+    expect(orange(scope(24, true, NADE_MAX))).toBe(NADE_MAX * 6);
+    expect(orange(scope(24, true, 1))).toBe(6);
+    expect(dim(scope(24, true, 1))).toBe((NADE_MAX - 1) * 6);
+    expect(orange(scope(24, true, 0)) + dim(scope(24))).toBe(0);
+    // Not before the counter is booted, nor without the launcher's count.
+    expect(scope(24, false, NADE_MAX)).toEqual(scope(24, false));
+    expect(scope(24, true, NADE_MAX).length).toBe(scope(24).length + NADE_MAX * 6 * STRIDE);
   });
 
   it('keeps the digits of its counter small in the middle of the screen, well clear of the ring', () => {

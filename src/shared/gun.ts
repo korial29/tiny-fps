@@ -96,7 +96,7 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  *   unless it is `hot`: its `heat` rises while it fires and falls when it does not (HEAT_MAX).
  * - The laser rifle (KEY.RIFLE, `rifled`), filled at its rack on arrival, fires a round from its
  *   cell (`clip`) each RIFLE_COOL ticks while FIRE is held (STRIKE.LASER). Its rack loads NADE_MAX
- *   grenades too: SPECIAL (a double click) launches one (STRIKE.NADE) when `lob` is 0, even during
+ *   grenades too: SPECIAL (G) launches one (STRIKE.NADE) when `lob` is 0, even during
  *   a swap of the cell, then `lob` runs NADE_COOL ticks and the rifle holds its fire NADE_HOLD.
  * - The trigger: `cool` and `swing` run down, and at 0 a held FIRE charges the gun, with ammo, and
  *   letting it go fires a ball as strong as the charge (powerOf()), spending as many shots; or it
@@ -209,6 +209,13 @@ export const step = (
   if ((p.wield && !top) || p.railed || p.rifled || busy || p.reload || (!p.wield && !p.mag)) {
     p.charge = 0;
   }
+  // G with the rifle in hand (SPECIAL, with or without FIRE): a grenade from its launcher.
+  if (p.rifled && i.keys & KEY.SPECIAL && !busy && p.nades && !p.lob) {
+    p.nades--;
+    [p.lob, p.cool] = [NADE_COOL, NADE_HOLD];
+    p.shots = (p.shots + 1) & 255;
+    return STRIKE.NADE;
+  }
   if (i.keys & KEY.FIRE && !busy) {
     // A double click's second press turns a cut just started into its special.
     const late = CUTS[p.cut ?? 0].ticks - (p.swing ?? 0);
@@ -220,12 +227,6 @@ export const step = (
       [p.swing, p.charge] = [CUTS[p.cut].ticks, 0];
       launch(p);
     } else if (p.rifled) {
-      if (i.keys & KEY.SPECIAL && p.nades && !p.lob) {
-        p.nades--;
-        [p.lob, p.cool] = [NADE_COOL, NADE_HOLD];
-        p.shots = (p.shots + 1) & 255;
-        return STRIKE.NADE;
-      }
       if (!p.cool && p.clip && !p.reload) {
         p.rifle!--;
         p.clip--;

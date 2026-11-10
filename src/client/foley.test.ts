@@ -6,7 +6,7 @@ import { KEY, NOBODY } from '../shared/types';
 import { ROVER, drive } from '../shared/rover';
 import { land, rover as parked, run } from '../../test/slope';
 import type { Audio } from './audio';
-import { SKID_FROM, createFoley } from './foley';
+import { BREATH, SKID_FROM, createFoley } from './foley';
 import { createGait } from './gait';
 import type { Gait } from './gait';
 import { SOUND } from './sfx';
@@ -526,5 +526,47 @@ describe('the rover the own player sits in', () => {
     }
     expect(r.x).toBeGreaterThan(32);
     expect(ids()).toEqual([SOUND.THUD]);
+  });
+});
+
+describe('breathing in a helmet', () => {
+  /** The breaths of `secs` seconds of `p`, after a fresh start: [id, time, gain, rate]. */
+  const breaths = (p: PlayerState, secs: number, f = fake()) => {
+    const foley = createFoley(f.audio);
+    const out: [number, number, number, number][] = [];
+    for (let i = 0; i < secs / DT; i++) {
+      const n = f.played.length;
+      foley.breathe(p, DT);
+      f.played.slice(n).forEach(b => out.push([b.id, i * DT, b.gain!, b.rate!]));
+    }
+    return out;
+  };
+
+  it('breathes in then out, again and again, centred, slowly at rest', () => {
+    const b = breaths(player(), 12);
+    const ids = b.map(([id]) => id);
+    expect(ids.slice(0, 4)).toEqual([SOUND.EXHALE, SOUND.INHALE, SOUND.EXHALE, SOUND.INHALE]);
+    const ins = b.filter(([id]) => id == SOUND.INHALE).map(([, t]) => t);
+    expect(ins[1] - ins[0]).toBeCloseTo(BREATH[0], 1);
+  });
+
+  it('breathes quicker, louder and higher after running hard', () => {
+    const calm = breaths(player(), 20);
+    const hard = breaths(player({ ground: false, vy: -2 }), 20);
+    expect(hard.length).toBeGreaterThan(calm.length * 1.8);
+    expect(hard[hard.length - 1][2]).toBeGreaterThan(calm[calm.length - 1][2]);
+    expect(hard[hard.length - 1][3]).toBeGreaterThan(calm[calm.length - 1][3]);
+  });
+
+  it('is silent when down, without a player, and muted', () => {
+    expect(breaths(player({ down: 100 }), 10)).toEqual([]);
+    const f = fake();
+    const foley = createFoley(f.audio);
+    for (let i = 0; i < 600; i++) {
+      foley.breathe(undefined, DT);
+    }
+    expect(f.played).toEqual([]);
+    f.audio.mute(true);
+    expect(breaths(player(), 10, f)).toEqual([]);
   });
 });

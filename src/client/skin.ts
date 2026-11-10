@@ -11,6 +11,10 @@ import type { Vec3 } from './mesh';
 
 const SKIN = [0.66, 0.45, 0.35];
 
+/** The space suit's dark grey under its armour (the user, 2026-11-10: white, then a mid grey so the plates stand out) and its black (gloves, boots, belt): see palette(). */
+const SUIT = [0.36, 0.37, 0.4];
+const BLACK = [0.05, 0.05, 0.055];
+
 /** The colour regions of a palette. */
 const [
   JACKET,
@@ -29,9 +33,12 @@ const [
   STUBBLE,
   SHADOW,
   LINE,
+  STRIPE,
+  STRIPE_LOW,
+  BELT,
   GLINT,
   CAP,
-] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
 /** Hair colours, one per runner (hairOf()): black, dark and mid brown, chestnut, red, dark and light blond, grey, and a shaved head, the skin's in its shadow. */
 const HAIRS = [
@@ -64,27 +71,42 @@ export const hairOf = (id: number): number[] => HAIRS[pick(id, 0, HAIRS.length)]
 /** An iris colour for the runner `id`, as hairOf(). */
 export const eyesOf = (id: number): number[] => IRISES[pick(id, 0x2468, IRISES.length)];
 
-/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, between the hair and the skin, the shaved beard's shadow and its edge, the line between the lips (as the folds), the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
-export const palette = (jacket: number[], hair = HAIRS[1], iris = IRISES[0]): number[][] => [
-  jacket,
-  jacket.map(v => v * 0.5),
-  jacket.map(v => v * 0.62),
-  SKIN,
-  hair,
-  [0.2, 0.19, 0.14],
-  [0.09, 0.085, 0.07],
-  [0.22, 0.21, 0.16],
-  [0.85, 0.83, 0.8],
-  iris,
-  [0.5, 0.3, 0.26],
-  SKIN.map(v => v * 0.55),
-  hair.map((v, i) => v * 0.4 + SKIN[i] * 0.3),
-  SKIN.map((v, i) => v * 0.62 + hair[i] * 0.1 + [0, 0.01, 0.03][i]),
-  SKIN.map((v, i) => v * 0.81 + hair[i] * 0.05 + [0, 0.005, 0.015][i]),
-  SKIN.map(v => v * 0.55),
-  [1.3, 1.3, 1.3],
-  [2.8, 0.5, 0.12],
-];
+/** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, between the hair and the skin, the shaved beard's shadow and its edge, the line between the lips (as the folds), the side stripe on the jacket and on the trousers and the belt (the jacket's and the trousers' own colours but on a space suit), the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
+/**
+ * With `suit` (the moon's, the user 2026-11-10), a dark grey space suit under white armour: the
+ * team's colour only in a stripe down each side, black gloves, boots and belt.
+ */
+export const palette = (
+  jacket: number[],
+  hair = HAIRS[1],
+  iris = IRISES[0],
+  suit = false,
+): number[][] => {
+  const [coat, legs] = suit ? [SUIT, SUIT.map(v => v * 0.94)] : [jacket, jacket.map(v => v * 0.62)];
+  return [
+    coat,
+    coat.map(v => v * 0.5),
+    legs,
+    SKIN,
+    hair,
+    suit ? BLACK : [0.2, 0.19, 0.14],
+    suit ? [0.03, 0.03, 0.035] : [0.09, 0.085, 0.07],
+    suit ? BLACK : [0.22, 0.21, 0.16],
+    [0.85, 0.83, 0.8],
+    iris,
+    [0.5, 0.3, 0.26],
+    SKIN.map(v => v * 0.55),
+    hair.map((v, i) => v * 0.4 + SKIN[i] * 0.3),
+    SKIN.map((v, i) => v * 0.62 + hair[i] * 0.1 + [0, 0.01, 0.03][i]),
+    SKIN.map((v, i) => v * 0.81 + hair[i] * 0.05 + [0, 0.005, 0.015][i]),
+    SKIN.map(v => v * 0.55),
+    suit ? jacket : coat,
+    suit ? jacket : legs,
+    suit ? BLACK : coat,
+    [1.3, 1.3, 1.3],
+    [2.8, 0.5, 0.12],
+  ];
+};
 
 /**
  * A ring: where it is along the loft (y, or z), the centre of its ellipse across the loft (x, then
@@ -121,6 +143,13 @@ interface Loft {
 // the legs. Two rings at the armpits' height, 10 cm under the shoulder joint, are the split: the
 // first is the torso alone, the second takes in the shoulders, and the sleeves hang from the
 // shoulders' sides, ending in the torso's own side vertices.
+/**
+ * Rules for a side stripe (angle 0 the front, 90 the sides), in the jacket's or the trousers'
+ * stripe colour: their own but on a space suit.
+ */
+const SIDE = [108, JACKET, 72, STRIPE];
+const SIDE_LOW = [108, PANTS, 72, STRIPE_LOW];
+
 /** The height of the armpits, where the trunk splits into the shoulders and the arms hang. */
 const SPLIT = 1.41;
 
@@ -133,16 +162,17 @@ const TRUNK: Loft = {
   // ribs, the chest fullest at 1.37 m under the armpits, which are at 1.41 (4 cm higher than they
   // were), the shoulders falling gently to the neck. Each ring's centre forward and half depth from
   // the front and the back it is measured to.
+  // The belt at the waist and a stripe down each side (both only on a space suit: see palette()).
   rings: [
     [0.93, 0, 0.013, 0.178, 0.111, 0, PANTS],
-    [0.99, 0, 0.015, 0.176, 0.111, 0.25, JACKET],
-    [1.03, 0, 0.011, 0.165, 0.12, 0.5, JACKET],
-    [1.075, 0, 0.012, 0.159, 0.12, 0.75, JACKET],
-    [1.12, 0, 0.012, 0.156, 0.121, 1, JACKET],
-    [1.25, 0, 0.011, 0.158, 0.127, 1.73, JACKET],
-    [1.3, 0, 0.014, 0.162, 0.131, 1.85, JACKET],
-    [1.37, 0, 0.015, 0.166, 0.137, 1.97, JACKET],
-    [1.41, 0, 0.007, 0.172, 0.138, 2, JACKET],
+    [0.99, 0, 0.015, 0.176, 0.111, 0.25, BELT],
+    [1.03, 0, 0.011, 0.165, 0.12, 0.5, JACKET, ...SIDE],
+    [1.075, 0, 0.012, 0.159, 0.12, 0.75, JACKET, ...SIDE],
+    [1.12, 0, 0.012, 0.156, 0.121, 1, JACKET, ...SIDE],
+    [1.25, 0, 0.011, 0.158, 0.127, 1.73, JACKET, ...SIDE],
+    [1.3, 0, 0.014, 0.162, 0.131, 1.85, JACKET, ...SIDE],
+    [1.37, 0, 0.015, 0.166, 0.137, 1.97, JACKET, ...SIDE],
+    [1.41, 0, 0.007, 0.172, 0.138, 2, JACKET, ...SIDE],
     [1.41, 0, 0.007, 0.249, 0.138, 2, JACKET],
     [1.445, 0, -0.003, 0.238, 0.135, 2, JACKET],
     [1.475, 0, -0.0085, 0.223, 0.1265, 2.03, JACKET],
@@ -161,16 +191,16 @@ const LEG: Loft = {
   m: true,
   far: [0, 3, 8, 11, 15, 18, 20, 22],
   rings: [
-    [0.93, 0.1, 0, 0, 0, 0, PANTS],
-    [0.85, 0.1, 0.006, 0.087, 0.103, 0.6, PANTS],
-    [0.79, 0.1, 0.002, 0.079, 0.093, 0.785, PANTS],
-    [0.72, 0.1, -0.002, 0.074, 0.084, 1, PANTS],
-    [0.66, 0.1, -0.002, 0.072, 0.086, 1.088, PANTS],
-    [0.6, 0.1, -0.003, 0.072, 0.088, 1.176, PANTS],
-    [0.55, 0.1, -0.003, 0.081, 0.081, 1.25, PANTS],
-    [0.52, 0.1, -0.004, 0.083, 0.082, 1.375, PANTS],
-    [0.49, 0.1, -0.004, 0.083, 0.082, 1.5, PANTS],
-    [0.455, 0.1, -0.001, 0.08, 0.079, 1.65, PANTS],
+    [0.93, 0.1, 0, 0, 0, 0, PANTS, ...SIDE_LOW],
+    [0.85, 0.1, 0.006, 0.087, 0.103, 0.6, PANTS, ...SIDE_LOW],
+    [0.79, 0.1, 0.002, 0.079, 0.093, 0.785, PANTS, ...SIDE_LOW],
+    [0.72, 0.1, -0.002, 0.074, 0.084, 1, PANTS, ...SIDE_LOW],
+    [0.66, 0.1, -0.002, 0.072, 0.086, 1.088, PANTS, ...SIDE_LOW],
+    [0.6, 0.1, -0.003, 0.072, 0.088, 1.176, PANTS, ...SIDE_LOW],
+    [0.55, 0.1, -0.003, 0.081, 0.081, 1.25, PANTS, ...SIDE_LOW],
+    [0.52, 0.1, -0.004, 0.083, 0.082, 1.375, PANTS, ...SIDE_LOW],
+    [0.49, 0.1, -0.004, 0.083, 0.082, 1.5, PANTS, ...SIDE_LOW],
+    [0.455, 0.1, -0.001, 0.08, 0.079, 1.65, PANTS, ...SIDE_LOW],
     [0.425, 0.1, 0.002, 0.082, 0.08, 1.779, UPPER],
     [0.415, 0.1, 0.003, 0.079, 0.078, 1.811, UPPER],
     [0.375, 0.1, 0.007, 0.064, 0.068, 1.9, UPPER],
@@ -209,14 +239,14 @@ const ARM: Loft = {
   far: [0, 2, 4, 7, 9, 10, 12, 14],
   rings: [
     [SPLIT, 0.195, 0, 0, 0, 0, JACKET],
-    [1.36, 0.2, 0.004, 0.054, 0.063, 0.38, JACKET],
-    [1.31, 0.2, 0.006, 0.053, 0.061, 0.5, JACKET],
-    [1.225, 0.208, -0.002, 0.055, 0.063, 1.12, JACKET],
-    [1.18, 0.214, 0.003, 0.052, 0.062, 1.5, JACKET],
-    [1.135, 0.222, -0.002, 0.049, 0.056, 1.9, JACKET],
-    [1.09, 0.222, -0.001, 0.05, 0.058, 2, JACKET],
-    [1.05, 0.222, -0.001, 0.044, 0.055, 2, JACKET],
-    [1.01, 0.222, 0, 0.04, 0.049, 2, JACKET],
+    [1.36, 0.2, 0.004, 0.054, 0.063, 0.38, JACKET, ...SIDE],
+    [1.31, 0.2, 0.006, 0.053, 0.061, 0.5, JACKET, ...SIDE],
+    [1.225, 0.208, -0.002, 0.055, 0.063, 1.12, JACKET, ...SIDE],
+    [1.18, 0.214, 0.003, 0.052, 0.062, 1.5, JACKET, ...SIDE],
+    [1.135, 0.222, -0.002, 0.049, 0.056, 1.9, JACKET, ...SIDE],
+    [1.09, 0.222, -0.001, 0.05, 0.058, 2, JACKET, ...SIDE],
+    [1.05, 0.222, -0.001, 0.044, 0.055, 2, JACKET, ...SIDE],
+    [1.01, 0.222, 0, 0.04, 0.049, 2, JACKET, ...SIDE],
     [0.975, 0.222, 0, 0.043, 0.048, 2.05, GLOVE],
     [0.935, 0.222, 0, 0.038, 0.04, 2.6, GLOVE],
     [0.885, 0.222, -0.004, 0.032, 0.046, 3, GLOVE],

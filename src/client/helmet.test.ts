@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { LIMB } from '../shared/types';
 import { GLOW } from './flag';
-import { SHELL, VISOR, helmet } from './helmet';
-import { SHINE, STRIDE, place } from './mesh';
+import { SCALE, SHELL, WRAP, band, helmet, inside, shrunk, uOf } from './helmet';
+import { GLOSS, SHINE, STRIDE, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
@@ -71,20 +71,28 @@ describe('helmet', () => {
     });
   }
 
-  it('stays modest: under 150 vertices far, under 600 near', () => {
-    expect(count(make(0))).toBeLessThan(150);
-    expect(count(make(1))).toBeLessThan(600);
-    expect(count(make(3))).toBeLessThan(900);
+  // Detailed (the user, 2026-11-10: whatever it costs), still a fraction of a body (34 000 close).
+  it('stays modest: under 1 000 vertices far, 8 000 near, 20 000 close', () => {
+    expect(count(make(0))).toBeLessThan(1000);
+    expect(count(make(1))).toBeLessThan(8000);
+    expect(count(make(3))).toBeLessThan(20000);
     expect(count(make(0))).toBeLessThan(count(make(1)));
   });
 
   it('encloses the head of the skin at rest, from the jaw up, in the shell, at every level of detail', () => {
     for (const lod of [0, 1, 3]) {
-      const { c, r } = SHELL;
+      const {
+        c,
+        e: [ep, eq],
+      } = SHELL;
+      const [A, B, D] = SHELL.r.map(v => v * SCALE);
       const out = make(lod);
-      // The shell's ellipsoid, less what its facets cut: no head vertex is out of 97 % of it.
+      // The shell as drawn (SCALE smaller), less what its facets cut: no head vertex is out of 97 % of it.
       for (const p of headVertices(lod).filter(p => p[1] > SHELL.rim + 0.01)) {
-        const e = Math.hypot(...[0, 1, 2].map(k => (p[k] - c[k]) / r[k]));
+        const [x, y, z] = [0, 1, 2].map(k => p[k] - c[k]);
+        const e =
+          ((Math.abs(x / A) ** ep + Math.abs(z / D) ** ep) ** (eq / ep) + Math.abs(y / B) ** eq) **
+          (1 / eq);
         expect(e).toBeLessThan(0.97);
       }
       // And inside the whole helmet's bounds, at the rest place.
@@ -109,11 +117,11 @@ describe('helmet', () => {
       );
       expect(shiny.length).toBeGreaterThan(20);
       for (const i of shiny) {
-        const p = at(out, i).map((w, k) => w - HEAD[k]);
-        // On the front of the shell, within the opening.
+        // Back to the helmet as built.
+        const p = at(out, i).map((w, k) => SHELL.c[k] + (w - HEAD[k] - SHELL.c[k]) / SCALE);
+        // On the front half of the shell, within the opening wrapped round it.
         expect(p[2]).toBeLessThan(-0.05);
-        expect(Math.abs(p[0])).toBeLessThanOrEqual(VISOR.r[0] + 1e-6);
-        expect(Math.abs(p[1] - VISOR.c[1])).toBeLessThanOrEqual(VISOR.r[1] + 1e-6);
+        expect(inside(uOf(p as Vec3), p[1], 1.02)).toBe(true);
         // Dark.
         expect(out[i * STRIDE + 6] + out[i * STRIDE + 7] + out[i * STRIDE + 9]).toBeLessThan(0.3);
       }
@@ -149,24 +157,30 @@ describe('helmet', () => {
     for (const lod of [0, 1, 3]) {
       const out = make(lod);
       let n = 0;
+      // Seen straight on, its middle: up to 40 degrees round each way.
       for (let a = -0.9; a <= 0.9; a += 0.15) {
         for (let b = -0.9; b <= 0.9; b += 0.15) {
-          const [x, y] = [VISOR.r[0] * a, VISOR.c[1] + VISOR.r[1] * b];
-          if (a * a + b * b > 0.8) {
+          const u = 0.7 * WRAP * a;
+          const [m, h] = band(u);
+          const y = m + h * 0.8 * b;
+          if (!inside(u, y, 0.85)) {
             continue;
           }
-          const [, layer] = first(out, HEAD[0] + x, HEAD[1] + y);
+          // Where that point of the band is across, on the shell's widest ring.
+          const x = SHELL.r[0] * Math.sign(u) * Math.abs(Math.sin(u / WRAP)) ** (2 / SHELL.e[0]);
+          const [sx, sy] = shrunk([x, y, 0]);
+          const [, layer] = first(out, HEAD[0] + sx, HEAD[1] + sy);
           expect(layer).toBe(SHINE);
           n++;
         }
       }
       expect(n).toBeGreaterThan(60);
       // Outside the opening the shell shows.
-      expect(first(out, HEAD[0], HEAD[1] + 0.17)[1]).toBe(-1);
+      expect(first(out, HEAD[0], HEAD[1] + 0.17)[1]).toBe(GLOSS);
     }
   });
 
-  it('wears a crest, and the beads on the ears glow, in the team colour', () => {
+  it('wears the team colour in the glowing strips on the ears, and no crest', () => {
     const near = make(1);
     const lit = Array.from({ length: count(near) }, (_, i) => i).filter(
       i => near[i * STRIDE + 8] == -2,
@@ -175,13 +189,14 @@ describe('helmet', () => {
     for (const i of lit) {
       expect(near[i * STRIDE + 6]).toBeCloseTo(TEAM[0] * GLOW, 5);
     }
-    // Both ears, one each side; the crest on top, in the team's red.
+    // Both ears, one each side.
     expect(lit.some(i => near[i * STRIDE] > HEAD[0] + 0.1)).toBe(true);
     expect(lit.some(i => near[i * STRIDE] < HEAD[0] - 0.1)).toBe(true);
+    // Nothing else in the team's red (the user, 2026-11-10: no crest on top).
     const red = Array.from({ length: count(near) }, (_, i) => i).filter(
       i => near[i * STRIDE + 8] == -1 && near[i * STRIDE + 6] == TEAM[0],
     );
-    expect(Math.max(...red.map(i => near[i * STRIDE + 1]))).toBeGreaterThan(HEAD[1] + 0.2);
+    expect(red).toEqual([]);
     // The far one has no ears.
     expect(make(0).some((_, i) => i % STRIDE == 8 && make(0)[i] == -2)).toBe(false);
   });

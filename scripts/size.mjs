@@ -6,7 +6,8 @@ import { gzipSync } from 'node:zlib';
 const BUDGETS = [
   // 76 KB until the detailed hands (the user, 2026-11-09: "peu importe le budget").
   // 92 and 18 KB until the moon's crater, rovers and base (the user, 2026-11-10: weight does not matter).
-  { file: 'dist/index.js', max: 110 * 1024 },
+  // 110 KB until the space trooper's armour (the user, 2026-11-10: weight does not matter).
+  { file: 'dist/index.js', max: 120 * 1024 },
   { file: 'dist/local.js', max: 24 * 1024 },
 ];
 

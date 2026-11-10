@@ -364,6 +364,8 @@ const CELLS: Vec3[] = [
 ];
 
 export const HIGHLINE: WorldDef = {
+  // The user, 2026-11-10: the moon's armour here too, in the team's colour, no helmet.
+  armor: true,
   name: 'Highline',
   brushes: [...half, ...half.map(flip), ...centre],
   teams: [

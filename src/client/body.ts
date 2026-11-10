@@ -74,6 +74,7 @@ import { add, basis, dot, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
+import { armor } from './armor';
 import { CUFF, CUFF_SIDES, body, palette, skin } from './skin';
 import { createTrail } from './trail';
 
@@ -647,7 +648,8 @@ export const hand = (
     put,
     0.75,
   );
-  const nail = mix(bare as Vec3, [0.98, 0.74, 0.7], 0.4);
+  // A whole glove (`bare` the glove's own colour, a space suit's) has no nails showing.
+  const nail = bare === tint ? tint : mix(bare as Vec3, [0.98, 0.74, 0.7], 0.4);
   /** A finger's tube, its glove to ring BARE and bare beyond, and the nail on its tip. */
   const digit = (p: Vec3, ds: [Vec3, Vec3, Vec3], l: number, r: number, t: Vec3, from = 1) => {
     paint = k => (k < BARE ? tint : bare);
@@ -1599,8 +1601,16 @@ export const createBody = (world?: World): Body => {
     draw(out, eye, yaw, pitch, roll = 0, color = [0.7, 0.7, 0.7]) {
       const s = pose(eye, yaw, pitch, roll);
       if (s) {
-        const colors = palette(color);
+        // An armoured suit (see palette()): its gloves cover the fingers too; white armour in space,
+        // else in the team's colour.
+        const suit = !!world?.def.armor;
+        const plate = world?.def.helmets ? undefined : color;
+        const colors = palette(color, undefined, undefined, suit);
+        const from = out.length;
         skin(out, body(2), s, colors);
+        if (suit) {
+          armor(out, from, body(2), true, plate);
+        }
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
         // The right thumb presses the button of the katana or the plasma gun as it comes on.
         const tk = me?.wield ? 1 : me ? kindOf(me) : -1;
@@ -1621,7 +1631,7 @@ export const createBody = (world?: World): Body => {
             i ? 0 : pointing,
             i * push,
             thumbTo(Math.max(tk, 0)),
-            colors[3],
+            suit ? colors[7] : colors[3],
             i ? 0 : cupping,
           );
         });

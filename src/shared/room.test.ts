@@ -3,6 +3,7 @@ import {
   ACCEL,
   END_SCREEN,
   FLAG_RETURN,
+  HP_MAX,
   INPUT_BURST,
   MAX_NAME,
   MAX_PLAYERS,
@@ -14,12 +15,16 @@ import {
 } from './constants';
 import { HIGHLINE } from './map';
 import { MOON } from './moon';
+import { respawn, stumble } from './physics';
 import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
-import { FLAG, KEY, TEAM, TEX } from './types';
-import type { Conn, Every, Input, PlayerState, Snapshot } from './types';
+import { ROVER, park, seat } from './rover';
+import { FLAG, KEY, MODE, NOBODY, TEAM, TEX } from './types';
+import type { Conn, Every, Input, PlayerState, Rover, Snapshot } from './types';
+import { build } from './world';
 import type { Spawn, WorldDef } from './world';
+import { loaded } from '../../test/loaded';
 import { duo } from '../../test/teams';
 
 /** Metres run in n steps of forward from a stand, with the ground acceleration. */
@@ -885,5 +890,357 @@ describe('Room: capture the flag', () => {
       ticks(room, SNAP_EVERY);
       expect(snap(b)).toMatchObject({ clock: 60, score: [0, 0] });
     });
+  });
+});
+
+describe('Room: the rovers', () => {
+  const EAST = (3 * Math.PI) / 2;
+  /** ARENA with a rover 2 m east of each team's first spawn, its nose to the east. */
+  const LOT: WorldDef = {
+    ...ARENA,
+    rovers: [
+      [6, 1, 4, EAST],
+      [66, 1, 4, EAST],
+    ],
+  };
+  const lot = build(LOT);
+  const PARKED = park(lot);
+  const who = (room: Room, c: Peer) => room['peers'].get(c)!;
+  const st = (room: Room, c: Peer): PlayerState => who(room, c).state;
+  const cars = (room: Room): Rover[] => room['rovers'];
+  /** Per peer, the next seq. */
+  const seqs = new Map<Peer, number>();
+  /** `n` inputs of a peer, a tick after each. */
+  const send = (room: Room, c: Peer, keys = 0, n = 1, yaw = EAST): void => {
+    for (let k = 0; k < n; k++) {
+      const seq = seqs.get(c) ?? 0;
+      seqs.set(c, seq + 1);
+      room.receive(c, input(seq, keys, yaw));
+      room.tick();
+    }
+  };
+  /** A press of USE, and its release. */
+  const use = (room: Room, c: Peer): void => {
+    send(room, c, KEY.USE);
+    send(room, c);
+  };
+  /** Stands a player `dx` m east of rover 0's parking place. */
+  const stand = (room: Room, c: Peer, dx = -2, dz = 0): void => {
+    Object.assign(st(room, c), { x: 6 + dx, y: 1, z: 4 + dz, vx: 0, vz: 0 });
+  };
+  /** Ann (red, id 0) at the wheel of rover 0. */
+  const driven = (def = LOT) => {
+    const room = new Room({}, def);
+    const a = join(room, 'Ann');
+    use(room, a);
+    return { room, a, r: cars(room)[0] };
+  };
+
+  it('boards the nearest rover on a press of USE, once however long it is held', () => {
+    const room = new Room({}, LOT);
+    const a = join(room, 'Ann');
+    send(room, a, 0, 3);
+    expect(st(room, a).mode).toBe(MODE.GROUND);
+    send(room, a, KEY.USE);
+    expect(st(room, a).mode).toBe(MODE.RIDE);
+    expect(cars(room).map(r => r.driver)).toEqual([0, NOBODY]);
+    // Held on: he stays in.
+    send(room, a, KEY.USE, 30);
+    expect(st(room, a).mode).toBe(MODE.RIDE);
+    expect(cars(room)[0].driver).toBe(0);
+    // Let go and pressed again: out, beside it.
+    send(room, a);
+    send(room, a, KEY.USE);
+    expect(st(room, a).mode).not.toBe(MODE.RIDE);
+    expect(cars(room)[0].driver).toBe(NOBODY);
+    expect(Math.abs(st(room, a).z - cars(room)[0].z)).toBeGreaterThan(ROVER.RB);
+    // Too far from any rover, a press does nothing.
+    send(room, a);
+    Object.assign(st(room, a), { x: 6, z: 4 + ROVER.ENTER_R + 0.5 });
+    use(room, a);
+    expect(st(room, a).mode).not.toBe(MODE.RIDE);
+  });
+
+  it("takes the rider's seat when the wheel is taken, and nothing when both are", () => {
+    const { room } = driven();
+    const [b, c] = [join(room, 'Bob'), join(room, 'Cid')];
+    stand(room, b);
+    use(room, b);
+    expect(cars(room)[0]).toMatchObject({ driver: 0, rider: 1 });
+    expect(st(room, b).mode).toBe(MODE.RIDE);
+    stand(room, c);
+    use(room, c);
+    expect(cars(room)[0]).toMatchObject({ driver: 0, rider: 1 });
+    expect(st(room, c).mode).toBe(MODE.GROUND);
+    // The rider gets out on his own press; the driver stays.
+    use(room, b);
+    expect(cars(room)[0]).toMatchObject({ driver: 0, rider: NOBODY });
+    expect(st(room, b).mode).not.toBe(MODE.RIDE);
+  });
+
+  it("drives it with the driver's inputs and leaves a driverless one to the tick", () => {
+    const { room, a, r } = driven();
+    const far = cars(room)[1];
+    ticks(room, 30);
+    const still = { ...r };
+    // No input, no step: the driven rover waits for its driver whatever the ticks.
+    ticks(room, 60);
+    expect(r).toEqual(still);
+    // His inputs alone move it, with no tick between them.
+    for (let k = 0; k < 5; k++) {
+      room.receive(a, input(100 + k, KEY.FORWARD, EAST));
+    }
+    expect(r.x).toBeGreaterThan(still.x);
+    expect(r.vx).toBeGreaterThan(0.5);
+    send(room, a, KEY.FORWARD, 60);
+    expect(r.x).toBeGreaterThan(still.x + 3);
+    // The other one, pushed with nobody in it, rolls on the ticks and brakes to a stop.
+    far.vx = 5;
+    ticks(room, 10);
+    expect(far.x).toBeGreaterThan(66.3);
+    ticks(room, 120);
+    expect(Math.abs(far.vx)).toBeLessThan(0.01);
+  });
+
+  it('carries the rider with the rover, and lets him shoot', () => {
+    const { room, a, r } = driven();
+    const b = join(room, 'Bob');
+    stand(room, b);
+    use(room, b);
+    Object.assign(st(room, b), loaded({ ammo: 10 }));
+    send(room, a, KEY.FORWARD, 90);
+    expect(r.x).toBeGreaterThan(12);
+    const sat = { ...st(room, b) };
+    seat(sat, r, 1);
+    expect(st(room, b)).toMatchObject({ x: sat.x, y: sat.y, z: sat.z, mode: MODE.RIDE });
+    // His own inputs turn his look and work his gun, and leave his body on the seat.
+    send(room, b, KEY.FIRE | KEY.FORWARD, 1, 1);
+    send(room, b, KEY.FORWARD, 1, 1);
+    expect(st(room, b)).toMatchObject({ shots: 1, ammo: 9, x: sat.x, z: sat.z });
+    expect(st(room, b).yaw).toBeCloseTo(1, 3);
+    expect(room['balls']).toHaveLength(1);
+  });
+
+  it("does not fire the driver's gun", () => {
+    const { room, a } = driven();
+    Object.assign(st(room, a), loaded({ ammo: 10 }));
+    send(room, a, KEY.FIRE, 3);
+    send(room, a, 0, 3);
+    expect(st(room, a)).toMatchObject({ shots: 0, ammo: 10, charge: 0 });
+    expect(room['balls']).toHaveLength(0);
+  });
+
+  it('frees the seat when the occupant leaves, goes down, respawns or disconnects', () => {
+    const board = () => {
+      const { room, a, r } = driven();
+      const b = join(room, 'Bob');
+      stand(room, b);
+      use(room, b);
+      expect(r).toMatchObject({ driver: 0, rider: 1 });
+      return { room, a, b, r };
+    };
+    // Leaves.
+    let { room, a, b, r } = board();
+    use(room, a);
+    expect(r).toMatchObject({ driver: NOBODY, rider: 1 });
+    // Goes down: in the air where he sat, with the rover's speed.
+    ({ room, a, b, r } = board());
+    send(room, a, KEY.FORWARD, 60);
+    room['harm'](who(room, a), HP_MAX);
+    expect(r).toMatchObject({ driver: NOBODY, rider: 1 });
+    expect(st(room, a).mode).toBe(MODE.AIR);
+    expect(st(room, a).down).toBeGreaterThan(0);
+    expect(st(room, a).vx).toBe(r.vx);
+    room['harm'](who(room, b), HP_MAX);
+    expect(r.rider).toBe(NOBODY);
+    // Respawns, or is thrown off by a stumble: off the rover at the next pass.
+    ({ room, a, b, r } = board());
+    respawn(st(room, b), lot, 1);
+    stumble(st(room, a), 0, 1);
+    room.tick();
+    expect(r).toMatchObject({ driver: NOBODY, rider: NOBODY });
+    expect(st(room, b)).toMatchObject({ mode: MODE.GROUND, x: 64 });
+    // Disconnects.
+    ({ room, a, b, r } = board());
+    room.disconnect(a);
+    expect(r).toMatchObject({ driver: NOBODY, rider: 1 });
+    room.disconnect(b);
+    expect(cars(room)[0].rider).toBe(NOBODY);
+  });
+
+  it("does not seat a new joiner who takes a leaver's id", () => {
+    const { room, a, r } = driven();
+    const b = join(room, 'Bob');
+    send(room, a, KEY.FORWARD, 30);
+    room.disconnect(a);
+    const c = join(room, 'Cid');
+    expect(roster(c).you).toBe(0);
+    expect(r.driver).toBe(NOBODY);
+    expect(st(room, c).mode).toBe(MODE.GROUND);
+    ticks(room, 120);
+    const at = r.x;
+    send(room, c, KEY.FORWARD, 30);
+    expect(r.x).toBe(at);
+    expect(st(room, c).x).toBeGreaterThan(4.5);
+    expect(snap(b).rovers![0].driver).toBe(NOBODY);
+  });
+
+  it('parks the rovers again on a new match, a new map and an empty room', () => {
+    // An empty room.
+    let { room, a } = driven();
+    send(room, a, KEY.FORWARD, 60);
+    expect(cars(room)).not.toEqual(PARKED);
+    room.disconnect(a);
+    expect(cars(room)).toEqual(PARKED);
+    // A new match: everyone on foot at his spawn.
+    room = new Room({ timeLimit: 1 }, LOT);
+    a = join(room, 'Ann');
+    use(room, a);
+    send(room, a, KEY.FORWARD, 40);
+    ticks(room, (END_SCREEN + 1) * TICK_HZ);
+    expect(snap(a).over).toBe(false);
+    expect(cars(room).map(r => [r.x, r.z, r.vx, r.driver])).toEqual(
+      PARKED.map(r => [r.x, r.z, 0, NOBODY]),
+    );
+    expect(st(room, a)).toMatchObject({ mode: MODE.GROUND, x: 4, z: 4 });
+    // A new map: its own rovers.
+    use(room, a);
+    room.receive(a, JSON.stringify({ t: 'map', map: 'tranquility' }));
+    ticks(room, (END_SCREEN + 1) * TICK_HZ + SNAP_EVERY);
+    expect(roster(a).map).toBe('tranquility');
+    expect(snap(a).rovers).toHaveLength(MOON.rovers!.length);
+    expect(snap(a).rovers!.map(r => [r.x, r.z, r.driver])).toEqual(
+      MOON.rovers!.map(([x, , z]) => [x, z, NOBODY]),
+    );
+    expect(st(room, a).mode).toBe(MODE.GROUND);
+  });
+
+  it('puts a rover that fell in the rille back on its spawn, its occupants at theirs', () => {
+    const { room, a, r } = driven();
+    const b = join(room, 'Bob');
+    stand(room, b);
+    use(room, b);
+    // Over the edge of the slab.
+    Object.assign(r, { x: 120, vx: 10 });
+    for (let k = 0; k < 600 && (r.x !== PARKED[0].x || r.rider !== NOBODY); k++) {
+      send(room, a, KEY.FORWARD);
+    }
+    ticks(room, 60);
+    expect(r.x).toBe(PARKED[0].x);
+    expect(r.z).toBe(PARKED[0].z);
+    expect(r).toMatchObject({ driver: NOBODY, rider: NOBODY, vx: 0 });
+    expect(st(room, a)).toMatchObject({ mode: MODE.GROUND, x: 4, y: 1, z: 4 });
+    // Bob, id 1, at the blue spawn of his id.
+    expect(st(room, b)).toMatchObject({ mode: MODE.GROUND, x: 64, y: 1, z: 12 });
+  });
+
+  it('lets the carrier ride, not drive, and gives no flag to a driver', () => {
+    const room = new Room({}, LOT);
+    const [a, b, c] = [join(room, 'Ann'), join(room, 'Bob'), join(room, 'Cid')];
+    // Ann takes the blue flag on foot, then goes to the rover: the rider's seat, the wheel free.
+    Object.assign(st(room, a), { x: 30, z: 4 });
+    ticks(room, SNAP_EVERY);
+    expect(snap(a).flags[TEAM.BLUE]).toMatchObject({ state: FLAG.CARRIED, by: 0 });
+    stand(room, a);
+    use(room, a);
+    expect(cars(room)[0]).toMatchObject({ driver: NOBODY, rider: 0 });
+    // With that seat taken, a second carrier gets nothing.
+    room['ctf'].flags[TEAM.RED] = { ...room['ctf'].flags[TEAM.RED], state: FLAG.CARRIED, by: 1 };
+    stand(room, b);
+    use(room, b);
+    expect(st(room, b).mode).toBe(MODE.GROUND);
+    expect(cars(room)[0]).toMatchObject({ driver: NOBODY, rider: 0 });
+    room['ctf'].reset();
+    use(room, a);
+
+    // Cid drives onto the blue flag's stand: it stays home. Ann, beside him, takes it.
+    stand(room, c);
+    use(room, c);
+    expect(cars(room)[0].driver).toBe(2);
+    Object.assign(cars(room)[0], { x: 30, z: 4 });
+    send(room, c, 0, 20);
+    expect(snap(a).flags[TEAM.BLUE].state).toBe(FLAG.HOME);
+    Object.assign(st(room, a), { x: 30, z: 6.5 });
+    send(room, a, KEY.USE);
+    expect(cars(room)[0]).toMatchObject({ driver: 2, rider: 0 });
+    send(room, c, 0, 4);
+    expect(snap(a).flags[TEAM.BLUE]).toMatchObject({ state: FLAG.CARRIED, by: 0 });
+  });
+
+  it('runs an enemy over above the speed that kills, bruises him under it, spares a teammate, and does not slow the rover', () => {
+    /** Ann drives east at `v` m/s into who stands 4 m ahead: Bob (blue) or Cid (red). Returns him, her and the rover. */
+    const charge = (v: number, victim: 'Bob' | 'Cid' | 'none', keys: number = KEY.FORWARD) => {
+      const { room, a, r } = driven();
+      const [b, c] = [join(room, 'Bob'), join(room, 'Cid')];
+      const p = victim === 'Bob' ? b : c;
+      if (victim !== 'none') {
+        stand(room, p, 4);
+      }
+      Object.assign(r, { vx: Math.fround(v) });
+      send(room, a, keys, 40);
+      return { foe: st(room, p), me: st(room, a), r: { ...r } };
+    };
+    const free = charge(ROVER.SPLAT_KILL + 3, 'none');
+    const kill = charge(ROVER.SPLAT_KILL + 3, 'Bob');
+    expect(kill.foe.down).toBeGreaterThan(0);
+    expect(kill.foe.hp).toBe(0);
+    expect(kill.me.hits).toBe(1);
+    // The rover is where it would be with nobody in its way, to the bit.
+    expect(kill.r).toEqual(free.r);
+
+    const v = (ROVER.SPLAT_MIN + ROVER.SPLAT_KILL) / 2;
+    const bruise = charge(v, 'Bob');
+    // Once, though the body is over him for many steps: thrown the rover's way, on his feet.
+    expect(bruise.foe).toMatchObject({ hp: HP_MAX - 1, down: 0 });
+    expect(bruise.foe.stun).toBeGreaterThan(0);
+    expect(bruise.foe.vx).toBeGreaterThan(0);
+    expect(bruise.me.hits).toBe(1);
+    expect(bruise.r).toEqual(charge(v, 'none').r);
+
+    const slow = charge(ROVER.SPLAT_MIN - 2, 'Bob', 0);
+    expect(slow.foe).toMatchObject({ hp: HP_MAX, stun: 0 });
+    const mate = charge(ROVER.SPLAT_KILL + 3, 'Cid');
+    expect(mate.foe).toMatchObject({ hp: HP_MAX, down: 0, stun: 0 });
+    expect(mate.me.hits).toBe(0);
+  });
+
+  it('rewinds a rider to the seat he was drawn in', () => {
+    const { room, a, r } = driven();
+    const b = join(room, 'Bob');
+    stand(room, b);
+    use(room, b);
+    Object.assign(st(room, b), loaded({ ammo: 10 }));
+    send(room, a, KEY.FORWARD, 180);
+    expect(r.vx).toBeGreaterThan(15);
+    // Bob fires north, across the rover's way, at a view 10 ticks back.
+    const tick = room['ticks'];
+    const view = tick - 10;
+    const then = room['history'].find(h => h.tick === view)!.players.find(p => p.id === 1)!;
+    const fire = (seq: number, keys: number) =>
+      room.receive(b, encodeInput({ seq, keys, yaw: 0, pitch: 0, view }));
+    fire(50, KEY.FIRE);
+    fire(51, 0);
+    const [ball] = room['balls'];
+    expect(ball.x).toBeCloseTo(then.x, 3);
+    expect(st(room, b).x - ball.x).toBeGreaterThan(2);
+    // His body is still on the seat.
+    const sat = { ...st(room, b) };
+    seat(sat, r, 1);
+    expect(st(room, b).x).toBe(sat.x);
+  });
+
+  it('sends the rovers in every snapshot', () => {
+    const { room, a, r } = driven();
+    send(room, a, KEY.FORWARD, 20);
+    for (let k = 0; k < 6; k++) {
+      send(room, a, KEY.FORWARD, SNAP_EVERY);
+      expect(snap(a).rovers).toEqual(cars(room));
+    }
+    expect(snap(a).rovers![0]).toMatchObject({ driver: 0, x: r.x });
+    // A map without any carries none.
+    const bare = new Room({}, ARENA);
+    const c = join(bare, 'Cid');
+    ticks(bare, SNAP_EVERY);
+    expect(snap(c).rovers).toBeUndefined();
   });
 });

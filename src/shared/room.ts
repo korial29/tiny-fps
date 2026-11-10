@@ -19,6 +19,7 @@ import {
   PACK_HP,
   PACK_R,
   PLASMA_MAX,
+  PLAYER_R,
   RAIL_CELL,
   RAIL_DRAIN,
   RAIL_MAX,
@@ -38,15 +39,16 @@ import { CHEST, crossing, knock, limbOf, strike, swingOf } from './blade';
 import { Ctf } from './ctf';
 import { STRIKE, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
-import { forward, heightOf, spawn, speedOf, stumble } from './physics';
+import { floorAt, forward, heightOf, respawn, spawn, speedOf, stumble } from './physics';
 import { PLASMA_LAG, fly, launch, stepOf, wave } from './plasma';
 import type { Flying } from './plasma';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
 import { beam } from './rail';
+import { ROVER, board, drive, footprint, leave, park, ride, seat } from './rover';
 import { reaches, tackling } from './tackle';
-import { CUT, LIMB } from './types';
-import type { Conn, Every, PlayerInfo, PlayerState, Rules } from './types';
+import { CUT, KEY, LIMB, MODE, NOBODY } from './types';
+import type { Conn, Every, PlayerInfo, PlayerState, Rover, Rules } from './types';
 import { build } from './world';
 import type { World, WorldDef } from './world';
 
@@ -64,6 +66,8 @@ interface Player {
   by: number;
   /** The host tick of the last tackle this player made. */
   tackled: number;
+  /** The host tick a rover last ran him over. */
+  run: number;
   /** Ticks drained by the rail gun's bolt since its first touch, while `slow` runs. */
   burn?: number;
   /** The laser rifle's hits on him toward the next hp: every RIFLE_HITS take one. */
@@ -74,6 +78,10 @@ interface Player {
 const MAX_CATCH_UP = 20;
 /** A new player does not spawn within this many metres of another one. */
 const SPAWN_CLEAR = 2;
+/** Ticks before a rover can run the same player over again. */
+const SPLAT_COOLDOWN = TACKLE_COOLDOWN;
+/** The two seats of a rover, the driver's first. */
+const SEATS = ['driver', 'rider'] as const;
 
 /** First n characters (code points) of s, trimmed. */
 const cut = (s: string, n: number): string => Array.from(s).slice(0, n).join('').trim();
@@ -95,6 +103,8 @@ const unique = (name: string, taken: string[]): string => {
   }
   return out;
 };
+
+const len = (x: number, z: number): number => Math.sqrt(x * x + z * z);
 
 const setEvery: Every = (cb, ms) => {
   const id = setInterval(cb, ms);
@@ -120,11 +130,16 @@ const setEvery: Every = (cb, ms) => {
  * - The host is the player in the room the longest; when he leaves, the next oldest. Only his
  *   { t: 'map', map } counts: the map (a MAPS key) is played from the next match on, or from the
  *   next join once the room is empty. The roster tells everyone the host and the map picked.
+ * - The map's rovers (rover.ts) are in every snapshot. A press of USE near one seats a player; a
+ *   driven rover is stepped by its driver's inputs alone (ride()), a driverless one by the tick.
+ *   seats() keeps the seats and the players' MODE.RIDE in step.
  */
 /** A player out of any saber lock. */
 const FREE = { lock: 0, foe: 0, pushes: 0, pressed: false, away: 0 };
 /** Where a rewound copy of a player stood and looked, to put over his live state. */
 const pick = ({ x, y, z, yaw }: PlayerState) => ({ x, y, z, yaw });
+/** Where a player stands. */
+const spot = ({ x, y, z }: PlayerState) => ({ x, y, z });
 
 export class Room {
   /** Every connected peer; null until it joins. */
@@ -142,6 +157,8 @@ export class Room {
   private gone: number[];
   /** The plasma balls in flight, and the ones that burst since the last snapshot, which sends them once more. */
   private balls: Flying[] = [];
+  /** The map's rovers, in the order of WorldDef.rovers. */
+  private rovers: Rover[];
 
   /** The key of the map being played, which the roster tells the clients. */
   private mapName: string;
@@ -157,6 +174,7 @@ export class Room {
     this.world = build(def ?? mapOf(this.mapName));
     this.ctf = new Ctf(this.world, this.rules);
     this.gone = this.spots();
+    this.rovers = park(this.world);
   }
 
   /** The health, ammo and cell packs of the map, all there (0 ticks before each is back). */
@@ -183,6 +201,7 @@ export class Room {
     this.world = build(mapOf(this.mapName));
     this.ctf = new Ctf(this.world, this.rules);
     this.gone = this.spots();
+    this.rovers = park(this.world);
     this.history = [];
     this.balls = [];
     for (const p of this.players()) {
@@ -219,17 +238,42 @@ export class Room {
     if (input && p.bank > 0) {
       p.bank--;
       const slow = p.state.slow ?? 0;
-      const struck = step(p.state, input, this.world, p.info.team, !this.ctf.over);
-      this.ctf.moved(p.state);
-      this.tackle(p, input.view);
-      if (struck === STRIKE.SHOT) {
-        this.shoot(p, input.view);
-      } else if (struck === STRIKE.CUT) {
-        this.cut(p, input.view);
-      } else if (struck === STRIKE.RAIL) {
-        this.rail(p, input.view);
-      } else if (struck === STRIKE.LASER) {
-        this.shoot(p, input.view);
+      const use = (input.keys & KEY.USE) !== 0 && (p.state.held & KEY.USE) === 0;
+      const [r, s] = this.seatOf(p);
+      if (r && !s) {
+        // At the wheel: his input is the rover's clock, and nothing else moves it.
+        const fell = ride(p.state, r, input, this.world, p.info.team);
+        this.ctf.moved(p.state);
+        if (fell) {
+          this.sink(r);
+        } else {
+          this.carry(r);
+          this.splat(p, r, input.view);
+        }
+      } else {
+        const struck = step(p.state, input, this.world, p.info.team, !this.ctf.over);
+        this.ctf.moved(p.state);
+        this.tackle(p, input.view);
+        // A rider's strike starts from the seat he was drawn in at his view tick, not where the
+        // rover has got to since.
+        const here = spot(p.state);
+        const seen = r && struck ? this.past(input.view).find(q => q.id === p.info.id) : undefined;
+        Object.assign(p.state, seen && spot(seen));
+        if (struck === STRIKE.SHOT) {
+          this.shoot(p, input.view);
+        } else if (struck === STRIKE.CUT) {
+          this.cut(p, input.view);
+        } else if (struck === STRIKE.RAIL) {
+          this.rail(p, input.view);
+        } else if (struck === STRIKE.LASER) {
+          this.shoot(p, input.view);
+        }
+        Object.assign(p.state, here);
+        if (use && r && p.state.mode === MODE.RIDE) {
+          leave(p.state, r, 1, this.world);
+        } else if (use) {
+          this.enter(p);
+        }
       }
       // The bolt drains him: 1 hp each RAIL_DRAIN ticks after its first touch.
       p.burn = slow ? (p.burn ?? 0) + 1 : 0;
@@ -238,6 +282,7 @@ export class Room {
       }
       this.duel(p);
       p.ack = input.seq;
+      this.seats();
     }
   }
 
@@ -250,8 +295,10 @@ export class Room {
       if (!this.size) {
         this.ctf.reset();
         this.gone.fill(0);
+        this.rovers = park(this.world);
         this.load();
       }
+      this.seats();
       this.roster();
     }
   }
@@ -282,10 +329,10 @@ export class Room {
       }
     }
     this.heal(players);
-    // Someone lying down touches no flag.
+    // Someone lying down touches no flag, nor does a driver.
     const turn = this.ctf.tick(
       players
-        .filter(p => !p.state.down)
+        .filter(p => !p.state.down && !this.rovers.some(r => r.driver === p.info.id))
         .map(p => ({ id: p.info.id, team: p.info.team, state: p.state })),
     );
     if (turn === 'end') {
@@ -294,6 +341,18 @@ export class Room {
       this.load();
       this.restart(players);
     }
+    this.seats();
+    for (const r of this.rovers) {
+      // A driven rover waits for its driver's inputs.
+      if (r.driver !== NOBODY) {
+        this.carry(r);
+      } else if (drive(r, undefined, this.world)) {
+        this.sink(r);
+      } else {
+        this.carry(r);
+      }
+    }
+    this.seats();
     if (now % SNAP_EVERY === 0) {
       this.history.push({ tick: now, players: players.map(p => ({ ...p.state })) });
       while (this.history[0].tick < now - MAX_REWIND) {
@@ -306,6 +365,7 @@ export class Room {
         ...this.ctf.wire(),
         packs: this.gone.reduce((m, t, k) => (t ? m : m + 2 ** k), 0),
         balls: this.balls,
+        rovers: this.rovers,
       });
       players.forEach(p => p.conn.send(snap));
       // Every snapshot reaches every peer (WebSocket, BroadcastChannel): a burst is sent once.
@@ -351,9 +411,12 @@ export class Room {
    * One the history does not hold stands where it is.
    */
   public rewind(id: number, view = 0): PlayerState[] {
-    const now = this.players()
-      .filter(p => p.info.id !== id)
-      .map(p => p.state);
+    return this.past(view).filter(p => p.id !== id);
+  }
+
+  /** Every player as the snapshots around the view tick `view` showed him: rewind(), the asker included. */
+  private past(view = 0): PlayerState[] {
+    const now = this.players().map(p => p.state);
     const [first, last] = [this.history[0], this.history.at(-1)];
     if (!first || !last) {
       return now;
@@ -429,6 +492,10 @@ export class Room {
       return false;
     }
     foe.graze = 0;
+    // Out of his seat, in the air with the rover's speed (his own since the last seat()).
+    if (foe.state.mode === MODE.RIDE) {
+      this.unseat(foe);
+    }
     Object.assign(foe.state, {
       hp: 0,
       down: DOWN_TICKS,
@@ -672,6 +739,139 @@ export class Room {
     });
   }
 
+  /** The rover `p` is seated in and his seat (0 the driver's), or nothing on foot. */
+  private seatOf(p: Player): [Rover, 0 | 1] | [] {
+    if (p.state.mode === MODE.RIDE) {
+      for (const r of this.rovers) {
+        const s = SEATS.findIndex(k => r[k] === p.info.id);
+        if (s >= 0) {
+          return [r, s as 0 | 1];
+        }
+      }
+    }
+    return [];
+  }
+
+  /** Takes `p` off his seat: in the air where he sat. */
+  private unseat(p: Player): void {
+    for (const r of this.rovers) {
+      SEATS.forEach(k => (r[k] = r[k] === p.info.id ? NOBODY : r[k]));
+    }
+    Object.assign(p.state, { mode: MODE.AIR, t: 0, coyote: 0 });
+  }
+
+  /**
+   * The one place seats are kept true: a seat is held by a player who is there and rides, and who
+   * rides holds a seat. So a leaver's seat is free before his id is given again, and one put down,
+   * respawned or stumbled out is off the rover.
+   */
+  private seats(): void {
+    const players = this.players();
+    for (const r of this.rovers) {
+      for (const k of SEATS) {
+        if (!players.some(p => p.info.id === r[k] && p.state.mode === MODE.RIDE)) {
+          r[k] = NOBODY;
+        }
+      }
+    }
+    for (const p of players) {
+      if (p.state.mode === MODE.RIDE && !this.seatOf(p).length) {
+        this.unseat(p);
+      }
+    }
+  }
+
+  /**
+   * A press of USE on foot: the nearest rover within ROVER.ENTER_R (centre to feet) with a seat
+   * for him, the wheel first; a flag carrier only rides. Not while down, stumbling or in a lock.
+   */
+  private enter(p: Player): void {
+    const q = p.state;
+    if (q.down || q.stun || q.lock || q.mode === MODE.RIDE) {
+      return;
+    }
+    const carrier = this.ctf.carrying(p.info.id) >= 0;
+    const d2 = (r: Rover) => (r.x - q.x) ** 2 + (r.y - q.y) ** 2 + (r.z - q.z) ** 2;
+    const free = (r: Rover): 0 | 1 | -1 =>
+      r.driver === NOBODY && !carrier ? 0 : r.rider === NOBODY ? 1 : -1;
+    const r = this.rovers
+      .filter(r => d2(r) < ROVER.ENTER_R ** 2 && free(r) >= 0)
+      .sort((a, b) => d2(a) - d2(b))[0];
+    if (r) {
+      board(q, r, free(r) as 0 | 1);
+    }
+  }
+
+  /**
+   * The rider follows the rover on his seat. Over a floor, that is his last ground: where a flag he
+   * carries lies if he is put down or falls with the rover.
+   */
+  private carry(r: Rover): void {
+    const p = this.players().find(q => q.info.id === r.rider);
+    if (p?.state.mode === MODE.RIDE) {
+      seat(p.state, r, 1);
+      const y = floorAt(this.world, r.x, r.z, r.y);
+      if (y > this.world.def.floor) {
+        this.ctf.place(p.info.id, { ...p.state, y });
+      }
+    }
+  }
+
+  /** The rover fell under the kill floor: who was aboard is back at a spawn, it is parked again. */
+  private sink(r: Rover): void {
+    for (const p of this.players()) {
+      if (this.seatOf(p)[0] === r) {
+        respawn(p.state, this.world, p.info.team);
+        this.ctf.moved(p.state);
+      }
+    }
+    const k = this.rovers.indexOf(r);
+    Object.assign(r, park(this.world)[k]);
+  }
+
+  /**
+   * After a step of the driver `p` at the view tick `view`: the rover's body (footprint()) over an
+   * enemy on foot, as `p` drew him, runs him over. Closing on him at ROVER.SPLAT_KILL or more puts
+   * him down; from ROVER.SPLAT_MIN it takes 1 hp and throws him the rover's way in a stumble. Once
+   * per SPLAT_COOLDOWN ticks a victim; a hit counts for the driver. The rover is never changed.
+   */
+  private splat(p: Player, r: Rover, view: number | undefined): void {
+    if (len(r.vx, r.vz) < ROVER.SPLAT_MIN) {
+      return;
+    }
+    const body = footprint(r);
+    for (const seen of this.enemies(p, view)) {
+      const foe = this.players().find(q => q.info.id === seen.id);
+      if (!foe || foe.state.mode === MODE.RIDE || this.ticks - foe.run < SPLAT_COOLDOWN) {
+        continue;
+      }
+      const hit = body.find(
+        ([x, y, z]) =>
+          len(seen.x - x, seen.z - z) < ROVER.RB + PLAYER_R &&
+          seen.y < y + ROVER.BODY_H &&
+          seen.y + heightOf(seen) > y,
+      );
+      if (!hit) {
+        continue;
+      }
+      // The speed the rover closes on him at, along the line from its centre to him.
+      const [dx, dz] = [seen.x - r.x, seen.z - r.z];
+      const d = len(dx, dz) || 1;
+      const closing = ((r.vx - seen.vx) * dx + (r.vz - seen.vz) * dz) / d;
+      if (closing < ROVER.SPLAT_MIN) {
+        continue;
+      }
+      foe.run = this.ticks;
+      p.state.hits = (p.state.hits + 1) & 255;
+      if (!this.harm(foe, closing < ROVER.SPLAT_KILL ? 1 : foe.state.hp)) {
+        const v = len(r.vx, r.vz);
+        stumble(foe.state, r.vx / v, r.vz / v);
+        foe.state.zap = false;
+        foe.by = p.info.id;
+      }
+    }
+  }
+
   /** The first spawn point of the team with none of `others` within SPAWN_CLEAR, else the next one round-robin. */
   private place(id: number, team: number, others: PlayerState[]): PlayerState {
     const n = this.world.def.teams[team].spawns.findIndex((_, k) => {
@@ -700,6 +900,7 @@ export class Room {
     const put: PlayerState[] = [];
     this.rr = [0, 0];
     this.gone.fill(0);
+    this.rovers = park(this.world);
     for (const p of players) {
       const { shots, hits } = p.state;
       p.state = { ...this.place(p.info.id, p.info.team, put), shots, hits };
@@ -748,6 +949,7 @@ export class Room {
       ack: 0xffff,
       by: 0,
       tackled: -TACKLE_COOLDOWN,
+      run: -SPLAT_COOLDOWN,
     };
     this.peers.set(conn, player);
     this.ctf.join(id, team, player.state);

@@ -14,7 +14,7 @@ import type { Effects } from './effects';
 import { createDust } from './dust';
 import { base, flag, teamRgb } from './flag';
 import type { CtfScene } from './flag';
-import { SHINE, STRIDE, basis } from './mesh';
+import { GLOSS, SHINE, STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
 import { moonscape } from './moonscape';
 import type { Light } from './lights';
@@ -111,8 +111,9 @@ o=vec4(c,1);}`;
 
 /**
  * Blinn-Phong strength and exponent: a row per TEX id in order (brick, tile, lava, stone, metal, wood,
- * moss, grate, concrete, glass, steel, paint), then the flat bodies, then polished metal (SHINE). Lava
- * and glows never get here: they light themselves.
+ * moss, grate, concrete, glass, steel, paint), then the flat bodies, then polished metal (SHINE), then a
+ * glossy shell (GLOSS: broader, so it shows on the armour). Lava and glows never get here: they light
+ * themselves.
  */
 export const SPEC = [
   [0.04, 8],
@@ -129,6 +130,7 @@ export const SPEC = [
   [0.25, 30],
   [0.1, 24],
   [1.4, 90],
+  [1.1, 34],
 ];
 /** Metres a height of 1 in a texture's alpha stands for. */
 const RELIEF = 0.06;
@@ -148,7 +150,8 @@ const RELIEF = 0.06;
 // haze band, the sun's disc and glow, bright enough to bloom (K0, the sky along a direction; the glow
 // scattered by the air, so it fades with a dark horizon: the moon keeps a tenth of it). The
 // glass layer adds K0 along the reflected view r, strong at a grazing angle (Fresnel, fr), after the
-// lighting. Polished metal (SHINE) turns partly into that reflection (k), tinted by its colour and
+// lighting. A glossy shell (GLOSS) gets a clear coat: a pale sheen at a grazing angle and where it
+// faces up, less in the sun's shadow. Polished metal (SHINE) turns partly into that reflection (k), tinted by its colour and
 // dark where r looks down at the ground, with a sharp bright streak where it mirrors just above the
 // horizon. On a texture C.w is 2 * the brush's tint index + its light (see level); G is the
 // palette. On stone (the regolith) the texture is mixed with itself 3.7 times larger and turned,
@@ -179,7 +182,7 @@ vec3 n=normalize(N),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float h=t.a*s*${RELIEF},det=dot(dx,a);
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
-vec2 R=SP[int(s>0.?L+.5:L<-1.1?${LAYERS + 1}.:${LAYERS}.)];
+vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];
 vec3 y=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s),V=normalize(E-P),w=normalize(n+m);
 float sd=max(dot(m,O),0.)*smoothstep(0.,.1,dot(n,O)),sv=1.;
 if(sd>0.&&g<1.){
@@ -205,6 +208,7 @@ c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
 vec3 r=reflect(-V,m),k=K0(r);float fr=pow(1.-max(dot(m,V),0.),4.);
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
 c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr));
+c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv);
 float D=length(P-E),x=${FOG_RISE}*(P.y-E.y),z=step(L,-2.5);
 c.g=mix(c.g,c.r,z);
 o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z));}`;

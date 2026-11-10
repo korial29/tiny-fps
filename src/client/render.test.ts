@@ -91,8 +91,14 @@ describe('viewProj and project', () => {
 });
 
 describe('SPEC', () => {
-  it('has a row per texture layer, one for the flat bodies and one for polished metal', () => {
-    expect(SPEC).toHaveLength(LAYERS + 2);
+  it('has a row per texture layer, one for the flat bodies, one for polished metal, one for a glossy shell', () => {
+    expect(SPEC).toHaveLength(LAYERS + 3);
+  });
+
+  it('gives a glossy shell a broader highlight than polished metal, stronger than the flat bodies', () => {
+    const [k, e] = SPEC[LAYERS + 2];
+    expect(e).toBeLessThan(SPEC[LAYERS + 1][1]);
+    expect(k).toBeGreaterThan(SPEC[LAYERS][0] * 5);
   });
 
   it('gives polished metal a stronger, sharper highlight than the flat bodies and any texture but glass', () => {

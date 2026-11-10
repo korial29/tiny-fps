@@ -101,7 +101,11 @@ describe('the shoulder pads', () => {
         lod,
       );
       sound(v);
-      each(v, i => expect(v[i + 8]).toBe(GLOSS));
+      // Glossy but for the matte scratches close up.
+      each(v, i => expect([GLOSS, -1]).toContain(v[i + 8]));
+      expect(v.filter((_, i) => i % STRIDE == 8 && v[i] == GLOSS).length).toBeGreaterThan(
+        v.length / STRIDE / 2,
+      );
       const half = v.length / 2;
       // The first over the left shoulder, the second over the right, each near its joint.
       [J.ARM_L, J.ARM_R].forEach((j, n) => {

@@ -5,7 +5,7 @@
 // back); the hose is built each frame between the head and the chest, which move apart.
 import { TAU } from '../shared/physics';
 import { GLOW, glow } from './flag';
-import { cross, loft, pow, quad, shrunk, sub, unit } from './helmet';
+import { cross, loft, pow, quad, sheet, shrunk, sub, unit } from './helmet';
 import { GLOSS, STRIDE, aim, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
@@ -185,32 +185,40 @@ export const hose = (out: number[], head: Vec3, hq: Quat, chest: Vec3, cq: Quat,
     [p3[0] + i[0], p3[1] + i[1], p3[2] + i[2]],
     p3,
   ];
-  const B = (s: number): Vec3 => {
-    const m = [(1 - s) ** 3, 3 * s * (1 - s) ** 2, 3 * s * s * (1 - s), s ** 3];
-    return [0, 1, 2].map(k => P.reduce((v, pt, j) => v + pt[k] * m[j], 0)) as Vec3;
-  };
-  // Across it, kept steady by the chest's right.
+  // Rings along it, each square to it, kept steady by the chest's right; ribs close.
   const right = turn(cq, [1, 0, 0]);
   const ribs = D.steps > 20 ? Math.round(span / 0.018) : 0;
-  const r = (s: number) =>
+  const radius = (s: number) =>
     HOSE.r *
     (1 + (ribs ? 0.12 * Math.cos(s * TAU * ribs) ** 6 : 0) + 0.2 * Math.max(1 - s * 14, 0));
-  loft(
-    (t, s) => {
-      const c = B(s);
-      const tan = unit(sub(B(Math.min(s + 1e-3, 1)), B(Math.max(s - 1e-3, 0))));
-      const a = unit(cross(tan, right));
-      const b = cross(a, tan);
-      const [x, y] = [Math.cos(t * TAU) * r(s), Math.sin(t * TAU) * r(s)];
-      return [0, 1, 2].map(k => c[k] + a[k] * x + b[k] * y) as Vec3;
-    },
-    B,
-    D.hose,
-    Array.from({ length: D.steps + 1 }, (_, k) => k / D.steps),
-    [B(0), B(1)],
-    IRON,
-    out,
-  );
+  const rows: [Vec3, Vec3][][] = [];
+  for (let k = 0; k <= D.steps; k++) {
+    const s = k / D.steps;
+    const u = 1 - s;
+    const m = [u * u * u, 3 * s * u * u, 3 * s * s * u, s * s * s];
+    // The derivative of the Bezier: its way along.
+    const dm = [-3 * u * u, 3 * u * u - 6 * s * u, 6 * s * u - 3 * s * s, 3 * s * s];
+    const c = [0, 1, 2].map(j => P[0][j] * m[0] + P[1][j] * m[1] + P[2][j] * m[2] + P[3][j] * m[3]);
+    const tan = unit(
+      [0, 1, 2].map(
+        j => P[0][j] * dm[0] + P[1][j] * dm[1] + P[2][j] * dm[2] + P[3][j] * dm[3],
+      ) as Vec3,
+    );
+    const a = unit(cross(tan, right));
+    const b = cross(a, tan);
+    const r = radius(s);
+    rows.push(
+      Array.from({ length: D.hose }, (_, i) => {
+        const [cs, sn] = [Math.cos((i / D.hose) * TAU), Math.sin((i / D.hose) * TAU)];
+        const n: Vec3 = [a[0] * cs + b[0] * sn, a[1] * cs + b[1] * sn, a[2] * cs + b[2] * sn];
+        return [[c[0] + n[0] * r, c[1] + n[1] * r, c[2] + n[2] * r], n] as [Vec3, Vec3];
+      }),
+    );
+  }
+  // The ends, closed flat.
+  const t0 = unit(sub(P[1] as Vec3, P[0] as Vec3));
+  const t1 = unit(sub(P[3] as Vec3, P[2] as Vec3));
+  sheet([[[P[0] as Vec3, [-t0[0], -t0[1], -t0[2]]]], ...rows, [[P[3] as Vec3, t1]]], IRON, -1, out);
 };
 
 /**
@@ -307,10 +315,11 @@ const padOf = (lod: number) => {
       return corner(edge(t) * Math.cos(t), edge(t) * Math.sin(t), true);
     }),
   );
-  const build = (m: number) => {
+  const build = (m: number, strokes: C[][] = []) => {
     const out: number[] = [];
+    let layer = GLOSS;
     const put = ([p, n, c]: C) =>
-      out.push(p[0] * m, p[1], p[2], n[0] * m, n[1], n[2], c[0], c[1], GLOSS, c[2]);
+      out.push(p[0] * m, p[1], p[2], n[0] * m, n[1], n[2], c[0], c[1], layer, c[2]);
     const tri = (a: C, b: C, c: C) => {
       const f = cross(sub(b[0], a[0]), sub(c[0], a[0]));
       if (Math.hypot(...f) < 1e-12) {
@@ -328,9 +337,56 @@ const padOf = (lod: number) => {
         tri(prev[i], row[j], prev[j]);
       }
     });
+    layer = -1;
+    for (const q of strokes) {
+      tri(q[0], q[1], q[2]);
+      tri(q[0], q[2], q[3]);
+    }
     return out;
   };
-  v = [build(-1), build(1)];
+  // Close up, scratches: short matte strokes at random (the same each time), a hair over it.
+  if (grooved && cols > 20) {
+    let seed = 0x9ad;
+    const rand = () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let z = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      z = (z + Math.imul(z ^ (z >>> 7), 61 | z)) ^ z;
+      return ((z ^ (z >>> 14)) >>> 0) / 2 ** 32;
+    };
+    const worn = [
+      [0.46, 0.47, 0.5],
+      [0.62, 0.63, 0.66],
+    ];
+    const strokes: C[][] = [];
+    for (let n = 0; n < 30; n++) {
+      const [a, b] = [(rand() * 2 - 1) * Ra * 0.8, (rand() * 2 - 1) * Rb * 0.8];
+      if (norm(a, b) > 0.85 || a > PAD.cut * Ra - 0.01) {
+        continue;
+      }
+      const [t, len, w] = [rand() * Math.PI, 0.008 + rand() * 0.02, 0.0005 + rand() * 0.0006];
+      const [dx, dy] = [Math.cos(t), Math.sin(t)];
+      const col = worn[n % 2];
+      strokes.push(
+        [
+          [-0.5, -1],
+          [0.5, -1],
+          [0.5, 1],
+          [-0.5, 1],
+        ].map(([f, g]) => {
+          const [pa, pb] = [a + dx * len * f - dy * w * g, b + dy * len * f + dx * w * g];
+          const [p, nn] = corner(pa, pb);
+          return [
+            [p[0] + nn[0] * 0.0008, p[1] + nn[1] * 0.0008, p[2] + nn[2] * 0.0008],
+            nn,
+            col,
+          ] as C;
+        }),
+      );
+    }
+    v = [build(-1, strokes), build(1, strokes)];
+  } else {
+    v = [build(-1), build(1)];
+  }
   pads.set(level, v);
   return v;
 };
@@ -339,4 +395,60 @@ const padOf = (lod: number) => {
 export const shoulders = (out: number[], arms: [Vec3, Quat][], lod: number) => {
   const src = padOf(lod);
   arms.forEach(([at, q], i) => put(out, src[i], at, q));
+};
+
+/**
+ * The cup at the crotch of the briefs (the user, 2026-11-10, after a trooper's armour, not copied):
+ * a rounded shield narrowing down between the thighs, on the pelvis joint (0.98 m at rest). Its
+ * rings from the top down: [height from the joint, half width, front (z), back (z)].
+ */
+const CUP = [
+  [-0.035, 0.058, -0.139, -0.1],
+  [-0.06, 0.052, -0.137, -0.098],
+  [-0.085, 0.042, -0.131, -0.096],
+  [-0.106, 0.03, -0.122, -0.094],
+  [-0.124, 0.014, -0.11, -0.094],
+];
+
+const cups = new Map<number, number[]>();
+
+/** Appends the crotch cup at level of detail `lod` on the pelvis joint at `at` turned by `q`. */
+export const crotch = (out: number[], at: Vec3, q: Quat, lod: number) => {
+  const level = Math.min(lod, 2);
+  let v = cups.get(level);
+  if (!v) {
+    v = [];
+    const ring = (s: number) => {
+      const f = s * (CUP.length - 1);
+      const i = Math.min(Math.floor(f), CUP.length - 2);
+      const k = f - i;
+      return CUP[i].map((w, j) => w + (CUP[i + 1][j] - w) * k);
+    };
+    const rows = [6, 10, 16][level];
+    loft(
+      (t, s) => {
+        const [y, w, front, back] = ring(s);
+        const th = t * TAU;
+        const [zc, d] = [(front + back) / 2, (back - front) / 2];
+        return [w * pow(Math.sin(th), 2 / 3), y, zc - d * pow(Math.cos(th), 2 / 3)];
+      },
+      s => {
+        const [y, , front, back] = ring(s);
+        return [0, y, (front + back) / 2];
+      },
+      [8, 14, 22][level],
+      Array.from({ length: rows + 1 }, (_, i) => i / rows),
+      [
+        [0, CUP[0][0] + 0.003, (CUP[0][2] + CUP[0][3]) / 2],
+        [0, CUP[CUP.length - 1][0] - 0.004, (CUP[CUP.length - 1][2] + CUP[CUP.length - 1][3]) / 2],
+      ],
+      WHITE,
+      v,
+    );
+    for (let i = 8; i < v.length; i += STRIDE) {
+      v[i] = GLOSS;
+    }
+    cups.set(level, v);
+  }
+  put(out, v, at, q);
 };

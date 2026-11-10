@@ -32,7 +32,7 @@ It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](htt
 | `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~15.5 KB    |
 | `@korial29/tiny-fps/server` | Node WebSocket server (needs `ws`)                                     | Node only   |
 
-CI checks the budgets (110 KB and 24 KB) on every pull request.
+CI checks the budgets (120 KB and 24 KB) on every pull request.
 
 ## Live demo
 

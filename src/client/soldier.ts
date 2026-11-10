@@ -36,7 +36,7 @@ import {
 } from './gun';
 import { helmet } from './helmet';
 import { armor } from './armor';
-import { hose, pack, shoulders } from './pack';
+import { crotch, hose, pack, shoulders } from './pack';
 import { fetched, pouch, pouchAt } from './pouch';
 import type { Tracer } from './beams';
 import {
@@ -447,7 +447,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
     // The stump's face is the last vertex drawn.
     r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
     if (helmets) {
-      armor(out, at, cs);
+      armor(out, at, cs, lod > 2);
     }
     piece(out, r.cut, colors, lod, sink);
   } else {
@@ -466,7 +466,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
     );
     // The space suit's armour, cut out of the skin just drawn.
     if (helmets) {
-      armor(out, from, bs);
+      armor(out, from, bs, lod > 2);
     }
     pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
     if (k > 0) {
@@ -481,6 +481,7 @@ export const soldier = (out: number[], r: Runner, color: number[], lod = 1, helm
   // The life support pack on the back of a space suit.
   if (helmets) {
     pack(out, s.pos[J.CHEST], s.rot[J.CHEST], color, lod);
+    crotch(out, s.pos[J.PELVIS], s.rot[J.PELVIS], lod);
     shoulders(
       out,
       [J.ARM_L, J.ARM_R].map(j => [s.pos[j], s.rot[j]] as [Vec3, Quat]),

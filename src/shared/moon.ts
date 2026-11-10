@@ -39,6 +39,9 @@ const MASTS = [
   [103.2, 212.4],
 ];
 
+/** Red's flag: in the hall, 2 m from the dome's centre toward the door. */
+const FLAG = DOME[1] - 2;
+
 const c1 = (t: number) => Math.min(Math.max(t, 0), 1);
 const sm = (t: number) => c1(t) * c1(t) * (3 - 2 * c1(t));
 const far = (a: number, b: number) => Math.sqrt(a * a + b * b);
@@ -196,9 +199,10 @@ const half: Brush[] = [
   box(0, -30, 148, 160, 0, 280, STONE),
   // The base: the dome's ghosts, the modules, the tubes and their stairs.
   ...BASE,
-  // The flag's pad ahead of the dome: a red step of 0.5 m and a dais at 1 m.
-  box(74, 0, 199, 86, 0.5, 211, PAINT, CONCRETE, RED),
-  box(76, 0.5, 201, 84, 1, 209, PAINT, CONCRETE, RED),
+  // The flag's dais in the hall: a red step of 0.5 m and a dais at 1 m, ghosts as all in the hall,
+  // drawn by client/moonbase.ts (daises()), the zone's square of 8.4 m on top.
+  { ...box(75.25, 0, FLAG - 4.75, 84.75, 0.5, FLAG + 4.75, PAINT, CONCRETE, RED), ghost: true },
+  { ...box(75.75, 0.5, FLAG - 4.25, 84.25, 1, FLAG + 4.25, PAINT, CONCRETE, RED), ghost: true },
   // The armoury, a red plinth behind the dome: the racks stand on it.
   box(60, 0, 259, 70, 1.5, 265, STEEL, PAINT, RED),
   // The landing pad, a shuttle on it (cover), and masts at the pad's corners and by the tubes.
@@ -259,16 +263,16 @@ const racks = (z: number) =>
 const team = (z: number, s: Spawn[]) => ({
   base: [80, 1, z] as Vec3,
   spawns: s,
-  ...racks(z + (z > 140 ? 57 : -57)),
+  ...racks(z + (z > 140 ? 28 : -28)),
 });
 
 export const MOON: WorldDef = {
   name: 'Tranquility',
   brushes: [...half, ...half.map(flip), ...centre],
   teams: [
-    team(205, SPAWNS),
+    team(FLAG, SPAWNS),
     team(
-      ZED - 205,
+      ZED - FLAG,
       SPAWNS.map(([x, y, z]): Spawn => [x, y, ZED - z, Math.PI]),
     ),
   ],

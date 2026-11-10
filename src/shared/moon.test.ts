@@ -12,16 +12,18 @@ import {
   JUMP_SPEED,
   PLAYER_H,
   PLAYER_R,
+  RULES,
   RUN_SPEED,
   SPRINT_SPEED,
   STEP_H,
   TICK_HZ,
 } from './constants';
+import { Ctf } from './ctf';
 import { TEAM_TINT } from './map';
 import { LAYOUT, MOON, WEST_GAP, ZED } from './moon';
 import { move, spawn } from './physics';
 import { ground } from './relief';
-import { EV, KEY, MODE, TEX } from './types';
+import { EV, FLAG, KEY, MODE, TEAM, TEX } from './types';
 import { build, hidden, ray } from './world';
 import type { Brush, WorldDef } from './world';
 
@@ -230,7 +232,7 @@ describe('MOON, bases and spawns', () => {
     }
   });
 
-  it('stands each flag on a red or blue pad ahead of its dome, the ring and the pole clear', () => {
+  it("stands each flag on a red or blue dais in its dome's hall, the ring and the pole clear", () => {
     for (const [
       team,
       {
@@ -260,9 +262,44 @@ describe('MOON, bases and spawns', () => {
         ),
         `team ${team}: room`,
       ).toBe(false);
-      // The dome is behind it, 30 m from the pad's centre to the dome's centre.
-      expect(Math.abs(z - (team ? ZED - 236 : 236))).toBeCloseTo(31, 6);
+      // In the hall, 2 m from the dome's centre toward the door; a ghost, drawn indoors.
+      expect([x, z - (team ? ZED - 236 : 236)]).toEqual([80, team ? 2 : -2]);
+      expect(top!.ghost).toBe(true);
+      // Under the dome's roof: nothing between it and the sky but the dome.
+      expect(ray(world, [x, y + 1.5, z], [0, 1, 0], 100)).toBeLessThan(10);
     }
+  });
+
+  it("scores a capture in the hall: a red carrier walks in by the door to his flag's dais", () => {
+    const ctf = new Ctf(world, RULES);
+    const s = Sim.at(world).put(80, 1, ZED - 234);
+    const [bx, by, bz] = teams[1].spawns[0];
+    const b = Sim.at(world).put(bx, by, bz);
+    const runners = [
+      { id: 0, team: TEAM.RED, state: s.p },
+      { id: 1, team: TEAM.BLUE, state: b.p },
+    ];
+    runners.forEach(r => ctf.join(r.id, r.team, r.state));
+    ctf.tick(runners);
+    expect(ctf.flags[TEAM.BLUE].state).toBe(FLAG.CARRIED);
+    // Ahead of red's door, then in along the middle of the hall.
+    s.put(80, 0, 205, SOUTH);
+    let at = 0;
+    const steps = s.until(
+      p => {
+        ctf.tick(runners);
+        at ||= ctf.score[TEAM.RED] && p.z;
+        return at > 0;
+      },
+      KEY.FORWARD,
+      p => toward(p.x, p.z, 80, 234),
+    );
+    expect(steps).toBeGreaterThan(0);
+    expect(ctf.score).toEqual([1, 0]);
+    expect(ctf.flags.map(f => f.state)).toEqual([FLAG.HOME, FLAG.HOME]);
+    // Scored on the dais, past the door (z 216.2), not outside.
+    expect(at).toBeGreaterThan(234 - FLAG_REACH - 0.2);
+    expect(s.p.y).toBeCloseTo(1, 3);
   });
 });
 

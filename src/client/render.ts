@@ -16,6 +16,7 @@ import { base, flag, teamRgb } from './flag';
 import type { CtfScene } from './flag';
 import { SHINE, STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
+import { furnishing } from './moonbase';
 import { moonscape } from './moonscape';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
@@ -413,7 +414,13 @@ export const city = (world: World): World => ({
 /** All the map's vertices, drawn once: the city (on the moon, its scenery instead), the brushes, the street under them, the parks' trees, the runner's red and the team zones. */
 export const scenery = (world: World): number[] =>
   world.def.scenery === 'moon'
-    ? [...level(world), ...moonscape(world.def), ...vision(world.def), ...zones(world.def)]
+    ? [
+        ...level(world),
+        ...moonscape(world.def),
+        ...furnishing(world.def, palette(world).map(String)),
+        ...vision(world.def),
+        ...zones(world.def),
+      ]
     : [
         ...level(city(world)),
         ...street(world.def),

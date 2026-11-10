@@ -35,16 +35,16 @@ const smooth = (a: number, b: number, x: number) => {
 };
 
 /**
- * The chest plate's pecs (the user, 2026-11-10: fuller toward the bottom): a lobe each side of the
- * sternum, rising sharply from the line under the pecs, fullest just above it, fading to the
- * collar; `PEC` metres at most.
+ * The chest plate's pecs (the user, 2026-11-10: fuller toward the bottom, then the round part too
+ * low, flattened): a lobe each side of the sternum, high on the chest, rising from the line under
+ * the pecs and fading to the collar, the plate flat below; `PEC` metres at most.
  */
-export const PEC = 0.017;
+export const PEC = 0.011;
 const pecs = (x: number, y: number) =>
   PEC *
-  Math.exp(-(((Math.abs(x) - 0.072) / 0.058) ** 2)) *
-  smooth(1.245, 1.285, y) *
-  (1 - smooth(1.36, 1.46, y));
+  Math.exp(-(((Math.abs(x) - 0.072) / 0.06) ** 2)) *
+  smooth(1.3, 1.36, y) *
+  (1 - smooth(1.41, 1.48, y));
 
 /** The gap the user asked between the chest plate and the belly's plates, and between those. */
 export const GAP = 0.02;

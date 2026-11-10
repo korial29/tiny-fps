@@ -48,14 +48,30 @@ const sm = (t: number) => c1(t) * c1(t) * (3 - 2 * c1(t));
 const far = (a: number, b: number) => Math.sqrt(a * a + b * b);
 
 // The relief's pieces, x and the distance from the centre line (so blue's half is red's mirror).
-/** Craters, x, z, radius: a bowl 0.19 of the radius deep under a rim 0.06 of it high, flat for 4 m. The first is the Bowl. */
+/**
+ * Craters, x, z, radius and how deep as a share of the radius: a bowl under a rim, both wandering
+ * with the bearing (the rim is 0.03 to 0.075 of the radius high and up to 10 % nearer or further),
+ * flat for 4 m. With a fifth number, a pit's crater: a level terrace out to that share of the
+ * radius (22 m and more), then one wall up to the rim; the pit is cut in the terrace (PITS). The
+ * first is the Bowl; the small ones by a big one's rim are its secondaries.
+ */
 const BOWLS = [
-  [-100, 0, 46],
-  [20, 215, 22],
+  [-100, 0, 46, 0.13, 0.52],
+  [-4, 224, 36, 0.12, 0.67],
   [110, 236, 16],
   [-112, 108, 14],
   [236, 170, 13],
-  [-28, 228, 12],
+  [-52, 230, 10],
+  [80, 184, 14],
+  [150, 250, 13],
+  [-36, 168, 10],
+  [200, 152, 12],
+  [262, 134, 14],
+  [240, 150, 9],
+  [-140, 60, 12],
+  [-66, 60, 9],
+  [40, 262, 10],
+  [118, 200, 11],
 ];
 /** Jump ramps, where the rise starts and the unit way up: 16 m long, 5.6 m high (19 degrees), 12 m wide, the lip flat for 4 m (no knife edge under a rover). */
 const RAMPS = [
@@ -170,7 +186,7 @@ const DISHES = [
   [173, 346],
   [186, 347],
 ];
-const WRECK = [BOWLS[0][0], ZED / 2];
+const WRECK = [BOWLS[0][0] - 4.5, ZED / 2];
 /** Boulders in the arena's field, red's (x, z, width, depth, height): drawn as rocks round their box. */
 const STONES = [
   [4, 172, 4, 4, 2.2],
@@ -201,6 +217,25 @@ const BOULDERS = Array.from({ length: 36 }, (_, i) => {
     }),
 );
 
+/** What the craters dig and raise at (x, z from the centre line), and how far in a pit's crater it is (1 on its terrace, 0 well clear): the hills fade out there. */
+const bowls = (x: number, z: number) => {
+  let [h, m] = [0, 0];
+  for (const [cx, cz, r, k = 0.17, flat = 0] of BOWLS) {
+    const d = far(x - cx, z - cz);
+    // The bearing, as a point on a circle: the noises of the rim's radius and height turn with it.
+    const [ux, uz] = d ? [(x - cx) / d, (z - cz) / d] : [1, 0];
+    const q = (d / r) * (0.9 + 0.2 * noise(2.5 * ux + 0.37 * cx, 2.5 * uz + 0.21 * cz, 9));
+    const rim = 0.03 + 0.045 * noise(4 * ux - 0.1 * cz, 4 * uz + 0.1 * cx, 10);
+    // The rim is flat for 4 m: a rover's belly clears it.
+    const s = 1 - c1((q - 1 - 4 / r) / 0.6);
+    const wall = flat ? (k + rim) * c1((q - flat) / (1 - flat)) - k : (k + rim) * q * q - k;
+    h += r * (q < 1 ? wall : rim * s * s);
+    // A pit's crater has no hills on its terrace (the pit's brushes stand level with it) and few round it.
+    m = Math.max(m, flat ? c1((1.6 - q) / (1.5 - flat)) : 0);
+  }
+  return [h, m];
+};
+
 /**
  * How much of a mound's height there is at x, across it: all of it for 4 m each side of its
  * middle cx, none 8 m further, and none over the spurs that close the rille's east end. Straight
@@ -224,6 +259,7 @@ const at = (x: number, z: number): number => {
   z = Math.abs(z - ZED / 2);
   const k = far((x - 80) / 300, z / 360);
   const t = Math.max((k - 0.78) / 0.22, 0);
+  const dug = bowls(x, z);
   // How far out of the arena (under 0: in it).
   const out = Math.max(Math.abs(x - 80) - 80, z - 140);
   let h =
@@ -257,12 +293,7 @@ const at = (x: number, z: number): number => {
     // No relief in the rille: its nodes are the lips'.
     h = z < 8 ? 0 : h;
   }
-  for (const [cx, cz, r] of BOWLS) {
-    const q = far(x - cx, z - cz) / r;
-    // The rim is flat for 4 m: a rover's belly clears it.
-    const s = 1 - c1((q - 1 - 4 / r) / 0.6);
-    h += r * (q < 1 ? 0.25 * q * q - 0.19 : 0.06 * s * s);
-  }
+  h = (out < 0 ? h : h * (1 - dug[1])) + dug[0];
   for (const [rx, rz, ax, az] of RAMPS) {
     const [p, q] = [x - rx, z - rz];
     const a = p * ax + q * az;
@@ -440,6 +471,60 @@ const ghosts = (l: { parts: number[][] }[]): Brush[] =>
     .flatMap(c => c.parts)
     .map(([x0, y0, z0, x1, y1, z1]) => ({ ...box(x0, y0, z0, x1, y1, z1, STONE), ghost: true }));
 
+/** A pit: PIT_R in radius, cut in a square of half side PIT_S of its crater's terrace, its floor at PIT_FLOOR, 7 m over the kill floor; a flight of PIT_STEPS steps up its east wall. */
+export const [PIT_R, PIT_S, PIT_FLOOR, PIT_STEPS] = [9, 12, -19, 7];
+/**
+ * The pits of red's side and of the centre line (the Bowl's): the middle, the terrace's level and
+ * the rows, a metre of z each: z0, z1 and how far the void goes west and east of the middle. A
+ * circle that wanders by 12 % with z, the same north and south of the middle, rounded up to half
+ * a metre: the void is never narrower than the outline the scenery draws.
+ */
+const PITS = BOWLS.filter(b => b[4]).map(([x, zf], n) => {
+  const z = ZED / 2 + zf;
+  const rows = Array.from({ length: 2 * PIT_R }, (_, i) => {
+    const dz = Math.abs(i + 0.5 - PIT_R);
+    const half = Math.sqrt(PIT_R * PIT_R - dz * dz);
+    const w = (side: number) =>
+      Math.ceil(2 * half * (0.88 + 0.24 * noise(dz / 4, side + 0.5, 60 + n))) / 2;
+    return [z - PIT_R + i, z - PIT_R + i + 1, w(0), w(1)];
+  });
+  return { x, z, level: at(x, z), rows };
+});
+/** What a pit collides with: its square of terrace in pieces round the void (two caps and, for each run of rows of one width, a box each side), its floor, and the steps: each as high again as a body jumps at half gravity, 1.3 m deep, up to the terrace at the east wall. */
+const pit = ({ x, z, level, rows }: (typeof PITS)[0]): Brush[] => {
+  const runs = rows.reduce<number[][]>((l, [z0, z1, a, b]) => {
+    const last = l.at(-1);
+    if (last && last[2] === a && last[3] === b) {
+      last[1] = z1;
+    } else {
+      l.push([z0, z1, a, b]);
+    }
+    return l;
+  }, []);
+  const east = rows[PIT_R][3];
+  const rise = (level - PIT_FLOOR) / PIT_STEPS;
+  return [
+    box(x - PIT_S, -30, z - PIT_S, x + PIT_S, level, z - PIT_R, STONE),
+    box(x - PIT_S, -30, z + PIT_R, x + PIT_S, level, z + PIT_S, STONE),
+    ...runs.flatMap(([z0, z1, a, b]) => [
+      box(x - PIT_S, -30, z0, x - a, level, z1, STONE),
+      box(x + b, -30, z0, x + PIT_S, level, z1, STONE),
+    ]),
+    box(x - PIT_R - 1.5, -30, z - PIT_R, x + PIT_R + 1.5, PIT_FLOOR, z + PIT_R, STONE),
+    ...Array.from({ length: PIT_STEPS - 1 }, (_, k) =>
+      box(
+        x + east - 1.3 * (PIT_STEPS - 1 - k),
+        PIT_FLOOR,
+        z - 1,
+        x + east - 1.3 * (PIT_STEPS - 2 - k),
+        PIT_FLOOR + rise * (k + 1),
+        z + 1,
+        STONE,
+      ),
+    ),
+  ].map(b => ({ ...b, ghost: true }));
+};
+
 /** The ghost under a drawn rock or mast: a box of half side s from under the ground to h above it. */
 const lump = (x: number, z: number, s: number, h: number): Brush => ({
   ...box(x - s, at(x, z) - 6, z - s, x + s, at(x, z) + h, z + s, STONE),
@@ -455,7 +540,24 @@ export const LAYOUT = {
     (z ? [1, -1] : [1]).map(m => [x + 16 * ax, ZED / 2 + m * (z + 16 * az), ax, m * az + 0]),
   ),
   wreck: WRECK,
+  /** The pits, both sides: the middle, the terrace's level and the rows (z0, z1, the void's reach west and east). */
+  pits: PITS.flatMap(p =>
+    p.z === ZED / 2
+      ? [p]
+      : [
+          p,
+          {
+            ...p,
+            z: ZED - p.z,
+            rows: p.rows.map(([z0, z1, a, b]) => [ZED - z1, ZED - z0, a, b]).reverse(),
+          },
+        ],
+  ),
   /** Red's boulders along its walls and the field's stones; blue's are their mirrors, drawn by the scenery's flip. */
+  /** The craters of the relief, both sides: x, z, radius, depth as a share of it. */
+  bowls: BOWLS.flatMap(([x, z, r, k = 0.17]) =>
+    (z ? [1, -1] : [1]).map(m => [x, ZED / 2 + m * z, r, k]),
+  ),
   boulders: BOULDERS,
   /** Red's rocks, in the arena and in the boulder field: blue's are their mirrors. */
   crags: CRAGS,
@@ -536,6 +638,8 @@ const half: Brush[] = [
   box(12, -30, 148 - (16 - WEST_GAP) / 2, 24, 0, 148, PAINT, STONE, [1, 0.42, 0.08]),
   // The field's stones, the boulders along the walls and, out on the relief, the boulder field:
   // each two or three boxes, drawn as one rock by the scenery.
+  // The pit of this side's deep crater.
+  ...PITS.filter(p => p.z !== ZED / 2).flatMap(pit),
   ...ghosts(CRAGS.arena),
   ...ghosts(CRAGS.field),
   ...DISHES.map(([x, z]) => lump(x, z, 0.4, 6)),
@@ -553,7 +657,20 @@ const centre: Brush[] = [
   { ...box(-10, -30, 132, 0, 0, 148, STONE), ghost: true },
   { ...box(160, -30, 132, 170, 0, 148, STONE), ghost: true },
   // The wrecked lander's hull, wide enough to take in its beacon's mast (3.4 m west, 2.6 m south).
-  lump(WRECK[0], WRECK[1], 3.6, 3.5),
+  {
+    ...box(
+      WRECK[0] - 3.6,
+      -30,
+      WRECK[1] - 3.6,
+      WRECK[0] + 3.6,
+      PIT_FLOOR + 3.5,
+      WRECK[1] + 3.6,
+      STONE,
+    ),
+    ghost: true,
+  },
+  // The Bowl's pit, the same north and south of the line.
+  ...PITS.filter(p => p.z === ZED / 2).flatMap(pit),
   // The orange lamps each side of a ramp's lip.
   ...LAYOUT.ramps.flatMap(([x, z, ax, az]) =>
     [-8, 8].map(c => lump(x + c * az, z - c * ax, 0.2, 2.2)),
@@ -614,18 +731,25 @@ export const MOON: WorldDef = {
     ],
     [80, 0, 140],
   ),
-  floor: -20,
+  // Under the pits' floors (PIT_FLOOR) and over the rille's bottom.
+  floor: -26,
   // The crater floor, out to an ellipse of 600 by 720 m nobody crosses: none in the rille and the notches of its lips.
   relief: {
     hole: [0, 132, 160, 148],
-    pits: RUNS.flatMap(([x, w, n]): [number, number, number, number][] =>
-      n > 0
-        ? [
-            [x, 148, x + w, 148 + n],
-            [x, 132 - n, x + w, 132],
-          ]
-        : [],
-    ),
+    pits: [
+      ...RUNS.flatMap(([x, w, n]): [number, number, number, number][] =>
+        n > 0
+          ? [
+              [x, 148, x + w, 148 + n],
+              [x, 132 - n, x + w, 132],
+            ]
+          : [],
+      ),
+      // The pits' voids, a row at a time.
+      ...LAYOUT.pits.flatMap(({ x, rows }) =>
+        rows.map(([z0, z1, a, b]): [number, number, number, number] => [x - a, z0, x + b, z1]),
+      ),
+    ],
     bound: [80, ZED / 2, 300, 360],
     cell: 4,
     at,

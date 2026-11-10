@@ -4,7 +4,7 @@
 // under each piece a player can reach. Every part is lit paint
 // (layer -1) or glow (layer -2: windows, lamps, stars, the Earth), but the relief and the small
 // craters on the floor, in the floor's own stone, and the boulders, in basalt (TEX.ROCK).
-import { LAYOUT, LIP, rockOf } from '../shared/moon';
+import { LAYOUT, LIP, PIT_FLOOR, PIT_R, PIT_S, PIT_STEPS, rockOf } from '../shared/moon';
 import { TAU } from '../shared/physics';
 import { ground, raise } from '../shared/relief';
 import { TEX } from '../shared/types';
@@ -603,7 +603,7 @@ const bare = ({ brushes }: WorldDef, x: number, z: number, r: number) =>
   });
 
 /**
- * Small craters on the floor, 60 of 1.2 to 5 m wide, where it is level and nothing stands: a shallow bowl
+ * Small craters on the floor, 72 of 1.2 to 5 m wide, where it is level and nothing stands: a shallow bowl
  * darker than the floor and a raised lip, in its stone texture, the slopes' normals steepened
  * so the sun lights one side of the lip and shades the other, and none within 6 m of where a rover
  * is parked. They are not collided with.
@@ -617,7 +617,7 @@ const craters = (o: number[], def: WorldDef) => {
     Array.from({ length: 17 }, (_, k) => (k * TAU) / 16).every(
       (a, k) => ground(land, x + (k ? r * Math.cos(a) : 0), z + (k ? r * Math.sin(a) : 0)) === 0,
     );
-  for (let k = 0, n = 0; n < 60 && k < 900; k++) {
+  for (let k = 0, n = 0; n < 72 && k < 900; k++) {
     const [x, z, r] = [W * hash(k, 1, 61), Z * hash(k, 2, 61), 0.6 + 2 * hash(k, 3, 61) ** 2];
     if (
       !bare(def, x, z, 1.5 * r) ||
@@ -630,7 +630,12 @@ const craters = (o: number[], def: WorldDef) => {
     }
     n++;
     const at = (i: number, j: number) => {
-      const [f, y, l] = BOWL[i];
+      // A rim that is no ring: each bearing a hash nearer or further, its lip higher or lower.
+      const [f0, y0, l] = BOWL[i];
+      const [f, y] = [
+        f0 * (i && i < 4 ? 0.86 + 0.28 * hash(k, j % N, 67) : 1),
+        i === 2 || i === 3 ? y0 * (0.55 + 0.45 * hash(k, j % N, 68)) : y0,
+      ];
       const a = (j * TAU) / N;
       const [c, d] = [Math.cos(a), Math.sin(a)];
       const [p, q] = [BOWL[Math.max(i - 1, 0)], BOWL[Math.min(i + 1, BOWL.length - 1)]];
@@ -675,6 +680,16 @@ const terrain = (o: number[], def: WorldDef) => {
       ? def.relief!.at(x, z)
       : r.h[i + j * r.nx];
   };
+  /** What a crater threw out, lighter: rays from its rim to 2.4 times its radius, a few on each, fading out. */
+  const rays = (x: number, z: number) =>
+    LAYOUT.bowls.reduce((t, [bx, bz, br]) => {
+      const d = Math.hypot(x - bx, z - bz);
+      const q = d / br;
+      const ray = noise(5 * ((x - bx) / d) + bx, 5 * ((z - bz) / d) + bz, 19);
+      return q > 1.05 && q < 2.4
+        ? t + 0.22 * sm((ray - 0.55) * 5) * sm((2.4 - q) / 0.9) * sm((q - 1.05) * 6)
+        : t;
+    }, 0);
   const seen = new Map<number, number[]>();
   const vert = (x: number, z: number) => {
     const k = x * 4096 + z;
@@ -682,7 +697,7 @@ const terrain = (o: number[], def: WorldDef) => {
     if (!v) {
       const h = y(x, z);
       const n = unit([y(x - 4, z) - y(x + 4, z), 8, y(x, z - 4) - y(x, z + 4)]);
-      v = [x, h, z, ...n, x, z, TEX.STONE, Math.min(Math.max(1 + h / 60, 0.78), 1.2)];
+      v = [x, h, z, ...n, x, z, TEX.STONE, Math.min(Math.max(1 + h / 60, 0.78), 1.2) + rays(x, z)];
       seen.set(k, v);
     }
     return v;
@@ -707,7 +722,13 @@ const terrain = (o: number[], def: WorldDef) => {
         for (let x = x0; x < x1; x += r.cell) {
           for (let z = z0; z < z1; z += r.cell) {
             // Not the rille, nor the 8 m behind each lip: ravine() draws the ground up to the rim.
-            if (x >= r.hole[0] && x < r.hole[2] && z >= r.hole[1] - 8 && z < r.hole[3] + 8) {
+            if (
+              (x >= r.hole[0] && x < r.hole[2] && z >= r.hole[1] - 8 && z < r.hole[3] + 8) ||
+              // Nor a pit's square of terrace: pits() draws it round the void.
+              LAYOUT.pits.some(
+                p => x >= p.x - PIT_S && x < p.x + PIT_S && z >= p.z - PIT_S && z < p.z + PIT_S,
+              )
+            ) {
               continue;
             }
             const [p, q, s, t] = [
@@ -902,9 +923,184 @@ const ravine = (o: number[], def: WorldDef) => {
   }
 };
 
+/**
+ * The three pits, drawn round their voids: the square of terrace cut in the lattice, darker toward
+ * the edge so a driver sees it coming, out to an outline through the rows of shared/moon.ts (at
+ * each metre the narrower of the two rows: the ground drawn reaches every brush's edge); the wall
+ * under it in basalt, pushed in and out by a hash, darker with depth; the floor; the steps of the
+ * way out, a rock on each box; blocks round the edge.
+ */
+const pits = (o: number[]) => {
+  for (const [n, { x, z, level, rows }] of LAYOUT.pits.entries()) {
+    const w = (k: number, side: number) => rows[k]?.[2 + side] ?? 0;
+    // The outline at each row's edge, west then east: x from the middle.
+    const rim = Array.from({ length: rows.length + 1 }, (_, k) => [
+      rows[0][0] + k,
+      -Math.min(w(k - 1, 0), w(k, 0)),
+      Math.min(w(k - 1, 1), w(k, 1)),
+    ]);
+    // Darker within 3 m of the void.
+    const top = (u: number, v: number) => [
+      u,
+      level,
+      v,
+      0,
+      1,
+      0,
+      u,
+      v,
+      TEX.STONE,
+      0.6 + 0.4 * sm((Math.hypot(u - x, v - z) - PIT_R) / 3),
+    ];
+    const quad = (a: number[], b: number[], c: number[], d: number[]) =>
+      o.push(...a, ...c, ...b, ...a, ...d, ...c);
+    for (const [z0, z1] of [
+      [z - PIT_S, z - PIT_R],
+      [z + PIT_R, z + PIT_S],
+    ]) {
+      // In strips of 2 m, so the tone follows the void's round edge.
+      for (let u = x - PIT_S; u < x + PIT_S; u += 2) {
+        quad(top(u, z0), top(u + 2, z0), top(u + 2, z1), top(u, z1));
+      }
+    }
+    for (let k = 0; k < rim.length - 1; k++) {
+      const [[z0, a0, b0], [z1, a1, b1]] = [rim[k], rim[k + 1]];
+      quad(top(x - PIT_S, z0), top(x + a0, z0), top(x + a1, z1), top(x - PIT_S, z1));
+      quad(top(x + b0, z0), top(x + PIT_S, z0), top(x + PIT_S, z1), top(x + b1, z1));
+      // The walls, down to the floor in four courses.
+      for (const side of [1, 2]) {
+        const ys = [level, level - 0.6, level - 5, level - 10, PIT_FLOOR];
+        const at = (row: number[], j: number): Vec3 => [
+          x +
+            row[side] +
+            (side > 1 ? -1 : 1) * (j && j < 4 ? 0.9 * hash(row[0], j, 83 + side) - 0.25 : 0),
+          ys[j],
+          row[0],
+        ];
+        for (let j = 0; j < 4; j++) {
+          const f = [at(rim[k], j), at(rim[k + 1], j), at(rim[k + 1], j + 1), at(rim[k], j + 1)];
+          const out: Vec3 = [x + (side > 1 ? 99 : -99), ys[j], z];
+          const from = o.length;
+          facet(o, [f[0], f[1], f[2]], out, PIT_FLOOR - 12, level, n + j, 1.2);
+          facet(o, [f[0], f[2], f[3]], out, PIT_FLOOR - 12, level, n + j, 1.2);
+          // No sun reaches down here: the normals lean up to the sky, or the walls are black.
+          for (let i = from + 3; i < o.length; i += 10) {
+            const up = unit([o[i], o[i + 1] + 0.9, o[i + 2]]);
+            [o[i], o[i + 1], o[i + 2]] = up;
+          }
+        }
+      }
+    }
+    const floor = (u: number, v: number) => [u, PIT_FLOOR, v, 0, 1, 0, u, v, TEX.STONE, 0.5];
+    quad(
+      floor(x - PIT_R - 1.5, z - PIT_R),
+      floor(x + PIT_R + 1.5, z - PIT_R),
+      floor(x + PIT_R + 1.5, z + PIT_R),
+      floor(x - PIT_R - 1.5, z + PIT_R),
+    );
+    // The steps: as shared/moon.ts stacks them against the east wall.
+    const east = rows[PIT_R][3];
+    const rise = (level - PIT_FLOOR) / PIT_STEPS;
+    for (let k = 0; k < PIT_STEPS - 1; k++) {
+      const x0 = x + east - 1.3 * (PIT_STEPS - 1 - k);
+      boulder(
+        o,
+        [[x0, PIT_FLOOR - 1, z - 1, x0 + 1.3, PIT_FLOOR + rise * (k + 1), z + 1]],
+        PIT_FLOOR,
+        n * 9 + k,
+        2,
+        0.9,
+      );
+    }
+    // Blocks round the edge, a metre back from it.
+    for (let k = 0; k < 20; k++) {
+      const t = (TAU * (k + hash(n, k, 85))) / 20;
+      const [u, v, r] = [
+        x + (PIT_R + 1.6) * Math.cos(t),
+        z + (PIT_R + 1.6) * Math.sin(t),
+        0.3 + 0.35 * hash(n, k, 86),
+      ];
+      boulder(
+        o,
+        [[u - r, level - 0.3, v - r, u + r, level + 0.9 * r, v + r]],
+        level,
+        n * 40 + k,
+        1,
+        0.9,
+      );
+    }
+  }
+};
+
+/**
+ * A band of detail on the rim of each crater of 12 m and more, laid on the relief and 4 to 25 cm
+ * proud of it (the lattice's 4 m squares cannot carry an outline): five rings 1.2 m apart round
+ * the crest, found on each bearing as the highest ground, a point every 1.5 m. The crest ring is
+ * raised by a hash and light, the inner one dark and streaked (gullies), the outer ones fade into
+ * the ground's own tone: from above the rim reads as a broken ring.
+ */
+const rims = (o: number[], def: WorldDef) => {
+  const { at } = def.relief!;
+  const land = { relief: raise(def.relief!) } as World;
+  LAYOUT.bowls.forEach(([bx, bz, br], n) => {
+    const count = br < 12 ? 0 : Math.round((TAU * br) / 1.5);
+    // The crest on each bearing, then eased over five: a flat rim's highest point jumps about.
+    const found = Array.from({ length: count }, (_, i) => {
+      const [c, s] = [Math.cos((TAU * i) / count), Math.sin((TAU * i) / count)];
+      let [crest, high] = [br, -Infinity];
+      for (let d = 0.8 * br; d < 1.3 * br; d += 0.5) {
+        const h = at(bx + c * d, bz + s * d);
+        [crest, high] = h > high ? [d, h] : [crest, high];
+      }
+      return crest;
+    });
+    const ring = Array.from({ length: count }, (_, i) => {
+      const [c, s] = [Math.cos((TAU * i) / count), Math.sin((TAU * i) / count)];
+      const crest = [-2, -1, 0, 1, 2].reduce((t, d) => t + found[(i + d + count) % count], 0) / 5;
+      const broken = hash(i, n, 87);
+      return [-2.4, -1.2, 0, 1.2, 2.4].map((d, k) => {
+        const [x, z] = [bx + c * (crest + d), bz + s * (crest + d)];
+        const up = [0.04, 0.12, 0.1 + 0.15 * broken, 0.1, 0.04][k];
+        const tone = [0.62 + 0.3 * hash(i >> 1, n, 88), 0.9, 1.22 + 0.2 * broken, 1.1, 1][k];
+        return [x, ground(land, x, z) + up, z, 0, 1, 0, x, z, TEX.STONE, tone];
+      });
+    });
+    ring.forEach((a, i) => {
+      const b = ring[(i + 1) % count];
+      for (let k = 0; k < 4; k++) {
+        // Not over a pit or the rille.
+        if ([a[k], a[k + 1], b[k], b[k + 1]].every(v => Number.isFinite(v[1]))) {
+          o.push(...a[k], ...b[k + 1], ...b[k], ...a[k], ...a[k + 1], ...b[k + 1]);
+        }
+      }
+    });
+  });
+};
+
 /** What stands on the relief, on the map's LAYOUT: the boulder field, the dishes on their hill, an orange lamp each side of a ramp's lip, the wrecked lander in the Bowl, and boulders up the crater wall past the bound. */
 const sites = (o: number[], def: WorldDef) => {
   const { at } = def.relief!;
+  // Round each crater 12 m in radius and more: stones on its crest, where it broke, and the
+  // blocks it threw out, fewer the further from it; none in the arena.
+  LAYOUT.bowls.forEach(([bx, bz, br], i) => {
+    for (let k = 0; br >= 12 && k < Math.round(br / 3.5); k++) {
+      const h = (j: number) => hash(i, 7 * k + j, 57);
+      // Two in five on the crest, the rest out to 2.6 times the radius, thinning.
+      const q = k % 5 < 2 ? 0.96 + 0.16 * h(1) : 1.25 + 1.35 * h(1) * h(1);
+      const [u, v] = [bx + q * br * Math.cos(TAU * h(2)), bz + q * br * Math.sin(TAU * h(2))];
+      const r = (0.3 + 0.5 * h(3)) * (br > 30 ? 1.5 : 1);
+      if (Math.abs(u - C[0]) > C[0] + 2 || Math.abs(v - C[2]) > C[2] + 2) {
+        boulder(
+          o,
+          [[u - r, at(u, v) - 0.4, v - r, u + r, at(u, v) + 0.8 * r, v + r]],
+          at(u, v),
+          i * 31 + k,
+          1,
+          0.85 + 0.3 * h(4),
+        );
+      }
+    }
+  });
   // The dishes look at the Earth.
   const side = unit(cross([0, 1, 0], EARTH));
   const frame = [side, cross(EARTH, side), EARTH];
@@ -918,8 +1114,9 @@ const sites = (o: number[], def: WorldDef) => {
     }
   }
   // The lander: its hull nose down in the regolith, a torn fin, a beacon still lit.
+  // On the floor of the Bowl's pit.
   const [x, z] = LAYOUT.wreck;
-  const h = at(x, z);
+  const h = PIT_FLOOR;
   const nose = unit([0.8, -0.35, 0.5]);
   const wing = unit(cross([0, 1, 0], nose));
   place(
@@ -1031,6 +1228,8 @@ export const moonscape = (def: WorldDef): number[] => {
   craters(o, def);
   if (def.relief) {
     apron(o, def);
+    pits(o);
+    rims(o, def);
     terrain(o, def);
     sites(o, def);
   }

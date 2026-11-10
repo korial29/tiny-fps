@@ -107,6 +107,12 @@ describe('input frame', () => {
     }
   });
 
+  it('carries USE in bit 14 and drops bit 15', () => {
+    const back = decodeInput(encodeInput({ seq: 1, keys: 0xffff, yaw: 0, pitch: 0 }))!;
+    expect(back.keys).toBe(0x7fff);
+    expect(back.keys & KEY.USE).toBe(KEY.USE);
+  });
+
   it('folds yaw into [0, 2π), negative ones included', () => {
     for (const yaw of [-0.5, -7, 2 * Math.PI, 9, -1e-9]) {
       const back = decodeInput(encodeInput({ seq: 0, keys: 0, yaw, pitch: 0 }))!;
@@ -530,9 +536,9 @@ describe('snapshot frame', () => {
     expect(MAX_PLAYERS).toBeLessThanOrEqual(16);
     expect(Object.keys(MODE).length).toBeLessThanOrEqual(8);
     expect(Object.keys(SIDE).length).toBeLessThanOrEqual(8);
-    // A slide, a wall-run and a climb end long before t saturates, and the key bits are fourteen.
+    // A slide, a wall-run and a climb end long before t saturates, and the key bits are fifteen.
     expect(SLIDE_TICKS).toBeLessThan(255);
-    expect(Math.max(...Object.values(KEY))).toBeLessThanOrEqual(0x2000);
+    expect(Math.max(...Object.values(KEY))).toBeLessThanOrEqual(0x4000);
     // The rifle's rounds plus one, its cell and its cooldown (the gun's 3 bits).
     expect(Math.max(RIFLE_MAX + 1, RIFLE_CLIP, RIFLE_RELOAD)).toBeLessThanOrEqual(255);
     expect(RIFLE_COOL).toBeLessThanOrEqual(7);

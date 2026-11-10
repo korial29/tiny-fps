@@ -2,6 +2,9 @@
 // are box tops, walls box sides; boxes may float, so platforms, overhangs and ledges are free.
 // No DOM, no Node API.
 
+import { raise, trace } from './relief';
+import type { Relief, ReliefDef } from './relief';
+
 type Vec3 = [number, number, number];
 
 /** One solid box. */
@@ -63,6 +66,10 @@ export interface WorldDef {
   scenery?: 'city' | 'moon';
   /** Whether the runners wear space helmets. */
   helmets?: boolean;
+  /** Ground that is not flat (relief.ts), round the brushes: the moon's crater floor. Absent: none. */
+  relief?: ReliefDef;
+  /** Where the rovers (rover.ts) are parked, each as a spawn: the middle of its wheels on the ground and the yaw of its nose. Absent: none. */
+  rovers?: Spawn[];
 }
 
 /** A world ready for physics and drawing: the definition and a grid of brushes on the floor plane. */
@@ -72,6 +79,8 @@ export interface World {
   cell: number;
   /** Cell key (see key()) to the indices of the brushes overlapping it. */
   grid: Map<number, number[]>;
+  /** The lattice of WorldDef.relief. */
+  relief?: Relief;
 }
 
 /** Metres per grid cell: about the size of the player's reach, so a query touches 1 to 4 cells. */
@@ -102,7 +111,7 @@ export const build = (def: WorldDef, cell = CELL): World => {
       }
     }
   });
-  return { def, cell, grid };
+  return def.relief ? { def, cell, grid, relief: raise(def.relief) } : { def, cell, grid };
 };
 
 /**
@@ -124,16 +133,24 @@ export const near = (w: World, x: number, z: number, r: number): number[] => {
 };
 
 /**
- * Distance along the ray from o in the unit direction d to the first brush face, at most max. A ray
- * that starts inside a brush hits at 0; one that starts on a face and moves away from it does not hit it.
+ * Distance along the ray from o in the unit direction d to the first brush face or to the ground of
+ * the relief, at most max. A ray that starts inside a brush hits at 0; one that starts on a face
+ * and moves away from it does not hit it.
  * With `grow`, every brush is that much bigger on each side: the path of a sphere of that radius
  * (its corners square, and a brush is only found in the cells the ray crosses).
- *
- * Walks the grid cells the ray crosses (Amanatides and Woo), testing the brushes of each against
- * the exact slab test, and stops once the next cell starts beyond the best hit or max. A brush
- * spanning several cells is tested in each: the hit is the same, and lists are short.
  */
 export const ray = (w: World, o: Vec3, d: Vec3, max: number, grow = 0): number => {
+  const hit = faces(w, o, d, max, grow);
+  return w.relief ? trace(w, o, d, hit, grow) : hit;
+};
+
+/**
+ * The brushes' share of ray(). Walks the grid cells the ray crosses (Amanatides and Woo), testing
+ * the brushes of each against the exact slab test, and stops once the next cell starts beyond the
+ * best hit or max. A brush spanning several cells is tested in each: the hit is the same, and
+ * lists are short.
+ */
+const faces = (w: World, o: Vec3, d: Vec3, max: number, grow: number): number => {
   const { cell, def } = w;
   let best = max;
   // Cell of the origin, step direction, distance to the next boundary and between boundaries.

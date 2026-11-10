@@ -384,7 +384,12 @@ describe('prediction against the room', () => {
   })();
 
   it('flies a course that uses every move: a guard, so the run below is not a trivial one', () => {
-    expect([...COURSE.modes].sort()).toEqual(Object.values(MODE).sort());
+    // Every mode a runner gets into on foot: RIDE is a rover's seat.
+    expect([...COURSE.modes].sort()).toEqual(
+      Object.values(MODE)
+        .filter(m => m !== MODE.RIDE)
+        .sort(),
+    );
     expect(COURSE.ev).toBe(Object.values(EV).reduce((a, b) => a | b, 0) & ~EV.RESPAWN);
     expect(COURSE.low).toBeGreaterThan(7.9);
     expect(COURSE.inputs.length).toBeGreaterThan(2000);

@@ -132,7 +132,7 @@ export const encodeInput = (i: Input): ArrayBuffer => {
   const v = new DataView(new ArrayBuffer(INPUT_BYTES));
   v.setUint8(0, MSG_INPUT);
   v.setUint16(1, i.seq & 0xffff);
-  v.setUint16(3, i.keys & 0x3fff);
+  v.setUint16(3, i.keys & 0x7fff);
   v.setUint16(5, toTurn(i.yaw));
   v.setInt16(7, toPitch(i.pitch));
   const view = toView(i.view);
@@ -152,7 +152,7 @@ export const decodeInput = (buf: ArrayBuffer): Input | null => {
   }
   return {
     seq: v.getUint16(1),
-    keys: v.getUint16(3) & 0x3fff,
+    keys: v.getUint16(3) & 0x7fff,
     yaw: fromTurn(v.getUint16(5)),
     pitch: fromPitch(v.getInt16(7)),
     view: (v.getUint16(9) * 256 + v.getUint8(11)) / 256,

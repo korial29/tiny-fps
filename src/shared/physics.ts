@@ -81,6 +81,7 @@ import {
   WALL_TURN_KEEP,
   SHOCK_TICKS,
 } from './constants';
+import { bound, ground } from './relief';
 import { EV, KEY, LIMB, MODE, SIDE } from './types';
 import type { Input, PlayerState } from './types';
 import { near } from './world';
@@ -241,10 +242,13 @@ const gap = (b: Brush, x: number, z: number): [dx: number, dz: number] => [
  * step of that size cannot bring the centre across one, however thin. The candidates come from
  * near() with twice PLAYER_R, enough for the one push of at most PLAYER_R that matters.
  */
-const push = (p: Pos, w: World, h: number): [x: number, z: number] => {
+const push = (p: Pos, w: World, h: number): [x: number, z: number] => shove(p, w, h, PLAYER_R);
+
+/** push() for a circle of radius r: a rover's body is a few of them. */
+export const shove = (p: Pos, w: World, h: number, r: number): [x: number, z: number] => {
   const { brushes } = w.def;
-  const ids = near(w, p.x, p.z, 2 * PLAYER_R);
-  const reach = (PLAYER_R - EPS) ** 2;
+  const ids = near(w, p.x, p.z, 2 * r);
+  const reach = (r - EPS) ** 2;
   let [tx, tz] = [0, 0];
   for (let pass = 0; pass < 4; pass++) {
     let best = 0;
@@ -262,8 +266,8 @@ const push = (p: Pos, w: World, h: number): [x: number, z: number] => {
       }
       if (d2) {
         const d = sqrt(d2);
-        if (PLAYER_R - d > best) {
-          best = PLAYER_R - d;
+        if (r - d > best) {
+          best = r - d;
           px = (dx / d) * best;
           pz = (dz / d) * best;
         }
@@ -277,8 +281,8 @@ const push = (p: Pos, w: World, h: number): [x: number, z: number] => {
         [b.max[2] - p.z, 0, 1],
       ];
       const [m, nx, nz] = out.reduce((a, c) => (c[0] < a[0] ? c : a));
-      if (m + PLAYER_R > best) {
-        best = m + PLAYER_R;
+      if (m + r > best) {
+        best = m + r;
         [px, pz] = [nx * best, nz * best];
       }
     }
@@ -304,7 +308,8 @@ const push = (p: Pos, w: World, h: number): [x: number, z: number] => {
 const span = (p: Pos, w: World, h: number): [floor: number, ceil: number] => {
   const { brushes } = w.def;
   const reach = (PLAYER_R - EPS) ** 2;
-  let floor = -Infinity;
+  // The relief is a floor whatever its height: a body is never inside the ground.
+  let floor = ground(w, p.x, p.z);
   let ceil = Infinity;
   for (const i of near(w, p.x, p.z, PLAYER_R)) {
     const b = brushes[i];
@@ -319,6 +324,21 @@ const span = (p: Pos, w: World, h: number): [floor: number, ceil: number] => {
     }
   }
   return [floor, ceil];
+};
+
+/**
+ * The highest floor under the point (x, z) at most as high as y: the ground of the relief, or the
+ * top of a brush the point is over. For a rover's wheel.
+ */
+export const floorAt = (w: World, x: number, z: number, y: number): number => {
+  let floor = ground(w, x, z);
+  for (const i of near(w, x, z, 0)) {
+    const { min, max } = w.def.brushes[i];
+    if (x >= min[0] && x <= max[0] && z >= min[2] && z <= max[2] && max[1] <= y) {
+      floor = Math.max(floor, max[1]);
+    }
+  }
+  return floor;
 };
 
 /** Whether a standing body fits where the player is: no ceiling or box within PLAYER_H. */
@@ -443,7 +463,7 @@ const over = (p: PlayerState, w: World): boolean => {
 };
 
 /** The world's gravity: GRAVITY times the map's share (the moon's half gravity, the user, 2026-11-09). */
-const pull = (w: World): number => GRAVITY * (w.def.gravity ?? 1);
+export const gravity = (w: World): number => GRAVITY * (w.def.gravity ?? 1);
 
 /** Whether the player will be back on a floor within the jump buffer: a press now is kept for it. */
 const landingSoon = (p: PlayerState, w: World): boolean => {
@@ -452,7 +472,7 @@ const landingSoon = (p: PlayerState, w: World): boolean => {
   }
   const [floor] = span(p, w, PLAYER_H);
   const t = JUMP_BUFFER_TICKS * DT;
-  return p.y - floor <= -p.vy * t + 0.5 * pull(w) * t * t;
+  return p.y - floor <= -p.vy * t + 0.5 * gravity(w) * t * t;
 };
 
 /** What one input asks for, worked out once per step. */
@@ -505,7 +525,12 @@ export const stumble = (
   if (p.mode === MODE.HANG || p.mode === MODE.CLIMB) {
     p.vy = 0;
   }
-  if (p.mode === MODE.HANG || p.mode === MODE.CLIMB || p.mode === MODE.WALLRUN) {
+  if (
+    p.mode === MODE.HANG ||
+    p.mode === MODE.CLIMB ||
+    p.mode === MODE.WALLRUN ||
+    p.mode === MODE.RIDE
+  ) {
     enter(p, MODE.AIR);
     p.edge = 0;
   }
@@ -595,9 +620,10 @@ const fly = (p: PlayerState, w: World, h: number, g: number, snap: boolean): num
       p.vz -= (into * cz) / d;
     }
   }
+  bound(p, w);
   const [floor, ceil] = span(p, w, h);
   // Constant acceleration, integrated exactly (average speed): the jump peaks at v² / 2g.
-  const vy = p.vy - g * pull(w) * DT;
+  const vy = p.vy - g * gravity(w) * DT;
   p.y += ((p.vy + vy) / 2) * DT;
   p.vy = vy;
   if (p.y + h > ceil) {
@@ -932,11 +958,13 @@ export const move = (p: PlayerState, i: Input, w: World, team = 0): void => {
   const pressed = (bit: number): boolean => (i.keys & bit) !== 0 && (p.held & bit) === 0;
   // A stumble (STUMBLE_TICKS steps from the tackle) drops the jump and dash presses.
   const stumbling = p.stun > 0;
+  // Seated in a rover: it carries him (seat(), rover.ts) and the keys are its own.
+  const riding = p.mode === MODE.RIDE;
   const c: Ctl = {
     keys: i.keys,
     stumble: stumbling,
-    jump: !stumbling && pressed(KEY.JUMP),
-    dash: !stumbling && pressed(KEY.DASH),
+    jump: !stumbling && !riding && pressed(KEY.JUMP),
+    dash: !stumbling && !riding && pressed(KEY.DASH),
     fwd: f > 0,
     wx: (fx * f - fz * s) / n,
     wz: (fz * f + fx * s) / n,
@@ -967,7 +995,7 @@ export const move = (p: PlayerState, i: Input, w: World, team = 0): void => {
   }
   if (p.mode === MODE.CLIMB) {
     climb(p, w);
-  } else if (p.mode !== MODE.HANG) {
+  } else if (p.mode !== MODE.HANG && !riding) {
     free(p, w, c);
   }
 
@@ -985,7 +1013,7 @@ export const move = (p: PlayerState, i: Input, w: World, team = 0): void => {
   if (p.mode === MODE.AIR && before === MODE.AIR) {
     p.coyote = Math.max(0, p.coyote - 1);
   }
-  p.held = i.keys & (KEY.JUMP | KEY.DASH);
+  p.held = i.keys & (KEY.JUMP | KEY.DASH | KEY.USE);
   p.ground = onFloor(p.mode);
   // Host and client then hold identical values and the snapshot carries them exactly, so the
   // replay is exact (barring Math.sin / Math.cos differences between JS engines).

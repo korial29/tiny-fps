@@ -47,6 +47,8 @@ export const KEY = {
   RELOAD: 4096,
   /** Set while the player wants the laser rifle in hand (4 or the wheel), with BLADE and RAIL clear. Ignored without it. */
   RIFLE: 8192,
+  /** Press to get into the rover at hand, or out of the one he rides. */
+  USE: 16384,
 } as const;
 
 /**
@@ -92,6 +94,8 @@ export const MODE = {
   SLIDE: 5,
   /** Walking low. */
   CROUCH: 6,
+  /** Seated in a rover (rover.ts): the body follows the seat, move() leaves it there. */
+  RIDE: 7,
 } as const;
 
 /**
@@ -173,7 +177,7 @@ export interface PlayerState {
   /** Ticks left in which a jump still works after walking off an edge, and in which a press is kept. */
   coyote: number;
   buffer: number;
-  /** KEY.JUMP and KEY.DASH as held in the last step, to tell a press from a hold. */
+  /** KEY.JUMP, KEY.DASH and KEY.USE as held in the last step, to tell a press from a hold. */
   held: number;
   /** Health, 0 to HP_MAX. */
   hp: number;
@@ -317,6 +321,39 @@ export interface FlagState {
   left: number;
 }
 
+/** A seat nobody is in (Rover.driver, Rover.rider). */
+export const NOBODY = 255;
+
+/**
+ * A rover (rover.ts): thirteen float32 and its two seats, all a drive() needs to carry on from, so
+ * a snapshot is enough and the driver's replay is exact. Nothing is kept per wheel.
+ */
+export interface Rover {
+  /** The body's centre at hub height: metres. */
+  x: number;
+  y: number;
+  z: number;
+  /** m/s. */
+  vx: number;
+  vy: number;
+  vz: number;
+  /** Where the nose points, as a player's yaw, radians in [0, 2π). */
+  yaw: number;
+  /** Nose up is positive, radians. */
+  pitch: number;
+  /** Right side down is positive, radians. */
+  roll: number;
+  /** The rates of yaw, pitch and roll, rad/s. */
+  wy: number;
+  wp: number;
+  wr: number;
+  /** The front wheels' angle, radians, positive to the right. */
+  steer: number;
+  /** The player ids at the wheel and beside it, or NOBODY. */
+  driver: number;
+  rider: number;
+}
+
 export interface Snapshot {
   /** Host tick, u16, wraps. */
   tick: number;
@@ -338,6 +375,8 @@ export interface Snapshot {
   packs?: number;
   /** The plasma balls in flight, and those that burst since the last snapshot. Absent: none. */
   balls?: Ball[];
+  /** The map's rovers, in the order of WorldDef.rovers. Absent: none. */
+  rovers?: Rover[];
 }
 
 /** Room rules, set by the host. Defaults in constants.ts (RULES). */

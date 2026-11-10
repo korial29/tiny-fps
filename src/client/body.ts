@@ -219,7 +219,7 @@ export const shrug = (q: Pose, s: Solved, j: number, at: Vec3) => {
 };
 
 /** The most a clavicle turns for a held hand out of reach (wield()), radians. */
-const REACH = 0.6;
+const REACH = 0.75;
 /** Where a fist holds a handle, from the wrist: along the fingers, and toward the palm. */
 export const FIST = [0.078, 0.022];
 /**
@@ -415,8 +415,8 @@ const TOWARD = [
 const THICK = [1, 1, 0.96, 0.86];
 /** Finger lengths against 4 cm, index to little. */
 const LENGTH = [1, 1.1, 1, 0.82];
-/** The thumb's two segments when the palm carries the rifle's handguard: up its near side, a little along it. */
-const CUP: Vec3[] = [unit([0.6, -0.8, 0]), unit([0.7, -0.65, 0.1])];
+/** The thumb's two segments when the palm carries the rifle's handguard: closed on its near side, along it (the user, 2026-11-10). */
+const CUP: Vec3[] = [unit([0.7, -0.7, 0]), unit([0.9, -0.4, 0.1])];
 /** The thumb's two segments open and in a fist, as directions in the hand (x toward the thumb). */
 const THUMB: [Vec3, Vec3][] = [
   [

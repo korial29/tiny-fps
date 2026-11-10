@@ -22,10 +22,12 @@ import {
 } from './body';
 import type { Body } from './body';
 import {
+  GUARD,
   MUZZLE,
   REAR,
   RIFLE_GRIP,
   RIFLE_HOLD,
+  RIFLE_RISE,
   axes as gunAxes,
   button,
   foregrip,
@@ -1585,10 +1587,10 @@ describe('the laser rifle in both hands', () => {
     }
   });
 
-  it('carries the handguard in the palm, the fingers up its right side and the thumb up its left, none through it', () => {
-    // The rifle's section where the hand is, in its own right and up: the handguard, a keel 16 mm
-    // round under a body 62 mm wide whose underside is 11 mm over the grip.
-    const [KEEL, HALF, UNDER] = [0.016, 0.031, 0.011];
+  it('carries the handguard in the palm, the fingers up its right side and the thumb closed on its left, none through it', () => {
+    // The rifle's section where the hand is, in its own right and up, along its underside: the
+    // handguard, a block GUARD round RIFLE_GRIP, under a body as wide.
+    const [HALF, UNDER] = [GUARD[0] + 0.001, RIFLE_GRIP[1] - GUARD[1]];
     for (const [name, p, pitch, kick] of POSES) {
       const body = createBody();
       for (let i = 0; i < 90; i++) {
@@ -1601,20 +1603,23 @@ describe('the laser rifle in both hands', () => {
         .filter(v => [GLOVE, FLESH].some(c => c.every((n, i) => v.c[i] == n)))
         .filter(v => away(v.at, s.pos[J.HAND_L]) < 0.16)
         .map(v => ax.map(a => dot(sub(v.at, at), a)))
-        .filter(([, , f]) => f > 0.05);
-      /** How deep a point is in the rifle (negative outside), and how far under the keel. */
-      const keel = ([r, u]: number[]) => KEEL - Math.hypot(r, u - RIFLE_GRIP[1]);
-      const deep = (v: number[]) =>
-        Math.max(Math.min(HALF - Math.abs(v[0]), v[1] - UNDER), keel(v));
+        .filter(([, , f]) => f > 0.05)
+        .map(([r, u, f]) => [r, u - RIFLE_RISE * (f + RIFLE_GRIP[2]), f]);
+      /** How deep a point is in the rifle: negative outside. */
+      const deep = ([r, u]: number[]) => Math.min(HALF - Math.abs(r), u - UNDER);
       expect(Math.max(...hand.map(deep)), name).toBeLessThan(0.008);
-      // The palm on the keel's underside.
-      const under = hand.filter(([r, u]) => Math.abs(r) < KEEL && u < RIFLE_GRIP[1]);
-      expect(Math.abs(Math.max(...under.map(keel))), name).toBeLessThan(0.003);
-      // The fingers on the right flank, up past the body's underside; the thumb on the left one.
+      // The palm on the block's underside, across its whole width.
+      const under = hand.filter(([r, u]) => Math.abs(r) < HALF && u < UNDER);
+      expect(Math.min(...under.map(([, u]) => UNDER - u)), name).toBeLessThan(0.003);
+      expect(Math.max(...under.map(([r]) => r)), name).toBeGreaterThan(HALF - 0.005);
+      expect(Math.min(...under.map(([r]) => r)), name).toBeLessThan(0.005 - HALF);
+      // The fingers on the right flank and the thumb on the left one, both up past the block.
       for (const side of [1, -1]) {
-        const on = hand.filter(([r, u]) => r * side > HALF && u > UNDER);
+        const on = hand.filter(
+          ([r, u]) => r * side > HALF && r * side < HALF + 0.03 && u > UNDER + 0.01,
+        );
         expect(Math.min(...on.map(([r]) => r * side - HALF)), name).toBeLessThan(0.003);
-        expect(Math.max(...on.map(([, u]) => u)), name).toBeGreaterThan(UNDER + 0.012);
+        expect(Math.max(...on.map(([, u]) => u)), name).toBeGreaterThan(UNDER + 0.03);
       }
     }
   });

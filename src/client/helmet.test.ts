@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LIMB } from '../shared/types';
 import { GLOW } from './flag';
-import { SHELL, VISOR, WRAP, helmet, inside, uOf } from './helmet';
+import { SHELL, WRAP, band, helmet, inside, uOf } from './helmet';
 import { SHINE, STRIDE, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, rest, solve, turn } from './rig';
@@ -72,10 +72,10 @@ describe('helmet', () => {
   }
 
   // Detailed (the user, 2026-11-10: whatever it costs), still a fraction of a body (34 000 close).
-  it('stays modest: under 1 000 vertices far, 4 000 near, 12 000 close', () => {
+  it('stays modest: under 1 000 vertices far, 8 000 near, 16 000 close', () => {
     expect(count(make(0))).toBeLessThan(1000);
-    expect(count(make(1))).toBeLessThan(4000);
-    expect(count(make(3))).toBeLessThan(12000);
+    expect(count(make(1))).toBeLessThan(8000);
+    expect(count(make(3))).toBeLessThan(16000);
     expect(count(make(0))).toBeLessThan(count(make(1)));
   });
 
@@ -153,8 +153,8 @@ describe('helmet', () => {
       for (let a = -0.9; a <= 0.9; a += 0.15) {
         for (let b = -0.9; b <= 0.9; b += 0.15) {
           const u = 0.7 * WRAP * a;
-          const y =
-            VISOR.c[1] + VISOR.r[1] * 0.8 * b - VISOR.drop * Math.min((u / VISOR.r[0]) ** 2, 1);
+          const [m, h] = band(u);
+          const y = m + h * 0.8 * b;
           if (!inside(u, y, 0.85)) {
             continue;
           }

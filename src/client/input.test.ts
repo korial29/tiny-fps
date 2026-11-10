@@ -436,6 +436,22 @@ describe('createInput', () => {
       expect(ctl.keys & ~KEY.FIRE).toBe(0);
     });
 
+    it('sends the double click with the rifle chosen as FIRE, SPECIAL and RIFLE on one step: a grenade', () => {
+      let clock = 1000;
+      vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      make();
+      lock(true);
+      ctl.weapon = WEAPON.RIFLE;
+      button('mousedown', 0);
+      button('mouseup', 0);
+      expect(ctl.take()).toBe(KEY.RIFLE);
+      clock += DOUBLE_CLICK_MS - 1;
+      button('mousedown', 0);
+      expect(ctl.take()).toBe(KEY.FIRE | KEY.SPECIAL | KEY.RIFLE);
+      // Held on, the rifle fires: FIRE without SPECIAL.
+      expect(ctl.take()).toBe(KEY.FIRE | KEY.RIFLE);
+    });
+
     it('sends one step of FIRE and SPECIAL after a double click, however short, and not after two slow clicks', () => {
       let clock = 1000;
       vi.spyOn(performance, 'now').mockImplementation(() => clock);

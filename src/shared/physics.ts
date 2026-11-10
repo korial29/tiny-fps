@@ -163,6 +163,8 @@ export const STILL = {
   rifle: -1,
   clip: 0,
   rifled: false,
+  nades: 0,
+  lob: 0,
   inRifle: false,
   inRail: false,
   zapping: false,

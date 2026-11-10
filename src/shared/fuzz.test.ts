@@ -159,10 +159,11 @@ describe('random fire on ROOFTOPS', () => {
         );
         const label = `seed ${seed}, step ${k}`;
         // A plasma shot and a laser shot count a shot; the rail gun's bolt is a step spent zapping.
-        expect(struck === STRIKE.SHOT || struck === STRIKE.LASER, label).toBe(
-          ((p.shots - before) & 255) === 1,
-        );
-        expect(struck !== STRIKE.LASER || !!p.rifled, label).toBe(true);
+        expect(
+          struck === STRIKE.SHOT || struck === STRIKE.LASER || struck === STRIKE.NADE,
+          label,
+        ).toBe(((p.shots - before) & 255) === 1);
+        expect((struck !== STRIKE.LASER && struck !== STRIKE.NADE) || !!p.rifled, label).toBe(true);
         expect(struck === STRIKE.RAIL, label).toBe(!!p.zapping);
         expect(!p.zapping || !!p.railed, label).toBe(true);
         shots += +(struck === STRIKE.SHOT);
@@ -199,6 +200,8 @@ describe('random fire on ROOFTOPS', () => {
             rifle: -1,
             clip: 0,
             rifled: false,
+            nades: 0,
+            lob: 0,
           });
         } else if (!p.down && p.hp > 1 && rnd() < 0.01) {
           p.hp--;

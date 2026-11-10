@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { EYE, GUN_RANGE, INTERP_DELAY, PLASMA_R, PLASMA_SPEED } from '../shared/constants';
+import {
+  EYE,
+  GRAVITY,
+  GUN_RANGE,
+  INTERP_DELAY,
+  NADE,
+  NADE_COOL,
+  PLASMA_R,
+  PLASMA_SPEED,
+  TICK_HZ,
+} from '../shared/constants';
 import { STILL } from '../shared/physics';
-import { fly, launch } from '../shared/plasma';
+import { fly, launch, lob, toss } from '../shared/plasma';
 import type { Ball, PlayerState } from '../shared/types';
 import { build } from '../shared/world';
 import { CATCH, TRAIL, createBalls } from './balls';
@@ -190,5 +200,86 @@ describe('the others’ balls', () => {
     const b = createBalls(WORLD);
     b.snapshot([ball({ by: 1 })], 1, 1000);
     expect(b.frame(1000 + INTERP_DELAY, muzzle).orbs).toHaveLength(1);
+  });
+});
+
+describe('a grenade', () => {
+  /** The own player after the step that launched a grenade, looking up a little. */
+  const lobber = (o: Partial<PlayerState> = {}) =>
+    me({ rifled: true, rifle: 100, lob: NADE_COOL, pitch: 0.3, ...o });
+  const TICK = 1000 / TICK_HZ;
+
+  it('of the own player flies the ticks the host’s toss() gives it, and bursts where the host’s does', () => {
+    const b = createBalls(WORLD);
+    b.fire(lobber(), 0);
+    const host = lob(lobber());
+    const path: Vec3[] = [];
+    while (!host.burst) {
+      toss(WORLD, host, []);
+      path.push([host.x, host.y, host.z]);
+    }
+    // On the wall, a ball's radius off it.
+    expect(path.at(-1)![2]).toBeGreaterThanOrEqual(-20);
+    expect(path.at(-1)![2]).toBeLessThan(-20 + PLASMA_R + 1e-3);
+    expect(b.frame(0, muzzle).orbs[0].p).toEqual(MUZZLE);
+    for (const k of [10, 17, 25]) {
+      const [o] = b.frame(k * TICK, muzzle).orbs;
+      expect(o.power).toBe(NADE);
+      expect(near(o.p, path[k - 1], 1e-3), `tick ${k}`).toBe(true);
+    }
+    // It falls: its direction dips from one tick to a later one.
+    const dy = [10, 25].map(k => b.frame(k * TICK + 1, muzzle).orbs[0].d[1]);
+    expect(dy[1]).toBeLessThan(dy[0]);
+    const { orbs, bursts } = b.frame(path.length * TICK + 1, muzzle);
+    expect(orbs).toEqual([]);
+    expect(bursts).toEqual([[path.at(-1), NADE]]);
+    // Once: the host's word of the burst does not burst it again.
+    b.snapshot([{ ...host, burst: true }], 1, path.length * TICK + 20);
+    expect(b.frame(path.length * TICK + 200, muzzle)).toEqual({ orbs: [], bursts: [] });
+  });
+
+  it('of the own player bursts short, where the host says it met a body', () => {
+    const b = createBalls(WORLD);
+    b.fire(lobber(), 0);
+    const host = lob(lobber());
+    for (let k = 0; k < 12; k++) {
+      toss(WORLD, host, []);
+    }
+    const at: Vec3 = [host.x, host.y, host.z];
+    b.snapshot([{ ...host, burst: true }], 1, 5 * TICK);
+    expect(b.frame(10 * TICK, muzzle).bursts).toEqual([]);
+    const { orbs, bursts } = b.frame(14 * TICK, muzzle);
+    expect(orbs).toEqual([]);
+    expect(bursts).toEqual([[at, NADE]]);
+  });
+
+  it('of another player arcs on from the last snapshot under gravity, and bursts where the host says', () => {
+    const b = createBalls(WORLD);
+    const d: Vec3 = [0, 0.6, -0.8];
+    const ball: Ball = {
+      id: 3,
+      by: 2,
+      x: 1,
+      y: 2,
+      z: -3,
+      dx: d[0],
+      dy: d[1],
+      dz: d[2],
+      burst: false,
+      power: NADE,
+      v: 30,
+    };
+    b.snapshot([ball], 1, 1000);
+    // Drawn INTERP_DELAY late: 0.2 s after the place of the snapshot.
+    expect(b.frame(1000 + INTERP_DELAY, muzzle).orbs).toHaveLength(1);
+    const [o] = b.frame(1000 + INTERP_DELAY + 200 + CATCH * 1000, muzzle).orbs;
+    const t = 0.2 + CATCH;
+    expect(o.power).toBe(NADE);
+    expect(near(o.p, [1, 2 + 18 * t - 0.5 * GRAVITY * t * t, -3 - 24 * t], 1e-6)).toBe(true);
+    expect(o.d[1]).toBeLessThan(d[1]);
+    const at: Vec3 = [1, 0.12, -12];
+    b.snapshot([{ ...ball, x: at[0], y: at[1], z: at[2], burst: true }], 1, 1500);
+    expect(b.frame(1500 + INTERP_DELAY - 1, muzzle).bursts).toEqual([]);
+    expect(b.frame(1500 + INTERP_DELAY, muzzle)).toEqual({ orbs: [], bursts: [[at, NADE]] });
   });
 });

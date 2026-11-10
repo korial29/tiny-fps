@@ -30,6 +30,7 @@ import {
   GUN_MAG,
   GUN_RELOAD,
   MAX_PLAYERS,
+  NADE,
   PACK_BITS,
   RAIL_CAP,
   RAIL_MAX,
@@ -190,7 +191,7 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 4-byte head, 61 bytes per player, then the match: 10 bytes and a byte per flag at home', () => {
+  it('has a 4-byte head, 62 bytes per player, then the match: 10 bytes and a byte per flag at home', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [
@@ -246,6 +247,8 @@ describe('snapshot frame', () => {
           rifled: true,
           heat: 97,
           hot: true,
+          nades: 2,
+          lob: 41,
           // What the animation reads is not sent, nor the last shot's power.
           power: 3,
           ev: 0xffff,
@@ -255,7 +258,7 @@ describe('snapshot frame', () => {
       ...IDLE,
       packs: 2 ** 47 + 0x8000_0005,
     });
-    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 61, 10]);
+    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 62, 10]);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + SNAP_MATCH + 2);
     expect(bytes(buf)).toEqual([
       ...[MSG_SNAPSHOT, 0x12, 0x34, 1],
@@ -299,6 +302,7 @@ describe('snapshot frame', () => {
       100, // rifle: 99 rounds plus one
       21, // clip
       97, // heat
+      (2 << 6) | 41, // nade: 2 grenades, 41 ticks before the next
       ...[0, 0, 0x01, 0xe0], // red 0, blue 0, clock 480 s, not over
       ...[0x80, 0, 0x80, 0, 0, 5], // packs 0 and 2, 31 and 47
       ...[0, 0], // both flags at home
@@ -456,6 +460,21 @@ describe('snapshot frame', () => {
         const cos = b.dx * s.dx + b.dy * s.dy + b.dz * s.dz;
         expect(Math.acos(Math.min(1, cos))).toBeLessThan(0.02);
       });
+    });
+
+    it('carry a grenade in the power byte: bit 6 and its speed in whole m/s, 63 at most', () => {
+      const sent = [
+        ball({ power: NADE, v: 36 }),
+        ball({ id: 7, power: NADE, v: 80.4, burst: true }),
+      ];
+      const buf = encodeSnapshot(snap(sent));
+      expect(bytes(buf).slice(-SNAP_BALL - 1)[0]).toBe(64 | 36);
+      expect(bytes(buf).at(-1)).toBe(64 | 63);
+      const got = decodeSnapshot(buf)!.balls!;
+      expect(got.map(b => [b.power, b.v, b.arc, b.burst])).toEqual([
+        [NADE, 36, undefined, false],
+        [NADE, 63, undefined, true],
+      ]);
     });
 
     it('carry the katana’s arcs of energy in the power byte: bit 7 and the cut that threw it', () => {

@@ -21,6 +21,9 @@ import {
   LEAP_SPEED,
   LOCK_BREAK,
   LUNGE_SPEED,
+  NADE_COOL,
+  NADE_HOLD,
+  NADE_MAX,
   PICK_H,
   RACK_R,
   HEAT_COOL,
@@ -70,8 +73,8 @@ const launch = (p: PlayerState): void => {
   }
 };
 
-/** What a step struck, for the host to resolve: nothing, a shot (a plasma ball), the katana's cut, a rail gun's beam, or a laser rifle's shot. */
-export const STRIKE = { NONE: 0, SHOT: 1, CUT: 2, RAIL: 3, LASER: 4 } as const;
+/** What a step struck, for the host to resolve: nothing, a shot (a plasma ball), the katana's cut, a rail gun's beam, a laser rifle's shot, or a grenade from its launcher. */
+export const STRIKE = { NONE: 0, SHOT: 1, CUT: 2, RAIL: 3, LASER: 4, NADE: 5 } as const;
 export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
 
 /**
@@ -92,7 +95,9 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  * - The rail gun throws its bolt on every step FIRE is held, spending a tick of it (`zapping`),
  *   unless it is `hot`: its `heat` rises while it fires and falls when it does not (HEAT_MAX).
  * - The laser rifle (KEY.RIFLE, `rifled`), filled at its rack on arrival, fires a round from its
- *   cell (`clip`) each RIFLE_COOL ticks while FIRE is held (STRIKE.LASER).
+ *   cell (`clip`) each RIFLE_COOL ticks while FIRE is held (STRIKE.LASER). Its rack loads NADE_MAX
+ *   grenades too: SPECIAL (a double click) launches one (STRIKE.NADE) when `lob` is 0, even during
+ *   a swap of the cell, then `lob` runs NADE_COOL ticks and the rifle holds its fire NADE_HOLD.
  * - The trigger: `cool` and `swing` run down, and at 0 a held FIRE charges the gun, with ammo, and
  *   letting it go fires a ball as strong as the charge (powerOf()), spending as many shots; or it
  *   starts the katana's swing (`cut` from the keys), unless the hands are busy (a hang, a climb).
@@ -143,10 +148,11 @@ export const step = (
   p.inRail = inRail;
   const inRifle = !!rifle && within(p, rifle, RACK_R);
   if (armed && inRifle && !p.inRifle) {
-    [p.rifle, p.clip] = [RIFLE_MAX, RIFLE_CLIP];
+    [p.rifle, p.clip, p.nades] = [RIFLE_MAX, RIFLE_CLIP, NADE_MAX];
   }
   p.inRifle = inRifle;
   p.cool = Math.max(0, p.cool - 1);
+  p.lob = Math.max(0, (p.lob ?? 0) - 1);
   const busy = p.mode === MODE.HANG || p.mode === MODE.CLIMB;
   // The katana's swing runs down, but stays at the top of a cut's wind-up while FIRE is held there:
   // a charge. Let go after HEAVY_TAP, the rest of the cut is the heavy release, its own timer; busy
@@ -214,6 +220,12 @@ export const step = (
       [p.swing, p.charge] = [CUTS[p.cut].ticks, 0];
       launch(p);
     } else if (p.rifled) {
+      if (i.keys & KEY.SPECIAL && p.nades && !p.lob) {
+        p.nades--;
+        [p.lob, p.cool] = [NADE_COOL, NADE_HOLD];
+        p.shots = (p.shots + 1) & 255;
+        return STRIKE.NADE;
+      }
       if (!p.cool && p.clip && !p.reload) {
         p.rifle!--;
         p.clip--;

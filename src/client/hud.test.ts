@@ -384,7 +384,10 @@ describe('the gun on the HUD', () => {
     expect(rest()).toBe('\n0');
     // The laser rifle counts in its own power cells.
     hud.vitals(5, -1, false, false, -1, false, 50, false, 50 + RIFLE_CLIP + 30, true);
-    expect(rest()).toBe(`▮▯\n${RIFLE_CLIP + 30}`);
+    expect(rest()).toBe(`▮▯\n${RIFLE_CLIP + 30}  ○○○`);
+    // With the grenades left in its launcher as dots, hollow once spent.
+    hud.vitals(5, -1, false, false, -1, false, 50, false, 50 + RIFLE_CLIP + 30, true, 2);
+    expect(rest()).toBe(`▮▯\n${RIFLE_CLIP + 30}  ●●○`);
     // Not the crosshair's dot, nor anything else, over the big count.
     expect(screen.querySelector('dl i')).toBeNull();
   });
@@ -486,7 +489,9 @@ describe('the gun on the HUD', () => {
       expect(rows).toContain('Katana + Wthrust');
       expect(rows).toContain('Katana + A or Dcut across');
       expect(rows).toContain('Katana aloneslash');
-      expect(rows).toContain('Double clickspecial: lunge, energy arc, leap');
+      expect(rows).toContain(
+        'Double clickkatana special: lunge, energy arc, leap; laser rifle: a grenade from its launcher',
+      );
       expect(screen.querySelector('aside')!.textContent).toMatch(/armoury past your flag/);
     });
   });

@@ -15,6 +15,9 @@ import {
   cell,
   fore,
   rifle,
+  NADE_MUZZLE,
+  RIFLE_GRIP,
+  GUARD,
   scope,
   focus,
   grip,
@@ -834,6 +837,26 @@ describe('the battery and the capsule', () => {
 });
 
 describe('the laser rifle', () => {
+  it('has its grenade launcher in the handguard: a steel barrel out of the block’s front to NADE_MUZZLE, a dark mouth', () => {
+    for (const lod of [0, 1]) {
+      const vs = verts(rifle(lod));
+      // Ahead of the block's front, under the body: only the launcher's barrel.
+      const front = -RIFLE_GRIP[2] + 0.08;
+      const barrel = vs.filter(
+        v => -v.p[2] > front + 0.005 && -v.p[2] < front + 0.05 && v.p[1] < NADE_MUZZLE[1] + 0.02,
+      );
+      expect(barrel.length, `lod ${lod}`).toBeGreaterThan(10);
+      expect(Math.max(...barrel.map(v => -v.p[2]))).toBeCloseTo(-NADE_MUZZLE[2], 2);
+      expect(Math.max(...barrel.map(v => Math.abs(v.p[0])))).toBeLessThan(GUARD[0]);
+      // Its mouth is dark: the darkest thing there, at the muzzle's height.
+      const mouth = barrel.filter(v => Math.max(...v.c) < 0.03);
+      expect(mouth.length, `lod ${lod}`).toBeGreaterThan(2);
+      for (const v of mouth) {
+        expect(Math.abs(v.p[1] - NADE_MUZZLE[1])).toBeLessThan(0.014);
+      }
+    }
+  });
+
   it('has its red lens where tip() puts its muzzle, and the hold of the left hand under the body, ahead of the grip', () => {
     const vs = verts(rifle(1));
     const lens = vs.filter(v => v.layer === -2 && v.c[0] > 2);

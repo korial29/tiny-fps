@@ -7,11 +7,11 @@
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
 //   keys is a u16: KEY bits 0 to 14 (forward, back, left, right, jump, sprint, dash, crouch, fire, blade, special, rail, reload, rifle, use).
 // Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][counts u8], counts: bits 0-4 the players, bits 5-7
-//   the rovers (0 on a map without any). Then players × 61 bytes:
+//   the rovers (0 on a map without any). Then players × 62 bytes:
 //   [id u8][x f32][y f32][z f32][vx f32][vy f32][vz f32][edge f32]
 //   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8][stun u8]
 //   [gun u24][shots u8][hits u8][swing u8][lost u8][charge u8][lock u8][foe u8][pushes u8][away u8]
-//   [rail u8][railing u8][slow u8][mag u8][cap u8][reload u8][rifle u8][clip u8][heat u8]
+//   [rail u8][railing u8][slow u8][mag u8][cap u8][reload u8][rifle u8][clip u8][heat u8][nade u8]
 //   mode: bits 0-2 MODE, bits 3-5 wall (SIDE), bit 6 jumps left, bit 7 air dashes left
 //   dash: bits 0-5 the dash timer, bits 6-7 the high bits of the tackler's id (see stun)
 //   timers: bits 0-2 coyote ticks, bits 3-5 jump buffer ticks, bit 6 jump held, bit 7 dash held
@@ -37,7 +37,8 @@
 //   5: heavy (the katana's charged cut let go). charge is the katana's too, held at a cut's top.
 //   mag: the shots in the gun's battery; cap: the ticks in the rail gun's capsule; reload: the ticks
 //   left swapping the one in hand; rifle: the laser rifle's rounds plus one (0: none); clip: its cell;
-//   heat: the rail gun's heat (HEAT_MAX at most).
+//   heat: the rail gun's heat (HEAT_MAX at most). nade: bits 0-5 the ticks before the rifle's
+//   launcher fires again (`lob`), bits 6-7 its grenades left (`nades`).
 //   Then the rovers, rovers × 54 bytes, in the order of WorldDef.rovers:
 //     [x f32][y f32][z f32][vx f32][vy f32][vz f32][yaw f32][pitch f32][roll f32][wy f32][wp f32]
 //     [wr f32][steer f32][driver u8][rider u8]
@@ -54,10 +55,12 @@
 //     id: the shooter's `shots` after the shot; by: bits 0-6 the shooter's id, bit 7 burst (it burst
 //     where it is: the last snapshot that carries it); x, y, z in 1/32 m; the direction as a yaw in
 //     256ths of a turn and a pitch in 127ths of a quarter turn; power: the health it takes, or for an
-//     arc of energy bit 7 set and the CUT that threw it (Ball.arc) in bits 0-6.
-//   A snapshot is 4 + 61 × players + 54 × rovers + 10 + 2 to 16 bytes: 12 on top of the players and
+//     arc of energy bit 7 set and the CUT that threw it (Ball.arc) in bits 0-6, or for a grenade
+//     (power NADE) bit 6 set and its speed in whole m/s in bits 0-5 (Ball.v).
+//   A snapshot is 4 + 62 × players + 54 × rovers + 10 + 2 to 16 bytes: 12 on top of the players and
 //   the rovers when both flags are home and no ball flies; with balls, 1 + 11 × balls more.
 // Every multi-byte field is big-endian (DataView's default).
+import { NADE } from './constants';
 import { FLAG, KEY, MODE } from './types';
 import type { Ball, FlagState, Input, PlayerInfo, Rover, Snapshot } from './types';
 
@@ -95,7 +98,7 @@ export const MSG_SNAPSHOT = 2;
 
 export const INPUT_BYTES = 12;
 export const SNAP_HEAD = 4;
-export const SNAP_PLAYER = 61;
+export const SNAP_PLAYER = 62;
 /** Bytes of a rover: thirteen float32 and the two seats. */
 export const SNAP_ROVER = 54;
 /** The rover count has three bits of the head's count byte, the players the other five. */
@@ -255,6 +258,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint8(o + 58, (p.rifle ?? -1) + 1);
     v.setUint8(o + 59, p.clip ?? 0);
     v.setUint8(o + 60, p.heat ?? 0);
+    v.setUint8(o + 61, ((p.nades ?? 0) << 6) | (p.lob ?? 0));
   });
   rovers.forEach((r, i) => {
     const o = mid + i * SNAP_ROVER;
@@ -290,7 +294,10 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     [b.x, b.y, b.z].forEach((c, k) => v.setInt16(o + 2 + 2 * k, clamp16(c * BALL_POS)));
     v.setUint8(o + 8, Math.round(Math.atan2(-b.dx, -b.dz) * YAW8) & 255);
     v.setInt8(o + 9, Math.round(Math.asin(Math.max(-1, Math.min(1, b.dy))) * PITCH8));
-    v.setUint8(o + 10, b.arc ? 128 | b.arc : (b.power ?? 1));
+    v.setUint8(
+      o + 10,
+      b.arc ? 128 | b.arc : b.power === NADE ? 64 | Math.min(63, Math.round(b.v!)) : (b.power ?? 1),
+    );
     o += SNAP_BALL;
   }
   return v.buffer;
@@ -380,6 +387,8 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       inRifle: (v.getUint8(o + 53) & 16) > 0,
       hot: (v.getUint8(o + 53) & 32) > 0,
       heat: v.getUint8(o + 60),
+      nades: v.getUint8(o + 61) >> 6,
+      lob: v.getUint8(o + 61) & 63,
     });
   }
   const rovers: Rover[] = [];
@@ -426,7 +435,9 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       burst: v.getUint8(o + 1) > 127,
       ...(v.getUint8(o + 10) > 127
         ? { power: 1, arc: v.getUint8(o + 10) & 127 }
-        : { power: v.getUint8(o + 10) }),
+        : v.getUint8(o + 10) > 63
+          ? { power: NADE, v: v.getUint8(o + 10) & 63 }
+          : { power: v.getUint8(o + 10) }),
     });
   }
   return {

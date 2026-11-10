@@ -15,6 +15,7 @@ import {
   RUN_SPEED,
   STEP_H,
   TICK_HZ,
+  NADE_MAX,
 } from '../shared/constants';
 import { STRIKE, step } from '../shared/gun';
 import { ROOFTOPS } from '../shared/map';
@@ -210,6 +211,7 @@ describe('prediction against the room', () => {
     let checked = 0;
     let shots = 0;
     let cuts = 0;
+    let lobs = 0;
     let wielded = 0;
     let fills = 0;
     let granted = 0;
@@ -276,6 +278,7 @@ describe('prediction against the room', () => {
       const fired = step(ref, input, map, team);
       shots += +(fired === STRIKE.SHOT);
       cuts += +(fired === STRIKE.CUT);
+      lobs += +(fired === STRIKE.NADE);
       wielded += +!!ref.wield;
       fills += +(ref.ammo > had);
       respawns += +((ref.ev & EV.RESPAWN) !== 0);
@@ -313,6 +316,8 @@ describe('prediction against the room', () => {
       shots,
       /** Cuts that struck, and the steps the reference had the katana in hand. */
       cuts,
+      /** Grenades the reference launched. */
+      lobs,
       wielded,
       fills,
       /** Ammo packs the reference took, and the fields of the host's last snapshot that the prediction does not match. */
@@ -539,6 +544,30 @@ describe('prediction against the room', () => {
           expect(r.checked, label).toBeGreaterThan(500);
         }
       }
+    }
+  }, 60_000);
+
+  it('agrees with the host exactly with the rifle’s launcher: the rack, the grenades, their cooldown and the rounds between, under every lag', () => {
+    const rack = ROOFTOPS.teams[0].rifle!;
+    const from = ROOFTOPS.teams[0].spawns[0];
+    const yaw = Math.atan2(-(rack[0] - from[0]), -(rack[2] - from[2]));
+    const d = Math.hypot(rack[0] - from[0], rack[2] - from[2]);
+    const put = (n: number, keys: (k: number) => number) =>
+      Array.from({ length: n }, (_, k) => ({ keys: keys(k), yaw, pitch: 0.4 }));
+    // To the rifle's rack, then 300 steps with it in hand: FIRE held in bursts, a double click
+    // every 37 steps (some inside the cooldown, more than the launcher holds).
+    const steps = [
+      ...put(Math.round((d - 0.5) * 10) + 3, () => KEY.FORWARD),
+      ...put(
+        300,
+        k => KEY.RIFLE | (k % 50 < 30 ? KEY.FIRE : 0) | (k % 37 === 5 ? KEY.FIRE | KEY.SPECIAL : 0),
+      ),
+    ];
+    for (const [name, lag] of LAGS) {
+      const r = race(lag, steps, 0, [], [], true);
+      expect([r.worst, r.end, r.final, r.differing], `${name} lag`).toEqual([0, 0, 0, []]);
+      expect(r.lastDiffering, `${name} lag`).toEqual([]);
+      expect(r.lobs, `${name} lag`).toBe(NADE_MAX);
     }
   }, 60_000);
 

@@ -6,6 +6,7 @@ import {
   HP_MAX,
   RAIL_CAP,
   RAIL_MAX,
+  NADE_MAX,
   RIFLE_CLIP,
   TEAM_COLOR,
   TEAM_NAME,
@@ -144,7 +145,8 @@ export interface Hud {
    * over the glyph, none hides it. `loaded` is what the battery or the capsule of the gun in hand
    * holds, in the same count: big, with the rest after it as the magazines it makes (an open one for
    * a part) over its count; faded while `swapping` it. `rifle` is the
-   * laser rifle's rounds (-1 none), shown with the glyph in red when `rifled` (slot 4).
+   * laser rifle's rounds (-1 none), shown with the glyph in red when `rifled` (slot 4), with the
+   * `nades` left in its launcher as dots after the count, hollow for the ones spent.
    */
   vitals(
     hp: number,
@@ -157,6 +159,7 @@ export interface Hud {
     swapping?: boolean,
     rifle?: number,
     rifled?: boolean,
+    nades?: number,
   ): void;
   /** A hit marker on the crosshair for a moment: a ball or a cut of the own player hit. */
   hit(): void;
@@ -196,7 +199,7 @@ export const createHud = (screen: HTMLElement): Hud => {
     `<aside hidden><h6>TINY FPS</h6><span></span><table>` +
       `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Shift<td>sprint<tr><td>Space<td>jump, again in the air` +
       `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>Left click<td>fire, hold to charge<tr><td>R<td>swap the battery<tr><td>1, 2, 3, 4, wheel<td>gun, katana, rail gun, laser rifle` +
-      `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>special: lunge, energy arc, leap<tr><td>Blades locked<td>click fast; step aside to break<tr><td>E<td>rover: get in, get out (W/S drive toward the look, Space handbrake)<tr><td>M<td>mute<tr><td>Esc<td>this screen: the host picks the map at the top</table>` +
+      `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>katana special: lunge, energy arc, leap; laser rifle: a grenade from its launcher<tr><td>Blades locked<td>click fast; step aside to break<tr><td>E<td>rover: get in, get out (W/S drive toward the look, Space handbrake)<tr><td>M<td>mute<tr><td>Esc<td>this screen: the host picks the map at the top</table>` +
       `<span>Take the enemy flag to your own base while yours is home. Jump onto the armoury past your flag for the gun, the katana and the rail gun. Hold the rail gun's lightning on a foe: it slows him and drains 1 health a second, and 3 s more after it lets go.</span>` +
       `<strong></strong></aside><menu hidden></menu>` +
       `<del hidden></del><u></u><h5 hidden>Muted (M)</h5>` +
@@ -318,6 +321,7 @@ export const createHud = (screen: HTMLElement): Hud => {
       swapping = false,
       rifle = -1,
       rifled = false,
+      nades = 0,
     ) {
       pips.forEach((li, i) => li.classList.toggle('e', i >= hp));
       life.classList.toggle('low', hp <= 1);
@@ -335,7 +339,10 @@ export const createHud = (screen: HTMLElement): Hud => {
       // The rest as the magazines it makes, full ones and an open one for a part, over its count.
       const rest = Math.max(n - m, 0);
       const size = rifled ? RIFLE_CLIP : railed ? (RAIL_CAP * 99) / RAIL_MAX : GUN_MAG;
-      set(spare, `${'▮'.repeat(rest / size)}${rest % size ? '▯' : ''}\n${rest}`);
+      const dots = rifled
+        ? `  ${'●'.repeat(nades)}${'○'.repeat(Math.max(NADE_MAX - nades, 0))}`
+        : '';
+      set(spare, `${'▮'.repeat(rest / size)}${rest % size ? '▯' : ''}\n${rest}${dots}`);
       slots.hidden = have.filter(Boolean).length < 2;
       [...slots.children].forEach((kbd, i) => {
         (kbd as HTMLElement).hidden = !have[i];

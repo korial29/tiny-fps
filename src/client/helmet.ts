@@ -73,15 +73,14 @@ const RIM = [0.006, 0.005, 0.016];
  * `GUARD_E`). Its back is inside the shell.
  */
 const GUARD = [
-  [0.05, 0.02, 0.034, -0.146, -0.085],
-  [0.036, 0.03, 0.052, -0.164, -0.085],
-  [0.012, 0.036, 0.062, -0.176, -0.085],
-  [-0.02, 0.04, 0.07, -0.18, -0.085],
-  [-0.055, 0.04, 0.072, -0.178, -0.085],
-  [-0.082, 0.038, 0.066, -0.168, -0.085],
-  [-0.094, 0.03, 0.054, -0.15, -0.085],
+  [0.05, 0.018, 0.03, -0.146, -0.085],
+  [0.034, 0.03, 0.046, -0.166, -0.085],
+  [0.004, 0.034, 0.056, -0.172, -0.085],
+  [-0.05, 0.034, 0.058, -0.172, -0.085],
+  [-0.074, 0.03, 0.054, -0.162, -0.085],
+  [-0.086, 0.024, 0.046, -0.146, -0.085],
 ];
-const GUARD_E = 6;
+const GUARD_E = 12;
 
 /**
  * The cheek blocks (the user, 2026-11-10): a raised band on each side, along the ear plate's front
@@ -95,8 +94,8 @@ const CHEEK = {
     [0.082, -0.045],
   ],
   round: 0.01,
-  w: 0.028,
-  h: 0.036,
+  w: 0.017,
+  h: 0.024,
 };
 
 /**
@@ -131,7 +130,7 @@ const INTAKES = [
 ];
 
 /** The ear plates: centre (y, z), half height and depth, and from where in the shell out to where. */
-const PLATE = { c: [0.035, 0.024], r: [0.092, 0.064], x: [0.09, 0.148] };
+const PLATE = { c: [0.035, 0.022], r: [0.086, 0.046], x: [0.09, 0.138] };
 
 /**
  * Sides around and rows up of the shell; points round the visor's edge; sides of the guard, the
@@ -728,8 +727,8 @@ const kit = (lod: number): Kit => {
     const [x0, x1] = PLATE.x;
     for (const side of [-1, 1]) {
       // Along x out of the shell: the plate's full face, a bevel, then its flat front.
-      const xs = [x0, x1 - 0.022, x1];
-      const scale = [1, 0.96, 0.58];
+      const xs = [x0, x1 - 0.014, x1];
+      const scale = [1, 0.97, 0.7];
       loft(
         (t, s) => {
           const f = s * (xs.length - 1);

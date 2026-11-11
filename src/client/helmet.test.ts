@@ -72,6 +72,43 @@ describe('helmet', () => {
   }
 
   // Detailed (the user, 2026-11-10: whatever it costs), still a fraction of a body (34 000 close).
+  it('is a round dome after DOOM’s, narrower than the boxy one it replaces, with nothing on top and a short jaw box', () => {
+    // Round: exponents a little over an ellipsoid's 2, where the boxy shell's were 3.2 and 3.
+    expect(SHELL.e[0]).toBeLessThan(2.8);
+    expect(SHELL.e[1]).toBeLessThan(2.8);
+    // Drawn 21 cm wide, where the old one was 23; no taller, no deeper.
+    expect(SHELL.r[0] * SCALE).toBeLessThan(0.108);
+    expect(SHELL.r[1] * SCALE).toBeLessThanOrEqual(0.14);
+    expect(SHELL.r[2] * SCALE).toBeLessThanOrEqual(0.135);
+    for (const lod of [1, 3]) {
+      const out = make(lod);
+      const p = Array.from({ length: count(out) }, (_, i) => at(out, i).map((w, k) => w - HEAD[k]));
+      // Nothing over the dome: the vent block is gone.
+      const top = shrunk([0, SHELL.c[1] + SHELL.r[1], 0])[1];
+      expect(Math.max(...p.map(q => q[1]))).toBeLessThan(top + 0.001);
+      // The jaw box stands 3 to 5 cm out of the shell's front, where the snout stood 7.
+      const front = shrunk([0, 0, SHELL.c[2] - SHELL.r[2]])[2];
+      const jut = front - Math.min(...p.map(q => q[2]));
+      expect(jut).toBeGreaterThan(0.025);
+      expect(jut).toBeLessThan(0.05);
+      // The ear discs are round: as tall as they are deep, at the helmet's widest.
+      const side = shrunk([SHELL.r[0], 0, 0])[0];
+      const ear = p.filter(q => q[0] > side + 0.004);
+      const span = (k: number) => Math.max(...ear.map(q => q[k])) - Math.min(...ear.map(q => q[k]));
+      expect(ear.length).toBeGreaterThan(20);
+      expect(Math.abs(span(1) - span(2))).toBeLessThan(0.004);
+      expect(span(1)).toBeGreaterThan(0.07);
+    }
+    // The neck is sealed at every level, the far one too: the helmet goes down to the suit's collar.
+    for (const lod of [0, 1, 3]) {
+      const out = make(lod);
+      const low = Math.min(
+        ...Array.from({ length: count(out) }, (_, i) => out[i * STRIDE + 1] - HEAD[1]),
+      );
+      expect(low).toBeLessThan(-0.08);
+    }
+  });
+
   it('stays modest: under 1 000 vertices far, 8 000 near, 20 000 close', () => {
     expect(count(make(0))).toBeLessThan(1000);
     expect(count(make(1))).toBeLessThan(8000);

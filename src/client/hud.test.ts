@@ -289,14 +289,27 @@ describe('createHud', () => {
     expect(v()).toBe('');
   });
 
-  it('shows the dark rim of a helmet visor while the own player wears one', () => {
+  it('shows a helmet’s rim round the view, heavier at the brow, under the face and the counts', () => {
     const rim = () => q('del');
     expect(rim().hidden).toBe(true);
     hud.visor(true);
     expect(rim().hidden).toBe(false);
     hud.visor(false);
     expect(rim().hidden).toBe(true);
+    // The first rim, a little more aggressive: the corners' shade, a rounded rim squarer at the brow
+    // than at the jaw, and a heavy brow's shade under its top edge. No V, no clip.
     expect(HUD_CSS).toMatch(/del\{inset:0;background:radial-gradient/);
+    expect(HUD_CSS).not.toMatch(/del[^}]*clip-path/);
+    const [, top, , bottom] = /del::before\{[^}]*border-radius:(\d+)% (\d+)% (\d+)% (\d+)%/.exec(
+      HUD_CSS,
+    )!;
+    expect(+top).toBeLessThan(+bottom);
+    expect(HUD_CSS).toMatch(/del::before\{[^}]*inset 0 22px 20px -8px #000a/);
+    // The shell is drawn before the face, the health and the gun's count, so they lie over it.
+    const order = [...screen.children].map(e => e.tagName);
+    for (const tag of ['UL', 'FIGURE', 'DL']) {
+      expect(order.indexOf('DEL')).toBeLessThan(order.indexOf(tag));
+    }
   });
 
   it('shows the muted mark while muted', () => {

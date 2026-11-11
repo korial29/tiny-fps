@@ -158,8 +158,10 @@ const RELIEF = 0.06;
 // dark where r looks down at the ground, with a sharp bright streak where it mirrors just above the
 // horizon. On a texture C.w is 2 * the brush's tint index + its light (see level); G is the
 // palette. On stone (the regolith) the tile is fetched twice at offsets drawn from a 9 m value noise
-// (vn) and blended by it, so no two patches repeat, darkened on slopes; it is then mixed with itself 3.7 times larger and turned,
-// and lit up or darkened by its own 58 m mip (mk), so it shows no 2 m grid. F: fog colour and
+// (vn) and blended by it, so no two patches repeat, darkened on slopes; its tone then varies by noise
+// computed here at 11, 4, 1.6 and 77 m (no second fetch of the tile, whose period showed on far
+// hills), and with distance it fades to the tile's mean colour and a flat height, so the horizon
+// carries shading and no pattern. F: fog colour and
 // density, U the height the fog layer is anchored at: the density is
 // F.a * (1 + FOG_LAYER * exp(FOG_RISE * (U - y))) at height y, integrated along the view ray in closed
 // form (x is the climb along it, times FOG_RISE; the branch is its limit at 0).
@@ -187,8 +189,10 @@ if(ks>.5){
 vec2 uv=C.xy/${TILE}.,gx=dFdx(uv),gy=dFdy(uv);float q=vn(C.xy*.11)*8.,iq=floor(q);
 vec4 ta=textureGrad(S,vec3(uv+sin(vec2(3,7)*iq),L),gx,gy),tb=textureGrad(S,vec3(uv+sin(vec2(3,7)*(iq+1.)),L),gx,gy);
 t=mix(ta,tb,smoothstep(.2,.8,q-iq-.1*dot(ta.rgb-tb.rgb,vec3(1))));
+float fd=smoothstep(25.,140.,length(P-E)),n1=(vn(C.xy*.09)+.5*vn(C.xy*.23+7.)+.25*vn(C.xy*.61+3.))/1.75-.5,n2=vn(C.xy*.013+11.)-.5;
+t.rgb=mix(t.rgb,textureLod(S,vec3(0,0,L),9.).rgb,.2+.8*fd)*(1.+.42*n1+.5*n2);
+t.a=mix(t.a,.5,fd);
 t.rgb*=mix(.6,1.,smoothstep(.72,.97,normalize(N).y));}
-vec3 t2=texture(S,vec3(mat2(.8,-.6,.6,.8)*C.xy*.135,L)).rgb;float mk=textureLod(S,vec3(C.xy*.017,L),5.).g-textureLod(S,vec3(0,0,L),9.).g;t.rgb=mix(t.rgb,mix(t.rgb,t2,.45)*(1.+6.*mk),ks);
 vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
 vec3 n=normalize(N),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float h=t.a*s*${RELIEF},det=dot(dx,a);

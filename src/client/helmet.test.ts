@@ -117,8 +117,12 @@ describe('helmet', () => {
     // its front face, cut in segments.
     const dome = shrunk([0, SHELL.c[1] + SHELL.r[1], 0])[1];
     const over = p.filter(q => q[1] > dome + 0.004);
-    expect(over.length).toBeGreaterThan(30);
-    expect(Math.max(...over.map(q => q[1]))).toBeLessThan(dome + 0.03);
+    expect(over.length).toBeGreaterThan(12);
+    // A small block (the user, 2026-11-11: reduce it): under 2 cm over the dome, under 10 cm wide,
+    // and gone before the back of the crown.
+    expect(Math.max(...over.map(q => q[1]))).toBeLessThan(dome + 0.02);
+    expect(Math.max(...over.map(q => Math.abs(q[0])))).toBeLessThan(0.05);
+    expect(Math.max(...over.map(q => q[2]))).toBeLessThan(0.06);
     expect(Math.min(...over.map(q => q[2]))).toBeGreaterThan(-0.11);
     const bar = p.filter(q => q[3] > 0.96 && q[1] > 0.15 && q[2] < -0.08);
     expect(bar.length).toBeGreaterThanOrEqual(6);
@@ -131,10 +135,11 @@ describe('helmet', () => {
     expect(jut).toBeLessThan(0.05);
     const slots = p.filter(q => q[3] < 0.06 && q[2] < front - 0.005 && Math.abs(q[0]) < 0.04);
     expect(new Set(slots.map(q => Math.round(q[1] * 200))).size).toBeGreaterThanOrEqual(5);
-    // Vents: one each side of the box, low, and one each side of the visor, high.
+    // Vents: one each side of the visor, high, and none low on the cheeks beside the box (the
+    // user, 2026-11-11: those were not coherent).
     const dark = p.filter(q => q[3] < 0.06 && q[4] < 0.06 && Math.abs(q[0]) > 0.05);
     for (const side of [1, -1]) {
-      expect(dark.some(q => q[0] * side > 0 && q[1] < 0)).toBe(true);
+      expect(dark.some(q => q[0] * side > 0 && q[1] < 0)).toBe(false);
       expect(dark.some(q => q[0] * side > 0 && q[1] > 0.05)).toBe(true);
     }
   });

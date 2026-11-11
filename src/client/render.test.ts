@@ -756,4 +756,20 @@ describe('the regolith in the shader', () => {
     expect(FRAG).toMatch(/if\(ks>\.5\)\{[^}]*textureGrad\([^}]*textureGrad\(/s);
     expect(FRAG).toMatch(/t\.rgb\*=mix\(\.6,1\.,smoothstep\(\.72,\.97,normalize\(N\)\.y\)\)/);
   });
+
+  it('varies the stone by computed noise and fades it to its mean colour with distance, with no second copy of the tile', () => {
+    // The tile mixed with itself 3.7 times larger repeated every 7 m on far hills: gone.
+    expect(FRAG).not.toContain('C.xy*.135');
+    expect(FRAG).not.toContain('C.xy*.017');
+    // Three octaves and a slow one, computed, and a fade by the distance to the eye toward the layer's last mip.
+    expect(FRAG).toMatch(/fd=smoothstep\(25\.,140\.,length\(P-E\)\)/);
+    expect(FRAG).toMatch(
+      /vn\(C\.xy\*\.09\).*vn\(C\.xy\*\.23\+7\.\).*vn\(C\.xy\*\.61\+3\.\).*vn\(C\.xy\*\.013\+11\.\)/,
+    );
+    expect(FRAG).toMatch(
+      /t\.rgb=mix\(t\.rgb,textureLod\(S,vec3\(0,0,L\),9\.\)\.rgb,\.2\+\.8\*fd\)/,
+    );
+    // The bump flattens too, or the far ground would sparkle.
+    expect(FRAG).toContain('t.a=mix(t.a,.5,fd)');
+  });
 });

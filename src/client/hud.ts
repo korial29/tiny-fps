@@ -96,9 +96,11 @@ export const HUD_CSS =
   `background:linear-gradient(90deg,#e23b3b,#fff3 50%,#8ef);box-shadow:0 0 0 1px #0008}` +
   `ins i{position:absolute;top:-5px;width:6px;height:22px;margin-left:-3px;border-radius:3px;background:#fff;box-shadow:0 0 8px #8ef}` +
   `figure{left:50%;bottom:24px;transform:translateX(-50%)}figure canvas{display:block;width:72px;height:87px;image-rendering:pixelated;filter:drop-shadow(0 2px 2px #000a)}` +
-  // The visor rim of a helmet: the dark of the shell at the corners, a curved edge and a sheen on it.
-  `del{inset:0;background:radial-gradient(ellipse 74% 80% at 50% 54%,#0000 62%,#000c 100%)}` +
-  `del::before{content:"";position:absolute;inset:3% 4% 6%;border-radius:42% 42% 30% 30%/34% 34% 24% 24%;box-shadow:inset 0 0 0 2px #fff1,inset 0 10px 16px #fff1,inset 0 -8px 14px #0006}` +
+  // The visor rim of a helmet, as it first was (the user, 2026-11-11, after a V was tried) but a little more aggressive: the
+  // dark of the shell at the corners, a rim squarer at the brow and tapering to the jaw, a heavy brow's shade under its
+  // top edge, a sheen on it. Drawn before the face, the health and the counts, which lie over it.
+  `del{inset:0;background:radial-gradient(ellipse 74% 80% at 50% 54%,#0000 60%,#000d 100%)}` +
+  `del::before{content:"";position:absolute;inset:3% 4% 6%;border-radius:30% 30% 44% 44%/20% 20% 38% 38%;box-shadow:inset 0 0 0 2px #fff1,inset 0 22px 20px -8px #000a,inset 0 10px 16px #fff1,inset 0 -8px 14px #0006}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}` +
   // The maps over the title screen, and over the end screen when the pointer is free: the host's buttons.

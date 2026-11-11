@@ -3,7 +3,7 @@
 // top, set back from the brow, with a pale bar in segments across its front; a tall green visor
 // under a heavy brow, its lower edge falling from its ends to the jaw box, which comes up into its
 // middle; the jaw box with a short slot at its top and four vent slots under it; a vent each side
-// of it and one each side of the visor; a tall plate on each ear with a light strip; L-shaped
+// of the visor; a tall plate on each ear with a light strip; L-shaped
 // blocks down the sides; a ring at the neck. A pure function of the head joint's place: no state,
 // no DOM. Built once per level of detail, in the head's own frame (the head joint's rest pose,
 // metres, -z the front) and appended where the head is.
@@ -101,8 +101,9 @@ const CHEEK = {
 /**
  * The air intakes (the user, 2026-11-10: more vents on top and on the sides): framed openings
  * standing out of the shell, dark inside, crossed by slats. Each [u, y, half width, half height,
- * slats, slats upright, how far it stands out]: one small on each cheek beside the guard. The
- * big one on top is a block of its own (ROOF).
+ * slats, slats upright, how far it stands out]: one each side of the visor. Those low on the
+ * cheeks beside the guard are gone (the user, 2026-11-11: not coherent). The big one on top is a
+ * block of its own (ROOF).
  */
 /**
  * The vent block on top (the user, 2026-11-10: just that on top, no crest, one block the helmet's
@@ -110,7 +111,8 @@ const CHEEK = {
  * back, following its curve; its half width, its front and back (z), how far it stands over the
  * shell, the grille's slats and how far back from the front the grille goes.
  */
-const ROOF = { w: 0.07, z: [-0.104, 0.13], h: 0.028, slats: 6 };
+// Smaller since 2026-11-11 (the user: reduce the block on top): two thirds as wide and as high, and shorter at the back.
+const ROOF = { w: 0.046, z: [-0.1, 0.08], h: 0.018, slats: 4 };
 
 /** The height of the shell's top at (x, z). */
 const topAt = (x: number, z: number) => {
@@ -123,8 +125,6 @@ const topAt = (x: number, z: number) => {
 /** How deep in the shell the intakes' walls start, so a big one meets the curve all round. */
 const FOOT = -0.03;
 const INTAKES = [
-  [0.092, -0.034, 0.013, 0.032, 0, 0, 0.009],
-  [-0.092, -0.034, 0.013, 0.032, 0, 0, 0.009],
   [0.142, 0.082, 0.008, 0.028, 3, 0, 0.006],
   [-0.142, 0.082, 0.008, 0.028, 3, 0, 0.006],
 ];

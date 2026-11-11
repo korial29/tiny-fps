@@ -106,14 +106,34 @@ describe('createHud', () => {
     expect(v()).toBe('');
   });
 
-  it('shows the dark rim of a helmet visor while the own player wears one', () => {
+  it('keeps the helmet’s view as it was, with a faint V outline under the face and the counts', () => {
     const rim = () => q('del');
     expect(rim().hidden).toBe(true);
     hud.visor(true);
     expect(rim().hidden).toBe(false);
     hud.visor(false);
     expect(rim().hidden).toBe(true);
+    // The view is the one it was: the corners' shade.
     expect(HUD_CSS).toMatch(/del\{inset:0;background:radial-gradient/);
+    // Over it only a hint of the visor: a thin pale outline in a slight V, never a filled shell.
+    const [, line] = /del::before\{[^}]*clip-path:polygon\(evenodd,([^)]*)\)/.exec(HUD_CSS)!;
+    const pts = line.split(',').map(p => p.split(' ').map(parseFloat));
+    const [tl, brow, tr, r, chin, l] = pts;
+    expect([brow[0], chin[0]]).toEqual([50, 50]);
+    expect(brow[1] - tl[1]).toBeGreaterThan(1);
+    expect(brow[1] - tl[1]).toBeLessThan(5);
+    expect(chin[1] - l[1]).toBeGreaterThan(1);
+    expect(chin[1] - l[1]).toBeLessThan(8);
+    expect(tr[1]).toBe(tl[1]);
+    expect(100 - r[0]).toBe(l[0]);
+    // Thin: its inner outline is under half a percent inside the outer one.
+    expect(pts[7][0] - tl[0]).toBeLessThan(0.5);
+    expect(HUD_CSS).toMatch(/del::before\{[^}]*background:#fff[1-3]\b/);
+    // The shell is drawn before the face, the health and the gun's count, so they lie over it.
+    const order = [...screen.children].map(e => e.tagName);
+    for (const tag of ['UL', 'FIGURE', 'DL']) {
+      expect(order.indexOf('DEL')).toBeLessThan(order.indexOf(tag));
+    }
   });
 
   it('shows the muted mark while muted', () => {

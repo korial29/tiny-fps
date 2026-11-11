@@ -58,11 +58,12 @@ describe("helm, the woman's helmet on the moon", () => {
     expect(DOME.r[1]).toBeLessThan(0.142);
   });
 
-  it('has a V cut on each cheek, its point under the cheekbone by the eye, its arms down to the lip, carved in angles inside', () => {
+  it('has a V cut on each cheek, its point under the cheekbone by the eye, its arms down toward the lip, carved in angles inside', () => {
     const [tu, tv] = CUT.tip;
     expect(tu).toBeLessThan(0.3);
-    expect(tv).toBeGreaterThan(0.6);
-    expect(CUT.arms.every(([, v]) => v == 0)).toBe(true);
+    expect(tv).toBeGreaterThan(0.9);
+    // High on the cheek: the arms end above the lip.
+    expect(CUT.arms.every(([, v]) => v > 0.15 && v < 0.3)).toBe(true);
     const turn = (w: { p: Vec3 }) => Math.atan2(w.p[0] - DOME.c[0], DOME.c[2] - w.p[2]);
     const off = (w: { p: Vec3 }) => {
       const d = dome(turn(w), w.p[1]);

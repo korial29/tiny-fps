@@ -183,14 +183,14 @@ const outline = (u: number, v: number): [a: number, y: number] => {
 /**
  * The cheeks (the user, 2026-11-11: no surfaces on the sides, no hollows, just a cut, clean; after
  * a Mandalorian helmet, an idea and nothing copied): the dome is whole, and on each cheek a fine
- * dark groove draws a V, its point under the cheekbone by the eye, its two arms down the helmet to
- * the lip. Each point is [u, v] on the outline (outline()); the groove is `w` metres wide.
+ * dark groove draws a V, its point under the cheekbone by the eye, its two arms down the helmet,
+ * ending above the lip (the user: higher). Each point is [u, v] on the outline (outline()); the groove is `w` metres wide.
  */
 export const CUT = {
-  tip: [0.22, 0.74] as [number, number],
+  tip: [0.22, 0.95] as [number, number],
   arms: [
-    [0.08, 0],
-    [0.7, 0],
+    [0.08, 0.22],
+    [0.7, 0.22],
   ] as [number, number][],
   w: 0.0028,
   off: 0.0016,
@@ -221,7 +221,7 @@ const groove = (sx: number, p: [number, number], q: [number, number], out: numbe
 };
 
 /** The V's hollow: its deepest point (u, v) inside the V, and how deep, metres. */
-export const PIT = { at: [0.38, 0.22] as [number, number], depth: 0.015 };
+export const PIT = { at: [0.38, 0.42] as [number, number], depth: 0.015 };
 /** How far the hollow and its skirt stand over the dome where flush with it; the skirt's reach past the V, in u and v; each face cut in SPLIT². */
 const FLUSH = 0.0006;
 const SKIRT = [0.22, 0.1];
@@ -325,6 +325,23 @@ const cheek = (sx: number, out: number[]) => {
       out,
     );
   }
+  // Under the V's base too: from the base down to the lip.
+  const base = Array.from({ length: SPLIT * 2 + 1 }, (_, i): [number, number] => {
+    const t = i / (SPLIT * 2);
+    return [L1[0] + (L2[0] - L1[0]) * t, L1[1] + (L2[1] - L1[1]) * t];
+  });
+  const wide: [number, number][] = [[L1[0] - SKIRT[0], L1[1]], ...base, [L2[0] + SKIRT[0], L2[1]]];
+  strip(
+    [wide, wide.map(([u]): [number, number] => [u, 0])].map(row =>
+      row.map(([u, v]): Spot => {
+        const [a, y] = outline(u, Math.max(0, v));
+        return onDome(sx * a, y, FLUSH);
+      }),
+    ),
+    WHITE,
+    GLOSS,
+    out,
+  );
   for (const arm of CUT.arms) {
     groove(sx, CUT.tip, arm, out);
   }

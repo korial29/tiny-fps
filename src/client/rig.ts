@@ -64,6 +64,30 @@ export const REST: Vec3[] = [
   [0, -0.04, -0.13],
 ];
 
+/** The builds a runner can have (PlayerInfo.body): today's man, and the woman. */
+export const BUILD = { MALE: 0, FEMALE: 1 } as const;
+
+/**
+ * The woman's rest offsets: the same legs under a shorter trunk (3 cm less to the head joint),
+ * narrower shoulders (the joint 16.7 cm out, not 19), hips 4 mm wider apart, shorter arms. The
+ * pelvis, the legs and the feet are the man's, so the gait's leg lengths hold for both.
+ */
+const REST_F: Vec3[] = REST.map(v => [...v] as Vec3);
+REST_F[1] = [0, 0.115, 0];
+REST_F[2] = [0, 0.19, 0];
+REST_F[3] = [0, 0.21, 0];
+REST_F[4] = [0, 0.095, 0];
+[-1, 1].forEach((s, i) => {
+  REST_F[5 + 4 * i] = [0.035 * s, 0.16, 0];
+  REST_F[6 + 4 * i] = [0.132 * s, 0, 0];
+  REST_F[7 + 4 * i] = [0.026 * s, -0.275, 0];
+  REST_F[8 + 4 * i] = [0, -0.25, 0];
+  REST_F[13 + 4 * i] = [0.104 * s, -0.05, 0];
+});
+
+/** Each build's rest offsets (BUILD). */
+export const RESTS: Vec3[][] = [REST, REST_F];
+
 /** A pose: where the runner stands, how it faces, and each joint's rotation from its rest. */
 export interface Pose {
   /** The feet origin in the world (the player's position). */
@@ -73,16 +97,19 @@ export interface Pose {
   hips: Vec3;
   /** Local rotation of each joint, relative to its rest, in its parent's frame. */
   rot: Quat[];
+  /** The rest offsets of its build (RESTS), the man's when absent. Copies of a pose keep it. */
+  rest?: Vec3[];
 }
 
 export const IDENTITY: Quat = [0, 0, 0, 1];
 
 /** The rest pose at `at`, facing `yaw`. */
-export const rest = (at: Vec3 = [0, 0, 0], yaw = 0): Pose => ({
+export const rest = (at: Vec3 = [0, 0, 0], yaw = 0, build = 0): Pose => ({
   at,
   yaw,
   hips: [0, 0, 0],
   rot: Array.from({ length: JOINTS }, () => [...IDENTITY] as Quat),
+  ...(build ? { rest: RESTS[build] } : {}),
 });
 
 /** a then b: the rotation b applied in a's frame. */
@@ -131,6 +158,7 @@ export const solve = (p: Pose): { pos: Vec3[]; rot: Quat[] } => {
   const pos: Vec3[] = [];
   const rot: Quat[] = [];
   const root = axis([0, 1, 0], p.yaw);
+  const REST = p.rest ?? RESTS[0];
   for (let j = 0; j < JOINTS; j++) {
     const up = PARENT[j];
     const base = up < 0 ? root : rot[up];

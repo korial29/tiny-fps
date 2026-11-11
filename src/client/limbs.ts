@@ -48,15 +48,22 @@ export interface Piece {
   /** The stump's cut face on the body (soldier() keeps it there), and seconds since the cut. */
   at: Vec3;
   age: number;
+  /** The BUILD of the body it came off (rig.ts). */
+  b?: number;
 }
 
 /**
  * The limb `limb` of `p` coming off the body posed as `s`: thrown with the body's speed, a little
  * outward (and back) from the hips and up, tumbling outward.
  */
-export const sever = (limb: number, s: ReturnType<typeof solve>, p: PlayerState): Piece => {
+export const sever = (
+  limb: number,
+  s: ReturnType<typeof solve>,
+  p: PlayerState,
+  build = 0,
+): Piece => {
   const v: number[] = [];
-  skin(v, cut(1, limb)[1], s, palette([0, 0, 0]));
+  skin(v, cut(1, limb, build)[1], s, palette([0, 0, 0]));
   const n = v.length / STRIDE;
   const at = v.slice(v.length - STRIDE, v.length - STRIDE + 3) as Vec3;
   const c = [0, 1, 2].map(k => v.reduce((m, x, i) => (i % STRIDE == k ? m + x : m), 0) / n) as Vec3;
@@ -82,6 +89,7 @@ export const sever = (limb: number, s: ReturnType<typeof solve>, p: PlayerState)
     w: [out[2] * 7, 1.5, -out[0] * 7],
     at,
     age: 0,
+    b: build,
   };
 };
 
@@ -117,7 +125,7 @@ export const fall = (c: Piece, dt: number, floor: Ground) => {
  * way); moved by dt, the stump spitting; forgotten once he is up.
  */
 export const track = (
-  r: { p: PlayerState; gait: Pick<Gait, 'pose'>; cut?: Piece },
+  r: { p: PlayerState; gait: Pick<Gait, 'pose'>; cut?: Piece; build?: number },
   dt: number,
   floor: Ground,
   fresh: boolean,
@@ -129,7 +137,7 @@ export const track = (
     return;
   }
   if (!r.cut) {
-    r.cut = sever(k, solve(r.gait.pose()), r.p);
+    r.cut = sever(k, solve(r.gait.pose()), r.p, r.build);
     if (fresh) {
       for (let i = 0; i < 240; i++) {
         fall(r.cut, 1 / 60, floor);
@@ -156,7 +164,7 @@ export const piece = (
 ) => {
   const from = out.length;
   // A head off has its owner's face: down, the eyes shut.
-  skin(out, cut(lod, c.limb)[1], c.s, colors, face);
+  skin(out, cut(lod, c.limb, c.b)[1], c.s, colors, face);
   for (let i = from; i < out.length; i += STRIDE) {
     const x = turn(c.q, [out[i] - c.c[0], out[i + 1] - c.c[1], out[i + 2] - c.c[2]]);
     const nv = turn(c.q, [out[i + 3], out[i + 4], out[i + 5]]);

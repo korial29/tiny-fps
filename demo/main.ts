@@ -6,7 +6,10 @@ const q = new URLSearchParams(location.search);
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>('form');
-const fields = form.elements as unknown as Record<'name' | 'mode' | 'url', HTMLInputElement> & {
+const fields = form.elements as unknown as Record<
+  'name' | 'mode' | 'url' | 'body',
+  HTMLInputElement
+> & {
   /** The map cards' radios: its value is the checked one's. */
   map: RadioNodeList;
 };
@@ -33,6 +36,7 @@ const join = () => {
   game = tinyFps($('game'), {
     name,
     map,
+    body: +fields.body.value,
     ...(server ? { url } : { socket: localSocket('demo', { map }) }),
   });
   status.textContent = server ? `Playing on ${url}` : 'Playing locally';
@@ -52,11 +56,12 @@ form.addEventListener('submit', e => {
 });
 $('leave').addEventListener('click', leave);
 
-// ?name=…&mode=local|server&map=highline|tranquility&url=… joins right away.
+// ?name=…&mode=local|server&map=highline|tranquility&body=0|1&url=… joins right away.
 fields.name.value = q.get('name') ?? `Player ${Math.floor(Math.random() * 900) + 100}`;
 fields.mode.value = q.get('mode') == 'server' ? 'server' : 'local';
 fields.map.value = q.get('map') == 'tranquility' ? 'tranquility' : 'highline';
 fields.url.value = q.get('url') ?? fields.url.value;
+fields.body.value = q.get('body') == '1' ? '1' : '0';
 syncMode();
 if (q.has('name')) {
   join();

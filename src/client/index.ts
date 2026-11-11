@@ -44,6 +44,8 @@ export interface TinyFpsOptions {
    * room's roster says the map it plays, and the game follows it: the host picks it.
    */
   map?: string;
+  /** The character to play (BODY): the man (0, the default) or the woman (1). The look only. */
+  body?: number;
 }
 
 export type TinyFpsEvent = 'roster' | 'open' | 'close';
@@ -104,7 +106,13 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   };
   ws.onopen = () => {
     up = true;
-    ws.send(JSON.stringify({ t: 'join', name: opts.name } satisfies ClientText));
+    ws.send(
+      JSON.stringify({
+        t: 'join',
+        name: opts.name,
+        ...(opts.body ? { body: opts.body } : {}),
+      } satisfies ClientText),
+    );
     port.onopen?.();
     emit('open');
   };
@@ -291,7 +299,10 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
       roster = m.players;
       colors = new Map(roster.map(p => [p.id, p.color]));
       names = new Map(roster.map(p => [p.id, p.name]));
+      rd?.wear(new Map(roster.map(p => [p.id, p.body ?? 0])));
       you = { id: m.you, team: roster.find(p => p.id == m.you)?.team ?? 0 };
+      body.wear(roster.find(p => p.id == m.you)?.body ?? 0);
+      hud.wear(roster.find(p => p.id == m.you)?.body ?? 0);
       predictor.you(you.id, you.team);
       hud.maps(
         Object.entries(MAPS).map(([k, d]) => [k, d.name ?? k]),

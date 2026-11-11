@@ -165,6 +165,8 @@ export interface Hud {
   hit(): void;
   /** The face over the health, frame `n` of face.ts (-1 hides it). */
   face(n: number): void;
+  /** The own player's character (BODY): the face is hers when she is the woman. */
+  wear(body: number): void;
   /**
    * A saber lock: the gauge of the tug of war under the crosshair, with `lead` the own side's, -1
    * (the foe wins) to 1 (he wins); undefined hides it.
@@ -229,6 +231,8 @@ export const createHud = (screen: HTMLElement): Hud => {
   const [frame, mug] = [one('figure'), one<HTMLCanvasElement>('figure canvas')];
   let pen: CanvasRenderingContext2D | null | undefined;
   let shown = -1;
+  /** 1 when the own player is the woman: her face (sprite()). */
+  let fem = 0;
   const banner = one('output');
   const [prompt, act, meter, speed] = ['samp', 'samp span', 'cite', 'cite span'].map(t => one(t));
   const vignette = one('u');
@@ -349,6 +353,11 @@ export const createHud = (screen: HTMLElement): Hud => {
         kbd.classList.toggle('a', i == (k ? 1 : rifled ? 3 : railed ? 2 : 0));
       });
     },
+    wear(body) {
+      if (+!!body != fem) {
+        [fem, shown] = [+!!body, -1];
+      }
+    },
     face(n) {
       frame.hidden = n < 0;
       if (n < 0 || n == shown) {
@@ -359,7 +368,7 @@ export const createHud = (screen: HTMLElement): Hud => {
       if (pen) {
         const img = pen.createImageData(FW, FH);
         const px = new Uint32Array(img.data.buffer);
-        sprite(n).forEach((c, i) => (px[i] = PALETTE[c]));
+        sprite(n, fem).forEach((c, i) => (px[i] = PALETTE[c]));
         pen.putImageData(img, 0, 0);
       }
     },

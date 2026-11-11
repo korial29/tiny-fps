@@ -143,9 +143,16 @@ const kit = (lod: number): Kit => {
 };
 
 /** Places `src`, built in a joint's frame, at that joint `at` turned by `q`. */
-const put = (out: number[], src: number[], at: Vec3, q: Quat, tint?: number[]) => {
+const put = (
+  out: number[],
+  src: number[],
+  at: Vec3,
+  q: Quat,
+  tint?: number[],
+  scale: number | Vec3 = 1,
+) => {
   const [r, u, f] = aim([0, 0, -1], [1, 0, 0]);
-  place(out, src, at, [turn(q, r), turn(q, u), turn(q, f)], [0, 0, 0], 1, tint);
+  place(out, src, at, [turn(q, r), turn(q, u), turn(q, f)], [0, 0, 0], scale, tint);
 };
 
 /**
@@ -395,12 +402,21 @@ const padOf = (lod: number) => {
 /** The tint that turns a white piece into `plate` (white when absent). */
 const tintOf = (plate?: number[]) => plate?.map((v, i) => v / WHITE[i]);
 
-/** Appends both shoulder pads at level of detail `lod` on the arm joints (`arms`: the left's and the right's place and turn), in `plate` (white when absent). */
-export const shoulders = (out: number[], arms: [Vec3, Quat][], lod: number, plate?: number[]) => {
+/** The woman's shoulder pads and cup, scaled about their joints: her shoulders' caps are smaller, the cup flatter. */
+export const [PAD_F, CUP_F]: [number, Vec3] = [0.87, [0.92, 0.94, 0.96]];
+
+/** Appends both shoulder pads at level of detail `lod` on the arm joints (`arms`: the left's and the right's place and turn), in `plate` (white when absent), `scale`d about the joints. */
+export const shoulders = (
+  out: number[],
+  arms: [Vec3, Quat][],
+  lod: number,
+  plate?: number[],
+  scale = 1,
+) => {
   const src = padOf(lod);
   arms.forEach(([at, q], i) => {
     const from = out.length;
-    put(out, src[i], at, q, tintOf(plate));
+    put(out, src[i], at, q, tintOf(plate), scale);
     // On coloured pads the scratches (the matte vertices) are white, not tinted.
     for (let k = from; plate && k < out.length; k += STRIDE) {
       if (out[k + 8] == -1) {
@@ -427,7 +443,14 @@ const CUP = [
 const cups = new Map<number, number[]>();
 
 /** Appends the crotch cup at level of detail `lod` on the pelvis joint at `at` turned by `q`, in `plate` (white when absent). */
-export const crotch = (out: number[], at: Vec3, q: Quat, lod: number, plate?: number[]) => {
+export const crotch = (
+  out: number[],
+  at: Vec3,
+  q: Quat,
+  lod: number,
+  plate?: number[],
+  scale: number | Vec3 = 1,
+) => {
   const level = Math.min(lod, 2);
   let v = cups.get(level);
   if (!v) {
@@ -464,5 +487,5 @@ export const crotch = (out: number[], at: Vec3, q: Quat, lod: number, plate?: nu
     }
     cups.set(level, v);
   }
-  put(out, v, at, q, tintOf(plate));
+  put(out, v, at, q, tintOf(plate), scale);
 };

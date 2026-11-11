@@ -407,6 +407,7 @@ describe('createRenderer', () => {
     ) => ({
       id: 7,
       update: vi.fn(),
+      wear: vi.fn(),
       pose: vi.fn(),
       muzzle: () => [0, 0, 0] as [number, number, number],
       spun: () => 0,

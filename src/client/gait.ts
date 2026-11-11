@@ -8,7 +8,7 @@ import { floored } from '../shared/physics';
 import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import type { Vec3 } from './mesh';
-import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn } from './rig';
+import { JOINT as J, PARENT, RESTS, axis, mul, rest, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
 import { grips } from './rover';
 import { damp } from './spring';
@@ -48,7 +48,7 @@ const [X, Y, Z]: Vec3[] = [
 /** Thigh and shin, and the ankle above the floor when the foot is flat. */
 const [THIGH, SHIN, SOLE] = [0.44, 0.43, 0.06];
 /** Upper arm and forearm (the rest offsets of the elbow and the wrist). */
-const [ARM, FORE] = [0.2915, 0.26];
+const [ARM_M, FORE_M] = [0.2915, 0.26];
 const LEG = THIGH + SHIN;
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
 const ease = (v: number) => (v = clamp(v)) * v * (3 - 2 * v);
@@ -390,8 +390,13 @@ interface Foot {
 }
 
 /** `bow` is the guard's lean forward: none for the eye's own body, whose arms hold to the view and which stands in no sword guard. */
-export const createGait = (bow = BOW): Gait => {
-  const out = rest();
+export const createGait = (bow = BOW, kind = 0): Gait => {
+  const out = rest([0, 0, 0], 0, kind);
+  /** The build's arm: the woman's is shorter (RESTS in rig.ts). */
+  const REST = RESTS[kind];
+  const [ARM, FORE] = kind
+    ? [Math.hypot(...REST[J.FOREARM_R]), Math.hypot(...REST[J.HAND_R])]
+    : [ARM_M, FORE_M];
   const P = {} as Record<Key, number>;
   /** After the moves' springs, the sword guard's. */
   const KEN = W + 2 * MOVES.length;

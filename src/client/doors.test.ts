@@ -91,7 +91,12 @@ describe('doors, from the snapshots', () => {
     const d = createDoors(w);
     d.snapshot([1, 0, 0.4, 0, 0, 0]);
     expect(w.doors!.map(s => s.open)).toEqual([1, 0, 0.4, 0, 0, 0]);
-    d.snapshot(undefined);
+    // A snapshot with no doors at all comes from a host that does not move them (an older
+    // server): they stand open, silently, not shut across the way with nothing to open them.
+    expect(d.snapshot(undefined)).toEqual([]);
+    expect(w.doors!.every(s => s.open === 1)).toBe(true);
+    // The host's word again: they follow it, and are heard.
+    expect(d.snapshot([0, 0, 0, 0, 0, 0]).length).toBeGreaterThan(0);
     expect(w.doors!.every(s => s.open === 0)).toBe(true);
     // A map without doors: nothing to do, nothing drawn.
     const none = createDoors(build({ ...MOON, doors: undefined }));

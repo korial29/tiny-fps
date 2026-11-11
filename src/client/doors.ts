@@ -103,12 +103,14 @@ export const createDoors = (world: World): Doors => {
     (min[2] + max[2]) / 2,
   ];
   return {
-    snapshot(open = []) {
+    snapshot(open) {
       const out: { id: number; at: Vec3 }[] = [];
       world.doors?.forEach((s, i) => {
-        const to = open[i] ?? 0;
+        // A host that sends no doors is an older one that does not move them: they stand open,
+        // not shut in the way with nothing to open them.
+        const to = open ? (open[i] ?? 0) : 1;
         const turn = Math.sign(to - s.open);
-        if (turn && turn !== way[i]) {
+        if (open && turn && turn !== way[i]) {
           way[i] = turn;
           out.push({ id: turn > 0 ? SOUND.DOOR : SOUND.SHUT, at: centre(defs[i]) });
         }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { STILL } from '../shared/physics';
 import { LIMB } from '../shared/types';
 import { CUP, CUP_Y, bust } from './armor';
-import { CREST, DENT, DOME, EAR, TEE, dent, dome, glazed, helm, onDome, shell, slit } from './helm';
+import { CREST, DOME, EAR, FACETS, TEE, dome, glazed, helm, onDome, slit } from './helm';
 import { helmet } from './helmet';
 import { GLOSS, SHINE, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
@@ -58,29 +58,26 @@ describe("helm, the woman's helmet on the moon", () => {
     expect(DOME.r[1]).toBeLessThan(0.142);
   });
 
-  it('is stove in under each cheekbone: the shell itself, in two flat faces meeting on a crease', () => {
-    const k = DOME.r[2];
-    const depth = (a: number, y: number) => {
-      const [p, q] = [dome(a, y), shell(a, y)];
-      return Math.hypot(q[0], q[2] - DOME.c[2]) - Math.hypot(p[0], p[2] - DOME.c[2]);
-    };
-    // Deepest on the crease, half way down it, on both sides alike.
-    const [a, y] = [(DENT.tip[0] + DENT.foot[0]) / 2, (DENT.tip[1] + DENT.foot[1]) / 2];
-    expect(depth(a, y)).toBeCloseTo(DENT.depth, 4);
-    expect(depth(-a, y)).toBeCloseTo(DENT.depth, 4);
-    expect(dent(a, y)).toBeCloseTo(DENT.depth, 6);
-    // Flat faces: the depth falls straight off the crease.
-    const off = (t: number) => dent(a - t / k, y);
-    expect(off(0.004) - off(0.008)).toBeCloseTo(off(0.008) - off(0.012), 6);
-    // Nothing over the cheekbones, at the visor, round the back or down the slot.
-    for (const [b, h] of [
-      [a, TEE.y],
-      [0, y],
-      [Math.PI / 2 + 0.3, y],
-      [DENT.tip[0], DENT.tip[1] + 0.03],
-    ]) {
-      expect(dent(b, h)).toBe(0);
-    }
+  it('has angular cheeks: the dome left out under them, a hollow of two dark flat triangles in each', () => {
+    const v = verts(make(3));
+    // The hollow: dark triangles under the slit, on both sides, sunk under the dome.
+    const dark = v.filter(
+      w => w.c[0] < 0.2 && w.layer == GLOSS && w.p[1] < TEE.y - slit(0) && w.p[2] < 0,
+    );
+    expect(dark.some(w => w.p[0] > 0) && dark.some(w => w.p[0] < 0)).toBe(true);
+    const sunk = dark.some(w => {
+      const a = Math.atan2(w.p[0] - DOME.c[0], DOME.c[2] - w.p[2]);
+      const d = dome(a, w.p[1]);
+      return Math.hypot(w.p[0], w.p[2] - DOME.c[2]) < Math.hypot(d[0], d[2] - DOME.c[2]) - 0.005;
+    });
+    expect(sunk).toBe(true);
+    expect(FACETS.tip[1]).toBeGreaterThan(0.5);
+    // Far, no cheeks: the dome is whole there.
+    expect(
+      verts(make(0)).filter(
+        w => w.c[0] < 0.2 && w.p[1] < TEE.y - slit(0) && w.p[2] < -0.05 && Math.abs(w.p[0]) > 0.03,
+      ),
+    ).toEqual([]);
   });
 
   it('holds the head of her skin, from the jaw up, with room', () => {

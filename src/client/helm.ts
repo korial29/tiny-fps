@@ -50,7 +50,7 @@ export const EAR = { y: 0.045, r: 0.036, t: 0.014, stalk: 0.19, w: 0.005 };
  * The cheek plates, grey, each side of the slot under the slit: how far round they go (radians),
  * the gap to the T's frame, how much their top edge falls to the back, and how far they stand off.
  */
-export const CHEEK = { round: 1.3, gap: 0.012, fall: 0.05, off: 0.0025 };
+export const CHEEK = { round: 1.3, gap: 0.012, fall: 0.05, off: 0.006 };
 
 /** The crest, in the team's colour: a stripe from the brow over the top to the back of the dome, its half width and how far it stands off. */
 export const CREST = { w: 0.015, off: 0.002, from: 0.112 };
@@ -59,6 +59,8 @@ const WHITE = [0.88, 0.89, 0.92];
 const IRON = [0.25, 0.27, 0.3];
 const STEEL = [0.56, 0.58, 0.63];
 const PALE = [0.74, 0.76, 0.8];
+const DARK_STEEL = STEEL.map(c => c * 0.3);
+const MID_STEEL = STEEL.map(c => c * 0.62);
 const GLASS = [0.02, 0.025, 0.035];
 /** Tinted with the team's colour when drawn. */
 const TEAM = [1, 1, 1];
@@ -74,8 +76,8 @@ const girth = (y: number) => {
   return 1 - DOME.waist * Math.sin(Math.PI * Math.min(s, 1)) + DOME.flare * s ** 4;
 };
 
-/** The dome's shell before the dents, at the turn `a` (radians from the front, + to the right) and height y. */
-export const shell = (a: number, y: number): Vec3 => {
+/** The dome's surface at the turn `a` (radians from the front, + to the right) and height y. */
+export const dome = (a: number, y: number): Vec3 => {
   const h = girth(y);
   const p = DOME.e[0];
   return [
@@ -83,53 +85,6 @@ export const shell = (a: number, y: number): Vec3 => {
     y,
     DOME.c[2] - DOME.r[2] * h * pow(Math.cos(a), 2 / p),
   ];
-};
-
-/**
- * The dents under the cheekbones (the user, 2026-11-11: the shell itself stove in, in cut faces,
- * after a Mandalorian helmet, an idea and nothing copied). On each side a crease runs from `tip`
- * (a turn and a height, under the slit's end) down and in to `foot`, on the lip; the shell is
- * pushed in `depth` metres on it, back to nothing `inner` metres off it toward the slot and the
- * slit and `outer` metres off it toward the jaw: two flat faces in a V. Over `taper` metres from
- * the tip it closes. Turns count as metres at the dome's front radius.
- */
-export const DENT = {
-  tip: [0.86, 0.022],
-  foot: [0.26, -0.074],
-  depth: 0.014,
-  inner: 0.022,
-  outer: 0.032,
-  taper: 0.02,
-};
-
-/** How far the shell is pushed in at the turn a (either side) and height y, metres. */
-export const dent = (a: number, y: number): number => {
-  const k = DOME.r[2];
-  const [px, py] = [DENT.tip[0] * k, DENT.tip[1]];
-  const [dx, dy] = [DENT.foot[0] * k - px, DENT.foot[1] - py];
-  const l = Math.hypot(dx, dy);
-  const [ux, uy] = [dx / l, dy / l];
-  const [x, z] = [Math.abs(a) * k - px, y - py];
-  // Along the crease from the tip, and across it: + toward the slot and the slit.
-  const along = x * ux + z * uy;
-  const across = x * uy - z * ux;
-  if (along < 0) {
-    return 0;
-  }
-  const flank = across > 0 ? 1 - across / DENT.inner : 1 + across / DENT.outer;
-  return DENT.depth * Math.max(0, Math.min(flank, along / DENT.taper, 1));
-};
-
-/** The dome's surface at the turn `a` (radians from the front, + to the right) and height y: the shell, stove in under the cheekbones. */
-export const dome = (a: number, y: number): Vec3 => {
-  const p = shell(a, y);
-  const d = Math.cos(a) > 0 ? dent(a, y) : 0;
-  if (!d) {
-    return p;
-  }
-  const [dx, dz] = [p[0] - DOME.c[0], p[2] - DOME.c[2]];
-  const r = Math.hypot(dx, dz);
-  return [DOME.c[0] + (dx * (r - d)) / r, y, DOME.c[2] + (dz * (r - d)) / r];
 };
 
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -219,19 +174,134 @@ const tee = (grow: number, off: number, n: number, col: number[], layer: number)
   return out;
 };
 
-/** A cheek plate on the side `sx`: from the slot's frame round to the ear, its top under the slit and falling to the back. It lies on the dome, so it follows the dents. */
-const cheek = (sx: number, n: number, out: number[]) => {
-  const low = DOME.rim + 0.012;
-  const cols = Array.from({ length: n + 1 }, (_, i) => i / n);
-  const rows = [0, 0.2, 0.4, 0.6, 0.8, 1].map(v =>
-    cols.map(u => {
-      const y0 = TEE.y - slit(0) - TEE.frame - CHEEK.gap - CHEEK.fall * u ** 2;
-      const y = low + (y0 - low) * v;
-      const a0 = slotTurn(y, TEE.slot + TEE.frame + CHEEK.gap);
-      return onDome(sx * (a0 + (CHEEK.round - a0) * u), y, CHEEK.off);
-    }),
+/** The cheek's outline at (u, v): u 0 at the slot's frame to 1 round toward the ear, v 0 at the lip to 1 under the slit, its top falling to the back. */
+const outline = (u: number, v: number): [a: number, y: number] => {
+  const low = DOME.rim + 0.004;
+  const y0 = TEE.y - slit(0) - TEE.frame - CHEEK.gap - CHEEK.fall * u ** 2;
+  const y = low + (y0 - low) * v;
+  const a0 = slotTurn(y, TEE.slot + TEE.frame + CHEEK.gap);
+  return [a0 + (CHEEK.round - a0) * u, y];
+};
+
+/** Where the turn a (either side) and height y fall on the cheek's outline, or nothing off it. */
+const onCheek = (a: number, y: number): [u: number, v: number] | undefined => {
+  const a0 = slotTurn(y, TEE.slot + TEE.frame + CHEEK.gap);
+  const u = (Math.abs(a) - a0) / (CHEEK.round - a0);
+  const [, yl] = outline(u, 0);
+  const [, yh] = outline(u, 1);
+  const v = (y - yl) / (yh - yl);
+  return u > 0 && u < 1 && v > 0 && v < 1 && Math.cos(a) > 0 ? [u, v] : undefined;
+};
+
+/**
+ * The cheeks (the user, 2026-11-11: the helmet itself, very angular hollows made of plain
+ * triangles, after a Mandalorian helmet, an idea and nothing copied): the dome is left out under
+ * each, and the cheek is a few flat triangles in its place, CHEEK.off out. Its hollow is two of
+ * them sunk in a V: from a point under the cheekbone (`tip`) down to the lip, where the crease is
+ * `depth` in. Each corner is [u, v] on the outline (outline()), and how far in.
+ */
+export const FACETS = {
+  tip: [0.62, 0.8],
+  depth: 0.016,
+  corners: {
+    A0: [0, 1],
+    A1: [0.35, 1],
+    A2: [0.68, 1],
+    A3: [1, 1],
+    B0: [0, 0],
+    B1: [0.12, 0],
+    B2: [0.46, 0],
+    B3: [0.74, 0],
+    B4: [1, 0],
+  } as Record<string, number[]>,
+};
+
+/** The triangles: the hollow's inner face, its outer face, then the plain faces round it. */
+const HOLLOW = [
+  ['P', 'F', 'B1'],
+  ['P', 'B2', 'F'],
+];
+const PLAIN = [
+  ['B0', 'B1', 'P'],
+  ['B0', 'P', 'A0'],
+  ['A0', 'P', 'A1'],
+  ['A1', 'P', 'A2'],
+  ['A2', 'P', 'A3'],
+  ['P', 'B2', 'B3'],
+  ['P', 'B3', 'B4'],
+  ['P', 'B4', 'A3'],
+];
+
+/** A cheek on the side `sx`: its flat triangles, each its own normal, and a wall down to the dome round its edge. */
+const cheek = (sx: number, out: number[]) => {
+  const at = (u: number, v: number, inward = 0): Spot => {
+    const [a, y] = outline(u, v);
+    return onDome(sx * a, y, CHEEK.off - inward);
+  };
+  const pts: Record<string, Spot> = Object.fromEntries(
+    Object.entries(FACETS.corners).map(([k, [u, v]]) => [k, at(u, v)]),
   );
-  strip(rows, STEEL, GLOSS, out);
+  pts.P = at(FACETS.tip[0], FACETS.tip[1]);
+  // The crease's foot on the lip, between the hollow's two corners there.
+  const [u1, u2] = [FACETS.corners.B1[0], FACETS.corners.B2[0]];
+  pts.F = at((u1 + u2) / 2, 0, FACETS.depth);
+  const flat = (names: string[], col: number[]) => {
+    const p = names.map(k => pts[k][0]);
+    const n = unit(cross(sub(p[1], p[0]), sub(p[2], p[0])));
+    const o = pts[names[0]][1];
+    const m: Vec3 = n[0] * o[0] + n[1] * o[1] + n[2] * o[2] < 0 ? [-n[0], -n[1], -n[2]] : n;
+    face(
+      out,
+      col,
+      GLOSS,
+      p.map(q => [q, m] as Spot),
+    );
+  };
+  flat(HOLLOW[0], DARK_STEEL);
+  flat(HOLLOW[1], MID_STEEL);
+  // The plain faces smooth (the user, 2026-11-11): each corner the mean of its faces' normals,
+  // weighted by their areas; only the hollow's faces are flat, so its edges stay sharp.
+  const sum: Record<string, Vec3> = {};
+  for (const t of PLAIN) {
+    const p = t.map(k => pts[k][0]);
+    let n = cross(sub(p[1], p[0]), sub(p[2], p[0]));
+    const o = pts[t[0]][1];
+    n = n[0] * o[0] + n[1] * o[1] + n[2] * o[2] < 0 ? [-n[0], -n[1], -n[2]] : n;
+    for (const k of t) {
+      const m = (sum[k] ??= [0, 0, 0]);
+      [m[0], m[1], m[2]] = [m[0] + n[0], m[1] + n[1], m[2] + n[2]];
+    }
+  }
+  for (const t of PLAIN) {
+    face(
+      out,
+      STEEL,
+      GLOSS,
+      t.map(k => [pts[k][0], unit(sum[k])] as Spot),
+    );
+  }
+  // The wall: from the edge down to the dome, round the outline but along the lip.
+  const ring = ['B4', 'A3', 'A2', 'A1', 'A0', 'B0'];
+  ring.slice(1).forEach((k, e) => {
+    const [p, q] = [pts[ring[e]], pts[k]];
+    const [pb, qb] = [p, q].map(([x, n]) => [
+      [x[0] - n[0] * CHEEK.off, x[1] - n[1] * CHEEK.off, x[2] - n[2] * CHEEK.off] as Vec3,
+      n,
+    ]) as Spot[];
+    const out_: Vec3 = sub(p[0], [DOME.c[0], p[0][1], DOME.c[2]]);
+    const wall = (a: Spot, b: Spot, c: Spot) => {
+      const n = unit(cross(sub(b[0], a[0]), sub(c[0], a[0])));
+      const side = Math.sign(n[0] * out_[0] + n[2] * out_[2]) || 1;
+      face(
+        out,
+        IRON,
+        -1,
+        [a, b, c].map(([x]) => [x, [n[0] * side, n[1] * side, n[2] * side]] as Spot),
+      );
+    };
+    wall(p, q, qb);
+    wall(p, qb, pb);
+  });
 };
 
 /** The crest: up the front from over the slit, over the top and down the back to the dome's middle. */
@@ -312,7 +382,7 @@ interface Kit {
 const DETAIL = [
   [14, 8, 8],
   [28, 16, 20],
-  [72, 40, 36],
+  [48, 28, 36],
 ];
 const kits = new Map<number, Kit>();
 
@@ -347,7 +417,14 @@ const kit = (lod: number): Kit => {
       const [x, y, z] = whole.slice(i + j, i + j + 3);
       return glazed(Math.atan2(x - DOME.c[0], DOME.c[2] - z), y, -0.002);
     });
-    if (!hidden) {
+    // Under the cheeks, where they are drawn, the dome is theirs: the triangles wholly under one.
+    const cheeked =
+      level > 0 &&
+      [0, 10, 20].every(j => {
+        const [x, y, z] = whole.slice(i + j, i + j + 3);
+        return !!onCheek(Math.atan2(x - DOME.c[0], DOME.c[2] - z), y);
+      });
+    if (!hidden && !cheeked) {
       plain.push(...whole.slice(i, i + 30));
     }
   }
@@ -366,7 +443,7 @@ const kit = (lod: number): Kit => {
   if (level) {
     for (const sx of [1, -1]) {
       ear(sx, lon >> 1, plain);
-      cheek(sx, across, plain);
+      cheek(sx, plain);
     }
   }
   kits.set(level, (k = { plain, team }));

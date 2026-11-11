@@ -3,21 +3,21 @@
 import { describe, expect, it } from 'vitest';
 import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { STILL, eyeHeight } from '../shared/physics';
-import { MODE, SIDE } from '../shared/types';
+import { LIMB, MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { GLOSS, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { BUILD, JOINT as J, RESTS, rest, solve } from './rig';
 import { helm } from './helm';
 import { helmet } from './helmet';
-import { hose, shoulders } from './pack';
+import { hose } from './pack';
 import { BUST, bindOf, body, tressOf } from './skin';
 import { createRunner, femme, soldier, stance } from './soldier';
 import { HEAD_SCALE, LOWEST, STYLE, STYLES, hair, styleOf, sway, tress } from './hair';
 import { CH, lookOf } from './features';
 import { FRAMES, PALETTE, sprite } from './face';
 import { createBody } from './body';
-import { armor } from './armor';
+import { REGIONS, armor } from './armor';
 import { palette, skin } from './skin';
 
 const F = BUILD.FEMALE;
@@ -187,42 +187,45 @@ describe('her armour', () => {
     armor(out, 0, s, lod > 2);
     return { out, n };
   };
-  it('is his suit, plate for plate, cut on her body, plus a cap on each shoulder', () => {
+  it('is his suit, plate for plate, cut on her body, but for the shoulders: her caps, his pieces', () => {
+    const fem = REGIONS.filter(g => g.fem);
+    const man = REGIONS.filter(g => g.man);
+    expect([fem.length, man.length]).toEqual([2, 2]);
     for (const lod of [0, 1, 3]) {
       const [a, b] = [draw(0, lod), draw(F, lod)];
-      // Hers follow the shoulder (the user, 2026-11-11): caps cut out of the skin, where he has pads.
-      // The rest is the same plates: the caps are all she has more.
-      expect(b.out.length - b.n).toBeGreaterThan(a.out.length - a.n + 60 * STRIDE);
+      expect(a.out.length - a.n).toBeGreaterThan(0);
+      expect(b.out.length - b.n).toBeGreaterThan(0);
     }
   });
-  it('has no plate standing over her shoulders, as he has', () => {
+  it('wears one round cap on each shoulder, wholly on the trunk over the arm: no seam in steps', () => {
+    const caps = REGIONS.filter(g => g.fem);
+    expect(caps).toHaveLength(2);
+    const s = body(3, F);
+    const v = s.u ?? s.v;
+    let arm = 0;
+    s.l!.forEach((l, t) => {
+      if (l == LIMB.ARM_L || l == LIMB.ARM_R) {
+        for (let c = 0; c < 3; c++) {
+          arm = Math.max(arm, v[s.t[t * 3 + c] * 6 + 1]);
+        }
+      }
+    });
+    for (const g of caps) {
+      expect(g.round).toBeDefined();
+      expect(g.y[0]).toBeGreaterThan(arm);
+    }
+  });
+  it('has no plate standing over her shoulders, nor he over his', () => {
     const count = (build: number) => {
       const out: number[] = [];
       soldier(out, createRunner(who(), undefined, build), [1, 0, 0], 1, false, true);
       return out.length;
     };
-    const pads: number[] = [];
-    shoulders(
-      pads,
-      [
-        [
-          [0, 0, 0],
-          [0, 0, 0, 1],
-        ],
-        [
-          [0, 0, 0],
-          [0, 0, 0, 1],
-        ],
-      ],
-      1,
-    );
     const [a, b] = [draw(0, 1), draw(F, 1)];
     const hairs: number[] = [];
     hair(hairs, [0, 0, 0], [0, 0, 0, 1], styleOf(1), tressOf(1), 1, sway(0, 0, 0));
-    // Her vertices: his, less the pads, plus her caps and her hair.
-    expect(count(F)).toBe(
-      count(0) - pads.length + (b.out.length - b.n) - (a.out.length - a.n) + hairs.length,
-    );
+    // Her vertices: his, with her armour for his, plus her hair.
+    expect(count(F)).toBe(count(0) + (b.out.length - b.n) - (a.out.length - a.n) + hairs.length);
   });
   it.each(STANCES)('sits on her body in the stance: %s', (_, o) => {
     const r = createRunner(who(o), undefined, F);
@@ -323,44 +326,41 @@ describe('her hair', () => {
     const sizes = Object.values(STYLE).map(k => tress(k, true).length);
     expect(new Set(sizes).size).toBeGreaterThan(2);
   });
-  it.each(STANCES)(
-    'is clear of the trunk’s plates and the shoulder pads in the stance: %s',
-    (_, o) => {
-      for (const id of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(
-        (id, _i, all) => all.findIndex(q => styleOf(q) == styleOf(id)) == all.indexOf(id),
-      )) {
-        const r = createRunner(who({ ...o, id }), undefined, F);
-        const out: number[] = [];
-        const s = soldier(out, r, [1, 0, 0], 1, false, true)!;
-        const plates: number[][] = [];
-        for (let i = 0; i < out.length; i += STRIDE) {
-          // Not the forearms' plates: in a guard the fists are up by the face, as his are.
-          const q = [out[i], out[i + 1], out[i + 2]];
-          const arm = [J.FOREARM_L, J.FOREARM_R].some(j =>
-            [0, 0.5, 1].some(
-              t =>
-                dist(
-                  q,
-                  s.pos[j].map((v, d) => v + (s.pos[j + 1][d] - v) * t),
-                ) < 0.1,
-            ),
-          );
-          if (out[i + 8] == GLOSS && !arm) {
-            plates.push(q);
-          }
+  it.each(STANCES)('is clear of the trunk’s plates in the stance: %s', (_, o) => {
+    for (const id of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(
+      (id, _i, all) => all.findIndex(q => styleOf(q) == styleOf(id)) == all.indexOf(id),
+    )) {
+      const r = createRunner(who({ ...o, id }), undefined, F);
+      const out: number[] = [];
+      const s = soldier(out, r, [1, 0, 0], 1, false, true)!;
+      const plates: number[][] = [];
+      for (let i = 0; i < out.length; i += STRIDE) {
+        // Not the forearms' plates: in a guard the fists are up by the face, as his are.
+        const q = [out[i], out[i + 1], out[i + 2]];
+        const arm = [J.FOREARM_L, J.FOREARM_R].some(j =>
+          [0, 0.5, 1].some(
+            t =>
+              dist(
+                q,
+                s.pos[j].map((v, d) => v + (s.pos[j + 1][d] - v) * t),
+              ) < 0.1,
+          ),
+        );
+        if (out[i + 8] == GLOSS && !arm) {
+          plates.push(q);
         }
-        const h: number[] = [];
-        hair(h, s.pos[J.HEAD], s.rot[J.HEAD], styleOf(id), [1, 1, 1], 1);
-        let near = Infinity;
-        for (let i = 0; i < h.length; i += STRIDE * 3) {
-          for (let k = 0; k < plates.length; k += 2) {
-            near = Math.min(near, dist([h[i], h[i + 1], h[i + 2]], plates[k]));
-          }
-        }
-        expect(near).toBeGreaterThan(0.01);
       }
-    },
-  );
+      const h: number[] = [];
+      hair(h, s.pos[J.HEAD], s.rot[J.HEAD], styleOf(id), [1, 1, 1], 1);
+      let near = Infinity;
+      for (let i = 0; i < h.length; i += STRIDE * 3) {
+        for (let k = 0; k < plates.length; k += 2) {
+          near = Math.min(near, dist([h[i], h[i + 1], h[i + 2]], plates[k]));
+        }
+      }
+      expect(near).toBeGreaterThan(0.01);
+    }
+  });
   it('is drawn on her and not on him, and tucked in under the helmet', () => {
     const count = (build: number, helmets: boolean) => {
       const out: number[] = [];
@@ -379,21 +379,6 @@ describe('her hair', () => {
       size(o => helmet(o, at, [0, 0, 0, 1], [1, 0, 0], 1)) +
       size(o => hose(o, [0, 1.62, 0], [0, 0, 0, 1], [0, 1.4, 0], [0, 0, 0, 1], 1));
     const hers = size(o => helm(o, at, [0, 0, 0, 1], [1, 0, 0], 1));
-    const pads: number[] = [];
-    shoulders(
-      pads,
-      [
-        [
-          [0, 0, 0],
-          [0, 0, 0, 1],
-        ],
-        [
-          [0, 0, 0],
-          [0, 0, 0, 1],
-        ],
-      ],
-      1,
-    );
     const plates = (build: number) => {
       const s = body(1, build);
       const out: number[] = [];
@@ -402,8 +387,8 @@ describe('her hair', () => {
       armor(out, 0, s, false);
       return out.length - n;
     };
-    // And by her shoulders: caps of the armour for his pads.
-    expect(count(F, true)).toBe(count(0, true) - his + hers - pads.length + plates(F) - plates(0));
+    // And by her armour for his.
+    expect(count(F, true)).toBe(count(0, true) - his + hers + plates(F) - plates(0));
   });
   it('gives the same look for the same id and choice', () => {
     const look = () => {

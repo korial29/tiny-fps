@@ -35,7 +35,7 @@ import { helm } from './helm';
 import { helmet } from './helmet';
 import { STYLE, hair, styleOf, sway } from './hair';
 import { armor } from './armor';
-import { CUP_F, crotch, hose, pack, shoulders } from './pack';
+import { CUP_F, crotch, hose, pack } from './pack';
 import { fetched, pouch, pouchAt } from './pouch';
 import type { Tracer } from './beams';
 import {
@@ -55,8 +55,8 @@ import type { Piece } from './limbs';
 import { STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, axis, mul, slerp, solve, turn } from './rig';
-import type { Pose, Quat } from './rig';
-import { beardOf, body, capped, cut, eyesOf, hairOf, palette, shaved, skin, tressOf } from './skin';
+import type { Pose } from './rig';
+import { beardOf, body, cut, eyesOf, hairOf, palette, shaved, skin, tressOf } from './skin';
 import { createFace, dashing, felled, strain } from './expression';
 import type { Face } from './expression';
 import { CH, toneOf } from './features';
@@ -693,15 +693,6 @@ export const soldier = (
   }
   if (armored) {
     crotch(out, s.pos[J.PELVIS], s.rot[J.PELVIS], lod, plate, build ? CUP_F : 1);
-    // Her shoulders are caps of the armour itself (armor.ts): no plate standing over them.
-    if (!build) {
-      shoulders(
-        out,
-        [J.ARM_L, J.ARM_R].map(j => [s.pos[j], capped(s.rot, j)] as [Vec3, Quat]),
-        lod,
-        plate,
-      );
-    }
   }
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);

@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { STILL } from '../shared/physics';
 import { LIMB } from '../shared/types';
-import { CUP, bust } from './armor';
-import { CREST, DOME, EAR, TEE, dome, glazed, helm, onDome, slit } from './helm';
+import { CUP, CUP_Y, bust } from './armor';
+import { CREST, DENT, DOME, EAR, TEE, dent, dome, glazed, helm, onDome, shell, slit } from './helm';
 import { helmet } from './helmet';
 import { GLOSS, SHINE, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, rest, solve } from './rig';
 import type { Quat } from './rig';
-import { body } from './skin';
+import { BUST_Y, body } from './skin';
 import { createRunner, soldier } from './soldier';
 
 const HEAD = solve(rest()).pos[J.HEAD];
@@ -51,6 +51,36 @@ describe("helm, the woman's helmet on the moon", () => {
     expect(make(1).length).toBeGreaterThan(make(0).length);
     // Built once per level: the same again.
     expect(make(3)).toEqual(make(3));
+  });
+
+  it('is a little smaller than the first one', () => {
+    expect(DOME.r[0]).toBeLessThan(0.106);
+    expect(DOME.r[1]).toBeLessThan(0.142);
+  });
+
+  it('is stove in under each cheekbone: the shell itself, in two flat faces meeting on a crease', () => {
+    const k = DOME.r[2];
+    const depth = (a: number, y: number) => {
+      const [p, q] = [dome(a, y), shell(a, y)];
+      return Math.hypot(q[0], q[2] - DOME.c[2]) - Math.hypot(p[0], p[2] - DOME.c[2]);
+    };
+    // Deepest on the crease, half way down it, on both sides alike.
+    const [a, y] = [(DENT.tip[0] + DENT.foot[0]) / 2, (DENT.tip[1] + DENT.foot[1]) / 2];
+    expect(depth(a, y)).toBeCloseTo(DENT.depth, 4);
+    expect(depth(-a, y)).toBeCloseTo(DENT.depth, 4);
+    expect(dent(a, y)).toBeCloseTo(DENT.depth, 6);
+    // Flat faces: the depth falls straight off the crease.
+    const off = (t: number) => dent(a - t / k, y);
+    expect(off(0.004) - off(0.008)).toBeCloseTo(off(0.008) - off(0.012), 6);
+    // Nothing over the cheekbones, at the visor, round the back or down the slot.
+    for (const [b, h] of [
+      [a, TEE.y],
+      [0, y],
+      [Math.PI / 2 + 0.3, y],
+      [DENT.tip[0], DENT.tip[1] + 0.03],
+    ]) {
+      expect(dent(b, h)).toBe(0);
+    }
   });
 
   it('holds the head of her skin, from the jaw up, with room', () => {
@@ -195,9 +225,11 @@ describe("helm, the woman's helmet on the moon", () => {
 
 describe("the woman's chest plate", () => {
   it('has a cup each side, fullest low on the chest, and a hollow at the sternum', () => {
-    expect(bust(0.068, 1.342)).toBeCloseTo(CUP, 6);
-    expect(bust(-0.068, 1.342)).toBeCloseTo(CUP, 6);
-    expect(bust(0, 1.342)).toBeLessThan(CUP * 0.1);
+    expect(bust(0.068, CUP_Y)).toBeCloseTo(CUP, 6);
+    expect(bust(-0.068, CUP_Y)).toBeCloseTo(CUP, 6);
+    expect(bust(0, CUP_Y)).toBeLessThan(CUP * 0.1);
+    // Over the skin's bust, a little higher than before (1.342).
+    expect(CUP_Y).toBeCloseTo(BUST_Y - 0.003, 6);
     // A firm line under it, a slope above.
     expect(bust(0.068, 1.3)).toBeLessThan(bust(0.068, 1.39));
     expect(bust(0.068, 1.25)).toBeLessThan(CUP * 0.01);

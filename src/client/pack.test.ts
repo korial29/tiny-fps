@@ -3,7 +3,7 @@ import { GLOW } from './flag';
 import { GLOSS, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { shrunk } from './helmet';
-import { HOSE, PACK, hose, pack, shoulders } from './pack';
+import { HOSE, PACK, hose, pack } from './pack';
 import { JOINT as J, axis, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
 
@@ -88,31 +88,5 @@ describe('the breathing hose', () => {
 
   it('follows the head as it turns', () => {
     expect(draw(1, axis([0, 1, 0], 0.6))).not.toEqual(draw(1));
-  });
-});
-
-describe('the shoulder pads', () => {
-  it('cover both shoulders, glossy, whole', () => {
-    for (const lod of [0, 1, 3]) {
-      const v: number[] = [];
-      shoulders(
-        v,
-        [J.ARM_L, J.ARM_R].map(j => [S.pos[j], S.rot[j]] as [Vec3, Quat]),
-        lod,
-      );
-      sound(v);
-      // Glossy but for the matte scratches close up.
-      each(v, i => expect([GLOSS, -1]).toContain(v[i + 8]));
-      expect(v.filter((_, i) => i % STRIDE == 8 && v[i] == GLOSS).length).toBeGreaterThan(
-        v.length / STRIDE / 2,
-      );
-      const half = v.length / 2;
-      // The first over the left shoulder, the second over the right, each near its joint.
-      [J.ARM_L, J.ARM_R].forEach((j, n) => {
-        for (let i = n * half; i < (n + 1) * half; i += STRIDE) {
-          expect(Math.hypot(...at(v, i).map((w, k) => w - S.pos[j][k]))).toBeLessThan(0.25);
-        }
-      });
-    }
   });
 });

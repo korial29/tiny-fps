@@ -21,7 +21,7 @@ import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
-import { createGait, frame } from './gait';
+import { createGait, frame, thrown } from './gait';
 import { fetched, pouch, pouchAt } from './pouch';
 import type { Floor } from './gait';
 import {
@@ -1295,6 +1295,10 @@ export const createBody = (world?: World): Body => {
       h = mix(h, sd > 0 ? [0.36, -0.26, 0.38] : [0.28, -0.1, 0.42], w.slide);
       // Reeling from a tackle: the hands thrown out and up, flailing against each other.
       const flail = Math.sin(clock * 12 + (sd > 0 ? Math.PI : 0));
+      // A punch (no weapon at all, FIRE) drives the left fist up to the middle of the view and
+      // brings the right one into its lower corner, drawn back.
+      const jab = me ? thrown(me) : 0;
+      h = mix(h, sd > 0 ? [0.26, -0.36, 0.26] : [0.02, -0.13, 0.66], jab);
       h = mix(h, [0.46, 0.05 + 0.2 * flail, 0.4 + 0.1 * flail], w.stun);
       if (grip) {
         // On the ledge's lip, a hand-width apart along the wall, the right hand on the right.

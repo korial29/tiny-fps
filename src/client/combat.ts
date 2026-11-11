@@ -17,6 +17,7 @@ import {
   NADE_R,
   RECOIL,
   TICK_HZ,
+  PUNCH,
 } from '../shared/constants';
 import { swingOf } from '../shared/blade';
 import { powerOf } from '../shared/gun';
@@ -137,7 +138,8 @@ export const swung = (a?: Blade, b?: Blade): number =>
 
 /** Whether the step from a to b is the strike of its cut: `swing` went down through the strike tick (CUTS). */
 export const struck = (a?: Blade, b?: Blade): boolean => {
-  const { ticks, strike } = swingOf(b ?? {});
+  // With no blade the swing is a punch.
+  const { ticks, strike } = b && !b.blade ? PUNCH : swingOf(b ?? {});
   return !!a && !!b && (a.swing ?? 0) > ticks - strike && (b.swing ?? 0) <= ticks - strike;
 };
 

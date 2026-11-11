@@ -7,6 +7,7 @@ import {
   GRAB_GAP,
   LOW_EYE,
   PLAYER_R,
+  PUNCH,
 } from '../shared/constants';
 import { STILL } from '../shared/physics';
 import { CUT, MODE, SIDE } from '../shared/types';
@@ -291,6 +292,36 @@ describe('body', () => {
   });
 
   describe('arms', () => {
+    it('throw a punch into the view: with no weapon and a swing, the left fist up to its middle at the strike, and down again after', () => {
+      const p = man();
+      const body = watch(p, 60);
+      const rest = hands(p, body)[0];
+      expect(seen(rest)).toBe(false);
+      // The swing runs down a tick a frame, as the predictor gives it.
+      const at: Vec3[] = [];
+      for (let swing = PUNCH.ticks; swing >= 0; swing--) {
+        body.update({ ...p, swing }, DT);
+        at.push(hands(p, body)[0]);
+      }
+      const strike = at[PUNCH.strike];
+      expect(seen(strike)).toBe(true);
+      expect(Math.abs(strike[0])).toBeLessThan(0.12);
+      expect(strike[1]).toBeGreaterThan(-0.3);
+      expect(strike[2]).toBeGreaterThan(0.45);
+      // Further out than as the swing starts and as it ends.
+      expect(strike[2]).toBeGreaterThan(at[0][2] + 0.2);
+      expect(strike[2]).toBeGreaterThan(at[PUNCH.ticks][2] + 0.2);
+      // Over, it hangs again, out of the view.
+      const after = hands(p, watch(p, 30, body))[0];
+      expect(seen(after)).toBe(false);
+      expect(after[1]).toBeLessThan(-0.55);
+      // With a gun in hand a swing left over moves nothing.
+      const armed = watch(man({ ammo: 5 }), 60);
+      const [was] = hands(p, armed);
+      armed.update({ ...man({ ammo: 5 }), swing: PUNCH.ticks - PUNCH.strike }, DT);
+      expect(hands(p, armed)[0][2]).toBeCloseTo(was[2], 2);
+    });
+
     it('hang along the body when idle, either side, out of the view', () => {
       const p = man();
       const [l, r] = hands(p, watch(p, 60));

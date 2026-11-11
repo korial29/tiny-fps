@@ -9,7 +9,7 @@ import type { PlayerState, Rover } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { FIST, KATANA_LEFT, KATANA_TILT, clasp, inv, reach, shrug, stowed, wield } from './body';
-import { createGait, frame } from './gait';
+import { JAB, armOf, createGait, frame, thrown } from './gait';
 import type { Floor, Gait, Seat } from './gait';
 import {
   ARC,
@@ -91,6 +91,8 @@ export interface Runner {
   /** Seconds left of the grimace a hit puts on his face, and of the grin of a capture or of a foe put down. */
   hurt: number;
   grin: number;
+  /** How far out the fist of a punch is, 0 to 1, eased. */
+  jab: number;
   /** His face (expression.ts), and the seconds it has yet to live through: soldier() moves it once drawn, where the head's turn is known. */
   face: Face;
   dt: number;
@@ -137,6 +139,7 @@ export const createRunner = (p: PlayerState, seat?: Seat): Runner => {
     t: 0,
     hurt: 0,
     grin: 0,
+    jab: 0,
     face,
     dt: 0,
   };
@@ -196,6 +199,7 @@ export const animate = (
       r.hurt = p.hp < r.p.hp ? HURT : Math.max(r.hurt - dt, 0);
       r.grin = felled(r.p, p, id => book.get(id)?.p, others) ? GRIN : Math.max(r.grin - dt, 0);
       r.dt += dt;
+      r.jab += (thrown(p) - r.jab) * (1 - Math.exp(-dt * 45));
       r.p = { ...p };
     } else {
       book.set(p.id, createRunner(p, seat));
@@ -490,9 +494,20 @@ export const stance = (r: Runner) => {
       at: [pose.at[0], pose.at[1] - sink, pose.at[2]],
     };
   }
-  let s = solve(pose);
   // Down or floored, the weapon stays in the hand as it falls. At the wheel both hands are on the yoke.
   const lying = !!p.down || floored(p) || driving(r);
+  if (r.jab > 0.002 && !lying) {
+    // A punch: the rear fist out, the lead one back to the hip, the chest behind it.
+    const rot = pose.rot.slice();
+    const [out, back] = [armOf(-1, JAB.out), armOf(1, JAB.back)];
+    rot[J.ARM_L] = slerp(rot[J.ARM_L], out[0], r.jab);
+    rot[J.FOREARM_L] = slerp(rot[J.FOREARM_L], out[1], r.jab);
+    rot[J.ARM_R] = slerp(rot[J.ARM_R], back[0], r.jab);
+    rot[J.FOREARM_R] = slerp(rot[J.FOREARM_R], back[1], r.jab);
+    rot[J.CHEST] = mul(axis([0, 1, 0], -JAB.twist * r.jab), rot[J.CHEST]);
+    pose = { ...pose, rot };
+  }
+  let s = solve(pose);
   if (p.wield && !lying) {
     pose = brandish(pose, p, r.prog, r.gait.phase, r.t);
     s = solve(pose);

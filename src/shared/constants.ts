@@ -192,6 +192,16 @@ export const FLAG_RETURN = 10;
 
 /** Health of a player; a hit takes 1, so HP_MAX hits put him down. */
 export const HP_MAX = 5;
+/**
+ * A punch (the user, 2026-11-11): FIRE with no weapon at all. A swing of `ticks` that strikes at
+ * `strike` whoever is within `reach` of his centre less PLAYER_R, inside `arc` round his look (the
+ * katana's strike test, blade.ts). It takes half a point of health: every PUNCH_HITS punches a
+ * player takes cost him 1 hp (the host counts; the wire's health is whole). The PUNCH_STUN-th he
+ * takes within PUNCH_MEMORY ticks of the one before stuns him: a stumble as a tackle's, thrown the
+ * way the puncher faces, and he drops the flag he carries.
+ */
+export const PUNCH = { ticks: 20, strike: 6, reach: 1.4, arc: 0.6, hp: 0, hold: -1 };
+export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];
 /** Shots the rack loads. */
 export const AMMO_MAX = 60;
 /**

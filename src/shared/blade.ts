@@ -58,8 +58,12 @@ export const swingOf = (p: Pick<PlayerState, 'cut' | 'heavy'>) => {
  * the arc round his look (the foe's own angular radius counts: his edge in the arc is a hit), with
  * the heights of the two bodies overlapping and no brush between the chests.
  */
-export const strike = (w: World, p: PlayerState, foes: PlayerState[]): PlayerState[] => {
-  const { reach, arc } = swingOf(p);
+export const strike = (
+  w: World,
+  p: PlayerState,
+  foes: PlayerState[],
+  { reach, arc }: { reach: number; arc: number } = swingOf(p),
+): PlayerState[] => {
   const [fx, fz] = forward(p.yaw);
   const o: [number, number, number] = [p.x, p.y + CHEST * heightOf(p), p.z];
   return foes.filter(f => {

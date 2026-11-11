@@ -36,6 +36,10 @@ import {
   TEAM_COLOR,
   TICK_HZ,
   BOLT,
+  PUNCH,
+  PUNCH_HITS,
+  PUNCH_MEMORY,
+  PUNCH_STUN,
 } from './constants';
 import { CHEST, crossing, knock, limbOf, strike, swingOf } from './blade';
 import { Ctf } from './ctf';
@@ -74,6 +78,10 @@ interface Player {
   burn?: number;
   /** The laser rifle's hits on him toward the next hp: every RIFLE_HITS take one. */
   graze?: number;
+  /** The punches he took toward the next hp (every PUNCH_HITS take one), those toward a stun, and the host tick of the last. */
+  bruise?: number;
+  blows?: number;
+  punched?: number;
   /** At a rover's wheel: his inputs left before its lasers fire again, and the count that names their bolts. */
   gun?: number;
   bolt?: number;
@@ -508,7 +516,7 @@ export class Room {
     if ((foe.state.hp -= hp) > 0) {
       return false;
     }
-    foe.graze = 0;
+    [foe.graze, foe.bruise, foe.blows] = [0, 0, 0];
     // Out of his seat, in the air with the rover's speed (his own since the last seat()).
     if (foe.state.mode === MODE.RIDE) {
       this.unseat(foe);
@@ -652,6 +660,10 @@ export class Room {
    * crosses where `p` drew him (`limbOf`).
    */
   private cut(p: Player, view: number | undefined): void {
+    if (!p.state.blade) {
+      this.punch(p, view);
+      return;
+    }
     if (p.state.cut === CUT.ARC_L || p.state.cut === CUT.ARC_R) {
       this.shoot(p, view, wave(p.state, p.info.team));
       return;
@@ -684,6 +696,39 @@ export class Room {
         const [dx, dz] = knock(p.state);
         stumble(foe.state, dx, dz, SHOCK_TICKS, SHOCK_KNOCK * (p.state.heavy ? HEAVY : 1));
         foe.state.zap = true;
+        foe.by = p.info.id;
+      }
+    }
+  }
+
+  /**
+   * A punch of `p` struck at the view tick `view`: every enemy it reaches as `p` drew him (the
+   * strike test, with PUNCH's reach and arc) takes half a point, 1 hp every PUNCH_HITS punches; the
+   * `hits` count goes up once. The PUNCH_STUN-th he takes with no more than PUNCH_MEMORY ticks
+   * between two stuns him as a tackle does: a stumble thrown the way `p` faces, the flag dropped,
+   * `by` the puncher.
+   */
+  private punch(p: Player, view: number | undefined): void {
+    const seen = strike(this.world, p.state, this.enemies(p, view), PUNCH);
+    const foes = this.players().filter(q => seen.some(s => s.id === q.info.id));
+    if (!foes.length) {
+      return;
+    }
+    p.state.hits = (p.state.hits + 1) & 255;
+    for (const foe of foes) {
+      const fresh = this.ticks - (foe.punched ?? -Infinity) <= PUNCH_MEMORY;
+      foe.blows = (fresh ? (foe.blows ?? 0) : 0) + 1;
+      foe.punched = this.ticks;
+      foe.bruise = ((foe.bruise ?? 0) + 1) % PUNCH_HITS;
+      if (!foe.bruise && this.harm(foe, 1)) {
+        continue;
+      }
+      if (foe.blows >= PUNCH_STUN) {
+        foe.blows = 0;
+        this.drop(foe.info.id);
+        const [dx, dz] = forward(p.state.yaw);
+        stumble(foe.state, dx, dz);
+        foe.state.zap = false;
         foe.by = p.info.id;
       }
     }

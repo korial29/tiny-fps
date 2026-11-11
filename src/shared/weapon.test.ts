@@ -52,7 +52,14 @@ import {
   NADE_HP,
   NADE_R,
 } from './constants';
-import { PLAYER_H } from './constants';
+import {
+  PLAYER_H,
+  PUNCH,
+  PUNCH_HITS,
+  PUNCH_MEMORY,
+  PUNCH_STUN,
+  STUMBLE_TICKS as REEL,
+} from './constants';
 import { drift, lob, toss } from './plasma';
 import { cutOf, swingOf } from './blade';
 import { decodeSnapshot, encodeInput } from './protocol';
@@ -1510,6 +1517,150 @@ describe('a charged cut', () => {
   });
 });
 
+describe('a punch (the user, 2026-11-11: hit with the fists; half a point, the third stuns)', () => {
+  const BARE = { ammo: -1 };
+  /** One punch of the player: a click of FIRE and the swing to its strike. */
+  const punch = (m: ReturnType<typeof match>, c: Peer, look: Look = {}) => {
+    m.cut(c, PUNCH.strike + 1, 0, look);
+    // The rest of the swing, the hands back.
+    m.hold(c, PUNCH.ticks - PUNCH.strike, 0, look);
+  };
+  const facing = () => {
+    const m = match();
+    m.put(m.cy, 0, 0, BARE);
+    m.put(m.bob, 1.2);
+    m.ticks(SNAP_EVERY);
+    return m;
+  };
+
+  it('starts on FIRE with no weapon at all, strikes PUNCH.strike ticks in and is over in PUNCH.ticks', () => {
+    const m = facing();
+    m.send(m.cy, FIRE);
+    expect(m.state(m.cy)).toMatchObject({ swing: PUNCH.ticks, wield: false, shots: 0 });
+    m.hold(m.cy, PUNCH.strike - 1, 0);
+    expect(m.state(m.cy).hits).toBe(0);
+    m.hold(m.cy, 1, 0);
+    expect(m.state(m.cy).hits).toBe(1);
+    m.hold(m.cy, PUNCH.ticks - PUNCH.strike - 1, 0);
+    expect(m.state(m.cy).swing).toBe(1);
+    m.hold(m.cy, 1, 0);
+    expect(m.state(m.cy).swing).toBe(0);
+    // Held, FIRE punches again and again: three in three swings.
+    m.hold(m.cy, 3 * PUNCH.ticks, FIRE);
+    expect(m.state(m.cy).hits).toBe(4);
+    // It shows in the snapshot as a swing with no blade.
+    m.send(m.cy, FIRE);
+    m.ticks(SNAP_EVERY);
+    expect(m.snap(m.ann).players.find(p => p.id === 2)).toMatchObject({
+      blade: false,
+      wield: false,
+    });
+    expect(m.snap(m.ann).players.find(p => p.id === 2)!.swing).toBeGreaterThan(0);
+  });
+
+  it('takes half a point: nothing at the first, 1 hp at the second, and so on, down at the tenth', () => {
+    const m = facing();
+    expect(PUNCH_HITS).toBe(2);
+    const hp: number[] = [];
+    for (let k = 0; k < 2 * HP_MAX; k++) {
+      punch(m, m.cy);
+      hp.push(m.state(m.bob).hp);
+      // Bob stays where he is: his stumbles are not played here.
+      Object.assign(m.state(m.bob), { x: 1.2, z: 0, vx: 0, vz: 0 });
+      m.ticks(SNAP_EVERY);
+    }
+    expect(hp).toEqual([5, 4, 4, 3, 3, 2, 2, 1, 1, 0]);
+    expect(m.state(m.bob).down).toBeGreaterThan(0);
+    expect(m.state(m.cy).hits).toBe(10);
+    // Nobody else paid, and the puncher neither.
+    expect([m.state(m.ann).hp, m.state(m.dee).hp, m.state(m.cy).hp]).toEqual([
+      HP_MAX,
+      HP_MAX,
+      HP_MAX,
+    ]);
+  });
+
+  it('stuns at the third punch in a row: a stumble as a tackle’s, thrown the way the puncher faces, the flag dropped', () => {
+    const m = facing();
+    expect(PUNCH_STUN).toBe(3);
+    m.carry(m.bob);
+    punch(m, m.cy);
+    punch(m, m.cy);
+    expect(m.state(m.bob).stun).toBe(0);
+    expect(m.flag(1 - 0).state === FLAG.CARRIED || m.flag(0).state === FLAG.CARRIED).toBe(true);
+    m.cut(m.cy, PUNCH.strike + 1, 0);
+    expect(m.state(m.bob)).toMatchObject({ stun: REEL, zap: false });
+    // Thrown east, the way Cy faces.
+    expect(m.state(m.bob).vx).toBeGreaterThan(3);
+    expect([m.flag(0).state, m.flag(1).state]).not.toContain(FLAG.CARRIED);
+    m.ticks(SNAP_EVERY);
+    expect(m.snap(m.ann).players.find(p => p.id === 1)).toMatchObject({ by: 2, zap: false });
+    // The count starts again: the next two do not stun.
+    Object.assign(m.state(m.bob), { x: 1.2, z: 0, vx: 0, vz: 0, stun: 0 });
+    m.hold(m.cy, PUNCH.ticks, 0);
+    m.ticks(SNAP_EVERY);
+    punch(m, m.cy);
+    punch(m, m.cy);
+    expect(m.state(m.bob).stun).toBe(0);
+  });
+
+  it('forgets the punches a player took after PUNCH_MEMORY ticks without one: the third is then a first', () => {
+    const m = facing();
+    punch(m, m.cy);
+    punch(m, m.cy);
+    m.ticks(PUNCH_MEMORY + 2);
+    punch(m, m.cy);
+    expect(m.state(m.bob).stun).toBe(0);
+    // The half points are not forgotten: three punches, one hp.
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 1);
+    punch(m, m.cy);
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 2);
+    expect(m.state(m.bob).stun).toBe(0);
+    punch(m, m.cy);
+    expect(m.state(m.bob).stun).toBe(REEL);
+  });
+
+  it('reaches an arm’s length ahead, an enemy only: not behind, not a teammate, not past 1.4 m, not through a wall of air', () => {
+    const tried = (x: number, z = 0, yaw = EAST, who: 'bob' | 'ann' = 'bob') => {
+      const m = match();
+      m.put(m.cy, 0, 0, BARE);
+      m.put(m[who], x, z);
+      m.ticks(SNAP_EVERY);
+      m.cut(m.cy, PUNCH.strike + 1, 0, { yaw });
+      return m.state(m.cy).hits;
+    };
+    expect(tried(1.2)).toBe(1);
+    expect(tried(PUNCH.reach + PLAYER_R - 0.05)).toBe(1);
+    expect(tried(PUNCH.reach + PLAYER_R + 0.05)).toBe(0);
+    expect(tried(-1.2)).toBe(0);
+    expect(tried(0, 1.2)).toBe(0);
+    // Ann is of his team (the first and the third to join).
+    expect(tried(1.2, 0, EAST, 'ann')).toBe(0);
+  });
+
+  it('is for bare hands: with the gun FIRE charges it, with the katana it cuts, and neither punches', () => {
+    const m = facing();
+    Object.assign(m.state(m.cy), loaded(GUN));
+    m.hold(m.cy, PUNCH.ticks, FIRE);
+    expect([m.state(m.cy).swing ?? 0, m.state(m.cy).hits]).toEqual([0, 0]);
+    expect(m.state(m.cy).charge).toBeGreaterThan(0);
+    const n = facing();
+    Object.assign(n.state(n.cy), SWORD);
+    n.send(n.cy, FIRE);
+    expect(n.state(n.cy)).toMatchObject({ wield: true, swing: CUTS[CUT.SLASH].ticks });
+    // Hanging from a ledge, the hands are busy.
+    const h = facing();
+    Object.assign(h.state(h.cy), { mode: MODE.HANG, ground: false });
+    h.send(h.cy, FIRE);
+    expect(h.state(h.cy).swing ?? 0).toBe(0);
+    // Down, nobody punches.
+    const d = facing();
+    Object.assign(d.state(d.cy), { down: 60, hp: 0 });
+    d.send(d.cy, FIRE);
+    expect(d.state(d.cy).swing ?? 0).toBe(0);
+  });
+});
+
 describe('a cut', () => {
   it('thrusts into the enemy in front: he loses 2 hp, the cutter counts one hit and no shot', () => {
     const m = match();
@@ -2149,9 +2300,11 @@ describe('random cuts', () => {
         // A limb is lost only while down.
         expect(!p.lost || p.down > 0, label).toBe(true);
         limbs += +(!!p.lost && !prev[n].lost);
-        // In hand only with the katana, and the swing runs only with the katana in hand.
+        // In hand only with the katana, and the swing runs only with the katana in hand, or with
+        // no weapon at all: a punch.
         expect(!p.wield || p.blade, label).toBe(true);
-        expect(!p.swing || p.wield, label).toBe(true);
+        const bare = p.ammo < 0 && !p.blade && (p.rail ?? -1) < 0 && (p.rifle ?? -1) < 0;
+        expect(!p.swing || p.wield || bare, label).toBe(true);
         expect((p.hits - prev[n].hits) & 255, label).toBeLessThanOrEqual(1);
         hits += (p.hits - prev[n].hits) & 255;
         went += +(p.down > 0 && prev[n].down === 0);

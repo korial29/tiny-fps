@@ -16,6 +16,7 @@ import { beats, cues, say } from './beats';
 import { createBody } from './body';
 import { chasePitch, createChase } from './chase';
 import { createCombat, sight } from './combat';
+import { createDoors } from './doors';
 import { createEffects } from './effects';
 import { flagDraws } from './flag';
 import { createFoley } from './foley';
@@ -191,6 +192,7 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
   const chase = createChase(world);
   const tracer = createTracer();
   const balls = createBalls(world);
+  const doors = createDoors(world);
   const combat = createCombat(world, audio, hud, fx, tracer, ctl, balls, id => rd?.muzzle(id));
   let rd: Renderer | undefined;
   try {
@@ -261,6 +263,10 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
         }
         bolts = flying;
         balls.snapshot(s.balls ?? [], you.id, performance.now());
+        // A door that starts to open or to shut is heard where it is.
+        for (const c of doors.snapshot(s.doors)) {
+          audio.play(c.id, c.at, 0.5);
+        }
         const told = beats(match, s);
         for (const beat of told) {
           const line = say(beat, you, id => names.get(id) ?? 'Someone');
@@ -516,6 +522,7 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
         tracer,
         rovers,
         third ? me : undefined,
+        v => doors.draw(v, pov, dt),
       );
       // The rover's reticle: where its lasers cross along the look, or the ground or wall before it.
       const car = driving ? rovers[wheel] : undefined;

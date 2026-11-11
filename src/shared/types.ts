@@ -391,6 +391,8 @@ export interface Snapshot {
   balls?: Ball[];
   /** The map's rovers, in the order of WorldDef.rovers. Absent: none. */
   rovers?: Rover[];
+  /** How far each of WorldDef.doors is open, 0 shut to 1, in sixteen steps on the wire. Absent: none. */
+  doors?: number[];
 }
 
 /** Room rules, set by the host. Defaults in constants.ts (RULES). */

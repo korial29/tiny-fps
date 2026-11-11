@@ -10,6 +10,8 @@ import type { Brush } from './world';
 /** The beams over the doorways of the modules. */
 const LINTELS = BASE.filter(b => b.min[1] === HEAD && b.max[1] === ROOM);
 const world = build(MOON);
+// The doors (doors.ts) are open here: these tests are about the walls.
+world.doors?.forEach(d => (d.open = 1));
 const { brushes } = MOON;
 const [CX, CZ] = DOME;
 

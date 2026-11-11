@@ -134,6 +134,10 @@ export const SOUND = {
   /** Breathing in a space helmet (the user, 2026-11-10), in then out: air drawn through the regulator, and let out with its valve's hiss. */
   INHALE: 43,
   EXHALE: 44,
+  /** An automatic door (doors.ts) sliding open: its seals let go with a hiss and its servo whirs up. */
+  DOOR: 45,
+  /** And sliding shut: the servo whirs down and the panels meet with a thump. */
+  SHUT: 46,
 } as const;
 
 /**
@@ -411,6 +415,17 @@ export const LAYERS: Voice[][] = [
     [3, 1100, -0.5, 0.07, 0.18, 0.55, 0.25, 0.14, 0, 1, 0.65],
     [3, 4500, -0.4, 0.07, 0.14, 0.55, 0.3, 0.4, 0, 1, 0.2],
     [0, 95, -0.3, 0.05, 0.12, 0.4, 0.1, 0.06, 0, 1, 0.1],
+  ],
+  // DOOR: the seals' hiss, a bright noise falling, and the servo, a muffled saw rising over 0.3 s.
+  [
+    [3, 6500, -1.2, 0.01, 0.1, 0.28, 0, 0.5, 0, 1, 0.5],
+    [1, 140, 1.6, 0.02, 0.22, 0.1, 0.05, 0.15, 0, 1, 0.3],
+  ],
+  // SHUT: the servo falling, a softer hiss, and the panels' thump at the end, a low sine.
+  [
+    [1, 300, -1.8, 0.02, 0.32, 0.1, 0.05, 0.15, 0, 1, 0.3],
+    [3, 5000, -0.8, 0.02, 0.2, 0.25, 0, 0.35, 0, 1, 0.3],
+    [2, 90, -2, 0.001, 0.02, 0.16, 0, 1, 0, 1, 0.8, 0.42],
   ],
 ];
 

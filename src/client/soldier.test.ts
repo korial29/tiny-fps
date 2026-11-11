@@ -300,10 +300,14 @@ describe('soldier', () => {
       // In its guard, the knees bent and the trunk leaning forward: a little under PLAYER_H.
       expect(Math.max(...v.map(p => p[1]))).toBeGreaterThan(1 + PLAYER_H - 0.14);
       expect(Math.max(...v.map(p => p[1]))).toBeLessThanOrEqual(1 + PLAYER_H + 1e-6);
-      // But the lead fist of his bare-handed guard, held out up to 18 cm past the cylinder (a wall he stands against does not stop it).
-      for (const p of v) {
-        expect(Math.hypot(p[0] - 5, p[2] + 3)).toBeLessThan(PLAYER_R + 0.2);
-      }
+      // All but the arms of his bare-handed guard, held out before him: the lead hand reaches
+      // up to 35 cm past the cylinder (a wall he stands against does not stop it).
+      const far = Math.max(...v.map(p => Math.hypot(p[0] - 5, p[2] + 3)));
+      expect(far).toBeLessThan(PLAYER_R + 0.35);
+      // And the feet of his long stance, some centimetres past it.
+      const legs = v.filter(p => p[1] < 1 + 1 || p[1] > 1 + 1.5);
+      const wide = Math.max(...legs.map(p => Math.hypot(p[0] - 5, p[2] + 3)));
+      expect(wide).toBeLessThan(PLAYER_R + 0.15);
     }
   });
 

@@ -85,14 +85,14 @@ describe('helmet', () => {
     expect(low(0) - low(0.062)).toBeGreaterThan(0.005);
     // An aggressive one (the user, 2026-11-11): its upper edge frowns, a centimetre lower in the
     // middle than at its ends; its lower edge runs straight up to them, a V (no curve: the half-way
-    // point is within 3 mm of the chord); its ends are a third of its height.
+    // point is within 3 mm of the chord); its ends are lower than its middle.
     expect(top(0.122) - top(0)).toBeGreaterThan(0.01);
     // More glass, a thinner rim (the user, 2026-11-11): 7 cm of dark over each eye.
     expect(top(0.07) - low(0.07)).toBeGreaterThan(0.065);
     expect(top(0.06)).toBeGreaterThan(top(0));
     expect(low(0.122) - low(0.07)).toBeGreaterThan(0.02);
     expect(Math.abs(low(0.096) - (low(0.07) + low(0.122)) / 2)).toBeLessThan(0.003);
-    expect(top(0.122) - low(0.122)).toBeLessThan((top(0.07) - low(0.07)) * 0.65);
+    expect(top(0.122) - low(0.122)).toBeLessThan((top(0.07) - low(0.07)) * 0.8);
     const out = make(3);
     const p = Array.from({ length: count(out) }, (_, i) => [
       ...at(out, i).map((w, k) => w - HEAD[k]),

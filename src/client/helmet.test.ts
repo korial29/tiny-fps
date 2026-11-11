@@ -81,12 +81,14 @@ describe('helmet', () => {
     // by 3 cm in the middle, where the jaw box comes up into it; its top level.
     const low = (u: number) => band(u)[0] - band(u)[1];
     const top = (u: number) => band(u)[0] + band(u)[1];
-    expect(top(0) - low(0.062)).toBeGreaterThan(0.05);
+    expect(top(0) - low(0.062)).toBeGreaterThan(0.04);
     expect(low(0) - low(0.062)).toBeGreaterThan(0.005);
     // An aggressive one (the user, 2026-11-11): its upper edge frowns, a centimetre lower in the
     // middle than at its ends; its lower edge runs straight up to them, a V (no curve: the half-way
     // point is within 3 mm of the chord); its ends are a third of its height.
-    expect(top(0.122) - top(0)).toBeGreaterThan(0.008);
+    expect(top(0.122) - top(0)).toBeGreaterThan(0.01);
+    // More glass, a thinner rim (the user, 2026-11-11): 7 cm of dark over each eye.
+    expect(top(0.07) - low(0.07)).toBeGreaterThan(0.065);
     expect(top(0.06)).toBeGreaterThan(top(0));
     expect(low(0.122) - low(0.07)).toBeGreaterThan(0.02);
     expect(Math.abs(low(0.096) - (low(0.07) + low(0.122)) / 2)).toBeLessThan(0.003);

@@ -37,12 +37,12 @@ export const SHELL = {
  */
 export const VISOR = {
   c: [0, 0.068] as [number, number],
-  r: [0.122, 0.047] as [number, number],
-  rise: 0.058,
+  r: [0.124, 0.052] as [number, number],
+  rise: 0.052,
   /** How much lower its upper edge is in the middle than at its ends: a frown under the brow. */
-  frown: 0.01,
+  frown: 0.012,
   /** The notch in its lower edge where the guard comes up (the user: the mouth rises in the middle): how high, and the half widths of its flat top and of its foot. */
-  up: 0.045,
+  up: 0.034,
   notch: [0.028, 0.062] as [number, number],
 };
 /**
@@ -64,7 +64,7 @@ const LIFT = 0.003;
 /** How far past the visor's edge its rim covers the shell (it is RIM[0] + 0.6 RIM[2] wide). */
 const COVER = 0.012;
 /** The rim: how wide it is round the visor, how far it stands out, and how much more at the brow. */
-const RIM = [0.014, 0.007, 0.02];
+const RIM = [0.006, 0.005, 0.016];
 
 /**
  * The mouth guard: rings from its top under the visor to the chin, each [height, half width at its
@@ -95,8 +95,8 @@ const CHEEK = {
     [0.082, -0.045],
   ],
   round: 0.01,
-  w: 0.026,
-  h: 0.026,
+  w: 0.028,
+  h: 0.036,
 };
 
 /**
@@ -131,7 +131,7 @@ const INTAKES = [
 ];
 
 /** The ear plates: centre (y, z), half height and depth, and from where in the shell out to where. */
-const PLATE = { c: [0.035, 0.024], r: [0.092, 0.064], x: [0.09, 0.136] };
+const PLATE = { c: [0.035, 0.024], r: [0.092, 0.064], x: [0.09, 0.148] };
 
 /**
  * Sides around and rows up of the shell; points round the visor's edge; sides of the guard, the
@@ -149,7 +149,7 @@ const DETAIL = [
   },
   {
     shell: [20, 8],
-    visor: 32,
+    visor: 40,
     guard: 12,
     plate: 12,
 
@@ -170,6 +170,8 @@ const DETAIL = [
 const WHITE = [0.88, 0.89, 0.92];
 const PALE = [0.74, 0.76, 0.8];
 const GREY = [0.5, 0.52, 0.56];
+/** The side blocks: darker than the shell, so their volumes read in the moon's hard light. */
+const BLOCK = [0.6, 0.62, 0.66];
 const IRON = [0.25, 0.27, 0.3];
 const VENT = [0.05, 0.05, 0.06];
 const LIGHT = [0.97, 0.98, 1];
@@ -662,7 +664,7 @@ const kit = (lod: number): Kit => {
       };
       sheet(
         [[end(0, 1)], ...rows, [end(line.length - 1, line.length - 2)]],
-        PALE,
+        BLOCK,
         -1,
         kitOut.cheeks,
       );
@@ -726,8 +728,8 @@ const kit = (lod: number): Kit => {
     const [x0, x1] = PLATE.x;
     for (const side of [-1, 1]) {
       // Along x out of the shell: the plate's full face, a bevel, then its flat front.
-      const xs = [x0, x1 - 0.016, x1];
-      const scale = [1, 0.97, 0.66];
+      const xs = [x0, x1 - 0.022, x1];
+      const scale = [1, 0.96, 0.58];
       loft(
         (t, s) => {
           const f = s * (xs.length - 1);
@@ -749,7 +751,7 @@ const kit = (lod: number): Kit => {
           [(x0 - 0.001) * side, cy, cz],
           [(x1 + 0.0005) * side, cy, cz],
         ],
-        PALE,
+        BLOCK,
         kitOut.plates,
       );
       // A light strip up the plate's back edge, a hair out of its face.

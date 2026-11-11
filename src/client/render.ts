@@ -493,6 +493,8 @@ export interface Renderer {
     rovers?: Rover[],
     /** The own player when the camera is not in his head (seated in a rover): drawn whole, like the others. */
     self?: PlayerState,
+    /** Adds what else moves in the map (the doors): drawn lit, casting shadows, with the other players. */
+    more?: (v: number[]) => void,
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
@@ -773,7 +775,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   return {
-    frame(eye, yaw, pitch, others, colors, fx, lights, body, ctf, tracer, rovers = [], self) {
+    frame(eye, yaw, pitch, others, colors, fx, lights, body, ctf, tracer, rovers = [], self, more) {
       const [w, h] = size();
       if (lost || !w || !h) {
         return;
@@ -804,6 +806,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       ctf?.packs?.forEach(at => kit(v, at, now));
       ctf?.ammo?.forEach(at => cell(v, at, now));
       ctf?.cells?.forEach(at => battery(v, at, now));
+      more?.(v);
       // The rovers: the first half of the map's are red's, the others blue's. Their wheels turn by
       // the way they went along their nose since the last frame.
       rovers.forEach((r, i) => {

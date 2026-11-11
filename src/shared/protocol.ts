@@ -57,6 +57,9 @@
 //     256ths of a turn and a pitch in 127ths of a quarter turn; power: the health it takes, or for an
 //     arc of energy bit 7 set and the CUT that threw it (Ball.arc) in bits 0-6, or for a grenade
 //     (power NADE) bit 6 set and its speed in whole m/s in bits 0-5 (Ball.v).
+//   Then, only on a map with doors: the balls' count is always written (0 with none), and after
+//   the balls [doors u8], then a nibble a door, the first in the high half of its byte: how far it
+//   is open in fifteenths (Snapshot.doors). 1 + doors / 2 bytes, and 1 more when no ball flies.
 //   A snapshot is 4 + 62 × players + 54 × rovers + 10 + 2 to 16 bytes: 12 on top of the players and
 //   the rovers when both flags are home and no ball flies; with balls, 1 + 11 × balls more.
 // Every multi-byte field is big-endian (DataView's default).
@@ -189,7 +192,11 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
   const end = mid + SNAP_ROVER * rovers.length;
   const balls = s.balls ?? [];
   const tail = end + SNAP_MATCH + s.flags.reduce((n, f) => n + flagBytes(f.state), 0);
-  const v = new DataView(new ArrayBuffer(tail + (balls.length && 1 + SNAP_BALL * balls.length)));
+  const doors = s.doors ?? [];
+  const gate = doors.length && 1 + Math.ceil(doors.length / 2);
+  const v = new DataView(
+    new ArrayBuffer(tail + (balls.length || gate ? 1 + SNAP_BALL * balls.length : 0) + gate),
+  );
   v.setUint8(0, MSG_SNAPSHOT);
   v.setUint16(1, s.tick & 0xffff);
   v.setUint8(3, s.players.length | (rovers.length << 5));
@@ -285,7 +292,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     }
     o += flagBytes(f.state);
   }
-  if (balls.length) {
+  if (balls.length || gate) {
     v.setUint8(o++, balls.length);
   }
   for (const b of balls) {
@@ -299,6 +306,13 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
       b.arc ? 128 | b.arc : b.power === NADE ? 64 | Math.min(63, Math.round(b.v!)) : (b.power ?? 1),
     );
     o += SNAP_BALL;
+  }
+  if (gate) {
+    v.setUint8(o++, doors.length);
+    doors.forEach((d, k) => {
+      const at = o + (k >> 1);
+      v.setUint8(at, v.getUint8(at) | (Math.round(d * 15) << (k & 1 ? 0 : 4)));
+    });
   }
   return v.buffer;
 };
@@ -415,11 +429,18 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     flags.push(f);
     o += flagBytes(state);
   }
-  // A count of 0 is never written: a zero byte there is padding.
-  const n = o < buf.byteLength ? v.getUint8(o++) || -1 : 0;
-  if (o + n * SNAP_BALL !== buf.byteLength) {
+  // A count of 0 is only written before the doors: alone, a zero byte there is padding.
+  const some = o < buf.byteLength;
+  const n = some ? v.getUint8(o++) : 0;
+  const gate = o + n * SNAP_BALL;
+  const ports = gate < buf.byteLength ? v.getUint8(gate) : 0;
+  if (gate + (ports && 1 + Math.ceil(ports / 2)) !== buf.byteLength || (some && !n && !ports)) {
     return null;
   }
+  const doors = Array.from(
+    { length: ports },
+    (_, k) => ((v.getUint8(gate + 1 + (k >> 1)) >> (k & 1 ? 0 : 4)) & 15) / 15,
+  );
   const balls: Ball[] = [];
   for (let k = 0; k < n; k++, o += SNAP_BALL) {
     const [yaw, pitch] = [v.getUint8(o + 8) / YAW8, v.getInt8(o + 9) / PITCH8];
@@ -450,6 +471,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     packs: v.getUint16(end + 4) * 2 ** 32 + v.getUint32(end + 6),
     ...(n ? { balls } : {}),
     ...(rovers.length ? { rovers } : {}),
+    ...(ports ? { doors } : {}),
   };
 };
 

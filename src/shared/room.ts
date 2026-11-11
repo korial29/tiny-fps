@@ -43,6 +43,7 @@ import {
 } from './constants';
 import { CHEST, crossing, knock, limbOf, strike, swingOf } from './blade';
 import { Ctf } from './ctf';
+import { shut, swing } from './doors';
 import { STRIKE, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
 import { floorAt, forward, heightOf, respawn, spawn, speedOf, stumble } from './physics';
@@ -354,6 +355,12 @@ export class Room {
       }
     }
     this.heal(players);
+    // The doors open to who is up, and to a rover that is driven.
+    swing(
+      this.world,
+      players.filter(p => !p.state.down).map(p => [p.state.x, p.state.y, p.state.z]),
+      this.rovers.filter(r => r.driver !== NOBODY).map(r => [r.x, r.y, r.z]),
+    );
     // Someone lying down touches no flag, nor does a driver.
     const turn = this.ctf.tick(
       players
@@ -391,6 +398,7 @@ export class Room {
         packs: this.gone.reduce((m, t, k) => (t ? m : m + 2 ** k), 0),
         balls: this.balls,
         rovers: this.rovers,
+        doors: this.world.doors?.map(d => d.open),
       });
       players.forEach(p => p.conn.send(snap));
       // Every snapshot reaches every peer (WebSocket, BroadcastChannel): a burst is sent once.
@@ -1018,6 +1026,7 @@ export class Room {
     this.rr = [0, 0];
     this.gone.fill(0);
     this.rovers = park(this.world);
+    shut(this.world);
     for (const p of players) {
       const { shots, hits } = p.state;
       p.state = { ...this.place(p.info.id, p.info.team, put), shots, hits };

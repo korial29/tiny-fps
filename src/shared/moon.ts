@@ -6,7 +6,7 @@
 // its lips have none. Compact on purpose: the local bundle carries it (budget in scripts/size.mjs).
 import { PLAYER_R } from './constants';
 import { TEAM_TINT } from './map';
-import { BASE, DOME, MODULES, TUBES, box, bx, fromBx } from './moonbase';
+import { BASE, DOME, DOORS, MODULES, TUBES, box, bx, fromBx } from './moonbase';
 import type { Bx, Vec3 } from './moonbase';
 import { hash, noise } from './relief';
 import { TEX } from './types';
@@ -768,6 +768,8 @@ export const MOON: WorldDef = {
     [100, 0, ZED - 178, Math.PI],
     [30, 0, ZED - 255, Math.PI],
   ],
+  // The dome's door and the two airlocks of each base.
+  doors: [...DOORS, ...DOORS.map(mirror)],
   scenery: 'moon',
   helmets: true,
   armor: true,

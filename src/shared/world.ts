@@ -40,6 +40,12 @@ export interface TeamDef {
   rifle?: Vec3;
 }
 
+/** A sliding door (doors.ts): the box its two panels fill when shut, in a doorway of the brushes. */
+export interface Door {
+  min: Vec3;
+  max: Vec3;
+}
+
 export interface WorldDef {
   /** Shown on the title screen. */
   name?: string;
@@ -72,6 +78,8 @@ export interface WorldDef {
   relief?: ReliefDef;
   /** Where the rovers (rover.ts) are parked, each as a spawn: the middle of its wheels on the ground and the yaw of its nose. Absent: none. */
   rovers?: Spawn[];
+  /** The automatic doors (doors.ts). Absent: none. */
+  doors?: Door[];
 }
 
 /** A world ready for physics and drawing: the definition and a grid of brushes on the floor plane. */
@@ -83,6 +91,12 @@ export interface World {
   grid: Map<number, number[]>;
   /** The lattice of WorldDef.relief. */
   relief?: Relief;
+  /**
+   * The state of each of WorldDef.doors: how far it is open, 0 shut to 1, and the ticks it stays
+   * open with nobody near. The host's doors.ts moves it, the client copies it from the snapshot:
+   * ray() stops at a door less than half open, a body never does.
+   */
+  doors?: { open: number; wait: number }[];
 }
 
 /** Metres per grid cell: about the size of the player's reach, so a query touches 1 to 4 cells. */
@@ -113,7 +127,13 @@ export const build = (def: WorldDef, cell = CELL): World => {
       }
     }
   });
-  return def.relief ? { def, cell, grid, relief: raise(def.relief) } : { def, cell, grid };
+  return {
+    def,
+    cell,
+    grid,
+    ...(def.relief ? { relief: raise(def.relief) } : {}),
+    ...(def.doors ? { doors: def.doors.map(() => ({ open: 0, wait: 0 })) } : {}),
+  };
 };
 
 /**
@@ -142,7 +162,26 @@ export const near = (w: World, x: number, z: number, r: number): number[] => {
  * (its corners square, and a brush is only found in the cells the ray crosses).
  */
 export const ray = (w: World, o: Vec3, d: Vec3, max: number, grow = 0): number => {
-  const hit = faces(w, o, d, max, grow);
+  let hit = faces(w, o, d, max, grow);
+  // A door less than half open is a wall to a shot and to the eye.
+  w.doors?.forEach(({ open }, i) => {
+    if (open < 0.5) {
+      const { min, max } = w.def.doors![i];
+      let [lo, hi] = [0, hit];
+      for (let a = 0; a < 3; a++) {
+        const [t0, t1] = d[a]
+          ? [(min[a] - grow - o[a]) / d[a], (max[a] + grow - o[a]) / d[a]]
+          : o[a] < min[a] - grow || o[a] > max[a] + grow
+            ? [1, -1]
+            : [-Infinity, Infinity];
+        lo = Math.max(lo, Math.min(t0, t1));
+        hi = Math.min(hi, Math.max(t0, t1));
+      }
+      if (lo <= hi && hi > 0) {
+        hit = lo;
+      }
+    }
+  });
   return w.relief ? trace(w, o, d, hit, grow) : hit;
 };
 

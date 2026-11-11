@@ -95,6 +95,23 @@ export const MOUTHS = [
   [C1, -10.8, 2, 3.5, 2],
 ];
 
+/**
+ * The automatic doors of red's half (doors.ts), each the box its panels fill when shut: in the
+ * middle of the dome's door, then in the wall of each module's airlock.
+ */
+export const DOORS = [
+  bx(
+    DOME[0] - MOUTHS[0][2],
+    0,
+    DOME[1] - C0 - 1.55,
+    DOME[0] + MOUTHS[0][2],
+    MOUTHS[0][3],
+    DOME[1] - C0 - 1.25,
+  ),
+  bx(116.8, 0, MODULES[0].max[2] - 0.3, 119.2, H, MODULES[0].max[2] - 0.1),
+  bx(101.8, 0, MODULES[1].min[2] + 0.1, 104.2, H, MODULES[1].min[2] + 0.3),
+];
+
 /** The rectangles (x0, z0, x1, z1), their mirrors and their quarter turns about the centre, each once. */
 const turns = (l: number[][]) => [
   ...new Map(

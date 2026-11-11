@@ -182,9 +182,11 @@ const STONES = [
 ];
 /**
  * Boulders along the three walls of red's half (x, z, radius), not on the field's first stone
- * (4..8, 172..176). Each stands in a box of half side 0.6 r (the brushes below); one whose box
+ * (4..8, 172..176). Each stands in the boxes of a crag reaching REACH r (the brushes below); one whose box
  * would leave a crack a player could not get out of next to an earlier one is left out.
  */
+/** How far a boulder of radius r reaches from its middle, in r: its boxes' footprint. */
+const REACH = 0.85;
 const BOULDERS = Array.from({ length: 36 }, (_, i) => {
   const h = (k: number) => hash(i, k, 41);
   const b = Math.floor(h(1) * 3);
@@ -194,7 +196,7 @@ const BOULDERS = Array.from({ length: 36 }, (_, i) => {
 }).filter(
   ([x, z, r], i, l) =>
     !l.slice(0, i).some(([u, w, q]) => {
-      const gap = Math.max(Math.abs(x - u), Math.abs(z - w)) - 0.6 * (r + q);
+      const gap = Math.max(Math.abs(x - u), Math.abs(z - w)) - REACH * (r + q);
       return gap > 0 && gap < 2 * PLAYER_R + 0.2;
     }),
 );
@@ -279,6 +281,165 @@ const at = (x: number, z: number): number => {
   return Math.max(h, -14.5) + w;
 };
 
+type V3 = [number, number, number];
+/** Five bearings a fifth of a turn apart, as unit vectors: no Math.cos in what the host and the clients must agree on. */
+const FIFTHS = [
+  [1, 0],
+  [0.309, 0.951],
+  [-0.809, 0.588],
+  [-0.809, -0.588],
+  [0.309, -0.951],
+];
+/**
+ * The form of a boulder of radius R and height H from a seed: how far it reaches from its middle
+ * (a quarter of its height over the ground) along a unit vector. One to three lobes, each a block
+ * cut by five leaning planes round it and a nearly level one on top, its corners rounded by an
+ * ellipsoid: a main mass, a shoulder beside it half as high from 1.3 m of radius, a low one from
+ * 3.2 m. One plane cuts under a side (an overhang), and the whole swells and shrinks by 6 % with
+ * the bearing. Only + - * /, Math.sqrt and the hash: the boxes below come from it on every side.
+ * `tops` are the lobes' middles (x, z) and the height of their top over the rock's middle.
+ */
+export const rockOf = (s: number, R: number, H: number) => {
+  const h = (k: number) => hash(s, k, 131);
+  const flat = (k: number) => {
+    const [a, b] = [2 * h(k) - 1, 2 * h(k + 1) - 1];
+    const l = Math.sqrt(a * a + b * b) || 1;
+    return [a / l, b / l];
+  };
+  const lobes = [0, 1, 2].slice(0, R < 1.3 ? 1 : R < 3.2 ? 2 : 3).map(k => {
+    const [fx, fz] = flat(20 * k + 1);
+    const [off, rad] = [[0.1, 0.45, 0.42][k] * R, [0.8, 0.75, 0.65][k] * R];
+    const o = [fx * off, fz * off];
+    const top = [H, (0.5 + 0.15 * h(20 * k + 3)) * H, 0.34 * H][k] - 0.25 * H;
+    // The top, tilted by 0.12 m at most across the lobe; then the five sides.
+    const tilt = Math.min(0.06, 0.06 / rad);
+    const [tx, tz] = [(2 * h(20 * k + 4) - 1) * tilt, (2 * h(20 * k + 5) - 1) * tilt];
+    const tl = Math.sqrt(tx * tx + 1 + tz * tz);
+    const planes = [
+      [tx / tl, 1 / tl, tz / tl, (tx * o[0] + top + tz * o[1]) / tl],
+      ...FIFTHS.map(([px, pz], j) => {
+        const [ax, az] = [px + h(20 * k + 6 + j) - 0.5, pz + h(20 * k + 11 + j) - 0.5];
+        const l = Math.sqrt(ax * ax + az * az);
+        const y = -0.15 + 0.5 * h(20 * k + 16 + j);
+        const c = Math.sqrt(1 - y * y);
+        const [nx, nz] = [(c * ax) / l, (c * az) / l];
+        return [nx, y, nz, nx * o[0] + nz * o[1] + rad * (0.72 + 0.22 * h(20 * k + 21 + j))];
+      }),
+    ];
+    return { o, rad, top, planes };
+  });
+  const [ux, uz] = flat(91);
+  const under = [0.866 * ux, -0.5, 0.866 * uz, 0.72 * R];
+  const reach = (u: V3) => {
+    let far = 0;
+    for (const { o, rad, planes } of lobes) {
+      // Out of the lobe's ellipsoid, wide and very tall, from the rock's middle inside it.
+      const [a, c] = [1.2 * rad, 1.15 * H];
+      const A = (u[0] * u[0] + u[2] * u[2]) / (a * a) + (u[1] * u[1]) / (c * c);
+      const B = (-2 * (u[0] * o[0] + u[2] * o[1])) / (a * a);
+      const C = (o[0] * o[0] + o[1] * o[1]) / (a * a) - 1;
+      let t = (-B + Math.sqrt(B * B - 4 * A * C)) / (2 * A);
+      for (const [nx, ny, nz, d] of [...planes, under]) {
+        const k = u[0] * nx + u[1] * ny + u[2] * nz;
+        t = k > 1e-9 ? Math.min(t, d / k) : t;
+      }
+      far = Math.max(far, t);
+    }
+    return far * (0.94 + 0.12 * noise(1.5 * u[0] + s, 1.5 * u[2] + 2 * u[1], s));
+  };
+  return { reach, tops: lobes.map(({ o, top }) => [o[0], o[1], top]) };
+};
+
+/**
+ * The boxes inside a boulder, one for each lobe, each x0, y0, z0, x1, y1, z1 round its middle
+ * (y from the middle's height): the widest box under the lobe's top, standing from `foot` under
+ * the middle, whose corners and the middles of its sides are all in the rock at its foot, half
+ * way up and on top. A body is stopped a little inside what is drawn, never outside it.
+ */
+const inside = ({ reach, tops }: ReturnType<typeof rockOf>, R: number, foot: number) => {
+  // Within 9 cm of the rock: a box may stand that far out of it.
+  const holds = (x: number, y: number, z: number, slack = 0.09) => {
+    const l = Math.sqrt(x * x + y * y + z * z);
+    return l < 1e-6 || l <= reach([x / l, y / l, z / l]) + slack;
+  };
+  const grid = [-1, 0, 1];
+  /** A box of half sides p and q round (cx, cz) from the foot up to t: in the rock at its foot, half way up and on top, and with no rock 0.2 m over its top (what stands on it is not in the rock). */
+  const fits = (cx: number, cz: number, p: number, q: number, t: number) =>
+    [foot + 0.05, (foot + t) / 2, t].every(y =>
+      grid.every(i => grid.every(j => holds(cx + i * p, y, cz + j * q))),
+    ) && grid.every(i => grid.every(j => !holds(cx + i * p, t + 0.2, cz + j * q, 0)));
+  return tops.flatMap(([ox, oz, top], k) => {
+    let best = [0, 0, 0, 0, 0, 0];
+    // Round the main lobe's middle; for the others, out from the rock's middle past theirs, where the main mass is not over them.
+    const l = Math.sqrt(ox * ox + oz * oz) || 1;
+    for (const a of k ? [0.1, 0.3, 0.5] : [-0.15, 0, 0.15]) {
+      for (const b of [-0.15, 0, 0.15]) {
+        const [cx, cz] = k
+          ? [ox + (a * ox - b * oz) * (R / l), oz + (a * oz + b * ox) * (R / l)]
+          : [ox + a * R, oz + b * R];
+        // The highest top that holds a small box there; then the box wider both ways, one way, the other.
+        let t = 0;
+        for (let y = top + 0.1; !t && y > foot + 0.3; y -= 0.1) {
+          t = fits(cx, cz, 0.08 * R, 0.08 * R, y) ? y : 0;
+        }
+        let [p, q] = [0.08 * R, 0.08 * R];
+        for (const [fa, fb] of t
+          ? [
+              [1, 1],
+              [1, 0],
+              [0, 1],
+            ]
+          : []) {
+          for (let step = 0.5 * R; step > 0.03; step /= 2) {
+            [p, q] = fits(cx, cz, p + fa * step, q + fb * step, t)
+              ? [p + fa * step, q + fb * step]
+              : [p, q];
+          }
+        }
+        if (t && p * q * (t - foot) > best[0]) {
+          best = [p * q * (t - foot), cx, cz, p, q, t];
+        }
+      }
+    }
+    // A lobe with no room for a box 0.5 m wide has none: the main one always has.
+    const [, cx, cz, p, q, t] = best;
+    return Math.min(p, q) < (k ? 0.25 : 0) ? [] : [[cx - p, foot, cz - q, cx + p, t, cz + q]];
+  });
+};
+
+/** A rock of the map: where its middle is over the ground (x, the ground's height, z), its radius, height and seed, and the boxes it collides with (x0, y0, z0, x1, y1, z1), inside what rockOf() draws. */
+const crag = (x: number, z: number, R: number, H: number, s: number, deep = 0) => {
+  const g = at(x, z);
+  const y = g + 0.25 * H;
+  return {
+    at: [x, g, z],
+    R,
+    H,
+    s,
+    parts: inside(rockOf(s, R, H), R, -0.25 * H)
+      // Not a second box that leaves a crack a body is caught in between it and the first.
+      .filter((b, k, l) => {
+        const gap = Math.max(b[0] - l[0][3], l[0][0] - b[3], b[2] - l[0][5], l[0][2] - b[5]);
+        return !k || gap <= 0 || gap > 1.2;
+      })
+      .map(([x0, , z0, x1, y1, z1]) => [x + x0, deep, z + z0, x + x1, y + y1, z + z1]),
+  };
+};
+/** Red's rocks: in the arena the field's stones (as wide as their old box was long, a fifth higher) and the boulders along the walls, then the boulder field's. */
+const CRAGS = {
+  arena: [
+    ...STONES.map(([x, z, w, d, h], i) =>
+      crag(x + w / 2, z + d / 2, 0.31 * (w + d), 1.15 * h, i + 61),
+    ),
+    ...BOULDERS.map(([x, z, r], i) => crag(x, z, r, 0.8 * r, i)),
+  ],
+  field: FIELD.map(([x, z, r], i) => crag(x, z, r, 0.75 * r, i + 100, at(x, z) - 6)),
+};
+const ghosts = (l: { parts: number[][] }[]): Brush[] =>
+  l
+    .flatMap(c => c.parts)
+    .map(([x0, y0, z0, x1, y1, z1]) => ({ ...box(x0, y0, z0, x1, y1, z1, STONE), ghost: true }));
+
 /** The ghost under a drawn rock or mast: a box of half side s from under the ground to h above it. */
 const lump = (x: number, z: number, s: number, h: number): Brush => ({
   ...box(x - s, at(x, z) - 6, z - s, x + s, at(x, z) + h, z + s, STONE),
@@ -296,6 +457,9 @@ export const LAYOUT = {
   wreck: WRECK,
   /** Red's boulders along its walls and the field's stones; blue's are their mirrors, drawn by the scenery's flip. */
   boulders: BOULDERS,
+  /** Red's rocks, in the arena and in the boulder field: blue's are their mirrors. */
+  crags: CRAGS,
+
   stones: STONES,
   pillars: PILLARS,
   domes: [DOME, [DOME[0], ZED - DOME[1]]],
@@ -370,19 +534,10 @@ const half: Brush[] = [
   ),
   // The west long jump: a spur of the lip into the rille, orange.
   box(12, -30, 148 - (16 - WEST_GAP) / 2, 24, 0, 148, PAINT, STONE, [1, 0.42, 0.08]),
-  // Boulders in the field: their boxes, drawn as rocks by the scenery.
-  // Each stands on the relief under its middle.
-  ...STONES.map(([x, z, w, d, h]) => ({
-    ...box(x, 0, z, x + w, at(x + w / 2, z + d / 2) + h, z + d, STONE),
-    ghost: true,
-  })),
-  // The boulders along the walls: a box inside each drawn rock (top 0.9 of its radius).
-  ...BOULDERS.map(([x, z, r]): Brush => ({
-    ...box(x - 0.6 * r, 0, z - 0.6 * r, x + 0.6 * r, at(x, z) + 0.75 * r, z + 0.6 * r, STONE),
-    ghost: true,
-  })),
-  // Out on the relief, ghosts under what the scenery draws: the boulder field and the dishes' masts.
-  ...FIELD.map(([x, z, r]) => lump(x, z, 0.6 * r, 0.6 * r)),
+  // The field's stones, the boulders along the walls and, out on the relief, the boulder field:
+  // each two or three boxes, drawn as one rock by the scenery.
+  ...ghosts(CRAGS.arena),
+  ...ghosts(CRAGS.field),
   ...DISHES.map(([x, z]) => lump(x, z, 0.4, 6)),
 ];
 

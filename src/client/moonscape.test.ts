@@ -118,7 +118,7 @@ describe('moonscape', () => {
     expect(big.length).toBeGreaterThan(0);
   });
 
-  it('mirrors red onto blue: the pads and the shuttles at z 220 and 60', () => {
+  it('mirrors red onto blue: the pads at z 220 and 60, with no ship drawn in the scenery (craft.ts draws it)', () => {
     for (const z of [220, 60]) {
       const pad = verts.filter(
         p => Math.hypot(p[0] - 40, p[2] - z) < 13.1 && p[1] > 0.2 && p[1] < 0.3,
@@ -129,9 +129,9 @@ describe('moonscape', () => {
         Math.min(...pad.filter(p => Math.hypot(p[0] - 40, p[2] - z) < 12).map(p => p[1])),
       ).toBeGreaterThan(0.26);
       const hull = verts.filter(
-        p => Math.abs(p[2] - z) < 2.1 && p[0] > 32.9 && p[0] < 47.1 && p[1] > 1,
+        p => Math.abs(p[2] - z) < 2.1 && p[0] > 32.9 && p[0] < 47.1 && p[1] > 1 && p[1] < 20,
       );
-      expect(Math.max(...hull.map(p => p[1]))).toBeGreaterThan(3);
+      expect(hull).toEqual([]);
     }
   });
 
@@ -543,8 +543,8 @@ describe('moonscape and the rovers', () => {
     expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
   });
 
-  it('is 437,511 vertices, the four static rovers no longer among them', () => {
-    expect(verts.length).toBe(437511);
+  it('is 436,527 vertices, the four static rovers and the two shuttles no longer among them', () => {
+    expect(verts.length).toBe(436527);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {

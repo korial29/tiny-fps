@@ -39,11 +39,13 @@
 //   left swapping the one in hand; rifle: the laser rifle's rounds plus one (0: none); clip: its cell;
 //   heat: the rail gun's heat (HEAT_MAX at most). nade: bits 0-5 the ticks before the rifle's
 //   launcher fires again (`lob`), bits 6-7 its grenades left (`nades`).
-//   Then the rovers, rovers × 54 bytes, in the order of WorldDef.rovers:
+//   Then the rovers, rovers × 57 bytes, in the order of WorldDef.rovers then WorldDef.ships:
 //     [x f32][y f32][z f32][vx f32][vy f32][vz f32][yaw f32][pitch f32][roll f32][wy f32][wp f32]
-//     [wr f32][steer f32][driver u8][rider u8]
+//     [wr f32][steer f32][driver u8][rider u8][kind u8][wreck u8][nades u8]
 //     All thirteen are the host's float32, exact, the angles too: the driver's client replays its
 //     inputs from them (drive in rover.ts). driver and rider are player ids, NOBODY (255) when empty.
+//     kind: bit 7 a spaceship (ship.ts), bits 0-6 its armour; wreck: the ticks before a destroyed
+//     ship is back, in fours, rounded up; nades: its missiles. All 0 for a rover.
 //   Then the match, after the rovers: [red u8][blue u8][clock u16] the captures of each team, and
 //   the whole seconds to the end of the match (bit 15: it is over, and the clock counts to the next
 //   one), [packs u48: high u16, low u32] bit n set when pack n is there to take (Snapshot.packs); then the red and the blue flag, each [state u8 = FLAG] and by state:
@@ -60,7 +62,7 @@
 //   Then, only on a map with doors: the balls' count is always written (0 with none), and after
 //   the balls [doors u8], then a nibble a door, the first in the high half of its byte: how far it
 //   is open in fifteenths (Snapshot.doors). 1 + doors / 2 bytes, and 1 more when no ball flies.
-//   A snapshot is 4 + 62 × players + 54 × rovers + 10 + 2 to 16 bytes: 12 on top of the players and
+//   A snapshot is 4 + 62 × players + 57 × rovers + 10 + 2 to 16 bytes: 12 on top of the players and
 //   the rovers when both flags are home and no ball flies; with balls, 1 + 11 × balls more.
 // Every multi-byte field is big-endian (DataView's default).
 import { NADE } from './constants';
@@ -105,8 +107,8 @@ export const MSG_SNAPSHOT = 2;
 export const INPUT_BYTES = 12;
 export const SNAP_HEAD = 4;
 export const SNAP_PLAYER = 62;
-/** Bytes of a rover: thirteen float32 and the two seats. */
-export const SNAP_ROVER = 54;
+/** Bytes of a rover: thirteen float32, the two seats and a ship's three bytes. */
+export const SNAP_ROVER = 57;
 /** The rover count has three bits of the head's count byte, the players the other five. */
 export const MAX_ROVERS = 7;
 /** A rover's floats, in wire order. */
@@ -275,6 +277,11 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     ROVER_F.forEach((k, j) => v.setFloat32(o + 4 * j, r[k]));
     v.setUint8(o + 52, r.driver);
     v.setUint8(o + 53, r.rider);
+    if (r.ship) {
+      v.setUint8(o + 54, 128 | Math.max(0, Math.min(127, r.hp ?? 0)));
+      v.setUint8(o + 55, Math.min(255, Math.ceil((r.wreck ?? 0) / 4)));
+      v.setUint8(o + 56, r.nades ?? 0);
+    }
   });
   v.setUint8(end, s.score[0]);
   v.setUint8(end + 1, s.score[1]);
@@ -412,6 +419,15 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
   for (let o = mid; o < end; o += SNAP_ROVER) {
     const r = { driver: v.getUint8(o + 52), rider: v.getUint8(o + 53) } as Rover;
     ROVER_F.forEach((k, j) => (r[k] = v.getFloat32(o + 4 * j)));
+    const kind = v.getUint8(o + 54);
+    if (kind & 128) {
+      Object.assign(r, {
+        ship: true,
+        hp: kind & 127,
+        wreck: v.getUint8(o + 55) * 4,
+        nades: v.getUint8(o + 56),
+      });
+    }
     rovers.push(r);
   }
   const clock = v.getUint16(end + 2);

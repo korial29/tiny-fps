@@ -371,14 +371,14 @@ const topAt = (x: number, z: number) =>
 
 describe('MOON, the rim and the layout the scenery follows', () => {
   it('lays out what the scenery draws on its boxes: both halves, the blue one mirrored', () => {
-    const { pads, shuttles, masts } = LAYOUT;
-    expect([pads.length, shuttles.length, masts.length]).toEqual([2, 2, 12]);
+    const { pads, masts } = LAYOUT;
+    expect([pads.length, masts.length]).toEqual([2, 12]);
     expect(pads[1]).toEqual([40, ZED - 220, 13]);
-    const has = (b: { min: number[]; max: number[] }) =>
-      brushes.some(c => [0, 1, 2].every(k => c.min[k] === b.min[k] && c.max[k] === b.max[k]));
-    for (const b of shuttles) {
-      expect(has(b)).toBe(true);
-    }
+    // A ship stands on each pad, the blue one mirrored, noses toward the other base.
+    expect(MOON.ships).toEqual([
+      [40, 0.25, 220, 0],
+      [40, 0.25, ZED - 220, Math.PI],
+    ]);
     for (const [x, z] of masts) {
       expect(
         brushes.some(

@@ -102,6 +102,8 @@ export interface Controls {
   keys: number;
   /** The chosen weapon (WEAPON: 1, 2, 3 and the wheel). */
   weapon: number;
+  /** At a ship's stick (the client sets it): a press of G is a missile whatever the weapon, a double click nothing more than a click. */
+  pilot: boolean;
   /**
    * The KEY bits of the next step, read once per step. Same as `keys`, plus BLADE while the katana
    * is chosen and RAIL while the rail gun is, except for the step right after a double tap: it carries DASH and only the tapped
@@ -146,16 +148,21 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     pitch: 0,
     keys: 0,
     weapon: WEAPON.GUN,
+    pilot: false,
     take() {
       const keys =
         (pending ? dashKeys(c.keys, pending) : c.keys) |
-        (c.weapon == WEAPON.RIFLE
+        (c.pilot
           ? nade
             ? KEY.SPECIAL
             : 0
-          : special
-            ? KEY.FIRE | KEY.SPECIAL
-            : 0);
+          : c.weapon == WEAPON.RIFLE
+            ? nade
+              ? KEY.SPECIAL
+              : 0
+            : special
+              ? KEY.FIRE | KEY.SPECIAL
+              : 0);
       pending = 0;
       special = nade = false;
       return withWeapon(keys, c.weapon);

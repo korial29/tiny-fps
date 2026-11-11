@@ -340,7 +340,8 @@ export const NOBODY = 255;
 
 /**
  * A rover (rover.ts): thirteen float32 and its two seats, all a drive() needs to carry on from, so
- * a snapshot is enough and the driver's replay is exact. Nothing is kept per wheel.
+ * a snapshot is enough and the driver's replay is exact. Nothing is kept per wheel. With `ship`
+ * set it is a spaceship (ship.ts) instead: one seat, `steer` -1 on a floor and 0 in flight.
  */
 export interface Rover {
   /** The body's centre at hub height: metres. */
@@ -366,6 +367,14 @@ export interface Rover {
   /** The player ids at the wheel and beside it, or NOBODY. */
   driver: number;
   rider: number;
+  /** A spaceship, not a rover. Absent: a rover. */
+  ship?: boolean;
+  /** A ship's armour, SHIP.HP when new. */
+  hp?: number;
+  /** Ticks before a destroyed ship is back on its pad: 0 while it is there to fly. */
+  wreck?: number;
+  /** A ship's missiles left. */
+  nades?: number;
 }
 
 export interface Snapshot {

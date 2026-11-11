@@ -6,7 +6,8 @@ import type { ClientText, ServerText } from '../shared/protocol';
 import { FLAG, KEY } from '../shared/types';
 import type { PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
 import { SOUND } from './sfx';
-import { ROVER, aimOf } from '../shared/rover';
+import { aimOf, aimRange } from '../shared/rover';
+import { SHIP, limits } from '../shared/ship';
 import { build, hidden, ray } from '../shared/world';
 import { createAnnouncer } from './announce';
 import { createAudio, savedMute, toggleMute } from './audio';
@@ -262,6 +263,22 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
           }
         }
         bolts = flying;
+        // A ship blown up since the last snapshot: fireballs along its hull, heard and felt round it.
+        s.rovers?.forEach((r, k) => {
+          const was = match?.rovers?.[k];
+          if (r.ship && r.wreck && was?.ship && !was.wreck) {
+            for (const a of [-4, 0, 4]) {
+              const [sy, cy] = [Math.sin(r.yaw), Math.cos(r.yaw)];
+              const at: [number, number, number] = [r.x - sy * a, r.y, r.z - cy * a];
+              tracer.blast(at);
+              audio.play(SOUND.BLAST, at, 2, 0.35);
+            }
+            audio.play(SOUND.TACKLE, [r.x, r.y, r.z], 1.6, 0.3);
+            const me = predictor.me(1);
+            const d = me ? Math.hypot(r.x - me.x, r.y - me.y, r.z - me.z) : Infinity;
+            fx.quake(Math.max(0, 1 - d / 40));
+          }
+        });
         balls.snapshot(s.balls ?? [], you.id, performance.now());
         // A door that starts to open or to shut is heard where it is.
         for (const c of doors.snapshot(s.doors)) {
@@ -379,7 +396,7 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     seated = !!seat;
     if (driving) {
       wheel = seat.rover;
-      ctl.pitch = chasePitch(ctl.pitch);
+      ctl.pitch = chasePitch(ctl.pitch, rovers[wheel]);
     }
     audio.listen(eye, ctl.yaw);
     const dt = Math.min((now - before) / 1000, 0.1);
@@ -407,9 +424,17 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     fx.update(me, seat ? 0 : ctl.keys, dt, hit, body.phase);
     hud.hurt(fx.hurt);
     const carrying = !!match?.flags.some(f => f.state === FLAG.CARRIED && f.by == you.id);
+    const car = driving ? rovers[wheel] : undefined;
+    ctl.pilot = !!car?.ship;
     hud.rover(
       seat ? (now - since < OUT_HINT * 1000 ? 'get out' : '') : boarding(me, rovers, carrying),
-      driving && rovers[wheel] ? kmh(rovers[wheel]) : undefined,
+      car ? kmh(car) : undefined,
+    );
+    const [up, out] = car?.ship ? limits(car, world) : [0, 0];
+    hud.ship(
+      car?.ship
+        ? { hp: car.hp ?? 0, nades: car.nades ?? 0, alt: car.y - SHIP.DROP, up, out }
+        : undefined,
     );
     if (me) {
       // A hit comes from the nearest foe up: the angle to him off the view, to the right.
@@ -454,7 +479,11 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     // The steps sound as the drawn feet land: the own body's now, the others' as last drawn.
     foley.me(me, hit, body.steps);
     foley.others(others, id => rd?.steps(id));
-    foley.rover(seat && rovers[seat.rover], dt, driving ? ctl.keys : 0);
+    foley.rover(
+      seat && !rovers[seat.rover]?.ship ? rovers[seat.rover] : undefined,
+      dt,
+      driving ? ctl.keys : 0,
+    );
     if (world.def.helmets) {
       foley.breathe(me, dt);
     }
@@ -524,15 +553,15 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
         third ? me : undefined,
         v => doors.draw(v, pov, dt),
       );
-      // The rover's reticle: where its lasers cross along the look, or the ground or wall before it.
-      const car = driving ? rovers[wheel] : undefined;
+      // The reticle: where the lasers cross along the look, or the ground or wall before it.
       if (car) {
         const [o, to]: [number, number, number][] = [
           [car.x, car.y, car.z],
           aimOf(car, ctl.yaw, ctl.pitch),
         ];
-        const d = to.map((v, k) => (v - o[k]) / ROVER.GUN_AIM) as [number, number, number];
-        const t = ray(world, o, d, ROVER.GUN_AIM);
+        const k = aimRange(car);
+        const d = to.map((v, n) => (v - o[n]) / k) as [number, number, number];
+        const t = ray(world, o, d, k);
         hud.aim(rd.project(o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t));
       } else {
         hud.aim();

@@ -14,14 +14,15 @@ import {
   TEAM_NAME,
 } from '../shared/constants';
 import type { Result } from '../shared/protocol';
-import { ROVER } from '../shared/rover';
-import { FLAG, MODE, NOBODY } from '../shared/types';
+import { free, gap2, nearby } from '../shared/rover';
+import { SHIP } from '../shared/ship';
+import { FLAG, MODE } from '../shared/types';
 import type { PlayerState, Rover, Snapshot } from '../shared/types';
 import { FH, FW, PALETTE, sprite } from './face';
 import type { Mark } from './marks';
 
 export const HUD_CSS =
-  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,samp,cite,q{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,samp,cite,q,dfn{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
@@ -112,7 +113,11 @@ export const HUD_CSS =
   `samp var{display:inline-block;margin-right:8px;padding:1px 7px;border:1px solid #fffb;border-radius:4px;font-style:normal;font-weight:900}` +
   `q{width:26px;height:26px;margin:-13px 0 0 -13px;border:2px solid #5f8;border-radius:50%;box-shadow:0 0 6px #3f6,inset 0 0 4px #3f6;background:radial-gradient(#afc 0 1.5px,#0000 2px)}q::before,q::after{content:none}` +
   `cite{right:12px;bottom:10px;font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}cite small{margin-left:6px;font-size:14px}` +
-  `div.v>i,.v dl,.v del{display:none}`;
+  `div.v>i,.v dl,.v del{display:none}` +
+  // The ship: its armour as a bar behind the missiles and the height, bottom left; the limit's warning, flashing, under the banner.
+  `dfn{left:12px;bottom:10px;padding:7px 14px;border-radius:6px;font:800 15px/1 system-ui,sans-serif;font-style:normal;font-variant-numeric:tabular-nums;letter-spacing:.04em;background:linear-gradient(90deg,var(--c,#2c8c5bcc) var(--a,100%),#000a 0)}` +
+  `dfn+dfn{left:50%;top:30%;bottom:auto;transform:translateX(-50%);padding:8px 22px;font-size:clamp(14px,2.6vw,20px);background:#a10e0ecc;animation:blink .5s steps(2) infinite alternate}` +
+  `@keyframes blink{to{opacity:.35}}`;
 
 /** The tabs of the title screen's menu, the first one shown first. */
 export const TABS = ['Game', 'Controls'];
@@ -180,6 +185,19 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
     ],
   ],
   [
+    'Ship',
+    [
+      ['E', 'board, get out'],
+      ['Mouse', 'aim the nose'],
+      ['W|S', 'thrust, brake'],
+      ['A|D', 'slide'],
+      ['Space|C', 'climb, sink'],
+      ['Shift', 'boost'],
+      ['Left click', 'lasers'],
+      ['G', 'missiles'],
+    ],
+  ],
+  [
     'Game',
     [
       ['M', 'mute', 'KeyM'],
@@ -192,24 +210,25 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
 export const OUT_HINT = 4;
 
 /**
- * What E does for a player on foot: 'drive' within ROVER.ENTER_R of a rover whose wheel is free,
- * 'ride' when only the seat beside it is, or when he carries a flag (a carrier does not drive),
- * '' with no free seat in reach, seated or down. The nearest rover with a seat for him counts.
+ * What E does for a player on foot: 'drive' near a rover whose wheel is free, 'ride' when only the
+ * seat beside it is, or when he carries a flag (a carrier does not drive), 'fly' near a ship that
+ * is there and has no pilot (a carrier does not fly), '' with no free seat in reach, seated or
+ * down. The nearest vehicle with a seat for him counts, as the room judges it (nearby(), free()).
  */
 export const boarding = (
   me: Pick<PlayerState, 'x' | 'y' | 'z' | 'mode' | 'down'> | undefined,
   rovers: readonly Rover[],
   carrying = false,
-): '' | 'drive' | 'ride' => {
-  let [best, what]: [number, '' | 'drive' | 'ride'] = [ROVER.ENTER_R, ''];
+): '' | 'drive' | 'ride' | 'fly' => {
+  let [best, what]: [number, '' | 'drive' | 'ride' | 'fly'] = [Infinity, ''];
   if (!me || me.down || me.mode === MODE.RIDE) {
     return what;
   }
   for (const r of rovers) {
-    const d = Math.hypot(r.x - me.x, r.z - me.z);
-    const seat = r.driver === NOBODY && !carrying ? 'drive' : r.rider === NOBODY ? 'ride' : '';
-    if (seat && d <= best && Math.abs(r.y - me.y) <= ROVER.ENTER_R) {
-      [best, what] = [d, seat];
+    const s = free(r, carrying);
+    const d = gap2(r, me);
+    if (s >= 0 && nearby(r, me) && d <= best) {
+      [best, what] = [d, r.ship ? 'fly' : s ? 'ride' : 'drive'];
     }
   }
   return what;
@@ -308,9 +327,26 @@ export interface Hud {
   rover(act: string, speed?: number): void;
   /** The rover's reticle, where its lasers cross: `at` on screen in [0, 1] from the top left; undefined hides it. */
   aim(at?: [number, number]): void;
+  /** The ship flown: its armour, missiles and height, and how near its limits are (limits(), ship.ts); undefined hides it. */
+  ship(s?: ShipPanel): void;
   /** The end screen with the result and each player's captures and returns, `next` seconds before the next match; undefined hides it. */
   end(sum: Summary | undefined, next: number): void;
 }
+
+/** What the ship's panel shows. */
+export interface ShipPanel {
+  hp: number;
+  nades: number;
+  /** Metres over the crater's floor. */
+  alt: number;
+  /** limits(): the ceiling's and the edge's nearness, 1 at the limit. */
+  up: number;
+  out: number;
+}
+
+/** The warning of the nearest limit once one is within its last half of WARN, or ''. */
+export const warning = (up: number, out: number): string =>
+  Math.max(up, out) < 0.5 ? '' : up >= out ? 'CEILING · DESCEND' : 'CRATER EDGE · TURN BACK';
 
 /** Milliseconds a banner stays, and a hit marker. */
 export const BANNER_MS = 2800;
@@ -357,7 +393,7 @@ export const createHud = (screen: HTMLElement, play = () => {}): Hud => {
       `<data></data><span></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
       `<s hidden></s><mark hidden></mark><ins hidden><i></i></ins>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav>` +
-      `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q>` +
+      `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q><dfn hidden></dfn><dfn hidden></dfn>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
   );
   const one = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
@@ -596,6 +632,22 @@ export const createHud = (screen: HTMLElement, play = () => {}): Hud => {
       if (at) {
         q.style.left = `${at[0] * 100}%`;
         q.style.top = `${at[1] * 100}%`;
+      }
+    },
+    ship(s) {
+      const [panel, warn] = screen.querySelectorAll<HTMLElement>('dfn');
+      panel.hidden = !s;
+      const w = s ? warning(s.up, s.out) : '';
+      warn.hidden = !w;
+      set(warn, w);
+      if (s) {
+        const a = Math.max(0, Math.min(1, s.hp / SHIP.HP));
+        panel.style.setProperty('--a', `${Math.round(a * 100)}%`);
+        panel.style.setProperty('--c', a > 0.3 ? '#2c8c5bcc' : '#c0392bcc');
+        set(
+          panel,
+          `ARMOUR ${s.hp}  ·  MISSILES ${s.nades}/${SHIP.MISSILES}  ·  ALT ${Math.round(s.alt)} m`,
+        );
       }
     },
     rover(what, v) {

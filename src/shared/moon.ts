@@ -6,7 +6,7 @@
 // its lips have none. Compact on purpose: the local bundle carries it (budget in scripts/size.mjs).
 import { PLAYER_R } from './constants';
 import { TEAM_TINT } from './map';
-import { BASE, DOME, DOORS, MODULES, TUBES, box, bx, fromBx } from './moonbase';
+import { BASE, DOME, DOORS, MODULES, TUBES, box, bx } from './moonbase';
 import type { Bx, Vec3 } from './moonbase';
 import { hash, noise } from './relief';
 import { TEX } from './types';
@@ -28,9 +28,8 @@ export const WEST_GAP = 13.5;
 const mirror = ({ min, max }: Bx): Bx =>
   bx(min[0], min[1], ZED - max[2], max[0], max[1], ZED - min[2]);
 
-/** The domes' centres, the landing pads (x, z, radius), the shuttles, the modules, the tubes and the masts (centres), red's then blue's: what the scenery draws on. */
+/** The domes' centres, the landing pads (x, z, radius), the modules, the tubes and the masts (centres), red's then blue's: what the scenery draws on. */
 const PAD = [40, 220, 13];
-const SHUTTLE = bx(33, 0.25, 218, 47, 3.25, 222);
 const MASTS = [
   [27.3, 207.3],
   [52.7, 207.3],
@@ -566,7 +565,6 @@ export const LAYOUT = {
   pillars: PILLARS,
   domes: [DOME, [DOME[0], ZED - DOME[1]]],
   pads: [PAD, [PAD[0], ZED - PAD[1], PAD[2]]],
-  shuttles: [SHUTTLE, mirror(SHUTTLE)],
   modules: [...MODULES, ...MODULES.map(mirror)],
   tubes: [...TUBES, ...TUBES.map(mirror)],
   masts: [...MASTS, ...MASTS.map(([x, z]) => [x, ZED - z])],
@@ -624,13 +622,8 @@ const half: Brush[] = [
   { ...box(75.75, 0.5, FLAG - 4.25, 84.25, 1, FLAG + 4.25, PAINT, CONCRETE, RED), ghost: true },
   // The armoury, a red plinth behind the dome: the racks stand on it.
   box(60, 0, 259, 70, 1.5, 265, STEEL, PAINT, RED),
-  // The landing pad, a shuttle on it (cover), and masts at the pad's corners and by the tubes.
+  // The landing pad, its spaceship's (ship.ts: a solid body, not a brush), and masts at the pad's corners and by the tubes.
   box(27, 0, 207, 53, 0.25, 233, METAL),
-  { ...fromBx(SHUTTLE, PAINT), tint: [0.82, 0.84, 0.88] },
-  // Its wings (y 1 to 1.2, 3.5 m out from the hull's sides) and its tail fin over the hull, as drawn by the scenery.
-  { ...box(42, 1, 222, 45.8, 1.25, 225.5, METAL), ghost: true },
-  { ...box(42, 1, 214.5, 45.8, 1.25, 218, METAL), ghost: true },
-  { ...box(43, 3.25, 219.9, 46.8, 5.4, 220.1, PAINT), ghost: true },
   ...MASTS.map(([x, z]) =>
     box(x - 0.2, x < 60 ? 0.25 : 0, z - 0.2, x + 0.2, x < 60 ? 10.25 : 10, z + 0.2, STEEL),
   ),
@@ -769,6 +762,11 @@ export const MOON: WorldDef = {
     [30, 0, 255, 0],
     [100, 0, ZED - 178, Math.PI],
     [30, 0, ZED - 255, Math.PI],
+  ],
+  // A combat ship on each landing pad, its nose toward the other base.
+  ships: [
+    [PAD[0], 0.25, PAD[1], 0],
+    [PAD[0], 0.25, ZED - PAD[1], Math.PI],
   ],
   // The dome's door and the two airlocks of each base.
   doors: [...DOORS, ...DOORS.map(mirror)],

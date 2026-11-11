@@ -64,10 +64,10 @@ const YOKE: Vec3 = [-0.45, 0.3, 0.6];
 const GEAR = 2.5;
 
 /** A point of the body's frame: metres right, up and ahead of the centre. */
-const P = (x: number, y: number, a: number): Vec3 => [x, y, -a];
+export const P = (x: number, y: number, a: number): Vec3 => [x, y, -a];
 
 /** A flat polygon of three or four corners facing `to`; a fourth number of the colour is its layer. */
-const panel = (o: number[], [a, b, c, d]: Vec3[], rgb: number[], to: Vec3) => {
+export const panel = (o: number[], [a, b, c, d]: Vec3[], rgb: number[], to: Vec3) => {
   const [u, v] = [sub(b, a), sub(c, a)];
   const back =
     dot([u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], to) < 0;
@@ -82,7 +82,7 @@ const panel = (o: number[], [a, b, c, d]: Vec3[], rgb: number[], to: Vec3) => {
 };
 
 /** A skin between two rings of as many corners, each side (in `cols`, in the rings' order) facing away from the middle, and a cap on either ring. */
-const loft = (
+export const loft = (
   o: number[],
   a: Vec3[],
   b: Vec3[],
@@ -126,11 +126,11 @@ const pipe = (sides: number) =>
     [1, 1, 1],
   );
 /** A thin tube has three sides, a thick one four near by. */
-const LINK = pipe(3);
-const TUBE = pipe(4);
+export const LINK = pipe(3);
+export const TUBE = pipe(4);
 
 /** A tube from a to b, r thick. */
-const rod = (o: number[], tube: number[], a: Vec3, b: Vec3, r: number, rgb: number[]) => {
+export const rod = (o: number[], tube: number[], a: Vec3, b: Vec3, r: number, rgb: number[]) => {
   const d = sub(b, a);
   segment(o, tube, a, b, Math.abs(d[1]) > Math.abs(d[0]) ? [1, 0, 0] : [0, 1, 0], 1, r, rgb);
 };

@@ -645,6 +645,44 @@ describe('moonscape', () => {
   });
 });
 
+describe('moonscape, the small relief', () => {
+  it("draws ripples finer than the lattice: off the level patches the ground's normals lean by a hash, up to 5 degrees; on them not at all", () => {
+    const inside = land.flat().filter(p => reach(relief, p[0], p[2]) < 0.9);
+    // What the heights alone would give, 4 m each side.
+    const plain = (p: number[]) => {
+      const n = [
+        at(p[0] - 4, p[2]) - at(p[0] + 4, p[2]),
+        8,
+        at(p[0], p[2] - 4) - at(p[0], p[2] + 4),
+      ];
+      const l = Math.hypot(...n);
+      return n.map(v => v / l);
+    };
+    const turn = (p: number[]) => {
+      const n = plain(p);
+      return (Math.acos(Math.min(p[3] * n[0] + p[4] * n[1] + p[5] * n[2], 1)) * 180) / Math.PI;
+    };
+    const flat = inside.filter(
+      p =>
+        p[1] === 0 &&
+        at(p[0] - 4, p[2]) === 0 &&
+        at(p[0] + 4, p[2]) === 0 &&
+        at(p[0], p[2] - 4) === 0 &&
+        at(p[0], p[2] + 4) === 0,
+    );
+    expect(flat.length).toBeGreaterThan(3000);
+    expect(flat.every(p => p[4] === 1)).toBe(true);
+    const open = inside.filter(p => p[1] !== 0).filter((_, k) => k % 7 === 0);
+    const turns = open.map(turn);
+    expect(hi(turns)).toBeLessThan(7.5);
+    expect(turns.filter(t => t > 1).length / turns.length).toBeGreaterThan(0.6);
+  });
+
+  it('adds no vertex for it: the cap stays at 470,000', () => {
+    expect(verts.length).toBeLessThan(470000);
+  });
+});
+
 describe('moonscape, the horizon', () => {
   const [cx, cz, ba, bb] = relief.bound;
   const deg = (r: number) => (r * 180) / Math.PI;
@@ -799,8 +837,8 @@ describe('moonscape and the rovers', () => {
     expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
   });
 
-  it('is 464,283 vertices, the four static rovers and the two shuttles no longer among them', () => {
-    expect(verts.length).toBe(464283);
+  it('is 464,289 vertices, the four static rovers and the two shuttles no longer among them', () => {
+    expect(verts.length).toBe(464289);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {

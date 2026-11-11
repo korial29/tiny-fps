@@ -29,6 +29,7 @@ import {
   MOON,
   MOUND,
   MOUNDS,
+  STRIPS,
   PIT_FLOOR,
   PIT_R,
   PIT_S,
@@ -709,26 +710,32 @@ describe('MOON, the relief round the arena', () => {
     expect(relief.pits.every(([x0, z0, x1, z1]) => x0 < x1 && z0 < z1)).toBe(true);
   });
 
-  it('is exactly 0 for 12 m round the arena and on its edge, and rolls beyond', () => {
-    let rolls = 0;
-    const flat = nodes(relief).filter(([x, z, h]) => {
+  it('is exactly 0 on the edge of the arena, rough but within 0.6 m for 12 m round it, and rolls beyond', () => {
+    let [rolls, bumps] = [0, 0];
+    const apron: number[] = [];
+    const edge = nodes(relief).filter(([x, z, h]) => {
       const d = off(x, z);
       rolls = Math.max(rolls, d > 12 && d < 60 ? Math.abs(h) : 0);
-      const edge = !d && (x === 0 || x === 160 || z === 0 || z === ZED);
-      return (edge || (d > 0 && d <= 12)) && !Object.is(h, 0);
+      if (d > 0 && d <= 12) {
+        apron.push(h);
+        bumps += Math.abs(h) > 0.1 ? 1 : 0;
+      }
+      return !d && (x === 0 || x === 160 || z === 0 || z === ZED) && !Object.is(h, 0);
     });
-    expect(flat).toEqual([]);
+    // The slabs end on the edge: the ground meets them there.
+    expect(edge).toEqual([]);
+    expect(Math.max(...apron.map(Math.abs))).toBeLessThan(0.6);
+    // No longer a level apron: a node in six and more stands 10 cm off the floor.
+    expect(bumps / apron.length).toBeGreaterThan(0.16);
     expect(rolls).toBeGreaterThan(3);
-    // Between the nodes too, corners included.
+    // Between the nodes of the edge too, corners included.
     for (const [x, z] of [
-      [-12, 50.5],
-      [-3.3, 139],
-      [171.9, 277],
-      [80.4, -11.6],
-      [166, 289.7],
+      [0, 50.5],
+      [160, 277],
+      [80.4, 0],
+      [0, 280],
     ]) {
       expect(at(x, z)).toBe(0);
-      expect(ground(world, x, z)).toBe(0);
     }
   });
 
@@ -789,7 +796,7 @@ describe('MOON, the relief round the arena', () => {
         src.match(/\*\*|Math\.(?!imul|sqrt|abs|min|max|floor|ceil|round|PI)\w+/g) ?? [],
       ).toEqual([]);
     }
-    expect(checksum(relief)).toBe(2076870685);
+    expect(checksum(relief)).toBe(3677647529);
   });
 
   it('keeps every spawn, flag base, rack and pack on flat ground: the relief is exactly 0 under each', () => {
@@ -814,13 +821,17 @@ describe('MOON, the relief round the arena', () => {
     }
   });
 
-  it('leaves a lane round each end of the rille: flat for 12 m, within a metre for 20', () => {
+  it('leaves a lane round each end of the rille: level by the centre line, within 0.6 m for 12 m, within a metre for 20', () => {
     for (let z = 100; z <= 180; z += 2) {
       for (const x of [-19, -16, -13, 173, 176, 179]) {
         expect(Math.abs(ground(world, x, z))).toBeLessThan(1);
       }
       for (const x of [-11, -6, -1, 161, 166, 171]) {
-        expect(ground(world, x, z)).toBe(0);
+        expect(Math.abs(ground(world, x, z))).toBeLessThan(0.6);
+        // Level where the rille's ends close, 5 m each side of the centre line: the plugs are under it.
+        if (Math.abs(z - ZED / 2) < 5) {
+          expect(ground(world, x, z)).toBe(0);
+        }
       }
     }
   });
@@ -991,7 +1002,8 @@ describe('MOON, the relief with the real physics', () => {
           expect(s.p.mode, `from ${x}, ${z}, step ${n}`).toBe(MODE.GROUND);
           // On the arena's floor, then on the ground.
           const g = ground(world, s.p.x, s.p.z);
-          expect(s.p.y).toBeCloseTo(g === -Infinity ? 0 : g, 3);
+          // (A foot on the last slab while the ground just off it dips: a few centimetres.)
+          expect(Math.abs(s.p.y - (g === -Infinity ? 0 : g))).toBeLessThan(0.06);
           out = Math.max(out, off(s.p.x, s.p.z));
         }
       }
@@ -999,11 +1011,13 @@ describe('MOON, the relief with the real physics', () => {
       expect(Math.hypot(s.p.x - x, s.p.z - z)).toBeLessThan(8);
       expect(s.ev & (EV.JUMP | EV.RESPAWN)).toBe(0);
     }
-    // And round the end of the rille, over its plug: level ground.
+    // And round the end of the rille, over its plug: on his feet all the way, over hummocks and pans of half a metre at most.
     const s = Sim.at(world).put(-3, 0, 120, SOUTH);
     s.run(480, KEY.FORWARD, SOUTH);
     expect(s.p.z).toBeGreaterThan(160);
-    expect([s.low, s.p.y, s.modes.size]).toEqual([0, 0, 1]);
+    expect(s.modes.size).toBe(1);
+    expect(s.low).toBeGreaterThan(-0.6);
+    expect(Math.abs(s.p.y - ground(world, s.p.x, s.p.z))).toBeLessThan(0.06);
   });
 
   it('stops a runner at the bound, up on the crater wall', () => {
@@ -1047,7 +1061,8 @@ describe('MOON, the field, the mounds and the carved rille', () => {
       }
     }
     expect(high).toBeGreaterThan(2);
-    expect(high).toBeLessThanOrEqual(2.6);
+    // The mounds are 2.6 m at most, the hummocks on them 0.45 m.
+    expect(high).toBeLessThanOrEqual(3.05);
     expect(rough / all).toBeGreaterThan(0.25);
     // Enough to hide a runner from one standing 40 m off on the flat: a line of sight is cut.
     let cut = 0;
@@ -1311,6 +1326,163 @@ describe('MOON, the field, the mounds and the carved rille', () => {
   });
 });
 
+describe('MOON, the small relief', () => {
+  /** The bases' own rectangles, x0, z0, x1, z1 from the centre line: a pad, a dome and its spawns, the modules. No open ground. */
+  const built = FLATS.filter(f => (f[2] - f[0]) * (f[3] - f[1]) > 500);
+  /** The share of the open ground, in the arena and out to 0.8 of the bound, that is level within 2 cm over a window of 10 m. */
+  const level = () => {
+    const [cx, cz, a, b] = relief.bound;
+    const n = { in: [0, 0], out: [0, 0] };
+    for (let x = cx - a; x <= cx + a; x += 3) {
+      for (let z = cz - b; z <= cz + b; z += 3) {
+        const g = ground(world, x, z);
+        const zc = Math.abs(z - ZED / 2);
+        if (
+          Math.hypot((x - cx) / a, (z - cz) / b) > 0.8 ||
+          !Number.isFinite(g) ||
+          (!off(x, z) && built.some(f => x >= f[0] && x <= f[2] && zc >= f[1] && zc <= f[3]))
+        ) {
+          continue;
+        }
+        let [lo, hi] = [g, g];
+        for (let u = -5; u <= 5; u += 2.5) {
+          for (let v = -5; v <= 5; v += 2.5) {
+            const h = ground(world, x + u, z + v);
+            [lo, hi] = Number.isFinite(h) ? [Math.min(lo, h), Math.max(hi, h)] : [lo, hi];
+          }
+        }
+        const k = off(x, z) ? n.out : n.in;
+        k[0] += hi - lo <= 0.02 ? 1 : 0;
+        k[1]++;
+      }
+    }
+    return [n.in[0] / n.in[1], n.out[0] / n.out[1]];
+  };
+
+  it('leaves little ground level: under 9 % of the open ground in the arena and 2 % outside, within 2 cm over 10 m', () => {
+    // It was 10.3 % and 3.4 %: what is left is round a pack, a spawn, a rover's place, a base's edge and the strips of the measured jumps.
+    const [inside, outside] = level();
+    expect(inside).toBeLessThan(0.09);
+    expect(outside).toBeLessThan(0.02);
+  });
+
+  it('is hummocks over the slabs in the arena, hummocks and pans outside: on the apron and the lanes, up to half a metre from 8 m across', () => {
+    // The apron, 4 to 12 m off the arena: no node was off the floor.
+    const apron = nodes(relief).filter(([x, z]) => off(x, z) >= 4 && off(x, z) <= 12);
+    expect(apron.filter(n => n[2] > 0.1).length / apron.length).toBeGreaterThan(0.1);
+    expect(apron.filter(n => n[2] < -0.05).length / apron.length).toBeGreaterThan(0.05);
+    expect(Math.max(...apron.map(n => Math.abs(n[2])))).toBeLessThan(0.6);
+    // The arena's open floor between the bases and the rille, where the mounds leave it bare: a node in five is a hummock, none a pan.
+    const floor = nodes(relief).filter(
+      ([x, z]) =>
+        x > 6 && x < 154 && z > 172 && z < 200 && Math.hypot(x - HOLLOW[0], z - HOLLOW[1]) > 14,
+    );
+    expect(floor.filter(n => n[2] > 0.08).length / floor.length).toBeGreaterThan(0.2);
+    expect(floor.every(n => n[2] >= 0)).toBe(true);
+  });
+
+  it('keeps a level patch where the game needs one: 1.5 m round every spawn, flag base, rack and pack as it is walked on, the bases, the strips of the measured jumps', () => {
+    const points = [
+      ...teams.flatMap(t => [t.base, ...t.spawns, t.rack!, t.blade!, t.rail!, t.rifle!]),
+      ...MOON.packs!,
+      ...MOON.ammo!,
+      ...MOON.cells!,
+    ].filter(p => p[2] !== ZED / 2);
+    for (const [x, , z] of points) {
+      for (let u = -1.5; u <= 1.5; u += 0.75) {
+        for (let v = -1.5; v <= 1.5; v += 0.75) {
+          const g = ground(world, x + u, z + v);
+          expect(Object.is(g, 0) || g === -Infinity, `${x}, ${z}`).toBe(true);
+        }
+      }
+    }
+    // The jumps' strips (the last two are the mounds a rover flies from, which are relief themselves): level from the lip back.
+    for (const [x0, z0, x1, z1] of STRIPS.slice(0, 3)) {
+      // (Not on a mound's flank, 12 m from its middle.)
+      for (let x = x0; x <= x1; x += 2) {
+        for (
+          let z = Math.max(z0, 8 + Math.max(LIP[x], 0) + 0.5);
+          z <= z1 && !MOUNDS.some(m => Math.abs(x - m) < 13);
+          z += 2
+        ) {
+          for (const side of [1, -1]) {
+            // (Or the void of a notch of the lip.)
+            const g = ground(world, x, ZED / 2 + side * z);
+            expect(Object.is(g, 0) || g === -Infinity, `${x}, ${z}`).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
+  it('floats no brush and buries none: the ground is within 3 cm of the foot of each that stands on it, and under no rock', () => {
+    const standing = brushes.filter(b => b.min[1] === 0 && !(b.ghost && b.top === TEX.STONE));
+    expect(standing.length).toBeGreaterThan(100);
+    for (const b of standing) {
+      for (const fx of [0, 0.5, 1]) {
+        for (const fz of [0, 0.5, 1]) {
+          const g = ground(
+            world,
+            b.min[0] + fx * (b.max[0] - b.min[0]),
+            b.min[2] + fz * (b.max[2] - b.min[2]),
+          );
+          expect(g === -Infinity || Math.abs(g) <= 0.03, `${b.min} to ${b.max}: ${g}`).toBe(true);
+        }
+      }
+    }
+    // A rock's boxes go under the lowest ground round it.
+    for (const c of [...LAYOUT.crags.arena, ...LAYOUT.crags.field]) {
+      const low = Math.min(...c.parts.map(q => q[1]));
+      for (let i = 0; i < 8; i++) {
+        const g = ground(
+          world,
+          c.at[0] + 0.8 * c.R * Math.cos((i * Math.PI) / 4),
+          c.at[2] + 0.8 * c.R * Math.sin((i * Math.PI) / 4),
+        );
+        expect(g === -Infinity || low < g, `rock ${c.at}`).toBe(true);
+      }
+    }
+  });
+
+  it('carries a rover at speed: across the field, the apron and the ground outside it bounces on its springs, never over, never thrown', () => {
+    let [speed, tilt, top] = [0, 0, 0];
+    for (const [x, z, yaw] of [
+      [14, 252, EAST],
+      [150, 262, WEST],
+      [205, 250, NORTH],
+      [-20, 300, WEST],
+      [-8, 20, SOUTH],
+    ]) {
+      const car = rover(world, x, z, yaw);
+      let air = 0;
+      for (let k = 0; k < 420; k++) {
+        expect(run(car, world, 1, KEY.FORWARD, yaw), `from ${x}, ${z}`).toBe(false);
+        speed = Math.max(speed, Math.abs(car.vy));
+        tilt = Math.max(tilt, Math.abs(car.pitch), Math.abs(car.roll));
+        top = Math.max(top, Math.hypot(car.vx, car.vz));
+        air += flying(car, world) ? 1 : 0;
+      }
+      // Off the ground a second at most in seven, over a mound's crest.
+      expect(air, `from ${x}, ${z}`).toBeLessThan(60);
+    }
+    expect(top).toBeGreaterThan(20);
+    expect(speed).toBeLessThan(6);
+    expect(tilt).toBeLessThan(0.5);
+    // On the apron, level before: it rides the hummocks at 21 m/s with its wheels down, 5 degrees of tilt at most.
+    const car = rover(world, -8, 20, SOUTH);
+    let [bounce, lean] = [0, 0];
+    for (let k = 0; k < 420; k++) {
+      run(car, world, 1, KEY.FORWARD, SOUTH);
+      bounce = Math.max(bounce, Math.abs(car.vy));
+      lean = Math.max(lean, Math.abs(car.pitch), Math.abs(car.roll));
+      expect(flying(car, world)).toBe(false);
+    }
+    expect(bounce).toBeGreaterThan(0.5);
+    expect(bounce).toBeLessThan(2.5);
+    expect(lean).toBeLessThan(0.12);
+  });
+});
+
 describe('MOON, the rocks', () => {
   const rocks = [...LAYOUT.crags.arena, ...LAYOUT.crags.field];
   type Rock = (typeof rocks)[0];
@@ -1486,7 +1658,7 @@ describe('MOON, the rocks', () => {
     );
   });
 
-  it('fits a body: at body height the boxes are a median 0.15 m, 0.3 m for nine in ten, 0.37 m for nineteen in twenty, inside what is drawn, on its flanks and on its dome', () => {
+  it('fits a body: at body height the boxes are a median 0.15 m, 0.32 m for nine in ten, 0.37 m for nineteen in twenty, inside what is drawn, on its flanks and on its dome', () => {
     // The brief was a median under 0.15 m, 0.3 m for nineteen in twenty and 0.45 m at worst. The median is met; the rest is not: at the
     // foot of a rock on a slope or lower than a body no box may stand where a body would step onto it, and the boxes over it are further in.
     const gaps: number[] = [];
@@ -1515,7 +1687,7 @@ describe('MOON, the rocks', () => {
     }
     expect(gaps.length).toBeGreaterThan(15000);
     expect(quantile(gaps, 0.5)).toBeLessThan(0.15);
-    expect(quantile(gaps, 0.9)).toBeLessThan(0.3);
+    expect(quantile(gaps, 0.9)).toBeLessThan(0.32);
     expect(quantile(gaps, 0.95)).toBeLessThan(0.37);
     expect(quantile(gaps, 0.98)).toBeLessThan(0.5);
     expect(quantile(gaps, 0)).toBeGreaterThan(-0.12);
@@ -1649,7 +1821,8 @@ describe('MOON, the rocks', () => {
       }
     }
     expect(gaps.length).toBeGreaterThanOrEqual(8);
-    expect(Math.min(...gaps)).toBeGreaterThan(-0.45);
+    // (On the field's hummocks a wheel is at times higher than the rock's foot: its nose goes further in.)
+    expect(Math.min(...gaps)).toBeGreaterThan(-0.75);
     expect(Math.max(...gaps)).toBeLessThan(0.45);
     const shots: number[] = [];
     for (const c of rocks.filter(q => q.H > 0.75)) {

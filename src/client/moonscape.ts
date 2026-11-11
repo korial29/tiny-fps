@@ -680,7 +680,13 @@ const terrain = (o: number[], def: WorldDef) => {
     let v = seen.get(k);
     if (!v) {
       const h = y(x, z);
-      const n = unit([y(x - 4, z) - y(x + 4, z), 8, y(x, z - 4) - y(x, z + 4)]);
+      // Finer than the lattice carries, drawn only: the normal leans by up to 5 degrees from a hash, so the low sun
+      // picks out ripples a body does not feel. Not where the ground is level (a base, a spawn, a pack, the arena's edge):
+      // nothing there looks like something to trip on.
+      const slopes = [y(x - 4, z) - y(x + 4, z), y(x, z - 4) - y(x, z + 4)];
+      const level = h === 0 && slopes[0] === 0 && slopes[1] === 0;
+      const lean = (k: number) => (level ? 0 : 1.4 * (hash(x, z, 131 + k) - 0.5));
+      const n = unit([slopes[0] + lean(0), 8, slopes[1] + lean(1)]);
       v = [x, h, z, ...n, x, z, TEX.STONE, Math.min(Math.max(1 + h / 60, 0.78), 1.2) + rays(x, z)];
       seen.set(k, v);
     }

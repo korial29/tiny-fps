@@ -4,7 +4,7 @@
 // under each piece a player can reach. Every part is lit paint
 // (layer -1) or glow (layer -2: windows, lamps, stars, the Earth), but the relief and the small
 // craters on the floor, in the floor's own stone, and the boulders, in basalt (TEX.ROCK).
-import { LAYOUT, LIP, PIT_FLOOR, PIT_R, PIT_S, PIT_STEPS, rockOf } from '../shared/moon';
+import { LAYOUT, LIP, PIT_FLOOR, PIT_R, PIT_S, PIT_STEPS, rockMid, rockOf } from '../shared/moon';
 import { TAU } from '../shared/physics';
 import { ground, raise } from '../shared/relief';
 import { TEX } from '../shared/types';
@@ -266,36 +266,6 @@ const rock = (
   });
 };
 
-/** A unit sphere as triangles: an octahedron with each face cut in four, n times (8 * 4 ** n). */
-const ball = (n: number): Vec3[][] => {
-  let t: Vec3[][] = [];
-  for (const a of [-1, 1]) {
-    for (const b of [-1, 1]) {
-      for (const c of [-1, 1]) {
-        t.push([
-          [a, 0, 0],
-          [0, b, 0],
-          [0, 0, c],
-        ]);
-      }
-    }
-  }
-  for (; n > 0; n--) {
-    t = t.flatMap(([p, q, r]) => {
-      const m = (u: Vec3, v: Vec3) => unit([u[0] + v[0], u[1] + v[1], u[2] + v[2]]);
-      const [pq, qr, rp] = [m(p, q), m(q, r), m(r, p)];
-      return [
-        [p, pq, rp],
-        [pq, q, qr],
-        [rp, qr, r],
-        [pq, qr, rp],
-      ];
-    });
-  }
-  return t;
-};
-const BALLS = [1, 2, 3].map(ball);
-
 /** One facet of basalt, flat shaded, turned out from `mid`: a hash lighter or darker than `shade`, dark at the foot (from the ground g up a third of the way to `top`), the texture laid along its main plane. */
 const facet = (
   o: number[],
@@ -337,15 +307,125 @@ const facet = (
   }
 };
 
+/** A unit sphere as triangles of one size and shape: an icosahedron with each edge cut in f (20 * f * f triangles). No pole, no sliver. */
+const ico = (f: number): Vec3[][] => {
+  const g = (1 + Math.sqrt(5)) / 2;
+  const v = [
+    [-1, g, 0],
+    [1, g, 0],
+    [-1, -g, 0],
+    [1, -g, 0],
+    [0, -1, g],
+    [0, 1, g],
+    [0, -1, -g],
+    [0, 1, -g],
+    [g, 0, -1],
+    [g, 0, 1],
+    [-g, 0, -1],
+    [-g, 0, 1],
+  ].map(p => unit(p as Vec3));
+  const t = [
+    [0, 11, 5],
+    [0, 5, 1],
+    [0, 1, 7],
+    [0, 7, 10],
+    [0, 10, 11],
+    [1, 5, 9],
+    [5, 11, 4],
+    [11, 10, 2],
+    [10, 7, 6],
+    [7, 1, 8],
+    [3, 9, 4],
+    [3, 4, 2],
+    [3, 2, 6],
+    [3, 6, 8],
+    [3, 8, 9],
+    [4, 9, 5],
+    [2, 4, 11],
+    [6, 2, 10],
+    [8, 6, 7],
+    [9, 8, 1],
+  ].map(q => q.map(k => v[k]));
+  return t.flatMap(([a, b, c]) => {
+    const at = (i: number, j: number) =>
+      unit(a.map((p, k) => p + ((b[k] - p) * i + (c[k] - p) * j) / f) as Vec3);
+    const out: Vec3[][] = [];
+    for (let i = 0; i < f; i++) {
+      for (let j = 0; i + j < f; j++) {
+        out.push([at(i, j), at(i + 1, j), at(i, j + 1)]);
+        if (i + j < f - 1) {
+          out.push([at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)]);
+        }
+      }
+    }
+    return out;
+  });
+};
+/** The spheres by how fine: 20, 80, 180, 320 and 720 triangles. */
+const ICO = [1, 2, 3, 4, 6].map(ico);
+
 /**
- * A boulder wrapped round the boxes shared/moon.ts collides with (each x0, y0, z0, x1, y1, z1,
- * all holding the middle of the first, low on the ground g): a sphere of 8 * 4 ** lod triangles
- * (lod 1 to 3), most of them over the ground, each point thrown from that middle onto the far
- * side of the boxes, drawn back up to 0.26 m where two faces meet (no box's edge shows), then
- * moved by two octaves of noise of seed s: a side no more than 0.2 m out nor 0.05 m in, a top
- * only down, 0.08 m. The triangles that span a step from one box to the next are its slopes. Four
- * planes shave the upper half for broad breaks. Flat shaded basalt, each facet a hash lighter or
- * darker, dark at the foot.
+ * A rounded stone, smooth: the sphere ICO[lod - 1] thrown onto a form from its middle (`pt` gives
+ * the point for a unit vector), each point's normal the mean of the faces round it, so it shades
+ * as one rounded mass with no facet. One tone a stone, darker at the foot (from `g` up a third of
+ * the way to `top`); what is wholly under the ground (`floor`, if given) is not drawn.
+ */
+const stone = (
+  o: number[],
+  lod: number,
+  pt: (u: Vec3) => Vec3,
+  g: number,
+  top: number,
+  s: number,
+  shade: number,
+  floor?: (x: number, z: number) => number,
+) => {
+  const key = (u: Vec3) => u.map(c => Math.round(c * 1e4)).join();
+  const at = new Map<string, { p: Vec3; n: Vec3; low: boolean }>();
+  const tris = ICO[lod - 1].map(t =>
+    t.map(u => {
+      const k = key(u);
+      let v = at.get(k);
+      if (!v) {
+        const p = pt(u);
+        v = { p, n: [0, 0, 0], low: floor ? p[1] < floor(p[0], p[2]) - 0.05 : false };
+        at.set(k, v);
+      }
+      return v;
+    }),
+  );
+  for (const t of tris) {
+    // Not normalised: a larger face weighs more.
+    const n = cross(sub(t[1].p, t[0].p), sub(t[2].p, t[0].p));
+    t.forEach(v => (v.n = [v.n[0] + n[0], v.n[1] + n[1], v.n[2] + n[2]]));
+  }
+  for (const t of tris) {
+    if (t.every(v => v.low)) {
+      continue;
+    }
+    const f = cross(sub(t[1].p, t[0].p), sub(t[2].p, t[0].p));
+    // The texture along the face's main plane.
+    const flat = Math.abs(f[1]) > Math.max(Math.abs(f[0]), Math.abs(f[2]));
+    const side = Math.abs(f[0]) > Math.abs(f[2]);
+    for (const { p, n } of t) {
+      const m: Vec3 = Math.hypot(...n) > 1e-12 ? unit(n) : [0, 1, 0];
+      o.push(
+        ...p,
+        ...m,
+        ...(flat ? [p[0], p[2]] : side ? [p[2] + 3 * s, p[1]] : [p[0] + 3 * s, p[1]]),
+        TEX.ROCK,
+        0.85 * shade * (0.55 + 0.45 * sm((p[1] - g) / (0.3 * (top - g)))),
+      );
+    }
+  }
+};
+
+/**
+ * A boulder round a box shared/moon.ts collides with, or a loose stone (x0, y0, z0, x1, y1, z1 of
+ * its first box, low on the ground g): a rounded solid from the box's middle, a third of the way
+ * up, squarer from lod 2 (a pillar, a step: feet land on its top, which is the box's, never
+ * higher) and round at lod 1 (a pebble), swollen and shrunk by a low noise on its sides only.
+ * 720 triangles at lod 3, 180 at lod 2, 80 for a pebble of 1.4 m and more and 20 under, smooth.
  */
 const boulder = (
   o: number[],
@@ -355,69 +435,28 @@ const boulder = (
   lod: number,
   shade: number,
 ) => {
-  const top = Math.max(...parts.map(b => b[4]));
-  const mid: Vec3 = [
-    (parts[0][0] + parts[0][3]) / 2,
-    g + 0.1 * (top - g),
-    (parts[0][2] + parts[0][5]) / 2,
-  ];
-  const hi = [0, top, 0];
-  // How far from an edge the rounding starts: less on a small rock.
-  const round = Math.min(0.35, 0.2 * (parts[0][3] - parts[0][0]));
-  const cuts = [0, 1, 2, 3].map(k => {
-    const a = TAU * hash(s, k, 91);
-    const y = 0.25 + 0.6 * hash(s, k, 92);
-    const c = Math.sqrt(1 - y * y);
-    return [c * Math.cos(a), y, c * Math.sin(a), (0.1 + 0.35 * hash(s, k, 93)) * round];
-  });
-  const far = cuts.map(() => -Infinity);
-  const pt = (v: Vec3): Vec3 => {
-    // Three quarters of the sphere over the middle: under it is under the ground.
-    const u = unit([v[0], 0.625 * v[1] + 0.375, v[2]]);
-    let [reach, hit, face] = [0, parts[0], 0];
-    for (const b of parts) {
-      // Where the ray leaves this box, and by which face.
-      let [t, f] = [Infinity, 0];
-      for (let k = 0; k < 3; k++) {
-        const e =
-          u[k] > 0 ? (b[k + 3] - mid[k]) / u[k] : u[k] < 0 ? (b[k] - mid[k]) / u[k] : Infinity;
-        [t, f] = e < t ? [e, k] : [t, f];
-      }
-      [reach, hit, face] = t > reach ? [t, b, f] : [reach, hit, face];
-    }
-    const p = u.map((c, k) => mid[k] + c * reach) as Vec3;
-    // How near the two other pairs of faces are: an edge, a corner.
-    const near = [0, 1, 2]
-      .filter(k => k !== face)
-      .map(k => Math.min(p[k] - hit[k], hit[k + 3] - p[k]))
-      .sort((x, y) => x - y);
-    const edge = 0.35 * Math.max(round - near[0], 0) + 0.2 * Math.max(round - near[1], 0);
-    const n =
-      0.65 * noise(3 * v[0] + 1.7 * v[1] + s, 3 * v[2] - 2.1 * v[1], s) +
-      0.35 * noise(7 * v[0] - 3 * v[1], 7 * v[2] + 4 * v[1] + s, s + 1);
-    const d = (face === 1 ? -0.08 * n : 0.25 * n - 0.05) - edge;
-    return p.map((c, k) => c + u[k] * d) as Vec3;
-  };
-  const tris = BALLS[lod - 1].map(t => t.map(pt));
-  tris.forEach(t =>
-    t.forEach(p =>
-      cuts.forEach((c, k) => (far[k] = Math.max(far[k], dot(p, c as unknown as Vec3)))),
-    ),
+  const [x0, y0, z0, x1, y1, z1] = parts[0];
+  const mid: Vec3 = [(x0 + x1) / 2, g + 0.3 * (y1 - g), (z0 + z1) / 2];
+  // A pebble is an ellipsoid in its box; a pillar goes 8 % past its box's sides, its corners inside.
+  const [a, c] = [(lod > 1 ? 0.54 : 0.5) * (x1 - x0), (lod > 1 ? 0.54 : 0.5) * (z1 - z0)];
+  stone(
+    o,
+    lod > 2 ? 5 : lod > 1 ? 3 : x1 - x0 > 1.4 ? 2 : 1,
+    u => {
+      const b = u[1] > 0 ? y1 - mid[1] : mid[1] - y0;
+      const q = [u[0] / a, u[1] / b, u[2] / c].map(v => v * v);
+      const t =
+        lod > 1
+          ? 1 / Math.sqrt(Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2]))
+          : 1 / Math.sqrt(q[0] + q[1] + q[2]);
+      const k = t * (0.93 + 0.14 * noise(1.3 * u[0] + s, 1.3 * u[2] + u[1], s));
+      return [mid[0] + u[0] * k, Math.min(mid[1] + u[1] * t, y1), mid[2] + u[2] * k];
+    },
+    g,
+    y1,
+    s,
+    shade,
   );
-  for (const t of tris) {
-    const q = t.map(p => {
-      let v = p;
-      cuts.forEach((c, k) => {
-        // Past the plane: back onto it.
-        const over = dot(v, c as unknown as Vec3) - (far[k] - c[3]);
-        // Only over its middle: the sides stay where a body hides behind them.
-        v =
-          over > 0 && v[1] > g + 0.55 * (top - g) ? (v.map((x, j) => x - over * c[j]) as Vec3) : v;
-      });
-      return [v[0], Math.min(v[1], hi[1]), v[2]] as Vec3;
-    });
-    facet(o, q, mid, g, hi[1], s, shade);
-  }
 };
 
 /**
@@ -468,9 +507,8 @@ const mast = (o: number[], x: number, z: number, y: number, h = 10, rgb = [1, 0.
 
 /**
  * One of the map's rocks, drawn from its own form (rockOf() in shared/moon.ts, which the map's
- * boxes are cut inside of): a sphere thrown onto it from its middle, most of it over the ground,
- * chipped up to 3 cm, 512 triangles from 2.3 m of radius and 128 under; its tone its own; two
- * stones by the foot of a big one.
+ * boxes are cut inside of): a sphere thrown onto it from its middle, smooth, 720 triangles from
+ * 2.5 m of radius, 320 from 1.5 m and 180 under, less what is under the ground; its tone its own.
  */
 const crag = (
   o: number[],
@@ -478,35 +516,20 @@ const crag = (
   at: (x: number, z: number) => number,
 ) => {
   const { reach } = rockOf(s, R, H);
-  const mid: Vec3 = [x, g + 0.25 * H, z];
-  const shade = 0.8 + 0.4 * hash(s, 5, 41);
-  for (const t of BALLS[R < 2.3 ? 1 : 2]) {
-    facet(
-      o,
-      t.map(v => {
-        const u = unit([v[0], 0.675 * v[1] + 0.325, v[2]]);
-        const d = reach(u) - 0.03 * noise(9 * v[0] + s, 9 * v[2] + 5 * v[1], s + 3);
-        return [mid[0] + u[0] * d, mid[1] + u[1] * d, mid[2] + u[2] * d] as Vec3;
-      }),
-      mid,
-      g,
-      g + H,
-      s,
-      shade,
-    );
-  }
-  for (let k = 0; k < 2 && R >= 2.3; k++) {
-    const [a, r] = [TAU * hash(s, k, 95), 0.2 + 0.3 * hash(s, k, 96)];
-    const [u, v] = [x + (0.85 * R + r) * Math.cos(a), z + (0.85 * R + r) * Math.sin(a)];
-    boulder(
-      o,
-      [[u - r, at(u, v) - 0.3, v - r, u + r, at(u, v) + 0.8 * r, v + r]],
-      at(u, v),
-      s + k,
-      1,
-      0.75,
-    );
-  }
+  const mid: Vec3 = [x, g + rockMid(H), z];
+  stone(
+    o,
+    R < 1.5 ? 3 : R < 2.5 ? 4 : 5,
+    u => {
+      const d = reach(u);
+      return [mid[0] + u[0] * d, mid[1] + u[1] * d, mid[2] + u[2] * d];
+    },
+    g,
+    g + H,
+    s,
+    0.8 + 0.4 * hash(s, 5, 41),
+    at,
+  );
 };
 
 /** A stepping stone of the rille: a rock for its head, where feet land, and a coarser one under it for the shaft, down into the dark. */
@@ -520,11 +543,11 @@ const pillar = (
   s: number,
 ) => {
   boulder(o, [[x0, y - 4, z0, x1, y, z1]], y - 3.4, s, 3, 0.9);
-  boulder(o, [[x0 + 0.15, -17, z0 + 0.15, x1 - 0.15, y - 3, z1 - 0.15]], -15, s + 9, 2, 0.6);
+  boulder(o, [[x0 + 0.15, -17, z0 + 0.15, x1 - 0.15, y - 3, z1 - 0.15]], -15, s + 9, 2, 0.5);
 };
 
 /** Red's half: everything but the crater, the stars and the Earth, on the map's LAYOUT. */
-const base = (o: number[], at: (x: number, z: number) => number) => {
+const base = (o: number[]) => {
   moonbase(o);
   hull(o);
   const [px, pz] = LAYOUT.pads[0];
@@ -532,10 +555,6 @@ const base = (o: number[], at: (x: number, z: number) => number) => {
   for (const [x, z] of LAYOUT.masts.slice(0, 6)) {
     mast(o, x, z, x < 60 ? 0.25 : 0);
   }
-  // Boulders along the three walls of the half, and the field's stones round their boxes (shared/moon.ts collides with both).
-  LAYOUT.crags.arena.forEach(c => crag(o, c, at));
-  // The boulder field's, out on the relief south-west: red's side of it.
-  LAYOUT.crags.field.forEach(c => crag(o, c, at));
 };
 
 /** Profile of a small crater, radius 1 across: [radius, height, light] from the bowl's middle to where it meets the floor. */
@@ -1179,10 +1198,14 @@ const earth = (o: number[]) => {
 /** The moon's scenery vertices, in the renderer's format. */
 export const moonscape = (def: WorldDef): number[] => {
   const red: number[] = [];
-  base(red, def.relief?.at ?? (() => 0));
+  base(red);
   if (def.relief) {
     ravine(red, def);
   }
+  // Red's rocks, after the rille (whose facets take their tone from where they fall in the list): the boulders along the three walls
+  // of the half, the field's stones, and the boulder field's out on the relief south-west. shared/moon.ts collides with them all.
+  const at = def.relief?.at ?? (() => 0);
+  [...LAYOUT.crags.arena, ...LAYOUT.crags.field].forEach(c => crag(red, c, at));
   const o = red.concat(mirror(red));
   // The stone on the centre line is its own twin.
   for (const [x0, z0, x1, z1, y] of LAYOUT.pillars) {

@@ -247,6 +247,82 @@ const across = (cx: number, x: number) => {
 };
 
 /**
+ * Where the small relief stays out, besides FLATS: the strips whose jumps are measured, x0, z0, x1,
+ * z1 with z from the centre line. The west long jump's take-off and landing, the bridge's ends,
+ * the east stones' approaches, and the two mounds a rover flies the rille from with their flanks
+ * (their run-ups are in FLATS). All to 16 m from the centre line, where the field's mounds begin
+ * at the nearest: what was level there stays level.
+ */
+export const STRIPS = [
+  [8, 0, 28, 16],
+  [70, 0, 90, 16],
+  [122, 0, 139, 16],
+  [36, 0, 60, 16],
+  [132, 0, 156, 16],
+];
+/**
+ * The small relief, laid over everything: the moon is rugged, no ground is dead flat for long.
+ * `out` is how far out of the arena (under 0: in it). The lattice is 4 m: it carries hummocks and
+ * pans from 8 m across, no less (what is finer is drawn only), and a patch is exactly level only
+ * if every node within 5.7 m of it is, so a level patch costs 6 m of margin whatever its size. In
+ * the arena, over the slabs, only hummocks (up to 0.45 m, nothing under the floor), gentle;
+ * outside, hummocks, shallow pans and a slow swell, -0.45 to 0.55 m, on every 10 m or so. It is
+ * exactly 0 on the arena's edge (the slabs end there), on the lips, on
+ * STRIPS, on FLATS (a base, a rover's place; 1.8 m round a pack or a spawn), and stays off
+ * the jump ramps outside with their run-ups and landings, the craters and the dishes' hill.
+ */
+const rough = (x: number, z: number, out: number) => {
+  const gap = (l: number[][], by: number, over: number) =>
+    l.reduce(
+      (m, [x0, z0, x1, z1]) =>
+        m * sm((far(Math.max(x0 - x, x - x1, 0), Math.max(z0 - z, z - z1, 0)) - by) / over),
+      1,
+    );
+  if (out < 0) {
+    // The lip here and 6 m each way, as deep as it gets.
+    const i = Math.min(Math.max(Math.floor(x), 6), LIP.length - 7);
+    const lip = Math.max(...LIP.slice(i - 6, i + 7), 0);
+    return (
+      (0.6 * Math.max(noise(x / 5, z / 5, 61) - 0.42, 0) +
+        0.25 * Math.max(noise(x / 9, z / 9, 67) - 0.5, 0)) *
+      sm(-out / 4) *
+      sm((z - 14 - lip) / 3) *
+      // A point (a pack, a spawn) is level for 1.8 m round it; a base's rectangle to its edge.
+      gap(
+        FLATS.filter(f => f[0] === f[2]),
+        7.5,
+        2,
+      ) *
+      gap(
+        FLATS.filter(f => f[0] < f[2]),
+        5.7,
+        2,
+      ) *
+      gap(STRIPS, 5.7, 2)
+    );
+  }
+  let m = sm(out / 4) * (Math.abs(x - 80) < 96 ? sm((z - 10) / 6) : 1);
+  for (const [rx, rz, ax, az] of RAMPS) {
+    const [p, q] = [x - rx, z - rz];
+    const a = p * ax + q * az;
+    m *= sm(
+      (far(Math.max(-22 - a, a - 38, 0), Math.max(Math.abs(p * az - q * ax) - 10, 0)) - 2) / 4,
+    );
+  }
+  // Nor on a crater and its rim (the rim of a small one is no higher than a hummock), nor on the dishes' hill, as steep as a body stands on.
+  for (const [cx, cz, r] of BOWLS) {
+    m *= sm((far(x - cx, z - cz) / r - 1.3) / 0.25);
+  }
+  m *= sm((far(x - HILL[0], z - HILL[1]) - 40) / 20);
+  return (
+    (0.75 * Math.max(noise(x / 5, z / 5, 61) - 0.42, 0) -
+      0.8 * Math.max(noise(x / 7, z / 7, 63) - 0.6, 0) +
+      0.25 * (noise(x / 11, z / 11, 65) - 0.5)) *
+    m
+  );
+};
+
+/**
  * The height of the crater floor round the arena. Only + - * /, Math.sqrt, Math.abs, min, max, floor
  * and the integer hash: every engine builds the same lattice. In the arena, the field (see FLATS)
  * and the mounds; exactly 0 for 12 m round it (a rectangle on lattice lines, so between the nodes
@@ -274,7 +350,10 @@ const at = (x: number, z: number): number => {
     // It starts 16 to 26 m from the centre line, not along a ruled line.
     let m = sm((z - 16 - 10 * noise(x / 19, 0.5, 37)) / 8) * sm(-out / 10);
     for (const [x0, z0, x1, z1] of FLATS) {
-      m *= sm((far(Math.max(x0 - x, x - x1, 0), Math.max(z0 - z, z - z1, 0)) - 6) / 6);
+      // (A point is level for 1.8 m round it as it is walked on: every node within 7.5 m.)
+      m *= sm(
+        (far(Math.max(x0 - x, x - x1, 0), Math.max(z0 - z, z - z1, 0)) - (x0 < x1 ? 6 : 7.5)) / 6,
+      );
     }
     h =
       m *
@@ -292,7 +371,7 @@ const at = (x: number, z: number): number => {
     // No relief in the rille: its nodes are the lips'.
     h = z < 8 ? 0 : h;
   }
-  h = (out < 0 ? h : h * (1 - dug[1])) + dug[0];
+  h = (out < 0 ? h : h * (1 - dug[1])) + dug[0] + rough(x, z, out) * (1 - dug[1]) * (1 - sm(t));
   for (const [rx, rz, ax, az] of RAMPS) {
     const [p, q] = [x - rx, z - rz];
     const a = p * ax + q * az;

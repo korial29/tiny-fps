@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { STILL } from '../shared/physics';
 import { LIMB } from '../shared/types';
 import { CUP, CUP_Y, bust } from './armor';
-import { CREST, DOME, EAR, FACETS, TEE, dome, glazed, helm, onDome, relief, slit } from './helm';
+import { CREST, DOME, EAR, FACETS, TEE, dome, glazed, helm, onDome, slit } from './helm';
 import { helmet } from './helmet';
 import { GLOSS, SHINE, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
@@ -58,19 +58,19 @@ describe("helm, the woman's helmet on the moon", () => {
     expect(DOME.r[1]).toBeLessThan(0.142);
   });
 
-  it('has cheeks shaped as a skull: the cheekbone out, a hollow V from by the eye down to the lip, the jaw out', () => {
-    const { tip, foot, boneV, jawV, deepV } = FACETS;
-    const at = (v: number) => tip[0] + ((foot[0] - tip[0]) * (tip[1] - v)) / tip[1];
-    // Out on the cheekbone and the jaw, in on the crease.
-    expect(relief(0.5, boneV)).toBeGreaterThan(0.004);
-    expect(relief(0.85, jawV)).toBeGreaterThan(0.002);
-    expect(relief(at(deepV), deepV)).toBeCloseTo(-FACETS.depth, 3);
-    expect(relief(at(0.05), 0.05)).toBeLessThan(0);
-    // The V's tip by the eye: near the slot, high; nothing over it.
-    expect(tip[0]).toBeLessThan(0.3);
-    expect(tip[1]).toBeGreaterThan(0.6);
-    expect(relief(tip[0], tip[1] + 0.05)).toBeGreaterThan(0);
-    // Drawn: under the slit on both sides, the hollow under the dome.
+  it('has cheeks of a few flat faces shaped as a skull: the cheekbone out, a V in under it, the jaw out', () => {
+    const { A1, R1, T, K, J1, F } = FACETS;
+    // The ridge stands out over the slit's edge, the jaw out too, the crease in.
+    expect(R1[2]).toBeGreaterThan(A1[2]);
+    expect(J1[2]).toBeGreaterThan(0);
+    expect(K[2]).toBeLessThan(-0.015);
+    expect(F[2]).toBeLessThan(0);
+    // The V: its tip under the ridge, by the eye; its crease down to the jaw, then to the lip.
+    expect(T[1]).toBeLessThan(R1[1]);
+    expect(T[0]).toBeLessThan(0.3);
+    expect(K[1]).toBeLessThan(T[1]);
+    expect(F[1]).toBe(0);
+    // Drawn flat: under the slit, on both sides, few distinct normals, the hollow under the dome.
     const v = verts(make(3)).filter(
       w => w.layer == GLOSS && w.p[1] < TEE.y - slit(0) && w.p[2] < 0,
     );

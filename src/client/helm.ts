@@ -192,142 +192,93 @@ const onCheek = (a: number, y: number): [u: number, v: number] | undefined => {
 };
 
 /**
- * The cheeks (the user, 2026-11-11: the helmet itself, shaped as a skull is, after a Mandalorian
- * helmet, an idea and nothing copied): the dome is left out under each, and the cheek is a
- * surface of its own CHEEK.off out, smooth but for one sharp crease. Down from the slit: the
- * cheekbone stands out (`bone`, metres at its peak, at height `boneV` of the cheek), then the
- * cheek is hollow, then the jaw stands out again (`jaw` at `jawV`). The hollow is a V: its crease
- * runs from `tip` (u, v), under the cheekbone by the eye, down the helmet to `foot` on the lip,
- * `depth` in at its deepest (`deepV`) and back to `lip` of that at the lip; it is `half` wide each
- * side of the crease. Heights v from 0 at the lip to 1 under the slit, turns u from 0 at the slot
- * to 1 toward the ear (outline()).
+ * The cheeks (the user, 2026-11-11: shaped as a skull is, in simple flat shapes, very sharp; after
+ * a Mandalorian helmet, an idea and nothing copied): the dome is left out under each, and the
+ * cheek is a few flat faces CHEEK.off out. Down from the slit: a band for the cheekbone, standing
+ * out most on its lower edge; a hollow V under it, its crease from by the eye down to the jaw; a
+ * band for the jaw, standing out again, the crease going on through it to the lip. Each corner is
+ * [u, v, out]: u 0 at the slot to 1 toward the ear, v 0 at the lip to 1 under the slit
+ * (outline()), and metres out of CHEEK.off (in when negative).
  */
-export const FACETS = {
-  bone: 0.007,
-  boneV: 0.84,
-  jaw: 0.005,
-  jawV: 0.12,
-  tip: [0.2, 0.74],
-  foot: [0.52, 0],
-  depth: 0.02,
-  deepV: 0.4,
-  lip: 0.45,
-  half: 0.26,
+export const FACETS: Record<string, [number, number, number]> = {
+  // Under the slit.
+  A0: [0, 1, 0.002],
+  A1: [0.45, 1, 0.004],
+  A2: [1, 1, 0.002],
+  // The cheekbone's lower edge, its ridge.
+  R0: [0, 0.8, 0.004],
+  R1: [0.45, 0.8, 0.008],
+  R2: [1, 0.8, 0.005],
+  // The V: its tip by the eye, its crease's deepest point on the jaw's top edge.
+  T: [0.2, 0.72, -0.002],
+  K: [0.5, 0.2, -0.02],
+  // The jaw's top edge.
+  J0: [0, 0.2, 0.003],
+  J1: [0.8, 0.2, 0.006],
+  J2: [1, 0.2, 0.004],
+  // The lip, the crease's foot on it.
+  B0: [0, 0, 0.001],
+  F: [0.52, 0, -0.009],
+  B2: [1, 0, 0.002],
 };
 
-/** The crease's turn at height v (none over the tip: the tip's). */
-const crease = (v: number) => {
-  const t = Math.min(v / FACETS.tip[1], 1);
-  return FACETS.foot[0] + (FACETS.tip[0] - FACETS.foot[0]) * t;
-};
+/** The faces, each a triangle of corners and a shade: 0 plain, 1 the cheekbone, 2 and 3 the hollow's, darker. */
+const FACES: [string, string, string, number][] = [
+  // The cheekbone.
+  ['A0', 'A1', 'R1', 1],
+  ['A0', 'R1', 'R0', 1],
+  ['A1', 'A2', 'R2', 1],
+  ['A1', 'R2', 'R1', 1],
+  // Under the ridge, down into the V.
+  ['R0', 'R1', 'T', 0],
+  ['R0', 'T', 'J0', 3],
+  ['T', 'K', 'J0', 3],
+  ['T', 'R1', 'K', 2],
+  ['R1', 'J1', 'K', 2],
+  ['R1', 'R2', 'J2', 0],
+  ['R1', 'J2', 'J1', 0],
+  // The jaw.
+  ['J0', 'K', 'F', 0],
+  ['J0', 'F', 'B0', 0],
+  ['K', 'J1', 'F', 0],
+  ['J1', 'J2', 'B2', 0],
+  ['J1', 'B2', 'F', 0],
+];
+/** Round the edge, for the wall. */
+const EDGE = ['B0', 'J0', 'R0', 'A0', 'A1', 'A2', 'R2', 'J2', 'B2', 'F', 'B0'];
+const SHADES = [STEEL, PALE, STEEL.map(c => c * 0.6), STEEL.map(c => c * 0.38)];
 
-/** How deep the V is at its crease at height v: nothing at the tip, deepest at deepV, `lip` of that at the lip. */
-const deep = (v: number) => {
-  if (v >= FACETS.tip[1]) {
-    return 0;
-  }
-  const { deepV, depth, lip } = FACETS;
-  return v > deepV
-    ? depth * Math.sin(((FACETS.tip[1] - v) / (FACETS.tip[1] - deepV)) * (Math.PI / 2))
-    : depth * (lip + (1 - lip) * Math.sin((v / deepV) * (Math.PI / 2)));
-};
-
-/** How far the cheek stands out of CHEEK.off at (u, v): the cheekbone and the jaw out, the V in. */
-export const relief = (u: number, v: number) => {
-  const bell = (x: number, w: number) => Math.exp(-((x / w) ** 2));
-  const across = Math.sin(Math.PI * Math.min(Math.max(u, 0), 1)) ** 0.5;
-  const out =
-    across * (FACETS.bone * bell(v - FACETS.boneV, 0.1) + FACETS.jaw * bell(v - FACETS.jawV, 0.11));
-  const v_ = Math.max(0, 1 - Math.abs(u - crease(v)) / FACETS.half);
-  return out - deep(v) * v_;
-};
-
-/** The cheek's rows, and its columns: the crease's is the fourth, so it is an edge of the mesh. */
-const ROWS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.68, 0.74, 0.8, 0.87, 0.94, 1];
-const columns = (v: number) => {
-  const c = crease(v);
-  return [0, c / 3, (2 * c) / 3, c, ...[0.2, 0.4, 0.6, 0.8, 1].map(t => c + (1 - c) * t)];
-};
-const CREASE = 3;
-
-/** A cheek on the side `sx`: smooth each side of the crease, sharp on it, and a wall down to the dome round its edge. */
+/** A cheek on the side `sx`: flat faces, each its own normal, and a wall down to the dome round its edge. */
 const cheek = (sx: number, out: number[]) => {
-  const at = (u: number, v: number, off: number): Vec3 => {
+  const at = (k: string, base = true): Vec3 => {
+    const [u, v, e] = FACETS[k];
     const [a, y] = outline(u, v);
-    return onDome(sx * a, y, off)[0];
-  };
-  const grid = ROWS.map(v => columns(v).map(u => at(u, v, CHEEK.off + relief(u, v))));
-  const color = (u: number, v: number) => {
-    const k = Math.min(Math.max(-relief(u, v) / FACETS.depth, 0), 1);
-    return STEEL.map(c => c * (1 - 0.6 * k));
+    return onDome(sx * a, y, base ? CHEEK.off + e : 0)[0];
   };
   const outward = (p: Vec3): Vec3 => [p[0] - DOME.c[0], 0, p[2] - DOME.c[2]];
-  // Each side of the crease its own smooth normals: the mean of the faces round a corner.
-  for (const [c0, c1] of [
-    [0, CREASE],
-    [CREASE, columns(0).length - 1],
-  ]) {
-    const n = grid.map(row => row.map(() => [0, 0, 0] as Vec3));
-    const tris: [number, number, number, number, number, number][] = [];
-    for (let r = 0; r + 1 < ROWS.length; r++) {
-      for (let i = c0; i < c1; i++) {
-        tris.push([r, i, r + 1, i, r + 1, i + 1], [r, i, r + 1, i + 1, r, i + 1]);
-      }
+  const flat = (p: Vec3[], col: number[], layer: number) => {
+    const f = cross(sub(p[1], p[0]), sub(p[2], p[0]));
+    if (Math.hypot(...f) < 1e-10) {
+      return;
     }
-    for (const [r0, i0, r1, i1, r2, i2] of tris) {
-      const [a, b, c] = [grid[r0][i0], grid[r1][i1], grid[r2][i2]];
-      let f = cross(sub(b, a), sub(c, a));
-      const o = outward(a);
-      f = f[0] * o[0] + f[2] * o[2] < 0 ? [-f[0], -f[1], -f[2]] : f;
-      for (const [r, i] of [
-        [r0, i0],
-        [r1, i1],
-        [r2, i2],
-      ]) {
-        n[r][i] = [n[r][i][0] + f[0], n[r][i][1] + f[1], n[r][i][2] + f[2]];
-      }
-    }
-    for (const [r0, i0, r1, i1, r2, i2] of tris) {
-      const cols = columns(ROWS[r0]);
-      const col = color((cols[i0] + cols[Math.min(i0 + 1, cols.length - 1)]) / 2, ROWS[r0]);
-      face(
-        out,
-        col,
-        GLOSS,
-        [
-          [r0, i0],
-          [r1, i1],
-          [r2, i2],
-        ].map(([r, i]) => [grid[r][i], unit(n[r][i])] as Spot),
-      );
-    }
+    const n = unit(f);
+    const o = outward(p[0]);
+    const k = n[0] * o[0] + n[2] * o[2] < 0 ? -1 : 1;
+    face(
+      out,
+      col,
+      layer,
+      p.map(q => [q, [n[0] * k, n[1] * k, n[2] * k]] as Spot),
+    );
+  };
+  for (const [a, b, c, shade] of FACES) {
+    flat([at(a), at(b), at(c)], SHADES[shade], GLOSS);
   }
-  // The wall: from the edge down to the dome, round the outline.
-  const last = ROWS.length - 1;
-  const n = columns(0).length;
-  const ring: [number, number][] = [
-    ...Array.from({ length: n }, (_, i): [number, number] => [0, i]),
-    ...Array.from({ length: last }, (_, r): [number, number] => [r + 1, n - 1]),
-    ...Array.from({ length: n - 1 }, (_, i): [number, number] => [last, n - 2 - i]),
-    ...Array.from({ length: last }, (_, r): [number, number] => [last - 1 - r, 0]),
-  ];
-  ring.slice(1).forEach(([r, i], e) => {
-    const [pr, pi] = ring[e];
-    const [p, q] = [grid[pr][pi], grid[r][i]];
-    const [pb, qb] = [at(columns(ROWS[pr])[pi], ROWS[pr], 0), at(columns(ROWS[r])[i], ROWS[r], 0)];
-    const o = outward(p);
-    const wall = (a: Vec3, b: Vec3, c: Vec3) => {
-      const f = unit(cross(sub(b, a), sub(c, a)));
-      const k = Math.sign(f[0] * o[0] + f[2] * o[2]) || 1;
-      face(
-        out,
-        IRON,
-        -1,
-        [a, b, c].map(x => [x, [f[0] * k, f[1] * k, f[2] * k]] as Spot),
-      );
-    };
-    wall(p, q, qb);
-    wall(p, qb, pb);
+  EDGE.slice(1).forEach((k, e) => {
+    const [p, q] = [at(EDGE[e]), at(k)];
+    const [pb, qb] = [at(EDGE[e], false), at(k, false)];
+    flat([p, q, qb], IRON, -1);
+    flat([p, qb, pb], IRON, -1);
   });
 };
 

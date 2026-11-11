@@ -106,14 +106,34 @@ describe('createHud', () => {
     expect(v()).toBe('');
   });
 
-  it('shows the dark rim of a helmet visor while the own player wears one', () => {
+  it('shows the V of a helmet visor while the own player wears one, under the face and the counts', () => {
     const rim = () => q('del');
     expect(rim().hidden).toBe(true);
     hud.visor(true);
     expect(rim().hidden).toBe(false);
     hud.visor(false);
     expect(rim().hidden).toBe(true);
-    expect(HUD_CSS).toMatch(/del\{inset:0;background:radial-gradient/);
+    // A V: the brow dips at the middle and the chin points down, the sides slant in.
+    const [, hole] =
+      /del\{[^}]*clip-path:polygon\(evenodd,0 0,100% 0,100% 100%,0 100%,0 0,([^)]*)\)/.exec(
+        HUD_CSS,
+      )!;
+    const pts = hole.split(',').map(p => p.split(' ').map(parseFloat));
+    const [tl, brow, tr, r, chin, l] = pts;
+    expect(brow[0]).toBe(50);
+    expect(chin[0]).toBe(50);
+    expect(brow[1]).toBeGreaterThan(tl[1] + 5);
+    expect(tr[1]).toBe(tl[1]);
+    expect(chin[1]).toBeGreaterThan(l[1] + 15);
+    expect(l[0]).toBeGreaterThan(tl[0] + 2);
+    expect(100 - r[0]).toBe(l[0]);
+    // The chin's opening holds the face and the health at the bottom middle.
+    expect(chin[1]).toBeGreaterThanOrEqual(98);
+    // The shell is drawn before the face, the health and the gun's count, so they lie over it.
+    const order = [...screen.children].map(e => e.tagName);
+    for (const tag of ['UL', 'FIGURE', 'DL']) {
+      expect(order.indexOf('DEL')).toBeLessThan(order.indexOf(tag));
+    }
   });
 
   it('shows the muted mark while muted', () => {

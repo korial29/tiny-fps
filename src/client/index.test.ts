@@ -7,7 +7,7 @@ import { encodeSnapshot } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import { HIGHLINE, ROOFTOPS } from '../shared/map';
 import { MOON } from '../shared/moon';
-import { FLAG, TEAM } from '../shared/types';
+import { BODY, FLAG, TEAM } from '../shared/types';
 import type { FlagState, PlayerInfo, SnapPlayer, SocketLike, Snapshot } from '../shared/types';
 import { build } from '../shared/world';
 import { tinyFps } from './index';
@@ -147,12 +147,43 @@ describe('tinyFps, the match through the socket', () => {
     expect(q('nav').textContent).toContain('RED 0');
   });
 
+  it('sends the character of the card chosen on the title screen, and wears what the roster answers', () => {
+    const cards = [...hud().querySelectorAll<HTMLElement>('[role=radio]')];
+    const checked = () => cards.map(c => c.getAttribute('aria-checked'));
+    expect(checked()).toEqual(['true', 'false']);
+    cards[BODY.FEMALE].click();
+    expect(JSON.parse(sent.at(-1) as string)).toEqual({ t: 'body', body: BODY.FEMALE });
+    // The host's word is the last one: his roster says the man again.
+    text({ t: 'roster', you: 0, players: roster });
+    expect(checked()).toEqual(['true', 'false']);
+    text({ t: 'roster', you: 0, players: [{ ...roster[0], body: BODY.FEMALE }, roster[1]] });
+    expect(checked()).toEqual(['false', 'true']);
+  });
+
+  it('starts on the title screen’s button as on the canvas, and on nothing else in its panel', () => {
+    const lock = vi.fn();
+    (q('canvas') as HTMLCanvasElement).requestPointerLock = lock;
+    hud().querySelectorAll<HTMLElement>('[role=tab]')[1].click();
+    hud().querySelectorAll<HTMLElement>('[role=radio]')[1].click();
+    q('aside main').click();
+    expect(lock).not.toHaveBeenCalled();
+    q('aside header>:last-child').click();
+    expect(lock).toHaveBeenCalledOnce();
+  });
+
+  it('tells the map’s kind and lore on the title screen', () => {
+    frames();
+    expect(q('aside h3').textContent).toBe(HIGHLINE.name);
+    expect(q('aside address').textContent).toContain(HIGHLINE.tag);
+    expect(q('aside address').textContent).toContain(HIGHLINE.lore);
+  });
+
   it('shows the maps read-only to a player who does not host, with the host named', () => {
     text({ t: 'roster', you: 0, players: roster, map: 'highline', host: 1 });
     frames();
     expect(q('menu').hidden).toBe(false);
     expect(q('menu').textContent).toContain('Bob hosts');
-    const buttons = [...hud().querySelectorAll('button')];
+    const buttons = [...q('menu').querySelectorAll('button')];
     expect(buttons.map(b => b.textContent)).toEqual([HIGHLINE.name, MOON.name]);
     expect(buttons.every(b => b.disabled)).toBe(true);
     expect(buttons[0].className).toBe('n');
@@ -162,10 +193,10 @@ describe('tinyFps, the match through the socket', () => {
     text({ t: 'roster', you: 0, players: roster, map: 'highline', host: 0 });
     frames();
     expect(q('menu').textContent).toContain('You host');
-    hud().querySelectorAll('button')[1].click();
+    q('menu').querySelectorAll('button')[1].click();
     expect(JSON.parse(sent.at(-1) as string)).toEqual({ t: 'map', map: 'tranquility' });
     text({ t: 'roster', you: 0, players: roster, map: 'highline', host: 0, next: 'tranquility' });
-    const [now, next] = [...hud().querySelectorAll('button')];
+    const [now, next] = [...q('menu').querySelectorAll('button')];
     expect([now.textContent, now.className]).toEqual([`${HIGHLINE.name} (now)`, '']);
     expect(next.className).toBe('n');
     text({ t: 'end', score: [0, 0], players: [] });

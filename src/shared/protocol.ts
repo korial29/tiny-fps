@@ -64,8 +64,11 @@ import { NADE } from './constants';
 import { FLAG, KEY, MODE } from './types';
 import type { Ball, FlagState, Input, PlayerInfo, Rover, Snapshot } from './types';
 
-/** join: the first frame of a peer, `body` the character he picked (BODY, the man without it). map: the host picks the map of the next match (MAPS key). */
-export type ClientText = { t: 'join'; name: string; body?: number } | { t: 'map'; map: string };
+/** join: the first frame of a peer, `body` the character he picked (BODY, the man without it). map: the host picks the map of the next match (MAPS key). body: a joined player changes character (BODY), at once. */
+export type ClientText =
+  | { t: 'join'; name: string; body?: number }
+  | { t: 'map'; map: string }
+  | { t: 'body'; body: number };
 
 /** What a player did in a match, for the end screen: it carries the name and the team, which a leaver takes out of the roster. */
 export interface Result {

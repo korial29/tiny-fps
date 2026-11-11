@@ -43,6 +43,9 @@ export interface TeamDef {
 export interface WorldDef {
   /** Shown on the title screen. */
   name?: string;
+  /** What kind of place it is, in a few words, and its story in two or three sentences: the title screen and the demo's map cards. */
+  tag?: string;
+  lore?: string;
   brushes: Brush[];
   /** The red team, then the blue one (TEAM). */
   teams: [red: TeamDef, blue: TeamDef];

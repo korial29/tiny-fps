@@ -285,8 +285,10 @@
         main {
           padding-top: 28px;
         }
+        /* The title screen's panel takes the top of a small window. */
         #bar {
-          top: 64px;
+          top: auto;
+          bottom: 32px;
         }
         #join {
           flex: 1 1 100%;
@@ -334,13 +336,9 @@
               />
               <i>✓</i>
               <div>
-                <em>Rooftops · 94 × 240 m</em>
-                <strong>Highline</strong>
-                <p>
-                  The towers of an old business district, closed for years, far above streets that
-                  still have traffic. Two crews of runners have taken the roofs. Three routes cross
-                  between them, and a fall takes you back to your tower.
-                </p>
+                <em></em>
+                <strong></strong>
+                <p></p>
               </div>
             </label>
             <label class="map">
@@ -351,13 +349,9 @@
               />
               <i>✓</i>
               <div>
-                <em>Moon · half gravity</em>
-                <strong>Tranquility</strong>
-                <p>
-                  A mining base left in a lunar crater, its domes still lit. Two crews fight for it
-                  in space helmets, under the Earth and a black sky. Jumps float twice as high, and
-                  a rille cuts the base in two.
-                </p>
+                <em></em>
+                <strong></strong>
+                <p></p>
               </div>
             </label>
           </div>
@@ -369,8 +363,8 @@
           <label class="field"
             >Character
             <select name="body">
-              <option value="0">Man</option>
-              <option value="1">Woman</option>
+              <option value="0">Kai</option>
+              <option value="1">Nova</option>
             </select>
           </label>
           <label class="field"

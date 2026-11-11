@@ -13,6 +13,7 @@ import {
   createInput,
   dashKeys,
   keyBit,
+  CODES,
   picked,
   turned,
   WEAPON,
@@ -56,6 +57,21 @@ const player = (o: Partial<PlayerState> = {}): PlayerState => ({
   ...STILL,
   ammo: 30,
   ...o,
+});
+
+describe('CODES', () => {
+  it('lists every key the game reads: the held ones, the weapons, mute and the grenade', () => {
+    for (const code of ['KeyW', 'ArrowLeft', 'Space', 'ShiftRight', 'KeyC', 'KeyR', 'KeyE']) {
+      expect(keyBit(code)).toBeGreaterThan(0);
+      expect(CODES).toContain(code);
+    }
+    expect(CODES).toEqual(
+      expect.arrayContaining(['Digit1', 'Digit2', 'Digit3', 'Digit4', 'KeyM', 'KeyG']),
+    );
+    // Nothing else: a held key has a bit, a weapon key picks.
+    const rest = CODES.filter(c => !keyBit(c) && picked(-1, c) < 0);
+    expect(rest.sort()).toEqual(['KeyG', 'KeyM']);
+  });
 });
 
 describe('the weapon choice', () => {

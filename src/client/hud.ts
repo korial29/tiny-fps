@@ -1,4 +1,5 @@
-// The HUD, in the game's Shadow DOM: the title screen with the controls and the maps, the muted mark, the score
+// The HUD, in the game's Shadow DOM: the title screen (a menu on the left, the Game panel with the characters,
+// the mode and the map, the Controls panel), the muted mark, the score
 // and the clock with the state of both flags, the markers toward the flags, the banner of the last
 // event and the end screen of a match.
 import {
@@ -8,6 +9,7 @@ import {
   RAIL_MAX,
   NADE_MAX,
   RIFLE_CLIP,
+  RULES,
   TEAM_COLOR,
   TEAM_NAME,
 } from '../shared/constants';
@@ -34,9 +36,48 @@ export const HUD_CSS =
   `section{inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0 12px;text-align:center;background:#000c}` +
   `section h6{font:900 clamp(30px,9vw,72px)/1 system-ui,sans-serif;letter-spacing:.04em}section strong{font-size:34px}` +
   `section td:first-child{text-align:left;opacity:1}section td+td{text-align:center}section th{padding:2px 10px;font-size:12px;opacity:.7;font-weight:600}` +
-  `aside{inset:0;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:0 12px;text-align:center;background:#000b}` +
+  // The title screen: the paused view dimmed, and over it a panel that takes its own clicks (a click on
+  // the view round it, or on the orange button, plays): the logo, the two tabs and the button on the
+  // left, the panel of the chosen tab on the right. Under 760 px the left column is a bar on top.
+  `aside{inset:0;z-index:1;display:flex;align-items:center;justify-content:center;background:#04070bb0;container-type:size;text-shadow:none}` +
+  `aside main{pointer-events:auto;display:flex;width:min(1120px,100% - 32px);max-height:calc(100% - 32px);border:1px solid #2c3a48;border-radius:16px;overflow:hidden;` +
+  `background:#0b1016e6;backdrop-filter:blur(14px);box-shadow:0 24px 80px #000b;color:#e9eef3;text-align:left;font-weight:500;line-height:1.45;white-space:normal;user-select:none}` +
+  `aside header{flex:0 0 216px;display:flex;flex-direction:column;gap:6px;padding:26px 14px 16px;background:linear-gradient(#f7782a1c,#0000 42%),#0d141c;border-right:1px solid #26323e}` +
+  `aside button{margin:0;padding:0;font:inherit;color:inherit;cursor:pointer;border:1px solid #0000;border-radius:10px;background:none}aside button:focus-visible{outline:2px solid #ffb347;outline-offset:2px}` +
+  `aside [role=tab]{padding:11px 14px;border-left-width:3px;border-radius:4px 10px 10px 4px;text-align:left;font-size:15px;font-weight:700;color:#8d9aa7}aside [role=tab]:hover{color:#e9eef3;background:#ffffff0d}` +
+  `aside [aria-selected=true],aside [aria-selected=true]:hover{color:#fff;background:#f7782a26;border-left-color:#f7782a}` +
+  `aside header>:last-child{margin-top:auto;padding:14px 8px;border:0;background:linear-gradient(#ff9a4a,#e8590c);box-shadow:0 8px 24px -8px #e8590caa;text-align:center;text-transform:uppercase;letter-spacing:.08em}` +
+  `aside header>:last-child:hover{filter:brightness(1.1)}aside header strong{font-size:15px;font-weight:800}` +
+  `aside article{flex:1;min-width:0;min-height:0;overflow:auto;padding:24px 26px;pointer-events:auto}` +
+  `aside article:first-of-type{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:22px 30px;align-content:start}` +
+  `aside h4,aside caption{margin:0 0 10px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;text-align:left;color:#8d9aa7}` +
+  // The characters: a card each, its picture and its name; the chosen one lit, like a map on the join page.
+  `aside fieldset{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;align-content:start;margin:0;padding:0;border:0;min-width:0}aside fieldset h4{grid-column:1/-1}` +
+  `aside [role=radio]{position:relative;display:grid;overflow:hidden;border-color:#26323e;border-radius:14px;background:#121a23;text-align:left;font-size:16px;font-weight:800;transition:transform .15s,border-color .15s,box-shadow .15s}` +
+  `aside [role=radio]:hover{transform:translateY(-2px);border-color:#3a4a5a}aside [role=radio] span{padding:9px 14px 11px}` +
+  `aside [aria-checked=true],aside [aria-checked=true]:hover{border-color:#f7782a;box-shadow:0 0 0 1px #f7782a,0 10px 40px -12px #f7782a88}` +
+  `aside [aria-checked=true]::after{content:"✓";position:absolute;top:8px;right:8px;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#f7782a;font:900 14px/1 system-ui,sans-serif}` +
+  `aside canvas{height:auto;aspect-ratio:3/4;cursor:inherit;background:radial-gradient(#26323e,#0d141c);filter:saturate(.85) brightness(.75);transition:filter .15s}aside [aria-checked=true] canvas,aside [role=radio]:hover canvas{filter:none}` +
+  // The mode: its badge, its name, and the rules a line each.
+  `aside blockquote{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;align-items:center;align-content:start;margin:0}aside blockquote h4,aside blockquote span{grid-column:1/-1;margin:0}` +
+  `aside abbr{display:grid;place-items:center;width:46px;height:46px;border-radius:11px;background:#f7782a26;color:#ffb347;font:900 15px/1 system-ui,sans-serif;letter-spacing:.06em}aside blockquote strong{font-size:18px;font-weight:800}` +
+  `aside blockquote span{position:relative;padding-left:16px;font-size:13.5px;color:#b7c2cd}aside blockquote span::before{content:"";position:absolute;left:2px;top:.52em;width:6px;height:6px;border-radius:2px;background:#f7782a}` +
+  `aside abbr+strong+span{margin-top:6px}` +
+  // The map: its name, what kind of place it is, its story, and the host's buttons.
+  `aside address{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 30px;padding-top:20px;border-top:1px solid #26323e;font-style:normal}aside address>*{grid-column:1}aside address h4{margin:0}aside h3{margin:0;font:900 26px/1.1 system-ui,sans-serif;letter-spacing:.02em}` +
+  `aside address small{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#ffb347}aside address>span{font-size:13.5px;color:#b7c2cd}` +
+  `aside address menu{grid-area:1/2/span 4;align-self:end;position:static;transform:none;justify-content:flex-start;width:auto;max-width:300px;color:#8d9aa7}aside menu span{flex-basis:100%}` +
+  // The controls: a table a group, in two columns; a key is a cap.
+  `aside article+article{columns:2;column-gap:34px}aside table{width:100%;margin:0 0 18px;break-inside:avoid;font-size:13.5px}aside caption{margin:0 0 6px;padding-bottom:6px;border-bottom:1px solid #26323e}` +
+  `aside td{padding:4px 0;vertical-align:top}aside td:first-child{width:46%;padding-right:12px;text-align:right;white-space:nowrap;opacity:1;color:#8d9aa7}aside td+td{color:#dbe3ea}` +
+  `aside kbd{display:inline-block;min-width:24px;padding:2px 7px;border:1px solid #3a4a5a;border-bottom-width:2px;border-radius:6px;background:#18222c;color:#fff;font:700 12px/1.3 system-ui,sans-serif;text-align:center}` +
+  `aside article[hidden]{display:none}` +
+  `@container (max-width:980px){aside address{grid-template-columns:1fr}aside address menu{grid-area:auto;margin-top:8px}}` +
+  `@container (max-width:760px){aside main{flex-direction:column}aside header{flex:none;flex-flow:row wrap;align-items:center;padding:10px 12px;border-right:0;border-bottom:1px solid #26323e}` +
+  `aside header h6{margin:0 8px 0 4px;font-size:22px}aside [role=tab]{padding:8px 12px;border-left-width:1px;border-radius:10px}aside header>:last-child{margin:0 0 0 auto;padding:10px 16px}` +
+  `aside article{padding:16px}aside article:first-of-type,aside address{grid-template-columns:1fr}aside fieldset{max-width:330px}aside address menu{grid-area:auto;margin-top:8px}aside article+article{columns:1}aside td:first-child{white-space:normal}}` +
   `h6{margin:0;font-size:inherit;text-shadow:none}` +
-  `aside h6{font:900 clamp(36px,13vw,84px)/1 system-ui,sans-serif;letter-spacing:.04em;transform:skewX(-8deg);` +
+  `aside h6{align-self:center;margin-bottom:20px;font:900 36px/1 system-ui,sans-serif;letter-spacing:.04em;transform:skewX(-8deg);` +
   `background:linear-gradient(#fe6,#f92 45%,#d21);-webkit-background-clip:text;background-clip:text;color:transparent;` +
   `filter:drop-shadow(0 3px 0 #500) drop-shadow(0 0 14px #f604)}` +
   `ul{left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:4px;list-style:none}li{width:16px;height:6px;background:#fff;box-shadow:0 0 0 1px #0008}` +
@@ -72,6 +113,80 @@ export const HUD_CSS =
   `q{width:26px;height:26px;margin:-13px 0 0 -13px;border:2px solid #5f8;border-radius:50%;box-shadow:0 0 6px #3f6,inset 0 0 4px #3f6;background:radial-gradient(#afc 0 1.5px,#0000 2px)}q::before,q::after{content:none}` +
   `cite{right:12px;bottom:10px;font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}cite small{margin-left:6px;font-size:14px}` +
   `div.v>i,.v dl,.v del{display:none}`;
+
+/** The tabs of the title screen's menu, the first one shown first. */
+export const TABS = ['Game', 'Controls'];
+
+/** The characters' first names (the user, 2026-11-11: names, not "man" and "woman"), in BODY's order, and the size of a card's picture in pixels. */
+export const CAST = ['Kai', 'Nova'];
+export const SHOT = [300, 400];
+
+/** Capture the flag in a few lines, with the room's default rules. */
+export const GOAL = [
+  'Two teams, two flags. Take the enemy flag from its base and run it home.',
+  'A capture counts only while your own flag is at home.',
+  `First team to ${RULES.scoreLimit} captures wins, or the one ahead after ${RULES.timeLimit / 60} minutes.`,
+  'The gun, the katana, the rail gun and the rifle wait on the armoury past your flag.',
+];
+
+/**
+ * The controls of the title screen, a group each: the caps of a row split by `|` (a `+`, `/`, `or`
+ * or `twice` between them stays text), what they do, and the KeyboardEvent.codes the row tells,
+ * which together must be all of input.ts's CODES.
+ */
+export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?: string][]][] = [
+  [
+    'Movement',
+    [
+      ['Mouse', 'look'],
+      [
+        'W|A|S|D|or|Arrows',
+        'move (ZQSD on AZERTY)',
+        'KeyW KeyA KeyS KeyD ArrowUp ArrowDown ArrowLeft ArrowRight',
+      ],
+      ['Shift', 'sprint', 'ShiftLeft ShiftRight'],
+      ['Space', 'jump, again in the air', 'Space'],
+      ['Move key|twice', 'dash that way'],
+      ['C', 'crouch, slide when fast', 'KeyC'],
+    ],
+  ],
+  [
+    'Combat',
+    [
+      ['Left click', 'fire, hold to charge; bare hands: punch'],
+      ['R', 'swap the battery', 'KeyR'],
+      ['1|2|3|4', 'gun, katana, rail gun, laser rifle', 'Digit1 Digit2 Digit3 Digit4'],
+      ['Wheel', 'next weapon'],
+      ['G', 'laser rifle: a grenade from its launcher', 'KeyG'],
+    ],
+  ],
+  [
+    'Katana',
+    [
+      ['Left click', 'slash'],
+      ['W|+|Left click', 'thrust'],
+      ['A|or|D|+|Left click', 'cut across'],
+      ['Double click', 'special: lunge, energy arc, leap'],
+      ['Blades locked', 'click fast; step aside to break'],
+    ],
+  ],
+  [
+    'Rover',
+    [
+      ['E', 'get in, get out', 'KeyE'],
+      ['W|S', 'drive toward the look'],
+      ['Space', 'handbrake'],
+      ['Left click', 'lasers'],
+    ],
+  ],
+  [
+    'Game',
+    [
+      ['M', 'mute', 'KeyM'],
+      ['Esc', 'this screen'],
+    ],
+  ],
+];
 
 /** Seconds the way out is shown after sitting down. */
 export const OUT_HINT = 4;
@@ -111,10 +226,18 @@ export interface Summary {
 }
 
 export interface Hud {
-  /** The title screen with `status` under the controls, "Click to play" or why not; '' hides it. */
-  title(status: string, name: string): void;
   /**
-   * The maps over the title screen, [key, name] each: the one the next match plays (`next`, else
+   * The title screen with `status` on its button, "Click to play" or why not; '' hides it. `name`,
+   * `tag` and `lore` are the map's (WorldDef).
+   */
+  title(status: string, name: string, tag?: string, lore?: string): void;
+  /**
+   * The character cards of the title screen: `pick` is told the BODY of the card the player
+   * chooses. Returns the cards' canvases, in BODY's order, for their pictures (SHOT pixels).
+   */
+  cast(pick: (body: number) => void): HTMLCanvasElement[];
+  /**
+   * The maps in the title screen's Game panel, [key, name] each: the one the next match plays (`next`, else
    * `played`) stands out. They are buttons that `pick` when the own player is the host (`mine`),
    * read-only for the others; `host` is his name.
    */
@@ -167,7 +290,7 @@ export interface Hud {
   hit(): void;
   /** The face over the health, frame `n` of face.ts (-1 hides it). */
   face(n: number): void;
-  /** The own player's character (BODY): the face is hers when she is the woman. */
+  /** The own player's character (BODY): the face is hers when she is the woman, and her card is the chosen one. */
   wear(body: number): void;
   /**
    * A saber lock: the gauge of the tug of war under the crosshair, with `lead` the own side's, -1
@@ -196,16 +319,37 @@ export const HIT_MS = 140;
 /** m:ss. */
 export const clock = (s: number): string => `${Math.floor(s / 60)}:${`${s % 60}`.padStart(2, '0')}`;
 
-/** Appends the HUD to `screen`, whose stylesheet has HUD_CSS. */
-export const createHud = (screen: HTMLElement): Hud => {
+/**
+ * Appends the HUD to `screen`, whose stylesheet has HUD_CSS. `play` is the title screen's button:
+ * the click that starts the game (the panel takes its other clicks, the view round it plays too).
+ */
+export const createHud = (screen: HTMLElement, play = () => {}): Hud => {
   screen.insertAdjacentHTML(
     'beforeend',
-    `<aside hidden><h6>TINY FPS</h6><span></span><table>` +
-      `<tr><td>Mouse<td>look<tr><td>WASD / ZQSD<td>move<tr><td>Shift<td>sprint<tr><td>Space<td>jump, again in the air` +
-      `<tr><td>Move key twice<td>dash that way<tr><td>C<td>crouch, slide when fast<tr><td>Left click<td>fire, hold to charge<tr><td>R<td>swap the battery<tr><td>1, 2, 3, 4, wheel<td>gun, katana, rail gun, laser rifle` +
-      `<tr><td>Katana + W<td>thrust<tr><td>Katana + A or D<td>cut across<tr><td>Katana alone<td>slash<tr><td>Double click<td>katana special: lunge, energy arc, leap<tr><td>G<td>laser rifle: a grenade from its launcher<tr><td>Blades locked<td>click fast; step aside to break<tr><td>E<td>rover: get in, get out (W/S drive toward the look, Space handbrake)<tr><td>M<td>mute<tr><td>Esc<td>this screen: the host picks the map at the top</table>` +
-      `<span>Take the enemy flag to your own base while yours is home. Jump onto the armoury past your flag for the gun, the katana and the rail gun. Hold the rail gun's lightning on a foe: it slows him and drains 1 health a second, and 3 s more after it lets go.</span>` +
-      `<strong></strong></aside><menu hidden></menu>` +
+    `<aside hidden><main><header><h6>TINY FPS</h6>` +
+      TABS.map(
+        (t, i) => `<button role="tab" aria-selected="${!i}" tabindex="${i && -1}">${t}</button>`,
+      ).join('') +
+      `<button><strong></strong></button></header>` +
+      `<article role="tabpanel"><fieldset role="radiogroup" aria-label="Character"><h4>Character</h4>` +
+      CAST.map(
+        (c, i) =>
+          `<button role="radio" aria-checked="${!i}" tabindex="${i && -1}"><canvas width="${SHOT[0]}" height="${SHOT[1]}"></canvas><span>${c}</span></button>`,
+      ).join('') +
+      `</fieldset><blockquote><h4>Game mode</h4><abbr>CTF</abbr><strong>Capture the flag</strong>${GOAL.map(l => `<span>${l}</span>`).join('')}</blockquote>` +
+      `<address><h4>Map</h4><h3></h3><small></small><span></span><menu hidden></menu></address></article>` +
+      `<article role="tabpanel" hidden>${CONTROLS.map(
+        ([group, rows]) =>
+          `<table><caption>${group}</caption>${rows
+            .map(
+              ([keys, does]) =>
+                `<tr><td>${keys
+                  .split('|')
+                  .map(k => (/^(\+|\/|or|twice)$/.test(k) ? k : `<kbd>${k}</kbd>`))
+                  .join(' ')}<td>${does}`,
+            )
+            .join('')}</table>`,
+      ).join('')}</article></main></aside>` +
       `<del hidden></del><u></u><h5 hidden>Muted (M)</h5>` +
       `<ul>${'<li></li>'.repeat(HP_MAX)}</ul><figure hidden><canvas width="${FW}" height="${FH}"></canvas></figure>` +
       `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
@@ -220,7 +364,43 @@ export const createHud = (screen: HTMLElement): Hud => {
   const [muted, menu, maps] = ['h5', 'aside', 'menu'].map(t => one(t));
   /** The name of the map the host picked for the next match, for the end screen. */
   let soon = '';
-  const [name, status] = ['aside span', 'aside strong'].map(t => one(t));
+  const [name, tag, lore, status] = ['h3', 'address small', 'address>span', 'header strong'].map(
+    t => one(`aside ${t}`),
+  );
+  const all = (sel: string) => [...menu.querySelectorAll<HTMLElement>(sel)];
+  const [tabs, panels, cards] = ['[role=tab]', 'article', '[role=radio]'].map(all);
+  /** The one of `list` that is on, by its ARIA state `attr`: it alone is in the Tab order, the arrows go to the others. */
+  const turn = (list: HTMLElement[], attr: string, on: number) =>
+    list.forEach((el, i) => {
+      el.setAttribute(attr, `${i == on}`);
+      el.tabIndex = i == on ? 0 : -1;
+    });
+  /** The arrows over `list` go to the next one or the one before, round, which `go` then takes. */
+  const arrows = (list: HTMLElement[], go: (i: number) => void) =>
+    list.forEach((el, i) => {
+      el.onclick = () => go(i);
+      el.onkeydown = e => {
+        const d = +/^Arrow(Down|Right)/.test(e.code) - +/^Arrow(Up|Left)/.test(e.code);
+        if (d) {
+          e.preventDefault();
+          const to = (i + d + list.length) % list.length;
+          go(to);
+          list[to].focus();
+        }
+      };
+    });
+  arrows(tabs, i => {
+    turn(tabs, 'aria-selected', i);
+    panels.forEach((p, k) => (p.hidden = k != i));
+  });
+  one('header>:last-child').onclick = play;
+  let chose = (_body: number) => {};
+  arrows(cards, i => {
+    if (cards[i].getAttribute('aria-checked') != 'true') {
+      turn(cards, 'aria-checked', i);
+      chose(i);
+    }
+  });
   const set = (el: HTMLElement, text: string) => el.textContent != text && (el.textContent = text);
   const bar = one('nav');
   const [red, time, blue] = [...bar.querySelectorAll<HTMLElement>('span, time')];
@@ -252,11 +432,21 @@ export const createHud = (screen: HTMLElement): Hud => {
   [red, redFlag].forEach(el => tint(el, 0));
   [blue, blueFlag].forEach(el => tint(el, 1));
   return {
-    title(text, map) {
+    title(text, map, kind = '', story = '') {
+      if (!text && !menu.hidden) {
+        // A tab or a card that kept the focus would take the game's Space and Enter.
+        menu.querySelector<HTMLElement>(':focus')?.blur();
+      }
       menu.hidden = !text;
-      maps.hidden = !text || !maps.childElementCount;
+      maps.hidden = !maps.childElementCount;
       set(name, map);
+      set(tag, kind);
+      set(lore, story);
       set(status, text);
+    },
+    cast(pick) {
+      chose = pick;
+      return cards.map(c => c.querySelector('canvas')!);
     },
     maps(list, played, next, host, mine, pick) {
       const label = document.createElement('span');
@@ -356,6 +546,7 @@ export const createHud = (screen: HTMLElement): Hud => {
       });
     },
     wear(body) {
+      turn(cards, 'aria-checked', +!!body);
       if (+!!body != fem) {
         [fem, shown] = [+!!body, -1];
       }

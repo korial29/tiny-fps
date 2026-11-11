@@ -35,7 +35,7 @@ import { helm } from './helm';
 import { helmet } from './helmet';
 import { STYLE, hair, styleOf, sway } from './hair';
 import { armor } from './armor';
-import { CUP_F, PAD_F, crotch, hose, pack, shoulders } from './pack';
+import { CUP_F, crotch, hose, pack, shoulders } from './pack';
 import { fetched, pouch, pouchAt } from './pouch';
 import type { Tracer } from './beams';
 import {
@@ -693,13 +693,15 @@ export const soldier = (
   }
   if (armored) {
     crotch(out, s.pos[J.PELVIS], s.rot[J.PELVIS], lod, plate, build ? CUP_F : 1);
-    shoulders(
-      out,
-      [J.ARM_L, J.ARM_R].map(j => [s.pos[j], capped(s.rot, j, build)] as [Vec3, Quat]),
-      lod,
-      plate,
-      build ? PAD_F : 1,
-    );
+    // Her shoulders are caps of the armour itself (armor.ts): no plate standing over them.
+    if (!build) {
+      shoulders(
+        out,
+        [J.ARM_L, J.ARM_R].map(j => [s.pos[j], capped(s.rot, j)] as [Vec3, Quat]),
+        lod,
+        plate,
+      );
+    }
   }
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);

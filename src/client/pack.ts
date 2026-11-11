@@ -402,8 +402,8 @@ const padOf = (lod: number) => {
 /** The tint that turns a white piece into `plate` (white when absent). */
 const tintOf = (plate?: number[]) => plate?.map((v, i) => v / WHITE[i]);
 
-/** The woman's shoulder pads and cup, scaled about their joints: her shoulders' caps are smaller, the cup flatter. */
-export const [PAD_F, CUP_F]: [number, Vec3] = [0.87, [0.92, 0.94, 0.96]];
+/** The woman's cup, scaled about its joint: flatter. Her shoulders have caps of the armour (armor.ts), no pads. */
+export const CUP_F: Vec3 = [0.92, 0.94, 0.96];
 
 /** Appends both shoulder pads at level of detail `lod` on the arm joints (`arms`: the left's and the right's place and turn), in `plate` (white when absent), `scale`d about the joints. */
 export const shoulders = (

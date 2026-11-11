@@ -24,7 +24,7 @@ import { decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
 import { ROVER, park, seat } from './rover';
-import { FLAG, KEY, MODE, NOBODY, TEAM, TEX } from './types';
+import { BODY, FLAG, KEY, MODE, NOBODY, TEAM, TEX } from './types';
 import type { Conn, Every, Input, PlayerState, Rover, Snapshot } from './types';
 import { build } from './world';
 import type { Spawn, WorldDef } from './world';
@@ -108,6 +108,40 @@ const ticks = (room: Room, n: number): void => {
 };
 
 describe('Room: joining', () => {
+  it('carries the character a peer picked in the roster, and the man without one', () => {
+    const room = new Room();
+    const pick = (body?: unknown) => {
+      const c = peer();
+      room.connect(c);
+      room.receive(
+        c,
+        JSON.stringify({ t: 'join', name: 'p', ...(body === undefined ? {} : { body }) }),
+      );
+      return c;
+    };
+    const [a, b] = [pick(), pick(BODY.FEMALE)];
+    // A body the game does not know is the man's too.
+    pick(7);
+    pick('1');
+    pick(BODY.MALE);
+    const list = roster(a).players;
+    expect(list.map(p => p.body)).toEqual([
+      undefined,
+      BODY.FEMALE,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    // The man's entry is what it was before there was a choice: an old client reads it unchanged.
+    expect(Object.keys(list[0]).sort()).toEqual(['color', 'id', 'name', 'team']);
+    expect(roster(b).players).toEqual(list);
+    // The look only: both stand in the same state but for where they spawned.
+    ticks(room, SNAP_EVERY);
+    const [sa, sb] = snap(a).players;
+    expect(Object.keys(sb).sort()).toEqual(Object.keys(sa).sort());
+    expect([sb.hp, sb.mode, sb.y]).toEqual([sa.hp, sa.mode, sa.y]);
+  });
+
   it('sends every joined peer the roster with its own id, on every join and leave', () => {
     const room = new Room({}, ARENA);
     const a = join(room, 'Ann');

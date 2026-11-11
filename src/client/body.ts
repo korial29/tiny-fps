@@ -70,7 +70,7 @@ import {
   progress,
   BEHIND as BACK,
 } from './katana';
-import { add, basis, dot, mix, sub, unit } from './mesh';
+import { STRIDE, add, basis, dot, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
@@ -101,6 +101,8 @@ export interface Body {
   pose(eye: Vec3, yaw: number, pitch: number, roll?: number): Solved | undefined;
   /** Appends the body's vertices (see STRIDE) in the jacket `color`; nothing when pose() has none. */
   draw(out: number[], eye: Vec3, yaw: number, pitch: number, roll?: number, color?: number[]): void;
+  /** The own player's character (BUILD in rig.ts, PlayerInfo.body): the woman's arms are slimmer and her hands smaller, on the same grips. */
+  wear(build: number): void;
 }
 
 /** Metres the camera may be from the eye of the body and still show it: the bob is centimetres, a crouch's ease under a metre. */
@@ -429,6 +431,9 @@ const THUMB: [Vec3, Vec3][] = [
     [-0.55, -0.5, 0.65],
   ],
 ];
+/** The woman's hand to the man's, about the wrist (SCALE in skin.ts has her glove's). */
+export const HAND_F = 0.92;
+
 /** Sides around a finger (6 until the user, 2026-11-09: more detail on the hands). */
 export const FINGER_SIDES = 10;
 /** The wrist joint at rest: the cuff's ring is placed from it. */
@@ -973,7 +978,8 @@ const RATES = {
 };
 
 export const createBody = (world?: World): Body => {
-  const gait = createGait(0);
+  let gait = createGait(0);
+  let build = 0;
   /** The own player as last seen. */
   let me: PlayerState | undefined;
   const w = {
@@ -1166,6 +1172,7 @@ export const createBody = (world?: World): Body => {
       yaw: g.yaw,
       hips: [...g.hips],
       rot: g.rot.map(r => [...r] as Quat),
+      rest: g.rest,
     };
     const [r, u, f] = basis(yaw, pitch, roll);
     /** Camera space (right, up, forward) as a direction in the world, and a world direction in it. */
@@ -1602,6 +1609,15 @@ export const createBody = (world?: World): Body => {
     },
     update,
     pose,
+    wear(b) {
+      if (b != build) {
+        // Her own skeleton: a gait of its own, in the pose of the player at once.
+        [build, gait] = [b, createGait(0, b)];
+        if (me) {
+          gait.update(me, 0, world && floorOf(world, me.y));
+        }
+      }
+    },
     draw(out, eye, yaw, pitch, roll = 0, color = [0.7, 0.7, 0.7]) {
       const s = pose(eye, yaw, pitch, roll);
       if (s) {
@@ -1611,9 +1627,9 @@ export const createBody = (world?: World): Body => {
         const plate = world?.def.helmets ? undefined : color;
         const colors = palette(color, undefined, undefined, suit);
         const from = out.length;
-        skin(out, body(2), s, colors);
+        skin(out, body(2, build), s, colors);
         if (suit) {
-          armor(out, from, body(2), true, plate);
+          armor(out, from, body(2, build), true, plate);
         }
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
         // The right thumb presses the button of the katana or the plasma gun as it comes on.
@@ -1624,6 +1640,7 @@ export const createBody = (world?: World): Body => {
             : 0;
         [J.HAND_L, J.HAND_R].forEach((j, i) => {
           const q = s.rot[j];
+          const at = out.length;
           hand(
             out,
             s.pos[j],
@@ -1638,6 +1655,12 @@ export const createBody = (world?: World): Body => {
             suit ? colors[7] : colors[3],
             i ? 0 : cupping,
           );
+          // Her hand: the same one, smaller about the wrist, so it closes on the same grips.
+          for (let k = at; build && k < out.length; k += STRIDE) {
+            for (let d = 0; d < 3; d++) {
+              out[k + d] = s.pos[j][d] + HAND_F * (out[k + d] - s.pos[j][d]);
+            }
+          }
         });
         if (hold > 0.2) {
           // The gauge lights once a press is more than a tap: the strength the shot would have.

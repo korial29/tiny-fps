@@ -52,6 +52,13 @@ const pecs = (x: number, y: number) =>
   smooth(1.3, 1.36, y) *
   (1 - smooth(1.41, 1.48, y));
 
+/**
+ * The woman's chest plate (skin.ts shapes her bust under it): one moulded piece, the hollow of the
+ * sternum filled a little, not two cups.
+ */
+const bust = (x: number, y: number) =>
+  0.007 * Math.exp(-((x / 0.034) ** 2)) * Math.exp(-(((y - 1.35) / 0.05) ** 2));
+
 /** The knee pad's dome: up to 8 mm out at the kneecap. */
 const knee = (x: number, y: number) =>
   0.008 * Math.max(0, 1 - ((Math.abs(x) - 0.1) / 0.07) ** 2 - ((y - 0.515) / 0.055) ** 2);
@@ -256,8 +263,15 @@ const seeded = (seed: number) => () => {
 };
 
 /** The recipe of the armour on the skin `s`, `fine` (curved outlines refined, scratches) or not. */
+/** The region as the skin's build wears it: the woman's chest plate has her own swell. */
+const shaped = (g: Region, s: Skin): Region =>
+  s.b && g.swell === pecs ? { ...g, swell: bust } : g;
+
 const cook = (s: Skin, fine: boolean): Recipe => {
-  const { t, v, l } = s;
+  // The regions are written on the man's rest mesh: another build's plates are cut there and sit
+  // on its own skin, corner for corner.
+  const { t, l } = s;
+  const v = s.u ?? s.v;
   const r: Recipe = { c: [], t: [] };
   if (!l) {
     return r;
@@ -302,7 +316,7 @@ const cook = (s: Skin, fine: boolean): Recipe => {
     const ys = [0, 1, 2].map(c => v[t[k * 3 + c] * 6 + 1]);
     const [lo, hi] = [Math.min(...ys), Math.max(...ys)];
     for (let g = 0; g < REGIONS.length; g++) {
-      const region = REGIONS[g];
+      const region = shaped(REGIONS[g], s);
       if (region.part != part || hi < SPANS[g][0] || lo > SPANS[g][1]) {
         continue;
       }
@@ -386,7 +400,8 @@ const scratchesOn = (
     k: number,
   ) => void,
 ) => {
-  const { t, v, l } = s;
+  const { t, l } = s;
+  const v = s.u ?? s.v;
   const rand = seeded(0xa4f0);
   const n = t.length / 3;
   let made = 0;
@@ -439,7 +454,7 @@ const scratchesOn = (
     const dot = (p: number[], q: number[]) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
     const [d11, d12, d22] = [dot(e1, e1), dot(e1, e2), dot(e2, e2)];
     const det = d11 * d22 - d12 * d12;
-    const swell = REGIONS[g].swell;
+    const swell = shaped(REGIONS[g], s).swell;
     const cs: Corner[] = quad.map(c => {
       const rr = c.map((q, j) => q - P[0][j]);
       const [r1, r2] = [dot(rr, e1), dot(rr, e2)];

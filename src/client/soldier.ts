@@ -32,8 +32,9 @@ import {
   swapOf,
 } from './gun';
 import { helmet } from './helmet';
+import { STYLE, hair, styleOf, sway } from './hair';
 import { armor } from './armor';
-import { crotch, hose, pack, shoulders } from './pack';
+import { CUP_F, PAD_F, crotch, hose, pack, shoulders } from './pack';
 import { fetched, pouch, pouchAt } from './pouch';
 import type { Tracer } from './beams';
 import {
@@ -54,7 +55,7 @@ import { STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, axis, mul, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
-import { beardOf, body, capped, cut, eyesOf, hairOf, palette, shaved, skin } from './skin';
+import { beardOf, body, capped, cut, eyesOf, hairOf, palette, shaved, skin, tressOf } from './skin';
 import { createFace, dashing, felled, strain } from './expression';
 import type { Face } from './expression';
 import { CH, toneOf } from './features';
@@ -100,6 +101,8 @@ export interface Runner {
   seat?: Seat;
   /** The muzzle of the long gun in his hands as last drawn, from his feet: where its shots are seen to leave (combat.ts). */
   tip?: Vec3;
+  /** The BUILD of the body (rig.ts, PlayerInfo.body): the man's when absent. */
+  build?: number;
 }
 
 /**
@@ -120,11 +123,29 @@ const AIMING = 0.5;
 /** Seconds a hit's wince lasts, and the grin of a capture or of a foe put down. */
 export const [HURT, GRIN] = [0.4, 1.6];
 
+/**
+ * A woman's traits on the face of her id: never the heavy brow ridge, the wide jaw or the long
+ * lower face of the draw, fuller lips, and the scalp's hair flat under her style (hair.ts).
+ */
+export const femme = (w: Float32Array) => {
+  w[CH.RIDGE] = Math.min(w[CH.RIDGE], 0) - 0.3;
+  w[CH.JOWL] = Math.min(w[CH.JOWL] * 0.5, 0.1) - 0.2;
+  w[CH.CHIN] = Math.min(w[CH.CHIN] * 0.6, 0.2);
+  w[CH.NOSE_W] = Math.min(w[CH.NOSE_W], 0.3);
+  w[CH.LIPS] = Math.max(w[CH.LIPS], 0) * 0.6 + 0.3;
+  w[CH.LIDS] = Math.min(w[CH.LIDS], 0.3);
+  w[CH.HAIR] = 0;
+  w[CH.EARS] = Math.min(w[CH.EARS], 0) - 0.4;
+};
+
 /** A runner as first seen: in the pose its state asks for, no ease. */
-export const createRunner = (p: PlayerState, seat?: Seat): Runner => {
-  const gait = createGait();
+export const createRunner = (p: PlayerState, seat?: Seat, build = 0): Runner => {
+  const gait = createGait(undefined, build);
   const face = createFace(p.id);
   face.w[CH.HAIR] *= +!shaved(p.id);
+  if (build) {
+    femme(face.w);
+  }
   gait.update(p, 0, undefined, seat);
   return {
     seat,
@@ -142,6 +163,7 @@ export const createRunner = (p: PlayerState, seat?: Seat): Runner => {
     jab: 0,
     face,
     dt: 0,
+    build,
   };
 };
 
@@ -165,6 +187,7 @@ export const animate = (
   world?: World,
   tracer?: Pick<Tracer, 'shock' | 'spit'>,
   rovers?: Rover[],
+  builds?: ReadonlyMap<number, number>,
 ) => {
   for (const id of book.keys()) {
     if (!others.some(p => p.id == id)) {
@@ -172,7 +195,9 @@ export const animate = (
     }
   }
   for (const p of others) {
-    const r = book.get(p.id);
+    const build = builds?.get(p.id) ?? 0;
+    // A roster that says another body than the one drawn (it came after him): a new runner.
+    const r = book.get(p.id)?.build == build ? book.get(p.id) : undefined;
     const seat = seatOf(p, rovers);
     if (r) {
       r.seat = seat;
@@ -202,7 +227,7 @@ export const animate = (
       r.jab += (thrown(p) - r.jab) * (1 - Math.exp(-dt * 45));
       r.p = { ...p };
     } else {
-      book.set(p.id, createRunner(p, seat));
+      book.set(p.id, createRunner(p, seat, build));
     }
     track(book.get(p.id)!, dt, ground(world, p.y), !r, tracer);
   }
@@ -579,7 +604,20 @@ export const soldier = (
     return;
   }
   r.tip = undefined;
-  const colors = palette(color, hairOf(p.id), eyesOf(p.id), armored, toneOf(p.id), beardOf(p.id));
+  const build = r.build ?? 0;
+  const colors = palette(
+    color,
+    build ? tressOf(p.id) : hairOf(p.id),
+    eyesOf(p.id),
+    armored,
+    toneOf(p.id),
+    build ? 0 : beardOf(p.id),
+    !!build,
+  );
+  if (build && styleOf(p.id) == STYLE.UNDERCUT) {
+    // A shaved side: the scalp's hair is stubble, the skin showing through it.
+    colors[4] = colors[4].map((v, i) => v * 0.5 + colors[3][i] * 0.42);
+  }
   // The armour: white in space, else in the team's colour.
   const plate = helmets ? undefined : color;
   const { s, sink, yaw, carry } = stance(r);
@@ -599,7 +637,7 @@ export const soldier = (
   r.dt = 0;
   const blade = p.wield && !p.down && !driving(r);
   if (r.cut) {
-    const cs = cut(lod, r.cut.limb)[0];
+    const cs = cut(lod, r.cut.limb, build)[0];
     const at = out.length;
     skin(out, cs, s, colors, r.face.w);
     // The stump's face is the last vertex drawn.
@@ -610,7 +648,7 @@ export const soldier = (
     piece(out, r.cut, colors, lod, sink, r.face.w);
   } else {
     const from = out.length;
-    const bs = body(lod);
+    const bs = body(lod, build);
     // Under a helmet's dark visor no face shows: its channels are not worth their time.
     skin(out, bs, s, colors, helmets ? undefined : r.face.w);
     // The armour, cut out of the skin just drawn.
@@ -618,6 +656,22 @@ export const soldier = (
       armor(out, from, bs, lod > 2, plate);
     }
     pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
+    if (k > 0) {
+      dissolve(out, from, k);
+    }
+  }
+  // Her hair, on her head while it is on her; tucked in under a helmet.
+  if (build && !helmets && r.cut?.limb !== LIMB.HEAD) {
+    const from = out.length;
+    hair(
+      out,
+      s.pos[J.HEAD],
+      s.rot[J.HEAD],
+      styleOf(p.id),
+      tressOf(p.id),
+      lod,
+      sway(r.gait.phase, Math.hypot(p.vx, p.vz), r.t),
+    );
     if (k > 0) {
       dissolve(out, from, k);
     }
@@ -632,12 +686,13 @@ export const soldier = (
     pack(out, s.pos[J.CHEST], s.rot[J.CHEST], color, lod);
   }
   if (armored) {
-    crotch(out, s.pos[J.PELVIS], s.rot[J.PELVIS], lod, plate);
+    crotch(out, s.pos[J.PELVIS], s.rot[J.PELVIS], lod, plate, build ? CUP_F : 1);
     shoulders(
       out,
-      [J.ARM_L, J.ARM_R].map(j => [s.pos[j], capped(s.rot, j)] as [Vec3, Quat]),
+      [J.ARM_L, J.ARM_R].map(j => [s.pos[j], capped(s.rot, j, build)] as [Vec3, Quat]),
       lod,
       plate,
+      build ? PAD_F : 1,
     );
   }
   if (blade) {

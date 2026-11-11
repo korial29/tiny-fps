@@ -11,7 +11,12 @@ export interface PlayerInfo {
   team: number;
   /** CSS colour: the team's (TEAM_COLOR). */
   color: string;
+  /** BODY: the character he plays. Absent for the man, as before there was a choice. */
+  body?: number;
 }
+
+/** The characters a player can be (PlayerInfo.body, the join's `body`): the look only, the game is the same for both. */
+export const BODY = { MALE: 0, FEMALE: 1 } as const;
 
 /** Bits of Input.keys. Keys are read by KeyboardEvent.code, so WASD is ZQSD on AZERTY. */
 export const KEY = {

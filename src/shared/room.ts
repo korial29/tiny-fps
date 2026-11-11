@@ -53,7 +53,7 @@ import type { ClientText, ServerText } from './protocol';
 import { beam } from './rail';
 import { board, bolts, drive, footprint, hull, leave, park, ride, ROVER, seat } from './rover';
 import { reaches, tackling } from './tackle';
-import { CUT, KEY, LIMB, MODE, NOBODY } from './types';
+import { BODY, CUT, KEY, LIMB, MODE, NOBODY } from './types';
 import type { Conn, Every, Input, PlayerInfo, PlayerState, Rover, Rules } from './types';
 import { build } from './world';
 import type { World, WorldDef } from './world';
@@ -241,7 +241,7 @@ export class Room {
     if (typeof data === 'string') {
       const msg = parseText<ClientText>(data);
       if (p === null && msg?.t === 'join') {
-        this.join(conn, msg.name);
+        this.join(conn, msg.name, msg.body);
       } else if (p && msg?.t === 'map' && p === this.host() && Object.hasOwn(MAPS, msg.map)) {
         this.next = msg.map === this.mapName ? undefined : msg.map;
         this.roster();
@@ -1030,7 +1030,7 @@ export class Room {
     return [...this.peers.values()].filter(p => p !== null);
   }
 
-  private join(conn: Conn, name: unknown): void {
+  private join(conn: Conn, name: unknown, body?: unknown): void {
     const players = this.players();
     if (players.length >= this.rules.maxPlayers) {
       conn.send(JSON.stringify({ t: 'full' } satisfies ServerText));
@@ -1055,6 +1055,8 @@ export class Room {
         ),
         team,
         color: TEAM_COLOR[team],
+        // Only a body the game knows, and only when it is not the man's: an old roster is unchanged.
+        ...(body === BODY.FEMALE ? { body } : {}),
       },
       state: this.place(
         id,

@@ -498,6 +498,8 @@ export interface Renderer {
   muzzle(id: number): Vec3 | undefined;
   /** The runners of the players `ids` grin for a moment: their team has captured. */
   cheer(ids: number[]): void;
+  /** The body of each player (PlayerInfo.body, BODY), from the roster: the man's for one not in it. */
+  wear(builds: ReadonlyMap<number, number>): void;
   destroy(): void;
 }
 
@@ -514,9 +516,10 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 export const createRenderer = (canvas: HTMLCanvasElement, world: World): Renderer => {
   /** The animation state of each runner drawn. */
   const runners = new Map<number, Runner>();
+  let builds: ReadonlyMap<number, number> = new Map();
   // The runners' skins at every level, now: built on the first runner to come near (the close one
   // with its face's channels takes a tenth of a second), they would stall a frame of the match.
-  [0, 1, 3].forEach(body);
+  [0, 1, 3].forEach(lod => body(lod));
   /** Each rover's wheels: the angle they have rolled to, and where the rover was last frame. */
   const spins: number[] = [];
   const was: [number, number][] = [];
@@ -786,7 +789,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       clock = now;
       // The own player, seen from outside his head, is one of the crowd.
       const crowd = self ? [...others, self] : others;
-      animate(runners, crowd, dt, world, tracer, rovers);
+      animate(runners, crowd, dt, world, tracer, rovers, builds);
       const [right, up, fwd] = basis(yaw, pitch, fx.roll);
       drive(v, eye, fwd, Date.now() / 1000);
       // The spent batteries and capsules falling to the floor.
@@ -920,6 +923,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     project: (x, y, z) => project(vp, x, y, z),
     steps: id => runners.get(id)?.gait.steps,
     muzzle: id => runners.get(id)?.tip,
+    wear: b => {
+      builds = b;
+      // Her skins now, as the man's are built at the start: not in a frame of the match.
+      new Set(b.values()).forEach(k => k && [0, 1, 3].forEach(lod => body(lod, k)));
+    },
     cheer: ids =>
       ids.forEach(id => {
         const r = runners.get(id);

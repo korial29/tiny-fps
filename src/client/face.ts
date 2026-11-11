@@ -32,6 +32,8 @@ export const frame = (level: number, e: number) =>
 export const PALETTE = [
   0, 0xff0a0f1a, 0xff628bc9, 0xff4363a0, 0xff7da7e0, 0xff364a6b, 0xffdce8ee, 0xff0f1420, 0xff14144a,
   0xffe0eff2, 0xff1a12b0, 0xff5a3f7d, 0xff362f2a, 0xffffd93f, 0xff4ad3ff, 0xff86908a, 0xff18243a,
+  // The woman's: her hair, its light, her lips.
+  0xff1c2f5e, 0xff2f4c8a, 0xff5a4fc4,
 ];
 const [
   ,
@@ -51,14 +53,21 @@ const [
   GOLD,
   GREY,
   BROW,
+  HAIR,
+  SHEEN,
+  LIP,
 ] = PALETTE.map((_, i) => i);
 
 const sprites: Uint8Array[] = [];
 
-/** Frame `n`'s pixels, FW by FH palette indices, row by row; built once. */
-export const sprite = (n: number): Uint8Array => {
-  if (sprites[n]) {
-    return sprites[n];
+/**
+ * Frame `n`'s pixels, FW by FH palette indices, row by row; built once. `fem` (1) is the woman's
+ * face: the same frames, a bob over the scalp and down the cheeks, a narrower jaw, lashes, lips.
+ */
+export const sprite = (n: number, fem = 0): Uint8Array => {
+  const key = n + FRAMES * fem;
+  if (sprites[key]) {
+    return sprites[key];
   }
   const p = new Uint8Array(FW * FH);
   const dead = n == DEAD;
@@ -84,15 +93,35 @@ export const sprite = (n: number): Uint8Array => {
   // The head: an egg, the scalp shaved dark on top, an outline round it, the ears.
   for (let y = 1; y < FH; y++) {
     for (let x = 0; x < FW; x++) {
-      const [u, v] = [(x - 11.5) / 9.6, (y - 15) / (y < 15 ? 13 : 12.6)];
+      // Her jaw narrows to the chin.
+      const [u, v] = [
+        ((x - 11.5) / 9.6) * (1 + 0.035 * fem * Math.max(y - 17, 0)),
+        (y - 15) / (y < 15 ? 13 : 12.6),
+      ];
       const r = u * u + v * v;
       if (r < 1) {
-        put(x, y, r > 0.84 ? LINE : y < 8 - Math.abs(u) * 2 ? (dead ? GREY : SCALP) : skin);
+        const top = fem ? y < 9 - Math.abs(u) * 1.5 - (x > 12 ? 1 : 0) : y < 8 - Math.abs(u) * 2;
+        const hair = fem ? (y == 3 && x > 6 && x < 13 ? SHEEN : HAIR) : SCALP;
+        put(x, y, r > 0.84 ? LINE : top ? (dead && !fem ? GREY : hair) : skin);
       }
     }
   }
   for (const s of [-1, 1]) {
     const x = s < 0 ? 1 : 21;
+    if (fem) {
+      // Her bob: from the top of the head down each cheek to the jaw, over the ears and the
+      // head's own outline, a dark edge outside and under it.
+      for (let y = 3; y < 21; y++) {
+        const edge = Array.from({ length: 12 }, (_, k) => (s < 0 ? k : FW - 1 - k)).find(
+          k => p[y * FW + k],
+        )!;
+        const out = Math.min(Math.max(edge - s * (y < 8 ? 1 : 2), 0), FW - 1);
+        for (let k = out; k != edge + s * (y < 19 ? 2 : 1); k += s) {
+          put(k, y, y == 20 || k == out ? LINE : HAIR);
+        }
+      }
+      continue;
+    }
     box(x, 13, 2, 5, skin);
     box(s < 0 ? 0 : 23, 14, 1, 3, LINE);
   }
@@ -124,6 +153,11 @@ export const sprite = (n: number): Uint8Array => {
     const [top, h] = wide ? [12, 3] : narrow ? [14, 1] : [13, 2];
     box(x, top, 4, h, n == GLOW ? GOLD : WHITE);
     box(x, top - 1, 4, 1, LINE);
+    // Her lashes: the lid's line goes on past the outer corner, up.
+    if (fem) {
+      put(i ? x + 4 : x - 1, top - 1, LINE);
+      put(i ? x + 5 : x - 2, top - 2, LINE);
+    }
     if (n != GLOW) {
       box(x + 1 + look, wide ? 13 : top, wide ? 1 : 2, wide ? 1 : h, PUPIL);
     }
@@ -171,6 +205,7 @@ export const sprite = (n: number): Uint8Array => {
   } else if (e == EXPR.FOCUS) {
     // Set: a short, tight line.
     box(m + 1, 21, 4, 1, LINE);
+    box(m + 1, 22, 4, fem, LIP);
   } else if (e == EXPR.TURN_L || e == EXPR.TURN_R) {
     // A grimace, lower on the side of the hit.
     for (let k = 0; k < 6; k++) {
@@ -178,6 +213,9 @@ export const sprite = (n: number): Uint8Array => {
     }
   } else {
     box(m, 21, 6, 1, LINE);
+    // Her lips: the upper one's bow over the line, the fuller lower one under it.
+    box(m + 1, 20, 4, fem, LIP);
+    box(m + 1, 22, 4, fem, LIP);
   }
   // The wounds, worse with each level: a bruise, a cut on the brow, a bleeding nose and a swollen
   // eye, blood down the forehead and from the mouth.
@@ -200,7 +238,7 @@ export const sprite = (n: number): Uint8Array => {
     put(m + 6, 23, BLOOD);
     put(m + 6, 24, BLOOD);
   }
-  return (sprites[n] = p);
+  return (sprites[key] = p);
 };
 
 /** What the face reacts to, each frame. */

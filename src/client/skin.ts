@@ -5,7 +5,7 @@
 // crotch by sharing its vertices, so normals flow over the joins. Clothes are colour regions of
 // the triangles. See rig.ts for the joints and the pose.
 import { LIMB } from '../shared/types';
-import { JOINT as J, JOINTS, REST, mul, rest, slerp, solve, turn } from './rig';
+import { BUILD, JOINT as J, JOINTS, RESTS, mul, rest, slerp, solve, turn } from './rig';
 import type { Quat } from './rig';
 import type { Vec3 } from './mesh';
 import {
@@ -95,6 +95,11 @@ export const hairOf = (id: number): number[] => {
   // On the two darkest skins the hair is dark, or shaved.
   return HAIRS[dark(id) && h > 2 && h < 8 ? h % 3 : h];
 };
+/** The hair colour of the woman `id`: as hairOf(), never the shaved head's (her hair is a style of hair.ts). */
+export const tressOf = (id: number): number[] => {
+  const h = pick(id, 0, HAIRS.length - 1);
+  return HAIRS[dark(id) && h > 2 ? h % 3 : h];
+};
 const dark = (id: number) => TONES.indexOf(toneOf(id)) > 3;
 
 /** How dark the shaved beard of the runner `id` is, 0 (none) to 1. */
@@ -112,7 +117,7 @@ export const eyesOf = (id: number): number[] =>
  * With `suit` (the moon's, the user 2026-11-10), a dark grey space suit under white armour: the
  * team's colour only in a stripe down each side, black gloves, boots and belt. Then the pupils,
  * the lashes, the cheeks' flush and the teeth. `tone` is the skin's (toneOf()), `beard` how dark
- * the shaved beard is on it, 0 to 1.
+ * the shaved beard is on it, 0 to 1. `fem` (the woman's): redder lips, darker lashes.
  */
 export const palette = (
   jacket: number[],
@@ -121,6 +126,7 @@ export const palette = (
   suit = false,
   tone = SKIN,
   beard = 1,
+  fem = false,
 ): number[][] => {
   const SKIN = tone;
   const [coat, legs] = suit ? [SUIT, SUIT.map(v => v * 0.94)] : [jacket, jacket.map(v => v * 0.62)];
@@ -135,7 +141,7 @@ export const palette = (
     suit ? BLACK : [0.22, 0.21, 0.16],
     [0.85, 0.83, 0.8],
     eyes,
-    SKIN.map((v, i) => v * [0.84, 0.68, 0.72][i]),
+    SKIN.map((v, i) => v * (fem ? [0.9, 0.56, 0.6] : [0.84, 0.68, 0.72])[i]),
     SKIN.map(v => v * 0.55),
     hair.map((v, i) => v * 0.4 + SKIN[i] * 0.3),
     SKIN.map((v, i) => v * (1 - 0.34 * beard) + (hair[i] * 0.1 + [0, 0.01, 0.03][i]) * beard),
@@ -147,7 +153,7 @@ export const palette = (
     [1.3, 1.3, 1.3],
     [2.8, 0.5, 0.12],
     [0.015, 0.012, 0.012],
-    hair.map((v, i) => v * 0.25 + SKIN[i] * 0.12),
+    fem ? [0.03, 0.025, 0.025] : hair.map((v, i) => v * 0.25 + SKIN[i] * 0.12),
     SKIN.map((v, i) => v * [1.02, 0.86, 0.84][i]),
     [0.86, 0.81, 0.7],
   ];
@@ -365,6 +371,12 @@ const finer = (rings: Ring[], limb: boolean): Ring[] => {
 // into it along its normal (face()); under the jaw line (jaw()) it is the neck's. Near, its sides
 // crowd to the front and its rings to the face.
 const [NECK_Y, CROWN] = [1.555, 1.803];
+/**
+ * 1 while the woman's skin is generated: the head's functions below carve her face. A lower face
+ * that tapers to a narrower chin, a lighter brow ridge and shallower sockets, higher cheekbones, no
+ * jaw corners, a smaller nose, fuller lips, thinner arched brows, a lash line on the lids.
+ */
+let fem = 0;
 const SKULL = [
   [1.555, 0.068, 0.085, 0.07],
   [1.575, 0.068, 0.088, 0.07],
@@ -405,6 +417,8 @@ const section = (y: number): number[] => {
   const [p, n] = [SKULL[k - 1] ?? a, SKULL[k + 2] ?? b];
   const h = b[0] - a[0];
   const t = (y - a[0]) / h;
+  // Her lower face is narrower: the jaw tapers from the cheekbones to the chin.
+  const taper = 1 - 0.18 * fem * (1 - step(1.59, 1.68, y));
   return [
     ...[1, 2, 3].map(i => {
       const [m0, m1] = [
@@ -412,18 +426,45 @@ const section = (y: number): number[] => {
         ((n[i] - a[i]) / (n[0] - a[0] || 1)) * h,
       ];
       return (
-        (2 * t ** 3 - 3 * t ** 2 + 1) * a[i] +
-        (t ** 3 - 2 * t ** 2 + t) * m0 +
-        (-2 * t ** 3 + 3 * t ** 2) * b[i] +
-        (t ** 3 - t ** 2) * m1
+        ((2 * t ** 3 - 3 * t ** 2 + 1) * a[i] +
+          (t ** 3 - 2 * t ** 2 + t) * m0 +
+          (-2 * t ** 3 + 3 * t ** 2) * b[i] +
+          (t ** 3 - t ** 2) * m1) *
+        (i == 1 ? taper : 1)
       );
     }),
     0,
   ];
 };
 
+/**
+ * A point of the man's skull at rest, `a` radians round it from the front (+ toward +x) at height
+ * `y`, `off` metres out of it along its normal: what hair.ts lays a woman's hair on.
+ */
+export const scalp = (a: number, y: number, off = 0): Vec3 => {
+  const at = (a: number, y: number): Vec3 => {
+    const [rx, zf, zb, cz] = section(Math.min(y, CROWN - 0.002));
+    const [sn, cs] = [Math.sin(a), Math.cos(a)];
+    const [rz, e] = cs > 0 ? [zf, 2.2] : [zb, 2.1];
+    return [rx * sgn(sn, e), y, cz - rz * sgn(cs, e)];
+  };
+  const p = at(a, y);
+  const [da, dy] = [at(a + 0.02, y), at(a, y - 0.004)].map(q => q.map((v, i) => v - p[i]));
+  const n = [
+    da[1] * dy[2] - da[2] * dy[1],
+    da[2] * dy[0] - da[0] * dy[2],
+    da[0] * dy[1] - da[1] * dy[0],
+  ];
+  // Outward: away from the head's axis, and up on the dome.
+  const s = n[0] * p[0] + n[2] * (p[2] - 0.004) + n[1] * 0.01 < 0 ? -1 : 1;
+  const l = (Math.hypot(...n) || 1) * s;
+  return [p[0] + (n[0] / l) * off, p[1] + (n[1] / l) * off, p[2] + (n[2] / l) * off];
+};
+/** The crown of the man's head at rest, metres. */
+export const TOP = 1.803;
+
 /** Where the hair starts, by the angle from the front (0 to pi): the forehead, the temples, a short sideburn, over the ear, the nape. */
-const HAIRLINE = [
+const HAIRLINE_M = [
   [0, 1.757],
   [0.5, 1.752],
   [0.8, 1.738],
@@ -435,7 +476,18 @@ const HAIRLINE = [
   [2.25, 1.64],
   [Math.PI, 1.625],
 ];
+/** The woman's: a higher, rounder forehead, no sideburn, clear of the ear, a higher nape. hair.ts lays her styles down to it. */
+export const HAIRLINE_F = [
+  [0, 1.753],
+  [0.55, 1.749],
+  [0.95, 1.732],
+  [1.25, 1.719],
+  [1.95, 1.719],
+  [2.35, 1.664],
+  [Math.PI, 1.65],
+];
 const hairline = (aq: number) => {
+  const HAIRLINE = fem ? HAIRLINE_F : HAIRLINE_M;
   const k = HAIRLINE.findIndex(r => r[0] >= aq);
   const [a, b] = [HAIRLINE[Math.max(k - 1, 0)], HAIRLINE[Math.max(k, 0)]];
   return a[1] + (b[1] - a[1]) * step(0, 1, (aq - a[0]) / (b[0] - a[0] || 1));
@@ -468,32 +520,33 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
   const [bridge, tip, base] = [1.702, 1.652, 1.641];
   const k = clamp((bridge - y) / (bridge - tip));
   const h =
-    y < tip
+    (y < tip
       ? 0.023 * step(base, tip, y) ** 0.6
       : y < bridge
         ? 0.002 + 0.021 * k ** 1.3
-        : 0.002 * bell(y - bridge, 0.004);
+        : 0.002 * bell(y - bridge, 0.004)) *
+    (1 - 0.14 * fem);
   d +=
     f ** 4 *
-    (h * bell(x, 0.0045 + 0.004 * k) +
-      0.0042 * bell(ax - 0.0095, 0.0036) * bell(y - 1.6475, 0.0042));
+    (h * bell(x, 0.0045 + (0.004 - 0.0008 * fem) * k) +
+      (0.0042 - 0.001 * fem) * bell(ax - 0.0095, 0.0036) * bell(y - 1.6475, 0.0042));
   /** The height as the lips see it: along the line between them, which falls to the corners. */
   const ym = y - lipLine(ax) + 1.6168;
   // The brow over deep sockets, cheekbones and the hollow under them, the jaw's corners, the lips,
   // a square chin; the forehead leaning back over the brow. A soldier's face (the user, 2026-11-08).
   d +=
     f ** 2 *
-    (-0.013 * bell(ax - 0.032, 0.014) * bell(y - 1.69, 0.009) +
-      0.01 * bell(ax - 0.026, 0.03) * bell(y - arcade(ax), 0.007) +
-      0.0065 * bell(ax - 0.048, 0.012) * bell(y - 1.668, 0.011) +
-      0.008 * bell(ax - 0.056, 0.014) * bell(y - 1.598, 0.013) -
-      0.002 * bell(ax - 0.05, 0.012) * bell(y - 1.632, 0.01) +
+    (-(0.013 - 0.003 * fem) * bell(ax - 0.032, 0.014) * bell(y - 1.69, 0.009) +
+      (0.01 - 0.0055 * fem) * bell(ax - 0.026, 0.03) * bell(y - arcade(ax), 0.007) +
+      (0.0065 + 0.0015 * fem) * bell(ax - 0.048, 0.012) * bell(y - 1.668, 0.011) +
+      (0.008 - 0.0075 * fem) * bell(ax - 0.056, 0.014) * bell(y - 1.598, 0.013) -
+      (0.002 - 0.002 * fem) * bell(ax - 0.05, 0.012) * bell(y - 1.632, 0.01) +
       0.006 * bell(x, 0.021) * bell(ym - 1.627, 0.007) +
-      0.003 * bell(x, 0.019) * bell(ym - 1.6215, 0.0036) +
-      0.0037 * bell(x, 0.018) * bell(ym - 1.6112, 0.004) -
+      (0.003 + 0.0013 * fem) * bell(x, 0.019) * bell(ym - 1.6215, 0.0036) +
+      (0.0037 + 0.0014 * fem) * bell(x, 0.018) * bell(ym - 1.6112, 0.004) -
       0.002 * bell(x, 0.016) * bell(ym - 1.6025, 0.003) +
-      0.0075 * bell(x, 0.026) * bell(y - 1.593, 0.008) -
-      0.006 * step(1.715, 1.75, y));
+      (0.0075 - 0.0015 * fem) * bell(x, 0.026 - 0.008 * fem) * bell(y - 1.593, 0.008) -
+      (0.006 - 0.003 * fem) * step(1.715, 1.75, y));
   // The nostrils set in under the tip, the groove from the nose to the upper lip, the line between
   // the lips, and a fold each side from the nose's wing to the corner of the mouth. The lids are
   // pieces of their own (lid() in features.ts) and the look is the expression's (CH), not carved.
@@ -515,8 +568,12 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
 // they are level: the look is the expression's (CH.BROW_DOWN and the others).
 /** A brow's middle line at x across and its half height there. */
 const browAt = (x: number) => [
-  arcade(x) + 0.0015 - 0.035 * Math.max(0.02 - x, 0),
-  Math.max(0.0044 * clamp((x - 0.006) / 0.006) - 0.09 * Math.max(x - 0.028, 0), 0),
+  arcade(x) + 0.0015 - 0.035 * Math.max(0.02 - x, 0) + 0.0012 * fem,
+  Math.max(
+    (0.0044 - 0.0014 * fem) * clamp((x - 0.006 - 0.003 * fem) / 0.006) -
+      0.09 * Math.max(x - 0.028, 0),
+    0,
+  ),
 ];
 
 /**
@@ -554,7 +611,7 @@ const tint = (x: number, y: number, aq: number, fine: boolean): number[] => {
     }
     // The lips: the upper one thinner, dipping at its middle, the lower one fuller; to nothing at the corners.
     const lip =
-      (dy > 0 ? 0.0066 * (1 - 0.2 * bell(x, 0.0045)) : 0.0074) *
+      (dy > 0 ? (0.0066 + 0.001 * fem) * (1 - 0.2 * bell(x, 0.0045)) : 0.0074 + 0.0014 * fem) *
       Math.sqrt(Math.max(1 - (ax / MOUTH_X) ** 2, 0));
     const l = clamp((lip - Math.abs(dy)) / 0.0025);
     if (l > 0) {
@@ -597,6 +654,9 @@ export interface Skin {
   cm: Float32Array;
   /** Per vertex the KIND of part it is (features.ts). */
   g: Uint8Array;
+  /** The BUILD it is (rig.ts), the man's when absent; and, for another, the man's rest mesh it was made from, as `v`: the armour's regions are written on him. */
+  b?: number;
+  u?: Float32Array;
   /**
    * Per channel (CH in features.ts) the vertices it moves and, six floats each, how far at full
    * weight: the position's shift, then the normal's. skin() adds them to the rest mesh.
@@ -637,7 +697,7 @@ const onHead = (x: number, y: number) => {
 
 const LOFTS = [TRUNK, LEG, ARM, EAR, CONCHA];
 
-const generate = (lod: number): Skin => {
+const shape = (lod: number): Skin => {
   const [v, j, w, t, c, l, g, c2, cm]: number[][] = [[], [], [], [], [], [], [], [], []];
   /** The KIND of the vertices being put, and what the fields know of each (Uv). */
   let kind: number = KIND.BODY;
@@ -938,7 +998,9 @@ const generate = (lod: number): Skin => {
           const k = face(x, y, aq, fine) / Math.hypot(n[0], n[1]);
           const [line, soft] = jaw(aq);
           const w = step(line - soft, line + soft, y);
-          const [nx, nz] = [NECK[0] * sgn(sn, 2.3), -NECK[cs > 0 ? 1 : 2] * sgn(cs, 2.3)];
+          // Her neck narrows a little up to the jaw, which is narrower than his.
+          const nk = 1 - 0.1 * fem * clamp((y - NECK_Y) / 0.02);
+          const [nx, nz] = [NECK[0] * nk * sgn(sn, 2.3), -NECK[cs > 0 ? 1 : 2] * nk * sgn(cs, 2.3)];
           const p = [nx + (x + n[0] * k - nx) * w, y, nz + (cz + z + n[1] * k - nz) * w];
           const ax = Math.abs(p[0]);
           const col = tint(p[0], y, aq, fine);
@@ -1140,8 +1202,10 @@ const generate = (lod: number): Skin => {
           (i, r) => lid(upper, (2 * i) / (cols - 1) - 1, S[r], 0, surf),
           (_, r) =>
             S[r] == 1
-              ? [FLESH, LASH, upper ? 0.9 : 0.3]
-              : [FLESH, SHADE, upper && S[r] > 0.5 ? 0.08 : 0],
+              ? [FLESH, LASH, upper ? 0.9 + 0.1 * fem : 0.3]
+              : fem && upper && S[r] > 0.5
+                ? [FLESH, LASH, 0.45]
+                : [FLESH, SHADE, upper && S[r] > 0.5 ? 0.08 : 0],
           (i, r) => [(2 * i) / (cols - 1) - 1, S[r]],
         );
       }
@@ -1369,13 +1433,139 @@ const generate = (lod: number): Skin => {
   };
 };
 
+/**
+ * Per joint how the woman's parts scale about it from the man's (across, along y, in depth), the
+ * skin's two swing joints last: a narrower waist and ribs on hips a little wider, a slimmer neck,
+ * a head 4 % smaller, slimmer and shorter arms, smaller hands, slimmer shins, smaller feet.
+ */
+const SCALE: number[][] = (() => {
+  const [arm, fore, hand] = [
+    [0.86, 0.275 / 0.29, 0.86],
+    [0.85, 0.25 / 0.26, 0.85],
+    [0.9, 0.92, 0.9],
+  ];
+  const [thigh, shin, foot] = [
+    [1, 1, 1],
+    [0.93, 1, 0.93],
+    [0.9, 1, 0.92],
+  ];
+  const chest = [0.89, 0.95, 0.9];
+  return [
+    [1.04, 1, 1],
+    [0.87, 0.115 / 0.12, 0.88],
+    chest,
+    [0.86, 0.955, 0.86],
+    [0.96, 0.96, 0.96],
+    ...[chest, arm, fore, hand],
+    ...[chest, arm, fore, hand],
+    ...[thigh, shin, foot, foot],
+    ...[thigh, shin, foot, foot],
+    arm,
+    arm,
+  ];
+})();
+
+/**
+ * The woman's skin from the man's, vertex for vertex (the same triangles, weights and channels):
+ * her volumes are shaped on his rest mesh (a bust under the ribs' line, hips and buttocks fuller,
+ * the waist drawn in higher), then each vertex goes where its joints' own scales about their binds
+ * carry it, mixed by its weights, onto her skeleton (RESTS). The man's mesh is kept as `u`.
+ */
+const retarget = (s: Skin, build: number): Skin => {
+  const n = s.w.length;
+  const v = s.v.slice();
+  const [from, to] = [BINDS[0], BINDS[build]];
+  const ARMS: number[] = [J.ARM_L, J.FOREARM_L, J.HAND_L, J.ARM_R, J.FOREARM_R, J.HAND_R];
+  /** The mix of the two joints' scales at vertex i. */
+  const scaleAt = (i: number) => {
+    const [a, b, w] = [s.j[2 * i], s.j[2 * i + 1], s.w[i]];
+    return [0, 1, 2].map(r => SCALE[a][r] * (1 - w) + SCALE[b][r] * w);
+  };
+  for (let i = 0; i < n; i++) {
+    const [a, b, w] = [s.j[2 * i], s.j[2 * i + 1], s.w[i]];
+    const p = [v[i * 6], v[i * 6 + 1], v[i * 6 + 2]];
+    const [nx, , nz] = [v[i * 6 + 3], v[i * 6 + 4], v[i * 6 + 5]];
+    const arm = +ARMS.includes(a) * (1 - w) + +ARMS.includes(b) * w;
+    if (s.g[i] == KIND.BODY && arm < 0.5) {
+      const [ax, y, sx] = [Math.abs(p[0]), p[1], Math.sign(p[0])];
+      const k = 1 - arm * 2;
+      // The bust: fullest at 1.345 m, a firm line under it, a slope above it to the collarbones.
+      p[2] -=
+        k *
+        BUST *
+        clamp(-nz * 1.6) *
+        bell(ax - 0.066, 0.05) *
+        bell(y - 1.345, y < 1.345 ? 0.042 : 0.065);
+      // The buttocks, and the hips out at the sides; the waist in under the ribs.
+      p[2] += k * 0.012 * clamp(nz * 1.6) * bell(ax - 0.085, 0.07) * bell(y - 0.94, 0.075);
+      p[0] +=
+        k *
+        sx *
+        clamp(Math.abs(nx) * 1.4) *
+        (0.009 * bell(y - 0.93, 0.075) - 0.006 * bell(y - 1.175, 0.05));
+    }
+    for (let r = 0; r < 3; r++) {
+      v[i * 6 + r] =
+        (1 - w) * (to[a][r] + SCALE[a][r] * (p[r] - from[a][r])) +
+        w * (to[b][r] + SCALE[b][r] * (p[r] - from[b][r]));
+    }
+  }
+  // Her normals: the area-weighted mean of the triangles round each vertex, as the man's are made.
+  const N = new Float32Array(n * 3);
+  for (let i = 0; i < s.t.length; i += 3) {
+    const [a, b, d] = [s.t[i] * 6, s.t[i + 1] * 6, s.t[i + 2] * 6];
+    const [ux, uy, uz] = [v[b] - v[a], v[b + 1] - v[a + 1], v[b + 2] - v[a + 2]];
+    const [wx, wy, wz] = [v[d] - v[a], v[d + 1] - v[a + 1], v[d + 2] - v[a + 2]];
+    const f = [uy * wz - uz * wy, uz * wx - ux * wz, ux * wy - uy * wx];
+    for (const k of [a, b, d]) {
+      N[k / 2] += f[0];
+      N[k / 2 + 1] += f[1];
+      N[k / 2 + 2] += f[2];
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    const l = Math.hypot(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]);
+    // A vertex of no triangle (a cut's middle) keeps its own.
+    if (l > 0) {
+      for (let r = 0; r < 3; r++) {
+        v[i * 6 + 3 + r] = N[i * 3 + r] / l;
+      }
+    }
+  }
+  // The channels' shifts go with their vertices' scale: the head's, all one.
+  const m = s.m.map(({ i, d }) => {
+    const e = d.slice();
+    i.forEach((k, h) => {
+      const sc = scaleAt(k);
+      for (let r = 0; r < 3; r++) {
+        e[h * 6 + r] *= sc[r];
+      }
+    });
+    return { i, d: e };
+  });
+  return { ...s, v, m, b: build, u: s.v };
+};
+
+/** How far out the woman's bust stands at its fullest, on the man's rest mesh, metres. */
+export const BUST = 0.022;
+
+const generate = (lod: number, build: number): Skin => {
+  fem = +(build == BUILD.FEMALE);
+  try {
+    const s = shape(lod);
+    return build ? retarget(s, build) : s;
+  } finally {
+    fem = 0;
+  }
+};
+
 const skins: Skin[] = [];
 /**
  * The skin at a level of detail: 0 far, 1 near (see DETAIL in mesh.ts), 2 near, headless and
  * handless, for the eye, 3 close (CLOSE in render.ts), twice the rings and half more sides, the
  * face carved finest. Built once.
  */
-export const body = (lod: number) => (skins[lod] ??= generate(lod));
+export const body = (lod: number, build = 0) => (skins[lod + 4 * build] ??= generate(lod, build));
 
 /** Per LIMB the joint the centre of its cut face hangs on. */
 const ROOT = [0, J.NECK, J.CHEST, J.CHEST, J.PELVIS, J.PELVIS];
@@ -1431,12 +1621,18 @@ const sever = (s: Skin, limb: number): Skin[] => {
   const w = new Float32Array([...s.w, 0]);
   const o = new Float32Array([...s.o, 1]);
   const g = new Uint8Array([...s.g, 0]);
+  // The man's mesh under another build's, with the cut's middle too.
+  const u = s.u && new Float32Array(n * 6 + 6);
+  u?.set(s.u!);
+  u?.set(v.subarray(n * 6), n * 6);
   return t.map((x, k) => ({
     v,
     o,
     j,
     w,
     g,
+    b: s.b,
+    u,
     m: s.m,
     t: new Uint16Array(x),
     c: new Uint8Array(c[k]),
@@ -1450,20 +1646,25 @@ const parts: Skin[][] = [];
  * The skin at a level of detail without the LIMB `limb`, then the limb alone, each closed by a
  * glowing cut face whose middle is the last vertex of the last triangle. Built once.
  */
-export const cut = (lod: number, limb: number) =>
-  (parts[lod * 8 + limb] ??= sever(body(lod), limb));
+export const cut = (lod: number, limb: number, build = 0) =>
+  (parts[(lod + 4 * build) * 8 + limb] ??= sever(body(lod, build), limb));
 
-const BIND = solve(rest()).pos;
-BIND.push(BIND[J.ARM_R], BIND[J.ARM_L]);
+/** Per BUILD the joints' places at rest, the skin's two swing joints (the shoulders') last. */
+const BINDS = RESTS.map((_, build) => {
+  const b = solve(rest([0, 0, 0], 0, build)).pos;
+  return [...b, b[J.ARM_R], b[J.ARM_L]];
+});
+/** A build's joints at rest (solve() of its rest pose), for what is placed on its body. */
+export const bindOf = (build = 0) => BINDS[build];
 
 /**
  * The upper arm of shoulder joint `j` in the world without its turn about itself: the swing of
  * its rotation from the collarbone's, about the bone's rest axis, on the collarbone's.
  */
-const swing = (rot: Quat[], j: number): Quat => {
+const swing = (rot: Quat[], j: number, build = 0): Quat => {
   const c = rot[j - 1];
   const l = mul([-c[0], -c[1], -c[2], c[3]], rot[j]);
-  const b = REST[j + 1];
+  const b = RESTS[build][j + 1];
   const n = Math.hypot(...b);
   const p = (l[0] * b[0] + l[1] * b[1] + l[2] * b[2]) / (n * n);
   const t = [b[0] * p, b[1] * p, b[2] * p, l[3]];
@@ -1478,8 +1679,8 @@ const CAPPED = 0.6;
  * turn about itself, as a plate strapped to the trunk does (the user, 2026-11-10: it rode a
  * reaching arm round to the front of the chest).
  */
-export const capped = (rot: Quat[], j: number): Quat => {
-  const [c, w] = [rot[j - 1], swing(rot, j)];
+export const capped = (rot: Quat[], j: number, build = 0): Quat => {
+  const [c, w] = [rot[j - 1], swing(rot, j, build)];
   const th =
     2 * Math.acos(Math.min(Math.abs(c[0] * w[0] + c[1] * w[1] + c[2] * w[2] + c[3] * w[3]), 1));
   const k = clamp((th - 1) / 1.2);
@@ -1548,8 +1749,9 @@ export const skin = (
   colors: number[][],
   face?: ArrayLike<number>,
 ) => {
+  const BIND = BINDS[s.b ?? 0];
   for (let k = 0; k < JOINTS + 2; k++) {
-    const r = k < JOINTS ? rot[k] : swing(rot, k == SWING_R ? J.ARM_R : J.ARM_L);
+    const r = k < JOINTS ? rot[k] : swing(rot, k == SWING_R ? J.ARM_R : J.ARM_L, s.b);
     const p = pos[k < JOINTS ? k : k == SWING_R ? J.ARM_R : J.ARM_L];
     const t = turn(r, BIND[k]);
     D.set(r, k * 8);

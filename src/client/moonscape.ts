@@ -1131,6 +1131,92 @@ const sites = (o: number[], def: WorldDef) => {
   }
 };
 
+/**
+ * The ranges on the horizon, all round, past the crater wall: radius from the middle of the play
+ * area, height of its highest peak, rows of points from foot to crest, its grey in the sun and in
+ * the shade (the nearer darker and sharper, the farther paler and flatter, as the eye expects with
+ * no air), seed.
+ * Inside the stars' dome and, from the far side of the bound, the far plane.
+ */
+export const RANGES = [
+  [640, 140, 4, 0.32, 0.03, 3],
+  [690, 180, 3, 0.3, 0.05, 5],
+  [740, 220, 3, 0.28, 0.07, 8],
+];
+/** Columns a range is drawn in: three quarters of a degree each, no segment shows on its skyline. */
+export const RANGE_COLS = 480;
+/**
+ * How high a range's crest is on a bearing (u, v), as a share of its highest peak: long swells,
+ * ridges, then finer and finer teeth of rock, all from noise on the circle (so it closes on itself),
+ * with two massifs that stand over the rest and two passes, each range's at its own bearings: one
+ * knows where one is by them.
+ */
+const crest = (u: number, v: number, R: number, s: number) => {
+  const n = (l: number, k: number) => noise((u * R) / l + 7 * s, (v * R) / l - 3 * s, s + k);
+  const turn = (k: number) => {
+    const a = TAU * hash(s, k, 97);
+    return u * Math.cos(a) + v * Math.sin(a);
+  };
+  const massif = Math.max(sm((turn(1) - 0.93) / 0.07), 0.8 * sm((turn(2) - 0.95) / 0.05));
+  const pass = Math.max(sm((turn(3) - 0.985) / 0.015), sm((turn(4) - 0.985) / 0.015));
+  const ridge = 1 - Math.abs(2 * n(150, 2) - 1);
+  return (
+    (0.42 + 0.2 * n(520, 1) + 0.14 * ridge * ridge + 0.24 * massif) * (1 - 0.5 * pass) +
+    0.1 * (n(60, 3) - 0.5) +
+    0.05 * (n(24, 4) - 0.5) +
+    0.025 * (n(9, 5) - 0.5)
+  );
+};
+/**
+ * The ranges, painted: no texture, no light of the scene's (layer -2, which takes none and casts
+ * no shade worth the name), each point's grey worked out here from the map's sun. A face that
+ * looks at the sun is lit, one that looks away is in shade; spurs come down from the crest, each
+ * with a lit side and a dark one; the crest itself catches the light. The foot is under the
+ * horizon, behind the crater wall.
+ */
+const ranges = (o: number[], sun: Vec3) => {
+  for (const [R, H, rows, sunny, shady, s] of RANGES) {
+    const col = (i: number) => {
+      const a = (i * TAU) / RANGE_COLS;
+      const [u, v] = [Math.cos(a), Math.sin(a)];
+      const h = H * crest(u, v, R, s);
+      // The slope of the crest along the range, and of the spurs.
+      const b = ((i + 1) * TAU) / RANGE_COLS;
+      const along = (H * crest(Math.cos(b), Math.sin(b), R, s) - h) / ((R * TAU) / RANGE_COLS);
+      return Array.from({ length: rows + 1 }, (_, j) => {
+        const f = j / rows;
+        // The foot nearer than the crest: a slope of three in ten.
+        const r = R - 0.3 * h * (1 - f);
+        // Spurs come down from the crest aslant, wider apart at the foot; a gully between two is darker whatever the sun.
+        const lane = (R / (30 + 26 * (1 - f))) * (1 + 0.05 * f);
+        const spur = 2 * noise(u * lane + s + 1.7 * f, v * lane - 1.3 * f, s + 9) - 1;
+        const n = unit([
+          -u - v * (-1.5 * along - 1.6 * spur * (1 - 0.5 * f)),
+          0.75,
+          -v + u * (-1.5 * along - 1.6 * spur * (1 - 0.5 * f)),
+        ]);
+        const lit = Math.max(dot(n, sun), 0);
+        const rock =
+          (0.8 + 0.3 * noise((u * R) / 90 - s, (v * R) / 90 + 2.3 * f, s + 11)) *
+          (0.72 + 0.28 * sm(0.5 + 0.9 * spur));
+        // In the shade a little light from the ground; on the crest a rim of light.
+        const g =
+          rock * (shady + (sunny - shady) * Math.min(1.2 * lit + (j === rows ? 0.3 : 0), 1));
+        // Its normal looks away from the crater: no highlight of the sun's on it.
+        return [C[0] + u * r, -25 + (h + 25) * f, C[2] + v * r, u, 0, v, g, g, -2, 1.03 * g];
+      });
+    };
+    let p = col(0);
+    for (let i = 1; i <= RANGE_COLS; i++) {
+      const q = col(i % RANGE_COLS);
+      for (let j = 0; j < rows; j++) {
+        o.push(...p[j], ...q[j], ...q[j + 1], ...p[j], ...q[j + 1], ...p[j + 1]);
+      }
+      p = q;
+    }
+  }
+};
+
 /** 3000 stars, tiny glowing squares facing the middle of the play area on a dome above the horizon. */
 const stars = (o: number[]) => {
   for (let i = 0; i < 3000; i++) {
@@ -1221,6 +1307,7 @@ export const moonscape = (def: WorldDef): number[] => {
     terrain(o, def);
     sites(o, def);
   }
+  ranges(o, unit(def.sun.dir as Vec3));
   stars(o);
   earth(o);
   return o;

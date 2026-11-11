@@ -5,7 +5,7 @@ import { ground } from '../shared/relief';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
 import { STRIDE } from './mesh';
-import { SKY, moonscape } from './moonscape';
+import { RANGES, RANGE_COLS, SKY, moonscape } from './moonscape';
 import { FAR } from './render';
 
 const v = moonscape(MOON);
@@ -14,8 +14,11 @@ const verts = Array.from({ length: v.length / STRIDE }, (_, i) =>
 );
 const C = [80, 0, 140];
 const dist = (p: number[], c: number[]) => Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]);
-/** What glows far from the crater: the stars and the Earth. */
-const sky = new Set(verts.filter(p => p[8] === -2 && dist(p, C) > 600));
+/** The ranges on the horizon: what glows with a level normal. */
+const far = verts.filter(p => p[8] === -2 && p[4] === 0 && dist(p, C) > 550);
+const ranges = new Set(far);
+/** What else glows far from the crater: the stars and the Earth. */
+const sky = new Set(verts.filter(p => p[8] === -2 && dist(p, C) > 600 && !ranges.has(p)));
 /** The highest and the lowest of a long list. */
 const hi = (l: number[]) => l.reduce((a, v) => Math.max(a, v), -Infinity);
 const lo = (l: number[]) => l.reduce((a, v) => Math.min(a, v), Infinity);
@@ -79,7 +82,8 @@ describe('moonscape', () => {
     // The arena's own relief is 16,000 more, the rille's rock and rim 30,000, the boulders 100,000 (512 triangles a big one).
     expect(verts.length).toBeGreaterThan(330000);
     // The craters' stones and twelve small craters more are 12,600: then the rims' bands of detail 33,000 and the pits 10,000: the cap went from 380,000 to 440,000.
-    expect(verts.length).toBeLessThan(440000);
+    // The ranges on the horizon are 28,800: the cap went to 470,000.
+    expect(verts.length).toBeLessThan(470000);
     expect(moonscape(MOON)).toEqual(v);
   });
 
@@ -90,9 +94,11 @@ describe('moonscape', () => {
     expect(hi(d)).toBeLessThan(SKY + 5);
     expect(lo([...sky].map(p => p[1]))).toBeGreaterThan(-100);
     // The crater wall is drawn to 1.65 of the bound: no star in front of it from inside.
-    const rest = verts.filter(p => !sky.has(p)).map(p => dist(p, C));
+    const rest = verts.filter(p => !sky.has(p) && !ranges.has(p)).map(p => dist(p, C));
     expect(hi(rest)).toBeGreaterThan(500);
     expect(hi(rest)).toBeLessThan(SKY - 100);
+    // Nor in front of a range.
+    expect(hi(far.map(p => dist(p, C)))).toBeLessThan(SKY - 15);
   });
 
   it('draws nothing beyond the far plane, from anywhere on the bound', () => {
@@ -639,6 +645,146 @@ describe('moonscape', () => {
   });
 });
 
+describe('moonscape, the horizon', () => {
+  const [cx, cz, ba, bb] = relief.bound;
+  const deg = (r: number) => (r * 180) / Math.PI;
+  /** The highest a set of triangles stands on each degree of bearing from an eye, in degrees over the level; -90 where none does. */
+  const skyline = (tris: number[][][], eye: number[]) => {
+    const top = new Array<number>(360).fill(-90);
+    for (const t of tris) {
+      for (let k = 0; k < 3; k++) {
+        const [p, q] = [t[k], t[(k + 1) % 3]];
+        const [a, b] = [p, q].map(v => deg(Math.atan2(v[2] - eye[2], v[0] - eye[0])));
+        // Turned the short way round.
+        const d = ((b - a + 540) % 360) - 180;
+        for (let g = Math.ceil(Math.min(a, a + d)); g <= Math.max(a, a + d); g++) {
+          const [c, n] = [Math.cos((g * Math.PI) / 180), Math.sin((g * Math.PI) / 180)];
+          const den = (q[0] - p[0]) * n - (q[2] - p[2]) * c;
+          const f = Math.abs(den) < 1e-9 ? 0 : ((eye[0] - p[0]) * n - (eye[2] - p[2]) * c) / den;
+          if (f < -1e-9 || f > 1 + 1e-9) {
+            continue;
+          }
+          const at = [0, 1, 2].map(j => p[j] + f * (q[j] - p[j]));
+          const e = deg(Math.atan2(at[1] - eye[1], Math.hypot(at[0] - eye[0], at[2] - eye[2])));
+          top[(g + 720) % 360] = Math.max(top[(g + 720) % 360], e);
+        }
+      }
+    }
+    return top;
+  };
+  /** The crater wall as drawn: the relief past the bound. */
+  const wall = land.filter(t => t.every(p => reach(relief, p[0], p[2]) > 0.98));
+  const mounts: number[][][] = [];
+  for (let k = 0; k < far.length; k += 3) {
+    mounts.push(far.slice(k, k + 3));
+  }
+  /** A player's eyes: at the middle of the play area, and four places half way to the bound. */
+  const eyes = [
+    [0, 0],
+    [0.55, 0],
+    [-0.55, 0],
+    [0, 0.55],
+    [0, -0.55],
+  ].map(([u, v]) => {
+    const [x, z] = [cx + u * ba, cz + v * bb];
+    const g = ground(world, x, z);
+    return [x, (Number.isFinite(g) ? g : 0) + 1.7, z];
+  });
+
+  it('has no tooth on the crater wall: from the middle and half way to the bound its skyline turns by under 0.6 degrees a degree of bearing', () => {
+    expect(wall.length).toBeGreaterThan(1500);
+    for (const eye of eyes) {
+      const top = skyline(wall, eye);
+      expect(lo(top)).toBeGreaterThan(1);
+      let [worst, peaks] = [0, 0];
+      for (let g = 0; g < 360; g++) {
+        const [a, b, c] = [top[(g + 359) % 360], top[g], top[(g + 1) % 360]];
+        worst = Math.max(worst, Math.abs(a - 2 * b + c));
+        // A summit over both its neighbours by a tenth of a degree: a tooth, if there are many.
+        peaks += b > a + 0.1 && b > c + 0.1 ? 1 : 0;
+      }
+      expect(worst, `from ${eye}`).toBeLessThan(0.6);
+      expect(peaks, `from ${eye}`).toBeLessThan(10);
+    }
+  });
+
+  it('stands three ranges all round the horizon, past the wall and inside the stars: over the wall on every bearing from the middle', () => {
+    expect(far.length).toBe(RANGE_COLS * 6 * RANGES.reduce((t, r) => t + r[2], 0));
+    // Past where the wall is down on the plain, and nearer than the stars.
+    expect(lo(far.map(p => reach(relief, p[0], p[2])))).toBeGreaterThan(1.65);
+    expect(hi(far.map(p => dist(p, C)))).toBeLessThan(SKY - 15);
+    // Their feet under the level: no gap under them.
+    expect(lo(far.map(p => p[1]))).toBeLessThan(-20);
+    const top = skyline(mounts, eyes[0]);
+    const rim = skyline(wall, eyes[0]);
+    for (let g = 0; g < 360; g++) {
+      expect(top[g] - rim[g], `bearing ${g}`).toBeGreaterThan(0.3);
+    }
+    // Half way to the bound: over the wall on three bearings in five (the near wall is the tallest thing there).
+    for (const eye of eyes.slice(1)) {
+      const [t, r] = [skyline(mounts, eye), skyline(wall, eye)];
+      expect(t.filter((e, g) => e > r[g] + 0.3).length, `from ${eye}`).toBeGreaterThan(216);
+    }
+    // Massifs and passes: the highest crest twice the lowest and more.
+    expect(hi(top) / lo(top)).toBeGreaterThan(2);
+    // Nearer, darker: the first range's mean grey under the last's in the shade, and each lit where it looks at the sun.
+    const mean = (l: number[]) => l.reduce((a, v) => a + v, 0) / l.length;
+    const of = (k: number, pick: (p: number[]) => boolean) =>
+      mean(
+        far
+          .filter(
+            p => Math.abs(Math.hypot(p[0] - C[0], p[2] - C[2]) - RANGES[k][0]) < 70 && pick(p),
+          )
+          .map(p => p[6]),
+      );
+    const [east, west] = [(p: number[]) => p[0] > C[0] + 500, (p: number[]) => p[0] < C[0] - 500];
+    expect(of(0, east)).toBeLessThan(of(2, east));
+    expect(of(0, west)).toBeGreaterThan(3 * of(0, east));
+    expect(hi(far.map(p => p[6]))).toBeLessThan(0.45);
+  });
+
+  it('draws a fine skyline: a point every three quarters of a degree on each range', () => {
+    for (const [R] of RANGES) {
+      const crest = far.filter(p => Math.abs(Math.hypot(p[0] - C[0], p[2] - C[2]) - R) < 1e-6);
+      const turn = [
+        ...new Set(crest.map(p => deg(Math.atan2(p[2] - C[2], p[0] - C[0])).toFixed(3))),
+      ]
+        .map(Number)
+        .sort((a, b) => a - b);
+      expect(turn).toHaveLength(RANGE_COLS);
+      turn.forEach((a, k) =>
+        expect((turn[(k + 1) % turn.length] - a + 360) % 360).toBeLessThan(0.76),
+      );
+    }
+  });
+
+  it('keeps the ranges low: under 32 degrees from anywhere on the bound, 18 from the middle, and never on the Earth', () => {
+    const earth = [...sky].filter(p => Math.abs(p[3]) + Math.abs(p[5]) > 0 && p[1] > 400);
+    const rim = Array.from({ length: 36 }, (_, i) => {
+      const [x, z] = [cx + 0.99 * ba * Math.cos(i / 5.73), cz + 0.99 * bb * Math.sin(i / 5.73)];
+      return [x, at(x, z) + 1.7, z];
+    });
+    expect(hi(skyline(mounts, eyes[0]))).toBeLessThan(18);
+    for (const eye of [eyes[0], ...rim]) {
+      const top = skyline(mounts, eye);
+      expect(hi(top), `from ${eye}`).toBeLessThan(32);
+      // The Earth's disc from here: its lowest point over the level, and its bearings.
+      const disc = [...sky].filter(
+        p => dist(p, [C[0] + 0.3 * SKY, 0.62 * SKY, C[2] - 0.75 * SKY]) < 70,
+      );
+      expect(disc.length).toBeGreaterThan(1000);
+      const low = lo(
+        disc.map(p => deg(Math.atan2(p[1] - eye[1], Math.hypot(p[0] - eye[0], p[2] - eye[2])))),
+      );
+      const turn = disc.map(p => Math.round(deg(Math.atan2(p[2] - eye[2], p[0] - eye[0]))));
+      for (const g of new Set(turn)) {
+        expect(top[(g + 720) % 360], `from ${eye}, bearing ${g}`).toBeLessThan(low - 3);
+      }
+    }
+    expect(earth.length).toBeGreaterThan(0);
+  });
+});
+
 describe('moonscape and the rovers', () => {
   /** What is drawn in the arena that is not its stone floor's craters, the relief or the sky. */
   const things = verts.filter(p => p[8] !== TEX.STONE && inArena(p));
@@ -653,8 +799,8 @@ describe('moonscape and the rovers', () => {
     expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
   });
 
-  it('is 435,483 vertices, the four static rovers and the two shuttles no longer among them', () => {
-    expect(verts.length).toBe(435483);
+  it('is 464,283 vertices, the four static rovers and the two shuttles no longer among them', () => {
+    expect(verts.length).toBe(464283);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {

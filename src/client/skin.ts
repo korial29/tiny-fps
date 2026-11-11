@@ -1547,7 +1547,7 @@ const retarget = (s: Skin, build: number): Skin => {
 };
 
 /** How far out the woman's bust stands at its fullest, on the man's rest mesh, metres. */
-export const BUST = 0.022;
+export const BUST = 0.028;
 
 const generate = (lod: number, build: number): Skin => {
   fem = +(build == BUILD.FEMALE);

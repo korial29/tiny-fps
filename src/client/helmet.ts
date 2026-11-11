@@ -192,7 +192,7 @@ export const unit = (v: Vec3): Vec3 => {
 export const pow = (t: number, p: number) => Math.sign(t) * Math.abs(t) ** p;
 
 /** A triangle over `p`, wound as its first normal faces, in `col` on `layer`; none if it has no area. */
-const face = (out: number[], col: number[], layer: number, p: Spot[]) => {
+export const face = (out: number[], col: number[], layer: number, p: Spot[]) => {
   const c = cross(sub(p[1][0], p[0][0]), sub(p[2][0], p[0][0]));
   if (Math.hypot(...c) < 1e-9) {
     return;

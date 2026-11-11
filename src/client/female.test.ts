@@ -8,9 +8,12 @@ import type { PlayerState } from '../shared/types';
 import { GLOSS, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { BUILD, JOINT as J, RESTS, rest, solve } from './rig';
+import { helm } from './helm';
+import { helmet } from './helmet';
+import { hose, shoulders } from './pack';
 import { BUST, bindOf, body, tressOf } from './skin';
 import { createRunner, femme, soldier, stance } from './soldier';
-import { HEAD_SCALE, LOWEST, STYLE, STYLES, hair, styleOf, tress } from './hair';
+import { HEAD_SCALE, LOWEST, STYLE, STYLES, hair, styleOf, sway, tress } from './hair';
 import { CH, lookOf } from './features';
 import { FRAMES, PALETTE, sprite } from './face';
 import { createBody } from './body';
@@ -184,13 +187,42 @@ describe('her armour', () => {
     armor(out, 0, s, lod > 2);
     return { out, n };
   };
-  it('is his suit, plate for plate, cut on her body', () => {
+  it('is his suit, plate for plate, cut on her body, plus a cap on each shoulder', () => {
     for (const lod of [0, 1, 3]) {
       const [a, b] = [draw(0, lod), draw(F, lod)];
-      expect(b.out.length - b.n).toBeGreaterThan(0);
-      // The same plates: only the chest plate's swell differs, which adds no triangle.
-      expect(b.out.length - b.n).toBe(a.out.length - a.n);
+      // Hers follow the shoulder (the user, 2026-11-11): caps cut out of the skin, where he has pads.
+      // The rest is the same plates: the caps are all she has more.
+      expect(b.out.length - b.n).toBeGreaterThan(a.out.length - a.n + 60 * STRIDE);
     }
+  });
+  it('has no plate standing over her shoulders, as he has', () => {
+    const count = (build: number) => {
+      const out: number[] = [];
+      soldier(out, createRunner(who(), undefined, build), [1, 0, 0], 1, false, true);
+      return out.length;
+    };
+    const pads: number[] = [];
+    shoulders(
+      pads,
+      [
+        [
+          [0, 0, 0],
+          [0, 0, 0, 1],
+        ],
+        [
+          [0, 0, 0],
+          [0, 0, 0, 1],
+        ],
+      ],
+      1,
+    );
+    const [a, b] = [draw(0, 1), draw(F, 1)];
+    const hairs: number[] = [];
+    hair(hairs, [0, 0, 0], [0, 0, 0, 1], styleOf(1), tressOf(1), 1, sway(0, 0, 0));
+    // Her vertices: his, less the pads, plus her caps and her hair.
+    expect(count(F)).toBe(
+      count(0) - pads.length + (b.out.length - b.n) - (a.out.length - a.n) + hairs.length,
+    );
   });
   it.each(STANCES)('sits on her body in the stance: %s', (_, o) => {
     const r = createRunner(who(o), undefined, F);
@@ -336,7 +368,42 @@ describe('her hair', () => {
       return out.length;
     };
     expect(count(F, false)).toBeGreaterThan(count(0, false));
-    expect(count(F, true)).toBe(count(0, true));
+    // Under her helmet, no hair: she differs from him by the helmet alone, hers with no hose.
+    const size = (draw: (out: number[]) => void) => {
+      const out: number[] = [];
+      draw(out);
+      return out.length;
+    };
+    const at: [number, number, number] = [0, 0, 0];
+    const his =
+      size(o => helmet(o, at, [0, 0, 0, 1], [1, 0, 0], 1)) +
+      size(o => hose(o, [0, 1.62, 0], [0, 0, 0, 1], [0, 1.4, 0], [0, 0, 0, 1], 1));
+    const hers = size(o => helm(o, at, [0, 0, 0, 1], [1, 0, 0], 1));
+    const pads: number[] = [];
+    shoulders(
+      pads,
+      [
+        [
+          [0, 0, 0],
+          [0, 0, 0, 1],
+        ],
+        [
+          [0, 0, 0],
+          [0, 0, 0, 1],
+        ],
+      ],
+      1,
+    );
+    const plates = (build: number) => {
+      const s = body(1, build);
+      const out: number[] = [];
+      skin(out, s, solve(rest([0, 0, 0], 0, build)), palette([1, 0, 0]));
+      const n = out.length;
+      armor(out, 0, s, false);
+      return out.length - n;
+    };
+    // And by her shoulders: caps of the armour for his pads.
+    expect(count(F, true)).toBe(count(0, true) - his + hers - pads.length + plates(F) - plates(0));
   });
   it('gives the same look for the same id and choice', () => {
     const look = () => {

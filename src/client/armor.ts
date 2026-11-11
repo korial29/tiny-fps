@@ -31,6 +31,8 @@ interface Region {
   /** Its bottom and top at each angle (degrees from the front, + outward), when not level: a leg's opening. */
   low?: (a: number) => number;
   high?: (a: number) => number;
+  /** Only on the woman's skin. */
+  fem?: boolean;
   /** A round plate: its outline an ellipse in (angle, height), [half the angle, middle height, half height]. */
   round?: [number, number, number];
 }
@@ -53,11 +55,20 @@ const pecs = (x: number, y: number) =>
   (1 - smooth(1.41, 1.48, y));
 
 /**
- * The woman's chest plate (skin.ts shapes her bust under it): one moulded piece, the hollow of the
- * sternum filled a little, not two cups.
+ * The woman's chest plate (the user, 2026-11-11: a more feminine armour, with the chest; until then
+ * one moulded piece with the sternum filled): a cup each side over the bust skin.ts shapes, `CUP`
+ * metres out at most, fullest low with a firm line under it, the sternum left hollow between them.
  */
-const bust = (x: number, y: number) =>
-  0.007 * Math.exp(-((x / 0.034) ** 2)) * Math.exp(-(((y - 1.35) / 0.05) ** 2));
+export const CUP = 0.014;
+export const bust = (x: number, y: number) =>
+  CUP *
+  Math.exp(-(((Math.abs(x) - 0.068) / 0.04) ** 2)) *
+  Math.exp(-(((y - 1.342) / (y < 1.342 ? 0.036 : 0.06)) ** 2));
+
+/** The woman's shoulder cap: a low dome, 5 mm more at the middle of the deltoid; its middle height and half height on the arm at rest. */
+export const SHOULDER = [1.4, 0.07];
+const cap = (_x: number, y: number) =>
+  0.005 * Math.max(0, 1 - ((y - SHOULDER[0]) / SHOULDER[1]) ** 2);
 
 /** The knee pad's dome: up to 8 mm out at the kneecap. */
 const knee = (x: number, y: number) =>
@@ -130,6 +141,21 @@ export const REGIONS: Region[] = [
   { part: PART.TRUNK, cx: 0, y: [1.47, 1.528], a: [-78, 78], low: a => chestTop(a) + COLLAR_GAP },
   { part: PART.TRUNK, cx: 0, y: [1.4 + COLLAR_GAP, 1.505], a: [-62, -5], face: 180 },
   { part: PART.TRUNK, cx: 0, y: [1.4 + COLLAR_GAP, 1.505], a: [5, 62], face: 180 },
+  // The woman's shoulders (the user, 2026-11-11: discreet, one block that follows the shoulder's
+  // shape, where the man has a plate standing over his): a cap cut out of the skin of each
+  // deltoid, from the front round the outside to the back.
+  {
+    part: PART.ARM,
+    cx: 0.207,
+    y: [SHOULDER[0] - SHOULDER[1], SHOULDER[0] + SHOULDER[1]],
+    a: [-35, 170],
+    swell: cap,
+    fem: true,
+  },
+  // The top of the deltoid is the trunk's skin: the same cap goes on over it, each side, between
+  // the collar piece and the shoulder blade's.
+  { part: PART.TRUNK, cx: 0, y: [1.34, 1.52], a: [80, 124], fem: true },
+  { part: PART.TRUNK, cx: 0, y: [1.34, 1.52], a: [-124, -80], fem: true },
   // The back (the user, 2026-11-10, for Highline, where no pack covers it): a plate between the
   // shoulder blades and one on the small of the back, GAP apart.
   { part: PART.TRUNK, cx: 0, y: [1.2, 1.4], a: [-58, 58], face: 180 },
@@ -317,7 +343,7 @@ const cook = (s: Skin, fine: boolean): Recipe => {
     const [lo, hi] = [Math.min(...ys), Math.max(...ys)];
     for (let g = 0; g < REGIONS.length; g++) {
       const region = shaped(REGIONS[g], s);
-      if (region.part != part || hi < SPANS[g][0] || lo > SPANS[g][1]) {
+      if (region.part != part || hi < SPANS[g][0] || lo > SPANS[g][1] || (region.fem && !s.b)) {
         continue;
       }
       const tri: Corner[] = [0, 1, 2].map(c => {
@@ -415,7 +441,7 @@ const scratchesOn = (
     const at = [0, 1, 2].map(j => P[0][j] + (P[1][j] - P[0][j]) * b1 + (P[2][j] - P[0][j]) * b2);
     const probe = (x: number[]): Corner => [...x, 0, 0, 0, 0, 0, 0, 0];
     const g = REGIONS.findIndex(
-      (rg, i) => rg.part == part && LIMITS[i].every(f => f(probe(at)) >= 0),
+      (rg, i) => rg.part == part && !(rg.fem && !s.b) && LIMITS[i].every(f => f(probe(at)) >= 0),
     );
     if (g < 0) {
       continue;

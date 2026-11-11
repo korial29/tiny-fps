@@ -72,40 +72,52 @@ describe('helmet', () => {
   }
 
   // Detailed (the user, 2026-11-10: whatever it costs), still a fraction of a body (34 000 close).
-  it('is a round dome after DOOM’s, narrower than the boxy one it replaces, with nothing on top and a short jaw box', () => {
-    // Round: exponents a little over an ellipsoid's 2, where the boxy shell's were 3.2 and 3.
-    expect(SHELL.e[0]).toBeLessThan(2.8);
-    expect(SHELL.e[1]).toBeLessThan(2.8);
-    // Drawn 21 cm wide, where the old one was 23; no taller, no deeper.
+  it('has the shape of the marine’s helmet the user gave (2026-11-11): narrower, a block with a lit bar on top, a tall visor cut in a V by the jaw box, vents on the sides', () => {
+    // Drawn 21 cm wide, where it was 23; no taller, a little less deep.
     expect(SHELL.r[0] * SCALE).toBeLessThan(0.108);
     expect(SHELL.r[1] * SCALE).toBeLessThanOrEqual(0.14);
-    expect(SHELL.r[2] * SCALE).toBeLessThanOrEqual(0.135);
-    for (const lod of [1, 3]) {
-      const out = make(lod);
-      const p = Array.from({ length: count(out) }, (_, i) => at(out, i).map((w, k) => w - HEAD[k]));
-      // Nothing over the dome: the vent block is gone.
-      const top = shrunk([0, SHELL.c[1] + SHELL.r[1], 0])[1];
-      expect(Math.max(...p.map(q => q[1]))).toBeLessThan(top + 0.001);
-      // The jaw box stands 3 to 5 cm out of the shell's front, where the snout stood 7.
-      const front = shrunk([0, 0, SHELL.c[2] - SHELL.r[2]])[2];
-      const jut = front - Math.min(...p.map(q => q[2]));
-      expect(jut).toBeGreaterThan(0.025);
-      expect(jut).toBeLessThan(0.05);
-      // The ear discs are round: as tall as they are deep, at the helmet's widest.
-      const side = shrunk([SHELL.r[0], 0, 0])[0];
-      const ear = p.filter(q => q[0] > side + 0.004);
-      const span = (k: number) => Math.max(...ear.map(q => q[k])) - Math.min(...ear.map(q => q[k]));
-      expect(ear.length).toBeGreaterThan(20);
-      expect(Math.abs(span(1) - span(2))).toBeLessThan(0.004);
-      expect(span(1)).toBeGreaterThan(0.07);
-    }
-    // The neck is sealed at every level, the far one too: the helmet goes down to the suit's collar.
-    for (const lod of [0, 1, 3]) {
-      const out = make(lod);
-      const low = Math.min(
-        ...Array.from({ length: count(out) }, (_, i) => out[i * STRIDE + 1] - HEAD[1]),
-      );
-      expect(low).toBeLessThan(-0.08);
+    expect(SHELL.r[2] * SCALE).toBeLessThan(0.132);
+    // The visor: 9 cm tall at the notch's feet, its lower edge rising to half that at its ends and
+    // by 3 cm in the middle, where the jaw box comes up into it; its top level.
+    const low = (u: number) => band(u)[0] - band(u)[1];
+    const top = (u: number) => band(u)[0] + band(u)[1];
+    expect(top(0)).toBeCloseTo(top(0.1), 9);
+    expect(top(0) - low(0.062)).toBeGreaterThan(0.07);
+    expect(low(0) - low(0.062)).toBeGreaterThan(0.015);
+    expect(low(0.118) - low(0.062)).toBeGreaterThan(0.025);
+    const out = make(3);
+    const p = Array.from({ length: count(out) }, (_, i) => [
+      ...at(out, i).map((w, k) => w - HEAD[k]),
+      out[i * STRIDE + 6],
+      out[i * STRIDE + 7],
+      out[i * STRIDE + 9],
+    ]);
+    // Green glass.
+    const glass = p.filter((_, i) => out[i * STRIDE + 8] == SHINE);
+    expect(glass.every(q => q[4] > q[3] * 2 && q[4] > q[5])).toBe(true);
+    // The block on top stands over the dome, set back from the brow, and carries a pale bar across
+    // its front face, cut in segments.
+    const dome = shrunk([0, SHELL.c[1] + SHELL.r[1], 0])[1];
+    const over = p.filter(q => q[1] > dome + 0.004);
+    expect(over.length).toBeGreaterThan(30);
+    expect(Math.max(...over.map(q => q[1]))).toBeLessThan(dome + 0.03);
+    expect(Math.min(...over.map(q => q[2]))).toBeGreaterThan(-0.11);
+    const bar = p.filter(q => q[3] > 0.96 && q[1] > 0.15 && q[2] < -0.08);
+    expect(bar.length).toBeGreaterThanOrEqual(6);
+    expect(Math.max(...bar.map(q => q[0])) - Math.min(...bar.map(q => q[0]))).toBeGreaterThan(0.09);
+    // The jaw box: 4 to 5 cm out of the shell's front (the snout stood 7), down past the rim,
+    // five dark slots across it: a short one at its top and four under it.
+    const front = shrunk([0, 0, SHELL.c[2] - SHELL.r[2]])[2];
+    const jut = front - Math.min(...p.map(q => q[2]));
+    expect(jut).toBeGreaterThan(0.03);
+    expect(jut).toBeLessThan(0.05);
+    const slots = p.filter(q => q[3] < 0.06 && q[2] < front - 0.005 && Math.abs(q[0]) < 0.04);
+    expect(new Set(slots.map(q => Math.round(q[1] * 200))).size).toBeGreaterThanOrEqual(5);
+    // Vents: one each side of the box, low, and one each side of the visor, high.
+    const dark = p.filter(q => q[3] < 0.06 && q[4] < 0.06 && Math.abs(q[0]) > 0.05);
+    for (const side of [1, -1]) {
+      expect(dark.some(q => q[0] * side > 0 && q[1] < 0)).toBe(true);
+      expect(dark.some(q => q[0] * side > 0 && q[1] > 0.05)).toBe(true);
     }
   });
 

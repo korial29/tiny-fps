@@ -104,6 +104,19 @@ describe('localSocket', () => {
     expect(c.names()).toEqual(['guest', 'late']);
   });
 
+  it('joins the next host as the character picked since the join', async () => {
+    const room = `r${rooms++}`;
+    const a = player(room, 'host');
+    await until(() => a.names().length === 1);
+    const b = player(room, 'guest');
+    await until(() => b.names().length === 2);
+    b.sock.send(JSON.stringify({ t: 'body', body: 1 }));
+    await until(() => b.roster()!.players.find(p => p.name == 'guest')?.body === 1);
+    a.sock.close();
+    await until(() => b.names().join() === 'guest');
+    expect(b.roster()!.players[0].body).toBe(1);
+  });
+
   it('removes a remote socket from the roster when it closes', async () => {
     const room = `r${rooms++}`;
     const a = player(room, 'a');

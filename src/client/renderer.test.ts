@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { STILL } from '../shared/physics';
+import { STILL, spawn } from '../shared/physics';
 import { ROVER } from '../shared/rover';
 import { MODE, NOBODY, TEX } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
@@ -14,6 +14,7 @@ import { SHINE, STRIDE } from './mesh';
 import { headlights, rover } from './rover';
 import { LAYERS } from './textures';
 import {
+  PORTRAIT,
   FOG_LAYER,
   FOG_RISE,
   HAZE,
@@ -1057,5 +1058,68 @@ describe('createRenderer', () => {
       frame(rd, createEffects(), [spot()]);
       expect(layers()).toEqual([0, 1]);
     });
+  });
+});
+
+describe('Renderer.portrait, the picture of a character card', () => {
+  const calls: Call[] = [];
+  let canvas: HTMLCanvasElement;
+  const size = (w: number, h: number) => {
+    Object.defineProperty(canvas, 'clientWidth', { value: w, configurable: true });
+    Object.defineProperty(canvas, 'clientHeight', { value: h, configurable: true });
+  };
+  const me: PlayerState = { ...STILL, ...spawn(0, ROOM, 0, 0), id: 4 };
+  beforeEach(() => {
+    calls.length = 0;
+    canvas = document.createElement('canvas');
+    size(320, 200);
+    vi.stubGlobal('devicePixelRatio', 1);
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+      this: HTMLCanvasElement,
+      kind: string,
+    ) {
+      return kind == 'webgl2' ? fakeGl(calls, () => ({})) : { drawImage: draw };
+    } as never);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+  const draw = vi.fn();
+  const card = () => Object.assign(document.createElement('canvas'), { width: 300, height: 400 });
+
+  it('draws the player alone, far over the map, and copies the middle of the frame into the card', () => {
+    const rd = createRenderer(canvas, ROOM);
+    draw.mockClear();
+    calls.length = 0;
+    const into = card();
+    expect(rd.portrait(into, me, 1, '#e23b3b')).toBe(true);
+    // The scene was drawn with a runner in it: more than the map's vertices.
+    const scenes = calls.filter(c => c[0] == 'drawArrays' && (c[3] as number) > FLOOR_VERTS);
+    expect(scenes.length).toBeGreaterThan(0);
+    // The eye is up there with him, not on the map.
+    const eye = calls.filter(c => c[0] == 'uniform3fv' && (c[1] as { u: string }).u == 'E').pop()!;
+    expect((eye[2] as number[])[1]).toBeCloseTo(PORTRAIT.y + PORTRAIT.eye);
+    // A 3:4 card out of a 320 by 200 frame: the 150 pixels in the middle, the whole height.
+    expect(draw).toHaveBeenCalledExactlyOnceWith(canvas, 85, 0, 150, 200, 0, 0, 300, 400);
+  });
+
+  it('leaves the runners of the match as they were', () => {
+    const rd = createRenderer(canvas, ROOM);
+    const other: PlayerState = { ...me, id: 1 };
+    rd.frame([1, 1.6, 1], 0, 0, [other], new Map(), createEffects(), []);
+    expect(rd.steps(1)).toBeDefined();
+    rd.portrait(card(), me, 0, '#e23b3b');
+    expect(rd.steps(1)).toBeDefined();
+    // The model was a runner of the picture only.
+    expect(rd.steps(4)).toBeUndefined();
+  });
+
+  it('draws nothing before the canvas has a size', () => {
+    size(320, 0);
+    const rd = createRenderer(canvas, ROOM);
+    draw.mockClear();
+    expect(rd.portrait(card(), me, 0, '#e23b3b')).toBe(false);
+    expect(draw).not.toHaveBeenCalled();
   });
 });

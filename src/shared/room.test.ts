@@ -108,6 +108,33 @@ const ticks = (room: Room, n: number): void => {
 };
 
 describe('Room: joining', () => {
+  it('lets a joined player change character at once, tells everyone, and ignores what changes nothing', () => {
+    const room = new Room();
+    const [a, b] = [peer(), peer()];
+    [a, b].forEach((c, i) => {
+      room.connect(c);
+      room.receive(c, JSON.stringify({ t: 'join', name: `p${i}` }));
+    });
+    const told = () => b.texts.length;
+    const before = told();
+    room.receive(a, JSON.stringify({ t: 'body', body: BODY.FEMALE }));
+    expect(roster(b).players.map(p => p.body)).toEqual([BODY.FEMALE, undefined]);
+    expect(told()).toBe(before + 1);
+    // The same again, or a body the game does not know while he is the man: no roster.
+    room.receive(a, JSON.stringify({ t: 'body', body: BODY.FEMALE }));
+    room.receive(b, JSON.stringify({ t: 'body', body: 7 }));
+    expect(told()).toBe(before + 1);
+    // Back to the man: the entry is what it was before there was a choice.
+    room.receive(a, JSON.stringify({ t: 'body', body: BODY.MALE }));
+    expect(roster(b).players[0]).not.toHaveProperty('body');
+    expect(told()).toBe(before + 2);
+    // Before joining it is nothing.
+    const c = peer();
+    room.connect(c);
+    room.receive(c, JSON.stringify({ t: 'body', body: BODY.FEMALE }));
+    expect(c.texts).toEqual([]);
+  });
+
   it('carries the character a peer picked in the roster, and the man without one', () => {
     const room = new Room();
     const pick = (body?: unknown) => {

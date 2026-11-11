@@ -246,6 +246,14 @@ export class Room {
       } else if (p && msg?.t === 'map' && p === this.host() && Object.hasOwn(MAPS, msg.map)) {
         this.next = msg.map === this.mapName ? undefined : msg.map;
         this.roster();
+      } else if (p && msg?.t === 'body' && (msg.body === BODY.FEMALE) !== !!p.info.body) {
+        // The look only: it changes at once, and the roster tells everyone.
+        if (msg.body === BODY.FEMALE) {
+          p.info.body = BODY.FEMALE;
+        } else {
+          delete p.info.body;
+        }
+        this.roster();
       }
       return;
     }

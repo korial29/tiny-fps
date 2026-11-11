@@ -1,6 +1,7 @@
 import { tinyFps } from '../src/client';
 import type { TinyFps } from '../src/client';
 import { localSocket } from '../src/local';
+import { MAPS } from '../src/shared/maps';
 
 const q = new URLSearchParams(location.search);
 
@@ -55,6 +56,14 @@ form.addEventListener('submit', e => {
   join();
 });
 $('leave').addEventListener('click', leave);
+
+// A map card's words are the map's own: the game's title screen tells the same.
+for (const card of document.querySelectorAll('.map')) {
+  const def = MAPS[card.querySelector('input')!.value];
+  [def.tag, def.name, def.lore].forEach(
+    (text, i) => (card.querySelectorAll('em, strong, p')[i].textContent = text ?? ''),
+  );
+}
 
 // ?name=…&mode=local|server&map=highline|tranquility&body=0|1&url=… joins right away.
 fields.name.value = q.get('name') ?? `Player ${Math.floor(Math.random() * 900) + 100}`;

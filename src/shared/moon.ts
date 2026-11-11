@@ -695,6 +695,8 @@ const team = (z: number, s: Spawn[]) => ({
 
 export const MOON: WorldDef = {
   name: 'Tranquility',
+  tag: 'Moon · half gravity',
+  lore: 'A mining base left in a lunar crater, its domes still lit. Two crews fight for it in space helmets, under the Earth and a black sky. Jumps float twice as high, and a rille cuts the base in two.',
   brushes: [...half, ...half.map(flip), ...centre],
   teams: [
     team(FLAG, SPAWNS),

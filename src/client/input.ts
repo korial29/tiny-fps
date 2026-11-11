@@ -25,6 +25,13 @@ const BITS: Record<string, number> = {
   KeyE: KEY.USE,
 };
 
+/** The keys that pick a weapon, in WEAPON's order, and the ones that act on a press: mute, and the rifle's grenade. */
+const DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4'];
+const [MUTE, NADE] = ['KeyM', 'KeyG'];
+
+/** Every KeyboardEvent.code the game reads: the title screen's controls must tell them all. */
+export const CODES: readonly string[] = [...Object.keys(BITS), ...DIGITS, MUTE, NADE];
+
 /** The four direction bits. */
 const DIRS = KEY.FORWARD | KEY.BACK | KEY.LEFT | KEY.RIGHT;
 
@@ -48,7 +55,7 @@ export const WEAPON = { GUN: 0, BLADE: 1, RAIL: 2, RIFLE: 3 } as const;
 
 /** The choice after a key: 1 the gun, 2 the katana, 3 the rail gun, 4 the laser rifle, any other key keeps it. */
 export const picked = (weapon: number, code: string): number => {
-  const k = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(code);
+  const k = DIGITS.indexOf(code);
   return k < 0 ? weapon : k;
 };
 
@@ -205,10 +212,10 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     if (c.locked()) {
       c.weapon = picked(c.weapon, e.code);
     }
-    if (e.code == 'KeyM' && !e.repeat && c.locked()) {
+    if (e.code == MUTE && !e.repeat && c.locked()) {
       onMute();
     }
-    if (e.code == 'KeyG' && !e.repeat && c.locked()) {
+    if (e.code == NADE && !e.repeat && c.locked()) {
       nade = true;
     }
     if (bit && c.locked()) {

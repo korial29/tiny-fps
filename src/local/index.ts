@@ -132,8 +132,12 @@ export const localSocket = (room: string, rules?: Partial<Rules>): SocketLike =>
     if (closed) {
       return;
     }
-    if (typeof data === 'string' && parseText<ClientText>(data)?.t === 'join') {
-      join = data;
+    const m = typeof data === 'string' ? parseText<ClientText>(data) : null;
+    if (m?.t === 'join') {
+      join = data as string;
+    } else if (m?.t === 'body' && join) {
+      // A new host is joined as the character last picked.
+      join = JSON.stringify({ ...parseText<ClientText>(join), body: m.body });
     }
     if (game) {
       game.receive(self, data);

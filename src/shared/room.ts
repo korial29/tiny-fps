@@ -52,7 +52,23 @@ import type { Flying } from './plasma';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
 import { beam } from './rail';
-import { board, bolts, drive, footprint, hull, leave, park, ride, ROVER, seat } from './rover';
+import {
+  board,
+  bolts,
+  drive,
+  footprint,
+  free,
+  gap2,
+  hull,
+  leave,
+  missile,
+  park,
+  ride,
+  ROVER,
+  seat,
+  nearby,
+} from './rover';
+import { SHIP, reach, struck } from './ship';
 import { reaches, tackling } from './tackle';
 import { BODY, CUT, KEY, LIMB, MODE, NOBODY } from './types';
 import type { Conn, Every, Input, PlayerInfo, PlayerState, Rover, Rules } from './types';
@@ -86,6 +102,9 @@ interface Player {
   /** At a rover's wheel: his inputs left before its lasers fire again, and the count that names their bolts. */
   gun?: number;
   bolt?: number;
+  /** At a ship's stick: his inputs left before a missile goes again, and the pod it leaves from. */
+  pod?: number;
+  side?: number;
 }
 
 /** Ticks run at most this many times per timer callback, so a stalled host does not spiral. */
@@ -173,8 +192,10 @@ export class Room {
   private gone: number[];
   /** The plasma balls in flight, and the ones that burst since the last snapshot, which sends them once more. */
   private balls: Flying[] = [];
-  /** The map's rovers, in the order of WorldDef.rovers. */
+  /** The map's rovers, in the order of WorldDef.rovers, then its ships (ship.ts). */
   private rovers: Rover[];
+  /** Ticks toward each ship's next missile, by index in `rovers`. */
+  private rearm: number[] = [];
 
   /** The key of the map being played, which the roster tells the clients. */
   private mapName: string;
@@ -272,7 +293,11 @@ export class Room {
           this.sink(r);
         } else {
           this.carry(r);
-          this.splat(p, r, input.view);
+          if (r.ship) {
+            this.launch(p, r, input);
+          } else {
+            this.splat(p, r, input.view);
+          }
           this.lase(p, r, input);
         }
       } else {
@@ -382,6 +407,7 @@ export class Room {
       this.restart(players);
     }
     this.seats();
+    this.rovers.forEach((r, k) => this.dock(r, k));
     for (const r of this.rovers) {
       // A driven rover waits for its driver's inputs.
       if (r.driver !== NOBODY) {
@@ -599,12 +625,22 @@ export class Room {
   private fly(b: Flying, m: number): void {
     const peers = this.players();
     const foes = peers.filter(q => q.info.team !== b.team && !q.state.down);
+    const by = peers.find(q => q.info.id === b.by);
+    const o: [number, number, number] = [b.x, b.y, b.z];
     if (b.power === NADE) {
       toss(
         this.world,
         b,
         foes.map(f => f.state),
       );
+      this.ram(b, o);
+      // The burst takes armour from the enemy ships round it too.
+      for (const r of b.burst ? this.targets(b.team) : []) {
+        const d = reach(r, [b.x, b.y, b.z]);
+        if (d < SHIP.BLAST_R) {
+          this.hurt(r, Math.ceil(SHIP.BLAST_HP * (1 - d / SHIP.BLAST_R)), by);
+        }
+      }
       let hit = false;
       for (const q of b.burst ? peers : []) {
         const own = q.info.id === b.by;
@@ -617,7 +653,6 @@ export class Room {
           hit ||= !own;
         }
       }
-      const by = peers.find(q => q.info.id === b.by);
       if (hit && by) {
         by.state.hits = (by.state.hits + 1) & 255;
       }
@@ -629,11 +664,19 @@ export class Room {
       m,
       foes.map(f => f.state),
     );
+    const ship = this.ram(b, o);
+    if (ship) {
+      this.hurt(
+        ship,
+        b.power === 0 || b.power === BOLT ? SHIP.BOLT_HP : SHIP.BALL_HP * (b.power ?? 1),
+        by,
+      );
+      return;
+    }
     const foe = foes.find(q => q.state === hit);
     if (!foe) {
       return;
     }
-    const by = peers.find(q => q.info.id === b.by);
     if (by) {
       by.state.hits = (by.state.hits + 1) & 255;
     }
@@ -880,6 +923,32 @@ export class Room {
    * rides holds a seat. So a leaver's seat is free before his id is given again, and one put down,
    * respawned or stumbled out is off the rover.
    */
+  /**
+   * The first enemy ship on the way the ball `b` flew this tick, from `o` to where it is now: the
+   * ball bursts on its hull, short of a body or a wall further on.
+   */
+  private ram(b: Flying, o: [number, number, number]): Rover | undefined {
+    const d = [b.x - o[0], b.y - o[1], b.z - o[2]];
+    const m = Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    if (!m) {
+      return undefined;
+    }
+    const u: [number, number, number] = [d[0] / m, d[1] / m, d[2] / m];
+    let [t, hit] = [m, undefined as Rover | undefined];
+    for (const r of this.targets(b.team)) {
+      const s = struck(r, o, u, t);
+      if (s < t) {
+        [t, hit] = [s, r];
+      }
+    }
+    if (hit) {
+      b.left += m - t;
+      [b.x, b.y, b.z] = [o[0] + u[0] * t, o[1] + u[1] * t, o[2] + u[2] * t];
+      b.burst = true;
+    }
+    return hit;
+  }
+
   private seats(): void {
     const players = this.players();
     for (const r of this.rovers) {
@@ -906,16 +975,11 @@ export class Room {
       return;
     }
     const carrier = this.ctf.carrying(p.info.id) >= 0;
-    // On the floor plane, as the HUD's prompt judges it (boarding(), hud.ts), within the reach in height.
-    const d2 = (r: Rover) =>
-      Math.abs(r.y - q.y) > ROVER.ENTER_R ? Infinity : (r.x - q.x) ** 2 + (r.z - q.z) ** 2;
-    const free = (r: Rover): 0 | 1 | -1 =>
-      r.driver === NOBODY && !carrier ? 0 : r.rider === NOBODY ? 1 : -1;
     const r = this.rovers
-      .filter(r => d2(r) <= ROVER.ENTER_R ** 2 && free(r) >= 0)
-      .sort((a, b) => d2(a) - d2(b))[0];
+      .filter(r => nearby(r, q) && free(r, carrier) >= 0)
+      .sort((a, b) => gap2(a, q) - gap2(b, q))[0];
     if (r) {
-      board(q, r, free(r) as 0 | 1);
+      board(q, r, free(r, carrier) as 0 | 1);
     }
   }
 
@@ -961,11 +1025,80 @@ export class Room {
     if (!(i.keys & KEY.FIRE) || p.gun || this.ctf.over || p.state.mode !== MODE.RIDE) {
       return;
     }
-    p.gun = ROVER.GUN_COOL;
+    p.gun = r.ship ? SHIP.GUN_COOL : ROVER.GUN_COOL;
     p.bolt = ((p.bolt ?? 0) + 2) & 255;
     for (const b of bolts(r, p.info.id, p.info.team, i.yaw, i.pitch, p.bolt)) {
       this.shoot(p, i.view, b);
     }
+  }
+
+  /**
+   * A ship's missiles: while its pilot holds SPECIAL (G), one each SHIP.MISSILE_COOL of his inputs
+   * while it has any, from the left pod then the right, toward where its lasers cross.
+   */
+  private launch(p: Player, r: Rover, i: Input): void {
+    p.pod = Math.max(0, (p.pod ?? 0) - 1);
+    if (!(i.keys & KEY.SPECIAL) || p.pod || !r.nades || this.ctf.over) {
+      return;
+    }
+    if (p.state.mode !== MODE.RIDE) {
+      return;
+    }
+    p.pod = SHIP.MISSILE_COOL;
+    p.side = (p.side ?? 0) ^ 1;
+    r.nades--;
+    p.bolt = ((p.bolt ?? 0) + 1) & 255;
+    this.shoot(p, i.view, missile(r, p.info.id, p.info.team, i.yaw, i.pitch, p.bolt, p.side));
+  }
+
+  /**
+   * A ship's clock outside its pilot's inputs: one that is gone comes back on its pad, new, after
+   * SHIP.WRECK ticks; one short of missiles loads one each SHIP.RELOAD ticks.
+   */
+  private dock(r: Rover, k: number): void {
+    if (!r.ship) {
+      return;
+    }
+    if (r.wreck) {
+      if (!--r.wreck) {
+        Object.assign(r, park(this.world)[k]);
+        this.rearm[k] = 0;
+      }
+      return;
+    }
+    this.rearm[k] = (r.nades ?? 0) < SHIP.MISSILES ? (this.rearm[k] ?? 0) + 1 : 0;
+    if (this.rearm[k] >= SHIP.RELOAD) {
+      r.nades = (r.nades ?? 0) + 1;
+      this.rearm[k] = 0;
+    }
+  }
+
+  /** The ships an enemy of `team` pilots and that are there to hit. */
+  private targets(team: number): Rover[] {
+    const by = new Map(this.players().map(p => [p.info.id, p.info.team]));
+    return this.rovers.filter(
+      r => r.ship && !r.wreck && r.driver !== NOBODY && by.get(r.driver) !== team,
+    );
+  }
+
+  /**
+   * The ship `r` loses `hp` of armour to the shot of `by`; at 0 it blows up where it is: its pilot
+   * goes down with it, and it is gone SHIP.WRECK ticks.
+   */
+  private hurt(r: Rover, hp: number, by: Player | undefined): void {
+    if (by) {
+      by.state.hits = (by.state.hits + 1) & 255;
+    }
+    r.hp = Math.max(0, (r.hp ?? 0) - hp);
+    if (r.hp) {
+      return;
+    }
+    for (const q of this.players()) {
+      if (this.seatOf(q)[0] === r) {
+        this.harm(q, q.state.hp);
+      }
+    }
+    Object.assign(r, { wreck: SHIP.WRECK, driver: NOBODY, rider: NOBODY, nades: 0 });
   }
 
   private splat(p: Player, r: Rover, view: number | undefined): void {

@@ -532,7 +532,7 @@ describe('snapshot frame', () => {
     });
 
     it('puts the rover count in the top three bits of the count byte, and the players in the low five', () => {
-      expect([SNAP_ROVER, MAX_ROVERS]).toEqual([54, 7]);
+      expect([SNAP_ROVER, MAX_ROVERS]).toEqual([57, 7]);
       for (const players of [0, 1, 5, MAX_PLAYERS]) {
         for (let n = 0; n <= MAX_ROVERS; n++) {
           const sent = Array.from({ length: n }, (_, k) => rover(k));
@@ -579,14 +579,33 @@ describe('snapshot frame', () => {
         expect(ROVER_F.map((_, j) => v.getFloat32(o + 4 * j))).toEqual(ROVER_F.map(k => r[k]));
         expect([v.getUint8(o + 52), v.getUint8(o + 53)]).toEqual([r.driver, r.rider]);
       });
-      // The match comes right after the last seat: no captures, 480 s.
+      // The match comes after the last seat and three ship bytes, 0 on a rover: no captures, 480 s.
       const last = SNAP_HEAD + 2 * SNAP_PLAYER + 2 * SNAP_ROVER + 52;
-      expect(bytes(buf).slice(last, last + 6)).toEqual([254, NOBODY, 0, 0, 0x01, 0xe0]);
+      expect(bytes(buf).slice(last, last + 9)).toEqual([254, NOBODY, 0, 0, 0, 0, 0, 0x01, 0xe0]);
       // A float64 goes to its nearest float32, no further.
       const [r] = decodeSnapshot(
         encodeSnapshot(snap([rover(0, { yaw: 4.2, wy: 1 / 3 })])),
       )!.rovers!;
       expect([r.yaw, r.wy]).toEqual([f(4.2), f(1 / 3)]);
+    });
+
+    it('carries a ship: its kind and armour, its wreck time in fours rounded up, its missiles', () => {
+      const sent = [
+        rover(0, { driver: 3, ship: true, hp: 60, wreck: 0, nades: 4 }),
+        rover(1, { ship: true, hp: 0, wreck: 597, nades: 0 }),
+        rover(2),
+      ];
+      const back = decodeSnapshot(encodeSnapshot(snap(sent, 2)))!.rovers!;
+      expect(back[0]).toEqual(sent[0]);
+      expect(back[1]).toEqual({ ...sent[1], wreck: 600 });
+      expect(back[2].ship).toBeUndefined();
+      const v = new DataView(encodeSnapshot(snap(sent, 2)));
+      const o = SNAP_HEAD + 2 * SNAP_PLAYER;
+      expect([v.getUint8(o + 54), v.getUint8(o + 55), v.getUint8(o + 56)]).toEqual([
+        128 | 60,
+        0,
+        4,
+      ]);
     });
 
     it('carries rovers, balls and sixteen players together', () => {

@@ -81,6 +81,8 @@ export interface WorldDef {
   relief?: ReliefDef;
   /** Where the rovers (rover.ts) are parked, each as a spawn: the middle of its wheels on the ground and the yaw of its nose. Absent: none. */
   rovers?: Spawn[];
+  /** Where the spaceships (ship.ts) stand on their pads: the floor under the skids and the yaw of the nose. Absent: none. */
+  ships?: Spawn[];
   /** The automatic doors (doors.ts). Absent: none. */
   doors?: Door[];
 }

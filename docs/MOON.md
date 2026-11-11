@@ -119,3 +119,15 @@ Measured, and tested: no box over 0.1 m out of what is drawn; nothing drawn over
 - A pit traps a rover by design: one that drives in lands on its wheels 13 to 15 m down, is not lost (it is over the kill floor) and cannot drive out; its crew walks out. The way out on foot is a flight of six steps against the east wall, each 1.3 m deep and 2 m high (a jump at half gravity rises 2.45 m); the other walls are not climbed (tested). Blocks stand round the edge and the terrace darkens toward it. The Bowl's wreck is on its pit's floor.
 - Every other crater is walked and driven out of (tested from each middle).
 - Drawn only (`moonscape.ts`): `pits()` (the terrace to an outline through the rows, never short of a brush's edge, the walls in basalt, the floor, a rock on each step, the blocks); `rims()`, a band of detail on the rim of each crater of 12 m and more, five rings 1.2 m apart round the crest, a point every 1.5 m, laid on the lattice and 4 to 25 cm proud of it (it does not replace the lattice's triangles): the crest raised and light, the inner ring dark and streaked; stones on the crests and blocks thrown out; lighter rays in the ground's tone; 72 small craters in the field (were 60), their rims broken by a hash. 437,511 vertices (cap 440,000), 614 brushes (cap 640).
+
+## The combat ships (2026-11-11)
+
+The user: the draft shuttle on each pad becomes a combat ship a player boards and flies, up to a limit. Their choices: arcade controls, lasers and missiles, a ceiling plus the crater's edge, a ship that can be shot down and comes back.
+
+- `MOON.ships` stands one on each pad, nose toward the other base. The shuttle's brush and its three ghosts are gone; the ship is a solid body (`shipHull()`) players walk into and stand on, as a rover.
+- `src/shared/ship.ts` is the simulation: a `Rover` with `ship` set, so it shares the rovers' seats, snapshot slot (three bytes more a vehicle: kind and armour, wreck time, missiles), prediction and chase camera. `rover.ts` hands it to `pilot()` wherever it would `drive()`. One seat; a flag's carrier does not fly.
+- Controls: the look aims the nose, W and S thrust and brake, A and D slide, Space and C climb and sink, Shift boosts, a click fires the two lasers (bolts, as the rover's), G a missile (a grenade at 60 m/s from a pod, `NADE` burst). Four missiles, one loaded back every 5 s. With nobody at the stick it falls to a floor.
+- The limit: the climb fades over the last 20 m under `CEIL` (120 m) and a push brings it back past it; the same at `EDGE` (0.88 of the crater's bound). Never more than 12 m past either. The HUD warns from half way into the last 20 m.
+- Armour 60: a bolt or a rifle round takes 1, a plasma ball 2 per point of power, a missile's burst up to 14 within 7 m of the hull. Only a piloted enemy ship is hit; the hull stops the shot before its pilot. At 0 it blows up where it is, its pilot goes down, and it is back new on its pad 10 s later.
+
+Known limits: the rail gun and the katana do not touch a ship; ships do not collide with rovers or each other in flight (a rover stops on a parked one); a pilot's own missile burst can still reach him.

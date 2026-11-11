@@ -2,6 +2,7 @@
 // spring, never under the ground nor through a brush. Pure, no DOM, unit-tested.
 import { ground } from '../shared/relief';
 import { ROVER } from '../shared/rover';
+import { SHIP } from '../shared/ship';
 import type { Rover } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
@@ -27,6 +28,12 @@ export const CHASE = {
   FOV: 10,
   FOV_W: 4,
 } as const;
+
+/** A ship's: further back and higher (it is 14 m long), its pitch the whole of the nose's. */
+export const SHIP_CHASE = { ...CHASE, UP: 3.2, BACK: 16, RISE: 2, LO: -SHIP.PMAX, HI: SHIP.PMAX };
+
+/** The rig behind a vehicle: a ship's or a rover's. */
+const rig = (r: Pick<Rover, 'ship'> | undefined) => (r?.ship ? SHIP_CHASE : CHASE);
 
 /** What a frame is drawn from. */
 export interface Shot {
@@ -60,8 +67,9 @@ const LEAP = 10;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
-/** The look's pitch as the chase camera takes it. */
-export const chasePitch = (pitch: number): number => clamp(pitch, CHASE.LO, CHASE.HI);
+/** The look's pitch as the chase camera takes it, behind a rover or a ship (`r`). */
+export const chasePitch = (pitch: number, r?: Pick<Rover, 'ship'>): number =>
+  clamp(pitch, rig(r).LO, rig(r).HI);
 
 export const createChase = (world: World): Chase => {
   /** The rover's centre as trailed: x, its speed, y, its speed, z, its speed. Empty on foot. */
@@ -93,6 +101,7 @@ export const createChase = (world: World): Chase => {
         return { at: eye, pitch: tilt, fov: 0, k: 0 };
       }
       const c: Vec3 = [r.x, r.y, r.z];
+      const { UP, BACK, RISE } = rig(r);
       // A rover parked again, or another one: no trail across the map.
       if (!s.length || Math.hypot(r.x - was[0], r.y - was[1], r.z - was[2]) > LEAP) {
         s = [r.x, 0, r.y, 0, r.z, 0];
@@ -111,14 +120,14 @@ export const createChase = (world: World): Chase => {
       }) as Vec3;
       was = c;
       // The pivot, no further from the rover than what is over it lets it.
-      const [up, , top] = reach(c, [soft[0], soft[1] + CHASE.UP, soft[2]]);
+      const [up, , top] = reach(c, [soft[0], soft[1] + UP, soft[2]]);
       const pivot = c.map((v, i) => v + up[i] * top) as Vec3;
-      const p = chasePitch(pitch);
+      const p = chasePitch(pitch, r);
       const cp = Math.cos(p);
       const [dir, len, free] = reach(pivot, [
-        pivot[0] + Math.sin(yaw) * cp * CHASE.BACK,
-        pivot[1] - Math.sin(p) * CHASE.BACK + CHASE.RISE,
-        pivot[2] + Math.cos(yaw) * cp * CHASE.BACK,
+        pivot[0] + Math.sin(yaw) * cp * BACK,
+        pivot[1] - Math.sin(p) * BACK + RISE,
+        pivot[2] + Math.cos(yaw) * cp * BACK,
       ]);
       // Pulled in at once, let out softly.
       if (far[0] < 0 || free <= far[0]) {
@@ -131,7 +140,7 @@ export const createChase = (world: World): Chase => {
       const wide = damp(
         fov,
         0,
-        CHASE.FOV * clamp(Math.hypot(r.vx, r.vz) / ROVER.VMAX, 0, 1),
+        CHASE.FOV * clamp(Math.hypot(r.vx, r.vz) / (r.ship ? SHIP.VMAX : ROVER.VMAX), 0, 1),
         CHASE.FOV_W,
         dt,
       );

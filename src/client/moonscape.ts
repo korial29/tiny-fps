@@ -9,10 +9,10 @@ import { TAU } from '../shared/physics';
 import { ground, raise } from '../shared/relief';
 import { TEX } from '../shared/types';
 import type { World, WorldDef } from '../shared/world';
-import { GLOW, glow, ring, tri } from './flag';
+import { GLOW, glow, ring } from './flag';
 import { STRIDE, dot, dress, mix, place, smooth, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { UP, box, cross, face, lit, moonbase } from './moonbase';
+import { UP, cross, face, lit, moonbase } from './moonbase';
 import { hull } from './moonhull';
 import { hash } from './textures';
 
@@ -28,13 +28,6 @@ export const SKY = 800;
 const OUT = 1.65;
 /** Toward the Earth. */
 const EARTH = unit([0.3, 0.62, -0.75]);
-const GREY = [0.52, 0.54, 0.58];
-/** A model whose length runs along x (the hull): a frame place() takes, like UP. */
-const HULL: Vec3[] = [
-  [0, 0, 1],
-  [0, 1, 0],
-  [1, 0, 0],
-];
 
 const sm = (t: number) => {
   t = Math.min(Math.max(t, 0), 1);
@@ -91,7 +84,7 @@ const BLOB = dress(
   ),
   [1, 1, 1],
 );
-/** The shuttle's hull, its length along -z. */
+/** The wrecked lander's hull, its length along -z. */
 const SHIP = dress(
   smooth(
     [
@@ -428,10 +421,10 @@ const boulder = (
 };
 
 /**
- * A landing pad (radius 13) with its painted rings and 24 lights, and a shuttle lying on it from x = s, nose toward +x.
+ * A landing pad (radius 13) with its painted rings and 24 lights; its ship is drawn by craft.ts.
  * The disc tops out 2 cm above the pad's metal brush (0.25): level with it, the two fought for the depth buffer.
  */
-const pad = (o: number[], px: number, pz: number, s: number) => {
+const pad = (o: number[], px: number, pz: number) => {
   place(
     o,
     dress(
@@ -464,34 +457,6 @@ const pad = (o: number[], px: number, pz: number, s: number) => {
       ),
     );
   }
-  place(o, SHIP, [s, 1.8, pz], HULL, [0, 0, 0], [2, 1.5, 1]);
-  const flat = (a: Vec3, b: Vec3, c: Vec3, rgb: number[]) => {
-    tri(o, a, b, c, rgb);
-    tri(o, a, c, b, rgb);
-  };
-  for (const k of [-1, 1]) {
-    flat(
-      [s + 5, 1.2, pz + 1.5 * k],
-      [s + 12, 1.2, pz + 1.5 * k],
-      [s + 12.8, 1, pz + 6.5 * k],
-      GREY,
-    );
-  }
-  flat([s + 8, 3, pz], [s + 13.6, 2.5, pz], [s + 13.9, 5.6, pz], [0.9, 0.35, 0.15]);
-  lit(o, 0.5, () => box(o, [s + 2.2, 2.5, pz - 0.7], [s + 4.6, 2.95, pz + 0.7], [0.5, 0.8, 1]));
-  lit(o, 2, () =>
-    face(
-      o,
-      [
-        [s + 14.02, 1.4, pz - 0.45],
-        [s + 14.02, 1.4, pz + 0.45],
-        [s + 14.02, 2.2, pz + 0.45],
-        [s + 14.02, 2.2, pz - 0.45],
-      ],
-      [0.5, 0.7, 1],
-      [s, 1.8, pz],
-    ),
-  );
 };
 
 /** A light mast standing at height y: a pole h high, a foot, a glowing lamp. */
@@ -563,7 +528,7 @@ const base = (o: number[], at: (x: number, z: number) => number) => {
   moonbase(o);
   hull(o);
   const [px, pz] = LAYOUT.pads[0];
-  pad(o, px, pz, LAYOUT.shuttles[0].min[0]);
+  pad(o, px, pz);
   for (const [x, z] of LAYOUT.masts.slice(0, 6)) {
     mast(o, x, z, x < 60 ? 0.25 : 0);
   }

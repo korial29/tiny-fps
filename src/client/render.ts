@@ -23,6 +23,7 @@ import type { Vec3 } from './mesh';
 import { battery, cell, kit, racks } from './props';
 import { PACK } from './pack';
 import { JOINT, turn } from './rig';
+import { craft } from './craft';
 import { rolled, rover } from './rover';
 import type { Quat } from './rig';
 import { GRIN, animate, soldier } from './soldier';
@@ -816,9 +817,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       ctf?.ammo?.forEach(at => cell(v, at, now));
       ctf?.cells?.forEach(at => battery(v, at, now));
       more?.(v);
-      // The rovers: the first half of the map's are red's, the others blue's. Their wheels turn by
-      // the way they went along their nose since the last frame.
-      rovers.forEach((r, i) => {
+      // The rovers, then the ships: of each kind the first half of the map's are red's, the others
+      // blue's. The wheels turn by the way the rover went along its nose since the last frame.
+      const cars = rovers.filter(r => !r.ship);
+      const ships = rovers.filter(r => r.ship);
+      cars.forEach((r, i) => {
         spins[i] = (spins[i] ?? 0) + (was[i] ? rolled(...was[i], r) : 0);
         was[i] = [r.x, r.z];
         const d = Math.hypot(r.x - eye[0], r.y - eye[1], r.z - eye[2]);
@@ -827,12 +830,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           r,
           world,
           spins[i],
-          teamRgb(+(i >= rovers.length / 2)),
+          teamRgb(+(i >= cars.length / 2)),
           d < ROVER_NEAR ? 2 : +(d < ROVER_MID),
         );
       });
+      ships.forEach((r, i) => craft(v, r, teamRgb(+(i >= ships.length / 2)), now));
       // The dust off their wheels is smoke: it casts nothing wherever it is in the list.
-      dust.update(rovers, world, dt, eye);
+      dust.update(cars, world, dt, eye);
       dust.draw(v);
       // A carried flag is strapped to its carrier's chest.
       const chests = new Map<number, [Vec3, Quat]>();
@@ -868,7 +872,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       }
       gl.bufferSubData(gl.ARRAY_BUFFER, tail, new Float32Array(v));
       // The headlights of the rovers that are driven, after the lights given.
-      const pk = pack([...lights, ...beams(rovers)]);
+      const pk = pack([...lights, ...beams(rovers.filter(r => !r.ship))]);
       const first = ground.length / STRIDE;
       const sunM = sunProj(sunDir, sunAt(eye, yaw));
       // Layer 0: the sun, once; then one layer per mapped light.

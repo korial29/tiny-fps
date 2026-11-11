@@ -9,11 +9,22 @@
 // rover stops on another as on a wall (drive()'s fleet), and a player on foot walks into its body
 // and stands on it (hull(), move()'s bodies). A driver who hits a parked rover or a player is
 // replayed exactly; one whose obstacle moves meanwhile is corrected by the next snapshot.
-import { BOLT, DASH_COOLDOWN, DASH_TICKS, PLAYER_H, PLAYER_R, TICK_HZ } from './constants';
+import { BOLT, DASH_COOLDOWN, DASH_TICKS, NADE, PLAYER_H, PLAYER_R, TICK_HZ } from './constants';
 import { step } from './gun';
 import { floorAt, forward, gapTo, gravity, norm, shove } from './physics';
 import type { Body } from './physics';
 import { bound } from './relief';
+import {
+  COCKPIT,
+  OUT as SHIP_OUT,
+  PODS,
+  SHIP,
+  SHIP_GUNS,
+  dock,
+  pilot,
+  point,
+  shipHull,
+} from './ship';
 import { KEY, MODE, NOBODY } from './types';
 import type { Flying } from './plasma';
 import type { Input, PlayerState, Rover } from './types';
@@ -102,7 +113,7 @@ const LEDGE = 1;
 /** The numbers of the state: float32 after every step, and on the wire. */
 const FLOATS = 'x y z vx vy vz yaw pitch roll wy wp wr steer'.split(' ') as Exclude<
   keyof Rover,
-  'driver' | 'rider'
+  'driver' | 'rider' | 'ship' | 'hp' | 'wreck' | 'nades'
 >[];
 
 type Vec3 = [x: number, y: number, z: number];
@@ -158,12 +169,20 @@ export const footprint = (r: Rover): Vec3[] => ROVER.BODY.map(a => at(r, a, 0, -
  * rear circles of footprint(), RB wide and BODY_H tall. A player walks into it and stands on it.
  */
 export const hull = (r: Rover): Body => {
+  if (r.ship) {
+    return shipHull(r);
+  }
   const [a, , b] = footprint(r);
   return { a, b, r: ROVER.RB, h: ROVER.BODY_H };
 };
 
-/** The map's rovers at rest on their spawns, nobody aboard. */
-export const park = (w: World): Rover[] =>
+/**
+ * The map's rovers at rest on their spawns, nobody aboard, then its ships on their pads (ship.ts):
+ * the order of the snapshot's.
+ */
+export const park = (w: World): Rover[] => [...cars(w), ...dock(w.def.ships)];
+
+const cars = (w: World): Rover[] =>
   (w.def.rovers ?? []).map(([x, y, z, yaw]) => ({
     x: f32(x),
     y: f32(y + DROP),
@@ -201,6 +220,9 @@ export const drive = (
   w: World,
   fleet: readonly Rover[] = [],
 ): boolean => {
+  if (r.ship) {
+    return pilot(r, i, w);
+  }
   const { A, B, CMAX, K, D, KP2, KR2, HC, MU, MUL, TILT } = ROVER;
   const g = gravity(w);
   const keys = i ? i.keys : 0;
@@ -351,8 +373,8 @@ export const drive = (
  * speed. The seat leans with the body: on a slope he is not left in the air.
  */
 export const seat = (p: PlayerState, r: Rover, s: 0 | 1): void => {
-  const [side, up, ahead] = SEATS[s];
-  [p.x, p.y, p.z] = at(r, ahead, side, up).map(f32);
+  const [side, up, ahead] = r.ship ? COCKPIT : SEATS[s];
+  [p.x, p.y, p.z] = (r.ship ? point(r, side, up, ahead) : at(r, ahead, side, up)).map(f32);
   p.vx = r.vx;
   p.vy = r.vy;
   p.vz = r.vz;
@@ -386,13 +408,15 @@ export const leave = (p: PlayerState, r: Rover, s: 0 | 1, w: World): void => {
   p.t = 0;
   p.coyote = 0;
   [p.vx, p.vy, p.vz] = [r.vx, r.vy, r.vz];
-  const side = s ? OUT : -OUT;
+  const side = r.ship ? -SHIP_OUT : s ? OUT : -OUT;
+  const [drop, top] = r.ship ? [SHIP.DROP, SHIP.H] : [DROP, ROVER.BODY_H];
   for (const [b, u] of [
-    [side, -DROP],
-    [-side, -DROP],
-    [0, ROVER.BODY_H - DROP],
+    [side, -drop],
+    [-side, -drop],
+    [0, top - drop],
   ]) {
-    const [x, y, z] = at(r, SEATS[s][2], b, u);
+    const ahead = r.ship ? COCKPIT[2] : SEATS[s][2];
+    const [x, y, z] = r.ship ? point(r, b, u, ahead) : at(r, ahead, b, u);
     Object.assign(p, { x, y, z });
     bound(p, w);
     // The floor there, no higher than the rover's centre: his feet on it, never under the ground.
@@ -437,10 +461,50 @@ export const ride = (
   return fell;
 };
 
-/** Where the rover's lasers cross: GUN_AIM metres from its centre along the driver's look. */
+/** The squared distance on the floor plane from the vehicle's centre to the player. */
+export const gap2 = (r: Rover, p: { x: number; z: number }): number =>
+  (r.x - p.x) ** 2 + (r.z - p.z) ** 2;
+
+/**
+ * A player on foot near enough to get in: on the floor plane within ENTER_R of the centre, and
+ * within the reach in height (a ship's ENTER_H). A ship that is gone has no seat.
+ */
+export const nearby = (r: Rover, p: { x: number; y: number; z: number }): boolean => {
+  const [k, h] = r.ship ? [SHIP.ENTER_R, SHIP.ENTER_H] : [ROVER.ENTER_R, ROVER.ENTER_R];
+  return !r.wreck && Math.abs(r.y - p.y) <= h && gap2(r, p) <= k * k;
+};
+
+/**
+ * The seat a player gets: 0 at the wheel (never a flag's carrier), 1 beside it, -1 none. A ship
+ * has its pilot's seat only.
+ */
+export const free = (r: Rover, carrier: boolean): 0 | 1 | -1 =>
+  r.driver === NOBODY && !carrier ? 0 : r.rider === NOBODY && !r.ship ? 1 : -1;
+
+/** Metres from the centre to where the lasers cross along the look: a ship's or a rover's. */
+export const aimRange = (r: Rover): number => (r.ship ? SHIP.GUN_AIM : ROVER.GUN_AIM);
+
+/** Where the lasers cross: aimRange() metres from the centre along the driver's look. */
 export const aimOf = (r: Rover, yaw: number, pitch: number): [number, number, number] => {
   const [sy, cy, sp, cp] = [Math.sin(yaw), Math.cos(yaw), Math.sin(pitch), Math.cos(pitch)];
-  return [r.x - sy * cp * ROVER.GUN_AIM, r.y + sp * ROVER.GUN_AIM, r.z - cy * cp * ROVER.GUN_AIM];
+  const k = aimRange(r);
+  return [r.x - sy * cp * k, r.y + sp * k, r.z - cy * cp * k];
+};
+
+/** A muzzle of the vehicle in the world: `m` is right of the centre, above it, ahead of it. */
+const muzzle = (r: Rover, [side, up, ahead]: number[]): number[] => {
+  if (r.ship) {
+    return point(r, side, up, ahead);
+  }
+  const [fx, fz] = forward(r.yaw);
+  return [r.x + fx * ahead - fz * side, r.y + up, r.z + fz * ahead + fx * side];
+};
+
+/** From `o` toward the aim, unit. */
+const toward = (o: number[], aim: number[]): number[] => {
+  const d = aim.map((v, a) => v - o[a]);
+  const l = Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+  return d.map(v => v / l);
 };
 
 /**
@@ -456,12 +520,10 @@ export const bolts = (
   pitch: number,
   id: number,
 ): Flying[] => {
-  const [fx, fz] = forward(r.yaw);
   const aim = aimOf(r, yaw, pitch);
-  return GUNS.map(([side, up, ahead], k) => {
-    const o = [r.x + fx * ahead - fz * side, r.y + up, r.z + fz * ahead + fx * side];
-    const d = aim.map((v, a) => v - o[a]);
-    const l = Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+  return (r.ship ? SHIP_GUNS : GUNS).map((m, k) => {
+    const o = muzzle(r, m);
+    const d = toward(o, aim);
     return {
       id: (id + k) & 255,
       by,
@@ -469,12 +531,46 @@ export const bolts = (
       x: o[0],
       y: o[1],
       z: o[2],
-      dx: d[0] / l,
-      dy: d[1] / l,
-      dz: d[2] / l,
-      left: ROVER.GUN_RANGE,
+      dx: d[0],
+      dy: d[1],
+      dz: d[2],
+      left: r.ship ? SHIP.GUN_RANGE : ROVER.GUN_RANGE,
       burst: false,
       power: BOLT,
     };
   });
+};
+
+/**
+ * A ship's missile from its pod `k` (0 left, 1 right) toward where its lasers cross: a grenade
+ * (plasma.ts's toss() flies it, blast() is its burst) launched at MISSILE_SPEED plus the ship's own
+ * speed along the way, 63 m/s at most (the wire's six bits).
+ */
+export const missile = (
+  r: Rover,
+  by: number,
+  team: number,
+  yaw: number,
+  pitch: number,
+  id: number,
+  k: number,
+): Flying => {
+  const o = muzzle(r, PODS[k]);
+  const d = toward(o, aimOf(r, yaw, pitch));
+  const own = r.vx * d[0] + r.vy * d[1] + r.vz * d[2];
+  return {
+    id: id & 255,
+    by,
+    team,
+    x: o[0],
+    y: o[1],
+    z: o[2],
+    dx: d[0],
+    dy: d[1],
+    dz: d[2],
+    left: 2 * SHIP.GUN_RANGE,
+    burst: false,
+    power: NADE,
+    v: Math.min(63, SHIP.MISSILE_SPEED + Math.max(0, own)),
+  };
 };

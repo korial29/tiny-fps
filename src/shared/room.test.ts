@@ -1205,10 +1205,11 @@ describe('Room: the rovers', () => {
     room.receive(a, JSON.stringify({ t: 'map', map: 'tranquility' }));
     ticks(room, (END_SCREEN + 1) * TICK_HZ + SNAP_EVERY);
     expect(roster(a).map).toBe('tranquility');
-    expect(snap(a).rovers).toHaveLength(MOON.rovers!.length);
-    expect(snap(a).rovers!.map(r => [r.x, r.z, r.driver])).toEqual(
-      MOON.rovers!.map(([x, , z]) => [x, z, NOBODY]),
-    );
+    // Its rovers, then its ships on their pads.
+    expect(snap(a).rovers!.map(r => [r.x, r.z, r.driver, !!r.ship])).toEqual([
+      ...MOON.rovers!.map(([x, , z]) => [x, z, NOBODY, false]),
+      ...MOON.ships!.map(([x, , z]) => [x, z, NOBODY, true]),
+    ]);
     expect(st(room, a).mode).toBe(MODE.GROUND);
   });
 

@@ -298,10 +298,11 @@ describe('soldier', () => {
       const v = rows(draw(undefined, lod));
       expect(Math.min(...v.map(p => p[1]))).toBeCloseTo(1, 1);
       // In its guard, the knees bent and the trunk leaning forward: a little under PLAYER_H.
-      expect(Math.max(...v.map(p => p[1]))).toBeGreaterThan(1 + PLAYER_H - 0.1);
+      expect(Math.max(...v.map(p => p[1]))).toBeGreaterThan(1 + PLAYER_H - 0.14);
       expect(Math.max(...v.map(p => p[1]))).toBeLessThanOrEqual(1 + PLAYER_H + 1e-6);
+      // But the lead fist of his bare-handed guard, held out up to 18 cm past the cylinder (a wall he stands against does not stop it).
       for (const p of v) {
-        expect(Math.hypot(p[0] - 5, p[2] + 3)).toBeLessThan(PLAYER_R);
+        expect(Math.hypot(p[0] - 5, p[2] + 3)).toBeLessThan(PLAYER_R + 0.2);
       }
     }
   });
@@ -310,7 +311,7 @@ describe('soldier', () => {
     const v = rows(draw());
     const jacket = dyed(v, GREEN);
     expect(jacket.length).toBeGreaterThan(300);
-    expect(Math.min(...jacket.map(p => p[1]))).toBeGreaterThan(1 + 0.9);
+    expect(Math.min(...jacket.map(p => p[1]))).toBeGreaterThan(1 + 0.84);
     expect(Math.max(...jacket.map(p => p[1]))).toBeLessThan(1 + 1.55);
     const legs = v.filter(p => p[1] < 1 + 0.8);
     expect(dyed(legs, GREEN)).toHaveLength(0);
@@ -1141,7 +1142,7 @@ describe('riding a rover', () => {
       animate(book, [man()], DT, undefined, undefined, [rover()]);
     }
     expect(book.get(1)!.seat).toBeUndefined();
-    expect(stance(book.get(1)!).s.pos[J.HEAD][1] - 1).toBeGreaterThan(1.5);
+    expect(stance(book.get(1)!).s.pos[J.HEAD][1] - 1).toBeGreaterThan(1.45);
   });
 
   it('keeps both hands of the driver on the yoke and his weapons away, while a rider holds his', () => {

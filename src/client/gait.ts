@@ -309,6 +309,24 @@ const HIP = 0.1;
  * trunk's lean forward (radians), and how far the legs give.
  */
 const [WIDE, STEP, BOW, GIVE] = [0.16, 0.12, 0.2, 0.05];
+/** How much wider, longer, further forward and lower the guard of one with nothing in his hands is: a fighter's stance (FISTS). */
+const LOW_GUARD = [0.03, 0.08, 0.06, 0.035];
+/**
+ * The guard of one with nothing in his hands (the user, 2026-11-11: the arms out before him as in
+ * karate, not along the body, not a boxer's fists by the chin): the lead arm (the right, as the
+ * right foot) nearly straight ahead at the chest's height, the rear hand half way out before the
+ * solar plexus. Per arm, the lead then the rear: the upper arm's lift forward and out to the side,
+ * its turn inward, and the elbow's bend (radians).
+ */
+const FISTS = [
+  [1.15, 0.05, 0.12, 0.4],
+  [0.5, 0.1, 0.3, 1.25],
+];
+/**
+ * The breath of one standing still (the user, 2026-11-11: see him breathe): breaths a second, the
+ * chest's lift (radians), the shoulders' (radians), and the rise of the whole body on its legs (metres).
+ */
+const BREATH = [0.3, 0.035, 0.03, 0.007];
 /**
  * The guard with the katana in hand, a swordsman's middle guard (the user, 2026-11-10: stand like
  * a samurai): how much further ahead the right foot stands and behind the left (metres), the pitch
@@ -348,7 +366,9 @@ export const createGait = (bow = BOW): Gait => {
   const P = {} as Record<Key, number>;
   /** After the moves' springs, the sword guard's. */
   const KEN = W + 2 * MOVES.length;
-  const sp = new Array<number>(KEN + 2).fill(0);
+  /** After it, the bare fists' guard's. */
+  const BARE = KEN + 2;
+  const sp = new Array<number>(BARE + 2).fill(0);
   const feet: Foot[] = [0, 1].map(() => ({
     x: 0,
     y: 0,
@@ -469,6 +489,7 @@ export const createGait = (bow = BOW): Gait => {
     sat = rides ? (seat ?? { yaw: p.yaw, pitch: 0, roll: 0, steer: 0, s: 1 }) : sat;
     armed = p.ammo >= 0 || !!p.railed || !!p.rifled || !!p.wield;
     set(KEN, +(!!p.wield && bow > 0), 10);
+    set(BARE, +(!armed && bow > 0 && !p.down), 8);
     set(LOW, +(p.mode == MODE.CROUCH), 12);
     set(UP, hold ? clamp((1.7 - lip[4] + p.y) / 1.2) : 0, 14);
     set(DIP, kick, 26);
@@ -526,7 +547,12 @@ export const createGait = (bow = BOW): Gait => {
     feet.forEach((f, n) => {
       const s = n ? 1 : -1;
       const u = (ph + n / 2) % 1;
-      const [wide, ahead] = idle ? [WIDE, s * (STEP + KAMAE[0] * sp[KEN])] : [HIP, 0];
+      const [wide, ahead] = idle
+        ? [
+            WIDE + LOW_GUARD[0] * sp[BARE],
+            s * (STEP + KAMAE[0] * sp[KEN] + LOW_GUARD[1] * sp[BARE]),
+          ]
+        : [HIP, 0];
       const [hx, hz] = [
         p.x + rx * s * wide - Math.sin(yaw) * ahead,
         p.z + rz * s * wide - Math.cos(yaw) * ahead,
@@ -777,10 +803,13 @@ export const createGait = (bow = BOW): Gait => {
     const tilt = P.pt + who[3] + P.pa * g * c2;
     const turn_ = (P.cc + P.pr) * g * c1;
     const idle = 1 - g;
-    const breath = idle * 0.012 * Math.sin(TAU * 0.28 * time);
+    // In faster than out: a second harmonic leans the wave.
+    const wave = TAU * BREATH[0] * time + who[1] * 5;
+    const air = idle * (Math.sin(wave) + 0.25 * Math.sin(2 * wave));
+    const breath = air * BREATH[1];
     const shift = idle * 0.012 * Math.sin(TAU * 0.17 * time + who[1] * 9);
     const ken = sp[KEN];
-    const guard = idle * bow * (1 - (1 - KAMAE[2]) * ken);
+    const guard = idle * (bow * (1 - (1 - KAMAE[2]) * ken) + LOW_GUARD[2] * sp[BARE]);
     const hipX = P.sw * g * side + shift;
     out.at[0] = at[0];
     out.at[1] = at[1];
@@ -800,19 +829,32 @@ export const createGait = (bow = BOW): Gait => {
       mul(axis(Y, 0.6 * turn_ - 0.25 * yo), axis(Z, 0.25 * bank - 0.8 * obl - 0.5 * shift)),
       axis(X, 0.55 * body + breath),
     );
+    const bare = idle * sp[BARE];
     [-1, 1].forEach(s => {
       const k = Math.cos(TAU * (ph - (s < 0 ? 0.5 : 0)));
       const a = who[s < 0 ? 1 : 2];
+      // The fists' guard, breathing with the chest: the elbows open a little as it fills.
+      const [lift, out2, inward, bend] = FISTS[s < 0 ? 1 : 0].map(v => v * bare);
+      // The shoulders rise with the breath.
+      // Not with a weapon in hand: a long gun's butt stays in the shoulder.
+      rot[s < 0 ? J.CLAVICLE_L : J.CLAVICLE_R] = axis(Z, s * air * BREATH[2] * sp[BARE]);
       rot[s < 0 ? J.ARM_L : J.ARM_R] = mul(
-        axis(Z, s * (0.06 + P.ab * g + 0.5 * dip)),
-        axis(
-          X,
-          (P.am + P.aa * a * k) * g + 0.05 * idle * s * Math.sin(time * 1.3) + dip + 0.5 * crouch,
+        mul(
+          axis(Z, s * (0.06 + P.ab * g + 0.5 * dip + out2 + 0.3 * breath)),
+          axis(
+            X,
+            (P.am + P.aa * a * k) * g +
+              0.05 * idle * s * Math.sin(time * 1.3) * (1 - sp[BARE]) +
+              dip +
+              0.5 * crouch +
+              lift,
+          ),
         ),
+        axis(Y, s * inward),
       );
       rot[s < 0 ? J.FOREARM_L : J.FOREARM_R] = axis(
         X,
-        0.15 * idle + g * (P.em + P.ea * k) + dip + 0.5 * crouch,
+        0.15 * idle + g * (P.em + P.ea * k) + dip + 0.5 * crouch + bend - 0.8 * breath * sp[BARE],
       );
     });
 
@@ -822,7 +864,12 @@ export const createGait = (bow = BOW): Gait => {
     const [rx, rz] = [Math.cos(yaw), -Math.sin(yaw)];
     const base: Vec3 = [at[0] + rx * hipX, 0, at[2] + rz * hipX];
     const off = [J.THIGH_L, J.THIGH_R].map(j => turn(pw, REST[j]));
-    const stand = 1 - 0.25 * crouch - 0.7 * dip - (GIVE + KAMAE[3] * ken) * idle;
+    const stand =
+      1 -
+      0.25 * crouch -
+      0.7 * dip -
+      (GIVE + KAMAE[3] * ken + LOW_GUARD[3] * sp[BARE]) * idle +
+      (air * BREATH[3]) / LEG;
     const flight =
       at[1] +
       0.05 +

@@ -285,8 +285,9 @@ describe('gait: the stride', () => {
     expect(spread(hand)).toBeGreaterThan(0.4);
   });
 
-  it('hangs the arms along the body at rest, and swings them like a pendulum in a stride', () => {
-    const [still] = jog(0, 3).frames.slice(-1);
+  it('hangs the arms along the body at rest with a gun in hand, and swings them like a pendulum in a stride', () => {
+    const armed = createGait();
+    const [still] = sim(armed, state({ ammo: 0 }), 3, () => undefined).slice(-1);
     for (const [hand, shoulder] of [
       [J.HAND_L, J.ARM_L],
       [J.HAND_R, J.ARM_R],
@@ -480,8 +481,9 @@ describe('gait: the layers', () => {
     // The feet stay where they are.
     const toe = frames.map(f => f.pos[J.TOE_L]);
     expect(spread(toe.map(q => q[2]))).toBeLessThan(0.003);
-    expect(frames[0].pos[J.PELVIS][1]).toBeGreaterThan(0.9);
-    expect(frames[0].pos[J.HEAD][1]).toBeGreaterThan(1.5);
+    // Lower than it was: bare-handed, he stands in a fighter's guard (below).
+    expect(frames[0].pos[J.PELVIS][1]).toBeGreaterThan(0.84);
+    expect(frames[0].pos[J.HEAD][1]).toBeGreaterThan(1.45);
     expect(frames[0].pos[J.HEAD][1]).toBeLessThan(PLAYER_H);
   });
 
@@ -545,7 +547,7 @@ describe('gait: the layers', () => {
     const g = createGait();
     const p = state({ mode: MODE.CROUCH, vz: -2.5 });
     const low = sim(g, p, 3, q => (q.z += q.vz * DT)).pop()!;
-    expect(low.pos[J.PELVIS][1]).toBeLessThan(stand.pos[J.PELVIS][1] - 0.2);
+    expect(low.pos[J.PELVIS][1]).toBeLessThan(stand.pos[J.PELVIS][1] - 0.15);
     expect(Math.min(knee(low, 'L'), knee(low, 'R')) * D).toBeGreaterThan(20);
     // Lands from a fall at 12 m/s.
     const h = createGait();
@@ -1441,7 +1443,7 @@ describe('seated in a rover', () => {
     for (let i = 0; i < 60; i++) {
       g.update({ ...p, mode: MODE.GROUND }, DT);
     }
-    expect(solve(g.pose()).pos[J.HEAD][1]).toBeGreaterThan(1.5);
+    expect(solve(g.pose()).pos[J.HEAD][1]).toBeGreaterThan(1.45);
   });
 });
 
@@ -1455,7 +1457,8 @@ describe('gait: the sword guard (the user, 2026-11-10: stand like a samurai)', (
   };
 
   it('lifts the left heel, sets the right foot further ahead and straightens the back, with the katana in hand only', () => {
-    const [bare, sword] = [stood(createGait(), {}), stood(createGait(), { wield: true })];
+    // Against one with a gun: the plain guard (bare-handed it is a fighter's, lower and longer).
+    const [bare, sword] = [stood(createGait(), { ammo: 0 }), stood(createGait(), { wield: true })];
     // The heel up on the ball of the foot: the ankle higher, the toes where they were.
     expect(sword.pos[J.FOOT_L][1]).toBeGreaterThan(bare.pos[J.FOOT_L][1] + 0.025);
     expect(sword.pos[J.TOE_L][1]).toBeCloseTo(bare.pos[J.TOE_L][1], 2);
@@ -1475,7 +1478,7 @@ describe('gait: the sword guard (the user, 2026-11-10: stand like a samurai)', (
         g.update(state({ wield }), DT);
         const s = solve(g.pose());
         s.pos.forEach((p, j) =>
-          expect(Math.hypot(...p.map((v, k) => v - was.pos[j][k]))).toBeLessThan(0.02),
+          expect(Math.hypot(...p.map((v, k) => v - was.pos[j][k]))).toBeLessThan(0.035),
         );
         was = s;
       }
@@ -1485,5 +1488,101 @@ describe('gait: the sword guard (the user, 2026-11-10: stand like a samurai)', (
   it("leaves the eye's own body as it stands", () => {
     const [bare, sword] = [stood(createGait(0), {}), stood(createGait(0), { wield: true })];
     expect(sword.pos).toEqual(bare.pos);
+  });
+});
+
+describe('gait: the bare-handed guard and the breath (the user, 2026-11-11: a fighting stance, the arms out as in karate; see him breathe)', () => {
+  const stood = (o: Partial<PlayerState>, secs = 2) => {
+    const g = createGait();
+    return { g, frames: sim(g, state(o), secs, () => undefined) };
+  };
+  const last = (o: Partial<PlayerState>) => stood(o).frames.pop()!;
+
+  it('holds the arms out before him with nothing in his hands: the right nearly straight at the chest, the left half way, not along the body', () => {
+    const s = last({});
+    const fwd = (a: number, b: number) => -(s.pos[a][2] - s.pos[b][2]);
+    // The right hand 40 cm and more ahead of its shoulder, about its height; the elbow nearly straight.
+    expect(fwd(J.HAND_R, J.ARM_R)).toBeGreaterThan(0.4);
+    expect(Math.abs(s.pos[J.HAND_R][1] - s.pos[J.ARM_R][1])).toBeLessThan(0.25);
+    const reach = Math.hypot(...sub(s.pos[J.HAND_R], s.pos[J.ARM_R]));
+    expect(reach).toBeGreaterThan(0.5);
+    // The left hand ahead too, less far, under the right, before the trunk; its elbow well bent.
+    expect(fwd(J.HAND_L, J.ARM_L)).toBeGreaterThan(0.18);
+    expect(fwd(J.HAND_L, J.ARM_L)).toBeLessThan(fwd(J.HAND_R, J.ARM_R) - 0.1);
+    expect(s.pos[J.HAND_L][1]).toBeLessThan(s.pos[J.HAND_R][1]);
+    expect(s.pos[J.HAND_L][1]).toBeGreaterThan(s.pos[J.PELVIS][1] + 0.1);
+    // Neither hangs: both hands are over the belt and inside the shoulders' width.
+    for (const [hand, shoulder] of [
+      [J.HAND_L, J.ARM_L],
+      [J.HAND_R, J.ARM_R],
+    ]) {
+      expect(s.pos[hand][1] - s.pos[shoulder][1]).toBeGreaterThan(-0.4);
+      expect(Math.abs(s.pos[hand][0])).toBeLessThan(Math.abs(s.pos[shoulder][0]) + 0.05);
+    }
+  });
+
+  it('stands lower, longer and wider than with a weapon: the right foot well ahead, the knees bent', () => {
+    const [bare, gun] = [last({}), last({ ammo: 0 })];
+    const span = (s: Frame) => s.pos[J.FOOT_L][2] - s.pos[J.FOOT_R][2];
+    const width = (s: Frame) => s.pos[J.FOOT_R][0] - s.pos[J.FOOT_L][0];
+    expect(span(bare)).toBeGreaterThan(span(gun) + 0.12);
+    expect(span(bare)).toBeGreaterThan(0.35);
+    expect(width(bare)).toBeGreaterThan(width(gun) + 0.04);
+    expect(bare.pos[J.PELVIS][1]).toBeLessThan(gun.pos[J.PELVIS][1] - 0.02);
+    expect(Math.min(knee(bare, 'L'), knee(bare, 'R')) * D).toBeGreaterThan(12);
+    // The feet flat on the floor, the head over them.
+    expect(bare.pos[J.TOE_L][1]).toBeCloseTo(gun.pos[J.TOE_L][1], 2);
+    expect(Math.abs(bare.pos[J.HEAD][0])).toBeLessThan(0.08);
+  });
+
+  it('keeps the guard for bare hands and for standing: not with a gun, a rifle or the katana, not on the run, not down', () => {
+    const out = (s: Frame) => -(s.pos[J.HAND_R][2] - s.pos[J.ARM_R][2]);
+    for (const o of [{ ammo: 0 }, { ammo: 3, rifled: true, rifle: 5 }]) {
+      expect(out(last(o))).toBeLessThan(0.2);
+    }
+    // On the run the arms swing by the body: the hands under the shoulders.
+    const run = jog(6, 3).frames.slice(-60);
+    const drop = run.reduce((m, f) => m + f.pos[J.HAND_R][1] - f.pos[J.ARM_R][1], 0) / run.length;
+    expect(drop).toBeLessThan(-0.1);
+    // It comes and goes in a fraction of a second, with no jump.
+    const g = createGait();
+    let was = sim(g, state({ ammo: 0 }), 1, () => undefined).pop()!;
+    const frames = sim(g, state({}), 1.2, () => undefined);
+    for (const s of frames) {
+      s.pos.forEach((p, j) => expect(Math.hypot(...sub(p, was.pos[j]))).toBeLessThan(0.035));
+      was = s;
+    }
+    expect(out(frames.pop()!)).toBeGreaterThan(0.4);
+  });
+
+  it('breathes: a loop of three seconds or so that lifts the chest, the shoulders and the hands, in faster than out', () => {
+    const { frames } = stood({}, 14);
+    const steady = frames.slice(Math.round(2 / DT));
+    const chest = steady.map(f => f.pos[J.NECK][1]);
+    const hand = steady.map(f => f.pos[J.HAND_R][1]);
+    const shoulder = steady.map(f => f.pos[J.ARM_R][1] - f.pos[J.CHEST][1]);
+    // Seen: the chest rises and falls by a centimetre or two, the hands with it, the shoulders on the chest.
+    expect(spread(chest)).toBeGreaterThan(0.008);
+    expect(spread(chest)).toBeLessThan(0.04);
+    expect(spread(hand)).toBeGreaterThan(0.01);
+    expect(spread(hand)).toBeLessThan(0.08);
+    expect(spread(shoulder)).toBeGreaterThan(0.004);
+    // A loop: the same height again every 1 / 0.3 s, three or four breaths in twelve seconds.
+    const mid = (Math.max(...chest) + Math.min(...chest)) / 2;
+    const ups = chest.flatMap((v, i) => (i && v >= mid && chest[i - 1] < mid ? [i * DT] : []));
+    expect(ups.length).toBeGreaterThanOrEqual(3);
+    expect(ups.length).toBeLessThanOrEqual(4);
+    const gaps = ups.slice(1).map((t, i) => t - ups[i]);
+    for (const gap of gaps) {
+      expect(gap).toBeCloseTo(1 / 0.3, 1);
+    }
+    // In faster than out: less time rising than falling.
+    const rising = chest.filter((v, i) => i && v > chest[i - 1]).length;
+    expect(rising).toBeLessThan(chest.length * 0.47);
+    // The feet do not move with it, and nobody steps.
+    expect(spread(steady.map(f => f.pos[J.TOE_R][1]))).toBeLessThan(0.002);
+    // With a gun in hand he breathes too, the shoulders still.
+    const armed = stood({ ammo: 0 }, 8).frames.slice(Math.round(2 / DT));
+    expect(spread(armed.map(f => f.pos[J.NECK][1]))).toBeGreaterThan(0.006);
   });
 });

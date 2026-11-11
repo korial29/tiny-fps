@@ -916,7 +916,8 @@ describe('createRenderer', () => {
       const p = man({ id: 7, y: 0.67 });
       const stands = top(parked(), p);
       const sits = top(parked({ driver: 7 }), { ...p, mode: MODE.RIDE });
-      expect(stands - p.y).toBeGreaterThan(1.7);
+      // Bare-handed, in his fighter's guard: lower than a man standing straight.
+      expect(stands - p.y).toBeGreaterThan(1.62);
       expect(sits - p.y).toBeGreaterThan(0.95);
       expect(sits - p.y).toBeLessThan(1.3);
       // Nose down, his head goes down with the seat.

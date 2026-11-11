@@ -20,6 +20,7 @@ import { createEffects } from './effects';
 import { flagDraws } from './flag';
 import { createFoley } from './foley';
 import { mood } from './face';
+import { dashing, felled, strain } from './expression';
 import { HUD_CSS, OUT_HINT, boarding, createHud, kmh } from './hud';
 import type { Summary } from './hud';
 import { createInput } from './input';
@@ -213,6 +214,9 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
   /** The face in the HUD: its mind, the own player as last framed, and how long the trigger has been held. */
   const feel = mood();
   let [felt, firing]: [PlayerState | undefined, number] = [undefined, 0];
+  /** The others as last framed (a foe put down shows between two frames), and the own team has just captured. */
+  let prior = new Map<number, PlayerState>();
+  let won = false;
   /** The rover last driven (its index), whether the own player is seated, and since when (ms). */
   let [wheel, seated, since] = [-1, false, 0];
   let last = performance.now();
@@ -255,6 +259,11 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
           }
           for (const c of cues(beat, you)) {
             audio.play(c.id, c.at, c.gain, c.rate);
+          }
+          if (beat.kind == 'capture') {
+            // The team that captured grins, the own face in the HUD with it.
+            rd?.cheer(roster.filter(p => p.team == beat.team).map(p => p.id));
+            won ||= beat.team == you.team;
           }
           if (beat.kind == 'tackle') {
             // The own player tackled, or was: the camera answers.
@@ -405,10 +414,16 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
           from,
           got: !!felt && has(me) > has(felt),
           firing,
+          effort: strain(me) > 0.5,
+          focus: firing > 0 || !!me.charge,
+          shout: !me.down && (dashing(me) || !!me.swing),
+          grin: won || (!!felt && felled(felt, me, id => prior.get(id), others)),
         }),
       );
+      won = false;
     }
     felt = me && { ...me };
+    prior = new Map(others.map(p => [p.id, p]));
     // A saber lock: the gauge of the tug of war, the own presses against the foe's.
     const foe = me?.lock ? who(me.foe ?? -1) : undefined;
     hud.duel(foe ? ((me!.pushes ?? 0) - (foe.pushes ?? 0)) / LOCK_WIN : undefined);

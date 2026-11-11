@@ -4,7 +4,22 @@ import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT, JOINTS, PARENT, REST, axis, mul, rest, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
-import { body, capped, cut, eyesOf, hairOf, palette, skin } from './skin';
+import { beardOf, body, capped, cut, eyesOf, hairOf, palette, shaved, skin } from './skin';
+import {
+  CH,
+  CHANNELS,
+  EYE,
+  IRIS_R,
+  KIND,
+  PUPIL_R,
+  TONES,
+  ball,
+  lidEdge,
+  lookIn,
+  lookOf,
+  toneOf,
+} from './features';
+import { POSE, expression } from './expression';
 import { LIMB } from '../shared/types';
 
 const JACKET = [0.1, 0.8, 0.2];
@@ -36,16 +51,23 @@ const edges = (v: number[]) => {
   return e;
 };
 
-/** Whether vertex k is on the base of an eye, open and buried in the socket. */
-const eyeBase = (v: Float32Array, k: number) =>
-  Math.abs(Math.abs(v[k * 6]) - 0.032) < 0.014 &&
-  Math.abs(v[k * 6 + 1] - 1.69) < 0.007 &&
-  v[k * 6 + 2] < -0.065;
+/** Whether vertex k is of a piece of the face laid on the head (an eye, a lid, a far mark): those are open sheets. */
+const piece = (s: { g: Uint8Array }, k: number) => s.g[k] > KIND.HEAD && s.g[k] != KIND.EAR;
+/** Each corner of the skin `s` as [x, y, z] of its rest vertex, for those whose colour is mostly one of `col`. */
+const corners = (s: ReturnType<typeof body>, ...col: number[]) =>
+  [...s.t]
+    .filter((_, i) => col.includes(s.cm[i] > 0.5 ? s.c2[i] : s.c[i]))
+    .map(k => [s.v[k * 6], s.v[k * 6 + 1], s.v[k * 6 + 2]]);
+/** The palette's regions the face's tests name. */
+const [FLESH_, WHITE_, IRIS_, LIP_, BROW_, STUBBLE_, CAP_, PUPIL_, LASH_] = [
+  3, 8, 9, 10, 12, 13, 20, 21, 22,
+];
 
 describe('skin', () => {
-  it('stays within the budgets: far under 1800 vertices drawn, near (the face carved) under 12000 (rings measured on the soldier), close (within CLOSE, the face finest) under 36000', () => {
+  it('stays within the budgets: far under 1900 vertices drawn, near (the face carved) under 12000 (rings measured on the soldier), close (within CLOSE, the face finest) under 36000', () => {
     const [far, near, close] = [0, 1, 3].map(lod => draw(lod).length / STRIDE);
-    expect(far).toBeLessThan(1800);
+    // 1800 until the far head got its marks and its nose (31 vertices, 28 triangles).
+    expect(far).toBeLessThan(1900);
     expect(near).toBeLessThanOrEqual(12000);
     // 26000 until the close head took 2.5 times the neck's sides and finer rows (the user, 2026-11-08).
     // 34000 until the close arms took 24 sides (the user, 2026-11-09).
@@ -53,7 +75,11 @@ describe('skin', () => {
     expect(far).toBeLessThan(near * 0.3);
     // Near carries the measured rings too, so it is less far below close than it was.
     expect(near).toBeLessThan(close * 0.45);
+    // The vertices skinned each frame, per level: 296, 1674 and 5292 before the eyes' balls, the
+    // irises, the lids and the far marks; 327, 1826 and 5768 with them.
+    expect(body(0).w.length).toBeLessThan(340);
     expect(body(1).w.length).toBeLessThan(2000);
+    expect(body(3).w.length).toBeLessThan(6000);
     // The eye's own body: no head; the close sides (a round chest looking down), its arms' rings
     // doubled, and a thin wrist (the user, 2026-11-09: fewer angles, whatever the budget).
     expect(draw(2).length / STRIDE).toBeLessThan(12000);
@@ -176,9 +202,9 @@ describe('skin', () => {
       for (const key of dir) {
         const [a, b] = key.split(' ');
         if (!dir.has(`${b} ${a}`)) {
-          // Only the eyes' bases, buried in the face.
+          // Only the edges of the face's pieces: sheets laid on the head, their rims in it.
           for (const k of [a, b]) {
-            expect(eyeBase(s.v, +k)).toBe(true);
+            expect(piece(s, +k)).toBe(true);
           }
         }
       }
@@ -424,44 +450,43 @@ describe('skin', () => {
     expect(gloves.every(r => Math.abs(r.x) > 0.15 && r.y < 0.99 && r.y > 0.7)).toBe(true);
   });
 
-  it('gives the runner two eyes, whites with a dark iris at the front of each, and no shades', () => {
-    const [WHITE, IRIS] = palette(JACKET).slice(8, 10);
-    const v = draw(1);
-    const rows = Array.from({ length: v.length / STRIDE }, (_, i) => at(v, i));
-    const colour = (i: number) => [v[i * STRIDE + 6], v[i * STRIDE + 7], v[i * STRIDE + 9]];
-    const of = (c: number[]) => rows.filter((_, i) => same(colour(i), c));
-    for (const c of [WHITE, IRIS]) {
-      const p = of(c);
-      // Both sides of the nose, at the eyes' height, on the front of the face (-z).
-      expect(p.some(q => q[0] > 0.015)).toBe(true);
-      expect(p.some(q => q[0] < -0.015)).toBe(true);
-      expect(p.every(q => q[1] > 1.67 && q[1] < 1.71 && q[2] < -0.06)).toBe(true);
+  it('gives the runner two eyes: a white ball in each socket, an iris on its front, a darker pupil in its middle', () => {
+    for (const lod of [1, 3]) {
+      const s = body(lod);
+      const [white, iris, pupil] = [WHITE_, IRIS_, PUPIL_].map(c => corners(s, c));
+      for (const p of [white, iris, pupil]) {
+        // Both sides of the nose, at the eyes' height, on the front of the face (-z).
+        expect(p.some(q => q[0] > 0.015)).toBe(true);
+        expect(p.some(q => q[0] < -0.015)).toBe(true);
+        expect(p.every(q => q[1] > 1.67 && q[1] < 1.71 && q[2] < -0.06)).toBe(true);
+      }
+      // The iris is on the ball, just in front of it; the pupil within its radius of the eye's middle.
+      for (const q of iris) {
+        const d = ball(Math.abs(q[0]), q[1]) - q[2];
+        expect(d).toBeGreaterThan(0);
+        expect(d).toBeLessThan(0.001);
+        expect(Math.hypot(Math.abs(q[0]) - EYE[0], q[1] - EYE[1])).toBeLessThan(IRIS_R + 1e-6);
+      }
+      for (const q of pupil) {
+        expect(Math.hypot(Math.abs(q[0]) - EYE[0], q[1] - EYE[1])).toBeLessThan(PUPIL_R + 1e-4);
+      }
+      // The ball is round: its middle stands 5 mm out of its rim.
+      const front = Math.min(...white.map(q => q[2]));
+      const rim = white.filter(q => Math.abs(q[1] - EYE[1]) > 0.0085 && q[2] < -0.07);
+      expect(Math.min(...rim.map(q => q[2])) - front).toBeGreaterThan(0.003);
     }
-    // The iris is in front of the white, and dark.
-    expect(Math.min(...of(IRIS).map(q => q[2]))).toBeLessThan(
-      Math.min(...of(WHITE).map(q => q[2])),
-    );
-    expect(IRIS.reduce((a, b) => a + b)).toBeLessThan(0.4);
-    // Nothing dark across the eyes but the irises: the shades are gone.
-    expect(
-      rows.filter((q, i) => q[1] > 1.66 && q[1] < 1.7 && colour(i).reduce((a, b) => a + b) < 0.1),
-    ).toHaveLength(0);
+    const colors = palette(JACKET);
+    expect(colors[PUPIL_].reduce((a, b) => a + b)).toBeLessThan(0.1);
+    expect(colors[IRIS_].reduce((a, b) => a + b)).toBeLessThan(0.4);
     // The eye's own body, headless, has no eyes.
-    const own = draw(2);
-    expect(
-      Array.from({ length: own.length / STRIDE }, (_, i) => i).some(i =>
-        same([own[i * STRIDE + 6], own[i * STRIDE + 7], own[i * STRIDE + 9]], WHITE),
-      ),
-    ).toBe(false);
+    expect([...body(2).c].includes(WHITE_)).toBe(false);
+    expect(body(2).m).toHaveLength(0);
   });
 
-  it('carves a face into the close head: a nose, lids over the irises, lips, a jaw over the neck, ears', () => {
-    const { v, t, c } = body(3);
-    const [FLESH_, IRIS_, LIP, STUBBLE, SHADOW] = [3, 9, 10, 13, 14];
-    const corners = (...col: number[]) =>
-      [...t].filter((_, i) => col.includes(c[i])).map(k => [v[k * 6], v[k * 6 + 1], v[k * 6 + 2]]);
+  it('carves a face into the close head: a nose, lids of their own over the top and the bottom of the irises, lips, a jaw over the neck, ears', () => {
+    const s = body(3);
     // The skin, shaved or not.
-    const flesh = corners(FLESH_, STUBBLE, SHADOW);
+    const flesh = corners(s, FLESH_, STUBBLE_, 23);
     // The nose's tip is the front of the face, about 2 cm out of the lips and the brow.
     const tip = flesh.reduce((a, b) => (b[2] < a[2] ? b : a));
     expect(Math.abs(tip[0])).toBeLessThan(0.002);
@@ -471,84 +496,350 @@ describe('skin', () => {
       Math.min(
         ...flesh.filter(p => Math.abs(p[0]) < 0.002 && Math.abs(p[1] - y) < 0.003).map(p => p[2]),
       );
-    expect(front(1.62) - tip[2]).toBeGreaterThan(0.018);
+    expect(front(1.608) - tip[2]).toBeGreaterThan(0.015);
     expect(front(1.708) - tip[2]).toBeGreaterThan(0.018);
     // The chin stands 2.5 cm over the throat under it.
     expect(front(1.575) - front(1.594)).toBeGreaterThan(0.02);
-    // The upper lid comes down in front of the top of the iris.
-    const irisFront = Math.min(...corners(IRIS_).map(p => p[2]));
-    expect(
-      flesh.some(
-        p => Math.abs(p[0] - 0.032) < 0.004 && p[1] > 1.6935 && p[1] < 1.697 && p[2] < irisFront,
-      ),
-    ).toBe(true);
+    // The lids: the upper one's edge under the top of the iris, the lower one's over its bottom,
+    // both in front of the ball; a line of lashes along the upper one's.
+    const of = (k: number) =>
+      Array.from({ length: s.w.length }, (_, i) => i)
+        .filter(i => s.g[i] == k && s.v[i * 6] > 0)
+        .map(i => [...s.v.slice(i * 6, i * 6 + 3)]);
+    const [up, low] = [of(KIND.LID_U), of(KIND.LID_L)];
+    const mid = (l: number[][]) => l.filter(p => Math.abs(p[0] - EYE[0]) < 0.002);
+    const upEdge = Math.min(...mid(up).map(p => p[1]));
+    const lowEdge = Math.max(...mid(low).map(p => p[1]));
+    expect(upEdge).toBeLessThan(EYE[1] + IRIS_R);
+    expect(upEdge).toBeGreaterThan(EYE[1] + PUPIL_R);
+    expect(lowEdge).toBeGreaterThan(EYE[1] - IRIS_R);
+    expect(lowEdge).toBeLessThan(EYE[1] - PUPIL_R);
+    for (const p of [...up, ...low]) {
+      expect(p[2]).toBeLessThan(ball(p[0], p[1]) - 0.0005);
+    }
+    const lash = corners(s, LASH_);
+    expect(lash.length).toBeGreaterThan(20);
+    expect(lash.every(p => Math.abs(Math.abs(p[0]) - EYE[0]) < 0.016)).toBe(true);
     // Lips under the nose, ears out of the sides.
-    const lips = corners(LIP);
+    const lips = corners(s, LIP_);
     expect(lips.length).toBeGreaterThan(30);
     expect(lips.every(p => Math.abs(p[0]) < 0.025 && p[1] > 1.605 && p[1] < 1.63)).toBe(true);
     for (const side of [1, -1]) {
       expect(flesh.some(p => p[0] * side > 0.083 && p[1] > 1.66 && p[1] < 1.7)).toBe(true);
     }
-    // Far, none of it: the far head is a plain one.
-    expect([...body(0).c].includes(LIP)).toBe(false);
   });
 
-  it('gives the close face a hard look: brows of their own along the arch of the brow ridge, their inner ends lower; a shaved beard under the cheekbones', () => {
-    const { v, t, c } = body(3);
-    const [BROW, STUBBLE, SHADOW] = [12, 13, 14];
-    const corners = (...col: number[]) =>
-      [...t].filter((_, i) => col.includes(c[i])).map(k => [v[k * 6], v[k * 6 + 1], v[k * 6 + 2]]);
-    const brows = corners(BROW);
+  it('paints the brows along the arch of the brow ridge, level at rest, and a shaved beard under the cheekbones, their edges soft', () => {
+    const s = body(3);
+    const brows = corners(s, BROW_);
     for (const side of [1, -1]) {
       const b = brows.filter(p => p[0] * side > 0);
       expect(b.length).toBeGreaterThan(30);
-      expect(b.every(p => Math.abs(p[0]) > 0.007 && Math.abs(p[0]) < 0.056 && p[2] < -0.07)).toBe(
+      expect(b.every(p => Math.abs(p[0]) > 0.005 && Math.abs(p[0]) < 0.06 && p[2] < -0.07)).toBe(
         true,
       );
-      // Over the eyes (1.69), the inner end lower than the arch.
-      const at = (x: number) =>
-        Math.max(...b.filter(p => Math.abs(Math.abs(p[0]) - x) < 0.003).map(p => p[1]));
-      expect(at(0.03)).toBeGreaterThan(1.712);
+      // Over the eyes (1.69), the inner end no more than a millimetre or two under the arch.
+      const at = (x: number) => {
+        const ys = b.filter(p => Math.abs(Math.abs(p[0]) - x) < 0.004).map(p => p[1]);
+        return (Math.max(...ys) + Math.min(...ys)) / 2;
+      };
+      expect(at(0.03)).toBeGreaterThan(1.706);
       expect(at(0.03)).toBeLessThan(1.72);
-      expect(at(0.03) - at(0.011)).toBeGreaterThan(0.003);
+      expect(Math.abs(at(0.03) - at(0.014))).toBeLessThan(0.004);
     }
-    // The beard, its edge softer: under the nose, around the mouth, along the jaw.
-    const beard = corners(STUBBLE, SHADOW);
-    expect(corners(STUBBLE).length).toBeGreaterThan(100);
-    expect(corners(SHADOW).length).toBeGreaterThan(50);
+    // The beard: under the nose, around the mouth, along the jaw.
+    const beard = corners(s, STUBBLE_);
+    expect(beard.length).toBeGreaterThan(150);
     expect(beard.every(p => p[1] < 1.672 && p[1] > 1.57)).toBe(true);
     expect(beard.some(p => p[0] > 0.04) && beard.some(p => p[0] < -0.04)).toBe(true);
-    // Far, the head is plain.
-    expect([...body(0).c].some(k => k == BROW || k == STUBBLE)).toBe(false);
+    // Soft edges: the hairline, the brows and the beard are blends of two colours, so they do
+    // not step with the head's grid.
+    for (const col of [4, BROW_, STUBBLE_]) {
+      const soft = [...s.cm].filter((m, i) => s.c2[i] == col && m > 0.05 && m < 0.95);
+      expect(soft.length).toBeGreaterThan(40);
+    }
+    // How dark the beard is is the runner's: none to full.
+    const none = palette(JACKET, undefined, undefined, false, TONES[1], 0);
+    expect(none[STUBBLE_]).toEqual(none[FLESH_]);
+    expect(palette(JACKET)[STUBBLE_][0]).toBeLessThan(none[FLESH_][0] * 0.8);
+    expect(new Set(Array.from({ length: 40 }, (_, i) => beardOf(i))).size).toBe(4);
   });
 
-  it('shuts the eyes in the skin of the lids and opens the mouth by turning the jaw down, dark inside', () => {
+  it('gives the far head, too coarse to carve, a mark for each eye, each brow and the mouth, and a nose: 31 vertices', () => {
+    const s = body(0);
+    const marks = Array.from({ length: s.w.length }, (_, i) => i).filter(i => s.g[i] == KIND.MARK);
+    expect(marks).toHaveLength(31);
+    const at = marks.map(i => [...s.v.slice(i * 6, i * 6 + 3)]);
+    // On the front of the face, the nose's tip 2 cm out of it.
+    expect(at.every(p => p[2] < -0.07 && p[1] > 1.6 && p[1] < 1.72)).toBe(true);
+    expect(Math.min(...at.map(p => p[2]))).toBeLessThan(-0.11);
+    const dark = corners(s, LASH_);
+    expect(dark.some(p => p[0] > 0.02) && dark.some(p => p[0] < -0.02)).toBe(true);
+    expect(dark.every(p => Math.abs(p[1] - EYE[1]) < 0.01)).toBe(true);
+    // No lids, no balls, no channels: nothing of it moves.
+    expect([...s.g].some(k => k == KIND.LID_U || k == KIND.WHITE || k == KIND.IRIS)).toBe(false);
+    expect(s.m).toHaveLength(0);
+    // The carved levels have no marks.
+    expect([...body(1).g, ...body(3).g].includes(KIND.MARK)).toBe(false);
+  });
+
+  describe('the face', () => {
     const colors = palette(JACKET);
-    const face = (shut: number, open: number) => {
+    /** The close skin's vertices drawn with the face `w`, by rest vertex: [x, y, z, nx, ny, nz, r, g, layer, b]. */
+    const drawn = (w?: ArrayLike<number>, lod = 3) => {
       const out: number[] = [];
-      skin(out, body(3), solve(rest()), colors, shut, open);
-      return Array.from({ length: out.length / STRIDE }, (_, i) =>
-        out.slice(i * STRIDE, (i + 1) * STRIDE),
-      );
+      const s = body(lod);
+      skin(out, s, solve(rest()), colors, w);
+      const by: number[][] = [];
+      s.t.forEach((k, i) => (by[k] = out.slice(i * STRIDE, (i + 1) * STRIDE)));
+      return by;
     };
-    const [still, shut, open] = [face(0, 0), face(1, 0), face(0, 1)];
-    const colour = (r: number[]) => [r[6], r[7], r[9]];
-    const has = (rs: number[][], c: number[]) => rs.some(r => same(colour(r), c));
-    const [WHITE, IRIS] = colors.slice(8, 10);
-    expect(has(still, WHITE) && has(still, IRIS)).toBe(true);
-    expect(still.some(r => r[8] == -2)).toBe(true);
-    // Shut: no white, no iris, no speck; nothing else moves.
-    expect(has(shut, WHITE) || has(shut, IRIS)).toBe(false);
-    expect(shut.every(r => r[8] == -1)).toBe(true);
-    expect(shut.map(r => r.slice(0, 3))).toEqual(still.map(r => r.slice(0, 3)));
-    // Open: the chin comes 1.5 cm down, the nose and the brow stay, the mouth dark between.
-    const drop = Math.max(...still.map((r, i) => r[1] - open[i][1]));
-    expect(drop).toBeGreaterThan(0.015);
-    expect(drop).toBeLessThan(0.025);
-    const above = (rs: number[][]) => rs.filter(r => r[1] > 1.63).map(r => r.slice(0, 3));
-    expect(above(open)).toEqual(above(still));
-    expect(open.some(r => r[6] < 0.1 && r[6] > 0.08 && r[9] < 0.04)).toBe(true);
-    expect(still.some(r => r[6] < 0.1 && r[6] > 0.08 && r[9] < 0.04)).toBe(false);
+    const s = body(3);
+    const ids = Array.from({ length: s.w.length }, (_, i) => i);
+    const kind = (k: number, right = true) =>
+      ids.filter(i => s.g[i] == k && s.v[i * 6] > 0 == right);
+    /** The head's vertices near (x, y) on the front of the face, both sides when x is not 0. */
+    const near = (x: number, y: number, r = 0.004) =>
+      ids.filter(
+        i =>
+          s.g[i] == KIND.HEAD &&
+          s.v[i * 6 + 2] < -0.05 &&
+          Math.hypot(Math.abs(s.v[i * 6]) - x, s.v[i * 6 + 1] - y) < r,
+      );
+    const moved = (a: number[][], b: number[][], list: number[], axis: number) =>
+      list.reduce((m, i) => m + b[i][axis] - a[i][axis], 0) / list.length;
+    const still = drawn();
+    const one = (ch: number, k = 1) => {
+      const w = new Float32Array(CHANNELS);
+      w[ch] = k;
+      return w;
+    };
+
+    it('draws the rest mesh with no face, and with a face at rest: the channels add nothing at 0', () => {
+      expect(drawn(new Float32Array(CHANNELS))).toEqual(still);
+      expect(s.m).toHaveLength(CHANNELS);
+      // The body under the neck is in no channel.
+      for (const { i } of s.m) {
+        expect([...i].every(k => s.v[k * 6 + 1] > 1.55)).toBe(true);
+      }
+    });
+
+    it('blinks: the upper lids come down onto the lower ones, over the irises, on the ball all the way, and go back', () => {
+      const edge = (d: number[][]) => {
+        const lid = kind(KIND.LID_U).filter(i => Math.abs(s.v[i * 6] - EYE[0]) < 0.002);
+        return lid.map(i => d[i]).reduce((a, b) => (b[1] < a[1] ? b : a));
+      };
+      const [open, shut] = [edge(still), edge(drawn(one(CH.BLINK)))];
+      expect(open[1]).toBeGreaterThan(EYE[1] + 0.003);
+      // Shut: at the lower lid's edge, 9 mm down, under the whole pupil and nearly all the iris.
+      expect(shut[1]).toBeLessThan(lidEdge(false, 0) + 0.0005);
+      expect(open[1] - shut[1]).toBeGreaterThan(0.008);
+      expect(shut[1]).toBeLessThan(EYE[1] - PUPIL_R);
+      // Half way the lid is on the ball, in front of it; on the straight line from open to shut
+      // (BLINK alone) its edge would be in the ball.
+      const half = one(CH.BLINK, 0.5);
+      const chord = edge(drawn(half));
+      half[CH.BLINK_MID] = 1;
+      const on = edge(drawn(half));
+      expect(on[2]).toBeLessThan(ball(on[0], on[1]) - 0.0005);
+      expect(on[2]).toBeLessThan(chord[2]);
+      // Shut too, at every vertex of the lid.
+      const all = drawn(one(CH.BLINK));
+      for (const i of kind(KIND.LID_U)) {
+        expect(all[i][2]).toBeLessThan(ball(all[i][0], all[i][1]) - 0.0003);
+      }
+      // Nothing but the lids moves, and they reopen where they were.
+      for (const i of ids.filter(i => s.g[i] != KIND.LID_U)) {
+        expect(all[i].slice(0, 3)).toEqual(still[i].slice(0, 3));
+      }
+      expect(drawn(one(CH.BLINK, 0))).toEqual(still);
+    });
+
+    it('turns the gaze: the irises slide on the balls, both to the same side, and stay within the whites', () => {
+      const middle = (d: number[][], right: boolean) => {
+        const p = kind(KIND.IRIS, right).map(i => d[i]);
+        return [0, 1, 2].map(e => p.reduce((m, q) => m + q[e], 0) / p.length);
+      };
+      for (const right of [true, false]) {
+        const [at, to, up] = [still, drawn(one(CH.LOOK_X)), drawn(one(CH.LOOK_Y))].map(d =>
+          middle(d, right),
+        );
+        // To the runner's right (+x) in both eyes, 4 to 5 mm; up 3 mm.
+        expect(to[0] - at[0]).toBeGreaterThan(0.004);
+        expect(to[0] - at[0]).toBeLessThan(0.0055);
+        expect(up[1] - at[1]).toBeGreaterThan(0.0025);
+        expect(Math.abs(to[1] - at[1])).toBeLessThan(1e-5);
+      }
+      // At the end of its travel every point of the iris is still on the ball, inside its rim.
+      for (const [gx, gy] of [
+        [1, 0],
+        [-1, 0],
+        [0.7, 0.7],
+        [-0.7, -0.7],
+      ]) {
+        const w = one(CH.LOOK_X, gx);
+        w[CH.LOOK_Y] = gy;
+        w[CH.LOOK_IN] = lookIn(gx, gy);
+        const d = drawn(w);
+        for (const i of [...kind(KIND.IRIS), ...kind(KIND.IRIS, false)]) {
+          const [x, y, z] = d[i];
+          expect(((Math.abs(x) - EYE[0]) / 0.0138) ** 2 + ((y - EYE[1]) / 0.009) ** 2).toBeLessThan(
+            1,
+          );
+          // Just off the ball, whichever way: LOOK_IN takes it back along the ball's curve.
+          const off = ball(Math.abs(x), y) - z;
+          expect(off).toBeGreaterThan(0.0001);
+          expect(off).toBeLessThan(0.001);
+        }
+      }
+      // Only the irises move.
+      const d = drawn(one(CH.LOOK_X));
+      expect(ids.filter(i => s.g[i] != KIND.IRIS).every(i => d[i][0] == still[i][0])).toBe(true);
+    });
+
+    it('moves the right features with each channel: the brows, the jaw, the corners of the mouth, the lower lids', () => {
+      const [brow, inner, chin, corner, cheek] = [
+        near(0.03, 1.713),
+        near(0.012, 1.711),
+        near(0, 1.59, 0.006),
+        near(0.0235, 1.6165),
+        near(0.04, 1.65, 0.006),
+      ];
+      for (const l of [brow, inner, chin, corner, cheek]) {
+        expect(l.length).toBeGreaterThan(1);
+      }
+      const d = (ch: number) => drawn(one(ch));
+      // The brows up 3 to 5 mm; nothing at the mouth.
+      const up = d(CH.BROW_UP);
+      expect(moved(still, up, brow, 1)).toBeGreaterThan(0.003);
+      expect(moved(still, up, brow, 1)).toBeLessThan(0.0055);
+      expect(Math.abs(moved(still, up, corner, 1))).toBeLessThan(1e-4);
+      // A frown: their inner ends down, more than the arch; pain: the inner ends up.
+      const down = d(CH.BROW_DOWN);
+      expect(moved(still, down, inner, 1)).toBeLessThan(-0.003);
+      expect(moved(still, down, inner, 1)).toBeLessThan(moved(still, down, brow, 1) - 0.001);
+      expect(moved(still, d(CH.BROW_PAIN), inner, 1)).toBeGreaterThan(0.002);
+      // The jaw: the chin 1.5 to 2.5 cm down, nothing above the upper lip, the mouth dark between.
+      const jaw = d(CH.JAW);
+      expect(-moved(still, jaw, chin, 1)).toBeGreaterThan(0.015);
+      expect(-moved(still, jaw, chin, 1)).toBeLessThan(0.025);
+      expect(ids.filter(i => s.v[i * 6 + 1] > 1.63).every(i => jaw[i][1] == still[i][1])).toBe(
+        true,
+      );
+      const dark = (r: number[]) => r[6] < 0.1 && r[6] > 0.08 && r[9] < 0.04;
+      expect(jaw.some(dark)).toBe(true);
+      expect(still.some(dark)).toBe(false);
+      // A smile: the corners up and out, the cheeks up; a frown of the mouth: the corners down.
+      const smile = d(CH.SMILE);
+      expect(moved(still, smile, corner, 1)).toBeGreaterThan(0.003);
+      expect(moved(still, smile, cheek, 1)).toBeGreaterThan(0.001);
+      const out = corner.reduce((m, i) => m + Math.abs(smile[i][0]) - Math.abs(still[i][0]), 0);
+      expect(out / corner.length).toBeGreaterThan(0.002);
+      expect(Math.abs(moved(still, smile, brow, 1))).toBeLessThan(1e-4);
+      expect(moved(still, d(CH.FROWN), corner, 1)).toBeLessThan(-0.002);
+      // The lips off the teeth: the line between them is the teeth's colour.
+      const teeth = colors[24];
+      const bared = d(CH.GRIT).filter(r => Math.abs(r[6] - teeth[0] * 1) < 0.02 && r[9] > 0.6);
+      expect(bared.length).toBeGreaterThan(4);
+      // A squint: the lower lids' edges up.
+      const lower = kind(KIND.LID_L).filter(i => Math.abs(s.v[i * 6] - EYE[0]) < 0.002);
+      const top = (x: number[][]) => Math.max(...lower.map(i => x[i][1]));
+      expect(top(d(CH.SQUINT)) - top(still)).toBeGreaterThan(0.002);
+      // Unit normals whatever the face.
+      for (const w of [expression(POSE.SHOUT, 4), expression(POSE.WINCE, 9), lookOf(11)]) {
+        for (const r of drawn(w)) {
+          expect(Math.hypot(r[3], r[4], r[5])).toBeCloseTo(1, 4);
+        }
+      }
+    });
+
+    it('wears each expression on the features it is made of, and is back at rest with it gone', () => {
+      const [brow, chin, corner] = [near(0.012, 1.711), near(0, 1.59, 0.006), near(0.0235, 1.6165)];
+      const lidGap = (d: number[][]) => {
+        const at = (k: number) =>
+          kind(k)
+            .filter(i => Math.abs(s.v[i * 6] - EYE[0]) < 0.002)
+            .map(i => d[i][1]);
+        return Math.min(...at(KIND.LID_U)) - Math.max(...at(KIND.LID_L));
+      };
+      const open = lidGap(still);
+      expect(open).toBeGreaterThan(0.008);
+      const of = (pose: number[][]) => drawn(expression(pose));
+      // Effort and focus: the brows down, the eyes narrowed; in effort the mouth open to breathe.
+      for (const pose of [POSE.EFFORT, POSE.FOCUS]) {
+        const d = of(pose);
+        expect(moved(still, d, brow, 1)).toBeLessThan(-0.0015);
+        expect(lidGap(d)).toBeLessThan(open - 0.001);
+        expect(lidGap(d)).toBeGreaterThan(open * 0.5);
+      }
+      expect(-moved(still, of(POSE.EFFORT), chin, 1)).toBeGreaterThan(0.004);
+      expect(-moved(still, of(POSE.FOCUS), chin, 1)).toBeLessThan(0.001);
+      // A wince and the face of one down: the eyes shut or nearly, the mouth's corners down.
+      for (const pose of [POSE.WINCE, POSE.DOWN]) {
+        const d = of(pose);
+        expect(lidGap(d)).toBeLessThan(open * 0.2);
+        expect(moved(still, d, corner, 1)).toBeLessThan(-0.001);
+      }
+      // A shout: the jaw wide, the brows hard down, the eyes open.
+      const shout = of(POSE.SHOUT);
+      expect(-moved(still, shout, chin, 1)).toBeGreaterThan(0.015);
+      expect(moved(still, shout, brow, 1)).toBeLessThan(-0.003);
+      expect(lidGap(shout)).toBeGreaterThan(open * 0.5);
+      // A grin: the corners up, the jaw nearly shut, the eyes open.
+      const grin = of(POSE.GRIN);
+      expect(moved(still, grin, corner, 1)).toBeGreaterThan(0.003);
+      expect(-moved(still, grin, chin, 1)).toBeLessThan(0.004);
+      expect(lidGap(grin)).toBeGreaterThan(open * 0.5);
+      // Gone, the face is the rest one again: no channel leaves anything behind.
+      expect(drawn(expression([]))).toEqual(still);
+    });
+
+    it('gives two players two faces and one player one face: the shape, the skin, the hair, the eyes, the beard', () => {
+      const [a, b] = [drawn(lookOf(1)), drawn(lookOf(2))];
+      expect(drawn(lookOf(1))).toEqual(a);
+      const head = ids.filter(i => s.v[i * 6 + 1] > 1.6);
+      const apart = Math.max(
+        ...head.map(i => dist(a[i].slice(0, 3) as Vec3, b[i].slice(0, 3) as Vec3)),
+      );
+      // Millimetres, not centimetres: two people, not two species.
+      expect(apart).toBeGreaterThan(0.002);
+      expect(apart).toBeLessThan(0.02);
+      // The body under the neck is the same.
+      for (const i of ids.filter(i => s.v[i * 6 + 1] < 1.55)) {
+        expect(a[i]).toEqual(b[i]);
+      }
+      // Each trait within its range, the expressions' channels left at 0; no two of 30 players alike.
+      const looks = Array.from({ length: 30 }, (_, i) => lookOf(i));
+      for (const w of looks) {
+        expect(w).toHaveLength(CHANNELS);
+        expect([...w.slice(0, CH.WIDTH)].every(v => v == 0)).toBe(true);
+        expect([...w.slice(CH.WIDTH)].every(v => Math.abs(v) <= 1.25)).toBe(true);
+        expect(w[CH.HAIR]).toBeGreaterThanOrEqual(0);
+      }
+      expect(new Set(looks.map(w => w.join())).size).toBe(30);
+      // A face is not the same on both sides.
+      const lop = drawn(one(CH.ASYM));
+      const [r, l] = [true, false].map(right =>
+        ids.filter(
+          i => s.g[i] == KIND.HEAD && s.v[i * 6] > 0.02 == right && Math.abs(s.v[i * 6]) > 0.02,
+        ),
+      );
+      const lift = (list: number[]) => Math.max(...list.map(i => lop[i][1] - still[i][1]));
+      expect(lift(r)).toBeGreaterThan(lift(l) + 0.001);
+      // The skin: six tones, the same for every viewer, in the palette with its lips and its shades.
+      const people = Array.from({ length: 200 }, (_, i) => i);
+      expect(new Set(people.map(i => String(toneOf(i)))).size).toBe(TONES.length);
+      expect(toneOf(5)).toBe(toneOf(5));
+      const dark = palette(JACKET, undefined, undefined, false, TONES[5]);
+      expect(dark[FLESH_]).toBe(TONES[5]);
+      expect(dark[LIP_][0]).toBeLessThan(TONES[5][0]);
+      expect(palette(JACKET)[FLESH_]).toBe(TONES[1]);
+      // On the two darkest the hair is dark or shaved, the eyes brown.
+      for (const i of people.filter(i => TONES.indexOf(toneOf(i)) > 3)) {
+        expect(shaved(i) || hairOf(i)[0] < 0.25).toBe(true);
+        expect(eyesOf(i)[2]).toBeLessThan(0.1);
+      }
+    });
   });
 
   it('gives each runner his own look, the same for everyone: one of nine hair colours, a shaved head among them, one of five irises', () => {
@@ -678,11 +969,19 @@ describe('skin', () => {
     // Close, 2.6 ms on a desk with the hard face (#116); runners took 12.6 against 12, then 16.2
     // against 15 under coverage: the bound only catches a many-fold slowdown.
     expect((performance.now() - u) / 50).toBeLessThan(25);
+    // With a face in a full expression, its channels added before the pose: the same bound.
+    const w = expression(POSE.WINCE, 3);
+    const f = performance.now();
+    for (let i = 0; i < 50; i++) {
+      out.length = 0;
+      skin(out, body(3), solve(p), palette(JACKET), w);
+    }
+    expect((performance.now() - f) / 50).toBeLessThan(25);
   });
 
   describe('cut', () => {
     const LIMBS = [LIMB.HEAD, LIMB.ARM_L, LIMB.ARM_R, LIMB.LEG_L, LIMB.LEG_R];
-    const CAP = palette(JACKET).length - 1;
+    const CAP = CAP_;
     const tris = (s: { t: Uint16Array }, n = s.t.length / 3) =>
       Array.from({ length: n }, (_, i) => [...s.t.slice(i * 3, i * 3 + 3)].join());
 
@@ -730,7 +1029,7 @@ describe('skin', () => {
       expect(Math.min(...xs(LIMB.LEG_R))).toBeGreaterThan(-0.01);
     });
 
-    it('closes both pieces: every edge has a twin, but the buried bases of the eyes', () => {
+    it('closes both pieces: every edge has a twin, but the rims of the pieces of the face', () => {
       for (const limb of LIMBS) {
         for (const s of cut(1, limb)) {
           const dir = new Set<string>();
@@ -742,7 +1041,7 @@ describe('skin', () => {
           for (const key of dir) {
             const [a, b] = key.split(' ');
             if (!dir.has(`${b} ${a}`)) {
-              expect(eyeBase(s.v, +a)).toBe(true);
+              expect(piece(s, +a)).toBe(true);
             }
           }
         }

@@ -2,7 +2,9 @@
 // sprites and the same behaviour, its own look): a shaved runner with an earpiece, 24 by 29 pixels,
 // drawn in code. 42 frames: 5 levels of wounds by 8 expressions (looking ahead, left and right,
 // turned left and right toward a hit, an ouch, a grin, a rage), a glow for the flag carrier and the
-// dead face. mood() picks the frame from what happens to the player.
+// dead face; then 15 more, the 5 levels by the three expressions the runners' faces have and DOOM's
+// had not (expression.ts): effort, focus, a shout. mood() picks the frame from what happens to the
+// player.
 
 /** The sprite's size, pixels. */
 export const [FW, FH] = [24, 29];
@@ -16,9 +18,15 @@ export const EXPR = {
   OUCH: 5,
   GRIN: 6,
   RAGE: 7,
+  EFFORT: 8,
+  FOCUS: 9,
+  SHOUT: 10,
 };
-/** The frames past the 40 of the wound levels: the flag carrier's glow, and dead. */
-export const [GLOW, DEAD, FRAMES] = [40, 41, 42];
+/** The frames past the 40 of the wound levels: the flag carrier's glow, and dead; then the 15 of effort, focus and the shout. */
+export const [GLOW, DEAD, MORE, FRAMES] = [40, 41, 42, 57];
+/** The frame of expression `e` at wound level `level`. */
+export const frame = (level: number, e: number) =>
+  e < 8 ? level * 8 + e : MORE + level * 3 + e - 8;
 
 /** The colours of the palette, RGBA as one number each (little-endian ABGR for ImageData). */
 export const PALETTE = [
@@ -54,8 +62,10 @@ export const sprite = (n: number): Uint8Array => {
   }
   const p = new Uint8Array(FW * FH);
   const dead = n == DEAD;
-  const level = dead ? 4 : n == GLOW ? 0 : Math.floor(n / 8);
-  const e = n >= 40 ? -1 : n % 8;
+  const more = n >= MORE;
+  const level = dead ? 4 : n == GLOW ? 0 : more ? Math.floor((n - MORE) / 3) : Math.floor(n / 8);
+  const e = more ? 8 + ((n - MORE) % 3) : n >= 40 ? -1 : n % 8;
+  const hard = e == EXPR.EFFORT || e == EXPR.SHOUT;
   const put = (x: number, y: number, c: number) => {
     if (x >= 0 && x < FW && y >= 0 && y < FH) {
       p[y * FW + x] = c;
@@ -102,7 +112,7 @@ export const sprite = (n: number): Uint8Array => {
   // The eyes: open, wide, narrowed, crossed out dead or glowing; the left one swells at level 3.
   for (const [i, x] of [lx, rx].entries()) {
     const wide = e == EXPR.OUCH;
-    const narrow = e == EXPR.GRIN || e == EXPR.RAGE || (i == 0 && level >= 3);
+    const narrow = e == EXPR.GRIN || e == EXPR.RAGE || e >= EXPR.EFFORT || (i == 0 && level >= 3);
     if (dead) {
       put(x, 12, PUPIL);
       put(x + 3, 12, PUPIL);
@@ -121,12 +131,12 @@ export const sprite = (n: number): Uint8Array => {
     const lift = wide ? -2 : 0;
     for (let k = 0; k < 4; k++) {
       const v =
-        e == EXPR.RAGE || e == EXPR.TURN_L || e == EXPR.TURN_R
+        e == EXPR.RAGE || e == EXPR.TURN_L || e == EXPR.TURN_R || hard
           ? (i ? 3 - k : k) >> 1
           : e == EXPR.GRIN
             ? (i ? k : 3 - k) >> 2
             : 0;
-      put(x + k, 10 + lift + v + (narrow && e != EXPR.RAGE ? 1 : 0), BROW);
+      put(x + k, 10 + lift + v + (narrow && e != EXPR.RAGE && !hard ? 1 : 0), BROW);
     }
   }
   // The nose.
@@ -147,6 +157,20 @@ export const sprite = (n: number): Uint8Array => {
     box(m, 21, 6, 1, TEETH);
     put(m + 2, 21, LINE);
     put(m + 4, 21, LINE);
+  } else if (e == EXPR.SHOUT) {
+    // Wide open, the upper teeth showing.
+    box(m, 19, 6, 5, LINE);
+    box(m + 1, 20, 4, 3, MOUTH);
+    box(m + 1, 20, 4, 1, TEETH);
+  } else if (e == EXPR.EFFORT) {
+    // Out of breath: the mouth open a little, a drop of sweat on the temple.
+    box(m + 1, 20, 4, 3, LINE);
+    box(m + 2, 21, 2, 1, MOUTH);
+    put(4, 11, LIGHT);
+    put(4, 12, WHITE);
+  } else if (e == EXPR.FOCUS) {
+    // Set: a short, tight line.
+    box(m + 1, 21, 4, 1, LINE);
   } else if (e == EXPR.TURN_L || e == EXPR.TURN_R) {
     // A grimace, lower on the side of the hit.
     for (let k = 0; k < 6; k++) {
@@ -193,13 +217,20 @@ export interface Feel {
   got: boolean;
   /** Seconds the trigger has been held, firing. */
   firing: number;
+  /** What the runners' faces answer to as well (Mood in expression.ts): a sprint or a climb, aiming, a cut or a dash, a capture or a foe put down. */
+  effort?: boolean;
+  focus?: boolean;
+  shout?: boolean;
+  grin?: boolean;
 }
 
 /**
  * The face's mind (after DOOM's, not its code): the frame for this moment. A hit turns the face
  * toward its side, or grimaces straight on when it comes from ahead or from nowhere; a heavy hit (2
  * health or more) is an ouch; a new weapon a grin; the trigger held for 2 s a rage; and otherwise it
- * glances left and right every half second or so. Each reaction holds a second.
+ * glances left and right every half second or so. Each reaction holds a second. As the runners'
+ * faces do, it shouts in a cut or a dash, grins at a capture or a foe put down, is set while aiming
+ * and strains in a sprint or a climb.
  */
 export const mood = (rand = Math.random) => {
   let [hold, held, glance, eyes] = [0, EXPR.AHEAD, 0, EXPR.AHEAD];
@@ -221,17 +252,26 @@ export const mood = (rand = Math.random) => {
               ? EXPR.TURN_L
               : EXPR.TURN_R;
       hold = 1;
-    } else if (f.got) {
+    } else if (f.got || f.grin) {
       [held, hold] = [EXPR.GRIN, 1.5];
     }
     if (hold > 0) {
       return level * 8 + held;
     }
+    if (f.shout) {
+      return frame(level, EXPR.SHOUT);
+    }
     if (f.firing > 2) {
       return level * 8 + EXPR.RAGE;
     }
+    if (f.focus) {
+      return frame(level, EXPR.FOCUS);
+    }
     if (f.flag) {
       return GLOW;
+    }
+    if (f.effort) {
+      return frame(level, EXPR.EFFORT);
     }
     if ((glance -= dt) <= 0) {
       glance = 0.5 + rand() * 0.6;

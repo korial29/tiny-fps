@@ -55,11 +55,11 @@ export const HUD_CSS =
   `background:linear-gradient(90deg,#e23b3b,#fff3 50%,#8ef);box-shadow:0 0 0 1px #0008}` +
   `ins i{position:absolute;top:-5px;width:6px;height:22px;margin-left:-3px;border-radius:3px;background:#fff;box-shadow:0 0 8px #8ef}` +
   `figure{left:50%;bottom:24px;transform:translateX(-50%)}figure canvas{display:block;width:72px;height:87px;image-rendering:pixelated;filter:drop-shadow(0 2px 2px #000a)}` +
-  // The visor of a helmet from inside: a V. A heavy brow that dips at the middle, sides that slant in, a chin that points
-  // down between the health and the face, which stay in the opening; what the HUD draws after it (the face, the health,
-  // the gun's count) is over the shell, never cut by it. A darker shell outside a lighter band, for a soft edge.
-  `del{inset:0;background:#0005;clip-path:polygon(evenodd,0 0,100% 0,100% 100%,0 100%,0 0,2% 5%,50% 11%,98% 5%,95% 76%,50% 99%,5% 76%,2% 5%)}` +
-  `del::before{content:"";position:absolute;inset:0;background:#0009;clip-path:polygon(evenodd,0 0,100% 0,100% 100%,0 100%,0 0,0.6% 3%,50% 9.5%,99.4% 3%,97% 77.5%,50% 102.5%,3% 77.5%,0.6% 3%)}` +
+  // The visor rim of a helmet: the dark of the shell at the corners, as it was.
+  `del{inset:0;background:radial-gradient(ellipse 74% 80% at 50% 54%,#0000 62%,#000c 100%)}` +
+  // And the visor's own outline in place of the rounded sheen, barely there: a thin pale line in a slight V (a brow that dips a little at the middle, a
+  // chin that points a little down), drawn under the face, the health and the counts, which nothing covers.
+  `del::before{content:"";position:absolute;inset:0;background:#fff2;clip-path:polygon(evenodd,3.5% 4%,50% 7%,96.5% 4%,95.5% 93%,50% 98.6%,4.5% 93%,3.5% 4%,3.85% 4.35%,50% 7.35%,96.15% 4.35%,95.15% 92.65%,50% 98.25%,4.85% 92.65%,3.85% 4.35%)}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}` +
   // The maps over the title screen, and over the end screen when the pointer is free: the host's buttons.

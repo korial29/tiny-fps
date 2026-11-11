@@ -1,13 +1,29 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDLE } from '../../test/teams';
-import { FLAG } from '../shared/types';
+import { MAPS } from '../shared/maps';
+import { HIGHLINE } from '../shared/map';
+import { BODY, FLAG } from '../shared/types';
 import type { FlagState } from '../shared/types';
-import { GUN_MAG, HP_MAX, RIFLE_CLIP } from '../shared/constants';
+import { GUN_MAG, HP_MAX, RIFLE_CLIP, RULES } from '../shared/constants';
 import { ROVER } from '../shared/rover';
 import { MODE, NOBODY } from '../shared/types';
 import type { Rover } from '../shared/types';
-import { BANNER_MS, HIT_MS, HUD_CSS, boarding, clock, createHud, kmh } from './hud';
+import {
+  BANNER_MS,
+  CAST,
+  CONTROLS,
+  GOAL,
+  HIT_MS,
+  HUD_CSS,
+  SHOT,
+  TABS,
+  boarding,
+  clock,
+  createHud,
+  kmh,
+} from './hud';
+import { CODES } from './input';
 import type { Hud, Summary } from './hud';
 import type { Mark } from './marks';
 
@@ -22,66 +38,227 @@ describe('createHud', () => {
   const [muted, menu] = ['h5', 'aside'].map(t => () => q(t));
 
   describe('title screen', () => {
-    it('is hidden until given a status, then shows it with the name and the controls', () => {
+    const show = (map = HIGHLINE) => hud.title('Click to play', map.name!, map.tag, map.lore);
+    const tabs = () => [...screen.querySelectorAll<HTMLElement>('[role=tab]')];
+    const panels = () => [...screen.querySelectorAll<HTMLElement>('aside article')];
+    const cards = () => [...screen.querySelectorAll<HTMLElement>('[role=radio]')];
+    const on = (list: HTMLElement[], attr: string) => list.map(el => el.getAttribute(attr));
+    const press = (el: HTMLElement, code: string) =>
+      el.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true, cancelable: true }));
+
+    it('is hidden until given a status, then shows it on its button under the logo', () => {
       expect(menu().hidden).toBe(true);
-      hud.title('Click to play', 'Rooftops');
+      show();
       expect(menu().hidden).toBe(false);
-      const text = menu().textContent!;
-      expect(text).toContain('TINY FPS');
-      expect(text).toContain('Rooftops');
-      expect(text).toContain('Click to play');
-      for (const control of [
-        'Mouse',
-        'WASD / ZQSD',
-        'Shift',
-        'Space',
-        'Move key twice',
-        'C',
-        'M',
-      ]) {
-        expect(text).toContain(control);
-      }
       expect(q('aside h6').textContent).toBe('TINY FPS');
+      expect(q('aside header strong').textContent).toBe('Click to play');
     });
 
-    it('says what each move key does: sprint, jump again for the double jump, dash, slide', () => {
-      hud.title('Click to play', 'Rooftops');
-      const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
-      expect(rows).toContain('Shiftsprint');
-      expect(rows).toContain('Spacejump, again in the air');
-      expect(rows).toContain('Move key twicedash that way');
-      expect(rows).toContain('Ccrouch, slide when fast');
+    it('has a menu of two entries, Game then Controls, and shows the Game panel first', () => {
+      show();
+      expect(tabs().map(t => t.textContent)).toEqual(['Game', 'Controls']);
+      expect(TABS).toEqual(['Game', 'Controls']);
+      expect(on(tabs(), 'aria-selected')).toEqual(['true', 'false']);
+      expect(panels().map(p => p.hidden)).toEqual([false, true]);
     });
 
-    it('says the goal: the flag of the other team to your own base', () => {
-      hud.title('Click to play', 'Rooftops');
-      expect(menu().textContent).toMatch(/enemy flag.*your own base/);
+    it('shows the other panel and hides the first on a click of its entry, and back', () => {
+      show();
+      tabs()[1].click();
+      expect(on(tabs(), 'aria-selected')).toEqual(['false', 'true']);
+      expect(panels().map(p => p.hidden)).toEqual([true, false]);
+      tabs()[0].click();
+      expect(on(tabs(), 'aria-selected')).toEqual(['true', 'false']);
+      expect(panels().map(p => p.hidden)).toEqual([false, true]);
     });
 
-    it('says the left button fires the gun, taken on the armoury', () => {
-      hud.title('Click to play', 'Rooftops');
-      const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
-      expect(rows).toContain('Left clickfire, hold to charge');
-      expect(menu().textContent).toMatch(/armoury past your flag for the gun/);
+    it('goes from an entry to the other with the arrows, the chosen one alone in the Tab order', () => {
+      show();
+      screen.ownerDocument.body.append(screen);
+      expect(tabs().map(t => t.tabIndex)).toEqual([0, -1]);
+      press(tabs()[0], 'ArrowDown');
+      expect(panels().map(p => p.hidden)).toEqual([true, false]);
+      expect(tabs().map(t => t.tabIndex)).toEqual([-1, 0]);
+      expect(document.activeElement).toBe(tabs()[1]);
+      press(tabs()[1], 'ArrowUp');
+      expect(panels().map(p => p.hidden)).toEqual([false, true]);
+      // Any other key is the page's.
+      press(tabs()[0], 'KeyW');
+      expect(panels().map(p => p.hidden)).toEqual([false, true]);
+      screen.remove();
     });
 
-    it('hides when the status is empty, and is back for the next pause', () => {
-      hud.title('Click to play', 'Rooftops');
-      hud.title('', 'Rooftops');
+    it('has a card with a picture for each character in the Game panel, the man chosen first', () => {
+      show();
+      expect(cards().map(c => c.textContent)).toEqual(CAST);
+      expect(cards()).toHaveLength(Object.keys(BODY).length);
+      expect(cards().every(c => panels()[0].contains(c))).toBe(true);
+      expect(on(cards(), 'aria-checked')).toEqual(['true', 'false']);
+      const pics = hud.cast(() => {});
+      expect(pics).toEqual(cards().map(c => c.querySelector('canvas')));
+      expect(pics.map(c => [c.width, c.height])).toEqual([SHOT, SHOT]);
+    });
+
+    it('chooses the card clicked and tells the choice once, by a click or by the arrows', () => {
+      show();
+      const pick = vi.fn();
+      hud.cast(pick);
+      cards()[BODY.FEMALE].click();
+      expect(on(cards(), 'aria-checked')).toEqual(['false', 'true']);
+      expect(pick.mock.calls).toEqual([[BODY.FEMALE]]);
+      // The chosen card again changes nothing.
+      cards()[BODY.FEMALE].click();
+      expect(pick).toHaveBeenCalledOnce();
+      press(cards()[BODY.FEMALE], 'ArrowLeft');
+      expect(on(cards(), 'aria-checked')).toEqual(['true', 'false']);
+      expect(pick.mock.calls).toEqual([[BODY.FEMALE], [BODY.MALE]]);
+    });
+
+    it('lights the card of the character the roster says, without telling it back', () => {
+      show();
+      const pick = vi.fn();
+      hud.cast(pick);
+      hud.wear(BODY.FEMALE);
+      expect(on(cards(), 'aria-checked')).toEqual(['false', 'true']);
+      hud.wear(BODY.MALE);
+      expect(on(cards(), 'aria-checked')).toEqual(['true', 'false']);
+      expect(pick).not.toHaveBeenCalled();
+    });
+
+    it('sums the mode up in a few lines: the goal, the flag at home, the score and the time of a match', () => {
+      show();
+      const mode = q('aside blockquote');
+      expect(panels()[0].contains(mode)).toBe(true);
+      expect(mode.textContent).toContain('Capture the flag');
+      const lines = [...mode.querySelectorAll('span')].map(l => l.textContent!);
+      expect(lines).toEqual(GOAL);
+      expect(lines.length).toBeLessThanOrEqual(4);
+      expect(lines[0]).toMatch(/enemy flag.*run it home/);
+      expect(lines[1]).toMatch(/own flag is at home/);
+      expect(lines[2]).toContain(`${RULES.scoreLimit} captures`);
+      expect(lines[2]).toContain(`${RULES.timeLimit / 60} minutes`);
+      expect(lines[3]).toMatch(/armoury past your flag/);
+    });
+
+    it.each(Object.entries(MAPS))('tells the title, the kind and the lore of %s', (_, map) => {
+      expect(map.name && map.tag && map.lore).toBeTruthy();
+      show(map);
+      const box = q('aside address');
+      expect(panels()[0].contains(box)).toBe(true);
+      expect(q('aside h3').textContent).toBe(map.name);
+      expect(q('aside address small').textContent).toBe(map.tag);
+      expect(q('aside address>span').textContent).toBe(map.lore);
+    });
+
+    it('tells every key the game reads in the Controls panel, in groups', () => {
+      show();
+      const told = CONTROLS.flatMap(([, rows]) => rows.flatMap(r => r[2]?.split(' ') ?? []));
+      expect([...CODES].filter(c => !told.includes(c))).toEqual([]);
+      // No code twice, and none the game does not read.
+      expect(told.filter(c => !CODES.includes(c))).toEqual([]);
+      expect(new Set(told).size).toBe(told.length);
+      const tables = [...panels()[1].querySelectorAll('table')];
+      expect(tables.map(t => t.caption!.textContent)).toEqual(CONTROLS.map(g => g[0]));
+      expect(tables.map(t => t.caption!.textContent)).toEqual(
+        expect.arrayContaining(['Movement', 'Combat', 'Katana', 'Rover']),
+      );
+      tables.forEach((t, g) => {
+        const rows = [...t.rows].map(r => [...r.cells].map(c => c.textContent));
+        expect(rows).toEqual(
+          CONTROLS[g][1].map(([keys, does]) => [keys.split('|').join(' '), does]),
+        );
+      });
+      const caps = [...panels()[1].querySelectorAll('kbd')].map(k => k.textContent);
+      for (const cap of ['W', 'A', 'S', 'D', 'Shift', 'Space', 'C', 'R', 'G', 'E', 'M', 'Esc']) {
+        expect(caps).toContain(cap);
+      }
+      expect(caps).not.toContain('+');
+    });
+
+    it('tells the rover, its lasers and the grenade launcher', () => {
+      show();
+      const rows = [...panels()[1].querySelectorAll('tr')].map(r => r.textContent);
+      expect(rows).toContain('Eget in, get out');
+      expect(rows).toContain('Left clicklasers');
+      expect(rows).toContain('Glaser rifle: a grenade from its launcher');
+      expect(rows).toContain('1 2 3 4gun, katana, rail gun, laser rifle');
+      expect(rows).toContain('Double clickspecial: lunge, energy arc, leap');
+    });
+
+    it('plays on a click of its button, from either panel, and on no other click of the panel', () => {
+      const play = vi.fn();
+      screen = document.createElement('div');
+      hud = createHud(screen, play);
+      show();
+      hud.maps([['highline', 'Highline']], 'highline', undefined, 'Ann', true, () => {});
+      const others = [...tabs(), ...cards(), q('menu button'), q('aside h3'), q('aside main')];
+      others.forEach(el => el.click());
+      expect(play).not.toHaveBeenCalled();
+      q('aside header>:last-child').click();
+      expect(play).toHaveBeenCalledOnce();
+      tabs()[1].click();
+      q('aside header>:last-child').click();
+      expect(play).toHaveBeenCalledTimes(2);
+      // The panel takes its own clicks; the dimmed view round it lets them through to the canvas.
+      expect(HUD_CSS).toMatch(/aside main\{pointer-events:auto/);
+      expect(HUD_CSS.split('}')[0]).toMatch(/aside,[^{]*\{[^}]*pointer-events:none/);
+    });
+
+    it('keeps the host’s maps in the Game panel: buttons for the host, the next one lit', () => {
+      show();
+      const pick = vi.fn();
+      const list: [string, string][] = [
+        ['highline', 'Highline'],
+        ['tranquility', 'Tranquility'],
+      ];
+      expect(q('menu').hidden).toBe(true);
+      hud.maps(list, 'highline', undefined, 'Ann', true, pick);
+      show();
+      const maps = q('menu');
+      expect(panels()[0].contains(maps)).toBe(true);
+      expect(maps.hidden).toBe(false);
+      expect(maps.textContent).toContain('You host');
+      const buttons = () => [...q('menu').querySelectorAll('button')];
+      expect(buttons().map(b => [b.textContent, b.disabled, b.className])).toEqual([
+        ['Highline', false, 'n'],
+        ['Tranquility', false, ''],
+      ]);
+      buttons()[1].click();
+      expect(pick).toHaveBeenCalledWith('tranquility');
+      hud.maps(list, 'highline', 'tranquility', 'Ann', true, pick);
+      expect(buttons().map(b => [b.textContent, b.className])).toEqual([
+        ['Highline (now)', ''],
+        ['Tranquility', 'n'],
+      ]);
+      // The others read them.
+      hud.maps(list, 'highline', 'tranquility', 'Ann', false, pick);
+      expect(q('menu').textContent).toContain('Ann hosts');
+      expect(buttons().every(b => b.disabled)).toBe(true);
+    });
+
+    it('hides when the status is empty, lets go of the focus, and is back for the next pause', () => {
+      screen.ownerDocument.body.append(screen);
+      show();
+      tabs()[1].focus();
+      expect(document.activeElement).toBe(tabs()[1]);
+      hud.title('', 'Highline');
       expect(menu().hidden).toBe(true);
-      hud.title('Click to play', 'Rooftops');
+      // A tab that kept the focus would take the Space of a jump.
+      expect(document.activeElement).not.toBe(tabs()[1]);
+      show();
       expect(menu().hidden).toBe(false);
+      screen.remove();
     });
 
     it('shows the other statuses in the same place', () => {
       for (const status of ['Connecting…', 'Joining…', 'Room is full', 'Connection closed']) {
         hud.title(status, 'Rooftops');
-        expect(q('aside strong').textContent).toBe(status);
+        expect(q('aside header strong').textContent).toBe(status);
         expect(menu().hidden).toBe(false);
       }
     });
 
-    it('lets every click through to the canvas: all the HUD boxes are pointer-events none', () => {
+    it('lets every click round the panel through to the canvas: all the HUD boxes are pointer-events none', () => {
       const [group, body] = HUD_CSS.split('{');
       expect(body).toContain('pointer-events:none');
       const tags = group.split(',');
@@ -90,6 +267,12 @@ describe('createHud', () => {
       }
       // But the host's map buttons.
       expect(HUD_CSS).toMatch(/menu button\{[^}]*pointer-events:auto/);
+    });
+
+    it('styles the title screen under its own tag, the key caps too: the weapon slots keep theirs', () => {
+      expect(HUD_CSS).toContain('aside kbd{');
+      expect(HUD_CSS).not.toMatch(/[}`]kbd\{/);
+      expect(HUD_CSS).toContain('aside article[hidden]{display:none}');
     });
   });
 
@@ -485,12 +668,12 @@ describe('the gun on the HUD', () => {
     it('says on the title screen how to pick and how to cut', () => {
       hud.title('Click to play', 'Rooftops');
       const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
-      expect(rows).toContain('1, 2, 3, 4, wheelgun, katana, rail gun, laser rifle');
-      expect(rows).toContain('Katana + Wthrust');
-      expect(rows).toContain('Katana + A or Dcut across');
-      expect(rows).toContain('Katana aloneslash');
-      expect(rows).toContain('Double clickkatana special: lunge, energy arc, leap');
-      expect(rows).toContain('Glaser rifle: a grenade from its launcher');
+      expect(rows).toContain('1 2 3 4gun, katana, rail gun, laser rifle');
+      expect(rows).toContain('Wheelnext weapon');
+      expect(rows).toContain('W + Left clickthrust');
+      expect(rows).toContain('A or D + Left clickcut across');
+      expect(rows).toContain('Left clickslash');
+      expect(rows).toContain('Blades lockedclick fast; step aside to break');
       expect(screen.querySelector('aside')!.textContent).toMatch(/armoury past your flag/);
     });
   });
@@ -678,7 +861,9 @@ describe('the rover on the HUD', () => {
     it('tells the key on the title screen', () => {
       hud.title('Click to play', 'Tranquility');
       const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
-      expect(rows.some(r => /^Erover: get in, get out/.test(r!))).toBe(true);
+      expect(rows).toContain('Eget in, get out');
+      expect(rows).toContain('W Sdrive toward the look');
+      expect(rows).toContain('Spacehandbrake');
     });
   });
 });

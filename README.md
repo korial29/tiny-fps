@@ -103,7 +103,7 @@ PORT=8787 npx tiny-fps-server
 
 ### The host picks the map
 
-The player in the room the longest is its **host**; when they leave, the next oldest player takes over. Press Esc in a game: the maps sit at the top of the screen. The host's are buttons, and the one they pick is played from the next match on, never in the middle of one (or from the next join when the room empties). Everyone else sees the maps read-only, with the host's name and pick, and the end screen says the map of the next match. The server checks that the pick comes from the host: anyone else's is ignored.
+The player in the room the longest is its **host**; when they leave, the next oldest player takes over. Press Esc in a game: the maps sit in the Game panel of the title screen. The host's are buttons, and the one they pick is played from the next match on, never in the middle of one (or from the next join when the room empties). Everyone else sees the maps read-only, with the host's name and pick, and the end screen says the map of the next match. The server checks that the pick comes from the host: anyone else's is ignored.
 
 The client follows the room: when the roster names another map, it builds that map on the same connection, so players keep their id, their team and the host role. The `map` option is only the map built until the roster comes.
 
@@ -239,7 +239,7 @@ The game is the movement and a capture the flag on top of it, with a tackle, a g
 - [x] Four weapons taken at each team's armoury, a plasma gun, an electric katana, a rail gun and a laser rifle: plasma balls, charged shots, three cuts and their specials, a bolt of lightning, a saber lock, a shock, limb cuts, health and ammo packs, all predicted on the client and resolved by the host with lag compensation; magazines and reloads drawn by hand, each weapon switched on its own way
 - [x] A city around the roofs: a street far below with traffic and markings to the horizon, a height fog, parks of branched trees and a skyline
 - [x] Sound: a jsfxr-style synthesiser for steps, jumps, dashes, landings, grabs, climbs, slides and the wind of speed, placed in stereo; a looped music; M mutes
-- [x] A title screen with the controls, a muted mark, a player count and name tags
+- [x] A title screen with a menu (the character to play, the mode and the map; the controls), a muted mark, a player count and name tags
 - [x] A pixel face over the health, in the spirit of DOOM's (its own look, drawn in code): 42 frames, 5 levels of wounds, glances, a turn toward the side a hit comes from, an ouch, a grin at a new weapon, a rage with the trigger held, a glow carrying the flag, and dead
 - [x] Teams and capture the flag: bases with a glowing ring, flags that wave and ride on a carrier's back, a score and a clock, markers toward the flags, banners, an end screen and synth sounds
 - [x] An announcer: a calm, generated voice for the match, the flags, takedown runs, the aim and the result

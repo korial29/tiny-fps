@@ -367,6 +367,8 @@ export const HIGHLINE: WorldDef = {
   // The user, 2026-11-10: the moon's armour here too, in the team's colour, no helmet.
   armor: true,
   name: 'Highline',
+  tag: 'Rooftops · 94 × 240 m',
+  lore: 'The towers of an old business district, closed for years, far above streets that still have traffic. Two crews of runners have taken the roofs. Three routes cross between them, and a fall takes you back to your tower.',
   brushes: [...half, ...half.map(flip), ...centre],
   teams: [
     // The racks stand on the armoury, past the flag ahead of the spawns, 2.5 m apart.

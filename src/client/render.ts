@@ -5,7 +5,7 @@
 // spots get the layers after it). Everything is drawn in the one program, the depth passes with
 // colour writes off. The scene goes into an offscreen target, then a second, small program (POST)
 // turns it into the picture on the canvas. No DOM beyond the canvas.
-import { TEX } from '../shared/types';
+import { MODE, TEX } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
 import type { World, WorldDef } from '../shared/world';
 import type { Body } from './body';
@@ -500,8 +500,17 @@ export interface Renderer {
   cheer(ids: number[]): void;
   /** The body of each player (PlayerInfo.body, BODY), from the roster: the man's for one not in it. */
   wear(builds: ReadonlyMap<number, number>): void;
+  /**
+   * A picture of the player `p` as the character `build` in `color`, into the 2D canvas `into`:
+   * a frame of him alone in the map's sky, which the next frame() replaces on the screen. False
+   * when nothing could be drawn yet.
+   */
+  portrait(into: HTMLCanvasElement, p: PlayerState, build: number, color: string): boolean;
   destroy(): void;
 }
+
+/** A character card's picture: how high over the map he stands (m), the camera's height over his feet and its distance (m), its angle off his front and his own off the sun (rad), and its field of view (degrees). */
+export const PORTRAIT = { y: 500, eye: 1.3, away: 2.5, turn: -0.35, sun: 0.9, fov: 30 };
 
 /** Pixels drawn at most (1080p): every one is lit per light and shadow map, so a 4K screen at a pixel ratio of 2 would pay for 8 million. */
 export const MAX_PIXELS = 1920 * 1080;
@@ -515,7 +524,7 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 /** Throws when the browser has no WebGL2. */
 export const createRenderer = (canvas: HTMLCanvasElement, world: World): Renderer => {
   /** The animation state of each runner drawn. */
-  const runners = new Map<number, Runner>();
+  let runners = new Map<number, Runner>();
   let builds: ReadonlyMap<number, number> = new Map();
   // The runners' skins at every level, now: built on the first runner to come near (the close one
   // with its face's channels takes a tenth of a second), they would stall a frame of the match.
@@ -768,7 +777,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   canvas.addEventListener('webglcontextlost', onLost);
   canvas.addEventListener('webglcontextrestored', onRestored);
 
-  return {
+  const api: Renderer = {
     frame(eye, yaw, pitch, others, colors, fx, lights, body, ctf, tracer, rovers = [], self) {
       const [w, h] = size();
       if (lost || !w || !h) {
@@ -935,10 +944,41 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           r.grin = GRIN;
         }
       }),
+    portrait(into, p, build, color) {
+      const card = into.getContext('2d');
+      if (lost || !card || !size()[1]) {
+        return false;
+      }
+      // A runner of his own, with the player's id (his face and hair), standing still far above the map.
+      const [crowd, worn] = [runners, builds];
+      [runners, builds] = [new Map(), new Map([[p.id, build]])];
+      // The sun on one side of him and the camera on the same one, nearer his front: no glare off the chest.
+      const face = Math.atan2(-sunDir[0], -sunDir[2]) + PORTRAIT.sun;
+      const model: PlayerState = {
+        ...p,
+        ...{ y: PORTRAIT.y, vx: 0, vy: 0, vz: 0, yaw: face, pitch: 0, mode: MODE.GROUND, t: 0 },
+        ...{ down: 0, stun: 0, swing: 0, ev: 0, fall: 0, held: 0 },
+      };
+      const [a, d] = [face + PORTRAIT.turn, PORTRAIT.away];
+      const eye: Vec3 = [p.x - Math.sin(a) * d, PORTRAIT.y + PORTRAIT.eye, p.z - Math.cos(a) * d];
+      const lens = { fov: PORTRAIT.fov - FOV_DEG, roll: 0, lines: 0 } as Effects;
+      const shoot = () =>
+        api.frame(eye, a + Math.PI, 0, [model], new Map([[p.id, color]]), lens, []);
+      // Twice: the first frame makes the runner, the second draws him settled.
+      shoot();
+      shoot();
+      [runners, builds] = [crowd, worn];
+      // The middle of the frame, as tall as it and as wide as the card.
+      const [w, h] = [canvas.width, canvas.height];
+      const cw = Math.min(w, (h * into.width) / into.height);
+      card.drawImage(canvas, (w - cw) / 2, 0, cw, h, 0, 0, into.width, into.height);
+      return true;
+    },
     destroy() {
       canvas.removeEventListener('webglcontextlost', onLost);
       canvas.removeEventListener('webglcontextrestored', onRestored);
       gl.getExtension('WEBGL_lose_context')?.loseContext();
     },
   };
+  return api;
 };

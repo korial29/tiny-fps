@@ -66,7 +66,8 @@ const MAX_STEPS = 5;
  * Mounts the game in a Shadow DOM inside container: one WebGL2 canvas filling it, a click locks the
  * pointer, the mouse looks, WASD (ZQSD on AZERTY) moves, Shift sprints, Space jumps (again in the
  * air for a second jump), C crouches and slides, a direction key pressed twice dashes, E gets in
- * and out of a rover.
+ * and out of a rover. Without the lock the title screen shows: a menu, the character to play, the
+ * mode, the map and the controls.
  *
  * The socket is this function's; the scene of one map is play()'s, behind a socket of its own.
  * When the room plays another map, the scene goes and one of the new map takes its place on the
@@ -171,7 +172,8 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
   const canvas = root.querySelector('canvas')!;
   const count = root.querySelector('p')!;
   const screen = root.querySelector('div')!;
-  const hud = createHud(screen);
+  // The title screen's button is a click on the canvas: the pointer lock and the sound start there.
+  const hud = createHud(screen, () => canvas.click());
 
   const world = build(mapOf(key));
   const predictor = createPredictor(world);
@@ -202,6 +204,10 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
   const rails = world.def.teams.map(t => t.rail);
   const rifles = world.def.teams.map(t => t.rifle);
   let roster: PlayerInfo[] = [];
+  /** The title screen's character cards: a choice goes to the host, whose roster dresses everyone. */
+  const cards = hud.cast(body => ws.send(JSON.stringify({ t: 'body', body } satisfies ClientText)));
+  /** Whose pictures the cards show: the own id and colour. */
+  let drawn = '';
   /** The own player's id and team, from the roster. */
   let you = { id: -1, team: 0 };
   /** The latest snapshot, for the flags and the match; the one before it tells what just happened. */
@@ -490,6 +496,13 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
       now,
     );
     if (me && rd) {
+      // The cards' pictures, once the own player and his colour are known: drawn before the frame, which then takes the canvas back.
+      const mine = `${you.id}${colors.get(you.id)}`;
+      if (!ctl.locked() && drawn != mine && colors.has(you.id)) {
+        drawn = cards.every((c, build) => rd!.portrait(c, me, build, colors.get(you.id)!))
+          ? mine
+          : drawn;
+      }
       rd.frame(
         pov,
         view,
@@ -569,6 +582,8 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     hud.title(
       msg || (!open ? 'Connecting…' : !ready ? 'Joining…' : ctl.locked() ? '' : 'Click to play'),
       world.def.name ?? '',
+      world.def.tag,
+      world.def.lore,
     );
   };
   raf = requestAnimationFrame(frame);

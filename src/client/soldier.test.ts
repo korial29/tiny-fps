@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { CUTS, DASH_COOLDOWN, DOWN_TICKS, PLAYER_H, PLAYER_R, TICK_HZ } from '../shared/constants';
+import {
+  CUTS,
+  DASH_COOLDOWN,
+  DOWN_TICKS,
+  PLAYER_H,
+  PLAYER_R,
+  PUNCH,
+  TICK_HZ,
+} from '../shared/constants';
 import { STILL } from '../shared/physics';
 import { CUT, LIMB, MODE, NOBODY, SIDE, TEX } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
@@ -1540,5 +1548,76 @@ describe('a runner’s face (expression.ts): what he does shows on it', () => {
         }
       }),
     ).toEqual(plain);
+  });
+});
+
+describe('a runner who punches (the user, 2026-11-11: hit with the fists)', () => {
+  const GREEN = [0.1, 0.8, 0.2];
+  /** The runner after standing bare-handed, then the frames of a swing run down a tick a frame. */
+  const swing = (o: Partial<PlayerState> = {}) => {
+    const book = new Map<number, Runner>();
+    for (let i = 0; i < 90; i++) {
+      animate(book, [man(o)], DT);
+    }
+    const guard = stance(book.get(1)!).s;
+    const frames = [];
+    for (let k = PUNCH.ticks; k >= 0; k--) {
+      animate(book, [man({ ...o, swing: k })], DT);
+      frames.push(stance(book.get(1)!).s);
+    }
+    return { book, guard, frames };
+  };
+  /** How far ahead of the chest (the runner faces -z) a joint is. */
+  const ahead = (s: ReturnType<typeof stance>['s'], j: number) =>
+    -(s.pos[j][2] - s.pos[J.CHEST][2]);
+
+  it('drives the rear fist straight out at the strike, draws the lead one back to the hip, and is back in his guard after', () => {
+    const { book, guard, frames } = swing();
+    const strike = frames[PUNCH.strike + 1];
+    // The left fist: from half way out in the guard to an arm's length ahead, at the chest's height.
+    expect(ahead(strike, J.HAND_L)).toBeGreaterThan(ahead(guard, J.HAND_L) + 0.2);
+    expect(ahead(strike, J.HAND_L)).toBeGreaterThan(0.5);
+    expect(Math.abs(strike.pos[J.HAND_L][1] - strike.pos[J.ARM_L][1])).toBeLessThan(0.22);
+    // The right one comes back from ahead of him to his side.
+    expect(ahead(strike, J.HAND_R)).toBeLessThan(ahead(guard, J.HAND_R) - 0.3);
+    expect(strike.pos[J.HAND_R][1]).toBeLessThan(strike.pos[J.ARM_R][1] - 0.15);
+    // No joint jumps on the way: under 9 cm a frame, the fist at its fastest.
+    frames.forEach((s, i) => {
+      const was = i ? frames[i - 1] : guard;
+      s.pos.forEach((p, j) =>
+        expect(Math.hypot(...p.map((v, k) => v - was.pos[j][k]))).toBeLessThan(0.12),
+      );
+    });
+    // The feet do not leave the floor for it.
+    expect(strike.pos[J.FOOT_L][1]).toBeCloseTo(guard.pos[J.FOOT_L][1], 2);
+    // Half a second later he is in his guard again.
+    for (let i = 0; i < 30; i++) {
+      animate(book, [man()], DT);
+    }
+    const back = stance(book.get(1)!).s;
+    expect(Math.abs(ahead(back, J.HAND_L) - ahead(guard, J.HAND_L))).toBeLessThan(0.03);
+    expect(book.get(1)!.jab).toBeLessThan(0.01);
+  });
+
+  it('shouts with it, and throws nothing with a weapon in hand or down', () => {
+    const { book } = swing();
+    // The face of a cut: the jaw open (soldier() moves the face).
+    const r = book.get(1)!;
+    for (let k = PUNCH.ticks; k > PUNCH.ticks - 8; k--) {
+      animate(book, [man({ swing: k })], DT);
+      soldier([], r, GREEN, 1);
+    }
+    expect(r.face.w[CH.JAW]).toBeGreaterThan(0.5);
+    for (const o of [{ ammo: 3 }, { hp: 0, down: DOWN_TICKS }]) {
+      const armed = swing(o);
+      expect(armed.book.get(1)!.jab).toBe(0);
+    }
+    // Drawn at every level without a hole: as many vertices as standing.
+    const count = (s: Partial<PlayerState>) => {
+      const out: number[] = [];
+      soldier(out, createRunner(man(s)), GREEN, 1);
+      return out.length;
+    };
+    expect(count({ swing: PUNCH.ticks - PUNCH.strike })).toBe(count({}));
   });
 });

@@ -3,7 +3,7 @@
 // the stance legs put it, and a swing foot flies from where it left to where the stride will land
 // it. The other moves are static poses (MOVES) eased in by critically damped springs, so a switch
 // never pops. Everything is in the runner's frame: x right, y up, -z ahead. No DOM.
-import { DASH_COOLDOWN, DASH_TICKS } from '../shared/constants';
+import { DASH_COOLDOWN, DASH_TICKS, PUNCH } from '../shared/constants';
 import { floored } from '../shared/physics';
 import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -322,6 +322,35 @@ const FISTS = [
   [1.15, 0.05, 0.12, 0.4],
   [0.5, 0.1, 0.3, 1.25],
 ];
+/**
+ * An arm's pose, the upper arm then the forearm, as the gait builds them: `s` 1 the right, -1 the
+ * left; the upper arm's lift forward, out to the side and turn inward, and the elbow's bend.
+ */
+export const armOf = (s: number, [lift, out, inward, bend]: number[]): [Quat, Quat] => [
+  mul(mul(axis(Z, s * (0.06 + out)), axis(X, lift)), axis(Y, s * inward)),
+  axis(X, 0.15 + bend),
+];
+/**
+ * A punch from the guard (the user, 2026-11-11), a karate reverse punch: the rear hand (the left)
+ * driven straight out at the chest's height, the lead one drawn back to the hip, the chest turned
+ * behind the blow (radians, the left shoulder forward).
+ */
+export const JAB = { out: [1.42, 0, 0.1, 0], back: [0.1, 0.12, 0.25, 1.9], twist: 0.4 };
+
+/**
+ * How far out the fist of a punch is, 0 to 1, by the swing of a player with no weapon at all: out
+ * at the strike, back by the swing's end.
+ */
+export const thrown = (p: PlayerState): number => {
+  const bare = p.ammo < 0 && !p.blade && (p.rail ?? -1) < 0 && (p.rifle ?? -1) < 0;
+  if (!bare || !p.swing || p.down) {
+    return 0;
+  }
+  const [k, at] = [1 - p.swing / PUNCH.ticks, PUNCH.strike / PUNCH.ticks];
+  const e = (v: number) => Math.min(Math.max(v, 0), 1) ** 2 * (3 - 2 * Math.min(Math.max(v, 0), 1));
+  return k < at ? e(k / at) : 1 - e((k - at) / (1 - at));
+};
+
 /**
  * The breath of one standing still (the user, 2026-11-11: see him breathe): breaths a second, the
  * chest's lift (radians), the shoulders' (radians), and the rise of the whole body on its legs (metres).

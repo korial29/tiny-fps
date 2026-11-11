@@ -6,10 +6,11 @@ import {
   STUMBLE_DRAG,
   STUMBLE_KNOCK,
   STUMBLE_TICKS,
+  PUNCH,
 } from '../shared/constants';
 import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { MOVE, MOVES, createGait } from './gait';
+import { MOVE, MOVES, createGait, thrown } from './gait';
 import type { Floor, Gait, Seat } from './gait';
 import { basis } from './mesh';
 import { grips } from './rover';
@@ -1584,5 +1585,26 @@ describe('gait: the bare-handed guard and the breath (the user, 2026-11-11: a fi
     // With a gun in hand he breathes too, the shoulders still.
     const armed = stood({ ammo: 0 }, 8).frames.slice(Math.round(2 / DT));
     expect(spread(armed.map(f => f.pos[J.NECK][1]))).toBeGreaterThan(0.006);
+  });
+});
+
+describe('thrown: how far out the fist of a punch is', () => {
+  it('goes out to the strike and comes back by the end of the swing, for bare hands only', () => {
+    const at = (swing: number, o: Partial<PlayerState> = {}) => thrown(state({ swing, ...o }));
+    expect(at(0)).toBe(0);
+    expect(at(PUNCH.ticks)).toBe(0);
+    expect(at(PUNCH.ticks - PUNCH.strike)).toBeCloseTo(1, 9);
+    // Rising to the strike, falling after it, never past 1.
+    const curve = Array.from({ length: PUNCH.ticks + 1 }, (_, k) => at(PUNCH.ticks - k));
+    for (let k = 1; k <= PUNCH.ticks; k++) {
+      expect(curve[k]).toBeLessThanOrEqual(1);
+      expect(Math.sign(curve[k] - curve[k - 1])).toBe(k <= PUNCH.strike ? 1 : -1);
+    }
+    // Out in 6 ticks, back in 14: faster out.
+    expect(PUNCH.strike).toBeLessThan(PUNCH.ticks - PUNCH.strike);
+    // A swing with a weapon is no punch, nor one of a player down.
+    for (const o of [{ ammo: 0 }, { blade: true }, { rail: 3 }, { rifle: 3 }, { down: 10 }]) {
+      expect(at(PUNCH.ticks - PUNCH.strike, o)).toBe(0);
+    }
   });
 });

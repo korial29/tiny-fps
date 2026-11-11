@@ -38,6 +38,7 @@ import {
   RIFLE_MAX,
   RIFLE_RELOAD,
   SPECIAL_LATE,
+  PUNCH,
 } from './constants';
 import { forward, move, respawn } from './physics';
 import type { Body } from './physics';
@@ -180,6 +181,10 @@ export const step = (
     p.reload = 0;
   }
   [p.wield, p.railed, p.rifled] = [hand == 1, hand == 2, hand == 3];
+  // A punch under way ends when a weapon comes to hand.
+  if (p.swing && hand >= 0 && !p.blade) {
+    p.swing = 0;
+  }
   if (!armed) {
     [p.charge, p.reload] = [0, 0];
     return STRIKE.NONE;
@@ -200,7 +205,9 @@ export const step = (
   } else if (hand != 1 && carried >= 0 && !busy && load < full && (!load || i.keys & KEY.RELOAD)) {
     [p.reload, p.charge] = [ticks2, 0];
   }
-  const c = swingOf(p);
+  // With no weapon at all the swing is a punch (PUNCH), not a cut.
+  const bare = hand < 0;
+  const c = bare ? PUNCH : swingOf(p);
   if (p.swing && c.ticks - p.swing === c.strike) {
     return STRIKE.CUT;
   }
@@ -222,7 +229,12 @@ export const step = (
     const special =
       !!(i.keys & KEY.SPECIAL) &&
       (!p.swing || (!p.heavy && (p.cut ?? 0) < SPECIAL_CUT && late <= SPECIAL_LATE));
-    if (p.wield && (!p.swing || special)) {
+    if (bare) {
+      // A punch, and the next when it is over while FIRE is held.
+      if (!p.swing) {
+        [p.cut, p.heavy, p.swing] = [0, false, PUNCH.ticks];
+      }
+    } else if (p.wield && (!p.swing || special)) {
       p.cut = cutOf(i.keys) + (special ? SPECIAL_CUT : 0);
       [p.swing, p.charge] = [CUTS[p.cut].ticks, 0];
       launch(p);

@@ -206,6 +206,8 @@ describe('random fire on ROOFTOPS', () => {
         } else if (!p.down && p.hp > 1 && rnd() < 0.01) {
           p.hp--;
         }
+        // With no weapon at all as the step left him: a swing is then a punch.
+        const bare = p.ammo < 0 && !p.blade && (p.rail ?? -1) < 0 && (p.rifle ?? -1) < 0;
         // A rack is far off on these roofs: the gun comes back at random now and then.
         if (!p.down && p.ammo <= 0 && rnd() < 0.02) {
           [p.ammo, p.mag] = [AMMO_MAX, GUN_MAG];
@@ -248,7 +250,8 @@ describe('random fire on ROOFTOPS', () => {
         expect(p.swing, label).toBeGreaterThanOrEqual(0);
         expect(p.swing, label).toBeLessThanOrEqual(swingOf(p).ticks);
         expect(!p.wield || p.blade, label).toBe(true);
-        expect(!p.swing || p.wield, label).toBe(true);
+        // Or a punch, with no weapon at all.
+        expect(!p.swing || p.wield || bare, label).toBe(true);
         expect(!p.down || (!p.blade && !p.wield && !p.swing), label).toBe(true);
         expect(p.rail ?? -1, label).toBeGreaterThanOrEqual(-1);
         expect(p.rail ?? -1, label).toBeLessThanOrEqual(RAIL_MAX);

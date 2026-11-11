@@ -62,6 +62,8 @@ describe("helm, the woman's helmet on the moon", () => {
     const [tu, tv] = CUT.tip;
     expect(tu).toBeLessThan(0.3);
     expect(tv).toBeGreaterThan(0.9);
+    // Its inner arm straight down along the slot, as the helmet's middle line runs.
+    expect(CUT.arms[0][0]).toBe(tu);
     // High on the cheek: the arms end above the lip.
     expect(CUT.arms.every(([, v]) => v > 0.15 && v < 0.3)).toBe(true);
     const turn = (w: { p: Vec3 }) => Math.atan2(w.p[0] - DOME.c[0], DOME.c[2] - w.p[2]);

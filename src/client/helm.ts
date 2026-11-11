@@ -184,13 +184,14 @@ const outline = (u: number, v: number): [a: number, y: number] => {
  * The cheeks (the user, 2026-11-11: no surfaces on the sides, no hollows, just a cut, clean; after
  * a Mandalorian helmet, an idea and nothing copied): the dome is whole, and on each cheek a fine
  * dark groove draws a V, its point under the cheekbone by the eye, its two arms down the helmet,
- * ending above the lip (the user: higher). Each point is [u, v] on the outline (outline()); the groove is `w` metres wide.
+ * ending above the lip (the user: higher); the inner arm straight down, along the slot (the user:
+ * aligned with the helmet's middle line). Each point is [u, v] on the outline (outline()); the groove is `w` metres wide.
  */
 export const CUT = {
-  tip: [0.22, 0.95] as [number, number],
+  tip: [0.12, 0.95] as [number, number],
   arms: [
-    [0.08, 0.22],
-    [0.7, 0.22],
+    [0.12, 0.22],
+    [0.62, 0.22],
   ] as [number, number][],
   w: 0.0028,
   off: 0.0016,
@@ -221,7 +222,7 @@ const groove = (sx: number, p: [number, number], q: [number, number], out: numbe
 };
 
 /** The V's hollow: its deepest point (u, v) inside the V, and how deep, metres. */
-export const PIT = { at: [0.38, 0.42] as [number, number], depth: 0.015 };
+export const PIT = { at: [0.28, 0.42] as [number, number], depth: 0.015 };
 /** How far the hollow and its skirt stand over the dome where flush with it; the skirt's reach past the V, in u and v; each face cut in SPLIT². */
 const FLUSH = 0.0006;
 const SKIRT = [0.22, 0.1];

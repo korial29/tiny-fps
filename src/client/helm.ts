@@ -202,7 +202,7 @@ const onCheek = (a: number, y: number): [u: number, v: number] | undefined => {
  */
 export const FACETS = {
   tip: [0.62, 0.8],
-  depth: 0.016,
+  depth: 0.028,
   corners: {
     A0: [0, 1],
     A1: [0.35, 1],

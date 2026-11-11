@@ -106,11 +106,30 @@ The user, after playing: the field is flat, the ravine too regular, the rocks to
 - A hollow in each field (`HOLLOW`, 2 m deep, 20 m across, at (114, 176) and its twin): the slab is in four pieces round a square whose floor is 3 m down, and the relief is the floor there. No pack, spawn or rover is within 14 m.
 - Rocks: `boulder()` presses a sphere of 128 or 512 triangles into the rock's collision box (edges rounded 0.35 m, noise no more than 0.28 m out of a side or 0.05 m in, never over the top, four planes shaving the upper half). The field's stones, the wall boulders, the boulder field and the east stepping stones (now ghosts under rock pillars) use it; the rocks up the crater wall and on the rille's bottom keep the older cut block.
 
-### Rocks: drawn first, collided inside (2026-11-11)
+### Rocks: rounded, and stopped where they are drawn (2026-11-11)
 
-Fitting rocks to boxes made them blocks, then hats. Now the form comes first. `rockOf(seed, R, H)` in `src/shared/moon.ts` is a boulder's form, as its reach from its middle along a unit vector: one to three lobes (a main mass, a shoulder from 1.3 m of radius, a low one from 3.2 m), each cut by five leaning planes and a nearly level top and rounded by an ellipsoid, one plane cutting under a side, the whole swelling by 6 % with the bearing. Only + - * /, `Math.sqrt` and the hash, because the collision comes from it: `inside()` finds, at module load (about 0.2 s, no baked table), the widest box under each lobe's top whose corners and sides are in the rock (9 cm of slack) and that has no rock 0.2 m over its top; a second box that would leave a crack by the first is dropped. `moonscape.ts` throws a sphere onto the same form (512 triangles from 2.3 m of radius, 128 under).
+The user walked into the drawn flank of a rock before being stopped ("you sink into them"), and found the cut rocks too triangular. Both are redone.
 
-Measured, and tested: no box over 0.1 m out of what is drawn; nothing drawn over 0.2 m above a box top (0.12 m at worst), so a body on a rock stands on what is drawn; the sides are drawn 0.65 m outside a box at the median and 1.5 m at the ninth decile, at body height: the 0.5 m asked for is not met, a body walks that far into a leaning face or a shoulder. 497 brushes (cap 560), 375,645 vertices. A boulder is its radius wide and 0.8 of it high again; a field stone is 0.31 of its old box's width and depth in radius and 1.15 of its height. The east stepping stones keep their box and its drawn head.
+**Shape.** `rockOf(seed, R, H)` in `src/shared/moon.ts` is a boulder's form, as its reach from its middle along a unit vector. No plane in it: an ellipsoid stretched unevenly on its three axes and turned by the seed, a dome over its middle (two parts of an ellipse, one of a squarer solid) that leans a little, swollen and shrunk by two low octaves of noise (large soft lobes), with one gentle hollow and one flatter side. Under its middle it goes straight down, as wide as at its middle: it stands in the regolith and its flank is upright at the ground. `rockMid(H)` is the middle's height: 0.3 H, and half of H up to 0.8 m for a low rock. Only + - * /, `Math.sqrt` and the hash.
+
+**Drawn** (`moonscape.ts`): `stone()` throws an icosahedron's sphere onto a form (20 f² triangles, no pole, no sliver) and gives each point the mean normal of its faces, so a rock shades as one rounded mass. A rock is 720 triangles from 2.5 m of radius, 320 from 1.5 m, 180 under, less what is under the ground; one tone, darker at the foot. `boulder()` (the east stepping stones, the pits' steps, the pebbles and the stones on the rims) is the same on a box: a squarer solid for a pillar or a step, its top the box's top, an ellipsoid for a pebble (20 triangles under 1.4 m, which shows its corners close up).
+
+**Collision** (`fitted()`): boxes inside the form, computed at load (about 0.3 s more on this machine; a baked table of 1,370 boxes would not fit the bundle's budget). From the lowest ground round the rock to its top the form is cut in layers. The first is a wall: it goes 0.7 m over the highest ground round the rock, more than a body or a rover steps up, so nothing walks up a rock. Over it a layer ends where the outline has moved 0.16 m on a bearing (0.3 m over a body's height), 0.25 to 0.9 m thick. In each layer the outline is read at its foot and its top on 64 bearings, laid on a grid of 7 to 12 cm, and boxes are picked one after the other: the largest, then the one that brings the most of the outline within 0.16 m of a box, overlapping one already picked, until the whole outline is. A box may stand 7 cm out of the form. A rock whose top is under a metre over the ground has no wall: it is walked over, up its layers.
+
+Measured, and tested, at body height (every 7.5 degrees, every 0.2 m up; horizontally on a flank, vertically where the rock is shallower than 45 degrees):
+
+| | before (#190) | now | asked |
+| --- | --- | --- | --- |
+| median | 0.69 m | 0.13 m | 0.15 m |
+| nine in ten | 1.62 m | 0.29 m | |
+| nineteen in twenty | 1.97 m | 0.36 m | 0.3 m |
+| ninety-nine in a hundred | 2.67 m | 0.50 m | |
+| worst | 3.71 m | 1.05 m | 0.45 m |
+| a box out of the rock, worst | 0.09 m | 0.08 m | 0.1 m |
+
+The median is met; the tail is not. It is at the foot of a rock on rolling ground (the wall is one layer from the lowest ground to 0.7 m over the highest, as wide as the rock is narrowest in it) and on the dome of a low one. A runner walking straight at a rock from eight sides comes a median 0.10 m into its drawn flank, 0.22 m one time in ten, 0.67 m at worst (the worst was over 1.5 m). A rover's nose stops 0.25 m in at most on the six field stones; a shot at body height stops a median under 0.15 m in. A runner sliding past is never held up.
+
+Changed for a player: a rock is as wide as it looks, so the passages between rocks are narrower. A body that jumps at a rock can land on a layer's edge, up to 0.9 m up its flank, its feet under the slope drawn there (a median 0.16 m, 0.52 m at the 99th centile). A rock under a metre is walked over. At the west end of the rille a plain sprint and jump crosses at x = 4 as well as x = 2 (the boulder there is rounder). 3,252 brushes (cap 3,400), 436,467 vertices (cap 440,000). The side profile of a rock is up to 0.92 of its bounding rectangle, not under the 0.85 asked: the upright foot is what lets collision follow it.
 
 ### More craters, three pits, rims with an outline (2026-11-11)
 

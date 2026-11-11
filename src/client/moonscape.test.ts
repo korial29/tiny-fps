@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { empty, reach } from '../../test/relief';
-import { LAYOUT, LIP, MOON, PIT_FLOOR, PIT_R, PIT_S } from '../shared/moon';
+import { LAYOUT, LIP, MOON, PIT_FLOOR, PIT_R, PIT_S, rockMid, rockOf } from '../shared/moon';
 import { ground } from '../shared/relief';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
@@ -319,37 +319,146 @@ describe('moonscape', () => {
     { ...c, at: [c.at[0], c.at[1], 280 - c.at[2]] },
   ]);
   const basalt = verts.filter(p => p[8] === TEX.ROCK && reach(relief, p[0], p[2]) < 1);
+  /** The basalt's triangles, and those of a rock: each point on its form. */
+  const chips: number[][][] = [];
+  for (let k = 0; k < verts.length; k += 3) {
+    if (verts[k][8] === TEX.ROCK) {
+      chips.push([verts[k], verts[k + 1], verts[k + 2]]);
+    }
+  }
+  const mesh = ({ at: [x, g, z], R, H, s }: (typeof rocks)[0]) => {
+    const { reach: form } = rockOf(s, R, H);
+    const mid = [x, g + rockMid(H), z];
+    return chips
+      .filter(
+        t =>
+          Math.hypot(t[0][0] - x, t[0][2] - z) < 1.5 * R &&
+          t.every(q => {
+            const v = [q[0] - mid[0], q[1] - mid[1], q[2] - mid[2]];
+            const l = Math.hypot(...v);
+            return Math.abs(l - form(v.map(u => u / l) as [number, number, number])) < 1e-3;
+          }),
+      )
+      .flat();
+  };
   /** The basalt drawn within a rock's radius of its middle, over its foot. */
   const of = ({ at: [x, g, z], R }: (typeof rocks)[0]) =>
     basalt.filter(p => Math.hypot(p[0] - x, p[2] - z) < 1.35 * R && p[1] > g - 0.5);
 
-  it('draws each rock a player gets near from 128 or 512 triangles, the ones up the crater wall from far fewer', () => {
+  it('draws each rock a player gets near from 180, 320 or 720 triangles less what is under the ground, the ones up the crater wall from far fewer', () => {
     for (const c of rocks) {
-      expect(of(c).length / 3, `rock at ${c.at}`).toBeGreaterThanOrEqual(c.R < 2.3 ? 70 : 300);
+      const n = of(c).length / 3;
+      expect(n, `rock at ${c.at}`).toBeGreaterThanOrEqual(c.R < 1.5 ? 70 : c.R < 2.5 ? 130 : 300);
     }
-    expect(rocks.filter(c => c.R >= 2.3).length).toBeGreaterThan(20);
-    // Up the wall, where nobody gets within 60 m: 30 of them, about 65 triangles each.
+    expect(rocks.filter(c => c.R >= 2.5).length).toBeGreaterThan(20);
+    // Up the wall, where nobody gets within 60 m: 30 of them, 20 triangles each.
     const far = verts.filter(p => p[8] === TEX.ROCK && reach(relief, p[0], p[2]) > 1.02);
     expect(far.length / 3 / 30).toBeLessThan(70);
-    expect(far.length / 3 / 30).toBeGreaterThan(30);
+    expect(far.length / 3 / 30).toBeGreaterThanOrEqual(20);
   });
 
-  it('draws a rock that is not a box, a ball or a hat: no level brim at its foot, a top that is not level, leaning faces', () => {
-    for (const c of rocks.filter(r => r.R >= 2.3)) {
-      const [x, g, z] = c.at;
-      const pts = of(c).filter(p => Math.hypot(p[0] - x, p[2] - z) < 1.2 * c.R && p[1] > g + 0.1);
-      const top = hi(pts.map(p => p[1]));
-      expect(top - g).toBeGreaterThan(0.6 * c.H);
-      // No brim: of what is drawn in the lowest fifth, little faces up (a slab's top would).
-      const low = pts.filter(
-        p => p[1] < g + 0.2 * (top - g) && Math.hypot(p[0] - x, p[2] - z) < 0.8 * c.R,
-      );
-      expect(low.filter(p => p[4] > 0.9).length / low.length, `rock at ${c.at}`).toBeLessThan(0.15);
-      // Not a box: a quarter and more of its facets lean more than 12 degrees off upright or level.
-      const lean = pts.filter(p => Math.abs(p[4]) > 0.2 && Math.abs(p[4]) < 0.98);
-      expect(lean.length / pts.length).toBeGreaterThan(0.25);
+  it('draws a rock smooth and round: one normal a point, turning little from a triangle to the next, no sliver, no flat face, no box', () => {
+    for (const c of rocks.filter((r, k) => r.R >= 1.5 && k % 2 === 0)) {
+      const g = c.at[1];
+      const own = mesh(c);
+      expect(own.length / 3, `rock at ${c.at}`).toBeGreaterThanOrEqual(c.R < 2.5 ? 130 : 300);
+      // Smooth: a point has one normal, whichever triangle it is in.
+      const normals = new Map<string, string>();
+      for (const p of own) {
+        const key = p
+          .slice(0, 3)
+          .map(v => v.toFixed(4))
+          .join();
+        const n = p
+          .slice(3, 6)
+          .map(v => v.toFixed(4))
+          .join();
+        expect(normals.get(key) ?? n).toBe(n);
+        normals.set(key, n);
+      }
+      let [slivers, turned, area] = [0, 0, 0];
+      const faces: { n: number[]; a: number }[] = [];
+      for (let k = 0; k < own.length; k += 3) {
+        const [a, b, d] = [own[k], own[k + 1], own[k + 2]];
+        const e = [
+          [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
+          [d[0] - b[0], d[1] - b[1], d[2] - b[2]],
+          [a[0] - d[0], a[1] - d[1], a[2] - d[2]],
+        ].map(v => Math.hypot(...v));
+        // No sliver: the longest side under three times the shortest.
+        slivers += Math.max(...e) > 3 * Math.min(...e) ? 1 : 0;
+        // The three normals of a triangle within 40 degrees of each other: no crease.
+        const dot = (u: number[], v: number[]) => u[3] * v[3] + u[4] * v[4] + u[5] * v[5];
+        turned +=
+          Math.min(dot(a, b), dot(b, d), dot(d, a)) < Math.cos((40 * Math.PI) / 180) ? 1 : 0;
+        const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        const v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+        const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+        const l = Math.hypot(...n);
+        faces.push({ n: n.map(q => q / l), a: l / 2 });
+        area += l / 2;
+      }
+      expect(slivers / (own.length / 3), `rock at ${c.at}`).toBeLessThan(0.1);
+      expect(turned / (own.length / 3), `rock at ${c.at}`).toBeLessThan(0.1);
+      // No flat face: no direction that a fifth of its surface faces within 8 degrees.
+      for (const f of faces.filter((_, k) => k % 7 === 0)) {
+        const share =
+          faces
+            .filter(
+              q =>
+                q.n[0] * f.n[0] + q.n[1] * f.n[1] + q.n[2] * f.n[2] > Math.cos((8 * Math.PI) / 180),
+            )
+            .reduce((t, q) => t + q.a, 0) / area;
+        expect(share, `rock at ${c.at}`).toBeLessThan(0.2);
+      }
       // Not level on top: under a third of it is within 0.15 m of the highest point.
-      expect(pts.filter(p => p[1] > top - 0.15).length / pts.length).toBeLessThan(0.33);
+      const top = hi(own.map(p => p[1]));
+      expect(top - g).toBeGreaterThan(0.9 * c.H);
+      expect(own.filter(p => p[1] > top - 0.15).length / own.length).toBeLessThan(0.33);
+      // Darker at the foot.
+      const tone = (l: number[][]) => l.reduce((t, p) => t + p[9], 0) / l.length;
+      expect(tone(own.filter(p => p[1] < g + 0.1 * c.H))).toBeLessThan(
+        0.85 * tone(own.filter(p => p[1] > g + 0.5 * c.H)),
+      );
+    }
+  });
+
+  it('draws what stops a body: no box of a rock over 0.15 m out of its drawn triangles at body height', () => {
+    // The mesh is inside the form by what its flat triangles cut off: the boxes are 7 cm out of the form at most.
+    for (const c of rocks.filter((r, k) => r.R >= 1.5 && k % 4 === 0)) {
+      const [x, g, z] = c.at;
+      const drawnOf = mesh(c);
+      // How far the drawn rock goes from its axis on 24 bearings at three heights: its furthest point within 0.2 m of the height and 8 degrees of the bearing.
+      for (let i = 0; i < 24; i++) {
+        const [dx, dz] = [Math.cos((i * Math.PI) / 12), Math.sin((i * Math.PI) / 12)];
+        for (const up of [0.4, 1, 1.6].filter(u => u < 0.6 * c.H)) {
+          const near = drawnOf.filter(p => {
+            const [ux, uz] = [p[0] - x, p[2] - z];
+            const d = Math.hypot(ux, uz);
+            return Math.abs(p[1] - g - up) < 0.25 && d > 0 && (ux * dx + uz * dz) / d > 0.99;
+          });
+          if (!near.length) {
+            continue;
+          }
+          const drawn = hi(near.map(p => Math.hypot(p[0] - x, p[2] - z)));
+          const boxes = hi(
+            c.parts
+              .filter(q => g + up > q[1] && g + up < q[4])
+              .map(q => {
+                let [t0, t1] = [0, 1e9];
+                for (const [o, d, a, b] of [
+                  [x, dx, q[0], q[3]],
+                  [c.at[2], dz, q[2], q[5]],
+                ]) {
+                  const [u, v] = [(a - o) / d, (b - o) / d];
+                  [t0, t1] = [Math.max(t0, Math.min(u, v)), Math.min(t1, Math.max(u, v))];
+                }
+                return t1 >= t0 ? t1 : 0;
+              }),
+          );
+          expect(boxes - drawn, `rock at ${c.at}, bearing ${i}, ${up} m up`).toBeLessThan(0.15);
+        }
+      }
     }
   });
 
@@ -440,7 +549,8 @@ describe('moonscape', () => {
           v[1] < p.level + 1 &&
           Math.abs(Math.hypot(v[0] - p.x, v[2] - p.z) - PIT_R - 1.6) < 1.2,
       );
-      expect(blocks.length / 96).toBeGreaterThan(12);
+      // Twenty triangles each.
+      expect(blocks.length / 60).toBeGreaterThan(6);
     }
   });
 
@@ -543,8 +653,8 @@ describe('moonscape and the rovers', () => {
     expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
   });
 
-  it('is 436,527 vertices, the four static rovers and the two shuttles no longer among them', () => {
-    expect(verts.length).toBe(436527);
+  it('is 435,483 vertices, the four static rovers and the two shuttles no longer among them', () => {
+    expect(verts.length).toBe(435483);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {

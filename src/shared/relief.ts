@@ -34,6 +34,8 @@ export interface Relief {
   /** The definition's pits and the box round them all (none: an empty box). */
   pits: Quad[];
   box: Quad;
+  /** 1 for each lattice square a pit touches or is next to, by its low node. */
+  pitted: Uint8Array;
   bound: Quad;
   /** The highest node: a ray above it meets no ground. */
   top: number;
@@ -85,7 +87,18 @@ export const raise = (def: ReliefDef): Relief => {
       top = Math.max(top, h[i + j * nx]);
     }
   }
-  const r = { x0, z0, cell, nx, nz, h, hole, pits, box, bound, top };
+  // The squares a pit touches, its edge included: ground() looks through the pits only there.
+  const pitted = new Uint8Array(nx * nz);
+  for (const [px0, pz0, px1, pz1] of pits) {
+    for (let j = Math.floor((pz0 - z0) / cell) - 1; j <= Math.floor((pz1 - z0) / cell) + 1; j++) {
+      for (let i = Math.floor((px0 - x0) / cell) - 1; i <= Math.floor((px1 - x0) / cell) + 1; i++) {
+        if (i >= 0 && j >= 0 && i < nx && j < nz) {
+          pitted[i + j * nx] = 1;
+        }
+      }
+    }
+  }
+  const r = { x0, z0, cell, nx, nz, h, hole, pits, pitted, box, bound, top };
   made.set(def, r);
   return r;
 };
@@ -96,19 +109,20 @@ export const raise = (def: ReliefDef): Relief => {
  */
 export const ground = (w: World, x: number, z: number): number => {
   const r = w.relief;
-  // A pit's edge has no ground either: two pits side by side leave no line to walk between them.
-  const pit = (q: Quad) => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3];
-  if (
-    !r ||
-    (x > r.hole[0] && x < r.hole[2] && z > r.hole[1] && z < r.hole[3]) ||
-    (pit(r.box) && r.pits.some(pit))
-  ) {
+  if (!r || (x > r.hole[0] && x < r.hole[2] && z > r.hole[1] && z < r.hole[3])) {
     return -Infinity;
   }
   const u = Math.min(Math.max((x - r.x0) / r.cell, 0), r.nx - 1);
   const v = Math.min(Math.max((z - r.z0) / r.cell, 0), r.nz - 1);
   const i = Math.min(Math.floor(u), r.nx - 2);
   const j = Math.min(Math.floor(v), r.nz - 2);
+  // A pit's edge has no ground either: two pits side by side leave no line to walk between them.
+  if (
+    r.pitted[i + j * r.nx] &&
+    r.pits.some(q => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3])
+  ) {
+    return -Infinity;
+  }
   const [fu, fv] = [u - i, v - j];
   const n = i + j * r.nx;
   const [a, b, c, d] = [r.h[n], r.h[n + 1], r.h[n + r.nx], r.h[n + r.nx + 1]];

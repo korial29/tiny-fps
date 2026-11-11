@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { empty, reach } from '../../test/relief';
-import { LAYOUT, LIP, MOON } from '../shared/moon';
+import { LAYOUT, LIP, MOON, PIT_FLOOR, PIT_R, PIT_S } from '../shared/moon';
 import { ground } from '../shared/relief';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
@@ -23,17 +23,27 @@ const world = build(MOON);
 const relief = world.relief!;
 const { at } = MOON.relief!;
 const inArena = (p: number[]) => p[0] > 0 && p[0] < 160 && p[2] > 0 && p[2] < 280;
+/** Metres from the arena, 0 in it. */
+const off = (p: number[]) =>
+  Math.hypot(Math.max(-p[0], 0, p[0] - 160), Math.max(-p[2], 0, p[2] - 280));
 /** Off the lattice in the arena: a small crater's vertex, or a spur's top at the rille's end. */
 const loose = (p: number[]) =>
   p[0] >= 0 && p[0] <= 160 && p[2] > 0 && p[2] < 280 && (p[0] % 4 !== 0 || p[2] % 4 !== 0);
 /** The small craters' vertices: in the floor's stone, off the lattice, over the floor. */
 const pitted = (p: number[]) =>
   p[8] === TEX.STONE && loose(p) && p[1] > 0.01 && Math.abs(p[2] - 140) > 16;
-/** The relief as drawn: the stone triangles that face up, on the lattice or past the bound. */
+/** In a pit's square of terrace, which pits() draws: not on its edge. */
+const inPit = (p: number[]) =>
+  LAYOUT.pits.some(q => Math.abs(p[0] - q.x) < PIT_S && Math.abs(p[2] - q.z) < PIT_S);
+/** The relief as drawn: the stone triangles that face up, on the lattice or past the bound (the rims' bands of detail are off whole metres). */
 const land: number[][][] = [];
 for (let i = 0; i < verts.length; i += 3) {
   const t = verts.slice(i, i + 3);
-  if (t.every(p => p[8] === TEX.STONE && p[4] > 0 && !loose(p))) {
+  const mid = [0, 1, 2].map(k => (t[0][k] + t[1][k] + t[2][k]) / 3);
+  if (
+    !inPit(mid) &&
+    t.every(p => p[8] === TEX.STONE && p[4] > 0 && !loose(p) && p[0] % 1 === 0 && p[2] % 1 === 0)
+  ) {
     land.push(t);
   }
 }
@@ -45,9 +55,9 @@ describe('moonscape', () => {
     expect(verts.every(p => Math.abs(Math.hypot(p[3], p[4], p[5]) - 1) < 1e-3)).toBe(true);
   });
 
-  it("lays 60 small craters in the floor's stone, low, on bare floor only", () => {
+  it("lays 72 small craters in the floor's stone, low, on bare floor only", () => {
     const pits = verts.filter(pitted);
-    expect(pits.length).toBe(60 * 4 * 12 * 6);
+    expect(pits.length).toBe(72 * 4 * 12 * 6);
     expect(pits.every(p => p[1] > 0.01 && p[1] <= 0.24 && p[6] === p[0] && p[7] === p[2])).toBe(
       true,
     );
@@ -68,7 +78,8 @@ describe('moonscape', () => {
     // faceted boulders about 20,000, the outside of the two bases (moonhull.ts) 17,952.
     // The arena's own relief is 16,000 more, the rille's rock and rim 30,000, the boulders 100,000 (512 triangles a big one).
     expect(verts.length).toBeGreaterThan(330000);
-    expect(verts.length).toBeLessThan(380000);
+    // The craters' stones and twelve small craters more are 12,600: then the rims' bands of detail 33,000 and the pits 10,000: the cap went from 380,000 to 440,000.
+    expect(verts.length).toBeLessThan(440000);
     expect(moonscape(MOON)).toEqual(v);
   });
 
@@ -132,7 +143,7 @@ describe('moonscape', () => {
       for (const p of t) {
         // A node, at its height, with the floor's stone laid in metres.
         const [i, j] = [(p[0] - x0) / cell, (p[2] - z0) / cell];
-        expect(i % 1 || j % 1).toBe(0);
+        expect(i % 1 || j % 1, `${p.slice(0, 3)}`).toBe(0);
         expect(p[1]).toBe(h[i + j * nx]);
         expect([p[6], p[7]]).toEqual([p[0], p[2]]);
       }
@@ -155,14 +166,18 @@ describe('moonscape', () => {
     for (let x = x0; x < x0 + (nx - 1) * cell; x += cell) {
       for (let z = z0; z < z0 + (relief.nz - 1) * cell; z += cell) {
         const corners = [0, 1, 2, 3].map(k => [x + (k & 1) * cell, z + (k >> 1) * cell]);
-        if (corners.every(c => reach(relief, c[0], c[1]) <= 1) && !empty(relief, x, z)) {
+        if (
+          corners.every(c => reach(relief, c[0], c[1]) <= 1) &&
+          !empty(relief, x, z) &&
+          !inPit([x + 2, 0, z + 2])
+        ) {
           squares++;
           expect(drawn.has(`${3 * x + 2 * cell},${3 * z + cell}`), `${x}, ${z}`).toBe(true);
           expect(drawn.has(`${3 * x + cell},${3 * z + 2 * cell}`), `${x}, ${z}`).toBe(true);
         }
       }
     }
-    expect(squares).toBeGreaterThan(20500);
+    expect(squares).toBeGreaterThan(20400);
     expect(drawn.size).toBeGreaterThanOrEqual(2 * squares);
   }, 30_000);
 
@@ -188,7 +203,11 @@ describe('moonscape', () => {
             Math.abs(z - 140) <= 16 &&
             (Math.abs(z - 140) >= 8 || x === 0 || x === 160),
         );
-        expect(out || lip, key).toBe(true);
+        // Or the edge of a pit's square of terrace.
+        const pit = ends.every(([x, z]) =>
+          LAYOUT.pits.some(q => Math.max(Math.abs(x - q.x), Math.abs(z - q.z)) === PIT_S),
+        );
+        expect(out || lip || pit, key).toBe(true);
         rim += out ? 1 : 0;
         lips += lip ? 1 : 0;
       }
@@ -334,6 +353,142 @@ describe('moonscape', () => {
     }
   });
 
+  /** The bands of detail on the rims: stone facing up, off whole metres, outside the arena and the pits. */
+  const band = verts.filter(
+    p =>
+      p[8] === TEX.STONE &&
+      p[4] > 0.99 &&
+      (p[0] % 1 !== 0 || p[2] % 1 !== 0) &&
+      !inPit(p) &&
+      off(p) > 0,
+  );
+
+  it('lays a band of detail on the rim of every crater of 12 m and more: on the relief, 3 to 26 cm proud, the crest raised, light and broken', () => {
+    expect(band.length).toBeGreaterThan(25000);
+    for (const p of band) {
+      const up = p[1] - ground(world, p[0], p[2]);
+      expect(up).toBeGreaterThan(0.03);
+      expect(up).toBeLessThan(0.26);
+    }
+    for (const [x, z, r] of LAYOUT.bowls.filter(b => b[2] >= 12)) {
+      const ring = band.filter(p => Math.abs(Math.hypot(p[0] - x, p[2] - z) / r - 1) < 0.35);
+      // All round: on each of sixteen bearings.
+      const turns = new Set(
+        ring.map(p => Math.floor((Math.atan2(p[2] - z, p[0] - x) / Math.PI + 1) * 8) % 16),
+      );
+      expect(turns.size, `crater at ${x}, ${z}`).toBe(16);
+      // The crest: the lightest points, standing 10 to 25 cm proud, not all at one height; the inner ring dark.
+      const crest = ring.filter(p => p[9] > 1.2).map(p => p[1] - ground(world, p[0], p[2]));
+      expect(crest.length).toBeGreaterThan(r);
+      expect(Math.min(...crest)).toBeGreaterThan(0.09);
+      expect(Math.max(...crest) - Math.min(...crest)).toBeGreaterThan(0.08);
+      expect(ring.some(p => p[9] < 0.8)).toBe(true);
+    }
+    // None on a crater under 12 m.
+    for (const [x, z, r] of LAYOUT.bowls.filter(b => b[2] < 12)) {
+      const near = LAYOUT.bowls.some(
+        b => b[2] >= 12 && Math.hypot(b[0] - x, b[1] - z) < 1.5 * b[2] + r,
+      );
+      expect(near || !band.some(p => Math.hypot(p[0] - x, p[2] - z) < 0.7 * r)).toBe(true);
+    }
+  }, 60_000);
+
+  it('draws each pit: its terrace to the void with a dark lip, rock walls down to a floor 13 m and more under it, the steps, blocks round the edge', () => {
+    for (const p of LAYOUT.pits) {
+      const here = verts.filter(
+        v => Math.abs(v[0] - p.x) <= PIT_S && Math.abs(v[2] - p.z) <= PIT_S,
+      );
+      const terrace = here.filter(v => v[8] === TEX.STONE && Math.abs(v[1] - p.level) < 1e-9);
+      expect(terrace.length).toBeGreaterThan(200);
+      // Drawn up to the void all round, never short of it, and darker by it.
+      for (const [z0, z1, a, b] of p.rows) {
+        const row = terrace.filter(v => v[2] >= z0 && v[2] <= z1);
+        expect(Math.min(...row.filter(v => v[0] > p.x).map(v => v[0] - p.x))).toBeLessThanOrEqual(
+          b + 1e-9,
+        );
+        expect(Math.min(...row.filter(v => v[0] < p.x).map(v => p.x - v[0]))).toBeLessThanOrEqual(
+          a + 1e-9,
+        );
+      }
+      const lip = terrace.filter(v => Math.hypot(v[0] - p.x, v[2] - p.z) < PIT_R + 1);
+      expect(Math.max(...lip.map(v => v[9]))).toBeLessThan(0.8);
+      expect(terrace.some(v => v[9] > 0.99)).toBe(true);
+      // The walls: basalt from the terrace to the floor.
+      const wall = here.filter(
+        v => v[8] === TEX.ROCK && Math.abs(v[4]) < 0.9 && v[1] < p.level - 0.5 && v[0] < p.x,
+      );
+      expect(wall.length).toBeGreaterThan(300);
+      expect(Math.min(...wall.map(v => v[1]))).toBe(PIT_FLOOR);
+      // The floor, dark, and the steps on it: basalt at six heights and more up the east side.
+      const floor = here.filter(v => v[8] === TEX.STONE && v[1] === PIT_FLOOR);
+      expect(floor).toHaveLength(6);
+      expect(floor.every(v => v[9] < 0.6)).toBe(true);
+      const steps = here.filter(
+        v =>
+          v[8] === TEX.ROCK &&
+          Math.abs(v[2] - p.z) < 1.3 &&
+          v[0] > p.x &&
+          v[0] < p.x + p.rows[PIT_R][3] - 0.4 &&
+          v[1] > PIT_FLOOR + 0.5,
+      );
+      expect(new Set(steps.map(v => Math.round(v[1]))).size).toBeGreaterThanOrEqual(5);
+      // Blocks round the edge: basalt standing on the terrace within 3 m of the void.
+      const blocks = verts.filter(
+        v =>
+          v[8] === TEX.ROCK &&
+          v[1] > p.level + 0.15 &&
+          v[1] < p.level + 1 &&
+          Math.abs(Math.hypot(v[0] - p.x, v[2] - p.z) - PIT_R - 1.6) < 1.2,
+      );
+      expect(blocks.length / 96).toBeGreaterThan(12);
+    }
+  });
+
+  it("breaks the small craters' rims: no two bearings of a lip at one distance or height", () => {
+    const pits = verts.filter(pitted);
+    // The lips: the highest points of each crater.
+    const heights = new Set(pits.filter(p => p[1] > 0.1).map(p => p[1].toFixed(3)));
+    expect(heights.size).toBeGreaterThan(100);
+    expect(Math.max(...pits.map(p => p[1]))).toBeLessThanOrEqual(0.24);
+  });
+
+  it('dresses each crater of 12 m and more: stones on its crest, blocks thrown out, lighter rays on the ground round it', () => {
+    const big = LAYOUT.bowls.filter(b => b[2] >= 12);
+    expect(big.length).toBeGreaterThan(15);
+    let [crest, near] = [0, 0];
+    const low = basalt.filter(p => p[1] - at(p[0], p[2]) < 1.5);
+    for (const [x, z, r] of big) {
+      const q = low.map(p => Math.hypot(p[0] - x, p[2] - z) / r);
+      crest += q.filter(v => v > 0.9 && v < 1.2).length;
+      near += q.filter(v => v >= 1.25 && v < 2.6).length;
+    }
+    // (Counted in vertices: 96 a stone.)
+    expect(crest / 96).toBeGreaterThan(25);
+    expect(near / 96).toBeGreaterThan(30);
+    // None thrown into the arena's field: every stone of basalt there is by one of the map's rocks.
+    const strays = basalt.filter(
+      p =>
+        inArena(p) &&
+        Math.abs(p[2] - 140) > 20 &&
+        p[1] > at(p[0], p[2]) + 0.05 &&
+        !rocks.some(c => Math.hypot(p[0] - c.at[0], p[2] - c.at[2]) < 1.4 * c.R + 1.2),
+    );
+    expect(strays).toEqual([]);
+    // Rays: round the deep twins, between 1.2 and 2.2 of the radius, some of the ground is 0.1 lighter and more than the rest, and most is not.
+    for (const [x, z, r] of big.filter(b => b[3] > 0.25 && b[1] !== 140)) {
+      const ring = land
+        .flat()
+        .filter(p => {
+          const d = Math.hypot(p[0] - x, p[2] - z) / r;
+          return d > 1.2 && d < 2.2;
+        })
+        .map(p => p[9] - Math.min(Math.max(1 + p[1] / 60, 0.78), 1.2));
+      const lit = ring.filter(v => v > 0.1).length / ring.length;
+      expect(lit).toBeGreaterThan(0.05);
+      expect(lit).toBeLessThan(0.5);
+    }
+  }, 60_000);
+
   it("stands the boulders, the dishes, the ramps' lamps and the wreck on the relief", () => {
     const by = (x: number, z: number, r: number) =>
       verts.filter(p => p[8] !== TEX.STONE && Math.hypot(p[0] - x, p[2] - z) < r);
@@ -357,8 +512,10 @@ describe('moonscape', () => {
     const [x, z] = LAYOUT.wreck;
     const hull = by(x, z, 9);
     expect(hull.length).toBeGreaterThan(200);
-    expect(Math.max(...hull.map(p => p[1]))).toBeGreaterThan(at(x, z) + 3);
-    expect(Math.max(...hull.map(p => p[1]))).toBeLessThan(at(x, z) + 8);
+    // On the floor of the Bowl's pit.
+    const up = hull.filter(p => p[8] === -1).map(p => p[1] - PIT_FLOOR);
+    expect(Math.max(...up)).toBeGreaterThan(3);
+    expect(Math.max(...up)).toBeLessThan(8);
   });
 
   it('puts the masts on the map layout: lamps 10 m up, pad masts on the pad', () => {
@@ -386,8 +543,8 @@ describe('moonscape and the rovers', () => {
     expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
   });
 
-  it('is 375,645 vertices, the four static rovers no longer among them', () => {
-    expect(verts.length).toBe(375645);
+  it('is 437,511 vertices, the four static rovers no longer among them', () => {
+    expect(verts.length).toBe(437511);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {
@@ -397,7 +554,7 @@ describe('moonscape and the rovers', () => {
     for (const [x, , z] of MOON.rovers!) {
       expect(near(pits, x, z)).toBe(0);
     }
-    // Park one on a crater of today's map: the crater goes, and there are still 60.
+    // Park one on a crater of today's map: the crater goes, and there are still 72.
     const [x, , z] = pits[0];
     expect(near(pits, x, z)).toBeGreaterThan(0);
     const moved = moonscape({ ...MOON, rovers: [[x, 0, z, 0]] });

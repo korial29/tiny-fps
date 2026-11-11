@@ -59,6 +59,8 @@ export default defineConfig({
     root,
     include: ['src/**/*.test.ts'],
     environment: 'node',
+    // The moon's scenery is built whole in several tests: seconds each on a CI runner, past the default 5 s.
+    testTimeout: 30_000,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

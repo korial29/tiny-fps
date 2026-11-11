@@ -81,10 +81,16 @@ describe('helmet', () => {
     // by 3 cm in the middle, where the jaw box comes up into it; its top level.
     const low = (u: number) => band(u)[0] - band(u)[1];
     const top = (u: number) => band(u)[0] + band(u)[1];
-    expect(top(0)).toBeCloseTo(top(0.1), 9);
-    expect(top(0) - low(0.062)).toBeGreaterThan(0.07);
-    expect(low(0) - low(0.062)).toBeGreaterThan(0.015);
-    expect(low(0.118) - low(0.062)).toBeGreaterThan(0.025);
+    expect(top(0) - low(0.062)).toBeGreaterThan(0.05);
+    expect(low(0) - low(0.062)).toBeGreaterThan(0.005);
+    // An aggressive one (the user, 2026-11-11): its upper edge frowns, a centimetre lower in the
+    // middle than at its ends; its lower edge runs straight up to them, a V (no curve: the half-way
+    // point is within 3 mm of the chord); its ends are a third of its height.
+    expect(top(0.122) - top(0)).toBeGreaterThan(0.008);
+    expect(top(0.06)).toBeGreaterThan(top(0));
+    expect(low(0.122) - low(0.07)).toBeGreaterThan(0.02);
+    expect(Math.abs(low(0.096) - (low(0.07) + low(0.122)) / 2)).toBeLessThan(0.003);
+    expect(top(0.122) - low(0.122)).toBeLessThan((top(0.07) - low(0.07)) * 0.65);
     const out = make(3);
     const p = Array.from({ length: count(out) }, (_, i) => [
       ...at(out, i).map((w, k) => w - HEAD[k]),
@@ -92,6 +98,16 @@ describe('helmet', () => {
       out[i * STRIDE + 7],
       out[i * STRIDE + 9],
     ]);
+    // The volumes on the sides stand well out (the user: more pronounced): the ear blocks 2 cm
+    // out of the shell, stepped, where the plates stood 0.8.
+    const wide = shrunk([SHELL.r[0], 0, 0])[0];
+    for (const side of [1, -1]) {
+      const pod = p.filter(q => q[0] * side > wide + 0.004);
+      expect(Math.max(...pod.map(q => q[0] * side)) - wide).toBeGreaterThan(0.018);
+      expect(Math.max(...pod.map(q => q[1])) - Math.min(...pod.map(q => q[1]))).toBeGreaterThan(
+        0.12,
+      );
+    }
     // Green glass.
     const glass = p.filter((_, i) => out[i * STRIDE + 8] == SHINE);
     expect(glass.every(q => q[4] > q[3] * 2 && q[4] > q[5])).toBe(true);

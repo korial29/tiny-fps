@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { DEAD, EXPR, FH, FRAMES, FW, GLOW, PALETTE, mood, sprite } from './face';
+import { DEAD, EXPR, FH, FRAMES, FW, GLOW, MORE, PALETTE, frame, mood, sprite } from './face';
 import type { Feel } from './face';
 
 const calm: Feel = { hp: 5, max: 5, down: false, flag: false, lost: 0, got: false, firing: 0 };
 
 describe('the face in the HUD', () => {
-  it('has 42 frames, as many as DOOM’s, each its own picture in the palette', () => {
-    expect(FRAMES).toBe(42);
+  it('has DOOM’s 42 frames and 15 more for effort, focus and a shout, each its own picture in the palette', () => {
+    expect(MORE).toBe(42);
+    expect(FRAMES).toBe(42 + 5 * 3);
     const seen = new Set<string>();
     for (let n = 0; n < FRAMES; n++) {
       const p = sprite(n);
@@ -79,5 +80,46 @@ describe('the face in the HUD', () => {
     expect(run([{ down: true, hp: 0 }])[0]).toBe(DEAD);
     // A hit still shows over the glow.
     expect(run([{ flag: true, hp: 4, lost: 1, from: -1.2 }])[0]).toBe(8 + EXPR.TURN_L);
+  });
+
+  it('wears the runners’ expressions too: a strain in a sprint, a set face aiming, a shout in a cut or a dash, a grin at a capture', () => {
+    // Their frames: after DOOM's 42, three per level of wounds.
+    expect(frame(0, EXPR.GRIN)).toBe(EXPR.GRIN);
+    expect(frame(2, EXPR.RAGE)).toBe(16 + EXPR.RAGE);
+    expect(frame(0, EXPR.EFFORT)).toBe(MORE);
+    expect(frame(4, EXPR.SHOUT)).toBe(FRAMES - 1);
+    expect(run([{ effort: true }])[0]).toBe(frame(0, EXPR.EFFORT));
+    expect(run([{ focus: true, hp: 3 }])[0]).toBe(frame(2, EXPR.FOCUS));
+    expect(run([{ shout: true, hp: 1 }])[0]).toBe(frame(4, EXPR.SHOUT));
+    // A grin holds a second and a half, as a new weapon's does.
+    const grin = run([{ grin: true }, ...Array<Partial<Feel>>(60).fill({})]);
+    expect(grin[0]).toBe(EXPR.GRIN);
+    expect(grin.at(-1)).toBe(EXPR.GRIN);
+    expect(run([{ grin: true }, ...Array<Partial<Feel>>(120).fill({})]).at(-1)).not.toBe(EXPR.GRIN);
+    // What matters most shows: a hit over all, a shout over aiming, aiming over the flag's glow and the effort.
+    expect(run([{ shout: true, hp: 4, lost: 1, from: 1.2 }])[0]).toBe(8 + EXPR.TURN_R);
+    expect(run([{ shout: true, focus: true, effort: true }])[0]).toBe(frame(0, EXPR.SHOUT));
+    expect(run([{ focus: true, flag: true, effort: true }])[0]).toBe(frame(0, EXPR.FOCUS));
+    expect(run([{ flag: true, effort: true }])[0]).toBe(GLOW);
+    // The trigger held: set at first, a rage after 2 s.
+    expect(run([{ focus: true, firing: 1 }])[0]).toBe(frame(0, EXPR.FOCUS));
+    expect(run([{ focus: true, firing: 2.5 }])[0]).toBe(EXPR.RAGE);
+    expect(run([{ down: true, shout: true, grin: true }])[0]).toBe(DEAD);
+    // The pictures: the eyes narrowed in all three; the mouth wide open with teeth in a shout,
+    // open a little in an effort, a short line when set.
+    const count = (n: number, c: number, y0: number, y1: number) =>
+      [...sprite(n)].filter((v, i) => v == c && i / FW >= y0 && i / FW < y1).length;
+    const [WHITE, MOUTH, TEETH] = [6, 8, 9];
+    for (const e of [EXPR.EFFORT, EXPR.FOCUS, EXPR.SHOUT]) {
+      expect(count(frame(0, e), WHITE, 11, 16)).toBeLessThan(count(EXPR.AHEAD, WHITE, 11, 16));
+      // And the wounds of its level, as every other frame.
+      expect(count(frame(4, e), 10, 0, FH)).toBeGreaterThan(count(frame(0, e), 10, 0, FH));
+    }
+    expect(count(frame(0, EXPR.SHOUT), MOUTH, 18, 26)).toBeGreaterThan(
+      count(frame(0, EXPR.EFFORT), MOUTH, 18, 26),
+    );
+    expect(count(frame(0, EXPR.SHOUT), TEETH, 18, 26)).toBeGreaterThan(0);
+    expect(count(frame(0, EXPR.EFFORT), MOUTH, 18, 26)).toBeGreaterThan(0);
+    expect(count(frame(0, EXPR.FOCUS), MOUTH, 18, 26)).toBe(0);
   });
 });

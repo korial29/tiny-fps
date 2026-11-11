@@ -28,6 +28,7 @@ import { JOINT as J, REST, solve, turn } from './rig';
 import type { Quat } from './rig';
 import {
   FRY,
+  GRIN,
   animate,
   brandish,
   createRunner,
@@ -39,11 +40,20 @@ import {
 } from './soldier';
 import type { Runner } from './soldier';
 import { PACK, PAD, pack, shoulders } from './pack';
-import { capped, palette } from './skin';
+import { capped, palette, shaved } from './skin';
+import { CH, lookOf, toneOf } from './features';
+import { POSE } from './expression';
 
 const DT = 1 / 60;
 const DASH_BURST = DASH_COOLDOWN - 2;
-const [, , , SKIN, , , SOLE, GLOVE] = palette([0.1, 0.8, 0.2]);
+// The skin of the player 1, whom man() is.
+const [, , , SKIN, , , SOLE, GLOVE] = palette(
+  [0.1, 0.8, 0.2],
+  undefined,
+  undefined,
+  false,
+  toneOf(1),
+);
 const man = (o: Partial<PlayerState> = {}): PlayerState => ({
   id: 1,
   x: 5,
@@ -1362,4 +1372,168 @@ describe('a runner shouldering a long gun (the user, 2026-11-10: it hung across 
       expect(armed.tip).toBeUndefined();
     });
   }
+});
+
+describe('a runner’s face (expression.ts): what he does shows on it', () => {
+  const GREEN = [0.1, 0.8, 0.2];
+  /** Frames of the states `ps`, each animated and drawn as the renderer does: the runner of player 1 after them. */
+  const play = (book: Map<number, Runner>, ps: PlayerState[], n = 1, lod = 1) => {
+    for (let i = 0; i < n; i++) {
+      animate(book, ps, DT);
+      for (const p of ps) {
+        soldier([], book.get(p.id)!, GREEN, lod);
+      }
+    }
+    return book.get(1)!;
+  };
+  /** The pose's own channels are all at least `share` of the way in. */
+  const wears = (r: Runner, pose: number[][], share = 0.7) =>
+    pose.every(([ch, v]) => ch == CH.BLINK || r.face.w[ch] >= v * share - 1e-6);
+
+  it('is his own: the traits of his id, his skin, and no length to the hair of a shaved head', () => {
+    const book = new Map<number, Runner>();
+    const ids = Array.from({ length: 40 }, (_, i) => i);
+    animate(
+      book,
+      ids.map(id => man({ id })),
+      DT,
+    );
+    for (const id of ids) {
+      const { w } = book.get(id)!.face;
+      const look = lookOf(id);
+      expect(w[CH.WIDTH]).toBe(look[CH.WIDTH]);
+      expect(w[CH.ASYM]).toBe(look[CH.ASYM]);
+      expect(w[CH.HAIR]).toBe(shaved(id) ? 0 : look[CH.HAIR]);
+    }
+    expect(ids.some(shaved)).toBe(true);
+    // Two players, two heads; the same player twice, the same head.
+    const head = (id: number) => {
+      const out: number[] = [];
+      soldier(out, createRunner(man({ id })), GREEN, 3);
+      return rows(out).filter(p => p[1] > 1 + 1.6);
+    };
+    expect(head(3)).toEqual(head(3));
+    const [a, b] = [head(3), head(4)];
+    expect(
+      a.some((p, i) => Math.hypot(p[0] - b[i][0], p[1] - b[i][1], p[2] - b[i][2]) > 0.002),
+    ).toBe(true);
+    // The skin's tone is in the colours he is drawn with.
+    const tone = toneOf(3);
+    expect(a.some(p => p[4] == tone[0] && p[5] == tone[1] && p[6] == tone[2])).toBe(true);
+  });
+
+  it('is at rest standing, strains in a sprint and on a ledge, is set aiming, shouts in a dash and in a cut', () => {
+    const book = new Map<number, Runner>();
+    let r = play(book, [man()], 60);
+    expect(r.face.k.every(k => k < 0.01)).toBe(true);
+    expect(r.face.w[CH.JAW]).toBeLessThan(0.05);
+    // A sprint, then a hang: effort.
+    r = play(book, [man({ vz: -9 })], 90);
+    expect(
+      wears(
+        r,
+        POSE.EFFORT.filter(([ch]) => ch != CH.JAW),
+      ),
+    ).toBe(true);
+    r = play(book, [man()], 240);
+    expect(r.face.k[0]).toBeLessThan(0.05);
+    r = play(book, [man(HANGS)], 90);
+    expect(r.face.k[0]).toBeGreaterThan(0.9);
+    // A shot: the gun arm comes up and the face is set, for as long as he aims.
+    const still = new Map<number, Runner>();
+    play(still, [man({ ammo: 5 })], 30);
+    r = play(still, [man({ ammo: 4, shots: 1 })], 12);
+    expect(wears(r, POSE.FOCUS)).toBe(true);
+    r = play(still, [man({ ammo: 4, shots: 1 })], 180);
+    expect(r.face.w[CH.SQUINT]).toBeLessThan(0.2);
+    // A dash: a shout, at once, and gone soon after.
+    r = play(still, [man({ dash: DASH_BURST })], 6);
+    expect(r.face.w[CH.JAW]).toBeGreaterThan(0.6);
+    r = play(still, [man()], 60);
+    expect(r.face.w[CH.JAW]).toBeLessThan(0.05);
+    // A katana's cut.
+    const cut = { blade: true, wield: true, cut: CUT.RIGHT, swing: CUTS[CUT.RIGHT].ticks };
+    play(still, [man({ blade: true, wield: true })], 5);
+    r = play(still, [man(cut)], 6);
+    expect(r.prog).toBeGreaterThanOrEqual(0);
+    expect(r.face.w[CH.JAW]).toBeGreaterThan(0.6);
+    expect(r.face.w[CH.BROW_DOWN]).toBeGreaterThan(0.6);
+  });
+
+  it('winces when hit, for under a second, and grimaces down with the eyes shut', () => {
+    const book = new Map<number, Runner>();
+    play(book, [man({ hp: 5 })], 30);
+    let r = play(book, [man({ hp: 4 })], 4);
+    expect(r.hurt).toBeGreaterThan(0);
+    expect(wears(r, POSE.WINCE, 0.6)).toBe(true);
+    expect(r.face.w[CH.BLINK]).toBeGreaterThan(0.5);
+    r = play(book, [man({ hp: 4 })], 90);
+    expect(r.face.w[CH.GRIT]).toBeLessThan(0.05);
+    r = play(book, [man({ hp: 0, down: DOWN_TICKS })], 40);
+    expect(wears(r, POSE.DOWN, 0.9)).toBe(true);
+    expect(r.face.w[CH.BLINK]).toBeGreaterThan(0.97);
+    expect(r.face.w[CH.LOOK_X]).toBeCloseTo(0, 2);
+  });
+
+  it('grins for a moment at a foe he has put down, and when his team captures (GRIN seconds)', () => {
+    const book = new Map<number, Runner>();
+    play(book, [man({ hits: 2 }), man({ id: 2, x: 8 })], 10);
+    // His hit lands as the other goes down.
+    let r = play(book, [man({ hits: 3 }), man({ id: 2, x: 8, hp: 0, down: DOWN_TICKS })]);
+    expect(r.grin).toBeCloseTo(GRIN, 5);
+    expect(book.get(2)!.grin).toBe(0);
+    r = play(book, [man({ hits: 3 }), man({ id: 2, x: 8, hp: 0, down: DOWN_TICKS - 1 })], 20);
+    expect(wears(r, POSE.GRIN)).toBe(true);
+    r = play(book, [man({ hits: 3 }), man({ id: 2, x: 8 })], Math.ceil((GRIN + 2) / DT));
+    expect(r.grin).toBe(0);
+    expect(r.face.w[CH.SMILE]).toBeLessThan(0.15);
+    // A hit that puts nobody down is no grin.
+    r = play(book, [man({ hits: 4 }), man({ id: 2, x: 8, hp: 3 })], 3);
+    expect(r.grin).toBe(0);
+    // The renderer's cheer() sets the same clock (a capture).
+    r.grin = GRIN;
+    r = play(book, [man({ hits: 4 }), man({ id: 2, x: 8 })], 20);
+    expect(r.face.w[CH.SMILE]).toBeGreaterThan(0.7);
+  });
+
+  it('keeps the eyes on the aim when the head is not: they turn in their sockets, the same side as the look', () => {
+    // Looking up past where the neck takes the head, and to a side of a body that has not turned yet.
+    const gaze = (o: Partial<PlayerState>) => {
+      const book = new Map<number, Runner>();
+      const r = play(book, [man({ ammo: 5, shots: 1, ...o })], 30);
+      const s = stance(r).s;
+      const look = turn(inv(s.rot[J.HEAD]), basis(o.yaw ?? 0, o.pitch ?? 0)[2]);
+      return {
+        w: r.face.w,
+        gx: Math.atan2(look[0], -look[2]),
+        gy: Math.atan2(look[1], Math.hypot(look[0], look[2])),
+      };
+    };
+    for (const o of [{ pitch: 1.2 }, { pitch: -1.2 }, {}]) {
+      const { w, gx, gy } = gaze(o);
+      // Where the eyes are is where the aim is from the head, as far as they turn (0.6 and 0.4 rad), less a small glance.
+      expect(Math.abs(w[CH.LOOK_X] - Math.max(-1, Math.min(1, gx / 0.6)))).toBeLessThan(0.25);
+      expect(Math.abs(w[CH.LOOK_Y] - Math.max(-1, Math.min(1, gy / 0.4)))).toBeLessThan(0.25);
+      expect(Math.hypot(w[CH.LOOK_X], w[CH.LOOK_Y])).toBeLessThanOrEqual(1 + 1e-6);
+    }
+  });
+
+  it('moves nothing but the head: the body of a runner with any face is the body he had', () => {
+    const body = (w: (r: Runner) => void) => {
+      const r = createRunner(man());
+      w(r);
+      r.face.update = () => {};
+      const out: number[] = [];
+      soldier(out, r, GREEN, 3);
+      return rows(out).filter(p => p[1] < 1 + 1.35);
+    };
+    const plain = body(() => {});
+    expect(
+      body(r => {
+        for (const [ch, v] of POSE.SHOUT) {
+          r.face.w[ch] = v;
+        }
+      }),
+    ).toEqual(plain);
+  });
 });

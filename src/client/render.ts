@@ -25,7 +25,8 @@ import { PACK } from './pack';
 import { JOINT, turn } from './rig';
 import { rolled, rover } from './rover';
 import type { Quat } from './rig';
-import { animate, soldier } from './soldier';
+import { GRIN, animate, soldier } from './soldier';
+import { body } from './skin';
 import type { Runner } from './soldier';
 import { skyline, trees } from './skyline';
 import { deepen, street } from './street';
@@ -495,6 +496,8 @@ export interface Renderer {
   steps(id: number): number | undefined;
   /** The muzzle of the long gun of the player `id`'s runner as last drawn, from his feet (Runner.tip). */
   muzzle(id: number): Vec3 | undefined;
+  /** The runners of the players `ids` grin for a moment: their team has captured. */
+  cheer(ids: number[]): void;
   destroy(): void;
 }
 
@@ -511,6 +514,9 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 export const createRenderer = (canvas: HTMLCanvasElement, world: World): Renderer => {
   /** The animation state of each runner drawn. */
   const runners = new Map<number, Runner>();
+  // The runners' skins at every level, now: built on the first runner to come near (the close one
+  // with its face's channels takes a tenth of a second), they would stall a frame of the match.
+  [0, 1, 3].forEach(body);
   /** Each rover's wheels: the angle they have rolled to, and where the rover was last frame. */
   const spins: number[] = [];
   const was: [number, number][] = [];
@@ -914,6 +920,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     project: (x, y, z) => project(vp, x, y, z),
     steps: id => runners.get(id)?.gait.steps,
     muzzle: id => runners.get(id)?.tip,
+    cheer: ids =>
+      ids.forEach(id => {
+        const r = runners.get(id);
+        if (r) {
+          r.grin = GRIN;
+        }
+      }),
     destroy() {
       canvas.removeEventListener('webglcontextlost', onLost);
       canvas.removeEventListener('webglcontextrestored', onRestored);

@@ -146,10 +146,17 @@ export const track = (
 };
 
 /** Appends the piece at level of detail `lod`, in `colors` (see palette()), sunk by `sink` metres with the body. */
-export const piece = (out: number[], c: Piece, colors: number[][], lod: number, sink: number) => {
+export const piece = (
+  out: number[],
+  c: Piece,
+  colors: number[][],
+  lod: number,
+  sink: number,
+  face?: ArrayLike<number>,
+) => {
   const from = out.length;
-  // A head off has its eyes shut, the mouth slack.
-  skin(out, cut(lod, c.limb)[1], c.s, colors, 1, 0.3);
+  // A head off has its owner's face: down, the eyes shut.
+  skin(out, cut(lod, c.limb)[1], c.s, colors, face);
   for (let i = from; i < out.length; i += STRIDE) {
     const x = turn(c.q, [out[i] - c.c[0], out[i + 1] - c.c[1], out[i + 2] - c.c[2]]);
     const nv = turn(c.q, [out[i + 3], out[i + 4], out[i + 5]]);

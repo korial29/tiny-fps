@@ -8,8 +8,28 @@ import { LIMB } from '../shared/types';
 import { JOINT as J, JOINTS, REST, mul, rest, slerp, solve, turn } from './rig';
 import type { Quat } from './rig';
 import type { Vec3 } from './mesh';
+import {
+  CH,
+  CHANNELS,
+  EYE as EYE_AT,
+  IRIS_R,
+  KIND,
+  MOUTH_X,
+  PUPIL_R,
+  TONES,
+  hash,
+  toneOf,
+  ball,
+  iris,
+  lid,
+  lipLine,
+  shift,
+  socket,
+  white,
+} from './features';
+import type { Uv } from './features';
 
-const SKIN = [0.66, 0.45, 0.35];
+const SKIN = TONES[1];
 
 /** The space suit's dark grey under its armour (the user, 2026-11-10: white, then a mid grey so the plates stand out) and its black (gloves, boots, belt): see palette(). */
 const SUIT = [0.36, 0.37, 0.4];
@@ -31,16 +51,20 @@ const [
   SHADE,
   BROW,
   STUBBLE,
-  SHADOW,
+  ,
   LINE,
   STRIPE,
   STRIPE_LOW,
   BELT,
   GLINT,
   CAP,
-] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+  PUPIL,
+  LASH,
+  BLUSH,
+  TEETH,
+] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
 
-/** Hair colours, one per runner (hairOf()): black, dark and mid brown, chestnut, red, dark and light blond, grey, and a shaved head, the skin's in its shadow. */
+/** Hair colours, one per runner (hairOf(), by his skin too): black, dark and mid brown, chestnut, red, dark and light blond, grey, and a shaved head, the skin's in its shadow. */
 const HAIRS = [
   [0.03, 0.03, 0.035],
   [0.09, 0.07, 0.06],
@@ -66,22 +90,39 @@ const pick = (id: number, salt: number, n: number) =>
   (Math.imul(id + 1, 0x9e3779b1 + salt) >>> 0) % n;
 
 /** A hair colour for the runner `id`, picked at random from HAIRS but the same for everyone who sees him. */
-export const hairOf = (id: number): number[] => HAIRS[pick(id, 0, HAIRS.length)];
+export const hairOf = (id: number): number[] => {
+  const h = pick(id, 0, HAIRS.length);
+  // On the two darkest skins the hair is dark, or shaved.
+  return HAIRS[dark(id) && h > 2 && h < 8 ? h % 3 : h];
+};
+const dark = (id: number) => TONES.indexOf(toneOf(id)) > 3;
+
+/** How dark the shaved beard of the runner `id` is, 0 (none) to 1. */
+export const beardOf = (id: number): number => Math.floor(hash(id, 99) * 4) / 3;
+
+/** Whether the runner `id` has a shaved head (the last of HAIRS): no hair to give a length to. */
+export const shaved = (id: number): boolean => hairOf(id) == HAIRS[HAIRS.length - 1];
 
 /** An iris colour for the runner `id`, as hairOf(). */
-export const eyesOf = (id: number): number[] => IRISES[pick(id, 0x2468, IRISES.length)];
+export const eyesOf = (id: number): number[] =>
+  IRISES[pick(id, 0x2468, IRISES.length) % (dark(id) ? 2 : IRISES.length)];
 
 /** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, between the hair and the skin, the shaved beard's shadow and its edge, the line between the lips (as the folds), the side stripe on the jacket and on the trousers and the belt (the jacket's and the trousers' own colours but on a space suit), the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
 /**
  * With `suit` (the moon's, the user 2026-11-10), a dark grey space suit under white armour: the
- * team's colour only in a stripe down each side, black gloves, boots and belt.
+ * team's colour only in a stripe down each side, black gloves, boots and belt. Then the pupils,
+ * the lashes, the cheeks' flush and the teeth. `tone` is the skin's (toneOf()), `beard` how dark
+ * the shaved beard is on it, 0 to 1.
  */
 export const palette = (
   jacket: number[],
   hair = HAIRS[1],
-  iris = IRISES[0],
+  eyes = IRISES[0],
   suit = false,
+  tone = SKIN,
+  beard = 1,
 ): number[][] => {
+  const SKIN = tone;
   const [coat, legs] = suit ? [SUIT, SUIT.map(v => v * 0.94)] : [jacket, jacket.map(v => v * 0.62)];
   return [
     coat,
@@ -93,11 +134,11 @@ export const palette = (
     suit ? [0.03, 0.03, 0.035] : [0.09, 0.085, 0.07],
     suit ? BLACK : [0.22, 0.21, 0.16],
     [0.85, 0.83, 0.8],
-    iris,
-    [0.5, 0.3, 0.26],
+    eyes,
+    SKIN.map((v, i) => v * [0.84, 0.68, 0.72][i]),
     SKIN.map(v => v * 0.55),
     hair.map((v, i) => v * 0.4 + SKIN[i] * 0.3),
-    SKIN.map((v, i) => v * 0.62 + hair[i] * 0.1 + [0, 0.01, 0.03][i]),
+    SKIN.map((v, i) => v * (1 - 0.34 * beard) + (hair[i] * 0.1 + [0, 0.01, 0.03][i]) * beard),
     SKIN.map((v, i) => v * 0.81 + hair[i] * 0.05 + [0, 0.005, 0.015][i]),
     SKIN.map(v => v * 0.55),
     suit ? jacket : coat,
@@ -105,6 +146,10 @@ export const palette = (
     suit ? BLACK : coat,
     [1.3, 1.3, 1.3],
     [2.8, 0.5, 0.12],
+    [0.015, 0.012, 0.012],
+    hair.map((v, i) => v * 0.25 + SKIN[i] * 0.12),
+    SKIN.map((v, i) => v * [1.02, 0.86, 0.84][i]),
+    [0.86, 0.81, 0.7],
   ];
 };
 
@@ -260,37 +305,6 @@ const ARM: Loft = {
 export const CUFF = [0.925, 0.222, 0, 0.0265, 0.0265, 3, GLOVE];
 export const CUFF_SIDES = ARM.n[2];
 
-// The eyes are small pieces of their own, the left the right one mirrored, buried in the sockets
-// of the face (face()): a white almond just out of it with a dark iris at its front.
-const EYE: Loft = {
-  chain: [J.HEAD],
-  n: [0, 5, 8],
-  z: true,
-  m: true,
-  far: [],
-  rings: [
-    [-0.068, 0.032, 1.69, 0.013, 0.0058, 0, WHITE],
-    [-0.0832, 0.032, 1.69, 0.013, 0.0058, 0, WHITE],
-    [-0.0843, 0.032, 1.69, 0.0062, 0.0058, 0, IRIS],
-    [-0.0849, 0.032, 1.69, 0.003, 0.003, 0, IRIS],
-    [-0.0852, 0.032, 1.69, 0, 0, 0, IRIS],
-  ],
-};
-
-// The light caught in each eye, close only: a speck on the iris over the pupil, toward the nose. It glows.
-const SPECK: Loft = {
-  chain: [J.HEAD],
-  n: [0, 0, 6],
-  z: true,
-  m: true,
-  far: [],
-  rings: [
-    [-0.0851, 0.0305, 1.6905, 0, 0, 0, GLINT],
-    [-0.0855, 0.0305, 1.6905, 0.0011, 0.0011, 0, GLINT],
-    [-0.0857, 0.0305, 1.6905, 0, 0, 0, GLINT],
-  ],
-};
-
 // The ears are pieces of their own too, half in the head a little behind its sides: a flat oval
 // standing out, leaning back.
 const EAR: Loft = {
@@ -373,7 +387,7 @@ const NECK = [0.068, 0.066, 0.066];
  */
 const jaw = (aq: number) => [
   1.588 + 0.032 * clamp(aq / 1.75) ** 1.5 + 0.025 * clamp((aq - 1.75) / 1.39),
-  0.0035 + 0.011 * clamp((aq - 1.6) / 1.2),
+  0.0055 + 0.009 * clamp((aq - 1.6) / 1.2),
 ];
 const DOME = SKULL[SKULL.length - 1][0];
 
@@ -424,7 +438,7 @@ const HAIRLINE = [
 const hairline = (aq: number) => {
   const k = HAIRLINE.findIndex(r => r[0] >= aq);
   const [a, b] = [HAIRLINE[Math.max(k - 1, 0)], HAIRLINE[Math.max(k, 0)]];
-  return a[1] + (b[1] - a[1]) * clamp((aq - a[0]) / (b[0] - a[0] || 1));
+  return a[1] + (b[1] - a[1]) * step(0, 1, (aq - a[0]) / (b[0] - a[0] || 1));
 };
 
 const bell = (a: number, s: number) => Math.exp(-((a / s) ** 2));
@@ -463,6 +477,8 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
     f ** 4 *
     (h * bell(x, 0.0045 + 0.004 * k) +
       0.0042 * bell(ax - 0.0095, 0.0036) * bell(y - 1.6475, 0.0042));
+  /** The height as the lips see it: along the line between them, which falls to the corners. */
+  const ym = y - lipLine(ax) + 1.6168;
   // The brow over deep sockets, cheekbones and the hollow under them, the jaw's corners, the lips,
   // a square chin; the forehead leaning back over the brow. A soldier's face (the user, 2026-11-08).
   d +=
@@ -472,67 +488,96 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
       0.0065 * bell(ax - 0.048, 0.012) * bell(y - 1.668, 0.011) +
       0.008 * bell(ax - 0.056, 0.014) * bell(y - 1.598, 0.013) -
       0.002 * bell(ax - 0.05, 0.012) * bell(y - 1.632, 0.01) +
-      0.006 * bell(x, 0.021) * bell(y - 1.627, 0.007) +
-      0.003 * bell(x, 0.019) * bell(y - 1.6215, 0.003) +
-      0.004 * bell(x, 0.018) * bell(y - 1.6115, 0.0035) -
-      0.002 * bell(x, 0.016) * bell(y - 1.6035, 0.003) +
+      0.006 * bell(x, 0.021) * bell(ym - 1.627, 0.007) +
+      0.003 * bell(x, 0.019) * bell(ym - 1.6215, 0.0036) +
+      0.0037 * bell(x, 0.018) * bell(ym - 1.6112, 0.004) -
+      0.002 * bell(x, 0.016) * bell(ym - 1.6025, 0.003) +
       0.0075 * bell(x, 0.026) * bell(y - 1.593, 0.008) -
       0.006 * step(1.715, 1.75, y));
   // The nostrils set in under the tip, the groove from the nose to the upper lip, the line between
-  // the lips, and a fold each side from the nose's wing to the corner of the mouth.
+  // the lips, and a fold each side from the nose's wing to the corner of the mouth. The lids are
+  // pieces of their own (lid() in features.ts) and the look is the expression's (CH), not carved.
   const fold = clamp((1.646 - y) / 0.028);
   d +=
     f ** 4 *
     (-0.0022 * bell(ax - 0.006, 0.0022) * bell(y - 1.6425, 0.0022) -
       0.0008 * bell(x, 0.0025) * bell(y - 1.633, 0.006) -
-      0.0015 * bell(x, 0.02) * bell(y - 1.6168, 0.0012) -
+      0.0015 * bell(x, 0.02) * bell(ym - 1.6168, 0.0012) -
       0.0016 *
         bell(ax - 0.014 - 0.014 * fold, 0.0028) *
         step(1.614, 1.62, y) *
         (1 - step(1.644, 1.65, y)));
-  // A hard look: the brows' inner ends drawn down and in over the nose, two furrows between them,
-  // two lines across the forehead, the mouth's corners pulled down.
-  d +=
-    f ** 4 *
-    (0.0035 * bell(ax - 0.012, 0.007) * bell(y - 1.704, 0.005) -
-      0.002 * bell(ax - 0.004, 0.0025) * bell(y - 1.708, 0.007) -
-      0.001 * bell(x, 0.035) * (bell(y - 1.727, 0.0022) + bell(y - 1.737, 0.0022)) -
-      0.0014 * bell(ax - 0.021, 0.003) * bell(y - 1.611, 0.004));
-  // The lids over the eyes, narrowed: the upper one down over the top of the iris, the lower one
-  // up to its bottom.
-  d +=
-    f ** 2 *
-    bell(ax - 0.032, 0.0105) *
-    (0.0072 * step(1.6892, 1.6912, y) * (1 - step(1.697, 1.703, y)) +
-      0.0046 * (1 - step(1.6868, 1.6882, y)) * step(1.679, 1.683, y));
   return d;
 };
 
-/** The colour of the head at a point of it: hair above the hairline, near the brows and the lips. */
-const tint = (x: number, y: number, aq: number, fine: boolean) => {
-  if (y > hairline(aq)) {
-    return HAIR;
+// The brows are a colour of the skin along the brow ridge's arch (arcade()): over the eyes, thinner
+// out to the tail, thinning into the skin at their edges, so they go where the skin goes. At rest
+// they are level: the look is the expression's (CH.BROW_DOWN and the others).
+/** A brow's middle line at x across and its half height there. */
+const browAt = (x: number) => [
+  arcade(x) + 0.0015 - 0.035 * Math.max(0.02 - x, 0),
+  Math.max(0.0044 * clamp((x - 0.006) / 0.006) - 0.09 * Math.max(x - 0.028, 0), 0),
+];
+
+/**
+ * The colour of the head at a point of it: a palette colour, a second one and how much of it (the
+ * two blend, so the hairline, the beard and the lips have soft edges on any grid). Hair above the
+ * hairline, the lips, the shaved beard, a flush on the cheeks and the nose.
+ */
+const tint = (x: number, y: number, aq: number, fine: boolean): number[] => {
+  // How far over the hairline, across it: where it runs down the temple a column is all hair or
+  // none, and it is the blend between two columns that draws it straight.
+  const run = (hairline(aq + 0.03) - hairline(Math.max(aq - 0.03, 0))) / (0.06 * 0.085);
+  const h = clamp((y - hairline(aq)) / Math.hypot(1, run) / (fine ? 0.009 : 0.03) + 0.5);
+  if (h >= 1) {
+    return [HAIR, HAIR, 0];
+  }
+  if (!fine) {
+    return [FLESH, HAIR, h];
   }
   const ax = Math.abs(x);
-  if (fine && aq < 1) {
+  // The shaved beard: under the nose and the cheekbones, along the jaw to the sideburns.
+  const b =
+    aq < 1.75
+      ? clamp(
+          Math.min(1.637 + 0.034 * clamp((aq - 0.35) / 0.95) - y, y - jaw(aq)[0] + 0.014) / 0.024,
+        )
+      : 0;
+  if (aq < 1) {
     const [nx, ny] = [(ax - 0.006) / 0.0025, (y - 1.6428) / 0.0018];
     if (nx * nx + ny * ny < 1) {
-      return SHADE;
+      return [SHADE, SHADE, 0];
     }
-    if (Math.abs(y - 1.6168 + 6 * ax * ax) < 0.0009 && ax < 0.019) {
-      return LINE;
+    const dy = y - lipLine(ax);
+    if (Math.abs(dy) < 0.0009 && ax < MOUTH_X - 0.0015) {
+      return [LINE, LINE, 0];
     }
-    const dy = (y - 1.6168) / 0.0082;
-    if (dy * dy < 1 && ax < 0.021 * Math.sqrt(1 - dy * dy)) {
-      return LIP;
+    // The lips: the upper one thinner, dipping at its middle, the lower one fuller; to nothing at the corners.
+    const lip =
+      (dy > 0 ? 0.0066 * (1 - 0.2 * bell(x, 0.0045)) : 0.0074) *
+      Math.sqrt(Math.max(1 - (ax / MOUTH_X) ** 2, 0));
+    const l = clamp((lip - Math.abs(dy)) / 0.0025);
+    if (l > 0) {
+      return [STUBBLE, LIP, l];
     }
   }
-  // The shaved beard: under the nose and the cheekbones, along the jaw to the sideburns.
-  const b = Math.min(1.637 + 0.034 * clamp((aq - 0.35) / 0.95) - y, y - jaw(aq)[0] + 0.014);
-  if (fine && aq < 1.75 && b > 0) {
-    return b > 0.004 ? STUBBLE : SHADOW;
+  if (h > 0) {
+    return [FLESH, HAIR, h];
   }
-  return FLESH;
+  const [by, bh] = browAt(ax);
+  const brow =
+    clamp((bh - Math.abs(y - by)) / 0.003 + 0.25) * clamp((0.058 - ax) / 0.008) * +(aq < 1.2);
+  if (brow > 0) {
+    return [FLESH, BROW, Math.min(brow, 0.92)];
+  }
+  if (b > 0) {
+    return [FLESH, STUBBLE, b];
+  }
+  // A flush: the cheeks, the tip of the nose.
+  const f =
+    0.55 * Math.exp(-(((ax - 0.046) / 0.02) ** 2) - ((y - 1.655) / 0.016) ** 2) +
+    0.5 * bell(x, 0.012) * bell(y - 1.652, 0.01);
+  return [FLESH, BLUSH, aq < 1.6 ? Math.min(f, 0.7) : 0];
 };
 
 /** The rest mesh: per vertex a position and a normal, two joints and the weight of the second. */
@@ -547,8 +592,16 @@ export interface Skin {
   o: Float32Array;
   /** Per triangle the LIMB it comes off with, NONE for the trunk's. */
   l?: Uint8Array;
-  /** Per vertex how far it turns with the jaw when the mouth opens (radians, see skin()). */
-  d: Float32Array;
+  /** Per corner a second palette colour and how much of it is blended into the first. */
+  c2: Uint8Array;
+  cm: Float32Array;
+  /** Per vertex the KIND of part it is (features.ts). */
+  g: Uint8Array;
+  /**
+   * Per channel (CH in features.ts) the vertices it moves and, six floats each, how far at full
+   * weight: the position's shift, then the normal's. skin() adds them to the rest mesh.
+   */
+  m: { i: Uint16Array; d: Float32Array }[];
   /**
    * The eye's own body only: the vertices round its shoulders that skin() relaxes once posed, how
    * much (0 to 1), and per each (offsets into the lists) its neighbours and its triangles.
@@ -582,26 +635,13 @@ const onHead = (x: number, y: number) => {
   return z;
 };
 
-// The brows, pieces of their own along x laid on the brow ridge (a colour on the head's grid
-// steps), along the ridge's arch (arcade()): low over the eyes, the inner ends a little lower, thin, thinner out to
-// the tail. A hard look.
-const BROWS: Loft = {
-  chain: [J.HEAD],
-  n: [0, 3, 6],
-  x: true,
-  m: true,
-  far: [],
-  rings: [0.008, 0.0095, 0.014, 0.021, 0.028, 0.035, 0.042, 0.049, 0.055].map((x, i) => {
-    const y = arcade(x) + 0.0015 - 0.08 * Math.max(0.02 - x, 0);
-    const h = i % 8 ? 0.0034 - 0.06 * Math.max(x - 0.03, 0) : 0;
-    return [x, y, onHead(x, y) + 0.0002, h, h && 0.0008, 0, BROW];
-  }),
-};
-
-const LOFTS = [TRUNK, LEG, ARM, EYE, SPECK, BROWS, EAR, CONCHA];
+const LOFTS = [TRUNK, LEG, ARM, EAR, CONCHA];
 
 const generate = (lod: number): Skin => {
-  const [v, j, w, t, c, l, d]: number[][] = [[], [], [], [], [], [], []];
+  const [v, j, w, t, c, l, g, c2, cm]: number[][] = [[], [], [], [], [], [], [], [], []];
+  /** The KIND of the vertices being put, and what the fields know of each (Uv). */
+  let kind: number = KIND.BODY;
+  const uvs: Uv[] = [];
   /** Far, near, or close; the eye's own body is near: the camera's near plane and the hands' budget hold it. */
   // The eye's own body is close too: its chest, seen looking down, is round (the user, 2026-11-09).
   const tier = [0, 1, 2, 2][lod];
@@ -614,12 +654,13 @@ const generate = (lod: number): Skin => {
   const crotch: number[] = [];
   const put = (p: number[], a: number, b: number, k: number) => {
     v.push(...p, 0, 0, 0);
-    d.push(0);
+    g.push(kind);
     j.push(a, b);
     w.push(k);
     return w.length - 1;
   };
   for (const L of LOFTS) {
+    kind = L === EAR || L === CONCHA ? KIND.EAR : KIND.BODY;
     // The eye's own arms have their rings doubled too (the user, 2026-11-09: smoother arms).
     const arm = lod == 2 && L === ARM;
     const n = L.n[tier];
@@ -777,7 +818,7 @@ const generate = (lod: number): Skin => {
         const part =
           L === TRUNK
             ? LIMB.NONE
-            : L === EYE || L === SPECK || L === BROWS || L === EAR || L === CONCHA
+            : L === EAR || L === CONCHA
               ? LIMB.HEAD
               : (L === ARM ? LIMB.ARM_L : LIMB.LEG_L) + +(m > 0);
         const emit = (tri: number[], u: number) => {
@@ -831,8 +872,13 @@ const generate = (lod: number): Skin => {
     // twice the neck's sides, on the neck's angles and between them (2.5 times close, for the
     // face's detail: 3 times cost 80 % more skinning for no visible gain); the next crowd to the face.
     const fine = tier > 0;
+    kind = KIND.HEAD;
     const M = (tier > 1 ? 2.5 : 2) * N;
     const rows: number[][] = [T[T.length - 1]];
+    /** Per head vertex its colours (tint()), taken where the section put it: the socket's floor, set back, is skin. */
+    const tints: number[][] = [];
+    /** Heights a row is put at, whatever the step: the line between the lips, and each lip's fullest. */
+    const KEYS = fine ? [-0.0046, -0.001, 0, 0.001, 0.004].map(k => 1.6168 + k) : [];
     const tri = (a: number, b: number, d: number, col: number) => {
       if (new Set([a, b, d]).size < 3) {
         return;
@@ -840,9 +886,11 @@ const generate = (lod: number): Skin => {
       // Wound as the trunk's; each corner coloured where it is, so the hairline, the brows and the
       // lips blend over a triangle instead of stepping.
       for (const k of [a, d, b]) {
-        const [x, y, z] = [v[k * 6], v[k * 6 + 1], v[k * 6 + 2]];
         t.push(k);
-        c.push(col < 0 ? tint(x, y, Math.atan2(Math.abs(x), -z), fine) : col);
+        const [p, q, mix] = col < 0 ? (tints[k] ?? [FLESH, FLESH, 0]) : [col, col, 0];
+        c.push(p);
+        c2[c.length - 1] = q;
+        cm[c.length - 1] = mix;
       }
       l.push(LIMB.HEAD);
     };
@@ -854,23 +902,35 @@ const generate = (lod: number): Skin => {
       return put(p, TRUNK.chain[g], TRUNK.chain[g + 1], u - g);
     };
     for (let y = NECK_Y; ;) {
+      const y0 = y;
       y += [
         [0.035, 0.035, 0.035],
         [0.014, 0.009, 0.007],
         [0.006, 0.0042, 0.003],
-      ][tier][+(y > 1.575 && y < 1.745) + +((y > 1.6 && y < 1.66) || (y > 1.678 && y < 1.712))];
+      ][tier][+(y > 1.575 && y < 1.745) + +((y > 1.6 && y < 1.66) || (y > 1.678 && y < 1.722))];
+      const key = KEYS.find(k => k > y0 + 0.0005 && k < y + 0.0005);
+      y = key ?? y;
       if (y > CROWN - 0.003) {
         break;
       }
-      const [rx, zf, zb, cz] = section(y);
-      const ramp = clamp((y - NECK_Y) / 0.025);
+      const yr = y;
+      const ramp = clamp((yr - NECK_Y) / 0.025);
       const warp = fine ? -0.6 * ramp : 0;
-      const [ef, eb] = [1.9 + 0.45 * clamp((y - 1.59) / 0.07), 2.1];
       rows.push(
         Array.from({ length: M }, (_, i) => {
           const a = (2 * Math.PI * i) / M;
           const q = a + warp * Math.sin(a);
           const [sn, cs] = [Math.sin(q), Math.cos(q)];
+          // The rows about the mouth bend with the line between the lips, down to its corners.
+          const x0 = section(yr)[0] * sgn(sn, 2.1);
+          const y = fine
+            ? yr -
+              (lipLine(0) - lipLine(Math.min(Math.abs(x0), 0.03))) *
+                bell(yr - 1.6168, 0.014) *
+                Math.max(cs, 0)
+            : yr;
+          const [rx, zf, zb, cz] = section(y);
+          const [ef, eb] = [1.9 + 0.45 * clamp((y - 1.59) / 0.07), 2.1];
           const [rz, e] = cs > 0 ? [zf, ef] : [zb, eb];
           const [x, z] = [rx * sgn(sn, e), -rz * sgn(cs, e)];
           const n = [x / rx ** 2, z / rz ** 2];
@@ -879,18 +939,36 @@ const generate = (lod: number): Skin => {
           const [line, soft] = jaw(aq);
           const w = step(line - soft, line + soft, y);
           const [nx, nz] = [NECK[0] * sgn(sn, 2.3), -NECK[cs > 0 ? 1 : 2] * sgn(cs, 2.3)];
-          const h = hang([nx + (x + n[0] * k - nx) * w, y, nz + (cz + z + n[1] * k - nz) * w]);
+          const p = [nx + (x + n[0] * k - nx) * w, y, nz + (cz + z + n[1] * k - nz) * w];
+          const ax = Math.abs(p[0]);
+          const col = tint(p[0], y, aq, fine);
+          // The socket's floor, behind the eye's ball: the lids (pieces of their own) are over it.
+          const sk = fine ? socket(ax, y) : 0;
+          p[2] += (Math.max(p[2], ball(ax, y) + 0.004) - p[2]) * sk;
+          const h = hang(p);
+          tints[h] = sk > 0.5 ? [SHADE, SHADE, 0] : col;
           // The jaw: under the line between the lips, out from its corners down to the jaw's
-          // angle, the line itself half; the neck under it not.
-          const ax = Math.abs(x);
-          d[h] = fine
-            ? 0.22 * w * clamp((1.618 - 6 * ax * ax - 0.5 * Math.max(ax - 0.019, 0) - y) / 0.004)
-            : 0;
+          // angle, the line itself a part; the neck under it not. And how much hair is on it.
+          uvs[h] = [
+            fine
+              ? 0.22 *
+                // The skin under the chin goes down with it, to nothing down the throat.
+                Math.max(w, clamp((y - NECK_Y - 0.008) / 0.02) * clamp(1.4 - aq)) *
+                clamp(
+                  (lipLine(ax) + 0.0012 - 0.5 * Math.max(ax - 0.019, 0) - y) /
+                    (0.004 + 0.45 * Math.max(ax - MOUTH_X, 0)),
+                )
+              : 0,
+            col[1] == HAIR ? col[2] : 0,
+            clamp((y - hairline(aq)) / 0.03),
+          ];
           return h;
         }),
       );
     }
     rows.push([hang([0, CROWN, 0.012])]);
+    tints[rows[rows.length - 1][0]] = [HAIR, HAIR, 0];
+    uvs[rows[rows.length - 1][0]] = [0, 1, 1];
     rows.slice(1).forEach((b, r) => {
       const a = rows[r];
       if (b.length > 2 * a.length) {
@@ -918,6 +996,156 @@ const generate = (lod: number): Skin => {
         }
       }
     });
+    /**
+     * A piece of the face of its own, of kind `k`: a grid of points (the right eye's, mirrored for
+     * the left; `wrap` joins its last column to its first), coloured per point, wound to face the
+     * front. Points at one place are one vertex, in all the pieces.
+     */
+    const spots = new Map<string, number>();
+    const patch = (
+      k: number,
+      cols: number,
+      n: number,
+      wrap: boolean,
+      at: (i: number, j: number, m: number) => number[],
+      col: (i: number, j: number) => number[],
+      uv?: (i: number, j: number) => number[],
+    ) => {
+      kind = k;
+      for (const m of [1, -1]) {
+        const grid = Array.from({ length: n }, (_, r) => {
+          const row: number[] = [];
+          for (let i = 0; i < cols; i++) {
+            const p = at(i, r, m);
+            const q = [m * p[0], p[1], p[2]];
+            const key = q.map(e => e.toFixed(6)).join();
+            const h = spots.get(key) ?? put(q, J.HEAD, J.HEAD, 0);
+            spots.set(key, h);
+            uvs[h] = uv?.(i, r);
+            tints[h] = col(i, r);
+            row.push(h);
+          }
+          return row;
+        });
+        let flip: boolean | undefined;
+        for (let r = 0; r + 1 < n; r++) {
+          for (let i = 0; i < (wrap ? cols : cols - 1); i++) {
+            const j = (i + 1) % cols;
+            for (const q of [
+              [grid[r][i], grid[r][j], grid[r + 1][j]],
+              [grid[r][i], grid[r + 1][j], grid[r + 1][i]],
+            ]) {
+              if (new Set(q).size < 3) {
+                continue;
+              }
+              const [a, b, d] = q.map(h => h * 6);
+              flip ??=
+                (v[b] - v[a]) * (v[d + 1] - v[a + 1]) - (v[b + 1] - v[a + 1]) * (v[d] - v[a]) > 0;
+              tri(q[0], flip ? q[1] : q[2], flip ? q[2] : q[1], -1);
+            }
+          }
+        }
+      }
+      kind = KIND.BODY;
+    };
+    if (!fine) {
+      // Far, a face is a few pixels: a dark mark for each eye, one for the mouth and a nose, just
+      // off the plain head, are what tells it from the back of a head.
+      const egg = (x: number, y: number) => {
+        const [rx, zf] = section(y);
+        const e = 1.9 + 0.45 * clamp((y - 1.59) / 0.07);
+        return -zf * (1 - (x / rx) ** e) ** (1 / e);
+      };
+      const mark = (x: number[], y: number[], col: number[]) =>
+        patch(
+          KIND.MARK,
+          2,
+          2,
+          false,
+          (i, r) => [x[i], y[r], egg(x[i], y[r]) - 0.003],
+          () => col,
+        );
+      mark([0.018, 0.047], [1.682, 1.698], [LASH, IRIS, 0.35]);
+      mark([0.019, 0.05], [1.706, 1.715], [BROW, FLESH, 0.3]);
+      mark([0, 0.023], [1.613, 1.62], [LINE, LIP, 0.35]);
+      const NOSE = [1.641, 1.652, 1.7];
+      patch(
+        KIND.MARK,
+        2,
+        3,
+        false,
+        (i, r) => [
+          i * (r > 1 ? 0.006 : 0.014),
+          NOSE[r],
+          egg(0, NOSE[r]) + (i ? 0.003 : -[0.003, 0.023, 0.001][r]),
+        ],
+        () => [FLESH, FLESH, 0],
+      );
+    }
+    if (fine) {
+      const close = tier > 1;
+      const surf = (x: number, y: number) => onHead(Math.abs(x), y);
+      const sides = close ? 14 : 8;
+      const round = (i: number) => (2 * Math.PI * i) / sides;
+      // The white: the ball, in the lids' shadow toward its rim, and its sides back into the head.
+      const W = close ? [0, 0.45, 0.75, 0.93, 1, 1.5] : [0, 0.6, 1, 1.5];
+      patch(
+        KIND.WHITE,
+        sides,
+        W.length,
+        true,
+        (i, r) => white(W[r], round(i)),
+        (_, r) => [WHITE, SHADE, W[r] > 0.9 ? 0.5 : W[r] > 0.7 ? 0.2 : 0],
+      );
+      // The iris on it: a dark pupil, the iris, a darker ring round it.
+      const I = close ? [0, 0.34, 0.44, 0.8, 1] : [0, 0.42, 1];
+      patch(
+        KIND.IRIS,
+        sides,
+        I.length,
+        true,
+        (i, r) => iris(I[r], round(i)),
+        (_, r) =>
+          I[r] * IRIS_R < PUPIL_R * 1.01 ? [PUPIL, PUPIL, 0] : [IRIS, PUPIL, I[r] == 1 ? 0.45 : 0],
+      );
+      // The light caught in each eye, close only: a speck over the pupil's edge, up and to the
+      // runner's right in both. It glows, and stays as the iris moves under it.
+      if (close) {
+        patch(
+          KIND.WHITE,
+          6,
+          2,
+          true,
+          (i, r, m) => {
+            const p = iris(0, 0);
+            const [x, y] = [
+              p[0] + m * 0.0019 + 0.0011 * r * Math.cos(i),
+              p[1] + 0.0021 + 0.0011 * r * Math.sin(i),
+            ];
+            return [x, y, ball(x, y) - 0.0007];
+          },
+          () => [GLINT, GLINT, 0],
+        );
+      }
+      // The lids, from their roots under the skin to their edges on the ball; a line of lashes
+      // along the upper one's edge, a fainter one along the lower one's.
+      const S = close ? [0, 0.4, 0.75, 1] : [0, 0.55, 1];
+      const cols = close ? 11 : 7;
+      for (const upper of [true, false]) {
+        patch(
+          upper ? KIND.LID_U : KIND.LID_L,
+          cols,
+          S.length,
+          false,
+          (i, r) => lid(upper, (2 * i) / (cols - 1) - 1, S[r], 0, surf),
+          (_, r) =>
+            S[r] == 1
+              ? [FLESH, LASH, upper ? 0.9 : 0.3]
+              : [FLESH, SHADE, upper && S[r] > 0.5 ? 0.08 : 0],
+          (i, r) => [(2 * i) / (cols - 1) - 1, S[r]],
+        );
+      }
+    }
   }
   // The armpits relaxed: each vertex round them drawn toward the mean of its neighbours, the
   // shrinking undone every other pass (Taubin), fading out from the middle of the region. The
@@ -953,27 +1181,32 @@ const generate = (lod: number): Skin => {
     });
     next.forEach((c, i) => (v[i] = c));
   }
-  // Smooth normals: the area-weighted mean of the triangles around a vertex.
-  for (let i = 0; i < t.length; i += 3) {
-    const [a, b, d] = [t[i], t[i + 1], t[i + 2]].map(k => k * 6);
-    const e = [0, 1, 2].map(r => [v[b + r] - v[a + r], v[d + r] - v[a + r]]);
-    const f = [
-      e[1][0] * e[2][1] - e[2][0] * e[1][1],
-      e[2][0] * e[0][1] - e[0][0] * e[2][1],
-      e[0][0] * e[1][1] - e[1][0] * e[0][1],
-    ];
-    for (const k of [a, b, d]) {
-      for (let r = 0; r < 3; r++) {
-        v[k + 3 + r] += f[r];
+  /** Smooth normals of the positions P (`st` floats a vertex): the area-weighted mean of the triangles around a vertex. */
+  const normals = (P: ArrayLike<number>, st: number) => {
+    const out = new Float32Array(w.length * 3);
+    for (let i = 0; i < t.length; i += 3) {
+      const [a, b, d] = [t[i], t[i + 1], t[i + 2]];
+      const e = [0, 1, 2].map(r => [P[b * st + r] - P[a * st + r], P[d * st + r] - P[a * st + r]]);
+      const f = [
+        e[1][0] * e[2][1] - e[2][0] * e[1][1],
+        e[2][0] * e[0][1] - e[0][0] * e[2][1],
+        e[0][0] * e[1][1] - e[1][0] * e[0][1],
+      ];
+      for (const k of [a, b, d]) {
+        for (let r = 0; r < 3; r++) {
+          out[k * 3 + r] += f[r];
+        }
       }
     }
-  }
-  for (let k = 0; k < v.length; k += 6) {
-    const l = Math.hypot(v[k + 3], v[k + 4], v[k + 5]) || 1;
-    for (let r = 3; r < 6; r++) {
-      v[k + r] /= l;
+    for (let k = 0; k < out.length; k += 3) {
+      const l = Math.hypot(out[k], out[k + 1], out[k + 2]) || 1;
+      for (let r = 0; r < 3; r++) {
+        out[k + r] /= l;
+      }
     }
-  }
+    return out;
+  };
+  normals(v, 6).forEach((f, i) => (v[((i / 3) | 0) * 6 + 3 + (i % 3)] = f));
   // Occlusion, baked in the rest pose so the arms stand off the chest: the torso's sides in the
   // shadow of the upper arms hanging by them, the insides of the sleeves and the armpits in the
   // torso's. Each occluder shades a vertex by the cosine toward its closest point and by how near
@@ -996,6 +1229,91 @@ const generate = (lod: number): Skin => {
     const cos = clamp(((nx * d[0] + ny * d[1] + nz * d[2]) / l + 0.6) / 1.6);
     // Gone some centimetres off its surface, so the rest of the body keeps the palette's colours.
     o[i] = reach ? 1 - 0.9 * cos * clamp((r + reach - l) / reach) ** 0.8 : 1;
+  }
+  // The face's own shadows, which no light of the game is fine enough to cast: the sockets, under
+  // the nose, under the lower lip, under the jaw; the upper lids' under the brow.
+  for (let i = 0; i < w.length; i++) {
+    const [x, y, z] = v.slice(i * 6, i * 6 + 3);
+    const ax = Math.abs(x);
+    if (g[i] == KIND.HEAD && tier > 0 && z < 0) {
+      const aq = Math.atan2(ax, -z);
+      o[i] *=
+        1 -
+        0.24 *
+          Math.exp(-(((ax - EYE_AT[0]) / 0.021) ** 2) - ((y - EYE_AT[1] - 0.002) / 0.012) ** 2) -
+        0.16 * bell(x, 0.013) * bell(y - 1.6405, 0.0045) -
+        0.1 * bell(x, 0.015) * bell(y - lipLine(ax) + 0.0135, 0.004) -
+        (tier > 1 ? 0.26 : 0.1) *
+          (1 - step(-0.012, 0.008, y - jaw(aq)[0])) *
+          clamp((y - NECK_Y) / 0.02) *
+          clamp(2 - aq);
+    } else if (g[i] == KIND.LID_U) {
+      o[i] *= 0.9 + 0.1 * uvs[i]![1];
+    }
+  }
+  // The channels: each field of features.ts on the vertices it moves, and what it does to the
+  // normals of those and of their neighbours.
+  const m: Skin['m'] = [];
+  if (tier > 0 && lod != 2) {
+    // The lids' roots are asked for again by every channel that moves a lid.
+    const seen = new Map<number, number>();
+    const surf = (x: number, y: number) => {
+      const key = Math.abs(x) * 1e3 + y;
+      const z = seen.get(key) ?? onHead(Math.abs(x), y);
+      seen.set(key, z);
+      return z;
+    };
+    // Only the head's vertices and triangles are in it: the channels are baked in a few
+    // milliseconds, when a runner first comes close.
+    const heads = g.flatMap((k, i) => (k ? [i] : []));
+    const tris = l.flatMap((part, i) => (part == LIMB.HEAD ? [i * 3] : []));
+    const P = Float32Array.from({ length: w.length * 3 }, (_, i) => v[((i / 3) | 0) * 6 + (i % 3)]);
+    const N = new Float32Array(w.length * 3);
+    for (let ch = 0; ch < CHANNELS; ch++) {
+      const moved = new Map<number, number[]>();
+      for (const i of heads) {
+        const p = v.slice(i * 6, i * 6 + 6);
+        const d = shift(ch, p, g[i], uvs[i], p.slice(3), surf);
+        if (d && Math.hypot(d[0], d[1], d[2]) > 2e-5) {
+          moved.set(i, d);
+          for (let r = 0; r < 3; r++) {
+            P[i * 3 + r] += d[r];
+          }
+        }
+      }
+      // The head's normals with the channel full on, as normals() makes them.
+      N.fill(0);
+      for (const i of tris) {
+        const [a, b, d] = [t[i] * 3, t[i + 1] * 3, t[i + 2] * 3];
+        const [ux, uy, uz] = [P[b] - P[a], P[b + 1] - P[a + 1], P[b + 2] - P[a + 2]];
+        const [wx, wy, wz] = [P[d] - P[a], P[d + 1] - P[a + 1], P[d + 2] - P[a + 2]];
+        const f = [uy * wz - uz * wy, uz * wx - ux * wz, ux * wy - uy * wx];
+        for (const k of [a, b, d]) {
+          N[k] += f[0];
+          N[k + 1] += f[1];
+          N[k + 2] += f[2];
+        }
+      }
+      const all = new Set<number>();
+      moved.forEach((_, i) => {
+        all.add(i);
+        // Not the neck's row, the trunk's: its normal is the trunk's too.
+        near[i].forEach(k => g[k] && all.add(k));
+        for (let r = 0; r < 3; r++) {
+          P[i * 3 + r] = v[i * 6 + r];
+        }
+      });
+      const idx = [...all].sort((a, b) => a - b);
+      const d = new Float32Array(idx.length * 6);
+      idx.forEach((i, k) => {
+        d.set(moved.get(i) ?? [0, 0, 0], k * 6);
+        const n = Math.hypot(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]) || 1;
+        for (let r = 0; r < 3; r++) {
+          d[k * 6 + 3 + r] = N[i * 3 + r] / n - v[i * 6 + 3 + r];
+        }
+      });
+      m.push({ i: new Uint16Array(idx), d });
+    }
   }
   // The eye's own shoulders bend hard when its arms come up (a katana held before it), on few
   // rows: the vertices round them are relaxed once posed, in skin() (the user, 2026-11-09).
@@ -1043,7 +1361,10 @@ const generate = (lod: number): Skin => {
     t: new Uint16Array(t),
     c: new Uint8Array(c),
     l: new Uint8Array(l),
-    d: new Float32Array(d),
+    c2: Uint8Array.from({ length: c.length }, (_, i) => c2[i] ?? 0),
+    cm: Float32Array.from({ length: c.length }, (_, i) => cm[i] ?? 0),
+    g: new Uint8Array(g),
+    m,
     r,
   };
 };
@@ -1065,7 +1386,9 @@ const ROOT = [0, J.NECK, J.CHEST, J.CHEST, J.PELVIS, J.PELVIS];
  */
 const sever = (s: Skin, limb: number): Skin[] => {
   const n = s.w.length;
-  const [t, c]: number[][][] = [
+  const [t, c, c2, cm]: number[][][] = [
+    [[], []],
+    [[], []],
     [[], []],
     [[], []],
   ];
@@ -1075,6 +1398,8 @@ const sever = (s: Skin, limb: number): Skin[] => {
     for (let e = 0; e < 3; e++) {
       t[k].push(s.t[i * 3 + e]);
       c[k].push(s.c[i * 3 + e]);
+      c2[k].push(s.c2[i * 3 + e]);
+      cm[k].push(s.cm[i * 3 + e]);
       [other, own][k].add((s.t[i * 3 + e] << 16) | s.t[i * 3 + ((e + 1) % 3)]);
     }
   });
@@ -1087,8 +1412,11 @@ const sever = (s: Skin, limb: number): Skin[] => {
     if (other.has((b << 16) | a)) {
       t[0].push(a, b, n);
       t[1].push(b, a, n);
-      c[0].push(CAP, CAP, CAP);
-      c[1].push(CAP, CAP, CAP);
+      for (const k of [0, 1]) {
+        c[k].push(CAP, CAP, CAP);
+        c2[k].push(0, 0, 0);
+        cm[k].push(0, 0, 0);
+      }
       for (let r = 0; r < 3; r++) {
         v[n * 6 + r] += s.v[a * 6 + r];
       }
@@ -1102,8 +1430,19 @@ const sever = (s: Skin, limb: number): Skin[] => {
   const j = new Uint8Array([...s.j, ROOT[limb], ROOT[limb]]);
   const w = new Float32Array([...s.w, 0]);
   const o = new Float32Array([...s.o, 1]);
-  const d = new Float32Array([...s.d, 0]);
-  return t.map((x, k) => ({ v, o, j, w, d, t: new Uint16Array(x), c: new Uint8Array(c[k]) }));
+  const g = new Uint8Array([...s.g, 0]);
+  return t.map((x, k) => ({
+    v,
+    o,
+    j,
+    w,
+    g,
+    m: s.m,
+    t: new Uint16Array(x),
+    c: new Uint8Array(c[k]),
+    c2: new Uint8Array(c2[k]),
+    cm: new Float32Array(cm[k]),
+  }));
 };
 
 const parts: Skin[][] = [];
@@ -1193,6 +1532,8 @@ const relax = (s: Skin, r: NonNullable<Skin['r']>) => {
 const D = new Float64Array((JOINTS + 2) * 8);
 const E = new Float64Array(8);
 let Q = new Float32Array(0);
+/** The rest mesh with the face's channels added. */
+let R = new Float32Array(0);
 
 /**
  * Appends the skin in the pose `solved` (see solve()) to `out` as triangles in the renderer's
@@ -1205,8 +1546,7 @@ export const skin = (
   s: Skin,
   { pos, rot }: { pos: Vec3[]; rot: Quat[] },
   colors: number[][],
-  shut = 0,
-  open = 0,
+  face?: ArrayLike<number>,
 ) => {
   for (let k = 0; k < JOINTS + 2; k++) {
     const r = k < JOINTS ? rot[k] : swing(rot, k == SWING_R ? J.ARM_R : J.ARM_L);
@@ -1218,6 +1558,40 @@ export const skin = (
   const n = s.w.length;
   if (Q.length < n * 6) {
     Q = new Float32Array(n * 6);
+    R = new Float32Array(n * 6);
+  }
+  // The face's channels (CH) onto the rest mesh: each moves its vertices by its weight.
+  let V = s.v;
+  if (face && s.m.length) {
+    R.set(s.v);
+    V = R;
+    for (let ch = 0; ch < CHANNELS; ch++) {
+      const f = face[ch];
+      if (f) {
+        const { i, d } = s.m[ch];
+        for (let k = 0; k < i.length; k++) {
+          const [a, b] = [i[k] * 6, k * 6];
+          R[a] += f * d[b];
+          R[a + 1] += f * d[b + 1];
+          R[a + 2] += f * d[b + 2];
+          R[a + 3] += f * d[b + 3];
+          R[a + 4] += f * d[b + 4];
+          R[a + 5] += f * d[b + 5];
+        }
+      }
+    }
+    // Their normals, turned, back to unit length.
+    for (let ch = 0; ch < CHANNELS; ch++) {
+      if (face[ch]) {
+        for (const k of s.m[ch].i) {
+          const a = k * 6 + 3;
+          const l = Math.hypot(R[a], R[a + 1], R[a + 2]) || 1;
+          R[a] /= l;
+          R[a + 1] /= l;
+          R[a + 2] /= l;
+        }
+      }
+    }
   }
   for (let i = 0; i < n; i++) {
     const [a, b, u, k] = [s.j[i * 2] * 8, s.j[i * 2 + 1] * 8, s.w[i], i * 6];
@@ -1237,15 +1611,9 @@ export const skin = (
       E[3] * E[5] - E[7] * E[1] - (E[6] * E[0] - E[4] * E[2]),
       E[3] * E[6] - E[7] * E[2] - (E[4] * E[1] - E[5] * E[0]),
     ];
-    // The mouth `open` turns the jaw down about its hinge under the ears: the position (e 2).
-    const dj = (s.d[i] * open) / 2;
     for (const h of [k, k + 3]) {
       const e = h == k ? 2 : 0;
-      const [x, y, z] = [
-        s.v[h],
-        s.v[h + 1] + e * dj * s.v[h + 2],
-        s.v[h + 2] - e * dj * (s.v[h + 1] - 1.665),
-      ];
+      const [x, y, z] = [V[h], V[h + 1], V[h + 2]];
       const [p, q, r] = [E[1] * z - E[2] * y, E[2] * x - E[0] * z, E[0] * y - E[1] * x];
       Q[h] = x + 2 * (E[3] * p + E[1] * r - E[2] * q) + e * m[0];
       Q[h + 1] = y + 2 * (E[3] * q + E[2] * p - E[0] * r) + e * m[1];
@@ -1255,19 +1623,28 @@ export const skin = (
   if (s.r) {
     relax(s, s.r);
   }
-  // Eyes `shut`: the lids, the skin, over the whites, the irises and their specks (unlit). Open,
-  // the line between the lips is the mouth's dark.
+  // The line between the lips: the mouth's dark as the jaw opens, the teeth when the lips are drawn off them.
   const pal = colors.slice();
-  if (shut) {
-    pal[WHITE] = pal[IRIS] = pal[GLINT] = colors[FLESH];
-  }
-  if (open > 0.2) {
-    pal[LINE] = MOUTH;
+  const [jw, grit] = [clamp((face?.[CH.JAW] ?? 0) * 4), clamp((face?.[CH.GRIT] ?? 0) * 1.6)];
+  if (jw || grit) {
+    const bare = grit * (1 - clamp((face?.[CH.JAW] ?? 0) * 2 - 0.5));
+    pal[LINE] = colors[LINE].map(
+      (c, i) => (c + (MOUTH[i] - c) * jw) * (1 - bare) + colors[TEETH][i] * bare,
+    );
   }
   // Written by index rather than pushed: the close skin is some 20 000 vertices.
   let o = out.length;
   for (let h = 0; h < s.t.length; h++, o += 10) {
-    const [col, k, g] = [pal[s.c[h]], s.t[h] * 6, s.o[s.t[h]]];
+    const [k, g, f] = [s.t[h] * 6, s.o[s.t[h]], s.cm[h]];
+    let col = pal[s.c[h]];
+    if (f) {
+      const to = pal[s.c2[h]];
+      col = [
+        col[0] + (to[0] - col[0]) * f,
+        col[1] + (to[1] - col[1]) * f,
+        col[2] + (to[2] - col[2]) * f,
+      ];
+    }
     out[o] = Q[k];
     out[o + 1] = Q[k + 1];
     out[o + 2] = Q[k + 2];
@@ -1277,7 +1654,7 @@ export const skin = (
     out[o + 6] = col[0] * g;
     out[o + 7] = col[1] * g;
     // The cut's face and the eyes' specks glow: unlit.
-    out[o + 8] = s.c[h] >= GLINT + shut ? -2 : -1;
+    out[o + 8] = s.c[h] == GLINT || s.c[h] == CAP ? -2 : -1;
     out[o + 9] = col[2] * g;
   }
 };

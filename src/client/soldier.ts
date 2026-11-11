@@ -2,15 +2,7 @@
 // renderer's vertex format. A runner is the last PlayerState seen and the gait that eases the body
 // toward it; the dash streaks are the only thing drawn here that the gait does not pose. A
 // player's (x, y, z) is the bottom of the feet. No DOM.
-import {
-  DASH_COOLDOWN,
-  DASH_TICKS,
-  DOWN_TICKS,
-  HEAT_MAX,
-  RUN_SPEED,
-  STEP_H,
-  TICK_HZ,
-} from '../shared/constants';
+import { DOWN_TICKS, HEAT_MAX, RUN_SPEED, STEP_H, TICK_HZ } from '../shared/constants';
 import { TAU, floored } from '../shared/physics';
 import { LIMB, MODE } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
@@ -62,7 +54,10 @@ import { STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, axis, mul, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
-import { body, capped, cut, eyesOf, hairOf, palette, skin } from './skin';
+import { beardOf, body, capped, cut, eyesOf, hairOf, palette, shaved, skin } from './skin';
+import { createFace, dashing, felled, strain } from './expression';
+import type { Face } from './expression';
+import { CH, toneOf } from './features';
 import { createTrail } from './trail';
 import type { Trail } from './trail';
 
@@ -93,8 +88,12 @@ export interface Runner {
   t: number;
   /** The limb a katana's cut took off, while he is down (see limbs.ts). */
   cut?: Piece;
-  /** Seconds left of the grimace a hit puts on his face. */
+  /** Seconds left of the grimace a hit puts on his face, and of the grin of a capture or of a foe put down. */
   hurt: number;
+  grin: number;
+  /** His face (expression.ts), and the seconds it has yet to live through: soldier() moves it once drawn, where the head's turn is known. */
+  face: Face;
+  dt: number;
   /** The seat he rides in, when he does and his rover is known. */
   seat?: Seat;
   /** The muzzle of the long gun in his hands as last drawn, from his feet: where its shots are seen to leave (combat.ts). */
@@ -116,12 +115,14 @@ const SEATED = 0.62;
 
 /** Seconds after a shot that the gun stays up. */
 const AIMING = 0.5;
-
-const dashing = (p: PlayerState) => p.dash > DASH_COOLDOWN - DASH_TICKS;
+/** Seconds a hit's wince lasts, and the grin of a capture or of a foe put down. */
+export const [HURT, GRIN] = [0.4, 1.6];
 
 /** A runner as first seen: in the pose its state asks for, no ease. */
 export const createRunner = (p: PlayerState, seat?: Seat): Runner => {
   const gait = createGait();
+  const face = createFace(p.id);
+  face.w[CH.HAIR] *= +!shaved(p.id);
   gait.update(p, 0, undefined, seat);
   return {
     seat,
@@ -135,6 +136,9 @@ export const createRunner = (p: PlayerState, seat?: Seat): Runner => {
     trail: createTrail(),
     t: 0,
     hurt: 0,
+    grin: 0,
+    face,
+    dt: 0,
   };
 };
 
@@ -189,7 +193,9 @@ export const animate = (
       }
       r.trail.update(dt);
       r.t += dt;
-      r.hurt = p.hp < r.p.hp ? 0.4 : Math.max(r.hurt - dt, 0);
+      r.hurt = p.hp < r.p.hp ? HURT : Math.max(r.hurt - dt, 0);
+      r.grin = felled(r.p, p, id => book.get(id)?.p, others) ? GRIN : Math.max(r.grin - dt, 0);
+      r.dt += dt;
       r.p = { ...p };
     } else {
       book.set(p.id, createRunner(p, seat));
@@ -558,35 +564,40 @@ export const soldier = (
     return;
   }
   r.tip = undefined;
-  const colors = palette(color, hairOf(p.id), eyesOf(p.id), armored);
+  const colors = palette(color, hairOf(p.id), eyesOf(p.id), armored, toneOf(p.id), beardOf(p.id));
   // The armour: white in space, else in the team's colour.
   const plate = helmets ? undefined : color;
   const { s, sink, yaw, carry } = stance(r);
+  // His face: a wince when hit, a grimace down, a shout in a cut or a dash, effort in a sprint or a
+  // climb, focus aiming, a grin; the eyes on his aim from where the head points.
+  const look = turn(inv(s.rot[J.HEAD]), basis(p.yaw, p.pitch)[2]);
+  r.face.update(r.dt, {
+    down: p.down > 0,
+    hurt: r.hurt / HURT,
+    effort: strain(p),
+    focus: Math.max(r.aim, +!!p.charge),
+    shout: +(r.prog >= 0 || dashing(p)),
+    grin: +(r.grin > 0),
+    gx: Math.atan2(look[0], -look[2]),
+    gy: Math.atan2(look[1], Math.hypot(look[0], look[2])),
+  });
+  r.dt = 0;
   const blade = p.wield && !p.down && !driving(r);
   if (r.cut) {
     const cs = cut(lod, r.cut.limb)[0];
     const at = out.length;
-    skin(out, cs, s, colors, 1, 0.3);
+    skin(out, cs, s, colors, r.face.w);
     // The stump's face is the last vertex drawn.
     r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
     if (armored) {
       armor(out, at, cs, lod > 2, plate);
     }
-    piece(out, r.cut, colors, lod, sink);
+    piece(out, r.cut, colors, lod, sink, r.face.w);
   } else {
     const from = out.length;
-    // His face: the eyes shut down, in a grimace and in a blink every few seconds; the mouth open
-    // in a cut's shout, a dash's breath, a grimace, slack down.
-    const down = p.down > 0;
     const bs = body(lod);
-    skin(
-      out,
-      bs,
-      s,
-      colors,
-      +(down || r.hurt > 0 || (r.t + p.id * 0.7) % 3.7 < 0.13),
-      r.prog >= 0 ? 1 : r.hurt > 0 ? 0.6 : down ? 0.3 : r.dash * 0.5,
-    );
+    // Under a helmet's dark visor no face shows: its channels are not worth their time.
+    skin(out, bs, s, colors, helmets ? undefined : r.face.w);
     // The armour, cut out of the skin just drawn.
     if (armored) {
       armor(out, from, bs, lod > 2, plate);

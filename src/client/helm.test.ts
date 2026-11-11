@@ -59,12 +59,14 @@ describe("helm, the woman's helmet on the moon", () => {
   });
 
   it('has cheeks of a few flat faces shaped as a skull: the cheekbone out, a V in under it, the jaw out', () => {
-    const { A1, R1, T, K, J1, F } = FACETS;
-    // The ridge stands out over the slit's edge, the jaw out too, the crease in.
-    expect(R1[2]).toBeGreaterThan(A1[2]);
+    const { R1, T, K, J1, F } = FACETS;
+    // Flush with the dome all round the edge; the ridge and the jaw out by the V, the crease in.
+    for (const k of ['A0', 'A2', 'R0', 'R2', 'J0', 'J2', 'B0', 'F', 'B2']) {
+      expect(FACETS[k][2]).toBe(0);
+    }
+    expect(R1[2]).toBeGreaterThan(0.005);
     expect(J1[2]).toBeGreaterThan(0);
     expect(K[2]).toBeLessThan(-0.015);
-    expect(F[2]).toBeLessThan(0);
     // The V: its tip under the ridge, by the eye; its crease down to the jaw, then to the lip.
     expect(T[1]).toBeLessThan(R1[1]);
     expect(T[0]).toBeLessThan(0.3);

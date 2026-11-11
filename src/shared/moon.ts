@@ -251,8 +251,8 @@ const across = (cx: number, x: number) => {
  * and the integer hash: every engine builds the same lattice. In the arena, the field (see FLATS)
  * and the mounds; exactly 0 for 12 m round it (a rectangle on lattice lines, so between the nodes
  * too); then rolling hills, the pieces above, then the crater wall: it starts 0.78 of the way to the bound,
- * is 20 m high on it and, past it where nobody goes, climbs to a ragged crest of 60 to 95 m and
- * falls to the plain at 1.65 of the bound.
+ * is 20 m high on it and, past it where nobody goes, rounds off under a crest of 28 to 48 m that
+ * rolls slowly and falls to the plain at 1.65 of the bound. Lower than the ranges drawn far behind it.
  */
 const at = (x: number, z: number): number => {
   z = Math.abs(z - ZED / 2);
@@ -302,10 +302,12 @@ const at = (x: number, z: number): number => {
   h += 12 * (1 - d * d) * (1 - d * d) + 8 * sm((36 - far(x - HILL[0], z - HILL[1])) / 24);
   let w = 10 * t * (1 + t);
   if (k > 1) {
+    // Past the bound the wall rounds off under a crest that rolls slowly (170 m and 70 m to a wave: no tooth on the skyline), then falls to the plain.
+    const crest = 28 + 14 * noise(x / 170, z / 170, 5) + 6 * noise(x / 70, z / 70, 7);
+    const soft = 10 * sm((k - 1) / 0.1);
     w =
-      (w + (k - 1) * 60 * (Math.abs(2 * noise(x / 45, z / 45, 5) - 1) - 0.5)) *
-      (1 + (k - 1) * (1.2 * noise(x / 90, z / 90, 7) - 0.6)) *
-      (1 - sm((k - 1.25) / 0.4));
+      ((w + crest - Math.sqrt((w - crest) * (w - crest) + soft * soft)) / 2) *
+      (1 - sm((k - 1.3) / 0.35));
   }
   // The Bowl's floor stays 5 m over the kill floor.
   return Math.max(h, -14.5) + w;

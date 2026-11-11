@@ -774,8 +774,9 @@ describe('MOON, the relief round the arena', () => {
     expect(wall.length).toBeGreaterThan(200);
     expect(Math.min(...wall)).toBeGreaterThan(15);
     expect(Math.max(...wall)).toBeLessThan(23);
-    // Past the bound it climbs on to a crest a body in the crater never sees over.
-    expect(relief.top).toBeGreaterThan(60);
+    // Past the bound it climbs on to a crest a body in the crater never sees over: 28 to 48 m, under the ranges drawn far behind it.
+    expect(relief.top).toBeGreaterThan(40);
+    expect(relief.top).toBeLessThan(50);
   });
 
   it('builds the same lattice on every engine: no Math.sin, cos, pow or ** in it, its bits pinned', () => {
@@ -788,7 +789,7 @@ describe('MOON, the relief round the arena', () => {
         src.match(/\*\*|Math\.(?!imul|sqrt|abs|min|max|floor|ceil|round|PI)\w+/g) ?? [],
       ).toEqual([]);
     }
-    expect(checksum(relief)).toBe(2251941057);
+    expect(checksum(relief)).toBe(2076870685);
   });
 
   it('keeps every spawn, flag base, rack and pack on flat ground: the relief is exactly 0 under each', () => {

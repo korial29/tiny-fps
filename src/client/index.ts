@@ -265,7 +265,7 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
         balls.snapshot(s.balls ?? [], you.id, performance.now());
         // A door that starts to open or to shut is heard where it is.
         for (const c of doors.snapshot(s.doors)) {
-          audio.play(c.id, c.at, 0.5);
+          audio.play(c.id, c.at, 0.9);
         }
         const told = beats(match, s);
         for (const beat of told) {

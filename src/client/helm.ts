@@ -180,106 +180,112 @@ const outline = (u: number, v: number): [a: number, y: number] => {
   return [a0 + (CHEEK.round - a0) * u, y];
 };
 
-/** Where the turn a (either side) and height y fall on the cheek's outline, or nothing off it. */
-const onCheek = (a: number, y: number): [u: number, v: number] | undefined => {
+/**
+ * The cheeks (the user, 2026-11-11: no surfaces on the sides, no hollows, just a cut, clean; after
+ * a Mandalorian helmet, an idea and nothing copied): the dome is whole, and on each cheek a fine
+ * dark groove draws a V, its point under the cheekbone by the eye, its two arms down the helmet to
+ * the lip. Each point is [u, v] on the outline (outline()); the groove is `w` metres wide.
+ */
+export const CUT = {
+  tip: [0.22, 0.74] as [number, number],
+  arms: [
+    [0.08, 0],
+    [0.7, 0],
+  ] as [number, number][],
+  w: 0.0028,
+  off: 0.0016,
+};
+
+/** A groove along the line from p to q in the outline's (u, v) on the side `sx`, dark, a hair off the dome. */
+const groove = (sx: number, p: [number, number], q: [number, number], out: number[]) => {
+  const n = 16;
+  const at = (t: number): Spot => {
+    const [a, y] = outline(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t);
+    return onDome(sx * a, y, CUT.off);
+  };
+  const rows: Spot[][] = [[], []];
+  for (let i = 0; i <= n; i++) {
+    const [c, m] = at(i / n);
+    const along = sub(at(Math.min(1, (i + 1) / n))[0], at(Math.max(0, (i - 1) / n))[0]);
+    const side = unit(cross(along, m));
+    rows[0].push([
+      [c[0] - (side[0] * CUT.w) / 2, c[1] - (side[1] * CUT.w) / 2, c[2] - (side[2] * CUT.w) / 2],
+      m,
+    ]);
+    rows[1].push([
+      [c[0] + (side[0] * CUT.w) / 2, c[1] + (side[1] * CUT.w) / 2, c[2] + (side[2] * CUT.w) / 2],
+      m,
+    ]);
+  }
+  strip(rows, IRON, -1, out);
+};
+
+/** The V's hollow: its deepest point (u, v) inside the V, and how deep, metres. */
+export const PIT = { at: [0.38, 0.22] as [number, number], depth: 0.015 };
+/** How far the hollow and its skirt stand over the dome where flush with it; the skirt's reach past the V, in u and v; each face cut in SPLIT². */
+const FLUSH = 0.0006;
+const SKIRT = [0.22, 0.1];
+const SPLIT = 6;
+
+/** The corners of the V on the outline: its point, then its arms' feet. */
+const vee = (): [number, number][] => [CUT.tip, ...CUT.arms];
+
+/** Whether (u, v) is inside the triangle a b c. */
+const inside = (p: [number, number], [a, b, c]: [number, number][]) => {
+  const s = (p1: [number, number], p2: [number, number]) =>
+    (p[0] - p2[0]) * (p1[1] - p2[1]) - (p1[0] - p2[0]) * (p[1] - p2[1]);
+  const [d1, d2, d3] = [s(a, b), s(b, c), s(c, a)];
+  return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+};
+
+/** Where the turn a (either side) and height y fall in the outline's (u, v). */
+const uvOf = (a: number, y: number): [number, number] => {
   const a0 = slotTurn(y, TEE.slot + TEE.frame + CHEEK.gap);
   const u = (Math.abs(a) - a0) / (CHEEK.round - a0);
   const [, yl] = outline(u, 0);
   const [, yh] = outline(u, 1);
-  const v = (y - yl) / (yh - yl);
-  return u > 0 && u < 1 && v > 0 && v < 1 && Math.cos(a) > 0 ? [u, v] : undefined;
+  return [u, (y - yl) / (yh - yl)];
 };
 
-/**
- * The cheeks (the user, 2026-11-11: shaped as a skull is, in simple flat shapes, very sharp; after
- * a Mandalorian helmet, an idea and nothing copied): the dome is left out under each, and the
- * cheek is a few flat faces CHEEK.off out. Down from the slit: a band for the cheekbone, standing
- * out most on its lower edge; a hollow V under it, its crease from by the eye down to the jaw; a
- * band for the jaw, standing out again, the crease going on through it to the lip. Each corner is
- * [u, v, out]: u 0 at the slot to 1 toward the ear, v 0 at the lip to 1 under the slit
- * (outline()), and metres out of CHEEK.off (in when negative).
- */
-export const FACETS: Record<string, [number, number, number]> = {
-  // Under the slit, flush with the dome round the edge (EDGE).
-  A0: [0, 1, 0],
-  A2: [1, 1, 0],
-  // The cheekbone's ridge: out by the V, flush toward the ear (the user: few angles on the sides).
-  R0: [0, 0.8, 0],
-  R1: [0.42, 0.8, 0.007],
-  R2: [1, 0.8, 0],
-  // The V: its tip by the eye, its crease's deepest point on the jaw's top edge.
-  T: [0.2, 0.72, -0.004],
-  K: [0.5, 0.2, -0.02],
-  // The jaw's top edge: out a little by the V.
-  J0: [0, 0.2, 0],
-  J1: [0.72, 0.2, 0.003],
-  J2: [1, 0.2, 0],
-  // The lip, the crease coming out flush on it.
-  B0: [0, 0, 0],
-  F: [0.52, 0, 0],
-  B2: [1, 0, 0],
-};
-
-/** The faces, each a triangle of corners and a shade: 0 plain, 1 the hollow's outer face, 2 its inner one. */
-const FACES: [string, string, string, number][] = [
-  // The cheekbone.
-  ['A0', 'A2', 'R1', 0],
-  ['A0', 'R1', 'R0', 0],
-  ['A2', 'R2', 'R1', 0],
-  // Under the ridge, down into the V.
-  ['R0', 'R1', 'T', 0],
-  ['R0', 'T', 'J0', 2],
-  ['T', 'K', 'J0', 2],
-  ['T', 'R1', 'K', 1],
-  ['R1', 'J1', 'K', 1],
-  // The side toward the ear, one face.
-  ['R1', 'R2', 'J2', 0],
-  ['R1', 'J2', 'J1', 0],
-  // The jaw.
-  ['J0', 'K', 'F', 0],
-  ['J0', 'F', 'B0', 0],
-  ['K', 'J1', 'F', 0],
-  ['J1', 'J2', 'B2', 0],
-  ['J1', 'B2', 'F', 0],
-];
-/** Round the edge but along the lip: the skirt's line. */
-const EDGE = ['B0', 'J0', 'R0', 'A0', 'A2', 'R2', 'J2', 'B2'];
-const SHADES = [WHITE, WHITE.map(c => c * 0.84), WHITE.map(c => c * 0.7)];
-/** How far over the dome the cheek and its skirt stand where they are flush with it: none of the dome shows through. */
-const FLUSH = 0.0008;
-/** How far the skirt reaches past the edge, in the outline's u and v: a cell of the dome and more. */
-const SKIRT = [0.13, 0.1];
-/** Each face and each edge of the skirt in this many: they follow the dome's curve. */
-const SPLIT = 5;
+/** Whether the dome's point at the turn a and height y is in a V's hollow: the dome is left out there. */
+const pitted = (a: number, y: number) => Math.cos(a) > 0 && inside(uvOf(a, y), vee());
 
 /**
- * A cheek on the side `sx`: its faces, each cut in SPLIT² so it follows the dome, lit flat with the
- * face's own normal (sharp at its edges); and a skirt round it, flush with the dome and lit as the
- * dome is, over where the dome was left out (the dome's triangles with a corner on the cheek).
+ * A cheek on the side `sx` (the user, 2026-11-11: in the V, carve angles): the V's hollow, three
+ * flat faces sinking from its edges, flush with the dome there, to PIT; a skirt flush with the
+ * dome round it over where the dome was left out; and the groove along its two arms.
  */
 const cheek = (sx: number, out: number[]) => {
-  const at = (u: number, v: number, e: number): Spot => {
+  const at = (u: number, v: number, e: number): Vec3 => {
     const [a, y] = outline(u, v);
-    return onDome(sx * a, y, FLUSH + e);
+    return onDome(sx * a, y, FLUSH - e)[0];
   };
-  const corner = (k: string) => FACETS[k];
-  const outward = (p: Vec3): Vec3 => [p[0] - DOME.c[0], 0, p[2] - DOME.c[2]];
-  for (const [a, b, c, shade] of FACES) {
-    const [A, B, C] = [corner(a), corner(b), corner(c)];
+  const [T, L1, L2] = vee();
+  const corners: [number, number, number][] = [
+    [T[0], T[1], 0],
+    [L1[0], L1[1], 0],
+    [L2[0], L2[1], 0],
+  ];
+  const K: [number, number, number] = [PIT.at[0], PIT.at[1], PIT.depth];
+  const faces: [[number, number, number][], number[]][] = [
+    [[corners[0], corners[1], K], WHITE.map(c => c * 0.62)],
+    [[corners[0], K, corners[2]], WHITE.map(c => c * 0.8)],
+    [[corners[1], corners[2], K], WHITE.map(c => c * 0.7)],
+  ];
+  for (const [[A, B, C], col] of faces) {
     const P = (i: number, j: number): Vec3 => {
-      const [wa, wb] = [1 - (i + j) / SPLIT, i / SPLIT];
-      const wc = j / SPLIT;
+      const [wa, wb, wc] = [1 - (i + j) / SPLIT, i / SPLIT, j / SPLIT];
       const m = [0, 1, 2].map(k => A[k] * wa + B[k] * wb + C[k] * wc);
-      return at(m[0], m[1], m[2])[0];
+      return at(m[0], m[1], m[2]);
     };
     const [pa, pb, pc] = [P(0, 0), P(SPLIT, 0), P(0, SPLIT)];
     let n = unit(cross(sub(pb, pa), sub(pc, pa)));
-    const o = outward(pa);
+    const o: Vec3 = [pa[0] - DOME.c[0], 0, pa[2] - DOME.c[2]];
     n = n[0] * o[0] + n[2] * o[2] < 0 ? [-n[0], -n[1], -n[2]] : n;
     const tri = (p: Vec3[]) =>
       face(
         out,
-        SHADES[shade],
+        col,
         GLOSS,
         p.map(q => [q, n] as Spot),
       );
@@ -292,21 +298,36 @@ const cheek = (sx: number, out: number[]) => {
       }
     }
   }
-  // The skirt: out from the edge in u and v, flush, as smooth as the dome.
-  const line: [number, number][] = [];
-  EDGE.slice(1).forEach((k, e) => {
-    const [p, q] = [corner(EDGE[e]), corner(k)];
-    for (let t = e ? 1 : 0; t <= SPLIT; t++) {
-      line.push([p[0] + ((q[0] - p[0]) * t) / SPLIT, p[1] + ((q[1] - p[1]) * t) / SPLIT]);
+  // The skirt: out from each arm, square to it and away from the hollow, down to the lip; flush
+  // and lit as the dome is.
+  for (const L of [L1, L2]) {
+    const line = Array.from({ length: SPLIT * 2 + 1 }, (_, i): [number, number] => {
+      const t = i / (SPLIT * 2);
+      return [T[0] + (L[0] - T[0]) * t, T[1] + (L[1] - T[1]) * t];
+    });
+    const [du, dv] = [L[0] - T[0], L[1] - T[1]];
+    const s = L === L1 ? -1 : 1;
+    // Square to the arm, in u mostly: SKIRT[0] across.
+    let [pu, pv] = [-dv * s, du * s];
+    if (pu * s < 0) {
+      [pu, pv] = [-pu, -pv];
     }
-  });
-  const away = ([u, v]: [number, number]): [number, number] => [
-    u <= 1e-9 ? u - SKIRT[0] : u >= 1 - 1e-9 ? u + SKIRT[0] : u,
-    v >= 1 - 1e-9 ? v + SKIRT[1] : v,
-  ];
-  // At a corner the skirt goes out both ways.
-  const outer = line.map(away);
-  strip([line.map(([u, v]) => at(u, v, 0)), outer.map(([u, v]) => at(u, v, 0))], WHITE, GLOSS, out);
+    const k = SKIRT[0] / Math.abs(pu);
+    const outer = line.map(([u, v]): [number, number] => [u + pu * k, v + pv * k]);
+    const spot = ([u, v]: [number, number]): Spot => {
+      const [a, y] = outline(u, Math.max(0, v));
+      return onDome(sx * a, y, FLUSH);
+    };
+    strip(
+      [[...line, L].map(spot), [...outer, [outer.at(-1)![0], 0] as [number, number]].map(spot)],
+      WHITE,
+      GLOSS,
+      out,
+    );
+  }
+  for (const arm of CUT.arms) {
+    groove(sx, CUT.tip, arm, out);
+  }
 };
 
 /** The crest: up the front from over the slit, over the top and down the back to the dome's middle. */
@@ -422,14 +443,14 @@ const kit = (lod: number): Kit => {
       const [x, y, z] = whole.slice(i + j, i + j + 3);
       return glazed(Math.atan2(x - DOME.c[0], DOME.c[2] - z), y, -0.002);
     });
-    // Under the cheeks, where they are drawn, the dome is theirs: the triangles with a corner on one (their skirts cover the rest).
-    const cheeked =
+    // In the V's hollows, where they are drawn, the dome is theirs: the triangles with a corner in one (their skirts cover the rest).
+    const pit =
       level > 0 &&
       [0, 10, 20].some(j => {
         const [x, y, z] = whole.slice(i + j, i + j + 3);
-        return !!onCheek(Math.atan2(x - DOME.c[0], DOME.c[2] - z), y);
+        return pitted(Math.atan2(x - DOME.c[0], DOME.c[2] - z), y);
       });
-    if (!hidden && !cheeked) {
+    if (!hidden && !pit) {
       plain.push(...whole.slice(i, i + 30));
     }
   }

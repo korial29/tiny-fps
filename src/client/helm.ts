@@ -181,48 +181,22 @@ const outline = (u: number, v: number): [a: number, y: number] => {
 };
 
 /**
- * The cheeks (the user, 2026-11-11: no surfaces on the sides, no hollows, just a cut, clean; after
- * a Mandalorian helmet, an idea and nothing copied): the dome is whole, and on each cheek a fine
- * dark groove draws a V, its point under the cheekbone by the eye, its two arms down the helmet,
- * ending above the lip (the user: higher); the inner arm straight down, along the slot (the user:
- * aligned with the helmet's middle line). Each point is [u, v] on the outline (outline()); the groove is `w` metres wide.
+ * The cheeks (the user, 2026-11-11, after a Mandalorian helmet, an idea and nothing copied): the
+ * dome is whole but for a V carved in each cheek, no panel and no line round it. The V is upside
+ * down: its top edge just under the slit, from the slot back across the cheek, its inner side
+ * straight down along the slot (the helmet's middle line), its point low by the jaw. Each corner is
+ * [u, v] on the outline (outline()).
  */
 export const CUT = {
-  tip: [0.12, 0.95] as [number, number],
+  tip: [0.12, 0.12] as [number, number],
   arms: [
-    [0.12, 0.22],
-    [0.62, 0.22],
+    [0.12, 0.9],
+    [1, 0.9],
   ] as [number, number][],
-  w: 0.0028,
-  off: 0.0016,
-};
-
-/** A groove along the line from p to q in the outline's (u, v) on the side `sx`, dark, a hair off the dome. */
-const groove = (sx: number, p: [number, number], q: [number, number], out: number[]) => {
-  const n = 16;
-  const at = (t: number): Spot => {
-    const [a, y] = outline(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t);
-    return onDome(sx * a, y, CUT.off);
-  };
-  const rows: Spot[][] = [[], []];
-  for (let i = 0; i <= n; i++) {
-    const [c, m] = at(i / n);
-    const along = sub(at(Math.min(1, (i + 1) / n))[0], at(Math.max(0, (i - 1) / n))[0]);
-    const side = unit(cross(along, m));
-    rows[0].push([
-      [c[0] - (side[0] * CUT.w) / 2, c[1] - (side[1] * CUT.w) / 2, c[2] - (side[2] * CUT.w) / 2],
-      m,
-    ]);
-    rows[1].push([
-      [c[0] + (side[0] * CUT.w) / 2, c[1] + (side[1] * CUT.w) / 2, c[2] + (side[2] * CUT.w) / 2],
-      m,
-    ]);
-  }
-  strip(rows, IRON, -1, out);
 };
 
 /** The V's hollow: its deepest point (u, v) inside the V, and how deep, metres. */
-export const PIT = { at: [0.28, 0.42] as [number, number], depth: 0.015 };
+export const PIT = { at: [0.4, 0.66] as [number, number], depth: 0.018 };
 /** How far the hollow and its skirt stand over the dome where flush with it; the skirt's reach past the V, in u and v; each face cut in SPLIT². */
 const FLUSH = 0.0006;
 const SKIRT = [0.22, 0.1];
@@ -254,7 +228,7 @@ const pitted = (a: number, y: number) => Math.cos(a) > 0 && inside(uvOf(a, y), v
 /**
  * A cheek on the side `sx` (the user, 2026-11-11: in the V, carve angles): the V's hollow, three
  * flat faces sinking from its edges, flush with the dome there, to PIT; a skirt flush with the
- * dome round it over where the dome was left out; and the groove along its two arms.
+ * dome round it over where the dome was left out.
  */
 const cheek = (sx: number, out: number[]) => {
   const at = (u: number, v: number, e: number): Vec3 => {
@@ -299,53 +273,34 @@ const cheek = (sx: number, out: number[]) => {
       }
     }
   }
-  // The skirt: out from each arm, square to it and away from the hollow, down to the lip; flush
-  // and lit as the dome is.
-  for (const L of [L1, L2]) {
-    const line = Array.from({ length: SPLIT * 2 + 1 }, (_, i): [number, number] => {
+  // The skirt: round the V, out from each side square to it and away from the hollow, the
+  // corners filled; flush with the dome and lit as it is.
+  const tri = [T, L1, L2];
+  const mid = [0, 1].map(k => (T[k] + L1[k] + L2[k]) / 3);
+  const normal = (a: [number, number], b: [number, number]): [number, number] => {
+    let [nu, nv] = [-(b[1] - a[1]), b[0] - a[0]];
+    const [cu, cv] = [(a[0] + b[0]) / 2 - mid[0], (a[1] + b[1]) / 2 - mid[1]];
+    [nu, nv] = nu * cu + nv * cv < 0 ? [-nu, -nv] : [nu, nv];
+    const l = Math.hypot(nu, nv);
+    return [(nu / l) * SKIRT[0], (nv / l) * SKIRT[0]];
+  };
+  const inner: [number, number][] = [];
+  const outer: [number, number][] = [];
+  tri.forEach((a, e) => {
+    const b = tri[(e + 1) % 3];
+    const [nu, nv] = normal(a, b);
+    for (let i = 0; i <= SPLIT * 2; i++) {
       const t = i / (SPLIT * 2);
-      return [T[0] + (L[0] - T[0]) * t, T[1] + (L[1] - T[1]) * t];
-    });
-    const [du, dv] = [L[0] - T[0], L[1] - T[1]];
-    const s = L === L1 ? -1 : 1;
-    // Square to the arm, in u mostly: SKIRT[0] across.
-    let [pu, pv] = [-dv * s, du * s];
-    if (pu * s < 0) {
-      [pu, pv] = [-pu, -pv];
+      const p: [number, number] = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      inner.push(p);
+      outer.push([p[0] + nu, p[1] + nv]);
     }
-    const k = SKIRT[0] / Math.abs(pu);
-    const outer = line.map(([u, v]): [number, number] => [u + pu * k, v + pv * k]);
-    const spot = ([u, v]: [number, number]): Spot => {
-      const [a, y] = outline(u, Math.max(0, v));
-      return onDome(sx * a, y, FLUSH);
-    };
-    strip(
-      [[...line, L].map(spot), [...outer, [outer.at(-1)![0], 0] as [number, number]].map(spot)],
-      WHITE,
-      GLOSS,
-      out,
-    );
-  }
-  // Under the V's base too: from the base down to the lip.
-  const base = Array.from({ length: SPLIT * 2 + 1 }, (_, i): [number, number] => {
-    const t = i / (SPLIT * 2);
-    return [L1[0] + (L2[0] - L1[0]) * t, L1[1] + (L2[1] - L1[1]) * t];
   });
-  const wide: [number, number][] = [[L1[0] - SKIRT[0], L1[1]], ...base, [L2[0] + SKIRT[0], L2[1]]];
-  strip(
-    [wide, wide.map(([u]): [number, number] => [u, 0])].map(row =>
-      row.map(([u, v]): Spot => {
-        const [a, y] = outline(u, Math.max(0, v));
-        return onDome(sx * a, y, FLUSH);
-      }),
-    ),
-    WHITE,
-    GLOSS,
-    out,
-  );
-  for (const arm of CUT.arms) {
-    groove(sx, CUT.tip, arm, out);
-  }
+  const spot = ([u, v]: [number, number]): Spot => {
+    const [a, y] = outline(u, Math.min(Math.max(0, v), 1.12));
+    return onDome(sx * a, y, FLUSH);
+  };
+  strip([[...inner, inner[0]].map(spot), [...outer, outer[0]].map(spot)], WHITE, GLOSS, out);
 };
 
 /** The crest: up the front from over the slit, over the top and down the back to the dome's middle. */
@@ -462,12 +417,23 @@ const kit = (lod: number): Kit => {
       return glazed(Math.atan2(x - DOME.c[0], DOME.c[2] - z), y, -0.002);
     });
     // In the V's hollows, where they are drawn, the dome is theirs: the triangles with a corner in one (their skirts cover the rest).
+    // Its corners, the middles of its sides and its middle: one in a V, or a V's corner in it,
+    // and the hollow is under it.
+    const ps = [0, 10, 20].map(j => whole.slice(i + j, i + j + 3) as Vec3);
+    const samples = [
+      ...ps,
+      ...ps.map((p, k) => p.map((v, n) => (v + ps[(k + 1) % 3][n]) / 2) as Vec3),
+      ps[0].map((v, n) => (v + ps[1][n] + ps[2][n]) / 3) as Vec3,
+    ].map(([x, y, z]) => [Math.atan2(x - DOME.c[0], DOME.c[2] - z), y] as [number, number]);
+    const corners = samples.slice(0, 3);
     const pit =
       level > 0 &&
-      [0, 10, 20].some(j => {
-        const [x, y, z] = whole.slice(i + j, i + j + 3);
-        return pitted(Math.atan2(x - DOME.c[0], DOME.c[2] - z), y);
-      });
+      (samples.some(([a, y]) => pitted(a, y)) ||
+        (corners.every(([a]) => Math.cos(a) > 0) &&
+          [-1, 1].some(sx => {
+            const uv = corners.filter(([a]) => Math.sign(a) == sx).map(([a, y]) => uvOf(a, y));
+            return uv.length == 3 && vee().some(c => inside(c, uv as [number, number][]));
+          })));
     if (!hidden && !pit) {
       plain.push(...whole.slice(i, i + 30));
     }

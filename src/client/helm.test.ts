@@ -58,14 +58,13 @@ describe("helm, the woman's helmet on the moon", () => {
     expect(DOME.r[1]).toBeLessThan(0.142);
   });
 
-  it('has a V cut on each cheek, its point under the cheekbone by the eye, its arms down toward the lip, carved in angles inside', () => {
-    const [tu, tv] = CUT.tip;
-    expect(tu).toBeLessThan(0.3);
-    expect(tv).toBeGreaterThan(0.9);
-    // Its inner arm straight down along the slot, as the helmet's middle line runs.
-    expect(CUT.arms[0][0]).toBe(tu);
-    // High on the cheek: the arms end above the lip.
-    expect(CUT.arms.every(([, v]) => v > 0.15 && v < 0.3)).toBe(true);
+  it('has a V carved in each cheek, upside down, wide under the slit, its inner side along the slot; no line round it', () => {
+    const [tip, [l1, l1v], [l2, l2v]] = [CUT.tip, ...CUT.arms];
+    // The top edge under the slit, wide; the inner side straight down along the slot; the point low.
+    expect([l1v, l2v]).toEqual([0.9, 0.9]);
+    expect(l2 - l1).toBeGreaterThan(0.8);
+    expect(tip[0]).toBe(l1);
+    expect(tip[1]).toBeLessThan(0.2);
     const turn = (w: { p: Vec3 }) => Math.atan2(w.p[0] - DOME.c[0], DOME.c[2] - w.p[2]);
     const off = (w: { p: Vec3 }) => {
       const d = dome(turn(w), w.p[1]);
@@ -74,12 +73,8 @@ describe("helm, the woman's helmet on the moon", () => {
     const cheeks = verts(make(3)).filter(
       w => w.p[1] > DOME.rim + 0.005 && w.p[1] < TEE.y - slit(0) && Math.abs(turn(w)) < 1.2,
     );
-    // The grooves: dark and matte on both sides, on the dome.
-    const g = cheeks.filter(w => w.layer == -1 && w.c[0] < 0.3);
-    expect(g.some(w => w.p[0] > 0) && g.some(w => w.p[0] < 0)).toBe(true);
-    for (const w of g) {
-      expect(Math.abs(off(w))).toBeLessThan(0.003);
-    }
+    // No dark line on the cheeks.
+    expect(cheeks.filter(w => w.layer == -1 && w.c[0] < 0.3)).toEqual([]);
     // The hollow: sunk under the dome on both sides, as deep as PIT at most.
     const sunk = cheeks.filter(w => w.layer == GLOSS && off(w) < -0.008);
     expect(sunk.some(w => w.p[0] > 0) && sunk.some(w => w.p[0] < 0)).toBe(true);

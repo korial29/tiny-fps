@@ -52,6 +52,8 @@ const demoBuild = {
 };
 
 export default defineConfig({
+  // The demo's local rooms are per build (demo/main.ts).
+  define: { __BUILD__: JSON.stringify(Date.now().toString(36)) },
   root: isBuildingDemo ? resolve(root, 'demo') : root,
   base: isBuildingDemo ? '/tiny-fps/' : undefined,
   build: isBuildingDemo ? demoBuild : isBuildingServer ? serverBuild : libBuild,

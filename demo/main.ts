@@ -3,6 +3,9 @@ import type { TinyFps } from '../src/client';
 import { localSocket } from '../src/local';
 import { MAPS } from '../src/shared/maps';
 
+/** When this page was built or served (vite.config.ts): tabs of another build do not share a local room. */
+declare const __BUILD__: string;
+
 const q = new URLSearchParams(location.search);
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -33,12 +36,15 @@ const join = () => {
   const url = fields.url.value;
   const map = fields.map.value;
   playing(true);
-  // The first map of a new local room; a server has its own (MAP). In a game, the host picks.
+  // A local room per map picked and per build of the page: a tab left open on another map, or on
+  // an older build, hosted the one room there was, and its map and its rules won over the choice
+  // made here (the user, 2026-11-11: always Tranquility whatever I pick). A server has its own
+  // map (MAP). In a game, the host picks the next.
   game = tinyFps($('game'), {
     name,
     map,
     body: +fields.body.value,
-    ...(server ? { url } : { socket: localSocket('demo', { map }) }),
+    ...(server ? { url } : { socket: localSocket(`demo-${map}-${__BUILD__}`, { map }) }),
   });
   status.textContent = server ? `Playing on ${url}` : 'Playing locally';
   game.on('close', () => (status.textContent = 'Disconnected'));

@@ -53,11 +53,15 @@ const pecs = (x: number, y: number) =>
   (1 - smooth(1.41, 1.48, y));
 
 /**
- * The woman's chest plate (skin.ts shapes her bust under it): one moulded piece, the hollow of the
- * sternum filled a little, not two cups.
+ * The woman's chest plate (the user, 2026-11-11: a more feminine armour, with the chest; until then
+ * one moulded piece with the sternum filled): a cup each side over the bust skin.ts shapes, `CUP`
+ * metres out at most, fullest low with a firm line under it, the sternum left hollow between them.
  */
-const bust = (x: number, y: number) =>
-  0.007 * Math.exp(-((x / 0.034) ** 2)) * Math.exp(-(((y - 1.35) / 0.05) ** 2));
+export const CUP = 0.014;
+export const bust = (x: number, y: number) =>
+  CUP *
+  Math.exp(-(((Math.abs(x) - 0.068) / 0.04) ** 2)) *
+  Math.exp(-(((y - 1.342) / (y < 1.342 ? 0.036 : 0.06)) ** 2));
 
 /** The knee pad's dome: up to 8 mm out at the kneecap. */
 const knee = (x: number, y: number) =>

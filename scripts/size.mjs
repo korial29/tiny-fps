@@ -7,7 +7,8 @@ const BUDGETS = [
   // 76 KB until the detailed hands (the user, 2026-11-09: "peu importe le budget").
   // 92 and 18 KB until the moon's crater, rovers and base (the user, 2026-11-10: weight does not matter).
   // 110 KB until the space trooper's armour (the user, 2026-11-10: weight does not matter).
-  { file: 'dist/index.js', max: 144 * 1024 },
+  // 144 KB until the woman's own helmet, 100 B under it (the user: weight does not matter).
+  { file: 'dist/index.js', max: 150 * 1024 },
   { file: 'dist/local.js', max: 32 * 1024 },
 ];
 

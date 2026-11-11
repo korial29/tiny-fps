@@ -31,6 +31,7 @@ import {
   tip,
   swapOf,
 } from './gun';
+import { helm } from './helm';
 import { helmet } from './helmet';
 import { STYLE, hair, styleOf, sway } from './hair';
 import { armor } from './armor';
@@ -678,8 +679,13 @@ export const soldier = (
   }
   // The helmet is on the head: not on one a katana cut has taken off.
   if (helmets && r.cut?.limb !== LIMB.HEAD) {
-    helmet(out, s.pos[J.HEAD], s.rot[J.HEAD], color, lod);
-    hose(out, s.pos[J.HEAD], s.rot[J.HEAD], s.pos[J.CHEST], s.rot[J.CHEST], lod);
+    if (build) {
+      // Hers is another helmet, with no hose: told from his at a glance.
+      helm(out, s.pos[J.HEAD], s.rot[J.HEAD], color, lod);
+    } else {
+      helmet(out, s.pos[J.HEAD], s.rot[J.HEAD], color, lod);
+      hose(out, s.pos[J.HEAD], s.rot[J.HEAD], s.pos[J.CHEST], s.rot[J.CHEST], lod);
+    }
   }
   // The life support pack on the back of a space suit.
   if (helmets) {

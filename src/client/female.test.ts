@@ -8,6 +8,9 @@ import type { PlayerState } from '../shared/types';
 import { GLOSS, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { BUILD, JOINT as J, RESTS, rest, solve } from './rig';
+import { helm } from './helm';
+import { helmet } from './helmet';
+import { hose } from './pack';
 import { BUST, bindOf, body, tressOf } from './skin';
 import { createRunner, femme, soldier, stance } from './soldier';
 import { HEAD_SCALE, LOWEST, STYLE, STYLES, hair, styleOf, tress } from './hair';
@@ -336,7 +339,18 @@ describe('her hair', () => {
       return out.length;
     };
     expect(count(F, false)).toBeGreaterThan(count(0, false));
-    expect(count(F, true)).toBe(count(0, true));
+    // Under her helmet, no hair: she differs from him by the helmet alone, hers with no hose.
+    const size = (draw: (out: number[]) => void) => {
+      const out: number[] = [];
+      draw(out);
+      return out.length;
+    };
+    const at: [number, number, number] = [0, 0, 0];
+    const his =
+      size(o => helmet(o, at, [0, 0, 0, 1], [1, 0, 0], 1)) +
+      size(o => hose(o, [0, 1.62, 0], [0, 0, 0, 1], [0, 1.4, 0], [0, 0, 0, 1], 1));
+    const hers = size(o => helm(o, at, [0, 0, 0, 1], [1, 0, 0], 1));
+    expect(count(F, true)).toBe(count(0, true) - his + hers);
   });
   it('gives the same look for the same id and choice', () => {
     const look = () => {

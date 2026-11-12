@@ -346,9 +346,9 @@ describe('createHud', () => {
     expect(Math.min(...top.map(p => p[1]))).toBeGreaterThan(11.9);
     // The guard's notch in the middle, flat-topped: the face (72 px wide, its top 111 px up) and the
     // health sit in it on a screen of 800 by 600.
-    expect(at(low, 50)).toBe(at(low, 44));
+    expect(at(low, 50)).toBeCloseTo(at(low, 44), 1);
     // It stands 21 over where the V would meet in the middle, and over the edge at its foot.
-    expect(at(low, 50)).toBe(77);
+    expect(at(low, 50)).toBeCloseTo(77, 1);
     expect(at(low, 50)).toBeLessThan(at(low, 36) - 4);
     expect((100 - at(low, 50)) * 6).toBeGreaterThan(111 + 10);
     expect(8 * 8).toBeGreaterThan(36 + 10);

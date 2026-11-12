@@ -33,6 +33,8 @@ interface Region {
   high?: (a: number) => number;
   /** Only on the woman's skin. */
   fem?: boolean;
+  /** Only on the man's. */
+  man?: boolean;
   /** A round plate: its outline an ellipse in (angle, height), [half the angle, middle height, half height]. */
   round?: [number, number, number];
 }
@@ -60,15 +62,23 @@ const pecs = (x: number, y: number) =>
  * metres out at most, fullest low with a firm line under it, the sternum left hollow between them.
  */
 export const CUP = 0.014;
+/** The cups' fullest height, 3 mm under the bust's (BUST_Y, skin.ts). */
+export const CUP_Y = 1.367;
 export const bust = (x: number, y: number) =>
   CUP *
   Math.exp(-(((Math.abs(x) - 0.068) / 0.04) ** 2)) *
-  Math.exp(-(((y - 1.342) / (y < 1.342 ? 0.036 : 0.06)) ** 2));
+  Math.exp(-(((y - CUP_Y) / (y < CUP_Y ? 0.036 : 0.06)) ** 2));
 
-/** The woman's shoulder cap: a low dome, 5 mm more at the middle of the deltoid; its middle height and half height on the arm at rest. */
-export const SHOULDER = [1.4, 0.07];
+/**
+ * The woman's shoulder cap (the user, 2026-11-11: simpler, no part down the arm): one round piece
+ * on the top of the shoulder, all of it on the trunk's skin, over the arm's (which stops at
+ * 1.41 m): the border between the two is under no plate, so its triangles make no steps. Its middle
+ * angle round the trunk (degrees from the front), half angle, middle height and half height; a low
+ * dome, 4 mm more at its middle.
+ */
+export const SHOULDER = { a: 102, half: 22, y: 1.465, h: 0.05 };
 const cap = (_x: number, y: number) =>
-  0.005 * Math.max(0, 1 - ((y - SHOULDER[0]) / SHOULDER[1]) ** 2);
+  0.004 * Math.max(0, 1 - ((y - SHOULDER.y) / SHOULDER.h) ** 2);
 
 /** The knee pad's dome: up to 8 mm out at the kneecap. */
 const knee = (x: number, y: number) =>
@@ -113,6 +123,20 @@ const chestTop = (a: number) => 1.5 - 0.045 * Math.cos((a * Math.PI * 1.4) / 180
 /** The gap round the collar piece and over the back plate: there is little room up there. */
 const COLLAR_GAP = 0.012;
 
+/**
+ * The man's shoulder piece (the user, 2026-11-11: no pad standing over the shoulder, a light and
+ * simple piece that covers its shape, joining the collar piece in front to the shoulder blade's
+ * behind): the angles round the trunk it spans, from the collar piece's end to the shoulder blade
+ * plate's; its bottom, over the arm's skin (which stops at 1.41 m), so no plate edge follows the
+ * border between the two; and its top at each end, the collar's and the shoulder blade plate's.
+ */
+export const BAND = { a: [78, 118], low: 1.415, top: [1.528, 1.505] };
+/** Its top at the angle a, straight from the collar's end to the shoulder blade plate's. */
+const band = (a: number) => {
+  const t = Math.max(0, Math.min((Math.abs(a) - BAND.a[0]) / (BAND.a[1] - BAND.a[0]), 1));
+  return BAND.top[0] + (BAND.top[1] - BAND.top[0]) * t;
+};
+
 /** The gap the user asked between the chest plate and the belly's plates, and between those. */
 export const GAP = 0.02;
 
@@ -141,21 +165,26 @@ export const REGIONS: Region[] = [
   { part: PART.TRUNK, cx: 0, y: [1.47, 1.528], a: [-78, 78], low: a => chestTop(a) + COLLAR_GAP },
   { part: PART.TRUNK, cx: 0, y: [1.4 + COLLAR_GAP, 1.505], a: [-62, -5], face: 180 },
   { part: PART.TRUNK, cx: 0, y: [1.4 + COLLAR_GAP, 1.505], a: [5, 62], face: 180 },
-  // The woman's shoulders (the user, 2026-11-11: discreet, one block that follows the shoulder's
-  // shape, where the man has a plate standing over his): a cap cut out of the skin of each
-  // deltoid, from the front round the outside to the back.
-  {
-    part: PART.ARM,
-    cx: 0.207,
-    y: [SHOULDER[0] - SHOULDER[1], SHOULDER[0] + SHOULDER[1]],
-    a: [-35, 170],
+  // The man's shoulders: a piece on each (BAND); her caps are there on her.
+  ...[1, -1].map((k): Region => ({
+    part: PART.TRUNK,
+    cx: 0,
+    y: [BAND.low, BAND.top[0]],
+    a: k > 0 ? [BAND.a[0], BAND.a[1]] : [-BAND.a[1], -BAND.a[0]],
+    high: band,
+    man: true,
+  })),
+  // The woman's shoulders: a round cap on each (SHOULDER).
+  ...[SHOULDER.a, -SHOULDER.a].map((face): Region => ({
+    part: PART.TRUNK,
+    cx: 0,
+    y: [SHOULDER.y - SHOULDER.h, SHOULDER.y + SHOULDER.h],
+    a: [-SHOULDER.half, SHOULDER.half],
+    face,
+    round: [SHOULDER.half, SHOULDER.y, SHOULDER.h],
     swell: cap,
     fem: true,
-  },
-  // The top of the deltoid is the trunk's skin: the same cap goes on over it, each side, between
-  // the collar piece and the shoulder blade's.
-  { part: PART.TRUNK, cx: 0, y: [1.34, 1.52], a: [80, 124], fem: true },
-  { part: PART.TRUNK, cx: 0, y: [1.34, 1.52], a: [-124, -80], fem: true },
+  })),
   // The back (the user, 2026-11-10, for Highline, where no pack covers it): a plate between the
   // shoulder blades and one on the small of the back, GAP apart.
   { part: PART.TRUNK, cx: 0, y: [1.2, 1.4], a: [-58, 58], face: 180 },
@@ -343,7 +372,13 @@ const cook = (s: Skin, fine: boolean): Recipe => {
     const [lo, hi] = [Math.min(...ys), Math.max(...ys)];
     for (let g = 0; g < REGIONS.length; g++) {
       const region = shaped(REGIONS[g], s);
-      if (region.part != part || hi < SPANS[g][0] || lo > SPANS[g][1] || (region.fem && !s.b)) {
+      if (
+        region.part != part ||
+        hi < SPANS[g][0] ||
+        lo > SPANS[g][1] ||
+        (region.fem && !s.b) ||
+        (region.man && s.b)
+      ) {
         continue;
       }
       const tri: Corner[] = [0, 1, 2].map(c => {
@@ -441,7 +476,11 @@ const scratchesOn = (
     const at = [0, 1, 2].map(j => P[0][j] + (P[1][j] - P[0][j]) * b1 + (P[2][j] - P[0][j]) * b2);
     const probe = (x: number[]): Corner => [...x, 0, 0, 0, 0, 0, 0, 0];
     const g = REGIONS.findIndex(
-      (rg, i) => rg.part == part && !(rg.fem && !s.b) && LIMITS[i].every(f => f(probe(at)) >= 0),
+      (rg, i) =>
+        rg.part == part &&
+        !(rg.fem && !s.b) &&
+        !(rg.man && s.b) &&
+        LIMITS[i].every(f => f(probe(at)) >= 0),
     );
     if (g < 0) {
       continue;

@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { STILL } from '../shared/physics';
 import { LIMB } from '../shared/types';
-import { CUP, bust } from './armor';
-import { CREST, DOME, EAR, TEE, dome, glazed, helm, onDome, slit } from './helm';
+import { CUP, CUP_Y, bust } from './armor';
+import { CREST, CUT, DOME, EAR, PIT, TEE, dome, glazed, helm, onDome, slit } from './helm';
 import { helmet } from './helmet';
 import { GLOSS, SHINE, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, rest, solve } from './rig';
 import type { Quat } from './rig';
-import { body } from './skin';
+import { BUST_Y, body } from './skin';
 import { createRunner, soldier } from './soldier';
 
 const HEAD = solve(rest()).pos[J.HEAD];
@@ -51,6 +51,34 @@ describe("helm, the woman's helmet on the moon", () => {
     expect(make(1).length).toBeGreaterThan(make(0).length);
     // Built once per level: the same again.
     expect(make(3)).toEqual(make(3));
+  });
+
+  it('is a little smaller than the first one', () => {
+    expect(DOME.r[0]).toBeLessThan(0.106);
+    expect(DOME.r[1]).toBeLessThan(0.142);
+  });
+
+  it('has a V carved in each cheek, upside down, wide under the slit, its inner side along the slot; no line round it', () => {
+    const [tip, [l1, l1v], [l2, l2v]] = [CUT.tip, ...CUT.arms];
+    // The top edge under the slit, wide; the inner side straight down along the slot; the point low.
+    expect([l1v, l2v]).toEqual([0.9, 0.9]);
+    expect(l2 - l1).toBeGreaterThan(0.8);
+    expect(tip[0]).toBe(l1);
+    expect(tip[1]).toBeLessThan(0.2);
+    const turn = (w: { p: Vec3 }) => Math.atan2(w.p[0] - DOME.c[0], DOME.c[2] - w.p[2]);
+    const off = (w: { p: Vec3 }) => {
+      const d = dome(turn(w), w.p[1]);
+      return Math.hypot(w.p[0], w.p[2] - DOME.c[2]) - Math.hypot(d[0], d[2] - DOME.c[2]);
+    };
+    const cheeks = verts(make(3)).filter(
+      w => w.p[1] > DOME.rim + 0.005 && w.p[1] < TEE.y - slit(0) && Math.abs(turn(w)) < 1.2,
+    );
+    // No dark line on the cheeks.
+    expect(cheeks.filter(w => w.layer == -1 && w.c[0] < 0.3)).toEqual([]);
+    // The hollow: sunk under the dome on both sides, as deep as PIT at most.
+    const sunk = cheeks.filter(w => w.layer == GLOSS && off(w) < -0.008);
+    expect(sunk.some(w => w.p[0] > 0) && sunk.some(w => w.p[0] < 0)).toBe(true);
+    expect(Math.min(...sunk.map(off))).toBeGreaterThan(-PIT.depth - 0.002);
   });
 
   it('holds the head of her skin, from the jaw up, with room', () => {
@@ -195,9 +223,11 @@ describe("helm, the woman's helmet on the moon", () => {
 
 describe("the woman's chest plate", () => {
   it('has a cup each side, fullest low on the chest, and a hollow at the sternum', () => {
-    expect(bust(0.068, 1.342)).toBeCloseTo(CUP, 6);
-    expect(bust(-0.068, 1.342)).toBeCloseTo(CUP, 6);
-    expect(bust(0, 1.342)).toBeLessThan(CUP * 0.1);
+    expect(bust(0.068, CUP_Y)).toBeCloseTo(CUP, 6);
+    expect(bust(-0.068, CUP_Y)).toBeCloseTo(CUP, 6);
+    expect(bust(0, CUP_Y)).toBeLessThan(CUP * 0.1);
+    // Over the skin's bust, a little higher than before (1.342).
+    expect(CUP_Y).toBeCloseTo(BUST_Y - 0.003, 6);
     // A firm line under it, a slope above.
     expect(bust(0.068, 1.3)).toBeLessThan(bust(0.068, 1.39));
     expect(bust(0.068, 1.25)).toBeLessThan(CUP * 0.01);

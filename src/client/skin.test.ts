@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT, JOINTS, PARENT, REST, axis, mul, rest, solve, turn } from './rig';
+import { JOINT, JOINTS, PARENT, axis, rest, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
-import { beardOf, body, capped, cut, eyesOf, hairOf, palette, shaved, skin } from './skin';
+import { beardOf, body, cut, eyesOf, hairOf, palette, shaved, skin } from './skin';
 import {
   CH,
   CHANNELS,
@@ -1067,48 +1067,5 @@ describe('skin', () => {
       skin(plain, body(1), solve(rest()), palette(JACKET));
       expect(rows(plain).every(r => r[8] == -1 || speck(r))).toBe(true);
     });
-  });
-});
-
-describe('capped: the turn of a shoulder plate (the user, 2026-11-10: it rode a reaching arm round to the front of the chest)', () => {
-  /** The angle of the turn from `a` to `b`, radians. */
-  const between = (a: Quat, b: Quat) =>
-    2 * Math.acos(Math.min(Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]), 1));
-  /** The rest pose with the right arm turned by `arm` and its collarbone by `clav`, solved. */
-  const posed = (arm: Quat, clav: Quat = [0, 0, 0, 1]) => {
-    const p = rest();
-    p.rot[JOINT.ARM_R] = arm;
-    p.rot[JOINT.CLAVICLE_R] = clav;
-    return solve(p).rot;
-  };
-  const BONE = REST[JOINT.FOREARM_R].map(v => v / Math.hypot(...REST[JOINT.FOREARM_R])) as Vec3;
-
-  it('is the collarbone at rest, and goes with it in a shrug', () => {
-    expect(between(capped(posed([0, 0, 0, 1]), JOINT.ARM_R), [0, 0, 0, 1])).toBeLessThan(1e-6);
-    const shrug = axis([0, 0, 1], 0.4);
-    expect(between(capped(posed([0, 0, 0, 1], shrug), JOINT.ARM_R), shrug)).toBeLessThan(1e-6);
-  });
-
-  it("takes none of the upper arm's turn about itself", () => {
-    const twisted = posed(axis(BONE, 1.3));
-    expect(between(capped(twisted, JOINT.ARM_R), [0, 0, 0, 1])).toBeLessThan(1e-6);
-    const [swung, both] = [axis([1, 0, 0], 0.9), mul(axis([1, 0, 0], 0.9), axis(BONE, 1.3))];
-    expect(
-      between(capped(posed(swung), JOINT.ARM_R), capped(posed(both), JOINT.ARM_R)),
-    ).toBeLessThan(1e-6);
-  });
-
-  it('goes part of the way with an arm that reaches forward, and all the way with one up over the shoulder', () => {
-    for (const [th, lo, hi] of [
-      [0.5, 0.5, 0.7],
-      [1, 0.5, 0.7],
-      [1.6, 0.6, 0.9],
-      [2.4, 0.97, 1],
-      [2.9, 0.97, 1],
-    ]) {
-      const share = between(capped(posed(axis([1, 0, 0], th)), JOINT.ARM_R), [0, 0, 0, 1]) / th;
-      expect(share).toBeGreaterThanOrEqual(lo - 1e-6);
-      expect(share).toBeLessThanOrEqual(hi + 1e-6);
-    }
   });
 });

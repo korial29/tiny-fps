@@ -1,6 +1,6 @@
 // The woman's helmet on the moon (the user, 2026-11-11: hers must be told from his at a glance,
 // "like a Mandalorian's"; an idea of a shape, nothing copied): a smooth dome with straight cheeks
-// down past the jaw and a lip at the bottom; a dark T for a visor, a slit across the eyes and a
+// down past the jaw and a lip at the bottom, a little smaller since (the user, 2026-11-11); a dark T for a visor, a slit across the eyes and a
 // slot from its middle down to the lip, framed in the team's colour; a grey plate on each cheek; a
 // crest in the team's colour over the top; a round cap on each ear, and a
 // thin stalk with a sight on the right one, up past the dome. A pure function of the head joint's
@@ -16,16 +16,17 @@ import type { Quat } from './rig';
 /**
  * The dome: its middle (the widest ring, level with the brow), its half width, height over the
  * middle and depth, how square it is seen from above, how flat on top, and the height of its lip
- * under the chin. It holds the head of the skin (1.555 to 1.803 m, the head joint at 1.62).
+ * under the chin. It holds the head of the skin (1.555 to 1.803 m, the head joint at 1.62): the
+ * head fills 97 % of it at the cheekbones.
  */
 export const DOME = {
   c: [0, 0.05, 0.003] as Vec3,
-  r: [0.106, 0.142, 0.129] as Vec3,
+  r: [0.101, 0.128, 0.123] as Vec3,
   e: [2.5, 2.3] as [number, number],
-  rim: -0.088,
-  /** The cheeks draw in by this share half way down, and the lip flares out by this one. */
-  waist: 0.035,
-  flare: 0.07,
+  rim: -0.074,
+  /** The cheeks draw in by this share half way down, and the lip flares out by this one: none, the bottom cut straight (the user, 2026-11-11). */
+  waist: 0.02,
+  flare: 0,
 };
 
 /**
@@ -49,14 +50,13 @@ export const EAR = { y: 0.045, r: 0.036, t: 0.014, stalk: 0.19, w: 0.005 };
  * The cheek plates, grey, each side of the slot under the slit: how far round they go (radians),
  * the gap to the T's frame, how much their top edge falls to the back, and how far they stand off.
  */
-export const CHEEK = { round: 1.3, gap: 0.012, fall: 0.05, off: 0.0025 };
+export const CHEEK = { round: 1.3, gap: 0.012, fall: 0.05, off: 0.006 };
 
 /** The crest, in the team's colour: a stripe from the brow over the top to the back of the dome, its half width and how far it stands off. */
 export const CREST = { w: 0.015, off: 0.002, from: 0.112 };
 
 const WHITE = [0.88, 0.89, 0.92];
 const IRON = [0.25, 0.27, 0.3];
-const STEEL = [0.56, 0.58, 0.63];
 const PALE = [0.74, 0.76, 0.8];
 const GLASS = [0.02, 0.025, 0.035];
 /** Tinted with the team's colour when drawn. */
@@ -171,19 +171,155 @@ const tee = (grow: number, off: number, n: number, col: number[], layer: number)
   return out;
 };
 
-/** A cheek plate on the side `sx`: from the slot's frame round to the ear, its top under the slit and falling to the back. */
-const cheek = (sx: number, n: number, out: number[]) => {
-  const low = DOME.rim + 0.012;
-  const cols = Array.from({ length: n + 1 }, (_, i) => i / n);
-  const rows = [0, 0.25, 0.5, 0.75, 1].map(v =>
-    cols.map(u => {
-      const y0 = TEE.y - slit(0) - TEE.frame - CHEEK.gap - CHEEK.fall * u ** 2;
-      const y = low + (y0 - low) * v;
-      const a0 = slotTurn(y, TEE.slot + TEE.frame + CHEEK.gap);
-      return onDome(sx * (a0 + (CHEEK.round - a0) * u), y, CHEEK.off);
+/** The cheek's outline at (u, v): u 0 at the slot's frame to 1 round toward the ear, v 0 at the lip to 1 under the slit, its top falling to the back. */
+const outline = (u: number, v: number): [a: number, y: number] => {
+  const low = DOME.rim + 0.004;
+  const y0 = TEE.y - slit(0) - TEE.frame - CHEEK.gap - CHEEK.fall * Math.min(u, 1.1) ** 2;
+  const y = low + (y0 - low) * v;
+  const a0 = slotTurn(y, TEE.slot + TEE.frame + CHEEK.gap);
+  return [a0 + (CHEEK.round - a0) * u, y];
+};
+
+/**
+ * The cheeks (the user, 2026-11-11, after a Mandalorian helmet, an idea and nothing copied): the
+ * dome is whole but for a V carved in each cheek, no panel and no line round it. The V is upside
+ * down: its top edge just under the slit, from the slot back across the cheek, its inner side
+ * straight down along the slot (the helmet's middle line), its point low by the jaw. Each corner is
+ * [u, v] on the outline (outline()).
+ */
+export const CUT = {
+  tip: [0.12, 0.12] as [number, number],
+  arms: [
+    [0.12, 0.9],
+    [1.1, 0.9],
+  ] as [number, number][],
+};
+
+/** The V's hollow: its deepest point (u, v) inside the V, and how deep, metres. */
+export const PIT = { at: [0.4, 0.62] as [number, number], depth: 0.015 };
+/** How far the hollow and its skirt stand over the dome where flush with it; the skirt's reach past the V, in u and v; each face cut in SPLIT². */
+const FLUSH = 0.0006;
+const SPLIT = 6;
+/**
+ * The patch round each V, in the outline's (u, v): the dome is left out where a triangle has a
+ * point in LEFT_OUT, and the patch, flush with it, covers PATCH, a dome triangle wider all round.
+ */
+const LEFT_OUT = [-0.08, -0.02, 1.3, 1.02];
+const PATCH = [-0.24, -0.06, 1.7, 1.6];
+
+/** The corners of the V on the outline: its point, then its arms' feet. */
+const vee = (): [number, number][] => [CUT.tip, ...CUT.arms];
+
+/** Where the turn a (either side) and height y fall in the outline's (u, v). */
+const uvOf = (a: number, y: number): [number, number] => {
+  const a0 = slotTurn(y, TEE.slot + TEE.frame + CHEEK.gap);
+  const u = (Math.abs(a) - a0) / (CHEEK.round - a0);
+  const [, yl] = outline(u, 0);
+  const [, yh] = outline(u, 1);
+  return [u, (y - yl) / (yh - yl)];
+};
+
+/** Whether the dome's point at the turn a and height y is in a V's hollow: the dome is left out there. */
+const pitted = (a: number, y: number) => {
+  if (Math.cos(a) <= 0) {
+    return false;
+  }
+  const [u, v] = uvOf(a, y);
+  const [u0, v0, u1, v1] = LEFT_OUT;
+  return u > u0 && u < u1 && v > v0 && v < v1;
+};
+
+/**
+ * A cheek on the side `sx` (the user, 2026-11-11: in the V, carve angles): the V's hollow, three
+ * flat faces sinking from its edges, flush with the dome there, to PIT; a patch flush with the
+ * dome round it over where the dome was left out.
+ */
+const cheek = (sx: number, out: number[]) => {
+  const at = (u: number, v: number, e: number): Vec3 => {
+    const [a, y] = outline(u, v);
+    return onDome(sx * a, y, FLUSH - e)[0];
+  };
+  const [T, L1, L2] = vee();
+  const corners: [number, number, number][] = [
+    [T[0], T[1], 0],
+    [L1[0], L1[1], 0],
+    [L2[0], L2[1], 0],
+  ];
+  const K: [number, number, number] = [PIT.at[0], PIT.at[1], PIT.depth];
+  const faces: [[number, number, number][], number[]][] = [
+    [[corners[0], corners[1], K], WHITE.map(c => c * 0.62)],
+    [[corners[0], K, corners[2]], WHITE.map(c => c * 0.8)],
+    [[corners[1], corners[2], K], WHITE.map(c => c * 0.7)],
+  ];
+  for (const [[A, B, C], col] of faces) {
+    const P = (i: number, j: number): Vec3 => {
+      const [wa, wb, wc] = [1 - (i + j) / SPLIT, i / SPLIT, j / SPLIT];
+      const m = [0, 1, 2].map(k => A[k] * wa + B[k] * wb + C[k] * wc);
+      return at(m[0], m[1], m[2]);
+    };
+    const [pa, pb, pc] = [P(0, 0), P(SPLIT, 0), P(0, SPLIT)];
+    let n = unit(cross(sub(pb, pa), sub(pc, pa)));
+    const o: Vec3 = [pa[0] - DOME.c[0], 0, pa[2] - DOME.c[2]];
+    n = n[0] * o[0] + n[2] * o[2] < 0 ? [-n[0], -n[1], -n[2]] : n;
+    const tri = (p: Vec3[]) =>
+      face(
+        out,
+        col,
+        GLOSS,
+        p.map(q => [q, n] as Spot),
+      );
+    for (let i = 0; i < SPLIT; i++) {
+      for (let j = 0; i + j < SPLIT; j++) {
+        tri([P(i, j), P(i + 1, j), P(i, j + 1)]);
+        if (i + j + 1 < SPLIT) {
+          tri([P(i + 1, j), P(i + 1, j + 1), P(i, j + 1)]);
+        }
+      }
+    }
+  }
+  // The patch: from the V's sides out to the PATCH's edges, ring by ring, flush with the dome and
+  // lit as it is. Each ring goes round the V's middle; a ray from it meets the V and the edge.
+  const mid: [number, number] = [0, 1].map(k => (T[k] + L1[k] + L2[k]) / 3) as [number, number];
+  const hit = (poly: [number, number][], du: number, dv: number): [number, number] => {
+    let best = Infinity;
+    poly.forEach((a, k) => {
+      const b = poly[(k + 1) % poly.length];
+      const [eu, ev] = [b[0] - a[0], b[1] - a[1]];
+      const den = du * ev - dv * eu;
+      if (Math.abs(den) < 1e-12) {
+        return;
+      }
+      const t = ((a[0] - mid[0]) * ev - (a[1] - mid[1]) * eu) / den;
+      const w = ((a[0] - mid[0]) * dv - (a[1] - mid[1]) * du) / den;
+      if (t > 0 && w >= -1e-9 && w <= 1 + 1e-9) {
+        best = Math.min(best, t);
+      }
+    });
+    return [mid[0] + du * best, mid[1] + dv * best];
+  };
+  const [pu0, pv0, pu1, pv1] = PATCH;
+  const box: [number, number][] = [
+    [pu0, pv0],
+    [pu1, pv0],
+    [pu1, pv1],
+    [pu0, pv1],
+  ];
+  const N = 96;
+  const RINGS = 6;
+  const rays = Array.from({ length: N + 1 }, (_, i) => {
+    const t = (i / N) * TAU;
+    const [du, dv] = [Math.cos(t), Math.sin(t)];
+    return [hit([T, L1, L2], du, dv), hit(box, du, dv)];
+  });
+  const rings = Array.from({ length: RINGS + 1 }, (_, r) =>
+    rays.map(([a, b]): Spot => {
+      const k = r / RINGS;
+      const [u, v] = [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+      const [ang, y] = outline(u, v);
+      return onDome(sx * ang, Math.max(y, DOME.rim + 0.002), FLUSH);
     }),
   );
-  strip(rows, STEEL, GLOSS, out);
+  strip(rings, WHITE, GLOSS, out);
 };
 
 /** The crest: up the front from over the slit, over the top and down the back to the dome's middle. */
@@ -299,7 +435,15 @@ const kit = (lod: number): Kit => {
       const [x, y, z] = whole.slice(i + j, i + j + 3);
       return glazed(Math.atan2(x - DOME.c[0], DOME.c[2] - z), y, -0.002);
     });
-    if (!hidden) {
+    // In the V's hollows, where they are drawn, the dome is theirs: the triangles with a corner in one (their skirts cover the rest).
+    // Under the patches round the V's, where they are drawn, the dome is theirs.
+    const pit =
+      level > 0 &&
+      [0, 10, 20].some(j => {
+        const [x, y, z] = whole.slice(i + j, i + j + 3);
+        return pitted(Math.atan2(x - DOME.c[0], DOME.c[2] - z), y);
+      });
+    if (!hidden && !pit) {
       plain.push(...whole.slice(i, i + 30));
     }
   }
@@ -318,7 +462,7 @@ const kit = (lod: number): Kit => {
   if (level) {
     for (const sx of [1, -1]) {
       ear(sx, lon >> 1, plain);
-      cheek(sx, across >> 1, plain);
+      cheek(sx, plain);
     }
   }
   kits.set(level, (k = { plain, team }));

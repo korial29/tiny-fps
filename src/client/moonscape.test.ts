@@ -792,7 +792,7 @@ describe('moonscape, the horizon', () => {
     }
   });
 
-  it('stands three ranges all round the horizon, past the wall and inside the stars: over the wall on every bearing from the middle', () => {
+  it('stands three ranges all round the horizon, past the wall and inside the stars, low: over the wall here and there', () => {
     expect(far.length).toBe(RANGE_COLS * 6 * RANGES.reduce((t, r) => t + r[2], 0));
     // Past where the wall is down on the plain, and nearer than the stars.
     expect(lo(far.map(p => reach(relief, p[0], p[2])))).toBeGreaterThan(1.65);
@@ -801,13 +801,14 @@ describe('moonscape, the horizon', () => {
     expect(lo(far.map(p => p[1]))).toBeLessThan(-20);
     const top = skyline(mounts, eyes[0]);
     const rim = skyline(wall, eyes[0]);
-    for (let g = 0; g < 360; g++) {
-      expect(top[g] - rim[g], `bearing ${g}`).toBeGreaterThan(0.3);
-    }
-    // Half way to the bound: over the wall on three bearings in five (the near wall is the tallest thing there).
+    // Low (the user, 2026-11-12: more discreet): over the wall from the middle on a bearing in three
+    // and more, never more than 5 degrees over it.
+    expect(top.filter((e, g) => e > rim[g] + 0.3).length).toBeGreaterThan(120);
+    expect(Math.max(...top.map((e, g) => e - rim[g]))).toBeLessThan(5);
+    // Half way to the bound: over the wall on some bearings still (the near wall is the tallest thing there).
     for (const eye of eyes.slice(1)) {
       const [t, r] = [skyline(mounts, eye), skyline(wall, eye)];
-      expect(t.filter((e, g) => e > r[g] + 0.3).length, `from ${eye}`).toBeGreaterThan(216);
+      expect(t.filter((e, g) => e > r[g] + 0.3).length, `from ${eye}`).toBeGreaterThan(40);
     }
     // Massifs and passes: the highest crest twice the lowest and more.
     expect(hi(top) / lo(top)).toBeGreaterThan(2);

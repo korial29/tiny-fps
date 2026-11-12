@@ -179,7 +179,8 @@ export const drive = (
     // The rover is compared while he drives it; the others are drawn in the past.
     if (a.r.driver === 0) {
       for (const key of Object.keys(a.r) as (keyof Rover)[]) {
-        if (h.r[key] !== a.r[key]) {
+        // Its health is the host's alone, like a player's: the snapshot's, whenever it was taken.
+        if (key !== 'hp' && h.r[key] !== a.r[key]) {
           differing.add(`rover.${key}`);
         }
       }

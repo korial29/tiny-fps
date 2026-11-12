@@ -17,6 +17,7 @@ import { glow } from './flag';
 import { SHINE, STRIDE, add, basis, dress, mix, place, smooth, sub } from './mesh';
 import type { Vec3 } from './mesh';
 import { LINK, P, TUBE, grips, panel, rod } from './rover';
+import { char, pose } from './wreck';
 
 const WHITE = [0.8, 0.81, 0.84];
 const PALE = [0.66, 0.67, 0.71];
@@ -797,22 +798,31 @@ export const legs = (r: Rover): number =>
   r.driver === NOBODY ? 1 : Math.min(1, Math.max(0, 1 - (Math.hypot(r.vx, r.vy, r.vz) - 3) / 9));
 
 /**
- * Appends the ship as the state has it, unless it is gone (`wreck`), at the level of detail `lod`
- * (0 far to 2 near): the hull pitched and banked, the stripes and fins in `rgb` (the team's colour,
- * 0 to 1), its legs down or folding, the missiles it has left under the wings, the flames of its
- * engines and its navigation lights. `t` is the time in seconds, for the strobe.
+ * Appends the ship as the state has it, at the level of detail `lod` (0 far to 2 near): the hull
+ * pitched and banked, the stripes and fins in `rgb` (the team's colour, 0 to 1), its legs down or
+ * folding, the missiles it has left under the wings, the flames of its engines and its navigation
+ * lights. `t` is the time in seconds, for the strobe. Its damage shows (wreck.ts, `n` its index
+ * among the map's vehicles): scorched where it arcs; a wreck on its belly, its legs gone, charred,
+ * no light on it, falling apart at the end.
  */
-export const craft = (out: number[], r: Rover, rgb: number[], t: number, lod = 2): void => {
-  if (r.wreck) {
-    return;
-  }
+export const craft = (
+  out: number[],
+  state: Rover,
+  rgb: number[],
+  t: number,
+  lod = 2,
+  n = 0,
+): void => {
+  const start = out.length;
+  const r = pose(state);
+  const whole = r === state;
   const kit = (kits[Math.min(lod, 2)] ??= build(Math.min(lod, 2)));
   const [to, axes] = frame(r);
   const at: Vec3 = [r.x, r.y, r.z];
   place(out, kit[0], at, axes, O, 1);
   place(out, kit[1], at, axes, O, 1, rgb);
   // The legs: a strut from the hip to the foot and a shoe under it, swung back into the hull as they fold.
-  const g = legs(r);
+  const g = whole ? legs(r) : 0;
   if (g > 0.02) {
     FEET.forEach((f, i) => {
       const e = g * g * (3 - 2 * g);
@@ -862,10 +872,11 @@ export const craft = (out: number[], r: Rover, rgb: number[], t: number, lod = 2
     [[1, 1, 1], (t * 1.4) % 1 < 0.12 ? 3 : 0],
   ];
   lights.forEach(([c, n], i) => {
-    if (n) {
+    if (n && whole) {
       const from = out.length;
       place(out, BEAD, to(LIGHTS[i]), axes, O, 1, c);
       glow(out, from, n);
     }
   });
+  char(out, start, state, n);
 };

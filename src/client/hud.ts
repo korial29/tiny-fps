@@ -12,6 +12,7 @@ import {
   RULES,
   TEAM_COLOR,
   TEAM_NAME,
+  VEHICLE,
 } from '../shared/constants';
 import type { Result } from '../shared/protocol';
 import { free, gap2, nearby } from '../shared/rover';
@@ -22,7 +23,7 @@ import { FH, FW, PALETTE, sprite } from './face';
 import type { Mark } from './marks';
 
 export const HUD_CSS =
-  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,samp,cite,q,dfn{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,samp,cite,q,dfn,tt{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
@@ -114,8 +115,11 @@ export const HUD_CSS =
   `q{width:26px;height:26px;margin:-13px 0 0 -13px;border:2px solid #5f8;border-radius:50%;box-shadow:0 0 6px #3f6,inset 0 0 4px #3f6;background:radial-gradient(#afc 0 1.5px,#0000 2px)}q::before,q::after{content:none}` +
   `cite{right:12px;bottom:10px;font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}cite small{margin-left:6px;font-size:14px}` +
   `div.v>i,.v dl,.v del{display:none}` +
-  // The ship: its armour as a bar behind the missiles and the height, bottom left; the limit's warning, flashing, under the banner.
-  `dfn{left:12px;bottom:10px;padding:7px 14px;border-radius:6px;font:800 15px/1 system-ui,sans-serif;font-style:normal;font-variant-numeric:tabular-nums;letter-spacing:.04em;background:linear-gradient(90deg,var(--c,#2c8c5bcc) var(--a,100%),#000a 0)}` +
+  // A vehicle's health: ten pips over the speed for who is in it, and a small bar over one near by.
+  `tt{right:12px;bottom:62px;width:148px;height:10px;background:linear-gradient(90deg,var(--c,#5fd28a) var(--a,100%),#fff3 0);-webkit-mask:repeating-linear-gradient(90deg,#000 0 13px,#0000 13px 15px);mask:repeating-linear-gradient(90deg,#000 0 13px,#0000 13px 15px);filter:drop-shadow(0 1px 1px #000)}` +
+  `tt+tt{right:auto;bottom:auto;transform:translate(-50%,-50%) scale(.5)}` +
+  // The ship: its missiles and its height, bottom left; the limit's warning, flashing, under the banner.
+  `dfn{left:12px;bottom:10px;padding:7px 14px;border-radius:6px;font:800 15px/1 system-ui,sans-serif;font-style:normal;font-variant-numeric:tabular-nums;letter-spacing:.04em;background:#000a}` +
   `dfn+dfn{left:50%;top:30%;bottom:auto;transform:translateX(-50%);padding:8px 22px;font-size:clamp(14px,2.6vw,20px);background:#a10e0ecc;animation:blink .5s steps(2) infinite alternate}` +
   `@keyframes blink{to{opacity:.35}}`;
 
@@ -327,15 +331,19 @@ export interface Hud {
   rover(act: string, speed?: number): void;
   /** The rover's reticle, where its lasers cross: `at` on screen in [0, 1] from the top left; undefined hides it. */
   aim(at?: [number, number]): void;
-  /** The ship flown: its armour, missiles and height, and how near its limits are (limits(), ship.ts); undefined hides it. */
+  /** The ship flown: its missiles and height, and how near its limits are (limits(), ship.ts); undefined hides it. */
   ship(s?: ShipPanel): void;
+  /**
+   * A vehicle's health, of VEHICLE.HP: `own` in pips for who is seated in it (undefined on foot),
+   * and `near` as a small bar over a vehicle close by, `at` on screen in [0, 1] from the top left.
+   */
+  hull(own?: number, near?: { hp: number; at: [number, number] }): void;
   /** The end screen with the result and each player's captures and returns, `next` seconds before the next match; undefined hides it. */
   end(sum: Summary | undefined, next: number): void;
 }
 
 /** What the ship's panel shows. */
 export interface ShipPanel {
-  hp: number;
   nades: number;
   /** Metres over the crater's floor. */
   alt: number;
@@ -393,7 +401,7 @@ export const createHud = (screen: HTMLElement, play = () => {}): Hud => {
       `<data></data><span></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
       `<s hidden></s><mark hidden></mark><ins hidden><i></i></ins>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav>` +
-      `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q><dfn hidden></dfn><dfn hidden></dfn>` +
+      `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q><dfn hidden></dfn><dfn hidden></dfn><tt hidden></tt><tt hidden></tt>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
   );
   const one = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
@@ -641,13 +649,23 @@ export const createHud = (screen: HTMLElement, play = () => {}): Hud => {
       warn.hidden = !w;
       set(warn, w);
       if (s) {
-        const a = Math.max(0, Math.min(1, s.hp / SHIP.HP));
-        panel.style.setProperty('--a', `${Math.round(a * 100)}%`);
-        panel.style.setProperty('--c', a > 0.3 ? '#2c8c5bcc' : '#c0392bcc');
-        set(
-          panel,
-          `ARMOUR ${s.hp}  ·  MISSILES ${s.nades}/${SHIP.MISSILES}  ·  ALT ${Math.round(s.alt)} m`,
-        );
+        set(panel, `MISSILES ${s.nades}/${SHIP.MISSILES}  ·  ALT ${Math.round(s.alt)} m`);
+      }
+    },
+    hull(own, near) {
+      const bars = screen.querySelectorAll<HTMLElement>('tt');
+      [own, near?.hp].forEach((hp, i) => {
+        const bar = bars[i];
+        bar.hidden = hp === undefined;
+        if (hp !== undefined) {
+          // Green, amber from 6 down, red from 3.
+          bar.style.setProperty('--a', `${Math.max(0, Math.min(1, hp / VEHICLE.HP)) * 100}%`);
+          bar.style.setProperty('--c', hp > 6 ? '#5fd28a' : hp > 3 ? '#f0b429' : '#e5484d');
+        }
+      });
+      if (near) {
+        bars[1].style.left = `${near.at[0] * 100}%`;
+        bars[1].style.top = `${near.at[1] * 100}%`;
       }
     },
     rover(what, v) {

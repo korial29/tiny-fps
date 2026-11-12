@@ -27,7 +27,7 @@ const state = (o: Partial<Rover> = {}): Rover => ({
   driver: NOBODY,
   rider: NOBODY,
   ship: true,
-  hp: SHIP.HP,
+  hp: 10,
   wreck: 0,
   nades: 0,
   ...o,

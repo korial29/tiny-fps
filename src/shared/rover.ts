@@ -9,10 +9,20 @@
 // rover stops on another as on a wall (drive()'s fleet), and a player on foot walks into its body
 // and stands on it (hull(), move()'s bodies). A driver who hits a parked rover or a player is
 // replayed exactly; one whose obstacle moves meanwhile is corrected by the next snapshot.
-import { BOLT, DASH_COOLDOWN, DASH_TICKS, NADE, PLAYER_H, PLAYER_R, TICK_HZ } from './constants';
+import {
+  BOLT,
+  DASH_COOLDOWN,
+  DASH_TICKS,
+  NADE,
+  PLAYER_H,
+  PLAYER_R,
+  TICK_HZ,
+  VEHICLE,
+} from './constants';
 import { step } from './gun';
-import { floorAt, forward, gapTo, gravity, norm, shove } from './physics';
+import { floorAt, forward, gapTo, gravity, heightOf, norm, shove } from './physics';
 import type { Body } from './physics';
+import { cylinder } from './plasma';
 import { bound } from './relief';
 import {
   COCKPIT,
@@ -23,11 +33,14 @@ import {
   dock,
   pilot,
   point,
+  reach as shipReach,
   shipHull,
+  struck as shipStruck,
 } from './ship';
 import { KEY, MODE, NOBODY } from './types';
 import type { Flying } from './plasma';
 import type { Input, PlayerState, Rover } from './types';
+import { hidden } from './world';
 import type { World } from './world';
 
 /** The rover's sizes and its handling (docs/MOON.md). Lengths in metres, per wheel rates for a body of mass 1. */
@@ -177,8 +190,8 @@ export const hull = (r: Rover): Body => {
 };
 
 /**
- * The map's rovers at rest on their spawns, nobody aboard, then its ships on their pads (ship.ts):
- * the order of the snapshot's.
+ * The map's rovers at rest on their spawns, whole, nobody aboard, then its ships on their pads
+ * (ship.ts): the order of the snapshot's.
  */
 export const park = (w: World): Rover[] => [...cars(w), ...dock(w.def.ships)];
 
@@ -199,7 +212,74 @@ const cars = (w: World): Rover[] =>
     steer: 0,
     driver: NOBODY,
     rider: NOBODY,
+    hp: VEHICLE.HP,
+    wreck: 0,
   }));
+
+/**
+ * The team whose base vehicle `k` of park() is parked at: of the rovers, then of the ships, the
+ * first half are red's (the renderer paints them so).
+ */
+export const homeOf = (w: World, k: number): number => {
+  const [cars, ships] = [w.def.rovers?.length ?? 0, w.def.ships?.length ?? 0];
+  return k < cars ? +(2 * k >= cars) : +(2 * (k - cars) >= ships);
+};
+
+/**
+ * Where a shot from `o` along the unit `d` meets the vehicle's body within `m` metres: the
+ * distance, or Infinity. A rover's body is its footprint()'s circles, BODY_H tall; a ship's is
+ * ship.ts's spheres.
+ */
+export const struck = (r: Rover, o: Vec3, d: Vec3, m: number): number => {
+  if (r.ship) {
+    return shipStruck(r, o, d, m);
+  }
+  const t = min(
+    ...footprint(r).map(([x, y, z]) => cylinder(o, d, { x, y, z }, ROVER.RB, ROVER.BODY_H)),
+  );
+  return t <= m ? t : Infinity;
+};
+
+/** The distance from `c` to the nearest point of the vehicle's body (struck()'s), 0 inside. */
+export const reach = (r: Rover, c: Vec3): number =>
+  r.ship
+    ? shipReach(r, c)
+    : min(
+        ...footprint(r).map(([x, y, z]) => {
+          const side = max(0, sqrt((c[0] - x) ** 2 + (c[2] - z) ** 2) - ROVER.RB);
+          const up = max(0, y - c[1], c[1] - y - ROVER.BODY_H);
+          return sqrt(side * side + up * up);
+        }),
+      );
+
+/**
+ * Whether a cut of `p` with this reach and arc (blade.ts's strike(), for a hull) meets the
+ * vehicle: its hull() within reach of his centre on the floor plane, inside the arc round his look
+ * (the hull's own angular radius counts), the heights overlapping and no brush before it.
+ */
+export const slashed = (
+  w: World,
+  r: Rover,
+  p: PlayerState,
+  { reach, arc }: { reach: number; arc: number },
+): boolean => {
+  const h = hull(r);
+  // From the nearest point of the hull's axis to him.
+  const [dx, dz, y] = gapTo(h, p.x, p.z);
+  const d = sqrt(dx * dx + dz * dz);
+  const tall = heightOf(p);
+  if (d - h.r > reach || p.y >= y + h.h || y >= p.y + tall) {
+    return false;
+  }
+  const [fx, fz] = forward(p.yaw);
+  const off = d > h.r ? abs(Math.atan2(fz * dx - fx * dz, -fx * dx - fz * dz)) : 0;
+  const wide = d > h.r ? Math.asin(h.r / d) : Math.PI;
+  const chest = p.y + 0.7 * tall;
+  return (
+    off <= arc + wide &&
+    !hidden(w, [p.x, chest, p.z], [p.x - dx, clamp(chest, y, y + h.h), p.z - dz])
+  );
+};
 
 /**
  * One step of 1 / TICK_HZ s, in place. `i` is the driver's input as the wire rounds it (FORWARD and
@@ -467,7 +547,7 @@ export const gap2 = (r: Rover, p: { x: number; z: number }): number =>
 
 /**
  * A player on foot near enough to get in: on the floor plane within ENTER_R of the centre, and
- * within the reach in height (a ship's ENTER_H). A ship that is gone has no seat.
+ * within the reach in height (a ship's ENTER_H). A wreck has no seat.
  */
 export const nearby = (r: Rover, p: { x: number; y: number; z: number }): boolean => {
   const [k, h] = r.ship ? [SHIP.ENTER_R, SHIP.ENTER_H] : [ROVER.ENTER_R, ROVER.ENTER_R];

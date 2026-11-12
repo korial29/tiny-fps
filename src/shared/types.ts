@@ -369,9 +369,9 @@ export interface Rover {
   rider: number;
   /** A spaceship, not a rover. Absent: a rover. */
   ship?: boolean;
-  /** A ship's armour, SHIP.HP when new. */
+  /** Its health, VEHICLE.HP when parked afresh (and when absent). The host's alone: no step reads it. */
   hp?: number;
-  /** Ticks before a destroyed ship is back on its pad: 0 while it is there to fly. */
+  /** Ticks its wreck still lies there before it is parked afresh: 0 while it is whole. */
   wreck?: number;
   /** A ship's missiles left. */
   nades?: number;

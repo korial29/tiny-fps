@@ -1,4 +1,4 @@
-import { BOLT, HP_MAX, LOCK_WIN, PLAYER_H, TICK_HZ } from '../shared/constants';
+import { BOLT, HP_MAX, LOCK_WIN, PLAYER_H, TICK_HZ, VEHICLE } from '../shared/constants';
 import { MAPS, mapKey, mapOf } from '../shared/maps';
 import { eyeHeight } from '../shared/physics';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
@@ -6,7 +6,7 @@ import type { ClientText, ServerText } from '../shared/protocol';
 import { FLAG, KEY } from '../shared/types';
 import type { PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
 import { SOUND } from './sfx';
-import { aimOf, aimRange } from '../shared/rover';
+import { aimOf, aimRange, gap2 } from '../shared/rover';
 import { SHIP, limits } from '../shared/ship';
 import { build, hidden, ray } from '../shared/world';
 import { createAnnouncer } from './announce';
@@ -31,6 +31,7 @@ import { gather } from './lights';
 import { marks } from './marks';
 import { packsOf } from './props';
 import { createRenderer } from './render';
+import { createWrecks } from './wreck';
 import type { Renderer } from './render';
 
 export type { PlayerInfo, SocketLike } from '../shared/types';
@@ -63,6 +64,8 @@ export interface TinyFps {
 const STEP = 1 / TICK_HZ;
 /** Steps run in one frame at most: a background tab catches up by this much, not by minutes. */
 const MAX_STEPS = 5;
+/** Metres within which a vehicle shows its health over it. */
+const NEAR_HULL = 14;
 
 /**
  * Mounts the game in a Shadow DOM inside container: one WebGL2 canvas filling it, a click locks the
@@ -195,6 +198,7 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
   const balls = createBalls(world);
   const doors = createDoors(world);
   const combat = createCombat(world, audio, hud, fx, tracer, ctl, balls, id => rd?.muzzle(id));
+  const wrecks = createWrecks(world, { tracer, audio, fx });
   let rd: Renderer | undefined;
   try {
     rd = createRenderer(canvas, world);
@@ -263,22 +267,6 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
           }
         }
         bolts = flying;
-        // A ship blown up since the last snapshot: fireballs along its hull, heard and felt round it.
-        s.rovers?.forEach((r, k) => {
-          const was = match?.rovers?.[k];
-          if (r.ship && r.wreck && was?.ship && !was.wreck) {
-            for (const a of [-4, 0, 4]) {
-              const [sy, cy] = [Math.sin(r.yaw), Math.cos(r.yaw)];
-              const at: [number, number, number] = [r.x - sy * a, r.y, r.z - cy * a];
-              tracer.blast(at);
-              audio.play(SOUND.BLAST, at, 2, 0.35);
-            }
-            audio.play(SOUND.TACKLE, [r.x, r.y, r.z], 1.6, 0.3);
-            const me = predictor.me(1);
-            const d = me ? Math.hypot(r.x - me.x, r.y - me.y, r.z - me.z) : Infinity;
-            fx.quake(Math.max(0, 1 - d / 40));
-          }
-        });
         balls.snapshot(s.balls ?? [], you.id, performance.now());
         // A door that starts to open or to shut is heard where it is.
         for (const c of doors.snapshot(s.doors)) {
@@ -400,6 +388,8 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     }
     audio.listen(eye, ctl.yaw);
     const dt = Math.min((now - before) / 1000, 0.1);
+    // The vehicles as drawn: their damage arcs, blows up and falls apart on the way (wreck.ts).
+    const shown = wrecks.frame(rovers, dt, eye);
     // The flags and the bases for the renderer and the lights, and the HUD that goes with them.
     const who = (id: number) => (id == you.id ? me : others.find(p => p.id == id));
     const ctf = match && {
@@ -431,11 +421,7 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
       car ? kmh(car) : undefined,
     );
     const [up, out] = car?.ship ? limits(car, world) : [0, 0];
-    hud.ship(
-      car?.ship
-        ? { hp: car.hp ?? 0, nades: car.nades ?? 0, alt: car.y - SHIP.DROP, up, out }
-        : undefined,
-    );
+    hud.ship(car?.ship ? { nades: car.nades ?? 0, alt: car.y - SHIP.DROP, up, out } : undefined);
     if (me) {
       // A hit comes from the nearest foe up: the angle to him off the view, to the right.
       const lost = felt && !felt.down ? Math.max(0, felt.hp - me.hp) : 0;
@@ -549,9 +535,12 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
         third ? undefined : body,
         ctf,
         tracer,
-        rovers,
+        shown,
         third ? me : undefined,
-        v => doors.draw(v, pov, dt),
+        v => {
+          doors.draw(v, pov, dt);
+          wrecks.draw(v);
+        },
       );
       // The reticle: where the lasers cross along the look, or the ground or wall before it.
       if (car) {
@@ -567,6 +556,21 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
         hud.aim();
       }
     }
+    // The health of the vehicle he sits in, and of the nearest other one within NEAR_HULL metres in sight.
+    const mine = seat && rovers[seat.rover];
+    const near = rovers
+      .filter(r => me && r !== mine && !r.wreck && gap2(r, me) < NEAR_HULL ** 2)
+      .sort((a, b) => gap2(a, me!) - gap2(b, me!))[0];
+    const over: [number, number, number] | undefined = near && [
+      near.x,
+      near.y + (near.ship ? 2.4 : 1.7),
+      near.z,
+    ];
+    const at = over && !hidden(world, pov, over) ? rd?.project(...over) : undefined;
+    hud.hull(
+      mine ? (mine.hp ?? VEHICLE.HP) : undefined,
+      near && at ? { hp: near.hp ?? VEHICLE.HP, at } : undefined,
+    );
     if (match) {
       hud.match(match, id => names.get(id) ?? '?');
       hud.marks(

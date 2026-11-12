@@ -416,3 +416,13 @@ export const RULES: Rules = {
   timeLimit: 480,
   map: 'highline',
 };
+
+/**
+ * A vehicle's health (the user, 2026-11-12), a rover's and a ship's alike: HP when parked afresh;
+ * at 0 it blows up, its crew goes down with it and its wreck lies WRECK ticks (5 s), falling apart
+ * over the last FADE of them, before it is parked afresh. A plasma ball takes its power, a cut its
+ * hp, a blast what it takes from a body; of the laser bolts and the rifle's rounds every GRAZE that
+ * meet the hull take 1; the rail gun's bolt drains it as it does a player. The wire holds HP in 7
+ * bits and WRECK / 4 in a byte.
+ */
+export const VEHICLE = { HP: 10, WRECK: 300, FADE: 60, GRAZE: 4 } as const;

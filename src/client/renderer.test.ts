@@ -871,7 +871,7 @@ describe('createRenderer', () => {
 
     it("picks a ship's level of detail by the distance to the eye, further out than a rover's", () => {
       const rd = createRenderer(canvas, ROOM);
-      const r: Rover = { ...parked({ y: SHIP.DROP }), ship: true, hp: SHIP.HP, wreck: 0, nades: 2 };
+      const r: Rover = { ...parked({ y: SHIP.DROP }), ship: true, hp: 10, wreck: 0, nades: 2 };
       const at = (d: number): [number, number, number] => [r.x, r.y, r.z + d];
       /** The ship as craft.ts draws it between two flashes of its strobe, as the buffer holds it. */
       const ship = (lod: number) => {

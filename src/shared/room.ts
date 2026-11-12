@@ -15,6 +15,8 @@ import {
   LOCK_WIN,
   MAX_NAME,
   MAX_REWIND,
+  NADE_HP,
+  NADE_R,
   PACK_BACK,
   PACK_HP,
   PACK_R,
@@ -35,6 +37,7 @@ import {
   TACKLE_COOLDOWN,
   TEAM_COLOR,
   TICK_HZ,
+  VEHICLE,
   BOLT,
   PUNCH,
   PUNCH_HITS,
@@ -59,20 +62,24 @@ import {
   footprint,
   free,
   gap2,
+  homeOf,
   hull,
   leave,
   missile,
   park,
+  reach,
   ride,
   ROVER,
   seat,
+  slashed,
+  struck,
   nearby,
 } from './rover';
-import { SHIP, reach, struck } from './ship';
+import { SHIP } from './ship';
 import { reaches, tackling } from './tackle';
 import { BODY, CUT, KEY, LIMB, MODE, NOBODY } from './types';
 import type { Conn, Every, Input, PlayerInfo, PlayerState, Rover, Rules } from './types';
-import { build } from './world';
+import { build, hidden } from './world';
 import type { World, WorldDef } from './world';
 
 interface Player {
@@ -113,6 +120,17 @@ const MAX_CATCH_UP = 20;
 const SPAWN_CLEAR = 2;
 /** Ticks before a rover can run the same player over again. */
 const SPLAT_COOLDOWN = TACKLE_COOLDOWN;
+/**
+ * What the host alone keeps of a vehicle's damage: the bolts on its hull toward the next hp, the
+ * ticks the rail gun's bolt still drains it and those since its first touch, and whose it is.
+ */
+interface Wear {
+  graze: number;
+  sear: number;
+  burn: number;
+  by: number;
+  team: number;
+}
 /** The two seats of a rover, the driver's first. */
 const SEATS = ['driver', 'rider'] as const;
 
@@ -168,7 +186,14 @@ const setEvery: Every = (cb, ms) => {
  *   A player on foot walks into the rovers as they stand when his input arrives (hull()); a rover
  *   stops on the others as they stand when it steps.
  *   seats() keeps the seats and the players' MODE.RIDE in step.
+ * - A vehicle has VEHICLE.HP of health, the host's alone like a player's hp: every weapon takes
+ *   some from the hull of one that is not of the shooter's team (teamOf()), and a shot the hull
+ *   stops does not reach its crew. At 0 it blows up (wreck()): its crew goes down, a blast hurts
+ *   who is near, and its wreck lies VEHICLE.WRECK ticks, moved by the tick alone, before the
+ *   vehicle is parked afresh.
  */
+/** A vehicle parked afresh, for the host's own count of its damage. */
+const NEW: Wear = { graze: 0, sear: 0, burn: 0, by: NOBODY, team: -1 };
 /** A player out of any saber lock. */
 const FREE = { lock: 0, foe: 0, pushes: 0, pressed: false, away: 0 };
 /** Where a rewound copy of a player stood and looked, to put over his live state. */
@@ -180,8 +205,8 @@ export class Room {
   /** Every connected peer; null until it joins. */
   private peers = new Map<Conn, Player | null>();
   private ticks = 0;
-  /** The players as each snapshot of the last MAX_REWIND ticks sent them. */
-  private history: { tick: number; players: PlayerState[] }[] = [];
+  /** The players and the vehicles as each snapshot of the last MAX_REWIND ticks sent them. */
+  private history: { tick: number; players: PlayerState[]; rovers: Rover[] }[] = [];
   private world: World;
   private ctf: Ctf;
   private halt: (() => void) | undefined;
@@ -193,9 +218,11 @@ export class Room {
   /** The plasma balls in flight, and the ones that burst since the last snapshot, which sends them once more. */
   private balls: Flying[] = [];
   /** The map's rovers, in the order of WorldDef.rovers, then its ships (ship.ts). */
-  private rovers: Rover[];
+  private rovers: Rover[] = [];
   /** Ticks toward each ship's next missile, by index in `rovers`. */
   private rearm: number[] = [];
+  /** Each vehicle's damage short of a whole hp, by index in `rovers`. */
+  private wear: Wear[] = [];
 
   /** The key of the map being played, which the roster tells the clients. */
   private mapName: string;
@@ -211,7 +238,14 @@ export class Room {
     this.world = build(def ?? mapOf(this.mapName));
     this.ctf = new Ctf(this.world, this.rules);
     this.gone = this.spots();
+    this.fresh();
+  }
+
+  /** Every vehicle of the map parked afresh: whole, empty, on its spawn. */
+  private fresh(): void {
     this.rovers = park(this.world);
+    this.rearm = [];
+    this.wear = this.rovers.map(() => ({ ...NEW }));
   }
 
   /** The health, ammo and cell packs of the map, all there (0 ticks before each is back). */
@@ -238,7 +272,7 @@ export class Room {
     this.world = build(mapOf(this.mapName));
     this.ctf = new Ctf(this.world, this.rules);
     this.gone = this.spots();
-    this.rovers = park(this.world);
+    this.fresh();
     this.history = [];
     this.balls = [];
     for (const p of this.players()) {
@@ -354,7 +388,7 @@ export class Room {
       if (!this.size) {
         this.ctf.reset();
         this.gone.fill(0);
-        this.rovers = park(this.world);
+        this.fresh();
         this.load();
       }
       this.seats();
@@ -420,7 +454,11 @@ export class Room {
     }
     this.seats();
     if (now % SNAP_EVERY === 0) {
-      this.history.push({ tick: now, players: players.map(p => ({ ...p.state })) });
+      this.history.push({
+        tick: now,
+        players: players.map(p => ({ ...p.state })),
+        rovers: this.rovers.map(r => ({ ...r })),
+      });
       while (this.history[0].tick < now - MAX_REWIND) {
         this.history.shift();
       }
@@ -484,9 +522,25 @@ export class Room {
   /** Every player as the snapshots around the view tick `view` showed him: rewind(), the asker included. */
   private past(view = 0): PlayerState[] {
     const now = this.players().map(p => p.state);
+    const at = this.around(view);
+    if (!at) {
+      return now;
+    }
+    const [a, b, l] = at;
+    return now.map(p => {
+      const pa = a.players.find(q => q.id === p.id);
+      const pb = b.players.find(q => q.id === p.id);
+      return pa && pb
+        ? { ...pb, x: l(pa.x, pb.x), y: l(pa.y, pb.y), z: l(pa.z, pb.z) }
+        : (pb ?? pa ?? p);
+    });
+  }
+
+  /** The two kept snapshots around the view tick `view`, and the mix between them; nothing with no history. */
+  private around(view: number) {
     const [first, last] = [this.history[0], this.history.at(-1)];
     if (!first || !last) {
-      return now;
+      return undefined;
     }
     // Ticks back, on the u16 circle: in [-0x8000, 0x8000).
     const back = ((((this.ticks - view + 0x8000) % 0x10000) + 0x10000) % 0x10000) - 0x8000;
@@ -497,13 +551,25 @@ export class Room {
     }
     const [a, b] = [this.history[k], this.history[k + 1] ?? this.history[k]];
     const u = b.tick > a.tick ? (t - a.tick) / (b.tick - a.tick) : 0;
-    const l = (m: number, n: number): number => m + (n - m) * u;
-    return now.map(p => {
-      const pa = a.players.find(q => q.id === p.id);
-      const pb = b.players.find(q => q.id === p.id);
-      return pa && pb
-        ? { ...pb, x: l(pa.x, pb.x), y: l(pa.y, pb.y), z: l(pa.z, pb.z) }
-        : (pb ?? pa ?? p);
+    return [a, b, (m: number, n: number): number => m + (n - m) * u] as const;
+  }
+
+  /**
+   * The vehicles a shooter of `team` may hurt, each with its index, as he drew them at the view
+   * tick `view` (the place interpolated like a player's, the angles the later snapshot's); as
+   * they are now with no `view`. For the katana and the rail gun, which strike where he saw.
+   */
+  private hulls(team: number, view?: number): [seen: Rover, k: number][] {
+    const at = view === undefined ? undefined : this.around(view);
+    return this.targets(team).map(r => {
+      const k = this.rovers.indexOf(r);
+      const [ra, rb] = [at?.[0].rovers[k], at?.[1].rovers[k]];
+      // One parked afresh since then is not where it was drawn.
+      if (!at || !ra || !rb || ra.wreck || rb.wreck) {
+        return [r, k];
+      }
+      const l = at[2];
+      return [{ ...r, ...rb, x: l(ra.x, rb.x), y: l(ra.y, rb.y), z: l(ra.z, rb.z) }, k];
     });
   }
 
@@ -618,9 +684,9 @@ export class Room {
    * Flies the ball `b` on by `m` metres: one that bursts on an enemy who is up takes its power in hp
    * from him, and counts a hit to its shooter. An arc takes its cut's hp; one it does not put down
    * is floored (FLOOR_TICKS, `zap`), thrown ARC_KNOCK m/s the way it flies, and drops the flag.
-   * A grenade flies one tick of its arc whatever `m`, and its burst is a blast: every enemy who is
-   * up, and its owner, lose what blast() gives where they stand now; one hit for the shooter when
-   * it hurt an enemy.
+   * A grenade flies one tick of its arc whatever `m`, and its burst is a blast (boom()); one hit
+   * for the shooter when it hurt an enemy or his vehicle. A ball an enemy vehicle's hull stops
+   * (ram()) hurts the hull, not the crew behind it.
    */
   private fly(b: Flying, m: number): void {
     const peers = this.players();
@@ -634,26 +700,7 @@ export class Room {
         foes.map(f => f.state),
       );
       this.ram(b, o);
-      // The burst takes armour from the enemy ships round it too.
-      for (const r of b.burst ? this.targets(b.team) : []) {
-        const d = reach(r, [b.x, b.y, b.z]);
-        if (d < SHIP.BLAST_R) {
-          this.hurt(r, Math.ceil(SHIP.BLAST_HP * (1 - d / SHIP.BLAST_R)), by);
-        }
-      }
-      let hit = false;
-      for (const q of b.burst ? peers : []) {
-        const own = q.info.id === b.by;
-        const hp =
-          !q.state.down && (own || q.info.team !== b.team)
-            ? blast(this.world, [b.x, b.y, b.z], q.state)
-            : 0;
-        if (hp) {
-          this.harm(q, hp);
-          hit ||= !own;
-        }
-      }
-      if (hit && by) {
+      if (b.burst && this.boom([b.x, b.y, b.z], b.by, b.team) && by) {
         by.state.hits = (by.state.hits + 1) & 255;
       }
       return;
@@ -664,13 +711,21 @@ export class Room {
       m,
       foes.map(f => f.state),
     );
-    const ship = this.ram(b, o);
-    if (ship) {
-      this.hurt(
-        ship,
-        b.power === 0 || b.power === BOLT ? SHIP.BOLT_HP : SHIP.BALL_HP * (b.power ?? 1),
-        by,
-      );
+    const hull = this.ram(b, o);
+    if (hull) {
+      if (by) {
+        by.state.hits = (by.state.hits + 1) & 255;
+      }
+      if (b.power === 0 || b.power === BOLT) {
+        // Bolts and rounds graze a hull: every VEHICLE.GRAZE on it (from anyone) take 1 hp.
+        const w = this.wear[this.rovers.indexOf(hull)];
+        w.graze = (w.graze + 1) % VEHICLE.GRAZE;
+        if (!w.graze) {
+          this.hurt(hull, 1, b.by, b.team);
+        }
+      } else {
+        this.hurt(hull, b.arc ? CUTS[b.arc].hp : (b.power ?? 1), b.by, b.team);
+      }
       return;
     }
     const foe = foes.find(q => q.state === hit);
@@ -716,7 +771,8 @@ export class Room {
    * (`strike`), and the `hits` count goes up once. Each takes the cut's hp; one it does not put
    * down is shocked: a stumble of SHOCK_TICKS thrown SHOCK_KNOCK m/s the way the blade throws him, with
    * `zap`, and `by` the attacker. A shock drops no flag. One it puts down loses the limb the blade
-   * crosses where `p` drew him (`limbOf`).
+   * crosses where `p` drew him (`limbOf`). An enemy vehicle's hull the cut meets (slashed(), where
+   * `p` drew it) takes the cut's hp, and its crew none of it.
    */
   private cut(p: Player, view: number | undefined): void {
     if (!p.state.blade) {
@@ -727,7 +783,14 @@ export class Room {
       this.shoot(p, view, wave(p.state, p.info.team));
       return;
     }
-    const seen = strike(this.world, p.state, this.enemies(p, view));
+    // The hulls it meets take the cut; their crews are behind them.
+    const cars = this.hulls(p.info.team, view).filter(([r]) =>
+      slashed(this.world, r, p.state, swingOf(p.state)),
+    );
+    const crew = cars.flatMap(([, k]) => SEATS.map(s => this.rovers[k][s]));
+    const seen = strike(this.world, p.state, this.enemies(p, view)).filter(
+      s => !crew.includes(s.id),
+    );
     let foes = this.players().filter(q => seen.some(s => s.id === q.info.id));
     // A foe whose own cut meets this one locks blades with him instead (crossing()).
     const locked = foes.find(q =>
@@ -743,10 +806,13 @@ export class Room {
       }
       foes = foes.filter(q => q !== locked);
     }
-    if (!foes.length) {
+    if (!foes.length && !cars.length) {
       return;
     }
     p.state.hits = (p.state.hits + 1) & 255;
+    for (const [, k] of cars) {
+      this.hurt(this.rovers[k], swingOf(p.state).hp, p.info.id, p.info.team);
+    }
     for (const foe of foes) {
       const drawn = seen.find(s => s.id === foe.info.id)!;
       if (this.harm(foe, swingOf(p.state).hp)) {
@@ -796,10 +862,29 @@ export class Room {
   /**
    * The rail gun's bolt of `p` at the view tick `view`: the first enemy it enters as `p` drew him is
    * drained for RAIL_TICKS more (`slow`). A first touch, when he was not drained, takes 1 hp at once
-   * and counts a hit.
+   * and counts a hit. An enemy vehicle's hull is drained the same way, and shields who is behind it.
    */
   private rail(p: Player, view: number | undefined): void {
-    const { hit } = beam(this.world, p.state, this.enemies(p, view));
+    const { o, d, t, hit } = beam(this.world, p.state, this.enemies(p, view));
+    // An enemy hull before the body or the wall takes the bolt: seared RAIL_TICKS more (dock()).
+    const [s, k] = this.hulls(p.info.team, view).reduce(
+      (best, [r, n]) => {
+        const u = struck(r, o, d, best[0]);
+        return u < best[0] ? [u, n] : best;
+      },
+      [t, -1],
+    );
+    if (s < t) {
+      const w = this.wear[k];
+      const fresh = !w.sear;
+      Object.assign(w, { sear: RAIL_TICKS, by: p.info.id, team: p.info.team });
+      if (fresh) {
+        p.state.hits = (p.state.hits + 1) & 255;
+        w.burn = 0;
+        this.hurt(this.rovers[k], 1, p.info.id, p.info.team);
+      }
+      return;
+    }
     const foe = this.players().find(q => q.info.id === hit?.id);
     if (foe) {
       const fresh = !foe.state.slow;
@@ -924,7 +1009,7 @@ export class Room {
    * respawned or stumbled out is off the rover.
    */
   /**
-   * The first enemy ship on the way the ball `b` flew this tick, from `o` to where it is now: the
+   * The first enemy vehicle on the way the ball `b` flew this tick, from `o` to where it is now: the
    * ball bursts on its hull, short of a body or a wall further on.
    */
   private ram(b: Flying, o: [number, number, number]): Rover | undefined {
@@ -1006,8 +1091,14 @@ export class Room {
         this.ctf.moved(p.state);
       }
     }
-    const k = this.rovers.indexOf(r);
-    Object.assign(r, park(this.world)[k]);
+    this.renew(this.rovers.indexOf(r));
+  }
+
+  /** Vehicle `k` parked afresh on its spawn: whole, empty. */
+  private renew(k: number): void {
+    Object.assign(this.rovers[k], park(this.world)[k]);
+    this.rearm[k] = 0;
+    this.wear[k] = { ...NEW };
   }
 
   /**
@@ -1052,18 +1143,25 @@ export class Room {
   }
 
   /**
-   * A ship's clock outside its pilot's inputs: one that is gone comes back on its pad, new, after
-   * SHIP.WRECK ticks; one short of missiles loads one each SHIP.RELOAD ticks.
+   * A vehicle's clock outside its driver's inputs: a wreck is parked afresh after VEHICLE.WRECK
+   * ticks; a hull the rail gun's bolt sears loses 1 hp each RAIL_DRAIN ticks after its first touch;
+   * a ship short of missiles loads one each SHIP.RELOAD ticks.
    */
   private dock(r: Rover, k: number): void {
-    if (!r.ship) {
-      return;
-    }
     if (r.wreck) {
       if (!--r.wreck) {
-        Object.assign(r, park(this.world)[k]);
-        this.rearm[k] = 0;
+        this.renew(k);
       }
+      return;
+    }
+    const w = this.wear[k];
+    if (w.sear) {
+      w.sear--;
+      if (!(++w.burn % RAIL_DRAIN)) {
+        this.hurt(r, 1, w.by, w.team);
+      }
+    }
+    if (!r.ship || r.wreck) {
       return;
     }
     this.rearm[k] = (r.nades ?? 0) < SHIP.MISSILES ? (this.rearm[k] ?? 0) + 1 : 0;
@@ -1073,32 +1171,78 @@ export class Room {
     }
   }
 
-  /** The ships an enemy of `team` pilots and that are there to hit. */
+  /** The team a vehicle is of: its driver's, else its rider's, else the one whose base it is parked at. */
+  private teamOf(r: Rover): number {
+    const who = this.players().find(p => p.info.id === (r.driver === NOBODY ? r.rider : r.driver));
+    return who ? who.info.team : homeOf(this.world, this.rovers.indexOf(r));
+  }
+
+  /** The vehicles a shooter of `team` hurts: whole, and not of his team. */
   private targets(team: number): Rover[] {
-    const by = new Map(this.players().map(p => [p.info.id, p.info.team]));
-    return this.rovers.filter(
-      r => r.ship && !r.wreck && r.driver !== NOBODY && by.get(r.driver) !== team,
-    );
+    return this.rovers.filter(r => !r.wreck && this.teamOf(r) !== team);
+  }
+
+  /** The vehicle `r` loses `hp` to player `by` of `team`; at 0 it blows up (wreck()). */
+  private hurt(r: Rover, hp: number, by: number, team: number): void {
+    if (r.wreck) {
+      return;
+    }
+    r.hp = Math.max(0, (r.hp ?? VEHICLE.HP) - hp);
+    if (!r.hp) {
+      this.wreck(r, by, team);
+    }
   }
 
   /**
-   * The ship `r` loses `hp` of armour to the shot of `by`; at 0 it blows up where it is: its pilot
-   * goes down with it, and it is gone SHIP.WRECK ticks.
+   * The vehicle blows up where it is, by the hand of player `by` of `team`: who is aboard goes
+   * down on the spot, and it is a wreck for VEHICLE.WRECK ticks, with no seat, moved by the tick
+   * alone. Its blast is a grenade of `by` at its centre (boom()).
    */
-  private hurt(r: Rover, hp: number, by: Player | undefined): void {
-    if (by) {
-      by.state.hits = (by.state.hits + 1) & 255;
+  private wreck(r: Rover, by: number, team: number): void {
+    const crew = this.players().filter(q => this.seatOf(q)[0] === r);
+    Object.assign(r, { hp: 0, wreck: VEHICLE.WRECK, driver: NOBODY, rider: NOBODY });
+    if (r.ship) {
+      r.nades = 0;
     }
-    r.hp = Math.max(0, (r.hp ?? 0) - hp);
-    if (r.hp) {
-      return;
+    this.wear[this.rovers.indexOf(r)] = { ...NEW };
+    for (const q of crew) {
+      this.harm(q, q.state.hp);
     }
-    for (const q of this.players()) {
-      if (this.seatOf(q)[0] === r) {
-        this.harm(q, q.state.hp);
+    const hit = this.boom([r.x, r.y, r.z], by, team);
+    const killer = this.players().find(q => q.info.id === by);
+    if (killer && (hit || crew.length)) {
+      killer.state.hits = (killer.state.hits + 1) & 255;
+    }
+  }
+
+  /**
+   * A blast at `c`, the grenade's rule, of player `by` of `team`: every enemy on foot who is up,
+   * and `by` himself, lose what blast() gives where they stand now; every enemy vehicle loses
+   * NADE_HP at its hull, less with the distance to it, nothing from NADE_R on or behind a brush.
+   * Who is seated is behind his hull: the blast takes nothing from him. True when it hurt an enemy
+   * or his vehicle.
+   */
+  private boom(c: [number, number, number], by: number, team: number): boolean {
+    let hit = false;
+    for (const r of this.targets(team)) {
+      const d = reach(r, c);
+      if (d < NADE_R && !hidden(this.world, c, [r.x, r.y, r.z])) {
+        this.hurt(r, Math.ceil(NADE_HP * (1 - d / NADE_R)), by, team);
+        hit = true;
       }
     }
-    Object.assign(r, { wreck: SHIP.WRECK, driver: NOBODY, rider: NOBODY, nades: 0 });
+    for (const q of this.players()) {
+      const own = q.info.id === by;
+      const hp =
+        !q.state.down && q.state.mode !== MODE.RIDE && (own || q.info.team !== team)
+          ? blast(this.world, c, q.state)
+          : 0;
+      if (hp) {
+        this.harm(q, hp);
+        hit ||= !own;
+      }
+    }
+    return hit;
   }
 
   private splat(p: Player, r: Rover, view: number | undefined): void {
@@ -1166,7 +1310,7 @@ export class Room {
     const put: PlayerState[] = [];
     this.rr = [0, 0];
     this.gone.fill(0);
-    this.rovers = park(this.world);
+    this.fresh();
     shut(this.world);
     for (const p of players) {
       const { shots, hits } = p.state;

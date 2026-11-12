@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import * as ride from '../../test/ride';
 import { box, land } from '../../test/slope';
 import { duo } from '../../test/teams';
-import { TICK_HZ } from './constants';
+import { TICK_HZ, VEHICLE } from './constants';
 import { MOON } from './moon';
 import { move } from './physics';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
-import { drive, hull, park } from './rover';
+import { drive, hull, nearby, park } from './rover';
 import { SHIP, dock, limits, pilot, struck } from './ship';
 import { KEY, MODE, NOBODY } from './types';
 import type { Conn, Input, PlayerState, Rover } from './types';
@@ -32,7 +32,7 @@ describe('a ship in flight (pilot)', () => {
   it('rests on its skids on the pad with nobody aboard, and is solid to a player on foot', () => {
     const w = field();
     const [r] = park(w);
-    expect(r).toMatchObject({ ship: true, hp: SHIP.HP, wreck: 0, nades: SHIP.MISSILES });
+    expect(r).toMatchObject({ ship: true, hp: VEHICLE.HP, wreck: 0, nades: SHIP.MISSILES });
     expect(r.y).toBeCloseTo(SHIP.DROP, 6);
     fly(r, w, 120);
     expect(r.y).toBeCloseTo(SHIP.DROP, 3);
@@ -149,11 +149,30 @@ describe('a ship in flight (pilot)', () => {
     expect(flown).toEqual(again);
   });
 
-  it('is hit by a shot along the hull, never when it is gone', () => {
+  it('is hit by a shot along the hull, and by none over it or short of it', () => {
     const [r] = dock([[0, 0, 0, EAST]]);
     expect(struck(r, [-30, SHIP.DROP, 0], [1, 0, 0], 100)).toBeCloseTo(30 - 4.5 - SHIP.HIT, 3);
     expect(struck(r, [-30, 20, 0], [1, 0, 0], 100)).toBe(Infinity);
-    expect(struck({ ...r, wreck: 10 }, [-30, SHIP.DROP, 0], [1, 0, 0], 100)).toBe(Infinity);
+    expect(struck(r, [-30, SHIP.DROP, 0], [1, 0, 0], 20)).toBe(Infinity);
+  });
+
+  it('falls to the ground as a wreck, its engines off, where the tick takes it', () => {
+    const w = field();
+    const [r] = park(w);
+    fly(r, w, 120, keys(KEY.JUMP));
+    fly(r, w, 60, keys(KEY.FORWARD));
+    expect(r.y).toBeGreaterThan(10);
+    Object.assign(r, { hp: 0, wreck: VEHICLE.WRECK, driver: NOBODY });
+    const [x, y] = [r.x, r.y];
+    fly(r, w, 3 * TICK_HZ);
+    // It keeps its way and comes down.
+    expect(r.x).toBeGreaterThan(x + 1);
+    expect(r.y).toBeLessThan(y);
+    fly(r, w, 20 * TICK_HZ);
+    expect(r.y).toBeCloseTo(SHIP.DROP, 3);
+    // Nobody gets in, and it is in the way like any hull.
+    expect(nearby(r, { x: r.x, y: 0, z: r.z + 2 })).toBe(false);
+    expect(hull(r).h).toBe(SHIP.H);
   });
 
   it('stands on each pad of Tranquility, nose to the other base', () => {
@@ -266,7 +285,7 @@ describe('Room: the ships', () => {
     expect(ships()[0].nades).toBe(SHIP.MISSILES - 1);
   });
 
-  it("loses armour to an enemy pilot's lasers, blows up with its pilot, and is back on its pad", () => {
+  it("loses health to an enemy pilot's lasers, blows up with its pilot, falls, and is back on its pad", () => {
     const { room, a, b, st, ships } = setup();
     use(room, a);
     use(room, b);
@@ -288,16 +307,27 @@ describe('Room: the ships', () => {
       send(room, b, KEY.FIRE, 1, Math.PI);
       Object.assign(blue, { x: red.x, y: red.y, z: red.z - 40, vx: 0, vy: 0, vz: 0 });
     }
+    // Every VEHICLE.GRAZE bolts on the hull took 1: forty in all, twenty salvos.
+    expect(n).toBeGreaterThanOrEqual(((VEHICLE.HP * VEHICLE.GRAZE) / 2 - 1) * SHIP.GUN_COOL);
+    expect(n).toBeLessThan(30 * SHIP.GUN_COOL);
     expect(red.hp).toBe(0);
-    expect(red.wreck).toBeGreaterThan(0);
+    expect(red.wreck).toBeGreaterThan(VEHICLE.WRECK - 3);
     expect(red.driver).toBe(NOBODY);
+    expect(st(a)).toMatchObject({ hp: 0, mode: MODE.AIR });
     expect(st(a).down).toBeGreaterThan(0);
-    // It cannot be boarded while gone, and its hull is no obstacle.
-    expect(hull(red).h).toBe(0);
-    for (let k = 0; k < SHIP.WRECK; k++) {
+    // The wreck falls where it is, with no seat, and is back whole on its pad 5 s after the blast.
+    const y = red.y;
+    for (let k = red.wreck! - 1; k > 0; k--) {
       room.tick();
     }
-    expect(red).toMatchObject({ x: 0, z: 0, hp: SHIP.HP, wreck: 0, nades: SHIP.MISSILES });
+    expect(red.wreck).toBe(1);
+    expect(red.y).toBeLessThan(y - 5);
+    Object.assign(st(b), { x: red.x + 3, y: red.y - SHIP.DROP, z: red.z, mode: MODE.GROUND });
+    blue.driver = NOBODY;
+    use(room, b);
+    expect(red.driver).toBe(NOBODY);
+    expect(red).toMatchObject({ x: 0, z: 0, hp: VEHICLE.HP, wreck: 0, nades: SHIP.MISSILES });
+    expect(red.y).toBeCloseTo(SHIP.DROP, 6);
   });
 
   it('does not let a flag carrier fly', () => {

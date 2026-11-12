@@ -66,7 +66,8 @@ const MAX_SNAPS = 16;
 /**
  * A rover the own player got out of is drawn as predicted, rolling on, until the snapshots' one is
  * within GHOST_NEAR m of it or GHOST_MS have passed. One that will not get there (the host took
- * him off the wheel, someone else drives it now) is eased to the snapshots' over ROVER_BLEND ms.
+ * him off the wheel, someone else drives it now, it blew up) is eased to the snapshots' over
+ * ROVER_BLEND ms.
  */
 export const ROVER_BLEND = 300;
 const GHOST_MS = 4000;
@@ -105,10 +106,13 @@ const lerp = (a: PlayerState, b: PlayerState, t: number): PlayerState => ({
   pitch: a.pitch + (b.pitch - a.pitch) * t,
 });
 
-/** The rover a share t of the way from a to b: b itself from 1 on, the seats b's. */
+/**
+ * The rover a share t of the way from a to b: b itself from 1 on, the seats and the damage b's. A
+ * wreck parked afresh is not drawn on the way back to its spawn.
+ */
 const mix = (a: Rover, b: Rover, t: number): Rover => {
   const out = { ...b };
-  if (t < 1) {
+  if (t < 1 && !(a.wreck && !b.wreck)) {
     for (const k of 'x y z vx vy vz pitch roll wy wp wr steer'.split(' ') as 'x'[]) {
       out[k] = a[k] + (b[k] - a[k]) * t;
     }
@@ -232,8 +236,13 @@ export const createPredictor = (world: World): Predictor => {
           ghost = undefined;
           return drawn;
         }
-        if ((drawn.driver === NOBODY || drawn.driver === id) && now - ghost.t < GHOST_MS) {
-          return { ...g, driver: NOBODY, rider: drawn.rider };
+        // A wreck is the host's: it lies where the snapshots have it.
+        if (
+          !drawn.wreck &&
+          (drawn.driver === NOBODY || drawn.driver === id) &&
+          now - ghost.t < GHOST_MS
+        ) {
+          return { ...g, driver: NOBODY, rider: drawn.rider, hp: drawn.hp };
         }
         ghost.end = now;
       }

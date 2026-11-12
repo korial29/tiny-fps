@@ -98,7 +98,7 @@ export const LIGHTS: Vec3[] = [
   [0, 0.82, -3.1],
 ];
 /** The vertices a ship takes at most, legs down and everything aboard, by level of detail (0 far to 2 near). */
-export const BUDGET = [1400, 2300, 4600];
+export const BUDGET = [1400, 2300, 5000];
 
 /** The ship's own frame for place(): model space as it is. */
 const SELF: Vec3[] = [
@@ -477,6 +477,181 @@ const build = (lod: number): [number[], number[]] => {
         DARK,
         [0, 1, 0],
       );
+      // Circuits: thin tracks with a pad at their end, laid on the nose's top and on the wing,
+      // some of copper, a few pads lit.
+      const wingY = (x: number) =>
+        x < WING[1][0]
+          ? WING[0][3] + ((x - WING[0][0]) / (WING[1][0] - WING[0][0])) * (WING[1][3] - WING[0][3])
+          : WING[1][3] + ((x - WING[1][0]) / (WING[2][0] - WING[1][0])) * (WING[2][3] - WING[1][3]);
+      const onNose = (a: number, x: number): Vec3 => P(s * x, deck(a) + 0.012, a);
+      const onWing = (a: number, x: number): Vec3 => P(s * x, wingY(x) + 0.012, a);
+      const track = (
+        on: (a: number, x: number) => Vec3,
+        path: number[][],
+        rgb: number[],
+        lit = false,
+        w = 0.022,
+      ) => {
+        path.slice(1).forEach(([a1, x1], k) => {
+          const [a0, x0] = path[k];
+          const l = Math.hypot(a1 - a0, x1 - x0);
+          const [na, nx] = [(-(x1 - x0) / l) * w, ((a1 - a0) / l) * w];
+          panel(
+            o,
+            [
+              on(a0 + na, x0 + nx),
+              on(a1 + na, x1 + nx),
+              on(a1 - na, x1 - nx),
+              on(a0 - na, x0 - nx),
+            ],
+            rgb,
+            [0, 1, 0],
+          );
+        });
+        const [a, x] = path[path.length - 1];
+        const from = o.length;
+        const d = 2.6 * w;
+        panel(
+          o,
+          [on(a - d, x - d), on(a + d, x - d), on(a + d, x + d), on(a - d, x + d)],
+          lit ? [0.3, 0.85, 1] : GUNMETAL,
+          [0, 1, 0],
+        );
+        if (lit) {
+          glow(o, from, 1.3);
+        }
+      };
+      track(
+        onNose,
+        [
+          [3, 0.38],
+          [3.6, 0.38],
+          [3.8, 0.28],
+          [4.6, 0.28],
+        ],
+        LINE,
+        true,
+      );
+      track(
+        onNose,
+        [
+          [4, 0.34],
+          [4.3, 0.34],
+        ],
+        COPPER,
+      );
+      track(
+        onNose,
+        [
+          [3.05, 0.31],
+          [3.45, 0.31],
+          [3.55, 0.24],
+        ],
+        COPPER,
+      );
+      track(
+        onNose,
+        [
+          [5.35, 0.2],
+          [6.2, 0.2],
+          [6.35, 0.14],
+        ],
+        LINE,
+      );
+      track(
+        onNose,
+        [
+          [5.5, 0.26],
+          [5.9, 0.26],
+        ],
+        COPPER,
+      );
+      track(
+        onWing,
+        [
+          [-3.2, 2.9],
+          [-4.6, 2.9],
+          [-4.9, 3.2],
+          [-4.9, 3.9],
+        ],
+        LINE,
+        true,
+      );
+      track(
+        onWing,
+        [
+          [-3.6, 3.3],
+          [-4.2, 3.3],
+          [-4.2, 3.9],
+        ],
+        COPPER,
+      );
+      track(
+        onWing,
+        [
+          [-3.4, 3.9],
+          [-3.4, 3.5],
+        ],
+        LINE,
+      );
+      track(
+        onWing,
+        [
+          [-5.2, 3.1],
+          [-5.2, 3.7],
+          [-5.35, 3.85],
+        ],
+        COPPER,
+      );
+      track(
+        onWing,
+        [
+          [-4.6, 5.1],
+          [-5.4, 5.1],
+          [-5.6, 5.3],
+          [-5.6, 5.7],
+        ],
+        LINE,
+        true,
+      );
+      track(
+        onWing,
+        [
+          [-4.8, 5.4],
+          [-5.2, 5.4],
+        ],
+        COPPER,
+      );
+      // Pipes: one along the nose under each shoulder with a branch down, one along the foot of
+      // the spine, three along each engine's cowl.
+      rod(o, LINK, flank(1.7, 0.2, 0.03), flank(4.4, 0.2, 0.03), 0.022, COPPER);
+      rod(o, LINK, flank(2.6, 0.2, 0.03), flank(2.6, 0.75, 0.03), 0.018, GUNMETAL);
+      rod(o, LINK, flank(3.7, 0.2, 0.03), flank(3.7, 0.75, 0.03), 0.018, GUNMETAL);
+      const [foot0, foot1] = [rear[s > 0 ? 3 : 0], end[s > 0 ? 3 : 0]];
+      rod(
+        o,
+        LINK,
+        add(mix(foot0, foot1, 0.06), [s * 0.03, 0.03, 0]),
+        add(mix(foot0, foot1, 0.94), [s * 0.03, 0.03, 0]),
+        0.028,
+        GUNMETAL,
+      );
+      for (const [deg, a0, a1, rgb] of [
+        [50, -1.9, -3.2, COPPER],
+        [75, -2.2, -3.3, GUNMETAL],
+        [125, -1.9, -2.9, GUNMETAL],
+      ] as [number, number, number, number[]][]) {
+        const [c, u] = [Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180)];
+        const r = ENGINE.R + 0.012;
+        rod(
+          o,
+          LINK,
+          P(s * (ENGINE.X + c * r), ENGINE.Y + u * r, a0),
+          P(s * (ENGINE.X + c * r), ENGINE.Y + u * r, a1),
+          0.02,
+          rgb,
+        );
+      }
     }
     // The tail: a cluster of ducts.
     for (const [x, y] of [

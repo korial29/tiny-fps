@@ -80,10 +80,10 @@ describe('craft', () => {
     });
   }
 
-  it('stays within 1,400 vertices far, 2,300 mid and 4,600 near with everything aboard, and any level past 2 is the near one', () => {
+  it('stays within 1,400 vertices far, 2,300 mid and 5,000 near with everything aboard, and any level past 2 is the near one', () => {
     const full = flown(4, { nades: SHIP.MISSILES });
     const [far, mid, near] = [0, 1, 2].map(lod => count(make(full, lod, TEAM, 0)));
-    expect(BUDGET).toEqual([1400, 2300, 4600]);
+    expect(BUDGET).toEqual([1400, 2300, 5000]);
     [far, mid, near].forEach((n, lod) => expect(n).toBeLessThanOrEqual(BUDGET[lod]));
     expect(far).toBeLessThan(mid);
     expect(mid).toBeLessThan(near);
@@ -139,7 +139,7 @@ describe('craft', () => {
         .filter(p => p[2] > screen + 0.01);
       for (const [x, y, a] of nose) {
         const u = Math.max(0, (HULL.TIP - a) / (HULL.TIP - screen));
-        expect(Math.abs(x)).toBeLessThan(0.26 + 0.75 * u);
+        expect(Math.abs(x)).toBeLessThan(0.28 + 0.75 * u);
         expect(y).toBeLessThan(0.1 + 0.56 * u);
         expect(y).toBeGreaterThan(-0.38 - 0.51 * u);
       }

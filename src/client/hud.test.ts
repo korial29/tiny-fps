@@ -298,29 +298,33 @@ describe('createHud', () => {
     expect(rim().hidden).toBe(true);
     // The first rim, a little more aggressive: the corners' shade, a rounded rim squarer at the brow
     // than at the jaw, and a heavy brow's shade under its top edge. No V, no clip.
-    expect(HUD_CSS).toMatch(/del\{inset:0;background:radial-gradient/);
+    expect(HUD_CSS).toMatch(/del\{inset:0;background:[^}]*radial-gradient\(ellipse/);
     expect(HUD_CSS).not.toMatch(/del[^}]*clip-path/);
     const [, top, , bottom] = /del::before\{[^}]*border-radius:(\d+)% (\d+)% (\d+)% (\d+)%/.exec(
       HUD_CSS,
     )!;
     expect(+top).toBeLessThan(+bottom);
-    // Its lower edge is a fixed 36 px up and open over the middle, where a rounded pocket drops
-    // round the face and the health: they sit inside the rim (the user, 2026-11-12).
+    // Its lower edge is a fixed 36 px up and open over the middle, where the rim rises in an arch
+    // over the face: the face sits in the frame with the rest of the HUD (the user, 2026-11-12).
     expect(HUD_CSS).toMatch(/del::before\{[^}]*inset:3% 4% 36px/);
     expect(HUD_CSS).toMatch(
-      /del::before\{[^}]*mask:[^}]*calc\(50% - 70px\)[^}]*calc\(50% \+ 70px\)/,
+      /del::before\{[^}]*mask:[^}]*calc\(50% - 62px\)[^}]*calc\(50% \+ 62px\)/,
     );
-    const [, w, h] = /del::after\{[^}]*width:(\d+)px;height:(\d+)px/.exec(HUD_CSS)!;
-    const [, up] = /del::after\{[^}]*bottom:(\d+)px/.exec(HUD_CSS)!;
-    // The face is 72 px wide from 24 px up, the health 96 px wide from 12 px up: both inside it.
-    expect(+w).toBeGreaterThan(96 + 20);
-    expect(+up).toBeLessThan(12);
-    expect(+up + +h).toBe(36);
-    expect(HUD_CSS).toMatch(/del::after\{[^}]*border-top:0;border-radius:0 0 \d+px \d+px/);
-    // The sides are swept: a shade inside each.
+    const [, w, h] = /del::after\{[^}]*bottom:0;width:(\d+)px;height:(\d+)px/.exec(HUD_CSS)!;
+    // The face is 72 px wide and 87 high from 24 px up: the arch clears its sides and its top.
+    expect(+w).toBeGreaterThan(72 + 30);
+    expect(+h).toBeGreaterThan(24 + 87 + 8);
     expect(HUD_CSS).toMatch(
-      /del::before\{[^}]*inset 26px 0 22px -18px #0008,inset -26px 0 22px -18px #0008/,
+      /del::after\{[^}]*border-bottom:0;border-radius:\d+px \d+px 0 0;background:#0008/,
     );
+    // On each side the frame comes up the rim in a very acute angle: a wedge of 15 degrees.
+    const wedges = [
+      ...HUD_CSS.matchAll(/conic-gradient\(from (\d+)deg at (\d+)% 44%,#000b 0 (\d+)deg/g),
+    ];
+    expect(wedges.map(m => [+m[1], +m[2], +m[3]])).toEqual([
+      [164, 4, 15],
+      [181, 96, 15],
+    ]);
     expect(HUD_CSS).toMatch(/del::before\{[^}]*inset 0 22px 20px -8px #000a/);
     // The shell is drawn before the face, the health and the gun's count, so they lie over it.
     const order = [...screen.children].map(e => e.tagName);

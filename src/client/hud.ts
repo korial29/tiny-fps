@@ -100,12 +100,13 @@ export const HUD_CSS =
   // The visor rim of a helmet, as it first was (the user, 2026-11-11, after a V was tried) but a little more aggressive: the
   // dark of the shell at the corners, a rim squarer at the brow and tapering to the jaw, a heavy brow's shade under its
   // top edge, a sheen on it. Drawn before the face, the health and the counts, which lie over it.
-  `del{inset:0;background:radial-gradient(ellipse 74% 80% at 50% 54%,#0000 60%,#000d 100%)}` +
-  // The rim: squarer at the brow, its sides swept in and curled under toward the jaw. Its lower edge is 36 px up, cut open
-  // over the middle 140 px, where a rounded pocket (::after) drops round the face and the health so they sit inside the rim
-  // with the rest of the HUD.
-  `del::before{content:"";position:absolute;inset:3% 4% 36px;border-radius:27% 27% 47% 47%/15% 15% 44% 44%;box-shadow:inset 0 0 0 2px #fff1,inset 0 22px 20px -8px #000a,inset 0 10px 16px #fff1,inset 0 -8px 14px #0006,inset 26px 0 22px -18px #0008,inset -26px 0 22px -18px #0008;-webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 24px) no-repeat,linear-gradient(90deg,#000 calc(50% - 70px),#0000 0 calc(50% + 70px),#000 0) bottom/100% 24px no-repeat;mask:linear-gradient(#000 0 0) top/100% calc(100% - 24px) no-repeat,linear-gradient(90deg,#000 calc(50% - 70px),#0000 0 calc(50% + 70px),#000 0) bottom/100% 24px no-repeat}` +
-  `del::after{content:"";position:absolute;left:50%;bottom:4px;width:140px;height:32px;margin-left:-70px;box-sizing:border-box;border:2px solid #fff2;border-top:0;border-radius:0 0 34px 34px;box-shadow:inset 0 -8px 12px #0006}` +
+  `del{inset:0;background:conic-gradient(from 163.2deg at 4% 44%,#fff3 0 .7deg,#0000 0),conic-gradient(from 164deg at 4% 44%,#000b 0 15deg,#0000 0),conic-gradient(from 196.1deg at 96% 44%,#fff3 0 .7deg,#0000 0),conic-gradient(from 181deg at 96% 44%,#000b 0 15deg,#0000 0),radial-gradient(ellipse 74% 80% at 50% 54%,#0000 60%,#000d 100%)}` +
+  // The rim: squarer at the brow, its lower edge 36 px up. On each side the frame comes up along the rim in a very acute
+  // angle (the wedges above: 15 degrees, their point at 44 % of the height, a pale edge on them). Over the middle the
+  // rim rises in an arch (::after) over the face, which so sits in the frame with the health and the rest of the HUD,
+  // not in the glass (the user, 2026-11-12).
+  `del::before{content:"";position:absolute;inset:3% 4% 36px;border-radius:30% 30% 44% 44%/20% 20% 38% 38%;box-shadow:inset 0 0 0 2px #fff1,inset 0 22px 20px -8px #000a,inset 0 10px 16px #fff1,inset 0 -8px 14px #0006;-webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 24px) no-repeat,linear-gradient(90deg,#000 calc(50% - 62px),#0000 0 calc(50% + 62px),#000 0) bottom/100% 24px no-repeat;mask:linear-gradient(#000 0 0) top/100% calc(100% - 24px) no-repeat,linear-gradient(90deg,#000 calc(50% - 62px),#0000 0 calc(50% + 62px),#000 0) bottom/100% 24px no-repeat}` +
+  `del::after{content:"";position:absolute;left:50%;bottom:0;width:124px;height:126px;margin-left:-62px;box-sizing:border-box;border:2px solid #fff2;border-bottom:0;border-radius:56px 56px 0 0;background:#0008;box-shadow:inset 0 10px 14px #0006}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}` +
   // The maps over the title screen, and over the end screen when the pointer is free: the host's buttons.

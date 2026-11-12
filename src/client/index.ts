@@ -255,14 +255,15 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
       const s = decodeSnapshot(data);
       if (s) {
         predictor.snapshot(s, performance.now());
-        // A rover's laser bolt, new in this snapshot: its shot is heard where it is.
+        // A vehicle's laser bolt, new in this snapshot: its blaster is heard where it is, each a
+        // little off the pitch of the last so that a salvo does not drone.
         const flying = new Set<number>();
         for (const b of s.balls ?? []) {
           if (b.power === BOLT) {
             const key = (b.by << 8) | b.id;
             flying.add(key);
             if (!bolts.has(key) && !b.burst) {
-              audio.play(SOUND.LASE, [b.x, b.y, b.z], 0.35, 1.5);
+              audio.play(SOUND.BLASTER, [b.x, b.y, b.z], 0.6, 0.92 + 0.16 * ((b.id * 0.618) % 1));
             }
           }
         }
@@ -465,6 +466,11 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     foley.others(others, id => rd?.steps(id));
     foley.rover(
       seat && !rovers[seat.rover]?.ship ? rovers[seat.rover] : undefined,
+      dt,
+      driving ? ctl.keys : 0,
+    );
+    foley.ship(
+      seat && rovers[seat.rover]?.ship ? rovers[seat.rover] : undefined,
       dt,
       driving ? ctl.keys : 0,
     );

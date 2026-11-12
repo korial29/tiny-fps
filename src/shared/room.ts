@@ -322,7 +322,9 @@ export class Room {
       const [r, s] = this.seatOf(p);
       if (r && !s) {
         // At the wheel: his input is the rover's clock, and nothing else moves it.
-        const fell = ride(p.state, r, input, this.world, p.info.team, this.rovers);
+        const fell = ride(p.state, r, input, this.world, p.info.team, this.rovers, j =>
+          this.crash(r, j),
+        );
         this.ctf.moved(p.state);
         if (fell) {
           this.sink(r);
@@ -452,7 +454,7 @@ export class Room {
       if (r.wreck) {
         skid(r);
       }
-      if (drive(r, undefined, this.world, this.rovers)) {
+      if (drive(r, undefined, this.world, this.rovers, j => this.crash(r, j))) {
         this.sink(r);
       } else {
         this.carry(r);
@@ -1186,6 +1188,15 @@ export class Room {
   /** The vehicles a shooter of `team` hurts: whole, and not of his team. */
   private targets(team: number): Rover[] {
     return this.rovers.filter(r => !r.wreck && this.teamOf(r) !== team);
+  }
+
+  /**
+   * A ship that crashed into a brush, the ground or another vehicle with a jolt of `jolt` m/s
+   * (pilot()): 1 hp each SHIP.CRASH_HP past SHIP.CRASH, nobody's shot; at 0 it blows up as its
+   * team's, so its blast spares its mates.
+   */
+  private crash(r: Rover, jolt: number): void {
+    this.hurt(r, Math.ceil((jolt - SHIP.CRASH) / SHIP.CRASH_HP), NOBODY, this.teamOf(r));
   }
 
   /** The vehicle `r` loses `hp` to player `by` of `team`; at 0 it blows up (wreck()). */

@@ -67,7 +67,7 @@ const crossings = (s: Float32Array) =>
 const sound = (name: keyof typeof SOUND) => render(SOUND[name], LAYERS);
 
 describe('the sounds of the game', () => {
-  it('are one entry per id, and the looped ones are the wind, the scrape, the hum, the buzz, the gun’s charge and the rover’s engine and skid', () => {
+  it('are one entry per id, and the looped ones are the wind, the scrape, the hum, the buzz, the gun’s charge, the rover’s engine and skid and the ship’s jet', () => {
     expect(LAYERS).toHaveLength(Object.keys(SOUND).length);
     expect(Object.values(SOUND).sort((a, b) => a - b)).toEqual(LAYERS.map((_, i) => i));
     expect(LOOPED).toEqual([
@@ -78,6 +78,7 @@ describe('the sounds of the game', () => {
       SOUND.CHARGE,
       SOUND.ENGINE,
       SOUND.SKID,
+      SOUND.JET,
     ]);
   });
 
@@ -410,7 +411,7 @@ describe('a vehicle’s damage', () => {
   it('has four sounds after all the others, whose ids stay: a hit on the hull, an arc, the explosion, the wreck falling apart', () => {
     expect([SOUND.HULL, SOUND.ARC, SOUND.WRECK, SOUND.CRUMBLE]).toEqual([47, 48, 49, 50]);
     expect([SOUND.DOOR, SOUND.SHUT]).toEqual([45, 46]);
-    expect(LAYERS).toHaveLength(51);
+    expect(LAYERS).toHaveLength(54);
     for (const id of [47, 48, 49, 50]) {
       expect(LOOPED).not.toContain(id);
     }
@@ -433,5 +434,30 @@ describe('a vehicle’s damage', () => {
       s.reduce((n, x, i) => n + +(i > 0 && x * s[i - 1] < 0), 0) / s.length;
     expect(bright(wreck)).toBeLessThan(bright(arc));
     expect(bright(wreck)).toBeLessThan(bright(crumble));
+  });
+});
+
+describe('the ship (the user, 2026-11-12)', () => {
+  it('has three sounds after all the others, whose ids stay: a blaster, a jet that loops, a crash', () => {
+    expect([SOUND.BLASTER, SOUND.JET, SOUND.CRASH]).toEqual([51, 52, 53]);
+    expect(LOOPED).toContain(SOUND.JET);
+    expect(LOOPED).not.toContain(SOUND.BLASTER);
+    expect(LOOPED).not.toContain(SOUND.CRASH);
+  });
+
+  it('makes the blaster a chirp that falls fast from the treble: bright at first, far lower at its end', () => {
+    const s = sound('BLASTER');
+    expect(s.length / RATE).toBeLessThan(0.3);
+    expect(peak(s.subarray(0, 0.02 * RATE))).toBeGreaterThan(0.3);
+    const [head, tail] = [s.subarray(0, 0.04 * RATE), s.subarray(0.12 * RATE, 0.2 * RATE)];
+    expect(crossings(head)).toBeGreaterThan(2500);
+    expect(crossings(tail)).toBeLessThan(crossings(head) / 3);
+  });
+
+  it('makes the crash longer and heavier than a hit on the hull, in the bass', () => {
+    const s = sound('CRASH');
+    expect(s.length).toBeGreaterThan(sound('HULL').length);
+    expect(rms(s)).toBeGreaterThan(rms(sound('HULL')));
+    expect(peak(s)).toBeGreaterThan(0.8);
   });
 });

@@ -143,6 +143,12 @@ export const SOUND = {
   ARC: 48,
   WRECK: 49,
   CRUMBLE: 50,
+  /** A vehicle's laser bolt (the user, 2026-11-12: a blaster of the films): a bright zing diving fast, metallic. */
+  BLASTER: 51,
+  /** The combat ship's engines, looped: a turbine's whine over a jet's roar, played higher and louder with the thrust. */
+  JET: 52,
+  /** The ship crashing into a wall, the ground or another vehicle: a crunch of metal over a deep thump. */
+  CRASH: 53,
 } as const;
 
 /**
@@ -462,6 +468,33 @@ export const LAYERS: Voice[][] = [
     [3, 1800, -1, 0.05, 0.3, 0.55, 0.7, 0.3, 0, 1, 0.4],
     [2, 1400, -2, 0.1, 0.2, 0.6, 0.05, 1, 0, 1, 0.1],
   ],
+  // BLASTER: the sound of a struck guy wire, a chirp that falls fast: a square and a saw a few
+  // tens of hertz apart diving three octaves from 1.9 kHz with a little vibrato, their beating
+  // its shimmer; a thin sine zing diving from 5 kHz over the start; a click of noise as it leaves.
+  [
+    [0, 1900, -9, 0.001, 0.02, 0.2, 0.05, 0.25, 0, 1, 0.34],
+    [1, 1960, -9.5, 0.001, 0.02, 0.18, 0.04, 0.2, 0, 1, 0.3],
+    [2, 5200, -16, 0.001, 0.005, 0.08, 0, 1, 0, 1, 0.3],
+    [3, 9000, -3, 0.001, 0.004, 0.025, 0, 0.6, 0, 1, 0.25],
+  ],
+  // JET: a jet's roar, two bands of held noise, the lower the louder; a turbine's whine and its
+  // shaft's hum, tones a quarter turn late where seam() joins the end to the start (as the
+  // engine's), so the loop keeps its level; held, to loop.
+  [
+    [3, 420, 0, 0.001, 2.1, 0.001, 0.4, 0.12, 0, 1, 0.6],
+    [3, 3200, 0, 0.001, 2.1, 0.001, 0.5, 0.3, 0, 1, 0.22],
+    [2, 879.74, 0, 0.001, 2.1, 0.001, 0, 1, 0, 1, 0.1],
+    [1, 55.07, 0, 0.001, 2.1, 0.001, 0, 0.1, 0, 1, 0.3],
+  ],
+  // CRASH: a deep thump that dives, a crunch of noise falling, torn plate (two squares a tritone
+  // apart, falling) and a rattle of debris, late.
+  [
+    [2, 75, -2, 0.001, 0.04, 0.4, 0, 1, 0, 1, 1],
+    [3, 1500, -2, 0.002, 0.08, 0.35, 0.3, 0.3, 0, 1, 0.7],
+    [0, 340, -1.5, 0.002, 0.05, 0.3, 0.08, 0.2, 0, 1, 0.3],
+    [0, 480, -1.5, 0.002, 0.04, 0.25, 0.08, 0.2, 0, 1, 0.22],
+    [3, 5000, -1, 0.01, 0.1, 0.3, 0.8, 0.5, 0, 1, 0.3, 0.12],
+  ],
 ];
 
 /** The sounds played in a loop: their buffers go through seam. */
@@ -473,6 +506,7 @@ export const LOOPED: number[] = [
   SOUND.CHARGE,
   SOUND.ENGINE,
   SOUND.SKID,
+  SOUND.JET,
 ];
 
 /**

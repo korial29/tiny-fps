@@ -533,8 +533,9 @@ describe('a vehicle at 0 HP', () => {
     m.hold(m.bob, 20, 0);
     const bob = m.state(m.bob);
     expect(bob.down).toBeGreaterThan(0);
-    expect(solid(m.cars(), bob)).toHaveLength(3);
-    expect(solid(m.cars(), m.state(m.cy))).toHaveLength(4);
+    // Two rovers and two ships of five solids each (a hull and four wing pieces), the wreck's less.
+    expect(solid(m.cars(), bob)).toHaveLength(11);
+    expect(solid(m.cars(), m.state(m.cy))).toHaveLength(12);
     m.ticks(2 * TICK_HZ);
     expect(car.x - x).toBeGreaterThan(1);
     expect(car.x - x).toBeLessThan(5);

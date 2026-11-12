@@ -4,6 +4,7 @@
 // sound goes with the legs. No DOM, unit-tested against a fake Audio.
 import { speedOf, sprinting } from '../shared/physics';
 import { ROVER } from '../shared/rover';
+import { SHIP } from '../shared/ship';
 import { EV, KEY, MODE } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
 import type { Audio, Loop } from './audio';
@@ -21,6 +22,11 @@ export interface Foley {
    * call, and the keys he holds at its wheel (0 for the rider): the engine, the skid, the landings.
    */
   rover(r: Rover | undefined, dt: number, keys?: number): void;
+  /**
+   * The ship the own player flies, as drawn (undefined otherwise), `dt` seconds after the last
+   * call, and the keys he holds at its stick: the engines, and a crash.
+   */
+  ship(r: Rover | undefined, dt: number, keys?: number): void;
   /**
    * The own player's breath in his space helmet, `dt` seconds after the last call: in and out,
    * quicker and louder the harder he has been moving lately. None when down or without a player.
@@ -60,6 +66,9 @@ export const createFoley = (a: Audio): Foley => {
   const seen = new Map<number, { p: PlayerState; steps?: number }>();
   let engine: Loop | undefined;
   let skid: Loop | undefined;
+  let jet: Loop | undefined;
+  /** The ship at the last call. */
+  let flown: Rover | undefined;
   /** The rover at the last call, its time falling freely and the fastest it fell. */
   let rode: Rover | undefined;
   let [air, drop] = [0, 0];
@@ -146,6 +155,34 @@ export const createFoley = (a: Audio): Foley => {
       }
       const side = clamp((Math.abs(r.vz * fx - r.vx * fz) - SKID_FROM) / SKID_SPAN);
       skid.set(air >= AIR || side <= 0 ? 0 : 0.25 + 0.45 * side, 0.8 + 0.4 * side);
+    },
+
+    ship(r, dt, keys = 0) {
+      const was = flown;
+      flown = r && { ...r };
+      if (!r || r.wreck || a.muted) {
+        jet?.set(0, 0.7);
+        return;
+      }
+      jet ??= a.loop(SOUND.JET);
+      const u = clamp(Math.hypot(r.vx, r.vy, r.vz) / SHIP.VMAX);
+      const push =
+        keys & (KEY.FORWARD | KEY.BACK | KEY.LEFT | KEY.RIGHT | KEY.JUMP | KEY.CROUCH) ? 1 : 0;
+      const boost = keys & KEY.SPRINT && keys & KEY.FORWARD ? 1 : 0;
+      // It idles low on its pad, roars with the speed and the thrust, and screams on the boost.
+      const idle = r.steer < 0 && !push ? 0.6 : 1;
+      jet.set(
+        (0.28 + 0.35 * u + 0.15 * push + 0.2 * boost) * idle,
+        0.7 + 0.55 * u + 0.1 * push + 0.25 * boost,
+      );
+      // A crash: more speed gone in a frame than the engines can brake, as the host counts it
+      // (pilot()'s jolt). Another ship, or this one parked again: nothing to compare.
+      if (was && dt > 0 && Math.hypot(r.x - was.x, r.y - was.y, r.z - was.z) < 5) {
+        const jolt = Math.hypot(r.vx - was.vx, (r.vy - was.vy) / 2, r.vz - was.vz);
+        if (jolt > SHIP.CRASH) {
+          a.play(SOUND.CRASH, undefined, clamp(jolt / 40, 0.5), 1.1 - 0.3 * clamp(jolt / 60));
+        }
+      }
     },
 
     breathe(p, dt) {

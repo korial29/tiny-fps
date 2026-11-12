@@ -156,8 +156,8 @@ describe('the arcs of a damaged hull', () => {
       for (const [from, to] of b) {
         expect(at).toContainEqual(from);
         const l = Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2]);
-        expect(l).toBeGreaterThan(0.2);
-        expect(l).toBeLessThan(0.7);
+        expect(l).toBeGreaterThan(0.4);
+        expect(l).toBeLessThan(1.1);
       }
     }
     // Each place arcs in about four slots of ten.
@@ -169,7 +169,7 @@ describe('the arcs of a damaged hull', () => {
     const far = sparking(ship({ hp: 1 }), 0, 3).map(([a, b]) =>
       Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]),
     );
-    expect(Math.max(...far)).toBeGreaterThan(0.45);
+    expect(Math.max(...far)).toBeGreaterThan(1.1);
   });
 
   it('scorch the hull round them, and nowhere on a whole vehicle', () => {
@@ -369,6 +369,28 @@ describe('createWrecks', () => {
     expect(seen.at(-1)).toBeLessThan(4);
     expect(s.heard(SOUND.CRUMBLE)).toHaveLength(1);
     expect(s.heard(SOUND.WRECK)).toHaveLength(1);
+  });
+
+  it('smokes over the wreck: puffs that rise and slow, never fall, and thin out as they go', () => {
+    const s = stage();
+    const wreck = state({ hp: 0, wreck: 200 });
+    // No explosion first: its debris is not smoke.
+    s.run([wreck], 4 * TICK_HZ);
+    const out: number[] = [];
+    s.wrecks.draw(out);
+    const smoke = verts(out).filter(x => x[8] === -3);
+    expect(smoke.length).toBeGreaterThan(10 * 24);
+    expect(smoke.length).toBe(out.length / STRIDE);
+    // All of it over the hull's middle, up to a few metres.
+    const ys = smoke.map(x => x[1]);
+    expect(Math.min(...ys)).toBeGreaterThan(wreck.y - 0.5);
+    expect(Math.max(...ys)).toBeGreaterThan(wreck.y + 1.5);
+    expect(Math.max(...ys)).toBeLessThan(wreck.y + 6);
+    // See-through, the highest (the oldest) the thinnest.
+    const top = smoke.reduce((a, x) => (x[1] > a[1] ? x : a));
+    const low = smoke.reduce((a, x) => (x[1] < a[1] ? x : a));
+    expect(top[7]).toBeLessThan(low[7]);
+    expect(Math.max(...smoke.map(x => x[7]))).toBeLessThanOrEqual(0.8);
   });
 
   it('shimmers the vehicle in when it is parked afresh, without a sound of damage', () => {

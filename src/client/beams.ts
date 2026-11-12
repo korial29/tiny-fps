@@ -40,7 +40,7 @@ const SPARKS = 12;
 const MAX = 16;
 /** Seconds a bolt lasts, bolts kept at most, and the sparks of a shock. */
 const BOLT = 0.05;
-const BOLTS = 64;
+const BOLTS = 96;
 const SHOCK_SPARKS = 10;
 /** The rail gun's lightning: [halo, core] half widths and colours, and its metres per kink. */
 const ZAP: [number, number[]][] = [
@@ -83,6 +83,8 @@ interface Bolt {
   m: Vec3;
   b: Vec3;
   age: number;
+  /** Times the katana's width, for a hull's arcs: they are seen from further, and grow with the distance. */
+  wide?: number;
 }
 
 export interface Tracer {
@@ -98,8 +100,11 @@ export interface Tracer {
   blast(at: Vec3, size?: number): void;
   /** A shock wave from `at`: a ring of fire flat on the ground, out to `r` metres as it fades. */
   ring(at: Vec3, r: number): void;
-  /** A short jagged bolt from `a` to `b`, gone in a twentieth of a second: an arc on a damaged hull. */
-  arc(a: Vec3, b: Vec3): void;
+  /**
+   * A short jagged bolt from `a` to `b` with a fork off its kink, gone in a twentieth of a second:
+   * an arc on a damaged hull, `wide` times as thick as the katana's bolts.
+   */
+  arc(a: Vec3, b: Vec3, wide?: number): void;
   /** The balls to draw this frame. */
   orbs(list: Orb[]): void;
   /** The katana's shock at `at`: a burst of sparks and bolts. */
@@ -342,10 +347,15 @@ export const createTracer = (): Tracer => {
     ring(at, r) {
       glows = [...glows, { p: at, age: 0, boom: true, ring: true, size: r }].slice(-MAX);
     },
-    arc(a, b) {
+    arc(a, b, wide = 3) {
       const l = Math.hypot(...sub(b, a));
       const m = a.map((v, i) => (v + b[i]) / 2 + rnd() * l * 0.3) as Vec3;
-      bolts = [...bolts, { a, m, b, age: 0 }].slice(-BOLTS);
+      // The fork: from the kink, half as long, its own way.
+      const f = m.map(v => v + rnd() * l * 0.4) as Vec3;
+      const n = m.map((v, i) => (v + f[i]) / 2 + rnd() * l * 0.12) as Vec3;
+      bolts = [...bolts, { a, m, b, age: 0, wide }, { a: m, m: n, b: f, age: 0, wide }].slice(
+        -BOLTS,
+      );
     },
     orbs(list) {
       balls = list;
@@ -518,8 +528,8 @@ export const createTracer = (): Tracer => {
           }
         }
       }
-      for (const { a, m, b, age } of bolts) {
-        const k = 1 - age / BOLT;
+      for (const { a, m, b, age, wide } of bolts) {
+        const k = (1 - age / BOLT) * (wide ? wide * far(eye, m, 1) : 1);
         for (const [p, q] of [
           [a, m],
           [m, b],

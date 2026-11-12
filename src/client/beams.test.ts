@@ -390,8 +390,8 @@ describe('a vehicle’s damage', () => {
       // Within its length of the two ends.
       expect(Math.hypot(x[0] - a[0], x[1] - a[1], x[2] - a[2])).toBeLessThan(0.8);
     }
-    // A faint point of light at it.
-    expect(t.lights().length).toBe(1);
+    // A faint point of light at it, and one at its fork.
+    expect(t.lights().length).toBe(2);
     expect(Math.hypot(...t.lights()[0].p.map((c, i) => c - a[i]))).toBeLessThan(0.5);
     t.update(0.06);
     expect(drawn(t)).toEqual([]);
@@ -401,6 +401,30 @@ describe('a vehicle’s damage', () => {
       t.arc(a, b);
     }
     expect(drawn(t).length).toBe(40 * v.length);
+    // Thick enough to be seen from where a vehicle is seen: `wide` times the katana's bolts, and
+    // more with the distance.
+    const area = (wide: number, from: Vec3, to: Vec3) => {
+      const u = createTracer();
+      u.arc(from, to, wide);
+      const x = drawn(u);
+      let sum = 0;
+      for (let i = 0; i + 2 < x.length; i += 3) {
+        const [p, q] = [1, 2].map(k => [0, 1, 2].map(j => x[i + k][j] - x[i][j]));
+        sum +=
+          Math.hypot(
+            p[1] * q[2] - p[2] * q[1],
+            p[2] * q[0] - p[0] * q[2],
+            p[0] * q[1] - p[1] * q[0],
+          ) / 2;
+      }
+      return sum;
+    };
+    expect(area(6, a, b)).toBeCloseTo(2 * area(3, a, b), 6);
+    const away = (z: number): Vec3[] => [
+      [1, 1, z],
+      [1.3, 1.2, z - 0.1],
+    ];
+    expect(area(3, ...(away(-30) as [Vec3, Vec3]))).toBeGreaterThan(1.5 * area(3, a, b));
   });
 
   it('blows a vehicle up in a fireball `size` times a grenade’s, with a wider light', () => {

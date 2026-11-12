@@ -64,10 +64,12 @@ const SCORCH = [0.7, 0.25];
 /** The colours a piece glows in as it falls apart, and as it shimmers in. */
 const EMBER = [3, 1.1, 0.2];
 const GLINT = [0.5, 1.5, 2.4];
-/** Arcs' time slots a second, the chance a place arcs in one, and its bolt's length in metres (a ship's are longer). */
+/** Arcs' time slots a second, the chance a place arcs in one, its bolt's length in metres (from, and up to as much more) and its width in katana bolts; a ship's are BIG times that. */
 const SLOTS = 30;
 const CHANCE = 0.4;
-const SPAN = [0.25, 0.4];
+const SPAN = [0.45, 0.6];
+const WIDE = 3;
+const BIG = 1.8;
 /** Debris thrown by an explosion, kept at most, and puffs of smoke kept at most. */
 const BITS = 36;
 const MAX_BITS = 144;
@@ -131,7 +133,7 @@ export const sparking = (r: Rover, k: number, slot: number): [Vec3, Vec3][] =>
     if (hash(n) >= CHANCE) {
       return [];
     }
-    const l = (SPAN[0] + SPAN[1] * hash(n + 1)) * (r.ship ? 1.6 : 1);
+    const l = (SPAN[0] + SPAN[1] * hash(n + 1)) * (r.ship ? BIG : 1);
     const d = [2, 3, 4].map(i => hash(n + i) * 2 - 1);
     const m = Math.hypot(...d) || 1;
     return [[a, a.map((v, i) => v + (d[i] / m) * l) as Vec3]];
@@ -261,7 +263,7 @@ const SHARD: Vec3[] = [
 /** What plays a vehicle's damage: the tracer's bolts, fireballs and sparks, the sounds, the camera's shake. */
 export interface Stage {
   tracer: {
-    arc(a: Vec3, b: Vec3): void;
+    arc(a: Vec3, b: Vec3, wide?: number): void;
     blast(at: Vec3, size?: number): void;
     ring(at: Vec3, r: number): void;
     spit(at: Vec3): void;
@@ -369,8 +371,9 @@ export const createWrecks = (world: World, { tracer, audio, fx }: Stage): Wrecks
       }
       bits = bits.filter(b => b.age < b.life);
       for (const p of puffs) {
+        // Smoke rises and slows; it does not fall.
         p.age += dt;
-        p.v[1] -= g * dt * 0.5;
+        p.v = p.v.map(c => c * Math.max(0, 1 - 0.8 * dt)) as Vec3;
         p.p = p.p.map((c, i) => c + p.v[i] * dt) as Vec3;
       }
       puffs = puffs.filter(p => p.age < p.life);
@@ -409,7 +412,7 @@ export const createWrecks = (world: World, { tracer, audio, fx }: Stage): Wrecks
         hush[k] = (hush[k] ?? 0) - dt;
         const live = tick ? sparking(shown, k, slot + 1) : [];
         for (const [a, b] of live) {
-          tracer.arc(a, b);
+          tracer.arc(a, b, WIDE * (r.ship ? BIG : 1));
           if (rnd() < 0.3) {
             tracer.spit(a);
           }
@@ -420,8 +423,8 @@ export const createWrecks = (world: World, { tracer, audio, fx }: Stage): Wrecks
         }
         const top: Vec3 = [r.x, r.y + (r.ship ? 0.6 : 0.3), r.z];
         if (w > VEHICLE.FADE) {
-          if (rnd() < 8 * dt) {
-            smoke(top, 3);
+          if (rnd() < 12 * dt) {
+            smoke(top, 2.4);
           }
         } else if (w > 0) {
           // Falling apart: sparks off it all along.
@@ -465,7 +468,7 @@ export const createWrecks = (world: World, { tracer, audio, fx }: Stage): Wrecks
       }
       for (const { p, age, life } of puffs) {
         const k = age / life;
-        const s = 0.18 + 0.5 * k;
+        const s = 0.22 + 0.7 * k;
         for (let i = 0; i < BALL.length; i += STRIDE) {
           out.push(
             p[0] + BALL[i] * s,

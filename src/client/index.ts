@@ -64,8 +64,8 @@ export interface TinyFps {
 const STEP = 1 / TICK_HZ;
 /** Steps run in one frame at most: a background tab catches up by this much, not by minutes. */
 const MAX_STEPS = 5;
-/** Metres within which a vehicle shows its health over it. */
-const NEAR_HULL = 14;
+/** Metres within which a vehicle shows its health over it: a rover, a ship. */
+const NEAR_HULL = [14, 24];
 
 /**
  * Mounts the game in a Shadow DOM inside container: one WebGL2 canvas filling it, a click locks the
@@ -388,8 +388,6 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     }
     audio.listen(eye, ctl.yaw);
     const dt = Math.min((now - before) / 1000, 0.1);
-    // The vehicles as drawn: their damage arcs, blows up and falls apart on the way (wreck.ts).
-    const shown = wrecks.frame(rovers, dt, eye);
     // The flags and the bases for the renderer and the lights, and the HUD that goes with them.
     const who = (id: number) => (id == you.id ? me : others.find(p => p.id == id));
     const ctf = match && {
@@ -516,6 +514,9 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
       dt,
       now,
     );
+    // The vehicles as drawn: their damage arcs, blows up and falls apart on the way (wreck.ts).
+    // After the tracer's update of this frame: a bolt it adds is drawn at least once at any rate.
+    const shown = wrecks.frame(rovers, dt, eye);
     if (me && rd) {
       // The cards' pictures, once the own player and his colour are known: drawn before the frame, which then takes the canvas back.
       const mine = `${you.id}${colors.get(you.id)}`;
@@ -559,7 +560,7 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     // The health of the vehicle he sits in, and of the nearest other one within NEAR_HULL metres in sight.
     const mine = seat && rovers[seat.rover];
     const near = rovers
-      .filter(r => me && r !== mine && !r.wreck && gap2(r, me) < NEAR_HULL ** 2)
+      .filter(r => me && r !== mine && !r.wreck && gap2(r, me) < NEAR_HULL[+!!r.ship] ** 2)
       .sort((a, b) => gap2(a, me!) - gap2(b, me!))[0];
     const over: [number, number, number] | undefined = near && [
       near.x,

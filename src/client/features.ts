@@ -69,7 +69,15 @@ const step = (a: number, b: number, v: number) => {
 /** The middle of the right eye (x, y); the left is its mirror. */
 export const EYE = [0.032, 1.6895];
 /** Half the eye's width and height, and how far its ball stands out of its rim. */
-const [EA, EB, ED] = [0.0138, 0.009, 0.0058];
+let [EA, EB] = [0.0138, 0.009];
+const ED = 0.0058;
+/** How much larger than the man's the eyes being made are: the opening, the iris, the lids (see eyes()). */
+let big = 1;
+/** The woman's eyes are larger (the user, 2026-11-12): skin.ts sets `k` while it makes her head, and 1 back after. */
+export const eyes = (k = 1) => {
+  big = k;
+  [EA, EB] = [0.0138 * k, 0.009 * k];
+};
 /** The rim's depth at the eye's middle, and how much further back it is per metre outward: the outer corner is set back. */
 const [RIM, SLANT] = [-0.0792, 0.2];
 /** The iris' radius, the pupil's, and how far the iris travels sideways and up or down. */
@@ -98,7 +106,7 @@ const [UP, LOW] = [0.0039, 0.005];
  * 0 lifted.
  */
 export const lidEdge = (upper: boolean, t: number, c = 0) => {
-  const [u, l] = [canth(t) + UP * arch(t), canth(t) - LOW * arch(t)];
+  const [u, l] = [canth(t) + big * UP * arch(t), canth(t) - big * LOW * arch(t)];
   return upper ? u + c * (l - u) : l + c * (u - l);
 };
 
@@ -114,7 +122,7 @@ export const lid = (
   surf: (x: number, y: number) => number,
 ): number[] => {
   const x = EYE[0] + EA * 1.06 * t;
-  const root = canth(t) + (upper ? 0.0122 : -0.0098) * (1 - 0.3 * t * t);
+  const root = canth(t) + big * (upper ? 0.0122 : -0.0098) * (1 - 0.3 * t * t);
   const edge = lidEdge(upper, t, c);
   const y = root + (edge - root) * s;
   const zr = surf(x, root) + 0.0012;
@@ -123,7 +131,7 @@ export const lid = (
 };
 
 /** A point of the iris' disc, r from its middle (in radii) at angle a, the gaze (gx, gy) of its travel: on the ball. */
-export const iris = (r: number, a: number, gx = 0, gy = 0, k = IRIS_R): number[] => {
+export const iris = (r: number, a: number, gx = 0, gy = 0, k = IRIS_R * big): number[] => {
   const x = EYE[0] + gx * GAZE_X + k * r * Math.cos(a);
   const y = EYE[1] + gy * GAZE_Y + k * r * Math.sin(a);
   return [x, y, ball(x, y) - 0.00035];
@@ -148,7 +156,8 @@ export const white = (r: number, a: number): number[] => {
 /** Whether (ax, y) is in the opening between the lids' roots, 1 inside, 0 outside, soft at its edge: the socket's floor is set back behind the ball there. */
 export const socket = (ax: number, y: number) => {
   const t = (ax - EYE[0]) / (EA * 1.06);
-  const h = (y - canth(t)) / (y > canth(t) ? 0.0122 : 0.0098) / (1 - 0.3 * Math.min(t * t, 1));
+  const h =
+    (y - canth(t)) / (big * (y > canth(t) ? 0.0122 : 0.0098)) / (1 - 0.3 * Math.min(t * t, 1));
   return step(1, 0.72, Math.hypot(t, h));
 };
 

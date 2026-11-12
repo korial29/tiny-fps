@@ -13,6 +13,7 @@ import {
   CHANNELS,
   EYE as EYE_AT,
   IRIS_R,
+  eyes,
   KIND,
   MOUTH_X,
   PUPIL_R,
@@ -141,7 +142,8 @@ export const palette = (
     suit ? BLACK : [0.22, 0.21, 0.16],
     [0.85, 0.83, 0.8],
     eyes,
-    SKIN.map((v, i) => v * (fem ? [0.9, 0.56, 0.6] : [0.84, 0.68, 0.72])[i]),
+    // Her lips are red on any skin (the user, 2026-11-12), his a shade of his own.
+    SKIN.map((v, i) => (fem ? v * 0.28 + [0.5, 0.03, 0.08][i] : v * [0.84, 0.68, 0.72][i])),
     SKIN.map(v => v * 0.55),
     hair.map((v, i) => v * 0.4 + SKIN[i] * 0.3),
     SKIN.map((v, i) => v * (1 - 0.34 * beard) + (hair[i] * 0.1 + [0, 0.01, 0.03][i]) * beard),
@@ -418,7 +420,7 @@ const section = (y: number): number[] => {
   const h = b[0] - a[0];
   const t = (y - a[0]) / h;
   // Her lower face is narrower: the jaw tapers from the cheekbones to the chin.
-  const taper = 1 - 0.18 * fem * (1 - step(1.59, 1.68, y));
+  const taper = 1 - 0.25 * fem * (1 - step(1.59, 1.695, y));
   return [
     ...[1, 2, 3].map(i => {
       const [m0, m1] = [
@@ -525,10 +527,10 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
       : y < bridge
         ? 0.002 + 0.021 * k ** 1.3
         : 0.002 * bell(y - bridge, 0.004)) *
-    (1 - 0.14 * fem);
+    (1 - 0.2 * fem);
   d +=
     f ** 4 *
-    (h * bell(x, 0.0045 + (0.004 - 0.0008 * fem) * k) +
+    (h * bell(x, 0.0045 - 0.0006 * fem + (0.004 - 0.0012 * fem) * k) +
       (0.0042 - 0.001 * fem) * bell(ax - 0.0095, 0.0036) * bell(y - 1.6475, 0.0042));
   /** The height as the lips see it: along the line between them, which falls to the corners. */
   const ym = y - lipLine(ax) + 1.6168;
@@ -545,7 +547,7 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
       (0.003 + 0.0013 * fem) * bell(x, 0.019) * bell(ym - 1.6215, 0.0036) +
       (0.0037 + 0.0014 * fem) * bell(x, 0.018) * bell(ym - 1.6112, 0.004) -
       0.002 * bell(x, 0.016) * bell(ym - 1.6025, 0.003) +
-      (0.0075 - 0.0015 * fem) * bell(x, 0.026 - 0.008 * fem) * bell(y - 1.593, 0.008) -
+      (0.0075 - 0.0015 * fem) * bell(x, 0.026 - 0.012 * fem) * bell(y - 1.593, 0.008) -
       (0.006 - 0.003 * fem) * step(1.715, 1.75, y));
   // The nostrils set in under the tip, the groove from the nose to the upper lip, the line between
   // the lips, and a fold each side from the nose's wing to the corner of the mouth. The lids are
@@ -1209,6 +1211,27 @@ const shape = (lod: number): Skin => {
           (i, r) => [(2 * i) / (cols - 1) - 1, S[r]],
         );
       }
+      // The lashes: a fringe off the upper lid's edge, forward and up, longer to the outer corner.
+      // Hers are long (the user, 2026-11-12); his a trace, so the two skins keep the same triangles.
+      patch(
+        KIND.LID_U,
+        cols,
+        2,
+        false,
+        (i, r) => {
+          const t = (2 * i) / (cols - 1) - 1;
+          const p = lid(true, t, 1, 0, surf);
+          const l = r * (fem ? 0.0045 + 0.0045 * step(-0.6, 0.9, t) : 0.0006) * (1 - t ** 4);
+          // Rooted a hair in front of the lid's edge: vertices of its own, or the fringe would be a fold of the lid.
+          return [
+            p[0] + 0.5 * l * Math.max(t, 0),
+            p[1] + 0.0003 + 0.8 * l,
+            p[2] - 0.0003 - 0.55 * l,
+          ];
+        },
+        () => [LASH, LASH, 0],
+        i => [(2 * i) / (cols - 1) - 1, 1],
+      );
     }
   }
   // The armpits relaxed: each vertex round them drawn toward the mean of its neighbours, the
@@ -1551,13 +1574,18 @@ export const BUST = 0.028;
 /** Where it is fullest, metres up (the user, 2026-11-11: a little higher; it was 1.345). */
 export const BUST_Y = 1.37;
 
+/** How much larger her eyes are than his. */
+const EYES = 0.2;
+
 const generate = (lod: number, build: number): Skin => {
   fem = +(build == BUILD.FEMALE);
+  eyes(1 + EYES * fem);
   try {
     const s = shape(lod);
     return build ? retarget(s, build) : s;
   } finally {
     fem = 0;
+    eyes();
   }
 };
 

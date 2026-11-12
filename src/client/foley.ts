@@ -140,6 +140,12 @@ export const createFoley = (a: Audio): Foley => {
       // Another rover, or this one parked again: nothing to compare.
       const same = was && dt > 0 && Math.hypot(r.x - was.x, r.y - was.y, r.z - was.z) < 5;
       const acc = same ? (r.vy - was.vy) / dt : 0;
+      // A crash into a wall or a vehicle: more speed on the level gone in a frame than the brakes
+      // can take, as the host counts it (drive()'s jolt).
+      const jolt = same ? Math.hypot(r.vx - was.vx, r.vz - was.vz) : 0;
+      if (jolt > ROVER.CRASH) {
+        a.play(SOUND.CRASH, undefined, clamp(jolt / 25, 0.4), 1.25 - 0.3 * clamp(jolt / 30));
+      }
       if (!same) {
         air = drop = 0;
       } else if (acc < -FALL) {

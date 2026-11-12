@@ -50,7 +50,7 @@ import { shut, swing } from './doors';
 import { STRIKE, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
 import { floorAt, forward, heightOf, respawn, spawn, speedOf, stumble } from './physics';
-import { PLASMA_LAG, blast, fly, launch, lob, stepOf, toss, wave } from './plasma';
+import { PLASMA_LAG, blast, cylinder, fly, launch, lob, stepOf, toss, wave } from './plasma';
 import type { Flying } from './plasma';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
@@ -76,11 +76,12 @@ import {
   struck,
   nearby,
 } from './rover';
+import type { Sight } from './rover';
 import { SHIP } from './ship';
 import { reaches, tackling } from './tackle';
 import { BODY, CUT, KEY, LIMB, MODE, NOBODY } from './types';
 import type { Conn, Every, Input, PlayerInfo, PlayerState, Rover, Rules } from './types';
-import { build, hidden } from './world';
+import { build, hidden, ray } from './world';
 import type { World, WorldDef } from './world';
 
 interface Player {
@@ -1126,7 +1127,7 @@ export class Room {
     }
     p.gun = r.ship ? SHIP.GUN_COOL : ROVER.GUN_COOL;
     p.bolt = ((p.bolt ?? 0) + 2) & 255;
-    for (const b of bolts(r, p.info.id, p.info.team, i.yaw, i.pitch, p.bolt)) {
+    for (const b of bolts(r, p.info.id, p.info.team, i.yaw, i.pitch, p.bolt, this.sight(p, i))) {
       this.shoot(p, i.view, b);
     }
   }
@@ -1147,7 +1148,31 @@ export class Room {
     p.side = (p.side ?? 0) ^ 1;
     r.nades--;
     p.bolt = ((p.bolt ?? 0) + 1) & 255;
-    this.shoot(p, i.view, missile(r, p.info.id, p.info.team, i.yaw, i.pitch, p.bolt, p.side));
+    this.shoot(
+      p,
+      i.view,
+      missile(r, p.info.id, p.info.team, i.yaw, i.pitch, p.bolt, p.side, this.sight(p, i)),
+    );
+  }
+
+  /**
+   * What the look of the driver `p` meets for his guns' aim (aimOf()): a brush, an enemy vehicle's
+   * hull where it is, or an enemy on foot who is up as `p` drew him at the input's view tick.
+   */
+  private sight(p: Player, i: Input): Sight {
+    const foes = new Set(
+      this.players()
+        .filter(q => q.info.team !== p.info.team)
+        .map(q => q.info.id),
+    );
+    const drawn = this.past(i.view).filter(q => foes.has(q.id) && !q.down && q.mode !== MODE.RIDE);
+    const hulls = this.targets(p.info.team);
+    return (o, d, m) =>
+      Math.min(
+        ray(this.world, o, d, m),
+        ...hulls.map(v => struck(v, o, d, m)),
+        ...drawn.map(q => cylinder(o, d, q, PLAYER_R, heightOf(q))),
+      );
   }
 
   /**
@@ -1191,12 +1216,13 @@ export class Room {
   }
 
   /**
-   * A ship that crashed into a brush, the ground or another vehicle with a jolt of `jolt` m/s
-   * (pilot()): 1 hp each SHIP.CRASH_HP past SHIP.CRASH, nobody's shot; at 0 it blows up as its
-   * team's, so its blast spares its mates.
+   * A vehicle that crashed with a jolt of `jolt` m/s: a ship into a brush, the ground or another
+   * vehicle (pilot()), a rover into a wall or a vehicle (drive()). 1 hp each CRASH_HP past CRASH
+   * (SHIP's, ROVER's), nobody's shot; at 0 it blows up as its team's, so its blast spares its mates.
    */
   private crash(r: Rover, jolt: number): void {
-    this.hurt(r, Math.ceil((jolt - SHIP.CRASH) / SHIP.CRASH_HP), NOBODY, this.teamOf(r));
+    const [from, per] = r.ship ? [SHIP.CRASH, SHIP.CRASH_HP] : [ROVER.CRASH, ROVER.CRASH_HP];
+    this.hurt(r, Math.ceil((jolt - from) / per), NOBODY, this.teamOf(r));
   }
 
   /** The vehicle `r` loses `hp` to player `by` of `team`; at 0 it blows up (wreck()). */

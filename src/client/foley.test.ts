@@ -396,6 +396,18 @@ describe('the rover the own player sits in', () => {
   });
   const last = (l: [number, number][]) => l.at(-1)!;
 
+  it('crashes when a frame takes the speed on the level off it, not on a hard landing', () => {
+    const { audio, played } = fake();
+    const f = createFoley(audio);
+    f.rover(car({ vz: -20 }), DT, KEY.FORWARD);
+    f.rover(car({ z: -0.3, vz: 0 }), DT, KEY.FORWARD);
+    expect(played.map(p => p.id)).toContain(SOUND.CRASH);
+    const n = played.length;
+    f.rover(car({ z: -0.3, vy: -20 }), DT);
+    f.rover(car({ z: -0.3, vy: 0 }), DT);
+    expect(played.slice(n).map(p => p.id)).not.toContain(SOUND.CRASH);
+  });
+
   it('is silent on foot: no loop is even started, and a rover left goes quiet', () => {
     const { audio, sets, played } = fake();
     const f = createFoley(audio);

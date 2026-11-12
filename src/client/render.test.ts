@@ -36,6 +36,7 @@ import {
   sunProj,
   viewProj,
   FRAG,
+  POST_FRAG,
 } from './render';
 import { trees } from './skyline';
 import { STREET, street } from './street';
@@ -771,5 +772,40 @@ describe('the regolith in the shader', () => {
     );
     // The bump flattens too, or the far ground would sparkle.
     expect(FRAG).toContain('t.a=mix(t.a,.5,fd)');
+  });
+});
+
+describe('no NaN out of the shaders', () => {
+  /** The first argument of each pow() in a shader: its base. */
+  const bases = (src: string) =>
+    [...src.matchAll(/pow\(/g)].map(m => {
+      let [i, depth] = [m.index + 4, 0];
+      const from = i;
+      for (; depth > 0 || src[i] != ','; i++) {
+        depth += src[i] == '(' ? 1 : src[i] == ')' ? -1 : 0;
+      }
+      return src.slice(from, i);
+    });
+
+  it('gives every pow() a base that cannot go below 0: one NaN pixel blooms into a grey rectangle', () => {
+    // pow(x, y) is exp2(y * log2(x)) on the GPU: NaN for any x < 0, even 1 - dot(a, b) of two unit
+    // vectors, which rounds past 1 where a face looks straight at the eye (the user, 2026-11-12).
+    for (const src of [FRAG, POST_FRAG]) {
+      const all = bases(src);
+      expect(all.length).toBeGreaterThan(0);
+      for (const b of all) {
+        expect(b, b).toMatch(/^(max\(|clamp\(|abs\(|k$)/);
+      }
+    }
+    // k, the sun's glow in K0, is a max() already.
+    expect(FRAG).toContain('k=max(dot(d,O),0.)');
+  });
+
+  it('normalises the half vectors and the light direction safely, as they can vanish', () => {
+    expect(FRAG).toContain('vec3 nz(vec3 v){return v*inversesqrt(max(dot(v,v),1e-12));}');
+    expect(FRAG).not.toMatch(/normalize\((O\+V|d\+V|n\+m)\)/);
+    expect(FRAG).toContain('nz(O+V)');
+    expect(FRAG).toContain('nz(d+V)');
+    expect(FRAG).toContain('d/=max(r,1e-4);');
   });
 });

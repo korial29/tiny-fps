@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { DOME, GAP, REGIONS, armor } from './armor';
+import { BRIEFS, DOME, GAP, REGIONS, armor } from './armor';
 import { GLOSS, STRIDE } from './mesh';
 import { rest, solve } from './rig';
 import { body, palette, skin } from './skin';
 
 /** The skin at rest drawn, then the armour cut out of it: [the skin's floats, the armour's]. */
-const draw = (lod: number) => {
+const draw = (lod: number, build = 0) => {
   const out: number[] = [];
-  const s = body(lod);
-  skin(out, s, solve(rest()), palette([0.9, 0.2, 0.1], undefined, undefined, true));
+  const s = body(lod, build);
+  skin(
+    out,
+    s,
+    solve(rest([0, 0, 0], 0, build)),
+    palette([0.9, 0.2, 0.1], undefined, undefined, true),
+  );
   const n = out.length;
   armor(out, 0, s);
   return [out.slice(0, n), out.slice(n)];
@@ -181,6 +186,80 @@ describe('the armour', () => {
               }
             }
           }
+        }
+      }
+    });
+  });
+
+  describe('the briefs (the user, 2026-11-12: thinner on the sides, no glitches)', () => {
+    /** Whether a ray out from the trunk's axis at angle `t` (degrees from the front, + to the right) and height `y` meets a plate's face. */
+    const plated = (v: number[]) => (t: number, y: number) => {
+      const r = (t * Math.PI) / 180;
+      const d = [Math.sin(r), 0, -Math.cos(r)];
+      const o = [0, y, 0.0];
+      for (let i = 0; i < v.length; i += 3 * STRIDE) {
+        if (v[i + 8] != GLOSS) {
+          continue;
+        }
+        const [a, b, c] = [0, 1, 2].map(k => [0, 1, 2].map(j => v[i + k * STRIDE + j]));
+        const e1 = b.map((q, j) => q - a[j]);
+        const e2 = c.map((q, j) => q - a[j]);
+        const p = [
+          d[1] * e2[2] - d[2] * e2[1],
+          d[2] * e2[0] - d[0] * e2[2],
+          d[0] * e2[1] - d[1] * e2[0],
+        ];
+        const det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
+        if (Math.abs(det) < 1e-12) {
+          continue;
+        }
+        const s = o.map((q, j) => q - a[j]);
+        const u = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) / det;
+        const q = [
+          s[1] * e1[2] - s[2] * e1[1],
+          s[2] * e1[0] - s[0] * e1[2],
+          s[0] * e1[1] - s[1] * e1[0],
+        ];
+        const w = (d[0] * q[0] + d[1] * q[1] + d[2] * q[2]) / det;
+        const h = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
+        if (u >= 0 && w >= 0 && u + w <= 1 && h > 0) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    it('cover the hips from their opening up to the belt with no hole, thin on the sides', () => {
+      // The opening line: lowest at the crotch, up to BRIEFS.side between BRIEFS.at.
+      const ease = (a: number, b: number, x: number) => {
+        const t = Math.max(0, Math.min((x - a) / (b - a), 1));
+        return t * t * (3 - 2 * t);
+      };
+      const [f0, f1, b1, b0] = BRIEFS.at;
+      const line = (t: number) =>
+        t <= 90
+          ? BRIEFS.front + (BRIEFS.side - BRIEFS.front) * ease(f0, f1, t)
+          : BRIEFS.back + (BRIEFS.side - BRIEFS.back) * ease(b0, b1, t);
+      expect(BRIEFS.side).toBeGreaterThan(0.965);
+      for (const build of [0, 1]) {
+        const [, v] = draw(3, build);
+        const at = plated(v);
+        for (const k of [1, -1]) {
+          for (let t = 25; t <= 155; t += 10) {
+            // From a little over the opening (its wall leans) to under the belt, across the border
+            // of the trunk's skin and the legs' (0.93 m), where the pieces left gaps.
+            for (let y = Math.max(line(t) + 0.012, 0.9); y < 0.978; y += 0.004) {
+              expect(at(k * t, y)).toBe(true);
+            }
+          }
+          // Cut high on the sides: from the front quarter to the back one, the suit shows just
+          // under the opening, between the briefs and the thigh plates.
+          for (let t = 45; t <= 135; t += 15) {
+            expect(at(k * t, line(t) - 0.005)).toBe(false);
+          }
+          // On the side, a centimetre under the belt, then the suit.
+          expect(at(k * 90, 0.977)).toBe(true);
+          expect(at(k * 90, 0.966)).toBe(false);
         }
       }
     });

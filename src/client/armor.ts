@@ -29,9 +29,9 @@ interface Region {
   swell?: (x: number, y: number) => number;
   /** Where its angles are measured from, degrees (0 the front): 180 for a plate on the back. */
   face?: number;
-  /** Its bottom and top at each angle (degrees from the front, + outward), when not level: a leg's opening. */
-  low?: (a: number) => number;
-  high?: (a: number) => number;
+  /** Its bottom and top at each angle (degrees from the front, + outward) or rest point, when not level: a leg's opening. */
+  low?: (a: number, c: Corner) => number;
+  high?: (a: number, c: Corner) => number;
   /** Only on the woman's skin. */
   fem?: boolean;
   /** Only on the man's. */
@@ -90,37 +90,42 @@ const knee = (x: number, y: number) =>
   0.008 * Math.max(0, 1 - ((Math.abs(x) - 0.1) / 0.07) ** 2 - ((y - 0.515) / 0.055) ** 2);
 
 /**
- * The briefs' leg opening on a thigh at angle a (degrees from the front, + outward, -90 the inside):
- * lowest at the crotch, in front of the inside, rising straight to the top of the hip outside, then
- * down again over the buttock behind. The thigh plates follow it GAP under.
+ * The briefs (the user, 2026-11-10: round the hips under the belt, the leg's opening rising from the
+ * crotch to the hip and lower behind, never between the thighs; 2026-11-12: thinner on the sides,
+ * and no glitches). One opening line for all their pieces, the band on the trunk and the piece on
+ * each thigh, by the angle of the rest point round the trunk (0 the front, 180 the back, either
+ * side): the pieces met at the border of the trunk's skin and the legs' (0.93 m) on two lines that
+ * did not agree, and left gaps, overlaps and slivers there. Lowest at the crotch, before and
+ * behind, it rises to `side`, under the band's top (0.982), between the angles `at`.
  */
-const brief = (a: number) => {
-  // Round from the inside front (-80) through the front and the outside (90) to the inside back (-110 = 250).
-  const b = a < -95 ? a + 360 : a;
-  return b <= 55
-    ? 0.85 + (0.085 * (b + 80)) / 135
-    : b < 125
-      ? 0.94
-      : 0.94 - (0.08 * (b - 125)) / 125;
+export const BRIEFS = { front: 0.85, back: 0.86, side: 0.972, at: [14, 66, 114, 168] };
+/** The angle round the trunk of a rest point, degrees from the front, either side. */
+const round = (c: Corner) => (Math.abs(Math.atan2(c[0], -c[2])) * 180) / Math.PI;
+const opening = (_a: number, c: Corner) => {
+  const [s, [f0, f1, b1, b0]] = [round(c), BRIEFS.at];
+  return s <= 90
+    ? BRIEFS.front + (BRIEFS.side - BRIEFS.front) * smooth(f0, f1, s)
+    : BRIEFS.back + (BRIEFS.side - BRIEFS.back) * smooth(b0, b1, s);
 };
-
-/** A thigh plate's top at angle a: GAP under the briefs' opening, closing up on the outside, where the plate goes on up the hip. */
-const thigh = (a: number) => {
-  const b = a < -95 ? a + 360 : a;
-  return brief(a) - GAP * (b <= 90 ? 1 - smooth(25, 55, b) : 1 - smooth(155, 125, b));
-};
-
 /**
- * The briefs' band round the hips: its bottom at angle a round the trunk (degrees, 0 the front): low
- * in front and behind, up at the sides, where the band is thin (the user, 2026-11-10).
+ * On a thigh the opening also rises over its inside (a, round the leg, -90), above the leg's skin:
+ * never between the thighs, with a curved edge where an angle limit cut it straight, a sliver of
+ * plate standing by a wedge of suit at the back.
  */
-const hips = (a: number) => {
-  const s = Math.abs(a);
-  return 0.925 + 0.046 * smooth(48, 85, s) * (1 - smooth(95, 132, s));
-};
+const legOpening = (a: number, c: Corner) =>
+  opening(a, c) + (0.95 - opening(a, c)) * (1 - smooth(25, 60, Math.abs(((a + 630) % 360) - 180)));
 
 /** The gap between the briefs' thin sides and the thigh plates going up the hips: there is little room. */
 const SIDE_GAP = 0.01;
+
+/**
+ * The thigh plates' top, on the thighs and up the hips' sides alike: under the opening by GAP, by
+ * SIDE_GAP at the sides, eased between, so that it is one line across the border too.
+ */
+const plates = (a: number, c: Corner) => {
+  const s = round(c);
+  return opening(a, c) - GAP + (GAP - SIDE_GAP) * smooth(45, 70, s) * (1 - smooth(110, 135, s));
+};
 
 /** The chest plate's top at angle a round the trunk (degrees, 0 the front): the neck's V. */
 const chestTop = (a: number) => 1.5 - 0.045 * Math.cos((a * Math.PI * 1.4) / 180) ** 2;
@@ -169,7 +174,7 @@ export const REGIONS: Region[] = [
   { part: PART.TRUNK, cx: 0, y: [1.115, 1.195 - GAP], a: [-54, 54] },
   { part: PART.TRUNK, cx: 0, y: [1.035, 1.115 - GAP], a: [-54, 54] },
   // The front of each thigh down to GAP over the knee pad, the knees, the outer side of each forearm.
-  { part: PART.LEG, cx: 0.1, y: [0.585, 0.94], a: [-62, 78], high: thigh },
+  { part: PART.LEG, cx: 0.1, y: [0.585, 0.94], a: [-62, 78], high: plates },
   // The knees: round (the user, 2026-11-10), domed.
   { part: PART.LEG, cx: 0.1, y: [0.46, 0.57], a: [-60, 60], round: [56, 0.515, 0.05], swell: knee },
   // The forearms, down to the gloves (the user, 2026-11-10), all round the arm (2026-11-12).
@@ -180,8 +185,8 @@ export const REGIONS: Region[] = [
   // the crotch (crotch()).
   // The biceps' goes all round the arm too (the user, 2026-11-12).
   { part: PART.ARM, cx: 0.207, y: [1.215, 1.325], a: [-181, 181] },
-  { part: PART.LEG, cx: 0.1, y: [0.6, 0.94], a: [-58, 58], face: 180, high: thigh },
-  { part: PART.TRUNK, cx: 0, y: [0.925, 0.982], a: [-181, 181], low: hips },
+  { part: PART.LEG, cx: 0.1, y: [0.6, 0.94], a: [-58, 58], face: 180, high: plates },
+  { part: PART.TRUNK, cx: 0, y: [0.925, 0.982], a: [-181, 181], low: opening },
   // The user, 2026-11-10: a piece over the collarbones up to the neck, following the chest plate's
   // V a little over it, out to the shoulder plates; and one on each shoulder blade, over the back's,
   // a groove down the spine between them.
@@ -216,12 +221,12 @@ export const REGIONS: Region[] = [
   ...[90, -90].map((face): Region => ({
     part: PART.TRUNK,
     cx: 0,
-    y: [0.92, 0.96],
-    a: [-32, 32],
+    y: [0.92, 0.975],
+    a: [-70, 70],
     face,
-    high: a => hips(a) - SIDE_GAP,
+    high: plates,
   })),
-  { part: PART.LEG, cx: 0.1, y: [0.845, 0.935], a: [-150, 150], face: 70, low: brief },
+  { part: PART.LEG, cx: 0.1, y: [0.845, 0.935], a: [-181, 181], low: legOpening },
 ];
 
 /** How far the plates stand off the skin: their thickness. */
@@ -254,8 +259,8 @@ const angle = (g: Region, x: number, z: number) => {
 const limits = (g: Region) => {
   const raw = (c: Corner) => angle({ ...g, face: 0 }, c[0], c[2]);
   return [
-    (c: Corner) => c[1] - (g.low ? g.low(raw(c)) : g.y[0]),
-    (c: Corner) => (g.high ? Math.min(g.high(raw(c)), g.y[1]) : g.y[1]) - c[1],
+    (c: Corner) => c[1] - (g.low ? g.low(raw(c), c) : g.y[0]),
+    (c: Corner) => (g.high ? Math.min(g.high(raw(c), c), g.y[1]) : g.y[1]) - c[1],
     (c: Corner) => angle(g, c[0], c[2]) - g.a[0],
     (c: Corner) => g.a[1] - angle(g, c[0], c[2]),
     ...(g.round

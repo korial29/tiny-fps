@@ -26,6 +26,8 @@ const DARK = [0.08, 0.085, 0.1];
 const FRAME = [0.17, 0.18, 0.2];
 const GUNMETAL = [0.2, 0.21, 0.24, SHINE];
 const COPPER = [0.55, 0.33, 0.18, SHINE];
+/** The circuits' tracks: grey, discreet on the white hull and the pale wings. */
+const TRACK = [0.52, 0.53, 0.57];
 const FLAME = [1, 0.55, 0.2];
 const CORE = [0.55, 0.8, 1];
 const TEAM = [1, 1, 1];
@@ -477,21 +479,15 @@ const build = (lod: number): [number[], number[]] => {
         DARK,
         [0, 1, 0],
       );
-      // Circuits: thin tracks with a pad at their end, laid on the nose's top and on the wing,
-      // some of copper, a few pads lit.
+      // Circuits: thin tracks with a pad at their end, laid on the nose's top and on the wing, in
+      // a grey a little darker than the hull: seen near by, not from afar.
       const wingY = (x: number) =>
         x < WING[1][0]
           ? WING[0][3] + ((x - WING[0][0]) / (WING[1][0] - WING[0][0])) * (WING[1][3] - WING[0][3])
           : WING[1][3] + ((x - WING[1][0]) / (WING[2][0] - WING[1][0])) * (WING[2][3] - WING[1][3]);
       const onNose = (a: number, x: number): Vec3 => P(s * x, deck(a) + 0.012, a);
       const onWing = (a: number, x: number): Vec3 => P(s * x, wingY(x) + 0.012, a);
-      const track = (
-        on: (a: number, x: number) => Vec3,
-        path: number[][],
-        rgb: number[],
-        lit = false,
-        w = 0.022,
-      ) => {
+      const track = (on: (a: number, x: number) => Vec3, path: number[][], w = 0.022) => {
         path.slice(1).forEach(([a1, x1], k) => {
           const [a0, x0] = path[k];
           const l = Math.hypot(a1 - a0, x1 - x0);
@@ -504,124 +500,73 @@ const build = (lod: number): [number[], number[]] => {
               on(a1 - na, x1 - nx),
               on(a0 - na, x0 - nx),
             ],
-            rgb,
+            TRACK,
             [0, 1, 0],
           );
         });
         const [a, x] = path[path.length - 1];
-        const from = o.length;
         const d = 2.6 * w;
         panel(
           o,
           [on(a - d, x - d), on(a + d, x - d), on(a + d, x + d), on(a - d, x + d)],
-          lit ? [0.3, 0.85, 1] : GUNMETAL,
+          TRACK,
           [0, 1, 0],
         );
-        if (lit) {
-          glow(o, from, 1.3);
-        }
       };
-      track(
-        onNose,
-        [
-          [3, 0.38],
-          [3.6, 0.38],
-          [3.8, 0.28],
-          [4.6, 0.28],
-        ],
-        LINE,
-        true,
-      );
-      track(
-        onNose,
-        [
-          [4, 0.34],
-          [4.3, 0.34],
-        ],
-        COPPER,
-      );
-      track(
-        onNose,
-        [
-          [3.05, 0.31],
-          [3.45, 0.31],
-          [3.55, 0.24],
-        ],
-        COPPER,
-      );
-      track(
-        onNose,
-        [
-          [5.35, 0.2],
-          [6.2, 0.2],
-          [6.35, 0.14],
-        ],
-        LINE,
-      );
-      track(
-        onNose,
-        [
-          [5.5, 0.26],
-          [5.9, 0.26],
-        ],
-        COPPER,
-      );
-      track(
-        onWing,
-        [
-          [-3.2, 2.9],
-          [-4.6, 2.9],
-          [-4.9, 3.2],
-          [-4.9, 3.9],
-        ],
-        LINE,
-        true,
-      );
-      track(
-        onWing,
-        [
-          [-3.6, 3.3],
-          [-4.2, 3.3],
-          [-4.2, 3.9],
-        ],
-        COPPER,
-      );
-      track(
-        onWing,
-        [
-          [-3.4, 3.9],
-          [-3.4, 3.5],
-        ],
-        LINE,
-      );
-      track(
-        onWing,
-        [
-          [-5.2, 3.1],
-          [-5.2, 3.7],
-          [-5.35, 3.85],
-        ],
-        COPPER,
-      );
-      track(
-        onWing,
-        [
-          [-4.6, 5.1],
-          [-5.4, 5.1],
-          [-5.6, 5.3],
-          [-5.6, 5.7],
-        ],
-        LINE,
-        true,
-      );
-      track(
-        onWing,
-        [
-          [-4.8, 5.4],
-          [-5.2, 5.4],
-        ],
-        COPPER,
-      );
+      track(onNose, [
+        [3, 0.38],
+        [3.6, 0.38],
+        [3.8, 0.28],
+        [4.6, 0.28],
+      ]);
+      track(onNose, [
+        [4, 0.34],
+        [4.3, 0.34],
+      ]);
+      track(onNose, [
+        [3.05, 0.31],
+        [3.45, 0.31],
+        [3.55, 0.24],
+      ]);
+      track(onNose, [
+        [5.35, 0.2],
+        [6.2, 0.2],
+        [6.35, 0.14],
+      ]);
+      track(onNose, [
+        [5.5, 0.26],
+        [5.9, 0.26],
+      ]);
+      track(onWing, [
+        [-3.2, 2.9],
+        [-4.6, 2.9],
+        [-4.9, 3.2],
+        [-4.9, 3.9],
+      ]);
+      track(onWing, [
+        [-3.6, 3.3],
+        [-4.2, 3.3],
+        [-4.2, 3.9],
+      ]);
+      track(onWing, [
+        [-3.4, 3.9],
+        [-3.4, 3.5],
+      ]);
+      track(onWing, [
+        [-5.2, 3.1],
+        [-5.2, 3.7],
+        [-5.35, 3.85],
+      ]);
+      track(onWing, [
+        [-4.6, 5.1],
+        [-5.4, 5.1],
+        [-5.6, 5.3],
+        [-5.6, 5.7],
+      ]);
+      track(onWing, [
+        [-4.8, 5.4],
+        [-5.2, 5.4],
+      ]);
       // Pipes: one along the nose under each shoulder with a branch down, one along the foot of
       // the spine, three along each engine's cowl.
       rod(o, LINK, flank(1.7, 0.2, 0.03), flank(4.4, 0.2, 0.03), 0.022, COPPER);

@@ -5,7 +5,7 @@
 // crotch by sharing its vertices, so normals flow over the joins. Clothes are colour regions of
 // the triangles. See rig.ts for the joints and the pose.
 import { LIMB } from '../shared/types';
-import { BUILD, JOINT as J, JOINTS, RESTS, mul, rest, slerp, solve, turn } from './rig';
+import { BUILD, JOINT as J, JOINTS, RESTS, mul, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
 import type { Vec3 } from './mesh';
 import {
@@ -1489,13 +1489,13 @@ const retarget = (s: Skin, build: number): Skin => {
     if (s.g[i] == KIND.BODY && arm < 0.5) {
       const [ax, y, sx] = [Math.abs(p[0]), p[1], Math.sign(p[0])];
       const k = 1 - arm * 2;
-      // The bust: fullest at 1.345 m, a firm line under it, a slope above it to the collarbones.
+      // The bust: fullest at BUST_Y, a firm line under it, a slope above it to the collarbones.
       p[2] -=
         k *
         BUST *
         clamp(-nz * 1.6) *
         bell(ax - 0.066, 0.05) *
-        bell(y - 1.345, y < 1.345 ? 0.042 : 0.065);
+        bell(y - BUST_Y, y < BUST_Y ? 0.042 : 0.065);
       // The buttocks, and the hips out at the sides; the waist in under the ribs.
       p[2] += k * 0.012 * clamp(nz * 1.6) * bell(ax - 0.085, 0.07) * bell(y - 0.94, 0.075);
       p[0] +=
@@ -1548,6 +1548,8 @@ const retarget = (s: Skin, build: number): Skin => {
 
 /** How far out the woman's bust stands at its fullest, on the man's rest mesh, metres. */
 export const BUST = 0.028;
+/** Where it is fullest, metres up (the user, 2026-11-11: a little higher; it was 1.345). */
+export const BUST_Y = 1.37;
 
 const generate = (lod: number, build: number): Skin => {
   fem = +(build == BUILD.FEMALE);
@@ -1670,21 +1672,6 @@ const swing = (rot: Quat[], j: number, build = 0): Quat => {
   const t = [b[0] * p, b[1] * p, b[2] * p, l[3]];
   const h = Math.hypot(...t) || 1;
   return mul(c, mul(l, [-t[0] / h, -t[1] / h, -t[2] / h, t[3] / h]));
-};
-/** The share of the upper arm's swing its shoulder plate goes with, low at its side. */
-const CAPPED = 0.6;
-/**
- * The turn of the shoulder plate of shoulder joint `j`: on the collarbone, it goes with a share of
- * the upper arm's swing, all of it as the arm comes up over the shoulder, and with none of its
- * turn about itself, as a plate strapped to the trunk does (the user, 2026-11-10: it rode a
- * reaching arm round to the front of the chest).
- */
-export const capped = (rot: Quat[], j: number, build = 0): Quat => {
-  const [c, w] = [rot[j - 1], swing(rot, j, build)];
-  const th =
-    2 * Math.acos(Math.min(Math.abs(c[0] * w[0] + c[1] * w[1] + c[2] * w[2] + c[3] * w[3]), 1));
-  const k = clamp((th - 1) / 1.2);
-  return slerp(c, w, CAPPED + (1 - CAPPED) * k * k * (3 - 2 * k));
 };
 /** The inside of an open mouth. */
 const MOUTH = [0.09, 0.03, 0.03];

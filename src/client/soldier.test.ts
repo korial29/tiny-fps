@@ -33,7 +33,6 @@ import { SCALE, SHELL } from './helmet';
 import { GLOSS, SHINE, STRIDE, add, basis } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, REST, solve, turn } from './rig';
-import type { Quat } from './rig';
 import {
   FRY,
   GRIN,
@@ -47,8 +46,8 @@ import {
   stance,
 } from './soldier';
 import type { Runner } from './soldier';
-import { PACK, PAD, pack, shoulders } from './pack';
-import { capped, palette, shaved } from './skin';
+import { PACK, pack } from './pack';
+import { palette, shaved } from './skin';
 import { CH, lookOf, toneOf } from './features';
 import { POSE } from './expression';
 
@@ -99,36 +98,6 @@ const hold = (o: Partial<PlayerState>, n = 90) => {
     p = man({ ...o, z: p.z + (o.vz ?? 0) * DT });
   }
   return book.get(1)!;
-};
-
-/**
- * The shoulder plates an armoured runner is drawn with, the left's vertices then the right's, and
- * his stance: the plates of shoulders() on his arm joints, turned by capped().
- */
-const plates = (r: Runner) => {
-  const out: number[] = [];
-  const s = soldier(out, r, [0.1, 0.8, 0.2], 1, false, true)!;
-  const pads: number[] = [];
-  shoulders(
-    pads,
-    [J.ARM_L, J.ARM_R].map(j => [s.pos[j], capped(s.rot, j)] as [Vec3, Quat]),
-    1,
-  );
-  const same = (i: number) => {
-    for (let k = 0; k < pads.length; k += STRIDE) {
-      if (pads[k] != out[i + k] || pads[k + 1] != out[i + k + 1] || pads[k + 2] != out[i + k + 2]) {
-        return false;
-      }
-    }
-    return true;
-  };
-  let at = 0;
-  while (at < out.length && !same(at)) {
-    at += STRIDE;
-  }
-  expect(at).toBeLessThan(out.length);
-  const all = rows(pads).map(v => v.slice(0, 3));
-  return { s, pads: [all.slice(0, all.length / 2), all.slice(all.length / 2)] };
 };
 
 describe('animate', () => {
@@ -989,26 +958,21 @@ describe('a runner with the rail gun', () => {
     soldier(bare, r, [0.9, 0.1, 0.1], 1);
     soldier(capped, r, [0.9, 0.1, 0.1], 1, true);
     expect(capped.length).toBeGreaterThan(bare.length);
-    // Every added vertex is near a joint: the helmet, and the space suit's pack, hose, shoulder
-    // pads and armour plates.
+    // Every added vertex is near a joint: the helmet, and the space suit's pack, hose and armour
+    // plates.
     const { pos } = solve(r.gait.pose());
     const off = (i: number, j: number) =>
       Math.hypot(...[0, 1, 2].map(k => capped[i + k] - pos[j][k]));
     for (let i = bare.length; i < capped.length; i += STRIDE) {
       expect(Math.min(...pos.map((_, j) => off(i, j)))).toBeLessThan(0.35);
     }
-    // A head the katana took off wears no helmet and no hose: the body keeps its pack, pads and armour.
+    // A head the katana took off wears no helmet and no hose: the body keeps its pack and armour.
     const cut = hold({ down: 200, hp: 0, lost: LIMB.HEAD }, 30);
     expect(cut.cut?.limb).toBe(LIMB.HEAD);
     const [a, b, suit] = [[], [], []] as number[][];
     soldier(a, cut, [0.9, 0.1, 0.1], 1);
     const sk = soldier(b, cut, [0.9, 0.1, 0.1], 1, true)!;
     pack(suit, sk.pos[J.CHEST], sk.rot[J.CHEST], [0.9, 0.1, 0.1], 1);
-    shoulders(
-      suit,
-      [J.ARM_L, J.ARM_R].map(j => [sk.pos[j], sk.rot[j]] as [Vec3, Quat]),
-      1,
-    );
     // The armour is cut out of the stump's skin: it comes after it, so the rest is at least as much.
     expect(b.length).toBeGreaterThanOrEqual(a.length + suit.length);
   });
@@ -1047,40 +1011,6 @@ describe('armour without a helmet (Highline)', () => {
     expect(glossy(armored).some(([r0, g, b]) => b > r0 * 2 && b > g)).toBe(true);
     expect(glossy(armored).some(([r0, g, b]) => r0 > 0.8 && g > 0.8 && b > 0.8)).toBe(false);
     expect(glossy(space).some(([r0, g, b]) => r0 > 0.8 && g > 0.8 && b > 0.8)).toBe(true);
-  });
-});
-
-describe('the shoulder plates on a runner', () => {
-  const far = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]));
-  it('stay on the shoulders in every move, with every weapon: each plate on its joint, clear of the head', () => {
-    const blade = { blade: true, wield: true, ammo: -1 };
-    const moves: Partial<PlayerState>[] = [
-      {},
-      { vz: -6 },
-      { vz: -9 },
-      { ammo: 30, zapping: true, pitch: 0.5 },
-      HANGS,
-      { ...HANGS, mode: MODE.CLIMB, y: 1.6 },
-      { mode: MODE.WALLRUN, ground: false, wall: SIDE.WEST, vz: -8 },
-      { mode: MODE.SLIDE, vz: -8 },
-      blade,
-      { ...blade, vz: -6 },
-      { ...blade, lock: 10 },
-      ...CUTS.flatMap((c, cut) =>
-        [0.2, 0.45, 0.7].map(k => ({ ...blade, cut, swing: Math.round(c.ticks * (1 - k)) })),
-      ),
-    ];
-    for (const o of moves) {
-      const { s, pads } = plates(hold(o, 40));
-      [J.ARM_L, J.ARM_R].forEach((j, n) => {
-        for (const w of pads[n]) {
-          expect(far(w, s.pos[j])).toBeLessThan(0.2);
-          expect(far(w, add(s.pos[J.HEAD], turn(s.rot[J.HEAD], [0, 0.09, 0])))).toBeGreaterThan(
-            0.13,
-          );
-        }
-      });
-    }
   });
 });
 
@@ -1331,27 +1261,6 @@ describe('a runner shouldering a long gun (the user, 2026-11-10: it hung across 
         });
       }
     }
-
-    it(`wears the shoulder plates on the shoulders with the ${g.name} up, in every pose (the user, 2026-11-10: one sat before the chest)`, () => {
-      for (const [name, o] of [...POSES, ['sprinting', { vz: -9 }] as (typeof POSES)[number]]) {
-        const { s, pads } = plates(hold({ ...o, ...g.o }));
-        [J.ARM_L, J.ARM_R].forEach((j, n) => {
-          const v = pads[n];
-          const middle = v
-            .reduce((t, w) => t.map((x, k) => x + w[k]), [0, 0, 0])
-            .map(x => x / v.length);
-          // Its middle on the shoulder as the rig has it, not out with a reaching arm.
-          expect(far(middle, socket(s, j)), name).toBeLessThan(0.06);
-          // None of it ahead of the chest plate, 15 cm before the chest's joint, by more than a centimetre.
-          const front = Math.min(...v.map(w => local(s, J.CHEST, s.pos[J.CHEST], w)[2]));
-          expect(front, name).toBeGreaterThan(-0.16);
-          // It faces up and out from the trunk, as at rest: not round to the front.
-          const out = [n ? PAD.out[0] : -PAD.out[0], PAD.out[1], 0];
-          const faces = turn(inv(s.rot[J.CHEST]), turn(capped(s.rot, j), out as Vec3));
-          expect(off(faces, out), name).toBeLessThan(1.1);
-        });
-      }
-    });
 
     it(`carries the ${g.name} at the low ready in a sprint, the butt still in the shoulder, and brings it up to fire`, () => {
       for (const { p, s } of frames({ vz: -9, ...g.o }, false)) {

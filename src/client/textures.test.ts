@@ -68,8 +68,9 @@ describe('textures', () => {
       textures();
       return performance.now() - t;
     });
-    // About 100 ms on a quiet machine: the bound only catches a texture that got an order slower.
-    expect(Math.min(...times)).toBeLessThan(400);
+    // About 100 ms on a quiet machine, and up to 420 on a busy CI runner beside the other files:
+    // the bound only catches a texture that got an order slower.
+    expect(Math.min(...times)).toBeLessThan(1000);
   });
 
   it('is deterministic', () => {

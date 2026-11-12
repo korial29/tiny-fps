@@ -2,7 +2,7 @@
 // renderer's vertex format. A runner is the last PlayerState seen and the gait that eases the body
 // toward it; the dash streaks are the only thing drawn here that the gait does not pose. A
 // player's (x, y, z) is the bottom of the feet. No DOM.
-import { DOWN_TICKS, HEAT_MAX, RUN_SPEED, STEP_H, TICK_HZ } from '../shared/constants';
+import { DOWN_TICKS, EYE, HEAT_MAX, RUN_SPEED, STEP_H, TICK_HZ } from '../shared/constants';
 import { TAU, floored } from '../shared/physics';
 import { LIMB, MODE } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
@@ -100,6 +100,9 @@ export interface Runner {
   dt: number;
   /** The seat he rides in, when he does and his rover is known. */
   seat?: Seat;
+  /** The head of the runner he looks at (watched()), and how far his own is turned to it, eased: to his right and up, radians. */
+  watch?: Vec3;
+  gaze?: number[];
   /** The muzzle of the long gun in his hands as last drawn, from his feet: where its shots are seen to leave (combat.ts). */
   tip?: Vec3;
   /** The BUILD of the body (rig.ts, PlayerInfo.body): the man's when absent. */
@@ -181,6 +184,39 @@ const floorOf =
  * runner already in pose, one that left loses it. With a `world` the feet stand on the brushes
  * under them. The `tracer` gets the sparks of a limb cut off.
  */
+/**
+ * The head turns to the runner one looks at (the user, 2026-11-12): the nearest within `far`
+ * metres and `cone` radians of his aim. It turns no further than `turn` (to a side, up or down)
+ * from where it points, the eyes going the rest of their travel; `rate` is how fast, per second.
+ */
+export const WATCH = { far: 14, cone: 1.2, turn: [1.05, 0.5], rate: 7 };
+
+/** Where the head of the runner `p` looks at is, among `crowd`: nothing when he looks at no one, or is down. */
+export const watched = (p: PlayerState, crowd: PlayerState[]): Vec3 | undefined => {
+  if (p.down) {
+    return;
+  }
+  const f = basis(p.yaw, p.pitch)[2];
+  let best: Vec3 | undefined;
+  let near = WATCH.far;
+  for (const q of crowd) {
+    const d = [q.x - p.x, q.y - p.y, q.z - p.z];
+    const l = Math.hypot(...d);
+    if (q.id == p.id || l >= near || l < 0.3 || fried(q) >= 1) {
+      continue;
+    }
+    if (
+      Math.acos(Math.min(Math.max((d[0] * f[0] + d[1] * f[1] + d[2] * f[2]) / l, -1), 1)) <
+      WATCH.cone
+    ) {
+      near = l;
+      // A man down is looked at where he lies.
+      best = [q.x, q.y + (q.down ? 0.3 : EYE + 0.06), q.z];
+    }
+  }
+  return best;
+};
+
 export const animate = (
   book: Map<number, Runner>,
   others: PlayerState[],
@@ -196,6 +232,10 @@ export const animate = (
     }
   }
   for (const p of others) {
+    const seen = book.get(p.id);
+    if (seen) {
+      seen.watch = watched(p, others);
+    }
     const build = builds?.get(p.id) ?? 0;
     // A roster that says another body than the one drawn (it came after him): a new runner.
     const r = book.get(p.id)?.build == build ? book.get(p.id) : undefined;
@@ -624,7 +664,27 @@ export const soldier = (
   const { s, sink, yaw, carry } = stance(r);
   // His face: a wince when hit, a grimace down, a shout in a cut or a dash, effort in a sprint or a
   // climb, focus aiming, a grin; the eyes on his aim from where the head points.
-  const look = turn(inv(s.rot[J.HEAD]), basis(p.yaw, p.pitch)[2]);
+  // The head on the runner he looks at, as far as it turns; the eyes on him, or on the aim.
+  const [hx, hy, hz] = s.pos[J.HEAD];
+  const to =
+    r.watch && turn(inv(s.rot[J.HEAD]), [r.watch[0] - hx, r.watch[1] - hy, r.watch[2] - hz]);
+  const want = to
+    ? [Math.atan2(to[0], -to[2]), Math.atan2(to[1], Math.hypot(to[0], to[2]))].map((a, i) =>
+        Math.min(Math.max(a, -WATCH.turn[i]), WATCH.turn[i]),
+      )
+    : [0, 0];
+  const near = 1 - Math.exp(-r.dt * WATCH.rate);
+  r.gaze = (r.gaze ?? [0, 0]).map((a, i) => a + (want[i] - a) * near);
+  if (Math.hypot(...r.gaze) > 1e-4) {
+    s.rot[J.HEAD] = mul(
+      s.rot[J.HEAD],
+      mul(axis([0, 1, 0], -r.gaze[0]), axis([1, 0, 0], r.gaze[1])),
+    );
+  }
+  const look = turn(
+    inv(s.rot[J.HEAD]),
+    r.watch ? [r.watch[0] - hx, r.watch[1] - hy, r.watch[2] - hz] : basis(p.yaw, p.pitch)[2],
+  );
   r.face.update(r.dt, {
     down: p.down > 0,
     hurt: r.hurt / HURT,

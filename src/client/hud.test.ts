@@ -314,17 +314,18 @@ describe('createHud', () => {
     // The face is 72 px wide and 87 high from 24 px up: the arch clears its sides and its top.
     expect(+w).toBeGreaterThan(72 + 30);
     expect(+h).toBeGreaterThan(24 + 87 + 8);
-    expect(HUD_CSS).toMatch(
-      /del::after\{[^}]*border-bottom:0;border-radius:\d+px \d+px 0 0;background:#0008/,
-    );
-    // On each side the frame comes up the rim in a very acute angle: a wedge of 15 degrees.
-    const wedges = [
-      ...HUD_CSS.matchAll(/conic-gradient\(from (\d+)deg at (\d+)% 44%,#000b 0 (\d+)deg/g),
+    expect(HUD_CSS).toMatch(/del::after\{[^}]*border-bottom:0;border-radius:\d+px \d+px 0 0\}/);
+    // On each side the rim comes up in a very acute angle: a pale line 16 degrees off the side.
+    const lines = [
+      ...HUD_CSS.matchAll(/conic-gradient\(from ([\d.]+)deg at (\d+)% 44%,#fff2 0 \.5deg/g),
     ];
-    expect(wedges.map(m => [+m[1], +m[2], +m[3]])).toEqual([
-      [164, 4, 15],
-      [181, 96, 15],
+    expect(lines.map(m => [+m[1], +m[2]])).toEqual([
+      [164, 4],
+      [195.5, 96],
     ]);
+    // Lines only: the view is as clear as it was (the user: no black triangles, the same glass).
+    expect(HUD_CSS).not.toMatch(/del::after\{[^}]*background/);
+    expect(/del\{[^}]*\}/.exec(HUD_CSS)![0]).not.toMatch(/#000[a-c]/);
     expect(HUD_CSS).toMatch(/del::before\{[^}]*inset 0 22px 20px -8px #000a/);
     // The shell is drawn before the face, the health and the gun's count, so they lie over it.
     const order = [...screen.children].map(e => e.tagName);

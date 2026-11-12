@@ -4,6 +4,7 @@ import { EV, MODE, SIDE } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
 import { KEY, NOBODY } from '../shared/types';
 import { ROVER, drive } from '../shared/rover';
+import { SHIP, dock } from '../shared/ship';
 import { land, rover as parked, run } from '../../test/slope';
 import type { Audio } from './audio';
 import { BREATH, SKID_FROM, createFoley } from './foley';
@@ -39,6 +40,7 @@ const fake = () => {
     [SOUND.SCRAPE]: [],
     [SOUND.ENGINE]: [],
     [SOUND.SKID]: [],
+    [SOUND.JET]: [],
   };
   let muted = false;
   const audio: Audio = {
@@ -394,6 +396,18 @@ describe('the rover the own player sits in', () => {
   });
   const last = (l: [number, number][]) => l.at(-1)!;
 
+  it('crashes when a frame takes the speed on the level off it, not on a hard landing', () => {
+    const { audio, played } = fake();
+    const f = createFoley(audio);
+    f.rover(car({ vz: -20 }), DT, KEY.FORWARD);
+    f.rover(car({ z: -0.3, vz: 0 }), DT, KEY.FORWARD);
+    expect(played.map(p => p.id)).toContain(SOUND.CRASH);
+    const n = played.length;
+    f.rover(car({ z: -0.3, vy: -20 }), DT);
+    f.rover(car({ z: -0.3, vy: 0 }), DT);
+    expect(played.slice(n).map(p => p.id)).not.toContain(SOUND.CRASH);
+  });
+
   it('is silent on foot: no loop is even started, and a rover left goes quiet', () => {
     const { audio, sets, played } = fake();
     const f = createFoley(audio);
@@ -568,5 +582,39 @@ describe('breathing in a helmet', () => {
     expect(f.played).toEqual([]);
     f.audio.mute(true);
     expect(breaths(player(), 10, f)).toEqual([]);
+  });
+});
+
+describe('the ship the own player flies (the user, 2026-11-12)', () => {
+  const ship = (over: Partial<Rover> = {}): Rover => ({ ...dock([[0, 0, 0, 0]])[0], ...over });
+
+  it('runs its jet louder and higher with the speed and the boost, low on its pad, silent off it', () => {
+    const { audio, sets } = fake();
+    const f = createFoley(audio);
+    f.ship(ship({ steer: -1 }), DT);
+    f.ship(ship({ vz: -SHIP.VMAX / 2 }), DT, KEY.FORWARD);
+    f.ship(ship({ vz: -SHIP.VMAX }), DT, KEY.FORWARD | KEY.SPRINT);
+    f.ship(undefined, DT);
+    const [pad, half, full, off] = sets[SOUND.JET];
+    expect(pad[0]).toBeGreaterThan(0);
+    expect(half[0]).toBeGreaterThan(pad[0]);
+    expect(full[0]).toBeGreaterThan(half[0]);
+    expect(full[1]).toBeGreaterThan(half[1]);
+    expect(off[0]).toBe(0);
+  });
+
+  it('crashes when a frame takes more speed off it than the engines can, harder the faster', () => {
+    const { audio, played } = fake();
+    const f = createFoley(audio);
+    f.ship(ship({ vz: -40 }), DT, KEY.FORWARD);
+    f.ship(ship({ z: -0.6, vz: -39 }), DT, KEY.FORWARD);
+    expect(played).toEqual([]);
+    f.ship(ship({ z: -1.2, vz: 0 }), DT, KEY.FORWARD);
+    expect(played).toHaveLength(1);
+    expect(played[0]).toMatchObject({ id: SOUND.CRASH });
+    // Parked afresh far away: no crash.
+    f.ship(ship({ z: -100, vz: -40 }), DT);
+    f.ship(ship({ z: 0, vz: 0 }), DT);
+    expect(played).toHaveLength(1);
   });
 });

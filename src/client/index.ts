@@ -1,12 +1,13 @@
-import { BOLT, HP_MAX, LOCK_WIN, PLAYER_H, TICK_HZ, VEHICLE } from '../shared/constants';
+import { BOLT, HP_MAX, LOCK_WIN, PLAYER_H, PLAYER_R, TICK_HZ, VEHICLE } from '../shared/constants';
 import { MAPS, mapKey, mapOf } from '../shared/maps';
-import { eyeHeight } from '../shared/physics';
+import { eyeHeight, heightOf } from '../shared/physics';
+import { cylinder } from '../shared/plasma';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ClientText, ServerText } from '../shared/protocol';
-import { FLAG, KEY } from '../shared/types';
+import { FLAG, KEY, MODE } from '../shared/types';
 import type { PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
 import { SOUND } from './sfx';
-import { aimOf, aimRange, gap2 } from '../shared/rover';
+import { aimOf, gap2, struck } from '../shared/rover';
 import { SHIP, limits } from '../shared/ship';
 import { build, hidden, ray } from '../shared/world';
 import { createAnnouncer } from './announce';
@@ -255,14 +256,15 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
       const s = decodeSnapshot(data);
       if (s) {
         predictor.snapshot(s, performance.now());
-        // A rover's laser bolt, new in this snapshot: its shot is heard where it is.
+        // A vehicle's laser bolt, new in this snapshot: its blaster is heard where it is, each a
+        // little off the pitch of the last so that a salvo does not drone.
         const flying = new Set<number>();
         for (const b of s.balls ?? []) {
           if (b.power === BOLT) {
             const key = (b.by << 8) | b.id;
             flying.add(key);
             if (!bolts.has(key) && !b.burst) {
-              audio.play(SOUND.LASE, [b.x, b.y, b.z], 0.35, 1.5);
+              audio.play(SOUND.BLASTER, [b.x, b.y, b.z], 0.6, 0.92 + 0.16 * ((b.id * 0.618) % 1));
             }
           }
         }
@@ -468,6 +470,11 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
       dt,
       driving ? ctl.keys : 0,
     );
+    foley.ship(
+      seat && rovers[seat.rover]?.ship ? rovers[seat.rover] : undefined,
+      dt,
+      driving ? ctl.keys : 0,
+    );
     if (world.def.helmets) {
       foley.breathe(me, dt);
     }
@@ -543,16 +550,19 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
           wrecks.draw(v);
         },
       );
-      // The reticle: where the lasers cross along the look, or the ground or wall before it.
+      // The reticle: where the lasers cross, on what the look meets as the host's sight() does
+      // (a wall, another vehicle, a runner who is up), or along the look.
       if (car) {
-        const [o, to]: [number, number, number][] = [
-          [car.x, car.y, car.z],
-          aimOf(car, ctl.yaw, ctl.pitch),
-        ];
-        const k = aimRange(car);
-        const d = to.map((v, n) => (v - o[n]) / k) as [number, number, number];
-        const t = ray(world, o, d, k);
-        hud.aim(rd.project(o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t));
+        const hulls = rovers.filter(r => r !== car && !r.wreck);
+        const up = others.filter(p => !p.down && p.mode !== MODE.RIDE);
+        const [x, y, z] = aimOf(car, ctl.yaw, ctl.pitch, (o, d, m) =>
+          Math.min(
+            ray(world, o, d, m),
+            ...hulls.map(r => struck(r, o, d, m)),
+            ...up.map(p => cylinder(o, d, p, PLAYER_R, heightOf(p))),
+          ),
+        );
+        hud.aim(rd.project(x, y, z));
       } else {
         hud.aim();
       }

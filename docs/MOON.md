@@ -203,7 +203,18 @@ The user: rework the ship's style after the long-nosed strike fighters of the fi
 - Three levels of detail (`BUDGET`: 1,400, 2,400 and 5,000 vertices at most; `SHIP_NEAR` 45 m, `SHIP_MID` 160 m in `render.ts`).
 - The simulation moved with the shape, along the nose only: `COCKPIT` 2.6 m back and 0.6 m up (the pilot's shoulders at the sill), the cannons' muzzles (`SHIP_GUNS`) 3.1 m back under the wings, the pods (`PODS`) 3.4 m back under the wings. The hull's body, its hit spheres, its handling and the chase camera are as they were.
 
-Known limits: ships do not collide with rovers or each other in flight (a rover stops on a parked one).
+Known limits: a rover never pushes a ship, nor a ship another vehicle: each stops on the other.
+
+### Wings and crashes (the user, 2026-11-12)
+
+The user: the wings went through everything, shots on another ship or a rover seemed to do nothing, and a ship should be heard and hurt when it crashes.
+
+- `WING` (the wings' three sections) moved from `craft.ts` to `ship.ts`: what is drawn is what collides. `wings()` are four stadiums along the middle of the chord (two a side, `WING_H` thick over the wing's bottom), added to the hull by `shipBodies()` and `hulls()` (`rover.ts`): players on foot walk into the wings and stand on them, rovers and cuts meet them. `struck()` and `reach()` add the wings as boxes along the span in the ship's frame (`WING_BOXES`), so a bolt, a ball or a missile on a wing hurts the ship.
+- In flight (`pilot()`): the wing tips are pushed out of the brushes' sides like the hull's circles, the wings' undersides (`TOUCH`) lift the ship over the floor under them (banked low, a tip went into the ground) without landing it, and the hull's circles and the tips stop on the other vehicles' bodies (`drive()` hands them in), `SHIP.BOUNCE` of the speed into them sent back. Ships now collide with rovers and with each other.
+- A crash: the speed a step's collisions take away (the vertical part halved: sinking onto a pad on C is no crash) is the jolt; past `SHIP.CRASH` (12 m/s) it costs 1 hp each `SHIP.CRASH_HP` (4) more (`Room.crash()`, nobody's shot, the blast its own team's). A wall at the top speed takes 9, at full boost the ship blows up. Piloted or not.
+- The lasers' aim (`aimOf()`, the room's `sight()`): the two beams crossed at a fixed `GUN_AIM` (50 m for a rover, 80 m for a ship), so on a rover nearer than that they went either side of it. They now cross on what the look meets within the guns' range (a brush, an enemy vehicle's hull, an enemy on foot as the driver drew him), `AIM_MIN` (8 m) at least; the missiles fly there too, and the reticle shows the same point.
+- A rover's crash (`drive()`, `ROVER.CRASH` 10 m/s, `CRASH_HP` 3): the speed on the level that walls and vehicles take away; a landing is the springs' and no crash. A wall at the top speed takes 5. Heard as the ship's `CRASH`.
+- Heard (`foley.ts` `ship()`, `sfx.ts`): the ship has its own looped engine, `JET` (a jet's roar and a turbine's whine, louder and higher with the speed, the thrust and the boost, low on its pad); `CRASH` when a frame takes more speed off it than the engines can; every vehicle's laser bolt is a `BLASTER`, a chirp diving fast from 1.9 kHz, as in the films.
 
 ## Vehicle damage (the user, 2026-11-12)
 

@@ -7,8 +7,8 @@ import { MOON } from './moon';
 import { move } from './physics';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
-import { drive, hull, nearby, park } from './rover';
-import { SHIP, dock, limits, pilot, struck } from './ship';
+import { drive, hull, hulls, nearby, park } from './rover';
+import { SHIP, dock, limits, pilot, point, reach, struck } from './ship';
 import { KEY, MODE, NOBODY } from './types';
 import type { Conn, Input, PlayerState, Rover } from './types';
 import { build } from './world';
@@ -405,5 +405,155 @@ describe('the ship, predicted against the room', () => {
       expect(r.pred.rovers(1e9, 1)[0], name).toMatchObject({ x, y, z, hp, wreck, nades });
       expect(r.car, name).toMatchObject({ hp: VEHICLE.HP, wreck: 0, driver: NOBODY, x: 2.5 });
     }
+  });
+});
+
+// The user, 2026-11-12: the wings went through everything, and a crash did nothing.
+describe('the wings and the crashes', () => {
+  // Nose to the east (+x): the right wing is toward +z, a few metres behind the centre.
+  it('takes the shots on its wings, out past the hull, and none beyond the tips or ahead of them', () => {
+    const [r] = dock([[0, 0, 0, EAST]]);
+    // Straight down onto each wing, 5 m out and 5 m back: on its top, a little under the centre.
+    for (const z of [5, -5]) {
+      const t = struck(r, [-5, 20, z], [0, -1, 0], 100);
+      expect(t).toBeGreaterThan(20 - SHIP.DROP - 0.1);
+      expect(t).toBeLessThan(20 - SHIP.DROP + 1);
+      expect(reach(r, [-5, SHIP.DROP - 0.3, z])).toBe(0);
+    }
+    // Past the tip, ahead of the leading edge, short of the wing.
+    expect(struck(r, [-5, 20, 7.6], [0, -1, 0], 100)).toBe(Infinity);
+    expect(struck(r, [-1, 20, 5], [0, -1, 0], 100)).toBe(Infinity);
+    expect(struck(r, [-5, 20, 5], [0, -1, 0], 10)).toBe(Infinity);
+    // A shot along the span from the side meets the tip first.
+    expect(struck(r, [-5.5, SHIP.DROP - 0.75, 30], [0, 0, -1], 100)).toBeCloseTo(30 - 6.4 - 0.1, 1);
+  });
+
+  it('stops a runner at a wing, which he can stand on', () => {
+    const w = field();
+    const [r] = park(w);
+    fly(r, w, 60);
+    // Walking east under the right wing, 4 m out: he stops at its trailing edge.
+    const p = { ...MOON_PLAYER, x: -14, y: 0, z: 4 };
+    for (let k = 0; k < 240; k++) {
+      move(p, { keys: KEY.FORWARD, yaw: EAST, pitch: 0, seq: k }, w, 0, hulls(r));
+    }
+    expect(p.x).toBeLessThan(-5.4);
+    expect(p.x).toBeGreaterThan(-8);
+    // Dropped on the wing, he stands on it.
+    const q = { ...MOON_PLAYER, x: -5, y: 3, z: 4, mode: MODE.AIR, ground: false };
+    for (let k = 0; k < 120; k++) {
+      move(q, { keys: 0, yaw: EAST, pitch: 0, seq: k }, w, 0, hulls(r));
+    }
+    expect(q.y).toBeGreaterThan(SHIP.DROP - 0.5);
+  });
+
+  it('stops its wing tip on a wall, not only its hull', () => {
+    // A wall 8 m to the ship's right.
+    const w = field([box([-30, 0, 8], [30, 40, 10])]);
+    const [r] = park(w);
+    fly(r, w, 30, keys(KEY.JUMP));
+    fly(r, w, 300, keys(KEY.RIGHT));
+    expect(r.z).toBeLessThan(8 - 5.6);
+    expect(r.z).toBeGreaterThan(8 - 5.6 - 1.5);
+  });
+
+  it('keeps its wing tips out of the ground when it banks low over it', () => {
+    const w = field();
+    const [r] = park(w);
+    fly(r, w, 20, keys(KEY.JUMP));
+    fly(r, w, 240, keys(0));
+    // Banked hard a metre over its hover height: the low tip would be far under the ground.
+    for (const roll of [0.8, -0.8]) {
+      Object.assign(r, { y: SHIP.DROP + 1, vy: 0, roll, wr: 0 });
+      pilot(r, keys(0), w);
+      for (const s of [-1, 1]) {
+        for (const a of [-4.9, -6.1]) {
+          expect(point(r, s * 6.4, -0.78, a)[1]).toBeGreaterThan(-0.01);
+        }
+      }
+    }
+    // It is not landed: it flies on.
+    expect(r.steer).toBe(0);
+  });
+
+  it('stops on another vehicle, wings and all, and feels the jolt', () => {
+    const w = field();
+    const [r, o] = park({
+      ...w,
+      def: {
+        ...w.def,
+        ships: [
+          [0, 0, 0, EAST],
+          [40, 0, 0, EAST],
+        ],
+      },
+    });
+    fly(r, w, 30, keys(KEY.JUMP));
+    fly(r, w, 240, keys(0));
+    Object.assign(o, { y: r.y });
+    const jolts: number[] = [];
+    for (let k = 0; k < 300; k++) {
+      pilot(r, keys(KEY.FORWARD), w, hulls(o), j => jolts.push(j));
+    }
+    // It stops behind the other ship's hull, and the stop at speed is a crash.
+    expect(r.x).toBeLessThan(40 - 4.8);
+    expect(Math.max(...jolts)).toBeGreaterThan(SHIP.CRASH);
+  });
+
+  it('crashes into a wall at speed, not when it lands on C or brushes a wall slowly', () => {
+    const w = field([box([60, 0, -20], [62, 40, 20])]);
+    const [r] = park(w);
+    const jolts: number[] = [];
+    const go = (n: number, i: Input) => {
+      for (let k = 0; k < n; k++) {
+        pilot(r, i, w, [], j => jolts.push(j));
+      }
+    };
+    go(90, keys(KEY.JUMP));
+    go(600, keys(KEY.CROUCH));
+    expect(r.steer).toBe(-1);
+    expect(jolts).toEqual([]);
+    go(30, keys(KEY.JUMP));
+    go(600, keys(KEY.FORWARD | KEY.SPRINT));
+    expect(jolts.length).toBe(1);
+    expect(jolts[0]).toBeGreaterThan(SHIP.VMAX);
+  });
+});
+
+describe('Room: a ship that crashes', () => {
+  it('loses health with the speed it hits a wall at, and blows up at full boost', () => {
+    const W = build({
+      ...land(undefined, [box([60, 0, -20], [62, 40, 20])]).def,
+      teams: duo([[4, 0, 0, EAST]], [[4, 0, -120, EAST]]),
+      ships: [[0, 0, 0, EAST]],
+    });
+    const room = new Room({}, W.def);
+    const c: Conn = { send: () => {} };
+    room.connect(c);
+    room.receive(c, JSON.stringify({ t: 'join', name: 'p' }));
+    let seq = 0;
+    const send = (k: number, n: number) => {
+      for (let i = 0; i < n; i++) {
+        room.receive(c, encodeInput({ seq: seq++, keys: k, yaw: EAST, pitch: 0 }));
+        room.tick();
+      }
+    };
+    const ship: Rover = room['rovers'][0];
+    send(KEY.USE, 1);
+    send(0, 1);
+    expect(ship.driver).toBe(0);
+    // From 30 m off the wall, plain thrust into it: some of its health.
+    send(KEY.JUMP, 30);
+    send(0, 240);
+    Object.assign(ship, { x: 30, vx: 0, vz: 0 });
+    send(KEY.FORWARD, 120);
+    expect(ship.x).toBeGreaterThan(50);
+    expect(ship.hp).toBeGreaterThan(3);
+    expect(ship.hp).toBeLessThan(VEHICLE.HP);
+    // From 120 m off it at full boost: a wreck, and its pilot down.
+    Object.assign(ship, { x: -60, vx: 0, vz: 0 });
+    send(KEY.FORWARD | KEY.SPRINT, 180);
+    expect(ship.wreck).toBeGreaterThan(0);
+    expect(room['peers'].get(c)!.state.down).toBeGreaterThan(0);
   });
 });

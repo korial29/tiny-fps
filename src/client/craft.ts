@@ -12,7 +12,7 @@
 // missiles left and the lights are added after them.
 import { NOBODY } from '../shared/types';
 import type { Rover } from '../shared/types';
-import { COCKPIT, PODS, SHIP, SHIP_GUNS } from '../shared/ship';
+import { COCKPIT, PODS, SHIP, SHIP_GUNS, WING } from '../shared/ship';
 import { glow } from './flag';
 import { SHINE, STRIDE, add, basis, dress, mix, place, smooth, sub } from './mesh';
 import type { Vec3 } from './mesh';
@@ -71,12 +71,8 @@ const FLAT = 0.6;
 export const ENGINE = { X: 1.55, Y: 0.3, R: 0.56, LIP: -1.3, NOZZLE: -6.3 };
 /** The engines' nozzles: right of the centre, above it, ahead of it. */
 export const NOZZLES: Vec3[] = [-1, 1].map(s => [s * ENGINE.X, ENGINE.Y, ENGINE.NOZZLE]);
-/** A wing's sections, at the hull, at the cannon and at the tip: right, the leading and the trailing edge ahead, the top and the bottom. */
-export const WING = [
-  [0.9, -2.7, -5.3, 0.14, -0.12],
-  [2.6, -2.6, -5.5, 0.12, -0.1],
-  [6.4, -4.9, -6.1, -0.7, -0.78],
-];
+/** A wing's sections (ship.ts's: the wings collide as they are drawn). */
+export { WING };
 /** The feet of the three legs it stands on: right of the centre, under it, ahead of it. */
 export const FEET: Vec3[] = [
   [0, -SHIP.DROP, 3.4],

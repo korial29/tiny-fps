@@ -9,7 +9,7 @@
 // crater's bound. Inside WARN of either the climb or the way out fades; past it the ship is braked
 // and pushed back, and the HUD warns (limits()).
 import { TICK_HZ, VEHICLE } from './constants';
-import { floorAt, gravity, norm, shove } from './physics';
+import { floorAt, gapTo, gravity, norm, shove } from './physics';
 import { bound } from './relief';
 import { KEY, NOBODY } from './types';
 import type { Body } from './physics';
@@ -72,6 +72,14 @@ export const SHIP = {
   MISSILE_COOL: 30,
   RELOAD: 300,
   MISSILE_SPEED: 60,
+  /**
+   * A crash (the user, 2026-11-12): the speed a step's collisions take away (m/s, the vertical
+   * part halved, so a sink onto a pad is no crash) past CRASH costs 1 hp each CRASH_HP more.
+   */
+  CRASH: 12,
+  CRASH_HP: 4,
+  /** How much of the speed into another vehicle comes back off it. */
+  BOUNCE: 0.3,
 } as const;
 
 /** The lasers' muzzles under the wings, the missiles' pods under the wings: right of the centre, above it, ahead of it. */
@@ -83,6 +91,58 @@ export const PODS = [
   [-3.4, -0.7, -2.9],
   [3.4, -0.7, -2.9],
 ];
+/**
+ * A wing's sections, at the hull, at the cannon and at the tip: right, the leading and the trailing
+ * edge ahead, the top and the bottom. craft.ts draws them; the shots, the players on foot, the
+ * other vehicles and the brushes meet them (the user, 2026-11-12: the wings went through all).
+ */
+export const WING = [
+  [0.9, -2.7, -5.3, 0.14, -0.12],
+  [2.6, -2.6, -5.5, 0.12, -0.1],
+  [6.4, -4.9, -6.1, -0.7, -0.78],
+];
+/** The right wing's section `x` metres right of the centre, between two of WING's. */
+const section = (x: number): number[] => {
+  const k = x < WING[1][0] ? 0 : 1;
+  const [a, b] = [WING[k], WING[k + 1]];
+  const t = (x - a[0]) / (b[0] - a[0]);
+  return a.map((v, n) => v + (b[n] - v) * t);
+};
+/**
+ * The right wing as the shots meet it: boxes in the ship's frame along the span, each round its
+ * slice of the wing with a margin of PAD: [right, up, ahead] each from, to.
+ */
+const PAD = 0.1;
+export const WING_BOXES: [number, number][][] = [0.9, 2.6, 3.9, 5.15, 6.4]
+  .slice(1)
+  .map((x1, k, xs) => {
+    const x0 = k ? xs[k - 1] : 0.9;
+    const [s0, s1] = [section(x0), section(x1)];
+    return [
+      [x0, x1 + PAD],
+      [Math.min(s0[4], s1[4]) - PAD, Math.max(s0[3], s1[3]) + PAD],
+      [Math.min(s0[2], s1[2]) - PAD, Math.max(s0[1], s1[1]) + PAD],
+    ];
+  });
+/**
+ * The right wing as the players on foot and the other vehicles meet it: stadiums from the root to
+ * near the tip along the middle of the chord ([from, to, radius]), WING_H thick over its bottom.
+ */
+const WING_BODY = [
+  [1.4, 3.2, 1.1],
+  [3.2, 5.8, 0.75],
+];
+const WING_H = 0.4;
+/** The wing tips against the brushes: a circle this wide, this far right of the centre. */
+const TIP = { X: 5.6, R: 0.8 };
+/** Where the wings' undersides meet the floor: right of the centre, and the trailing edge (-1), the middle of the chord (0) or the leading edge (1). */
+const TOUCH = [
+  [3.2, 0],
+  [4.8, 0],
+  [6.4, -1],
+  [6.4, 1],
+];
+
 /** The pilot's seat in the cockpit, behind the long nose: right of the centre, above it (the feet), ahead of it. */
 export const COCKPIT = [0, 0.05, -0.2];
 /** Where who gets out stands, beside the cockpit: clear of the hull, ahead of the wings. */
@@ -154,6 +214,21 @@ export const shipHull = (r: Rover): Body => {
   return { a, b, r: SHIP.R, h: SHIP.H };
 };
 
+/** The wings as solids (WING_BODY), the left one then the right one. */
+export const wings = (r: Rover): Body[] =>
+  [-1, 1].flatMap(s =>
+    WING_BODY.map(([x0, x1, rad]) => {
+      const [a, b] = [x0, x1].map(x => {
+        const [, le, te, , low] = section(x);
+        return point(r, s * x, low - 0.05, (le + te) / 2);
+      });
+      return { a, b, r: rad, h: WING_H };
+    }),
+  );
+
+/** Every solid of the ship: its hull, then its wings. */
+export const shipBodies = (r: Rover): Body[] => [shipHull(r), ...wings(r)];
+
 /**
  * How near the ship is to its limits, each 0 inside and 1 at the limit (more past it): the ceiling
  * and the edge of the crater. For the HUD.
@@ -217,7 +292,13 @@ const roof = (w: World, x: number, z: number, y0: number, y1: number): number =>
  * the engines hold it against gravity: it hovers with no key held. On a floor it rests on its
  * skids, level.
  */
-export const pilot = (r: Rover, i: Input | undefined, w: World): boolean => {
+export const pilot = (
+  r: Rover,
+  i: Input | undefined,
+  w: World,
+  others: readonly Body[] = [],
+  crash?: (jolt: number) => void,
+): boolean => {
   const keys = i ? i.keys : 0;
   const on = (k: number) => (keys & k ? 1 : 0);
   const thr = on(KEY.FORWARD) - on(KEY.BACK);
@@ -312,6 +393,8 @@ export const pilot = (r: Rover, i: Input | undefined, w: World): boolean => {
     }
   }
 
+  // What the collisions take from the speed is the crash's jolt.
+  const v0 = [r.vx, r.vy, r.vz];
   // The hull against the brushes and the ground: each circle along the nose stands on the highest
   // floor under it, stops under the lowest bottom over it, and is pushed out of the sides.
   let lifted = 0;
@@ -325,6 +408,20 @@ export const pilot = (r: Rover, i: Input | undefined, w: World): boolean => {
     r.vy = max(r.vy, 0);
     // Landed: -1 until a step leaves the floor.
     r.steer = r.vy > 0.5 ? 0 : -1;
+  }
+  // The wings on the floor (the user, 2026-11-12: banked low, a tip went into the ground): the
+  // undersides at TOUCH lift the ship over the highest floor under them. No landing: it flies on.
+  let scraped = 0;
+  for (const s of [-1, 1]) {
+    for (const [x, edge] of TOUCH) {
+      const [, le, te, , low] = section(x);
+      const [px, py, pz] = point(r, s * x, low, edge < 0 ? te : edge > 0 ? le : (le + te) / 2);
+      scraped = max(scraped, floorAt(w, px, pz, py + 1) - py);
+    }
+  }
+  if (scraped > 0) {
+    r.y += scraped;
+    r.vy = max(r.vy, 0);
   }
   for (const k of SHIP.BODY) {
     const [x, y, z] = point(r, 0, -SHIP.DROP, k);
@@ -346,7 +443,59 @@ export const pilot = (r: Rover, i: Input | undefined, w: World): boolean => {
       r.vz -= v * pz;
     }
   }
+  // The wing tips against the brushes' sides, as the hull's circles.
+  for (const s of [-1, 1]) {
+    const [, le, te, , low] = section(TIP.X);
+    const [x, y, z] = point(r, s * TIP.X, low, (le + te) / 2);
+    const [px, pz] = shove({ x, y, z }, w, WING_H, TIP.R);
+    const d = px * px + pz * pz;
+    if (d) {
+      r.x += px;
+      r.z += pz;
+      const v = min(0, r.vx * px + r.vz * pz) / d;
+      r.vx -= v * px;
+      r.vz -= v * pz;
+    }
+  }
+  // The other vehicles: the hull's circles and the wing tips against their bodies; on their axis,
+  // out by their right. Like a rover, a ship never pushes another: it stops on it, BOUNCE of its
+  // speed into it sent back.
+  if (others.length) {
+    const [, le, te, , low] = section(TIP.X);
+    const mine: [number, number, number, number, number][] = [
+      ...SHIP.BODY.map((k): [number, number, number, number, number] => [
+        0,
+        -SHIP.DROP,
+        k,
+        SHIP.R,
+        SHIP.H,
+      ]),
+      [-TIP.X, low, (le + te) / 2, TIP.R, WING_H],
+      [TIP.X, low, (le + te) / 2, TIP.R, WING_H],
+    ];
+    for (const o of others) {
+      for (const [b, u, k, rad, h] of mine) {
+        const [x, y, z] = point(r, b, u, k);
+        const [dx, dz, oy] = gapTo(o, x, z);
+        const reach = rad + o.r;
+        const d = sqrt(dx * dx + dz * dz);
+        if (d >= reach - 1e-4 || oy >= y + h || oy + o.h <= y) {
+          continue;
+        }
+        const [nx, nz] = d ? [dx / d, dz / d] : [cos(r.yaw), -sin(r.yaw)];
+        r.x += nx * (reach - d);
+        r.z += nz * (reach - d);
+        const v = min(0, r.vx * nx + r.vz * nz) * (1 + SHIP.BOUNCE);
+        r.vx -= v * nx;
+        r.vz -= v * nz;
+      }
+    }
+  }
   bound(r, w);
+  const jolt = sqrt((r.vx - v0[0]) ** 2 + ((r.vy - v0[1]) / 2) ** 2 + (r.vz - v0[2]) ** 2);
+  if (crash && jolt > SHIP.CRASH) {
+    crash(jolt);
+  }
   if (abs(r.roll) < 1e-6) {
     r.roll = 0;
   }
@@ -361,7 +510,7 @@ export const pilot = (r: Rover, i: Input | undefined, w: World): boolean => {
  * Infinity. The hull is the HITS spheres.
  */
 export const struck = (r: Rover, o: Vec3, d: Vec3, m: number): number => {
-  let best = Infinity;
+  let best = wingStruck(r, o, d);
   for (const k of SHIP.HITS) {
     const c = point(r, 0, 0, k);
     const [px, py, pz] = [o[0] - c[0], o[1] - c[1], o[2] - c[2]];
@@ -376,14 +525,54 @@ export const struck = (r: Rover, o: Vec3, d: Vec3, m: number): number => {
       best = t;
     }
   }
+  return best <= m ? best : Infinity;
+};
+
+/** `v` in the ship's frame: right, up and ahead of its centre (`at`), or along its axes. */
+const frame = (r: Rover, v: Vec3, at = true): Vec3 => {
+  const q = at ? [v[0] - r.x, v[1] - r.y, v[2] - r.z] : v;
+  return axes(r).map(e => e[0] * q[0] + e[1] * q[1] + e[2] * q[2]) as Vec3;
+};
+/** The boxes of both wings, each [right, up, ahead] from, to. */
+const BOXES = [-1, 1].flatMap(s =>
+  WING_BOXES.map(([x, y, a]) => [s > 0 ? x : [-x[1], -x[0]], y, a]),
+);
+
+/** Where a shot from `o` along the unit `d` first enters a wing: the distance, or Infinity. */
+const wingStruck = (r: Rover, o: Vec3, d: Vec3): number => {
+  const [lo, ld] = [frame(r, o), frame(r, d, false)];
+  let best = Infinity;
+  for (const box of BOXES) {
+    let [t0, t1] = [0, Infinity];
+    for (let n = 0; n < 3 && t0 <= t1; n++) {
+      const [from, to] = box[n];
+      if (abs(ld[n]) < 1e-9) {
+        if (lo[n] < from || lo[n] > to) {
+          t0 = Infinity;
+        }
+        continue;
+      }
+      const [a, b] = [(from - lo[n]) / ld[n], (to - lo[n]) / ld[n]];
+      t0 = max(t0, min(a, b));
+      t1 = min(t1, max(a, b));
+    }
+    if (t0 <= t1 && t0 < best) {
+      best = t0;
+    }
+  }
   return best;
 };
 
-/** The distance from `c` to the nearest point of the hull's spheres, 0 inside. */
-export const reach = (r: Rover, c: Vec3): number =>
-  min(
+/** The distance from `c` to the nearest point of the hull's spheres and the wings, 0 inside. */
+export const reach = (r: Rover, c: Vec3): number => {
+  const l = frame(r, c);
+  return min(
     ...SHIP.HITS.map(k => {
       const [x, y, z] = point(r, 0, 0, k).map((v, n) => c[n] - v);
       return max(0, sqrt(x * x + y * y + z * z) - SHIP.HIT);
     }),
+    ...BOXES.map(box =>
+      sqrt(box.reduce((s, [from, to], n) => s + max(0, from - l[n], l[n] - to) ** 2, 0)),
+    ),
   );
+};

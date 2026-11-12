@@ -533,8 +533,9 @@ describe('a vehicle at 0 HP', () => {
     m.hold(m.bob, 20, 0);
     const bob = m.state(m.bob);
     expect(bob.down).toBeGreaterThan(0);
-    expect(solid(m.cars(), bob)).toHaveLength(3);
-    expect(solid(m.cars(), m.state(m.cy))).toHaveLength(4);
+    // Two rovers and two ships of five solids each (a hull and four wing pieces), the wreck's less.
+    expect(solid(m.cars(), bob)).toHaveLength(11);
+    expect(solid(m.cars(), m.state(m.cy))).toHaveLength(12);
     m.ticks(2 * TICK_HZ);
     expect(car.x - x).toBeGreaterThan(1);
     expect(car.x - x).toBeLessThan(5);
@@ -618,5 +619,70 @@ describe('a new match, a new map, an empty room', () => {
       m.room.disconnect(c);
     }
     expect(m.room['rovers']).toEqual(park(W));
+  });
+});
+
+// The user, 2026-11-12: the lasers did nothing to a rover, and a rover's crash should hurt it.
+describe('a vehicle’s lasers and a rover’s crashes', () => {
+  /** Flat land: red's ship on its pad at the origin nose east, blue's rover 20 m ahead of it. */
+  const W2 = build({
+    ...LOT,
+    brushes: [
+      LOT.brushes[0],
+      { min: [60, 1, -20], max: [62, 9, 20], top: TEX.STEEL, side: TEX.STEEL },
+    ],
+    rovers: [
+      [-60, 1, -60, EAST],
+      [20, 1, 0, EAST],
+    ],
+    ships: [[0, 1, 0, EAST]],
+  });
+  const join = () => {
+    const room = new Room({}, W2.def);
+    const c: Conn = { send: () => {} };
+    room.connect(c);
+    room.receive(c, JSON.stringify({ t: 'join', name: 'p' }));
+    let seq = 0;
+    const send = (k: number, n: number, yaw = EAST, pitch = 0) => {
+      for (let i = 0; i < n; i++) {
+        room.receive(c, encodeInput({ seq: seq++, keys: k, yaw, pitch }));
+        room.tick();
+      }
+    };
+    const p: PlayerState = room['peers'].get(c)!.state;
+    return { room, send, p, cars: (): Rover[] => room['rovers'] };
+  };
+
+  it('cross the ship’s two beams on a rover nearer than their usual cross: both bolts hit it', () => {
+    const { send, p, cars } = join();
+    Object.assign(p, { x: 0, y: 1, z: 3 });
+    send(USE, 1);
+    send(0, 1);
+    const [, blue, ship] = cars();
+    expect(ship.driver).toBe(0);
+    // Two salvos at the rover 20 m ahead, a little down to its body: four bolts, one hp.
+    send(FIRE, 2 * SHIP.GUN_COOL, EAST, -0.01);
+    send(0, 30);
+    expect(blue.hp).toBe(VEHICLE.HP - 1);
+  });
+
+  it('take health from a rover driven into a wall, more the faster, and none from a slow touch', () => {
+    const { send, p, cars } = join();
+    const red = cars()[0];
+    Object.assign(red, { x: 40, z: 30, yaw: EAST });
+    Object.assign(p, { x: 40, y: 1, z: 32 });
+    send(USE, 1);
+    send(0, 1);
+    expect(red.driver).toBe(0);
+    // Full speed into the wall 20 m away: a crash.
+    Object.assign(red, { z: 0, x: 30 });
+    send(FORWARD, 180);
+    const fast = red.hp!;
+    expect(fast).toBeLessThan(VEHICLE.HP);
+    expect(fast).toBeGreaterThan(0);
+    // Pressed against it at a crawl: nothing more.
+    send(0, 120);
+    send(FORWARD, 10);
+    expect(red.hp).toBe(fast);
   });
 });

@@ -156,9 +156,7 @@ const crumble = (
     if (!k) {
       continue;
     }
-    const c = [0, 1, 2].map(
-      a => (out[i + a] + out[i + STRIDE + a] + out[i + 2 * STRIDE + a]) / 3,
-    );
+    const c = [0, 1, 2].map(a => (out[i + a] + out[i + STRIDE + a] + out[i + 2 * STRIDE + a]) / 3);
     for (let v = i; v < i + 3 * STRIDE; v += STRIDE) {
       for (let a = 0; a < 3; a++) {
         out[v + a] = c[a] + (out[v + a] - c[a]) * (1 - k);
@@ -201,8 +199,8 @@ export const char = (out: number[], from: number, r: Rover, k = 0): void => {
   for (let i = from; i < out.length; i += STRIDE) {
     // Glass stays glass (layer -3: its opacity is in green).
     if (out[i + 8] != -3) {
-      [out[i + 6], out[i + 7], out[i + 9]] = [out[i + 6], out[i + 7], out[i + 9]].map(c =>
-        Math.min(c, 1) * SOOT,
+      [out[i + 6], out[i + 7], out[i + 9]] = [out[i + 6], out[i + 7], out[i + 9]].map(
+        c => Math.min(c, 1) * SOOT,
       );
       out[i + 8] = -1;
     }
@@ -406,7 +404,11 @@ export const createWrecks = (world: World, { tracer, audio, fx }: Stage): Wrecks
           delete eased[k];
         }
         fresh[k] = Math.max(0, (fresh[k] ?? 0) - dt * TICK_HZ);
-        const shown: Rover = w ? { ...r, wreck: eased[k] } : fresh[k] ? { ...r, wreck: -fresh[k] } : r;
+        const shown: Rover = w
+          ? { ...r, wreck: eased[k] }
+          : fresh[k]
+            ? { ...r, wreck: -fresh[k] }
+            : r;
 
         // The arcs, in their slots; their crackle, now and then; a spark or two; smoke when it is bad.
         hush[k] = (hush[k] ?? 0) - dt;
@@ -445,13 +447,11 @@ export const createWrecks = (world: World, { tracer, audio, fx }: Stage): Wrecks
         // Still or turning, then shrinking away over its last half second.
         const s = size * Math.min(1, (life - age) / 0.5);
         const [c, sn] = [Math.cos(spin * age), Math.sin(spin * age)];
-        const q = SHARD.map(
-          ([x, y, z]): Vec3 => [
-            p[0] + (x * c - z * sn) * s,
-            p[1] + y * s,
-            p[2] + (x * sn + z * c) * s,
-          ],
-        );
+        const q = SHARD.map(([x, y, z]): Vec3 => [
+          p[0] + (x * c - z * sn) * s,
+          p[1] + y * s,
+          p[2] + (x * sn + z * c) * s,
+        ]);
         for (const [a, b, d] of [
           [0, 1, 3],
           [1, 2, 3],
@@ -459,7 +459,11 @@ export const createWrecks = (world: World, { tracer, audio, fx }: Stage): Wrecks
           [1, 0, 2],
         ]) {
           const [u, v] = [b, d].map(j => q[j].map((x, i) => x - q[a][i]));
-          const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+          const n = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+          ];
           const l = Math.hypot(...n) || 1;
           for (const j of [a, b, d]) {
             out.push(...q[j], n[0] / l, n[1] / l, n[2] / l, 0.05, 0.05, -1, 0.06);

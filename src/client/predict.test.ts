@@ -1394,7 +1394,12 @@ describe('the rover, predicted against the room', () => {
 
   it('agrees with the host while driving under fire: the hull’s health is the snapshot’s, the drive his own', () => {
     for (const [name, lag] of ride.LAGS) {
-      const r = ride.drive(flat, ride.trip(240, 7, true), lag, underFire(4, 10, () => true));
+      const r = ride.drive(
+        flat,
+        ride.trip(240, 7, true),
+        lag,
+        underFire(4, 10, () => true),
+      );
       expect([name, r.differing]).toEqual([name, []]);
       expect([name, r.final]).toEqual([name, []]);
       expect(r.checked).toBeGreaterThan(60);

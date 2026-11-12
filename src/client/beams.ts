@@ -572,9 +572,12 @@ export const createTracer = (): Tracer => {
           .slice(-4)
           .map(g =>
             g.boom
-              ? point(g.p, 4 * NADE_R * (g.ring ? 1 : (g.size ?? 1)), 6 * (1 - g.age / BOOM), [
-                  1.6, 0.8, 0.3,
-                ])
+              ? point(
+                  g.p,
+                  4 * NADE_R * (g.ring ? 1 : (g.size ?? 1)),
+                  6 * (1 - g.age / BOOM),
+                  [1.6, 0.8, 0.3],
+                )
               : g.splash
                 ? point(
                     g.p,

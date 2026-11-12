@@ -27,7 +27,7 @@ import { STILL } from './physics';
 import { blast } from './plasma';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
-import { ROVER, homeOf, park, reach, struck } from './rover';
+import { ROVER, homeOf, park, reach, solid, struck } from './rover';
 import { PODS, SHIP, point } from './ship';
 import { CUT, FLAG, KEY, MODE, NOBODY, TEX } from './types';
 import type { Conn, PlayerState, Rover, Rules } from './types';
@@ -518,6 +518,27 @@ describe('a vehicle at 0 HP', () => {
     expect(car.hp).toBe(0);
     expect(car.wreck).toBeLessThan(left);
     expect(Math.hypot(car.x - x, car.z - z)).toBeLessThan(0.05);
+  });
+
+  it('skids to a stop within 5 m when it blows up at top speed, and is no obstacle to its dead crew', () => {
+    const m = doomed();
+    const car = m.cars()[1];
+    m.hold(m.bob, 300, FORWARD);
+    expect(car.vx).toBeGreaterThan(18);
+    const x = car.x;
+    m.room['hurt'](car, 1, 2, 0);
+    expect(car.wreck).toBe(VEHICLE.WRECK);
+    // Bob is down, thrown out at its speed: a wreck's body is no obstacle to him (it does not bend
+    // his replay); a player who is up is kept out of it.
+    m.hold(m.bob, 20, 0);
+    const bob = m.state(m.bob);
+    expect(bob.down).toBeGreaterThan(0);
+    expect(solid(m.cars(), bob)).toHaveLength(3);
+    expect(solid(m.cars(), m.state(m.cy))).toHaveLength(4);
+    m.ticks(2 * TICK_HZ);
+    expect(car.x - x).toBeGreaterThan(1);
+    expect(car.x - x).toBeLessThan(5);
+    expect(Math.abs(car.vx)).toBeLessThan(0.01);
   });
 
   it('is parked afresh on its spawn VEHICLE.WRECK ticks after the blast, whole, and can be boarded', () => {

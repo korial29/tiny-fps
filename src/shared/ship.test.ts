@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as ride from '../../test/ride';
 import { box, land } from '../../test/slope';
 import { duo } from '../../test/teams';
-import { TICK_HZ, VEHICLE } from './constants';
+import { RAIL_DRAIN, TICK_HZ, VEHICLE } from './constants';
 import { MOON } from './moon';
 import { move } from './physics';
 import { decodeSnapshot, encodeInput } from './protocol';
@@ -374,6 +374,36 @@ describe('the ship, predicted against the room', () => {
       expect(r.final, name).toEqual([]);
       expect(r.checked, name).toBeGreaterThan(50);
       expect(r.pred.riding(), name).toEqual({ rover: 0, seat: 0 });
+    }
+  });
+  it('stops predicting the ship when the host blows it up in flight: the pilot falls as the host has him, the wreck is the host’s', () => {
+    for (const [name, lag] of ride.LAGS) {
+      let room: Room;
+      const flying: boolean[] = [];
+      const r = ride.drive(lot, flight(), lag, {
+        setup: host => (room = host),
+        each: (pred, _, k) => {
+          if (k === 200) {
+            // The rail gun's burn takes its last hp in the host's next tick.
+            room['rovers'][0].hp = 1;
+            room['wear'][0] = { graze: 0, sear: 9, burn: RAIL_DRAIN - 1, by: 1, team: 1 };
+          }
+          flying.push(!!pred.riding());
+        },
+      });
+      expect(r.differing, name).toEqual([]);
+      expect(r.final, name).toEqual([]);
+      expect(r.checked, name).toBeGreaterThan(50);
+      expect(flying[199], name).toBe(true);
+      // Off the stick within his lag both ways, and never back on it.
+      const out = flying.indexOf(false, 199);
+      expect(out - 200, name).toBeLessThanOrEqual(20);
+      expect(flying.slice(out).some(Boolean), name).toBe(false);
+      expect(r.pred.riding(), name).toBeUndefined();
+      // Five seconds on it is back on its pad, whole: the host's.
+      const { x, y, z, hp, wreck, nades } = r.car;
+      expect(r.pred.rovers(1e9, 1)[0], name).toMatchObject({ x, y, z, hp, wreck, nades });
+      expect(r.car, name).toMatchObject({ hp: VEHICLE.HP, wreck: 0, driver: NOBODY, x: 2.5 });
     }
   });
 });

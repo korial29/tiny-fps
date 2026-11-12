@@ -423,6 +423,7 @@ export const RULES: Rules = {
  * over the last FADE of them, before it is parked afresh. A plasma ball takes its power, a cut its
  * hp, a blast what it takes from a body; of the laser bolts and the rifle's rounds every GRAZE that
  * meet the hull take 1; the rail gun's bolt drains it as it does a player. The wire holds HP in 7
- * bits and WRECK / 4 in a byte.
+ * bits and WRECK / 4 in a byte. A rover's wreck keeps SKID of its speed along the ground each tick:
+ * from top speed it skids under 5 m and lies there.
  */
-export const VEHICLE = { HP: 10, WRECK: 300, FADE: 60, GRAZE: 4 } as const;
+export const VEHICLE = { HP: 10, WRECK: 300, FADE: 60, GRAZE: 4, SKID: 0.92 } as const;

@@ -11,7 +11,7 @@ import { INTERP_DELAY, TICK_HZ } from '../shared/constants';
 import { step } from '../shared/gun';
 import { TAU, norm, respawn } from '../shared/physics';
 import { onWire } from '../shared/protocol';
-import { drive, hull, park, ride, seat } from '../shared/rover';
+import { drive, park, ride, seat, skid, solid } from '../shared/rover';
 import { MODE, NOBODY } from '../shared/types';
 import type { Input, PlayerState, Rover, SnapPlayer, Snapshot } from '../shared/types';
 import type { World } from '../shared/world';
@@ -144,10 +144,14 @@ export const createPredictor = (world: World): Predictor => {
   let clock = 0;
   let timed = false;
 
-  /** The map's rovers as the own steps meet them: the latest snapshot's, the predicted ones instead. */
-  const fleet = (): Rover[] =>
+  /**
+   * The map's rovers as the own steps meet them: the latest snapshot's, the predicted ones instead.
+   * A wreck is the host's: where the snapshot has it, not where the ghost rolls, but for the
+   * ghost's own roll (`rolling`), which must find itself in the list.
+   */
+  const fleet = (rolling = false): Rover[] =>
     (snaps.at(-1)?.s.rovers ?? []).map((r, k) =>
-      car && k === carK ? car : ghost?.k === k ? ghost.r : r,
+      car && k === carK ? car : ghost?.k === k && (rolling || !r.wreck) ? ghost.r : r,
     );
 
   /** One input of the own player, as the host applies it: at the wheel the rover's step, else his own. */
@@ -161,7 +165,7 @@ export const createPredictor = (world: World): Predictor => {
         car = park(world)[carK];
       }
     } else {
-      step(own!, i, world, team, armed, fleet().map(hull));
+      step(own!, i, world, team, armed, solid(fleet(), own!));
     }
   };
   const driving = (): boolean => !!car && own?.mode === MODE.RIDE && car.driver === id;
@@ -281,7 +285,11 @@ export const createPredictor = (world: World): Predictor => {
       if (ghost) {
         // The rover he left rolls on with nobody at the wheel, as the host's tick rolls it.
         ghost.prev = { ...ghost.r };
-        drive(ghost.r, undefined, world, fleet());
+        // Blown up, says the host: it skids as the host's wreck does, and stops about where it lies.
+        if (snaps.at(-1)?.s.rovers?.[ghost.k]?.wreck) {
+          skid(ghost.r);
+        }
+        drive(ghost.r, undefined, world, fleet(true));
       }
       if (own) {
         prev = state(own);
@@ -306,7 +314,7 @@ export const createPredictor = (world: World): Predictor => {
       clock = timed ? clock : now;
       armed = !s.over;
       pending = pending.filter(i => !acked(i.seq, me.ack));
-      const was = car;
+      const [was, wasK] = [car, carK];
       own = state(me);
       prev = state(own);
       // The rover he drives is reset with him and replayed with him.
@@ -324,7 +332,7 @@ export const createPredictor = (world: World): Predictor => {
         // Off the wheel in the replay as in the live step that made the ghost; or the host took
         // him off it, and the rover he was predicting is the ghost.
         if (was && !ghost) {
-          [car, carPrev] = [was, was];
+          [car, carPrev, carK] = [was, was, wasK];
           drop(clock, clock);
         }
         car = carPrev = undefined;

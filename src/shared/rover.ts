@@ -190,6 +190,24 @@ export const hull = (r: Rover): Body => {
 };
 
 /**
+ * A rover's wreck skids to a stop where it blew up: before each of its steps with nobody at the
+ * wheel it keeps VEHICLE.SKID of its speed along the ground. A ship's wreck falls as it flew.
+ */
+export const skid = (r: Rover): void => {
+  if (!r.ship) {
+    [r.vx, r.vz] = [f32(r.vx * VEHICLE.SKID), f32(r.vz * VEHICLE.SKID)];
+  }
+};
+
+/**
+ * The vehicles' bodies as the step of `p` on foot meets them: every hull(), but for a player who
+ * is down the wrecks' (his own vehicle's among them: he lies where it blew up, and no wreck that
+ * moves under him bends his replay).
+ */
+export const solid = (rovers: readonly Rover[], p: Pick<PlayerState, 'down'>): Body[] =>
+  rovers.filter(r => !(p.down && r.wreck)).map(hull);
+
+/**
  * The map's rovers at rest on their spawns, whole, nobody aboard, then its ships on their pads
  * (ship.ts): the order of the snapshot's.
  */

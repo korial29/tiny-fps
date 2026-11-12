@@ -63,7 +63,6 @@ import {
   free,
   gap2,
   homeOf,
-  hull,
   leave,
   missile,
   park,
@@ -71,7 +70,9 @@ import {
   ride,
   ROVER,
   seat,
+  skid,
   slashed,
+  solid,
   struck,
   nearby,
 } from './rover';
@@ -341,7 +342,7 @@ export class Room {
           this.world,
           p.info.team,
           !this.ctf.over,
-          this.rovers.map(hull),
+          solid(this.rovers, p.state),
         );
         this.ctf.moved(p.state);
         this.tackle(p, input.view);
@@ -446,7 +447,12 @@ export class Room {
       // A driven rover waits for its driver's inputs.
       if (r.driver !== NOBODY) {
         this.carry(r);
-      } else if (drive(r, undefined, this.world, this.rovers)) {
+        continue;
+      }
+      if (r.wreck) {
+        skid(r);
+      }
+      if (drive(r, undefined, this.world, this.rovers)) {
         this.sink(r);
       } else {
         this.carry(r);

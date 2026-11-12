@@ -5,7 +5,7 @@
 import { DOWN_TICKS, EYE, HEAT_MAX, RUN_SPEED, STEP_H, TICK_HZ } from '../shared/constants';
 import { TAU, floored } from '../shared/physics';
 import { LIMB, MODE } from '../shared/types';
-import type { PlayerState, Rover } from '../shared/types';
+import type { Choice, PlayerState, Rover } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { FIST, KATANA_LEFT, KATANA_TILT, clasp, inv, reach, shrug, stowed, wield } from './body';
@@ -34,6 +34,8 @@ import {
 import { helm } from './helm';
 import { helmet } from './helmet';
 import { STYLE, hair, styleOf, sway } from './hair';
+import { CLOTH, dress, mask } from './mask';
+import { ROLE } from '../shared/kit';
 import { armor } from './armor';
 import { CUP_F, crotch, hose, pack } from './pack';
 import { fetched, pouch, pouchAt } from './pouch';
@@ -56,10 +58,10 @@ import { STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, axis, mul, slerp, solve, turn } from './rig';
 import type { Pose } from './rig';
-import { beardOf, body, cut, eyesOf, hairOf, palette, shaved, skin, tressOf } from './skin';
+import { REGION, beardOf, body, cut, eyesOf, hairOf, palette, shaved, skin, tressOf } from './skin';
 import { createFace, dashing, felled, strain } from './expression';
 import type { Face } from './expression';
-import { CH, toneOf } from './features';
+import { CH, toneFor } from './features';
 import { createTrail } from './trail';
 import type { Trail } from './trail';
 
@@ -107,7 +109,16 @@ export interface Runner {
   tip?: Vec3;
   /** The BUILD of the body (rig.ts, PlayerInfo.body): the man's when absent. */
   build?: number;
+  /** The skin and haircut the player picked (PlayerInfo.tone and hair): his id's when absent. */
+  look?: Choice;
 }
+
+/** A man's haircuts (look.ts's HAIR_NAMES[0]): how long the hair stands off the scalp, the first one shaved. */
+export const LENGTHS = [0, 0.18, 0.55, 1];
+
+/** Whether two looks draw the same runner. */
+const same = (a?: Choice, b?: Choice) =>
+  a?.tone === b?.tone && a?.hair === b?.hair && a?.role === b?.role;
 
 /**
  * The seat of a player who rides: the rover whose `driver` or `rider` he is. Nothing for one on
@@ -143,10 +154,18 @@ export const femme = (w: Float32Array) => {
 };
 
 /** A runner as first seen: in the pose its state asks for, no ease. */
-export const createRunner = (p: PlayerState, seat?: Seat, build = 0): Runner => {
-  const gait = createGait(undefined, build);
+/** `calm`: at ease, not in a fighter's guard (the menu's picture, the user 2026-11-12). */
+export const createRunner = (
+  p: PlayerState,
+  seat?: Seat,
+  build = 0,
+  look?: Choice,
+  calm = false,
+): Runner => {
+  const gait = createGait(calm ? 0 : undefined, build);
   const face = createFace(p.id);
-  face.w[CH.HAIR] *= +!shaved(p.id);
+  face.w[CH.HAIR] =
+    !build && look?.hair !== undefined ? LENGTHS[look.hair] : face.w[CH.HAIR] * +!shaved(p.id);
   if (build) {
     femme(face.w);
   }
@@ -168,6 +187,7 @@ export const createRunner = (p: PlayerState, seat?: Seat, build = 0): Runner => 
     face,
     dt: 0,
     build,
+    look,
   };
 };
 
@@ -225,6 +245,7 @@ export const animate = (
   tracer?: Pick<Tracer, 'shock' | 'spit'>,
   rovers?: Rover[],
   builds?: ReadonlyMap<number, number>,
+  looks?: ReadonlyMap<number, Choice>,
 ) => {
   for (const id of book.keys()) {
     if (!others.some(p => p.id == id)) {
@@ -237,8 +258,10 @@ export const animate = (
       seen.watch = watched(p, others);
     }
     const build = builds?.get(p.id) ?? 0;
-    // A roster that says another body than the one drawn (it came after him): a new runner.
-    const r = book.get(p.id)?.build == build ? book.get(p.id) : undefined;
+    const look = looks?.get(p.id);
+    // A roster that says another body or look than the one drawn (it came after him): a new runner.
+    const old = book.get(p.id);
+    const r = old?.build == build && same(old.look, look) ? old : undefined;
     const seat = seatOf(p, rovers);
     if (r) {
       r.seat = seat;
@@ -268,7 +291,7 @@ export const animate = (
       r.jab += (thrown(p) - r.jab) * (1 - Math.exp(-dt * 45));
       r.p = { ...p };
     } else {
-      book.set(p.id, createRunner(p, seat, build));
+      book.set(p.id, createRunner(p, seat, build, look));
     }
     track(book.get(p.id)!, dt, ground(world, p.y), !r, tracer);
   }
@@ -645,17 +668,28 @@ export const soldier = (
     return;
   }
   r.tip = undefined;
-  const build = r.build ?? 0;
+  const [build, picked] = [r.build ?? 0, r.look];
+  // The ninja (the user, 2026-11-12): a tight black suit, his team's colour on its side stripes and
+  // its belt, a hood and a guard over the mouth; of the armour only the shoulder pieces, the chest
+  // plate and shin guards of his own (2026-11-13).
+  const ninja = picked?.role === ROLE.NINJA;
+  const plated = armored;
+  armored &&= !ninja;
   const colors = palette(
-    color,
-    build ? tressOf(p.id) : hairOf(p.id),
-    eyesOf(p.id),
+    ninja ? CLOTH : color,
+    build ? tressOf(p.id, picked) : hairOf(p.id, picked),
+    eyesOf(p.id, picked),
     armored,
-    toneOf(p.id),
+    toneFor(p.id, picked),
     build ? 0 : beardOf(p.id),
     !!build,
   );
-  if (build && styleOf(p.id) == STYLE.UNDERCUT) {
+  if (ninja) {
+    const { PANTS, UPPER, GLOVE, STRIPE, STRIPE_LOW, BELT } = REGION;
+    [colors[PANTS], colors[UPPER], colors[GLOVE]] = [CLOTH, CLOTH, CLOTH];
+    [colors[STRIPE], colors[STRIPE_LOW], colors[BELT]] = [color, color, color];
+  }
+  if (build && styleOf(p.id, picked) == STYLE.UNDERCUT) {
     // A shaved side: the scalp's hair is stubble, the skin showing through it.
     colors[4] = colors[4].map((v, i) => v * 0.5 + colors[3][i] * 0.42);
   }
@@ -703,8 +737,8 @@ export const soldier = (
     skin(out, cs, s, colors, r.face.w);
     // The stump's face is the last vertex drawn.
     r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
-    if (armored) {
-      armor(out, at, cs, lod > 2, plate);
+    if (plated) {
+      armor(out, at, cs, lod > 2, plate, ninja);
     }
     piece(out, r.cut, colors, lod, sink, r.face.w);
   } else {
@@ -712,27 +746,38 @@ export const soldier = (
     const bs = body(lod, build);
     // Under a helmet's dark visor no face shows: its channels are not worth their time.
     skin(out, bs, s, colors, helmets ? undefined : r.face.w);
+    if (ninja && !helmets) {
+      // The hood painted on the head, the face under the guard pressed in.
+      dress(out, from, bs, s.pos[J.HEAD], s.rot[J.HEAD], build);
+    }
     // The armour, cut out of the skin just drawn.
-    if (armored) {
-      armor(out, from, bs, lod > 2, plate);
+    if (plated) {
+      armor(out, from, bs, lod > 2, plate, ninja);
     }
     pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
     if (k > 0) {
       dissolve(out, from, k);
     }
   }
-  // Her hair, on her head while it is on her; tucked in under a helmet.
-  if (build && !helmets && r.cut?.limb !== LIMB.HEAD) {
+  // Her hair, on her head while it is on her; tucked in under a helmet or the ninja's hood.
+  if (build && !helmets && !ninja && r.cut?.limb !== LIMB.HEAD) {
     const from = out.length;
     hair(
       out,
       s.pos[J.HEAD],
       s.rot[J.HEAD],
-      styleOf(p.id),
-      tressOf(p.id),
+      styleOf(p.id, picked),
+      tressOf(p.id, picked),
       lod,
       sway(r.gait.phase, Math.hypot(p.vx, p.vz), r.t),
     );
+    if (k > 0) {
+      dissolve(out, from, k);
+    }
+  }
+  if (ninja && !helmets && r.cut?.limb !== LIMB.HEAD) {
+    const from = out.length;
+    mask(out, s.pos[J.HEAD], s.rot[J.HEAD], build, color);
     if (k > 0) {
       dissolve(out, from, k);
     }

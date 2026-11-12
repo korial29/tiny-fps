@@ -12,7 +12,8 @@
 //   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8][stun u8]
 //   [gun u24][shots u8][hits u8][swing u8][lost u8][charge u8][lock u8][foe u8][pushes u8][away u8]
 //   [rail u8][railing u8][slow u8][mag u8][cap u8][reload u8][rifle u8][clip u8][heat u8][nade u8]
-//   mode: bits 0-2 MODE, bits 3-5 wall (SIDE), bit 6 jumps left, bit 7 air dashes left
+//   mode: bits 0-2 MODE, bits 3-5 wall (SIDE), bit 6 jumps left, bit 7 the low bit of the dashes left
+//   (its high bit is bit 4 of foe: a ninja chains three)
 //   dash: bits 0-5 the dash timer, bits 6-7 the high bits of the tackler's id (see stun)
 //   timers: bits 0-2 coyote ticks, bits 3-5 jump buffer ticks, bit 6 jump held, bit 7 dash held
 //   stun: bits 0-5 the stumble ticks left after a tackle, bits 6-7 the low bits of the id of the
@@ -20,7 +21,8 @@
 //   The floats are the host's float32 state, exact (see move in physics.ts), and with the rest
 //   they are all a move needs to continue from. ground comes from the mode; ev and fall (what the
 //   animation reads) are not sent, they read 0.
-//   gun, 24 bits, big-endian: bits 0-2 hp, bits 3-5 cool (ticks to the next shot), bits 6-12 ammo
+//   gun, 24 bits, big-endian: bits 0-2 hp, bits 3-5 cool (ticks to the next shot; its high bit is bit
+//   7 of railing: a ninja's gun cools for 14), bits 6-12 ammo
 //   (127: no gun), bits 13-19 down (ticks left lying, 0 when up), bit 20 rack (inside the circle of
 //   the team's rack), bit 21 blade (has the katana), bit 22 wield (the katana is in hand), bit 23 zap
 //   (the stumble is a katana's shock). shots and hits are the wrapping counters of the shots fired
@@ -28,7 +30,8 @@
 //   swing: bits 0-5 the ticks left in the katana's swing, bits 6-7 the low two bits of its cut (CUT).
 //   lost: bits 0-2 the LIMB a katana's cut took off when it put him down (NONE once up), bit 3 the
 //   high bit of the cut (a special), the rest 0. charge: the ticks FIRE has been held with the gun.
-//   lock: the ticks left in a saber lock; foe: bits 0-3 the id locked with, bit 7 FIRE held at the
+//   lock: the ticks left in a saber lock; foe: bits 0-3 the id locked with, bit 4 the high bit of the
+//   dashes left, bit 7 FIRE held at the
 //   last step (`pressed`); pushes: the FIRE presses in the lock; away: the ticks a side or back key
 //   has been held in it. rail: the rail gun's ticks of lightning plus one (0: no rail gun);
 //   railing: bit 0 railed (it is in hand), bit 1 inRail (inside the circle of the rail rack), bit 2
@@ -68,13 +71,17 @@
 // Every multi-byte field is big-endian (DataView's default).
 import { NADE, VEHICLE } from './constants';
 import { FLAG, KEY, MODE } from './types';
-import type { Ball, FlagState, Input, PlayerInfo, Rover, Snapshot } from './types';
+import type { Ball, Choice, FlagState, Input, PlayerInfo, Rover, Snapshot } from './types';
 
-/** join: the first frame of a peer, `body` the character he picked (BODY, the man without it). map: the host picks the map of the next match (MAPS key). body: a joined player changes character (BODY), at once. */
+/**
+ * join: the first frame of a peer, with what he picked on the title screen (Choice: the body, BODY,
+ * the man without it; the skin, the haircut, the class). map: the host picks the map of the next
+ * match (MAPS key). body: a joined player changes his choice, at once.
+ */
 export type ClientText =
-  | { t: 'join'; name: string; body?: number }
+  | ({ t: 'join'; name: string } & Choice)
   | { t: 'map'; map: string }
-  | { t: 'body'; body: number };
+  | ({ t: 'body'; body: number } & Choice);
 
 /** What a player did in a match, for the end screen: it carries the name and the team, which a leaver takes out of the roster. */
 export interface Result {
@@ -219,7 +226,10 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint16(o + 29, toTurn(p.yaw));
     v.setInt16(o + 31, toPitch(p.pitch));
     v.setUint16(o + 33, p.ack & 0xffff);
-    v.setUint8(o + 35, (p.mode & 7) | ((p.wall & 7) << 3) | ((p.jumps & 1) << 6) | (p.dashes << 7));
+    v.setUint8(
+      o + 35,
+      (p.mode & 7) | ((p.wall & 7) << 3) | ((p.jumps & 1) << 6) | ((p.dashes & 1) << 7),
+    );
     v.setUint8(o + 36, p.t);
     v.setUint8(o + 37, p.dash | (((p.by >> 2) & 3) << 6));
     v.setUint8(
@@ -232,7 +242,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint8(o + 39, p.stun | ((p.by & 3) << 6));
     const gun =
       p.hp |
-      (p.cool << 3) |
+      ((p.cool & 7) << 3) |
       ((p.ammo < 0 ? NO_GUN : p.ammo) << 6) |
       (p.down << 13) |
       (+!!p.rack << 20) |
@@ -250,7 +260,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     );
     v.setUint8(o + 47, p.charge ?? 0);
     v.setUint8(o + 48, p.lock ?? 0);
-    v.setUint8(o + 49, ((p.foe ?? 0) & 15) | (p.pressed ? 128 : 0));
+    v.setUint8(o + 49, ((p.foe ?? 0) & 15) | ((p.dashes & 2) << 3) | (p.pressed ? 128 : 0));
     v.setUint8(o + 50, p.pushes ?? 0);
     v.setUint8(o + 51, p.away ?? 0);
     v.setUint8(o + 52, (p.rail ?? -1) + 1);
@@ -262,7 +272,8 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
         (+!!p.rifled << 3) |
         (+!!p.inRifle << 4) |
         (+!!p.hot << 5) |
-        (p.held & KEY.USE ? 64 : 0),
+        (p.held & KEY.USE ? 64 : 0) |
+        ((p.cool & 8) << 4),
     );
     v.setUint8(o + 54, p.slow ?? 0);
     v.setUint8(o + 55, p.mag ?? 0);
@@ -362,7 +373,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       mode: m,
       wall: (mode >> 3) & 7,
       jumps: (mode >> 6) & 1,
-      dashes: mode >> 7,
+      dashes: (mode >> 7) | ((v.getUint8(o + 49) >> 3) & 2),
       t: v.getUint8(o + 36),
       dash: dash & 63,
       stun: stun & 63,
@@ -376,7 +387,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       ev: 0,
       fall: 0,
       hp: gun & 7,
-      cool: (gun >> 3) & 7,
+      cool: ((gun >> 3) & 7) | ((v.getUint8(o + 53) >> 4) & 8),
       ammo: ((gun >> 6) & 127) === NO_GUN ? -1 : (gun >> 6) & 127,
       down: (gun >> 13) & 127,
       rack: ((gun >> 20) & 1) === 1,

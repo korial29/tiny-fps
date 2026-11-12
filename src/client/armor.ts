@@ -40,6 +40,9 @@ interface Region {
   round?: [number, number, number];
   /** Moulded: a smooth shell round the trunk rather than the skin's facets (moulding()). */
   mould?: boolean;
+  /** Worn by the ninja too (the user, 2026-11-13: the marine's shoulder pieces and chest plate alone); `alone`, by the ninja alone. */
+  ninja?: boolean;
+  alone?: boolean;
 }
 
 const smooth = (a: number, b: number, x: number) => {
@@ -169,12 +172,15 @@ export const REGIONS: Region[] = [
     high: chestHigh,
     swell: pecs,
     mould: true,
+    ninja: true,
   },
   // The belly's two plates, GAP apart and GAP under the chest's.
   { part: PART.TRUNK, cx: 0, y: [1.115, 1.195 - GAP], a: [-54, 54] },
   { part: PART.TRUNK, cx: 0, y: [1.035, 1.115 - GAP], a: [-54, 54] },
   // The front of each thigh down to GAP over the knee pad, the knees, the outer side of each forearm.
   { part: PART.LEG, cx: 0.1, y: [0.585, 0.94], a: [-62, 78], high: plates },
+  // The ninja's shin guards (the user, 2026-11-13), from under the knee to the boot.
+  { part: PART.LEG, cx: 0.1, y: [0.17, 0.44], a: [-62, 62], ninja: true, alone: true },
   // The knees: round (the user, 2026-11-10), domed.
   { part: PART.LEG, cx: 0.1, y: [0.46, 0.57], a: [-60, 60], round: [56, 0.515, 0.05], swell: knee },
   // The forearms, down to the gloves (the user, 2026-11-10), all round the arm (2026-11-12).
@@ -190,7 +196,14 @@ export const REGIONS: Region[] = [
   // The user, 2026-11-10: a piece over the collarbones up to the neck, following the chest plate's
   // V a little over it, out to the shoulder plates; and one on each shoulder blade, over the back's,
   // a groove down the spine between them.
-  { part: PART.TRUNK, cx: 0, y: [1.47, 1.528], a: [-78, 78], low: a => chestTop(a) + COLLAR_GAP },
+  {
+    part: PART.TRUNK,
+    cx: 0,
+    y: [1.47, 1.528],
+    a: [-78, 78],
+    low: a => chestTop(a) + COLLAR_GAP,
+    ninja: true,
+  },
   { part: PART.TRUNK, cx: 0, y: [1.4 + COLLAR_GAP, 1.505], a: [-62, -5], face: 180 },
   { part: PART.TRUNK, cx: 0, y: [1.4 + COLLAR_GAP, 1.505], a: [5, 62], face: 180 },
   // The man's shoulders: a piece on each (BAND); her caps are there on her.
@@ -201,6 +214,7 @@ export const REGIONS: Region[] = [
     a: k > 0 ? [BAND.a[0], BAND.a[1]] : [-BAND.a[1], -BAND.a[0]],
     high: band,
     man: true,
+    ninja: true,
   })),
   // The woman's shoulders: a round cap on each (SHOULDER).
   ...[SHOULDER.a, -SHOULDER.a].map((face): Region => ({
@@ -212,6 +226,7 @@ export const REGIONS: Region[] = [
     round: [SHOULDER.half, SHOULDER.y, SHOULDER.h],
     swell: cap,
     fem: true,
+    ninja: true,
   })),
   // The back (the user, 2026-11-10, for Highline, where no pack covers it): a plate between the
   // shoulder blades and one on the small of the back, GAP apart.
@@ -329,14 +344,14 @@ export const SCRATCHED = [
 /**
  * A recipe: triangles of corners, each [skin triangle, its three weights, how far off the skin,
  * the slope of the swell at rest (x, y, z), the normal at rest (x, y, z)], and per triangle its
- * colour, layer and whether it is a wall (its normal its own, flat).
+ * colour, layer, whether it is a wall (its normal its own, flat) and its region (-1: a scratch).
  */
 interface Recipe {
   c: number[];
   t: number[];
 }
 const CORNER = 11;
-const TRI = 5;
+const TRI = 6;
 
 const seeded = (seed: number) => () => {
   seed = (seed + 0x6d2b79f5) | 0;
@@ -598,6 +613,8 @@ const cook = (s: Skin, fine: boolean): Recipe => {
   if (!l) {
     return r;
   }
+  /** The region of the triangles added now: -1 for the scratches. */
+  let at = -1;
   const add = (
     cs: Corner[],
     offs: number[],
@@ -629,7 +646,7 @@ const cook = (s: Skin, fine: boolean): Recipe => {
       }
       r.c.push(k, c[3], c[4], c[5], offs[i], g[0], g[1], g[2], c[6], c[7], c[8]);
     });
-    r.t.push(col[0], col[1], col[2], layer, wall);
+    r.t.push(col[0], col[1], col[2], layer, wall, at);
   };
   /** A corner at rest set `d` off along its rest normal: to wind the walls out. */
   const lift = (c: Corner, d: number) => {
@@ -646,6 +663,7 @@ const cook = (s: Skin, fine: boolean): Recipe => {
     const [lo, hi] = [Math.min(...ys), Math.max(...ys)];
     for (let g = 0; g < REGIONS.length; g++) {
       const region = shaped(REGIONS[g], s);
+      at = g;
       if (
         region.part != part ||
         hi < SPANS[g][0] ||
@@ -721,6 +739,7 @@ const cook = (s: Skin, fine: boolean): Recipe => {
       }
     }
   }
+  at = -1;
   if (fine) {
     scratchesOn(s, add, moulds);
   }
@@ -763,6 +782,7 @@ const scratchesOn = (
     const g = REGIONS.findIndex(
       (rg, i) =>
         rg.part == part &&
+        !rg.alone &&
         !(rg.fem && !s.b) &&
         !(rg.man && s.b) &&
         LIMITS[i].every(f => f(probe(at)) >= 0),
@@ -851,7 +871,14 @@ const recipes = [new WeakMap<Skin, Recipe>(), new WeakMap<Skin, Recipe>()];
  * outlines follow the skin's own triangles, unrefined, and there are no scratches. `plate` is the
  * plates' colour (their walls a shade darker): white when absent.
  */
-export const armor = (out: number[], from: number, s: Skin, fine = true, plate?: number[]) => {
+export const armor = (
+  out: number[],
+  from: number,
+  s: Skin,
+  fine = true,
+  plate?: number[],
+  ninja = false,
+) => {
   const book = recipes[+fine];
   let r = book.get(s);
   if (!r) {
@@ -863,6 +890,11 @@ export const armor = (out: number[], from: number, s: Skin, fine = true, plate?:
   const N = new Float64Array(9);
   let w = out.length;
   for (let i = 0, ci = 0; i < t.length; i += TRI) {
+    // The ninja's plates alone, without their scratches; his shin guards on him alone.
+    if (ninja ? !REGIONS[t[i + 5]]?.ninja : REGIONS[t[i + 5]]?.alone) {
+      ci += 3 * CORNER;
+      continue;
+    }
     for (let j = 0; j < 3; j++, ci += CORNER) {
       const o = from + c[ci] * 3 * STRIDE;
       const b0 = c[ci + 1];

@@ -6,7 +6,7 @@
 // colour writes off. The scene goes into an offscreen target, then a second, small program (POST)
 // turns it into the picture on the canvas. No DOM beyond the canvas.
 import { MODE, TEX } from '../shared/types';
-import type { PlayerState, Rover } from '../shared/types';
+import type { Choice, PlayerState, Rover } from '../shared/types';
 import type { World, WorldDef } from '../shared/world';
 import type { Body } from './body';
 import type { Tracer } from './beams';
@@ -26,7 +26,7 @@ import { JOINT, turn } from './rig';
 import { craft } from './craft';
 import { rolled, rover } from './rover';
 import type { Quat } from './rig';
-import { GRIN, animate, soldier } from './soldier';
+import { GRIN, animate, createRunner, soldier } from './soldier';
 import { body } from './skin';
 import type { Runner } from './soldier';
 import { skyline, trees } from './skyline';
@@ -511,19 +511,28 @@ export interface Renderer {
   muzzle(id: number): Vec3 | undefined;
   /** The runners of the players `ids` grin for a moment: their team has captured. */
   cheer(ids: number[]): void;
-  /** The body of each player (PlayerInfo.body, BODY), from the roster: the man's for one not in it. */
-  wear(builds: ReadonlyMap<number, number>): void;
+  /** The body of each player (PlayerInfo.body, BODY), from the roster: the man's for one not in it; and the skin and haircut he picked, his id's for one not in `looks`. */
+  wear(builds: ReadonlyMap<number, number>, looks?: ReadonlyMap<number, Choice>): void;
   /**
-   * A picture of the player `p` as the character `build` in `color`, into the 2D canvas `into`:
-   * a frame of him alone in the map's sky, which the next frame() replaces on the screen. False
-   * when nothing could be drawn yet.
+   * A picture of the player `p` as the character `build` in `color`, with the skin and haircut
+   * `look`, framed by `shot` (PORTRAIT, or HEAD for the head alone), into the 2D canvas `into`: a frame of him alone in the map's sky, which the next
+   * frame() replaces on the screen. False when nothing could be drawn yet.
    */
-  portrait(into: HTMLCanvasElement, p: PlayerState, build: number, color: string): boolean;
+  portrait(
+    into: HTMLCanvasElement,
+    p: PlayerState,
+    build: number,
+    color: string,
+    look?: Choice,
+    shot?: typeof PORTRAIT,
+  ): boolean;
   destroy(): void;
 }
 
-/** A character card's picture: how high over the map he stands (m), the camera's height over his feet and its distance (m), its angle off his front and his own off the sun (rad), and its field of view (degrees). */
-export const PORTRAIT = { y: 500, eye: 1.3, away: 2.5, turn: -0.35, sun: 0.9, fov: 30 };
+/** A character card's picture: how high over the map he stands (m), the camera's height over his feet and its distance (m), its angle off his front and his own off the sun (rad), its field of view (degrees), and how far it steps to its right (m). */
+export const PORTRAIT = { y: 500, eye: 1.3, away: 2.5, turn: -0.35, sun: 0.9, fov: 30, side: 0 };
+/** A haircut's picture: the head alone, seen three quarters from behind so a tail or a bun shows. */
+export const HEAD = { ...PORTRAIT, eye: 1.6, away: 1.5, turn: -0.9, fov: 20, side: -0.12 };
 
 /** Pixels drawn at most (1080p): every one is lit per light and shadow map, so a 4K screen at a pixel ratio of 2 would pay for 8 million. */
 export const MAX_PIXELS = 1920 * 1080;
@@ -539,6 +548,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   /** The animation state of each runner drawn. */
   let runners = new Map<number, Runner>();
   let builds: ReadonlyMap<number, number> = new Map();
+  let looks: ReadonlyMap<number, Choice> = new Map();
   // The runners' skins at every level, now: built on the first runner to come near (the close one
   // with its face's channels takes a tenth of a second), they would stall a frame of the match.
   [0, 1, 3].forEach(lod => body(lod));
@@ -811,7 +821,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       clock = now;
       // The own player, seen from outside his head, is one of the crowd.
       const crowd = self ? [...others, self] : others;
-      animate(runners, crowd, dt, world, tracer, rovers, builds);
+      animate(runners, crowd, dt, world, tracer, rovers, builds, looks);
       const [right, up, fwd] = basis(yaw, pitch, fx.roll);
       drive(v, eye, fwd, Date.now() / 1000);
       // The spent batteries and capsules falling to the floor.
@@ -960,8 +970,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     project: (x, y, z) => project(vp, x, y, z),
     steps: id => runners.get(id)?.gait.steps,
     muzzle: id => runners.get(id)?.tip,
-    wear: b => {
-      builds = b;
+    wear: (b, l = new Map()) => {
+      [builds, looks] = [b, l];
       // Her skins now, as the man's are built at the start: not in a frame of the match.
       new Set(b.values()).forEach(k => k && [0, 1, 3].forEach(lod => body(lod, k)));
     },
@@ -972,30 +982,50 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           r.grin = GRIN;
         }
       }),
-    portrait(into, p, build, color) {
+    portrait(into, p, build, color, look, shot = PORTRAIT) {
       const card = into.getContext('2d');
       if (lost || !card || !size()[1]) {
         return false;
       }
       // A runner of his own, with the player's id (his face and hair), standing still far above the map.
-      const [crowd, worn] = [runners, builds];
-      [runners, builds] = [new Map(), new Map([[p.id, build]])];
+      const [crowd, worn, styled] = [runners, builds, looks];
+      [runners, builds, looks] = [
+        new Map(),
+        new Map([[p.id, build]]),
+        new Map([[p.id, look ?? {}]]),
+      ];
       // The sun on one side of him and the camera on the same one, nearer his front: no glare off the chest.
-      const face = Math.atan2(-sunDir[0], -sunDir[2]) + PORTRAIT.sun;
+      const face = Math.atan2(-sunDir[0], -sunDir[2]) + shot.sun;
       const model: PlayerState = {
         ...p,
-        ...{ y: PORTRAIT.y, vx: 0, vy: 0, vz: 0, yaw: face, pitch: 0, mode: MODE.GROUND, t: 0 },
+        ...{ y: shot.y, vx: 0, vy: 0, vz: 0, yaw: face, pitch: 0, mode: MODE.GROUND, t: 0 },
         ...{ down: 0, stun: 0, swing: 0, ev: 0, fall: 0, held: 0 },
+        // Empty handed.
+        ...{
+          ammo: -1,
+          blade: false,
+          wield: false,
+          rail: -1,
+          rifle: -1,
+          railed: false,
+          rifled: false,
+        },
       };
-      const [a, d] = [face + PORTRAIT.turn, PORTRAIT.away];
-      const eye: Vec3 = [p.x - Math.sin(a) * d, PORTRAIT.y + PORTRAIT.eye, p.z - Math.cos(a) * d];
-      const lens = { fov: PORTRAIT.fov - FOV_DEG, roll: 0, lines: 0 } as Effects;
+      // At ease, the arms down: no fighter's guard.
+      runners.set(p.id, createRunner(model, undefined, build, look ?? {}, true));
+      const [a, d] = [face + shot.turn, shot.away];
+      const eye: Vec3 = [
+        p.x - Math.sin(a) * d + Math.cos(a) * shot.side,
+        shot.y + shot.eye,
+        p.z - Math.cos(a) * d - Math.sin(a) * shot.side,
+      ];
+      const lens = { fov: shot.fov - FOV_DEG, roll: 0, lines: 0 } as Effects;
       const shoot = () =>
         api.frame(eye, a + Math.PI, 0, [model], new Map([[p.id, color]]), lens, []);
       // Twice: the first frame makes the runner, the second draws him settled.
       shoot();
       shoot();
-      [runners, builds] = [crowd, worn];
+      [runners, builds, looks] = [crowd, worn, styled];
       // The middle of the frame, as tall as it and as wide as the card.
       const [w, h] = [canvas.width, canvas.height];
       const cw = Math.min(w, (h * into.width) / into.height);

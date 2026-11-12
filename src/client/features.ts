@@ -361,6 +361,10 @@ export const TONES = [
 /** A skin tone for the runner `id`, the same for everyone who sees him. */
 export const toneOf = (id: number): number[] => TONES[Math.floor(hash(id, 7) * TONES.length)];
 
+/** The skin tone the player picked (`c.tone`, an index of TONES), else his id's. */
+export const toneFor = (id: number, c?: { tone?: number }): number[] =>
+  c?.tone !== undefined ? TONES[c.tone] : toneOf(id);
+
 /**
  * The face of the runner `id`: the weights of the trait channels (the expressions' are 0), the
  * same for everyone who sees him. Each trait is the mean of two draws, so most faces are near the

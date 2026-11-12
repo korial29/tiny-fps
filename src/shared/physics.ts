@@ -27,7 +27,6 @@ import {
   DASH_SPEED,
   DASH_TICKS,
   DECAY,
-  DOUBLE_JUMP_SPEED,
   EYE,
   FRICTION,
   GRAB_FACING,
@@ -43,7 +42,6 @@ import {
   HANG_SNAP,
   HP_MAX,
   JUMP_BUFFER_TICKS,
-  JUMP_SPEED,
   LOW_EYE,
   LOW_H,
   MAX_PITCH,
@@ -56,7 +54,6 @@ import {
   SLIDE_TICKS,
   SLOW_SPEED,
   SPRINT_ACCEL,
-  SPRINT_SPEED,
   STEP_H,
   STUMBLE_DRAG,
   STUMBLE_KNOCK,
@@ -70,7 +67,6 @@ import {
   WALLRUN_KEEP_SPEED,
   WALLRUN_LIFT,
   WALLRUN_MIN_SPEED,
-  WALLRUN_TICKS,
   WALLRUN_VY_MAX,
   WALL_AWAY,
   WALL_KICK_SPEED,
@@ -84,6 +80,8 @@ import {
 import { bound, ground } from './relief';
 import { EV, KEY, LIMB, MODE, SIDE } from './types';
 import type { Input, PlayerState } from './types';
+import { DASH_GAP, KITS } from './kit';
+import type { Kit } from './kit';
 import { near } from './world';
 import type { Brush, World } from './world';
 
@@ -559,6 +557,8 @@ interface Ctl {
   fz: number;
   /** The rovers' bodies, where they stand for this step. */
   bodies: readonly Body[];
+  /** The class's numbers (kit.ts). */
+  kit: Kit;
 }
 
 /** Changes the mode, and starts counting the time in it. */
@@ -641,7 +641,7 @@ const unwalled = (p: PlayerState, w: World, c: Ctl, h: number): [x: number, z: n
  * Ground control: speed toward the wished direction (a vector of length 0 to 1), up to `top` times
  * its length; friction with none.
  */
-const steer = (p: PlayerState, wish: [number, number], top: number): void => {
+const steer = (p: PlayerState, wish: [number, number], top: number, run = RUN_SPEED): void => {
   const m = len(wish[0], wish[1]);
   if (m < EPS) {
     const s = len(p.vx, p.vz);
@@ -663,7 +663,7 @@ const steer = (p: PlayerState, wish: [number, number], top: number): void => {
   top *= m;
   par =
     par < top
-      ? Math.min(top, par + (par >= RUN_SPEED ? SPRINT_ACCEL : ACCEL) * DT)
+      ? Math.min(top, par + (par >= run ? SPRINT_ACCEL : ACCEL) * DT)
       : Math.max(top, par - DECAY * DT);
   p.vx = px + par * wx;
   p.vz = pz + par * wz;
@@ -805,11 +805,11 @@ const run = (p: PlayerState, w: World, c: Ctl): void => {
     p.vz = tz - nz * WALL_KICK_SPEED;
     leap(p, WALL_KICK_UP);
     p.jumps = AIR_JUMPS;
-    p.dashes = 1;
+    p.dashes = c.kit.dashes;
     p.ev |= EV.WALLRUN_END;
   } else {
     const gap = wallGap(p, w, p.wall);
-    if (gap === undefined || !c.fwd || s < WALLRUN_KEEP_SPEED || p.t >= WALLRUN_TICKS) {
+    if (gap === undefined || !c.fwd || s < WALLRUN_KEEP_SPEED || p.t >= c.kit.wallrun) {
       enter(p, MODE.AIR);
       p.ev |= EV.WALLRUN_END;
       return;
@@ -855,7 +855,7 @@ const startRun = (p: PlayerState, w: World, c: Ctl): void => {
       [p.vx, p.vz] = [tx * k, tz * k];
       p.vy = clamp(p.vy, WALLRUN_LIFT, WALLRUN_VY_MAX);
       p.jumps = AIR_JUMPS;
-      p.dashes = 1;
+      p.dashes = c.kit.dashes;
       p.coyote = 0;
       p.ev |= EV.WALLRUN_START;
       return;
@@ -864,7 +864,7 @@ const startRun = (p: PlayerState, w: World, c: Ctl): void => {
 };
 
 /** Takes hold of a ledge: hang there. */
-const grab = (p: PlayerState, l: Ledge): void => {
+const grab = (p: PlayerState, l: Ledge, dashes: number): void => {
   enter(p, MODE.HANG);
   p.wall = l.side;
   p.edge = f32(l.top);
@@ -875,7 +875,7 @@ const grab = (p: PlayerState, l: Ledge): void => {
   }
   p.vx = p.vy = p.vz = 0;
   p.jumps = AIR_JUMPS;
-  p.dashes = 1;
+  p.dashes = dashes;
   p.coyote = 0;
   p.buffer = 0;
   p.ev |= EV.GRAB;
@@ -883,14 +883,23 @@ const grab = (p: PlayerState, l: Ledge): void => {
 
 /** The modes that move freely: everything but the hang and the climb. */
 const free = (p: PlayerState, w: World, c: Ctl): void => {
-  // A dash: on the ground, or once in the air (a wall-run ends in it).
+  // A dash: on the ground, or once in the air (a wall-run ends in it). A chain (kit.dashes > 1)
+  // counts the ground's too, and its next link is ready DASH_GAP ticks after the last one started;
+  // on the ground a full cooldown gives the chain back.
   const ground = p.mode === MODE.GROUND;
+  const chain = c.kit.dashes > 1;
+  if (chain && ground && p.dash === 0) {
+    p.dashes = c.kit.dashes;
+  }
   if (
     c.dash &&
-    p.dash === 0 &&
-    (ground || ((p.mode === MODE.AIR || p.mode === MODE.WALLRUN) && p.dashes > 0))
+    (p.dash === 0 || (chain && p.dashes > 0 && p.dash <= DASH_COOLDOWN - DASH_GAP)) &&
+    (ground
+      ? !chain || p.dashes > 0
+      : (p.mode === MODE.AIR || p.mode === MODE.WALLRUN) && p.dashes > 0)
   ) {
     const [dx, dz] = c.wx || c.wz ? [c.wx, c.wz] : [c.fx, c.fz];
+    p.dashes -= +(ground && chain);
     if (!ground) {
       p.dashes--;
       p.vy = 0;
@@ -927,7 +936,7 @@ const free = (p: PlayerState, w: World, c: Ctl): void => {
       p.ev |= EV.LAND | (p.mode === MODE.WALLRUN ? EV.WALLRUN_END : 0);
       p.fall = hit;
       p.jumps = AIR_JUMPS;
-      p.dashes = 1;
+      p.dashes = c.kit.dashes;
       p.wall = SIDE.NONE;
       if (c.keys & KEY.CROUCH) {
         const slide = len(p.vx, p.vz) >= SLIDE_MIN_SPEED;
@@ -946,7 +955,7 @@ const free = (p: PlayerState, w: World, c: Ctl): void => {
   if (p.mode === MODE.AIR) {
     const ledge = ledgeAt(p, w);
     if (ledge) {
-      grab(p, ledge);
+      grab(p, ledge, c.kit.dashes);
     } else {
       startRun(p, w, c);
     }
@@ -959,7 +968,7 @@ const onGround = (p: PlayerState, w: World, c: Ctl, burst: boolean): void => {
   if (p.buffer > 0 && (p.mode === MODE.GROUND || canStand(p, w))) {
     p.ev |= p.mode === MODE.SLIDE ? EV.SLIDE_END : 0;
     enter(p, MODE.AIR);
-    leap(p, JUMP_SPEED);
+    leap(p, c.kit.jump);
     return;
   }
   const speed = len(p.vx, p.vz);
@@ -999,7 +1008,7 @@ const onGround = (p: PlayerState, w: World, c: Ctl, burst: boolean): void => {
     steer(p, unwalled(p, w, c, LOW_H), CROUCH_SPEED);
   } else {
     const sprint = (c.keys & KEY.SPRINT) !== 0 && c.fwd;
-    steer(p, unwalled(p, w, c, PLAYER_H), sprint ? SPRINT_SPEED : RUN_SPEED);
+    steer(p, unwalled(p, w, c, PLAYER_H), sprint ? c.kit.sprint : c.kit.run, c.kit.run);
   }
 };
 
@@ -1007,10 +1016,10 @@ const onGround = (p: PlayerState, w: World, c: Ctl, burst: boolean): void => {
 const air = (p: PlayerState, w: World, c: Ctl, burst: boolean): void => {
   if (p.buffer > 0) {
     if (p.coyote > 0) {
-      leap(p, JUMP_SPEED);
+      leap(p, c.kit.jump);
     } else if (p.jumps > 0 && !landingSoon(p, w)) {
       p.jumps--;
-      leap(p, DOUBLE_JUMP_SPEED);
+      leap(p, c.kit.double);
       p.ev = (p.ev & ~EV.JUMP) | EV.DOUBLE;
     }
   }
@@ -1035,6 +1044,7 @@ export const move = (
   w: World,
   team = 0,
   bodies: readonly Body[] = [],
+  kit: Kit = KITS[0],
 ): void => {
   p.yaw = norm(i.yaw);
   p.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, i.pitch));
@@ -1060,6 +1070,7 @@ export const move = (
     fx,
     fz,
     bodies,
+    kit,
   };
 
   const before = p.mode;

@@ -848,10 +848,12 @@ describe('skin', () => {
     expect(new Set(ids.map(i => String(eyesOf(i)))).size).toBe(5);
     expect(hairOf(7)).toBe(hairOf(7));
     // A shaved head is the skin's colour in its shadow: reddish, darker than the skin.
-    const shaved = ids.map(hairOf).find(h => h[0] > 0.4 && h[0] < 0.55 && h[0] > h[2] * 1.5)!;
+    const shaved = ids
+      .map(id => hairOf(id))
+      .find(h => h[0] > 0.4 && h[0] < 0.55 && h[0] > h[2] * 1.5)!;
     expect(shaved[0]).toBeLessThan(FLESH[0]);
     // The irises run from dark brown to a pale blue.
-    const blue = ids.map(eyesOf).filter(e => e[2] > e[0]);
+    const blue = ids.map(id => eyesOf(id)).filter(e => e[2] > e[0]);
     expect(blue.length).toBeGreaterThan(40);
   });
 
@@ -941,8 +943,8 @@ describe('skin', () => {
 
   it('picks a hair colour per runner at random, the same for every viewer', () => {
     const ids = Array.from({ length: 16 }, (_, i) => i + 1);
-    const hair = ids.map(hairOf);
-    expect(ids.map(hairOf)).toEqual(hair);
+    const hair = ids.map(id => hairOf(id));
+    expect(ids.map(id => hairOf(id))).toEqual(hair);
     expect(new Set(hair.map(String)).size).toBeGreaterThanOrEqual(5);
     // Into the palette's hair region; the default is the old dark brown.
     expect(palette(JACKET, hair[3])[4]).toBe(hair[3]);

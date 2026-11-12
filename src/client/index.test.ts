@@ -8,6 +8,7 @@ import type { ServerText } from '../shared/protocol';
 import { HIGHLINE, ROOFTOPS } from '../shared/map';
 import { MOON } from '../shared/moon';
 import { BODY, FLAG, TEAM } from '../shared/types';
+import { ROLE } from '../shared/kit';
 import type { FlagState, PlayerInfo, SnapPlayer, SocketLike, Snapshot } from '../shared/types';
 import { build } from '../shared/world';
 import { tinyFps } from './index';
@@ -147,17 +148,34 @@ describe('tinyFps, the match through the socket', () => {
     expect(q('nav').textContent).toContain('RED 0');
   });
 
-  it('sends the character of the card chosen on the title screen, and wears what the roster answers', () => {
-    const cards = [...hud().querySelectorAll<HTMLElement>('[role=radio]')];
-    const checked = () => cards.map(c => c.getAttribute('aria-checked'));
+  it('sends the whole choice made on the title screen, and wears what the roster answers', () => {
+    const radios = (label: string) => [
+      ...hud().querySelectorAll<HTMLElement>(`[aria-label="${label}"] [role=radio]`),
+    ];
+    const checked = () => radios('Body').map(c => c.getAttribute('aria-checked'));
     expect(checked()).toEqual(['true', 'false']);
-    cards[BODY.FEMALE].click();
-    expect(JSON.parse(sent.at(-1) as string)).toEqual({ t: 'body', body: BODY.FEMALE });
+    radios('Body')[BODY.FEMALE].click();
+    expect(JSON.parse(sent.at(-1) as string)).toMatchObject({ t: 'body', body: BODY.FEMALE });
+    radios('Class')[ROLE.NINJA].click();
+    expect(JSON.parse(sent.at(-1) as string)).toMatchObject({
+      body: BODY.FEMALE,
+      role: ROLE.NINJA,
+    });
+    // No astronaut off the moon: greyed out and deaf to a click.
+    const told = sent.length;
+    radios('Class')[ROLE.ASTRONAUT].click();
+    expect(sent).toHaveLength(told);
     // The host's word is the last one: his roster says the man again.
     text({ t: 'roster', you: 0, players: roster });
     expect(checked()).toEqual(['true', 'false']);
-    text({ t: 'roster', you: 0, players: [{ ...roster[0], body: BODY.FEMALE }, roster[1]] });
+    text({
+      t: 'roster',
+      you: 0,
+      players: [{ ...roster[0], body: BODY.FEMALE, tone: 5, role: ROLE.NINJA }, roster[1]],
+    });
     expect(checked()).toEqual(['false', 'true']);
+    expect(radios('Skin')[5].getAttribute('aria-checked')).toBe('true');
+    expect(radios('Class')[ROLE.NINJA].getAttribute('aria-checked')).toBe('true');
   });
 
   it('starts on the title screen’s button as on the canvas, and on nothing else in its panel', () => {

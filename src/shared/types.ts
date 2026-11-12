@@ -13,10 +13,23 @@ export interface PlayerInfo {
   color: string;
   /** BODY: the character he plays. Absent for the man, as before there was a choice. */
   body?: number;
+  /** The skin tone he picked (an index of TONES, features.ts); absent, his id picks one. */
+  tone?: number;
+  /** The haircut he picked (look.ts); absent, his id picks one. */
+  hair?: number;
+  /** ROLE (kit.ts) on the maps that offer it; absent, the map's default (the marine, the astronaut on the moon). */
+  role?: number;
 }
+
+/** What a player picks on the title screen: his body, his skin, his haircut and his class (PlayerInfo's). */
+export type Choice = Pick<PlayerInfo, 'body' | 'tone' | 'hair' | 'role'>;
 
 /** The characters a player can be (PlayerInfo.body, the join's `body`): the look only, the game is the same for both. */
 export const BODY = { MALE: 0, FEMALE: 1 } as const;
+
+/** How many skin tones there are, and haircuts for each BODY (the client's TONES and look.ts). */
+export const TONES_N = 6;
+export const HAIRS_N = [4, 5];
 
 /** Bits of Input.keys. Keys are read by KeyboardEvent.code, so WASD is ZQSD on AZERTY. */
 export const KEY = {

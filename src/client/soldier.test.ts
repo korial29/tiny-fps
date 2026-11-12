@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { ROLE } from '../shared/kit';
+import { mask } from './mask';
 import {
   CUTS,
   DASH_COOLDOWN,
@@ -978,6 +980,52 @@ describe('a runner with the rail gun', () => {
   });
 });
 
+describe('the ninja', () => {
+  it('wears no armour on an armoured map, but the black suit and the face guard', () => {
+    const team = [0.15, 0.4, 1];
+    const [marine, ninja, bare] = [[], [], []] as number[][];
+    soldier(marine, hold({}, 5), team, 3, false, true);
+    const r = hold({}, 5);
+    r.look = { role: ROLE.NINJA };
+    soldier(ninja, r, team, 3, false, true);
+    soldier(bare, hold({}, 5), team, 3);
+    const guard: number[] = [];
+    mask(guard, [0, 0, 0], [0, 0, 0, 1]);
+    // Fewer plates than the marine, but some: the shoulders, the chest and his shin guards, in the team's colour.
+    expect(ninja.length).toBeGreaterThan(bare.length + guard.length);
+    expect(marine.length).toBeGreaterThan(ninja.length);
+    // Heights from his feet.
+    const plated = (v: number[], lo: number, hi: number) => {
+      let [n, feet] = [0, Infinity];
+      for (let i = 0; i < v.length; i += STRIDE) {
+        feet = Math.min(feet, v[i + 1]);
+      }
+      for (let i = 0; i < v.length; i += STRIDE) {
+        const y = v[i + 1] - feet;
+        // Glossy: a plate, not the suit's stripes.
+        n += +(y > lo && y < hi && v[i + 8] == GLOSS && v[i + 6] == team[0]);
+      }
+      return n;
+    };
+    // Under the knee pads.
+    expect(plated(ninja, 0.2, 0.3)).toBeGreaterThan(0);
+    expect(plated(marine, 0.2, 0.3)).toBe(0);
+    expect(plated(ninja, 1.25, 1.5)).toBeGreaterThan(0);
+    // No plate on his thighs or his forearms.
+    expect(plated(ninja, 0.6, 0.94)).toBe(0);
+    // Black where the other wears his team's colour: far more of him is dark.
+    const dark = (v: number[]) => {
+      let n = 0;
+      for (let i = 0; i < v.length; i += STRIDE) {
+        n += +(v[i + 6] < 0.1 && v[i + 7] < 0.1 && v[i + 9] < 0.1);
+      }
+      return n / (v.length / STRIDE);
+    };
+    expect(dark(ninja)).toBeGreaterThan(0.35);
+    expect(dark(ninja)).toBeGreaterThan(dark(bare) * 2);
+  });
+});
+
 describe('armour without a helmet (Highline)', () => {
   it('wears plates in the team colour, no helmet, no pack, and no white', () => {
     const r = hold({}, 5);
@@ -1327,7 +1375,7 @@ describe('a runner’s face (expression.ts): what he does shows on it', () => {
       expect(w[CH.ASYM]).toBe(look[CH.ASYM]);
       expect(w[CH.HAIR]).toBe(shaved(id) ? 0 : look[CH.HAIR]);
     }
-    expect(ids.some(shaved)).toBe(true);
+    expect(ids.some(id => shaved(id))).toBe(true);
     // Two players, two heads; the same player twice, the same head.
     const head = (id: number) => {
       const out: number[] = [];

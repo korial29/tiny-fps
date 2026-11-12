@@ -19,7 +19,76 @@ import { SHIP } from '../shared/ship';
 import { FLAG, MODE } from '../shared/types';
 import type { PlayerState, Rover, Snapshot } from '../shared/types';
 import { FH, FW, PALETTE, sprite } from './face';
+import { VISOR } from './helmet';
 import type { Mark } from './marks';
+
+/**
+ * The outline of the helmet's visor as the runners wear it (helmet.ts: VISOR and band()), seen from
+ * inside, over the whole screen in a box of 100 by 100: its upper edge comes down to the middle (a
+ * frown), its lower edge runs from the ends, half way up the sides, down toward the middle (a V),
+ * where the guard comes up in a notch with a flat top. The notch is cut to the face of the HUD, which
+ * sits in it: its flat top `NOTCH[2]` up from the bottom, `NOTCH[0]` and `NOTCH[1]` its half widths.
+ */
+// Softened (the user, 2026-11-12): a short flat top and long, gentle shoulders, so it reads as a swell.
+const NOTCH = [5, 24, 21];
+/** The exponent of the outline's round ends: 2 a half circle, more squarer. */
+const ROUND = 3;
+export const rim = (): [number, number][] => {
+  // Low on the screen (the user, 2026-11-12: lower it, then lower still): its lower edge runs off the bottom beside the notch.
+  const [x0, x1, y0, y1] = [4, 96, 12, 103];
+  const h = y1 - y0;
+  // The helmet's own proportions: the ends' rise over the visor's height, and its frown, softened.
+  const rise = (VISOR.rise / (2 * VISOR.r[1])) * h;
+  const frown = ((0.6 * VISOR.frown) / (2 * VISOR.r[1])) * h;
+  const t = (x: number) => Math.abs(x - 50) / ((x1 - x0) / 2);
+  // The frown's point is rounded over a few hundredths of the width.
+  const top0 = (x: number) => y0 + frown * (1 - Math.sqrt(t(x) ** 2 + 0.002));
+  const low0 = (x: number) => {
+    const a = Math.abs(x - 50);
+    const base = y1 - rise * t(x) ** 1.15;
+    const up =
+      a < NOTCH[0]
+        ? 1
+        : a < NOTCH[1]
+          ? (1 + Math.cos((Math.PI * (a - NOTCH[0])) / (NOTCH[1] - NOTCH[0]))) / 2
+          : 0;
+    return base - up * Math.max(0, base - (100 - NOTCH[2]));
+  };
+  // Round ends, as the helmet's visor has (its superellipse, softer here): the two edges close on
+  // each other toward the sides instead of meeting the side in corners (the user, 2026-11-12).
+  const edge = (x: number, side: 1 | -1): [number, number] => {
+    const [a, b] = [top0(x), low0(x)];
+    const k = (1 - Math.min(t(x), 1) ** ROUND) ** (1 / ROUND);
+    return [x, (a + b) / 2 + (side * k * (b - a)) / 2];
+  };
+  // Every half unit, and every tenth in the last four toward each end, where the outline turns.
+  const xs: number[] = [];
+  for (let x = x0; x < x1 + 1e-9; x += x < x0 + 4 - 1e-9 || x > x1 - 4 - 1e-9 ? 0.1 : 0.5) {
+    xs.push(+x.toFixed(1));
+  }
+  return [...xs.map(x => edge(x, -1)), ...xs.reverse().map(x => edge(x, 1))];
+};
+/**
+ * RIM as a background, with the sheen the rounded rim had: inside the outline only (it clips itself),
+ * a soft pale glow, a shade along the lower edge and a heavier one under the brow, and no line (the
+ * user, 2026-11-12: no white border). Widths in pixels whatever the screen's size; the glass itself is not filled.
+ */
+const RIM = (() => {
+  const pts = rim().map(([x, y]) => `${x} ${+y.toFixed(2)}`);
+  const d = `M${pts.join('L')}Z`;
+  const half = pts.length / 2;
+  const [brow, jaw] = [pts.slice(0, half), pts.slice(half)].map(l => `M${l.join('L')}`);
+  const line = (path: string, colour: string, alpha: number, width: number) =>
+    `<path d="${path}" fill="none" stroke="${colour}" stroke-opacity="${alpha}" stroke-width="${width}" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><clipPath id="c"><path d="${d}"/></clipPath><g clip-path="url(#c)">` +
+      line(brow, '#000', 0.16, 70) +
+      line(brow, '#000', 0.2, 34) +
+      line(jaw, '#000', 0.14, 30) +
+      line(d, '#fff', 0.05, 34) +
+      `</g></svg>`,
+  )}")`;
+})();
 
 export const HUD_CSS =
   `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,samp,cite,q,dfn{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
@@ -97,11 +166,10 @@ export const HUD_CSS =
   `background:linear-gradient(90deg,#e23b3b,#fff3 50%,#8ef);box-shadow:0 0 0 1px #0008}` +
   `ins i{position:absolute;top:-5px;width:6px;height:22px;margin-left:-3px;border-radius:3px;background:#fff;box-shadow:0 0 8px #8ef}` +
   `figure{left:50%;bottom:24px;transform:translateX(-50%)}figure canvas{display:block;width:72px;height:87px;image-rendering:pixelated;filter:drop-shadow(0 2px 2px #000a)}` +
-  // The visor rim of a helmet, as it first was (the user, 2026-11-11, after a V was tried) but a little more aggressive: the
-  // dark of the shell at the corners, a rim squarer at the brow and tapering to the jaw, a heavy brow's shade under its
-  // top edge, a sheen on it. Drawn before the face, the health and the counts, which lie over it.
+  // The rim of a helmet round the view: the dark of the shell at the corners, as it always was, and the outline of the
+  // helmet's own visor (RIM, below) as a pale line over a clear view. Drawn before the face, the health and the counts.
   `del{inset:0;background:radial-gradient(ellipse 74% 80% at 50% 54%,#0000 60%,#000d 100%)}` +
-  `del::before{content:"";position:absolute;inset:3% 4% 6%;border-radius:30% 30% 44% 44%/20% 20% 38% 38%;box-shadow:inset 0 0 0 2px #fff1,inset 0 22px 20px -8px #000a,inset 0 10px 16px #fff1,inset 0 -8px 14px #0006}` +
+  `del::before{content:"";position:absolute;inset:0;background:${RIM} 0 0/100% 100% no-repeat}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}` +
   // The maps over the title screen, and over the end screen when the pointer is free: the host's buttons.

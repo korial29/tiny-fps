@@ -22,7 +22,9 @@ import {
   clock,
   createHud,
   kmh,
+  rim,
 } from './hud';
+import { VISOR } from './helmet';
 import { CODES } from './input';
 import type { Hud, Summary } from './hud';
 import type { Mark } from './marks';
@@ -289,22 +291,72 @@ describe('createHud', () => {
     expect(v()).toBe('');
   });
 
-  it('shows a helmet’s rim round the view, heavier at the brow, under the face and the counts', () => {
-    const rim = () => q('del');
-    expect(rim().hidden).toBe(true);
+  it('draws the outline of the helmet’s own visor round a clear view, the face in its notch', () => {
+    const el = () => q('del');
+    expect(el().hidden).toBe(true);
     hud.visor(true);
-    expect(rim().hidden).toBe(false);
+    expect(el().hidden).toBe(false);
     hud.visor(false);
-    expect(rim().hidden).toBe(true);
-    // The first rim, a little more aggressive: the corners' shade, a rounded rim squarer at the brow
-    // than at the jaw, and a heavy brow's shade under its top edge. No V, no clip.
-    expect(HUD_CSS).toMatch(/del\{inset:0;background:radial-gradient/);
-    expect(HUD_CSS).not.toMatch(/del[^}]*clip-path/);
-    const [, top, , bottom] = /del::before\{[^}]*border-radius:(\d+)% (\d+)% (\d+)% (\d+)%/.exec(
-      HUD_CSS,
-    )!;
-    expect(+top).toBeLessThan(+bottom);
-    expect(HUD_CSS).toMatch(/del::before\{[^}]*inset 0 22px 20px -8px #000a/);
+    expect(el().hidden).toBe(true);
+    // The corners' shade as it always was, and nothing else filled: a line, 2 px at any size.
+    expect(HUD_CSS).toMatch(
+      /del\{inset:0;background:radial-gradient\(ellipse 74% 80% at 50% 54%,#0000 60%,#000d 100%\)\}/,
+    );
+    const svg = decodeURIComponent(
+      /del::before\{[^}]*url\("data:image\/svg\+xml,([^"]*)"\)/.exec(HUD_CSS)![1],
+    );
+    expect(svg).toContain('fill="none"');
+    expect(svg).not.toMatch(/ fill="#/);
+    // The rim's sheen, inside the outline only: a pale line, a glow behind it, shades under the brow and along the jaw.
+    expect(svg).toContain('clip-path="url(#c)"');
+    // No white border: one wide, faint glow only.
+    expect(svg.match(/stroke="#fff"/g)).toHaveLength(1);
+    expect(svg).toMatch(/stroke="#fff" stroke-opacity="0\.05" stroke-width="34"/);
+    expect(svg.match(/stroke="#000"/g)).toHaveLength(3);
+    expect(svg).toContain('vector-effect="non-scaling-stroke"');
+    expect(svg).toContain('preserveAspectRatio="none"');
+    expect(HUD_CSS).not.toMatch(/del::after/);
+    // The visor's shape, as on the helmet (helmet.ts): in a box of 100 by 100, y down.
+    const pts = rim();
+    const top = pts.slice(0, pts.length / 2);
+    const low = pts.slice(pts.length / 2).reverse();
+    const at = (l: [number, number][], x: number) => l.find(p => p[0] === x)![1];
+    // The upper edge comes down to the middle: a frown, its point rounded.
+    expect(at(top, 50)).toBeGreaterThan(at(top, 35) + 1);
+    expect(at(top, 65)).toBeCloseTo(at(top, 35), 9);
+    expect(at(top, 50) - at(top, 49.5)).toBeLessThan((at(top, 40) - at(top, 39.5)) / 2);
+    // The lower edge runs up toward its ends, by the helmet's own rise over the visor's height.
+    expect(at(low, 15)).toBeLessThan(at(low, 34) - 12);
+    expect(at(low, 20) - at(low, 15)).toBeCloseTo(at(low, 80) - at(low, 85), 9);
+    expect(VISOR.rise / (2 * VISOR.r[1])).toBeCloseTo(0.5, 6);
+    // Round ends: the two edges close on each other at the sides, with no corner on the way.
+    expect(at(top, 4)).toBeCloseTo(at(low, 4), 9);
+    expect(at(low, 5) - at(top, 5)).toBeLessThan(at(low, 10) - at(top, 10));
+    const turns = pts.map((p, k) => {
+      const [a, b] = [pts[(k + pts.length - 1) % pts.length], pts[(k + 1) % pts.length]];
+      const [u, v] = [
+        [p[0] - a[0], p[1] - a[1]],
+        [b[0] - p[0], b[1] - p[1]],
+      ];
+      return Math.abs(Math.atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1]));
+    });
+    // No turn of more than half a right angle between two steps, the ends' tips aside.
+    expect(turns.filter(a => a > Math.PI / 4).length).toBeLessThanOrEqual(4);
+    // Low on the screen: 12 down at its top.
+    expect(Math.min(...top.map(p => p[1]))).toBeGreaterThan(11.9);
+    // The guard's notch in the middle, flat-topped: the face (72 px wide, its top 111 px up) and the
+    // health sit in it on a screen of 800 by 600.
+    expect(at(low, 50)).toBeCloseTo(at(low, 46), 1);
+    // It stands 21 over where the V would meet in the middle, and over the edge at its foot.
+    expect(at(low, 50)).toBeCloseTo(79, 1);
+    expect(at(low, 50)).toBeLessThan(at(low, 28) - 2);
+    // Softened: long shoulders, no step: it gains under 1.5 a unit of width anywhere.
+    for (let x = 27; x < 50; x += 0.5) {
+      expect(Math.abs(at(low, x + 0.5) - at(low, x)) / 0.5).toBeLessThan(1.5);
+    }
+    expect((100 - at(low, 50)) * 6).toBeGreaterThan(111 + 10);
+    // The face's top corners, 36 px off the middle: the swell is still over them there.
+    expect((100 - at(low, 54.5)) * 6).toBeGreaterThan(111);
     // The shell is drawn before the face, the health and the gun's count, so they lie over it.
     const order = [...screen.children].map(e => e.tagName);
     for (const tag of ['UL', 'FIGURE', 'DL']) {

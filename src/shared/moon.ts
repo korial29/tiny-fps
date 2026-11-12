@@ -4,7 +4,7 @@
 // of 600 by 720 m: in the arena (x 0..160, z 0..280) it lies on the floor's slabs, never under
 // them, flat where a base, a pack or a route's jump needs it; only the rille and the notches of
 // its lips have none. Compact on purpose: the local bundle carries it (budget in scripts/size.mjs).
-import { PLAYER_H, PLAYER_R, STEP_H } from './constants';
+import { PLAYER_H, STEP_H } from './constants';
 import { TEAM_TINT } from './map';
 import { BASE, DOME, DOORS, MODULES, TUBES, box, bx } from './moonbase';
 import type { Bx, Vec3 } from './moonbase';
@@ -186,35 +186,23 @@ const DISHES = [
   [186, 347],
 ];
 const WRECK = [BOWLS[0][0] - 4.5, ZED / 2];
-/** Boulders in the arena's field, red's (x, z, width, depth, height): drawn as rocks round their box. */
-const STONES = [
-  [4, 172, 4, 4, 2.2],
-  [30, 154, 5, 5, 3],
-  [66, 158, 3, 3, 1.6],
-  [95, 164, 5, 4, 2.6],
-  [125, 175, 6, 5, 3.2],
-  [92, 186, 4, 4, 2.4],
+/** Where the boulders stood, red's (x, z, radius): the field's six stones, those along the three walls of the half, and the boulder field's. No rock there now, no box: the scenery scatters pebbles thickest round each. */
+const SITES = [
+  [6, 174, 2.5],
+  [32.5, 156.5, 3.1],
+  [67.5, 159.5, 1.9],
+  [97.5, 166, 2.8],
+  [128, 177.5, 3.4],
+  [94, 188, 2.5],
+  ...Array.from({ length: 36 }, (_, i) => {
+    const h = (k: number) => hash(i, k, 41);
+    const b = Math.floor(h(1) * 3);
+    const [x, z0] =
+      b < 2 ? [(b ? 151 : 0) + h(2) * 9, 150 + h(3) * 122] : [5 + h(2) * 150, 273 + h(3) * 7];
+    return [x, z0 + (b === 0 && Math.abs(z0 - 174) < 8 ? 16 : 0), 0.6 + 2.4 * h(4) * h(4)];
+  }),
+  ...FIELD,
 ];
-/**
- * Boulders along the three walls of red's half (x, z, radius), not on the field's first stone
- * (4..8, 172..176). Each stands in the boxes of a crag reaching REACH r (the brushes below); one whose box
- * would leave a crack a player could not get out of next to an earlier one is left out.
- */
-/** How far a boulder of radius r reaches from its middle, in r: its boxes' footprint. */
-const REACH = 0.85;
-const BOULDERS = Array.from({ length: 36 }, (_, i) => {
-  const h = (k: number) => hash(i, k, 41);
-  const b = Math.floor(h(1) * 3);
-  const [x, z0] =
-    b < 2 ? [(b ? 151 : 0) + h(2) * 9, 150 + h(3) * 122] : [5 + h(2) * 150, 273 + h(3) * 7];
-  return [x, z0 + (b === 0 && Math.abs(z0 - 174) < 8 ? 16 : 0), 0.6 + 2.4 * h(4) * h(4)];
-}).filter(
-  ([x, z, r], i, l) =>
-    !l.slice(0, i).some(([u, w, q]) => {
-      const gap = Math.max(Math.abs(x - u), Math.abs(z - w)) - REACH * (r + q);
-      return gap > 0 && gap < 2 * PLAYER_R + 0.2;
-    }),
-);
 
 /** What the craters dig and raise at (x, z from the centre line), and how far in a pit's crater it is (1 on its terrace, 0 well clear): the hills fade out there. */
 const bowls = (x: number, z: number) => {
@@ -663,16 +651,24 @@ const crag = (x: number, z: number, R: number, H: number, s: number) => {
     ),
   };
 };
-/** Red's rocks: in the arena the field's stones (as wide as their old box was long, a fifth higher) and the boulders along the walls, then the boulder field's. */
-const CRAGS = {
-  arena: [
-    ...STONES.map(([x, z, w, d, h], i) =>
-      crag(x + w / 2, z + d / 2, 0.31 * (w + d), 1.15 * h, i + 61),
-    ),
-    ...BOULDERS.map(([x, z, r], i) => crag(x, z, r, 0.8 * r, i)),
-  ],
-  field: FIELD.map(([x, z, r], i) => crag(x, z, r, 0.75 * r, i + 100)),
-};
+/**
+ * The few boulders left, red's (x, z, radius, height, seed): four in the arena's field, cover
+ * between the base and the rille (the third stands where a sprint aslant would clear the rille by
+ * the bridge's east end); two where the boulder field was; one by the west lane, one by the east.
+ * None under 1.8 m: a low one would be walked over, and the pebbles do that.
+ */
+const ROCKS = [
+  [32.5, 156.5, 3.1, 3.45, 62],
+  [67.5, 159.5, 1.86, 1.84, 63],
+  [97.5, 166, 2.79, 2.99, 64],
+  [128, 177.5, 3.41, 3.68, 65],
+  [-50, 330, 3.6, 2.9, 100],
+  [-64, 336, 2.4, 1.9, 101],
+  [-14, 204, 2.4, 1.9, 110],
+  [176, 212, 2.8, 2.3, 111],
+];
+/** Red's boulders, each with the boxes it collides with; blue's are their mirrors. */
+const CRAGS = ROCKS.map(([x, z, R, H, s]) => crag(x, z, R, H, s));
 const ghosts = (l: { parts: number[][] }[]): Brush[] =>
   l
     .flatMap(c => c.parts)
@@ -739,8 +735,7 @@ const lump = (x: number, z: number, s: number, h: number): Brush => ({
 });
 
 export const LAYOUT = {
-  /** Outside the arena: the boulders (x, z, radius), the dishes, the ramps (the middle of the lip and the unit way up it), the wreck. */
-  rocks: [...FIELD, ...FIELD.map(([x, z, r]) => [x, ZED - z, r])],
+  /** Outside the arena: the dishes, the ramps (the middle of the lip and the unit way up it), the wreck. */
   dishes: [...DISHES, ...DISHES.map(([x, z]) => [x, ZED - z])],
   // A ramp on the centre line is its own twin.
   ramps: RAMPS.flatMap(([x, z, ax, az]) =>
@@ -760,16 +755,14 @@ export const LAYOUT = {
           },
         ],
   ),
-  /** Red's boulders along its walls and the field's stones; blue's are their mirrors, drawn by the scenery's flip. */
   /** The craters of the relief, both sides: x, z, radius, depth as a share of it. */
   bowls: BOWLS.flatMap(([x, z, r, k = 0.17]) =>
     (z ? [1, -1] : [1]).map(m => [x, ZED / 2 + m * z, r, k]),
   ),
-  boulders: BOULDERS,
-  /** Red's rocks, in the arena and in the boulder field: blue's are their mirrors. */
+  /** Red's boulders, in the field and outside: blue's are their mirrors. */
   crags: CRAGS,
-
-  stones: STONES,
+  /** Where the boulders stood, red's side (x, z, radius): pebbles lie thickest there. */
+  sites: SITES,
   pillars: PILLARS,
   domes: [DOME, [DOME[0], ZED - DOME[1]]],
   pads: [PAD, [PAD[0], ZED - PAD[1], PAD[2]]],
@@ -837,12 +830,10 @@ const half: Brush[] = [
   ),
   // The west long jump: a spur of the lip into the rille, orange.
   box(12, -30, 148 - (16 - WEST_GAP) / 2, 24, 0, 148, PAINT, STONE, [1, 0.42, 0.08]),
-  // The field's stones, the boulders along the walls and, out on the relief, the boulder field:
-  // each two or three boxes, drawn as one rock by the scenery.
   // The pit of this side's deep crater.
   ...PITS.filter(p => p.z !== ZED / 2).flatMap(pit),
-  ...ghosts(CRAGS.arena),
-  ...ghosts(CRAGS.field),
+  // The few boulders: each some forty boxes that follow its outline, drawn as one rock by the scenery.
+  ...ghosts(CRAGS),
   ...DISHES.map(([x, z]) => lump(x, z, 0.4, 6)),
 ];
 

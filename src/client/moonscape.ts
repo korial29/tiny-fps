@@ -1281,13 +1281,14 @@ const sites = (o: number[], def: WorldDef) => {
  * The ranges on the horizon, all round, past the crater wall: radius from the middle of the play
  * area, height of its highest peak, rows of points from foot to crest, its grey in the sun and in
  * the shade (the nearer darker and sharper, the farther paler and flatter, as the eye expects with
- * no air), seed.
+ * no air), seed. Low and dark (the user, 2026-11-12: more discreet): about half their first height
+ * and grey.
  * Inside the stars' dome and, from the far side of the bound, the far plane.
  */
 export const RANGES = [
-  [640, 140, 4, 0.32, 0.03, 3],
-  [690, 180, 3, 0.3, 0.05, 5],
-  [740, 220, 3, 0.28, 0.07, 8],
+  [640, 75, 4, 0.17, 0.02, 3],
+  [690, 95, 3, 0.16, 0.03, 5],
+  [740, 115, 3, 0.15, 0.04, 8],
 ];
 /** Columns a range is drawn in: three quarters of a degree each, no segment shows on its skyline. */
 export const RANGE_COLS = 480;
@@ -1309,8 +1310,7 @@ const crest = (u: number, v: number, R: number, s: number) => {
   return (
     (0.42 + 0.2 * n(520, 1) + 0.14 * ridge * ridge + 0.24 * massif) * (1 - 0.5 * pass) +
     0.1 * (n(60, 3) - 0.5) +
-    0.05 * (n(24, 4) - 0.5) +
-    0.025 * (n(9, 5) - 0.5)
+    0.04 * (n(24, 4) - 0.5)
   );
 };
 /**

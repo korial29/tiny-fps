@@ -173,6 +173,7 @@ The far crest of the crater wall showed as a row of big triangles against the sk
 - Painted, not lit: layer -2, which takes no light, each point's grey worked out from the map's sun (from the east): the west ranges look at it and are light, the east ones are in the shade with a rim of light on their crest; spurs come down aslant, a gully between two darker. The nearest range is the darkest and sharpest, the farthest the palest. Their normals look away from the crater, or the shader puts the sun's highlight on them. They are in the shadow passes like all the scenery (the renderer has no way out for static geometry): 28,800 vertices more to transform, nothing to draw in the sun's 96 m window.
 - 465,267 vertices (cap 470,000, was 440,000).
 - Falls short: the ranges read as modelled hills with pleated flanks rather than as a photograph (three or four rows of points from foot to crest carry no fine shadow), and the fully lit west range is flat.
+- Lower and darker since (the user, 2026-11-12: more discreet): highest peaks 75, 95 and 115 m (were 140, 180 and 220), greys about half, no finest teeth on the crest. From the middle they show over the wall on about half the bearings, at most 3.5 degrees over it; in a pass they are behind it.
 
 ### More craters, three pits, rims with an outline (2026-11-11)
 

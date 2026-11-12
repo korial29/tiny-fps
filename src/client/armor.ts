@@ -150,13 +150,14 @@ export const REGIONS: Region[] = [
   { part: PART.LEG, cx: 0.1, y: [0.585, 0.94], a: [-62, 78], high: thigh },
   // The knees: round (the user, 2026-11-10), domed.
   { part: PART.LEG, cx: 0.1, y: [0.46, 0.57], a: [-60, 60], round: [56, 0.515, 0.05], swell: knee },
-  // The forearms, down to the gloves (the user, 2026-11-10).
-  { part: PART.ARM, cx: 0.222, y: [0.979, 1.15], a: [20, 160] },
+  // The forearms, down to the gloves (the user, 2026-11-10), all round the arm (2026-11-12).
+  { part: PART.ARM, cx: 0.222, y: [0.979, 1.15], a: [-181, 181] },
   // The user, 2026-11-10: a small plate on the biceps, under the shoulder plate; one on the back of
   // each thigh; and the shorts cut as briefs: round the hips under the belt, on each thigh the leg's
   // opening rising from the crotch to the hip and lower behind, never between the thighs; a cup at
   // the crotch (crotch()).
-  { part: PART.ARM, cx: 0.207, y: [1.215, 1.325], a: [-25, 95] },
+  // The biceps' goes all round the arm too (the user, 2026-11-12).
+  { part: PART.ARM, cx: 0.207, y: [1.215, 1.325], a: [-181, 181] },
   { part: PART.LEG, cx: 0.1, y: [0.6, 0.94], a: [-58, 58], face: 180, high: thigh },
   { part: PART.TRUNK, cx: 0, y: [0.925, 0.982], a: [-181, 181], low: hips },
   // The user, 2026-11-10: a piece over the collarbones up to the neck, following the chest plate's

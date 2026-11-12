@@ -5,7 +5,7 @@ import { MAPS } from '../shared/maps';
 import { HIGHLINE } from '../shared/map';
 import { BODY, FLAG } from '../shared/types';
 import type { FlagState } from '../shared/types';
-import { GUN_MAG, HP_MAX, RIFLE_CLIP, RULES } from '../shared/constants';
+import { GUN_MAG, HP_MAX, RIFLE_CLIP, RULES, VEHICLE } from '../shared/constants';
 import { ROVER } from '../shared/rover';
 import { MODE, NOBODY } from '../shared/types';
 import type { Rover } from '../shared/types';
@@ -796,6 +796,14 @@ describe('the rover on the HUD', () => {
       expect(boarding(foot(2, { down: 30 }), [car()])).toBe('');
     });
 
+    it('offers nothing at a wreck, and the seat again once it is parked afresh', () => {
+      expect(boarding(foot(2), [car({ hp: 0, wreck: 200 })])).toBe('');
+      expect(boarding(foot(2), [car({ hp: 0, wreck: 1 })])).toBe('');
+      expect(boarding(foot(2), [car({ hp: 10, wreck: 0 })])).toBe('drive');
+      // A whole one further off is offered past it.
+      expect(boarding(foot(2), [car({ hp: 0, wreck: 200 }), car({ x: 4 })])).toBe('drive');
+    });
+
     it('goes by the nearest rover with a seat for him', () => {
       const full = car({ x: 1, driver: 3, rider: 4 });
       const ride = car({ x: 3, driver: 5 });
@@ -869,6 +877,66 @@ describe('the rover on the HUD', () => {
       expect(HUD_CSS).toMatch(/cite\{[^}]*right/);
       expect(HUD_CSS).toContain('div.v>i,.v dl,.v del{display:none}');
       expect(HUD_CSS.split('{')[0].split(',')).toEqual(expect.arrayContaining(['samp', 'cite']));
+    });
+
+    it('shows the health of the vehicle he sits in as ten pips over the speed, and hides it on foot', () => {
+      const [own, near] = [...screen.querySelectorAll<HTMLElement>('tt')];
+      expect([own.hidden, near.hidden]).toEqual([true, true]);
+      hud.hull(VEHICLE.HP);
+      expect(own.hidden).toBe(false);
+      expect(near.hidden).toBe(true);
+      expect(own.style.getPropertyValue('--a')).toBe('100%');
+      expect(own.style.getPropertyValue('--c')).toBe('#5fd28a');
+      // Amber from 6 down, red from 3; the lit share is the health's.
+      hud.hull(6);
+      expect([own.style.getPropertyValue('--a'), own.style.getPropertyValue('--c')]).toEqual([
+        '60%',
+        '#f0b429',
+      ]);
+      hud.hull(3);
+      expect([own.style.getPropertyValue('--a'), own.style.getPropertyValue('--c')]).toEqual([
+        '30%',
+        '#e5484d',
+      ]);
+      hud.hull(0);
+      expect(own.hidden).toBe(false);
+      expect(own.style.getPropertyValue('--a')).toBe('0%');
+      hud.hull();
+      expect(own.hidden).toBe(true);
+    });
+
+    it('puts a small bar over a vehicle near by, where it is on screen', () => {
+      const [own, near] = [...screen.querySelectorAll<HTMLElement>('tt')];
+      hud.hull(undefined, { hp: 4, at: [0.25, 0.4] });
+      expect([own.hidden, near.hidden]).toEqual([true, false]);
+      expect([near.style.left, near.style.top]).toEqual(['25%', '40%']);
+      expect(near.style.getPropertyValue('--a')).toBe('40%');
+      hud.hull(8, { hp: 10, at: [0.5, 0.5] });
+      expect([own.hidden, near.hidden]).toEqual([false, false]);
+      hud.hull(8);
+      expect(near.hidden).toBe(true);
+    });
+
+    it('styles the health bar by its own tag: ten pips over the speed, the near one half the size', () => {
+      expect(HUD_CSS.split('{')[0].split(',')).toContain('tt');
+      // 10 pips of 13 px and 2 px between them: 148 px.
+      expect(HUD_CSS).toMatch(/tt\{[^}]*right:12px[^}]*width:148px/);
+      expect(HUD_CSS).toMatch(
+        /tt\{[^}]*repeating-linear-gradient\(90deg,#000 0 13px,#0000 13px 15px\)/,
+      );
+      expect(HUD_CSS).toMatch(/tt\+tt\{[^}]*scale\(\.5\)/);
+      // Over the speed read-out, which is at the bottom right.
+      expect(HUD_CSS).toMatch(/cite\{right:12px;bottom:10px/);
+    });
+
+    it('tells the ship’s missiles and height in its panel, its health being the bar’s', () => {
+      const panel = screen.querySelector<HTMLElement>('dfn')!;
+      hud.ship({ nades: 3, alt: 41.6, up: 0, out: 0 });
+      expect(panel.hidden).toBe(false);
+      expect(panel.textContent).toMatch(/^MISSILES 3\/\d+ {2}· {2}ALT 42 m$/);
+      expect(panel.textContent).not.toMatch(/ARMOUR/);
+      hud.ship();
+      expect(panel.hidden).toBe(true);
     });
 
     it('tells the key on the title screen', () => {

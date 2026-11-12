@@ -101,7 +101,11 @@ export const HUD_CSS =
   // dark of the shell at the corners, a rim squarer at the brow and tapering to the jaw, a heavy brow's shade under its
   // top edge, a sheen on it. Drawn before the face, the health and the counts, which lie over it.
   `del{inset:0;background:radial-gradient(ellipse 74% 80% at 50% 54%,#0000 60%,#000d 100%)}` +
-  `del::before{content:"";position:absolute;inset:3% 4% 6%;border-radius:30% 30% 44% 44%/20% 20% 38% 38%;box-shadow:inset 0 0 0 2px #fff1,inset 0 22px 20px -8px #000a,inset 0 10px 16px #fff1,inset 0 -8px 14px #0006}` +
+  // The rim: squarer at the brow, its sides swept in and curled under toward the jaw. Its lower edge is 36 px up, cut open
+  // over the middle 140 px, where a rounded pocket (::after) drops round the face and the health so they sit inside the rim
+  // with the rest of the HUD.
+  `del::before{content:"";position:absolute;inset:3% 4% 36px;border-radius:27% 27% 47% 47%/15% 15% 44% 44%;box-shadow:inset 0 0 0 2px #fff1,inset 0 22px 20px -8px #000a,inset 0 10px 16px #fff1,inset 0 -8px 14px #0006,inset 26px 0 22px -18px #0008,inset -26px 0 22px -18px #0008;-webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 24px) no-repeat,linear-gradient(90deg,#000 calc(50% - 70px),#0000 0 calc(50% + 70px),#000 0) bottom/100% 24px no-repeat;mask:linear-gradient(#000 0 0) top/100% calc(100% - 24px) no-repeat,linear-gradient(90deg,#000 calc(50% - 70px),#0000 0 calc(50% + 70px),#000 0) bottom/100% 24px no-repeat}` +
+  `del::after{content:"";position:absolute;left:50%;bottom:4px;width:140px;height:32px;margin-left:-70px;box-sizing:border-box;border:2px solid #fff2;border-top:0;border-radius:0 0 34px 34px;box-shadow:inset 0 -8px 12px #0006}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}` +
   // The maps over the title screen, and over the end screen when the pointer is free: the host's buttons.

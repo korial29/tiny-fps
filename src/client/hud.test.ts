@@ -304,6 +304,23 @@ describe('createHud', () => {
       HUD_CSS,
     )!;
     expect(+top).toBeLessThan(+bottom);
+    // Its lower edge is a fixed 36 px up and open over the middle, where a rounded pocket drops
+    // round the face and the health: they sit inside the rim (the user, 2026-11-12).
+    expect(HUD_CSS).toMatch(/del::before\{[^}]*inset:3% 4% 36px/);
+    expect(HUD_CSS).toMatch(
+      /del::before\{[^}]*mask:[^}]*calc\(50% - 70px\)[^}]*calc\(50% \+ 70px\)/,
+    );
+    const [, w, h] = /del::after\{[^}]*width:(\d+)px;height:(\d+)px/.exec(HUD_CSS)!;
+    const [, up] = /del::after\{[^}]*bottom:(\d+)px/.exec(HUD_CSS)!;
+    // The face is 72 px wide from 24 px up, the health 96 px wide from 12 px up: both inside it.
+    expect(+w).toBeGreaterThan(96 + 20);
+    expect(+up).toBeLessThan(12);
+    expect(+up + +h).toBe(36);
+    expect(HUD_CSS).toMatch(/del::after\{[^}]*border-top:0;border-radius:0 0 \d+px \d+px/);
+    // The sides are swept: a shade inside each.
+    expect(HUD_CSS).toMatch(
+      /del::before\{[^}]*inset 26px 0 22px -18px #0008,inset -26px 0 22px -18px #0008/,
+    );
     expect(HUD_CSS).toMatch(/del::before\{[^}]*inset 0 22px 20px -8px #000a/);
     // The shell is drawn before the face, the health and the gun's count, so they lie over it.
     const order = [...screen.children].map(e => e.tagName);

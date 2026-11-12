@@ -4,7 +4,18 @@
 // under each piece a player can reach. Every part is lit paint
 // (layer -1) or glow (layer -2: windows, lamps, stars, the Earth), but the relief and the small
 // craters on the floor, in the floor's own stone, and the boulders, in basalt (TEX.ROCK).
-import { FLATS, LAYOUT, LIP, PIT_FLOOR, PIT_R, PIT_S, PIT_STEPS, STRIPS } from '../shared/moon';
+import {
+  FLATS,
+  LAYOUT,
+  LIP,
+  PIT_FLOOR,
+  PIT_R,
+  PIT_S,
+  PIT_STEPS,
+  STRIPS,
+  rockMid,
+  rockOf,
+} from '../shared/moon';
 import { TAU } from '../shared/physics';
 import { ground, raise } from '../shared/relief';
 import { TEX } from '../shared/types';
@@ -537,8 +548,8 @@ export const PEBBLES = [0.08, 0.2, 0.45];
  * crater and thrown out round it, along the rille's rim, in loose trails across the floor and in
  * patches where a noise is high. None within 2.5 m of a base, a rover's place, a landing pad, a
  * pack or a spawn (FLATS), none on the strips of the measured jumps (STRIPS), none in a pit's
- * square nor where there is no ground. Six in ten are of the smallest size, three of the middle
- * one, one of the largest.
+ * square nor where there is no ground. Six in ten are of the smallest size, a third of the
+ * middle one, one in twenty of the largest.
  */
 export const strewn = (def: WorldDef): number[][] => {
   const r = raise(def.relief!);
@@ -568,6 +579,8 @@ export const strewn = (def: WorldDef): number[][] => {
       !FLATS.some(f => off(f) < 2.5) &&
       !STRIPS.some(f => off(f) < 1) &&
       !LAYOUT.pits.some(q => Math.abs(x - q.x) < PIT_S + 0.5 && Math.abs(z - q.z) < PIT_S + 0.5) &&
+      // Nor in a boulder: it reaches 1.3 times its radius at most.
+      !LAYOUT.crags.some(c => Math.hypot(x - c.at[0], z - c.at[2]) < 1.3 * c.R) &&
       // Nor on a jump ramp's lamps or the dishes' feet: nothing to see there.
       Number.isFinite(floor(x, z))
     );
@@ -576,7 +589,7 @@ export const strewn = (def: WorldDef): number[][] => {
   const put = (x: number, z: number, s: number, big = 1) => {
     if (kept(x, z)) {
       const t = hash(s, 3, 211);
-      out.push([x, floor(x, z), z, t < 0.6 ? 0 : t < 0.6 + 0.3 * big + 0.4 * (1 - big) ? 1 : 2, s]);
+      out.push([x, floor(x, z), z, t < 0.62 ? 0 : t < 0.945 + 0.055 * (1 - big) ? 1 : 2, s]);
     }
   };
   // A cluster where each boulder stood: thick at its middle, thinning to twice its radius.
@@ -585,6 +598,14 @@ export const strewn = (def: WorldDef): number[][] => {
       const h = (j: number) => hash(i, 5 * k + j, 201);
       const d = R * (0.1 + 1.7 * h(1) * h(1));
       put(x + d * Math.cos(TAU * h(2)), z + d * Math.sin(TAU * h(2)), 1000 * i + k);
+    }
+  });
+  // A ring at each boulder's foot: what broke off it, thick against it, thinning to twice its radius.
+  LAYOUT.crags.forEach(({ at: [x, , z], R }, i) => {
+    for (let k = 0; k < Math.round(8 + 5 * R); k++) {
+      const h = (j: number) => hash(i, 5 * k + j, 215);
+      const d = R * (1.32 + 0.75 * h(1) * h(1));
+      put(x + d * Math.cos(TAU * h(2)), z + d * Math.sin(TAU * h(2)), 500000 + 1000 * i + k);
     }
   });
   // On each crater's crest and thrown out round it, to 2.4 times its radius.
@@ -625,7 +646,7 @@ export const strewn = (def: WorldDef): number[][] => {
     }
   }
   // Patches, where a noise 20 m to a wave is high: no even sprinkle.
-  for (let k = 0; k < 900; k++) {
+  for (let k = 0; k < 520; k++) {
     const h = (j: number) => hash(k, j, 209);
     const [x, z] = [cx + ba * (2 * h(1) - 1), Z / 2 + bb * h(2)];
     if (noise(x / 20, z / 20, 77) > 0.62 || h(3) < 0.04) {
@@ -664,6 +685,33 @@ const pebbles = (o: number[], def: WorldDef) => {
       0.5 + 0.25 * h(5),
     );
   }
+};
+
+/**
+ * One of the map's rocks, drawn from its own form (rockOf() in shared/moon.ts, which the map's
+ * boxes are cut inside of): a sphere thrown onto it from its middle, smooth, 720 triangles from
+ * 2.5 m of radius, 320 from 1.5 m and 180 under, less what is under the ground; its tone its own.
+ */
+const crag = (
+  o: number[],
+  { at: [x, g, z], R, H, s }: (typeof LAYOUT.crags)[0],
+  at: (x: number, z: number) => number,
+) => {
+  const { reach } = rockOf(s, R, H);
+  const mid: Vec3 = [x, g + rockMid(H), z];
+  stone(
+    o,
+    R < 1.5 ? 3 : R < 2.5 ? 4 : 5,
+    u => {
+      const d = reach(u);
+      return [mid[0] + u[0] * d, mid[1] + u[1] * d, mid[2] + u[2] * d];
+    },
+    g,
+    g + H,
+    s,
+    0.8 + 0.4 * hash(s, 5, 41),
+    at,
+  );
 };
 
 /** A stepping stone of the rille: a rock for its head, where feet land, and a coarser one under it for the shaft, down into the dark. */
@@ -1386,6 +1434,9 @@ export const moonscape = (def: WorldDef): number[] => {
   if (def.relief) {
     ravine(red, def);
   }
+  // Red's boulders, after the rille (whose facets take their tone from where they fall in the list). shared/moon.ts collides with them.
+  const at = def.relief?.at ?? (() => 0);
+  LAYOUT.crags.forEach(c => crag(red, c, at));
   const o = red.concat(mirror(red));
   if (def.relief) {
     pebbles(o, def);

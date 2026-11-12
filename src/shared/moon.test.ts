@@ -31,6 +31,8 @@ import {
   MOUND,
   MOUNDS,
   STRIPS,
+  rockMid,
+  rockOf,
   PIT_FLOOR,
   PIT_R,
   PIT_S,
@@ -94,11 +96,11 @@ describe('MOON', () => {
     expect(MOON.floor).toBe(-26);
   });
 
-  it('has brushes with min below max, known textures and tints, under 560 of them', () => {
+  it('has brushes with min below max, known textures and tints, under 1300 of them', () => {
     expect(brushes.length).toBeGreaterThan(60);
     // Room for a base with an inside (its walls are brushes too) and for the lips of the rille, in strips half a metre deep.
-    // And the three pits' walls, floors and steps. No rock has a box any more: 500 (3,252 with the rocks' boxes).
-    expect(brushes.length).toBeLessThan(560);
+    // And the three pits' walls, floors and steps, and the boxes that fit each of the sixteen boulders: 1,214 (3,252 with the rocks of before).
+    expect(brushes.length).toBeLessThan(1300);
     const tex: number[] = Object.values(TEX);
     for (const [i, b] of brushes.entries()) {
       for (let a = 0; a < 3; a++) {
@@ -1309,17 +1311,16 @@ describe('MOON, the field, the mounds and the carved rille', () => {
         over.push(x);
       }
     }
-    // Straight across: only where the two ends close to 4 m (no boulder is in the way at the east end any more, nor at x 4).
+    // Straight across: only where the two ends close to 4 m (no boulder stands at the east end any more).
     expect(over).toEqual([2, 158]);
     // Off a mound, aslant: from 3 m up he reaches the lower lip beside the far mound. New with the mounds.
     for (const x of MOUNDS) {
       const ways = [-50, -40, -30, -20, -10, 10, 20, 30, 40, 50];
       expect(ways.some(d => hops(x, d) || hops(x + 3, d) || hops(x - 3, d))).toBe(true);
     }
-    // Not from the flat lip, at any slant. (But from x 100, 20 degrees west: he jumps at (91.4, 148.3) and lands at
-    // (86.4, 131.8), half a metre from the bridge's east end, where the lips are straight. The field stone that stood
-    // in his way is gone. The bridge is the crossing there anyway.)
-    for (const x of [106, 118]) {
+    // Not from the flat lip, at any slant. (From x 100, 20 degrees west, the field stone at (97.5, 166) is in the way:
+    // without it he would clear the rille by the bridge's east end.)
+    for (const x of [100, 118]) {
       expect([-20, -10, 10, 20].some(d => hops(x, d))).toBe(false);
     }
   });
@@ -1470,7 +1471,438 @@ describe('MOON, the small relief', () => {
   });
 });
 
-describe('MOON, no rocks, pebbles', () => {
+describe('MOON, the rocks', () => {
+  const rocks = LAYOUT.crags;
+  type Rock = (typeof rocks)[0];
+  /** A rock's drawn form: whether a point is in it, and how far it goes from its axis at a height on a bearing. */
+  const form = ({ at: [x, g, z], R, H, s }: Rock) => {
+    const { reach } = rockOf(s, R, H);
+    const y0 = g + rockMid(H);
+    const out = (px: number, py: number, pz: number) => {
+      const v = [px - x, py - y0, pz - z];
+      const l = Math.hypot(...v);
+      return l < 1e-6 ? -1 : l - reach(v.map(c => c / l) as [number, number, number]);
+    };
+    const far = (y: number, dx: number, dz: number) => {
+      let r = 0;
+      for (let q = 0.01; q < 1.6 * R; q += 0.01) {
+        r = out(x + dx * q, y, z + dz * q) <= 0 ? q : r;
+      }
+      return r;
+    };
+    return { reach, out, far };
+  };
+  /** How far a rock's boxes go from its axis at a height on a bearing. */
+  const stops = (c: Rock, y: number, dx: number, dz: number) => {
+    let far = 0;
+    for (const q of c.parts) {
+      if (y <= q[1] || y >= q[4]) {
+        continue;
+      }
+      let [t0, t1] = [0, 1e9];
+      for (const [o, d, a, b] of [
+        [c.at[0], dx, q[0], q[3]],
+        [c.at[2], dz, q[2], q[5]],
+      ]) {
+        const [u, v] = [(a - o) / d, (b - o) / d];
+        [t0, t1] = [Math.max(t0, Math.min(u, v)), Math.min(t1, Math.max(u, v))];
+      }
+      far = t1 >= t0 ? Math.max(far, t1) : far;
+    }
+    return far;
+  };
+  const floor = (x: number, z: number, g: number) => {
+    const f = ground(world, x, z);
+    return Number.isFinite(f) ? f : g;
+  };
+  /** The furthest the rock is drawn from its axis on a bearing, over a body's height from the ground there. */
+  const flanks = new Map<string, number>();
+  const flank = (c: Rock, ax: number, az: number) => {
+    // To the nearest of 120 bearings, kept.
+    const k = Math.round((Math.atan2(az, ax) * 60) / Math.PI);
+    const key = `${c.s},${k}`;
+    const [dx, dz] = [Math.cos((k * Math.PI) / 60), Math.sin((k * Math.PI) / 60)];
+    const kept = flanks.get(key);
+    if (kept !== undefined) {
+      return kept;
+    }
+    const { far } = form(c);
+    const g = floor(c.at[0] + 0.8 * c.R * dx, c.at[2] + 0.8 * c.R * dz, c.at[1]);
+    const r = Math.max(...[0.1, 0.4, 0.7, 1, 1.3, 1.6].map(up => far(g + up, dx, dz)));
+    flanks.set(key, r);
+    return r;
+  };
+  /** Whether a rock stands as a wall: a metre and more over the highest ground round it. A lower one is walked over, up its layers. */
+  const walled = (c: Rock) => {
+    const ring = [0, 1, 2, 3, 4, 5, 6, 7].map(k =>
+      floor(
+        c.at[0] + 1.2 * c.R * Math.cos((k * Math.PI) / 4),
+        c.at[2] + 1.2 * c.R * Math.sin((k * Math.PI) / 4),
+        c.at[1],
+      ),
+    );
+    return Math.max(...c.parts.map(q => q[4])) - Math.max(c.at[1], ...ring) > 1.2;
+  };
+  /** Whether a point is clear of every other rock, by a margin. */
+  const alone = (c: Rock, x: number, z: number, by: number) =>
+    !rocks.some(o => o !== c && Math.hypot(o.at[0] - x, o.at[2] - z) < 1.4 * o.R + by);
+  const quantile = (l: number[], f: number) =>
+    [...l].sort((a, b) => a - b)[Math.min(l.length - 1, Math.floor(f * l.length))];
+
+  it('draws first: each rock is a rounded solid of its own, as big as before, its plan and its profile far from a rectangle, no two alike', () => {
+    // Eight a side: four in the arena's field, two where the boulder field was, one by each lane. None under 1.8 m.
+    expect(rocks.map(c => [c.at[0], c.at[2]])).toEqual([
+      [32.5, 156.5],
+      [67.5, 159.5],
+      [97.5, 166],
+      [128, 177.5],
+      [-50, 330],
+      [-64, 336],
+      [-14, 204],
+      [176, 212],
+    ]);
+    expect(Math.min(...rocks.map(c => c.H))).toBeGreaterThan(1.8);
+    expect(rocks.filter(c => c.H > 2.8).length).toBeGreaterThanOrEqual(3);
+    const seen = new Set<string>();
+    for (const c of rocks) {
+      const { reach } = form(c);
+      const turn = Array.from({ length: 48 }, (_, i) => [
+        Math.cos((i * Math.PI) / 24),
+        Math.sin((i * Math.PI) / 24),
+      ]);
+      // Its plan at the middle's height: 0.5 to 1.4 of its radius, not a circle, and under 0.85 of the rectangle round it.
+      const plan = turn.map(([u, v]) => [u * reach([u, 0, v]), v * reach([u, 0, v])]);
+      const round = plan.map(([u, v]) => Math.hypot(u, v));
+      expect(Math.min(...round)).toBeGreaterThan(0.5 * c.R);
+      expect(Math.max(...round)).toBeLessThan(1.4 * c.R);
+      expect(Math.max(...round) / Math.min(...round)).toBeGreaterThan(1.12);
+      const area = (l: number[][]) =>
+        Math.abs(
+          l.reduce((t, [u, v], k) => {
+            const [p, q] = l[(k + 1) % l.length];
+            return t + u * q - p * v;
+          }, 0),
+        ) / 2;
+      const rect = (l: number[][]) =>
+        (Math.max(...l.map(p => p[0])) - Math.min(...l.map(p => p[0]))) *
+        (Math.max(...l.map(p => p[1])) - Math.min(...l.map(p => p[1])));
+      expect(area(plan) / rect(plan)).toBeLessThan(0.85);
+      // Its profile over the ground, from the east and from the south: a dome on an upright foot, under 0.93 of the rectangle round it (0.85 was asked: the foot is upright so that a body is stopped where it is drawn).
+      for (const [ax, az] of [
+        [1, 0],
+        [0, 1],
+      ]) {
+        const side = turn
+          .map(([u, v]) => {
+            const d = reach([u * ax, v, u * az]);
+            return [u * d, Math.max(v * d, -rockMid(c.H))];
+          })
+          .filter(([, y], k, l) => y > -rockMid(c.H) || l[(k + 1) % 48][1] > -rockMid(c.H));
+        expect(area(side) / rect(side)).toBeLessThan(0.93);
+      }
+      // Its top is as high as it says.
+      expect(reach([0, 1, 0])).toBeGreaterThan(0.95 * (c.H - rockMid(c.H)));
+      expect(reach([0, 1, 0])).toBeLessThan(1.0001 * (c.H - rockMid(c.H)));
+      // Rounded: on no bearing does it turn by more than 30 degrees in a twenty-fourth of a turn.
+      plan.forEach(([u, v], k) => {
+        const [a, b] = [plan[(k + 47) % 48], plan[(k + 1) % 48]];
+        const [e, f] = [
+          [u - a[0], v - a[1]],
+          [b[0] - u, b[1] - v],
+        ];
+        const cos = (e[0] * f[0] + e[1] * f[1]) / Math.hypot(...e) / Math.hypot(...f);
+        expect(cos).toBeGreaterThan(Math.cos((30 * Math.PI) / 180));
+      });
+      seen.add(round.map(v => (v / c.R).toFixed(2)).join());
+    }
+    expect(seen.size).toBe(rocks.length);
+  });
+
+  it('collides inside: no box over 0.1 m out of what is drawn, each overlapping another of its rock, every box a brush', () => {
+    let worst = 0;
+    for (const c of rocks) {
+      const { out } = form(c);
+      for (const q of c.parts) {
+        // Over the ground: its corners, the middles of its edges and its top.
+        for (const fx of [0, 0.25, 0.5, 0.75, 1]) {
+          for (const fz of [0, 0.25, 0.5, 0.75, 1]) {
+            for (const fy of [0, 0.5, 1]) {
+              const [x, z] = [q[0] + fx * (q[3] - q[0]), q[2] + fz * (q[5] - q[2])];
+              const low = Math.max(q[1], floor(x, z, c.at[1]));
+              if (low < q[4]) {
+                worst = Math.max(worst, out(x, low + fy * (q[4] - low), z));
+              }
+            }
+          }
+        }
+        expect(
+          c.parts.length === 1 ||
+            c.parts.some(
+              o =>
+                o !== q && [0, 1, 2].every(k => o[k] <= q[k + 3] + 1e-9 && q[k] <= o[k + 3] + 1e-9),
+            ),
+        ).toBe(true);
+      }
+    }
+    expect(worst).toBeLessThan(0.1);
+    const keys = new Set(
+      brushes.filter(b => b.ghost).map(b => [...b.min, ...b.max].map(v => v.toFixed(6)).join()),
+    );
+    expect(rocks.every(c => c.parts.every(q => keys.has(q.map(v => v.toFixed(6)).join())))).toBe(
+      true,
+    );
+  });
+
+  it('fits a body: at body height the boxes are a median 0.15 m, 0.32 m for nine in ten, 0.37 m for nineteen in twenty, inside what is drawn, on its flanks and on its dome', () => {
+    // The brief was a median under 0.15 m, 0.3 m for nineteen in twenty and 0.45 m at worst. The median is met; the rest is not: at the
+    // foot of a rock on a slope or lower than a body no box may stand where a body would step onto it, and the boxes over it are further in.
+    const gaps: number[] = [];
+    for (const c of rocks) {
+      const { far } = form(c);
+      for (let i = 0; i < 48; i++) {
+        const [dx, dz] = [Math.cos((i * Math.PI) / 24 + 0.05), Math.sin((i * Math.PI) / 24 + 0.05)];
+        const g = floor(c.at[0] + 0.8 * c.R * dx, c.at[2] + 0.8 * c.R * dz, c.at[1]);
+        for (let up = 0.113; up < PLAYER_H; up += 0.2) {
+          const [r, over] = [far(g + up, dx, dz), far(g + up + 0.05, dx, dz)];
+          if (!r) {
+            continue;
+          }
+          const side = r - stops(c, g + up, dx, dz);
+          // Where it is shallower than 45 degrees it is a top: how far under it the highest box is, if less.
+          const [x, z] = [c.at[0] + dx * (r - 0.02), c.at[2] + dz * (r - 0.02)];
+          const under = Math.max(
+            -99,
+            ...c.parts
+              .filter(q => x >= q[0] && x <= q[3] && z >= q[2] && z <= q[5] && q[4] <= g + up + 0.1)
+              .map(q => q[4]),
+          );
+          gaps.push(r - over > 0.05 && under > -99 ? g + up - under : side);
+        }
+      }
+    }
+    expect(gaps.length).toBeGreaterThan(3000);
+    expect(quantile(gaps, 0.5)).toBeLessThan(0.15);
+    expect(quantile(gaps, 0.9)).toBeLessThan(0.32);
+    expect(quantile(gaps, 0.95)).toBeLessThan(0.37);
+    expect(quantile(gaps, 0.98)).toBeLessThan(0.5);
+    expect(quantile(gaps, 0)).toBeGreaterThan(-0.12);
+  });
+
+  it('stops a runner walking straight at a rock from eight sides where it is drawn: within 0.3 m nine times in ten', () => {
+    const gaps: number[] = [];
+    for (const c of rocks.filter(walled)) {
+      for (let i = 0; i < 8; i++) {
+        const [dx, dz] = [Math.cos((i * Math.PI) / 4 + 0.3), Math.sin((i * Math.PI) / 4 + 0.3)];
+        const [x, z] = [c.at[0] + dx * (1.4 * c.R + 2.5), c.at[2] + dz * (1.4 * c.R + 2.5)];
+        const y = floor(x, z, NaN);
+        // Not from the rille, from another rock, from under a brush or from far up or down a slope.
+        if (
+          !(Math.abs(y - c.at[1]) < 0.8) ||
+          brushes.some(b => meets(b, x, y, z, PLAYER_H)) ||
+          rocks.some(o => o !== c && Math.hypot(o.at[0] - x, o.at[2] - z) < 1.4 * o.R + 1.5)
+        ) {
+          continue;
+        }
+        const yaw = toward(x, z, c.at[0], c.at[2]);
+        const s = Sim.at(world).put(x, y, z, yaw);
+        // Until he meets it and slides off: how near its drawn flank he comes, a body's radius from his middle.
+        let near = Infinity;
+        for (let n = 0; n < 90 && alone(c, s.p.x, s.p.z, 0.6); n++) {
+          s.step(KEY.FORWARD, yaw);
+          const [ux, uz] = [s.p.x - c.at[0], s.p.z - c.at[2]];
+          const d = Math.hypot(ux, uz);
+          near = Math.min(near, d - PLAYER_R - flank(c, ux / d, uz / d));
+          // On his feet, on the ground: not walked up the rock.
+          expect(s.p.y, `rock ${c.at}, side ${i}`).toBeLessThan(floor(s.p.x, s.p.z, y) + 0.3);
+        }
+        // Not one that another rock held up on his way.
+        if (near < 0.6) {
+          gaps.push(near);
+        }
+      }
+    }
+    expect(gaps.length).toBeGreaterThan(40);
+    // Never held off it (the boxes are inside it); in it by a median 0.1 m, by 0.3 m and less nine times in ten, never by 0.8 m.
+    expect(quantile(gaps, 0.95)).toBeLessThan(0.1);
+    expect(quantile(gaps, 0.5)).toBeGreaterThan(-0.15);
+    expect(quantile(gaps, 0.1)).toBeGreaterThan(-0.3);
+    expect(Math.min(...gaps)).toBeGreaterThan(-0.8);
+  });
+
+  it('lets a runner slide round a rock: walking past it at a shallow angle, he is never held up', () => {
+    let tried = 0;
+    for (const c of rocks.filter(walled)) {
+      for (const [dx, dz] of [
+        [1, 0],
+        [0, 1],
+        [-0.7071, 0.7071],
+      ]) {
+        // A line that cuts 0.3 m into the rock's flank, walked from 1.2 radii and 3 m before its middle.
+        const [nx, nz] = [-dz, dx];
+        const off = flank(c, nx, nz) - 0.3 + PLAYER_R;
+        const back = 1.2 * c.R + 3;
+        const [x, z] = [c.at[0] + nx * off - dx * back, c.at[2] + nz * off - dz * back];
+        const y = floor(x, z, NaN);
+        const clear = (u: number, w: number) =>
+          !brushes.some(
+            b =>
+              !c.parts.some(q => q[0] === b.min[0] && q[2] === b.min[2] && q[4] === b.max[1]) &&
+              meets(b, u, floor(u, w, 0), w, PLAYER_H),
+          );
+        if (
+          !(Math.abs(y - c.at[1]) < 0.8) ||
+          !Array.from({ length: 21 }, (_, k) => k / 20).every(
+            f =>
+              clear(x + 2 * f * back * dx + 1.2 * nx, z + 2 * f * back * dz + 1.2 * nz) &&
+              alone(c, x + 2 * f * back * dx, z + 2 * f * back * dz, 1.2) &&
+              // Not across the arena's edge, where the boulders stand in a row.
+              (rocks.indexOf(c) >= 4 ||
+                (Math.abs(x + 2 * f * back * dx - 80) < 78 &&
+                  Math.abs(z + 2 * f * back * dz - 214) < 63)),
+          ) ||
+          !clear(x, z)
+        ) {
+          continue;
+        }
+        tried++;
+        const yaw = toward(x, z, x + dx, z + dz);
+        const s = Sim.at(world).put(x, y, z, yaw);
+        const steps = Math.ceil(((2 * back) / RUN_SPEED) * TICK_HZ);
+        // He goes round it: never under a quarter of his speed for a third of a second, and past it in half as long again as on open ground.
+        const trail: number[][] = [];
+        let [stuck, done] = [0, 0];
+        for (let n = 0; n < 2 * steps && !done; n++) {
+          s.step(KEY.FORWARD, yaw);
+          trail.push([s.p.x, s.p.z]);
+          const was = trail[n - 20];
+          stuck +=
+            was && Math.hypot(s.p.x - was[0], s.p.z - was[1]) < (0.25 * RUN_SPEED * 20) / TICK_HZ
+              ? 1
+              : 0;
+          done = (s.p.x - x) * dx + (s.p.z - z) * dz > 2 * back ? n : 0;
+        }
+        expect(stuck, `rock ${c.at}, along ${dx}, ${dz}`).toBe(0);
+        expect(done).toBeGreaterThan(0);
+        expect(done).toBeLessThan(1.5 * steps);
+      }
+    }
+    expect(tried).toBeGreaterThan(12);
+  });
+
+  it('stops a rover where the rock is drawn, and a shot at body height on its surface', () => {
+    const gaps: number[] = [];
+    for (const c of rocks.slice(0, 4)) {
+      for (const [dx, dz, yaw] of [
+        [1, 0, WEST],
+        [-1, 0, EAST],
+        [0, 1, NORTH],
+        [0, -1, SOUTH],
+      ]) {
+        const [x, z] = [c.at[0] + dx * (1.4 * c.R + 7), c.at[2] + dz * (1.4 * c.R + 7)];
+        if (
+          brushes.some(b => b.max[1] > 0.3 && meets(b, x, 0, z, 2)) ||
+          rocks.some(o => o !== c && Math.hypot(o.at[0] - x, o.at[2] - z) < 1.4 * o.R + 4) ||
+          z < RILLE1 + 6
+        ) {
+          continue;
+        }
+        const car = rover(world, x, z, yaw);
+        run(car, world, 150, KEY.FORWARD, yaw);
+        // Its nose circle against the rock, on the bearing it ended on.
+        const [nx, nz] = [car.x - Math.sin(car.yaw) * 1.15, car.z - Math.cos(car.yaw) * 1.15];
+        const [ux, uz] = [nx - c.at[0], nz - c.at[2]];
+        const d = Math.hypot(ux, uz);
+        gaps.push(d - 1.05 - flank(c, ux / d, uz / d));
+      }
+    }
+    expect(gaps.length).toBeGreaterThanOrEqual(8);
+    // (On the field's hummocks a wheel is at times higher than the rock's foot: its nose goes further in.)
+    expect(Math.min(...gaps)).toBeGreaterThan(-0.8);
+    expect(Math.max(...gaps)).toBeLessThan(0.45);
+    const shots: number[] = [];
+    for (const c of rocks.filter(q => q.H > 0.75)) {
+      const { far } = form(c);
+      for (let i = 0; i < 8; i++) {
+        const [dx, dz] = [Math.cos((i * Math.PI) / 4 + 0.2), Math.sin((i * Math.PI) / 4 + 0.2)];
+        const from = 1.4 * c.R + 1;
+        const g = floor(c.at[0] + 0.8 * c.R * dx, c.at[2] + 0.8 * c.R * dz, c.at[1]);
+        for (const up of [0.5, 1.1]) {
+          const drawn = far(g + up, dx, dz);
+          if (!drawn || g + up > c.at[1] + 0.8 * c.H) {
+            continue;
+          }
+          const o: [number, number, number] = [c.at[0] + dx * from, g + up, c.at[2] + dz * from];
+          const t = ray(world, o, [-dx, 0, -dz], from);
+          // Not what another rock or the ground stops first: where it stops is in a box of this rock.
+          const [hx, hz] = [o[0] - dx * (t + 0.02), o[2] - dz * (t + 0.02)];
+          if (
+            c.parts.some(
+              q =>
+                hx >= q[0] && hx <= q[3] && hz >= q[2] && hz <= q[5] && o[1] > q[1] && o[1] < q[4],
+            )
+          ) {
+            shots.push(from - t - drawn);
+          }
+        }
+      }
+    }
+    expect(shots.length).toBeGreaterThan(100);
+    expect(quantile(shots.map(Math.abs), 0.5)).toBeLessThan(0.15);
+    expect(quantile(shots.map(Math.abs), 0.95)).toBeLessThan(0.4);
+    expect(Math.max(...shots)).toBeLessThan(0.1);
+  });
+
+  it('stands a body on a rock where it is drawn: over a box top that shows, the rock is a median 0.2 m higher, 0.4 m for nine in ten', () => {
+    // The layers are steps up a dome: on a step's edge the feet are under the slope drawn over it.
+    const rise: number[] = [];
+    for (const c of rocks) {
+      const { out } = form(c);
+      for (const q of c.parts) {
+        for (let x = q[0] + 0.05; x < q[3]; x += 0.2) {
+          for (let z = q[2] + 0.05; z < q[5]; z += 0.2) {
+            if (
+              c.parts.some(
+                o => o !== q && o[4] > q[4] && x > o[0] && x < o[3] && z > o[2] && z < o[5],
+              )
+            ) {
+              continue;
+            }
+            let y = q[4];
+            while (out(x, y + 0.02, z) <= 0 && y < q[4] + 4) {
+              y += 0.02;
+            }
+            rise.push(y - q[4]);
+          }
+        }
+      }
+    }
+    expect(quantile(rise, 0.5)).toBeLessThan(0.2);
+    expect(quantile(rise, 0.9)).toBeLessThan(0.4);
+  });
+
+  it('is no stair, from 1.2 m over the ground: the first box a body meets on a rock stands more than a step over the ground there', () => {
+    // But a low rock, which is walked over.
+    for (const c of rocks.filter(walled)) {
+      const top = Math.max(...c.parts.map(q => q[4]));
+      for (let i = 0; i < 16; i++) {
+        const [dx, dz] = [Math.cos((i * Math.PI) / 8), Math.sin((i * Math.PI) / 8)];
+        const g = floor(c.at[0] + 0.8 * c.R * dx, c.at[2] + 0.8 * c.R * dz, c.at[1]);
+        // Of the boxes over the ground there, the one that goes furthest out: its top, unless the rock itself is lower than a step.
+        let [far, high] = [0, 0];
+        for (const q of c.parts.filter(b => b[4] > g + 0.02)) {
+          const r = stops({ ...c, parts: [q] }, (Math.max(q[1], g) + q[4]) / 2, dx, dz);
+          [far, high] =
+            r > far + 1e-9 ? [r, q[4]] : [far, r > far - 1e-9 ? Math.max(high, q[4]) : high];
+        }
+        expect(high > g + STEP_H || top < g + STEP_H + 0.2, `rock ${c.at}, bearing ${i}`).toBe(
+          true,
+        );
+      }
+    }
+  });
+});
+
+describe('MOON, a few rocks, pebbles', () => {
   const all = strewn(MOON);
   const half = all.slice(0, all.length / 2);
   /** A pit's square, the rille and its lips: where the steps, the walls and the stepping stones are. */
@@ -1484,8 +1916,8 @@ describe('MOON, no rocks, pebbles', () => {
         b.max[2] <= p.z + PIT_S + 1e-9,
     );
 
-  it('leaves no rock standing on the floor: no ghost of stone rises off the ground but the stepping stones, the steps and walls of the pits and the lips', () => {
-    // A ghost of stone that stands over the ground at its middle, anywhere else: a boulder's box.
+  it("leaves sixteen boulders standing on the floor and no other rock: every ghost of stone off the ground is a box of one of them, a mast's foot, a stepping stone, a pit's or a lip's", () => {
+    // A ghost of stone that stands over the ground at its middle, out of the rille and the pits.
     const rocks = brushes.filter(b => {
       const [x, z] = [(b.min[0] + b.max[0]) / 2, (b.min[2] + b.max[2]) / 2];
       const g = ground(world, x, z);
@@ -1498,11 +1930,29 @@ describe('MOON, no rocks, pebbles', () => {
         b.max[2] - b.min[2] < 12
       );
     });
-    // The masts' feet are all there is: six dishes 0.8 m wide, the lamps of the jump ramps 0.4 m wide.
-    expect(rocks.length).toBeLessThanOrEqual(22);
+    // The boulders, both sides: red's eight and their mirrors.
+    const crags = LAYOUT.crags.flatMap(c => [
+      [c.at[0], c.at[2], c.R],
+      [c.at[0], ZED - c.at[2], c.R],
+    ]);
+    expect(crags).toHaveLength(16);
+    const loose = rocks.filter(
+      b =>
+        !crags.some(
+          ([x, z, r]) =>
+            Math.hypot((b.min[0] + b.max[0]) / 2 - x, (b.min[2] + b.max[2]) / 2 - z) < 1.4 * r,
+        ),
+    );
+    // The rest are masts' feet: six dishes 0.8 m wide, the lamps of the jump ramps 0.4 m wide.
+    expect(loose.length).toBeLessThanOrEqual(22);
     expect(
-      Math.max(...rocks.map(b => Math.max(b.max[0] - b.min[0], b.max[2] - b.min[2]))),
+      Math.max(...loose.map(b => Math.max(b.max[0] - b.min[0], b.max[2] - b.min[2]))),
     ).toBeLessThan(0.81);
+    // (All of their boxes but the few that end under the ground.)
+    const boxes = 2 * LAYOUT.crags.reduce((t, c) => t + c.parts.length, 0);
+    expect(boxes).toBe(714);
+    expect(rocks.length - loose.length).toBeGreaterThan(0.98 * boxes);
+    expect(rocks.length - loose.length).toBeLessThanOrEqual(boxes);
     // Kept: the three east stepping stones and, in each of the three pits, six steps.
     expect(LAYOUT.pillars).toHaveLength(3);
     for (const [x0, z0, x1, z1, y] of LAYOUT.pillars) {
@@ -1517,8 +1967,11 @@ describe('MOON, no rocks, pebbles', () => {
         ),
       ).toBe(true);
     }
+    // No box where a boulder stood and none stands now.
     expect(LAYOUT.sites.length).toBeGreaterThan(40);
-    for (const [x, z, r] of LAYOUT.sites) {
+    for (const [x, z, r] of LAYOUT.sites.filter(
+      q => !crags.some(c => Math.hypot(q[0] - c[0], q[1] - c[1]) < 1.4 * c[2] + q[2] + 1),
+    )) {
       for (const w of [z, ZED - z]) {
         expect(
           brushes.some(
@@ -1542,7 +1995,7 @@ describe('MOON, no rocks, pebbles', () => {
     expect(PEBBLES).toEqual([0.08, 0.2, 0.45]);
     expect(half.length).toBeGreaterThan(1200);
     const count = [0, 1, 2].map(k => half.filter(p => p[3] === k).length);
-    expect(count.every(n => n > 80)).toBe(true);
+    expect(count.every(n => n > 50)).toBe(true);
     expect(count[0]).toBeGreaterThan(count[1]);
     expect(count[1]).toBeGreaterThan(count[2]);
     expect(half.every(p => [0, 1, 2].includes(p[3]))).toBe(true);
@@ -1564,6 +2017,12 @@ describe('MOON, no rocks, pebbles', () => {
     ).length;
     const area = LAYOUT.sites.reduce((t, c) => t + Math.PI * 4 * c[2] * c[2], 0);
     expect(near / area).toBeGreaterThan((40 * (half.length - near)) / (Math.PI * 300 * 360 * 0.5));
+    // None in a boulder, a ring of ten and more at the foot of each.
+    for (const c of LAYOUT.crags) {
+      const d = half.map(p => Math.hypot(p[0] - c.at[0], p[2] - c.at[2]) / c.R);
+      expect(Math.min(...d)).toBeGreaterThan(1.3);
+      expect(d.filter(v => v < 2.1).length, `boulder at ${c.at}`).toBeGreaterThanOrEqual(10);
+    }
     // Clusters, no even sprinkle: half of them have another within a metre and a half.
     const close = half.filter(p =>
       half.some(q => q !== p && Math.hypot(p[0] - q[0], p[2] - q[2]) < 1.5),
@@ -1622,8 +2081,8 @@ describe('MOON, no rocks, pebbles', () => {
         `pebble at ${x}, ${z}`,
       ).toBe(false);
     }
-    // Across the six places where the field's stones stood, west to east.
-    for (const [x, z, r] of LAYOUT.sites.slice(0, 6)) {
+    // Across the two places where a field stone stood and none stands now, west to east, and four clusters along the walls.
+    for (const [x, z, r] of [LAYOUT.sites[0], LAYOUT.sites[5], ...LAYOUT.sites.slice(8, 12)]) {
       const s = Sim.at(world).put(x - 2 * r - 2, ground(world, x - 2 * r - 2, z), z, EAST);
       const steps = Math.ceil(((4 * r + 4) / RUN_SPEED) * TICK_HZ) + 15;
       for (let n = 0; n < steps; n++) {

@@ -106,6 +106,16 @@ The user, after playing: the field is flat, the ravine too regular, the rocks to
 - A hollow in each field (`HOLLOW`, 2 m deep, 20 m across, at (114, 176) and its twin): the slab is in four pieces round a square whose floor is 3 m down, and the relief is the floor there. No pack, spawn or rover is within 14 m.
 - Rocks: `boulder()` presses a sphere of 128 or 512 triangles into the rock's collision box (edges rounded 0.35 m, noise no more than 0.28 m out of a side or 0.05 m in, never over the top, four planes shaving the upper half). The field's stones, the wall boulders, the boulder field and the east stepping stones (now ghosts under rock pillars) use it; the rocks up the crater wall and on the rille's bottom keep the older cut block.
 
+### A few rocks after all (2026-11-12)
+
+The user asked to keep rocks all the same, a few. On top of the section below (the pebbles stay):
+
+- **Sixteen boulders**, eight a side (`ROCKS` in `src/shared/moon.ts`, red's, mirrored): four in the arena's field at (32.5, 156.5), (67.5, 159.5), (97.5, 166) and (128, 177.5), the four of the old field stones nearest the rille, as they were (1.8 to 3.7 m high); two where the boulder field was, at (-50, 330) and (-64, 336); one by the west lane at (-14, 204) and one by the east at (176, 212). None along the walls, none up the crater wall, none round the craters, none under 1.8 m.
+- They are the rocks of #208, restored from history: `rockOf()`, `fitted()` and `crag()` in `moon.ts`, `crag()` in `moonscape.ts`, with their fit, no-snag, rover and shot tests on the eight.
+- The stone at (97.5, 166) closes the sprint aslant from x 100 that cleared the rille by the bridge's east end: the slant test is back on x 100 and 118. Straight across, a plain sprint and jump crosses at x 2 and 158 (master: 2 and 4): the east end's wall boulders are gone, and the one that let x 4 through too.
+- Pebbles: a ring of 18 to 25 at each boulder's foot, none within 1.3 radii of its middle. One pebble in twenty is of the largest size (was one in ten) to pay for the boulders.
+- 1,214 brushes (cap 1,300): 714 are the boulders' boxes, 45 a boulder on average. The map loads in about 200 ms (10 ms with no rock, 360 ms with the rocks of #208). 467,919 vertices (cap 470,000).
+
 ### No rocks: pebbles (2026-11-12)
 
 The user asked for the rocks to go and for small pebbles of three sizes on the ground, with no collision. This replaces the section below, kept for the record.

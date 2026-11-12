@@ -4,6 +4,7 @@
 // of 600 by 720 m: in the arena (x 0..160, z 0..280) it lies on the floor's slabs, never under
 // them, flat where a base, a pack or a route's jump needs it; only the rille and the notches of
 // its lips have none. Compact on purpose: the local bundle carries it (budget in scripts/size.mjs).
+import { PLAYER_H, STEP_H } from './constants';
 import { TEAM_TINT } from './map';
 import { BASE, DOME, DOORS, MODULES, TUBES, box, bx } from './moonbase';
 import type { Bx, Vec3 } from './moonbase';
@@ -379,6 +380,300 @@ const at = (x: number, z: number): number => {
   return Math.max(h, -14.5) + w;
 };
 
+type V3 = [number, number, number];
+/** How high a rock's middle is over the ground: three tenths of its height, and 0.6 m or half its height if less. Its widest is there, its flank steep down to the ground: a body is stopped at its foot. */
+export const rockMid = (H: number) => Math.max(0.3 * H, Math.min(0.5 * H, 0.8));
+/**
+ * The form of a boulder of radius R and height H from a seed: how far it reaches from its middle
+ * (rockMid() over the ground) along a unit vector. A rounded solid, no plane in it:
+ * an ellipsoid stretched unevenly on its three axes and turned by the seed, upright under its
+ * middle (it stands in the regolith, as wide at the ground as at its middle) and a dome over it, swollen and shrunk by two low octaves
+ * of noise with the bearing (large soft lobes), with one gentle hollow and one flatter side. Only
+ * + - * /, Math.sqrt and the hash: the boxes below come from it on every side.
+ */
+export const rockOf = (s: number, R: number, H: number) => {
+  const h = (k: number) => hash(s, k, 131);
+  const flat = (k: number) => {
+    const [a, b] = [2 * h(k) - 1, 2 * h(k + 1) - 1];
+    const l = Math.sqrt(a * a + b * b) || 1;
+    return [a / l, b / l];
+  };
+  const [cx, sx] = flat(1);
+  const [a, b] = [R * (0.9 + 0.25 * h(3)), R * (0.68 + 0.22 * h(4))];
+  const lean = 0.3 * h(9) - 0.15;
+  const [hx, hz] = flat(5);
+  const [fx, fz] = flat(7);
+  const swell = (u: V3) => {
+    const n =
+      0.8 +
+      0.28 * noise(1.1 * u[0] + s, 1.1 * u[2] + 0.9 * u[1], s) +
+      0.1 * noise(2.3 * u[0] - s, 2.3 * u[2] + 1.7 * u[1], s + 1);
+    const hollow = c1((0.8 * (u[0] * hx + u[2] * hz) + 0.6 * u[1] - 0.55) / 0.45);
+    const side = c1((0.954 * (u[0] * fx + u[2] * fz) + 0.3 * u[1] - 0.4) / 0.6);
+    return n * (1 - 0.14 * hollow * hollow) * (1 - 0.16 * side * side);
+  };
+  const cu = (H - rockMid(H)) / swell([0, 1, 0]);
+  const deep = rockMid(H) + 0.7 * H;
+  const reach = (u: V3): number => {
+    if (u[1] < 0) {
+      // Under its middle it goes straight down, as wide as at its middle on that bearing, to a flat bottom under the ground.
+      const l = Math.sqrt(u[0] * u[0] + u[2] * u[2]);
+      return l < 1e-6 ? deep : Math.min(reach([u[0] / l, 0, u[2] / l]) / l, deep / -u[1]);
+    }
+    // Over it, it leans a little one way.
+    const x = (u[0] * cx + u[2] * sx - lean * u[1]) / a;
+    const z = (u[2] * cx - u[0] * sx - (0.15 - lean) * u[1]) / b;
+    const q = (u[1] * u[1]) / (cu * cu);
+    // Two parts of an ellipse and one of a squarer solid: (A + 0.65 q) T + 0.35 (q T)^2 = 1, T the square of the reach.
+    const [D, E] = [x * x + z * z + 0.65 * q, 0.35 * q * q];
+    const T = E < 1e-12 ? 1 / D : (Math.sqrt(D * D + 4 * E) - D) / (2 * E);
+    return Math.sqrt(T) * swell(u);
+  };
+  return { reach };
+};
+
+/**
+ * The boxes a boulder collides with, x0, y0, z0, x1, y1, z1 round its middle: what stops a body is
+ * where the rock is drawn. From `lo` (the ground round it) to its top it is cut in layers: up to
+ * `band` (a body's height over the ground) a layer ends where the rock has moved in or out by
+ * FIT[0] on a bearing, or at 0.9 m; over it by FIT[1], or at 1.5 m; none thinner than 0.25 m. In
+ * each a grid of points says where the rock is at the layer's foot and top (a box may stand 7 cm
+ * out of it), and boxes are picked on it one after the other: the largest first, then the one
+ * that brings the most of the outline within FIT[2] (FIT[3] over the band) of a box, overlapping
+ * one already there, until the whole outline is. No crack between them.
+ */
+/** How far over the ground a rock's first layer of boxes goes: more than a body steps up, from ground a little higher. */
+const WALL = STEP_H + 0.2;
+const FIT = [0.16, 0.3, 0.16, 0.3];
+const fitted = (
+  { reach }: ReturnType<typeof rockOf>,
+  R: number,
+  lo: number,
+  band: number,
+  foot: number,
+) => {
+  /**
+   * The rock's outline at a height: how far it goes from its axis on 8 m bearings, m to each side
+   * of a square round it (no Math.cos), 7 cm out of it; then whether a point is in that outline.
+   */
+  const outline = (y: number, m: number) => {
+    const o = new Float64Array(8 * m);
+    const u: V3 = [0, 0, 0];
+    for (let k = 0; k < 8 * m; k++) {
+      const t = ((k % (2 * m)) + 0.5) / m - 1;
+      const side = Math.floor(k / (2 * m));
+      const l = Math.sqrt(1 + t * t) * (side > 1 ? -1 : 1);
+      const dx = (side % 2 ? -t : 1) / l;
+      const dz = (side % 2 ? 1 : t) / l;
+      let p = 0;
+      let q = 1.6 * R;
+      for (let it = 0; it < 8; it++) {
+        const r = (p + q) / 2;
+        const d = Math.sqrt(r * r + y * y);
+        u[0] = (r * dx) / d;
+        u[1] = y / d;
+        u[2] = (r * dz) / d;
+        if (d <= reach(u) + 0.07) {
+          p = r;
+        } else {
+          q = r;
+        }
+      }
+      o[k] = p;
+    }
+    return o;
+  };
+  const within = (o: Float64Array, x: number, z: number) => {
+    const m = o.length / 8;
+    const wide = Math.abs(x) >= Math.abs(z);
+    if (Math.abs(x) + Math.abs(z) < 1e-9) {
+      return true;
+    }
+    const side = wide ? (x > 0 ? 0 : 2) : z > 0 ? 1 : 3;
+    const t = wide ? z / x : -x / z;
+    // Between the two bearings it lies between, along the square's side.
+    const f = (t + 1) * m - 0.5 + side * 2 * m;
+    const k = Math.floor(f);
+    const r = o[(k + 8 * m) % (8 * m)] * (1 - (f - k)) + o[(k + 1) % (8 * m)] * (f - k);
+    return x * x + z * z <= r * r;
+  };
+  const top = reach([0, 1, 0]) - 0.1;
+  const c = Math.max(0.07, Math.min(0.12, R / 12));
+  const out: number[][] = [];
+  // The layers' heights, then the outline at each. The first goes WALL over the highest ground round the rock: a body or a
+  // rover's is stopped by it and steps onto nothing. A rock no higher than that is walked over, up its layers.
+  const wall = band - PLAYER_H + WALL;
+  const cuts = [lo];
+  for (let a = lo; a < top - 1e-9;) {
+    const shift = a < band - 1e-9 ? FIT[0] : FIT[1];
+    const base = outline(a + 0.03, 2);
+    let b = Math.min(a === lo && wall < top - 0.3 ? wall : a + 0.25, top);
+    while (
+      b < top &&
+      b - a < 0.9 &&
+      outline(Math.min(b + 0.1, top), 2).every((r, k) => Math.abs(r - base[k]) <= shift)
+    ) {
+      b = Math.min(b + 0.1, top);
+    }
+    a = top - b < 0.15 ? top : b;
+    cuts.push(a);
+  }
+  const lines = cuts.map((y, k) => outline(k ? y : y + 0.03, 8));
+  for (let l = 0; l + 1 < cuts.length; l++) {
+    const [a, b] = [cuts[l], cuts[l + 1]];
+    const near = a < band - 1e-9 ? FIT[2] : FIT[3];
+    // The grid: as wide as the rock is in this layer.
+    const n = Math.ceil(Math.min(Math.max(...lines[l]), Math.max(...lines[l + 1])) / c) + 1;
+    const N = 2 * n + 1;
+    const inl = new Uint8Array(N * N);
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < N; j++) {
+        const [x, z] = [(i - n) * c, (j - n) * c];
+        inl[i + j * N] = within(lines[l], x, z) && within(lines[l + 1], x, z) ? 1 : 0;
+      }
+    }
+    const NEAR = Math.max(1, Math.round(near / c));
+    const on = (i: number, j: number) => i >= 0 && i < N && j >= 0 && j < N && inl[i + j * N] > 0;
+    // The outline: points in the rock with a neighbour out of it. `left` counts those no box is near yet, summed from the corner.
+    const edge = new Uint8Array(N * N);
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < N; j++) {
+        edge[i + j * N] =
+          on(i, j) && !(on(i - 1, j) && on(i + 1, j) && on(i, j - 1) && on(i, j + 1)) ? 1 : 0;
+      }
+    }
+    // Every box on the grid that is in the rock and no wider box holds: between two columns, each run of points in all of them.
+    const rects: number[][] = [];
+    const all = new Uint8Array(N);
+    // Between every other column on a wide grid.
+    const hop = N > 48 ? 2 : 1;
+    for (let i0 = 0; i0 < N; i0 += hop) {
+      all.fill(1);
+      for (let i1 = i0; i1 < N; i1++) {
+        let any = false;
+        for (let j = 0, from = 0; j <= N; j++) {
+          all[j] = j < N && all[j] && inl[i1 + j * N] ? 1 : 0;
+          if (!all[j]) {
+            if (j - 1 - from >= 2 && i1 - i0 >= 2 && (i1 - i0) % hop === 0) {
+              rects.push([i0, from, i1, j - 1]);
+            }
+            any ||= j - 1 > from;
+            from = j + 1;
+          }
+        }
+        if (!any) {
+          break;
+        }
+      }
+    }
+    const sum = new Int32Array((N + 1) * (N + 1));
+    const count = (i0: number, j0: number, i1: number, j1: number) => {
+      const [a0, b0, a1, b1] = [
+        Math.max(i0, 0),
+        Math.max(j0, 0),
+        Math.min(i1, N - 1) + 1,
+        Math.min(j1, N - 1) + 1,
+      ];
+      return (
+        sum[a1 + b1 * (N + 1)] -
+        sum[a0 + b1 * (N + 1)] -
+        sum[a1 + b0 * (N + 1)] +
+        sum[a0 + b0 * (N + 1)]
+      );
+    };
+    const picked: number[][] = [];
+    for (let k = 0; k < 40 && rects.length; k++) {
+      for (let j = 0; j < N; j++) {
+        for (let i = 0; i < N; i++) {
+          sum[i + 1 + (j + 1) * (N + 1)] =
+            edge[i + j * N] +
+            sum[i + (j + 1) * (N + 1)] +
+            sum[i + 1 + j * (N + 1)] -
+            sum[i + j * (N + 1)];
+        }
+      }
+      let [best, score] = [-1, 0];
+      for (let m = 0; m < rects.length; m++) {
+        const q = rects[m];
+        if (k && !picked.some(p => q[0] < p[2] && p[0] < q[2] && q[1] < p[3] && p[1] < q[3])) {
+          continue;
+        }
+        const area = (q[2] - q[0]) * (q[3] - q[1]);
+        const gain = k ? count(q[0] - NEAR, q[1] - NEAR, q[2] + NEAR, q[3] + NEAR) : 2;
+        const v = k ? gain * 1e6 + area : area;
+        if (gain >= 2 && v > score) {
+          [best, score] = [m, v];
+        }
+      }
+      if (best < 0) {
+        break;
+      }
+      const [i0, j0, i1, j1] = rects[best];
+      picked.push(rects[best]);
+      for (let i = Math.max(i0 - NEAR, 0); i <= Math.min(i1 + NEAR, N - 1); i++) {
+        for (let j = Math.max(j0 - NEAR, 0); j <= Math.min(j1 + NEAR, N - 1); j++) {
+          edge[i + j * N] = 0;
+        }
+      }
+      out.push([(i0 - n) * c, l ? a : foot, (j0 - n) * c, (i1 - n) * c, b, (j1 - n) * c]);
+    }
+  }
+  return out;
+};
+
+/** The ground as it is walked on: at()'s 4 m lattice, each square two triangles, as ground() in relief.ts reads it. */
+const walked = (x: number, z: number) => {
+  const [i, j] = [Math.floor(x / 4), Math.floor(z / 4)];
+  const [fu, fv] = [x / 4 - i, z / 4 - j];
+  const h = (u: number, v: number) => at(4 * (i + u), 4 * (j + v));
+  const [a, d] = [h(0, 0), h(1, 1)];
+  return fu >= fv
+    ? a + (h(1, 0) - a) * fu + (d - h(1, 0)) * fv
+    : a + (h(0, 1) - a) * fv + (d - h(0, 1)) * fu;
+};
+/** A rock of the map: where its middle is over the ground (x, the ground's height, z), its radius, height and seed, and the boxes it collides with (x0, y0, z0, x1, y1, z1), inside what rockOf() draws. */
+const crag = (x: number, z: number, R: number, H: number, s: number) => {
+  const g = walked(x, z);
+  const y = g + rockMid(H);
+  // The ground round it: a body meets the rock from the lowest of it to its height over the highest.
+  const span = [-3, -2, -1, 0, 1, 2, 3].map(k => 0.4 * R * k);
+  const round = span.map(u => span.map(v => walked(x + u, z + v)));
+  // Not under the rock itself, which goes two thirds of its height under its middle's ground.
+  const lo = Math.max(Math.min(...round.flat()), g - 0.55 * H);
+  const band = Math.max(...round.flat()) + PLAYER_H;
+  return {
+    at: [x, g, z],
+    R,
+    H,
+    s,
+    parts: fitted(rockOf(s, R, H), R, lo - y, band - y, lo - 0.5 - y).map(
+      ([x0, y0, z0, x1, y1, z1]) => [x + x0, y + y0, z + z0, x + x1, y + y1, z + z1],
+    ),
+  };
+};
+/**
+ * The few boulders left, red's (x, z, radius, height, seed): four in the arena's field, cover
+ * between the base and the rille (the third stands where a sprint aslant would clear the rille by
+ * the bridge's east end); two where the boulder field was; one by the west lane, one by the east.
+ * None under 1.8 m: a low one would be walked over, and the pebbles do that.
+ */
+const ROCKS = [
+  [32.5, 156.5, 3.1, 3.45, 62],
+  [67.5, 159.5, 1.86, 1.84, 63],
+  [97.5, 166, 2.79, 2.99, 64],
+  [128, 177.5, 3.41, 3.68, 65],
+  [-50, 330, 3.6, 2.9, 100],
+  [-64, 336, 2.4, 1.9, 101],
+  [-14, 204, 2.4, 1.9, 110],
+  [176, 212, 2.8, 2.3, 111],
+];
+/** Red's boulders, each with the boxes it collides with; blue's are their mirrors. */
+const CRAGS = ROCKS.map(([x, z, R, H, s]) => crag(x, z, R, H, s));
+const ghosts = (l: { parts: number[][] }[]): Brush[] =>
+  l
+    .flatMap(c => c.parts)
+    .map(([x0, y0, z0, x1, y1, z1]) => ({ ...box(x0, y0, z0, x1, y1, z1, STONE), ghost: true }));
+
 /** A pit: PIT_R in radius, cut in a square of half side PIT_S of its crater's terrace, its floor at PIT_FLOOR, 7 m over the kill floor; a flight of PIT_STEPS steps up its east wall. */
 export const [PIT_R, PIT_S, PIT_FLOOR, PIT_STEPS] = [9, 12, -19, 7];
 /**
@@ -464,6 +759,8 @@ export const LAYOUT = {
   bowls: BOWLS.flatMap(([x, z, r, k = 0.17]) =>
     (z ? [1, -1] : [1]).map(m => [x, ZED / 2 + m * z, r, k]),
   ),
+  /** Red's boulders, in the field and outside: blue's are their mirrors. */
+  crags: CRAGS,
   /** Where the boulders stood, red's side (x, z, radius): pebbles lie thickest there. */
   sites: SITES,
   pillars: PILLARS,
@@ -535,6 +832,8 @@ const half: Brush[] = [
   box(12, -30, 148 - (16 - WEST_GAP) / 2, 24, 0, 148, PAINT, STONE, [1, 0.42, 0.08]),
   // The pit of this side's deep crater.
   ...PITS.filter(p => p.z !== ZED / 2).flatMap(pit),
+  // The few boulders: each some forty boxes that follow its outline, drawn as one rock by the scenery.
+  ...ghosts(CRAGS),
   ...DISHES.map(([x, z]) => lump(x, z, 0.4, 6)),
 ];
 

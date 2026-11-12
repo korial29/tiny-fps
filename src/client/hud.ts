@@ -29,7 +29,8 @@ import type { Mark } from './marks';
  * where the guard comes up in a notch with a flat top. The notch is cut to the face of the HUD, which
  * sits in it: its flat top `NOTCH[2]` up from the bottom, `NOTCH[0]` and `NOTCH[1]` its half widths.
  */
-const NOTCH = [8, 14, 23];
+// Softened (the user, 2026-11-12): a short flat top and long, gentle shoulders, so it reads as a swell.
+const NOTCH = [5, 24, 21];
 /** The exponent of the outline's round ends: 2 a half circle, more squarer. */
 const ROUND = 3;
 export const rim = (): [number, number][] => {

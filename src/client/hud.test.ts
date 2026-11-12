@@ -346,12 +346,17 @@ describe('createHud', () => {
     expect(Math.min(...top.map(p => p[1]))).toBeGreaterThan(11.9);
     // The guard's notch in the middle, flat-topped: the face (72 px wide, its top 111 px up) and the
     // health sit in it on a screen of 800 by 600.
-    expect(at(low, 50)).toBeCloseTo(at(low, 44), 1);
+    expect(at(low, 50)).toBeCloseTo(at(low, 46), 1);
     // It stands 21 over where the V would meet in the middle, and over the edge at its foot.
-    expect(at(low, 50)).toBeCloseTo(77, 1);
-    expect(at(low, 50)).toBeLessThan(at(low, 36) - 4);
+    expect(at(low, 50)).toBeCloseTo(79, 1);
+    expect(at(low, 50)).toBeLessThan(at(low, 28) - 2);
+    // Softened: long shoulders, no step: it gains under 1.5 a unit of width anywhere.
+    for (let x = 27; x < 50; x += 0.5) {
+      expect(Math.abs(at(low, x + 0.5) - at(low, x)) / 0.5).toBeLessThan(1.5);
+    }
     expect((100 - at(low, 50)) * 6).toBeGreaterThan(111 + 10);
-    expect(8 * 8).toBeGreaterThan(36 + 10);
+    // The face's top corners, 36 px off the middle: the swell is still over them there.
+    expect((100 - at(low, 54.5)) * 6).toBeGreaterThan(111);
     // The shell is drawn before the face, the health and the gun's count, so they lie over it.
     const order = [...screen.children].map(e => e.tagName);
     for (const tag of ['UL', 'FIGURE', 'DL']) {

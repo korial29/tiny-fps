@@ -307,6 +307,32 @@ describe('craft', () => {
     }
   });
 
+  it("leaves each engine's intake an empty hole: nothing ahead of it, a dark bottom, and the wing starting behind it", () => {
+    const deep = ENGINE.LIP - 0.8;
+    for (const lod of [0, 1, 2]) {
+      const v = make(state({ nades: 4 }), lod);
+      const mouth = all(v).filter(i => {
+        const [x, y, a] = at(v, i);
+        return (
+          Math.hypot(Math.abs(x) - ENGINE.X, y - ENGINE.Y) < ENGINE.R * 0.79 &&
+          a > deep - 0.01 &&
+          a < ENGINE.LIP + 2
+        );
+      });
+      // Only the hole's own bottom is in there: dark, from the lip back to the axis.
+      expect(mouth.length).toBeGreaterThan(0);
+      for (const i of mouth) {
+        expect(is(v, i, [0.08, 0.085, 0.1])).toBe(true);
+        expect(at(v, i)[2]).toBeLessThan(ENGINE.LIP);
+      }
+    }
+    // The wing's leading edge, from the hull to the cannon, is behind the hole's bottom.
+    const [root, mid] = WING;
+    expect(root[0]).toBeLessThan(ENGINE.X - ENGINE.R);
+    expect(mid[0]).toBeGreaterThan(ENGINE.X + ENGINE.R);
+    expect(Math.max(root[1], mid[1])).toBeLessThan(deep - 0.4);
+  });
+
   it('has two wings and no more: one thin sheet a side, swept back and drooping past the engine', () => {
     expect(WING.length).toBe(3);
     for (const lod of [0, 1, 2]) {

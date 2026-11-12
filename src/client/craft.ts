@@ -72,8 +72,8 @@ export const ENGINE = { X: 1.55, Y: 0.3, R: 0.56, LIP: -1.3, NOZZLE: -6.3 };
 export const NOZZLES: Vec3[] = [-1, 1].map(s => [s * ENGINE.X, ENGINE.Y, ENGINE.NOZZLE]);
 /** A wing's sections, at the hull, at the cannon and at the tip: right, the leading and the trailing edge ahead, the top and the bottom. */
 export const WING = [
-  [0.9, -0.9, -5.3, 0.14, -0.12],
-  [2.6, -2.1, -5.5, 0.12, -0.1],
+  [0.9, -2.7, -5.3, 0.14, -0.12],
+  [2.6, -2.6, -5.5, 0.12, -0.1],
   [6.4, -4.9, -6.1, -0.7, -0.78],
 ];
 /** The feet of the three legs it stands on: right of the centre, under it, ahead of it. */
@@ -642,7 +642,7 @@ const build = (lod: number): [number[], number[]] => {
       TEAM,
     );
     // The engine against the hull's flank: a wide cowl, the team's ring behind its lip, a dark
-    // intake with its spike; behind the cowl a thinner exhaust with two dark ribs and a pipe along
+    // intake, empty and deep; behind the cowl a thinner exhaust with two dark ribs and a pipe along
     // it, and a dark nozzle.
     const lathe = (profile: [number, number][], rgb: number[], into = o, k = 1) =>
       place(into, dress(smooth(profile, sides), rgb), P(s * X, Y, NOZZLE), SELF, O, k);
@@ -675,17 +675,10 @@ const build = (lod: number): [number[], number[]] => {
         t,
         1.03,
       );
-      lathe(
-        [
-          [R * 0.34, len - 0.3],
-          [0, len + 0.28],
-        ],
-        GREY,
-      );
     }
     lathe(
       [
-        [0, len - 0.35],
+        [0, len - 0.8],
         [R * 0.8, len - 0.02],
       ],
       DARK,

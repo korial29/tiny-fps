@@ -83,17 +83,17 @@ export const SHIP = {
   BALL_HP: 2,
 } as const;
 
-/** The lasers' muzzles at the wing roots, the missiles' pods under the wings: right of the centre, above it, ahead of it. */
+/** The lasers' muzzles under the wings, the missiles' pods under the wings: right of the centre, above it, ahead of it. */
 export const SHIP_GUNS = [
-  [-2.6, -0.2, 2.2],
-  [2.6, -0.2, 2.2],
+  [-2.6, -0.2, -0.9],
+  [2.6, -0.2, -0.9],
 ];
 export const PODS = [
-  [-3.4, -0.7, 0.5],
-  [3.4, -0.7, 0.5],
+  [-3.4, -0.7, -2.9],
+  [3.4, -0.7, -2.9],
 ];
-/** The pilot's seat in the cockpit: right of the centre, above it (the feet), ahead of it. */
-export const COCKPIT = [0, -0.55, 2.4];
+/** The pilot's seat in the cockpit, behind the long nose: right of the centre, above it (the feet), ahead of it. */
+export const COCKPIT = [0, 0.05, -0.2];
 /** Where who gets out stands, beside the cockpit: clear of the hull, ahead of the wings. */
 export const OUT = SHIP.R + 0.9;
 

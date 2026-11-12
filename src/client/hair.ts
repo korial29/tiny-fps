@@ -46,6 +46,8 @@ const pulled = (off: number, fringe: (a: number) => number = () => 0): Shell => 
   low: a => curve(LINE, Math.abs(a)) - fringe(a),
   off: (a, t) => 0.0045 + off * (1 - t ** 2.5) + 0.2 * fringe(a) * t,
 });
+/** How many locks run down a shell, half round the head. */
+const LOCKS = 7;
 const SHELLS: Shell[] = [
   // The ponytail: a lock swept across the forehead to her right.
   pulled(0.011, a => 0.024 * bell(a - 0.5, 0.42)),
@@ -247,7 +249,9 @@ const lock = (
 /** The rest mesh of a style, `fine` or not: its triangles' corners, each 8 floats (V), on the man's head. */
 const make = (style: number, fine: boolean): Float32Array => {
   const out: V[] = [];
-  const [cols, rows] = fine ? [30, 9] : [12, 5];
+  const [cols, rows] = fine ? [44, 9] : [12, 5];
+  // Loose ends are cut in tips, lock by lock: the bob's all round, the swept top's on its long side.
+  const loose = (a: number) => (style == STYLE.BOB ? 1 : style == STYLE.UNDERCUT ? +(a > 0.3) : 0);
   const { low, off } = SHELLS[style];
   const top = TOP - 0.012;
   const grid: V[][] = [];
@@ -258,12 +262,22 @@ const make = (style: number, fine: boolean): Float32Array => {
     grid.push(
       Array.from({ length: cols }, (_, i) => {
         const a = -Math.PI + (2 * Math.PI * (i + 0.5)) / cols;
-        const y = top + (low(a) - top) * t ** 0.85 - (tuck ? 0.004 : 0);
-        const p = scalp(a, y, tuck ? 0.0015 : off(a, t));
+        // The locks (the user, 2026-11-12): ridges that run down the shell, wavering, a groove
+        // between two of them; fuller to the ends.
+        const ridge = fine ? Math.abs(Math.sin(a * LOCKS + 1.3 * Math.sin(t * 3.2 + style))) : 0.6;
+        const tip = fine ? 0.016 * ridge ** 2 * loose(a) : 0;
+        const y = Math.max(
+          top + (low(a) - tip - top) * t ** 0.85 - (tuck ? 0.004 : 0),
+          LOWEST + 0.007,
+        );
+        const p = scalp(
+          a,
+          y,
+          tuck ? 0.0015 : off(a, t) + 0.0065 * (ridge ** 0.7 - 0.6) * (0.25 + 0.75 * t),
+        );
         // Lighter where the light catches the top's turn, darker to the ends; strands round it.
         const light =
-          (0.78 + 0.34 * Math.exp(-(((t - 0.3) / 0.22) ** 2)) - 0.12 * t) *
-          (1 + (fine ? 0.07 : 0) * Math.sin(a * 23 + r));
+          (0.78 + 0.34 * Math.exp(-(((t - 0.3) / 0.22) ** 2)) - 0.12 * t) * (0.58 + 0.5 * ridge);
         return [...p, 0, 0, 0, tuck ? 0.6 : light, 0];
       }),
     );
@@ -324,6 +338,35 @@ const make = (style: number, fine: boolean): Float32Array => {
       0.92,
       0.22,
     );
+  }
+  // Loose strands that frame the face: off the temple, down in front of the ear to the jaw,
+  // curling out at their ends. They sway with the run. The bob's sides are its own.
+  const strand = (side: number, a0: number, len: number, r: number) => {
+    const n = fine ? 6 : 3;
+    lock(
+      out,
+      Array.from({ length: n }, (_, k) => {
+        const t = k / (n - 1);
+        const [x, y, z] = scalp(
+          side * (a0 - 0.1 * t + 0.07 * Math.sin(t * 5.5)),
+          1.742 - len * t,
+          0.007 + 0.007 * Math.sin(t * 3) + 0.012 * t ** 3,
+        );
+        return [x, y, z, r * (1 - 0.75 * t ** 2)];
+      }),
+      fine ? 6 : 4,
+      1.5,
+      0.9,
+    );
+  };
+  if (style == STYLE.PONYTAIL || style == STYLE.BRAID) {
+    strand(1, 1.02, 0.115, 0.0052);
+    strand(-1, 1.02, 0.105, 0.0052);
+  } else if (style == STYLE.BUN) {
+    strand(1, 0.98, 0.095, 0.004);
+    strand(-1, 0.98, 0.12, 0.004);
+  } else if (style == STYLE.UNDERCUT) {
+    strand(1, 0.62, 0.1, 0.006);
   }
   return new Float32Array(out.flat());
 };

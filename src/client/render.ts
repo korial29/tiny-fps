@@ -72,6 +72,8 @@ export const FOV = Math.tan((FOV_DEG * Math.PI) / 360);
 const [NEAR, CLOSE] = [10, 4];
 /** Metres within which a rover is drawn with its near level of detail (rover.ts), and within which with the middle one. */
 export const [ROVER_NEAR, ROVER_MID] = [22, 70];
+/** A ship's, 14 m long: its cockpit and its struts within 45 m, its plain shape past 160 m. */
+export const [SHIP_NEAR, SHIP_MID] = [45, 160];
 /** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
 const SAMPLES = 4;
 
@@ -834,7 +836,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           d < ROVER_NEAR ? 2 : +(d < ROVER_MID),
         );
       });
-      ships.forEach((r, i) => craft(v, r, teamRgb(+(i >= ships.length / 2)), now));
+      ships.forEach((r, i) => {
+        const d = Math.hypot(r.x - eye[0], r.y - eye[1], r.z - eye[2]);
+        craft(v, r, teamRgb(+(i >= ships.length / 2)), now, d < SHIP_NEAR ? 2 : +(d < SHIP_MID));
+      });
       // The dust off their wheels is smoke: it casts nothing wherever it is in the list.
       dust.update(cars, world, dt, eye);
       dust.draw(v);

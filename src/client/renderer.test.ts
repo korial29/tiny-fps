@@ -2,10 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STILL, spawn } from '../shared/physics';
 import { ROVER } from '../shared/rover';
+import { SHIP } from '../shared/ship';
 import { MODE, NOBODY, TEX } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
 import { build } from '../shared/world';
 import type { Brush, WorldDef } from '../shared/world';
+import { craft } from './craft';
 import { createEffects } from './effects';
 import { teamRgb } from './flag';
 import { BEAM_RANGE, LIGHT } from './lights';
@@ -22,6 +24,8 @@ import {
   MAX_TINTS,
   ROVER_MID,
   ROVER_NEAR,
+  SHIP_MID,
+  SHIP_NEAR,
   SHADOW,
   backing,
   city,
@@ -863,6 +867,31 @@ describe('createRenderer', () => {
       }
       expect(model(r, 0, 0, 0).length).toBeLessThan(model(r, 0, 0, 1).length);
       expect(model(r, 0, 0, 1).length).toBeLessThan(model(r, 0, 0, 2).length);
+    });
+
+    it("picks a ship's level of detail by the distance to the eye, further out than a rover's", () => {
+      const rd = createRenderer(canvas, ROOM);
+      const r: Rover = { ...parked({ y: SHIP.DROP }), ship: true, hp: SHIP.HP, wreck: 0, nades: 2 };
+      const at = (d: number): [number, number, number] => [r.x, r.y, r.z + d];
+      /** The ship as craft.ts draws it between two flashes of its strobe, as the buffer holds it. */
+      const ship = (lod: number) => {
+        const out: number[] = [];
+        craft(out, r, teamRgb(0), 0.5, lod);
+        return Array.from(new Float32Array(out));
+      };
+      for (const [d, lod] of [
+        [SHIP_NEAR - 1, 2],
+        [SHIP_NEAR + 1, 1],
+        [SHIP_MID - 1, 1],
+        [SHIP_MID + 1, 0],
+      ]) {
+        show(rd, [r], undefined, [], at(d));
+        // The strobe's bead, when it is lit, comes last.
+        expect(tail().slice(0, ship(lod).length)).toEqual(ship(lod));
+        expect(tail().length - ship(lod).length).toBeLessThan(40 * STRIDE);
+      }
+      expect(SHIP_NEAR).toBeGreaterThan(ROVER_NEAR);
+      expect(SHIP_MID).toBeGreaterThan(ROVER_MID);
     });
 
     it('rolls the wheels by the way driven along the nose: forward, back again in reverse, not at all sideways or when put back', () => {

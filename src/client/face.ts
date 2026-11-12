@@ -33,7 +33,7 @@ export const PALETTE = [
   0, 0xff0a0f1a, 0xff628bc9, 0xff4363a0, 0xff7da7e0, 0xff364a6b, 0xffdce8ee, 0xff0f1420, 0xff14144a,
   0xffe0eff2, 0xff1a12b0, 0xff5a3f7d, 0xff362f2a, 0xffffd93f, 0xff4ad3ff, 0xff86908a, 0xff18243a,
   // The woman's: her hair, its light, her lips.
-  0xff1c2f5e, 0xff2f4c8a, 0xff5a4fc4,
+  0xff1c2f5e, 0xff2f4c8a, 0xff4a45cc,
 ];
 const [
   ,
@@ -95,7 +95,7 @@ export const sprite = (n: number, fem = 0): Uint8Array => {
     for (let x = 0; x < FW; x++) {
       // Her jaw narrows to the chin.
       const [u, v] = [
-        ((x - 11.5) / 9.6) * (1 + 0.035 * fem * Math.max(y - 17, 0)),
+        ((x - 11.5) / 9.6) * (1 + 0.05 * fem * Math.max(y - 16, 0)),
         (y - 15) / (y < 15 ? 13 : 12.6),
       ];
       const r = u * u + v * v;
@@ -150,19 +150,23 @@ export const sprite = (n: number, fem = 0): Uint8Array => {
       put(x + 3, 14, PUPIL);
       continue;
     }
-    const [top, h] = wide ? [12, 3] : narrow ? [14, 1] : [13, 2];
+    // Her eyes are larger (the user, 2026-11-12): a row taller, open.
+    const [top, h] = wide ? [12, 3] : narrow ? [14, 1] : fem ? [12, 3] : [13, 2];
+    const tall = fem && !wide && !narrow;
     box(x, top, 4, h, n == GLOW ? GOLD : WHITE);
     box(x, top - 1, 4, 1, LINE);
     // Her lashes: the lid's line goes on past the outer corner, up.
     if (fem) {
       put(i ? x + 4 : x - 1, top - 1, LINE);
       put(i ? x + 5 : x - 2, top - 2, LINE);
+      put(i ? x + 5 : x - 2, top - 3, LINE);
+      put(i ? x + 4 : x - 1, top + h - 1, LINE);
     }
     if (n != GLOW) {
-      box(x + 1 + look, wide ? 13 : top, wide ? 1 : 2, wide ? 1 : h, PUPIL);
+      box(x + 1 + look, wide ? 13 : top + +tall, wide ? 1 : 2, wide ? 1 : h - +tall, PUPIL);
     }
     // The brows: flat, raised, or down in a V.
-    const lift = wide ? -2 : 0;
+    const lift = wide ? -2 : tall ? -1 : 0;
     for (let k = 0; k < 4; k++) {
       const v =
         e == EXPR.RAGE || e == EXPR.TURN_L || e == EXPR.TURN_R || hard

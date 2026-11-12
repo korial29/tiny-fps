@@ -702,7 +702,7 @@ describe('skin', () => {
         near(0.03, 1.713),
         near(0.012, 1.711),
         near(0, 1.59, 0.006),
-        near(0.0235, 1.6165),
+        near(0.0245, 1.6216),
         near(0.04, 1.65, 0.006),
       ];
       for (const l of [brow, inner, chin, corner, cheek]) {
@@ -754,7 +754,7 @@ describe('skin', () => {
     });
 
     it('wears each expression on the features it is made of, and is back at rest with it gone', () => {
-      const [brow, chin, corner] = [near(0.012, 1.711), near(0, 1.59, 0.006), near(0.0235, 1.6165)];
+      const [brow, chin, corner] = [near(0.012, 1.711), near(0, 1.59, 0.006), near(0.0245, 1.6216)];
       const lidGap = (d: number[][]) => {
         const at = (k: number) =>
           kind(k)

@@ -108,8 +108,46 @@ describe('craft', () => {
     }
   });
 
-  it('is nothing once it is a wreck', () => {
-    expect(make(state({ wreck: 30 }))).toEqual([]);
+  it('lies there as a wreck: charred, on its belly, its legs gone, no light on it', () => {
+    const [whole, wreck] = [make(), make(state({ hp: 0, wreck: 200 }))];
+    // Parked, its legs are down; the wreck has none, and no missile, flame or lamp.
+    expect(count(wreck)).toBeLessThan(count(whole));
+    expect(lit(whole).length).toBeGreaterThan(0);
+    expect(lit(wreck)).toEqual([]);
+    // Soot all over, the canopy's panes aside.
+    const dark = all(wreck).filter(i => layer(wreck, i) != -3);
+    expect(dark.length).toBeGreaterThan(1000);
+    expect(Math.max(...dark.flatMap(i => colour(wreck, i)))).toBeLessThan(0.2);
+    // Slumped: lower than it stood.
+    const y = (v: number[]) => all(v).reduce((s, i) => s + v[i * STRIDE + 1], 0) / count(v);
+    expect(y(wreck)).toBeLessThan(y(whole) - 0.3);
+  });
+
+  it('falls apart over the last second of its wreck, and is all gone at the end', () => {
+    /** The area of every triangle, summed. */
+    const area = (v: number[]) => {
+      let sum = 0;
+      for (let i = 0; i + 3 * STRIDE <= v.length; i += 3 * STRIDE) {
+        const [a, b, c] = [0, 1, 2].map(k => [0, 1, 2].map(j => v[i + k * STRIDE + j]));
+        const [u, w] = [b, c].map(p => p.map((x, j) => x - a[j]));
+        sum +=
+          Math.hypot(
+            u[1] * w[2] - u[2] * w[1],
+            u[2] * w[0] - u[0] * w[2],
+            u[0] * w[1] - u[1] * w[0],
+          ) / 2;
+      }
+      return sum;
+    };
+    const left = [200, 61, 45, 30, 15, 0.01].map(wreck => area(make(state({ hp: 0, wreck }))));
+    expect(left[1]).toBeCloseTo(left[0], 6);
+    for (let k = 2; k < left.length; k++) {
+      expect(left[k]).toBeLessThan(left[k - 1]);
+    }
+    expect(left[5]).toBeLessThan(0.01 * left[0]);
+    // What is going glows like embers.
+    const going = make(state({ hp: 0, wreck: 30 }));
+    expect(lit(going).length).toBeGreaterThan(100);
   });
 
   it('has a long nose: close to half the ship from the tip to the foot of the windscreen, slender and tapering all the way', () => {

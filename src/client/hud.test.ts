@@ -22,7 +22,9 @@ import {
   clock,
   createHud,
   kmh,
+  rim,
 } from './hud';
+import { VISOR } from './helmet';
 import { CODES } from './input';
 import type { Hud, Summary } from './hud';
 import type { Mark } from './marks';
@@ -289,44 +291,54 @@ describe('createHud', () => {
     expect(v()).toBe('');
   });
 
-  it('shows a helmet’s rim round the view, heavier at the brow, under the face and the counts', () => {
-    const rim = () => q('del');
-    expect(rim().hidden).toBe(true);
+  it('draws the outline of the helmet’s own visor round a clear view, the face in its notch', () => {
+    const el = () => q('del');
+    expect(el().hidden).toBe(true);
     hud.visor(true);
-    expect(rim().hidden).toBe(false);
+    expect(el().hidden).toBe(false);
     hud.visor(false);
-    expect(rim().hidden).toBe(true);
-    // The first rim, a little more aggressive: the corners' shade, a rounded rim squarer at the brow
-    // than at the jaw, and a heavy brow's shade under its top edge. No V, no clip.
-    expect(HUD_CSS).toMatch(/del\{inset:0;background:[^}]*radial-gradient\(ellipse/);
-    expect(HUD_CSS).not.toMatch(/del[^}]*clip-path/);
-    const [, top, , bottom] = /del::before\{[^}]*border-radius:(\d+)% (\d+)% (\d+)% (\d+)%/.exec(
-      HUD_CSS,
-    )!;
-    expect(+top).toBeLessThan(+bottom);
-    // Its lower edge is a fixed 36 px up and open over the middle, where the rim rises in an arch
-    // over the face: the face sits in the frame with the rest of the HUD (the user, 2026-11-12).
-    expect(HUD_CSS).toMatch(/del::before\{[^}]*inset:3% 4% 36px/);
+    expect(el().hidden).toBe(true);
+    // The corners' shade as it always was, and nothing else filled: a line, 2 px at any size.
     expect(HUD_CSS).toMatch(
-      /del::before\{[^}]*mask:[^}]*calc\(50% - 62px\)[^}]*calc\(50% \+ 62px\)/,
+      /del\{inset:0;background:radial-gradient\(ellipse 74% 80% at 50% 54%,#0000 60%,#000d 100%\)\}/,
     );
-    const [, w, h] = /del::after\{[^}]*bottom:0;width:(\d+)px;height:(\d+)px/.exec(HUD_CSS)!;
-    // The face is 72 px wide and 87 high from 24 px up: the arch clears its sides and its top.
-    expect(+w).toBeGreaterThan(72 + 30);
-    expect(+h).toBeGreaterThan(24 + 87 + 8);
-    expect(HUD_CSS).toMatch(/del::after\{[^}]*border-bottom:0;border-radius:\d+px \d+px 0 0\}/);
-    // On each side the rim comes up in a very acute angle: a pale line 16 degrees off the side.
-    const lines = [
-      ...HUD_CSS.matchAll(/conic-gradient\(from ([\d.]+)deg at (\d+)% 44%,#fff2 0 \.5deg/g),
-    ];
-    expect(lines.map(m => [+m[1], +m[2]])).toEqual([
-      [164, 4],
-      [195.5, 96],
-    ]);
-    // Lines only: the view is as clear as it was (the user: no black triangles, the same glass).
-    expect(HUD_CSS).not.toMatch(/del::after\{[^}]*background/);
-    expect(/del\{[^}]*\}/.exec(HUD_CSS)![0]).not.toMatch(/#000[a-c]/);
-    expect(HUD_CSS).toMatch(/del::before\{[^}]*inset 0 22px 20px -8px #000a/);
+    const svg = decodeURIComponent(
+      /del::before\{[^}]*url\("data:image\/svg\+xml,([^"]*)"\)/.exec(HUD_CSS)![1],
+    );
+    expect(svg).toContain('fill="none"');
+    expect(svg).not.toMatch(/ fill="#/);
+    // The rim's sheen, inside the outline only: a pale line, a glow behind it, shades under the brow and along the jaw.
+    expect(svg).toContain('clip-path="url(#c)"');
+    expect(svg.match(/stroke="#fff"/g)).toHaveLength(3);
+    expect(svg.match(/stroke="#000"/g)).toHaveLength(3);
+    expect(svg).toContain('vector-effect="non-scaling-stroke"');
+    expect(svg).toContain('preserveAspectRatio="none"');
+    expect(HUD_CSS).not.toMatch(/del::after/);
+    // The visor's shape, as on the helmet (helmet.ts): in a box of 100 by 100, y down.
+    const pts = rim();
+    const top = pts.slice(0, pts.length / 2);
+    const low = pts.slice(pts.length / 2).reverse();
+    const at = (l: [number, number][], x: number) => l.find(p => p[0] === x)![1];
+    // The upper edge comes down to the middle: a frown.
+    expect(at(top, 50)).toBeGreaterThan(at(top, 4) + 3);
+    expect(at(top, 96)).toBe(at(top, 4));
+    // The lower edge runs up to its ends, as far as on the helmet: its rise over the visor's height.
+    const share = (at(low, 30) - at(low, 4)) / (at(low, 30) - at(top, 4));
+    expect(at(low, 4)).toBeLessThan(at(low, 30) - 25);
+    expect(share).toBeGreaterThan(0.3);
+    expect((at(low, 20) - at(low, 4)) / 16).toBeCloseTo((at(low, 96) - at(low, 80)) / -16, 6);
+    expect(VISOR.rise / (2 * VISOR.r[1])).toBeCloseTo(0.5, 6);
+    // The guard's notch in the middle, flat-topped: the face (72 px wide, its top 111 px up) and the
+    // health sit in it on a screen of 800 by 600.
+    expect(at(low, 50)).toBe(at(low, 44));
+    // It stands 21 over where the V would meet in the middle, and over the edge at its foot.
+    expect(at(low, 50)).toBe(77);
+    // The whole of it sits a little low on the screen: 7 down at its top.
+    expect(at(top, 4)).toBe(7);
+    expect(Math.max(...low.map(p => p[1]))).toBeGreaterThan(85);
+    expect(at(low, 50)).toBeLessThan(at(low, 36) - 4);
+    expect((100 - at(low, 50)) * 6).toBeGreaterThan(111 + 10);
+    expect(8 * 8).toBeGreaterThan(36 + 10);
     // The shell is drawn before the face, the health and the gun's count, so they lie over it.
     const order = [...screen.children].map(e => e.tagName);
     for (const tag of ['UL', 'FIGURE', 'DL']) {

@@ -8,6 +8,7 @@
 // body's own shape and bends with it.
 import { LIMB } from '../shared/types';
 import { GLOSS, STRIDE } from './mesh';
+import { BUST, BUST_Y, body } from './skin';
 import type { Skin } from './skin';
 
 /** Why a plate applies to a triangle: the trunk, an arm or a leg (both sides). */
@@ -37,12 +38,18 @@ interface Region {
   man?: boolean;
   /** A round plate: its outline an ellipse in (angle, height), [half the angle, middle height, half height]. */
   round?: [number, number, number];
+  /** Moulded: a smooth shell round the trunk rather than the skin's facets (moulding()). */
+  mould?: boolean;
 }
 
 const smooth = (a: number, b: number, x: number) => {
   const t = Math.max(0, Math.min((x - a) / (b - a), 1));
   return t * t * (3 - 2 * t);
 };
+
+/** A bell either side of the middle line, `c` out, `w` wide: no crease down the middle, as |x| would make. */
+const twin = (x: number, c: number, w: number) =>
+  Math.exp(-(((x - c) / w) ** 2)) + Math.exp(-(((x + c) / w) ** 2));
 
 /**
  * The chest plate's pecs (the user, 2026-11-10: fuller toward the bottom, then the round part too
@@ -65,9 +72,7 @@ export const CUP = 0.014;
 /** The cups' fullest height, 3 mm under the bust's (BUST_Y, skin.ts). */
 export const CUP_Y = 1.367;
 export const bust = (x: number, y: number) =>
-  CUP *
-  Math.exp(-(((Math.abs(x) - 0.068) / 0.04) ** 2)) *
-  Math.exp(-(((y - CUP_Y) / (y < CUP_Y ? 0.036 : 0.06)) ** 2));
+  CUP * twin(x, 0.068, 0.038) * Math.exp(-(((y - CUP_Y) / (y < CUP_Y ? 0.036 : 0.06)) ** 2));
 
 /**
  * The woman's shoulder cap (the user, 2026-11-11: simpler, no part down the arm): one round piece
@@ -120,6 +125,15 @@ const SIDE_GAP = 0.01;
 /** The chest plate's top at angle a round the trunk (degrees, 0 the front): the neck's V. */
 const chestTop = (a: number) => 1.5 - 0.045 * Math.cos((a * Math.PI * 1.4) / 180) ** 2;
 
+/**
+ * The chest plate's outer corners go round under the armpits (the user, 2026-11-12: a triangle came
+ * through the plate under the armpit): the shoulder's skin stands out of the trunk's at the split
+ * (1.41 m, skin.ts), and the plate over it was pierced. Its top falls to `y` between the angles `a`.
+ */
+export const ARMPIT = { a: [42, 58], y: 1.385 };
+const chestHigh = (a: number) =>
+  chestTop(a) - (chestTop(a) - ARMPIT.y) * smooth(ARMPIT.a[0], ARMPIT.a[1], Math.abs(a));
+
 /** The gap round the collar piece and over the back plate: there is little room up there. */
 const COLLAR_GAP = 0.012;
 
@@ -142,7 +156,15 @@ export const GAP = 0.02;
 
 export const REGIONS: Region[] = [
   // The chest plate, from under the ribs to the collar, cut round the neck.
-  { part: PART.TRUNK, cx: 0, y: [1.195, 1.5], a: [-64, 64], high: chestTop, swell: pecs },
+  {
+    part: PART.TRUNK,
+    cx: 0,
+    y: [1.195, 1.5],
+    a: [-64, 64],
+    high: chestHigh,
+    swell: pecs,
+    mould: true,
+  },
   // The belly's two plates, GAP apart and GAP under the chest's.
   { part: PART.TRUNK, cx: 0, y: [1.115, 1.195 - GAP], a: [-54, 54] },
   { part: PART.TRUNK, cx: 0, y: [1.035, 1.115 - GAP], a: [-54, 54] },
@@ -318,10 +340,249 @@ const seeded = (seed: number) => () => {
   return ((z ^ (z >>> 14)) >>> 0) / 2 ** 32;
 };
 
-/** The recipe of the armour on the skin `s`, `fine` (curved outlines refined, scratches) or not. */
 /** The region as the skin's build wears it: the woman's chest plate has her own swell. */
 const shaped = (g: Region, s: Skin): Region =>
   s.b && g.swell === pecs ? { ...g, swell: bust } : g;
+
+/** A moulded corner: how far off the skin, the tilt of its normal (rest normal less the shell's), its rest normal. */
+type Moulded = number[];
+
+const bell = (a: number, w: number) => Math.exp(-((a / w) ** 2));
+const unit = (x: number, y: number, z: number) => {
+  const n = Math.hypot(x, y, z) || 1;
+  return [x / n, y / n, z / n];
+};
+
+/**
+ * The share of the skin a moulded plate may come closer to than OFF, how close it comes to any and
+ * how far it stands off at most, and the least the skin must face out from the trunk's axis (the
+ * cosine) to be moulded: the eye's skin (body(2)) closes the trunk with a cap over the shoulders
+ * whose normals point up, and set off to the shell along them the plate rose over the head (the
+ * user, 2026-11-12, climbing: "the legs go up").
+ */
+const [CLEAR, FLOOR, CEIL, FACING] = [0.03, 0.004, 0.08, 0.5];
+
+/** A moulded plate's shell: its axis, the fit's weights, its clearance, per build and region. */
+interface Shell {
+  z0: number;
+  w: number[];
+  clear: number;
+}
+const shells = new Map<number, Shell>();
+
+/** The fit's terms: even powers of the angle round the axis by powers of the height. */
+const [POW_A, POW_Y] = [4, 5];
+const fitAt = (w: number[], a: number, y: number) => {
+  const [a2, h] = [a * a, (y - 1.35) / 0.2];
+  let [sum, pa] = [0, 1];
+  for (let i = 0, p = 0; i < POW_A; i++, pa *= a2) {
+    let py = pa;
+    for (let j = 0; j < POW_Y; j++, p++, py *= h) {
+      sum += w[p] * py;
+    }
+  }
+  return sum;
+};
+
+/** Her bust on the skin where it faces forward by `ahead` (retarget() in skin.ts), along -z. */
+const sag = (b: number, x: number, y: number, ahead: number) =>
+  b
+    ? BUST *
+      Math.min(Math.max(ahead * 1.6, 0), 1) *
+      bell(Math.abs(x) - 0.066, 0.05) *
+      bell(y - BUST_Y, y < BUST_Y ? 0.042 : 0.065)
+    : 0;
+
+/**
+ * Her bust as the shell has it (the user, 2026-11-12: keep the bust on the woman, smooth the man):
+ * as deep as on her skin, the same bells but smooth across the sternum and round the sides.
+ */
+const bustR = (b: number, a: number, r: number, y: number) =>
+  b
+    ? BUST *
+      smooth(0, 0.625, Math.cos(a)) *
+      twin(r * Math.sin(a), 0.066, 0.05) *
+      bell(y - BUST_Y, y < BUST_Y ? 0.042 : 0.065) *
+      Math.cos(a)
+    : 0;
+
+/**
+ * Her breasts on the shell (the user, 2026-11-12: a uniform dome each, a little bigger): a round
+ * dome each side, `h` out at its middle (x, y) and falling to nothing `r` away, smooth at its rim;
+ * it stands in for the skin's bust and bust()'s cups.
+ */
+export const DOME = { x: 0.07, y: 1.362, r: 0.078, h: 0.05 };
+const dome = (x: number, y: number) =>
+  [x - DOME.x, x + DOME.x].reduce((sum, dx) => {
+    const q = 1 - (dx * dx + (y - DOME.y) ** 2) / DOME.r ** 2;
+    return sum + DOME.h * Math.max(0, q) ** 2;
+  }, 0);
+
+const polar = (z0: number, x: number, z: number) => [Math.atan2(x, z0 - z), Math.hypot(x, z - z0)];
+
+/** The skin's radius at a point of the man's rest skin, its normal's z given: hers has the bust on. */
+const skinR = (b: number, z0: number, x: number, y: number, z: number, nz: number) => {
+  const [a, r] = polar(z0, x, z);
+  return r + sag(b, x, y, -nz) * Math.cos(a);
+};
+
+/** The shell's radius at angle a and height y, its clearance left out. */
+const rawR = (b: number, gi: number, w: number[], a: number, y: number) => {
+  const f = fitAt(w, a, y);
+  const swell = b ? dome : REGIONS[gi].swell;
+  return f + (swell ? swell(f * Math.sin(a), y) : 0);
+};
+
+/**
+ * The shell of build b's region gi, fitted once on the near skin, whatever the level drawn: points
+ * all over its trunk's triangles, the corners and between them, the bust taken off, fitted by least
+ * squares; then OFF clear of the region's points but the closest CLEAR of them.
+ */
+const shellOf = (b: number, gi: number): Shell => {
+  const key = b * REGIONS.length + gi;
+  const had = shells.get(key);
+  if (had) {
+    return had;
+  }
+  const { t, l, u, v: own } = body(1, b);
+  const v = u ?? own;
+  const W = [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+    [1 / 3, 1 / 3, 1 / 3],
+    [2 / 3, 1 / 6, 1 / 6],
+    [1 / 6, 2 / 3, 1 / 6],
+    [1 / 6, 1 / 6, 2 / 3],
+  ];
+  const pts: number[][] = [];
+  for (let k = 0; k < t.length / 3; k++) {
+    if (partOf(l![k]) == PART.TRUNK) {
+      for (const c of W) {
+        const p = [0, 1, 2, 5].map(j =>
+          [0, 1, 2].reduce((sum, q) => sum + v[t[k * 3 + q] * 6 + j] * c[q], 0),
+        );
+        if (p[1] > 1.15 && p[1] < 1.55) {
+          pts.push(p);
+        }
+      }
+    }
+  }
+  let [front, back] = [Infinity, -Infinity];
+  for (const p of pts) {
+    if (p[1] > 1.2 && p[1] < 1.5) {
+      front = Math.min(front, p[2]);
+      back = Math.max(back, p[2]);
+    }
+  }
+  // The axis, up through the middle of the chest.
+  const z0 = (front + back) / 2;
+  const M = POW_A * POW_Y;
+  const A = Array.from({ length: M }, () => new Array<number>(M + 1).fill(0));
+  const e = new Array<number>(M).fill(0);
+  for (const [x, y, z, nz] of pts) {
+    const [a, r] = polar(z0, x, z);
+    if (Math.abs(a) < 1.35) {
+      const f = e.map((_, p) => {
+        e.fill(0);
+        e[p] = 1;
+        return fitAt(e, a, y);
+      });
+      const hgt = skinR(b, z0, x, y, z, nz) - bustR(b, a, r, y);
+      for (let p = 0; p < M; p++) {
+        for (let q = 0; q < M; q++) {
+          A[p][q] += f[p] * f[q];
+        }
+        A[p][M] += f[p] * hgt;
+      }
+    }
+  }
+  // Gauss-Jordan with partial pivoting.
+  for (let p = 0; p < M; p++) {
+    let m = p;
+    for (let q = p + 1; q < M; q++) {
+      m = Math.abs(A[q][p]) > Math.abs(A[m][p]) ? q : m;
+    }
+    [A[p], A[m]] = [A[m], A[p]];
+    for (let q = 0; q < M; q++) {
+      if (q != p) {
+        const f = A[q][p] / A[p][p];
+        for (let r = p; r <= M; r++) {
+          A[q][r] -= f * A[p][r];
+        }
+      }
+    }
+  }
+  const w = A.map((row, p) => row[M] / row[p]);
+  // Not clear of all of it: the step at the armpits (the trunk's split) would push the whole shell
+  // out; the few corners there keep FLOOR.
+  const over: number[] = [];
+  for (const [x, y, z, nz] of pts) {
+    if (LIMITS[gi].every(f => f([x, y, z, 0, 0, 0, 0, 0, 0, 0]) >= 0)) {
+      over.push(skinR(b, z0, x, y, z, nz) - rawR(b, gi, w, polar(z0, x, z)[0], y));
+    }
+  }
+  over.sort((p, q) => q - p);
+  const shell = { z0, w, clear: over[Math.floor(over.length * CLEAR)] + OFF };
+  shells.set(key, shell);
+  return shell;
+};
+
+/**
+ * A moulded plate (the user, 2026-11-12: the chest uneven, as the plate followed every facet of the
+ * skin, its creases and the line under the bust): a shell round the trunk (shellOf()), its radius
+ * smooth in the angle (even: both sides alike) and the height. Each corner of the region on the
+ * skin `s` is set off to the shell, with the shell's normal, turned as the skin turns.
+ */
+const moulding = (s: Skin, gi: number) => {
+  const b = s.b ?? 0;
+  const { z0, w, clear } = shellOf(b, gi);
+  const shell = (a: number, y: number) => rawR(b, gi, w, a, y) + clear;
+  const done = new WeakMap<Corner, Moulded>();
+  return (c: Corner, k: number): Moulded => {
+    const had = done.get(c);
+    if (had) {
+      return had;
+    }
+    const [x, y, z] = c;
+    const a = polar(z0, x, z)[0];
+    const [sa, ca] = [Math.sin(a), Math.cos(a)];
+    const n = unit(c[6], c[7], c[8]);
+    const R = shell(a, y);
+    const out0 = n[0] * sa - n[2] * ca;
+    if (out0 < FACING) {
+      // Not facing out: set off as an unmoulded plate, along the skin, with its normal.
+      const m = [OFF, 0, 0, 0, n[0], n[1], n[2]];
+      done.set(c, m);
+      return m;
+    }
+    const d = Math.min(CEIL, Math.max(FLOOR, (R - skinR(b, z0, x, y, z, n[2])) / out0));
+    const e = 1e-3;
+    const Ra = (shell(a + e, y) - shell(a - e, y)) / (2 * e);
+    const Ry = (shell(a, y + e) - shell(a, y - e)) / (2 * e);
+    // The shell's normal: its slope round the axis crossed with its slope up it.
+    const Pa = [Ra * sa + R * ca, 0, -Ra * ca + R * sa];
+    const Py = [Ry * sa, 1, -Ry * ca];
+    const N = unit(
+      Pa[1] * Py[2] - Pa[2] * Py[1],
+      Pa[2] * Py[0] - Pa[0] * Py[2],
+      Pa[0] * Py[1] - Pa[1] * Py[0],
+    );
+    const out = N[0] * sa - N[2] * ca >= 0 ? N : N.map(q => -q);
+    // The rest normal of the skin as drawn, the build's own: the shell turns from it.
+    const { t } = s;
+    const o = unit(
+      ...([0, 1, 2].map(j =>
+        [0, 1, 2].reduce((sum, q) => sum + s.v[t[k * 3 + q] * 6 + 3 + j] * c[3 + q], 0),
+      ) as [number, number, number]),
+    );
+    const m = [d, o[0] - out[0], o[1] - out[1], o[2] - out[2], ...o];
+    done.set(c, m);
+    return m;
+  };
+};
+
+/** The recipe of the armour on the skin `s`, `fine` (curved outlines refined, scratches) or not. */
 
 const cook = (s: Skin, fine: boolean): Recipe => {
   // The regions are written on the man's rest mesh: another build's plates are cut there and sit
@@ -340,9 +601,15 @@ const cook = (s: Skin, fine: boolean): Recipe => {
     layer: number,
     wall: number,
     k: number,
+    moulded?: Moulded[],
   ) => {
     cs.forEach((c, i) => {
       let g = [0, 0, 0];
+      if (moulded) {
+        const m = moulded[i];
+        r.c.push(k, c[3], c[4], c[5], offs[i], m[1], m[2], m[3], m[4], m[5], m[6]);
+        return;
+      }
       if (swell) {
         const e = 1e-3;
         g = [
@@ -364,6 +631,7 @@ const cook = (s: Skin, fine: boolean): Recipe => {
     const nl = Math.hypot(c[6], c[7], c[8]) || 1;
     return [0, 1, 2].map(j => c[j] + (c[6 + j] / nl) * d);
   };
+  const moulds = REGIONS.map((g, i) => (g.mould ? moulding(s, i) : undefined));
   for (let k = 0; k < t.length / 3; k++) {
     const part = partOf(l[k]);
     if (part < 0) {
@@ -406,16 +674,25 @@ const cook = (s: Skin, fine: boolean): Recipe => {
         }
       }
       // A round or curved outline needs finer pieces than the skin's, close up.
-      const pieces = fine && (region.round || region.low || region.high) ? split([tri]) : [tri];
+      // A moulded plate's curves, finer still: the woman's domes.
+      const pieces = !fine
+        ? [tri]
+        : region.mould
+          ? split(split([tri]))
+          : region.round || region.low || region.high
+            ? split([tri])
+            : [tri];
       for (const piece of pieces) {
         const poly = LIMITS[g].reduce((p, f, i) => clip(p, f, 1 << i), piece);
         if (poly.length < 3) {
           continue;
         }
-        const off = (c: Corner) => OFF + (region.swell ? region.swell(c[0], c[1]) : 0);
+        const mould = moulds[g];
+        const off = (c: Corner) =>
+          mould ? mould(c, k)[0] : OFF + (region.swell ? region.swell(c[0], c[1]) : 0);
         for (let i = 1; i + 1 < poly.length; i++) {
           const cs = [poly[0], poly[i], poly[i + 1]];
-          add(cs, cs.map(off), region.swell, WHITE, GLOSS, 0, k);
+          add(cs, cs.map(off), region.swell, WHITE, GLOSS, 0, k, mould && cs.map(c => mould(c, k)));
         }
         // The walls along the plate's edge, wound outward (away from its middle, at rest).
         const mid = [0, 1, 2].map(j => poly.reduce((sum, c) => sum + c[j], 0) / poly.length);
@@ -440,7 +717,7 @@ const cook = (s: Skin, fine: boolean): Recipe => {
     }
   }
   if (fine) {
-    scratchesOn(s, add);
+    scratchesOn(s, add, moulds);
   }
   return r;
 };
@@ -460,7 +737,9 @@ const scratchesOn = (
     layer: number,
     wall: number,
     k: number,
+    moulded?: Moulded[],
   ) => void,
+  moulds: (((c: Corner, k: number) => Moulded) | undefined)[],
 ) => {
   const { t, l } = s;
   const v = s.u ?? s.v;
@@ -530,10 +809,31 @@ const scratchesOn = (
       const nr = [0, 1, 2].map(j => N[0][j] * b[0] + N[1][j] * b[1] + N[2][j] * b[2]);
       return [...c, ...b, ...nr, 0];
     });
-    const offs = cs.map(c => OFF + (swell ? swell(c[0], c[1]) : 0) + 0.0008);
+    const mould = moulds[g];
+    const ms = mould && cs.map(c => mould(c, k));
+    const offs = cs.map((c, i) => (ms ? ms[i][0] : OFF + (swell ? swell(c[0], c[1]) : 0)) + 0.0008);
     const col = WORN[Math.floor(rand() * WORN.length)];
-    add([cs[0], cs[1], cs[2]], [offs[0], offs[1], offs[2]], undefined, col, -1, 0, k);
-    add([cs[0], cs[2], cs[3]], [offs[0], offs[2], offs[3]], undefined, col, -1, 0, k);
+    const pick = (...i: number[]) => ms && i.map(j => ms[j]);
+    add(
+      [cs[0], cs[1], cs[2]],
+      [offs[0], offs[1], offs[2]],
+      undefined,
+      col,
+      -1,
+      0,
+      k,
+      pick(0, 1, 2),
+    );
+    add(
+      [cs[0], cs[2], cs[3]],
+      [offs[0], offs[2], offs[3]],
+      undefined,
+      col,
+      -1,
+      0,
+      k,
+      pick(0, 2, 3),
+    );
     made++;
   }
 };

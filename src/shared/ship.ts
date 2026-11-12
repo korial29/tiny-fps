@@ -8,7 +8,7 @@
 // The flight has a limit: a ceiling CEIL metres over the crater's floor and an ellipse EDGE of the
 // crater's bound. Inside WARN of either the climb or the way out fades; past it the ship is braked
 // and pushed back, and the HUD warns (limits()).
-import { TICK_HZ } from './constants';
+import { TICK_HZ, VEHICLE } from './constants';
 import { floorAt, gravity, norm, shove } from './physics';
 import { bound } from './relief';
 import { KEY, NOBODY } from './types';
@@ -63,9 +63,6 @@ export const SHIP = {
   /** A player this close to the centre (on the floor plane) and within this height gets in. */
   ENTER_R: 6,
   ENTER_H: 4,
-  /** Armour, and the ticks a destroyed ship is gone before it is back on its pad. */
-  HP: 60,
-  WRECK: 600,
   /** The lasers: ticks between two salvos, the bolts' reach, and where the beams cross ahead along the look. */
   GUN_COOL: 6,
   GUN_RANGE: 160,
@@ -75,12 +72,6 @@ export const SHIP = {
   MISSILE_COOL: 30,
   RELOAD: 300,
   MISSILE_SPEED: 60,
-  /** A missile's burst: the armour it takes at the hull, falling off to nothing this far from it. */
-  BLAST_HP: 14,
-  BLAST_R: 7,
-  /** The armour a laser bolt or a rifle round takes, and a plasma ball per point of its power. */
-  BOLT_HP: 1,
-  BALL_HP: 2,
 } as const;
 
 /** The lasers' muzzles under the wings, the missiles' pods under the wings: right of the centre, above it, ahead of it. */
@@ -130,7 +121,7 @@ export const point = (r: Rover, b: number, u: number, a: number): Vec3 => {
   ];
 };
 
-/** The map's ships at rest on their pads: full armour and missiles, nobody aboard. */
+/** The map's ships at rest on their pads: whole, full of missiles, nobody aboard. */
 export const dock = (ships: readonly Spawn[] = []): Rover[] =>
   ships.map(([x, y, z, yaw]) => ({
     x: f32(x),
@@ -149,22 +140,16 @@ export const dock = (ships: readonly Spawn[] = []): Rover[] =>
     driver: NOBODY,
     rider: NOBODY,
     ship: true,
-    hp: SHIP.HP,
+    hp: VEHICLE.HP,
     wreck: 0,
     nades: SHIP.MISSILES,
   }));
-
-/** A body that meets nothing: a ship that is gone. */
-const NONE: Body = { a: [0, -1e4, 0], b: [0, -1e4, 0], r: 0, h: 0 };
 
 /**
  * The hull as the players on foot and the rovers meet it: the stadium from the tail to the nose
  * along the floor plane, R wide, from the skids up H. A player walks into it and stands on it.
  */
 export const shipHull = (r: Rover): Body => {
-  if (r.wreck) {
-    return NONE;
-  }
   const [a, b] = [SHIP.BODY[0], SHIP.BODY[2]].map(k => point(r, 0, -SHIP.DROP, k));
   return { a, b, r: SHIP.R, h: SHIP.H };
 };
@@ -224,8 +209,8 @@ const roof = (w: World, x: number, z: number, y0: number, y1: number): number =>
 /**
  * One step of 1 / TICK_HZ s, in place. `i` is the pilot's input as the wire rounds it, or
  * undefined with nobody at the stick: the engines are off and it falls under the map's gravity to
- * a floor. A ship that is gone (`wreck`) does not move. Returns whether it fell under the kill
- * floor: the caller docks it again.
+ * a floor, a wreck as well. Returns whether it fell under the kill floor: the caller docks it
+ * again.
  *
  * The nose turns toward the look as fast as the rates allow and banks into the turn; the thrust
  * is along the nose, sideways and straight up, against a drag that sets the top speed. Piloted,
@@ -233,9 +218,6 @@ const roof = (w: World, x: number, z: number, y0: number, y1: number): number =>
  * skids, level.
  */
 export const pilot = (r: Rover, i: Input | undefined, w: World): boolean => {
-  if (r.wreck) {
-    return false;
-  }
   const keys = i ? i.keys : 0;
   const on = (k: number) => (keys & k ? 1 : 0);
   const thr = on(KEY.FORWARD) - on(KEY.BACK);
@@ -376,12 +358,9 @@ export const pilot = (r: Rover, i: Input | undefined, w: World): boolean => {
 
 /**
  * Where a shot from `o` along the unit `d` meets the hull within `m` metres: the distance, or
- * Infinity. The hull is the HITS spheres; a ship that is gone has none.
+ * Infinity. The hull is the HITS spheres.
  */
 export const struck = (r: Rover, o: Vec3, d: Vec3, m: number): number => {
-  if (r.wreck) {
-    return Infinity;
-  }
   let best = Infinity;
   for (const k of SHIP.HITS) {
     const c = point(r, 0, 0, k);

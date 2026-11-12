@@ -1367,6 +1367,102 @@ describe('the rover, predicted against the room', () => {
     }
   });
 
+  /**
+   * The blue player 80 m east on the rover's way, facing it, the gun in hand: he taps FIRE along
+   * the road, a little down, onto the hull that comes at him, while `go` says so and until it
+   * blows up.
+   */
+  const underFire = (ammo: number, hp: number, go: (k: number) => boolean) => {
+    const WEST = Math.PI / 2;
+    let room: Room;
+    let seq = 0;
+    let done = false;
+    return {
+      setup: (r: Room, foe: PlayerState) => {
+        room = r;
+        Object.assign(foe, { x: 80, z: 0, yaw: WEST }, loaded({ ammo }));
+        r['rovers'][0].hp = hp;
+      },
+      each: (_: unknown, __: number, k: number) => {
+        const conn = [...room['peers']].find(([, p]) => p?.info.id === 1)![0];
+        done ||= !!room['rovers'][0].wreck;
+        const keys = !done && go(k) && k % 2 ? KEY.FIRE : 0;
+        room.receive(conn, encodeInput({ seq: seq++, keys, yaw: WEST, pitch: -0.012 }));
+      },
+    };
+  };
+
+  it('agrees with the host while driving under fire: the hull’s health is the snapshot’s, the drive his own', () => {
+    for (const [name, lag] of ride.LAGS) {
+      const r = ride.drive(
+        flat,
+        ride.trip(240, 7, true),
+        lag,
+        underFire(4, 10, () => true),
+      );
+      expect([name, r.differing]).toEqual([name, []]);
+      expect([name, r.final]).toEqual([name, []]);
+      expect(r.checked).toBeGreaterThan(60);
+      // Four balls on the hull, and he drives on.
+      expect([name, r.car.hp, r.car.wreck]).toEqual([name, 6, 0]);
+      expect(r.car.x).toBeGreaterThan(30);
+      expect(r.pred.riding()).toEqual({ rover: 0, seat: 0 });
+      expect(r.pred.rovers(1e9, 1)[0]).toEqual(r.car);
+    }
+  });
+
+  it('stops predicting the rover the moment the host says it blew up, and draws the wreck where the host has it', () => {
+    for (const [name, lag] of ride.LAGS) {
+      /** The rover as drawn on each frame, and whether he was in it. */
+      const drawn: { r: Rover; in: boolean }[] = [];
+      const fire = underFire(20, 3, k => k > 60);
+      const r = ride.drive(flat, ride.trip(300, 7, true), lag, {
+        setup: fire.setup,
+        each: (pred, now, k) => {
+          fire.each(pred, now, k);
+          const car = pred.rovers(now, 1)[0];
+          if (car) {
+            drawn.push({ r: car, in: !!pred.riding() });
+          }
+        },
+      });
+      expect([name, r.differing]).toEqual([name, []]);
+      expect([name, r.final]).toEqual([name, []]);
+      // He was driving at speed when it went; he went down with it, off the wheel on the frame
+      // of the snapshot that says so. The rover he drew is shown blown up when the snapshots
+      // drawn (INTERP_DELAY in the past) get there: a few frames later.
+      const out = drawn.findIndex((d, k) => k > 0 && drawn[k - 1].in && !d.in);
+      const boom = drawn.findIndex(d => d.r.wreck);
+      expect([name, out > 0, boom >= out, boom - out <= 8]).toEqual([name, true, true, true]);
+      expect(drawn[out - 1].r.vx).toBeGreaterThan(10);
+      expect(r.foe.hits).toBeGreaterThanOrEqual(3);
+      expect(r.host.hp).toBe(HP_MAX);
+      for (const d of drawn.slice(out)) {
+        expect(d.in).toBe(false);
+      }
+      for (const d of drawn.slice(boom)) {
+        expect(d.r.driver).toBe(NOBODY);
+      }
+      // What he sees skids to a stop and is eased onto the host's wreck, which lies behind what
+      // he predicted by his lag: no frame moves it more than a step at speed, either way.
+      const wrecked = drawn.slice(out - 1).filter((d, k) => k < boom - out + 1 || d.r.wreck);
+      expect(wrecked.length).toBeGreaterThan(30);
+      for (let k = 1; k < wrecked.length; k++) {
+        const d = wrecked[k].r.x - wrecked[k - 1].r.x;
+        expect([name, k, d > -0.3, d < 0.8]).toEqual([name, k, true, true]);
+      }
+      expect(wrecked.at(-1)!.r.x - wrecked[0].r.x).toBeLessThan(10);
+      expect(r.pred.riding()).toBeUndefined();
+      // In the end it is the host's wreck, its time as the wire counts it (in fours, rounded up).
+      const last = r.pred.rovers(1e9, 1)[0];
+      expect(r.car.wreck).toBeGreaterThan(0);
+      expect(last).toMatchObject({ x: r.car.x, y: r.car.y, z: r.car.z, yaw: r.car.yaw, hp: 0 });
+      expect([last.vx, last.driver]).toEqual([0, NOBODY]);
+      expect(last.wreck! - r.car.wreck!).toBeGreaterThanOrEqual(0);
+      expect(last.wreck! - r.car.wreck!).toBeLessThan(4 + 2);
+    }
+  });
+
   it('agrees with the host when he walks into the rover, jumps onto it and off it', () => {
     // East into its tail, then round it to its left side, onto its top and off its right.
     const walk: ride.Keys[] = [

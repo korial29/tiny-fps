@@ -138,6 +138,11 @@ export const SOUND = {
   DOOR: 45,
   /** And sliding shut: the servo whirs down and the panels meet with a thump. */
   SHUT: 46,
+  /** A vehicle's damage (wreck.ts): a shot on its hull, a crackle of its arcs, its explosion, its wreck falling apart. */
+  HULL: 47,
+  ARC: 48,
+  WRECK: 49,
+  CRUMBLE: 50,
 } as const;
 
 /**
@@ -426,6 +431,36 @@ export const LAYERS: Voice[][] = [
     [1, 300, -1.8, 0.02, 0.32, 0.1, 0.05, 0.15, 0, 1, 0.3],
     [3, 5000, -0.8, 0.02, 0.2, 0.25, 0, 0.35, 0, 1, 0.3],
     [2, 90, -2, 0.001, 0.02, 0.16, 0, 1, 0, 1, 0.8, 0.42],
+  ],
+  // HULL: a shot on plate: a crack of bright noise, the plate's ring (two squares a fifth apart,
+  // falling a little) and a dull knock under it.
+  [
+    [3, 6000, -2, 0.001, 0.005, 0.04, 0, 0.7, 0, 1, 0.45],
+    [0, 520, -0.4, 0.001, 0.02, 0.16, 0, 0.25, 0, 1, 0.3],
+    [0, 780, -0.4, 0.001, 0.01, 0.12, 0, 0.2, 0, 1, 0.2],
+    [2, 140, -2.5, 0.001, 0.01, 0.09, 0, 1, 0, 1, 0.6],
+  ],
+  // ARC: a spit of current: three snaps of bright held noise that waver, over a short mains buzz.
+  [
+    [3, 7000, -1, 0.001, 0.008, 0.02, 0.9, 0.8, 0, 1, 0.4],
+    [3, 9000, -2, 0.001, 0.006, 0.02, 0.9, 0.8, 0, 1, 0.35, 0.04],
+    [3, 5000, 1, 0.001, 0.01, 0.03, 0.9, 0.7, 0, 1, 0.35, 0.085],
+    [1, 100, 0, 0.001, 0.1, 0.03, 0.4, 0.5, 0, 1, 0.22],
+  ],
+  // WRECK: the vehicle blowing up: a crack, a long rumble of low noise falling, a sub thump that
+  // dives, and torn metal, a saw falling through two octaves.
+  [
+    [3, 9000, -4, 0.001, 0.01, 0.07, 0, 0.9, 0, 1, 0.6],
+    [3, 500, -2, 0.003, 0.2, 0.7, 0, 0.12, 0, 1, 0.9],
+    [2, 95, -1.6, 0.001, 0.1, 0.75, 0, 1, 0, 1, 0.9],
+    [1, 420, -2.4, 0.004, 0.1, 0.5, 0.06, 0.2, 0, 1, 0.3, 0.03],
+  ],
+  // CRUMBLE: the wreck falling apart: a fizz of bright noise swelling then dying, grit under it,
+  // and a thin tone sliding down as it goes.
+  [
+    [3, 8000, -0.6, 0.15, 0.3, 0.5, 0.5, 0.5, 0, 1, 0.4],
+    [3, 1800, -1, 0.05, 0.3, 0.55, 0.7, 0.3, 0, 1, 0.4],
+    [2, 1400, -2, 0.1, 0.2, 0.6, 0.05, 1, 0, 1, 0.1],
   ],
 ];
 

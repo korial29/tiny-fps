@@ -96,7 +96,13 @@ export const stepOf = (b: Ball): number =>
  * Distance at which the ray from `o` along the unit `d` enters the upright cylinder of radius `r`
  * on `c`'s feet, `h` tall; Infinity on a miss.
  */
-export const cylinder = (o: Vec3, d: Vec3, c: PlayerState, r: number, h: number): number => {
+export const cylinder = (
+  o: Vec3,
+  d: Vec3,
+  c: Pick<PlayerState, 'x' | 'y' | 'z'>,
+  r: number,
+  h: number,
+): number => {
   const [px, pz] = [o[0] - c.x, o[2] - c.z];
   const a = d[0] * d[0] + d[2] * d[2];
   const b = px * d[0] + pz * d[2];

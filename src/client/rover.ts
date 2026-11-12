@@ -26,6 +26,7 @@ import {
   sub,
 } from './mesh';
 import type { Vec3 } from './mesh';
+import { char, pose } from './wreck';
 
 const { A, B, WR, L0 } = ROVER;
 /** The wheels, front left, front right, rear left, rear right: metres along the nose and to the right. */
@@ -653,6 +654,8 @@ export const grips = (steer: number): Vec3[] => {
   });
 };
 
+/** Radians a wreck's wheels lean in by at the top. */
+const SPLAY = 0.3;
 /** Metres a rover moves in a frame, at the least, when it is put back on its spawn: its wheels do not turn for it. */
 const PUT_BACK = 5;
 
@@ -701,16 +704,23 @@ export const contacts = (r: Rover, w: World): Vec3[] => {
  * world's floor, turned by `spin` radians (the distance driven over WR) and the front pair by
  * `steer`, the wishbones and the coil-overs following, the yoke turning with the wheels. `rgb` is
  * the team's colour (0 to 1): the fenders, the bonnet's stripe, the springs and the whip's light.
+ * Its damage shows (wreck.ts, `n` its index among the map's vehicles): scorched where it arcs; a
+ * wreck sagged on splayed wheels, charred, falling apart at the end.
  */
 export const rover = (
   out: number[],
-  r: Rover,
+  state: Rover,
   w: World,
   spin: number,
   rgb: number[],
   lod: number,
+  n = 0,
 ): void => {
   const k = kit(lod);
+  const start = out.length;
+  const r = pose(state);
+  // A wreck's wheels lean in at the top.
+  const [cc, sc] = r === state ? [1, 0] : [Math.cos(SPLAY), Math.sin(SPLAY)];
   const [to, axes] = frame(r);
   const [R, U, F] = axes;
   const at: Vec3 = [r.x, r.y, r.z];
@@ -740,21 +750,23 @@ export const rover = (
     const hub = to(b, h, a);
     // The front wheels turn about the body's up, then every wheel rolls about its own axle.
     const [ct, st] = a > 0 ? [Math.cos(r.steer) * s, Math.sin(r.steer) * s] : [s, 0];
-    const right = R.map((v, j) => v * ct - F[j] * st) as Vec3;
+    const flat = R.map((v, j) => v * ct - F[j] * st) as Vec3;
     const ahead = F.map((v, j) => v * ct + R[j] * st) as Vec3;
+    const right = flat.map((v, j) => v * cc + U[j] * sc) as Vec3;
+    const up = U.map((v, j) => v * cc - flat[j] * sc) as Vec3;
     place(
       out,
       k.wheel,
       hub,
       [
         right,
-        U.map((v, j) => v * cs + ahead[j] * ss * s) as Vec3,
-        ahead.map((v, j) => v * cs - U[j] * ss * s) as Vec3,
+        up.map((v, j) => v * cs + ahead[j] * ss * s) as Vec3,
+        ahead.map((v, j) => v * cs - up[j] * ss * s) as Vec3,
       ],
       O,
       1,
     );
-    place(out, k.fender, hub, [right, U, ahead], O, 1, rgb);
+    place(out, k.fender, hub, [flat, U, ahead], O, 1, rgb);
     if (!k.level) {
       return;
     }
@@ -778,4 +790,5 @@ export const rover = (
     segment(out, TUBE, top, along(DAMPER), F, 1, 0.05, STEEL);
     segment(out, k.coil, along(DAMPER - 0.14), foot, F, 1, 0.075, rgb);
   });
+  char(out, start, state, n);
 };

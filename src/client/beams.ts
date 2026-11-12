@@ -40,7 +40,7 @@ const SPARKS = 12;
 const MAX = 16;
 /** Seconds a bolt lasts, bolts kept at most, and the sparks of a shock. */
 const BOLT = 0.05;
-const BOLTS = 24;
+const BOLTS = 96;
 const SHOCK_SPARKS = 10;
 /** The rail gun's lightning: [halo, core] half widths and colours, and its metres per kink. */
 const ZAP: [number, number[]][] = [
@@ -72,6 +72,10 @@ interface Glow {
   /** A grenade's fireball: it lasts BOOM. Its puffs: where each sits, in radii from the centre. */
   boom?: boolean;
   puffs?: Vec3[];
+  /** A fireball's size, in grenades' (1 when absent); a shock wave's widest radius, metres. */
+  size?: number;
+  /** A shock wave: a ring flat on the ground that widens to `size` and fades, in BOOM. */
+  ring?: boolean;
 }
 /** A jagged bolt: two segments, a to m to b. */
 interface Bolt {
@@ -79,6 +83,8 @@ interface Bolt {
   m: Vec3;
   b: Vec3;
   age: number;
+  /** Times the katana's width, for a hull's arcs: they are seen from further, and grow with the distance. */
+  wide?: number;
 }
 
 export interface Tracer {
@@ -90,8 +96,15 @@ export interface Tracer {
   lightning(list: { a: Vec3; b: Vec3 }[]): void;
   /** A ball burst at `at`: a splash of light and a spray of sparks; a laser rifle's, `red`, bigger and fiercer. */
   burst(at: Vec3, red?: boolean): void;
-  /** A grenade burst at `at`: a white-hot fireball in orange puffs that swells and shrinks away, a shower of embers, a strong light. */
-  blast(at: Vec3): void;
+  /** A grenade burst at `at`: a white-hot fireball in orange puffs that swells and shrinks away, a shower of embers, a strong light. `size` times as wide for a vehicle blowing up. */
+  blast(at: Vec3, size?: number): void;
+  /** A shock wave from `at`: a ring of fire flat on the ground, out to `r` metres as it fades. */
+  ring(at: Vec3, r: number): void;
+  /**
+   * A short jagged bolt from `a` to `b` with a fork off its kink, gone in a twentieth of a second:
+   * an arc on a damaged hull, `wide` times as thick as the katana's bolts.
+   */
+  arc(a: Vec3, b: Vec3, wide?: number): void;
   /** The balls to draw this frame. */
   orbs(list: Orb[]): void;
   /** The katana's shock at `at`: a burst of sparks and bolts. */
@@ -314,17 +327,35 @@ export const createTracer = (): Tracer => {
       glows = [...glows, { p: at, age: 0, splash: true, hot: red ? -0.6 : 0 }].slice(-MAX);
       spray(at, red ? 2 * SPARKS : SPARKS, red ? 7 : 4, red);
     },
-    blast(at) {
+    blast(at, size = 1) {
       const puffs = Array.from({ length: PUFFS }, (): Vec3 => [
         rnd() * 0.7,
         rnd() * 0.5 + 0.2,
         rnd() * 0.7,
       ]);
-      glows = [...glows, { p: at, age: 0, boom: true, puffs }].slice(-MAX);
+      glows = [...glows, { p: at, age: 0, boom: true, puffs, size }].slice(-MAX);
       for (let i = 0; i < EMBERS; i++) {
-        sparks.push({ p: at, v: [rnd() * 9, rnd() * 7 + 5, rnd() * 9], age: 0, hot: true });
+        sparks.push({
+          p: at,
+          v: [rnd() * 9 * size, (rnd() * 7 + 5) * size, rnd() * 9 * size],
+          age: 0,
+          hot: true,
+        });
       }
       sparks = sparks.slice(-MAX * SPARKS);
+    },
+    ring(at, r) {
+      glows = [...glows, { p: at, age: 0, boom: true, ring: true, size: r }].slice(-MAX);
+    },
+    arc(a, b, wide = 3) {
+      const l = Math.hypot(...sub(b, a));
+      const m = a.map((v, i) => (v + b[i]) / 2 + rnd() * l * 0.3) as Vec3;
+      // The fork: from the kink, half as long, its own way.
+      const f = m.map(v => v + rnd() * l * 0.4) as Vec3;
+      const n = m.map((v, i) => (v + f[i]) / 2 + rnd() * l * 0.12) as Vec3;
+      bolts = [...bolts, { a, m, b, age: 0, wide }, { a: m, m: n, b: f, age: 0, wide }].slice(
+        -BOLTS,
+      );
     },
     orbs(list) {
       balls = list;
@@ -416,11 +447,28 @@ export const createTracer = (): Tracer => {
           ),
         );
       }
-      for (const { p, age, puffs = [] } of glows.filter(g => g.boom)) {
+      for (const { p, age, size = 1 } of glows.filter(g => g.ring)) {
+        // The shock wave: a band a tenth of its radius wide, out fast then slower, dimming.
+        const k = age / BOOM;
+        const [r, c] = [size * Math.sqrt(k), BLAZE[1].map(v => v * (1 - k))];
+        const at = (i: number, q: number): Vec3 => [
+          p[0] + Math.cos((i * Math.PI) / 12) * q,
+          p[1],
+          p[2] + Math.sin((i * Math.PI) / 12) * q,
+        ];
+        for (let i = 0; i < 24; i++) {
+          const [a, b, d, e] = [at(i, r), at(i + 1, r), at(i + 1, r * 0.9), at(i, r * 0.9)];
+          for (const v of [a, b, d, a, d, e]) {
+            vert(out, v, c);
+          }
+        }
+      }
+      for (const { p, age, puffs = [], size = 1 } of glows.filter(g => g.boom && !g.ring)) {
         // The fireball, at its true size: out to FIRE of NADE_R in a quarter of its time, then it
         // shrinks away, white-hot inside orange, with a few puffs of the orange round it.
         const k = age / BOOM;
-        const r = (FIRE * NADE_R * (k < 0.25 ? Math.sqrt(4 * k) : (1 - k) / 0.75)) / far(eye, p, 1);
+        const r =
+          (size * FIRE * NADE_R * (k < 0.25 ? Math.sqrt(4 * k) : (1 - k) / 0.75)) / far(eye, p, 1);
         puffs.forEach(d =>
           disc(
             out,
@@ -480,8 +528,8 @@ export const createTracer = (): Tracer => {
           }
         }
       }
-      for (const { a, m, b, age } of bolts) {
-        const k = 1 - age / BOLT;
+      for (const { a, m, b, age, wide } of bolts) {
+        const k = (1 - age / BOLT) * (wide ? wide * far(eye, m, 1) : 1);
         for (const [p, q] of [
           [a, m],
           [m, b],
@@ -524,7 +572,12 @@ export const createTracer = (): Tracer => {
           .slice(-4)
           .map(g =>
             g.boom
-              ? point(g.p, 4 * NADE_R, 6 * (1 - g.age / BOOM), [1.6, 0.8, 0.3])
+              ? point(
+                  g.p,
+                  4 * NADE_R * (g.ring ? 1 : (g.size ?? 1)),
+                  6 * (1 - g.age / BOOM),
+                  [1.6, 0.8, 0.3],
+                )
               : g.splash
                 ? point(
                     g.p,

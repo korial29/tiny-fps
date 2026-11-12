@@ -108,6 +108,9 @@ export const drive = (
   const held: { seq: number; ack: number; p: PlayerState; r: Rover }[] = [];
   let seen = 0;
   let sent = -1;
+  /** The last seq the host applied, and the seqs after which one of its ticks put him down (his vehicle blew up). */
+  let applied = -1;
+  const felled: number[] = [];
   let [driving, flew, landed] = [0, 0, 0];
 
   const flush = (k: number, snapAt: number) => {
@@ -115,6 +118,7 @@ export const drive = (
       const { data, seq } = inputs.shift()!;
       const was = host().mode;
       room.receive(conn, data);
+      applied = seq;
       after.set(seq, {
         p: { ...host() },
         r: { ...car() },
@@ -127,7 +131,11 @@ export const drive = (
         flew += +air;
       }
     }
+    const up = !host().down;
     room.tick();
+    if (up && host().down) {
+      felled.push(applied);
+    }
     for (; seen < conn.bins.length; seen++) {
       snaps.push({ at: snapAt, data: conn.bins[seen] });
     }
@@ -170,6 +178,11 @@ export const drive = (
     if (boards.some(b => b > h.ack && b <= h.seq)) {
       continue;
     }
+    // Going down in a tick is the host's alone too: the host's state after a seq has it once the
+    // seq is past it, the predictor's once the snapshot it starts from is.
+    if (felled.some(f => h.seq > f !== h.ack >= f)) {
+      continue;
+    }
     checked++;
     for (const key of Object.keys(a.p) as (keyof PlayerState)[]) {
       if (!SKIP.includes(key) && h.p[key] !== a.p[key]) {
@@ -179,7 +192,8 @@ export const drive = (
     // The rover is compared while he drives it; the others are drawn in the past.
     if (a.r.driver === 0) {
       for (const key of Object.keys(a.r) as (keyof Rover)[]) {
-        if (h.r[key] !== a.r[key]) {
+        // Its health is the host's alone, like a player's: the snapshot's, whenever it was taken.
+        if (key !== 'hp' && h.r[key] !== a.r[key]) {
           differing.add(`rover.${key}`);
         }
       }

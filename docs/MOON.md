@@ -188,10 +188,10 @@ The far crest of the crater wall showed as a row of big triangles against the sk
 The user: the draft shuttle on each pad becomes a combat ship a player boards and flies, up to a limit. Their choices: arcade controls, lasers and missiles, a ceiling plus the crater's edge, a ship that can be shot down and comes back.
 
 - `MOON.ships` stands one on each pad, nose toward the other base. The shuttle's brush and its three ghosts are gone; the ship is a solid body (`shipHull()`) players walk into and stand on, as a rover.
-- `src/shared/ship.ts` is the simulation: a `Rover` with `ship` set, so it shares the rovers' seats, snapshot slot (three bytes more a vehicle: kind and armour, wreck time, missiles), prediction and chase camera. `rover.ts` hands it to `pilot()` wherever it would `drive()`. One seat; a flag's carrier does not fly.
+- `src/shared/ship.ts` is the simulation: a `Rover` with `ship` set, so it shares the rovers' seats, snapshot slot (three bytes a vehicle: kind and health, wreck time, missiles), prediction and chase camera. `rover.ts` hands it to `pilot()` wherever it would `drive()`. One seat; a flag's carrier does not fly.
 - Controls: the look aims the nose, W and S thrust and brake, A and D slide, Space and C climb and sink, Shift boosts, a click fires the two lasers (bolts, as the rover's), G a missile (a grenade at 60 m/s from a pod, `NADE` burst). Four missiles, one loaded back every 5 s. With nobody at the stick it falls to a floor.
 - The limit: the climb fades over the last 20 m under `CEIL` (120 m) and a push brings it back past it; the same at `EDGE` (0.88 of the crater's bound). Never more than 12 m past either. The HUD warns from half way into the last 20 m.
-- Armour 60: a bolt or a rifle round takes 1, a plasma ball 2 per point of power, a missile's burst up to 14 within 7 m of the hull. Only a piloted enemy ship is hit; the hull stops the shot before its pilot. At 0 it blows up where it is, its pilot goes down, and it is back new on its pad 10 s later.
+- Health: a vehicle's, 10 HP like a rover's (see Vehicle damage below; until 2026-11-12 the ship alone had an armour of 60 and came back after 10 s).
 
 ### The ship's look (2026-11-12)
 
@@ -203,4 +203,25 @@ The user: rework the ship's style after the long-nosed strike fighters of the fi
 - Three levels of detail (`BUDGET`: 1,400, 2,400 and 5,000 vertices at most; `SHIP_NEAR` 45 m, `SHIP_MID` 160 m in `render.ts`).
 - The simulation moved with the shape, along the nose only: `COCKPIT` 2.6 m back and 0.6 m up (the pilot's shoulders at the sill), the cannons' muzzles (`SHIP_GUNS`) 3.1 m back under the wings, the pods (`PODS`) 3.4 m back under the wings. The hull's body, its hit spheres, its handling and the chase camera are as they were.
 
-Known limits: the rail gun and the katana do not touch a ship; ships do not collide with rovers or each other in flight (a rover stops on a parked one); a pilot's own missile burst can still reach him.
+Known limits: ships do not collide with rovers or each other in flight (a rover stops on a parked one).
+
+## Vehicle damage (the user, 2026-11-12)
+
+A rover and a ship have `VEHICLE.HP` (10) of health, full when parked afresh. `Room.hurt()` is the one way it goes down; it is the host's alone, like a player's `hp`, and no step reads it, so the driver's replay is unchanged.
+
+| Weapon                              | Takes from a hull                                                                                             |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Plasma ball                         | Its power: 1, up to `CHARGE_MAX` (5) charged                                                                  |
+| Laser rifle round, a vehicle's bolt | 1 for every `VEHICLE.GRAZE` (4) that meet the hull, from anyone (a body takes 1 for every 2)                  |
+| Rail gun                            | 1 at the first touch, 1 more each `RAIL_DRAIN` ticks while it holds and `RAIL_TICKS` after                    |
+| Grenade, a ship's missile           | `blast()`'s rule on the hull: `NADE_HP` (5) on it, less with the distance, nothing from 5 m or behind a brush |
+| Katana                              | The cut's hp (2, heavy 3); an arc of energy its cut's too                                                     |
+| Fists, a run-over, a tackle         | Nothing                                                                                                       |
+
+- **Whose**: a vehicle is of its driver's team (else its rider's), and of the team whose base it is parked at when empty (`homeOf()`: the first half of the rovers, and of the ships, are red's). A team's shots pass through its own vehicles and take nothing, as for a teammate.
+- **Hull and crew**: the hull is the rover's three body circles `BODY_H` tall, the ship's `HITS` spheres (`struck()`, `reach()`, `slashed()` in `rover.ts`). A shot the hull stops does not reach the crew; one that passes over it hits who sits there. A blast takes nothing from who is seated.
+- **Lag**: the katana and the rail gun strike the hull where the shooter drew it (`Room.hulls()`, the history keeps the vehicles). Balls, rounds, bolts and grenades fly against it where it is now, like against a player: at a rover's top speed (23 m/s) that is 2.3 m of lead per 100 ms of delay, on a body 4.4 m long.
+- **At 0** (`Room.wreck()`): its crew goes down on the spot through `harm()` (flags drop, respawns as usual), the shooter's `hits` goes up once more, a grenade's blast of his goes off at its centre (`boom()`), and it is a wreck for `VEHICLE.WRECK` ticks (5 s): no seat (`nearby()`), not hurt again, solid to who is up and no obstacle to who is down (`solid()`). A rover's wreck keeps `VEHICLE.SKID` of its speed each tick (it stops within 5 m); a ship's falls. Then `renew()` parks it afresh on its spawn. A new match, a new map and an empty room park everything afresh; the kill floor does as before.
+- **Wire**: no byte more. The rover's block had three bytes for a ship (kind and armour, wreck, missiles): the first now carries bit 7 the kind and bits 0-6 the health of any vehicle, the second the wreck's ticks in fours rounded up. A map without vehicles sends the same bytes as before.
+- **Prediction**: the driver's client takes `hp` from the snapshot and replays `drive()` or `pilot()` as before. When a snapshot shows him off the wheel, the rover he predicted becomes the ghost (`predict.ts`), which skids as the host's wreck does and is eased onto it over `ROVER_BLEND` ms.
+- **Seen and heard** (`src/client/wreck.ts`): arcs at 12 fixed places per vehicle (`ANCHORS`), `arcs()` of them by health (none at 10, 1 to 2 from 9 to 7, 4 to 6 from 6 to 4, 9 to 11 under), in an order of the vehicle's own, each a forked bolt in 4 slots of 10 at 30 slots a second (a function of the vehicle, the health and the slot), with sparks, the bolts' light and a crackle; the hull is scorched round them. The explosion: three fireballs, a ring on the ground, 36 pieces of debris, a boom and a shake within 40 m. The wreck: soot, sagged (`pose()`), no lights, smoke; over its last second it crumbles into embers (`char()`); the fresh vehicle shimmers in over half a second. The HUD: ten pips over the speed for who sits in it (`Hud.hull()`, the `tt` tag), a half-size bar over the nearest other vehicle within 14 m (a ship 24 m) in sight.

@@ -374,3 +374,97 @@ describe('a grenade', () => {
     expect(drawn(t)).toEqual([]);
   });
 });
+
+describe('a vehicle’s damage', () => {
+  it('draws an arc as a short jagged bolt between its two ends, lit by itself, gone in a twentieth of a second', () => {
+    const t = createTracer();
+    const [a, b]: Vec3[] = [
+      [1, 1, -6],
+      [1.3, 1.2, -6.1],
+    ];
+    t.arc(a, b);
+    const v = drawn(t);
+    expect(v.length).toBeGreaterThan(0);
+    for (const x of v) {
+      expect(x[8]).toBe(-2);
+      // Within its length of the two ends.
+      expect(Math.hypot(x[0] - a[0], x[1] - a[1], x[2] - a[2])).toBeLessThan(0.8);
+    }
+    // A faint point of light at it, and one at its fork.
+    expect(t.lights().length).toBe(2);
+    expect(Math.hypot(...t.lights()[0].p.map((c, i) => c - a[i]))).toBeLessThan(0.5);
+    t.update(0.06);
+    expect(drawn(t)).toEqual([]);
+    expect(t.lights()).toEqual([]);
+    // Many at once are kept: a hull at its last health arcs at eleven places.
+    for (let k = 0; k < 40; k++) {
+      t.arc(a, b);
+    }
+    expect(drawn(t).length).toBe(40 * v.length);
+    // Thick enough to be seen from where a vehicle is seen: `wide` times the katana's bolts, and
+    // more with the distance.
+    const area = (wide: number, from: Vec3, to: Vec3) => {
+      const u = createTracer();
+      u.arc(from, to, wide);
+      const x = drawn(u);
+      let sum = 0;
+      for (let i = 0; i + 2 < x.length; i += 3) {
+        const [p, q] = [1, 2].map(k => [0, 1, 2].map(j => x[i + k][j] - x[i][j]));
+        sum +=
+          Math.hypot(
+            p[1] * q[2] - p[2] * q[1],
+            p[2] * q[0] - p[0] * q[2],
+            p[0] * q[1] - p[1] * q[0],
+          ) / 2;
+      }
+      return sum;
+    };
+    expect(area(6, a, b)).toBeCloseTo(2 * area(3, a, b), 6);
+    const away = (z: number): Vec3[] => [
+      [1, 1, z],
+      [1.3, 1.2, z - 0.1],
+    ];
+    expect(area(3, ...(away(-30) as [Vec3, Vec3]))).toBeGreaterThan(1.5 * area(3, a, b));
+  });
+
+  it('blows a vehicle up in a fireball `size` times a grenade’s, with a wider light', () => {
+    const wide = (size?: number) => {
+      const t = createTracer();
+      t.blast(TO, size);
+      t.update(BOOM / 4);
+      const far = Math.max(
+        ...drawn(t)
+          .slice(0, 6 * 24 + 3 * 48)
+          .map(x => Math.hypot(x[0] - TO[0], x[1] - TO[1], x[2] - TO[2])),
+      );
+      return [far, t.lights()[0].range];
+    };
+    const [one, big] = [wide(), wide(2.2)];
+    expect(big[0]).toBeGreaterThan(2 * one[0]);
+    expect(big[0]).toBeLessThan(2.4 * one[0]);
+    expect(big[1]).toBeCloseTo(2.2 * one[1], 5);
+  });
+
+  it('sends a shock wave out along the ground: a flat ring that widens to its radius and fades', () => {
+    const t = createTracer();
+    t.ring([0, 0.1, -20], 9);
+    const radii = () => drawn(t).map(x => Math.hypot(x[0], x[2] + 20));
+    const glow = () => Math.max(...drawn(t).map(x => x[6]));
+    t.update(BOOM / 10);
+    const v = drawn(t);
+    // 24 quads, flat on the ground.
+    expect(v).toHaveLength(24 * 6);
+    expect(v.every(x => x[1] === 0.1 && x[8] === -2)).toBe(true);
+    const [early, bright] = [Math.max(...radii()), glow()];
+    expect(early).toBeGreaterThan(2);
+    expect(early).toBeLessThan(4);
+    // A band: its inner edge nine tenths of the outer.
+    expect(Math.min(...radii())).toBeCloseTo(0.9 * early, 5);
+    t.update((BOOM * 7) / 10);
+    expect(Math.max(...radii())).toBeGreaterThan(7.5);
+    expect(Math.max(...radii())).toBeLessThanOrEqual(9);
+    expect(glow()).toBeLessThan(bright / 3);
+    t.update(BOOM / 4);
+    expect(drawn(t)).toEqual([]);
+  });
+});

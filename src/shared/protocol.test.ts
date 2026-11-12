@@ -43,6 +43,7 @@ import {
   SHOCK_TICKS,
   SLIDE_TICKS,
   STUMBLE_TICKS,
+  VEHICLE,
 } from './constants';
 import { MAPS } from './maps';
 import { STILL } from './physics';
@@ -84,6 +85,8 @@ const rover = (k = 0, over: Partial<Rover> = {}): Rover => ({
   ) as Record<(typeof ROVER_F)[number], number>),
   driver: NOBODY,
   rider: NOBODY,
+  hp: VEHICLE.HP,
+  wreck: 0,
   ...over,
 });
 
@@ -579,9 +582,13 @@ describe('snapshot frame', () => {
         expect(ROVER_F.map((_, j) => v.getFloat32(o + 4 * j))).toEqual(ROVER_F.map(k => r[k]));
         expect([v.getUint8(o + 52), v.getUint8(o + 53)]).toEqual([r.driver, r.rider]);
       });
-      // The match comes after the last seat and three ship bytes, 0 on a rover: no captures, 480 s.
+      // The match comes after the last seat and the three bytes of the kind and health, the wreck
+      // and the missiles (a whole rover's: its health, 0, 0): no captures, 480 s.
       const last = SNAP_HEAD + 2 * SNAP_PLAYER + 2 * SNAP_ROVER + 52;
-      expect(bytes(buf).slice(last, last + 9)).toEqual([254, NOBODY, 0, 0, 0, 0, 0, 0x01, 0xe0]);
+      expect(bytes(buf).slice(last, last + 9)).toEqual([
+        ...[254, NOBODY, VEHICLE.HP, 0, 0],
+        ...[0, 0, 0x01, 0xe0],
+      ]);
       // A float64 goes to its nearest float32, no further.
       const [r] = decodeSnapshot(
         encodeSnapshot(snap([rover(0, { yaw: 4.2, wy: 1 / 3 })])),
@@ -589,23 +596,52 @@ describe('snapshot frame', () => {
       expect([r.yaw, r.wy]).toEqual([f(4.2), f(1 / 3)]);
     });
 
-    it('carries a ship: its kind and armour, its wreck time in fours rounded up, its missiles', () => {
+    it('carries a ship: its kind and health, its wreck time in fours rounded up, its missiles', () => {
       const sent = [
-        rover(0, { driver: 3, ship: true, hp: 60, wreck: 0, nades: 4 }),
-        rover(1, { ship: true, hp: 0, wreck: 597, nades: 0 }),
+        rover(0, { driver: 3, ship: true, hp: 7, wreck: 0, nades: 4 }),
+        rover(1, { ship: true, hp: 0, wreck: 297, nades: 0 }),
         rover(2),
       ];
       const back = decodeSnapshot(encodeSnapshot(snap(sent, 2)))!.rovers!;
       expect(back[0]).toEqual(sent[0]);
-      expect(back[1]).toEqual({ ...sent[1], wreck: 600 });
+      expect(back[1]).toEqual({ ...sent[1], wreck: 300 });
       expect(back[2].ship).toBeUndefined();
       const v = new DataView(encodeSnapshot(snap(sent, 2)));
       const o = SNAP_HEAD + 2 * SNAP_PLAYER;
-      expect([v.getUint8(o + 54), v.getUint8(o + 55), v.getUint8(o + 56)]).toEqual([
-        128 | 60,
-        0,
-        4,
+      expect([v.getUint8(o + 54), v.getUint8(o + 55), v.getUint8(o + 56)]).toEqual([128 | 7, 0, 4]);
+    });
+
+    it('carries a rover’s health and its wreck’s time in the same two bytes, and adds none', () => {
+      expect(SNAP_ROVER).toBe(57);
+      const sent = [
+        rover(0, { hp: 3 }),
+        rover(1, { hp: 0, wreck: VEHICLE.WRECK }),
+        rover(2, { hp: 0, wreck: 1 }),
+      ];
+      const buf = encodeSnapshot(snap(sent, 1));
+      expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + 3 * SNAP_ROVER + SNAP_MATCH + 2);
+      const back = decodeSnapshot(buf)!.rovers!;
+      expect(back.map(r => [r.hp, r.wreck, r.ship])).toEqual([
+        [3, 0, undefined],
+        [0, VEHICLE.WRECK, undefined],
+        // The last ticks still read as a wreck: rounded up to the wire's four.
+        [0, 4, undefined],
       ]);
+      const v = new DataView(buf);
+      const at = (i: number) => SNAP_HEAD + SNAP_PLAYER + i * SNAP_ROVER + 54;
+      expect([0, 1, 2].map(i => [0, 1, 2].map(j => v.getUint8(at(i) + j)))).toEqual([
+        [3, 0, 0],
+        [0, VEHICLE.WRECK / 4, 0],
+        [0, 1, 0],
+      ]);
+      // A state that says nothing of its health is whole.
+      const bare = rover(0);
+      delete bare.hp;
+      delete bare.wreck;
+      expect(decodeSnapshot(encodeSnapshot(snap([bare])))!.rovers![0]).toMatchObject({
+        hp: VEHICLE.HP,
+        wreck: 0,
+      });
     });
 
     it('carries rovers, balls and sixteen players together', () => {

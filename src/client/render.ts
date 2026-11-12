@@ -838,11 +838,19 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           spins[i],
           teamRgb(+(i >= cars.length / 2)),
           d < ROVER_NEAR ? 2 : +(d < ROVER_MID),
+          i,
         );
       });
       ships.forEach((r, i) => {
         const d = Math.hypot(r.x - eye[0], r.y - eye[1], r.z - eye[2]);
-        craft(v, r, teamRgb(+(i >= ships.length / 2)), now, d < SHIP_NEAR ? 2 : +(d < SHIP_MID));
+        craft(
+          v,
+          r,
+          teamRgb(+(i >= ships.length / 2)),
+          now,
+          d < SHIP_NEAR ? 2 : +(d < SHIP_MID),
+          cars.length + i,
+        );
       });
       // The dust off their wheels is smoke: it casts nothing wherever it is in the list.
       dust.update(cars, world, dt, eye);

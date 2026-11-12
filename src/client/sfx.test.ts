@@ -405,3 +405,33 @@ describe('the rover', () => {
     expect(tone(skid, 700)).toBeLessThan(0.05);
   });
 });
+
+describe('a vehicle’s damage', () => {
+  it('has four sounds after all the others, whose ids stay: a hit on the hull, an arc, the explosion, the wreck falling apart', () => {
+    expect([SOUND.HULL, SOUND.ARC, SOUND.WRECK, SOUND.CRUMBLE]).toEqual([47, 48, 49, 50]);
+    expect([SOUND.DOOR, SOUND.SHUT]).toEqual([45, 46]);
+    expect(LAYERS).toHaveLength(51);
+    for (const id of [47, 48, 49, 50]) {
+      expect(LOOPED).not.toContain(id);
+    }
+  });
+
+  it('makes the hit and the arc short, the explosion the longest and the loudest in the bass', () => {
+    const [hull, arc, wreck, crumble] = [47, 48, 49, 50].map(id => render(id));
+    const secs = (s: Float32Array) => s.length / RATE;
+    const level = (s: Float32Array) => Math.sqrt(s.reduce((a, x) => a + x * x, 0) / s.length);
+    for (const s of [hull, arc, wreck, crumble]) {
+      expect(level(s)).toBeGreaterThan(0.02);
+      expect(Math.max(...s.map(Math.abs))).toBeLessThanOrEqual(1);
+    }
+    expect(secs(hull)).toBeLessThan(0.4);
+    expect(secs(arc)).toBeLessThan(0.3);
+    expect(secs(wreck)).toBeGreaterThan(0.9);
+    expect(secs(crumble)).toBeGreaterThan(0.8);
+    /** The share of the changes of sign: low for a rumble, high for a hiss. */
+    const bright = (s: Float32Array) =>
+      s.reduce((n, x, i) => n + +(i > 0 && x * s[i - 1] < 0), 0) / s.length;
+    expect(bright(wreck)).toBeLessThan(bright(arc));
+    expect(bright(wreck)).toBeLessThan(bright(crumble));
+  });
+});

@@ -96,7 +96,7 @@ out vec2 U;void main(){U=vec2(gl_VertexID&1,gl_VertexID>>1)*2.;gl_Position=vec4(
 // gaussian along Y.xy in 5 taps (the weights and offsets fold the bilinear filter in). 2: the
 // scene plus the three blurs (S[1..3]) on the canvas. Tone: linear up to .6, then a shoulder
 // toward 1.
-const POST_FRAG = `#version 300 es
+export const POST_FRAG = `#version 300 es
 precision highp float;uniform sampler2D S[4];uniform vec4 Y;uniform float L;in vec2 U;out vec4 o;
 vec3 b(vec2 x){vec3 c=texture(S[0],x).rgb;return c*smoothstep(.9,2.,max(c.r,max(c.g,c.b)));}
 #define T(k)texture(S[0],U+Y.xy*(k)).rgb
@@ -111,7 +111,7 @@ c=min(c,.6)+.4*(1.-exp(-max(c-.6,0.)/.4));
 float a=atan(q.y,q.x)*24.,h=fract(sin(floor(a)*12.9898)*43758.5453);
 c+=L*step(.85-.5*L,h)*sin(fract(a)*3.1416)*smoothstep(.2,.6,length(q))*fract(length(q)*3.-Y.w*.002+h*9.)*.22;
 c*=1.-(.7+.3*L)*dot(q,q);
-c=pow(c*vec3(.97,1.,1.03),vec3(.92))+(fract(sin(dot(gl_FragCoord.xy+Y.w,vec2(12.9898,78.233)))*43758.5453)-.5)*.03;}
+c=pow(max(c*vec3(.97,1.,1.03),0.),vec3(.92))+(fract(sin(dot(gl_FragCoord.xy+Y.w,vec2(12.9898,78.233)))*43758.5453)-.5)*.03;}
 o=vec4(c,1);}`;
 
 /**
@@ -164,7 +164,10 @@ const RELIEF = 0.06;
 // (vn) and blended by it, so no two patches repeat, darkened on slopes; its tone then varies by noise
 // computed here at 11, 4, 1.6 and 77 m (no second fetch of the tile, whose period showed on far
 // hills), and with distance it fades to the tile's mean colour and a flat height, so the horizon
-// carries shading and no pattern. F: fog colour and
+// carries shading and no pattern. No NaN may leave it: the bloom's blurs spread one into a flat grey
+// rectangle (the user, 2026-11-12). So every pow() has a base in [0, 1] (two unit vectors' dot can
+// round past 1 where a face looks straight at the eye) and nz() normalises the half vectors, which
+// can vanish. F: fog colour and
 // density, U the height the fog layer is anchored at: the density is
 // F.a * (1 + FOG_LAYER * exp(FOG_RISE * (U - y))) at height y, integrated along the view ray in closed
 // form (x is the climb along it, times FOG_RISE; the branch is its limit at 0).
@@ -175,6 +178,7 @@ uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F;uniform float 
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;out vec4 o;
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
+vec3 nz(vec3 v){return v*inversesqrt(max(dot(v,v),1e-12));}
 vec3 K0(vec3 d){
 float h=d.y,k=max(dot(d,O),0.);
 vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
@@ -202,18 +206,18 @@ float h=t.a*s*${RELIEF},det=dot(dx,a);
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
 vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];
-vec3 y=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s),V=normalize(E-P),w=normalize(n+m);
+vec3 y=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s),V=normalize(E-P),w=nz(n+m);
 float sd=max(dot(m,O),0.)*smoothstep(0.,.1,dot(n,O)),sv=1.;
 if(sd>0.&&g<1.){
 vec4 q=W*vec4(P+n*.08,1);q.xyz=q.xyz*.5+.5;
 float v=0.;
 for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADOW},0,q.z-.0004));
 sv=mix(v/4.,1.,smoothstep(.8,1.,max(abs(q.x-.5),abs(q.y-.5))*2.));}
-vec3 l=y*(mix(mix(H[1],H[0],max(w.y,0.)),H[2],max(-w.y,0.))+X*sd*sv),sp=X*sv*sd*pow(max(dot(m,normalize(O+V)),0.),R.y);
+vec3 l=y*(mix(mix(H[1],H[0],max(w.y,0.)),H[2],max(-w.y,0.))+X*sd*sv),sp=X*sv*sd*pow(max(dot(m,nz(O+V)),0.),R.y);
 for(int i=0;i<${MAX_LIGHTS};i++){
 if(i>=Q||g>0.)break;
 vec3 d=A[i].xyz-P;float r=length(d),k=K[i].w,u=B[i].w;
-d/=r;
+d/=max(r,1e-4);
 float w=max(1.-r*r/(A[i].w*A[i].w),0.);
 w*=w*smoothstep(u,u+(1.-u)*.4,-dot(d,B[i].xyz))*max(dot(m,d),0.);
 if(w>0.&&k>=0.){
@@ -222,9 +226,9 @@ float v=0.;
 for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADOW},k+1.,q.z-.0005));
 w*=v/4.;}
 l+=K[i].rgb*w;
-sp+=K[i].rgb*w*pow(max(dot(m,normalize(d+V)),0.),R.y);}
+sp+=K[i].rgb*w*pow(max(dot(m,nz(d+V)),0.),R.y);}
 c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
-vec3 r=reflect(-V,m),k=K0(r);float fr=pow(1.-max(dot(m,V),0.),4.);
+vec3 r=reflect(-V,m),k=K0(r);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
 c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr));
 c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv);

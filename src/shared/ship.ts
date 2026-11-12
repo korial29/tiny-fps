@@ -135,6 +135,13 @@ const WING_BODY = [
 const WING_H = 0.4;
 /** The wing tips against the brushes: a circle this wide, this far right of the centre. */
 const TIP = { X: 5.6, R: 0.8 };
+/** Where the wings' undersides meet the floor: right of the centre, and the trailing edge (-1), the middle of the chord (0) or the leading edge (1). */
+const TOUCH = [
+  [3.2, 0],
+  [4.8, 0],
+  [6.4, -1],
+  [6.4, 1],
+];
 
 /** The pilot's seat in the cockpit, behind the long nose: right of the centre, above it (the feet), ahead of it. */
 export const COCKPIT = [0, 0.05, -0.2];
@@ -401,6 +408,20 @@ export const pilot = (
     r.vy = max(r.vy, 0);
     // Landed: -1 until a step leaves the floor.
     r.steer = r.vy > 0.5 ? 0 : -1;
+  }
+  // The wings on the floor (the user, 2026-11-12: banked low, a tip went into the ground): the
+  // undersides at TOUCH lift the ship over the highest floor under them. No landing: it flies on.
+  let scraped = 0;
+  for (const s of [-1, 1]) {
+    for (const [x, edge] of TOUCH) {
+      const [, le, te, , low] = section(x);
+      const [px, py, pz] = point(r, s * x, low, edge < 0 ? te : edge > 0 ? le : (le + te) / 2);
+      scraped = max(scraped, floorAt(w, px, pz, py + 1) - py);
+    }
+  }
+  if (scraped > 0) {
+    r.y += scraped;
+    r.vy = max(r.vy, 0);
   }
   for (const k of SHIP.BODY) {
     const [x, y, z] = point(r, 0, -SHIP.DROP, k);

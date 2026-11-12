@@ -8,7 +8,7 @@ import { move } from './physics';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
 import { drive, hull, hulls, nearby, park } from './rover';
-import { SHIP, dock, limits, pilot, reach, struck } from './ship';
+import { SHIP, dock, limits, pilot, point, reach, struck } from './ship';
 import { KEY, MODE, NOBODY } from './types';
 import type { Conn, Input, PlayerState, Rover } from './types';
 import { build } from './world';
@@ -455,6 +455,25 @@ describe('the wings and the crashes', () => {
     fly(r, w, 300, keys(KEY.RIGHT));
     expect(r.z).toBeLessThan(8 - 5.6);
     expect(r.z).toBeGreaterThan(8 - 5.6 - 1.5);
+  });
+
+  it('keeps its wing tips out of the ground when it banks low over it', () => {
+    const w = field();
+    const [r] = park(w);
+    fly(r, w, 20, keys(KEY.JUMP));
+    fly(r, w, 240, keys(0));
+    // Banked hard a metre over its hover height: the low tip would be far under the ground.
+    for (const roll of [0.8, -0.8]) {
+      Object.assign(r, { y: SHIP.DROP + 1, vy: 0, roll, wr: 0 });
+      pilot(r, keys(0), w);
+      for (const s of [-1, 1]) {
+        for (const a of [-4.9, -6.1]) {
+          expect(point(r, s * 6.4, -0.78, a)[1]).toBeGreaterThan(-0.01);
+        }
+      }
+    }
+    // It is not landed: it flies on.
+    expect(r.steer).toBe(0);
   });
 
   it('stops on another vehicle, wings and all, and feels the jolt', () => {

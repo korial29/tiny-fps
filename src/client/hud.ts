@@ -30,16 +30,19 @@ import type { Mark } from './marks';
  * sits in it: its flat top `NOTCH[2]` up from the bottom, `NOTCH[0]` and `NOTCH[1]` its half widths.
  */
 const NOTCH = [8, 14, 23];
+/** The exponent of the outline's round ends: 2 a half circle, more squarer. */
+const ROUND = 3;
 export const rim = (): [number, number][] => {
-  // A little low on the screen (the user, 2026-11-12: lower it a bit).
-  const [x0, x1, y0, y1] = [4, 96, 7, 98];
+  // Low on the screen (the user, 2026-11-12: lower it, then lower still): its lower edge runs off the bottom beside the notch.
+  const [x0, x1, y0, y1] = [4, 96, 12, 103];
   const h = y1 - y0;
   // The helmet's own proportions: the ends' rise over the visor's height, and its frown, softened.
   const rise = (VISOR.rise / (2 * VISOR.r[1])) * h;
   const frown = ((0.6 * VISOR.frown) / (2 * VISOR.r[1])) * h;
   const t = (x: number) => Math.abs(x - 50) / ((x1 - x0) / 2);
-  const top = (x: number): [number, number] => [x, y0 + frown * (1 - t(x))];
-  const low = (x: number): [number, number] => {
+  // The frown's point is rounded over a few hundredths of the width.
+  const top0 = (x: number) => y0 + frown * (1 - Math.sqrt(t(x) ** 2 + 0.002));
+  const low0 = (x: number) => {
     const a = Math.abs(x - 50);
     const base = y1 - rise * t(x) ** 1.15;
     const up =
@@ -48,15 +51,26 @@ export const rim = (): [number, number][] => {
         : a < NOTCH[1]
           ? (1 + Math.cos((Math.PI * (a - NOTCH[0])) / (NOTCH[1] - NOTCH[0]))) / 2
           : 0;
-    return [x, base - up * Math.max(0, base - (100 - NOTCH[2]))];
+    return base - up * Math.max(0, base - (100 - NOTCH[2]));
   };
-  const xs = Array.from({ length: x1 - x0 + 1 }, (_, k) => x0 + k);
-  return [...xs.map(top), ...xs.reverse().map(low)];
+  // Round ends, as the helmet's visor has (its superellipse, softer here): the two edges close on
+  // each other toward the sides instead of meeting the side in corners (the user, 2026-11-12).
+  const edge = (x: number, side: 1 | -1): [number, number] => {
+    const [a, b] = [top0(x), low0(x)];
+    const k = (1 - Math.min(t(x), 1) ** ROUND) ** (1 / ROUND);
+    return [x, (a + b) / 2 + (side * k * (b - a)) / 2];
+  };
+  // Every half unit, and every tenth in the last four toward each end, where the outline turns.
+  const xs: number[] = [];
+  for (let x = x0; x < x1 + 1e-9; x += x < x0 + 4 - 1e-9 || x > x1 - 4 - 1e-9 ? 0.1 : 0.5) {
+    xs.push(+x.toFixed(1));
+  }
+  return [...xs.map(x => edge(x, -1)), ...xs.reverse().map(x => edge(x, 1))];
 };
 /**
  * RIM as a background, with the sheen the rounded rim had: inside the outline only (it clips itself),
- * a pale line 2 px wide, a soft pale glow behind it, a shade along the lower edge and a heavier one
- * under the brow. Widths in pixels whatever the screen's size; the glass itself is not filled.
+ * a soft pale glow, a shade along the lower edge and a heavier one under the brow, and no line (the
+ * user, 2026-11-12: no white border). Widths in pixels whatever the screen's size; the glass itself is not filled.
  */
 const RIM = (() => {
   const pts = rim().map(([x, y]) => `${x} ${+y.toFixed(2)}`);
@@ -71,8 +85,6 @@ const RIM = (() => {
       line(brow, '#000', 0.2, 34) +
       line(jaw, '#000', 0.14, 30) +
       line(d, '#fff', 0.05, 34) +
-      line(d, '#fff', 0.07, 16) +
-      line(d, '#fff', 0.34, 4) +
       `</g></svg>`,
   )}")`;
 })();

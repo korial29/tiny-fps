@@ -309,7 +309,9 @@ describe('createHud', () => {
     expect(svg).not.toMatch(/ fill="#/);
     // The rim's sheen, inside the outline only: a pale line, a glow behind it, shades under the brow and along the jaw.
     expect(svg).toContain('clip-path="url(#c)"');
-    expect(svg.match(/stroke="#fff"/g)).toHaveLength(3);
+    // No white border: one wide, faint glow only.
+    expect(svg.match(/stroke="#fff"/g)).toHaveLength(1);
+    expect(svg).toMatch(/stroke="#fff" stroke-opacity="0\.05" stroke-width="34"/);
     expect(svg.match(/stroke="#000"/g)).toHaveLength(3);
     expect(svg).toContain('vector-effect="non-scaling-stroke"');
     expect(svg).toContain('preserveAspectRatio="none"');
@@ -319,23 +321,34 @@ describe('createHud', () => {
     const top = pts.slice(0, pts.length / 2);
     const low = pts.slice(pts.length / 2).reverse();
     const at = (l: [number, number][], x: number) => l.find(p => p[0] === x)![1];
-    // The upper edge comes down to the middle: a frown.
-    expect(at(top, 50)).toBeGreaterThan(at(top, 4) + 3);
-    expect(at(top, 96)).toBe(at(top, 4));
-    // The lower edge runs up to its ends, as far as on the helmet: its rise over the visor's height.
-    const share = (at(low, 30) - at(low, 4)) / (at(low, 30) - at(top, 4));
-    expect(at(low, 4)).toBeLessThan(at(low, 30) - 25);
-    expect(share).toBeGreaterThan(0.3);
-    expect((at(low, 20) - at(low, 4)) / 16).toBeCloseTo((at(low, 96) - at(low, 80)) / -16, 6);
+    // The upper edge comes down to the middle: a frown, its point rounded.
+    expect(at(top, 50)).toBeGreaterThan(at(top, 35) + 1);
+    expect(at(top, 65)).toBeCloseTo(at(top, 35), 9);
+    expect(at(top, 50) - at(top, 49.5)).toBeLessThan((at(top, 40) - at(top, 39.5)) / 2);
+    // The lower edge runs up toward its ends, by the helmet's own rise over the visor's height.
+    expect(at(low, 15)).toBeLessThan(at(low, 34) - 12);
+    expect(at(low, 20) - at(low, 15)).toBeCloseTo(at(low, 80) - at(low, 85), 9);
     expect(VISOR.rise / (2 * VISOR.r[1])).toBeCloseTo(0.5, 6);
+    // Round ends: the two edges close on each other at the sides, with no corner on the way.
+    expect(at(top, 4)).toBeCloseTo(at(low, 4), 9);
+    expect(at(low, 5) - at(top, 5)).toBeLessThan(at(low, 10) - at(top, 10));
+    const turns = pts.map((p, k) => {
+      const [a, b] = [pts[(k + pts.length - 1) % pts.length], pts[(k + 1) % pts.length]];
+      const [u, v] = [
+        [p[0] - a[0], p[1] - a[1]],
+        [b[0] - p[0], b[1] - p[1]],
+      ];
+      return Math.abs(Math.atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1]));
+    });
+    // No turn of more than half a right angle between two steps, the ends' tips aside.
+    expect(turns.filter(a => a > Math.PI / 4).length).toBeLessThanOrEqual(4);
+    // Low on the screen: 12 down at its top.
+    expect(Math.min(...top.map(p => p[1]))).toBeGreaterThan(11.9);
     // The guard's notch in the middle, flat-topped: the face (72 px wide, its top 111 px up) and the
     // health sit in it on a screen of 800 by 600.
     expect(at(low, 50)).toBe(at(low, 44));
     // It stands 21 over where the V would meet in the middle, and over the edge at its foot.
     expect(at(low, 50)).toBe(77);
-    // The whole of it sits a little low on the screen: 7 down at its top.
-    expect(at(top, 4)).toBe(7);
-    expect(Math.max(...low.map(p => p[1]))).toBeGreaterThan(85);
     expect(at(low, 50)).toBeLessThan(at(low, 36) - 4);
     expect((100 - at(low, 50)) * 6).toBeGreaterThan(111 + 10);
     expect(8 * 8).toBeGreaterThan(36 + 10);

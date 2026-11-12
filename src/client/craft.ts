@@ -100,7 +100,7 @@ export const LIGHTS: Vec3[] = [
   [0, 0.82, -3.1],
 ];
 /** The vertices a ship takes at most, legs down and everything aboard, by level of detail (0 far to 2 near). */
-export const BUDGET = [1400, 2300, 5000];
+export const BUDGET = [1400, 2400, 5000];
 
 /** The ship's own frame for place(): model space as it is. */
 const SELF: Vec3[] = [
@@ -642,7 +642,7 @@ const build = (lod: number): [number[], number[]] => {
       TEAM,
     );
     // The engine against the hull's flank: a wide cowl, the team's ring behind its lip, a dark
-    // intake, empty and deep; behind the cowl a thinner exhaust with two dark ribs and a pipe along
+    // intake, deep, with the turbine's spinner out of its middle; behind the cowl a thinner exhaust with two dark ribs and a pipe along
     // it, and a dark nozzle.
     const lathe = (profile: [number, number][], rgb: number[], into = o, k = 1) =>
       place(into, dress(smooth(profile, sides), rgb), P(s * X, Y, NOZZLE), SELF, O, k);
@@ -674,6 +674,15 @@ const build = (lod: number): [number[], number[]] => {
         TEAM,
         t,
         1.03,
+      );
+      // The turbine's spinner, well out of the intake's mouth.
+      lathe(
+        [
+          [R * 0.4, len - 0.6],
+          [R * 0.34, len - 0.05],
+          [0, len + 0.6],
+        ],
+        GREY,
       );
     }
     lathe(

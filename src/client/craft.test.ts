@@ -80,10 +80,10 @@ describe('craft', () => {
     });
   }
 
-  it('stays within 1,400 vertices far, 2,300 mid and 5,000 near with everything aboard, and any level past 2 is the near one', () => {
+  it('stays within 1,400 vertices far, 2,400 mid and 5,000 near with everything aboard, and any level past 2 is the near one', () => {
     const full = flown(4, { nades: SHIP.MISSILES });
     const [far, mid, near] = [0, 1, 2].map(lod => count(make(full, lod, TEAM, 0)));
-    expect(BUDGET).toEqual([1400, 2300, 5000]);
+    expect(BUDGET).toEqual([1400, 2400, 5000]);
     [far, mid, near].forEach((n, lod) => expect(n).toBeLessThanOrEqual(BUDGET[lod]));
     expect(far).toBeLessThan(mid);
     expect(mid).toBeLessThan(near);
@@ -307,7 +307,7 @@ describe('craft', () => {
     }
   });
 
-  it("leaves each engine's intake an empty hole: nothing ahead of it, a dark bottom, and the wing starting behind it", () => {
+  it("leaves each engine's intake a clear hole: a dark bottom, the turbine's spinner alone out of it, and the wing starting behind it", () => {
     const deep = ENGINE.LIP - 0.8;
     for (const lod of [0, 1, 2]) {
       const v = make(state({ nades: 4 }), lod);
@@ -319,11 +319,21 @@ describe('craft', () => {
           a < ENGINE.LIP + 2
         );
       });
-      // Only the hole's own bottom is in there: dark, from the lip back to the axis.
-      expect(mouth.length).toBeGreaterThan(0);
-      for (const i of mouth) {
+      // Only the hole's own bottom is in there, dark, from the lip back to the axis, and near by
+      // the turbine's grey spinner on the axis, 0.6 m out of the mouth.
+      const spinner = mouth.filter(i => is(v, i, [0.46, 0.48, 0.52]));
+      for (const i of mouth.filter(k => !spinner.includes(k))) {
         expect(is(v, i, [0.08, 0.085, 0.1])).toBe(true);
         expect(at(v, i)[2]).toBeLessThan(ENGINE.LIP);
+      }
+      expect(mouth.length).toBeGreaterThan(spinner.length);
+      expect(spinner.length > 0).toBe(lod > 0);
+      for (const i of spinner) {
+        const [x, y] = at(v, i);
+        expect(Math.hypot(Math.abs(x) - ENGINE.X, y - ENGINE.Y)).toBeLessThan(ENGINE.R * 0.41);
+      }
+      if (lod) {
+        expect(Math.max(...spinner.map(i => at(v, i)[2]))).toBeCloseTo(ENGINE.LIP + 0.6, 5);
       }
     }
     // The wing's leading edge, from the hull to the cannon, is behind the hole's bottom.

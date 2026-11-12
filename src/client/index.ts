@@ -1,5 +1,5 @@
 import { BOLT, HP_MAX, LOCK_WIN, PLAYER_H, PLAYER_R, TICK_HZ, VEHICLE } from '../shared/constants';
-import { MAPS, mapKey, mapOf } from '../shared/maps';
+import { mapKey, mapOf } from '../shared/maps';
 import { eyeHeight, heightOf } from '../shared/physics';
 import { cylinder } from '../shared/plasma';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
@@ -375,14 +375,7 @@ const play = (
         rolesOf(world.def),
       );
       predictor.you(you.id, you.team, own?.role);
-      hud.maps(
-        Object.entries(MAPS).map(([k, d]) => [k, d.name ?? k]),
-        key,
-        m.next,
-        names.get(m.host ?? -1) ?? '?',
-        m.host == you.id,
-        map => ws.send(JSON.stringify({ t: 'map', map } satisfies ClientText)),
-      );
+      // No map to pick in the game's menu (the user, 2026-11-13): it is the join page's choice.
       count.textContent = `Players: ${roster.length}`;
     } else if (m?.t == 'end') {
       ended = { score: m.score, players: m.players };

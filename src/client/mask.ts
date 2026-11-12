@@ -64,6 +64,10 @@ const skull = (a: number, y: number, off: number): Vec3 => {
  */
 const under = (a: number) => {
   const q = Math.abs(a);
+  // The mouth and the chin black too (the user, 2026-11-13): bare only over the guard's top.
+  if (q < 0.6) {
+    return PT;
+  }
   const jaw = 1.584 + 0.032 * clamp(q / 1.75) ** 1.5;
   // The cloth beside the guard joins it: up its side edge, a little under it, to mid-cheek; then up to
   // the opening's bottom behind the cheek.
@@ -77,8 +81,8 @@ const under = (a: number) => {
 /** The guard over the mouth, a trapezoid seen from the front: its top and bottom, and its half widths there (radians round). */
 const [PT, PB, AT, AB] = [1.662, 1.59, 0.95, 0.52];
 const half = (y: number) => AT + ((AB - AT) * (PT - y)) / (PT - PB);
-/** How far its top edge rises at `x` across it (-1 to 1): a wide chevron up toward the nose in its middle. */
-const peak = (x: number) => 0.012 * clamp(1 - Math.abs(x) / 0.45);
+/** How far its top edge rises at `x` across it (-1 to 1): an arrow up the nose in its middle. */
+const peak = (x: number) => 0.024 * clamp(1 - Math.abs(x) / 0.4);
 /**
  * The guard's prow (the user, 2026-11-13: its very front stands out): how far out of the skull its
  * shell is pushed at `a` round and `y` high, most down its middle and at the mouth and the chin.
@@ -87,7 +91,8 @@ const PROW = 0.024;
 const prow = (a: number, y: number) =>
   PROW *
   clamp(1 - Math.abs(a) / 1.0) ** 1.3 *
-  (0.5 + 0.5 * clamp((SLIT_LO - y) / (SLIT_LO - 1.58)));
+  // From the nose to the chin an arc (the user, 2026-11-13): furthest out at the mouth.
+  (0.3 + 0.7 * Math.sin(Math.PI * clamp((PT + 0.014 - y) / (PT + 0.014 - PB + 0.004))));
 
 /** The middle of the head: the normals point away from it. */
 const MID: Vec3 = [0, 1.66, 0.03];
@@ -231,7 +236,7 @@ const make = (): number[] => {
           [side * 0.64, y + 0.005],
           [side * 0.32, y - 0.003],
         ],
-        0.0028,
+        0.0046,
         BLACK,
       );
     }

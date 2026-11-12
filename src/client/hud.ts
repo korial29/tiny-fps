@@ -20,6 +20,7 @@ import { SHIP } from '../shared/ship';
 import { FLAG, MODE } from '../shared/types';
 import type { Choice, PlayerState, Rover, Snapshot } from '../shared/types';
 import { TONES } from './features';
+import { ROLE } from '../shared/kit';
 import { FH, FW, PALETTE, sprite } from './face';
 import { VISOR } from './helmet';
 import type { Mark } from './marks';
@@ -134,7 +135,7 @@ export const HUD_CSS =
   `aside fieldset{display:grid;grid-template-columns:150px minmax(0,1fr);gap:10px 16px;align-content:start;margin:0;padding:0;border:0;min-width:0}aside fieldset h4{grid-column:1/-1;margin:0}` +
   `aside canvas{width:100%;height:auto;aspect-ratio:3/4;border:1px solid #26323e;border-radius:14px;cursor:inherit;background:radial-gradient(#26323e,#0d141c)}` +
   `aside .op{display:grid;gap:5px;align-content:start}aside fieldset small{margin-top:4px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8d9aa7}` +
-  `aside [role=radiogroup]{display:flex;flex-wrap:wrap;gap:6px}` +
+  `aside [role=radiogroup]{display:flex;flex-wrap:wrap;gap:6px}aside [role=radiogroup][hidden]{display:none}` +
   `aside .hc [role=radio]{display:grid;justify-items:center;gap:3px;width:60px;padding:4px 3px 5px;font-size:11px}aside .hc canvas{width:52px;aspect-ratio:1;border-radius:8px}aside.hm .hc canvas{display:none}` +
   `aside [role=radio]{position:relative;padding:6px 11px;border-color:#26323e;background:#121a23;font-size:13px;font-weight:700;transition:border-color .15s,box-shadow .15s}` +
   `aside [role=radio]:hover{border-color:#3a4a5a}aside [role=radio]:disabled{opacity:.4;cursor:not-allowed}` +
@@ -594,13 +595,17 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         return b;
       }),
     );
-  /** Each group's pick lit and in the Tab order; with none, its first is. */
-  const lit = () =>
+  /** Each group's pick lit and in the Tab order; with none, its first is. The ninja's hood hides the hair: no haircut to pick. */
+  const lit = () => {
     KEYS.forEach((k, g) => {
       const on = picked[k] ?? -1;
       turn(radios(g), 'aria-checked', on);
       radios(g)[0].tabIndex = on < 0 ? 0 : radios(g)[0].tabIndex;
     });
+    const hooded = picked.role == ROLE.NINJA;
+    groups[2].hidden = hooded;
+    (groups[2].previousElementSibling as HTMLElement).hidden = hooded;
+  };
   const choose = (g: number, i: number) => {
     const b = radios(g)[i];
     if (!b || b.disabled || b.getAttribute('aria-checked') == 'true') {

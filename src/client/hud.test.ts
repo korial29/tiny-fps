@@ -136,6 +136,11 @@ describe('createHud', () => {
       expect(pick).toHaveBeenLastCalledWith({ body: 1, tone: 4, role: ROLE.NINJA });
       expect(group('Hair').map(b => b.textContent)).toEqual(HAIR_NAMES[BODY.FEMALE]);
       expect(lit('Hair')).not.toContain(true);
+      // The ninja's hood hides the hair: no haircut to pick.
+      const hair = screen.querySelector<HTMLElement>('[aria-label="Hair"]')!;
+      expect(hair.hidden).toBe(true);
+      group('Class')[ROLE.MARINE].click();
+      expect(hair.hidden).toBe(false);
       group('Hair')[2].click();
       expect(lit('Hair')).toEqual([false, false, true, false, false]);
     });

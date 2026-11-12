@@ -85,7 +85,7 @@ export const [IRIS_R, PUPIL_R, GAZE_X, GAZE_Y] = [0.006, 0.0023, 0.0046, 0.003];
 /** How far a lid is off the ball. */
 const LIFT = 0.0011;
 /** The mouth: the height of the line between the lips at the middle, how it falls to the corners (per m2), and the corners. */
-export const [MOUTH_Y, MOUTH_K, MOUTH_X] = [1.6168, 0.8, 0.0235];
+export const [MOUTH_Y, MOUTH_K, MOUTH_X] = [1.6218, 0.25, 0.0245];
 /** The line between the lips at `ax` across. */
 export const lipLine = (ax: number) => MOUTH_Y - MOUTH_K * ax * ax;
 

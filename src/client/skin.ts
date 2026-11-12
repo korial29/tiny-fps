@@ -16,6 +16,7 @@ import {
   eyes,
   KIND,
   MOUTH_X,
+  MOUTH_Y,
   PUPIL_R,
   TONES,
   hash,
@@ -143,7 +144,7 @@ export const palette = (
     [0.85, 0.83, 0.8],
     eyes,
     // Her lips are red on any skin (the user, 2026-11-12), his a shade of his own.
-    SKIN.map((v, i) => (fem ? v * 0.28 + [0.5, 0.03, 0.08][i] : v * [0.84, 0.68, 0.72][i])),
+    SKIN.map((v, i) => (fem ? v * 0.5 + [0.3, 0.03, 0.06][i] : v * [0.84, 0.62, 0.66][i])),
     SKIN.map(v => v * 0.55),
     hair.map((v, i) => v * 0.4 + SKIN[i] * 0.3),
     SKIN.map((v, i) => v * (1 - 0.34 * beard) + (hair[i] * 0.1 + [0, 0.01, 0.03][i]) * beard),
@@ -503,6 +504,9 @@ const step = (a: number, b: number, v: number) => {
   return t * t * (3 - 2 * t);
 };
 
+/** The middle of the groove between the nose and the upper lip, metres up. */
+const PHILTRUM = 1.6355;
+
 /** The brow ridge's crest at ax across: an arch over each eye, down to the nose and the temple. The brows follow it. */
 const arcade = (ax: number) => 1.708 + 0.004 * (1 - ((ax - 0.032) / 0.024) ** 2);
 
@@ -543,9 +547,9 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
       (0.0065 + 0.0015 * fem) * bell(ax - 0.048, 0.012) * bell(y - 1.668, 0.011) +
       (0.008 - 0.0075 * fem) * bell(ax - 0.056, 0.014) * bell(y - 1.598, 0.013) -
       (0.002 - 0.002 * fem) * bell(ax - 0.05, 0.012) * bell(y - 1.632, 0.01) +
-      0.006 * bell(x, 0.021) * bell(ym - 1.627, 0.007) +
-      (0.003 + 0.0013 * fem) * bell(x, 0.019) * bell(ym - 1.6215, 0.0036) +
-      (0.0037 + 0.0014 * fem) * bell(x, 0.018) * bell(ym - 1.6112, 0.004) -
+      0.0048 * bell(x, 0.027) * bell(ym - 1.627, 0.007) +
+      (0.0042 + 0.001 * fem) * bell(x, 0.026) * bell(ym - 1.6198, 0.0046) +
+      (0.003 + 0.001 * fem) * bell(x, 0.024) * bell(ym - 1.6112, 0.004) -
       0.002 * bell(x, 0.016) * bell(ym - 1.6025, 0.003) +
       (0.0075 - 0.0015 * fem) * bell(x, 0.026 - 0.012 * fem) * bell(y - 1.593, 0.008) -
       (0.006 - 0.003 * fem) * step(1.715, 1.75, y));
@@ -556,11 +560,16 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
   d +=
     f ** 4 *
     (-0.0022 * bell(ax - 0.006, 0.0022) * bell(y - 1.6425, 0.0022) -
-      0.0008 * bell(x, 0.0025) * bell(y - 1.633, 0.006) -
+      // The philtrum (the user, 2026-11-12): a groove from the nose to the upper lip's bow, a ridge each side of it.
+      0.0034 * bell(x, 0.0034) * bell(y - PHILTRUM, 0.005) +
+      0.0016 * bell(ax - 0.0066, 0.0024) * bell(y - PHILTRUM, 0.005) +
+      // The upper lip's bow: a peak each side of its middle, a bead under the dip.
+      0.0007 * bell(ax - 0.0065, 0.004) * bell(ym - 1.6232, 0.0022) +
+      0.0006 * bell(x, 0.0045) * bell(ym - 1.6192, 0.002) -
       0.0015 * bell(x, 0.02) * bell(ym - 1.6168, 0.0012) -
       0.0016 *
         bell(ax - 0.014 - 0.014 * fold, 0.0028) *
-        step(1.614, 1.62, y) *
+        step(MOUTH_Y - 0.0028, MOUTH_Y + 0.0032, y) *
         (1 - step(1.644, 1.65, y)));
   return d;
 };
@@ -612,9 +621,15 @@ const tint = (x: number, y: number, aq: number, fine: boolean): number[] => {
       return [LINE, LINE, 0];
     }
     // The lips: the upper one thinner, dipping at its middle, the lower one fuller; to nothing at the corners.
+    // A bow on the upper one (two peaks, a dip between them, a long taper to the corner); the
+    // lower one full across its middle, then quickly to the corner (the user, 2026-11-12).
+    const u = Math.max(1 - (ax / MOUTH_X) ** 2, 0);
     const lip =
-      (dy > 0 ? (0.0066 + 0.001 * fem) * (1 - 0.2 * bell(x, 0.0045)) : 0.0074 + 0.0014 * fem) *
-      Math.sqrt(Math.max(1 - (ax / MOUTH_X) ** 2, 0));
+      dy > 0
+        ? (0.0086 + 0.001 * fem) *
+          (1 - 0.34 * bell(x, 0.0034) + 0.1 * bell(ax - 0.0068, 0.004)) *
+          u ** 0.6
+        : (0.0078 + 0.0014 * fem) * (1 - (ax / MOUTH_X) ** 3) ** 0.6 * u ** 0.2;
     const l = clamp((lip - Math.abs(dy)) / 0.0025);
     if (l > 0) {
       return [STUBBLE, LIP, l];
@@ -629,14 +644,15 @@ const tint = (x: number, y: number, aq: number, fine: boolean): number[] => {
   if (brow > 0) {
     return [FLESH, BROW, Math.min(brow, 0.92)];
   }
+  const groove = 0.65 * bell(x, 0.003) * bell(y - PHILTRUM, 0.0045) * +(aq < 1);
   if (b > 0) {
-    return [FLESH, STUBBLE, b];
+    return [FLESH, STUBBLE, Math.max(b, groove)];
   }
   // A flush: the cheeks, the tip of the nose.
   const f =
     0.55 * Math.exp(-(((ax - 0.046) / 0.02) ** 2) - ((y - 1.655) / 0.016) ** 2) +
     0.5 * bell(x, 0.012) * bell(y - 1.652, 0.01);
-  return [FLESH, BLUSH, aq < 1.6 ? Math.min(f, 0.7) : 0];
+  return groove > 0.08 ? [FLESH, SHADE, groove] : [FLESH, BLUSH, aq < 1.6 ? Math.min(f, 0.7) : 0];
 };
 
 /** The rest mesh: per vertex a position and a normal, two joints and the weight of the second. */
@@ -940,7 +956,7 @@ const shape = (lod: number): Skin => {
     /** Per head vertex its colours (tint()), taken where the section put it: the socket's floor, set back, is skin. */
     const tints: number[][] = [];
     /** Heights a row is put at, whatever the step: the line between the lips, and each lip's fullest. */
-    const KEYS = fine ? [-0.0046, -0.001, 0, 0.001, 0.004].map(k => 1.6168 + k) : [];
+    const KEYS = fine ? [-0.0046, -0.001, 0, 0.001, 0.004].map(k => MOUTH_Y + k) : [];
     const tri = (a: number, b: number, d: number, col: number) => {
       if (new Set([a, b, d]).size < 3) {
         return;
@@ -988,7 +1004,7 @@ const shape = (lod: number): Skin => {
           const y = fine
             ? yr -
               (lipLine(0) - lipLine(Math.min(Math.abs(x0), 0.03))) *
-                bell(yr - 1.6168, 0.014) *
+                bell(yr - MOUTH_Y, 0.014) *
                 Math.max(cs, 0)
             : yr;
           const [rx, zf, zb, cz] = section(y);
@@ -1131,7 +1147,7 @@ const shape = (lod: number): Skin => {
         );
       mark([0.018, 0.047], [1.682, 1.698], [LASH, IRIS, 0.35]);
       mark([0.019, 0.05], [1.706, 1.715], [BROW, FLESH, 0.3]);
-      mark([0, 0.023], [1.613, 1.62], [LINE, LIP, 0.35]);
+      mark([0, 0.023], [MOUTH_Y - 0.0038, MOUTH_Y + 0.0032], [LINE, LIP, 0.35]);
       const NOSE = [1.641, 1.652, 1.7];
       patch(
         KIND.MARK,

@@ -66,8 +66,8 @@ const skull = (a: number, y: number, off: number): Vec3 => {
  * to its points beside them.
  */
 const under = (a: number) => PT + HORN * clamp((Math.abs(a) / AT - 0.4) / 0.6) ** 1.6;
-/** The guard over the mouth: its top (under the eyes) and bottom, and its half widths there (radians round). */
-const [PT, PB, AT, AB] = [1.662, 1.59, 1.15, 0.42];
+/** The guard over the mouth: its top (under the eyes) and bottom (under the chin, the user 2026-11-13), and its half widths there (radians round). */
+const [PT, PB, AT, AB] = [1.662, 1.575, 1.15, 0.42];
 /** How high its points beside the eyes stand over its top, and the power that rounds its sides out over the cheeks. */
 const [HORN, ROUND] = [0.045, 0.7];
 const half = (y: number) => AB + (AT - AB) * clamp((y - PB) / (PT - PB)) ** ROUND;

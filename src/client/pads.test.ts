@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { STRIDE } from './mesh';
-import { BELL, LAMES, pads } from './pads';
+import { BELL, FORE, LAMES, pads } from './pads';
 import { JOINT as J, rest, solve } from './rig';
 import { body, palette, skin } from './skin';
 
@@ -32,6 +32,22 @@ describe("pads, the ninja's shoulder pads and collar", () => {
     expect(Math.max(...xs)).toBeGreaterThan(arm[0] + 0.07);
     const tip = pts.find(p => p[0] == Math.max(...xs))!;
     expect(tip[1]).toBeGreaterThan(arm[1]);
+  });
+
+  it('wraps the front of the shoulder further than the back (the user, 2026-11-13)', () => {
+    expect(FORE.wide).toBeGreaterThan(1);
+    expect(FORE.fall).toBeGreaterThan(1);
+    // The right pad's edges fore and aft of its arm's joint, the collar left out: the front one
+    // reaches further and hangs lower.
+    const pad = pts.filter(p => Math.abs(p[0] - arm[0]) < 0.06 && Math.abs(p[0]) > 0.13);
+    const [fore, aft] = [
+      pad.filter(p => p[2] < arm[2] - 0.08),
+      pad.filter(p => p[2] > arm[2] + 0.08),
+    ];
+    const reach = (ps: number[][]) => Math.max(...ps.map(p => Math.abs(p[2] - arm[2])));
+    const low = (ps: number[][]) => Math.min(...ps.map(p => p[1]));
+    expect(reach(fore)).toBeGreaterThan(reach(aft));
+    expect(low(fore)).toBeLessThan(low(aft) - 0.02);
   });
 
   it('stands a collar round the back of the neck, open in front', () => {

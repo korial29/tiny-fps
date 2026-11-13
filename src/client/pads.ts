@@ -40,16 +40,30 @@ const SLOPE = 0.07;
  */
 const shoulder = (x: number, z: number) => {
   const out = Math.max(x - 0.02, 0);
-  return 0.038 - 0.4 * x - out * (0.5 + 18 * out) - 1.5 * z * z;
+  const front = FRONT[0] + (FRONT[1] - FRONT[0]) * Math.min(Math.max((x + 0.04) / 0.06, 0), 1);
+  return 0.038 - 0.4 * x - out * (0.5 + 18 * out) - (z < 0 ? front : 1.5) * z * z;
 };
+/**
+ * How fast it falls in front (the user, 2026-11-13: wrap the front of the shoulders), by the neck
+ * and from over the joint on: there the skin falls some 4 cm in 6, by the neck far less.
+ */
+const FRONT = [3, 9];
 const [CLEAR, STACK] = [0.013, 0.009];
+
+/**
+ * The lames' front half (the user, 2026-11-13: wrap the front of the shoulders more): this much
+ * wider than their back half, and falling this much further, down over the front of the shoulder.
+ */
+export const FORE = { wide: 1.2, fall: 1.6 };
 
 /** The lame `i` at `u` across it (-1 its front edge, 1 its back) and `v` along it, `d` under its top. */
 const at = (i: number, u: number, v: number, d = 0): Vec3 => {
   const l = LAMES[i];
   const w = v < WIDE ? 0.75 + (0.25 * v) / WIDE : (1 - v) / (1 - WIDE);
-  const [x, z] = [l[0] + (l[1] - l[0]) * v, 0.01 + u * w * l[2]];
-  const y = l[3] - SLOPE * v + RISE * v ** 3 - FALL * w * Math.abs(u) ** 1.3;
+  const fore = u < 0;
+  const [x, z] = [l[0] + (l[1] - l[0]) * v, 0.01 + u * w * l[2] * (fore ? FORE.wide : 1)];
+  const y =
+    l[3] - SLOPE * v + RISE * v ** 3 - FALL * w * Math.abs(u) ** 1.3 * (fore ? FORE.fall : 1);
   return [x, Math.max(y, shoulder(x, z) + CLEAR + i * STACK) - d, z];
 };
 

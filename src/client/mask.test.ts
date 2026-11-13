@@ -48,6 +48,16 @@ describe('mask, the ninja hood and face guard', () => {
     expect(high.filter(p => p[0] > 0).length).toBe(high.filter(p => p[0] < 0).length);
   });
 
+  it('comes down under the chin, round at its corners (the user, 2026-11-13)', () => {
+    const red = pts.filter(p => p[6] == RED[0] && p[7] == RED[1] && p[9] == RED[2]);
+    const low = (f: (p: number[]) => boolean) => Math.min(...red.filter(f).map(p => p[1]));
+    // Its middle under the chin; its sides drawn up toward the cheeks, as before.
+    expect(low(p => Math.abs(p[0]) < 0.01)).toBeLessThan(1.58);
+    expect(low(p => Math.abs(p[0]) > 0.025 && Math.abs(p[0]) < 0.03)).toBeGreaterThan(
+      low(p => Math.abs(p[0]) < 0.01) + 0.005,
+    );
+  });
+
   it('paints the hood on the head, but round the eyes', () => {
     // The crown and the back of the head: black.
     expect(where(([, y]) => y > 1.78).every(c => black(c.rgb))).toBe(true);

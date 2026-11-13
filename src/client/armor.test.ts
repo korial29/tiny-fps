@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { ARMHOLE, BRACER, BRIEFS, CHEST, DETAILS, DOME, GAP, REGIONS, THIGH, armor } from './armor';
+import {
+  ARMHOLE,
+  BRACER,
+  BRIEFS,
+  CHEST,
+  DETAILS,
+  DOME,
+  GAP,
+  NINJA_DETAILS,
+  REGIONS,
+  THIGH,
+  VEST,
+  armor,
+} from './armor';
 import { GLOSS, STRIDE } from './mesh';
 import { rest, solve } from './rig';
 import { body, palette, skin } from './skin';
@@ -95,6 +108,38 @@ describe('the armour', () => {
           top = Math.max(top, out[i + 1]);
         }
         expect(top).toBeLessThan(1.56);
+      }
+    }
+  });
+
+  it('has nothing standing off behind the back, where a front plate was cut in slivers (the user, 2026-11-13)', () => {
+    // The middle of the back is +180 or -180 round the trunk by the sign of a hair: a moulded
+    // plate's corners set off there flipped across it, and the clip took the jump for an edge.
+    for (const ninja of [false, true]) {
+      for (const build of [0, 1]) {
+        for (const lod of [1, 3]) {
+          const out: number[] = [];
+          const s = body(lod, build);
+          skin(
+            out,
+            s,
+            solve(rest([0, 0, 0], 0, build)),
+            palette([0.9, 0.2, 0.1], undefined, undefined, true),
+          );
+          const n = out.length;
+          armor(out, 0, s, lod > 2, undefined, ninja);
+          let back = 0;
+          for (let i = 0; i < n; i += STRIDE) {
+            if (Math.abs(out[i]) < 0.03 && out[i + 1] > 1.2 && out[i + 1] < 1.4) {
+              back = Math.max(back, out[i + 2]);
+            }
+          }
+          for (let i = n; i < out.length; i += STRIDE) {
+            if (Math.abs(out[i]) < 0.03 && out[i + 1] > 1.2 && out[i + 1] < 1.4) {
+              expect(out[i + 2]).toBeLessThan(back + 0.025);
+            }
+          }
+        }
       }
     }
   });
@@ -200,6 +245,36 @@ describe('the armour', () => {
       for (const side of [1, -1]) {
         for (let x = 0.115; x < 0.16; x += 0.005) {
           expect(at(side * x, ARMHOLE.y + 0.012)).toBeUndefined();
+        }
+      }
+    });
+
+    it("tops the ninja's vest in one block, its edge one smooth curve into the armhole, close or near (the user, 2026-11-13)", () => {
+      for (const build of [0, 1]) {
+        for (const lod of [1, 3]) {
+          const at = front(build, lod, false, true);
+          /** The top of the chest piece at x: the first plate met going down. */
+          const top = (x: number) => {
+            for (let y = VEST.top[build] + 0.01; y > VEST.y; y -= 0.001) {
+              if (at(x, y)) {
+                return y;
+              }
+            }
+            return 0;
+          };
+          // In from the side, where the plate turns away from the front.
+          const tops: number[] = [];
+          for (let x = 0; x < 0.12; x += 0.005) {
+            tops.push(top(x));
+          }
+          // No V at the neck: the middle is as high as the shallow neckline lets it.
+          expect(tops[0]).toBeGreaterThan(Math.max(...tops) - VEST.neck - 0.008);
+          for (let i = 8; i < tops.length; i++) {
+            // Only down from the neckline outward, with no cliff into the armhole: it fell 10 cm
+            // in 2 there, then ran on as a shelf.
+            expect(tops[i]).toBeLessThan(tops[i - 1] + 0.003);
+            expect(tops[i - 1] - tops[i]).toBeLessThan(0.022);
+          }
         }
       }
     });
@@ -415,6 +490,50 @@ describe('the armour', () => {
       const n = out.length;
       armor(out, 0, s, true, [0.9, 0.2, 0.1]);
       expect(dark(out.slice(n)).length).toBeGreaterThan(DETAILS.length * 6 * 0.7);
+    });
+    it("are the ninja's own on his pieces, the long ones unbroken (the user, 2026-11-13: more detail)", () => {
+      for (const build of [0, 1]) {
+        const out: number[] = [];
+        const s = body(3, build);
+        skin(
+          out,
+          s,
+          solve(rest([0, 0, 0], 0, build)),
+          palette([0.9, 0.2, 0.1], undefined, undefined, true),
+        );
+        const n = out.length;
+        armor(out, 0, s, true, [0.9, 0.2, 0.1], true);
+        const marks: number[][] = [];
+        for (let i = n; i < out.length; i += STRIDE) {
+          if (out[i + 8] != GLOSS && out[i + 6] < 0.1) {
+            marks.push([out[i], out[i + 1], out[i + 2]]);
+          }
+        }
+        expect(marks.length).toBeGreaterThan(NINJA_DETAILS.length * 6);
+        // None of the marine's slits on the right of his chest, under the collar.
+        expect(marks.filter(p => p[0] > 0.05 && p[1] > 1.42 && p[2] < 0)).toEqual([]);
+        // The seam down the chest, the vents, the lames' rivets, the shins'.
+        expect(marks.some(p => Math.abs(p[0]) < 0.005 && p[1] > 1.38 && p[2] < 0)).toBe(true);
+        for (const k of [1, -1]) {
+          expect(marks.some(p => p[0] * k > 0.04 && p[1] > 1.32 && p[1] < 1.38 && p[2] < 0)).toBe(
+            true,
+          );
+          expect(marks.some(p => p[0] * k > 0.06 && p[1] < 1.25 && p[1] > 1.0 && p[2] < 0)).toBe(
+            true,
+          );
+          expect(marks.some(p => p[0] * k > 0 && p[1] < 0.45)).toBe(true);
+          // A groove down the back, 20 cm in one line: laid flat on a skin triangle it went
+          // under the curved plate, in dashes.
+          const ys = marks
+            .filter(p => p[0] * k > 0.005 && p[0] * k < 0.04 && p[2] > 0 && p[1] > 1.2)
+            .map(p => p[1])
+            .sort((a, b) => a - b);
+          expect(ys[ys.length - 1] - ys[0]).toBeGreaterThan(0.18);
+          for (let i = 1; i < ys.length; i++) {
+            expect(ys[i] - ys[i - 1]).toBeLessThan(0.016);
+          }
+        }
+      }
     });
   });
 });

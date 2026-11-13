@@ -99,6 +99,13 @@ export const SPECIAL_CUT = 4;
  */
 export const LIMB = { NONE: 0, HEAD: 1, ARM_L: 2, ARM_R: 3, LEG_L: 4, LEG_R: 5 } as const;
 
+/**
+ * How a player went down (bits 5-6 of PlayerState.fell), for the clients' fall: PLAIN as before,
+ * SHOT thrown the way the hit went (a gun, a blast, a rover), STRUCK by a blade or the fists: on
+ * his knees, then over on his side.
+ */
+export const FALL = { PLAIN: 0, SHOT: 1, STRUCK: 2 } as const;
+
 /** The movement state of a player: what the body is doing, one of these. */
 export const MODE = {
   /** Standing or running on a floor. */
@@ -275,6 +282,8 @@ export interface PlayerState {
   heavy?: boolean;
   /** While down after a katana's cut put him down: the LIMB it took off, for the clients to draw. NONE once up. Absent reads NONE. */
   lost?: number;
+  /** While down: bits 5-6 the FALL, bits 0-4 the way the hit went, a yaw in 32nds of a turn (felled() in gun.ts). Absent reads 0. */
+  fell?: number;
   /** For the animation, not sent: the EV bits of the last step, and the speed of a landing. */
   ev: number;
   fall: number;

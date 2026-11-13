@@ -29,7 +29,9 @@
 //   and the hits landed (a plasma ball or a cut).
 //   swing: bits 0-5 the ticks left in the katana's swing, bits 6-7 the low two bits of its cut (CUT).
 //   lost: bits 0-2 the LIMB a katana's cut took off when it put him down (NONE once up), bit 3 the
-//   high bit of the cut (a special), the rest 0. charge: the ticks FIRE has been held with the gun.
+//   high bit of the cut (a special), the rest 0. charge: the ticks FIRE has been held with the gun;
+//   while down (when it is 0: no weapon) the fall instead (`fell`: bits 5-6 the FALL, bits 0-4 the
+//   way the hit went, in 32nds of a turn).
 //   lock: the ticks left in a saber lock; foe: bits 0-3 the id locked with, bit 4 the high bit of the
 //   dashes left, bit 7 FIRE held at the
 //   last step (`pressed`); pushes: the FIRE presses in the lock; away: the ticks a side or back key
@@ -268,7 +270,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
       o + 46,
       ((p.lost ?? 0) & 7) | (((p.cut ?? 0) & 4) << 1) | (p.fried ? 16 : 0) | (p.heavy ? 32 : 0),
     );
-    v.setUint8(o + 47, p.charge ?? 0);
+    v.setUint8(o + 47, p.down ? (p.fell ?? 0) : (p.charge ?? 0));
     v.setUint8(o + 48, p.lock ?? 0);
     v.setUint8(o + 49, ((p.foe ?? 0) & 15) | ((p.dashes & 2) << 3) | (p.pressed ? 128 : 0));
     v.setUint8(o + 50, p.pushes ?? 0);
@@ -409,7 +411,9 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       swing: v.getUint8(o + 45) & 63,
       cut: (v.getUint8(o + 45) >> 6) | ((v.getUint8(o + 46) >> 1) & 4),
       lost: v.getUint8(o + 46) & 7,
-      charge: v.getUint8(o + 47),
+      // While he is down the charge's byte carries his fall: he holds no weapon then.
+      charge: (gun >> 13) & 127 ? 0 : v.getUint8(o + 47),
+      fell: (gun >> 13) & 127 ? v.getUint8(o + 47) : 0,
       lock: v.getUint8(o + 48),
       foe: v.getUint8(o + 49) & 15,
       pressed: v.getUint8(o + 49) > 127,

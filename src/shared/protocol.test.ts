@@ -47,7 +47,8 @@ import {
 } from './constants';
 import { MAPS } from './maps';
 import { STILL } from './physics';
-import { CUT, FLAG, KEY, LIMB, MODE, NOBODY, SIDE } from './types';
+import { CUT, FALL, FLAG, KEY, LIMB, MODE, NOBODY, SIDE } from './types';
+import { felled } from './gun';
 import type { Ball, FlagState, Rover, SnapPlayer, Snapshot } from './types';
 import { IDLE } from '../../test/teams';
 
@@ -231,7 +232,9 @@ describe('snapshot frame', () => {
           swing: 20,
           cut: CUT.RIGHT,
           lost: LIMB.LEG_L,
-          charge: 42,
+          // Down: his fall goes in the charge's byte.
+          charge: 9,
+          fell: 42,
           lock: 200,
           foe: 5,
           pressed: true,
@@ -291,7 +294,7 @@ describe('snapshot frame', () => {
       7, // hits
       0b10010100, // swing 20, cut RIGHT (2) << 6
       4 | 16, // lost LEG_L, fried << 4
-      42, // charge
+      42, // fell, as he is down (else charge)
       200, // lock
       5 | 128, // foe 5, FIRE held at the last step
       17, // pushes
@@ -713,6 +716,19 @@ describe('snapshot frame', () => {
         expect(b.held).toBe(0);
       }
     }
+  });
+
+  it('carries the fall in the charge’s byte while he is down, and the charge while he is up', () => {
+    const fell = felled(FALL.STRUCK, -1, 0.3);
+    const buf = encodeSnapshot({
+      tick: 0,
+      players: [player(1, { down: 30, charge: 0, fell }), player(2, { charge: 17, fell })],
+      ...IDLE,
+    });
+    expect(bytes(buf)[SNAP_HEAD + 47]).toBe(fell);
+    const [a, b] = decodeSnapshot(buf)!.players;
+    expect([a.fell, a.charge, b.fell, b.charge]).toEqual([fell, 0, 0, 17]);
+    expect(fell >> 5).toBe(FALL.STRUCK);
   });
 
   it('round-trips MODE.RIDE', () => {

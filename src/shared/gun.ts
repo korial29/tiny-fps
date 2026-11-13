@@ -48,6 +48,10 @@ export const within = (p: PlayerState, at: Vec3, r: number): boolean => {
   return dx * dx + dz * dz < r * r && Math.abs(p.y - at[1]) < PICK_H;
 };
 
+/** PlayerState.fell of one put down the FALL `kind` by a hit going (dx, dz) on the floor. */
+export const felled = (kind: number, dx: number, dz: number): number =>
+  (kind << 5) | (Math.round((Math.atan2(-dx, -dz) * 16) / Math.PI) & 31);
+
 /**
  * The start of a cut that moves the body, from a floor only: the lunge throws him along the look at
  * LUNGE_SPEED for the burst of a dash, and spends the dash; the leap jumps him LEAP_SPEED up.

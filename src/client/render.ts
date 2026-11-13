@@ -63,8 +63,12 @@ export const HAZE = 0.6;
  */
 export const FOG_LAYER = 0.02;
 export const FOG_RISE = 0.05;
+/** The bound on the fog's climb (FOG_RISE times the height between the eye and the point): a kilometre up or down, and exp() of it stays finite in float32. */
+export const FOG_CLIMB = 50;
 /** The far clip, metres: the moon's stars (moonscape.ts SKY) seen from the far end of its crater, the widest view of any map. */
 export const FAR = 1200;
+/** The bound on the distance the fog integrates over: nothing drawn is further, and a point extrapolated off a thin face can be kilometres off. */
+export const FOG_FAR = 2 * FAR;
 /** The vertical field of view at rest, degrees, and the tangent of its half. */
 export const FOV_DEG = 70;
 export const FOV = Math.tan((FOV_DEG * Math.PI) / 360);
@@ -170,7 +174,10 @@ const RELIEF = 0.06;
 // can vanish. F: fog colour and
 // density, U the height the fog layer is anchored at: the density is
 // F.a * (1 + FOG_LAYER * exp(FOG_RISE * (U - y))) at height y, integrated along the view ray in closed
-// form (x is the climb along it, times FOG_RISE; the branch is its limit at 0).
+// form (x is the climb along it, times FOG_RISE; the branch is its limit at 0). D and x are bounded
+// (FOG_FAR, FOG_CLIMB): where a thin face only grazes a pixel's samples, P is extrapolated to the
+// pixel's centre, kilometres off, and exp(-x) overflowed to infinity; times the moon's density of 0
+// that is NaN (a grey rectangle over its horizon for a frame, the user 2026-11-13).
 export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T,Z,Y;uniform int Q;
@@ -232,7 +239,7 @@ vec3 r=reflect(-V,m),k=K0(r);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
 c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr));
 c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv);
-float D=length(P-E),x=${FOG_RISE}*(P.y-E.y),z=step(L,-2.5);
+float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5);
 c.g=mix(c.g,c.r,z);
 o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z));}`;
 
@@ -454,11 +461,11 @@ export const fogRef = ({ brushes }: WorldDef) => Math.min(...brushes.map(b => b.
  * for a world whose fog density is `density` and whose layer sits at `ref`.
  */
 export const fogDepth = (density: number, ref: number, eye: Vec3, p: Vec3) => {
-  const x = FOG_RISE * (p[1] - eye[1]);
+  const x = Math.min(Math.max(FOG_RISE * (p[1] - eye[1]), -FOG_CLIMB), FOG_CLIMB);
   const climb = Math.abs(x) < 1e-3 ? 1 - x / 2 : (1 - Math.exp(-x)) / x;
   return (
     density *
-    Math.hypot(p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]) *
+    Math.min(Math.hypot(p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]), FOG_FAR) *
     (1 + FOG_LAYER * Math.exp(FOG_RISE * (ref - eye[1])) * climb)
   );
 };

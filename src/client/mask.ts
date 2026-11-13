@@ -4,8 +4,8 @@
 // guard over the mouth is a piece of its own in the team's colour (reshaped on the user's picture,
 // 2026-11-13): its top edge low under the eyes with a small peak up the nose, swept up to a point
 // beside each eye; its sides round the cheeks, drawn in to a narrow chin; jutting out down its
-// middle, with a kite of black mesh over the mouth and a crescent of it on each cheek, sunk in the
-// shell inside a thin rim; the face under it is pressed in. Built once, carried by the head joint like the hair
+// middle, with a kite of black mesh over the mouth under the nose, and a big hollow on each cheek
+// sunk in the shell inside a thin rim, plain in the team's colour; the face under it is pressed in. Built once, carried by the head joint like the hair
 // (hair.ts), the woman's scaled to her head.
 import { HEAD_SCALE } from './hair';
 import { JOINT as J, turn } from './rig';
@@ -71,9 +71,14 @@ const [PT, PB, AT, AB] = [1.662, 1.575, 1.25, 0.85];
 /** How high its points beside the eyes stand over its top, and the power that rounds its sides out over the cheeks. */
 const [HORN, ROUND] = [0.045, 0.55];
 const half = (y: number) => AB + (AT - AB) * clamp((y - PB) / (PT - PB)) ** ROUND;
-/** How far its top edge rises at `x` across it (-1 to 1): a small peak up the nose, and the sweep up to the point at each end. */
+/**
+ * How far its top edge rises at `x` across it (-1 to 1): a peak up the bridge of the nose, `NOSE`
+ * high, sloping straight down over the cheekbones to `LOW` (the user, 2026-11-13, on a picture), then
+ * the sweep up to the point at each end.
+ */
+const [NOSE, LOW] = [0.026, 0.45];
 const crest = (x: number) =>
-  0.024 * clamp(1 - Math.abs(x) / 0.33) + HORN * clamp((Math.abs(x) - 0.4) / 0.6) ** 1.6;
+  NOSE * clamp(1 - Math.abs(x) / LOW) + HORN * clamp((Math.abs(x) - LOW) / (1 - LOW)) ** 1.4;
 /** Its bottom corners drawn up: round at the chin. */
 const CHIN = 0.016;
 /** The height of its side edge at `q` round from the front. */
@@ -83,11 +88,16 @@ const edge = (q: number) => {
 };
 /** The hollow in each cheek (the user, 2026-11-13: sunk as on his picture, the middle and the rim left proud): its depth and its bevel's width (in x). */
 const [DENT, BEVEL] = [0.005, 0.045];
-/** The hollow's inner edge at `v` down the guard (0 to 1), in x: a crescent from under the point to the chin; its outer edge is CHEEK. */
+/** The hollow's inner edge at `v` down the guard (0 to 1), in x: from under the point to the chin; its outer edge is CHEEK. */
 const CHEEK = 0.94;
-const [V0, V1] = [0.2, 0.96];
+const [V0, V1] = [0.1, 0.95];
+/**
+ * How far in it reaches at most, and the power that squares it off (the user, 2026-11-13, on a
+ * picture: a big panel each side, its inner edge straight down beside the middle, round at its ends).
+ */
+const [WIDE, SQUARE] = [0.6, 0.3];
 const inner = (v: number) =>
-  CHEEK - 0.5 * Math.sin(Math.PI * clamp((v - V0) / (V1 - V0)) ** 0.8) ** 0.55;
+  CHEEK - WIDE * Math.sin(Math.PI * clamp((v - V0) / (V1 - V0)) ** 0.8) ** SQUARE;
 /** Where across a half of the shell (0 the middle, 1 its side) its columns meet the hollow's inner edge, its floor's two edges and its outer edge. */
 const KNOTS = [0, 0.5, 0.6, 0.8, 0.9, 1];
 /** How deep the guard is sunk at `x` across and `v` down. */
@@ -109,6 +119,9 @@ const prow = (a: number, y: number) =>
   clamp(1 - Math.abs(a) / 1.0) ** 1.3 *
   // From the nose to the chin an arc (the user, 2026-11-13): furthest out at the mouth.
   (0.3 + 0.7 * Math.sin(Math.PI * clamp((PT + 0.014 - y) / (PT + 0.014 - PB + 0.004))));
+
+/** The grooves at the mouth: their places round (radians), their bottom and top, their width (m). */
+export const MOUTH = { a: [-0.1, 0, 0.1], y: [1.598, 1.624], w: 0.0026 };
 
 /** The middle of the head: the normals point away from it. */
 const MID: Vec3 = [0, 1.66, 0.03];
@@ -262,12 +275,13 @@ const make = (): number[] => {
       sheet((u, v) => p(0.0013)(u, c + (v - 0.5) * w * 2), 8, 1, GROOVE);
     }
   };
-  // The kite over the mouth: its point up the nose, its widest low.
+  // The kite over the mouth: its point up the nose, its widest low; raised to the nose and smaller
+  // (the user, 2026-11-13, on a picture).
   const KITE = [
-    [0, 1.648],
-    [0.0105, 1.624],
-    [0, 1.61],
-    [-0.0105, 1.624],
+    [0, 1.666],
+    [0.008, 1.648],
+    [0, 1.637],
+    [-0.008, 1.648],
   ];
   mesh(
     off => (u, v) => {
@@ -282,21 +296,19 @@ const make = (): number[] => {
     0.07,
     true,
   );
-  // A crescent on each cheek, inside the rim: from under the point down to the chin.
-  for (const side of [1, -1]) {
-    mesh(
-      off => (u, v) => {
-        const w = V0 + (V1 - V0) * clamp(v);
-        // Its floor, just inside the bevels.
-        const b = Math.min(BEVEL, (CHEEK - inner(w)) / 2) + 0.012;
-        const [lo, hi] = [inner(w) + b, CHEEK - b];
-        const x = lo + Math.max(hi - lo, 0) * clamp(u);
-        return guard(OUT + off)((1 + side * x) / 2, w);
-      },
-      6,
-      0.04,
+  // Three grooves down the guard at the mouth, under the kite (the user, 2026-11-13).
+  for (const a of MOUTH.a) {
+    line(
+      [
+        [a, MOUTH.y[0]],
+        [a, MOUTH.y[1]],
+      ],
+      MOUTH.w,
+      GROOVE,
     );
   }
+  // The hollow on each cheek is the shell's own, plain in the team's colour (the user, 2026-11-13:
+  // no mesh there).
   return out;
 };
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { STRIDE } from './mesh';
-import { CLOTH, dress, mask } from './mask';
+import { CLOTH, MOUTH, dress, mask } from './mask';
 import { JOINT as J, rest, solve } from './rig';
 import { bindOf, body, palette, skin } from './skin';
 
@@ -58,6 +58,29 @@ describe('mask, the ninja hood and face guard', () => {
     expect(low(0.07)).toBeGreaterThan(low(0) + 0.02);
     // Its front stood out too much: 13 cm before the head's joint, now under 12.
     expect(Math.min(...band(0).map(p => p[2]))).toBeGreaterThan(-0.12);
+  });
+
+  it('has its black mesh only in the kite under the nose, the cheeks plain (the user, 2026-11-13)', () => {
+    const ink = pts.filter(p => p[6] < 0.02 && p[7] < 0.02 && p[9] < 0.02);
+    expect(ink.length).toBeGreaterThan(0);
+    for (const p of ink) {
+      expect(Math.abs(p[0])).toBeLessThan(0.012);
+      expect(p[1]).toBeGreaterThan(1.633);
+    }
+  });
+
+  it('has three grooves down the guard at the mouth, in a darker team colour (the user, 2026-11-13)', () => {
+    const groove = pts.filter(
+      p =>
+        Math.abs(p[6] - RED[0] * 0.45) < 1e-6 &&
+        p[1] > MOUTH.y[0] - 0.003 &&
+        p[1] < MOUTH.y[1] + 0.003,
+    );
+    const xs = [...new Set(groove.map(p => Math.round(p[0] * 200)))].sort((a, b) => a - b);
+    // Three columns, a left, a middle and a right one.
+    const cols = xs.filter((x, i) => i == 0 || x - xs[i - 1] > 1);
+    expect(cols.length).toBe(3);
+    expect(groove.some(p => Math.abs(p[0]) < 0.002)).toBe(true);
   });
 
   it('paints the hood on the head, but round the eyes', () => {

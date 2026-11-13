@@ -981,7 +981,7 @@ describe('a runner with the rail gun', () => {
 });
 
 describe('the ninja', () => {
-  it('wears no armour on an armoured map, but the black suit and the face guard', () => {
+  it('wears his own armour on an armoured map, over the black suit, and the face guard', () => {
     const team = [0.15, 0.4, 1];
     const [marine, ninja, bare] = [[], [], []] as number[][];
     soldier(marine, hold({}, 5), team, 3, false, true);
@@ -991,7 +991,7 @@ describe('the ninja', () => {
     soldier(bare, hold({}, 5), team, 3);
     const guard: number[] = [];
     mask(guard, [0, 0, 0], [0, 0, 0, 1]);
-    // Fewer plates than the marine, but some: the shoulders, the chest and his shin guards, in the team's colour.
+    // Fewer plates than the marine, but some: his vest, his bracers, his shin guards and his shoulder pads, in the team's colour.
     expect(ninja.length).toBeGreaterThan(bare.length + guard.length);
     expect(marine.length).toBeGreaterThan(ninja.length);
     // Heights from his feet.
@@ -1011,8 +1011,9 @@ describe('the ninja', () => {
     expect(plated(ninja, 0.2, 0.3)).toBeGreaterThan(0);
     expect(plated(marine, 0.2, 0.3)).toBe(0);
     expect(plated(ninja, 1.25, 1.5)).toBeGreaterThan(0);
-    // No plate on his thighs or his forearms.
-    expect(plated(ninja, 0.6, 0.94)).toBe(0);
+    // No plate on his thighs (his bracers hang lower than their tops), and none of the marine's belly plates' gloss on his back's sides.
+    expect(plated(ninja, 0.6, 0.8)).toBe(0);
+    expect(plated(marine, 0.6, 0.8)).toBeGreaterThan(0);
     // Black where the other wears his team's colour: far more of him is dark.
     const dark = (v: number[]) => {
       let n = 0;

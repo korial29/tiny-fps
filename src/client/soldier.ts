@@ -35,6 +35,7 @@ import { helm } from './helm';
 import { helmet } from './helmet';
 import { STYLE, hair, styleOf, sway } from './hair';
 import { CLOTH, dress, mask } from './mask';
+import { pads } from './pads';
 import { ROLE } from '../shared/kit';
 import { armor } from './armor';
 import { CUP_F, crotch, hose, pack } from './pack';
@@ -670,8 +671,8 @@ export const soldier = (
   r.tip = undefined;
   const [build, picked] = [r.build ?? 0, r.look];
   // The ninja (the user, 2026-11-12): a tight black suit, his team's colour on its side stripes and
-  // its belt, a hood and a guard over the mouth; of the armour only the shoulder pieces, the chest
-  // plate and shin guards of his own (2026-11-13).
+  // its belt, a hood and a guard over the mouth; an armour of his own (2026-11-13): armor.ts's
+  // `alone` plates, and the shoulder pads and collar of pads.ts.
   const ninja = picked?.role === ROLE.NINJA;
   const plated = armored;
   armored &&= !ninja;
@@ -771,6 +772,13 @@ export const soldier = (
       lod,
       sway(r.gait.phase, Math.hypot(p.vx, p.vz), r.t),
     );
+    if (k > 0) {
+      dissolve(out, from, k);
+    }
+  }
+  if (ninja && plated) {
+    const from = out.length;
+    pads(out, s, build, color);
     if (k > 0) {
       dissolve(out, from, k);
     }

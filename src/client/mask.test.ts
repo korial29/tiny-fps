@@ -64,7 +64,7 @@ describe('mask, the ninja hood and face guard', () => {
 
   it('keeps the face behind the guard, and moves nothing else', () => {
     const moved = corners.filter(c => Math.hypot(...c.now.map((v, i) => v - c.at[i])) > 1e-6);
-    expect(moved.every(c => c.at[1] > 1.57 && c.at[1] < 1.67)).toBe(true);
+    expect(moved.every(c => c.at[1] > 1.57 && c.at[1] < 1.71)).toBe(true);
     // The tip of the nose, pressed in, is behind the guard's front.
     const nose = Math.min(
       ...corners

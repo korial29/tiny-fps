@@ -40,8 +40,7 @@ interface Region {
   round?: [number, number, number];
   /** Moulded: a smooth shell round the trunk rather than the skin's facets (moulding()). */
   mould?: boolean;
-  /** Worn by the ninja too (the user, 2026-11-13: the marine's shoulder pieces and chest plate alone); `alone`, by the ninja alone. */
-  ninja?: boolean;
+  /** The ninja's own armour (the user, 2026-11-13), worn by him alone; he wears no other plate. */
   alone?: boolean;
 }
 
@@ -162,6 +161,14 @@ const band = (a: number) => {
 /** The gap the user asked between the chest plate and the belly's plates, and between those. */
 export const GAP = 0.02;
 
+/**
+ * The ninja's vest: the bottom of its chest piece at the sides, how far its chevron dips at the
+ * middle (and the lames' under it), the bottom of the V at its neck, the lames' height and the gap
+ * between two pieces.
+ */
+export const VEST = { y: 1.3, dip: 0.035, neck: 1.385, lame: 0.06, gap: 0.012 };
+/** How far a piece of the vest dips at the angle a: a chevron, its point down the middle. */
+const chevron = (a: number) => VEST.dip * Math.max(0, 1 - Math.abs(a) / 40);
 export const REGIONS: Region[] = [
   // The chest plate, from under the ribs to the collar, cut round the neck.
   {
@@ -172,7 +179,6 @@ export const REGIONS: Region[] = [
     high: chestHigh,
     swell: pecs,
     mould: true,
-    ninja: true,
   },
   // The belly's two plates, GAP apart and GAP under the chest's.
   { part: PART.TRUNK, cx: 0, y: [1.115, 1.195 - GAP], a: [-54, 54] },
@@ -180,7 +186,7 @@ export const REGIONS: Region[] = [
   // The front of each thigh down to GAP over the knee pad, the knees, the outer side of each forearm.
   { part: PART.LEG, cx: 0.1, y: [0.585, 0.94], a: [-62, 78], high: plates },
   // The ninja's shin guards (the user, 2026-11-13), from under the knee to the boot.
-  { part: PART.LEG, cx: 0.1, y: [0.17, 0.44], a: [-62, 62], ninja: true, alone: true },
+  { part: PART.LEG, cx: 0.1, y: [0.17, 0.44], a: [-62, 62], alone: true },
   // The knees: round (the user, 2026-11-10), domed.
   { part: PART.LEG, cx: 0.1, y: [0.46, 0.57], a: [-60, 60], round: [56, 0.515, 0.05], swell: knee },
   // The forearms, down to the gloves (the user, 2026-11-10), all round the arm (2026-11-12).
@@ -202,7 +208,6 @@ export const REGIONS: Region[] = [
     y: [1.47, 1.528],
     a: [-78, 78],
     low: a => chestTop(a) + COLLAR_GAP,
-    ninja: true,
   },
   { part: PART.TRUNK, cx: 0, y: [1.4 + COLLAR_GAP, 1.505], a: [-62, -5], face: 180 },
   { part: PART.TRUNK, cx: 0, y: [1.4 + COLLAR_GAP, 1.505], a: [5, 62], face: 180 },
@@ -214,7 +219,6 @@ export const REGIONS: Region[] = [
     a: k > 0 ? [BAND.a[0], BAND.a[1]] : [-BAND.a[1], -BAND.a[0]],
     high: band,
     man: true,
-    ninja: true,
   })),
   // The woman's shoulders: a round cap on each (SHOULDER).
   ...[SHOULDER.a, -SHOULDER.a].map((face): Region => ({
@@ -226,7 +230,6 @@ export const REGIONS: Region[] = [
     round: [SHOULDER.half, SHOULDER.y, SHOULDER.h],
     swell: cap,
     fem: true,
-    ninja: true,
   })),
   // The back (the user, 2026-11-10, for Highline, where no pack covers it): a plate between the
   // shoulder blades and one on the small of the back, GAP apart.
@@ -242,6 +245,37 @@ export const REGIONS: Region[] = [
     high: plates,
   })),
   { part: PART.LEG, cx: 0.1, y: [0.845, 0.935], a: [-181, 181], low: legOpening },
+  // The ninja's vest (the user, 2026-11-13, on his picture of a ninja's armour): a chest piece open in
+  // a deep V at the neck, its bottom a chevron; three lames down the belly nested under it, each
+  // narrower; a plate on the back and one on the small of it; and a bracer on each forearm. His
+  // shoulder pads and his collar are pieces of their own (pads.ts).
+  {
+    part: PART.TRUNK,
+    cx: 0,
+    y: [VEST.y - VEST.dip, 1.5],
+    a: [-60, 60],
+    high: a =>
+      Math.min(chestHigh(a), VEST.neck + (1.5 - VEST.neck) * Math.min(Math.abs(a) / 26, 1)),
+    low: a => VEST.y - chevron(a),
+    swell: pecs,
+    mould: true,
+    alone: true,
+  },
+  ...[0, 1, 2].map((k): Region => {
+    const top = VEST.y - VEST.gap - k * (VEST.lame + VEST.gap);
+    return {
+      part: PART.TRUNK,
+      cx: 0,
+      y: [top - VEST.lame - VEST.dip, top],
+      a: [-46 + k * 4, 46 - k * 4],
+      high: a => top - chevron(a),
+      low: a => top - VEST.lame - chevron(a),
+      alone: true,
+    };
+  }),
+  { part: PART.TRUNK, cx: 0, y: [1.2, 1.46], a: [-58, 58], face: 180, alone: true },
+  { part: PART.TRUNK, cx: 0, y: [1.035, 1.2 - GAP], a: [-50, 50], face: 180, alone: true },
+  { part: PART.ARM, cx: 0.222, y: [0.99, 1.14], a: [-181, 181], alone: true },
 ];
 
 /** How far the plates stand off the skin: their thickness. */
@@ -869,7 +903,7 @@ const recipes = [new WeakMap<Skin, Recipe>(), new WeakMap<Skin, Recipe>()];
  * Appends the armour cut out of the skin `s` drawn into `out` from the float `from` on (skin()
  * writes three vertices per triangle of s.t, in order). Not `fine` (a runner not close by), curved
  * outlines follow the skin's own triangles, unrefined, and there are no scratches. `plate` is the
- * plates' colour (their walls a shade darker): white when absent.
+ * plates' colour (their walls a shade darker): white when absent. The `ninja` wears his own armour.
  */
 export const armor = (
   out: number[],
@@ -890,8 +924,8 @@ export const armor = (
   const N = new Float64Array(9);
   let w = out.length;
   for (let i = 0, ci = 0; i < t.length; i += TRI) {
-    // The ninja's plates alone, without their scratches; his shin guards on him alone.
-    if (ninja ? !REGIONS[t[i + 5]]?.ninja : REGIONS[t[i + 5]]?.alone) {
+    // The ninja's own armour alone, without scratches, and none of it on another.
+    if (ninja != !!REGIONS[t[i + 5]]?.alone) {
       ci += 3 * CORNER;
       continue;
     }

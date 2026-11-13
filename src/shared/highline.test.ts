@@ -17,7 +17,7 @@ import {
 import { touches } from './ctf';
 import { within } from './gun';
 import { HIGHLINE, TEAM_TINT } from './map';
-import { move, spawn } from './physics';
+import { bruise, move, spawn } from './physics';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
 import { EV, FLAG, KEY, MODE, TEAM, TEX } from './types';
@@ -427,6 +427,8 @@ describe('HIGHLINE, the three routes, flown with the real physics', () => {
         // The lowest roof of the map is 14.5 m: never under it, so never fell.
         expect(f.s.low).toBeGreaterThan(14.4);
         times[`${name} ${from}`] = f.there.seconds;
+        // No landing on a route is hard enough to hurt (fall damage, FALL_SAFE).
+        expect(bruise(f.s.hard)).toBe(0);
         if (from === 'blue') {
           // The map is symmetric: so is the time, to a few steps.
           expect(Math.abs(times[`${name} red`] - times[`${name} blue`])).toBeLessThan(0.5);

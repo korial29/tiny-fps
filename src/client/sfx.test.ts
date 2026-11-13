@@ -191,6 +191,14 @@ describe('the sounds of the game', () => {
     }
   });
 
+  it('make the death cry longer than the cry of pain, both lower than the hit', () => {
+    expect(sound('DEATH').length).toBeGreaterThan(2 * sound('PAIN').length);
+    const hit = crossings(sound('HIT')) / sound('HIT').length;
+    for (const n of ['PAIN', 'DEATH'] as const) {
+      expect(crossings(sound(n)) / sound(n).length).toBeLessThan(hit);
+    }
+  });
+
   it('give the katana three sounds: the shing, the swish of a cut and the zap of a hit', () => {
     const blade = ['SHING', 'SWISH', 'ZAP'] as const;
     expect(blade.map(n => SOUND[n])).toEqual([23, 24, 25]);
@@ -411,7 +419,7 @@ describe('a vehicle’s damage', () => {
   it('has four sounds after all the others, whose ids stay: a hit on the hull, an arc, the explosion, the wreck falling apart', () => {
     expect([SOUND.HULL, SOUND.ARC, SOUND.WRECK, SOUND.CRUMBLE]).toEqual([47, 48, 49, 50]);
     expect([SOUND.DOOR, SOUND.SHUT]).toEqual([45, 46]);
-    expect(LAYERS).toHaveLength(54);
+    expect(LAYERS).toHaveLength(56);
     for (const id of [47, 48, 49, 50]) {
       expect(LOOPED).not.toContain(id);
     }

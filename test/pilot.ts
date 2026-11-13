@@ -2,7 +2,7 @@
 // same run can be replayed through the room and the predictor.
 import { move, spawn } from '../src/shared/physics';
 import { onWire } from '../src/shared/protocol';
-import { KEY } from '../src/shared/types';
+import { EV, KEY } from '../src/shared/types';
 import type { Input, PlayerState } from '../src/shared/types';
 import type { World } from '../src/shared/world';
 
@@ -25,6 +25,8 @@ export class Sim {
   public ev = 0;
   public modes = new Set<number>();
   public low = Infinity;
+  /** The hardest landing so far (m/s). */
+  public hard = 0;
 
   public p: PlayerState;
   public w: World;
@@ -53,6 +55,7 @@ export class Sim {
     this.ev |= this.p.ev;
     this.modes.add(this.p.mode);
     this.low = Math.min(this.low, this.p.y);
+    this.hard = this.p.ev & EV.LAND ? Math.max(this.hard, this.p.fall) : this.hard;
     return this.p;
   }
 

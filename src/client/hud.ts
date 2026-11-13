@@ -142,8 +142,10 @@ export const HUD_CSS =
   `aside [aria-checked=true],aside [aria-checked=true]:hover{border-color:#f7782a;box-shadow:0 0 0 1px #f7782a;color:#fff}` +
   `aside .sw [role=radio]{width:24px;height:24px;padding:0;border-radius:50%;border:2px solid #0b1016}aside .sw [aria-checked=true]{box-shadow:0 0 0 2px #f7782a}` +
   `aside .cl{grid-column:1/-1;display:grid;gap:6px}` +
-  `aside .cl [role=radio]{display:grid;grid-template-columns:86px 1fr;gap:2px 10px;align-items:baseline;padding:9px 12px;border-radius:12px;text-align:left}aside .cl strong{grid-row:span 2;font-size:15px;font-weight:800}` +
+  `aside .cl [role=radio]{display:grid;grid-template-columns:86px 1fr;gap:2px 10px;align-items:baseline;padding:9px 12px;border-radius:12px;text-align:left}aside .cl strong{grid-row:span 3;font-size:15px;font-weight:800}` +
   `aside .cl span{font-size:12px;font-weight:500;line-height:1.35;color:#b7c2cd}aside .cl .w{font-size:11px;font-weight:700;color:#ffb347}` +
+  // A class's pros and cons, a + and a − before each.
+  `aside .cl .p::before,aside .cl .c::before{display:inline-block;width:1.1em;font-weight:900}aside .cl .p::before{content:"+";color:#5fd38a}aside .cl .c::before{content:"−";color:#ff6b5e}` +
   // The mode: its badge, its name, and the rules a line each.
   `aside blockquote{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;align-items:center;align-content:start;margin:0}aside blockquote h4,aside blockquote span{grid-column:1/-1;margin:0}` +
   `aside abbr{display:grid;place-items:center;width:46px;height:46px;border-radius:11px;background:#f7782a26;color:#ffb347;font:900 15px/1 system-ui,sans-serif;letter-spacing:.06em}aside blockquote strong{font-size:18px;font-weight:800}` +
@@ -220,15 +222,26 @@ export const HAIR_NAMES = [
   ['Ponytail', 'Bob', 'Bun', 'Braid', 'Undercut'],
 ];
 
-/** The classes, in ROLE's order (kit.ts): the name, what it does, and where it plays. */
-export const ROLES: [name: string, does: string, where: string][] = [
-  ['Marine', 'Full ammo and rate of fire, the standard moves.', 'City maps'],
+/** The classes, in ROLE's order (kit.ts): the name, what it is good at, what it pays for it, and where it plays. */
+export const ROLES: [name: string, pros: string, cons: string, where: string][] = [
   [
-    'Ninja',
-    'Runs faster, jumps higher, wall-runs twice as long, chains 3 dashes, cuts twice as fast. With a gun: half the ammo, magazine, rate of fire and damage, and slowed hard.',
+    'Marine',
+    'Full ammo, magazines, rate of fire and damage with every gun.',
+    'The standard moves: one dash, normal speed and jumps.',
     'City maps',
   ],
-  ['Astronaut', 'The space suit, in the moon’s low gravity.', 'Moon only'],
+  [
+    'Ninja',
+    'Runs 20 % faster, jumps higher, wall-runs twice as long, chains 3 dashes; katana and fists twice as fast.',
+    'Guns: half the ammo, magazine, rate of fire and damage, and slowed hard while one is in hand.',
+    'City maps',
+  ],
+  [
+    'Astronaut',
+    'The marine’s full firepower, in a suit made for the moon’s low gravity.',
+    'The standard moves; plays nowhere but the moon.',
+    'Moon only',
+  ],
 ];
 
 /** A skin tone (TONES, linear) as a CSS colour. */
@@ -490,8 +503,8 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       ).join('')}</span>` +
       `<small>Hair</small><span role="radiogroup" aria-label="Hair" class="hc"></span></span>` +
       `<h4>Class</h4><span role="radiogroup" aria-label="Class" class="cl">${ROLES.map(
-        ([n, does, where]) =>
-          `<button role="radio"><strong>${n}</strong><span>${does}</span><span class="w">${where}</span></button>`,
+        ([n, pros, cons, where]) =>
+          `<button role="radio"><strong>${n}</strong><span class="p">${pros}</span><span class="c">${cons}</span><span class="w">${where}</span></button>`,
       ).join('')}</span>` +
       `</fieldset><blockquote><h4>Game mode</h4><abbr>CTF</abbr><strong>Capture the flag</strong>${GOAL.map(l => `<span>${l}</span>`).join('')}</blockquote>` +
       `<address><h4>Map</h4><h3></h3><small></small><span></span></address></article>` +

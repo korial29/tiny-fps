@@ -21,7 +21,7 @@ import { build } from '../shared/world';
 import { TRAIL, createBalls } from './balls';
 import { createTracer } from './beams';
 import type { Orb } from './beams';
-import { createCombat, fired, sight, struck, swung } from './combat';
+import { createCombat, fired, sight, struck, swung, voiceOf } from './combat';
 import { aimed, focus, tip } from './gun';
 import type { Vec3 } from './mesh';
 import type { View } from './combat';
@@ -615,15 +615,41 @@ describe('the sounds and the screen of what happens to the own player', () => {
     expect(ids()).not.toContain(SOUND.HIT);
   });
 
-  it('plays hurt and the red flash when the health goes down, going down when it runs out', () => {
+  it('plays hurt, a cry and the red flash when the health goes down, going down and the death cry when it runs out', () => {
     const { frame, ids, fx } = setup();
     frame(player({ hp: 5 }));
     frame(player({ hp: 4 }));
-    expect(ids()).toEqual([SOUND.HURT]);
+    expect(ids()).toEqual([SOUND.HURT, SOUND.PAIN]);
     expect(fx.wound).toHaveBeenCalledTimes(1);
     frame(player({ hp: 0, down: 120, ammo: -1 }));
-    expect(ids()).toEqual([SOUND.HURT, SOUND.DOWN]);
+    expect(ids()).toEqual([SOUND.HURT, SOUND.PAIN, SOUND.DOWN, SOUND.DEATH]);
     expect(fx.wound).toHaveBeenCalledTimes(2);
+  });
+
+  it('makes the others cry out where they stand when they lose health, and as they go down, not when they heal or respawn', () => {
+    const { frame, audio } = setup();
+    const cries = () =>
+      audio.play.mock.calls.filter(c => c[0] == SOUND.PAIN || c[0] == SOUND.DEATH);
+    const bob = (o: Partial<PlayerState>) => player({ id: 2, x: 5, ...o });
+    frame(player(), [bob({ hp: 5 })]);
+    frame(player(), [bob({ hp: 3 })]);
+    expect(cries().map(c => c[0])).toEqual([SOUND.PAIN]);
+    // At him, not centred.
+    expect(cries()[0][1]?.[0]).toBe(5);
+    frame(player(), [bob({ hp: 0, down: 120, ammo: -1 })]);
+    frame(player(), [bob({ hp: 5, down: 0, ammo: -1 })]);
+    frame(player(), [bob({ hp: 5, down: 0, ammo: -1 })]);
+    expect(cries().map(c => c[0])).toEqual([SOUND.PAIN, SOUND.DEATH]);
+  });
+
+  it('gives each player a voice of his own, the woman a higher one', () => {
+    const men = [0, 1, 2, 3, 4, 5].map(id => voiceOf(id));
+    expect(new Set(men).size).toBe(6);
+    for (const v of men) {
+      expect(v).toBeGreaterThanOrEqual(0.9);
+      expect(v).toBeLessThan(1.1);
+    }
+    expect(voiceOf(3, 1)).toBeGreaterThan(Math.max(...men));
   });
 
   it('plays the pack when the health goes up, and nothing for a respawn at full health', () => {

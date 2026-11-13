@@ -76,6 +76,8 @@ import {
   WALL_REACH,
   WALL_TURN_KEEP,
   SHOCK_TICKS,
+  FALL_HP,
+  FALL_SAFE,
 } from './constants';
 import { bound, ground } from './relief';
 import { EV, KEY, LIMB, MODE, SIDE } from './types';
@@ -525,6 +527,10 @@ const over = (p: PlayerState, w: World): boolean => {
     return f32(b.max[1]) === p.edge && co >= b.min[o] && co <= b.max[o] && depth >= CLIMB_INSET;
   });
 };
+
+/** The health a landing at `fall` m/s takes (PlayerState.fall): none up to FALL_SAFE. */
+export const bruise = (fall: number): number =>
+  fall > FALL_SAFE ? Math.ceil((fall - FALL_SAFE) / FALL_HP) : 0;
 
 /** The world's gravity: GRAVITY times the map's share (the moon's half gravity, the user, 2026-11-09). */
 export const gravity = (w: World): number => GRAVITY * (w.def.gravity ?? 1);

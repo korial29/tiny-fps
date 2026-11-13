@@ -122,7 +122,7 @@ export const HUD_CSS =
   `aside header>:last-child{margin-top:auto;padding:14px 8px;border:0;background:linear-gradient(#ff9a4a,#e8590c);box-shadow:0 8px 24px -8px #e8590caa;text-align:center;text-transform:uppercase;letter-spacing:.08em}` +
   `aside header>:last-child:hover{filter:brightness(1.1)}aside header strong{font-size:15px;font-weight:800}` +
   `aside article{flex:1;min-width:0;min-height:0;overflow:auto;padding:24px 26px;pointer-events:auto}` +
-  `aside article:first-of-type{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:22px 30px;align-content:start}` +
+  `aside article:first-of-type{display:grid;grid-template-columns:minmax(0,480px) minmax(0,1fr);gap:22px 30px;align-content:start}` +
   `aside h4,aside caption{margin:0 0 10px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;text-align:left;color:#8d9aa7}` +
   // Paused in a game (Escape): a small menu in the middle, and the panel shows only the part it opens, with a way back.
   `aside .pm{pointer-events:auto;display:grid;gap:10px;width:min(300px,100% - 32px);padding:24px 22px;border:1px solid #2c3a48;border-radius:16px;background:#0b1016e6;backdrop-filter:blur(14px);box-shadow:0 24px 80px #000b;color:#e9eef3;text-align:center;user-select:none}` +
@@ -132,7 +132,7 @@ export const HUD_CSS =
   `aside:not([data-v=controls]):not([data-v=character]) .bk{display:none}aside .bk{padding:11px 14px;text-align:left;font-size:15px;font-weight:700;color:#8d9aa7}aside .bk:hover{color:#fff}` +
   // The character: his live picture, beside it the body, the skin and the haircut, a row of chips
   // each; under them the class, a card each, the ones the map does not offer greyed out.
-  `aside fieldset{display:grid;grid-template-columns:150px minmax(0,1fr);gap:10px 16px;align-content:start;margin:0;padding:0;border:0;min-width:0}aside fieldset h4{grid-column:1/-1;margin:0}` +
+  `aside fieldset{display:grid;grid-template-columns:240px minmax(0,1fr);gap:10px 16px;align-content:start;margin:0;padding:0;border:0;min-width:0}aside fieldset h4{grid-column:1/-1;margin:0}` +
   `aside canvas{width:100%;height:auto;aspect-ratio:3/4;border:1px solid #26323e;border-radius:14px;cursor:inherit;background:radial-gradient(#26323e,#0d141c)}` +
   `aside .op{display:grid;gap:5px;align-content:start}aside fieldset small{margin-top:4px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8d9aa7}` +
   `aside [role=radiogroup]{display:flex;flex-wrap:wrap;gap:6px}aside [role=radiogroup][hidden]{display:none}` +
@@ -163,7 +163,7 @@ export const HUD_CSS =
   `@container (max-width:980px){aside address{grid-template-columns:1fr}}` +
   `@container (max-width:760px){aside main{flex-direction:column}aside header{flex:none;flex-flow:row wrap;align-items:center;padding:10px 12px;border-right:0;border-bottom:1px solid #26323e}` +
   `aside header h6{margin:0 8px 0 4px;font-size:22px}aside [role=tab]{padding:8px 12px;border-left-width:1px;border-radius:10px}aside header>:last-child{margin:0 0 0 auto;padding:10px 16px}` +
-  `aside article{padding:16px}aside article:first-of-type,aside address{grid-template-columns:1fr}aside fieldset{max-width:330px}aside article+article{columns:1}aside td:first-child{white-space:normal}}` +
+  `aside article{padding:16px}aside article:first-of-type,aside address{grid-template-columns:1fr}aside fieldset{max-width:480px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}aside article+article{columns:1}aside td:first-child{white-space:normal}}` +
   `h6{margin:0;font-size:inherit;text-shadow:none}` +
   `aside h6{align-self:center;margin-bottom:20px;font:900 36px/1 system-ui,sans-serif;letter-spacing:.04em;transform:skewX(-8deg);` +
   `background:linear-gradient(#fe6,#f92 45%,#d21);-webkit-background-clip:text;background-clip:text;color:transparent;` +
@@ -212,7 +212,7 @@ export const TABS = ['Game', 'Controls'];
 
 /** The characters' first names (the user, 2026-11-11: names, not "man" and "woman"), in BODY's order, and the size of the character's picture in pixels. */
 export const CAST = ['Kai', 'Nova'];
-export const SHOT = [300, 400];
+export const SHOT = [480, 640];
 /** The size of a haircut's picture, pixels. */
 export const HEAD_PX = 112;
 

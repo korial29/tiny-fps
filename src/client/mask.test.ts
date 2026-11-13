@@ -62,6 +62,12 @@ describe('mask, the ninja hood and face guard', () => {
     expect(eyes.some(c => black(c.rgb))).toBe(false);
   });
 
+  it("paints all of the face under the guard's top black: no skin beside it (the user, 2026-11-13)", () => {
+    const low = where(([, y]) => y > 1.56 && y < 1.655);
+    expect(low.length).toBeGreaterThan(50);
+    expect(low.every(c => black(c.rgb))).toBe(true);
+  });
+
   it('keeps the face behind the guard, and moves nothing else', () => {
     const moved = corners.filter(c => Math.hypot(...c.now.map((v, i) => v - c.at[i])) > 1e-6);
     expect(moved.every(c => c.at[1] > 1.57 && c.at[1] < 1.71)).toBe(true);

@@ -15,9 +15,9 @@ import type { Quat } from './rig';
  * width fore and aft, and its height at its start.
  */
 export const LAMES = [
-  [-0.05, 0.09, 0.115, 0.06],
-  [-0.058, 0.06, 0.102, 0.071],
-  [-0.066, 0.03, 0.089, 0.082],
+  [-0.05, 0.09, 0.115, 0.075],
+  [-0.058, 0.06, 0.102, 0.086],
+  [-0.066, 0.03, 0.089, 0.097],
 ];
 /**
  * His collar, standing round the back of the neck and open in front: how far round from the back it
@@ -26,20 +26,31 @@ export const LAMES = [
  */
 export const COLLAR = { a: 2.5, r: 0.085, flare: 0.035, foot: -0.035, back: 0.12, end: 0.05 };
 /** How far a lame rises to its point, how far its edges fall from its crease, its thickness, and the share of the arm's turn it takes. */
-const [RISE, FALL, THICK, LIFT] = [0.03, 0.075, 0.007, 0.3];
+const [RISE, FALL, THICK, LIFT] = [0.03, 0.075, 0.007, 0.55];
 /** Where along a lame it is widest. */
 const WIDE = 0.45;
 /** How far a lame slopes down along the shoulder before its point kicks up. */
 const SLOPE = 0.07;
 
-/** The lame `l` at `u` across it (-1 its front edge, 1 its back) and `v` along it, `d` under its top. */
-const at = (l: number[], u: number, v: number, d = 0): Vec3 => {
+/**
+ * The shoulder under the pads (the user, 2026-11-13: the pads went into the shoulder): the top of
+ * the skin round the arm's joint as he stands, measured on it: rising to the neck, falling fast past
+ * the joint, and fore and aft.
+ * A lame stays `CLEAR` over it, each one `STACK` more than the one under.
+ */
+const shoulder = (x: number, z: number) => {
+  const out = Math.max(x - 0.02, 0);
+  return 0.038 - 0.4 * x - out * (0.5 + 18 * out) - 1.5 * z * z;
+};
+const [CLEAR, STACK] = [0.013, 0.009];
+
+/** The lame `i` at `u` across it (-1 its front edge, 1 its back) and `v` along it, `d` under its top. */
+const at = (i: number, u: number, v: number, d = 0): Vec3 => {
+  const l = LAMES[i];
   const w = v < WIDE ? 0.75 + (0.25 * v) / WIDE : (1 - v) / (1 - WIDE);
-  return [
-    l[0] + (l[1] - l[0]) * v,
-    l[3] - SLOPE * v + RISE * v ** 3 - FALL * w * Math.abs(u) ** 1.3 - d,
-    0.01 + u * w * l[2],
-  ];
+  const [x, z] = [l[0] + (l[1] - l[0]) * v, 0.01 + u * w * l[2]];
+  const y = l[3] - SLOPE * v + RISE * v ** 3 - FALL * w * Math.abs(u) ** 1.3;
+  return [x, Math.max(y, shoulder(x, z) + CLEAR + i * STACK) - d, z];
 };
 
 /** The collar at `u` round it (-1 to 1) and `v` up it, `d` inside its outer face. */
@@ -63,7 +74,7 @@ const make = () => {
     [0, 2, 1, 0, 3, 2].forEach(i => out.push(...p[i], n[0] / k, n[1] / k, n[2] / k, shade));
   };
   const [COLS, ROWS] = [6, 6];
-  for (const l of LAMES) {
+  for (let l = 0; l < LAMES.length; l++) {
     for (let c = 0; c < COLS; c++) {
       const [u0, u1] = [(2 * c) / COLS - 1, (2 * (c + 1)) / COLS - 1];
       for (let r = 0; r < ROWS; r++) {

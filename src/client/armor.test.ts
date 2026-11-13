@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BRIEFS, DOME, GAP, REGIONS, armor } from './armor';
+import { ARMHOLE, BRACER, BRIEFS, DOME, GAP, REGIONS, armor } from './armor';
 import { GLOSS, STRIDE } from './mesh';
 import { rest, solve } from './rig';
 import { body, palette, skin } from './skin';
@@ -104,7 +104,7 @@ describe('the armour', () => {
 
   describe('the chest plate, moulded (the user, 2026-11-12)', () => {
     /** The plate's front drawn at rest: at (x, y), its depth (-z) and unit normal. */
-    const front = (build: number, lod: number, bare = false) => {
+    const front = (build: number, lod: number, bare = false, ninja = false) => {
       const out: number[] = [];
       const s = body(lod, build);
       skin(
@@ -114,7 +114,7 @@ describe('the armour', () => {
         palette([0.9, 0.2, 0.1], undefined, undefined, true),
       );
       const n = out.length;
-      armor(out, 0, s);
+      armor(out, 0, s, true, undefined, ninja);
       const v = bare ? out.slice(0, n) : out.slice(n);
       return (x: number, y: number) => {
         let best: number[] | undefined;
@@ -158,17 +158,52 @@ describe('the armour', () => {
       }
     });
 
+    /** The furthest point out of the plate `at` over a breast on the side `k`: [x, y, how far out]. */
+    const peak = (at: (x: number, y: number) => number[], k = 1) => {
+      let best = [0, 0, 0];
+      for (let x = 0.04; x < 0.13; x += 0.005) {
+        for (let y = 1.3; y < 1.4; y += 0.005) {
+          const d = at(k * x, y)?.[0] ?? 0;
+          best = d > best[2] ? [x, y, d] : best;
+        }
+      }
+      return best;
+    };
+    /** How far out the plate is at eight points `q` from (x, y), all round it. */
+    const ring = (at: (x: number, y: number) => number[], [x, y]: number[], q: number) =>
+      [0, 1, 2, 3, 4, 5, 6, 7].map(
+        i => at(x + q * Math.cos((i * Math.PI) / 4), y + q * Math.sin((i * Math.PI) / 4))[0],
+      );
+
     it('keeps the woman a dome each side, as far out on both, well over the plate under it', () => {
       const at = front(1, 1);
-      const [l, r] = [at(-DOME.x, DOME.y), at(DOME.x, DOME.y)];
+      const [l, r] = [peak(at, -1), peak(at)];
       // Her skin under it is not mirrored to a few millimetres.
-      expect(Math.abs(l[0] - r[0])).toBeLessThan(0.006);
-      expect(r[0] - at(DOME.x, 1.27)[0]).toBeGreaterThan(0.032);
+      expect(Math.abs(l[2] - r[2])).toBeLessThan(0.006);
+      expect(r[2] - at(r[0], 1.27)[0]).toBeGreaterThan(0.032);
       // Round: as far out a little inside it whichever way.
-      const k = DOME.r * 0.4;
-      const ring = [at(DOME.x + k, DOME.y), at(DOME.x - k, DOME.y), at(DOME.x, DOME.y + k)];
-      for (const p of ring) {
-        expect(p[0]).toBeLessThan(r[0]);
+      const round = ring(at, r, DOME.r * 0.4);
+      expect(Math.max(...round)).toBeLessThan(r[2]);
+    });
+
+    it("stands the ninja's bracers half as far off the forearm as a plate (the user, 2026-11-13)", () => {
+      const g = REGIONS.find(r => r.alone && r.off);
+      expect(g?.off).toBe(BRACER);
+      expect(BRACER).toBeLessThanOrEqual(0.006);
+    });
+
+    it("rounds the ninja's vest over her breasts, smaller, and cuts it under the shoulder's skin: no crack by the armpit (the user, 2026-11-13)", () => {
+      const at = front(1, 1, false, true);
+      const [l, r] = [peak(at, -1), peak(at)];
+      expect(Math.abs(l[2] - r[2])).toBeLessThan(0.006);
+      expect(r[2]).toBeLessThan(peak(front(1, 1))[2] - 0.005);
+      const round = ring(at, r, DOME.r * 0.35);
+      expect(Math.max(...round)).toBeLessThan(r[2]);
+      // None of it is on the shoulder's skin, over the trunk's split.
+      for (const side of [1, -1]) {
+        for (let x = 0.115; x < 0.16; x += 0.005) {
+          expect(at(side * x, ARMHOLE.y + 0.012)).toBeUndefined();
+        }
       }
     });
 

@@ -6,7 +6,8 @@
 // a swing (a change of `swing` or `cut`) plays the swish, the own cut's strike tick punches the
 // camera, drawing or sheathing it plays the shing, a hit of the own player with the katana in hand
 // adds the zap, and a runner shocked by it crackles. A grenade of the rifle's launcher thumps out
-// of it, and its burst is a fireball that shakes the view of who stands near. No DOM.
+// of it, and its burst is a fireball that shakes the view of who stands near. A player who loses
+// health, to a weapon or a fall, cries out in his own voice, and cries out longer as he goes down. No DOM.
 import {
   CHARGE_MAX,
   CHARGE_TAP,
@@ -143,6 +144,10 @@ export const struck = (a?: Blade, b?: Blade): boolean => {
   return !!a && !!b && (a.swing ?? 0) > ticks - strike && (b.swing ?? 0) <= ticks - strike;
 };
 
+/** The pitch of a player's voice: the woman's higher, and each a little off the next by his id. */
+export const voiceOf = (id: number, body = 0): number =>
+  (body ? 1.35 : 1) * (0.9 + 0.2 * ((id * 0.618) % 1));
+
 /** Seconds between two buzzes of a saber lock, and two crackles of a rail gun's bolt. */
 const BUZZ = 0.16;
 const CRACKLE = 0.09;
@@ -167,6 +172,8 @@ export const createCombat = (
   balls: Pick<Balls, 'fire' | 'frame'>,
   /** The muzzle of a runner's long gun as last drawn, from his feet (Renderer.muzzle()). */
   drawn?: (id: number) => Vec3 | undefined,
+  /** The pitch of a player's voice (voiceOf()). */
+  voice: (id: number) => number = voiceOf,
 ): Combat => {
   /** The own player after each live step that fired, since the last frame. */
   let pending: PlayerState[] = [];
@@ -177,11 +184,16 @@ export const createCombat = (
   let buzz = 0;
   /** The `shots` of each other player at the last frame, and what the katana reads of him. */
   const seen = new Map<number, number>();
+  /** The health of each other player at the last frame, and whether he was down. */
+  const lives = new Map<number, [number, boolean]>();
   const blades = new Map<number, Blade>();
   /** The own cuts started in the live steps since the last frame. */
   let cuts: number[] = [];
   /** A little off the pitch each time, so that a burst does not drone. */
   const rate = () => 0.94 + 0.12 * ((seq++ * 0.618) % 1);
+  /** Player `id` cries out in pain, or as he goes down (`died`), at `at` (the own, centred). */
+  const cry = (id: number, died: boolean, at?: Vec3) =>
+    audio.play(died ? SOUND.DEATH : SOUND.PAIN, at, at ? 0.9 : 0.7, voice(id) * rate());
   /** A shot; a charged one (`power` over 1) deeper and louder, with the long blast under it. */
   const laser = (at?: Vec3, power = 1) => {
     audio.play(
@@ -357,7 +369,9 @@ export const createCombat = (
           reloads(was, me, undefined, f);
         }
         if (was && me.hp < was.hp) {
-          audio.play(me.down && !was.down ? SOUND.DOWN : SOUND.HURT);
+          const died = me.down > 0 && !was.down;
+          audio.play(died ? SOUND.DOWN : SOUND.HURT);
+          cry(me.id, died);
           fx.wound();
         } else if (was && me.hp > was.hp && !was.down) {
           audio.play(SOUND.PACK);
@@ -470,6 +484,11 @@ export const createCombat = (
           laser(at, power);
         }
         seen.set(p.id, p.shots);
+        const life = lives.get(p.id);
+        if (life && p.hp < life[0]) {
+          cry(p.id, p.down > 0 && !life[1], at);
+        }
+        lives.set(p.id, [p.hp, p.down > 0]);
         charges.set(p.id, p.charge ?? 0);
         if ((p.charge ?? 0) >= CHARGE_TAP && p.ammo >= 0 && !p.wield && !p.down) {
           hot.push({ p: gun(p), k: filled(p.charge) });
@@ -520,6 +539,7 @@ export const createCombat = (
       for (const id of seen.keys()) {
         if (!others.some(p => p.id == id)) {
           seen.delete(id);
+          lives.delete(id);
           blades.delete(id);
           charges.delete(id);
         }

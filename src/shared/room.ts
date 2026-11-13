@@ -47,7 +47,7 @@ import { kitOf } from './kit';
 import { shut, swing } from './doors';
 import { STRIKE, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
-import { floorAt, forward, heightOf, respawn, spawn, speedOf, stumble } from './physics';
+import { bruise, floorAt, forward, heightOf, respawn, spawn, speedOf, stumble } from './physics';
 import { PLASMA_LAG, blast, cylinder, fly, launch, lob, stepOf, toss, wave } from './plasma';
 import type { Flying } from './plasma';
 import { decodeInput, encodeSnapshot, parseText } from './protocol';
@@ -77,7 +77,7 @@ import {
 import type { Sight } from './rover';
 import { SHIP } from './ship';
 import { reaches, tackling } from './tackle';
-import { BODY, CUT, HAIRS_N, KEY, LIMB, MODE, NOBODY, TONES_N } from './types';
+import { BODY, CUT, EV, HAIRS_N, KEY, LIMB, MODE, NOBODY, TONES_N } from './types';
 import type { Choice, Conn, Every, Input, PlayerInfo, PlayerState, Rover, Rules } from './types';
 import { build, hidden, ray } from './world';
 import type { World, WorldDef } from './world';
@@ -363,6 +363,7 @@ export class Room {
           this.lase(p, r, input);
         }
       } else {
+        const lying = p.state.down > 0;
         const struck = step(
           p.state,
           input,
@@ -373,6 +374,11 @@ export class Room {
           kitOf(p.info.role, this.world.def),
         );
         this.ctf.moved(p.state);
+        // A hard landing hurts, and counts as nobody's hit; one that puts him down drops his flag.
+        const fall = p.state.ev & EV.LAND && !lying && !this.ctf.over ? bruise(p.state.fall) : 0;
+        if (fall) {
+          this.harm(p, fall);
+        }
         this.tackle(p, input.view);
         // A rider's strike starts from the seat he was drawn in at his view tick, not where the
         // rover has got to since.

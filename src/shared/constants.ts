@@ -193,6 +193,13 @@ export const FLAG_RETURN = 10;
 /** Health of a player; a hit takes 1, so HP_MAX hits put him down. */
 export const HP_MAX = 5;
 /**
+ * Fall damage (the user, 2026-11-13): a landing faster than FALL_SAFE m/s (a 10 m drop at full
+ * gravity; Highline's routes land at 18.4 at most) takes 1 hp, and 1 more each FALL_HP m/s past it.
+ * By the speed, not the height: the moon's half gravity lands softer from as high.
+ */
+export const FALL_SAFE = 20;
+export const FALL_HP = 2;
+/**
  * A punch (the user, 2026-11-11): FIRE with no weapon at all. A swing of `ticks` that strikes at
  * `strike` whoever is within `reach` of his centre less PLAYER_R, inside `arc` round his look (the
  * katana's strike test, blade.ts). It takes half a point of health: every PUNCH_HITS punches a

@@ -1,10 +1,10 @@
 import { BOLT, HP_MAX, LOCK_WIN, PLAYER_H, PLAYER_R, TICK_HZ, VEHICLE } from '../shared/constants';
 import { mapKey, mapOf } from '../shared/maps';
-import { eyeHeight, heightOf } from '../shared/physics';
+import { bruise, eyeHeight, heightOf } from '../shared/physics';
 import { cylinder } from '../shared/plasma';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ClientText, ServerText } from '../shared/protocol';
-import { FLAG, KEY, MODE } from '../shared/types';
+import { EV, FLAG, KEY, MODE } from '../shared/types';
 import type { Choice, PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
 import { ROLE, kitOf, roleOf, rolesOf } from '../shared/kit';
 import { TONES, toneOf } from './features';
@@ -21,7 +21,7 @@ import { createTracer } from './beams';
 import { beats, cues, say } from './beats';
 import { createBody } from './body';
 import { chasePitch, createChase } from './chase';
-import { createCombat, sight } from './combat';
+import { createCombat, sight, voiceOf } from './combat';
 import { createDoors } from './doors';
 import { createEffects } from './effects';
 import { flagDraws } from './flag';
@@ -72,6 +72,8 @@ const STEP = 1 / TICK_HZ;
 const MAX_STEPS = 5;
 /** Metres within which a vehicle shows its health over it: a rover, a ship. */
 const NEAR_HULL = [14, 24];
+/** Ms after a hard landing during which a loss of health is the fall's, not a foe's: the snapshot's lag. */
+const FELL = 500;
 
 /**
  * Mounts the game in a Shadow DOM inside container: one WebGL2 canvas filling it, a click locks the
@@ -222,7 +224,17 @@ const play = (
   const tracer = createTracer();
   const balls = createBalls(world);
   const doors = createDoors(world);
-  const combat = createCombat(world, audio, hud, fx, tracer, ctl, balls, id => rd?.muzzle(id));
+  const combat = createCombat(
+    world,
+    audio,
+    hud,
+    fx,
+    tracer,
+    ctl,
+    balls,
+    id => rd?.muzzle(id),
+    id => voiceOf(id, roster.find(p => p.id == id)?.body),
+  );
   const wrecks = createWrecks(world, { tracer, audio, fx });
   let rd: Renderer | undefined;
   try {
@@ -264,6 +276,8 @@ const play = (
   /** The face in the HUD: its mind, the own player as last framed, and how long the trigger has been held. */
   const feel = mood();
   let [felt, firing]: [PlayerState | undefined, number] = [undefined, 0];
+  /** When the own player last landed hard enough to hurt (ms): that hurt comes from no foe. */
+  let thud = -Infinity;
   /** The others as last framed (a foe put down shows between two frames), and the own team has just captured. */
   let prior = new Map<number, PlayerState>();
   let won = false;
@@ -456,6 +470,7 @@ const play = (
     };
     // What the live steps did, once: the camera and the sounds read it, the inputs sent do not.
     const hit = predictor.events();
+    thud = hit.ev & EV.LAND && bruise(hit.fall) ? now : thud;
     // The bob goes with the legs as last drawn.
     // Seated, the move keys are the rover's: no strafe leans the view.
     fx.update(me, seat ? 0 : ctl.keys, dt, hit, body.phase);
@@ -477,7 +492,7 @@ const play = (
       for (const p of others) {
         const [dx, dz] = [p.x - me.x, p.z - me.z];
         const d = Math.hypot(dx, dz);
-        if (lost && !p.down && team.get(p.id) != you.team && d < near) {
+        if (lost && now - thud > FELL && !p.down && team.get(p.id) != you.team && d < near) {
           const [s, c] = [Math.sin(ctl.yaw), Math.cos(ctl.yaw)];
           [from, near] = [Math.atan2(dx * c - dz * s, -dx * s - dz * c), d];
         }

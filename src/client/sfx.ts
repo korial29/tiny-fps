@@ -149,6 +149,12 @@ export const SOUND = {
   JET: 52,
   /** The ship crashing into a wall, the ground or another vehicle: a crunch of metal over a deep thump. */
   CRASH: 53,
+  /**
+   * A voice in pain (the user, 2026-11-13): a short "ugh" when hurt, a falling cry when put down.
+   * A saw and its 3rd and 5th harmonics sliding together (the vowel), over a breath.
+   */
+  PAIN: 54,
+  DEATH: 55,
 } as const;
 
 /**
@@ -494,6 +500,20 @@ export const LAYERS: Voice[][] = [
     [0, 340, -1.5, 0.002, 0.05, 0.3, 0.08, 0.2, 0, 1, 0.3],
     [0, 480, -1.5, 0.002, 0.04, 0.25, 0.08, 0.2, 0, 1, 0.22],
     [3, 5000, -1, 0.01, 0.1, 0.3, 0.8, 0.5, 0, 1, 0.3, 0.12],
+  ],
+  // PAIN: an "ugh" pushed out, 210 Hz falling, the 3rd and 5th harmonics making an "uh", a puff of breath.
+  [
+    [1, 210, -1.4, 0.006, 0.05, 0.2, 0.025, 0.22, 0, 1, 0.42],
+    [2, 630, -1.4, 0.006, 0.05, 0.2, 0.025, 1, 0, 1, 0.3],
+    [2, 1050, -1.4, 0.006, 0.04, 0.16, 0.025, 1, 0, 1, 0.14],
+    [3, 2500, 0, 0.004, 0.02, 0.12, 0.4, 0.15, 0, 1, 0.4],
+  ],
+  // DEATH: an "aah" that shakes and falls away over half a second, with a rasp in the throat.
+  [
+    [1, 240, -0.8, 0.01, 0.2, 0.45, 0.05, 0.2, 0, 1, 0.45],
+    [2, 720, -0.8, 0.01, 0.2, 0.45, 0.05, 1, 0, 1, 0.3],
+    [2, 1200, -0.8, 0.01, 0.15, 0.4, 0.05, 1, 0, 1, 0.15],
+    [3, 1800, -0.5, 0.02, 0.15, 0.4, 0.6, 0.12, 0, 1, 0.35],
   ],
 ];
 

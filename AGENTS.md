@@ -90,7 +90,7 @@ npm run size        # gzip budgets
 
 - Same flow as air-hockey: branch from `master` (`feature/…`, `fix/…`), one release label per PR, rebase on `origin/master` with `--force-with-lease`, conventional commit subjects in English.
 - The PR's label picks the bump (`release:major`, `release:minor`, `release:patch`); `release:skip` publishes nothing. A merge releases at once, with no approval (single maintainer): npm publish, `vX.Y.Z` tag, GitHub Release, built from the PR's merge commit, one release at a time.
-- Every PR description shows a screenshot of the game with the change (before and after for a visual fix), taken as in Tests (the built client in headless Chromium, or the browser pane). `gh` cannot upload an image: push it to the orphan branch `screenshots` as `<branch>/<name>.png` and embed it with its `https://raw.githubusercontent.com/korial29/tiny-fps/screenshots/…` link (the repo is public). Never commit a screenshot to `master`.
+- Every PR description shows a screenshot of the game with the change (before and after for a visual fix), taken as in Tests (the built client in headless Chromium, or the browser pane). `gh` cannot upload an image: push it to the orphan branch `screenshots` as `<branch>/<name>.png` and embed it with its `https://raw.githubusercontent.com/korial29/tiny-fps/refs/heads/screenshots/…` link (the repo is public). Never commit a screenshot to `master`.
 
 ## Working with several agents
 

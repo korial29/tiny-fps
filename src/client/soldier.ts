@@ -776,9 +776,10 @@ export const soldier = (
       dissolve(out, from, k);
     }
   }
-  if (ninja && plated) {
+  // The ninja's pads and collar; the marine's shoulder bells.
+  if (plated) {
     const from = out.length;
-    pads(out, s, build, color);
+    pads(out, s, build, ninja ? color : (plate ?? [0.9, 0.91, 0.93]), !ninja);
     if (k > 0) {
       dissolve(out, from, k);
     }

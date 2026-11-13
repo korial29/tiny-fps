@@ -61,6 +61,51 @@ const ring = (u: number, v: number, d = 0): Vec3 => {
   return [q * Math.sin(u * a), foot + h, 0.008 + q * Math.cos(u * a)];
 };
 
+/**
+ * The marine's shoulder bell (the user, 2026-11-13, on a picture of a trooper's armour: a big round
+ * shell over each shoulder, hanging over the top of the arm): from the arm's joint at rest, its
+ * middle across, its radius out and fore and aft, its top, how far round it goes each side of
+ * straight out (rad), its length at its outer middle and how much shorter at its ends, and how much
+ * it flares at its rim; and her bell's size to his.
+ */
+export const BELL = {
+  x: -0.012,
+  r: [0.09, 0.092],
+  top: 0.064,
+  a: 1.9,
+  len: 0.2,
+  cut: 0.075,
+  flare: 0.06,
+  fem: 0.8,
+};
+/** The share of its length that is its dome, a quarter of a round; under it the bell is straight. */
+const DOME = 0.55;
+
+/** The bell at `u` round it (-1 its front end, 1 its back) and `v` down it, `d` inside its outer face. */
+const bell = (u: number, v: number, d = 0): Vec3 => {
+  const { x, r, top, a, len, cut, flare } = BELL;
+  const [l, t] = [len - cut * u * u, (Math.min(v / DOME, 1) * Math.PI) / 2];
+  // Round as a ball down to its widest, then straight, flaring a little.
+  const w = Math.sin(t) + flare * Math.max(v - DOME, 0);
+  const drop = l * DOME * (1 - Math.cos(t)) + l * Math.max(v - DOME, 0);
+  return [
+    x + (r[0] - d) * w * Math.cos(u * a),
+    top - d * Math.cos(t) - drop,
+    (r[1] - d) * w * Math.sin(u * a),
+  ];
+};
+/** Its outer face's normal there, off its slopes: smooth shading, no facets. */
+const bellN = (u: number, v: number): Vec3 => {
+  const e = 1e-3;
+  const [p, q] = [bell(u + e, v), bell(u - e, v)];
+  const [f, g] = [bell(u, Math.min(v + e, 1)), bell(u, Math.max(v - e, 1e-4))];
+  const [s, t] = [p.map((c, i) => c - q[i]), f.map((c, i) => c - g[i])];
+  const n = [s[1] * t[2] - s[2] * t[1], s[2] * t[0] - s[0] * t[2], s[0] * t[1] - s[1] * t[0]];
+  const k = Math.hypot(...n);
+  // At its top the slopes round it are nil: up.
+  return k < 1e-12 ? [0, 1, 0] : [n[0] / k, n[1] / k, n[2] / k];
+};
+
 let made: number[][] | undefined;
 
 /** The right pad at rest: triangles of [x, y, z, nx, ny, nz, shade], the shade 1 on top. */
@@ -116,18 +161,54 @@ const make = () => {
     const p = [ring(u, 0), ring(u, 1), ring(u, 1, THICK), ring(u, 0, THICK)];
     quad(u < 0 ? p.reverse() : p, 0.7);
   }
-  return [pad, out];
+  const collar = out;
+  out = [];
+  const [BC, BR] = [20, 12];
+  for (let c = 0; c < BC; c++) {
+    const [u0, u1] = [(2 * c) / BC - 1, (2 * (c + 1)) / BC - 1];
+    for (let r = 0; r < BR; r++) {
+      const [v0, v1] = [r / BR, (r + 1) / BR];
+      // Its outer face, each corner with the surface's own normal.
+      const from = out.length;
+      quad([bell(u0, v0), bell(u0, v1), bell(u1, v1), bell(u1, v0)], 1);
+      [
+        [u0, v0],
+        [u1, v1],
+        [u0, v1],
+        [u0, v0],
+        [u1, v0],
+        [u1, v1],
+      ].forEach(([u, v], i) => {
+        const [n, o] = [bellN(u, v), from + i * 7 + 3];
+        // Out, as the flat normal the quad was wound by.
+        const k = n[0] * out[o] + n[1] * out[o + 1] + n[2] * out[o + 2] < 0 ? -1 : 1;
+        [out[o], out[o + 1], out[o + 2]] = [n[0] * k, n[1] * k, n[2] * k];
+      });
+      quad(
+        [bell(u0, v0, THICK), bell(u1, v0, THICK), bell(u1, v1, THICK), bell(u0, v1, THICK)],
+        0.4,
+      );
+    }
+    quad([bell(u0, 1), bell(u1, 1), bell(u1, 1, THICK), bell(u0, 1, THICK)], 0.7);
+  }
+  return [pad, collar, out];
 };
 
-/** Appends the ninja's shoulder pads and his collar on the solved pose `s`, in the team's `color`; smaller on the woman (`build`). */
+/**
+ * Appends the ninja's shoulder pads and his collar on the solved pose `s`, in the team's `color`;
+ * smaller on the woman (`build`). Or the `marine`'s shoulder bells, and no collar.
+ */
 export const pads = (
   out: number[],
   s: { pos: Vec3[]; rot: Quat[] },
   build = 0,
   color = [0.5, 0.5, 0.5],
+  marine = false,
 ) => {
-  const [pad, collar] = (made ??= make());
-  const k = build ? 0.9 : 1;
+  const [lames, collar, shell] = (made ??= make());
+  const pad = marine ? shell : lames;
+  // Hers smaller; her bells slimmer still (the user, 2026-11-13: over the shoulder, but finer).
+  const k = build ? (marine ? BELL.fem : 0.9) : 1;
   let w = out.length;
   /** The piece `m` at `o` turned by `rot`, mirrored with `side` -1. */
   const place = (m: number[], o: Vec3, rot: Quat, side: number) => {
@@ -160,5 +241,7 @@ export const pads = (
     const n = Math.hypot(...q) || 1;
     place(pad, s.pos[arm], q.map(c => c / n) as Quat, side);
   }
-  place(collar, s.pos[J.NECK], s.rot[J.CHEST], 1);
+  if (!marine) {
+    place(collar, s.pos[J.NECK], s.rot[J.CHEST], 1);
+  }
 };

@@ -3,7 +3,7 @@ import { Bot } from './bot';
 import { HIGHLINE } from './map';
 import { MOON } from './moon';
 import { ROUTES, navBuilt, navOf, path } from './nav';
-import { spawn } from './physics';
+import { move, spawn } from './physics';
 import { decodeSnapshot } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
@@ -288,5 +288,112 @@ describe('Bot: the keys of a leg', () => {
     });
     const i = bot.think({ me, others: [foe], flags: [carried, home], world });
     expect(i.keys & KEY.SPRINT).toBe(KEY.SPRINT);
+  });
+});
+
+describe('Bot: on the moon', () => {
+  const world = build(MOON);
+  const home: FlagState = { state: FLAG.HOME, by: 0, x: 0, y: 0, z: 0, left: 0 };
+
+  /** A red bot of this id flown from a point with the real physics: the lowest it went and where it ended. */
+  const flight = (id: number, [x, y, z]: [number, number, number], secs: number) => {
+    const me = { id, team: 0, state: { ...spawn(id, world, 0, 0), x, y, z, ammo: 10, mag: 5 } };
+    const bot = new Bot(id);
+    let low = Infinity;
+    for (let k = 0; k < secs * 60 && me.state.z > 110; k++) {
+      const i = bot.think({ me, others: [], flags: [home, home], world });
+      move(me.state, { ...i, seq: k & 0xffff }, world, 0);
+      low = Math.min(low, me.state.y);
+    }
+    return { low, z: me.state.z };
+  };
+
+  it('crosses the rille by the east stones, jumping from stone to stone', () => {
+    // Id 2 prefers the third route: the stones.
+    const { low, z } = flight(2, [128.5, 0, 158], 30);
+    expect(low).toBeGreaterThan(-1);
+    expect(z).toBeLessThanOrEqual(110);
+  });
+
+  it('crosses the rille by the west long jump, if need be by the far lip and a climb', () => {
+    const { low, z } = flight(1, [18, 0, 195], 30);
+    // Hanging from the lip, the feet are 2 m under it.
+    expect(low).toBeGreaterThan(-3);
+    expect(z).toBeLessThanOrEqual(110);
+  });
+
+  it('spreads the bots over the bridge, the west jump and the east stones', () => {
+    const nav = navOf(world);
+    const [r, b] = MOON.teams;
+    const [x, y, z] = r.spawns[0];
+    const legs = [0, 1, 2].map(k =>
+      path(nav, world, [x, y, z], b.base, k)
+        .edges.flatMap(e => (e.leg?.k === 'leap' ? [e.leg] : []))
+        .map(l => l.to.join(',')),
+    );
+    expect(legs[0]).toEqual([]);
+    expect(legs[1]).toEqual(['18,125']);
+    expect(legs[2]).toHaveLength(4);
+  });
+});
+
+describe('Bot: in a fight', () => {
+  const ledge: Brush = { min: [-1, -5, -50], max: [50, 0, 50], top: TEX.TILE, side: TEX.BRICK };
+  const def = (brushes: Brush[]): WorldDef => ({
+    brushes,
+    teams: [
+      { base: [0, 0, 40], spawns: [[0, 0, 10, 0]] },
+      { base: [0, 0, -40], spawns: [[0, 0, -10, Math.PI]] },
+    ],
+    floor: -20,
+    sun: { dir: [0, 1, 0], color: [1, 1, 1] },
+    sky: [
+      [0, 0, 1],
+      [1, 1, 1],
+    ],
+  });
+  const home: FlagState = { state: FLAG.HOME, by: 0, x: 0, y: 0, z: 0, left: 0 };
+
+  /** The keys of a red bot with the gun, facing a blue player 20 m ahead, over a second. */
+  const keys = (world: World, flags: FlagState[] = [home, home]) => {
+    const bot = new Bot(0);
+    const me = { id: 0, team: 0, state: { ...spawn(0, world, 0, 0), ammo: 10, mag: 5 } };
+    const foe = { id: 1, team: 1, state: spawn(1, world, 0, 1) };
+    return Array.from({ length: 60 }, () => bot.think({ me, others: [foe], flags, world }).keys);
+  };
+
+  it('steps aside while it shoots, never toward a drop', () => {
+    // The slab ends 1 m to its left (west, at x = -1): the void.
+    const ks = keys(build(def([ledge])));
+    expect(ks.some(k => k & KEY.FIRE)).toBe(true);
+    expect(ks.some(k => k & KEY.RIGHT)).toBe(true);
+    expect(ks.some(k => k & KEY.LEFT)).toBe(false);
+  });
+
+  it('carries the flag home at a sprint, not stopping to shoot', () => {
+    const world = build(def([{ ...ledge, min: [-50, -5, -50] }]));
+    const theirs: FlagState = { ...home, state: FLAG.CARRIED, by: 0 };
+    const ks = keys(world, [home, theirs]);
+    expect(ks.some(k => k & KEY.FIRE)).toBe(false);
+    expect(ks.every(k => k & KEY.SPRINT)).toBe(true);
+  });
+
+  it('stops at the edge of the void it was walking into', () => {
+    // A slab ending 1 m ahead (north), its goal past it over the void.
+    const world = build(
+      def([{ min: [-50, -5, 9], max: [50, 0, 50], top: TEX.TILE, side: TEX.BRICK }]),
+    );
+    const bot = new Bot(0);
+    const me = { id: 0, team: 0, state: { ...spawn(0, world, 0, 0), ammo: 10, mag: 5 } };
+    const i = bot.think({ me, others: [], flags: [home, home], world });
+    expect(i.keys & KEY.FORWARD).toBe(0);
+  });
+});
+
+describe('nav: off the ways', () => {
+  it('finds a way from the middle of a tower’s stair', () => {
+    const w = build(HIGHLINE);
+    const way = path(navOf(w), w, [56.8, 24.2, 227], [98, 14.5, 131]);
+    expect(way.entry).toBeDefined();
   });
 });

@@ -23,6 +23,8 @@ export type Leg =
       double?: number;
       run?: boolean;
       sprint: boolean;
+      /** In the air, forward or back so as to come down on `to`, a stone or a ledge: the bots' (bot.ts). */
+      land?: boolean;
     }
   | { k: 'slide'; from: P; to: P; c: [number, number]; y: number };
 
@@ -37,18 +39,21 @@ export const leap = (
   at: P,
   to: P,
   y: number,
-  o: { dash?: number; double?: number; run?: boolean; sprint?: boolean } = {},
+  o: { dash?: number; double?: number; run?: boolean; sprint?: boolean; land?: boolean } = {},
 ): Leg => ({ k: 'leap', at, to, y, sprint: true, ...o });
 
-/** The mirror image of a leg across the centre line. */
-export const flip = (l: Leg): Leg => {
-  const f = ([x, z]: P): P => [x, 240 - z];
+/** The mirror image of a leg across z = zed / 2. */
+export const mirror = (l: Leg, zed: number): Leg => {
+  const f = ([x, z]: P): P => [x, zed - z];
   return l.k === 'go'
     ? { ...l, to: f(l.to) }
     : l.k === 'leap'
       ? { ...l, at: f(l.at), to: f(l.to) }
       : { ...l, from: f(l.from), to: f(l.to) };
 };
+
+/** The mirror image of a leg across HIGHLINE's centre line. */
+export const flip = (l: Leg): Leg => mirror(l, 240);
 
 /** The same legs with no dash, double jump or wall-run: plain runs and jumps. */
 export const plain = (legs: Leg[]): Leg[] =>

@@ -1,8 +1,8 @@
 // A bot: a player the host plays itself, one Input a tick, through the same step() as everyone.
 // It picks a goal from the flags (take theirs, bring it home, chase the one who has ours, return a
 // lying flag, guard the base), goes there along nav.ts's legs, and shoots the enemies it sees.
-import { PLASMA_SPEED } from './constants';
-import { eyeHeight, norm } from './physics';
+import { FALL_SAFE, PLASMA_SPEED, STEP_H } from './constants';
+import { eyeHeight, floorAt, forward, gravity, norm } from './physics';
 import { navOf, path, ROUTES } from './nav';
 import type { Edge, Nav, Vec3, Way } from './nav';
 import type { Leg } from './routes';
@@ -49,6 +49,12 @@ const DRIFT = 4;
 const TACKLE = 4;
 /** Metres a bot without a gun goes out of its way to the rack. */
 const ARM = 30;
+/** Metres ahead a walking bot looks for the floor, and the share of the drop that hurts it will walk into. */
+const AHEAD = 1.5;
+const SAFE = 0.8;
+/** Ticks a bot strafes one way while it fights, and metres of floor it wants on that side. */
+const DODGE = 40;
+const SIDE = 1.5;
 /** The bots whose id is GUARD - 1 modulo GUARD stay home. */
 const GUARD = 8;
 
@@ -108,6 +114,7 @@ export class Bot {
   private foe = -1;
   private since = 0;
   private last: Vec3 = [0, 0, 0];
+  private world: World | undefined;
 
   public constructor(id: number) {
     this.id = id;
@@ -118,6 +125,7 @@ export class Bot {
   public think(s: Sight): Intent {
     const t = ++this.ticks;
     const p = s.me.state;
+    this.world = s.world;
     if (p.down) {
       this.goal = undefined;
       this.foe = -1;
@@ -157,7 +165,23 @@ export class Bot {
     // Aiming elsewhere: the move keys turn with the look, and the sprint goes (it wants forward).
     const keys = move.keys & ~(FORWARD | BACK | LEFT | RIGHT | SPRINT);
     const dirs = move.keys & FORWARD ? keysFor(this.aim, move.yaw) : 0;
-    return { keys: keys | dirs | fight.keys | reload, yaw: this.aim, pitch: this.pitch };
+    return {
+      keys: (dirs & ~(LEFT | RIGHT)) | this.dodge(s.world, p) | keys | fight.keys | reload,
+      yaw: this.aim,
+      pitch: this.pitch,
+    };
+  }
+
+  /** A side step while it fights, one way then the other, never toward a drop. */
+  private dodge(w: World, p: PlayerState): number {
+    const left = (((this.ticks + this.id * 17) / DODGE) | 0) & 1;
+    for (const k of [left, 1 - left]) {
+      const [x, z] = forward(this.aim + (k ? 1 : -1) * (Math.PI / 2));
+      if (floorAt(w, p.x + x * SIDE, p.z + z * SIDE, p.y + STEP_H) > p.y - STEP_H) {
+        return k ? LEFT : RIGHT;
+      }
+    }
+    return 0;
   }
 
   /** Where it wants to be. */
@@ -227,14 +251,26 @@ export class Bot {
     }
     const [x, , z] = this.target();
     const d = flat(p.x, p.z, x, z);
-    if (d < (e || this.leg < 0 ? 0.5 : 1)) {
+    // A node where a jump lands may stand against a wall: blocked close to it is there.
+    const near = d < 2 && this.ticks - this.better > STUCK_JUMP;
+    if (d < (e || this.leg < 0 ? 0.5 : 1) || (near && this.leg < this.way.edges.length)) {
       if (this.leg < this.way.edges.length) {
         this.next();
         return this.pilot(p);
       }
       return { keys: 0, yaw: this.aim, free: true };
     }
-    return { keys: this.unstick(p, d, FORWARD | SPRINT), yaw: toward(p.x, p.z, x, z), free: true };
+    const yaw = toward(p.x, p.z, x, z);
+    // A straight walk steps down onto a lower roof, but stops at the void or a drop that hurts, and
+    // finds another way when it stays there.
+    const [fx, fz] = forward(yaw);
+    const w = this.world!;
+    const hurts = (SAFE * FALL_SAFE ** 2) / (2 * gravity(w));
+    if (p.ground && floorAt(w, p.x + fx * AHEAD, p.z + fz * AHEAD, p.y + STEP_H) < p.y - hurts) {
+      this.unstick(p, d, 0);
+      return { keys: 0, yaw, free: true };
+    }
+    return { keys: this.unstick(p, d, FORWARD | SPRINT), yaw, free: true };
   }
 
   private next(): void {
@@ -261,9 +297,10 @@ export class Bot {
   /** One step of a leg of a route, the way test/routes.ts flies it. */
   private fly(p: PlayerState, leg: Leg): { keys: number; yaw: number; free: boolean } {
     const f = (this.flight ??= { leg, k: -1, ran: false, ended: -1 });
+    // A point blocked close by is reached too: a take-off can stand in a wall's lee.
     const go = (x: number, z: number, r: number, keys: number) => {
       const d = flat(p.x, p.z, x, z);
-      return d < r
+      return d < r || (d < 2 && this.ticks - this.better > STUCK_JUMP)
         ? undefined
         : { keys: this.unstick(p, d, keys), yaw: toward(p.x, p.z, x, z), free: false };
     };
@@ -305,7 +342,7 @@ export class Bot {
     const keys = FORWARD | (leg.sprint ? SPRINT : 0);
     const yaw = toward(p.x, p.z, leg.to[0], leg.to[1]);
     if (f.k < 0) {
-      const run = go(leg.at[0], leg.at[1], 0.2, keys);
+      const run = go(leg.at[0], leg.at[1], leg.land ? 1 : 0.2, keys);
       if (run) {
         return run;
       }
@@ -320,6 +357,18 @@ export class Bot {
       f.ran = true;
     } else if (f.ran && f.ended < 0) {
       f.ended = f.k;
+    }
+    if (leg.land) {
+      // Will the flight carry it past the point, or short of it, by the time it is down at its height?
+      const [tx, tz] = leg.to;
+      const d = flat(p.x, p.z, tx, tz);
+      const v = (p.vx * (tx - p.x) + p.vz * (tz - p.z)) / (d || 1);
+      const g = gravity(this.world!);
+      const t = Math.max(
+        (p.vy + Math.sqrt(Math.max(p.vy ** 2 + 2 * g * (p.y - leg.y), 0))) / g,
+        0.05,
+      );
+      return { keys: v * t < d - 0.3 ? FORWARD : v * t > d + 0.3 ? BACK : 0, yaw, free: false };
     }
     const n = leg.run ? (f.ended < 0 ? -1 : f.k - f.ended) : f.k;
     return {
@@ -369,8 +418,10 @@ export class Bot {
         [foe, best] = [o, score];
       }
     }
-    // On a leg the keys are the leg's: a jump's run-up wants its sprint, even past the carrier.
-    if (!foe || !free) {
+    // On a leg the keys are the leg's: a jump's run-up wants its sprint, even past the carrier. And
+    // the carrier runs: a fight would cost him the sprint.
+    const carrying = flags[1 - me.team].state === FLAG.CARRIED && flags[1 - me.team].by === me.id;
+    if (!foe || !free || carrying) {
       this.foe = -1;
       return undefined;
     }

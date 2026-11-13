@@ -5,7 +5,7 @@ import { PLAYER_R, STEP_H } from './constants';
 import { HIGHLINE } from './map';
 import { MOON } from './moon';
 import { floorAt } from './physics';
-import { HIGH, LOW, MID, UP, flip } from './routes';
+import { HIGH, LOW, MID, UP, flip, leap, mirror } from './routes';
 import type { Leg } from './routes';
 import { ray } from './world';
 import type { World } from './world';
@@ -39,8 +39,14 @@ const TRICK = 1.5;
 const WALK = 30;
 /** The most a straight walk steps down, metres: off a plinth, down a short drop. */
 const DROP = 2;
-/** Metres to the nearest node a bot heads for when no straight walk reaches one. */
-const NEAR = 8;
+/**
+ * Metres to the nearest node a bot heads for when no straight walk reaches one (the moon's relief
+ * fails most, a stair all), how far above it may be (up a stair, or a ledge to climb) and how far
+ * below: a drop that does not hurt at full gravity.
+ */
+const NEAR = 16;
+const ABOVE = 2.2;
+const BELOW = 8;
 /** Two points of the routes this close (metres, and in height) are one. */
 const SAME = 0.6;
 
@@ -51,12 +57,14 @@ const OTHER = 3;
 
 /**
  * MOON's lanes in red's half, walked straight from point to point both ways: round the dome on the
- * west (the modules close the east), in at its door to the flag, and across the field to the
- * bridge over the rille. Blue's are their mirror across z = 140. Relief and boulders fail
- * walkable(), so these are not checked: a bot jumps what it bumps into.
+ * west (the modules close the east), in at its door to the flag, and across the field to the three
+ * crossings of the rille (the bridge, the west jump's run-up, the east stones' lip). Blue's are
+ * their mirror across z = 140. Relief and boulders fail walkable(), so these are not checked: a
+ * bot jumps what it bumps into.
  */
 const LANES: Vec3[][] = [
   [
+    [72, 0, 258],
     [80, 0, 269],
     [52, 0, 270],
     [50, 0, 212],
@@ -69,6 +77,40 @@ const LANES: Vec3[][] = [
     [80, 0, 208],
     [80, 0, 152],
     [80, 0, 140],
+  ],
+  [
+    [50, 0, 212],
+    [18, 0, 190],
+  ],
+  [
+    [18, 0, 125],
+    [18, 0, 90],
+  ],
+  [
+    [80, 0, 208],
+    [128.5, 0, 160],
+    [128.5, 0, 150],
+  ],
+];
+
+/**
+ * The jumps over MOON's rille from red's side, as moon.test.ts flies them: the west long jump (a
+ * sprint jumped at the lip, a dash late in the air), and the east stones at 1.2, 2.4 and 1.2 m,
+ * each a jump that comes down on the stone. Blue's are their mirror. With the bridge (LANES[1]),
+ * they are the moon's three routes, an index of ROUTES each, so that bots spread over them.
+ */
+const BRIDGE = 1;
+const CROSSINGS: [route: number, start: Vec3, legs: Leg[]][] = [
+  [1, [18, 0, 190], [leap([18, 147], [18, 125], 0, { dash: 20 })]],
+  [
+    2,
+    [128.5, 0, 150],
+    [
+      [128.5, 150, 128.5, 145, 1.2],
+      [128.5, 145, 132.5, 140, 2.4],
+      [132.5, 140, 128.5, 135, 1.2],
+      [128.5, 135, 128.5, 130, 0],
+    ].map(([ax, az, tx, tz, y]) => leap([ax, az], [tx, tz], y, { sprint: false, land: true })),
   ],
 ];
 
@@ -176,14 +218,24 @@ const build = (w: World): Nav => {
     }
   }
   if (w.def === MOON) {
-    for (const lane of [...LANES, ...LANES.map(l => l.map(([x, y, z]): Vec3 => [x, y, 280 - z]))]) {
+    for (const [route, [x, y, z], legs] of CROSSINGS) {
+      chain([x, y, z], legs, route);
+      chain(
+        [x, y, 280 - z],
+        legs.map(l => mirror(l, 280)),
+        route,
+      );
+    }
+    const lanes = [...LANES, ...LANES.map(l => l.map(([x, y, z]): Vec3 => [x, y, 280 - z]))];
+    lanes.forEach((lane, i) => {
+      const route = i % LANES.length === BRIDGE ? 0 : -1;
       for (let k = 1; k < lane.length; k++) {
         const [a, b] = [node(lane[k - 1]), node(lane[k])];
         const cost = flat(nodes[a], nodes[b]) / PACE;
-        out[a].push({ to: b, route: -1, cost });
-        out[b].push({ to: a, route: -1, cost });
+        out[a].push({ to: b, route, cost });
+        out[b].push({ to: a, route, cost });
       }
-    }
+    });
   }
   for (let i = 0; i < nodes.length; i++) {
     for (let j = 0; j < nodes.length; j++) {
@@ -222,16 +274,23 @@ export const path = (nav: Nav, w: World, a: Vec3, b: Vec3, prefer = -1): Way => 
       cost[i] = flat(a, nodes[i]) / PACE;
     }
   }
-  // Against a wall the body's sides see into it: the nearest node on about the same roof will do.
-  if (!cost.some(c => c < Infinity)) {
+  // Against a wall the body's sides see into it, on a stair no node is level: the nearest node not
+  // too high or too low, with nothing in the way of the head, will do; behind a shuttle or a plinth,
+  // the nearest one even hidden, which a bot walks round as it can.
+  for (const clear of [true, false]) {
+    if (cost.some(c => c < Infinity)) {
+      break;
+    }
     let near = -1;
     for (let i = 0; i < n; i++) {
       const [d, dy] = [flat(a, nodes[i]), nodes[i][1] - a[1]];
+      const [ux, uz] = [(nodes[i][0] - a[0]) / (d || 1), (nodes[i][2] - a[2]) / (d || 1)];
       if (
         !runUp.has(i) &&
         d < NEAR &&
-        dy <= STEP_H &&
-        dy >= -DROP &&
+        dy <= ABOVE &&
+        dy >= -BELOW &&
+        (!clear || ray(w, [a[0], a[1] + 1.5, a[2]], [ux, 0, uz], d) >= d) &&
         (near < 0 || d < flat(a, nodes[near]))
       ) {
         near = i;

@@ -60,9 +60,11 @@ describe("helm, the woman's helmet on the moon", () => {
 
   it('has a V carved in each cheek, upside down, wide under the slit, its inner side along the slot; no line round it', () => {
     const [tip, [l1, l1v], [l2, l2v]] = [CUT.tip, ...CUT.arms];
-    // The top edge under the slit, wide; the inner side straight down along the slot; the point low.
-    expect([l1v, l2v]).toEqual([0.9, 0.9]);
-    expect(l2 - l1).toBeGreaterThan(0.8);
+    // The top edge under the slit, wide, rising to the back (the user, 2026-11-13: its branch by
+    // the eyes spread out); the inner side straight down along the slot; the point low.
+    expect(l1v).toBe(0.9);
+    expect(l2v).toBeGreaterThan(l1v + 0.2);
+    expect(l2 - l1).toBeGreaterThan(1.05);
     expect(tip[0]).toBe(l1);
     expect(tip[1]).toBeLessThan(0.2);
     const turn = (w: { p: Vec3 }) => Math.atan2(w.p[0] - DOME.c[0], DOME.c[2] - w.p[2]);

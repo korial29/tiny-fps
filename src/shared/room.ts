@@ -30,13 +30,15 @@ import {
   RULES,
   SHOCK_KNOCK,
   SHOCK_TICKS,
+  STUMBLE_KNOCK,
+  STUMBLE_TICKS,
   SNAP_EVERY,
   TACKLE_COOLDOWN,
   TEAM_COLOR,
   TICK_HZ,
   VEHICLE,
   BOLT,
-  PUNCH,
+  PUNCHES,
   PUNCH_HITS,
   PUNCH_MEMORY,
   PUNCH_STUN,
@@ -925,14 +927,16 @@ export class Room {
   }
 
   /**
-   * A punch of `p` struck at the view tick `view`: every enemy it reaches as `p` drew him (the
-   * strike test, with PUNCH's reach and arc) takes half a point, 1 hp every PUNCH_HITS punches; the
-   * `hits` count goes up once. The PUNCH_STUN-th he takes with no more than PUNCH_MEMORY ticks
-   * between two stuns him as a tackle does: a stumble thrown the way `p` faces, the flag dropped,
-   * `by` the puncher.
+   * A punch of `p` struck at the view tick `view`: every enemy its blow (PUNCHES by `cut`) reaches
+   * as `p` drew him (the strike test, with the blow's reach and arc) is hit; the `hits` count goes
+   * up once. A jab or a cross takes half a point, 1 hp every PUNCH_HITS of them; a hook or a lunge a
+   * whole one. The PUNCH_STUN-th blow he takes with no more than PUNCH_MEMORY ticks between two, or
+   * a blow with a `knock`, stuns him as a tackle does: a stumble thrown the way `p` faces (`knock`
+   * times as hard), the flag dropped, `by` the puncher.
    */
   private punch(p: Player, view: number | undefined): void {
-    const seen = strike(this.world, p.state, this.enemies(p, view), PUNCH);
+    const blow = PUNCHES[p.state.cut ?? 0] ?? PUNCHES[0];
+    const seen = strike(this.world, p.state, this.enemies(p, view), blow);
     const foes = this.players().filter(q => seen.some(s => s.id === q.info.id));
     if (!foes.length) {
       return;
@@ -942,18 +946,18 @@ export class Room {
       const fresh = this.ticks - (foe.punched ?? -Infinity) <= PUNCH_MEMORY;
       foe.blows = (fresh ? (foe.blows ?? 0) : 0) + 1;
       foe.punched = this.ticks;
-      foe.bruise = ((foe.bruise ?? 0) + 1) % PUNCH_HITS;
-      if (
-        !foe.bruise &&
-        this.harm(foe, 1, p, FRAG.FIST, felled(FALL.STRUCK, ...forward(p.state.yaw)))
-      ) {
+      if (!blow.hp) {
+        foe.bruise = ((foe.bruise ?? 0) + 1) % PUNCH_HITS;
+      }
+      const fell = felled(FALL.STRUCK, ...forward(p.state.yaw));
+      if ((blow.hp || !foe.bruise) && this.harm(foe, 1, p, FRAG.FIST, fell)) {
         continue;
       }
-      if (foe.blows >= PUNCH_STUN) {
+      if (blow.knock || foe.blows >= PUNCH_STUN) {
         foe.blows = 0;
         this.drop(foe.info.id);
         const [dx, dz] = forward(p.state.yaw);
-        stumble(foe.state, dx, dz);
+        stumble(foe.state, dx, dz, STUMBLE_TICKS, STUMBLE_KNOCK * (blow.knock || 1));
         foe.state.zap = false;
         foe.by = p.info.id;
       }

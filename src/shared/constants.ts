@@ -208,7 +208,22 @@ export const FALL_HP = 2;
  * takes within PUNCH_MEMORY ticks of the one before stuns him: a stumble as a tackle's, thrown the
  * way the puncher faces, and he drops the flag he carries.
  */
-export const PUNCH = { ticks: 20, strike: 6, reach: 1.4, arc: 0.6, hp: 0, hold: -1 };
+export const PUNCH = { ticks: 20, strike: 6, reach: 1.4, arc: 0.6, hp: 0, hold: -1, knock: 0 };
+/**
+ * The blows of the fists (the user, 2026-11-13), the `cut` of a swing with no weapon: the JAB is the
+ * punch above, the left fist. A fresh FIRE press after a blow's strike, while its swing runs, throws
+ * the next of the chain at once: the CROSS (the right fist), then the HOOK (the left, swung round),
+ * which ends the chain. A blow started at a sprint on the ground, in a slide or in a dash's burst is
+ * the LUNGE, a long straight right. `hp` 0 is half a point (PUNCH_HITS), 1 a whole one; a blow with
+ * a `knock` throws whoever it hits as a tackle does, `knock` times as hard, and drops his flag.
+ */
+export const BLOW = { JAB: 0, CROSS: 1, HOOK: 2, LUNGE: 3 } as const;
+export const PUNCHES = [
+  PUNCH,
+  PUNCH,
+  { ticks: 28, strike: 9, reach: 1.5, arc: 0.9, hp: 1, hold: -1, knock: 1.4 },
+  { ticks: 26, strike: 7, reach: 2.2, arc: 0.5, hp: 1, hold: -1, knock: 1.2 },
+];
 export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];
 /** Shots the rack loads. */
 export const AMMO_MAX = 60;

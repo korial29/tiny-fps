@@ -6,8 +6,10 @@ import {
   STUMBLE_DRAG,
   STUMBLE_KNOCK,
   STUMBLE_TICKS,
+  BLOW,
   PUNCH,
   DOWN_TICKS,
+  PUNCHES,
 } from '../shared/constants';
 import { felled } from '../shared/gun';
 import { FALL, MODE } from '../shared/types';
@@ -1607,6 +1609,16 @@ describe('thrown: how far out the fist of a punch is', () => {
     // A swing with a weapon is no punch, nor one of a player down.
     for (const o of [{ ammo: 0 }, { blade: true }, { rail: 3 }, { rifle: 3 }, { down: 10 }]) {
       expect(at(PUNCH.ticks - PUNCH.strike, o)).toBe(0);
+    }
+  });
+
+  it('is out at the strike of each blow, its own swing’s (BLOW)', () => {
+    for (const cut of [BLOW.JAB, BLOW.CROSS, BLOW.HOOK, BLOW.LUNGE]) {
+      const { ticks, strike } = PUNCHES[cut];
+      const at = (swing: number) => thrown(state({ swing, cut }));
+      expect(at(ticks - strike), `blow ${cut}`).toBeCloseTo(1, 9);
+      expect(at(ticks - strike + 2), `blow ${cut}`).toBeLessThan(1);
+      expect(at(ticks - strike - 2), `blow ${cut}`).toBeLessThan(1);
     }
   });
 });

@@ -18,9 +18,11 @@ import {
   NADE_R,
   RECOIL,
   TICK_HZ,
-  PUNCH,
+  BLOW,
+  PUNCHES,
 } from '../shared/constants';
-import { swingOf } from '../shared/blade';
+import { strike, swingOf } from '../shared/blade';
+import { blowOf } from './gait';
 import { powerOf } from '../shared/gun';
 import { eyeHeight } from '../shared/physics';
 import { lobbed } from '../shared/plasma';
@@ -126,6 +128,7 @@ type Blade = Pick<
   | 'reload'
   | 'rifled'
   | 'hot'
+  | 'hits'
 >;
 
 /**
@@ -140,8 +143,8 @@ export const swung = (a?: Blade, b?: Blade): number =>
 /** Whether the step from a to b is the strike of its cut: `swing` went down through the strike tick (CUTS). */
 export const struck = (a?: Blade, b?: Blade): boolean => {
   // With no blade the swing is a punch.
-  const { ticks, strike } = b && !b.blade ? PUNCH : swingOf(b ?? {});
-  return !!a && !!b && (a.swing ?? 0) > ticks - strike && (b.swing ?? 0) <= ticks - strike;
+  const { ticks, strike: at } = b && !b.blade ? PUNCHES[blowOf(b)] : swingOf(b ?? {});
+  return !!a && !!b && (a.swing ?? 0) > ticks - at && (b.swing ?? 0) <= ticks - at;
 };
 
 /** The pitch of a player's voice: the woman's higher, and each a little off the next by his id. */
@@ -156,6 +159,11 @@ const WAIL = [1.6, 0.35];
 
 /** A heavy release's swish is told by its cut plus this. */
 const HEAVY_CUE = 8;
+/** A blow of the fists' swish is told by its blow (BLOW) plus this: shorter, higher and softer than a cut's. */
+const FIST_CUE = 16;
+const WHOOSH = { rate: [1.9, 1.85, 1.45, 1.55], gain: [0.3, 0.3, 0.45, 0.5] };
+/** The thud of a blow that landed, the tackle's impact played higher: its gain, by BLOW, and its rate. */
+const THUD = [[0.35, 0.35, 0.65, 0.7], 1.5] as const;
 /** The swish of a cut, by CUT: higher and quieter for a thrust, lower and fuller for a slash. */
 const SWISH = { rate: [1.3, 1.05, 0.95, 0.8], gain: [0.6, 0.8, 0.8, 1] };
 
@@ -163,7 +171,7 @@ export const createCombat = (
   world: World,
   audio: Pick<Audio, 'play'> & Partial<Pick<Audio, 'loop'>>,
   hud: Pick<Hud, 'vitals' | 'hit' | 'down'>,
-  fx: Pick<Effects, 'fire' | 'cut' | 'wound' | 'lie' | 'quake'>,
+  fx: Pick<Effects, 'fire' | 'cut' | 'wound' | 'lie' | 'quake' | 'blow' | 'punch'>,
   tracer: Pick<
     Tracer,
     'flash' | 'burst' | 'blast' | 'orbs' | 'update' | 'mount' | 'crackle' | 'charging' | 'lightning'
@@ -275,6 +283,10 @@ export const createCombat = (
   };
   /** The swish of the cut `c`, at `at`; a heavy release's (c + HEAVY_CUE) louder and much deeper. */
   const swish = (c: number, at?: Vec3) => {
+    if (c >= FIST_CUE) {
+      audio.play(SOUND.SWISH, at, WHOOSH.gain[c - FIST_CUE], WHOOSH.rate[c - FIST_CUE]);
+      return;
+    }
     const [k, heavy] = [c % HEAVY_CUE, c >= HEAVY_CUE];
     audio.play(
       SOUND.SWISH,
@@ -286,6 +298,8 @@ export const createCombat = (
   /** The weapon in the hand of `p`: 0 the gun, 1 the katana, 2 the rail gun, -1 none. */
   const inHand = (p: Blade) =>
     p.down ? -1 : p.wield ? 1 : p.rifled ? 3 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
+  /** Whether a player's swing is a blow of his fists: no weapon at all. */
+  const fists = (p?: Blade) => !!p && !p.blade && inHand(p) < 0;
   /** Whether the weapon in a player's hand has just come to it for the first time (firsts()). */
   const fresh = firsts();
   /** Sounds to play later: when (ms), which, where, and how loud and fast. */
@@ -332,9 +346,11 @@ export const createCombat = (
       }
       const c = swung(a, b);
       if (c >= 0) {
-        cuts.push(c + (b?.heavy ? HEAVY_CUE : 0));
+        cuts.push(fists(b) ? FIST_CUE + blowOf(b!) : c + (b?.heavy ? HEAVY_CUE : 0));
       }
-      if (b && struck(a, b)) {
+      if (b && struck(a, b) && fists(b)) {
+        fx.blow(blowOf(b));
+      } else if (b && struck(a, b)) {
         fx.cut(b.cut ?? 0);
         // The ARC cut throws its arc of energy at its strike.
         if (b.cut == CUT.ARC_L || b.cut == CUT.ARC_R) {
@@ -359,6 +375,13 @@ export const createCombat = (
         if (was && me.hits != was.hits) {
           audio.play(SOUND.HIT);
           hud.hit();
+          // A blow of the fists that landed: a thud, and a hook or a lunge kicks the look.
+          if (fists(me)) {
+            audio.play(SOUND.TACKLE, undefined, THUD[0][blowOf(me)], THUD[1]);
+            if (blowOf(me) >= BLOW.HOOK) {
+              fx.punch();
+            }
+          }
           if (me.wield) {
             audio.play(SOUND.ZAP);
           }
@@ -496,7 +519,16 @@ export const createCombat = (
         const old = blades.get(p.id);
         const c = swung(old, p);
         if (c >= 0) {
-          swish(c + (p.heavy ? HEAVY_CUE : 0), at);
+          swish(fists(p) ? FIST_CUE + blowOf(p) : c + (p.heavy ? HEAVY_CUE : 0), at);
+        }
+        // A blow of his fists the host counted: a thud, and the own player knocked when it is he
+        // that the blow reaches.
+        if (old && p.hits != old.hits && fists(p) && p.swing) {
+          const b = blowOf(p);
+          audio.play(SOUND.TACKLE, at, THUD[0][b], THUD[1]);
+          if (me && !me.down && strike(world, p, [me], PUNCHES[b]).length) {
+            fx.blow(b, true);
+          }
         }
         const f = fresh(p) ? inHand(p) : -1;
         if (old) {
@@ -514,6 +546,7 @@ export const createCombat = (
           ammo: p.ammo,
           reload: p.reload,
           rifled: p.rifled,
+          hits: p.hits,
         });
         // A runner drained by the rail gun's bolt, or shocked by the katana, crackles.
         if ((p.zap && p.stun > 0) || p.slow) {

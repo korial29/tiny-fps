@@ -290,6 +290,8 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
     'Combat',
     [
       ['Left click', 'fire, hold to charge; bare hands: punch'],
+      ['Click|again', 'bare hands, as a punch lands: cross, then hook'],
+      ['Shift|+|Left click', 'bare hands, at a sprint: lunge'],
       ['R', 'swap the battery', 'KeyR'],
       ['1|2|3|4', 'gun, katana, rail gun, laser rifle', 'Digit1 Digit2 Digit3 Digit4'],
       ['Wheel', 'next weapon'],

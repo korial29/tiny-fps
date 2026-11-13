@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DASH_COOLDOWN, DASH_TICKS } from '../shared/constants';
+import { BLOW, DASH_COOLDOWN, DASH_TICKS } from '../shared/constants';
 import { STILL } from '../shared/physics';
 import { CUT, EV, KEY, MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -402,6 +402,7 @@ describe('tackle', () => {
 describe('shape', () => {
   it('holds the numbers the camera draws and the stride, and update', () => {
     expect(Object.keys(createEffects()).sort()).toEqual([
+      'blow',
       'cut',
       'dy',
       'fire',
@@ -538,6 +539,43 @@ describe('the katana', () => {
     run(fx, me(), 1.5);
     expect(Math.abs(fx.pitch)).toBeLessThan(0.005);
     expect(fx.fov).toBeCloseTo(0, 1);
+  });
+});
+
+describe('the fists', () => {
+  /** The extremes of pitch, roll and fov over half a second after a blow, on a player standing still. */
+  const blow = (b: number, taken?: boolean) => {
+    const fx = createEffects();
+    run(fx, me(), 0.3);
+    fx.blow(b, taken);
+    const out = { pitch: [0, 0], roll: [0, 0], fov: 0 };
+    for (let t = 0; t < 0.5; t += DT) {
+      fx.update(me(), 0, DT);
+      out.pitch = [Math.min(out.pitch[0], fx.pitch), Math.max(out.pitch[1], fx.pitch)];
+      out.roll = [Math.min(out.roll[0], fx.roll), Math.max(out.roll[1], fx.roll)];
+      out.fov = Math.max(out.fov, fx.fov);
+    }
+    return out;
+  };
+
+  it('rolls the view toward the fist that strikes, a hook most, a lunge punching the field of view', () => {
+    const [jab, cross, hook, lunge] = [BLOW.JAB, BLOW.CROSS, BLOW.HOOK, BLOW.LUNGE].map(b =>
+      blow(b),
+    );
+    expect(Math.sign(jab.roll[0] + jab.roll[1])).toBe(-Math.sign(cross.roll[0] + cross.roll[1]));
+    expect(Math.max(-hook.roll[0], hook.roll[1])).toBeGreaterThan(
+      2 * Math.max(-jab.roll[0], jab.roll[1]),
+    );
+    expect(lunge.fov).toBeGreaterThan(1);
+    expect(jab.fov).toBeLessThan(0.1);
+    // Small: a jab is felt, not a jolt.
+    expect(Math.max(-jab.roll[0], jab.roll[1])).toBeLessThan(0.05);
+  });
+
+  it('knocks the look up when the own player takes a blow, harder than he gives one', () => {
+    const [given, taken] = [blow(BLOW.CROSS), blow(BLOW.CROSS, true)];
+    expect(taken.pitch[1]).toBeGreaterThan(0.02);
+    expect(taken.pitch[1]).toBeGreaterThan(given.pitch[1] * 3);
   });
 });
 

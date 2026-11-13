@@ -6,6 +6,7 @@
 // ledge on a hang, the wall on a wall-run. Drawn by the renderer over a cleared depth, like a view
 // model. No DOM, pure but for the state it keeps.
 import {
+  BLOW,
   CHARGE_TAP,
   CHARGE_TICKS,
   DASH_COOLDOWN,
@@ -21,7 +22,7 @@ import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
-import { createGait, frame, thrown } from './gait';
+import { SIDE, blowOf, createGait, frame, thrown } from './gait';
 import { fetched, pouch, pouchAt } from './pouch';
 import type { Floor } from './gait';
 import {
@@ -1376,10 +1377,19 @@ export const createBody = (world?: World): Body => {
       h = mix(h, sd > 0 ? [0.36, -0.26, 0.38] : [0.28, -0.1, 0.42], w.slide);
       // Reeling from a tackle: the hands thrown out and up, flailing against each other.
       const flail = Math.sin(clock * 12 + (sd > 0 ? Math.PI : 0));
-      // A punch (no weapon at all, FIRE) drives the left fist up to the middle of the view and
-      // brings the right one into its lower corner, drawn back.
+      // A punch (no weapon at all, FIRE) drives the striking fist of its blow (SIDE) up to the
+      // middle of the view and brings the other into its lower corner, drawn back. A hook comes
+      // round from the side, a lunge goes further out.
       const jab = me ? thrown(me) : 0;
-      h = mix(h, sd > 0 ? [0.26, -0.36, 0.26] : [0.02, -0.13, 0.66], jab);
+      const blow = me ? blowOf(me) : 0;
+      const strikes = sd == SIDE[blow];
+      const fist: Vec3 =
+        blow == BLOW.HOOK
+          ? [0.04 + 0.5 * Math.sin(Math.PI * jab), -0.06, 0.52]
+          : blow == BLOW.LUNGE
+            ? [0.02, -0.12, 0.78]
+            : [0.02, -0.13, 0.66];
+      h = mix(h, strikes ? fist : [0.26, -0.36, 0.26], jab);
       h = mix(h, [0.46, 0.05 + 0.2 * flail, 0.4 + 0.1 * flail], w.stun);
       if (grip) {
         // On the ledge's lip, a hand-width apart along the wall, the right hand on the right.

@@ -2,7 +2,17 @@
 // renderer's vertex format. A runner is the last PlayerState seen and the gait that eases the body
 // toward it; the dash streaks are the only thing drawn here that the gait does not pose. A
 // player's (x, y, z) is the bottom of the feet. No DOM.
-import { DOWN_TICKS, EYE, HEAT_MAX, RUN_SPEED, STEP_H, TICK_HZ } from '../shared/constants';
+import {
+  BLOW,
+  DOWN_TICKS,
+  EYE,
+  HEAT_MAX,
+  PUNCHES,
+  RUN_SPEED,
+  STEP_H,
+  TICK_HZ,
+} from '../shared/constants';
+import { strike } from '../shared/blade';
 import { TAU, floored } from '../shared/physics';
 import { LIMB, MODE } from '../shared/types';
 import type { Choice, PlayerState, Rover } from '../shared/types';
@@ -20,7 +30,7 @@ import {
   stowed,
   wield,
 } from './body';
-import { JAB, armOf, createGait, frame, thrown } from './gait';
+import { HOOK, JAB, LUNGE, SIDE, armOf, bare, blowOf, createGait, frame, thrown } from './gait';
 import type { Floor, Gait, Seat } from './gait';
 import {
   ARC,
@@ -108,10 +118,13 @@ export interface Runner {
   /** Seconds left of the grimace a hit puts on his face, and of the grin of a capture or of a foe put down. */
   hurt: number;
   grin: number;
-  /** How far out the fist of a punch is, 0 to 1, eased. */
+  /** How far out the fist of a punch is, 0 to 1, eased, and its blow (BLOW). */
   jab: number;
   /** How closed his hands are, left then right, eased toward grasp(). */
   curls: number[];
+  blow: number;
+  /** How far his head is still thrown back by a blow he took, 1 to 0. */
+  flinch: number;
   /** His face (expression.ts), and the seconds it has yet to live through: soldier() moves it once drawn, where the head's turn is known. */
   face: Face;
   dt: number;
@@ -200,6 +213,8 @@ export const createRunner = (
     grin: 0,
     jab: 0,
     curls: grasp(p),
+    blow: 0,
+    flinch: 0,
     face,
     dt: 0,
     build,
@@ -252,6 +267,9 @@ export const watched = (p: PlayerState, crowd: PlayerState[]): Vec3 | undefined 
   }
   return best;
 };
+
+/** A blow taken: seconds it lasts, and how far it throws the head and the chest back (radians). */
+const FLINCH = [0.35, 0.45, 0.12];
 
 export const animate = (
   book: Map<number, Runner>,
@@ -307,6 +325,24 @@ export const animate = (
       r.jab += (thrown(p) - r.jab) * (1 - Math.exp(-dt * 45));
       const g = grasp(p, r.seat);
       r.curls = r.curls.map((c, i) => c + (g[i] - c) * (1 - Math.exp(-dt * CLOSE)));
+      r.blow = thrown(p) > 0 ? blowOf(p) : r.blow;
+      r.flinch = Math.max(r.flinch - dt / FLINCH[0], 0);
+      // A blow of his fists the host counted: the nearest he reaches, in his arc, flinches.
+      const hit = world && bare(p) && p.hits != r.p.hits && p.swing;
+      if (hit) {
+        const near = strike(
+          world,
+          p,
+          others.filter(q => q.id != p.id),
+          PUNCHES[blowOf(p)],
+        );
+        const d = (q: PlayerState) => (q.x - p.x) ** 2 + (q.z - p.z) ** 2;
+        const foe = near.sort((a, b) => d(a) - d(b))[0];
+        const fr = foe && book.get(foe.id);
+        if (fr) {
+          fr.flinch = 1;
+        }
+      }
       r.p = { ...p };
     } else {
       book.set(p.id, createRunner(p, seat, build, look));
@@ -646,14 +682,29 @@ export const stance = (r: Runner) => {
   // Down or floored, the weapon stays in the hand as it falls. At the wheel both hands are on the yoke.
   const lying = !!p.down || floored(p) || driving(r);
   if (r.jab > 0.002 && !lying) {
-    // A punch: the rear fist out, the lead one back to the hip, the chest behind it.
+    // A punch: the striking fist out (the blow's), the other back to the hip, the chest behind it.
     const rot = pose.rot.slice();
-    const [out, back] = [armOf(-1, JAB.out), armOf(1, JAB.back)];
-    rot[J.ARM_L] = slerp(rot[J.ARM_L], out[0], r.jab);
-    rot[J.FOREARM_L] = slerp(rot[J.FOREARM_L], out[1], r.jab);
-    rot[J.ARM_R] = slerp(rot[J.ARM_R], back[0], r.jab);
-    rot[J.FOREARM_R] = slerp(rot[J.FOREARM_R], back[1], r.jab);
-    rot[J.CHEST] = mul(axis([0, 1, 0], -JAB.twist * r.jab), rot[J.CHEST]);
+    const sd = SIDE[r.blow];
+    const blow = r.blow == BLOW.HOOK ? HOOK : r.blow == BLOW.LUNGE ? LUNGE : JAB;
+    const [out, back] = [armOf(sd, blow.out), armOf(-sd, JAB.back)];
+    const [a, f, ba, bf] =
+      sd < 0
+        ? [J.ARM_L, J.FOREARM_L, J.ARM_R, J.FOREARM_R]
+        : [J.ARM_R, J.FOREARM_R, J.ARM_L, J.FOREARM_L];
+    rot[a] = slerp(rot[a], out[0], r.jab);
+    rot[f] = slerp(rot[f], out[1], r.jab);
+    rot[ba] = slerp(rot[ba], back[0], r.jab);
+    rot[bf] = slerp(rot[bf], back[1], r.jab);
+    rot[J.CHEST] = mul(axis([0, 1, 0], sd * blow.twist * r.jab), rot[J.CHEST]);
+    pose = { ...pose, rot };
+  }
+  if (r.flinch > 0 && !lying) {
+    // Hit by a fist: the head snapped back and the chest after it, springing back.
+    const rot = pose.rot.slice();
+    const t = 1 - r.flinch;
+    const k = t < 0.2 ? t / 0.2 : (1 - t) / 0.8;
+    rot[J.HEAD] = mul(rot[J.HEAD], axis([1, 0, 0], FLINCH[1] * k));
+    rot[J.CHEST] = mul(rot[J.CHEST], axis([1, 0, 0], FLINCH[2] * k));
     pose = { ...pose, rot };
   }
   let s = solve(pose);

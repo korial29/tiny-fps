@@ -1,6 +1,7 @@
 // Camera feel, fed each frame: field of view, eye height, roll and speed lines. No DOM, times in
 // seconds, unit-tested. It only moves what is drawn: the inputs sent keep the real eye and angles.
 import {
+  BLOW,
   DASH_COOLDOWN,
   DASH_TICKS,
   RUN_SPEED,
@@ -49,6 +50,12 @@ export interface Effects {
   punch(): void;
   /** The own katana's cut struck: a thrust punches the field of view, a slash dips the look, a cut across rolls toward the side it ends on. */
   cut(c: number): void;
+  /**
+   * A blow of the fists (BLOW) struck: the own (the look kicked toward the fist's side, rolled hard
+   * by a hook, a lunge punching the field of view), or, `taken`, one the own player took: the eye
+   * dipped and the look knocked up.
+   */
+  blow(b: number, taken?: boolean): void;
   /**
    * Advances dt seconds: the own player (eased, undefined before the first snapshot), the held keys,
    * the events, and the stride phase of its drawn legs (Gait.phase): with it the bob dips as a foot
@@ -109,6 +116,9 @@ const PUNCH_FOV = 4;
 const SHOT = [-0.25, 0.4, 0.5];
 /** A cut's strike: the eye's speed, then the look's (a slash) and the roll's (across). */
 const STRIKE = [-0.5, 1.5, 1.2];
+/** A blow of the fists: the eye's speed, the look's and the roll's; then the same for one taken. */
+const FIST = [-0.3, 0.3, 0.7];
+const KNOCKED = [-1.4, 1.8, 1.6];
 /** A hit: the same, and a floor at which the view lies, tilted (radians) and lowered to a hand's width. */
 const WOUND = [-1.5, 0.8, 1.5];
 const LIE = [0.9, 0.3];
@@ -202,6 +212,15 @@ export const createEffects = (): Effects => {
         (c == CUT.LEFT || c == CUT.ARC_L ? 1 : c == CUT.RIGHT || c == CUT.ARC_R ? -1 : 0) *
         STRIKE[2];
       thump = c == CUT.THRUST || arc ? 1 : thump;
+    },
+
+    blow(b, taken) {
+      const [e, l, roll] = taken ? KNOCKED : FIST;
+      const sd = b == BLOW.CROSS || b == BLOW.LUNGE ? 1 : -1;
+      y[1] += e;
+      p[1] += taken ? l : b == BLOW.LUNGE ? -l : 0;
+      r[1] += (taken ? 1 : sd) * roll * (b == BLOW.HOOK ? 2.5 : 1);
+      thump = !taken && b == BLOW.LUNGE ? 1 : thump;
     },
 
     update(me, keys, dt, hit = { ev: 0, fall: 0 }, phase) {

@@ -188,8 +188,9 @@ describe('her armour', () => {
     return { out, n };
   };
   it('is his suit, plate for plate, cut on her body, but for the shoulders: her caps, his pieces', () => {
-    const fem = REGIONS.filter(g => g.fem);
-    const man = REGIONS.filter(g => g.man);
+    // The ninja's vest aside: a chest piece for each (armor.test.ts).
+    const fem = REGIONS.filter(g => g.fem && !g.alone);
+    const man = REGIONS.filter(g => g.man && !g.alone);
     expect([fem.length, man.length]).toEqual([2, 2]);
     for (const lod of [0, 1, 3]) {
       const [a, b] = [draw(0, lod), draw(F, lod)];
@@ -198,7 +199,7 @@ describe('her armour', () => {
     }
   });
   it('wears one round cap on each shoulder, wholly on the trunk over the arm: no seam in steps', () => {
-    const caps = REGIONS.filter(g => g.fem);
+    const caps = REGIONS.filter(g => g.fem && !g.alone);
     expect(caps).toHaveLength(2);
     const s = body(3, F);
     const v = s.u ?? s.v;

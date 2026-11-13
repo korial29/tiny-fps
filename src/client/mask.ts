@@ -61,25 +61,11 @@ const skull = (a: number, y: number, off: number): Vec3 => {
   return [p[0], y < 1.557 ? y : p[1], p[2]];
 };
 /**
- * The opening's bottom round the face: the cheeks bare down to the jaw line (skin.ts's), the hood
- * under it; back up to the opening's bottom behind the cheeks.
+ * The opening's bottom round the face: all of the face under the guard's top edge is black (the
+ * user, 2026-11-13: no skin beside the guard), level under the eyes and up with the guard's sweep
+ * to its points beside them.
  */
-const under = (a: number) => {
-  const q = Math.abs(a);
-  // The mouth and the chin black too (the user, 2026-11-13): bare only over the guard's top.
-  if (q < 0.6) {
-    return PT;
-  }
-  const jaw = 1.584 + 0.032 * clamp(q / 1.75) ** 1.5;
-  // The cloth beside the guard joins it: up its side edge, a little under it, to mid-cheek; then up to
-  // the opening's bottom behind the cheek.
-  const mid = 1.636;
-  const side = edge(q) + 0.008;
-  return (
-    Math.max(jaw, q < AB ? jaw : Math.min(side, mid)) +
-    (SLIT_LO - mid) * clamp((q - 0.85) / 0.17) ** 2
-  );
-};
+const under = (a: number) => PT + HORN * clamp((Math.abs(a) / AT - 0.4) / 0.6) ** 1.6;
 /** The guard over the mouth: its top (under the eyes) and bottom, and its half widths there (radians round). */
 const [PT, PB, AT, AB] = [1.662, 1.59, 1.15, 0.42];
 /** How high its points beside the eyes stand over its top, and the power that rounds its sides out over the cheeks. */

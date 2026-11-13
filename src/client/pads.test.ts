@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { STRIDE } from './mesh';
-import { pads } from './pads';
+import { LAMES, pads } from './pads';
 import { JOINT as J, rest, solve } from './rig';
+import { body, palette, skin } from './skin';
 
 describe("pads, the ninja's shoulder pads and collar", () => {
   const pose = solve(rest());
@@ -38,5 +39,38 @@ describe("pads, the ninja's shoulder pads and collar", () => {
     expect(Math.max(...near.map(p => p[2]))).toBeGreaterThan(neck[2] + 0.09);
     // Nothing of it before the throat.
     expect(near.some(p => Math.abs(p[0]) < 0.04 && p[2] < neck[2])).toBe(false);
+  });
+
+  it('stands clear of the shoulder under it, on him and on her (the user, 2026-11-13: it went into the shoulder)', () => {
+    for (const build of [0, 1]) {
+      const at = solve(rest([0, 0, 0], 0, build));
+      const [worn, bare]: number[][] = [[], []];
+      pads(worn, at, build);
+      skin(bare, body(1, build), at, palette([1, 1, 1]));
+      const joint = at.pos[J.ARM_R];
+      // The skin's top round the joint, in cells of 1 cm.
+      const top = new Map<string, number>();
+      for (let i = 0; i < bare.length; i += 3 * STRIDE) {
+        for (let u = 0; u <= 8; u++) {
+          for (let w = 0; w <= 8 - u; w++) {
+            const c = [u / 8, w / 8, 1 - (u + w) / 8];
+            const p = [0, 1, 2].map(j =>
+              c.reduce((sum, f, q) => sum + bare[i + q * STRIDE + j] * f, 0),
+            );
+            const key = `${Math.round(p[0] * 100)},${Math.round(p[2] * 100)}`;
+            top.set(key, Math.max(top.get(key) ?? -9, p[1]));
+          }
+        }
+      }
+      let under = 0;
+      // The right pad's lames, drawn first: 90 quads each.
+      for (let i = 0; i < LAMES.length * 90 * 6 * STRIDE; i += STRIDE) {
+        const [x, y, z] = [worn[i], worn[i + 1], worn[i + 2]];
+        if (Math.abs(x - joint[0]) < 0.12) {
+          under += +(y < (top.get(`${Math.round(x * 100)},${Math.round(z * 100)}`) ?? -9) + 0.002);
+        }
+      }
+      expect(under).toBe(0);
+    }
   });
 });

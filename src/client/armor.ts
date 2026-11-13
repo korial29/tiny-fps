@@ -42,6 +42,8 @@ interface Region {
   mould?: boolean;
   /** The ninja's own armour (the user, 2026-11-13), worn by him alone; he wears no other plate. */
   alone?: boolean;
+  /** How far it stands off the skin, when not OFF. */
+  off?: number;
 }
 
 const smooth = (a: number, b: number, x: number) => {
@@ -163,12 +165,28 @@ export const GAP = 0.02;
 
 /**
  * The ninja's vest: the bottom of its chest piece at the sides, how far its chevron dips at the
- * middle (and the lames' under it), the bottom of the V at its neck, the lames' height and the gap
+ * middle (and the lames' under it), the bottom of the V at its neck and its top beside it on the woman, the lames' height and the gap
  * between two pieces.
  */
-export const VEST = { y: 1.3, dip: 0.035, neck: 1.385, lame: 0.06, gap: 0.012 };
+export const VEST = { y: 1.278, dip: 0.035, neck: 1.385, top: 1.462, lame: 0.06, gap: 0.012 };
 /** How far a piece of the vest dips at the angle a: a chevron, its point down the middle. */
 const chevron = (a: number) => VEST.dip * Math.max(0, 1 - Math.abs(a) / 40);
+/**
+ * The vest's armholes (the user, 2026-11-13: a crack in the chest piece by the armpit): over the
+ * trunk's split (1.41 m) the skin is the shoulder's and goes with the arm, away from the piece under
+ * it. Its top falls to `y`, under the split, between the angles `a`, where the shoulder's skin starts.
+ */
+export const ARMHOLE = { a: [22, 32, 41], y: 1.398 };
+/** The top of the vest's chest piece at the angle a: the V at the neck, then down into the armhole; hers lower, round over each breast (`fem`). */
+const vestTop = (a: number, fem: number) => {
+  const [q, top] = [Math.abs(a), fem ? VEST.top : 1.5];
+  return Math.min(
+    VEST.neck + (top - VEST.neck) * smooth(0, 25, q),
+    top - (top - ARMHOLE.y) * smooth(ARMHOLE.a[1 - fem], ARMHOLE.a[2], q),
+  );
+};
+/** How far the ninja's bracers stand off the forearm: half a plate's thickness. */
+export const BRACER = 0.006;
 export const REGIONS: Region[] = [
   // The chest plate, from under the ribs to the collar, cut round the neck.
   {
@@ -249,18 +267,19 @@ export const REGIONS: Region[] = [
   // a deep V at the neck, its bottom a chevron; three lames down the belly nested under it, each
   // narrower; a plate on the back and one on the small of it; and a bracer on each forearm. His
   // shoulder pads and his collar are pieces of their own (pads.ts).
-  {
+  ...[0, 1].map((fem): Region => ({
     part: PART.TRUNK,
     cx: 0,
     y: [VEST.y - VEST.dip, 1.5],
     a: [-60, 60],
-    high: a =>
-      Math.min(chestHigh(a), VEST.neck + (1.5 - VEST.neck) * Math.min(Math.abs(a) / 26, 1)),
+    high: a => vestTop(a, fem),
     low: a => VEST.y - chevron(a),
     swell: pecs,
     mould: true,
     alone: true,
-  },
+    fem: !!fem,
+    man: !fem,
+  })),
   ...[0, 1, 2].map((k): Region => {
     const top = VEST.y - VEST.gap - k * (VEST.lame + VEST.gap);
     return {
@@ -275,7 +294,8 @@ export const REGIONS: Region[] = [
   }),
   { part: PART.TRUNK, cx: 0, y: [1.2, 1.46], a: [-58, 58], face: 180, alone: true },
   { part: PART.TRUNK, cx: 0, y: [1.035, 1.2 - GAP], a: [-50, 50], face: 180, alone: true },
-  { part: PART.ARM, cx: 0.222, y: [0.99, 1.14], a: [-181, 181], alone: true },
+  // His bracers, thinner (the user, 2026-11-13).
+  { part: PART.ARM, cx: 0.222, y: [0.99, 1.14], a: [-181, 181], alone: true, off: BRACER },
 ];
 
 /** How far the plates stand off the skin: their thickness. */
@@ -471,6 +491,8 @@ const dome = (x: number, y: number) =>
     const q = 1 - (dx * dx + (y - DOME.y) ** 2) / DOME.r ** 2;
     return sum + DOME.h * Math.max(0, q) ** 2;
   }, 0);
+/** The ninja's vest has them a little smaller (the user, 2026-11-13): this much of their height. */
+export const SLIM = 0.8;
 
 const polar = (z0: number, x: number, z: number) => [Math.atan2(x, z0 - z), Math.hypot(x, z - z0)];
 
@@ -484,7 +506,7 @@ const skinR = (b: number, z0: number, x: number, y: number, z: number, nz: numbe
 const rawR = (b: number, gi: number, w: number[], a: number, y: number) => {
   const f = fitAt(w, a, y);
   const swell = b ? dome : REGIONS[gi].swell;
-  return f + (swell ? swell(f * Math.sin(a), y) : 0);
+  return f + (swell ? swell(f * Math.sin(a), y) : 0) * (b && REGIONS[gi].alone ? SLIM : 1);
 };
 
 /**
@@ -593,27 +615,58 @@ const moulding = (s: Skin, gi: number) => {
   const { z0, w, clear } = shellOf(b, gi);
   const shell = (a: number, y: number) => rawR(b, gi, w, a, y) + clear;
   const done = new WeakMap<Corner, Moulded>();
+  const { t } = s;
+  const facing = (x: number, z: number, n: number[]) => {
+    const a = polar(z0, x, z)[0];
+    return n[0] * Math.sin(a) - n[2] * Math.cos(a);
+  };
   return (c: Corner, k: number): Moulded => {
     const had = done.get(c);
     if (had) {
       return had;
     }
     const [x, y, z] = c;
-    const a = polar(z0, x, z)[0];
-    const [sa, ca] = [Math.sin(a), Math.cos(a)];
-    const n = unit(c[6], c[7], c[8]);
-    const R = shell(a, y);
-    const out0 = n[0] * sa - n[2] * ca;
-    if (out0 < FACING) {
+    // The rest normal of the skin as drawn, the build's own: the plate is set off along it.
+    const o = unit(
+      ...([0, 1, 2].map(j =>
+        [0, 1, 2].reduce((sum, q) => sum + s.v[t[k * 3 + q] * 6 + 3 + j] * c[3 + q], 0),
+      ) as [number, number, number]),
+    );
+    if (facing(x, z, o) < FACING) {
       // Not facing out: set off as an unmoulded plate, along the skin, with its normal.
-      const m = [OFF, 0, 0, 0, n[0], n[1], n[2]];
+      const m = [OFF, 0, 0, 0, ...o];
       done.set(c, m);
       return m;
     }
-    const d = Math.min(CEIL, Math.max(FLOOR, (R - skinR(b, z0, x, y, z, n[2])) / out0));
+    // Her bust is on the skin as drawn (retarget(), by the man's normal): the plate starts from it.
+    const base = [x, y, z - sag(b, x, y, -unit(c[6], c[7], c[8])[2])];
+    // Onto the shell where the normal meets it, not where it leaves the skin: on her bust the
+    // normals fan out, and the plate set off by the gap at its foot was uneven (the user, 2026-11-13).
+    /** How far the shell is past the point `d` along the normal, and the shell there. */
+    const gap = (d: number) => {
+      const p = base.map((c, j) => c + o[j] * d);
+      const [a, r] = polar(z0, p[0], p[2]);
+      const R = shell(a, p[1]);
+      return [R - r, a, R, p[1]];
+    };
+    let [g, a, R, py] = gap(0);
+    let [lo, hi] = [0, CEIL];
+    // Her alone (his chest is flat enough, and his plate is left as it was): where the normal
+    // crosses the shell, by halving; a dome's slope is too steep to walk down.
+    for (let i = 0; b && i < 12; i++) {
+      const m = (lo + hi) / 2;
+      [g, a, R, py] = gap(m);
+      if (g > 0) {
+        lo = m;
+      } else {
+        hi = m;
+      }
+    }
+    const d = Math.min(CEIL, Math.max(FLOOR, b ? lo : g / facing(x, z, o)));
+    const [sa, ca] = [Math.sin(a), Math.cos(a)];
     const e = 1e-3;
-    const Ra = (shell(a + e, y) - shell(a - e, y)) / (2 * e);
-    const Ry = (shell(a, y + e) - shell(a, y - e)) / (2 * e);
+    const Ra = (shell(a + e, py) - shell(a - e, py)) / (2 * e);
+    const Ry = (shell(a, py + e) - shell(a, py - e)) / (2 * e);
     // The shell's normal: its slope round the axis crossed with its slope up it.
     const Pa = [Ra * sa + R * ca, 0, -Ra * ca + R * sa];
     const Py = [Ry * sa, 1, -Ry * ca];
@@ -623,13 +676,6 @@ const moulding = (s: Skin, gi: number) => {
       Pa[0] * Py[1] - Pa[1] * Py[0],
     );
     const out = N[0] * sa - N[2] * ca >= 0 ? N : N.map(q => -q);
-    // The rest normal of the skin as drawn, the build's own: the shell turns from it.
-    const { t } = s;
-    const o = unit(
-      ...([0, 1, 2].map(j =>
-        [0, 1, 2].reduce((sum, q) => sum + s.v[t[k * 3 + q] * 6 + 3 + j] * c[3 + q], 0),
-      ) as [number, number, number]),
-    );
     const m = [d, o[0] - out[0], o[1] - out[1], o[2] - out[2], ...o];
     done.set(c, m);
     return m;
@@ -746,7 +792,9 @@ const cook = (s: Skin, fine: boolean): Recipe => {
         }
         const mould = moulds[g];
         const off = (c: Corner) =>
-          mould ? mould(c, k)[0] : OFF + (region.swell ? region.swell(c[0], c[1]) : 0);
+          mould
+            ? mould(c, k)[0]
+            : (region.off ?? OFF) + (region.swell ? region.swell(c[0], c[1]) : 0);
         for (let i = 1; i + 1 < poly.length; i++) {
           const cs = [poly[0], poly[i], poly[i + 1]];
           add(cs, cs.map(off), region.swell, WHITE, GLOSS, 0, k, mould && cs.map(c => mould(c, k)));

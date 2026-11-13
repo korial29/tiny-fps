@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { STRIDE } from './mesh';
-import { CLOTH, dress, mask } from './mask';
+import { CLOTH, MOUTH, dress, mask } from './mask';
 import { JOINT as J, rest, solve } from './rig';
 import { bindOf, body, palette, skin } from './skin';
 
@@ -46,6 +46,41 @@ describe('mask, the ninja hood and face guard', () => {
     const high = red.filter(p => p[1] > 1.72);
     expect(high.length).toBeGreaterThan(30);
     expect(high.filter(p => p[0] > 0).length).toBe(high.filter(p => p[0] < 0).length);
+  });
+
+  it('comes down under the chin and over the jaw, close to the face (the user, 2026-11-13)', () => {
+    const red = pts.filter(p => p[6] == RED[0] && p[7] == RED[1] && p[9] == RED[2] && p[1] < 1.7);
+    const band = (x: number) => red.filter(p => Math.abs(p[0]) >= x && Math.abs(p[0]) < x + 0.01);
+    const low = (x: number) => Math.min(...band(x).map(p => p[1]));
+    // Its middle under the chin, its sides low over the jaw, still rising round to the cheeks.
+    expect(low(0)).toBeLessThan(1.58);
+    expect(low(0.06)).toBeLessThan(1.6);
+    expect(low(0.07)).toBeGreaterThan(low(0) + 0.02);
+    // Its front stood out too much: 13 cm before the head's joint, now under 12.
+    expect(Math.min(...band(0).map(p => p[2]))).toBeGreaterThan(-0.12);
+  });
+
+  it('has its black mesh only in the kite under the nose, the cheeks plain (the user, 2026-11-13)', () => {
+    const ink = pts.filter(p => p[6] < 0.02 && p[7] < 0.02 && p[9] < 0.02);
+    expect(ink.length).toBeGreaterThan(0);
+    for (const p of ink) {
+      expect(Math.abs(p[0])).toBeLessThan(0.012);
+      expect(p[1]).toBeGreaterThan(1.633);
+    }
+  });
+
+  it('has three grooves down the guard at the mouth, in a darker team colour (the user, 2026-11-13)', () => {
+    const groove = pts.filter(
+      p =>
+        Math.abs(p[6] - RED[0] * 0.45) < 1e-6 &&
+        p[1] > MOUTH.y[0] - 0.003 &&
+        p[1] < MOUTH.y[1] + 0.003,
+    );
+    const xs = [...new Set(groove.map(p => Math.round(p[0] * 200)))].sort((a, b) => a - b);
+    // Three columns, a left, a middle and a right one.
+    const cols = xs.filter((x, i) => i == 0 || x - xs[i - 1] > 1);
+    expect(cols.length).toBe(3);
+    expect(groove.some(p => Math.abs(p[0]) < 0.002)).toBe(true);
   });
 
   it('paints the hood on the head, but round the eyes', () => {

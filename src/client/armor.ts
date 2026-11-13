@@ -44,6 +44,10 @@ interface Region {
   alone?: boolean;
   /** How far it stands off the skin, when not OFF. */
   off?: number;
+  /** On the trunk, its angles are measured round the leg of that side, as a leg's plate's. */
+  legs?: boolean;
+  /** No plate: the suit's dark ribbed cloth, a hair off the skin, with no wall (the gusset). */
+  thin?: boolean;
 }
 
 const smooth = (a: number, b: number, x: number) => {
@@ -111,25 +115,51 @@ const opening = (_a: number, c: Corner) => {
     ? BRIEFS.front + (BRIEFS.side - BRIEFS.front) * smooth(f0, f1, s)
     : BRIEFS.back + (BRIEFS.side - BRIEFS.back) * smooth(b0, b1, s);
 };
+/** How far the inside of a leg is from the angle a round it: 1 there, 0 from 60 degrees off. */
+const inside = (a: number) => 1 - smooth(25, 60, Math.abs(((a + 630) % 360) - 180));
+
 /**
  * On a thigh the opening also rises over its inside (a, round the leg, -90), above the leg's skin:
  * never between the thighs, with a curved edge where an angle limit cut it straight, a sliver of
  * plate standing by a wedge of suit at the back.
  */
-const legOpening = (a: number, c: Corner) =>
-  opening(a, c) + (0.95 - opening(a, c)) * (1 - smooth(25, 60, Math.abs(((a + 630) % 360) - 180)));
+const legOpening = (a: number, c: Corner) => opening(a, c) + (0.95 - opening(a, c)) * inside(a);
 
 /** The gap between the briefs' thin sides and the thigh plates going up the hips: there is little room. */
 const SIDE_GAP = 0.01;
 
 /**
- * The thigh plates' top, on the thighs and up the hips' sides alike: under the opening by GAP, by
- * SIDE_GAP at the sides, eased between, so that it is one line across the border too.
+ * The thigh plates' top (the user, 2026-11-13, on a picture of a trooper's hips: a slant from the
+ * hip down to the inside of the thigh, a crescent of dark ribbed suit between it and the briefs):
+ * a line of its own by the angle round the trunk, on the thighs and up the hips' sides alike, so one
+ * line across the border too. Lowest at the inside of the thigh, `front` and `back`, under the
+ * crotch; SIDE_GAP under the briefs at the hip; between the angles `at`.
  */
-const plates = (a: number, c: Corner) => {
-  const s = round(c);
-  return opening(a, c) - GAP + (GAP - SIDE_GAP) * smooth(45, 70, s) * (1 - smooth(110, 135, s));
+export const THIGH = { front: 0.775, back: 0.815, at: [20, 86, 96, 166] };
+const plates = (_a: number, c: Corner) => {
+  const [s, [f0, f1, b1, b0], top] = [round(c), THIGH.at, BRIEFS.side - SIDE_GAP];
+  return s <= 90
+    ? THIGH.front + (top - THIGH.front) * smooth(f0, f1, s)
+    : THIGH.back + (top - THIGH.back) * smooth(b0, b1, s);
 };
+
+/**
+ * The gusset: dark cloth from under the briefs to under the thigh plates' top, where the grey suit
+ * showed and, at the crotch, the stripes of the legs' insides. Its bottom is under the plates by
+ * `under`, and as low all round the inside of the thigh, where no plate is.
+ */
+const GUSSET = { under: 0.025, off: 0.003, rib: 0.005 };
+const gusset = (a: number, c: Corner) => {
+  const p = plates(a, c);
+  return p + (THIGH.front - p) * inside(a) - GUSSET.under;
+};
+/** The rib a rest point is in: slanted bands, down toward the crotch, both sides alike. */
+const rib = (c: Corner) => (Math.abs(c[0]) + c[1] * 0.7) / GUSSET.rib;
+/** The cloth's two shades, rib after rib. */
+const CLOTH = [
+  [0.04, 0.04, 0.045],
+  [0.075, 0.075, 0.085],
+];
 
 /** The chest plate's top at angle a round the trunk (degrees, 0 the front): the neck's V. */
 const chestTop = (a: number) => 1.5 - 0.045 * Math.cos((a * Math.PI * 1.4) / 180) ** 2;
@@ -253,16 +283,23 @@ export const REGIONS: Region[] = [
   // shoulder blades and one on the small of the back, GAP apart.
   { part: PART.TRUNK, cx: 0, y: [1.2, 1.4], a: [-58, 58], face: 180 },
   { part: PART.TRUNK, cx: 0, y: [1.035, 1.2 - GAP], a: [-52, 52], face: 180 },
-  // The thigh plates go on up the hips' sides, SIDE_GAP under the briefs' thin sides (the user).
-  ...[90, -90].map((face): Region => ({
+  // The thigh plates go on up the hips' sides, SIDE_GAP under the briefs' thin sides (the user): the
+  // same two plates on the trunk's skin, cut at the same angles round the leg, so the edges of each
+  // run on across the border (one piece spanning both left a tab over the stripe between them).
+  { part: PART.TRUNK, cx: 0.1, y: [0.92, 0.975], a: [-62, 78], high: plates, legs: true },
+  {
     part: PART.TRUNK,
-    cx: 0,
+    cx: 0.1,
     y: [0.92, 0.975],
-    a: [-70, 70],
-    face,
+    a: [-58, 58],
+    face: 180,
     high: plates,
-  })),
+    legs: true,
+  },
   { part: PART.LEG, cx: 0.1, y: [0.845, 0.935], a: [-181, 181], low: legOpening },
+  // The gusset under them (GUSSET): on the trunk and round the top of each thigh.
+  { part: PART.TRUNK, cx: 0, y: [0.8, 0.98], a: [-181, 181], thin: true },
+  { part: PART.LEG, cx: 0.1, y: [0.74, 0.94], a: [-181, 181], low: gusset, thin: true },
   // The ninja's vest (the user, 2026-11-13, on his picture of a ninja's armour): a chest piece open in
   // a deep V at the neck, its bottom a chevron; three lames down the belly nested under it, each
   // narrower; a plate on the back and one on the small of it; and a bracer on each forearm. His
@@ -319,7 +356,7 @@ type Corner = number[];
 
 /** The angle of the rest point (x, z) round the region's middle line, degrees: + outward on a limb, toward +x on the trunk; from the region's face. */
 const angle = (g: Region, x: number, z: number) => {
-  const side = g.part == PART.TRUNK ? 1 : Math.sign(x) || 1;
+  const side = g.part == PART.TRUNK && !g.legs ? 1 : Math.sign(x) || 1;
   const a = (Math.atan2((x - g.cx * side) * side, -z) * 180) / Math.PI;
   return g.face ? ((a - g.face + 540) % 360) - 180 : a;
 };
@@ -790,6 +827,34 @@ const cook = (s: Skin, fine: boolean): Recipe => {
         if (poly.length < 3) {
           continue;
         }
+        if (region.thin) {
+          // Cloth: no wall; close up, cut in ribs of two shades.
+          const js = poly.map(rib);
+          const [j0, j1] = fine
+            ? [Math.floor(Math.min(...js)), Math.floor(Math.max(...js))]
+            : [0, 0];
+          for (let j = j0; j <= j1; j++) {
+            const band = fine
+              ? clip(
+                  clip(poly, c => rib(c) - j, 0),
+                  c => j + 1 - rib(c),
+                  0,
+                )
+              : poly;
+            for (let i = 1; i + 1 < band.length; i++) {
+              add(
+                [band[0], band[i], band[i + 1]],
+                [GUSSET.off, GUSSET.off, GUSSET.off],
+                undefined,
+                CLOTH[j & 1],
+                -1,
+                0,
+                k,
+              );
+            }
+          }
+          continue;
+        }
         const mould = moulds[g];
         const off = (c: Corner) =>
           mould
@@ -865,6 +930,7 @@ const scratchesOn = (
       (rg, i) =>
         rg.part == part &&
         !rg.alone &&
+        !rg.thin &&
         !(rg.fem && !s.b) &&
         !(rg.man && s.b) &&
         LIMITS[i].every(f => f(probe(at)) >= 0),
@@ -1063,7 +1129,7 @@ export const armor = (
       [cr, cg, cb] = plate;
     } else if (plate && t[i + 4]) {
       [cr, cg, cb] = [plate[0] * 0.75, plate[1] * 0.75, plate[2] * 0.75];
-    } else if (plate) {
+    } else if (plate && t[i + 5] < 0) {
       // On coloured plates the scratches are white (the user, 2026-11-10); on white ones, grey.
       [cr, cg, cb] = SCRATCHED[+(cr > 0.55)];
     }

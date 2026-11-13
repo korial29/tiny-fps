@@ -805,7 +805,7 @@ export const soldier = (
     pack(out, s.pos[J.CHEST], s.rot[J.CHEST], color, lod);
   }
   if (armored) {
-    crotch(out, s.pos[J.PELVIS], s.rot[J.PELVIS], lod, plate, build ? CUP_F : 1);
+    crotch(out, s.pos[J.PELVIS], s.rot[J.PELVIS], plate, build ? CUP_F : 1);
   }
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);

@@ -7,8 +7,10 @@ import {
   STUMBLE_KNOCK,
   STUMBLE_TICKS,
   PUNCH,
+  DOWN_TICKS,
 } from '../shared/constants';
-import { MODE } from '../shared/types';
+import { felled } from '../shared/gun';
+import { FALL, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { MOVE, MOVES, createGait, thrown } from './gait';
 import type { Floor, Gait, Seat } from './gait';
@@ -1605,6 +1607,69 @@ describe('thrown: how far out the fist of a punch is', () => {
     // A swing with a weapon is no punch, nor one of a player down.
     for (const o of [{ ammo: 0 }, { blade: true }, { rail: 3 }, { rifle: 3 }, { down: 10 }]) {
       expect(at(PUNCH.ticks - PUNCH.strike, o)).toBe(0);
+    }
+  });
+});
+
+describe('a fall when he goes down (the user, 2026-11-13)', () => {
+  /** Stands half a second facing -z, then goes down with `fell`; the frame `secs` after. */
+  const die = (fell: number, secs: number, floor?: Floor) => {
+    const g = createGait();
+    const p = state();
+    sim(g, p, 0.5, () => {}, { floor });
+    p.fell = fell;
+    p.down = DOWN_TICKS;
+    const f = sim(g, p, secs, q => (q.down = Math.max(q.down - 1, 1)), { floor });
+    return f[f.length - 1];
+  };
+  /** Which way the chest's front looks, world y: 1 up, -1 down. */
+  const front = (f: Frame) => turn(f.rot[J.CHEST], [0, 0, -1])[1];
+
+  it('is thrown the way a shot went: on his back when hit from the front, on his face from behind', () => {
+    const back = die(felled(FALL.SHOT, 0, 1), 1.2);
+    const [pb, hb] = [back.pos[J.PELVIS], back.pos[J.HEAD]];
+    expect(pb[2]).toBeGreaterThan(1.2);
+    expect(hb[2] - pb[2]).toBeGreaterThan(0.4);
+    expect([pb[1], hb[1]].every(y => y < 0.4)).toBe(true);
+    expect(front(back)).toBeGreaterThan(0.7);
+    const face = die(felled(FALL.SHOT, 0, -1), 1.2);
+    expect(face.pos[J.PELVIS][2]).toBeLessThan(-1.2);
+    expect(face.pos[J.HEAD][2] - face.pos[J.PELVIS][2]).toBeLessThan(-0.4);
+    expect(front(face)).toBeLessThan(-0.7);
+  });
+
+  it('turns to the way a shot from the side went, and is thrown along it', () => {
+    const f = die(felled(FALL.SHOT, 1, 0), 1.2);
+    const [p, h] = [f.pos[J.PELVIS], f.pos[J.HEAD]];
+    expect(p[0]).toBeGreaterThan(1.2);
+    expect(Math.abs(p[2])).toBeLessThan(0.2);
+    expect(h[0] - p[0]).toBeGreaterThan(0.4);
+  });
+
+  it('is thrown no further than the roof goes on', () => {
+    const f = die(felled(FALL.SHOT, 0, 1), 1.2, (_, z) => (z > 0.9 ? -10 : 0));
+    expect(f.pos[J.PELVIS][2]).toBeLessThan(1);
+    expect(f.pos[J.PELVIS][2]).toBeGreaterThan(0.5);
+  });
+
+  it('struck, drops to his knees, then goes over on the side the blow pushes and lies there', () => {
+    const knees = die(felled(FALL.STRUCK, 1, 0), 0.5);
+    const p = knees.pos[J.PELVIS];
+    expect(Math.max(knees.pos[J.SHIN_L][1], knees.pos[J.SHIN_R][1])).toBeLessThan(0.15);
+    expect(p[1]).toBeGreaterThan(0.4);
+    expect(p[1]).toBeLessThan(0.65);
+    expect(knees.pos[J.HEAD][1] - p[1]).toBeGreaterThan(0.4);
+    for (const s of [1, -1]) {
+      const f = die(felled(FALL.STRUCK, s, 0), 1.6);
+      const [q, h] = [f.pos[J.PELVIS], f.pos[J.HEAD]];
+      expect(h[1]).toBeLessThan(0.45);
+      expect(q[1]).toBeLessThan(0.35);
+      expect(s * (h[0] - q[0])).toBeGreaterThan(0.3);
+      // Where he knelt: not thrown.
+      expect(Math.hypot(q[0], q[2])).toBeLessThan(0.6);
+      // He lay down whole: still at the end.
+      const later = die(felled(FALL.STRUCK, s, 0), 1.8);
+      expect(later.pos[J.HEAD][1]).toBeCloseTo(h[1], 3);
     }
   });
 });

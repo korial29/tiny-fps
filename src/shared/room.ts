@@ -46,7 +46,7 @@ import { Bot } from './bot';
 import { Ctf } from './ctf';
 import { kitOf } from './kit';
 import { shut, swing } from './doors';
-import { STRIKE, step, within } from './gun';
+import { STRIKE, felled, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
 import { navOf } from './nav';
 import { bruise, floorAt, forward, heightOf, respawn, spawn, speedOf, stumble } from './physics';
@@ -79,7 +79,7 @@ import {
 import type { Sight } from './rover';
 import { SHIP } from './ship';
 import { reaches, tackling } from './tackle';
-import { BODY, CUT, EV, HAIRS_N, KEY, LIMB, MODE, NOBODY, TONES_N } from './types';
+import { BODY, CUT, EV, FALL, HAIRS_N, KEY, LIMB, MODE, NOBODY, TONES_N } from './types';
 import type { Choice, Conn, Every, Input, PlayerInfo, PlayerState, Rover, Rules } from './types';
 import { build, hidden, ray } from './world';
 import type { World, WorldDef } from './world';
@@ -681,20 +681,29 @@ export class Room {
 
   /**
    * `hp` of a gun's damage to `foe` from `by`: as his class deals it (Kit.damage, a ninja's half), the
-   * half points kept on `foe` toward the next. True when he went down; `how` is the FRAG then.
+   * half points kept on `foe` toward the next, the hit going (dx, dz). True when he went down; `how`
+   * is the FRAG then.
    */
-  private shot(foe: Player, hp: number, by?: Player, how: number = FRAG.GUN): boolean {
+  private shot(
+    foe: Player,
+    hp: number,
+    by: Player | undefined,
+    dx: number,
+    dz: number,
+    how: number = FRAG.GUN,
+  ): boolean {
     const bank = (foe.halves ?? 0) + hp * 2 * (by ? kitOf(by.info.role, this.world.def).damage : 1);
     foe.halves = bank % 2;
-    return bank >= 2 && this.harm(foe, Math.floor(bank / 2), by, how);
+    return bank >= 2 && this.harm(foe, Math.floor(bank / 2), by, how, felled(FALL.SHOT, dx, dz));
   }
 
   /**
    * `hp` of damage to `foe`; the last one puts him down: he lies where he fell, without the gun or
    * the katana, a flag he carries drops with the lock, and `lost` is NONE (a cut sets it after).
-   * True when he went down: an enemy `by` scores a frag made `how` (FRAG), told to everyone.
+   * True when he went down: an enemy `by` scores a frag made `how` (FRAG), told to everyone. `fell`
+   * is how he falls (felled()).
    */
-  private harm(foe: Player, hp: number, by?: Player, how: number = FRAG.GUN): boolean {
+  private harm(foe: Player, hp: number, by?: Player, how: number = FRAG.GUN, fell = 0): boolean {
     if ((foe.state.hp -= hp) > 0) {
       return false;
     }
@@ -716,6 +725,7 @@ export class Room {
       wield: false,
       swing: 0,
       lost: LIMB.NONE,
+      fell,
       rail: -1,
       railed: false,
       rifle: -1,
@@ -825,11 +835,11 @@ export class Room {
       // The laser rifle's: every RIFLE_HITS on him (from anyone, until he goes down) take 1 hp.
       foe.graze = ((foe.graze ?? 0) + 1) % RIFLE_HITS;
       if (!foe.graze) {
-        this.shot(foe, 1, by);
+        this.shot(foe, 1, by, b.dx, b.dz);
       }
     } else if (!b.arc) {
-      this.shot(foe, b.power ?? 1, by);
-    } else if (this.harm(foe, CUTS[b.arc].hp, by, FRAG.BLADE)) {
+      this.shot(foe, b.power ?? 1, by, b.dx, b.dz);
+    } else if (this.harm(foe, CUTS[b.arc].hp, by, FRAG.BLADE, felled(FALL.STRUCK, b.dx, b.dz))) {
       // The limb a blade would take along the arc's line, swung from a metre back on it.
       const from = by && { ...by.state, cut: b.arc, yaw: Math.atan2(-b.dx, -b.dz) };
       foe.state.lost = from
@@ -901,7 +911,9 @@ export class Room {
     }
     for (const foe of foes) {
       const drawn = seen.find(s => s.id === foe.info.id)!;
-      if (this.harm(foe, swingOf(p.state).hp, p, FRAG.BLADE)) {
+      if (
+        this.harm(foe, swingOf(p.state).hp, p, FRAG.BLADE, felled(FALL.STRUCK, ...knock(p.state)))
+      ) {
         foe.state.lost = limbOf(p.state, drawn);
       } else {
         const [dx, dz] = knock(p.state);
@@ -931,7 +943,10 @@ export class Room {
       foe.blows = (fresh ? (foe.blows ?? 0) : 0) + 1;
       foe.punched = this.ticks;
       foe.bruise = ((foe.bruise ?? 0) + 1) % PUNCH_HITS;
-      if (!foe.bruise && this.harm(foe, 1, p, FRAG.FIST)) {
+      if (
+        !foe.bruise &&
+        this.harm(foe, 1, p, FRAG.FIST, felled(FALL.STRUCK, ...forward(p.state.yaw)))
+      ) {
         continue;
       }
       if (foe.blows >= PUNCH_STUN) {
@@ -985,7 +1000,15 @@ export class Room {
 
   /** 1 hp of the bolt's drain to `foe`, as his railer deals it; if it puts him down he is disintegrated (`fried`). */
   private fry(foe: Player): void {
-    foe.state.fried = this.shot(foe, 1, foe.railer, FRAG.RAIL);
+    const r = foe.railer?.state ?? foe.state;
+    foe.state.fried = this.shot(
+      foe,
+      1,
+      foe.railer,
+      foe.state.x - r.x,
+      foe.state.z - r.z,
+      FRAG.RAIL,
+    );
   }
 
   /**
@@ -1014,7 +1037,7 @@ export class Room {
     if (Math.abs(lead) >= LOCK_WIN) {
       const [w, l] = lead > 0 ? [p, o] : [o, p];
       w.state.hits = (w.state.hits + 1) & 255;
-      if (!this.harm(l, LOCK_HP, w, FRAG.BLADE)) {
+      if (!this.harm(l, LOCK_HP, w, FRAG.BLADE, felled(FALL.STRUCK, ...forward(w.state.yaw)))) {
         const [dx, dz] = forward(w.state.yaw);
         stumble(l.state, dx, dz, SHOCK_TICKS, SHOCK_KNOCK);
         l.state.zap = true;
@@ -1366,6 +1389,8 @@ export class Room {
           q,
           hp,
           this.players().find(o => o.info.id === by),
+          q.state.x - c[0],
+          q.state.z - c[2],
           FRAG.NADE,
         );
         hit ||= !own;
@@ -1402,7 +1427,9 @@ export class Room {
       }
       foe.run = this.ticks;
       p.state.hits = (p.state.hits + 1) & 255;
-      if (!this.harm(foe, closing < ROVER.SPLAT_KILL ? 1 : foe.state.hp, p, FRAG.VEHICLE)) {
+      const fell = felled(FALL.SHOT, r.vx, r.vz);
+      const hp = closing < ROVER.SPLAT_KILL ? 1 : foe.state.hp;
+      if (!this.harm(foe, hp, p, FRAG.VEHICLE, fell)) {
         const v = len(r.vx, r.vz);
         stumble(foe.state, r.vx / v, r.vz / v);
         foe.state.zap = false;

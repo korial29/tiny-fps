@@ -3,9 +3,9 @@
 // the stance legs put it, and a swing foot flies from where it left to where the stride will land
 // it. The other moves are static poses (MOVES) eased in by critically damped springs, so a switch
 // never pops. Everything is in the runner's frame: x right, y up, -z ahead. No DOM.
-import { DASH_COOLDOWN, DASH_TICKS, PUNCH } from '../shared/constants';
+import { DASH_COOLDOWN, DASH_TICKS, DOWN_TICKS, PUNCH, TICK_HZ } from '../shared/constants';
 import { floored } from '../shared/physics';
-import { MODE } from '../shared/types';
+import { FALL, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, RESTS, axis, mul, rest, slerp, solve, turn } from './rig';
@@ -282,6 +282,43 @@ const fk = (c: number[]): Quat[] => {
 };
 const IDENT: Quat = [0, 0, 0, 1];
 
+/**
+ * The falls of one put down shot or struck (FALL, less one), keys of the seconds since he went
+ * down: the pelvis's tip (forward or back) and roll to the side, its height over the floor and how
+ * far it has gone along the throw (metres), the bend of the hips and the knees, the arms' lift
+ * forward and out, the elbows' bend, the spine's slump. Shot: thrown off his feet along the hit,
+ * flat on his back or his face, the arms flung out; struck: down on his knees, a sway, then over
+ * on his side, curled.
+ */
+export const FALLS = [
+  [
+    [0, 0, 0, 0.98, 0, 0, 0.1, 0.2, 0.2, 0.3, 0],
+    [0.12, 0.35, 0, 1.05, 0.35, 0.5, 0.6, 1.2, 0.6, 0.6, 0.3],
+    [0.45, 1.57, 0, 0.3, 1.4, 0.6, 0.5, 1, 1, 0.5, 0],
+    [0.55, 1.57, 0, 0.18, 1.55, 0.1, 0.2, 0.5, 1.2, 0.3, 0],
+    [0.65, 1.5, 0, 0.25, 1.62, 0.05, 0.15, 0.3, 1.25, 0.3, 0],
+    [0.9, 1.57, 0, 0.16, 1.66, 0, 0.08, 0.1, 1.3, 0.2, 0],
+  ],
+  [
+    [0, 0, 0, 0.98, 0, 0, 0.1, 0.1, 0.2, 0.3, 0],
+    [0.3, 0.25, 0, 0.55, 0, 0.25, 1.55, 0.1, 0.15, 0.3, 0.3],
+    [0.6, 0.3, 0.12, 0.53, 0, 0.3, 1.55, 0.15, 0.15, 0.4, 0.3],
+    [1.1, 0.1, 1.57, 0.17, 0, 1, 1.4, 0.7, 0.3, 0.6, 0.2],
+  ],
+];
+/** The farthest a shot throws a body, metres: no further than the floor goes on at his height. */
+const THROW = 1.6;
+
+/** The keys K at the time t, eased from one to the next. */
+const keyed = (K: number[][], t: number): number[] => {
+  let i = 1;
+  while (i < K.length - 1 && K[i][0] < t) {
+    i++;
+  }
+  const [a, b] = [K[i - 1], K[i]];
+  return a.map((v, j) => v + (b[j] - v) * ease((t - a[0]) / (b[0] - a[0])));
+};
+
 /** The unit vector toward a wall on each SIDE of PlayerState.wall, on the floor plane. */
 const TOWARD = [
   [0, 0],
@@ -436,6 +473,12 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
   /** The seat he rides in, and whether a weapon keeps his right hand. */
   let sat: Seat | undefined;
   let armed = false;
+  /**
+   * Down shot or struck: the FALL (0 otherwise), the seconds since, its side (shot: 1 thrown face
+   * first, -1 on his back; struck: 1 over to his right), the metres of throw the floor allows, the
+   * yaw he went down at and the one he lands at.
+   */
+  let [how, dead, lay, far, y0, y1] = [0, 0, 1, 1, 0, 0];
 
   const update = (p: PlayerState, dt: number, floor?: Floor, seat?: Seat) => {
     dt = clamp(dt, 0, 0.1);
@@ -544,6 +587,32 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
     const face = p.yaw + arc(p.yaw, way) * turned;
     yaw = face + arc(face, wall) * clamp(sw(MOVE.HANG) + sw(MOVE.CLIMB));
     yaw += sp[YAW] * (1 - turned);
+    if (p.down > 0 && p.fell) {
+      if (!(q.down > 0) || fresh) {
+        const a = ((p.fell & 31) * Math.PI) / 16;
+        const r = arc(yaw, a);
+        const shot = (how = p.fell >> 5) == FALL.SHOT;
+        dead = (DOWN_TICKS - p.down) / TICK_HZ;
+        // Shot: thrown face first or on his back, whichever the body turns the less for, as far as
+        // the floor goes on at his height. Struck: over to the side the blow pushes.
+        lay = (shot ? Math.cos(r) : -Math.sin(r)) < 0 ? -1 : 1;
+        [y0, y1] = [yaw, shot ? a + (lay < 0 ? Math.PI : 0) : yaw];
+        far = 0;
+        while (
+          far < THROW &&
+          Math.abs(
+            (floor?.(p.x - Math.sin(a) * (far + 0.4), p.z - Math.cos(a) * (far + 0.4)) ?? p.y) -
+              p.y,
+          ) < 0.3
+        ) {
+          far += 0.4;
+        }
+      }
+      dead += dt;
+      yaw = y0 + arc(y0, y1) * ease(dead / 0.2);
+    } else {
+      how = 0;
+    }
     // Seated, the body faces the rover's nose.
     if (sat) {
       yaw += arc(yaw, sat.yaw) * clamp(sw(MOVE.RIDE));
@@ -996,8 +1065,28 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
       rot[J.CHEST] = mul(rot[J.CHEST], axis(Y, 0.3 * stun * Math.sin(time * 8)));
     }
     reach();
-    // Down: the knees buckle, then the body goes over about the pelvis onto the floor.
-    const lie = ease((sw(MOVE.DOWN) - 0.35) / 0.65);
+    // Down, shot or struck: the fall's keys over the pose, eased in over its first tenth of a second.
+    if (how) {
+      const [, tip, roll, hy, go, hip, knee, lift, wide, bend, slump] = keyed(FALLS[how - 1], dead);
+      const [f, s, h] = how == FALL.SHOT ? [lay, 0, -lay] : [1, lay, 1];
+      const k = clamp(dead / 0.1);
+      const to: Quat[] = [];
+      to[J.PELVIS] = mul(axis(Z, -s * roll), axis(X, -f * tip));
+      to[J.SPINE] = to[J.CHEST] = axis(X, -slump);
+      [0, 4].forEach((j, n) => {
+        to[J.THIGH_L + j] = axis(X, h * hip);
+        to[J.SHIN_L + j] = to[J.FOOT_L + j] = axis(X, -knee);
+        to[J.TOE_L + j] = IDENT;
+        to[J.ARM_L + j] = mul(axis(Z, (n * 2 - 1) * wide), axis(X, lift));
+        to[J.FOREARM_L + j] = axis(X, bend);
+      });
+      to.forEach((q, j) => (rot[j] = slerp(rot[j], q, k)));
+      [s * 0.4 * Math.sin(roll), hy - REST[0][1], -f * Math.min(go, far)].forEach(
+        (v, i) => (out.hips[i] += (v - out.hips[i]) * k),
+      );
+    }
+    // Down otherwise: the knees buckle, then the body goes over about the pelvis onto the floor.
+    const lie = how ? 0 : ease((sw(MOVE.DOWN) - 0.35) / 0.65);
     if (lie) {
       rot[J.PELVIS] = mul(axis(X, -1.45 * lie), rot[J.PELVIS]);
       out.hips[1] += (0.21 - REST[0][1] - out.hips[1]) * lie;

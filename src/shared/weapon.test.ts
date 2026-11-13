@@ -66,7 +66,8 @@ import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
 import { STILL, floored, spawn, speedOf } from './physics';
 import { PLASMA_LAG, PLASMA_STEP, launch } from './plasma';
-import { CUT, FLAG, KEY, LIMB, MODE, TEAM, TEX } from './types';
+import { CUT, FALL, FLAG, KEY, LIMB, MODE, TEAM, TEX } from './types';
+import { felled } from './gun';
 import type { Conn, PlayerState, Rules, Snapshot } from './types';
 import type { Spawn, WorldDef } from './world';
 import { loaded } from '../../test/loaded';
@@ -916,7 +917,10 @@ describe('going down', () => {
       expect([m.state(m.bob).hp, m.state(m.bob).down], `hit ${k}`).toEqual([HP_MAX - k, 0]);
     }
     m.fire(m.cy);
-    expect(m.state(m.bob)).toMatchObject({ hp: 0, down: DOWN_TICKS, ammo: -1, cool: 0 });
+    // Shot: thrown east, the way the ball went.
+    const fell = felled(FALL.SHOT, 1, 0);
+    expect(m.state(m.bob)).toMatchObject({ hp: 0, down: DOWN_TICKS, ammo: -1, cool: 0, fell });
+    expect(fell & 31).toBe(24);
     expect(m.state(m.cy).hits).toBe(HP_MAX);
     // On the wire: health 0 with `down` running says he is down.
     m.ticks(SNAP_EVERY);
@@ -924,6 +928,7 @@ describe('going down', () => {
       hp: 0,
       down: DOWN_TICKS,
       ammo: -1,
+      fell,
     });
     // One more shot passes through the body: no hit.
     m.fire(m.cy);
@@ -1571,6 +1576,8 @@ describe('a punch (the user, 2026-11-11: hit with the fists; half a point, the t
     }
     expect(hp).toEqual([5, 4, 4, 3, 3, 2, 2, 1, 1, 0]);
     expect(m.state(m.bob).down).toBeGreaterThan(0);
+    // Struck by the fists, the way Cy faces: east.
+    expect(m.state(m.bob).fell).toBe(felled(FALL.STRUCK, 1, 0));
     expect(m.state(m.cy).hits).toBe(10);
     // Nobody else paid, and the puncher neither.
     expect([m.state(m.ann).hp, m.state(m.dee).hp, m.state(m.cy).hp]).toEqual([
@@ -2133,6 +2140,8 @@ describe('a cut, the limb', () => {
     m.put(m.bob, 1.5, 0, { hp: 2 });
     swing(m, m.cy, LEFT, { pitch: aim(0.6) });
     expect(m.state(m.bob).lost).toBe(LIMB.ARM_L);
+    // Struck by a blade: on his knees, then over the way the cut throws (knock(): +z here).
+    expect(m.state(m.bob).fell).toBe(felled(FALL.STRUCK, 0, 1));
     m.hold(m.bob, DOWN_TICKS - 1, 0);
     expect(m.state(m.bob)).toMatchObject({ down: 1, lost: LIMB.ARM_L });
     m.hold(m.bob, 1, 0);

@@ -67,13 +67,14 @@ const grant = (p: PlayerState): boolean => {
   p.ammo = p.ammo < 0 ? p.ammo : Math.min(AMMO_MAX, p.ammo + AMMO_PACK);
   return p.ammo !== had;
 };
-/** What a hit on the host does to a player who has run out of health. */
+/** What a hit on the host does to a player who has run out of health (harm() in room.ts): the charge's byte carries his fall then. */
 const fell = (p: PlayerState) =>
   Object.assign(p, {
     hp: 0,
     down: DOWN_TICKS,
     ammo: -1,
     cool: 0,
+    charge: 0,
     blade: false,
     wield: false,
     swing: 0,

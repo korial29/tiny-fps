@@ -1,15 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { IDLE, duo } from '../../test/teams';
-import { AMMO_MAX, CUTS, GUN_COOLDOWN, GUN_MAG, RUN_SPEED, WALLRUN_TICKS } from './constants';
+import {
+  AMMO_MAX,
+  CUTS,
+  GUN_COOLDOWN,
+  GUN_MAG,
+  RAIL_CAP,
+  RIFLE_CLIP,
+  RUN_SPEED,
+  WALLRUN_TICKS,
+} from './constants';
 import { STRIKE, step } from './gun';
 import { KITS, ROLE, kitOf, roleOf, rolesOf } from './kit';
 import type { Kit } from './kit';
 import { MAPS } from './maps';
 import { STILL, move } from './physics';
 import { decodeSnapshot, encodeSnapshot } from './protocol';
-import { chosen } from './room';
+import { Room, chosen } from './room';
+import { ROOFTOPS } from './map';
 import { EV, KEY, MODE, TEX } from './types';
-import type { PlayerState } from './types';
+import type { Conn, PlayerState } from './types';
 import { build } from './world';
 import type { Brush } from './world';
 
@@ -169,6 +179,69 @@ describe('the ninja', () => {
       const q = decodeSnapshot(encodeSnapshot({ tick: 1, players: [{ ...p, dashes }], ...IDLE }))!;
       expect(q.players[0].dashes).toBe(dashes);
     }
+  });
+});
+
+describe('the ninja with a gun', () => {
+  it('holds half a magazine in each gun', () => {
+    expect([NINJA.mag, NINJA.cap, NINJA.clip]).toEqual([
+      Math.ceil(GUN_MAG / 2),
+      RAIL_CAP / 2,
+      RIFLE_CLIP / 2,
+    ]);
+    // A full magazine from before is cut to his.
+    const p = at(-50, 0, { ammo: AMMO_MAX, mag: GUN_MAG });
+    step(p, { seq: 0, keys: 0, yaw: 0, pitch: 0 }, yard, 0, true, [], NINJA);
+    expect(p.mag).toBe(NINJA.mag);
+  });
+
+  it('runs and sprints far slower with a gun in hand, not with the katana', () => {
+    const top = (o: Partial<PlayerState>, keys: number) => {
+      const p = at(-50, 0, o);
+      for (let k = 0; k < 600; k++) {
+        go(p, keys, NINJA);
+      }
+      return -p.vz;
+    };
+    for (const keys of [KEY.FORWARD, KEY.FORWARD | KEY.SPRINT]) {
+      const bare = top({}, keys);
+      expect(top({ ammo: 30 }, keys)).toBeCloseTo(bare * NINJA.slow, 3);
+      expect(top({ rifle: 30 }, keys)).toBeCloseTo(bare * NINJA.slow, 3);
+      expect(top({ ammo: 30, blade: true, wield: true }, keys)).toBeCloseTo(bare, 3);
+    }
+    expect(NINJA.slow).toBeLessThan(0.6);
+    // The marine is not slowed.
+    const m = at(-50, 0, { ammo: 30 });
+    for (let k = 0; k < 600; k++) {
+      go(m, KEY.FORWARD, MARINE);
+    }
+    expect(-m.vz).toBeCloseTo(RUN_SPEED, 3);
+  });
+
+  it('takes half the health his guns hit for, the half points kept toward the next', () => {
+    const room = new Room({}, ROOFTOPS);
+    const join = (name: string, role: number) => {
+      const c: Conn = { send: () => {} };
+      room.connect(c);
+      room.receive(c, JSON.stringify({ t: 'join', name, role }));
+    };
+    join('ninja', ROLE.NINJA);
+    join('marine', ROLE.MARINE);
+    join('foe', ROLE.MARINE);
+    type Shot = { shot(foe: unknown, hp: number, by?: unknown): boolean };
+    const r = room as unknown as Shot & {
+      players(): { info: { name: string }; state: PlayerState }[];
+    };
+    const [ninja, marine, foe] = ['ninja', 'marine', 'foe'].map(n =>
+      r.players().find(p => p.info.name == n)!,
+    );
+    const hp = foe.state.hp;
+    r.shot(foe, 1, ninja);
+    expect(foe.state.hp).toBe(hp);
+    r.shot(foe, 1, ninja);
+    expect(foe.state.hp).toBe(hp - 1);
+    r.shot(foe, 1, marine);
+    expect(foe.state.hp).toBe(hp - 2);
   });
 });
 

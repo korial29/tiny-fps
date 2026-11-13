@@ -12,7 +12,6 @@ import {
   CHARGE_TICKS,
   CUTS,
   DASH_COOLDOWN,
-  GUN_MAG,
   GUN_RELOAD,
   HEAVY_MAX,
   HEAVY_TAP,
@@ -27,10 +26,8 @@ import {
   HEAT_COOL,
   HEAT_LOCK,
   HEAT_MAX,
-  RAIL_CAP,
   RAIL_SPEND,
   RAIL_RELOAD,
-  RIFLE_CLIP,
   RIFLE_RELOAD,
   SPECIAL_LATE,
   PUNCH,
@@ -88,7 +85,7 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  *   stays in hand for the length of a swing. `wield` is the katana in hand, `railed` the rail gun.
  * - The gun fires from its battery (`mag`), the rail gun from its capsule (`cap`). An empty one, or
  *   KEY.RELOAD with room in it, swaps it for a full one from what he carries: `reload` ticks
- *   without firing, then it holds GUN_MAG (RAIL_CAP) or what is left. A switch of weapon drops it.
+ *   without firing, then it holds the kit's `mag` (`cap`, `clip`) or what is left. A switch of weapon drops it.
  *   The racks fill both.
  * - The rail gun throws its bolt on every step FIRE is held, spending a tick of it (`zapping`),
  *   unless it is `hot`: its `heat` rises while it fires and falls when it does not (HEAT_MAX).
@@ -136,24 +133,29 @@ export const step = (
   const { rack, blade, rail, rifle } = w.def.teams[team];
   const inside = !!rack && within(p, rack, RACK_R);
   if (armed && inside && !p.rack) {
-    [p.ammo, p.mag] = [kit.ammo, GUN_MAG];
+    [p.ammo, p.mag] = [kit.ammo, kit.mag];
   }
   p.rack = inside;
   p.blade = !!p.blade || (armed && !!blade && within(p, blade, RACK_R));
   const inRail = !!rail && within(p, rail, RACK_R);
   if (armed && inRail && !p.inRail) {
-    [p.rail, p.cap] = [kit.rail, RAIL_CAP];
+    [p.rail, p.cap] = [kit.rail, kit.cap];
   }
   p.inRail = inRail;
   const inRifle = !!rifle && within(p, rifle, RACK_R);
   if (armed && inRifle && !p.inRifle) {
-    [p.rifle, p.clip, p.nades] = [kit.rifle, RIFLE_CLIP, NADE_MAX];
+    [p.rifle, p.clip, p.nades] = [kit.rifle, kit.clip, NADE_MAX];
   }
   p.inRifle = inRifle;
   // Never more than the class carries: a change of class keeps no marine's ammo on a ninja.
   p.ammo = Math.min(p.ammo, kit.ammo);
   p.rail = p.rail === undefined ? p.rail : Math.min(p.rail, kit.rail);
   p.rifle = p.rifle === undefined ? p.rifle : Math.min(p.rifle, kit.rifle);
+  [p.mag, p.cap, p.clip] = [
+    Math.min(p.mag ?? 0, kit.mag),
+    Math.min(p.cap ?? 0, kit.cap),
+    Math.min(p.clip ?? 0, kit.clip),
+  ];
   p.cool = Math.max(0, p.cool - 1);
   p.lob = Math.max(0, (p.lob ?? 0) - 1);
   const busy = p.mode === MODE.HANG || p.mode === MODE.CLIMB;
@@ -204,10 +206,10 @@ export const step = (
   // then full.
   const [key, size, carried, ticks2] =
     hand == 3
-      ? (['clip', RIFLE_CLIP, p.rifle!, RIFLE_RELOAD] as const)
+      ? (['clip', kit.clip, p.rifle!, RIFLE_RELOAD] as const)
       : hand == 2
-        ? (['cap', RAIL_CAP, p.rail!, RAIL_RELOAD] as const)
-        : (['mag', GUN_MAG, p.ammo, GUN_RELOAD] as const);
+        ? (['cap', kit.cap, p.rail!, RAIL_RELOAD] as const)
+        : (['mag', kit.mag, p.ammo, GUN_RELOAD] as const);
   const [load, full] = [p[key] ?? 0, Math.min(size, carried)];
   if (p.reload) {
     if (!--p.reload) {

@@ -102,6 +102,9 @@ interface Player {
   burn?: number;
   /** The laser rifle's hits on him toward the next hp: every RIFLE_HITS take one. */
   graze?: number;
+  /** Half points of damage on him toward the next hp, a ninja's guns' (shot()); and who last railed him. */
+  halves?: number;
+  railer?: Player;
   /** The punches he took toward the next hp (every PUNCH_HITS take one), those toward a stun, and the host tick of the last. */
   bruise?: number;
   blows?: number;
@@ -647,6 +650,16 @@ export class Room {
   }
 
   /**
+   * `hp` of a gun's damage to `foe` from `by`: as his class deals it (Kit.damage, a ninja's half), the
+   * half points kept on `foe` toward the next. True when he went down.
+   */
+  private shot(foe: Player, hp: number, by?: Player): boolean {
+    const bank = (foe.halves ?? 0) + hp * 2 * (by ? kitOf(by.info.role, this.world.def).damage : 1);
+    foe.halves = bank % 2;
+    return bank >= 2 && this.harm(foe, Math.floor(bank / 2));
+  }
+
+  /**
    * `hp` of damage to `foe`; the last one puts him down: he lies where he fell, without the gun or
    * the katana, a flag he carries drops with the lock, and `lost` is NONE (a cut sets it after).
    * True when he went down.
@@ -655,7 +668,7 @@ export class Room {
     if ((foe.state.hp -= hp) > 0) {
       return false;
     }
-    [foe.graze, foe.bruise, foe.blows] = [0, 0, 0];
+    [foe.graze, foe.bruise, foe.blows, foe.halves] = [0, 0, 0, 0];
     // Out of his seat, in the air with the rover's speed (his own since the last seat()).
     if (foe.state.mode === MODE.RIDE) {
       this.unseat(foe);
@@ -770,10 +783,10 @@ export class Room {
       // The laser rifle's: every RIFLE_HITS on him (from anyone, until he goes down) take 1 hp.
       foe.graze = ((foe.graze ?? 0) + 1) % RIFLE_HITS;
       if (!foe.graze) {
-        this.harm(foe, 1);
+        this.shot(foe, 1, by);
       }
     } else if (!b.arc) {
-      this.harm(foe, b.power ?? 1);
+      this.shot(foe, b.power ?? 1, by);
     } else if (this.harm(foe, CUTS[b.arc].hp)) {
       // The limb a blade would take along the arc's line, swung from a metre back on it.
       const from = by && { ...by.state, cut: b.arc, yaw: Math.atan2(-b.dx, -b.dz) };
@@ -922,15 +935,15 @@ export class Room {
       foe.state.slow = RAIL_TICKS;
       if (fresh) {
         p.state.hits = (p.state.hits + 1) & 255;
-        foe.burn = 0;
+        [foe.burn, foe.railer] = [0, p];
         this.fry(foe);
       }
     }
   }
 
-  /** 1 hp of the bolt's drain to `foe`; if it puts him down he is disintegrated (`fried`). */
+  /** 1 hp of the bolt's drain to `foe`, as his railer deals it; if it puts him down he is disintegrated (`fried`). */
   private fry(foe: Player): void {
-    foe.state.fried = this.harm(foe, 1);
+    foe.state.fried = this.shot(foe, 1, foe.railer);
   }
 
   /**
@@ -1307,7 +1320,11 @@ export class Room {
           ? blast(this.world, c, q.state)
           : 0;
       if (hp) {
-        this.harm(q, hp);
+        this.shot(
+          q,
+          hp,
+          this.players().find(o => o.info.id === by),
+        );
         hit ||= !own;
       }
     }

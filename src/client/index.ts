@@ -6,7 +6,7 @@ import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ClientText, ServerText } from '../shared/protocol';
 import { FLAG, KEY, MODE } from '../shared/types';
 import type { Choice, PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
-import { ROLE, roleOf, rolesOf } from '../shared/kit';
+import { ROLE, kitOf, roleOf, rolesOf } from '../shared/kit';
 import { TONES, toneOf } from './features';
 import { styleOf } from './hair';
 import { shaved } from './skin';
@@ -375,6 +375,8 @@ const play = (
         rolesOf(world.def),
       );
       predictor.you(you.id, you.team, own?.role);
+      const kit = kitOf(own?.role, world.def);
+      hud.magazines([kit.mag, kit.cap, kit.clip]);
       // No map to pick in the game's menu (the user, 2026-11-13): it is the join page's choice.
       count.textContent = `Players: ${roster.length}`;
     } else if (m?.t == 'end') {

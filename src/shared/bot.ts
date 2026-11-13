@@ -3,8 +3,9 @@
 // lying flag, guard the base), goes there along nav.ts's legs, and shoots the enemies it sees. It
 // fights after UT2004's bots (docs/BOTS.md): a character drawn from its id and the room's skill,
 // strafes, jumps and dashes aside in a fight, and a dash out of the way of a ball coming at it.
-import { FALL_SAFE, PLASMA_SPEED, STEP_H, TICK_HZ } from './constants';
-import { eyeHeight, floorAt, forward, gravity, norm } from './physics';
+import { FALL_SAFE, PLASMA_SPEED, PLAYER_H, PLAYER_R, STEP_H, TICK_HZ } from './constants';
+import { eyeHeight, floorAt, forward, gapTo, gravity, norm } from './physics';
+import type { Body } from './physics';
 import { navOf, path, ROUTES } from './nav';
 import type { Edge, Nav, Vec3, Way } from './nav';
 import type { Flying } from './plasma';
@@ -32,6 +33,8 @@ export interface Sight {
   world: World;
   /** The balls in flight, to get out of their way. */
   balls?: readonly Flying[];
+  /** The vehicles' bodies, which a body on foot walks into as into a wall (rover.ts's solid()). */
+  bodies?: readonly Body[];
 }
 
 export type Intent = { keys: number; yaw: number; pitch: number };
@@ -91,6 +94,8 @@ const CLOSE = 1.3;
 /** Ticks without a metre of progress before a point close by counts as reached, and before a new way. */
 const STUCK_JUMP = 45;
 const STUCK_PLAN = 180;
+/** Ticks an entry a bot could not get to is left out of its ways. */
+const SHUN = 1200;
 /**
  * Ticks a straight run to a goal is kept before a way is looked for again, and the metres the goal
  * may move before a new way: DRIFT, or that share of the way to it when it is farther.
@@ -197,6 +202,7 @@ export class Bot {
   private since = 0;
   private last: Vec3 = [0, 0, 0];
   private world: World | undefined;
+  private bodies: readonly Body[] = [];
   /** Where it looks walking, turned a little each tick; the side of its last detour; its last dash. */
   private look = 0;
   private side = 1;
@@ -207,6 +213,8 @@ export class Bot {
   /** The way it strafes in a fight (1 left, -1 right) and the tick it may turn back. */
   private strafing = 1;
   private turnBack = 0;
+  /** The nodes it could not get to as an entry, and the tick each may be one again. */
+  private shun = new Map<number, number>();
   /** The balls it has weighed, by shooter and count: it decides once whether to get out of the way. */
   private weighed = new Set<number>();
 
@@ -228,6 +236,7 @@ export class Bot {
     const t = ++this.ticks;
     const p = s.me.state;
     this.world = s.world;
+    this.bodies = s.bodies ?? [];
     if (p.down) {
       this.goal = undefined;
       this.foe = -1;
@@ -422,7 +431,12 @@ export class Bot {
     this.goal = goal;
     this.planned = this.ticks;
     this.nav = navOf(w);
-    this.way = path(this.nav, w, at(p), goal, this.prefer);
+    for (const [i, until] of this.shun) {
+      if (until < this.ticks) {
+        this.shun.delete(i);
+      }
+    }
+    this.way = path(this.nav, w, at(p), goal, this.prefer, new Set(this.shun.keys()));
     this.leg = this.way.entry ? -1 : 0;
     this.flight = undefined;
     this.best = Infinity;
@@ -545,6 +559,19 @@ export class Bot {
     if (ray(w, [p.x, p.y + 1.9, p.z], [fx, 0, fz], reach) < reach) {
       return false;
     }
+    // A parked rover or ship is a wall too: its hull and wings, between the knees and the head.
+    for (let t = 0.5; t <= ahead; t += 0.5) {
+      for (const o of this.bodies) {
+        const [dx, dz, y] = gapTo(o, p.x + fx * t, p.z + fz * t);
+        if (
+          dx * dx + dz * dz < (o.r + PLAYER_R) ** 2 &&
+          y < p.y + PLAYER_H &&
+          y + o.h > p.y + STEP_H
+        ) {
+          return false;
+        }
+      }
+    }
     if (ray(w, [p.x, p.y + STEP_H + 0.1, p.z], [fx, 0, fz], ahead) >= ahead) {
       return 'open';
     }
@@ -575,8 +602,12 @@ export class Bot {
     }
     if (this.ticks - this.better > STUCK_PLAN) {
       this.goal = undefined;
-      // The next way round goes the other side.
+      // The next way round goes the other side, and an entry it could not get to is none for a while.
       this.side = -this.side;
+      const entry = this.leg < 0 && this.way.entry ? this.nav!.nodes.indexOf(this.way.entry) : -1;
+      if (entry >= 0) {
+        this.shun.set(entry, this.ticks + SHUN);
+      }
     }
   }
 

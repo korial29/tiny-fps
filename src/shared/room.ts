@@ -1491,6 +1491,8 @@ export class Room {
   /** Each bot's input of this tick, applied as a client's would be on arrival. */
   private think(players: Player[]): void {
     const others = players.map(q => ({ id: q.info.id, team: q.info.team, state: q.state }));
+    // The vehicles as a bot up on its feet walks into them.
+    const bodies = solid(this.rovers, { down: 0 });
     for (const p of players) {
       if (p.bot) {
         const me = others.find(o => o.id === p.info.id)!;
@@ -1500,6 +1502,7 @@ export class Room {
           flags: this.ctf.flags,
           world: this.world,
           balls: this.balls,
+          bodies,
         });
         p.seq = ((p.seq ?? -1) + 1) & 0xffff;
         this.apply(p, onWire({ ...i, seq: p.seq, view: this.ticks & 0xffff }));

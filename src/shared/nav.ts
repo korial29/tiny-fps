@@ -45,6 +45,8 @@ const DROP = 2;
  * below: a drop that does not hurt at full gravity.
  */
 const NEAR = 20;
+/** The metres of way a metre of height off a bot counts for, when it picks a node to head for. */
+const LEVEL = 3;
 const ABOVE = 2.2;
 const BELOW = 8;
 /** Two points of the routes this close (metres, and in height) are one. */
@@ -259,6 +261,8 @@ export interface Way {
  * `ok` takes, within NEAR, the best by `weigh` whose height off `p` a body manages (a stair, a
  * ledge to climb, a drop that does not hurt), `up` 1 when the bot goes from `p` to the node and -1
  * when it goes from the node to `p`; with nothing in the way of the head first, then even hidden.
+ * `weigh` takes the way to the node with each metre of height as LEVEL metres: from a beam, a node
+ * along it beats one on the roof below, which no step off the beam reaches.
  */
 const close = (
   w: World,
@@ -280,10 +284,10 @@ const close = (
         d < NEAR &&
         dy <= ABOVE &&
         dy >= -BELOW &&
-        weigh(d, i) < least &&
+        weigh(d + LEVEL * Math.abs(dy), i) < least &&
         (!clear || ray(w, [p[0], head, p[2]], [ux, 0, uz], d) >= d)
       ) {
-        [best, least] = [i, weigh(d, i)];
+        [best, least] = [i, weigh(d + LEVEL * Math.abs(dy), i)];
       }
     }
     if (best >= 0) {
@@ -296,9 +300,17 @@ const close = (
 /**
  * The cheapest way from the point `a` to the point `b`. No entry when `a` walks straight to `b`, or
  * when the map has no way. The legs of the routes other than `prefer` (an index of ROUTES) cost
- * more, so bots that prefer different ones spread over the map.
+ * more, so bots that prefer different ones spread over the map. The nodes in `shun` are no entry:
+ * the bot could not get to them.
  */
-export const path = (nav: Nav, w: World, a: Vec3, b: Vec3, prefer = -1): Way => {
+export const path = (
+  nav: Nav,
+  w: World,
+  a: Vec3,
+  b: Vec3,
+  prefer = -1,
+  shun: ReadonlySet<number> = new Set(),
+): Way => {
   const { nodes, out, runUp } = nav;
   if (!nodes.length || walkable(w, a, b)) {
     return { edges: [] };
@@ -309,7 +321,7 @@ export const path = (nav: Nav, w: World, a: Vec3, b: Vec3, prefer = -1): Way => 
   const back = new Array<number>(n).fill(-1);
   const done = new Array<boolean>(n).fill(false);
   for (let i = 0; i < n; i++) {
-    if (!runUp.has(i) && flat(a, nodes[i]) <= WALK && walkable(w, a, nodes[i])) {
+    if (!runUp.has(i) && !shun.has(i) && flat(a, nodes[i]) <= WALK && walkable(w, a, nodes[i])) {
       cost[i] = flat(a, nodes[i]) / PACE;
     }
   }
@@ -321,7 +333,7 @@ export const path = (nav: Nav, w: World, a: Vec3, b: Vec3, prefer = -1): Way => 
       w,
       nodes,
       a,
-      i => !runUp.has(i),
+      i => !runUp.has(i) && !shun.has(i),
       d => d,
       1,
     );

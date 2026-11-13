@@ -12,6 +12,8 @@ import type { Conn, FlagState, Snapshot } from './types';
 import { build } from './world';
 import type { Brush, World, WorldDef } from './world';
 
+type Vec3 = [number, number, number];
+
 /** A peer that records what the room sends it. */
 const peer = () => {
   const texts: ServerText[] = [];
@@ -396,6 +398,24 @@ describe('Bot: in a fight', () => {
 });
 
 describe('nav: off the ways', () => {
+  it('heads along a narrow beam rather than for the roof below it', () => {
+    // On the Spine's beam over the plaza, 0.5 m wide, 6.6 m over the next roof down.
+    const w = build(HIGHLINE);
+    const way = path(navOf(w), w, [15.6, 26, 127], [98, 14.5, 120]);
+    expect(way.entry?.[1]).toBe(26);
+  });
+
+  it('leaves out an entry the bot could not get to', () => {
+    const w = build(HIGHLINE);
+    const nav = navOf(w);
+    const from: [number, number, number] = [15.6, 26, 127];
+    const first = path(nav, w, from, [98, 14.5, 120]);
+    const shunned = new Set([nav.nodes.indexOf(first.entry!)]);
+    const next = path(nav, w, from, [98, 14.5, 120], -1, shunned);
+    expect(next.entry).toBeDefined();
+    expect(next.entry).not.toBe(first.entry);
+  });
+
   it('finds a way across the map to a goal on a plinth, which no node walks straight to', () => {
     // A carrier on red's armoury, 1.5 m up: chased from blue's spawn, not run at in a straight line.
     const w = build(HIGHLINE);
@@ -409,6 +429,35 @@ describe('nav: off the ways', () => {
     const w = build(HIGHLINE);
     const way = path(navOf(w), w, [56.8, 24.2, 227], [98, 14.5, 131]);
     expect(way.entry).toBeDefined();
+  });
+});
+
+describe('Bot: round a parked vehicle', () => {
+  it('walks round a vehicle’s body standing in its way, as round a wall', () => {
+    const world = build({
+      brushes: [{ min: [-50, -5, -50], max: [50, 0, 50], top: TEX.TILE, side: TEX.BRICK }],
+      teams: [
+        { base: [0, 0, 40], spawns: [[0, 0, 10, 0]] },
+        { base: [0, 0, -40], spawns: [[0, 0, -10, Math.PI]] },
+      ],
+      floor: -20,
+      sun: { dir: [0, 1, 0], color: [1, 1, 1] },
+      sky: [
+        [0, 0, 1],
+        [1, 1, 1],
+      ],
+    });
+    const home: FlagState = { state: FLAG.HOME, by: 0, x: 0, y: 0, z: 0, left: 0 };
+    // A hull 6 m long across the bot's way north, 2 m ahead, as a ship's on its pad.
+    const hull = { a: [-3, 0, 8] as Vec3, b: [3, 0, 8] as Vec3, r: 1, h: 2 };
+    const bot = new Bot(0);
+    const me = { id: 0, team: 0, state: { ...spawn(0, world, 0, 0), ammo: 10, mag: 5 } };
+    for (let k = 0; k < 600 && me.state.z > 0; k++) {
+      const i = bot.think({ me, others: [], flags: [home, home], world, bodies: [hull] });
+      move(me.state, { ...i, seq: k }, world, 0, [hull]);
+    }
+    // Past the hull, on its way to the blue base.
+    expect(me.state.z).toBeLessThanOrEqual(0);
   });
 });
 

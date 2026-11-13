@@ -7,6 +7,7 @@ import { TAU } from '../shared/physics';
 import { GLOW, glow } from './flag';
 import { cross, loft, pow, quad, sheet, shrunk, sub, unit } from './helmet';
 import { GLOSS, STRIDE, aim, place } from './mesh';
+import type { Spot } from './helmet';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
@@ -231,68 +232,78 @@ export const hose = (out: number[], head: Vec3, hq: Quat, chest: Vec3, cq: Quat,
 /** The tint that turns a white piece into `plate` (white when absent). */
 const tintOf = (plate?: number[]) => plate?.map((v, i) => v / WHITE[i]);
 
-/** The woman's cup, scaled about its joint: flatter. */
-export const CUP_F: Vec3 = [0.92, 0.94, 0.96];
+/** The woman's panel, scaled about its joint: smaller, as far out (her briefs are where his are). */
+export const CUP_F: Vec3 = [0.92, 0.94, 1];
 
 /**
- * The cup at the crotch of the briefs (the user, 2026-11-10, after a trooper's armour, not copied):
- * a rounded shield narrowing down between the thighs, on the pelvis joint (0.98 m at rest). Its
- * rings from the top down: [height from the joint, half width, front (z), back (z)].
+ * The panel at the crotch of the briefs (the user, 2026-11-10: a cup, after a trooper's armour, not
+ * copied; 2026-11-13, on his picture: no ball, a flat piece at the bottom of the briefs set apart
+ * from them by a line, a trapeze over a round bottom), on the pelvis joint (0.98 m at rest). Its
+ * rows from the top down: [height from the joint, half width, front (z)]; its face lies a few
+ * millimetres over the briefs and follows them back to the crotch.
  */
 const CUP = [
-  [-0.035, 0.058, -0.139, -0.1],
-  [-0.06, 0.052, -0.137, -0.098],
-  [-0.085, 0.042, -0.131, -0.096],
-  [-0.106, 0.03, -0.122, -0.094],
-  [-0.124, 0.014, -0.11, -0.094],
+  [-0.032, 0.038, -0.1405],
+  [-0.056, 0.062, -0.1405],
+  [-0.09, 0.059, -0.136],
+  [-0.111, 0.049, -0.128],
+  [-0.124, 0.033, -0.115],
+  [-0.132, 0.013, -0.103],
 ];
+/** The dark line round it: a bevel `w` wide from its face down into the briefs, `d` deep. */
+const SEAM = { w: 0.008, d: 0.016, col: [0.05, 0.05, 0.06] };
 
-const cups = new Map<number, number[]>();
+let cup: number[] | undefined;
 
-/** Appends the crotch cup at level of detail `lod` on the pelvis joint at `at` turned by `q`, in `plate` (white when absent). */
+/** Appends the crotch panel on the pelvis joint at `at` turned by `q`, in `plate` (white when absent). */
 export const crotch = (
   out: number[],
   at: Vec3,
   q: Quat,
-  lod: number,
   plate?: number[],
   scale: number | Vec3 = 1,
 ) => {
-  const level = Math.min(lod, 2);
-  let v = cups.get(level);
-  if (!v) {
-    v = [];
-    const ring = (s: number) => {
-      const f = s * (CUP.length - 1);
-      const i = Math.min(Math.floor(f), CUP.length - 2);
-      const k = f - i;
-      return CUP[i].map((w, j) => w + (CUP[i + 1][j] - w) * k);
+  if (!cup) {
+    const last = CUP.length - 1;
+    /** A ring at row i, `up` further (the bevel's top and bottom): face left to right, the right bevel, the back, the left bevel. */
+    const ring = (i: number, face: Vec3 | 0, up = 0): Spot[] => {
+      const [y, w, z] = CUP[i];
+      const [yb, wb, zb] = [y + up, w + SEAM.w, z + SEAM.d];
+      const m = (k: number): Vec3 => face || unit([k, 0, -0.2]);
+      const edge = (k: number): Vec3 => (up ? [k * wb, yb, zb] : [k * w, y, z]);
+      return [
+        [edge(-1), face || [0, 0, 0]],
+        [edge(1), face || [0, 0, 0]],
+        [edge(1), m(1)],
+        [[wb, yb, zb], m(1)],
+        [[-wb, yb, zb], m(-1)],
+        [edge(-1), m(-1)],
+      ];
     };
-    const rows = [6, 10, 16][level];
-    loft(
-      (t, s) => {
-        const [y, w, front, back] = ring(s);
-        const th = t * TAU;
-        const [zc, d] = [(front + back) / 2, (back - front) / 2];
-        return [w * pow(Math.sin(th), 2 / 3), y, zc - d * pow(Math.cos(th), 2 / 3)];
-      },
-      s => {
-        const [y, , front, back] = ring(s);
-        return [0, y, (front + back) / 2];
-      },
-      [8, 14, 22][level],
-      Array.from({ length: rows + 1 }, (_, i) => i / rows),
-      [
-        [0, CUP[0][0] + 0.003, (CUP[0][2] + CUP[0][3]) / 2],
-        [0, CUP[CUP.length - 1][0] - 0.004, (CUP[CUP.length - 1][2] + CUP[CUP.length - 1][3]) / 2],
-      ],
+    const rows = CUP.map((_, i) => {
+      // The face's normal: across its slope from the row above to the row below.
+      const [p, n] = [CUP[Math.max(i - 1, 0)], CUP[Math.min(i + 1, last)]];
+      const row = ring(i, 0);
+      row[0][1] = row[1][1] = unit([0, p[2] - n[2], n[0] - p[0]]);
+      return row;
+    });
+    const [top, low]: Vec3[] = [unit([0, 1, -0.2]), unit([0, -1, -0.2])];
+    cup = sheet(
+      [ring(0, top, SEAM.w), ring(0, top), ...rows, ring(last, low), ring(last, low, -SEAM.w)],
       WHITE,
-      v,
+      GLOSS,
     );
-    for (let i = 8; i < v.length; i += STRIDE) {
-      v[i] = GLOSS;
+    // The bevel is the dark line: all that does not face the front.
+    for (let i = 0; i < cup.length; i += STRIDE) {
+      if (cup[i + 5] > -0.5) {
+        [cup[i + 6], cup[i + 7], cup[i + 8], cup[i + 9]] = [
+          SEAM.col[0],
+          SEAM.col[1],
+          -1,
+          SEAM.col[2],
+        ];
+      }
     }
-    cups.set(level, v);
   }
-  put(out, v, at, q, tintOf(plate), scale);
+  put(out, cup, at, q, tintOf(plate), scale);
 };

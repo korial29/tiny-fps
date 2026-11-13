@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ARMHOLE, BRACER, BRIEFS, DOME, GAP, REGIONS, armor } from './armor';
+import { ARMHOLE, BRACER, BRIEFS, DOME, GAP, REGIONS, THIGH, armor } from './armor';
 import { GLOSS, STRIDE } from './mesh';
 import { rest, solve } from './rig';
 import { body, palette, skin } from './skin';
@@ -228,41 +228,44 @@ describe('the armour', () => {
 
   describe('the briefs (the user, 2026-11-12: thinner on the sides, no glitches)', () => {
     /** Whether a ray out from the trunk's axis at angle `t` (degrees from the front, + to the right) and height `y` meets a plate's face. */
-    const plated = (v: number[]) => (t: number, y: number) => {
-      const r = (t * Math.PI) / 180;
-      const d = [Math.sin(r), 0, -Math.cos(r)];
-      const o = [0, y, 0.0];
-      for (let i = 0; i < v.length; i += 3 * STRIDE) {
-        if (v[i + 8] != GLOSS) {
-          continue;
+    const plated =
+      (v: number[], cloth = false) =>
+      (t: number, y: number) => {
+        const r = (t * Math.PI) / 180;
+        const d = [Math.sin(r), 0, -Math.cos(r)];
+        const o = [0, y, 0.0];
+        for (let i = 0; i < v.length; i += 3 * STRIDE) {
+          // A plate's face, or the gusset's dark cloth (the walls and the scratches are paler).
+          if (cloth ? v[i + 8] == GLOSS || v[i + 6] > 0.15 : v[i + 8] != GLOSS) {
+            continue;
+          }
+          const [a, b, c] = [0, 1, 2].map(k => [0, 1, 2].map(j => v[i + k * STRIDE + j]));
+          const e1 = b.map((q, j) => q - a[j]);
+          const e2 = c.map((q, j) => q - a[j]);
+          const p = [
+            d[1] * e2[2] - d[2] * e2[1],
+            d[2] * e2[0] - d[0] * e2[2],
+            d[0] * e2[1] - d[1] * e2[0],
+          ];
+          const det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
+          if (Math.abs(det) < 1e-12) {
+            continue;
+          }
+          const s = o.map((q, j) => q - a[j]);
+          const u = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) / det;
+          const q = [
+            s[1] * e1[2] - s[2] * e1[1],
+            s[2] * e1[0] - s[0] * e1[2],
+            s[0] * e1[1] - s[1] * e1[0],
+          ];
+          const w = (d[0] * q[0] + d[1] * q[1] + d[2] * q[2]) / det;
+          const h = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
+          if (u >= 0 && w >= 0 && u + w <= 1 && h > 0) {
+            return true;
+          }
         }
-        const [a, b, c] = [0, 1, 2].map(k => [0, 1, 2].map(j => v[i + k * STRIDE + j]));
-        const e1 = b.map((q, j) => q - a[j]);
-        const e2 = c.map((q, j) => q - a[j]);
-        const p = [
-          d[1] * e2[2] - d[2] * e2[1],
-          d[2] * e2[0] - d[0] * e2[2],
-          d[0] * e2[1] - d[1] * e2[0],
-        ];
-        const det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
-        if (Math.abs(det) < 1e-12) {
-          continue;
-        }
-        const s = o.map((q, j) => q - a[j]);
-        const u = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) / det;
-        const q = [
-          s[1] * e1[2] - s[2] * e1[1],
-          s[2] * e1[0] - s[0] * e1[2],
-          s[0] * e1[1] - s[1] * e1[0],
-        ];
-        const w = (d[0] * q[0] + d[1] * q[1] + d[2] * q[2]) / det;
-        const h = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
-        if (u >= 0 && w >= 0 && u + w <= 1 && h > 0) {
-          return true;
-        }
-      }
-      return false;
-    };
+        return false;
+      };
 
     it('cover the hips from their opening up to the belt with no hole, thin on the sides', () => {
       // The opening line: lowest at the crotch, up to BRIEFS.side between BRIEFS.at.
@@ -297,6 +300,48 @@ describe('the armour', () => {
           expect(at(k * 90, 0.966)).toBe(false);
         }
       }
+    });
+
+    it('leave a crescent of dark cloth down to the thigh plates, whose top slants from the hip (the user, 2026-11-13)', () => {
+      const ease = (a: number, b: number, x: number) => {
+        const t = Math.max(0, Math.min((x - a) / (b - a), 1));
+        return t * t * (3 - 2 * t);
+      };
+      const top = (t: number) =>
+        THIGH.front + (BRIEFS.side - 0.01 - THIGH.front) * ease(THIGH.at[0], THIGH.at[1], t);
+      // Under the crotch at the inside of the thigh.
+      expect(THIGH.front).toBeLessThan(BRIEFS.front - 0.05);
+      for (const build of [0, 1]) {
+        const [, v] = draw(3, build);
+        const [plate, cloth] = [plated(v), plated(v, true)];
+        for (const k of [1, -1]) {
+          for (const t of [45, 50, 55, 60]) {
+            // The thigh plate under its line, the cloth and no plate from there to the briefs.
+            expect(plate(k * t, top(t) - 0.03)).toBe(true);
+            for (let y = top(t) + 0.012; y < 0.925; y += 0.008) {
+              expect(plate(k * t, y)).toBe(false);
+              expect(cloth(k * t, y)).toBe(true);
+            }
+          }
+          // The stripe between the front and the back plates runs up to the cloth: no tab of plate
+          // over it at the hip.
+          expect(plate(k * 95, 0.95)).toBe(false);
+          expect(plate(k * 95, 0.9)).toBe(false);
+        }
+      }
+    });
+
+    it('keeps the cloth dark under plates in a team colour', () => {
+      const out: number[] = [];
+      const s = body(3);
+      skin(out, s, solve(rest()), palette([0.9, 0.2, 0.1], undefined, undefined, true));
+      const n = out.length;
+      armor(out, 0, s, true, [0.9, 0.2, 0.1]);
+      let dark = 0;
+      for (let i = n; i < out.length; i += STRIDE) {
+        dark += +(out[i + 8] != GLOSS && out[i + 6] < 0.15 && out[i + 9] < 0.15);
+      }
+      expect(dark).toBeGreaterThan(300);
     });
   });
 });

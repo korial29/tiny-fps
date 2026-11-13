@@ -3,7 +3,7 @@ import { GLOW } from './flag';
 import { GLOSS, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { shrunk } from './helmet';
-import { HOSE, PACK, hose, pack } from './pack';
+import { CUP_F, HOSE, PACK, crotch, hose, pack } from './pack';
 import { JOINT as J, axis, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
 
@@ -89,4 +89,37 @@ describe('the breathing hose', () => {
   it('follows the head as it turns', () => {
     expect(draw(1, axis([0, 1, 0], 0.6))).not.toEqual(draw(1));
   });
+});
+
+describe('the crotch panel (the user, 2026-11-13: no ball, a flat trapeze set apart by a line)', () => {
+  for (const scale of [1, CUP_F]) {
+    it(`is a flat face a few millimetres over the briefs, a dark line round it (${scale})`, () => {
+      const v: number[] = [];
+      crotch(v, [0, 0.98, 0], [0, 0, 0, 1], undefined, scale);
+      expect(v.length % (3 * STRIDE)).toBe(0);
+      const face: number[][] = [];
+      let seam = 0;
+      for (let i = 0; i < v.length; i += STRIDE) {
+        expect(Math.hypot(v[i + 3], v[i + 4], v[i + 5])).toBeCloseTo(1, 4);
+        if (v[i + 8] == GLOSS) {
+          face.push([v[i], v[i + 1], v[i + 2]]);
+        } else {
+          // The line: dark, and never in front of the face.
+          expect(v[i + 6]).toBeLessThan(0.1);
+          seam++;
+        }
+      }
+      expect(seam).toBeGreaterThan(30);
+      // Flat: the briefs' plate is at z = -0.135 under its top; the ball stood 4 cm deep.
+      const top = face.filter(p => p[1] > 0.9);
+      expect(Math.min(...top.map(p => p[2]))).toBeGreaterThan(-0.142);
+      expect(Math.max(...top.map(p => p[2]))).toBeLessThan(-0.137);
+      // A trapeze over a round bottom: narrow at its top edge, widest under it, narrow at the crotch.
+      const wide = (lo: number, hi: number) =>
+        Math.max(...face.filter(p => p[1] > lo && p[1] <= hi).map(p => Math.abs(p[0])));
+      const y = Math.max(...face.map(p => p[1]));
+      expect(wide(y - 0.001, y)).toBeLessThan(wide(0.9, y - 0.005) * 0.7);
+      expect(wide(0.84, 0.855)).toBeLessThan(wide(0.9, y - 0.005) * 0.4);
+    });
+  }
 });

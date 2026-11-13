@@ -118,6 +118,9 @@ export const walkable = (w: World, a: Vec3, b: Vec3): boolean => {
 
 const built = new WeakMap<World, Nav>();
 
+/** Whether the bots' map of a world is built. */
+export const navBuilt = (w: World): boolean => built.has(w);
+
 /** The bots' map of a world, built once per world. */
 export const navOf = (w: World): Nav => {
   let nav = built.get(w);
@@ -215,7 +218,7 @@ export const path = (nav: Nav, w: World, a: Vec3, b: Vec3, prefer = -1): Way => 
   const back = new Array<number>(n).fill(-1);
   const done = new Array<boolean>(n).fill(false);
   for (let i = 0; i < n; i++) {
-    if (!runUp.has(i) && walkable(w, a, nodes[i])) {
+    if (!runUp.has(i) && flat(a, nodes[i]) <= WALK && walkable(w, a, nodes[i])) {
       cost[i] = flat(a, nodes[i]) / PACE;
     }
   }
@@ -262,7 +265,7 @@ export const path = (nav: Nav, w: World, a: Vec3, b: Vec3, prefer = -1): Way => 
   let total = Infinity;
   for (let i = 0; i < n; i++) {
     const c = cost[i] + flat(nodes[i], b) / PACE;
-    if (cost[i] < Infinity && c < total && walkable(w, nodes[i], b)) {
+    if (cost[i] < Infinity && c < total && flat(nodes[i], b) <= WALK && walkable(w, nodes[i], b)) {
       [best, total] = [i, c];
     }
   }

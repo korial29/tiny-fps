@@ -2,15 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { Bot } from './bot';
 import { HIGHLINE } from './map';
 import { MOON } from './moon';
-import { ROUTES, navOf, path } from './nav';
+import { ROUTES, navBuilt, navOf, path } from './nav';
 import { spawn } from './physics';
 import { decodeSnapshot } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
-import { FLAG, KEY, TEX } from './types';
+import { FLAG, KEY, MODE, TEX } from './types';
 import type { Conn, FlagState, Snapshot } from './types';
 import { build } from './world';
-import type { Brush, WorldDef } from './world';
+import type { Brush, World, WorldDef } from './world';
 
 /** A peer that records what the room sends it. */
 const peer = () => {
@@ -60,9 +60,9 @@ describe('Room: bots', () => {
     const { players, host, you } = roster(a);
     expect(players).toHaveLength(4);
     expect(players.filter(p => p.bot).map(p => p.name)).toEqual([
+      'Ada (bot)',
       'Bix (bot)',
       'Cog (bot)',
-      'Dot (bot)',
     ]);
     expect(players.find(p => p.id === you)).not.toHaveProperty('bot');
     expect(sides(a)).toEqual([2, 2]);
@@ -95,6 +95,40 @@ describe('Room: bots', () => {
     const d = join(room, 'd');
     expect(roster(d).you).toBe(0);
     expect(roster(d).players).toHaveLength(2);
+  });
+
+  it('sends one roster for a join and the bots it brings', () => {
+    const room = new Room({ bots: 8 });
+    const a = join(room);
+    expect(a.texts.filter(m => m.t === 'roster')).toHaveLength(1);
+    expect(roster(a).players).toHaveLength(8);
+  });
+
+  it('gives a joiner no id a bot let go of in the same tick', () => {
+    const room = new Room({ bots: 4 });
+    join(room, 'a');
+    const gone = roster(join(room, 'b'));
+    const ids = gone.players.map(p => p.id);
+    // The bot that made room had id 3: the joiner is drawn as nobody's old self.
+    expect(ids).not.toContain(3);
+    expect(gone.you).toBe(4);
+  });
+
+  it('names a bot by the first name no bot here bears', () => {
+    const room = new Room({ bots: 4 });
+    const a = join(room, 'a');
+    const b = join(room, 'b');
+    room.disconnect(b);
+    const bots = roster(a)
+      .players.filter(p => p.bot)
+      .map(p => p.name);
+    expect(bots.sort()).toEqual(['Ada (bot)', 'Bix (bot)', 'Cog (bot)']);
+  });
+
+  it('builds the bots’ map when the room loads its world, not in a tick', () => {
+    const world = (r: Room) => (r as unknown as { world: World }).world;
+    expect(navBuilt(world(new Room({ bots: 2 })))).toBe(true);
+    expect(navBuilt(world(new Room()))).toBe(false);
   });
 
   it('takes no bot without the rule', () => {
@@ -211,5 +245,48 @@ describe('Bot: the gun', () => {
     expect(fires([{ min: [-5, 0, -1], max: [5, 4, 1], top: TEX.TILE, side: TEX.BRICK }])).toBe(
       false,
     );
+  });
+});
+
+describe('Bot: the keys of a leg', () => {
+  const world = build(HIGHLINE);
+  const home: FlagState = { state: FLAG.HOME, by: 0, x: 0, y: 0, z: 0, left: 0 };
+
+  it('keeps forward in the air when it has no way yet, to clear the gap it jumped', () => {
+    const me = {
+      id: 0,
+      team: 0,
+      state: { ...spawn(0, world, 0, 0), ground: false, mode: MODE.AIR },
+    };
+    const i = new Bot(0).think({ me, others: [], flags: [home, home], world });
+    expect(i.keys & KEY.FORWARD).toBe(KEY.FORWARD);
+  });
+
+  it('keeps the sprint of a jump’s run-up with the enemy carrier in sight', () => {
+    const me = { id: 0, team: 0, state: { ...spawn(0, world, 0, 0), ammo: 10, mag: 5 } };
+    // Blue's player with red's flag, 10 m behind on the same roof.
+    const foe = { id: 1, team: 1, state: { ...spawn(1, world, 0, 1), x: 16, y: 26, z: 246 } };
+    const carried: FlagState = { ...home, state: FLAG.CARRIED, by: 1 };
+    const bot = new Bot(0);
+    const goal = [foe.state.x, foe.state.y, foe.state.z];
+    // On the Spine's run-up to its 11 m jump: the leg after the run to it.
+    const way = path(
+      navOf(world),
+      world,
+      [me.state.x, me.state.y, me.state.z],
+      HIGHLINE.teams[1].base,
+      0,
+    );
+    expect(way.edges[1].leg?.k).toBe('leap');
+    Object.assign(bot, {
+      nav: navOf(world),
+      way,
+      leg: 1,
+      goal,
+      planned: 0,
+      last: [me.state.x, me.state.y, me.state.z],
+    });
+    const i = bot.think({ me, others: [foe], flags: [carried, home], world });
+    expect(i.keys & KEY.SPRINT).toBe(KEY.SPRINT);
   });
 });

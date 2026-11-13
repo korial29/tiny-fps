@@ -48,6 +48,7 @@ import { kitOf } from './kit';
 import { shut, swing } from './doors';
 import { STRIKE, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
+import { navOf } from './nav';
 import { bruise, floorAt, forward, heightOf, respawn, spawn, speedOf, stumble } from './physics';
 import { PLASMA_LAG, blast, cylinder, fly, launch, lob, stepOf, toss, wave } from './plasma';
 import type { Flying } from './plasma';
@@ -264,6 +265,8 @@ export class Room {
   private next: string | undefined;
   /** Joins so far: each player's `since`. */
   private joins = 0;
+  /** Ids of bots let go this tick, not given again before the next: the person who takes a bot's place would be drawn where it stood. */
+  private freed = new Set<number>();
 
   /** Missing rules fall back to RULES. The map is the rules' one, unless a definition is given. */
   public constructor(rules: Partial<Rules> = {}, def?: WorldDef) {
@@ -273,6 +276,7 @@ export class Room {
     this.ctf = new Ctf(this.world, this.rules);
     this.gone = this.spots();
     this.fresh();
+    this.guide();
   }
 
   /** Every vehicle of the map parked afresh: whole, empty, on its spawn. */
@@ -307,6 +311,7 @@ export class Room {
     this.ctf = new Ctf(this.world, this.rules);
     this.gone = this.spots();
     this.fresh();
+    this.guide();
     this.history = [];
     this.balls = [];
     for (const p of this.players()) {
@@ -436,6 +441,8 @@ export class Room {
       this.ctf.leave(p.info.id);
       this.fill();
       if (!this.size) {
+        // Nobody is left to see an id taken again.
+        this.freed.clear();
         this.ctf.reset();
         this.gone.fill(0);
         this.fresh();
@@ -457,6 +464,7 @@ export class Room {
 
   /** One host tick. Public so tests can drive the room without a timer. */
   public tick(): void {
+    this.freed.clear();
     const players = this.players();
     if (!players.length) {
       this.balls = [];
@@ -1454,6 +1462,13 @@ export class Room {
     }
   }
 
+  /** The bots' map of the world, built when it loads rather than in the tick of a bot's first plan. */
+  private guide(): void {
+    if (this.rules.bots) {
+      navOf(this.world);
+    }
+  }
+
   /** The players the bots fill the room up to: none with no human. */
   private wanted(): number {
     return this.size ? Math.min(this.rules.bots ?? 0, this.rules.maxPlayers) : 0;
@@ -1473,11 +1488,15 @@ export class Room {
         const out = bots.reverse().find(p => p.info.team === big) ?? bots[0];
         this.peers.delete(out.conn);
         this.ctf.leave(out.info.id);
+        this.freed.add(out.info.id);
       } else if (players.length < want) {
         // What the room sends a bot is of no use: it reads the room itself.
         const conn: Conn = { send: () => undefined };
         this.peers.set(conn, null);
-        this.join(conn, `${BOT_NAMES[this.joins % BOT_NAMES.length]} (bot)`, {}, true);
+        // The first name no bot here bears.
+        const names = players.map(p => p.info.name);
+        const name = BOT_NAMES.map(n => `${n} (bot)`).find(n => !names.includes(n)) ?? 'Bot';
+        this.join(conn, name, {}, true);
       } else {
         return;
       }
@@ -1496,7 +1515,7 @@ export class Room {
     }
     // Smallest free id.
     let id = 0;
-    while (players.some(p => p.info.id === id)) {
+    while (players.some(p => p.info.id === id) || this.freed.has(id)) {
       id++;
     }
     // The smaller team, red when they are equal.
@@ -1531,10 +1550,11 @@ export class Room {
     };
     this.peers.set(conn, player);
     this.ctf.join(id, team, player.state);
+    // One roster for a person's join and the bots it moves; fill()'s callers send it.
     if (!bot) {
       this.fill();
+      this.roster();
     }
-    this.roster();
   }
 
   /** Each joined peer gets the full roster with its own id. */

@@ -130,8 +130,9 @@ export class Bot {
     this.last = at(p);
     const goal = this.goalOf(s);
     // A way is planned from a floor: from the air it would start where the bot is not going to be.
+    // Forward is kept till then, so a jump over a gap does not fall short of it.
     if (!this.goal && !p.ground) {
-      return { keys: 0, yaw: this.aim, pitch: 0 };
+      return { keys: FORWARD, yaw: p.yaw, pitch: 0 };
     }
     if (
       p.ground &&
@@ -368,7 +369,8 @@ export class Bot {
         [foe, best] = [o, score];
       }
     }
-    if (!foe || (!free && foe.id !== carrier)) {
+    // On a leg the keys are the leg's: a jump's run-up wants its sprint, even past the carrier.
+    if (!foe || !free) {
       this.foe = -1;
       return undefined;
     }

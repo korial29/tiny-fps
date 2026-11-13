@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   AMMO_PACK,
+  BLOW,
+  PUNCHES,
   GUN_RELOAD,
   RAIL_RELOAD,
   CUTS,
@@ -73,7 +75,15 @@ const VIEW = mk();
 const setup = () => {
   const audio = { play: vi.fn() };
   const hud = { vitals: vi.fn(), hit: vi.fn(), down: vi.fn() };
-  const fx = { fire: vi.fn(), cut: vi.fn(), wound: vi.fn(), quake: vi.fn(), lie: 0 };
+  const fx = {
+    fire: vi.fn(),
+    cut: vi.fn(),
+    wound: vi.fn(),
+    quake: vi.fn(),
+    lie: 0,
+    blow: vi.fn(),
+    punch: vi.fn(),
+  };
   const tracer = createTracer();
   const ctl = { pitch: 0 };
   const balls = createBalls(WORLD);
@@ -1022,5 +1032,52 @@ describe('the others and the katana', () => {
     frame(player(), [other(0, 0, { stun: 40, zap: false })]);
     frame(player(), [other(0, 0, { stun: 0, zap: true })]);
     expect(crackle).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('the fists’ feel (the user, 2026-11-13: their own, not the katana’s)', () => {
+  const BARE = { ammo: -1 };
+  /** A blow's swing at `k` ticks in. */
+  const at = (b: number, k: number, o: Partial<PlayerState> = {}) =>
+    player({ ...BARE, cut: b, swing: PUNCHES[b].ticks - k, ...o });
+
+  it('whooshes on each blow, shorter and softer than a cut, and kicks the look by the blow at its strike', () => {
+    for (const b of [BLOW.JAB, BLOW.CROSS, BLOW.HOOK, BLOW.LUNGE]) {
+      const { combat, audio, fx, frame } = setup();
+      combat.step(player(BARE), at(b, 0));
+      frame(at(b, 0));
+      const swish = audio.play.mock.calls.find(c => c[0] === SOUND.SWISH)!;
+      expect(swish[3], `blow ${b}`).toBeGreaterThan(1.4);
+      combat.step(at(b, PUNCHES[b].strike - 1), at(b, PUNCHES[b].strike));
+      expect(fx.blow).toHaveBeenCalledWith(b);
+      expect(fx.cut).not.toHaveBeenCalled();
+    }
+  });
+
+  it('thuds when an own blow lands, and a hook or a lunge punches the view', () => {
+    for (const b of [BLOW.JAB, BLOW.HOOK]) {
+      const { audio, fx, frame } = setup();
+      frame(at(b, 2, { hits: 0 }));
+      frame(at(b, PUNCHES[b].strike + 1, { hits: 1 }));
+      expect(audio.play.mock.calls.map(c => c[0])).toContain(SOUND.TACKLE);
+      expect(fx.punch).toHaveBeenCalledTimes(b === BLOW.HOOK ? 1 : 0);
+    }
+  });
+
+  it('knocks the own view when an enemy’s blow lands and he faces the own player within reach, not else', () => {
+    const tried = (x: number, yaw: number) => {
+      const { audio, fx, frame } = setup();
+      const me = player({ ...BARE, id: 1 });
+      const foe = (hits: number) => at(BLOW.CROSS, PUNCHES[1].strike + 1, { id: 5, x, yaw, hits });
+      frame(me, [foe(0)]);
+      frame(me, [foe(1)]);
+      expect(audio.play.mock.calls.map(c => c[0])).toContain(SOUND.TACKLE);
+      return fx.blow.mock.calls;
+    };
+    // Facing west, toward the own player, a metre away.
+    expect(tried(1.2, Math.PI / 2)).toEqual([[BLOW.CROSS, true]]);
+    // Facing away, or out of reach: someone else took it.
+    expect(tried(1.2, (3 * Math.PI) / 2)).toEqual([]);
+    expect(tried(4, Math.PI / 2)).toEqual([]);
   });
 });

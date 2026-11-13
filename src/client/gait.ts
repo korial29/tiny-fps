@@ -3,7 +3,7 @@
 // the stance legs put it, and a swing foot flies from where it left to where the stride will land
 // it. The other moves are static poses (MOVES) eased in by critically damped springs, so a switch
 // never pops. Everything is in the runner's frame: x right, y up, -z ahead. No DOM.
-import { DASH_COOLDOWN, DASH_TICKS, DOWN_TICKS, PUNCH, TICK_HZ } from '../shared/constants';
+import { BLOW, DASH_COOLDOWN, DASH_TICKS, DOWN_TICKS, PUNCHES, TICK_HZ } from '../shared/constants';
 import { floored } from '../shared/physics';
 import { FALL, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -375,15 +375,34 @@ export const armOf = (s: number, [lift, out, inward, bend]: number[]): [Quat, Qu
 export const JAB = { out: [1.42, 0, 0.1, 0], back: [0.1, 0.12, 0.25, 1.9], twist: 0.4 };
 
 /**
+ * The other blows (BLOW, the user 2026-11-13), as JAB's arms: the HOOK's left arm swung round at
+ * the shoulder's height, the elbow bent square and out, the chest turned behind it; the LUNGE's right
+ * arm driven straight out, further than a jab, the chest turned the other way.
+ */
+export const HOOK = { out: [1.2, 1.1, 0.1, 1.5], twist: 0.45 };
+export const LUNGE = { out: [1.52, -0.05, 0.05, 0], twist: 0.55 };
+
+/** The striking arm of each blow (BLOW): -1 the left, 1 the right. */
+export const SIDE = [-1, 1, -1, 1];
+
+/** Whether the player has no weapon at all: FIRE punches. */
+export const bare = (p: PlayerState): boolean =>
+  p.ammo < 0 && !p.blade && (p.rail ?? -1) < 0 && (p.rifle ?? -1) < 0;
+
+/** The blow (BLOW) of a bare-handed swing. */
+export const blowOf = (p: Pick<PlayerState, 'cut'>): number =>
+  PUNCHES[p.cut ?? 0] ? (p.cut ?? 0) : BLOW.JAB;
+
+/**
  * How far out the fist of a punch is, 0 to 1, by the swing of a player with no weapon at all: out
- * at the strike, back by the swing's end.
+ * at the strike of its blow, back by the swing's end.
  */
 export const thrown = (p: PlayerState): number => {
-  const bare = p.ammo < 0 && !p.blade && (p.rail ?? -1) < 0 && (p.rifle ?? -1) < 0;
-  if (!bare || !p.swing || p.down) {
+  if (!bare(p) || !p.swing || p.down) {
     return 0;
   }
-  const [k, at] = [1 - p.swing / PUNCH.ticks, PUNCH.strike / PUNCH.ticks];
+  const b = PUNCHES[blowOf(p)];
+  const [k, at] = [1 - p.swing / b.ticks, b.strike / b.ticks];
   const e = (v: number) => Math.min(Math.max(v, 0), 1) ** 2 * (3 - 2 * Math.min(Math.max(v, 0), 1));
   return k < at ? e(k / at) : 1 - e((k - at) / (1 - at));
 };

@@ -7,7 +7,9 @@ import {
   DOWN_TICKS,
   PLAYER_H,
   PLAYER_R,
+  BLOW,
   PUNCH,
+  PUNCHES,
   TICK_HZ,
 } from '../shared/constants';
 import { STILL } from '../shared/physics';
@@ -1654,5 +1656,79 @@ describe('a runner who punches (the user, 2026-11-11: hit with the fists)', () =
       return out.length;
     };
     expect(count({ swing: PUNCH.ticks - PUNCH.strike })).toBe(count({}));
+  });
+});
+
+describe('a runner’s blows (the user, 2026-11-13: jab, cross, hook, lunge; the one hit flinches)', () => {
+  /** The runner after standing bare-handed, then the pose at the strike of the blow `b`. */
+  const at = (b: number) => {
+    const book = new Map<number, Runner>();
+    for (let i = 0; i < 90; i++) {
+      animate(book, [man()], DT);
+    }
+    const guard = stance(book.get(1)!).s;
+    let s = guard;
+    for (let k = PUNCHES[b].ticks; k >= PUNCHES[b].ticks - PUNCHES[b].strike - 1; k--) {
+      animate(book, [man({ cut: b, swing: k })], DT);
+      s = stance(book.get(1)!).s;
+    }
+    return { guard, s };
+  };
+  const ahead = (s: ReturnType<typeof stance>['s'], j: number) =>
+    -(s.pos[j][2] - s.pos[J.CHEST][2]);
+
+  it('strikes with the left for a jab and a hook, the right for a cross and a lunge, the lunge furthest', () => {
+    const [jab, cross, hook, lunge] = [BLOW.JAB, BLOW.CROSS, BLOW.HOOK, BLOW.LUNGE].map(at);
+    expect(ahead(jab.s, J.HAND_L)).toBeGreaterThan(ahead(jab.s, J.HAND_R) + 0.3);
+    expect(ahead(cross.s, J.HAND_R)).toBeGreaterThan(ahead(cross.s, J.HAND_L) + 0.3);
+    expect(ahead(cross.s, J.HAND_R)).toBeGreaterThan(0.5);
+    expect(ahead(lunge.s, J.HAND_R)).toBeGreaterThan(ahead(cross.s, J.HAND_R));
+    // The hook's fist comes round: ahead of him and across his middle, its elbow out as wide as
+    // the shoulder, the fist at the shoulder's height.
+    const x = (j: number) => hook.s.pos[j][0] - hook.s.pos[J.CHEST][0];
+    expect(ahead(hook.s, J.HAND_L)).toBeGreaterThan(0.25);
+    expect(x(J.FOREARM_L)).toBeLessThan(x(J.ARM_L) + 0.05);
+    expect(x(J.HAND_L)).toBeGreaterThan(x(J.FOREARM_L) + 0.15);
+    expect(Math.abs(hook.s.pos[J.HAND_L][1] - hook.s.pos[J.ARM_L][1])).toBeLessThan(0.1);
+  });
+
+  it('throws back the head of the nearest he reaches when the host counts a blow, and nobody else', () => {
+    const world = build({
+      brushes: [{ min: [-20, 0, -20], max: [20, 1, 20], top: TEX.TILE, side: TEX.BRICK }],
+      teams: [
+        { base: [0, 0, 0], spawns: [[0, 0, 0, 0]] },
+        { base: [0, 0, 0], spawns: [[0, 0, 0, 0]] },
+      ],
+      floor: -20,
+      sun: { dir: [0, 1, 0], color: [1, 1, 1] },
+      sky: [
+        [0, 0, 0],
+        [0, 0, 0],
+      ],
+    });
+    const book = new Map<number, Runner>();
+    // He faces -z; one a metre ahead facing him, one behind him.
+    const puncher = (hits: number) => man({ id: 1, x: 0, z: 0, cut: BLOW.CROSS, swing: 12, hits });
+    const near = man({ id: 2, x: 0, z: -1.2, yaw: Math.PI });
+    const behind = man({ id: 3, x: 0, z: 1.2 });
+    for (let i = 0; i < 30; i++) {
+      animate(book, [puncher(0), near, behind], DT, world);
+    }
+    expect(book.get(2)!.flinch).toBe(0);
+    const head = stance(book.get(2)!).s.pos[J.HEAD];
+    animate(book, [puncher(1), near, behind], DT, world);
+    expect(book.get(2)!.flinch).toBeGreaterThan(0.9);
+    expect(book.get(3)!.flinch).toBe(0);
+    // A few frames on, his head is thrown back (toward -z, away from the blow); then it comes back.
+    for (let i = 0; i < 4; i++) {
+      animate(book, [puncher(1), near, behind], DT, world);
+    }
+    expect(stance(book.get(2)!).s.pos[J.HEAD][2]).toBeLessThan(head[2] - 0.02);
+    const tipped = stance(book.get(2)!).s.rot[J.HEAD];
+    for (let i = 0; i < 40; i++) {
+      animate(book, [puncher(1), near, behind], DT, world);
+    }
+    expect(book.get(2)!.flinch).toBe(0);
+    expect(stance(book.get(2)!).s.rot[J.HEAD]).not.toEqual(tipped);
   });
 });

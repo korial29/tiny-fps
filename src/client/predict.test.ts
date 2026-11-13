@@ -16,6 +16,7 @@ import {
   STEP_H,
   TICK_HZ,
   NADE_MAX,
+  BLOW,
 } from '../shared/constants';
 import { STRIKE, step } from '../shared/gun';
 import { ROOFTOPS } from '../shared/map';
@@ -563,6 +564,58 @@ describe('prediction against the room', () => {
           expect(r.shots, label).toBeGreaterThan(10);
           expect(r.checked, label).toBeGreaterThan(500);
         }
+      }
+    }
+  }, 60_000);
+
+  it('agrees with the host exactly on a brawl with bare fists: chains, hooks and lunges, marine and ninja, under every lag', () => {
+    let s = 4242;
+    const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const steps: Omit<Input, 'seq'>[] = [];
+    let [keys, every, yaw, turn] = [0, 5, ROOFTOPS.teams[0].spawns[0][3], 0];
+    for (let k = 0; k < 1500; k++) {
+      if (k % 30 === 0) {
+        keys =
+          (rnd() < 0.7 ? KEY.FORWARD : 0) |
+          (rnd() < 0.5 ? KEY.SPRINT : 0) |
+          (rnd() < 0.1 ? KEY.JUMP : 0) |
+          (rnd() < 0.1 ? KEY.CROUCH : 0) |
+          (rnd() < 0.15 ? KEY.DASH : 0);
+        // Presses this many steps apart: some in a blow's recovery, some after it.
+        every = [3, 5, 8, 12, 21][Math.floor(rnd() * 5)];
+        turn = (rnd() - 0.5) * 0.08;
+      }
+      yaw += turn;
+      steps.push({
+        keys: keys | (k % every === 0 ? KEY.FIRE : 0),
+        yaw: ((yaw % 6.2832) + 6.2832) % 6.2832,
+        pitch: 0,
+      });
+    }
+    for (const role of [ROLE.MARINE, ROLE.NINJA]) {
+      // The guard: the blows the fists threw, stepped with no network.
+      const p = spawn(0, world, 0);
+      const blows = new Set<number>();
+      steps.forEach((i, k) => {
+        step(p, onWire({ ...i, seq: k }), world, 0, true, [], kitOf(role, ROOFTOPS));
+        if (p.swing && !p.blade && p.ammo < 0) {
+          blows.add(p.cut ?? 0);
+        }
+      });
+      expect([...blows].sort(), `role ${role}`).toEqual([
+        BLOW.JAB,
+        BLOW.CROSS,
+        BLOW.HOOK,
+        BLOW.LUNGE,
+      ]);
+      for (const [name, lag] of LAGS) {
+        const r = race(lag, steps, 0, [], [], true, { role });
+        expect([r.worst, r.end, r.final, r.differing], `role ${role}, ${name} lag`).toEqual([
+          0,
+          0,
+          0,
+          [],
+        ]);
       }
     }
   }, 60_000);

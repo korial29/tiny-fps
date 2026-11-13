@@ -30,11 +30,13 @@ import {
   RAIL_RELOAD,
   RIFLE_RELOAD,
   SPECIAL_LATE,
-  PUNCH,
+  BLOW,
+  PUNCHES,
 } from './constants';
 import { KITS } from './kit';
 import type { Kit } from './kit';
 import { forward, move, respawn } from './physics';
+import { tackling } from './tackle';
 import type { Body } from './physics';
 import { CUT, EV, KEY, MODE, SPECIAL_CUT } from './types';
 import type { Input, PlayerState } from './types';
@@ -133,6 +135,9 @@ export const step = (
   if (locked) {
     return duel(p, i);
   }
+  // FIRE pressed now and not at the last step: the fists chain their blows on a press.
+  const fresh = !!(i.keys & KEY.FIRE) && !p.pressed;
+  p.pressed = !!(i.keys & KEY.FIRE);
   // The rack fills the gun on arrival, not on every step spent in its circle.
   const { rack, blade, rail, rifle } = w.def.teams[team];
   const inside = !!rack && within(p, rack, RACK_R);
@@ -179,11 +184,10 @@ export const step = (
     // the strike (the cut's, or the punch's), so neither is skipped.
     const s = p.swing ?? 0;
     const c = swingOf(p);
+    const blow = PUNCHES[p.cut ?? 0] ?? PUNCHES[0];
     const stop = (v: number) =>
       v == s - 1 &&
-      (v == c.ticks - c.strike ||
-        v == PUNCH.ticks - PUNCH.strike ||
-        (!p.heavy && v == ticks - hold));
+      (v == c.ticks - c.strike || v == blow.ticks - blow.strike || (!p.heavy && v == ticks - hold));
     p.swing = Math.max(0, kit.haste > 1 && stop(s - 1) ? s - 1 : s - kit.haste);
     p.heavy = !!p.swing && !!p.heavy;
   }
@@ -222,9 +226,9 @@ export const step = (
   } else if (hand != 1 && carried >= 0 && !busy && load < full && (!load || i.keys & KEY.RELOAD)) {
     [p.reload, p.charge] = [ticks2, 0];
   }
-  // With no weapon at all the swing is a punch (PUNCH), not a cut.
+  // With no weapon at all the swing is a punch (PUNCHES, by its blow), not a cut.
   const bare = hand < 0;
-  const c = bare ? PUNCH : swingOf(p);
+  const c = bare ? (PUNCHES[p.cut ?? 0] ?? PUNCHES[0]) : swingOf(p);
   if (p.swing && c.ticks - p.swing === c.strike) {
     return STRIKE.CUT;
   }
@@ -247,9 +251,19 @@ export const step = (
       !!(i.keys & KEY.SPECIAL) &&
       (!p.swing || (!p.heavy && (p.cut ?? 0) < SPECIAL_CUT && late <= SPECIAL_LATE));
     if (bare) {
-      // A punch, and the next when it is over while FIRE is held.
+      // A punch, and the next when it is over while FIRE is held: a jab, or a lunge on the run. A
+      // fresh press after the strike chains the next blow (BLOW).
       if (!p.swing) {
-        [p.cut, p.heavy, p.swing] = [0, false, PUNCH.ticks];
+        const run =
+          tackling(p) ||
+          (p.mode === MODE.GROUND &&
+            !!(i.keys & KEY.SPRINT) &&
+            p.vx * p.vx + p.vz * p.vz > kit.run * kit.run);
+        p.cut = run ? BLOW.LUNGE : BLOW.JAB;
+        [p.heavy, p.swing] = [false, PUNCHES[p.cut].ticks];
+      } else if (fresh && p.cut! < BLOW.HOOK && c.ticks - p.swing > c.strike) {
+        p.cut!++;
+        p.swing = PUNCHES[p.cut!].ticks;
       }
     } else if (p.wield && (!p.swing || special)) {
       p.cut = cutOf(i.keys) + (special ? SPECIAL_CUT : 0);

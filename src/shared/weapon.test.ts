@@ -53,13 +53,17 @@ import {
   NADE_R,
 } from './constants';
 import {
+  BLOW,
   PLAYER_H,
   PUNCH,
+  PUNCHES,
   PUNCH_HITS,
   PUNCH_MEMORY,
   PUNCH_STUN,
+  STUMBLE_KNOCK,
   STUMBLE_TICKS as REEL,
 } from './constants';
+import { ROLE } from './kit';
 import { drift, lob, toss } from './plasma';
 import { cutOf, swingOf } from './blade';
 import { decodeSnapshot, encodeInput } from './protocol';
@@ -1665,6 +1669,141 @@ describe('a punch (the user, 2026-11-11: hit with the fists; half a point, the t
     Object.assign(d.state(d.cy), { down: 60, hp: 0 });
     d.send(d.cy, FIRE);
     expect(d.state(d.cy).swing ?? 0).toBe(0);
+  });
+});
+
+describe('the fists’ blows (the user, 2026-11-13: a combo, a running punch, the ninja twice as fast)', () => {
+  const BARE = { ammo: -1 };
+  const facing = (role?: number) => {
+    const m = match();
+    if (role !== undefined) {
+      m.room.receive(m.cy, JSON.stringify({ t: 'body', body: 0, role }));
+    }
+    m.put(m.cy, 0, 0, BARE);
+    m.put(m.bob, 1.2);
+    m.ticks(SNAP_EVERY);
+    return m;
+  };
+  /** Bob back where he stood, his stumble over. */
+  const still = (m: ReturnType<typeof match>) =>
+    Object.assign(m.state(m.bob), { x: 1.2, z: 0, vx: 0, vz: 0, stun: 0 });
+  /** Steps until the player's swing is past its strike: one with FIRE (a press), the rest without. */
+  const until = (m: ReturnType<typeof match>, past: (p: PlayerState) => boolean) => {
+    let n = 0;
+    for (; n < 64 && !past(m.state(m.cy)); n++) {
+      m.hold(m.cy, 1, 0);
+    }
+    return n;
+  };
+  const struckOf = (p: PlayerState) => {
+    const b = PUNCHES[p.cut ?? 0];
+    return b.ticks - (p.swing ?? 0) > b.strike;
+  };
+
+  it('chains a jab, a cross and a hook on fresh presses after each strike, and the hook ends the chain', () => {
+    const m = facing();
+    m.send(m.cy, FIRE);
+    expect(m.state(m.cy)).toMatchObject({ cut: BLOW.JAB, swing: PUNCH.ticks });
+    // A press before the strike chains nothing.
+    m.hold(m.cy, 2, 0);
+    m.send(m.cy, FIRE);
+    expect(m.state(m.cy).cut).toBe(BLOW.JAB);
+    until(m, struckOf);
+    m.send(m.cy, FIRE);
+    expect(m.state(m.cy)).toMatchObject({ cut: BLOW.CROSS, swing: PUNCHES[BLOW.CROSS].ticks });
+    until(m, struckOf);
+    m.send(m.cy, FIRE);
+    expect(m.state(m.cy)).toMatchObject({ cut: BLOW.HOOK, swing: PUNCHES[BLOW.HOOK].ticks });
+    expect(m.state(m.cy).hits).toBe(2);
+    until(m, struckOf);
+    expect(m.state(m.cy).hits).toBe(3);
+    // After the hook a press waits for its end, and starts over with a jab.
+    m.send(m.cy, FIRE);
+    expect(m.state(m.cy).cut).toBe(BLOW.HOOK);
+    until(m, p => !p.swing);
+    m.send(m.cy, FIRE);
+    expect(m.state(m.cy).cut).toBe(BLOW.JAB);
+  });
+
+  it('does not chain on FIRE held: held, the fists throw jab after jab', () => {
+    const m = facing();
+    const cuts = new Set<number>();
+    for (let k = 0; k < 4 * PUNCH.ticks; k++) {
+      m.hold(m.cy, 1, FIRE);
+      cuts.add(m.state(m.cy).cut ?? 0);
+    }
+    expect([...cuts]).toEqual([BLOW.JAB]);
+    expect(m.state(m.cy).hits).toBe(4);
+  });
+
+  it('hooks for a whole point and throws harder than a tackle, the flag dropped', () => {
+    const m = facing();
+    m.carry(m.bob);
+    m.send(m.cy, FIRE);
+    // The jab and the cross miss: Bob steps out of reach and back in for the hook.
+    m.state(m.bob).x = 5;
+    until(m, struckOf);
+    m.send(m.cy, FIRE);
+    until(m, struckOf);
+    expect(m.state(m.cy).hits).toBe(0);
+    m.send(m.cy, FIRE);
+    still(m);
+    m.ticks(SNAP_EVERY);
+    until(m, struckOf);
+    expect(m.state(m.cy).hits).toBe(1);
+    expect(m.state(m.bob)).toMatchObject({ hp: HP_MAX - 1, stun: REEL, zap: false });
+    expect(m.state(m.bob).vx).toBeGreaterThan(STUMBLE_KNOCK * 1.2);
+    expect([m.flag(0).state, m.flag(1).state]).not.toContain(FLAG.CARRIED);
+  });
+
+  it('lunges on a sprint: a long straight that reaches 2.2 m, a whole point, a throw and the flag', () => {
+    const tried = (x: number, keys: number) => {
+      const m = match();
+      m.put(m.cy, -10, 0, BARE);
+      m.put(m.bob, 50);
+      m.ticks(SNAP_EVERY);
+      // Up to speed toward the east, then Bob put x m ahead.
+      m.hold(m.cy, 60, FORWARD | keys);
+      const at = m.state(m.cy).x;
+      Object.assign(m.state(m.bob), { x: at + x, vx: 0 });
+      m.carry(m.bob);
+      m.ticks(SNAP_EVERY);
+      m.send(m.cy, FORWARD | keys | FIRE);
+      const cut = m.state(m.cy).cut;
+      // Bob kept in front, the distance the same, until the strike.
+      for (let k = 0; k < 10; k++) {
+        Object.assign(m.state(m.bob), { x: m.state(m.cy).x + x, vx: 0, z: 0 });
+        m.ticks(SNAP_EVERY);
+        m.hold(m.cy, 1, FORWARD | keys);
+      }
+      return { cut, hits: m.state(m.cy).hits, bob: m.state(m.bob), flag: m.flag(0).state };
+    };
+    const run = tried(2, SPRINT);
+    expect(run).toMatchObject({ cut: BLOW.LUNGE, hits: 1 });
+    expect(run.bob).toMatchObject({ hp: HP_MAX - 1, stun: REEL });
+    expect(run.flag).not.toBe(FLAG.CARRIED);
+    // A run is no sprint: a jab, which does not reach so far.
+    expect(tried(2, 0)).toMatchObject({ cut: BLOW.JAB, hits: 0 });
+    expect(PUNCHES[BLOW.LUNGE].reach).toBeGreaterThan(PUNCH.reach + 0.5);
+  });
+
+  it('runs a ninja’s blows and their chain twice as fast as a marine’s', () => {
+    const steps = (role?: number) => {
+      const m = facing(role);
+      m.send(m.cy, FIRE);
+      let n = 1 + until(m, struckOf);
+      m.send(m.cy, FIRE);
+      n += 1 + until(m, struckOf);
+      m.send(m.cy, FIRE);
+      expect(m.state(m.cy).cut).toBe(BLOW.HOOK);
+      n += 1 + until(m, p => !p.swing);
+      return [n, m.state(m.cy).hits];
+    };
+    const [marine, ninja] = [steps(), steps(ROLE.NINJA)];
+    expect(marine[1]).toBe(3);
+    expect(ninja[1]).toBe(3);
+    // Half the steps, and a few more: the swing stops on each strike tick so none is skipped.
+    expect(ninja[0]).toBeLessThanOrEqual(marine[0] * 0.6);
   });
 });
 

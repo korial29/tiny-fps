@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ARMHOLE,
+  ASTRO_DETAILS,
   BRACER,
   BRIEFS,
   CHEST,
@@ -491,6 +492,40 @@ describe('the armour', () => {
       armor(out, 0, s, true, [0.9, 0.2, 0.1]);
       expect(dark(out.slice(n)).length).toBeGreaterThan(DETAILS.length * 6 * 0.7);
     });
+    it("are the astronaut's own on his white plates, some in his team's colour, none on the marine (the user, 2026-11-13)", () => {
+      const GREEN = [0.1, 0.9, 0.2];
+      for (const build of [0, 1]) {
+        const marks = (plate?: number[]) => {
+          const out: number[] = [];
+          const s = body(3, build);
+          skin(
+            out,
+            s,
+            solve(rest([0, 0, 0], 0, build)),
+            palette([0.9, 0.2, 0.1], undefined, undefined, true),
+          );
+          const n = out.length;
+          armor(out, 0, s, true, plate, false, GREEN);
+          const at: number[][] = [];
+          for (let i = n; i < out.length; i += STRIDE) {
+            if (out[i + 8] != GLOSS && out[i + 6] == GREEN[0] && out[i + 7] == GREEN[1]) {
+              at.push([out[i], out[i + 1], out[i + 2]]);
+            }
+          }
+          return at;
+        };
+        const astro = marks();
+        expect(astro.length).toBeGreaterThan(ASTRO_DETAILS.filter(d => d[8]).length * 6);
+        // The rank bars on the left of his chest, the bands round both wrists.
+        expect(astro.some(p => p[0] < -0.03 && p[1] > 1.37 && p[2] < 0)).toBe(true);
+        for (const k of [1, -1]) {
+          expect(astro.some(p => p[0] * k > 0.15 && p[1] > 0.94 && p[1] < 0.99)).toBe(true);
+        }
+        // The marine's plates in his team's colour have none of them.
+        expect(marks([0.9, 0.2, 0.1])).toEqual([]);
+      }
+    });
+
     it("are the ninja's own on his pieces, the long ones unbroken (the user, 2026-11-13: more detail)", () => {
       for (const build of [0, 1]) {
         const out: number[] = [];

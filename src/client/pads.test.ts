@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { STRIDE } from './mesh';
-import { BELL, FORE, LAMES, pads } from './pads';
+import { BAND, BELL, FORE, LAMES, pads } from './pads';
 import { JOINT as J, rest, solve } from './rig';
 import { body, palette, skin } from './skin';
 
@@ -119,6 +119,25 @@ describe("the marine's shoulder bells (the user, 2026-11-13, on a picture of a t
           expect(((x - BELL.x) / BELL.r[0]) ** 2 + (z / BELL.r[1]) ** 2).toBeLessThan(1);
         }
       }
+    }
+  });
+  it("has a band round each bell in its own colour: the astronaut's team colour on his white (the user, 2026-11-13)", () => {
+    const v: number[] = [];
+    pads(v, solve(rest()), 0, [0.85, 0.86, 0.88], true, [0.1, 0.9, 0.2]);
+    const band = [];
+    for (let i = 0; i < v.length; i += STRIDE) {
+      if (v[i + 6] == 0.1 && v[i + 7] == 0.9) {
+        band.push(v[i]);
+      }
+    }
+    expect(BAND.rows.length).toBeGreaterThan(0);
+    expect(band.some(x => x > 0)).toBe(true);
+    expect(band.some(x => x < 0)).toBe(true);
+    // Without a band colour of its own, the bell is all one colour.
+    const plain: number[] = [];
+    pads(plain, solve(rest()), 0, [0.9, 0.2, 0.1], true);
+    for (let i = 0; i < plain.length; i += STRIDE) {
+      expect(plain[i + 7] == 0.9).toBe(false);
     }
   });
 });

@@ -739,7 +739,7 @@ export const soldier = (
     // The stump's face is the last vertex drawn.
     r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
     if (plated) {
-      armor(out, at, cs, lod > 2, plate, ninja);
+      armor(out, at, cs, lod > 2, plate, ninja, color);
     }
     piece(out, r.cut, colors, lod, sink, r.face.w);
   } else {
@@ -753,7 +753,7 @@ export const soldier = (
     }
     // The armour, cut out of the skin just drawn.
     if (plated) {
-      armor(out, from, bs, lod > 2, plate, ninja);
+      armor(out, from, bs, lod > 2, plate, ninja, color);
     }
     pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
     if (k > 0) {
@@ -779,7 +779,7 @@ export const soldier = (
   // The ninja's pads and collar; the marine's shoulder bells.
   if (plated) {
     const from = out.length;
-    pads(out, s, build, ninja ? color : (plate ?? [0.9, 0.91, 0.93]), !ninja);
+    pads(out, s, build, ninja ? color : (plate ?? [0.85, 0.86, 0.88]), !ninja, color);
     if (k > 0) {
       dissolve(out, from, k);
     }

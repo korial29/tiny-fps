@@ -184,14 +184,16 @@ const outline = (u: number, v: number): [a: number, y: number] => {
  * The cheeks (the user, 2026-11-11, after a Mandalorian helmet, an idea and nothing copied): the
  * dome is whole but for a V carved in each cheek, no panel and no line round it. The V is upside
  * down: its top edge just under the slit, from the slot back across the cheek, its inner side
- * straight down along the slot (the helmet's middle line), its point low by the jaw. Each corner is
- * [u, v] on the outline (outline()).
+ * straight down along the slot (the helmet's middle line), its point low by the jaw. Its top edge
+ * rises to the back, under the ear (the user, 2026-11-13: the V wider toward the back, its branch by
+ * the eyes spread out, more angular and aggressive). Each corner is [u, v] on the outline
+ * (outline()).
  */
 export const CUT = {
   tip: [0.12, 0.12] as [number, number],
   arms: [
     [0.12, 0.9],
-    [1.1, 0.9],
+    [1.25, 1.2],
   ] as [number, number][],
 };
 
@@ -204,8 +206,8 @@ const SPLIT = 6;
  * The patch round each V, in the outline's (u, v): the dome is left out where a triangle has a
  * point in LEFT_OUT, and the patch, flush with it, covers PATCH, a dome triangle wider all round.
  */
-const LEFT_OUT = [-0.08, -0.02, 1.3, 1.02];
-const PATCH = [-0.24, -0.06, 1.7, 1.6];
+const LEFT_OUT = [-0.08, -0.02, 1.45, 1.32];
+const PATCH = [-0.24, -0.06, 1.85, 1.9];
 
 /** The corners of the V on the outline: its point, then its arms' feet. */
 const vee = (): [number, number][] => [CUT.tip, ...CUT.arms];

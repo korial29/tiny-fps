@@ -3,12 +3,13 @@
 import { describe, expect, it } from 'vitest';
 import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { STILL, eyeHeight } from '../shared/physics';
-import { LIMB, MODE, SIDE } from '../shared/types';
+import { MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { GLOSS, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { BUILD, JOINT as J, RESTS, rest, solve } from './rig';
 import { helm } from './helm';
+import { BELL, pads } from './pads';
 import { helmet } from './helmet';
 import { hose } from './pack';
 import { BUST, bindOf, body, tressOf } from './skin';
@@ -187,36 +188,32 @@ describe('her armour', () => {
     armor(out, 0, s, lod > 2);
     return { out, n };
   };
-  it('is his suit, plate for plate, cut on her body, but for the shoulders: her caps, his pieces', () => {
-    // The ninja's vest aside: a chest piece for each (armor.test.ts).
+  it('is his suit, plate for plate, cut on her body; a bell on each shoulder, hers slimmer (the user, 2026-11-13)', () => {
+    // The ninja's vest aside: a chest piece for each (armor.test.ts). The bells are no plate cut
+    // out of the skin (pads.ts).
     const fem = REGIONS.filter(g => g.fem && !g.alone);
     const man = REGIONS.filter(g => g.man && !g.alone);
-    expect([fem.length, man.length]).toEqual([2, 2]);
+    expect([fem.length, man.length]).toEqual([0, 0]);
     for (const lod of [0, 1, 3]) {
       const [a, b] = [draw(0, lod), draw(F, lod)];
       expect(a.out.length - a.n).toBeGreaterThan(0);
       expect(b.out.length - b.n).toBeGreaterThan(0);
     }
   });
-  it('wears one round cap on each shoulder, wholly on the trunk over the arm: no seam in steps', () => {
-    const caps = REGIONS.filter(g => g.fem && !g.alone);
-    expect(caps).toHaveLength(2);
-    const s = body(3, F);
-    const v = s.u ?? s.v;
-    let arm = 0;
-    s.l!.forEach((l, t) => {
-      if (l == LIMB.ARM_L || l == LIMB.ARM_R) {
-        for (let c = 0; c < 3; c++) {
-          arm = Math.max(arm, v[s.t[t * 3 + c] * 6 + 1]);
-        }
+  it('wears a bell over each shoulder as he does, slimmer: four fifths of his', () => {
+    const size = (build: number) => {
+      const v: number[] = [];
+      pads(v, solve(rest([0, 0, 0], 0, build)), build, [1, 1, 1], true);
+      let [lo, hi] = [Infinity, -Infinity];
+      for (let i = 0; i < v.length; i += STRIDE) {
+        [lo, hi] = [Math.min(lo, v[i + 1]), Math.max(hi, v[i + 1])];
       }
-    });
-    for (const g of caps) {
-      expect(g.round).toBeDefined();
-      expect(g.y[0]).toBeGreaterThan(arm);
-    }
+      return hi - lo;
+    };
+    expect(size(F)).toBeCloseTo(size(0) * BELL.fem, 4);
+    expect(BELL.fem).toBeLessThan(0.85);
   });
-  it('has no plate standing over her shoulders, nor he over his', () => {
+  it('differs from him by her armour for his, her bells for his, and her hair', () => {
     const count = (build: number) => {
       const out: number[] = [];
       soldier(out, createRunner(who(), undefined, build), [1, 0, 0], 1, false, true);
@@ -225,7 +222,7 @@ describe('her armour', () => {
     const [a, b] = [draw(0, 1), draw(F, 1)];
     const hairs: number[] = [];
     hair(hairs, [0, 0, 0], [0, 0, 0, 1], styleOf(1), tressOf(1), 1, sway(0, 0, 0));
-    // Her vertices: his, with her armour for his, plus her hair.
+    // The bells are as many vertices on both.
     expect(count(F)).toBe(count(0) + (b.out.length - b.n) - (a.out.length - a.n) + hairs.length);
   });
   it.each(STANCES)('sits on her body in the stance: %s', (_, o) => {

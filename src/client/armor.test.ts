@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ARMHOLE, BRACER, BRIEFS, DOME, GAP, REGIONS, THIGH, armor } from './armor';
+import { ARMHOLE, BRACER, BRIEFS, CHEST, DETAILS, DOME, GAP, REGIONS, THIGH, armor } from './armor';
 import { GLOSS, STRIDE } from './mesh';
 import { rest, solve } from './rig';
 import { body, palette, skin } from './skin';
@@ -33,27 +33,24 @@ describe('the armour', () => {
     });
   }
 
-  it('leaves the gap the user asked between the chest plate and the belly plates', () => {
+  it("leaves the gap the user asked between the chest plate and the one belly plate, along the chest's dipped bottom", () => {
     const [, v] = draw(3);
-    // The plates' white at the front, by height: none within the gaps.
+    // The plates' white down the middle of the front, by height: none within the gap.
     const ys: number[] = [];
     for (let i = 0; i < v.length; i += STRIDE) {
-      if (v[i + 8] == GLOSS && Math.abs(v[i]) < 0.08 && v[i + 2] < 0) {
+      if (v[i + 8] == GLOSS && Math.abs(v[i]) < 0.02 && v[i + 2] < 0) {
         ys.push(v[i + 1]);
       }
     }
-    const [chest, upper, lower] = REGIONS;
-    expect(chest.y[0] - upper.y[1]).toBeCloseTo(GAP, 6);
-    expect(upper.y[0] - lower.y[1]).toBeCloseTo(GAP, 6);
-    for (const [lo, hi] of [
-      [upper.y[1], chest.y[0]],
-      [lower.y[1], upper.y[0]],
-    ]) {
-      // The plates stand off the skin along its normals, which tilt a few millimetres.
-      expect(ys.filter(y => y > lo + 0.003 && y < hi - 0.003)).toEqual([]);
-    }
-    expect(ys.some(y => y > chest.y[0])).toBe(true);
-    expect(ys.some(y => y < upper.y[1] && y > upper.y[0])).toBe(true);
+    const [chest, belly] = REGIONS;
+    // The chest's bottom dips to the middle; the belly's top is GAP under it there.
+    expect(chest.y[0]).toBe(CHEST.y);
+    expect(CHEST.rise).toBeGreaterThan(0.02);
+    expect(belly.high!(0, [])).toBeCloseTo(CHEST.y - GAP, 6);
+    // The plates stand off the skin along its normals, which tilt a few millimetres.
+    expect(ys.filter(y => y > CHEST.y - GAP + 0.004 && y < CHEST.y - 0.004)).toEqual([]);
+    expect(ys.some(y => y > CHEST.y)).toBe(true);
+    expect(ys.some(y => y < CHEST.y - GAP && y > belly.y[0])).toBe(true);
   });
 
   it('stands off the skin it is cut from, on the body: the chest, belly, thighs, knees, forearms', () => {
@@ -169,11 +166,11 @@ describe('the armour', () => {
       }
       return best;
     };
-    /** How far out the plate is at eight points `q` from (x, y), all round it. */
+    /** How far out the plate is at eight points `q` from (x, y), all round it; nothing where its side faces away or it is cut. */
     const ring = (at: (x: number, y: number) => number[], [x, y]: number[], q: number) =>
-      [0, 1, 2, 3, 4, 5, 6, 7].map(
-        i => at(x + q * Math.cos((i * Math.PI) / 4), y + q * Math.sin((i * Math.PI) / 4))[0],
-      );
+      [0, 1, 2, 3, 4, 5, 6, 7]
+        .map(i => at(x + q * Math.cos((i * Math.PI) / 4), y + q * Math.sin((i * Math.PI) / 4))?.[0])
+        .filter(d => d !== undefined);
 
     it('keeps the woman a dome each side, as far out on both, well over the plate under it', () => {
       const at = front(1, 1);
@@ -207,15 +204,39 @@ describe('the armour', () => {
       }
     });
 
+    it("has no breach by the armpits, over the rim of the arm's hole in the trunk's skin (the user, 2026-11-13)", () => {
+      for (const build of [0, 1]) {
+        for (const lod of [1, 3]) {
+          const [, v] = draw(lod, build);
+          // The plate between the trunk's last two rows (1.394 and 1.41 m), in from its corners:
+          // none of it turned in, as the rim's normals are, and all of it before the chest.
+          let seen = 0;
+          for (let i = 0; i < v.length; i += STRIDE) {
+            const [x, y, z] = [Math.abs(v[i]), v[i + 1], v[i + 2]];
+            if (v[i + 8] == GLOSS && x > 0.05 && x < 0.13 && y > 1.39 && y < 1.415 && z < -0.05) {
+              seen++;
+              expect(v[i + 5]).toBeLessThan(0);
+              expect(z).toBeLessThan(-0.1);
+            }
+          }
+          expect(seen).toBeGreaterThan(10);
+        }
+      }
+    });
+
     it('is not pierced under the armpits, where the shoulders stand out of the trunk', () => {
       for (const build of [0, 1]) {
         for (const lod of [1, 3]) {
           const [plate, bare] = [front(build, lod), front(build, lod, true)];
-          for (let y = 1.3; y < 1.42; y += 0.005) {
+          // Off the plate's top line by the armpit (ARMPIT.y), where the bare shoulder over its
+          // edge is the skin met.
+          for (let y = 1.302; y < 1.42; y += 0.005) {
             for (let x = 0.08; x < 0.16; x += 0.005) {
               for (const k of [1, -1]) {
                 const [p, q] = [plate(k * x, y), bare(k * x, y)];
-                if (p && q) {
+                // In the armhole the plate met is the biceps', on the arm behind the chest's
+                // front: never more than 0.063 deep.
+                if (p && q && p[0] > 0.063) {
                   expect(p[0]).toBeGreaterThan(q[0]);
                 }
               }
@@ -260,7 +281,15 @@ describe('the armour', () => {
           ];
           const w = (d[0] * q[0] + d[1] * q[1] + d[2] * q[2]) / det;
           const h = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
-          if (u >= 0 && w >= 0 && u + w <= 1 && h > 0) {
+          // The hips' own plates, facing out: not the forearm's, down to the wrist by the hip.
+          if (
+            u >= 0 &&
+            w >= 0 &&
+            u + w <= 1 &&
+            h > 0 &&
+            h < 0.215 &&
+            v[i + 3] * d[0] + v[i + 5] * d[2] > 0.5
+          ) {
             return true;
           }
         }
@@ -342,6 +371,50 @@ describe('the armour', () => {
         dark += +(out[i + 8] != GLOSS && out[i + 6] < 0.15 && out[i + 9] < 0.15);
       }
       expect(dark).toBeGreaterThan(300);
+    });
+  });
+
+  describe('the details (the user, 2026-11-13: discreet, on the chest plate and the forearms)', () => {
+    /** The dark strokes of the armour `v` (the gusset's cloth is under 1 m): [x, y, z] of each vertex. */
+    const dark = (v: number[]) => {
+      const at: number[][] = [];
+      for (let i = 0; i < v.length; i += STRIDE) {
+        if (v[i + 8] != GLOSS && v[i + 6] < 0.1 && v[i + 1] > 1) {
+          at.push([v[i], v[i + 1], v[i + 2]]);
+        }
+      }
+      return at;
+    };
+    it('are slits on the right of the chest and strokes on the outer side of both forearms, close up only', () => {
+      for (const build of [0, 1]) {
+        const marks = dark(draw(3, build)[1]);
+        // Two triangles a stroke; most of them drawn (one may fall off its plate's edge).
+        expect(marks.length).toBeGreaterThan(DETAILS.length * 6 * 0.7);
+        const chest = marks.filter(p => p[1] > 1.4);
+        expect(chest.length).toBeGreaterThan(5 * 6);
+        // The slits are on his right; the V at the collar on both sides of the middle.
+        expect(chest.filter(p => p[0] > 0.03).length).toBeGreaterThan(4 * 6);
+        expect(chest.filter(p => p[0] < -0.03)).toEqual([]);
+        for (const side of [1, -1]) {
+          const arm = marks.filter(p => p[1] < 1.16 && p[0] * side > 0.2);
+          expect(arm.length).toBeGreaterThan(5 * 6);
+        }
+        // None on a runner not close by (not `fine`).
+        const out: number[] = [];
+        const far = body(1, build);
+        skin(out, far, solve(rest([0, 0, 0], 0, build)), palette([0.9, 0.2, 0.1]));
+        const n = out.length;
+        armor(out, 0, far, false);
+        expect(dark(out.slice(n))).toEqual([]);
+      }
+    });
+    it('keep their colour on plates in a team colour, as the scratches do not', () => {
+      const out: number[] = [];
+      const s = body(3);
+      skin(out, s, solve(rest()), palette([0.9, 0.2, 0.1], undefined, undefined, true));
+      const n = out.length;
+      armor(out, 0, s, true, [0.9, 0.2, 0.1]);
+      expect(dark(out.slice(n)).length).toBeGreaterThan(DETAILS.length * 6 * 0.7);
     });
   });
 });

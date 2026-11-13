@@ -75,7 +75,7 @@ import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
 import { armor } from './armor';
-import { CUFF, CUFF_SIDES, REGION, body, palette, skin } from './skin';
+import { CUFF, CUFF_NEAR, CUFF_SIDES, REGION, body, palette, skin } from './skin';
 import { CLOTH } from './mask';
 import { createTrail } from './trail';
 
@@ -517,6 +517,8 @@ const FINGER_R = 0.01;
 const BONES = [1, 0.62, 0.42];
 /** The ring of a finger from which on it is bare: the glove's fingers end 60 % along the middle phalanx. */
 export const BARE = 8;
+/** The rings of a finger a near runner's hand keeps past its root (hand()'s `lite`): the knuckle's bend, the glove's edge, the last bend, the tip. */
+const LITE = [5, 8, 12, 15];
 
 /**
  * The rings of a finger, in the hand's space: from `p` along `d1`, `d2` then `d3`, its three
@@ -620,7 +622,10 @@ export const hand = (
   bare = tint,
   /** 0 to 1: the thumb out of the fist to CUP, up the side of what the palm carries. */
   cup = 0,
+  /** A near runner's hand: fewer sides, on the near sleeve's cuff, and none of the glove's small parts. */
+  lite = false,
 ) => {
+  const [FS, CS] = lite ? [4, CUFF_NEAR] : [FINGER_SIDES, CUFF_SIDES];
   let paint = (_: number) => tint;
   /** Hand space (x toward the thumb, y the back, z toward the fingers), a point and a direction, to the world, in `paint` of its ring. */
   const put = ([x, y, z]: Vec3, [m, n, w]: Vec3, r = 0) => {
@@ -649,8 +654,8 @@ export const hand = (
   ];
   // The palm up to WELD; from there a skin welds it to the four fingers' roots (weld(), below).
   tube(
-    PALM.slice(0, 3).map(r => palm(r)),
-    CUFF_SIDES,
+    (lite ? [PALM[0], PALM[2]] : PALM.slice(0, 3)).map(r => palm(r)),
+    CS,
     put,
     0.75,
   );
@@ -660,7 +665,16 @@ export const hand = (
   const digit = (p: Vec3, ds: [Vec3, Vec3, Vec3], l: number, r: number, t: Vec3, from = 1) => {
     paint = k => (k < BARE ? tint : bare);
     // From where it leaves the palm, ring `from`: a weld skins its root.
-    tube(finger(p, ...ds, l, r, t).slice(from), FINGER_SIDES, (q, n, k) => put(q, n, k + from));
+    const all = finger(p, ...ds, l, r, t);
+    const ks = lite ? [from, ...LITE.filter(k => k > from)] : all.map((_, k) => k).slice(from);
+    tube(
+      ks.map(k => all[k]),
+      FS,
+      (q, n, k) => put(q, n, ks[k]),
+    );
+    if (lite) {
+      return;
+    }
     paint = () => nail;
     // The nail: an oval on the back of the last phalanx, toward its tip, a hair out of it.
     const d = ds[2];
@@ -694,8 +708,8 @@ export const hand = (
     roots.push([
       at,
 
-      Array.from({ length: FINGER_SIDES }, (_, k) => {
-        const a = (k * TAU) / FINGER_SIDES;
+      Array.from({ length: FS }, (_, k) => {
+        const a = (k * TAU) / FS;
         return [0, 1, 2].map(d => at[d] + x[d] * Math.cos(a) + y[d] * Math.sin(a)) as Vec3;
       }),
       unit(y),
@@ -708,8 +722,8 @@ export const hand = (
   paint = () => tint;
   const [wz, y0, a0, b0] = PALM[2];
   type W = [Vec3, Vec3];
-  const palmLoop = Array.from({ length: CUFF_SIDES }, (_, k): W => {
-    const a = (k * TAU) / CUFF_SIDES;
+  const palmLoop = Array.from({ length: CS }, (_, k): W => {
+    const a = (k * TAU) / CS;
     return [
       [a0 * Math.cos(a), y0 + b0 * Math.sin(a), wz],
       unit([Math.cos(a) / a0, Math.sin(a) / b0, 0]),
@@ -721,7 +735,7 @@ export const hand = (
     return ring
       .map((p, k): [Vec3, number] => [p, k])
       .filter(([p, k]) => {
-        const a = (k * TAU) / FINGER_SIDES;
+        const a = (k * TAU) / FS;
         const side = i == 3 ? a <= Math.PI + 1e-6 : a < Math.PI - 1e-6;
         return (
           (top ? side : !side) && roots.every(([o], j) => j == i || dist(p, o) > FINGER_R * 1.1)
@@ -822,8 +836,8 @@ export const hand = (
       const f = Math.min(Math.max((z - a[0]) / (b[0] - a[0]), 0), 1);
       return [1, 2, 3].map(i => a[i] + (b[i] - a[i]) * f);
     };
-    const foot = Array.from({ length: FINGER_SIDES }, (_, k): [Vec3, Vec3] => {
-      const a = (k * TAU) / FINGER_SIDES;
+    const foot = Array.from({ length: FS }, (_, k): [Vec3, Vec3] => {
+      const a = (k * TAU) / FS;
       const q = [0, 1, 2].map(
         d => tp[d] + 1.7 * (x1[d] * Math.cos(a) + y1[d] * Math.sin(a)),
       ) as Vec3;
@@ -833,8 +847,8 @@ export const hand = (
       const on: Vec3 = [q[0] / e, yc + (q[1] - yc) / e, q[2]];
       return [on, unit([on[0] / (w * w), (on[1] - yc) / (h * h), 0])];
     });
-    const top = Array.from({ length: FINGER_SIDES }, (_, k): [Vec3, Vec3] => {
-      const a = (k * TAU) / FINGER_SIDES;
+    const top = Array.from({ length: FS }, (_, k): [Vec3, Vec3] => {
+      const a = (k * TAU) / FS;
       const d: Vec3 = [0, 1, 2].map(i => x2[i] * Math.cos(a) + y2[i] * Math.sin(a)) as Vec3;
       return [add(c2, d), unit(d)];
     });
@@ -847,13 +861,16 @@ export const hand = (
       [foot, mid],
       [mid, top],
     ]) {
-      for (let k = 0; k < FINGER_SIDES; k++) {
-        const n = (k + 1) % FINGER_SIDES;
+      for (let k = 0; k < FS; k++) {
+        const n = (k + 1) % FS;
         for (const [q, m] of [a[k], a[n], b[n], a[k], b[n], b[k]]) {
           put(q, m);
         }
       }
     }
+  }
+  if (lite) {
+    return;
   }
   /** The back of the palm at `z` forward and `x` across, its height in the hand. */
   const back = (z: number, x = 0) => {
@@ -932,7 +949,7 @@ export const hand = (
   const [z0, z1] = [PALM[0][0] + 0.004, PALM[0][0] + 0.016];
   tube(
     [strap(z0, 0.96), strap(z0 + 0.0015, 1.07), strap(z1 - 0.0015, 1.07), strap(z1, 0.96)],
-    CUFF_SIDES,
+    CS,
     put,
   );
   paint = () => SHELL;
@@ -951,6 +968,59 @@ export const hand = (
     put,
   );
 };
+
+/** What a hand does besides closing (hand()): the left index pointing, the right thumb pushing toward `to`, the left thumb cupped. */
+export interface Grip {
+  point?: number;
+  push?: number;
+  to?: Vec3;
+  cup?: number;
+}
+
+/**
+ * Both hands of the skeleton `s` on its wrists, left then right, each closed `curls[i]` (hand()), in
+ * the glove `glove` with the bare fingertips `bare`; hers smaller about the wrist (HAND_F). The own
+ * body and the runners share it, so a runner's fist closes on a grip as the own one does. `lite` is
+ * a near runner's hand, `skip` a hand not drawn (the one a cut took off with its arm).
+ */
+export const hands = (
+  out: number[],
+  s: Solved,
+  build: number,
+  curls: number[],
+  glove: number[],
+  bare: number[],
+  { point = 0, push = 0, to, cup = 0 }: Grip = {},
+  lite = false,
+  skip = -1,
+) =>
+  [J.HAND_L, J.HAND_R].forEach((j, i) => {
+    if (j == skip) {
+      return;
+    }
+    const q = s.rot[j];
+    const at = out.length;
+    hand(
+      out,
+      s.pos[j],
+      spin(q, [0, -1, 0]),
+      spin(q, [i * 2 - 1, 0, 0]),
+      spin(q, [0, 0, -1]),
+      curls[i],
+      glove,
+      i ? 0 : point,
+      i * push,
+      to,
+      bare,
+      i ? 0 : cup,
+      lite,
+    );
+    for (let k = at; build && k < out.length; k += STRIDE) {
+      for (let d = 0; d < 3; d++) {
+        out[k + d] = s.pos[j][d] + HAND_F * (out[k + d] - s.pos[j][d]);
+      }
+    }
+  });
 
 /** The floor under a player standing at height `y`: the first top within a step above or below it. */
 const floorOf =
@@ -1648,29 +1718,12 @@ export const createBody = (world?: World): Body => {
           me && swapOf(me) < 0 && ((tk == 1 && grasp > 0.2) || (tk == 0 && hold > 0.2))
             ? poke(since, pressOf(tk))
             : 0;
-        [J.HAND_L, J.HAND_R].forEach((j, i) => {
-          const q = s.rot[j];
-          const at = out.length;
-          hand(
-            out,
-            s.pos[j],
-            spin(q, [0, -1, 0]),
-            spin(q, [i * 2 - 1, 0, 0]),
-            spin(q, [0, 0, -1]),
-            curls[i],
-            colors[7],
-            i ? 0 : pointing,
-            i * push,
-            thumbTo(Math.max(tk, 0)),
-            suit ? colors[7] : colors[3],
-            i ? 0 : cupping,
-          );
-          // Her hand: the same one, smaller about the wrist, so it closes on the same grips.
-          for (let k = at; build && k < out.length; k += STRIDE) {
-            for (let d = 0; d < 3; d++) {
-              out[k + d] = s.pos[j][d] + HAND_F * (out[k + d] - s.pos[j][d]);
-            }
-          }
+        // Her hand: the same one, smaller about the wrist, so it closes on the same grips.
+        hands(out, s, build, curls, colors[7], suit ? colors[7] : colors[3], {
+          point: pointing,
+          push,
+          to: thumbTo(Math.max(tk, 0)),
+          cup: cupping,
         });
         if (hold > 0.2) {
           // The gauge lights once a press is more than a tap: the strength the shot would have.

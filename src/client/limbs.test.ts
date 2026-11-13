@@ -4,9 +4,10 @@ import { STILL } from '../shared/physics';
 import { LIMB, TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
-import { fall, ground, sever } from './limbs';
+import { hands } from './body';
+import { LIMP, fall, ground, sever } from './limbs';
 import { STRIDE } from './mesh';
-import { rest, solve, turn } from './rig';
+import { JOINT as J, rest, solve, turn } from './rig';
 import { body, cut } from './skin';
 import { animate, soldier } from './soldier';
 import type { Runner } from './soldier';
@@ -44,6 +45,12 @@ const drawn = (r: Runner, lod = 1) => {
   return v;
 };
 const ys = (v: number[]) => v.filter((_, i) => i % STRIDE == 1);
+/** The vertices of a near runner's hands closed `curls`, but the hand `skip`. */
+const fingers = (curls: number[], skip = -1) => {
+  const v: number[] = [];
+  hands(v, solve(rest()), 0, curls, [1, 1, 1], [1, 1, 1], {}, true, skip);
+  return v.length / STRIDE;
+};
 
 describe('a limb cut off', () => {
   it('draws the body without the limb and the limb as a piece, both faces glowing', () => {
@@ -52,7 +59,15 @@ describe('a limb cut off', () => {
       expect(r.cut?.limb).toBe(limb);
       const v = drawn(r);
       const [rest, piece] = cut(1, limb);
-      expect(v.length / STRIDE).toBe(rest.t.length + piece.t.length);
+      // The hands on the body, and the one on an arm cut off.
+      const [own, other] =
+        limb == LIMB.ARM_L
+          ? [J.HAND_L, J.HAND_R]
+          : limb == LIMB.ARM_R
+            ? [J.HAND_R, J.HAND_L]
+            : [-1, -1];
+      const held = fingers(r.curls, own) + (own < 0 ? 0 : fingers([LIMP, LIMP], other));
+      expect(v.length / STRIDE).toBe(rest.t.length + piece.t.length + held);
       expect(v.filter((x, i) => i % STRIDE == 8 && x == -2).length).toBeGreaterThan(20);
     }
   });
@@ -165,7 +180,10 @@ describe('a limb cut off', () => {
     // The whole body again, and the pouch on its hip.
     const bag: number[] = [];
     pouch(bag, [0, 0, 0], [0, 0, 0, 1]);
-    expect(drawn(book.get(1)!).length / STRIDE).toBe(body(1).t.length + bag.length / STRIDE);
+    const r = book.get(1)!;
+    expect(drawn(r).length / STRIDE).toBe(
+      body(1).t.length + bag.length / STRIDE + fingers(r.curls),
+    );
     const gone = felled(LIMB.HEAD, 30);
     animate(gone, [], DT);
     expect(gone.size).toBe(0);

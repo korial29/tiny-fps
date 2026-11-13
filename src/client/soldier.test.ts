@@ -18,6 +18,7 @@ import type { WorldDef } from '../shared/world';
 import {
   MUZZLE,
   REAR,
+  RIFLE_CURL,
   RIFLE_HOLD,
   aimed,
   button,
@@ -31,8 +32,9 @@ import {
 } from './gun';
 import { BEHIND, axes } from './katana';
 import { FIST, KATANA_LEFT, inv } from './body';
+import type { Solved } from './body';
 import { SCALE, SHELL } from './helmet';
-import { GLOSS, SHINE, STRIDE, add, basis } from './mesh';
+import { GLOSS, SHINE, STRIDE, add, basis, dot, sub } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, REST, solve, turn } from './rig';
 import {
@@ -43,6 +45,7 @@ import {
   createRunner,
   dissolve,
   fried,
+  grasp,
   seatOf,
   soldier,
   stance,
@@ -347,6 +350,80 @@ describe('soldier', () => {
       }
       expect(Math.max(...g.map(q => q[1]))).toBeLessThan(0.12);
     }
+  });
+
+  describe('hands', () => {
+    /** The bare fingertips of the hand on the wrist `j`: the skin within a hand's length of it. */
+    const tips = (v: number[], s: Solved, j: number) =>
+      dyed(rows(v), SKIN).filter(p => Math.hypot(...sub(p.slice(0, 3) as Vec3, s.pos[j])) < 0.22);
+    const drawn = (r: Runner, lod: number, helmets = false) => {
+      const out: number[] = [];
+      const s = soldier(out, r, GREEN, lod, helmets)!;
+      return { out, s };
+    };
+
+    it('have four fingers and a thumb, bare at their tips, near and close; far, mittens', () => {
+      const r = hold({});
+      for (const lod of [0, 1, 3]) {
+        const { out, s } = drawn(r, lod);
+        for (const j of [J.HAND_L, J.HAND_R]) {
+          const t = tips(out, s, j);
+          if (lod) {
+            expect(t.length).toBeGreaterThan(100);
+          } else {
+            expect(t.length).toBe(0);
+          }
+        }
+      }
+    });
+
+    it('in a space suit, have gloves over the tips too', () => {
+      const { out, s } = drawn(hold({}), 3, true);
+      expect(tips(out, s, J.HAND_R).length).toBe(0);
+    });
+
+    it('close round the katana’s grip, near and close', () => {
+      const r = hold({ blade: true, wield: true });
+      for (const lod of [1, 3]) {
+        const { out, s } = drawn(r, lod);
+        const hilt = grip(s.pos[J.HAND_R], s.rot[J.HAND_R]);
+        const way = axes(s.rot[J.HAND_R])[2];
+        const t = tips(out, s, J.HAND_R);
+        expect(t.length).toBeGreaterThan(100);
+        const off = t
+          .map(p => {
+            const d = sub(p.slice(0, 3) as Vec3, hilt);
+            return Math.hypot(...sub(d, way.map(v => v * dot(d, way)) as Vec3));
+          })
+          .sort((a, b) => a - b);
+        // Round the grip, 2.5 cm thick, the fingers 2 cm: an open hand reaches 12 cm and more off it.
+        expect(off[off.length >> 1]).toBeLessThan(0.035);
+        expect(off[off.length - 1]).toBeLessThan(0.06);
+      }
+    });
+
+    it('are fists with nothing in them and open in the air', () => {
+      const reach = (o: Partial<PlayerState>) => {
+        const { out, s } = drawn(hold(o), 3);
+        return Math.max(
+          ...tips(out, s, J.HAND_R).map(p =>
+            Math.hypot(...sub(p.slice(0, 3) as Vec3, s.pos[J.HAND_R])),
+          ),
+        );
+      };
+      expect(reach({})).toBeLessThan(0.13);
+      expect(reach({ mode: MODE.AIR, ground: false, vy: 5, vz: -6 })).toBeGreaterThan(0.16);
+    });
+
+    it('close round what they hold, flat on a ledge, limp lying down', () => {
+      expect(grasp(man())).toEqual([1, 1]);
+      expect(grasp(man({ blade: true, wield: true }))).toEqual([0.9, 0.9]);
+      expect(grasp(man({ ammo: 5 }))[1]).toBe(0.9);
+      expect(grasp(man({ ammo: 5 }))[0]).toBeLessThan(0.9);
+      expect(grasp(man({ rifled: true, ammo: 5 }))).toEqual([RIFLE_CURL, 0.9]);
+      expect(grasp(man({ ...HANGS }))).toEqual([0.1, 0.1]);
+      expect(grasp(man({ down: 100, hp: 0 }))).toEqual([0.3, 0.3]);
+    });
   });
 
   it('draws the sole on the wall in a wall-run, on both sides', () => {

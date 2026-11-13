@@ -3,6 +3,7 @@
 // bounces on the roof and lies there until the body is gone. Both cut faces glow, cauterized; the
 // cut bursts in cyan sparks and the stump spits a few more for a second. Changes no rule. No DOM.
 import { GRAVITY } from '../shared/constants';
+import { LIMB } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
@@ -12,7 +13,11 @@ import { STRIDE, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, mul, solve, turn } from './rig';
 import type { Quat } from './rig';
-import { cut, palette, skin } from './skin';
+import { hands } from './body';
+import { REGION, cut, palette, skin } from './skin';
+
+/** How closed the hand of an arm cut off is (hand() in body.ts). */
+export const LIMP = 0.35;
 
 /** Seconds the stump spits sparks, and sparks a second. */
 const SPIT = 1;
@@ -153,7 +158,10 @@ export const track = (
   }
 };
 
-/** Appends the piece at level of detail `lod`, in `colors` (see palette()), sunk by `sink` metres with the body. */
+/**
+ * Appends the piece at level of detail `lod`, in `colors` (see palette()), sunk by `sink` metres with
+ * the body; an arm with its hand, limp, in a space suit's glove on `suit`.
+ */
 export const piece = (
   out: number[],
   c: Piece,
@@ -161,10 +169,28 @@ export const piece = (
   lod: number,
   sink: number,
   face?: ArrayLike<number>,
+  suit = false,
 ) => {
   const from = out.length;
   // A head off has its owner's face: down, the eyes shut.
   skin(out, cut(lod, c.limb, c.b)[1], c.s, colors, face);
+  const arm = c.limb == LIMB.ARM_L || c.limb == LIMB.ARM_R;
+  if (arm && lod) {
+    const glove = colors[REGION.GLOVE];
+    // hands() leaves out the other one.
+    const other = c.limb == LIMB.ARM_L ? J.HAND_R : J.HAND_L;
+    hands(
+      out,
+      c.s,
+      c.b ?? 0,
+      [LIMP, LIMP],
+      glove,
+      suit ? glove : colors[REGION.FLESH],
+      {},
+      lod < 3,
+      other,
+    );
+  }
   for (let i = from; i < out.length; i += STRIDE) {
     const x = turn(c.q, [out[i] - c.c[0], out[i + 1] - c.c[1], out[i + 2] - c.c[2]]);
     const nv = turn(c.q, [out[i + 3], out[i + 4], out[i + 5]]);

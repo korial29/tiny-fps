@@ -1021,7 +1021,8 @@ describe('skin', () => {
       };
       expect(Math.min(...ys(LIMB.HEAD))).toBeGreaterThan(1.54);
       expect(Math.max(...ys(LIMB.HEAD))).toBeCloseTo(1.8, 2);
-      expect(Math.min(...ys(LIMB.ARM_R))).toBeCloseTo(0.772, 2);
+      // To the cuff's point at the wrist: hands() draws the hand.
+      expect(Math.min(...ys(LIMB.ARM_R))).toBeCloseTo(0.91, 2);
       expect(Math.max(...ys(LIMB.ARM_R))).toBeLessThan(1.45);
       expect(Math.min(...xs(LIMB.ARM_R))).toBeGreaterThan(0.1);
       expect(Math.max(...xs(LIMB.ARM_L))).toBeLessThan(-0.1);

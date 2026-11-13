@@ -8,7 +8,18 @@ import { LIMB, MODE } from '../shared/types';
 import type { Choice, PlayerState, Rover } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
-import { FIST, KATANA_LEFT, KATANA_TILT, clasp, inv, reach, shrug, stowed, wield } from './body';
+import {
+  FIST,
+  KATANA_LEFT,
+  KATANA_TILT,
+  clasp,
+  hands,
+  inv,
+  reach,
+  shrug,
+  stowed,
+  wield,
+} from './body';
 import { JAB, armOf, createGait, frame, thrown } from './gait';
 import type { Floor, Gait, Seat } from './gait';
 import {
@@ -16,6 +27,7 @@ import {
   RIFLE_HOLD,
   RIFLE_TILT,
   BROUGHT,
+  RIFLE_CURL,
   TILT,
   aimed,
   axes,
@@ -98,6 +110,8 @@ export interface Runner {
   grin: number;
   /** How far out the fist of a punch is, 0 to 1, eased. */
   jab: number;
+  /** How closed his hands are, left then right, eased toward grasp(). */
+  curls: number[];
   /** His face (expression.ts), and the seconds it has yet to live through: soldier() moves it once drawn, where the head's turn is known. */
   face: Face;
   dt: number;
@@ -185,6 +199,7 @@ export const createRunner = (
     hurt: 0,
     grin: 0,
     jab: 0,
+    curls: grasp(p),
     face,
     dt: 0,
     build,
@@ -290,6 +305,8 @@ export const animate = (
       r.grin = felled(r.p, p, id => book.get(id)?.p, others) ? GRIN : Math.max(r.grin - dt, 0);
       r.dt += dt;
       r.jab += (thrown(p) - r.jab) * (1 - Math.exp(-dt * 45));
+      const g = grasp(p, r.seat);
+      r.curls = r.curls.map((c, i) => c + (g[i] - c) * (1 - Math.exp(-dt * CLOSE)));
       r.p = { ...p };
     } else {
       book.set(p.id, createRunner(p, seat, build, look));
@@ -531,7 +548,49 @@ const streaks = (out: number[], r: Runner, color: number[], at: (v: Vec3) => Vec
 };
 
 /** Whether the runner is at a rover's wheel: unarmed, his weapons put away. */
-const driving = (r: Runner) => r.p.mode == MODE.RIDE && r.seat?.s === 0;
+const driving = (r: Pick<Runner, 'p' | 'seat'>) => r.p.mode == MODE.RIDE && r.seat?.s === 0;
+
+/** How fast a hand closes or opens, 1 / s. */
+const CLOSE = 14;
+
+/**
+ * How closed the hands of `p` are, left then right (hand() in body.ts: 0 flat, 0.9 round a grip, 1
+ * a fist), as the own body closes its own: round what they hold and on the wheel, fists with
+ * nothing in them (the guard), a loose fist on a run, tighter at a sprint, open in the air, flat
+ * on a ledge, a wall or the floor, limp lying down.
+ */
+export const grasp = (p: PlayerState, seat?: Seat): number[] => {
+  if (p.down || floored(p)) {
+    return [0.3, 0.3];
+  }
+  if (driving({ p, seat })) {
+    return [0.9, 0.9];
+  }
+  const armed = p.ammo >= 0 || !!p.railed || !!p.rifled || !!p.wield;
+  const pace = Math.min(Math.max((Math.hypot(p.vx, p.vz) - RUN_SPEED) / 3, 0), 1);
+  const free = dashing(p)
+    ? 1
+    : p.mode == MODE.HANG || p.mode == MODE.CLIMB || p.mode == MODE.WALLRUN || p.mode == MODE.SLIDE
+      ? 0.1
+      : p.stun > 0
+        ? 0.25
+        : p.mode == MODE.AIR
+          ? 0.35
+          : armed
+            ? 0.75 + 0.15 * pace
+            : 1;
+  if (p.wield) {
+    return [0.9, 0.9];
+  }
+  if (p.rifled || (p.railed && !stowed(p))) {
+    return [p.rifled ? RIFLE_CURL : 0.9, 0.9];
+  }
+  // In a swap the left hand brings the new battery up from the pouch.
+  return [
+    p.ammo >= 0 && !p.railed && swapOf(p) >= 0 ? 0.7 : free,
+    (p.railed ? !stowed(p) : p.ammo >= 0) ? 0.9 : free,
+  ];
+};
 
 /** Seconds a runner the rail gun's bolt put down takes to come apart. */
 export const FRY = 0.9;
@@ -654,6 +713,39 @@ export const stance = (r: Runner) => {
   return { s, sink, yaw: pose.yaw, carry };
 };
 
+/**
+ * The runner's hands on his wrists (hands() in body.ts), the fingers closed as r.curls says: none
+ * far, where the skin's sleeves end in mittens; lighter near. A space suit's gloves cover the
+ * fingertips. Not the hand of an arm a cut took off.
+ */
+const gloves = (
+  out: number[],
+  r: Runner,
+  s: ReturnType<typeof solve>,
+  colors: number[][],
+  lod: number,
+  suit: boolean,
+  limb: number = LIMB.NONE,
+) => {
+  if (!lod) {
+    return;
+  }
+  const { p } = r;
+  const glove = colors[REGION.GLOVE];
+  hands(
+    out,
+    s,
+    r.build ?? 0,
+    r.curls,
+    glove,
+    suit ? glove : colors[REGION.FLESH],
+    // The left thumb up the rifle's handguard.
+    { cup: +(!!p.rifled && !p.down && !floored(p) && !driving(r)) },
+    lod < 3,
+    limb == LIMB.ARM_L ? J.HAND_L : limb == LIMB.ARM_R ? J.HAND_R : -1,
+  );
+};
+
 /** Draws the runner and gives back its solved skeleton, or nothing once a bolt has burnt it away. */
 export const soldier = (
   out: number[],
@@ -741,7 +833,8 @@ export const soldier = (
     if (plated) {
       armor(out, at, cs, lod > 2, plate, ninja, color);
     }
-    piece(out, r.cut, colors, lod, sink, r.face.w);
+    piece(out, r.cut, colors, lod, sink, r.face.w, armored);
+    gloves(out, r, s, colors, lod, armored, r.cut.limb);
   } else {
     const from = out.length;
     const bs = body(lod, build);
@@ -756,6 +849,7 @@ export const soldier = (
       armor(out, from, bs, lod > 2, plate, ninja, color);
     }
     pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
+    gloves(out, r, s, colors, lod, armored);
     if (k > 0) {
       dissolve(out, from, k);
     }

@@ -316,9 +316,10 @@ const ARM: Loft = {
   ],
 };
 
-/** The ring where the eye's sleeve ends in the glove, which body.ts starts the palm on, and its sides: the close ones (the eye's body is close). A thin wrist (3.2 cm until the user, 2026-11-09). */
+/** The ring where a sleeve ends in the glove, which body.ts starts the palm on, and its sides: the close ones (the eye's body is close), and the near ones. A thin wrist (3.2 cm until the user, 2026-11-09). */
 export const CUFF = [0.925, 0.222, 0, 0.0265, 0.0265, 3, GLOVE];
 export const CUFF_SIDES = ARM.n[2];
+export const CUFF_NEAR = ARM.n[1];
 
 // The ears are pieces of their own too, half in the head a little behind its sides: a flat oval
 // standing out, leaning back.
@@ -752,12 +753,12 @@ const shape = (lod: number): Skin => {
     if (!n || (lod == 2 && (L.z || L.x || L === EAR || L === CONCHA))) {
       continue;
     }
-    // The eye's own body ends the trunk in a cap on the shoulders and each sleeve in a cuff over a
-    // thin wrist, where body.ts puts a hand.
+    // The eye's own body ends the trunk in a cap on the shoulders. Each sleeve but a far one ends
+    // in a cuff over a thin wrist, where body.ts puts a hand with fingers (hands()); far, a mitten.
     const base =
       lod == 2 && L === TRUNK
         ? [...L.rings.filter(r => r[0] < 1.45), [1.462, 0, 0, 0, 0, 2, JACKET]]
-        : lod == 2 && L === ARM
+        : lod && L === ARM
           ? [
               ...L.rings.filter(r => r[0] > 0.96),
               [0.95, 0.222, 0, 0.035, 0.036, 2.6, GLOVE],
@@ -1613,9 +1614,9 @@ const generate = (lod: number, build: number): Skin => {
 
 const skins: Skin[] = [];
 /**
- * The skin at a level of detail: 0 far, 1 near (see DETAIL in mesh.ts), 2 near, headless and
- * handless, for the eye, 3 close (CLOSE in render.ts), twice the rings and half more sides, the
- * face carved finest. Built once.
+ * The skin at a level of detail: 0 far, 1 near (see DETAIL in mesh.ts), 2 near, headless, for the
+ * eye, 3 close (CLOSE in render.ts), twice the rings and half more sides, the face carved finest.
+ * Only the far one has hands, mittens: the others end at the wrists, where hands() goes. Built once.
  */
 export const body = (lod: number, build = 0) => (skins[lod + 4 * build] ??= generate(lod, build));
 

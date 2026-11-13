@@ -677,3 +677,146 @@ export const music = (): Float32Array => {
   }
   return mixdown(mix, pads);
 };
+
+/** A sixteenth of the moon's music in samples, at 126 bpm: whole, and so is the loop. */
+const STEP = (MUSIC_RATE * 15) / 126;
+/**
+ * The moon's chords in D minor, a bar each: the bass's root, then the arpeggio's three notes. A
+ * letter is semitones above C4 from a: Dm Dm Bb C Dm Dm Gm A, Bb C Am Dm Gm Bb Asus4 A.
+ */
+const CHORDS_MOON = 'ccfjccfjkcfkaaehccfjccfjhchkjbejkcfkaaehjaejccfjhchkkcfkjcejjbej';
+/** The lead over them, a sixteenth a character: a letter starts a note, '.' holds it, '-' rests. */
+const LEAD =
+  'j.o.q.r...q.o...m.o.j.....------k.m.o.r...o.m...m.o.q...t...q...' +
+  'j.o.q.r...q.o...t.r.q.o...j.....k...m...o.k.h...n...j...n...q...' +
+  'r.......o...r.t.v.......t...q...q...m...j...m...o.......j.k.m.o.' +
+  't.......r.q.o.k.o.......r.......q.......o.......n.......q...n...';
+/** The arpeggio's hits in a bar. */
+const COMP = 'x..x..x...x..x..';
+/** A bar of drums, k kick, s snare, h hat; the last bar of eight rolls. */
+const KIT = ['k.h.s.hkk.h.s.h.', 'k.h.s.hkk.s.ssss'];
+
+const hz = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
+/** The MIDI note of a letter of the score. */
+const key = (s: string, at = 0) => s.charCodeAt(at) - 37;
+
+/**
+ * Adds one chip note to `to` from sample `at`, `len` samples, wrapping round: `wave` 0 a pulse of
+ * duty `w`, 1 the NES's 4-bit triangle, 2 its noise (a 15-bit shift register tapped at `w`: 1 hisses,
+ * 6 rings), at `pitch(j)` on sample j; the volume falls from `vol` to `rest` of it in `fall`
+ * samples, in sixteen steps.
+ */
+const chip = (
+  to: Float32Array,
+  at: number,
+  len: number,
+  pitch: (j: number) => number,
+  wave: number,
+  w: number,
+  vol: number,
+  fall: number,
+  rest = 0,
+) => {
+  // The pitch and the volume change every 32 samples, as a chip's registers once a frame.
+  for (let j = 0, p = 0, r = 1, o = at % to.length, f = 0, g = 0; j < len; j++) {
+    if (!(j & 31)) {
+      f = pitch(j) / MUSIC_RATE;
+      g = (vol * Math.ceil(16 * Math.max(rest, 1 - j / fall))) / 16;
+    }
+    if ((p += f) >= 1) {
+      p -= 1;
+      r = (r >> 1) | (((r ^ (r >> w)) & 1) << 14);
+    }
+    const q = (p * 32) | 0;
+    const x = wave > 1 ? (r & 1) * 2 - 1 : wave ? (q < 16 ? q : 31 - q) / 7.5 - 1 : p < w ? 1 : -1;
+    to[o] += x * g;
+    if (++o == to.length) {
+      o = 0;
+    }
+  }
+};
+
+/**
+ * Adds `beat` to both halves of `mix`, takes the edge off the aliased squares with a one-pole
+ * low-pass at about 4 kHz (warmed on the end, so the seam holds) and brings the peak to 0.26.
+ */
+const finish = (mix: Float32Array, beat: Float32Array) => {
+  let [y, peak] = [0, 0];
+  for (let i = mix.length - 256; i < mix.length; i++) {
+    y += (mix[i] + beat[i - beat.length] - y) * 0.7;
+  }
+  for (let i = 0; i < mix.length; i++) {
+    mix[i] = y += (mix[i] + beat[i < beat.length ? i : i - beat.length] - y) * 0.7;
+    peak = Math.max(peak, Math.abs(y));
+  }
+  for (let i = 0; i < mix.length; i++) {
+    mix[i] *= 0.26 / peak;
+  }
+  return mix;
+};
+
+/**
+ * The moon's music, 8-bit: thirty-two bars in D minor at 126 bpm, a pulse lead, a fast arpeggio
+ * in a thin pulse, an octave bass on the triangle and noise drums. The second sixteen bars play
+ * the lead thinner with an echo and the arpeggio an octave up. Like music(): mono at MUSIC_RATE,
+ * deterministic, its end joining its start.
+ */
+export const moon = (): Float32Array => {
+  const mix = new Float32Array(STEP * 512);
+  // The bass and the drums are the same both times: rendered once, over half the loop.
+  const beat = new Float32Array(STEP * 256);
+  for (let s = 0; s < 512; s++) {
+    const [at, bar, pass, i] = [s * STEP, (s >> 4) & 15, s >> 8, s & 15];
+    const chord = CHORDS_MOON.slice(bar * 4, bar * 4 + 4);
+    const c = LEAD[s & 255];
+    let k = 1;
+    if (c >= 'a') {
+      while (LEAD[(s + k) & 255] == '.') {
+        k++;
+      }
+      const f = hz(key(c));
+      // A vibrato that comes in over the first eighth.
+      const sing = (j: number) => f * (1 + 0.007 * Math.sin(j / 640) * Math.min(1, j / STEP / 2));
+      for (let e = 0; e <= pass; e++) {
+        chip(
+          mix,
+          at + 3 * e * STEP,
+          (k - 0.25) * STEP,
+          sing,
+          0,
+          0.5 - pass / 4,
+          0.2 * 0.35 ** e,
+          4 * STEP,
+          0.45,
+        );
+      }
+    }
+    if (COMP[i] == 'x') {
+      for (k = 1; COMP[i + k] == '.';) {
+        k++;
+      }
+      // The chord's notes in turn, fifty a second.
+      const fs = [1, 2, 3].map(n => hz(key(chord, n)) * (pass + 1));
+      chip(mix, at, k * STEP, j => fs[((j / 441) | 0) % 3], 0, 0.125, 0.09, 2 * STEP, 0.25);
+    }
+    if (pass) {
+      continue;
+    }
+    if (!(i & 1)) {
+      const f = hz(38 + ((key(chord) - 38) % 12) + (i & 2 ? 12 : 0));
+      chip(beat, at, 1.5 * STEP, () => f, 1, 0, 0.4, 1, 1);
+    }
+    const d = KIT[+(bar % 8 == 7)][i];
+    if (d == 'k') {
+      chip(beat, at, STEP, j => 160 * 2 ** (-j / 900), 1, 0, 0.6, STEP);
+    } else if (d == 's') {
+      chip(beat, at, 1.25 * STEP, () => 7000, 2, 1, 0.22, 1.25 * STEP);
+    } else if (d == 'h') {
+      chip(beat, at, STEP / 3, () => MUSIC_RATE, 2, 6, 0.08, STEP / 3);
+    }
+  }
+  return finish(mix, beat);
+};
+
+/** The music of each map by its key; the others play music(). */
+export const SONGS: Record<string, () => Float32Array> = { tranquility: moon };

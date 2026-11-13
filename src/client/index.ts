@@ -10,7 +10,7 @@ import { ROLE, kitOf, roleOf, rolesOf } from '../shared/kit';
 import { TONES, toneOf } from './features';
 import { styleOf } from './hair';
 import { shaved } from './skin';
-import { SOUND } from './sfx';
+import { SONGS, SOUND } from './sfx';
 import { aimOf, gap2, struck } from '../shared/rover';
 import { SHIP, limits } from '../shared/ship';
 import { build, hidden, ray } from '../shared/world';
@@ -210,7 +210,7 @@ const play = (
 
   const world = build(mapOf(key));
   const predictor = createPredictor(world);
-  const audio = createAudio();
+  const audio = createAudio(undefined, undefined, SONGS[key]);
   audio.mute(savedMute());
   hud.mute(audio.muted);
   hud.frags(0);

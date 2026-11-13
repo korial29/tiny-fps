@@ -430,6 +430,8 @@ export interface Rules {
   map?: string;
   /** Bots fill the room up to this many players while a human is in it (bot.ts). Absent, none. */
   bots?: number;
+  /** The bots' skill, 0 (novice) to 7 (godlike) as in UT2004 (bot.ts's SKILL when absent). */
+  botSkill?: number;
 }
 
 /**

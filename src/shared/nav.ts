@@ -44,7 +44,7 @@ const DROP = 2;
  * fails most, a stair all), how far above it may be (up a stair, or a ledge to climb) and how far
  * below: a drop that does not hurt at full gravity.
  */
-const NEAR = 16;
+const NEAR = 20;
 const ABOVE = 2.2;
 const BELOW = 8;
 /** Two points of the routes this close (metres, and in height) are one. */

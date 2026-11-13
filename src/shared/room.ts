@@ -1455,6 +1455,7 @@ export class Room {
           others: others.filter(o => o !== me),
           flags: this.ctf.flags,
           world: this.world,
+          balls: this.balls,
         });
         p.seq = ((p.seq ?? -1) + 1) & 0xffff;
         this.apply(p, onWire({ ...i, seq: p.seq, view: this.ticks & 0xffff }));
@@ -1546,7 +1547,7 @@ export class Room {
       by: 0,
       tackled: -TACKLE_COOLDOWN,
       run: -SPLAT_COOLDOWN,
-      ...(bot ? { bot: new Bot(id) } : {}),
+      ...(bot ? { bot: new Bot(id, this.rules.botSkill) } : {}),
     };
     this.peers.set(conn, player);
     this.ctf.join(id, team, player.state);

@@ -11,7 +11,7 @@ const q = new URLSearchParams(location.search);
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>('form');
 const fields = form.elements as unknown as Record<
-  'name' | 'mode' | 'url' | 'body',
+  'name' | 'mode' | 'url' | 'body' | 'bots',
   HTMLInputElement
 > & {
   /** The map cards' radios: its value is the checked one's. */
@@ -35,16 +35,19 @@ const join = () => {
   const server = fields.mode.value == 'server';
   const url = fields.url.value;
   const map = fields.map.value;
+  const bots = +fields.bots.value;
   playing(true);
   // A local room per map picked and per build of the page: a tab left open on another map, or on
   // an older build, hosted the one room there was, and its map and its rules won over the choice
   // made here (the user, 2026-11-11: always Tranquility whatever I pick). A server has its own
-  // map (MAP). In a game, the host picks the next.
+  // map (MAP) and its bots (BOTS). In a game, the host picks the next map.
   game = tinyFps($('game'), {
     name,
     map,
     body: +fields.body.value,
-    ...(server ? { url } : { socket: localSocket(`demo-${map}-${__BUILD__}`, { map }) }),
+    ...(server
+      ? { url }
+      : { socket: localSocket(`demo-${map}-${bots}-${__BUILD__}`, { map, bots }) }),
   });
   status.textContent = server ? `Playing on ${url}` : 'Playing locally';
   game.on('close', () => (status.textContent = 'Disconnected'));
@@ -73,12 +76,13 @@ for (const card of document.querySelectorAll('.map')) {
   );
 }
 
-// ?name=…&mode=local|server&map=highline|tranquility&body=0|1&url=… joins right away.
+// ?name=…&mode=local|server&map=highline|tranquility&body=0|1&bots=0|4|8&url=… joins right away.
 fields.name.value = q.get('name') ?? `Player ${Math.floor(Math.random() * 900) + 100}`;
 fields.mode.value = q.get('mode') == 'server' ? 'server' : 'local';
 fields.map.value = q.get('map') == 'tranquility' ? 'tranquility' : 'highline';
 fields.url.value = q.get('url') ?? fields.url.value;
 fields.body.value = q.get('body') == '1' ? '1' : '0';
+fields.bots.value = ['4', '8'].includes(q.get('bots') ?? '') ? q.get('bots')! : '0';
 syncMode();
 if (q.has('name')) {
   join();

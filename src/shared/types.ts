@@ -18,7 +18,8 @@ export interface PlayerInfo {
   /** The haircut he picked (look.ts); absent, his id picks one. */
   hair?: number;
   /** ROLE (kit.ts) on the maps that offer it; absent, the map's default (the marine, the astronaut on the moon). */
-  role?: number;
+  role?: number; /** Played by the host (bot.ts). Absent for a human. */
+  bot?: boolean;
 }
 
 /** What a player picks on the title screen: his body, his skin, his haircut and his class (PlayerInfo's). */
@@ -425,7 +426,8 @@ export interface Rules {
   /** Seconds a match lasts: the team with more captures wins, a tie is a draw. */
   timeLimit: number;
   /** The map's key in MAPS (maps.ts); an unknown one plays 'highline'. */
-  map?: string;
+  map?: string; /** Bots fill the room up to this many players while a human is in it (bot.ts). Absent, none. */
+  bots?: number;
 }
 
 /**

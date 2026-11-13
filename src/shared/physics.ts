@@ -559,6 +559,8 @@ interface Ctl {
   bodies: readonly Body[];
   /** The class's numbers (kit.ts). */
   kit: Kit;
+  /** Of his running speeds he keeps: the kit's `slow` with a gun in hand, else all. */
+  pace: number;
 }
 
 /** Changes the mode, and starts counting the time in it. */
@@ -1008,7 +1010,8 @@ const onGround = (p: PlayerState, w: World, c: Ctl, burst: boolean): void => {
     steer(p, unwalled(p, w, c, LOW_H), CROUCH_SPEED);
   } else {
     const sprint = (c.keys & KEY.SPRINT) !== 0 && c.fwd;
-    steer(p, unwalled(p, w, c, PLAYER_H), sprint ? c.kit.sprint : c.kit.run, c.kit.run);
+    const run = c.kit.run * c.pace;
+    steer(p, unwalled(p, w, c, PLAYER_H), sprint ? c.kit.sprint * c.pace : run, run);
   }
 };
 
@@ -1071,6 +1074,8 @@ export const move = (
     fz,
     bodies,
     kit,
+    // A gun in hand: one carried, and the katana not in hand (gun.ts's choice at the last step).
+    pace: !p.wield && (p.ammo >= 0 || (p.rail ?? -1) >= 0 || (p.rifle ?? -1) >= 0) ? kit.slow : 1,
   };
 
   const before = p.mode;

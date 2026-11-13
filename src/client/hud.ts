@@ -225,7 +225,7 @@ export const ROLES: [name: string, does: string, where: string][] = [
   ['Marine', 'Full ammo and rate of fire, the standard moves.', 'City maps'],
   [
     'Ninja',
-    'Runs faster, jumps higher, wall-runs twice as long, chains 3 dashes, cuts twice as fast. Half the ammo, half the rate of fire.',
+    'Runs faster, jumps higher, wall-runs twice as long, chains 3 dashes, cuts twice as fast. With a gun: half the ammo, magazine, rate of fire and damage, and slowed hard.',
     'City maps',
   ],
   ['Astronaut', 'The space suit, in the moon’s low gravity.', 'Moon only'],
@@ -372,6 +372,8 @@ export interface Hud {
   cast(pick: (c: Choice & { body: number }) => void): HTMLCanvasElement;
   /** The pictures of the haircuts on offer, in their order (HEAD_PX square): the own head with each. */
   heads(): HTMLCanvasElement[];
+  /** The own player's magazines, as his class holds them (Kit's mag, cap, clip): the spare ones counted by them. */
+  magazines(sizes: number[]): void;
   /** Shows or hides the muted mark. */
   mute(on: boolean): void;
   /**
@@ -517,6 +519,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   );
   const one = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
   const [muted, menu] = ['h5', 'aside'].map(t => one(t));
+  let mags = [GUN_MAG, RAIL_CAP, RIFLE_CLIP];
   const [name, tag, lore, status] = ['h3', 'address small', 'address>span', 'header strong'].map(
     t => one(`aside ${t}`),
   );
@@ -680,6 +683,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       chose = pick;
       return groups[0].closest('fieldset')!.querySelector('canvas')!;
     },
+    magazines: sizes => (mags = sizes),
     mute: on => (muted.hidden = !on),
     match(m, who) {
       bar.hidden = false;
@@ -755,7 +759,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       set(count, `${m}`);
       // The rest as the magazines it makes, full ones and an open one for a part, over its count.
       const rest = Math.max(n - m, 0);
-      const size = rifled ? RIFLE_CLIP : railed ? (RAIL_CAP * 99) / RAIL_MAX : GUN_MAG;
+      const size = rifled ? mags[2] : railed ? (mags[1] * 99) / RAIL_MAX : mags[0];
       const dots = rifled
         ? `  ${'●'.repeat(nades)}${'○'.repeat(Math.max(NADE_MAX - nades, 0))}`
         : '';

@@ -5,6 +5,9 @@ import {
   AMMO_MAX,
   DOUBLE_JUMP_SPEED,
   GUN_COOLDOWN,
+  GUN_MAG,
+  RAIL_CAP,
+  RIFLE_CLIP,
   JUMP_SPEED,
   RAIL_MAX,
   RIFLE_COOL,
@@ -35,6 +38,14 @@ export interface Kit {
   /** Ticks between two shots of the gun and of the rifle. */
   cool: number;
   rifleCool: number;
+  /** What the gun's battery, the rail gun's capsule and the rifle's cell hold. */
+  mag: number;
+  cap: number;
+  clip: number;
+  /** What a hit of his guns takes, of their damage (the host's: room.ts). */
+  damage: number;
+  /** His running speeds with a gun in hand, of his own. */
+  slow: number;
 }
 
 const MARINE: Kit = {
@@ -50,9 +61,18 @@ const MARINE: Kit = {
   rifle: RIFLE_MAX,
   cool: GUN_COOLDOWN,
   rifleCool: RIFLE_COOL,
+  mag: GUN_MAG,
+  cap: RAIL_CAP,
+  clip: RIFLE_CLIP,
+  damage: 1,
+  slow: 1,
 };
 
-/** Faster, higher, twice as long on a wall, three dashes in a row and twice as quick with the blade; half the ammo, half the rate of fire. */
+/**
+ * Faster, higher, twice as long on a wall, three dashes in a row and twice as quick with the blade;
+ * with the guns (the user, 2026-11-13) half the ammo, half the magazine, half the rate of fire, half
+ * the damage, and slowed hard while one is in hand.
+ */
 const NINJA: Kit = {
   run: RUN_SPEED * 1.2,
   sprint: SPRINT_SPEED * 1.2,
@@ -66,6 +86,11 @@ const NINJA: Kit = {
   rifle: RIFLE_MAX / 2,
   cool: GUN_COOLDOWN * 2,
   rifleCool: RIFLE_COOL * 2,
+  mag: Math.ceil(GUN_MAG / 2),
+  cap: RAIL_CAP / 2,
+  clip: RIFLE_CLIP / 2,
+  damage: 0.5,
+  slow: 0.55,
 };
 
 /** By ROLE. The astronaut moves and fights as the marine: the moon's gravity is the map's. */

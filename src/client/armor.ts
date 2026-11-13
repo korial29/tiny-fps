@@ -220,24 +220,40 @@ const chestLow = (a: number) => CHEST.y + CHEST.rise * smooth(0, 60, Math.abs(a)
 
 /**
  * The ninja's vest: the bottom of its chest piece at the sides, how far its chevron dips at the
- * middle (and the lames' under it), the bottom of the V at its neck and its top beside it on the woman, the lames' height and the gap
- * between two pieces.
+ * middle (and the lames' under it), how far its neckline dips at the middle, its top over the chest
+ * on him and on her, the lames' height and the gap between two pieces.
  */
-export const VEST = { y: 1.278, dip: 0.035, neck: 1.385, top: 1.462, lame: 0.06, gap: 0.012 };
+export const VEST = {
+  y: 1.278,
+  dip: 0.035,
+  neck: 0.015,
+  top: [1.5, 1.462],
+  lame: 0.06,
+  gap: 0.012,
+};
 /** How far a piece of the vest dips at the angle a: a chevron, its point down the middle. */
 const chevron = (a: number) => VEST.dip * Math.max(0, 1 - Math.abs(a) / 40);
 /**
  * The vest's armholes (the user, 2026-11-13: a crack in the chest piece by the armpit): over the
  * trunk's split (1.41 m) the skin is the shoulder's and goes with the arm, away from the piece under
- * it. Its top falls to `y`, under the split, between the angles `a`, where the shoulder's skin starts.
+ * it. Its top is down to `y`, under the split, at the angle `a`, where the shoulder's skin starts;
+ * from the top over the pec it falls there from the angle `fall` on him and on her (hers sooner,
+ * round over each breast); its outer corner rounds off by `corner` between the angles `round`.
  */
-export const ARMHOLE = { a: [22, 32, 41], y: 1.398 };
-/** The top of the vest's chest piece at the angle a: the V at the neck, then down into the armhole; hers lower, round over each breast (`fem`). */
+export const ARMHOLE = { a: 42, y: 1.398, fall: [22, 10], corner: 0.04, round: [46, 60] };
+/**
+ * The top of the vest's chest piece at the angle a (the user, 2026-11-13: smooth the stairs on the
+ * pecs, then all in one block): one curve, a shallow neckline, over the chest and down into the
+ * armhole, rounding the corner. It was open in a deep V, and came down by a cliff into the armhole,
+ * then a shelf, then the side, in steps.
+ */
 const vestTop = (a: number, fem: number) => {
-  const [q, top] = [Math.abs(a), fem ? VEST.top : 1.5];
-  return Math.min(
-    VEST.neck + (top - VEST.neck) * smooth(0, 25, q),
-    top - (top - ARMHOLE.y) * smooth(ARMHOLE.a[1 - fem], ARMHOLE.a[2], q),
+  const [q, top] = [Math.abs(a), VEST.top[fem]];
+  return (
+    top -
+    VEST.neck * (1 - smooth(0, 14, q)) -
+    (top - ARMHOLE.y) * smooth(ARMHOLE.fall[fem], ARMHOLE.a, q) -
+    ARMHOLE.corner * smooth(ARMHOLE.round[0], ARMHOLE.round[1], q) ** 2
   );
 };
 /** How far the ninja's bracers stand off the forearm: half a plate's thickness. */
@@ -332,14 +348,14 @@ export const REGIONS: Region[] = [
   // The gusset under them (GUSSET): on the trunk and round the top of each thigh.
   { part: PART.TRUNK, cx: 0, y: [0.8, 0.98], a: [-181, 181], thin: true },
   { part: PART.LEG, cx: 0.1, y: [0.74, 0.94], a: [-181, 181], low: gusset, thin: true },
-  // The ninja's vest (the user, 2026-11-13, on his picture of a ninja's armour): a chest piece open in
-  // a deep V at the neck, its bottom a chevron; three lames down the belly nested under it, each
+  // The ninja's vest (the user, 2026-11-13, on his picture of a ninja's armour): a chest piece up to
+  // the neck in one block, its bottom a chevron; three lames down the belly nested under it, each
   // narrower; a plate on the back and one on the small of it; and a bracer on each forearm. His
   // shoulder pads and his collar are pieces of their own (pads.ts).
   ...[0, 1].map((fem): Region => ({
     part: PART.TRUNK,
     cx: 0,
-    y: [VEST.y - VEST.dip, 1.5],
+    y: [VEST.y - VEST.dip, VEST.top[fem]],
     a: [-60, 60],
     high: a => vestTop(a, fem),
     low: a => VEST.y - chevron(a),
@@ -470,6 +486,9 @@ const clip = (poly: Corner[], f: (c: Corner) => number, bit: number) => {
   return out;
 };
 
+/** How far round past a plate's side a skin triangle may lie and still be cut (degrees). */
+const REACH = 40;
+
 /** Where a corner keeps the limits it lies on (a bit each): two corners sharing one make an edge of the plate. */
 const BITS = 9;
 
@@ -531,6 +550,8 @@ const unit = (x: number, y: number, z: number) => {
  * user, 2026-11-12, climbing: "the legs go up").
  */
 const [CLEAR, FLOOR, CEIL, FACING] = [0.03, 0.004, 0.08, 0.5];
+/** How far round from the front the shell is fitted (radians): past it its polynomial runs wild. */
+const FIT = 1.35;
 
 /** A moulded plate's shell: its axis, the fit's weights, its clearance, per build and region. */
 interface Shell {
@@ -670,7 +691,7 @@ const shellOf = (b: number, gi: number): Shell => {
   const e = new Array<number>(M).fill(0);
   for (const [x, y, z, nz] of pts) {
     const [a, r] = polar(z0, x, z);
-    if (Math.abs(a) < 1.35) {
+    if (Math.abs(a) < FIT) {
       const f = e.map((_, p) => {
         e.fill(0);
         e[p] = 1;
@@ -749,8 +770,9 @@ const moulding = (s: Skin, gi: number) => {
         ),
       ) as [number, number, number]),
     );
-    if (facing(x, z, o) < FACING) {
-      // Not facing out: set off as an unmoulded plate, along the skin, with its normal.
+    if (facing(x, z, o) < FACING || Math.abs(polar(z0, x, z)[0]) > FIT) {
+      // Not facing out, or round past the fit (shellOf()): set off as an unmoulded plate, along
+      // the skin, with its normal.
       const m = [OFF, 0, 0, 0, ...o];
       done.set(c, m);
       return m;
@@ -920,21 +942,28 @@ const cook = (s: Skin, fine: boolean): Recipe => {
       }
       // A triangle across the turn opposite the plate's face, where its angles jump by 360, would
       // seem to cross the plate's edges: it is out of every plate short of a whole ring.
+      // Nor is one wholly far round from it: the middle of the back reads +180 or -180 by the sign
+      // of a hair, and a moulded plate's corners set off there flipped across it, the clip taking
+      // that jump for its edge and leaving slivers 8 cm out behind the back (the user, 2026-11-13).
       if (region.a[1] - region.a[0] < 360) {
         const as = tri.map(c => angle(region, c[0], c[2]));
-        if (Math.max(...as) - Math.min(...as) > 180) {
+        if (
+          Math.max(...as) - Math.min(...as) > 180 ||
+          as.every(q => q < region.a[0] - REACH) ||
+          as.every(q => q > region.a[1] + REACH)
+        ) {
           continue;
         }
       }
       // A round or curved outline needs finer pieces than the skin's, close up.
-      // A moulded plate's curves, finer still: the woman's domes.
-      const pieces = !fine
-        ? [tri]
-        : region.mould
-          ? split(split([tri]))
-          : region.round || region.low || region.high
-            ? split([tri])
-            : [tri];
+      // A moulded plate's curves, finer still: the woman's domes. Not close up too: on the near
+      // skin its outline went by the skin's big triangles, in steps, and the V at the neck was gone
+      // (the user, 2026-11-13: smooth the stairs on the pecs).
+      const pieces = region.mould
+        ? split(fine ? split([tri]) : [tri])
+        : fine && (region.round || region.low || region.high)
+          ? split([tri])
+          : [tri];
       for (const piece of pieces) {
         const shell = moulds[g];
         const mould = shell && ((c: Corner, k: number) => shell(c, k, flat));
@@ -1031,13 +1060,35 @@ export const DETAILS = [
   [PART.ARM, 0.222, 90, 1.012, 0, 0.012, 0.004, 0],
   ...[62, 118].flatMap(a => [1.035, 1.068].map(y => [PART.ARM, 0.222, a, y, 0, 0.03, 0.0012, 0])),
 ];
+/**
+ * The ninja's details (the user, 2026-11-13: more detail on his armour), as DETAILS on his own
+ * pieces: a seam down the chest piece and three vents on each pec; a rivet at each end of each lame;
+ * two grooves down the back plate, either side of the spine; a band at each end of the bracers with
+ * three slits between them; a groove down each shin guard, a rivet each side of its top.
+ */
+export const NINJA_DETAILS = [
+  [PART.TRUNK, 0, 0, 1.38, 0, 0.1, 0.0012, 1],
+  ...[1.37, 1.352, 1.334].map(y => [PART.TRUNK, 0, 26, y, 62, 0.032, 0.0014, 0]),
+  ...[0, 1, 2].map(k => {
+    const a = 39 - k * 4;
+    const y = VEST.y - VEST.gap - k * (VEST.lame + VEST.gap) - VEST.lame / 2 - chevron(a);
+    return [PART.TRUNK, 0, a, y, 0, 0.007, 0.0035, 0];
+  }),
+  [PART.TRUNK, 0, 172, 1.33, 0, 0.2, 0.0013, 0],
+  ...[1.005, 1.125].map(y => [PART.ARM, 0.222, 90, y, 90, 0.05, 0.0013, 0]),
+  ...[1.05, 1.065, 1.08].map(y => [PART.ARM, 0.222, 90, y, 90, 0.018, 0.0011, 0]),
+  [PART.LEG, 0.1, 0, 0.3, 0, 0.2, 0.0013, 0],
+  ...[-40, 40].map(a => [PART.LEG, 0.1, a, 0.415, 0, 0.007, 0.0035, 0]),
+];
 const DARK = [0.07, 0.07, 0.08];
+/** The longest piece a detail is laid in (m). */
+const PIECE = 0.012;
 
 /**
  * Adds to the recipe the scratches on the plates of the skin `s`: short strokes at random (the
  * same each time) on its triangles inside a plate, each lying on one triangle, wholly inside its
- * plate, a hair over it, matte. Then its details (DETAILS), each tagged with its plate (`tag`): they
- * keep their colour on a plate in a team's.
+ * plate, a hair over it, matte. Then its details (DETAILS, and the ninja's NINJA_DETAILS on his own
+ * pieces), each tagged with its plate (`tag`): they keep their colour on a plate in a team's.
  */
 const scratchesOn = (
   s: Skin,
@@ -1075,6 +1126,7 @@ const scratchesOn = (
     col: number[],
     up = false,
     mark = false,
+    own = false,
   ) => {
     const part = partOf(l![k]);
     const P = corners(k);
@@ -1082,7 +1134,7 @@ const scratchesOn = (
     const g = REGIONS.findIndex(
       (rg, i) =>
         rg.part == part &&
-        !rg.alone &&
+        !rg.alone == !own &&
         !rg.thin &&
         !(rg.fem && !s.b) &&
         !(rg.man && s.b) &&
@@ -1172,6 +1224,35 @@ const scratchesOn = (
     );
     return true;
   };
+  const cross = (p: number[], q: number[]) => [
+    p[1] * q[2] - p[2] * q[1],
+    p[2] * q[0] - p[0] * q[2],
+    p[0] * q[1] - p[1] * q[0],
+  ];
+  /** Where a ray from `o` along `w` leaves the skin of the part: its furthest triangle, and the point. */
+  const hitOf = (part: number, o: number[], w: number[]): [number, number[]] | undefined => {
+    let best = [-1, 0];
+    for (let k = 0; k < n; k++) {
+      if (partOf(l![k]) != part) {
+        continue;
+      }
+      const P = corners(k);
+      const [e1, e2] = [P[1].map((q, j) => q - P[0][j]), P[2].map((q, j) => q - P[0][j])];
+      const h = cross(w, e2);
+      const det = dot(e1, h);
+      if (Math.abs(det) < 1e-12) {
+        continue;
+      }
+      const q = o.map((c, j) => c - P[0][j]);
+      const bu = dot(q, h) / det;
+      const c = cross(q, e1);
+      const [bv, far] = [dot(w, c) / det, dot(e2, c) / det];
+      if (bu >= 0 && bv >= 0 && bu + bv <= 1 && far > best[1]) {
+        best = [k, far];
+      }
+    }
+    return best[0] < 0 ? undefined : [best[0], o.map((c, j) => c + w[j] * best[1])];
+  };
   let made = 0;
   for (let tries = 0; tries < SCRATCHES * 60 && made < SCRATCHES; tries++) {
     const k = Math.floor(rand() * n);
@@ -1183,45 +1264,44 @@ const scratchesOn = (
     const [L, W] = [0.008 + rand() * 0.022, 0.0005 + rand() * 0.0006];
     made += +stroke(k, at, a, L, W, WORN[Math.floor(rand() * WORN.length)]);
   }
-  for (const [part, cx, ang, y, tilt, L, W, only] of DETAILS) {
+  for (const [part, cx, ang, y, tilt, L, W, only, own] of [
+    ...DETAILS,
+    ...NINJA_DETAILS.map(d => [...d, 1]),
+  ]) {
     for (const side of only ? [only] : [1, -1]) {
-      // Where a ray out from the part's middle line leaves the skin: its furthest triangle.
       const r = (ang * Math.PI) / 180;
-      const [o, w] = [
-        [cx * side, y, 0],
-        [Math.sin(r) * side, 0, -Math.cos(r)],
-      ];
-      let best = [-1, 0];
-      for (let k = 0; k < n; k++) {
-        if (partOf(l![k]) != part) {
-          continue;
-        }
-        const P = corners(k);
-        const [e1, e2] = [P[1].map((q, j) => q - P[0][j]), P[2].map((q, j) => q - P[0][j])];
-        const h = [
-          w[1] * e2[2] - w[2] * e2[1],
-          w[2] * e2[0] - w[0] * e2[2],
-          w[0] * e2[1] - w[1] * e2[0],
-        ];
-        const det = dot(e1, h);
-        if (Math.abs(det) < 1e-12) {
-          continue;
-        }
-        const q = o.map((c, j) => c - P[0][j]);
-        const bu = dot(q, h) / det;
-        const c = [
-          q[1] * e1[2] - q[2] * e1[1],
-          q[2] * e1[0] - q[0] * e1[2],
-          q[0] * e1[1] - q[1] * e1[0],
-        ];
-        const [bv, far] = [dot(w, c) / det, dot(e2, c) / det];
-        if (bu >= 0 && bv >= 0 && bu + bv <= 1 && far > best[1]) {
-          best = [k, far];
-        }
+      const hit = hitOf(part, [cx * side, y, 0], [Math.sin(r) * side, 0, -Math.cos(r)]);
+      if (!hit) {
+        continue;
       }
-      if (best[0] >= 0) {
-        const at = o.map((c, j) => c + w[j] * best[1]);
-        stroke(best[0], at, ((tilt * Math.PI) / 180) * side, L, W, DARK, true, true);
+      // A long one in short pieces, each laid on the skin where it is: one stroke flat on a skin
+      // triangle went under a curved plate, in dashes.
+      const parts = Math.ceil(L / PIECE);
+      const P = corners(hit[0]);
+      const nn = cross(
+        P[1].map((q, j) => q - P[0][j]),
+        P[2].map((q, j) => q - P[0][j]),
+      );
+      const across = cross(nn, [0, 1, 0]);
+      const al = Math.hypot(...across) || 1;
+      const [ct, st] = [Math.cos((tilt * Math.PI) / 180), Math.sin((tilt * Math.PI) / 180) * side];
+      for (let i = 0; i < parts; i++) {
+        const f = ((i + 0.5) / parts - 0.5) * L;
+        const q = hit[1].map((c, j) => c + f * (ct * +(j == 1) + (st * across[j]) / al));
+        const out = [q[0] - cx * side, 0, q[2]];
+        const ol = Math.hypot(...out) || 1;
+        const at =
+          parts > 1
+            ? hitOf(
+                part,
+                [cx * side, q[1], 0],
+                out.map(c => c / ol),
+              )
+            : hit;
+        if (at) {
+          const len = L / parts + (parts > 1 ? 0.0008 : 0);
+          stroke(at[0], at[1], ((tilt * Math.PI) / 180) * side, len, W, DARK, true, true, !!own);
+        }
       }
     }
   }

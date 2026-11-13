@@ -95,8 +95,8 @@ export const WALLRUN_MIN_SPEED = 4.5;
 export const WALLRUN_KEEP_SPEED = 3.5;
 /** Speed lost along the wall, m/s². */
 export const WALLRUN_DRAG = 1.5;
-/** Longest run, in ticks (1 s). */
-export const WALLRUN_TICKS = 60;
+/** Longest run, in ticks (1.25 s). */
+export const WALLRUN_TICKS = 75;
 /**
  * Gravity during the run, as a share of GRAVITY. The start lifts the rise to at least
  * WALLRUN_LIFT and holds it to at most WALLRUN_VY_MAX (m/s).
@@ -116,9 +116,10 @@ export const WALL_AWAY = 0.2;
 export const WALL_TURN_KEEP = 0.9;
 /** Speed at which a run draws the body in to the wall when it starts up to WALL_REACH away (m/s). */
 export const WALL_PULL = 4;
-/** A kick-off from the wall: speed away from it and upward (m/s). */
-export const WALL_KICK_SPEED = 5;
-export const WALL_KICK_UP = 6.5;
+/** A kick-off from the wall: speed away from it and upward, and a push along the run (m/s). */
+export const WALL_KICK_SPEED = 6.5;
+export const WALL_KICK_UP = 7.5;
+export const WALL_KICK_BOOST = 2;
 
 /** Ledge grab: a top this far above the feet (m) can be caught, if the player faces it (cosine). */
 export const GRAB_MIN = 1.2;

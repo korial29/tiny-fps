@@ -152,16 +152,16 @@ export const HUD_CSS =
   // The map: its name, what kind of place it is, its story, and the host's buttons.
   `aside address{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 30px;padding-top:20px;border-top:1px solid #26323e;font-style:normal}aside address>*{grid-column:1}aside address h4{margin:0}aside h3{margin:0;font:900 26px/1.1 system-ui,sans-serif;letter-spacing:.02em}` +
   `aside address small{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#ffb347}aside address>span{font-size:13.5px;color:#b7c2cd}` +
-  `aside address menu{grid-area:1/2/span 4;align-self:end;position:static;transform:none;justify-content:flex-start;width:auto;max-width:300px;color:#8d9aa7}aside menu span{flex-basis:100%}` +
+  `` +
   // The controls: a table a group, in two columns; a key is a cap.
   `aside article+article{columns:2;column-gap:34px}aside table{width:100%;margin:0 0 18px;break-inside:avoid;font-size:13.5px}aside caption{margin:0 0 6px;padding-bottom:6px;border-bottom:1px solid #26323e}` +
   `aside td{padding:4px 0;vertical-align:top}aside td:first-child{width:46%;padding-right:12px;text-align:right;white-space:nowrap;opacity:1;color:#8d9aa7}aside td+td{color:#dbe3ea}` +
   `aside kbd{display:inline-block;min-width:24px;padding:2px 7px;border:1px solid #3a4a5a;border-bottom-width:2px;border-radius:6px;background:#18222c;color:#fff;font:700 12px/1.3 system-ui,sans-serif;text-align:center}` +
   `aside article[hidden]{display:none}` +
-  `@container (max-width:980px){aside address{grid-template-columns:1fr}aside address menu{grid-area:auto;margin-top:8px}}` +
+  `@container (max-width:980px){aside address{grid-template-columns:1fr}}` +
   `@container (max-width:760px){aside main{flex-direction:column}aside header{flex:none;flex-flow:row wrap;align-items:center;padding:10px 12px;border-right:0;border-bottom:1px solid #26323e}` +
   `aside header h6{margin:0 8px 0 4px;font-size:22px}aside [role=tab]{padding:8px 12px;border-left-width:1px;border-radius:10px}aside header>:last-child{margin:0 0 0 auto;padding:10px 16px}` +
-  `aside article{padding:16px}aside article:first-of-type,aside address{grid-template-columns:1fr}aside fieldset{max-width:330px}aside address menu{grid-area:auto;margin-top:8px}aside article+article{columns:1}aside td:first-child{white-space:normal}}` +
+  `aside article{padding:16px}aside article:first-of-type,aside address{grid-template-columns:1fr}aside fieldset{max-width:330px}aside article+article{columns:1}aside td:first-child{white-space:normal}}` +
   `h6{margin:0;font-size:inherit;text-shadow:none}` +
   `aside h6{align-self:center;margin-bottom:20px;font:900 36px/1 system-ui,sans-serif;letter-spacing:.04em;transform:skewX(-8deg);` +
   `background:linear-gradient(#fe6,#f92 45%,#d21);-webkit-background-clip:text;background-clip:text;color:transparent;` +
@@ -188,10 +188,6 @@ export const HUD_CSS =
   `del::before{content:"";position:absolute;inset:0;background:${RIM} 0 0/100% 100% no-repeat}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}` +
-  // The maps over the title screen, and over the end screen when the pointer is free: the host's buttons.
-  `menu{top:10px;left:50%;transform:translateX(-50%);z-index:3;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px;width:max-content;max-width:calc(100% - 24px);font-size:12px}` +
-  `menu button{font:700 13px system-ui,sans-serif;color:#fff;background:#0008;border:1px solid #fff5;border-radius:4px;padding:5px 12px;cursor:pointer;pointer-events:auto}` +
-  `menu .n{border-color:#fe6;color:#fe6;box-shadow:0 0 8px #f924}menu button:disabled{cursor:default}` +
   // The rover: the key to get in or out, over the face, and the speed where the gun's count is; at the wheel the gun, the crosshair and the visor's rim go.
   `samp{left:50%;bottom:128px;transform:translateX(-50%);padding:6px 14px;border-radius:6px;background:#0008;font:inherit;font-size:15px;white-space:nowrap}` +
   `samp var{display:inline-block;margin-right:8px;padding:1px 7px;border:1px solid #fffb;border-radius:4px;font-style:normal;font-weight:900}` +
@@ -376,19 +372,6 @@ export interface Hud {
   cast(pick: (c: Choice & { body: number }) => void): HTMLCanvasElement;
   /** The pictures of the haircuts on offer, in their order (HEAD_PX square): the own head with each. */
   heads(): HTMLCanvasElement[];
-  /**
-   * The maps in the title screen's Game panel, [key, name] each: the one the next match plays (`next`, else
-   * `played`) stands out. They are buttons that `pick` when the own player is the host (`mine`),
-   * read-only for the others; `host` is his name.
-   */
-  maps(
-    list: [string, string][],
-    played: string,
-    next: string | undefined,
-    host: string,
-    mine: boolean,
-    pick: (key: string) => void,
-  ): void;
   /** Shows or hides the muted mark. */
   mute(on: boolean): void;
   /**
@@ -509,7 +492,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
           `<button role="radio"><strong>${n}</strong><span>${does}</span><span class="w">${where}</span></button>`,
       ).join('')}</span>` +
       `</fieldset><blockquote><h4>Game mode</h4><abbr>CTF</abbr><strong>Capture the flag</strong>${GOAL.map(l => `<span>${l}</span>`).join('')}</blockquote>` +
-      `<address><h4>Map</h4><h3></h3><small></small><span></span><menu hidden></menu></address></article>` +
+      `<address><h4>Map</h4><h3></h3><small></small><span></span></address></article>` +
       `<article role="tabpanel" hidden>${CONTROLS.map(
         ([group, rows]) =>
           `<table><caption>${group}</caption>${rows
@@ -533,9 +516,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
   );
   const one = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
-  const [muted, menu, maps] = ['h5', 'aside', 'menu'].map(t => one(t));
-  /** The name of the map the host picked for the next match, for the end screen. */
-  let soon = '';
+  const [muted, menu] = ['h5', 'aside'].map(t => one(t));
   const [name, tag, lore, status] = ['h3', 'address small', 'address>span', 'header strong'].map(
     t => one(`aside ${t}`),
   );
@@ -683,7 +664,6 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         view('pause');
       }
       menu.hidden = !text;
-      maps.hidden = !maps.childElementCount;
       set(name, map);
       set(tag, kind);
       set(lore, story);
@@ -699,21 +679,6 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
     cast(pick) {
       chose = pick;
       return groups[0].closest('fieldset')!.querySelector('canvas')!;
-    },
-    maps(list, played, next, host, mine, pick) {
-      const label = document.createElement('span');
-      label.textContent = mine ? 'You host. Map of the next match:' : `${host} hosts. Map:`;
-      maps.replaceChildren(label);
-      soon = '';
-      for (const [key, name] of list) {
-        const b = document.createElement('button');
-        b.textContent = key == played && next ? `${name} (now)` : name;
-        b.disabled = !mine;
-        b.className = key == (next ?? played) ? 'n' : '';
-        b.onclick = () => pick(key);
-        maps.append(b);
-        soon = key == next ? name : soon;
-      }
     },
     mute: on => (muted.hidden = !on),
     match(m, who) {
@@ -917,7 +882,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
           tr.style.color = TEAM_COLOR[p.team];
         }
       }
-      set(next, `Next match in ${left}${soon && ` on ${soon}`}`);
+      set(next, `Next match in ${left}`);
     },
   };
 };

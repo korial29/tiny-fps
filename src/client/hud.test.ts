@@ -260,11 +260,9 @@ describe('createHud', () => {
       screen = document.createElement('div');
       hud = createHud(screen, play);
       show();
-      hud.maps([['highline', 'Highline']], 'highline', undefined, 'Ann', true, () => {});
       const others = [
         ...tabs(),
         ...screen.querySelectorAll<HTMLElement>('[role=radio]'),
-        q('menu button'),
         q('aside h3'),
         q('aside main'),
       ];
@@ -278,38 +276,6 @@ describe('createHud', () => {
       // The panel takes its own clicks; the dimmed view round it lets them through to the canvas.
       expect(HUD_CSS).toMatch(/aside main\{pointer-events:auto/);
       expect(HUD_CSS.split('}')[0]).toMatch(/aside,[^{]*\{[^}]*pointer-events:none/);
-    });
-
-    it('keeps the host’s maps in the Game panel: buttons for the host, the next one lit', () => {
-      show();
-      const pick = vi.fn();
-      const list: [string, string][] = [
-        ['highline', 'Highline'],
-        ['tranquility', 'Tranquility'],
-      ];
-      expect(q('menu').hidden).toBe(true);
-      hud.maps(list, 'highline', undefined, 'Ann', true, pick);
-      show();
-      const maps = q('menu');
-      expect(panels()[0].contains(maps)).toBe(true);
-      expect(maps.hidden).toBe(false);
-      expect(maps.textContent).toContain('You host');
-      const buttons = () => [...q('menu').querySelectorAll('button')];
-      expect(buttons().map(b => [b.textContent, b.disabled, b.className])).toEqual([
-        ['Highline', false, 'n'],
-        ['Tranquility', false, ''],
-      ]);
-      buttons()[1].click();
-      expect(pick).toHaveBeenCalledWith('tranquility');
-      hud.maps(list, 'highline', 'tranquility', 'Ann', true, pick);
-      expect(buttons().map(b => [b.textContent, b.className])).toEqual([
-        ['Highline (now)', ''],
-        ['Tranquility', 'n'],
-      ]);
-      // The others read them.
-      hud.maps(list, 'highline', 'tranquility', 'Ann', false, pick);
-      expect(q('menu').textContent).toContain('Ann hosts');
-      expect(buttons().every(b => b.disabled)).toBe(true);
     });
 
     it('hides when the status is empty, lets go of the focus, and is back for the next pause', () => {
@@ -342,7 +308,6 @@ describe('createHud', () => {
         expect(tags).toContain(el.tagName.toLowerCase());
       }
       // But the host's map buttons.
-      expect(HUD_CSS).toMatch(/menu button\{[^}]*pointer-events:auto/);
     });
 
     it('styles the title screen under its own tag, the key caps too: the weapon slots keep theirs', () => {

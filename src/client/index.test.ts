@@ -200,8 +200,7 @@ describe('tinyFps, the match through the socket', () => {
     for (const host of [0, 1]) {
       text({ t: 'roster', you: 0, players: roster, map: 'highline', host });
       frames();
-      expect(q('menu').hidden).toBe(true);
-      expect(q('menu').querySelectorAll('button')).toHaveLength(0);
+      expect(hud().querySelector('menu')).toBeNull();
     }
     expect(sent.some(d => typeof d == 'string' && JSON.parse(d).t == 'map')).toBe(false);
   });

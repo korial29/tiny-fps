@@ -1,36 +1,47 @@
 // What the announcer says, read off two snapshots in a row and the beats between them: the match
-// starting and its last minute, the flags and the captures told from the own team's side, the own
-// takedowns in quick succession and in a row, and a run of shots that mostly hit. No DOM, no sound.
+// starting and its last minute, the flags and the captures told from the own team's side, and a run
+// of shots that mostly hit; and off the host's frag messages, the own frags in quick succession and
+// in a row, the first blood and a kill with the fists. No DOM, no sound.
+import { FRAG } from '../shared/protocol';
+import type { ServerText } from '../shared/protocol';
 import type { Snapshot } from '../shared/types';
 import type { Beat } from './beats';
 import { LINE } from './voice/clips';
 
-/** Seconds between two takedowns for them to count as a double, a triple. */
+/** Seconds between two frags for them to count as a double kill, a multi kill and on. */
 export const MULTI = 4;
+/** The lines of the 2nd, 3rd, 4th, 5th frag in quick succession; the last for every one after. */
+export const QUICK = [LINE.DOUBLE, LINE.MULTI, LINE.MEGA, LINE.ULTRA, LINE.MONSTER];
+/** Frags without going down between two lines of a run; the last line for every SPREE after. */
+export const SPREE = 5;
+export const RUNS = [LINE.SPREE, LINE.RAMPAGE, LINE.DOMINATING, LINE.UNSTOPPABLE, LINE.GODLIKE];
 /** Shots of the gun in one run judged for the aim, and the share of them that must hit. */
 export const AIM_SHOTS = 12;
 export const AIM_SHARE = 0.75;
 
 export interface Announcer {
   /**
-   * The lines for the step from snapshot `a` to `b`, given its beats, the own player `me` and the
-   * time in seconds. The own takedowns are the foes who went down in a step where the own `hits`
-   * grew, as many as it grew by at most: the wire does not say who put a player down, and a
-   * teammate's takedown in the same step as an own hit on someone else is counted as the own.
+   * The lines for the step from snapshot `a` to `b`, given its beats and the own player `me`: the
+   * match, the flags, the aim. The own player going down ends his run of frags.
    */
   step(
     a: Snapshot | undefined,
     b: Snapshot,
     beats: Beat[],
     me: { id: number; team: number },
-    now: number,
   ): number[];
+  /**
+   * The line for the host's frag message `m` at `now` seconds, for the own player `me`: none when
+   * the frag is not his. One line at most: a run reached, else a quick succession, else a kill with
+   * the fists, else the first blood.
+   */
+  frag(m: Extract<ServerText, { t: 'frag' }>, me: { id: number }, now: number): number | undefined;
   /** The line for a match that ended `score` (red, blue), told to `team`. */
   end(score: [number, number], team: number): number;
 }
 
 export const createAnnouncer = (): Announcer => {
-  /** Takedowns since the own player last went down, and in the current quick succession. */
+  /** Frags since the own player last went down, in the current quick succession, and the last's time. */
   let [streak, multi, last] = [0, 0, -Infinity];
   /** The gun's shots and hits in the current run. */
   let [shots, hits] = [0, 0];
@@ -40,7 +51,7 @@ export const createAnnouncer = (): Announcer => {
     [streak, multi, last, shots, hits] = [0, 0, -Infinity, 0, 0];
   };
   return {
-    step(a, b, beats, me, now) {
+    step(a, b, beats, me) {
       const out: number[] = [];
       for (const beat of beats) {
         if (beat.kind == 'start') {
@@ -75,28 +86,6 @@ export const createAnnouncer = (): Announcer => {
         return out;
       }
       const landed = (is.hits - was.hits) & 255;
-      const fell = b.players.filter(
-        p => p.id != me.id && p.down && !a.players.find(q => q.id == p.id)?.down,
-      ).length;
-      const downs = landed ? Math.min(fell, landed) : 0;
-      for (let i = 0; i < downs; i++) {
-        multi = now - last <= MULTI ? multi + 1 : 1;
-        last = now;
-        streak++;
-      }
-      if (downs) {
-        const run =
-          streak >= 10 && streak - downs < 10
-            ? LINE.TEN
-            : streak >= 5 && streak - downs < 5
-              ? LINE.FIVE
-              : -1;
-        const quick = multi == 3 ? LINE.TRIPLE : multi == 2 ? LINE.DOUBLE : -1;
-        // A run reached says more than a double within it; past a triple, only the runs.
-        if (run >= 0 || quick >= 0) {
-          out.push(run >= 0 ? run : quick);
-        }
-      }
       // The gun's balls only: the katana's cuts and arcs, the rifle's rounds and the bolt hit
       // without a shot or a shot at a time.
       if (is.ammo >= 0 && !is.wield && !is.rifled && !is.railed) {
@@ -110,6 +99,23 @@ export const createAnnouncer = (): Announcer => {
         }
       }
       return out;
+    },
+    frag(m, me, now) {
+      if (m.by != me.id) {
+        return undefined;
+      }
+      multi = now - last <= MULTI ? multi + 1 : 1;
+      last = now;
+      streak++;
+      return streak % SPREE == 0
+        ? RUNS[Math.min(streak / SPREE, RUNS.length) - 1]
+        : multi > 1
+          ? QUICK[Math.min(multi, QUICK.length + 1) - 2]
+          : m.how == FRAG.FIST
+            ? LINE.HUMILIATION
+            : m.first
+              ? LINE.FIRST
+              : undefined;
     },
     end(score, team) {
       return score[team] > score[1 - team]

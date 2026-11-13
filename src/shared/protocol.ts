@@ -1,5 +1,5 @@
 // Wire format.
-// Text frames carry rare JSON messages (join, map, roster, full, end).
+// Text frames carry rare JSON messages (join, map, roster, full, end, frag).
 // Binary frames carry the hot path: inputs (client → host) and snapshots (host → client).
 //
 // Input, 12 bytes: [type u8 = MSG_INPUT][seq u16][keys u16][yaw u16][pitch i16][view u16][frac u8]
@@ -90,7 +90,12 @@ export interface Result {
   team: number;
   caps: number;
   returns: number;
+  /** Enemies he put down. */
+  frags: number;
 }
+
+/** What put a player down, in a frag message. */
+export const FRAG = { GUN: 0, BLADE: 1, FIST: 2, RAIL: 3, NADE: 4, VEHICLE: 5 } as const;
 
 export type ServerText =
   /**
@@ -106,6 +111,11 @@ export type ServerText =
       next?: string;
     }
   | { t: 'full' }
+  /**
+   * Player `by` put his enemy `who` down with `how` (FRAG): his `n`th frag this match, and `first`
+   * when it is the match's first. Not sent for a fall, an own blast or after the match.
+   */
+  | { t: 'frag'; by: number; who: number; how: number; n: number; first?: true }
   /** The match is over: the final captures of red and blue, and every player's result. */
   | { t: 'end'; score: [number, number]; players: Result[] };
 

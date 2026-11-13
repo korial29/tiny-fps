@@ -13,6 +13,9 @@ import { MODE, NOBODY } from '../shared/types';
 import type { Rover } from '../shared/types';
 import {
   BANNER_MS,
+  FEED_MAX,
+  FEED_MS,
+  FRAG_MS,
   CAST,
   CONTROLS,
   GOAL,
@@ -559,15 +562,62 @@ describe('createHud', () => {
     });
   });
 
+  describe('frags', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('counts the own frags top left once told', () => {
+      expect(q('h1').hidden).toBe(true);
+      hud.frags(3);
+      expect(q('h1').hidden).toBe(false);
+      expect(q('h1').textContent).toBe('FRAGS3');
+    });
+
+    it("shows the own frag's victim and the award under the banner, then they go", () => {
+      const notice = q('h2');
+      expect(notice.hidden).toBe(true);
+      hud.fragged('Bob killed!', 'Double kill!');
+      expect([...notice.children].map(e => e.textContent)).toEqual(['Bob killed!', 'Double kill!']);
+      vi.advanceTimersByTime(FRAG_MS - 500);
+      // An award alone replaces both, with its own full time.
+      hud.fragged('', 'Impressive!');
+      expect(notice.textContent).toBe('Impressive!');
+      vi.advanceTimersByTime(FRAG_MS - 1);
+      expect(notice.hidden).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(notice.hidden).toBe(true);
+    });
+
+    it('lists the frags top right, names in their teams colours, the oldest going first', () => {
+      const lines = () => [...screen.querySelectorAll('ol li')].map(e => e.textContent);
+      hud.feed(['Ann', 0], ['Bob', 1]);
+      expect(lines()).toEqual(['AnnkilledBob']);
+      const [by, , who] = [...q('ol li').children] as HTMLElement[];
+      expect(by.style.color).not.toBe(who.style.color);
+      for (let k = 0; k < FEED_MAX; k++) {
+        hud.feed([`P${k}`, 0], ['Bob', 1]);
+      }
+      expect(lines()).toHaveLength(FEED_MAX);
+      expect(lines()[0]).toBe('P0killedBob');
+      vi.advanceTimersByTime(FEED_MS);
+      expect(lines()).toEqual([]);
+      // The health bar's pips are the list's own.
+      hud.feed(['Ann', 0], ['Bob', 1]);
+      hud.vitals(1, -1);
+      expect(screen.querySelectorAll('ul li.e')).toHaveLength(HP_MAX - 1);
+      expect(screen.querySelector('ol li.e')).toBeNull();
+    });
+  });
+
   describe('the end screen', () => {
     const section = () => q('section');
     const rows = () => [...section().querySelectorAll('tr')].slice(1).map(r => r.textContent);
     const sum = (over: Partial<Summary> = {}): Summary => ({
       score: [3, 1],
       players: [
-        { id: 1, name: 'Bob', team: 1, caps: 1, returns: 4 },
-        { id: 0, name: 'Ann', team: 0, caps: 2, returns: 0 },
-        { id: 2, name: 'Cy', team: 0, caps: 1, returns: 6 },
+        { id: 1, name: 'Bob', team: 1, caps: 1, returns: 4, frags: 5 },
+        { id: 0, name: 'Ann', team: 0, caps: 2, returns: 0, frags: 2 },
+        { id: 2, name: 'Cy', team: 0, caps: 1, returns: 6, frags: 7 },
       ],
       ...over,
     });
@@ -596,10 +646,11 @@ describe('createHud', () => {
       expect(q('section h6').textContent).toBe('DRAW');
     });
 
-    it('lists each player with his captures and returns, the most captures first', () => {
+    it('lists each player with his captures, frags and returns: the most captures first, then frags', () => {
       hud.end(sum(), 10);
-      expect(rows()).toEqual(['Ann20', 'Cy16', 'Bob14']);
+      expect(rows()).toEqual(['Ann220', 'Cy176', 'Bob154']);
       expect(section().textContent).toContain('Captures');
+      expect(section().textContent).toContain('Frags');
       expect(section().textContent).toContain('Returns');
     });
 

@@ -94,7 +94,7 @@ const RIM = (() => {
 })();
 
 export const HUD_CSS =
-  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,samp,cite,q,dfn,tt{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,samp,cite,q,dfn,tt,h1,h2,ol{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
@@ -105,6 +105,14 @@ export const HUD_CSS =
   `output{top:18%;left:50%;transform:translateX(-50%);padding:12px 64px;font:900 italic clamp(20px,4.4vw,40px)/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;` +
   `background:linear-gradient(90deg,#0000,#000c 24%,#000c 76%,#0000);text-shadow:0 0 18px currentColor,0 0 2px currentColor,0 3px 0 #000;animation:pop .4s cubic-bezier(.2,1.5,.4,1)}` +
   `@keyframes pop{from{opacity:0;transform:translateX(-50%) scale(1.5)}}` +
+  // An own frag under the banner: the name of who went down, and the announcer's award in gold under it.
+  `h2{left:50%;top:29%;transform:translateX(-50%);display:grid;justify-items:center;gap:6px;text-align:center;white-space:nowrap;animation:pop .3s cubic-bezier(.2,1.5,.4,1)}` +
+  `h2 span{font:900 italic clamp(16px,3vw,26px)/1 system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase}` +
+  `h2 small{font:900 italic clamp(22px,5vw,46px)/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#ffd23f;text-shadow:0 0 16px #f90,0 3px 0 #000}h2 :empty{display:none}` +
+  // The kill feed, top right, and the own frags, top left.
+  `ol{top:30px;right:12px;display:grid;justify-items:end;gap:3px;list-style:none;font-size:13px;font-weight:700}` +
+  `ol li{width:auto;height:auto;padding:3px 9px;border-radius:4px;background:#000a;box-shadow:none;white-space:nowrap}ol li em{position:static;transform:none;margin:0 6px;font-size:11px;opacity:.75}` +
+  `h1{left:12px;top:8px;font:900 13px/1 system-ui,sans-serif;letter-spacing:.1em}h1 span{margin-left:6px;font-size:24px;font-variant-numeric:tabular-nums}` +
   `em{font-style:normal;font-size:13px;font-weight:800;line-height:1.1;text-align:center;transform:translate(-50%,-50%)}em span{display:block;font-size:20px;line-height:1}` +
   `section{inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0 12px;text-align:center;background:#000c}` +
   `section h6{font:900 clamp(30px,9vw,72px)/1 system-ui,sans-serif;letter-spacing:.04em}section strong{font-size:34px}` +
@@ -444,6 +452,18 @@ export interface Hud {
   down(level: number, left: number): void;
   /** A line in the middle of the top of the screen in `team`'s colour, for a few seconds; a newer one replaces it. */
   banner(text: string, team?: number): void;
+  /** The own frags this match, top left. */
+  frags(n: number): void;
+  /**
+   * Under the banner for FRAG_MS: `text` ("Bob killed!", '' for none) and the announcer's `award`
+   * in gold under it; a newer one replaces both.
+   */
+  fragged(text: string, award?: string): void;
+  /**
+   * A line of the kill feed, top right: `by` put `who` down, each [name, team] in his team's
+   * colour. The newest at the bottom, FEED_MAX at most, each gone after FEED_MS.
+   */
+  feed(by: [string, number], who: [string, number]): void;
   /**
    * The rover: `act` is what E does now ('drive', 'ride', 'get out'; '' hides the prompt), and
    * `speed` the km/h shown at the wheel, where the gun and the crosshair then hide; undefined off it.
@@ -458,7 +478,7 @@ export interface Hud {
    * and `near` as a small bar over a vehicle close by, `at` on screen in [0, 1] from the top left.
    */
   hull(own?: number, near?: { hp: number; at: [number, number] }): void;
-  /** The end screen with the result and each player's captures and returns, `next` seconds before the next match; undefined hides it. */
+  /** The end screen with the result and each player's captures, frags and returns, `next` seconds before the next match; undefined hides it. */
   end(sum: Summary | undefined, next: number): void;
 }
 
@@ -478,6 +498,10 @@ export const warning = (up: number, out: number): string =>
 
 /** Milliseconds a banner stays, and a hit marker. */
 export const BANNER_MS = 2800;
+/** Milliseconds an own frag's name and award stay, and a line of the kill feed; the feed's lines. */
+export const FRAG_MS = 2400;
+export const FEED_MS = 6000;
+export const FEED_MAX = 5;
 export const HIT_MS = 140;
 
 /** m:ss. */
@@ -528,6 +552,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       `<data></data><span></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
       `<s hidden></s><mark hidden></mark><ins hidden><i></i></ins>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav>` +
+      `<h1 hidden>FRAGS<span>0</span></h1><ol></ol><h2 hidden><span></span><small></small></h2>` +
       `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q><dfn hidden></dfn><dfn hidden></dfn><tt hidden></tt><tt hidden></tt>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
   );
@@ -645,7 +670,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const bar = one('nav');
   const [red, time, blue] = [...bar.querySelectorAll<HTMLElement>('span, time')];
   const [redFlag, blueFlag] = [...bar.querySelectorAll<HTMLElement>('small')];
-  const pips = [...screen.querySelectorAll('li')];
+  const pips = [...one('ul').querySelectorAll('li')];
   const [life, ammo, marker, fallen] = [one('ul'), one('dl'), one('s'), one('mark')];
   const [rope, knot] = [one('ins'), one('ins i')];
   const [count, spare, slots] = [one('data'), one('dl span'), one('dl small')];
@@ -666,6 +691,9 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const table = end.querySelector('table')!;
   const pins: HTMLElement[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const [tally, list, notice] = [one('h1'), one('ol'), one('h2')];
+  const [victim, award] = [...notice.children] as HTMLElement[];
+  let shout: ReturnType<typeof setTimeout> | undefined;
   /** The summary the end screen's table was built from. */
   let built: Summary | undefined;
   const tint = (el: HTMLElement, team: number) => (el.style.color = TEAM_COLOR[team]);
@@ -834,6 +862,37 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       clearTimeout(timer);
       timer = setTimeout(() => (banner.hidden = true), BANNER_MS);
     },
+    frags(n) {
+      tally.hidden = false;
+      set(tally.lastElementChild as HTMLElement, `${n}`);
+    },
+    fragged(text, prize = '') {
+      notice.hidden = false;
+      notice.style.animation = 'none';
+      void notice.offsetWidth;
+      notice.style.animation = '';
+      set(victim, text);
+      set(award, prize);
+      clearTimeout(shout);
+      shout = setTimeout(() => (notice.hidden = true), FRAG_MS);
+    },
+    feed([a, at], [b, bt]) {
+      const li = document.createElement('li');
+      const name = (n: string, t: number) => {
+        const el = document.createElement('span');
+        el.textContent = n;
+        tint(el, t);
+        return el;
+      };
+      const verb = document.createElement('em');
+      verb.textContent = 'killed';
+      li.append(name(a, at), verb, name(b, bt));
+      list.append(li);
+      while (list.children.length > FEED_MAX) {
+        list.firstElementChild!.remove();
+      }
+      setTimeout(() => li.remove(), FEED_MS);
+    },
     aim(at) {
       const q = one('q');
       q.hidden = !at;
@@ -888,15 +947,18 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         set(title, win < 0 ? 'DRAW' : `${TEAM_NAME[win].toUpperCase()} WINS`);
         title.style.color = win < 0 ? '#fff' : TEAM_COLOR[win];
         set(score, `${r} – ${b}`);
-        // The most captures first, then returns.
+        // The most captures first, then frags, then returns.
         const rows = [...sum.players].sort(
-          (x, y) => y.caps - x.caps || y.returns - x.returns || x.id - y.id,
+          (x, y) => y.caps - x.caps || y.frags - x.frags || y.returns - x.returns || x.id - y.id,
         );
         table.replaceChildren();
-        table.insertAdjacentHTML('beforeend', '<tr><th>Player<th>Captures<th>Returns</tr>');
+        table.insertAdjacentHTML(
+          'beforeend',
+          '<tr><th>Player<th>Captures<th>Frags<th>Returns</tr>',
+        );
         for (const p of rows) {
           const tr = table.insertRow();
-          [p.name, p.caps, p.returns].forEach(v => (tr.insertCell().textContent = `${v}`));
+          [p.name, p.caps, p.frags, p.returns].forEach(v => (tr.insertCell().textContent = `${v}`));
           tr.style.color = TEAM_COLOR[p.team];
         }
       }

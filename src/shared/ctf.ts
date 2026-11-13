@@ -28,17 +28,19 @@ export interface Runner {
 /** What a tick of the match ended or began. */
 export type Turn = 'end' | 'start';
 
-/** The captures and returns of one player this match. */
+/** The captures, returns and frags of one player this match. */
 export interface Tally {
   id: number;
   caps: number;
   returns: number;
+  frags: number;
 }
 
 interface Mate {
   team: number;
   caps: number;
   returns: number;
+  frags: number;
   /** The last point he stood on: where a flag falls when he falls off the map or leaves. */
   ground: Vec3;
 }
@@ -53,6 +55,8 @@ export class Ctf {
   public score: [number, number] = [0, 0];
   /** The match is over and the end screen shows. */
   public over = false;
+  /** Frags this match, by everyone: the first is first blood. */
+  public frags = 0;
   /** The flag of each team, red then blue. */
   public flags: [FlagState, FlagState] = [home(), home()];
   private world: World;
@@ -78,7 +82,7 @@ export class Ctf {
 
   /** A player joined, standing at `at`. */
   public join(id: number, team: number, at: PlayerState): void {
-    this.mates.set(id, { team, caps: 0, returns: 0, ground: [at.x, at.y, at.z] });
+    this.mates.set(id, { team, caps: 0, returns: 0, frags: 0, ground: [at.x, at.y, at.z] });
   }
 
   /** A player left: a flag he carried is dropped where he last stood. */
@@ -156,20 +160,39 @@ export class Ctf {
 
   /** What every player has done this match. */
   public tally(): Tally[] {
-    return [...this.mates].map(([id, m]) => ({ id, caps: m.caps, returns: m.returns }));
+    return [...this.mates].map(([id, m]) => ({
+      id,
+      caps: m.caps,
+      returns: m.returns,
+      frags: m.frags,
+    }));
+  }
+
+  /**
+   * Player `id` put an enemy down: his frags this match, or 0 when he is not in it or the match is
+   * over.
+   */
+  public frag(id: number): number {
+    const m = this.mates.get(id);
+    if (!m || this.over) {
+      return 0;
+    }
+    this.frags++;
+    return ++m.frags;
   }
 
   /** The room is empty: the next match starts from scratch. */
   public reset(): void {
     this.over = false;
     this.score = [0, 0];
+    this.frags = 0;
     this.flags = [home(), home()];
     this.back = [0, 0];
     this.lock.forEach(l => (l.left = 0));
     this.hold = [0, 0];
     this.clock = this.rules.timeLimit * TICK_HZ;
     for (const m of this.mates.values()) {
-      m.caps = m.returns = 0;
+      m.caps = m.returns = m.frags = 0;
     }
   }
 

@@ -3,7 +3,9 @@ import { IDLE } from '../../test/teams';
 import { STILL } from '../shared/physics';
 import { FLAG, TEAM } from '../shared/types';
 import type { SnapPlayer, Snapshot } from '../shared/types';
-import { AIM_SHOTS, MULTI, createAnnouncer } from './announce';
+import { FRAG } from '../shared/protocol';
+import type { ServerText } from '../shared/protocol';
+import { AIM_SHOTS, MULTI, RUNS, SPREE, createAnnouncer } from './announce';
 import { beats } from './beats';
 import { LINE } from './voice/clips';
 
@@ -34,16 +36,25 @@ const snap = (
   ...over,
 });
 
-/** Feeds the steps through one announcer, a second apart unless `dt` says, and returns its lines. */
-const told = (steps: Snapshot[], dt = 1) => {
+/** Feeds the steps through one announcer and returns its lines. */
+const told = (steps: Snapshot[]) => {
   const a = createAnnouncer();
   const out: number[][] = [];
   steps.forEach((s, i) => {
     const prev = steps[i - 1];
-    out.push(a.step(prev, s, beats(prev, s), ME, i * dt));
+    out.push(a.step(prev, s, beats(prev, s), ME));
   });
   return out;
 };
+/** The host's frag message: `by` put player 2 down. */
+const frag = (by: number, over: Partial<Extract<ServerText, { t: 'frag' }>> = {}) => ({
+  t: 'frag' as const,
+  by,
+  who: 2,
+  how: FRAG.GUN,
+  n: 1,
+  ...over,
+});
 
 describe('announcer', () => {
   it('tells the match starting, and nothing at the first snapshot', () => {
@@ -71,41 +82,57 @@ describe('announcer', () => {
     expect(told([snap({ clock: 40 }), snap({ clock: 39 })]).flat()).toEqual([]);
   });
 
-  it('counts a foe going down in a step of an own hit as a takedown, two quickly a double', () => {
-    const steps = [
-      snap(),
-      snap({}, { 1: { hits: 1 }, 2: { down: 9 } }),
-      snap({}, { 1: { hits: 2 }, 2: { down: 8 }, 3: { down: 9 } }),
-    ];
-    expect(told(steps)).toEqual([[], [], [LINE.DOUBLE]]);
+  it('says nothing for a frag that is not his', () => {
+    const a = createAnnouncer();
+    expect(a.frag(frag(2), ME, 0)).toBeUndefined();
+  });
+
+  it('tells the first blood, and a kill with the fists', () => {
+    expect(createAnnouncer().frag(frag(1, { first: true }), ME, 0)).toBe(LINE.FIRST);
+    expect(createAnnouncer().frag(frag(1, { how: FRAG.FIST }), ME, 0)).toBe(LINE.HUMILIATION);
+    expect(createAnnouncer().frag(frag(1), ME, 0)).toBeUndefined();
+  });
+
+  it('tells frags in quick succession, up to a monster kill and on', () => {
+    const a = createAnnouncer();
+    const lines = [0, 1, 2, 3, 4, 5].map(k => a.frag(frag(1), ME, k * (MULTI - 1)));
+    expect(lines).toEqual([
+      undefined,
+      LINE.DOUBLE,
+      LINE.MULTI,
+      LINE.MEGA,
+      // The fifth frag without going down is a killing spree, which says more.
+      LINE.SPREE,
+      LINE.MONSTER,
+    ]);
     // Too far apart, no double.
-    expect(told(steps, MULTI + 1).flat()).toEqual([]);
+    const b = createAnnouncer();
+    expect([0, MULTI + 1].map(t => b.frag(frag(1), ME, t))).toEqual([undefined, undefined]);
   });
 
-  it('does not count a foe going down without an own hit', () => {
-    expect(
-      told([snap(), snap({}, { 2: { down: 9 } }), snap({}, { 3: { down: 9 } })]).flat(),
-    ).toEqual([]);
-  });
-
-  it('tells a triple, then five in a row, and forgets the run on going down', () => {
-    // One foe going down and up again, each time with an own hit.
-    const steps = [snap()];
-    for (let k = 1; k <= 5; k++) {
-      steps.push(snap({}, { 1: { hits: k }, 2: { down: 9 } }), snap({}, { 1: { hits: k } }));
+  it('tells a run every five frags without going down, and forgets it on going down', () => {
+    const a = createAnnouncer();
+    const runs = Array.from({ length: 30 }, (_, k) => a.frag(frag(1), ME, k * 10)).filter(
+      l => l !== undefined,
+    );
+    expect(runs).toEqual([...RUNS, LINE.GODLIKE]);
+    expect(RUNS).toEqual([
+      LINE.SPREE,
+      LINE.RAMPAGE,
+      LINE.DOMINATING,
+      LINE.UNSTOPPABLE,
+      LINE.GODLIKE,
+    ]);
+    const b = createAnnouncer();
+    for (let k = 0; k < 4; k++) {
+      b.frag(frag(1), ME, k * 10);
     }
-    const lines = told(steps, 1).flat();
-    expect(lines).toEqual([LINE.DOUBLE, LINE.TRIPLE, LINE.FIVE]);
-    const after = [
-      ...steps,
-      snap({}, { 1: { down: 9, hits: 5 } }),
-      snap({}, { 1: { hits: 6 }, 2: { down: 9 } }),
-    ];
-    // Down, then one takedown: neither a run nor a double.
-    expect(told(after, 1).flat()).toEqual(lines);
+    b.step(snap(), snap({}, { 1: { down: 9 } }), [], ME);
+    expect(b.frag(frag(1), ME, 50)).toBeUndefined();
+    expect(SPREE).toBe(5);
   });
 
-  it('tells a sharp aim when most of a run of the gun hits, not for the katana', () => {
+  it('says impressive when most of a run of the gun hits, not for the katana', () => {
     const run = (hits: number, over: Partial<SnapPlayer> = {}) =>
       told([snap(), snap({}, { 1: { shots: AIM_SHOTS, hits, ...over } })]).flat();
     expect(run(AIM_SHOTS)).toEqual([LINE.AIM]);

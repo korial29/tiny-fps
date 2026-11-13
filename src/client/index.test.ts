@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDLE } from '../../test/teams';
 import { TEAM_COLOR } from '../shared/constants';
 import { STILL, spawn } from '../shared/physics';
-import { encodeSnapshot } from '../shared/protocol';
+import { FRAG, encodeSnapshot } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import { HIGHLINE, ROOFTOPS } from '../shared/map';
 import { MOON } from '../shared/moon';
@@ -126,8 +126,8 @@ describe('tinyFps, the match through the socket', () => {
       t: 'end',
       score: [3, 1],
       players: [
-        { id: 0, name: 'Ann', team: 0, caps: 3, returns: 1 },
-        { id: 1, name: 'Bob', team: 1, caps: 1, returns: 0 },
+        { id: 0, name: 'Ann', team: 0, caps: 3, returns: 1, frags: 4 },
+        { id: 1, name: 'Bob', team: 1, caps: 1, returns: 0, frags: 2 },
       ],
     });
     // The result alone is not the end screen: the snapshot has to say the match is over.
@@ -146,6 +146,20 @@ describe('tinyFps, the match through the socket', () => {
     expect(q('section').hidden).toBe(true);
     expect(q('output').textContent).toBe('New match');
     expect(q('nav').textContent).toContain('RED 0');
+  });
+
+  it('tells a frag in the feed, and an own one in the middle with its award and the count', () => {
+    text({ t: 'frag', by: 1, who: 0, how: FRAG.GUN, n: 1, first: true });
+    expect(q('ol').textContent).toBe('BobkilledAnn');
+    // Not his: no name in the middle, no count.
+    expect(q('h2').hidden).toBe(true);
+    expect(q('h1').textContent).toBe('FRAGS0');
+    text({ t: 'frag', by: 0, who: 1, how: FRAG.FIST, n: 1 });
+    expect(q('h2').textContent).toBe('Bob killed!Humiliation!');
+    expect(q('h1').textContent).toBe('FRAGS1');
+    text({ t: 'frag', by: 0, who: 1, how: FRAG.GUN, n: 2 });
+    expect(q('h2').textContent).toBe('Bob killed!Double kill!');
+    expect(q('h1').textContent).toBe('FRAGS2');
   });
 
   it('sends the whole choice made on the title screen, and wears what the roster answers', () => {

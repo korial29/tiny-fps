@@ -8,7 +8,8 @@ const BUDGETS = [
   // 92 and 18 KB until the moon's crater, rovers and base (the user, 2026-11-10: weight does not matter).
   // 110 KB until the space trooper's armour (the user, 2026-11-10: weight does not matter).
   // 144 KB until the woman's own helmet, 100 B under it (the user: weight does not matter).
-  { file: 'dist/index.js', max: 170 * 1024 },
+  // 170 KB until the fist combos, the frags, the death falls and the runners' fingers (the user, 2026-11-13).
+  { file: 'dist/index.js', max: 174 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   { file: 'dist/local.js', max: 44 * 1024 },
 ];

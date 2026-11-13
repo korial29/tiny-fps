@@ -396,7 +396,7 @@ describe('say', () => {
 
   it('keeps two lines waiting at most, each once, and says them in turn', async () => {
     const a = await speaking('ok');
-    for (const id of [LINE.WIN, LINE.WIN, LINE.AIM, LINE.TEN]) {
+    for (const id of [LINE.WIN, LINE.WIN, LINE.AIM, LINE.GODLIKE]) {
       a.say(id);
     }
     expect(lines()).toHaveLength(1);

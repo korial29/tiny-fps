@@ -1034,7 +1034,7 @@ describe('the end of a match', () => {
     const end: ServerText = {
       t: 'end',
       score: [3, 1],
-      players: [{ id: 2, name: 'Ann', team: 0, caps: 3, returns: 1 }],
+      players: [{ id: 2, name: 'Ann', team: 0, caps: 3, returns: 1, frags: 2 }],
     };
     expect(parseText<ServerText>(JSON.stringify(end))).toEqual(end);
   });

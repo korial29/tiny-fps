@@ -1,6 +1,7 @@
 """The announcer's lines, spoken by Kokoro-82M (Apache-2.0) and encoded into one sprite.
 
-Writes src/client/voice/clips.ts (the lines and where each lies in the sprite), opus.ts and mp3.ts
+Writes src/client/voice/clips.ts (the lines, their words for the screen and where each lies in the
+sprite), opus.ts and mp3.ts
 (the sprite as base64: Ogg Opus first, MP3 for the browsers that cannot decode it).
 
 Needs: pip install kokoro-onnx soundfile numpy; brew install espeak-ng opus-tools lame; the model
@@ -28,11 +29,20 @@ LINES = [
     ("WIN", "Victory."),
     ("LOSS", "Defeat."),
     ("DRAW", "A draw."),
-    ("DOUBLE", "Double takedown."),
-    ("TRIPLE", "Triple takedown."),
-    ("FIVE", "Five in a row."),
-    ("TEN", "Ten in a row. Untouchable."),
-    ("AIM", "Sharp aim."),
+    ("AIM", "Impressive!"),
+    # The own frags: the first of the match, by the fists, in quick succession, in a row.
+    ("FIRST", "First blood!"),
+    ("HUMILIATION", "Humiliation!"),
+    ("DOUBLE", "Double kill!"),
+    ("MULTI", "Multi kill!"),
+    ("MEGA", "Mega kill!"),
+    ("ULTRA", "Ultra kill!"),
+    ("MONSTER", "Monster kill!"),
+    ("SPREE", "Killing spree!"),
+    ("RAMPAGE", "Rampage!"),
+    ("DOMINATING", "Dominating!"),
+    ("UNSTOPPABLE", "Unstoppable!"),
+    ("GODLIKE", "Godlike!"),
 ]
 RATE = 24000
 GAP = int(RATE * 0.25)
@@ -83,6 +93,10 @@ with open(os.path.join(OUT, "clips.ts"), "w") as f:
     for i, (key, text, _, _) in enumerate(clips):
         f.write(f"  /** \"{text}\" */\n  {key}: {i},\n")
     f.write("} as const;\n\n")
+    # The awards (the lines that end in "!") are shown too; the rest have their own banners.
+    f.write("/** The words of each award, for the screen, separated by | (the other lines' are empty). */\n")
+    said = "|".join(text if text.endswith("!") else "" for _, text, _, _ in clips)
+    f.write(f"const AWARDS =\n  '{said}';\nexport const SAID = AWARDS.split('|');\n\n")
     f.write("/** Where each line lies in the sprite: its start and its length, seconds. */\n")
     f.write("export const CLIPS: readonly (readonly [number, number])[] = [\n")
     for _, _, start, n in clips:

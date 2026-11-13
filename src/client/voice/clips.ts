@@ -23,17 +23,38 @@ export const LINE = {
   LOSS: 9,
   /** "A draw." */
   DRAW: 10,
-  /** "Double takedown." */
-  DOUBLE: 11,
-  /** "Triple takedown." */
-  TRIPLE: 12,
-  /** "Five in a row." */
-  FIVE: 13,
-  /** "Ten in a row. Untouchable." */
-  TEN: 14,
-  /** "Sharp aim." */
-  AIM: 15,
+  /** "Impressive!" */
+  AIM: 11,
+  /** "First blood!" */
+  FIRST: 12,
+  /** "Humiliation!" */
+  HUMILIATION: 13,
+  /** "Double kill!" */
+  DOUBLE: 14,
+  /** "Multi kill!" */
+  MULTI: 15,
+  /** "Mega kill!" */
+  MEGA: 16,
+  /** "Ultra kill!" */
+  ULTRA: 17,
+  /** "Monster kill!" */
+  MONSTER: 18,
+  /** "Killing spree!" */
+  SPREE: 19,
+  /** "Rampage!" */
+  RAMPAGE: 20,
+  /** "Dominating!" */
+  DOMINATING: 21,
+  /** "Unstoppable!" */
+  UNSTOPPABLE: 22,
+  /** "Godlike!" */
+  GODLIKE: 23,
 } as const;
+
+/** The words of each award, for the screen, separated by | (the other lines' are empty). */
+const AWARDS =
+  '|||||||||||Impressive!|First blood!|Humiliation!|Double kill!|Multi kill!|Mega kill!|Ultra kill!|Monster kill!|Killing spree!|Rampage!|Dominating!|Unstoppable!|Godlike!';
+export const SAID = AWARDS.split('|');
 
 /** Where each line lies in the sprite: its start and its length, seconds. */
 export const CLIPS: readonly (readonly [number, number])[] = [
@@ -48,9 +69,17 @@ export const CLIPS: readonly (readonly [number, number])[] = [
   [10.833, 0.766],
   [11.848, 0.764],
   [12.862, 0.681],
-  [13.792, 1.15],
-  [15.192, 1.138],
-  [16.58, 1.051],
-  [17.881, 1.887],
-  [20.018, 0.831],
+  [13.792, 0.849],
+  [14.891, 0.887],
+  [16.028, 0.989],
+  [17.267, 0.827],
+  [18.344, 0.946],
+  [19.539, 0.809],
+  [20.598, 0.869],
+  [21.717, 0.897],
+  [22.864, 0.943],
+  [24.057, 0.82],
+  [25.127, 0.884],
+  [26.261, 0.948],
+  [27.459, 0.787],
 ];

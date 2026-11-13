@@ -15,6 +15,7 @@ import { aimOf, gap2, struck } from '../shared/rover';
 import { SHIP, limits } from '../shared/ship';
 import { build, hidden, ray } from '../shared/world';
 import { createAnnouncer } from './announce';
+import { LINE, SAID } from './voice/clips';
 import { createAudio, savedMute, toggleMute } from './audio';
 import { createBalls } from './balls';
 import { createTracer } from './beams';
@@ -212,6 +213,7 @@ const play = (
   const audio = createAudio();
   audio.mute(savedMute());
   hud.mute(audio.muted);
+  hud.frags(0);
   hud.visor(!!world.def.helmets);
   const ctl = createInput(canvas, () => hud.mute(toggleMute(audio)));
   // The click that takes the pointer lock is the gesture that lets the sound start.
@@ -323,6 +325,7 @@ const play = (
             hud.banner(line.text, line.team);
           }
           if (beat.kind == 'start') {
+            hud.frags(0);
             // A new match: everyone is back at a spawn, facing the way his team's spawns do.
             [ctl.yaw, ctl.pitch] = [world.def.teams[you.team].spawns[0][3], 0];
           }
@@ -348,8 +351,11 @@ const play = (
             }
           }
         }
-        for (const line of announcer.step(match, s, told, you, performance.now() / 1000)) {
+        for (const line of announcer.step(match, s, told, you)) {
           audio.say(line);
+          if (line == LINE.AIM) {
+            hud.fragged('', SAID[line]);
+          }
         }
         match = s;
       }
@@ -393,6 +399,20 @@ const play = (
       hud.magazines([kit.mag, kit.cap, kit.clip]);
       // No map to pick in the game's menu (the user, 2026-11-13): it is the join page's choice.
       count.textContent = `Players: ${roster.length}`;
+    } else if (m?.t == 'frag') {
+      const who = (id: number): [string, number] => [
+        names.get(id) ?? 'Someone',
+        roster.find(p => p.id == id)?.team ?? 0,
+      ];
+      hud.feed(who(m.by), who(m.who));
+      if (m.by == you.id) {
+        hud.frags(m.n);
+        const line = announcer.frag(m, you, performance.now() / 1000);
+        hud.fragged(`${who(m.who)[0]} killed!`, line === undefined ? '' : SAID[line]);
+        if (line !== undefined) {
+          audio.say(line);
+        }
+      }
     } else if (m?.t == 'end') {
       ended = { score: m.score, players: m.players };
       audio.say(announcer.end(m.score, you.team));

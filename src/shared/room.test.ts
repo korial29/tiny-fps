@@ -20,7 +20,7 @@ import {
 import { HIGHLINE } from './map';
 import { MOON } from './moon';
 import { respawn, stumble } from './physics';
-import { decodeSnapshot, encodeInput } from './protocol';
+import { FRAG, decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
 import { ROVER, park, seat } from './rover';
@@ -909,8 +909,8 @@ describe('Room: capture the flag', () => {
             t: 'end',
             score: [1, 0],
             players: [
-              { id: 0, name: 'Ann', team: 0, caps: 1, returns: 0 },
-              { id: 1, name: 'Bob', team: 1, caps: 0, returns: 0 },
+              { id: 0, name: 'Ann', team: 0, caps: 1, returns: 0, frags: 0 },
+              { id: 1, name: 'Bob', team: 1, caps: 0, returns: 0, frags: 0 },
             ],
           },
         ]);
@@ -939,7 +939,7 @@ describe('Room: capture the flag', () => {
         {
           t: 'end',
           score: [0, 0],
-          players: [{ id: 0, name: 'Ann', team: 0, caps: 0, returns: 0 }],
+          players: [{ id: 0, name: 'Ann', team: 0, caps: 0, returns: 0, frags: 0 }],
         },
       ]);
       expect(snap(a)).toMatchObject({ over: true, clock: END_SCREEN });
@@ -955,6 +955,68 @@ describe('Room: capture the flag', () => {
       ticks(room, SNAP_EVERY);
       expect(snap(b)).toMatchObject({ clock: 60, score: [0, 0] });
     });
+  });
+});
+
+describe('Room: frags', () => {
+  /** Ann and Cid red, Bob blue, in a match. */
+  const trio = () => {
+    const room = new Room({}, ARENA);
+    const [a, b, c] = ['Ann', 'Bob', 'Cid'].map(n => join(room, n));
+    ticks(room, SNAP_EVERY);
+    const who = (p: Peer) => room['peers'].get(p)!;
+    /** `foe` goes down at `by`'s hand, and is up again. */
+    const kill = (foe: Peer, by?: Peer, how?: number) => {
+      room['harm'](who(foe), HP_MAX, by && who(by), how);
+      respawn(who(foe).state, room['world'], foe === b ? TEAM.BLUE : TEAM.RED);
+      who(foe).state.hp = HP_MAX;
+    };
+    const frags = (p: Peer) => p.texts.filter(m => m.t === 'frag');
+    return { room, a, b, c, kill, frags };
+  };
+
+  it("tells everyone an enemy's frag: who put whom down, how, his count, and the match's first", () => {
+    const { a, b, c, kill, frags } = trio();
+    kill(b, a, FRAG.BLADE);
+    kill(b, a);
+    kill(b, c, FRAG.FIST);
+    kill(a, b, FRAG.NADE);
+    const told = [
+      { t: 'frag', by: 0, who: 1, how: FRAG.BLADE, n: 1, first: true },
+      { t: 'frag', by: 0, who: 1, how: FRAG.GUN, n: 2 },
+      { t: 'frag', by: 2, who: 1, how: FRAG.FIST, n: 1 },
+      { t: 'frag', by: 1, who: 0, how: FRAG.NADE, n: 1 },
+    ];
+    for (const p of [a, b, c]) {
+      expect(frags(p)).toEqual(told);
+    }
+  });
+
+  it('counts no frag for a fall, a teammate or his own blast', () => {
+    const { a, b, c, kill, frags } = trio();
+    kill(a);
+    kill(a, c);
+    kill(b, b, FRAG.NADE);
+    expect(frags(a)).toEqual([]);
+    // The first enemy's frag is still the first blood.
+    kill(a, b);
+    expect(frags(c)).toEqual([{ t: 'frag', by: 1, who: 0, how: FRAG.GUN, n: 1, first: true }]);
+  });
+
+  it('puts the frags in the end of the match, and the next counts from nothing', () => {
+    const { room, a, b, kill, frags } = trio();
+    kill(b, a);
+    kill(b, a);
+    room['ctf']['clock'] = 1;
+    ticks(room, SNAP_EVERY);
+    const end = a.texts.find(m => m.t === 'end');
+    expect(end?.t === 'end' && end.players.map(p => p.frags)).toEqual([2, 0, 0]);
+    // No frag on the end screen.
+    kill(b, a);
+    expect(frags(a)).toHaveLength(2);
+    ticks(room, END_SCREEN * TICK_HZ + SNAP_EVERY);
+    kill(b, a);
+    expect(frags(a).at(-1)).toMatchObject({ n: 1, first: true });
   });
 });
 
@@ -1276,13 +1338,15 @@ describe('Room: the rovers', () => {
       }
       Object.assign(r, { vx: Math.fround(v) });
       send(room, a, keys, 40);
-      return { foe: st(room, p), me: st(room, a), r: { ...r } };
+      const told = c.texts.filter(m => m.t === 'frag');
+      return { foe: st(room, p), me: st(room, a), r: { ...r }, told };
     };
     const free = charge(ROVER.SPLAT_KILL + 3, 'none');
     const kill = charge(ROVER.SPLAT_KILL + 3, 'Bob');
     expect(kill.foe.down).toBeGreaterThan(0);
     expect(kill.foe.hp).toBe(0);
     expect(kill.me.hits).toBe(1);
+    expect(kill.told).toEqual([{ t: 'frag', by: 0, who: 1, how: FRAG.VEHICLE, n: 1, first: true }]);
     // The rover is where it would be with nobody in its way, to the bit.
     expect(kill.r).toEqual(free.r);
 
@@ -1300,6 +1364,7 @@ describe('Room: the rovers', () => {
     const mate = charge(ROVER.SPLAT_KILL + 3, 'Cid');
     expect(mate.foe).toMatchObject({ hp: HP_MAX, down: 0, stun: 0 });
     expect(mate.me.hits).toBe(0);
+    expect(mate.told).toEqual([]);
   });
 
   it('rewinds a rider to the seat he was drawn in', () => {

@@ -42,15 +42,17 @@ import {
   PUNCH_STUN,
 } from './constants';
 import { CHEST, crossing, knock, limbOf, strike, swingOf } from './blade';
+import { Bot } from './bot';
 import { Ctf } from './ctf';
 import { kitOf } from './kit';
 import { shut, swing } from './doors';
 import { STRIKE, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
+import { navOf } from './nav';
 import { bruise, floorAt, forward, heightOf, respawn, spawn, speedOf, stumble } from './physics';
 import { PLASMA_LAG, blast, cylinder, fly, launch, lob, stepOf, toss, wave } from './plasma';
 import type { Flying } from './plasma';
-import { decodeInput, encodeSnapshot, parseText } from './protocol';
+import { decodeInput, encodeSnapshot, onWire, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
 import { beam } from './rail';
 import {
@@ -85,6 +87,10 @@ import type { World, WorldDef } from './world';
 interface Player {
   conn: Conn;
   info: PlayerInfo;
+  /** A bot's mind: the host plays this player itself (bot.ts). */
+  bot?: Bot;
+  /** A bot's last seq. */
+  seq?: number;
   state: PlayerState;
   /** The order he joined in: the oldest player is the host. */
   since: number;
@@ -134,6 +140,9 @@ interface Wear {
   by: number;
   team: number;
 }
+/** The names of the bots, in turn. */
+const BOT_NAMES = ['Ada', 'Bix', 'Cog', 'Dot', 'Echo', 'Flux', 'Gear', 'Hex'];
+
 /** The two seats of a rover, the driver's first. */
 const SEATS = ['driver', 'rider'] as const;
 
@@ -256,6 +265,8 @@ export class Room {
   private next: string | undefined;
   /** Joins so far: each player's `since`. */
   private joins = 0;
+  /** Ids of bots let go this tick, not given again before the next: the person who takes a bot's place would be drawn where it stood. */
+  private freed = new Set<number>();
 
   /** Missing rules fall back to RULES. The map is the rules' one, unless a definition is given. */
   public constructor(rules: Partial<Rules> = {}, def?: WorldDef) {
@@ -265,6 +276,7 @@ export class Room {
     this.ctf = new Ctf(this.world, this.rules);
     this.gone = this.spots();
     this.fresh();
+    this.guide();
   }
 
   /** Every vehicle of the map parked afresh: whole, empty, on its spawn. */
@@ -282,7 +294,7 @@ export class Room {
 
   /** The host: the player in the room the longest. */
   private host(): Player | undefined {
-    return this.players().reduce<Player | undefined>(
+    return this.humans().reduce<Player | undefined>(
       (h, p) => (h && h.since < p.since ? h : p),
       undefined,
     );
@@ -299,6 +311,7 @@ export class Room {
     this.ctf = new Ctf(this.world, this.rules);
     this.gone = this.spots();
     this.fresh();
+    this.guide();
     this.history = [];
     this.balls = [];
     for (const p of this.players()) {
@@ -307,9 +320,9 @@ export class Room {
     this.roster();
   }
 
-  /** Number of joined players. */
+  /** Number of joined players, the bots left out: a room of bots alone is empty. */
   public get size(): number {
-    return this.players().length;
+    return this.humans().length;
   }
 
   /** A peer opened. Nothing is sent until it joins. */
@@ -339,8 +352,14 @@ export class Room {
       return;
     }
     const input = p && decodeInput(data);
-    // An input beyond the bank is dropped, and not acked.
-    if (input && p.bank > 0) {
+    if (input) {
+      this.apply(p, input);
+    }
+  }
+
+  /** One input of a player, moved at once. An input beyond the bank is dropped, and not acked. */
+  private apply(p: Player, input: Input): void {
+    if (p.bank > 0) {
       p.bank--;
       const slow = p.state.slow ?? 0;
       const use = (input.keys & KEY.USE) !== 0 && (p.state.held & KEY.USE) === 0;
@@ -420,7 +439,10 @@ export class Room {
     this.peers.delete(conn);
     if (p) {
       this.ctf.leave(p.info.id);
+      this.fill();
       if (!this.size) {
+        // Nobody is left to see an id taken again.
+        this.freed.clear();
         this.ctf.reset();
         this.gone.fill(0);
         this.fresh();
@@ -442,6 +464,7 @@ export class Room {
 
   /** One host tick. Public so tests can drive the room without a timer. */
   public tick(): void {
+    this.freed.clear();
     const players = this.players();
     if (!players.length) {
       this.balls = [];
@@ -451,6 +474,7 @@ export class Room {
     for (const p of players) {
       p.bank = Math.min(INPUT_BURST, p.bank + 1);
     }
+    this.think(players);
     for (const b of this.balls) {
       if (!b.burst && b.left > 0) {
         this.fly(b, stepOf(b));
@@ -1416,7 +1440,74 @@ export class Room {
     return [...this.peers.values()].filter(p => p !== null);
   }
 
-  private join(conn: Conn, name: unknown, picked: Record<string, unknown> = {}): void {
+  private humans(): Player[] {
+    return this.players().filter(p => !p.bot);
+  }
+
+  /** Each bot's input of this tick, applied as a client's would be on arrival. */
+  private think(players: Player[]): void {
+    const others = players.map(q => ({ id: q.info.id, team: q.info.team, state: q.state }));
+    for (const p of players) {
+      if (p.bot) {
+        const me = others.find(o => o.id === p.info.id)!;
+        const i = p.bot.think({
+          me,
+          others: others.filter(o => o !== me),
+          flags: this.ctf.flags,
+          world: this.world,
+        });
+        p.seq = ((p.seq ?? -1) + 1) & 0xffff;
+        this.apply(p, onWire({ ...i, seq: p.seq, view: this.ticks & 0xffff }));
+      }
+    }
+  }
+
+  /** The bots' map of the world, built when it loads rather than in the tick of a bot's first plan. */
+  private guide(): void {
+    if (this.rules.bots) {
+      navOf(this.world);
+    }
+  }
+
+  /** The players the bots fill the room up to: none with no human. */
+  private wanted(): number {
+    return this.size ? Math.min(this.rules.bots ?? 0, this.rules.maxPlayers) : 0;
+  }
+
+  /**
+   * Bots in and out so that there are `want` players, the humans first, the teams even: a bot comes
+   * on the smaller team and leaves the larger one.
+   */
+  private fill(want = this.wanted()): void {
+    for (;;) {
+      const players = this.players();
+      const reds = players.filter(p => p.info.team === 0).length;
+      const bots = players.filter(p => p.bot);
+      if (players.length > want && bots.length) {
+        const big = reds > players.length - reds ? 0 : 1;
+        const out = bots.reverse().find(p => p.info.team === big) ?? bots[0];
+        this.peers.delete(out.conn);
+        this.ctf.leave(out.info.id);
+        this.freed.add(out.info.id);
+      } else if (players.length < want) {
+        // What the room sends a bot is of no use: it reads the room itself.
+        const conn: Conn = { send: () => undefined };
+        this.peers.set(conn, null);
+        // The first name no bot here bears.
+        const names = players.map(p => p.info.name);
+        const name = BOT_NAMES.map(n => `${n} (bot)`).find(n => !names.includes(n)) ?? 'Bot';
+        this.join(conn, name, {}, true);
+      } else {
+        return;
+      }
+    }
+  }
+
+  private join(conn: Conn, name: unknown, picked: Record<string, unknown> = {}, bot = false): void {
+    // A human takes a bot's place: one goes first, from the larger team.
+    if (!bot && this.players().some(p => p.bot)) {
+      this.fill(Math.min(this.wanted(), this.players().length) - 1);
+    }
     const players = this.players();
     if (players.length >= this.rules.maxPlayers) {
       conn.send(JSON.stringify({ t: 'full' } satisfies ServerText));
@@ -1424,7 +1515,7 @@ export class Room {
     }
     // Smallest free id.
     let id = 0;
-    while (players.some(p => p.info.id === id)) {
+    while (players.some(p => p.info.id === id) || this.freed.has(id)) {
       id++;
     }
     // The smaller team, red when they are equal.
@@ -1442,6 +1533,7 @@ export class Room {
         team,
         color: TEAM_COLOR[team],
         ...chosen(picked),
+        ...(bot ? { bot } : {}),
       },
       state: this.place(
         id,
@@ -1454,17 +1546,23 @@ export class Room {
       by: 0,
       tackled: -TACKLE_COOLDOWN,
       run: -SPLAT_COOLDOWN,
+      ...(bot ? { bot: new Bot(id) } : {}),
     };
     this.peers.set(conn, player);
     this.ctf.join(id, team, player.state);
-    this.roster();
+    // One roster for a person's join and the bots it moves; fill()'s callers send it.
+    if (!bot) {
+      this.fill();
+      this.roster();
+    }
   }
 
   /** Each joined peer gets the full roster with its own id. */
   private roster(): void {
-    const players = this.players();
-    const list = players.map(p => p.info).sort((a, b) => a.id - b.id);
-    players.forEach(p =>
+    const list = this.players()
+      .map(p => p.info)
+      .sort((a, b) => a.id - b.id);
+    this.humans().forEach(p =>
       p.conn.send(
         JSON.stringify({
           t: 'roster',

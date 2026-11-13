@@ -101,6 +101,8 @@ PORT=8787 npx tiny-fps-server
 
 `MAP=tranquility` starts a new room on the moon map (the default is `highline`). In local mode the tab that hosts the room starts it on its client's `map` option, which the demo's Map menu sets.
 
+`BOTS=8` fills each room with bots up to 8 players while at least one person plays: the bots even out the teams, and each one leaves when a person joins. In local mode it is the `bots` rule of `localSocket()`, which the demo's Bots menu sets. A bot takes the gun at its rack, runs the routes of Highline (jumps, dashes and wall-runs included) or the lanes of the Moon, takes the flag, chases the one who has its own and shoots the enemies it sees.
+
 ### The host picks the map
 
 The player in the room the longest is its **host**; when they leave, the next oldest player takes over. Press Esc in a game: the maps sit in the Game panel of the title screen. The host's are buttons, and the one they pick is played from the next match on, never in the middle of one (or from the next join when the room empties). Everyone else sees the maps read-only, with the host's name and pick, and the end screen says the map of the next match. The server checks that the pick comes from the host: anyone else's is ignored.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Bot } from './bot';
+import { Bot, personaOf } from './bot';
 import { HIGHLINE } from './map';
 import { MOON } from './moon';
 import { ROUTES, navBuilt, navOf, path } from './nav';
@@ -378,15 +378,20 @@ describe('Bot: in a fight', () => {
     expect(ks.every(k => k & KEY.SPRINT)).toBe(true);
   });
 
-  it('stops at the edge of the void it was walking into', () => {
+  it('never walks into the void its goal lies over, for ten seconds', () => {
     // A slab ending 1 m ahead (north), its goal past it over the void.
     const world = build(
       def([{ min: [-50, -5, 9], max: [50, 0, 50], top: TEX.TILE, side: TEX.BRICK }]),
     );
     const bot = new Bot(0);
     const me = { id: 0, team: 0, state: { ...spawn(0, world, 0, 0), ammo: 10, mag: 5 } };
-    const i = bot.think({ me, others: [], flags: [home, home], world });
-    expect(i.keys & KEY.FORWARD).toBe(0);
+    let low = Infinity;
+    for (let k = 0; k < 600; k++) {
+      const i = bot.think({ me, others: [], flags: [home, home], world });
+      move(me.state, { ...i, seq: k }, world, 0);
+      low = Math.min(low, me.state.y);
+    }
+    expect(low).toBeGreaterThan(-0.01);
   });
 });
 
@@ -395,5 +400,100 @@ describe('nav: off the ways', () => {
     const w = build(HIGHLINE);
     const way = path(navOf(w), w, [56.8, 24.2, 227], [98, 14.5, 131]);
     expect(way.entry).toBeDefined();
+  });
+});
+
+describe('Bot: after UT2004', () => {
+  const slab: Brush = { min: [-50, -5, -50], max: [50, 0, 50], top: TEX.TILE, side: TEX.BRICK };
+  const world = build({
+    brushes: [slab],
+    teams: [
+      { base: [0, 0, 40], spawns: [[0, 0, 10, 0]] },
+      { base: [0, 0, -40], spawns: [[0, 0, -10, Math.PI]] },
+    ],
+    floor: -20,
+    sun: { dir: [0, 1, 0], color: [1, 1, 1] },
+    sky: [
+      [0, 0, 1],
+      [1, 1, 1],
+    ],
+  });
+  const home: FlagState = { state: FLAG.HOME, by: 0, x: 0, y: 0, z: 0, left: 0 };
+
+  it('draws a character from the id, the same every time, sharper with the skill', () => {
+    expect(personaOf(3, 4)).toEqual(personaOf(3, 4));
+    expect(personaOf(3, 4)).not.toEqual(personaOf(4, 4));
+    const [novice, godlike] = [personaOf(3, 0), personaOf(3, 7)];
+    expect(godlike.miss).toBeLessThan(novice.miss);
+    expect(godlike.react).toBeLessThan(novice.react);
+    expect(godlike.turn).toBeGreaterThan(novice.turn);
+    expect(godlike.duck).toBeGreaterThan(novice.duck);
+  });
+
+  // A red bot standing at its base with blue's flag: nowhere to go, so a dash can only be out of a ball's way.
+  const there = () => ({
+    id: 0,
+    team: 0,
+    state: { ...spawn(0, world, 0, 0), x: 0, z: 40, ammo: 10, mag: 5 },
+  });
+  const carried: FlagState = { ...home, state: FLAG.CARRIED, by: 0 };
+  /** A blue ball 8 m north of the bot at chest height, flying south at it. */
+  const ball = (id: number) => ({
+    id,
+    by: 1,
+    team: 1,
+    x: 0,
+    y: 1.1,
+    z: 32,
+    dx: 0,
+    dy: 0,
+    dz: 1,
+    burst: false,
+    left: 99,
+  });
+
+  /** How many of 20 balls shot straight at a red bot standing still it dashes away from. */
+  const ducks = (skill: number) => {
+    const bot = new Bot(0, skill);
+    const me = there();
+    let n = 0;
+    for (let k = 0; k < 20; k++) {
+      const i = bot.think({ me, others: [], flags: [home, carried], world, balls: [ball(k)] });
+      if (i.keys & KEY.DASH) {
+        n++;
+        // Across the ball's way (east or west), not along it.
+        expect(i.keys & (KEY.LEFT | KEY.RIGHT)).not.toBe(0);
+      }
+    }
+    return n;
+  };
+
+  it('dashes out of the way of the balls coming at it, more often the more skilled', () => {
+    expect(ducks(7)).toBeGreaterThan(ducks(0));
+    expect(ducks(7)).toBeGreaterThanOrEqual(14);
+  });
+
+  it('ignores its own team’s balls and those that will miss it', () => {
+    const bot = new Bot(0, 7);
+    const me = there();
+    const mate = { ...ball(1), team: 0, by: 2 };
+    const wide = { ...ball(2), x: 3 };
+    for (let k = 0; k < 10; k++) {
+      const i = bot.think({ me, others: [], flags: [home, carried], world, balls: [mate, wide] });
+      expect(i.keys & KEY.DASH).toBe(0);
+    }
+  });
+
+  it('strafes both ways in a fight, and jumps or dashes aside now and then', () => {
+    const bot = new Bot(5);
+    const me = { id: 5, team: 0, state: { ...spawn(0, world, 0, 0), ammo: 60, mag: 10 } };
+    const foe = { id: 1, team: 1, state: spawn(1, world, 0, 1) };
+    let keys = 0;
+    for (let k = 0; k < 600; k++) {
+      keys |= bot.think({ me, others: [foe], flags: [home, home], world }).keys;
+      me.state.held = 0;
+    }
+    expect(keys & KEY.LEFT && keys & KEY.RIGHT).toBeTruthy();
+    expect(keys & (KEY.JUMP | KEY.DASH)).not.toBe(0);
   });
 });

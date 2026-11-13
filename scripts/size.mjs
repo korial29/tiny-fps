@@ -9,7 +9,8 @@ const BUDGETS = [
   // 110 KB until the space trooper's armour (the user, 2026-11-10: weight does not matter).
   // 144 KB until the woman's own helmet, 100 B under it (the user: weight does not matter).
   { file: 'dist/index.js', max: 170 * 1024 },
-  { file: 'dist/local.js', max: 40 * 1024 },
+  // 40 KB until the bots after UT2004's (the user, 2026-11-13).
+  { file: 'dist/local.js', max: 44 * 1024 },
 ];
 
 // An entry plus every chunk it statically imports, concatenated.

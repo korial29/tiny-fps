@@ -112,6 +112,12 @@ describe('createHud', () => {
       expect(group('Class').map(b => b.querySelector('strong')!.textContent)).toEqual(
         ROLES.map(r => r[0]),
       );
+      // Each class says what it is good at and what it pays for it.
+      for (const [b, [, pros, cons]] of group('Class').map((b, i) => [b, ROLES[i]] as const)) {
+        expect([pros, cons].every(t => t.length > 20)).toBe(true);
+        expect(b.querySelector('.p')!.textContent).toBe(pros);
+        expect(b.querySelector('.c')!.textContent).toBe(cons);
+      }
       expect(HAIR_NAMES.map(h => h.length)).toEqual(HAIRS_N);
       // A picture of the own head with each haircut.
       expect(hud.heads()).toHaveLength(HAIR_NAMES[BODY.MALE].length);

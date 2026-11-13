@@ -1639,7 +1639,7 @@ export const createBody = (world?: World): Body => {
         skin(out, body(2, build), s, colors);
         // The ninja's own plates in his team's colour (soldier.ts).
         if (world?.def.armor) {
-          armor(out, from, body(2, build), true, plate, ninja);
+          armor(out, from, body(2, build), true, plate, ninja, color);
         }
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
         // The right thumb presses the button of the katana or the plasma gun as it comes on.

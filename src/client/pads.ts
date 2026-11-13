@@ -120,6 +120,12 @@ const bellN = (u: number, v: number): Vec3 => {
   return k < 1e-12 ? [0, 1, 0] : [n[0] / k, n[1] / k, n[2] / k];
 };
 
+/**
+ * The band round the bell (the user, 2026-11-13: more detail on the astronaut): its rows of the
+ * bell's outer face, drawn in `pads()`'s `band` colour, and the shade that tells them.
+ */
+export const BAND = { rows: [8], shade: 2 };
+
 let made: number[][] | undefined;
 
 /** The right pad at rest: triangles of [x, y, z, nx, ny, nz, shade], the shade 1 on top. */
@@ -184,7 +190,10 @@ const make = () => {
       const [v0, v1] = [r / BR, (r + 1) / BR];
       // Its outer face, each corner with the surface's own normal.
       const from = out.length;
-      quad([bell(u0, v0), bell(u0, v1), bell(u1, v1), bell(u1, v0)], 1);
+      quad(
+        [bell(u0, v0), bell(u0, v1), bell(u1, v1), bell(u1, v0)],
+        BAND.rows.includes(r) ? BAND.shade : 1,
+      );
       [
         [u0, v0],
         [u1, v1],
@@ -210,7 +219,8 @@ const make = () => {
 
 /**
  * Appends the ninja's shoulder pads and his collar on the solved pose `s`, in the team's `color`;
- * smaller on the woman (`build`). Or the `marine`'s shoulder bells, and no collar.
+ * smaller on the woman (`build`). Or the `marine`'s shoulder bells, and no collar, with a band
+ * round them in `band` (the astronaut's team colour on his white bells).
  */
 export const pads = (
   out: number[],
@@ -218,6 +228,7 @@ export const pads = (
   build = 0,
   color = [0.5, 0.5, 0.5],
   marine = false,
+  band = color,
 ) => {
   const [lames, collar, shell] = (made ??= make());
   const pad = marine ? shell : lames;
@@ -232,17 +243,18 @@ export const pads = (
         const j = i + c * 7;
         const p = turn(rot, [m[j] * k * side, m[j + 1] * k, m[j + 2] * k]);
         const d = turn(rot, [m[j + 3] * side, m[j + 4], m[j + 5]]);
-        const shade = m[j + 6];
+        const banded = m[j + 6] == BAND.shade;
+        const [rgb, shade] = banded ? [band, 1] : [color, m[j + 6]];
         out[w] = o[0] + p[0];
         out[w + 1] = o[1] + p[1];
         out[w + 2] = o[2] + p[2];
         out[w + 3] = d[0];
         out[w + 4] = d[1];
         out[w + 5] = d[2];
-        out[w + 6] = color[0] * shade;
-        out[w + 7] = color[1] * shade;
+        out[w + 6] = rgb[0] * shade;
+        out[w + 7] = rgb[1] * shade;
         out[w + 8] = shade == 1 ? GLOSS : -1;
-        out[w + 9] = color[2] * shade;
+        out[w + 9] = rgb[2] * shade;
         w += STRIDE;
       }
     }

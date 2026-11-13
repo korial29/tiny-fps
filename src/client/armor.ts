@@ -386,7 +386,8 @@ export const REGIONS: Region[] = [
 /** How far the plates stand off the skin: their thickness. */
 const OFF = 0.012;
 
-const WHITE = [0.9, 0.91, 0.93];
+/** The astronaut's white, a shade under full: in the moon's sun the plates burnt out to flat white (the user, 2026-11-13). */
+const WHITE = [0.85, 0.86, 0.88];
 /** The plates' edges seen side on: their thickness. */
 const WALL = [0.7, 0.71, 0.74];
 
@@ -1080,6 +1081,36 @@ export const NINJA_DETAILS = [
   [PART.LEG, 0.1, 0, 0.3, 0, 0.2, 0.0013, 0],
   ...[-40, 40].map(a => [PART.LEG, 0.1, a, 0.415, 0, 0.007, 0.0035, 0]),
 ];
+/**
+ * The astronaut's details (the user, 2026-11-13: more detail on his armour), as DETAILS, then 1 for
+ * the team's colour (ACCENT) or 0 dark: three rank bars on the left of the chest; a band of the
+ * team's colour round each wrist; a patch on the left biceps; a dark control panel on the left
+ * forearm with a row of keys beside it; a rivet at each corner of the belly's plate; two grooves
+ * down the front of each thigh plate.
+ */
+export const ASTRO_DETAILS = [
+  ...[1.41, 1.398, 1.386].map(y => [PART.TRUNK, 0, 32, y, 90, 0.034, 0.0032, -1, 1]),
+  ...[-135, -90, -45, 0, 45, 90, 135, 180].map(a => [
+    PART.ARM,
+    0.222,
+    a,
+    0.962,
+    90,
+    0.04,
+    0.0035,
+    0,
+    1,
+  ]),
+  [PART.ARM, 0.207, 90, 1.262, 0, 0.026, 0.009, -1, 1],
+  [PART.ARM, 0.222, 20, 1.05, 0, 0.045, 0.011, -1, 0],
+  ...[1.012, 1.026, 1.04, 1.054, 1.068].map(y => [PART.ARM, 0.222, 55, y, 90, 0.008, 0.002, -1, 0]),
+  ...[1.09, 1.13].map(y => [PART.TRUNK, 0, 38, y, 0, 0.006, 0.003, 0, 0]),
+  ...[-12, 12].map(a => [PART.LEG, 0.1, a, 0.74, 0, 0.13, 0.0012, 0, 0]),
+];
+/** A detail's colour that is the team's, told by its red under 0 (armor() swaps it). */
+const ACCENT = [-1, 0, 0];
+/** A triangle's kind bit: the astronaut's alone (ASTRO_DETAILS). */
+const ASTRO = 16;
 const DARK = [0.07, 0.07, 0.08];
 /** The longest piece a detail is laid in (m). */
 const PIECE = 0.012;
@@ -1127,6 +1158,7 @@ const scratchesOn = (
     up = false,
     mark = false,
     own = false,
+    kind = 0,
   ) => {
     const part = partOf(l![k]);
     const P = corners(k);
@@ -1208,7 +1240,7 @@ const scratchesOn = (
       undefined,
       col,
       -1,
-      0,
+      kind,
       k,
       pick(0, 1, 2),
     );
@@ -1218,7 +1250,7 @@ const scratchesOn = (
       undefined,
       col,
       -1,
-      0,
+      kind,
       k,
       pick(0, 2, 3),
     );
@@ -1264,10 +1296,12 @@ const scratchesOn = (
     const [L, W] = [0.008 + rand() * 0.022, 0.0005 + rand() * 0.0006];
     made += +stroke(k, at, a, L, W, WORN[Math.floor(rand() * WORN.length)]);
   }
-  for (const [part, cx, ang, y, tilt, L, W, only, own] of [
+  for (const [part, cx, ang, y, tilt, L, W, only, own, astro, lit] of [
     ...DETAILS,
     ...NINJA_DETAILS.map(d => [...d, 1]),
+    ...ASTRO_DETAILS.map(d => [...d.slice(0, 8), 0, 1, d[8]]),
   ]) {
+    const [col, kind] = [lit ? ACCENT : DARK, astro ? ASTRO : 0];
     for (const side of only ? [only] : [1, -1]) {
       const r = (ang * Math.PI) / 180;
       const hit = hitOf(part, [cx * side, y, 0], [Math.sin(r) * side, 0, -Math.cos(r)]);
@@ -1300,7 +1334,18 @@ const scratchesOn = (
             : hit;
         if (at) {
           const len = L / parts + (parts > 1 ? 0.0008 : 0);
-          stroke(at[0], at[1], ((tilt * Math.PI) / 180) * side, len, W, DARK, true, true, !!own);
+          stroke(
+            at[0],
+            at[1],
+            ((tilt * Math.PI) / 180) * side,
+            len,
+            W,
+            col,
+            true,
+            true,
+            !!own,
+            kind,
+          );
         }
       }
     }
@@ -1313,7 +1358,8 @@ const recipes = [new WeakMap<Skin, Recipe>(), new WeakMap<Skin, Recipe>()];
  * Appends the armour cut out of the skin `s` drawn into `out` from the float `from` on (skin()
  * writes three vertices per triangle of s.t, in order). Not `fine` (a runner not close by), curved
  * outlines follow the skin's own triangles, unrefined, and there are no scratches. `plate` is the
- * plates' colour (their walls a shade darker): white when absent. The `ninja` wears his own armour.
+ * plates' colour (their walls a shade darker): white when absent, the astronaut's, who has his own
+ * details in his team's colour `accent` too. The `ninja` wears his own armour.
  */
 export const armor = (
   out: number[],
@@ -1322,7 +1368,9 @@ export const armor = (
   fine = true,
   plate?: number[],
   ninja = false,
+  accent = [0.8, 0.8, 0.82],
 ) => {
+  const astro = !plate && !ninja;
   const book = recipes[+fine];
   let r = book.get(s);
   if (!r) {
@@ -1335,7 +1383,7 @@ export const armor = (
   let w = out.length;
   for (let i = 0, ci = 0; i < t.length; i += TRI) {
     // The ninja's own armour alone, without scratches, and none of it on another.
-    if (ninja != !!REGIONS[t[i + 5]]?.alone) {
+    if (ninja != !!REGIONS[t[i + 5]]?.alone || (t[i + 4] & ASTRO && !astro)) {
       ci += 3 * CORNER;
       continue;
     }
@@ -1432,7 +1480,9 @@ export const armor = (
     }
     // The plates and their walls in `plate` when given; the scratches in their own.
     let [cr, cg, cb] = [t[i], t[i + 1], t[i + 2]];
-    if (plate && t[i + 3] == GLOSS) {
+    if (cr < 0) {
+      [cr, cg, cb] = accent;
+    } else if (plate && t[i + 3] == GLOSS) {
       [cr, cg, cb] = plate;
     } else if (plate && t[i + 4] & 1) {
       [cr, cg, cb] = [plate[0] * 0.75, plate[1] * 0.75, plate[2] * 0.75];

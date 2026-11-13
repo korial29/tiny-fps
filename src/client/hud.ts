@@ -232,7 +232,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Ninja',
-    'Runs 20 % faster, jumps higher, wall-runs twice as long, chains 3 dashes; katana and fists twice as fast.',
+    'Runs 20 % faster, jumps much higher, wall-runs twice as long, chains 3 dashes; katana and fists twice as fast.',
     'Guns: half the ammo, magazine, rate of fire and damage, and slowed hard while one is in hand.',
     'City maps',
   ],
@@ -273,6 +273,7 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
       ],
       ['Shift', 'sprint', 'ShiftLeft ShiftRight'],
       ['Space', 'jump, again in the air', 'Space'],
+      ['Q', 'dash toward the keys held (A on AZERTY)', 'KeyQ'],
       ['Move key|twice', 'dash that way'],
       ['C', 'crouch, slide when fast', 'KeyC'],
     ],

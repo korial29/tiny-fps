@@ -15,6 +15,7 @@ import {
   WALL_AWAY,
   WALL_PARALLEL,
   WALL_REACH,
+  WALL_KICK_BOOST,
   WALL_KICK_SPEED,
   WALL_KICK_UP,
 } from './constants';
@@ -124,7 +125,10 @@ describe('wall-run', () => {
     const s = jumpAlong();
     s.run(10, FORWARD | SPRINT, NORTH);
     s.p.jumps = 0;
+    const along = -s.p.vz;
     s.step(FORWARD | SPRINT | JUMP, NORTH);
+    // And faster along the wall: the kick pushes the run on.
+    expect(-s.p.vz).toBeCloseTo(along + WALL_KICK_BOOST, 0);
     // Away from the wall (it is on the east, so west), and up.
     expect(s.p.mode).toBe(MODE.AIR);
     expect(s.p.ev & EV.JUMP).toBe(EV.JUMP);

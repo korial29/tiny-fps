@@ -76,8 +76,8 @@ const MARINE: Kit = {
 const NINJA: Kit = {
   run: RUN_SPEED * 1.2,
   sprint: SPRINT_SPEED * 1.2,
-  jump: JUMP_SPEED * 1.15,
-  double: DOUBLE_JUMP_SPEED * 1.15,
+  jump: JUMP_SPEED * 1.3,
+  double: DOUBLE_JUMP_SPEED * 1.3,
   wallrun: WALLRUN_TICKS * 2,
   dashes: 3,
   haste: 2,

@@ -20,6 +20,8 @@ const BITS: Record<string, number> = {
   ShiftRight: KEY.SPRINT,
   // Not Ctrl: Ctrl+W closes the tab and the browser keeps it.
   KeyC: KEY.CROUCH,
+  // A on AZERTY. Held like Space: move() reads the press off it, toward the keys held (forward without one).
+  KeyQ: KEY.DASH,
   KeyR: KEY.RELOAD,
   // Held: the host and ride() read the press off it.
   KeyE: KEY.USE,
@@ -122,7 +124,7 @@ export interface Controls {
 
 /**
  * Click the canvas to lock the pointer; while locked the mouse looks, the keys move (WASD, Shift
- * sprints, Space jumps, C crouches, E gets in and out of a rover, a direction key pressed twice within DOUBLE_TAP_MS dashes that
+ * sprints, Space jumps, Q dashes, C crouches, E gets in and out of a rover, a direction key pressed twice within DOUBLE_TAP_MS dashes that
  * way, the left button fires or cuts and a double click cuts the special, G launches a grenade with the
  * rifle, 1, 2 and 3 or the wheel pick
  * the gun, the katana or the rail gun) and M calls `onMute`.

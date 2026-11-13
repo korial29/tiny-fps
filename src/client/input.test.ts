@@ -29,10 +29,14 @@ describe('keyBit', () => {
     expect(keyBit('KeyA')).toBe(KEY.LEFT);
     expect(keyBit('ArrowRight')).toBe(KEY.RIGHT);
     expect(keyBit('Space')).toBe(KEY.JUMP);
-    expect(keyBit('KeyQ')).toBe(0);
+    expect(keyBit('KeyX')).toBe(0);
   });
 
-  it('maps Shift to the sprint and C to the crouch, and not Ctrl (the dash is a double tap)', () => {
+  it('maps Q to the dash (A on AZERTY), held like the jump', () => {
+    expect(keyBit('KeyQ')).toBe(KEY.DASH);
+  });
+
+  it('maps Shift to the sprint and C to the crouch, and not Ctrl', () => {
     expect(keyBit('ShiftLeft')).toBe(KEY.SPRINT);
     expect(keyBit('ShiftRight')).toBe(KEY.SPRINT);
     expect(keyBit('KeyC')).toBe(KEY.CROUCH);

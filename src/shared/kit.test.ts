@@ -91,7 +91,7 @@ describe('the ninja', () => {
       }
       return top;
     };
-    expect(apex(NINJA) / apex(MARINE)).toBeCloseTo(1.15 ** 2, 1);
+    expect(apex(NINJA) / apex(MARINE)).toBeCloseTo(1.3 ** 2, 1);
   });
 
   it('runs along a wall twice as long', () => {

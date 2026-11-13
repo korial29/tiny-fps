@@ -48,14 +48,16 @@ describe('mask, the ninja hood and face guard', () => {
     expect(high.filter(p => p[0] > 0).length).toBe(high.filter(p => p[0] < 0).length);
   });
 
-  it('comes down under the chin, round at its corners (the user, 2026-11-13)', () => {
-    const red = pts.filter(p => p[6] == RED[0] && p[7] == RED[1] && p[9] == RED[2]);
-    const low = (f: (p: number[]) => boolean) => Math.min(...red.filter(f).map(p => p[1]));
-    // Its middle under the chin; its sides drawn up toward the cheeks, as before.
-    expect(low(p => Math.abs(p[0]) < 0.01)).toBeLessThan(1.58);
-    expect(low(p => Math.abs(p[0]) > 0.025 && Math.abs(p[0]) < 0.03)).toBeGreaterThan(
-      low(p => Math.abs(p[0]) < 0.01) + 0.005,
-    );
+  it('comes down under the chin and over the jaw, close to the face (the user, 2026-11-13)', () => {
+    const red = pts.filter(p => p[6] == RED[0] && p[7] == RED[1] && p[9] == RED[2] && p[1] < 1.7);
+    const band = (x: number) => red.filter(p => Math.abs(p[0]) >= x && Math.abs(p[0]) < x + 0.01);
+    const low = (x: number) => Math.min(...band(x).map(p => p[1]));
+    // Its middle under the chin, its sides low over the jaw, still rising round to the cheeks.
+    expect(low(0)).toBeLessThan(1.58);
+    expect(low(0.06)).toBeLessThan(1.6);
+    expect(low(0.07)).toBeGreaterThan(low(0) + 0.02);
+    // Its front stood out too much: 13 cm before the head's joint, now under 12.
+    expect(Math.min(...band(0).map(p => p[2]))).toBeGreaterThan(-0.12);
   });
 
   it('paints the hood on the head, but round the eyes', () => {

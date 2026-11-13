@@ -29,7 +29,7 @@ const [SLIT_LO, SLIT_HI, SLIT] = [1.668, 1.73, 1.02];
 const arch = (a: number) =>
   SLIT_LO + (SLIT_HI - SLIT_LO) * Math.sqrt(Math.max(1 - (a / SLIT) ** 2, 0));
 /** How far out of the skull the ideograms stand, and the guard's inner and outer faces, metres. */
-const [HOOD, IN, OUT] = [0.003, 0.006, 0.011];
+const [HOOD, IN, OUT] = [0.003, 0.005, 0.009];
 /**
  * 忍, its strokes as lines in a unit square, y up: 刃 (the turn and hook, the sweep down to the
  * left, its dot), then 心 (the left dot, the hook along the bottom, the middle and the right dots).
@@ -66,10 +66,10 @@ const skull = (a: number, y: number, off: number): Vec3 => {
  * to its points beside them.
  */
 const under = (a: number) => PT + HORN * clamp((Math.abs(a) / AT - 0.4) / 0.6) ** 1.6;
-/** The guard over the mouth: its top (under the eyes) and bottom (under the chin, the user 2026-11-13), and its half widths there (radians round). */
-const [PT, PB, AT, AB] = [1.662, 1.575, 1.15, 0.42];
+/** The guard over the mouth: its top (under the eyes) and bottom (under the chin, the user 2026-11-13), and its half widths there (radians round; then wider, over the jaw and the cheeks). */
+const [PT, PB, AT, AB] = [1.662, 1.575, 1.25, 0.85];
 /** How high its points beside the eyes stand over its top, and the power that rounds its sides out over the cheeks. */
-const [HORN, ROUND] = [0.045, 0.7];
+const [HORN, ROUND] = [0.045, 0.55];
 const half = (y: number) => AB + (AT - AB) * clamp((y - PB) / (PT - PB)) ** ROUND;
 /** How far its top edge rises at `x` across it (-1 to 1): a small peak up the nose, and the sweep up to the point at each end. */
 const crest = (x: number) =>
@@ -99,10 +99,11 @@ const dent = (x: number, v: number) => {
 const covers = (q: number, y: number) =>
   q < AT && y > PB - 0.004 && y < PT + crest(q / AT) && (q < AB || y > edge(q) - 0.004);
 /**
- * The guard's prow (the user, 2026-11-13: its very front stands out): how far out of the skull its
- * shell is pushed at `a` round and `y` high, most down its middle and at the mouth and the chin.
+ * The guard's prow (the user, 2026-11-13: its very front stands out; then less, it stood out too
+ * much): how far out of the skull its shell is pushed at `a` round and `y` high, most down its
+ * middle and at the mouth and the chin.
  */
-const PROW = 0.024;
+const PROW = 0.014;
 const prow = (a: number, y: number) =>
   PROW *
   clamp(1 - Math.abs(a) / 1.0) ** 1.3 *

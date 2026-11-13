@@ -9,6 +9,7 @@
 // the latest snapshot's, with the predicted ones in their place: exact while they stand still.
 import { INTERP_DELAY, TICK_HZ } from '../shared/constants';
 import { step } from '../shared/gun';
+import { kitOf } from '../shared/kit';
 import { TAU, norm, respawn } from '../shared/physics';
 import { onWire } from '../shared/protocol';
 import { drive, park, ride, seat, skid, solid } from '../shared/rover';
@@ -19,9 +20,9 @@ import type { World } from '../shared/world';
 export interface Predictor {
   /**
    * The own player id and team, from the roster. Snapshots before it are only used for the others.
-   * The team picks the spawn a fall puts the player back at.
+   * The team picks the spawn a fall puts the player back at, the role (ROLE) the kit of the steps.
    */
-  you(id: number, team?: number): void;
+  you(id: number, team?: number, role?: number): void;
   /**
    * One local step: gives the input the next seq, rounds its yaw and pitch to the wire, moves the
    * own player with it, keeps it for replay, and returns it for the caller to send (the very
@@ -124,6 +125,7 @@ const mix = (a: Rover, b: Rover, t: number): Rover => {
 export const createPredictor = (world: World): Predictor => {
   let id: number | undefined;
   let team = 0;
+  let kit = kitOf(undefined, world.def);
   let seq = 0;
   let pending: Input[] = [];
   /** The own player after the last step, and before it. */
@@ -165,7 +167,7 @@ export const createPredictor = (world: World): Predictor => {
         car = park(world)[carK];
       }
     } else {
-      step(own!, i, world, team, armed, solid(fleet(), own!));
+      step(own!, i, world, team, armed, solid(fleet(), own!), kit);
     }
   };
   const driving = (): boolean => !!car && own?.mode === MODE.RIDE && car.driver === id;
@@ -270,8 +272,8 @@ export const createPredictor = (world: World): Predictor => {
   };
 
   return {
-    you: (n, t = 0) => {
-      [id, team] = [n, t];
+    you: (n, t = 0, role) => {
+      [id, team, kit] = [n, t, kitOf(role, world.def)];
     },
 
     step: (i, now) => {

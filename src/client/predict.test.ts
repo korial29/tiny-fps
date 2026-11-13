@@ -21,6 +21,7 @@ import { STRIKE, step } from '../shared/gun';
 import { ROOFTOPS } from '../shared/map';
 import { STILL, move, spawn, stumble } from '../shared/physics';
 import { decodeInput, decodeSnapshot, encodeInput, onWire } from '../shared/protocol';
+import { ROLE, kitOf } from '../shared/kit';
 import { Room } from '../shared/room';
 import { ROVER, park, seat } from '../shared/rover';
 import { EV, KEY, MODE, NOBODY } from '../shared/types';
@@ -169,9 +170,13 @@ describe('prediction against the room', () => {
     alone = false,
     /**
      * `grants`: inputs after which the host adds an ammo pack to his gun, as it does at one; `def`:
-     * the map the room and the predictor play, ROOFTOPS unless told.
+     * the map the room and the predictor play, ROOFTOPS unless told; `role` the player's class (ROLE).
      */
-    { grants = [], def = ROOFTOPS }: { grants?: number[]; def?: WorldDef } = {},
+    {
+      grants = [],
+      def = ROOFTOPS,
+      role,
+    }: { grants?: number[]; def?: WorldDef; role?: number } = {},
   ) => {
     const n = steps.length;
     const map = def === ROOFTOPS ? world : build(def);
@@ -186,7 +191,7 @@ describe('prediction against the room', () => {
     const other: Conn = { send: () => {} };
     const join = (c: Conn, name: string) => {
       room.connect(c);
-      room.receive(c, JSON.stringify({ t: 'join', name }));
+      room.receive(c, JSON.stringify({ t: 'join', name, ...(name == 'me' ? { role } : {}) }));
     };
     if (team) {
       join(other, 'other');
@@ -201,7 +206,8 @@ describe('prediction against the room', () => {
     }
 
     const pred = createPredictor(map);
-    pred.you(team, team);
+    pred.you(team, team, role);
+    const kit = kitOf(role, def);
     const ref: PlayerState = spawn(team, world, 0, team);
     const inputs: { at: number; data: ArrayBuffer }[] = [];
     const snaps: { at: number; data: ArrayBuffer }[] = [];
@@ -275,7 +281,7 @@ describe('prediction against the room', () => {
     steps.forEach((i, k) => {
       const input = pred.step(i, k * STEP);
       const had = ref.ammo;
-      const fired = step(ref, input, map, team);
+      const fired = step(ref, input, map, team, true, [], kit);
       shots += +(fired === STRIKE.SHOT);
       cuts += +(fired === STRIKE.CUT);
       lobs += +(fired === STRIKE.NADE);
@@ -414,6 +420,19 @@ describe('prediction against the room', () => {
       // With a lag the replay had work to do: the host state was behind the predicted one.
       expect(r.behind, `${name} lag`).toBeGreaterThanOrEqual(name === 'none' ? 0 : 0.1);
     }
+  }, 60_000);
+
+  it('agrees with the host exactly for a ninja on a run of every move, under every lag', () => {
+    for (const [name, lag] of LAGS) {
+      const r = race(lag, COURSE.inputs, 0, [], [], false, { role: ROLE.NINJA });
+      expect(r.worst, `${name} lag`).toBe(0);
+      expect(r.end, `${name} lag`).toBe(0);
+      expect(r.differing, `${name} lag`).toEqual([]);
+    }
+    // A guard: the ninja did not fly the marine's course.
+    expect(race(LAGS[1][1], COURSE.inputs, 0, [], [], false, { role: ROLE.NINJA }).at).not.toEqual(
+      race(LAGS[1][1], COURSE.inputs).at,
+    );
   }, 60_000);
 
   /**

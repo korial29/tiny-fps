@@ -75,7 +75,8 @@ import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
 import { armor } from './armor';
-import { CUFF, CUFF_SIDES, body, palette, skin } from './skin';
+import { CUFF, CUFF_SIDES, REGION, body, palette, skin } from './skin';
+import { CLOTH } from './mask';
 import { createTrail } from './trail';
 
 export type Solved = ReturnType<typeof solve>;
@@ -101,8 +102,8 @@ export interface Body {
   pose(eye: Vec3, yaw: number, pitch: number, roll?: number): Solved | undefined;
   /** Appends the body's vertices (see STRIDE) in the jacket `color`; nothing when pose() has none. */
   draw(out: number[], eye: Vec3, yaw: number, pitch: number, roll?: number, color?: number[]): void;
-  /** The own player's character (BUILD in rig.ts, PlayerInfo.body): the woman's arms are slimmer and her hands smaller, on the same grips. */
-  wear(build: number): void;
+  /** The own player's character (BUILD in rig.ts, PlayerInfo.body): the woman's arms are slimmer and her hands smaller, on the same grips; `tone` the skin he picked (the default's when absent). */
+  wear(build: number, tone?: number[], ninja?: boolean): void;
 }
 
 /** Metres the camera may be from the eye of the body and still show it: the bob is centimetres, a crouch's ease under a metre. */
@@ -980,6 +981,9 @@ const RATES = {
 export const createBody = (world?: World): Body => {
   let gait = createGait(0);
   let build = 0;
+  let tone: number[] | undefined;
+  /** The ninja's black suit, with no armour (soldier.ts). */
+  let ninja = false;
   /** The own player as last seen. */
   let me: PlayerState | undefined;
   const w = {
@@ -1609,7 +1613,8 @@ export const createBody = (world?: World): Body => {
     },
     update,
     pose,
-    wear(b) {
+    wear(b, t, n = false) {
+      [tone, ninja] = [t, n];
       if (b != build) {
         // Her own skeleton: a gait of its own, in the pose of the player at once.
         [build, gait] = [b, createGait(0, b)];
@@ -1623,13 +1628,18 @@ export const createBody = (world?: World): Body => {
       if (s) {
         // An armoured suit (see palette()): its gloves cover the fingers too; white armour in space,
         // else in the team's colour.
-        const suit = !!world?.def.armor;
+        const suit = !!world?.def.armor && !ninja;
         const plate = world?.def.helmets ? undefined : color;
-        const colors = palette(color, undefined, undefined, suit);
+        const colors = palette(ninja ? CLOTH : color, undefined, undefined, suit, tone);
+        if (ninja) {
+          const { PANTS, UPPER, GLOVE } = REGION;
+          [colors[PANTS], colors[UPPER], colors[GLOVE]] = [CLOTH, CLOTH, CLOTH];
+        }
         const from = out.length;
         skin(out, body(2, build), s, colors);
-        if (suit) {
-          armor(out, from, body(2, build), true, plate);
+        // The ninja's own plates in his team's colour (soldier.ts).
+        if (world?.def.armor) {
+          armor(out, from, body(2, build), true, plate, ninja);
         }
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
         // The right thumb presses the button of the katana or the plasma gun as it comes on.

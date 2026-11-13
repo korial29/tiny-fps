@@ -1,11 +1,15 @@
 import { BOLT, HP_MAX, LOCK_WIN, PLAYER_H, PLAYER_R, TICK_HZ, VEHICLE } from '../shared/constants';
-import { MAPS, mapKey, mapOf } from '../shared/maps';
+import { mapKey, mapOf } from '../shared/maps';
 import { eyeHeight, heightOf } from '../shared/physics';
 import { cylinder } from '../shared/plasma';
 import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ClientText, ServerText } from '../shared/protocol';
 import { FLAG, KEY, MODE } from '../shared/types';
-import type { PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
+import type { Choice, PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
+import { ROLE, roleOf, rolesOf } from '../shared/kit';
+import { TONES, toneOf } from './features';
+import { styleOf } from './hair';
+import { shaved } from './skin';
 import { SOUND } from './sfx';
 import { aimOf, gap2, struck } from '../shared/rover';
 import { SHIP, limits } from '../shared/ship';
@@ -31,7 +35,7 @@ import { createPredictor } from './predict';
 import { gather } from './lights';
 import { marks } from './marks';
 import { packsOf } from './props';
-import { createRenderer } from './render';
+import { HEAD, createRenderer } from './render';
 import { createWrecks } from './wreck';
 import type { Renderer } from './render';
 
@@ -52,7 +56,8 @@ export interface TinyFpsOptions {
   body?: number;
 }
 
-export type TinyFpsEvent = 'roster' | 'open' | 'close';
+/** quit: the player left from the pause menu (Escape, then Quit); the page decides where he goes. */
+export type TinyFpsEvent = 'roster' | 'open' | 'close' | 'quit';
 
 export interface TinyFps {
   on(ev: TinyFpsEvent, cb: () => void): void;
@@ -80,7 +85,12 @@ const NEAR_HULL = [14, 24];
  * same connection: the room keeps the player, his team and the host.
  */
 export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps => {
-  const listeners: Record<TinyFpsEvent, (() => void)[]> = { roster: [], open: [], close: [] };
+  const listeners: Record<TinyFpsEvent, (() => void)[]> = {
+    roster: [],
+    open: [],
+    close: [],
+    quit: [],
+  };
   const emit = (ev: TinyFpsEvent) => listeners[ev].forEach(cb => cb());
   const ws = opts.socket ?? (new WebSocket(opts.url!) as unknown as SocketLike);
   ws.binaryType = 'arraybuffer';
@@ -103,7 +113,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       close: () => {},
     };
     port = p;
-    scene = play(container, map, p);
+    scene = play(container, map, p, () => emit('quit'));
     if (up) {
       p.onopen?.();
     }
@@ -162,7 +172,12 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
 };
 
 /** The game on one map, talking through `ws`: the scene, the HUD, the input, the sound. */
-const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy(): void } => {
+const play = (
+  container: HTMLElement,
+  key: string,
+  ws: SocketLike,
+  quit = () => {},
+): { destroy(): void } => {
   const wrap = document.createElement('div');
   const root = wrap.attachShadow({ mode: 'open' });
   root.innerHTML =
@@ -179,7 +194,16 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
   const count = root.querySelector('p')!;
   const screen = root.querySelector('div')!;
   // The title screen's button is a click on the canvas: the pointer lock and the sound start there.
-  const hud = createHud(screen, () => canvas.click());
+  const hud = createHud(
+    screen,
+    () => canvas.click(),
+    () => {
+      document.exitPointerLock?.();
+      quit();
+    },
+  );
+  /** The player has been in the game: Escape then opens the pause menu. */
+  let started = false;
 
   const world = build(mapOf(key));
   const predictor = createPredictor(world);
@@ -212,9 +236,13 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
   const rails = world.def.teams.map(t => t.rail);
   const rifles = world.def.teams.map(t => t.rifle);
   let roster: PlayerInfo[] = [];
-  /** The title screen's character cards: a choice goes to the host, whose roster dresses everyone. */
-  const cards = hud.cast(body => ws.send(JSON.stringify({ t: 'body', body } satisfies ClientText)));
-  /** Whose pictures the cards show: the own id and colour. */
+  /** What the own player picked, as last told or answered: drawn at once, and sent to the host, whose roster dresses everyone. */
+  let picked: Choice & { body: number } = { body: 0 };
+  const avatar = hud.cast(c => {
+    picked = c;
+    ws.send(JSON.stringify({ t: 'body', ...c } satisfies ClientText));
+  });
+  /** What the live picture shows: the own id, colour and choice. */
   let drawn = '';
   /** The own player's id and team, from the roster. */
   let you = { id: -1, team: 0 };
@@ -318,19 +346,36 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
       roster = m.players;
       colors = new Map(roster.map(p => [p.id, p.color]));
       names = new Map(roster.map(p => [p.id, p.name]));
-      rd?.wear(new Map(roster.map(p => [p.id, p.body ?? 0])));
-      you = { id: m.you, team: roster.find(p => p.id == m.you)?.team ?? 0 };
-      body.wear(roster.find(p => p.id == m.you)?.body ?? 0);
-      hud.wear(roster.find(p => p.id == m.you)?.body ?? 0);
-      predictor.you(you.id, you.team);
-      hud.maps(
-        Object.entries(MAPS).map(([k, d]) => [k, d.name ?? k]),
-        key,
-        m.next,
-        names.get(m.host ?? -1) ?? '?',
-        m.host == you.id,
-        map => ws.send(JSON.stringify({ t: 'map', map } satisfies ClientText)),
+      rd?.wear(
+        new Map(roster.map(p => [p.id, p.body ?? 0])),
+        new Map(
+          roster.map(({ id, tone, hair, role }) => [
+            id,
+            { tone, hair, role: roleOf(role, world.def) },
+          ]),
+        ),
       );
+      const own = roster.find(p => p.id == m.you);
+      you = { id: m.you, team: own?.team ?? 0 };
+      const build = own?.body ?? 0;
+      picked = { body: build, tone: own?.tone, hair: own?.hair, role: own?.role };
+      body.wear(
+        build,
+        own?.tone === undefined ? undefined : TONES[own.tone],
+        roleOf(own?.role, world.def) == ROLE.NINJA,
+      );
+      // The title screen shows what his id gives where he has picked nothing: his skin and cut as drawn.
+      hud.wear(
+        build,
+        {
+          tone: own?.tone ?? TONES.indexOf(toneOf(m.you)),
+          hair: own?.hair ?? (build ? styleOf(m.you) : shaved(m.you) ? 0 : undefined),
+          role: roleOf(own?.role, world.def),
+        },
+        rolesOf(world.def),
+      );
+      predictor.you(you.id, you.team, own?.role);
+      // No map to pick in the game's menu (the user, 2026-11-13): it is the join page's choice.
       count.textContent = `Players: ${roster.length}`;
     } else if (m?.t == 'end') {
       ended = { score: m.score, players: m.players };
@@ -526,11 +571,18 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
     const shown = wrecks.frame(rovers, dt, eye);
     if (me && rd) {
       // The cards' pictures, once the own player and his colour are known: drawn before the frame, which then takes the canvas back.
-      const mine = `${you.id}${colors.get(you.id)}`;
+      const mine = `${you.id}${colors.get(you.id)}${JSON.stringify(picked)}`;
       if (!ctl.locked() && drawn != mine && colors.has(you.id)) {
-        drawn = cards.every((c, build) => rd!.portrait(c, me, build, colors.get(you.id)!))
-          ? mine
-          : drawn;
+        const color = colors.get(you.id)!;
+        // Dressed as the class he plays here.
+        const look = { ...picked, role: roleOf(picked.role, world.def) };
+        drawn = rd.portrait(avatar, me, picked.body, color, look) ? mine : drawn;
+        // Each haircut on offer, on his own head (none under a space helmet, which hides it).
+        if (!world.def.helmets) {
+          hud
+            .heads()
+            .forEach((c, hair) => rd!.portrait(c, me, picked.body, color, { ...look, hair }, HEAD));
+        }
       }
       rd.frame(
         pov,
@@ -630,8 +682,19 @@ const play = (container: HTMLElement, key: string, ws: SocketLike): { destroy():
       }
     }
 
+    started ||= ctl.locked();
+    hud.paused(started);
     hud.title(
-      msg || (!open ? 'Connecting…' : !ready ? 'Joining…' : ctl.locked() ? '' : 'Click to play'),
+      msg ||
+        (!open
+          ? 'Connecting…'
+          : !ready
+            ? 'Joining…'
+            : ctl.locked()
+              ? ''
+              : started
+                ? 'Resume'
+                : 'Click to play'),
       world.def.name ?? '',
       world.def.tag,
       world.def.lore,

@@ -136,8 +136,9 @@ export const localSocket = (room: string, rules?: Partial<Rules>): SocketLike =>
     if (m?.t === 'join') {
       join = data as string;
     } else if (m?.t === 'body' && join) {
-      // A new host is joined as the character last picked.
-      join = JSON.stringify({ ...parseText<ClientText>(join), body: m.body });
+      // A new host is joined as the character last picked: body, skin, haircut and class.
+      const { name } = parseText<Extract<ClientText, { t: 'join' }>>(join)!;
+      join = JSON.stringify({ ...m, t: 'join', name });
     }
     if (game) {
       game.receive(self, data);

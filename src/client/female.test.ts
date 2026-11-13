@@ -298,8 +298,8 @@ describe('her hands on the weapons', () => {
 describe('her hair', () => {
   const ids = Array.from({ length: 200 }, (_, i) => i);
   it('is one of five styles by her id, the same every time, each one someone’s', () => {
-    expect(new Set(ids.map(styleOf)).size).toBe(STYLES);
-    expect(ids.map(styleOf)).toEqual(ids.map(styleOf));
+    expect(new Set(ids.map(id => styleOf(id))).size).toBe(STYLES);
+    expect(ids.map(id => styleOf(id))).toEqual(ids.map(id => styleOf(id)));
     expect(ids.every(id => tressOf(id) == tressOf(id) && tressOf(id)[0] != 0.47)).toBe(true);
   });
   it.each(Object.entries(STYLE))(

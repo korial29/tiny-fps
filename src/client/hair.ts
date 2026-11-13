@@ -13,8 +13,9 @@ import { HAIRLINE_F, TOP, bindOf, scalp } from './skin';
 export const STYLE = { PONYTAIL: 0, BOB: 1, BUN: 2, BRAID: 3, UNDERCUT: 4 } as const;
 export const STYLES = Object.keys(STYLE).length;
 
-/** The hair style of the woman `id`: the same for everyone who sees her. */
-export const styleOf = (id: number): number => Math.floor(hash(id, 311) * STYLES);
+/** The hair style of the woman `id`: the one she picked (`c.hair`), else her id's, the same for everyone who sees her. */
+export const styleOf = (id: number, c?: { hair?: number }): number =>
+  c?.hair ?? Math.floor(hash(id, 311) * STYLES);
 
 /** The woman's head to the man's (SCALE in skin.ts), and the lowest a style may hang on the man's head at rest, metres: the chin's height. */
 export const [HEAD_SCALE, LOWEST] = [0.96, 1.592];

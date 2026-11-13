@@ -5,6 +5,7 @@
 // crotch by sharing its vertices, so normals flow over the joins. Clothes are colour regions of
 // the triangles. See rig.ts for the joints and the pose.
 import { LIMB } from '../shared/types';
+import type { Choice } from '../shared/types';
 import { BUILD, JOINT as J, JOINTS, RESTS, mul, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
 import type { Vec3 } from './mesh';
@@ -20,7 +21,7 @@ import {
   PUPIL_R,
   TONES,
   hash,
-  toneOf,
+  toneFor,
   ball,
   iris,
   lid,
@@ -65,6 +66,8 @@ const [
   BLUSH,
   TEETH,
 ] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
+/** The regions a runner's outfit is recoloured or covered by: the skin, the trousers, the boots, the gloves, the stripes and the belt. */
+export const REGION = { FLESH, PANTS, UPPER, GLOVE, STRIPE, STRIPE_LOW, BELT };
 
 /** Hair colours, one per runner (hairOf(), by his skin too): black, dark and mid brown, chestnut, red, dark and light blond, grey, and a shaved head, the skin's in its shadow. */
 const HAIRS = [
@@ -91,28 +94,31 @@ const IRISES = [
 const pick = (id: number, salt: number, n: number) =>
   (Math.imul(id + 1, 0x9e3779b1 + salt) >>> 0) % n;
 
-/** A hair colour for the runner `id`, picked at random from HAIRS but the same for everyone who sees him. */
-export const hairOf = (id: number): number[] => {
+/** A hair colour for the runner `id`, picked at random from HAIRS but the same for everyone who sees him; his haircut (`c.hair`, look.ts) says whether he is shaved. */
+export const hairOf = (id: number, c?: Choice): number[] => {
+  if (c?.hair !== undefined) {
+    return c.hair ? tressOf(id, c) : HAIRS[HAIRS.length - 1];
+  }
   const h = pick(id, 0, HAIRS.length);
   // On the two darkest skins the hair is dark, or shaved.
-  return HAIRS[dark(id) && h > 2 && h < 8 ? h % 3 : h];
+  return HAIRS[dark(id, c) && h > 2 && h < 8 ? h % 3 : h];
 };
 /** The hair colour of the woman `id`: as hairOf(), never the shaved head's (her hair is a style of hair.ts). */
-export const tressOf = (id: number): number[] => {
+export const tressOf = (id: number, c?: Choice): number[] => {
   const h = pick(id, 0, HAIRS.length - 1);
-  return HAIRS[dark(id) && h > 2 ? h % 3 : h];
+  return HAIRS[dark(id, c) && h > 2 ? h % 3 : h];
 };
-const dark = (id: number) => TONES.indexOf(toneOf(id)) > 3;
+const dark = (id: number, c?: Choice) => TONES.indexOf(toneFor(id, c)) > 3;
 
 /** How dark the shaved beard of the runner `id` is, 0 (none) to 1. */
 export const beardOf = (id: number): number => Math.floor(hash(id, 99) * 4) / 3;
 
 /** Whether the runner `id` has a shaved head (the last of HAIRS): no hair to give a length to. */
-export const shaved = (id: number): boolean => hairOf(id) == HAIRS[HAIRS.length - 1];
+export const shaved = (id: number, c?: Choice): boolean => hairOf(id, c) == HAIRS[HAIRS.length - 1];
 
 /** An iris colour for the runner `id`, as hairOf(). */
-export const eyesOf = (id: number): number[] =>
-  IRISES[pick(id, 0x2468, IRISES.length) % (dark(id) ? 2 : IRISES.length)];
+export const eyesOf = (id: number, c?: Choice): number[] =>
+  IRISES[pick(id, 0x2468, IRISES.length) % (dark(id, c) ? 2 : IRISES.length)];
 
 /** Jacket, its darker trim, trousers (the suit's legs, darker), skin, hair, boots, sole, gloves, the whites of the eyes and their irises, the lips, the skin in its folds (nostrils, the mouth, the ears' hollows), the brows, between the hair and the skin, the shaved beard's shadow and its edge, the line between the lips (as the folds), the side stripe on the jacket and on the trousers and the belt (the jacket's and the trousers' own colours but on a space suit), the light caught in the eyes, which glows, and the cut's cauterized face, which glows too. */
 /**

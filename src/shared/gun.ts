@@ -7,13 +7,11 @@
 // a fall and a respawn the way the host plays them.
 import { cutOf, swingOf } from './blade';
 import {
-  AMMO_MAX,
   CHARGE_MAX,
   CHARGE_TAP,
   CHARGE_TICKS,
   CUTS,
   DASH_COOLDOWN,
-  GUN_COOLDOWN,
   GUN_MAG,
   GUN_RELOAD,
   HEAVY_MAX,
@@ -30,16 +28,15 @@ import {
   HEAT_LOCK,
   HEAT_MAX,
   RAIL_CAP,
-  RAIL_MAX,
   RAIL_SPEND,
   RAIL_RELOAD,
   RIFLE_CLIP,
-  RIFLE_COOL,
-  RIFLE_MAX,
   RIFLE_RELOAD,
   SPECIAL_LATE,
   PUNCH,
 } from './constants';
+import { KITS } from './kit';
+import type { Kit } from './kit';
 import { forward, move, respawn } from './physics';
 import type { Body } from './physics';
 import { CUT, EV, KEY, MODE, SPECIAL_CUT } from './types';
@@ -115,10 +112,11 @@ export const step = (
   team: number,
   armed = true,
   bodies: readonly Body[] = [],
+  kit: Kit = KITS[0],
 ): Strike => {
   const down = p.down > 0;
   const locked = !down && (p.lock ?? 0) > 0;
-  move(p, down || locked ? { ...i, keys: 0 } : i, w, team, bodies);
+  move(p, down || locked ? { ...i, keys: 0 } : i, w, team, bodies, kit);
   // The rail gun cools on each step its bolt did not go out, slower while it is hot.
   p.heat = Math.max(0, (p.heat ?? 0) - (p.zapping ? 0 : p.hot ? 1 : HEAT_COOL));
   p.hot = !!p.hot && p.heat > HEAT_LOCK;
@@ -138,20 +136,24 @@ export const step = (
   const { rack, blade, rail, rifle } = w.def.teams[team];
   const inside = !!rack && within(p, rack, RACK_R);
   if (armed && inside && !p.rack) {
-    [p.ammo, p.mag] = [AMMO_MAX, GUN_MAG];
+    [p.ammo, p.mag] = [kit.ammo, GUN_MAG];
   }
   p.rack = inside;
   p.blade = !!p.blade || (armed && !!blade && within(p, blade, RACK_R));
   const inRail = !!rail && within(p, rail, RACK_R);
   if (armed && inRail && !p.inRail) {
-    [p.rail, p.cap] = [RAIL_MAX, RAIL_CAP];
+    [p.rail, p.cap] = [kit.rail, RAIL_CAP];
   }
   p.inRail = inRail;
   const inRifle = !!rifle && within(p, rifle, RACK_R);
   if (armed && inRifle && !p.inRifle) {
-    [p.rifle, p.clip, p.nades] = [RIFLE_MAX, RIFLE_CLIP, NADE_MAX];
+    [p.rifle, p.clip, p.nades] = [kit.rifle, RIFLE_CLIP, NADE_MAX];
   }
   p.inRifle = inRifle;
+  // Never more than the class carries: a change of class keeps no marine's ammo on a ninja.
+  p.ammo = Math.min(p.ammo, kit.ammo);
+  p.rail = p.rail === undefined ? p.rail : Math.min(p.rail, kit.rail);
+  p.rifle = p.rifle === undefined ? p.rifle : Math.min(p.rifle, kit.rifle);
   p.cool = Math.max(0, p.cool - 1);
   p.lob = Math.max(0, (p.lob ?? 0) - 1);
   const busy = p.mode === MODE.HANG || p.mode === MODE.CLIMB;
@@ -167,7 +169,16 @@ export const step = (
     p.swing = swingOf(p).ticks;
   } else {
     p.charge = top ? 0 : p.charge;
-    p.swing = Math.max(0, (p.swing ?? 0) - 1);
+    // A hastier class runs the swing down faster, but stops on the tick of the wind-up's top and of
+    // the strike (the cut's, or the punch's), so neither is skipped.
+    const s = p.swing ?? 0;
+    const c = swingOf(p);
+    const stop = (v: number) =>
+      v == s - 1 &&
+      (v == c.ticks - c.strike ||
+        v == PUNCH.ticks - PUNCH.strike ||
+        (!p.heavy && v == ticks - hold));
+    p.swing = Math.max(0, kit.haste > 1 && stop(s - 1) ? s - 1 : s - kit.haste);
     p.heavy = !!p.swing && !!p.heavy;
   }
   // The battery holds no more than the player carries, and nothing without the gun: a shot never
@@ -242,7 +253,7 @@ export const step = (
       if (!p.cool && p.clip && !p.reload) {
         p.rifle!--;
         p.clip--;
-        p.cool = RIFLE_COOL;
+        p.cool = kit.rifleCool;
         p.shots = (p.shots + 1) & 255;
         return STRIKE.LASER;
       }
@@ -271,7 +282,7 @@ export const step = (
     p.ammo -= p.power;
     p.mag = p.mag! - p.power;
     p.shots = (p.shots + 1) & 255;
-    p.cool = GUN_COOLDOWN;
+    p.cool = kit.cool;
     return STRIKE.SHOT;
   }
   return STRIKE.NONE;

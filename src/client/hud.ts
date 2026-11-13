@@ -18,7 +18,9 @@ import type { Result } from '../shared/protocol';
 import { free, gap2, nearby } from '../shared/rover';
 import { SHIP } from '../shared/ship';
 import { FLAG, MODE } from '../shared/types';
-import type { PlayerState, Rover, Snapshot } from '../shared/types';
+import type { Choice, PlayerState, Rover, Snapshot } from '../shared/types';
+import { TONES } from './features';
+import { ROLE } from '../shared/kit';
 import { FH, FW, PALETTE, sprite } from './face';
 import { VISOR } from './helmet';
 import type { Mark } from './marks';
@@ -122,13 +124,26 @@ export const HUD_CSS =
   `aside article{flex:1;min-width:0;min-height:0;overflow:auto;padding:24px 26px;pointer-events:auto}` +
   `aside article:first-of-type{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:22px 30px;align-content:start}` +
   `aside h4,aside caption{margin:0 0 10px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;text-align:left;color:#8d9aa7}` +
-  // The characters: a card each, its picture and its name; the chosen one lit, like a map on the join page.
-  `aside fieldset{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;align-content:start;margin:0;padding:0;border:0;min-width:0}aside fieldset h4{grid-column:1/-1}` +
-  `aside [role=radio]{position:relative;display:grid;overflow:hidden;border-color:#26323e;border-radius:14px;background:#121a23;text-align:left;font-size:16px;font-weight:800;transition:transform .15s,border-color .15s,box-shadow .15s}` +
-  `aside [role=radio]:hover{transform:translateY(-2px);border-color:#3a4a5a}aside [role=radio] span{padding:9px 14px 11px}` +
-  `aside [aria-checked=true],aside [aria-checked=true]:hover{border-color:#f7782a;box-shadow:0 0 0 1px #f7782a,0 10px 40px -12px #f7782a88}` +
-  `aside [aria-checked=true]::after{content:"✓";position:absolute;top:8px;right:8px;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#f7782a;font:900 14px/1 system-ui,sans-serif}` +
-  `aside canvas{height:auto;aspect-ratio:3/4;cursor:inherit;background:radial-gradient(#26323e,#0d141c);filter:saturate(.85) brightness(.75);transition:filter .15s}aside [aria-checked=true] canvas,aside [role=radio]:hover canvas{filter:none}` +
+  // Paused in a game (Escape): a small menu in the middle, and the panel shows only the part it opens, with a way back.
+  `aside .pm{pointer-events:auto;display:grid;gap:10px;width:min(300px,100% - 32px);padding:24px 22px;border:1px solid #2c3a48;border-radius:16px;background:#0b1016e6;backdrop-filter:blur(14px);box-shadow:0 24px 80px #000b;color:#e9eef3;text-align:center;user-select:none}` +
+  `aside .pm strong{margin-bottom:6px;font:900 18px/1 system-ui,sans-serif;letter-spacing:.2em;color:#ffb347}aside .pm button{padding:12px;border-color:#26323e;background:#121a23;font-size:15px;font-weight:800}aside .pm button:hover{border-color:#f7782a}` +
+  `aside .pm button:first-of-type{border:0;background:linear-gradient(#ff9a4a,#e8590c);text-transform:uppercase;letter-spacing:.08em}` +
+  `aside[data-v=pause] main,aside:not([data-v=pause]) .pm,aside[data-v=controls] [role=tab],aside[data-v=character] [role=tab],aside[data-v=character] blockquote,aside[data-v=character] address{display:none}` +
+  `aside:not([data-v=controls]):not([data-v=character]) .bk{display:none}aside .bk{padding:11px 14px;text-align:left;font-size:15px;font-weight:700;color:#8d9aa7}aside .bk:hover{color:#fff}` +
+  // The character: his live picture, beside it the body, the skin and the haircut, a row of chips
+  // each; under them the class, a card each, the ones the map does not offer greyed out.
+  `aside fieldset{display:grid;grid-template-columns:150px minmax(0,1fr);gap:10px 16px;align-content:start;margin:0;padding:0;border:0;min-width:0}aside fieldset h4{grid-column:1/-1;margin:0}` +
+  `aside canvas{width:100%;height:auto;aspect-ratio:3/4;border:1px solid #26323e;border-radius:14px;cursor:inherit;background:radial-gradient(#26323e,#0d141c)}` +
+  `aside .op{display:grid;gap:5px;align-content:start}aside fieldset small{margin-top:4px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8d9aa7}` +
+  `aside [role=radiogroup]{display:flex;flex-wrap:wrap;gap:6px}aside [role=radiogroup][hidden]{display:none}` +
+  `aside .hc [role=radio]{display:grid;justify-items:center;gap:3px;width:60px;padding:4px 3px 5px;font-size:11px}aside .hc canvas{width:52px;aspect-ratio:1;border-radius:8px}aside.hm .hc canvas{display:none}` +
+  `aside [role=radio]{position:relative;padding:6px 11px;border-color:#26323e;background:#121a23;font-size:13px;font-weight:700;transition:border-color .15s,box-shadow .15s}` +
+  `aside [role=radio]:hover{border-color:#3a4a5a}aside [role=radio]:disabled{opacity:.4;cursor:not-allowed}` +
+  `aside [aria-checked=true],aside [aria-checked=true]:hover{border-color:#f7782a;box-shadow:0 0 0 1px #f7782a;color:#fff}` +
+  `aside .sw [role=radio]{width:24px;height:24px;padding:0;border-radius:50%;border:2px solid #0b1016}aside .sw [aria-checked=true]{box-shadow:0 0 0 2px #f7782a}` +
+  `aside .cl{grid-column:1/-1;display:grid;gap:6px}` +
+  `aside .cl [role=radio]{display:grid;grid-template-columns:86px 1fr;gap:2px 10px;align-items:baseline;padding:9px 12px;border-radius:12px;text-align:left}aside .cl strong{grid-row:span 2;font-size:15px;font-weight:800}` +
+  `aside .cl span{font-size:12px;font-weight:500;line-height:1.35;color:#b7c2cd}aside .cl .w{font-size:11px;font-weight:700;color:#ffb347}` +
   // The mode: its badge, its name, and the rules a line each.
   `aside blockquote{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;align-items:center;align-content:start;margin:0}aside blockquote h4,aside blockquote span{grid-column:1/-1;margin:0}` +
   `aside abbr{display:grid;place-items:center;width:46px;height:46px;border-radius:11px;background:#f7782a26;color:#ffb347;font:900 15px/1 system-ui,sans-serif;letter-spacing:.06em}aside blockquote strong{font-size:18px;font-weight:800}` +
@@ -137,16 +152,16 @@ export const HUD_CSS =
   // The map: its name, what kind of place it is, its story, and the host's buttons.
   `aside address{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 30px;padding-top:20px;border-top:1px solid #26323e;font-style:normal}aside address>*{grid-column:1}aside address h4{margin:0}aside h3{margin:0;font:900 26px/1.1 system-ui,sans-serif;letter-spacing:.02em}` +
   `aside address small{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#ffb347}aside address>span{font-size:13.5px;color:#b7c2cd}` +
-  `aside address menu{grid-area:1/2/span 4;align-self:end;position:static;transform:none;justify-content:flex-start;width:auto;max-width:300px;color:#8d9aa7}aside menu span{flex-basis:100%}` +
+  `` +
   // The controls: a table a group, in two columns; a key is a cap.
   `aside article+article{columns:2;column-gap:34px}aside table{width:100%;margin:0 0 18px;break-inside:avoid;font-size:13.5px}aside caption{margin:0 0 6px;padding-bottom:6px;border-bottom:1px solid #26323e}` +
   `aside td{padding:4px 0;vertical-align:top}aside td:first-child{width:46%;padding-right:12px;text-align:right;white-space:nowrap;opacity:1;color:#8d9aa7}aside td+td{color:#dbe3ea}` +
   `aside kbd{display:inline-block;min-width:24px;padding:2px 7px;border:1px solid #3a4a5a;border-bottom-width:2px;border-radius:6px;background:#18222c;color:#fff;font:700 12px/1.3 system-ui,sans-serif;text-align:center}` +
   `aside article[hidden]{display:none}` +
-  `@container (max-width:980px){aside address{grid-template-columns:1fr}aside address menu{grid-area:auto;margin-top:8px}}` +
+  `@container (max-width:980px){aside address{grid-template-columns:1fr}}` +
   `@container (max-width:760px){aside main{flex-direction:column}aside header{flex:none;flex-flow:row wrap;align-items:center;padding:10px 12px;border-right:0;border-bottom:1px solid #26323e}` +
   `aside header h6{margin:0 8px 0 4px;font-size:22px}aside [role=tab]{padding:8px 12px;border-left-width:1px;border-radius:10px}aside header>:last-child{margin:0 0 0 auto;padding:10px 16px}` +
-  `aside article{padding:16px}aside article:first-of-type,aside address{grid-template-columns:1fr}aside fieldset{max-width:330px}aside address menu{grid-area:auto;margin-top:8px}aside article+article{columns:1}aside td:first-child{white-space:normal}}` +
+  `aside article{padding:16px}aside article:first-of-type,aside address{grid-template-columns:1fr}aside fieldset{max-width:330px}aside article+article{columns:1}aside td:first-child{white-space:normal}}` +
   `h6{margin:0;font-size:inherit;text-shadow:none}` +
   `aside h6{align-self:center;margin-bottom:20px;font:900 36px/1 system-ui,sans-serif;letter-spacing:.04em;transform:skewX(-8deg);` +
   `background:linear-gradient(#fe6,#f92 45%,#d21);-webkit-background-clip:text;background-clip:text;color:transparent;` +
@@ -173,10 +188,6 @@ export const HUD_CSS =
   `del::before{content:"";position:absolute;inset:0;background:${RIM} 0 0/100% 100% no-repeat}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}` +
-  // The maps over the title screen, and over the end screen when the pointer is free: the host's buttons.
-  `menu{top:10px;left:50%;transform:translateX(-50%);z-index:3;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px;width:max-content;max-width:calc(100% - 24px);font-size:12px}` +
-  `menu button{font:700 13px system-ui,sans-serif;color:#fff;background:#0008;border:1px solid #fff5;border-radius:4px;padding:5px 12px;cursor:pointer;pointer-events:auto}` +
-  `menu .n{border-color:#fe6;color:#fe6;box-shadow:0 0 8px #f924}menu button:disabled{cursor:default}` +
   // The rover: the key to get in or out, over the face, and the speed where the gun's count is; at the wheel the gun, the crosshair and the visor's rim go.
   `samp{left:50%;bottom:128px;transform:translateX(-50%);padding:6px 14px;border-radius:6px;background:#0008;font:inherit;font-size:15px;white-space:nowrap}` +
   `samp var{display:inline-block;margin-right:8px;padding:1px 7px;border:1px solid #fffb;border-radius:4px;font-style:normal;font-weight:900}` +
@@ -191,12 +202,38 @@ export const HUD_CSS =
   `dfn+dfn{left:50%;top:30%;bottom:auto;transform:translateX(-50%);padding:8px 22px;font-size:clamp(14px,2.6vw,20px);background:#a10e0ecc;animation:blink .5s steps(2) infinite alternate}` +
   `@keyframes blink{to{opacity:.35}}`;
 
+/** The menu of a game paused by Escape (the user, 2026-11-12): play on, then the two parts of the title screen it opens, then leave. */
+export const PAUSE = ['Resume', 'Controls', 'Character', 'Quit'];
+
 /** The tabs of the title screen's menu, the first one shown first. */
 export const TABS = ['Game', 'Controls'];
 
-/** The characters' first names (the user, 2026-11-11: names, not "man" and "woman"), in BODY's order, and the size of a card's picture in pixels. */
+/** The characters' first names (the user, 2026-11-11: names, not "man" and "woman"), in BODY's order, and the size of the character's picture in pixels. */
 export const CAST = ['Kai', 'Nova'];
 export const SHOT = [300, 400];
+/** The size of a haircut's picture, pixels. */
+export const HEAD_PX = 112;
+
+/** The haircuts of each body, in HAIRS_N's order: the man's by length (LENGTHS, soldier.ts), the woman's STYLE (hair.ts). */
+export const HAIR_NAMES = [
+  ['Shaved', 'Buzz', 'Short', 'Full'],
+  ['Ponytail', 'Bob', 'Bun', 'Braid', 'Undercut'],
+];
+
+/** The classes, in ROLE's order (kit.ts): the name, what it does, and where it plays. */
+export const ROLES: [name: string, does: string, where: string][] = [
+  ['Marine', 'Full ammo and rate of fire, the standard moves.', 'City maps'],
+  [
+    'Ninja',
+    'Runs faster, jumps higher, wall-runs twice as long, chains 3 dashes, cuts twice as fast. Half the ammo, half the rate of fire.',
+    'City maps',
+  ],
+  ['Astronaut', 'The space suit, in the moon’s low gravity.', 'Moon only'],
+];
+
+/** A skin tone (TONES, linear) as a CSS colour. */
+const swatch = (t: number[]) =>
+  `rgb(${t.map(v => Math.round(255 * Math.min(1, v) ** (1 / 2.2))).join()})`;
 
 /** Capture the flag in a few lines, with the room's default rules. */
 export const GOAL = [
@@ -323,23 +360,18 @@ export interface Hud {
    */
   title(status: string, name: string, tag?: string, lore?: string): void;
   /**
-   * The character cards of the title screen: `pick` is told the BODY of the card the player
-   * chooses. Returns the cards' canvases, in BODY's order, for their pictures (SHOT pixels).
+   * Whether the player has been in the game: then the title screen opens on the pause menu (PAUSE)
+   * rather than the whole panel, until he plays again.
    */
-  cast(pick: (body: number) => void): HTMLCanvasElement[];
+  paused(on: boolean): void;
   /**
-   * The maps in the title screen's Game panel, [key, name] each: the one the next match plays (`next`, else
-   * `played`) stands out. They are buttons that `pick` when the own player is the host (`mine`),
-   * read-only for the others; `host` is his name.
+   * The character on the title screen: `pick` is told the whole choice (the body, the skin, the
+   * haircut, the class) each time the player changes a part of it. Returns the canvas of his live
+   * picture (SHOT pixels).
    */
-  maps(
-    list: [string, string][],
-    played: string,
-    next: string | undefined,
-    host: string,
-    mine: boolean,
-    pick: (key: string) => void,
-  ): void;
+  cast(pick: (c: Choice & { body: number }) => void): HTMLCanvasElement;
+  /** The pictures of the haircuts on offer, in their order (HEAD_PX square): the own head with each. */
+  heads(): HTMLCanvasElement[];
   /** Shows or hides the muted mark. */
   mute(on: boolean): void;
   /**
@@ -381,8 +413,12 @@ export interface Hud {
   hit(): void;
   /** The face over the health, frame `n` of face.ts (-1 hides it). */
   face(n: number): void;
-  /** The own player's character (BODY): the face is hers when she is the woman, and her card is the chosen one. */
-  wear(body: number): void;
+  /**
+   * The own player's character (BODY): the face is hers when she is the woman. `c` is what the
+   * roster says he picked, shown chosen on the title screen, and `roles` the classes the map offers
+   * (ROLE): the others are greyed out.
+   */
+  wear(body: number, c?: Choice, roles?: number[]): void;
   /**
    * A saber lock: the gauge of the tug of war under the crosshair, with `lead` the own side's, -1
    * (the foe wins) to 1 (he wins); undefined hides it.
@@ -435,21 +471,28 @@ export const clock = (s: number): string => `${Math.floor(s / 60)}:${`${s % 60}`
  * Appends the HUD to `screen`, whose stylesheet has HUD_CSS. `play` is the title screen's button:
  * the click that starts the game (the panel takes its other clicks, the view round it plays too).
  */
-export const createHud = (screen: HTMLElement, play = () => {}): Hud => {
+export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {}): Hud => {
   screen.insertAdjacentHTML(
     'beforeend',
-    `<aside hidden><main><header><h6>TINY FPS</h6>` +
+    `<aside hidden><span class="pm"><strong>PAUSED</strong>${PAUSE.map(t => `<button>${t}</button>`).join('')}</span>` +
+      `<main><header><h6>TINY FPS</h6>` +
       TABS.map(
         (t, i) => `<button role="tab" aria-selected="${!i}" tabindex="${i && -1}">${t}</button>`,
       ).join('') +
-      `<button><strong></strong></button></header>` +
-      `<article role="tabpanel"><fieldset role="radiogroup" aria-label="Character"><h4>Character</h4>` +
-      CAST.map(
-        (c, i) =>
-          `<button role="radio" aria-checked="${!i}" tabindex="${i && -1}"><canvas width="${SHOT[0]}" height="${SHOT[1]}"></canvas><span>${c}</span></button>`,
-      ).join('') +
+      `<button class="bk">← Back</button><button><strong></strong></button></header>` +
+      `<article role="tabpanel"><fieldset><h4>Character</h4><canvas width="${SHOT[0]}" height="${SHOT[1]}"></canvas><span class="op">` +
+      `<span role="radiogroup" aria-label="Body">${CAST.map(c => `<button role="radio">${c}</button>`).join('')}</span>` +
+      `<small>Skin</small><span role="radiogroup" aria-label="Skin" class="sw">${TONES.map(
+        (t, i) =>
+          `<button role="radio" aria-label="Skin ${i + 1}" style="background:${swatch(t)}"></button>`,
+      ).join('')}</span>` +
+      `<small>Hair</small><span role="radiogroup" aria-label="Hair" class="hc"></span></span>` +
+      `<h4>Class</h4><span role="radiogroup" aria-label="Class" class="cl">${ROLES.map(
+        ([n, does, where]) =>
+          `<button role="radio"><strong>${n}</strong><span>${does}</span><span class="w">${where}</span></button>`,
+      ).join('')}</span>` +
       `</fieldset><blockquote><h4>Game mode</h4><abbr>CTF</abbr><strong>Capture the flag</strong>${GOAL.map(l => `<span>${l}</span>`).join('')}</blockquote>` +
-      `<address><h4>Map</h4><h3></h3><small></small><span></span><menu hidden></menu></address></article>` +
+      `<address><h4>Map</h4><h3></h3><small></small><span></span></address></article>` +
       `<article role="tabpanel" hidden>${CONTROLS.map(
         ([group, rows]) =>
           `<table><caption>${group}</caption>${rows
@@ -473,14 +516,12 @@ export const createHud = (screen: HTMLElement, play = () => {}): Hud => {
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
   );
   const one = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
-  const [muted, menu, maps] = ['h5', 'aside', 'menu'].map(t => one(t));
-  /** The name of the map the host picked for the next match, for the end screen. */
-  let soon = '';
+  const [muted, menu] = ['h5', 'aside'].map(t => one(t));
   const [name, tag, lore, status] = ['h3', 'address small', 'address>span', 'header strong'].map(
     t => one(`aside ${t}`),
   );
   const all = (sel: string) => [...menu.querySelectorAll<HTMLElement>(sel)];
-  const [tabs, panels, cards] = ['[role=tab]', 'article', '[role=radio]'].map(all);
+  const [tabs, panels, groups] = ['[role=tab]', 'article', '[role=radiogroup]'].map(all);
   /** The one of `list` that is on, by its ARIA state `attr`: it alone is in the Tab order, the arrows go to the others. */
   const turn = (list: HTMLElement[], attr: string, on: number) =>
     list.forEach((el, i) => {
@@ -506,13 +547,83 @@ export const createHud = (screen: HTMLElement, play = () => {}): Hud => {
     panels.forEach((p, k) => (p.hidden = k != i));
   });
   one('header>:last-child').onclick = play;
-  let chose = (_body: number) => {};
-  arrows(cards, i => {
-    if (cards[i].getAttribute('aria-checked') != 'true') {
-      turn(cards, 'aria-checked', i);
-      chose(i);
+  // The pause menu: what it shows (data-v): the menu, or the part of the panel it opened.
+  let started = false;
+  const view = (v: string) => {
+    menu.dataset.v = v;
+    tabs[+(v == 'controls')].click();
+  };
+  const [resume, controls, character, leave] = [
+    ...menu.querySelectorAll<HTMLElement>('.pm button'),
+  ];
+  resume.onclick = play;
+  controls.onclick = () => view('controls');
+  character.onclick = () => view('character');
+  leave.onclick = quit;
+  one('.bk').onclick = () => view('pause');
+  // The character's choice, in the order of its groups: body, skin, haircut, class.
+  const KEYS = ['body', 'tone', 'hair', 'role'] as const;
+  let picked: Choice & { body: number } = { body: 0 };
+  let chose = (_: Choice & { body: number }) => {};
+  const radios = (k: number) => [...groups[k].children] as HTMLButtonElement[];
+  /** The woman's haircuts or the man's. */
+  const cuts = (body: number) =>
+    groups[2].replaceChildren(
+      ...HAIR_NAMES[body].map(n => {
+        const b = document.createElement('button');
+        b.setAttribute('role', 'radio');
+        b.innerHTML = `<canvas width="${HEAD_PX}" height="${HEAD_PX}"></canvas>${n}`;
+        return b;
+      }),
+    );
+  /** Each group's pick lit and in the Tab order; with none, its first is. The ninja's hood hides the hair: no haircut to pick. */
+  const lit = () => {
+    KEYS.forEach((k, g) => {
+      const on = picked[k] ?? -1;
+      turn(radios(g), 'aria-checked', on);
+      radios(g)[0].tabIndex = on < 0 ? 0 : radios(g)[0].tabIndex;
+    });
+    const hooded = picked.role == ROLE.NINJA;
+    groups[2].hidden = hooded;
+    (groups[2].previousElementSibling as HTMLElement).hidden = hooded;
+  };
+  const choose = (g: number, i: number) => {
+    const b = radios(g)[i];
+    if (!b || b.disabled || b.getAttribute('aria-checked') == 'true') {
+      return;
     }
+    picked = { ...picked, [KEYS[g]]: i };
+    if (g == 0) {
+      // Another body: its own haircuts, his id's until he picks one.
+      delete picked.hair;
+      cuts(i);
+    }
+    lit();
+    chose(picked);
+  };
+  groups.forEach((group, g) => {
+    group.onclick = e => {
+      const b = (e.target as Element).closest('[role=radio]');
+      choose(g, radios(g).indexOf(b as HTMLButtonElement));
+    };
+    group.onkeydown = e => {
+      const d = +/^Arrow(Down|Right)/.test(e.code) - +/^Arrow(Up|Left)/.test(e.code);
+      const all = radios(g);
+      const at = all.indexOf(e.target as HTMLButtonElement);
+      if (d && at >= 0) {
+        e.preventDefault();
+        // The next one the map offers, round.
+        let to = at;
+        do {
+          to = (to + d + all.length) % all.length;
+        } while (all[to].disabled && to != at);
+        choose(g, to);
+        all[to].focus();
+      }
+    };
   });
+  cuts(0);
+  lit();
   const set = (el: HTMLElement, text: string) => el.textContent != text && (el.textContent = text);
   const bar = one('nav');
   const [red, time, blue] = [...bar.querySelectorAll<HTMLElement>('span, time')];
@@ -549,31 +660,25 @@ export const createHud = (screen: HTMLElement, play = () => {}): Hud => {
         // A tab or a card that kept the focus would take the game's Space and Enter.
         menu.querySelector<HTMLElement>(':focus')?.blur();
       }
+      if (menu.hidden && text && started) {
+        view('pause');
+      }
       menu.hidden = !text;
-      maps.hidden = !maps.childElementCount;
       set(name, map);
       set(tag, kind);
       set(lore, story);
       set(status, text);
     },
+    paused(on) {
+      if (on != started && !on) {
+        view('');
+      }
+      started = on;
+    },
+    heads: () => [...groups[2].querySelectorAll('canvas')],
     cast(pick) {
       chose = pick;
-      return cards.map(c => c.querySelector('canvas')!);
-    },
-    maps(list, played, next, host, mine, pick) {
-      const label = document.createElement('span');
-      label.textContent = mine ? 'You host. Map of the next match:' : `${host} hosts. Map:`;
-      maps.replaceChildren(label);
-      soon = '';
-      for (const [key, name] of list) {
-        const b = document.createElement('button');
-        b.textContent = key == played && next ? `${name} (now)` : name;
-        b.disabled = !mine;
-        b.className = key == (next ?? played) ? 'n' : '';
-        b.onclick = () => pick(key);
-        maps.append(b);
-        soon = key == next ? name : soon;
-      }
+      return groups[0].closest('fieldset')!.querySelector('canvas')!;
     },
     mute: on => (muted.hidden = !on),
     match(m, who) {
@@ -611,7 +716,11 @@ export const createHud = (screen: HTMLElement, play = () => {}): Hud => {
         set(text, `${m.kind === 'base' ? 'Base ' : ''}${m.text}`);
       });
     },
-    visor: on => (rim.hidden = !on),
+    visor: on => {
+      rim.hidden = !on;
+      // Under a space helmet no haircut shows: no pictures of them.
+      menu.classList.toggle('hm', on);
+    },
     hurt(level) {
       const v = level < 0.01 ? '' : `${Math.min(1, level)}`;
       if (vignette.style.opacity != v) {
@@ -657,8 +766,13 @@ export const createHud = (screen: HTMLElement, play = () => {}): Hud => {
         kbd.classList.toggle('a', i == (k ? 1 : rifled ? 3 : railed ? 2 : 0));
       });
     },
-    wear(body) {
-      turn(cards, 'aria-checked', +!!body);
+    wear(body, c = {}, roles) {
+      if (+!!body != picked.body) {
+        cuts(+!!body);
+      }
+      picked = { ...c, body: +!!body };
+      radios(3).forEach((b, i) => (b.disabled = !!roles && !roles.includes(i)));
+      lit();
       if (+!!body != fem) {
         [fem, shown] = [+!!body, -1];
       }
@@ -768,7 +882,7 @@ export const createHud = (screen: HTMLElement, play = () => {}): Hud => {
           tr.style.color = TEAM_COLOR[p.team];
         }
       }
-      set(next, `Next match in ${left}${soon && ` on ${soon}`}`);
+      set(next, `Next match in ${left}`);
     },
   };
 };

@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDLE } from '../../test/teams';
 import { MAPS } from '../shared/maps';
 import { HIGHLINE } from '../shared/map';
-import { BODY, FLAG } from '../shared/types';
+import { BODY, FLAG, HAIRS_N, TONES_N } from '../shared/types';
+import { ROLE } from '../shared/kit';
+import { TONES } from './features';
 import type { FlagState } from '../shared/types';
 import { GUN_MAG, HP_MAX, RIFLE_CLIP, RULES, VEHICLE } from '../shared/constants';
 import { ROVER } from '../shared/rover';
@@ -15,7 +17,11 @@ import {
   CONTROLS,
   GOAL,
   HIT_MS,
+  HAIR_NAMES,
+  HEAD_PX,
   HUD_CSS,
+  PAUSE,
+  ROLES,
   SHOT,
   TABS,
   boarding,
@@ -43,7 +49,6 @@ describe('createHud', () => {
     const show = (map = HIGHLINE) => hud.title('Click to play', map.name!, map.tag, map.lore);
     const tabs = () => [...screen.querySelectorAll<HTMLElement>('[role=tab]')];
     const panels = () => [...screen.querySelectorAll<HTMLElement>('aside article')];
-    const cards = () => [...screen.querySelectorAll<HTMLElement>('[role=radio]')];
     const on = (list: HTMLElement[], attr: string) => list.map(el => el.getAttribute(attr));
     const press = (el: HTMLElement, code: string) =>
       el.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true, cancelable: true }));
@@ -90,41 +95,104 @@ describe('createHud', () => {
       screen.remove();
     });
 
-    it('has a card with a picture for each character in the Game panel, the man chosen first', () => {
+    const group = (label: string) => [
+      ...screen.querySelectorAll<HTMLButtonElement>(`[aria-label="${label}"] [role=radio]`),
+    ];
+    const lit = (label: string) => group(label).map(b => b.getAttribute('aria-checked') == 'true');
+
+    it('has one live picture and the body, skin, hair and class pickers in the Game panel', () => {
       show();
-      expect(cards().map(c => c.textContent)).toEqual(CAST);
-      expect(cards()).toHaveLength(Object.keys(BODY).length);
-      expect(cards().every(c => panels()[0].contains(c))).toBe(true);
-      expect(on(cards(), 'aria-checked')).toEqual(['true', 'false']);
-      const pics = hud.cast(() => {});
-      expect(pics).toEqual(cards().map(c => c.querySelector('canvas')));
-      expect(pics.map(c => [c.width, c.height])).toEqual([SHOT, SHOT]);
+      const pic = hud.cast(() => {});
+      expect([pic.width, pic.height]).toEqual(SHOT);
+      expect(panels()[0].contains(pic)).toBe(true);
+      expect(group('Body').map(b => b.textContent)).toEqual(CAST);
+      expect(group('Skin')).toHaveLength(TONES_N);
+      expect(TONES).toHaveLength(TONES_N);
+      expect(group('Hair').map(b => b.textContent)).toEqual(HAIR_NAMES[BODY.MALE]);
+      expect(group('Class').map(b => b.querySelector('strong')!.textContent)).toEqual(
+        ROLES.map(r => r[0]),
+      );
+      expect(HAIR_NAMES.map(h => h.length)).toEqual(HAIRS_N);
+      // A picture of the own head with each haircut.
+      expect(hud.heads()).toHaveLength(HAIR_NAMES[BODY.MALE].length);
+      expect(hud.heads().map(c => [c.width, c.height])[0]).toEqual([HEAD_PX, HEAD_PX]);
+      expect(lit('Body')).toEqual([true, false]);
     });
 
-    it('chooses the card clicked and tells the choice once, by a click or by the arrows', () => {
+    it('tells the whole choice on each change, and gives the woman her own haircuts', () => {
       show();
       const pick = vi.fn();
       hud.cast(pick);
-      cards()[BODY.FEMALE].click();
-      expect(on(cards(), 'aria-checked')).toEqual(['false', 'true']);
-      expect(pick.mock.calls).toEqual([[BODY.FEMALE]]);
-      // The chosen card again changes nothing.
-      cards()[BODY.FEMALE].click();
-      expect(pick).toHaveBeenCalledOnce();
-      press(cards()[BODY.FEMALE], 'ArrowLeft');
-      expect(on(cards(), 'aria-checked')).toEqual(['true', 'false']);
-      expect(pick.mock.calls).toEqual([[BODY.FEMALE], [BODY.MALE]]);
+      group('Skin')[4].click();
+      expect(pick).toHaveBeenLastCalledWith({ body: BODY.MALE, tone: 4 });
+      group('Hair')[0].click();
+      group('Class')[ROLE.NINJA].click();
+      expect(pick).toHaveBeenLastCalledWith({ body: 0, tone: 4, hair: 0, role: ROLE.NINJA });
+      // The chosen one again changes nothing.
+      group('Class')[ROLE.NINJA].click();
+      expect(pick).toHaveBeenCalledTimes(3);
+      // Another body: her haircuts, none picked until she picks one.
+      group('Body')[BODY.FEMALE].click();
+      expect(pick).toHaveBeenLastCalledWith({ body: 1, tone: 4, role: ROLE.NINJA });
+      expect(group('Hair').map(b => b.textContent)).toEqual(HAIR_NAMES[BODY.FEMALE]);
+      expect(lit('Hair')).not.toContain(true);
+      // The ninja's hood hides the hair: no haircut to pick.
+      const hair = screen.querySelector<HTMLElement>('[aria-label="Hair"]')!;
+      expect(hair.hidden).toBe(true);
+      group('Class')[ROLE.MARINE].click();
+      expect(hair.hidden).toBe(false);
+      group('Hair')[2].click();
+      expect(lit('Hair')).toEqual([false, false, true, false, false]);
     });
 
-    it('lights the card of the character the roster says, without telling it back', () => {
+    it('lights what the roster says without telling it back, and greys out the classes the map does not offer', () => {
       show();
       const pick = vi.fn();
       hud.cast(pick);
-      hud.wear(BODY.FEMALE);
-      expect(on(cards(), 'aria-checked')).toEqual(['false', 'true']);
-      hud.wear(BODY.MALE);
-      expect(on(cards(), 'aria-checked')).toEqual(['true', 'false']);
+      hud.wear(BODY.FEMALE, { tone: 2, hair: 3, role: ROLE.MARINE }, [ROLE.MARINE, ROLE.NINJA]);
+      expect(lit('Body')).toEqual([false, true]);
+      expect(lit('Skin')).toEqual([false, false, true, false, false, false]);
+      expect(lit('Hair')).toEqual([false, false, false, true, false]);
+      expect(group('Class').map(b => b.disabled)).toEqual([false, false, true]);
+      group('Class')[ROLE.ASTRONAUT].click();
       expect(pick).not.toHaveBeenCalled();
+      // On the moon: the astronaut alone.
+      hud.wear(BODY.MALE, { role: ROLE.ASTRONAUT }, [ROLE.ASTRONAUT]);
+      expect(group('Class').map(b => b.disabled)).toEqual([true, true, false]);
+      expect(lit('Class')).toEqual([false, false, true]);
+      expect(group('Hair').map(b => b.textContent)).toEqual(HAIR_NAMES[BODY.MALE]);
+    });
+
+    it('opens on a small pause menu once the player has been in the game', () => {
+      const [play, quit] = [vi.fn(), vi.fn()];
+      screen = document.createElement('div');
+      hud = createHud(screen, play, quit);
+      const v = () => menu().dataset.v ?? '';
+      const items = () => [...screen.querySelectorAll<HTMLElement>('.pm button')];
+      // The first time: the whole title screen.
+      show();
+      expect(v()).toBe('');
+      hud.title('', HIGHLINE.name!);
+      hud.paused(true);
+      show();
+      expect(v()).toBe('pause');
+      expect(items().map(b => b.textContent)).toEqual(PAUSE);
+      items()[1].click();
+      expect(v()).toBe('controls');
+      expect(panels().map(p => p.hidden)).toEqual([true, false]);
+      q('.bk').click();
+      expect(v()).toBe('pause');
+      items()[2].click();
+      expect(v()).toBe('character');
+      expect(panels().map(p => p.hidden)).toEqual([false, true]);
+      items()[0].click();
+      expect(play).toHaveBeenCalledOnce();
+      items()[3].click();
+      expect(quit).toHaveBeenCalledOnce();
+      // Escape again, after playing on: the pause menu, not the part last opened.
+      hud.title('', HIGHLINE.name!);
+      show();
+      expect(v()).toBe('pause');
     });
 
     it('sums the mode up in a few lines: the goal, the flag at home, the score and the time of a match', () => {
@@ -192,8 +260,12 @@ describe('createHud', () => {
       screen = document.createElement('div');
       hud = createHud(screen, play);
       show();
-      hud.maps([['highline', 'Highline']], 'highline', undefined, 'Ann', true, () => {});
-      const others = [...tabs(), ...cards(), q('menu button'), q('aside h3'), q('aside main')];
+      const others = [
+        ...tabs(),
+        ...screen.querySelectorAll<HTMLElement>('[role=radio]'),
+        q('aside h3'),
+        q('aside main'),
+      ];
       others.forEach(el => el.click());
       expect(play).not.toHaveBeenCalled();
       q('aside header>:last-child').click();
@@ -204,38 +276,6 @@ describe('createHud', () => {
       // The panel takes its own clicks; the dimmed view round it lets them through to the canvas.
       expect(HUD_CSS).toMatch(/aside main\{pointer-events:auto/);
       expect(HUD_CSS.split('}')[0]).toMatch(/aside,[^{]*\{[^}]*pointer-events:none/);
-    });
-
-    it('keeps the host’s maps in the Game panel: buttons for the host, the next one lit', () => {
-      show();
-      const pick = vi.fn();
-      const list: [string, string][] = [
-        ['highline', 'Highline'],
-        ['tranquility', 'Tranquility'],
-      ];
-      expect(q('menu').hidden).toBe(true);
-      hud.maps(list, 'highline', undefined, 'Ann', true, pick);
-      show();
-      const maps = q('menu');
-      expect(panels()[0].contains(maps)).toBe(true);
-      expect(maps.hidden).toBe(false);
-      expect(maps.textContent).toContain('You host');
-      const buttons = () => [...q('menu').querySelectorAll('button')];
-      expect(buttons().map(b => [b.textContent, b.disabled, b.className])).toEqual([
-        ['Highline', false, 'n'],
-        ['Tranquility', false, ''],
-      ]);
-      buttons()[1].click();
-      expect(pick).toHaveBeenCalledWith('tranquility');
-      hud.maps(list, 'highline', 'tranquility', 'Ann', true, pick);
-      expect(buttons().map(b => [b.textContent, b.className])).toEqual([
-        ['Highline (now)', ''],
-        ['Tranquility', 'n'],
-      ]);
-      // The others read them.
-      hud.maps(list, 'highline', 'tranquility', 'Ann', false, pick);
-      expect(q('menu').textContent).toContain('Ann hosts');
-      expect(buttons().every(b => b.disabled)).toBe(true);
     });
 
     it('hides when the status is empty, lets go of the focus, and is back for the next pause', () => {
@@ -268,7 +308,6 @@ describe('createHud', () => {
         expect(tags).toContain(el.tagName.toLowerCase());
       }
       // But the host's map buttons.
-      expect(HUD_CSS).toMatch(/menu button\{[^}]*pointer-events:auto/);
     });
 
     it('styles the title screen under its own tag, the key caps too: the weapon slots keep theirs', () => {

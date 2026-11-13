@@ -48,6 +48,8 @@ const join = () => {
   });
   status.textContent = server ? `Playing on ${url}` : 'Playing locally';
   game.on('close', () => (status.textContent = 'Disconnected'));
+  // Quit, from the game's pause menu: back to this page's menu.
+  game.on('quit', leave);
 };
 
 const leave = () => {

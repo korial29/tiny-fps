@@ -1,5 +1,4 @@
 import {
-  AMMO_MAX,
   AMMO_BACK,
   AMMO_PACK,
   ARC_KNOCK,
@@ -24,12 +23,10 @@ import {
   PLAYER_R,
   RAIL_CELL,
   RAIL_DRAIN,
-  RAIL_MAX,
   RAIL_TICKS,
   NADE,
   RIFLE_CLIP,
   RIFLE_HITS,
-  RIFLE_MAX,
   RULES,
   SHOCK_KNOCK,
   SHOCK_TICKS,
@@ -46,6 +43,7 @@ import {
 } from './constants';
 import { CHEST, crossing, knock, limbOf, strike, swingOf } from './blade';
 import { Ctf } from './ctf';
+import { kitOf } from './kit';
 import { shut, swing } from './doors';
 import { STRIKE, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
@@ -79,8 +77,8 @@ import {
 import type { Sight } from './rover';
 import { SHIP } from './ship';
 import { reaches, tackling } from './tackle';
-import { BODY, CUT, KEY, LIMB, MODE, NOBODY } from './types';
-import type { Conn, Every, Input, PlayerInfo, PlayerState, Rover, Rules } from './types';
+import { BODY, CUT, HAIRS_N, KEY, LIMB, MODE, NOBODY, TONES_N } from './types';
+import type { Choice, Conn, Every, Input, PlayerInfo, PlayerState, Rover, Rules } from './types';
 import { build, hidden, ray } from './world';
 import type { World, WorldDef } from './world';
 
@@ -135,6 +133,29 @@ interface Wear {
 }
 /** The two seats of a rover, the driver's first. */
 const SEATS = ['driver', 'rider'] as const;
+
+/** An index in [0, n), or undefined. */
+const index = (v: unknown, n: number): number | undefined =>
+  Number.isInteger(v) && (v as number) >= 0 && (v as number) < n ? (v as number) : undefined;
+
+/**
+ * What a player picked, only what the game knows: the woman's body (the man's is no field, so an old
+ * roster is unchanged), a skin, a haircut of that body and a class (ROLE: the map says which it offers).
+ */
+export const chosen = (m: Record<string, unknown>): Choice => {
+  const body = m.body === BODY.FEMALE ? BODY.FEMALE : undefined;
+  const [tone, hair, role] = [
+    index(m.tone, TONES_N),
+    index(m.hair, HAIRS_N[body ?? 0]),
+    index(m.role, 3),
+  ];
+  return {
+    ...(body !== undefined ? { body } : {}),
+    ...(tone !== undefined ? { tone } : {}),
+    ...(hair !== undefined ? { hair } : {}),
+    ...(role !== undefined ? { role } : {}),
+  };
+};
 
 /** First n characters (code points) of s, trimmed. */
 const cut = (s: string, n: number): string => Array.from(s).slice(0, n).join('').trim();
@@ -299,18 +320,18 @@ export class Room {
     if (typeof data === 'string') {
       const msg = parseText<ClientText>(data);
       if (p === null && msg?.t === 'join') {
-        this.join(conn, msg.name, msg.body);
+        this.join(conn, msg.name, msg);
       } else if (p && msg?.t === 'map' && p === this.host() && Object.hasOwn(MAPS, msg.map)) {
         this.next = msg.map === this.mapName ? undefined : msg.map;
         this.roster();
-      } else if (p && msg?.t === 'body' && (msg.body === BODY.FEMALE) !== !!p.info.body) {
-        // The look only: it changes at once, and the roster tells everyone.
-        if (msg.body === BODY.FEMALE) {
-          p.info.body = BODY.FEMALE;
-        } else {
-          delete p.info.body;
+      } else if (p && msg?.t === 'body') {
+        // It changes at once, and the roster tells everyone; the class is the next step's.
+        const { id, name, team, color } = p.info;
+        const info = { id, name, team, color, ...chosen(msg) };
+        if (JSON.stringify(info) !== JSON.stringify(p.info)) {
+          p.info = info;
+          this.roster();
         }
-        this.roster();
       }
       return;
     }
@@ -346,6 +367,7 @@ export class Room {
           p.info.team,
           !this.ctf.over,
           solid(this.rovers, p.state),
+          kitOf(p.info.role, this.world.def),
         );
         this.ctf.moved(p.state);
         this.tackle(p, input.view);
@@ -968,23 +990,27 @@ export class Room {
       }
       // 0 health, 1 ammo, 2 a rail cell.
       const kind = +(k >= packs.length) + +(k >= packs.length + ammo.length);
-      const wants = (q: PlayerState) =>
-        [
+      // Up to what his class carries (kit.ts).
+      const wants = ({ state: q, info }: Player) => {
+        const kit = kitOf(info.role, this.world.def);
+        return [
           q.hp < HP_MAX,
-          (q.ammo >= 0 && q.ammo < AMMO_MAX) || ((q.rifle ?? -1) >= 0 && q.rifle! < RIFLE_MAX),
-          (q.rail ?? -1) >= 0 && q.rail! < RAIL_MAX,
+          (q.ammo >= 0 && q.ammo < kit.ammo) || ((q.rifle ?? -1) >= 0 && q.rifle! < kit.rifle),
+          (q.rail ?? -1) >= 0 && q.rail! < kit.rail,
         ][kind];
-      const p = players.find(({ state: q }) => !q.down && wants(q) && within(q, at, PACK_R));
+      };
+      const p = players.find(o => !o.state.down && wants(o) && within(o.state, at, PACK_R));
       if (p) {
         const q = p.state;
+        const kit = kitOf(p.info.role, this.world.def);
         if (kind == 0) {
           q.hp = Math.min(HP_MAX, q.hp + PACK_HP);
         } else if (kind == 1) {
           // It fills the gun and the laser rifle, whichever he has.
-          q.ammo = q.ammo < 0 ? -1 : Math.min(AMMO_MAX, q.ammo + AMMO_PACK);
-          q.rifle = (q.rifle ?? -1) < 0 ? -1 : Math.min(RIFLE_MAX, q.rifle! + RIFLE_CLIP);
+          q.ammo = q.ammo < 0 ? -1 : Math.min(kit.ammo, q.ammo + AMMO_PACK);
+          q.rifle = (q.rifle ?? -1) < 0 ? -1 : Math.min(kit.rifle, q.rifle! + RIFLE_CLIP);
         } else {
-          q.rail = Math.min(RAIL_MAX, q.rail! + RAIL_CELL);
+          q.rail = Math.min(kit.rail, q.rail! + RAIL_CELL);
         }
         this.gone[k] = (kind == 1 ? AMMO_BACK : PACK_BACK) * TICK_HZ;
       }
@@ -1367,7 +1393,7 @@ export class Room {
     return [...this.peers.values()].filter(p => p !== null);
   }
 
-  private join(conn: Conn, name: unknown, body?: unknown): void {
+  private join(conn: Conn, name: unknown, picked: Record<string, unknown> = {}): void {
     const players = this.players();
     if (players.length >= this.rules.maxPlayers) {
       conn.send(JSON.stringify({ t: 'full' } satisfies ServerText));
@@ -1392,8 +1418,7 @@ export class Room {
         ),
         team,
         color: TEAM_COLOR[team],
-        // Only a body the game knows, and only when it is not the man's: an old roster is unchanged.
-        ...(body === BODY.FEMALE ? { body } : {}),
+        ...chosen(picked),
       },
       state: this.place(
         id,

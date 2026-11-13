@@ -69,6 +69,7 @@ import {
   WALLRUN_MIN_SPEED,
   WALLRUN_VY_MAX,
   WALL_AWAY,
+  WALL_KICK_BOOST,
   WALL_KICK_SPEED,
   WALL_KICK_UP,
   WALL_PARALLEL,
@@ -809,8 +810,9 @@ const run = (p: PlayerState, w: World, c: Ctl): void => {
   const s = len(tx, tz);
   if (c.jump) {
     enter(p, MODE.AIR);
-    p.vx = tx - nx * WALL_KICK_SPEED;
-    p.vz = tz - nz * WALL_KICK_SPEED;
+    const b = s > 0 ? 1 + WALL_KICK_BOOST / s : 1;
+    p.vx = tx * b - nx * WALL_KICK_SPEED;
+    p.vz = tz * b - nz * WALL_KICK_SPEED;
     leap(p, WALL_KICK_UP);
     p.jumps = AIR_JUMPS;
     p.dashes = c.kit.dashes;

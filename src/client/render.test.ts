@@ -20,6 +20,8 @@ import {
   SUN_DEPTH,
   backing,
   daylight,
+  FOG_CLIMB,
+  FOG_FAR,
   FOG_LAYER,
   FOG_RISE,
   fogDepth,
@@ -807,5 +809,23 @@ describe('no NaN out of the shaders', () => {
     expect(FRAG).toContain('nz(O+V)');
     expect(FRAG).toContain('nz(d+V)');
     expect(FRAG).toContain('d/=max(r,1e-4);');
+  });
+
+  it('keeps the fog finite in float32 at a point extrapolated kilometres off a thin face', () => {
+    // Measured on the moon (the user, 2026-11-13): a mountain face grazing an MSAA pixel's samples
+    // gave P - E = (16128, -12232, -16032) at its centre, while its neighbours were 600 m off.
+    // exp(-x) of that climb is infinite in float32, and the moon's fog density of 0 times it is NaN.
+    const eye: [number, number, number] = [21, 1.6, 127];
+    const off: [number, number, number] = [21 + 16128, 1.6 - 12232, 127 - 16032];
+    const F32_MAX = 3.4028234663852886e38;
+    for (const density of [0, 0.002]) {
+      const d = fogDepth(density, -30, eye, off);
+      expect(d).toBeGreaterThanOrEqual(0);
+      expect(d).toBeLessThan(F32_MAX);
+    }
+    // The shader bounds the same two numbers as its twin.
+    expect(Math.exp(FOG_CLIMB) * FOG_FAR).toBeLessThan(F32_MAX);
+    expect(FRAG).toContain(`D=min(length(P-E),${FOG_FAR}.)`);
+    expect(FRAG).toContain(`x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.)`);
   });
 });

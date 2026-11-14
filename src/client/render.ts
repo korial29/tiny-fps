@@ -27,7 +27,8 @@ import { craft } from './craft';
 import { rolled, rover } from './rover';
 import type { Quat } from './rig';
 import { GRIN, animate, createRunner, soldier } from './soldier';
-import { COLOURS, UNLIT, body } from './skin';
+import { COLOURS, REGION, UNLIT, body } from './skin';
+import { CLOTH } from './mask';
 import { CHANNELS } from './features';
 import { PLATE, VERT as VERT_TEXELS } from './flesh';
 import { SCRATCHED, prepare } from './armor';
@@ -101,7 +102,8 @@ const SAMPLES = 4;
 // Sm 1 and 2 pose a runner's skin and armour from the texels of Sg (flesh.ts), with no vertex
 // array: Sb the texels of the skin's vertices, of what is drawn and of the skin's corners, and
 // whether the plates take Sc[0] (Sc[1] the accent); Sq the joints' dual quaternions, Sp the
-// palette, Sw the face's weights. k() is skin() for one vertex, the rest armor() for one corner.
+// palette, Sw the face's weights. k() is skin() for one vertex (and hb the ninja's hood over it,
+// dress()), the rest armor() for one corner.
 const VERT = `#version 300 es
 layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec4 c;
 uniform mat4 m;uniform float Y;uniform vec3 J[3];uniform vec4 R[2];
@@ -109,9 +111,9 @@ uniform highp sampler2D Sg;uniform int Sm;uniform ivec4 Sb;uniform vec4 Sq[${2 *
 out vec3 P,N;out vec4 C;
 vec3 r(vec3 v){vec3 t=2.*cross(R[0].xyz,v);return v+R[0].w*t+cross(R[0].xyz,t);}
 vec4 g(int i){return texelFetch(Sg,ivec2(i&2047,i>>11),0);}
-float sh;
+float sh;vec2 hb;
 void k(int i,out vec3 x,out vec3 y){
-int b=Sb.x+i*${VERT_TEXELS};vec4 a=g(b),e=g(b+1),f=g(b+2);x=a.xyz;y=e.xyz;sh=e.w;bool z=false;
+int b=Sb.x+i*${VERT_TEXELS};vec4 a=g(b),e=g(b+1),f=g(b+2);x=a.xyz;y=e.xyz;sh=e.w;hb=g(b+3).xy;bool z=false;
 for(int j=0;j<int(f.w);j++){int q=Sb.x+int(f.z)+j*2;vec4 h=g(q);int w=int(h.w);float fw=Sw[w>>2][w&3];if(fw!=0.){x+=fw*h.xyz;y+=fw*g(q+1).xyz;z=true;}}
 if(z)y=normalize(y);
 int u=int(f.x)*2,v=int(f.y)*2;float l=a.w,s=dot(Sq[u],Sq[v])<0.?-l:l;
@@ -120,8 +122,9 @@ vec3 t=cross(E.xyz,x);x+=2.*(E.w*t+cross(E.xyz,t)+E.w*F.xyz-F.w*E.xyz-cross(F.xy
 t=cross(E.xyz,y);y+=2.*(E.w*t+cross(E.xyz,t));}
 void main(){
 if(Y>.5){vec2 q=vec2(gl_VertexID&1,gl_VertexID>>1)*4.-1.;gl_Position=vec4(q,1,1);P=J[0]*q.x+J[1]*q.y+J[2];N=vec3(0);C=vec4(0);return;}
-if(Sm==1){vec4 h=g(Sb.y+gl_VertexID);k(int(h.x),P,N);int a=int(h.y);vec3 l=Sp[a];l+=(Sp[int(h.z)]-l)*h.w;
-C=vec4(l.xy*sh,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:-1.,l.z*sh);gl_Position=m*vec4(P,1);return;}
+if(Sm==1){vec4 h=g(Sb.y+gl_VertexID);k(int(h.x),P,N);int a=int(h.y);vec3 l=Sp[a];l+=(Sp[int(h.z)]-l)*h.w;l*=sh;
+if(hb.x>=0.&&(hb.y>.5||a==${REGION.FLESH}))l=vec3(${CLOTH})+(l-vec3(${CLOTH}))*hb.x;
+C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:-1.,l.z);gl_Position=m*vec4(P,1);return;}
 if(Sm==2){int b=Sb.y+gl_VertexID*${PLATE},j,K,t;vec4 h=g(b),G4=g(b+4),R4=g(b+5);j=int(h.y);K=int(h.z);t=int(h.x)*3;
 vec3 X[3],Z[3],W3[3],M3[3];
 for(int i=0;i<3;i++)k(int(g(Sb.z+t+i).x),X[i],Z[i]);

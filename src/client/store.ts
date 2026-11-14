@@ -4,7 +4,7 @@
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import type { Quat } from './rig';
-import { room } from './verts';
+import { Verts, room } from './verts';
 import type { Out } from './verts';
 
 /** A piece built once: where its vertices start in the store and how many there are. */
@@ -63,17 +63,18 @@ export let filled = 0;
 const meshes = new Map<string, Mesh>();
 
 /** The piece `key`, made by `make` (into an empty array, at the origin) the first time it is asked for. */
-export const mesh = (key: string, make: (out: number[]) => void): Mesh => {
+export const mesh = (key: string, make: (out: Out) => void): Mesh => {
   let m = meshes.get(key);
   if (!m) {
-    const v: number[] = [];
+    // Into a Verts, as in a frame: a plain array through the same models would slow them for good (V8).
+    const v = new Verts();
     make(v);
     if (filled + v.length > stored.length) {
       const s = new Float32Array(Math.max(filled + v.length, stored.length * 2));
       s.set(stored);
       stored = s;
     }
-    stored.set(v, filled);
+    stored.set(v.a.subarray(0, v.length), filled);
     meshes.set(key, (m = { first: filled / STRIDE, count: v.length / STRIDE }));
     filled += v.length;
   }

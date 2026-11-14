@@ -8,6 +8,7 @@ import { animate, soldier } from './soldier';
 import type { Runner } from './soldier';
 import { expand, mesh, stored } from './store';
 import { traffic } from './traffic';
+import { TRAITS } from './features';
 import { pose } from '../../test/flesh';
 import type { Pieces } from './store';
 
@@ -101,13 +102,16 @@ describe('the store (store.ts): pieces built once on the GPU', () => {
           // the floats' error from their corners: a degree or two, on a few in a thousand at most.
           const [place, colour, normal, off] = apart(merged, cpu);
           expect(place).toBeLessThan(1e-4);
-          expect(colour).toBeLessThan(1e-6);
+          // The ninja's hood is worked out at rest with his face's traits (flesh.ts): with his
+          // expressions on, his bare share differs by a fraction of a level of 255.
+          expect(colour).toBeLessThan(looks.get(p.id)?.role == ROLE.NINJA ? 1e-3 : 1e-6);
           expect(normal).toBeLessThan(0.05);
           expect(off).toBeLessThan(0.01);
         }
       }
     }
-  });
+    // Every role, build, level and weapon on both maps, through the shader's twin: a minute on a slow runner.
+  }, 120_000);
 
   it('draws the traffic as the CPU does: each car placed by the GPU', () => {
     const def = MAPS.highline;
@@ -120,6 +124,44 @@ describe('the store (store.ts): pieces built once on the GPU', () => {
       expect(n).toBeGreaterThan(10);
       const [place, colour, normal] = apart(merged, cpu);
       expect(Math.max(place, colour, normal)).toBeLessThan(1e-4);
+    }
+  });
+
+  it("poses the ninja's hooded face as the CPU does, whatever it shows: the jaw stays behind the guard", () => {
+    const world = build(MAPS.highline);
+    for (const b of [0, 1]) {
+      const p = spawn(1, world, 1, 0);
+      const book = new Map<number, Runner>();
+      animate(
+        book,
+        [p],
+        1 / 60,
+        world,
+        undefined,
+        [],
+        new Map([[1, b]]),
+        new Map([[1, { role: ROLE.NINJA }]]),
+      );
+      const r = book.get(1)!;
+      // Each expression at its full, alone: the hood was worked out at rest (flesh.ts).
+      for (let ch = 0; ch < TRAITS; ch++) {
+        r.face.w.fill(0, 0, TRAITS);
+        r.face.w[ch] = 1;
+        const cpu: number[] = [];
+        soldier(cpu, r, [0.9, 0.2, 0.1], 3, false, true);
+        const list: Pieces = [];
+        soldier([], r, [0.9, 0.2, 0.1], 3, false, true, list);
+        const gpu: number[] = [];
+        list.filter(d => d.f?.kind == 1).forEach(d => pose(gpu, d));
+        let most = 0;
+        for (let i = 0; i < gpu.length; i += STRIDE) {
+          most = Math.max(
+            most,
+            Math.hypot(gpu[i] - cpu[i], gpu[i + 1] - cpu[i + 1], gpu[i + 2] - cpu[i + 2]),
+          );
+        }
+        expect(most).toBeLessThan(1e-4);
+      }
     }
   });
 });

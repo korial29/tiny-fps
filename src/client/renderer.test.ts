@@ -11,6 +11,7 @@ import { build } from '../shared/world';
 import type { Brush, World, WorldDef } from '../shared/world';
 import { craft } from './craft';
 import { createEffects } from './effects';
+import { HEAVENS } from './moonscape';
 import { teamRgb } from './flag';
 import { BEAM_RANGE, LIGHT } from './lights';
 import type { Light } from './lights';
@@ -791,6 +792,33 @@ describe('createRenderer', () => {
       expect(high.slice(1, 3)).toEqual([1, 1]);
       // A map with no relief never has one.
       expect(ob(ROOM, ORBIT.SEAM + 300)).toEqual([0, 0, 0, 0]);
+    });
+
+    it('draws the moon’s stars in the sky, and its Earth wherever the eye is, at the same angle: they are infinitely far', () => {
+      const sn = (w: World) => {
+        calls.length = 0;
+        createRenderer(canvas, w);
+        return calls.find(c => (c[1] as { u?: string } | undefined)?.u == 'Sn')?.[2];
+      };
+      expect(sn(build(MOON))).toBe(1);
+      expect(sn(ROOM)).toBe(0);
+      const rd = createRenderer(canvas, build(MOON));
+      for (const eye of [
+        [80, 2, 200],
+        [-150, 600, 400],
+      ] as [number, number, number][]) {
+        calls.length = 0;
+        rd.frame(eye, 0, 0, [], new Map(), createEffects(), []);
+        const moved = calls.filter(
+          c =>
+            (c[1] as { u?: string } | undefined)?.u == 'R' &&
+            [4, 5, 6].some(k => (c[2] as number[])[k] !== 0),
+        );
+        expect(moved.length).toBeGreaterThan(0);
+        expect([...(moved[0][2] as number[])].slice(4, 7)).toEqual(
+          eye.map((v, k) => v - HEAVENS[k]),
+        );
+      }
     });
 
     it('declares the fog, palette and daylight uniforms in the shader', () => {

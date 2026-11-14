@@ -18,7 +18,7 @@ import type { CtfScene } from './flag';
 import { GILT, GLOSS, SHINE, STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
 import { furnishing } from './moonbase';
-import { heavens, moonscape } from './moonscape';
+import { HEAVENS, heavens, moonscape } from './moonscape';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { battery, cell, kit, racks, vest } from './props';
@@ -100,8 +100,6 @@ const ORBIT_FADE = 250;
 const GLOBE_FROM = 20;
 const GLOBE_IN = 60;
 const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
-/** Metres over the crater's floor from which the stars and the Earth rise with the eye. */
-const LIFT = 20;
 
 /** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
 const SAMPLES = 4;
@@ -243,7 +241,7 @@ const RELIEF = 0.06;
 export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T,Z,Y;uniform int Q;
-uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
+uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform float Sn;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;out vec4 o;
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
@@ -251,21 +249,40 @@ vec3 nz(vec3 v){return v*inversesqrt(max(dot(v,v),1e-12));}
 vec3 hs(vec3 p){p=fract(p*vec3(.1031,.103,.0973));p+=dot(p,p.yxz+33.33);return fract((p.xxy+p.yxx)*p.zyx);}
 float n3(vec3 p){vec3 i=floor(p),f=p-i;f=f*f*(3.-2.*f);
 return mix(mix(mix(hs(i).x,hs(i+vec3(1,0,0)).x,f.x),mix(hs(i+vec3(0,1,0)).x,hs(i+vec3(1,1,0)).x,f.x),f.y),mix(mix(hs(i+vec3(0,0,1)).x,hs(i+vec3(1,0,1)).x,f.x),mix(hs(i+vec3(0,1,1)).x,hs(i+vec3(1,1,1)).x,f.x),f.y),f.z);}
-float cr(vec3 p,float s){vec3 q=p*s,i=floor(q),f=q-i;float v=1.;
-for(int j=0;j<27;j++){vec3 g=vec3(j%3,(j/3)%3,j/9)-1.,h=hs(i+g+s);if(h.x<.45)continue;float d=length(g+h-f)/(.2+.3*h.y);
-v*=d<1.?.62+.4*d*d:1.+.22*max(0.,1.-abs(d-1.15)/.15);}
-return v;}
+float cp(float d){return 1.4*d*exp(-2.*d*d)-1.3*(d-1.)*exp(-8.*(d-1.)*(d-1.));}
+float ca(float d){return 1.-.18*exp(-2.*d*d)+.12*exp(-8.*(d-1.)*(d-1.));}
+vec3 ct(vec2 q,float s){vec2 i=floor(q/s),f=q/s-i;vec3 o=vec3(0,0,1);
+for(int j=0;j<9;j++){vec2 g=vec2(j%3,j/3)-1.;vec3 h=hs(vec3(i+g,s));if(h.z>.55)continue;
+vec2 v=(f-g-.2-.6*h.xy)/(.1+.6*h.z);float d=length(v);
+o.xy+=v/max(d,1e-3)*cp(d);o.z*=ca(d);}
+return o;}
+vec3 cs(vec2 q,float D){vec3 a=vec3(0,0,1);for(int i=0;i<3;i++){float s=6.*exp(1.28*float(i)),w=1.-smoothstep(s*12.,s*35.,D);if(w>0.){vec3 c=ct(q,s);a.xy+=c.xy*w/(1.+float(i));a.z*=mix(1.,c.z,w);}}return a;}
+vec4 cr(vec3 p,float s){vec3 q=p*s,i=floor(q),f=q-i;vec4 o=vec4(0,0,0,1);
+for(int j=0;j<27;j++){vec3 g=vec3(j%3,(j/3)%3,j/9)-1.,h=hs(i+g+s);if(h.x>.5)continue;
+float r=.08+.42*h.y*h.y*h.y;vec3 v=(f-g-h)/r;float d=length(v);if(d>2.5)continue;
+o.xyz+=v/max(d,1e-3)*cp(d);o.w*=ca(d);
+if(h.z>.95)o.w*=1.+.3*exp(-1.2*max(d-1.,0.))*hs(floor(vec3(v*4.))).x;}
+return o;}
 bool gh(vec3 d,out vec3 p){vec3 o=vec3(0,1.+Ob.x,0);float b=dot(o,d),q=b*b-dot(o,o)+1.;p=normalize(o+d*(-b-sqrt(max(q,0.))));return q>0.&&b<0.;}
-vec3 mg(vec3 d,out bool t){vec3 p;t=gh(d,p);if(!t)return vec3(0);
-float ma=smoothstep(.42,.6,n3(p*3.)+.5*n3(p*9.)-.25);
-return textureLod(S,vec3(.5,.5,${TEX.STONE}.),12.).rgb*mix(1.9,.9,ma)*(.8+.4*n3(p*60.))*(.85+.3*n3(p*4e3))*(.9+.2*n3(p*2e4))*cr(p,40.)*cr(p,150.)*cr(p,600.)*e(X*max(dot(p,O),0.));}
-vec3 K1(vec3 d);
+vec3 mg(vec3 d,float px,out bool t){vec3 p;t=gh(d,p);if(!t)return vec3(0);
+float T=length(p-vec3(0,1.+Ob.x,0)),fp=px*T,ma=smoothstep(.42,.6,n3(p*3.)+.5*n3(p*9.)-.25);
+float al=mix(1.9,.9,ma)*(.8+.4*n3(p*60.))*(.85+.3*n3(p*4e3));vec3 g=vec3(0),G=g;
+for(int i=0;i<8;i++){float s=12.*exp(1.22*float(i));if(s*fp>.4)break;vec4 c=cr(p,s);float w=1.-smoothstep(.15,.4,s*fp);g+=c.xyz*w*(.3+.14*float(i));al*=mix(1.,c.w,w);}
+float m=T*${MOON_R}.;if(m<6e3){vec3 c=cs((E+d*m).xz,m);G=vec3(c.x,0,c.y);al*=c.z;}
+vec3 n=normalize(p-(g-p*dot(g,p))-G);
+return textureLod(S,vec3(.5,.5,${TEX.STONE}.),12.).rgb*al*(e(X*max(dot(n,O),0.))+.04)*smoothstep(-.05,.1,dot(p,O));}
+vec3 sk(vec3 d,float px){vec3 c=vec3(0);
+for(int l=0;l<2;l++){float s=l>0?150.:60.;vec3 i=floor(d*s),h=hs(i+s*.1);if(h.x>(l>0?.04:.09))continue;
+vec3 a=normalize(i+.2+.6*h);if(floor(a*s)!=i)continue;float b=l>0?.25+.4*h.y:.5+2.2*h.y*h.y*h.y,w=max(px,.0011);
+float r=length(d-a)/w;c+=b*exp(-r*r*1.4)*vec3(1.-.25*h.z,.9+.05*h.z,.75+.25*h.z);}
+return c;}
+vec3 K1(vec3 d,float px);
 vec3 K0(vec3 d){
-vec3 s=K1(d);if(Ob.x>0.){bool t;vec3 m=mg(d,t);if(t)s=mix(s,m,Ob.z);}return s;}
-vec3 K1(vec3 d){
+float px=length(fwidth(d));vec3 s=K1(d,px);if(Ob.x>0.){bool t;vec3 m=mg(d,px,t);if(t)s=mix(s,m,Ob.z);}return s;}
+vec3 K1(vec3 d,float px){
 float h=d.y,k=max(dot(d,O),0.);
 vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
-c=mix(c,H[4]*1.08,exp(-abs(h)*7.));
+c=mix(c,H[4]*1.08,exp(-abs(h)*7.))+Sn*sk(d,px);
 return c+X*((.1+.9*clamp(H[4].g*1.2,0.,1.))*(.2*pow(k,24.)+.05*pow(k,4.))+2.*smoothstep(.9993,.9997,k));}
 float vh(vec2 q){return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5453);}
 float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(vh(i),vh(i+vec2(1,0)),f.x),mix(vh(i+vec2(0,1)),vh(i+vec2(1,1)),f.x),f.y);}
@@ -275,7 +292,7 @@ if(Y>.5){o=vec4(K0(normalize(P)),1);return;}
 if(Ob.w>.5&&Ob.x>0.){vec3 p;if(gh(normalize(P-E),p))discard;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
-float ks=step(abs(L-${TEX.STONE}.),.5);
+float ks=step(abs(L-${TEX.STONE}.),.5);vec3 cg=vec3(0);
 if(ks>.5){
 vec2 uv=C.xy/${TILE}.,gx=dFdx(uv),gy=dFdy(uv);float q=vn(C.xy*.11)*8.,iq=floor(q);
 vec4 ta=textureGrad(S,vec3(uv+sin(vec2(3,7)*iq),L),gx,gy),tb=textureGrad(S,vec3(uv+sin(vec2(3,7)*(iq+1.)),L),gx,gy);
@@ -283,9 +300,10 @@ t=mix(ta,tb,smoothstep(.2,.8,q-iq-.1*dot(ta.rgb-tb.rgb,vec3(1))));
 float fd=smoothstep(25.,140.,length(P-E)),n1=(vn(C.xy*.09)+.5*vn(C.xy*.23+7.)+.25*vn(C.xy*.61+3.))/1.75-.5,n2=vn(C.xy*.013+11.)-.5;
 t.rgb=mix(t.rgb,textureLod(S,vec3(0,0,L),9.).rgb,.2+.8*fd)*(1.+.42*n1+.5*n2);
 t.a=mix(t.a,.5,fd);
-t.rgb*=mix(.6,1.,smoothstep(.72,.97,normalize(N).y));}
+t.rgb*=mix(.6,1.,smoothstep(.72,.97,normalize(N).y));
+if(Sn>0.){vec3 cq=cs(P.xz,length(P-E));float uw=smoothstep(.7,.95,normalize(N).y);t.rgb*=mix(1.,cq.z,uw);cg=-uw*vec3(cq.x,0,cq.y);}}
 vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
-vec3 n=normalize(N),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
+vec3 n=normalize(normalize(N)+cg),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float h=t.a*s*${RELIEF},det=dot(dx,a);
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
@@ -668,7 +686,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const size = () => backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
   // What is drawn is the world plus a city, a street and the runner's red; the physics knows only `world`.
   const ground = scenery(world);
-  /** The stars and the Earth, the last of the ground's vertices. */
+  /** The Earth, the last of the ground's vertices (the stars are the sky's). */
   const heavensN = world.def.scenery === 'moon' ? heavens().length / STRIDE : 0;
   /** True while portrait() draws: its runner stands high over the map, never in orbit. */
   let posing = false;
@@ -858,12 +876,15 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       'Sc',
       'Ob',
       'Cb',
+      'Sn',
     ]);
     gl.uniform1i(u.D, 1);
     gl.uniform4fv(u.R, STILL);
     // The crater's bound: its centre and one over its half axes, for the relief's edge fading into the globe.
     const b = world.relief?.bound ?? [0, 0, 1, 1];
     gl.uniform4f(u.Cb, b[0], b[1], 1 / b[2], 1 / b[3]);
+    // The moon's stars and craters, drawn by the shader.
+    gl.uniform1f(u.Sn, +(world.def.scenery === 'moon'));
     gl.uniform1i(u.Sg, 4);
     // The store's data, read by texel: sent again whole on a new context.
     gl.activeTexture(gl.TEXTURE4);
@@ -1142,8 +1163,6 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
       // Over the edge of space the crater fades into the moon's globe, drawn with the sky.
       const high = posing || world.def.seam === undefined ? 0 : eye[1] - world.def.seam;
-      // The stars' dome is round the crater's floor: high up it follows the eye, LIFT m under it.
-      const lift = posing ? 0 : Math.max(0, eye[1] - LIFT);
       // From a little height the globe is the ground past the relief's edge, where that edge fades.
       const low = posing || !world.relief ? 0 : clamp01((eye[1] - GLOBE_FROM) / GLOBE_IN);
       const globe = low > 0 || high > 0 ? Math.max(altitude(eye[1]), 1) / MOON_R : 0;
@@ -1155,11 +1174,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.uniform1f(u.Y, 1);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.uniform1f(u.Y, 0);
-      if (lift > 0 && heavensN) {
-        // The stars and the Earth rise with a ship in space, and never fade into the globe.
+      if (heavensN) {
+        // The Earth goes with the eye, so it is as far as the stars, and never fades into the globe.
         const sky0 = first - heavensN;
         gl.drawArrays(gl.TRIANGLES, 0, sky0);
-        gl.uniform4fv(u.R, [0, 0, 0, 1, 0, lift, 0, 1]);
+        const [x, y, z] = HEAVENS;
+        gl.uniform4fv(u.R, [0, 0, 0, 1, eye[0] - x, eye[1] - y, eye[2] - z, 1]);
         gl.uniform4f(u.Ob, globe, fade, edge, 1);
         gl.drawArrays(gl.TRIANGLES, sky0, heavensN);
         gl.uniform4fv(u.R, STILL);

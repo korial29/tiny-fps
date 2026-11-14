@@ -666,14 +666,14 @@ export const SCRATCHED = [
  * the slope of the swell at rest (x, y, z), the normal at rest (x, y, z)], and per triangle its
  * colour, layer, whether it is a wall (its normal its own, flat) and its region (-1: a scratch).
  */
-interface Recipe {
+export interface Recipe {
   c: number[];
   t: number[];
   /** The triangles each kind of wearer has (armor()'s `ninja`, astronaut and `bare` bits), listed on first use. */
   k?: Int32Array[];
 }
-const CORNER = 11;
-const TRI = 6;
+export const CORNER = 11;
+export const TRI = 6;
 /** A triangle's kind, bits: 1 a wall (its normal its own, flat); from TURN on, one for each corner of its skin triangle whose normal is taken the other way. */
 const TURN = 2;
 
@@ -1620,6 +1620,19 @@ export const prepare = (s: Skin, fine: boolean) => {
  * plates' colour (their walls a shade darker): white when absent, the astronaut's, who has his own
  * details in his team's colour `accent` too. The `ninja` wears his own armour.
  */
+/** The recipe on the skin `s` (`fine` or not) and the triangles of it a wearer has (armor()'s rules): its first numbers' indices. */
+export const wornOf = (
+  s: Skin,
+  fine: boolean,
+  ninja: boolean,
+  astro: boolean,
+  bare: boolean,
+): [Recipe, Int32Array] => {
+  const r = prepare(s, fine);
+  const wearer = +ninja | (+astro << 1) | (+bare << 2);
+  return [r, ((r.k ??= [])[wearer] ??= wearing(r.t, ninja, astro, bare))];
+};
+
 export const armor = (
   out: Out,
   from: number,
@@ -1631,10 +1644,8 @@ export const armor = (
   bare = false,
 ) => {
   const astro = !plate && !ninja;
-  const r = prepare(s, fine);
+  const [r, list] = wornOf(s, fine, ninja, astro, bare);
   const { c, t } = r;
-  const wearer = +ninja | (+astro << 1) | (+bare << 2);
-  const list = ((r.k ??= [])[wearer] ??= wearing(t, ninja, astro, bare));
   const P = new Float64Array(9);
   const N = new Float64Array(9);
   let w = out.length;

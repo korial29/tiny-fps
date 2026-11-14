@@ -8,12 +8,22 @@ import { animate, soldier } from './soldier';
 import type { Runner } from './soldier';
 import { expand, mesh, stored } from './store';
 import { traffic } from './traffic';
+import { pose } from '../../test/flesh';
 import type { Pieces } from './store';
 
-/** The largest difference between two lists of numbers, Infinity when their lengths differ. */
+/**
+ * How far two lists of vertices are apart: the largest difference of a place and of a colour, the
+ * largest of a normal and the share of normals more than a thousandth off (Infinity: their lengths
+ * differ).
+ */
 const apart = (a: number[], b: number[]) => {
-  let most = a.length == b.length ? 0 : Infinity;
-  a.forEach((x, i) => (most = Math.max(most, Math.abs(x - b[i]))));
+  const most = a.length == b.length ? [0, 0, 0, 0] : [Infinity, Infinity, Infinity, Infinity];
+  a.forEach((x, i) => {
+    const [n, d] = [i % STRIDE, Math.abs(x - b[i])];
+    const k = n < 3 ? 0 : n < 6 ? 2 : 1;
+    most[k] = Math.max(most[k], d);
+    most[3] += +(n == 3 && d > 1e-3) / (a.length / STRIDE);
+  });
   return most;
 };
 
@@ -32,7 +42,11 @@ const unfolded = (draw: (out: number[], list: Pieces) => void) => {
   const copy = (to: number) => gpu.slice(from, to).forEach(x => merged.push(x));
   list.forEach((d, i) => {
     copy(marks[i]);
-    expand(merged, d);
+    if (d.f) {
+      pose(merged, d);
+    } else {
+      expand(merged, d);
+    }
     from = marks[i];
   });
   copy(gpu.length);
@@ -82,8 +96,14 @@ describe('the store (store.ts): pieces built once on the GPU', () => {
             soldier(o, book.get(p.id)!, [0.9, 0.2, 0.1], lod, !!def.helmets, !!def.armor, list),
           );
           expect(n).toBeGreaterThan(0);
-          // The store keeps floats, as the GPU does: a millionth of a metre or of a normal.
-          expect(apart(merged, cpu)).toBeLessThan(1e-5);
+          // The GPU and the store keep floats: places within a tenth of a millimetre, colours as they
+          // are. A normal too, but on a few armour walls, slivers 1.5 mm tall whose own normal takes
+          // the floats' error from their corners: a degree or two, on a few in a thousand at most.
+          const [place, colour, normal, off] = apart(merged, cpu);
+          expect(place).toBeLessThan(1e-4);
+          expect(colour).toBeLessThan(1e-6);
+          expect(normal).toBeLessThan(0.05);
+          expect(off).toBeLessThan(0.01);
         }
       }
     }
@@ -98,7 +118,8 @@ describe('the store (store.ts): pieces built once on the GPU', () => {
       drive(cpu, eye, [0, 0, -1], t);
       const [merged, n] = unfolded((o, list) => drive(o, eye, [0, 0, -1], t, list));
       expect(n).toBeGreaterThan(10);
-      expect(apart(merged, cpu)).toBeLessThan(1e-4);
+      const [place, colour, normal] = apart(merged, cpu);
+      expect(Math.max(place, colour, normal)).toBeLessThan(1e-4);
     }
   });
 });

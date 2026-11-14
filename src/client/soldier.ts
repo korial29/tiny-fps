@@ -57,6 +57,7 @@ import { helm } from './helm';
 import { helmet } from './helmet';
 import { HEAD_SCALE, STYLE, hair, styleOf, sway } from './hair';
 import { ID, ORIGIN, mesh } from './store';
+import { flesh } from './flesh';
 import type { Pieces } from './store';
 import { CLOTH, dress, mask } from './mask';
 import { GOLD, pads } from './pads';
@@ -916,14 +917,20 @@ export const soldier = (
     const from = out.length;
     const bs = body(lod, build);
     // Under a helmet's dark visor no face shows: its channels are not worth their time.
-    skin(out, bs, s, colors, helmets ? undefined : r.face.w);
-    if (ninja && !helmets) {
-      // The hood painted on the head, the face under the guard pressed in.
-      dress(out, from, bs, s.pos[J.HEAD], s.rot[J.HEAD], build);
-    }
-    // The armour, cut out of the skin just drawn.
-    if (plated || ninja) {
-      armor(out, from, bs, lod > 2, plate, ninja, color, !plated);
+    const face = helmets ? undefined : r.face.w;
+    if (gpu && !ninja) {
+      // Posed by the shader, the armour too (flesh.ts).
+      flesh(gpu, bs, s, colors, face, plated ? { fine: lod > 2, plate, accent: color } : undefined);
+    } else {
+      skin(out, bs, s, colors, face);
+      if (ninja && !helmets) {
+        // The hood painted on the head, the face under the guard pressed in.
+        dress(out, from, bs, s.pos[J.HEAD], s.rot[J.HEAD], build);
+      }
+      // The armour, cut out of the skin just drawn.
+      if (plated || ninja) {
+        armor(out, from, bs, lod > 2, plate, ninja, color, !plated);
+      }
     }
     rigid('pouch', s.pos[J.PELVIS], s.rot[J.PELVIS], pouch);
     if (ninja) {

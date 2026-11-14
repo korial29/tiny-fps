@@ -13,13 +13,48 @@ export interface Mesh {
   count: number;
 }
 
-/** One piece drawn: `m` turned by `q`, scaled by `k`, moved to `t`. */
+/** One piece drawn: `m` turned by `q`, scaled by `k`, moved to `t`; or, with `f`, flesh posed by the shader. */
 export interface Draw {
   m: Mesh;
   q: Quat;
   t: Vec3;
   k: number;
+  f?: Flesh;
 }
+
+/**
+ * A runner's skin (`kind` 1) or armour (2) posed by the vertex shader from `data` (flesh.ts): the
+ * texels of the skin's vertices, of the drawn vertices and of the skin's corners; the joints' dual
+ * quaternions (eight numbers each), the palette, the face's weights; the plates' colour (absent:
+ * not coloured) and the accent.
+ */
+export interface Flesh {
+  kind: number;
+  at: [number, number, number];
+  d: Float32Array;
+  pal: Float32Array;
+  face: Float32Array;
+  plate?: number[];
+  accent?: number[];
+}
+
+/** What the vertex shader reads by texel (flesh.ts): four floats each, 2048 a row. */
+export let data = new Float32Array(1 << 18);
+/** The floats of `data` written: a renderer uploads what it has not yet. */
+export let used = 0;
+
+/** Appends `v` to `data`, from a new texel on, and gives that texel's index. */
+export const texels = (v: ArrayLike<number>) => {
+  const n = Math.ceil(v.length / 4) * 4;
+  if (used + n > data.length) {
+    const d = new Float32Array(Math.max(used + n, data.length * 2));
+    d.set(data);
+    data = d;
+  }
+  data.set(v, used);
+  used += n;
+  return (used - n) / 4;
+};
 
 /** Every piece's vertices one after the other, in the renderer's vertex format: what the GPU gets. */
 export let stored = new Float32Array(1 << 16);

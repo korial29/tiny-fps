@@ -2,9 +2,13 @@
 // goes to the GPU once (store.ts's `data`), and a frame sends only the joints, the palette and the
 // face's weights. The same sums as skin() and armor(), which stay the CPU's way (the tests, the own
 // body, a runner coming apart).
-import { CHANNELS } from './features';
+import { CHANNELS, TRAITS } from './features';
 import { CORNER, TRI, wornOf } from './armor';
-import { duals, mouthed } from './skin';
+import { COLOURS, duals, mouthed, skin } from './skin';
+import { dress, dressedOf } from './mask';
+import { JOINT as J, rest, solve } from './rig';
+import { STRIDE } from './mesh';
+import { Verts } from './verts';
 import type { Skin } from './skin';
 import { ORIGIN, ID, texels } from './store';
 import type { Pieces } from './store';
@@ -12,44 +16,103 @@ import type { Quat } from './rig';
 import type { Vec3 } from './mesh';
 
 /** Texels a skin vertex takes (then its face's records, two each), a corner, an armour vertex. */
-export const [VERT, CORN, PLATE] = [3, 1, 7];
+export const [VERT, CORN, PLATE] = [4, 1, 7];
 
-/** Where a skin is in `data`: its vertices (and records) and its corners. */
-const skins = new WeakMap<Skin, [number, number]>();
+/** Where a skin's corners are in `data`, and its vertices: plain, and hooded by the traits of a face (a ninja's). */
+const corners = new WeakMap<Skin, number>();
+const skins = new WeakMap<Skin, Map<string, number>>();
 
 /**
- * A skin's data, made once. A vertex: its place at rest and its weight, its normal and its shade,
- * its two joints and where its face's records start and how many (each: the channel's shift of
- * its place and of its normal, by channel). A corner: its vertex, its colour, the colour it fades
- * to and how far.
+ * The vertices of the skin `s` in `data`: at rest at `v` (place and normal, six numbers each). A
+ * vertex: its place and its weight, its normal and its shade, its two joints and where its face's
+ * records start and how many (each: a channel's shift of its place and of its normal), and the hood's
+ * bare share over it (-1: no hood) and whether it is on the head or the neck. `keep` says which of
+ * its face's channels it takes.
  */
-export const skinOf = (s: Skin): [number, number] => {
-  let at = skins.get(s);
-  if (!at) {
-    const n = s.w.length;
-    const recs: number[][] = Array.from({ length: n }, () => []);
-    s.m.forEach(({ i }, ch) => i.forEach((k, r) => recs[k].push(ch, r)));
-    const v = new Float32Array(n * VERT * 4 + recs.reduce((a, r) => a + r.length * 4, 0));
-    let w = n * VERT * 4;
-    for (let k = 0; k < n; k++) {
-      const [o, q] = [k * VERT * 4, k * 6];
-      v.set([s.v[q], s.v[q + 1], s.v[q + 2], s.w[k]], o);
-      v.set([s.v[q + 3], s.v[q + 4], s.v[q + 5], s.o[k]], o + 4);
-      v.set([s.j[k * 2], s.j[k * 2 + 1], w / 4, recs[k].length / 2], o + 8);
-      for (let e = 0; e < recs[k].length; e += 2) {
-        const [ch, r] = [recs[k][e], recs[k][e + 1] * 6];
-        const d = s.m[ch].d;
-        v.set([d[r], d[r + 1], d[r + 2], ch, d[r + 3], d[r + 4], d[r + 5], 0], w);
-        w += 8;
-      }
+const pack = (
+  s: Skin,
+  v: ArrayLike<number>,
+  keep: (k: number, ch: number) => boolean,
+  bare?: Float64Array,
+) => {
+  const n = s.w.length;
+  const recs: number[][] = Array.from({ length: n }, () => []);
+  s.m.forEach(({ i }, ch) => i.forEach((k, r) => keep(k, ch) && recs[k].push(ch, r)));
+  const out = new Float32Array(n * VERT * 4 + recs.reduce((a, r) => a + r.length * 4, 0));
+  let w = n * VERT * 4;
+  for (let k = 0; k < n; k++) {
+    const [o, q, a, b] = [k * VERT * 4, k * 6, s.j[k * 2], s.j[k * 2 + 1]];
+    out.set([v[q], v[q + 1], v[q + 2], s.w[k], v[q + 3], v[q + 4], v[q + 5], s.o[k]], o);
+    out.set(
+      [
+        a,
+        b,
+        w / 4,
+        recs[k].length / 2,
+        bare?.[k] ?? -1,
+        +[a, b].some(j => j == J.HEAD || j == J.NECK),
+      ],
+      o + 8,
+    );
+    for (let e = 0; e < recs[k].length; e += 2) {
+      const [ch, r] = [recs[k][e], recs[k][e + 1] * 6];
+      const d = s.m[ch].d;
+      out.set([d[r], d[r + 1], d[r + 2], ch, d[r + 3], d[r + 4], d[r + 5], 0], w);
+      w += 8;
     }
+  }
+  return texels(out);
+};
+
+/**
+ * Where the skin `s` is in `data`, made once: its vertices and its corners (a corner: its vertex, its
+ * colour, the colour it fades to and how far). With `hood`, the ninja's (build and face): dress() at
+ * rest on the skin his face's traits have shaped, its pressed places taken as the rest's, and only
+ * the face's expressions left for the shader, none under the guard (hidden there, and the jaw would
+ * push the face through it).
+ */
+export const skinOf = (s: Skin, hood?: [number, ArrayLike<number>]): [number, number] => {
+  let cs = corners.get(s);
+  if (cs === undefined) {
     const c = new Float32Array(s.t.length * 4);
     for (let h = 0; h < s.t.length; h++) {
       c.set([s.t[h], s.c[h], s.c2[h], s.cm[h]], h * 4);
     }
-    skins.set(s, (at = [texels(v), texels(c)]));
+    corners.set(s, (cs = texels(c)));
   }
-  return at;
+  const traits = hood ? Array.from(hood[1]).slice(TRAITS, CHANNELS) : [];
+  const key = hood ? `${hood[0]} ${traits}` : '';
+  const book = skins.get(s) ?? new Map<string, number>();
+  skins.set(s, book);
+  let vs = book.get(key);
+  if (vs === undefined) {
+    if (hood) {
+      const n = s.w.length;
+      const face = new Float32Array(CHANNELS);
+      face.set(traits, TRAITS);
+      const at = solve(rest([0, 0, 0], 0, hood[0]));
+      // Into a Verts, as in a frame: a plain array through skin() would slow it for good (V8).
+      const v = new Verts();
+      skin(
+        v,
+        s,
+        at,
+        Array.from({ length: COLOURS }, () => [1, 1, 1]),
+        face,
+      );
+      dress(v, 0, s, at.pos[J.HEAD], at.rot[J.HEAD], hood[0]);
+      const [bare, press] = dressedOf(n);
+      const rested = Float32Array.from(s.v);
+      for (let h = s.t.length - 1; h >= 0; h--) {
+        rested.set(v.a.subarray(h * STRIDE, h * STRIDE + 6), s.t[h] * 6);
+      }
+      vs = pack(s, rested, (k, ch) => ch < TRAITS && press[k * 3] !== press[k * 3], bare);
+    } else {
+      vs = pack(s, s.v, () => true);
+    }
+    book.set(key, vs);
+  }
+  return [vs, cs];
 };
 
 /** Where an armour is in `data` and its vertices, by skin, fineness and wearer. */
@@ -95,8 +158,9 @@ export const armourOf = (
 };
 
 /**
- * Draws the skin `s` in the pose `pose` and, `plated`, the armour cut out of it, posed by the
- * shader: into `list`, as skin() and armor() would into the frame's vertices.
+ * Draws the skin `s` in the pose `pose` and, with `armour`, the armour cut out of it, posed by the
+ * shader: into `list`, as skin(), dress() (`hood`: the ninja's build) and armor() would into the
+ * frame's vertices.
  */
 export const flesh = (
   list: Pieces,
@@ -104,9 +168,10 @@ export const flesh = (
   pose: { pos: Vec3[]; rot: Quat[] },
   colors: number[][],
   face: ArrayLike<number> | undefined,
-  armour?: { fine: boolean; plate?: number[]; accent: number[] },
+  armour?: { fine: boolean; plate?: number[]; accent: number[]; ninja?: boolean; bare?: boolean },
+  hood?: number,
 ) => {
-  const [vs, cs] = skinOf(s);
+  const [vs, cs] = skinOf(s, hood !== undefined && face ? [hood, face] : undefined);
   const d = Float32Array.from(duals(s, pose));
   const pal = Float32Array.from(mouthed(colors, face).flat());
   const w = new Float32Array(Math.ceil(CHANNELS / 4) * 4);
@@ -121,7 +186,8 @@ export const flesh = (
     });
   go(1, cs, s.t.length);
   if (armour) {
-    const [at, n] = armourOf(s, armour.fine, false, !armour.plate, false);
+    const { fine, plate, ninja = false, bare = false } = armour;
+    const [at, n] = armourOf(s, fine, ninja, !plate && !ninja, bare);
     go(2, at, n, armour);
   }
 };

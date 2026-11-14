@@ -98,9 +98,15 @@ what each step costs:
    colours as they are, a few armour walls' normals a degree or two off (slivers 1.5 mm tall whose
    own normal takes the floats' error). Measured in Node: Tranquility 5.9 to 3.8 ms a frame,
    Highline 7.0 to 6.3 ms (half the runners there being ninjas, still on the CPU).
-4. The ninja: his hood (`dress()`) works out each head vertex from `scalp()`, too much for a
-   shader; it will be baked into a skin of his own at rest, the same to the eye but not to the bit
-   under the guard while his jaw moves.
+4. **The ninja** (done): his hood (`dress()`) works out each head vertex from `scalp()`, too much
+   for a shader, so `skinOf()` bakes it for each skin and each face's traits (a player's, constant):
+   the skin at rest shaped by the traits, `dress()` on it, its pressed places taken as the rest's and
+   its bare share kept per vertex (`hb` in `VERT`). The shader then adds only the expressions, none
+   under the guard. `store.test.ts` holds every expression at its full, alone, within 0.1 mm of the
+   CPU's (0.08 mm at most: the jaw stays behind the guard), and the hood's colour within a fraction of
+   a level of 255. Measured in Node: Highline 6.2 to 4.0 ms a frame. The first build of it went
+   through `skin()` with a plain array and slowed every `skin()` after it (the own body's too) by
+   three milliseconds a frame: rule 9.
 
 The own first-person body stays on the CPU: `relax()` smooths its shoulders once posed, which a
 vertex shader cannot do.
@@ -144,8 +150,8 @@ Verts`, `verts.ts`): `out.push(...)` for a few numbers, and for many, `const a =
 9. **Hand a per-frame model only the frame's `Verts` in the game.** Tests pass plain arrays and that
    is fine there; in the game, if a plain array ever goes through the same index writes as the
    `Verts` (a mesh built once with `skin()`, say), V8 falls back to a generic path for good: the
-   match frame went from 9.3 to 65 ms in Chrome after it happened once. Build a mesh made once in a
-   function of its own. The upload copies into one `Float32Array` kept from frame to frame (`floats`
+   match frame went from 9.3 to 65 ms in Chrome after it happened once. That holds for what is built
+   once too: `mesh()` and `skinOf()` build into a `Verts` of their own for that reason. The upload copies into one `Float32Array` kept from frame to frame (`floats`
    in `render.ts`); do not allocate one per frame or per object.
 10. **A pure speed-up changes no pixel.** Prove it: draw the same runners and body before and after
     and compare every float (the method is below). A level of detail is a visual change: show it

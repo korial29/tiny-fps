@@ -3,7 +3,8 @@
 import { GLOSS } from '../src/client/mesh';
 import { SCRATCHED } from '../src/client/armor';
 import { PLATE, VERT } from '../src/client/flesh';
-import { UNLIT } from '../src/client/skin';
+import { REGION, UNLIT } from '../src/client/skin';
+import { CLOTH } from '../src/client/mask';
 import { data } from '../src/client/store';
 import type { Draw } from '../src/client/store';
 
@@ -19,8 +20,8 @@ const add = (a: V3, b: V3, k = 1): V3 => [a[0] + b[0] * k, a[1] + b[1] * k, a[2]
 const mul = (a: V3, k: number): V3 => [a[0] * k, a[1] * k, a[2] * k];
 const texel = (i: number) => Array.from(data.subarray(i * 4, i * 4 + 4));
 
-/** k(): the skin's vertex i posed, and its shade. */
-const posed = (d: Draw, i: number): [V3, V3, number] => {
+/** k(): the skin's vertex i posed, its shade, and the hood over it (bare share, on the head). */
+const posed = (d: Draw, i: number): [V3, V3, number, number[]] => {
   const f = d.f!;
   const b = f.at[0] + i * VERT;
   const [a, e, g] = [texel(b), texel(b + 1), texel(b + 2)];
@@ -59,7 +60,7 @@ const posed = (d: Draw, i: number): [V3, V3, number] => {
     return add(p, m ? add(r, m) : r, 2);
   };
   const M = add(add(mul(fx, ew), mul(ex, -fw)), cross(fx, ex), -1);
-  return [turn(x, M), turn(y, 0), e[3]];
+  return [turn(x, M), turn(y, 0), e[3], texel(b + 3)];
 };
 
 /** Appends to `out` the vertices the shader draws of `d`, a Draw with flesh. */
@@ -68,11 +69,14 @@ export const pose = (out: number[], d: Draw) => {
   for (let id = 0; id < d.m.count; id++) {
     if (f.kind == 1) {
       const h = texel(f.at[1] + id);
-      const [P, N, sh] = posed(d, h[0]);
+      const [P, N, sh, hb] = posed(d, h[0]);
       const pal = (c: number) => Array.from(f.pal.subarray(c * 3, c * 3 + 3));
       let l = pal(h[1]);
-      l = l.map((c, k) => c + (pal(h[2])[k] - c) * h[3]);
-      out.push(...P, ...N, l[0] * sh, l[1] * sh, UNLIT.includes(h[1]) ? -2 : -1, l[2] * sh);
+      l = l.map((c, k) => (c + (pal(h[2])[k] - c) * h[3]) * sh);
+      if (hb[0] >= 0 && (hb[1] > 0.5 || h[1] == REGION.FLESH)) {
+        l = l.map((c, k) => CLOTH[k] + (c - CLOTH[k]) * hb[0]);
+      }
+      out.push(...P, ...N, l[0], l[1], UNLIT.includes(h[1]) ? -2 : -1, l[2]);
       continue;
     }
     const b = f.at[1] + id * PLATE;

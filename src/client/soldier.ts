@@ -918,9 +918,17 @@ export const soldier = (
     const bs = body(lod, build);
     // Under a helmet's dark visor no face shows: its channels are not worth their time.
     const face = helmets ? undefined : r.face.w;
-    if (gpu && !ninja) {
-      // Posed by the shader, the armour too (flesh.ts).
-      flesh(gpu, bs, s, colors, face, plated ? { fine: lod > 2, plate, accent: color } : undefined);
+    if (gpu) {
+      // Posed by the shader, the hood and the armour too (flesh.ts).
+      flesh(
+        gpu,
+        bs,
+        s,
+        colors,
+        face,
+        plated || ninja ? { fine: lod > 2, plate, accent: color, ninja, bare: !plated } : undefined,
+        ninja && !helmets ? build : undefined,
+      );
     } else {
       skin(out, bs, s, colors, face);
       if (ninja && !helmets) {

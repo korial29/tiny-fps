@@ -394,6 +394,18 @@ export const dress = (out: Out, from: number, s: Skin, at: Vec3, q: Quat, build 
 let [DONE, BARE, PRESS] = [new Int32Array(0), new Float64Array(0), new Float64Array(0)];
 let dressed = 0;
 
+/** What the last dress() made of each of the `n` vertices of its skin: its bare share (-1: none), where it was pressed in (NaN: not). */
+export const dressedOf = (n: number): [Float64Array, Float64Array] => {
+  const [bare, press] = [new Float64Array(n).fill(-1), new Float64Array(n * 3).fill(NaN)];
+  for (let i = 0; i < n; i++) {
+    if (DONE[i] == dressed) {
+      bare[i] = BARE[i];
+      press.set(PRESS.subarray(i * 3, i * 3 + 3), i * 3);
+    }
+  }
+  return [bare, press];
+};
+
 /** Appends the guard and the ideograms on the head joint at `at` turned by `q` (see solve()), on the woman's smaller head with `build`, in the team's `color`. */
 export const mask = (
   out: Out,

@@ -66,6 +66,27 @@ What is still to look at:
   city and skyline included (216 000 vertices on Highline), then the scene draws everything once
   more at 4x MSAA in RGBA16F. On an integrated GPU, look there first.
 
+## Moving the work to the GPU
+
+The plan agreed on 2026-11-14 (the user), one step and one PR at a time, the size budget raised by
+what each step costs:
+
+1. **Rigid pieces through the store** (done): `store.ts` keeps a piece built once at the origin
+   (`mesh()`); a frame lists where each one stands (`Pieces`: a turn, a place, a scale) and the scene's
+   vertex shader places it (`R` in `VERT`), in the shadow passes and the scene alike. The runners'
+   pads, collar, guard, helmets, pack, crotch panel, pouch and buckle go there (`soldier()`'s `list`,
+   `pads()`'s). Without a list (the tests, the own body, a runner coming apart) the old path draws
+   them into `out`, and `store.test.ts` checks both give the same triangles. Measured: 202 000 to
+   159 000 vertices written a match frame, the frame's CPU 9.7 to 8.7 ms in the browser, the GPU's
+   time the same.
+2. The runners' skin skinned in the vertex shader (dual quaternions as uniforms), the face's
+   channels from a texture of shifts, the ninja's hood baked into a skin of its own.
+3. The armour: each vertex refers to its skin triangle's three corners, skinned in the shader.
+4. Hands, cars and props through the store.
+
+The own first-person body stays on the CPU: `relax()` smooths its shoulders once posed, which a
+vertex shader cannot do.
+
 ## Rules for every change
 
 1. **Count the vertices of what you add, at every level.** A runner is drawn at lod 3 within 4 m
@@ -94,16 +115,20 @@ Verts`, `verts.ts`): `out.push(...)` for a few numbers, and for many, `const a =
    Read back what is already there through `room(out, 0)`. Never keep `a` across a `push` or another
    model's call: the store may have moved. No `slice`, `splice`, `concat` or spread of the frame's
    vertices, and no temporary array per object to copy in afterwards.
-7. **Hand a per-frame model only the frame's `Verts` in the game.** Tests pass plain arrays and that
+7. **A rigid piece goes through the store.** A piece that only follows a joint (no vertex of its
+   own moving) is made once at the origin and drawn with `rigid()` in `soldier()` or a `list` of its
+   own: its key names everything its vertices depend on (level, colours, build), never the pose. A
+   piece that changes shape or colour each frame stays in `out`.
+8. **Hand a per-frame model only the frame's `Verts` in the game.** Tests pass plain arrays and that
    is fine there; in the game, if a plain array ever goes through the same index writes as the
    `Verts` (a mesh built once with `skin()`, say), V8 falls back to a generic path for good: the
    match frame went from 9.3 to 65 ms in Chrome after it happened once. Build a mesh made once in a
    function of its own. The upload copies into one `Float32Array` kept from frame to frame (`floats`
    in `render.ts`); do not allocate one per frame or per object.
-8. **A pure speed-up changes no pixel.** Prove it: draw the same runners and body before and after
+9. **A pure speed-up changes no pixel.** Prove it: draw the same runners and body before and after
    and compare every float (the method is below). A level of detail is a visual change: show it
    from the distance it is used at, magnified, before and after.
-9. **Measure, do not guess.** Profile before optimising; the hot spot was never where it looked.
+10. **Measure, do not guess.** Profile before optimising; the hot spot was never where it looked.
 
 ## How to measure
 

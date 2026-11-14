@@ -30,6 +30,8 @@ import { GRIN, animate, createRunner, soldier } from './soldier';
 import { body } from './skin';
 import { prepare } from './armor';
 import { Verts } from './verts';
+import { filled, stored } from './store';
+import type { Pieces } from './store';
 import type { Out } from './verts';
 import type { Runner } from './soldier';
 import { skyline, trees } from './skyline';
@@ -81,17 +83,23 @@ const [NEAR, CLOSE] = [10, 4];
 export const [ROVER_NEAR, ROVER_MID] = [22, 70];
 /** A ship's, 14 m long: its cockpit and its struts within 45 m, its plain shape past 160 m. */
 export const [SHIP_NEAR, SHIP_MID] = [45, 160];
+/** R of the frame's own vertices (see VERT): no turn, a scale of 1, at the origin. */
+const STILL = [0, 0, 0, 1, 0, 0, 0, 1];
+
 /** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
 const SAMPLES = 4;
 
 // Y > 0 is the sky: a fullscreen triangle from gl_VertexID at depth 1, whose varying P is the view
-// ray (J: the camera's right and up scaled by the field of view, then forward).
+// ray (J: the camera's right and up scaled by the field of view, then forward). R places a piece of
+// the store (store.ts): turned by the quaternion R[0] as turn() does, scaled by R[1].w and moved to
+// R[1].xyz; the frame's own vertices go with no turn, a scale of 1, at the origin (STILL).
 const VERT = `#version 300 es
 layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec4 c;
-uniform mat4 m;uniform float Y;uniform vec3 J[3];out vec3 P,N;out vec4 C;
+uniform mat4 m;uniform float Y;uniform vec3 J[3];uniform vec4 R[2];out vec3 P,N;out vec4 C;
+vec3 r(vec3 v){vec3 t=2.*cross(R[0].xyz,v);return v+R[0].w*t+cross(R[0].xyz,t);}
 void main(){
 if(Y>.5){vec2 q=vec2(gl_VertexID&1,gl_VertexID>>1)*4.-1.;gl_Position=vec4(q,1,1);P=J[0]*q.x+J[1]*q.y+J[2];N=vec3(0);C=vec4(0);return;}
-P=p;N=n;C=c;gl_Position=m*vec4(p,1);}`;
+P=R[1].xyz+r(p*R[1].w);N=r(n);C=c;gl_Position=m*vec4(P,1);}`;
 
 // A fullscreen triangle from gl_VertexID, no buffer.
 const POST_VERT = `#version 300 es
@@ -620,6 +628,26 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   /** The frame's vertices as written, and as the GPU takes them: both kept from frame to frame. */
   const v = new Verts();
   let floats = new Float32Array(0);
+  /** The frame's pieces of the store (store.ts), drawn after its own vertices. */
+  const pieces: Pieces = [];
+  /** The vertex arrays of the frame's buffer and of the store's, the two buffers, and the store's floats sent and room. */
+  let [main, kept, frameBuf, held] = [{}, {}, {}, {}] as [
+    WebGLVertexArrayObject,
+    WebGLVertexArrayObject,
+    WebGLBuffer,
+    WebGLBuffer,
+  ];
+  let [sent, roomy] = [0, 0];
+  /** The frame's pieces, drawn after the frame's own vertices in every pass. */
+  const place = () => {
+    gl.bindVertexArray(kept);
+    for (const { m, q, t, k } of pieces) {
+      gl.uniform4fv(u.R, [...q, ...t, k]);
+      gl.drawArrays(gl.TRIANGLES, m.first, m.count);
+    }
+    gl.uniform4fv(u.R, STILL);
+    gl.bindVertexArray(main);
+  };
 
   /** (Re)allocates the buffer at cap bytes and puts the level back at its head. */
   const alloc = () => {
@@ -732,15 +760,25 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       'X',
       'Y',
       'J',
+      'R',
     ]);
     gl.uniform1i(u.D, 1);
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.uniform4fv(u.R, STILL);
+    const layout = () =>
+      [3, 3, 4].reduce((at, size, i) => {
+        gl.enableVertexAttribArray(i);
+        gl.vertexAttribPointer(i, size, gl.FLOAT, false, STRIDE * 4, at * 4);
+        return at + size;
+      }, 0);
+    // The store's pieces: sent again whole on a new context.
+    gl.bindVertexArray((kept = gl.createVertexArray()));
+    gl.bindBuffer(gl.ARRAY_BUFFER, (held = gl.createBuffer()));
+    layout();
+    [sent, roomy] = [0, 0];
+    gl.bindVertexArray((main = gl.createVertexArray()));
+    gl.bindBuffer(gl.ARRAY_BUFFER, (frameBuf = gl.createBuffer()));
     alloc();
-    [3, 3, 4].reduce((at, size, i) => {
-      gl.enableVertexAttribArray(i);
-      gl.vertexAttribPointer(i, size, gl.FLOAT, false, STRIDE * 4, at * 4);
-      return at + size;
-    }, 0);
+    layout();
     // Unit 1: the sun's depth layer, then one per shadowed light, compared in the shader (linear: a 2x2 PCF per tap).
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, (shadows = gl.createTexture()));
@@ -833,6 +871,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       vp = viewProj(eye, yaw, pitch, w / h, fx.roll, tan);
       // The frame's vertices, into the store the last frame left.
       v.length = 0;
+      pieces.length = 0;
       const now = performance.now() / 1000;
       const dt = Math.min(0.1, now - clock);
       clock = now;
@@ -894,6 +933,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           d < CLOSE ? 3 : +(d < NEAR),
           world.def.helmets,
           !!world.def.armor,
+          pieces,
         );
         if (s) {
           // A space suit's pack is on the back: the flag is strapped on the pack, further back.
@@ -921,6 +961,18 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       }
       floats.set(v.a.subarray(0, v.length));
       gl.bufferSubData(gl.ARRAY_BUFFER, tail, floats.subarray(0, v.length));
+      // The pieces made since the last frame, to the store's buffer (all of it when it has grown).
+      if (sent < filled) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, held);
+        if (roomy == stored.length) {
+          gl.bufferSubData(gl.ARRAY_BUFFER, sent * 4, stored.subarray(sent, filled));
+        } else {
+          gl.bufferData(gl.ARRAY_BUFFER, stored, gl.STATIC_DRAW);
+          roomy = stored.length;
+        }
+        sent = filled;
+        gl.bindBuffer(gl.ARRAY_BUFFER, frameBuf);
+      }
       // The headlights of the rovers that are driven, after the lights given.
       const pk = pack([...lights, ...beams(rovers.filter(r => !r.ship))]);
       const first = ground.length / STRIDE;
@@ -938,6 +990,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.uniformMatrix4fv(u.m, false, i ? pk.m.subarray(i * 16 - 16, i * 16) : sunM);
         gl.clear(gl.DEPTH_BUFFER_BIT);
         gl.drawArrays(gl.TRIANGLES, 0, first + beamAt / STRIDE);
+        place();
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, shadows);
@@ -963,6 +1016,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.uniform1f(u.Y, 0);
       gl.drawArrays(gl.TRIANGLES, 0, first + bodyAt / STRIDE);
+      place();
       if (v.length > bodyAt) {
         // Last, over a cleared depth: the body never sinks into a wall.
         gl.clear(gl.DEPTH_BUFFER_BIT);

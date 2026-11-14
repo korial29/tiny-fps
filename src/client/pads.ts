@@ -10,6 +10,8 @@ import type { Vec3 } from './mesh';
 import { JOINT as J } from './rig';
 import type { Quat } from './rig';
 import { room } from './verts';
+import { ID, ORIGIN, mesh } from './store';
+import type { Pieces } from './store';
 import type { Out } from './verts';
 
 /**
@@ -294,24 +296,34 @@ export const pads = (
   band = color,
   /** A far runner's: fewer quads. */
   far = false,
+  /** The frame's pieces of the store: each pad and the collar go there, built once (store.ts). */
+  list?: Pieces,
 ) => {
   const [lames, collar, shell] = (made[+far] ??= make(far));
   const pad = marine ? shell : lames;
   // Hers smaller; her bells slimmer still (the user, 2026-11-13: over the shoulder, but finer).
   const k = build ? (marine ? BELL.fem : 0.9) : 1;
-  let w = out.length;
-  const dst = room(out, ((2 * pad.length + (marine ? 0 : collar.length)) / 7) * STRIDE);
-  /** The piece `m` at `o` turned by `rot`, mirrored with `side` -1; of `cloth` when given, matte. */
-  const place = (m: number[], o: Vec3, rot: Quat, side: number, cloth?: number[]) => {
+  /** The piece `m` into `to` at `o` turned by `rot`, `kk` its size, mirrored with `side` -1; of `cloth` when given, matte. */
+  const place = (
+    to: Out,
+    m: number[],
+    o: Vec3,
+    rot: Quat,
+    side: number,
+    kk: number,
+    cloth?: number[],
+  ) => {
+    let w = to.length;
+    const dst = room(to, (m.length / 7) * STRIDE);
     const [qx, qy, qz, qw] = rot;
     for (let i = 0; i < m.length; i += 7 * 3) {
       // Mirrored: its corners in the other order.
       for (let e = 0; e < 3; e++) {
         const j = i + (side > 0 ? e : (3 - e) % 3) * 7;
         // turn() written out, in plain numbers: a pad is some three thousand vertices a frame.
-        const x = m[j] * k * side;
-        const y = m[j + 1] * k;
-        const z = m[j + 2] * k;
+        const x = m[j] * kk * side;
+        const y = m[j + 1] * kk;
+        const z = m[j + 2] * kk;
         const tx = 2 * (qy * z - qz * y);
         const ty = 2 * (qz * x - qx * z);
         const tz = 2 * (qx * y - qy * x);
@@ -337,17 +349,29 @@ export const pads = (
         w += STRIDE;
       }
     }
+    to.length = w;
   };
+  /** Into the frame's vertices, or the piece made once into the store and placed there. */
+  const lay = (key: string, m: number[], o: Vec3, rot: Quat, side: number, cloth?: number[]) =>
+    list
+      ? list.push({
+          m: mesh(`${key} ${+far} ${+marine} ${color} ${band} ${side}`, v =>
+            place(v, m, ORIGIN, ID, side, 1, cloth),
+          ),
+          q: rot,
+          t: o,
+          k,
+        })
+      : place(out, m, o, rot, side, k, cloth);
   for (const side of [1, -1]) {
     const [arm, clavicle] = side > 0 ? [J.ARM_R, J.CLAVICLE_R] : [J.ARM_L, J.CLAVICLE_L];
     const [a, b] = [s.rot[clavicle], s.rot[arm]];
     const f = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3] < 0 ? -1 : 1) * LIFT;
     const q = a.map((c, i) => c * (1 - LIFT) + b[i] * f);
     const n = Math.hypot(...q) || 1;
-    place(pad, s.pos[arm], q.map(c => c / n) as Quat, side);
+    lay('pad', pad, s.pos[arm], q.map(c => c / n) as Quat, side);
   }
   if (!marine) {
-    place(collar, s.pos[J.NECK], s.rot[J.CHEST], 1, COLLAR_CLOTH);
+    lay('collar', collar, s.pos[J.NECK], s.rot[J.CHEST], 1, COLLAR_CLOTH);
   }
-  out.length = w;
 };

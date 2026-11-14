@@ -798,6 +798,7 @@ const gloves = (
   lod: number,
   suit: boolean,
   limb: number = LIMB.NONE,
+  lights = false,
 ) => {
   if (!lod) {
     return;
@@ -811,8 +812,8 @@ const gloves = (
     r.curls,
     glove,
     suit ? glove : colors[REGION.FLESH],
-    // The left thumb up the rifle's handguard.
-    { cup: +(!!p.rifled && !p.down && !floored(p) && !driving(r)) },
+    // The left thumb up the rifle's handguard; the marine's lit buttons on the wrists.
+    { cup: +(!!p.rifled && !p.down && !floored(p) && !driving(r)), lights },
     lod < 3,
     limb == LIMB.ARM_L ? J.HAND_L : limb == LIMB.ARM_R ? J.HAND_R : -1,
   );
@@ -875,6 +876,7 @@ export const soldier = (
   }
   // The armour: white in space, else in the team's colour.
   const plate = helmets ? undefined : color;
+  const marine = plated && !ninja && !!plate;
   const { s, sink, yaw, carry } = stance(r);
   // His face: a wince when hit, a grimace down, a shout in a cut or a dash, effort in a sprint or a
   // climb, focus aiming, a grin; the eyes on his aim from where the head points.
@@ -926,7 +928,7 @@ export const soldier = (
       );
     }
     piece(out, r.cut, colors, lod, sink, r.face.w, armored);
-    gloves(out, r, s, colors, lod, armored, r.cut.limb);
+    gloves(out, r, s, colors, lod, armored, r.cut.limb, marine);
   } else {
     const from = out.length;
     const bs = body(lod, build);
@@ -960,7 +962,7 @@ export const soldier = (
         buckle(o, a, q, build, color),
       );
     }
-    gloves(out, r, s, colors, lod, armored);
+    gloves(out, r, s, colors, lod, armored, LIMB.NONE, marine);
     if (k > 0) {
       dissolve(out, from, k);
     }

@@ -1,7 +1,7 @@
 // The vertex shader's skin and armour (render.ts's VERT, modes 1 and 2) in JavaScript, for the tests:
 // what the GPU draws of a Draw with flesh, from the same texels.
 import { GLOSS } from '../src/client/mesh';
-import { SCRATCHED } from '../src/client/armor';
+import { MARINE, SCRATCHED } from '../src/client/armor';
 import { PLATE, VERT } from '../src/client/flesh';
 import { REGION, UNLIT } from '../src/client/skin';
 import { CLOTH } from '../src/client/mask';
@@ -128,6 +128,8 @@ export const pose = (out: number[], d: Draw) => {
     const pl = !!f.plate;
     if (l[0] < 0) {
       l = f.accent!;
+    } else if (K & MARINE) {
+      // The marine's details keep their own colours.
     } else if (pl && Math.abs(h[3] - GLOSS) < 0.01) {
       l = f.plate!;
     } else if (pl && K & 1) {

@@ -602,6 +602,14 @@ export const phalanges = (curl: number, i: number): [Vec3, Vec3, Vec3] => {
 
 /** The knuckles' shell and the strap's buckle: near-black hard plastic. */
 const SHELL = [0.09, 0.09, 0.1];
+/** The strap round the wrist (the user, 2026-11-14: finer): its width, and how far it stands out of the palm's ring. */
+export const STRAP = { w: 0.009, k: 1.045 };
+/** The marine's lit buttons on it, in place of the buckle (the user, 2026-11-14: no black box): across (toward the thumb), and colour. */
+export const WRIST_LIGHTS: [number, number[]][] = [
+  [0.0048, [0.25, 1, 0.4]],
+  [0, [1, 0.65, 0.1]],
+  [-0.0048, [0.2, 0.8, 1]],
+];
 
 /**
  * A gloved hand at the wrist `end`: the fingers along `f`, the back of the hand along `u`, the thumb
@@ -628,6 +636,8 @@ export const hand = (
   cup = 0,
   /** A near runner's hand: fewer sides, on the near sleeve's cuff, and none of the glove's small parts. */
   lite = false,
+  /** The marine's: lit buttons on the strap round the wrist (WRIST_LIGHTS). */
+  lights = false,
 ) => {
   // A hand is built in its own space, the same as long as nothing it is made of changes (a grip
   // held, the hand at rest): some ten thousand vertices that are then only carried to the wrist.
@@ -635,18 +645,18 @@ export const hand = (
   // to frame, and every frame built the hand again.
   [curl, point, push, cup] = [curl, point, push, cup].map(tidy);
   to &&= to.map(tidy) as Vec3;
-  const key = `${+lite} ${curl} ${point} ${push} ${to} ${cup} ${tint} ${bare} ${+(bare === tint)}`;
+  const key = `${+lite} ${+lights} ${curl} ${point} ${push} ${to} ${cup} ${tint} ${bare} ${+(bare === tint)}`;
   let m = BUILT.get(key);
   if (!m) {
     if (BUILT.size >= KEPT) {
       BUILT.clear();
     }
-    BUILT.set(key, (m = shape(curl, tint, point, push, to, bare, cup, lite)));
+    BUILT.set(key, (m = shape(curl, tint, point, push, to, bare, cup, lite, lights)));
   }
   // Hand space (x toward the thumb, y the back, z toward the fingers), a point and a direction, to the world.
   let o = out.length;
-  const dst = room(out, (m.length / 9) * STRIDE);
-  for (let i = 0; i < m.length; i += 9, o += STRIDE) {
+  const dst = room(out, (m.length / 10) * STRIDE);
+  for (let i = 0; i < m.length; i += 10, o += STRIDE) {
     const x = m[i];
     const y = m[i + 1];
     const z = m[i + 2];
@@ -661,7 +671,7 @@ export const hand = (
     dst[o + 5] = th[2] * a + u[2] * b + f[2] * c;
     dst[o + 6] = m[i + 6];
     dst[o + 7] = m[i + 7];
-    dst[o + 8] = -1;
+    dst[o + 8] = m[i + 9];
     dst[o + 9] = m[i + 8];
   }
   out.length = o;
@@ -674,7 +684,7 @@ const tidy = (x: number) => Math.round(x * 1e9) / 1e9;
 const BUILT = new Map<string, number[]>();
 const KEPT = 128;
 
-/** hand()'s vertices in the hand's own space: position, normal and colour, nine numbers each. */
+/** hand()'s vertices in the hand's own space: position, normal, colour and layer, ten numbers each. */
 const shape = (
   curl: number,
   tint: number[],
@@ -684,14 +694,16 @@ const shape = (
   bare: number[],
   cup: number,
   lite: boolean,
+  lights: boolean,
 ): number[] => {
   const out: number[] = [];
   const [FS, CS] = lite ? [4, CUFF_NEAR] : [FINGER_SIDES, CUFF_SIDES];
   let paint = (_: number) => tint;
+  let layer = -1;
   /** A point and a direction in hand space, in `paint` of its ring. */
   const put = ([x, y, z]: Vec3, [m, n, w]: Vec3, r = 0) => {
     const c = paint(r);
-    out.push(x, y, z, m, n, w, c[0], c[1], c[2]);
+    out.push(x, y, z, m, n, w, c[0], c[1], c[2], layer);
   };
   // The palm starts as the sleeve's cuff does, vertex for vertex, its normals leaning to the fingers.
   const PALM = [
@@ -1000,27 +1012,36 @@ const shape = (
       k,
     );
   };
-  const [z0, z1] = [PALM[0][0] + 0.004, PALM[0][0] + 0.016];
-  tube(
-    [strap(z0, 0.96), strap(z0 + 0.0015, 1.07), strap(z1 - 0.0015, 1.07), strap(z1, 0.96)],
-    CS,
-    put,
-  );
-  paint = () => SHELL;
+  const [z0, z1, k] = [PALM[0][0] + 0.004, PALM[0][0] + 0.004 + STRAP.w, STRAP.k];
+  tube([strap(z0, 0.97), strap(z0 + 0.001, k), strap(z1 - 0.001, k), strap(z1, 0.97)], CS, put);
   const zb = (z0 + z1) / 2;
-  const yb = strap(zb, 1.07)[0][1] + strap(zb, 1.07)[2][1];
-  tube(
-    [-0.009, -0.008, 0.008, 0.009].map((x, i): Ring => {
-      const k = i % 3 ? 1 : i ? 0 : 0.1;
-      return [
-        [x, yb, zb],
-        [0, 0.0018 * k, 0],
-        [0, 0, 0.0055 * k],
-      ];
-    }),
-    6,
-    put,
-  );
+  const yb = strap(zb, k)[0][1] + strap(zb, k)[2][1];
+  /** A small block on the strap's back, `x` across, `w` and `d` its half sizes, `h` high. */
+  const block = (x: number, w: number, d: number, h: number) =>
+    tube(
+      [x - w, x - w * 0.85, x + w * 0.85, x + w].map((q, i): Ring => {
+        const s = i % 3 ? 1 : i ? 0 : 0.1;
+        return [
+          [q, yb, zb],
+          [0, h * s, 0],
+          [0, 0, d * s],
+        ];
+      }),
+      6,
+      put,
+    );
+  if (!lights) {
+    paint = () => SHELL;
+    block(0, 0.008, STRAP.w / 2 - 0.0015, 0.0016);
+  } else {
+    // Lit: unshaded, they bloom.
+    layer = -2;
+    for (const [x, c] of WRIST_LIGHTS) {
+      paint = () => c;
+      block(x, 0.0016, 0.0016, 0.0014);
+    }
+    layer = -1;
+  }
   return out;
 };
 
@@ -1030,6 +1051,8 @@ export interface Grip {
   push?: number;
   to?: Vec3;
   cup?: number;
+  /** The marine's lit buttons on the wrists' straps. */
+  lights?: boolean;
 }
 
 /**
@@ -1045,7 +1068,7 @@ export const hands = (
   curls: number[],
   glove: number[],
   bare: number[],
-  { point = 0, push = 0, to, cup = 0 }: Grip = {},
+  { point = 0, push = 0, to, cup = 0, lights = false }: Grip = {},
   lite = false,
   skip = -1,
 ) =>
@@ -1069,6 +1092,7 @@ export const hands = (
       bare,
       i ? 0 : cup,
       lite,
+      lights,
     );
     const a = room(out, 0);
     for (let k = at; build && k < out.length; k += STRIDE) {
@@ -1798,6 +1822,7 @@ export const createBody = (world?: World): Body => {
           push,
           to: thumbTo(Math.max(tk, 0)),
           cup: cupping,
+          lights: suit && !!plate,
         });
         if (hold > 0.2) {
           // The gauge lights once a press is more than a tap: the strength the shot would have.

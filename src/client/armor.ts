@@ -30,7 +30,7 @@ interface Region {
   y: [number, number];
   a: [number, number];
   /** How much further out the plate swells at the rest point (x, y): the chest plate's pecs. */
-  swell?: (x: number, y: number) => number;
+  swell?: (x: number, y: number, z: number) => number;
   /** Where its angles are measured from, degrees (0 the front): 180 for a plate on the back. */
   face?: number;
   /** Its bottom and top at each angle (degrees from the front, + outward) or rest point, when not level: a leg's opening. */
@@ -42,6 +42,8 @@ interface Region {
   man?: boolean;
   /** A round plate: its outline an ellipse in (angle, height), [half the angle, middle height, half height]. */
   round?: [number, number, number];
+  /** Cast: the forearm's straight plate rather than the skin's shape (casting()). */
+  cast?: boolean;
   /** Moulded: a smooth shell round the trunk rather than the skin's facets (moulding()). */
   mould?: boolean;
   /** The ninja's own armour (the user, 2026-11-13), worn by him alone; he wears no other plate. */
@@ -94,16 +96,25 @@ export const bust = (x: number, y: number) =>
  * cut low in the crook of the elbow, at `y`, and rises by `rise` round to the elbow's point behind,
  * between the angles `a` round the arm; it flares by `flare` toward the elbow; and a flat ridge
  * `ridge` high runs down its outer side, from `x` out from the body's middle, fading to the wrist.
+ * It stands `off` the arm, half a chest plate's thickness (the user, 2026-11-14: thinner).
  */
 export const CUFF = {
   wrist: 0.935,
   y: 1.122,
   rise: 0.045,
   a: [35, 150],
-  flare: 0.004,
-  ridge: 0.005,
+  flare: 0.003,
+  ridge: 0.004,
   x: 0.253,
+  off: 0.006,
 };
+/**
+ * The forearm's plate cast straight (the user, 2026-11-14: rectilinear, aggressive, not in rolls
+ * over the muscles, still flared): its section a rounded square (`n`, a superellipse) round the
+ * arm's line at `cx`, its half sizes across (`x`) and front to back (`z`) growing in a straight line
+ * from the wrist to the elbow, the heights `y`, clear of the skin; then the flare and the ridge.
+ */
+export const CAST = { cx: 0.222, y: [0.935, 1.14], x: [0.047, 0.06], z: [0.055, 0.069], n: 3 };
 const cuff = (a: number) => CUFF.y + CUFF.rise * smooth(CUFF.a[0], CUFF.a[1], Math.abs(a));
 const vambrace = (x: number, y: number) =>
   CUFF.flare * smooth(1.09, 1.15, y) +
@@ -113,10 +124,11 @@ const vambrace = (x: number, y: number) =>
     (1 - smooth(1.12, 1.135, y));
 
 /**
- * The biceps' plate (the user, 2026-11-13: worked too, and thinner): the heights of its edges'
- * middles, how far they slant (`cut`), and how far it stands off the arm, not OFF.
+ * The biceps' plate (the user, 2026-11-13: worked too, and thinner; 2026-11-14: thinner again): the
+ * heights of its edges' middles, how far they slant (`cut`), and how far it stands off the arm, not
+ * OFF.
  */
-export const BICEPS = { y: [1.203, 1.315], cut: 0.018, off: 0.007 };
+export const BICEPS = { y: [1.203, 1.315], cut: 0.018, off: 0.0045 };
 
 /** The knee pad's dome: up to 8 mm out at the kneecap. */
 const knee = (x: number, y: number) =>
@@ -125,20 +137,50 @@ const knee = (x: number, y: number) =>
 /**
  * The briefs (the user, 2026-11-10: round the hips under the belt, the leg's opening rising from the
  * crotch to the hip and lower behind, never between the thighs; 2026-11-12: thinner on the sides,
- * and no glitches). One opening line for all their pieces, the band on the trunk and the piece on
- * each thigh, by the angle of the rest point round the trunk (0 the front, 180 the back, either
- * side): the pieces met at the border of the trunk's skin and the legs' (0.93 m) on two lines that
- * did not agree, and left gaps, overlaps and slivers there. Lowest at the crotch, before and
- * behind, it rises to `side`, under the band's top (0.982), between the angles `at`.
+ * and no glitches; 2026-11-14: their sides up higher toward the hips, then a little less). One opening line for all
+ * their pieces, the band on the trunk and the piece on each thigh, by the angle of the rest point
+ * round the trunk (0 the front, 180 the back, either side): the pieces met at the border of the
+ * trunk's skin and the legs' (0.93 m) on two lines that did not agree, and left gaps, overlaps and
+ * slivers there. Their top is at `top` before and behind and climbs to `hip` over the hip between
+ * the angles `rise`; the opening, lowest at the crotch, before and behind, rises between the angles
+ * `at` to a strap `strap` high under that top.
  */
-export const BRIEFS = { front: 0.85, back: 0.86, side: 0.972, at: [14, 66, 114, 168] };
+export const BRIEFS = {
+  front: 0.85,
+  back: 0.86,
+  top: 0.982,
+  hip: 1.02,
+  strap: 0.012,
+  at: [14, 66, 114, 168],
+  rise: [20, 75, 105, 145],
+};
 /** The angle round the trunk of a rest point, degrees from the front, either side. */
 const round = (c: Corner) => (Math.abs(Math.atan2(c[0], -c[2])) * 180) / Math.PI;
-const opening = (_a: number, c: Corner) => {
-  const [s, [f0, f1, b1, b0]] = [round(c), BRIEFS.at];
-  return s <= 90
-    ? BRIEFS.front + (BRIEFS.side - BRIEFS.front) * smooth(f0, f1, s)
-    : BRIEFS.back + (BRIEFS.side - BRIEFS.back) * smooth(b0, b1, s);
+const briefsTop = (_a: number, c: Corner) => {
+  const [s, [f0, f1, b1, b0]] = [round(c), BRIEFS.rise];
+  return BRIEFS.top + (BRIEFS.hip - BRIEFS.top) * (s <= 90 ? smooth(f0, f1, s) : smooth(b0, b1, s));
+};
+/**
+ * The seat (the user, 2026-11-14: one piece, rounded, no breach in the middle, then one block): behind,
+ * the opening rises over the cleft in a small round arch to `top`, `r` either side of the middle,
+ * where the legs' insides rose in a V and parted the seat in two points.
+ */
+export const SEAT = { top: 0.865, r: 0.03, fill: 0.02, w: 0.03, y: [0.9, 0.95] };
+/**
+ * The seat in one block (the user: no parting): the plate on each side of the cleft set off further
+ * the nearer the middle, `fill` at most, `w` wide, up to the heights `y`, so that the two halves
+ * meet over it; its slope turns their normals back.
+ */
+const seat = (x: number, y: number, z: number) =>
+  z > 0 ? SEAT.fill * Math.exp(-((x / SEAT.w) ** 2)) * (1 - smooth(SEAT.y[0], SEAT.y[1], y)) : 0;
+const opening = (a: number, c: Corner) => {
+  const [s, [f0, f1, b1, b0], side] = [round(c), BRIEFS.at, briefsTop(a, c) - BRIEFS.strap];
+  if (s <= 90) {
+    return BRIEFS.front + (side - BRIEFS.front) * smooth(f0, f1, s);
+  }
+  const back = BRIEFS.back + (side - BRIEFS.back) * smooth(b0, b1, s);
+  const q = Math.min(Math.abs(c[0]) / SEAT.r, 1);
+  return Math.max(back, back + ((SEAT.top - back) * (1 + Math.cos(Math.PI * q))) / 2);
 };
 /** How far the inside of a leg is from the angle a round it: 1 there, 0 from 60 degrees off. */
 const inside = (a: number) => 1 - smooth(25, 60, Math.abs(((a + 630) % 360) - 180));
@@ -146,23 +188,21 @@ const inside = (a: number) => 1 - smooth(25, 60, Math.abs(((a + 630) % 360) - 18
 /**
  * On a thigh the opening also rises over its inside (a, round the leg, -90), above the leg's skin:
  * never between the thighs, with a curved edge where an angle limit cut it straight, a sliver of
- * plate standing by a wedge of suit at the back.
+ * plate standing by a wedge of suit at the back. Behind, the seat's arch does it (SEAT).
  */
-const legOpening = (a: number, c: Corner) => opening(a, c) + (0.95 - opening(a, c)) * inside(a);
-
-/** The gap between the briefs' thin sides and the thigh plates going up the hips: there is little room. */
-const SIDE_GAP = 0.01;
+const legOpening = (a: number, c: Corner) =>
+  round(c) > 90 ? opening(a, c) : opening(a, c) + (0.95 - opening(a, c)) * inside(a);
 
 /**
  * The thigh plates' top (the user, 2026-11-13, on a picture of a trooper's hips: a slant from the
  * hip down to the inside of the thigh, a crescent of dark ribbed suit between it and the briefs):
  * a line of its own by the angle round the trunk, on the thighs and up the hips' sides alike, so one
  * line across the border too. Lowest at the inside of the thigh, `front` and `back`, under the
- * crotch; SIDE_GAP under the briefs at the hip; between the angles `at`.
+ * crotch; `hip` at the hip, where the briefs' strap climbs on over it; between the angles `at`.
  */
-export const THIGH = { front: 0.775, back: 0.815, at: [20, 86, 96, 166] };
+export const THIGH = { front: 0.775, back: 0.815, hip: 0.962, at: [20, 86, 96, 166] };
 const plates = (_a: number, c: Corner) => {
-  const [s, [f0, f1, b1, b0], top] = [round(c), THIGH.at, BRIEFS.side - SIDE_GAP];
+  const [s, [f0, f1, b1, b0], top] = [round(c), THIGH.at, THIGH.hip];
   return s <= 90
     ? THIGH.front + (top - THIGH.front) * smooth(f0, f1, s)
     : THIGH.back + (top - THIGH.back) * smooth(b0, b1, s);
@@ -173,7 +213,7 @@ const plates = (_a: number, c: Corner) => {
  * showed and, at the crotch, the stripes of the legs' insides. Its bottom is under the plates by
  * `under`, and as low all round the inside of the thigh, where no plate is.
  */
-const GUSSET = { under: 0.025, off: 0.003, rib: 0.005 };
+const GUSSET = { under: 0.025, off: 0.003, tuck: 0.006 };
 /**
  * The ninja's belt (the user, 2026-11-13: a V on the sides, then deeper, on him and on her): its
  * bottom at the front's middle, under the buckle's middle (buckle.ts), rising `rise` to the hips,
@@ -190,13 +230,8 @@ const gusset = (a: number, c: Corner) => {
   const p = plates(a, c);
   return p + (THIGH.front - p) * inside(a) - GUSSET.under;
 };
-/** The rib a rest point is in: slanted bands, down toward the crotch, both sides alike. */
-const rib = (c: Corner) => (Math.abs(c[0]) + c[1] * 0.7) / GUSSET.rib;
-/** The cloth's two shades, rib after rib. */
-const CLOTH = [
-  [0.04, 0.04, 0.045],
-  [0.075, 0.075, 0.085],
-];
+/** The cloth: plain black, as the suit's legs (the user, 2026-11-14: it was ribbed in two shades). */
+const CLOTH = [0.07, 0.07, 0.08];
 
 /** The chest plate's top at angle a round the trunk (degrees, 0 the front): the neck's V. */
 const chestTop = (a: number) => 1.5 - 0.045 * Math.cos((a * Math.PI * 1.4) / 180) ** 2;
@@ -217,6 +252,9 @@ const chestHigh = (a: number) => {
   return top - (top - ARMPIT.y) * smooth(a0, a1, q) - (ARMPIT.y - ARMPIT.low) * smooth(a2, a3, q);
 };
 
+/** The marine's shoulder blade plates: ovals `at` degrees either side of the spine, `a` degrees and `h` metres half wide and high, their middle at `y`. */
+export const BLADE = { at: 32, a: 19, y: 1.458, h: 0.036 };
+
 /** The gap round the collar piece and over the back plate: there is little room up there. */
 const COLLAR_GAP = 0.012;
 
@@ -224,17 +262,30 @@ const COLLAR_GAP = 0.012;
 export const GAP = 0.02;
 
 /**
- * The belly's plate (the user, 2026-11-13: worked, rounder): its bottom at the middle, how far it
- * goes round each side (degrees), how much its bottom rises to its corners, rounding them off, and
- * how far it domes at its middle.
+ * The belly's plate (the user, 2026-11-13: worked, rounder; 2026-11-14: its shape to fit the chest
+ * plate's as puzzle pieces fit): its bottom at the middle, how far it goes round each side
+ * (degrees: out to under the chest plate's corners), how much its bottom rises to its corners,
+ * rounding them off, and how far it domes at its middle.
  */
-export const BELLY = { y: 1.035, a: 50, round: 0.07, dome: 0.007 };
+export const BELLY = { y: 1.035, a: 60, round: 0.075, dome: 0.007 };
 const belly = (x: number, y: number) =>
-  BELLY.dome * Math.max(0, 1 - (x / 0.14) ** 2 - ((y - 1.095) / 0.1) ** 2);
+  BELLY.dome * Math.max(0, 1 - (x / 0.15) ** 2 - ((y - 1.085) / 0.1) ** 2);
 
-/** The chest plate's bottom: its height at the middle, and how much higher at the sides. */
-export const CHEST = { y: 1.165, rise: 0.03 };
-const chestLow = (a: number) => CHEST.y + CHEST.rise * smooth(0, 60, Math.abs(a));
+/**
+ * The chest plate's bottom (the user, 2026-11-13: dipped at the middle; 2026-11-14: the belly's
+ * plate to lock into it): a tab hangs down the middle to `y`, flat out to the first angle of `tab`
+ * and rounding up by `drop` to the second; beside it the bottom rises by `rise` more to the sides.
+ * The belly's top follows it GAP under, so the tab sits in a notch of the belly's plate.
+ */
+export const CHEST = { y: 1.125, drop: 0.04, tab: [11, 22], rise: 0.03 };
+const chestLow = (a: number) => {
+  const q = Math.abs(a);
+  return (
+    CHEST.y +
+    CHEST.drop * smooth(CHEST.tab[0], CHEST.tab[1], q) +
+    CHEST.rise * smooth(CHEST.tab[1], 60, q)
+  );
+};
 
 /**
  * The ninja's vest: the bottom of its chest piece at the sides, how far its chevron dips at the
@@ -352,11 +403,12 @@ export const REGIONS: Region[] = [
     swell: pecs,
     mould: true,
   },
-  // The belly's plate, one piece (2026-11-13), GAP under the chest's along its bottom; rounded (BELLY).
+  // The belly's plate, one piece (2026-11-13), GAP under the chest's along its bottom, notched
+  // round its tab; rounded (BELLY).
   {
     part: PART.TRUNK,
     cx: 0,
-    y: [BELLY.y, CHEST.y + CHEST.rise],
+    y: [BELLY.y, CHEST.y + CHEST.drop + CHEST.rise],
     a: [-BELLY.a, BELLY.a],
     high: a => chestLow(a) - GAP,
     low: a => BELLY.y + BELLY.round * (Math.abs(a) / BELLY.a) ** 3,
@@ -375,7 +427,7 @@ export const REGIONS: Region[] = [
     y: [CUFF.wrist, CUFF.y + CUFF.rise],
     a: [-181, 181],
     high: cuff,
-    swell: vambrace,
+    cast: true,
   },
   // The user, 2026-11-10: a small plate on the biceps, under the shoulder plate; one on the back of
   // each thigh; and the shorts cut as briefs: round the hips under the belt, on each thigh the leg's
@@ -394,7 +446,15 @@ export const REGIONS: Region[] = [
     off: BICEPS.off,
   },
   { part: PART.LEG, cx: 0.1, y: [0.6, 0.94], a: [-58, 58], face: 180, high: plates },
-  { part: PART.TRUNK, cx: 0, y: [0.925, 0.982], a: [-181, 181], low: opening },
+  {
+    part: PART.TRUNK,
+    cx: 0,
+    y: [0.925, BRIEFS.hip],
+    a: [-181, 181],
+    low: opening,
+    high: briefsTop,
+    swell: seat,
+  },
   // The user, 2026-11-10: a piece over the collarbones up to the neck, following the chest plate's
   // V a little over it, out to the shoulder plates; and one on each shoulder blade, over the back's,
   // a groove down the spine between them.
@@ -405,14 +465,21 @@ export const REGIONS: Region[] = [
     a: [-78, 78],
     low: a => chestTop(a) + COLLAR_GAP,
   },
-  { part: PART.TRUNK, cx: 0, y: [1.4 + COLLAR_GAP, 1.505], a: [-62, -5], face: 180 },
-  { part: PART.TRUNK, cx: 0, y: [1.4 + COLLAR_GAP, 1.505], a: [5, 62], face: 180 },
+  // Smaller and oval (the user, 2026-11-14: they spanned the back's top from the spine out).
+  ...[-1, 1].map((k): Region => ({
+    part: PART.TRUNK,
+    cx: 0,
+    y: [BLADE.y - BLADE.h, BLADE.y + BLADE.h],
+    a: [-BLADE.a, BLADE.a],
+    face: 180 + k * BLADE.at,
+    round: [BLADE.a, BLADE.y, BLADE.h],
+  })),
   // The shoulders have a bell each (pads.ts), hers slimmer.
   // The back (the user, 2026-11-10, for Highline, where no pack covers it): a plate between the
   // shoulder blades and one on the small of the back, GAP apart.
   { part: PART.TRUNK, cx: 0, y: [1.2, 1.4], a: [-58, 58], face: 180 },
   { part: PART.TRUNK, cx: 0, y: [1.035, 1.2 - GAP], a: [-52, 52], face: 180 },
-  // The thigh plates go on up the hips' sides, SIDE_GAP under the briefs' thin sides (the user): the
+  // The thigh plates go on up the hips' sides, under the briefs' strap (the user): the
   // same two plates on the trunk's skin, cut at the same angles round the leg, so the edges of each
   // run on across the border (one piece spanning both left a tab over the stripe between them).
   { part: PART.TRUNK, cx: 0.1, y: [0.92, 0.975], a: [-62, 78], high: plates, legs: true },
@@ -425,9 +492,17 @@ export const REGIONS: Region[] = [
     high: plates,
     legs: true,
   },
-  { part: PART.LEG, cx: 0.1, y: [0.845, 0.935], a: [-181, 181], low: legOpening },
-  // The gusset under them (GUSSET): on the trunk and round the top of each thigh.
-  { part: PART.TRUNK, cx: 0, y: [0.8, 0.98], a: [-181, 181], thin: true },
+  { part: PART.LEG, cx: 0.1, y: [0.845, 0.935], a: [-181, 181], low: legOpening, swell: seat },
+  // The gusset under them (GUSSET): on the trunk, up under the briefs' strap over the hip, and
+  // round the top of each thigh.
+  {
+    part: PART.TRUNK,
+    cx: 0,
+    y: [0.8, BRIEFS.hip],
+    a: [-181, 181],
+    high: (a, c) => opening(a, c) + GUSSET.tuck,
+    thin: true,
+  },
   { part: PART.LEG, cx: 0.1, y: [0.74, 0.94], a: [-181, 181], low: gusset, thin: true },
   // The ninja's belt, in a V (BELT).
   {
@@ -794,7 +869,7 @@ const rawR = (b: number, gi: number, w: number[], a: number, y: number) => {
       smooth(SWELL.a[0], SWELL.a[1], (Math.abs(a) * 180) / Math.PI) *
       smooth(SWELL.y[0], SWELL.y[1], y) *
       (1 - 0.6 * smooth(SWELL.top[0], SWELL.top[1], y));
-  return f + out + (swell ? swell(f * Math.sin(a), y) : 0) * (b && REGIONS[gi].alone ? SLIM : 1);
+  return f + out + (swell ? swell(f * Math.sin(a), y, 0) : 0) * (b && REGIONS[gi].alone ? SLIM : 1);
 };
 
 /**
@@ -976,6 +1051,60 @@ const moulding = (s: Skin, gi: number) => {
   };
 };
 
+/** The cast forearm plate's radius at the angle `t` round the arm (0 out to the side, toward +z) and height `y`, on the side `side`. */
+const castR = (t: number, y: number, side: number) => {
+  const f = Math.min(Math.max((y - CAST.y[0]) / (CAST.y[1] - CAST.y[0]), 0), 1.2);
+  const [ax, az] = [
+    CAST.x[0] + (CAST.x[1] - CAST.x[0]) * f,
+    CAST.z[0] + (CAST.z[1] - CAST.z[0]) * f,
+  ];
+  const [c, s] = [Math.cos(t), Math.sin(t)];
+  const r = (Math.abs(c / ax) ** CAST.n + Math.abs(s / az) ** CAST.n) ** (-1 / CAST.n);
+  return r + vambrace(side * (CAST.cx + r * c), y);
+};
+
+/**
+ * The forearm's plate on the skin `s` (CAST): each corner set off along the skin's rest normal to
+ * the cast's radius, with the cast's normal, as moulding() does the chest's.
+ */
+const casting = (s: Skin) => {
+  const { t } = s;
+  return (c: Corner, k: number, turned = 0): Moulded => {
+    const [x, y, z] = c;
+    const side = Math.sign(x) || 1;
+    const o = unit(
+      ...([0, 1, 2].map(j =>
+        [0, 1, 2].reduce(
+          (sum, q) =>
+            sum + s.v[t[k * 3 + q] * 6 + 3 + j] * c[3 + q] * (turned & (TURN << q) ? -(j != 1) : 1),
+          0,
+        ),
+      ) as [number, number, number]),
+    );
+    const dx = x * side - CAST.cx;
+    const a = Math.atan2(z, dx);
+    const d = Math.max(FLOOR, castR(a, y, side) - Math.hypot(dx, z));
+    // The cast's normal, from its slopes round the arm and up it.
+    const at = (q: number, h: number) => {
+      const r = castR(q, h, side);
+      return [side * r * Math.cos(q), h, r * Math.sin(q)];
+    };
+    const e = 1e-3;
+    const [p0, p1, h0, h1] = [at(a - e, y), at(a + e, y), at(a, y - e), at(a, y + e)];
+    const ta = p1.map((v, j) => v - p0[j]);
+    const ty = h1.map((v, j) => v - h0[j]);
+    let N = unit(
+      ta[1] * ty[2] - ta[2] * ty[1],
+      ta[2] * ty[0] - ta[0] * ty[2],
+      ta[0] * ty[1] - ta[1] * ty[0],
+    );
+    if (N[0] * side * Math.cos(a) + N[2] * Math.sin(a) < 0) {
+      N = N.map(v => -v);
+    }
+    return [d, o[0] - N[0], o[1] - N[1], o[2] - N[2], ...o];
+  };
+};
+
 /** The recipe of the armour on the skin `s`, `fine` (curved outlines refined, scratches) or not. */
 
 const cook = (s: Skin, fine: boolean): Recipe => {
@@ -1011,8 +1140,8 @@ const cook = (s: Skin, fine: boolean): Recipe => {
       if (swell) {
         const e = 1e-3;
         g = [
-          (swell(c[0] + e, c[1]) - swell(c[0] - e, c[1])) / (2 * e),
-          (swell(c[0], c[1] + e) - swell(c[0], c[1] - e)) / (2 * e),
+          (swell(c[0] + e, c[1], c[2]) - swell(c[0] - e, c[1], c[2])) / (2 * e),
+          (swell(c[0], c[1] + e, c[2]) - swell(c[0], c[1] - e, c[2])) / (2 * e),
           0,
         ];
         const nl = Math.hypot(c[6], c[7], c[8]) || 1;
@@ -1029,7 +1158,9 @@ const cook = (s: Skin, fine: boolean): Recipe => {
     const nl = Math.hypot(c[6], c[7], c[8]) || 1;
     return [0, 1, 2].map(j => c[j] + (c[6 + j] / nl) * d);
   };
-  const moulds = REGIONS.map((g, i) => (g.mould ? moulding(s, i) : undefined));
+  const moulds = REGIONS.map((g, i) =>
+    g.mould ? moulding(s, i) : g.cast ? casting(s) : undefined,
+  );
   for (let k = 0; k < t.length / 3; k++) {
     const part = partOf(l[k]);
     if (part < 0) {
@@ -1114,11 +1245,12 @@ const cook = (s: Skin, fine: boolean): Recipe => {
       // A moulded plate's curves, finer still: the woman's domes. Not close up too: on the near
       // skin its outline went by the skin's big triangles, in steps, and the V at the neck was gone
       // (the user, 2026-11-13: smooth the stairs on the pecs).
-      const pieces = region.mould
-        ? split(fine ? split([tri]) : [tri])
-        : fine && (region.round || region.low || region.high)
-          ? split([tri])
-          : [tri];
+      const pieces =
+        region.mould || region.cast
+          ? split(fine ? split([tri]) : [tri])
+          : fine && (region.round || region.low || region.high)
+            ? split([tri])
+            : [tri];
       for (const piece of pieces) {
         const shell = moulds[g];
         const mould = shell && ((c: Corner, k: number) => shell(c, k, flat));
@@ -1148,37 +1280,24 @@ const cook = (s: Skin, fine: boolean): Recipe => {
           continue;
         }
         if (region.thin) {
-          // Cloth: no wall; close up, cut in ribs of two shades.
-          const js = poly.map(rib);
-          const [j0, j1] = fine
-            ? [Math.floor(Math.min(...js)), Math.floor(Math.max(...js))]
-            : [0, 0];
-          for (let j = j0; j <= j1; j++) {
-            const band = fine
-              ? clip(
-                  clip(poly, c => rib(c) - j, 0),
-                  c => j + 1 - rib(c),
-                  0,
-                )
-              : poly;
-            for (let i = 1; i + 1 < band.length; i++) {
-              add(
-                [band[0], band[i], band[i + 1]],
-                [GUSSET.off, GUSSET.off, GUSSET.off],
-                undefined,
-                CLOTH[j & 1],
-                -1,
-                0,
-                k,
-              );
-            }
+          // Cloth: no wall.
+          for (let i = 1; i + 1 < poly.length; i++) {
+            add(
+              [poly[0], poly[i], poly[i + 1]],
+              [GUSSET.off, GUSSET.off, GUSSET.off],
+              undefined,
+              CLOTH,
+              -1,
+              0,
+              k,
+            );
           }
           continue;
         }
         const off = (c: Corner) =>
           mould
             ? mould(c, k)[0]
-            : (region.off ?? OFF) + (region.swell ? region.swell(c[0], c[1]) : 0);
+            : (region.off ?? OFF) + (region.swell ? region.swell(c[0], c[1], c[2]) : 0);
         for (let i = 1; i + 1 < poly.length; i++) {
           const cs = [poly[0], poly[i], poly[i + 1]];
           add(cs, cs.map(off), region.swell, WHITE, GLOSS, 0, k, mould && cs.map(c => mould(c, k)));
@@ -1321,10 +1440,60 @@ export const ASTRO_DETAILS = [
   ...[1.09, 1.13].map(y => [PART.TRUNK, 0, 38, y, 0, 0.006, 0.003, 0, 0]),
   ...[-12, 12].map(a => [PART.LEG, 0.1, a, 0.74, 0, 0.13, 0.0012, 0, 0]),
 ];
+/**
+ * The marine's details (the user, 2026-11-14: coloured buttons, boxes, grooves), as DETAILS, then
+ * how far it stands over the plate (a box, walled, when not 0) and its look in `KIT`: a control box
+ * on the left of the chest with three lit buttons (none on the belly: smooth, the user); a
+ * power box on the back with two lights, two
+ * grooves across the small of the back; a box on the outside of each thigh with a light; three
+ * lit buttons alone on the left forearm by the wrist (the user: no black box there).
+ */
+export const MARINE_DETAILS = [
+  [PART.TRUNK, 0, 24, 1.425, 90, 0.034, 0.01, -1, 0.004, 0],
+  ...[19.5, 24, 28.5].map((a, i) => [
+    PART.TRUNK,
+    0,
+    a,
+    1.425,
+    90,
+    0.005,
+    0.0025,
+    -1,
+    0.0052,
+    i + 1,
+  ]),
+  [PART.TRUNK, 0, 180, 1.29, 0, 0.09, 0.035, 1, 0.007, 0],
+  ...[-1, 1].map((k, i) => [PART.TRUNK, 0, 180 + 5 * k, 1.322, 0, 0.007, 0.0035, 1, 0.0105, i + 1]),
+  ...[1.08, 1.12].map(y => [PART.TRUNK, 0, 180, y, 90, 0.18, 0.0012, 1, 0, 4]),
+  [PART.LEG, 0.1, 60, 0.82, 0, 0.05, 0.015, 0, 0.006, 0],
+  [PART.LEG, 0.1, 60, 0.835, 0, 0.005, 0.0025, 0, 0.0072, 1],
+  ...[0.988, 1.0, 1.012].map((y, i) => [
+    PART.ARM,
+    0.222,
+    0,
+    y,
+    0,
+    0.005,
+    0.0025,
+    -1,
+    0.0015,
+    i + 1,
+  ]),
+];
+/** The marine's details' looks: [colour, layer]: the boxes dark and glossy, the buttons lit (green, amber, cyan), the grooves dark. */
+const KIT: [number[], number][] = [
+  [[0.1, 0.1, 0.11], GLOSS],
+  [[0.25, 1, 0.4], -2],
+  [[1, 0.65, 0.1], -2],
+  [[0.2, 0.8, 1], -2],
+  [[0.07, 0.07, 0.08], -1],
+];
 /** A detail's colour that is the team's, told by its red under 0 (armor() swaps it). */
 const ACCENT = [-1, 0, 0];
 /** A triangle's kind bit: the astronaut's alone (ASTRO_DETAILS). */
 const ASTRO = 16;
+/** A triangle's kind bit: the marine's alone (MARINE_DETAILS), in its own colour on any plate. */
+export const MARINE = 32;
 const DARK = [0.07, 0.07, 0.08];
 /** The longest piece a detail is laid in (m). */
 const PIECE = 0.012;
@@ -1357,6 +1526,11 @@ const scratchesOn = (
   const probe = (x: number[]): Corner => [...x, 0, 0, 0, 0, 0, 0, 0];
   const dot = (p: number[], q: number[]) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
   const corners = (k: number) => [0, 1, 2].map(c => [0, 1, 2].map(j => v[t[k * 3 + c] * 6 + j]));
+  const cross = (p: number[], q: number[]) => [
+    p[1] * q[2] - p[2] * q[1],
+    p[2] * q[0] - p[0] * q[2],
+    p[0] * q[1] - p[1] * q[0],
+  ];
   /**
    * A stroke on the skin triangle k at `at`, L long and W half wide, turned by `a` in the
    * triangle's plane from its first edge, or from upright when `up`; in `col`, tagged as a detail
@@ -1373,6 +1547,8 @@ const scratchesOn = (
     mark = false,
     own = false,
     kind = 0,
+    layer = -1,
+    raise = 0,
   ) => {
     const part = partOf(l![k]);
     const P = corners(k);
@@ -1445,37 +1621,78 @@ const scratchesOn = (
     }
     const offs = cs.map(
       (c, i) =>
-        (ms ? ms[i][0] : (REGIONS[g].off ?? OFF) + (swell ? swell(c[0], c[1]) : 0)) + 0.0008,
+        (ms ? ms[i][0] : (REGIONS[g].off ?? OFF) + (swell ? swell(c[0], c[1], c[2]) : 0)) + 0.0008,
     );
     const pick = (...i: number[]) => ms && i.map(j => ms[j]);
+    const top = offs.map(o => o + raise);
     tag(mark ? g : -1);
     add(
       [cs[0], cs[1], cs[2]],
-      [offs[0], offs[1], offs[2]],
+      [top[0], top[1], top[2]],
       undefined,
       col,
-      -1,
+      layer,
       kind,
       k,
       pick(0, 1, 2),
     );
     add(
       [cs[0], cs[2], cs[3]],
-      [offs[0], offs[2], offs[3]],
+      [top[0], top[2], top[3]],
       undefined,
       col,
-      -1,
+      layer,
       kind,
       k,
       pick(0, 2, 3),
     );
+    if (raise) {
+      // A box: walls from the plate up to its top, wound outward as the plates' (cook()).
+      const lift = (i: number, d: number) => {
+        const c = cs[i];
+        const nl = Math.hypot(c[6], c[7], c[8]) || 1;
+        return [0, 1, 2].map(j => c[j] + (c[6 + j] / nl) * d);
+      };
+      const side = col.map(q => q * 0.6);
+      for (let i = 0; i < 4; i++) {
+        const j = (i + 1) % 4;
+        const [pt, qt, qb] = [lift(i, top[i]), lift(j, top[j]), lift(j, offs[j])];
+        const f = cross(
+          qt.map((q, m) => q - pt[m]),
+          qb.map((q, m) => q - pt[m]),
+        );
+        const [p, q] =
+          dot(
+            f,
+            cs[i].map((c, m) => c - at[m]),
+          ) >= 0
+            ? [i, j]
+            : [j, i];
+        const [P, Q] = [cs[p], cs[q]];
+        add(
+          [P, Q, Q],
+          [top[p], top[q], offs[q] - 0.001],
+          undefined,
+          side,
+          -1,
+          kind | 1,
+          k,
+          pick(p, q, q),
+        );
+        add(
+          [P, Q, P],
+          [top[p], offs[q] - 0.001, offs[p] - 0.001],
+          undefined,
+          side,
+          -1,
+          kind | 1,
+          k,
+          pick(p, q, p),
+        );
+      }
+    }
     return true;
   };
-  const cross = (p: number[], q: number[]) => [
-    p[1] * q[2] - p[2] * q[1],
-    p[2] * q[0] - p[0] * q[2],
-    p[0] * q[1] - p[1] * q[0],
-  ];
   /** Each triangle's part, and its corners' places, nine numbers each: hitOf() goes through them all, many times. */
   const parts = Int8Array.from({ length: n }, (_, k) => partOf(l![k]));
   const T = new Float64Array(n * 9);
@@ -1526,12 +1743,14 @@ const scratchesOn = (
     const [L, W] = [0.008 + rand() * 0.022, 0.0005 + rand() * 0.0006];
     made += +stroke(k, at, a, L, W, WORN[Math.floor(rand() * WORN.length)]);
   }
-  for (const [part, cx, ang, y, tilt, L, W, only, own, astro, lit] of [
+  for (const [part, cx, ang, y, tilt, L, W, only, own, astro, lit, marine, raise, look] of [
     ...DETAILS,
     ...[...NINJA_DETAILS, ...VENTS[s.b ? 1 : 0], ...SIGNS[s.b ? 1 : 0]].map(d => [...d, 1]),
     ...ASTRO_DETAILS.map(d => [...d.slice(0, 8), 0, 1, d[8]]),
+    ...MARINE_DETAILS.map(d => [...d.slice(0, 8), 0, 0, 0, 1, d[8], d[9]]),
   ]) {
-    const [col, kind] = [lit ? ACCENT : DARK, astro ? ASTRO : 0];
+    const [col, layer] = marine ? KIT[look] : [lit ? ACCENT : DARK, -1];
+    const kind = astro ? ASTRO : marine ? MARINE : 0;
     for (const side of only ? [only] : [1, -1]) {
       const r = (ang * Math.PI) / 180;
       const hit = hitOf(part, [cx * side, y, 0], [Math.sin(r) * side, 0, -Math.cos(r)]);
@@ -1575,6 +1794,8 @@ const scratchesOn = (
             true,
             !!own,
             kind,
+            layer,
+            raise,
           );
         }
       }
@@ -1593,6 +1814,7 @@ const wearing = (t: number[], ninja: boolean, astro: boolean, bare: boolean) => 
     if (
       ninja != !!REGIONS[t[i + 5]]?.alone ||
       (t[i + 4] & ASTRO && !astro) ||
+      (t[i + 4] & MARINE && (astro || ninja)) ||
       (bare && !REGIONS[t[i + 5]]?.belt)
     ) {
       continue;
@@ -1747,20 +1969,23 @@ export const armor = (
     let cg = t[i + 1];
     let cb = t[i + 2];
     // Plain numbers, no array a triangle (as below).
+    // The marine's details keep their own colours.
     const tone =
-      cr < 0
-        ? accent
-        : plate && t[i + 3] == GLOSS
-          ? plate
-          : plate && !(kind & 1) && t[i + 5] < 0
-            ? // On coloured plates the scratches are white (the user, 2026-11-10); on white ones, grey.
-              SCRATCHED[+(cr > 0.55)]
-            : undefined;
+      kind & MARINE
+        ? undefined
+        : cr < 0
+          ? accent
+          : plate && t[i + 3] == GLOSS
+            ? plate
+            : plate && !(kind & 1) && t[i + 5] < 0
+              ? // On coloured plates the scratches are white (the user, 2026-11-10); on white ones, grey.
+                SCRATCHED[+(cr > 0.55)]
+              : undefined;
     if (tone) {
       cr = tone[0];
       cg = tone[1];
       cb = tone[2];
-    } else if (plate && kind & 1) {
+    } else if (plate && kind & 1 && !(kind & MARINE)) {
       cr = plate[0] * 0.75;
       cg = plate[1] * 0.75;
       cb = plate[2] * 0.75;

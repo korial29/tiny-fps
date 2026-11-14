@@ -5,7 +5,7 @@
 // piece of their own, built once for the right shoulder and mirrored: carried at the arm's joint,
 // turned as the collarbone is and a little as the arm (so it lifts when the arm does). And his collar,
 // on the chest at the neck's foot.
-import { GLOSS, STRIDE } from './mesh';
+import { GILT, GLOSS, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, turn } from './rig';
 import type { Quat } from './rig';
@@ -48,23 +48,47 @@ const shoulder = (x: number, z: number) => {
  * and from over the joint on: there the skin falls some 4 cm in 6, by the neck far less.
  */
 const FRONT = [3, 9];
-const [CLEAR, STACK] = [0.013, 0.009];
+const [CLEAR, STACK] = [0.015, 0.009];
+/** How round the lame's turn onto the shoulder is (m): the width of the smooth maximum. */
+const EASE = 0.03;
 
 /**
  * The lames' front half (the user, 2026-11-13: wrap the front of the shoulders more): this much
- * wider than their back half, and falling this much further, down over the front of the shoulder.
+ * wider than their back half, and falling this much further, down over the front of the shoulder
+ * (1.6 plunged too steeply, the user, 2026-11-13), down onto the chest piece (the user: fill the
+ * gap between the pads and the plates).
  */
-export const FORE = { wide: 1.2, fall: 1.6 };
+export const FORE = { wide: 1.35, fall: 1.35 };
+/** Their back half (the user, 2026-11-13: the pads go on behind too): as FORE, over the shoulder blade. */
+export const AFT = { wide: 1.4, fall: 1.25 };
+/**
+ * How a lame falls from its crease to its edges, as a power of the way across: round over the
+ * shoulder, not a roof's straight slope (the user, 2026-11-13: round the slope; it was 1.3).
+ */
+export const CROWN = 2;
 
 /** The lame `i` at `u` across it (-1 its front edge, 1 its back) and `v` along it, `d` under its top. */
 const at = (i: number, u: number, v: number, d = 0): Vec3 => {
   const l = LAMES[i];
   const w = v < WIDE ? 0.75 + (0.25 * v) / WIDE : (1 - v) / (1 - WIDE);
   const fore = u < 0;
-  const [x, z] = [l[0] + (l[1] - l[0]) * v, 0.01 + u * w * l[2] * (fore ? FORE.wide : 1)];
-  const y =
-    l[3] - SLOPE * v + RISE * v ** 3 - FALL * w * Math.abs(u) ** 1.3 * (fore ? FORE.fall : 1);
-  return [x, Math.max(y, shoulder(x, z) + CLEAR + i * STACK) - d, z];
+  const half = fore ? FORE : AFT;
+  const [x, z] = [l[0] + (l[1] - l[0]) * v, 0.01 + u * w * l[2] * half.wide];
+  const y = l[3] - SLOPE * v + RISE * v ** 3 - FALL * w * Math.abs(u) ** CROWN * half.fall;
+  // Eased onto the shoulder rather than bent onto it at once: no kink where it starts to follow it.
+  const [a, b] = [y, shoulder(x, z) + CLEAR + i * STACK];
+  return [x, (a + b + Math.sqrt((a - b) ** 2 + EASE * EASE)) / 2 - d, z];
+};
+
+/** The lame's top's normal at `u`, `v`, off its slopes: shaded round, not in facets. */
+const atN = (i: number, u: number, v: number): Vec3 => {
+  const e = 1e-3;
+  const [p, q] = [at(i, Math.min(u + e, 1), v), at(i, Math.max(u - e, -1), v)];
+  const [f, g] = [at(i, u, Math.min(v + e, 1)), at(i, u, Math.max(v - e, 0))];
+  const [s, t] = [p.map((c, j) => c - q[j]), f.map((c, j) => c - g[j])];
+  const n = [s[1] * t[2] - s[2] * t[1], s[2] * t[0] - s[0] * t[2], s[0] * t[1] - s[1] * t[0]];
+  const k = (Math.hypot(...n) || 1) * (n[1] < 0 ? -1 : 1);
+  return [n[0] / k, n[1] / k, n[2] / k];
 };
 
 /** The collar at `u` round it (-1 to 1) and `v` up it, `d` inside its outer face. */
@@ -126,6 +150,19 @@ const bellN = (u: number, v: number): Vec3 => {
  */
 export const BAND = { rows: [8], shade: 2 };
 
+/** A lame's quads across and along it (its top shaded round, so ten across). */
+const [COLS, ROWS] = [10, 6];
+/** A lame's quads: its top and underside, its inner end, its front and back edges. */
+export const LAME_QUADS = COLS * ROWS * 2 + COLS + ROWS * 2;
+
+/**
+ * The ninja's colours (the user, 2026-11-13: vary them): gold shoulder pads that shine (GILT; a darker
+ * gold, the user), and a
+ * collar of brown cloth, matte.
+ */
+export const GOLD = [0.6, 0.4, 0.09];
+export const COLLAR_CLOTH = [0.3, 0.18, 0.1];
+
 let made: number[][] | undefined;
 
 /** The right pad at rest: triangles of [x, y, z, nx, ny, nz, shade], the shade 1 on top. */
@@ -138,14 +175,25 @@ const make = () => {
     const k = Math.hypot(...n) || 1;
     [0, 2, 1, 0, 3, 2].forEach(i => out.push(...p[i], n[0] / k, n[1] / k, n[2] / k, shade));
   };
-  const [COLS, ROWS] = [6, 6];
   for (let l = 0; l < LAMES.length; l++) {
     for (let c = 0; c < COLS; c++) {
       const [u0, u1] = [(2 * c) / COLS - 1, (2 * (c + 1)) / COLS - 1];
       for (let r = 0; r < ROWS; r++) {
         const [v0, v1] = [r / ROWS, (r + 1) / ROWS];
-        // Its top, wound to face up; its underside.
+        // Its top, wound to face up, each corner with the surface's own normal; its underside.
+        const from = out.length;
         quad([at(l, u0, v0), at(l, u0, v1), at(l, u1, v1), at(l, u1, v0)], 1);
+        [
+          [u0, v0],
+          [u1, v1],
+          [u0, v1],
+          [u0, v0],
+          [u1, v0],
+          [u1, v1],
+        ].forEach(([u, v], k) => {
+          const o = from + k * 7 + 3;
+          [out[o], out[o + 1], out[o + 2]] = atN(l, u, v);
+        });
         quad(
           [at(l, u0, v0, THICK), at(l, u1, v0, THICK), at(l, u1, v1, THICK), at(l, u0, v1, THICK)],
           0.4,
@@ -218,7 +266,8 @@ const make = () => {
 };
 
 /**
- * Appends the ninja's shoulder pads and his collar on the solved pose `s`, in the team's `color`;
+ * Appends the ninja's shoulder pads and his collar on the solved pose `s`, the pads in `color` (GOLD
+ * for him), the collar in COLLAR_CLOTH;
  * smaller on the woman (`build`). Or the `marine`'s shoulder bells, and no collar, with a band
  * round them in `band` (the astronaut's team colour on his white bells).
  */
@@ -235,8 +284,8 @@ export const pads = (
   // Hers smaller; her bells slimmer still (the user, 2026-11-13: over the shoulder, but finer).
   const k = build ? (marine ? BELL.fem : 0.9) : 1;
   let w = out.length;
-  /** The piece `m` at `o` turned by `rot`, mirrored with `side` -1. */
-  const place = (m: number[], o: Vec3, rot: Quat, side: number) => {
+  /** The piece `m` at `o` turned by `rot`, mirrored with `side` -1; of `cloth` when given, matte. */
+  const place = (m: number[], o: Vec3, rot: Quat, side: number, cloth?: number[]) => {
     for (let i = 0; i < m.length; i += 7 * 3) {
       // Mirrored: its corners in the other order.
       for (const c of side > 0 ? [0, 1, 2] : [0, 2, 1]) {
@@ -244,7 +293,7 @@ export const pads = (
         const p = turn(rot, [m[j] * k * side, m[j + 1] * k, m[j + 2] * k]);
         const d = turn(rot, [m[j + 3] * side, m[j + 4], m[j + 5]]);
         const banded = m[j + 6] == BAND.shade;
-        const [rgb, shade] = banded ? [band, 1] : [color, m[j + 6]];
+        const [rgb, shade] = banded ? [band, 1] : [cloth ?? color, m[j + 6]];
         out[w] = o[0] + p[0];
         out[w + 1] = o[1] + p[1];
         out[w + 2] = o[2] + p[2];
@@ -253,7 +302,7 @@ export const pads = (
         out[w + 5] = d[2];
         out[w + 6] = rgb[0] * shade;
         out[w + 7] = rgb[1] * shade;
-        out[w + 8] = shade == 1 ? GLOSS : -1;
+        out[w + 8] = shade != 1 || cloth ? -1 : marine ? GLOSS : GILT;
         out[w + 9] = rgb[2] * shade;
         w += STRIDE;
       }
@@ -268,6 +317,6 @@ export const pads = (
     place(pad, s.pos[arm], q.map(c => c / n) as Quat, side);
   }
   if (!marine) {
-    place(collar, s.pos[J.NECK], s.rot[J.CHEST], 1);
+    place(collar, s.pos[J.NECK], s.rot[J.CHEST], 1, COLLAR_CLOTH);
   }
 };

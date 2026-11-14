@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { STRIDE } from './mesh';
-import { BAND, BELL, FORE, LAMES, pads } from './pads';
+import { AFT, BAND, BELL, COLLAR_CLOTH, CROWN, FORE, GOLD, LAME_QUADS, LAMES, pads } from './pads';
 import { JOINT as J, rest, solve } from './rig';
 import { body, palette, skin } from './skin';
 
@@ -34,11 +34,14 @@ describe("pads, the ninja's shoulder pads and collar", () => {
     expect(tip[1]).toBeGreaterThan(arm[1]);
   });
 
-  it('wraps the front of the shoulder further than the back (the user, 2026-11-13)', () => {
-    expect(FORE.wide).toBeGreaterThan(1);
-    expect(FORE.fall).toBeGreaterThan(1);
-    // The right pad's edges fore and aft of its arm's joint, the collar left out: the front one
-    // reaches further and hangs lower.
+  it('wraps the front of the shoulder and, since, the back too (the user, 2026-11-13)', () => {
+    expect(FORE.wide).toBeGreaterThan(1.3);
+    expect(AFT.wide).toBeGreaterThan(1.3);
+    // Round over the shoulder, and not plunging as steeply (the user, 2026-11-13).
+    expect(CROWN).toBeGreaterThanOrEqual(2);
+    expect(FORE.fall).toBeLessThan(1.6);
+    // The right pad's edges fore and aft of its arm's joint, the collar left out: both reach well
+    // past the joint, the front hanging lower over the chest.
     const pad = pts.filter(p => Math.abs(p[0] - arm[0]) < 0.06 && Math.abs(p[0]) > 0.13);
     const [fore, aft] = [
       pad.filter(p => p[2] < arm[2] - 0.08),
@@ -46,8 +49,25 @@ describe("pads, the ninja's shoulder pads and collar", () => {
     ];
     const reach = (ps: number[][]) => Math.max(...ps.map(p => Math.abs(p[2] - arm[2])));
     const low = (ps: number[][]) => Math.min(...ps.map(p => p[1]));
-    expect(reach(fore)).toBeGreaterThan(reach(aft));
-    expect(low(fore)).toBeLessThan(low(aft) - 0.02);
+    expect(reach(fore)).toBeGreaterThan(0.13);
+    expect(reach(aft)).toBeGreaterThan(0.13);
+    expect(low(fore)).toBeLessThan(low(aft));
+  });
+
+  it("makes the collar of brown cloth, matte, whatever the pads' colour (the user, 2026-11-13)", () => {
+    const gold: number[] = [];
+    pads(gold, pose, 0, GOLD);
+    // The collar comes after both pads.
+    const from = 2 * LAMES.length * LAME_QUADS * 6 * STRIDE;
+    expect(gold.length).toBeGreaterThan(from);
+    for (let i = from; i < gold.length; i += STRIDE) {
+      expect(gold[i + 8]).toBe(-1);
+      const k = gold[i + 6] / COLLAR_CLOTH[0];
+      expect(gold[i + 7]).toBeCloseTo(COLLAR_CLOTH[1] * k, 6);
+      expect(gold[i + 9]).toBeCloseTo(COLLAR_CLOTH[2] * k, 6);
+    }
+    // The pads' tops in the colour given, glossy.
+    expect(gold.slice(0, from).some((_, i) => i % STRIDE == 6 && gold[i] == GOLD[0])).toBe(true);
   });
 
   it('stands a collar round the back of the neck, open in front', () => {
@@ -79,8 +99,8 @@ describe("pads, the ninja's shoulder pads and collar", () => {
         }
       }
       let under = 0;
-      // The right pad's lames, drawn first: 90 quads each.
-      for (let i = 0; i < LAMES.length * 90 * 6 * STRIDE; i += STRIDE) {
+      // The right pad's lames, drawn first.
+      for (let i = 0; i < LAMES.length * LAME_QUADS * 6 * STRIDE; i += STRIDE) {
         const [x, y, z] = [worn[i], worn[i + 1], worn[i + 2]];
         if (Math.abs(x - joint[0]) < 0.12) {
           under += +(y < (top.get(`${Math.round(x * 100)},${Math.round(z * 100)}`) ?? -9) + 0.002);

@@ -34,7 +34,7 @@ const [HOOD, IN, OUT] = [0.003, 0.005, 0.009];
  * 忍, its strokes as lines in a unit square, y up: 刃 (the turn and hook, the sweep down to the
  * left, its dot), then 心 (the left dot, the hook along the bottom, the middle and the right dots).
  */
-const KANJI = [
+export const KANJI = [
   [0.12, 0.92, 0.84, 0.92, 0.78, 0.5, 0.68, 0.56],
   [0.52, 0.98, 0.46, 0.72, 0.14, 0.48],
   [0.26, 0.76, 0.34, 0.64],

@@ -1,5 +1,5 @@
-// The man's cigar (the user, 2026-11-14): clenched in the corner of his mouth, pointing out and a
-// little down, a band near the lips, grey ash and a glowing ember at its end. Carried by the head
+// The man's cigarillo (the user, 2026-11-14): thin, half smoked, clenched in the corner of his
+// mouth, pointing out and a little down, a band near the lips, grey ash and a glowing ember. Carried by the head
 // joint like the ninja's guard (mask.ts): made once on the man's head at rest.
 import { JOINT as J, turn } from './rig';
 import type { Quat } from './rig';
@@ -13,17 +13,17 @@ import type { Out } from './verts';
 /** Where the lips hold it, metres across from the mouth's middle (to his right), and the way it points. */
 export const HOLD_X = 0.013;
 const AXIS = unit([0.28, -0.14, -0.95]);
-/** Its length out of the mouth and its radius. */
-export const [LEN, R] = [0.115, 0.0072];
+/** What is left of it out of the mouth, half smoked, and its radius. */
+export const [LEN, R] = [0.05, 0.0042];
 const [LEAF, BAND, ASH] = [
-  [0.3, 0.16, 0.075],
-  [0.62, 0.42, 0.1],
-  [0.42, 0.41, 0.39],
+  [0.24, 0.13, 0.06],
+  [0.55, 0.12, 0.08],
+  [0.36, 0.35, 0.34],
 ];
 /** The ember: unlit (layer -2), it blooms. */
 export const EMBER = [2.2, 0.32, 0.05];
 
-/** The cigar on the head at rest: close (`fine`, banded, round), or a plain one of four sides. */
+/** The cigarillo on the head at rest: close (`fine`, banded, round), or a plain one of four sides. */
 const make = (fine: boolean): number[] => {
   const sides = fine ? 10 : 4;
   const y = lipLine(HOLD_X) - 0.0008;
@@ -35,43 +35,43 @@ const make = (fine: boolean): number[] => {
     ? [
         [
           [
-            [0, -0.004],
-            [R * 0.75, -0.004],
-            [R * 0.92, 0],
-            [R * 0.95, 0.018],
+            [0, -0.003],
+            [R * 0.8, -0.003],
+            [R * 0.95, 0],
+            [R, 0.007],
           ],
           LEAF,
         ],
         [
           [
-            [R * 0.95, 0.018],
-            [R * 1.06, 0.0185],
-            [R * 1.06, 0.029],
-            [R * 0.97, 0.0295],
+            [R, 0.007],
+            [R * 1.08, 0.0073],
+            [R * 1.08, 0.0112],
+            [R, 0.0115],
           ],
           BAND,
         ],
         [
           [
-            [R * 0.97, 0.0295],
-            [R, 0.06],
-            [R, LEN - 0.012],
+            [R, 0.0115],
+            [R, 0.025],
+            [R, LEN - 0.009],
           ],
           LEAF,
         ],
         [
           [
-            [R, LEN - 0.012],
-            [R * 0.97, LEN - 0.004],
-            [R * 0.9, LEN],
+            [R, LEN - 0.009],
+            [R * 0.96, LEN - 0.004],
+            [R * 0.84, LEN],
           ],
           ASH,
         ],
         [
           [
-            [R * 0.9, LEN],
-            [R * 0.5, LEN + 0.0015],
-            [0, LEN + 0.002],
+            [R * 0.84, LEN],
+            [R * 0.45, LEN + 0.001],
+            [0, LEN + 0.0013],
           ],
           EMBER,
         ],
@@ -79,23 +79,23 @@ const make = (fine: boolean): number[] => {
     : [
         [
           [
-            [0, -0.004],
-            [R * 0.85, -0.004],
-            [R, LEN - 0.012],
+            [0, -0.003],
+            [R * 0.85, -0.003],
+            [R, LEN - 0.009],
           ],
           LEAF,
         ],
         [
           [
-            [R, LEN - 0.012],
-            [R * 0.9, LEN],
+            [R, LEN - 0.009],
+            [R * 0.84, LEN],
           ],
           ASH,
         ],
         [
           [
-            [R * 0.9, LEN],
-            [0, LEN + 0.002],
+            [R * 0.84, LEN],
+            [0, LEN + 0.0013],
           ],
           EMBER,
         ],

@@ -251,15 +251,15 @@ float n3(vec3 p){vec3 i=floor(p),f=p-i;f=f*f*(3.-2.*f);
 return mix(mix(mix(hs(i).x,hs(i+vec3(1,0,0)).x,f.x),mix(hs(i+vec3(0,1,0)).x,hs(i+vec3(1,1,0)).x,f.x),f.y),mix(mix(hs(i+vec3(0,0,1)).x,hs(i+vec3(1,0,1)).x,f.x),mix(hs(i+vec3(0,1,1)).x,hs(i+vec3(1,1,1)).x,f.x),f.y),f.z);}
 float cp(float d){return 1.4*d*exp(-2.*d*d)-1.3*(d-1.)*exp(-8.*(d-1.)*(d-1.));}
 float ca(float d){return 1.-.18*exp(-2.*d*d)+.12*exp(-8.*(d-1.)*(d-1.));}
-vec3 ct(vec2 q,float s){vec2 i=floor(q/s),f=q/s-i;vec3 o=vec3(0,0,1);
-for(int j=0;j<9;j++){vec2 g=vec2(j%3,j/3)-1.;vec3 h=hs(vec3(i+g,s));if(h.z>.55)continue;
-vec2 v=(f-g-.2-.6*h.xy)/(.1+.6*h.z);float d=length(v);
+vec3 ct(vec2 q,float s){q/=s;vec2 i=floor(q),b=i-step(q-i,vec2(.5));vec3 o=vec3(0,0,1);
+for(int j=0;j<4;j++){vec2 c=b+vec2(j&1,j>>1);vec3 h=hs(vec3(c,s));if(h.z>.55)continue;
+vec2 v=(q-c-.2-.6*h.xy)/(.1+.6*h.z);float d=length(v);if(d>1.6)continue;
 o.xy+=v/max(d,1e-3)*cp(d);o.z*=ca(d);}
 return o;}
 vec3 cs(vec2 q,float D){vec3 a=vec3(0,0,1);for(int i=0;i<3;i++){float s=6.*exp(1.28*float(i)),w=1.-smoothstep(s*12.,s*35.,D);if(w>0.){vec3 c=ct(q,s);a.xy+=c.xy*w/(1.+float(i));a.z*=mix(1.,c.z,w);}}return a;}
-vec4 cr(vec3 p,float s){vec3 q=p*s,i=floor(q),f=q-i;vec4 o=vec4(0,0,0,1);
-for(int j=0;j<27;j++){vec3 g=vec3(j%3,(j/3)%3,j/9)-1.,h=hs(i+g+s);if(h.x>.5)continue;
-float r=.08+.42*h.y*h.y*h.y;vec3 v=(f-g-h)/r;float d=length(v);if(d>2.5)continue;
+vec4 cr(vec3 p,float s){vec3 q=p*s,i=floor(q),b=i-step(q-i,vec3(.5));vec4 o=vec4(0,0,0,1);
+for(int j=0;j<8;j++){vec3 c=b+vec3(j&1,(j>>1)&1,j>>2),h=hs(c+s);if(h.x>.5)continue;
+float r=.06+.37*h.y*h.y*h.y;vec3 v=(q-c-.2-.6*h)/r;float d=length(v);if(d>1.6)continue;
 o.xyz+=v/max(d,1e-3)*cp(d);o.w*=ca(d);
 if(h.z>.95)o.w*=1.+.3*exp(-1.2*max(d-1.,0.))*hs(floor(vec3(v*4.))).x;}
 return o;}
@@ -267,7 +267,7 @@ bool gh(vec3 d,out vec3 p){vec3 o=vec3(0,1.+Ob.x,0);float b=dot(o,d),q=b*b-dot(o
 vec3 mg(vec3 d,float px,out bool t){vec3 p;t=gh(d,p);if(!t)return vec3(0);
 float T=length(p-vec3(0,1.+Ob.x,0)),fp=px*T,ma=smoothstep(.42,.6,n3(p*3.)+.5*n3(p*9.)-.25);
 float al=mix(1.9,.9,ma)*(.8+.4*n3(p*60.))*(.85+.3*n3(p*4e3));vec3 g=vec3(0),G=g;
-for(int i=0;i<8;i++){float s=12.*exp(1.22*float(i));if(s*fp>.4)break;vec4 c=cr(p,s);float w=1.-smoothstep(.15,.4,s*fp);g+=c.xyz*w*(.3+.14*float(i));al*=mix(1.,c.w,w);}
+for(int i=0;i<8;i++){float s=12.*exp(1.22*float(i));if(s*fp>.4)break;if(s*T<.05)continue;vec4 c=cr(p,s);float w=1.-smoothstep(.15,.4,s*fp);g+=c.xyz*w*(.3+.14*float(i));al*=mix(1.,c.w,w);}
 float m=T*${MOON_R}.;if(m<6e3){vec3 c=cs((E+d*m).xz,m);G=vec3(c.x,0,c.y);al*=c.z;}
 vec3 n=normalize(p-(g-p*dot(g,p))-G);
 return textureLod(S,vec3(.5,.5,${TEX.STONE}.),12.).rgb*al*(e(X*max(dot(n,O),0.))+.04)*smoothstep(-.05,.1,dot(p,O));}
@@ -277,8 +277,8 @@ vec3 a=normalize(i+.2+.6*h);if(floor(a*s)!=i)continue;float b=l>0?.25+.4*h.y:.5+
 float r=length(d-a)/w;c+=b*exp(-r*r*1.4)*vec3(1.-.25*h.z,.9+.05*h.z,.75+.25*h.z);}
 return c;}
 vec3 K1(vec3 d,float px);
-vec3 K0(vec3 d){
-float px=length(fwidth(d));vec3 s=K1(d,px);if(Ob.x>0.){bool t;vec3 m=mg(d,px,t);if(t)s=mix(s,m,Ob.z);}return s;}
+vec3 K0(vec3 d,float px){
+vec3 s=K1(d,px);if(Ob.x>0.){bool t;vec3 m=mg(d,px,t);if(t)s=mix(s,m,Ob.z);}return s;}
 vec3 K1(vec3 d,float px){
 float h=d.y,k=max(dot(d,O),0.);
 vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
@@ -288,7 +288,7 @@ float vh(vec2 q){return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5453);}
 float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(vh(i),vh(i+vec2(1,0)),f.x),mix(vh(i+vec2(0,1)),vh(i+vec2(1,1)),f.x),f.y);}
 void main(){
 if(Z<0.){if(C.z<-2.5)discard;return;}
-if(Y>.5){o=vec4(K0(normalize(P)),1);return;}
+if(Y>.5){vec3 d=normalize(P);o=vec4(K0(d,length(fwidth(d))),1);return;}
 if(Ob.w>.5&&Ob.x>0.){vec3 p;if(gh(normalize(P-E),p))discard;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
@@ -330,7 +330,7 @@ w*=v/4.;}
 l+=K[i].rgb*w;
 sp+=K[i].rgb*w*pow(max(dot(m,nz(d+V)),0.),R.y);}
 c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
-vec3 r=reflect(-V,m),k=K0(r);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
+vec3 r=reflect(-V,m),k=K1(r,0.);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
 c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr));
 c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv);
@@ -338,7 +338,8 @@ c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(
 float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5);
 c.g=mix(c.g,c.r,z);
 o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z));
-o.rgb=mix(o.rgb,K0(-V),Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E)),Ob.z*smoothstep(1.25,1.6,length((P.xz-Cb.xy)*Cb.zw))));}`;
+float pv=length(fwidth(V)),fa=Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E)),Ob.z*smoothstep(1.25,1.6,length((P.xz-Cb.xy)*Cb.zw)));
+if(fa>.002)o.rgb=mix(o.rgb,K0(-V,pv),fa);}`;
 
 /**
  * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
@@ -1169,11 +1170,6 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const fade = clamp01(high / ORBIT_FADE);
       const edge = high > 0 ? 1 : low;
       gl.uniform4f(u.Ob, globe, fade, edge, 0);
-      // The sky first, at depth 1: the view ray of each pixel from the camera's axes.
-      gl.uniform3fv(u.J, [right.map(c => c * tan * (w / h)), up.map(c => c * tan), fwd].flat());
-      gl.uniform1f(u.Y, 1);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      gl.uniform1f(u.Y, 0);
       if (heavensN) {
         // The Earth goes with the eye, so it is as far as the stars, and never fades into the globe.
         const sky0 = first - heavensN;
@@ -1189,6 +1185,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.drawArrays(gl.TRIANGLES, 0, first + bodyAt / STRIDE);
       }
       place();
+      // The sky after the world, at depth 1: shaded only where nothing stands in front of it (the
+      // moon's globe is the costliest pixel of the frame). The view ray of each pixel from the camera's axes.
+      gl.uniform3fv(u.J, [right.map(c => c * tan * (w / h)), up.map(c => c * tan), fwd].flat());
+      gl.uniform1f(u.Y, 1);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.uniform1f(u.Y, 0);
       if (v.length > bodyAt) {
         // Last, over a cleared depth: the body never sinks into a wall.
         gl.clear(gl.DEPTH_BUFFER_BIT);

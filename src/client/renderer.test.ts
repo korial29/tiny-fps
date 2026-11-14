@@ -490,7 +490,7 @@ describe('createRenderer', () => {
     const sky = () =>
       calls.findIndex(c => c[0] == 'drawArrays' && c[3] == 3 && c[1] == K('TRIANGLES'));
 
-    it('is a fullscreen triangle at depth 1, drawn first in the scene, with its own mode uniform', () => {
+    it('is a fullscreen triangle at depth 1, drawn after the world (shaded only where nothing is in front), with its own mode uniform', () => {
       const rd = createRenderer(canvas, ROOM);
       const vert = calls
         .filter(c => c[0] == 'shaderSource')
@@ -503,15 +503,14 @@ describe('createRenderer', () => {
       const world = calls.findIndex(
         c => c[0] == 'drawArrays' && c[3] == FLOOR_VERTS && calls.indexOf(c) > clear,
       );
-      expect(sky()).toBeGreaterThan(clear);
-      expect(sky()).toBeLessThan(world);
-      // Between the clear and the sky, nothing is drawn; the mode is on for the sky and off after.
-      expect(calls.slice(clear, sky()).some(c => c[0] == 'drawArrays')).toBe(false);
+      expect(world).toBeGreaterThan(clear);
+      expect(sky()).toBeGreaterThan(world);
+      // The mode is on for the sky alone: set after the world, off right after the sky.
       const mode = set('Y').filter(c => c[0] == 'uniform1f' && c.length == 3);
       expect(mode.slice(0, 2).map(c => c[2])).toEqual([1, 0]);
+      expect(calls.indexOf(mode[0])).toBeGreaterThan(world);
       expect(calls.indexOf(mode[0])).toBeLessThan(sky());
       expect(calls.indexOf(mode[1])).toBeGreaterThan(sky());
-      expect(calls.indexOf(mode[1])).toBeLessThan(world);
     });
 
     it('passes the depth test at the cleared depth, so it needs no depth write tricks', () => {
@@ -759,9 +758,15 @@ describe('createRenderer', () => {
         .find(s => s.includes('sampler2DArray'))!;
       expect(frag).toContain(`abs(L-${TEX.GLASS}.)`);
       expect(frag).toContain(`abs(L-(${SHINE}))`);
-      expect(frag).toMatch(/r=reflect\(-V,m\),k=K0\(r\)/);
-      // The sky pass, the reflection and the crater fading into the globe in orbit are the one function.
-      expect(frag.match(/K0\(/g)).toHaveLength(4);
+      // The sky without the moon's globe: a reflection of it is not worth its cost on every pixel.
+      expect(frag).toMatch(/r=reflect\(-V,m\),k=K1\(r,0\.\)/);
+      // The sky pass and the crater fading into the globe are the one function, and its definition.
+      expect(frag.match(/K0\(/g)).toHaveLength(3);
+      // The globe is shaded only for a pixel that fades into it, and a crater cell looks at the
+      // neighbours on its near side alone: 4 on the ground, 8 on the globe (the user's lag in orbit).
+      expect(frag).toContain('if(fa>.002)o.rgb=mix(o.rgb,K0(-V,pv),fa)');
+      expect(frag).toMatch(/vec3 ct\(vec2 q,float s\)\{[^}]*for\(int j=0;j<4;j\+\+\)/);
+      expect(frag).toMatch(/vec4 cr\(vec3 p,float s\)\{[^}]*for\(int j=0;j<8;j\+\+\)/);
     });
 
     it('lets the sun’s shadow go past the sides of its window and past its depth: from high up, the ground under it is no dark square', () => {

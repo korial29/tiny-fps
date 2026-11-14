@@ -2,13 +2,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STILL, spawn } from '../shared/physics';
 import { ROVER } from '../shared/rover';
+import { ORBIT } from '../shared/constants';
+import { MOON } from '../shared/moon';
 import { SHIP } from '../shared/ship';
 import { MODE, NOBODY, TEX } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
 import { build } from '../shared/world';
-import type { Brush, WorldDef } from '../shared/world';
+import type { Brush, World, WorldDef } from '../shared/world';
 import { craft } from './craft';
 import { createEffects } from './effects';
+import { HEAVENS } from './moonscape';
 import { teamRgb } from './flag';
 import { BEAM_RANGE, LIGHT } from './lights';
 import type { Light } from './lights';
@@ -487,7 +490,7 @@ describe('createRenderer', () => {
     const sky = () =>
       calls.findIndex(c => c[0] == 'drawArrays' && c[3] == 3 && c[1] == K('TRIANGLES'));
 
-    it('is a fullscreen triangle at depth 1, drawn first in the scene, with its own mode uniform', () => {
+    it('is a fullscreen triangle at depth 1, drawn after the world (shaded only where nothing is in front), with its own mode uniform', () => {
       const rd = createRenderer(canvas, ROOM);
       const vert = calls
         .filter(c => c[0] == 'shaderSource')
@@ -500,15 +503,14 @@ describe('createRenderer', () => {
       const world = calls.findIndex(
         c => c[0] == 'drawArrays' && c[3] == FLOOR_VERTS && calls.indexOf(c) > clear,
       );
-      expect(sky()).toBeGreaterThan(clear);
-      expect(sky()).toBeLessThan(world);
-      // Between the clear and the sky, nothing is drawn; the mode is on for the sky and off after.
-      expect(calls.slice(clear, sky()).some(c => c[0] == 'drawArrays')).toBe(false);
+      expect(world).toBeGreaterThan(clear);
+      expect(sky()).toBeGreaterThan(world);
+      // The mode is on for the sky alone: set after the world, off right after the sky.
       const mode = set('Y').filter(c => c[0] == 'uniform1f' && c.length == 3);
       expect(mode.slice(0, 2).map(c => c[2])).toEqual([1, 0]);
+      expect(calls.indexOf(mode[0])).toBeGreaterThan(world);
       expect(calls.indexOf(mode[0])).toBeLessThan(sky());
       expect(calls.indexOf(mode[1])).toBeGreaterThan(sky());
-      expect(calls.indexOf(mode[1])).toBeLessThan(world);
     });
 
     it('passes the depth test at the cleared depth, so it needs no depth write tricks', () => {
@@ -756,9 +758,72 @@ describe('createRenderer', () => {
         .find(s => s.includes('sampler2DArray'))!;
       expect(frag).toContain(`abs(L-${TEX.GLASS}.)`);
       expect(frag).toContain(`abs(L-(${SHINE}))`);
-      expect(frag).toMatch(/r=reflect\(-V,m\),k=K0\(r\)/);
-      // The sky pass and the reflection are the one function.
+      // The sky without the moon's globe: a reflection of it is not worth its cost on every pixel.
+      expect(frag).toMatch(/r=reflect\(-V,m\),k=K1\(r,0\.\)/);
+      // The sky pass and the crater fading into the globe are the one function, and its definition.
       expect(frag.match(/K0\(/g)).toHaveLength(3);
+      // The globe is shaded only for a pixel that fades into it, and a crater cell looks at the
+      // neighbours on its near side alone: 4 on the ground, 8 on the globe (the user's lag in orbit).
+      expect(frag).toContain('if(fa>.002)o.rgb=mix(o.rgb,K0(-V,pv),fa)');
+      expect(frag).toMatch(/vec3 ct\(vec2 q,float s\)\{[^}]*for\(int j=0;j<4;j\+\+\)/);
+      expect(frag).toMatch(/vec4 cr\(vec3 p,float s\)\{[^}]*for\(int j=0;j<8;j\+\+\)/);
+    });
+
+    it('lets the sun’s shadow go past the sides of its window and past its depth: from high up, the ground under it is no dark square', () => {
+      createRenderer(canvas, ROOM);
+      const frag = calls
+        .filter(c => c[0] == 'shaderSource')
+        .map(c => String(c[2]))
+        .find(s => s.includes('sampler2DArray'))!;
+      expect(frag).toContain('max(max(abs(q.x-.5),abs(q.y-.5)),abs(q.z-.5))');
+    });
+
+    it('draws the moon’s globe past the relief from a little height, and fades the crater into it over the seam', () => {
+      const ob = (w: World, y: number) => {
+        const rd = createRenderer(canvas, w);
+        calls.length = 0;
+        rd.frame([80, y, 140], 0, 0, [], new Map(), createEffects(), []);
+        return calls.find(c => (c[1] as { u?: string } | undefined)?.u == 'Ob')!.slice(2);
+      };
+      const moon = build({ ...ROOM.def, relief: MOON.relief, seam: ORBIT.SEAM });
+      expect(ob(moon, 2)).toEqual([0, 0, 0, 0]);
+      // Over the rim: the globe at its own height, the relief's edge fading into it.
+      const [globe, fade, edge] = ob(moon, 90) as number[];
+      expect(globe * 1_737_400).toBeCloseTo(90, 0);
+      expect([fade, edge]).toEqual([0, 1]);
+      // In orbit: seen from kilometres up, the crater gone into it.
+      const high = ob(moon, ORBIT.SEAM + 300) as number[];
+      expect(high[0] * 1_737_400).toBeGreaterThan(5_000);
+      expect(high.slice(1, 3)).toEqual([1, 1]);
+      // A map with no relief never has one.
+      expect(ob(ROOM, ORBIT.SEAM + 300)).toEqual([0, 0, 0, 0]);
+    });
+
+    it('draws the moon’s stars in the sky, and its Earth wherever the eye is, at the same angle: they are infinitely far', () => {
+      const sn = (w: World) => {
+        calls.length = 0;
+        createRenderer(canvas, w);
+        return calls.find(c => (c[1] as { u?: string } | undefined)?.u == 'Sn')?.[2];
+      };
+      expect(sn(build(MOON))).toBe(1);
+      expect(sn(ROOM)).toBe(0);
+      const rd = createRenderer(canvas, build(MOON));
+      for (const eye of [
+        [80, 2, 200],
+        [-150, 600, 400],
+      ] as [number, number, number][]) {
+        calls.length = 0;
+        rd.frame(eye, 0, 0, [], new Map(), createEffects(), []);
+        const moved = calls.filter(
+          c =>
+            (c[1] as { u?: string } | undefined)?.u == 'R' &&
+            [4, 5, 6].some(k => (c[2] as number[])[k] !== 0),
+        );
+        expect(moved.length).toBeGreaterThan(0);
+        expect([...(moved[0][2] as number[])].slice(4, 7)).toEqual(
+          eye.map((v, k) => v - HEAVENS[k]),
+        );
+      }
     });
 
     it('declares the fog, palette and daylight uniforms in the shader', () => {

@@ -17,7 +17,9 @@ import {
   NADE_R,
   NADE_RANGE,
   NADE_SPEED,
+  ORBIT,
 } from './constants';
+import { MOON } from './moon';
 import { spawn } from './physics';
 import { PLASMA_STEP, blast, cylinder, fly, launch, lob, stepOf, toss, wave } from './plasma';
 import { MODE, TEX } from './types';
@@ -333,5 +335,52 @@ describe('a grenade', () => {
       expect(blast(low, at(0), f)).toBe(blast(flat, at(0), f));
       expect(blast(low, at(0), f)).toBeGreaterThan(0);
     });
+  });
+});
+
+describe('the edge of space (WorldDef.seam)', () => {
+  const SEAM = 300;
+  const space = build({ ...flat.def, seam: SEAM });
+  /** A ball from (0, y, 0) along the unit (dx, dy, 0), with `left` metres to go. */
+  const ball = (y: number, dx: number, dy: number, left = 500) => ({
+    ...launch(shooter()),
+    ...{ x: 0, y, z: 0, dx, dy, dz: 0, left },
+  });
+
+  it('stops a shot climbing to it there, and a foe past it is not reached', () => {
+    // On the line 30 m east, 20 m over the seam: hit with no seam.
+    const up = foe(30, 0, { y: SEAM + 20 - PLAYER_H / 2 });
+    expect(fly(flat, ball(SEAM - 20, 0.6, 0.8), 500, [up])).toBe(up);
+    const b = ball(SEAM - 20, 0.6, 0.8);
+    expect(fly(space, b, 500, [up])).toBeUndefined();
+    expect(b.burst).toBe(true);
+    expect(b.y).toBeCloseTo(SEAM, 3);
+    expect(b.x).toBeCloseTo(15, 3);
+  });
+
+  it('stops a shot diving to it from space, the same way', () => {
+    const down = foe(0, 0, { y: SEAM - 60 });
+    expect(fly(flat, ball(SEAM + 40, 0, -1), 500, [down])).toBe(down);
+    const b = ball(SEAM + 40, 0, -1);
+    expect(fly(space, b, 500, [down])).toBeUndefined();
+    expect([b.burst, b.y]).toEqual([true, SEAM]);
+  });
+
+  it('lets a shot on its own side fly on: along it, away from it, and on a map with no seam', () => {
+    for (const [w, y, dy] of [
+      [space, SEAM + 50, 0],
+      [space, SEAM + 50, 1],
+      [space, SEAM - 50, -0.6],
+      [flat, SEAM - 20, 0.8],
+    ] as const) {
+      const b = ball(y, Math.sqrt(1 - dy * dy), dy, 100);
+      fly(w, b, 100, []);
+      expect(b.left).toBeCloseTo(0, 3);
+      expect(b.burst).toBe(false);
+    }
+  });
+
+  it('is the moon’s, at ORBIT.SEAM', () => {
+    expect(MOON.seam).toBe(ORBIT.SEAM);
   });
 });

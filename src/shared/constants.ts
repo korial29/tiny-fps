@@ -465,3 +465,11 @@ export const RULES: Rules = {
  * from top speed it skids under 5 m and lies there.
  */
 export const VEHICLE = { HP: 10, WRECK: 300, FADE: 60, GRAZE: 4, SKID: 0.92 } as const;
+
+/**
+ * Space over the moon (the user, 2026-11-14): SEAM metres up is the edge of space, where a ship
+ * fights only ships. A shot that crosses it either way bursts there, so the ground and the sky never
+ * hit each other. TOP is the highest a ship climbs, under the 1024 m a ball's height has on the
+ * wire. Over the seam the moon is drawn as a globe seen from ALT metres at TOP (altitude()).
+ */
+export const ORBIT = { SEAM: 300, TOP: 960, ALT: 250_000 } as const;

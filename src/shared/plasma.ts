@@ -147,7 +147,9 @@ export const fly = (
   const o: Vec3 = [b.x, b.y, b.z];
   const d: Vec3 = [b.dx, b.dy, b.dz];
   const go = Math.min(m, b.left);
-  let t = ray(w, o, d, go, PLASMA_R);
+  // The edge of space stops it: past it nothing on the other side is reached.
+  const seam = w.def.seam === undefined || !d[1] ? Infinity : (w.def.seam - o[1]) / d[1];
+  let t = ray(w, o, d, seam > 1e-6 ? Math.min(go, seam) : go, PLASMA_R);
   let hit: PlayerState | undefined;
   for (const f of foes) {
     const u = cylinder(o, d, f, PLAYER_R + (b.arc ? ARC_R : PLASMA_R), heightOf(f));

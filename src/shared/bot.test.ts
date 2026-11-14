@@ -396,6 +396,15 @@ describe('Bot: in a fight', () => {
 });
 
 describe('nav: off the ways', () => {
+  it('finds a way across the map to a goal on a plinth, which no node walks straight to', () => {
+    // A carrier on red's armoury, 1.5 m up: chased from blue's spawn, not run at in a straight line.
+    const w = build(HIGHLINE);
+    const [x, y, z] = HIGHLINE.teams[1].spawns[0];
+    const way = path(navOf(w), w, [x, y, z], HIGHLINE.teams[0].rack!);
+    expect(way.entry).toBeDefined();
+    expect(way.edges.length).toBeGreaterThan(5);
+  });
+
   it('finds a way from the middle of a tower’s stair', () => {
     const w = build(HIGHLINE);
     const way = path(navOf(w), w, [56.8, 24.2, 227], [98, 14.5, 131]);

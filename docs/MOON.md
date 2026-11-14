@@ -141,14 +141,14 @@ The user walked into the drawn flank of a rock before being stopped ("you sink i
 
 Measured, and tested, at body height (every 7.5 degrees, every 0.2 m up; horizontally on a flank, vertically where the rock is shallower than 45 degrees):
 
-| | before (#190) | now | asked |
-| --- | --- | --- | --- |
-| median | 0.69 m | 0.13 m | 0.15 m |
-| nine in ten | 1.62 m | 0.29 m | |
-| nineteen in twenty | 1.97 m | 0.36 m | 0.3 m |
-| ninety-nine in a hundred | 2.67 m | 0.50 m | |
-| worst | 3.71 m | 1.05 m | 0.45 m |
-| a box out of the rock, worst | 0.09 m | 0.08 m | 0.1 m |
+|                              | before (#190) | now    | asked  |
+| ---------------------------- | ------------- | ------ | ------ |
+| median                       | 0.69 m        | 0.13 m | 0.15 m |
+| nine in ten                  | 1.62 m        | 0.29 m |        |
+| nineteen in twenty           | 1.97 m        | 0.36 m | 0.3 m  |
+| ninety-nine in a hundred     | 2.67 m        | 0.50 m |        |
+| worst                        | 3.71 m        | 1.05 m | 0.45 m |
+| a box out of the rock, worst | 0.09 m        | 0.08 m | 0.1 m  |
 
 The median is met; the tail is not. It is at the foot of a rock on rolling ground (the wall is one layer from the lowest ground to 0.7 m over the highest, as wide as the rock is narrowest in it) and on the dome of a low one. A runner walking straight at a rock from eight sides comes a median 0.10 m into its drawn flank, 0.22 m one time in ten, 0.67 m at worst (the worst was over 1.5 m). A rover's nose stops 0.25 m in at most on the six field stones; a shot at body height stops a median under 0.15 m in. A runner sliding past is never held up.
 
@@ -238,3 +238,18 @@ A rover and a ship have `VEHICLE.HP` (10) of health, full when parked afresh. `R
 - **Wire**: no byte more. The rover's block had three bytes for a ship (kind and armour, wreck, missiles): the first now carries bit 7 the kind and bits 0-6 the health of any vehicle, the second the wreck's ticks in fours rounded up. A map without vehicles sends the same bytes as before.
 - **Prediction**: the driver's client takes `hp` from the snapshot and replays `drive()` or `pilot()` as before. When a snapshot shows him off the wheel, the rover he predicted becomes the ghost (`predict.ts`), which skids as the host's wreck does and is eased onto it over `ROVER_BLEND` ms.
 - **Seen and heard** (`src/client/wreck.ts`): arcs at 12 fixed places per vehicle (`ANCHORS`), `arcs()` of them by health (none at 10, 1 to 2 from 9 to 7, 4 to 6 from 6 to 4, 9 to 11 under), in an order of the vehicle's own, each a forked bolt in 4 slots of 10 at 30 slots a second (a function of the vehicle, the health and the slot), with sparks, the bolts' light and a crackle; the hull is scorched round them. The explosion: three fireballs, a ring on the ground, 36 pieces of debris, a boom and a shake within 40 m. The wreck: soot, sagged (`pose()`), no lights, smoke; over its last second it crumbles into embers (`char()`); the fresh vehicle shimmers in over half a second. The HUD: ten pips over the speed for who sits in it (`Hud.hull()`, the `tt` tag), a half-size bar over the nearest other vehicle within 14 m (a ship 24 m) in sight.
+
+## Orbit (the user, 2026-11-14)
+
+A ship climbs out of the crater into space and the fight goes on up there, ships against ships. There is no goal in orbit yet.
+
+- **The seam** (`ORBIT.SEAM`, 300 m, `WorldDef.seam` on the moon): the edge of space. A shot that crosses it either way bursts there (`fly()` in `plasma.ts`, so the host and the predictor agree, missiles included): the ground and the sky never hit each other. The ground's own guns reach 80 m at most; it is the ships' lasers and missiles that it stops.
+- **The ceiling** (`SHIP.CEIL` = `ORBIT.TOP`, 960 m, was 120): under the 1024 m a ball's height has on the wire, so the protocol is unchanged. The warning reads `HIGH ORBIT · DESCEND`.
+- **The height shown** (`altitude()` in `ship.ts`): the true one up to the seam, then a power of the height over it, to `ORBIT.ALT` (250 km) at the ceiling. Space is small to fly through and looks high. The HUD shows it in km with `ORBIT`.
+- **The globe** (`mg()` in the scene shader of `render.ts`): the moon as a sphere of 1737.4 km seen from `altitude()`, drawn with the sky: its albedo from the regolith's texture, maria from noise, craters on up to eight sizes (`cr()`, many small and a few large, the large ones shallower, a few fresh ones with a pale halo) lit by the sun, the sizes under two pixels or far wider than the view left out. From `GLOBE_FROM` (20 m) up it is the ground past the relief, whose edge (1.25 to 1.6 of the bound) fades into it, so the crater runs on into a plain; over the seam the whole crater fades into it within 250 m of climb, past 260 m from the eye (a ship near by stays sharp).
+- **Craters on the ground** (`cs()`): the regolith's shader draws them at 6, 22 and 78 m cells, a bell bowl and a soft rim lit by the sun, on what faces up; the globe's plain carries the same ones on, so the edge does not show. Colour and light only: no vertex, no collision.
+- **The stars** (`sk()`): drawn by the sky's shader from the view's direction alone, over the whole sky and behind the globe, so they never slide past a ship. The Earth (`heavens()` in `moonscape.ts`) goes with the eye from `HEAVENS`.
+- **Cost**: the sky is drawn after the world, shaded only where nothing is in front of it; the fade shades the globe only where it shows; reflections take the sky without it; a crater cell looks at its neighbours on the near side alone. 7.5 ms a frame in orbit looking at the moon on the user's GPU.
+- **The sun's shadow** now fades past the depth of its window too: from high up the ground under the eye lay past it, a dark square.
+
+Known limit: a missile that bursts just under the seam can still hurt a ship just over it through its blast.

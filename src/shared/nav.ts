@@ -255,6 +255,45 @@ export interface Way {
 }
 
 /**
+ * The node a bot goes to, or from, when no straight walk joins it to the point `p`: among the nodes
+ * `ok` takes, within NEAR, the best by `weigh` whose height off `p` a body manages (a stair, a
+ * ledge to climb, a drop that does not hurt), `up` 1 when the bot goes from `p` to the node and -1
+ * when it goes from the node to `p`; with nothing in the way of the head first, then even hidden.
+ */
+const close = (
+  w: World,
+  nodes: Vec3[],
+  p: Vec3,
+  ok: (i: number) => boolean,
+  weigh: (d: number, i: number) => number,
+  up: number,
+): number => {
+  for (const clear of [true, false]) {
+    let best = -1;
+    let least = Infinity;
+    for (let i = 0; i < nodes.length; i++) {
+      const [d, dy] = [flat(p, nodes[i]), (nodes[i][1] - p[1]) * up];
+      const [ux, uz] = [(nodes[i][0] - p[0]) / (d || 1), (nodes[i][2] - p[2]) / (d || 1)];
+      const head = Math.max(p[1], nodes[i][1]) + 1.5;
+      if (
+        ok(i) &&
+        d < NEAR &&
+        dy <= ABOVE &&
+        dy >= -BELOW &&
+        weigh(d, i) < least &&
+        (!clear || ray(w, [p[0], head, p[2]], [ux, 0, uz], d) >= d)
+      ) {
+        [best, least] = [i, weigh(d, i)];
+      }
+    }
+    if (best >= 0) {
+      return best;
+    }
+  }
+  return -1;
+};
+
+/**
  * The cheapest way from the point `a` to the point `b`. No entry when `a` walks straight to `b`, or
  * when the map has no way. The legs of the routes other than `prefer` (an index of ROUTES) cost
  * more, so bots that prefer different ones spread over the map.
@@ -277,27 +316,17 @@ export const path = (nav: Nav, w: World, a: Vec3, b: Vec3, prefer = -1): Way => 
   // Against a wall the body's sides see into it, on a stair no node is level: the nearest node not
   // too high or too low, with nothing in the way of the head, will do; behind a shuttle or a plinth,
   // the nearest one even hidden, which a bot walks round as it can.
-  for (const clear of [true, false]) {
-    if (cost.some(c => c < Infinity)) {
-      break;
-    }
-    let near = -1;
-    for (let i = 0; i < n; i++) {
-      const [d, dy] = [flat(a, nodes[i]), nodes[i][1] - a[1]];
-      const [ux, uz] = [(nodes[i][0] - a[0]) / (d || 1), (nodes[i][2] - a[2]) / (d || 1)];
-      if (
-        !runUp.has(i) &&
-        d < NEAR &&
-        dy <= ABOVE &&
-        dy >= -BELOW &&
-        (!clear || ray(w, [a[0], a[1] + 1.5, a[2]], [ux, 0, uz], d) >= d) &&
-        (near < 0 || d < flat(a, nodes[near]))
-      ) {
-        near = i;
-      }
-    }
-    if (near >= 0) {
-      cost[near] = flat(a, nodes[near]) / PACE;
+  if (!cost.some(c => c < Infinity)) {
+    const first = close(
+      w,
+      nodes,
+      a,
+      i => !runUp.has(i),
+      d => d,
+      1,
+    );
+    if (first >= 0) {
+      cost[first] = flat(a, nodes[first]) / PACE;
     }
   }
   for (;;) {
@@ -327,6 +356,19 @@ export const path = (nav: Nav, w: World, a: Vec3, b: Vec3, prefer = -1): Way => 
     if (cost[i] < Infinity && c < total && flat(nodes[i], b) <= WALK && walkable(w, nodes[i], b)) {
       [best, total] = [i, c];
     }
+  }
+  // A goal no node walks straight to (on a plinth, a box, a ledge): the cheapest node close to it, up
+  // or down as a start may be. Without it every bot after that goal would run straight at it, across
+  // the map, and they would heap up at the first wall on the way.
+  if (best < 0) {
+    best = close(
+      w,
+      nodes,
+      b,
+      i => cost[i] < Infinity,
+      (d, i) => cost[i] + d / PACE,
+      -1,
+    );
   }
   const edges: Edge[] = [];
   let i = best;

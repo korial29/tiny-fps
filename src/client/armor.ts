@@ -1320,9 +1320,28 @@ const cook = (s: Skin, fine: boolean): Recipe => {
           mould
             ? mould(c, k)[0]
             : (region.off ?? OFF) + (region.swell ? region.swell(c[0], c[1], c[2]) : 0);
-        for (let i = 1; i + 1 < poly.length; i++) {
-          const cs = [poly[0], poly[i], poly[i + 1]];
-          add(cs, cs.map(off), region.swell, WHITE, GLOSS, 0, k, mould && cs.map(c => mould(c, k)));
+        // The forearm's bevel painted black under the arrow (the user, 2026-11-14), cut at its top.
+        const lit = (c: Corner) =>
+          c[1] - castLow(angle({ ...region, face: 0 }, c[0], c[2])) - CAST.bevel.h;
+        for (const [part, col, own] of region.cast
+          ? ([
+              [clip(poly, lit, 0), WHITE, 0],
+              [clip(poly, c => -lit(c), 0), BEVEL, OWN],
+            ] as const)
+          : ([[poly, WHITE, 0]] as const)) {
+          for (let i = 1; i + 1 < part.length; i++) {
+            const cs = [part[0], part[i], part[i + 1]];
+            add(
+              cs,
+              cs.map(off),
+              region.swell,
+              col,
+              GLOSS,
+              own,
+              k,
+              mould && cs.map(c => mould(c, k)),
+            );
+          }
         }
         // The walls along the plate's edge, wound outward (away from its middle, at rest).
         const mid = [0, 1, 2].map(j => poly.reduce((sum, c) => sum + c[j], 0) / poly.length);
@@ -1514,8 +1533,12 @@ const KIT: [number[], number][] = [
 const ACCENT = [-1, 0, 0];
 /** A triangle's kind bit: the astronaut's alone (ASTRO_DETAILS). */
 const ASTRO = 16;
-/** A triangle's kind bit: the marine's alone (MARINE_DETAILS), in its own colour on any plate. */
-export const MARINE = 32;
+/** A triangle's kind bit: the marine's alone (MARINE_DETAILS). */
+const MARINE = 32;
+/** A triangle's kind bit: in its own colour on any plate (the marine's details, the forearm's bevel). */
+export const OWN = 64;
+/** The forearm's bevel under the arrow: glossy black. */
+const BEVEL = [0.05, 0.05, 0.055];
 const DARK = [0.07, 0.07, 0.08];
 /** The longest piece a detail is laid in (m). */
 const PIECE = 0.012;
@@ -1772,7 +1795,7 @@ const scratchesOn = (
     ...MARINE_DETAILS.map(d => [...d.slice(0, 8), 0, 0, 0, 1, d[8], d[9]]),
   ]) {
     const [col, layer] = marine ? KIT[look] : [lit ? ACCENT : DARK, -1];
-    const kind = astro ? ASTRO : marine ? MARINE : 0;
+    const kind = astro ? ASTRO : marine ? MARINE | OWN : 0;
     for (const side of only ? [only] : [1, -1]) {
       const r = (ang * Math.PI) / 180;
       const hit = hitOf(part, [cx * side, y, 0], [Math.sin(r) * side, 0, -Math.cos(r)]);
@@ -1993,7 +2016,7 @@ export const armor = (
     // Plain numbers, no array a triangle (as below).
     // The marine's details keep their own colours.
     const tone =
-      kind & MARINE
+      kind & OWN
         ? undefined
         : cr < 0
           ? accent
@@ -2007,7 +2030,7 @@ export const armor = (
       cr = tone[0];
       cg = tone[1];
       cb = tone[2];
-    } else if (plate && kind & 1 && !(kind & MARINE)) {
+    } else if (plate && kind & 1 && !(kind & OWN)) {
       cr = plate[0] * 0.75;
       cg = plate[1] * 0.75;
       cb = plate[2] * 0.75;

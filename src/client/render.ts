@@ -31,7 +31,7 @@ import { COLOURS, REGION, UNLIT, body } from './skin';
 import { CLOTH } from './mask';
 import { CHANNELS } from './features';
 import { PLATE, VERT as VERT_TEXELS } from './flesh';
-import { MARINE, SCRATCHED, prepare } from './armor';
+import { OWN, SCRATCHED, prepare } from './armor';
 import { Verts } from './verts';
 import { data, filled, stored, used } from './store';
 import type { Pieces } from './store';
@@ -137,7 +137,7 @@ else if(G4.xyz!=vec3(0)){float l=length(R4.xyz);vec3 o=R4.xyz/(l>0.?l:1.),e=cros
 if(sn>1e-6){float cs=dot(o,q);vec3 u=e/sn;s=s*cs+cross(u,s)*sn+u*dot(u,s)*(1.-cs);}
 q-=s;l=length(q);q/=l>0.?l:1.;}
 vec3 l=g(b+6).xyz;bool pl=Sb.w!=0;
-if(l.x<0.)l=Sc[1];else if((K&${MARINE})!=0){}else if(pl&&abs(h.w-(${GLOSS}))<.01)l=Sc[0];else if(pl&&(K&1)!=0)l=Sc[0]*.75;else if(pl&&G4.w>0.)l=l.x>.55?vec3(${SCRATCHED[1]}):vec3(${SCRATCHED[0]});
+if(l.x<0.)l=Sc[1];else if((K&${OWN})!=0){}else if(pl&&abs(h.w-(${GLOSS}))<.01)l=Sc[0];else if(pl&&(K&1)!=0)l=Sc[0]*.75;else if(pl&&G4.w>0.)l=l.x>.55?vec3(${SCRATCHED[1]}):vec3(${SCRATCHED[0]});
 N=q;C=vec4(l.xy,h.w,l.z);gl_Position=m*vec4(P,1);return;}
 P=R[1].xyz+r(p*R[1].w);N=r(n);C=c;gl_Position=m*vec4(P,1);}`;
 

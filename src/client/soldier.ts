@@ -248,10 +248,10 @@ const floorOf =
  * metres and `cone` radians of his aim. It turns no further than `turn` (to a side, up or down)
  * from where it points, the eyes going the rest of their travel; `rate` is how fast, per second.
  * The one looked at is followed as he goes by (the user, 2026-11-14): kept, over a nearer one,
- * until he is `hold` radians off the aim (the head's turn and the eyes' travel, REACH_X) or
- * `keep` metres away.
+ * until he is `hold` radians off the aim (the head's 80 degrees and the eyes' travel, REACH_X)
+ * or `keep` metres away.
  */
-export const WATCH = { far: 14, keep: 18, cone: 1.2, hold: 1.65, turn: [1.05, 0.5], rate: 7 };
+export const WATCH = { far: 14, keep: 18, cone: 1.2, hold: 2, turn: [1.4, 0.5], rate: 7 };
 
 /** The runner `p` looks at among `crowd`, and where his head is: none when he looks at no one, or is down. `held` is the one he looked at last. */
 export const watched = (

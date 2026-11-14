@@ -29,11 +29,11 @@ const other = (a: number, d = 4, o: Partial<PlayerState> = {}) =>
     ...o,
   });
 /** Where the first runner's head points and is after `n` frames among `crowd`, and his runner. */
-const head = (crowd: PlayerState[], n = 90) => {
+const head = (crowd: PlayerState[] | ((i: number) => PlayerState[]), n = 90) => {
   const book = new Map<number, Runner>();
   let s;
   for (let i = 0; i < n; i++) {
-    animate(book, crowd, DT);
+    animate(book, typeof crowd == 'function' ? crowd(i) : crowd, DT);
     s = soldier([], book.get(1)!, [1, 0, 0]);
   }
   return { dir: turn(s!.rot[J.HEAD], [0, 0, -1]), at: s!.pos[J.HEAD], r: book.get(1)! };
@@ -59,7 +59,10 @@ describe('the head on a runner one looks at', () => {
   });
   it('turns no further than its limit, the eyes going on', () => {
     const alone = head([man()]);
-    const seen = head([man(), other(1.15)]);
+    // Met in front, then walked round past the head's limit, still within the eyes' reach.
+    const seen = head(i => [man(), other(Math.min(0.5 + i * 0.03, 1.8))], 120);
+    expect(1.8).toBeGreaterThan(WATCH.turn[0]);
+    expect(1.8).toBeLessThan(WATCH.hold);
     const t = angle(alone.dir, seen.dir);
     expect(t).toBeGreaterThan(WATCH.turn[0] - 0.12);
     expect(t).toBeLessThan(WATCH.turn[0] + 0.05);

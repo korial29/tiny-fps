@@ -111,21 +111,20 @@ export const CUFF = {
 /**
  * The forearm's plate cast straight (the user, 2026-11-14: rectilinear, aggressive, not in rolls
  * over the muscles, still flared): its section a rounded square (`n`, a superellipse) round the
- * arm's line at `cx`, its half sizes across (`x`) and front to back (`z`) growing in a straight line
- * from the wrist to the elbow, the heights `y`, clear of the skin; then the flare and the ridge. Its
- * end slopes in toward the hand in a flat bevel (the user, 2026-11-14: thinner, an angular slope
- * toward the hands, then steeper, aggressive, smooth), `in` over its last `h`; and that end is cut
- * to a point over the back of the hand, an arrow (the user liked it: more), `cut` higher on the
- * inside of the arm, in straight lines.
+ * arm's line at `cx`, its half sizes across (`x`) and front to back (`z`) in straight lines between
+ * the heights `y`: a steep taper from the wrist, then an angular break and the long run to the elbow
+ * (the user, 2026-11-14: thin, an angular slope toward the hands, aggressive, down to the end of the
+ * wrist, kept thin by its shape: a bevel pressed onto the skin lay on the arm in a tongue), at least
+ * `floor` off the skin; then the flare and the ridge. Its end is cut to a point over the back of the
+ * hand, an arrow (the user liked it: more), `cut` higher on the inside of the arm, in straight lines.
  */
 export const CAST = {
   cx: 0.222,
-  y: [0.935, 1.14],
-  x: [0.039, 0.05],
-  z: [0.046, 0.057],
+  y: [0.935, 0.985, 1.14],
+  x: [0.04, 0.047, 0.055],
+  z: [0.041, 0.052, 0.062],
   floor: 0.003,
   n: 3,
-  bevel: { h: 0.032, in: 0.024 },
   cut: 0.095,
 };
 const cuff = (a: number) => CUFF.y + CUFF.rise * smooth(CUFF.a[0], CUFF.a[1], Math.abs(a));
@@ -1066,31 +1065,16 @@ const moulding = (s: Skin, gi: number) => {
 };
 
 /** The cast forearm plate's radius at the angle `t` round the arm (0 out to the side, toward +z) and height `y`, on the side `side`. */
-/** How far the cast forearm plate stands off the rest point `c` past its least (CAST.floor), in its bevel: under 0 it would lie on the skin. */
-const clear = (c: Corner) => {
-  const side = Math.sign(c[0]) || 1;
-  const dx = c[0] * side - CAST.cx;
-  const t = Math.atan2(c[2], dx);
-  // Only in the bevel: higher up, the arm's own bulges come as close.
-  return Math.max(
-    castR(t, c[1], side) - Math.hypot(dx, c[2]) - CAST.floor,
-    c[1] - castLow(90 + (t * 180) / Math.PI) - CAST.bevel.h,
-  );
-};
 /** The cast forearm plate's bottom by the angle `a` round the arm (degrees, + outward): lowest on the outside. */
 const castLow = (a: number) =>
   CUFF.wrist + (CAST.cut * Math.abs(((a - 90 + 540) % 360) - 180)) / 180;
 const castR = (t: number, y: number, side: number) => {
-  const f = Math.min(Math.max((y - CAST.y[0]) / (CAST.y[1] - CAST.y[0]), 0), 1.2);
-  const [ax, az] = [
-    CAST.x[0] + (CAST.x[1] - CAST.x[0]) * f,
-    CAST.z[0] + (CAST.z[1] - CAST.z[0]) * f,
-  ];
+  const [y0, y1, y2] = CAST.y;
+  const k = y < y1 ? 0 : 1;
+  const f = Math.min(Math.max((y - (k ? y1 : y0)) / (k ? y2 - y1 : y1 - y0), 0), k ? 1.2 : 1);
+  const [ax, az] = [CAST.x, CAST.z].map(v => v[k] + (v[k + 1] - v[k]) * f);
   const [c, s] = [Math.cos(t), Math.sin(t)];
-  const r =
-    (Math.abs(c / ax) ** CAST.n + Math.abs(s / az) ** CAST.n) ** (-1 / CAST.n) -
-    // Curved into the plate at its top: a crease there was cut in steps by the skin's triangles.
-    CAST.bevel.in * Math.max(0, 1 - (y - castLow(90 + (t * 180) / Math.PI)) / CAST.bevel.h) ** 2;
+  const r = (Math.abs(c / ax) ** CAST.n + Math.abs(s / az) ** CAST.n) ** (-1 / CAST.n);
   return r + vambrace(side * (CAST.cx + r * c), y);
 };
 
@@ -1290,13 +1274,10 @@ const cook = (s: Skin, fine: boolean): Recipe => {
         // A moulded plate is cut where it lies, on its shell, not where its skin is: set off some
         // centimetres along normals that fan out, the edges of two pieces of skin (the trunk's and
         // the shoulder's) did not meet, a triangle standing out by the armpit (the user, 2026-11-13).
-        const cut = LIMITS[g].reduce(
+        const poly = LIMITS[g].reduce(
           (p, f, i) => clip(p, mould ? c => f(landed(c, mould(c, k))) : f, 1 << i),
           piece,
         );
-        // The forearm's plate ends where its bevel meets the arm: pressed onto the skin below that,
-        // it lay along the arm in a tongue under the arrow (the user, 2026-11-14).
-        const poly = region.cast ? clip(cut, clear, 1 << LIMITS[g].length) : cut;
         if (poly.length < 3) {
           continue;
         }

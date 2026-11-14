@@ -322,7 +322,8 @@ describe('music', () => {
 });
 
 describe('the moon\u2019s music', () => {
-  // Best of three, as music()'s.
+  // Best of three. About 35 ms alone, cold; a loaded CI runner took 576 ms, the full suite here up
+  // to 750: its loops wait longer than music()'s for V8 to optimize them on a starved machine.
   const times: number[] = [];
   const m = Array.from({ length: 3 }, () => {
     const t0 = performance.now();
@@ -367,7 +368,7 @@ describe('the moon\u2019s music', () => {
   });
 
   it('renders fast', () => {
-    expect(Math.min(...times)).toBeLessThan(400);
+    expect(Math.min(...times)).toBeLessThan(1000);
   });
 
   it('is the moon\u2019s alone: every other map plays music()', () => {

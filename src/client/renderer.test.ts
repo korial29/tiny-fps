@@ -134,8 +134,20 @@ describe('createRenderer', () => {
     Object.defineProperty(canvas, 'clientWidth', { value: w, configurable: true });
     Object.defineProperty(canvas, 'clientHeight', { value: h, configurable: true });
   };
-  const draws = () =>
-    calls.filter(c => c[0] == 'drawArrays' && c[3] != 3).map(c => [c[2], c[3]] as [number, number]);
+  /** The draws of the frame's own vertices, or with `kept` those of the store's pieces (store.ts): its vertex array is the first one bound. */
+  const draws = (kept = false) => {
+    const store = calls.find(c => c[0] == 'bindVertexArray')?.[1];
+    const out: [number, number][] = [];
+    let bound: unknown;
+    for (const c of calls) {
+      if (c[0] == 'bindVertexArray') {
+        bound = c[1];
+      } else if (c[0] == 'drawArrays' && c[3] != 3 && (bound === store) == kept) {
+        out.push([c[2], c[3]] as [number, number]);
+      }
+    }
+    return out;
+  };
   const frame = (
     rd: ReturnType<typeof createRenderer>,
     fx = createEffects(),
@@ -569,6 +581,10 @@ describe('createRenderer', () => {
       const [depth, world] = draws();
       expect(depth[1]).toBeGreaterThan(FLOOR_VERTS);
       expect(depth[1]).toBe(world[1]);
+      // His rigid pieces, from the store, in the shadow's pass and the scene's alike.
+      const pieces = draws(true);
+      expect(pieces.length).toBeGreaterThan(0);
+      expect(pieces.slice(0, pieces.length / 2)).toEqual(pieces.slice(pieces.length / 2));
     });
 
     it('is cast by the bases and the flags too, drawn with the brushes and before the other players', () => {

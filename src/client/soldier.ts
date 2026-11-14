@@ -55,7 +55,9 @@ import {
 } from './gun';
 import { helm } from './helm';
 import { helmet } from './helmet';
-import { STYLE, hair, styleOf, sway } from './hair';
+import { HEAD_SCALE, STYLE, hair, styleOf, sway } from './hair';
+import { ID, ORIGIN, mesh } from './store';
+import type { Pieces } from './store';
 import { CLOTH, dress, mask } from './mask';
 import { GOLD, pads } from './pads';
 import { ROLE } from '../shared/kit';
@@ -81,7 +83,7 @@ import type { Piece } from './limbs';
 import { STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, axis, mul, slerp, solve, turn } from './rig';
-import type { Pose } from './rig';
+import type { Pose, Quat } from './rig';
 import { REGION, beardOf, body, cut, eyesOf, hairOf, palette, shaved, skin, tressOf } from './skin';
 import { createFace, dashing, felled, strain } from './expression';
 import type { Face } from './expression';
@@ -809,12 +811,26 @@ export const soldier = (
   lod = 1,
   helmets = false,
   armored = helmets,
+  /** The frame's pieces of the store: the rigid ones go there (store.ts), but on one coming apart. */
+  list?: Pieces,
 ) => {
   const { p } = r;
   const k = fried(p);
   if (k >= 1) {
     return;
   }
+  const gpu = k > 0 ? undefined : list;
+  /** A rigid piece on a joint: into `out`, or made once at the origin into the store and placed there, `scale` its size. */
+  const rigid = (
+    key: string,
+    at: Vec3,
+    q: Quat,
+    make: (o: Out, at: Vec3, q: Quat) => void,
+    scale = 1,
+  ) =>
+    gpu
+      ? gpu.push({ m: mesh(key, o => make(o, ORIGIN, ID)), q, t: at, k: scale })
+      : make(out, at, q);
   r.tip = undefined;
   const [build, picked] = [r.build ?? 0, r.look];
   // The ninja (the user, 2026-11-12): a tight black suit, his team's colour on its side stripes and
@@ -890,7 +906,9 @@ export const soldier = (
       armor(out, at, cs, lod > 2, plate, ninja, color, !plated);
     }
     if (ninja) {
-      buckle(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build, color);
+      rigid(`buckle ${build} ${color}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
+        buckle(o, a, q, build, color),
+      );
     }
     piece(out, r.cut, colors, lod, sink, r.face.w, armored);
     gloves(out, r, s, colors, lod, armored, r.cut.limb);
@@ -907,9 +925,11 @@ export const soldier = (
     if (plated || ninja) {
       armor(out, from, bs, lod > 2, plate, ninja, color, !plated);
     }
-    pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
+    rigid('pouch', s.pos[J.PELVIS], s.rot[J.PELVIS], pouch);
     if (ninja) {
-      buckle(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build, color);
+      rigid(`buckle ${build} ${color}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
+        buckle(o, a, q, build, color),
+      );
     }
     gloves(out, r, s, colors, lod, armored);
     if (k > 0) {
@@ -935,14 +955,25 @@ export const soldier = (
   // The ninja's pads and collar; the marine's shoulder bells.
   if (plated) {
     const from = out.length;
-    pads(out, s, build, ninja ? GOLD : (plate ?? [0.85, 0.86, 0.88]), !ninja, color, !lod);
+    pads(out, s, build, ninja ? GOLD : (plate ?? [0.85, 0.86, 0.88]), !ninja, color, !lod, gpu);
     if (k > 0) {
       dissolve(out, from, k);
     }
   }
   if (ninja && !helmets && r.cut?.limb !== LIMB.HEAD) {
     const from = out.length;
-    mask(out, s.pos[J.HEAD], s.rot[J.HEAD], build, color, !lod);
+    if (gpu) {
+      // Hers is his, smaller.
+      rigid(
+        `mask ${color} ${!lod}`,
+        s.pos[J.HEAD],
+        s.rot[J.HEAD],
+        (o, a, q) => mask(o, a, q, 0, color, !lod),
+        build ? HEAD_SCALE : 1,
+      );
+    } else {
+      mask(out, s.pos[J.HEAD], s.rot[J.HEAD], build, color, !lod);
+    }
     if (k > 0) {
       dissolve(out, from, k);
     }
@@ -951,18 +982,26 @@ export const soldier = (
   if (helmets && r.cut?.limb !== LIMB.HEAD) {
     if (build) {
       // Hers is another helmet, with no hose: told from his at a glance.
-      helm(out, s.pos[J.HEAD], s.rot[J.HEAD], color, lod);
+      rigid(`helm ${color} ${lod}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) =>
+        helm(o, a, q, color, lod),
+      );
     } else {
-      helmet(out, s.pos[J.HEAD], s.rot[J.HEAD], color, lod);
+      rigid(`helmet ${color} ${lod}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) =>
+        helmet(o, a, q, color, lod),
+      );
       hose(out, s.pos[J.HEAD], s.rot[J.HEAD], s.pos[J.CHEST], s.rot[J.CHEST], lod);
     }
   }
   // The life support pack on the back of a space suit.
   if (helmets) {
-    pack(out, s.pos[J.CHEST], s.rot[J.CHEST], color, lod);
+    rigid(`pack ${color} ${lod}`, s.pos[J.CHEST], s.rot[J.CHEST], (o, a, q) =>
+      pack(o, a, q, color, lod),
+    );
   }
   if (armored) {
-    crotch(out, s.pos[J.PELVIS], s.rot[J.PELVIS], plate, build ? CUP_F : 1);
+    rigid(`crotch ${plate} ${build}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
+      crotch(o, a, q, plate, build ? CUP_F : 1),
+    );
   }
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);

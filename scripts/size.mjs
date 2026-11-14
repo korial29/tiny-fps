@@ -11,7 +11,8 @@ const BUDGETS = [
   // 170 KB until the fist combos, the frags, the death falls and the runners' fingers (the user, 2026-11-13).
   // 174 KB until the ninja's belt, buckle, back and gold pads (the user, 2026-11-14).
   // 176 KB until 8 HP and the armour pickups (the user, 2026-11-14).
-  { file: 'dist/index.js', max: 177 * 1024 },
+  // 177 KB until the pieces kept on the GPU (the user, 2026-11-14: a step of that plan at a time).
+  { file: 'dist/index.js', max: 178 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   { file: 'dist/local.js', max: 44 * 1024 },
 ];

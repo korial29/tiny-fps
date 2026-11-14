@@ -122,7 +122,7 @@ export const CAST = {
   x: [0.041, 0.051],
   z: [0.048, 0.059],
   n: 3,
-  bevel: { h: 0.032, in: 0.009 },
+  bevel: { h: 0.04, in: 0.018 },
 };
 const cuff = (a: number) => CUFF.y + CUFF.rise * smooth(CUFF.a[0], CUFF.a[1], Math.abs(a));
 const vambrace = (x: number, y: number) =>

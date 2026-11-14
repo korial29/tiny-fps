@@ -188,11 +188,18 @@ export const FLAG_REACH = 1.5;
 export const FLAG_H = 2.2;
 /** Seconds a dropped flag lies before it goes home by itself. */
 export const FLAG_RETURN = 10;
-// The gun (gun.ts) and health. Ticks of 1 / TICK_HZ s. On the wire (protocol.ts) HP_MAX and
-// GUN_COOLDOWN take 3 bits, AMMO_MAX 7 bits less the no-gun value, DOWN_TICKS 7 bits.
+// The gun (gun.ts) and health. Ticks of 1 / TICK_HZ s. On the wire (protocol.ts) HP_MAX takes 4
+// bits, ARMOR_MAX 2, GUN_COOLDOWN 3, AMMO_MAX 7 bits less the no-gun value, DOWN_TICKS 7 bits.
 
-/** Health of a player; a hit takes 1, so HP_MAX hits put him down. */
-export const HP_MAX = 5;
+/** Health of a player; a hit takes 1, so HP_MAX hits put him down (8 since the user, 2026-11-14: 5 before). */
+export const HP_MAX = 8;
+/**
+ * Armour (the user, 2026-11-14): points on top of the health, spent first, 1 per point of damage.
+ * An armour pickup (WorldDef.armor) fills it to ARMOR_MAX for a player short of it, then it is
+ * gone ARMOR_BACK s. Going down loses it; a spawn starts without.
+ */
+export const ARMOR_MAX = 3;
+export const ARMOR_BACK = 10;
 /**
  * Fall damage (the user, 2026-11-13): a landing faster than FALL_SAFE m/s (a 10 m drop at full
  * gravity; Highline's routes land at 18.4 at most) takes 1 hp, and 1 more each FALL_HP m/s past it.
@@ -273,7 +280,7 @@ export const PACK_BACK = 20;
 /** Shots an ammo pack gives, up to AMMO_MAX, and seconds before a taken one is back. */
 export const AMMO_PACK = 20;
 export const AMMO_BACK = 10;
-/** Health packs, ammo packs and rail cells a map has at most: the bits of Snapshot.packs. */
+/** Health packs, ammo packs, rail cells and armours a map has at most: the bits of Snapshot.packs. */
 export const PACK_BITS = 48;
 /** Metres from a pack or a rack, feet to point on the floor plane, that take it. */
 export const PACK_R = 0.9;

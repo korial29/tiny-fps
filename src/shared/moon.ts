@@ -925,6 +925,9 @@ export const MOON: WorldDef = {
     ],
     [80, 0, 140],
   ),
+  // The armours: one on the module roof in each half, the nearer the rille, and one on the high
+  // middle stone of the east crossing, which only its hops reach.
+  vests: both([[107, 5, 200]], [132.5, 2.4, ZED / 2]),
   // Under the pits' floors (PIT_FLOOR) and over the rille's bottom.
   floor: -26,
   // The crater floor, out to an ellipse of 600 by 720 m nobody crosses: none in the rille and the notches of its lips.

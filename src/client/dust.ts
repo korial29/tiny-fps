@@ -8,6 +8,7 @@ import type { World } from '../shared/world';
 import { dress, place, smooth } from './mesh';
 import type { Vec3 } from './mesh';
 import { contacts, springs } from './rover';
+import type { Out } from './verts';
 
 /** Metres a second along the ground from which the wheels raise dust, and across the nose (a slide) from which they do at any speed. */
 export const DUST_SPEED = 6;
@@ -57,7 +58,7 @@ export interface Dust {
   /** Moves the puffs by dt seconds, then lets the rovers' wheels throw new ones. */
   update(rovers: Rover[], world: World, dt: number, eye?: Vec3): void;
   /** Appends the puffs: each swells and thins as it flies. */
-  draw(out: number[]): void;
+  draw(out: Out): void;
   /** Puffs in flight. */
   readonly count: number;
 }

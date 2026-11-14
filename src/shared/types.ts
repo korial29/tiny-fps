@@ -209,6 +209,8 @@ export interface PlayerState {
   held: number;
   /** Health, 0 to HP_MAX. */
   hp: number;
+  /** Armour, 0 to ARMOR_MAX, spent before the health; the host's alone, like hp. Absent: none. */
+  armor?: number;
   /** Shots left in the gun; -1 without the gun (taken at the team's rack, lost on death). */
   ammo: number;
   /** Ticks to the next shot. */
@@ -415,8 +417,8 @@ export interface Snapshot {
   flags: [FlagState, FlagState];
   /**
    * Bit n set: pack n is there to take, the health packs of WorldDef.packs first, then the ammo
-   * packs of WorldDef.ammo (bit packs.length + n), then the rail cells of WorldDef.cells (after
-   * both). PACK_BITS bits, past the 32 of the bitwise operators: read a bit with arithmetic.
+   * packs of WorldDef.ammo (bit packs.length + n), then the rail cells of WorldDef.cells, then the
+   * armours of WorldDef.vests. PACK_BITS bits, past the 32 of the bitwise operators: read a bit with arithmetic.
    * Absent: none.
    */
   packs?: number;

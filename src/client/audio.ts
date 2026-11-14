@@ -76,7 +76,7 @@ const silent = (): Audio => {
   };
 };
 
-export const createAudio = (layers: Voice[][] = LAYERS, sprites = SPRITES): Audio => {
+export const createAudio = (layers: Voice[][] = LAYERS, sprites = SPRITES, song = music): Audio => {
   let ctx: AudioContext;
   try {
     ctx = new AudioContext();
@@ -146,7 +146,7 @@ export const createAudio = (layers: Voice[][] = LAYERS, sprites = SPRITES): Audi
           const s = render(id, layers);
           bufs[id] = buffer(LOOPED.includes(id) ? seam(s) : s);
         });
-        const m = source(buffer(music(), MUSIC_RATE));
+        const m = source(buffer(song(), MUSIC_RATE));
         m.loop = true;
         m.connect(bed);
         m.start();

@@ -9,6 +9,8 @@ import { STRIDE, place, segment, solid } from './mesh';
 import type { Vec3 } from './mesh';
 import { axis, turn } from './rig';
 import type { Quat } from './rig';
+import { room } from './verts';
+import type { Out } from './verts';
 
 /** One flag to draw. */
 export interface FlagDraw {
@@ -58,6 +60,8 @@ export interface CtfScene {
   ammo?: readonly Vec3[];
   /** The rail cells that are there to take. */
   cells?: readonly Vec3[];
+  /** The armours that are there to take. */
+  vests?: readonly Vec3[];
 }
 
 /** The flags to draw from a snapshot: each at its base, where it lies, or on the back of its carrier (none if he is not drawn). */
@@ -86,17 +90,18 @@ const AXES: Vec3[] = [
 ];
 
 /** Makes the vertices from `from` on glow: the colour gets brighter by `k` and loses its shading. */
-export const glow = (out: number[], from: number, k: number) => {
+export const glow = (out: Out, from: number, k: number) => {
+  const a = room(out, 0);
   for (let i = from; i < out.length; i += STRIDE) {
-    out[i + 6] *= k;
-    out[i + 7] *= k;
-    out[i + 9] *= k;
-    out[i + 8] = -2;
+    a[i + 6] *= k;
+    a[i + 7] *= k;
+    a[i + 9] *= k;
+    a[i + 8] = -2;
   }
 };
 
 /** A triangle with its flat normal, of one colour (r, g, b). */
-export const tri = (out: number[], a: Vec3, b: Vec3, c: Vec3, [r, g, bl]: number[]) => {
+export const tri = (out: Out, a: Vec3, b: Vec3, c: Vec3, [r, g, bl]: number[]) => {
   const [ux, uy, uz] = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
   const [vx, vy, vz] = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
   const n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
@@ -107,7 +112,7 @@ export const tri = (out: number[], a: Vec3, b: Vec3, c: Vec3, [r, g, bl]: number
 };
 
 /** A ring between the radii r0 and r1 on the horizontal at `at`, facing up: SIDES quads. */
-export const ring = (out: number[], at: Vec3, r0: number, r1: number, rgb: number[]) => {
+export const ring = (out: Out, at: Vec3, r0: number, r1: number, rgb: number[]) => {
   for (let i = 0; i < SIDES; i++) {
     const [a, b] = [i, i + 1].map(k => (k * 2 * Math.PI) / SIDES);
     const p = (r: number, t: number): Vec3 => [
@@ -121,7 +126,7 @@ export const ring = (out: number[], at: Vec3, r0: number, r1: number, rgb: numbe
 };
 
 /** A disc, a fan of SIDES triangles. */
-const disc = (out: number[], at: Vec3, r: number, rgb: number[]) => {
+const disc = (out: Out, at: Vec3, r: number, rgb: number[]) => {
   for (let i = 0; i < SIDES; i++) {
     const [a, b] = [i, i + 1].map(k => (k * 2 * Math.PI) / SIDES);
     tri(
@@ -139,7 +144,7 @@ const disc = (out: number[], at: Vec3, r: number, rgb: number[]) => {
  * radius within which a flag is touched and a capture counts. `t` is the clock in seconds: the
  * ring pulses.
  */
-export const base = (out: number[], at: Vec3, rgb: number[], t: number) => {
+export const base = (out: Out, at: Vec3, rgb: number[], t: number) => {
   disc(
     out,
     [at[0], at[1] + PAD, at[2]],
@@ -158,7 +163,7 @@ export const base = (out: number[], at: Vec3, rgb: number[], t: number) => {
  * carries. Both sides are drawn, the second a hair behind, each lit by its own normal.
  */
 const cloth = (
-  out: number[],
+  out: Out,
   root: Vec3,
   d: Vec3,
   [len, h]: [number, number],
@@ -203,7 +208,7 @@ const cloth = (
 };
 
 /** The pole from a to b, with a glowing bead on its tip. */
-const pole = (out: number[], a: Vec3, b: Vec3, rgb: number[]) => {
+const pole = (out: Out, a: Vec3, b: Vec3, rgb: number[]) => {
   segment(out, solid(1, 1, [1, 1], [0, 0]), a, b, [0.6, 0, 0.8], 1, 0.045, [0.82, 0.84, 0.9]);
   const from = out.length;
   place(out, solid(1, 0, [1, 1]), b, AXES, [0, 0, 0], 0.09, rgb);
@@ -218,13 +223,7 @@ const pole = (out: number[], a: Vec3, b: Vec3, rgb: number[]) => {
  * Dropped, it lies on the ground, the pole leaning, with a ring on the ground where it is to be
  * touched. `t` is the clock in seconds.
  */
-export const flag = (
-  out: number[],
-  f: FlagDraw,
-  rgb: number[],
-  t: number,
-  chest?: [Vec3, Quat],
-) => {
+export const flag = (out: Out, f: FlagDraw, rgb: number[], t: number, chest?: [Vec3, Quat]) => {
   const [x, y, z] = f.at;
   const phase = t + f.team * 1.7;
   if (f.by) {

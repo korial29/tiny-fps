@@ -10,7 +10,7 @@ import { ROLE, kitOf, roleOf, rolesOf } from '../shared/kit';
 import { TONES, toneOf } from './features';
 import { styleOf } from './hair';
 import { shaved } from './skin';
-import { SOUND } from './sfx';
+import { SONGS, SOUND } from './sfx';
 import { aimOf, gap2, struck } from '../shared/rover';
 import { SHIP, limits } from '../shared/ship';
 import { build, hidden, ray } from '../shared/world';
@@ -189,7 +189,8 @@ const play = (
     `i,p,b{position:absolute;pointer-events:none;user-select:none;margin:0}` +
     HUD_CSS +
     `i{left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #0008}` +
-    `p{bottom:8px;left:12px}` +
+    // Over the helmet's blurred rim (the HUD's del), under the death screen.
+    `p{bottom:8px;left:12px;z-index:1}` +
     `b{transform:translate(-50%,-100%);font-size:12px;white-space:nowrap}[hidden]{display:none}</style>` +
     `<div><canvas></canvas><i></i><p></p></div>`;
   container.append(wrap);
@@ -210,7 +211,7 @@ const play = (
 
   const world = build(mapOf(key));
   const predictor = createPredictor(world);
-  const audio = createAudio();
+  const audio = createAudio(undefined, undefined, SONGS[key]);
   audio.mute(savedMute());
   hud.mute(audio.muted);
   hud.frags(0);
@@ -487,6 +488,13 @@ const play = (
         match.packs,
         (world.def.packs?.length ?? 0) + (world.def.ammo?.length ?? 0),
       ),
+      vests: packsOf(
+        world.def.vests,
+        match.packs,
+        (world.def.packs?.length ?? 0) +
+          (world.def.ammo?.length ?? 0) +
+          (world.def.cells?.length ?? 0),
+      ),
     };
     // What the live steps did, once: the camera and the sounds read it, the inputs sent do not.
     const hit = predictor.events();
@@ -506,7 +514,8 @@ const play = (
     hud.ship(car?.ship ? { nades: car.nades ?? 0, alt: car.y - SHIP.DROP, up, out } : undefined);
     if (me) {
       // A hit comes from the nearest foe up: the angle to him off the view, to the right.
-      const lost = felt && !felt.down ? Math.max(0, felt.hp - me.hp) : 0;
+      const worn = (q: PlayerState) => q.hp + (q.armor ?? 0);
+      const lost = felt && !felt.down ? Math.max(0, worn(felt) - worn(me)) : 0;
       const team = new Map(roster.map(p => [p.id, p.team]));
       let [from, near] = [undefined as number | undefined, Infinity];
       for (const p of others) {

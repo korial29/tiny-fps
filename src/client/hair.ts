@@ -9,6 +9,8 @@ import type { Quat } from './rig';
 import type { Vec3 } from './mesh';
 import { hash } from './features';
 import { HAIRLINE_F, TOP, bindOf, scalp } from './skin';
+import { room } from './verts';
+import type { Out } from './verts';
 
 export const STYLE = { PONYTAIL: 0, BOB: 1, BUN: 2, BRAID: 3, UNDERCUT: 4 } as const;
 export const STYLES = Object.keys(STYLE).length;
@@ -402,7 +404,7 @@ export const sway = (phase: number, speed: number, t: number): Vec3 => {
  * at level of detail `lod` (0 far), its loose end moved by `swing` (sway()).
  */
 export const hair = (
-  out: number[],
+  out: Out,
   at: Vec3,
   q: Quat,
   style: number,
@@ -413,6 +415,7 @@ export const hair = (
   const m = tress(style, lod > 0);
   const o = bindOf(0)[J.HEAD];
   let w = out.length;
+  const dst = room(out, (m.length / 8) * 10);
   for (let i = 0; i < m.length; i += 8, w += 10) {
     const s = m[i + 7] ** 1.5;
     const p = turn(q, [
@@ -422,15 +425,16 @@ export const hair = (
     ]);
     const n = turn(q, [m[i + 3], m[i + 4], m[i + 5]]);
     const k = m[i + 6];
-    out[w] = at[0] + p[0];
-    out[w + 1] = at[1] + p[1];
-    out[w + 2] = at[2] + p[2];
-    out[w + 3] = n[0];
-    out[w + 4] = n[1];
-    out[w + 5] = n[2];
-    out[w + 6] = rgb[0] * k;
-    out[w + 7] = rgb[1] * k;
-    out[w + 8] = -1;
-    out[w + 9] = rgb[2] * k;
+    dst[w] = at[0] + p[0];
+    dst[w + 1] = at[1] + p[1];
+    dst[w + 2] = at[2] + p[2];
+    dst[w + 3] = n[0];
+    dst[w + 4] = n[1];
+    dst[w + 5] = n[2];
+    dst[w + 6] = rgb[0] * k;
+    dst[w + 7] = rgb[1] * k;
+    dst[w + 8] = -1;
+    dst[w + 9] = rgb[2] * k;
   }
+  out.length = w;
 };

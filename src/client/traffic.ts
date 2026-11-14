@@ -10,6 +10,10 @@ import { place } from './mesh';
 import type { Vec3 } from './mesh';
 import { FAR as CITY, MARKS, PITCH, ROAD, STREET, grid, scale } from './street';
 import { hash } from './textures';
+import type { Out } from './verts';
+import { ORIGIN, mesh } from './store';
+import type { Pieces } from './store';
+import type { Quat } from './rig';
 
 /** How much bigger than a real car (4.4 m) the cars are drawn: they are seen from 100 m up. */
 const SIZE = 1.3;
@@ -139,14 +143,14 @@ export const carAt = (car: Car, t: number): [number, number, number] => {
 };
 
 /** A flat polygon of 4 corners, wound as given. */
-const quad = (out: number[], [a, b, c, d]: Vec3[], rgb: number[]) => {
+const quad = (out: Out, [a, b, c, d]: Vec3[], rgb: number[]) => {
   tri(out, a, b, c, rgb);
   tri(out, a, c, d, rgb);
 };
 
 /** A box tapering from the footprint `b` at y0 to `t` at y1 ([x0, x1, z0, z1] each): four sides and the top, wound outward. */
 const hull = (
-  out: number[],
+  out: Out,
   y0: number,
   y1: number,
   b: number[],
@@ -202,6 +206,12 @@ const [BODY, CABIN, LAMPS] = (() => {
   return [body, cabin, lamps];
 })();
 export const MODEL = { body: BODY, cabin: CABIN, lamps: LAMPS };
+/** A car's axes facing -z: no turn. */
+const STRAIGHT: Vec3[] = [
+  [1, 0, 0],
+  [0, 1, 0],
+  [0, 0, -1],
+];
 
 /**
  * The drawer of a world's traffic: appends the cars in view (in front of the camera, within FAR) at
@@ -210,7 +220,8 @@ export const MODEL = { body: BODY, cabin: CABIN, lamps: LAMPS };
 export const traffic = (def: WorldDef) => {
   const list = cars(def);
   const k = scale(def);
-  return (out: number[], eye: Vec3, fwd: Vec3, t: number) => {
+  /** With `pieces`, the frame's pieces of the store: each car made once by paint and placed there (store.ts). */
+  return (out: Out, eye: Vec3, fwd: Vec3, t: number, pieces?: Pieces) => {
     for (const car of list) {
       const [x, z, size] = carAt(car, t);
       const to = [x - eye[0], STREET - eye[1], z - eye[2]];
@@ -230,12 +241,24 @@ export const traffic = (def: WorldDef) => {
       ];
       // On the asphalt, which is raised with the distance (street.ts).
       const at: Vec3 = [x, STREET + 0.12 * k(x, z) ** 2, z];
-      place(out, BODY, at, axes, [0, 0, 0], SIZE * size, PAINT[car.paint]);
+      // Its axes are a turn about up, facing (fx, fz): as a quaternion for the store.
+      const half = Math.atan2(-fx, -fz) / 2;
+      const q: Quat = [0, Math.sin(half), 0, Math.cos(half)];
+      const put = (key: string, src: number[], tint?: number[]) =>
+        pieces
+          ? pieces.push({
+              m: mesh(key, o => place(o, src, ORIGIN, STRAIGHT, [0, 0, 0], 1, tint)),
+              q,
+              t: at,
+              k: SIZE * size,
+            })
+          : place(out, src, at, axes, [0, 0, 0], SIZE * size, tint);
+      put(`car ${car.paint}`, BODY, PAINT[car.paint]);
       if (far < NEAR_CAR ** 2) {
-        place(out, CABIN, at, axes, [0, 0, 0], SIZE * size, PAINT[car.paint]);
+        put(`cabin ${car.paint}`, CABIN, PAINT[car.paint]);
       }
       if (far < LIT ** 2) {
-        place(out, LAMPS, at, axes, [0, 0, 0], SIZE * size);
+        put('lamps', LAMPS);
       }
     }
   };

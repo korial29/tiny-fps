@@ -18,6 +18,7 @@ import { SHINE, STRIDE, add, basis, dress, mix, place, smooth, sub } from './mes
 import type { Vec3 } from './mesh';
 import { LINK, P, TUBE, grips, panel, rod } from './rover';
 import { char, pose } from './wreck';
+import type { Out } from './verts';
 
 const WHITE = [0.8, 0.81, 0.84];
 const PALE = [0.66, 0.67, 0.71];
@@ -801,14 +802,7 @@ export const legs = (r: Rover): number =>
  * among the map's vehicles): scorched where it arcs; a wreck on its belly, its legs gone, charred,
  * no light on it, falling apart at the end.
  */
-export const craft = (
-  out: number[],
-  state: Rover,
-  rgb: number[],
-  t: number,
-  lod = 2,
-  n = 0,
-): void => {
+export const craft = (out: Out, state: Rover, rgb: number[], t: number, lod = 2, n = 0): void => {
   const start = out.length;
   const r = pose(state);
   const whole = r === state;

@@ -7,7 +7,7 @@ import { BODY, FLAG, HAIRS_N, TONES_N } from '../shared/types';
 import { ROLE } from '../shared/kit';
 import { TONES } from './features';
 import type { FlagState } from '../shared/types';
-import { GUN_MAG, HP_MAX, RIFLE_CLIP, RULES, VEHICLE } from '../shared/constants';
+import { ARMOR_MAX, GUN_MAG, HP_MAX, RIFLE_CLIP, RULES, VEHICLE } from '../shared/constants';
 import { ROVER } from '../shared/rover';
 import { MODE, NOBODY } from '../shared/types';
 import type { Rover } from '../shared/types';
@@ -348,10 +348,10 @@ describe('createHud', () => {
     expect(el().hidden).toBe(true);
     // The corners' shade as it always was, and nothing else filled: a line, 2 px at any size.
     expect(HUD_CSS).toMatch(
-      /del\{inset:0;background:radial-gradient\(ellipse 74% 80% at 50% 54%,#0000 60%,#000d 100%\)\}/,
+      /del\{inset:0;background:radial-gradient\(ellipse 84% 90% at 50% 52%,#0000 64%,#000d 100%\)\}/,
     );
     const svg = decodeURIComponent(
-      /del::before\{[^}]*url\("data:image\/svg\+xml,([^"]*)"\)/.exec(HUD_CSS)![1],
+      /del::after\{[^}]*url\("data:image\/svg\+xml,([^"]*)"\)/.exec(HUD_CSS)![1],
     );
     expect(svg).toContain('fill="none"');
     expect(svg).not.toMatch(/ fill="#/);
@@ -363,7 +363,13 @@ describe('createHud', () => {
     expect(svg.match(/stroke="#000"/g)).toHaveLength(3);
     expect(svg).toContain('vector-effect="non-scaling-stroke"');
     expect(svg).toContain('preserveAspectRatio="none"');
-    expect(HUD_CSS).not.toMatch(/del::after/);
+    // The view blurred round the glass, under the sheen: outside the outline and a soft band inside it.
+    const blur = /del::before\{([^}]*)\}/.exec(HUD_CSS)![1];
+    expect(blur).toContain('backdrop-filter:blur(10px)');
+    const mask = decodeURIComponent(/mask:url\("data:image\/svg\+xml,([^"]*)"\)/.exec(blur)![1]);
+    expect(mask).toContain('fill-rule="evenodd"');
+    expect(mask).toContain('feGaussianBlur');
+    expect(mask).toContain(`L${rim()[1][0]} ${+rim()[1][1].toFixed(2)}L`);
     // The visor's shape, as on the helmet (helmet.ts): in a box of 100 by 100, y down.
     const pts = rim();
     const top = pts.slice(0, pts.length / 2);
@@ -373,12 +379,13 @@ describe('createHud', () => {
     expect(at(top, 50)).toBeGreaterThan(at(top, 35) + 1);
     expect(at(top, 65)).toBeCloseTo(at(top, 35), 9);
     expect(at(top, 50) - at(top, 49.5)).toBeLessThan((at(top, 40) - at(top, 39.5)) / 2);
-    // The lower edge runs up toward its ends, by the helmet's own rise over the visor's height.
-    expect(at(low, 15)).toBeLessThan(at(low, 34) - 12);
+    // The lower edge runs up toward its ends, by 0.4 of the helmet's own rise over the visor's height.
+    expect(at(low, 15)).toBeLessThan(at(low, 34) - 4);
+    expect(at(low, 15)).toBeGreaterThan(at(low, 34) - 8);
     expect(at(low, 20) - at(low, 15)).toBeCloseTo(at(low, 80) - at(low, 85), 9);
     expect(VISOR.rise / (2 * VISOR.r[1])).toBeCloseTo(0.5, 6);
     // Round ends: the two edges close on each other at the sides, with no corner on the way.
-    expect(at(top, 4)).toBeCloseTo(at(low, 4), 9);
+    expect(at(top, 1)).toBeCloseTo(at(low, 1), 9);
     expect(at(low, 5) - at(top, 5)).toBeLessThan(at(low, 10) - at(top, 10));
     const turns = pts.map((p, k) => {
       const [a, b] = [pts[(k + pts.length - 1) % pts.length], pts[(k + 1) % pts.length]];
@@ -390,19 +397,20 @@ describe('createHud', () => {
     });
     // No turn of more than half a right angle between two steps, the ends' tips aside.
     expect(turns.filter(a => a > Math.PI / 4).length).toBeLessThanOrEqual(4);
-    // Low on the screen: 12 down at its top.
-    expect(Math.min(...top.map(p => p[1]))).toBeGreaterThan(11.9);
+    // Wide and tall, a thin frame round it: 6 down at its top, 1 in from each side.
+    expect(Math.min(...top.map(p => p[1]))).toBeGreaterThan(5.9);
+    expect(Math.min(...pts.map(p => p[0]))).toBe(1);
     // The guard's notch in the middle, flat-topped: the face (72 px wide, its top 111 px up) and the
     // health sit in it on a screen of 800 by 600.
     expect(at(low, 50)).toBeCloseTo(at(low, 46), 1);
-    // It stands 21 over where the V would meet in the middle, and over the edge at its foot.
-    expect(at(low, 50)).toBeCloseTo(79, 1);
+    // It stands 18.8 over where the V would meet in the middle, and over the edge at its foot.
+    expect(at(low, 50)).toBeCloseTo(81.2, 1);
     expect(at(low, 50)).toBeLessThan(at(low, 28) - 2);
     // Softened: long shoulders, no step: it gains under 1.5 a unit of width anywhere.
     for (let x = 27; x < 50; x += 0.5) {
       expect(Math.abs(at(low, x + 0.5) - at(low, x)) / 0.5).toBeLessThan(1.5);
     }
-    expect((100 - at(low, 50)) * 6).toBeGreaterThan(111 + 10);
+    expect((100 - at(low, 50)) * 6).toBeGreaterThan(111);
     // The face's top corners, 36 px off the middle: the swell is still over them there.
     expect((100 - at(low, 54.5)) * 6).toBeGreaterThan(111);
     // The shell is drawn before the face, the health and the gun's count, so they lie over it.
@@ -604,7 +612,7 @@ describe('createHud', () => {
       // The health bar's pips are the list's own.
       hud.feed(['Ann', 0], ['Bob', 1]);
       hud.vitals(1, -1);
-      expect(screen.querySelectorAll('ul li.e')).toHaveLength(HP_MAX - 1);
+      expect(screen.querySelectorAll('ul li.e:not(.a)')).toHaveLength(HP_MAX - 1);
       expect(screen.querySelector('ol li.e')).toBeNull();
     });
   });
@@ -682,18 +690,30 @@ describe('the gun on the HUD', () => {
     hud = createHud(screen);
   });
   afterEach(() => vi.useRealTimers());
-  const pips = () => [...screen.querySelectorAll('li')].map(li => !li.classList.contains('e'));
+  const pips = () =>
+    [...screen.querySelectorAll('li:not(.a)')].map(li => !li.classList.contains('e'));
   const ammo = () => screen.querySelector<HTMLElement>('dl')!;
   const count = () => screen.querySelector<HTMLElement>('data')!;
 
   it('shows the health as HP_MAX pips, the empty ones outlined', () => {
     expect(pips()).toHaveLength(HP_MAX);
-    hud.vitals(5, -1);
-    expect(pips()).toEqual([true, true, true, true, true]);
+    hud.vitals(HP_MAX, -1);
+    expect(pips()).toEqual(Array(HP_MAX).fill(true));
     hud.vitals(3, -1);
-    expect(pips()).toEqual([true, true, true, false, false]);
+    expect(pips()).toEqual(pips().map((_, i) => i < 3));
     hud.vitals(0, -1);
-    expect(pips()).toEqual([false, false, false, false, false]);
+    expect(pips()).toEqual(Array(HP_MAX).fill(false));
+  });
+
+  it('shows the armour as ARMOR_MAX gold pips after the health, the empty ones hidden', () => {
+    const plates = () =>
+      [...screen.querySelectorAll('li.a')].map(li => !li.classList.contains('e'));
+    expect(plates()).toHaveLength(ARMOR_MAX);
+    hud.vitals(HP_MAX, -1);
+    expect(plates()).toEqual(Array(ARMOR_MAX).fill(false));
+    hud.vitals(HP_MAX, -1, false, false, -1, false, undefined, false, -1, false, 0, 2);
+    expect(plates()).toEqual([true, true, false]);
+    expect(pips()).toEqual(Array(HP_MAX).fill(true));
   });
 
   it('turns the pips red on the last one', () => {

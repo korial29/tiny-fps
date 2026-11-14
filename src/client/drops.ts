@@ -3,6 +3,7 @@
 // lie down there and are gone after a few seconds. Drawn only; the physics of the game never sees them.
 import { add, place, unit } from './mesh';
 import type { Vec3 } from './mesh';
+import type { Out } from './verts';
 
 /** Seconds a drop lies about, and the last of them it shrinks away in. */
 export const [LIFE, GONE] = [3, 0.3];
@@ -75,7 +76,7 @@ export const fall = (dt: number) => {
 };
 
 /** Appends the drops, each shrinking away in its last GONE seconds. */
-export const drawDrops = (out: number[]) => {
+export const drawDrops = (out: Out) => {
   for (const d of list) {
     const k = Math.min(1, (LIFE - d.age) / GONE);
     place(out, d.model, add(d.c, d.ax[2].map(x => -x * HALF * k) as Vec3), d.ax, [0, 0, 0], k);

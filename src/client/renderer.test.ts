@@ -40,6 +40,8 @@ import {
 } from './render';
 import type * as Traffic from './traffic';
 import { duo } from '../../test/teams';
+import { Verts } from './verts';
+import { pose } from '../../test/flesh';
 
 // The traffic is off unless a test turns it on: the draws below are counted to the vertex.
 const cars = vi.hoisted(() => ({ on: false }));
@@ -133,8 +135,25 @@ describe('createRenderer', () => {
     Object.defineProperty(canvas, 'clientWidth', { value: w, configurable: true });
     Object.defineProperty(canvas, 'clientHeight', { value: h, configurable: true });
   };
-  const draws = () =>
-    calls.filter(c => c[0] == 'drawArrays' && c[3] != 3).map(c => [c[2], c[3]] as [number, number]);
+  /**
+   * The draws of the frame's own vertices, or with `kept` the others (store.ts's pieces): those are
+   * drawn with a turn or a place in R, or posed by the shader (Sm).
+   */
+  const draws = (kept = false) => {
+    const out: [number, number][] = [];
+    let [still, posed] = [true, false];
+    for (const c of calls) {
+      const at = (c[1] as { u?: string } | undefined)?.u;
+      if (c[0] == 'uniform4fv' && at == 'R') {
+        still = (c[2] as number[]).join() == '0,0,0,1,0,0,0,1';
+      } else if (c[0] == 'uniform1i' && at == 'Sm') {
+        posed = c[2] != 0;
+      } else if (c[0] == 'drawArrays' && c[3] != 3 && (still && !posed) != kept) {
+        out.push([c[2], c[3]] as [number, number]);
+      }
+    }
+    return out;
+  };
   const frame = (
     rd: ReturnType<typeof createRenderer>,
     fx = createEffects(),
@@ -429,7 +448,7 @@ describe('createRenderer', () => {
       rd.frame([1, 1.6, 1], 0.5, -0.2, [], new Map([[7, '#ff0000']]), fx, [], b);
       // In the colour of the own player's team.
       expect(b.draw).toHaveBeenCalledWith(
-        expect.any(Array),
+        expect.any(Verts),
         [1, 1.6, 1],
         0.5,
         -0.2,
@@ -568,6 +587,10 @@ describe('createRenderer', () => {
       const [depth, world] = draws();
       expect(depth[1]).toBeGreaterThan(FLOOR_VERTS);
       expect(depth[1]).toBe(world[1]);
+      // His rigid pieces, from the store, in the shadow's pass and the scene's alike.
+      const pieces = draws(true);
+      expect(pieces.length).toBeGreaterThan(0);
+      expect(pieces.slice(0, pieces.length / 2)).toEqual(pieces.slice(pieces.length / 2));
     });
 
     it('is cast by the bases and the flags too, drawn with the brushes and before the other players', () => {
@@ -666,7 +689,7 @@ describe('createRenderer', () => {
         draw,
         lights: () => [],
       });
-      expect(draw).toHaveBeenCalledWith(expect.any(Array), [1, 1.6, 1]);
+      expect(draw).toHaveBeenCalledWith(expect.any(Verts), [1, 1.6, 1]);
       const [depth, world] = draws();
       expect(depth[1]).toBe(FLOOR_VERTS);
       expect(world[1]).toBe(FLOOR_VERTS + 6);
@@ -821,6 +844,35 @@ describe('createRenderer', () => {
     /** The dynamic vertices of the last frame. */
     const tail = () =>
       Array.from(calls.filter(c => c[0] == 'bufferSubData').at(-1)![3] as Float32Array);
+    /** The vertices the shader poses (flesh.ts) in the frame's draws, as their uniforms gave them. */
+    const posed = () => {
+      const out: number[] = [];
+      const u: Record<string, unknown[]> = {};
+      for (const c of calls) {
+        const at = (c[1] as { u?: string } | undefined)?.u;
+        if (at && c[0].startsWith('uniform')) {
+          u[at] = c.slice(2);
+        } else if (c[0] == 'drawArrays' && u.Sm?.[0]) {
+          const sc = Array.from(u.Sc[0] as number[]);
+          pose(out, {
+            m: { first: 0, count: c[3] as number },
+            q: [0, 0, 0, 1],
+            t: [0, 0, 0],
+            k: 1,
+            f: {
+              kind: u.Sm[0] as number,
+              at: u.Sb.slice(0, 3) as [number, number, number],
+              d: u.Sq[0] as Float32Array,
+              pal: u.Sp[0] as Float32Array,
+              face: u.Sw[0] as Float32Array,
+              plate: u.Sb[3] ? sc.slice(0, 3) : undefined,
+              accent: sc.slice(3),
+            },
+          });
+        }
+      }
+      return out;
+    };
     /** The model as rover.ts draws it, as the buffer holds it. */
     const model = (r: Rover, spin: number, team: number, lod: number) => {
       const out: number[] = [];
@@ -939,7 +991,8 @@ describe('createRenderer', () => {
       const top = (r: Rover, p: PlayerState) => {
         const rd = createRenderer(canvas, ROOM);
         show(rd, [r], p);
-        const v = tail().slice(model(r, 0, 0, 2).length);
+        // His skin is posed by the shader (flesh.ts).
+        const v = [...tail().slice(model(r, 0, 0, 2).length), ...posed()];
         let y = -Infinity;
         for (let i = 1; i < v.length; i += STRIDE) {
           y = Math.max(y, v[i]);
@@ -1002,18 +1055,23 @@ describe('createRenderer', () => {
       cars.on = false;
     });
 
-    it('adds the cars in view to the dynamic vertices, before the beams and the body, and none when it is off', () => {
+    it('draws the cars in view as pieces of the store, in the shadow and the scene alike, and none when it is off', () => {
       const rd = createRenderer(canvas, ROOM);
       frame(rd);
       expect(draws()[1][1]).toBe(FLOOR_VERTS);
+      expect(draws(true)).toEqual([]);
       calls.length = 0;
       cars.on = true;
       vi.spyOn(Date, 'now').mockReturnValue(161e3);
       rd.frame([1, 100, 1], 0, -Math.PI / 2, [], new Map(), createEffects(), []);
+      // Not in the frame's own vertices: each car is a piece (store.ts), in whole triangles.
       const [depth, world] = draws();
-      expect(depth[1]).toBeGreaterThan(FLOOR_VERTS);
+      expect(depth[1]).toBe(FLOOR_VERTS);
       expect(world[1]).toBe(depth[1]);
-      expect((depth[1] - FLOOR_VERTS) % 3).toBe(0);
+      const pieces = draws(true);
+      expect(pieces.length).toBeGreaterThan(0);
+      expect(pieces.slice(0, pieces.length / 2)).toEqual(pieces.slice(pieces.length / 2));
+      expect(pieces.every(([, n]) => n % 3 == 0)).toBe(true);
     });
   });
 
@@ -1069,7 +1127,9 @@ describe('createRenderer', () => {
       const rd = createRenderer(canvas, ROOM);
       calls.length = 0;
       frame(rd, createEffects(), [spot()]);
-      const binds = calls.filter(c => c[0] == 'bindTexture').map(c => c[2]);
+      const binds = calls
+        .filter(c => c[0] == 'bindTexture' && c[1] == K('TEXTURE_2D_ARRAY'))
+        .map(c => c[2]);
       expect(binds[0]).toBeNull();
       expect(binds[1]).not.toBeNull();
     });

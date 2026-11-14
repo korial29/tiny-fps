@@ -129,6 +129,13 @@ describe('unlock', () => {
     expect(loops[0].started).toBe(1);
   });
 
+  it('loops the song it is given: a map\u2019s own music', () => {
+    install();
+    createAudio(LAYERS, SPRITES, () => new Float32Array(7)).unlock();
+    expect(fake().buffers.at(-1)).toEqual({ length: 7, rate: MUSIC_RATE });
+    expect(fake().sources.filter(s => s.loop)).toHaveLength(1);
+  });
+
   it('plays nothing before the first unlock', () => {
     install();
     const a = createAudio(LAYERS);

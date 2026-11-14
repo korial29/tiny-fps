@@ -69,23 +69,23 @@ const step = (a: number, b: number, v: number) => {
 /** The middle of the right eye (x, y); the left is its mirror. */
 export const EYE = [0.032, 1.6895];
 /** Half the eye's width and height, and how far its ball stands out of its rim. */
-let [EA, EB] = [0.0138, 0.009];
+let [EA, EB] = [0.0152, 0.0099];
 const ED = 0.0058;
 /** How much larger than the man's the eyes being made are: the opening, the iris, the lids (see eyes()). */
 let big = 1;
 /** The woman's eyes are larger (the user, 2026-11-12): skin.ts sets `k` while it makes her head, and 1 back after. */
 export const eyes = (k = 1) => {
   big = k;
-  [EA, EB] = [0.0138 * k, 0.009 * k];
+  [EA, EB] = [0.0152 * k, 0.0099 * k];
 };
 /** The rim's depth at the eye's middle, and how much further back it is per metre outward: the outer corner is set back. */
 const [RIM, SLANT] = [-0.0792, 0.2];
 /** The iris' radius, the pupil's, and how far the iris travels sideways and up or down. */
-export const [IRIS_R, PUPIL_R, GAZE_X, GAZE_Y] = [0.006, 0.0023, 0.0046, 0.003];
+export const [IRIS_R, PUPIL_R, GAZE_X, GAZE_Y] = [0.0066, 0.0025, 0.0046, 0.003];
 /** How far a lid is off the ball. */
 const LIFT = 0.0011;
 /** The mouth: the height of the line between the lips at the middle, how it falls to the corners (per m2), and the corners. */
-export const [MOUTH_Y, MOUTH_K, MOUTH_X] = [1.6218, 0.25, 0.0245];
+export const [MOUTH_Y, MOUTH_K, MOUTH_X] = [1.627, 0.25, 0.0245];
 /** The line between the lips at `ax` across. */
 export const lipLine = (ax: number) => MOUTH_Y - MOUTH_K * ax * ax;
 
@@ -99,7 +99,7 @@ export const ball = (ax: number, y: number) =>
 const canth = (t: number) => EYE[1] + 0.0008 * t;
 const arch = (t: number) => Math.max(1 - t * t, 0) ** 0.7;
 /** The open lids' edges at t: the upper one just over the top of the iris, the lower one at its bottom. */
-const [UP, LOW] = [0.0039, 0.005];
+const [UP, LOW] = [0.0043, 0.0055];
 
 /**
  * A lid's edge at t, `c` of the way to the other lid's open edge: an upper lid at 1 is shut, under
@@ -122,10 +122,12 @@ export const lid = (
   surf: (x: number, y: number) => number,
 ): number[] => {
   const x = EYE[0] + EA * 1.06 * t;
-  const root = canth(t) + big * (upper ? 0.0122 : -0.0098) * (1 - 0.3 * t * t);
+  const root = canth(t) + big * (upper ? 0.0134 : -0.0108) * (1 - 0.3 * t * t);
   const edge = lidEdge(upper, t, c);
   const y = root + (edge - root) * s;
-  const zr = surf(x, root) + 0.0012;
+  // The root on the skin along the lid, so the lid's own smooth edge is what shows, not the steps
+  // where the skin's rows dip behind it; under the skin at the corners, where nothing frames it.
+  const zr = surf(x, root) + 0.0012 - 0.0016 * Math.max(1 - t ** 4, 0);
   const ze = ball(x, edge) - LIFT;
   return [x, y, Math.min(zr + (ze - zr) * s, ball(x, y) - LIFT)];
 };
@@ -157,7 +159,7 @@ export const white = (r: number, a: number): number[] => {
 export const socket = (ax: number, y: number) => {
   const t = (ax - EYE[0]) / (EA * 1.06);
   const h =
-    (y - canth(t)) / (big * (y > canth(t) ? 0.0122 : 0.0098)) / (1 - 0.3 * Math.min(t * t, 1));
+    (y - canth(t)) / (big * (y > canth(t) ? 0.0134 : 0.0108)) / (1 - 0.3 * Math.min(t * t, 1));
   return step(1, 0.72, Math.hypot(t, h));
 };
 
@@ -217,8 +219,11 @@ export const shift = (
       if (lidded) {
         return lidTo(upper ? 0.16 : 0.34);
       }
-      // The cheek goes up under the eye.
-      const k = Math.exp(-(((ax - 0.036) / 0.02) ** 2) - ((y - 1.668) / 0.011) ** 2) * front;
+      // The cheek goes up under the eye, not the nose beside it.
+      const k =
+        Math.exp(-(((ax - 0.036) / 0.02) ** 2) - ((y - 1.668) / 0.011) ** 2) *
+        step(0.01, 0.02, ax) *
+        front;
       return eye ? undefined : [0, 0.002 * k, -0.0012 * k];
     }
     case CH.LOOK_X:
@@ -303,9 +308,9 @@ export const shift = (
       return [sd * 0.0016 * k, 0, -0.0026 * k];
     }
     case CH.NOSE_W:
-      return [sd * 0.0022 * bell(ax - 0.011, 0.006) * bell(y - 1.648, 0.007) * front, 0, 0];
+      return [sd * 0.0022 * bell(ax - 0.011, 0.006) * bell(y - 1.655, 0.007) * front, 0, 0];
     case CH.NOSE_L: {
-      const k = bell(x, 0.011) * bell(y - 1.656, 0.016) * clamp((-z - 0.07) / 0.01);
+      const k = bell(x, 0.011) * bell(y - 1.663, 0.016) * clamp((-z - 0.07) / 0.01);
       return [0, -0.001 * k, -0.003 * k];
     }
     case CH.RIDGE:
@@ -329,7 +334,7 @@ export const shift = (
       // One side's brow and mouth corner higher, the nose's tip and the chin a little off the middle.
       const r = +(x > 0);
       return [
-        (0.0012 * bell(x, 0.012) * bell(y - 1.652, 0.014) +
+        (0.0012 * bell(x, 0.012) * bell(y - 1.659, 0.014) +
           0.0016 * bell(y - 1.598, 0.022) * step(0.05, 0.08, -z)) *
           front,
         r * (0.0016 * b + 0.0014 * c) - (1 - r) * 0.0008 * b,

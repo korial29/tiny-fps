@@ -325,40 +325,6 @@ export const CUFF = [0.925, 0.222, 0, 0.0265, 0.0265, 3, GLOVE];
 export const CUFF_SIDES = ARM.n[2];
 export const CUFF_NEAR = ARM.n[1];
 
-// The ears are pieces of their own too, half in the head a little behind its sides: a flat oval
-// standing out, leaning back.
-const EAR: Loft = {
-  chain: [J.HEAD],
-  n: [0, 6, 10],
-  m: true,
-  far: [],
-  rings: [
-    [1.646, 0.075, -0.006, 0, 0, 0, FLESH],
-    [1.652, 0.077, -0.008, 0.005, 0.007, 0, FLESH],
-    [1.664, 0.08, -0.011, 0.0075, 0.011, 0, FLESH],
-    [1.683, 0.082, -0.015, 0.008, 0.0135, 0, FLESH],
-    [1.701, 0.081, -0.019, 0.0075, 0.012, 0, FLESH],
-    [1.71, 0.079, -0.021, 0.0055, 0.008, 0, FLESH],
-    [1.714, 0.077, -0.022, 0, 0, 0, FLESH],
-  ],
-};
-
-// The hollow of each ear, a dark oval just out of its outer face, under the rim.
-const CONCHA: Loft = {
-  chain: [J.HEAD],
-  n: [0, 0, 8],
-  m: true,
-  far: [],
-  rings: [
-    [1.657, 0.0875, -0.011, 0, 0, 0, SHADE],
-    [1.662, 0.0878, -0.012, 0.0016, 0.0041, 0, SHADE],
-    [1.675, 0.0882, -0.014, 0.0021, 0.007, 0, SHADE],
-    [1.69, 0.0882, -0.016, 0.0019, 0.0061, 0, SHADE],
-    [1.699, 0.0878, -0.018, 0.0014, 0.0037, 0, SHADE],
-    [1.703, 0.0875, -0.019, 0, 0, 0, SHADE],
-  ],
-};
-
 /**
  * The rings with one more between each two, on a Catmull-Rom curve through them, for the near
  * level. None across a split (two rings at one height) or out of a limb's first ring (the trunk's
@@ -392,33 +358,59 @@ const [NECK_Y, CROWN] = [1.555, 1.803];
  */
 let fem = 0;
 const SKULL = [
-  [1.555, 0.068, 0.085, 0.07],
+  [1.555, 0.068, 0.085, 0.069],
   [1.575, 0.068, 0.088, 0.07],
-  [1.59, 0.07, 0.091, 0.072],
-  [1.605, 0.072, 0.093, 0.075],
-  [1.625, 0.075, 0.095, 0.08],
-  [1.645, 0.078, 0.095, 0.086],
-  [1.665, 0.08, 0.094, 0.092],
-  [1.69, 0.08, 0.093, 0.098],
-  [1.715, 0.079, 0.092, 0.102],
-  [1.74, 0.077, 0.087, 0.102],
+  [1.59, 0.069, 0.092, 0.072],
+  [1.605, 0.072, 0.092, 0.073],
+  [1.625, 0.075, 0.093, 0.0765],
+  [1.645, 0.078, 0.094, 0.0815],
+  [1.665, 0.08, 0.094, 0.091],
+  [1.69, 0.08, 0.093, 0.1025],
+  [1.715, 0.079, 0.092, 0.1033],
+  [1.74, 0.077, 0.089, 0.0979],
 ];
+/**
+ * The back of the skull above its fullest (the occiput, at the brow's height): one round curve up to
+ * the crown, not the dome's, which stood straight up the back and turned at the top (the user,
+ * 2026-11-14: too stiff behind). Below it SKULL bulges out over the nape.
+ */
+const OCCIPUT = [1.7, 0.104];
 /** The neck's section under the jaw (half width, front and back depth), the trunk's last ring's. */
 const NECK = [0.068, 0.066, 0.066];
 
 /**
- * The jaw line by the angle from the front: under the chin, rising to the corner of the jaw under
- * the ear, then the base of the skull behind; and how wide the blend from the neck to the head is
- * there, sharp under the jaw, soft at the nape.
+ * The jaw line by the angle from the front: under the chin, low along the jaw to its angle a little
+ * in front of the ear, then straight up behind it to under the ear (the user, 2026-11-14: an angle
+ * before it rises to the ears), then the base of the skull behind; and how wide the blend from the
+ * neck to the head is there, sharp under the jaw, soft at the nape.
  */
-const jaw = (aq: number) => [
-  1.588 + 0.032 * clamp(aq / 1.75) ** 1.5 + 0.025 * clamp((aq - 1.75) / 1.39),
-  0.0055 + 0.009 * clamp((aq - 1.6) / 1.2),
+export const jaw = (aq: number) => [
+  1.588 +
+    0.012 * clamp(aq / 1.3) ** 1.6 +
+    0.03 * step(1.3, 1.75, aq) +
+    0.012 * clamp((aq - 1.75) / 1.39),
+  0.0055 -
+    0.0015 * step(0.6, 1.2, aq) * (1 - step(1.5, 1.7, aq)) -
+    // Hers sharper round its angle (the user, 2026-11-14).
+    0.0015 * fem * bell(aq - 1.3, 0.25) +
+    (0.009 - 0.006 * fem) * bell(aq - 1.55, 0.3) +
+    // Behind the ear the head goes on into the neck with no line (the user, 2026-11-14).
+    0.034 * step(1.65, 2.3, aq),
 ];
 const DOME = SKULL[SKULL.length - 1][0];
 
 /** [half width, front depth, back depth, centre z] at height y: a smooth curve through SKULL, a dome above it. */
 const section = (y: number): number[] => {
+  const r = arch(y);
+  if (y >= OCCIPUT[0]) {
+    r[2] =
+      OCCIPUT[1] * Math.max(1 - ((y - OCCIPUT[0]) / (CROWN - OCCIPUT[0])) ** 2.2, 0) ** (1 / 2.2);
+  }
+  return r;
+};
+
+/** section() but for the back above the occiput. */
+const arch = (y: number): number[] => {
   if (y >= DOME) {
     const s = Math.sqrt(Math.max(1 - ((y - DOME) / (CROWN - DOME)) ** 2, 0));
     return [
@@ -431,8 +423,9 @@ const section = (y: number): number[] => {
   const [p, n] = [SKULL[k - 1] ?? a, SKULL[k + 2] ?? b];
   const h = b[0] - a[0];
   const t = (y - a[0]) / h;
-  // Her lower face is narrower: the jaw tapers from the cheekbones to the chin.
-  const taper = 1 - 0.25 * fem * (1 - step(1.59, 1.695, y));
+  // Her lower face is narrower: the jaw tapers from the cheekbones to the chin, still wider than
+  // her neck so its line shows (the user, 2026-11-14).
+  const taper = 1 - 0.12 * fem * (1 - step(1.585, 1.665, y)) - 0.035 * fem * bell(y - 1.668, 0.022);
   return [
     ...[1, 2, 3].map(i => {
       const [m0, m1] = [
@@ -452,6 +445,13 @@ const section = (y: number): number[] => {
 };
 
 /**
+ * How much narrower the head is at height `y` on a side `cs` of it (the cosine from the front): the
+ * back below the ears goes in to the neck, not a block as wide as the face (the user, 2026-11-14).
+ */
+const nape = (y: number, cs: number) =>
+  1 - (0.24 + 0.1 * fem) * (1 - step(1.615, 1.7 + 0.015 * fem, y)) * Math.max(-cs, 0) ** 0.7;
+
+/**
  * A point of the man's skull at rest, `a` radians round it from the front (+ toward +x) at height
  * `y`, `off` metres out of it along its normal: what hair.ts lays a woman's hair on.
  */
@@ -460,7 +460,7 @@ export const scalp = (a: number, y: number, off = 0): Vec3 => {
     const [rx, zf, zb, cz] = section(Math.min(y, CROWN - 0.002));
     const [sn, cs] = [Math.sin(a), Math.cos(a)];
     const [rz, e] = cs > 0 ? [zf, 2.2] : [zb, 2.1];
-    return [rx * sgn(sn, e), y, cz - rz * sgn(cs, e)];
+    return [rx * nape(y, cs) * sgn(sn, e), y, cz - rz * sgn(cs, e)];
   };
   const p = at(a, y);
   const [da, dy] = [at(a + 0.02, y), at(a, y - 0.004)].map(q => q.map((v, i) => v - p[i]));
@@ -479,9 +479,10 @@ export const TOP = 1.803;
 
 /** Where the hair starts, by the angle from the front (0 to pi): the forehead, the temples, a short sideburn, over the ear, the nape. */
 const HAIRLINE_M = [
-  [0, 1.757],
-  [0.5, 1.752],
-  [0.8, 1.738],
+  // The forehead a third of the face, from the hairline to the brow (the user, 2026-11-14).
+  [0, 1.768],
+  [0.5, 1.762],
+  [0.8, 1.745],
   [1.1, 1.718],
   [1.3, 1.672],
   [1.45, 1.672],
@@ -492,9 +493,9 @@ const HAIRLINE_M = [
 ];
 /** The woman's: a higher, rounder forehead, no sideburn, clear of the ear, a higher nape. hair.ts lays her styles down to it. */
 export const HAIRLINE_F = [
-  [0, 1.753],
-  [0.55, 1.749],
-  [0.95, 1.732],
+  [0, 1.766],
+  [0.55, 1.76],
+  [0.95, 1.738],
   [1.25, 1.719],
   [1.95, 1.719],
   [2.35, 1.664],
@@ -516,10 +517,10 @@ const step = (a: number, b: number, v: number) => {
 };
 
 /** The middle of the groove between the nose and the upper lip, metres up. */
-const PHILTRUM = 1.6355;
+const PHILTRUM = 1.641;
 
 /** The brow ridge's crest at ax across: an arch over each eye, down to the nose and the temple. The brows follow it. */
-const arcade = (ax: number) => 1.708 + 0.004 * (1 - ((ax - 0.032) / 0.024) ** 2);
+const arcade = (ax: number) => 1.7105 + 0.004 * (1 - ((ax - 0.032) / 0.024) ** 2);
 
 /**
  * How far the surface of the head stands out of its section at (x, y), aq radians from the front:
@@ -534,7 +535,7 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
   const f = Math.max(Math.cos(aq), 0);
   // The nose: set in at its bridge between the eyes, a ridge to the tip, its underside back to the
   // lip, a wing each side of the tip.
-  const [bridge, tip, base] = [1.702, 1.652, 1.641];
+  const [bridge, tip, base] = [1.702, 1.659, 1.648];
   const k = clamp((bridge - y) / (bridge - tip));
   const h =
     (y < tip
@@ -542,11 +543,12 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
       : y < bridge
         ? 0.002 + 0.021 * k ** 1.3
         : 0.002 * bell(y - bridge, 0.004)) *
-    (1 - 0.2 * fem);
+    // 21 mm from its base to its tip on him, 18 on her.
+    (0.87 - 0.07 * fem);
   d +=
     f ** 4 *
     (h * bell(x, 0.0045 - 0.0006 * fem + (0.004 - 0.0012 * fem) * k) +
-      (0.0042 - 0.001 * fem) * bell(ax - 0.0095, 0.0036) * bell(y - 1.6475, 0.0042));
+      (0.0042 - 0.001 * fem) * bell(ax - 0.0095, 0.0036) * bell(y - 1.6545, 0.0042));
   /** The height as the lips see it: along the line between them, which falls to the corners. */
   const ym = y - lipLine(ax) + 1.6168;
   // The brow over deep sockets, cheekbones and the hollow under them, the jaw's corners, the lips,
@@ -554,23 +556,25 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
   d +=
     f ** 2 *
     (-(0.013 - 0.003 * fem) * bell(ax - 0.032, 0.014) * bell(y - 1.69, 0.009) +
-      (0.01 - 0.0055 * fem) * bell(ax - 0.026, 0.03) * bell(y - arcade(ax), 0.007) +
-      (0.0065 + 0.0015 * fem) * bell(ax - 0.048, 0.012) * bell(y - 1.668, 0.011) +
-      (0.008 - 0.0075 * fem) * bell(ax - 0.056, 0.014) * bell(y - 1.598, 0.013) -
+      (0.01 - 0.0055 * fem) * bell(ax - 0.03, 0.025) * bell(y - arcade(ax), 0.007) +
+      (0.0065 - 0.001 * fem) * bell(ax - 0.048 + 0.002 * fem, 0.012) * bell(y - 1.668, 0.011) +
+      (0.01 - 0.0025 * fem) *
+        bell(ax - 0.056 + 0.005 * fem, 0.014 - 0.002 * fem) *
+        bell(y - 1.598, 0.013) -
       (0.002 - 0.002 * fem) * bell(ax - 0.05, 0.012) * bell(y - 1.632, 0.01) +
-      0.0048 * bell(x, 0.027) * bell(ym - 1.627, 0.007) +
-      (0.0042 + 0.001 * fem) * bell(x, 0.026) * bell(ym - 1.6198, 0.0046) +
-      (0.003 + 0.001 * fem) * bell(x, 0.024) * bell(ym - 1.6112, 0.004) -
-      0.002 * bell(x, 0.016) * bell(ym - 1.6025, 0.003) +
-      (0.0075 - 0.0015 * fem) * bell(x, 0.026 - 0.012 * fem) * bell(y - 1.593, 0.008) -
-      (0.006 - 0.003 * fem) * step(1.715, 1.75, y));
+      0.0026 * bell(x, 0.027) * bell(ym - 1.627, 0.007) +
+      (0.0034 + 0.001 * fem) * bell(x, 0.026) * bell(ym - 1.6198, 0.0046) +
+      (0.0026 + 0.001 * fem) * bell(x, 0.024) * bell(ym - 1.6112, 0.004) -
+      0.001 * bell(x, 0.016) * bell(ym - 1.6025, 0.003) +
+      0.0068 * bell(x, 0.033 - 0.01 * fem) * bell(y - 1.597, 0.012) -
+      (0.003 - 0.0015 * fem) * step(1.715, 1.75, y));
   // The nostrils set in under the tip, the groove from the nose to the upper lip, the line between
   // the lips, and a fold each side from the nose's wing to the corner of the mouth. The lids are
   // pieces of their own (lid() in features.ts) and the look is the expression's (CH), not carved.
-  const fold = clamp((1.646 - y) / 0.028);
+  const fold = clamp((1.653 - y) / 0.031);
   d +=
     f ** 4 *
-    (-0.0022 * bell(ax - 0.006, 0.0022) * bell(y - 1.6425, 0.0022) -
+    (-0.0022 * bell(ax - 0.006, 0.0022) * bell(y - 1.6495, 0.0022) -
       // The philtrum (the user, 2026-11-12): a groove from the nose to the upper lip's bow, a ridge each side of it.
       0.0034 * bell(x, 0.0034) * bell(y - PHILTRUM, 0.005) +
       0.0016 * bell(ax - 0.0066, 0.0024) * bell(y - PHILTRUM, 0.005) +
@@ -581,7 +585,7 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
       0.0016 *
         bell(ax - 0.014 - 0.014 * fold, 0.0028) *
         step(MOUTH_Y - 0.0028, MOUTH_Y + 0.0032, y) *
-        (1 - step(1.644, 1.65, y)));
+        (1 - step(1.651, 1.657, y)));
   return d;
 };
 
@@ -590,7 +594,7 @@ const face = (x: number, y: number, aq: number, fine: boolean) => {
 // they are level: the look is the expression's (CH.BROW_DOWN and the others).
 /** A brow's middle line at x across and its half height there. */
 const browAt = (x: number) => [
-  arcade(x) + 0.0015 - 0.035 * Math.max(0.02 - x, 0) + 0.0012 * fem,
+  arcade(x) + 0.0015 - 0.015 * Math.max(0.02 - x, 0) + 0.0012 * fem,
   Math.max(
     (0.0044 - 0.0014 * fem) * clamp((x - 0.006 - 0.003 * fem) / 0.006) -
       0.09 * Math.max(x - 0.028, 0),
@@ -619,11 +623,11 @@ const tint = (x: number, y: number, aq: number, fine: boolean): number[] => {
   const b =
     aq < 1.75
       ? clamp(
-          Math.min(1.637 + 0.034 * clamp((aq - 0.35) / 0.95) - y, y - jaw(aq)[0] + 0.014) / 0.024,
+          Math.min(1.643 + 0.028 * clamp((aq - 0.35) / 0.95) - y, y - jaw(aq)[0] + 0.014) / 0.024,
         )
       : 0;
   if (aq < 1) {
-    const [nx, ny] = [(ax - 0.006) / 0.0025, (y - 1.6428) / 0.0018];
+    const [nx, ny] = [(ax - 0.006) / 0.0025, (y - 1.6498) / 0.0018];
     if (nx * nx + ny * ny < 1) {
       return [SHADE, SHADE, 0];
     }
@@ -662,7 +666,7 @@ const tint = (x: number, y: number, aq: number, fine: boolean): number[] => {
   // A flush: the cheeks, the tip of the nose.
   const f =
     0.55 * Math.exp(-(((ax - 0.046) / 0.02) ** 2) - ((y - 1.655) / 0.016) ** 2) +
-    0.5 * bell(x, 0.012) * bell(y - 1.652, 0.01);
+    0.5 * bell(x, 0.012) * bell(y - 1.659, 0.01);
   return groove > 0.08 ? [FLESH, SHADE, groove] : [FLESH, BLUSH, aq < 1.6 ? Math.min(f, 0.7) : 0];
 };
 
@@ -724,7 +728,7 @@ const onHead = (x: number, y: number) => {
   return z;
 };
 
-const LOFTS = [TRUNK, LEG, ARM, EAR, CONCHA];
+const LOFTS = [TRUNK, LEG, ARM];
 
 const shape = (lod: number): Skin => {
   const [v, j, w, t, c, l, g, c2, cm]: number[][] = [[], [], [], [], [], [], [], [], []];
@@ -749,12 +753,12 @@ const shape = (lod: number): Skin => {
     return w.length - 1;
   };
   for (const L of LOFTS) {
-    kind = L === EAR || L === CONCHA ? KIND.EAR : KIND.BODY;
+    kind = KIND.BODY;
     // The eye's own arms have their rings doubled too (the user, 2026-11-09: smoother arms).
     const arm = lod == 2 && L === ARM;
     const n = L.n[tier];
     // The eye's own body has no head.
-    if (!n || (lod == 2 && (L.z || L.x || L === EAR || L === CONCHA))) {
+    if (!n || (lod == 2 && (L.z || L.x))) {
       continue;
     }
     // The eye's own body ends the trunk in a cap on the shoulders. Each sleeve but a far one ends
@@ -904,12 +908,7 @@ const shape = (lod: number): Skin => {
         const [, , , , , , col, ...rules] = rings[k];
         // The head comes off at the neck, an arm at the shoulder, a leg at the hip: where its loft
         // meets the trunk.
-        const part =
-          L === TRUNK
-            ? LIMB.NONE
-            : L === EAR || L === CONCHA
-              ? LIMB.HEAD
-              : (L === ARM ? LIMB.ARM_L : LIMB.LEG_L) + +(m > 0);
+        const part = L === TRUNK ? LIMB.NONE : (L === ARM ? LIMB.ARM_L : LIMB.LEG_L) + +(m > 0);
         const emit = (tri: number[], u: number) => {
           const angle = Math.abs(((u * 360 + 180) % 360) - 180);
           const h = rules.findIndex((l, g) => !(g % 2) && (l > 0 ? angle > l : angle < -l));
@@ -966,8 +965,21 @@ const shape = (lod: number): Skin => {
     const rows: number[][] = [T[T.length - 1]];
     /** Per head vertex its colours (tint()), taken where the section put it: the socket's floor, set back, is skin. */
     const tints: number[][] = [];
-    /** Heights a row is put at, whatever the step: the line between the lips, and each lip's fullest. */
-    const KEYS = fine ? [-0.0046, -0.001, 0, 0.001, 0.004].map(k => MOUTH_Y + k) : [];
+    /**
+     * Heights a row is put at, whatever the step: the line between the lips, and each lip's fullest;
+     * then a row a step apart round the eye from its middle, so the socket's opening (cut along the
+     * rows) frames the lids the same wherever the rows under it fell.
+     */
+    const lap = tier > 1 ? 0.003 : 0.007;
+    const KEYS = fine
+      ? [
+          ...[-0.0046, -0.001, 0, 0.001, 0.004].map(k => MOUTH_Y + k),
+          ...Array.from(
+            { length: 2 * Math.ceil(0.016 / lap) + 1 },
+            (_, i) => EYE_AT[1] + (i + 0.5 - Math.ceil(0.016 / lap)) * lap,
+          ),
+        ]
+      : [];
     const tri = (a: number, b: number, d: number, col: number) => {
       if (new Set([a, b, d]).size < 3) {
         return;
@@ -1021,15 +1033,26 @@ const shape = (lod: number): Skin => {
           const [rx, zf, zb, cz] = section(y);
           const [ef, eb] = [1.9 + 0.45 * clamp((y - 1.59) / 0.07), 2.1];
           const [rz, e] = cs > 0 ? [zf, ef] : [zb, eb];
-          const [x, z] = [rx * sgn(sn, e), -rz * sgn(cs, e)];
+          const [x, z] = [rx * nape(y, cs) * sgn(sn, e), -rz * sgn(cs, e)];
           const n = [x / rx ** 2, z / rz ** 2];
           const aq = Math.acos(cs);
           const k = face(x, y, aq, fine) / Math.hypot(n[0], n[1]);
           const [line, soft] = jaw(aq);
-          const w = step(line - soft, line + soft, y);
-          // Her neck narrows a little up to the jaw, which is narrower than his.
-          const nk = 1 - 0.1 * fem * clamp((y - NECK_Y) / 0.02);
-          const [nx, nz] = [NECK[0] * nk * sgn(sn, 2.3), -NECK[cs > 0 ? 1 : 2] * nk * sgn(cs, 2.3)];
+          // Under the chin the blend runs mostly down the throat: the chin's bottom rounds off and
+          // the line under it slopes to the neck, not a shelf over it.
+          const f = clamp(1.2 - aq);
+          const w = step(line - soft * (1 + 1.6 * f), line + soft * (1 - 0.2 * f), y);
+          // The neck narrows a little up to the jaw, so the jaw's angle stands out of it; hers more.
+          const nk =
+            1 - (0.06 + 0.06 * fem) * clamp((y - NECK_Y) / 0.02) * clamp(0.5 + 0.4 * fem + cs);
+          // Behind, the neck thickens up into the back of the head, one line with it in profile,
+          // the jaw the only line (the user, 2026-11-14, on a photo); not wider: the jaw stands out.
+          const [nx, nz] = [
+            NECK[0] * nk * sgn(sn, 2.3),
+            -NECK[cs > 0 ? 1 : 2] *
+              (cs > 0 ? nk : 1 + 0.13 * clamp((y - NECK_Y) / 0.09) ** 1.5 * -cs) *
+              sgn(cs, 2.3),
+          ];
           const p = [nx + (x + n[0] * k - nx) * w, y, nz + (cz + z + n[1] * k - nz) * w];
           const ax = Math.abs(p[0]);
           const col = tint(p[0], y, aq, fine);
@@ -1037,7 +1060,8 @@ const shape = (lod: number): Skin => {
           const sk = fine ? socket(ax, y) : 0;
           p[2] += (Math.max(p[2], ball(ax, y) + 0.004) - p[2]) * sk;
           const h = hang(p);
-          tints[h] = sk > 0.5 ? [SHADE, SHADE, 0] : col;
+          // Blended into the skin round its edge: a hard switch drew the rows' steps round the eye.
+          tints[h] = sk > 0 ? [col[0], SHADE, Math.min(2 * sk, 1)] : col;
           // The jaw: under the line between the lips, out from its corners down to the jaw's
           // angle, the line itself a part; the neck under it not. And how much hair is on it.
           uvs[h] = [
@@ -1159,7 +1183,7 @@ const shape = (lod: number): Skin => {
       mark([0.018, 0.047], [1.682, 1.698], [LASH, IRIS, 0.35]);
       mark([0.019, 0.05], [1.706, 1.715], [BROW, FLESH, 0.3]);
       mark([0, 0.023], [MOUTH_Y - 0.0038, MOUTH_Y + 0.0032], [LINE, LIP, 0.35]);
-      const NOSE = [1.641, 1.652, 1.7];
+      const NOSE = [1.648, 1.659, 1.7];
       patch(
         KIND.MARK,
         2,
@@ -1259,6 +1283,207 @@ const shape = (lod: number): Skin => {
         () => [LASH, LASH, 0],
         i => [(2 * i) / (cols - 1) - 1, 1],
       );
+      // The ears: a thin shell each, a hair into the head along its front, leaning back with the
+      // nose's ridge and standing out of the head behind (the user, 2026-11-14). On its outer face
+      // a rolled rim over the top and the back, the ridge inside it, the bowl in front sunk and in
+      // shadow, a flap in front of the bowl, a soft lobe under it with no rim.
+      const around = close ? 20 : 6;
+      // Out from the bowl's middle to the rim on the outer face, round the rim, back on the inner.
+      const RHO = close
+        ? [
+            0, 0.18, 0.32, 0.44, 0.54, 0.62, 0.69, 0.75, 0.8, 0.85, 0.9, 0.94, 0.98, 1.02, 0.97,
+            0.8, 0.45, 0,
+          ]
+        : [0, 0.5, 0.72, 0.87, 1.02, 0.8, 0];
+      /**
+       * How near (u, v) is to a line through `pts`, 1 on it, by a bell `w` wide: the ridge inside
+       * the rim (the antihelix) up from over the lobe, forking under the top into a branch up and
+       * one forward.
+       */
+      const line = (u: number, v: number, pts: number[][], w: number) => {
+        let d = Infinity;
+        for (let q = 0; q + 1 < pts.length; q++) {
+          const [[a, b], [c, e]] = [pts[q], pts[q + 1]];
+          const l = clamp(((u - a) * (c - a) + (v - b) * (e - b)) / ((c - a) ** 2 + (e - b) ** 2));
+          d = Math.min(d, Math.hypot(u - a - l * (c - a), v - b - l * (e - b)));
+        }
+        return Math.exp(-((d / w) ** 2));
+      };
+      const BODY = [
+        [0.003, -0.013],
+        [0.009, -0.005],
+        [0.0105, 0.005],
+        [0.008, 0.012],
+      ];
+      const [UPPER, LOWER] = [
+        [
+          [0.008, 0.012],
+          [0.0065, 0.02],
+          [0.004, 0.025],
+        ],
+        [
+          [0.008, 0.012],
+          [0.002, 0.0108],
+          [-0.005, 0.0092],
+        ],
+      ];
+      const blob = (u: number, v: number, cu: number, cv: number, su: number, sv: number) =>
+        Math.exp(-(((u - cu) / su) ** 2) - ((v - cv) / sv) ** 2);
+      const RIM = RHO.indexOf(1.02);
+      const [TILT, OUT] = [0.3, 0.38];
+      /** Across the ear (back), along it (up), out of it: its frame, the right one's. */
+      const across = [
+        Math.sin(OUT),
+        -Math.sin(TILT) * Math.cos(OUT),
+        Math.cos(TILT) * Math.cos(OUT),
+      ];
+      const along = [0, Math.cos(TILT), Math.sin(TILT)];
+      const out = [
+        along[1] * across[2] - along[2] * across[1],
+        along[2] * across[0] - along[0] * across[2],
+        along[0] * across[1] - along[1] * across[0],
+      ];
+      /** The head's side at height y, z: how far out, on the plain section. */
+      const side = (y: number, z: number) => {
+        const [rx, zf, zb, cz] = section(y);
+        const back = z > cz;
+        const e = back ? 2.1 : 1.9 + 0.45 * clamp((y - 1.59) / 0.07);
+        const cs = (back ? -1 : 1) * Math.min(Math.abs(z - cz) / (back ? zb : zf), 1) ** (e / 2);
+        return rx * nape(y, cs) * Math.max(1 - cs * cs, 0) ** (1 / e);
+      };
+      const [YC, ZF] = [1.679, -0.007];
+      const root = [side(YC, ZF) - 0.0015, YC, ZF];
+      for (const m of [1, -1]) {
+        const rows = RHO.map((rho, r) =>
+          Array.from({ length: around }, (_, i) => {
+            const a = (2 * Math.PI * i) / around;
+            const [cs, sn] = [Math.cos(a), Math.sin(a)];
+            // The outline: wider at the top than at the lobe, its front edge flatter.
+            const k = Math.min(rho, 1);
+            // The outline: its top wide and round, its lobe smaller, a notch in its front edge
+            // under the flap.
+            const u =
+              k *
+              cs *
+              (cs > 0
+                ? 0.0165 * (1 + 0.16 * sn)
+                : 0.0122 * (1 - 0.25 * Math.exp(-(((sn + 0.35) / 0.18) ** 2))));
+            const vv = k * 0.031 * sn;
+            const inner = r > RIM;
+            // Where the rim rolls (not the lobe, not the front under the top, where the bowl opens
+            // to the flap); the ridge inside it and its two branches, the hollow between them; the
+            // bowl (its upper part over the rim's root, its lower and deeper part round the hole),
+            // the flap in front of the hole and the bump facing it over the lobe, the notch between.
+            const lobe = step(-0.012, -0.02, vv);
+            const rim = (1 - lobe) * (1 - step(-0.003, -0.009, u) * step(0.011, 0.003, vv));
+            const crus = line(
+              u,
+              vv,
+              [
+                [-0.0125, 0.0065],
+                [-0.002, 0.0055],
+              ],
+              0.0022,
+            );
+            const ridge = Math.max(
+              line(u, vv, BODY, 0.0024),
+              line(u, vv, UPPER, 0.002),
+              0.8 * line(u, vv, LOWER, 0.0018),
+            );
+            const fossa = blob(u, vv, 0.0015, 0.0185, 0.0045, 0.0042);
+            const cymba = blob(u, vv, 0.001, 0.0045, 0.0055, 0.0028);
+            const cavum = blob(u, vv, -0.0015, -0.0045, 0.0075, 0.0072);
+            const hole = blob(u, vv, -0.0072, -0.004, 0.0024, 0.003);
+            const flap = blob(u, vv, -0.0108, -0.0035, 0.0026, 0.004);
+            const anti = blob(u, vv, 0.0028, -0.0128, 0.0032, 0.0026);
+            const notch = blob(u, vv, -0.0055, -0.0125, 0.0025, 0.0022);
+            const h = inner
+              ? -0.0014 - 0.0016 * lobe - 0.004 * (1 - rho)
+              : rho > 1
+                ? 0
+                : 0.0013 +
+                  0.0016 * lobe +
+                  rim *
+                    (0.0042 * Math.exp(-(((rho - 0.91) / 0.055) ** 2)) -
+                      0.0022 * Math.exp(-(((rho - 0.79) / 0.045) ** 2))) +
+                  0.003 * ridge -
+                  0.0024 * fossa -
+                  0.0022 * cymba -
+                  0.0034 * cavum -
+                  0.0016 * hole -
+                  0.0012 * notch +
+                  0.0028 * flap +
+                  0.0022 * anti +
+                  0.0018 * crus;
+            const [du, dv] = [u + 0.0125, vv];
+            const p = [0, 1, 2].map(q => root[q] + across[q] * du + along[q] * dv + out[q] * h);
+            // In shadow: the bowl, darkest down its hole, and the groove under the rim.
+            const g = inner
+              ? 0
+              : Math.max(
+                  clamp(cavum * 1.5 - 0.3) * 0.8,
+                  0.95 * hole,
+                  0.55 * cymba,
+                  0.45 * fossa,
+                  0.6 * notch,
+                  0.5 * rim * Math.exp(-(((rho - 0.79) / 0.04) ** 2)),
+                ) *
+                (1 - 0.6 * ridge);
+            return { p: [m * p[0], p[1], p[2]], o: [m * out[0], out[1], out[2]], g };
+          }),
+        );
+        kind = KIND.EAR;
+        // The two middles are a point each.
+        const id = rows.map((row, r) => {
+          let one: number | undefined;
+          return row.map(q => {
+            if (RHO[r] == 0 && one !== undefined) {
+              return one;
+            }
+            const h = put(q.p, J.HEAD, J.HEAD, 0);
+            tints[h] = [FLESH, SHADE, q.g];
+            uvs[h] = undefined;
+            return (one = h);
+          });
+        });
+        kind = KIND.BODY;
+        // One winding for the whole strip, the way that faces the outer face out.
+        let flip: boolean | undefined;
+        for (let r = 0; r + 1 < rows.length; r++) {
+          for (let i = 0; i < around; i++) {
+            const j = (i + 1) % around;
+            for (const q of [
+              [
+                [r, i],
+                [r, j],
+                [r + 1, j],
+              ],
+              [
+                [r, i],
+                [r + 1, j],
+                [r + 1, i],
+              ],
+            ]) {
+              const [a, b, d] = q.map(([rr, ii]) => id[rr][ii]);
+              if (new Set([a, b, d]).size < 3) {
+                continue;
+              }
+              if (flip === undefined) {
+                // tri() winds a, d, b; this is the outer face, near its middle.
+                const [pa, pb, pd] = [a, b, d].map(h => [v[h * 6], v[h * 6 + 1], v[h * 6 + 2]]);
+                const [e1, e2] = [pd.map((x, k) => x - pa[k]), pb.map((x, k) => x - pa[k])];
+                const o = rows[r][i].o;
+                flip =
+                  (e1[1] * e2[2] - e1[2] * e2[1]) * o[0] +
+                    (e1[2] * e2[0] - e1[0] * e2[2]) * o[1] +
+                    (e1[0] * e2[1] - e1[1] * e2[0]) * o[2] <
+                  0;
+              }
+              tri(a, flip ? d : b, flip ? b : d, -1);
+            }
+          }
+        }
+      }
     }
   }
   // The armpits relaxed: each vertex round them drawn toward the mean of its neighbours, the
@@ -1355,12 +1580,14 @@ const shape = (lod: number): Skin => {
         1 -
         0.24 *
           Math.exp(-(((ax - EYE_AT[0]) / 0.021) ** 2) - ((y - EYE_AT[1] - 0.002) / 0.012) ** 2) -
-        0.16 * bell(x, 0.013) * bell(y - 1.6405, 0.0045) -
+        0.16 * bell(x, 0.013) * bell(y - 1.6475, 0.0045) -
         0.1 * bell(x, 0.015) * bell(y - lipLine(ax) + 0.0135, 0.004) -
         (tier > 1 ? 0.26 : 0.1) *
           (1 - step(-0.012, 0.008, y - jaw(aq)[0])) *
           clamp((y - NECK_Y) / 0.02) *
-          clamp(2 - aq);
+          // Under the jaw's front, to nothing up its back edge (which rises steeply across the
+          // columns: they stepped it) and none behind it, where the head goes on into the neck.
+          clamp((1.45 + 0.3 * fem - aq) / 0.35);
     } else if (g[i] == KIND.LID_U) {
       o[i] *= 0.9 + 0.1 * uvs[i]![1];
     }
@@ -1602,7 +1829,7 @@ export const BUST = 0.028;
 export const BUST_Y = 1.37;
 
 /** How much larger her eyes are than his. */
-const EYES = 0.2;
+const EYES = 0.09;
 
 const generate = (lod: number, build: number): Skin => {
   fem = +(build == BUILD.FEMALE);

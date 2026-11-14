@@ -137,6 +137,16 @@ const BOLT: Glyph = [
   ],
 ];
 
+/** A shield: a square top and a point at the bottom. */
+const SHIELD: Glyph = [
+  ...rect(-0.11, 0, 0.11, 0.12),
+  [
+    [-0.11, 0],
+    [0, -0.14],
+    [0.11, 0],
+  ],
+];
+
 /** A box of half side `h` turning and bobbing a little over `at` (on a top), `glyph` glowing in `lit` on each face. */
 const crate = (
   out: Out,
@@ -180,3 +190,7 @@ export const cell = (out: Out, at: Vec3, t: number) =>
 /** A rail cell at `at`: a gunmetal box with a glowing violet-white bolt on each side, the rail gun's colours. */
 export const battery = (out: Out, at: Vec3, t: number) =>
   crate(out, at, t, 0.15, [0.14, 0.15, 0.18], BOLT, [1.1, 0.85, 2.6]);
+
+/** An armour at `at`: a bigger steel box with a glowing gold shield on each side. */
+export const vest = (out: Out, at: Vec3, t: number) =>
+  crate(out, at, t, 0.2, [0.3, 0.32, 0.36], SHIELD, [1.5, 1, 0.12]);

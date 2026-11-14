@@ -487,6 +487,13 @@ const play = (
         match.packs,
         (world.def.packs?.length ?? 0) + (world.def.ammo?.length ?? 0),
       ),
+      vests: packsOf(
+        world.def.vests,
+        match.packs,
+        (world.def.packs?.length ?? 0) +
+          (world.def.ammo?.length ?? 0) +
+          (world.def.cells?.length ?? 0),
+      ),
     };
     // What the live steps did, once: the camera and the sounds read it, the inputs sent do not.
     const hit = predictor.events();
@@ -506,7 +513,8 @@ const play = (
     hud.ship(car?.ship ? { nades: car.nades ?? 0, alt: car.y - SHIP.DROP, up, out } : undefined);
     if (me) {
       // A hit comes from the nearest foe up: the angle to him off the view, to the right.
-      const lost = felt && !felt.down ? Math.max(0, felt.hp - me.hp) : 0;
+      const worn = (q: PlayerState) => q.hp + (q.armor ?? 0);
+      const lost = felt && !felt.down ? Math.max(0, worn(felt) - worn(me)) : 0;
       const team = new Map(roster.map(p => [p.id, p.team]));
       let [from, near] = [undefined as number | undefined, Infinity];
       for (const p of others) {

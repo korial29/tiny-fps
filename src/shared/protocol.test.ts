@@ -21,6 +21,7 @@ import {
   AIR_JUMPS,
   CUTS,
   AMMO_MAX,
+  ARMOR_MAX,
   COYOTE_TICKS,
   DASH_COOLDOWN,
   DOWN_TICKS,
@@ -844,8 +845,10 @@ describe('snapshot frame', () => {
     // The rail gun: its ticks plus one and its drain in a byte.
     expect(RAIL_MAX + 1).toBeLessThanOrEqual(255);
     expect(RAIL_TICKS).toBeLessThanOrEqual(255);
-    // The gun: 3 bits for hp and cool, 7 for down, 7 for ammo with 127 for no gun, PACK_BITS packs.
-    expect(HP_MAX).toBeLessThanOrEqual(7);
+    // The gun: 4 bits for hp (its high bit in foe), 2 for the armour, 3 for cool, 7 for down, 7
+    // for ammo with 127 for no gun, PACK_BITS packs.
+    expect(HP_MAX).toBeLessThanOrEqual(15);
+    expect(ARMOR_MAX).toBeLessThanOrEqual(3);
     expect(GUN_COOLDOWN).toBeLessThanOrEqual(7);
     expect(DOWN_TICKS).toBeLessThanOrEqual(127);
     expect(AMMO_MAX).toBeLessThan(127);
@@ -857,13 +860,14 @@ describe('snapshot frame', () => {
     expect(SHOCK_TICKS).toBeLessThanOrEqual(63);
   });
 
-  it('round-trips the gun fields: health, ammo or no gun, cool, down, the counters, the packs', () => {
+  it('round-trips the gun fields: health, armour, ammo or no gun, cool, down, the counters, the packs', () => {
     let s = 99;
     const rnd = (n: number) =>
       Math.floor(((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648) * n);
     for (let k = 0; k < 500; k++) {
       const p = player(k % 16, {
-        hp: rnd(HP_MAX + 1),
+        hp: k < 2 ? HP_MAX : rnd(HP_MAX + 1),
+        armor: k < 2 ? ARMOR_MAX : rnd(ARMOR_MAX + 1),
         ammo: rnd(AMMO_MAX + 2) - 1,
         cool: rnd(GUN_COOLDOWN + 1),
         down: rnd(DOWN_TICKS + 1),
@@ -895,6 +899,7 @@ describe('snapshot frame', () => {
       )!;
       const keys = [
         'hp',
+        'armor',
         'ammo',
         'cool',
         'down',

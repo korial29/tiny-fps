@@ -79,11 +79,13 @@ export const problems = (def: WorldDef): string[] => {
   });
   def.ammo?.forEach((p, k) => stands(`ammo pack ${k}`, p, PACK_R));
   def.cells?.forEach((p, k) => stands(`rail cell ${k}`, p, PACK_R));
-  // Every pack, health, ammo and rail cell, is clear of the others, of the racks and of the flag bases.
+  def.vests?.forEach((p, k) => stands(`armour ${k}`, p, PACK_R));
+  // Every pack, health, ammo, rail cell and armour, is clear of the others, of the racks and of the flag bases.
   const kinds: [string, Vec3[]][] = [
     ['pack', def.packs ?? []],
     ['ammo pack', def.ammo ?? []],
     ['rail cell', def.cells ?? []],
+    ['armour', def.vests ?? []],
   ];
   const all = kinds.flatMap(([, l]) => l);
   const names = kinds.flatMap(([name, l]) => l.map((_, k) => `${name} ${k}`));

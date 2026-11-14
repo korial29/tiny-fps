@@ -3,6 +3,7 @@ import { Sim } from '../../test/pilot';
 import {
   AIR_JUMPS,
   AMMO_MAX,
+  ARMOR_MAX,
   GUN_MAG,
   DASH_COOLDOWN,
   DOWN_TICKS,
@@ -205,6 +206,8 @@ describe('random fire on ROOFTOPS', () => {
           });
         } else if (!p.down && p.hp > 1 && rnd() < 0.01) {
           p.hp--;
+          // Some armour now and then, as an armour pickup gives it: on the wire with the health.
+          p.armor = Math.floor(rnd() * (ARMOR_MAX + 1));
         }
         // With no weapon at all as the step left him: a swing is then a punch.
         const bare = p.ammo < 0 && !p.blade && (p.rail ?? -1) < 0 && (p.rifle ?? -1) < 0;
@@ -262,6 +265,7 @@ describe('random fire on ROOFTOPS', () => {
           )!.players;
           expect(back, label).toMatchObject({
             hp: p.hp,
+            armor: p.armor ?? 0,
             ammo: p.ammo,
             cool: p.cool,
             down: p.down,

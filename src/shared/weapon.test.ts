@@ -3,6 +3,8 @@ import {
   AMMO_MAX,
   AMMO_PACK,
   ARC_KNOCK,
+  ARMOR_BACK,
+  ARMOR_MAX,
   ARC_R,
   ARC_RANGE,
   FLOOR_TICKS,
@@ -360,8 +362,7 @@ describe('the grenade launcher', () => {
     m.hold(m.cy, 1, CLICK);
     m.land();
     // Bob takes it on the body; Dee, 2.5 m aside, the half of it; Ann is red, as Cy is.
-    expect(m.state(m.bob)).toMatchObject({ hp: 0, rifle: -1, nades: 0 });
-    expect(m.state(m.bob).down).toBeGreaterThan(0);
+    expect(m.state(m.bob)).toMatchObject({ hp: HP_MAX - NADE_HP, down: 0 });
     expect(m.state(m.dee).hp).toBe(HP_MAX - 3);
     expect(m.state(m.ann).hp).toBe(HP_MAX);
     expect(m.state(m.cy).hp).toBe(HP_MAX);
@@ -392,9 +393,10 @@ describe('the grenade launcher', () => {
     expect(m.state(m.cy).hits).toBe(1);
   });
 
-  it('hurts its owner: one fired at his own feet puts him down, with no hit counted', () => {
+  it('hurts its owner: one fired at his own feet puts him down when hurt, with no hit counted', () => {
     const m = match();
     ready(m);
+    m.state(m.cy).hp = NADE_HP;
     m.put(m.ann, 2);
     m.ticks(SNAP_EVERY);
     m.hold(m.cy, 1, CLICK, { pitch: -1.4 });
@@ -727,12 +729,12 @@ describe('a charged shot', () => {
     return { m, held, ball };
   };
 
-  it('puts any foe down at the full charge, spending CHARGE_MAX shots on one ball', () => {
+  it('takes CHARGE_MAX at the full charge, spending CHARGE_MAX shots on one ball', () => {
     const { m, held, ball } = charged(CHARGE_TICKS + 20);
     expect([held.charge, held.shots, held.ammo]).toEqual([CHARGE_TICKS, 0, AMMO_MAX]);
     expect(ball!.power).toBe(CHARGE_MAX);
     expect(m.state(m.cy)).toMatchObject({ shots: 1, hits: 1, ammo: AMMO_MAX - CHARGE_MAX });
-    expect(m.state(m.bob)).toMatchObject({ hp: 0, down: DOWN_TICKS, ammo: -1 });
+    expect(m.state(m.bob)).toMatchObject({ hp: HP_MAX - CHARGE_MAX, down: 0 });
   });
 
   it('takes as much health as its strength: half a charge is 3', () => {
@@ -1055,7 +1057,7 @@ describe('health packs', () => {
     expect(m.state(m.dee).hp).toBe(1 + PACK_HP);
     expect(packs(m)).toBe(0b10);
     // The other pack was there all along.
-    m.put(m.cy, -20, 20, { hp: 4 });
+    m.put(m.cy, -20, 20, { hp: HP_MAX - 1 });
     m.ticks(1);
     expect(m.state(m.cy).hp).toBe(HP_MAX);
     expect(packs(m)).toBe(0);
@@ -1095,6 +1097,70 @@ describe('health packs', () => {
     m.put(m.ann, -20, 20, { hp: 3 });
     m.ticks(1);
     expect(m.state(m.ann).hp).toBe(5);
+  });
+});
+
+describe('armour (the user, 2026-11-14)', () => {
+  const ARMOURED: WorldDef = { ...ARENA, vests: [[0, 1, 30]] };
+  /** The armour's bit: after the two health packs and the two ammo packs. */
+  const there = (m: ReturnType<typeof match>) => {
+    m.ticks(SNAP_EVERY);
+    return Math.floor(m.snap(m.ann).packs! / 2 ** 4) % 2 === 1;
+  };
+
+  it('gives HP_MAX health, and nothing of armour, at a spawn', () => {
+    const m = match({}, ARMOURED);
+    expect(HP_MAX).toBe(8);
+    expect(ARMOR_MAX).toBe(3);
+    expect(m.state(m.bob)).toMatchObject({ hp: HP_MAX, armor: 0 });
+  });
+
+  it('fills to ARMOR_MAX who walks on it, and is gone ARMOR_BACK seconds', () => {
+    const m = match({}, ARMOURED);
+    expect(there(m)).toBe(true);
+    m.put(m.bob, 0, 30, { armor: 1 });
+    m.ticks(1);
+    expect(m.state(m.bob).armor).toBe(ARMOR_MAX);
+    expect(there(m)).toBe(false);
+    m.state(m.bob).x = 50;
+    m.put(m.dee, 0, 30);
+    m.ticks(ARMOR_BACK * TICK_HZ - SNAP_EVERY - 5);
+    expect(m.state(m.dee).armor).toBe(0);
+    m.ticks(10);
+    expect(m.state(m.dee).armor).toBe(ARMOR_MAX);
+    expect(ARMOR_BACK).toBe(10);
+  });
+
+  it('is not taken at full armour, nor by who lies down', () => {
+    const m = match({}, ARMOURED);
+    m.put(m.bob, 0, 30, { armor: ARMOR_MAX });
+    m.put(m.dee, 0.3, 30, { hp: 0, down: 40 });
+    m.ticks(1);
+    expect(m.state(m.dee).armor).toBe(0);
+    expect(there(m)).toBe(true);
+  });
+
+  it('takes the hits before the health, then goes with the player who goes down', () => {
+    const m = match({}, ARMOURED);
+    m.put(m.cy, 0, 0, GUN);
+    m.put(m.bob, 10, 0, { armor: ARMOR_MAX });
+    m.fire(m.cy, 2);
+    expect(m.state(m.bob)).toMatchObject({ hp: HP_MAX, armor: ARMOR_MAX - 2 });
+    m.fire(m.cy, 2);
+    expect(m.state(m.bob)).toMatchObject({ hp: HP_MAX - 1, armor: 0 });
+    m.state(m.bob).armor = ARMOR_MAX;
+    m.fire(m.cy, HP_MAX - 1 + ARMOR_MAX - 1);
+    expect(m.state(m.bob)).toMatchObject({ hp: 1, armor: 0, down: 0 });
+    m.fire(m.cy, 1);
+    expect(m.state(m.bob)).toMatchObject({ hp: 0, armor: 0 });
+    expect(m.state(m.bob).down).toBeGreaterThan(0);
+  });
+
+  it('shows in the snapshot, with the full health', () => {
+    const m = match({}, ARMOURED);
+    m.put(m.bob, 50, 0, { armor: 2 });
+    m.ticks(SNAP_EVERY);
+    expect(m.snap(m.ann).players.find(p => p.id === 1)).toMatchObject({ hp: HP_MAX, armor: 2 });
   });
 });
 
@@ -1567,7 +1633,7 @@ describe('a punch (the user, 2026-11-11: hit with the fists; half a point, the t
     expect(m.snap(m.ann).players.find(p => p.id === 2)!.swing).toBeGreaterThan(0);
   });
 
-  it('takes half a point: nothing at the first, 1 hp at the second, and so on, down at the tenth', () => {
+  it('takes half a point: nothing at the first, 1 hp at the second, and so on, down at the last', () => {
     const m = facing();
     expect(PUNCH_HITS).toBe(2);
     const hp: number[] = [];
@@ -1578,11 +1644,11 @@ describe('a punch (the user, 2026-11-11: hit with the fists; half a point, the t
       Object.assign(m.state(m.bob), { x: 1.2, z: 0, vx: 0, vz: 0 });
       m.ticks(SNAP_EVERY);
     }
-    expect(hp).toEqual([5, 4, 4, 3, 3, 2, 2, 1, 1, 0]);
+    expect(hp).toEqual(hp.map((_, k) => HP_MAX - Math.floor((k + 1) / 2)));
     expect(m.state(m.bob).down).toBeGreaterThan(0);
     // Struck by the fists, the way Cy faces: east.
     expect(m.state(m.bob).fell).toBe(felled(FALL.STRUCK, 1, 0));
-    expect(m.state(m.cy).hits).toBe(10);
+    expect(m.state(m.cy).hits).toBe(2 * HP_MAX);
     // Nobody else paid, and the puncher neither.
     expect([m.state(m.ann).hp, m.state(m.dee).hp, m.state(m.cy).hp]).toEqual([
       HP_MAX,

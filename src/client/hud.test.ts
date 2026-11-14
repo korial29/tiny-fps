@@ -7,7 +7,7 @@ import { BODY, FLAG, HAIRS_N, TONES_N } from '../shared/types';
 import { ROLE } from '../shared/kit';
 import { TONES } from './features';
 import type { FlagState } from '../shared/types';
-import { GUN_MAG, HP_MAX, RIFLE_CLIP, RULES, VEHICLE } from '../shared/constants';
+import { ARMOR_MAX, GUN_MAG, HP_MAX, RIFLE_CLIP, RULES, VEHICLE } from '../shared/constants';
 import { ROVER } from '../shared/rover';
 import { MODE, NOBODY } from '../shared/types';
 import type { Rover } from '../shared/types';
@@ -604,7 +604,7 @@ describe('createHud', () => {
       // The health bar's pips are the list's own.
       hud.feed(['Ann', 0], ['Bob', 1]);
       hud.vitals(1, -1);
-      expect(screen.querySelectorAll('ul li.e')).toHaveLength(HP_MAX - 1);
+      expect(screen.querySelectorAll('ul li.e:not(.a)')).toHaveLength(HP_MAX - 1);
       expect(screen.querySelector('ol li.e')).toBeNull();
     });
   });
@@ -682,18 +682,30 @@ describe('the gun on the HUD', () => {
     hud = createHud(screen);
   });
   afterEach(() => vi.useRealTimers());
-  const pips = () => [...screen.querySelectorAll('li')].map(li => !li.classList.contains('e'));
+  const pips = () =>
+    [...screen.querySelectorAll('li:not(.a)')].map(li => !li.classList.contains('e'));
   const ammo = () => screen.querySelector<HTMLElement>('dl')!;
   const count = () => screen.querySelector<HTMLElement>('data')!;
 
   it('shows the health as HP_MAX pips, the empty ones outlined', () => {
     expect(pips()).toHaveLength(HP_MAX);
-    hud.vitals(5, -1);
-    expect(pips()).toEqual([true, true, true, true, true]);
+    hud.vitals(HP_MAX, -1);
+    expect(pips()).toEqual(Array(HP_MAX).fill(true));
     hud.vitals(3, -1);
-    expect(pips()).toEqual([true, true, true, false, false]);
+    expect(pips()).toEqual(pips().map((_, i) => i < 3));
     hud.vitals(0, -1);
-    expect(pips()).toEqual([false, false, false, false, false]);
+    expect(pips()).toEqual(Array(HP_MAX).fill(false));
+  });
+
+  it('shows the armour as ARMOR_MAX gold pips after the health, the empty ones hidden', () => {
+    const plates = () =>
+      [...screen.querySelectorAll('li.a')].map(li => !li.classList.contains('e'));
+    expect(plates()).toHaveLength(ARMOR_MAX);
+    hud.vitals(HP_MAX, -1);
+    expect(plates()).toEqual(Array(ARMOR_MAX).fill(false));
+    hud.vitals(HP_MAX, -1, false, false, -1, false, undefined, false, -1, false, 0, 2);
+    expect(plates()).toEqual([true, true, false]);
+    expect(pips()).toEqual(Array(HP_MAX).fill(true));
   });
 
   it('turns the pips red on the last one', () => {

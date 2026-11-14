@@ -10,7 +10,8 @@ const BUDGETS = [
   // 144 KB until the woman's own helmet, 100 B under it (the user: weight does not matter).
   // 170 KB until the fist combos, the frags, the death falls and the runners' fingers (the user, 2026-11-13).
   // 174 KB until the ninja's belt, buckle, back and gold pads (the user, 2026-11-14).
-  { file: 'dist/index.js', max: 176 * 1024 },
+  // 176 KB until 8 HP and the armour pickups (the user, 2026-11-14).
+  { file: 'dist/index.js', max: 177 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   { file: 'dist/local.js', max: 44 * 1024 },
 ];

@@ -6,10 +6,11 @@ import { ground } from '../shared/relief';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
 import { STRIDE } from './mesh';
-import { PEBBLES, RANGES, RANGE_COLS, SKY, moonscape, strewn } from './moonscape';
+import { PEBBLES, RANGES, RANGE_COLS, SKY, heavens, moonscape, strewn } from './moonscape';
 import { FAR } from './render';
 
-const v = moonscape(MOON);
+// The scenery as render.ts draws it: the stars and the Earth last.
+const v = moonscape(MOON).concat(heavens());
 const verts = Array.from({ length: v.length / STRIDE }, (_, i) =>
   v.slice(i * STRIDE, (i + 1) * STRIDE),
 );
@@ -85,15 +86,15 @@ describe('moonscape', () => {
     // The craters' stones and twelve small craters more are 12,600: then the rims' bands of detail 33,000 and the pits 10,000: the cap went from 380,000 to 440,000.
     // The ranges on the horizon are 28,800: the cap went to 470,000. The rocks were 117,000; the pebbles are 98,000 and the sixteen boulders 22,000.
     expect(verts.length).toBeLessThan(470000);
-    expect(moonscape(MOON)).toEqual(v);
+    expect(moonscape(MOON).concat(heavens())).toEqual(v);
   });
 
-  it('puts the stars and the Earth on a dome of 800 m, past everything else drawn', () => {
-    expect(sky.size).toBeGreaterThan(3000 * 6);
+  it('puts the Earth 800 m off, past everything else drawn (the stars are the sky shader’s)', () => {
+    // 28 rings of 64 cells, the middle one a fan of triangles.
+    expect(sky.size).toBe(27 * 64 * 6 + 64 * 3);
     const d = [...sky].map(p => dist(p, C));
     expect(lo(d)).toBeGreaterThan(SKY - 5);
     expect(hi(d)).toBeLessThan(SKY + 5);
-    expect(lo([...sky].map(p => p[1]))).toBeGreaterThan(-100);
     // The crater wall is drawn to 1.65 of the bound: no star in front of it from inside.
     const rest = verts.filter(p => !sky.has(p) && !ranges.has(p)).map(p => dist(p, C));
     expect(hi(rest)).toBeGreaterThan(500);
@@ -883,8 +884,8 @@ describe('moonscape and the rovers', () => {
     expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
   });
 
-  it('is 467,055 vertices, the four static rovers, the two shuttles and the masts of the pads no longer among them', () => {
-    expect(verts.length).toBe(467055);
+  it('is 449,055 vertices, the four static rovers, the two shuttles, the masts of the pads and the 3000 stars no longer among them', () => {
+    expect(verts.length).toBe(449055);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {
@@ -908,6 +909,6 @@ describe('moonscape and the rovers', () => {
     expect(near(again, x, z)).toBe(0);
     expect(again.length).toBe(pits.length);
     // And none is kept away from where no rover is parked any more.
-    expect(moonscape({ ...MOON, rovers: undefined }).length).toBe(v.length);
+    expect(moonscape({ ...MOON, rovers: undefined }).length).toBe(v.length - heavens().length);
   });
 });

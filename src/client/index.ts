@@ -12,7 +12,7 @@ import { styleOf } from './hair';
 import { shaved } from './skin';
 import { SONGS, SOUND } from './sfx';
 import { aimOf, gap2, struck } from '../shared/rover';
-import { SHIP, limits } from '../shared/ship';
+import { SHIP, altitude, limits } from '../shared/ship';
 import { build, hidden, ray } from '../shared/world';
 import { createAnnouncer } from './announce';
 import { LINE, SAID } from './voice/clips';
@@ -511,7 +511,9 @@ const play = (
       car ? kmh(car) : undefined,
     );
     const [up, out] = car?.ship ? limits(car, world) : [0, 0];
-    hud.ship(car?.ship ? { nades: car.nades ?? 0, alt: car.y - SHIP.DROP, up, out } : undefined);
+    hud.ship(
+      car?.ship ? { nades: car.nades ?? 0, alt: altitude(car.y - SHIP.DROP), up, out } : undefined,
+    );
     if (me) {
       // A hit comes from the nearest foe up: the angle to him off the view, to the right.
       const worn = (q: PlayerState) => q.hp + (q.armor ?? 0);

@@ -4,7 +4,7 @@
 // of 600 by 720 m: in the arena (x 0..160, z 0..280) it lies on the floor's slabs, never under
 // them, flat where a base, a pack or a route's jump needs it; only the rille and the notches of
 // its lips have none. Compact on purpose: the local bundle carries it (budget in scripts/size.mjs).
-import { PLAYER_H, STEP_H } from './constants';
+import { ORBIT, PLAYER_H, STEP_H } from './constants';
 import { TEAM_TINT } from './map';
 import { BASE, DOME, DOORS, MODULES, TUBES, box, bx } from './moonbase';
 import type { Bx, Vec3 } from './moonbase';
@@ -970,4 +970,5 @@ export const MOON: WorldDef = {
   scenery: 'moon',
   helmets: true,
   armor: true,
+  seam: ORBIT.SEAM,
 };

@@ -87,6 +87,8 @@ export interface WorldDef {
   ships?: Spawn[];
   /** The automatic doors (doors.ts). Absent: none. */
   doors?: Door[];
+  /** The height of the edge of space (ORBIT.SEAM): a shot that crosses it either way bursts there. Absent: none. */
+  seam?: number;
 }
 
 /** A world ready for physics and drawing: the definition and a grid of brushes on the floor plane. */

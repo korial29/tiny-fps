@@ -330,14 +330,14 @@ describe('the own shots', () => {
     frame(player());
     combat.step(player({ shots: 0 }), player({ shots: 1 }));
     frame(player({ shots: 1 }));
-    // A quarter of a second on: 10 m out, on the line from the eye (x 0, y 1.6).
-    for (let k = 0; k < 15; k++) {
+    // 0.15 s on, past CATCH: 12 m out, on the line from the eye (x 0, y 1.6).
+    for (let k = 0; k < 9; k++) {
       frame(player({ shots: 1 }));
     }
     const [o] = orbs();
     expect(o.p[0]).toBeCloseTo(0, 6);
     expect(o.p[1]).toBeCloseTo(1.6, 6);
-    expect(o.p[2]).toBeCloseTo(-PLASMA_SPEED / 4, 0);
+    expect(o.p[2]).toBeCloseTo(-PLASMA_SPEED * 0.15, 0);
     expect(o.tail).toBeCloseTo(TRAIL, 6);
     // The wall at z = -20, 20 m from the eye: half a second.
     for (let k = 0; k < 20 && !bursts.length; k++) {
@@ -672,7 +672,14 @@ describe('the sounds and the screen of what happens to the own player', () => {
     expect(ids().filter(i => i == SOUND.PACK)).toHaveLength(1);
   });
 
-  it('plays the pickup when the gun is taken, and on a refill, not on a shot', () => {
+  it('plays the armour its own sound, not the pack (the user, 2026-11-14: one sound each)', () => {
+    const { frame, ids } = setup();
+    frame(player({ armor: 0 }));
+    frame(player({ armor: 3 }));
+    expect(ids()).toEqual([SOUND.ARMOR]);
+  });
+
+  it('plays the pickup when the gun is taken, the ammo sound on a refill, nothing on a shot', () => {
     const { frame, ids } = setup();
     frame(player({ ammo: -1 }));
     frame(player({ ammo: 60 }));
@@ -687,18 +694,22 @@ describe('the sounds and the screen of what happens to the own player', () => {
     frame(player({ ammo: 58 }));
     expect(ids()).toEqual([SOUND.GUN, SOUND.BOOT]);
     frame(player({ ammo: 60 }));
-    expect(ids()).toEqual([SOUND.GUN, SOUND.BOOT, SOUND.GUN]);
+    expect(ids()).toEqual([SOUND.GUN, SOUND.BOOT, SOUND.AMMO]);
   });
 
-  it('plays it too for an ammo pack: plus AMMO_PACK from any count, at once', () => {
+  it('plays the ammo sound for an ammo pack: plus AMMO_PACK from any count, at once, the rifle too', () => {
     for (const from of [0, 10, 25]) {
       const { frame, ids } = setup();
       frame(player({ ammo: from }));
       frame(player({ ammo: from + AMMO_PACK }));
-      expect(ids()).toEqual([SOUND.GUN]);
+      expect(ids()).toEqual([SOUND.AMMO]);
       frame(player({ ammo: from + AMMO_PACK }));
-      expect(ids()).toEqual([SOUND.GUN]);
+      expect(ids()).toEqual([SOUND.AMMO]);
     }
+    const { frame, ids } = setup();
+    frame(player({ ammo: -1, rifle: 30 }));
+    frame(player({ ammo: -1, rifle: 90 }));
+    expect(ids()).toEqual([SOUND.AMMO]);
   });
 
   it('clicks once when the trigger is pulled on an empty gun', () => {

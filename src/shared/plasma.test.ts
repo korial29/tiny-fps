@@ -13,12 +13,13 @@ import {
   GRAVITY,
   NADE,
   NADE_HP,
+  MISSILE_R,
   NADE_R,
   NADE_RANGE,
   NADE_SPEED,
 } from './constants';
 import { spawn } from './physics';
-import { PLASMA_STEP, blast, cylinder, fly, launch, lob, toss } from './plasma';
+import { PLASMA_STEP, blast, cylinder, fly, launch, lob, stepOf, toss, wave } from './plasma';
 import { MODE, TEX } from './types';
 import type { PlayerState } from './types';
 import { build } from './world';
@@ -66,9 +67,18 @@ describe('a plasma ball', () => {
       expect(b.burst).toBe(false);
       n++;
     }
-    expect(n).toBe(Math.ceil(GUN_RANGE / PLASMA_STEP));
+    // A whole number of steps to the metre, give or take the last hair of float rounding.
+    expect(Math.abs(n - GUN_RANGE / PLASMA_STEP)).toBeLessThanOrEqual(1);
     expect(b.x).toBeCloseTo(GUN_RANGE, 9);
     expect(b.left).toBe(0);
+  });
+
+  it("flies the pistol's ball at twice its old 40 m/s, the rifle's round at ten times it (the user, 2026-11-14)", () => {
+    expect(stepOf(launch(shooter())) * TICK_HZ).toBe(80);
+    expect(stepOf(launch(shooter({ power: 5 }))) * TICK_HZ).toBe(80);
+    expect(stepOf(launch(shooter({ rifled: true }))) * TICK_HZ).toBe(400);
+    // The katana's arc keeps its own.
+    expect(stepOf(wave(shooter({ cut: 5 })))).toBeLessThan(PLASMA_STEP);
   });
 
   it('hits an enemy in front, at the eye height of the look', () => {
@@ -258,6 +268,16 @@ describe('a grenade', () => {
     expect(thrown(w, shooter(), []).b.x).toBeGreaterThan(10);
   });
 
+  it("flies straight as a ship's missile, with no gravity, to the end of its range", () => {
+    const b = { ...lob(shooter({ pitch: 0.1 })), missile: true };
+    const [dy, y0] = [b.dy, b.y];
+    for (let k = 0; k < 120 && !b.burst; k++) {
+      toss(flat, b, []);
+    }
+    expect(b.dy).toBeCloseTo(dy, 6);
+    expect(b.y - y0).toBeCloseTo(Math.tan(0.1) * b.x, 2);
+  });
+
   it('bursts in the air at the end of its range', () => {
     const w = build({ ...flat.def, gravity: 0.2 });
     const { b } = thrown(w, shooter({ pitch: 1.5 }));
@@ -288,6 +308,15 @@ describe('a grenade', () => {
       expect(blast(flat, at(NADE_R), f)).toBe(0);
       const hp = Array.from({ length: 12 }, (_, k) => blast(flat, at(k * 0.5), f));
       expect(hp).toEqual([...hp].sort((a, b) => b - a));
+    });
+
+    it("reaches 8 m, a ship's missile MISSILE_R (the user, 2026-11-14)", () => {
+      const f = foe(0);
+      expect(NADE_R).toBe(8);
+      expect(MISSILE_R).toBeGreaterThan(NADE_R);
+      expect(blast(flat, at(NADE_R + 1), f)).toBe(0);
+      expect(blast(flat, at(NADE_R + 1), f, MISSILE_R)).toBeGreaterThan(0);
+      expect(blast(flat, at(MISSILE_R), f, MISSILE_R)).toBe(0);
     });
 
     it('measures to the nearest of the body, feet to head', () => {

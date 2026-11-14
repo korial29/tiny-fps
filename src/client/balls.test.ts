@@ -94,8 +94,8 @@ describe('an own ball', () => {
   it('goes out of sight at GUN_RANGE with no burst in the open', () => {
     const b = createBalls(WORLD);
     b.fire(me({ yaw: Math.PI }), 0);
-    expect(b.frame(1000, muzzle).orbs).toHaveLength(1);
     const end = (GUN_RANGE / PLASMA_SPEED) * 1000;
+    expect(b.frame(end / 2, muzzle).orbs).toHaveLength(1);
     expect(b.frame(end + 1, muzzle)).toEqual({ orbs: [], bursts: [] });
   });
 
@@ -114,18 +114,18 @@ describe('an own ball', () => {
       burst,
     });
     // The host's copy is ahead (the lag): it is not drawn.
-    b.snapshot([ball(-6)], 1, 50);
+    b.snapshot([ball(-12)], 1, 50);
     expect(b.frame(100, muzzle).orbs).toHaveLength(1);
-    // It burst on a body at 8 m: the own ball bursts there when it gets there.
-    b.snapshot([ball(-8, true)], 1, 120);
-    const at = (8 / PLASMA_SPEED) * 1000;
+    // It burst on a body at 16 m: the own ball bursts there when it gets there.
+    b.snapshot([ball(-16, true)], 1, 120);
+    const at = (16 / PLASMA_SPEED) * 1000;
     expect(b.frame(at - 5, muzzle).bursts).toEqual([]);
-    expect(b.frame(at + 5, muzzle).bursts).toEqual([[[0, EYE, -8], 1]]);
+    expect(b.frame(at + 5, muzzle).bursts).toEqual([[[0, EYE, -16], 1]]);
     // A burst behind it ends it at once.
     b.fire(me({ shots: 8 }), 1000);
-    b.frame(1300, muzzle);
-    b.snapshot([{ ...ball(-2, true), id: 8 }], 1, 1310);
-    expect(b.frame(1320, muzzle)).toEqual({ orbs: [], bursts: [[[0, EYE, -2], 1]] });
+    b.frame(1150, muzzle);
+    b.snapshot([{ ...ball(-2, true), id: 8 }], 1, 1160);
+    expect(b.frame(1170, muzzle)).toEqual({ orbs: [], bursts: [[[0, EYE, -2], 1]] });
   });
 
   it('is not burst twice: the host’s word of a burst it already had changes nothing', () => {
@@ -177,8 +177,8 @@ describe('the others’ balls', () => {
     const b = createBalls(WORLD);
     b.snapshot([ball()], 1, 1000);
     b.snapshot([ball({ x: 9, burst: true })], 1, 1033);
-    // As drawn, it reaches x = 9 25 ms after it was at 10.
-    const at = 1000 + INTERP_DELAY + 25;
+    // As drawn, it reaches x = 9 a metre's flight after it was at 10.
+    const at = 1000 + INTERP_DELAY + 1000 / PLASMA_SPEED;
     expect(b.frame(at - 2, muzzle).bursts).toEqual([]);
     expect(b.frame(at + 2, muzzle)).toEqual({ orbs: [], bursts: [[[9, 1.6, 0], 1]] });
     // One first seen burst (fired and burst between two snapshots) bursts once, at its time.

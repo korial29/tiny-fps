@@ -13,6 +13,7 @@ import {
   END_SCREEN,
   HP_MAX,
   NADE_HP,
+  NADE_R,
   NADE_MAX,
   RAIL_DRAIN,
   RAIL_MAX,
@@ -289,7 +290,7 @@ describe('what each weapon takes from an enemy vehicle', () => {
     const n = match();
     gunner(n, LOADED, REAR - 2.5);
     lob(n, { pitch: -1.5 });
-    expect(hp(n)[1]).toBe(10 - Math.ceil(NADE_HP * (1 - 2.4 / 5)));
+    expect(hp(n)[1]).toBe(10 - Math.ceil(NADE_HP * (1 - 2.4 / NADE_R)));
     expect(n.state(n.cy).hp).toBeLessThan(HP_MAX);
 
     // Blue's rover behind the wall, the grenade on the wall's near face.

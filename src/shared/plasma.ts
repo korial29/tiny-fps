@@ -20,6 +20,7 @@ import {
   PLAYER_R,
   RIFLE_DRIFT,
   RIFLE_RANGE,
+  RIFLE_SPEED,
   TICK_HZ,
   BOLT,
   BOLT_SPEED,
@@ -88,9 +89,12 @@ export const wave = (p: PlayerState, team = 0): Flying => ({
   arc: p.cut,
 });
 
+/** The speed of the flight `b`, m/s: an arc's, a bolt's, a rifle round's (power 0) or a ball's. A grenade has its own (`Ball.v`). */
+export const speedOf = (b: Pick<Ball, 'arc' | 'power'>): number =>
+  b.arc ? ARC_SPEED : b.power === BOLT ? BOLT_SPEED : b.power === 0 ? RIFLE_SPEED : PLASMA_SPEED;
+
 /** Metres the flight `b` goes in a tick. */
-export const stepOf = (b: Ball): number =>
-  b.arc ? ARC_STEP : b.power === BOLT ? BOLT_SPEED / TICK_HZ : PLASMA_STEP;
+export const stepOf = (b: Ball): number => speedOf(b) / TICK_HZ;
 
 /**
  * Distance at which the ray from `o` along the unit `d` enters the upright cylinder of radius `r`
@@ -175,13 +179,17 @@ export const lob = (p: PlayerState, team = 0): Flying => ({
 export const lobbed = (p: PlayerState): boolean => !p.wield && (p.lob ?? 0) > NADE_COOL - NADE_HOLD;
 
 /**
- * One tick of the grenade `b`: the map's gravity bends its flight, then it flies on as a ball
+ * One tick of the grenade `b`: the map's gravity bends its flight (not a missile's), then it flies on as a ball
  * (fly()) and bursts on the first brush or foe, or at the end of its range. Float32, so the
  * shooter's client flies the same one.
  */
 export const toss = (w: World, b: Flying, foes: PlayerState[]): PlayerState | undefined => {
   const f = Math.fround;
-  const [vx, vy, vz] = [b.dx * b.v!, b.dy * b.v! - gravity(w) / TICK_HZ, b.dz * b.v!];
+  const [vx, vy, vz] = [
+    b.dx * b.v!,
+    b.dy * b.v! - (b.missile ? 0 : gravity(w)) / TICK_HZ,
+    b.dz * b.v!,
+  ];
   const v = Math.sqrt(vx * vx + vy * vy + vz * vz) || 1;
   [b.dx, b.dy, b.dz, b.v] = [f(vx / v), f(vy / v), f(vz / v), f(v)];
   const hit = fly(w, b, b.v / TICK_HZ, foes);
@@ -192,15 +200,15 @@ export const toss = (w: World, b: Flying, foes: PlayerState[]): PlayerState | un
 
 /**
  * The health a grenade bursting at `c` takes from `p`: NADE_HP at the body, less with the distance
- * to its nearest point (the axis, feet to head), nothing from NADE_R on, rounded up. Nothing when
- * a brush hides both that point and the chest.
+ * to its nearest point (the axis, feet to head), nothing from `r` (NADE_R, a missile's MISSILE_R)
+ * on, rounded up. Nothing when a brush hides both that point and the chest.
  */
-export const blast = (w: World, c: Vec3, p: PlayerState): number => {
+export const blast = (w: World, c: Vec3, p: PlayerState, r = NADE_R): number => {
   const h = heightOf(p);
   const near: Vec3 = [p.x, Math.max(p.y, Math.min(p.y + h, c[1])), p.z];
   const [dx, dy, dz] = [near[0] - c[0], near[1] - c[1], near[2] - c[2]];
   const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-  return d >= NADE_R || (hidden(w, c, near) && hidden(w, c, [p.x, p.y + 0.7 * h, p.z]))
+  return d >= r || (hidden(w, c, near) && hidden(w, c, [p.x, p.y + 0.7 * h, p.z]))
     ? 0
-    : Math.ceil(NADE_HP * (1 - d / NADE_R));
+    : Math.ceil(NADE_HP * (1 - d / r));
 };

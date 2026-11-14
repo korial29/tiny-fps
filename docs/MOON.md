@@ -26,7 +26,7 @@ Space helmets on every runner, after DOOM's 90s marine helmet, not copied.
 | Landing pad | disc centre (40, 0.25, 220)              | radius 13                 | Collision: a thin 26 × 0.25 × 26 box. A shuttle on it: fuselage box 14 × 3 × 4 as cover.                                        |
 | Modules     | (118, 0, 226) and (112, 0, 200)          | 14 × 5 × 8                | Long halls with lit windows.                                                                                                    |
 | Tubes       | dome ↔ each module                       | 4 wide × 3.5 high         | Box collision, tops walkable; drawn as rounded tubes.                                                                           |
-| Light masts | at the pad's corners and along the tubes | 0.4 × 10 × 0.4            | A lamp on top.                                                                                                                  |
+| Light masts | along the tubes (the pad's went, 11-14)  | 0.4 × 10 × 0.4            | A lamp on top.                                                                                                                  |
 | Field       | z 150–200                                |                           | Open regolith, boulders 2–6 m as cover, low ramps up to the tube tops, a parked rover.                                          |
 
 The middle, z 132–148: **the rille**, a 16 m chasm across the crater, open to the kill floor, with
@@ -63,6 +63,8 @@ Every rock is a block cut by a flat bed, a top and three rings of hashed planes 
 ## The rovers (2026-11-10)
 
 `MOON.rovers` parks two a base. `src/shared/rover.ts` is the simulation (`drive()`, thirteen float32 and two seats, deterministic so the driver's client replays it), `src/shared/room.ts` seats players (`enter()`, `seats()`), steps a driven rover with its driver's inputs on arrival and a driverless one in the tick, and runs enemies over (`splat()`); the snapshot carries 54 bytes a rover. On the client, `predict.ts` predicts the driven rover and interpolates the others, `chase.ts` is the camera behind it, `rover.ts` the model, `dust.ts` the dust. The sun's shadow window is now 96 m, centred 29 m ahead of the eye. A rover cannot be damaged; the rider stays in first person.
+
+**Boost** (the user, 2026-11-14): Shift with W, as on the ship. A rocket at the back pushes `ROVER.BOOST` (10 m/s²) along the nose on top of the engine, fading to nothing at `VBOOST` (34 m/s); it is not the tyres', whose grip on the moon already caps the engine, so it works with any wheel down. 15 m/s after a second instead of 9, about 32 at the top instead of 22. Keys only, no state: predicted exactly, nothing on the wire. The engine howls higher while it pushes.
 
 ### Rover collisions (2026-11-10)
 
@@ -189,7 +191,7 @@ The user: the draft shuttle on each pad becomes a combat ship a player boards an
 
 - `MOON.ships` stands one on each pad, nose toward the other base. The shuttle's brush and its three ghosts are gone; the ship is a solid body (`shipHull()`) players walk into and stand on, as a rover.
 - `src/shared/ship.ts` is the simulation: a `Rover` with `ship` set, so it shares the rovers' seats, snapshot slot (three bytes a vehicle: kind and health, wreck time, missiles), prediction and chase camera. `rover.ts` hands it to `pilot()` wherever it would `drive()`. One seat; a flag's carrier does not fly.
-- Controls: the look aims the nose, W and S thrust and brake, A and D slide, Space and C climb and sink, Shift boosts, a click fires the two lasers (bolts, as the rover's), G a missile (a grenade at 60 m/s from a pod, `NADE` burst). Four missiles, one loaded back every 5 s. With nobody at the stick it falls to a floor.
+- Controls: the look aims the nose, W and S thrust and brake, A and D slide, Space and C climb and sink, Shift boosts, a click fires the two lasers (bolts, as the rover's), G a missile (a grenade at 60 m/s from a pod that flies straight, no gravity, and bursts out to `MISSILE_R`, 14 m: the user, 2026-11-14; `Ball.missile`, bit 7 of its power byte on the wire). Four missiles, one loaded back every 5 s. With nobody at the stick it falls to a floor.
 - The limit: the climb fades over the last 20 m under `CEIL` (120 m) and a push brings it back past it; the same at `EDGE` (0.88 of the crater's bound). Never more than 12 m past either. The HUD warns from half way into the last 20 m.
 - Health: a vehicle's, 10 HP like a rover's (see Vehicle damage below; until 2026-11-12 the ship alone had an armour of 60 and came back after 10 s).
 

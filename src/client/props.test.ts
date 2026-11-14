@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { PACK_BITS, RACK_R } from '../shared/constants';
-import { STRIDE } from './mesh';
+import { GILT, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
-import { battery, cell, kit, packsOf, rack, racks } from './props';
+import { battery, cell, kit, packsOf, rack, racks, vest } from './props';
 
 const PACKS: Vec3[] = [
   [1, 0, 0],
@@ -66,7 +66,7 @@ describe('packsOf', () => {
 });
 
 describe('a health pack', () => {
-  it('is a small white box with a glowing green cross on each face, around its place', () => {
+  it('is a white box with a glowing green cross on each face, around its place', () => {
     const v = drawn(out => kit(out, [10, 5, 20], 0));
     // Six faces and three plates each, two triangles a plate.
     expect(v).toHaveLength(6 * 3 * 6);
@@ -76,11 +76,13 @@ describe('a health pack', () => {
       expect(g[7]).toBeGreaterThan(g[6]);
       expect(g[7]).toBeGreaterThan(g[9]);
     }
+    // Half a metre across (the user, 2026-11-14: bigger), off the floor.
+    expect(Math.max(...v.map(x => x[1])) - Math.min(...v.map(x => x[1]))).toBeGreaterThan(0.5);
     for (const x of v) {
-      expect(Math.abs(x[0] - 10)).toBeLessThan(0.3);
-      expect(x[1]).toBeGreaterThan(5.2);
+      expect(Math.abs(x[0] - 10)).toBeLessThan(0.4);
+      expect(x[1]).toBeGreaterThan(5.1);
       expect(x[1]).toBeLessThan(5.9);
-      expect(Math.abs(x[2] - 20)).toBeLessThan(0.3);
+      expect(Math.abs(x[2] - 20)).toBeLessThan(0.4);
       expect(Math.hypot(x[3], x[4], x[5])).toBeCloseTo(1, 5);
     }
   });
@@ -103,6 +105,35 @@ describe('a health pack', () => {
   });
 });
 
+describe('an armour', () => {
+  const v = drawn(out => vest(out, [10, 5, 20], 0));
+
+  it('is a cuirass of polished green metal, chest and back, about its place (the user, 2026-11-14: as in Quake 3)', () => {
+    const shell = v.filter(x => x[8] == GILT);
+    expect(shell.length).toBeGreaterThan(1000);
+    const green = shell.filter(x => x[7] > 2 * x[6] && x[7] > 2 * x[9]);
+    expect(green.length / shell.length).toBeGreaterThan(0.9);
+    const [xs, ys, zs] = [0, 1, 2].map(k => v.map(x => x[k]));
+    // A torso's size, 0.6 m over the floor, turning about its place.
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.45);
+    expect(Math.min(...ys)).toBeGreaterThan(5.2);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.3);
+    expect(
+      Math.max(...xs.map(x => Math.abs(x - 10)), ...zs.map(z => Math.abs(z - 20))),
+    ).toBeLessThan(0.3);
+  });
+
+  it('turns the outside of its shell outward, and glows a shield on its chest', () => {
+    // The outer sheet: brighter than the inside, its normals away from the upright axis.
+    const out = v.filter(x => x[8] == GILT && x[7] > 0.3);
+    const away = out.filter(x => x[3] * (x[0] - 10) + x[5] * (x[2] - 20) > 0);
+    expect(away.length / out.length).toBeGreaterThan(0.95);
+    const glow = v.filter(x => x[8] == -2);
+    expect(glow.length).toBeGreaterThan(0);
+    expect(glow.every(g => g[7] > 1)).toBe(true);
+  });
+});
+
 describe('an ammo pack', () => {
   const v = drawn(out => cell(out, [10, 5, 20], 0));
 
@@ -121,9 +152,9 @@ describe('an ammo pack', () => {
     for (const x of box) {
       expect(x[9]).toBeGreaterThan(x[6]);
       expect(x[6]).toBeGreaterThan(x[7]);
-      expect(Math.abs(x[0] - 10)).toBeLessThan(0.3);
-      expect(x[1]).toBeGreaterThan(5.2);
-      expect(Math.abs(x[2] - 20)).toBeLessThan(0.3);
+      expect(Math.abs(x[0] - 10)).toBeLessThan(0.35);
+      expect(x[1]).toBeGreaterThan(5.1);
+      expect(Math.abs(x[2] - 20)).toBeLessThan(0.35);
     }
   });
 

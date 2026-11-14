@@ -121,11 +121,12 @@ export const CUFF = {
 export const CAST = {
   cx: 0.222,
   y: [0.935, 1.14],
-  x: [0.041, 0.051],
-  z: [0.048, 0.059],
+  x: [0.039, 0.05],
+  z: [0.046, 0.057],
+  floor: 0.003,
   n: 3,
   bevel: { h: 0.032, in: 0.024 },
-  cut: 0.06,
+  cut: 0.095,
 };
 const cuff = (a: number) => CUFF.y + CUFF.rise * smooth(CUFF.a[0], CUFF.a[1], Math.abs(a));
 const vambrace = (x: number, y: number) =>
@@ -1102,7 +1103,7 @@ const casting = (s: Skin) => {
     );
     const dx = x * side - CAST.cx;
     const a = Math.atan2(z, dx);
-    const d = Math.max(FLOOR, castR(a, y, side) - Math.hypot(dx, z));
+    const d = Math.max(CAST.floor, castR(a, y, side) - Math.hypot(dx, z));
     // The cast's normal, from its slopes round the arm and up it.
     const at = (q: number, h: number) => {
       const r = castR(q, h, side);
@@ -1488,7 +1489,7 @@ export const MARINE_DETAILS = [
   ...[1.08, 1.12].map(y => [PART.TRUNK, 0, 180, y, 90, 0.18, 0.0012, 1, 0, 4]),
   [PART.LEG, 0.1, 60, 0.82, 0, 0.05, 0.015, 0, 0.006, 0],
   [PART.LEG, 0.1, 60, 0.835, 0, 0.005, 0.0025, 0, 0.0072, 1],
-  ...[0.988, 1.0, 1.012].map((y, i) => [
+  ...[1.03, 1.042, 1.054].map((y, i) => [
     PART.ARM,
     0.222,
     0,

@@ -16,6 +16,7 @@ import {
   CAPSULE_HOLD,
   FINGER_SIDES,
   KATANA_LEFT,
+  STRAP,
   createBody,
   finger,
   hand,
@@ -585,6 +586,93 @@ describe('body', () => {
           v.slice(thumb, thumb + THUMB),
         ];
       };
+      it("wears a fine strap round the wrist, with the marine's lit buttons on it (the user, 2026-11-14)", () => {
+        expect(STRAP.w).toBeLessThan(0.012);
+        const lit = (lights: boolean) => {
+          const out: number[] = [];
+          hand(
+            out,
+            [0, 0, 0],
+            [0, 0, 1],
+            [0, 1, 0],
+            [1, 0, 0],
+            0.9,
+            [1, 1, 1],
+            0,
+            0,
+            undefined,
+            [1, 1, 1],
+            0,
+            false,
+            lights,
+          );
+          const at: number[][] = [];
+          for (let i = 0; i < out.length; i += STRIDE) {
+            if (out[i + 8] == -2) {
+              at.push(out.slice(i, i + 3));
+            }
+          }
+          return [at, out.length] as const;
+        };
+        /** The vertices in the buckle's near-black. */
+        const shell = (lights: boolean) => {
+          const out: number[] = [];
+          hand(
+            out,
+            [0, 0, 0],
+            [0, 0, 1],
+            [0, 1, 0],
+            [1, 0, 0],
+            0.9,
+            [1, 1, 1],
+            0,
+            0,
+            undefined,
+            [1, 1, 1],
+            0,
+            false,
+            lights,
+          );
+          let k = 0;
+          for (let i = 0; i < out.length; i += STRIDE) {
+            k += +(out[i + 6] == 0.09 && out[i + 7] == 0.09 && out[i + 9] == 0.1);
+          }
+          return k;
+        };
+        const [on, n] = lit(true);
+        const [off, m] = lit(false);
+        expect(off).toEqual([]);
+        expect(n).toBeGreaterThan(m);
+        // On the back of the wrist, in place of the buckle: no black box with them.
+        expect(on.length).toBeGreaterThan(0);
+        for (const [x, y, z] of on) {
+          expect(Math.abs(x)).toBeLessThan(0.008);
+          expect(y).toBeGreaterThan(0);
+          expect(z).toBeLessThan(0.035);
+        }
+        expect(shell(true)).toBeLessThan(shell(false));
+        // A near runner's hand has none of the small parts.
+        const out: number[] = [];
+        hand(
+          out,
+          [0, 0, 0],
+          [0, 0, 1],
+          [0, 1, 0],
+          [1, 0, 0],
+          0.9,
+          [1, 1, 1],
+          0,
+          0,
+          undefined,
+          [1, 1, 1],
+          0,
+          true,
+          true,
+        );
+        for (let i = 0; i < out.length; i += STRIDE) {
+          expect(out[i + 8]).not.toBe(-2);
+        }
+      });
       /** The weld and the thumb's mound. */
       const welds = (curl: number) => {
         const out: number[] = [];

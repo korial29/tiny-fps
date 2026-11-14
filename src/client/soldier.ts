@@ -138,6 +138,8 @@ export interface Runner {
   seat?: Seat;
   /** The head of the runner he looks at (watched()), and how far his own is turned to it, eased: to his right and up, radians. */
   watch?: Vec3;
+  /** The id of the runner he looks at, kept while he can be followed. */
+  watching?: number;
   gaze?: number[];
   /** The muzzle of the long gun in his hands as last drawn, from his feet: where its shots are seen to leave (combat.ts). */
   tip?: Vec3;
@@ -245,33 +247,43 @@ const floorOf =
  * The head turns to the runner one looks at (the user, 2026-11-12): the nearest within `far`
  * metres and `cone` radians of his aim. It turns no further than `turn` (to a side, up or down)
  * from where it points, the eyes going the rest of their travel; `rate` is how fast, per second.
+ * The one looked at is followed as he goes by (the user, 2026-11-14): kept, over a nearer one,
+ * until he is `hold` radians off the aim (the head's 80 degrees and the eyes' travel, REACH_X)
+ * or `keep` metres away.
  */
-export const WATCH = { far: 14, cone: 1.2, turn: [1.05, 0.5], rate: 7 };
+export const WATCH = { far: 14, keep: 18, cone: 1.2, hold: 2, turn: [1.4, 0.5], rate: 7 };
 
-/** Where the head of the runner `p` looks at is, among `crowd`: nothing when he looks at no one, or is down. */
-export const watched = (p: PlayerState, crowd: PlayerState[]): Vec3 | undefined => {
+/** The runner `p` looks at among `crowd`, and where his head is: none when he looks at no one, or is down. `held` is the one he looked at last. */
+export const watched = (
+  p: PlayerState,
+  crowd: PlayerState[],
+  held?: number,
+): { id: number; at: Vec3 } | undefined => {
   if (p.down) {
     return;
   }
   const f = basis(p.yaw, p.pitch)[2];
-  let best: Vec3 | undefined;
+  let best: PlayerState | undefined;
   let near = WATCH.far;
   for (const q of crowd) {
     const d = [q.x - p.x, q.y - p.y, q.z - p.z];
     const l = Math.hypot(...d);
-    if (q.id == p.id || l >= near || l < 0.3 || fried(q) >= 1) {
+    const kept = q.id == held;
+    if (q.id == p.id || l >= (kept ? WATCH.keep : near) || l < 0.3 || fried(q) >= 1) {
       continue;
     }
-    if (
-      Math.acos(Math.min(Math.max((d[0] * f[0] + d[1] * f[1] + d[2] * f[2]) / l, -1), 1)) <
-      WATCH.cone
-    ) {
+    const off = Math.acos(Math.min(Math.max((d[0] * f[0] + d[1] * f[1] + d[2] * f[2]) / l, -1), 1));
+    if (kept && off < WATCH.hold) {
+      best = q;
+      break;
+    }
+    if (off < WATCH.cone) {
       near = l;
-      // A man down is looked at where he lies.
-      best = [q.x, q.y + (q.down ? 0.3 : EYE + 0.06), q.z];
+      best = q;
     }
   }
-  return best;
+  // A man down is looked at where he lies.
+  return best && { id: best.id, at: [best.x, best.y + (best.down ? 0.3 : EYE + 0.06), best.z] };
 };
 
 /** A blow taken: seconds it lasts, and how far it throws the head and the chest back (radians). */
@@ -295,7 +307,9 @@ export const animate = (
   for (const p of others) {
     const seen = book.get(p.id);
     if (seen) {
-      seen.watch = watched(p, others);
+      const w = watched(p, others, seen.watching);
+      seen.watch = w?.at;
+      seen.watching = w?.id;
     }
     const build = builds?.get(p.id) ?? 0;
     const look = looks?.get(p.id);

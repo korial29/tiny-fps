@@ -87,10 +87,20 @@ what each step costs:
    bits frame to frame and built both hands again each time, so `hand()` rounds its numbers to a
    billionth. Measured in Node: Highline 8.9 to 8.0 ms, Tranquility 8.2 to 6.4 ms (medians), its
    spikes of 120 ms gone.
-3. The runners' skin and their armour together, in the vertex shader: `armor()` reads the skinned
-   skin back, so neither goes alone. The skin's dual quaternions as uniforms, the face's channels
-   from a texture of shifts, the ninja's hood baked into a skin of its own; each armour vertex refers
-   to its skin triangle's three corners, skinned in the shader.
+3. **The runners' skin and armour, in the vertex shader** (done for the marine and the astronaut):
+   they go together, since `armor()` reads the skinned skin back. `flesh.ts` puts a skin's vertices
+   (place, normal, joints, weight, shade, and the face's channels as records), its corners and the
+   armour's vertices (their skin triangle, each corner's weights and distance, the swell's slope) in
+   `store.ts`'s `data`, a float texture read by `texelFetch` with no vertex array; a frame sends a
+   runner's 25 dual quaternions, his palette and his face's weights. `VERT`'s modes 1 and 2 are
+   `skin()` and `armor()` for one vertex; `test/flesh.ts` is their twin in JavaScript, and
+   `store.test.ts` checks it draws what the CPU draws: places within a tenth of a millimetre,
+   colours as they are, a few armour walls' normals a degree or two off (slivers 1.5 mm tall whose
+   own normal takes the floats' error). Measured in Node: Tranquility 5.9 to 3.8 ms a frame,
+   Highline 7.0 to 6.3 ms (half the runners there being ninjas, still on the CPU).
+4. The ninja: his hood (`dress()`) works out each head vertex from `scalp()`, too much for a
+   shader; it will be baked into a skin of his own at rest, the same to the eye but not to the bit
+   under the guard while his jaw moves.
 
 The own first-person body stays on the CPU: `relax()` smooths its shoulders once posed, which a
 vertex shader cannot do.
@@ -123,20 +133,24 @@ Verts`, `verts.ts`): `out.push(...)` for a few numbers, and for many, `const a =
    Read back what is already there through `room(out, 0)`. Never keep `a` across a `push` or another
    model's call: the store may have moved. No `slice`, `splice`, `concat` or spread of the frame's
    vertices, and no temporary array per object to copy in afterwards.
-7. **A rigid piece goes through the store.** A piece that only follows a joint (no vertex of its
+7. **A runner's flesh goes through `flesh()`.** A new piece of the skin or the armour (a channel, a
+   colour rule, a region) is written twice: in `skin()` or `armor()` and in `VERT`'s modes 1 and 2,
+   and in `test/flesh.ts`, which `store.test.ts` holds to the CPU's output. A change to one alone
+   shows as a runner that differs from the own body and the tests.
+8. **A rigid piece goes through the store.** A piece that only follows a joint (no vertex of its
    own moving) is made once at the origin and drawn with `rigid()` in `soldier()` or a `list` of its
    own: its key names everything its vertices depend on (level, colours, build), never the pose. A
    piece that changes shape or colour each frame stays in `out`.
-8. **Hand a per-frame model only the frame's `Verts` in the game.** Tests pass plain arrays and that
+9. **Hand a per-frame model only the frame's `Verts` in the game.** Tests pass plain arrays and that
    is fine there; in the game, if a plain array ever goes through the same index writes as the
    `Verts` (a mesh built once with `skin()`, say), V8 falls back to a generic path for good: the
    match frame went from 9.3 to 65 ms in Chrome after it happened once. Build a mesh made once in a
    function of its own. The upload copies into one `Float32Array` kept from frame to frame (`floats`
    in `render.ts`); do not allocate one per frame or per object.
-9. **A pure speed-up changes no pixel.** Prove it: draw the same runners and body before and after
-   and compare every float (the method is below). A level of detail is a visual change: show it
-   from the distance it is used at, magnified, before and after.
-10. **Measure, do not guess.** Profile before optimising; the hot spot was never where it looked.
+10. **A pure speed-up changes no pixel.** Prove it: draw the same runners and body before and after
+    and compare every float (the method is below). A level of detail is a visual change: show it
+    from the distance it is used at, magnified, before and after.
+11. **Measure, do not guess.** Profile before optimising; the hot spot was never where it looked.
 
 ## How to measure
 

@@ -160,7 +160,7 @@ describe('the store (store.ts): pieces built once on the GPU', () => {
             Math.hypot(gpu[i] - cpu[i], gpu[i + 1] - cpu[i + 1], gpu[i + 2] - cpu[i + 2]),
           );
         }
-        expect(most).toBeLessThan(1e-4);
+        expect(most, `body ${b} channel ${ch}`).toBeLessThan(1e-4);
       }
     }
   });

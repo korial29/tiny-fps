@@ -60,6 +60,7 @@ import { ID, ORIGIN, mesh } from './store';
 import { flesh } from './flesh';
 import type { Pieces } from './store';
 import { CLOTH, dress, mask } from './mask';
+import { cigar } from './cigar';
 import { GOLD, pads } from './pads';
 import { ROLE } from '../shared/kit';
 import { armor } from './armor';
@@ -124,6 +125,8 @@ export interface Runner {
   /** Seconds left of the grimace a hit puts on his face, and of the grin of a capture or of a foe put down. */
   hurt: number;
   grin: number;
+  /** Seconds left of his anger: a hit, a tackle or a punch from a foe. */
+  mad: number;
   /** How far out the fist of a punch is, 0 to 1, eased, and its blow (BLOW). */
   jab: number;
   /** How closed his hands are, left then right, eased toward grasp(). */
@@ -173,6 +176,8 @@ const SEATED = 0.62;
 const AIMING = 0.5;
 /** Seconds a hit's wince lasts, and the grin of a capture or of a foe put down. */
 export const [HURT, GRIN] = [0.4, 1.6];
+/** Seconds the anger of a hit, a tackle or a punch lasts; it fades over the second half. */
+export const MAD = 4;
 
 /**
  * A woman's traits on the face of her id: never the heavy brow ridge, the wide jaw or the long
@@ -219,6 +224,7 @@ export const createRunner = (
     t: 0,
     hurt: 0,
     grin: 0,
+    mad: 0,
     jab: 0,
     curls: grasp(p),
     blow: 0,
@@ -340,6 +346,7 @@ export const animate = (
       r.trail.update(dt);
       r.t += dt;
       r.hurt = p.hp < r.p.hp ? HURT : Math.max(r.hurt - dt, 0);
+      r.mad = p.hp < r.p.hp || p.stun > r.p.stun ? MAD : Math.max(r.mad - dt, 0);
       r.grin = felled(r.p, p, id => book.get(id)?.p, others) ? GRIN : Math.max(r.grin - dt, 0);
       r.dt += dt;
       r.jab += (thrown(p) - r.jab) * (1 - Math.exp(-dt * 45));
@@ -908,6 +915,7 @@ export const soldier = (
     focus: Math.max(r.aim, +!!p.charge),
     shout: +(r.prog >= 0 || dashing(p)),
     grin: +(r.grin > 0),
+    anger: Math.min((2 * r.mad) / MAD, 1),
     gx: Math.atan2(look[0], -look[2]),
     gy: Math.atan2(look[1], Math.hypot(look[0], look[2])),
   });
@@ -979,6 +987,16 @@ export const soldier = (
       lod,
       sway(r.gait.phase, Math.hypot(p.vx, p.vz), r.t),
     );
+    if (k > 0) {
+      dissolve(out, from, k);
+    }
+  }
+  // The man's cigar, not on a far runner: not under a helmet or the ninja's guard, and it drops
+  // when he goes down (lying face down, it would go through the roof).
+  if (lod && !build && !helmets && !ninja && !p.down) {
+    const from = out.length;
+    const fine = lod > 2;
+    rigid(`cigar ${fine}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => cigar(o, a, q, fine));
     if (k > 0) {
       dissolve(out, from, k);
     }

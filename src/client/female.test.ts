@@ -1,5 +1,6 @@
 // The woman (BODY.FEMALE): her skeleton and skin against the man's, her armour and her hair in
 // every stance, her hands on the weapons, her face on the HUD.
+import { cigar } from './cigar';
 import { describe, expect, it } from 'vitest';
 import { PLAYER_H, PLAYER_R } from '../shared/constants';
 import { STILL, eyeHeight } from '../shared/physics';
@@ -222,8 +223,12 @@ describe('her armour', () => {
     const [a, b] = [draw(0, 1), draw(F, 1)];
     const hairs: number[] = [];
     hair(hairs, [0, 0, 0], [0, 0, 0, 1], styleOf(1), tressOf(1), 1, sway(0, 0, 0));
-    // The bells are as many vertices on both.
-    expect(count(F)).toBe(count(0) + (b.out.length - b.n) - (a.out.length - a.n) + hairs.length);
+    // The bells are as many vertices on both; his cigar is not hers.
+    const smoke: number[] = [];
+    cigar(smoke, [0, 0, 0], [0, 0, 0, 1], false);
+    expect(count(F)).toBe(
+      count(0) + (b.out.length - b.n) - (a.out.length - a.n) + hairs.length - smoke.length,
+    );
   });
   it.each(STANCES)('sits on her body in the stance: %s', (_, o) => {
     const r = createRunner(who(o), undefined, F);
@@ -412,7 +417,10 @@ describe('her face', () => {
     const [a, b] = [body(3), body(3, F)];
     expect(b.m.length).toBe(a.m.length);
     b.m.forEach((c, ch) => {
-      expect(c.i.length / (a.m[ch].i.length || 1)).toBeGreaterThan(0.6);
+      // A channel that moves nothing on his (FLUSH, a colour) moves nothing on hers.
+      expect(a.m[ch].i.length ? c.i.length / a.m[ch].i.length : 1 - c.i.length).toBeGreaterThan(
+        0.6,
+      );
       // Her head is smaller: so are its shifts.
       const sum = (d: Float32Array) => d.reduce((s, v, i) => s + (i % 6 < 3 ? Math.abs(v) : 0), 0);
       if (sum(a.m[ch].d) > 0) {

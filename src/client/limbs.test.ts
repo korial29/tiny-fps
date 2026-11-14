@@ -1,3 +1,4 @@
+import { cigar } from './cigar';
 import { describe, expect, it, vi } from 'vitest';
 import { pouch } from './pouch';
 import { STILL } from '../shared/physics';
@@ -177,9 +178,10 @@ describe('a limb cut off', () => {
     const book = felled(LIMB.HEAD, 30);
     animate(book, [man({ down: 0 })], DT);
     expect(book.get(1)!.cut).toBeUndefined();
-    // The whole body again, and the pouch on its hip.
+    // The whole body again, the pouch on its hip and the cigar in his mouth.
     const bag: number[] = [];
     pouch(bag, [0, 0, 0], [0, 0, 0, 1]);
+    cigar(bag, [0, 0, 0], [0, 0, 0, 1], false);
     const r = book.get(1)!;
     expect(drawn(r).length / STRIDE).toBe(
       body(1).t.length + bag.length / STRIDE + fingers(r.curls),

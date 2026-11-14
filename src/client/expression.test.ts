@@ -163,6 +163,7 @@ describe('a face that lives', () => {
       [{ focus: 1 }, POSE.FOCUS],
       [{ grin: 1 }, POSE.GRIN],
       [{ shout: 1 }, POSE.SHOUT],
+      [{ anger: 1 }, POSE.ANGER],
       [{ hurt: 1 }, POSE.WINCE],
       [{ down: true }, POSE.DOWN],
     ];

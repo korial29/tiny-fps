@@ -17,7 +17,7 @@ const BUDGETS = [
   // reworked armour (the user, 2026-11-14).
   // 182 KB until the orbit over the moon (the user, 2026-11-14).
   // 183 KB until the stars at infinity and the craters drawn by the shader (the user, 2026-11-14: up to 20 KB more for a better look).
-  { file: 'dist/index.js', max: 184 * 1024 },
+  { file: 'dist/index.js', max: 185 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   { file: 'dist/local.js', max: 44 * 1024 },
 ];

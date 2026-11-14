@@ -709,7 +709,7 @@ const sgn = (v: number, e: number) => Math.sign(v) * Math.abs(v) ** (2 / e);
 const clamp = (v: number) => Math.min(Math.max(v, 0), 1);
 
 /** How far out the face is (its z) at x across, height y: the carved surface, found by halving. */
-const onHead = (x: number, y: number) => {
+export const onHead = (x: number, y: number) => {
   const [rx, zf] = section(y);
   const e = 1.9 + 0.45 * clamp((y - 1.59) / 0.07);
   let [lo, hi, z] = [0, 1.6, 0];
@@ -1818,6 +1818,10 @@ export const duals = (s: Skin, { pos, rot }: { pos: Vec3[]; rot: Quat[] }) => {
 /** The palette `colors` as the face `face` shows it: the line between the lips, the mouth's dark as the jaw opens, the teeth when the lips are drawn off them. */
 export const mouthed = (colors: number[][], face?: ArrayLike<number>) => {
   const pal = colors.slice();
+  const flush = clamp(face?.[CH.FLUSH] ?? 0);
+  if (flush) {
+    pal[BLUSH] = colors[BLUSH].map((c, i) => c * (1 + flush * [0.14, -0.12, -0.12][i]));
+  }
   const [jw, grit] = [clamp((face?.[CH.JAW] ?? 0) * 4), clamp((face?.[CH.GRIT] ?? 0) * 1.6)];
   if (jw || grit) {
     const bare = grit * (1 - clamp((face?.[CH.JAW] ?? 0) * 2 - 0.5));

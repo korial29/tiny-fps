@@ -41,23 +41,35 @@ export const CH = {
   PUCKER: 13,
   /** The irises back with the ball's curve as they leave its middle: lookIn() is its weight. */
   LOOK_IN: 14,
+  /**
+   * Anger's: the fold beside the nose deeper and the upper lip drawn up at its sides (a snarl); the
+   * lips pressed thin and rolled in; the lower lids up and straight, the cheeks
+   * left where they are (a glare, with WIDE). FLUSH moves nothing: mouthed() (skin.ts) reddens the
+   * cheeks and the nose by it.
+   */
+  SNEER: 15,
+  PRESS: 16,
+  TENSE: 17,
+  FLUSH: 18,
   /** A wider head, a longer lower face, a wider jaw, fuller cheeks. */
-  WIDTH: 15,
-  CHIN: 16,
-  JOWL: 17,
-  CHEEK: 18,
+  WIDTH: 19,
+  CHIN: 20,
+  JOWL: 21,
+  CHEEK: 22,
   /** A wider nose, a longer one, a heavier brow ridge, fuller lips, ears standing out. */
-  NOSE_W: 19,
-  NOSE_L: 20,
-  RIDGE: 21,
-  LIPS: 22,
-  EARS: 23,
+  NOSE_W: 23,
+  NOSE_L: 24,
+  RIDGE: 25,
+  LIPS: 26,
+  EARS: 27,
   /** Longer hair (0 to 1), heavier lids, and what is not the same on both sides of a face. */
-  HAIR: 24,
-  LIDS: 25,
-  ASYM: 26,
+  HAIR: 28,
+  LIDS: 29,
+  ASYM: 30,
 } as const;
-export const [TRAITS, CHANNELS] = [15, 27];
+export const [TRAITS, CHANNELS] = [19, 31];
+/** The trait channels came after 15 expressions: their draws keep those numbers, so every face stays his own. */
+const SALT = 15 - TRAITS;
 
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
 const bell = (a: number, s: number) => Math.exp(-((a / s) ** 2));
@@ -233,6 +245,8 @@ export const shift = (
     }
     case CH.LOOK_IN:
       return kind == KIND.IRIS ? [0, 0, 0.001] : undefined;
+    case CH.TENSE:
+      return lidded ? lidTo(upper ? 0.06 : 0.42) : undefined;
   }
   if (ch < TRAITS && eye) {
     return;
@@ -281,6 +295,36 @@ export const shift = (
               ? -0.003 * bell(dy + 0.005, 0.006)
               : 0),
         0,
+      ];
+    }
+    case CH.SNEER: {
+      // The fold beside the nose deeper and the upper lip up over the canines (not at its middle,
+      // nor at the corners). Not the nose itself: the ninja's guard presses it in, and the shader
+      // leaves the expressions out of what it presses (flesh.ts), so they must not move it.
+      const fold = Math.exp(-(((ax - 0.024) / 0.009) ** 2) - ((y - 1.642) / 0.01) ** 2) * front;
+      const dy = y - lipLine(ax);
+      const lip =
+        step(0.0006, 0.002, dy) *
+        bell(dy - 0.004, 0.008) *
+        bell(ax - 0.012, 0.009) *
+        (1 - step(0.022, 0.03, ax)) *
+        front;
+      return [sd * 0.0006 * fold, 0.0026 * fold + 0.0045 * lip, -0.002 * fold - 0.0008 * lip];
+    }
+    case CH.PRESS: {
+      // Each lip drawn toward the line between them by a share of how far it is off it (so the
+      // two never cross) and rolled in; the corners in.
+      const dy = y - lipLine(ax);
+      // The lips alone: not the nose's foot over them, which the ninja's guard presses in.
+      const band =
+        bell(x, 0.022) *
+        (1 - step(0.022, 0.03, ax)) *
+        (1 - step(0.008, 0.011, Math.abs(dy))) *
+        front;
+      return [
+        -sd * 0.0012 * c,
+        -0.6 * dy * bell(dy, 0.012) * band - 0.0006 * c,
+        0.0022 * bell(dy, 0.008) * band + 0.001 * c,
       ];
     }
     case CH.PUCKER:
@@ -373,10 +417,10 @@ export const toneFor = (id: number, c?: { tone?: number }): number[] =>
 export const lookOf = (id: number): Float32Array => {
   const w = new Float32Array(CHANNELS);
   for (let ch = TRAITS; ch < CHANNELS; ch++) {
-    const v = hash(id, ch * 2) + hash(id, ch * 2 + 1) - 1;
+    const v = hash(id, (ch + SALT) * 2) + hash(id, (ch + SALT) * 2 + 1) - 1;
     w[ch] =
       ch == CH.HAIR
-        ? hash(id, ch)
+        ? hash(id, ch + SALT)
         : ch == CH.ASYM
           ? Math.sign(v) * (0.4 + Math.abs(v) * 0.6)
           : v * 1.25;

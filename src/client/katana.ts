@@ -12,6 +12,8 @@ import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
 import type { Out } from './verts';
+import { ID, ORIGIN, mesh } from './store';
+import type { Pieces } from './store';
 
 /** Where the blade starts and ends along the model's forward axis, metres from the right hand: a metre from the guard to the point. */
 export const [BASE, TIP] = [0.07, 1.07];
@@ -231,9 +233,21 @@ export const sword = (
   k = 1,
   light = 1,
   press = 0,
+  /** The hand's turn and the frame's pieces: the blade, lit, is then made once into the store and placed there (store.ts). */
+  q?: Quat,
+  list?: Pieces,
 ) => {
   const from = out.length;
-  place(out, katana(lod), at, ax, [0, 0, 0], k);
+  if (q && list && light == 1) {
+    list.push({
+      m: mesh(`katana ${lod}`, o => place(o, katana(lod), ORIGIN, axes(ID), [0, 0, 0], 1)),
+      q,
+      t: at,
+      k,
+    });
+  } else {
+    place(out, katana(lod), at, ax, [0, 0, 0], k);
+  }
   dim(out, from, 0.08 + 0.92 * light);
   const knob: number[] = [];
   button(knob, 1, press, light, [0.25, 0.9, 1]);
@@ -271,7 +285,8 @@ export const held = (
   k = 1,
   light = 1,
   press = 0,
-) => sword(out, grip(pos, q), axes(q), lod, t, k, light, press);
+  list?: Pieces,
+) => sword(out, grip(pos, q), axes(q), lod, t, k, light, press, q, list);
 
 /** The root of the blade and its point, in the world, for the hand at `pos` turned by `q`. */
 export const ends = (pos: Vec3, q: Quat): Vec3[] => {

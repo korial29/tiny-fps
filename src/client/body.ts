@@ -631,6 +631,10 @@ export const hand = (
 ) => {
   // A hand is built in its own space, the same as long as nothing it is made of changes (a grip
   // held, the hand at rest): some ten thousand vertices that are then only carried to the wrist.
+  // Its numbers to a billionth: a grip's curl eased onto its 0.9 wanders in its last bits frame
+  // to frame, and every frame built the hand again.
+  [curl, point, push, cup] = [curl, point, push, cup].map(tidy);
+  to &&= to.map(tidy) as Vec3;
   const key = `${+lite} ${curl} ${point} ${push} ${to} ${cup} ${tint} ${bare} ${+(bare === tint)}`;
   let m = BUILT.get(key);
   if (!m) {
@@ -662,6 +666,9 @@ export const hand = (
   }
   out.length = o;
 };
+
+/** A number to a billionth. */
+const tidy = (x: number) => Math.round(x * 1e9) / 1e9;
 
 /** The hands built in their own space, by what they are made of; forgotten all at once past KEPT (a grip closing makes a new one a frame). */
 const BUILT = new Map<string, number[]>();

@@ -1004,7 +1004,7 @@ export const soldier = (
     );
   }
   if (blade) {
-    sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);
+    sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t, 1, 1, 0, gpu);
     r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));
   } else if ((p.railed ? !stowed(p) : p.ammo >= 0 || p.rifled) && !p.down && !driving(r)) {
     // A swap shows: the battery or the capsule out and in, the glow off until it is.
@@ -1019,6 +1019,7 @@ export const soldier = (
       floor: p.ground ? p.y : undefined,
       vel: [p.vx, p.vy, p.vz],
       carry,
+      list: gpu,
     });
     if (p.railed || p.rifled) {
       const q = s.rot[J.HAND_R];

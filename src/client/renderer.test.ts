@@ -1019,18 +1019,23 @@ describe('createRenderer', () => {
       cars.on = false;
     });
 
-    it('adds the cars in view to the dynamic vertices, before the beams and the body, and none when it is off', () => {
+    it('draws the cars in view as pieces of the store, in the shadow and the scene alike, and none when it is off', () => {
       const rd = createRenderer(canvas, ROOM);
       frame(rd);
       expect(draws()[1][1]).toBe(FLOOR_VERTS);
+      expect(draws(true)).toEqual([]);
       calls.length = 0;
       cars.on = true;
       vi.spyOn(Date, 'now').mockReturnValue(161e3);
       rd.frame([1, 100, 1], 0, -Math.PI / 2, [], new Map(), createEffects(), []);
+      // Not in the frame's own vertices: each car is a piece (store.ts), in whole triangles.
       const [depth, world] = draws();
-      expect(depth[1]).toBeGreaterThan(FLOOR_VERTS);
+      expect(depth[1]).toBe(FLOOR_VERTS);
       expect(world[1]).toBe(depth[1]);
-      expect((depth[1] - FLOOR_VERTS) % 3).toBe(0);
+      const pieces = draws(true);
+      expect(pieces.length).toBeGreaterThan(0);
+      expect(pieces.slice(0, pieces.length / 2)).toEqual(pieces.slice(pieces.length / 2));
+      expect(pieces.every(([, n]) => n % 3 == 0)).toBe(true);
     });
   });
 

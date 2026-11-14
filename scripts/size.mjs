@@ -13,7 +13,8 @@ const BUDGETS = [
   // 176 KB until 8 HP and the armour pickups (the user, 2026-11-14).
   // 177 KB until the pieces kept on the GPU (the user, 2026-11-14: a step of that plan at a time).
   // 178 KB until the runners' skin and armour posed by the vertex shader (the same plan).
-  // 180 KB until the green armour, the pickups' sounds and the vehicles' changes (the user, 2026-11-14).
+  // 180 KB until the green armour, the pickups' sounds, the vehicles' changes and the marine's
+  // reworked armour (the user, 2026-11-14).
   { file: 'dist/index.js', max: 182 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   { file: 'dist/local.js', max: 44 * 1024 },

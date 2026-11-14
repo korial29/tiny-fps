@@ -57,11 +57,12 @@ import { helm } from './helm';
 import { helmet } from './helmet';
 import { STYLE, hair, styleOf, sway } from './hair';
 import { CLOTH, dress, mask } from './mask';
-import { pads } from './pads';
+import { GOLD, pads } from './pads';
 import { ROLE } from '../shared/kit';
 import { armor } from './armor';
 import { CUP_F, crotch, hose, pack } from './pack';
 import { fetched, pouch, pouchAt } from './pouch';
+import { buckle } from './buckle';
 import type { Tracer } from './beams';
 import {
   BEHIND,
@@ -831,7 +832,8 @@ export const soldier = (
   if (ninja) {
     const { PANTS, UPPER, GLOVE, STRIPE, STRIPE_LOW, BELT } = REGION;
     [colors[PANTS], colors[UPPER], colors[GLOVE]] = [CLOTH, CLOTH, CLOTH];
-    [colors[STRIPE], colors[STRIPE_LOW], colors[BELT]] = [color, color, color];
+    // His belt is cut in a V by armor() (BELT in armor.ts), the skin's under it black.
+    [colors[STRIPE], colors[STRIPE_LOW], colors[BELT]] = [color, color, CLOTH];
   }
   if (build && styleOf(p.id, picked) == STYLE.UNDERCUT) {
     // A shaved side: the scalp's hair is stubble, the skin showing through it.
@@ -881,8 +883,11 @@ export const soldier = (
     skin(out, cs, s, colors, r.face.w);
     // The stump's face is the last vertex drawn.
     r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
-    if (plated) {
-      armor(out, at, cs, lod > 2, plate, ninja, color);
+    if (plated || ninja) {
+      armor(out, at, cs, lod > 2, plate, ninja, color, !plated);
+    }
+    if (ninja) {
+      buckle(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build, color);
     }
     piece(out, r.cut, colors, lod, sink, r.face.w, armored);
     gloves(out, r, s, colors, lod, armored, r.cut.limb);
@@ -896,10 +901,13 @@ export const soldier = (
       dress(out, from, bs, s.pos[J.HEAD], s.rot[J.HEAD], build);
     }
     // The armour, cut out of the skin just drawn.
-    if (plated) {
-      armor(out, from, bs, lod > 2, plate, ninja, color);
+    if (plated || ninja) {
+      armor(out, from, bs, lod > 2, plate, ninja, color, !plated);
     }
     pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
+    if (ninja) {
+      buckle(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build, color);
+    }
     gloves(out, r, s, colors, lod, armored);
     if (k > 0) {
       dissolve(out, from, k);
@@ -924,7 +932,7 @@ export const soldier = (
   // The ninja's pads and collar; the marine's shoulder bells.
   if (plated) {
     const from = out.length;
-    pads(out, s, build, ninja ? color : (plate ?? [0.85, 0.86, 0.88]), !ninja, color);
+    pads(out, s, build, ninja ? GOLD : (plate ?? [0.85, 0.86, 0.88]), !ninja, color);
     if (k > 0) {
       dissolve(out, from, k);
     }

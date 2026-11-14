@@ -14,7 +14,7 @@ import type { Effects } from './effects';
 import { createDust } from './dust';
 import { base, flag, teamRgb } from './flag';
 import type { CtfScene } from './flag';
-import { GLOSS, SHINE, STRIDE, basis } from './mesh';
+import { GILT, GLOSS, SHINE, STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
 import { furnishing } from './moonbase';
 import { moonscape } from './moonscape';
@@ -161,7 +161,7 @@ const RELIEF = 0.06;
 // scattered by the air, so it fades with a dark horizon: the moon keeps a tenth of it). The
 // glass layer adds K0 along the reflected view r, strong at a grazing angle (Fresnel, fr), after the
 // lighting. A glossy shell (GLOSS) gets a clear coat: a pale sheen at a grazing angle and where it
-// faces up, less in the sun's shadow. Polished metal (SHINE) turns partly into that reflection (k), tinted by its colour and
+// faces up, less in the sun's shadow. Gold (GILT) turns partly into the sky's brightness along r times its colour. Polished metal (SHINE) turns partly into that reflection (k), tinted by its colour and
 // dark where r looks down at the ground, with a sharp bright streak where it mirrors just above the
 // horizon. On a texture C.w is 2 * the brush's tint index + its light (see level); G is the
 // palette. On stone (the regolith) the tile is fetched twice at offsets drawn from a 9 m value noise
@@ -239,6 +239,7 @@ vec3 r=reflect(-V,m),k=K0(r);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
 c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr));
 c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv);
+c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(-abs(r.y-.12)*18.)),step(abs(L-(${GILT})),.02)*(.45+.45*fr));
 float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5);
 c.g=mix(c.g,c.r,z);
 o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z));}`;

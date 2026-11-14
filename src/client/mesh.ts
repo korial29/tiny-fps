@@ -32,6 +32,12 @@ export const SHINE = -1.25;
  * metal's sharp highlight, but none of its sky reflection, which would grey it under a black sky.
  */
 export const GLOSS = -1.12;
+/**
+ * The layer of gold (the ninja's shoulder pads, the user, 2026-11-13: it must shine): polished
+ * metal's sharp highlight, and the sky reflected in it tinted by its own colour (SHINE's, barely
+ * tinted, turned yellow olive under a blue sky).
+ */
+export const GILT = -1.42;
 
 /**
  * Camera axes [right, up, forward]: forward is (-sin yaw cos pitch, sin pitch, -cos yaw cos pitch),

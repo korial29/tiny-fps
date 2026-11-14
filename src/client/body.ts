@@ -24,6 +24,7 @@ import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { SIDE, blowOf, createGait, frame, thrown } from './gait';
 import { fetched, pouch, pouchAt } from './pouch';
+import { buckle } from './buckle';
 import type { Floor } from './gait';
 import {
   GUN_ON,
@@ -1712,16 +1713,25 @@ export const createBody = (world?: World): Body => {
         const plate = world?.def.helmets ? undefined : color;
         const colors = palette(ninja ? CLOTH : color, undefined, undefined, suit, tone);
         if (ninja) {
-          const { PANTS, UPPER, GLOVE } = REGION;
-          [colors[PANTS], colors[UPPER], colors[GLOVE]] = [CLOTH, CLOTH, CLOTH];
+          const { PANTS, UPPER, GLOVE, BELT } = REGION;
+          // His belt is cut in a V by armor(), as on the others (soldier.ts).
+          [colors[PANTS], colors[UPPER], colors[GLOVE], colors[BELT]] = [
+            CLOTH,
+            CLOTH,
+            CLOTH,
+            CLOTH,
+          ];
         }
         const from = out.length;
         skin(out, body(2, build), s, colors);
         // The ninja's own plates in his team's colour (soldier.ts).
-        if (world?.def.armor) {
-          armor(out, from, body(2, build), true, plate, ninja, color);
+        if (world?.def.armor || ninja) {
+          armor(out, from, body(2, build), true, plate, ninja, color, !world?.def.armor);
         }
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
+        if (ninja) {
+          buckle(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build, color);
+        }
         // The right thumb presses the button of the katana or the plasma gun as it comes on.
         const tk = me?.wield ? 1 : me ? kindOf(me) : -1;
         const push =

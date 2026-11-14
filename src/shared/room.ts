@@ -26,6 +26,7 @@ import {
   RAIL_CELL,
   RAIL_DRAIN,
   RAIL_TICKS,
+  MISSILE_R,
   NADE,
   RIFLE_CLIP,
   RIFLE_HITS,
@@ -803,7 +804,8 @@ export class Room {
         foes.map(f => f.state),
       );
       this.ram(b, o);
-      if (b.burst && this.boom([b.x, b.y, b.z], b.by, b.team) && by) {
+      const r = b.missile ? MISSILE_R : NADE_R;
+      if (b.burst && this.boom([b.x, b.y, b.z], b.by, b.team, r) && by) {
         by.state.hits = (by.state.hits + 1) & 255;
       }
       return;
@@ -1381,16 +1383,17 @@ export class Room {
   /**
    * A blast at `c`, the grenade's rule, of player `by` of `team`: every enemy on foot who is up,
    * and `by` himself, lose what blast() gives where they stand now; every enemy vehicle loses
-   * NADE_HP at its hull, less with the distance to it, nothing from NADE_R on or behind a brush.
+   * NADE_HP at its hull, less with the distance to it, nothing from `w` (NADE_R, a missile's
+   * MISSILE_R) on or behind a brush.
    * Who is seated is behind his hull: the blast takes nothing from him. True when it hurt an enemy
    * or his vehicle.
    */
-  private boom(c: [number, number, number], by: number, team: number): boolean {
+  private boom(c: [number, number, number], by: number, team: number, w = NADE_R): boolean {
     let hit = false;
     for (const r of this.targets(team)) {
       const d = reach(r, c);
-      if (d < NADE_R && !hidden(this.world, c, [r.x, r.y, r.z])) {
-        this.hurt(r, Math.ceil(NADE_HP * (1 - d / NADE_R)), by, team);
+      if (d < w && !hidden(this.world, c, [r.x, r.y, r.z])) {
+        this.hurt(r, Math.ceil(NADE_HP * (1 - d / w)), by, team);
         hit = true;
       }
     }
@@ -1398,7 +1401,7 @@ export class Room {
       const own = q.info.id === by;
       const hp =
         !q.state.down && q.state.mode !== MODE.RIDE && (own || q.info.team !== team)
-          ? blast(this.world, c, q.state)
+          ? blast(this.world, c, q.state, w)
           : 0;
       if (hp) {
         this.shot(

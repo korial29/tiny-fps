@@ -30,11 +30,8 @@ const mirror = ({ min, max }: Bx): Bx =>
 
 /** The domes' centres, the landing pads (x, z, radius), the modules, the tubes and the masts (centres), red's then blue's: what the scenery draws on. */
 const PAD = [40, 220, 13];
+/** By the tubes. The four at the pad's corners went (the user, 2026-11-14): a ship hit them for nothing. */
 const MASTS = [
-  [27.3, 207.3],
-  [52.7, 207.3],
-  [27.3, 232.7],
-  [52.7, 232.7],
   [106.2, 230.4],
   [103.2, 212.4],
 ];
@@ -823,11 +820,9 @@ const half: Brush[] = [
   { ...box(75.75, 0.5, FLAG - 4.25, 84.25, 1, FLAG + 4.25, PAINT, CONCRETE, RED), ghost: true },
   // The armoury, a red plinth behind the dome: the racks stand on it.
   box(60, 0, 259, 70, 1.5, 265, STEEL, PAINT, RED),
-  // The landing pad, its spaceship's (ship.ts: a solid body, not a brush), and masts at the pad's corners and by the tubes.
+  // The landing pad, its spaceship's (ship.ts: a solid body, not a brush), and masts by the tubes.
   box(27, 0, 207, 53, 0.25, 233, METAL),
-  ...MASTS.map(([x, z]) =>
-    box(x - 0.2, x < 60 ? 0.25 : 0, z - 0.2, x + 0.2, x < 60 ? 10.25 : 10, z + 0.2, STEEL),
-  ),
+  ...MASTS.map(([x, z]) => box(x - 0.2, 0, z - 0.2, x + 0.2, 10, z + 0.2, STEEL)),
   // The west long jump: a spur of the lip into the rille, orange.
   box(12, -30, 148 - (16 - WEST_GAP) / 2, 24, 0, 148, PAINT, STONE, [1, 0.42, 0.08]),
   // The pit of this side's deep crater.

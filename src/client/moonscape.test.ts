@@ -680,11 +680,10 @@ describe('moonscape', () => {
     expect(Math.max(...up)).toBeLessThan(8);
   });
 
-  it('puts the masts on the map layout: lamps 10 m up, pad masts on the pad', () => {
+  it('puts the masts on the map layout: lamps 10 m up', () => {
     for (const [x, z] of LAYOUT.masts) {
-      const y0 = x < 60 ? 0.25 : 0;
       const lamp = verts.filter(
-        p => p[8] === -2 && Math.hypot(p[0] - x, p[2] - z) < 0.6 && p[1] > y0 + 9.5,
+        p => p[8] === -2 && Math.hypot(p[0] - x, p[2] - z) < 0.6 && p[1] > 9.5,
       );
       expect(lamp.length).toBeGreaterThan(0);
     }
@@ -884,8 +883,8 @@ describe('moonscape and the rovers', () => {
     expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
   });
 
-  it('is 467,919 vertices, the four static rovers and the two shuttles no longer among them', () => {
-    expect(verts.length).toBe(467919);
+  it('is 467,055 vertices, the four static rovers, the two shuttles and the masts of the pads no longer among them', () => {
+    expect(verts.length).toBe(467055);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {

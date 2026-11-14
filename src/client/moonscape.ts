@@ -734,8 +734,8 @@ const base = (o: number[]) => {
   hull(o);
   const [px, pz] = LAYOUT.pads[0];
   pad(o, px, pz);
-  for (const [x, z] of LAYOUT.masts.slice(0, 6)) {
-    mast(o, x, z, x < 60 ? 0.25 : 0);
+  for (const [x, z] of LAYOUT.masts.slice(0, LAYOUT.masts.length / 2)) {
+    mast(o, x, z, 0);
   }
 };
 

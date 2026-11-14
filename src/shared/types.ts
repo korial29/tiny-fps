@@ -346,6 +346,8 @@ export interface Ball {
   v?: number;
   /** An arc of energy, not a ball: the CUT that threw it (ARC_L or ARC_R). Absent for a ball. */
   arc?: number;
+  /** A ship's missile (power NADE): it flies straight, and its blast reaches MISSILE_R. */
+  missile?: boolean;
 }
 
 /** The flag of a team as a snapshot carries it: only the fields of its state are meaningful, the rest read 0. */

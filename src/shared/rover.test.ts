@@ -130,6 +130,23 @@ describe('drive', () => {
     expect(back.x).toBeLessThan(-30);
   });
 
+  it('boosts with Shift and W: off the line faster, on past its top speed, and back down when let go', () => {
+    const [r, b] = [rover(flat, -250, 0, EAST), rover(flat, -250, 20, EAST)];
+    run(r, flat, 60, KEY.FORWARD);
+    run(b, flat, 60, KEY.FORWARD | KEY.SPRINT);
+    expect(speeds(b).along).toBeGreaterThan(1.5 * speeds(r).along);
+    run(b, flat, 840, KEY.FORWARD | KEY.SPRINT);
+    expect(speeds(b).along).toBeGreaterThan(30);
+    expect(speeds(b).along).toBeLessThan(ROVER.VBOOST);
+    const top = speeds(b).along;
+    run(b, flat, 120, KEY.FORWARD);
+    expect(speeds(b).along).toBeLessThan(top - 1);
+    // Not in reverse.
+    const back = rover(flat, 0, 0, EAST);
+    run(back, flat, 360, KEY.BACK | KEY.SPRINT);
+    expect(speeds(back).along).toBeGreaterThan(-8);
+  });
+
   it('brakes against its motion, harder than it rolls out', () => {
     const stop = (keys: number | undefined): number => {
       const r = rover(flat, -100, 0, EAST);

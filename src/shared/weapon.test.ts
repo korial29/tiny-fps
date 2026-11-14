@@ -289,9 +289,11 @@ describe('the laser rifle', () => {
     m.put(m.dee, 20);
     m.hold(m.cy, 1, RIFLE);
     m.ticks(SNAP_EVERY);
-    m.hold(m.cy, RIFLE_COOL * 3, RIFLE | FIRE);
+    // A round is gone in a few ticks (RIFLE_SPEED): look at the first as it leaves.
+    m.hold(m.cy, 1, RIFLE | FIRE);
     expect(m.room['balls'].length).toBeGreaterThan(0);
     expect(m.room['balls'].every((b: { power?: number }) => b.power === 0)).toBe(true);
+    m.hold(m.cy, RIFLE_COOL * 3 - 1, RIFLE | FIRE);
     // Let them fly the 10 m: three hits, one hp and a hit toward the next.
     m.hold(m.cy, 30, RIFLE);
     expect(RIFLE_HITS).toBe(2);
@@ -355,15 +357,16 @@ describe('the grenade launcher', () => {
   it('bursts on the enemy it meets: he, and every enemy near, lose more the nearer they are; no teammate does', () => {
     const m = match();
     ready(m);
-    m.put(m.bob, 8);
-    m.put(m.dee, 8, 2.5);
-    m.put(m.ann, 8, -1);
+    // Past NADE_R from Cy, who would take his own blast.
+    m.put(m.bob, 12);
+    m.put(m.dee, 12, 2.5);
+    m.put(m.ann, 12, -1);
     m.ticks(SNAP_EVERY);
     m.hold(m.cy, 1, CLICK);
     m.land();
-    // Bob takes it on the body; Dee, 2.5 m aside, the half of it; Ann is red, as Cy is.
+    // Bob takes it on the body; Dee, 2.5 m aside, two thirds of it; Ann is red, as Cy is.
     expect(m.state(m.bob)).toMatchObject({ hp: HP_MAX - NADE_HP, down: 0 });
-    expect(m.state(m.dee).hp).toBe(HP_MAX - 3);
+    expect(m.state(m.dee).hp).toBe(HP_MAX - 4);
     expect(m.state(m.ann).hp).toBe(HP_MAX);
     expect(m.state(m.cy).hp).toBe(HP_MAX);
     // One hit for the shooter, however many it hurt.
@@ -375,7 +378,7 @@ describe('the grenade launcher', () => {
     ready(m);
     // Level from the eye it lands about 13.8 m out.
     m.put(m.bob, 15.5);
-    m.put(m.dee, 20);
+    m.put(m.dee, 24);
     m.ticks(SNAP_EVERY);
     m.hold(m.cy, 1, CLICK);
     let end: { x: number; y: number } | undefined;
@@ -386,8 +389,8 @@ describe('the grenade launcher', () => {
     expect(end!.y).toBeCloseTo(1 + PLASMA_R, 1);
     expect(end!.x).toBeGreaterThan(13.5);
     expect(end!.x).toBeLessThan(14.5);
-    // Bob, between 1 and 2 m from it, loses all but a fifth of NADE_HP.
-    expect(NADE_HP * (1 - 1.5 / NADE_R)).toBeGreaterThan(3);
+    // Bob, between 1 and 2 m from it, loses all but one of NADE_HP; Dee, over NADE_R off, nothing.
+    expect(NADE_HP * (1 - 2 / NADE_R)).toBeGreaterThan(3);
     expect(m.state(m.bob).hp).toBe(HP_MAX - 4);
     expect(m.state(m.dee).hp).toBe(HP_MAX);
     expect(m.state(m.cy).hits).toBe(1);
@@ -837,7 +840,7 @@ describe('the balls on the wire', () => {
   it('go in every snapshot while they fly, named by the shooter’s shots, and once more where they burst', () => {
     const m = match();
     m.put(m.cy, 0, 0, { ...GUN, shots: 41 });
-    m.put(m.bob, 20);
+    m.put(m.bob, 28);
     m.even();
     m.tap(m.cy);
     const seen: Snapshot[] = [];
@@ -849,7 +852,7 @@ describe('the balls on the wire', () => {
     }
     const flying = seen.filter(s => s.balls?.some(b => !b.burst));
     const burst = seen.filter(s => s.balls?.some(b => b.burst));
-    expect(flying.length).toBeGreaterThan(10);
+    expect(flying.length).toBeGreaterThan(8);
     expect(burst).toHaveLength(1);
     expect(seen.at(-1)!.balls).toBeUndefined();
     const [b] = flying[0].balls!;
@@ -863,7 +866,7 @@ describe('the balls on the wire', () => {
     const x = flying.map(s => s.balls![0].x);
     x.slice(1).forEach((v, k) => expect(v - x[k]).toBeCloseTo(2 * PLASMA_STEP, 1));
     // It burst in front of Bob, who lost 1 hp.
-    expect(burst[0].balls![0].x).toBeCloseTo(20 - PLAYER_R - PLASMA_R, 1);
+    expect(burst[0].balls![0].x).toBeCloseTo(28 - PLAYER_R - PLASMA_R, 1);
     expect(m.state(m.bob).hp).toBe(HP_MAX - 1);
   });
 

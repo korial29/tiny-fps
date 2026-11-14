@@ -332,6 +332,7 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
     [
       ['E', 'get in, get out', 'KeyE'],
       ['W|S', 'drive toward the look'],
+      ['Shift', 'boost'],
       ['Space', 'handbrake'],
       ['Left click', 'lasers'],
     ],

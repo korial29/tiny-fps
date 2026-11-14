@@ -11,10 +11,13 @@ import {
   EYE,
   IRIS_R,
   KIND,
+  MOUTH_X,
+  POCKET,
   PUPIL_R,
   TONES,
   ball,
   lidEdge,
+  lipLine,
   lookIn,
   lookOf,
   toneOf,
@@ -615,6 +618,52 @@ describe('skin', () => {
     expect(s.m).toHaveLength(0);
     // The carved levels have no marks.
     expect([...body(1).g, ...body(3).g].includes(KIND.MARK)).toBe(false);
+  });
+
+  it('opens the mouth on teeth: the lower lip whole on the jaw, the line between the lips going back', () => {
+    const s = body(3);
+    const all = Array.from({ length: s.w.length }, (_, i) => i);
+    const at = (i: number) => [...s.v.slice(i * 6, i * 6 + 3)];
+    /** How far the jaw at full moves each vertex it moves. */
+    const jaw = new Map<number, number[]>();
+    s.m[CH.JAW].i.forEach((v, k) => jaw.set(v, [...s.m[CH.JAW].d.slice(k * 6, k * 6 + 3)]));
+    // Two rows of teeth, close only: as many on the jaw as on the skull, the lower row under the
+    // upper one and all the way down with the jaw.
+    const teeth = all.filter(i => s.g[i] == KIND.TEETH);
+    expect(teeth.length).toBeGreaterThan(40);
+    expect(body(1).g.includes(KIND.TEETH)).toBe(false);
+    const low = teeth.filter(i => jaw.has(i));
+    const up = teeth.filter(i => !jaw.has(i));
+    expect(low.length).toBe(up.length);
+    expect(low.every(i => jaw.get(i)![1] < -0.015)).toBe(true);
+    const mean = (l: number[]) => l.reduce((a, i) => a + at(i)[1], 0) / l.length;
+    expect(mean(up)).toBeGreaterThan(mean(low) + 0.003);
+    // The lower lip moves as one: in the mouth's middle every vertex of it as far down as the
+    // others (half of it on the jaw stretched it into a slab).
+    const lip = all.filter(i => {
+      const [x, y, z] = at(i);
+      const dy = y - lipLine(Math.abs(x));
+      return s.g[i] == KIND.HEAD && z < 0 && Math.abs(x) < 0.01 && dy < -0.0005 && dy > -0.006;
+    });
+    expect(lip.length).toBeGreaterThan(5);
+    const drops = lip.map(i => jaw.get(i)?.[1] ?? 0);
+    expect(Math.max(...drops) - Math.min(...drops)).toBeLessThan(0.0015);
+    // The line itself stays on the skull and goes back behind the teeth.
+    const line = all.filter(i => {
+      const [x, y, z] = at(i);
+      return (
+        s.g[i] == KIND.HEAD &&
+        z < 0 &&
+        Math.abs(x) < MOUTH_X / 2 &&
+        Math.abs(y - lipLine(Math.abs(x))) < 0.0002
+      );
+    });
+    expect(line.length).toBeGreaterThan(2);
+    for (const i of line) {
+      const d = jaw.get(i)!;
+      expect(Math.abs(d[1])).toBeLessThan(0.001);
+      expect(d[2]).toBeGreaterThan(POCKET * 0.5);
+    }
   });
 
   describe('the face', () => {

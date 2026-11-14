@@ -14,6 +14,8 @@ export const KIND = {
   EAR: 6,
   /** Far, where the face is not carved: the marks that stand for the eyes, the brows and the mouth, and the nose. */
   MARK: 7,
+  /** The teeth, close only: the upper row on the skull, the lower one on the jaw (its uv's first is the jaw's weight). */
+  TEETH: 8,
 } as const;
 
 /** The channels: expressions first, then (from `TRAITS` on) a runner's own traits. */
@@ -98,6 +100,8 @@ export const [IRIS_R, PUPIL_R, GAZE_X, GAZE_Y] = [0.0066, 0.0025, 0.0046, 0.003]
 const LIFT = 0.0011;
 /** The mouth: the height of the line between the lips at the middle, how it falls to the corners (per m2), and the corners. */
 export const [MOUTH_Y, MOUTH_K, MOUTH_X] = [1.627, 0.25, 0.0245];
+/** How far back the line between the lips goes as the mouth opens (JAW, GRIT at full): behind the teeth. */
+export const POCKET = 0.02;
 /** The line between the lips at `ax` across. */
 export const lipLine = (ax: number) => MOUTH_Y - MOUTH_K * ax * ax;
 
@@ -201,7 +205,7 @@ export const shift = (
   n: number[],
   surf: (x: number, y: number) => number,
 ): number[] | undefined => {
-  if (!kind) {
+  if (!kind || (kind == KIND.TEETH && ch != CH.JAW && ch != CH.WIDTH && ch != CH.CHIN)) {
     return;
   }
   const [ax, sd] = [Math.abs(x), Math.sign(x) || 1];
@@ -257,6 +261,14 @@ export const shift = (
     return;
   }
   const b = brow(ax, y) * front;
+  // The row of the line between the lips: as the mouth opens it goes back into the head, a pocket
+  // the inside of the lips runs down into, dark behind the teeth (to nothing at the corners); the
+  // lips' inner edges (close) curl in a little.
+  const lip = Math.abs(y - lipLine(ax));
+  const pit =
+    kind == KIND.HEAD && lip < 0.0008
+      ? (lip < 0.0003 ? 1 : 0.25) * Math.max(1 - (ax / (MOUTH_X - 0.0015)) ** 2, 0) * front
+      : 0;
   const inner = bell(ax - 0.012, 0.012);
   const c = corner(ax, y) * front;
   const l = lips(ax, y) * front;
@@ -272,7 +284,9 @@ export const shift = (
     case CH.BROW_PAIN:
       return [0, (0.0046 * inner - 0.0018 * bell(ax - 0.046, 0.012)) * b, 0];
     case CH.JAW:
-      return kind == KIND.HEAD && uv![0] ? [0, uv![0] * z, -uv![0] * (y - 1.665)] : undefined;
+      return (kind == KIND.HEAD || kind == KIND.TEETH) && (uv![0] || pit)
+        ? [0, uv![0] * z, -uv![0] * (y - 1.665) + POCKET * pit]
+        : undefined;
     case CH.SMILE: {
       const k = Math.exp(-(((ax - 0.043) / 0.017) ** 2) - ((y - 1.647) / 0.014) ** 2) * front;
       return [
@@ -299,7 +313,7 @@ export const shift = (
             : dy < -0.0006
               ? -0.003 * bell(dy + 0.005, 0.006)
               : 0),
-        0,
+        POCKET * pit,
       ];
     }
     case CH.SNEER: {

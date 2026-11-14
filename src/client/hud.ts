@@ -80,7 +80,7 @@ export const rim = (): [number, number][] => {
  * a soft pale glow, a shade along the lower edge and a heavier one under the brow, and no line (the
  * user, 2026-11-12: no white border). Widths in pixels whatever the screen's size; the glass itself is not filled.
  * BLUR, where the view is blurred: outside the outline, and a soft band inside it, so the view goes
- * out of focus toward the glass's edge (the user, 2026-11-13; stronger and wider, 2026-11-14).
+ * out of focus toward the glass's edge (the user, 2026-11-13; stronger and wider, 2026-11-14, then a little less).
  */
 const [RIM, BLUR] = (() => {
   const pts = rim().map(([x, y]) => `${x} ${+y.toFixed(2)}`);
@@ -103,7 +103,7 @@ const [RIM, BLUR] = (() => {
         `</g>`,
     ),
     svg(
-      `<filter id="f"><feGaussianBlur stdDeviation="5"/></filter><path d="M-20-20H120V120H-20Z${d}" fill-rule="evenodd" stroke="#000" stroke-width="18" filter="url(#f)"/>`,
+      `<filter id="f"><feGaussianBlur stdDeviation="4"/></filter><path d="M-20-20H120V120H-20Z${d}" fill-rule="evenodd" stroke="#000" stroke-width="13" filter="url(#f)"/>`,
     ),
   ];
 })();
@@ -213,7 +213,7 @@ export const HUD_CSS =
   // helmet's own visor (RIM, below) as a pale line over a clear view. Drawn before the face, the health and the counts.
   `del{inset:0;background:radial-gradient(ellipse 84% 90% at 50% 52%,#0000 64%,#000d 100%)}` +
   // The view out of focus round the visor (BLUR), under the sheen.
-  `del::before{content:"";position:absolute;inset:0;backdrop-filter:blur(10px);mask:${BLUR} 0 0/100% 100%}` +
+  `del::before{content:"";position:absolute;inset:0;backdrop-filter:blur(7px);mask:${BLUR} 0 0/100% 100%}` +
   `del::after{content:"";position:absolute;inset:0;background:${RIM} 0 0/100% 100% no-repeat}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}` +

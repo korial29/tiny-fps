@@ -365,7 +365,7 @@ describe('createHud', () => {
     expect(svg).toContain('preserveAspectRatio="none"');
     // The view blurred round the glass, under the sheen: outside the outline and a soft band inside it.
     const blur = /del::before\{([^}]*)\}/.exec(HUD_CSS)![1];
-    expect(blur).toContain('backdrop-filter:blur(10px)');
+    expect(blur).toContain('backdrop-filter:blur(7px)');
     const mask = decodeURIComponent(/mask:url\("data:image\/svg\+xml,([^"]*)"\)/.exec(blur)![1]);
     expect(mask).toContain('fill-rule="evenodd"');
     expect(mask).toContain('feGaussianBlur');

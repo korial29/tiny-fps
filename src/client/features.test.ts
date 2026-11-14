@@ -32,19 +32,19 @@ describe('the features of a face', () => {
   it('sits them where anatomy does: the eyes half way up the head, an eye apart, the mouth under them', () => {
     // The head runs from the chin (1.585) to the crown (1.803): the eyes are within a centimetre of its middle.
     expect(Math.abs(EYE[1] - (1.585 + 1.803) / 2)).toBeLessThan(0.01);
-    // About an eye's width between the eyes: 28 mm wide, their inner corners 36 mm apart.
+    // About an eye's width between the eyes: 30 mm wide, their inner corners 34 mm apart.
     const [inner, outer] = [white(1, Math.PI)[0], white(1, 0)[0]];
     const width = outer - inner;
     expect(width).toBeGreaterThan(0.025);
     expect(width).toBeLessThan(0.031);
     expect((2 * inner) / width).toBeGreaterThan(0.9);
-    expect((2 * inner) / width).toBeLessThan(1.5);
+    expect((2 * inner) / width).toBeLessThan(1.2);
     // The iris fills the opening's height and a little under half its width; the pupil is in it.
     expect((2 * IRIS_R) / width).toBeGreaterThan(0.38);
     expect((2 * IRIS_R) / width).toBeLessThan(0.5);
-    // The mouth is under the nose (its base at 1.641), over the chin, its corners under the eyes' inner halves.
-    expect(MOUTH_Y).toBeLessThan(1.63);
-    expect(MOUTH_Y).toBeGreaterThan(1.6);
+    // The mouth is a third of the way from the nose's base (1.648) down to the chin (1.588), its
+    // corners under the eyes' inner halves.
+    expect(Math.abs(MOUTH_Y - (1.648 - (1.648 - 1.588) / 3))).toBeLessThan(0.003);
     expect(MOUTH_X).toBeGreaterThan(inner);
     expect(MOUTH_X).toBeLessThan(EYE[0]);
     // The line between the lips falls a little to the corners: a set mouth, not a smile.
@@ -72,8 +72,8 @@ describe('the features of a face', () => {
     expect(lidEdge(true, 1)).toBeGreaterThan(lidEdge(true, -1));
     // The socket's floor is set back inside the lids' roots, not outside them.
     expect(socket(EYE[0], EYE[1])).toBe(1);
-    expect(socket(EYE[0], EYE[1] + 0.014)).toBe(0);
-    expect(socket(EYE[0] + 0.016, EYE[1])).toBe(0);
+    expect(socket(EYE[0], EYE[1] + 0.015)).toBe(0);
+    expect(socket(EYE[0] + 0.0175, EYE[1])).toBe(0);
   });
 
   it('shuts a lid along the ball: its edge on the other lid, every point of it in front of the ball on the way', () => {
@@ -86,9 +86,11 @@ describe('the features of a face', () => {
             const [x, y, z] = lid(upper, t, s, c, surf);
             expect(z).toBeLessThan(ball(x, y) - 0.001);
           }
-          // Its root stays where it is, under the skin.
+          // Its root stays where it is: on the skin along its middle (its own edge is the one
+          // that shows), under it at the corners.
           expect(lid(upper, t, 0, c, surf)).toEqual(lid(upper, t, 0, 0, surf));
-          expect(lid(upper, t, 0, c, surf)[2]).toBeGreaterThan(surf());
+          expect(lid(upper, t, 0, c, surf)[2]).toBeGreaterThan(surf() - 0.0005);
+          expect(lid(upper, t, 0, c, surf)[2] > surf()).toBe(Math.abs(t) > 0.6);
         }
       }
     }
@@ -117,7 +119,7 @@ describe('the features of a face', () => {
     ]) {
       for (let a = 0; a < 6.28; a += 0.4) {
         const [x, y, z] = iris(1, a, gx, gy);
-        expect(((x - EYE[0]) / 0.0138) ** 2 + ((y - EYE[1]) / 0.009) ** 2).toBeLessThan(1);
+        expect(((x - EYE[0]) / 0.0152) ** 2 + ((y - EYE[1]) / 0.0099) ** 2).toBeLessThan(1);
         expect(ball(x, y) - z).toBeCloseTo(0.00035, 9);
       }
     }
@@ -169,6 +171,15 @@ describe('the features of a face', () => {
     expect(at(CH.BROW_DOWN, [-inner[0], inner[1], inner[2]])[0]).toBeGreaterThan(0.001);
     expect(at(CH.BROW_PAIN, inner)[1]).toBeGreaterThan(0.003);
     expect(at(CH.BROW_PAIN, [0.046, 1.714, -0.09])[1]).toBeLessThan(0);
+    // A squint takes the cheek up under the eye, not the side of the nose (the ninja's guard hides it,
+    // and the shader would not press it back as the CPU does).
+    expect(at(CH.SQUINT, [0.036, 1.668, -0.09])[1]).toBeGreaterThan(0.0015);
+    for (const p of [
+      [0.0075, 1.66, -0.107],
+      [0.007, 1.671, -0.101],
+    ]) {
+      expect(Math.hypot(...at(CH.SQUINT, p))).toBeLessThan(1e-5);
+    }
     for (const ch of [CH.BROW_UP, CH.BROW_DOWN, CH.BROW_PAIN]) {
       expect(far(ch, corner, chin, cheek, crown)).toBe(true);
     }

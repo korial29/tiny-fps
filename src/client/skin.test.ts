@@ -4,7 +4,7 @@ import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT, JOINTS, PARENT, axis, rest, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
-import { beardOf, body, cut, eyesOf, hairOf, palette, shaved, skin } from './skin';
+import { beardOf, body, cut, eyesOf, hairOf, jaw, palette, shaved, skin } from './skin';
 import {
   CH,
   CHANNELS,
@@ -71,7 +71,8 @@ describe('skin', () => {
     expect(near).toBeLessThanOrEqual(12000);
     // 26000 until the close head took 2.5 times the neck's sides and finer rows (the user, 2026-11-08).
     // 34000 until the close arms took 24 sides (the user, 2026-11-09).
-    expect(close).toBeLessThanOrEqual(36000);
+    // 36000 until the ears were carved (the user, 2026-11-14).
+    expect(close).toBeLessThanOrEqual(37000);
     expect(far).toBeLessThan(near * 0.3);
     // Near carries the measured rings too, so it is less far below close than it was.
     expect(near).toBeLessThan(close * 0.45);
@@ -79,7 +80,8 @@ describe('skin', () => {
     // irises, the lids and the far marks; 327, 1826 and 5768 with them.
     expect(body(0).w.length).toBeLessThan(340);
     expect(body(1).w.length).toBeLessThan(2000);
-    expect(body(3).w.length).toBeLessThan(6000);
+    // 6000 until the ears were carved: a rim, the ridge and its branches, the bowl, the flaps (the user, 2026-11-14).
+    expect(body(3).w.length).toBeLessThan(6300);
     // The eye's own body: no head; the close sides (a round chest looking down), its arms' rings
     // doubled, and a thin wrist (the user, 2026-11-09: fewer angles, whatever the budget).
     expect(draw(2).length / STRIDE).toBeLessThan(12000);
@@ -487,17 +489,49 @@ describe('skin', () => {
     const s = body(3);
     // The skin, shaved or not.
     const flesh = corners(s, FLESH_, STUBBLE_, 23);
+    // Rows round the eye at fixed heights, a step apart from its middle: the socket's opening is cut
+    // along them, and it frames the lids the same wherever the mouth puts the rows under it.
+    const heights = new Set(
+      Array.from({ length: s.w.length }, (_, i) => i)
+        .filter(i => s.g[i] == KIND.HEAD)
+        .map(i => Math.round(s.v[i * 6 + 1] * 1e5)),
+    );
+    for (let k = -4; k < 4; k++) {
+      expect(heights.has(Math.round((EYE[1] + (k + 0.5) * 0.003) * 1e5))).toBe(true);
+    }
     // The nose's tip is the front of the face, about 2 cm out of the lips and the brow.
     const tip = flesh.reduce((a, b) => (b[2] < a[2] ? b : a));
     expect(Math.abs(tip[0])).toBeLessThan(0.002);
-    expect(tip[1]).toBeGreaterThan(1.645);
-    expect(tip[1]).toBeLessThan(1.66);
+    // Short enough that the face is in thirds: the brow, the nose's base, the chin.
+    expect(tip[1]).toBeGreaterThan(1.655);
+    expect(tip[1]).toBeLessThan(1.665);
     const front = (y: number) =>
       Math.min(
         ...flesh.filter(p => Math.abs(p[0]) < 0.002 && Math.abs(p[1] - y) < 0.003).map(p => p[2]),
       );
     expect(front(1.608) - tip[2]).toBeGreaterThan(0.015);
     expect(front(1.708) - tip[2]).toBeGreaterThan(0.018);
+    // The ears lean back with the nose's ridge, their top behind their lobe, and stand out of the
+    // head behind: their back edge further out than their front one (the user, 2026-11-14).
+    const ear = Array.from({ length: s.w.length }, (_, i) => i)
+      .filter(i => s.g[i] == KIND.EAR && s.v[i * 6] > 0)
+      .map(i => [s.v[i * 6], s.v[i * 6 + 1], s.v[i * 6 + 2]]);
+    const [crest, lobe] = [0, 1].map(k =>
+      ear.reduce((a, b) => ((k ? b[1] < a[1] : b[1] > a[1]) ? b : a)),
+    );
+    expect(crest[2]).toBeGreaterThan(lobe[2] + 0.008);
+    expect(crest[1] - lobe[1]).toBeGreaterThan(0.055);
+    const [fore, aft] = [0, 1].map(k =>
+      ear.reduce((a, b) => ((k ? b[2] > a[2] : b[2] < a[2]) ? b : a)),
+    );
+    expect(aft[0]).toBeGreaterThan(fore[0] + 0.004);
+    // The mouth does not stand out of the face: the lips are no further forward than the chin.
+    expect(front(1.63)).toBeGreaterThan(front(1.596) - 0.0005);
+    expect(front(1.621)).toBeGreaterThan(front(1.596));
+    // The jaw's lower edge stays low back to its angle a little in front of the ear, then rises
+    // steeply to under the ear (the user, 2026-11-14).
+    expect(jaw(1.3)[0] - jaw(0)[0]).toBeLessThan(0.013);
+    expect(jaw(1.75)[0] - jaw(1.3)[0]).toBeGreaterThan(0.025);
     // The chin stands 2.5 cm over the throat under it.
     expect(front(1.575) - front(1.594)).toBeGreaterThan(0.02);
     // The lids: the upper one's edge under the top of the iris, the lower one's over its bottom,
@@ -519,11 +553,11 @@ describe('skin', () => {
     }
     const lash = corners(s, LASH_);
     expect(lash.length).toBeGreaterThan(20);
-    expect(lash.every(p => Math.abs(Math.abs(p[0]) - EYE[0]) < 0.016)).toBe(true);
+    expect(lash.every(p => Math.abs(Math.abs(p[0]) - EYE[0]) < 0.0175)).toBe(true);
     // Lips under the nose, ears out of the sides.
     const lips = corners(s, LIP_);
     expect(lips.length).toBeGreaterThan(30);
-    expect(lips.every(p => Math.abs(p[0]) < 0.025 && p[1] > 1.605 && p[1] < 1.63)).toBe(true);
+    expect(lips.every(p => Math.abs(p[0]) < 0.025 && p[1] > 1.609 && p[1] < 1.634)).toBe(true);
     for (const side of [1, -1]) {
       expect(flesh.some(p => p[0] * side > 0.083 && p[1] > 1.66 && p[1] < 1.7)).toBe(true);
     }
@@ -683,9 +717,9 @@ describe('skin', () => {
         const d = drawn(w);
         for (const i of [...kind(KIND.IRIS), ...kind(KIND.IRIS, false)]) {
           const [x, y, z] = d[i];
-          expect(((Math.abs(x) - EYE[0]) / 0.0138) ** 2 + ((y - EYE[1]) / 0.009) ** 2).toBeLessThan(
-            1,
-          );
+          expect(
+            ((Math.abs(x) - EYE[0]) / 0.0152) ** 2 + ((y - EYE[1]) / 0.0099) ** 2,
+          ).toBeLessThan(1);
           // Just off the ball, whichever way: LOOK_IN takes it back along the ball's curve.
           const off = ball(Math.abs(x), y) - z;
           expect(off).toBeGreaterThan(0.0001);
@@ -702,7 +736,7 @@ describe('skin', () => {
         near(0.03, 1.713),
         near(0.012, 1.711),
         near(0, 1.59, 0.006),
-        near(0.0245, 1.6216),
+        near(0.0245, 1.6268),
         near(0.04, 1.65, 0.006),
       ];
       for (const l of [brow, inner, chin, corner, cheek]) {
@@ -754,7 +788,7 @@ describe('skin', () => {
     });
 
     it('wears each expression on the features it is made of, and is back at rest with it gone', () => {
-      const [brow, chin, corner] = [near(0.012, 1.711), near(0, 1.59, 0.006), near(0.0245, 1.6216)];
+      const [brow, chin, corner] = [near(0.012, 1.711), near(0, 1.59, 0.006), near(0.0245, 1.6268)];
       const lidGap = (d: number[][]) => {
         const at = (k: number) =>
           kind(k)

@@ -96,6 +96,10 @@ const STILL = [0, 0, 0, 1, 0, 0, 0, 1];
 /** The moon's radius, metres, and the climb over the edge of space in which the crater fades into its globe. */
 const MOON_R = 1_737_400;
 const ORBIT_FADE = 250;
+/** The height from which the globe shows past the relief's edge, and the climb over which it comes in. */
+const GLOBE_FROM = 20;
+const GLOBE_IN = 60;
+const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
 /** Metres over the crater's floor from which the stars and the Earth rise with the eye. */
 const LIFT = 20;
 
@@ -239,7 +243,7 @@ const RELIEF = 0.06;
 export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T,Z,Y;uniform int Q;
-uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob;uniform float U;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
+uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;out vec4 o;
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
@@ -254,9 +258,11 @@ return v;}
 bool gh(vec3 d,out vec3 p){vec3 o=vec3(0,1.+Ob.x,0);float b=dot(o,d),q=b*b-dot(o,o)+1.;p=normalize(o+d*(-b-sqrt(max(q,0.))));return q>0.&&b<0.;}
 vec3 mg(vec3 d,out bool t){vec3 p;t=gh(d,p);if(!t)return vec3(0);
 float ma=smoothstep(.42,.6,n3(p*3.)+.5*n3(p*9.)-.25);
-return mix(vec3(.42,.41,.4),vec3(.16,.16,.17),ma)*(.8+.4*n3(p*60.))*cr(p,40.)*cr(p,150.)*cr(p,600.)*e(X*max(dot(p,O),0.));}
+return textureLod(S,vec3(.5,.5,${TEX.STONE}.),12.).rgb*mix(1.9,.9,ma)*(.8+.4*n3(p*60.))*(.85+.3*n3(p*4e3))*(.9+.2*n3(p*2e4))*cr(p,40.)*cr(p,150.)*cr(p,600.)*e(X*max(dot(p,O),0.));}
+vec3 K1(vec3 d);
 vec3 K0(vec3 d){
-if(Ob.x>0.){bool t;vec3 m=mg(d,t);if(t)return m;}
+vec3 s=K1(d);if(Ob.x>0.){bool t;vec3 m=mg(d,t);if(t)s=mix(s,m,Ob.z);}return s;}
+vec3 K1(vec3 d){
 float h=d.y,k=max(dot(d,O),0.);
 vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
 c=mix(c,H[4]*1.08,exp(-abs(h)*7.));
@@ -290,7 +296,7 @@ if(sd>0.&&g<1.){
 vec4 q=W*vec4(P+n*.08,1);q.xyz=q.xyz*.5+.5;
 float v=0.;
 for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADOW},0,q.z-.0004));
-sv=mix(v/4.,1.,smoothstep(.8,1.,max(abs(q.x-.5),abs(q.y-.5))*2.));}
+sv=mix(v/4.,1.,smoothstep(.8,1.,max(max(abs(q.x-.5),abs(q.y-.5)),abs(q.z-.5))*2.));}
 vec3 l=y*(mix(mix(H[1],H[0],max(w.y,0.)),H[2],max(-w.y,0.))+X*sd*sv),sp=X*sv*sd*pow(max(dot(m,nz(O+V)),0.),R.y);
 for(int i=0;i<${MAX_LIGHTS};i++){
 if(i>=Q||g>0.)break;
@@ -314,7 +320,7 @@ c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(
 float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5);
 c.g=mix(c.g,c.r,z);
 o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z));
-o.rgb=mix(o.rgb,K0(-V),Ob.w>.5?0.:Ob.y*smoothstep(120.,260.,length(P-E)));}`;
+o.rgb=mix(o.rgb,K0(-V),Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E)),Ob.z*smoothstep(1.25,1.6,length((P.xz-Cb.xy)*Cb.zw))));}`;
 
 /**
  * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
@@ -851,9 +857,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       'Sw',
       'Sc',
       'Ob',
+      'Cb',
     ]);
     gl.uniform1i(u.D, 1);
     gl.uniform4fv(u.R, STILL);
+    // The crater's bound: its centre and one over its half axes, for the relief's edge fading into the globe.
+    const b = world.relief?.bound ?? [0, 0, 1, 1];
+    gl.uniform4f(u.Cb, b[0], b[1], 1 / b[2], 1 / b[3]);
     gl.uniform1i(u.Sg, 4);
     // The store's data, read by texel: sent again whole on a new context.
     gl.activeTexture(gl.TEXTURE4);
@@ -1134,9 +1144,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const high = posing || world.def.seam === undefined ? 0 : eye[1] - world.def.seam;
       // The stars' dome is round the crater's floor: high up it follows the eye, LIFT m under it.
       const lift = posing ? 0 : Math.max(0, eye[1] - LIFT);
-      const globe = high > 0 ? altitude(eye[1]) / MOON_R : 0;
-      const fade = Math.min(Math.max(high / ORBIT_FADE, 0), 1);
-      gl.uniform4f(u.Ob, globe, fade, 0, 0);
+      // From a little height the globe is the ground past the relief's edge, where that edge fades.
+      const low = posing || !world.relief ? 0 : clamp01((eye[1] - GLOBE_FROM) / GLOBE_IN);
+      const globe = low > 0 || high > 0 ? Math.max(altitude(eye[1]), 1) / MOON_R : 0;
+      const fade = clamp01(high / ORBIT_FADE);
+      const edge = high > 0 ? 1 : low;
+      gl.uniform4f(u.Ob, globe, fade, edge, 0);
       // The sky first, at depth 1: the view ray of each pixel from the camera's axes.
       gl.uniform3fv(u.J, [right.map(c => c * tan * (w / h)), up.map(c => c * tan), fwd].flat());
       gl.uniform1f(u.Y, 1);
@@ -1147,10 +1160,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         const sky0 = first - heavensN;
         gl.drawArrays(gl.TRIANGLES, 0, sky0);
         gl.uniform4fv(u.R, [0, 0, 0, 1, 0, lift, 0, 1]);
-        gl.uniform4f(u.Ob, globe, fade, 0, 1);
+        gl.uniform4f(u.Ob, globe, fade, edge, 1);
         gl.drawArrays(gl.TRIANGLES, sky0, heavensN);
         gl.uniform4fv(u.R, STILL);
-        gl.uniform4f(u.Ob, globe, fade, 0, 0);
+        gl.uniform4f(u.Ob, globe, fade, edge, 0);
         gl.drawArrays(gl.TRIANGLES, first, bodyAt / STRIDE);
       } else {
         gl.drawArrays(gl.TRIANGLES, 0, first + bodyAt / STRIDE);

@@ -2,11 +2,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STILL, spawn } from '../shared/physics';
 import { ROVER } from '../shared/rover';
+import { ORBIT } from '../shared/constants';
+import { MOON } from '../shared/moon';
 import { SHIP } from '../shared/ship';
 import { MODE, NOBODY, TEX } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
 import { build } from '../shared/world';
-import type { Brush, WorldDef } from '../shared/world';
+import type { Brush, World, WorldDef } from '../shared/world';
 import { craft } from './craft';
 import { createEffects } from './effects';
 import { teamRgb } from './flag';
@@ -759,6 +761,36 @@ describe('createRenderer', () => {
       expect(frag).toMatch(/r=reflect\(-V,m\),k=K0\(r\)/);
       // The sky pass, the reflection and the crater fading into the globe in orbit are the one function.
       expect(frag.match(/K0\(/g)).toHaveLength(4);
+    });
+
+    it('lets the sun’s shadow go past the sides of its window and past its depth: from high up, the ground under it is no dark square', () => {
+      createRenderer(canvas, ROOM);
+      const frag = calls
+        .filter(c => c[0] == 'shaderSource')
+        .map(c => String(c[2]))
+        .find(s => s.includes('sampler2DArray'))!;
+      expect(frag).toContain('max(max(abs(q.x-.5),abs(q.y-.5)),abs(q.z-.5))');
+    });
+
+    it('draws the moon’s globe past the relief from a little height, and fades the crater into it over the seam', () => {
+      const ob = (w: World, y: number) => {
+        const rd = createRenderer(canvas, w);
+        calls.length = 0;
+        rd.frame([80, y, 140], 0, 0, [], new Map(), createEffects(), []);
+        return calls.find(c => (c[1] as { u?: string } | undefined)?.u == 'Ob')!.slice(2);
+      };
+      const moon = build({ ...ROOM.def, relief: MOON.relief, seam: ORBIT.SEAM });
+      expect(ob(moon, 2)).toEqual([0, 0, 0, 0]);
+      // Over the rim: the globe at its own height, the relief's edge fading into it.
+      const [globe, fade, edge] = ob(moon, 90) as number[];
+      expect(globe * 1_737_400).toBeCloseTo(90, 0);
+      expect([fade, edge]).toEqual([0, 1]);
+      // In orbit: seen from kilometres up, the crater gone into it.
+      const high = ob(moon, ORBIT.SEAM + 300) as number[];
+      expect(high[0] * 1_737_400).toBeGreaterThan(5_000);
+      expect(high.slice(1, 3)).toEqual([1, 1]);
+      // A map with no relief never has one.
+      expect(ob(ROOM, ORBIT.SEAM + 300)).toEqual([0, 0, 0, 0]);
     });
 
     it('declares the fog, palette and daylight uniforms in the shader', () => {

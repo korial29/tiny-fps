@@ -79,7 +79,7 @@ describe('the head on a runner one looks at', () => {
     expect(angle(head([man(), other(2.4)]).dir, alone.dir)).toBeLessThan(1e-6);
     // The nearest of two.
     const [far, near] = [other(0.3, 9), other(-0.4, 3, { id: 3 })];
-    expect(watched(man(), [man(), far, near])![0]).toBeCloseTo(near.x, 6);
+    expect(watched(man(), [man(), far, near])!.at[0]).toBeCloseTo(near.x, 6);
     // Gone, the head comes back.
     const book = new Map<number, Runner>();
     for (let i = 0; i < 90; i++) {
@@ -87,5 +87,25 @@ describe('the head on a runner one looks at', () => {
       soldier([], book.get(1)!, [1, 0, 0]);
     }
     expect(Math.hypot(...book.get(1)!.gaze!)).toBeLessThan(0.02);
+  });
+  it('follows him as he goes by, as far as the head and the eyes reach', () => {
+    // He comes in front, then walks round to the side, out of the cone a new one is picked in.
+    const book = new Map<number, Runner>();
+    const path = (i: number) => other(Math.min(0.5 + i * 0.02, 1.5));
+    for (let i = 0; i < 120; i++) {
+      animate(book, [man(), path(i)], DT);
+      soldier([], book.get(1)!, [1, 0, 0]);
+    }
+    expect(1.5).toBeGreaterThan(WATCH.cone);
+    expect(book.get(1)!.watching).toBe(2);
+    expect(book.get(1)!.gaze![0]).toBeCloseTo(WATCH.turn[0], 2);
+    // Met there first, he is not picked; past the reach he is let go.
+    expect(watched(man(), [man(), other(1.5)])).toBeUndefined();
+    expect(watched(man(), [man(), other(1.5)], 2)?.id).toBe(2);
+    expect(watched(man(), [man(), other(WATCH.hold + 0.1)], 2)).toBeUndefined();
+    // Kept over a nearer one, so the head does not flick between two.
+    const near = other(0.1, 2, { id: 3 });
+    expect(watched(man(), [man(), other(0.3, 9), near], 2)?.id).toBe(2);
+    expect(watched(man(), [man(), other(0.3, 9), near])?.id).toBe(3);
   });
 });

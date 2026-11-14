@@ -29,7 +29,9 @@ Measured in Node (same V8 as Chrome) on an M-series Mac, then checked in the bro
 | Match frame, Highline (own body, 1 near, 8 far) | 43 ms                   | 9.7 ms              |
 | Match frame, Tranquility                        | 34 ms                   | 8.9 ms              |
 | Same frame in the browser (Chrome's V8)         | 33 ms                   | 9.3 ms              |
-| Browser pane, Highline, 8 bots, before `Verts`  | 34 fps                  | 54 fps              |
+| In the game, browser pane, Highline, 8 bots     | 39.5 fps                | 60 fps (the screen) |
+| The same: a frame's CPU (median, 90th)          | 23.4 ms, 28.7 ms        | 8.4 ms, 9.1 ms      |
+| The same: a frame's GPU (median)                | 7.7 ms                  | 8.2 ms              |
 | Own first-person body                           | 10.6 ms                 | 6.5 ms              |
 | Ninja far away (lod 0)                          | 3.4 ms, 23 000 vertices | 11 000 vertices     |
 | Ninja's hood (`dress()`), close                 | 8.9 ms                  | 3.1 ms              |
@@ -58,10 +60,11 @@ What made the difference, and is now a rule:
 
 What is still to look at:
 
-- **The GPU side was not measured.** Each shadow map (the sun's and each shadowed spot) draws the
-  whole level, city and skyline included (216 000 vertices on Highline), then the scene draws
-  everything once more at 4x MSAA in RGBA16F. If a frame is slow with little JavaScript in it,
-  look there.
+- **The GPU, on a weaker machine.** On an M-series Mac a frame takes about 8 ms of GPU at 1.9
+  million pixels (the canvas is capped at `MAX_PIXELS`, 2.1 million), unchanged by this work: not
+  the bottleneck there. Each shadow map (the sun's and each shadowed spot) draws the whole level,
+  city and skyline included (216 000 vertices on Highline), then the scene draws everything once
+  more at 4x MSAA in RGBA16F. On an integrated GPU, look there first.
 
 ## Rules for every change
 
@@ -169,3 +172,8 @@ console.log(((performance.now() - t0) / 200).toFixed(2), 'ms a frame');
   mean nothing. A steadier measure of the JavaScript alone: in the page's console, import the
   modules through Vite (`import('/@fs/<repo>/src/client/soldier.ts')`) and time the frame above,
   in a page reloaded for it (what ran in it before changes what V8 compiled).
+- **The GPU's time**: before the game starts, wrap `HTMLCanvasElement.prototype.getContext` to
+  keep the first `webgl2` context and its `EXT_disjoint_timer_query_webgl2`, and wrap
+  `requestAnimationFrame` so each callback runs between `beginQuery(TIME_ELAPSED_EXT)` and
+  `endQuery`; read the queries back when `QUERY_RESULT_AVAILABLE`, skipping any while
+  `GPU_DISJOINT_EXT` is set. The same wrapper times each callback on the CPU.

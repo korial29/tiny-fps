@@ -6,6 +6,7 @@ import { SHINE, STRIDE, dress, place, smooth } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
+import type { Out } from './verts';
 
 const shine = (v: number[]) => {
   for (let i = 0; i < v.length; i += STRIDE) {
@@ -43,7 +44,7 @@ const AT: Vec3[] = [0.131, 0.123].map(z => [
 export const BUCKLE = [0.032, 0.008];
 
 /** Appends the buckle for build b's pelvis at `at` turned by `q`, its middle in `team`. */
-export const buckle = (out: number[], at: Vec3, q: Quat, b: number, team: number[]) => {
+export const buckle = (out: Out, at: Vec3, q: Quat, b: number, team: number[]) => {
   const ax = [turn(q, [1, 0, 0]), turn(q, [0, 1, 0]), turn(q, [0, 0, -1])];
   const o = turn(q, AT[b]);
   const m: Vec3 = [at[0] + o[0], at[1] + o[1], at[2] + o[2]];

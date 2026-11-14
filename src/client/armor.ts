@@ -12,6 +12,8 @@ import { KANJI } from './mask';
 import { GLOSS, STRIDE } from './mesh';
 import { BUST, BUST_Y, body } from './skin';
 import type { Skin } from './skin';
+import { room } from './verts';
+import type { Out } from './verts';
 
 /** Why a plate applies to a triangle: the trunk, an arm or a leg (both sides). */
 const PART = { TRUNK: 0, ARM: 1, LEG: 2 } as const;
@@ -608,9 +610,11 @@ const landed = (c: Corner, m: number[]): Corner => [
 /** Clips the polygon `poly` to where `f` >= 0 (Sutherland-Hodgman, corners eased along the edges). */
 const clip = (poly: Corner[], f: (c: Corner) => number, bit: number) => {
   const out: Corner[] = [];
+  // Each corner's once: a moulded plate's limit looks for its place on the shell.
+  const fs = poly.map(f);
   for (let i = 0; i < poly.length; i++) {
     const [p, q] = [poly[i], poly[(i + 1) % poly.length]];
-    const [fp, fq] = [f(p), f(q)];
+    const [fp, fq] = [fs[i], fs[(i + 1) % poly.length]];
     if (fp >= 0) {
       out.push(p);
     }
@@ -665,6 +669,8 @@ export const SCRATCHED = [
 interface Recipe {
   c: number[];
   t: number[];
+  /** The triangles each kind of wearer has (armor()'s `ninja`, astronaut and `bare` bits), listed on first use. */
+  k?: Int32Array[];
 }
 const CORNER = 11;
 const TRI = 6;
@@ -1470,29 +1476,44 @@ const scratchesOn = (
     p[2] * q[0] - p[0] * q[2],
     p[0] * q[1] - p[1] * q[0],
   ];
+  /** Each triangle's part, and its corners' places, nine numbers each: hitOf() goes through them all, many times. */
+  const parts = Int8Array.from({ length: n }, (_, k) => partOf(l![k]));
+  const T = new Float64Array(n * 9);
+  for (let k = 0; k < n; k++) {
+    for (let c = 0; c < 3; c++) {
+      for (let j = 0; j < 3; j++) {
+        T[k * 9 + c * 3 + j] = v[t[k * 3 + c] * 6 + j];
+      }
+    }
+  }
   /** Where a ray from `o` along `w` leaves the skin of the part: its furthest triangle, and the point. */
   const hitOf = (part: number, o: number[], w: number[]): [number, number[]] | undefined => {
-    let best = [-1, 0];
+    let [best, most] = [-1, 0];
+    const [wx, wy, wz] = [w[0], w[1], w[2]];
     for (let k = 0; k < n; k++) {
-      if (partOf(l![k]) != part) {
+      if (parts[k] != part) {
         continue;
       }
-      const P = corners(k);
-      const [e1, e2] = [P[1].map((q, j) => q - P[0][j]), P[2].map((q, j) => q - P[0][j])];
-      const h = cross(w, e2);
-      const det = dot(e1, h);
+      // cross() and dot() written out, in the same order.
+      const i = k * 9;
+      const [px, py, pz] = [T[i], T[i + 1], T[i + 2]];
+      const [ax, ay, az] = [T[i + 3] - px, T[i + 4] - py, T[i + 5] - pz];
+      const [bx, by, bz] = [T[i + 6] - px, T[i + 7] - py, T[i + 8] - pz];
+      const [hx, hy, hz] = [wy * bz - wz * by, wz * bx - wx * bz, wx * by - wy * bx];
+      const det = ax * hx + ay * hy + az * hz;
       if (Math.abs(det) < 1e-12) {
         continue;
       }
-      const q = o.map((c, j) => c - P[0][j]);
-      const bu = dot(q, h) / det;
-      const c = cross(q, e1);
-      const [bv, far] = [dot(w, c) / det, dot(e2, c) / det];
-      if (bu >= 0 && bv >= 0 && bu + bv <= 1 && far > best[1]) {
-        best = [k, far];
+      const [qx, qy, qz] = [o[0] - px, o[1] - py, o[2] - pz];
+      const bu = (qx * hx + qy * hy + qz * hz) / det;
+      const [cx, cy, cz] = [qy * az - qz * ay, qz * ax - qx * az, qx * ay - qy * ax];
+      const bv = (wx * cx + wy * cy + wz * cz) / det;
+      const far = (bx * cx + by * cy + bz * cz) / det;
+      if (bu >= 0 && bv >= 0 && bu + bv <= 1 && far > most) {
+        [best, most] = [k, far];
       }
     }
-    return best[0] < 0 ? undefined : [best[0], o.map((c, j) => c + w[j] * best[1])];
+    return best < 0 ? undefined : [best, o.map((c, j) => c + w[j] * most)];
   };
   let made = 0;
   for (let tries = 0; tries < SCRATCHES * 60 && made < SCRATCHES; tries++) {
@@ -1563,6 +1584,35 @@ const scratchesOn = (
 
 const recipes = [new WeakMap<Skin, Recipe>(), new WeakMap<Skin, Recipe>()];
 
+/** The triangles of the recipe's `t` (their first number's index) that a wearer has: armor()'s rules. */
+const wearing = (t: number[], ninja: boolean, astro: boolean, bare: boolean) => {
+  const keep: number[] = [];
+  for (let i = 0; i < t.length; i += TRI) {
+    // The ninja's own armour alone, without scratches, and none of it on another.
+    // With `bare`, his belt alone: a map with no armour.
+    if (
+      ninja != !!REGIONS[t[i + 5]]?.alone ||
+      (t[i + 4] & ASTRO && !astro) ||
+      (bare && !REGIONS[t[i + 5]]?.belt)
+    ) {
+      continue;
+    }
+    keep.push(i);
+  }
+  return Int32Array.from(keep);
+};
+
+/** The armour's recipe on the skin `s`, `fine` or not (armor()), made now if it is not yet: the close one takes a quarter of a second. */
+export const prepare = (s: Skin, fine: boolean) => {
+  const book = recipes[+fine];
+  let r = book.get(s);
+  if (!r) {
+    r = cook(s, fine);
+    book.set(s, r);
+  }
+  return r;
+};
+
 /**
  * Appends the armour cut out of the skin `s` drawn into `out` from the float `from` on (skin()
  * writes three vertices per triangle of s.t, in order). Not `fine` (a runner not close by), curved
@@ -1571,7 +1621,7 @@ const recipes = [new WeakMap<Skin, Recipe>(), new WeakMap<Skin, Recipe>()];
  * details in his team's colour `accent` too. The `ninja` wears his own armour.
  */
 export const armor = (
-  out: number[],
+  out: Out,
   from: number,
   s: Skin,
   fine = true,
@@ -1581,51 +1631,39 @@ export const armor = (
   bare = false,
 ) => {
   const astro = !plate && !ninja;
-  const book = recipes[+fine];
-  let r = book.get(s);
-  if (!r) {
-    r = cook(s, fine);
-    book.set(s, r);
-  }
+  const r = prepare(s, fine);
   const { c, t } = r;
+  const wearer = +ninja | (+astro << 1) | (+bare << 2);
+  const list = ((r.k ??= [])[wearer] ??= wearing(t, ninja, astro, bare));
   const P = new Float64Array(9);
   const N = new Float64Array(9);
   let w = out.length;
-  for (let i = 0, ci = 0; i < t.length; i += TRI) {
-    // The ninja's own armour alone, without scratches, and none of it on another.
-    // With `bare`, his belt alone: a map with no armour.
-    if (
-      ninja != !!REGIONS[t[i + 5]]?.alone ||
-      (t[i + 4] & ASTRO && !astro) ||
-      (bare && !REGIONS[t[i + 5]]?.belt)
-    ) {
-      ci += 3 * CORNER;
-      continue;
-    }
+  const a = room(out, list.length * 3 * STRIDE);
+  for (let n = 0; n < list.length; n++) {
+    const i = list[n];
+    let ci = (i / TRI) * 3 * CORNER;
+    // A weight is the other way for a corner whose normal is turned (cook()): the place is not.
+    const kind = t[i + 4];
     for (let j = 0; j < 3; j++, ci += CORNER) {
       const o = from + c[ci] * 3 * STRIDE;
-      // A weight is the other way for a corner whose normal is turned (cook()): the place is not.
-      const kind = t[i + 4];
       const b0 = c[ci + 1];
       const b1 = c[ci + 2];
       const b2 = c[ci + 3];
-      const [m0, m1, m2] = [
-        kind & TURN ? -b0 : b0,
-        kind & (TURN << 1) ? -b1 : b1,
-        kind & (TURN << 2) ? -b2 : b2,
-      ];
+      const m0 = kind & TURN ? -b0 : b0;
+      const m1 = kind & (TURN << 1) ? -b1 : b1;
+      const m2 = kind & (TURN << 2) ? -b2 : b2;
       const o1 = o + STRIDE;
       const o2 = o1 + STRIDE;
-      const x = out[o] * b0 + out[o1] * b1 + out[o2] * b2;
-      const y = out[o + 1] * b0 + out[o1 + 1] * b1 + out[o2 + 1] * b2;
-      const z = out[o + 2] * b0 + out[o1 + 2] * b1 + out[o2 + 2] * b2;
-      let nx = out[o + 3] * m0 + out[o1 + 3] * m1 + out[o2 + 3] * m2;
+      const x = a[o] * b0 + a[o1] * b1 + a[o2] * b2;
+      const y = a[o + 1] * b0 + a[o1 + 1] * b1 + a[o2 + 1] * b2;
+      const z = a[o + 2] * b0 + a[o1 + 2] * b1 + a[o2 + 2] * b2;
+      let nx = a[o + 3] * m0 + a[o1 + 3] * m1 + a[o2 + 3] * m2;
       // A turned normal is level too (the world's level: a runner mostly stands).
       let ny =
-        out[o + 4] * (m0 > 0 ? m0 : 0) +
-        out[o1 + 4] * (m1 > 0 ? m1 : 0) +
-        out[o2 + 4] * (m2 > 0 ? m2 : 0);
-      let nz = out[o + 5] * m0 + out[o1 + 5] * m1 + out[o2 + 5] * m2;
+        a[o + 4] * (m0 > 0 ? m0 : 0) +
+        a[o1 + 4] * (m1 > 0 ? m1 : 0) +
+        a[o2 + 4] * (m2 > 0 ? m2 : 0);
+      let nz = a[o + 5] * m0 + a[o1 + 5] * m1 + a[o2 + 5] * m2;
       const nl = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
       nx /= nl;
       ny /= nl;
@@ -1672,7 +1710,7 @@ export const armor = (
       N[j * 3 + 1] = ny;
       N[j * 3 + 2] = nz;
     }
-    if (t[i + 4] & 1) {
+    if (kind & 1) {
       // A wall: its own flat normal, as wound.
       const ax = P[3] - P[0];
       const ay = P[4] - P[1];
@@ -1694,29 +1732,41 @@ export const armor = (
       }
     }
     // The plates and their walls in `plate` when given; the scratches in their own.
-    let [cr, cg, cb] = [t[i], t[i + 1], t[i + 2]];
-    if (cr < 0) {
-      [cr, cg, cb] = accent;
-    } else if (plate && t[i + 3] == GLOSS) {
-      [cr, cg, cb] = plate;
-    } else if (plate && t[i + 4] & 1) {
-      [cr, cg, cb] = [plate[0] * 0.75, plate[1] * 0.75, plate[2] * 0.75];
-    } else if (plate && t[i + 5] < 0) {
-      // On coloured plates the scratches are white (the user, 2026-11-10); on white ones, grey.
-      [cr, cg, cb] = SCRATCHED[+(cr > 0.55)];
+    let cr = t[i];
+    let cg = t[i + 1];
+    let cb = t[i + 2];
+    // Plain numbers, no array a triangle (as below).
+    const tone =
+      cr < 0
+        ? accent
+        : plate && t[i + 3] == GLOSS
+          ? plate
+          : plate && !(kind & 1) && t[i + 5] < 0
+            ? // On coloured plates the scratches are white (the user, 2026-11-10); on white ones, grey.
+              SCRATCHED[+(cr > 0.55)]
+            : undefined;
+    if (tone) {
+      cr = tone[0];
+      cg = tone[1];
+      cb = tone[2];
+    } else if (plate && kind & 1) {
+      cr = plate[0] * 0.75;
+      cg = plate[1] * 0.75;
+      cb = plate[2] * 0.75;
     }
     // Written by index rather than pushed: the close armour is some 20 000 vertices.
     for (let j = 0; j < 9; j += 3, w += STRIDE) {
-      out[w] = P[j];
-      out[w + 1] = P[j + 1];
-      out[w + 2] = P[j + 2];
-      out[w + 3] = N[j];
-      out[w + 4] = N[j + 1];
-      out[w + 5] = N[j + 2];
-      out[w + 6] = cr;
-      out[w + 7] = cg;
-      out[w + 8] = t[i + 3];
-      out[w + 9] = cb;
+      a[w] = P[j];
+      a[w + 1] = P[j + 1];
+      a[w + 2] = P[j + 2];
+      a[w + 3] = N[j];
+      a[w + 4] = N[j + 1];
+      a[w + 5] = N[j + 2];
+      a[w + 6] = cr;
+      a[w + 7] = cg;
+      a[w + 8] = t[i + 3];
+      a[w + 9] = cb;
     }
   }
+  out.length = w;
 };

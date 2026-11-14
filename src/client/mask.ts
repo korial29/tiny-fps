@@ -14,6 +14,8 @@ import type { Vec3 } from './mesh';
 import { STRIDE } from './mesh';
 import { REGION, TOP, bindOf, scalp } from './skin';
 import type { Skin } from './skin';
+import { room } from './verts';
+import type { Out } from './verts';
 
 /** The suit's and the hood's black, a touch of blue in it; the guard's rim, a shade lighter; the disc's ink. */
 export const CLOTH = [0.035, 0.036, 0.042];
@@ -126,12 +128,21 @@ export const MOUTH = { a: [-0.1, 0, 0.1], y: [1.598, 1.624], w: 0.0026 };
 /** The middle of the head: the normals point away from it. */
 const MID: Vec3 = [0, 1.66, 0.03];
 
-let made: number[] | undefined;
+/** Built once at each level: the full one and the far one (`mask()`'s `far`). */
+const made: number[][] = [];
+/**
+ * A far runner's guard: its quads across and down its face (its columns still on the hollows'
+ * edges, KNOTS), round and down its inner face and its walls, and the longest piece of a line.
+ */
+const FAR = { cols: 20, rows: 6, round: 16, down: 2, piece: 0.009 };
 /** The head's axis, metres along z. */
 let axis: number | undefined;
 
-/** The hood and the guard in the man's rest pose: triangles of [x, y, z, nx, ny, nz, shade]. */
-const make = (): number[] => {
+/** The hood and the guard in the man's rest pose: triangles of [x, y, z, nx, ny, nz, shade]. Coarser `far`. */
+const make = (far: boolean): number[] => {
+  const [COLS, ROWS, ROUND, DOWN, PIECE] = far
+    ? [FAR.cols, FAR.rows, FAR.round, FAR.down, FAR.piece]
+    : [40, 18, 48, 8, 0.003];
   const mid: Vec3 = [0, 1.66, (skull(0, 1.66, 0)[2] + skull(Math.PI, 1.66, 0)[2]) / 2];
   Object.assign(MID, mid);
   const out: number[] = [];
@@ -197,23 +208,23 @@ const make = (): number[] => {
       const x = xs[i - 1] + ((xs[i] - xs[i - 1]) * (m - KNOTS[i - 1])) / (KNOTS[i] - KNOTS[i - 1]);
       return guard(OUT)((1 + Math.sign(2 * u - 1) * x) / 2, v);
     },
-    40,
-    18,
+    COLS,
+    ROWS,
     TEAM,
   );
   // Its walls, from its edge straight back to the face: a closed mask.
   const wall = (t: number) => guard(-0.003 + (OUT + 0.003) * t, t);
-  sheet(guard(IN), 48, 8, 0.5, -1);
+  sheet(guard(IN), ROUND, DOWN, 0.5, -1);
   const rim = (f: (w: number, t: number) => Vec3) => sheet(f, 1, 1, 0.75);
-  for (let c = 0; c < 48; c++) {
+  for (let c = 0; c < ROUND; c++) {
     for (const v of [0, 1]) {
-      const [u0, u1] = [c / 48, (c + 1) / 48];
+      const [u0, u1] = [c / ROUND, (c + 1) / ROUND];
       sheet((w, t) => wall(t)(round(w, u0, u1), v), 1, 1, 0.75);
     }
   }
   for (const u of [0, 1]) {
-    for (let r = 0; r < 8; r++) {
-      rim((w, t) => wall(t)(u, (r + w) / 8));
+    for (let r = 0; r < DOWN; r++) {
+      rim((w, t) => wall(t)(u, (r + w) / DOWN));
     }
   }
 
@@ -222,11 +233,11 @@ const make = (): number[] => {
     const f = (u: number, v: number) => skull(u, v, on + off + (on == OUT ? prow(u, v) : 0));
     return [f(a, y), normal(f, a, y)];
   };
-  /** A line `w` wide along the points `pts` ([a, y] each) on the guard or the hood, in pieces of 3 mm at most. */
+  /** A line `w` wide along the points `pts` ([a, y] each) on the guard or the hood, in pieces of PIECE at most. */
   const line = (pts: [number, number][], w: number, shade: number, on = OUT) => {
     for (let i = 0; i + 1 < pts.length; i++) {
       const [[a0, y0], [a1, y1]] = [pts[i], pts[i + 1]];
-      const n = Math.max(1, Math.ceil(Math.hypot((a1 - a0) * 0.085, y1 - y0) / 0.003));
+      const n = Math.max(1, Math.ceil(Math.hypot((a1 - a0) * 0.085, y1 - y0) / PIECE));
       for (let k = 0; k < n; k++) {
         const [[p, np], [q, nq]] = [k / n, (k + 1) / n].map(t =>
           face(a0 + (a1 - a0) * t, y0 + (y1 - y0) * t, 0.0008, on),
@@ -258,21 +269,21 @@ const make = (): number[] => {
     w: number,
     groove = false,
   ) => {
-    sheet(p(0.0008), 6, 12, BLACK);
+    sheet(p(0.0008), far ? 2 : 6, far ? 3 : 12, BLACK);
     for (let k = 1; k < 2 * n; k++) {
       const [c, wire] = [((k % n) + 0.5 * +(k > n)) / n, p(0.0013)];
       if (k != n) {
         sheet(
           (u, v) => (k < n ? wire(c + (v - 0.5) * w, u) : wire(u, c + (v - 0.5) * w)),
-          8,
+          far ? 2 : 8,
           1,
           WIRE,
         );
       }
     }
     for (const c of groove ? [0, 1] : []) {
-      sheet((u, v) => p(0.0013)(c + (v - 0.5) * w * 2, u), 8, 1, GROOVE);
-      sheet((u, v) => p(0.0013)(u, c + (v - 0.5) * w * 2), 8, 1, GROOVE);
+      sheet((u, v) => p(0.0013)(c + (v - 0.5) * w * 2, u), far ? 2 : 8, 1, GROOVE);
+      sheet((u, v) => p(0.0013)(u, c + (v - 0.5) * w * 2), far ? 2 : 8, 1, GROOVE);
     }
   };
   // The kite over the mouth: its point up the nose, its widest low; raised to the nose and smaller
@@ -318,11 +329,18 @@ const make = (): number[] => {
  * the neck and the skin at the neck's foot, but the opening round the eyes, soft at its edge), and
  * the face under the guard pressed in behind it.
  */
-export const dress = (out: number[], from: number, s: Skin, at: Vec3, q: Quat, build = 0) => {
+export const dress = (out: Out, from: number, s: Skin, at: Vec3, q: Quat, build = 0) => {
   const o = bindOf(0)[J.HEAD];
   const k = build ? HEAD_SCALE : 1;
   const back: Quat = [-q[0], -q[1], -q[2], q[3]];
   const cz = (axis ??= (skull(0, 1.66, 0)[2] + skull(Math.PI, 1.66, 0)[2]) / 2);
+  // A vertex is the corner of some six triangles, all at the same place: each is worked out once.
+  const n = s.w.length;
+  if (DONE.length < n) {
+    [DONE, BARE, PRESS] = [new Int32Array(n), new Float64Array(n), new Float64Array(n * 3)];
+  }
+  const stamp = ++dressed;
+  const buf = room(out, 0);
   for (let h = 0; h < s.t.length; h++) {
     const i = s.t[h];
     const [j0, j1] = [s.j[i * 2], s.j[i * 2 + 1]];
@@ -331,61 +349,103 @@ export const dress = (out: number[], from: number, s: Skin, at: Vec3, q: Quat, b
       continue;
     }
     const w = from + h * STRIDE;
-    const l = turn(back, [out[w] - at[0], out[w + 1] - at[1], out[w + 2] - at[2]]);
-    const [x, y, z] = [l[0] / k + o[0], l[1] / k + o[1], l[2] / k + o[2]];
-    if (!onHead && (y > 1.56 || y < 1.38)) {
+    if (DONE[i] != stamp) {
+      DONE[i] = stamp;
+      BARE[i] = -1;
+      PRESS[i * 3] = NaN;
+      const l = turn(back, [buf[w] - at[0], buf[w + 1] - at[1], buf[w + 2] - at[2]]);
+      const [x, y, z] = [l[0] / k + o[0], l[1] / k + o[1], l[2] / k + o[2]];
+      if (!onHead && (y > 1.56 || y < 1.38)) {
+        continue;
+      }
+      const a = Math.atan2(x, cz - z);
+      const qa = Math.abs(a);
+      // How far inside the opening, metres: bare beyond 12 mm, eased, the hood's black outside it.
+      const inside = Math.min(y - under(a), arch(a) - y, (SLIT - qa) * 0.08);
+      BARE[i] = clamp(inside / 0.012) ** 2 * (3 - 2 * clamp(inside / 0.012));
+      // Under the guard: drawn in behind its inner face.
+      if (covers(qa, y)) {
+        const p = skull(a, y, IN - 0.002 + prow(a, y));
+        const [r, d] = [Math.hypot(p[0], p[2] - cz), Math.hypot(x, z - cz)];
+        if (d > r) {
+          const f = r / d;
+          const m = turn(q, [(x * f - o[0]) * k, (y - o[1]) * k, (cz + (z - cz) * f - o[2]) * k]);
+          [PRESS[i * 3], PRESS[i * 3 + 1], PRESS[i * 3 + 2]] = [
+            at[0] + m[0],
+            at[1] + m[1],
+            at[2] + m[2],
+          ];
+        }
+      }
+    }
+    const bare = BARE[i];
+    if (bare < 0) {
       continue;
     }
-    const a = Math.atan2(x, cz - z);
-    const qa = Math.abs(a);
-    // How far inside the opening, metres: bare beyond 12 mm, eased, the hood's black outside it.
-    const inside = Math.min(y - under(a), arch(a) - y, (SLIT - qa) * 0.08);
-    const bare = clamp(inside / 0.012) ** 2 * (3 - 2 * clamp(inside / 0.012));
-    for (const c of [6, 7, 9]) {
-      out[w + c] = CLOTH[c == 9 ? 2 : c - 6] + (out[w + c] - CLOTH[c == 9 ? 2 : c - 6]) * bare;
-    }
-    // Under the guard: drawn in behind its inner face.
-    if (covers(qa, y)) {
-      const p = skull(a, y, IN - 0.002 + prow(a, y));
-      const [r, d] = [Math.hypot(p[0], p[2] - cz), Math.hypot(x, z - cz)];
-      if (d > r) {
-        const f = r / d;
-        const m = turn(q, [(x * f - o[0]) * k, (y - o[1]) * k, (cz + (z - cz) * f - o[2]) * k]);
-        [out[w], out[w + 1], out[w + 2]] = [at[0] + m[0], at[1] + m[1], at[2] + m[2]];
-      }
+    buf[w + 6] = CLOTH[0] + (buf[w + 6] - CLOTH[0]) * bare;
+    buf[w + 7] = CLOTH[1] + (buf[w + 7] - CLOTH[1]) * bare;
+    buf[w + 9] = CLOTH[2] + (buf[w + 9] - CLOTH[2]) * bare;
+    if (PRESS[i * 3] === PRESS[i * 3]) {
+      [buf[w], buf[w + 1], buf[w + 2]] = [PRESS[i * 3], PRESS[i * 3 + 1], PRESS[i * 3 + 2]];
     }
   }
 };
+/** dress()'s work per vertex of the skin: the call that did it, its bare share (-1: none), and where it is pressed in (NaN: not). */
+let [DONE, BARE, PRESS] = [new Int32Array(0), new Float64Array(0), new Float64Array(0)];
+let dressed = 0;
 
 /** Appends the guard and the ideograms on the head joint at `at` turned by `q` (see solve()), on the woman's smaller head with `build`, in the team's `color`. */
-export const mask = (out: number[], at: Vec3, q: Quat, build = 0, color = GUARD) => {
-  const m = (made ??= make());
+export const mask = (
+  out: Out,
+  at: Vec3,
+  q: Quat,
+  build = 0,
+  color = GUARD,
+  /** A far runner's: fewer quads. */
+  far = false,
+) => {
+  const m = (made[+far] ??= make(far));
   const o = bindOf(0)[J.HEAD];
   const k = build ? HEAD_SCALE : 1;
   let w = out.length;
+  const dst = room(out, (m.length / 7) * STRIDE);
+  const [wire, groove] = [GUARD.map(c => c * 2.6), color.map(c => c * 0.45)];
+  const [qx, qy, qz, qw] = q;
   for (let i = 0; i < m.length; i += 7, w += 10) {
-    const p = turn(q, [(m[i] - o[0]) * k, (m[i + 1] - o[1]) * k, (m[i + 2] - o[2]) * k]);
-    const n = turn(q, [m[i + 3], m[i + 4], m[i + 5]]);
+    // turn() written out, twice, in plain numbers: the guard is some nine thousand vertices a frame.
+    const x = (m[i] - o[0]) * k;
+    const y = (m[i + 1] - o[1]) * k;
+    const z = (m[i + 2] - o[2]) * k;
+    const tx = 2 * (qy * z - qz * y);
+    const ty = 2 * (qz * x - qx * z);
+    const tz = 2 * (qx * y - qy * x);
+    dst[w] = at[0] + (x + qw * tx + qy * tz - qz * ty);
+    dst[w + 1] = at[1] + (y + qw * ty + qz * tx - qx * tz);
+    dst[w + 2] = at[2] + (z + qw * tz + qx * ty - qy * tx);
+    const nx = m[i + 3];
+    const ny = m[i + 4];
+    const nz = m[i + 5];
+    const sx = 2 * (qy * nz - qz * ny);
+    const sy = 2 * (qz * nx - qx * nz);
+    const sz = 2 * (qx * ny - qy * nx);
+    dst[w + 3] = nx + qw * sx + qy * sz - qz * sy;
+    dst[w + 4] = ny + qw * sy + qz * sx - qx * sz;
+    dst[w + 5] = nz + qw * sz + qx * sy - qy * sx;
     const shade = m[i + 6];
     const rgb =
       shade == TEAM
         ? color
         : shade == WIRE
-          ? GUARD.map(c => c * 2.6)
+          ? wire
           : shade == BLACK
             ? INK
             : shade == GROOVE
-              ? color.map(c => c * 0.45)
+              ? groove
               : GUARD.map(c => (c * shade) / 0.9);
-    out[w] = at[0] + p[0];
-    out[w + 1] = at[1] + p[1];
-    out[w + 2] = at[2] + p[2];
-    out[w + 3] = n[0];
-    out[w + 4] = n[1];
-    out[w + 5] = n[2];
-    out[w + 6] = rgb[0];
-    out[w + 7] = rgb[1];
-    out[w + 8] = -1;
-    out[w + 9] = rgb[2];
+    dst[w + 6] = rgb[0];
+    dst[w + 7] = rgb[1];
+    dst[w + 8] = -1;
+    dst[w + 9] = rgb[2];
   }
+  out.length = w;
 };

@@ -80,6 +80,8 @@ import { armor } from './armor';
 import { CUFF, CUFF_NEAR, CUFF_SIDES, REGION, body, palette, skin } from './skin';
 import { CLOTH } from './mask';
 import { createTrail } from './trail';
+import { room } from './verts';
+import type { Out } from './verts';
 
 export type Solved = ReturnType<typeof solve>;
 
@@ -103,7 +105,7 @@ export interface Body {
   /** The joints for a camera at `eye`; undefined without a player, or with the camera away from the body. */
   pose(eye: Vec3, yaw: number, pitch: number, roll?: number): Solved | undefined;
   /** Appends the body's vertices (see STRIDE) in the jacket `color`; nothing when pose() has none. */
-  draw(out: number[], eye: Vec3, yaw: number, pitch: number, roll?: number, color?: number[]): void;
+  draw(out: Out, eye: Vec3, yaw: number, pitch: number, roll?: number, color?: number[]): void;
   /** The own player's character (BUILD in rig.ts, PlayerInfo.body): the woman's arms are slimmer and her hands smaller, on the same grips; `tone` the skin he picked (the default's when absent). */
   wear(build: number, tone?: number[], ninja?: boolean): void;
 }
@@ -611,7 +613,7 @@ const SHELL = [0.09, 0.09, 0.1];
  * each; a hard shell over the knuckles, a padded plate on the back, a strap round the wrist.
  */
 export const hand = (
-  out: number[],
+  out: Out,
   end: Vec3,
   f: Vec3,
   u: Vec3,
@@ -627,19 +629,62 @@ export const hand = (
   /** A near runner's hand: fewer sides, on the near sleeve's cuff, and none of the glove's small parts. */
   lite = false,
 ) => {
+  // A hand is built in its own space, the same as long as nothing it is made of changes (a grip
+  // held, the hand at rest): some ten thousand vertices that are then only carried to the wrist.
+  const key = `${+lite} ${curl} ${point} ${push} ${to} ${cup} ${tint} ${bare} ${+(bare === tint)}`;
+  let m = BUILT.get(key);
+  if (!m) {
+    if (BUILT.size >= KEPT) {
+      BUILT.clear();
+    }
+    BUILT.set(key, (m = shape(curl, tint, point, push, to, bare, cup, lite)));
+  }
+  // Hand space (x toward the thumb, y the back, z toward the fingers), a point and a direction, to the world.
+  let o = out.length;
+  const dst = room(out, (m.length / 9) * STRIDE);
+  for (let i = 0; i < m.length; i += 9, o += STRIDE) {
+    const x = m[i];
+    const y = m[i + 1];
+    const z = m[i + 2];
+    const a = m[i + 3];
+    const b = m[i + 4];
+    const c = m[i + 5];
+    dst[o] = end[0] + th[0] * x + u[0] * y + f[0] * z;
+    dst[o + 1] = end[1] + th[1] * x + u[1] * y + f[1] * z;
+    dst[o + 2] = end[2] + th[2] * x + u[2] * y + f[2] * z;
+    dst[o + 3] = th[0] * a + u[0] * b + f[0] * c;
+    dst[o + 4] = th[1] * a + u[1] * b + f[1] * c;
+    dst[o + 5] = th[2] * a + u[2] * b + f[2] * c;
+    dst[o + 6] = m[i + 6];
+    dst[o + 7] = m[i + 7];
+    dst[o + 8] = -1;
+    dst[o + 9] = m[i + 8];
+  }
+  out.length = o;
+};
+
+/** The hands built in their own space, by what they are made of; forgotten all at once past KEPT (a grip closing makes a new one a frame). */
+const BUILT = new Map<string, number[]>();
+const KEPT = 128;
+
+/** hand()'s vertices in the hand's own space: position, normal and colour, nine numbers each. */
+const shape = (
+  curl: number,
+  tint: number[],
+  point: number,
+  push: number,
+  to: Vec3 | undefined,
+  bare: number[],
+  cup: number,
+  lite: boolean,
+): number[] => {
+  const out: number[] = [];
   const [FS, CS] = lite ? [4, CUFF_NEAR] : [FINGER_SIDES, CUFF_SIDES];
   let paint = (_: number) => tint;
-  /** Hand space (x toward the thumb, y the back, z toward the fingers), a point and a direction, to the world, in `paint` of its ring. */
+  /** A point and a direction in hand space, in `paint` of its ring. */
   const put = ([x, y, z]: Vec3, [m, n, w]: Vec3, r = 0) => {
     const c = paint(r);
-    out.push(
-      ...[0, 1, 2].map(d => end[d] + th[d] * x + u[d] * y + f[d] * z),
-      ...[0, 1, 2].map(d => th[d] * m + u[d] * n + f[d] * w),
-      c[0],
-      c[1],
-      -1,
-      c[2],
-    );
+    out.push(x, y, z, m, n, w, c[0], c[1], c[2]);
   };
   // The palm starts as the sleeve's cuff does, vertex for vertex, its normals leaning to the fingers.
   const PALM = [
@@ -872,7 +917,7 @@ export const hand = (
     }
   }
   if (lite) {
-    return;
+    return out;
   }
   /** The back of the palm at `z` forward and `x` across, its height in the hand. */
   const back = (z: number, x = 0) => {
@@ -969,6 +1014,7 @@ export const hand = (
     6,
     put,
   );
+  return out;
 };
 
 /** What a hand does besides closing (hand()): the left index pointing, the right thumb pushing toward `to`, the left thumb cupped. */
@@ -986,7 +1032,7 @@ export interface Grip {
  * a near runner's hand, `skip` a hand not drawn (the one a cut took off with its arm).
  */
 export const hands = (
-  out: number[],
+  out: Out,
   s: Solved,
   build: number,
   curls: number[],
@@ -1017,9 +1063,10 @@ export const hands = (
       i ? 0 : cup,
       lite,
     );
+    const a = room(out, 0);
     for (let k = at; build && k < out.length; k += STRIDE) {
       for (let d = 0; d < 3; d++) {
-        out[k + d] = s.pos[j][d] + HAND_F * (out[k + d] - s.pos[j][d]);
+        a[k + d] = s.pos[j][d] + HAND_F * (a[k + d] - s.pos[j][d]);
       }
     }
   });

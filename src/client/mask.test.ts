@@ -118,3 +118,27 @@ describe('mask, the ninja hood and face guard', () => {
     expect(nose).toBeGreaterThan(guard);
   });
 });
+
+describe('mask on a far runner (the user, 2026-11-14: lags in a match)', () => {
+  const RED = [0.9, 0.1, 0.1];
+  const draw = (far: boolean) => {
+    const v: number[] = [];
+    mask(v, bindOf(0)[J.HEAD], [0, 0, 0, 1], 0, RED, far);
+    return Array.from({ length: v.length / STRIDE }, (_, i) =>
+      v.slice(i * STRIDE, i * STRIDE + STRIDE),
+    );
+  };
+  const [near, far] = [draw(false), draw(true)];
+
+  it('takes under a quarter of the vertices, over the same face, in the same colours', () => {
+    expect(far.length * 4).toBeLessThan(near.length);
+    expect(far.length % 3).toBe(0);
+    for (let d = 0; d < 3; d++) {
+      const [a, b] = [near.map(p => p[d]), far.map(p => p[d])];
+      expect(Math.abs(Math.min(...b) - Math.min(...a))).toBeLessThan(0.003);
+      expect(Math.abs(Math.max(...b) - Math.max(...a))).toBeLessThan(0.003);
+    }
+    const colours = (ps: number[][]) => new Set(ps.map(p => `${p[6]} ${p[7]} ${p[9]}`));
+    expect(colours(far)).toEqual(colours(near));
+  });
+});

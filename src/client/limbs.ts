@@ -15,6 +15,8 @@ import { JOINT as J, axis, mul, solve, turn } from './rig';
 import type { Quat } from './rig';
 import { hands } from './body';
 import { REGION, cut, palette, skin } from './skin';
+import { room } from './verts';
+import type { Out } from './verts';
 
 /** How closed the hand of an arm cut off is (hand() in body.ts). */
 export const LIMP = 0.35;
@@ -163,7 +165,7 @@ export const track = (
  * the body; an arm with its hand, limp, in a space suit's glove on `suit`.
  */
 export const piece = (
-  out: number[],
+  out: Out,
   c: Piece,
   colors: number[][],
   lod: number,
@@ -191,12 +193,13 @@ export const piece = (
       other,
     );
   }
+  const a = room(out, 0);
   for (let i = from; i < out.length; i += STRIDE) {
-    const x = turn(c.q, [out[i] - c.c[0], out[i + 1] - c.c[1], out[i + 2] - c.c[2]]);
-    const nv = turn(c.q, [out[i + 3], out[i + 4], out[i + 5]]);
+    const x = turn(c.q, [a[i] - c.c[0], a[i + 1] - c.c[1], a[i + 2] - c.c[2]]);
+    const nv = turn(c.q, [a[i + 3], a[i + 4], a[i + 5]]);
     for (let k = 0; k < 3; k++) {
-      out[i + k] = x[k] + c.p[k] - (k == 1 ? sink : 0);
-      out[i + 3 + k] = nv[k];
+      a[i + k] = x[k] + c.p[k] - (k == 1 ? sink : 0);
+      a[i + 3 + k] = nv[k];
     }
   }
 };

@@ -7,6 +7,7 @@ import { add, dot, dress, mix, place, smooth, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
+import type { Out } from './verts';
 
 /** The pouch: a soft box, and the spare's glowing top. Unit sized, scaled where it is placed. */
 const BAG = dress(
@@ -57,7 +58,7 @@ export const pouchAt = (at: Vec3, q: Quat): [Vec3, Vec3[]] => [
 ];
 
 /** Appends the pouch, and the spare's top 8 mm out of it, for the pelvis at `at` turned by `q`. */
-export const pouch = (out: number[], at: Vec3, q: Quat) => {
+export const pouch = (out: Out, at: Vec3, q: Quat) => {
   const [m, ax] = pouchAt(at, q);
   place(out, BAG, m, ax, [0, 0, 0], [0.019, 0.026, 0.08]);
   place(out, CAP, add(m, ax[2].map(v => -0.008 * v) as Vec3), ax, [0, 0, 0], [0.012, 0.012, 0.012]);

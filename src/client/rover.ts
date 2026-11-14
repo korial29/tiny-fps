@@ -27,6 +27,7 @@ import {
 } from './mesh';
 import type { Vec3 } from './mesh';
 import { char, pose } from './wreck';
+import type { Out } from './verts';
 
 const { A, B, WR, L0 } = ROVER;
 /** The wheels, front left, front right, rear left, rear right: metres along the nose and to the right. */
@@ -131,7 +132,7 @@ export const LINK = pipe(3);
 export const TUBE = pipe(4);
 
 /** A tube from a to b, r thick. */
-export const rod = (o: number[], tube: number[], a: Vec3, b: Vec3, r: number, rgb: number[]) => {
+export const rod = (o: Out, tube: number[], a: Vec3, b: Vec3, r: number, rgb: number[]) => {
   const d = sub(b, a);
   segment(o, tube, a, b, Math.abs(d[1]) > Math.abs(d[0]) ? [1, 0, 0] : [0, 1, 0], 1, r, rgb);
 };
@@ -708,7 +709,7 @@ export const contacts = (r: Rover, w: World): Vec3[] => {
  * wreck sagged on splayed wheels, charred, falling apart at the end.
  */
 export const rover = (
-  out: number[],
+  out: Out,
   state: Rover,
   w: World,
   spin: number,

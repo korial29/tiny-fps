@@ -7,8 +7,10 @@
 // on the chest at the neck's foot.
 import { GILT, GLOSS, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, turn } from './rig';
+import { JOINT as J } from './rig';
 import type { Quat } from './rig';
+import { room } from './verts';
+import type { Out } from './verts';
 
 /**
  * A lame, from the arm's joint at rest (metres, +x out): where it starts and ends across, its half
@@ -151,9 +153,9 @@ const bellN = (u: number, v: number): Vec3 => {
 export const BAND = { rows: [8], shade: 2 };
 
 /** A lame's quads across and along it (its top shaded round, so ten across). */
-const [COLS, ROWS] = [10, 6];
+const [LAME_COLS, LAME_ROWS] = [10, 6];
 /** A lame's quads: its top and underside, its inner end, its front and back edges. */
-export const LAME_QUADS = COLS * ROWS * 2 + COLS + ROWS * 2;
+export const LAME_QUADS = LAME_COLS * LAME_ROWS * 2 + LAME_COLS + LAME_ROWS * 2;
 
 /**
  * The ninja's colours (the user, 2026-11-13: vary them): gold shoulder pads that shine (GILT; a darker
@@ -163,10 +165,18 @@ export const LAME_QUADS = COLS * ROWS * 2 + COLS + ROWS * 2;
 export const GOLD = [0.6, 0.4, 0.09];
 export const COLLAR_CLOTH = [0.3, 0.18, 0.1];
 
-let made: number[][] | undefined;
+/** Built once at each level: the full one, and the far one (`pads()`'s `far`). */
+const made: number[][][] = [];
 
-/** The right pad at rest: triangles of [x, y, z, nx, ny, nz, shade], the shade 1 on top. */
-const make = () => {
+/**
+ * A far runner's pieces: a lame's quads across and along it, the collar's round it, the bell's
+ * round it and the heights down it where its rows meet (the band's row kept as it is).
+ */
+const FAR = { cols: 4, rows: 3, collar: 8, bell: 10, down: [0, 0.2, 0.4, 0.55, 8 / 12, 9 / 12, 1] };
+
+/** The right pad at rest: triangles of [x, y, z, nx, ny, nz, shade], the shade 1 on top. Coarser `far`. */
+const make = (far: boolean) => {
+  const [COLS, ROWS] = far ? [FAR.cols, FAR.rows] : [LAME_COLS, LAME_ROWS];
   let out: number[] = [];
   const quad = (p: Vec3[], shade: number) => {
     // Its normal off its diagonals; its corners wound to face that way.
@@ -211,12 +221,15 @@ const make = () => {
   }
   const pad = out;
   out = [];
-  for (let c = 0; c < 16; c++) {
-    const [u0, u1] = [c / 8 - 1, (c + 1) / 8 - 1];
-    for (const [v0, v1] of [
-      [0, 0.5],
-      [0.5, 1],
-    ]) {
+  const round = far ? FAR.collar : 16;
+  for (let c = 0; c < round; c++) {
+    const [u0, u1] = [c / (round / 2) - 1, (c + 1) / (round / 2) - 1];
+    for (const [v0, v1] of far
+      ? [[0, 1]]
+      : [
+          [0, 0.5],
+          [0.5, 1],
+        ]) {
       quad([ring(u0, v0), ring(u0, v1), ring(u1, v1), ring(u1, v0)], 1);
       quad(
         [ring(u0, v0, THICK), ring(u1, v0, THICK), ring(u1, v1, THICK), ring(u0, v1, THICK)],
@@ -231,16 +244,17 @@ const make = () => {
   }
   const collar = out;
   out = [];
-  const [BC, BR] = [20, 12];
+  const [BC, BR] = [far ? FAR.bell : 20, 12];
+  const down = far ? FAR.down : Array.from({ length: BR + 1 }, (_, r) => r / BR);
   for (let c = 0; c < BC; c++) {
     const [u0, u1] = [(2 * c) / BC - 1, (2 * (c + 1)) / BC - 1];
-    for (let r = 0; r < BR; r++) {
-      const [v0, v1] = [r / BR, (r + 1) / BR];
+    for (let r = 0; r + 1 < down.length; r++) {
+      const [v0, v1] = [down[r], down[r + 1]];
       // Its outer face, each corner with the surface's own normal.
       const from = out.length;
       quad(
         [bell(u0, v0), bell(u0, v1), bell(u1, v1), bell(u1, v0)],
-        BAND.rows.includes(r) ? BAND.shade : 1,
+        BAND.rows.some(b => v0 === b / BR && v1 === (b + 1) / BR) ? BAND.shade : 1,
       );
       [
         [u0, v0],
@@ -272,38 +286,54 @@ const make = () => {
  * round them in `band` (the astronaut's team colour on his white bells).
  */
 export const pads = (
-  out: number[],
+  out: Out,
   s: { pos: Vec3[]; rot: Quat[] },
   build = 0,
   color = [0.5, 0.5, 0.5],
   marine = false,
   band = color,
+  /** A far runner's: fewer quads. */
+  far = false,
 ) => {
-  const [lames, collar, shell] = (made ??= make());
+  const [lames, collar, shell] = (made[+far] ??= make(far));
   const pad = marine ? shell : lames;
   // Hers smaller; her bells slimmer still (the user, 2026-11-13: over the shoulder, but finer).
   const k = build ? (marine ? BELL.fem : 0.9) : 1;
   let w = out.length;
+  const dst = room(out, ((2 * pad.length + (marine ? 0 : collar.length)) / 7) * STRIDE);
   /** The piece `m` at `o` turned by `rot`, mirrored with `side` -1; of `cloth` when given, matte. */
   const place = (m: number[], o: Vec3, rot: Quat, side: number, cloth?: number[]) => {
+    const [qx, qy, qz, qw] = rot;
     for (let i = 0; i < m.length; i += 7 * 3) {
       // Mirrored: its corners in the other order.
-      for (const c of side > 0 ? [0, 1, 2] : [0, 2, 1]) {
-        const j = i + c * 7;
-        const p = turn(rot, [m[j] * k * side, m[j + 1] * k, m[j + 2] * k]);
-        const d = turn(rot, [m[j + 3] * side, m[j + 4], m[j + 5]]);
+      for (let e = 0; e < 3; e++) {
+        const j = i + (side > 0 ? e : (3 - e) % 3) * 7;
+        // turn() written out, in plain numbers: a pad is some three thousand vertices a frame.
+        const x = m[j] * k * side;
+        const y = m[j + 1] * k;
+        const z = m[j + 2] * k;
+        const tx = 2 * (qy * z - qz * y);
+        const ty = 2 * (qz * x - qx * z);
+        const tz = 2 * (qx * y - qy * x);
+        dst[w] = o[0] + (x + qw * tx + qy * tz - qz * ty);
+        dst[w + 1] = o[1] + (y + qw * ty + qz * tx - qx * tz);
+        dst[w + 2] = o[2] + (z + qw * tz + qx * ty - qy * tx);
+        const nx = m[j + 3] * side;
+        const ny = m[j + 4];
+        const nz = m[j + 5];
+        const sx = 2 * (qy * nz - qz * ny);
+        const sy = 2 * (qz * nx - qx * nz);
+        const sz = 2 * (qx * ny - qy * nx);
+        dst[w + 3] = nx + qw * sx + qy * sz - qz * sy;
+        dst[w + 4] = ny + qw * sy + qz * sx - qx * sz;
+        dst[w + 5] = nz + qw * sz + qx * sy - qy * sx;
         const banded = m[j + 6] == BAND.shade;
-        const [rgb, shade] = banded ? [band, 1] : [cloth ?? color, m[j + 6]];
-        out[w] = o[0] + p[0];
-        out[w + 1] = o[1] + p[1];
-        out[w + 2] = o[2] + p[2];
-        out[w + 3] = d[0];
-        out[w + 4] = d[1];
-        out[w + 5] = d[2];
-        out[w + 6] = rgb[0] * shade;
-        out[w + 7] = rgb[1] * shade;
-        out[w + 8] = shade != 1 || cloth ? -1 : marine ? GLOSS : GILT;
-        out[w + 9] = rgb[2] * shade;
+        const rgb = banded ? band : (cloth ?? color);
+        const shade = banded ? 1 : m[j + 6];
+        dst[w + 6] = rgb[0] * shade;
+        dst[w + 7] = rgb[1] * shade;
+        dst[w + 8] = shade != 1 || cloth ? -1 : marine ? GLOSS : GILT;
+        dst[w + 9] = rgb[2] * shade;
         w += STRIDE;
       }
     }
@@ -319,4 +349,5 @@ export const pads = (
   if (!marine) {
     place(collar, s.pos[J.NECK], s.rot[J.CHEST], 1, COLLAR_CLOTH);
   }
+  out.length = w;
 };

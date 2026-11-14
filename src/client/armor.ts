@@ -114,8 +114,9 @@ export const CUFF = {
  * arm's line at `cx`, its half sizes across (`x`) and front to back (`z`) growing in a straight line
  * from the wrist to the elbow, the heights `y`, clear of the skin; then the flare and the ridge. Its
  * end slopes in toward the hand in a flat bevel (the user, 2026-11-14: thinner, an angular slope
- * toward the hands, then steeper, aggressive), `in` over its last `h`; and that end is cut on a
- * slant, `cut` higher on the inside of the arm than over the back of the hand, in straight lines.
+ * toward the hands, then steeper, aggressive, smooth), `in` over its last `h`; and that end is cut
+ * to a point over the back of the hand, an arrow (the user liked it: more), `cut` higher on the
+ * inside of the arm, in straight lines.
  */
 export const CAST = {
   cx: 0.222,
@@ -123,8 +124,8 @@ export const CAST = {
   x: [0.041, 0.051],
   z: [0.048, 0.059],
   n: 3,
-  bevel: { h: 0.03, in: 0.024 },
-  cut: 0.035,
+  bevel: { h: 0.032, in: 0.024 },
+  cut: 0.06,
 };
 const cuff = (a: number) => CUFF.y + CUFF.rise * smooth(CUFF.a[0], CUFF.a[1], Math.abs(a));
 const vambrace = (x: number, y: number) =>
@@ -1076,7 +1077,8 @@ const castR = (t: number, y: number, side: number) => {
   const [c, s] = [Math.cos(t), Math.sin(t)];
   const r =
     (Math.abs(c / ax) ** CAST.n + Math.abs(s / az) ** CAST.n) ** (-1 / CAST.n) -
-    CAST.bevel.in * Math.max(0, 1 - (y - castLow(90 + (t * 180) / Math.PI)) / CAST.bevel.h);
+    // Curved into the plate at its top: a crease there was cut in steps by the skin's triangles.
+    CAST.bevel.in * Math.max(0, 1 - (y - castLow(90 + (t * 180) / Math.PI)) / CAST.bevel.h) ** 2;
   return r + vambrace(side * (CAST.cx + r * c), y);
 };
 
@@ -1262,8 +1264,10 @@ const cook = (s: Skin, fine: boolean): Recipe => {
       // A moulded plate's curves, finer still: the woman's domes. Not close up too: on the near
       // skin its outline went by the skin's big triangles, in steps, and the V at the neck was gone
       // (the user, 2026-11-13: smooth the stairs on the pecs).
-      const pieces =
-        region.mould || region.cast
+      const pieces = region.cast
+        ? // Its bevel's curve, finer still close up.
+          split(fine ? split(split([tri])) : [tri])
+        : region.mould
           ? split(fine ? split([tri]) : [tri])
           : fine && (region.round || region.low || region.high)
             ? split([tri])

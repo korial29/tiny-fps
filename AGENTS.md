@@ -49,6 +49,17 @@ npm run size        # gzip budgets
 - Raw WebGL2: one scene program (depth passes included) and one small post-processing program. No three.js, no WASM.
 - Do not copy code from `carlini/js13k2019-yet-another-doom-clone`: it is GPL-3.0, this project is Apache-2.0. Its ideas (procedural textures, maps as compact data, shadow maps, jsfxr-style sound) are fair game; reimplement them.
 
+## Frame time comes next
+
+Read [docs/PERFORMANCE.md](docs/PERFORMANCE.md) before adding anything drawn every frame. Every runner, the own body and the vehicles are rebuilt on the CPU each frame, so the cost is per vertex; the JavaScript of a match frame stays under 8 ms. In short:
+
+- Count the vertices of what you add at every level (`CLOSE` 4 m, `NEAR` 10 m, far beyond, most runners far); a piece on a runner takes the level, its far version a quarter of the vertices or fewer. Say the counts in the PR.
+- Build once at rest and only carry it per frame; cache what depends on a few numbers (`hand()`); work per skin vertex, not per triangle corner (`dress()`).
+- No allocation in a loop over vertices: no array literals, destructuring, `map`, spread there; plain `const` numbers, writes by index.
+- Write into the frame's `Verts` (`verts.ts`): `out: Out`, `room(out, n)` then writes by index and `out.length = w`; never a new array per object. In the game a per-frame model gets only the `Verts`, never a plain array (that turned a 9 ms frame into 65 ms in Chrome); tests may pass `[]`.
+- No first-use cost in a frame of a match: prepare it when the map loads (`createRenderer()`, `Renderer.wear()`).
+- A pure speed-up changes no float: compare every vertex before and after. A level of detail is shown from its distance, before and after.
+
 ## Architecture
 
 - **The host is authoritative**: the Node server or the local host tab.

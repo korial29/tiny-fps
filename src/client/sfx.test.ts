@@ -471,11 +471,26 @@ describe('the rover', () => {
   });
 });
 
+describe('the pickups', () => {
+  it('sound each their own, short (the user, 2026-11-14): health, ammo, armour', () => {
+    const [pack, ammo, armor] = (['PACK', 'AMMO', 'ARMOR'] as const).map(sound);
+    expect([SOUND.AMMO, SOUND.ARMOR]).toEqual([56, 57]);
+    for (const s of [ammo, armor]) {
+      expect(s.length / RATE).toBeGreaterThan(0.1);
+      expect(s.length / RATE).toBeLessThan(0.8);
+      expect(Math.max(...s.map(Math.abs))).toBeGreaterThan(0.1);
+    }
+    // The armour's rings the longest, the ammo's is the shortest.
+    expect(armor.length).toBeGreaterThan(pack.length);
+    expect(ammo.length).toBeLessThan(armor.length);
+  });
+});
+
 describe('a vehicle’s damage', () => {
   it('has four sounds after all the others, whose ids stay: a hit on the hull, an arc, the explosion, the wreck falling apart', () => {
     expect([SOUND.HULL, SOUND.ARC, SOUND.WRECK, SOUND.CRUMBLE]).toEqual([47, 48, 49, 50]);
     expect([SOUND.DOOR, SOUND.SHUT]).toEqual([45, 46]);
-    expect(LAYERS).toHaveLength(56);
+    expect(LAYERS).toHaveLength(58);
     for (const id of [47, 48, 49, 50]) {
       expect(LOOPED).not.toContain(id);
     }

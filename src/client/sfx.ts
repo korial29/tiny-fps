@@ -155,6 +155,12 @@ export const SOUND = {
    */
   PAIN: 54,
   DEATH: 55,
+  /**
+   * The pickups' own sounds (the user, 2026-11-14: one for each), PACK being the health's: an ammo
+   * pack's clack of a magazine and a blip up a fifth; an armour's rising hum under a ringing chord.
+   */
+  AMMO: 56,
+  ARMOR: 57,
 } as const;
 
 /**
@@ -514,6 +520,18 @@ export const LAYERS: Voice[][] = [
     [2, 720, -0.8, 0.01, 0.2, 0.45, 0.05, 1, 0, 1, 0.3],
     [2, 1200, -0.8, 0.01, 0.15, 0.4, 0.05, 1, 0, 1, 0.15],
     [3, 1800, -0.5, 0.02, 0.15, 0.4, 0.6, 0.12, 0, 1, 0.35],
+  ],
+  // AMMO: two clacks of metal, and a square blip that steps up a fifth.
+  [
+    [3, 7000, 0, 0.001, 0, 0.025, 0, 0.6, 0, 1, 0.55],
+    [3, 4500, 0, 0.001, 0, 0.03, 0, 0.5, 0, 1, 0.5, 0.07],
+    [0, 392, 0, 0.003, 0.05, 0.07, 0, 0.3, 0.06, 1.5, 0.35, 0.03],
+  ],
+  // ARMOR: a low saw rising through a filter, a fifth ringing over it, a high shimmer.
+  [
+    [1, 110, 2, 0.01, 0.15, 0.25, 0, 0.25, 0, 1, 0.45],
+    [2, 660, 0, 0.02, 0.12, 0.35, 0.02, 1, 0.12, 1.5, 0.3, 0.05],
+    [2, 1320, 0.3, 0.02, 0.1, 0.4, 0.015, 1, 0, 1, 0.18, 0.1],
   ],
 ];
 

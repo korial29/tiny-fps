@@ -135,8 +135,12 @@ export const createFoley = (a: Audio): Foley => {
       const [fx, fz] = [-Math.sin(r.yaw), -Math.cos(r.yaw)];
       const u = clamp(Math.abs(r.vx * fx + r.vz * fz) / ROVER.VMAX);
       const gas = keys & (KEY.FORWARD | KEY.BACK) ? 1 : 0;
-      // It idles, revs with the speed and growls under the throttle.
-      engine.set(0.22 + 0.4 * u + 0.18 * gas, 0.6 + 1.1 * u + 0.12 * gas);
+      const boost = keys & KEY.SPRINT && keys & KEY.FORWARD ? 1 : 0;
+      // It idles, revs with the speed, growls under the throttle and howls on the boost.
+      engine.set(
+        0.22 + 0.4 * u + 0.18 * gas + 0.2 * boost,
+        0.6 + 1.1 * u + 0.12 * gas + 0.3 * boost,
+      );
       // Another rover, or this one parked again: nothing to compare.
       const same = was && dt > 0 && Math.hypot(r.x - was.x, r.y - was.y, r.z - was.z) < 5;
       const acc = same ? (r.vy - was.vy) / dt : 0;

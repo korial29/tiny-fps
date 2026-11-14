@@ -64,7 +64,8 @@
 //     where it is: the last snapshot that carries it); x, y, z in 1/32 m; the direction as a yaw in
 //     256ths of a turn and a pitch in 127ths of a quarter turn; power: the health it takes, or for an
 //     arc of energy bit 7 set and the CUT that threw it (Ball.arc) in bits 0-6, or for a grenade
-//     (power NADE) bit 6 set and its speed in whole m/s in bits 0-5 (Ball.v).
+//     (power NADE) bit 6 set and its speed in whole m/s in bits 0-5 (Ball.v), bit 7 too for a ship's
+//     missile (an arc's CUT never reaches bit 6).
 //   Then, only on a map with doors: the balls' count is always written (0 with none), and after
 //   the balls [doors u8], then a nibble a door, the first in the high half of its byte: how far it
 //   is open in fifteenths (Snapshot.doors). 1 + doors / 2 bytes, and 1 more when no ball flies.
@@ -342,7 +343,11 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setInt8(o + 9, Math.round(Math.asin(Math.max(-1, Math.min(1, b.dy))) * PITCH8));
     v.setUint8(
       o + 10,
-      b.arc ? 128 | b.arc : b.power === NADE ? 64 | Math.min(63, Math.round(b.v!)) : (b.power ?? 1),
+      b.arc
+        ? 128 | b.arc
+        : b.power === NADE
+          ? (b.missile ? 192 : 64) | Math.min(63, Math.round(b.v!))
+          : (b.power ?? 1),
     );
     o += SNAP_BALL;
   }
@@ -501,11 +506,13 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       dy: Math.sin(pitch),
       dz: -Math.cos(yaw) * Math.cos(pitch),
       burst: v.getUint8(o + 1) > 127,
-      ...(v.getUint8(o + 10) > 127
-        ? { power: 1, arc: v.getUint8(o + 10) & 127 }
-        : v.getUint8(o + 10) > 63
-          ? { power: NADE, v: v.getUint8(o + 10) & 63 }
-          : { power: v.getUint8(o + 10) }),
+      ...(v.getUint8(o + 10) > 191
+        ? { power: NADE, v: v.getUint8(o + 10) & 63, missile: true }
+        : v.getUint8(o + 10) > 127
+          ? { power: 1, arc: v.getUint8(o + 10) & 127 }
+          : v.getUint8(o + 10) > 63
+            ? { power: NADE, v: v.getUint8(o + 10) & 63 }
+            : { power: v.getUint8(o + 10) }),
     });
   }
   return {

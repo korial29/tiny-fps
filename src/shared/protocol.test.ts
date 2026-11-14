@@ -484,6 +484,13 @@ describe('snapshot frame', () => {
       ]);
     });
 
+    it("carry a ship's missile as a grenade with bit 7 set too", () => {
+      const buf = encodeSnapshot(snap([ball({ power: NADE, v: 61, missile: true })]));
+      expect(bytes(buf).at(-1)).toBe(192 | 61);
+      expect(decodeSnapshot(buf)!.balls![0]).toMatchObject({ power: NADE, v: 61, missile: true });
+      expect(decodeSnapshot(buf)!.balls![0].arc).toBeUndefined();
+    });
+
     it('carry the katana’s arcs of energy in the power byte: bit 7 and the cut that threw it', () => {
       const none = SNAP_HEAD + SNAP_MATCH + 2;
       const sent = [ball({ arc: CUT.ARC_L }), ball({ id: 7, arc: CUT.ARC_R }), ball({ power: 5 })];

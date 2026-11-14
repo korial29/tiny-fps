@@ -261,9 +261,12 @@ export const GUN_RANGE = 80;
 /**
  * A shot is a plasma ball (the user, 2026-11-06, Doom-like): it leaves the eye along the look at
  * PLASMA_SPEED m/s, is a sphere of PLASMA_R metres, and bursts on the first brush or enemy body it
- * touches (teammates and the shooter let it through). It lives GUN_RANGE / PLASMA_SPEED s.
+ * touches (teammates and the shooter let it through). It lives GUN_RANGE / PLASMA_SPEED s. The
+ * laser rifle's rounds fly at RIFLE_SPEED. Both were 40 until the user, 2026-11-14: the pistol's
+ * twice as fast, the rifle's ten times.
  */
-export const PLASMA_SPEED = 40;
+export const PLASMA_SPEED = 80;
+export const RIFLE_SPEED = 400;
 export const PLASMA_R = 0.12;
 /** Plasma balls in flight in a room at most: past it the oldest bursts. They go on the wire. */
 export const PLASMA_MAX = 64;
@@ -400,7 +403,7 @@ export const SLOW_SPEED = 3;
  * The laser rifle (the user, 2026-11-08), held in both hands, after Halo's assault rifle: taken at
  * the team's fourth rack with RIFLE_MAX rounds, it fires while FIRE is held, one round each
  * RIFLE_COOL ticks (20 a second) from a power cell of RIFLE_CLIP (RIFLE_RELOAD to swap). Each shot
- * is an instant beam RIFLE_RANGE metres along the look, drifted by up to RIFLE_DRIFT radians in a
+ * is a red ball at RIFLE_SPEED, RIFLE_RANGE metres along the look, drifted by up to RIFLE_DRIFT radians in a
  * pattern of the shot count; every RIFLE_HITS of them that enter an enemy take 1 hp from him.
  * Rounds and the cell are u8 on the wire.
  */
@@ -429,7 +432,12 @@ export const NADE_COOL = 60;
 export const NADE_HOLD = 7;
 export const NADE_SPEED = 36;
 export const NADE_RANGE = 150;
-export const NADE_R = 5;
+export const NADE_R = 8;
+/**
+ * A ship's missile (Ball.missile, rover.ts's missile()): a grenade that flies straight, no gravity,
+ * and whose blast reaches MISSILE_R metres (the user, 2026-11-14; the grenade's went 5 to 8 m).
+ */
+export const MISSILE_R = 14;
 export const NADE_HP = 5;
 
 /** Seconds a carrier who is made to drop the flag cannot take it again: he would pick it up where he stands. */

@@ -1,24 +1,15 @@
 // The plasma balls on screen. The own ones fly from the predicted shot at once, along the same
 // line as the host's and stopped by the same walls; the host's copy of one only tells where it
 // burst, when that is short of the wall (a body). The others' come from the snapshots and are
-// drawn INTERP_DELAY in the past like the players, flying on at PLASMA_SPEED from the last place
+// drawn INTERP_DELAY in the past like the players, flying on at their speed (speedOf()) from the last place
 // a snapshot gave. A ball is drawn from the muzzle that fired it and joins its true line in CATCH
 // seconds. The katana's arcs of energy fly the same way, at ARC_SPEED, from the eye. A grenade of
 // the rifle's launcher falls as it flies: the own one along the ticks the host's toss() gives it
 // from the predicted launch, the others' on the arc of the last snapshot's place, direction and
 // speed; it always ends in a burst. No DOM.
-import {
-  ARC_SPEED,
-  BOLT,
-  BOLT_SPEED,
-  INTERP_DELAY,
-  NADE,
-  PLASMA_R,
-  PLASMA_SPEED,
-  TICK_HZ,
-} from '../shared/constants';
+import { INTERP_DELAY, MISSILE_R, NADE, NADE_R, PLASMA_R, TICK_HZ } from '../shared/constants';
 import { gravity } from '../shared/physics';
-import { launch, lob, lobbed, toss, wave } from '../shared/plasma';
+import { launch, lob, lobbed, speedOf, toss, wave } from '../shared/plasma';
 import type { Ball, PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
@@ -54,6 +45,8 @@ interface Flight {
   path?: Vec3[];
   /** Another's grenade: its speed along `d` at `o`, m/s. */
   v?: number;
+  /** A ship's missile: it flies straight, and bursts MISSILE_R wide. */
+  missile?: boolean;
 }
 
 export interface Balls {
@@ -68,7 +61,7 @@ export interface Balls {
   frame(
     now: number,
     muzzle: (id: number) => Vec3 | undefined,
-  ): { orbs: Orb[]; bursts: [Vec3, number][] };
+  ): { orbs: Orb[]; bursts: [Vec3, number, number?][] };
 }
 
 const at = (b: { x: number; y: number; z: number }): Vec3 => [b.x, b.y, b.z];
@@ -158,6 +151,7 @@ export const createBalls = (world: World): Balls => {
               due: Infinity,
               power: b.power ?? 1,
               arc: b.arc,
+              missile: b.missile,
             }),
           );
         }
@@ -177,13 +171,12 @@ export const createBalls = (world: World): Balls => {
 
     frame(now, muzzle) {
       const orbs: Orb[] = [];
-      const bursts: [Vec3, number][] = [];
+      const bursts: [Vec3, number, number?][] = [];
       for (const [key, f] of live) {
         const t = f.own ? now : now - INTERP_DELAY;
         const nade = f.power === NADE;
         const dt = (t - f.t) / 1000;
-        const s =
-          ((t - f.t) * (f.arc ? ARC_SPEED : f.power === BOLT ? BOLT_SPEED : PLASMA_SPEED)) / 1000;
+        const s = ((t - f.t) * speedOf(f)) / 1000;
         const tick = Math.max(0, dt * TICK_HZ);
         const last = f.path ? f.path.length - 1 : 0;
         if (
@@ -193,7 +186,9 @@ export const createBalls = (world: World): Balls => {
           t >= f.due
         ) {
           if (f.pop) {
-            bursts.push([f.path ? f.path[last] : f.end!, f.power]);
+            const at = f.path ? f.path[last] : f.end!;
+            // A missile's burst is MISSILE_R wide, as many times a grenade's.
+            bursts.push(f.missile ? [at, f.power, MISSILE_R / NADE_R] : [at, f.power]);
           }
           if (f.own) {
             spent.add(key);
@@ -212,7 +207,7 @@ export const createBalls = (world: World): Balls => {
           const [a, b] = f.path
             ? [f.path[Math.floor(tick)], f.path[Math.floor(tick) + 1]]
             : [f.o, f.o];
-          const [k, v, g] = [tick % 1, f.v ?? 0, gravity(world)];
+          const [k, v, g] = [tick % 1, f.v ?? 0, f.missile ? 0 : gravity(world)];
           const to: Vec3 = f.path
             ? (b.map((c, i) => c - a[i]) as Vec3)
             : [f.d[0] * v, f.d[1] * v - g * dt, f.d[2] * v];

@@ -67,6 +67,13 @@ export const ROVER = {
   BRAKE: 14,
   ROLL: 0.6,
   HB: 6,
+  /**
+   * The boost (the user, 2026-11-14), Shift with W as on the ship: a rocket at the back pushes
+   * BOOST m/s² more along the nose, fading to nothing at VBOOST. It is not the tyres' (the moon's
+   * grip already caps the engine), so it pushes with any wheel down.
+   */
+  BOOST: 10,
+  VBOOST: 34,
   /** Grip sideways and in traction, as shares of the load; under the handbrake, the share left sideways and how much faster the nose comes round. */
   MU: 1.1,
   MUL: 1.2,
@@ -339,6 +346,7 @@ export const drive = (
   const keys = i ? i.keys : 0;
   const thr = (keys & KEY.FORWARD ? 1 : 0) - (keys & KEY.BACK ? 1 : 0);
   const hb = keys & KEY.JUMP;
+  const boost = thr > 0 && keys & KEY.SPRINT;
   const [fx, fz] = forward(r.yaw);
   const [cp, cr] = [cos(r.pitch), cos(r.roll)];
 
@@ -401,6 +409,9 @@ export const drive = (
         ? thr * ROVER.BRAKE
         : thr * ROVER.ENGINE * max(0, 1 - abs(vl) / (thr > 0 ? ROVER.VMAX : ROVER.VREV));
     let dl = clamp(push * DT, -MUL * grip, MUL * grip);
+    if (boost) {
+      dl += ROVER.BOOST * clamp(1 - vl / ROVER.VBOOST, 0, 1) * DT;
+    }
     // Rolling drag, the handbrake (on with nobody at the wheel) and the grip sideways are capped
     // impulses, like GRIP in physics.ts: they stop a speed, they never turn it round.
     const drag = (ROVER.ROLL + (hb || !i ? ROVER.HB : 0)) * load * DT;
@@ -684,8 +695,8 @@ export const bolts = (
 
 /**
  * A ship's missile from its pod `k` (0 left, 1 right) toward where its lasers cross: a grenade
- * (plasma.ts's toss() flies it, blast() is its burst) launched at MISSILE_SPEED plus the ship's own
- * speed along the way, 63 m/s at most (the wire's six bits).
+ * (plasma.ts's toss() flies it, straight, blast() to MISSILE_R is its burst) launched at
+ * MISSILE_SPEED plus the ship's own speed along the way, 63 m/s at most (the wire's six bits).
  */
 export const missile = (
   r: Rover,
@@ -714,5 +725,6 @@ export const missile = (
     burst: false,
     power: NADE,
     v: Math.min(63, SHIP.MISSILE_SPEED + Math.max(0, own)),
+    missile: true,
   };
 };

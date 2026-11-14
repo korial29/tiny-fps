@@ -1,11 +1,11 @@
 // The things lying on the roofs: a team's gun rack (a stand in its colour with a gun turning over
-// it) and the health packs (a white box with a glowing green cross, bobbing). Pure functions of the
+// it), the health packs (a white box with a glowing green cross, bobbing) and the armour. Pure functions of the
 // place and the clock, in the renderer's vertex format. Lit and shadowed, but the glow parts.
 import { RACK_R } from '../shared/constants';
 import { GLOW, glow, ring, teamRgb, tri } from './flag';
 import { gun, railgun, rifle } from './gun';
 import { sword } from './katana';
-import { STRIDE, basis, place, segment, solid } from './mesh';
+import { GILT, GLOSS, STRIDE, basis, dim, place, segment, solid } from './mesh';
 import type { Vec3 } from './mesh';
 import { room } from './verts';
 import type { Out } from './verts';
@@ -147,7 +147,7 @@ const SHIELD: Glyph = [
   ],
 ];
 
-/** A box of half side `h` turning and bobbing a little over `at` (on a top), `glyph` glowing in `lit` on each face. */
+/** A box of half side `h` turning and bobbing a little over `at` (on a top), `glyph` glowing in `lit` on each face, `k` times its size. */
 const crate = (
   out: Out,
   at: Vec3,
@@ -156,6 +156,7 @@ const crate = (
   rgb: number[],
   glyph: Glyph,
   lit: number[],
+  k = 1,
 ) => {
   const [r, , f] = basis(t * 0.9, 0);
   const o: Vec3 = [at[0], at[1] + 0.45 + 0.07 * Math.sin(t * 2.2 + at[0]), at[2]];
@@ -170,7 +171,8 @@ const crate = (
     tri(out, q(-h, -h, 1), q(h, h, 1), q(-h, h, 1), rgb);
     const from = out.length;
     for (const [a, b, c] of glyph) {
-      tri(out, q(...a, 1.01), q(...b, 1.01), q(...c, 1.01), lit);
+      const g = ([x, y]: [number, number]) => q(x * k, y * k, 1.01);
+      tri(out, g(a), g(b), g(c), lit);
     }
     const a = room(out, 0);
     for (let i = from; i < out.length; i += STRIDE) {
@@ -179,18 +181,151 @@ const crate = (
   }
 };
 
+/** How much bigger the health and ammo packs are than they were (the user, 2026-11-14: bigger). */
+const BIG = 1.5;
+
 /** A health pack at `at`: a white box with a glowing green cross on each side. */
 export const kit = (out: Out, at: Vec3, t: number) =>
-  crate(out, at, t, 0.17, [0.86, 0.9, 0.88], CROSS, [0.1, 1.2, 0.4]);
+  crate(out, at, t, 0.17 * BIG, [0.86, 0.9, 0.88], CROSS, [0.1, 1.2, 0.4], BIG);
 
 /** An ammo pack at `at`: a violet box with a glowing cyan cartridge on each side, the gun's colours. */
 export const cell = (out: Out, at: Vec3, t: number) =>
-  crate(out, at, t, 0.15, [0.34, 0.14, 0.58], BULLET, [0.3, 1.4, 1.8]);
+  crate(out, at, t, 0.15 * BIG, [0.34, 0.14, 0.58], BULLET, [0.3, 1.4, 1.8], BIG);
 
 /** A rail cell at `at`: a gunmetal box with a glowing violet-white bolt on each side, the rail gun's colours. */
 export const battery = (out: Out, at: Vec3, t: number) =>
   crate(out, at, t, 0.15, [0.14, 0.15, 0.18], BOLT, [1.1, 0.85, 2.6]);
 
-/** An armour at `at`: a bigger steel box with a glowing gold shield on each side. */
-export const vest = (out: Out, at: Vec3, t: number) =>
-  crate(out, at, t, 0.2, [0.3, 0.32, 0.36], SHIELD, [1.5, 1, 0.12]);
+/** The armour's green, its grooves', its inside's, and its glowing shield's. */
+const ARMOUR = [0.16, 0.85, 0.22];
+const GROOVE = [0.05, 0.26, 0.07];
+const INSIDE = [0.04, 0.12, 0.05];
+const EMBLEM = [0.9, 1.7, 0.35];
+
+/** The cuirass's half width and half depth at the height y (-0.25 to 0.25 m): broad at the chest, in at the waist. */
+const girth = (y: number): [number, number] => [
+  0.145 + 0.075 * Math.sqrt(Math.max(0, y + 0.25)),
+  0.09 + 0.05 * Math.sqrt(Math.max(0, y + 0.25)),
+];
+
+/**
+ * Its edges at the angle a round it (0 in front): the top dips in a neckline front and back and
+ * deep into an armhole at each side, the shoulders between; the bottom comes to a point in front.
+ */
+const edges = (a: number): [number, number] => {
+  const [c, s] = [Math.cos(a), Math.abs(Math.sin(a))];
+  return [
+    -0.25 - 0.05 * Math.max(0, c) ** 6,
+    0.25 - 0.24 * s ** 4 - 0.09 * Math.max(0, c) ** 8 - 0.04 * Math.max(0, -c) ** 8,
+  ];
+};
+
+/** The point of the cuirass at the angle a and the share t of the way up, `k` of its size. */
+const shellAt = (a: number, t: number, k = 1): Vec3 => {
+  const [lo, hi] = edges(a);
+  const y = lo + t * (hi - lo);
+  const [w, d] = girth(y);
+  // The chest stands out in front, over the belly.
+  const chest =
+    0.025 * Math.max(0, Math.cos(a)) ** 2 * Math.max(0, Math.sin((Math.PI * (y + 0.05)) / 0.3));
+  return [Math.sin(a) * w * k, y, -(Math.cos(a) * d + chest) * k];
+};
+
+let cuirass: number[] | undefined;
+
+/** The outward normal of the cuirass at the angle a and the share t of the way up. */
+const shellNormal = (a: number, t: number): Vec3 => {
+  const e = 1e-3;
+  const [p, q, r] = [shellAt(a, t), shellAt(a + e, t), shellAt(a, t + e)];
+  const [u, v] = [q.map((c, i) => c - p[i]), r.map((c, i) => c - p[i])];
+  const n: Vec3 = [u[2] * v[1] - u[1] * v[2], u[0] * v[2] - u[2] * v[0], u[1] * v[0] - u[0] * v[1]];
+  const l = Math.hypot(...n) || 1;
+  return n.map(c => c / l) as Vec3;
+};
+
+/**
+ * The armour (the user, 2026-11-14: a green armour as in Quake 3, and it must shine), built once in
+ * model space: a shell of polished green metal (GILT: a sharp highlight and the sky in it tinted by
+ * its colour, smooth normals so they glide) round the chest and back, open at the neck and the
+ * arms, grooves across the belly, a plate on each shoulder and a glowing shield on the chest.
+ */
+const armour = (): number[] => {
+  if (cuirass) {
+    return cuirass;
+  }
+  const out: number[] = [];
+  const [N, M] = [32, 16];
+  const at = (i: number, j: number, k: number) => shellAt(((i / N) * 2 - 1) * Math.PI, j / M, k);
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < M; j++) {
+      // The belly's grooves: the rows between its plates, in front.
+      const front = Math.abs(((i + 0.5) / N) * 2 - 1) < 0.35;
+      const [cr, cg, cb] = front && (j == 2 || j == 4 || j == 6) ? GROOVE : ARMOUR;
+      for (const [di, dj] of [
+        [0, 0],
+        [1, 1],
+        [1, 0],
+        [0, 0],
+        [0, 1],
+        [1, 1],
+      ]) {
+        const a = (((i + di) / N) * 2 - 1) * Math.PI;
+        out.push(...at(i + di, j + dj, 1), ...shellNormal(a, (j + dj) / M), cr, cg, GILT, cb);
+      }
+      // The inside, a little in, facing in.
+      const [e, f, g, h] = [
+        at(i, j, 0.96),
+        at(i + 1, j, 0.96),
+        at(i + 1, j + 1, 0.96),
+        at(i, j + 1, 0.96),
+      ];
+      tri(out, e, f, g, INSIDE);
+      tri(out, e, g, h, INSIDE);
+    }
+  }
+  for (let i = 0; i < out.length; i += STRIDE) {
+    if (out[i + 8] == -1) {
+      out[i + 8] = GLOSS;
+    }
+  }
+  // The shoulder plates, over the tops between the neck and the armholes, sloping down outward.
+  for (const x of [-1, 1]) {
+    place(
+      out,
+      solid(2, 0, [1]),
+      [x * 0.165, 0.19, 0.005],
+      basis(0, 0, x * 0.5),
+      [0, 0, 0],
+      [0.1, 0.045, 0.125],
+      ARMOUR,
+    );
+  }
+  for (let i = out.length - 2 * solid(2, 0, [1]).length; i < out.length; i += STRIDE) {
+    out[i + 8] = GILT;
+  }
+  // The shield on the chest, a little proud of it.
+  const z = shellAt(0, 0.62)[2] - 0.012;
+  const from = out.length;
+  for (const [p, q, r] of SHIELD) {
+    const v = (u: [number, number]): Vec3 => [u[0] * 0.55, shellAt(0, 0.62)[1] + u[1] * 0.55, z];
+    tri(out, v(p), v(q), v(r), EMBLEM);
+  }
+  for (let i = from; i < out.length; i += STRIDE) {
+    out[i + 8] = -2;
+  }
+  return (cuirass = out);
+};
+
+/** An armour at `at`: a green cuirass turning and bobbing over it, its shield pulsing. */
+export const vest = (out: Out, at: Vec3, t: number) => {
+  const from = out.length;
+  place(
+    out,
+    armour(),
+    [at[0], at[1] + 0.6 + 0.07 * Math.sin(t * 2.2 + at[0]), at[2]],
+    basis(t * 0.9, 0),
+    [0, 0, 0],
+    1,
+  );
+  dim(out, from, 0.75 + 0.25 * Math.sin(t * 3));
+};

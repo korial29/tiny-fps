@@ -3,7 +3,7 @@
 // lying flag, guard the base), goes there along nav.ts's legs, and shoots the enemies it sees. It
 // fights after UT2004's bots (docs/BOTS.md): a character drawn from its id and the room's skill,
 // strafes, jumps and dashes aside in a fight, and a dash out of the way of a ball coming at it.
-import { FALL_SAFE, PLASMA_SPEED, STEP_H, TICK_HZ } from './constants';
+import { FALL_SAFE, PLASMA_SPEED, RIFLE_SPEED, STEP_H, TICK_HZ } from './constants';
 import { eyeHeight, floorAt, forward, gravity, norm } from './physics';
 import { navOf, path, ROUTES } from './nav';
 import type { Edge, Nav, Vec3, Way } from './nav';
@@ -736,7 +736,7 @@ export class Bot {
     }
     const d = flat(p.x, p.z, q.x, q.z);
     // Lead him by the ball's flight.
-    const lead = d / PLASMA_SPEED;
+    const lead = d / (p.rifled ? RIFLE_SPEED : PLASMA_SPEED);
     const [tx, ty, tz] = [q.x + q.vx * lead, q.y + 1.1 + q.vy * lead, q.z + q.vz * lead];
     const want = toward(p.x, p.z, tx, tz);
     const rate = this.persona.turn;

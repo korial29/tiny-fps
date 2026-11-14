@@ -394,21 +394,24 @@ export const createCombat = (
           shing(was, me, undefined, f);
           reloads(was, me, undefined, f);
         }
-        // A hit on the armour hurts as one on the health; an armour taken sounds as a pack.
+        // A hit on the armour hurts as one on the health. Each pickup has its sound: an armour,
+        // a health pack, an ammo pack (more rounds in a gun he had); a gun taken is the gun's.
         if (was && life(me) < life(was)) {
           const died = me.down > 0 && !was.down;
           audio.play(died ? SOUND.DOWN : SOUND.HURT);
           cry(me.id, died);
           fx.wound();
         } else if (was && life(me) > life(was) && !was.down) {
-          audio.play(SOUND.PACK);
+          audio.play((me.armor ?? 0) > (was.armor ?? 0) ? SOUND.ARMOR : SOUND.PACK);
         }
-        if (
-          was &&
-          (((was.ammo < 0 || me.ammo > was.ammo) && me.ammo >= 0) ||
-            (me.rail ?? -1) > (was.rail ?? -1))
-        ) {
+        if (was && ((was.ammo < 0 && me.ammo >= 0) || (me.rail ?? -1) > (was.rail ?? -1))) {
           audio.play(SOUND.GUN);
+        } else if (
+          was &&
+          ((was.ammo >= 0 && me.ammo > was.ammo) ||
+            ((was.rifle ?? -1) >= 0 && (me.rifle ?? -1) > (was.rifle ?? -1)))
+        ) {
+          audio.play(SOUND.AMMO);
         }
         const trigger = !!(keys & KEY.FIRE);
         if (trigger && !held && (me.railed ? me.rail : me.ammo) == 0 && !me.down) {
@@ -589,15 +592,16 @@ export const createCombat = (
       });
       tracer.orbs(orbs);
       // The laser rifle's (power 0) burst red, with a deeper, louder thud.
-      for (const [at, k] of bursts) {
+      for (const [at, k, wide = 1] of bursts) {
         if (k === NADE) {
-          // A grenade: a fireball, a deep blast, and the view shaken within three radii of it.
-          tracer.blast(at);
+          // A grenade: a fireball, a deep blast, and the view shaken within three radii of it; a
+          // missile's `wide` times as big.
+          tracer.blast(at, wide);
           audio.play(SOUND.BLAST, at, 1.6, 0.45);
           audio.play(SOUND.TACKLE, at, 1.4, 0.4);
           audio.play(SOUND.SPLASH, at, 1.2, 0.35);
           const d = me ? Math.hypot(at[0] - me.x, at[1] - me.y - 1, at[2] - me.z) : Infinity;
-          fx.quake(Math.max(0, 1 - d / (3 * NADE_R)));
+          fx.quake(Math.max(0, 1 - d / (3 * NADE_R * wide)));
           continue;
         }
         tracer.burst(at, !k);

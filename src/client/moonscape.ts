@@ -30,6 +30,8 @@ import { hash } from './textures';
 /** The arena is x 0..W, z 0..Z, its middle C. */
 const [W, Z] = [160, 280];
 const C: Vec3 = [80, 0, 140];
+/** The point the Earth is placed from, SKY m off: the eye, in render.ts. */
+export const HEAVENS = C;
 /**
  * Radius of the star dome and the Earth's distance, metres: past the crater wall (drawn to 1.65
  * of the bound) and, at most 360 m more from a spot on the bound, inside the far clip (FAR).
@@ -1363,30 +1365,6 @@ const ranges = (o: number[], sun: Vec3) => {
   }
 };
 
-/** 3000 stars, tiny glowing squares facing the middle of the play area on a dome above the horizon. */
-const stars = (o: number[]) => {
-  for (let i = 0; i < 3000; i++) {
-    const h = (k: number) => hash(i, k, 31);
-    const y = -0.05 + 1.05 * h(1);
-    const [r, a] = [Math.sqrt(1 - y * y), h(2) * TAU];
-    const d: Vec3 = [r * Math.cos(a), y, r * Math.sin(a)];
-    const e = unit(cross(d, [0, 1, 0]));
-    const f = cross(d, e);
-    const s = 0.9 + 1.8 * h(3) ** 3;
-    const at = d.map((v, k) => C[k] + v * SKY) as Vec3;
-    const p = (u: number, v: number) => at.map((c, k) => c + (e[k] * u + f[k] * v) * s) as Vec3;
-    const t = h(5);
-    lit(o, 0.5 + 1.7 * h(4) ** 2, () =>
-      face(
-        o,
-        [p(-1, -1), p(1, -1), p(1, 1), p(-1, 1)],
-        [1 - 0.25 * t, 0.9 + 0.05 * t, 0.75 + 0.25 * t],
-        at.map((c, k) => c + d[k] * 100) as Vec3,
-      ),
-    );
-  }
-};
-
 /** The Earth: a disc of 60 m about 40 degrees up, toward blue's side, its cells coloured from noise on a globe: oceans, green and brown land, white clouds and ice. */
 const earth = (o: number[]) => {
   const dir = EARTH;
@@ -1456,7 +1434,12 @@ export const moonscape = (def: WorldDef): number[] => {
     sites(o, def);
   }
   ranges(o, unit(def.sun.dir as Vec3));
-  stars(o);
+  return o;
+};
+
+/** The Earth, drawn last: render.ts moves it with the eye from HEAVENS. The stars are drawn by the sky's shader. */
+export const heavens = (): number[] => {
+  const o: number[] = [];
   earth(o);
   return o;
 };

@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import * as ride from '../../test/ride';
 import { box, land } from '../../test/slope';
 import { duo } from '../../test/teams';
-import { RAIL_DRAIN, TICK_HZ, VEHICLE } from './constants';
+import { ORBIT, RAIL_DRAIN, TICK_HZ, VEHICLE } from './constants';
 import { MOON } from './moon';
 import { move } from './physics';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
 import { drive, hull, hulls, nearby, park } from './rover';
-import { SHIP, dock, limits, pilot, point, reach, struck } from './ship';
+import { SHIP, altitude, dock, limits, pilot, point, reach, struck } from './ship';
 import { KEY, MODE, NOBODY } from './types';
 import type { Conn, Input, PlayerState, Rover } from './types';
 import { build } from './world';
@@ -99,6 +99,21 @@ describe('a ship in flight (pilot)', () => {
     expect(r.y).toBeGreaterThan(SHIP.CEIL - SHIP.WARN);
     expect(r.y).toBeLessThan(SHIP.CEIL + 1);
     expect(limits(r, w)[0]).toBeGreaterThan(0.9);
+  });
+
+  it('climbs out of the crater into space, up to the top of ORBIT', () => {
+    expect(SHIP.CEIL).toBe(ORBIT.TOP);
+    expect(SHIP.CEIL + SHIP.OVER).toBeLessThan(1024);
+    expect(SHIP.CEIL).toBeGreaterThan(ORBIT.SEAM + 500);
+  });
+
+  it('is drawn and shown higher in space: its own height to the seam, ORBIT.ALT at the top', () => {
+    expect(altitude(120)).toBe(120);
+    expect(altitude(ORBIT.SEAM)).toBe(ORBIT.SEAM);
+    expect(altitude(ORBIT.SEAM + 1)).toBeCloseTo(ORBIT.SEAM, -1);
+    expect(altitude(ORBIT.TOP)).toBeCloseTo(ORBIT.ALT, 0);
+    expect(altitude(ORBIT.TOP + 12)).toBeCloseTo(ORBIT.ALT, 0);
+    expect(altitude(600)).toBeGreaterThan(altitude(500));
   });
 
   it('never leaves the crater: the way out fades near its edge, a push brings it back in', () => {

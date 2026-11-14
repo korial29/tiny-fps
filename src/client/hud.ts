@@ -9,6 +9,7 @@ import {
   RAIL_CAP,
   RAIL_MAX,
   NADE_MAX,
+  ORBIT,
   RIFLE_CLIP,
   RULES,
   TEAM_COLOR,
@@ -518,7 +519,13 @@ export interface ShipPanel {
 
 /** The warning of the nearest limit once one is within its last half of WARN, or ''. */
 export const warning = (up: number, out: number): string =>
-  Math.max(up, out) < 0.5 ? '' : up >= out ? 'CEILING · DESCEND' : 'CRATER EDGE · TURN BACK';
+  Math.max(up, out) < 0.5 ? '' : up >= out ? 'HIGH ORBIT · DESCEND' : 'CRATER EDGE · TURN BACK';
+
+/** The ship's height on its panel: metres under the edge of space, kilometres in orbit. */
+export const height = (alt: number): string =>
+  alt <= ORBIT.SEAM
+    ? `${Math.round(alt)} m`
+    : `${(alt / 1000).toFixed(alt < 10_000 ? 1 : 0)} km  ·  ORBIT`;
 
 /** Milliseconds a banner stays, and a hit marker. */
 export const BANNER_MS = 2800;
@@ -935,7 +942,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       warn.hidden = !w;
       set(warn, w);
       if (s) {
-        set(panel, `MISSILES ${s.nades}/${SHIP.MISSILES}  ·  ALT ${Math.round(s.alt)} m`);
+        set(panel, `MISSILES ${s.nades}/${SHIP.MISSILES}  ·  ALT ${height(s.alt)}`);
       }
     },
     hull(own, near) {

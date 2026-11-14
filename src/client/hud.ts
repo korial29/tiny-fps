@@ -4,6 +4,7 @@
 // event and the end screen of a match.
 import {
   GUN_MAG,
+  ARMOR_MAX,
   HP_MAX,
   RAIL_CAP,
   RAIL_MAX,
@@ -33,15 +34,18 @@ import type { Mark } from './marks';
  * sits in it: its flat top `NOTCH[2]` up from the bottom, `NOTCH[0]` and `NOTCH[1]` its half widths.
  */
 // Softened (the user, 2026-11-12): a short flat top and long, gentle shoulders, so it reads as a swell.
-const NOTCH = [5, 24, 21];
+// Its top lowered to just over the face (the user, 2026-11-14).
+const NOTCH = [5, 24, 18.8];
 /** The exponent of the outline's round ends: 2 a half circle, more squarer. */
 const ROUND = 3;
 export const rim = (): [number, number][] => {
   // Low on the screen (the user, 2026-11-12: lower it, then lower still): its lower edge runs off the bottom beside the notch.
-  const [x0, x1, y0, y1] = [4, 96, 12, 103];
+  // Wide, so the frame round it is thin (the user, 2026-11-14).
+  const [x0, x1, y0, y1] = [1, 99, 6, 103];
   const h = y1 - y0;
   // The helmet's own proportions: the ends' rise over the visor's height, and its frown, softened.
-  const rise = (VISOR.rise / (2 * VISOR.r[1])) * h;
+  // Its ends rise less than the helmet's, so the frame under it is thin (the user, 2026-11-14).
+  const rise = 0.4 * (VISOR.rise / (2 * VISOR.r[1])) * h;
   const frown = ((0.6 * VISOR.frown) / (2 * VISOR.r[1])) * h;
   const t = (x: number) => Math.abs(x - 50) / ((x1 - x0) / 2);
   // The frown's point is rounded over a few hundredths of the width.
@@ -75,22 +79,33 @@ export const rim = (): [number, number][] => {
  * RIM as a background, with the sheen the rounded rim had: inside the outline only (it clips itself),
  * a soft pale glow, a shade along the lower edge and a heavier one under the brow, and no line (the
  * user, 2026-11-12: no white border). Widths in pixels whatever the screen's size; the glass itself is not filled.
+ * BLUR, where the view is blurred: outside the outline, and a soft band inside it, so the view goes
+ * out of focus toward the glass's edge (the user, 2026-11-13; stronger and wider, 2026-11-14).
  */
-const RIM = (() => {
+const [RIM, BLUR] = (() => {
   const pts = rim().map(([x, y]) => `${x} ${+y.toFixed(2)}`);
   const d = `M${pts.join('L')}Z`;
   const half = pts.length / 2;
   const [brow, jaw] = [pts.slice(0, half), pts.slice(half)].map(l => `M${l.join('L')}`);
   const line = (path: string, colour: string, alpha: number, width: number) =>
     `<path d="${path}" fill="none" stroke="${colour}" stroke-opacity="${alpha}" stroke-width="${width}" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><clipPath id="c"><path d="${d}"/></clipPath><g clip-path="url(#c)">` +
-      line(brow, '#000', 0.16, 70) +
-      line(brow, '#000', 0.2, 34) +
-      line(jaw, '#000', 0.14, 30) +
-      line(d, '#fff', 0.05, 34) +
-      `</g></svg>`,
-  )}")`;
+  const svg = (body: string) =>
+    `url("data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none">${body}</svg>`,
+    )}")`;
+  return [
+    svg(
+      `<clipPath id="c"><path d="${d}"/></clipPath><g clip-path="url(#c)">` +
+        line(brow, '#000', 0.16, 70) +
+        line(brow, '#000', 0.2, 34) +
+        line(jaw, '#000', 0.14, 30) +
+        line(d, '#fff', 0.05, 34) +
+        `</g>`,
+    ),
+    svg(
+      `<filter id="f"><feGaussianBlur stdDeviation="5"/></filter><path d="M-20-20H120V120H-20Z${d}" fill-rule="evenodd" stroke="#000" stroke-width="18" filter="url(#f)"/>`,
+    ),
+  ];
 })();
 
 export const HUD_CSS =
@@ -178,6 +193,8 @@ export const HUD_CSS =
   `filter:drop-shadow(0 3px 0 #500) drop-shadow(0 0 14px #f604)}` +
   `ul{left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:4px;list-style:none}li{width:16px;height:6px;background:#fff;box-shadow:0 0 0 1px #0008}` +
   `li.e{background:#0000;box-shadow:inset 0 0 0 1px #fffb,0 0 0 1px #0008}ul.low li{background:#f55}ul.low li.e{background:#0000}` +
+  // The armour: gold pips after the health, only the ones there.
+  `ul li.a{background:#fc3}li.a.e{display:none}li:not(.a)+li.a{margin-left:6px}` +
   `dl{right:12px;bottom:10px;display:flex;align-items:center;gap:10px}dl svg{width:38px;fill:#fff;filter:drop-shadow(0 1px 1px #000)}` +
   `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data,dl.k span{display:none}dl.w data{opacity:.35}dl.k svg{width:64px;fill:#8ef}dl.r svg{fill:#c9f}dl.r data{color:#dcf}dl.f svg{fill:#f86}dl.f data{color:#fdb}dl span::first-line{font-size:22px}` +
   `dl small{position:absolute;bottom:100%;right:0;display:flex;gap:10px;font-size:11px;white-space:nowrap}dl kbd{font:inherit;opacity:.5}dl kbd.a{opacity:1}` +
@@ -194,8 +211,10 @@ export const HUD_CSS =
   `figure{left:50%;bottom:24px;transform:translateX(-50%)}figure canvas{display:block;width:72px;height:87px;image-rendering:pixelated;filter:drop-shadow(0 2px 2px #000a)}` +
   // The rim of a helmet round the view: the dark of the shell at the corners, as it always was, and the outline of the
   // helmet's own visor (RIM, below) as a pale line over a clear view. Drawn before the face, the health and the counts.
-  `del{inset:0;background:radial-gradient(ellipse 74% 80% at 50% 54%,#0000 60%,#000d 100%)}` +
-  `del::before{content:"";position:absolute;inset:0;background:${RIM} 0 0/100% 100% no-repeat}` +
+  `del{inset:0;background:radial-gradient(ellipse 84% 90% at 50% 52%,#0000 64%,#000d 100%)}` +
+  // The view out of focus round the visor (BLUR), under the sheen.
+  `del::before{content:"";position:absolute;inset:0;backdrop-filter:blur(10px);mask:${BLUR} 0 0/100% 100%}` +
+  `del::after{content:"";position:absolute;inset:0;background:${RIM} 0 0/100% 100% no-repeat}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}` +
   // The rover: the key to get in or out, over the face, and the speed where the gun's count is; at the wheel the gun, the crosshair and the visor's rim go.
@@ -420,7 +439,8 @@ export interface Hud {
    * holds, in the same count: big, with the rest after it as the magazines it makes (an open one for
    * a part) over its count; faded while `swapping` it. `rifle` is the
    * laser rifle's rounds (-1 none), shown with the glyph in red when `rifled` (slot 4), with the
-   * `nades` left in its launcher as dots after the count, hollow for the ones spent.
+   * `nades` left in its launcher as dots after the count, hollow for the ones spent. `armor` shows
+   * as gold pips after the health's, only the ones he has.
    */
   vitals(
     hp: number,
@@ -434,6 +454,7 @@ export interface Hud {
     rifle?: number,
     rifled?: boolean,
     nades?: number,
+    armor?: number,
   ): void;
   /** A hit marker on the crosshair for a moment: a ball or a cut of the own player hit. */
   hit(): void;
@@ -548,7 +569,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
             .join('')}</table>`,
       ).join('')}</article></main></aside>` +
       `<del hidden></del><u></u><h5 hidden>Muted (M)</h5>` +
-      `<ul>${'<li></li>'.repeat(HP_MAX)}</ul><figure hidden><canvas width="${FW}" height="${FH}"></canvas></figure>` +
+      `<ul>${'<li></li>'.repeat(HP_MAX)}${'<li class=a></li>'.repeat(ARMOR_MAX)}</ul><figure hidden><canvas width="${FW}" height="${FH}"></canvas></figure>` +
       `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
       `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
       `<data></data><span></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
@@ -673,6 +694,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const [red, time, blue] = [...bar.querySelectorAll<HTMLElement>('span, time')];
   const [redFlag, blueFlag] = [...bar.querySelectorAll<HTMLElement>('small')];
   const pips = [...one('ul').querySelectorAll('li')];
+  const plates = pips.splice(HP_MAX);
   const [life, ammo, marker, fallen] = [one('ul'), one('dl'), one('s'), one('mark')];
   const [rope, knot] = [one('ins'), one('ins i')];
   const [count, spare, slots] = [one('data'), one('dl span'), one('dl small')];
@@ -787,8 +809,10 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       rifle = -1,
       rifled = false,
       nades = 0,
+      armor = 0,
     ) {
       pips.forEach((li, i) => li.classList.toggle('e', i >= hp));
+      plates.forEach((li, i) => li.classList.toggle('e', i >= armor));
       life.classList.toggle('low', hp <= 1);
       const have = [rounds >= 0, blade, rail >= 0, rifle >= 0];
       const k = !railed && !rifled && blade && (wield || !have[0]);

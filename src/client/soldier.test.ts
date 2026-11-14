@@ -1104,6 +1104,18 @@ describe('the ninja', () => {
     expect(dark(ninja)).toBeGreaterThan(0.35);
     expect(dark(ninja)).toBeGreaterThan(dark(bare) * 2);
   });
+
+  it('is cheap far away: his guard and pads coarse, under 12 000 vertices (the user, 2026-11-14: lags)', () => {
+    const team = [0.15, 0.4, 1];
+    const r = hold({}, 5);
+    r.look = { role: ROLE.NINJA };
+    const [far, near] = [[], []] as number[][];
+    soldier(far, r, team, 0, false, true);
+    soldier(near, r, team, 1, false, true);
+    // Each piece of a runner costs its vertices every frame, at every level: 23 000 before.
+    expect(far.length / STRIDE).toBeLessThan(12000);
+    expect(far.length * 2).toBeLessThan(near.length);
+  });
 });
 
 describe('armour without a helmet (Highline)', () => {

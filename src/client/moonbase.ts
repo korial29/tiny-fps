@@ -23,6 +23,8 @@ import type { Brush, WorldDef } from '../shared/world';
 import { glow, tri } from './flag';
 import { STRIDE, dot, dress, place, segment, smooth, solid, sub } from './mesh';
 import type { Vec3 } from './mesh';
+import { room } from './verts';
+import type { Out } from './verts';
 
 const PAINT = [0.8, 0.82, 0.86];
 const DARK = [0.35, 0.36, 0.4];
@@ -39,7 +41,7 @@ export const cross = (u: Vec3, v: Vec3): Vec3 => [
   u[0] * v[1] - u[1] * v[0],
 ];
 /** A convex polygon of one colour, wound so that it faces away from `away` when given. */
-export const face = (o: number[], p: Vec3[], rgb: number[], away?: Vec3) => {
+export const face = (o: Out, p: Vec3[], rgb: number[], away?: Vec3) => {
   const n = cross(sub(p[1], p[0]), sub(p[2], p[0]));
   const q = away && dot(n, sub(p[0], away)) < 0 ? [...p].reverse() : p;
   for (let k = 1; k < q.length - 1; k++) {
@@ -47,7 +49,7 @@ export const face = (o: number[], p: Vec3[], rgb: number[], away?: Vec3) => {
   }
 };
 /** A box of one colour between two corners, its faces outward, less those whose bit is in `skip`: 1 and 2 its low and high z, 4 and 8 y, 16 and 32 x. */
-export const box = (o: number[], lo: Vec3, hi: Vec3, rgb: number[], skip = 0) => {
+export const box = (o: Out, lo: Vec3, hi: Vec3, rgb: number[], skip = 0) => {
   const mid = lo.map((v, i) => (v + hi[i]) / 2) as Vec3;
   const p = (i: number): Vec3 => [
     i & 1 ? hi[0] : lo[0],
@@ -66,7 +68,7 @@ export const box = (o: number[], lo: Vec3, hi: Vec3, rgb: number[], skip = 0) =>
   }
 };
 /** Carries a model's vertices to (x, y, z), turned by `yaw` about y. */
-export const put = (o: number[], v: number[], [x, y, z]: Vec3, yaw = 0) => {
+export const put = (o: Out, v: number[], [x, y, z]: Vec3, yaw = 0) => {
   const [c, s] = [Math.cos(yaw), Math.sin(yaw)];
   for (let i = 0; i < v.length; i += STRIDE) {
     o.push(
@@ -81,7 +83,7 @@ export const put = (o: number[], v: number[], [x, y, z]: Vec3, yaw = 0) => {
   }
 };
 /** What `make` adds to `o` glows, k times its colour. */
-export const lit = (o: number[], k: number, make: () => void) => {
+export const lit = (o: Out, k: number, make: () => void) => {
   const from = o.length;
   make();
   glow(o, from, k);
@@ -114,7 +116,7 @@ const FRAME = [0.04, 0.04, 0.05];
 const { CONCRETE, METAL, PAINT: WHITE } = TEX;
 
 /** A quad indoors: textured, `l` its light (under 2), or glowing in an rgb. */
-const quad = (o: number[], p: Vec3[], c: number | number[], l = 1, [u, v] = UV[1]) => {
+const quad = (o: Out, p: Vec3[], c: number | number[], l = 1, [u, v] = UV[1]) => {
   for (const i of [0, 1, 2, 0, 2, 3]) {
     o.push(...p[i], ...INDOORS);
     if (typeof c == 'number') {
@@ -126,7 +128,7 @@ const quad = (o: number[], p: Vec3[], c: number | number[], l = 1, [u, v] = UV[1
 };
 /** quad() on the face of the box lo..hi that is flat on the axis k, moved to `at`. */
 const panel = (
-  o: number[],
+  o: Out,
   k: number,
   at: number,
   lo: number[],
@@ -152,7 +154,7 @@ const panel = (
     UV[k],
   );
 /** A box indoors, as a brush: its top in the top texture, the rest in the side one, each face lit by where it looks; `tint` twice the palette index of its tint. */
-const block = (o: number[], { min, max, top, side }: Brush, tint = 0) => {
+const block = (o: Out, { min, max, top, side }: Brush, tint = 0) => {
   for (let k = 0; k < 3; k++) {
     panel(o, k, min[k], min, max, side, tint + (k == 1 ? 0.4 : 1.25 - 0.15 * k));
     panel(o, k, max[k], min, max, k == 1 ? top : side, tint + (k == 1 ? 1.85 : 1.25 - 0.15 * k));
@@ -163,17 +165,18 @@ const block = (o: number[], { min, max, top, side }: Brush, tint = 0) => {
  * What `make` adds, moved indoors: the indoor normal, and a flat colour shaded by where its face
  * looked, brighter since it takes the ambient only (about what the textured walls get).
  */
-const inside = (o: number[], make: () => void) => {
+const inside = (o: Out, make: () => void) => {
   const from = o.length;
   make();
+  const buf = room(o, 0);
   for (let i = from; i < o.length; i += STRIDE) {
-    if (o[i + 8] == -1) {
-      const k = 2.2 * (0.72 + 0.28 * o[i + 4] - 0.12 * Math.abs(o[i + 3]));
-      o[i + 6] *= k;
-      o[i + 7] *= k;
-      o[i + 9] *= k;
+    if (buf[i + 8] == -1) {
+      const k = 2.2 * (0.72 + 0.28 * buf[i + 4] - 0.12 * Math.abs(buf[i + 3]));
+      buf[i + 6] *= k;
+      buf[i + 7] *= k;
+      buf[i + 9] *= k;
     }
-    [o[i + 3], o[i + 4], o[i + 5]] = INDOORS;
+    [buf[i + 3], buf[i + 4], buf[i + 5]] = INDOORS;
   }
 };
 
@@ -200,7 +203,7 @@ const [CYAN, GREEN, AMBER, RED, MAUVE, PINK] = [
  * Draws a piece of kit, (kind, x0, z0, x1, z1, y0, y1, the way its front looks: 0 +x, 1 +z, 2 -x,
  * 3 -z), in its own frame: u along it from its start, y up from its foot, w out from its back.
  */
-const piece = (o: number[], [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
+const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
   const k = f & 1 ? 2 : 0;
   const [lo, hi] = [
     [x0, y0, z0],
@@ -430,7 +433,7 @@ const PANELS = [
  * the door, cables under the east deck, cable trays and status lights along the tubes, hazard
  * stripes and a beacon over each airlock.
  */
-const dressing = (o: number[]) => {
+const dressing = (o: Out) => {
   [...KIT, ...PANELS].forEach(p => piece(o, p));
   const [, mz] = MOUTHS[0];
   const z = CZ + mz + 0.03;
@@ -505,7 +508,7 @@ const dressing = (o: number[]) => {
   }
 };
 /** A lit frame just inside a doorway h high from c0 to c1, in the plane of the axis k at `at`. */
-const frame = (o: number[], k: number, at: number, c0: number, c1: number, h: number) => {
+const frame = (o: Out, k: number, at: number, c0: number, c1: number, h: number) => {
   for (const [a, b, y0] of [
     [c0, c0 + 0.1, 0],
     [c1 - 0.1, c1, 0],
@@ -521,7 +524,7 @@ const frame = (o: number[], k: number, at: number, c0: number, c1: number, h: nu
  * to y, `l` its light, open at each door (from, to, height).
  */
 const lining = (
-  o: number[],
+  o: Out,
   k: number,
   at: number,
   s: number,
@@ -551,7 +554,7 @@ export const GAPS = [
 ];
 
 /** The dome: a drum with a band of windows under a hemisphere (radius 22, top at 17), open at the door and at the tubes; a lit portal at the door. */
-const dome = (o: number[]) => {
+const dome = (o: Out) => {
   const N = 48;
   const arc = Array.from({ length: 9 }, (_, j): [number, number] => {
     const a = ((j + 1) / 10) * (TAU / 4);
@@ -645,7 +648,7 @@ const dome = (o: number[]) => {
  * closes the wall against the shell, the shell from inside with a lamp at its top, and what stands
  * in it.
  */
-const hall = (o: number[]) => {
+const hall = (o: Out) => {
   const rects = [...HALL, ...HALL.map(([a, b]) => [b, a]).reverse()];
   for (const [c, d] of rects) {
     panel(o, 1, 0.02, [CX - c, 0, CZ - d], [CX + c, 0, CZ + d], CONCRETE, 1.85);
@@ -784,7 +787,7 @@ const RIB = upper(
 );
 
 /** A rounded tube over each tube of the map, from its module to where the two meet, with a rib every 5 m; inside, white walls and a ceiling with a strip of light. */
-const tubes = (o: number[]) =>
+const tubes = (o: Out) =>
   TUBES.forEach(({ min, max }, n) => {
     const k = n ? 2 : 0;
     const [a0, b0, mid] = [min[k], n ? TUBES[0].min[2] : max[k], (min[2 - k] + max[2 - k]) / 2];
@@ -804,7 +807,7 @@ const tubes = (o: number[]) =>
   });
 
 /** The strips of windows on the long faces of the two modules, outside and inside, but over a doorway; three lamps under each roof. */
-const modules = (o: number[]) => {
+const modules = (o: Out) => {
   for (const { min, max } of MODULES) {
     const mid: Vec3 = [(min[0] + max[0]) / 2, 2.5, (min[2] + max[2]) / 2];
     for (const s of [-1, 1]) {
@@ -862,7 +865,7 @@ const modules = (o: number[]) => {
 };
 
 /** Red's half of the base: the dome, its hall, the tubes and the modules, a metal floor in the last two, a lit frame in each of their doorways. */
-export const moonbase = (o: number[]): void => {
+export const moonbase = (o: Out): void => {
   dome(o);
   hall(o);
   tubes(o);

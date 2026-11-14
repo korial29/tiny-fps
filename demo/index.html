@@ -31,15 +31,15 @@
           sans-serif;
       }
       main {
-        max-width: 920px;
+        max-width: 1120px;
         margin: 0 auto;
-        padding: 40px 16px 48px;
+        padding: 32px 16px 40px;
         display: grid;
-        gap: 28px;
+        gap: 24px;
       }
       header {
         display: grid;
-        gap: 6px;
+        gap: 4px;
         justify-items: center;
         text-align: center;
       }
@@ -47,7 +47,7 @@
       h1 {
         margin: 0;
         font:
-          900 clamp(44px, 11vw, 88px) / 1 system-ui,
+          900 clamp(40px, 9vw, 76px) / 1 system-ui,
           sans-serif;
         letter-spacing: 0.04em;
         transform: skewX(-8deg);
@@ -60,19 +60,18 @@
       header p {
         margin: 0;
         color: var(--muted);
-        max-width: 560px;
       }
-      h2 {
-        margin: 0 0 10px;
+      h2,
+      legend,
+      .label {
+        display: block;
+        margin: 0 0 8px;
+        padding: 0;
         font-size: 12px;
         font-weight: 800;
         letter-spacing: 0.14em;
         text-transform: uppercase;
         color: var(--muted);
-      }
-      form {
-        display: grid;
-        gap: 28px;
       }
       fieldset {
         margin: 0;
@@ -80,53 +79,23 @@
         border: 0;
         min-width: 0;
       }
-      /* The game mode: one for now, shown as the chosen card with its goal. */
-      .mode {
+      /* Wide: the maps on the left, the settings and Play beside them. Narrow: one column. */
+      form {
         display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 4px 16px;
-        align-items: center;
-        padding: 16px 18px;
-        border: 1px solid var(--accent);
-        border-radius: 14px;
-        background: linear-gradient(90deg, #f7782a1f, #0000 60%), var(--card);
-        box-shadow: 0 0 0 1px #f7782a33 inset;
-      }
-      .mode b {
-        grid-row: span 2;
-        display: grid;
-        place-items: center;
-        width: 56px;
-        height: 56px;
-        border-radius: 12px;
-        background: #f7782a26;
-        color: var(--hot);
-        font:
-          900 18px/1 system-ui,
-          sans-serif;
-        letter-spacing: 0.06em;
-      }
-      .mode strong {
-        font-size: 18px;
-      }
-      .mode span {
-        color: var(--muted);
-        font-size: 15px;
-      }
-      .soon {
-        margin: 8px 2px 0;
-        font-size: 13px;
-        color: var(--muted);
+        grid-template-columns: minmax(0, 1fr) 340px;
+        gap: 24px;
+        align-items: start;
       }
       /* The maps: a card each, its picture, its name and a line of lore; the checked one lit. */
       .maps {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         gap: 16px;
       }
       .map {
         position: relative;
         display: grid;
+        grid-template-rows: auto 1fr;
         border: 1px solid var(--line);
         border-radius: 14px;
         overflow: hidden;
@@ -135,13 +104,15 @@
         transition:
           transform 0.15s,
           border-color 0.15s,
-          box-shadow 0.15s;
+          box-shadow 0.15s,
+          opacity 0.15s;
       }
       .map:hover {
         transform: translateY(-2px);
         border-color: #3a4a5a;
       }
-      .map input {
+      .map input,
+      .seg input {
         position: absolute;
         opacity: 0;
         pointer-events: none;
@@ -152,7 +123,8 @@
           0 0 0 1px var(--accent),
           0 10px 40px -12px #f7782a88;
       }
-      .map:has(input:focus-visible) {
+      .map:has(input:focus-visible),
+      .seg label:has(input:focus-visible) {
         outline: 2px solid var(--hot);
         outline-offset: 3px;
       }
@@ -170,8 +142,9 @@
       }
       .map div {
         display: grid;
+        align-content: start;
         gap: 4px;
-        padding: 14px 16px 16px;
+        padding: 12px 16px 16px;
       }
       .map strong {
         font-size: 20px;
@@ -211,21 +184,137 @@
       .map:has(input:checked) i {
         display: grid;
       }
-      .play {
+      /* On a server the map and the bots are the server's: shown, not chosen. */
+      fieldset:disabled .map,
+      fieldset:disabled .seg {
+        opacity: 0.4;
+        cursor: not-allowed;
+        transform: none;
+      }
+      fieldset:disabled .map *,
+      fieldset:disabled .seg * {
+        cursor: not-allowed;
+      }
+      /* The settings: one card, Play at its foot, kept in view while the maps scroll. */
+      .panel {
+        position: sticky;
+        top: 16px;
+        display: grid;
+        gap: 20px;
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--card);
+      }
+      /* The game mode: one for now, its goal in a line (the game's title screen tells it all). */
+      .mode {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0 12px;
+        align-items: center;
+      }
+      .mode b {
+        grid-row: span 2;
+        display: grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        background: #f7782a26;
+        color: var(--hot);
+        font:
+          900 14px/1 system-ui,
+          sans-serif;
+        letter-spacing: 0.06em;
+      }
+      .mode strong {
+        font-size: 16px;
+      }
+      .mode span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      /* A choice of a few: every option in sight, one click each. */
+      .seg {
+        display: grid;
+        grid-auto-columns: 1fr;
+        grid-auto-flow: column;
+        gap: 4px;
+        padding: 4px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--field);
+      }
+      .seg label {
+        position: relative;
+        display: grid;
+        place-items: center;
+        min-height: 40px;
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 700;
+        text-align: center;
+        color: var(--muted);
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          color 0.15s;
+      }
+      .seg label:hover {
+        color: var(--fg);
+      }
+      .seg label:has(input:checked) {
+        background: var(--accent);
+        color: #fff;
+      }
+      /* The level under the count: it only matters with bots. Eight steps, so a slider. */
+      #skill {
+        margin-top: 12px;
+      }
+      #skill.off {
+        opacity: 0.4;
+      }
+      .level {
         display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        align-items: end;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .level output {
+        font-weight: 800;
+        color: var(--hot);
+      }
+      #level {
+        display: block;
+        width: 100%;
+        margin: 4px 0 0;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+      #level:disabled {
+        cursor: not-allowed;
+      }
+      .ends {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .hint {
+        margin: 6px 2px 0;
+        min-height: 2.8em;
+        font-size: 13px;
+        line-height: 1.4;
+        color: var(--muted);
       }
       label.field {
         display: grid;
-        gap: 4px;
-        font-size: 13px;
-        color: var(--muted);
-        flex: 1 1 200px;
+        gap: 0;
       }
-      input,
-      select,
+      input:not([type='radio']),
       button {
         font: inherit;
         min-height: 44px;
@@ -235,20 +324,30 @@
         background: var(--field);
         color: var(--fg);
         min-width: 0;
+        width: 100%;
       }
-      input:focus,
-      select:focus {
+      input:focus {
         outline: 2px solid #f7782a88;
         outline-offset: 1px;
       }
+      #url {
+        margin-top: 10px;
+      }
+      #url .label {
+        margin-bottom: 4px;
+      }
+      .go {
+        display: grid;
+        gap: 6px;
+      }
       #join {
-        flex: 0 0 auto;
-        padding: 6px 32px;
+        min-height: 52px;
         border: 0;
         background: linear-gradient(#ff9a4a, #e8590c);
         color: #fff;
+        font-size: 18px;
         font-weight: 800;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
         cursor: pointer;
         box-shadow: 0 8px 24px -8px #e8590caa;
@@ -256,11 +355,28 @@
       #join:hover {
         filter: brightness(1.08);
       }
+      #summary {
+        margin: 0;
+        font-size: 13px;
+        text-align: center;
+        color: var(--muted);
+      }
       .keys {
         margin: 0;
         color: var(--muted);
         font-size: 13px;
         text-align: center;
+      }
+      kbd {
+        display: inline-block;
+        padding: 0 5px;
+        border: 1px solid var(--line);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        background: var(--field);
+        font: inherit;
+        font-size: 12px;
+        color: var(--fg);
       }
       [hidden] {
         display: none !important;
@@ -281,24 +397,57 @@
         font-size: 14px;
         text-shadow: 0 1px 2px #000;
       }
+      #bar button {
+        width: auto;
+        min-height: 32px;
+        padding: 2px 14px;
+        background: #0008;
+        border-color: #fff4;
+      }
+      @media (max-width: 900px) {
+        form {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .panel {
+          position: static;
+        }
+      }
       @media (max-width: 640px) {
         main {
-          padding-top: 28px;
+          padding-top: 24px;
+        }
+        /* The maps in a row each, picture beside the name, so Play is not three screens down. */
+        .maps {
+          gap: 10px;
+        }
+        .map {
+          grid-template-columns: 112px 1fr;
+          grid-template-rows: none;
+        }
+        .map img {
+          height: 100%;
+          aspect-ratio: auto;
+        }
+        .map div {
+          align-content: center;
+          padding: 12px 40px 12px 14px;
+        }
+        .map p {
+          display: none;
+        }
+        .map i {
+          top: 8px;
+          left: 8px;
+          right: auto;
+        }
+        .map div {
+          padding-right: 14px;
         }
         /* The title screen's panel takes the top of a small window. */
         #bar {
           top: auto;
           bottom: 32px;
         }
-        #join {
-          flex: 1 1 100%;
-        }
-      }
-      #bar button {
-        min-height: 32px;
-        padding: 2px 14px;
-        background: #0008;
-        border-color: #fff4;
       }
     </style>
   </head>
@@ -306,27 +455,11 @@
     <main id="menu">
       <header>
         <h1>TINY FPS</h1>
-        <p>
-          A tiny multiplayer parkour shooter in the browser. Open this page in another tab to join
-          the other team.
-        </p>
+        <p>A tiny multiplayer parkour shooter in the browser.</p>
       </header>
       <form id="form">
-        <section>
-          <h2>Game mode</h2>
-          <div class="mode">
-            <b>CTF</b>
-            <strong>Capture the flag</strong>
-            <span
-              >Two teams, two flags. Take the enemy flag from its base and run it home while your
-              own flag is there. First team to 3 captures wins, or the one ahead after 8
-              minutes.</span
-            >
-          </div>
-          <p class="soon">More modes are coming.</p>
-        </section>
-        <fieldset>
-          <h2>Map</h2>
+        <fieldset id="maps">
+          <legend>Map</legend>
           <div class="maps">
             <label class="map">
               <input type="radio" name="map" value="highline" checked />
@@ -356,55 +489,53 @@
             </label>
           </div>
         </fieldset>
-        <div class="play">
+        <section class="panel" aria-label="Game settings">
+          <div class="mode">
+            <b>CTF</b>
+            <strong>Capture the flag</strong>
+            <span>First to 3 captures, or the lead after 8 minutes</span>
+          </div>
           <label class="field"
-            >Name <input name="name" maxlength="16" required autocomplete="nickname"
+            ><span class="label">Your name</span>
+            <input name="name" maxlength="16" required autocomplete="nickname" spellcheck="false"
           /></label>
-          <label class="field"
-            >Character
-            <select name="body">
-              <option value="0">Kai</option>
-              <option value="1">Nova</option>
-            </select>
-          </label>
-          <label class="field"
-            >Bots
-            <select name="bots">
-              <option value="0">None</option>
-              <option value="4">2 against 2</option>
-              <option value="8">4 against 4</option>
-            </select>
-          </label>
-          <label class="field" id="skill" hidden
-            >Bot level
-            <select name="skill">
-              <option value="0">Novice</option>
-              <option value="1">Average</option>
-              <option value="2">Experienced</option>
-              <option value="3">Skilled</option>
-              <option value="4" selected>Adept</option>
-              <option value="5">Masterful</option>
-              <option value="6">Inhuman</option>
-              <option value="7">Godlike</option>
-            </select>
-          </label>
-          <label class="field"
-            >Connection
-            <select name="mode">
-              <option value="local">Local (tabs of this browser)</option>
-              <option value="server">Server</option>
-            </select>
-          </label>
-          <label class="field" id="url" hidden
-            >Server URL <input name="url" type="url" value="ws://localhost:8787/demo"
-          /></label>
-          <button id="join">Play</button>
-        </div>
-        <p class="keys">
-          Mouse to look · WASD (ZQSD) to move · Shift sprint · Space jump, twice in the air · a
-          direction twice to dash · C crouch or slide · E rover · Esc for every key
-        </p>
+          <fieldset id="bots">
+            <legend>Bots</legend>
+            <div class="seg">
+              <label><input type="radio" name="bots" value="0" />None</label>
+              <label><input type="radio" name="bots" value="4" />2 v 2</label>
+              <label><input type="radio" name="bots" value="8" />4 v 4</label>
+            </div>
+            <div id="skill">
+              <label class="level" for="level"
+                ><span>Level</span><output id="skill-name" for="level"></output
+              ></label>
+              <input id="level" type="range" name="skill" min="0" max="7" step="1" />
+              <div class="ends" aria-hidden="true"><span>Novice</span><span>Godlike</span></div>
+            </div>
+            <p class="hint" id="bots-hint" aria-live="polite"></p>
+          </fieldset>
+          <fieldset>
+            <legend>Play</legend>
+            <div class="seg">
+              <label><input type="radio" name="mode" value="local" />In this browser</label>
+              <label><input type="radio" name="mode" value="server" />On a server</label>
+            </div>
+            <p class="hint" id="mode-hint" aria-live="polite"></p>
+            <label class="field" id="url" hidden
+              ><span class="label">Server URL</span>
+              <input name="url" type="url" value="ws://localhost:8787/demo" spellcheck="false"
+            /></label>
+          </fieldset>
+          <div class="go">
+            <button id="join">Play</button>
+            <p id="summary" aria-live="polite"></p>
+          </div>
+        </section>
       </form>
+      <p class="keys">
+        Pick your character on the next screen. <kbd>Esc</kbd> in the game lists every key.
+      </p>
     </main>
     <div id="game" hidden></div>
     <div id="bar" hidden>

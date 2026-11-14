@@ -12,6 +12,7 @@ import { GLOSS, SHINE, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
+import type { Out } from './verts';
 
 /**
  * The dome: its middle (the widest ring, level with the brow), its half width, height over the
@@ -476,7 +477,7 @@ const kit = (lod: number): Kit => {
  * `at` turned by `q`, the frame of its T in `rgb`, the team's colour (0 to 1). The far one has no
  * ear caps and no cheek plates.
  */
-export const helm = (out: number[], at: Vec3, q: Quat, rgb: number[], lod: number) => {
+export const helm = (out: Out, at: Vec3, q: Quat, rgb: number[], lod: number) => {
   const k = kit(lod);
   const axes = [turn(q, [1, 0, 0]), turn(q, [0, 1, 0]), turn(q, [0, 0, -1])];
   place(out, k.plain, at, axes, [0, 0, 0], 1);

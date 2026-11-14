@@ -11,6 +11,7 @@ import type { Spot } from './helmet';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
+import type { Out } from './verts';
 
 /**
  * The pack's body in the chest joint's frame (at 1.30 m; the back of the trunk is about 0.12
@@ -144,7 +145,7 @@ const kit = (lod: number): Kit => {
 
 /** Places `src`, built in a joint's frame, at that joint `at` turned by `q`. */
 const put = (
-  out: number[],
+  out: Out,
   src: number[],
   at: Vec3,
   q: Quat,
@@ -159,7 +160,7 @@ const put = (
  * Appends the pack at level of detail `lod` on the chest joint at `at` turned by `q` (see solve()
  * in rig.ts); its light strips glow in `rgb`, the team's colour.
  */
-export const pack = (out: number[], at: Vec3, q: Quat, rgb: number[], lod: number) => {
+export const pack = (out: Out, at: Vec3, q: Quat, rgb: number[], lod: number) => {
   const k = kit(lod);
   put(out, k.body, at, q);
   const from = out.length;
@@ -172,7 +173,7 @@ export const pack = (out: number[], at: Vec3, q: Quat, rgb: number[], lod: numbe
  * (`chest`, `cq`), at level of detail `lod`: a Bezier leaving the helmet out and down and entering
  * the pack's port from above, ribbed close up. None far.
  */
-export const hose = (out: number[], head: Vec3, hq: Quat, chest: Vec3, cq: Quat, lod: number) => {
+export const hose = (out: Out, head: Vec3, hq: Quat, chest: Vec3, cq: Quat, lod: number) => {
   const D = DETAIL[Math.min(lod, 2)];
   if (!D.hose) {
     return;
@@ -256,13 +257,7 @@ const SEAM = { w: 0.008, d: 0.016, col: [0.05, 0.05, 0.06] };
 let cup: number[] | undefined;
 
 /** Appends the crotch panel on the pelvis joint at `at` turned by `q`, in `plate` (white when absent). */
-export const crotch = (
-  out: number[],
-  at: Vec3,
-  q: Quat,
-  plate?: number[],
-  scale: number | Vec3 = 1,
-) => {
+export const crotch = (out: Out, at: Vec3, q: Quat, plate?: number[], scale: number | Vec3 = 1) => {
   if (!cup) {
     const last = CUP.length - 1;
     /** A ring at row i, `up` further (the bevel's top and bottom): face left to right, the right bevel, the back, the left bevel. */

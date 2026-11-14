@@ -21,7 +21,7 @@
 //   The floats are the host's float32 state, exact (see move in physics.ts), and with the rest
 //   they are all a move needs to continue from. ground comes from the mode; ev and fall (what the
 //   animation reads) are not sent, they read 0.
-//   gun, 24 bits, big-endian: bits 0-2 hp, bits 3-5 cool (ticks to the next shot; its high bit is bit
+//   gun, 24 bits, big-endian: bits 0-2 hp (its high bit is bit 5 of foe), bits 3-5 cool (ticks to the next shot; its high bit is bit
 //   7 of railing: a ninja's gun cools for 14), bits 6-12 ammo
 //   (127: no gun), bits 13-19 down (ticks left lying, 0 when up), bit 20 rack (inside the circle of
 //   the team's rack), bit 21 blade (has the katana), bit 22 wield (the katana is in hand), bit 23 zap
@@ -29,11 +29,11 @@
 //   and the hits landed (a plasma ball or a cut).
 //   swing: bits 0-5 the ticks left in the katana's swing, bits 6-7 the low two bits of its cut (CUT).
 //   lost: bits 0-2 the LIMB a katana's cut took off when it put him down (NONE once up), bit 3 the
-//   high bit of the cut (a special), the rest 0. charge: the ticks FIRE has been held with the gun;
+//   high bit of the cut (a special), bits 6-7 the armour (ARMOR_MAX at most). charge: the ticks FIRE has been held with the gun;
 //   while down (when it is 0: no weapon) the fall instead (`fell`: bits 5-6 the FALL, bits 0-4 the
 //   way the hit went, in 32nds of a turn).
 //   lock: the ticks left in a saber lock; foe: bits 0-3 the id locked with, bit 4 the high bit of the
-//   dashes left, bit 7 FIRE held at the
+//   dashes left, bit 5 the high bit of hp, bit 7 FIRE held at the
 //   last step (`pressed`); pushes: the FIRE presses in the lock; away: the ticks a side or back key
 //   has been held in it. rail: the rail gun's ticks of lightning plus one (0: no rail gun);
 //   railing: bit 0 railed (it is in hand), bit 1 inRail (inside the circle of the rail rack), bit 2
@@ -253,7 +253,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     );
     v.setUint8(o + 39, p.stun | ((p.by & 3) << 6));
     const gun =
-      p.hp |
+      (p.hp & 7) |
       ((p.cool & 7) << 3) |
       ((p.ammo < 0 ? NO_GUN : p.ammo) << 6) |
       (p.down << 13) |
@@ -268,11 +268,18 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint8(o + 45, ((p.swing ?? 0) & 63) | (((p.cut ?? 0) & 3) << 6));
     v.setUint8(
       o + 46,
-      ((p.lost ?? 0) & 7) | (((p.cut ?? 0) & 4) << 1) | (p.fried ? 16 : 0) | (p.heavy ? 32 : 0),
+      ((p.lost ?? 0) & 7) |
+        (((p.cut ?? 0) & 4) << 1) |
+        (p.fried ? 16 : 0) |
+        (p.heavy ? 32 : 0) |
+        ((p.armor ?? 0) << 6),
     );
     v.setUint8(o + 47, p.down ? (p.fell ?? 0) : (p.charge ?? 0));
     v.setUint8(o + 48, p.lock ?? 0);
-    v.setUint8(o + 49, ((p.foe ?? 0) & 15) | ((p.dashes & 2) << 3) | (p.pressed ? 128 : 0));
+    v.setUint8(
+      o + 49,
+      ((p.foe ?? 0) & 15) | ((p.dashes & 2) << 3) | ((p.hp & 8) << 2) | (p.pressed ? 128 : 0),
+    );
     v.setUint8(o + 50, p.pushes ?? 0);
     v.setUint8(o + 51, p.away ?? 0);
     v.setUint8(o + 52, (p.rail ?? -1) + 1);
@@ -398,7 +405,8 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
         (v.getUint8(o + 53) & 64 ? KEY.USE : 0),
       ev: 0,
       fall: 0,
-      hp: gun & 7,
+      hp: (gun & 7) | ((v.getUint8(o + 49) >> 2) & 8),
+      armor: v.getUint8(o + 46) >> 6,
       cool: ((gun >> 3) & 7) | ((v.getUint8(o + 53) >> 4) & 8),
       ammo: ((gun >> 6) & 127) === NO_GUN ? -1 : (gun >> 6) & 127,
       down: (gun >> 13) & 127,

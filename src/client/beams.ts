@@ -7,6 +7,7 @@ import { CUT } from '../shared/types';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
+import type { Out } from './verts';
 
 /** A ball as drawn this frame: its centre, its unit direction, and the metres of trail behind it. */
 export interface Orb {
@@ -118,7 +119,7 @@ export interface Tracer {
   /** Ages everything by dt seconds and drops what is over. */
   update(dt: number): void;
   /** Appends the balls, the flashes, the bolts and the sparks, turned to the camera at `eye`. */
-  draw(out: number[], eye: Vec3): void;
+  draw(out: Out, eye: Vec3): void;
   /** The lights of the flashes, the splashes, the bolts and the nearest balls, for gather(). */
   lights(): Light[];
 }
@@ -161,7 +162,7 @@ const norm = (a: Vec3): Vec3 => {
   const l = Math.hypot(...a) || 1;
   return [a[0] / l, a[1] / l, a[2] / l];
 };
-const vert = (out: number[], p: Vec3, [r, g, b]: number[]) => out.push(...p, 0, 1, 0, r, g, -2, b);
+const vert = (out: Out, p: Vec3, [r, g, b]: number[]) => out.push(...p, 0, 1, 0, r, g, -2, b);
 /**
  * What glows is drawn at its size times this: beyond 5 m it grows with the distance (at most 2.5
  * times), so that it stays a few pixels; nearer it may shrink down to `lo`, so that a ball or a
@@ -175,7 +176,7 @@ const far = (eye: Vec3, c: Vec3, lo: number) =>
  * from eye and lifted toward it by `lift`.
  */
 const ribbon = (
-  out: number[],
+  out: Out,
   a: Vec3,
   b: Vec3,
   w: number,
@@ -208,7 +209,7 @@ const ribbon = (
 
 /** A disc of radius r round c facing the eye, lifted toward it, as a fan of n triangles. */
 const disc = (
-  out: number[],
+  out: Out,
   c: Vec3,
   r: number,
   rgb: number[],
@@ -245,7 +246,7 @@ const WAVE: [number, number[]][] = [
  * tilted the way the blade came down (from the top left for ARC_L), bowed out the way the blade
  * went and its tips bent back, thick in the middle, with a fainter one trailing.
  */
-const crescent = (out: number[], c: Vec3, d: Vec3, cut: number, eye: Vec3) => {
+const crescent = (out: Out, c: Vec3, d: Vec3, cut: number, eye: Vec3) => {
   const r = norm(cross(d, [0, 1, 0]));
   const u = cross(r, d);
   const t = cut == CUT.ARC_L ? -TILT : TILT;

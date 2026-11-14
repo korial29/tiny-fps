@@ -11,6 +11,9 @@ import { dim, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
+import type { Out } from './verts';
+import { ID, ORIGIN, mesh } from './store';
+import type { Pieces } from './store';
 
 /** Where the blade starts and ends along the model's forward axis, metres from the right hand: a metre from the guard to the point. */
 export const [BASE, TIP] = [0.07, 1.07];
@@ -70,7 +73,7 @@ const circ = (f: number, x: number, y: number, a: number, b: number, n: number, 
  * an end), flat shaded: each facet is painted `paint(ring, side)` and faces away from the middle
  * of its two rings.
  */
-const loft = (out: number[], rings: Vec3[][], paint: (i: number, k: number) => number[]) =>
+const loft = (out: Out, rings: Vec3[][], paint: (i: number, k: number) => number[]) =>
   rings.slice(1).forEach((b, i) => {
     const a = rings[i];
     const all = [...a, ...b];
@@ -185,7 +188,7 @@ export const katana = (lod: number): number[] => {
 };
 
 /** Appends arcs of lightning flickering along the blade at the clock `t` (s): a few zigzags of thin crossed ribbons, each new every 70 ms. */
-export const arcs = (out: number[], at: Vec3, [r, u, f]: Vec3[], t: number, lod: number, k = 1) => {
+export const arcs = (out: Out, at: Vec3, [r, u, f]: Vec3[], t: number, lod: number, k = 1) => {
   const step = Math.floor(t * 14);
   const from = out.length;
   for (let a = 0; a < (lod ? 4 : 2); a++) {
@@ -222,7 +225,7 @@ export const arcs = (out: number[], at: Vec3, [r, u, f]: Vec3[], t: number, lod:
  * size; with the clock `t` (s) it crackles, once its glow is all on (`light`, 0 off to 1).
  */
 export const sword = (
-  out: number[],
+  out: Out,
   at: Vec3,
   ax: Vec3[],
   lod: number,
@@ -230,9 +233,21 @@ export const sword = (
   k = 1,
   light = 1,
   press = 0,
+  /** The hand's turn and the frame's pieces: the blade, lit, is then made once into the store and placed there (store.ts). */
+  q?: Quat,
+  list?: Pieces,
 ) => {
   const from = out.length;
-  place(out, katana(lod), at, ax, [0, 0, 0], k);
+  if (q && list && light == 1) {
+    list.push({
+      m: mesh(`katana ${lod}`, o => place(o, katana(lod), ORIGIN, axes(ID), [0, 0, 0], 1)),
+      q,
+      t: at,
+      k,
+    });
+  } else {
+    place(out, katana(lod), at, ax, [0, 0, 0], k);
+  }
   dim(out, from, 0.08 + 0.92 * light);
   const knob: number[] = [];
   button(knob, 1, press, light, [0.25, 0.9, 1]);
@@ -262,7 +277,7 @@ export const wrists = (at: Vec3, ax: Vec3[]): Vec3[] => {
 
 /** Appends the katana held in the right hand at `pos` turned by `q`. */
 export const held = (
-  out: number[],
+  out: Out,
   pos: Vec3,
   q: Quat,
   lod: number,
@@ -270,7 +285,8 @@ export const held = (
   k = 1,
   light = 1,
   press = 0,
-) => sword(out, grip(pos, q), axes(q), lod, t, k, light, press);
+  list?: Pieces,
+) => sword(out, grip(pos, q), axes(q), lod, t, k, light, press, q, list);
 
 /** The root of the blade and its point, in the world, for the hand at `pos` turned by `q`. */
 export const ends = (pos: Vec3, q: Quat): Vec3[] => {

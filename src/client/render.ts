@@ -14,20 +14,28 @@ import type { Effects } from './effects';
 import { createDust } from './dust';
 import { base, flag, teamRgb } from './flag';
 import type { CtfScene } from './flag';
-import { GLOSS, SHINE, STRIDE, basis } from './mesh';
+import { GILT, GLOSS, SHINE, STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
 import { furnishing } from './moonbase';
 import { moonscape } from './moonscape';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
-import { battery, cell, kit, racks } from './props';
+import { battery, cell, kit, racks, vest } from './props';
 import { PACK } from './pack';
-import { JOINT, turn } from './rig';
+import { JOINT, JOINTS, turn } from './rig';
 import { craft } from './craft';
 import { rolled, rover } from './rover';
 import type { Quat } from './rig';
 import { GRIN, animate, createRunner, soldier } from './soldier';
-import { body } from './skin';
+import { COLOURS, REGION, UNLIT, body } from './skin';
+import { CLOTH } from './mask';
+import { CHANNELS } from './features';
+import { PLATE, VERT as VERT_TEXELS } from './flesh';
+import { SCRATCHED, prepare } from './armor';
+import { Verts } from './verts';
+import { data, filled, stored, used } from './store';
+import type { Pieces } from './store';
+import type { Out } from './verts';
 import type { Runner } from './soldier';
 import { skyline, trees } from './skyline';
 import { deepen, street } from './street';
@@ -78,17 +86,60 @@ const [NEAR, CLOSE] = [10, 4];
 export const [ROVER_NEAR, ROVER_MID] = [22, 70];
 /** A ship's, 14 m long: its cockpit and its struts within 45 m, its plain shape past 160 m. */
 export const [SHIP_NEAR, SHIP_MID] = [45, 160];
+/** Texels a row of the store's data texture (flesh.ts). */
+const TEXELS = 2048;
+
+/** R of the frame's own vertices (see VERT): no turn, a scale of 1, at the origin. */
+const STILL = [0, 0, 0, 1, 0, 0, 0, 1];
+
 /** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
 const SAMPLES = 4;
 
 // Y > 0 is the sky: a fullscreen triangle from gl_VertexID at depth 1, whose varying P is the view
-// ray (J: the camera's right and up scaled by the field of view, then forward).
+// ray (J: the camera's right and up scaled by the field of view, then forward). R places a piece of
+// the store (store.ts): turned by the quaternion R[0] as turn() does, scaled by R[1].w and moved to
+// R[1].xyz; the frame's own vertices go with no turn, a scale of 1, at the origin (STILL).
+// Sm 1 and 2 pose a runner's skin and armour from the texels of Sg (flesh.ts), with no vertex
+// array: Sb the texels of the skin's vertices, of what is drawn and of the skin's corners, and
+// whether the plates take Sc[0] (Sc[1] the accent); Sq the joints' dual quaternions, Sp the
+// palette, Sw the face's weights. k() is skin() for one vertex (and hb the ninja's hood over it,
+// dress()), the rest armor() for one corner.
 const VERT = `#version 300 es
 layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec4 c;
-uniform mat4 m;uniform float Y;uniform vec3 J[3];out vec3 P,N;out vec4 C;
+uniform mat4 m;uniform float Y;uniform vec3 J[3];uniform vec4 R[2];
+uniform highp sampler2D Sg;uniform int Sm;uniform ivec4 Sb;uniform vec4 Sq[${2 * (JOINTS + 2)}],Sw[${Math.ceil(CHANNELS / 4)}];uniform vec3 Sp[${COLOURS}],Sc[2];
+out vec3 P,N;out vec4 C;
+vec3 r(vec3 v){vec3 t=2.*cross(R[0].xyz,v);return v+R[0].w*t+cross(R[0].xyz,t);}
+vec4 g(int i){return texelFetch(Sg,ivec2(i&2047,i>>11),0);}
+float sh;vec2 hb;
+void k(int i,out vec3 x,out vec3 y){
+int b=Sb.x+i*${VERT_TEXELS};vec4 a=g(b),e=g(b+1),f=g(b+2);x=a.xyz;y=e.xyz;sh=e.w;hb=g(b+3).xy;bool z=false;
+for(int j=0;j<int(f.w);j++){int q=Sb.x+int(f.z)+j*2;vec4 h=g(q);int w=int(h.w);float fw=Sw[w>>2][w&3];if(fw!=0.){x+=fw*h.xyz;y+=fw*g(q+1).xyz;z=true;}}
+if(z)y=normalize(y);
+int u=int(f.x)*2,v=int(f.y)*2;float l=a.w,s=dot(Sq[u],Sq[v])<0.?-l:l;
+vec4 E=(1.-l)*Sq[u]+s*Sq[v],F=(1.-l)*Sq[u+1]+s*Sq[v+1];float L=length(E);E/=L;F/=L;
+vec3 t=cross(E.xyz,x);x+=2.*(E.w*t+cross(E.xyz,t)+E.w*F.xyz-F.w*E.xyz-cross(F.xyz,E.xyz));
+t=cross(E.xyz,y);y+=2.*(E.w*t+cross(E.xyz,t));}
 void main(){
 if(Y>.5){vec2 q=vec2(gl_VertexID&1,gl_VertexID>>1)*4.-1.;gl_Position=vec4(q,1,1);P=J[0]*q.x+J[1]*q.y+J[2];N=vec3(0);C=vec4(0);return;}
-P=p;N=n;C=c;gl_Position=m*vec4(p,1);}`;
+if(Sm==1){vec4 h=g(Sb.y+gl_VertexID);k(int(h.x),P,N);int a=int(h.y);vec3 l=Sp[a];l+=(Sp[int(h.z)]-l)*h.w;l*=sh;
+if(hb.x>=0.&&(hb.y>.5||a==${REGION.FLESH}))l=vec3(${CLOTH})+(l-vec3(${CLOTH}))*hb.x;
+C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:-1.,l.z);gl_Position=m*vec4(P,1);return;}
+if(Sm==2){int b=Sb.y+gl_VertexID*${PLATE},j,K,t;vec4 h=g(b),G4=g(b+4),R4=g(b+5);j=int(h.y);K=int(h.z);t=int(h.x)*3;
+vec3 X[3],Z[3],W3[3],M3[3];
+for(int i=0;i<3;i++)k(int(g(Sb.z+t+i).x),X[i],Z[i]);
+for(int i=0;i<3;i++){vec4 w=g(b+1+i);float m0=(K&2)!=0?-w.x:w.x,m1=(K&4)!=0?-w.y:w.y,m2=(K&8)!=0?-w.z:w.z;
+vec3 q=vec3(Z[0].x*m0+Z[1].x*m1+Z[2].x*m2,Z[0].y*max(m0,0.)+Z[1].y*max(m1,0.)+Z[2].y*max(m2,0.),Z[0].z*m0+Z[1].z*m1+Z[2].z*m2);
+float l=length(q);q/=l>0.?l:1.;W3[i]=X[0]*w.x+X[1]*w.y+X[2]*w.z+q*w.w;M3[i]=q;}
+P=W3[j];vec3 q=M3[j];
+if((K&1)!=0){vec3 f=cross(W3[1]-W3[0],W3[2]-W3[0]);float l=length(f);q=l<1e-12?vec3(0,1,0):f/l;}
+else if(G4.xyz!=vec3(0)){float l=length(R4.xyz);vec3 o=R4.xyz/(l>0.?l:1.),e=cross(o,q),s=G4.xyz;float sn=length(e);
+if(sn>1e-6){float cs=dot(o,q);vec3 u=e/sn;s=s*cs+cross(u,s)*sn+u*dot(u,s)*(1.-cs);}
+q-=s;l=length(q);q/=l>0.?l:1.;}
+vec3 l=g(b+6).xyz;bool pl=Sb.w!=0;
+if(l.x<0.)l=Sc[1];else if(pl&&abs(h.w-(${GLOSS}))<.01)l=Sc[0];else if(pl&&(K&1)!=0)l=Sc[0]*.75;else if(pl&&G4.w>0.)l=l.x>.55?vec3(${SCRATCHED[1]}):vec3(${SCRATCHED[0]});
+N=q;C=vec4(l.xy,h.w,l.z);gl_Position=m*vec4(P,1);return;}
+P=R[1].xyz+r(p*R[1].w);N=r(n);C=c;gl_Position=m*vec4(P,1);}`;
 
 // A fullscreen triangle from gl_VertexID, no buffer.
 const POST_VERT = `#version 300 es
@@ -161,7 +212,7 @@ const RELIEF = 0.06;
 // scattered by the air, so it fades with a dark horizon: the moon keeps a tenth of it). The
 // glass layer adds K0 along the reflected view r, strong at a grazing angle (Fresnel, fr), after the
 // lighting. A glossy shell (GLOSS) gets a clear coat: a pale sheen at a grazing angle and where it
-// faces up, less in the sun's shadow. Polished metal (SHINE) turns partly into that reflection (k), tinted by its colour and
+// faces up, less in the sun's shadow. Gold (GILT) turns partly into the sky's brightness along r times its colour. Polished metal (SHINE) turns partly into that reflection (k), tinted by its colour and
 // dark where r looks down at the ground, with a sharp bright streak where it mirrors just above the
 // horizon. On a texture C.w is 2 * the brush's tint index + its light (see level); G is the
 // palette. On stone (the regolith) the tile is fetched twice at offsets drawn from a 9 m value noise
@@ -239,6 +290,7 @@ vec3 r=reflect(-V,m),k=K0(r);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
 c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr));
 c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv);
+c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(-abs(r.y-.12)*18.)),step(abs(L-(${GILT})),.02)*(.45+.45*fr));
 float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5);
 c.g=mix(c.g,c.r,z);
 o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z));}`;
@@ -508,7 +560,7 @@ export interface Renderer {
     /** The own player when the camera is not in his head (seated in a rover): drawn whole, like the others. */
     self?: PlayerState,
     /** Adds what else moves in the map (the doors): drawn lit, casting shadows, with the other players. */
-    more?: (v: number[]) => void,
+    more?: (v: Out) => void,
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
@@ -557,8 +609,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   let builds: ReadonlyMap<number, number> = new Map();
   let looks: ReadonlyMap<number, Choice> = new Map();
   // The runners' skins at every level, now: built on the first runner to come near (the close one
-  // with its face's channels takes a tenth of a second), they would stall a frame of the match.
-  [0, 1, 3].forEach(lod => body(lod));
+  // with its face's channels takes a tenth of a second), they would stall a frame of the match. So
+  // would their armour's recipes (a quarter of a second close up).
+  const dressed = (build = 0) => [0, 1, 3].forEach(lod => prepare(body(lod, build), lod > 2));
+  dressed();
   /** Each rover's wheels: the angle they have rolled to, and where the rover was last frame. */
   const spins: number[] = [];
   const was: [number, number][] = [];
@@ -611,6 +665,45 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const owned: (() => void)[] = [];
   let lost = false;
   let vp = new Float32Array(16);
+  /** The frame's vertices as written, and as the GPU takes them: both kept from frame to frame. */
+  const v = new Verts();
+  let floats = new Float32Array(0);
+  /** The frame's pieces of the store (store.ts), drawn after its own vertices. */
+  const pieces: Pieces = [];
+  /** The vertex arrays of the frame's buffer and of the store's, the two buffers, and the store's floats sent and room. */
+  let [main, kept, frameBuf, held, none] = [{}, {}, {}, {}, {}] as [
+    WebGLVertexArrayObject,
+    WebGLVertexArrayObject,
+    WebGLBuffer,
+    WebGLBuffer,
+    WebGLVertexArrayObject,
+  ];
+  let [sent, roomy] = [0, 0];
+  /** The texture of the store's data (store.ts, unit 4), its rows, and the floats of `data` it holds. */
+  let [flesh, rows, read] = [{} as WebGLTexture, 0, 0];
+  /** The frame's pieces, drawn after the frame's own vertices in every pass. */
+  const place = () => {
+    for (const { m, q, t, k, f } of pieces) {
+      if (f) {
+        // Posed by the shader from its texels: no vertex array.
+        gl.bindVertexArray(none);
+        gl.uniform1i(u.Sm, f.kind);
+        gl.uniform4i(u.Sb, ...f.at, +!!f.plate);
+        gl.uniform4fv(u.Sq, f.d);
+        gl.uniform3fv(u.Sp, f.pal);
+        gl.uniform4fv(u.Sw, f.face);
+        gl.uniform3fv(u.Sc, [...(f.plate ?? [0, 0, 0]), ...(f.accent ?? [0, 0, 0])]);
+        gl.drawArrays(gl.TRIANGLES, 0, m.count);
+        gl.uniform1i(u.Sm, 0);
+      } else {
+        gl.bindVertexArray(kept);
+        gl.uniform4fv(u.R, [...q, ...t, k]);
+        gl.drawArrays(gl.TRIANGLES, m.first, m.count);
+      }
+    }
+    gl.uniform4fv(u.R, STILL);
+    gl.bindVertexArray(main);
+  };
 
   /** (Re)allocates the buffer at cap bytes and puts the level back at its head. */
   const alloc = () => {
@@ -723,15 +816,41 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       'X',
       'Y',
       'J',
+      'R',
+      'Sg',
+      'Sm',
+      'Sb',
+      'Sq',
+      'Sp',
+      'Sw',
+      'Sc',
     ]);
     gl.uniform1i(u.D, 1);
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.uniform4fv(u.R, STILL);
+    gl.uniform1i(u.Sg, 4);
+    // The store's data, read by texel: sent again whole on a new context.
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, (flesh = gl.createTexture()));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.activeTexture(gl.TEXTURE0);
+    [rows, read] = [0, 0];
+    none = gl.createVertexArray();
+    const layout = () =>
+      [3, 3, 4].reduce((at, size, i) => {
+        gl.enableVertexAttribArray(i);
+        gl.vertexAttribPointer(i, size, gl.FLOAT, false, STRIDE * 4, at * 4);
+        return at + size;
+      }, 0);
+    // The store's pieces: sent again whole on a new context.
+    gl.bindVertexArray((kept = gl.createVertexArray()));
+    gl.bindBuffer(gl.ARRAY_BUFFER, (held = gl.createBuffer()));
+    layout();
+    [sent, roomy] = [0, 0];
+    gl.bindVertexArray((main = gl.createVertexArray()));
+    gl.bindBuffer(gl.ARRAY_BUFFER, (frameBuf = gl.createBuffer()));
     alloc();
-    [3, 3, 4].reduce((at, size, i) => {
-      gl.enableVertexAttribArray(i);
-      gl.vertexAttribPointer(i, size, gl.FLOAT, false, STRIDE * 4, at * 4);
-      return at + size;
-    }, 0);
+    layout();
     // Unit 1: the sun's depth layer, then one per shadowed light, compared in the shader (linear: a 2x2 PCF per tap).
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, (shadows = gl.createTexture()));
@@ -822,7 +941,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       }
       const tan = Math.tan(((FOV_DEG + fx.fov) * Math.PI) / 360);
       vp = viewProj(eye, yaw, pitch, w / h, fx.roll, tan);
-      const v: number[] = [];
+      // The frame's vertices, into the store the last frame left.
+      v.length = 0;
+      pieces.length = 0;
       const now = performance.now() / 1000;
       const dt = Math.min(0.1, now - clock);
       clock = now;
@@ -830,7 +951,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const crowd = self ? [...others, self] : others;
       animate(runners, crowd, dt, world, tracer, rovers, builds, looks);
       const [right, up, fwd] = basis(yaw, pitch, fx.roll);
-      drive(v, eye, fwd, Date.now() / 1000);
+      drive(v, eye, fwd, Date.now() / 1000, pieces);
       // The spent batteries and capsules falling to the floor.
       fall(dt);
       drawDrops(v);
@@ -839,6 +960,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       ctf?.packs?.forEach(at => kit(v, at, now));
       ctf?.ammo?.forEach(at => cell(v, at, now));
       ctf?.cells?.forEach(at => battery(v, at, now));
+      ctf?.vests?.forEach(at => vest(v, at, now));
       more?.(v);
       // The rovers, then the ships: of each kind the first half of the map's are red's, the others
       // blue's. The wheels turn by the way the rover went along its nose since the last frame.
@@ -883,6 +1005,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           d < CLOSE ? 3 : +(d < NEAR),
           world.def.helmets,
           !!world.def.armor,
+          pieces,
         );
         if (s) {
           // A space suit's pack is on the back: the flag is strapped on the pack, further back.
@@ -904,7 +1027,45 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         cap = tail + v.length * 8;
         alloc();
       }
-      gl.bufferSubData(gl.ARRAY_BUFFER, tail, new Float32Array(v));
+      // Into the same floats every frame: a new array of some two million a frame was a pause of its own.
+      if (floats.length < v.length) {
+        floats = new Float32Array(v.length * 2);
+      }
+      floats.set(v.a.subarray(0, v.length));
+      gl.bufferSubData(gl.ARRAY_BUFFER, tail, floats.subarray(0, v.length));
+      // The pieces made since the last frame, to the store's buffer (all of it when it has grown).
+      if (sent < filled) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, held);
+        if (roomy == stored.length) {
+          gl.bufferSubData(gl.ARRAY_BUFFER, sent * 4, stored.subarray(sent, filled));
+        } else {
+          gl.bufferData(gl.ARRAY_BUFFER, stored, gl.STATIC_DRAW);
+          roomy = stored.length;
+        }
+        sent = filled;
+        gl.bindBuffer(gl.ARRAY_BUFFER, frameBuf);
+      }
+      // The data made since the last frame, by whole rows of 2048 texels (all of it when it has grown).
+      if (read < used) {
+        const row = TEXELS * 4;
+        const need = Math.ceil(used / row);
+        gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D, flesh);
+        if (need > rows) {
+          // Room to grow, within the 2048 rows every WebGL2 allows (every skin and armour is some 1000).
+          rows = Math.max(need, Math.min(need * 2, 2048));
+          const all = new Float32Array(rows * row);
+          all.set(data.subarray(0, used));
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, TEXELS, rows, 0, gl.RGBA, gl.FLOAT, all);
+        } else {
+          const from = Math.floor(read / row);
+          const part = new Float32Array((need - from) * row);
+          part.set(data.subarray(from * row, used));
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, from, TEXELS, need - from, gl.RGBA, gl.FLOAT, part);
+        }
+        gl.activeTexture(gl.TEXTURE0);
+        read = used;
+      }
       // The headlights of the rovers that are driven, after the lights given.
       const pk = pack([...lights, ...beams(rovers.filter(r => !r.ship))]);
       const first = ground.length / STRIDE;
@@ -922,6 +1083,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.uniformMatrix4fv(u.m, false, i ? pk.m.subarray(i * 16 - 16, i * 16) : sunM);
         gl.clear(gl.DEPTH_BUFFER_BIT);
         gl.drawArrays(gl.TRIANGLES, 0, first + beamAt / STRIDE);
+        place();
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, shadows);
@@ -947,6 +1109,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.uniform1f(u.Y, 0);
       gl.drawArrays(gl.TRIANGLES, 0, first + bodyAt / STRIDE);
+      place();
       if (v.length > bodyAt) {
         // Last, over a cleared depth: the body never sinks into a wall.
         gl.clear(gl.DEPTH_BUFFER_BIT);
@@ -979,8 +1142,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     muzzle: id => runners.get(id)?.tip,
     wear: (b, l = new Map()) => {
       [builds, looks] = [b, l];
-      // Her skins now, as the man's are built at the start: not in a frame of the match.
-      new Set(b.values()).forEach(k => k && [0, 1, 3].forEach(lod => body(lod, k)));
+      // Her skins and their armour now, as the man's are built at the start: not in a frame of the match.
+      new Set(b.values()).forEach(k => k && dressed(k));
     },
     cheer: ids =>
       ids.forEach(id => {

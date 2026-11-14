@@ -55,13 +55,17 @@ import {
 } from './gun';
 import { helm } from './helm';
 import { helmet } from './helmet';
-import { STYLE, hair, styleOf, sway } from './hair';
+import { HEAD_SCALE, STYLE, hair, styleOf, sway } from './hair';
+import { ID, ORIGIN, mesh } from './store';
+import { flesh } from './flesh';
+import type { Pieces } from './store';
 import { CLOTH, dress, mask } from './mask';
-import { pads } from './pads';
+import { GOLD, pads } from './pads';
 import { ROLE } from '../shared/kit';
 import { armor } from './armor';
 import { CUP_F, crotch, hose, pack } from './pack';
 import { fetched, pouch, pouchAt } from './pouch';
+import { buckle } from './buckle';
 import type { Tracer } from './beams';
 import {
   BEHIND,
@@ -80,13 +84,15 @@ import type { Piece } from './limbs';
 import { STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, axis, mul, slerp, solve, turn } from './rig';
-import type { Pose } from './rig';
+import type { Pose, Quat } from './rig';
 import { REGION, beardOf, body, cut, eyesOf, hairOf, palette, shaved, skin, tressOf } from './skin';
 import { createFace, dashing, felled, strain } from './expression';
 import type { Face } from './expression';
 import { CH, toneFor } from './features';
 import { createTrail } from './trail';
 import type { Trail } from './trail';
+import { room } from './verts';
+import type { Out } from './verts';
 
 /** How fast the dash streaks grow and fade, 1 / s. */
 const DASH_RATE = 14;
@@ -132,6 +138,8 @@ export interface Runner {
   seat?: Seat;
   /** The head of the runner he looks at (watched()), and how far his own is turned to it, eased: to his right and up, radians. */
   watch?: Vec3;
+  /** The id of the runner he looks at, kept while he can be followed. */
+  watching?: number;
   gaze?: number[];
   /** The muzzle of the long gun in his hands as last drawn, from his feet: where its shots are seen to leave (combat.ts). */
   tip?: Vec3;
@@ -239,33 +247,43 @@ const floorOf =
  * The head turns to the runner one looks at (the user, 2026-11-12): the nearest within `far`
  * metres and `cone` radians of his aim. It turns no further than `turn` (to a side, up or down)
  * from where it points, the eyes going the rest of their travel; `rate` is how fast, per second.
+ * The one looked at is followed as he goes by (the user, 2026-11-14): kept, over a nearer one,
+ * until he is `hold` radians off the aim (the head's 80 degrees and the eyes' travel, REACH_X)
+ * or `keep` metres away.
  */
-export const WATCH = { far: 14, cone: 1.2, turn: [1.05, 0.5], rate: 7 };
+export const WATCH = { far: 14, keep: 18, cone: 1.2, hold: 2, turn: [1.4, 0.5], rate: 7 };
 
-/** Where the head of the runner `p` looks at is, among `crowd`: nothing when he looks at no one, or is down. */
-export const watched = (p: PlayerState, crowd: PlayerState[]): Vec3 | undefined => {
+/** The runner `p` looks at among `crowd`, and where his head is: none when he looks at no one, or is down. `held` is the one he looked at last. */
+export const watched = (
+  p: PlayerState,
+  crowd: PlayerState[],
+  held?: number,
+): { id: number; at: Vec3 } | undefined => {
   if (p.down) {
     return;
   }
   const f = basis(p.yaw, p.pitch)[2];
-  let best: Vec3 | undefined;
+  let best: PlayerState | undefined;
   let near = WATCH.far;
   for (const q of crowd) {
     const d = [q.x - p.x, q.y - p.y, q.z - p.z];
     const l = Math.hypot(...d);
-    if (q.id == p.id || l >= near || l < 0.3 || fried(q) >= 1) {
+    const kept = q.id == held;
+    if (q.id == p.id || l >= (kept ? WATCH.keep : near) || l < 0.3 || fried(q) >= 1) {
       continue;
     }
-    if (
-      Math.acos(Math.min(Math.max((d[0] * f[0] + d[1] * f[1] + d[2] * f[2]) / l, -1), 1)) <
-      WATCH.cone
-    ) {
+    const off = Math.acos(Math.min(Math.max((d[0] * f[0] + d[1] * f[1] + d[2] * f[2]) / l, -1), 1));
+    if (kept && off < WATCH.hold) {
+      best = q;
+      break;
+    }
+    if (off < WATCH.cone) {
       near = l;
-      // A man down is looked at where he lies.
-      best = [q.x, q.y + (q.down ? 0.3 : EYE + 0.06), q.z];
+      best = q;
     }
   }
-  return best;
+  // A man down is looked at where he lies.
+  return best && { id: best.id, at: [best.x, best.y + (best.down ? 0.3 : EYE + 0.06), best.z] };
 };
 
 /** A blow taken: seconds it lasts, and how far it throws the head and the chest back (radians). */
@@ -289,7 +307,9 @@ export const animate = (
   for (const p of others) {
     const seen = book.get(p.id);
     if (seen) {
-      seen.watch = watched(p, others);
+      const w = watched(p, others, seen.watching);
+      seen.watch = w?.at;
+      seen.watching = w?.id;
     }
     const build = builds?.get(p.id) ?? 0;
     const look = looks?.get(p.id);
@@ -562,7 +582,7 @@ export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number, t
 };
 
 /** A dash trails three streaks: thin glowing (layer -2) spikes, a pair of crossed triangles each. */
-const streaks = (out: number[], r: Runner, color: number[], at: (v: Vec3) => Vec3) => {
+const streaks = (out: Out, r: Runner, color: number[], at: (v: Vec3) => Vec3) => {
   const back = unit([-r.p.vx, 0, -r.p.vz]);
   const [cr, cg, cb] = color.map(v => 0.6 + 0.6 * v);
   [
@@ -640,9 +660,10 @@ export const fried = (p: PlayerState): number =>
  * at once, each drifts up and out on its own, and goes when `k` passes its own share, so the body
  * thins to nothing.
  */
-export const dissolve = (out: number[], from: number, k: number) => {
+export const dissolve = (out: Out, from: number, k: number) => {
   const T = 3 * STRIDE;
   let w = from;
+  const a = room(out, 0);
   for (let o = from, i = 0; o < out.length; o += T, i++) {
     const h = ((Math.imul(i + 1, 0x9e3779b1) >>> 0) % 1000) / 1000;
     if (h < k) {
@@ -652,10 +673,10 @@ export const dissolve = (out: number[], from: number, k: number) => {
     const glow = Math.min(1, k * 4);
     for (let v = 0; v < T; v += STRIDE) {
       for (let j = 0; j < STRIDE; j++) {
-        out[w + v + j] = out[o + v + j] + (j < 3 ? lift[j] : 0);
+        a[w + v + j] = a[o + v + j] + (j < 3 ? lift[j] : 0);
       }
-      [6, 7, 9].forEach((j, c) => (out[w + v + j] += (ARC[c] * (1 - k) - out[w + v + j]) * glow));
-      out[w + v + 8] = glow > 0.5 ? -2 : out[w + v + 8];
+      [6, 7, 9].forEach((j, c) => (a[w + v + j] += (ARC[c] * (1 - k) - a[w + v + j]) * glow));
+      a[w + v + 8] = glow > 0.5 ? -2 : a[w + v + 8];
     }
     w += T;
   }
@@ -770,7 +791,7 @@ export const stance = (r: Runner) => {
  * fingertips. Not the hand of an arm a cut took off.
  */
 const gloves = (
-  out: number[],
+  out: Out,
   r: Runner,
   s: ReturnType<typeof solve>,
   colors: number[][],
@@ -799,18 +820,32 @@ const gloves = (
 
 /** Draws the runner and gives back its solved skeleton, or nothing once a bolt has burnt it away. */
 export const soldier = (
-  out: number[],
+  out: Out,
   r: Runner,
   color: number[],
   lod = 1,
   helmets = false,
   armored = helmets,
+  /** The frame's pieces of the store: the rigid ones go there (store.ts), but on one coming apart. */
+  list?: Pieces,
 ) => {
   const { p } = r;
   const k = fried(p);
   if (k >= 1) {
     return;
   }
+  const gpu = k > 0 ? undefined : list;
+  /** A rigid piece on a joint: into `out`, or made once at the origin into the store and placed there, `scale` its size. */
+  const rigid = (
+    key: string,
+    at: Vec3,
+    q: Quat,
+    make: (o: Out, at: Vec3, q: Quat) => void,
+    scale = 1,
+  ) =>
+    gpu
+      ? gpu.push({ m: mesh(key, o => make(o, ORIGIN, ID)), q, t: at, k: scale })
+      : make(out, at, q);
   r.tip = undefined;
   const [build, picked] = [r.build ?? 0, r.look];
   // The ninja (the user, 2026-11-12): a tight black suit, his team's colour on its side stripes and
@@ -831,7 +866,8 @@ export const soldier = (
   if (ninja) {
     const { PANTS, UPPER, GLOVE, STRIPE, STRIPE_LOW, BELT } = REGION;
     [colors[PANTS], colors[UPPER], colors[GLOVE]] = [CLOTH, CLOTH, CLOTH];
-    [colors[STRIPE], colors[STRIPE_LOW], colors[BELT]] = [color, color, color];
+    // His belt is cut in a V by armor() (BELT in armor.ts), the skin's under it black.
+    [colors[STRIPE], colors[STRIPE_LOW], colors[BELT]] = [color, color, CLOTH];
   }
   if (build && styleOf(p.id, picked) == STYLE.UNDERCUT) {
     // A shaved side: the scalp's hair is stubble, the skin showing through it.
@@ -881,8 +917,13 @@ export const soldier = (
     skin(out, cs, s, colors, r.face.w);
     // The stump's face is the last vertex drawn.
     r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
-    if (plated) {
-      armor(out, at, cs, lod > 2, plate, ninja, color);
+    if (plated || ninja) {
+      armor(out, at, cs, lod > 2, plate, ninja, color, !plated);
+    }
+    if (ninja) {
+      rigid(`buckle ${build} ${color}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
+        buckle(o, a, q, build, color),
+      );
     }
     piece(out, r.cut, colors, lod, sink, r.face.w, armored);
     gloves(out, r, s, colors, lod, armored, r.cut.limb);
@@ -890,16 +931,35 @@ export const soldier = (
     const from = out.length;
     const bs = body(lod, build);
     // Under a helmet's dark visor no face shows: its channels are not worth their time.
-    skin(out, bs, s, colors, helmets ? undefined : r.face.w);
-    if (ninja && !helmets) {
-      // The hood painted on the head, the face under the guard pressed in.
-      dress(out, from, bs, s.pos[J.HEAD], s.rot[J.HEAD], build);
+    const face = helmets ? undefined : r.face.w;
+    if (gpu) {
+      // Posed by the shader, the hood and the armour too (flesh.ts).
+      flesh(
+        gpu,
+        bs,
+        s,
+        colors,
+        face,
+        plated || ninja ? { fine: lod > 2, plate, accent: color, ninja, bare: !plated } : undefined,
+        ninja && !helmets ? build : undefined,
+      );
+    } else {
+      skin(out, bs, s, colors, face);
+      if (ninja && !helmets) {
+        // The hood painted on the head, the face under the guard pressed in.
+        dress(out, from, bs, s.pos[J.HEAD], s.rot[J.HEAD], build);
+      }
+      // The armour, cut out of the skin just drawn.
+      if (plated || ninja) {
+        armor(out, from, bs, lod > 2, plate, ninja, color, !plated);
+      }
     }
-    // The armour, cut out of the skin just drawn.
-    if (plated) {
-      armor(out, from, bs, lod > 2, plate, ninja, color);
+    rigid('pouch', s.pos[J.PELVIS], s.rot[J.PELVIS], pouch);
+    if (ninja) {
+      rigid(`buckle ${build} ${color}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
+        buckle(o, a, q, build, color),
+      );
     }
-    pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
     gloves(out, r, s, colors, lod, armored);
     if (k > 0) {
       dissolve(out, from, k);
@@ -924,14 +984,25 @@ export const soldier = (
   // The ninja's pads and collar; the marine's shoulder bells.
   if (plated) {
     const from = out.length;
-    pads(out, s, build, ninja ? color : (plate ?? [0.85, 0.86, 0.88]), !ninja, color);
+    pads(out, s, build, ninja ? GOLD : (plate ?? [0.85, 0.86, 0.88]), !ninja, color, !lod, gpu);
     if (k > 0) {
       dissolve(out, from, k);
     }
   }
   if (ninja && !helmets && r.cut?.limb !== LIMB.HEAD) {
     const from = out.length;
-    mask(out, s.pos[J.HEAD], s.rot[J.HEAD], build, color);
+    if (gpu) {
+      // Hers is his, smaller.
+      rigid(
+        `mask ${color} ${!lod}`,
+        s.pos[J.HEAD],
+        s.rot[J.HEAD],
+        (o, a, q) => mask(o, a, q, 0, color, !lod),
+        build ? HEAD_SCALE : 1,
+      );
+    } else {
+      mask(out, s.pos[J.HEAD], s.rot[J.HEAD], build, color, !lod);
+    }
     if (k > 0) {
       dissolve(out, from, k);
     }
@@ -940,21 +1011,29 @@ export const soldier = (
   if (helmets && r.cut?.limb !== LIMB.HEAD) {
     if (build) {
       // Hers is another helmet, with no hose: told from his at a glance.
-      helm(out, s.pos[J.HEAD], s.rot[J.HEAD], color, lod);
+      rigid(`helm ${color} ${lod}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) =>
+        helm(o, a, q, color, lod),
+      );
     } else {
-      helmet(out, s.pos[J.HEAD], s.rot[J.HEAD], color, lod);
+      rigid(`helmet ${color} ${lod}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) =>
+        helmet(o, a, q, color, lod),
+      );
       hose(out, s.pos[J.HEAD], s.rot[J.HEAD], s.pos[J.CHEST], s.rot[J.CHEST], lod);
     }
   }
   // The life support pack on the back of a space suit.
   if (helmets) {
-    pack(out, s.pos[J.CHEST], s.rot[J.CHEST], color, lod);
+    rigid(`pack ${color} ${lod}`, s.pos[J.CHEST], s.rot[J.CHEST], (o, a, q) =>
+      pack(o, a, q, color, lod),
+    );
   }
   if (armored) {
-    crotch(out, s.pos[J.PELVIS], s.rot[J.PELVIS], plate, build ? CUP_F : 1);
+    rigid(`crotch ${plate} ${build}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
+      crotch(o, a, q, plate, build ? CUP_F : 1),
+    );
   }
   if (blade) {
-    sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t);
+    sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t, 1, 1, 0, gpu);
     r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));
   } else if ((p.railed ? !stowed(p) : p.ammo >= 0 || p.rifled) && !p.down && !driving(r)) {
     // A swap shows: the battery or the capsule out and in, the glow off until it is.
@@ -969,6 +1048,7 @@ export const soldier = (
       floor: p.ground ? p.y : undefined,
       vel: [p.vx, p.vy, p.vz],
       carry,
+      list: gpu,
     });
     if (p.railed || p.rifled) {
       const q = s.rot[J.HAND_R];

@@ -7,6 +7,8 @@ import { gun, railgun, rifle } from './gun';
 import { sword } from './katana';
 import { STRIDE, basis, place, segment, solid } from './mesh';
 import type { Vec3 } from './mesh';
+import { room } from './verts';
+import type { Out } from './verts';
 
 /**
  * The packs of `all` whose bit is set in `mask`, if any: the ones that are there to take. The bits
@@ -20,7 +22,7 @@ export const packsOf = (all: readonly Vec3[] = [], mask = 0, from = 0): Vec3[] =
  * the weapon, and the weapon over it: the gun, or by `kind` the katana (1), crackling, the rail
  * gun (2) or the laser rifle (3).
  */
-export const rack = (out: number[], at: Vec3, rgb: number[], t: number, kind = 0) => {
+export const rack = (out: Out, at: Vec3, rgb: number[], t: number, kind = 0) => {
   const dark = rgb.map(c => c * 0.45);
   segment(
     out,
@@ -49,7 +51,7 @@ export const rack = (out: number[], at: Vec3, rgb: number[], t: number, kind = 0
 
 /** Each team's gun rack, katana rack, rail gun rack and laser rifle rack, where it has them. */
 export const racks = (
-  out: number[],
+  out: Out,
   guns: readonly (Vec3 | undefined)[] = [],
   blades: readonly (Vec3 | undefined)[] = [],
   t = 0,
@@ -135,9 +137,19 @@ const BOLT: Glyph = [
   ],
 ];
 
+/** A shield: a square top and a point at the bottom. */
+const SHIELD: Glyph = [
+  ...rect(-0.11, 0, 0.11, 0.12),
+  [
+    [-0.11, 0],
+    [0, -0.14],
+    [0.11, 0],
+  ],
+];
+
 /** A box of half side `h` turning and bobbing a little over `at` (on a top), `glyph` glowing in `lit` on each face. */
 const crate = (
-  out: number[],
+  out: Out,
   at: Vec3,
   t: number,
   h: number,
@@ -160,20 +172,25 @@ const crate = (
     for (const [a, b, c] of glyph) {
       tri(out, q(...a, 1.01), q(...b, 1.01), q(...c, 1.01), lit);
     }
+    const a = room(out, 0);
     for (let i = from; i < out.length; i += STRIDE) {
-      out[i + 8] = -2;
+      a[i + 8] = -2;
     }
   }
 };
 
 /** A health pack at `at`: a white box with a glowing green cross on each side. */
-export const kit = (out: number[], at: Vec3, t: number) =>
+export const kit = (out: Out, at: Vec3, t: number) =>
   crate(out, at, t, 0.17, [0.86, 0.9, 0.88], CROSS, [0.1, 1.2, 0.4]);
 
 /** An ammo pack at `at`: a violet box with a glowing cyan cartridge on each side, the gun's colours. */
-export const cell = (out: number[], at: Vec3, t: number) =>
+export const cell = (out: Out, at: Vec3, t: number) =>
   crate(out, at, t, 0.15, [0.34, 0.14, 0.58], BULLET, [0.3, 1.4, 1.8]);
 
 /** A rail cell at `at`: a gunmetal box with a glowing violet-white bolt on each side, the rail gun's colours. */
-export const battery = (out: number[], at: Vec3, t: number) =>
+export const battery = (out: Out, at: Vec3, t: number) =>
   crate(out, at, t, 0.15, [0.14, 0.15, 0.18], BOLT, [1.1, 0.85, 2.6]);
+
+/** An armour at `at`: a bigger steel box with a glowing gold shield on each side. */
+export const vest = (out: Out, at: Vec3, t: number) =>
+  crate(out, at, t, 0.2, [0.3, 0.32, 0.36], SHIELD, [1.5, 1, 0.12]);

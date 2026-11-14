@@ -109,7 +109,8 @@ describe('the trigger', () => {
     // Let go: one ball of the full strength, CHARGE_MAX shots spent.
     expect(go(p, 0)).toBe(true);
     expect([p.power, p.ammo, p.shots, p.charge]).toEqual([CHARGE_MAX, AMMO_MAX - CHARGE_MAX, 1, 0]);
-    expect(CHARGE_MAX).toBe(HP_MAX);
+    // Since HP_MAX went to 8 (the user, 2026-11-14) a full charge no longer puts a fresh foe down.
+    expect(CHARGE_MAX).toBeLessThan(HP_MAX);
   });
 
   it('grows the strength with the charge: 1 under CHARGE_TAP, CHARGE_MAX at CHARGE_TICKS, never back', () => {

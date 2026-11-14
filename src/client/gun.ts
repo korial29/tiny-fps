@@ -34,6 +34,10 @@ import type { Vec3 } from './mesh';
 import { drop } from './drops';
 import { axis, turn } from './rig';
 import type { Quat } from './rig';
+import { room } from './verts';
+import type { Out } from './verts';
+import { ID, ORIGIN, mesh } from './store';
+import type { Pieces } from './store';
 
 /** A ring of a loft: how far ahead, how high, half width, half height, and the offset to the side. */
 type Station = [f: number, y: number, a: number, b: number, x?: number];
@@ -59,7 +63,7 @@ const ring = (st: Station[], i: number, k: number, n: number): Vec3 => {
   return [x + a * c, y + b * s * tf, -(f - b * s * ty)];
 };
 
-const tube = (out: number[], st: Station[], n: number, paint: Paint) => {
+const tube = (out: Out, st: Station[], n: number, paint: Paint) => {
   const P: Vec3[] = [];
   const N: Vec3[] = [];
   const T: number[] = [];
@@ -415,7 +419,7 @@ const onBulb = (f: number, s: number, x: number, d = 0.0004): Vec3[] => {
 };
 
 /** The printed circuit (CIRCUIT) on both flanks of the pistol's body. */
-const circuits = (out: number[]) => {
+const circuits = (out: Out) => {
   for (const x of [-1, 1]) {
     /** A strip from `a` to `b` (forward, up round) `w` wide, in pieces of 3 cm at most. */
     const run = (a: number[], b: number[], w: number) => {
@@ -502,7 +506,7 @@ const RECEIVER = [
  * flank above and under its middle, cross-head screws; grooves round the barrel between the
  * insulators and the coils.
  */
-const teslaDetails = (out: number[]) => {
+const teslaDetails = (out: Out) => {
   /** The receiver's surface at `f` forward, `k` round (of its 10 vertices, between them on a flat face), `d` out of it, and the face's normal. */
   const at = (f: number, k: number, d = 0.0003): Vec3[] => {
     const t = (f + 0.1) / 0.23;
@@ -811,7 +815,7 @@ const HOUSING: number[][] = [
 const [HOUSING_FOOT, HOUSING_BACK, HOUSING_SLOPE] = [0.085, -0.115, 0.8];
 
 /** Appends the housing: its sides, its top and its two ends, in polished grey metal, the normals smooth round the top corners. */
-const housing = (out: number[], lod: number) => {
+const housing = (out: Out, lod: number) => {
   const r = 0.003;
   const turns = lod ? 4 : 1;
   /** One section at `f`: its outline from the right foot up, over the top, down to the left foot, in model space. */
@@ -923,7 +927,7 @@ const LEDS = [LASER, [1.8, 0.9, 0.1], GLOW];
  * three LEDs on each side of the housing at the back, and a vent of five slots on each side of the butt.
  */
 /** A flat quad `q` facing `n`, painted. */
-const flat = (out: number[], q: Vec3[], n: Vec3, paint: Paint) => {
+const flat = (out: Out, q: Vec3[], n: Vec3, paint: Paint) => {
   for (const t of [
     [q[0], q[1], q[2]],
     [q[0], q[2], q[3]],
@@ -935,7 +939,7 @@ const flat = (out: number[], q: Vec3[], n: Vec3, paint: Paint) => {
 };
 /** A rectangle on a surface: `at(u, v)` the point `u` along and `v` across it. */
 const rect = (
-  out: number[],
+  out: Out,
   at: (u: number, v: number) => Vec3,
   u0: number,
   u1: number,
@@ -952,7 +956,7 @@ const rect = (
   }
 };
 /** A cross-head screw at `c` on a surface of normal `n`, `e` and `w` across it, `k` times the rifle's. */
-const screw = (out: number[], c: Vec3, e: Vec3, w: Vec3, n: Vec3, k = 1) => {
+const screw = (out: Out, c: Vec3, e: Vec3, w: Vec3, n: Vec3, k = 1) => {
   const p = (a: number, b: number, d: number): Vec3 =>
     [0, 1, 2].map(i => c[i] + (e[i] * a + w[i] * b) * k + n[i] * d) as Vec3;
   for (let k = 0; k < 10; k++) {
@@ -978,7 +982,7 @@ const screw = (out: number[], c: Vec3, e: Vec3, w: Vec3, n: Vec3, k = 1) => {
   rect(out, (u, v) => p(v, u, 0.0008), -0.0019, 0.0019, -0.0003, 0.0003, n, slot);
 };
 
-const details = (out: number[]) => {
+const details = (out: Out) => {
   /** The housing's side `s` at `f` and `y`, `d` out of it, and its normal. */
   const side = (s: number, f: number, y: number, d = 0.0003): Vec3 => {
     const [, top, wb, wt] = along(HOUSING, f);
@@ -1425,7 +1429,7 @@ const KNOB = dress(
   [1, 1, 1],
 );
 /** Appends weapon `kind`'s button in model space, pushed in by `push` (0 to 1) of 1.5 mm, its glow `rgb` lit by `light`. */
-export const button = (out: number[], kind: number, push: number, light: number, rgb: number[]) => {
+export const button = (out: Out, kind: number, push: number, light: number, rgb: number[]) => {
   const [foot, n, len] = BUTTONS[kind];
   const from = out.length;
   place(
@@ -2021,7 +2025,7 @@ const WORLD: Vec3[] = [
   [0, 1, 0],
   [0, 0, 1],
 ];
-const smoke = (out: number[], at: Vec3, [r, u, f]: Vec3[], k: number, t: number) => {
+const smoke = (out: Out, at: Vec3, [r, u, f]: Vec3[], k: number, t: number) => {
   for (let i = 0; i < SMOKE; i++) {
     const p = (t * 0.7 + i / SMOKE) % 1;
     const g = 0.3 + 0.12 * ((i * 0.618) % 1);
@@ -2041,6 +2045,8 @@ const smoke = (out: number[], at: Vec3, [r, u, f]: Vec3[], k: number, t: number)
  * one in use, then the two in reserve), its heat (0 to 1) and whether it overheated.
  */
 export interface Lit {
+  /** The frame's pieces of the store: the gun's body, lit, goes there (store.ts). */
+  list?: Pieces;
   light?: number;
   swap?: number;
   empty?: boolean;
@@ -2079,7 +2085,7 @@ export const cellsOf = (p: Pick<PlayerState, 'rail' | 'cap'>): number[] => {
  * its counter dimmed with `light`, and the spark only when it is all on.
  */
 export const held = (
-  out: number[],
+  out: Out,
   pos: Vec3,
   q: Quat,
   lod: number,
@@ -2104,6 +2110,7 @@ export const held = (
     floor,
     vel = [0, 0, 0],
     carry,
+    list,
   }: Lit = {},
 ) => {
   const [at, ax] = [grip(pos, q), axes(q)];
@@ -2159,9 +2166,10 @@ export const held = (
         k * SLOTS[i][5],
       );
     }
+    const a = room(out, 0);
     for (let i = from + 8; blink && i < out.length; i += STRIDE) {
-      if (out[i] == -2) {
-        [out[i - 2], out[i - 1], out[i + 1]] = EMBER;
+      if (a[i] == -2) {
+        [a[i - 2], a[i - 1], a[i + 1]] = EMBER;
       }
     }
     place(out, insulators(lod, heat), at, ax, [0, 0, 0], k);
@@ -2169,7 +2177,18 @@ export const held = (
       smoke(out, at, ax, k, t);
     }
   }
-  place(out, [gun, gun, railgun, rifle][w](lod), at, ax, [0, 0, 0], k);
+  // The gun's body, lit: made once into the store and placed there (store.ts).
+  const model = [gun, gun, railgun, rifle][w](lod);
+  if (list && d == 1) {
+    list.push({
+      m: mesh(`gun ${w} ${lod}`, o => place(o, model, ORIGIN, axes(ID), [0, 0, 0], 1)),
+      q,
+      t: at,
+      k,
+    });
+  } else {
+    place(out, model, at, ax, [0, 0, 0], k);
+  }
   if (rail && light > 0.98 && swap < 0 && !hot) {
     place(out, arc(t), at, ax, [0, 0, 0], k);
   }

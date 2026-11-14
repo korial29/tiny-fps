@@ -63,6 +63,8 @@ export interface WorldDef {
   ammo?: Vec3[];
   /** Rail cells, points on tops (with the health and ammo packs at most PACK_BITS): within PACK_R a player with the rail gun and less than RAIL_MAX of lightning takes RAIL_CELL, then it is gone PACK_BACK seconds. */
   cells?: Vec3[];
+  /** Armours, points on tops (with the packs and the cells at most PACK_BITS): within PACK_R a player short of ARMOR_MAX is filled to it, then it is gone ARMOR_BACK seconds. */
+  vests?: Vec3[];
   /** Unit direction toward the sun, and its colour (linear RGB, may exceed 1). */
   sun: { dir: Vec3; color: Vec3 };
   /** Sky colours at the zenith and the horizon, linear RGB. */

@@ -4,6 +4,7 @@
 // event and the end screen of a match.
 import {
   GUN_MAG,
+  ARMOR_MAX,
   HP_MAX,
   RAIL_CAP,
   RAIL_MAX,
@@ -178,6 +179,8 @@ export const HUD_CSS =
   `filter:drop-shadow(0 3px 0 #500) drop-shadow(0 0 14px #f604)}` +
   `ul{left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:4px;list-style:none}li{width:16px;height:6px;background:#fff;box-shadow:0 0 0 1px #0008}` +
   `li.e{background:#0000;box-shadow:inset 0 0 0 1px #fffb,0 0 0 1px #0008}ul.low li{background:#f55}ul.low li.e{background:#0000}` +
+  // The armour: gold pips after the health, only the ones there.
+  `ul li.a{background:#fc3}li.a.e{display:none}li:not(.a)+li.a{margin-left:6px}` +
   `dl{right:12px;bottom:10px;display:flex;align-items:center;gap:10px}dl svg{width:38px;fill:#fff;filter:drop-shadow(0 1px 1px #000)}` +
   `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data,dl.k span{display:none}dl.w data{opacity:.35}dl.k svg{width:64px;fill:#8ef}dl.r svg{fill:#c9f}dl.r data{color:#dcf}dl.f svg{fill:#f86}dl.f data{color:#fdb}dl span::first-line{font-size:22px}` +
   `dl small{position:absolute;bottom:100%;right:0;display:flex;gap:10px;font-size:11px;white-space:nowrap}dl kbd{font:inherit;opacity:.5}dl kbd.a{opacity:1}` +
@@ -420,7 +423,8 @@ export interface Hud {
    * holds, in the same count: big, with the rest after it as the magazines it makes (an open one for
    * a part) over its count; faded while `swapping` it. `rifle` is the
    * laser rifle's rounds (-1 none), shown with the glyph in red when `rifled` (slot 4), with the
-   * `nades` left in its launcher as dots after the count, hollow for the ones spent.
+   * `nades` left in its launcher as dots after the count, hollow for the ones spent. `armor` shows
+   * as gold pips after the health's, only the ones he has.
    */
   vitals(
     hp: number,
@@ -434,6 +438,7 @@ export interface Hud {
     rifle?: number,
     rifled?: boolean,
     nades?: number,
+    armor?: number,
   ): void;
   /** A hit marker on the crosshair for a moment: a ball or a cut of the own player hit. */
   hit(): void;
@@ -548,7 +553,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
             .join('')}</table>`,
       ).join('')}</article></main></aside>` +
       `<del hidden></del><u></u><h5 hidden>Muted (M)</h5>` +
-      `<ul>${'<li></li>'.repeat(HP_MAX)}</ul><figure hidden><canvas width="${FW}" height="${FH}"></canvas></figure>` +
+      `<ul>${'<li></li>'.repeat(HP_MAX)}${'<li class=a></li>'.repeat(ARMOR_MAX)}</ul><figure hidden><canvas width="${FW}" height="${FH}"></canvas></figure>` +
       `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
       `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
       `<data></data><span></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
@@ -673,6 +678,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const [red, time, blue] = [...bar.querySelectorAll<HTMLElement>('span, time')];
   const [redFlag, blueFlag] = [...bar.querySelectorAll<HTMLElement>('small')];
   const pips = [...one('ul').querySelectorAll('li')];
+  const plates = pips.splice(HP_MAX);
   const [life, ammo, marker, fallen] = [one('ul'), one('dl'), one('s'), one('mark')];
   const [rope, knot] = [one('ins'), one('ins i')];
   const [count, spare, slots] = [one('data'), one('dl span'), one('dl small')];
@@ -787,8 +793,10 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       rifle = -1,
       rifled = false,
       nades = 0,
+      armor = 0,
     ) {
       pips.forEach((li, i) => li.classList.toggle('e', i >= hp));
+      plates.forEach((li, i) => li.classList.toggle('e', i >= armor));
       life.classList.toggle('low', hp <= 1);
       const have = [rounds >= 0, blade, rail >= 0, rifle >= 0];
       const k = !railed && !rifled && blade && (wield || !have[0]);

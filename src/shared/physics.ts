@@ -144,6 +144,7 @@ export const STILL = {
   buffer: 0,
   held: 0,
   hp: HP_MAX,
+  armor: 0,
   ammo: -1,
   cool: 0,
   mag: 0,

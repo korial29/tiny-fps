@@ -20,7 +20,7 @@ import { furnishing } from './moonbase';
 import { moonscape } from './moonscape';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
-import { battery, cell, kit, racks } from './props';
+import { battery, cell, kit, racks, vest } from './props';
 import { PACK } from './pack';
 import { JOINT, turn } from './rig';
 import { craft } from './craft';
@@ -849,6 +849,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       ctf?.packs?.forEach(at => kit(v, at, now));
       ctf?.ammo?.forEach(at => cell(v, at, now));
       ctf?.cells?.forEach(at => battery(v, at, now));
+      ctf?.vests?.forEach(at => vest(v, at, now));
       more?.(v);
       // The rovers, then the ships: of each kind the first half of the map's are red's, the others
       // blue's. The wheels turn by the way the rover went along its nose since the last frame.

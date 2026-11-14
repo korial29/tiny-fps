@@ -152,6 +152,9 @@ export const voiceOf = (id: number, body = 0): number =>
   (body ? 1.35 : 1) * (0.9 + 0.2 * ((id * 0.618) % 1));
 
 /** Seconds between two buzzes of a saber lock, and two crackles of a rail gun's bolt. */
+/** Health and armour together: what a hit takes. */
+const life = (p: Pick<PlayerState, 'hp' | 'armor'>): number => p.hp + (p.armor ?? 0);
+
 const BUZZ = 0.16;
 const CRACKLE = 0.09;
 /** A bolt's buzz goes up and down 1.6 times a second, by 35 % of its pitch either way. */
@@ -391,12 +394,13 @@ export const createCombat = (
           shing(was, me, undefined, f);
           reloads(was, me, undefined, f);
         }
-        if (was && me.hp < was.hp) {
+        // A hit on the armour hurts as one on the health; an armour taken sounds as a pack.
+        if (was && life(me) < life(was)) {
           const died = me.down > 0 && !was.down;
           audio.play(died ? SOUND.DOWN : SOUND.HURT);
           cry(me.id, died);
           fx.wound();
-        } else if (was && me.hp > was.hp && !was.down) {
+        } else if (was && life(me) > life(was) && !was.down) {
           audio.play(SOUND.PACK);
         }
         if (
@@ -440,6 +444,7 @@ export const createCombat = (
           me.rifle ?? -1,
           !!me.rifled,
           me.nades ?? 0,
+          me.armor ?? 0,
         );
         cuts.forEach(c => swish(c));
         hud.down(fx.lie, me.down / TICK_HZ);
@@ -507,11 +512,11 @@ export const createCombat = (
           laser(at, power);
         }
         seen.set(p.id, p.shots);
-        const life = lives.get(p.id);
-        if (life && p.hp < life[0]) {
-          cry(p.id, p.down > 0 && !life[1], at);
+        const lived = lives.get(p.id);
+        if (lived && life(p) < lived[0]) {
+          cry(p.id, p.down > 0 && !lived[1], at);
         }
-        lives.set(p.id, [p.hp, p.down > 0]);
+        lives.set(p.id, [life(p), p.down > 0]);
         charges.set(p.id, p.charge ?? 0);
         if ((p.charge ?? 0) >= CHARGE_TAP && p.ammo >= 0 && !p.wield && !p.down) {
           hot.push({ p: gun(p), k: filled(p.charge) });

@@ -135,6 +135,8 @@ export const ROOFTOPS: WorldDef = {
     [13, 12.4, 31],
     [41.5, 8, 34.5],
   ],
+  // One on D, the brick roof across from red's base.
+  vests: [[42, 8, 70]],
   floor: -25,
   // A warm bright sun, low in the east: long sharp shadows across the roofs.
   sun: { dir: [0.6, 0.64, 0.48], color: [2.6, 2.3, 1.8] },
@@ -397,6 +399,13 @@ export const HIGHLINE: WorldDef = {
   ],
   ammo: [...AMMO, ...AMMO.map(([x, y, z]): Vec3 => [x, y, ZED - z]), [12, 15, 116], [12, 15, 124]],
   cells: [...CELLS, ...CELLS.map(([x, y, z]): Vec3 => [x, y, ZED - z]), [28, 15, ZED / 2]],
+  // The armours: one on the dais in the middle of the plaza, beside its orange pad, and one
+  // in each half at the end of the Spine, off its line, for the runners who made the viaduct.
+  vests: [
+    [36, 17.2, ZED / 2],
+    [23, 26, 136],
+    [23, 26, ZED - 136],
+  ],
   floor: -25,
   // A warm sun low in the east, along the roofs' short side: the same light for both teams.
   sun: { dir: [0.8, 0.6, 0], color: [2.6, 2.3, 1.8] },

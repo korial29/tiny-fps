@@ -2,6 +2,8 @@ import {
   AMMO_BACK,
   AMMO_PACK,
   ARC_KNOCK,
+  ARMOR_BACK,
+  ARMOR_MAX,
   CUTS,
   DOWN_TICKS,
   FLOOR_TICKS,
@@ -288,10 +290,10 @@ export class Room {
     this.wear = this.rovers.map(() => ({ ...NEW }));
   }
 
-  /** The health, ammo and cell packs of the map, all there (0 ticks before each is back). */
+  /** The health, ammo and cell packs and the armours of the map, all there (0 ticks before each is back). */
   private spots(): number[] {
-    const { packs = [], ammo = [], cells = [] } = this.world.def;
-    return [...packs, ...ammo, ...cells].map(() => 0);
+    const { packs = [], ammo = [], cells = [], vests = [] } = this.world.def;
+    return [...packs, ...ammo, ...cells, ...vests].map(() => 0);
   }
 
   /** The host: the player in the room the longest. */
@@ -700,13 +702,15 @@ export class Room {
   }
 
   /**
-   * `hp` of damage to `foe`; the last one puts him down: he lies where he fell, without the gun or
-   * the katana, a flag he carries drops with the lock, and `lost` is NONE (a cut sets it after).
-   * True when he went down: an enemy `by` scores a frag made `how` (FRAG), told to everyone. `fell`
-   * is how he falls (felled()).
+   * `hp` of damage to `foe`, his armour taking it first (Infinity goes through it); the last one
+   * puts him down: he lies where he fell, without the gun, the katana or armour, a flag he carries
+   * drops with the lock, and `lost` is NONE (a cut sets it after). True when he went down: an enemy
+   * `by` scores a frag made `how` (FRAG), told to everyone. `fell` is how he falls (felled()).
    */
   private harm(foe: Player, hp: number, by?: Player, how: number = FRAG.GUN, fell = 0): boolean {
-    if ((foe.state.hp -= hp) > 0) {
+    const armor = foe.state.armor ?? 0;
+    foe.state.armor = Math.max(0, armor - hp);
+    if ((foe.state.hp -= Math.max(0, hp - armor)) > 0) {
       return false;
     }
     [foe.graze, foe.bruise, foe.blows, foe.halves] = [0, 0, 0, 0];
@@ -716,6 +720,7 @@ export class Room {
     }
     Object.assign(foe.state, {
       hp: 0,
+      armor: 0,
       down: DOWN_TICKS,
       ammo: -1,
       cool: 0,
@@ -1057,21 +1062,25 @@ export class Room {
   }
 
   /**
-   * The packs, health ones first, then the ammo ones, then the rail cells: one that is gone comes
-   * back after PACK_BACK s, an ammo pack after AMMO_BACK s. A health pack goes to a hurt player standing at it, an ammo pack to one
+   * The packs, health ones first, then the ammo ones, then the rail cells, then the armours: one
+   * that is gone comes back after PACK_BACK s, an ammo pack after AMMO_BACK s, an armour after
+   * ARMOR_BACK s. A health pack goes to a hurt player standing at it, an ammo pack to one
    * with the gun short of AMMO_MAX or the laser rifle short of RIFLE_MAX (RIFLE_CLIP more rounds), a rail cell to one with the rail gun and less than
-   * RAIL_MAX of lightning. Both change the state between two inputs, like a hit: the snapshot
+   * RAIL_MAX of lightning, an armour to one short of ARMOR_MAX. All change the state between two inputs, like a hit: the snapshot
    * carries the result and the predictor replays its unacked inputs on it.
    */
   private heal(players: Player[]): void {
-    const { packs = [], ammo = [], cells = [] } = this.world.def;
-    [...packs, ...ammo, ...cells].forEach((at, k) => {
+    const { packs = [], ammo = [], cells = [], vests = [] } = this.world.def;
+    [...packs, ...ammo, ...cells, ...vests].forEach((at, k) => {
       if (this.gone[k] > 0) {
         this.gone[k]--;
         return;
       }
-      // 0 health, 1 ammo, 2 a rail cell.
-      const kind = +(k >= packs.length) + +(k >= packs.length + ammo.length);
+      // 0 health, 1 ammo, 2 a rail cell, 3 an armour.
+      const kind =
+        +(k >= packs.length) +
+        +(k >= packs.length + ammo.length) +
+        +(k >= packs.length + ammo.length + cells.length);
       // Up to what his class carries (kit.ts).
       const wants = ({ state: q, info }: Player) => {
         const kit = kitOf(info.role, this.world.def);
@@ -1079,6 +1088,7 @@ export class Room {
           q.hp < HP_MAX,
           (q.ammo >= 0 && q.ammo < kit.ammo) || ((q.rifle ?? -1) >= 0 && q.rifle! < kit.rifle),
           (q.rail ?? -1) >= 0 && q.rail! < kit.rail,
+          (q.armor ?? 0) < ARMOR_MAX,
         ][kind];
       };
       const p = players.find(o => !o.state.down && wants(o) && within(o.state, at, PACK_R));
@@ -1091,10 +1101,12 @@ export class Room {
           // It fills the gun and the laser rifle, whichever he has.
           q.ammo = q.ammo < 0 ? -1 : Math.min(kit.ammo, q.ammo + AMMO_PACK);
           q.rifle = (q.rifle ?? -1) < 0 ? -1 : Math.min(kit.rifle, q.rifle! + RIFLE_CLIP);
-        } else {
+        } else if (kind == 2) {
           q.rail = Math.min(kit.rail, q.rail! + RAIL_CELL);
+        } else {
+          q.armor = ARMOR_MAX;
         }
-        this.gone[k] = (kind == 1 ? AMMO_BACK : PACK_BACK) * TICK_HZ;
+        this.gone[k] = [PACK_BACK, AMMO_BACK, PACK_BACK, ARMOR_BACK][kind] * TICK_HZ;
       }
     });
   }
@@ -1358,7 +1370,7 @@ export class Room {
     this.wear[this.rovers.indexOf(r)] = { ...NEW };
     const killer = this.players().find(q => q.info.id === by);
     for (const q of crew) {
-      this.harm(q, q.state.hp, killer, FRAG.VEHICLE);
+      this.harm(q, Infinity, killer, FRAG.VEHICLE);
     }
     const hit = this.boom([r.x, r.y, r.z], by, team);
     if (killer && (hit || crew.length)) {
@@ -1432,7 +1444,7 @@ export class Room {
       foe.run = this.ticks;
       p.state.hits = (p.state.hits + 1) & 255;
       const fell = felled(FALL.SHOT, r.vx, r.vz);
-      const hp = closing < ROVER.SPLAT_KILL ? 1 : foe.state.hp;
+      const hp = closing < ROVER.SPLAT_KILL ? 1 : Infinity;
       if (!this.harm(foe, hp, p, FRAG.VEHICLE, fell)) {
         const v = len(r.vx, r.vz);
         stumble(foe.state, r.vx / v, r.vz / v);

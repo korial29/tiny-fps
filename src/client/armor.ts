@@ -112,9 +112,18 @@ export const CUFF = {
  * The forearm's plate cast straight (the user, 2026-11-14: rectilinear, aggressive, not in rolls
  * over the muscles, still flared): its section a rounded square (`n`, a superellipse) round the
  * arm's line at `cx`, its half sizes across (`x`) and front to back (`z`) growing in a straight line
- * from the wrist to the elbow, the heights `y`, clear of the skin; then the flare and the ridge.
+ * from the wrist to the elbow, the heights `y`, clear of the skin; then the flare and the ridge. Its
+ * end slopes in toward the hand in a flat bevel (the user, 2026-11-14: thinner, an angular slope
+ * toward the hands), `in` over its last `h`.
  */
-export const CAST = { cx: 0.222, y: [0.935, 1.14], x: [0.043, 0.053], z: [0.05, 0.061], n: 3 };
+export const CAST = {
+  cx: 0.222,
+  y: [0.935, 1.14],
+  x: [0.041, 0.051],
+  z: [0.048, 0.059],
+  n: 3,
+  bevel: { h: 0.032, in: 0.009 },
+};
 const cuff = (a: number) => CUFF.y + CUFF.rise * smooth(CUFF.a[0], CUFF.a[1], Math.abs(a));
 const vambrace = (x: number, y: number) =>
   CUFF.flare * smooth(1.09, 1.15, y) +
@@ -1059,7 +1068,9 @@ const castR = (t: number, y: number, side: number) => {
     CAST.z[0] + (CAST.z[1] - CAST.z[0]) * f,
   ];
   const [c, s] = [Math.cos(t), Math.sin(t)];
-  const r = (Math.abs(c / ax) ** CAST.n + Math.abs(s / az) ** CAST.n) ** (-1 / CAST.n);
+  const r =
+    (Math.abs(c / ax) ** CAST.n + Math.abs(s / az) ** CAST.n) ** (-1 / CAST.n) -
+    CAST.bevel.in * Math.max(0, 1 - (y - CAST.y[0]) / CAST.bevel.h);
   return r + vambrace(side * (CAST.cx + r * c), y);
 };
 

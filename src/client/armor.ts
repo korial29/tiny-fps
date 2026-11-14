@@ -1260,10 +1260,8 @@ const cook = (s: Skin, fine: boolean): Recipe => {
       // A moulded plate's curves, finer still: the woman's domes. Not close up too: on the near
       // skin its outline went by the skin's big triangles, in steps, and the V at the neck was gone
       // (the user, 2026-11-13: smooth the stairs on the pecs).
-      const pieces = region.cast
-        ? // Its bevel's curve, finer still close up.
-          split(fine ? split(split([tri])) : [tri])
-        : region.mould
+      const pieces =
+        region.mould || region.cast
           ? split(fine ? split([tri]) : [tri])
           : fine && (region.round || region.low || region.high)
             ? split([tri])

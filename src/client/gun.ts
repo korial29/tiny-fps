@@ -36,6 +36,8 @@ import { axis, turn } from './rig';
 import type { Quat } from './rig';
 import { room } from './verts';
 import type { Out } from './verts';
+import { ID, ORIGIN, mesh } from './store';
+import type { Pieces } from './store';
 
 /** A ring of a loft: how far ahead, how high, half width, half height, and the offset to the side. */
 type Station = [f: number, y: number, a: number, b: number, x?: number];
@@ -2043,6 +2045,8 @@ const smoke = (out: Out, at: Vec3, [r, u, f]: Vec3[], k: number, t: number) => {
  * one in use, then the two in reserve), its heat (0 to 1) and whether it overheated.
  */
 export interface Lit {
+  /** The frame's pieces of the store: the gun's body, lit, goes there (store.ts). */
+  list?: Pieces;
   light?: number;
   swap?: number;
   empty?: boolean;
@@ -2106,6 +2110,7 @@ export const held = (
     floor,
     vel = [0, 0, 0],
     carry,
+    list,
   }: Lit = {},
 ) => {
   const [at, ax] = [grip(pos, q), axes(q)];
@@ -2172,7 +2177,18 @@ export const held = (
       smoke(out, at, ax, k, t);
     }
   }
-  place(out, [gun, gun, railgun, rifle][w](lod), at, ax, [0, 0, 0], k);
+  // The gun's body, lit: made once into the store and placed there (store.ts).
+  const model = [gun, gun, railgun, rifle][w](lod);
+  if (list && d == 1) {
+    list.push({
+      m: mesh(`gun ${w} ${lod}`, o => place(o, model, ORIGIN, axes(ID), [0, 0, 0], 1)),
+      q,
+      t: at,
+      k,
+    });
+  } else {
+    place(out, model, at, ax, [0, 0, 0], k);
+  }
   if (rail && light > 0.98 && swap < 0 && !hot) {
     place(out, arc(t), at, ax, [0, 0, 0], k);
   }

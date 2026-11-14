@@ -879,7 +879,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const crowd = self ? [...others, self] : others;
       animate(runners, crowd, dt, world, tracer, rovers, builds, looks);
       const [right, up, fwd] = basis(yaw, pitch, fx.roll);
-      drive(v, eye, fwd, Date.now() / 1000);
+      drive(v, eye, fwd, Date.now() / 1000, pieces);
       // The spent batteries and capsules falling to the floor.
       fall(dt);
       drawDrops(v);

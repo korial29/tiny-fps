@@ -79,10 +79,18 @@ what each step costs:
    them into `out`, and `store.test.ts` checks both give the same triangles. Measured: 202 000 to
    159 000 vertices written a match frame, the frame's CPU 9.7 to 8.7 ms in the browser, the GPU's
    time the same.
-2. The runners' skin skinned in the vertex shader (dual quaternions as uniforms), the face's
-   channels from a texture of shifts, the ninja's hood baked into a skin of its own.
-3. The armour: each vertex refers to its skin triangle's three corners, skinned in the shader.
-4. Hands, cars and props through the store.
+2. **Guns, katana, cars, and the own hands** (done): the gun's and the rail gun's and the rifle's
+   bodies and the katana's blade go through the store when lit (`held()`'s and `sword()`'s
+   `list`; while one comes on, its glow is dimmed on the CPU and it stays in `out`), and so do the
+   cars (`traffic()`'s drawer, one piece by paint). The runners' hands were already found in
+   `hand()`'s cache; the own body's were not: a grip's curl eased onto its 0.9 wandered in its last
+   bits frame to frame and built both hands again each time, so `hand()` rounds its numbers to a
+   billionth. Measured in Node: Highline 8.9 to 8.0 ms, Tranquility 8.2 to 6.4 ms (medians), its
+   spikes of 120 ms gone.
+3. The runners' skin and their armour together, in the vertex shader: `armor()` reads the skinned
+   skin back, so neither goes alone. The skin's dual quaternions as uniforms, the face's channels
+   from a texture of shifts, the ninja's hood baked into a skin of its own; each armour vertex refers
+   to its skin triangle's three corners, skinned in the shader.
 
 The own first-person body stays on the CPU: `relax()` smooths its shoulders once posed, which a
 vertex shader cannot do.
@@ -96,7 +104,7 @@ vertex shader cannot do.
    12 000 vertices (`soldier.test.ts`); keep it passing, lower it when you can.
 2. **Build once, carry every frame.** A piece whose shape does not depend on the pose (pads, guard,
    hair, helmet, a gun) is built once at rest in its joint's space and only turned and moved per
-   frame. A piece that depends on a few numbers (a hand on its curl) is cached by those numbers.
+   frame. A piece that depends on a few numbers (a hand on its curl) is cached by those numbers, rounded: an eased number wanders in its last bits and a key made of it misses every frame (the own hands did).
 3. **Work per vertex, not per corner.** `skin()` writes three corners per triangle; anything that
    reads them back and computes from the position does it once per skin vertex (`s.t[h]`), as
    `dress()` does.

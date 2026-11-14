@@ -114,7 +114,7 @@ export const CUFF = {
  * arm's line at `cx`, its half sizes across (`x`) and front to back (`z`) growing in a straight line
  * from the wrist to the elbow, the heights `y`, clear of the skin; then the flare and the ridge.
  */
-export const CAST = { cx: 0.222, y: [0.935, 1.14], x: [0.047, 0.06], z: [0.055, 0.069], n: 3 };
+export const CAST = { cx: 0.222, y: [0.935, 1.14], x: [0.043, 0.053], z: [0.05, 0.061], n: 3 };
 const cuff = (a: number) => CUFF.y + CUFF.rise * smooth(CUFF.a[0], CUFF.a[1], Math.abs(a));
 const vambrace = (x: number, y: number) =>
   CUFF.flare * smooth(1.09, 1.15, y) +

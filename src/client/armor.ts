@@ -114,7 +114,8 @@ export const CUFF = {
  * arm's line at `cx`, its half sizes across (`x`) and front to back (`z`) growing in a straight line
  * from the wrist to the elbow, the heights `y`, clear of the skin; then the flare and the ridge. Its
  * end slopes in toward the hand in a flat bevel (the user, 2026-11-14: thinner, an angular slope
- * toward the hands), `in` over its last `h`.
+ * toward the hands, then steeper, aggressive), `in` over its last `h`; and that end is cut on a
+ * slant, `cut` higher on the inside of the arm than over the back of the hand, in straight lines.
  */
 export const CAST = {
   cx: 0.222,
@@ -122,7 +123,8 @@ export const CAST = {
   x: [0.041, 0.051],
   z: [0.048, 0.059],
   n: 3,
-  bevel: { h: 0.04, in: 0.018 },
+  bevel: { h: 0.03, in: 0.024 },
+  cut: 0.035,
 };
 const cuff = (a: number) => CUFF.y + CUFF.rise * smooth(CUFF.a[0], CUFF.a[1], Math.abs(a));
 const vambrace = (x: number, y: number) =>
@@ -436,6 +438,7 @@ export const REGIONS: Region[] = [
     y: [CUFF.wrist, CUFF.y + CUFF.rise],
     a: [-181, 181],
     high: cuff,
+    low: a => castLow(a),
     cast: true,
   },
   // The user, 2026-11-10: a small plate on the biceps, under the shoulder plate; one on the back of
@@ -1061,6 +1064,9 @@ const moulding = (s: Skin, gi: number) => {
 };
 
 /** The cast forearm plate's radius at the angle `t` round the arm (0 out to the side, toward +z) and height `y`, on the side `side`. */
+/** The cast forearm plate's bottom by the angle `a` round the arm (degrees, + outward): lowest on the outside. */
+const castLow = (a: number) =>
+  CUFF.wrist + (CAST.cut * Math.abs(((a - 90 + 540) % 360) - 180)) / 180;
 const castR = (t: number, y: number, side: number) => {
   const f = Math.min(Math.max((y - CAST.y[0]) / (CAST.y[1] - CAST.y[0]), 0), 1.2);
   const [ax, az] = [
@@ -1070,7 +1076,7 @@ const castR = (t: number, y: number, side: number) => {
   const [c, s] = [Math.cos(t), Math.sin(t)];
   const r =
     (Math.abs(c / ax) ** CAST.n + Math.abs(s / az) ** CAST.n) ** (-1 / CAST.n) -
-    CAST.bevel.in * Math.max(0, 1 - (y - CAST.y[0]) / CAST.bevel.h);
+    CAST.bevel.in * Math.max(0, 1 - (y - castLow(90 + (t * 180) / Math.PI)) / CAST.bevel.h);
   return r + vambrace(side * (CAST.cx + r * c), y);
 };
 

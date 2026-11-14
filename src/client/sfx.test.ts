@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LAYERS, LOOPED, MUSIC_RATE, RATE, SOUND, music, render, seam } from './sfx';
+import { LAYERS, LOOPED, MUSIC_RATE, RATE, SONGS, SOUND, moon, music, render, seam } from './sfx';
 import type { Voice } from './sfx';
 
 const peak = (s: Float32Array) => s.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
@@ -318,6 +318,62 @@ describe('music', () => {
 
   it('renders fast', () => {
     expect(Math.min(...times)).toBeLessThan(400);
+  });
+});
+
+describe('the moon\u2019s music', () => {
+  // Best of three. About 35 ms alone, cold; a loaded CI runner took 576 ms, the full suite here up
+  // to 750: its loops wait longer than music()'s for V8 to optimize them on a starved machine.
+  const times: number[] = [];
+  const m = Array.from({ length: 3 }, () => {
+    const t0 = performance.now();
+    const out = moon();
+    times.push(performance.now() - t0);
+    return out;
+  })[0];
+  const sixteenths = (m.length * 126 * 4) / (MUSIC_RATE * 60);
+
+  it('is deterministic', () => {
+    expect(Buffer.from(moon().buffer).equals(Buffer.from(m.buffer))).toBe(true);
+  });
+
+  it('is thirty-two bars at 126 bpm, a whole number of samples a sixteenth: a minute', () => {
+    expect(sixteenths).toBe(32 * 16);
+    expect((MUSIC_RATE * 15) % 126).toBe(0);
+    expect(m.length / MUSIC_RATE).toBeCloseTo(61, 0);
+  });
+
+  it('is as loud as the other music, its squares no louder', () => {
+    expect(peak(m)).toBeCloseTo(0.26, 5);
+    const ratio = rms(m) / rms(music());
+    expect(ratio).toBeGreaterThan(0.8);
+    expect(ratio).toBeLessThan(1.2);
+  });
+
+  it('loops without a jump: the step from the end to the start is no bigger than any other', () => {
+    let most = 0;
+    for (let i = 1; i < m.length; i++) {
+      most = Math.max(most, Math.abs(m[i] - m[i - 1]));
+    }
+    expect(Math.abs(m[0] - m[m.length - 1])).toBeLessThanOrEqual(most);
+  });
+
+  it('plays its sixteen bars of chords twice, the second time otherwise', () => {
+    const half = m.length / 2;
+    let diff = 0;
+    for (let i = 0; i < half; i++) {
+      diff += Math.abs(m[i] - m[i + half]);
+    }
+    expect(diff / half).toBeGreaterThan(0.01);
+  });
+
+  it('renders fast', () => {
+    expect(Math.min(...times)).toBeLessThan(1000);
+  });
+
+  it('is the moon\u2019s alone: every other map plays music()', () => {
+    expect(SONGS.tranquility).toBe(moon);
+    expect(SONGS.highline).toBeUndefined();
   });
 });
 

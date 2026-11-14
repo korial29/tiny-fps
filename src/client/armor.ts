@@ -1066,6 +1066,17 @@ const moulding = (s: Skin, gi: number) => {
 };
 
 /** The cast forearm plate's radius at the angle `t` round the arm (0 out to the side, toward +z) and height `y`, on the side `side`. */
+/** How far the cast forearm plate stands off the rest point `c` past its least (CAST.floor), in its bevel: under 0 it would lie on the skin. */
+const clear = (c: Corner) => {
+  const side = Math.sign(c[0]) || 1;
+  const dx = c[0] * side - CAST.cx;
+  const t = Math.atan2(c[2], dx);
+  // Only in the bevel: higher up, the arm's own bulges come as close.
+  return Math.max(
+    castR(t, c[1], side) - Math.hypot(dx, c[2]) - CAST.floor,
+    c[1] - castLow(90 + (t * 180) / Math.PI) - CAST.bevel.h,
+  );
+};
 /** The cast forearm plate's bottom by the angle `a` round the arm (degrees, + outward): lowest on the outside. */
 const castLow = (a: number) =>
   CUFF.wrist + (CAST.cut * Math.abs(((a - 90 + 540) % 360) - 180)) / 180;
@@ -1279,10 +1290,13 @@ const cook = (s: Skin, fine: boolean): Recipe => {
         // A moulded plate is cut where it lies, on its shell, not where its skin is: set off some
         // centimetres along normals that fan out, the edges of two pieces of skin (the trunk's and
         // the shoulder's) did not meet, a triangle standing out by the armpit (the user, 2026-11-13).
-        const poly = LIMITS[g].reduce(
+        const cut = LIMITS[g].reduce(
           (p, f, i) => clip(p, mould ? c => f(landed(c, mould(c, k))) : f, 1 << i),
           piece,
         );
+        // The forearm's plate ends where its bevel meets the arm: pressed onto the skin below that,
+        // it lay along the arm in a tongue under the arrow (the user, 2026-11-14).
+        const poly = region.cast ? clip(cut, clear, 1 << LIMITS[g].length) : cut;
         if (poly.length < 3) {
           continue;
         }
@@ -1320,28 +1334,9 @@ const cook = (s: Skin, fine: boolean): Recipe => {
           mould
             ? mould(c, k)[0]
             : (region.off ?? OFF) + (region.swell ? region.swell(c[0], c[1], c[2]) : 0);
-        // The forearm's bevel painted black under the arrow (the user, 2026-11-14), cut at its top.
-        const lit = (c: Corner) =>
-          c[1] - castLow(angle({ ...region, face: 0 }, c[0], c[2])) - CAST.bevel.h;
-        for (const [part, col, own] of region.cast
-          ? ([
-              [clip(poly, lit, 0), WHITE, 0],
-              [clip(poly, c => -lit(c), 0), BEVEL, OWN],
-            ] as const)
-          : ([[poly, WHITE, 0]] as const)) {
-          for (let i = 1; i + 1 < part.length; i++) {
-            const cs = [part[0], part[i], part[i + 1]];
-            add(
-              cs,
-              cs.map(off),
-              region.swell,
-              col,
-              GLOSS,
-              own,
-              k,
-              mould && cs.map(c => mould(c, k)),
-            );
-          }
+        for (let i = 1; i + 1 < poly.length; i++) {
+          const cs = [poly[0], poly[i], poly[i + 1]];
+          add(cs, cs.map(off), region.swell, WHITE, GLOSS, 0, k, mould && cs.map(c => mould(c, k)));
         }
         // The walls along the plate's edge, wound outward (away from its middle, at rest).
         const mid = [0, 1, 2].map(j => poly.reduce((sum, c) => sum + c[j], 0) / poly.length);
@@ -1535,10 +1530,8 @@ const ACCENT = [-1, 0, 0];
 const ASTRO = 16;
 /** A triangle's kind bit: the marine's alone (MARINE_DETAILS). */
 const MARINE = 32;
-/** A triangle's kind bit: in its own colour on any plate (the marine's details, the forearm's bevel). */
+/** A triangle's kind bit: in its own colour on any plate (the marine's details). */
 export const OWN = 64;
-/** The forearm's bevel under the arrow: glossy black. */
-const BEVEL = [0.05, 0.05, 0.055];
 const DARK = [0.07, 0.07, 0.08];
 /** The longest piece a detail is laid in (m). */
 const PIECE = 0.012;

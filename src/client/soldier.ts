@@ -88,6 +88,8 @@ import type { Face } from './expression';
 import { CH, toneFor } from './features';
 import { createTrail } from './trail';
 import type { Trail } from './trail';
+import { room } from './verts';
+import type { Out } from './verts';
 
 /** How fast the dash streaks grow and fade, 1 / s. */
 const DASH_RATE = 14;
@@ -563,7 +565,7 @@ export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number, t
 };
 
 /** A dash trails three streaks: thin glowing (layer -2) spikes, a pair of crossed triangles each. */
-const streaks = (out: number[], r: Runner, color: number[], at: (v: Vec3) => Vec3) => {
+const streaks = (out: Out, r: Runner, color: number[], at: (v: Vec3) => Vec3) => {
   const back = unit([-r.p.vx, 0, -r.p.vz]);
   const [cr, cg, cb] = color.map(v => 0.6 + 0.6 * v);
   [
@@ -641,9 +643,10 @@ export const fried = (p: PlayerState): number =>
  * at once, each drifts up and out on its own, and goes when `k` passes its own share, so the body
  * thins to nothing.
  */
-export const dissolve = (out: number[], from: number, k: number) => {
+export const dissolve = (out: Out, from: number, k: number) => {
   const T = 3 * STRIDE;
   let w = from;
+  const a = room(out, 0);
   for (let o = from, i = 0; o < out.length; o += T, i++) {
     const h = ((Math.imul(i + 1, 0x9e3779b1) >>> 0) % 1000) / 1000;
     if (h < k) {
@@ -653,10 +656,10 @@ export const dissolve = (out: number[], from: number, k: number) => {
     const glow = Math.min(1, k * 4);
     for (let v = 0; v < T; v += STRIDE) {
       for (let j = 0; j < STRIDE; j++) {
-        out[w + v + j] = out[o + v + j] + (j < 3 ? lift[j] : 0);
+        a[w + v + j] = a[o + v + j] + (j < 3 ? lift[j] : 0);
       }
-      [6, 7, 9].forEach((j, c) => (out[w + v + j] += (ARC[c] * (1 - k) - out[w + v + j]) * glow));
-      out[w + v + 8] = glow > 0.5 ? -2 : out[w + v + 8];
+      [6, 7, 9].forEach((j, c) => (a[w + v + j] += (ARC[c] * (1 - k) - a[w + v + j]) * glow));
+      a[w + v + 8] = glow > 0.5 ? -2 : a[w + v + 8];
     }
     w += T;
   }
@@ -771,7 +774,7 @@ export const stance = (r: Runner) => {
  * fingertips. Not the hand of an arm a cut took off.
  */
 const gloves = (
-  out: number[],
+  out: Out,
   r: Runner,
   s: ReturnType<typeof solve>,
   colors: number[][],
@@ -800,7 +803,7 @@ const gloves = (
 
 /** Draws the runner and gives back its solved skeleton, or nothing once a bolt has burnt it away. */
 export const soldier = (
-  out: number[],
+  out: Out,
   r: Runner,
   color: number[],
   lod = 1,
@@ -932,14 +935,14 @@ export const soldier = (
   // The ninja's pads and collar; the marine's shoulder bells.
   if (plated) {
     const from = out.length;
-    pads(out, s, build, ninja ? GOLD : (plate ?? [0.85, 0.86, 0.88]), !ninja, color);
+    pads(out, s, build, ninja ? GOLD : (plate ?? [0.85, 0.86, 0.88]), !ninja, color, !lod);
     if (k > 0) {
       dissolve(out, from, k);
     }
   }
   if (ninja && !helmets && r.cut?.limb !== LIMB.HEAD) {
     const from = out.length;
-    mask(out, s.pos[J.HEAD], s.rot[J.HEAD], build, color);
+    mask(out, s.pos[J.HEAD], s.rot[J.HEAD], build, color, !lod);
     if (k > 0) {
       dissolve(out, from, k);
     }

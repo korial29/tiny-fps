@@ -10,6 +10,8 @@ import type { World } from '../shared/world';
 import { STRIDE, basis } from './mesh';
 import type { Vec3 } from './mesh';
 import { SOUND } from './sfx';
+import { room } from './verts';
+import type { Out } from './verts';
 
 /**
  * Where a hull arcs, right of the vehicle's centre, above it and ahead of it, each on the model: a
@@ -144,26 +146,27 @@ export const sparking = (r: Rover, k: number, slot: number): [Vec3, Vec3][] =>
  * onto its middle in its own time, glows `rgb` meanwhile and sinks `fall` metres.
  */
 const crumble = (
-  out: number[],
+  out: Out,
   from: number,
   p: number,
   seed: number,
   rgb: number[],
   fall: number,
 ): void => {
+  const buf = room(out, 0);
   for (let i = from, t = 0; i + 3 * STRIDE <= out.length; i += 3 * STRIDE, t++) {
     const k = clamp((p - 0.7 * hash(seed * 977 + t)) / 0.3, 0, 1);
     if (!k) {
       continue;
     }
-    const c = [0, 1, 2].map(a => (out[i + a] + out[i + STRIDE + a] + out[i + 2 * STRIDE + a]) / 3);
+    const c = [0, 1, 2].map(a => (buf[i + a] + buf[i + STRIDE + a] + buf[i + 2 * STRIDE + a]) / 3);
     for (let v = i; v < i + 3 * STRIDE; v += STRIDE) {
       for (let a = 0; a < 3; a++) {
-        out[v + a] = c[a] + (out[v + a] - c[a]) * (1 - k);
+        buf[v + a] = c[a] + (buf[v + a] - c[a]) * (1 - k);
       }
-      out[v + 1] -= fall * k * k;
-      [out[v + 6], out[v + 7], out[v + 9]] = rgb.map(x => x * (1 - 0.5 * k));
-      out[v + 8] = -2;
+      buf[v + 1] -= fall * k * k;
+      [buf[v + 6], buf[v + 7], buf[v + 9]] = rgb.map(x => x * (1 - 0.5 * k));
+      buf[v + 8] = -2;
     }
   }
 };
@@ -174,7 +177,8 @@ const crumble = (
  * last VEHICLE.FADE ticks it falls apart into embers. One just parked afresh (`wreck` below 0)
  * shimmers in.
  */
-export const char = (out: number[], from: number, r: Rover, k = 0): void => {
+export const char = (out: Out, from: number, r: Rover, k = 0): void => {
+  const buf = room(out, 0);
   const w = r.wreck ?? 0;
   if (w < 0) {
     crumble(out, from, clamp(-w / SHIMMER, 0, 1), k + 1, GLINT, 0);
@@ -183,26 +187,26 @@ export const char = (out: number[], from: number, r: Rover, k = 0): void => {
   if (!w) {
     const at = (r.hp ?? VEHICLE.HP) < VEHICLE.HP ? spots(r, k) : [];
     for (let i = from; at.length && i < out.length; i += STRIDE) {
-      if (out[i + 8] <= -2) {
+      if (buf[i + 8] <= -2) {
         continue;
       }
       const d = Math.min(
-        ...at.map(([x, y, z]) => Math.hypot(out[i] - x, out[i + 1] - y, out[i + 2] - z)),
+        ...at.map(([x, y, z]) => Math.hypot(buf[i] - x, buf[i + 1] - y, buf[i + 2] - z)),
       );
       if (d < SCORCH[0]) {
         const s = SCORCH[1] + (1 - SCORCH[1]) * (d / SCORCH[0]) ** 2;
-        [out[i + 6], out[i + 7], out[i + 9]] = [out[i + 6] * s, out[i + 7] * s, out[i + 9] * s];
+        [buf[i + 6], buf[i + 7], buf[i + 9]] = [buf[i + 6] * s, buf[i + 7] * s, buf[i + 9] * s];
       }
     }
     return;
   }
   for (let i = from; i < out.length; i += STRIDE) {
     // Glass stays glass (layer -3: its opacity is in green).
-    if (out[i + 8] != -3) {
-      [out[i + 6], out[i + 7], out[i + 9]] = [out[i + 6], out[i + 7], out[i + 9]].map(
+    if (buf[i + 8] != -3) {
+      [buf[i + 6], buf[i + 7], buf[i + 9]] = [buf[i + 6], buf[i + 7], buf[i + 9]].map(
         c => Math.min(c, 1) * SOOT,
       );
-      out[i + 8] = -1;
+      buf[i + 8] = -1;
     }
   }
   if (w < VEHICLE.FADE) {
@@ -279,7 +283,7 @@ export interface Wrecks {
    */
   frame(rovers: Rover[], dt: number, eye?: Vec3): Rover[];
   /** Appends the debris and the smoke. */
-  draw(out: number[]): void;
+  draw(out: Out): void;
   /** Debris and puffs in flight. */
   readonly count: number;
 }

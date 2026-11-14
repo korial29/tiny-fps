@@ -2,6 +2,7 @@
 // the way down it, fading in LIFE seconds. One per sword, the samples taken as it is drawn. Nothing
 // is blended, so a ribbon fades by narrowing toward the point's path and dimming. No DOM, no GL.
 import type { Vec3 } from './mesh';
+import type { Out } from './verts';
 
 /** Seconds a sample of the trail lasts. */
 export const LIFE = 0.15;
@@ -24,7 +25,7 @@ export interface Trail {
   /** Ages the samples by dt seconds and drops the ones that are over. */
   update(dt: number): void;
   /** Appends the ribbon, in the vertex format of mesh.ts. */
-  draw(out: number[]): void;
+  draw(out: Out): void;
   /** The samples alive now. */
   readonly count: number;
 }

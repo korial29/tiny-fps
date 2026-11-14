@@ -28,6 +28,9 @@ import { rolled, rover } from './rover';
 import type { Quat } from './rig';
 import { GRIN, animate, createRunner, soldier } from './soldier';
 import { body } from './skin';
+import { prepare } from './armor';
+import { Verts } from './verts';
+import type { Out } from './verts';
 import type { Runner } from './soldier';
 import { skyline, trees } from './skyline';
 import { deepen, street } from './street';
@@ -509,7 +512,7 @@ export interface Renderer {
     /** The own player when the camera is not in his head (seated in a rover): drawn whole, like the others. */
     self?: PlayerState,
     /** Adds what else moves in the map (the doors): drawn lit, casting shadows, with the other players. */
-    more?: (v: number[]) => void,
+    more?: (v: Out) => void,
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
@@ -558,8 +561,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   let builds: ReadonlyMap<number, number> = new Map();
   let looks: ReadonlyMap<number, Choice> = new Map();
   // The runners' skins at every level, now: built on the first runner to come near (the close one
-  // with its face's channels takes a tenth of a second), they would stall a frame of the match.
-  [0, 1, 3].forEach(lod => body(lod));
+  // with its face's channels takes a tenth of a second), they would stall a frame of the match. So
+  // would their armour's recipes (a quarter of a second close up).
+  const dressed = (build = 0) => [0, 1, 3].forEach(lod => prepare(body(lod, build), lod > 2));
+  dressed();
   /** Each rover's wheels: the angle they have rolled to, and where the rover was last frame. */
   const spins: number[] = [];
   const was: [number, number][] = [];
@@ -612,6 +617,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const owned: (() => void)[] = [];
   let lost = false;
   let vp = new Float32Array(16);
+  /** The frame's vertices as written, and as the GPU takes them: both kept from frame to frame. */
+  const v = new Verts();
+  let floats = new Float32Array(0);
 
   /** (Re)allocates the buffer at cap bytes and puts the level back at its head. */
   const alloc = () => {
@@ -823,7 +831,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       }
       const tan = Math.tan(((FOV_DEG + fx.fov) * Math.PI) / 360);
       vp = viewProj(eye, yaw, pitch, w / h, fx.roll, tan);
-      const v: number[] = [];
+      // The frame's vertices, into the store the last frame left.
+      v.length = 0;
       const now = performance.now() / 1000;
       const dt = Math.min(0.1, now - clock);
       clock = now;
@@ -905,7 +914,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         cap = tail + v.length * 8;
         alloc();
       }
-      gl.bufferSubData(gl.ARRAY_BUFFER, tail, new Float32Array(v));
+      // Into the same floats every frame: a new array of some two million a frame was a pause of its own.
+      if (floats.length < v.length) {
+        floats = new Float32Array(v.length * 2);
+      }
+      floats.set(v.a.subarray(0, v.length));
+      gl.bufferSubData(gl.ARRAY_BUFFER, tail, floats.subarray(0, v.length));
       // The headlights of the rovers that are driven, after the lights given.
       const pk = pack([...lights, ...beams(rovers.filter(r => !r.ship))]);
       const first = ground.length / STRIDE;
@@ -980,8 +994,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     muzzle: id => runners.get(id)?.tip,
     wear: (b, l = new Map()) => {
       [builds, looks] = [b, l];
-      // Her skins now, as the man's are built at the start: not in a frame of the match.
-      new Set(b.values()).forEach(k => k && [0, 1, 3].forEach(lod => body(lod, k)));
+      // Her skins and their armour now, as the man's are built at the start: not in a frame of the match.
+      new Set(b.values()).forEach(k => k && dressed(k));
     },
     cheer: ids =>
       ids.forEach(id => {

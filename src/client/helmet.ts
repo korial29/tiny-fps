@@ -13,6 +13,7 @@ import { GLOSS, SHINE, STRIDE, aim, dress, place, smooth } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
+import type { Out } from './verts';
 
 /**
  * The shell, a superellipsoid in the head joint's frame: its centre and half width, height and
@@ -192,7 +193,7 @@ export const unit = (v: Vec3): Vec3 => {
 export const pow = (t: number, p: number) => Math.sign(t) * Math.abs(t) ** p;
 
 /** A triangle over `p`, wound as its first normal faces, in `col` on `layer`; none if it has no area. */
-export const face = (out: number[], col: number[], layer: number, p: Spot[]) => {
+export const face = (out: Out, col: number[], layer: number, p: Spot[]) => {
   const c = cross(sub(p[1][0], p[0][0]), sub(p[2][0], p[0][0]));
   if (Math.hypot(...c) < 1e-9) {
     return;
@@ -208,7 +209,12 @@ export const face = (out: number[], col: number[], layer: number, p: Spot[]) => 
  * Triangles between the rows of points `rows`, each a closed ring of n (the first and the last may
  * be one point), in `col` on `layer`; wound as the normals face. Triangles of no area are left out.
  */
-export const sheet = (rows: Spot[][], col: number[], layer: number, out: number[] = []) => {
+export const sheet = <T extends Out = number[]>(
+  rows: Spot[][],
+  col: number[],
+  layer: number,
+  out: T = [] as number[] as T,
+): T => {
   const tri = (...p: Spot[]) => face(out, col, layer, p);
   rows.slice(1).forEach((row, r) => {
     const prev = rows[r];
@@ -225,7 +231,7 @@ export const sheet = (rows: Spot[][], col: number[], layer: number, out: number[
 };
 
 /** A flat quad over the corners `q` (in turn round it), facing `m`, in `col` on `layer`. */
-export const quad = (out: number[], q: Vec3[], m: Vec3, col: number[], layer = -1) => {
+export const quad = (out: Out, q: Vec3[], m: Vec3, col: number[], layer = -1) => {
   const s = q.map(p => [p, m] as Spot);
   face(out, col, layer, [s[0], s[1], s[2]]);
   face(out, col, layer, [s[0], s[2], s[3]]);
@@ -413,7 +419,7 @@ const WORN = [
  * Thin scratches over the shell (the user, 2026-11-10), matte on the gloss: short strokes bent a
  * little, at random but the same every time, kept off the visor; a hair over the shell's surface.
  */
-const scratches = (out: number[]) => {
+const scratches = (out: Out) => {
   let seed = 0x5eed;
   const rand = () => {
     seed = (seed + 0x6d2b79f5) | 0;
@@ -851,7 +857,7 @@ const kit = (lod: number): Kit => {
  * `at` turned by `q` (see solve() in rig.ts), in `rgb`, the team's colour (0 to 1): the strips on
  * the ear plates, which glow. The far helmet is the shell and the visor.
  */
-export const helmet = (out: number[], at: Vec3, q: Quat, rgb: number[], lod: number) => {
+export const helmet = (out: Out, at: Vec3, q: Quat, rgb: number[], lod: number) => {
   const k = kit(lod);
   const head = (v: Vec3) => turn(q, v);
   /** Places `src` scaled by `s` at `p` in the head's frame (shrunk by SCALE about the shell's middle), its axis along `to`, its x as near `side` as it can be. */

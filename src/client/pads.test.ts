@@ -161,3 +161,32 @@ describe("the marine's shoulder bells (the user, 2026-11-13, on a picture of a t
     }
   });
 });
+
+describe('pads on a far runner (the user, 2026-11-14: lags in a match)', () => {
+  const pose = solve(rest());
+  const draw = (marine: boolean, far: boolean) => {
+    const v: number[] = [];
+    pads(v, pose, 0, [0.9, 0.9, 0.9], marine, [0.1, 0.9, 0.2], far);
+    return Array.from({ length: v.length / STRIDE }, (_, i) =>
+      v.slice(i * STRIDE, i * STRIDE + STRIDE),
+    );
+  };
+  const box = (ps: number[][]) =>
+    [0, 1, 2].flatMap(d => [Math.min(...ps.map(p => p[d])), Math.max(...ps.map(p => p[d]))]);
+
+  it('takes under a third of the vertices, in the same place, the band still round the bell', () => {
+    for (const marine of [false, true]) {
+      const [near, far] = [draw(marine, false), draw(marine, true)];
+      expect(far.length * 3).toBeLessThan(near.length);
+      expect(far.length % 3).toBe(0);
+      box(far).forEach((b, i) => expect(Math.abs(b - box(near)[i])).toBeLessThan(0.01));
+      const band = (ps: number[][]) => ps.filter(p => p[6] == 0.1 && p[7] == 0.9);
+      if (marine) {
+        expect(band(far).length).toBeGreaterThan(0);
+        const ys = (ps: number[][]) => ps.map(p => p[1]);
+        expect(Math.min(...ys(band(far)))).toBeCloseTo(Math.min(...ys(band(near))), 4);
+        expect(Math.max(...ys(band(far)))).toBeCloseTo(Math.max(...ys(band(near))), 4);
+      }
+    }
+  });
+});

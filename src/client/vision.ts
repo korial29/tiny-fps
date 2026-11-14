@@ -6,6 +6,7 @@ import { GRAB_MAX, STEP_H } from '../shared/constants';
 import type { Brush, WorldDef } from '../shared/world';
 import { teamRgb } from './flag';
 import type { Vec3 } from './mesh';
+import type { Out } from './verts';
 
 /** A lip stands out when the top is more than a step above what lies beside it, and at most within a grab. */
 const LIP_MIN = STEP_H;
@@ -93,7 +94,7 @@ export const uses = ({ brushes, floor }: WorldDef, b: Brush): Use => {
 
 /** One face of the box min..max (flat on `axis` when min and max agree there) as two triangles, pushed in the map's vertex format. */
 export const face = (
-  out: number[],
+  out: Out,
   min: Vec3,
   max: Vec3,
   axis: number,

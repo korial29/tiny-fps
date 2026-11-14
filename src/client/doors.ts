@@ -6,6 +6,7 @@ import type { Door, World } from '../shared/world';
 import type { Vec3 } from './mesh';
 import { box, face, lit } from './moonbase';
 import { SOUND } from './sfx';
+import type { Out } from './verts';
 
 const FRAME = [0.16, 0.17, 0.2];
 const PANEL = [0.44, 0.46, 0.5];
@@ -26,7 +27,7 @@ const ease = (t: number) => t * t * (3 - 2 * t);
  * a header, proud of the panels on both faces), and the two panels, each slid `open` of its width
  * into the wall beside it.
  */
-export const panels = (o: number[], { min, max }: Door, open: number): void => {
+export const panels = (o: Out, { min, max }: Door, open: number): void => {
   // The panels slide along k and are thin along j.
   const k = max[0] - min[0] > max[2] - min[2] ? 0 : 2;
   const j = 2 - k;
@@ -87,7 +88,7 @@ export interface Doors {
    */
   snapshot(open?: number[]): { id: number; at: Vec3 }[];
   /** The doors near `eye`, `dt` seconds after the last frame: each follows its snapshot's state. */
-  draw(o: number[], eye: Vec3, dt: number): void;
+  draw(o: Out, eye: Vec3, dt: number): void;
   /** How far each is drawn open. */
   shown(): number[];
 }

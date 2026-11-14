@@ -40,6 +40,7 @@ import {
 } from './render';
 import type * as Traffic from './traffic';
 import { duo } from '../../test/teams';
+import { Verts } from './verts';
 
 // The traffic is off unless a test turns it on: the draws below are counted to the vertex.
 const cars = vi.hoisted(() => ({ on: false }));
@@ -429,7 +430,7 @@ describe('createRenderer', () => {
       rd.frame([1, 1.6, 1], 0.5, -0.2, [], new Map([[7, '#ff0000']]), fx, [], b);
       // In the colour of the own player's team.
       expect(b.draw).toHaveBeenCalledWith(
-        expect.any(Array),
+        expect.any(Verts),
         [1, 1.6, 1],
         0.5,
         -0.2,
@@ -666,7 +667,7 @@ describe('createRenderer', () => {
         draw,
         lights: () => [],
       });
-      expect(draw).toHaveBeenCalledWith(expect.any(Array), [1, 1.6, 1]);
+      expect(draw).toHaveBeenCalledWith(expect.any(Verts), [1, 1.6, 1]);
       const [depth, world] = draws();
       expect(depth[1]).toBe(FLOOR_VERTS);
       expect(world[1]).toBe(FLOOR_VERTS + 6);

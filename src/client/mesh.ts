@@ -1,5 +1,7 @@
 // Vertex format and the shapes built from it, shared by the renderer and the models. No DOM.
 import { TAU } from '../shared/physics';
+import { room } from './verts';
+import type { Out } from './verts';
 
 export type Vec3 = [number, number, number];
 
@@ -196,7 +198,7 @@ export const solid = (
  * a thousand vertices at a time.
  */
 export const place = (
-  out: number[],
+  out: Out,
   src: number[],
   eye: Vec3,
   [r, u, f]: Vec3[],
@@ -234,12 +236,13 @@ export const place = (
 };
 
 /** Dims by `k` the glow (layer -2) of the vertices of `out` from the float `from` on: a light that is off, or coming on. */
-export const dim = (out: number[], from: number, k: number) => {
+export const dim = (out: Out, from: number, k: number) => {
+  const a = room(out, 0);
   for (let i = from; k < 1 && i < out.length; i += STRIDE) {
-    if (out[i + 8] == -2) {
-      out[i + 6] *= k;
-      out[i + 7] *= k;
-      out[i + 9] *= k;
+    if (a[i + 8] == -2) {
+      a[i + 6] *= k;
+      a[i + 7] *= k;
+      a[i + 9] *= k;
     }
   }
 };
@@ -262,7 +265,7 @@ export const aim = (to: Vec3, side: Vec3): [Vec3, Vec3, Vec3] => {
  * its x axis points as near as it can.
  */
 export const segment = (
-  out: number[],
+  out: Out,
   src: number[],
   a: Vec3,
   b: Vec3,

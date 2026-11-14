@@ -10,6 +10,7 @@ import { place } from './mesh';
 import type { Vec3 } from './mesh';
 import { FAR as CITY, MARKS, PITCH, ROAD, STREET, grid, scale } from './street';
 import { hash } from './textures';
+import type { Out } from './verts';
 
 /** How much bigger than a real car (4.4 m) the cars are drawn: they are seen from 100 m up. */
 const SIZE = 1.3;
@@ -139,14 +140,14 @@ export const carAt = (car: Car, t: number): [number, number, number] => {
 };
 
 /** A flat polygon of 4 corners, wound as given. */
-const quad = (out: number[], [a, b, c, d]: Vec3[], rgb: number[]) => {
+const quad = (out: Out, [a, b, c, d]: Vec3[], rgb: number[]) => {
   tri(out, a, b, c, rgb);
   tri(out, a, c, d, rgb);
 };
 
 /** A box tapering from the footprint `b` at y0 to `t` at y1 ([x0, x1, z0, z1] each): four sides and the top, wound outward. */
 const hull = (
-  out: number[],
+  out: Out,
   y0: number,
   y1: number,
   b: number[],
@@ -210,7 +211,7 @@ export const MODEL = { body: BODY, cabin: CABIN, lamps: LAMPS };
 export const traffic = (def: WorldDef) => {
   const list = cars(def);
   const k = scale(def);
-  return (out: number[], eye: Vec3, fwd: Vec3, t: number) => {
+  return (out: Out, eye: Vec3, fwd: Vec3, t: number) => {
     for (const car of list) {
       const [x, z, size] = carAt(car, t);
       const to = [x - eye[0], STREET - eye[1], z - eye[2]];

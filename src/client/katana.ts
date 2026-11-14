@@ -11,6 +11,7 @@ import { dim, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
+import type { Out } from './verts';
 
 /** Where the blade starts and ends along the model's forward axis, metres from the right hand: a metre from the guard to the point. */
 export const [BASE, TIP] = [0.07, 1.07];
@@ -70,7 +71,7 @@ const circ = (f: number, x: number, y: number, a: number, b: number, n: number, 
  * an end), flat shaded: each facet is painted `paint(ring, side)` and faces away from the middle
  * of its two rings.
  */
-const loft = (out: number[], rings: Vec3[][], paint: (i: number, k: number) => number[]) =>
+const loft = (out: Out, rings: Vec3[][], paint: (i: number, k: number) => number[]) =>
   rings.slice(1).forEach((b, i) => {
     const a = rings[i];
     const all = [...a, ...b];
@@ -185,7 +186,7 @@ export const katana = (lod: number): number[] => {
 };
 
 /** Appends arcs of lightning flickering along the blade at the clock `t` (s): a few zigzags of thin crossed ribbons, each new every 70 ms. */
-export const arcs = (out: number[], at: Vec3, [r, u, f]: Vec3[], t: number, lod: number, k = 1) => {
+export const arcs = (out: Out, at: Vec3, [r, u, f]: Vec3[], t: number, lod: number, k = 1) => {
   const step = Math.floor(t * 14);
   const from = out.length;
   for (let a = 0; a < (lod ? 4 : 2); a++) {
@@ -222,7 +223,7 @@ export const arcs = (out: number[], at: Vec3, [r, u, f]: Vec3[], t: number, lod:
  * size; with the clock `t` (s) it crackles, once its glow is all on (`light`, 0 off to 1).
  */
 export const sword = (
-  out: number[],
+  out: Out,
   at: Vec3,
   ax: Vec3[],
   lod: number,
@@ -262,7 +263,7 @@ export const wrists = (at: Vec3, ax: Vec3[]): Vec3[] => {
 
 /** Appends the katana held in the right hand at `pos` turned by `q`. */
 export const held = (
-  out: number[],
+  out: Out,
   pos: Vec3,
   q: Quat,
   lod: number,

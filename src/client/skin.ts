@@ -31,6 +31,8 @@ import {
   white,
 } from './features';
 import type { Uv } from './features';
+import { room } from './verts';
+import type { Out } from './verts';
 
 const SKIN = TONES[1];
 
@@ -1733,39 +1735,60 @@ const MOUTH = [0.09, 0.03, 0.03];
  * triangles' again.
  */
 const relax = (s: Skin, r: NonNullable<Skin['r']>) => {
-  const P = new Float32Array(r.k.length * 3);
+  // Plain loops: the own body runs it every frame on some thousand vertices, fourteen times.
+  const nk = r.k.length;
+  if (MOVED.length < nk * 3) {
+    MOVED = new Float32Array(nk * 3);
+  }
+  const P = MOVED;
   for (let pass = 0; pass < 14; pass++) {
     const f = pass % 2 ? -0.53 : 0.5;
-    r.k.forEach((k, i) => {
+    for (let i = 0; i < nk; i++) {
+      const k = r.k[i];
+      const e0 = r.no[i];
+      const e1 = r.no[i + 1];
       for (let d = 0; d < 3; d++) {
         let m = 0;
-        for (let e = r.no[i]; e < r.no[i + 1]; e++) {
+        for (let e = e0; e < e1; e++) {
           m += Q[r.n[e] * 6 + d];
         }
-        P[i * 3 + d] = Q[k * 6 + d] + r.g[i] * f * (m / (r.no[i + 1] - r.no[i]) - Q[k * 6 + d]);
+        P[i * 3 + d] = Q[k * 6 + d] + r.g[i] * f * (m / (e1 - e0) - Q[k * 6 + d]);
       }
-    });
-    r.k.forEach((k, i) => {
+    }
+    for (let i = 0; i < nk; i++) {
+      const k = r.k[i];
       for (let d = 0; d < 3; d++) {
         Q[k * 6 + d] = P[i * 3 + d];
       }
-    });
+    }
   }
-  r.k.forEach((k, i) => {
-    const n = [0, 0, 0];
+  for (let i = 0; i < nk; i++) {
+    const k = r.k[i];
+    let n0 = 0;
+    let n1 = 0;
+    let n2 = 0;
     for (let e = r.to[i]; e < r.to[i + 1]; e++) {
-      const [a, b, c] = [0, 1, 2].map(j => s.t[r.t[e] + j] * 6);
-      const [u, v] = [b, c].map(o => [0, 1, 2].map(d => Q[o + d] - Q[a + d]));
-      n[0] += u[1] * v[2] - u[2] * v[1];
-      n[1] += u[2] * v[0] - u[0] * v[2];
-      n[2] += u[0] * v[1] - u[1] * v[0];
+      const a = s.t[r.t[e]] * 6;
+      const b = s.t[r.t[e] + 1] * 6;
+      const c = s.t[r.t[e] + 2] * 6;
+      const u0 = Q[b] - Q[a];
+      const u1 = Q[b + 1] - Q[a + 1];
+      const u2 = Q[b + 2] - Q[a + 2];
+      const v0 = Q[c] - Q[a];
+      const v1 = Q[c + 1] - Q[a + 1];
+      const v2 = Q[c + 2] - Q[a + 2];
+      n0 += u1 * v2 - u2 * v1;
+      n1 += u2 * v0 - u0 * v2;
+      n2 += u0 * v1 - u1 * v0;
     }
-    const l = Math.hypot(...n) || 1;
-    for (let d = 0; d < 3; d++) {
-      Q[k * 6 + 3 + d] = n[d] / l;
-    }
-  });
+    const l = Math.hypot(n0, n1, n2) || 1;
+    Q[k * 6 + 3] = n0 / l;
+    Q[k * 6 + 4] = n1 / l;
+    Q[k * 6 + 5] = n2 / l;
+  }
 };
+/** relax()'s moved places, kept from call to call. */
+let MOVED = new Float32Array(0);
 
 /** Per joint the dual quaternion that carries the rest pose to the pose: the rotation, then its dual. */
 const D = new Float64Array((JOINTS + 2) * 8);
@@ -1781,7 +1804,7 @@ let R = new Float32Array(0);
  * normal turned the same way.
  */
 export const skin = (
-  out: number[],
+  out: Out,
   s: Skin,
   { pos, rot }: { pos: Vec3[]; rot: Quat[] },
   colors: number[][],
@@ -1833,8 +1856,12 @@ export const skin = (
       }
     }
   }
+  // Scalars all through, no array a vertex: the close skin is some six thousand vertices a frame.
   for (let i = 0; i < n; i++) {
-    const [a, b, u, k] = [s.j[i * 2] * 8, s.j[i * 2 + 1] * 8, s.w[i], i * 6];
+    const a = s.j[i * 2] * 8;
+    const b = s.j[i * 2 + 1] * 8;
+    const u = s.w[i];
+    const k = i * 6;
     // The shorter way round.
     const f =
       D[a] * D[b] + D[a + 1] * D[b + 1] + D[a + 2] * D[b + 2] + D[a + 3] * D[b + 3] < 0 ? -u : u;
@@ -1845,19 +1872,24 @@ export const skin = (
     for (let r = 0; r < 8; r++) {
       E[r] /= l;
     }
+    const e0 = E[0];
+    const e1 = E[1];
+    const e2 = E[2];
+    const e3 = E[3];
     // The translation is twice the dual part times the rotation's conjugate.
-    const m = [
-      E[3] * E[4] - E[7] * E[0] - (E[5] * E[2] - E[6] * E[1]),
-      E[3] * E[5] - E[7] * E[1] - (E[6] * E[0] - E[4] * E[2]),
-      E[3] * E[6] - E[7] * E[2] - (E[4] * E[1] - E[5] * E[0]),
-    ];
-    for (const h of [k, k + 3]) {
-      const e = h == k ? 2 : 0;
-      const [x, y, z] = [V[h], V[h + 1], V[h + 2]];
-      const [p, q, r] = [E[1] * z - E[2] * y, E[2] * x - E[0] * z, E[0] * y - E[1] * x];
-      Q[h] = x + 2 * (E[3] * p + E[1] * r - E[2] * q) + e * m[0];
-      Q[h + 1] = y + 2 * (E[3] * q + E[2] * p - E[0] * r) + e * m[1];
-      Q[h + 2] = z + 2 * (E[3] * r + E[0] * q - E[1] * p) + e * m[2];
+    const m0 = e3 * E[4] - E[7] * e0 - (E[5] * e2 - E[6] * e1);
+    const m1 = e3 * E[5] - E[7] * e1 - (E[6] * e0 - E[4] * e2);
+    const m2 = e3 * E[6] - E[7] * e2 - (E[4] * e1 - E[5] * e0);
+    for (let h = k, e = 2; h <= k + 3; h += 3, e = 0) {
+      const x = V[h];
+      const y = V[h + 1];
+      const z = V[h + 2];
+      const p = e1 * z - e2 * y;
+      const q = e2 * x - e0 * z;
+      const r = e0 * y - e1 * x;
+      Q[h] = x + 2 * (e3 * p + e1 * r - e2 * q) + e * m0;
+      Q[h + 1] = y + 2 * (e3 * q + e2 * p - e0 * r) + e * m1;
+      Q[h + 2] = z + 2 * (e3 * r + e0 * q - e1 * p) + e * m2;
     }
   }
   if (s.r) {
@@ -1874,27 +1906,32 @@ export const skin = (
   }
   // Written by index rather than pushed: the close skin is some 20 000 vertices.
   let o = out.length;
+  const dst = room(out, s.t.length * 10);
   for (let h = 0; h < s.t.length; h++, o += 10) {
-    const [k, g, f] = [s.t[h] * 6, s.o[s.t[h]], s.cm[h]];
-    let col = pal[s.c[h]];
+    const k = s.t[h] * 6;
+    const g = s.o[s.t[h]];
+    const f = s.cm[h];
+    const col = pal[s.c[h]];
+    let r = col[0];
+    let gr = col[1];
+    let b = col[2];
     if (f) {
       const to = pal[s.c2[h]];
-      col = [
-        col[0] + (to[0] - col[0]) * f,
-        col[1] + (to[1] - col[1]) * f,
-        col[2] + (to[2] - col[2]) * f,
-      ];
+      r += (to[0] - r) * f;
+      gr += (to[1] - gr) * f;
+      b += (to[2] - b) * f;
     }
-    out[o] = Q[k];
-    out[o + 1] = Q[k + 1];
-    out[o + 2] = Q[k + 2];
-    out[o + 3] = Q[k + 3];
-    out[o + 4] = Q[k + 4];
-    out[o + 5] = Q[k + 5];
-    out[o + 6] = col[0] * g;
-    out[o + 7] = col[1] * g;
+    dst[o] = Q[k];
+    dst[o + 1] = Q[k + 1];
+    dst[o + 2] = Q[k + 2];
+    dst[o + 3] = Q[k + 3];
+    dst[o + 4] = Q[k + 4];
+    dst[o + 5] = Q[k + 5];
+    dst[o + 6] = r * g;
+    dst[o + 7] = gr * g;
     // The cut's face and the eyes' specks glow: unlit.
-    out[o + 8] = s.c[h] == GLINT || s.c[h] == CAP ? -2 : -1;
-    out[o + 9] = col[2] * g;
+    dst[o + 8] = s.c[h] == GLINT || s.c[h] == CAP ? -2 : -1;
+    dst[o + 9] = b * g;
   }
+  out.length = o;
 };

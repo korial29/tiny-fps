@@ -7,8 +7,9 @@
 //
 // The flight has a limit: a ceiling CEIL metres over the crater's floor and an ellipse EDGE of the
 // crater's bound. Inside WARN of either the climb or the way out fades; past it the ship is braked
-// and pushed back, and the HUD warns (limits()).
-import { TICK_HZ, VEHICLE } from './constants';
+// and pushed back, and the HUD warns (limits()). Past the world's seam (ORBIT.SEAM) the ship is in
+// space, up to the ceiling at ORBIT.TOP: altitude() is how high that is drawn.
+import { ORBIT, TICK_HZ, VEHICLE } from './constants';
 import { floorAt, gapTo, gravity, norm, shove } from './physics';
 import { bound } from './relief';
 import { KEY, NOBODY } from './types';
@@ -51,8 +52,8 @@ export const SHIP = {
   SLIDE: 0.3,
   RMAX: 0.8,
   RRESP: 5,
-  /** The ceiling's height (y), the crater's bound shrunk to EDGE, and the depth over which the warning grows. */
-  CEIL: 120,
+  /** The ceiling's height (y): the top of space; the crater's bound shrunk to EDGE, and the depth over which the warning grows. */
+  CEIL: ORBIT.TOP,
   EDGE: 0.88,
   WARN: 20,
   /** Past a limit: the push back (m/s² per metre past it) and the brake on the speed out (1/s). */
@@ -228,6 +229,17 @@ export const wings = (r: Rover): Body[] =>
 
 /** Every solid of the ship: its hull, then its wings. */
 export const shipBodies = (r: Rover): Body[] => [shipHull(r), ...wings(r)];
+
+/**
+ * The height `y` as it is drawn and shown: itself up to the seam, then growing as a power of the
+ * height over it, to ORBIT.ALT at ORBIT.TOP. Space is small to fly through and looks high.
+ */
+export const altitude = (y: number): number =>
+  y <= ORBIT.SEAM
+    ? y
+    : ORBIT.SEAM *
+      (ORBIT.ALT / ORBIT.SEAM) **
+        (Math.min(y - ORBIT.SEAM, ORBIT.TOP - ORBIT.SEAM) / (ORBIT.TOP - ORBIT.SEAM));
 
 /**
  * How near the ship is to its limits, each 0 inside and 1 at the limit (more past it): the ceiling

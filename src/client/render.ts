@@ -5,6 +5,7 @@
 // spots get the layers after it). Everything is drawn in the one program, the depth passes with
 // colour writes off. The scene goes into an offscreen target, then a second, small program (POST)
 // turns it into the picture on the canvas. No DOM beyond the canvas.
+import { altitude } from '../shared/ship';
 import { MODE, TEX } from '../shared/types';
 import type { Choice, PlayerState, Rover } from '../shared/types';
 import type { World, WorldDef } from '../shared/world';
@@ -17,7 +18,7 @@ import type { CtfScene } from './flag';
 import { GILT, GLOSS, SHINE, STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
 import { furnishing } from './moonbase';
-import { moonscape } from './moonscape';
+import { heavens, moonscape } from './moonscape';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { battery, cell, kit, racks, vest } from './props';
@@ -91,6 +92,12 @@ const TEXELS = 2048;
 
 /** R of the frame's own vertices (see VERT): no turn, a scale of 1, at the origin. */
 const STILL = [0, 0, 0, 1, 0, 0, 0, 1];
+
+/** The moon's radius, metres, and the climb over the edge of space in which the crater fades into its globe. */
+const MOON_R = 1_737_400;
+const ORBIT_FADE = 250;
+/** Metres over the crater's floor from which the stars and the Earth rise with the eye. */
+const LIFT = 20;
 
 /** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
 const SAMPLES = 4;
@@ -232,12 +239,24 @@ const RELIEF = 0.06;
 export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T,Z,Y;uniform int Q;
-uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F;uniform float U;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
+uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob;uniform float U;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;out vec4 o;
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
 vec3 nz(vec3 v){return v*inversesqrt(max(dot(v,v),1e-12));}
+vec3 hs(vec3 p){p=fract(p*vec3(.1031,.103,.0973));p+=dot(p,p.yxz+33.33);return fract((p.xxy+p.yxx)*p.zyx);}
+float n3(vec3 p){vec3 i=floor(p),f=p-i;f=f*f*(3.-2.*f);
+return mix(mix(mix(hs(i).x,hs(i+vec3(1,0,0)).x,f.x),mix(hs(i+vec3(0,1,0)).x,hs(i+vec3(1,1,0)).x,f.x),f.y),mix(mix(hs(i+vec3(0,0,1)).x,hs(i+vec3(1,0,1)).x,f.x),mix(hs(i+vec3(0,1,1)).x,hs(i+vec3(1,1,1)).x,f.x),f.y),f.z);}
+float cr(vec3 p,float s){vec3 q=p*s,i=floor(q),f=q-i;float v=1.;
+for(int j=0;j<27;j++){vec3 g=vec3(j%3,(j/3)%3,j/9)-1.,h=hs(i+g+s);if(h.x<.45)continue;float d=length(g+h-f)/(.2+.3*h.y);
+v*=d<1.?.62+.4*d*d:1.+.22*max(0.,1.-abs(d-1.15)/.15);}
+return v;}
+bool gh(vec3 d,out vec3 p){vec3 o=vec3(0,1.+Ob.x,0);float b=dot(o,d),q=b*b-dot(o,o)+1.;p=normalize(o+d*(-b-sqrt(max(q,0.))));return q>0.&&b<0.;}
+vec3 mg(vec3 d,out bool t){vec3 p;t=gh(d,p);if(!t)return vec3(0);
+float ma=smoothstep(.42,.6,n3(p*3.)+.5*n3(p*9.)-.25);
+return mix(vec3(.42,.41,.4),vec3(.16,.16,.17),ma)*(.8+.4*n3(p*60.))*cr(p,40.)*cr(p,150.)*cr(p,600.)*e(X*max(dot(p,O),0.));}
 vec3 K0(vec3 d){
+if(Ob.x>0.){bool t;vec3 m=mg(d,t);if(t)return m;}
 float h=d.y,k=max(dot(d,O),0.);
 vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
 c=mix(c,H[4]*1.08,exp(-abs(h)*7.));
@@ -247,6 +266,7 @@ float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(vh(i)
 void main(){
 if(Z<0.){if(C.z<-2.5)discard;return;}
 if(Y>.5){o=vec4(K0(normalize(P)),1);return;}
+if(Ob.w>.5&&Ob.x>0.){vec3 p;if(gh(normalize(P-E),p))discard;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
 float ks=step(abs(L-${TEX.STONE}.),.5);
@@ -293,7 +313,8 @@ c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv);
 c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(-abs(r.y-.12)*18.)),step(abs(L-(${GILT})),.02)*(.45+.45*fr));
 float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5);
 c.g=mix(c.g,c.r,z);
-o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z));}`;
+o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z));
+o.rgb=mix(o.rgb,K0(-V),Ob.w>.5?0.:Ob.y*smoothstep(120.,260.,length(P-E)));}`;
 
 /**
  * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
@@ -496,6 +517,7 @@ export const scenery = (world: World): number[] =>
         ...furnishing(world.def, palette(world).map(String)),
         ...vision(world.def),
         ...zones(world.def),
+        ...heavens(),
       ]
     : [
         ...level(city(world)),
@@ -640,6 +662,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const size = () => backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
   // What is drawn is the world plus a city, a street and the runner's red; the physics knows only `world`.
   const ground = scenery(world);
+  /** The stars and the Earth, the last of the ground's vertices. */
+  const heavensN = world.def.scenery === 'moon' ? heavens().length / STRIDE : 0;
+  /** True while portrait() draws: its runner stands high over the map, never in orbit. */
+  let posing = false;
   // The moon has no traffic.
   const drive = world.def.scenery === 'moon' ? () => {} : traffic(world.def);
   const { sun, sky } = world.def;
@@ -824,6 +850,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       'Sp',
       'Sw',
       'Sc',
+      'Ob',
     ]);
     gl.uniform1i(u.D, 1);
     gl.uniform4fv(u.R, STILL);
@@ -1103,12 +1130,31 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       // Smoke (layer -3) is see-through: its alpha covers that share of the samples.
       gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+      // Over the edge of space the crater fades into the moon's globe, drawn with the sky.
+      const high = posing || world.def.seam === undefined ? 0 : eye[1] - world.def.seam;
+      // The stars' dome is round the crater's floor: high up it follows the eye, LIFT m under it.
+      const lift = posing ? 0 : Math.max(0, eye[1] - LIFT);
+      const globe = high > 0 ? altitude(eye[1]) / MOON_R : 0;
+      const fade = Math.min(Math.max(high / ORBIT_FADE, 0), 1);
+      gl.uniform4f(u.Ob, globe, fade, 0, 0);
       // The sky first, at depth 1: the view ray of each pixel from the camera's axes.
       gl.uniform3fv(u.J, [right.map(c => c * tan * (w / h)), up.map(c => c * tan), fwd].flat());
       gl.uniform1f(u.Y, 1);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.uniform1f(u.Y, 0);
-      gl.drawArrays(gl.TRIANGLES, 0, first + bodyAt / STRIDE);
+      if (lift > 0 && heavensN) {
+        // The stars and the Earth rise with a ship in space, and never fade into the globe.
+        const sky0 = first - heavensN;
+        gl.drawArrays(gl.TRIANGLES, 0, sky0);
+        gl.uniform4fv(u.R, [0, 0, 0, 1, 0, lift, 0, 1]);
+        gl.uniform4f(u.Ob, globe, fade, 0, 1);
+        gl.drawArrays(gl.TRIANGLES, sky0, heavensN);
+        gl.uniform4fv(u.R, STILL);
+        gl.uniform4f(u.Ob, globe, fade, 0, 0);
+        gl.drawArrays(gl.TRIANGLES, first, bodyAt / STRIDE);
+      } else {
+        gl.drawArrays(gl.TRIANGLES, 0, first + bodyAt / STRIDE);
+      }
       place();
       if (v.length > bodyAt) {
         // Last, over a cleared depth: the body never sinks into a wall.
@@ -1192,9 +1238,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const lens = { fov: shot.fov - FOV_DEG, roll: 0, lines: 0 } as Effects;
       const shoot = () =>
         api.frame(eye, a + Math.PI, 0, [model], new Map([[p.id, color]]), lens, []);
-      // Twice: the first frame makes the runner, the second draws him settled.
+      // Twice: the first frame makes the runner, the second draws him settled. High as he is, no orbit.
+      posing = true;
       shoot();
       shoot();
+      posing = false;
       [runners, builds, looks] = [crowd, worn, styled];
       // The middle of the frame, as tall as it and as wide as the card.
       const [w, h] = [canvas.width, canvas.height];

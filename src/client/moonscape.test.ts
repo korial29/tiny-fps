@@ -6,10 +6,11 @@ import { ground } from '../shared/relief';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
 import { STRIDE } from './mesh';
-import { PEBBLES, RANGES, RANGE_COLS, SKY, moonscape, strewn } from './moonscape';
+import { PEBBLES, RANGES, RANGE_COLS, SKY, heavens, moonscape, strewn } from './moonscape';
 import { FAR } from './render';
 
-const v = moonscape(MOON);
+// The scenery as render.ts draws it: the stars and the Earth last.
+const v = moonscape(MOON).concat(heavens());
 const verts = Array.from({ length: v.length / STRIDE }, (_, i) =>
   v.slice(i * STRIDE, (i + 1) * STRIDE),
 );
@@ -85,7 +86,7 @@ describe('moonscape', () => {
     // The craters' stones and twelve small craters more are 12,600: then the rims' bands of detail 33,000 and the pits 10,000: the cap went from 380,000 to 440,000.
     // The ranges on the horizon are 28,800: the cap went to 470,000. The rocks were 117,000; the pebbles are 98,000 and the sixteen boulders 22,000.
     expect(verts.length).toBeLessThan(470000);
-    expect(moonscape(MOON)).toEqual(v);
+    expect(moonscape(MOON).concat(heavens())).toEqual(v);
   });
 
   it('puts the stars and the Earth on a dome of 800 m, past everything else drawn', () => {
@@ -908,6 +909,6 @@ describe('moonscape and the rovers', () => {
     expect(near(again, x, z)).toBe(0);
     expect(again.length).toBe(pits.length);
     // And none is kept away from where no rover is parked any more.
-    expect(moonscape({ ...MOON, rovers: undefined }).length).toBe(v.length);
+    expect(moonscape({ ...MOON, rovers: undefined }).length).toBe(v.length - heavens().length);
   });
 });

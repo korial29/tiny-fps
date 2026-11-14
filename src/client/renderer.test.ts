@@ -757,8 +757,8 @@ describe('createRenderer', () => {
       expect(frag).toContain(`abs(L-${TEX.GLASS}.)`);
       expect(frag).toContain(`abs(L-(${SHINE}))`);
       expect(frag).toMatch(/r=reflect\(-V,m\),k=K0\(r\)/);
-      // The sky pass and the reflection are the one function.
-      expect(frag.match(/K0\(/g)).toHaveLength(3);
+      // The sky pass, the reflection and the crater fading into the globe in orbit are the one function.
+      expect(frag.match(/K0\(/g)).toHaveLength(4);
     });
 
     it('declares the fog, palette and daylight uniforms in the shader', () => {

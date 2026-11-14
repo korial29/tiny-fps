@@ -1456,6 +1456,12 @@ export const moonscape = (def: WorldDef): number[] => {
     sites(o, def);
   }
   ranges(o, unit(def.sun.dir as Vec3));
+  return o;
+};
+
+/** The stars and the Earth: drawn last, lifted with a ship in space (render.ts). */
+export const heavens = (): number[] => {
+  const o: number[] = [];
   stars(o);
   earth(o);
   return o;

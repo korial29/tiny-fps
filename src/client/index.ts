@@ -189,7 +189,8 @@ const play = (
     `i,p,b{position:absolute;pointer-events:none;user-select:none;margin:0}` +
     HUD_CSS +
     `i{left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #0008}` +
-    `p{bottom:8px;left:12px}` +
+    // Over the helmet's blurred rim (the HUD's del), under the death screen.
+    `p{bottom:8px;left:12px;z-index:1}` +
     `b{transform:translate(-50%,-100%);font-size:12px;white-space:nowrap}[hidden]{display:none}</style>` +
     `<div><canvas></canvas><i></i><p></p></div>`;
   container.append(wrap);

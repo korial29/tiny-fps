@@ -857,10 +857,10 @@ const ARM_X = remake(ARM, r => {
  * ellipse, level where they meet, and falls along one arc to the tip; its underside rises faster,
  * clear of the neck.
  */
-const PROFILE = [0.42, 1.71, 0.1, 0.072, 0.135];
+const PROFILE = [0.42, 1.69, 0.1, 0.072, 0.115];
 /** The radius of the round end of the dome, and the banana's thickness and half width behind the face. */
 const TIP = 0.062;
-const BANANA = [0.245, 0.08];
+const BANANA = [0.22, 0.08];
 
 const CREST: Loft = {
   chain: [J.HEAD, J.HEAD],

@@ -86,11 +86,13 @@ export const column = (
     back(J.CHEST, [0, 0.12, 0.115], 0.024),
     back(J.CHEST, [0, -0.04, 0.12], 0.027),
     back(J.SPINE, [0, 0, 0.1], 0.029),
-    back(J.PELVIS, [0, -0.03, 0.09], 0.038),
+    back(J.PELVIS, [0, -0.03, 0.11], 0.036),
+    // Down to the coccyx, low over the rear (the user, 2026-11-15), where the tail leaves it.
+    back(J.PELVIS, [0, -0.12, 0.13], 0.04),
   ];
   // The tail in the pelvis' frame: its angle in the pelvis' plane (0 back, up from there) along it.
   const steps = 12;
-  let p: Vec3 = [0, -0.06, 0.13];
+  let p: Vec3 = [0, -0.15, 0.16];
   for (let k = 1; k <= steps; k++) {
     const u = k / steps;
     const lift = -0.55 + 1.15 * u + 0.25 * run;

@@ -315,7 +315,7 @@ float h=d.y,k=max(dot(d,O),0.);
 vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
 c=mix(c,H[4]*1.08,exp(-abs(h)*7.));
 #ifdef MOON
-c+=Sn*sk(d,px);
+if(px>0.)c+=Sn*sk(d,px);
 #endif
 return c+X*((.1+.9*clamp(H[4].g*1.2,0.,1.))*(.2*pow(k,24.)+.05*pow(k,4.))+2.*smoothstep(.9993,.9997,k));}
 float vh(vec2 q){return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5453);}

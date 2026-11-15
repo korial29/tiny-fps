@@ -32,8 +32,9 @@ export interface Audio {
   say(id: number): void;
   /**
    * Says clip `id` of the players' voices (CAST): placed and fainter with distance as play() with
-   * `at`, centred without; over the `radio`, thin as through a headset. False, and silent, until
-   * the voices are decoded.
+   * `at`, centred without; over the `radio`, clipped and thin as through a cheap headset, a burst
+   * of squelch before and after it and a hiss under it. False, and silent, until the voices are
+   * decoded.
    */
   speak(id: number, at?: Vec3, gain?: number, rate?: number, radio?: boolean): boolean;
   /** The sound `id` (one of LOOPED) as a loop, silent until its first set; the own player's, centred. */
@@ -56,6 +57,15 @@ const SPEECH = 0.9;
 const DUCK = 0.35;
 /** The radio's band, Hz: what a headset's speaker gives of a voice. */
 const BAND = [500, 2800];
+/** How hard the radio's amplifier clips a voice: its gain into the soft clip. */
+const DRIVE = 8;
+/** The soft clip's curve, tanh of the driven input, peak for peak. */
+const CLIP = Float32Array.from({ length: 257 }, (_, i) => {
+  const x = i / 128 - 1;
+  return Math.tanh(DRIVE * x) / Math.tanh(DRIVE);
+});
+/** Seconds of squelch before a radio line and after it, its loudness and the hiss's under the line. */
+const SQUELCH = [0.08, 0.14, 0.35, 0.06];
 
 /**
  * The announcer's sprite (voice/clips.ts), each as base64 and loaded only when asked for: Ogg Opus,
@@ -122,8 +132,9 @@ export const createAudio = (
   let speech: AudioBuffer | undefined;
   const lines: number[] = [];
   let talking = false;
-  /** The players' voices once decoded. */
+  /** The players' voices once decoded, and the radio's noise, made on its first line. */
   let cast: AudioBuffer | undefined;
+  let noise: AudioBuffer | undefined;
 
   /** The first of `formats` the browser decodes; none if it decodes none. */
   const decode = async (formats: (() => Promise<string>)[]) => {
@@ -193,7 +204,12 @@ export const createAudio = (
     const p = ctx.createStereoPanner();
     p.pan.value = pan;
     let head: AudioNode = src;
+    /** When the voice starts: after the squelch over the radio. */
+    let at0 = 0;
     if (radio) {
+      const shaper = ctx.createWaveShaper();
+      shaper.curve = CLIP;
+      head = head.connect(shaper);
       for (const [type, hz] of [
         ['highpass', BAND[0]],
         ['lowpass', BAND[1]],
@@ -203,13 +219,28 @@ export const createAudio = (
         f.frequency.value = hz;
         head = head.connect(f);
       }
+      // The squelch and the hiss: white noise through the same amplifier, loud at the two ends.
+      const [pre, post, loud, low] = SQUELCH;
+      const t = ctx.currentTime;
+      const len = (clip?.[1] ?? b.duration) / rate;
+      const n = source(
+        (noise ??= buffer(Float32Array.from({ length: RATE / 2 }, () => Math.random() * 2 - 1))),
+      );
+      n.loop = true;
+      const g = out(shaper, loud);
+      g.gain.setValueAtTime(low, t + pre);
+      g.gain.setValueAtTime(loud, t + pre + len);
+      n.connect(g);
+      n.start(t);
+      n.stop(t + pre + len + post);
+      at0 = t + pre;
     }
     head.connect(p).connect(out(master, vol));
     const v = { vol, src };
     voices.add(v);
     src.onended = () => voices.delete(v);
     if (clip) {
-      src.start(0, ...clip);
+      src.start(at0, ...clip);
     } else {
       src.start();
     }

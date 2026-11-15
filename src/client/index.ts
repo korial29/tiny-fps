@@ -547,22 +547,21 @@ const play = (
     })) {
       const info = roster.find(p => p.id == by);
       const p = others.find(o => o.id == by);
-      const screen = hud.comm(names.get(by) ?? 'Ally', info?.team ?? 0, s);
       const color = colors.get(by);
-      if (!info || !p || !color || !rd) {
-        continue;
-      }
-      const look = { tone: info.tone, hair: info.hair, role: roleOf(info.role, world.def) };
-      const key = `${by}${color}${info.body}${JSON.stringify(look)}`;
-      let face = faces.get(key);
-      if (!face) {
-        face = document.createElement('canvas');
-        face.width = face.height = COMM;
-        if (rd.portrait(face, p, info.body ?? 0, color, look, FACE)) {
-          faces.set(key, face);
+      let face: HTMLCanvasElement | undefined;
+      if (info && p && color && rd) {
+        const look = { tone: info.tone, hair: info.hair, role: roleOf(info.role, world.def) };
+        const key = `${by}${color}${info.body}${JSON.stringify(look)}`;
+        face = faces.get(key);
+        if (!face) {
+          face = document.createElement('canvas');
+          face.width = face.height = COMM;
+          if (rd.portrait(face, p, info.body ?? 0, color, look, FACE)) {
+            faces.set(key, face);
+          }
         }
       }
-      screen.getContext('2d')?.drawImage(face, 0, 0);
+      hud.comm(names.get(by) ?? 'Ally', info?.team ?? 0, s, face);
     }
     const dt = Math.min((now - before) / 1000, 0.1);
     // The flags and the bases for the renderer and the lights, and the HUD that goes with them.

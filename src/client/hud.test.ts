@@ -601,13 +601,13 @@ describe('createHud', () => {
     it('opens the radio screen for an ally while he speaks, in his team\u2019s colour, a newer line taking its place', () => {
       const box = q('label');
       expect(box.hidden).toBe(true);
-      const c = hud.comm('Ann', 1, 1.2);
+      hud.comm('Ann', 1, 1.2);
       expect(box.hidden).toBe(false);
       expect(box.textContent).toBe('Ann');
       const blue = box.style.color;
       expect(blue).not.toBe('');
+      const c = q<HTMLCanvasElement>('label canvas');
       expect([c.width, c.height]).toEqual([COMM, COMM]);
-      expect(c).toBe(q('label canvas'));
       vi.advanceTimersByTime(1000);
       hud.comm('Bob', 0, 1);
       expect(box.textContent).toBe('Bob');

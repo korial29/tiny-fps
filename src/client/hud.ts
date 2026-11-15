@@ -26,6 +26,7 @@ import { ROLE } from '../shared/kit';
 import { FH, FW, PALETTE, sprite } from './face';
 import { VISOR } from './helmet';
 import type { Mark } from './marks';
+import { createSignal, scramble } from './signal';
 
 /**
  * The outline of the helmet's visor as the runners wear it (helmet.ts: VISOR and band()), seen from
@@ -132,15 +133,15 @@ export const HUD_CSS =
   `ol{top:30px;right:12px;display:grid;justify-items:end;gap:3px;list-style:none;font-size:13px;font-weight:700}` +
   `ol li{width:auto;height:auto;padding:3px 9px;border-radius:4px;background:#000a;box-shadow:none;white-space:nowrap}ol li em{position:static;transform:none;margin:0 6px;font-size:11px;opacity:.75}` +
   // An ally on the radio (the user, 2026-11-15): his face on a small screen that flickers open
-  // under the own frags while he speaks, framed in his team's colour, his name and a level meter.
+  // under the own frags while he speaks, framed in his team's colour, his name and a level meter;
+  // the picture comes scrambled, with bad reception (signal.ts).
   `label{left:12px;top:40px;display:grid;justify-items:center;gap:4px;padding:5px 5px 6px;border:2px solid currentColor;border-radius:8px;background:#000c;box-shadow:0 0 14px currentColor;transform-origin:center;animation:comm .3s ease-out}` +
   `label canvas{display:block;width:96px;height:96px;border-radius:4px;background:radial-gradient(#26323e,#05080c)}` +
-  `label::after{content:"";position:absolute;left:5px;top:5px;width:96px;height:96px;border-radius:4px;background:repeating-linear-gradient(#0000 0 2px,#0004 2px 3px);animation:snow .12s steps(2) infinite}` +
   `label span{max-width:96px;overflow:hidden;text-overflow:ellipsis;font:800 11px/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}` +
   `label i{display:flex;gap:2px;align-items:end;height:8px}label i b{width:3px;height:100%;background:currentColor;animation:talk .28s ease-in-out infinite alternate}` +
   `label i b:nth-child(2n){animation-duration:.2s}label i b:nth-child(3n){animation-duration:.34s}` +
   `@keyframes comm{0%{opacity:0;transform:scale(1,.04)}45%{opacity:1;transform:scale(1.06,.12)}100%{transform:none}}` +
-  `@keyframes snow{50%{background-position:0 1px}}@keyframes talk{from{transform:scaleY(.2)}}` +
+  `@keyframes talk{from{transform:scaleY(.2)}}` +
   `h1{left:12px;top:8px;font:900 13px/1 system-ui,sans-serif;letter-spacing:.1em}h1 span{margin-left:6px;font-size:24px;font-variant-numeric:tabular-nums}` +
   `em{font-style:normal;font-size:13px;font-weight:800;line-height:1.1;text-align:center;transform:translate(-50%,-50%)}em span{display:block;font-size:20px;line-height:1}` +
   `section{inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0 12px;text-align:center;background:#000c}` +
@@ -506,10 +507,10 @@ export interface Hud {
   feed(by: [string, number], who: [string, number]): void;
   /**
    * An ally on the radio: the small screen with `name` in `team`'s colour opens for `s` seconds
-   * (and COMM_TAIL more), a newer one taking its place. Returns its canvas (COMM pixels square),
-   * cleared, for his face.
+   * (and COMM_TAIL more), a newer one taking its place, and shows his `face` (COMM pixels square)
+   * as a scrambled transmission with bad reception (signal.ts), static alone without one.
    */
-  comm(name: string, team: number, s: number): HTMLCanvasElement;
+  comm(name: string, team: number, s: number, face?: CanvasImageSource): void;
   /**
    * The rover: `act` is what E does now ('drive', 'ride', 'get out'; '' hides the prompt), and
    * `speed` the km/h shown at the wheel, where the gun and the crosshair then hide; undefined off it.
@@ -754,6 +755,8 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const [victim, award] = [...notice.children] as HTMLElement[];
   let shout: ReturnType<typeof setTimeout> | undefined;
   let radio: ReturnType<typeof setTimeout> | undefined;
+  /** The radio screen's frame request. */
+  let tuned = 0;
   /** The summary the end screen's table was built from. */
   let built: Summary | undefined;
   const tint = (el: HTMLElement, team: number) => (el.style.color = TEAM_COLOR[team]);
@@ -944,7 +947,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       clearTimeout(shout);
       shout = setTimeout(() => (notice.hidden = true), FRAG_MS);
     },
-    comm(who, team, secs) {
+    comm(who, team, secs, face) {
       const box = one('label');
       box.hidden = false;
       // Each line flickers it open again.
@@ -955,9 +958,30 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       set(one('label span'), who);
       clearTimeout(radio);
       radio = setTimeout(() => (box.hidden = true), (secs + COMM_TAIL) * 1000);
+      cancelAnimationFrame(tuned);
       const c = one<HTMLCanvasElement>('label canvas');
-      c.getContext('2d')?.clearRect(0, 0, c.width, c.height);
-      return c;
+      const g = c.getContext('2d');
+      if (!g) {
+        return;
+      }
+      g.clearRect(0, 0, COMM, COMM);
+      if (face) {
+        g.drawImage(face, 0, 0, COMM, COMM);
+      }
+      const src = g.getImageData(0, 0, COMM, COMM).data;
+      const img = g.createImageData(COMM, COMM);
+      const loss = createSignal(secs, COMM_TAIL);
+      let last = performance.now();
+      const tune = (now: number) => {
+        if (!box.hidden) {
+          scramble(src, img.data, COMM, COMM, loss(Math.min((now - last) / 1000, 0.1)));
+          g.putImageData(img, 0, 0);
+          last = now;
+          tuned = requestAnimationFrame(tune);
+        }
+      };
+      // At once: the screen opens on static, not on a clear face.
+      tune(last);
     },
     feed([a, at], [b, bt]) {
       const li = document.createElement('li');

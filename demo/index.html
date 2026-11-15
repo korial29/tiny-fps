@@ -386,7 +386,8 @@
         position: fixed;
         inset: 0;
       }
-      /* Top left: the ammo is at the bottom right, the face and the health in the middle. */
+      /* Top left, over the title screen; in play bottom left (.play): the frags and the radio's
+         screen take the top left, the ammo the bottom right, the face and the health the middle. */
       #bar {
         position: fixed;
         top: 8px;
@@ -396,6 +397,10 @@
         gap: 12px;
         font-size: 14px;
         text-shadow: 0 1px 2px #000;
+      }
+      #bar.play {
+        top: auto;
+        bottom: 32px;
       }
       #bar button {
         width: auto;

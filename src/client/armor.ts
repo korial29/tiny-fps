@@ -759,6 +759,18 @@ export interface Recipe {
   t: number[];
   /** The triangles each kind of wearer has (armor()'s `ninja`, astronaut and `bare` bits), listed on first use. */
   k?: Int32Array[];
+  /** Their corners, each distinct one once (shared()), by the same wearer. */
+  s?: Shared[];
+}
+
+/**
+ * A wearer's corners, each distinct one once: its first number in the recipe's `c` and its turned
+ * weights (TURN bits) in `u`, two numbers a corner; in `x` the three of each triangle of its list.
+ * Next to each other, triangles share their corners, two or three times over on the marine.
+ */
+interface Shared {
+  u: Int32Array;
+  x: Int32Array;
 }
 export const CORNER = 11;
 export const TRI = 6;
@@ -1872,6 +1884,30 @@ export const wornOf = (
   return [r, ((r.k ??= [])[wearer] ??= wearing(r.t, ninja, astro, bare))];
 };
 
+/** The distinct corners of the triangles `list` of a recipe (Shared). */
+const shared = (c: number[], t: number[], list: Int32Array): Shared => {
+  const seen = new Map<string, number>();
+  const u: number[] = [];
+  const x = new Int32Array(list.length * 3);
+  for (let n = 0; n < list.length; n++) {
+    const i = list[n];
+    const turn = t[i + 4] & (TURN * 7);
+    for (let j = 0, ci = (i / TRI) * 3 * CORNER; j < 3; j++, ci += CORNER) {
+      const key = `${turn} ${c.slice(ci, ci + CORNER)}`;
+      let k = seen.get(key);
+      if (k === undefined) {
+        seen.set(key, (k = u.length / 2));
+        u.push(ci, turn);
+      }
+      x[n * 3 + j] = k;
+    }
+  }
+  return { u: Int32Array.from(u), x };
+};
+
+/** Each distinct corner's place and normal, six numbers, from frame to frame. */
+let Q = new Float64Array(0);
+
 export const armor = (
   out: Out,
   from: number,
@@ -1885,80 +1921,93 @@ export const armor = (
   const astro = !plate && !ninja;
   const [r, list] = wornOf(s, fine, ninja, astro, bare);
   const { c, t } = r;
+  const { u, x } = ((r.s ??= [])[+ninja | (+astro << 1) | (+bare << 2)] ??= shared(c, t, list));
+  if (Q.length < u.length * 3) {
+    Q = new Float64Array(u.length * 3);
+  }
   const P = new Float64Array(9);
   const N = new Float64Array(9);
   let w = out.length;
   const a = room(out, list.length * 3 * STRIDE);
+  // Each corner once, though most are the corner of two or three triangles.
+  for (let k = 0, q = 0; k < u.length; k += 2, q += 6) {
+    const ci = u[k];
+    // A weight is the other way for a corner whose normal is turned (cook()): the place is not.
+    const kind = u[k + 1];
+    const o = from + c[ci] * 3 * STRIDE;
+    const b0 = c[ci + 1];
+    const b1 = c[ci + 2];
+    const b2 = c[ci + 3];
+    const m0 = kind & TURN ? -b0 : b0;
+    const m1 = kind & (TURN << 1) ? -b1 : b1;
+    const m2 = kind & (TURN << 2) ? -b2 : b2;
+    const o1 = o + STRIDE;
+    const o2 = o1 + STRIDE;
+    const x0 = a[o] * b0 + a[o1] * b1 + a[o2] * b2;
+    const y = a[o + 1] * b0 + a[o1 + 1] * b1 + a[o2 + 1] * b2;
+    const z = a[o + 2] * b0 + a[o1 + 2] * b1 + a[o2 + 2] * b2;
+    let nx = a[o + 3] * m0 + a[o1 + 3] * m1 + a[o2 + 3] * m2;
+    // A turned normal is level too (the world's level: a runner mostly stands).
+    let ny =
+      a[o + 4] * (m0 > 0 ? m0 : 0) + a[o1 + 4] * (m1 > 0 ? m1 : 0) + a[o2 + 4] * (m2 > 0 ? m2 : 0);
+    let nz = a[o + 5] * m0 + a[o1 + 5] * m1 + a[o2 + 5] * m2;
+    const nl = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+    nx /= nl;
+    ny /= nl;
+    nz /= nl;
+    const d = c[ci + 4];
+    Q[q] = x0 + nx * d;
+    Q[q + 1] = y + ny * d;
+    Q[q + 2] = z + nz * d;
+    let gx = c[ci + 5];
+    let gy = c[ci + 6];
+    let gz = c[ci + 7];
+    if (gx || gy || gz) {
+      // The swell's slope, turned as the normal turned from rest to drawn (Rodrigues), tilts it.
+      const rl = Math.sqrt(c[ci + 8] ** 2 + c[ci + 9] ** 2 + c[ci + 10] ** 2) || 1;
+      const rx = c[ci + 8] / rl;
+      const ry = c[ci + 9] / rl;
+      const rz = c[ci + 10] / rl;
+      const kx = ry * nz - rz * ny;
+      const ky = rz * nx - rx * nz;
+      const kz = rx * ny - ry * nx;
+      const sn = Math.sqrt(kx * kx + ky * ky + kz * kz);
+      if (sn > 1e-6) {
+        const cs = rx * nx + ry * ny + rz * nz;
+        const ux = kx / sn;
+        const uy = ky / sn;
+        const uz = kz / sn;
+        const ug = (ux * gx + uy * gy + uz * gz) * (1 - cs);
+        const wx = uy * gz - uz * gy;
+        const wy = uz * gx - ux * gz;
+        const wz = ux * gy - uy * gx;
+        gx = gx * cs + wx * sn + ux * ug;
+        gy = gy * cs + wy * sn + uy * ug;
+        gz = gz * cs + wz * sn + uz * ug;
+      }
+      nx -= gx;
+      ny -= gy;
+      nz -= gz;
+      const ml = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      nx /= ml;
+      ny /= ml;
+      nz /= ml;
+    }
+    Q[q + 3] = nx;
+    Q[q + 4] = ny;
+    Q[q + 5] = nz;
+  }
   for (let n = 0; n < list.length; n++) {
     const i = list[n];
-    let ci = (i / TRI) * 3 * CORNER;
-    // A weight is the other way for a corner whose normal is turned (cook()): the place is not.
     const kind = t[i + 4];
-    for (let j = 0; j < 3; j++, ci += CORNER) {
-      const o = from + c[ci] * 3 * STRIDE;
-      const b0 = c[ci + 1];
-      const b1 = c[ci + 2];
-      const b2 = c[ci + 3];
-      const m0 = kind & TURN ? -b0 : b0;
-      const m1 = kind & (TURN << 1) ? -b1 : b1;
-      const m2 = kind & (TURN << 2) ? -b2 : b2;
-      const o1 = o + STRIDE;
-      const o2 = o1 + STRIDE;
-      const x = a[o] * b0 + a[o1] * b1 + a[o2] * b2;
-      const y = a[o + 1] * b0 + a[o1 + 1] * b1 + a[o2 + 1] * b2;
-      const z = a[o + 2] * b0 + a[o1 + 2] * b1 + a[o2 + 2] * b2;
-      let nx = a[o + 3] * m0 + a[o1 + 3] * m1 + a[o2 + 3] * m2;
-      // A turned normal is level too (the world's level: a runner mostly stands).
-      let ny =
-        a[o + 4] * (m0 > 0 ? m0 : 0) +
-        a[o1 + 4] * (m1 > 0 ? m1 : 0) +
-        a[o2 + 4] * (m2 > 0 ? m2 : 0);
-      let nz = a[o + 5] * m0 + a[o1 + 5] * m1 + a[o2 + 5] * m2;
-      const nl = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
-      nx /= nl;
-      ny /= nl;
-      nz /= nl;
-      const d = c[ci + 4];
-      P[j * 3] = x + nx * d;
-      P[j * 3 + 1] = y + ny * d;
-      P[j * 3 + 2] = z + nz * d;
-      let gx = c[ci + 5];
-      let gy = c[ci + 6];
-      let gz = c[ci + 7];
-      if (gx || gy || gz) {
-        // The swell's slope, turned as the normal turned from rest to drawn (Rodrigues), tilts it.
-        const rl = Math.sqrt(c[ci + 8] ** 2 + c[ci + 9] ** 2 + c[ci + 10] ** 2) || 1;
-        const rx = c[ci + 8] / rl;
-        const ry = c[ci + 9] / rl;
-        const rz = c[ci + 10] / rl;
-        const kx = ry * nz - rz * ny;
-        const ky = rz * nx - rx * nz;
-        const kz = rx * ny - ry * nx;
-        const sn = Math.sqrt(kx * kx + ky * ky + kz * kz);
-        if (sn > 1e-6) {
-          const cs = rx * nx + ry * ny + rz * nz;
-          const ux = kx / sn;
-          const uy = ky / sn;
-          const uz = kz / sn;
-          const ug = (ux * gx + uy * gy + uz * gz) * (1 - cs);
-          const wx = uy * gz - uz * gy;
-          const wy = uz * gx - ux * gz;
-          const wz = ux * gy - uy * gx;
-          gx = gx * cs + wx * sn + ux * ug;
-          gy = gy * cs + wy * sn + uy * ug;
-          gz = gz * cs + wz * sn + uz * ug;
-        }
-        nx -= gx;
-        ny -= gy;
-        nz -= gz;
-        const ml = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
-        nx /= ml;
-        ny /= ml;
-        nz /= ml;
-      }
-      N[j * 3] = nx;
-      N[j * 3 + 1] = ny;
-      N[j * 3 + 2] = nz;
+    for (let j = 0; j < 9; j += 3) {
+      const q = x[n * 3 + j / 3] * 6;
+      P[j] = Q[q];
+      P[j + 1] = Q[q + 1];
+      P[j + 2] = Q[q + 2];
+      N[j] = Q[q + 3];
+      N[j + 1] = Q[q + 4];
+      N[j + 2] = Q[q + 5];
     }
     if (kind & 1) {
       // A wall: its own flat normal, as wound.

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ARMHOLE,
   ASTRO_DETAILS,
@@ -169,6 +169,26 @@ describe('the armour', () => {
         }
         expect(top).toBeLessThan(1.56);
       }
+    }
+  });
+
+  it("works out a corner shared by two or three triangles once: the eye's own body draws it every frame", () => {
+    // Every corner's normal is normalised by a square root at least: done per triangle, the marine's
+    // 73 000 corners took 3 ms of the own body's 4 a frame (2026-11-15).
+    for (const ninja of [false, true]) {
+      const out: number[] = [];
+      const s = body(2);
+      skin(out, s, solve(rest([0, 0, 0], 0)), palette([0.9, 0.2, 0.1], undefined, undefined, true));
+      const n = out.length;
+      armor(out, 0, s, true, [0.9, 0.2, 0.1], ninja);
+      const corners = (out.length - n) / STRIDE;
+      out.length = n;
+      const root = vi.spyOn(Math, 'sqrt');
+      armor(out, 0, s, true, [0.9, 0.2, 0.1], ninja);
+      const roots = root.mock.calls.length;
+      root.mockRestore();
+      expect((out.length - n) / STRIDE).toBe(corners);
+      expect(roots).toBeLessThan(corners * 1.5);
     }
   });
 

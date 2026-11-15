@@ -498,7 +498,7 @@ export const clavicles = (out: Out, at: Vec3, q: Quat, lod: number) => {
 /** The pipes' colour: a very dark grey, lighter than the chitin. */
 const PIPE = [0.1, 0.1, 0.105];
 /**
- * Thin pipes up its neck (the user, 2026-11-15: following the neck, in curves): three each side,
+ * Thin pipes up its neck (the user, 2026-11-15: following the neck, in curves, many): six each side,
  * from the top of the chest round the neck's sides into the underside of the skull, each through
  * points carried by the chest, the neck and the head, so it bends with them, on a smooth curve
  * that snakes round the neck. In the world, from the solved skeleton `s`.
@@ -513,7 +513,7 @@ export const pipes = (out: Out, s: Solved, lod: number) => {
     [J.HEAD, 0.05, 0.05, 0.01],
   ];
   for (const k of [-1, 1]) {
-    [0.65, 1.1, 1.55].forEach((a, i) => {
+    [0.4, 0.75, 1.1, 1.45, 1.8, 2.15].forEach((a, i) => {
       // A wave round the neck, each pipe out of step with the next.
       const pts = ctl.map(([j, y, r, z], c): Vec3 => {
         const b = a + 0.22 * Math.sin(c * 1.4 + i * 2.1);

@@ -156,6 +156,11 @@ form.addEventListener('submit', e => {
   join();
 });
 $('leave').addEventListener('click', leave);
+// In play the frags and the radio's screen are top left: the bar goes to the bottom left then, and
+// back up on the title screen and the pause menu (no pointer lock), whose panel covers that corner.
+document.addEventListener('pointerlockchange', () =>
+  $('bar').classList.toggle('play', !!document.pointerLockElement),
+);
 
 // A map card's words are the map's own: the game's title screen tells the same.
 for (const card of document.querySelectorAll('.map')) {

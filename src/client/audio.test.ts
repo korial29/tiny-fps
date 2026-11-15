@@ -21,7 +21,11 @@ vi.mock('./sfx', async importOriginal => ({
 
 interface Node {
   to?: Node;
-  gain: { value: number; setTargetAtTime: ReturnType<typeof vi.fn> };
+  gain: {
+    value: number;
+    setTargetAtTime: ReturnType<typeof vi.fn>;
+    setValueAtTime: ReturnType<typeof vi.fn>;
+  };
   pan: { value: number };
   playbackRate: { value: number; setTargetAtTime: ReturnType<typeof vi.fn> };
   buffer?: { length: number };
@@ -48,7 +52,7 @@ class FakeContext {
   }
   private node(): Node {
     const n: Node = {
-      gain: { value: 1, setTargetAtTime: vi.fn() },
+      gain: { value: 1, setTargetAtTime: vi.fn(), setValueAtTime: vi.fn() },
       pan: { value: 0 },
       playbackRate: { value: 1, setTargetAtTime: vi.fn() },
       started: 0,
@@ -67,6 +71,7 @@ class FakeContext {
   }
   createStereoPanner = () => this.node();
   createBiquadFilter = () => Object.assign(this.node(), { type: '', frequency: { value: 0 } });
+  createWaveShaper = () => Object.assign(this.node(), { curve: null as Float32Array | null });
   createBufferSource() {
     const n = this.node();
     this.sources.push(n);
@@ -458,16 +463,28 @@ describe('speak', () => {
     expect(a.speak(5, at(100, 0))).toBe(false);
   });
 
-  it('thins a line over the radio through a headset\u2019s band, centred', async () => {
+  it('clips a line over the radio and thins it through a headset\u2019s band, centred, after a squelch', async () => {
     const a = await voiced();
     expect(a.speak(2, undefined, 0.7, 1, true)).toBe(true);
     type Filter = Node & { type: string; frequency: { value: number } };
-    const hp = clips().at(-1)!.to as Filter;
+    const line = clips().at(-1)!;
+    const shaper = line.to as Node & { curve: Float32Array };
+    // A soft clip: full scale at the ends, a quarter of it driven near the top.
+    expect([shaper.curve[0], shaper.curve.at(-1)]).toEqual([-1, 1]);
+    expect(shaper.curve[160]).toBeGreaterThan(0.9);
+    const hp = shaper.to as Filter;
     const lp = hp.to as Filter;
     expect([hp.type, lp.type]).toEqual(['highpass', 'lowpass']);
     expect(hp.frequency.value).toBeLessThan(lp.frequency.value);
     expect(lp.to!.pan.value).toBe(0);
     expect(lp.to!.to!.gain.value).toBe(0.7);
+    // The noise into the same amplifier: loud, low under the line, loud again, then stopped.
+    const noise = fake().sources.find(s => s.loop && s.to?.to === shaper)!;
+    const g = noise.to!.gain;
+    expect(g.setValueAtTime.mock.calls.map(c => c[0] < g.value)).toEqual([true, false]);
+    expect(noise.args).toEqual([3]);
+    expect(line.args![0]).toBeGreaterThan(3);
+    expect(noise.stopped).toBe(1);
   });
 
   it('loads the Opus voices first', async () => {

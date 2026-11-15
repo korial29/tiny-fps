@@ -85,7 +85,7 @@ import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
 import { STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, PARENT, axis, mul, slerp, solve, turn } from './rig';
+import { IDENTITY, JOINT as J, PARENT, axis, mul, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
 import {
   REGION,
@@ -743,6 +743,13 @@ const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose =>
   rot[J.CHEST] = mul(rot[J.CHEST], axis(X, -0.3));
   rot[J.NECK] = mul(rot[J.NECK], axis(X, 0.42));
   rot[J.HEAD] = mul(rot[J.HEAD], axis(X, 0.2));
+  // Out of a blow, the upper arms hang lower than the runner's guard, the elbows still bent so the
+  // claws point ahead: raised forward, the shoulder's skin pinched into a fold (the user, 2026-11-15).
+  if (!p.swing) {
+    for (const a of [J.ARM_L, J.ARM_R]) {
+      rot[a] = slerp(rot[a], IDENTITY, 0.45);
+    }
+  }
   const q: Pose = { ...pose, rot };
   if (p.mode != MODE.GROUND && p.mode != MODE.CROUCH) {
     return q;

@@ -460,6 +460,34 @@ export const ribs = (out: Out, at: Vec3, q: Quat, lod: number, low = false) => {
   }
 };
 
+/**
+ * Its collarbones on the chest joint (the user, 2026-11-15: standing out, an exoskeleton), in the
+ * ribs' chitin: from the notch over the breastbone forward and out, then back to a knob over each
+ * shoulder.
+ */
+export const clavicles = (out: Out, at: Vec3, q: Quat, lod: number) => {
+  for (const s of [-1, 1]) {
+    strand(
+      out,
+      at,
+      q,
+      (
+        [
+          [0.022, 0.158, -0.118],
+          [0.06, 0.168, -0.128],
+          [0.105, 0.18, -0.11],
+          [0.145, 0.19, -0.075],
+          [0.172, 0.197, -0.04],
+          [0.186, 0.2, -0.012],
+        ] as Vec3[]
+      ).map(([x, y, z]): Vec3 => [s * x, y, z]),
+      [0.012, 0.012, 0.011, 0.012, 0.016, 0.01],
+      SIDES[1][lod],
+      SINEW,
+    );
+  }
+};
+
 /** A spur of bone on a joint: from `base` along `dir` (in its frame), `len` long, `r` thick at its root. */
 const spur = (
   out: Out,

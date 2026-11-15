@@ -111,6 +111,7 @@ import {
   heel,
   metatarsal,
   ribs,
+  clavicles,
   sinews,
   skull,
   toes,
@@ -1105,6 +1106,9 @@ export const soldier = (
         rigid(`toes ${lod}`, tip, s.rot[toe], (o, a, q) => toes(o, a, q, lod));
       }
       rigid(`ribs ${lod}`, s.pos[J.CHEST], s.rot[J.CHEST], (o, a, q) => ribs(o, a, q, lod));
+      rigid(`clavicles ${lod}`, s.pos[J.CHEST], s.rot[J.CHEST], (o, a, q) =>
+        clavicles(o, a, q, lod),
+      );
       rigid(`low ribs ${lod}`, s.pos[J.SPINE], s.rot[J.SPINE], (o, a, q) =>
         ribs(o, a, q, lod, true),
       );

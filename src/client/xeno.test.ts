@@ -4,11 +4,11 @@ import { STILL } from '../shared/physics';
 import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { MOVE, MOVES, createGait } from './gait';
-import { JOINT as J, JOINTS, rest, solve } from './rig';
+import { JOINT as J, JOINTS, rest, solve, turn } from './rig';
 import { KIND } from './features';
 import { beast, body } from './skin';
 import { animate, stance } from './soldier';
-import { column, eyes, instep, sinews, toes } from './xeno';
+import { FOOT_TIP, column, elbow, eyes, heel, metatarsal, ribs, sinews, toes } from './xeno';
 import type { Vec3 } from './mesh';
 import type { Quat } from './rig';
 
@@ -77,17 +77,27 @@ describe('its pieces', () => {
     expect(still.length).toBeGreaterThan(34 * 4 * 8);
   });
 
-  it('puts three clawed toes ahead of each foot, tendons along the shin and the instep, and glowing eyes on the head', () => {
+  it('puts three clawed toes ahead of each foot, tendons and spurs, a rib cage round the chest and glowing eyes on the head', () => {
     const out = (f: (o: number[]) => void) => {
       const v: number[] = [];
       f(v);
       return points(v);
     };
     const t = out(o => toes(o, O, ID, 1));
-    expect(Math.min(...t.map(p => p[2]))).toBeLessThan(-0.11);
-    expect(t.every(p => p[1] > -0.03)).toBe(true);
+    expect(Math.min(...t.map(p => p[2]))).toBeLessThan(-0.18);
+    expect(t.every(p => p[1] > -0.04)).toBe(true);
     expect(out(o => sinews(o, O, ID, 1)).every(p => p[1] < -0.05)).toBe(true);
-    expect(out(o => instep(o, O, ID, 1)).every(p => p[2] < 0)).toBe(true);
+    // The foot's long bone reaches FOOT_TIP, past the rig's foot (0.137 m).
+    expect(Math.min(...out(o => metatarsal(o, O, ID, 1)).map(p => p[2]))).toBeLessThan(
+      FOOT_TIP[2] + 0.03,
+    );
+    expect(-FOOT_TIP[2]).toBeGreaterThan(0.2);
+    // The ribs round the chest's sides and front, the spurs out of the backs of the joints.
+    const r = out(o => ribs(o, O, ID, 1));
+    expect(Math.min(...r.map(p => p[2]))).toBeLessThan(-0.14);
+    expect(Math.max(...r.map(p => Math.abs(p[0])))).toBeGreaterThan(0.15);
+    expect(Math.max(...out(o => elbow(o, O, ID, 1)).map(p => p[2]))).toBeGreaterThan(0.1);
+    expect(Math.max(...out(o => heel(o, O, ID, 1)).map(p => p[2]))).toBeGreaterThan(0.1);
     const lit: number[] = [];
     eyes(lit, O, ID, [1, 0, 0]);
     expect(lit.filter((_, i) => i % 10 == 8).every(l => l == -2)).toBe(true);
@@ -95,7 +105,7 @@ describe('its pieces', () => {
 });
 
 describe('its pose', () => {
-  it('crouches on a floor with its heels up: the knee ahead, the ankle high behind it, the toes ahead on the floor', () => {
+  it('stands on its toes: the knee ahead, the ankle a foot’s length over the ball, the toes on the floor ahead', () => {
     const run = (role: number) => {
       const book = new Map();
       const p = at();
@@ -111,15 +121,20 @@ describe('its pose', () => {
           new Map([[1, { role }]]),
         );
       }
-      return stance(book.get(1)).s.pos;
+      return stance(book.get(1)).s;
     };
-    const [x, m] = [run(ROLE.XENO), run(ROLE.MARINE)];
+    const [xs, ms] = [run(ROLE.XENO), run(ROLE.MARINE)];
+    const [x, m] = [xs.pos, ms.pos];
+    // The end of its long foot (FOOT_TIP), on the floor.
+    const tip = turn(xs.rot[J.FOOT_R], FOOT_TIP).map((v, i) => v + x[J.FOOT_R][i]);
     // Forward is -z.
     expect(x[J.SHIN_R][2]).toBeLessThan(x[J.FOOT_R][2]);
-    expect(x[J.TOE_R][2]).toBeLessThan(x[J.FOOT_R][2]);
-    expect(x[J.FOOT_R][1]).toBeGreaterThan(m[J.FOOT_R][1] + 0.03);
-    expect(x[J.TOE_R][1]).toBeLessThan(0.06);
-    expect(x[J.PELVIS][1]).toBeLessThan(m[J.PELVIS][1] - 0.02);
+    // The foot's long bone near upright: the ankle a foot's length over the ball.
+    expect(x[J.FOOT_R][1] - tip[1]).toBeGreaterThan(0.18);
+    expect(tip[1]).toBeLessThan(0.06);
+    expect(tip[2]).toBeLessThan(x[J.FOOT_R][2]);
+    // Longer legs: the hips no lower than the man's.
+    expect(x[J.PELVIS][1]).toBeGreaterThan(m[J.PELVIS][1]);
   });
 
   it('faces the wall it clings to, the hands up on it and the feet under them', () => {

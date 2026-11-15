@@ -27,7 +27,8 @@ const BUDGETS = [
   // 199 KB until the skin texture and each runner's marks (the user, 2026-11-15).
   // 200 KB until the xenomorph's own body (the user, 2026-11-15).
   // 202 KB until its spine, toes and tendons (the user, 2026-11-15).
-  { file: 'dist/index.js', max: 203 * 1024 },
+  // 203 KB until its rib cage, longer legs, bigger hands and more detail (the user, 2026-11-15: 5 KB more).
+  { file: 'dist/index.js', max: 208 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   { file: 'dist/local.js', max: 46 * 1024 },

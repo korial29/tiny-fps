@@ -17,6 +17,13 @@ export const CHITIN_X = [0.045, 0.05, 0.06];
 /** Metres: the tail's length, its root's radius and its tip's, the stinger's length. */
 export const TAIL = { len: 1.45, root: 0.06, tip: 0.012, sting: 0.17 };
 
+/** Sides round a piece at each level of detail (far, near, the own body, close), by how fine it is. */
+const SIDES = [
+  [3, 4, 5, 6],
+  [3, 5, 7, 9],
+  [4, 6, 9, 12],
+];
+
 /** A point of a piece in the frame (at, q) of its joint. */
 const on = (at: Vec3, q: Quat, v: Vec3): Vec3 => {
   const w = turn(q, v);
@@ -138,8 +145,10 @@ export const column = (
   };
   // The vertebrae, each bead's rings from joint to joint, and their spines but far and near the tip.
   const n = lod ? 34 : 14;
-  const sides = [4, 6, 8][Math.min(lod, 2)];
-  const shape = lod ? [0.55, 0.92, 1, 0.92] : [0.7, 1];
+  const sides = SIDES[2][lod];
+  // Each bead pinched at its joints; close, rounder.
+  const shape =
+    lod > 2 ? [0.55, 0.82, 0.97, 1, 0.97, 0.82] : lod ? [0.55, 0.92, 1, 0.92] : [0.7, 1];
   const side = turn(q, [1, 0, 0]);
   const rows: Spot[][] = [];
   for (let v = 0; v < n; v++) {
@@ -150,10 +159,10 @@ export const column = (
     if (lod && v < n - 6) {
       const [b, tan] = at(((v + 0.5) / n) * total);
       const d = unit(mix3(b[1], tan, 0.45));
-      const h = b[2] * (v < 8 ? 2.6 : 1.6);
+      const h = b[2] * (v < 8 ? 3.4 : 2.1);
       const root = [0, 1, 2].map(i => b[0][i] + b[1][i] * b[2] * 0.6) as Vec3;
       const top = [0, 1, 2].map(i => root[i] + d[i] * h) as Vec3;
-      sheet([ring(root, d, side, b[2] * 0.35, 4), [[top, d]]], CHITIN_X, -1, out);
+      sheet([ring(root, d, side, b[2] * 0.35, SIDES[0][lod]), [[top, d]]], CHITIN_X, -1, out);
     }
   }
   const [[end], w] = at(total);
@@ -211,31 +220,80 @@ const strand = (
   );
 };
 
+/** Where the metatarsal (the foot) ends, from the ankle, in the foot joint's frame: longer than the rig's foot. */
+export const FOOT_TIP: Vec3 = [0, -0.035, -0.25];
+
 /**
- * Its toes on a toe joint (the ball of the foot): three long digits splayed forward, each bending
- * down at its knuckle into a hooked claw of bone.
+ * Its foot on a foot joint: one long bone from the ankle to FOOT_TIP, with a knob at the heel and
+ * two tendons over it to the toes. The pose stands it near upright (prowl() in soldier.ts): a third
+ * segment to the leg.
  */
-export const toes = (out: Out, at: Vec3, q: Quat, lod: number) => {
-  const n = lod ? 5 : 3;
-  for (const x of [-1, 0, 1]) {
-    const [s, l] = [x * 0.022, x ? 0.075 : 0.09];
-    const pts: Vec3[] = [
-      [s * 0.6, 0.002, 0.02],
-      [s, 0.004, -l * 0.55],
-      [s * 1.15, -0.006, -l],
-    ];
-    strand(out, at, q, pts, [0.016, 0.012, 0.009], n, CHITIN_X);
-    const [tx, ty, tz] = pts[2];
+export const metatarsal = (out: Out, at: Vec3, q: Quat, lod: number) => {
+  const n = SIDES[2][lod];
+  const [x, y, z] = FOOT_TIP;
+  strand(
+    out,
+    at,
+    q,
+    [
+      [0, 0.01, 0.035],
+      [0, -0.005, -0.02],
+      [x, y * 0.6, z * 0.5],
+      [x, y, z],
+    ],
+    [0.04, 0.042, 0.03, 0.026],
+    n,
+    CHITIN_X,
+  );
+  for (const s of [-0.016, 0.016]) {
     strand(
       out,
       at,
       q,
       [
-        [tx, ty + 0.004, tz],
-        [tx * 1.05, ty - 0.004, tz - 0.024],
-        [tx * 1.08, ty - 0.018, tz - 0.034],
+        [s, 0.02, -0.03],
+        [s, y * 0.6 + 0.018, z * 0.5],
+        [s * 1.3, y + 0.012, z - 0.01],
       ],
-      [0.008, 0.005, 0],
+      [0.006, 0.006, 0.005],
+      SIDES[0][lod],
+      SINEW,
+    );
+  }
+};
+
+/**
+ * Its toes at the end of the foot (FOOT_TIP), level: three long digits splayed forward, each bending
+ * down at its knuckle into a big hooked claw of bone, and a fourth, shorter, behind.
+ */
+export const toes = (out: Out, at: Vec3, q: Quat, lod: number) => {
+  const n = SIDES[1][lod];
+  for (const [x, l] of [
+    [-1, 0.11],
+    [0, 0.13],
+    [1, 0.11],
+    [0, -0.05],
+  ]) {
+    const s = x * 0.034;
+    const pts: Vec3[] = [
+      [s * 0.4, 0.004, 0],
+      [s, 0.008, -l * 0.55],
+      [s * 1.15, -0.004, -l],
+    ];
+    strand(out, at, q, pts, [0.022, 0.017, 0.013], n, CHITIN_X);
+    const [tx, ty, tz] = pts[2];
+    const d = Math.sign(l);
+    // A big hooked claw past the toe: the foot stands on its pads and the claws grip.
+    strand(
+      out,
+      at,
+      q,
+      [
+        [tx, ty + 0.006, tz + 0.006 * d],
+        [tx * 1.05, ty + 0.006, tz - 0.05 * d],
+        [tx * 1.1, ty - 0.026, tz - 0.08 * d],
+      ],
+      [0.014, 0.009, 0],
       n,
       BONE,
     );
@@ -244,7 +302,7 @@ export const toes = (out: Out, at: Vec3, q: Quat, lod: number) => {
 
 /** Its tendons on a shin joint: the heel's cord down the back of the shin, and one down each side of its front. */
 export const sinews = (out: Out, at: Vec3, q: Quat, lod: number) => {
-  const n = lod ? 4 : 3;
+  const n = SIDES[0][lod];
   strand(
     out,
     at,
@@ -275,25 +333,72 @@ export const sinews = (out: Out, at: Vec3, q: Quat, lod: number) => {
   }
 };
 
-/** Its tendons on a foot joint: two cords over the instep from the ankle to the toes. */
-export const instep = (out: Out, at: Vec3, q: Quat, lod: number) => {
-  const n = lod ? 4 : 3;
-  for (const x of [-0.018, 0.018]) {
-    strand(
-      out,
-      at,
-      q,
-      [
-        [x * 0.5, 0.005, -0.03],
-        [x, -0.012, -0.08],
-        [x * 1.3, -0.03, -0.125],
-      ],
-      [0.006, 0.006, 0.005],
-      n,
-      SINEW,
-    );
-  }
+/**
+ * Its rib cage on the chest joint, standing out of a starved trunk in a lighter chitin: five pairs of ribs from the
+ * spine round to the breastbone, each sloping down toward the front, the lower ones shorter, and
+ * the keel of the breastbone down the middle. Each row: the height at the spine, the half width and
+ * the half depth of the arch (a hair outside the skin's).
+ */
+export const ribs = (out: Out, at: Vec3, q: Quat, lod: number) => {
+  const n = SIDES[1][lod];
+  const rows = [
+    [0.09, 0.158, 0.141],
+    [0.04, 0.156, 0.137],
+    [-0.01, 0.153, 0.133],
+    [-0.06, 0.146, 0.127],
+    [-0.11, 0.136, 0.118],
+  ];
+  rows.forEach(([y, w, d], i) => {
+    for (const s of [-1, 1]) {
+      const pts: Vec3[] = [];
+      const end = i > 2 ? 0.75 : 0.42;
+      for (let k = 0; k <= 6; k++) {
+        const a = 2.8 - ((2.8 - end) * k) / 6;
+        pts.push([s * w * Math.sin(a), y - 0.06 * (k / 6), -0.013 - d * Math.cos(a)]);
+      }
+      strand(out, at, q, pts, [0.008, 0.012, 0.013, 0.013, 0.012, 0.011, 0.007], n, SINEW);
+    }
+  });
+  strand(
+    out,
+    at,
+    q,
+    [
+      [0, 0.12, -0.15],
+      [0, 0.03, -0.158],
+      [0, -0.08, -0.15],
+    ],
+    [0.012, 0.016, 0.01],
+    n,
+    SINEW,
+  );
 };
+
+/** A spur of bone on a joint: from `base` along `dir` (in its frame), `len` long, `r` thick at its root. */
+const spur = (
+  out: Out,
+  at: Vec3,
+  q: Quat,
+  base: Vec3,
+  dir: Vec3,
+  len: number,
+  r: number,
+  n: number,
+) => {
+  const d = unit(dir);
+  const pt = (k: number, bend: number): Vec3 => [
+    base[0] + d[0] * len * k,
+    base[1] + d[1] * len * k - bend,
+    base[2] + d[2] * len * k,
+  ];
+  strand(out, at, q, [base, pt(0.5, 0.004), pt(1, 0.016)], [r, r * 0.6, 0], n, BONE);
+};
+
+/** Its spurs: one out of the back of each elbow (a forearm joint), one out of the back of each ankle (a shin joint). */
+export const elbow = (out: Out, at: Vec3, q: Quat, lod: number) =>
+  spur(out, at, q, [0, -0.02, 0.03], [0, 0.45, 1], 0.12, 0.016, SIDES[1][lod]);
+export const heel = (out: Out, at: Vec3, q: Quat, lod: number) =>
+  spur(out, at, q, [0, -0.4, 0.035], [0, 0.35, 1], 0.09, 0.014, SIDES[1][lod]);
 
 /** The slits of its eyes on the head joint: a pair of thin glowing blades along the skull's sides, in the team's `color`. */
 export const eyes = (out: Out, at: Vec3, q: Quat, color: number[]) => {

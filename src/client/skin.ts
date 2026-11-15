@@ -764,7 +764,7 @@ const TRUNK_X = remake(
   r => {
     const [at, , , rx] = r;
     const k =
-      at < 1.13 ? [0.78, 0.85] : rx > 0.2 ? [0.86, 1] : at < 1.42 ? [0.88, 0.95] : [0.72, 0.8];
+      at < 1.13 ? [0.72, 0.8] : rx > 0.2 ? [0.93, 1] : at < 1.42 ? [0.84, 0.92] : [0.72, 0.8];
     r[3] *= k[0];
     r[4] *= k[1];
     // Its ribs: the strips under the chest in turn lighter and darker.
@@ -774,21 +774,30 @@ const TRUNK_X = remake(
   { far: [...TRUNK.far, 16] },
 );
 TRUNK_X.rings.push([1.6, 0, 0, 0, 0, 2.7, TRIM]);
-const LEG_X = remake(LEG, r => {
-  const [at] = r;
-  // The foot shorter than a shoe: the toes (xeno.ts) come out of its ball.
-  const k = at > 0.55 ? [0.75, 0.85] : at > 0.11 ? [0.6, 0.7] : [0.6, 0.6];
-  r[3] *= k[0];
-  r[4] *= k[1];
-  return [...r.slice(0, 6), at > 0.11 ? PANTS : UPPER];
-});
-// The arms thin from the shoulder (which is narrower too) to the wrist, and in by as much: no
-// sudden step under the shoulder.
+// The leg ends at the ankle, closed: its foot is xeno.ts's metatarsal(), longer than the rig's.
+const LEG_X = remake(
+  { ...LEG, rings: [...LEG.rings.filter(r => r[0] > 0.1), [0.075, 0.1, 0, 0, 0, 3, UPPER]] },
+  r => {
+    const [at] = r;
+    const k = at > 0.55 ? [0.75, 0.85] : [0.6, 0.7];
+    r[3] *= k[0];
+    r[4] *= k[1];
+    // A knee that bends in one place (the user, 2026-11-15: an angle, not a curve): the man's rings
+    // blend the thigh and the shin over 40 cm round it; here only the 8 cm across it do, and the
+    // shin hangs on its own bone down to the ankle.
+    const u = r[5];
+    r[5] = u < 1 ? u : at >= 0.53 ? 1 : at > 0.45 ? 1 + (0.53 - at) / 0.08 : at > 0.12 ? 2 : u;
+    return [...r.slice(0, 6), at > 0.11 ? PANTS : UPPER];
+  },
+  { far: [0, 3, 8, 11, 15, 17], n: [6, 12, 22] },
+);
+// Real shoulders (the user, 2026-11-15: no angle there): the deltoid's cap near the man's, round
+// over the joint, then the arm thinning under it down to the wrist.
 const ARM_X = remake(ARM, r => {
-  const k = 0.68 + 0.18 * Math.min(Math.max((r[0] - 1) / 0.36, 0), 1);
-  r[1] -= r[3] ? 0.015 : 0;
+  const k = 0.68 + 0.27 * Math.min(Math.max((r[0] - 1.05) / 0.26, 0), 1) ** 1.5;
+  r[1] -= r[3] ? 0.006 : 0;
   r[3] *= k;
-  r[4] *= k + 0.04;
+  r[4] *= k + 0.03;
   return [...r.slice(0, 6), r[0] < 0.98 ? GLOVE : JACKET];
 });
 /**
@@ -797,10 +806,10 @@ const ARM_X = remake(ARM, r => {
  */
 const CREST: Loft = {
   chain: [J.HEAD, J.HEAD],
-  n: [6, 10, 16],
+  n: [6, 14, 28],
   e: 1.6,
   z: true,
-  far: [0, 2, 4, 6, 8],
+  far: [0, 4, 8, 12, 16],
   rings: [
     [0.38, 0, 1.84, 0, 0, 0, TRIM],
     [0.3, 0, 1.8, 0.025, 0.05, 0, TRIM],
@@ -813,6 +822,8 @@ const CREST: Loft = {
     [-0.22, 0, 1.595, 0, 0, 0, FLESH],
   ],
 };
+// A ring between each two: a smooth skull close up.
+CREST.rings = finer(CREST.rings, false);
 
 const shape = (lod: number, xeno = false): Skin => {
   const [TR, LG, AR] = xeno ? [TRUNK_X, LEG_X, ARM_X] : [TRUNK, LEG, ARM];
@@ -875,7 +886,7 @@ const shape = (lod: number, xeno = false): Skin => {
       const col = (row: number[], i: number) => row[m < 0 ? (N - i) % N : i];
       const vertex = (x: number, y: number, z: number, u: number) => {
         // The toe bends the front of the foot.
-        u = L === LG && y < 0.12 ? 3 + clamp((-z - 0.04) / 0.14) : u;
+        u = L === LG && y < 0.12 && !xeno ? 3 + clamp((-z - 0.04) / 0.14) : u;
         const g = Math.min(Math.floor(u), L.chain.length - 2);
         // The shoulder is a chain like the arm under it: the chest, the collarbone and the shoulder
         // blade (the top of the shoulder, up to the neck, which rises in a shrug), then the

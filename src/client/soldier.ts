@@ -100,7 +100,18 @@ import {
   skin,
   tressOf,
 } from './skin';
-import { CHITIN_X, column, eyes, instep, sinews, toes } from './xeno';
+import {
+  CHITIN_X,
+  FOOT_TIP,
+  column,
+  elbow,
+  eyes,
+  heel,
+  metatarsal,
+  ribs,
+  sinews,
+  toes,
+} from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
 import type { Face } from './expression';
 import { CH, toneFor } from './features';
@@ -712,9 +723,12 @@ export const dissolve = (out: Out, from: number, k: number) => {
 /**
  * The xenomorph's crouch over the gait's pose: the back bent forward and the head held up level, and
  * on a floor the hips lower with the heels lifted off it, the balls of the feet where they were:
- * the legs read as an animal's: a little lower, the heels a little up, the bones straight (the user,
- * 2026-11-15: a deeper crouch bowed the legs into an arc).
+ * the legs read as an animal's: the hips a little higher, the foot's long bone near upright over its
+ * ball, the bones straight (the user, 2026-11-15: a deeper crouch bowed the legs into an arc).
  */
+/** How far prowl() tips the xenomorph's foot down from the gait's, radians: near upright. */
+const FOOT_UP = 1.26;
+
 const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose => {
   const rot = pose.rot.slice();
   const X: Vec3 = [1, 0, 0];
@@ -726,18 +740,19 @@ const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose =>
   if (p.mode != MODE.GROUND && p.mode != MODE.CROUCH) {
     return q;
   }
-  q.hips = [pose.hips[0], pose.hips[1] - 0.04, pose.hips[2]];
+  q.hips = [pose.hips[0], pose.hips[1] + 0.06, pose.hips[2]];
   const t = solve(q);
   const [fx, , fz] = basis(pose.yaw, 0)[2];
   for (const [thigh, foot, toe] of [
     [J.THIGH_L, J.FOOT_L, J.TOE_L],
     [J.THIGH_R, J.FOOT_R, J.TOE_R],
   ]) {
-    const a = s.pos[foot];
-    reach(q, t, thigh, [a[0], a[1] + 0.06, a[2]], [fx, 0, fz], true);
-    // The foot tips down, its toes stay on the floor.
-    q.rot[foot] = mul(q.rot[foot], axis(X, -0.5));
-    q.rot[toe] = mul(q.rot[toe], axis(X, 0.5));
+    // The long bone of the foot near upright over the ball, which stays where the gait put it: a third
+    // segment to the leg (the user, 2026-11-15: longer legs); the toes flat on the floor ahead.
+    const b = s.pos[toe];
+    reach(q, t, thigh, [b[0] - fx * 0.045, b[1] + 0.245, b[2] - fz * 0.045], [fx, 0, fz], true);
+    q.rot[foot] = mul(q.rot[foot], axis(X, -FOOT_UP));
+    q.rot[toe] = mul(q.rot[toe], axis(X, FOOT_UP));
   }
   return q;
 };
@@ -1057,9 +1072,16 @@ export const soldier = (
         [J.SHIN_L, J.FOOT_L, J.TOE_L],
         [J.SHIN_R, J.FOOT_R, J.TOE_R],
       ]) {
-        rigid(`sinews ${!lod}`, s.pos[shin], s.rot[shin], (o, a, q) => sinews(o, a, q, lod));
-        rigid(`instep ${!lod}`, s.pos[foot], s.rot[foot], (o, a, q) => instep(o, a, q, lod));
-        rigid(`toes ${!lod}`, s.pos[toe], s.rot[toe], (o, a, q) => toes(o, a, q, lod));
+        rigid(`sinews ${lod}`, s.pos[shin], s.rot[shin], (o, a, q) => sinews(o, a, q, lod));
+        rigid(`heel ${lod}`, s.pos[shin], s.rot[shin], (o, a, q) => heel(o, a, q, lod));
+        rigid(`foot ${lod}`, s.pos[foot], s.rot[foot], (o, a, q) => metatarsal(o, a, q, lod));
+        // The toes at the foot's end, turned as the toe joint: level on a floor (prowl()).
+        const tip = add(s.pos[foot], turn(s.rot[foot], FOOT_TIP));
+        rigid(`toes ${lod}`, tip, s.rot[toe], (o, a, q) => toes(o, a, q, lod));
+      }
+      rigid(`ribs ${lod}`, s.pos[J.CHEST], s.rot[J.CHEST], (o, a, q) => ribs(o, a, q, lod));
+      for (const f of [J.FOREARM_L, J.FOREARM_R]) {
+        rigid(`elbow ${lod}`, s.pos[f], s.rot[f], (o, a, q) => elbow(o, a, q, lod));
       }
       rigid(`eyes ${color}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => eyes(o, a, q, color));
     } else {

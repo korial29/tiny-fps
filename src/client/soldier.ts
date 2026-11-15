@@ -1090,6 +1090,9 @@ export const soldier = (
         rigid(`toes ${lod}`, tip, s.rot[toe], (o, a, q) => toes(o, a, q, lod));
       }
       rigid(`ribs ${lod}`, s.pos[J.CHEST], s.rot[J.CHEST], (o, a, q) => ribs(o, a, q, lod));
+      rigid(`low ribs ${lod}`, s.pos[J.SPINE], s.rot[J.SPINE], (o, a, q) =>
+        ribs(o, a, q, lod, true),
+      );
       for (const f of [J.FOREARM_L, J.FOREARM_R]) {
         rigid(`elbow ${lod}`, s.pos[f], s.rot[f], (o, a, q) => elbow(o, a, q, lod));
       }

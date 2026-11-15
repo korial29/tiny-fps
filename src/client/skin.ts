@@ -762,16 +762,25 @@ const remake = (L: Loft, f: (r: Ring) => Ring, more: Partial<Loft> = {}): Loft =
 const TRUNK_X = remake(
   TRUNK,
   r => {
-    const [at, , , rx] = r;
-    const k =
-      at < 1.13 ? [0.72, 0.8] : rx > 0.2 ? [0.93, 1] : at < 1.42 ? [0.84, 0.92] : [0.72, 0.8];
-    r[3] *= k[0];
-    r[4] *= k[1];
+    const at = r[0];
+    // One smooth scale by height (the user, 2026-11-15: harmonious shoulders): a starved waist
+    // widening to the chest and the shoulders, then in to the neck. The torso's ring and the
+    // shoulders' at the armpits' height take the same, and no ring under the neck is cut in alone:
+    // steps there drew a line across the chest and a crease down each shoulder.
+    const e = (a: number, b: number) => {
+      const t = Math.min(Math.max((at - a) / (b - a), 0), 1);
+      return t * t * (3 - 2 * t);
+    };
+    const [up, neck] = [e(1.1, 1.38), e(1.49, 1.56)];
+    r[3] *= 0.72 + 0.2 * up - 0.18 * neck;
+    r[4] *= 0.8 + 0.18 * up - 0.12 * neck;
     // Its ribs: the strips under the chest in turn lighter and darker.
     const rib = at > 1.02 && at < 1.4 && TRUNK.rings.findIndex(q => q[0] == at) % 2;
-    return [...r.slice(0, 6), at > 1.5 || rib ? TRIM : JACKET];
+    // One chitin up to the skull: a lighter neck drew a collar's line round it.
+    return [...r.slice(0, 6), rib ? TRIM : JACKET];
   },
-  { far: [...TRUNK.far, 16] },
+  // More sides close: the shoulders' outline round, not in facets.
+  { far: [...TRUNK.far, 16], n: [8, 14, 28] },
 );
 // The neck runs on up into the skull, where its top is hidden: no flat ring under the jaw.
 TRUNK_X.rings.push([1.6, 0, 0.004, 0.05, 0.05, 2.8, TRIM], [1.66, 0, 0.01, 0, 0, 3, TRIM]);

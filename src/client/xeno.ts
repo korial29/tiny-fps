@@ -404,21 +404,30 @@ export const sinews = (out: Out, at: Vec3, q: Quat, lod: number) => {
  * the keel of the breastbone down the middle. Each row: the height at the spine, the half width and
  * the half depth of the arch (a hair outside the skin's).
  */
-export const ribs = (out: Out, at: Vec3, q: Quat, lod: number) => {
+export const ribs = (out: Out, at: Vec3, q: Quat, lod: number, low = false) => {
   const n = SIDES[1][lod];
-  const rows = [
-    [0.09, 0.158, 0.141],
-    [0.04, 0.156, 0.137],
-    [-0.01, 0.153, 0.133],
-    [-0.06, 0.146, 0.127],
-    [-0.11, 0.136, 0.118],
-  ];
+  // On the spine joint, the lower ribs down to the hips (the user, 2026-11-15), shorter, not
+  // reaching round to the front: the floating ribs over the waist.
+  const rows = low
+    ? [
+        [0.06, 0.122, 0.108],
+        [0.01, 0.124, 0.106],
+        [-0.04, 0.128, 0.104],
+        [-0.09, 0.134, 0.102],
+      ]
+    : [
+        [0.09, 0.158, 0.141],
+        [0.04, 0.156, 0.137],
+        [-0.01, 0.153, 0.133],
+        [-0.06, 0.146, 0.127],
+        [-0.11, 0.136, 0.118],
+      ];
   rows.forEach(([y, w, d], i) => {
     for (const s of [-1, 1]) {
       const pts: Vec3[] = [];
       // From the spine's vertebra at the middle of the back (the user, 2026-11-15) round the side
       // to the front.
-      const end = i > 2 ? 0.55 : 0.4;
+      const end = low ? 0.75 + 0.12 * i : i > 2 ? 0.55 : 0.4;
       for (let k = 0; k <= 8; k++) {
         const a = Math.PI - ((Math.PI - end) * k) / 8;
         pts.push([s * w * Math.sin(a), y - 0.06 * (k / 8), -0.013 - d * Math.cos(a)]);
@@ -434,19 +443,21 @@ export const ribs = (out: Out, at: Vec3, q: Quat, lod: number) => {
       );
     }
   });
-  strand(
-    out,
-    at,
-    q,
-    [
-      [0, 0.12, -0.15],
-      [0, 0.03, -0.158],
-      [0, -0.08, -0.15],
-    ],
-    [0.012, 0.016, 0.01],
-    n,
-    SINEW,
-  );
+  if (!low) {
+    strand(
+      out,
+      at,
+      q,
+      [
+        [0, 0.12, -0.15],
+        [0, 0.03, -0.158],
+        [0, -0.08, -0.15],
+      ],
+      [0.012, 0.016, 0.01],
+      n,
+      SINEW,
+    );
+  }
 };
 
 /** A spur of bone on a joint: from `base` along `dir` (in its frame), `len` long, `r` thick at its root. */

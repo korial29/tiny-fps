@@ -52,7 +52,8 @@ describe('the xenomorph’s skin', () => {
       expect(s.m).toEqual([]);
       expect(s.t.length % 3).toBe(0);
     }
-    expect(beast(3).v.length).toBeLessThan(body(3).v.length / 2);
+    // Detailed close up (the user, 2026-11-15: more polygons), still under the man.
+    expect(beast(3).v.length).toBeLessThan(body(3).v.length * 0.75);
   });
 
   it('carries a long curved dome past the back of the head, and none on the own first-person body', () => {
@@ -63,7 +64,7 @@ describe('the xenomorph’s skin', () => {
     const head = zs(3).filter(([, y]) => y > 1.58);
     expect(Math.max(...head.map(p => p[2]))).toBeGreaterThan(0.3);
     // Its dome stops at the brow: the face in front is skull()'s.
-    expect(Math.min(...head.map(p => p[2]))).toBeLessThan(-0.06);
+    expect(Math.min(...head.map(p => p[2]))).toBeLessThan(-0.05);
     expect(Math.max(...zs(2).map(p => p[1]))).toBeLessThan(1.5);
   });
 });

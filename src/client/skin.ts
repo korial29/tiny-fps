@@ -860,9 +860,7 @@ const ARM_X = remake(ARM, r => {
 const PROFILE = [0.42, 1.69, 0.21, 0.084, 0.1];
 /** The radius of the round end of the dome, and the banana's thickness and half width behind the face. */
 const TIP = 0.062;
-const BANANA = [0.2, 0.09];
-/** How far the banana's top climbs over the face's. */
-const RISE = 0.05;
+const BANANA = [0.15, 0.09];
 
 const CREST: Loft = {
   chain: [J.HEAD, J.HEAD],
@@ -877,10 +875,7 @@ const CREST: Loft = {
     const c = PROFILE[1] - PROFILE[2] * (z / PROFILE[0]) ** 2;
     // The top as it is (the user, 2026-11-15: perfect); the underside curves up toward the tip,
     // thinning the back of the head into a blade clear of the neck and the back.
-    // The banana set higher than the face (the user, 2026-11-15): its top climbs over the forehead
-    // just behind the face's edge (unmoved there, no seam), then falls along its arc.
-    const g = Math.min(z / 0.09, 1);
-    const top = c + PROFILE[4] * k + RISE * g * g * (3 - 2 * g) * (1 - (z / PROFILE[0]) ** 2);
+    const top = c + PROFILE[4] * k;
     // A banana (the user, 2026-11-15): from the face's full edge (no seam) down to a body of a
     // nearly even thickness along the top's curve, tapering a little, and a round end.
     // The base curving up quickly (the user, 2026-11-15): out of the face's edge then fast.
@@ -889,7 +884,9 @@ const CREST: Loft = {
     const along = Math.max(0, (z - 0.1) / (PROFILE[0] - 0.1));
     const u = Math.max(0, (z - PROFILE[0] + TIP) / TIP);
     const cap = Math.sqrt(Math.max(0, 1 - u * u));
-    const th = (2 * PROFILE[4] * (1 - f) + f * (BANANA[0] - (BANANA[0] - 2 * TIP) * along)) * cap;
+    // One even thickness from the face's edge to the round end (the user, 2026-11-15: a regular
+    // banana), thin enough there to clear the neck.
+    const th = (2 * PROFILE[4] * (1 - f) + f * BANANA[0]) * cap;
     const w = (PROFILE[3] * (1 - f) + f * (BANANA[1] - (BANANA[1] - TIP) * along)) * cap;
     return [z, 0, top - th / 2, w, th / 2, 0, TRIM];
   }),

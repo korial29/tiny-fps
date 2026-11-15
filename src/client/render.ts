@@ -118,13 +118,13 @@ const SAMPLES = 4;
 const VERT = `#version 300 es
 layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec4 c;
 uniform mat4 m;uniform float Y;uniform vec3 J[3];uniform vec4 R[2];
-uniform highp sampler2D Sg;uniform int Sm;uniform ivec4 Sb;uniform vec4 Sq[${2 * (JOINTS + 2)}],Sw[${Math.ceil(CHANNELS / 4)}];uniform vec3 Sp[${COLOURS}],Sc[2];
-out vec3 P,N;out vec4 C;
+uniform highp sampler2D Sg;uniform int Sm;uniform ivec4 Sb;uniform vec4 Sq[${2 * (JOINTS + 2)}],Sw[${Math.ceil(CHANNELS / 4)}];uniform vec3 Sp[${COLOURS}],Sc[2];uniform float Ak;
+out vec3 P,N,Rp;out vec4 C;out float Wa;
 vec3 r(vec3 v){vec3 t=2.*cross(R[0].xyz,v);return v+R[0].w*t+cross(R[0].xyz,t);}
 vec4 g(int i){return texelFetch(Sg,ivec2(i&2047,i>>11),0);}
-float sh;vec2 hb;
+float sh;vec2 hb;vec3 kr;
 void k(int i,out vec3 x,out vec3 y){
-int b=Sb.x+i*${VERT_TEXELS};vec4 a=g(b),e=g(b+1),f=g(b+2);x=a.xyz;y=e.xyz;sh=e.w;hb=g(b+3).xy;bool z=false;
+int b=Sb.x+i*${VERT_TEXELS};vec4 a=g(b),e=g(b+1),f=g(b+2);x=a.xyz;kr=x;y=e.xyz;sh=e.w;hb=g(b+3).xy;bool z=false;
 for(int j=0;j<int(f.w);j++){int q=Sb.x+int(f.z)+j*2;vec4 h=g(q);int w=int(h.w);float fw=Sw[w>>2][w&3];if(fw!=0.){x+=fw*h.xyz;y+=fw*g(q+1).xyz;z=true;}}
 if(z)y=normalize(y);
 int u=int(f.x)*2,v=int(f.y)*2;float l=a.w,s=dot(Sq[u],Sq[v])<0.?-l:l;
@@ -132,25 +132,26 @@ vec4 E=(1.-l)*Sq[u]+s*Sq[v],F=(1.-l)*Sq[u+1]+s*Sq[v+1];float L=length(E);E/=L;F/
 vec3 t=cross(E.xyz,x);x+=2.*(E.w*t+cross(E.xyz,t)+E.w*F.xyz-F.w*E.xyz-cross(F.xyz,E.xyz));
 t=cross(E.xyz,y);y+=2.*(E.w*t+cross(E.xyz,t));}
 void main(){
+Rp=vec3(0);Wa=0.;
 if(Y>.5){vec2 q=vec2(gl_VertexID&1,gl_VertexID>>1)*4.-1.;gl_Position=vec4(q,1,1);P=J[0]*q.x+J[1]*q.y+J[2];N=vec3(0);C=vec4(0);return;}
 if(Sm==1){vec4 h=g(Sb.y+gl_VertexID);k(int(h.x),P,N);int a=int(h.y);vec3 l=Sp[a];l+=(Sp[int(h.z)]-l)*h.w;l*=sh;
 if(hb.x>=0.&&(hb.y>.5||a==${REGION.FLESH}))l=vec3(${CLOTH})+(l-vec3(${CLOTH}))*hb.x;
 C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:-1.,l.z);gl_Position=m*vec4(P,1);return;}
 if(Sm==2){int b=Sb.y+gl_VertexID*${PLATE},j,K,t;vec4 h=g(b),G4=g(b+4),R4=g(b+5);j=int(h.y);K=int(h.z);t=int(h.x)*3;
-vec3 X[3],Z[3],W3[3],M3[3];
-for(int i=0;i<3;i++)k(int(g(Sb.z+t+i).x),X[i],Z[i]);
+vec3 X[3],Z[3],W3[3],M3[3],XR[3],RR[3];
+for(int i=0;i<3;i++){k(int(g(Sb.z+t+i).x),X[i],Z[i]);XR[i]=kr;}
 for(int i=0;i<3;i++){vec4 w=g(b+1+i);float m0=(K&2)!=0?-w.x:w.x,m1=(K&4)!=0?-w.y:w.y,m2=(K&8)!=0?-w.z:w.z;
 vec3 q=vec3(Z[0].x*m0+Z[1].x*m1+Z[2].x*m2,Z[0].y*max(m0,0.)+Z[1].y*max(m1,0.)+Z[2].y*max(m2,0.),Z[0].z*m0+Z[1].z*m1+Z[2].z*m2);
-float l=length(q);q/=l>0.?l:1.;W3[i]=X[0]*w.x+X[1]*w.y+X[2]*w.z+q*w.w;M3[i]=q;}
-P=W3[j];vec3 q=M3[j];
+float l=length(q);q/=l>0.?l:1.;W3[i]=X[0]*w.x+X[1]*w.y+X[2]*w.z+q*w.w;M3[i]=q;RR[i]=XR[0]*w.x+XR[1]*w.y+XR[2]*w.z;}
+P=W3[j];Rp=RR[j];vec3 q=M3[j];
 if((K&1)!=0){vec3 f=cross(W3[1]-W3[0],W3[2]-W3[0]);float l=length(f);q=l<1e-12?vec3(0,1,0):f/l;}
 else if(G4.xyz!=vec3(0)){float l=length(R4.xyz);vec3 o=R4.xyz/(l>0.?l:1.),e=cross(o,q),s=G4.xyz;float sn=length(e);
 if(sn>1e-6){float cs=dot(o,q);vec3 u=e/sn;s=s*cs+cross(u,s)*sn+u*dot(u,s)*(1.-cs);}
 q-=s;l=length(q);q/=l>0.?l:1.;}
 vec3 l=g(b+6).xyz;bool pl=Sb.w!=0;
 if(l.x<0.)l=Sc[1];else if((K&${OWN})!=0){}else if(pl&&abs(h.w-(${GLOSS}))<.01)l=Sc[0];else if(pl&&(K&1)!=0)l=Sc[0]*.75;else if(pl&&G4.w>0.)l=l.x>.55?vec3(${SCRATCHED[1]}):vec3(${SCRATCHED[0]});
-N=q;C=vec4(l.xy,h.w,l.z);gl_Position=m*vec4(P,1);return;}
-P=R[1].xyz+r(p*R[1].w);N=r(n);C=c;gl_Position=m*vec4(P,1);}`;
+Wa=Ak>0.?((K&1)!=0?2.:1.):0.;N=q;C=vec4(l.xy,h.w,l.z);gl_Position=m*vec4(P,1);return;}
+P=R[1].xyz+r(p*R[1].w);Rp=p*R[1].w;Wa=Ak;N=r(n);C=c;gl_Position=m*vec4(P,1);}`;
 
 // A fullscreen triangle from gl_VertexID, no buffer.
 const POST_VERT = `#version 300 es
@@ -242,7 +243,7 @@ const RELIEF = 0.06;
 // that is NaN (a grey rectangle over its horizon for a frame, the user 2026-11-13).
 export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
-in vec3 P,N;in vec4 C;uniform vec3 E;uniform float T,Z,Y;uniform int Q;
+in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y;uniform int Q;
 uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform float Sn;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;out vec4 o;
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
@@ -307,6 +308,16 @@ if(Sn>0.){vec3 cq=cs(P.xz,length(P-E));float uw=smoothstep(.7,.95,normalize(N).y
 vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
 vec3 n=normalize(normalize(N)+cg),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float h=t.a*s*${RELIEF},det=dot(dx,a);
+float wa=min(Wa,1.)*(step(abs(L-(${GLOSS})),.02)+step(abs(L-(${GILT})),.02)),ch=0.,gr=.5,sm=1.;
+if(wa>0.){vec3 q=Rp;float pw=max(length(dx),length(dy)),lowy=smoothstep(1.1,.25,q.y);
+gr=n3(q*9.)*.6+n3(q*23.+3.)*.4;sm=.55+.9*n3(q*31.+9.);
+float cv=max(clamp(length(fwidth(N))/max(pw,1e-5)*.02,0.,1.),step(1.5,Wa)),ce=n3(q*140.)*.65+n3(q*420.+7.)*.35;
+float zn=smoothstep(.35,.75,n3(q*5.+2.));ch=smoothstep(.87-.14*zn-.2*cv,.9-.14*zn-.2*cv,ce)*(1.-.85*smoothstep(.0006,.0025,pw));
+vec3 cl=floor(q*45.),hh=hs(cl+.5),d=normalize(hs(cl+3.7)-.5),e=q-(cl+.2+.6*hh)/45.;float al=dot(e,d);
+float sc=step(abs(al),.006+.007*hh.z)*step(hh.x,.4)*smoothstep(.0007,.0002,length(e-d*al))*(1.-smoothstep(.3,1.,pw*2500.));
+c=mix(c,vec3(dot(c,vec3(.3,.5,.2)))*vec3(.8,.68,.55)*(.55+.2*gr),(.3+.5*lowy)*smoothstep(.35,.75,gr));
+c=mix(c,vec3(.07,.075,.08),ch);c=mix(c,vec3(.7,.7,.72),sc*(1.-ch)*.9);
+h+=.00004*n3(q*900.)*(1.-smoothstep(.4,1.,pw*900.))-.00012*ch;}
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
 vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];
@@ -335,7 +346,8 @@ c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
 vec3 r=reflect(-V,m),k=K1(r,0.);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
 c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr));
-c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv);
+c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv)*mix(1.,sm*(1.-ch),wa);
+c+=wa*ch*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),60.)*.5;
 c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(-abs(r.y-.12)*18.)),step(abs(L-(${GILT})),.02)*(.45+.45*fr));
 float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5);
 c.g=mix(c.g,c.r,z);
@@ -743,7 +755,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   let [flesh, rows, read] = [{} as WebGLTexture, 0, 0];
   /** The frame's pieces, drawn after the frame's own vertices in every pass. */
   const place = () => {
-    for (const { m, q, t, k, f } of pieces) {
+    for (const { m, q, t, k, f, w } of pieces) {
+      gl.uniform1f(u.Ak, +!!w);
       if (f) {
         // Posed by the shader from its texels: no vertex array.
         gl.bindVertexArray(none);
@@ -761,6 +774,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.drawArrays(gl.TRIANGLES, m.first, m.count);
       }
     }
+    gl.uniform1f(u.Ak, 0);
     gl.uniform4fv(u.R, STILL);
     gl.bindVertexArray(main);
   };
@@ -879,6 +893,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       'R',
       'Sg',
       'Sm',
+      'Ak',
       'Sb',
       'Sq',
       'Sp',

@@ -128,7 +128,7 @@ const dist = (a: Vec3, b: Vec3) => Math.hypot(...sub(a, b));
 const along = (o: Vec3, d: Vec3, k: number): Vec3 => add(o, mix([0, 0, 0], d, k));
 
 /** The shortest rotation that turns the direction a into b. */
-const arc = (a: Vec3, b: Vec3): Quat => {
+export const arc = (a: Vec3, b: Vec3): Quat => {
   const [u, v] = [unit(a), unit(b)];
   const q = [
     u[1] * v[2] - u[2] * v[1],

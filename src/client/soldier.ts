@@ -23,6 +23,7 @@ import {
   KATANA_LEFT,
   KATANA_TILT,
   RAKE,
+  arc,
   clasp,
   hands,
   inv,
@@ -85,7 +86,7 @@ import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
 import { STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { IDENTITY, JOINT as J, PARENT, axis, mul, slerp, solve, turn } from './rig';
+import { JOINT as J, PARENT, REST, axis, mul, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
 import {
   REGION,
@@ -745,9 +746,15 @@ const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose =>
   rot[J.HEAD] = mul(rot[J.HEAD], axis(X, 0.2));
   // Out of a blow, the upper arms hang lower than the runner's guard, the elbows still bent so the
   // claws point ahead: raised forward, the shoulder's skin pinched into a fold (the user, 2026-11-15).
+  // A swing of the bone the shortest way toward hanging, its twist about itself kept: a blend of the
+  // whole turn toward rest undid the twist too, and wrung the arm at the shoulder.
   if (!p.swing) {
     for (const a of [J.ARM_L, J.ARM_R]) {
-      rot[a] = slerp(rot[a], IDENTITY, 0.45);
+      const bone = REST[a + 1];
+      const now = turn(rot[a], bone);
+      const k = 0.45;
+      const want: Vec3 = [0, 1, 2].map(i => now[i] * (1 - k) + bone[i] * k) as Vec3;
+      rot[a] = mul(arc(now, want), rot[a]);
     }
   }
   const q: Pose = { ...pose, rot };

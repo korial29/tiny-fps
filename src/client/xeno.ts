@@ -160,7 +160,8 @@ export const column = (
     if (lod && v < n - 6) {
       const [b, tan] = at(((v + 0.5) / n) * total);
       const d = unit(mix3(b[1], tan, 0.45));
-      const h = b[2] * (v < 8 ? 3.4 : 2.1);
+      // Short on the back, down to the coccyx (the user, 2026-11-15), the tail's as they were.
+      const h = b[2] * (((v + 0.5) / n) * total < len[(bones.length - 13) * 4] ? 1.2 : 2.1);
       const root = [0, 1, 2].map(i => b[0][i] + b[1][i] * b[2] * 0.6) as Vec3;
       const top = [0, 1, 2].map(i => root[i] + d[i] * h) as Vec3;
       sheet([ring(root, d, side, b[2] * 0.35, SIDES[0][lod]), [[top, d]]], CHITIN_X, -1, out);
@@ -549,7 +550,7 @@ export const pipes = (out: Out, s: Solved, lod: number) => {
 
 /**
  * Curved horns out of its back (the user, 2026-11-15): a pair on a joint, each from beside the spine
- * straight out of the back (near square to it), a little to the side, curling up at the end, `len` long and `r` thick at its root, at `base` (the right
+ * out of the back near square to it and well out to the side, clear of the head, curling up a little, `len` long and `r` thick at its root, at `base` (the right
  * one) in the joint's frame.
  */
 export const horns = (
@@ -565,9 +566,9 @@ export const horns = (
     const pts = Array.from({ length: 7 }, (_, i): Vec3 => {
       const t = i / 6;
       return [
-        s * (base[0] + len * 0.28 * t),
-        base[1] + len * (0.04 * t + 0.32 * t * t),
-        base[2] + len * (0.96 * t - 0.12 * t * t),
+        s * (base[0] + len * 0.66 * t),
+        base[1] + len * (0.02 * t + 0.22 * t * t),
+        base[2] + len * (0.72 * t - 0.1 * t * t),
       ];
     });
     strand(
@@ -583,9 +584,9 @@ export const horns = (
 };
 /** The three pairs of horns: the joint, the root, the length and thickness, small low, large high. */
 export const HORNS: [number, Vec3, number, number][] = [
-  [J.SPINE, [0.06, 0.02, 0.08], 0.13, 0.014],
-  [J.CHEST, [0.075, -0.03, 0.095], 0.2, 0.019],
-  [J.CHEST, [0.08, 0.09, 0.09], 0.3, 0.025],
+  [J.SPINE, [0.09, 0.02, 0.062], 0.13, 0.014],
+  [J.CHEST, [0.1, -0.03, 0.085], 0.2, 0.019],
+  [J.CHEST, [0.105, 0.09, 0.083], 0.3, 0.025],
 ];
 
 /** A spur of bone on a joint: from `base` along `dir` (in its frame), `len` long, `r` thick at its root. */
@@ -782,14 +783,16 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
     const g = 1 + 0.01 * w;
     return [on(at, q, [x * g, EY + (y - EY) * g, faceZ(x, y) + 0.004 * w]), turn(q, n)];
   };
-  // The grid, but where the lips part: the hole's edge, in steps, lies under the lips.
+  // The grid, but where the lips part: the hole's edge, in steps, lies under the lips. Far, with no
+  // lips or inside drawn, the mouth is the grid painted dark: a hole there showed the sky through.
   const tri = (p: [number, number][]) => {
     const [u, v] = [0, 1].map(k => (p[0][k] + p[1][k] + p[2][k]) / 3);
     const y = TOP - (TOP - CHIN) * v;
-    if (!parted(u * widthOf(y), y)) {
+    const open = parted(u * widthOf(y), y);
+    if (!open || !lod) {
       face(
         out,
-        HEAD,
+        open ? DARK : HEAD,
         -1,
         p.map(([a, b]) => spot(a, b)),
       );
@@ -817,11 +820,11 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
   const sides = SIDES[1][lod];
   const line = lipline(n);
   const fwd = turn(q, [0, 0, -1]);
-  // Inside the mouth, dark, a hair behind the lips.
+  // Inside the mouth, dark, its edge inside the lips: no gap between them seen from below.
   sheet(
     [
       [[on(at, q, [0, MY, faceZ(0, MY) + 0.018]), fwd]],
-      line.map(([x, y]): Spot => [on(at, q, [x, y, faceZ(x, y) + 0.004]), fwd]),
+      line.map(([x, y]): Spot => [on(at, q, [x, y, faceZ(x, y) - 0.001]), fwd]),
     ],
     DARK,
     -1,

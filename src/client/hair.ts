@@ -446,14 +446,14 @@ const makeCards = (style: number) => {
     [300, 0.9, 0.002, 0.0045, 0.82, 100, 0.25, 0.05],
     [260, 1, 0.003, 0.004, 0.95, 100, 0.35, 0.14],
     // Flyaways, many and long: they leave the outline, so it is no block.
-    [320, 1.05, 0.006, 0.0025, 0.95, 200, 1, 0.28],
+    [120, 1.05, 0.004, 0.002, 0.9, 200, 1, 0.14],
   ];
   for (const [count, depth, lift, half, light, base, moving, fray] of LAYERS) {
     for (let c = 0; c < count; c++) {
       const a0 = -Math.PI + 2 * Math.PI * rnd();
       const t0 = base ? 0.3 * rnd() ** 2 : 0.08 * rnd();
       const up = lift * (0.6 + 0.8 * rnd());
-      const drift = (rnd() - 0.5) * (base == 200 ? 0.6 : 0.3);
+      const drift = (rnd() - 0.5) * (base == 200 ? 0.2 : 0.3);
       const hw = half * (0.7 + 0.6 * rnd());
       // Past the edge: at the back and sides, and all round a loose style; never over the face.
       const past = (Math.abs(a0) > 1.15 || loose(a0) ? 1 : 0) * fray * (0.3 + rnd());
@@ -477,7 +477,7 @@ const makeCards = (style: number) => {
           (off(a, tt) + 0.0065 * (ridge ** 0.7 - 0.6) * (0.25 + 0.75 * tt)) * depth +
           up * (base ? Math.min(1, u * 5) : 1) +
           // A flyaway arches off the head toward its tip.
-          (base == 200 ? 0.022 * u * u : base == 100 && moving > 0.3 ? 0.006 * u * u : 0) -
+          (base == 200 ? 0.008 * u * u : base == 100 && moving > 0.3 ? 0.002 * u * u : 0) -
           (base ? 0.002 * Math.max(1 - u * 5, 0) : 0);
         const p = scalp(a, y, o);
         const n = scalp(a, y, o + 0.01).map((v, i) => (v - p[i]) / 0.01);
@@ -518,7 +518,6 @@ const makeCards = (style: number) => {
       [16, 0.55, 1.3, 0.6, 0],
       [30, 0.8, 0.9, 0.85, 100],
       [44, 1, 0.75, 1, 100],
-      [16, 1.3, 0.35, 1.05, 200],
     ]) {
       for (let c = 0; c < count; c++) {
         const th0 = (2 * Math.PI * (c + rnd() * 0.6)) / count;

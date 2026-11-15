@@ -406,14 +406,12 @@ export const sinews = (out: Out, at: Vec3, q: Quat, lod: number) => {
  */
 export const ribs = (out: Out, at: Vec3, q: Quat, lod: number, low = false) => {
   const n = SIDES[1][lod];
-  // On the spine joint, the lower ribs down to the hips (the user, 2026-11-15), shorter, not
-  // reaching round to the front: the floating ribs over the waist.
+  // On the spine joint, two more under the cage (the user, 2026-11-15), shorter, not reaching
+  // round to the front: the floating ribs.
   const rows = low
     ? [
         [0.06, 0.122, 0.108],
         [0.01, 0.124, 0.106],
-        [-0.04, 0.128, 0.104],
-        [-0.09, 0.134, 0.102],
       ]
     : [
         [0.09, 0.158, 0.141],

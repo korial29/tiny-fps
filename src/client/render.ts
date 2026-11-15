@@ -777,7 +777,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   for (let s = 0; s < STYLES; s++) {
     closeMesh(s);
   }
-  [0, 1, 3].forEach(lod => prepare(beast(lod), lod > 2));
+  // The xenomorph's skins too, but no armour recipe: it wears none.
+  [0, 1, 3].forEach(lod => beast(lod));
   /** Each rover's wheels: the angle they have rolled to, and where the rover was last frame. */
   const spins: number[] = [];
   const was: [number, number][] = [];

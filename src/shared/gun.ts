@@ -120,6 +120,8 @@ export const step = (
   const down = p.down > 0;
   const locked = !down && (p.lock ?? 0) > 0;
   move(p, down || locked ? { ...i, keys: 0 } : i, w, team, bodies, kit);
+  // A class's own health at a spawn, and never more than it has (a change of class).
+  p.hp = Math.min(p.ev & EV.RESPAWN ? kit.hp : p.hp, kit.hp);
   // The rail gun cools on each step its bolt did not go out, slower while it is hot.
   p.heat = Math.max(0, (p.heat ?? 0) - (p.zapping ? 0 : p.hot ? 1 : HEAT_COOL));
   p.hot = !!p.hot && p.heat > HEAT_LOCK;
@@ -129,6 +131,7 @@ export const step = (
     // A fall under the kill floor has already put him back, and cleared `down`.
     if (p.down > 0 && !--p.down) {
       respawn(p, w, team);
+      p.hp = kit.hp;
     }
     return STRIKE.NONE;
   }
@@ -141,18 +144,23 @@ export const step = (
   // The rack fills the gun on arrival, not on every step spent in its circle.
   const { rack, blade, rail, rifle } = w.def.teams[team];
   const inside = !!rack && within(p, rack, RACK_R);
-  if (armed && inside && !p.rack) {
+  // A class with no gear takes nothing from the racks, and carries nothing.
+  const gear = kit.gear;
+  if (!gear) {
+    [p.ammo, p.rail, p.rifle, p.blade, p.nades] = [-1, -1, -1, false, 0];
+  }
+  if (armed && gear && inside && !p.rack) {
     [p.ammo, p.mag] = [kit.ammo, kit.mag];
   }
   p.rack = inside;
-  p.blade = !!p.blade || (armed && !!blade && within(p, blade, RACK_R));
+  p.blade = !!p.blade || (armed && gear && !!blade && within(p, blade, RACK_R));
   const inRail = !!rail && within(p, rail, RACK_R);
-  if (armed && inRail && !p.inRail) {
+  if (armed && gear && inRail && !p.inRail) {
     [p.rail, p.cap] = [kit.rail, kit.cap];
   }
   p.inRail = inRail;
   const inRifle = !!rifle && within(p, rifle, RACK_R);
-  if (armed && inRifle && !p.inRifle) {
+  if (armed && gear && inRifle && !p.inRifle) {
     [p.rifle, p.clip, p.nades] = [kit.rifle, kit.clip, NADE_MAX];
   }
   p.inRifle = inRifle;
@@ -172,7 +180,8 @@ export const step = (
   // a charge. Let go after HEAVY_TAP, the rest of the cut is the heavy release, its own timer; busy
   // hands or the end of the match drop the charge and the cut goes on.
   const { ticks, hold } = CUTS[p.cut ?? 0];
-  const top = !!p.swing && !p.heavy && ticks - (p.swing ?? 0) === hold;
+  // The xenomorph's `charge` is its pounce's (physics.ts), never a cut's.
+  const top = !kit.xeno && !!p.swing && !p.heavy && ticks - (p.swing ?? 0) === hold;
   if (top && p.wield && armed && !busy && i.keys & KEY.FIRE) {
     p.charge = Math.min((p.charge ?? 0) + 1, HEAVY_MAX);
   } else if (top && armed && !busy && (p.charge ?? 0) >= HEAVY_TAP) {
@@ -207,7 +216,7 @@ export const step = (
     p.swing = 0;
   }
   if (!armed) {
-    [p.charge, p.reload] = [0, 0];
+    [p.charge, p.reload] = [kit.xeno ? p.charge : 0, 0];
     return STRIKE.NONE;
   }
   // The battery, the capsule or the cell of the gun in hand: swapped when empty or on KEY.RELOAD,
@@ -231,6 +240,10 @@ export const step = (
   const c = bare ? (PUNCHES[p.cut ?? 0] ?? PUNCHES[0]) : swingOf(p);
   if (p.swing && c.ticks - p.swing === c.strike) {
     return STRIKE.CUT;
+  }
+  if (kit.xeno) {
+    claws(p, i, fresh, busy);
+    return STRIKE.NONE;
   }
   // The gun's charge goes with the katana in hand and not charging, the rail gun, the hands busy,
   // or no shot left.
@@ -306,6 +319,30 @@ export const step = (
     return STRIKE.SHOT;
   }
   return STRIKE.NONE;
+};
+
+/**
+ * The xenomorph's blows (BLOW): FIRE swipes the left claws, then the right while it goes on, a
+ * fresh press after a swipe's strike throwing the next at once; SPECIAL alone stings with the tail.
+ * Not with the hands busy (a hang, a climb); on a wall they are free.
+ */
+const claws = (p: PlayerState, i: Input, fresh: boolean, busy: boolean): void => {
+  if (busy) {
+    return;
+  }
+  const c = PUNCHES[p.cut ?? 0];
+  const other = p.cut === BLOW.CLAW_L ? BLOW.CLAW_R : BLOW.CLAW_L;
+  if (!p.swing && i.keys & KEY.SPECIAL && !(i.keys & KEY.FIRE)) {
+    p.cut = BLOW.TAIL;
+  } else if (
+    i.keys & KEY.FIRE &&
+    (!p.swing || (fresh && p.cut !== BLOW.TAIL && c.ticks - p.swing > c.strike))
+  ) {
+    p.cut = other;
+  } else {
+    return;
+  }
+  [p.heavy, p.swing] = [false, PUNCHES[p.cut].ticks];
 };
 
 /**

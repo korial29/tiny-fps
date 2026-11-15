@@ -89,7 +89,7 @@ import type { Pose, Quat } from './rig';
 import { REGION, beardOf, body, cut, eyesOf, hairOf, palette, shaved, skin, tressOf } from './skin';
 import { createFace, dashing, felled, strain } from './expression';
 import type { Face } from './expression';
-import { CH, toneFor } from './features';
+import { CH, CHITIN, toneFor } from './features';
 import { createTrail } from './trail';
 import type { Trail } from './trail';
 import { room } from './verts';
@@ -862,18 +862,21 @@ export const soldier = (
   // its belt, a hood and a guard over the mouth; an armour of his own (2026-11-13): armor.ts's
   // `alone` plates, and the shoulder pads and collar of pads.ts.
   const ninja = picked?.role === ROLE.NINJA;
-  const plated = armored;
-  armored &&= !ninja;
+  // The xenomorph, until it has a body of its own: the runner in the black suit with the team's
+  // stripes, its skin dark chitin, no armour, no hair.
+  const xeno = picked?.role === ROLE.XENO;
+  const plated = armored && !xeno;
+  armored &&= !ninja && !xeno;
   const colors = palette(
-    ninja ? CLOTH : color,
-    build ? tressOf(p.id, picked) : hairOf(p.id, picked),
+    ninja || xeno ? CLOTH : color,
+    xeno ? CHITIN : build ? tressOf(p.id, picked) : hairOf(p.id, picked),
     eyesOf(p.id, picked),
     armored,
-    toneFor(p.id, picked),
-    build ? 0 : beardOf(p.id),
+    xeno ? CHITIN : toneFor(p.id, picked),
+    build || xeno ? 0 : beardOf(p.id),
     !!build,
   );
-  if (ninja) {
+  if (ninja || xeno) {
     const { PANTS, UPPER, GLOVE, STRIPE, STRIPE_LOW, BELT } = REGION;
     [colors[PANTS], colors[UPPER], colors[GLOVE]] = [CLOTH, CLOTH, CLOTH];
     // His belt is cut in a V by armor() (BELT in armor.ts), the skin's under it black.
@@ -982,7 +985,7 @@ export const soldier = (
     }
   }
   // Her hair, on her head while it is on her; tucked in under a helmet or the ninja's hood.
-  if (build && !helmets && !ninja && r.cut?.limb !== LIMB.HEAD) {
+  if (build && !helmets && !ninja && !xeno && r.cut?.limb !== LIMB.HEAD) {
     const from = out.length;
     hair(
       out,
@@ -1001,7 +1004,7 @@ export const soldier = (
   }
   // The man's cigar, not on a far runner: not under a helmet or the ninja's guard, and it drops
   // when he goes down (lying face down, it would go through the roof).
-  if (lod && !build && !helmets && !ninja && !p.down) {
+  if (lod && !build && !helmets && !ninja && !xeno && !p.down) {
     const from = out.length;
     const fine = lod > 2;
     rigid(`cigar ${fine}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => cigar(o, a, q, fine));

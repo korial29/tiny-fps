@@ -836,10 +836,9 @@ describe('snapshot frame', () => {
     }
     expect(NOBODY).toBeGreaterThanOrEqual(MAX_PLAYERS);
     expect(NOBODY).toBeLessThanOrEqual(255);
-    // The mode is 3 bits, RIDE the last value they hold.
-    expect(Math.max(...Object.values(MODE))).toBe(MODE.RIDE);
-    expect(MODE.RIDE).toBeLessThanOrEqual(7);
-    expect(Object.keys(MODE).length).toBeLessThanOrEqual(8);
+    // The mode is 4 bits (3 and bit 6 of foe), CLING the last value.
+    expect(Math.max(...Object.values(MODE))).toBe(MODE.CLING);
+    expect(MODE.CLING).toBeLessThanOrEqual(15);
     expect(Object.keys(SIDE).length).toBeLessThanOrEqual(8);
     // A slide, a wall-run and a climb end long before t saturates, and the key bits are fifteen.
     expect(SLIDE_TICKS).toBeLessThan(255);

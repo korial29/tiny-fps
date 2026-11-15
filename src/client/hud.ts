@@ -6,6 +6,7 @@ import {
   GUN_MAG,
   ARMOR_MAX,
   HP_MAX,
+  XENO_HP,
   RAIL_CAP,
   RAIL_MAX,
   NADE_MAX,
@@ -284,6 +285,12 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
     'The standard moves; plays nowhere but the moon.',
     'Moon only',
   ],
+  [
+    'Xenomorph',
+    `${XENO_HP} health, climbs any wall, pounces on its prey; claws and a tail sting, acid for blood, sees its enemies glow.`,
+    'No gun, no katana, no armour: it has to get close.',
+    'Every map',
+  ],
 ];
 
 /** A skin tone (TONES, linear) as a CSS colour. */
@@ -330,6 +337,17 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
       ['1|2|3|4', 'gun, katana, rail gun, laser rifle', 'Digit1 Digit2 Digit3 Digit4'],
       ['Wheel', 'next weapon'],
       ['G', 'laser rifle: a grenade from its launcher', 'KeyG'],
+    ],
+  ],
+  [
+    'Xenomorph',
+    [
+      ['W', 'facing a wall: cling to it, then W and S climb, A and D go along'],
+      ['Space', 'on a wall: leap off along the look'],
+      ['C', 'on a wall: let go'],
+      ['Q', 'hold to charge a pounce, let go to leap: it pins whoever it lands on'],
+      ['Left click', 'claws, left then right'],
+      ['Right click|or|G', 'tail sting: slow, long reach'],
     ],
   ],
   [
@@ -474,6 +492,8 @@ export interface Hud {
     nades?: number,
     armor?: number,
   ): void;
+  /** The health the own player's class has at most (Kit.hp): as many pips. */
+  life(max: number): void;
   /** A hit marker on the crosshair for a moment: a ball or a cut of the own player hit. */
   hit(): void;
   /** The face over the health, frame `n` of face.ts (-1 hides it). */
@@ -731,6 +751,15 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const [redFlag, blueFlag] = [...bar.querySelectorAll<HTMLElement>('small')];
   const pips = [...one('ul').querySelectorAll('li')];
   const plates = pips.splice(HP_MAX);
+  /** As many health pips as `max`, before the armour's. */
+  const pipsOf = (max: number) => {
+    while (pips.length < max) {
+      const li = document.createElement('li');
+      plates[0].before(li);
+      pips.push(li);
+    }
+    pips.splice(max).forEach(li => li.remove());
+  };
   const [life, ammo, marker, fallen] = [one('ul'), one('dl'), one('s'), one('mark')];
   const [rope, knot] = [one('ins'), one('ins i')];
   const [count, spare, slots] = [one('data'), one('dl span'), one('dl small')];
@@ -789,6 +818,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       return groups[0].closest('fieldset')!.querySelector('canvas')!;
     },
     magazines: sizes => (mags = sizes),
+    life: pipsOf,
     mute: on => (muted.hidden = !on),
     match(m, who) {
       bar.hidden = false;

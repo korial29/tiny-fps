@@ -15,7 +15,7 @@ import type { Out } from './verts';
 export const CHITIN_X = [0.045, 0.05, 0.06];
 
 /** Metres: the tail's length, its root's radius and its tip's, the stinger's length. */
-export const TAIL = { len: 1.45, root: 0.06, tip: 0.012, sting: 0.17 };
+export const TAIL = { len: 1.45, root: 0.046, tip: 0.012, sting: 0.17 };
 
 /** Sides round a piece at each level of detail (far, near, the own body, close), by how fine it is. */
 const SIDES = [
@@ -86,7 +86,7 @@ export const column = (
     back(J.CHEST, [0, 0.12, 0.115], 0.024),
     back(J.CHEST, [0, -0.04, 0.12], 0.027),
     back(J.SPINE, [0, 0, 0.1], 0.029),
-    back(J.PELVIS, [0, -0.03, 0.09], 0.032),
+    back(J.PELVIS, [0, -0.03, 0.09], 0.038),
   ];
   // The tail in the pelvis' frame: its angle in the pelvis' plane (0 back, up from there) along it.
   const steps = 12;
@@ -147,8 +147,7 @@ export const column = (
   const n = lod ? 34 : 14;
   const sides = SIDES[2][lod];
   // Each bead pinched at its joints; close, rounder.
-  const shape =
-    lod > 2 ? [0.55, 0.82, 0.97, 1, 0.97, 0.82] : lod ? [0.55, 0.92, 1, 0.92] : [0.7, 1];
+  const shape = lod > 2 ? [0.7, 0.86, 0.98, 1, 0.98, 0.86] : lod ? [0.7, 0.94, 1, 0.94] : [0.8, 1];
   const side = turn(q, [1, 0, 0]);
   const rows: Spot[][] = [];
   for (let v = 0; v < n; v++) {
@@ -351,12 +350,22 @@ export const ribs = (out: Out, at: Vec3, q: Quat, lod: number) => {
   rows.forEach(([y, w, d], i) => {
     for (const s of [-1, 1]) {
       const pts: Vec3[] = [];
-      const end = i > 2 ? 0.75 : 0.42;
-      for (let k = 0; k <= 6; k++) {
-        const a = 2.8 - ((2.8 - end) * k) / 6;
-        pts.push([s * w * Math.sin(a), y - 0.06 * (k / 6), -0.013 - d * Math.cos(a)]);
+      // From the spine's vertebra at the middle of the back (the user, 2026-11-15) round the side
+      // to the front.
+      const end = i > 2 ? 0.55 : 0.4;
+      for (let k = 0; k <= 8; k++) {
+        const a = Math.PI - ((Math.PI - end) * k) / 8;
+        pts.push([s * w * Math.sin(a), y - 0.06 * (k / 8), -0.013 - d * Math.cos(a)]);
       }
-      strand(out, at, q, pts, [0.008, 0.012, 0.013, 0.013, 0.012, 0.011, 0.007], n, SINEW);
+      strand(
+        out,
+        at,
+        q,
+        pts,
+        [0.014, 0.012, 0.012, 0.013, 0.013, 0.013, 0.012, 0.011, 0.007],
+        n,
+        SINEW,
+      );
     }
   });
   strand(
@@ -394,6 +403,35 @@ const spur = (
   strand(out, at, q, [base, pt(0.5, 0.004), pt(1, 0.016)], [r, r * 0.6, 0], n, BONE);
 };
 
+/**
+ * Its shoulder on an arm joint (the user, 2026-11-15: real shoulders, no angle): a round cap of
+ * chitin over the head of the arm, carried by it, so the turn of the arm under it never shows as a
+ * corner where the skin of the arm meets the trunk's.
+ */
+export const shoulder = (out: Out, at: Vec3, q: Quat, lod: number, side: number) => {
+  const [rings, n] = [
+    [3, 5, 6, 9],
+    [4, 8, 10, 14],
+  ].map(l => l[lod]);
+  const [cx, cy, a, b, c] = [-side * 0.006, -0.026, 0.043, 0.05, 0.05];
+  const rows: Spot[][] = [];
+  for (let k = 0; k <= rings; k++) {
+    const t = (k / rings) * Math.PI;
+    const [y, r] = [Math.cos(t), Math.sin(t)];
+    rows.push(
+      Array.from({ length: k && k < rings ? n : 1 }, (_, i): Spot => {
+        const w = (i / n) * TAU;
+        const v: Vec3 = [Math.cos(w) * r, y, Math.sin(w) * r];
+        return [
+          on(at, q, [cx + v[0] * a, cy + v[1] * b, v[2] * c]),
+          unit(turn(q, [v[0] / a, v[1] / b, v[2] / c])),
+        ];
+      }),
+    );
+  }
+  sheet(rows, CHITIN_X, -1, out);
+};
+
 /** Its spurs: one out of the back of each elbow (a forearm joint), one out of the back of each ankle (a shin joint). */
 export const elbow = (out: Out, at: Vec3, q: Quat, lod: number) =>
   spur(out, at, q, [0, -0.02, 0.03], [0, 0.45, 1], 0.12, 0.016, SIDES[1][lod]);
@@ -425,19 +463,8 @@ const DEPTH = [
   [0.012, 0.115],
   [-0.02, 0.12],
   [-0.05, 0.118],
-  [-0.072, 0.118],
-  [-0.095, 0.108],
-  [-0.125, 0.085],
-];
-const WIDTH = [
-  [0.115, 0.048],
-  [0.07, 0.066],
-  [0.035, 0.07],
-  [0, 0.074],
-  [-0.03, 0.066],
-  [-0.06, 0.05],
-  [-0.09, 0.052],
-  [-0.125, 0.024],
+  [-0.07, 0.112],
+  [-0.09, 0.088],
 ];
 /** Its head's chitin: the dome's (the skin's TRIM, soldier.ts) and its face's, one colour. */
 export const HEAD = CHITIN_X.map(v => v * 1.6);
@@ -445,15 +472,48 @@ const [DARK, TEETH] = [
   [0.02, 0.02, 0.025],
   [0.42, 0.42, 0.4],
 ];
+/**
+ * The middle of an orbit and how its long axis rises toward the temple (the user, 2026-11-15: less
+ * round, squinting, meaner): a narrow slanted slit, its inner corner low.
+ */
+const [EYE, SLANT] = [[0.032, 0.012], 0.35];
 /** How deep in an orbit (0 to 1) the point of the face (x, y) is. */
-const orbit = (x: number, y: number) =>
-  Math.max(0, 1 - ((Math.abs(x) - 0.032) / 0.021) ** 2 - ((y - 0.012) / 0.017) ** 2);
-/** The face's surface at (x, y): an ellipse's front, a smooth forehead, the orbits sunk, the cheekbones out. */
+const orbit = (x: number, y: number) => {
+  const dx = Math.abs(x) - EYE[0];
+  return Math.max(0, 1 - (dx / 0.024) ** 2 - ((y - EYE[1] - SLANT * dx) / 0.0085) ** 2);
+};
+/** The frown over each orbit: a ridge along its upper edge, pressing down on it. */
+const frown = (x: number, y: number) => {
+  const dx = Math.abs(x) - EYE[0];
+  return Math.exp(-(((y - EYE[1] - SLANT * dx - 0.013) / 0.006) ** 2) - (dx / 0.03) ** 2);
+};
+/**
+ * The head's front (the user, 2026-11-15: one smooth block with the back): an ellipsoid round the
+ * middle of the head, its centre's height and its half width, height and depth. Its rim is the
+ * dome's front ring (CREST in skin.ts), so the face, as wide as it at every height, meets the dome
+ * with no seam; over the orbits the face is the ellipsoid itself, a smooth forehead.
+ */
+const [EY, EA, EB, EC] = [0.04, 0.072, 0.135, 0.125];
+/** How much of the forehead's sphere the face is at height y: none under the orbits, all over them. */
+const brow = (y: number) => {
+  const t = Math.min(Math.max((y - 0.005) / 0.025, 0), 1);
+  return t * t * (3 - 2 * t);
+};
+/** The top of the face, and its half width at height y. */
+const TOP = EY + EB;
+/** The bottom of the chin (the user, 2026-11-15: a short one). */
+const CHIN = EY - EB;
+const widthOf = (y: number) => EA * Math.sqrt(Math.max(0, 1 - ((y - EY) / EB) ** 2));
+/** The face's surface at (x, y): an ellipse's front under a forehead's sphere, the orbits sunk, the cheekbones out. */
 const faceZ = (x: number, y: number) => {
-  const u = Math.min(Math.abs(x) / curve(WIDTH, y), 1);
+  const u = Math.min(Math.abs(x) / Math.max(widthOf(y), 1e-6), 1);
+  const low = -curve(DEPTH, y) * Math.sqrt(1 - u * u);
+  const dome = -EC * Math.sqrt(Math.max(0, 1 - (x / EA) ** 2 - ((y - EY) / EB) ** 2));
   return (
-    -curve(DEPTH, y) * Math.sqrt(1 - u * u) +
-    0.03 * orbit(x, y) ** 0.6 -
+    low +
+    (dome - low) * brow(y) +
+    0.028 * orbit(x, y) ** 0.6 -
+    0.007 * frown(x, y) -
     0.008 * Math.exp(-(((Math.abs(x) - 0.056) / 0.013) ** 2) - ((y + 0.008) / 0.012) ** 2)
   );
 };
@@ -462,7 +522,7 @@ const faceZ = (x: number, y: number) => {
  * the height of its middle and where the fangs are, and how far its lips part at x: the upper one
  * curled up over the fangs, a snarl.
  */
-const [MW, MY, FANG] = [0.032, -0.052, 0.018];
+const [MW, MY, FANG] = [0.032, -0.038, 0.018];
 const above = (x: number) =>
   (0.0055 + 0.008 * Math.exp(-(((Math.abs(x) - FANG) / 0.008) ** 2))) * (1 - (x / MW) ** 2) ** 0.5;
 const below = (x: number) => 0.008 * (1 - (x / MW) ** 2) ** 0.6;
@@ -481,7 +541,7 @@ const lipline = (n: number): [number, number][] => {
 };
 
 /**
- * The face of its skull, a human skull's in its chitin: a round forehead, the brow ridge, the
+ * The face of its skull, a human skull's in its chitin: a forehead a smooth sphere, the
  * orbits sunk, the cheekbones, no nose; the mouth an opening whose edge the lips hide, dark inside,
  * with grey teeth, the fangs longest. A grid over the face, finer the closer.
  */
@@ -493,8 +553,8 @@ export const skull = (out: Out, at: Vec3, q: Quat, lod: number) => {
     [44, 72],
   ][lod];
   const spot = (u: number, v: number): Spot => {
-    const y = 0.115 - 0.24 * v;
-    const x = u * curve(WIDTH, y) * 0.98;
+    const y = TOP - (TOP - CHIN) * v;
+    const x = u * widthOf(y);
     const h = 1e-3;
     const z = faceZ(x, y);
     const n = unit([(faceZ(x + h, y) - z) / h, (faceZ(x, y + h) - z) / h, -1]);
@@ -503,8 +563,8 @@ export const skull = (out: Out, at: Vec3, q: Quat, lod: number) => {
   // The grid, but where the lips part: the hole's edge, in steps, lies under the lips.
   const tri = (p: [number, number][]) => {
     const [u, v] = [0, 1].map(k => (p[0][k] + p[1][k] + p[2][k]) / 3);
-    const y = 0.115 - 0.24 * v;
-    if (!parted(u * curve(WIDTH, y) * 0.98, y)) {
+    const y = TOP - (TOP - CHIN) * v;
+    if (!parted(u * widthOf(y), y)) {
       face(
         out,
         HEAD,
@@ -584,23 +644,14 @@ export const skull = (out: Out, at: Vec3, q: Quat, lod: number) => {
   );
 };
 
-/** Its eyes, glowing at the back of the orbits in the team's `color`. */
+/** Its eyes, glowing slits at the back of the orbits in the team's `color`. */
 export const eyes = (out: Out, at: Vec3, q: Quat, color: number[]) => {
   for (const s of [-1, 1]) {
-    const [x, y] = [s * 0.032, 0.012];
-    const z = faceZ(x, y);
-    strand(
-      out,
-      at,
-      q,
-      [
-        [x, y, z - 0.002],
-        [x, y, z - 0.012],
-      ],
-      [0.009, 0.004],
-      6,
-      color,
-      -2,
-    );
+    // A glowing slit along the orbit's slant.
+    const pts = [-0.014, 0, 0.014].map((d): Vec3 => {
+      const [x, y] = [s * (EYE[0] + d), EYE[1] + SLANT * d];
+      return [x, y, faceZ(x, y) - 0.003];
+    });
+    strand(out, at, q, pts, [0.002, 0.0045, 0.002], 6, color, -2);
   }
 };

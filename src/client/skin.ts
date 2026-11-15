@@ -773,7 +773,8 @@ const TRUNK_X = remake(
   },
   { far: [...TRUNK.far, 16] },
 );
-TRUNK_X.rings.push([1.6, 0, 0, 0, 0, 2.7, TRIM]);
+// The neck runs on up into the skull, where its top is hidden: no flat ring under the jaw.
+TRUNK_X.rings.push([1.6, 0, 0.004, 0.05, 0.05, 2.8, TRIM], [1.66, 0, 0.01, 0, 0, 3, TRIM]);
 // The leg ends at the ankle, closed: its foot is xeno.ts's metatarsal(), longer than the rig's.
 const LEG_X = remake(
   { ...LEG, rings: [...LEG.rings.filter(r => r[0] > 0.1), [0.075, 0.1, 0, 0, 0, 3, UPPER]] },
@@ -810,9 +811,10 @@ const ARM_X = remake(ARM, r => {
   return [...r.slice(0, 6), r[0] < 0.98 ? GLOVE : JACKET];
 });
 /**
- * Its skull's dome, on the head joint, from the back to the brow (rings along z): long, swelling
- * then tapering as it sweeps back and up past the crown along a curve (the user, 2026-11-15: more
- * curves, less straight); its face is xeno.ts's skull(), a human skull's.
+ * Its skull's dome, on the head joint, from the back to the middle of the head (rings along z):
+ * long, swelling then tapering as it sweeps back and up past the crown along a curve (the user,
+ * 2026-11-15: more curves, less straight). Its front ring is the edge of its face, xeno.ts's
+ * skull(), a human skull's, which covers the front half: one smooth block, no seam.
  */
 const CREST: Loft = {
   chain: [J.HEAD, J.HEAD],
@@ -821,19 +823,20 @@ const CREST: Loft = {
   z: true,
   far: [0, 4, 8, 12, 16],
   rings: [
-    [0.4, 0, 1.88, 0, 0, 0, TRIM],
-    [0.36, 0, 1.855, 0.022, 0.035, 0, TRIM],
-    [0.3, 0, 1.815, 0.04, 0.062, 0, TRIM],
-    [0.22, 0, 1.77, 0.055, 0.088, 0, TRIM],
-    [0.13, 0, 1.725, 0.066, 0.108, 0, TRIM],
-    [0.04, 0, 1.69, 0.072, 0.118, 0, TRIM],
-    [-0.03, 0, 1.665, 0.072, 0.115, 0, TRIM],
-    [-0.07, 0, 1.65, 0.064, 0.1, 0, TRIM],
-    [-0.09, 0, 1.645, 0, 0, 0, TRIM],
+    [0.4, 0, 1.875, 0, 0, 0, TRIM],
+    [0.36, 0, 1.85, 0.022, 0.036, 0, TRIM],
+    [0.3, 0, 1.805, 0.04, 0.064, 0, TRIM],
+    [0.22, 0, 1.75, 0.056, 0.092, 0, TRIM],
+    [0.13, 0, 1.705, 0.067, 0.118, 0, TRIM],
+    [0.04, 0, 1.672, 0.072, 0.132, 0, TRIM],
+    // Its front ring, the face's edge (xeno.ts: EY, EA, EB), closed flat behind the face.
+    [0, 0, 1.66, 0.072, 0.135, 0, TRIM],
+    [0, 0, 1.66, 0, 0, 0, TRIM],
   ],
 };
 // A ring between each two: a smooth skull close up.
 CREST.rings = finer(CREST.rings, false);
+CREST.far = [0, 3, 6, 9, CREST.rings.length - 2, CREST.rings.length - 1];
 
 const shape = (lod: number, xeno = false): Skin => {
   const [TR, LG, AR] = xeno ? [TRUNK_X, LEG_X, ARM_X] : [TRUNK, LEG, ARM];

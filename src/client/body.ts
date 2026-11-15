@@ -1127,11 +1127,16 @@ export const hands = (
       claws,
     );
     const a = room(out, 0);
-    // The xenomorph's hands larger (CLAW_HAND), hers smaller.
+    // The xenomorph's hands larger (CLAW_HAND), but at the wrist, where they meet the arm's cuff, and
+    // growing from it over 4 cm; hers smaller.
     const f = claws ? CLAW_HAND : build ? HAND_F : 1;
     for (let k = at; f != 1 && k < out.length; k += STRIDE) {
+      const w = s.pos[j];
+      const r = Math.hypot(a[k] - w[0], a[k + 1] - w[1], a[k + 2] - w[2]);
+      const t = claws ? Math.min(r / 0.04, 1) : 1;
+      const g = 1 + (f - 1) * t * t * (3 - 2 * t);
       for (let d = 0; d < 3; d++) {
-        a[k + d] = s.pos[j][d] + f * (a[k + d] - s.pos[j][d]);
+        a[k + d] = w[d] + g * (a[k + d] - w[d]);
       }
     }
   });

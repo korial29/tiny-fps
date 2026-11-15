@@ -547,6 +547,47 @@ export const pipes = (out: Out, s: Solved, lod: number) => {
   }
 };
 
+/**
+ * Curved horns out of its back (the user, 2026-11-15): a pair on a joint, each from beside the spine
+ * out to the side and back, curling up, `len` long and `r` thick at its root, at `base` (the right
+ * one) in the joint's frame.
+ */
+export const horns = (
+  out: Out,
+  at: Vec3,
+  q: Quat,
+  lod: number,
+  base: Vec3,
+  len: number,
+  r: number,
+) => {
+  for (const s of [-1, 1]) {
+    const pts = Array.from({ length: 7 }, (_, i): Vec3 => {
+      const t = i / 6;
+      return [
+        s * (base[0] + len * 0.62 * t),
+        base[1] + len * (0.12 * t + 0.6 * t * t),
+        base[2] + len * (0.78 * t - 0.28 * t * t),
+      ];
+    });
+    strand(
+      out,
+      at,
+      q,
+      pts,
+      pts.map((_, i) => r * (1 - i / 6) ** 0.85 + 0.0012),
+      SIDES[1][lod],
+      CHITIN_X,
+    );
+  }
+};
+/** The three pairs of horns: the joint, the root, the length and thickness, small low, large high. */
+export const HORNS: [number, Vec3, number, number][] = [
+  [J.SPINE, [0.06, 0.02, 0.08], 0.13, 0.014],
+  [J.CHEST, [0.075, -0.03, 0.095], 0.2, 0.019],
+  [J.CHEST, [0.08, 0.09, 0.09], 0.3, 0.025],
+];
+
 /** A spur of bone on a joint: from `base` along `dir` (in its frame), `len` long, `r` thick at its root. */
 const spur = (
   out: Out,
@@ -823,6 +864,31 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
     sides,
     HEAD,
   );
+  // A band of the face round the lips, a grid cell wide (the user, 2026-11-15: no holes round the
+  // mouth): it covers the steps the grid's hole leaves outside the thinner lips.
+  const m = lod > 2 ? 0.005 : 0.01;
+  const at3 = (x: number, y: number): Spot => {
+    const h = 1e-3;
+    const nz: Vec3 = unit([
+      (faceZ(x + h, y) - faceZ(x - h, y)) / (2 * h),
+      (faceZ(x, y + h) - faceZ(x, y - h)) / (2 * h),
+      -1,
+    ]);
+    return [on(at, q, [x, y, faceZ(x, y) - 0.0006]), turn(q, nz)];
+  };
+  // Out of the lips' line (it runs clockwise: left to right over the top, back under).
+  const band = line.map(([x, y], i): [number, number] => {
+    const [a, b] = [line[(i + line.length - 1) % line.length], line[(i + 1) % line.length]];
+    const [tx, ty] = [b[0] - a[0], b[1] - a[1]];
+    const l = Math.hypot(tx, ty) || 1;
+    return [x - (ty / l) * m, y + (tx / l) * m];
+  });
+  line.forEach(([x, y], i) => {
+    const j = (i + 1) % line.length;
+    const quad = [at3(x, y), at3(...line[j]), at3(...band[j]), at3(...band[i])];
+    face(out, HEAD, -1, [quad[0], quad[1], quad[2]]);
+    face(out, HEAD, -1, [quad[0], quad[2], quad[3]]);
+  });
 };
 
 /** Its eyes, glowing slits at the back of the orbits in the team's `color`. */

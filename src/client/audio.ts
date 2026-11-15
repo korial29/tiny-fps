@@ -2,6 +2,7 @@
 import type { Vec3 } from './mesh';
 import { LAYERS, LOOPED, MUSIC_RATE, RATE, music, render, seam } from './sfx';
 import type { Voice } from './sfx';
+import { CAST } from './voice/cast';
 import { CLIPS } from './voice/clips';
 
 /** A sound that plays on and on, started on its first set. */
@@ -29,6 +30,11 @@ export interface Audio {
    * turn, two at most and each once; none before the voice is decoded, a moment after unlock.
    */
   say(id: number): void;
+  /**
+   * Says clip `id` of the players' voices (CAST): placed and fainter with distance as play() with
+   * `at`, centred without. False, and silent, until the voices are decoded.
+   */
+  speak(id: number, at?: Vec3, gain?: number, rate?: number): boolean;
   /** The sound `id` (one of LOOPED) as a loop, silent until its first set; the own player's, centred. */
   loop(id: number): Loop;
   /** Mutes or unmutes everything, music included. */
@@ -56,6 +62,11 @@ export const SPRITES: (() => Promise<string>)[] = [
   () => import('./voice/opus').then(m => m.default),
   () => import('./voice/mp3').then(m => m.default),
 ];
+/** The players' voices (voice/cast.ts), loaded the same way after the announcer's. */
+export const VOICED: (() => Promise<string>)[] = [
+  () => import('./voice/cast-opus').then(m => m.default),
+  () => import('./voice/cast-mp3').then(m => m.default),
+];
 
 /** A silent Audio when the browser has no Web Audio. */
 const silent = (): Audio => {
@@ -66,6 +77,7 @@ const silent = (): Audio => {
     play: () => {},
     loop: () => ({ set: () => {} }),
     say: () => {},
+    speak: () => false,
     mute: on => {
       muted = on;
     },
@@ -76,7 +88,12 @@ const silent = (): Audio => {
   };
 };
 
-export const createAudio = (layers: Voice[][] = LAYERS, sprites = SPRITES, song = music): Audio => {
+export const createAudio = (
+  layers: Voice[][] = LAYERS,
+  sprites = SPRITES,
+  song = music,
+  voiced = VOICED,
+): Audio => {
   let ctx: AudioContext;
   try {
     ctx = new AudioContext();
@@ -102,13 +119,15 @@ export const createAudio = (layers: Voice[][] = LAYERS, sprites = SPRITES, song 
   let speech: AudioBuffer | undefined;
   const lines: number[] = [];
   let talking = false;
+  /** The players' voices once decoded. */
+  let cast: AudioBuffer | undefined;
 
-  /** The first sprite the browser decodes; none if it decodes neither. */
-  const decode = async () => {
-    for (const load of sprites) {
+  /** The first of `formats` the browser decodes; none if it decodes none. */
+  const decode = async (formats: (() => Promise<string>)[]) => {
+    for (const load of formats) {
       try {
         const bytes = Uint8Array.from(atob(await load()), c => c.charCodeAt(0));
-        return (speech = await ctx.decodeAudioData(bytes.buffer));
+        return await ctx.decodeAudioData(bytes.buffer);
       } catch {
         // The next format.
       }
@@ -137,6 +156,50 @@ export const createAudio = (layers: Voice[][] = LAYERS, sprites = SPRITES, song 
     return src;
   };
 
+  /** Buffer `b` (from `clip`'s start for its length) as play() places it; false when unheard. */
+  const emit = (
+    b: AudioBuffer | undefined,
+    at: Vec3 | undefined,
+    gain: number,
+    rate: number,
+    clip?: readonly [number, number],
+  ): boolean => {
+    let pan = 0;
+    let vol = gain;
+    if (at) {
+      const [dx, dy, dz] = at.map((v, i) => v - eye[i]);
+      const d = Math.hypot(dx, dy, dz);
+      vol = Math.max(0, 1 - d / RANGE) ** 2 * gain;
+      // The listener's right is (cos yaw, -sin yaw) on x, z.
+      pan = (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / Math.max(d, 1);
+    }
+    if (!b || !vol) {
+      return false;
+    }
+    if (voices.size >= VOICES) {
+      const q = [...voices].reduce((a, v) => (v.vol < a.vol ? v : a));
+      if (q.vol >= vol) {
+        return false;
+      }
+      q.src.stop();
+      voices.delete(q);
+    }
+    const src = source(b);
+    src.playbackRate.value = rate;
+    const p = ctx.createStereoPanner();
+    p.pan.value = pan;
+    src.connect(p).connect(out(master, vol));
+    const v = { vol, src };
+    voices.add(v);
+    src.onended = () => voices.delete(v);
+    if (clip) {
+      src.start(0, ...clip);
+    } else {
+      src.start();
+    }
+    return true;
+  };
+
   return {
     unlock() {
       ctx.resume().catch(() => {});
@@ -150,43 +213,17 @@ export const createAudio = (layers: Voice[][] = LAYERS, sprites = SPRITES, song 
         m.loop = true;
         m.connect(bed);
         m.start();
-        void decode();
+        void decode(sprites)
+          .then(b => (speech = b))
+          .then(() => decode(voiced))
+          .then(b => (cast = b));
       }
     },
     listen(at, y) {
       [eye, yaw] = [at, y];
     },
     play(id, at, gain = 1, rate = 1) {
-      let pan = 0;
-      let vol = gain;
-      if (at) {
-        const [dx, dy, dz] = at.map((v, i) => v - eye[i]);
-        const d = Math.hypot(dx, dy, dz);
-        vol = Math.max(0, 1 - d / RANGE) ** 2 * gain;
-        // The listener's right is (cos yaw, -sin yaw) on x, z.
-        pan = (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / Math.max(d, 1);
-      }
-      const b = bufs[id];
-      if (!b || !vol) {
-        return;
-      }
-      if (voices.size >= VOICES) {
-        const q = [...voices].reduce((a, v) => (v.vol < a.vol ? v : a));
-        if (q.vol >= vol) {
-          return;
-        }
-        q.src.stop();
-        voices.delete(q);
-      }
-      const src = source(b);
-      src.playbackRate.value = rate;
-      const p = ctx.createStereoPanner();
-      p.pan.value = pan;
-      src.connect(p).connect(out(master, vol));
-      const v = { vol, src };
-      voices.add(v);
-      src.onended = () => voices.delete(v);
-      src.start();
+      emit(bufs[id], at, gain, rate);
     },
     say(id) {
       if (speech && lines.length < 2 && !lines.includes(id)) {
@@ -195,6 +232,9 @@ export const createAudio = (layers: Voice[][] = LAYERS, sprites = SPRITES, song 
           next();
         }
       }
+    },
+    speak(id, at, gain = 1, rate = 1) {
+      return !!cast && emit(cast, at, gain, rate, CAST[id]);
     },
     loop(id) {
       let src: AudioBufferSourceNode | undefined;

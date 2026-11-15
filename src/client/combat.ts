@@ -52,6 +52,7 @@ import type { Hud } from './hud';
 import { basis } from './mesh';
 import type { Vec3 } from './mesh';
 import { SOUND } from './sfx';
+import { deathOf, paceOf, speakerOf } from './taunt';
 
 /** The sound of each cue of a swap (CUES): the gun's, then the rail gun's. */
 const RELOADS = [
@@ -172,7 +173,7 @@ const SWISH = { rate: [1.3, 1.05, 0.95, 0.8], gain: [0.6, 0.8, 0.8, 1] };
 
 export const createCombat = (
   world: World,
-  audio: Pick<Audio, 'play'> & Partial<Pick<Audio, 'loop'>>,
+  audio: Pick<Audio, 'play'> & Partial<Pick<Audio, 'loop' | 'speak'>>,
   hud: Pick<Hud, 'vitals' | 'hit' | 'down'>,
   fx: Pick<Effects, 'fire' | 'cut' | 'wound' | 'lie' | 'quake' | 'blow' | 'punch'>,
   tracer: Pick<
@@ -185,6 +186,8 @@ export const createCombat = (
   drawn?: (id: number) => Vec3 | undefined,
   /** The pitch of a player's voice (voiceOf()). */
   voice: (id: number) => number = voiceOf,
+  /** A player's own voice in the players' sprite (speakerOf()). */
+  speaker: (id: number) => number = speakerOf,
 ): Combat => {
   /** The own player after each live step that fired, since the last frame. */
   let pending: PlayerState[] = [];
@@ -202,9 +205,27 @@ export const createCombat = (
   let cuts: number[] = [];
   /** A little off the pitch each time, so that a burst does not drone. */
   const rate = () => 0.94 + 0.12 * ((seq++ * 0.618) % 1);
-  /** Player `id` cries out in pain, or as he goes down (`died`), at `at` (the own, centred). */
-  const cry = (id: number, died: boolean, at?: Vec3) =>
-    audio.play(died ? SOUND.DEATH : SOUND.PAIN, at, at ? 0.9 : 0.7, voice(id) * rate());
+  /** Cries of players going down so far: each picks the next of his voice's. */
+  let deaths = 0;
+  /**
+   * Player `id` cries out in pain, or as he goes down (`died`), at `at` (the own, centred): going
+   * down, a scream in his own voice once the voices are decoded, the synth's before.
+   */
+  const cry = (id: number, died: boolean, at?: Vec3) => {
+    const r = rate();
+    if (
+      died &&
+      audio.speak?.(
+        deathOf(speaker(id), id + deaths++),
+        at,
+        at ? 1 : 0.8,
+        paceOf(id) * (0.5 + r / 2),
+      )
+    ) {
+      return;
+    }
+    audio.play(died ? SOUND.DEATH : SOUND.PAIN, at, at ? 0.9 : 0.7, voice(id) * r);
+  };
   /** A shot; a charged one (`power` over 1) deeper and louder, with the long blast under it. */
   const laser = (at?: Vec3, power = 1) => {
     audio.play(

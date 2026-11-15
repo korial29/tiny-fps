@@ -34,6 +34,8 @@ export const PALETTE = [
   0xffe0eff2, 0xff1a12b0, 0xff5a3f7d, 0xff362f2a, 0xffffd93f, 0xff4ad3ff, 0xff86908a, 0xff18243a,
   // The woman's: her hair, its light, her lips.
   0xff1c2f5e, 0xff2f4c8a, 0xff4a45cc,
+  // The xenomorph's: its chitin, the chitin's sheen, its eyes' glow, its acid.
+  0xff1c1412, 0xff604e46, 0xff3246ff, 0xff28e696,
 ];
 const [
   ,
@@ -56,18 +58,29 @@ const [
   HAIR,
   SHEEN,
   LIP,
+  CHIT,
+  CHIT_HI,
+  EYE,
+  ACID,
 ] = PALETTE.map((_, i) => i);
 
 const sprites: Uint8Array[] = [];
 
+/** The faces of sprite(): the man's, the woman's and the xenomorph's. */
+export const LOOK = { MAN: 0, WOMAN: 1, XENO: 2 } as const;
+
 /**
- * Frame `n`'s pixels, FW by FH palette indices, row by row; built once. `fem` (1) is the woman's
- * face: the same frames, a bob over the scalp and down the cheeks, a narrower jaw, lashes, lips.
+ * Frame `n`'s pixels, FW by FH palette indices, row by row; built once. `fem` (LOOK.WOMAN) is the
+ * woman's face: the same frames, a bob over the scalp and down the cheeks, a narrower jaw, lashes,
+ * lips; LOOK.XENO the xenomorph's head (beast()).
  */
 export const sprite = (n: number, fem = 0): Uint8Array => {
   const key = n + FRAMES * fem;
   if (sprites[key]) {
     return sprites[key];
+  }
+  if (fem == LOOK.XENO) {
+    return (sprites[key] = beast(n));
   }
   const p = new Uint8Array(FW * FH);
   const dead = n == DEAD;
@@ -243,6 +256,134 @@ export const sprite = (n: number, fem = 0): Uint8Array => {
     put(m + 6, 24, BLOOD);
   }
   return (sprites[key] = p);
+};
+
+/**
+ * The xenomorph's head in the frame `n`, the frames as the runner's: its long skull seen from the
+ * front, a dome of black chitin with a sheen down its crest, narrowing to the jaw; two glowing
+ * slits for eyes, which look, narrow and open as the runner's do; its jaws, closed on their fangs,
+ * open in a hiss (an ouch, the shout), bared (a grin), wide (a rage). Its wounds are acid: a
+ * splash, a crack in the dome, acid from the mouth, more cracks. Dead, grey and dark-eyed, the jaw
+ * slack. Turned toward a hit, the features move 2 pixels that way.
+ */
+const beast = (n: number): Uint8Array => {
+  const p = new Uint8Array(FW * FH);
+  const dead = n == DEAD;
+  const more = n >= MORE;
+  const level = dead ? 4 : n == GLOW ? 0 : more ? Math.floor((n - MORE) / 3) : Math.floor(n / 8);
+  const e = more ? 8 + ((n - MORE) % 3) : n >= 40 ? -1 : n % 8;
+  const put = (x: number, y: number, c: number) => {
+    if (x >= 0 && x < FW && y >= 0 && y < FH) {
+      p[y * FW + x] = c;
+    }
+  };
+  const box = (x: number, y: number, w: number, h: number, c: number) => {
+    for (let j = 0; j < h; j++) {
+      for (let i = 0; i < w; i++) {
+        put(x + i, y + j, c);
+      }
+    }
+  };
+  const t = e == EXPR.TURN_L ? -2 : e == EXPR.TURN_R ? 2 : 0;
+  const [body, hi] = dead ? [GREY, GREY] : [CHIT, CHIT_HI];
+  // The half width of the head at row y: a dome down to row 12, then the jaw narrowing to a snout.
+  const half = (y: number) =>
+    y <= 12
+      ? 8.6 * Math.sqrt(Math.max(0, 1 - ((y - 11.5) / 10.5) ** 2))
+      : 8.6 - (5.4 * (y - 12)) / 15;
+  for (let y = 1; y < FH - 1; y++) {
+    const w = half(y);
+    for (let x = 0; x < FW; x++) {
+      const d = Math.abs(x - 11.5);
+      if (d < w) {
+        put(x, y, d > w - 1 || y == FH - 2 ? LINE : body);
+      }
+    }
+  }
+  // The crest's sheen, and a rim of light down its left side.
+  box(11, 2, 2, 8, hi);
+  box(10, 4, 1, 4, hi);
+  for (let y = 6; y < 16; y++) {
+    put(Math.ceil(11.5 - half(y)) + 1, y, hi);
+  }
+  // Its far cheek in shadow, turned.
+  if (t && !dead) {
+    for (let y = 12; y < 24; y++) {
+      put(t > 0 ? 4 : 19, y, LINE);
+    }
+  }
+  const look =
+    e == EXPR.LEFT || e == EXPR.TURN_L ? -1 : e == EXPR.RIGHT || e == EXPR.TURN_R ? 1 : 0;
+  const wide = e == EXPR.OUCH || e == EXPR.SHOUT;
+  const narrow = e == EXPR.GRIN || e == EXPR.RAGE || e == EXPR.EFFORT || e == EXPR.FOCUS;
+  // The slits: slanting up to the temples, bright where they look.
+  for (const s of [-1, 1]) {
+    const x0 = 11.5 + s * 2 + t;
+    for (let k = 0; k < 5; k++) {
+      const x = Math.round(x0 + s * k);
+      const y = 14 - (k >> 1);
+      const lit = dead ? PUPIL : n == GLOW ? GOLD : EYE;
+      put(x, y, lit);
+      if (wide && k < 4) {
+        put(x, y - 1, lit);
+      }
+      if (!dead && n != GLOW && k == 2 + look * s) {
+        put(x, y, WHITE);
+      }
+    }
+    if (narrow && !dead) {
+      put(Math.round(x0 + s * 4), 12, LINE);
+    }
+  }
+  // The jaws: shut on their fangs, or open.
+  const m = 8 + t;
+  const open = dead || wide || e == EXPR.RAGE;
+  if (open) {
+    const h = e == EXPR.SHOUT || e == EXPR.RAGE ? 5 : 4;
+    box(m, 20, 8, h, LINE);
+    box(m + 1, 21, 6, h - 2, MOUTH);
+    for (let k = 0; k < 6; k += 2) {
+      put(m + 1 + k, 21, TEETH);
+      put(m + 2 + k, 19 + h - 1, TEETH);
+    }
+  } else if (e == EXPR.GRIN || n == GLOW) {
+    box(m, 21, 8, 2, TEETH);
+    box(m, 23, 8, 1, LINE);
+    for (let k = 1; k < 8; k += 2) {
+      put(m + k, 22, LINE);
+    }
+  } else {
+    box(m + 1, 22, 6, 1, LINE);
+    for (let k = 1; k < 7; k += 2) {
+      put(m + k, 21, TEETH);
+    }
+    if (e == EXPR.EFFORT) {
+      // A string of acid from the jaw.
+      put(m + 6, 23, ACID);
+      put(m + 6, 24, ACID);
+    }
+  }
+  // The wounds, in acid.
+  if (level >= 1) {
+    box(5 + t, 17, 2, 1, ACID);
+  }
+  if (level >= 2) {
+    put(15, 4, LINE);
+    put(16, 5, LINE);
+    put(16, 6, LINE);
+    put(17, 7, ACID);
+  }
+  if (level >= 3) {
+    put(m + 2, 24 + +open, ACID);
+    put(m + 2, 25 + +open, ACID);
+  }
+  if (level >= 4) {
+    put(7, 3, LINE);
+    put(8, 4, LINE);
+    put(7, 5, LINE);
+    box(6, 6, 1, 3, ACID);
+  }
+  return p;
 };
 
 /** What the face reacts to, each frame. */

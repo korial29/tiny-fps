@@ -3,8 +3,9 @@
 // bounces on the roof and lies there until the body is gone. Both cut faces glow, cauterized; the
 // cut bursts in cyan sparks and the stump spits a few more for a second. Changes no rule. No DOM.
 import { GRAVITY } from '../shared/constants';
+import { ROLE } from '../shared/kit';
 import { LIMB } from '../shared/types';
-import type { PlayerState } from '../shared/types';
+import type { Choice, PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import type { Tracer } from './beams';
@@ -132,13 +133,14 @@ export const fall = (c: Piece, dt: number, floor: Ground) => {
  * way); moved by dt, the stump spitting; forgotten once he is up.
  */
 export const track = (
-  r: { p: PlayerState; gait: Pick<Gait, 'pose'>; cut?: Piece; build?: number },
+  r: { p: PlayerState; gait: Pick<Gait, 'pose'>; cut?: Piece; build?: number; look?: Choice },
   dt: number,
   floor: Ground,
   fresh: boolean,
   tracer?: Pick<Tracer, 'shock' | 'spit'>,
 ) => {
-  const k = r.p.down ? (r.p.lost ?? 0) : 0;
+  // The xenomorph's body has no limb to lose (skin.ts's beast()).
+  const k = r.p.down && r.look?.role !== ROLE.XENO ? (r.p.lost ?? 0) : 0;
   if (!k) {
     r.cut = undefined;
     return;

@@ -37,6 +37,7 @@ Measured in Node (same V8 as Chrome) on an M-series Mac, then checked in the bro
 | Ninja's hood (`dress()`), close                 | 8.9 ms                  | 3.1 ms              |
 | Both hands, close                               | 5.1 ms                  | 0.8 ms              |
 | First close marine's armour (`cook()`)          | 440 ms freeze mid-match | 290 ms, at map load |
+| Her close hair, first of the five styles        | 373 ms freeze mid-match | 370 ms, at map load |
 
 What made the difference, and is now a rule:
 

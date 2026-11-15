@@ -659,6 +659,20 @@ export const closeOf = (style: number) => {
 };
 
 /**
+ * The close hair of `style` in the store (closeOf()). Built for every style when the map loads
+ * (createRenderer()): a style takes 50 to 110 ms, a freeze the first time she came near.
+ */
+export const closeMesh = (style: number) =>
+  mesh(`hair ${style}`, o => {
+    const c = closeOf(style);
+    const d = room(o, c.length);
+    for (let i = 0; i < c.length; i++) {
+      d[o.length + i] = c[i];
+    }
+    o.length += c.length;
+  });
+
+/**
  * Appends the hair `style` in `rgb` on the woman's head joint at `at` turned by `q` (see solve()),
  * at level of detail `lod` (0 far), its loose end moved by `swing` (sway()). Close (`lod` 3) it is
  * strands (closeOf()): into `gpu`, the frame's pieces, when given, the shader swaying them at the
@@ -676,18 +690,11 @@ export const hair = (
   gpu?: Pieces,
 ) => {
   if (lod > 2) {
-    const c = closeOf(style);
     if (gpu) {
-      const m = mesh(`hair ${style}`, o => {
-        const d = room(o, c.length);
-        for (let i = 0; i < c.length; i++) {
-          d[o.length + i] = c[i];
-        }
-        o.length += c.length;
-      });
-      gpu.push({ m, q, t: at, k: 1, h: { rgb, sw: swing, t: time } });
+      gpu.push({ m: closeMesh(style), q, t: at, k: 1, h: { rgb, sw: swing, t: time } });
       return;
     }
+    const c = closeOf(style);
     let w = out.length;
     const d = room(out, c.length);
     for (let i = 0; i < c.length; i += 10, w += 10) {

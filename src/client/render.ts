@@ -48,6 +48,7 @@ import { CHANNELS } from './features';
 import { PLATE, VERT as VERT_TEXELS } from './flesh';
 import { OWN, SCRATCHED, prepare } from './armor';
 import { Verts } from './verts';
+import { STYLES, closeMesh } from './hair';
 import { data, filled, stored, used } from './store';
 import type { Pieces } from './store';
 import type { Out } from './verts';
@@ -744,6 +745,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   // would their armour's recipes (a quarter of a second close up).
   const dressed = (build = 0) => [0, 1, 3].forEach(lod => prepare(body(lod, build), lod > 2));
   dressed();
+  // Her close hair, every style (half a second for the five): a style can come with a player who
+  // joins or change in the menu mid-match, and the store's buffer grows now, not in a frame.
+  for (let s = 0; s < STYLES; s++) {
+    closeMesh(s);
+  }
   /** Each rover's wheels: the angle they have rolled to, and where the rover was last frame. */
   const spins: number[] = [];
   const was: [number, number][] = [];

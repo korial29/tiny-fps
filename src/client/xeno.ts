@@ -549,7 +549,7 @@ export const pipes = (out: Out, s: Solved, lod: number) => {
 
 /**
  * Curved horns out of its back (the user, 2026-11-15): a pair on a joint, each from beside the spine
- * out to the side and back, curling up, `len` long and `r` thick at its root, at `base` (the right
+ * straight out of the back (near square to it), a little to the side, curling up at the end, `len` long and `r` thick at its root, at `base` (the right
  * one) in the joint's frame.
  */
 export const horns = (
@@ -565,9 +565,9 @@ export const horns = (
     const pts = Array.from({ length: 7 }, (_, i): Vec3 => {
       const t = i / 6;
       return [
-        s * (base[0] + len * 0.62 * t),
-        base[1] + len * (0.12 * t + 0.6 * t * t),
-        base[2] + len * (0.78 * t - 0.28 * t * t),
+        s * (base[0] + len * 0.28 * t),
+        base[1] + len * (0.04 * t + 0.32 * t * t),
+        base[2] + len * (0.96 * t - 0.12 * t * t),
       ];
     });
     strand(

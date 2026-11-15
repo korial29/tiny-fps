@@ -296,6 +296,9 @@ const make = (style: number, fine: boolean, dense = false): Float32Array => {
   const cap = scalp(0, TOP - 0.002, off(0, 0));
   grid.unshift(grid[0].map(() => [0, cap[1] + 0.001, 0.012, 0, 0, 0, 0.95, 0]));
   sheet(out, grid, true, [0, 1.7, 0.005]);
+  if (dense) {
+    SHELL.set(style, out.length);
+  }
   const back = (y: number, o: number) => scalp(Math.PI, y, o);
   const sides = fine ? 10 : 6;
   if (style == STYLE.PONYTAIL) {
@@ -438,22 +441,27 @@ const makeCards = (style: number) => {
   // [cards, depth in the shell's offset, lift (m), half width (m), how light, id base, moving share, fray]
   // Thin bands in successive layers, the deepest dark and still, each one out lighter and freer.
   const LAYERS: number[][] = [
-    [300, 0.55, 0.0006, 0.006, 0.42, 0, 0, 0.01],
-    [300, 0.75, 0.0012, 0.005, 0.58, 100, 0, 0.03],
-    [300, 0.9, 0.002, 0.0045, 0.75, 100, 0.25, 0.05],
-    [260, 1, 0.003, 0.004, 0.9, 100, 0.35, 0.07],
-    [80, 1.05, 0.006, 0.002, 1.05, 200, 1, 0.14],
+    [300, 0.55, 0.0006, 0.006, 0.5, 0, 0, 0.01],
+    [300, 0.75, 0.0012, 0.005, 0.68, 100, 0, 0.03],
+    [300, 0.9, 0.002, 0.0045, 0.82, 100, 0.25, 0.05],
+    [260, 1, 0.003, 0.004, 0.95, 100, 0.35, 0.14],
+    // Flyaways, many and long: they leave the outline, so it is no block.
+    [120, 1.05, 0.004, 0.002, 0.9, 200, 1, 0.14],
   ];
   for (const [count, depth, lift, half, light, base, moving, fray] of LAYERS) {
     for (let c = 0; c < count; c++) {
       const a0 = -Math.PI + 2 * Math.PI * rnd();
       const t0 = base ? 0.3 * rnd() ** 2 : 0.08 * rnd();
       const up = lift * (0.6 + 0.8 * rnd());
-      const drift = (rnd() - 0.5) * (base == 200 ? 0.6 : 0.3);
+      const drift = (rnd() - 0.5) * (base == 200 ? 0.2 : 0.3);
       const hw = half * (0.7 + 0.6 * rnd());
-      const past = Math.abs(a0) > 1.15 || loose(a0) ? fray * (0.3 + rnd()) : 0;
+      // Past the edge: at the back and sides, and all round a loose style; never over the face.
+      const past = (Math.abs(a0) > 1.15 || loose(a0) ? 1 : 0) * fray * (0.3 + rnd());
       const give = (rnd() < moving ? 1 : moving ? 0.08 : 0) * (loose(a0) ? 1 : 0.35);
       const lit = light * (0.85 + 0.3 * rnd());
+      if (base == 200 && Math.abs(a0) < 0.9 && !loose(a0)) {
+        continue;
+      }
       const pts: number[][] = [];
       for (let k = 0; k <= SEG; k++) {
         const u = k / SEG;
@@ -461,11 +469,15 @@ const makeCards = (style: number) => {
         const tt = Math.min(t, 1);
         const a = a0 + drift * u + 0.02 * Math.sin(u * 5 + c);
         const ridge = Math.abs(Math.sin(a * LOCKS + 1.3 * Math.sin(tt * 3.2 + style)));
-        const y = Math.max(top + (low(a) - top) * tt ** 0.85, LOWEST + 0.007);
+        // The loose ends' tips, as the shell cuts them: a lock's ridge reaches lower.
+        const tip = 0.016 * ridge ** 2 * loose(a);
+        const y = Math.max(top + (low(a) - tip - top) * tt ** 0.85, LOWEST + 0.007);
         // A clump's root starts under the base and rises out of it: no row of cut ends on the crown.
         const o =
           (off(a, tt) + 0.0065 * (ridge ** 0.7 - 0.6) * (0.25 + 0.75 * tt)) * depth +
-          up * (base ? Math.min(1, u * 5) : 1) -
+          up * (base ? Math.min(1, u * 5) : 1) +
+          // A flyaway arches off the head toward its tip.
+          (base == 200 ? 0.008 * u * u : base == 100 && moving > 0.3 ? 0.002 * u * u : 0) -
           (base ? 0.002 * Math.max(1 - u * 5, 0) : 0);
         const p = scalp(a, y, o);
         const n = scalp(a, y, o + 0.01).map((v, i) => (v - p[i]) / 0.01);
@@ -503,8 +515,8 @@ const makeCards = (style: number) => {
     };
     const steps = (n - 1) * 6;
     for (const [count, depth, half, light2, base] of [
-      [16, 0.55, 1.3, 0.5, 0],
-      [30, 0.8, 0.9, 0.75, 100],
+      [16, 0.55, 1.3, 0.6, 0],
+      [30, 0.8, 0.9, 0.85, 100],
       [44, 1, 0.75, 1, 100],
     ]) {
       for (let c = 0; c < count; c++) {
@@ -538,7 +550,7 @@ const makeCards = (style: number) => {
             t ** 1.5 / 0.6,
           ]);
         }
-        ribbon(pts, base + (c % 100));
+        ribbon(pts, base + (c % (base == 200 ? 80 : 100)));
       }
     }
   }
@@ -556,6 +568,8 @@ export const cardsOf = (style: number) => {
 
 /** The locks make() lays, while it runs for makeCards(). */
 let LAID: { path: number[][]; wide: number; plait: number; light: number }[] | undefined;
+/** How many vertices the dense shell of each style has before its locks (make()). */
+const SHELL = new Map<number, number>();
 const made = new Map<number, Float32Array>();
 /** The style's rest mesh (make()), built once per style and fineness. */
 export const tress = (style: number, fine: boolean) => {
@@ -597,10 +611,16 @@ export const closeOf = (style: number) => {
     const { low } = SHELLS[style];
     const top = TOP - 0.012;
     // How far down to the hem; only a loose style's frays, a pulled one ends on the hairline.
-    const hem = (x: number, y: number, z: number) => {
+    // Not a lock's (its vertices come after the shell's): it hangs past the hem, whole.
+    const hem = (x: number, y: number, z: number, i: number) => {
+      if (i >= (SHELL.get(style) ?? 0) * 8) {
+        return 0;
+      }
       const a = Math.atan2(x, 0.005 - z);
       const free = style == STYLE.BOB ? 1 : style == STYLE.UNDERCUT ? +(a > 0.3) : 0;
-      return free * clamp((top - y) / Math.max(top - low(a), 0.01));
+      // Down to the tips the shell cuts, not its line: the zigzag stays.
+      const tip = 0.016 * Math.sin(a * LOCKS + 1.3 * Math.sin(3.2 + style)) ** 2;
+      return free * clamp((top - y) / Math.max(top - low(a) + tip, 0.01));
     };
     const o = bindOf(0)[J.HEAD];
     const out: number[] = [];
@@ -612,11 +632,11 @@ export const closeOf = (style: number) => {
         m[i + 3],
         m[i + 4],
         m[i + 5],
-        m[i + 6] * 0.42,
+        m[i + 6] * 0.6,
         m[i + 7] ** 1.5 / 0.6,
         HAIR_ROOT - HAIR_SPAN * clamp((TOP - m[i + 1]) / 0.3),
         // Below -1: the underlayer, and how far down to its hem (the shader dissolves its edge).
-        -1 - hem(m[i], m[i + 1], m[i + 2]),
+        -1 - hem(m[i], m[i + 1], m[i + 2], i),
       );
     }
     for (let i = 0; i < c.length; i += 10) {

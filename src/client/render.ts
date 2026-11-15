@@ -362,14 +362,14 @@ if(kh>0.){for(int i=-3;i<=3;i++){vec3 q=P+T*float(i)*.011;st+=vn3(q*650.);st2+=v
 st=clamp(.5+(st/7.-.5)*1.7,0.,1.);st2=clamp(.5+(st2/7.-.5)*2.6,0.,1.);
 float hf=1.-smoothstep(.4,1.,hp*650.);st=mix(.5,st,hf);st2=mix(.5,st2,1.-smoothstep(.4,1.,hp*200.));
 c*=.9+.16*st+.16*(st2-.5);
-if(Wa<-.5&&Rp.y>.5)ah=1.-smoothstep(.9,1.,Rp.x+.12*(st-.5));}
+if(Wa<-.5&&Rp.y>.5)ah=1.-smoothstep(.94,1.,Rp.x+.08*(st-.5));}
 float kc=step(-1.3895,L)*step(L,-1.3595),ac=1.,kx=max(kh,kc);
 if(kc>0.){float cu=(${CARD_BASE}-L)*${(1 / CARD_STEP).toFixed(1)},ci=floor(cu),uu=(cu-ci-.02)/.96,kd=step(100.,ci)+step(200.,ci),x=uu*(kd<.5?10.:kd<1.5?7.:2.),ix=floor(x);
 T=nz(cross(T,n));vec3 hq=hs(vec3(ci,ix,7.));
-float d=abs(fract(x)-.5)*2.,wd=kd<.5?.5+.35*hq.x:kd<1.5?.2+.4*hq.x:.15+.2*hq.x,fw=max(fwidth(x)*2.,1e-3);
+float d=abs(fract(x)-.5)*2.,wd=kd<.5?.65+.3*hq.x:kd<1.5?.2+.4*hq.x:.3+.3*hq.x,fw=max(fwidth(x)*2.,1e-3);
 float vh=step(Wa,-.5),al=Rp.x,ln=1.-(kd<.5?.08:.2)*hs(vec3(ci,ix,3.)).x;wd*=1.-.8*vh*smoothstep(ln-.3,ln,al);
-ac=clamp((wd-d)/fw+.5,0.,1.)*min(1.,wd/fw)*(kd<.5?1.:step(.12,hq.y))*(kd<.5?.98:.92);
-ac*=max(1.-vh*(smoothstep(ln-.03,ln,al)+step(1.5,kd)*(1.-smoothstep(0.,.1,al))),0.);c*=mix(1.,.7+.3*sin(3.1416*uu),step(.5,kd));
+ac=clamp((wd-d)/fw+.5,0.,1.)*min(1.,max(wd/fw,kd>1.5?.45:0.))*(kd<.5?1.:step(.12,hq.y))*(kd<.5?.98:.92);
+ac*=max(1.-vh*(smoothstep(ln-.03,ln,al)+step(1.5,kd)*(1.-smoothstep(0.,.1,al))),0.);c*=mix(1.,.84+.16*sin(3.1416*uu),step(.5,kd));
 c*=.8+.4*hq.z;st=hq.z;st2=hq.y;}
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);

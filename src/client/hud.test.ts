@@ -7,7 +7,15 @@ import { BODY, FLAG, HAIRS_N, TONES_N } from '../shared/types';
 import { ROLE } from '../shared/kit';
 import { TONES } from './features';
 import type { FlagState } from '../shared/types';
-import { ARMOR_MAX, GUN_MAG, HP_MAX, RIFLE_CLIP, RULES, VEHICLE } from '../shared/constants';
+import {
+  ARMOR_MAX,
+  GUN_MAG,
+  HP_MAX,
+  RIFLE_CLIP,
+  RULES,
+  VEHICLE,
+  XENO_HP,
+} from '../shared/constants';
 import { ROVER } from '../shared/rover';
 import { MODE, NOBODY } from '../shared/types';
 import type { Rover } from '../shared/types';
@@ -164,13 +172,13 @@ describe('createHud', () => {
       expect(lit('Body')).toEqual([false, true]);
       expect(lit('Skin')).toEqual([false, false, true, false, false, false]);
       expect(lit('Hair')).toEqual([false, false, false, true, false]);
-      expect(group('Class').map(b => b.disabled)).toEqual([false, false, true]);
+      expect(group('Class').map(b => b.disabled)).toEqual([false, false, true, true]);
       group('Class')[ROLE.ASTRONAUT].click();
       expect(pick).not.toHaveBeenCalled();
       // On the moon: the astronaut alone.
       hud.wear(BODY.MALE, { role: ROLE.ASTRONAUT }, [ROLE.ASTRONAUT]);
-      expect(group('Class').map(b => b.disabled)).toEqual([true, true, false]);
-      expect(lit('Class')).toEqual([false, false, true]);
+      expect(group('Class').map(b => b.disabled)).toEqual([true, true, false, true]);
+      expect(lit('Class')).toEqual([false, false, true, false]);
       expect(group('Hair').map(b => b.textContent)).toEqual(HAIR_NAMES[BODY.MALE]);
     });
 
@@ -725,6 +733,16 @@ describe('the gun on the HUD', () => {
     expect(pips()).toEqual(pips().map((_, i) => i < 3));
     hud.vitals(0, -1);
     expect(pips()).toEqual(Array(HP_MAX).fill(false));
+  });
+
+  it('shows as many pips as the class has health, the xenomorph’s XENO_HP, before the armour’s', () => {
+    hud.life(XENO_HP);
+    expect(pips()).toHaveLength(XENO_HP);
+    hud.vitals(10, -1);
+    expect(pips()).toEqual(pips().map((_, i) => i < 10));
+    expect(screen.querySelector('ul')!.lastElementChild!.classList.contains('a')).toBe(true);
+    hud.life(HP_MAX);
+    expect(pips()).toHaveLength(HP_MAX);
   });
 
   it('shows the armour as ARMOR_MAX gold pips after the health, the empty ones hidden', () => {

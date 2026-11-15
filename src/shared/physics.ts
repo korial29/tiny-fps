@@ -79,6 +79,15 @@ import {
   SHOCK_TICKS,
   FALL_HP,
   FALL_SAFE,
+  CLING_FACING,
+  CLING_HOLD,
+  CLING_LEAP,
+  CLING_SPEED,
+  POUNCE_COOL,
+  POUNCE_HOLD,
+  POUNCE_MAX,
+  POUNCE_MIN,
+  POUNCE_PITCH,
 } from './constants';
 import { bound, ground } from './relief';
 import { EV, KEY, LIMB, MODE, SIDE } from './types';
@@ -607,6 +616,7 @@ export const stumble = (
     p.mode === MODE.HANG ||
     p.mode === MODE.CLIMB ||
     p.mode === MODE.WALLRUN ||
+    p.mode === MODE.CLING ||
     p.mode === MODE.RIDE
   ) {
     enter(p, MODE.AIR);
@@ -874,6 +884,153 @@ const startRun = (p: PlayerState, w: World, c: Ctl): void => {
   }
 };
 
+interface Hold {
+  /** The gap between the cylinder and the wall. */
+  gap: number;
+  /** The highest top of the wall, and where its face is on the side's axis. */
+  top: number;
+  face: number;
+}
+
+/**
+ * The wall on `side` the xenomorph can hold: faces within WALL_REACH that rise CLING_HOLD over its
+ * feet and start under its head; undefined when there is none.
+ */
+const holdAt = (p: Pos, w: World, side: number): Hold | undefined => {
+  const { a, sign } = along(p, side);
+  let best: Hold | undefined;
+  for (const i of near(w, p.x, p.z, PLAYER_R + WALL_REACH)) {
+    const b = w.def.brushes[i];
+    const d = faceDist(b, p, side, WALL_REACH);
+    if (d !== undefined && b.max[1] > p.y + CLING_HOLD && b.min[1] < p.y + PLAYER_H) {
+      const gap = Math.max(0, d - PLAYER_R);
+      best = {
+        gap: Math.min(best?.gap ?? Infinity, gap),
+        top: Math.max(best?.top ?? -Infinity, b.max[1]),
+        face: sign > 0 ? b.min[a] : b.max[a],
+      };
+    }
+  }
+  return best;
+};
+
+/**
+ * The xenomorph takes hold of a wall it faces with forward held: in the air within WALL_REACH, on
+ * a floor touching it, a wall from the knees to the head (wallGap). Not the side it just kicked off.
+ */
+const clingTo = (p: PlayerState, w: World, c: Ctl): boolean => {
+  if (!c.kit.xeno || !c.fwd || c.stumble) {
+    return false;
+  }
+  const reach = p.mode === MODE.AIR ? WALL_REACH : 0.05;
+  for (let side = 1; side <= 4; side++) {
+    const [nx, nz] = TOWARD[side];
+    const gap = wallGap(p, w, side);
+    if (
+      side !== p.wall &&
+      c.fx * nx + c.fz * nz >= CLING_FACING &&
+      gap !== undefined &&
+      gap <= reach
+    ) {
+      enter(p, MODE.CLING);
+      p.wall = side;
+      p.vx = p.vy = p.vz = 0;
+      p.jumps = AIR_JUMPS;
+      p.coyote = 0;
+      p.ev |= EV.GRAB;
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * On a wall: forward climbs and back goes down, the side keys go along it (as the look sees it);
+ * crouch lets go; a jump kicks off it, straight back when looking at it, else along the look. At a
+ * top under the head, climbing pulls it up onto the top (MODE.CLIMB); down on a floor, it stands.
+ */
+const cling = (p: PlayerState, w: World, c: Ctl): void => {
+  const [nx, nz] = TOWARD[p.wall];
+  const hold = holdAt(p, w, p.wall);
+  if (c.keys & KEY.CROUCH || !hold) {
+    enter(p, MODE.AIR);
+    p.coyote = 0;
+    return;
+  }
+  if (c.jump) {
+    enter(p, MODE.AIR);
+    if (c.fx * nx + c.fz * nz > 0.3) {
+      p.vx = -nx * WALL_KICK_SPEED;
+      p.vz = -nz * WALL_KICK_SPEED;
+      leap(p, WALL_KICK_UP);
+    } else {
+      const cp = Math.cos(p.pitch);
+      p.vx = c.fx * cp * CLING_LEAP;
+      p.vz = c.fz * cp * CLING_LEAP;
+      leap(p, Math.max(Math.sin(p.pitch) * CLING_LEAP, WALL_KICK_UP / 2));
+    }
+    return;
+  }
+  const up = (c.keys & KEY.FORWARD ? 1 : 0) - (c.keys & KEY.BACK ? 1 : 0);
+  const s = (c.keys & KEY.RIGHT ? 1 : 0) - (c.keys & KEY.LEFT ? 1 : 0);
+  // Along the wall to the right of one facing it, turned when the look is turned away from it.
+  const [tx, tz] = [-nz, nx];
+  const k = (tx * -c.fz + tz * c.fx >= 0 ? s : -s) * CLING_SPEED;
+  const { a, sign } = along(p, p.wall);
+  if (up > 0 && hold.top < p.y + PLAYER_H) {
+    // The top is under the head: up onto it, when there is room to stand there.
+    const land = hold.face + sign * CLIMB_INSET;
+    const [lx, lz] = a === 0 ? [land, p.z] : [p.x, land];
+    if (clear(w, lx, lz, hold.top + SKIN, hold.top + PLAYER_H)) {
+      enter(p, MODE.CLIMB);
+      p.edge = f32(hold.top);
+      p.vx = p.vy = p.vz = 0;
+      return;
+    }
+  }
+  p.vx = tx * k;
+  p.vz = tz * k;
+  p.vy = up > 0 && hold.top - p.y <= CLING_HOLD + 0.05 ? 0 : up * CLING_SPEED;
+  const pull = Math.min(hold.gap, WALL_PULL * DT);
+  p.x += nx * pull;
+  p.z += nz * pull;
+  if (fly(p, w, PLAYER_H, 0, false, c.bodies) >= 0 && up < 0) {
+    enter(p, MODE.GROUND);
+    p.wall = SIDE.NONE;
+    p.coyote = COYOTE_TICKS;
+    p.ev |= EV.LAND;
+  }
+};
+
+/**
+ * The xenomorph's dash: DASH held on a floor or a wall, with the dash timer run out, charges a
+ * pounce (`charge`); let go, it leaps along the look, at least POUNCE_PITCH up, faster the longer
+ * the charge. Anywhere else, or stumbling, the charge is lost.
+ */
+const pounce = (p: PlayerState, c: Ctl): void => {
+  const ready = !c.stumble && p.dash === 0 && (onFloor(p.mode) || p.mode === MODE.CLING);
+  if (ready && c.keys & KEY.DASH) {
+    p.charge = Math.min((p.charge ?? 0) + 1, POUNCE_HOLD);
+    return;
+  }
+  if (ready && p.charge) {
+    const v = POUNCE_MIN + ((POUNCE_MAX - POUNCE_MIN) * p.charge) / POUNCE_HOLD;
+    const pitch = Math.max(p.pitch, POUNCE_PITCH);
+    const cp = Math.cos(pitch);
+    if (p.mode !== MODE.CLING) {
+      p.wall = SIDE.NONE;
+    }
+    p.ev |= p.mode === MODE.SLIDE ? EV.SLIDE_END : 0;
+    enter(p, MODE.AIR);
+    p.vx = c.fx * cp * v;
+    p.vz = c.fz * cp * v;
+    leap(p, Math.sin(pitch) * v);
+    p.dash = POUNCE_COOL;
+    p.ev |= EV.DASH;
+  }
+  p.charge = 0;
+};
+
 /** Takes hold of a ledge: hang there. */
 const grab = (p: PlayerState, l: Ledge, dashes: number): void => {
   enter(p, MODE.HANG);
@@ -903,6 +1060,7 @@ const free = (p: PlayerState, w: World, c: Ctl): void => {
     p.dashes = c.kit.dashes;
   }
   if (
+    !c.kit.xeno &&
     c.dash &&
     (p.dash === 0 || (chain && p.dashes > 0 && p.dash <= DASH_COOLDOWN - DASH_GAP)) &&
     (ground
@@ -962,6 +1120,9 @@ const free = (p: PlayerState, w: World, c: Ctl): void => {
     // Walked off an edge: the coyote window stays open.
     p.ev |= p.mode === MODE.SLIDE ? EV.SLIDE_END : 0;
     enter(p, MODE.AIR);
+  }
+  if ((p.mode === MODE.AIR || p.mode === MODE.GROUND) && clingTo(p, w, c)) {
+    return;
   }
   if (p.mode === MODE.AIR) {
     const ledge = ledgeAt(p, w);
@@ -1105,12 +1266,18 @@ export const move = (
     }
   }
 
+  if (kit.xeno && p.mode !== MODE.HANG && p.mode !== MODE.CLIMB && !riding) {
+    pounce(p, c);
+  }
   if (p.mode === MODE.HANG) {
     hang(p, w, c);
   }
+  if (p.mode === MODE.CLING) {
+    cling(p, w, c);
+  }
   if (p.mode === MODE.CLIMB) {
     climb(p, w);
-  } else if (p.mode !== MODE.HANG && !riding) {
+  } else if (p.mode !== MODE.HANG && p.mode !== MODE.CLING && !riding) {
     free(p, w, c);
   }
 

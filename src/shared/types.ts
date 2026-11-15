@@ -124,6 +124,8 @@ export const MODE = {
   CROUCH: 6,
   /** Seated in a rover (rover.ts): the body follows the seat, move() leaves it there. */
   RIDE: 7,
+  /** The xenomorph on a wall (`wall` the side): it climbs, goes down and along it with no gravity. */
+  CLING: 8,
 } as const;
 
 /**

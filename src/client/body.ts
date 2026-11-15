@@ -78,6 +78,7 @@ import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin }
 import type { Pose, Quat } from './rig';
 import { armor } from './armor';
 import { CUFF, CUFF_NEAR, CUFF_SIDES, REGION, body, palette, skin } from './skin';
+import { CHITIN } from './features';
 import { CLOTH } from './mask';
 import { createTrail } from './trail';
 import { room } from './verts';
@@ -107,7 +108,7 @@ export interface Body {
   /** Appends the body's vertices (see STRIDE) in the jacket `color`; nothing when pose() has none. */
   draw(out: Out, eye: Vec3, yaw: number, pitch: number, roll?: number, color?: number[]): void;
   /** The own player's character (BUILD in rig.ts, PlayerInfo.body): the woman's arms are slimmer and her hands smaller, on the same grips; `tone` the skin he picked (the default's when absent). */
-  wear(build: number, tone?: number[], ninja?: boolean): void;
+  wear(build: number, tone?: number[], ninja?: boolean, xeno?: boolean): void;
 }
 
 /** Metres the camera may be from the eye of the body and still show it: the bob is centimetres, a crouch's ease under a metre. */
@@ -1134,6 +1135,8 @@ export const createBody = (world?: World): Body => {
   let tone: number[] | undefined;
   /** The ninja's black suit, with no armour (soldier.ts). */
   let ninja = false;
+  /** The xenomorph's stand-in: the black suit, no armour, its skin dark chitin (soldier.ts). */
+  let xeno = false;
   /** The own player as last seen. */
   let me: PlayerState | undefined;
   const w = {
@@ -1772,8 +1775,8 @@ export const createBody = (world?: World): Body => {
     },
     update,
     pose,
-    wear(b, t, n = false) {
-      [tone, ninja] = [t, n];
+    wear(b, t, n = false, x = false) {
+      [tone, ninja, xeno] = [x ? CHITIN : t, n, x];
       if (b != build) {
         // Her own skeleton: a gait of its own, in the pose of the player at once.
         [build, gait] = [b, createGait(0, b)];
@@ -1787,10 +1790,10 @@ export const createBody = (world?: World): Body => {
       if (s) {
         // An armoured suit (see palette()): its gloves cover the fingers too; white armour in space,
         // else in the team's colour.
-        const suit = !!world?.def.armor && !ninja;
+        const suit = !!world?.def.armor && !ninja && !xeno;
         const plate = world?.def.helmets ? undefined : color;
-        const colors = palette(ninja ? CLOTH : color, undefined, undefined, suit, tone);
-        if (ninja) {
+        const colors = palette(ninja || xeno ? CLOTH : color, undefined, undefined, suit, tone);
+        if (ninja || xeno) {
           const { PANTS, UPPER, GLOVE, BELT } = REGION;
           // His belt is cut in a V by armor(), as on the others (soldier.ts).
           [colors[PANTS], colors[UPPER], colors[GLOVE], colors[BELT]] = [
@@ -1803,7 +1806,7 @@ export const createBody = (world?: World): Body => {
         const from = out.length;
         skin(out, body(2, build), s, colors);
         // The ninja's own plates in his team's colour (soldier.ts).
-        if (world?.def.armor || ninja) {
+        if ((world?.def.armor && !xeno) || ninja) {
           armor(out, from, body(2, build), true, plate, ninja, color, !world?.def.armor);
         }
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);

@@ -4,11 +4,11 @@ import {
   ARC_KNOCK,
   ARMOR_BACK,
   ARMOR_MAX,
+  BLOW,
   CUTS,
   DOWN_TICKS,
   FLOOR_TICKS,
   HEAVY,
-  HP_MAX,
   INPUT_BURST,
   LOCK_BREAK,
   LOCK_HP,
@@ -35,6 +35,11 @@ import {
   SHOCK_TICKS,
   STUMBLE_KNOCK,
   STUMBLE_TICKS,
+  ACID_HP,
+  POUNCE_COOL,
+  POUNCE_FLY,
+  POUNCE_HP,
+  POUNCE_STUN,
   SNAP_EVERY,
   TACKLE_COOLDOWN,
   TEAM_COLOR,
@@ -49,7 +54,7 @@ import {
 import { CHEST, crossing, knock, limbOf, strike, swingOf } from './blade';
 import { Bot } from './bot';
 import { Ctf } from './ctf';
-import { kitOf } from './kit';
+import { KITS, kitOf } from './kit';
 import { shut, swing } from './doors';
 import { STRIKE, felled, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
@@ -85,7 +90,7 @@ import type { Sight } from './rover';
 import { SHIP } from './ship';
 import type { Errand } from './sortie';
 import { PHASE, STATION, Station, inside, reaches as atPost } from './station';
-import { reaches, tackling } from './tackle';
+import { pouncing, reaches, tackling } from './tackle';
 import { BODY, CUT, EV, FALL, HAIRS_N, KEY, LIMB, MODE, NOBODY, TONES_N } from './types';
 import type { Choice, Conn, Every, Input, PlayerInfo, PlayerState, Rover, Rules } from './types';
 import { build, hidden, ray } from './world';
@@ -166,7 +171,7 @@ export const chosen = (m: Record<string, unknown>): Choice => {
   const [tone, hair, role] = [
     index(m.tone, TONES_N),
     index(m.hair, HAIRS_N[body ?? 0]),
-    index(m.role, 3),
+    index(m.role, KITS.length),
   ];
   return {
     ...(body !== undefined ? { body } : {}),
@@ -668,6 +673,10 @@ export class Room {
    */
   private tackle(p: Player, view: number | undefined): void {
     const me = p.state;
+    if (!me.down && pouncing(me) && this.kit(p).xeno) {
+      this.pin(p, view);
+      return;
+    }
     if (me.down || !tackling(me) || this.ticks - p.tackled < TACKLE_COOLDOWN) {
       return;
     }
@@ -688,6 +697,47 @@ export class Room {
     foe.state.zap = false;
     foe.by = p.info.id;
     p.tackled = this.ticks;
+  }
+
+  /**
+   * A xenomorph's pounce `p` meets an enemy who is up, where `p` drew him: he is pinned, POUNCE_HP
+   * of health, his flag dropped and a stumble of POUNCE_STUN thrown the way it leapt. The pounce
+   * ends on him: it stops, its dash timer past the strike.
+   */
+  private pin(p: Player, view: number | undefined): void {
+    const me = p.state;
+    const seen = this.enemies(p, view).find(s => reaches(me, s));
+    const foe = this.players().find(q => q.info.id === seen?.id);
+    if (!foe) {
+      return;
+    }
+    const v = speedOf(me);
+    const [dx, dz] = v > 1e-3 ? [me.vx / v, me.vz / v] : forward(me.yaw);
+    me.dash = Math.min(me.dash, POUNCE_COOL - POUNCE_FLY);
+    [me.vx, me.vz] = [me.vx * 0.2, me.vz * 0.2];
+    me.hits = (me.hits + 1) & 255;
+    if (this.harm(foe, POUNCE_HP, p, FRAG.CLAW, felled(FALL.STRUCK, dx, dz))) {
+      return;
+    }
+    this.drop(foe.info.id);
+    stumble(foe.state, dx, dz, POUNCE_STUN);
+    foe.state.zap = false;
+    foe.by = p.info.id;
+  }
+
+  /** The class `p` plays on this map (kit.ts). */
+  private kit(p: Player) {
+    return kitOf(p.info.role, this.world.def);
+  }
+
+  /**
+   * An enemy's katana or fists struck the xenomorph `foe`: its acid takes ACID_HP from `by`, unless
+   * he is one too or already down.
+   */
+  private acid(foe: Player, by: Player): void {
+    if (this.kit(foe).xeno && !this.kit(by).xeno && !by.state.down) {
+      this.harm(by, ACID_HP, foe, FRAG.CLAW, felled(FALL.STRUCK, ...forward(foe.state.yaw)));
+    }
   }
 
   /**
@@ -937,6 +987,7 @@ export class Room {
       this.hurt(this.rovers[k], swingOf(p.state).hp, p.info.id, p.info.team);
     }
     for (const foe of foes) {
+      this.acid(foe, p);
       const drawn = seen.find(s => s.id === foe.info.id)!;
       if (
         this.harm(foe, swingOf(p.state).hp, p, FRAG.BLADE, felled(FALL.STRUCK, ...knock(p.state)))
@@ -967,15 +1018,21 @@ export class Room {
       return;
     }
     p.state.hits = (p.state.hits + 1) & 255;
+    // The xenomorph's claws and tail: their own frag, and only the tail's knock stuns.
+    const xeno = (p.state.cut ?? 0) >= BLOW.CLAW_L;
     for (const foe of foes) {
+      this.acid(foe, p);
       const fresh = this.ticks - (foe.punched ?? -Infinity) <= PUNCH_MEMORY;
-      foe.blows = (fresh ? (foe.blows ?? 0) : 0) + 1;
+      foe.blows = xeno ? 0 : (fresh ? (foe.blows ?? 0) : 0) + 1;
       foe.punched = this.ticks;
       if (!blow.hp) {
         foe.bruise = ((foe.bruise ?? 0) + 1) % PUNCH_HITS;
       }
       const fell = felled(FALL.STRUCK, ...forward(p.state.yaw));
-      if ((blow.hp || !foe.bruise) && this.harm(foe, 1, p, FRAG.FIST, fell)) {
+      if (
+        (blow.hp || !foe.bruise) &&
+        this.harm(foe, blow.hp || 1, p, xeno ? FRAG.CLAW : FRAG.FIST, fell)
+      ) {
         continue;
       }
       if (blow.knock || foe.blows >= PUNCH_STUN) {
@@ -1105,10 +1162,10 @@ export class Room {
       const wants = ({ state: q, info }: Player) => {
         const kit = kitOf(info.role, this.world.def);
         return [
-          q.hp < HP_MAX,
+          q.hp < kit.hp,
           (q.ammo >= 0 && q.ammo < kit.ammo) || ((q.rifle ?? -1) >= 0 && q.rifle! < kit.rifle),
           (q.rail ?? -1) >= 0 && q.rail! < kit.rail,
-          (q.armor ?? 0) < ARMOR_MAX,
+          kit.gear && (q.armor ?? 0) < ARMOR_MAX,
         ][kind];
       };
       const p = players.find(o => !o.state.down && wants(o) && within(o.state, at, PACK_R));
@@ -1116,7 +1173,7 @@ export class Room {
         const q = p.state;
         const kit = kitOf(p.info.role, this.world.def);
         if (kind == 0) {
-          q.hp = Math.min(HP_MAX, q.hp + PACK_HP);
+          q.hp = Math.min(kit.hp, q.hp + PACK_HP);
         } else if (kind == 1) {
           // It fills the gun and the laser rifle, whichever he has.
           q.ammo = q.ammo < 0 ? -1 : Math.min(kit.ammo, q.ammo + AMMO_PACK);
@@ -1278,6 +1335,7 @@ export class Room {
     for (const p of this.players()) {
       if (this.seatOf(p)[0] === r) {
         respawn(p.state, this.world, p.info.team);
+        p.state.hp = this.kit(p).hp;
         this.ctf.moved(p.state);
       }
     }
@@ -1549,7 +1607,7 @@ export class Room {
     shut(this.world);
     for (const p of players) {
       const { shots, hits } = p.state;
-      p.state = { ...this.place(p.info.id, p.info.team, put), shots, hits };
+      p.state = { ...this.place(p.info.id, p.info.team, put), shots, hits, hp: this.kit(p).hp };
       put.push(p.state);
       this.ctf.place(p.info.id, p.state);
     }
@@ -1734,11 +1792,14 @@ export class Room {
         ...chosen(picked),
         ...(bot ? { bot } : {}),
       },
-      state: this.place(
-        id,
-        team,
-        players.map(p => p.state),
-      ),
+      state: {
+        ...this.place(
+          id,
+          team,
+          players.map(p => p.state),
+        ),
+        hp: kitOf(chosen(picked).role, this.world.def).hp,
+      },
       since: this.joins++,
       bank: INPUT_BURST,
       ack: 0xffff,

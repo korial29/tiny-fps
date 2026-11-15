@@ -210,7 +210,8 @@ describe('prediction against the room', () => {
     const pred = createPredictor(map);
     pred.you(team, team, role);
     const kit = kitOf(role, def);
-    const ref: PlayerState = spawn(team, world, 0, team);
+    // As the room puts him in: with his class's health.
+    const ref: PlayerState = { ...spawn(team, world, 0, team), hp: kit.hp };
     const inputs: { at: number; data: ArrayBuffer }[] = [];
     const snaps: { at: number; data: ArrayBuffer }[] = [];
     let seen = 0;
@@ -400,10 +401,10 @@ describe('prediction against the room', () => {
   })();
 
   it('flies a course that uses every move: a guard, so the run below is not a trivial one', () => {
-    // Every mode a runner gets into on foot: RIDE is a rover's seat.
+    // Every mode a runner gets into on foot: RIDE is a rover's seat, CLING the xenomorph's.
     expect([...COURSE.modes].sort()).toEqual(
       Object.values(MODE)
-        .filter(m => m !== MODE.RIDE)
+        .filter(m => m !== MODE.RIDE && m !== MODE.CLING)
         .sort(),
     );
     expect(COURSE.ev).toBe(Object.values(EV).reduce((a, b) => a | b, 0) & ~EV.RESPAWN);
@@ -617,6 +618,56 @@ describe('prediction against the room', () => {
           [],
         ]);
       }
+    }
+  }, 60_000);
+
+  it('agrees with the host exactly for a xenomorph: walls climbed, pounces charged, claws and tail, under every lag', () => {
+    let s = 1337;
+    const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
+    // First up the wall north of the start, and onto the roof above it; then at random.
+    const steps: Omit<Input, 'seq'>[] = Array.from({ length: 300 }, () => ({
+      keys: KEY.FORWARD,
+      yaw: 0,
+      pitch: 0,
+    }));
+    let [keys, yaw, turn, pitch] = [0, 0, 0, 0];
+    for (let k = 0; k < 3000; k++) {
+      if (k % 25 === 0) {
+        keys =
+          (rnd() < 0.8 ? KEY.FORWARD : rnd() < 0.3 ? KEY.BACK : 0) |
+          (rnd() < 0.2 ? KEY.LEFT : rnd() < 0.2 ? KEY.RIGHT : 0) |
+          (rnd() < 0.15 ? KEY.JUMP : 0) |
+          (rnd() < 0.08 ? KEY.CROUCH : 0) |
+          (rnd() < 0.3 ? KEY.DASH : 0) |
+          (rnd() < 0.3 ? KEY.FIRE : 0) |
+          (rnd() < 0.1 ? KEY.SPECIAL : 0);
+        turn = (rnd() - 0.5) * 0.1;
+        pitch = (rnd() - 0.3) * 0.8;
+      }
+      // DASH let go now and then, so the charges end in pounces.
+      const held = k % 25 < 20 ? keys : keys & ~KEY.DASH;
+      yaw += turn;
+      steps.push({ keys: held, yaw: ((yaw % 6.2832) + 6.2832) % 6.2832, pitch });
+    }
+    // The guard: what it did, stepped with no network.
+    const p = spawn(0, world, 0);
+    const [modes, blows] = [new Set<number>(), new Set<number>()];
+    let pounces = 0;
+    steps.forEach((i, k) => {
+      const charged = (p.charge ?? 0) > 0;
+      step(p, onWire({ ...i, seq: k }), world, 0, true, [], kitOf(ROLE.XENO, ROOFTOPS));
+      modes.add(p.mode);
+      pounces += +(charged && !!(p.ev & EV.DASH));
+      if (p.swing) {
+        blows.add(p.cut ?? 0);
+      }
+    });
+    expect([...modes]).toEqual(expect.arrayContaining([MODE.CLING, MODE.CLIMB, MODE.AIR]));
+    expect([...blows].sort()).toEqual([BLOW.CLAW_L, BLOW.CLAW_R, BLOW.TAIL]);
+    expect(pounces).toBeGreaterThan(5);
+    for (const [name, lag] of LAGS) {
+      const r = race(lag, steps, 0, [], [], true, { role: ROLE.XENO });
+      expect([r.worst, r.end, r.final, r.differing], `${name} lag`).toEqual([0, 0, 0, []]);
     }
   }, 60_000);
 

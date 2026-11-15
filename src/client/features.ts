@@ -425,6 +425,9 @@ export const TONES = [
 export const toneOf = (id: number): number[] => TONES[Math.floor(hash(id, 7) * TONES.length)];
 
 /** The skin tone the player picked (`c.tone`, an index of TONES), else his id's. */
+/** The xenomorph's skin on the human runner it is drawn as until it has a body of its own: dark chitin. */
+export const CHITIN = [0.05, 0.055, 0.07];
+
 export const toneFor = (id: number, c?: { tone?: number }): number[] =>
   c?.tone !== undefined ? TONES[c.tone] : toneOf(id);
 

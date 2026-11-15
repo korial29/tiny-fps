@@ -294,6 +294,8 @@ const play = (
   let roster: PlayerInfo[] = [];
   /** What the own player picked, as last told or answered: drawn at once, and sent to the host, whose roster dresses everyone. */
   let picked: Choice & { body: number } = { body: 0 };
+  /** The own class's health at most (Kit.hp), for the face. */
+  let hpMax = HP_MAX;
   const avatar = hud.cast(c => {
     picked = c;
     ws.send(JSON.stringify({ t: 'body', ...c } satisfies ClientText));
@@ -439,6 +441,7 @@ const play = (
         build,
         own?.tone === undefined ? undefined : TONES[own.tone],
         roleOf(own?.role, world.def) == ROLE.NINJA,
+        roleOf(own?.role, world.def) == ROLE.XENO,
       );
       // The title screen shows what his id gives where he has picked nothing: his skin and cut as drawn.
       hud.wear(
@@ -453,6 +456,9 @@ const play = (
       predictor.you(you.id, you.team, own?.role);
       const kit = kitOf(own?.role, world.def);
       hud.magazines([kit.mag, kit.cap, kit.clip]);
+      hud.life(kit.hp);
+      [hpMax, ctl.beast] = [kit.hp, kit.xeno];
+      rd?.vision(kit.xeno);
       // No map to pick in the game's menu (the user, 2026-11-13): it is the join page's choice.
       count.textContent = `Players: ${roster.length}`;
     } else if (m?.t == 'frag') {
@@ -626,7 +632,7 @@ const play = (
       hud.face(
         feel(dt, {
           hp: me.hp,
-          max: HP_MAX,
+          max: hpMax,
           down: me.down > 0,
           flag: carrying,
           lost,

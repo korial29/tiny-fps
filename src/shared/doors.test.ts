@@ -27,12 +27,13 @@ const steps = (w: World, n: number, feet: Vec3[], rovers: Vec3[] = []) => {
 };
 
 describe('doors, the map', () => {
-  it('has three a base on the moon, the dome door and the two airlocks, blue the mirror of red, and none on Highline', () => {
+  it('has three a base on the moon, the dome door and the two airlocks, blue the mirror of red, the station door last, and none on Highline', () => {
     expect(HIGHLINE.doors).toBeUndefined();
     expect(build(HIGHLINE).doors).toBeUndefined();
-    expect(MOON.doors).toHaveLength(6);
+    expect(MOON.doors).toHaveLength(7);
     expect(MOON.doors!.slice(0, 3)).toEqual(DOORS);
-    MOON.doors!.slice(3).forEach((d, i) => {
+    expect(MOON.doors![6].min[1]).toBe(600);
+    MOON.doors!.slice(3, 6).forEach((d, i) => {
       expect(d.min).toEqual([DOORS[i].min[0], 0, ZED - DOORS[i].max[2]]);
       expect(d.max).toEqual([DOORS[i].max[0], DOORS[i].max[1], ZED - DOORS[i].min[2]]);
     });
@@ -42,18 +43,22 @@ describe('doors, the map', () => {
 
   it('stands each in a doorway: no brush in its box, a wall at each end for the panels to slide into', () => {
     for (const { min, max } of MOON.doors!) {
+      // The panels slide along the door's long side, k; j is across it.
+      const k = max[0] - min[0] > max[2] - min[2] ? 0 : 2;
       const meets = (lo: number[], hi: number[]) =>
         MOON.brushes.some(b =>
           [0, 1, 2].every(a => b.min[a] < hi[a] - 1e-6 && b.max[a] > lo[a] + 1e-6),
         );
       expect(meets(min, max)).toBe(false);
-      const w = max[0] - min[0];
+      const w = max[k] - min[k];
+      const j = 2 - k;
       // Half its width further on each side, at mid height: inside a brush.
       for (const s of [-1, 1]) {
-        const x = s < 0 ? min[0] - w / 2 : max[0];
-        expect(meets([x + 0.05, 1, min[2] + 0.05], [x + w / 2 - 0.05, 2, max[2] - 0.05])).toBe(
-          true,
-        );
+        const a = s < 0 ? min[k] - w / 2 : max[k];
+        const lo = [0, min[1] + 1, 0];
+        const hi = [0, min[1] + 2, 0];
+        [lo[k], hi[k], lo[j], hi[j]] = [a + 0.05, a + w / 2 - 0.05, min[j] + 0.05, max[j] - 0.05];
+        expect(meets(lo, hi)).toBe(true);
       }
     }
   });
@@ -235,7 +240,7 @@ describe('doors, the room and the wire', () => {
     room.receive(c, JSON.stringify({ t: 'join', name: 'a' }));
     room.tick();
     room.tick();
-    expect(last(c).doors).toEqual([0, 0, 0, 0, 0, 0]);
+    expect(last(c).doors).toEqual([0, 0, 0, 0, 0, 0, 0]);
     const { state } = inside(room).players()[0];
     Object.assign(state, { x: 80, y: 0, z: Z - 5 });
     for (let k = 0; k < 2 * SNAP_EVERY; k++) {
@@ -243,7 +248,7 @@ describe('doors, the room and the wire', () => {
     }
     const [open, ...rest] = last(c).doors!;
     expect(open).toBeCloseTo(Math.round((15 * 4) / DOOR.OPEN) / 15, 9);
-    expect(rest).toEqual([0, 0, 0, 0, 0]);
+    expect(rest).toEqual([0, 0, 0, 0, 0, 0]);
     // Lying down, he holds no door: it shuts.
     for (let k = 0; k < DOOR.OPEN; k++) {
       room.tick();

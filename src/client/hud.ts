@@ -110,12 +110,15 @@ const [RIM, BLUR] = (() => {
 })();
 
 export const HUD_CSS =
-  `h5,aside,nav,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,samp,cite,q,dfn,tt,h1,h2,ol{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,var,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,samp,cite,q,dfn,tt,h1,h2,ol{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
   `nav span,nav time{font:900 clamp(16px,4.6vw,24px)/1 system-ui,sans-serif;letter-spacing:.03em;white-space:nowrap}nav time{min-width:4.2ch;font-variant-numeric:tabular-nums;font-size:clamp(14px,3.8vw,20px)}` +
   `nav small{font-size:clamp(10px,2.6vw,12px);white-space:nowrap;opacity:.95}nav small:first-of-type{text-align:right}nav small:last-of-type{text-align:left}` +
+  // The orbital station's mission under the score, in amber; urgent, red and blinking.
+  `var{top:66px;left:50%;transform:translateX(-50%);padding:5px 14px;border:1px solid #ffb34780;border-radius:4px;background:#000b;color:#ffb347;font:800 normal clamp(11px,2.6vw,14px)/1.2 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}` +
+  `var.hot{color:#ff5a3c;border-color:#ff5a3c;animation:hot 1s steps(2) infinite}@keyframes hot{50%{border-color:#ff5a3c00}}` +
   // The banner of an event (the user, 2026-11-09: no underline, a nicer design): heavy italic in the
   // team's colour, glowing, on a dark band fading out at both ends, popping in.
   `output{top:18%;left:50%;transform:translateX(-50%);padding:12px 64px;font:900 italic clamp(20px,4.4vw,40px)/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;` +
@@ -428,6 +431,8 @@ export interface Hud {
   match(m: Pick<Snapshot, 'score' | 'clock' | 'over' | 'flags'>, who: (id: number) => string): void;
   /** The markers of this frame (see marks.ts), in the order given; the ones before are removed. */
   marks(list: Mark[]): void;
+  /** The orbital station's mission line (mission.ts), `hot` when urgent; none hides it. */
+  mission(text?: string, hot?: boolean): void;
   /** The dark rim of a space helmet's visor around the screen: on while the own player wears one, off otherwise. */
   visor(on: boolean): void;
   /** The red vignette of a tackle, 0 (none) to 1 (full). */
@@ -474,7 +479,7 @@ export interface Hud {
    */
   duel(lead: number | undefined): void;
   /** The state of being down: `level` 0 (up) to 1 hides or greys the screen, `left` seconds till the respawn. */
-  down(level: number, left: number): void;
+  down(level: number, left: number, what?: string): void;
   /** A line in the middle of the top of the screen in `team`'s colour, for a few seconds; a newer one replaces it. */
   banner(text: string, team?: number): void;
   /** The own frags this match, top left. */
@@ -528,6 +533,9 @@ export const height = (alt: number): string =>
     : `${(alt / 1000).toFixed(alt < 10_000 ? 1 : 0)} km  ·  ORBIT`;
 
 /** Milliseconds a banner stays, and a hit marker. */
+/** What a marker's distance reads after, by its kind. */
+const LABEL = { flag: '', base: 'Base ', station: 'Station ', post: 'Command post ' };
+
 export const BANNER_MS = 2800;
 /** Milliseconds an own frag's name and award stay, and a line of the kill feed; the feed's lines. */
 export const FRAG_MS = 2400;
@@ -582,7 +590,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
       `<data></data><span></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
       `<s hidden></s><mark hidden></mark><ins hidden><i></i></ins>` +
-      `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav>` +
+      `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav><var hidden></var>` +
       `<h1 hidden>FRAGS<span>0</span></h1><ol></ol><h2 hidden><span></span><small></small></h2>` +
       `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q><dfn hidden></dfn><dfn hidden></dfn><tt hidden></tt><tt hidden></tt>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
@@ -786,13 +794,19 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         const el = pins[i];
         el.style.left = `${m.x * 100}%`;
         el.style.top = `${m.y * 100}%`;
-        tint(el, m.team);
+        el.style.color = m.team < 0 ? '#ffb347' : TEAM_COLOR[m.team];
         const [arrow, text] = [el.children[0] as HTMLElement, el.children[1] as HTMLElement];
         // Over its target a mark points down at it; at the edge it points the way to turn.
         arrow.style.transform = m.arrow === undefined ? '' : `rotate(${m.arrow}rad)`;
         set(arrow, m.arrow === undefined ? '▼' : '▲');
-        set(text, `${m.kind === 'base' ? 'Base ' : ''}${m.text}`);
+        set(text, `${LABEL[m.kind]}${m.text}`);
       });
+    },
+    mission(text = '', hot = false) {
+      const el = one('var');
+      el.hidden = !text;
+      el.classList.toggle('hot', hot);
+      set(el, text);
     },
     visor: on => {
       rim.hidden = !on;
@@ -880,10 +894,10 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       rope.hidden = lead === undefined;
       knot.style.left = `${50 + 50 * Math.max(-1, Math.min(1, lead ?? 0))}%`;
     },
-    down(level, left) {
+    down(level, left, what = 'DOWN') {
       fallen.hidden = level < 0.02;
       fallen.style.opacity = `${Math.min(level, 1)}`;
-      set(fallen, fallen.hidden ? '' : `DOWN\nBack in ${left.toFixed(1)}`);
+      set(fallen, fallen.hidden ? '' : `${what}\nBack in ${left.toFixed(1)}`);
     },
     banner(text, team) {
       banner.hidden = false;

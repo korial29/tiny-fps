@@ -12,6 +12,7 @@ import {
   FLAG_REACH,
   GRAVITY,
   JUMP_SPEED,
+  ORBIT,
   PLAYER_H,
   PLAYER_R,
   RULES,
@@ -46,7 +47,9 @@ import { build, hidden, ray } from './world';
 import type { Brush, WorldDef } from './world';
 
 const world = build(MOON);
-const { brushes, teams } = MOON;
+const { teams } = MOON;
+// The ground's: the orbital station floats over the rille (station.test.ts).
+const brushes = MOON.brushes.filter(b => b.min[1] < ORBIT.SEAM);
 
 const twin = (b: Brush): Brush => ({
   ...b,

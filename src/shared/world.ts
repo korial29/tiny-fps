@@ -3,6 +3,7 @@
 // No DOM, no Node API.
 
 import { raise, trace } from './relief';
+import type { StationDef } from './station';
 import type { Relief, ReliefDef } from './relief';
 
 type Vec3 = [number, number, number];
@@ -89,6 +90,8 @@ export interface WorldDef {
   doors?: Door[];
   /** The height of the edge of space (ORBIT.SEAM): a shot that crosses it either way bursts there. Absent: none. */
   seam?: number;
+  /** The orbital station's command post and inside (station.ts), its brushes among the others. Absent: none. */
+  station?: StationDef;
 }
 
 /** A world ready for physics and drawing: the definition and a grid of brushes on the floor plane. */

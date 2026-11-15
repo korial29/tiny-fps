@@ -161,6 +161,9 @@ export const SOUND = {
    */
   AMMO: 56,
   ARMOR: 57,
+  /** The orbital station's mission: the alarm of a strike armed, and the strike's lasers from the sky. */
+  ALARM: 58,
+  STRIKE: 59,
 } as const;
 
 /**
@@ -532,6 +535,18 @@ export const LAYERS: Voice[][] = [
     [1, 110, 2, 0.01, 0.15, 0.25, 0, 0.25, 0, 1, 0.45],
     [2, 660, 0, 0.02, 0.12, 0.35, 0.02, 1, 0.12, 1.5, 0.3, 0.05],
     [2, 1320, 0.3, 0.02, 0.1, 0.4, 0.015, 1, 0, 1, 0.18, 0.1],
+  ],
+  // ALARM: a klaxon, two tones down a fourth, twice.
+  [
+    [0, 880, 0, 0.01, 0.16, 0.04, 0, 0.35, 0.2, 0.75, 0.45],
+    [0, 880, 0, 0.01, 0.16, 0.04, 0, 0.35, 0.2, 0.75, 0.45, 0.42],
+  ],
+  // STRIKE: saws diving out of the sky, a roar of noise and a deep boom under them.
+  [
+    [1, 2400, -2.5, 0.01, 0.3, 0.5, 0.04, 0.5, 0, 1, 0.3],
+    [1, 1800, -2, 0.02, 0.25, 0.55, 0.05, 0.4, 0, 1, 0.25, 0.08],
+    [3, 3000, -1.5, 0.01, 0.3, 0.5, 0, 0.3, 0, 1, 0.45, 0.1],
+    [2, 70, -1, 0.005, 0.15, 0.6, 0, 1, 0, 1, 0.7, 0.15],
   ],
 ];
 

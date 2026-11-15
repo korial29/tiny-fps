@@ -12,52 +12,56 @@ const drawn = (i: number, open: number) => {
   return Array.from({ length: v.length / STRIDE }, (_, k) => v.slice(k * STRIDE, (k + 1) * STRIDE));
 };
 /** Whether a point is inside a brush of the map, ghosts too: in a wall. */
+/** The axis a door's panels slide along (its long side), and the one across it: the station's door faces east. */
+const axes = ({ min, max }: { min: number[]; max: number[] }) =>
+  max[0] - min[0] > max[2] - min[2] ? [0, 2] : [2, 0];
 const walled = (p: number[]) =>
   MOON.brushes.some(b => [0, 1, 2].every(a => b.min[a] - 1e-6 <= p[a] && p[a] <= b.max[a] + 1e-6));
 
 describe('doors, drawn', () => {
   it('fills the doorway with two panels that meet in the middle when shut, in a frame', () => {
     MOON.doors!.forEach(({ min, max }, i) => {
+      const [k, j] = axes({ min, max });
       const v = drawn(i, 0);
       expect(v.length % 3).toBe(0);
       expect(v.every(p => p.every(Number.isFinite))).toBe(true);
       // Nothing past the doorway, and nothing proud of the frame's 8 cm.
-      expect(Math.min(...v.map(p => p[0]))).toBeCloseTo(min[0], 9);
-      expect(Math.max(...v.map(p => p[0]))).toBeCloseTo(max[0], 9);
-      expect(Math.min(...v.map(p => p[2]))).toBeCloseTo(min[2] - 0.08, 9);
-      expect(Math.max(...v.map(p => p[2]))).toBeCloseTo(max[2] + 0.08, 9);
+      expect(Math.min(...v.map(p => p[k]))).toBeCloseTo(min[k], 9);
+      expect(Math.max(...v.map(p => p[k]))).toBeCloseTo(max[k], 9);
+      expect(Math.min(...v.map(p => p[j]))).toBeCloseTo(min[j] - 0.08, 9);
+      expect(Math.max(...v.map(p => p[j]))).toBeCloseTo(max[j] + 0.08, 9);
       expect(Math.max(...v.map(p => p[1]))).toBeCloseTo(max[1], 9);
       // The seam: both panels have an edge on the middle.
-      const mid = (min[0] + max[0]) / 2;
-      expect(v.filter(p => Math.abs(p[0] - mid) < 1e-9).length).toBeGreaterThan(8);
+      const mid = (min[k] + max[k]) / 2;
+      expect(v.filter(p => Math.abs(p[k] - mid) < 1e-9).length).toBeGreaterThan(8);
     });
   });
 
   it('slides the panels into the wall: open, nothing is left across the opening and nothing shows out of the wall', () => {
     MOON.doors!.forEach(({ min, max }, i) => {
-      const [x0, x1] = [min[0] + 0.1, max[0] - 0.1];
+      const [k, j] = axes({ min, max });
+      const [x0, x1] = [min[k] + 0.1, max[k] - 0.1];
+      const off = (p: number[], d: number) => p.map((c, a) => (a === j ? c + d : c));
       for (const open of [0.5, 1]) {
         const v = drawn(i, open);
         // Beside the doorway every vertex is in a wall, a centimetre or more under its face.
-        for (const p of v.filter(p => p[0] < min[0] - 1e-6 || p[0] > max[0] + 1e-6)) {
-          expect(walled([p[0], p[1], p[2] - 0.011]) && walled([p[0], p[1], p[2] + 0.011])).toBe(
-            true,
-          );
+        for (const p of v.filter(p => p[k] < min[k] - 1e-6 || p[k] > max[k] + 1e-6)) {
+          expect(walled(off(p, -0.011)) && walled(off(p, 0.011))).toBe(true);
         }
-        const across = v.filter(p => p[0] > x0 + 1e-6 && p[0] < x1 - 1e-6 && p[1] < max[1] - 0.11);
+        const across = v.filter(p => p[k] > x0 + 1e-6 && p[k] < x1 - 1e-6 && p[1] < max[1] - 0.11);
         if (open === 1) {
           expect(across).toEqual([]);
         } else {
           // Half open: the middle half of the doorway is clear.
-          const w = (max[0] - min[0]) / 4;
-          const mid = (min[0] + max[0]) / 2;
-          expect(across.some(p => Math.abs(p[0] - mid) < w - 1e-6)).toBe(false);
+          const w = (max[k] - min[k]) / 4;
+          const mid = (min[k] + max[k]) / 2;
+          expect(across.some(p => Math.abs(p[k] - mid) < w - 1e-6)).toBe(false);
           expect(across.length).toBeGreaterThan(0);
         }
       }
       // And it reaches as far into the wall as it is wide.
-      const far = drawn(i, 1).map(p => p[0]);
-      expect(Math.min(...far)).toBeCloseTo(min[0] - (max[0] - min[0]) / 2, 9);
+      const far = drawn(i, 1).map(p => p[k]);
+      expect(Math.min(...far)).toBeCloseTo(min[k] - (max[k] - min[k]) / 2, 9);
     });
   });
 
@@ -89,14 +93,14 @@ describe('doors, from the snapshots', () => {
   it('copies each snapshot to the world, so a ray of the client stops where the host says a door is shut', () => {
     const w = build(MOON);
     const d = createDoors(w);
-    d.snapshot([1, 0, 0.4, 0, 0, 0]);
-    expect(w.doors!.map(s => s.open)).toEqual([1, 0, 0.4, 0, 0, 0]);
+    d.snapshot([1, 0, 0.4, 0, 0, 0, 0]);
+    expect(w.doors!.map(s => s.open)).toEqual([1, 0, 0.4, 0, 0, 0, 0]);
     // A snapshot with no doors at all comes from a host that does not move them (an older
     // server): they stand open, silently, not shut across the way with nothing to open them.
     expect(d.snapshot(undefined)).toEqual([]);
     expect(w.doors!.every(s => s.open === 1)).toBe(true);
     // The host's word again: they follow it, and are heard.
-    expect(d.snapshot([0, 0, 0, 0, 0, 0]).length).toBeGreaterThan(0);
+    expect(d.snapshot([0, 0, 0, 0, 0, 0, 0]).length).toBeGreaterThan(0);
     expect(w.doors!.every(s => s.open === 0)).toBe(true);
     // A map without doors: nothing to do, nothing drawn.
     const none = createDoors(build({ ...MOON, doors: undefined }));
@@ -108,7 +112,7 @@ describe('doors, from the snapshots', () => {
 
   it('plays the hiss once when a door starts to open and once when it starts to shut, where it is', () => {
     const d = createDoors(build(MOON));
-    const rest = [0, 0, 0, 0, 0];
+    const rest = [0, 0, 0, 0, 0, 0];
     expect(d.snapshot([0, ...rest])).toEqual([]);
     const { min, max } = MOON.doors![0];
     const at = [0, 1, 2].map(a => (min[a] + max[a]) / 2);
@@ -129,14 +133,14 @@ describe('doors, from the snapshots', () => {
 
   it('draws each door gliding to its snapshot state, and only the doors near the eye', () => {
     const d = createDoors(build(MOON));
-    d.snapshot([1, 0, 0, 0, 0, 0]);
+    d.snapshot([1, 0, 0, 0, 0, 0, 0]);
     const v: number[] = [];
     d.draw(v, [80, 2, 200], 1 / 60);
     expect(d.shown()[0]).toBeCloseTo(1 / 60 / 0.3, 9);
     for (let k = 0; k < 30; k++) {
       d.draw([], [80, 2, 200], 1 / 60);
     }
-    expect(d.shown()).toEqual([1, 0, 0, 0, 0, 0]);
+    expect(d.shown()).toEqual([1, 0, 0, 0, 0, 0, 0]);
     // The three of red's base are drawn from there, blue's are 150 m away and drawn too; from 300 m none.
     const one: number[] = [];
     panels(one, MOON.doors![0], 1 / 60 / 0.3);

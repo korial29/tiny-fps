@@ -9,6 +9,8 @@ import { navOf, path, ROUTES } from './nav';
 import type { Edge, Nav, Vec3, Way } from './nav';
 import type { Flying } from './plasma';
 import { stepOf } from './plasma';
+import { Sortie } from './sortie';
+import type { Errand } from './sortie';
 import type { Leg } from './routes';
 import { EV, FLAG, KEY, MODE } from './types';
 import type { FlagState, PlayerState } from './types';
@@ -32,6 +34,8 @@ export interface Sight {
   world: World;
   /** The balls in flight, to get out of their way. */
   balls?: readonly Flying[];
+  /** What the room asks of it at the orbital station (sortie.ts). */
+  errand?: Errand;
 }
 
 export type Intent = { keys: number; yaw: number; pitch: number };
@@ -209,6 +213,8 @@ export class Bot {
   private turnBack = 0;
   /** The balls it has weighed, by shooter and count: it decides once whether to get out of the way. */
   private weighed = new Set<number>();
+  /** Its errand to the orbital station, when it has one. */
+  private sortie = new Sortie();
 
   public constructor(id: number, skill = SKILL) {
     this.id = id;
@@ -238,6 +244,20 @@ export class Bot {
       this.goal = undefined;
     }
     this.last = at(p);
+    if (s.errand) {
+      const e = this.sortie.think(this.id, p, s.errand, t);
+      // On guard at the post, it fights whoever comes in sight.
+      const f = e && s.errand.go === 'guard' && !e.keys ? this.fight(s, true) : undefined;
+      if (f) {
+        return { keys: f.keys, yaw: this.aim, pitch: this.pitch };
+      }
+      if (e) {
+        this.look = this.aim = e.yaw;
+        return e;
+      }
+    } else {
+      this.sortie.board = undefined;
+    }
     const goal = this.goalOf(s);
     // A way is planned from a floor: from the air it would start where the bot is not going to be.
     // Forward is kept till then, so a jump over a gap does not fall short of it.
@@ -390,6 +410,9 @@ export class Bot {
     };
     if (theirs.state === FLAG.CARRIED && theirs.by === me.id) {
       return home.base;
+    }
+    if (this.sortie.board) {
+      return this.sortie.board;
     }
     if (p.ammo < 0 && home.rack && flat(p.x, p.z, home.rack[0], home.rack[2]) < ARM) {
       return home.rack;

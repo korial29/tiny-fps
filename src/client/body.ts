@@ -78,7 +78,7 @@ import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin }
 import type { Pose, Quat } from './rig';
 import { armor } from './armor';
 import { CUFF, CUFF_NEAR, CUFF_SIDES, REGION, beast, body, palette, skin } from './skin';
-import { CHITIN_X } from './xeno';
+import { BONE, CHITIN_X } from './xeno';
 import { CLOTH } from './mask';
 import { createTrail } from './trail';
 import { room } from './verts';
@@ -518,8 +518,8 @@ const tube = (
 
 /** The curl the xenomorph's fingers close to at most. */
 export const RAKE = 0.35;
-/** The xenomorph's claws: bone, and how far each reaches past the root of its last phalanx, metres. */
-const [CLAW, CLAW_L] = [[0.62, 0.6, 0.52], 0.032];
+/** How far each of the xenomorph's claws reaches past the root of its last phalanx, metres. */
+const CLAW_L = 0.032;
 /** A finger's half thickness at its root (11.2 mm until the fingers closed round a grip, 2026-11-09). */
 const FINGER_R = 0.01;
 /** The lengths of a finger's three phalanges against `l`, the root one first. */
@@ -753,7 +753,7 @@ const shape = (
     if (claws) {
       // A claw for the nail: from the back of the last phalanx, out past the tip and hooked down
       // toward the palm, tapering to a point.
-      paint = () => CLAW;
+      paint = () => BONE;
       const ring = (k: number, w: number): Ring => {
         const c = add(
           along(j2, d, BONES[2] * l * 0.55 + CLAW_L * k),
@@ -961,7 +961,8 @@ const shape = (
       }
     }
   }
-  if (lite) {
+  // No glove's shell, plate or strap on a near hand, nor on the xenomorph's bare one.
+  if (lite || claws) {
     return out;
   }
   /** The back of the palm at `z` forward and `x` across, its height in the hand. */

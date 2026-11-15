@@ -754,19 +754,17 @@ const remake = (L: Loft, f: (r: Ring) => Ring, more: Partial<Loft> = {}): Loft =
   rings: L.rings.map(r => f([...r])),
   ...more,
 });
-/** A gaussian bump of `w` metres round `c`. */
-const bump = (y: number, c: number, w: number) => Math.exp(-(((y - c) / w) ** 2));
 
 // The xenomorph (ROLE.XENO, the user 2026-11-15): the runner's lofts made gaunt, on the same joints,
-// so the gait and the skinning are the man's. A narrow waist under banded ribs, thin limbs, the
-// shins swept back into a hock over a long
-// narrow foot, the neck closed under a skull of its own (CREST).
+// so the gait and the skinning are the man's. A narrow waist under banded ribs, thin limbs with
+// straight shins (a curve down them read as a bowed leg) over a long narrow foot, the neck closed
+// under a skull of its own (CREST).
 const TRUNK_X = remake(
   TRUNK,
   r => {
     const [at, , , rx] = r;
     const k =
-      at < 1.13 ? [0.78, 0.85] : rx > 0.2 ? [0.95, 1] : at < 1.42 ? [0.88, 0.95] : [0.72, 0.8];
+      at < 1.13 ? [0.78, 0.85] : rx > 0.2 ? [0.86, 1] : at < 1.42 ? [0.88, 0.95] : [0.72, 0.8];
     r[3] *= k[0];
     r[4] *= k[1];
     // Its ribs: the strips under the chest in turn lighter and darker.
@@ -778,15 +776,19 @@ const TRUNK_X = remake(
 TRUNK_X.rings.push([1.6, 0, 0, 0, 0, 2.7, TRIM]);
 const LEG_X = remake(LEG, r => {
   const [at] = r;
-  const k = at > 0.55 ? [0.75, 0.85] : at > 0.11 ? [0.6, 0.7] : [0.55, 1];
+  // The foot shorter than a shoe: the toes (xeno.ts) come out of its ball.
+  const k = at > 0.55 ? [0.75, 0.85] : at > 0.11 ? [0.6, 0.7] : [0.6, 0.6];
   r[3] *= k[0];
   r[4] *= k[1];
-  r[2] -= 0.075 * bump(at, 0.24, 0.13);
   return [...r.slice(0, 6), at > 0.11 ? PANTS : UPPER];
 });
+// The arms thin from the shoulder (which is narrower too) to the wrist, and in by as much: no
+// sudden step under the shoulder.
 const ARM_X = remake(ARM, r => {
-  r[3] *= 0.68;
-  r[4] *= 0.72;
+  const k = 0.68 + 0.18 * Math.min(Math.max((r[0] - 1) / 0.36, 0), 1);
+  r[1] -= r[3] ? 0.015 : 0;
+  r[3] *= k;
+  r[4] *= k + 0.04;
   return [...r.slice(0, 6), r[0] < 0.98 ? GLOVE : JACKET];
 });
 /**

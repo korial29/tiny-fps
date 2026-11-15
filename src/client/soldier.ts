@@ -100,7 +100,7 @@ import {
   skin,
   tressOf,
 } from './skin';
-import { CHITIN_X, eyes, spines, tail } from './xeno';
+import { CHITIN_X, column, eyes, instep, sinews, toes } from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
 import type { Face } from './expression';
 import { CH, toneFor } from './features';
@@ -712,7 +712,8 @@ export const dissolve = (out: Out, from: number, k: number) => {
 /**
  * The xenomorph's crouch over the gait's pose: the back bent forward and the head held up level, and
  * on a floor the hips lower with the heels lifted off it, the balls of the feet where they were:
- * the legs read as an animal's, the hock behind (the shins' shape in skin.ts does the rest).
+ * the legs read as an animal's: a little lower, the heels a little up, the bones straight (the user,
+ * 2026-11-15: a deeper crouch bowed the legs into an arc).
  */
 const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose => {
   const rot = pose.rot.slice();
@@ -725,16 +726,18 @@ const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose =>
   if (p.mode != MODE.GROUND && p.mode != MODE.CROUCH) {
     return q;
   }
-  q.hips = [pose.hips[0], pose.hips[1] - 0.1, pose.hips[2]];
+  q.hips = [pose.hips[0], pose.hips[1] - 0.04, pose.hips[2]];
   const t = solve(q);
   const [fx, , fz] = basis(pose.yaw, 0)[2];
-  for (const [thigh, foot] of [
-    [J.THIGH_L, J.FOOT_L],
-    [J.THIGH_R, J.FOOT_R],
+  for (const [thigh, foot, toe] of [
+    [J.THIGH_L, J.FOOT_L, J.TOE_L],
+    [J.THIGH_R, J.FOOT_R, J.TOE_R],
   ]) {
     const a = s.pos[foot];
-    reach(q, t, thigh, [a[0], a[1] + 0.09, a[2]], [fx, 0, fz], true);
-    q.rot[foot] = mul(q.rot[foot], axis(X, -0.75));
+    reach(q, t, thigh, [a[0], a[1] + 0.06, a[2]], [fx, 0, fz], true);
+    // The foot tips down, its toes stay on the floor.
+    q.rot[foot] = mul(q.rot[foot], axis(X, -0.5));
+    q.rot[toe] = mul(q.rot[toe], axis(X, 0.5));
   }
   return q;
 };
@@ -1039,10 +1042,9 @@ export const soldier = (
       const blow = PUNCHES[BLOW.TAIL];
       const u = p.cut === BLOW.TAIL && p.swing ? 1 - p.swing / blow.ticks : 0;
       const hit = blow.strike / blow.ticks;
-      tail(
+      column(
         out,
-        s.pos[J.PELVIS],
-        s.rot[J.PELVIS],
+        s,
         r.t,
         Math.min(Math.hypot(p.vx, p.vz) / 9, 1),
         u < hit
@@ -1051,7 +1053,14 @@ export const soldier = (
         color,
         lod,
       );
-      rigid(`spines ${!lod}`, s.pos[J.CHEST], s.rot[J.CHEST], (o, a, q) => spines(o, a, q, lod));
+      for (const [shin, foot, toe] of [
+        [J.SHIN_L, J.FOOT_L, J.TOE_L],
+        [J.SHIN_R, J.FOOT_R, J.TOE_R],
+      ]) {
+        rigid(`sinews ${!lod}`, s.pos[shin], s.rot[shin], (o, a, q) => sinews(o, a, q, lod));
+        rigid(`instep ${!lod}`, s.pos[foot], s.rot[foot], (o, a, q) => instep(o, a, q, lod));
+        rigid(`toes ${!lod}`, s.pos[toe], s.rot[toe], (o, a, q) => toes(o, a, q, lod));
+      }
       rigid(`eyes ${color}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => eyes(o, a, q, color));
     } else {
       rigid('pouch', s.pos[J.PELVIS], s.rot[J.PELVIS], pouch);

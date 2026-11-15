@@ -4,11 +4,11 @@ import { STILL } from '../shared/physics';
 import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { MOVE, MOVES, createGait } from './gait';
-import { JOINT as J, JOINTS, solve } from './rig';
+import { JOINT as J, JOINTS, rest, solve } from './rig';
 import { KIND } from './features';
 import { beast, body } from './skin';
 import { animate, stance } from './soldier';
-import { eyes, spines, tail } from './xeno';
+import { column, eyes, instep, sinews, toes } from './xeno';
 import type { Vec3 } from './mesh';
 import type { Quat } from './rig';
 
@@ -56,28 +56,38 @@ describe('the xenomorph’s skin', () => {
 });
 
 describe('its pieces', () => {
-  it('draws a tail behind it at rest, which the sting arches up and forward past the head', () => {
-    const tipOf = (sting: number) => {
+  const S = solve(rest());
+  it('runs one chain of vertebrae from the base of the skull down the back into the tail, which the sting arches over the head', () => {
+    const draw = (sting: number) => {
       const v: number[] = [];
-      tail(v, [0, 1, 0], ID, 0, 0, sting, [1, 0, 0], 2);
-      expect(v.length).toBeGreaterThan(0);
+      column(v, S, 0, 0, sting, [1, 0, 0], 2);
       expect(v.every(Number.isFinite)).toBe(true);
-      // The stinger's point is the last vertex.
-      return v.slice(v.length - 10, v.length - 7);
+      return points(v);
     };
-    const [rest, strike] = [tipOf(0), tipOf(1)];
-    expect(rest[2]).toBeGreaterThan(1);
-    expect(strike[2]).toBeLessThan(0);
-    expect(strike[1]).toBeGreaterThan(1.6);
+    const [still, strike] = [draw(0), draw(1)];
+    // Up to the skull's base, behind the head joint; down the back, behind the chest.
+    expect(still.some(([x, y, z]) => Math.abs(x) < 0.03 && y > 1.6 && z > 0.08)).toBe(true);
+    expect(still.some(([, y, z]) => Math.abs(y - S.pos[J.CHEST][1]) < 0.05 && z > 0.12)).toBe(true);
+    // The stinger's point is the last vertex: behind at rest, over and past the head in the sting.
+    const [rest0, hit] = [still.at(-1)!, strike.at(-1)!];
+    expect(rest0[2]).toBeGreaterThan(1);
+    expect(hit[2]).toBeLessThan(0);
+    expect(hit[1]).toBeGreaterThan(1.6);
+    // Pinched at each joint: the vertebrae are beads, not a smooth tube.
+    expect(still.length).toBeGreaterThan(34 * 4 * 8);
   });
 
-  it('puts spines on the back and glowing eyes on the head', () => {
+  it('puts three clawed toes ahead of each foot, tendons along the shin and the instep, and glowing eyes on the head', () => {
     const out = (f: (o: number[]) => void) => {
       const v: number[] = [];
       f(v);
       return points(v);
     };
-    expect(out(o => spines(o, O, ID, 1)).every(([, , z]) => z > 0)).toBe(true);
+    const t = out(o => toes(o, O, ID, 1));
+    expect(Math.min(...t.map(p => p[2]))).toBeLessThan(-0.11);
+    expect(t.every(p => p[1] > -0.03)).toBe(true);
+    expect(out(o => sinews(o, O, ID, 1)).every(p => p[1] < -0.05)).toBe(true);
+    expect(out(o => instep(o, O, ID, 1)).every(p => p[2] < 0)).toBe(true);
     const lit: number[] = [];
     eyes(lit, O, ID, [1, 0, 0]);
     expect(lit.filter((_, i) => i % 10 == 8).every(l => l == -2)).toBe(true);
@@ -107,9 +117,9 @@ describe('its pose', () => {
     // Forward is -z.
     expect(x[J.SHIN_R][2]).toBeLessThan(x[J.FOOT_R][2]);
     expect(x[J.TOE_R][2]).toBeLessThan(x[J.FOOT_R][2]);
-    expect(x[J.FOOT_R][1]).toBeGreaterThan(m[J.FOOT_R][1] + 0.05);
+    expect(x[J.FOOT_R][1]).toBeGreaterThan(m[J.FOOT_R][1] + 0.03);
     expect(x[J.TOE_R][1]).toBeLessThan(0.06);
-    expect(x[J.PELVIS][1]).toBeLessThan(m[J.PELVIS][1] - 0.05);
+    expect(x[J.PELVIS][1]).toBeLessThan(m[J.PELVIS][1] - 0.02);
   });
 
   it('faces the wall it clings to, the hands up on it and the feet under them', () => {
@@ -142,7 +152,7 @@ describe('its blows on the arms', () => {
 });
 
 describe('its claws', () => {
-  it('ends each finger and the thumb in a claw reaching past the bare hand’s fingertips', async () => {
+  it('ends each finger and the thumb in a claw reaching past the bare hand’s fingertips, with no glove’s parts', async () => {
     const { hand } = await import('./body');
     const draw = (claws: boolean) => {
       const v: number[] = [];
@@ -167,7 +177,6 @@ describe('its claws', () => {
       return points(v);
     };
     const [plain, clawed] = [draw(false), draw(true)];
-    expect(clawed.length).toBeGreaterThan(plain.length);
     // Hooked toward the palm from the fingertips: past the bare hand on its palm's side (-x here).
     const reach = (ps: number[][]) => Math.min(...ps.map(p => p[0]));
     expect(reach(clawed)).toBeLessThan(reach(plain) - 0.01);

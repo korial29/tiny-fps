@@ -77,8 +77,8 @@ import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
 import { armor } from './armor';
-import { CUFF, CUFF_NEAR, CUFF_SIDES, REGION, body, palette, skin } from './skin';
-import { CHITIN } from './features';
+import { CUFF, CUFF_NEAR, CUFF_SIDES, REGION, beast, body, palette, skin } from './skin';
+import { BONE, CHITIN_X, FOOT_TIP, metatarsal, toes } from './xeno';
 import { CLOTH } from './mask';
 import { createTrail } from './trail';
 import { room } from './verts';
@@ -128,7 +128,7 @@ const dist = (a: Vec3, b: Vec3) => Math.hypot(...sub(a, b));
 const along = (o: Vec3, d: Vec3, k: number): Vec3 => add(o, mix([0, 0, 0], d, k));
 
 /** The shortest rotation that turns the direction a into b. */
-const arc = (a: Vec3, b: Vec3): Quat => {
+export const arc = (a: Vec3, b: Vec3): Quat => {
   const [u, v] = [unit(a), unit(b)];
   const q = [
     u[1] * v[2] - u[2] * v[1],
@@ -439,6 +439,8 @@ const THUMB: [Vec3, Vec3][] = [
 ];
 /** The woman's hand to the man's, about the wrist (SCALE in skin.ts has her glove's). */
 export const HAND_F = 0.92;
+/** The xenomorph's hands against the man's, about the wrist. */
+export const CLAW_HAND = 1.3;
 
 /** Sides around a finger (6 until the user, 2026-11-09: more detail on the hands). */
 export const FINGER_SIDES = 10;
@@ -516,6 +518,10 @@ const tube = (
   }
 };
 
+/** The curl the xenomorph's fingers close to at most. */
+export const RAKE = 0.35;
+/** How far each of the xenomorph's claws reaches past the root of its last phalanx, metres. */
+const CLAW_L = 0.05;
 /** A finger's half thickness at its root (11.2 mm until the fingers closed round a grip, 2026-11-09). */
 const FINGER_R = 0.01;
 /** The lengths of a finger's three phalanges against `l`, the root one first. */
@@ -639,6 +645,8 @@ export const hand = (
   lite = false,
   /** The marine's: lit buttons on the strap round the wrist (WRIST_LIGHTS). */
   lights = false,
+  /** The xenomorph's claws on the fingertips (Grip). */
+  claws = false,
 ) => {
   // A hand is built in its own space, the same as long as nothing it is made of changes (a grip
   // held, the hand at rest): some ten thousand vertices that are then only carried to the wrist.
@@ -646,13 +654,13 @@ export const hand = (
   // to frame, and every frame built the hand again.
   [curl, point, push, cup] = [curl, point, push, cup].map(tidy);
   to &&= to.map(tidy) as Vec3;
-  const key = `${+lite} ${+lights} ${curl} ${point} ${push} ${to} ${cup} ${tint} ${bare} ${+(bare === tint)}`;
+  const key = `${+claws} ${+lite} ${+lights} ${curl} ${point} ${push} ${to} ${cup} ${tint} ${bare} ${+(bare === tint)}`;
   let m = BUILT.get(key);
   if (!m) {
     if (BUILT.size >= KEPT) {
       BUILT.clear();
     }
-    BUILT.set(key, (m = shape(curl, tint, point, push, to, bare, cup, lite, lights)));
+    BUILT.set(key, (m = shape(curl, tint, point, push, to, bare, cup, lite, lights, claws)));
   }
   // Hand space (x toward the thumb, y the back, z toward the fingers), a point and a direction, to the world.
   let o = out.length;
@@ -696,6 +704,7 @@ const shape = (
   cup: number,
   lite: boolean,
   lights: boolean,
+  claws = false,
 ): number[] => {
   const out: number[] = [];
   const [FS, CS] = lite ? [4, CUFF_NEAR] : [FINGER_SIDES, CUFF_SIDES];
@@ -739,15 +748,33 @@ const shape = (
       FS,
       (q, n, k) => put(q, n, ks[k]),
     );
+    const d = ds[2];
+    const j2 = along(along(p, ds[0], BONES[0] * l), ds[1], BONES[1] * l);
+    const y = unit(cross(d, X));
+    const x = cross(y, d);
+    if (claws) {
+      // A claw for the nail: from the back of the last phalanx, out past the tip and hooked down
+      // toward the palm, tapering to a point.
+      paint = () => BONE;
+      const ring = (k: number, w: number): Ring => {
+        const c = add(
+          along(j2, d, BONES[2] * l * 0.55 + CLAW_L * k),
+          y.map(v => v * (r * 0.5 - CLAW_L * 0.45 * k * k)) as Vec3,
+        );
+        const t = unit(add(d, y.map(v => -v * 0.9 * k) as Vec3));
+        const b = unit(cross(t, x));
+        return [c, x.map(v => v * r * w) as Vec3, b.map(v => v * r * w * 0.8) as Vec3];
+      };
+      tube([ring(0, 0.9), ring(0.35, 0.7), ring(0.7, 0.4), ring(1, 0)], lite ? 4 : FS, (q, n) =>
+        put(q, n),
+      );
+      return;
+    }
     if (lite) {
       return;
     }
     paint = () => nail;
     // The nail: an oval on the back of the last phalanx, toward its tip, a hair out of it.
-    const d = ds[2];
-    const j2 = along(along(p, ds[0], BONES[0] * l), ds[1], BONES[1] * l);
-    const y = unit(cross(d, X));
-    const x = cross(y, d);
     const c = add(along(j2, d, BONES[2] * l * 0.6), y.map(v => v * (r * 0.79 + 0.0003)) as Vec3);
     const rim = (k: number): Vec3 =>
       add(
@@ -936,7 +963,8 @@ const shape = (
       }
     }
   }
-  if (lite) {
+  // No glove's shell, plate or strap on a near hand, nor on the xenomorph's bare one.
+  if (lite || claws) {
     return out;
   }
   /** The back of the palm at `z` forward and `x` across, its height in the hand. */
@@ -1054,6 +1082,8 @@ export interface Grip {
   cup?: number;
   /** The marine's lit buttons on the wrists' straps. */
   lights?: boolean;
+  /** The xenomorph's: a hooked claw of bone on each fingertip, for the nail. */
+  claws?: boolean;
 }
 
 /**
@@ -1069,7 +1099,7 @@ export const hands = (
   curls: number[],
   glove: number[],
   bare: number[],
-  { point = 0, push = 0, to, cup = 0, lights = false }: Grip = {},
+  { point = 0, push = 0, to, cup = 0, lights = false, claws = false }: Grip = {},
   lite = false,
   skip = -1,
 ) =>
@@ -1094,11 +1124,19 @@ export const hands = (
       i ? 0 : cup,
       lite,
       lights,
+      claws,
     );
     const a = room(out, 0);
-    for (let k = at; build && k < out.length; k += STRIDE) {
+    // The xenomorph's hands larger (CLAW_HAND), but at the wrist, where they meet the arm's cuff, and
+    // growing from it over 4 cm; hers smaller.
+    const f = claws ? CLAW_HAND : build ? HAND_F : 1;
+    for (let k = at; f != 1 && k < out.length; k += STRIDE) {
+      const w = s.pos[j];
+      const r = Math.hypot(a[k] - w[0], a[k + 1] - w[1], a[k + 2] - w[2]);
+      const t = claws ? Math.min(r / 0.04, 1) : 1;
+      const g = 1 + (f - 1) * t * t * (3 - 2 * t);
       for (let d = 0; d < 3; d++) {
-        a[k + d] = s.pos[j][d] + HAND_F * (a[k + d] - s.pos[j][d]);
+        a[k + d] = w[d] + g * (a[k + d] - w[d]);
       }
     }
   });
@@ -1135,7 +1173,7 @@ export const createBody = (world?: World): Body => {
   let tone: number[] | undefined;
   /** The ninja's black suit, with no armour (soldier.ts). */
   let ninja = false;
-  /** The xenomorph's stand-in: the black suit, no armour, its skin dark chitin (soldier.ts). */
+  /** The xenomorph: its own body (beast()) in chitin, claws on its fingertips (hand()). */
   let xeno = false;
   /** The own player as last seen. */
   let me: PlayerState | undefined;
@@ -1776,7 +1814,7 @@ export const createBody = (world?: World): Body => {
     update,
     pose,
     wear(b, t, n = false, x = false) {
-      [tone, ninja, xeno] = [x ? CHITIN : t, n, x];
+      [tone, ninja, xeno] = [x ? CHITIN_X : t, n, x];
       if (b != build) {
         // Her own skeleton: a gait of its own, in the pose of the player at once.
         [build, gait] = [b, createGait(0, b)];
@@ -1804,7 +1842,23 @@ export const createBody = (world?: World): Body => {
           ];
         }
         const from = out.length;
-        skin(out, body(2, build), s, colors);
+        if (xeno) {
+          const { PANTS, UPPER, GLOVE, JACKET, TRIM, SOLE } = REGION;
+          for (const k of [PANTS, UPPER, GLOVE, JACKET, TRIM, SOLE]) {
+            colors[k] = CHITIN_X;
+          }
+        }
+        skin(out, xeno ? beast(2) : body(2, build), s, colors);
+        if (xeno) {
+          // Its feet, the skin's legs ending at the ankles (soldier.ts draws them on the others).
+          for (const [f, t] of [
+            [J.FOOT_L, J.TOE_L],
+            [J.FOOT_R, J.TOE_R],
+          ]) {
+            metatarsal(out, s.pos[f], s.rot[f], 3);
+            toes(out, add(s.pos[f], spin(s.rot[f], FOOT_TIP)), s.rot[t], 3);
+          }
+        }
         // The ninja's own plates in his team's colour (soldier.ts).
         if ((world?.def.armor && !xeno) || ninja) {
           armor(out, from, body(2, build), true, plate, ninja, color, !world?.def.armor);
@@ -1820,13 +1874,23 @@ export const createBody = (world?: World): Body => {
             ? poke(since, pressOf(tk))
             : 0;
         // Her hand: the same one, smaller about the wrist, so it closes on the same grips.
-        hands(out, s, build, curls, colors[7], suit ? colors[7] : colors[3], {
-          point: pointing,
-          push,
-          to: thumbTo(Math.max(tk, 0)),
-          cup: cupping,
-          lights: suit && !!plate,
-        });
+        // The xenomorph's hands stay half open, its claws out: it rakes, it does not punch.
+        hands(
+          out,
+          s,
+          build,
+          xeno ? curls.map(c => Math.min(c, RAKE)) : curls,
+          colors[7],
+          suit ? colors[7] : colors[3],
+          {
+            point: pointing,
+            push,
+            to: thumbTo(Math.max(tk, 0)),
+            cup: cupping,
+            lights: suit && !!plate,
+            claws: xeno,
+          },
+        );
         if (hold > 0.2) {
           // The gauge lights once a press is more than a tap: the strength the shot would have.
           const level =

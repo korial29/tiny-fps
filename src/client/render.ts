@@ -42,7 +42,7 @@ import { craft } from './craft';
 import { rolled, rover } from './rover';
 import type { Quat } from './rig';
 import { GRIN, animate, createRunner, soldier } from './soldier';
-import { BARE_REGIONS, COLOURS, REGION, TOP, UNLIT, body } from './skin';
+import { BARE_REGIONS, COLOURS, REGION, TOP, UNLIT, beast, body } from './skin';
 import { CLOTH } from './mask';
 import { CHANNELS } from './features';
 import { PLATE, VERT as VERT_TEXELS } from './flesh';
@@ -777,6 +777,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   for (let s = 0; s < STYLES; s++) {
     closeMesh(s);
   }
+  // The xenomorph's skins too, but no armour recipe: it wears none.
+  [0, 1, 3].forEach(lod => beast(lod));
   /** Each rover's wheels: the angle they have rolled to, and where the rover was last frame. */
   const spins: number[] = [];
   const was: [number, number][] = [];

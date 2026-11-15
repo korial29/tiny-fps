@@ -22,6 +22,8 @@ import {
   FIST,
   KATANA_LEFT,
   KATANA_TILT,
+  RAKE,
+  arc,
   clasp,
   hands,
   inv,
@@ -84,12 +86,42 @@ import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
 import { STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, PARENT, axis, mul, slerp, solve, turn } from './rig';
+import { JOINT as J, PARENT, REST, axis, mul, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
-import { REGION, beardOf, body, cut, eyesOf, hairOf, palette, shaved, skin, tressOf } from './skin';
+import {
+  REGION,
+  beardOf,
+  beast,
+  body,
+  cut,
+  eyesOf,
+  hairOf,
+  palette,
+  shaved,
+  skin,
+  tressOf,
+} from './skin';
+import {
+  CHITIN_X,
+  FOOT_TIP,
+  HEAD,
+  column,
+  elbow,
+  eyes,
+  heel,
+  metatarsal,
+  ribs,
+  clavicles,
+  horns,
+  HORNS,
+  pipes,
+  sinews,
+  skull,
+  toes,
+} from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
 import type { Face } from './expression';
-import { CH, CHITIN, toneFor } from './features';
+import { CH, toneFor } from './features';
 import { createTrail } from './trail';
 import type { Trail } from './trail';
 import { room } from './verts';
@@ -695,6 +727,69 @@ export const dissolve = (out: Out, from: number, k: number) => {
  * when the runner is close): the jacket in `color` (r, g, b), dark
  * trousers, skin, hair in his own colour (hairOf()) and light shoes, posed by its gait. A dash trails a few glowing streaks.
  */
+/**
+ * The xenomorph's crouch over the gait's pose: the back bent forward and the head held up level, and
+ * on a floor the hips lower with the heels lifted off it, the balls of the feet where they were:
+ * the legs read as an animal's: the hips a little higher, the foot's long bone near upright over its
+ * ball, the bones straight (the user, 2026-11-15: a deeper crouch bowed the legs into an arc).
+ */
+/** How far prowl() tips the xenomorph's foot down from the gait's, radians: steep, the arch of its sole showing. */
+const FOOT_UP = 1.0;
+/** Where the ankle stands over the ball once the foot is tipped FOOT_UP: up, and behind it. */
+const ANKLE = [
+  -(FOOT_TIP[1] * Math.cos(FOOT_UP) + FOOT_TIP[2] * Math.sin(FOOT_UP)),
+  FOOT_TIP[1] * Math.sin(FOOT_UP) - FOOT_TIP[2] * Math.cos(FOOT_UP),
+];
+
+const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose => {
+  const rot = pose.rot.slice();
+  const X: Vec3 = [1, 0, 0];
+  // Bent, but not squat (the user, 2026-11-15): the neck clear, the head carried high.
+  rot[J.SPINE] = mul(rot[J.SPINE], axis(X, -0.2));
+  rot[J.CHEST] = mul(rot[J.CHEST], axis(X, -0.16));
+  rot[J.NECK] = mul(rot[J.NECK], axis(X, 0.22));
+  rot[J.HEAD] = mul(rot[J.HEAD], axis(X, 0.12));
+  // Out of a blow, the upper arms hang lower than the runner's guard, the elbows still bent so the
+  // claws point ahead: raised forward, the shoulder's skin pinched into a fold (the user, 2026-11-15).
+  // A swing of the bone the shortest way toward hanging, its twist about itself kept: a blend of the
+  // whole turn toward rest undid the twist too, and wrung the arm at the shoulder.
+  if (!p.swing) {
+    for (const a of [J.ARM_L, J.ARM_R]) {
+      const bone = REST[a + 1];
+      const now = turn(rot[a], bone);
+      const k = 0.45;
+      const want: Vec3 = [0, 1, 2].map(i => now[i] * (1 - k) + bone[i] * k) as Vec3;
+      rot[a] = mul(arc(now, want), rot[a]);
+    }
+  }
+  const q: Pose = { ...pose, rot };
+  if (p.mode != MODE.GROUND && p.mode != MODE.CROUCH) {
+    return q;
+  }
+  q.hips = [pose.hips[0], pose.hips[1] + 0.06, pose.hips[2]];
+  const t = solve(q);
+  const [fx, , fz] = basis(pose.yaw, 0)[2];
+  for (const [thigh, foot, toe] of [
+    [J.THIGH_L, J.FOOT_L, J.TOE_L],
+    [J.THIGH_R, J.FOOT_R, J.TOE_R],
+  ]) {
+    // The long bone of the foot near upright over the ball, which stays where the gait put it: a third
+    // segment to the leg (the user, 2026-11-15: longer legs); the toes flat on the floor ahead.
+    const b = s.pos[toe];
+    reach(
+      q,
+      t,
+      thigh,
+      [b[0] - fx * ANKLE[1], b[1] + ANKLE[0], b[2] - fz * ANKLE[1]],
+      [fx, 0, fz],
+      true,
+    );
+    q.rot[foot] = mul(q.rot[foot], axis(X, -FOOT_UP));
+    q.rot[toe] = mul(q.rot[toe], axis(X, FOOT_UP));
+  }
+  return q;
+};
+
 /** The runner's pose this frame, solved: the gait, the fall and sink of one down, and the weapon's hold; and the way the body faces. */
 export const stance = (r: Runner) => {
   let pose = r.gait.pose();
@@ -709,8 +804,9 @@ export const stance = (r: Runner) => {
   }
   // Down or floored, the weapon stays in the hand as it falls. At the wheel both hands are on the yoke.
   const lying = !!p.down || floored(p) || driving(r);
-  if (r.jab > 0.002 && !lying) {
+  if (r.jab > 0.002 && !lying && r.blow != BLOW.TAIL) {
     // A punch: the striking fist out (the blow's), the other back to the hip, the chest behind it.
+    // The xenomorph's sting is its tail's (xeno.ts), not an arm's.
     const rot = pose.rot.slice();
     const sd = SIDE[r.blow];
     const blow = r.blow == BLOW.HOOK ? HOOK : r.blow == BLOW.LUNGE ? LUNGE : JAB;
@@ -736,6 +832,10 @@ export const stance = (r: Runner) => {
     pose = { ...pose, rot };
   }
   let s = solve(pose);
+  if (r.look?.role === ROLE.XENO && !lying) {
+    pose = prowl(pose, s, p);
+    s = solve(pose);
+  }
   if (p.wield && !lying) {
     pose = brandish(pose, p, r.prog, r.gait.phase, r.t);
     s = solve(pose);
@@ -806,6 +906,7 @@ const gloves = (
   suit: boolean,
   limb: number = LIMB.NONE,
   lights = false,
+  claws = false,
 ) => {
   if (!lod) {
     return;
@@ -816,11 +917,11 @@ const gloves = (
     out,
     s,
     r.build ?? 0,
-    r.curls,
+    claws ? r.curls.map(c => Math.min(c, RAKE)) : r.curls,
     glove,
     suit ? glove : colors[REGION.FLESH],
     // The left thumb up the rifle's handguard; the marine's lit buttons on the wrists.
-    { cup: +(!!p.rifled && !p.down && !floored(p) && !driving(r)), lights },
+    { cup: +(!!p.rifled && !p.down && !floored(p) && !driving(r)), lights, claws },
     lod < 3,
     limb == LIMB.ARM_L ? J.HAND_L : limb == LIMB.ARM_R ? J.HAND_R : -1,
   );
@@ -862,21 +963,29 @@ export const soldier = (
   // its belt, a hood and a guard over the mouth; an armour of his own (2026-11-13): armor.ts's
   // `alone` plates, and the shoulder pads and collar of pads.ts.
   const ninja = picked?.role === ROLE.NINJA;
-  // The xenomorph, until it has a body of its own: the runner in the black suit with the team's
-  // stripes, its skin dark chitin, no armour, no hair.
+  // The xenomorph: a body of its own (beast() in skin.ts, xeno.ts) in black chitin, a glowing line
+  // down its spine in the team's colour; no armour, hair or helmet.
   const xeno = picked?.role === ROLE.XENO;
+  helmets &&= !xeno;
   const plated = armored && !xeno;
   armored &&= !ninja && !xeno;
   const colors = palette(
     ninja || xeno ? CLOTH : color,
-    xeno ? CHITIN : build ? tressOf(p.id, picked) : hairOf(p.id, picked),
+    xeno ? CHITIN_X : build ? tressOf(p.id, picked) : hairOf(p.id, picked),
     eyesOf(p.id, picked),
     armored,
-    xeno ? CHITIN : toneFor(p.id, picked),
+    xeno ? CHITIN_X : toneFor(p.id, picked),
     build || xeno ? 0 : beardOf(p.id),
     !!build,
   );
-  if (ninja || xeno) {
+  if (xeno) {
+    const { PANTS, UPPER, GLOVE, JACKET, TRIM, SOLE, FLESH, CAP } = REGION;
+    for (const k of [PANTS, UPPER, GLOVE, JACKET, SOLE]) {
+      colors[k] = CHITIN_X;
+    }
+    [colors[TRIM], colors[FLESH], colors[CAP]] = [HEAD, CHITIN_X.map(v => v * 0.6), color];
+  }
+  if (ninja) {
     const { PANTS, UPPER, GLOVE, STRIPE, STRIPE_LOW, BELT } = REGION;
     [colors[PANTS], colors[UPPER], colors[GLOVE]] = [CLOTH, CLOTH, CLOTH];
     // His belt is cut in a V by armor() (BELT in armor.ts), the skin's under it black.
@@ -926,7 +1035,7 @@ export const soldier = (
   });
   r.dt = 0;
   const blade = p.wield && !p.down && !driving(r);
-  if (r.cut) {
+  if (r.cut && !xeno) {
     const cs = cut(lod, r.cut.limb, build)[0];
     const at = out.length;
     skin(out, cs, s, colors, r.face.w);
@@ -944,9 +1053,9 @@ export const soldier = (
     gloves(out, r, s, colors, lod, armored, r.cut.limb, marine);
   } else {
     const from = out.length;
-    const bs = body(lod, build);
+    const bs = xeno ? beast(lod) : body(lod, build);
     // Under a helmet's dark visor no face shows: its channels are not worth their time.
-    const face = helmets ? undefined : r.face.w;
+    const face = helmets || xeno ? undefined : r.face.w;
     if (gpu) {
       const n0 = gpu.length;
       // Posed by the shader, the hood and the armour too (flesh.ts).
@@ -973,13 +1082,59 @@ export const soldier = (
         armor(out, from, bs, lod > 2, plate, ninja, color, !plated);
       }
     }
-    rigid('pouch', s.pos[J.PELVIS], s.rot[J.PELVIS], pouch);
+    if (xeno) {
+      const blow = PUNCHES[BLOW.TAIL];
+      const u = p.cut === BLOW.TAIL && p.swing ? 1 - p.swing / blow.ticks : 0;
+      const hit = blow.strike / blow.ticks;
+      column(
+        out,
+        s,
+        r.t,
+        Math.min(Math.hypot(p.vx, p.vz) / 9, 1),
+        u < hit
+          ? 0.65 * ease(u / hit)
+          : 0.65 + 0.35 * Math.max(0, 1 - (u - hit) / (1 - hit)) * +!!u,
+        color,
+        lod,
+      );
+      pipes(out, s, lod);
+      for (const [shin, foot, toe] of [
+        [J.SHIN_L, J.FOOT_L, J.TOE_L],
+        [J.SHIN_R, J.FOOT_R, J.TOE_R],
+      ]) {
+        rigid(`sinews ${lod}`, s.pos[shin], s.rot[shin], (o, a, q) => sinews(o, a, q, lod));
+        rigid(`heel ${lod}`, s.pos[shin], s.rot[shin], (o, a, q) => heel(o, a, q, lod));
+        rigid(`foot ${lod}`, s.pos[foot], s.rot[foot], (o, a, q) => metatarsal(o, a, q, lod));
+        // The toes at the foot's end, turned as the toe joint: level on a floor (prowl()).
+        const tip = add(s.pos[foot], turn(s.rot[foot], FOOT_TIP));
+        rigid(`toes ${lod}`, tip, s.rot[toe], (o, a, q) => toes(o, a, q, lod));
+      }
+      rigid(`ribs ${lod}`, s.pos[J.CHEST], s.rot[J.CHEST], (o, a, q) => ribs(o, a, q, lod));
+      HORNS.forEach(([j, base, len, w], i) =>
+        rigid(`horns ${i} ${lod}`, s.pos[j], s.rot[j], (o, a, q) =>
+          horns(o, a, q, lod, base, len, w),
+        ),
+      );
+      rigid(`clavicles ${lod}`, s.pos[J.CHEST], s.rot[J.CHEST], (o, a, q) =>
+        clavicles(o, a, q, lod),
+      );
+      rigid(`low ribs ${lod}`, s.pos[J.SPINE], s.rot[J.SPINE], (o, a, q) =>
+        ribs(o, a, q, lod, true),
+      );
+      for (const f of [J.FOREARM_L, J.FOREARM_R]) {
+        rigid(`elbow ${lod}`, s.pos[f], s.rot[f], (o, a, q) => elbow(o, a, q, lod));
+      }
+      rigid(`skull ${lod}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => skull(o, a, q, lod));
+      rigid(`eyes ${color}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => eyes(o, a, q, color));
+    } else {
+      rigid('pouch', s.pos[J.PELVIS], s.rot[J.PELVIS], pouch);
+    }
     if (ninja) {
       rigid(`buckle ${build} ${color}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
         buckle(o, a, q, build, color),
       );
     }
-    gloves(out, r, s, colors, lod, armored, LIMB.NONE, marine);
+    gloves(out, r, s, colors, lod, armored, LIMB.NONE, marine, xeno);
     if (k > 0) {
       dissolve(out, from, k);
     }

@@ -24,7 +24,7 @@ import { FLAG, MODE } from '../shared/types';
 import type { Choice, PlayerState, Rover, Snapshot } from '../shared/types';
 import { TONES } from './features';
 import { ROLE } from '../shared/kit';
-import { FH, FW, PALETTE, sprite } from './face';
+import { FH, FW, LOOK, PALETTE, sprite } from './face';
 import { VISOR } from './helmet';
 import type { Mark } from './marks';
 import { createSignal, scramble } from './signal';
@@ -767,7 +767,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const [frame, mug] = [one('figure'), one<HTMLCanvasElement>('figure canvas')];
   let pen: CanvasRenderingContext2D | null | undefined;
   let shown = -1;
-  /** 1 when the own player is the woman: her face (sprite()). */
+  /** The own player's face (LOOK in face.ts): the man's, the woman's, the xenomorph's head. */
   let fem = 0;
   const banner = one('output');
   const [prompt, act, meter, speed] = ['samp', 'samp span', 'cite', 'cite span'].map(t => one(t));
@@ -920,8 +920,10 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       picked = { ...c, body: +!!body };
       radios(3).forEach((b, i) => (b.disabled = !!roles && !roles.includes(i)));
       lit();
-      if (+!!body != fem) {
-        [fem, shown] = [+!!body, -1];
+      // The face's look: the man's, the woman's, or the xenomorph's head (face.ts).
+      const look = c.role === ROLE.XENO ? LOOK.XENO : +!!body;
+      if (look != fem) {
+        [fem, shown] = [look, -1];
       }
     },
     face(n) {

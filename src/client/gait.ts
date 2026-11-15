@@ -183,6 +183,8 @@ export const MOVE = {
   DOWN: 10,
   /** Seated in a rover: the rough of it, the hands and the feet are placed in `reach`. */
   RIDE: 11,
+  /** The xenomorph on a wall (MODE.CLING): facing it, the hands and the feet on it (`reach`). */
+  CLING: 12,
 } as const;
 
 /**
@@ -224,6 +226,7 @@ export const MOVES: number[][] = [
   [-0.05, 0.9, 0, 1.7, 2, 1.7, 2, 0.8, 1.6, 0.8, 1.6, 0.2, 0, 0],
   [-0.5, 0.35, 0, 1.3, 0.3, 1.1, 0.2, 0.4, 0.4, 0.2, 0.3, 0.6, 0, 0],
   [SIT.up - 0.98, -SIT.lean, 0, 1.75, 1.5, 1.75, 1.5, 0.75, 0.75, 0.75, 0.75, 0.1, SIT.back, 0],
+  [0, 0.15, 0, 1, 1.4, 1, 1.4, 2.6, 0.5, 2.6, 0.5, 0.35, 0, 0],
 ];
 // A wall on the left is the wall on the right seen in a mirror.
 const m = MOVES[MOVE.WALL_R];
@@ -382,8 +385,8 @@ export const JAB = { out: [1.42, 0, 0.1, 0], back: [0.1, 0.12, 0.25, 1.9], twist
 export const HOOK = { out: [1.2, 1.1, 0.1, 1.5], twist: 0.45 };
 export const LUNGE = { out: [1.52, -0.05, 0.05, 0], twist: 0.55 };
 
-/** The striking arm of each blow (BLOW): -1 the left, 1 the right. */
-export const SIDE = [-1, 1, -1, 1];
+/** The striking arm of each blow (BLOW): -1 the left, 1 the right; the xenomorph's claws, and its tail's sting, which takes no arm (0). */
+export const SIDE = [-1, 1, -1, 1, -1, 1, 0];
 
 /** Whether the player has no weapon at all: FIRE punches. */
 export const bare = (p: PlayerState): boolean =>
@@ -489,6 +492,8 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
   let [look, pitch, at] = [0, 0, [0, 0, 0]];
   /** The wall of a wall-run: its side of the runner (-1 left, 1 right) and its normal. The ledge held: where the hands took it, the normal and the height of its top. */
   let [side, wn, lip, held] = [1, [1, 0], [0, 0, 0, -1, 0], false];
+  /** On a wall (MODE.CLING): the normal toward it, and the phase of the climb, which goes with the speed. */
+  let [cn, cph] = [[0, -1], 0];
   /** The seat he rides in, and whether a weapon keeps his right hand. */
   let sat: Seat | undefined;
   let armed = false;
@@ -566,6 +571,11 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
       lip[4] = p.edge;
     }
     held = hold;
+    const cling = p.mode == MODE.CLING;
+    if (cling && p.wall) {
+      [wall, cn] = [Math.atan2(-dir[0], -dir[1]), dir];
+      cph = (cph + dt * 1.6 * (Math.abs(p.vy) + Math.hypot(p.vx, p.vz))) % 1;
+    }
     [
       air,
       air && p.vy > 0.5,
@@ -582,6 +592,7 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
     set(W + 2 * MOVE.DOWN, +(p.down > 0 || floored(p)), floored(p) ? 9 : 5);
     const rides = p.mode == MODE.RIDE;
     set(W + 2 * MOVE.RIDE, +rides, 14);
+    set(W + 2 * MOVE.CLING, +cling, 12);
     sat = rides ? (seat ?? { yaw: p.yaw, pitch: 0, roll: 0, steer: 0, s: 1 }) : sat;
     armed = p.ammo >= 0 || !!p.railed || !!p.rifled || !!p.wield;
     set(KEN, +(!!p.wield && bow > 0), 10);
@@ -604,7 +615,7 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
     const sw = (k: number) => sp[W + 2 * k];
     const turned = clamp(sw(MOVE.DASH) + sw(MOVE.WALL_L) + sw(MOVE.WALL_R) + sw(MOVE.SLIDE));
     const face = p.yaw + arc(p.yaw, way) * turned;
-    yaw = face + arc(face, wall) * clamp(sw(MOVE.HANG) + sw(MOVE.CLIMB));
+    yaw = face + arc(face, wall) * clamp(sw(MOVE.HANG) + sw(MOVE.CLIMB) + sw(MOVE.CLING));
     yaw += sp[YAW] * (1 - turned);
     if (p.down > 0 && p.fell) {
       if (!(q.down > 0) || fresh) {
@@ -802,6 +813,34 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
           frame([-nz, 0, nx], [0, -1, 0]),
         ]),
       );
+    }
+    const cl = sw(MOVE.CLING);
+    if (cl > 0.002) {
+      // On the wall's face, a body's radius ahead: the hands high and the feet low, each pair
+      // reaching in turn as it climbs.
+      const [nx, nz] = cn;
+      const on = (s: number, y: number, w: number): Vec3 => [
+        at[0] + nx * 0.32 - nz * s * w,
+        y,
+        at[2] + nz * 0.32 + nx * s * w,
+      ];
+      [-1, 1].forEach(s => {
+        const v = Math.sin(TAU * (cph + (s > 0 ? 0.5 : 0)));
+        goals.push([
+          hand(s),
+          cl,
+          on(s, pel[1] + 0.72 + 0.14 * v, 0.24),
+          D(s * 0.8, 0, 0.6),
+          frame([0, s, 0], [nx, 0, nz]),
+        ]);
+        goals.push([
+          foot(s),
+          cl,
+          on(s, pel[1] - 0.62 - 0.12 * v, 0.15),
+          [nx, 0.5, nz],
+          frame([-nz, 0, nx], [0, -1, 0]),
+        ]);
+      });
     }
     [-1, 1].forEach(s => {
       const w = sw(s < 0 ? MOVE.WALL_L : MOVE.WALL_R);

@@ -444,8 +444,9 @@ const makeCards = (style: number) => {
     [300, 0.55, 0.0006, 0.006, 0.5, 0, 0, 0.01],
     [300, 0.75, 0.0012, 0.005, 0.68, 100, 0, 0.03],
     [300, 0.9, 0.002, 0.0045, 0.82, 100, 0.25, 0.05],
-    [260, 1, 0.003, 0.004, 0.95, 100, 0.35, 0.07],
-    [80, 1.05, 0.006, 0.002, 1.05, 200, 1, 0.14],
+    [260, 1, 0.003, 0.004, 0.95, 100, 0.35, 0.14],
+    // Flyaways, many and long: they leave the outline, so it is no block.
+    [320, 1.05, 0.006, 0.0025, 0.95, 200, 1, 0.28],
   ];
   for (const [count, depth, lift, half, light, base, moving, fray] of LAYERS) {
     for (let c = 0; c < count; c++) {
@@ -454,9 +455,13 @@ const makeCards = (style: number) => {
       const up = lift * (0.6 + 0.8 * rnd());
       const drift = (rnd() - 0.5) * (base == 200 ? 0.6 : 0.3);
       const hw = half * (0.7 + 0.6 * rnd());
-      const past = Math.abs(a0) > 1.15 || loose(a0) ? fray * (0.3 + rnd()) : 0;
+      // Past the edge: at the back and sides, and all round a loose style; never over the face.
+      const past = (Math.abs(a0) > 1.15 || loose(a0) ? 1 : 0) * fray * (0.3 + rnd());
       const give = (rnd() < moving ? 1 : moving ? 0.08 : 0) * (loose(a0) ? 1 : 0.35);
       const lit = light * (0.85 + 0.3 * rnd());
+      if (base == 200 && Math.abs(a0) < 0.9 && !loose(a0)) {
+        continue;
+      }
       const pts: number[][] = [];
       for (let k = 0; k <= SEG; k++) {
         const u = k / SEG;
@@ -470,7 +475,9 @@ const makeCards = (style: number) => {
         // A clump's root starts under the base and rises out of it: no row of cut ends on the crown.
         const o =
           (off(a, tt) + 0.0065 * (ridge ** 0.7 - 0.6) * (0.25 + 0.75 * tt)) * depth +
-          up * (base ? Math.min(1, u * 5) : 1) -
+          up * (base ? Math.min(1, u * 5) : 1) +
+          // A flyaway arches off the head toward its tip.
+          (base == 200 ? 0.022 * u * u : base == 100 && moving > 0.3 ? 0.006 * u * u : 0) -
           (base ? 0.002 * Math.max(1 - u * 5, 0) : 0);
         const p = scalp(a, y, o);
         const n = scalp(a, y, o + 0.01).map((v, i) => (v - p[i]) / 0.01);
@@ -511,6 +518,7 @@ const makeCards = (style: number) => {
       [16, 0.55, 1.3, 0.6, 0],
       [30, 0.8, 0.9, 0.85, 100],
       [44, 1, 0.75, 1, 100],
+      [16, 1.3, 0.35, 1.05, 200],
     ]) {
       for (let c = 0; c < count; c++) {
         const th0 = (2 * Math.PI * (c + rnd() * 0.6)) / count;
@@ -543,7 +551,7 @@ const makeCards = (style: number) => {
             t ** 1.5 / 0.6,
           ]);
         }
-        ribbon(pts, base + (c % 100));
+        ribbon(pts, base + (c % (base == 200 ? 80 : 100)));
       }
     }
   }

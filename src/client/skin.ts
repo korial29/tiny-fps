@@ -1684,13 +1684,16 @@ const shape = (lod: number, xeno = false): Skin => {
   const soft = (k: number) => clamp(k) ** 2 * (3 - 2 * clamp(k));
   const pull = Array.from({ length: w.length }, (_, k) => {
     const [ax, y] = [Math.abs(v[k * 6]), v[k * 6 + 1]];
-    return (
-      soft((0.075 - Math.abs(y - SPLIT + 0.01)) / 0.035) *
-      soft(Math.min(ax - 0.05, 0.255 - ax) / 0.03)
-    );
+    // The xenomorph's: a taller region round its narrower shoulders, near too (the user,
+    // 2026-11-15: the joint of the shoulder and the arm still odd).
+    return xeno
+      ? soft((0.11 - Math.abs(y - SPLIT + 0.005)) / 0.05) *
+          soft(Math.min(ax - 0.04, 0.245 - ax) / 0.035)
+      : soft((0.075 - Math.abs(y - SPLIT + 0.01)) / 0.035) *
+          soft(Math.min(ax - 0.05, 0.255 - ax) / 0.03);
   });
   // Close only: farther the step does not show, and the eye's own body never sees its armpits.
-  for (let pass = 0; pass < (lod == 3 ? 24 : 0); pass++) {
+  for (let pass = 0; pass < (lod == 3 ? (xeno ? 40 : 24) : xeno && lod == 1 ? 24 : 0); pass++) {
     const k0 = pass % 2 ? -0.53 : 0.5;
     const next = v.slice();
     pull.forEach((g, k) => {

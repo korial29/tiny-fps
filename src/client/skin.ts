@@ -67,11 +67,12 @@ const [
   LASH,
   BLUSH,
   TEETH,
-] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
+  INNER,
+] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
 /** The regions a runner's outfit is recoloured or covered by: the skin, the trousers, the boots, the gloves, the stripes and the belt. */
 export const REGION = { FLESH, PANTS, UPPER, GLOVE, STRIPE, STRIPE_LOW, BELT };
 /** The palette's colours that glow, unlit (the eyes' specks, a cut's face), and its size. */
-export const [UNLIT, COLOURS] = [[GLINT, CAP], TEETH + 1];
+export const [UNLIT, COLOURS] = [[GLINT, CAP], INNER + 1];
 
 /** Hair colours, one per runner (hairOf(), by his skin too): black, dark and mid brown, chestnut, red, dark and light blond, grey, and a shaved head, the skin's in its shadow. */
 const HAIRS = [
@@ -169,6 +170,8 @@ export const palette = (
     fem ? [0.03, 0.025, 0.025] : hair.map((v, i) => v * 0.25 + SKIN[i] * 0.12),
     SKIN.map((v, i) => v * [1.02, 0.86, 0.84][i]),
     [0.86, 0.81, 0.7],
+    // The lips' inner edges: the lips' colour, gone dark as the mouth opens (mouthed()).
+    SKIN.map((v, i) => (fem ? v * 0.5 + [0.3, 0.03, 0.06][i] : v * [0.84, 0.62, 0.66][i])),
   ];
 };
 
@@ -632,8 +635,10 @@ const tint = (x: number, y: number, aq: number, fine: boolean): number[] => {
       return [SHADE, SHADE, 0];
     }
     const dy = y - lipLine(ax);
+    // The line's row; the lips' inner edges (close) a colour of their own, the lips' at rest and
+    // the mouth's dark as it opens: the inside of the lips.
     if (Math.abs(dy) < 0.0009 && ax < MOUTH_X - 0.0015) {
-      return [LINE, LINE, 0];
+      return Math.abs(dy) < 0.0003 ? [LINE, LINE, 0] : [INNER, INNER, 0];
     }
     // The lips: the upper one thinner, dipping at its middle, the lower one fuller; to nothing at the corners.
     // A bow on the upper one (two peaks, a dip between them, a long taper to the corner); the
@@ -713,7 +718,7 @@ const sgn = (v: number, e: number) => Math.sign(v) * Math.abs(v) ** (2 / e);
 const clamp = (v: number) => Math.min(Math.max(v, 0), 1);
 
 /** How far out the face is (its z) at x across, height y: the carved surface, found by halving. */
-const onHead = (x: number, y: number) => {
+export const onHead = (x: number, y: number) => {
   const [rx, zf] = section(y);
   const e = 1.9 + 0.45 * clamp((y - 1.59) / 0.07);
   let [lo, hi, z] = [0, 1.6, 0];
@@ -973,7 +978,11 @@ const shape = (lod: number): Skin => {
     const lap = tier > 1 ? 0.003 : 0.007;
     const KEYS = fine
       ? [
-          ...[-0.0046, -0.001, 0, 0.001, 0.004].map(k => MOUTH_Y + k),
+          // Close, the lips' inner edges nearer the line (±0.6 mm), dark as the mouth opens: the inside of the lips.
+          ...(tier > 1
+            ? [-0.0046, -0.0006, 0, 0.0006, 0.004]
+            : [-0.0046, -0.001, 0, 0.001, 0.004]
+          ).map(k => MOUTH_Y + k),
           ...Array.from(
             { length: 2 * Math.ceil(0.016 / lap) + 1 },
             (_, i) => EYE_AT[1] + (i + 0.5 - Math.ceil(0.016 / lap)) * lap,
@@ -1009,7 +1018,7 @@ const shape = (lod: number): Skin => {
         [0.014, 0.009, 0.007],
         [0.006, 0.0042, 0.003],
       ][tier][+(y > 1.575 && y < 1.745) + +((y > 1.6 && y < 1.66) || (y > 1.678 && y < 1.722))];
-      const key = KEYS.find(k => k > y0 + 0.0005 && k < y + 0.0005);
+      const key = KEYS.find(k => k > y0 + 0.0002 && k < y + 0.0005);
       y = key ?? y;
       if (y > CROWN - 0.003) {
         break;
@@ -1063,15 +1072,17 @@ const shape = (lod: number): Skin => {
           // Blended into the skin round its edge: a hard switch drew the rows' steps round the eye.
           tints[h] = sk > 0 ? [col[0], SHADE, Math.min(2 * sk, 1)] : col;
           // The jaw: under the line between the lips, out from its corners down to the jaw's
-          // angle, the line itself a part; the neck under it not. And how much hair is on it.
+          // angle, the neck under it not; the lower lip whole (a lip half on the jaw stretched
+          // into a slab as it opened), the line itself on the skull, going back (POCKET). And how
+          // much hair is on it.
           uvs[h] = [
             fine
               ? 0.22 *
                 // The skin under the chin goes down with it, to nothing down the throat.
                 Math.max(w, clamp((y - NECK_Y - 0.008) / 0.02) * clamp(1.4 - aq)) *
                 clamp(
-                  (lipLine(ax) + 0.0012 - 0.5 * Math.max(ax - 0.019, 0) - y) /
-                    (0.004 + 0.45 * Math.max(ax - MOUTH_X, 0)),
+                  (lipLine(ax) - 0.0003 - 0.5 * Math.max(ax - 0.019, 0) - y) /
+                    (0.0003 + 0.25 * Math.max(ax - 0.014, 0) + 0.45 * Math.max(ax - MOUTH_X, 0)),
                 )
               : 0,
             col[1] == HAIR ? col[2] : 0,
@@ -1283,6 +1294,45 @@ const shape = (lod: number): Skin => {
         () => [LASH, LASH, 0],
         i => [(2 * i) / (cols - 1) - 1, 1],
       );
+      // The teeth, close only: an arch behind each lip, the incisors in front and the rows going
+      // back round the curve, a shadow between two teeth, the canine a little longer; the upper
+      // row on the skull, the lower one on the jaw, a little behind it (the bite). Hidden by the
+      // closed lips; the mouth opening (POCKET in features.ts) shows them.
+      if (close) {
+        // Across from the middle: the two incisors, the canine (a shadow at each even column), the back.
+        const TOOTH = [0, 0.0024, 0.0047, 0.0068, 0.0088, 0.0112, 0.0135, 0.0185];
+        const z0 = surf(0, MOUTH_Y) + 0.004;
+        for (const upper of [true, false]) {
+          const d = upper ? 1 : -1;
+          // The upper row's edge 2 mm under the line between the lips, the lower one's 1.5 mm over it.
+          const rows = upper ? [0.0075, -0.0016, -0.0021] : [0.0075, -0.0001, -0.0006];
+          patch(
+            KIND.TEETH,
+            TOOTH.length,
+            rows.length,
+            false,
+            (i, r) => {
+              const x = TOOTH[i];
+              const tip = r ? 0.0008 * bell(x - 0.0112, 0.002) : 0;
+              const y = lipLine(x) + d * (rows[r] - tip);
+              const z =
+                Math.max(z0 + 22 * x * x, surf(x, y) + 0.0035) +
+                (upper ? 0 : 0.0016) +
+                (r == 2 ? 0.0012 : 0);
+              return [x, y, z];
+            },
+            (i, r) =>
+              r == 0
+                ? [TEETH, SHADE, 0.6]
+                : i == TOOTH.length - 1
+                  ? [TEETH, SHADE, 0.6]
+                  : i % 2 == 0
+                    ? [TEETH, SHADE, 0.3]
+                    : [TEETH, TEETH, 0],
+            () => [upper ? 0 : 0.22, 0, 0],
+          );
+        }
+      }
       // The ears: a thin shell each, a hair into the head along its front, leaning back with the
       // nose's ridge and standing out of the head behind (the user, 2026-11-14). On its outer face
       // a rolled rim over the top and the back, the ridge inside it, the bowl in front sunk and in
@@ -1590,6 +1640,9 @@ const shape = (lod: number): Skin => {
           clamp((1.45 + 0.3 * fem - aq) / 0.35);
     } else if (g[i] == KIND.LID_U) {
       o[i] *= 0.9 + 0.1 * uvs[i]![1];
+    } else if (g[i] == KIND.TEETH) {
+      // In the mouth, out of the light.
+      o[i] *= 0.8;
     }
   }
   // The channels: each field of features.ts on the vertices it moves, and what it does to the
@@ -2042,15 +2095,17 @@ export const duals = (s: Skin, { pos, rot }: { pos: Vec3[]; rot: Quat[] }) => {
   return D;
 };
 
-/** The palette `colors` as the face `face` shows it: the line between the lips, the mouth's dark as the jaw opens, the teeth when the lips are drawn off them. */
+/** The palette `colors` as the face `face` shows it: the line between the lips dark as the mouth opens (the teeth are pieces of their own, close). */
 export const mouthed = (colors: number[][], face?: ArrayLike<number>) => {
   const pal = colors.slice();
-  const [jw, grit] = [clamp((face?.[CH.JAW] ?? 0) * 4), clamp((face?.[CH.GRIT] ?? 0) * 1.6)];
-  if (jw || grit) {
-    const bare = grit * (1 - clamp((face?.[CH.JAW] ?? 0) * 2 - 0.5));
-    pal[LINE] = colors[LINE].map(
-      (c, i) => (c + (MOUTH[i] - c) * jw) * (1 - bare) + colors[TEETH][i] * bare,
-    );
+  const flush = clamp(face?.[CH.FLUSH] ?? 0);
+  if (flush) {
+    pal[BLUSH] = colors[BLUSH].map((c, i) => c * (1 + flush * [0.14, -0.12, -0.12][i]));
+  }
+  const open = clamp(Math.max((face?.[CH.JAW] ?? 0) * 4, (face?.[CH.GRIT] ?? 0) * 3));
+  if (open) {
+    pal[LINE] = colors[LINE].map((c, i) => c + (MOUTH[i] - c) * open);
+    pal[INNER] = colors[INNER].map((c, i) => c + (MOUTH[i] * 1.5 - c) * open);
   }
   return pal;
 };

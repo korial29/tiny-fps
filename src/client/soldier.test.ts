@@ -57,6 +57,7 @@ import { PACK, pack } from './pack';
 import { palette, shaved } from './skin';
 import { CH, lookOf, toneOf } from './features';
 import { POSE } from './expression';
+import { EMBER } from './cigar';
 
 const DT = 1 / 60;
 const DASH_BURST = DASH_COOLDOWN - 2;
@@ -119,6 +120,21 @@ describe('animate', () => {
       animate(book, [man({ hp: 80 })], DT);
     }
     expect(book.get(1)!.hurt).toBe(0);
+  });
+
+  it('angers a runner who is hit or tackled, for 4 s', () => {
+    const book = new Map<number, Runner>();
+    animate(book, [man({ hp: 100 })], DT);
+    animate(book, [man({ hp: 100 })], DT);
+    expect(book.get(1)!.mad).toBe(0);
+    animate(book, [man({ hp: 80 })], DT);
+    expect(book.get(1)!.mad).toBe(4);
+    for (let i = 0; i < 250; i++) {
+      animate(book, [man({ hp: 80 })], DT);
+    }
+    expect(book.get(1)!.mad).toBe(0);
+    animate(book, [man({ hp: 80, stun: 40 })], DT);
+    expect(book.get(1)!.mad).toBe(4);
   });
 
   it('keeps one runner per player and drops the ones that left', () => {
@@ -255,7 +271,7 @@ describe('soldier', () => {
     const plain = draw({ vz: -14 }).length / STRIDE;
     const dash = rows(draw({ dash: DASH_BURST, vz: -14 }));
     // The eyes' specks glow too, dash or not, and the spare's top at the pouch's mouth.
-    const speck = (p: number[]) => p[4] == 1.3 || p[4] == 0.25;
+    const speck = (p: number[]) => p[4] == 1.3 || p[4] == 0.25 || p[4] == EMBER[0];
     const glow = dash.filter(p => p[3] == -2 && !speck(p));
     expect(glow.length).toBeGreaterThan(15);
     expect(dash.length - glow.length).toBe(plain);

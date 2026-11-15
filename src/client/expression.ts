@@ -20,6 +20,8 @@ export interface Mood {
   shout: number;
   /** A capture, a foe put down. */
   grin: number;
+  /** Hit, tackled or punched by a foe: it lingers once the wince is gone. */
+  anger: number;
   /** Where he aims from where his head points: radians to his right, and up. */
   gx: number;
   gy: number;
@@ -32,6 +34,7 @@ export const CALM: Mood = {
   focus: 0,
   shout: 0,
   grin: 0,
+  anger: 0,
   gx: 0,
   gy: 0,
 };
@@ -66,8 +69,36 @@ export const POSE = {
   SHOUT: [
     [CH.JAW, 1],
     [CH.BROW_DOWN, 1],
-    [CH.SQUINT, 0.5],
-    [CH.GRIT, 0.5],
+    [CH.SQUINT, 0.3],
+    [CH.TENSE, 0.4],
+    [CH.SNEER, 0.6],
+    [CH.GRIT, 0.6],
+  ],
+  /**
+   * Anger, the mouth shut: the brows down and drawn together, their outer ends left up (a V); the
+   * upper lids up and the lower ones tight (a glare); the nose wrinkled; the lips pressed thin.
+   */
+  ANGER: [
+    [CH.BROW_DOWN, 1.3],
+    [CH.BROW_UP, 0.25],
+    [CH.WIDE, 0.8],
+    [CH.TENSE, 0.9],
+    [CH.SNEER, 0.7],
+    [CH.PRESS, 1],
+    [CH.FROWN, 0.5],
+    [CH.FLUSH, 1],
+  ],
+  /** Anger let out: the same glare, a snarl, the teeth bared and the jaw a little open. */
+  RAGE: [
+    [CH.BROW_DOWN, 1.3],
+    [CH.BROW_UP, 0.2],
+    [CH.WIDE, 0.8],
+    [CH.TENSE, 0.6],
+    [CH.SNEER, 1],
+    [CH.GRIT, 1],
+    [CH.JAW, 0.45],
+    [CH.FROWN, 0.5],
+    [CH.FLUSH, 1],
   ],
   WINCE: [
     [CH.BLINK, 0.85],
@@ -93,6 +124,7 @@ const LAYERS: [keyof Mood, number[][], number, number][] = [
   ['effort', POSE.EFFORT, 5, 1.6],
   ['focus', POSE.FOCUS, 9, 3],
   ['grin', POSE.GRIN, 10, 2.5],
+  ['anger', POSE.ANGER, 8, 1.2],
   ['shout', POSE.SHOUT, 30, 6],
   ['hurt', POSE.WINCE, 60, 6],
   ['down', POSE.DOWN, 12, 5],
@@ -124,6 +156,9 @@ export const expression = (pose: number[][], id?: number): Float32Array => {
   return w;
 };
 
+/** A pose every face holds at once, whatever its mood: the demo's shots of the expressions. */
+export const HOLD: { pose?: number[][] } = {};
+
 export interface Face {
   /** The channels' weights now (CH): what skin() takes. */
   w: Float32Array;
@@ -153,6 +188,10 @@ export const createFace = (id: number): Face => {
     w,
     k,
     update(dt, mood) {
+      if (HOLD.pose) {
+        w.set(expression(HOLD.pose, id));
+        return;
+      }
       t += dt;
       goal.fill(0);
       for (const [ch, v] of POSE.NEUTRAL) {

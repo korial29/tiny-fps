@@ -547,7 +547,7 @@ const frown = (x: number, y: number) => {
  */
 export const HEAD_UP = 0.05;
 // A lower, flatter forehead (the user, 2026-11-15: too conical), the chin where it was.
-const [EY, EA, EB, EC] = [0.02, 0.072, 0.115, 0.115];
+const [EY, EA, EB, EC] = [0.005, 0.072, 0.1, 0.105];
 /** How much of the forehead's sphere the face is at height y: none under the orbits, all over them. */
 const brow = (y: number) => {
   const t = Math.min(Math.max((y - 0.005) / 0.025, 0), 1);

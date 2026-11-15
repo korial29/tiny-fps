@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HIGHLINE, ROOFTOPS } from '../shared/map';
+import { MAPS } from '../shared/maps';
 import { forward } from '../shared/physics';
 import { ROVER } from '../shared/rover';
 import { TEX } from '../shared/types';
@@ -38,6 +39,7 @@ import {
   sunProj,
   viewProj,
   FRAG,
+  fragOf,
   POST_FRAG,
 } from './render';
 import { trees } from './skyline';
@@ -774,6 +776,42 @@ describe('the regolith in the shader', () => {
     );
     // The bump flattens too, or the far ground would sparkle.
     expect(FRAG).toContain('t.a=mix(t.a,.5,fd)');
+  });
+});
+
+/** The source with its `#ifdef MOON` blocks taken out: what a map without the moon compiles. */
+const earthly = (src: string) => src.replace(/#ifdef MOON\n[\s\S]*?#endif\n/g, '');
+
+/** The text from `open` to the brace that closes the block it opens. */
+const block = (src: string, open: string) => {
+  const at = src.indexOf(open);
+  let depth = 0;
+  for (let i = at + open.length - 1; i < src.length; i++) {
+    depth += src[i] == '{' ? 1 : src[i] == '}' ? -1 : 0;
+    if (!depth) {
+      return src.slice(at, i + 1);
+    }
+  }
+  return '';
+};
+
+describe('what a pixel pays for', () => {
+  it('compiles the moon only into a map that has it', () => {
+    expect(fragOf(HIGHLINE)).not.toContain('#define MOON');
+    expect(fragOf(MAPS.tranquility)).toMatch(/^#version 300 es\n#define MOON\n/);
+    // On Highline nothing of the globe, the stars, the craters or the orbit's fade is left.
+    const src = earthly(FRAG);
+    for (const call of ['mg(', 'sk(', 'cs(', 'cr(', 'gh(', 'fa>']) {
+      expect(src).not.toContain(call);
+    }
+    expect(FRAG).toContain('mg(');
+  });
+
+  it('works out the noises of the skin only on skin', () => {
+    // Seven 3D noises a pixel on every pixel of the city were 3.7 ms of GPU a frame.
+    const skin = block(FRAG, 'if(kb>0.){');
+    expect(skin).toContain('n3(Rp*1500.)');
+    expect(FRAG.replace(skin, '')).not.toContain('n3(Rp');
   });
 });
 

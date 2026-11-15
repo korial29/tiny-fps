@@ -67,6 +67,40 @@ What is still to look at:
   city and skyline included (216 000 vertices on Highline), then the scene draws everything once
   more at 4x MSAA in RGBA16F. On an integrated GPU, look there first.
 
+## The audit of 2026-11-15
+
+The game had gone back under 60 fps (the user: a new audit). Measured in Chrome with the real GPU
+(an M2, 1728 by 1013, a local game with 8 bots), then each of the 21 commits since #253 in turn:
+
+| Measure                          | #253   | Before the fix | After     |
+| -------------------------------- | ------ | -------------- | --------- |
+| Highline: frames a second        | 60     | 51 to 56       | 60        |
+| Highline: a frame's GPU (median) | 7.1 ms | 15.8 to 17 ms  | 9.5–11 ms |
+| Highline: a frame's CPU (median) | 6.7 ms | 13 to 18 ms    | 8.5 ms    |
+| Tranquility: frames a second     | –      | 52 to 57       | 59 to 60  |
+| Tranquility: a frame's GPU       | –      | 15.5 to 17 ms  | 14.6 ms   |
+
+The GPU was the bottleneck, and two changes made it so. The CPU's time went up with it only
+because the GL calls wait on a GPU that is behind.
+
+- **The skin's texture (#269) worked out seven 3D noises on every pixel of the screen**, the city's
+  included, though all of it was multiplied by `kb`, 0 off the skin. A shader does what it is told
+  even when the result is multiplied by zero: 3.7 ms a frame. They now run under `if(kb>0.)`.
+- **The moon's globe, stars, craters and orbit fade (#259) cost Highline 2.4 ms a frame** without
+  ever running there: uniforms at 0 kept them from running, not from weighing on the program (its
+  registers, so how many pixels the GPU shades at once). `fragOf()` compiles them in only for a map
+  that has the moon (`#define MOON`, the blocks under `#ifdef MOON`).
+
+The same frames before and after, time frozen, from the rooftop, the moon's ground and orbit, are
+the same to the byte.
+
+Still to do, found by the same audit:
+
+- **Close hair is made the first time a woman comes within `CLOSE`**: 53 to 113 ms a style, in a
+  frame of the match (rule 5), 412 ms for the five. `dressed()` should make them at the map's load.
+- **The own body is 70 % of a frame's JavaScript**: 4.1 ms (2.6 at #253), the marine's armour on
+  it 73 000 vertices since #257, a fifth of them behind the eye where nothing shows them.
+
 ## Moving the work to the GPU
 
 The plan agreed on 2026-11-14 (the user), one step and one PR at a time, the size budget raised by
@@ -166,6 +200,12 @@ Verts`, `verts.ts`): `out.push(...)` for a few numbers, and for many, `const a =
     and compare every float (the method is below). A level of detail is a visual change: show it
     from the distance it is used at, magnified, before and after.
 11. **Measure, do not guess.** Profile before optimising; the hot spot was never where it looked.
+12. **A pixel pays for what it computes, not for what it keeps.** In the fragment shader, work that
+    only some pixels need (the skin's, the armour's wear) goes under an `if` on what tells them
+    apart; multiplying it by a factor that is 0 elsewhere still pays for it on every pixel.
+13. **What a map does not have is not compiled in.** Code for one map only goes under an `#ifdef`
+    that `fragOf()` defines for it (`MOON`), not behind a uniform at 0: unrun, it still slows the
+    whole program. `render.test.ts` checks that Highline's shader has none of the moon's.
 
 ## How to measure
 

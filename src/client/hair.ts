@@ -441,10 +441,10 @@ const makeCards = (style: number) => {
   // [cards, depth in the shell's offset, lift (m), half width (m), how light, id base, moving share, fray]
   // Thin bands in successive layers, the deepest dark and still, each one out lighter and freer.
   const LAYERS: number[][] = [
-    [300, 0.55, 0.0006, 0.006, 0.42, 0, 0, 0.01],
-    [300, 0.75, 0.0012, 0.005, 0.58, 100, 0, 0.03],
-    [300, 0.9, 0.002, 0.0045, 0.75, 100, 0.25, 0.05],
-    [260, 1, 0.003, 0.004, 0.9, 100, 0.35, 0.07],
+    [300, 0.55, 0.0006, 0.006, 0.5, 0, 0, 0.01],
+    [300, 0.75, 0.0012, 0.005, 0.68, 100, 0, 0.03],
+    [300, 0.9, 0.002, 0.0045, 0.82, 100, 0.25, 0.05],
+    [260, 1, 0.003, 0.004, 0.95, 100, 0.35, 0.07],
     [80, 1.05, 0.006, 0.002, 1.05, 200, 1, 0.14],
   ];
   for (const [count, depth, lift, half, light, base, moving, fray] of LAYERS) {
@@ -464,7 +464,9 @@ const makeCards = (style: number) => {
         const tt = Math.min(t, 1);
         const a = a0 + drift * u + 0.02 * Math.sin(u * 5 + c);
         const ridge = Math.abs(Math.sin(a * LOCKS + 1.3 * Math.sin(tt * 3.2 + style)));
-        const y = Math.max(top + (low(a) - top) * tt ** 0.85, LOWEST + 0.007);
+        // The loose ends' tips, as the shell cuts them: a lock's ridge reaches lower.
+        const tip = 0.016 * ridge ** 2 * loose(a);
+        const y = Math.max(top + (low(a) - tip - top) * tt ** 0.85, LOWEST + 0.007);
         // A clump's root starts under the base and rises out of it: no row of cut ends on the crown.
         const o =
           (off(a, tt) + 0.0065 * (ridge ** 0.7 - 0.6) * (0.25 + 0.75 * tt)) * depth +
@@ -506,8 +508,8 @@ const makeCards = (style: number) => {
     };
     const steps = (n - 1) * 6;
     for (const [count, depth, half, light2, base] of [
-      [16, 0.55, 1.3, 0.5, 0],
-      [30, 0.8, 0.9, 0.75, 100],
+      [16, 0.55, 1.3, 0.6, 0],
+      [30, 0.8, 0.9, 0.85, 100],
       [44, 1, 0.75, 1, 100],
     ]) {
       for (let c = 0; c < count; c++) {
@@ -609,7 +611,9 @@ export const closeOf = (style: number) => {
       }
       const a = Math.atan2(x, 0.005 - z);
       const free = style == STYLE.BOB ? 1 : style == STYLE.UNDERCUT ? +(a > 0.3) : 0;
-      return free * clamp((top - y) / Math.max(top - low(a), 0.01));
+      // Down to the tips the shell cuts, not its line: the zigzag stays.
+      const tip = 0.016 * Math.sin(a * LOCKS + 1.3 * Math.sin(3.2 + style)) ** 2;
+      return free * clamp((top - y) / Math.max(top - low(a) + tip, 0.01));
     };
     const o = bindOf(0)[J.HEAD];
     const out: number[] = [];
@@ -621,7 +625,7 @@ export const closeOf = (style: number) => {
         m[i + 3],
         m[i + 4],
         m[i + 5],
-        m[i + 6] * 0.42,
+        m[i + 6] * 0.6,
         m[i + 7] ** 1.5 / 0.6,
         HAIR_ROOT - HAIR_SPAN * clamp((TOP - m[i + 1]) / 0.3),
         // Below -1: the underlayer, and how far down to its hem (the shader dissolves its edge).

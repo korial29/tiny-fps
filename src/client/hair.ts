@@ -433,10 +433,13 @@ const makeCards = (style: number) => {
     style == STYLE.BOB ? () => 1 : style == STYLE.UNDERCUT ? (a: number) => +(a > 0.3) : () => 0;
   const SEG = 8;
   // [cards, depth in the shell's offset, lift (m), half width (m), how light, id base, moving share, fray]
+  // Thin bands in successive layers, the deepest dark and still, each one out lighter and freer.
   const LAYERS: number[][] = [
-    [320, 0.7, 0.0008, 0.008, 0.5, 0, 0, 0.02],
-    [380, 0.95, 0.0025, 0.0045, 0.85, 100, 0.3, 0.06],
-    [70, 1, 0.006, 0.002, 1.05, 200, 1, 0.14],
+    [300, 0.55, 0.0006, 0.006, 0.42, 0, 0, 0.01],
+    [300, 0.75, 0.0012, 0.005, 0.58, 100, 0, 0.03],
+    [300, 0.9, 0.002, 0.0045, 0.75, 100, 0.25, 0.05],
+    [260, 1, 0.003, 0.004, 0.9, 100, 0.35, 0.07],
+    [80, 1.05, 0.006, 0.002, 1.05, 200, 1, 0.14],
   ];
   for (const [count, depth, lift, half, light, base, moving, fray] of LAYERS) {
     for (let c = 0; c < count; c++) {
@@ -497,7 +500,8 @@ const makeCards = (style: number) => {
     };
     const steps = (n - 1) * 6;
     for (const [count, depth, half, light2, base] of [
-      [14, 0.55, 1.3, 0.55, 0],
+      [16, 0.55, 1.3, 0.5, 0],
+      [30, 0.8, 0.9, 0.75, 100],
       [44, 1, 0.75, 1, 100],
     ]) {
       for (let c = 0; c < count; c++) {

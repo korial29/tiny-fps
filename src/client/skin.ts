@@ -2079,6 +2079,9 @@ let Q = new Float32Array(0);
 /** The rest mesh with the face's channels added. */
 let R = new Float32Array(0);
 
+/** The palette regions that are bare skin: the shader's skin pass (SKIN_LAYER) takes them. */
+export const BARE_REGIONS = [FLESH, LIP, STUBBLE, BLUSH, SHADE];
+
 /**
  * The dual quaternions that carry the rest pose of the skin `s` to the pose, joint by joint and
  * then its two swings (the shoulders'): eight numbers each, the rotation then its dual.

@@ -40,6 +40,8 @@ export interface Flesh {
   face: Float32Array;
   plate?: number[];
   accent?: number[];
+  /** The runner's id: the marks of his skin (moles, freckles, scars) in the shader. */
+  seed?: number;
 }
 
 /** What the vertex shader reads by texel (flesh.ts): four floats each, 2048 a row. */

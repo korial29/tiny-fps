@@ -494,6 +494,59 @@ export const clavicles = (out: Out, at: Vec3, q: Quat, lod: number) => {
   }
 };
 
+/** The pipes' colour: a very dark grey, lighter than the chitin. */
+const PIPE = [0.1, 0.1, 0.105];
+/**
+ * Thin pipes up its neck (the user, 2026-11-15: following the neck, in curves): three each side,
+ * from the top of the chest round the neck's sides into the underside of the skull, each through
+ * points carried by the chest, the neck and the head, so it bends with them, on a smooth curve
+ * that snakes round the neck. In the world, from the solved skeleton `s`.
+ */
+export const pipes = (out: Out, s: Solved, lod: number) => {
+  // The joint, the height over it and the neck's radius there (on its muscles), its centre's z.
+  const ctl: [number, number, number, number][] = [
+    [J.CHEST, 0.15, 0.08, 0],
+    [J.NECK, 0.0, 0.062, 0.002],
+    [J.NECK, 0.06, 0.057, 0.004],
+    [J.HEAD, 0.0, 0.055, 0.006],
+    [J.HEAD, 0.05, 0.05, 0.01],
+  ];
+  for (const k of [-1, 1]) {
+    [0.65, 1.1, 1.55].forEach((a, i) => {
+      // A wave round the neck, each pipe out of step with the next.
+      const pts = ctl.map(([j, y, r, z], c): Vec3 => {
+        const b = a + 0.22 * Math.sin(c * 1.4 + i * 2.1);
+        return on(s.pos[j], s.rot[j], [k * r * Math.sin(b), y, z - r * Math.cos(b)]);
+      });
+      const dense: Vec3[] = [];
+      pts.forEach((p, m) => {
+        const [o, c, d] = [pts[m - 1] ?? p, pts[m + 1], pts[m + 2] ?? pts[m + 1]];
+        if (!c) {
+          dense.push(p);
+          return;
+        }
+        for (let t = 0; t < 4; t++) {
+          const u = t / 4;
+          const [u2, u3] = [u * u, u * u * u];
+          const w = [-u3 + 2 * u2 - u, 3 * u3 - 5 * u2 + 2, -3 * u3 + 4 * u2 + u, u3 - u2];
+          dense.push(
+            [0, 1, 2].map(x => (o[x] * w[0] + p[x] * w[1] + c[x] * w[2] + d[x] * w[3]) / 2) as Vec3,
+          );
+        }
+      });
+      strand(
+        out,
+        [0, 0, 0],
+        [0, 0, 0, 1],
+        dense,
+        dense.map((_, m) => 0.0042 - 0.0015 * (m / (dense.length - 1))),
+        SIDES[0][lod],
+        PIPE,
+      );
+    });
+  }
+};
+
 /** A spur of bone on a joint: from `base` along `dir` (in its frame), `len` long, `r` thick at its root. */
 const spur = (
   out: Out,
@@ -545,9 +598,9 @@ const DEPTH = [
   [0.012, 0.115],
   [-0.02, 0.12],
   [-0.05, 0.118],
-  [-0.07, 0.12],
-  [-0.088, 0.116],
-  [-0.095, 0.1],
+  [-0.07, 0.115],
+  [-0.088, 0.105],
+  [-0.095, 0.088],
 ];
 /** Its head's chitin: the dome's (the skin's TRIM, soldier.ts) and its face's, one colour. */
 export const HEAD = CHITIN_X.map(v => v * 1.6);
@@ -628,7 +681,7 @@ const faceZ = (x: number, y: number) => {
     0.007 * frown(x, y) -
     0.008 * Math.exp(-(((Math.abs(x) - 0.056) / 0.013) ** 2) - ((y + 0.008) / 0.012) ** 2) +
     0.016 * Math.exp(-(((Math.abs(x) - 0.052) / 0.015) ** 2) - ((y + 0.036) / 0.016) ** 2) -
-    0.022 * Math.exp(-((jawline(x, y) / 0.0055) ** 2)) * (1 - u ** 6)
+    0.022 * Math.exp(-((jawline(x, y) / 0.009) ** 2)) * (1 - u ** 6)
   );
 };
 /**

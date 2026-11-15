@@ -775,8 +775,8 @@ const TRUNK_X = remake(
     // Wide hips and a full rear under the starved waist (the user, 2026-11-15): wider and deeper
     // round the pelvis, the depth thrown back.
     const hip = Math.exp(-(((at - 0.95) / 0.09) ** 2));
-    r[3] *= 0.72 + 0.2 * up - 0.26 * neck + 0.4 * hip;
-    r[4] *= 0.8 + 0.18 * up - 0.2 * neck + 0.3 * hip;
+    r[3] *= 0.72 + 0.2 * up - 0.2 * neck + 0.4 * hip;
+    r[4] *= 0.8 + 0.18 * up - 0.15 * neck + 0.3 * hip;
     r[2] -= 0.018 * hip;
     // Its ribs: the strips under the chest in turn lighter and darker.
     const rib = at > 1.02 && at < 1.4 && TRUNK.rings.findIndex(q => q[0] == at) % 2;
@@ -789,9 +789,10 @@ const TRUNK_X = remake(
 // The neck runs on up into the skull, where its top is hidden: no flat ring under the jaw.
 // A long neck under the head carried high (xeno.ts: HEAD_UP), running up into it.
 TRUNK_X.rings.push(
-  [1.6, 0, 0.004, 0.042, 0.044, 2.75, TRIM],
-  [1.655, 0, 0.008, 0.04, 0.042, 2.9, TRIM],
-  [1.715, 0, 0.012, 0.04, 0.04, 3, TRIM],
+  // A muscled neck (the user, 2026-11-15).
+  [1.6, 0, 0.004, 0.052, 0.05, 2.75, TRIM],
+  [1.655, 0, 0.008, 0.049, 0.047, 2.9, TRIM],
+  [1.715, 0, 0.012, 0.044, 0.042, 3, TRIM],
   [1.745, 0, 0.014, 0, 0, 3, TRIM],
 );
 // The leg ends at the ankle, closed: its foot is xeno.ts's metatarsal(), longer than the rig's.

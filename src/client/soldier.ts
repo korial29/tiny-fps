@@ -112,6 +112,7 @@ import {
   metatarsal,
   ribs,
   clavicles,
+  pipes,
   sinews,
   skull,
   toes,
@@ -1094,6 +1095,7 @@ export const soldier = (
         color,
         lod,
       );
+      pipes(out, s, lod);
       for (const [shin, foot, toe] of [
         [J.SHIN_L, J.FOOT_L, J.TOE_L],
         [J.SHIN_R, J.FOOT_R, J.TOE_R],

@@ -861,6 +861,8 @@ const PROFILE = [0.42, 1.69, 0.21, 0.084, 0.1];
 /** The radius of the round end of the dome, and the banana's thickness and half width behind the face. */
 const TIP = 0.062;
 const BANANA = [0.2, 0.09];
+/** How far the banana's top climbs over the face's. */
+const RISE = 0.05;
 
 const CREST: Loft = {
   chain: [J.HEAD, J.HEAD],
@@ -875,7 +877,10 @@ const CREST: Loft = {
     const c = PROFILE[1] - PROFILE[2] * (z / PROFILE[0]) ** 2;
     // The top as it is (the user, 2026-11-15: perfect); the underside curves up toward the tip,
     // thinning the back of the head into a blade clear of the neck and the back.
-    const top = c + PROFILE[4] * k;
+    // The banana set higher than the face (the user, 2026-11-15): its top climbs over the forehead
+    // just behind the face's edge (unmoved there, no seam), then falls along its arc.
+    const g = Math.min(z / 0.09, 1);
+    const top = c + PROFILE[4] * k + RISE * g * g * (3 - 2 * g) * (1 - (z / PROFILE[0]) ** 2);
     // A banana (the user, 2026-11-15): from the face's full edge (no seam) down to a body of a
     // nearly even thickness along the top's curve, tapering a little, and a round end.
     // The base curving up quickly (the user, 2026-11-15): out of the face's edge then fast.

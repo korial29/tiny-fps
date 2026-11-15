@@ -829,25 +829,29 @@ const ARM_X = remake(ARM, r => {
  * (the user, 2026-11-15: more curves, the back bending down, not up). Its front ring is the edge of its face, xeno.ts's
  * skull(), a human skull's, which covers the front half: one smooth block, no seam.
  */
+/**
+ * The xenomorph's dome's profile (the user, 2026-11-15: the back's curve carrying on the front's): its length
+ * behind the face's edge, the height of the face's middle (xeno.ts: EY over the head joint), how far
+ * the tip falls, and the face's half width and height (EA, EB). Its top runs on from the face's own
+ * ellipse, level where they meet, and falls along one arc to the tip; its underside rises faster,
+ * clear of the neck.
+ */
+const PROFILE = [0.42, 1.66, 0.07, 0.072, 0.135];
+
 const CREST: Loft = {
   chain: [J.HEAD, J.HEAD],
   n: [6, 16, 36],
   e: 2,
   z: true,
   far: [0, 4, 8, 12, 16],
-  rings: [
-    [0.42, 0, 1.62, 0, 0, 0, TRIM],
-    [0.385, 0, 1.655, 0.022, 0.034, 0, TRIM],
-    [0.33, 0, 1.69, 0.04, 0.062, 0, TRIM],
-    [0.25, 0, 1.71, 0.056, 0.09, 0, TRIM],
-    [0.15, 0, 1.703, 0.067, 0.116, 0, TRIM],
-    [0.08, 0, 1.684, 0.072, 0.128, 0, TRIM],
-    // Straight on from the face's edge for a few centimetres: the face's rim runs along z there too.
-    [0.03, 0, 1.663, 0.072, 0.135, 0, TRIM],
-    // Its front ring, the face's edge (xeno.ts: EY, EA, EB), left open: a flat cap behind the face
-    // tilted its normals forward, and the light broke along the seam.
-    [0, 0, 1.66, 0.072, 0.135, 0, TRIM],
-  ],
+  rings: Array.from({ length: 12 }, (_, i) => {
+    // From the tip at the back (i = 0) to the face's edge (i = 11), closer together toward the tip.
+    const z = PROFILE[0] * Math.cos(((i / 11) * Math.PI) / 2);
+    const k = Math.sqrt(Math.max(0, 1 - (z / PROFILE[0]) ** 2));
+    const c = PROFILE[1] - PROFILE[2] * (z / PROFILE[0]) ** 2;
+    const [top, low] = [c + PROFILE[4] * k, c - PROFILE[4] * k * k];
+    return [z, 0, (top + low) / 2, PROFILE[3] * k ** 0.8, (top - low) / 2, 0, TRIM];
+  }),
 };
 // A ring between each two: a smooth skull close up.
 CREST.rings = finer(CREST.rings, false);

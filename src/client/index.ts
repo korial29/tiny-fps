@@ -13,6 +13,7 @@ import { shaved } from './skin';
 import { SONGS, SOUND } from './sfx';
 import { aimOf, gap2, struck } from '../shared/rover';
 import { SHIP, altitude, limits } from '../shared/ship';
+import { PHASE, inside } from '../shared/station';
 import { build, hidden, ray } from '../shared/world';
 import { createAnnouncer } from './announce';
 import { LINE, SAID } from './voice/clips';
@@ -35,6 +36,8 @@ import { createInput } from './input';
 import { createPredictor } from './predict';
 import { gather } from './lights';
 import { marks } from './marks';
+import { brief, goal } from './mission';
+import { lamps } from './satellite';
 import { packsOf } from './props';
 import { HEAD, createRenderer } from './render';
 import { createWrecks } from './wreck';
@@ -350,6 +353,17 @@ const play = (
             if (beat.who == you.id) {
               fx.jolt();
             }
+          } else if (beat.kind == 'strike') {
+            // The station's lasers come down on every one of the other team.
+            for (const p of s.players) {
+              if (roster.find(q => q.id == p.id)?.team != beat.team) {
+                tracer.strike([p.x, p.y, p.z], world.def.station?.gun);
+                tracer.burst([p.x, p.y + 1, p.z], true);
+                if (p.id == you.id) {
+                  fx.jolt();
+                }
+              }
+            }
           }
         }
         for (const line of announcer.step(match, s, told, you)) {
@@ -458,6 +472,11 @@ const play = (
 
     const me = predictor.me(acc / STEP);
     const others = predictor.others(now);
+    // The station's strike disintegrated the other team: who of it lies down is not drawn.
+    const st = match?.station;
+    const gone = (id: number) =>
+      st?.phase === PHASE.STRUCK && roster.find(q => q.id == id)?.team != st.team;
+    const visible = others.filter(p => !(p.down && gone(p.id)));
     const eye: [number, number, number] = me ? [me.x, me.y + eyeHeight(me), me.z] : [0, 0, 0];
     // The rovers, and the own seat: at the wheel the camera chases the rover, beside it the view
     // stays in the rider's head, where his shots leave from.
@@ -614,6 +633,9 @@ const play = (
       dt,
       now,
     );
+    if (me?.down && gone(you.id)) {
+      hud.down(fx.lie, st!.left, 'DISINTEGRATED');
+    }
     // The vehicles as drawn: their damage arcs, blows up and falls apart on the way (wreck.ts).
     // After the tracer's update of this frame: a bolt it adds is drawn at least once at any rate.
     const shown = wrecks.frame(rovers, dt, eye);
@@ -636,10 +658,16 @@ const play = (
         pov,
         view,
         pitch,
-        others,
+        visible,
         colors,
         lens,
-        [...gather({ eye: pov, yaw: view, pitch, others, t: now / 1000, ctf }), ...tracer.lights()],
+        [
+          ...gather({ eye: pov, yaw: view, pitch, others: visible, t: now / 1000, ctf }),
+          ...(world.def.station
+            ? lamps(world.def.station, pov, st?.phase === PHASE.ARMED, now / 1000)
+            : []),
+          ...tracer.lights(),
+        ],
         third ? undefined : body,
         ctf,
         tracer,
@@ -682,6 +710,10 @@ const play = (
       mine ? (mine.hp ?? VEHICLE.HP) : undefined,
       near && at ? { hp: near.hp ?? VEHICLE.HP, at } : undefined,
     );
+    // The orbital mission: to a pilot, to who is in the station, to everyone while a strike is armed.
+    const def = world.def.station;
+    const aim =
+      me && def ? brief(st, you.team, !!car?.ship, inside(def, me.x, me.y, me.z)) : undefined;
     if (match) {
       hud.match(match, id => names.get(id) ?? '?');
       hud.marks(
@@ -698,9 +730,11 @@ const play = (
                 return p && [p.x, p.y, p.z];
               },
               project: rd.project,
+              goal: aim?.to && { kind: aim.to, at: goal(world.def.station!, aim.to) },
             })
           : [],
       );
+      hud.mission(aim?.text, aim?.hot);
       // A match that is over shows its result until the next one; its text arrives with the snapshot that says so.
       hud.end(match.over ? ended : undefined, match.clock);
     }
@@ -708,7 +742,9 @@ const play = (
     for (const p of others) {
       const top: [number, number, number] = [p.x, p.y + PLAYER_H + 0.3, p.z];
       // Behind a wall the tag would give the player away.
-      const at = me && !hidden(world, pov, top) ? rd?.project(...top) : undefined;
+      // Nor is the tag of one disintegrated shown.
+      const at =
+        me && !(p.down && gone(p.id)) && !hidden(world, pov, top) ? rd?.project(...top) : undefined;
       const el = tag(p.id);
       seen.add(p.id);
       el.hidden = !at;

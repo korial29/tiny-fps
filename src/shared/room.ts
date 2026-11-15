@@ -83,6 +83,8 @@ import {
 } from './rover';
 import type { Sight } from './rover';
 import { SHIP } from './ship';
+import type { Errand } from './sortie';
+import { PHASE, STATION, Station, inside, reaches as atPost } from './station';
 import { reaches, tackling } from './tackle';
 import { BODY, CUT, EV, FALL, HAIRS_N, KEY, LIMB, MODE, NOBODY, TONES_N } from './types';
 import type { Choice, Conn, Every, Input, PlayerInfo, PlayerState, Rover, Rules } from './types';
@@ -272,6 +274,14 @@ export class Room {
   private joins = 0;
   /** Ids of bots let go this tick, not given again before the next: the person who takes a bot's place would be drawn where it stood. */
   private freed = new Set<number>();
+  /** The orbital station's mission, on a map with a station. */
+  private station = new Station();
+  /** The players its strike disintegrated: held down until its STATION.OUT is over. */
+  private out = new Set<number>();
+  /** The bot of each team on an errand to the station, or -1 (errands()). */
+  private pilots = [-1, -1];
+  /** Ticks each vehicle has stood empty in the station with nobody in it, by index in `rovers`. */
+  private idle: number[] = [];
 
   /** Missing rules fall back to RULES. The map is the rules' one, unless a definition is given. */
   public constructor(rules: Partial<Rules> = {}, def?: WorldDef) {
@@ -319,6 +329,7 @@ export class Room {
     this.guide();
     this.history = [];
     this.balls = [];
+    this.station.reset();
     for (const p of this.players()) {
       this.ctf.join(p.info.id, p.info.team, p.state);
     }
@@ -423,7 +434,7 @@ export class Room {
         Object.assign(p.state, here);
         if (use && r && p.state.mode === MODE.RIDE) {
           leave(p.state, r, 1, this.world);
-        } else if (use) {
+        } else if (use && !this.press(p)) {
           this.enter(p);
         }
       }
@@ -449,6 +460,7 @@ export class Room {
         // Nobody is left to see an id taken again.
         this.freed.clear();
         this.ctf.reset();
+        this.station.reset();
         this.gone.fill(0);
         this.fresh();
         this.load();
@@ -486,6 +498,10 @@ export class Room {
       }
     }
     this.heal(players);
+    if (this.world.def.station && !this.ctf.over && this.station.tick() === 'strike') {
+      this.strike(players);
+    }
+    this.hold(players);
     // The doors open to who is up, and to a rover that is driven.
     swing(
       this.world,
@@ -506,6 +522,7 @@ export class Room {
     }
     this.seats();
     this.rovers.forEach((r, k) => this.dock(r, k));
+    this.recall(players);
     for (const r of this.rovers) {
       // A driven rover waits for its driver's inputs.
       if (r.driver !== NOBODY) {
@@ -540,6 +557,7 @@ export class Room {
         balls: this.balls,
         rovers: this.rovers,
         doors: this.world.doors?.map(d => d.open),
+        station: this.world.def.station && this.station.wire(),
       });
       players.forEach(p => p.conn.send(snap));
       // Every snapshot reaches every peer (WebSocket, BroadcastChannel): a burst is sent once.
@@ -1114,6 +1132,47 @@ export class Room {
   }
 
   /** The rover `p` is seated in and his seat (0 the driver's), or nothing on foot. */
+  /**
+   * A press of USE on foot at the station's console: it arms the mission for his team, or cancels
+   * the other team's. False when he is not there to press it.
+   */
+  private press(p: Player): boolean {
+    const def = this.world.def.station;
+    const q = p.state;
+    if (!def || q.down || q.stun || q.lock || q.mode === MODE.RIDE || !atPost(def, q)) {
+      return false;
+    }
+    if (!this.ctf.over) {
+      this.station.press(p.info.team);
+    }
+    return true;
+  }
+
+  /** The countdown ran out: every player of the other team is disintegrated, one already down too. */
+  private strike(players: Player[]): void {
+    for (const p of players) {
+      if (p.info.team !== this.station.team) {
+        if (!p.state.down) {
+          this.harm(p, Infinity);
+        }
+        this.out.add(p.info.id);
+      }
+    }
+  }
+
+  /** The disintegrated lie until the strike's wait is over: then their own count puts them back. */
+  private hold(players: Player[]): void {
+    if (this.station.phase !== PHASE.STRUCK) {
+      this.out.clear();
+      return;
+    }
+    for (const p of players) {
+      if (this.out.has(p.info.id) && p.state.down) {
+        p.state.down = Math.max(p.state.down, Math.min(DOWN_TICKS, this.station.ticks));
+      }
+    }
+  }
+
   private seatOf(p: Player): [Rover, 0 | 1] | [] {
     if (p.state.mode === MODE.RIDE) {
       for (const r of this.rovers) {
@@ -1486,6 +1545,7 @@ export class Room {
     this.rr = [0, 0];
     this.gone.fill(0);
     this.fresh();
+    this.station.reset();
     shut(this.world);
     for (const p of players) {
       const { shots, hits } = p.state;
@@ -1506,6 +1566,7 @@ export class Room {
   /** Each bot's input of this tick, applied as a client's would be on arrival. */
   private think(players: Player[]): void {
     const others = players.map(q => ({ id: q.info.id, team: q.info.team, state: q.state }));
+    const errands = this.errands(players);
     for (const p of players) {
       if (p.bot) {
         const me = others.find(o => o.id === p.info.id)!;
@@ -1515,11 +1576,89 @@ export class Room {
           flags: this.ctf.flags,
           world: this.world,
           balls: this.balls,
+          errand: errands.get(p.info.id),
         });
         p.seq = ((p.seq ?? -1) + 1) & 0xffff;
         this.apply(p, onWire({ ...i, seq: p.seq, view: this.ticks & 0xffff }));
       }
     }
+  }
+
+  /**
+   * A ship left empty in the station once nobody is in it any more goes home after STATION.RECALL
+   * ticks, parked afresh on its pad: its team can fly the mission again.
+   */
+  private recall(players: Player[]): void {
+    const def = this.world.def.station;
+    if (!def) {
+      return;
+    }
+    const manned = players.some(p => inside(def, p.state.x, p.state.y, p.state.z));
+    this.rovers.forEach((r, k) => {
+      const left = r.driver === NOBODY && !manned && inside(def, r.x, r.y, r.z);
+      this.idle[k] = left ? (this.idle[k] ?? 0) + 1 : 0;
+      if (this.idle[k] > STATION.RECALL) {
+        this.renew(k);
+        this.idle[k] = 0;
+      }
+    });
+  }
+
+  /**
+   * The bots' errands at the orbital station (sortie.ts): at most one pilot a team, sent while the
+   * mission waits or the other team's strike counts down, the nearest to its team's ship of its bots
+   * that are up and carry no flag, when that ship stands free on its pad; one in the station keeps
+   * guard while its own team's strike counts down. A bot in its ship or in the station with no
+   * errand goes home.
+   */
+  private errands(players: Player[]): Map<number, Errand> {
+    const out = new Map<number, Errand>();
+    const def = this.world.def.station;
+    const { phase, team: armed } = this.station;
+    const cars = this.world.def.rovers?.length ?? 0;
+    for (const team of def ? [0, 1] : []) {
+      const k = this.rovers.findIndex((r, i) => r.ship && homeOf(this.world, i) === team);
+      const [ship, home] = [this.rovers[k], this.world.def.ships?.[k - cars]];
+      if (!ship || !home || !def) {
+        continue;
+      }
+      const over = this.ctf.over;
+      const want = !over && (phase === PHASE.READY || (phase === PHASE.ARMED && armed !== team));
+      const guard = !over && phase === PHASE.ARMED && armed === team;
+      const able = (p: Player) =>
+        !!p.bot && p.info.team === team && !p.state.down && this.ctf.carrying(p.info.id) < 0;
+      let pilot = players.find(p => p.info.id === this.pilots[team] && able(p));
+      const parked =
+        ship.driver === NOBODY &&
+        !ship.wreck &&
+        gap2(ship, { x: home[0], z: home[2] }) < 100 &&
+        Math.abs(ship.y - SHIP.DROP - home[1]) < 3;
+      if (!pilot && want && parked) {
+        pilot = players.filter(able).sort((a, b) => gap2(ship, a.state) - gap2(ship, b.state))[0];
+      }
+      const there = pilot && inside(def, pilot.state.x, pilot.state.y, pilot.state.z);
+      if (!want && !(guard && there)) {
+        pilot = undefined;
+      }
+      this.pilots[team] = pilot ? pilot.info.id : -1;
+      for (const p of players) {
+        const { x, y, z } = p.state;
+        if (
+          p.bot &&
+          p.info.team === team &&
+          (p === pilot || ship.driver === p.info.id || inside(def, x, y, z))
+        ) {
+          out.set(p.info.id, {
+            def,
+            team,
+            ship,
+            home,
+            go: p === pilot ? (want ? 'press' : 'guard') : undefined,
+          });
+        }
+      }
+    }
+    return out;
   }
 
   /** The bots' map of the world, built when it loads rather than in the tick of a bot's first plan. */

@@ -3,6 +3,7 @@
 // drop, a return, a capture, a new match, a tackle and a shock are the differences between the flags,
 // the score and the stumble timers of one snapshot and the next. No DOM.
 import { TEAM_NAME } from '../shared/constants';
+import { PHASE } from '../shared/station';
 import { FLAG } from '../shared/types';
 import type { Snapshot } from '../shared/types';
 import type { Vec3 } from './mesh';
@@ -18,7 +19,9 @@ export type Beat =
   /** Player `who` was tackled by player `by`, at `at` (the middle of his body in the snapshot). */
   | { kind: 'tackle'; who: number; by: number; at: Vec3 }
   /** Player `who` was shocked by the katana of player `by`: a stumble with `zap` set. */
-  | { kind: 'shock'; who: number; by: number; at: Vec3 };
+  | { kind: 'shock'; who: number; by: number; at: Vec3 }
+  /** The orbital station's mission (station.ts): `team` armed it, an enemy of it cancelled it, its lasers struck. */
+  | { kind: 'armed' | 'cancelled' | 'strike'; team: number };
 
 /**
  * The beats from snapshot `a` to `b`. Nothing at the first snapshot, nothing while a match is
@@ -56,6 +59,14 @@ export const beats = (a: Snapshot | undefined, b: Snapshot): Beat[] => {
       out.push({ kind: 'return', flag });
     }
   });
+  const [was, now] = [a.station, b.station];
+  if (was && now && was.phase !== now.phase) {
+    if (now.phase === PHASE.ARMED || now.phase === PHASE.STRUCK) {
+      out.push({ kind: now.phase === PHASE.ARMED ? 'armed' : 'strike', team: now.team });
+    } else if (was.phase === PHASE.ARMED) {
+      out.push({ kind: 'cancelled', team: was.team });
+    }
+  }
   for (const p of b.players) {
     if (p.stun > (a.players.find(q => q.id === p.id)?.stun ?? Infinity)) {
       out.push({
@@ -110,6 +121,16 @@ export const say = (
       return beat.by === me.id ? { team: me.team, text: `Tackled ${name(beat.who)}!` } : undefined;
     case 'shock':
       return undefined;
+    case 'armed':
+      return beat.team === me.team
+        ? { team: beat.team, text: 'Orbital strike armed' }
+        : { team: beat.team, text: 'Enemy strike! Cancel it' };
+    case 'cancelled':
+      return { team: 1 - beat.team, text: 'Orbital strike cancelled' };
+    case 'strike':
+      return beat.team === me.team
+        ? { team: beat.team, text: 'Orbital strike! Go score' }
+        : { team: beat.team, text: 'Disintegrated' };
     default:
       return { text: 'New match' };
   }
@@ -147,6 +168,12 @@ export const cues = (beat: Beat, me: { id: number; team: number }): Cue[] => {
         : beat.by === me.id
           ? [{ id: SOUND.TACKLE, gain: 0.8, rate: 1.1 }]
           : [{ id: SOUND.TACKLE, at: beat.at }];
+    case 'armed':
+      return [{ id: SOUND.ALARM, rate: beat.team === team ? 1 : 0.9 }];
+    case 'cancelled':
+      return [{ id: SOUND.RETURN, rate: beat.team === team ? 0.8 : 1 }];
+    case 'strike':
+      return [{ id: SOUND.STRIKE, rate: beat.team === team ? 1 : 0.85 }];
     case 'shock':
       return beat.who === me.id
         ? [{ id: SOUND.ZAP }]

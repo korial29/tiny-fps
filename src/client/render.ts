@@ -5,6 +5,7 @@
 // spots get the layers after it). Everything is drawn in the one program, the depth passes with
 // colour writes off. The scene goes into an offscreen target, then a second, small program (POST)
 // turns it into the picture on the canvas. No DOM beyond the canvas.
+import { ORBIT } from '../shared/constants';
 import { altitude } from '../shared/ship';
 import { MODE, TEX } from '../shared/types';
 import type { Choice, PlayerState, Rover } from '../shared/types';
@@ -18,6 +19,7 @@ import type { CtfScene } from './flag';
 import { GILT, GLOSS, SHINE, STRIDE, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
 import { furnishing } from './moonbase';
+import { hangar, satellite } from './satellite';
 import { HEAVENS, heavens, moonscape } from './moonscape';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
@@ -338,7 +340,7 @@ c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(
 float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5);
 c.g=mix(c.g,c.r,z);
 o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z));
-float pv=length(fwidth(V)),fa=Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E)),Ob.z*smoothstep(1.25,1.6,length((P.xz-Cb.xy)*Cb.zw)));
+float pv=length(fwidth(V)),fa=Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E))*step(P.y,${ORBIT.SEAM}.),Ob.z*smoothstep(1.25,1.6,length((P.xz-Cb.xy)*Cb.zw)));
 if(fa>.002)o.rgb=mix(o.rgb,K0(-V,pv),fa);}`;
 
 /**
@@ -540,6 +542,9 @@ export const scenery = (world: World): number[] =>
         ...level(world),
         ...moonscape(world.def),
         ...furnishing(world.def, palette(world).map(String)),
+        ...(world.def.station
+          ? [...satellite(world.def.station), ...hangar(world.def.station)]
+          : []),
         ...vision(world.def),
         ...zones(world.def),
         ...heavens(),

@@ -430,6 +430,15 @@ export interface Snapshot {
   rovers?: Rover[];
   /** How far each of WorldDef.doors is open, 0 shut to 1, in sixteen steps on the wire. Absent: none. */
   doors?: number[];
+  /** The orbital station's mission (station.ts). Absent: the map has no station. */
+  station?: StationState;
+}
+
+/** The orbital station's mission as a snapshot carries it: the PHASE, the team that armed it, whole seconds left in the phase (127 at most). */
+export interface StationState {
+  phase: number;
+  team: number;
+  left: number;
 }
 
 /** Room rules, set by the host. Defaults in constants.ts (RULES). */

@@ -42,7 +42,8 @@ export const panels = (o: Out, { min, max }: Door, open: number): void => {
   for (const [a0, a1, y0] of [
     [min[k], min[k] + 0.1, 0],
     [max[k] - 0.1, max[k], 0],
-    [min[k], max[k], max[1] - 0.1],
+    // Its lintel, an offset up from the sill as the posts' 0 is (a door may stand off the ground).
+    [min[k], max[k], max[1] - min[1] - 0.1],
   ]) {
     box(o, at(a0, min[1] + y0, j0 - 0.08), at(a1, max[1], j1 + 0.08), FRAME);
   }
@@ -64,7 +65,7 @@ export const panels = (o: Out, { min, max }: Door, open: number): void => {
           at(seam + s * v * half, y1, b),
           at(seam + s * u * half, y1, b),
         ];
-        const make = () => face(o, q, rgb, at(mid, 1, away));
+        const make = () => face(o, q, rgb, at(mid, min[1] + 1, away));
         if (glow) {
           lit(o, glow, make);
         } else {

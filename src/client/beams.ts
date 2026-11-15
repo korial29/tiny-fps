@@ -51,6 +51,15 @@ const ZAP: [number, number[]][] = [
 const KINK = 0.6;
 /** Balls that light what they pass, the nearest first. */
 const LIT = 4;
+/**
+ * A strike's lasers: seconds they last, how many come down on one player, from how high and how far
+ * aside up there with no muzzle, how far round the muzzle, and their [halo, core] half widths and colours.
+ */
+const [RAY, RAYS, SKY, SPREAD, BORE] = [1.4, 4, 380, 70, 2.2];
+const LASER: [number, number[]][] = [
+  [0.3, [1.9, 0.22, 0.1]],
+  [0.09, [3.6, 1.7, 1.2]],
+];
 
 interface Spark {
   p: Vec3;
@@ -112,6 +121,11 @@ export interface Tracer {
   shock(at: Vec3): void;
   /** One frame of the crackle around a shocked runner whose middle is `at`: a few bolts, flickering. */
   crackle(at: Vec3): void;
+  /**
+   * The orbital station's strike on a player at `at` (his feet): red lasers onto him for RAY
+   * seconds from round `from`, the station cannon's muzzle (straight down from the sky without).
+   */
+  strike(at: Vec3, from?: Vec3): void;
   /** One spark out of `at`, up and a little aside: a cut limb's stump spitting. */
   spit(at: Vec3): void;
   /** Where the own muzzle is now: its flash stays there, so that a kick of the view does not leave it behind. */
@@ -292,6 +306,7 @@ export const createTracer = (): Tracer => {
   let balls: Orb[] = [];
   let zaps: { a: Vec3; b: Vec3 }[] = [];
   let hot: { p: Vec3; k: number }[] = [];
+  let rays: { p: Vec3; age: number; from?: Vec3 }[] = [];
   /** The eye of the last frame drawn: the balls nearest to it light the scene. */
   let seen: Vec3 = [0, 0, 0];
   let seed = 7;
@@ -377,13 +392,17 @@ export const createTracer = (): Tracer => {
     spit(at) {
       sparks.push({ p: at, v: [rnd(), rnd() + 2, rnd()], age: 0 });
     },
+    strike(at, from) {
+      rays.push({ p: at, age: 0, from });
+    },
     mount(a) {
       glows.forEach(g => g.own && (g.p = a));
     },
     update(dt) {
-      for (const x of [...glows, ...sparks, ...bolts]) {
+      for (const x of [...glows, ...sparks, ...bolts, ...rays]) {
         x.age += dt;
       }
+      rays = rays.filter(r => r.age < RAY);
       glows = glows.filter(g => g.age < (g.boom ? BOOM : g.splash ? SPLASH : FLASH));
       sparks = sparks.filter(s => s.age < (s.hot ? EMBER : SPARK));
       bolts = bolts.filter(b => b.age < BOLT);
@@ -394,6 +413,38 @@ export const createTracer = (): Tracer => {
     },
     draw(out, eye) {
       seen = eye;
+      for (const { p, age, from } of rays) {
+        // Snapped on, flickering, thinning out.
+        const k =
+          Math.min(1, age / 0.06) * Math.sqrt(1 - age / RAY) * (0.8 + 0.2 * Math.sin(age * 90));
+        for (let j = 0; j < RAYS; j++) {
+          const a = (j * 2 * Math.PI) / RAYS + p[0] + p[2];
+          const [c, r] = from ? [from, BORE] : [[p[0], p[1] + SKY, p[2]], SPREAD];
+          const top: Vec3 = [c[0] + Math.cos(a) * r, c[1], c[2] + Math.sin(a) * r];
+          LASER.forEach(([w, rgb], i) =>
+            ribbon(
+              out,
+              top,
+              p,
+              w * k,
+              rgb.map(c => c * k),
+              eye,
+              0.02 * i,
+            ),
+          );
+        }
+        LASER.forEach(([w, rgb], i) =>
+          disc(
+            out,
+            [p[0], p[1] + 0.9, p[2]],
+            w * 2.5 * k,
+            rgb.map(c => c * k),
+            eye,
+            0.03 * i,
+            16,
+          ),
+        );
+      }
       for (const { p, d, tail, power = 1, arc } of balls) {
         if (arc) {
           crescent(out, p, d, arc, eye);
@@ -597,6 +648,11 @@ export const createTracer = (): Tracer => {
               : point(o.p, 4, 1, o.power === 0 ? [1.4, 0.15, 0.1] : [0.25, 0.5, 1.4]),
           ),
         ...hot.slice(0, 2).map(({ p, k }) => point(p, 2 + 3 * k, 0.4 + 1.2 * k, [1.4, 0.55, 0.15])),
+        ...rays
+          .slice(-3)
+          .map(r =>
+            point([r.p[0], r.p[1] + 1, r.p[2]], 14, 5 * (1 - r.age / RAY), [1.8, 0.3, 0.15]),
+          ),
       ];
     },
   };

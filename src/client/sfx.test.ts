@@ -490,7 +490,8 @@ describe('a vehicle’s damage', () => {
   it('has four sounds after all the others, whose ids stay: a hit on the hull, an arc, the explosion, the wreck falling apart', () => {
     expect([SOUND.HULL, SOUND.ARC, SOUND.WRECK, SOUND.CRUMBLE]).toEqual([47, 48, 49, 50]);
     expect([SOUND.DOOR, SOUND.SHUT]).toEqual([45, 46]);
-    expect(LAYERS).toHaveLength(58);
+    expect([SOUND.ALARM, SOUND.STRIKE]).toEqual([58, 59]);
+    expect(LAYERS).toHaveLength(60);
     for (const id of [47, 48, 49, 50]) {
       expect(LOOPED).not.toContain(id);
     }

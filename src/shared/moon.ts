@@ -9,6 +9,7 @@ import { TEAM_TINT } from './map';
 import { BASE, DOME, DOORS, MODULES, TUBES, box, bx } from './moonbase';
 import type { Bx, Vec3 } from './moonbase';
 import { hash, noise } from './relief';
+import { station } from './station';
 import { TEX } from './types';
 import type { Brush, Spawn, WorldDef } from './world';
 
@@ -880,11 +881,14 @@ const team = (z: number, s: Spawn[]) => ({
   ...racks(z + (z > 140 ? 28 : -28)),
 });
 
+/** The orbital station (station.ts): over the rille, between the edge of space and the ceiling. */
+const [STATION_BRUSHES, STATION_DEF, STATION_DOOR] = station(80, 600, ZED / 2);
+
 export const MOON: WorldDef = {
   name: 'Tranquility',
   tag: 'Moon · half gravity',
   lore: 'A mining base left in a lunar crater, its domes still lit. Two crews fight for it in space helmets, under the Earth and a black sky. Jumps float twice as high, and a rille cuts the base in two.',
-  brushes: [...half, ...half.map(flip), ...centre],
+  brushes: [...half, ...half.map(flip), ...centre, ...STATION_BRUSHES],
   teams: [
     team(FLAG, SPAWNS),
     team(
@@ -965,10 +969,11 @@ export const MOON: WorldDef = {
     [PAD[0], 0.25, PAD[1], 0],
     [PAD[0], 0.25, ZED - PAD[1], Math.PI],
   ],
-  // The dome's door and the two airlocks of each base.
-  doors: [...DOORS, ...DOORS.map(mirror)],
+  // The dome's door and the two airlocks of each base, and the station's command room door.
+  doors: [...DOORS, ...DOORS.map(mirror), STATION_DOOR],
   scenery: 'moon',
   helmets: true,
   armor: true,
   seam: ORBIT.SEAM,
+  station: STATION_DEF,
 };

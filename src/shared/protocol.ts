@@ -69,6 +69,9 @@
 //   Then, only on a map with doors: the balls' count is always written (0 with none), and after
 //   the balls [doors u8], then a nibble a door, the first in the high half of its byte: how far it
 //   is open in fifteenths (Snapshot.doors). 1 + doors / 2 bytes, and 1 more when no ball flies.
+//   Then, only on a map with a station (station.ts), the doors' section written even with no door:
+//   [station u16] bits 0-1 the PHASE, bit 2 the team that armed it, bits 3-9 the whole seconds left
+//   in the phase (Snapshot.station).
 //   A snapshot is 4 + 62 × players + 57 × rovers + 10 + 2 to 16 bytes: 12 on top of the players and
 //   the rovers when both flags are home and no ball flies; with balls, 1 + 11 × balls more.
 // Every multi-byte field is big-endian (DataView's default).
@@ -219,9 +222,12 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
   const balls = s.balls ?? [];
   const tail = end + SNAP_MATCH + s.flags.reduce((n, f) => n + flagBytes(f.state), 0);
   const doors = s.doors ?? [];
-  const gate = doors.length && 1 + Math.ceil(doors.length / 2);
+  const st = s.station;
+  const gate = doors.length || st ? 1 + Math.ceil(doors.length / 2) : 0;
   const v = new DataView(
-    new ArrayBuffer(tail + (balls.length || gate ? 1 + SNAP_BALL * balls.length : 0) + gate),
+    new ArrayBuffer(
+      tail + (balls.length || gate ? 1 + SNAP_BALL * balls.length : 0) + gate + (st ? 2 : 0),
+    ),
   );
   v.setUint8(0, MSG_SNAPSHOT);
   v.setUint16(1, s.tick & 0xffff);
@@ -358,6 +364,12 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
       v.setUint8(at, v.getUint8(at) | (Math.round(d * 15) << (k & 1 ? 0 : 4)));
     });
   }
+  if (st) {
+    v.setUint16(
+      o + gate - 1,
+      (st.phase & 3) | ((st.team & 1) << 2) | (Math.min(127, st.left) << 3),
+    );
+  }
   return v.buffer;
 };
 
@@ -486,7 +498,10 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
   const n = some ? v.getUint8(o++) : 0;
   const gate = o + n * SNAP_BALL;
   const ports = gate < buf.byteLength ? v.getUint8(gate) : 0;
-  if (gate + (ports && 1 + Math.ceil(ports / 2)) !== buf.byteLength || (some && !n && !ports)) {
+  // After the doors, two bytes more are the station's; no door and no station is no doors' section.
+  const at = gate + (gate < buf.byteLength ? 1 + Math.ceil(ports / 2) : 0);
+  const st = at + 2 === buf.byteLength;
+  if ((at !== buf.byteLength && !st) || (!ports && !st && (at > gate || (some && !n)))) {
     return null;
   }
   const doors = Array.from(
@@ -526,6 +541,13 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     ...(n ? { balls } : {}),
     ...(rovers.length ? { rovers } : {}),
     ...(ports ? { doors } : {}),
+    ...(st && {
+      station: {
+        phase: v.getUint16(at) & 3,
+        team: (v.getUint16(at) >> 2) & 1,
+        left: v.getUint16(at) >> 3,
+      },
+    }),
   };
 };
 

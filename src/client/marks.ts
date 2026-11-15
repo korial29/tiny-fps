@@ -6,9 +6,9 @@ import type { FlagState } from '../shared/types';
 import type { Vec3 } from './mesh';
 
 export interface Mark {
-  /** The team whose flag or base it is: its colour. */
+  /** The team whose flag or base it is: its colour; -1 for the station's, in amber. */
   team: number;
-  kind: 'flag' | 'base';
+  kind: 'flag' | 'base' | 'station' | 'post';
   /** Where it is on the screen, in [0, 1] from the top left. */
   x: number;
   y: number;
@@ -56,6 +56,8 @@ export interface MarkScene {
   where(id: number): Vec3 | undefined;
   /** A world point on the screen as of the last frame, or undefined behind the camera. */
   project(x: number, y: number, z: number): [number, number] | undefined;
+  /** The orbital mission's marker: the station or its command post, and where (mission.ts). */
+  goal?: { kind: 'station' | 'post'; at: Vec3 };
 }
 
 /** Height above a flag's foot the mark aims at: the top of the pole. */
@@ -67,9 +69,9 @@ const TIP = 2.6;
  */
 export const marks = (s: MarkScene): Mark[] => {
   const out: Mark[] = [];
-  const one = (team: number, kind: Mark['kind'], [x, y, z]: Vec3) => {
-    const d = Math.round(Math.hypot(x - s.eye[0], y + TIP - s.eye[1], z - s.eye[2]));
-    const on = s.project(x, y + TIP, z);
+  const one = (team: number, kind: Mark['kind'], [x, y, z]: Vec3, tip = TIP) => {
+    const d = Math.round(Math.hypot(x - s.eye[0], y + tip - s.eye[1], z - s.eye[2]));
+    const on = s.project(x, y + tip, z);
     const ok = on && on[0] >= BOX.x0 && on[0] <= BOX.x1 && on[1] >= BOX.y0 && on[1] <= BOX.y1;
     const text = `${d} m`;
     if (ok) {
@@ -101,5 +103,8 @@ export const marks = (s: MarkScene): Mark[] => {
       one(team, 'flag', at);
     }
   });
+  if (s.goal) {
+    one(-1, s.goal.kind, s.goal.at, 0.4);
+  }
   return out;
 };

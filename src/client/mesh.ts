@@ -53,6 +53,13 @@ export const [HAIR_ROOT, HAIR_SPAN] = [-1.45, 0.04];
  * to coverage, and the depth passes leave it out.
  */
 export const [CARD_BASE, CARD_STEP] = [-1.36, 1e-4];
+/**
+ * The layer of bare skin posed by the shader (flesh.ts): lit like -1 (it falls in -1's band of
+ * the shader's SPEC row), plus the skin pass on its rest place: pores and grain, mottling, a soft
+ * terminator that runs red, an oily sheen. Between -1 and SKIN_LAYER the pass fades in, so an edge
+ * to a -1 corner blends. The CPU's skin (the own body, a runner coming apart) stays at -1.
+ */
+export const SKIN_LAYER = -1.06;
 
 /**
  * Camera axes [right, up, forward]: forward is (-sin yaw cos pitch, sin pitch, -cos yaw cos pitch),

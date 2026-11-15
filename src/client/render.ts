@@ -25,6 +25,7 @@ import {
   HAIR_ROOT,
   HAIR_SPAN,
   SHINE,
+  SKIN_LAYER,
   STRIDE,
   basis,
 } from './mesh';
@@ -41,7 +42,7 @@ import { craft } from './craft';
 import { rolled, rover } from './rover';
 import type { Quat } from './rig';
 import { GRIN, animate, createRunner, soldier } from './soldier';
-import { COLOURS, REGION, TOP, UNLIT, body } from './skin';
+import { BARE_REGIONS, COLOURS, REGION, TOP, UNLIT, body } from './skin';
 import { CLOTH } from './mask';
 import { CHANNELS } from './features';
 import { PLATE, VERT as VERT_TEXELS } from './flesh';
@@ -135,7 +136,7 @@ vec3 r(vec3 v){vec3 t=2.*cross(R[0].xyz,v);return v+R[0].w*t+cross(R[0].xyz,t);}
 vec4 g(int i){return texelFetch(Sg,ivec2(i&2047,i>>11),0);}
 float sh,ry;vec2 hb;vec3 kr;
 void k(int i,out vec3 x,out vec3 y){
-int b=Sb.x+i*${VERT_TEXELS};vec4 a=g(b),e=g(b+1),f=g(b+2);x=a.xyz;kr=x;ry=x.y;y=e.xyz;sh=e.w;hb=g(b+3).xy;bool z=false;
+int b=Sb.x+i*${VERT_TEXELS};vec4 a=g(b),e=g(b+1),f=g(b+2);x=a.xyz;kr=x;Rp=x;ry=x.y;y=e.xyz;sh=e.w;hb=g(b+3).xy;bool z=false;
 for(int j=0;j<int(f.w);j++){int q=Sb.x+int(f.z)+j*2;vec4 h=g(q);int w=int(h.w);float fw=Sw[w>>2][w&3];if(fw!=0.){x+=fw*h.xyz;y+=fw*g(q+1).xyz;z=true;}}
 if(z)y=normalize(y);
 int u=int(f.x)*2,v=int(f.y)*2;float l=a.w,s=dot(Sq[u],Sq[v])<0.?-l:l;
@@ -148,7 +149,8 @@ if(Y>.5){vec2 q=vec2(gl_VertexID&1,gl_VertexID>>1)*4.-1.;gl_Position=vec4(q,1,1)
 if(Sm==1){vec4 h=g(Sb.y+gl_VertexID);k(int(h.x),P,N);int a=int(h.y);vec3 l=Sp[a];l+=(Sp[int(h.z)]-l)*h.w;l*=sh;
 if(hb.x>=0.&&(hb.y>.5||a==${REGION.FLESH}))l=vec3(${CLOTH})+(l-vec3(${CLOTH}))*hb.x;
 float hw=0.;for(int i=0;i<3;i++){vec4 o=g(Sb.y+gl_VertexID/3*3+i);hw+=int(o.y)==${REGION.HAIR}?1.-(int(o.z)!=${REGION.HAIR}?o.w:0.):int(o.z)==${REGION.HAIR}?o.w:0.;}hw/=3.;
-C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:hw>.5&&hb.x<0.?${HAIR_ROOT}-${HAIR_SPAN}*clamp((${TOP}-ry)/.3,0.,1.):-1.,l.z);gl_Position=m*vec4(P,1);return;}
+float bw=float(${BARE_REGIONS.map(r => `a==${r}`).join('||')})*(hb.x<0.?1.:hb.x);
+C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:hw>.5&&hb.x<0.?${HAIR_ROOT}-${HAIR_SPAN}*clamp((${TOP}-ry)/.3,0.,1.):-1.+(${SKIN_LAYER}+1.)*bw,l.z);gl_Position=m*vec4(P,1);return;}
 if(Sm==2){int b=Sb.y+gl_VertexID*${PLATE},j,K,t;vec4 h=g(b),G4=g(b+4),R4=g(b+5);j=int(h.y);K=int(h.z);t=int(h.x)*3;
 vec3 X[3],Z[3],W3[3],M3[3],XR[3],RR[3];
 for(int i=0;i<3;i++){k(int(g(Sb.z+t+i).x),X[i],Z[i]);XR[i]=kr;}
@@ -261,7 +263,7 @@ const RELIEF = 0.06;
 // inside their cylinder: their bodies, never what a wall hides.
 export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
-in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y;uniform int Q;
+in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y,Ss;uniform int Q;
 uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform float Sn;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform vec4 Ve[16];uniform vec2 Vn;out vec4 o;
 vec3 xv(vec3 c){return dot(c,vec3(.3,.59,.11))*vec3(.55,.8,1.2);}
@@ -328,7 +330,22 @@ t.rgb*=mix(.6,1.,smoothstep(.72,.97,normalize(N).y));
 if(Sn>0.){vec3 cq=cs(P.xz,length(P-E));float uw=smoothstep(.7,.95,normalize(N).y);t.rgb*=mix(1.,cq.z,uw);cg=-uw*vec3(cq.x,0,cq.y);}}
 vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
 vec3 n=normalize(normalize(N)+cg),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
-float h=t.a*s*${RELIEF},det=dot(dx,a);
+float kb=clamp(-(L+1.)/.06,0.,1.)*step(-1.08,L)*step(L,-.5),pw=max(length(dx),length(dy));
+float f1=kb*(1.-smoothstep(.35,1.,pw*1500.)),f2=kb*(1.-smoothstep(.35,1.,pw*600.)),f3=kb*(1.-smoothstep(.35,1.,pw*180.));
+float pore=smoothstep(.62,.86,n3(Rp*1500.)),ma=n3(Rp*65.)-.5,mb=n3(Rp*24.+7.)-.5,md=.09*ma+.07*mb;
+c*=1.+kb*(md*vec3(1,1.15,1.2)+max(-mb,0.)*vec3(.035,-.02,-.025))+f2*.07*(n3(Rp*600.+5.)-.5)-f1*.05*pore;
+float sr=0.;
+if(kb>0.){vec3 q=Rp,z=vec3(Ss*.731,Ss*1.37,Ss*.291);float fm=1.-smoothstep(.4,1.,pw*500.),hd=smoothstep(1.53,1.58,q.y),fa=smoothstep(.02,-.04,q.z)*hd;
+vec3 mc=floor(q*28.),mh=hs(mc+z);float mo=fm*step(mh.x,.07)*smoothstep(.0011+.0011*mh.y,.0005,length(q-(mc+.25+.5*mh)/28.));
+vec3 bc=floor(q*50.),bh=hs(bc+z*1.7);float bl=fm*fa*step(bh.x,.05)*smoothstep(.0018,.0003,length(q-(bc+.25+.5*bh)/50.));
+vec3 fc=floor(q*170.),fh=hs(fc+z*1.3);float fk=fm*fa*smoothstep(.62,.8,hs(vec3(Ss,3.,7.)).x)*step(fh.x,.4)*smoothstep(.0012,.0004,length(q-(fc+.25+.5*fh)/170.));
+vec2 u=vec2(atan(q.x,.005-q.z)*.085,q.y);
+for(int i=0;i<2;i++){vec3 g=hs(vec3(Ss,float(i)*7.+1.,5.)),g2=hs(vec3(Ss,float(i)*7.+2.,9.));if(g.x>(i==0?.45:.15))continue;
+vec2 o=vec2((g.y-.5)*.17,1.6+.1*g.z),e=vec2(cos(g2.x*6.28),sin(g2.x*6.28))*(.008+.012*g2.y),w=u-o;float t=clamp(dot(w,e)/dot(e,e),-1.,1.),d=length(w-e*t),wd=.0007+.0006*g2.z;
+float k=hd*smoothstep(wd,wd*.3,d)*(1.-smoothstep(.85,1.,abs(t)))+hd*step(g2.y,.5)*step(fract(t*4.+.5),.18)*smoothstep(.003,.002,d)*smoothstep(.0012,.0006,d-.0012)*(1.-smoothstep(.7,.9,abs(t)));
+sr=max(sr,k);}
+c=mix(c,c*vec3(.45,.33,.28),mo*.85);c=mix(c,c*vec3(1.05,.72,.7),bl*.6);c=mix(c,c*vec3(.74,.58,.48),fk*.75);c=mix(c,c*vec3(1.18,.98,.98)+.025,sr*.8);}
+float h=t.a*s*${RELIEF}+f1*-.00004*pore*(1.-sr)+f2*.00007*n3(Rp*600.)+f3*.0002*n3(Rp*180.+3.)+.00012*sr,det=dot(dx,a);
 float wa=min(Wa,1.)*(step(abs(L-(${GLOSS})),.02)+step(abs(L-(${GILT})),.02)),ch=0.,gr=.5,sm=1.;
 if(wa>0.){vec3 q=Rp;float pw=max(length(dx),length(dy)),lowy=smoothstep(1.1,.25,q.y);
 gr=n3(q*9.)*.6+n3(q*23.+3.)*.4;sm=.55+.9*n3(q*31.+9.);
@@ -357,14 +374,16 @@ vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)]
 vec3 y=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s),V=normalize(E-P),w=nz(n+m);
 float sd=max(dot(m,O),0.)*smoothstep(0.,.1,dot(n,O)),sv=1.;
 sd=mix(sd,.5*sqrt(max(1.-dot(T,O)*dot(T,O),0.))*smoothstep(-.3,.4,dot(n,O)),kx*.6);
+vec3 wr=vec3(.38,.16,.1),sw=clamp((dot(m,O)+wr)/(1.+wr),0.,1.)*smoothstep(-.35,.1,dot(n,O));
 if(sd>0.&&g<1.){
 vec4 q=W*vec4(P+n*.08,1);q.xyz=q.xyz*.5+.5;
 float v=0.;
 for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADOW},0,q.z-.0004));
 sv=mix(v/4.,1.,smoothstep(.8,1.,max(max(abs(q.x-.5),abs(q.y-.5)),abs(q.z-.5))*2.));}
-vec3 l=y*(mix(mix(H[1],H[0],max(w.y,0.)),H[2],max(-w.y,0.))+X*sd*sv),sp=X*sv*sd*pow(max(dot(m,nz(O+V)),0.),R.y);
+vec3 l=y*(mix(mix(H[1],H[0],max(w.y,0.)),H[2],max(-w.y,0.))+X*mix(vec3(sd),sw,kb)*sv),sp=X*sv*sd*pow(max(dot(m,nz(O+V)),0.),R.y);
 vec3 Hh=nz(O+V),T1=nz(T+m*(-.1+.12*(st-.5))),T2=nz(T+m*(.15+.12*(st-.5)));float d1=dot(T1,Hh),d2=dot(T2,Hh);
 vec3 hl=kx*X*sv*smoothstep(-.15,.35,dot(n,O))*(.08*pow(max(1.-d1*d1,0.),80.)*(.5+st)+.06*c/(dot(c,vec3(.3,.5,.2))+.02)*pow(max(1.-d2*d2,0.),14.)*(.3+1.4*st2*st));
+vec3 skp=kb*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),90.)*(.07+.4*pow(clamp(1.-dot(n,V),0.,1.),5.))*(.6+.8*n3(Rp*90.));
 for(int i=0;i<${MAX_LIGHTS};i++){
 if(i>=Q||g>0.)break;
 vec3 d=A[i].xyz-P;float r=length(d),k=K[i].w,u=B[i].w;
@@ -378,8 +397,9 @@ for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADO
 w*=v/4.;}
 l+=K[i].rgb*w;
 sp+=K[i].rgb*w*pow(max(dot(m,nz(d+V)),0.),R.y);}
-c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(1.-kx)*(.4+.6*mix(1.,t.a,s))+hl);
+c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(1.-kx)*(1.-.75*kb)*(.4+.6*mix(1.,t.a,s))+hl+skp);
 vec3 r=reflect(-V,m),k=K1(r,0.);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
+c+=kb*k*(.01+.08*fr)*(.4+.6*sv);
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
 c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr));
 c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv)*mix(1.,sm*(1.-ch),wa);
@@ -803,6 +823,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         // Posed by the shader from its texels: no vertex array.
         gl.bindVertexArray(none);
         gl.uniform1i(u.Sm, f.kind);
+        gl.uniform1f(u.Ss, f.seed ?? 0);
         gl.uniform4i(u.Sb, ...f.at, +!!f.plate);
         gl.uniform4fv(u.Sq, f.d);
         gl.uniform3fv(u.Sp, f.pal);
@@ -947,6 +968,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       'Ak',
       'Hc',
       'Hs',
+      'Ss',
       'Sb',
       'Sq',
       'Sp',

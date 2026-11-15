@@ -24,7 +24,8 @@ const BUDGETS = [
   // 193 KB until every class's armour wear (the user, 2026-11-15).
   // 194 KB until the strand hair (the user, 2026-11-15: 3 KB more for it).
   // 197 KB until the xenomorph's class (the user, 2026-11-15: 2 KB more for it).
-  { file: 'dist/index.js', max: 199 * 1024 },
+  // 199 KB until the skin texture and each runner's marks (the user, 2026-11-15).
+  { file: 'dist/index.js', max: 200 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   { file: 'dist/local.js', max: 46 * 1024 },

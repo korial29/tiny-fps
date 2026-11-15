@@ -3,7 +3,8 @@
 import { GLOSS } from '../src/client/mesh';
 import { OWN, SCRATCHED } from '../src/client/armor';
 import { PLATE, VERT } from '../src/client/flesh';
-import { REGION, UNLIT } from '../src/client/skin';
+import { BARE_REGIONS, REGION, UNLIT } from '../src/client/skin';
+import { SKIN_LAYER } from '../src/client/mesh';
 import { CLOTH } from '../src/client/mask';
 import { data } from '../src/client/store';
 import type { Draw } from '../src/client/store';
@@ -76,7 +77,16 @@ export const pose = (out: number[], d: Draw) => {
       if (hb[0] >= 0 && (hb[1] > 0.5 || h[1] == REGION.FLESH)) {
         l = l.map((c, k) => CLOTH[k] + (c - CLOTH[k]) * hb[0]);
       }
-      out.push(...P, ...N, l[0], l[1], UNLIT.includes(h[1]) ? -2 : -1, l[2]);
+      // Bare skin takes the skin layer, as far as the hood leaves it bare.
+      const bw = BARE_REGIONS.includes(h[1]) ? (hb[0] < 0 ? 1 : hb[0]) : 0;
+      out.push(
+        ...P,
+        ...N,
+        l[0],
+        l[1],
+        UNLIT.includes(h[1]) ? -2 : -1 + (SKIN_LAYER + 1) * bw,
+        l[2],
+      );
       continue;
     }
     const b = f.at[1] + id * PLATE;

@@ -3,7 +3,7 @@ import { MAPS } from '../shared/maps';
 import { spawn } from '../shared/physics';
 import { ROLE } from '../shared/kit';
 import { build } from '../shared/world';
-import { STRIDE } from './mesh';
+import { SKIN_LAYER, STRIDE } from './mesh';
 import { animate, soldier } from './soldier';
 import type { Runner } from './soldier';
 import { expand, mesh, stored } from './store';
@@ -20,7 +20,9 @@ import type { Pieces } from './store';
 const apart = (a: number[], b: number[]) => {
   const most = a.length == b.length ? [0, 0, 0, 0] : [Infinity, Infinity, Infinity, Infinity];
   a.forEach((x, i) => {
-    const [n, d] = [i % STRIDE, Math.abs(x - b[i])];
+    // The GPU's bare skin carries the skin layer (render.ts), where the CPU's has -1.
+    const y = i % STRIDE == 8 && x <= -1 && x >= SKIN_LAYER ? -1 : x;
+    const [n, d] = [i % STRIDE, Math.abs(y - b[i])];
     const k = n < 3 ? 0 : n < 6 ? 2 : 1;
     most[k] = Math.max(most[k], d);
     most[3] += +(n == 3 && d > 1e-3) / (a.length / STRIDE);

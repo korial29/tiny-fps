@@ -3,7 +3,7 @@
 // hand()'s, body.ts). All
 // of it generated, original: a lean biomechanical stalker, not a copy of any film's creature.
 import { TAU } from '../shared/physics';
-import { cross, sheet } from './helmet';
+import { cross, face, sheet } from './helmet';
 import type { Spot } from './helmet';
 import { unit } from './mesh';
 import type { Vec3 } from './mesh';
@@ -400,19 +400,205 @@ export const elbow = (out: Out, at: Vec3, q: Quat, lod: number) =>
 export const heel = (out: Out, at: Vec3, q: Quat, lod: number) =>
   spur(out, at, q, [0, -0.4, 0.035], [0, 0.35, 1], 0.09, 0.014, SIDES[1][lod]);
 
-/** The slits of its eyes on the head joint: a pair of thin glowing blades along the skull's sides, in the team's `color`. */
+/** A value on a curve through [y, value] points, by y, highest first. */
+const curve = (pts: number[][], y: number) => {
+  const k = Math.min(
+    Math.max(
+      pts.findIndex(p => p[0] < y),
+      1,
+    ),
+    pts.length - 1,
+  );
+  const [[y0, a], [y1, b]] = [pts[k - 1], pts[k]];
+  const t = Math.min(Math.max((y - y0) / (y1 - y0), 0), 1);
+  return a + (b - a) * t * t * (3 - 2 * t);
+};
+
+// Its face, a human skull's (the user, 2026-11-15), on the head joint, in front of the dome and in
+// the dome's colour: how far forward and how wide it is at each height, from a round forehead down
+// to the chin.
+const DEPTH = [
+  [0.115, 0.098],
+  [0.09, 0.113],
+  [0.06, 0.12],
+  [0.035, 0.121],
+  [0.012, 0.115],
+  [-0.02, 0.12],
+  [-0.05, 0.118],
+  [-0.072, 0.118],
+  [-0.095, 0.108],
+  [-0.125, 0.085],
+];
+const WIDTH = [
+  [0.115, 0.048],
+  [0.07, 0.066],
+  [0.035, 0.07],
+  [0, 0.074],
+  [-0.03, 0.066],
+  [-0.06, 0.05],
+  [-0.09, 0.052],
+  [-0.125, 0.024],
+];
+/** Its head's chitin: the dome's (the skin's TRIM, soldier.ts) and its face's, one colour. */
+export const HEAD = CHITIN_X.map(v => v * 1.6);
+const [DARK, TEETH] = [
+  [0.02, 0.02, 0.025],
+  [0.42, 0.42, 0.4],
+];
+/** How deep in an orbit (0 to 1) the point of the face (x, y) is. */
+const orbit = (x: number, y: number) =>
+  Math.max(0, 1 - ((Math.abs(x) - 0.032) / 0.021) ** 2 - ((y - 0.012) / 0.017) ** 2);
+/** The face's surface at (x, y): an ellipse's front, a smooth forehead, the orbits sunk, the cheekbones out. */
+const faceZ = (x: number, y: number) => {
+  const u = Math.min(Math.abs(x) / curve(WIDTH, y), 1);
+  return (
+    -curve(DEPTH, y) * Math.sqrt(1 - u * u) +
+    0.03 * orbit(x, y) ** 0.6 -
+    0.008 * Math.exp(-(((Math.abs(x) - 0.056) / 0.013) ** 2) - ((y + 0.008) / 0.012) ** 2)
+  );
+};
+/**
+ * The mouth (the user, 2026-11-15: menacing lips over grey teeth, small and high): its half width,
+ * the height of its middle and where the fangs are, and how far its lips part at x: the upper one
+ * curled up over the fangs, a snarl.
+ */
+const [MW, MY, FANG] = [0.032, -0.052, 0.018];
+const above = (x: number) =>
+  (0.0055 + 0.008 * Math.exp(-(((Math.abs(x) - FANG) / 0.008) ** 2))) * (1 - (x / MW) ** 2) ** 0.5;
+const below = (x: number) => 0.008 * (1 - (x / MW) ** 2) ** 0.6;
+const parted = (x: number, y: number) => Math.abs(x) < MW && y < MY + above(x) && y > MY - below(x);
+/** The lips' line round the mouth, from the left corner over the upper lip and back under the lower one. */
+const lipline = (n: number): [number, number][] => {
+  const top = Array.from({ length: n + 1 }, (_, i): [number, number] => {
+    const x = -MW + (2 * MW * i) / n;
+    return [x, MY + above(x)];
+  });
+  const low = Array.from({ length: n - 1 }, (_, i): [number, number] => {
+    const x = MW - (2 * MW * (i + 1)) / n;
+    return [x, MY - below(x)];
+  });
+  return [...top, ...low];
+};
+
+/**
+ * The face of its skull, a human skull's in its chitin: a round forehead, the brow ridge, the
+ * orbits sunk, the cheekbones, no nose; the mouth an opening whose edge the lips hide, dark inside,
+ * with grey teeth, the fangs longest. A grid over the face, finer the closer.
+ */
+export const skull = (out: Out, at: Vec3, q: Quat, lod: number) => {
+  const [nx, ny] = [
+    [8, 10],
+    [18, 30],
+    [18, 30],
+    [44, 72],
+  ][lod];
+  const spot = (u: number, v: number): Spot => {
+    const y = 0.115 - 0.24 * v;
+    const x = u * curve(WIDTH, y) * 0.98;
+    const h = 1e-3;
+    const z = faceZ(x, y);
+    const n = unit([(faceZ(x + h, y) - z) / h, (faceZ(x, y + h) - z) / h, -1]);
+    return [on(at, q, [x, y, z]), turn(q, n)];
+  };
+  // The grid, but where the lips part: the hole's edge, in steps, lies under the lips.
+  const tri = (p: [number, number][]) => {
+    const [u, v] = [0, 1].map(k => (p[0][k] + p[1][k] + p[2][k]) / 3);
+    const y = 0.115 - 0.24 * v;
+    if (!parted(u * curve(WIDTH, y) * 0.98, y)) {
+      face(
+        out,
+        HEAD,
+        -1,
+        p.map(([a, b]) => spot(a, b)),
+      );
+    }
+  };
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      const [u0, u1, v0, v1] = [(2 * i) / nx - 1, (2 * (i + 1)) / nx - 1, j / ny, (j + 1) / ny];
+      tri([
+        [u0, v0],
+        [u1, v0],
+        [u1, v1],
+      ]);
+      tri([
+        [u0, v0],
+        [u1, v1],
+        [u0, v1],
+      ]);
+    }
+  }
+  if (!lod) {
+    return;
+  }
+  const n = lod > 2 ? 24 : 12;
+  const sides = SIDES[1][lod];
+  const line = lipline(n);
+  const fwd = turn(q, [0, 0, -1]);
+  // Inside the mouth, dark, a hair behind the lips.
+  sheet(
+    [
+      [[on(at, q, [0, MY, faceZ(0, MY) + 0.018]), fwd]],
+      line.map(([x, y]): Spot => [on(at, q, [x, y, faceZ(x, y) + 0.004]), fwd]),
+    ],
+    DARK,
+    -1,
+    out,
+  );
+  // The teeth, grey, from under each lip toward the other; the fangs, a lip's curl apart, longest.
+  for (const [k, up] of [
+    [9, true],
+    [8, false],
+  ] as const) {
+    for (let i = 0; i < k; i++) {
+      const x = -MW * 0.8 + (1.6 * MW * i) / (k - 1);
+      const fang = Math.exp(-(((Math.abs(x) - FANG) / 0.005) ** 2));
+      const [edge, tip] = up
+        ? [MY + above(x), MY - 0.0015 - 0.006 * fang]
+        : [MY - below(x), MY + 0.0015 + 0.0045 * fang];
+      const z = faceZ(x, MY) + 0.003;
+      strand(
+        out,
+        at,
+        q,
+        [
+          [x, edge + (up ? 0.003 : -0.003), z],
+          [x, tip, z - 0.002],
+        ],
+        [0.0034 + 0.0012 * fang, 0.0007],
+        sides,
+        TEETH,
+      );
+    }
+  }
+  // The lips round it, thick in their middle, curled.
+  const pts = [...line, line[0]].map(([x, y]): Vec3 => [x, y, faceZ(x, y) - 0.002]);
+  strand(
+    out,
+    at,
+    q,
+    pts,
+    pts.map(([x]) => 0.0032 + 0.0028 * (1 - (x / MW) ** 2)),
+    sides,
+    HEAD,
+  );
+};
+
+/** Its eyes, glowing at the back of the orbits in the team's `color`. */
 export const eyes = (out: Out, at: Vec3, q: Quat, color: number[]) => {
   for (const s of [-1, 1]) {
+    const [x, y] = [s * 0.032, 0.012];
+    const z = faceZ(x, y);
     strand(
       out,
       at,
       q,
       [
-        [s * 0.062, 0.05, -0.12],
-        [s * 0.088, 0.069, -0.015],
+        [x, y, z - 0.002],
+        [x, y, z - 0.012],
       ],
-      [0.009, 0],
-      4,
+      [0.009, 0.004],
+      6,
       color,
       -2,
     );

@@ -8,7 +8,19 @@ import { JOINT as J, JOINTS, rest, solve, turn } from './rig';
 import { KIND } from './features';
 import { beast, body } from './skin';
 import { animate, stance } from './soldier';
-import { FOOT_TIP, column, elbow, eyes, heel, metatarsal, ribs, sinews, toes } from './xeno';
+import {
+  FOOT_TIP,
+  HEAD,
+  column,
+  elbow,
+  eyes,
+  heel,
+  metatarsal,
+  ribs,
+  sinews,
+  skull,
+  toes,
+} from './xeno';
 import type { Vec3 } from './mesh';
 import type { Quat } from './rig';
 
@@ -43,14 +55,15 @@ describe('the xenomorph’s skin', () => {
     expect(beast(3).v.length).toBeLessThan(body(3).v.length / 2);
   });
 
-  it('carries a long skull past the back of the head, and none on the own first-person body', () => {
+  it('carries a long curved dome past the back of the head, and none on the own first-person body', () => {
     const zs = (lod: number) => {
       const s = beast(lod);
       return Array.from({ length: s.v.length / 6 }, (_, i) => s.v.slice(i * 6, i * 6 + 3));
     };
     const head = zs(3).filter(([, y]) => y > 1.58);
     expect(Math.max(...head.map(p => p[2]))).toBeGreaterThan(0.3);
-    expect(Math.min(...head.map(p => p[2]))).toBeLessThan(-0.18);
+    // Its dome stops at the brow: the face in front is skull()'s.
+    expect(Math.min(...head.map(p => p[2]))).toBeLessThan(-0.06);
     expect(Math.max(...zs(2).map(p => p[1]))).toBeLessThan(1.5);
   });
 });
@@ -98,6 +111,13 @@ describe('its pieces', () => {
     expect(Math.max(...r.map(p => Math.abs(p[0])))).toBeGreaterThan(0.15);
     expect(Math.max(...out(o => elbow(o, O, ID, 1)).map(p => p[2]))).toBeGreaterThan(0.1);
     expect(Math.max(...out(o => heel(o, O, ID, 1)).map(p => p[2]))).toBeGreaterThan(0.1);
+    // A human skull's face in front, in the dome's colour, the mouth dark between grey teeth.
+    const sk: number[] = [];
+    skull(sk, O, ID, 3);
+    const f = points(sk);
+    expect(Math.min(...f.map(p => p[2]))).toBeLessThan(-0.11);
+    const reds = new Set(Array.from({ length: sk.length / 10 }, (_, i) => sk[i * 10 + 6]));
+    expect([...reds].sort((a, b) => a - b)).toEqual([0.02, HEAD[0], 0.42]);
     const lit: number[] = [];
     eyes(lit, O, ID, [1, 0, 0]);
     expect(lit.filter((_, i) => i % 10 == 8).every(l => l == -2)).toBe(true);

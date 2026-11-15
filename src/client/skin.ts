@@ -779,9 +779,18 @@ const LEG_X = remake(
   { ...LEG, rings: [...LEG.rings.filter(r => r[0] > 0.1), [0.075, 0.1, 0, 0, 0, 3, UPPER]] },
   r => {
     const [at] = r;
-    const k = at > 0.55 ? [0.75, 0.85] : [0.6, 0.7];
+    // Muscled (the user, 2026-11-15): a full thigh swelling in front, a lean knee, a calf bulging
+    // behind the shin under it, the shin lean again down to the ankle.
+    const g = (c: number, w: number) => Math.exp(-(((at - c) / w) ** 2));
+    const k =
+      at > 0.55
+        ? [0.98, 1.06]
+        : at > 0.45
+          ? [0.78, 0.84]
+          : [0.62 + 0.24 * g(0.34, 0.07), 0.68 + 0.36 * g(0.34, 0.07)];
     r[3] *= k[0];
     r[4] *= k[1];
+    r[2] += 0.012 * g(0.7, 0.1) - 0.02 * g(0.34, 0.07);
     // A knee that bends in one place (the user, 2026-11-15: an angle, not a curve): the man's rings
     // blend the thigh and the shin over 40 cm round it; here only the 8 cm across it do, and the
     // shin hangs on its own bone down to the ankle.
@@ -801,25 +810,26 @@ const ARM_X = remake(ARM, r => {
   return [...r.slice(0, 6), r[0] < 0.98 ? GLOVE : JACKET];
 });
 /**
- * Its skull, on the head joint, from the back to the snout (rings along z): a long wedge sweeping
- * back and up past the crown, ridged above and below, its jaw darker.
+ * Its skull's dome, on the head joint, from the back to the brow (rings along z): long, swelling
+ * then tapering as it sweeps back and up past the crown along a curve (the user, 2026-11-15: more
+ * curves, less straight); its face is xeno.ts's skull(), a human skull's.
  */
 const CREST: Loft = {
   chain: [J.HEAD, J.HEAD],
-  n: [6, 14, 28],
-  e: 1.6,
+  n: [6, 16, 36],
+  e: 2,
   z: true,
   far: [0, 4, 8, 12, 16],
   rings: [
-    [0.38, 0, 1.84, 0, 0, 0, TRIM],
-    [0.3, 0, 1.8, 0.025, 0.05, 0, TRIM],
-    [0.18, 0, 1.75, 0.045, 0.09, 0, TRIM],
-    [0.06, 0, 1.7, 0.06, 0.115, 0, TRIM],
-    [-0.03, 0, 1.665, 0.068, 0.115, 0, TRIM],
-    [-0.1, 0, 1.635, 0.06, 0.095, 0, TRIM],
-    [-0.16, 0, 1.61, 0.045, 0.07, 0, FLESH],
-    [-0.2, 0, 1.6, 0.028, 0.045, 0, FLESH],
-    [-0.22, 0, 1.595, 0, 0, 0, FLESH],
+    [0.4, 0, 1.88, 0, 0, 0, TRIM],
+    [0.36, 0, 1.855, 0.022, 0.035, 0, TRIM],
+    [0.3, 0, 1.815, 0.04, 0.062, 0, TRIM],
+    [0.22, 0, 1.77, 0.055, 0.088, 0, TRIM],
+    [0.13, 0, 1.725, 0.066, 0.108, 0, TRIM],
+    [0.04, 0, 1.69, 0.072, 0.118, 0, TRIM],
+    [-0.03, 0, 1.665, 0.072, 0.115, 0, TRIM],
+    [-0.07, 0, 1.65, 0.064, 0.1, 0, TRIM],
+    [-0.09, 0, 1.645, 0, 0, 0, TRIM],
   ],
 };
 // A ring between each two: a smooth skull close up.

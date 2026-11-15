@@ -103,6 +103,7 @@ import {
 import {
   CHITIN_X,
   FOOT_TIP,
+  HEAD,
   column,
   elbow,
   eyes,
@@ -110,6 +111,7 @@ import {
   metatarsal,
   ribs,
   sinews,
+  skull,
   toes,
 } from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
@@ -950,11 +952,7 @@ export const soldier = (
     for (const k of [PANTS, UPPER, GLOVE, JACKET, SOLE]) {
       colors[k] = CHITIN_X;
     }
-    [colors[TRIM], colors[FLESH], colors[CAP]] = [
-      CHITIN_X.map(v => v * 1.6),
-      CHITIN_X.map(v => v * 0.6),
-      color,
-    ];
+    [colors[TRIM], colors[FLESH], colors[CAP]] = [HEAD, CHITIN_X.map(v => v * 0.6), color];
   }
   if (ninja) {
     const { PANTS, UPPER, GLOVE, STRIPE, STRIPE_LOW, BELT } = REGION;
@@ -1083,6 +1081,7 @@ export const soldier = (
       for (const f of [J.FOREARM_L, J.FOREARM_R]) {
         rigid(`elbow ${lod}`, s.pos[f], s.rot[f], (o, a, q) => elbow(o, a, q, lod));
       }
+      rigid(`skull ${lod}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => skull(o, a, q, lod));
       rigid(`eyes ${color}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => eyes(o, a, q, color));
     } else {
       rigid('pouch', s.pos[J.PELVIS], s.rot[J.PELVIS], pouch);

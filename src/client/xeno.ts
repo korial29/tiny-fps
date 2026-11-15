@@ -234,13 +234,15 @@ export const metatarsal = (out: Out, at: Vec3, q: Quat, lod: number) => {
     out,
     at,
     q,
+    // A round ankle over the joint, which the shin's end sinks into, then the bone tapering.
     [
-      [0, 0.01, 0.035],
-      [0, -0.005, -0.02],
+      [0, 0.03, 0.03],
+      [0, 0.005, 0.012],
+      [0, -0.008, -0.03],
       [x, y * 0.6, z * 0.5],
       [x, y, z],
     ],
-    [0.04, 0.042, 0.03, 0.026],
+    [0.02, 0.043, 0.037, 0.029, 0.025],
     n,
     CHITIN_X,
   );

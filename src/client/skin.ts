@@ -783,20 +783,22 @@ const LEG_X = remake(
     // Muscled (the user, 2026-11-15): a full thigh swelling in front, a lean knee, a calf bulging
     // behind the shin under it, the shin lean again down to the ankle.
     const g = (c: number, w: number) => Math.exp(-(((at - c) / w) ** 2));
-    const k =
-      at > 0.55
-        ? [0.98, 1.06]
-        : at > 0.45
-          ? [0.78, 0.84]
-          : [0.62 + 0.24 * g(0.34, 0.07), 0.68 + 0.36 * g(0.34, 0.07)];
-    r[3] *= k[0];
-    r[4] *= k[1];
-    r[2] += 0.012 * g(0.7, 0.1) - 0.02 * g(0.34, 0.07);
+    // One smooth profile down the leg, no steps: the thigh's share fading out over the knee.
+    const e = (a: number, b: number) => {
+      const t = Math.min(Math.max((at - a) / (b - a), 0), 1);
+      return t * t * (3 - 2 * t);
+    };
+    const thigh = e(0.44, 0.6);
+    r[3] *= 0.64 + 0.32 * thigh + 0.06 * g(0.72, 0.1) + 0.24 * g(0.33, 0.09) - 0.06 * g(0.5, 0.035);
+    r[4] *= 0.7 + 0.34 * thigh + 0.06 * g(0.72, 0.1) + 0.42 * g(0.33, 0.09) - 0.06 * g(0.5, 0.035);
+    r[2] += 0.012 * g(0.7, 0.1) - 0.028 * g(0.33, 0.09);
     // A knee that bends in one place (the user, 2026-11-15: an angle, not a curve): the man's rings
     // blend the thigh and the shin over 40 cm round it; here only the 8 cm across it do, and the
     // shin hangs on its own bone down to the ankle.
     const u = r[5];
-    r[5] = u < 1 ? u : at >= 0.53 ? 1 : at > 0.45 ? 1 + (0.53 - at) / 0.08 : at > 0.12 ? 2 : u;
+    // The shin's end hangs on the shin alone: the foot under it turns far (prowl()), and a share of
+    // it bent the ankle into a kink.
+    r[5] = u < 1 ? u : at >= 0.53 ? 1 : at > 0.45 ? 1 + (0.53 - at) / 0.08 : 2;
     return [...r.slice(0, 6), at > 0.11 ? PANTS : UPPER];
   },
   { far: [0, 3, 8, 11, 15, 17], n: [6, 12, 22] },
@@ -812,8 +814,8 @@ const ARM_X = remake(ARM, r => {
 });
 /**
  * Its skull's dome, on the head joint, from the back to the middle of the head (rings along z):
- * long, swelling then tapering as it sweeps back and up past the crown along a curve (the user,
- * 2026-11-15: more curves, less straight). Its front ring is the edge of its face, xeno.ts's
+ * long, swelling then tapering as it sweeps back over the crown and curves down toward the nape
+ * (the user, 2026-11-15: more curves, the back bending down, not up). Its front ring is the edge of its face, xeno.ts's
  * skull(), a human skull's, which covers the front half: one smooth block, no seam.
  */
 const CREST: Loft = {
@@ -823,12 +825,12 @@ const CREST: Loft = {
   z: true,
   far: [0, 4, 8, 12, 16],
   rings: [
-    [0.4, 0, 1.875, 0, 0, 0, TRIM],
-    [0.36, 0, 1.85, 0.022, 0.036, 0, TRIM],
-    [0.3, 0, 1.805, 0.04, 0.064, 0, TRIM],
-    [0.22, 0, 1.75, 0.056, 0.092, 0, TRIM],
-    [0.13, 0, 1.705, 0.067, 0.118, 0, TRIM],
-    [0.04, 0, 1.672, 0.072, 0.132, 0, TRIM],
+    [0.42, 0, 1.62, 0, 0, 0, TRIM],
+    [0.385, 0, 1.655, 0.022, 0.034, 0, TRIM],
+    [0.33, 0, 1.69, 0.04, 0.062, 0, TRIM],
+    [0.25, 0, 1.71, 0.056, 0.09, 0, TRIM],
+    [0.15, 0, 1.703, 0.067, 0.116, 0, TRIM],
+    [0.05, 0, 1.676, 0.072, 0.131, 0, TRIM],
     // Its front ring, the face's edge (xeno.ts: EY, EA, EB), closed flat behind the face.
     [0, 0, 1.66, 0.072, 0.135, 0, TRIM],
     [0, 0, 1.66, 0, 0, 0, TRIM],
@@ -887,7 +889,11 @@ const shape = (lod: number, xeno = false): Skin => {
             : L.far.map(i => L.rings[i]);
     // Close, the trunk's rings doubled; the eye's arms' too.
     // Not the eye's trunk: doubled, its rings would come in front of the near plane.
-    const rings = (lod == 3 && L === TR) || arm ? finer(base, arm) : base;
+    // The xenomorph's legs, their rings doubled near and close: a smooth outline.
+    const rings =
+      (lod == 3 && L === TR) || arm || (xeno && lod && L === LG)
+        ? finer(base, arm || L === LG)
+        : base;
     const up = rings[rings.length - 1][0] > rings[0][0];
     if (L === TR) {
       S = rings.findIndex((r, i) => i && r[0] == rings[i - 1][0]);

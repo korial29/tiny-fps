@@ -448,12 +448,15 @@ export const ribs = (out: Out, at: Vec3, q: Quat, lod: number, low = false) => {
       out,
       at,
       q,
+      // Sunk in the skin (the user, 2026-11-15: more a part of its body), out of it at both ends.
       [
-        [0, 0.12, -0.15],
-        [0, 0.03, -0.158],
-        [0, -0.08, -0.15],
+        [0, 0.13, -0.128],
+        [0, 0.09, -0.142],
+        [0, 0.03, -0.148],
+        [0, -0.03, -0.146],
+        [0, -0.08, -0.136],
       ],
-      [0.012, 0.016, 0.01],
+      [0.004, 0.011, 0.012, 0.011, 0.004],
       n,
       SINEW,
     );
@@ -466,6 +469,8 @@ export const ribs = (out: Out, at: Vec3, q: Quat, lod: number, low = false) => {
  * shoulder.
  */
 export const clavicles = (out: Out, at: Vec3, q: Quat, lod: number) => {
+  // Sunk in the skin and close under the neck (the user, 2026-11-15: more a part of its body): a
+  // ridge under it, rising out of it at the notch and going back into it at the shoulder.
   for (const s of [-1, 1]) {
     strand(
       out,
@@ -473,15 +478,16 @@ export const clavicles = (out: Out, at: Vec3, q: Quat, lod: number) => {
       q,
       (
         [
-          [0.022, 0.158, -0.118],
-          [0.06, 0.168, -0.128],
-          [0.105, 0.18, -0.11],
-          [0.145, 0.19, -0.075],
-          [0.172, 0.197, -0.04],
-          [0.186, 0.2, -0.012],
+          [0.02, 0.208, -0.07],
+          [0.036, 0.212, -0.08],
+          [0.064, 0.217, -0.083],
+          [0.097, 0.222, -0.072],
+          [0.128, 0.225, -0.052],
+          [0.15, 0.226, -0.032],
+          [0.166, 0.226, -0.012],
         ] as Vec3[]
       ).map(([x, y, z]): Vec3 => [s * x, y, z]),
-      [0.012, 0.012, 0.011, 0.012, 0.016, 0.01],
+      [0.004, 0.009, 0.011, 0.011, 0.011, 0.01, 0.005],
       SIDES[1][lod],
       SINEW,
     );

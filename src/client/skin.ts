@@ -774,9 +774,9 @@ const TRUNK_X = remake(
     const [up, neck] = [e(1.1, 1.38), e(1.49, 1.56)];
     // Wide hips and a full rear under the starved waist (the user, 2026-11-15): wider and deeper
     // round the pelvis, the depth thrown back.
-    const hip = Math.exp(-(((at - 0.97) / 0.07) ** 2));
-    r[3] *= 0.72 + 0.2 * up - 0.18 * neck + 0.22 * hip;
-    r[4] *= 0.8 + 0.18 * up - 0.12 * neck + 0.22 * hip;
+    const hip = Math.exp(-(((at - 0.95) / 0.09) ** 2));
+    r[3] *= 0.72 + 0.2 * up - 0.18 * neck + 0.4 * hip;
+    r[4] *= 0.8 + 0.18 * up - 0.12 * neck + 0.3 * hip;
     r[2] -= 0.018 * hip;
     // Its ribs: the strips under the chest in turn lighter and darker.
     const rib = at > 1.02 && at < 1.4 && TRUNK.rings.findIndex(q => q[0] == at) % 2;
@@ -794,7 +794,7 @@ const LEG_X = remake(
   r => {
     const [at] = r;
     // The thighs set wider at the top, under the wide hips.
-    r[1] *= 1 + 0.18 * Math.min(Math.max((at - 0.6) / 0.33, 0), 1) ** 1.5;
+    r[1] *= 1 + 0.3 * Math.min(Math.max((at - 0.6) / 0.33, 0), 1) ** 1.5;
     // Muscled (the user, 2026-11-15): a full thigh swelling in front, a lean knee, a calf bulging
     // behind the shin under it, the shin lean again down to the ankle.
     const g = (c: number, w: number) => Math.exp(-(((at - c) / w) ** 2));

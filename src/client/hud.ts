@@ -110,7 +110,7 @@ const [RIM, BLUR] = (() => {
 })();
 
 export const HUD_CSS =
-  `h5,aside,nav,var,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,samp,cite,q,dfn,tt,h1,h2,ol{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,var,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,label,samp,cite,q,dfn,tt,h1,h2,ol{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
@@ -131,6 +131,16 @@ export const HUD_CSS =
   // The kill feed, top right, and the own frags, top left.
   `ol{top:30px;right:12px;display:grid;justify-items:end;gap:3px;list-style:none;font-size:13px;font-weight:700}` +
   `ol li{width:auto;height:auto;padding:3px 9px;border-radius:4px;background:#000a;box-shadow:none;white-space:nowrap}ol li em{position:static;transform:none;margin:0 6px;font-size:11px;opacity:.75}` +
+  // An ally on the radio (the user, 2026-11-15): his face on a small screen that flickers open
+  // under the own frags while he speaks, framed in his team's colour, his name and a level meter.
+  `label{left:12px;top:40px;display:grid;justify-items:center;gap:4px;padding:5px 5px 6px;border:2px solid currentColor;border-radius:8px;background:#000c;box-shadow:0 0 14px currentColor;transform-origin:center;animation:comm .3s ease-out}` +
+  `label canvas{display:block;width:96px;height:96px;border-radius:4px;background:radial-gradient(#26323e,#05080c)}` +
+  `label::after{content:"";position:absolute;left:5px;top:5px;width:96px;height:96px;border-radius:4px;background:repeating-linear-gradient(#0000 0 2px,#0004 2px 3px);animation:snow .12s steps(2) infinite}` +
+  `label span{max-width:96px;overflow:hidden;text-overflow:ellipsis;font:800 11px/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}` +
+  `label i{display:flex;gap:2px;align-items:end;height:8px}label i b{width:3px;height:100%;background:currentColor;animation:talk .28s ease-in-out infinite alternate}` +
+  `label i b:nth-child(2n){animation-duration:.2s}label i b:nth-child(3n){animation-duration:.34s}` +
+  `@keyframes comm{0%{opacity:0;transform:scale(1,.04)}45%{opacity:1;transform:scale(1.06,.12)}100%{transform:none}}` +
+  `@keyframes snow{50%{background-position:0 1px}}@keyframes talk{from{transform:scaleY(.2)}}` +
   `h1{left:12px;top:8px;font:900 13px/1 system-ui,sans-serif;letter-spacing:.1em}h1 span{margin-left:6px;font-size:24px;font-variant-numeric:tabular-nums}` +
   `em{font-style:normal;font-size:13px;font-weight:800;line-height:1.1;text-align:center;transform:translate(-50%,-50%)}em span{display:block;font-size:20px;line-height:1}` +
   `section{inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0 12px;text-align:center;background:#000c}` +
@@ -495,6 +505,12 @@ export interface Hud {
    */
   feed(by: [string, number], who: [string, number]): void;
   /**
+   * An ally on the radio: the small screen with `name` in `team`'s colour opens for `s` seconds
+   * (and COMM_TAIL more), a newer one taking its place. Returns its canvas (COMM pixels square),
+   * cleared, for his face.
+   */
+  comm(name: string, team: number, s: number): HTMLCanvasElement;
+  /**
    * The rover: `act` is what E does now ('drive', 'ride', 'get out'; '' hides the prompt), and
    * `speed` the km/h shown at the wheel, where the gun and the crosshair then hide; undefined off it.
    */
@@ -541,6 +557,9 @@ export const BANNER_MS = 2800;
 export const FRAG_MS = 2400;
 export const FEED_MS = 6000;
 export const FEED_MAX = 5;
+/** The radio screen's canvas, pixels a side, and the seconds it stays after its line. */
+export const COMM = 192;
+export const COMM_TAIL = 0.5;
 export const HIT_MS = 140;
 
 /** m:ss. */
@@ -591,7 +610,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       `<data></data><span></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
       `<s hidden></s><mark hidden></mark><ins hidden><i></i></ins>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav><var hidden></var>` +
-      `<h1 hidden>FRAGS<span>0</span></h1><ol></ol><h2 hidden><span></span><small></small></h2>` +
+      `<h1 hidden>FRAGS<span>0</span></h1><label hidden><canvas width="${COMM}" height="${COMM}"></canvas><span></span><i>${'<b></b>'.repeat(5)}</i></label><ol></ol><h2 hidden><span></span><small></small></h2>` +
       `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q><dfn hidden></dfn><dfn hidden></dfn><tt hidden></tt><tt hidden></tt>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
   );
@@ -734,6 +753,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const [tally, list, notice] = [one('h1'), one('ol'), one('h2')];
   const [victim, award] = [...notice.children] as HTMLElement[];
   let shout: ReturnType<typeof setTimeout> | undefined;
+  let radio: ReturnType<typeof setTimeout> | undefined;
   /** The summary the end screen's table was built from. */
   let built: Summary | undefined;
   const tint = (el: HTMLElement, team: number) => (el.style.color = TEAM_COLOR[team]);
@@ -923,6 +943,21 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       set(award, prize);
       clearTimeout(shout);
       shout = setTimeout(() => (notice.hidden = true), FRAG_MS);
+    },
+    comm(who, team, secs) {
+      const box = one('label');
+      box.hidden = false;
+      // Each line flickers it open again.
+      box.style.animation = 'none';
+      void box.offsetWidth;
+      box.style.animation = '';
+      tint(box, team);
+      set(one('label span'), who);
+      clearTimeout(radio);
+      radio = setTimeout(() => (box.hidden = true), (secs + COMM_TAIL) * 1000);
+      const c = one<HTMLCanvasElement>('label canvas');
+      c.getContext('2d')?.clearRect(0, 0, c.width, c.height);
+      return c;
     },
     feed([a, at], [b, bt]) {
       const li = document.createElement('li');

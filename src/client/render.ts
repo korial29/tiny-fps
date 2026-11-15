@@ -635,7 +635,7 @@ export interface Renderer {
     build: number,
     color: string,
     look?: Choice,
-    shot?: typeof PORTRAIT,
+    shot?: Shot,
   ): boolean;
   destroy(): void;
 }
@@ -644,6 +644,10 @@ export interface Renderer {
 export const PORTRAIT = { y: 500, eye: 1.3, away: 2.5, turn: -0.35, sun: 0.9, fov: 30, side: 0 };
 /** A haircut's picture: the head alone, seen three quarters from behind so a tail or a bun shows. */
 export const HEAD = { ...PORTRAIT, eye: 1.6, away: 1.5, turn: -0.9, fov: 20, side: -0.12 };
+/** A picture's framing, and whether he grins in it. */
+export type Shot = typeof PORTRAIT & { grin?: boolean };
+/** An ally's face on the radio screen: the head nearly from the front, grinning. */
+export const FACE: Shot = { ...PORTRAIT, eye: 1.64, away: 1.4, turn: -0.3, fov: 14, grin: true };
 
 /** Pixels drawn at most (1080p): every one is lit per light and shadow map, so a 4K screen at a pixel ratio of 2 would pay for 8 million. */
 export const MAX_PIXELS = 1920 * 1080;
@@ -1268,7 +1272,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         },
       };
       // At ease, the arms down: no fighter's guard.
-      runners.set(p.id, createRunner(model, undefined, build, look ?? {}, true));
+      const r = createRunner(model, undefined, build, look ?? {}, true);
+      if (shot.grin) {
+        // Eased in at once: a moment of the face's time, under its first blink's half second.
+        r.grin = GRIN;
+        r.dt = 0.35;
+      }
+      runners.set(p.id, r);
       const [a, d] = [face + shot.turn, shot.away];
       const eye: Vec3 = [
         p.x - Math.sin(a) * d + Math.cos(a) * shot.side,

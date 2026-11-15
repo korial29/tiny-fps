@@ -32,9 +32,10 @@ export interface Audio {
   say(id: number): void;
   /**
    * Says clip `id` of the players' voices (CAST): placed and fainter with distance as play() with
-   * `at`, centred without. False, and silent, until the voices are decoded.
+   * `at`, centred without; over the `radio`, thin as through a headset. False, and silent, until
+   * the voices are decoded.
    */
-  speak(id: number, at?: Vec3, gain?: number, rate?: number): boolean;
+  speak(id: number, at?: Vec3, gain?: number, rate?: number, radio?: boolean): boolean;
   /** The sound `id` (one of LOOPED) as a loop, silent until its first set; the own player's, centred. */
   loop(id: number): Loop;
   /** Mutes or unmutes everything, music included. */
@@ -53,6 +54,8 @@ const STORE = 'tiny-fps:muted';
 /** The announcer's volume, and the music's share of its own under a line. */
 const SPEECH = 0.9;
 const DUCK = 0.35;
+/** The radio's band, Hz: what a headset's speaker gives of a voice. */
+const BAND = [500, 2800];
 
 /**
  * The announcer's sprite (voice/clips.ts), each as base64 and loaded only when asked for: Ogg Opus,
@@ -163,6 +166,7 @@ export const createAudio = (
     gain: number,
     rate: number,
     clip?: readonly [number, number],
+    radio = false,
   ): boolean => {
     let pan = 0;
     let vol = gain;
@@ -188,7 +192,19 @@ export const createAudio = (
     src.playbackRate.value = rate;
     const p = ctx.createStereoPanner();
     p.pan.value = pan;
-    src.connect(p).connect(out(master, vol));
+    let head: AudioNode = src;
+    if (radio) {
+      for (const [type, hz] of [
+        ['highpass', BAND[0]],
+        ['lowpass', BAND[1]],
+      ] as const) {
+        const f = ctx.createBiquadFilter();
+        f.type = type;
+        f.frequency.value = hz;
+        head = head.connect(f);
+      }
+    }
+    head.connect(p).connect(out(master, vol));
     const v = { vol, src };
     voices.add(v);
     src.onended = () => voices.delete(v);
@@ -233,8 +249,8 @@ export const createAudio = (
         }
       }
     },
-    speak(id, at, gain = 1, rate = 1) {
-      return !!cast && emit(cast, at, gain, rate, CAST[id]);
+    speak(id, at, gain = 1, rate = 1, radio = false) {
+      return !!cast && emit(cast, at, gain, rate, CAST[id], radio);
     },
     loop(id) {
       let src: AudioBufferSourceNode | undefined;

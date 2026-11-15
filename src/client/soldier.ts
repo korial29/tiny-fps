@@ -110,7 +110,6 @@ import {
   heel,
   metatarsal,
   ribs,
-  shoulder,
   sinews,
   skull,
   toes,
@@ -1091,14 +1090,6 @@ export const soldier = (
         rigid(`toes ${lod}`, tip, s.rot[toe], (o, a, q) => toes(o, a, q, lod));
       }
       rigid(`ribs ${lod}`, s.pos[J.CHEST], s.rot[J.CHEST], (o, a, q) => ribs(o, a, q, lod));
-      for (const [arm, sd] of [
-        [J.ARM_L, -1],
-        [J.ARM_R, 1],
-      ]) {
-        rigid(`shoulder ${lod} ${sd}`, s.pos[arm], s.rot[arm], (o, a, q) =>
-          shoulder(o, a, q, lod, sd),
-        );
-      }
       for (const f of [J.FOREARM_L, J.FOREARM_R]) {
         rigid(`elbow ${lod}`, s.pos[f], s.rot[f], (o, a, q) => elbow(o, a, q, lod));
       }

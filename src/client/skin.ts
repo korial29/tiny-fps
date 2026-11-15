@@ -805,27 +805,24 @@ const LEG_X = remake(
 );
 // Real shoulders (the user, 2026-11-15: no angle there): the deltoid's cap near the man's, round
 // over the joint, then the arm thinning under it down to the wrist.
-const ARM_X = remake(
-  ARM,
-  r => {
-    const at = r[0];
-    const g = (c: number, w: number) => Math.exp(-(((at - c) / w) ** 2));
-    const t = Math.min(Math.max((at - 1.05) / 0.26, 0), 1);
-    // One smooth profile, as the legs' (the user, 2026-11-15): the deltoid's cap, a biceps, a lean
-    // elbow, the forearm's muscles under it, a thin wrist.
-    const k =
-      0.66 +
-      0.26 * t * t * (3 - 2 * t) +
-      0.08 * g(1.2, 0.05) +
-      0.1 * g(1.0, 0.045) -
-      0.05 * g(1.09, 0.025);
-    r[1] -= r[3] ? 0.006 : 0;
-    r[3] *= k;
-    r[4] *= k + 0.03;
-    return [...r.slice(0, 6), r[0] < 0.98 ? GLOVE : JACKET];
-  },
-  { n: [6, 14, 28] },
-);
+const ARM_X = remake(ARM, r => {
+  const at = r[0];
+  const g = (c: number, w: number) => Math.exp(-(((at - c) / w) ** 2));
+  const t = Math.min(Math.max((at - 1.05) / 0.3, 0), 1);
+  // One smooth profile, as the legs' (the user, 2026-11-15): the top as thick as the shoulder it
+  // hangs from (a thinner one left a slanting facet there), a round biceps, a lean elbow, the
+  // forearm's muscles under it, a thin wrist. The sides are the man's, so the first strip fans from
+  // the shoulder's side evenly.
+  const k =
+    0.66 +
+    0.3 * t * t * (3 - 2 * t) +
+    0.06 * g(1.2, 0.06) +
+    0.1 * g(1.0, 0.045) -
+    0.05 * g(1.09, 0.025);
+  r[3] *= k;
+  r[4] *= k + 0.02;
+  return [...r.slice(0, 6), r[0] < 0.98 ? GLOVE : JACKET];
+});
 /**
  * Its skull's dome, on the head joint, from the back to the middle of the head (rings along z):
  * long, swelling then tapering as it sweeps back over the crown and curves down toward the nape
@@ -844,10 +841,12 @@ const CREST: Loft = {
     [0.33, 0, 1.69, 0.04, 0.062, 0, TRIM],
     [0.25, 0, 1.71, 0.056, 0.09, 0, TRIM],
     [0.15, 0, 1.703, 0.067, 0.116, 0, TRIM],
-    [0.05, 0, 1.676, 0.072, 0.131, 0, TRIM],
-    // Its front ring, the face's edge (xeno.ts: EY, EA, EB), closed flat behind the face.
+    [0.08, 0, 1.684, 0.072, 0.128, 0, TRIM],
+    // Straight on from the face's edge for a few centimetres: the face's rim runs along z there too.
+    [0.03, 0, 1.663, 0.072, 0.135, 0, TRIM],
+    // Its front ring, the face's edge (xeno.ts: EY, EA, EB), left open: a flat cap behind the face
+    // tilted its normals forward, and the light broke along the seam.
     [0, 0, 1.66, 0.072, 0.135, 0, TRIM],
-    [0, 0, 1.66, 0, 0, 0, TRIM],
   ],
 };
 // A ring between each two: a smooth skull close up.

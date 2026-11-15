@@ -469,35 +469,6 @@ const spur = (
   strand(out, at, q, [base, pt(0.5, 0.004), pt(1, 0.016)], [r, r * 0.6, 0], n, BONE);
 };
 
-/**
- * Its shoulder on an arm joint (the user, 2026-11-15: real shoulders, no angle): a round cap of
- * chitin over the head of the arm, carried by it, so the turn of the arm under it never shows as a
- * corner where the skin of the arm meets the trunk's.
- */
-export const shoulder = (out: Out, at: Vec3, q: Quat, lod: number, side: number) => {
-  const [rings, n] = [
-    [3, 5, 6, 9],
-    [4, 8, 10, 14],
-  ].map(l => l[lod]);
-  const [cx, cy, a, b, c] = [-side * 0.006, -0.026, 0.043, 0.05, 0.05];
-  const rows: Spot[][] = [];
-  for (let k = 0; k <= rings; k++) {
-    const t = (k / rings) * Math.PI;
-    const [y, r] = [Math.cos(t), Math.sin(t)];
-    rows.push(
-      Array.from({ length: k && k < rings ? n : 1 }, (_, i): Spot => {
-        const w = (i / n) * TAU;
-        const v: Vec3 = [Math.cos(w) * r, y, Math.sin(w) * r];
-        return [
-          on(at, q, [cx + v[0] * a, cy + v[1] * b, v[2] * c]),
-          unit(turn(q, [v[0] / a, v[1] / b, v[2] / c])),
-        ];
-      }),
-    );
-  }
-  sheet(rows, CHITIN_X, -1, out);
-};
-
 /** Its spurs: one out of the back of each elbow (a forearm joint), one out of the back of each ankle (a shin joint). */
 export const elbow = (out: Out, at: Vec3, q: Quat, lod: number) =>
   spur(out, at, q, [0, -0.02, 0.03], [0, 0.45, 1], 0.12, 0.016, SIDES[1][lod]);
@@ -621,10 +592,21 @@ export const skull = (out: Out, at: Vec3, q: Quat, lod: number) => {
   const spot = (u: number, v: number): Spot => {
     const y = TOP - (TOP - CHIN) * v;
     const x = u * widthOf(y);
+    // The slope from central differences a hair inside the rim (outside it the surface is flat),
+    // turned at the rim to the dome's own normal there, straight out of the ellipse: no seam in the
+    // light where the face meets the back of the head.
     const h = 1e-3;
-    const z = faceZ(x, y);
-    const n = unit([(faceZ(x + h, y) - z) / h, (faceZ(x, y + h) - z) / h, -1]);
-    return [on(at, q, [x, y, z]), turn(q, n)];
+    const [xi, yi] = [x * 0.97, EY + (y - EY) * 0.97];
+    const dz = [
+      (faceZ(xi + h, yi) - faceZ(xi - h, yi)) / (2 * h),
+      (faceZ(xi, yi + h) - faceZ(xi, yi - h)) / (2 * h),
+    ];
+    const m: Vec3 = unit([dz[0], dz[1], -1]);
+    const rim = unit([x / (EA * EA), (y - EY) / (EB * EB), 0]);
+    const e = Math.hypot(x / EA, (y - EY) / EB);
+    const w = Math.min(Math.max((e - 0.62) / 0.38, 0), 1) ** 2;
+    const n = unit([0, 1, 2].map(i => m[i] * (1 - w) + rim[i] * w) as Vec3);
+    return [on(at, q, [x, y, faceZ(x, y)]), turn(q, n)];
   };
   // The grid, but where the lips part: the hole's edge, in steps, lies under the lips.
   const tri = (p: [number, number][]) => {

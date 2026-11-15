@@ -20,7 +20,8 @@ const BUDGETS = [
   // 186 KB until the orbital station, its mission and its strike (the user, 2026-11-14).
   // 190 KB until the loading screen (the user, 2026-11-15).
   // 191 KB until the players' spoken taunts and death cries (the user, 2026-11-15).
-  { file: 'dist/index.js', max: 192 * 1024 },
+  // 192 KB until the allies' radio and its screen (the user, 2026-11-15).
+  { file: 'dist/index.js', max: 193 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   { file: 'dist/local.js', max: 46 * 1024 },

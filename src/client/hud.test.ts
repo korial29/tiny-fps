@@ -13,6 +13,8 @@ import { MODE, NOBODY } from '../shared/types';
 import type { Rover } from '../shared/types';
 import {
   BANNER_MS,
+  COMM,
+  COMM_TAIL,
   FEED_MAX,
   FEED_MS,
   FRAG_MS,
@@ -594,6 +596,26 @@ describe('createHud', () => {
       expect(notice.hidden).toBe(false);
       vi.advanceTimersByTime(1);
       expect(notice.hidden).toBe(true);
+    });
+
+    it('opens the radio screen for an ally while he speaks, in his team\u2019s colour, a newer line taking its place', () => {
+      const box = q('label');
+      expect(box.hidden).toBe(true);
+      const c = hud.comm('Ann', 1, 1.2);
+      expect(box.hidden).toBe(false);
+      expect(box.textContent).toBe('Ann');
+      const blue = box.style.color;
+      expect(blue).not.toBe('');
+      expect([c.width, c.height]).toEqual([COMM, COMM]);
+      expect(c).toBe(q('label canvas'));
+      vi.advanceTimersByTime(1000);
+      hud.comm('Bob', 0, 1);
+      expect(box.textContent).toBe('Bob');
+      expect(box.style.color).not.toBe(blue);
+      vi.advanceTimersByTime((1 + COMM_TAIL) * 1000 - 1);
+      expect(box.hidden).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(box.hidden).toBe(true);
     });
 
     it('lists the frags top right, names in their teams colours, the oldest going first', () => {

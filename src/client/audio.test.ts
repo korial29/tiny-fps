@@ -66,6 +66,7 @@ class FakeContext {
     return n;
   }
   createStereoPanner = () => this.node();
+  createBiquadFilter = () => Object.assign(this.node(), { type: '', frequency: { value: 0 } });
   createBufferSource() {
     const n = this.node();
     this.sources.push(n);
@@ -455,6 +456,18 @@ describe('speak', () => {
     expect(s.to!.to!.gain.value).toBeLessThan(1);
     // Out of range: unheard.
     expect(a.speak(5, at(100, 0))).toBe(false);
+  });
+
+  it('thins a line over the radio through a headset\u2019s band, centred', async () => {
+    const a = await voiced();
+    expect(a.speak(2, undefined, 0.7, 1, true)).toBe(true);
+    type Filter = Node & { type: string; frequency: { value: number } };
+    const hp = clips().at(-1)!.to as Filter;
+    const lp = hp.to as Filter;
+    expect([hp.type, lp.type]).toEqual(['highpass', 'lowpass']);
+    expect(hp.frequency.value).toBeLessThan(lp.frequency.value);
+    expect(lp.to!.pan.value).toBe(0);
+    expect(lp.to!.to!.gain.value).toBe(0.7);
   });
 
   it('loads the Opus voices first', async () => {

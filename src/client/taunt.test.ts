@@ -54,8 +54,13 @@ describe('voices', () => {
 describe('createTaunts', () => {
   const ME = 1;
   const setup = () => {
-    const speak = vi.fn((..._: [number, Vec3?, number?, number?]) => true);
-    const taunts = createTaunts({ speak }, id => (id == 4 ? 1 : 0));
+    const speak = vi.fn((..._: [number, Vec3?, number?, number?, boolean?]) => true);
+    // Players 1 (the own), 6 and 7 are red, the others blue.
+    const taunts = createTaunts(
+      { speak },
+      id => (id == 4 ? 1 : 0),
+      id => +![1, 6, 7].includes(id),
+    );
     const at = (id: number): Vec3 | undefined => (id == 9 ? undefined : [id, 0, 0]);
     return { speak, taunts, at };
   };
@@ -101,5 +106,31 @@ describe('createTaunts', () => {
     taunts.frag(frag(4, 3, 3), ME, 10 + TAUNT_GAP);
     taunts.frame(30, at);
     expect(speak).toHaveBeenCalledTimes(3);
+  });
+
+  it('brings an ally\u2019s taunt over the radio wherever he is, and says it began', () => {
+    const { speak, taunts, at } = setup();
+    // Ally 7 is not drawn near: the radio carries him all the same.
+    taunts.frag(frag(7, 2, 1), ME, 10);
+    expect(taunts.frame(10, at)).toEqual([]);
+    const said = taunts.frame(10 + TAUNT_DELAY, at);
+    const [clip, where, , , radio] = speak.mock.calls[0];
+    expect(where).toBeUndefined();
+    expect(radio).toBe(true);
+    expect(said).toEqual([{ by: 7, s: expect.closeTo(CAST[clip][1], 0) }]);
+    // An enemy's is no radio line.
+    taunts.frag(frag(4, ME, 1), ME, 20);
+    expect(taunts.frame(30, at)).toEqual([]);
+  });
+
+  it('shows no screen for an ally\u2019s line the voices could not say yet', () => {
+    const speak = vi.fn(() => false);
+    const taunts = createTaunts(
+      { speak },
+      () => 0,
+      id => +(id != 6 && id != ME),
+    );
+    taunts.frag(frag(6, 2), ME, 10);
+    expect(taunts.frame(20, () => undefined)).toEqual([]);
   });
 });

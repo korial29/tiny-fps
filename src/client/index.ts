@@ -31,7 +31,7 @@ import { flagDraws } from './flag';
 import { createFoley } from './foley';
 import { mood } from './face';
 import { dashing, felled, strain } from './expression';
-import { HUD_CSS, OUT_HINT, boarding, createHud, kmh } from './hud';
+import { COMM, HUD_CSS, OUT_HINT, boarding, createHud, kmh } from './hud';
 import type { Summary } from './hud';
 import { createInput } from './input';
 import { createPredictor } from './predict';
@@ -40,7 +40,7 @@ import { marks } from './marks';
 import { brief, goal } from './mission';
 import { lamps } from './satellite';
 import { packsOf } from './props';
-import { HEAD, createRenderer } from './render';
+import { FACE, HEAD, createRenderer } from './render';
 import { STEPS, createLoader } from './loading';
 import { createWrecks } from './wreck';
 import type { Renderer } from './render';
@@ -272,7 +272,13 @@ const play = (
     id => voiceOf(id, roster.find(p => p.id == id)?.body),
     id => speakerOf(id, roster.find(p => p.id == id)?.body),
   );
-  const taunts = createTaunts(audio, id => roster.find(p => p.id == id)?.body);
+  const taunts = createTaunts(
+    audio,
+    id => roster.find(p => p.id == id)?.body,
+    id => roster.find(p => p.id == id)?.team,
+  );
+  /** Each ally's face on the radio, drawn once for his look and colour (a portrait costs two frames). */
+  const faces = new Map<string, HTMLCanvasElement>();
   const wrecks = createWrecks(world, { tracer, audio, fx });
   let rd: Renderer | undefined;
   try {
@@ -533,10 +539,31 @@ const play = (
       ctl.pitch = chasePitch(ctl.pitch, rovers[wheel]);
     }
     audio.listen(eye, ctl.yaw);
-    taunts.frame(now / 1000, id => {
+    // An ally's taunt comes over the radio, his face on its screen; drawn before the frame, which
+    // then takes the canvas back.
+    for (const { by, s } of taunts.frame(now / 1000, id => {
       const p = others.find(o => o.id == id);
       return p && [p.x, p.y, p.z];
-    });
+    })) {
+      const info = roster.find(p => p.id == by);
+      const p = others.find(o => o.id == by);
+      const screen = hud.comm(names.get(by) ?? 'Ally', info?.team ?? 0, s);
+      const color = colors.get(by);
+      if (!info || !p || !color || !rd) {
+        continue;
+      }
+      const look = { tone: info.tone, hair: info.hair, role: roleOf(info.role, world.def) };
+      const key = `${by}${color}${info.body}${JSON.stringify(look)}`;
+      let face = faces.get(key);
+      if (!face) {
+        face = document.createElement('canvas');
+        face.width = face.height = COMM;
+        if (rd.portrait(face, p, info.body ?? 0, color, look, FACE)) {
+          faces.set(key, face);
+        }
+      }
+      screen.getContext('2d')?.drawImage(face, 0, 0);
+    }
     const dt = Math.min((now - before) / 1000, 0.1);
     // The flags and the bases for the renderer and the lights, and the HUD that goes with them.
     const who = (id: number) => (id == you.id ? me : others.find(p => p.id == id));

@@ -511,8 +511,9 @@ const DEPTH = [
   [0.012, 0.115],
   [-0.02, 0.12],
   [-0.05, 0.118],
-  [-0.07, 0.112],
-  [-0.09, 0.088],
+  [-0.07, 0.12],
+  [-0.088, 0.116],
+  [-0.095, 0.1],
 ];
 /** Its head's chitin: the dome's (the skin's TRIM, soldier.ts) and its face's, one colour. */
 export const HEAD = CHITIN_X.map(v => v * 1.6);
@@ -558,6 +559,27 @@ const TOP = EY + EB;
 /** The bottom of the chin (the user, 2026-11-15: a short one). */
 const CHIN = EY - EB;
 const widthOf = (y: number) => EA * Math.sqrt(Math.max(0, 1 - ((y - EY) / EB) ** 2));
+/**
+ * How far (x, y) is from the jawbone (the user, 2026-11-15: thin, bony, standing out low on the
+ * face): from under the ear down to the chin, the cheek hollowed above it in faceZ.
+ */
+const JAW = [
+  [0.072, -0.012],
+  [0.062, -0.05],
+  [0.036, -0.078],
+  [0, -0.088],
+];
+const jawline = (x: number, y: number) => {
+  const ax = Math.abs(x);
+  let d = 1;
+  for (let i = 1; i < JAW.length; i++) {
+    const [[x0, y0], [x1, y1]] = [JAW[i - 1], JAW[i]];
+    const [dx, dy] = [x1 - x0, y1 - y0];
+    const t = Math.min(Math.max(((ax - x0) * dx + (y - y0) * dy) / (dx * dx + dy * dy), 0), 1);
+    d = Math.min(d, Math.hypot(ax - x0 - dx * t, y - y0 - dy * t));
+  }
+  return d;
+};
 /** The face's surface at (x, y): an ellipse's front under a forehead's sphere, the orbits sunk, the cheekbones out. */
 const faceZ = (x: number, y: number) => {
   const u = Math.min(Math.abs(x) / Math.max(widthOf(y), 1e-6), 1);
@@ -568,7 +590,9 @@ const faceZ = (x: number, y: number) => {
     (dome - low) * brow(y) +
     0.028 * orbit(x, y) ** 0.6 -
     0.007 * frown(x, y) -
-    0.008 * Math.exp(-(((Math.abs(x) - 0.056) / 0.013) ** 2) - ((y + 0.008) / 0.012) ** 2)
+    0.008 * Math.exp(-(((Math.abs(x) - 0.056) / 0.013) ** 2) - ((y + 0.008) / 0.012) ** 2) +
+    0.016 * Math.exp(-(((Math.abs(x) - 0.052) / 0.015) ** 2) - ((y + 0.036) / 0.016) ** 2) -
+    0.015 * Math.exp(-((jawline(x, y) / 0.005) ** 2)) * (1 - u ** 4)
   );
 };
 /**

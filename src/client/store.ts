@@ -1,7 +1,7 @@
 // Pieces kept on the GPU (docs/PERFORMANCE.md): a rigid piece (a shoulder pad, a guard, a helmet)
 // is built once at the origin, its vertices go to the GPU once, and a frame only says where each
 // one stands: a turn, a place and a scale, applied by the scene's vertex shader as turn() does.
-import { STRIDE } from './mesh';
+import { CARD_BASE, CARD_STEP, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import type { Quat } from './rig';
 import { Verts, room } from './verts';
@@ -102,12 +102,14 @@ const NONE = [0, 0, 0];
 const SWAY = [0, 0, 0];
 /**
  * How far the hair vertex at `v[i]` (closeOf() in hair.ts: its normal at 3, how free at 7, its
- * phase at 9) moves in the head's frame at the time `t`, swung by `sw` (sway()): a share of the
+ * layer at 8, how far along at 9) moves in the head's frame at the time `t`, swung by `sw` (sway()): a share of the
  * swing, and a flutter of its own on its phase, out from the head too; a phase of -1 only swings.
  * The scene's vertex shader does the same sums (mode 3).
  */
 export const swayOf = (v: ArrayLike<number>, i: number, t: number, sw: ArrayLike<number>) => {
-  const [f, ph] = [v[i + 7], v[i + 9]];
+  // A card's phase is its id's (CARD_BASE); the underlayer (below -1 at 9) has none.
+  const f = v[i + 7];
+  const ph = v[i + 9] >= 0 ? Math.floor((CARD_BASE - v[i + 8]) / CARD_STEP) * 1.7 : -1;
   const on = ph >= 0 ? f : 0;
   const out = on * (0.002 + 0.0015 * Math.sin(t * 2.7 + ph));
   SWAY[0] =

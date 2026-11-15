@@ -775,8 +775,8 @@ const TRUNK_X = remake(
     // Wide hips and a full rear under the starved waist (the user, 2026-11-15): wider and deeper
     // round the pelvis, the depth thrown back.
     const hip = Math.exp(-(((at - 0.95) / 0.09) ** 2));
-    r[3] *= 0.72 + 0.2 * up - 0.18 * neck + 0.4 * hip;
-    r[4] *= 0.8 + 0.18 * up - 0.12 * neck + 0.3 * hip;
+    r[3] *= 0.72 + 0.2 * up - 0.26 * neck + 0.4 * hip;
+    r[4] *= 0.8 + 0.18 * up - 0.2 * neck + 0.3 * hip;
     r[2] -= 0.018 * hip;
     // Its ribs: the strips under the chest in turn lighter and darker.
     const rib = at > 1.02 && at < 1.4 && TRUNK.rings.findIndex(q => q[0] == at) % 2;
@@ -787,7 +787,13 @@ const TRUNK_X = remake(
   { far: [...TRUNK.far, 16], n: [8, 14, 28] },
 );
 // The neck runs on up into the skull, where its top is hidden: no flat ring under the jaw.
-TRUNK_X.rings.push([1.6, 0, 0.004, 0.05, 0.05, 2.8, TRIM], [1.66, 0, 0.01, 0, 0, 3, TRIM]);
+// A long neck under the head carried high (xeno.ts: HEAD_UP), running up into it.
+TRUNK_X.rings.push(
+  [1.6, 0, 0.004, 0.042, 0.044, 2.75, TRIM],
+  [1.65, 0, 0.008, 0.04, 0.042, 2.9, TRIM],
+  [1.7, 0, 0.012, 0.04, 0.04, 3, TRIM],
+  [1.73, 0, 0.014, 0, 0, 3, TRIM],
+);
 // The leg ends at the ankle, closed: its foot is xeno.ts's metatarsal(), longer than the rig's.
 const LEG_X = remake(
   { ...LEG, rings: [...LEG.rings.filter(r => r[0] > 0.1), [0.075, 0.1, 0, 0, 0, 3, UPPER]] },
@@ -851,7 +857,9 @@ const ARM_X = remake(ARM, r => {
  * ellipse, level where they meet, and falls along one arc to the tip; its underside rises faster,
  * clear of the neck.
  */
-const PROFILE = [0.42, 1.66, 0.07, 0.072, 0.135];
+const PROFILE = [0.42, 1.71, 0.07, 0.072, 0.135];
+/** The radius of the round end of the dome. */
+const TIP = 0.035;
 
 const CREST: Loft = {
   chain: [J.HEAD, J.HEAD],
@@ -864,8 +872,17 @@ const CREST: Loft = {
     const z = PROFILE[0] * Math.cos(((i / 11) * Math.PI) / 2);
     const k = Math.sqrt(Math.max(0, 1 - (z / PROFILE[0]) ** 2));
     const c = PROFILE[1] - PROFILE[2] * (z / PROFILE[0]) ** 2;
-    const [top, low] = [c + PROFILE[4] * k, c - PROFILE[4] * k * k];
-    return [z, 0, (top + low) / 2, PROFILE[3] * k ** 0.8, (top - low) / 2, 0, TRIM];
+    // The top as it is (the user, 2026-11-15: perfect); the underside curves up toward the tip,
+    // thinning the back of the head into a blade clear of the neck and the back.
+    const top = c + PROFILE[4] * k;
+    // From the base, just behind the face's edge (which stays full, no seam), boldly.
+    // Keeping its body to the end (the user, 2026-11-15: no tongue), which closes round: a cap of
+    // TIP's radius over the last of it.
+    const r = Math.min(Math.max((z - 0.015) / 0.035, 0), 1);
+    const u = Math.max(0, (z - PROFILE[0] + TIP) / TIP);
+    const cap = Math.sqrt(Math.max(0, 1 - u * u));
+    const th = Math.max(PROFILE[4] * (k + k * k) * k ** (2 * r * r * (3 - 2 * r)), 2 * TIP * cap);
+    return [z, 0, top - th / 2, Math.max(PROFILE[3] * k ** 0.8, TIP * cap), th / 2, 0, TRIM];
   }),
 };
 // A ring between each two: a smooth skull close up.

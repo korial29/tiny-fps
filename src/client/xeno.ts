@@ -541,6 +541,11 @@ const frown = (x: number, y: number) => {
  * dome's front ring (CREST in skin.ts), so the face, as wide as it at every height, meets the dome
  * with no seam; over the orbits the face is the ellipsoid itself, a smooth forehead.
  */
+/**
+ * How far the head is carried over its joint (the user, 2026-11-15: a neck that shows): the face
+ * here, the dome in skin.ts (PROFILE), the neck's skin run up to it.
+ */
+export const HEAD_UP = 0.05;
 const [EY, EA, EB, EC] = [0.04, 0.072, 0.135, 0.125];
 /** How much of the forehead's sphere the face is at height y: none under the orbits, all over them. */
 const brow = (y: number) => {
@@ -593,7 +598,8 @@ const lipline = (n: number): [number, number][] => {
  * orbits sunk, the cheekbones, no nose; the mouth an opening whose edge the lips hide, dark inside,
  * with grey teeth, the fangs longest. A grid over the face, finer the closer.
  */
-export const skull = (out: Out, at: Vec3, q: Quat, lod: number) => {
+export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
+  const at = on(head, q, [0, HEAD_UP, 0]);
   const [nx, ny] = [
     [8, 10],
     [18, 30],
@@ -704,7 +710,8 @@ export const skull = (out: Out, at: Vec3, q: Quat, lod: number) => {
 };
 
 /** Its eyes, glowing slits at the back of the orbits in the team's `color`. */
-export const eyes = (out: Out, at: Vec3, q: Quat, color: number[]) => {
+export const eyes = (out: Out, head: Vec3, q: Quat, color: number[]) => {
+  const at = on(head, q, [0, HEAD_UP, 0]);
   for (const s of [-1, 1]) {
     // A glowing slit along the orbit's slant.
     const pts = [-0.014, 0, 0.014].map((d): Vec3 => {

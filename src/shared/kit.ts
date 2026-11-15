@@ -1,11 +1,12 @@
-// The classes (the user, 2026-11-12): the marine and the ninja on the city's maps, the astronaut alone
-// on the moon's (a map with `helmets`). A kit is what a class changes in move() and step(): the host and
+// The classes (the user, 2026-11-12): the marine and the ninja on the city's maps, the astronaut on
+// the moon's (a map with `helmets`), the xenomorph on both (the user, 2026-11-15). A kit is what a class changes in move() and step(): the host and
 // the predictor take it from the player's `role` and the map, so both run the same numbers.
 import {
   AMMO_MAX,
   DOUBLE_JUMP_SPEED,
   GUN_COOLDOWN,
   GUN_MAG,
+  HP_MAX,
   RAIL_CAP,
   RIFLE_CLIP,
   JUMP_SPEED,
@@ -15,10 +16,11 @@ import {
   RUN_SPEED,
   SPRINT_SPEED,
   WALLRUN_TICKS,
+  XENO_HP,
 } from './constants';
 import type { WorldDef } from './world';
 
-export const ROLE = { MARINE: 0, NINJA: 1, ASTRONAUT: 2 } as const;
+export const ROLE = { MARINE: 0, NINJA: 1, ASTRONAUT: 2, XENO: 3 } as const;
 
 export interface Kit {
   run: number;
@@ -46,6 +48,15 @@ export interface Kit {
   damage: number;
   /** His running speeds with a gun in hand, of his own. */
   slow: number;
+  /** Health at a spawn, and what the packs heal up to. */
+  hp: number;
+  /** Whether the racks give him their weapons and he wears the armour pickups. */
+  gear: boolean;
+  /**
+   * The xenomorph's body: claws and a tail for weapons (PUNCHES from BLOW.CLAW_L), clinging to the
+   * walls (MODE.CLING), the dash a pounce charged on DASH held, acid for blood (room.ts).
+   */
+  xeno: boolean;
 }
 
 const MARINE: Kit = {
@@ -66,6 +77,9 @@ const MARINE: Kit = {
   clip: RIFLE_CLIP,
   damage: 1,
   slow: 1,
+  hp: HP_MAX,
+  gear: true,
+  xeno: false,
 };
 
 /**
@@ -91,17 +105,44 @@ const NINJA: Kit = {
   clip: RIFLE_CLIP / 2,
   damage: 0.5,
   slow: 0.55,
+  hp: HP_MAX,
+  gear: true,
+  xeno: false,
+};
+
+/**
+ * No weapon, no armour, more health; a little faster than the marine, under the ninja; it climbs
+ * any wall and pounces, so it needs no wall-run of its own.
+ */
+const XENO: Kit = {
+  ...MARINE,
+  run: RUN_SPEED * 1.1,
+  sprint: SPRINT_SPEED * 1.1,
+  jump: JUMP_SPEED * 1.15,
+  double: DOUBLE_JUMP_SPEED * 1.15,
+  ammo: 0,
+  rail: 0,
+  rifle: 0,
+  mag: 0,
+  cap: 0,
+  clip: 0,
+  hp: XENO_HP,
+  gear: false,
+  xeno: true,
 };
 
 /** By ROLE. The astronaut moves and fights as the marine: the moon's gravity is the map's. */
-export const KITS: readonly Kit[] = [MARINE, NINJA, MARINE];
+export const KITS: readonly Kit[] = [MARINE, NINJA, MARINE, XENO];
 
 /** Ticks after a dash's start before the next of a chain: the burst and a breath. */
 export const DASH_GAP = 16;
 
-/** The classes a map offers, the first one the default: the astronaut alone on a map with space helmets. */
+/**
+ * The classes a map offers, the first one the default: on a map with space helmets the astronaut
+ * and the xenomorph, who breathes none.
+ */
 export const rolesOf = (def: Pick<WorldDef, 'helmets'>): number[] =>
-  def.helmets ? [ROLE.ASTRONAUT] : [ROLE.MARINE, ROLE.NINJA];
+  def.helmets ? [ROLE.ASTRONAUT, ROLE.XENO] : [ROLE.MARINE, ROLE.NINJA, ROLE.XENO];
 
 /** The class a player plays on the map: his `role` when the map offers it, else the map's default. */
 export const roleOf = (role: number | undefined, def: Pick<WorldDef, 'helmets'>): number => {

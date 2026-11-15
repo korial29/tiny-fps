@@ -6,6 +6,7 @@
 // colour writes off. The scene goes into an offscreen target, then a second, small program (POST)
 // turns it into the picture on the canvas. No DOM beyond the canvas.
 import { ORBIT } from '../shared/constants';
+import { heightOf } from '../shared/physics';
 import { altitude } from '../shared/ship';
 import { MODE, TEX } from '../shared/types';
 import type { Choice, PlayerState, Rover } from '../shared/types';
@@ -254,12 +255,16 @@ const RELIEF = 0.06;
 // form (x is the climb along it, times FOG_RISE; the branch is its limit at 0). D and x are bounded
 // (FOG_FAR, FOG_CLIMB): where a thin face only grazes a pixel's samples, P is extrapolated to the
 // pixel's centre, kilometres off, and exp(-x) overflowed to infinity; times the moon's density of 0
-// that is NaN (a grey rectangle over its horizon for a frame, the user 2026-11-13).
+// that is NaN (a grey rectangle over its horizon for a frame, the user 2026-11-13). Vn.x is the
+// xenomorph's vision (the user, 2026-11-15): the world and the sky grey-blue (xv), the fog 60 %
+// thinner; the Vn.y enemies in Ve (feet and height) glow orange and take no fog (ht), on what lies
+// inside their cylinder: their bodies, never what a wall hides.
 export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y;uniform int Q;
 uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform float Sn;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
-uniform sampler2DArray S;uniform sampler2DArrayShadow D;out vec4 o;
+uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform vec4 Ve[16];uniform vec2 Vn;out vec4 o;
+vec3 xv(vec3 c){return dot(c,vec3(.3,.59,.11))*vec3(.55,.8,1.2);}
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
 vec3 nz(vec3 v){return v*inversesqrt(max(dot(v,v),1e-12));}
@@ -307,7 +312,7 @@ float vn3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(
 float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(vh(i),vh(i+vec2(1,0)),f.x),mix(vh(i+vec2(0,1)),vh(i+vec2(1,1)),f.x),f.y);}
 void main(){
 if(Z<0.){if(C.z<-2.5||(C.z<-1.3595&&C.z>-1.3895))discard;return;}
-if(Y>.5){vec3 d=normalize(P);o=vec4(K0(d,length(fwidth(d))),1);return;}
+if(Y>.5){vec3 d=normalize(P);o=vec4(K0(d,length(fwidth(d))),1);if(Vn.x>0.)o.rgb=xv(o.rgb);return;}
 if(Ob.w>.5&&Ob.x>0.){vec3 p;if(gh(normalize(P-E),p))discard;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
@@ -380,9 +385,11 @@ c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step
 c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv)*mix(1.,sm*(1.-ch),wa);
 c+=wa*ch*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),60.)*.5;
 c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(-abs(r.y-.12)*18.)),step(abs(L-(${GILT})),.02)*(.45+.45*fr));
-float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5);
+float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5),ht=0.;
 c.g=mix(c.g,c.r,z);
-o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc));
+for(int i=0;i<16;i++){if(float(i)>=Vn.y)break;vec2 dq=P.xz-Ve[i].xz;ht=max(ht,step(dot(dq,dq),.5)*step(Ve[i].y+.03,P.y)*step(P.y,Ve[i].y+Ve[i].w));}
+vec3 fc=F.rgb;if(Vn.x>0.){c=mix(xv(c),vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);fc=xv(fc);}
+o=vec4(mix(c,fc,1.-exp(-F.a*(1.-.6*Vn.x)*(1.-ht)*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc));
 float pv=length(fwidth(V)),fa=Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E))*step(P.y,${ORBIT.SEAM}.),Ob.z*smoothstep(1.25,1.6,length((P.xz-Cb.xy)*Cb.zw)));
 if(fa>.002)o.rgb=mix(o.rgb,K0(-V,pv),fa);}`;
 
@@ -665,6 +672,8 @@ export interface Renderer {
   muzzle(id: number): Vec3 | undefined;
   /** The runners of the players `ids` grin for a moment: their team has captured. */
   cheer(ids: number[]): void;
+  /** The xenomorph's vision (the own player is one): a grey-blue world, the enemies in sight glowing. */
+  vision(on: boolean): void;
   /** The body of each player (PlayerInfo.body, BODY), from the roster: the man's for one not in it; and the skin and haircut he picked, his id's for one not in `looks`. */
   wear(builds: ReadonlyMap<number, number>, looks?: ReadonlyMap<number, Choice>): void;
   /**
@@ -767,6 +776,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   /** Deletes what targets() built. */
   const owned: (() => void)[] = [];
   let lost = false;
+  /** The xenomorph's vision is on (vision()). */
+  let seeing = false;
   let vp = new Float32Array(16);
   /** The frame's vertices as written, and as the GPU takes them: both kept from frame to frame. */
   const v = new Verts();
@@ -944,6 +955,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       'Ob',
       'Cb',
       'Sn',
+      'Ve',
+      'Vn',
     ]);
     gl.uniform1i(u.D, 1);
     gl.uniform4fv(u.R, STILL);
@@ -1220,6 +1233,18 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.uniform3fv(u.E, eye);
       gl.uniform1f(u.T, performance.now() / 1000);
       gl.uniform1f(u.Z, 1);
+      // The enemies as drawn: every runner not in the own team's colour, up and on foot.
+      const own = colors.get(body?.id ?? self?.id ?? -1);
+      const prey = seeing
+        ? crowd.filter(p => !p.down && colors.get(p.id) !== own).slice(0, 16)
+        : [];
+      gl.uniform2f(u.Vn, +seeing, prey.length);
+      if (prey.length) {
+        gl.uniform4fv(
+          u.Ve,
+          prey.flatMap(p => [p.x, p.y, p.z, heightOf(p) + 0.3]),
+        );
+      }
       gl.uniform1i(u.Q, pk.n);
       gl.uniform4fv(u.A, pk.a);
       gl.uniform4fv(u.B, pk.b);
@@ -1292,6 +1317,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       // Her skins and their armour now, as the man's are built at the start: not in a frame of the match.
       new Set(b.values()).forEach(k => k && dressed(k));
     },
+    vision: on => (seeing = on),
     cheer: ids =>
       ids.forEach(id => {
         const r = runners.get(id);
@@ -1343,8 +1369,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         p.z - Math.cos(a) * d - Math.sin(a) * shot.side,
       ];
       const lens = { fov: shot.fov - FOV_DEG, roll: 0, lines: 0 } as Effects;
-      const shoot = () =>
+      // A picture, not the view: never through the xenomorph's eyes.
+      const shoot = () => {
+        const saw = seeing;
+        seeing = false;
         api.frame(eye, a + Math.PI, 0, [model], new Map([[p.id, color]]), lens, []);
+        seeing = saw;
+      };
       // Twice: the first frame makes the runner, the second draws him settled. High as he is, no orbit.
       posing = true;
       shoot();

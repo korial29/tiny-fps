@@ -106,6 +106,8 @@ export interface Controls {
   weapon: number;
   /** At a ship's stick (the client sets it): a press of G is a missile whatever the weapon, a double click nothing more than a click. */
   pilot: boolean;
+  /** Playing the xenomorph (the client sets it): the right button or G stings with the tail (SPECIAL alone). */
+  beast: boolean;
   /**
    * The KEY bits of the next step, read once per step. Same as `keys`, plus BLADE while the katana
    * is chosen and RAIL while the rail gun is, except for the step right after a double tap: it carries DASH and only the tapped
@@ -143,6 +145,8 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   let special = false;
   /** G pressed, waiting for its step: a grenade when the rifle is the choice. */
   let nade = false;
+  /** The right button pressed, waiting for its step: the xenomorph's sting. */
+  let sting = false;
   /** The weapons the own player has as of the last step, for the wheel. */
   let have = owned();
   const c: Controls = {
@@ -151,22 +155,27 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     keys: 0,
     weapon: WEAPON.GUN,
     pilot: false,
+    beast: false,
     take() {
       const keys =
         (pending ? dashKeys(c.keys, pending) : c.keys) |
-        (c.pilot
-          ? nade
+        (c.beast
+          ? nade || sting
             ? KEY.SPECIAL
             : 0
-          : c.weapon == WEAPON.RIFLE
+          : c.pilot
             ? nade
               ? KEY.SPECIAL
               : 0
-            : special
-              ? KEY.FIRE | KEY.SPECIAL
-              : 0);
+            : c.weapon == WEAPON.RIFLE
+              ? nade
+                ? KEY.SPECIAL
+                : 0
+              : special
+                ? KEY.FIRE | KEY.SPECIAL
+                : 0);
       pending = 0;
-      special = nade = false;
+      special = nade = sting = false;
       return withWeapon(keys, c.weapon);
     },
     track: (was, now) => {
@@ -186,8 +195,10 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
       c.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, c.pitch - e.movementY * SENS));
     }
   });
-  // The left button fires, under the lock only; a release always counts. The right one does nothing.
+  // The left button fires, under the lock only; a release always counts. The right one stings
+  // with the xenomorph's tail.
   on(document, 'mousedown', (e: MouseEvent) => {
+    sting ||= c.locked() && e.button == 2;
     if (c.locked() && !e.button) {
       c.keys |= KEY.FIRE;
       const now = performance.now();

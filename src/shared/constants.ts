@@ -224,14 +224,48 @@ export const PUNCH = { ticks: 20, strike: 6, reach: 1.4, arc: 0.6, hp: 0, hold: 
  * the LUNGE, a long straight right. `hp` 0 is half a point (PUNCH_HITS), 1 a whole one; a blow with
  * a `knock` throws whoever it hits as a tackle does, `knock` times as hard, and drops his flag.
  */
-export const BLOW = { JAB: 0, CROSS: 1, HOOK: 2, LUNGE: 3 } as const;
+export const BLOW = {
+  JAB: 0,
+  CROSS: 1,
+  HOOK: 2,
+  LUNGE: 3,
+  /** The xenomorph's (kit.ts): a swipe of the left claws, then of the right, while FIRE goes on. */
+  CLAW_L: 4,
+  CLAW_R: 5,
+  /** Its tail's sting, on SPECIAL: slow, far, and it throws whoever it stings. */
+  TAIL: 6,
+} as const;
+const CLAW = { ticks: 16, strike: 5, reach: 1.8, arc: 0.7, hp: 1, hold: -1, knock: 0 };
 export const PUNCHES = [
   PUNCH,
   PUNCH,
   { ticks: 28, strike: 9, reach: 1.5, arc: 0.9, hp: 1, hold: -1, knock: 1.4 },
   { ticks: 26, strike: 7, reach: 2.2, arc: 0.5, hp: 1, hold: -1, knock: 1.2 },
+  CLAW,
+  CLAW,
+  { ticks: 40, strike: 18, reach: 3.2, arc: 0.3, hp: 3, hold: -1, knock: 1.2 },
 ];
 export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];
+/**
+ * The xenomorph (the user, 2026-11-15; kit.ts). XENO_HP health. It clings to a wall it faces with
+ * forward held (MODE.CLING, physics.ts): CLING_SPEED m/s up, down or along it while the wall rises
+ * CLING_HOLD m over its feet; a jump kicks it off along the look at CLING_LEAP m/s. DASH held on a
+ * floor or a wall charges a pounce for up to POUNCE_HOLD ticks (PlayerState.charge); let go, it
+ * leaps POUNCE_MIN to POUNCE_MAX m/s along the look, at least POUNCE_PITCH up, and the dash timer
+ * runs from POUNCE_COOL: the first POUNCE_FLY ticks of it in the air, an enemy it reaches is
+ * pinned (room.ts): POUNCE_HP health, his flag dropped, a stumble of POUNCE_STUN ticks. An enemy
+ * whose katana or fists hit it loses ACID_HP.
+ */
+export const XENO_HP = 12;
+export const CLING_SPEED = 4.5;
+export const CLING_FACING = 0.6;
+export const CLING_HOLD = 0.4;
+export const CLING_LEAP = 10;
+export const POUNCE_HOLD = 36;
+export const [POUNCE_MIN, POUNCE_MAX, POUNCE_PITCH] = [9, 17, 0.3];
+export const [POUNCE_COOL, POUNCE_FLY] = [48, 40];
+export const [POUNCE_HP, POUNCE_STUN] = [2, 60];
+export const ACID_HP = 1;
 /** Shots the rack loads. */
 export const AMMO_MAX = 60;
 /**

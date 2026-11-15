@@ -12,7 +12,7 @@
 //   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8][stun u8]
 //   [gun u24][shots u8][hits u8][swing u8][lost u8][charge u8][lock u8][foe u8][pushes u8][away u8]
 //   [rail u8][railing u8][slow u8][mag u8][cap u8][reload u8][rifle u8][clip u8][heat u8][nade u8]
-//   mode: bits 0-2 MODE, bits 3-5 wall (SIDE), bit 6 jumps left, bit 7 the low bit of the dashes left
+//   mode: bits 0-2 MODE (its high bit is bit 6 of foe: the xenomorph's CLING), bits 3-5 wall (SIDE), bit 6 jumps left, bit 7 the low bit of the dashes left
 //   (its high bit is bit 4 of foe: a ninja chains three)
 //   dash: bits 0-5 the dash timer, bits 6-7 the high bits of the tackler's id (see stun)
 //   timers: bits 0-2 coyote ticks, bits 3-5 jump buffer ticks, bit 6 jump held, bit 7 dash held
@@ -33,7 +33,7 @@
 //   while down (when it is 0: no weapon) the fall instead (`fell`: bits 5-6 the FALL, bits 0-4 the
 //   way the hit went, in 32nds of a turn).
 //   lock: the ticks left in a saber lock; foe: bits 0-3 the id locked with, bit 4 the high bit of the
-//   dashes left, bit 5 the high bit of hp, bit 7 FIRE held at the
+//   dashes left, bit 5 the high bit of hp, bit 6 the high bit of the mode, bit 7 FIRE held at the
 //   last step (`pressed`); pushes: the FIRE presses in the lock; away: the ticks a side or back key
 //   has been held in it. rail: the rail gun's ticks of lightning plus one (0: no rail gun);
 //   railing: bit 0 railed (it is in hand), bit 1 inRail (inside the circle of the rail rack), bit 2
@@ -101,7 +101,8 @@ export interface Result {
 }
 
 /** What put a player down, in a frag message. */
-export const FRAG = { GUN: 0, BLADE: 1, FIST: 2, RAIL: 3, NADE: 4, VEHICLE: 5 } as const;
+/** CLAW is all the xenomorph's: claws, tail, pounce, and its acid. */
+export const FRAG = { GUN: 0, BLADE: 1, FIST: 2, RAIL: 3, NADE: 4, VEHICLE: 5, CLAW: 6 } as const;
 
 export type ServerText =
   /**
@@ -285,7 +286,11 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint8(o + 48, p.lock ?? 0);
     v.setUint8(
       o + 49,
-      ((p.foe ?? 0) & 15) | ((p.dashes & 2) << 3) | ((p.hp & 8) << 2) | (p.pressed ? 128 : 0),
+      ((p.foe ?? 0) & 15) |
+        ((p.dashes & 2) << 3) |
+        ((p.hp & 8) << 2) |
+        ((p.mode & 8) << 3) |
+        (p.pressed ? 128 : 0),
     );
     v.setUint8(o + 50, p.pushes ?? 0);
     v.setUint8(o + 51, p.away ?? 0);
@@ -391,7 +396,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     const mode = v.getUint8(o + 35);
     const timers = v.getUint8(o + 38);
     const [dash, stun] = [v.getUint8(o + 37), v.getUint8(o + 39)];
-    const m = mode & 7;
+    const m = (mode & 7) | ((v.getUint8(o + 49) >> 3) & 8);
     const gun = (v.getUint8(o + 40) << 16) | v.getUint16(o + 41);
     players.push({
       id: v.getUint8(o),

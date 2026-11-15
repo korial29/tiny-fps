@@ -729,8 +729,13 @@ export const dissolve = (out: Out, from: number, k: number) => {
  * the legs read as an animal's: the hips a little higher, the foot's long bone near upright over its
  * ball, the bones straight (the user, 2026-11-15: a deeper crouch bowed the legs into an arc).
  */
-/** How far prowl() tips the xenomorph's foot down from the gait's, radians: near upright. */
-const FOOT_UP = 1.26;
+/** How far prowl() tips the xenomorph's foot down from the gait's, radians: steep, the arch of its sole showing. */
+const FOOT_UP = 1.0;
+/** Where the ankle stands over the ball once the foot is tipped FOOT_UP: up, and behind it. */
+const ANKLE = [
+  -(FOOT_TIP[1] * Math.cos(FOOT_UP) + FOOT_TIP[2] * Math.sin(FOOT_UP)),
+  FOOT_TIP[1] * Math.sin(FOOT_UP) - FOOT_TIP[2] * Math.cos(FOOT_UP),
+];
 
 const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose => {
   const rot = pose.rot.slice();
@@ -753,7 +758,14 @@ const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose =>
     // The long bone of the foot near upright over the ball, which stays where the gait put it: a third
     // segment to the leg (the user, 2026-11-15: longer legs); the toes flat on the floor ahead.
     const b = s.pos[toe];
-    reach(q, t, thigh, [b[0] - fx * 0.045, b[1] + 0.245, b[2] - fz * 0.045], [fx, 0, fz], true);
+    reach(
+      q,
+      t,
+      thigh,
+      [b[0] - fx * ANKLE[1], b[1] + ANKLE[0], b[2] - fz * ANKLE[1]],
+      [fx, 0, fz],
+      true,
+    );
     q.rot[foot] = mul(q.rot[foot], axis(X, -FOOT_UP));
     q.rot[toe] = mul(q.rot[toe], axis(X, FOOT_UP));
   }

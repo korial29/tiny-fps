@@ -222,41 +222,69 @@ const strand = (
 /** Where the metatarsal (the foot) ends, from the ankle, in the foot joint's frame: longer than the rig's foot. */
 export const FOOT_TIP: Vec3 = [0, -0.035, -0.25];
 
+/** The three front toes: how far out to the side each goes (in widths of TOE_W) and its length. */
+const TOES = [
+  [-1, 0.11],
+  [0, 0.13],
+  [1, 0.11],
+];
+const TOE_W = 0.034;
+
 /**
- * Its foot on a foot joint: one long bone from the ankle to FOOT_TIP, with a knob at the heel and
- * two tendons over it to the toes. The pose stands it near upright (prowl() in soldier.ts): a third
- * segment to the leg.
+ * Its foot on a foot joint (the user, 2026-11-15: an arched sole, tendons and toes): a round ankle
+ * over the joint, which the shin's end sinks into, then the bone bowing up along its top into an
+ * arch, a pad under the heel and one under the ball at its end (FOOT_TIP); three tendons stand out
+ * over the instep from the ankle to the toes, where toes() carries them on to the claws. The pose
+ * stands it near upright (prowl() in soldier.ts): a third segment to the leg.
  */
 export const metatarsal = (out: Out, at: Vec3, q: Quat, lod: number) => {
   const n = SIDES[2][lod];
   const [x, y, z] = FOOT_TIP;
+  /** A point along the foot, k from the ankle (0) to the ball (1), lifted by the arch. */
+  const along = (k: number, up = 0, side = 0): Vec3 => [
+    x * k + side,
+    y * k + 0.022 * Math.sin(Math.PI * k) + up,
+    z * k,
+  ];
   strand(
     out,
     at,
     q,
-    // A round ankle over the joint, which the shin's end sinks into, then the bone tapering.
-    [
-      [0, 0.03, 0.03],
-      [0, 0.005, 0.012],
-      [0, -0.008, -0.03],
-      [x, y * 0.6, z * 0.5],
-      [x, y, z],
-    ],
-    [0.02, 0.043, 0.037, 0.029, 0.025],
+    [[0, 0.03, 0.03], [0, 0.005, 0.012], along(0.2), along(0.5), along(0.8), along(1)],
+    [0.02, 0.043, 0.034, 0.028, 0.027, 0.029],
     n,
     CHITIN_X,
   );
-  for (const s of [-0.016, 0.016]) {
+  // The pads: the heel's behind and under the ankle, the ball's under the foot's end.
+  strand(
+    out,
+    at,
+    q,
+    [
+      [0, -0.012, 0.03],
+      [0, -0.03, 0.005],
+    ],
+    [0.024, 0.016],
+    n,
+    CHITIN_X,
+  );
+  strand(out, at, q, [along(0.82, -0.016), along(1.02, -0.02)], [0.02, 0.024], n, CHITIN_X);
+  if (!lod) {
+    return;
+  }
+  for (const [t] of TOES) {
+    const w = t * 0.011;
     strand(
       out,
       at,
       q,
       [
-        [s, 0.02, -0.03],
-        [s, y * 0.6 + 0.018, z * 0.5],
-        [s * 1.3, y + 0.012, z - 0.01],
+        [w * 0.3, 0.032, -0.01],
+        along(0.35, 0.03, w * 0.8),
+        along(0.7, 0.031, w * 1.6),
+        along(1, 0.03, t * TOE_W * 0.4),
       ],
-      [0.006, 0.006, 0.005],
+      [0.006, 0.0075, 0.0075, 0.0065],
       SIDES[0][lod],
       SINEW,
     );
@@ -264,35 +292,71 @@ export const metatarsal = (out: Out, at: Vec3, q: Quat, lod: number) => {
 };
 
 /**
- * Its toes at the end of the foot (FOOT_TIP), level: three long digits splayed forward, each bending
- * down at its knuckle into a big hooked claw of bone, and a fourth, shorter, behind.
+ * Its toes at the end of the foot (FOOT_TIP), level: three long digits splayed forward and a fourth,
+ * short, behind. Each is two phalanges with a knuckle standing up between them, its tendon along
+ * its top, and at its end a big hooked claw of bone curving down past the toe.
  */
 export const toes = (out: Out, at: Vec3, q: Quat, lod: number) => {
   const n = SIDES[1][lod];
-  for (const [x, l] of [
-    [-1, 0.11],
-    [0, 0.13],
-    [1, 0.11],
-    [0, -0.05],
-  ]) {
-    const s = x * 0.034;
-    const pts: Vec3[] = [
-      [s * 0.4, 0.004, 0],
-      [s, 0.008, -l * 0.55],
-      [s * 1.15, -0.004, -l],
-    ];
-    strand(out, at, q, pts, [0.022, 0.017, 0.013], n, CHITIN_X);
-    const [tx, ty, tz] = pts[2];
+  for (const [t, l] of [...TOES, [0, -0.05]]) {
+    const s = t * TOE_W;
     const d = Math.sign(l);
-    // A big hooked claw past the toe: the foot stands on its pads and the claws grip.
+    const p: Vec3[] = [
+      [s * 0.4, 0.006, 0],
+      [s * 0.75, 0.016, -l * 0.45],
+      [s, 0.012, -l * 0.62],
+      [s * 1.15, 0, -l],
+    ];
+    strand(out, at, q, p, [0.021, 0.017, 0.016, 0.012], n, CHITIN_X);
+    // The knuckle, and the toe's pad under its end.
     strand(
       out,
       at,
       q,
       [
-        [tx, ty + 0.006, tz + 0.006 * d],
-        [tx * 1.05, ty + 0.006, tz - 0.05 * d],
-        [tx * 1.1, ty - 0.026, tz - 0.08 * d],
+        [s * 0.72, 0.02, -l * 0.43],
+        [s * 0.78, 0.02, -l * 0.5],
+      ],
+      [0.016, 0.014],
+      n,
+      CHITIN_X,
+    );
+    strand(
+      out,
+      at,
+      q,
+      [
+        [s * 1.1, -0.008, -l * 0.85],
+        [s * 1.15, -0.01, -l * 0.97],
+      ],
+      [0.012, 0.01],
+      n,
+      CHITIN_X,
+    );
+    if (lod && d > 0) {
+      strand(
+        out,
+        at,
+        q,
+        [
+          [s * 0.45, 0.026, -l * 0.05],
+          [s * 0.76, 0.034, -l * 0.47],
+          [s * 1.12, 0.014, -l * 0.95],
+        ],
+        [0.0065, 0.006, 0.005],
+        SIDES[0][lod],
+        SINEW,
+      );
+    }
+    const [tx, ty, tz] = p[3];
+    strand(
+      out,
+      at,
+      q,
+      [
+        [tx, ty + 0.008, tz + 0.008 * d],
+        [tx * 1.05, ty + 0.008, tz - 0.05 * d],
+        [tx * 1.1, ty - 0.024, tz - 0.082 * d],
       ],
       [0.014, 0.009, 0],
       n,

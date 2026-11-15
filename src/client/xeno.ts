@@ -559,30 +559,28 @@ const TOP = EY + EB;
 /** The bottom of the chin (the user, 2026-11-15: a short one). */
 const CHIN = EY - EB;
 const widthOf = (y: number) => EA * Math.sqrt(Math.max(0, 1 - ((y - EY) / EB) ** 2));
-/** The jawbone's line on the right, from under the ear down to the angle and forward to the chin. */
-const JAW: Vec3[] = [
-  [0.08, 0, 0.004],
-  [0.079, -0.05, 0.006],
-  [0.075, -0.085, 0.004],
-  [0.068, -0.094, -0.008],
-  [0.054, -0.094, -0.04],
-  [0.034, -0.094, -0.075],
-  [0.012, -0.093, -0.099],
+/**
+ * The jawbone's line on the right (the user, 2026-11-15: thin, bony, standing out low on the face,
+ * its angle marked): down from under the ear to a sharp angle, then forward to the chin.
+ */
+const JAW = [
+  [0.075, -0.005],
+  [0.071, -0.06],
+  [0.05, -0.075],
+  [0.028, -0.085],
+  [0, -0.09],
 ];
-/** The point `t` (0 to 1) of the way along a line of points, by length. */
-const along = (pts: Vec3[], t: number): Vec3 => {
-  const len = pts
-    .slice(1)
-    .map((p, i) => Math.hypot(...([0, 1, 2].map(j => p[j] - pts[i][j]) as Vec3)));
-  let l = t * len.reduce((x, y) => x + y, 0);
-  for (let i = 0; i < len.length; i++) {
-    if (l <= len[i] || i == len.length - 1) {
-      const k = Math.min(l / len[i], 1);
-      return [0, 1, 2].map(j => pts[i][j] + (pts[i + 1][j] - pts[i][j]) * k) as Vec3;
-    }
-    l -= len[i];
+/** How far (x, y) is from the jawbone. */
+const jawline = (x: number, y: number) => {
+  const ax = Math.abs(x);
+  let d = 1;
+  for (let i = 1; i < JAW.length; i++) {
+    const [[x0, y0], [x1, y1]] = [JAW[i - 1], JAW[i]];
+    const [dx, dy] = [x1 - x0, y1 - y0];
+    const t = Math.min(Math.max(((ax - x0) * dx + (y - y0) * dy) / (dx * dx + dy * dy), 0), 1);
+    d = Math.min(d, Math.hypot(ax - x0 - dx * t, y - y0 - dy * t));
   }
-  return pts[pts.length - 1];
+  return d;
 };
 /** The face's surface at (x, y): an ellipse's front under a forehead's sphere, the orbits sunk, the cheekbones out. */
 const faceZ = (x: number, y: number) => {
@@ -595,7 +593,8 @@ const faceZ = (x: number, y: number) => {
     0.028 * orbit(x, y) ** 0.6 -
     0.007 * frown(x, y) -
     0.008 * Math.exp(-(((Math.abs(x) - 0.056) / 0.013) ** 2) - ((y + 0.008) / 0.012) ** 2) +
-    0.016 * Math.exp(-(((Math.abs(x) - 0.052) / 0.015) ** 2) - ((y + 0.036) / 0.016) ** 2)
+    0.016 * Math.exp(-(((Math.abs(x) - 0.052) / 0.015) ** 2) - ((y + 0.036) / 0.016) ** 2) -
+    0.022 * Math.exp(-((jawline(x, y) / 0.0055) ** 2)) * (1 - u ** 6)
   );
 };
 /**
@@ -682,58 +681,6 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
         [u0, v1],
       ]);
     }
-  }
-  // The jawbone each side (the user, 2026-11-15: its angle seen square from the side): down from
-  // under the ear, a right angle under the back of the face, then forward along the bottom of the
-  // face to the chin, standing out of the head's outline.
-  for (const k of [-1, 1]) {
-    const bone = JAW.map(([x, y, z]): Vec3 => [k * x, y, z]);
-    // The cheek closed down to it: a web from the face's lower rim to the bone, seen from both sides.
-    const m = lod ? 12 : 4;
-    const rim = (t: number): Vec3 => [
-      k * EA * Math.cos((t * Math.PI) / 2),
-      EY - EB * Math.sin((t * Math.PI) / 2),
-      0,
-    ];
-    const spot = (p: Vec3, n: Vec3): Spot => [on(at, q, p), turn(q, n)];
-    for (let i = 0; i < m; i++) {
-      const [a, b, c, d] = [
-        rim(i / m),
-        rim((i + 1) / m),
-        along(bone, (i + 1) / m),
-        along(bone, i / m),
-      ];
-      const n = unit(
-        cross([0, 1, 2].map(j => b[j] - a[j]) as Vec3, [0, 1, 2].map(j => d[j] - a[j]) as Vec3),
-      );
-      const o = n[0] * k < 0 ? (n.map(v => -v) as Vec3) : n;
-      for (const tri of [
-        [a, b, c],
-        [a, c, d],
-      ]) {
-        face(
-          out,
-          HEAD,
-          -1,
-          tri.map(p => spot(p, o)),
-        );
-        face(
-          out,
-          HEAD,
-          -1,
-          tri.map(p => spot(p, o.map(v => -v) as Vec3)),
-        );
-      }
-    }
-    strand(
-      out,
-      at,
-      q,
-      bone,
-      [0.006, 0.0075, 0.009, 0.0085, 0.0075, 0.0075, 0.009],
-      lod ? 8 : 5,
-      HEAD,
-    );
   }
   if (!lod) {
     return;

@@ -89,6 +89,21 @@ describe('tinyFps, the match through the socket', () => {
     expect(q('output').hidden).toBe(true);
   });
 
+  it('shows a loading screen at once, the scene starting behind it, and lifts it once loaded', () => {
+    const box = document.createElement('div');
+    const other = tinyFps(box, { name: 'Cy', socket: { ...sock, send: () => {} } });
+    // The click that mounted it has not returned yet: the screen alone, the map not built.
+    expect(box.children).toHaveLength(1);
+    expect(box.firstElementChild!.shadowRoot!.textContent).toContain('Building the map');
+    other.destroy();
+    expect(box.children).toHaveLength(0);
+    // The game of beforeEach: started under its screen, which goes with no WebGL to wait for.
+    expect(host.children).toHaveLength(2);
+    expect(host.lastElementChild!.shadowRoot!.querySelector('s')).not.toBeNull();
+    vi.advanceTimersByTime(400);
+    expect(host.children).toHaveLength(1);
+  });
+
   it('puts the name of the map it plays, Highline, on the title screen', () => {
     expect(hud().textContent).toContain(HIGHLINE.name);
     expect(HIGHLINE.name).toBe('Highline');

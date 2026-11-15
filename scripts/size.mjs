@@ -18,7 +18,8 @@ const BUDGETS = [
   // 182 KB until the orbit over the moon (the user, 2026-11-14).
   // 183 KB until the stars at infinity and the craters drawn by the shader (the user, 2026-11-14: up to 20 KB more for a better look).
   // 186 KB until the orbital station, its mission and its strike (the user, 2026-11-14).
-  { file: 'dist/index.js', max: 190 * 1024 },
+  // 190 KB until the loading screen (the user, 2026-11-15).
+  { file: 'dist/index.js', max: 191 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   { file: 'dist/local.js', max: 46 * 1024 },

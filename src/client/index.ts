@@ -40,6 +40,7 @@ import { brief, goal } from './mission';
 import { lamps } from './satellite';
 import { packsOf } from './props';
 import { HEAD, createRenderer } from './render';
+import { STEPS, createLoader } from './loading';
 import { createWrecks } from './wreck';
 import type { Renderer } from './render';
 
@@ -119,13 +120,37 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       close: () => {},
     };
     port = p;
-    scene = play(container, map, p, () => emit('quit'));
-    if (up) {
-      p.onopen?.();
-    }
-    if (told) {
-      p.onmessage?.({ data: told });
-    }
+    const key = map;
+    const loader = createLoader(container, mapOf(key));
+    let live: { destroy(): void } | undefined;
+    /** What the scene is told before it starts: the last roster, then all that comes meanwhile. */
+    const early: { data: string | ArrayBuffer }[] = told ? [{ data: told }] : [];
+    p.onmessage = ev => early.push(ev);
+    // The scene starts once the loading screen is painted: building the map holds the main thread
+    // a while. A tab in the background has no frames, and starts after a wait.
+    const start = () => {
+      if (live) {
+        return;
+      }
+      live = play(container, key, p, () => emit('quit'), loader.step);
+      // The game first in its container, the loading screen over it.
+      container.append(loader.el);
+      if (up) {
+        p.onopen?.();
+      }
+      early.forEach(ev => p.onmessage?.(ev));
+    };
+    const timers = [setTimeout(start, 250), 0];
+    const raf = requestAnimationFrame(() => (timers[1] = setTimeout(start)));
+    scene = {
+      destroy() {
+        cancelAnimationFrame(raf);
+        timers.forEach(clearTimeout);
+        live?.destroy();
+        live = { destroy() {} };
+        loader.destroy();
+      },
+    };
   };
   ws.onopen = () => {
     up = true;
@@ -177,12 +202,16 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   };
 };
 
-/** The game on one map, talking through `ws`: the scene, the HUD, the input, the sound. */
+/**
+ * The game on one map, talking through `ws`: the scene, the HUD, the input, the sound. `progress`
+ * hears each step of STEPS (loading.ts) as it starts, then STEPS.length once the first frame is drawn.
+ */
 const play = (
   container: HTMLElement,
   key: string,
   ws: SocketLike,
   quit = () => {},
+  progress: (step: number) => void = () => {},
 ): { destroy(): void } => {
   const wrap = document.createElement('div');
   const root = wrap.attachShadow({ mode: 'open' });
@@ -293,6 +322,9 @@ const play = (
   let acc = 0;
   let raf = 0;
   let dead = false;
+  /** The loading step under way (STEPS): the map is built, the room is being joined. */
+  let step = 1;
+  progress(step);
 
   ws.onopen = () => (open = true);
   ws.onclose = () => {
@@ -639,6 +671,16 @@ const play = (
     // The vehicles as drawn: their damage arcs, blows up and falls apart on the way (wreck.ts).
     // After the tracer's update of this frame: a bolt it adds is drawn at least once at any rate.
     const shown = wrecks.frame(rovers, dt, eye);
+    // A message for the title screen (no WebGL, a closed connection, a full room) ends the loading.
+    if (msg && step < STEPS.length) {
+      progress((step = STEPS.length));
+    }
+    // Loading: the portraits in a frame, the world in the next, each frame a step of the bar. The
+    // first ones build the armour, seconds of it; the bar goes on on the compositor meanwhile.
+    if (me && rd && step == 1 && colors.has(you.id)) {
+      progress((step = 2));
+      return;
+    }
     if (me && rd) {
       // The cards' pictures, once the own player and his colour are known: drawn before the frame, which then takes the canvas back.
       const mine = `${you.id}${colors.get(you.id)}${JSON.stringify(picked)}`;
@@ -653,6 +695,10 @@ const play = (
             .heads()
             .forEach((c, hair) => rd!.portrait(c, me, picked.body, color, { ...look, hair }, HEAD));
         }
+      }
+      if (step == 2) {
+        progress((step = 3));
+        return;
       }
       rd.frame(
         pov,
@@ -678,6 +724,9 @@ const play = (
           wrecks.draw(v);
         },
       );
+      if (step < STEPS.length) {
+        progress((step = STEPS.length));
+      }
       // The reticle: where the lasers cross, on what the look meets as the host's sight() does
       // (a wall, another vehicle, a runner who is up), or along the look.
       if (car) {

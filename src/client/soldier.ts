@@ -991,6 +991,8 @@ export const soldier = (
       tressOf(p.id, picked),
       lod,
       sway(r.gait.phase, Math.hypot(p.vx, p.vz), r.t),
+      r.t,
+      gpu,
     );
     if (k > 0) {
       dissolve(out, from, k);

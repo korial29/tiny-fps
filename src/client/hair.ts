@@ -254,9 +254,10 @@ const lock = (
 };
 
 /** The rest mesh of a style, `fine` or not: its triangles' corners, each 8 floats (V), on the man's head. */
-const make = (style: number, fine: boolean): Float32Array => {
+const make = (style: number, fine: boolean, dense = false): Float32Array => {
   const out: V[] = [];
-  const [cols, rows] = fine ? [44, 9] : [12, 5];
+  // Dense: the close hair's underlayer, whose outline the strands fray.
+  const [cols, rows] = dense ? [88, 16] : fine ? [44, 9] : [12, 5];
   // Loose ends are cut in tips, lock by lock: the bob's all round, the swept top's on its long side.
   const loose = (a: number) => (style == STYLE.BOB ? 1 : style == STYLE.UNDERCUT ? +(a > 0.3) : 0);
   const { low, off } = SHELLS[style];
@@ -420,6 +421,8 @@ const makeCards = (style: number) => {
         p[7],
         p[8],
         CARD_BASE - CARD_STEP * (id + 0.02 + 0.96 * e),
+        // How far along the card, root to tip.
+        k / (pts.length - 1),
       ]);
     });
     for (let k = 0; k + 1 < rows.length; k++) {
@@ -433,10 +436,13 @@ const makeCards = (style: number) => {
     style == STYLE.BOB ? () => 1 : style == STYLE.UNDERCUT ? (a: number) => +(a > 0.3) : () => 0;
   const SEG = 8;
   // [cards, depth in the shell's offset, lift (m), half width (m), how light, id base, moving share, fray]
+  // Thin bands in successive layers, the deepest dark and still, each one out lighter and freer.
   const LAYERS: number[][] = [
-    [320, 0.7, 0.0008, 0.008, 0.5, 0, 0, 0.02],
-    [380, 0.95, 0.0025, 0.0045, 0.85, 100, 0.3, 0.06],
-    [70, 1, 0.006, 0.002, 1.05, 200, 1, 0.14],
+    [300, 0.55, 0.0006, 0.006, 0.42, 0, 0, 0.01],
+    [300, 0.75, 0.0012, 0.005, 0.58, 100, 0, 0.03],
+    [300, 0.9, 0.002, 0.0045, 0.75, 100, 0.25, 0.05],
+    [260, 1, 0.003, 0.004, 0.9, 100, 0.35, 0.07],
+    [80, 1.05, 0.006, 0.002, 1.05, 200, 1, 0.14],
   ];
   for (const [count, depth, lift, half, light, base, moving, fray] of LAYERS) {
     for (let c = 0; c < count; c++) {
@@ -497,7 +503,8 @@ const makeCards = (style: number) => {
     };
     const steps = (n - 1) * 6;
     for (const [count, depth, half, light2, base] of [
-      [14, 0.55, 1.3, 0.55, 0],
+      [16, 0.55, 1.3, 0.5, 0],
+      [30, 0.8, 0.9, 0.75, 100],
       [44, 1, 0.75, 1, 100],
     ]) {
       for (let c = 0; c < count; c++) {
@@ -578,14 +585,23 @@ export const sway = (phase: number, speed: number, t: number): Vec3 => {
 const close = new Map<number, Float32Array>();
 /**
  * The hair of `style` seen close, at rest in the head's frame, in the store's vertex format with,
- * in place of a colour, how light, how free (swayOf()), the layer and a phase: first the shell,
+ * in place of a colour, how light, how free (swayOf()), the layer and how far along (a card's
+ * root 0 to tip 1; below -1 the underlayer, -1 - how far down to its hem): first the shell,
  * drawn in a little and dark, the cards' underlayer (it fills what they leave, a phase of -1: it
  * only swings), then the cards (makeCards()). The store keeps it (hair()), and so does the CPU.
  */
 export const closeOf = (style: number) => {
   let v = close.get(style);
   if (!v) {
-    const [m, c] = [tress(style, true), cardsOf(style)];
+    const [m, c] = [make(style, true, true), cardsOf(style)];
+    const { low } = SHELLS[style];
+    const top = TOP - 0.012;
+    // How far down to the hem; only a loose style's frays, a pulled one ends on the hairline.
+    const hem = (x: number, y: number, z: number) => {
+      const a = Math.atan2(x, 0.005 - z);
+      const free = style == STYLE.BOB ? 1 : style == STYLE.UNDERCUT ? +(a > 0.3) : 0;
+      return free * clamp((top - y) / Math.max(top - low(a), 0.01));
+    };
     const o = bindOf(0)[J.HEAD];
     const out: number[] = [];
     for (let i = 0; i < m.length; i += 8) {
@@ -599,10 +615,11 @@ export const closeOf = (style: number) => {
         m[i + 6] * 0.42,
         m[i + 7] ** 1.5 / 0.6,
         HAIR_ROOT - HAIR_SPAN * clamp((TOP - m[i + 1]) / 0.3),
-        -1,
+        // Below -1: the underlayer, and how far down to its hem (the shader dissolves its edge).
+        -1 - hem(m[i], m[i + 1], m[i + 2]),
       );
     }
-    for (let i = 0; i < c.length; i += 9) {
+    for (let i = 0; i < c.length; i += 10) {
       out.push(
         (c[i] - o[0]) * HEAD_SCALE,
         (c[i + 1] - o[1]) * HEAD_SCALE,
@@ -613,7 +630,7 @@ export const closeOf = (style: number) => {
         c[i + 6],
         c[i + 7],
         c[i + 8],
-        Math.floor((CARD_BASE - c[i + 8]) / CARD_STEP) * 1.7,
+        c[i + 9],
       );
     }
     close.set(style, (v = new Float32Array(out)));

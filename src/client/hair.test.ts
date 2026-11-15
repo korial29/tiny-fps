@@ -19,9 +19,13 @@ describe('close hair (hair.ts): strand cards over a dark underlayer', () => {
         const l = c[i + 8];
         expect(other(l)).toBe(false);
         if (c[i + 9] < 0) {
+          // The underlayer: below -1, by how far down to its hem.
+          expect(c[i + 9]).toBeLessThanOrEqual(-1);
+          expect(c[i + 9]).toBeGreaterThanOrEqual(-2);
           expect(l).toBeLessThanOrEqual(HAIR_ROOT + 1e-6);
           expect(l).toBeGreaterThanOrEqual(HAIR_ROOT - HAIR_SPAN - 1e-6);
         } else {
+          expect(c[i + 9]).toBeLessThanOrEqual(1);
           const card = (CARD_BASE - l) / CARD_STEP;
           expect(card).toBeGreaterThan(0);
           expect(card).toBeLessThan(280);
@@ -36,7 +40,7 @@ describe('close hair (hair.ts): strand cards over a dark underlayer', () => {
   it('keeps the base still and lets only a share of the strands move', () => {
     const c = cardsOf(STYLE.BOB);
     const free = new Map<number, number>();
-    for (let i = 0; i < c.length; i += 9) {
+    for (let i = 0; i < c.length; i += 10) {
       const id = Math.floor((CARD_BASE - c[i + 8]) / CARD_STEP);
       free.set(id, Math.max(free.get(id) ?? 0, c[i + 7]));
     }
@@ -52,10 +56,10 @@ describe('close hair (hair.ts): strand cards over a dark underlayer', () => {
   });
 
   it('sways a strand by its own phase and only swings the underlayer', () => {
-    // [x, y, z, normal, light, free, layer, phase]
-    const strand = [0, 0, 0, 0, 0, 1, 1, 1, -1.37, 2];
-    const under = [0, 0, 0, 0, 0, 1, 1, 1, -1.46, -1];
-    const still = [0, 0, 0, 0, 0, 1, 1, 0, -1.37, 2];
+    // [x, y, z, normal, light, free, layer, how far along]: a card's phase is its id's.
+    const strand = [0, 0, 0, 0, 0, 1, 1, 1, -1.37, 0.7];
+    const under = [0, 0, 0, 0, 0, 1, 1, 1, -1.46, -1.5];
+    const still = [0, 0, 0, 0, 0, 1, 1, 0, -1.37, 0.7];
     expect(Math.hypot(...swayOf(strand, 0, 1.3, [0, 0, 0]))).toBeGreaterThan(0.002);
     expect(Math.hypot(...swayOf(under, 0, 1.3, [0, 0, 0]))).toBe(0);
     expect(swayOf(under, 0, 1.3, [0.01, 0, 0])[0]).toBeCloseTo(0.006, 9);

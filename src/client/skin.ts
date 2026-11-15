@@ -857,9 +857,10 @@ const ARM_X = remake(ARM, r => {
  * ellipse, level where they meet, and falls along one arc to the tip; its underside rises faster,
  * clear of the neck.
  */
-const PROFILE = [0.42, 1.71, 0.07, 0.072, 0.135];
-/** The radius of the round end of the dome. */
-const TIP = 0.035;
+const PROFILE = [0.42, 1.71, 0.1, 0.072, 0.135];
+/** The radius of the round end of the dome, and the banana's thickness and half width behind the face. */
+const TIP = 0.062;
+const BANANA = [0.245, 0.08];
 
 const CREST: Loft = {
   chain: [J.HEAD, J.HEAD],
@@ -875,14 +876,17 @@ const CREST: Loft = {
     // The top as it is (the user, 2026-11-15: perfect); the underside curves up toward the tip,
     // thinning the back of the head into a blade clear of the neck and the back.
     const top = c + PROFILE[4] * k;
-    // From the base, just behind the face's edge (which stays full, no seam), boldly.
-    // Keeping its body to the end (the user, 2026-11-15: no tongue), which closes round: a cap of
-    // TIP's radius over the last of it.
-    const r = Math.min(Math.max((z - 0.015) / 0.035, 0), 1);
+    // A banana (the user, 2026-11-15): from the face's full edge (no seam) down to a body of a
+    // nearly even thickness along the top's curve, tapering a little, and a round end.
+    // The base curving up quickly (the user, 2026-11-15): out of the face's edge then fast.
+    const e = Math.min(Math.max((z - 0.008) / 0.045, 0), 1);
+    const f = Math.sin((e * Math.PI) / 2) ** 0.6;
+    const along = Math.max(0, (z - 0.1) / (PROFILE[0] - 0.1));
     const u = Math.max(0, (z - PROFILE[0] + TIP) / TIP);
     const cap = Math.sqrt(Math.max(0, 1 - u * u));
-    const th = Math.max(PROFILE[4] * (k + k * k) * k ** (2 * r * r * (3 - 2 * r)), 2 * TIP * cap);
-    return [z, 0, top - th / 2, Math.max(PROFILE[3] * k ** 0.8, TIP * cap), th / 2, 0, TRIM];
+    const th = (2 * PROFILE[4] * (1 - f) + f * (BANANA[0] - (BANANA[0] - 2 * TIP) * along)) * cap;
+    const w = (PROFILE[3] * (1 - f) + f * (BANANA[1] - (BANANA[1] - TIP) * along)) * cap;
+    return [z, 0, top - th / 2, w, th / 2, 0, TRIM];
   }),
 };
 // A ring between each two: a smooth skull close up.

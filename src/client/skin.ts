@@ -946,11 +946,13 @@ const shape = (lod: number, xeno = false): Skin => {
         const q =
           L === TR
             ? ease(
-                (0.85 * (ax - 0.19) -
+                (0.85 * (ax - (xeno ? 0.175 : 0.19)) -
                   0.53 * (y - 1.47) -
-                  1.2 * Math.abs(z) * clamp((1.47 - y) / 0.08) +
+                  (xeno ? 0.6 : 1.2) * Math.abs(z) * clamp((1.47 - y) / 0.08) +
                   0.03) /
-                  0.13,
+                  // The xenomorph's blended wider (the user, 2026-11-15: a fold in front of the
+                  // armpit as its arms reach forward), round its narrower shoulders.
+                  (xeno ? 0.22 : 0.13),
               ) *
               top *
               clamp((y - SPLIT + 0.03) / 0.04)

@@ -109,7 +109,15 @@ what each step costs:
    three milliseconds a frame: rule 9.
 
 The own first-person body stays on the CPU: `relax()` smooths its shoulders once posed, which a
-vertex shader cannot do.
+vertex shader cannot do. Its armour was most of its time (the audit of 2026-11-15: 3 of the
+marine's 4 ms, 73 000 vertices): `armor()` worked out each triangle's three corners, and a corner
+is shared by two or three triangles (73 000 corners, 26 600 distinct on the marine). It now works
+out each distinct corner once (`shared()`, kept per wearer with the recipe), then writes the
+triangles from them: the same floats, 4.0 to 2.3 ms for the marine, 1.5 to 1.2 ms for the ninja.
+Leaving out the plates the eye never sees did not pay: drawn from the bots' states and the routes'
+hangs and climbs at six pitches, the back plates and the shoulder blades do show (the camera sits
+behind the head on a ledge), and what never showed (the belly's plate, the gusset, the hips' straps)
+is 2.5 % of it.
 
 ## Rules for every change
 

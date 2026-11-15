@@ -296,6 +296,9 @@ const make = (style: number, fine: boolean, dense = false): Float32Array => {
   const cap = scalp(0, TOP - 0.002, off(0, 0));
   grid.unshift(grid[0].map(() => [0, cap[1] + 0.001, 0.012, 0, 0, 0, 0.95, 0]));
   sheet(out, grid, true, [0, 1.7, 0.005]);
+  if (dense) {
+    SHELL.set(style, out.length);
+  }
   const back = (y: number, o: number) => scalp(Math.PI, y, o);
   const sides = fine ? 10 : 6;
   if (style == STYLE.PONYTAIL) {
@@ -556,6 +559,8 @@ export const cardsOf = (style: number) => {
 
 /** The locks make() lays, while it runs for makeCards(). */
 let LAID: { path: number[][]; wide: number; plait: number; light: number }[] | undefined;
+/** How many vertices the dense shell of each style has before its locks (make()). */
+const SHELL = new Map<number, number>();
 const made = new Map<number, Float32Array>();
 /** The style's rest mesh (make()), built once per style and fineness. */
 export const tress = (style: number, fine: boolean) => {
@@ -597,7 +602,11 @@ export const closeOf = (style: number) => {
     const { low } = SHELLS[style];
     const top = TOP - 0.012;
     // How far down to the hem; only a loose style's frays, a pulled one ends on the hairline.
-    const hem = (x: number, y: number, z: number) => {
+    // Not a lock's (its vertices come after the shell's): it hangs past the hem, whole.
+    const hem = (x: number, y: number, z: number, i: number) => {
+      if (i >= (SHELL.get(style) ?? 0) * 8) {
+        return 0;
+      }
       const a = Math.atan2(x, 0.005 - z);
       const free = style == STYLE.BOB ? 1 : style == STYLE.UNDERCUT ? +(a > 0.3) : 0;
       return free * clamp((top - y) / Math.max(top - low(a), 0.01));
@@ -616,7 +625,7 @@ export const closeOf = (style: number) => {
         m[i + 7] ** 1.5 / 0.6,
         HAIR_ROOT - HAIR_SPAN * clamp((TOP - m[i + 1]) / 0.3),
         // Below -1: the underlayer, and how far down to its hem (the shader dissolves its edge).
-        -1 - hem(m[i], m[i + 1], m[i + 2]),
+        -1 - hem(m[i], m[i + 1], m[i + 2], i),
       );
     }
     for (let i = 0; i < c.length; i += 10) {

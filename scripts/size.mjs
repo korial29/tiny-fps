@@ -22,7 +22,8 @@ const BUDGETS = [
   // 191 KB until the players' spoken taunts and death cries (the user, 2026-11-15).
   // 192 KB until the allies' radio and its screen (the user, 2026-11-15).
   // 193 KB until every class's armour wear (the user, 2026-11-15).
-  { file: 'dist/index.js', max: 194 * 1024 },
+  // 194 KB until the strand hair (the user, 2026-11-15: 3 KB more for it).
+  { file: 'dist/index.js', max: 197 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   { file: 'dist/local.js', max: 46 * 1024 },

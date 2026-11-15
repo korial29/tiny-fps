@@ -70,7 +70,7 @@ const [
   INNER,
 ] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
 /** The regions a runner's outfit is recoloured or covered by: the skin, the trousers, the boots, the gloves, the stripes and the belt. */
-export const REGION = { FLESH, PANTS, UPPER, GLOVE, STRIPE, STRIPE_LOW, BELT };
+export const REGION = { FLESH, PANTS, UPPER, GLOVE, STRIPE, STRIPE_LOW, BELT, HAIR };
 /** The palette's colours that glow, unlit (the eyes' specks, a cut's face), and its size. */
 export const [UNLIT, COLOURS] = [[GLINT, CAP], INNER + 1];
 

@@ -22,6 +22,8 @@ export interface Draw {
   f?: Flesh;
   /** Worn: armour, which the shader scuffs (grime, chipped paint, scratches) on its glossy and gold parts. */
   w?: boolean;
+  /** Close hair (hair.ts), coloured `rgb`, swung by `sw` in the head's frame at the time `t`: the shader sways it (swayOf()). */
+  h?: { rgb: number[]; sw: Vec3; t: number };
 }
 
 /**
@@ -94,16 +96,39 @@ export const ORIGIN: Vec3 = [0, 0, 0];
  * Appends the vertices of a drawn piece to `out` as the vertex shader places them (the tests'
  * eyes): position turned and scaled then moved, normal turned, colour as is.
  */
-export const expand = (out: Out, { m, q, t, k }: Draw) => {
+const NONE = [0, 0, 0];
+const SWAY = [0, 0, 0];
+/**
+ * How far the hair vertex at `v[i]` (closeOf() in hair.ts: its normal at 3, how free at 7, its
+ * phase at 9) moves in the head's frame at the time `t`, swung by `sw` (sway()): a share of the
+ * swing, and a flutter of its own on its phase, out from the head too; a phase of -1 only swings.
+ * The scene's vertex shader does the same sums (mode 3).
+ */
+export const swayOf = (v: ArrayLike<number>, i: number, t: number, sw: ArrayLike<number>) => {
+  const [f, ph] = [v[i + 7], v[i + 9]];
+  const on = ph >= 0 ? f : 0;
+  const out = on * (0.002 + 0.0015 * Math.sin(t * 2.7 + ph));
+  SWAY[0] =
+    0.6 * f * sw[0] +
+    on * (0.005 * Math.sin(t * 2.3 + ph) + 0.003 * Math.sin(t * 5.1 + ph * 1.7)) +
+    v[i + 3] * out;
+  SWAY[1] = 0.6 * f * sw[1] + on * 0.002 * Math.sin(t * 3.1 + ph * 0.7) + v[i + 4] * out;
+  SWAY[2] = 0.6 * f * sw[2] + on * (0.004 * Math.sin(t * 1.9 + ph * 1.3) + 0.003) + v[i + 5] * out;
+  return SWAY;
+};
+
+export const expand = (out: Out, { m, q, t, k, h: hair }: Draw) => {
   const a = room(out, m.count * STRIDE);
   let w = out.length;
   const [qx, qy, qz, qw] = q;
   for (let i = m.first * STRIDE; i < (m.first + m.count) * STRIDE; i += STRIDE, w += STRIDE) {
+    // Hair (mode 3) sways in the head's frame before the turn, as the shader does.
+    const sway = hair ? swayOf(stored, i, hair.t, hair.sw) : NONE;
     for (let h = 0; h < 6; h += 3) {
       const s = h ? 1 : k;
-      const x = stored[i + h] * s;
-      const y = stored[i + h + 1] * s;
-      const z = stored[i + h + 2] * s;
+      const x = stored[i + h] * s + (h ? 0 : sway[0]);
+      const y = stored[i + h + 1] * s + (h ? 0 : sway[1]);
+      const z = stored[i + h + 2] * s + (h ? 0 : sway[2]);
       const tx = 2 * (qy * z - qz * y);
       const ty = 2 * (qz * x - qx * z);
       const tz = 2 * (qx * y - qy * x);
@@ -114,6 +139,11 @@ export const expand = (out: Out, { m, q, t, k }: Draw) => {
     }
     for (let c = 6; c < STRIDE; c++) {
       a[w + c] = stored[i + c];
+    }
+    if (hair) {
+      a[w + 6] = hair.rgb[0] * stored[i + 6];
+      a[w + 7] = hair.rgb[1] * stored[i + 6];
+      a[w + 9] = hair.rgb[2] * stored[i + 6];
     }
   }
   out.length = w;

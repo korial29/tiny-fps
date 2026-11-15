@@ -40,6 +40,19 @@ export const GLOSS = -1.12;
  * tinted, turned yellow olive under a blue sky).
  */
 export const GILT = -1.42;
+/**
+ * Hair: a band of layers from HAIR_ROOT (the root) to HAIR_ROOT - HAIR_SPAN (the tip), how far along
+ * its strand a point is: the shader takes the strand's way from the band's gradient (Kajiya-Kay
+ * highlights, streaks). Lit like -1 but for its own highlights.
+ */
+export const [HAIR_ROOT, HAIR_SPAN] = [-1.45, 0.04];
+/**
+ * The strand cards of close hair (hair.ts): CARD_BASE - CARD_STEP * (card + across), across 0 to 1
+ * over the card, the card's id under 280 (below 100 the dense base, below 200 a clump, then a
+ * flyaway), a band no other layer of the shader takes. The shader cuts it into thin strands, alpha
+ * to coverage, and the depth passes leave it out.
+ */
+export const [CARD_BASE, CARD_STEP] = [-1.36, 1e-4];
 
 /**
  * Camera axes [right, up, forward]: forward is (-sin yaw cos pitch, sin pitch, -cos yaw cos pitch),

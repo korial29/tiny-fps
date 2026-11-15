@@ -6,11 +6,14 @@
 // braid sway a little with the run. Under the moon's helmet no hair is drawn: it is tucked in.
 import { JOINT as J, turn } from './rig';
 import type { Quat } from './rig';
+import { CARD_BASE, CARD_STEP, HAIR_ROOT, HAIR_SPAN } from './mesh';
 import type { Vec3 } from './mesh';
 import { hash } from './features';
 import { HAIRLINE_F, TOP, bindOf, scalp } from './skin';
 import { room } from './verts';
 import type { Out } from './verts';
+import { mesh, swayOf } from './store';
+import type { Pieces } from './store';
 
 export const STYLE = { PONYTAIL: 0, BOB: 1, BUN: 2, BRAID: 3, UNDERCUT: 4 } as const;
 export const STYLES = Object.keys(STYLE).length;
@@ -169,6 +172,7 @@ const lock = (
   light: number,
   plait = 0,
 ) => {
+  LAID?.push({ path, wide, plait, light });
   const rows = path.map((p, k) => {
     const [a, b] = [path[Math.max(k - 1, 0)], path[Math.min(k + 1, path.length - 1)]];
     const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
@@ -281,7 +285,9 @@ const make = (style: number, fine: boolean): Float32Array => {
         // Lighter where the light catches the top's turn, darker to the ends; strands round it.
         const light =
           (0.78 + 0.34 * Math.exp(-(((t - 0.3) / 0.22) ** 2)) - 0.12 * t) * (0.58 + 0.5 * ridge);
-        return [...p, 0, 0, 0, tuck ? 0.6 : light, 0];
+        // A loose style's lower part swings with the run, as its cards do.
+        const free = loose(a) * clamp((t - 0.45) / 0.75) ** 1.6 * 0.6;
+        return [...p, 0, 0, 0, tuck ? 0.6 : light, free ** (1 / 1.5)];
       }),
     );
   }
@@ -374,6 +380,175 @@ const make = (style: number, fine: boolean): Float32Array => {
   return new Float32Array(out.flat());
 };
 
+/**
+ * The hair as cards of strands, layered as in recent games: a dense dark base on the
+ * skull that never moves, clumps over it of which some move, a few thin flyaways that all do; the
+ * locks (tail, bun, braid, face strands) as cards wound round their paths. Nine floats a vertex:
+ * place, normal, how light, how free (the share of the run's swing and the flutter it takes), its
+ * layer: CARD_BASE - CARD_STEP * (card + across), across 0 to 1, the card's id telling the shader
+ * its kind (below 100 the base, below 200 a clump, then a flyaway).
+ */
+const makeCards = (style: number) => {
+  LAID = [];
+  make(style, true);
+  const locks = LAID;
+  LAID = undefined;
+  const { low, off } = SHELLS[style];
+  const top = TOP - 0.012;
+  let seed = 0x9e3779b9 ^ (style * 7919);
+  const rnd = () => {
+    seed = Math.imul(seed ^ (seed >>> 15), 0x2c1b3c6d);
+    seed = Math.imul(seed ^ (seed >>> 12), 0x297a2d39);
+    return ((seed ^= seed >>> 15) >>> 0) / 4294967296;
+  };
+  const out: number[] = [];
+  /** A ribbon through points [x, y, z, nx, ny, nz, half width, light, free]. */
+  const ribbon = (pts: number[][], id: number) => {
+    const rows = pts.map((p, k) => {
+      const q = pts[Math.min(k + 1, pts.length - 1)];
+      const r = pts[Math.max(k - 1, 0)];
+      const d = [q[0] - r[0], q[1] - r[1], q[2] - r[2]];
+      const x = [p[4] * d[2] - p[5] * d[1], p[5] * d[0] - p[3] * d[2], p[3] * d[1] - p[4] * d[0]];
+      const w = p[6] / (Math.hypot(...x) || 1);
+      return [0, 1].map(e => [
+        p[0] + x[0] * w * (e * 2 - 1),
+        p[1] + x[1] * w * (e * 2 - 1),
+        p[2] + x[2] * w * (e * 2 - 1),
+        p[3],
+        p[4],
+        p[5],
+        p[7],
+        p[8],
+        CARD_BASE - CARD_STEP * (id + 0.02 + 0.96 * e),
+      ]);
+    });
+    for (let k = 0; k + 1 < rows.length; k++) {
+      const [a, b, c, d] = [rows[k][0], rows[k][1], rows[k + 1][1], rows[k + 1][0]];
+      for (const v of [a, b, c, a, c, d]) {
+        out.push(...v);
+      }
+    }
+  };
+  const loose =
+    style == STYLE.BOB ? () => 1 : style == STYLE.UNDERCUT ? (a: number) => +(a > 0.3) : () => 0;
+  const SEG = 8;
+  // [cards, depth in the shell's offset, lift (m), half width (m), how light, id base, moving share, fray]
+  const LAYERS: number[][] = [
+    [320, 0.7, 0.0008, 0.008, 0.5, 0, 0, 0.02],
+    [380, 0.95, 0.0025, 0.0045, 0.85, 100, 0.3, 0.06],
+    [70, 1, 0.006, 0.002, 1.05, 200, 1, 0.14],
+  ];
+  for (const [count, depth, lift, half, light, base, moving, fray] of LAYERS) {
+    for (let c = 0; c < count; c++) {
+      const a0 = -Math.PI + 2 * Math.PI * rnd();
+      const t0 = base ? 0.3 * rnd() ** 2 : 0.08 * rnd();
+      const up = lift * (0.6 + 0.8 * rnd());
+      const drift = (rnd() - 0.5) * (base == 200 ? 0.6 : 0.3);
+      const hw = half * (0.7 + 0.6 * rnd());
+      const past = Math.abs(a0) > 1.15 || loose(a0) ? fray * (0.3 + rnd()) : 0;
+      const give = (rnd() < moving ? 1 : moving ? 0.08 : 0) * (loose(a0) ? 1 : 0.35);
+      const lit = light * (0.85 + 0.3 * rnd());
+      const pts: number[][] = [];
+      for (let k = 0; k <= SEG; k++) {
+        const u = k / SEG;
+        const t = t0 + (1 + past - t0) * u;
+        const tt = Math.min(t, 1);
+        const a = a0 + drift * u + 0.02 * Math.sin(u * 5 + c);
+        const ridge = Math.abs(Math.sin(a * LOCKS + 1.3 * Math.sin(tt * 3.2 + style)));
+        const y = Math.max(top + (low(a) - top) * tt ** 0.85, LOWEST + 0.007);
+        // A clump's root starts under the base and rises out of it: no row of cut ends on the crown.
+        const o =
+          (off(a, tt) + 0.0065 * (ridge ** 0.7 - 0.6) * (0.25 + 0.75 * tt)) * depth +
+          up * (base ? Math.min(1, u * 5) : 1) -
+          (base ? 0.002 * Math.max(1 - u * 5, 0) : 0);
+        const p = scalp(a, y, o);
+        const n = scalp(a, y, o + 0.01).map((v, i) => (v - p[i]) / 0.01);
+        // Past the shell's edge a strand falls straight down.
+        p[1] -= Math.max(t - 1, 0) * 0.12;
+        const free = give * clamp((t - 0.4) / 0.8) ** 1.6;
+        pts.push([
+          ...p,
+          ...n,
+          hw * Math.min(1, (base ? 0.15 : 0.35) + u * 5) * (1 - (base ? 0.75 : 0.45) * u * u),
+          lit * (0.8 + 0.2 * u),
+          free,
+        ]);
+      }
+      ribbon(pts, base + (c % (base == 200 ? 80 : 100)));
+    }
+  }
+  // The locks: cards round each path, a dense core and strands outside it; a lock swings as a whole.
+  for (const { path, wide, plait, light } of locks) {
+    const n = path.length;
+    // Catmull-Rom through the path's points: a lock of few points bends smoothly.
+    const at = (s: number) => {
+      const k = Math.min(Math.floor(s), n - 2);
+      const f = s - k;
+      const [a, b, c, d] = [k - 1, k, k + 1, k + 2].map(j => path[Math.min(Math.max(j, 0), n - 1)]);
+      return [0, 1, 2, 3].map(
+        i =>
+          b[i] +
+          0.5 *
+            f *
+            (c[i] -
+              a[i] +
+              f * (2 * a[i] - 5 * b[i] + 4 * c[i] - d[i] + f * (3 * (b[i] - c[i]) + d[i] - a[i]))),
+      );
+    };
+    const steps = (n - 1) * 6;
+    for (const [count, depth, half, light2, base] of [
+      [14, 0.55, 1.3, 0.55, 0],
+      [44, 1, 0.75, 1, 100],
+    ]) {
+      for (let c = 0; c < count; c++) {
+        const th0 = (2 * Math.PI * (c + rnd() * 0.6)) / count;
+        const lit = light * light2 * (0.85 + 0.3 * rnd());
+        const [deep, twist] = [depth * (0.9 + 0.2 * rnd()), (rnd() - 0.5) * 0.8];
+        const pts: number[][] = [];
+        for (let k = 0; k <= steps; k++) {
+          const s = (k / steps) * (n - 1);
+          const t = s / (n - 1);
+          const [px, py, pz, r] = at(s);
+          const [qa, qb] = [at(Math.max(s - 0.05, 0)), at(Math.min(s + 0.05, n - 1))];
+          const d = [qb[0] - qa[0], qb[1] - qa[1], qb[2] - qa[2]];
+          const l = Math.hypot(...d) || 1;
+          const upv = [0, -d[2] / l, d[1] / l];
+          const knot = plait ? 1 + plait * Math.abs(Math.sin(t * Math.PI * 4)) : 1;
+          const th = th0 + (plait ? t * 6 : twist * t);
+          const [cx, cy] = [Math.cos(th) * r * wide * knot * deep, Math.sin(th) * r * knot * deep];
+          const nn = [Math.cos(th) * wide, upv[1] * Math.sin(th), upv[2] * Math.sin(th)];
+          const nl = Math.hypot(...nn) || 1;
+          const w = ((Math.PI * r * (wide + 1)) / count) * half * knot;
+          pts.push([
+            px + cx,
+            py + upv[1] * cy,
+            pz + upv[2] * cy,
+            nn[0] / nl,
+            nn[1] / nl,
+            nn[2] / nl,
+            w * Math.min(1, 0.3 + t * 6) * (1 - 0.6 * t ** 4),
+            lit * (0.7 + 0.3 * t),
+            t ** 1.5 / 0.6,
+          ]);
+        }
+        ribbon(pts, base + (c % 100));
+      }
+    }
+  }
+  return new Float32Array(out);
+};
+const carded = new Map<number, Float32Array>();
+/** The cards of `style`, made once. */
+export const cardsOf = (style: number) => {
+  let m = carded.get(style);
+  if (!m) {
+    carded.set(style, (m = makeCards(style)));
+  }
+  return m;
+};
+
+/** The locks make() lays, while it runs for makeCards(). */
+let LAID: { path: number[][]; wide: number; plait: number; light: number }[] | undefined;
 const made = new Map<number, Float32Array>();
 /** The style's rest mesh (make()), built once per style and fineness. */
 export const tress = (style: number, fine: boolean) => {
@@ -399,9 +574,58 @@ export const sway = (phase: number, speed: number, t: number): Vec3 => {
   ];
 };
 
+/** The close hair of each style (closeOf()). */
+const close = new Map<number, Float32Array>();
+/**
+ * The hair of `style` seen close, at rest in the head's frame, in the store's vertex format with,
+ * in place of a colour, how light, how free (swayOf()), the layer and a phase: first the shell,
+ * drawn in a little and dark, the cards' underlayer (it fills what they leave, a phase of -1: it
+ * only swings), then the cards (makeCards()). The store keeps it (hair()), and so does the CPU.
+ */
+export const closeOf = (style: number) => {
+  let v = close.get(style);
+  if (!v) {
+    const [m, c] = [tress(style, true), cardsOf(style)];
+    const o = bindOf(0)[J.HEAD];
+    const out: number[] = [];
+    for (let i = 0; i < m.length; i += 8) {
+      out.push(
+        (m[i] * 0.985 - o[0]) * HEAD_SCALE,
+        (1.7 + (m[i + 1] - 1.7) * 0.985 - o[1]) * HEAD_SCALE,
+        (0.005 + (m[i + 2] - 0.005) * 0.985 - o[2]) * HEAD_SCALE,
+        m[i + 3],
+        m[i + 4],
+        m[i + 5],
+        m[i + 6] * 0.42,
+        m[i + 7] ** 1.5 / 0.6,
+        HAIR_ROOT - HAIR_SPAN * clamp((TOP - m[i + 1]) / 0.3),
+        -1,
+      );
+    }
+    for (let i = 0; i < c.length; i += 9) {
+      out.push(
+        (c[i] - o[0]) * HEAD_SCALE,
+        (c[i + 1] - o[1]) * HEAD_SCALE,
+        (c[i + 2] - o[2]) * HEAD_SCALE,
+        c[i + 3],
+        c[i + 4],
+        c[i + 5],
+        c[i + 6],
+        c[i + 7],
+        c[i + 8],
+        Math.floor((CARD_BASE - c[i + 8]) / CARD_STEP) * 1.7,
+      );
+    }
+    close.set(style, (v = new Float32Array(out)));
+  }
+  return v;
+};
+
 /**
  * Appends the hair `style` in `rgb` on the woman's head joint at `at` turned by `q` (see solve()),
- * at level of detail `lod` (0 far), its loose end moved by `swing` (sway()).
+ * at level of detail `lod` (0 far), its loose end moved by `swing` (sway()). Close (`lod` 3) it is
+ * strands (closeOf()): into `gpu`, the frame's pieces, when given, the shader swaying them at the
+ * time `time`; else into `out`, swayed here the same way.
  */
 export const hair = (
   out: Out,
@@ -411,7 +635,42 @@ export const hair = (
   rgb: number[],
   lod: number,
   swing: Vec3 = [0, 0, 0],
+  time = 0,
+  gpu?: Pieces,
 ) => {
+  if (lod > 2) {
+    const c = closeOf(style);
+    if (gpu) {
+      const m = mesh(`hair ${style}`, o => {
+        const d = room(o, c.length);
+        for (let i = 0; i < c.length; i++) {
+          d[o.length + i] = c[i];
+        }
+        o.length += c.length;
+      });
+      gpu.push({ m, q, t: at, k: 1, h: { rgb, sw: swing, t: time } });
+      return;
+    }
+    let w = out.length;
+    const d = room(out, c.length);
+    for (let i = 0; i < c.length; i += 10, w += 10) {
+      const [dx, dy, dz] = swayOf(c, i, time, swing);
+      const p = turn(q, [c[i] + dx, c[i + 1] + dy, c[i + 2] + dz]);
+      const n = turn(q, [c[i + 3], c[i + 4], c[i + 5]]);
+      d[w] = at[0] + p[0];
+      d[w + 1] = at[1] + p[1];
+      d[w + 2] = at[2] + p[2];
+      d[w + 3] = n[0];
+      d[w + 4] = n[1];
+      d[w + 5] = n[2];
+      d[w + 6] = rgb[0] * c[i + 6];
+      d[w + 7] = rgb[1] * c[i + 6];
+      d[w + 8] = c[i + 8];
+      d[w + 9] = rgb[2] * c[i + 6];
+    }
+    out.length = w;
+    return;
+  }
   const m = tress(style, lod > 0);
   const o = bindOf(0)[J.HEAD];
   let w = out.length;
@@ -433,7 +692,8 @@ export const hair = (
     dst[w + 5] = n[2];
     dst[w + 6] = rgb[0] * k;
     dst[w + 7] = rgb[1] * k;
-    dst[w + 8] = -1;
+    // Where along its strand: the shader takes the strand's way from it (HAIR_ROOT).
+    dst[w + 8] = HAIR_ROOT - HAIR_SPAN * clamp((TOP - m[i + 1]) / 0.3);
     dst[w + 9] = rgb[2] * k;
   }
   out.length = w;

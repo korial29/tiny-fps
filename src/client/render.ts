@@ -16,7 +16,17 @@ import type { Effects } from './effects';
 import { createDust } from './dust';
 import { base, flag, teamRgb } from './flag';
 import type { CtfScene } from './flag';
-import { GILT, GLOSS, SHINE, STRIDE, basis } from './mesh';
+import {
+  CARD_BASE,
+  CARD_STEP,
+  GILT,
+  GLOSS,
+  HAIR_ROOT,
+  HAIR_SPAN,
+  SHINE,
+  STRIDE,
+  basis,
+} from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
 import { furnishing } from './moonbase';
 import { hangar, satellite } from './satellite';
@@ -30,7 +40,7 @@ import { craft } from './craft';
 import { rolled, rover } from './rover';
 import type { Quat } from './rig';
 import { GRIN, animate, createRunner, soldier } from './soldier';
-import { COLOURS, REGION, UNLIT, body } from './skin';
+import { COLOURS, REGION, TOP, UNLIT, body } from './skin';
 import { CLOTH } from './mask';
 import { CHANNELS } from './features';
 import { PLATE, VERT as VERT_TEXELS } from './flesh';
@@ -118,13 +128,13 @@ const SAMPLES = 4;
 const VERT = `#version 300 es
 layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec4 c;
 uniform mat4 m;uniform float Y;uniform vec3 J[3];uniform vec4 R[2];
-uniform highp sampler2D Sg;uniform int Sm;uniform ivec4 Sb;uniform vec4 Sq[${2 * (JOINTS + 2)}],Sw[${Math.ceil(CHANNELS / 4)}];uniform vec3 Sp[${COLOURS}],Sc[2];uniform float Ak;
+uniform highp sampler2D Sg;uniform int Sm;uniform ivec4 Sb;uniform vec4 Sq[${2 * (JOINTS + 2)}],Sw[${Math.ceil(CHANNELS / 4)}];uniform vec3 Sp[${COLOURS}],Sc[2],Hc;uniform float Ak;uniform vec4 Hs;
 out vec3 P,N,Rp;out vec4 C;out float Wa;
 vec3 r(vec3 v){vec3 t=2.*cross(R[0].xyz,v);return v+R[0].w*t+cross(R[0].xyz,t);}
 vec4 g(int i){return texelFetch(Sg,ivec2(i&2047,i>>11),0);}
-float sh;vec2 hb;vec3 kr;
+float sh,ry;vec2 hb;vec3 kr;
 void k(int i,out vec3 x,out vec3 y){
-int b=Sb.x+i*${VERT_TEXELS};vec4 a=g(b),e=g(b+1),f=g(b+2);x=a.xyz;kr=x;y=e.xyz;sh=e.w;hb=g(b+3).xy;bool z=false;
+int b=Sb.x+i*${VERT_TEXELS};vec4 a=g(b),e=g(b+1),f=g(b+2);x=a.xyz;kr=x;ry=x.y;y=e.xyz;sh=e.w;hb=g(b+3).xy;bool z=false;
 for(int j=0;j<int(f.w);j++){int q=Sb.x+int(f.z)+j*2;vec4 h=g(q);int w=int(h.w);float fw=Sw[w>>2][w&3];if(fw!=0.){x+=fw*h.xyz;y+=fw*g(q+1).xyz;z=true;}}
 if(z)y=normalize(y);
 int u=int(f.x)*2,v=int(f.y)*2;float l=a.w,s=dot(Sq[u],Sq[v])<0.?-l:l;
@@ -136,7 +146,8 @@ Rp=vec3(0);Wa=0.;
 if(Y>.5){vec2 q=vec2(gl_VertexID&1,gl_VertexID>>1)*4.-1.;gl_Position=vec4(q,1,1);P=J[0]*q.x+J[1]*q.y+J[2];N=vec3(0);C=vec4(0);return;}
 if(Sm==1){vec4 h=g(Sb.y+gl_VertexID);k(int(h.x),P,N);int a=int(h.y);vec3 l=Sp[a];l+=(Sp[int(h.z)]-l)*h.w;l*=sh;
 if(hb.x>=0.&&(hb.y>.5||a==${REGION.FLESH}))l=vec3(${CLOTH})+(l-vec3(${CLOTH}))*hb.x;
-C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:-1.,l.z);gl_Position=m*vec4(P,1);return;}
+float hw=0.;for(int i=0;i<3;i++){vec4 o=g(Sb.y+gl_VertexID/3*3+i);hw+=int(o.y)==${REGION.HAIR}?1.-(int(o.z)!=${REGION.HAIR}?o.w:0.):int(o.z)==${REGION.HAIR}?o.w:0.;}hw/=3.;
+C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:hw>.5&&hb.x<0.?${HAIR_ROOT}-${HAIR_SPAN}*clamp((${TOP}-ry)/.3,0.,1.):-1.,l.z);gl_Position=m*vec4(P,1);return;}
 if(Sm==2){int b=Sb.y+gl_VertexID*${PLATE},j,K,t;vec4 h=g(b),G4=g(b+4),R4=g(b+5);j=int(h.y);K=int(h.z);t=int(h.x)*3;
 vec3 X[3],Z[3],W3[3],M3[3],XR[3],RR[3];
 for(int i=0;i<3;i++){k(int(g(Sb.z+t+i).x),X[i],Z[i]);XR[i]=kr;}
@@ -151,6 +162,9 @@ q-=s;l=length(q);q/=l>0.?l:1.;}
 vec3 l=g(b+6).xyz;bool pl=Sb.w!=0;
 if(l.x<0.)l=Sc[1];else if((K&${OWN})!=0){}else if(pl&&abs(h.w-(${GLOSS}))<.01)l=Sc[0];else if(pl&&(K&1)!=0)l=Sc[0]*.75;else if(pl&&G4.w>0.)l=l.x>.55?vec3(${SCRATCHED[1]}):vec3(${SCRATCHED[0]});
 Wa=Ak>0.?((K&1)!=0?2.:1.):0.;N=q;C=vec4(l.xy,h.w,l.z);gl_Position=m*vec4(P,1);return;}
+if(Sm==3){float f=c.y,ph=c.w,T=Hs.w,fo=f*step(0.,ph),o2=fo*(.002+.0015*sin(T*2.7+ph));
+vec3 d=.6*f*Hs.xyz+fo*vec3(.005*sin(T*2.3+ph)+.003*sin(T*5.1+ph*1.7),.002*sin(T*3.1+ph*.7),.004*sin(T*1.9+ph*1.3)+.003)+n*o2;
+P=R[1].xyz+r(p+d);N=r(n);C=vec4(Hc.rg*c.x,c.z,Hc.b*c.x);gl_Position=m*vec4(P,1);return;}
 P=R[1].xyz+r(p*R[1].w);Rp=p*R[1].w;Wa=Ak;N=r(n);C=c;gl_Position=m*vec4(P,1);}`;
 
 // A fullscreen triangle from gl_VertexID, no buffer.
@@ -288,9 +302,11 @@ vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
 c=mix(c,H[4]*1.08,exp(-abs(h)*7.))+Sn*sk(d,px);
 return c+X*((.1+.9*clamp(H[4].g*1.2,0.,1.))*(.2*pow(k,24.)+.05*pow(k,4.))+2.*smoothstep(.9993,.9997,k));}
 float vh(vec2 q){return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5453);}
+float h3(vec3 q){uvec3 u=uvec3(ivec3(floor(q)));uint h=u.x*1597334673u^u.y*3812015801u^u.z*2798796415u;h^=h>>15;h*=2246822519u;h^=h>>13;return float(h)*2.3283064e-10;}
+float vn3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(h3(i),h3(i+vec3(1,0,0)),f.x),mix(h3(i+vec3(0,1,0)),h3(i+vec3(1,1,0)),f.x),f.y),mix(mix(h3(i+vec3(0,0,1)),h3(i+vec3(1,0,1)),f.x),mix(h3(i+vec3(0,1,1)),h3(i+vec3(1,1,1)),f.x),f.y),f.z);}
 float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(vh(i),vh(i+vec2(1,0)),f.x),mix(vh(i+vec2(0,1)),vh(i+vec2(1,1)),f.x),f.y);}
 void main(){
-if(Z<0.){if(C.z<-2.5)discard;return;}
+if(Z<0.){if(C.z<-2.5||(C.z<-1.3595&&C.z>-1.3895))discard;return;}
 if(Y>.5){vec3 d=normalize(P);o=vec4(K0(d,length(fwidth(d))),1);return;}
 if(Ob.w>.5&&Ob.x>0.){vec3 p;if(gh(normalize(P-E),p))discard;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
@@ -318,17 +334,32 @@ float sc=step(abs(al),.006+.007*hh.z)*step(hh.x,.4)*smoothstep(.0007,.0002,lengt
 c=mix(c,vec3(dot(c,vec3(.3,.5,.2)))*vec3(.8,.68,.55)*(.55+.2*gr),(.3+.5*lowy)*smoothstep(.35,.75,gr));
 c=mix(c,vec3(.07,.075,.08),ch);c=mix(c,vec3(.7,.7,.72),sc*(1.-ch)*.9);
 h+=.00004*n3(q*900.)*(1.-smoothstep(.4,1.,pw*900.))-.00012*ch;}
+float kh=step(-1.497,L)*step(L,-1.443)*smoothstep(.02,.12,(-1.45-L)/.04),hp=max(length(dx),length(dy)),st=0.,st2=0.;
+vec3 T=-nz((dFdx(L)*a+dFdy(L)*b)*sign(det));T=nz(T-n*dot(T,n));
+if(kh>0.){for(int i=-3;i<=3;i++){vec3 q=P+T*float(i)*.011;st+=vn3(q*650.);st2+=vn3(q*200.+4.);}
+st=clamp(.5+(st/7.-.5)*1.7,0.,1.);st2=clamp(.5+(st2/7.-.5)*2.6,0.,1.);
+float hf=1.-smoothstep(.4,1.,hp*650.);st=mix(.5,st,hf);st2=mix(.5,st2,1.-smoothstep(.4,1.,hp*200.));
+c*=.9+.16*st+.16*(st2-.5);}
+float kc=step(-1.3895,L)*step(L,-1.3595),ac=1.,kx=max(kh,kc);
+if(kc>0.){float cu=(${CARD_BASE}-L)*${(1 / CARD_STEP).toFixed(1)},ci=floor(cu),uu=(cu-ci-.02)/.96,kd=step(100.,ci)+step(200.,ci),x=uu*(kd<.5?6.:kd<1.5?5.:2.),ix=floor(x);
+T=nz(cross(T,n));vec3 hq=hs(vec3(ci,ix,7.));
+float d=abs(fract(x)-.5)*2.,wd=kd<.5?.8+.2*hq.x:kd<1.5?.25+.45*hq.x:.15+.2*hq.x,fw=max(fwidth(x)*2.,1e-3);
+ac=clamp((wd-d)/fw+.5,0.,1.)*min(1.,wd/fw)*(kd<.5?1.:step(.12,hq.y))*(kd<.5?.98:.92);
+c*=.8+.4*hq.z;st=hq.z;st2=hq.y;}
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
 vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];
 vec3 y=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s),V=normalize(E-P),w=nz(n+m);
 float sd=max(dot(m,O),0.)*smoothstep(0.,.1,dot(n,O)),sv=1.;
+sd=mix(sd,.5*sqrt(max(1.-dot(T,O)*dot(T,O),0.))*smoothstep(-.3,.4,dot(n,O)),kx*.6);
 if(sd>0.&&g<1.){
 vec4 q=W*vec4(P+n*.08,1);q.xyz=q.xyz*.5+.5;
 float v=0.;
 for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADOW},0,q.z-.0004));
 sv=mix(v/4.,1.,smoothstep(.8,1.,max(max(abs(q.x-.5),abs(q.y-.5)),abs(q.z-.5))*2.));}
 vec3 l=y*(mix(mix(H[1],H[0],max(w.y,0.)),H[2],max(-w.y,0.))+X*sd*sv),sp=X*sv*sd*pow(max(dot(m,nz(O+V)),0.),R.y);
+vec3 Hh=nz(O+V),T1=nz(T+m*(-.1+.12*(st-.5))),T2=nz(T+m*(.15+.12*(st-.5)));float d1=dot(T1,Hh),d2=dot(T2,Hh);
+vec3 hl=kx*X*sv*smoothstep(-.15,.35,dot(n,O))*(.08*pow(max(1.-d1*d1,0.),80.)*(.5+st)+.06*c/(dot(c,vec3(.3,.5,.2))+.02)*pow(max(1.-d2*d2,0.),14.)*(.3+1.4*st2*st));
 for(int i=0;i<${MAX_LIGHTS};i++){
 if(i>=Q||g>0.)break;
 vec3 d=A[i].xyz-P;float r=length(d),k=K[i].w,u=B[i].w;
@@ -342,7 +373,7 @@ for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADO
 w*=v/4.;}
 l+=K[i].rgb*w;
 sp+=K[i].rgb*w*pow(max(dot(m,nz(d+V)),0.),R.y);}
-c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(.4+.6*mix(1.,t.a,s)));
+c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(1.-kx)*(.4+.6*mix(1.,t.a,s))+hl);
 vec3 r=reflect(-V,m),k=K1(r,0.);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
 c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr));
@@ -351,7 +382,7 @@ c+=wa*ch*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),60.)*.5;
 c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(-abs(r.y-.12)*18.)),step(abs(L-(${GILT})),.02)*(.45+.45*fr));
 float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5);
 c.g=mix(c.g,c.r,z);
-o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z));
+o=vec4(mix(c,F.rgb,1.-exp(-F.a*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc));
 float pv=length(fwidth(V)),fa=Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E))*step(P.y,${ORBIT.SEAM}.),Ob.z*smoothstep(1.25,1.6,length((P.xz-Cb.xy)*Cb.zw)));
 if(fa>.002)o.rgb=mix(o.rgb,K0(-V,pv),fa);}`;
 
@@ -755,7 +786,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   let [flesh, rows, read] = [{} as WebGLTexture, 0, 0];
   /** The frame's pieces, drawn after the frame's own vertices in every pass. */
   const place = () => {
-    for (const { m, q, t, k, f, w } of pieces) {
+    for (const { m, q, t, k, f, w, h } of pieces) {
       gl.uniform1f(u.Ak, +!!w);
       if (f) {
         // Posed by the shader from its texels: no vertex array.
@@ -771,7 +802,16 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       } else {
         gl.bindVertexArray(kept);
         gl.uniform4fv(u.R, [...q, ...t, k]);
+        if (h) {
+          // Close hair, coloured and swayed by the shader (mode 3, swayOf()).
+          gl.uniform1i(u.Sm, 3);
+          gl.uniform3fv(u.Hc, h.rgb);
+          gl.uniform4f(u.Hs, ...h.sw, h.t);
+        }
         gl.drawArrays(gl.TRIANGLES, m.first, m.count);
+        if (h) {
+          gl.uniform1i(u.Sm, 0);
+        }
       }
     }
     gl.uniform1f(u.Ak, 0);
@@ -894,6 +934,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       'Sg',
       'Sm',
       'Ak',
+      'Hc',
+      'Hs',
       'Sb',
       'Sq',
       'Sp',

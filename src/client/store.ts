@@ -20,6 +20,8 @@ export interface Draw {
   t: Vec3;
   k: number;
   f?: Flesh;
+  /** Worn: armour, which the shader scuffs (grime, chipped paint, scratches) on its glossy and gold parts. */
+  w?: boolean;
 }
 
 /**

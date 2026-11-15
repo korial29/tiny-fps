@@ -790,9 +790,9 @@ const TRUNK_X = remake(
 // A long neck under the head carried high (xeno.ts: HEAD_UP), running up into it.
 TRUNK_X.rings.push(
   [1.6, 0, 0.004, 0.042, 0.044, 2.75, TRIM],
-  [1.65, 0, 0.008, 0.04, 0.042, 2.9, TRIM],
-  [1.7, 0, 0.012, 0.04, 0.04, 3, TRIM],
-  [1.73, 0, 0.014, 0, 0, 3, TRIM],
+  [1.655, 0, 0.008, 0.04, 0.042, 2.9, TRIM],
+  [1.715, 0, 0.012, 0.04, 0.04, 3, TRIM],
+  [1.745, 0, 0.014, 0, 0, 3, TRIM],
 );
 // The leg ends at the ankle, closed: its foot is xeno.ts's metatarsal(), longer than the rig's.
 const LEG_X = remake(
@@ -857,10 +857,10 @@ const ARM_X = remake(ARM, r => {
  * ellipse, level where they meet, and falls along one arc to the tip; its underside rises faster,
  * clear of the neck.
  */
-const PROFILE = [0.42, 1.675, 0.1, 0.072, 0.1];
+const PROFILE = [0.42, 1.69, 0.21, 0.084, 0.1];
 /** The radius of the round end of the dome, and the banana's thickness and half width behind the face. */
 const TIP = 0.062;
-const BANANA = [0.2, 0.078];
+const BANANA = [0.2, 0.09];
 
 const CREST: Loft = {
   chain: [J.HEAD, J.HEAD],

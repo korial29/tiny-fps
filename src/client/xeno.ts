@@ -545,9 +545,9 @@ const frown = (x: number, y: number) => {
  * How far the head is carried over its joint (the user, 2026-11-15: a neck that shows): the face
  * here, the dome in skin.ts (PROFILE), the neck's skin run up to it.
  */
-export const HEAD_UP = 0.05;
+export const HEAD_UP = 0.065;
 // A lower, flatter forehead (the user, 2026-11-15: too conical), the chin where it was.
-const [EY, EA, EB, EC] = [0.005, 0.072, 0.1, 0.105];
+const [EY, EA, EB, EC] = [0.005, 0.084, 0.1, 0.105];
 /** How much of the forehead's sphere the face is at height y: none under the orbits, all over them. */
 const brow = (y: number) => {
   const t = Math.min(Math.max((y - 0.005) / 0.025, 0), 1);

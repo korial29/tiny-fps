@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SPRITES, createAudio, savedMute, toggleMute } from './audio';
+import { SPRITES, VOICED, createAudio, savedMute, toggleMute } from './audio';
 import type { Audio } from './audio';
 import { MUSIC_RATE, RATE } from './sfx';
+import { CAST } from './voice/cast';
 import { CLIPS, LINE } from './voice/clips';
 import type { Voice } from './sfx';
 
@@ -418,5 +419,45 @@ describe('say', () => {
 
   it('loads the Opus sprite first', async () => {
     expect(atob(await SPRITES[0]()).slice(0, 4)).toBe('OggS');
+  });
+});
+
+describe('speak', () => {
+  /** An unlocked Audio whose players' voices are this text, once decoded, and their sources. */
+  const voiced = async (text = 'ok') => {
+    install();
+    const a = createAudio(LAYERS, [() => Promise.resolve(btoa('ok'))], undefined, [
+      () => Promise.resolve(btoa(text)),
+    ]);
+    a.unlock();
+    a.listen(EYE, 0);
+    await vi.waitFor(() => expect(a.speak(0)).toBe(true));
+    return a;
+  };
+  const clips = () => fake().sources.filter(s => s.buffer?.length == 999 && s.args?.length == 3);
+
+  it('says nothing before the voices are decoded', () => {
+    install();
+    const a = createAudio(LAYERS, SPRITES, undefined, [() => new Promise(() => {})]);
+    a.unlock();
+    expect(a.speak(3)).toBe(false);
+    expect(fake().sources.filter(s => !s.loop)).toHaveLength(0);
+  });
+
+  it('plays the clip from its place in the sprite, placed as a sound and at its pace', async () => {
+    const a = await voiced();
+    expect(a.speak(5, at(4, 0), 1, 1.05)).toBe(true);
+    const s = clips().at(-1)!;
+    expect(s.args).toEqual([0, ...CAST[5]]);
+    expect(s.playbackRate.value).toBe(1.05);
+    // To the right, and fainter than close by.
+    expect(s.to!.pan.value).toBeGreaterThan(0);
+    expect(s.to!.to!.gain.value).toBeLessThan(1);
+    // Out of range: unheard.
+    expect(a.speak(5, at(100, 0))).toBe(false);
+  });
+
+  it('loads the Opus voices first', async () => {
+    expect(atob(await VOICED[0]()).slice(0, 4)).toBe('OggS');
   });
 });

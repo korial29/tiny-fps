@@ -16,6 +16,7 @@ import { SHIP, altitude, limits } from '../shared/ship';
 import { PHASE, inside } from '../shared/station';
 import { build, hidden, ray } from '../shared/world';
 import { createAnnouncer } from './announce';
+import { TAUNT_LATE, createTaunts, speakerOf } from './taunt';
 import { LINE, SAID } from './voice/clips';
 import { createAudio, savedMute, toggleMute } from './audio';
 import { createBalls } from './balls';
@@ -269,7 +270,9 @@ const play = (
     balls,
     id => rd?.muzzle(id),
     id => voiceOf(id, roster.find(p => p.id == id)?.body),
+    id => speakerOf(id, roster.find(p => p.id == id)?.body),
   );
+  const taunts = createTaunts(audio, id => roster.find(p => p.id == id)?.body);
   const wrecks = createWrecks(world, { tracer, audio, fx });
   let rd: Renderer | undefined;
   try {
@@ -459,6 +462,14 @@ const play = (
         if (line !== undefined) {
           audio.say(line);
         }
+        taunts.frag(
+          m,
+          you.id,
+          performance.now() / 1000,
+          line === undefined ? undefined : TAUNT_LATE,
+        );
+      } else {
+        taunts.frag(m, you.id, performance.now() / 1000);
       }
     } else if (m?.t == 'end') {
       ended = { score: m.score, players: m.players };
@@ -522,6 +533,10 @@ const play = (
       ctl.pitch = chasePitch(ctl.pitch, rovers[wheel]);
     }
     audio.listen(eye, ctl.yaw);
+    taunts.frame(now / 1000, id => {
+      const p = others.find(o => o.id == id);
+      return p && [p.x, p.y, p.z];
+    });
     const dt = Math.min((now - before) / 1000, 0.1);
     // The flags and the bases for the renderer and the lights, and the HUD that goes with them.
     const who = (id: number) => (id == you.id ? me : others.find(p => p.id == id));

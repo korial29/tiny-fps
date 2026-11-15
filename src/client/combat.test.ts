@@ -28,6 +28,7 @@ import { aimed, focus, tip } from './gun';
 import type { Vec3 } from './mesh';
 import type { View } from './combat';
 import { SOUND } from './sfx';
+import { KIND, LINES, VOICES } from './voice/cast';
 
 const player = (o: Partial<PlayerState> = {}): PlayerState => ({
   id: 1,
@@ -650,6 +651,53 @@ describe('the sounds and the screen of what happens to the own player', () => {
     frame(player(), [bob({ hp: 5, down: 0, ammo: -1 })]);
     frame(player(), [bob({ hp: 5, down: 0, ammo: -1 })]);
     expect(cries().map(c => c[0])).toEqual([SOUND.PAIN, SOUND.DEATH]);
+  });
+
+  it('screams in the voice of the one going down, where he stands, once the voices are decoded', () => {
+    const t = setup();
+    const speak = vi.fn(() => true);
+    const combat = createCombat(
+      WORLD,
+      { ...t.audio, speak },
+      t.hud,
+      t.fx,
+      t.tracer,
+      t.ctl,
+      t.balls,
+      undefined,
+      undefined,
+      id => (id == 2 ? VOICES : 0),
+    );
+    const bob = (o: Partial<PlayerState>) => player({ id: 2, x: 5, ...o });
+    const frame = (others: PlayerState[]) => combat.frame(VIEW, player(), others, 0, 1 / 60, 1000);
+    frame([bob({ hp: 5 })]);
+    frame([bob({ hp: 3 })]);
+    // A loss of health stays the synth's grunt.
+    expect(speak).not.toHaveBeenCalled();
+    frame([bob({ hp: 0, down: 120, ammo: -1 })]);
+    expect(speak).toHaveBeenCalledTimes(1);
+    const [clip, at] = speak.mock.calls[0] as unknown as [number, Vec3];
+    // One of the cries of the woman's first voice, at him.
+    expect(clip - VOICES * LINES).toBeGreaterThanOrEqual(KIND.DEATH[0]);
+    expect(clip - VOICES * LINES).toBeLessThan(KIND.DEATH[1]);
+    expect(at[0]).toBe(5);
+    expect(t.audio.play.mock.calls.map(c => c[0])).not.toContain(SOUND.DEATH);
+  });
+
+  it('falls back on the synth cry while the voices are not decoded', () => {
+    const t = setup();
+    const combat = createCombat(
+      WORLD,
+      { ...t.audio, speak: () => false },
+      t.hud,
+      t.fx,
+      t.tracer,
+      t.ctl,
+      t.balls,
+    );
+    combat.frame(VIEW, player({ hp: 5 }), [], 0, 1 / 60, 1000);
+    combat.frame(VIEW, player({ hp: 0, down: 120, ammo: -1 }), [], 0, 1 / 60, 1020);
+    expect(t.audio.play.mock.calls.map(c => c[0])).toEqual([SOUND.DOWN, SOUND.DEATH]);
   });
 
   it('gives each player a voice of his own, the woman a higher one', () => {

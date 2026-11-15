@@ -276,6 +276,7 @@ float n3(vec3 p){vec3 i=floor(p),f=p-i;f=f*f*(3.-2.*f);
 return mix(mix(mix(hs(i).x,hs(i+vec3(1,0,0)).x,f.x),mix(hs(i+vec3(0,1,0)).x,hs(i+vec3(1,1,0)).x,f.x),f.y),mix(mix(hs(i+vec3(0,0,1)).x,hs(i+vec3(1,0,1)).x,f.x),mix(hs(i+vec3(0,1,1)).x,hs(i+vec3(1,1,1)).x,f.x),f.y),f.z);}
 float cp(float d){return 1.4*d*exp(-2.*d*d)-1.3*(d-1.)*exp(-8.*(d-1.)*(d-1.));}
 float ca(float d){return 1.-.18*exp(-2.*d*d)+.12*exp(-8.*(d-1.)*(d-1.));}
+#ifdef MOON
 vec3 ct(vec2 q,float s){q/=s;vec2 i=floor(q),b=i-step(q-i,vec2(.5));vec3 o=vec3(0,0,1);
 for(int j=0;j<4;j++){vec2 c=b+vec2(j&1,j>>1);vec3 h=hs(vec3(c,s));if(h.z>.55)continue;
 vec2 v=(q-c-.2-.6*h.xy)/(.1+.6*h.z);float d=length(v);if(d>1.6)continue;
@@ -301,13 +302,21 @@ for(int l=0;l<2;l++){float s=l>0?150.:60.;vec3 i=floor(d*s),h=hs(i+s*.1);if(h.x>
 vec3 a=normalize(i+.2+.6*h);if(floor(a*s)!=i)continue;float b=l>0?.25+.4*h.y:.5+2.2*h.y*h.y*h.y,w=max(px,.0011);
 float r=length(d-a)/w;c+=b*exp(-r*r*1.4)*vec3(1.-.25*h.z,.9+.05*h.z,.75+.25*h.z);}
 return c;}
+#endif
 vec3 K1(vec3 d,float px);
 vec3 K0(vec3 d,float px){
-vec3 s=K1(d,px);if(Ob.x>0.){bool t;vec3 m=mg(d,px,t);if(t)s=mix(s,m,Ob.z);}return s;}
+vec3 s=K1(d,px);
+#ifdef MOON
+if(Ob.x>0.){bool t;vec3 m=mg(d,px,t);if(t)s=mix(s,m,Ob.z);}
+#endif
+return s;}
 vec3 K1(vec3 d,float px){
 float h=d.y,k=max(dot(d,O),0.);
 vec3 c=mix(H[4],H[3],pow(clamp(h,0.,1.),.5));
-c=mix(c,H[4]*1.08,exp(-abs(h)*7.))+Sn*sk(d,px);
+c=mix(c,H[4]*1.08,exp(-abs(h)*7.));
+#ifdef MOON
+c+=Sn*sk(d,px);
+#endif
 return c+X*((.1+.9*clamp(H[4].g*1.2,0.,1.))*(.2*pow(k,24.)+.05*pow(k,4.))+2.*smoothstep(.9993,.9997,k));}
 float vh(vec2 q){return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5453);}
 float h3(vec3 q){uvec3 u=uvec3(ivec3(floor(q)));uint h=u.x*1597334673u^u.y*3812015801u^u.z*2798796415u;h^=h>>15;h*=2246822519u;h^=h>>13;return float(h)*2.3283064e-10;}
@@ -316,7 +325,9 @@ float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(vh(i)
 void main(){
 if(Z<0.){if(C.z<-2.5||(C.z<-1.3595&&C.z>-1.3895))discard;return;}
 if(Y>.5){vec3 d=normalize(P);o=vec4(K0(d,length(fwidth(d))),1);if(Vn.x>0.)o.rgb=xv(o.rgb);return;}
+#ifdef MOON
 if(Ob.w>.5&&Ob.x>0.){vec3 p;if(gh(normalize(P-E),p))discard;}
+#endif
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
 float ks=step(abs(L-${TEX.STONE}.),.5);vec3 cg=vec3(0);
@@ -328,13 +339,17 @@ float fd=smoothstep(25.,140.,length(P-E)),n1=(vn(C.xy*.09)+.5*vn(C.xy*.23+7.)+.2
 t.rgb=mix(t.rgb,textureLod(S,vec3(0,0,L),9.).rgb,.2+.8*fd)*(1.+.42*n1+.5*n2);
 t.a=mix(t.a,.5,fd);
 t.rgb*=mix(.6,1.,smoothstep(.72,.97,normalize(N).y));
-if(Sn>0.){vec3 cq=cs(P.xz,length(P-E));float uw=smoothstep(.7,.95,normalize(N).y);t.rgb*=mix(1.,cq.z,uw);cg=-uw*vec3(cq.x,0,cq.y);}}
+#ifdef MOON
+if(Sn>0.){vec3 cq=cs(P.xz,length(P-E));float uw=smoothstep(.7,.95,normalize(N).y);t.rgb*=mix(1.,cq.z,uw);cg=-uw*vec3(cq.x,0,cq.y);}
+#endif
+}
 vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
 vec3 n=normalize(normalize(N)+cg),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float kb=clamp(-(L+1.)/.06,0.,1.)*step(-1.08,L)*step(L,-.5),pw=max(length(dx),length(dy));
 float f1=kb*(1.-smoothstep(.35,1.,pw*1500.)),f2=kb*(1.-smoothstep(.35,1.,pw*600.)),f3=kb*(1.-smoothstep(.35,1.,pw*180.));
-float pore=smoothstep(.62,.86,n3(Rp*1500.)),ma=n3(Rp*65.)-.5,mb=n3(Rp*24.+7.)-.5,md=.09*ma+.07*mb;
-c*=1.+kb*(md*vec3(1,1.15,1.2)+max(-mb,0.)*vec3(.035,-.02,-.025))+f2*.07*(n3(Rp*600.+5.)-.5)-f1*.05*pore;
+float pore=0.,n6=0.,n18=0.,n9=0.;
+if(kb>0.){pore=smoothstep(.62,.86,n3(Rp*1500.));float ma=n3(Rp*65.)-.5,mb=n3(Rp*24.+7.)-.5,md=.09*ma+.07*mb;
+c*=1.+kb*(md*vec3(1,1.15,1.2)+max(-mb,0.)*vec3(.035,-.02,-.025))+f2*.07*(n3(Rp*600.+5.)-.5)-f1*.05*pore;n6=n3(Rp*600.);n18=n3(Rp*180.+3.);n9=n3(Rp*90.);}
 float sr=0.;
 if(kb>0.){vec3 q=Rp,z=vec3(Ss*.731,Ss*1.37,Ss*.291);float fm=1.-smoothstep(.4,1.,pw*500.),hd=smoothstep(1.53,1.58,q.y),fa=smoothstep(.02,-.04,q.z)*hd;
 vec3 mc=floor(q*28.),mh=hs(mc+z);float mo=fm*step(mh.x,.07)*smoothstep(.0011+.0011*mh.y,.0005,length(q-(mc+.25+.5*mh)/28.));
@@ -346,7 +361,7 @@ vec2 o=vec2((g.y-.5)*.17,1.6+.1*g.z),e=vec2(cos(g2.x*6.28),sin(g2.x*6.28))*(.008
 float k=hd*smoothstep(wd,wd*.3,d)*(1.-smoothstep(.85,1.,abs(t)))+hd*step(g2.y,.5)*step(fract(t*4.+.5),.18)*smoothstep(.003,.002,d)*smoothstep(.0012,.0006,d-.0012)*(1.-smoothstep(.7,.9,abs(t)));
 sr=max(sr,k);}
 c=mix(c,c*vec3(.45,.33,.28),mo*.85);c=mix(c,c*vec3(1.05,.72,.7),bl*.6);c=mix(c,c*vec3(.74,.58,.48),fk*.75);c=mix(c,c*vec3(1.18,.98,.98)+.025,sr*.8);}
-float h=t.a*s*${RELIEF}+f1*-.00004*pore*(1.-sr)+f2*.00007*n3(Rp*600.)+f3*.0002*n3(Rp*180.+3.)+.00012*sr,det=dot(dx,a);
+float h=t.a*s*${RELIEF}+f1*-.00004*pore*(1.-sr)+f2*.00007*n6+f3*.0002*n18+.00012*sr,det=dot(dx,a);
 float wa=min(Wa,1.)*(step(abs(L-(${GLOSS})),.02)+step(abs(L-(${GILT})),.02)),ch=0.,gr=.5,sm=1.;
 if(wa>0.){vec3 q=Rp;float pw=max(length(dx),length(dy)),lowy=smoothstep(1.1,.25,q.y);
 gr=n3(q*9.)*.6+n3(q*23.+3.)*.4;sm=.55+.9*n3(q*31.+9.);
@@ -387,7 +402,7 @@ sv=mix(v/4.,1.,smoothstep(.8,1.,max(max(abs(q.x-.5),abs(q.y-.5)),abs(q.z-.5))*2.
 vec3 l=y*(mix(mix(H[1],H[0],max(w.y,0.)),H[2],max(-w.y,0.))+X*mix(vec3(sd),sw,kb)*sv),sp=X*sv*sd*pow(max(dot(m,nz(O+V)),0.),R.y);
 vec3 Hh=nz(O+V),T1=nz(T+m*(-.1+.12*(st-.5))),T2=nz(T+m*(.15+.12*(st-.5)));float d1=dot(T1,Hh),d2=dot(T2,Hh);
 vec3 hl=kx*X*sv*smoothstep(-.15,.35,dot(n,O))*(.08*pow(max(1.-d1*d1,0.),80.)*(.5+st)+.06*c/(dot(c,vec3(.3,.5,.2))+.02)*pow(max(1.-d2*d2,0.),14.)*(.3+1.4*st2*st));
-vec3 skp=kb*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),90.)*(.07+.4*pow(clamp(1.-dot(n,V),0.,1.),5.))*(.6+.8*n3(Rp*90.));
+vec3 skp=kb*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),90.)*(.07+.4*pow(clamp(1.-dot(n,V),0.,1.),5.))*(.6+.8*n9);
 for(int i=0;i<${MAX_LIGHTS};i++){
 if(i>=Q||g>0.)break;
 vec3 d=A[i].xyz-P;float r=length(d),k=K[i].w,u=B[i].w;
@@ -414,8 +429,20 @@ c.g=mix(c.g,c.r,z);
 for(int i=0;i<16;i++){if(float(i)>=Vn.y)break;vec2 dq=P.xz-Ve[i].xz;ht=max(ht,step(dot(dq,dq),.5)*step(Ve[i].y+.03,P.y)*step(P.y,Ve[i].y+Ve[i].w));}
 vec3 fc=F.rgb;if(Vn.x>0.){c=mix(xv(c),vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);fc=xv(fc);}
 o=vec4(mix(c,fc,1.-exp(-F.a*(1.-.6*Vn.x)*(1.-ht)*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc)*ah);
+#ifdef MOON
 float pv=length(fwidth(V)),fa=Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E))*step(P.y,${ORBIT.SEAM}.),Ob.z*smoothstep(1.25,1.6,length((P.xz-Cb.xy)*Cb.zw)));
-if(fa>.002)o.rgb=mix(o.rgb,K0(-V,pv),fa);}`;
+if(fa>.002)o.rgb=mix(o.rgb,K0(-V,pv),fa);
+#endif
+}`;
+
+/**
+ * The scene's fragment shader for a map: the moon's globe, stars, craters and orbit fade only where
+ * the map has them. Left in on another map, never run, they still cost Highline 2.4 ms of GPU a frame.
+ */
+export const fragOf = (def: Pick<WorldDef, 'scenery' | 'seam' | 'relief'>) =>
+  def.scenery === 'moon' || def.seam !== undefined || def.relief
+    ? FRAG.replace('\n', '\n#define MOON\n')
+    : FRAG;
 
 /**
  * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
@@ -951,7 +978,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     made = [0, 0];
     [post, pu] = link(POST_VERT, POST_FRAG, ['S', 'Y', 'L']);
     gl.uniform1iv(pu.S, [0, 1, 2, 3]);
-    [scene, u] = link(VERT, FRAG, [
+    [scene, u] = link(VERT, fragOf(world.def), [
       'm',
       'E',
       'T',

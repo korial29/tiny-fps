@@ -807,6 +807,14 @@ describe('what a pixel pays for', () => {
     expect(FRAG).toContain('mg(');
   });
 
+  it('draws the stars in the sky, not in what reflects it', () => {
+    // A reflection asks the sky at a width of 0: its stars, a few dots on a visor, made the shader
+    // three times dearer on close astronauts (14 to 36 ms of GPU with three of them at 3 m).
+    expect(FRAG).toContain('if(px>0.)c+=Sn*sk(d,px);');
+    expect(FRAG).toContain('k=K1(r,0.)');
+    expect(FRAG).toMatch(/o=vec4\(K0\(d,length\(fwidth\(d\)\)\),1\)/);
+  });
+
   it('works out the noises of the skin only on skin', () => {
     // Seven 3D noises a pixel on every pixel of the city were 3.7 ms of GPU a frame.
     const skin = block(FRAG, 'if(kb>0.){');

@@ -98,8 +98,30 @@ Still to do, found by the same audit:
 
 - **Close hair is made the first time a woman comes within `CLOSE`**: 53 to 113 ms a style, in a
   frame of the match (rule 5), 412 ms for the five. `dressed()` should make them at the map's load.
+- **Close hair is made the first time a woman comes within `CLOSE`**: done in #276, made at the
+  map's load.
 - **The own body is 70 % of a frame's JavaScript**: 4.1 ms (2.6 at #253), the marine's armour on
-  it 73 000 vertices since #257, a fifth of them behind the eye where nothing shows them.
+  it 73 000 vertices since #257. #277 works out each shared corner once: 2.3 ms.
+
+### Tranquility in 2 v 2
+
+The user had lag playing 2 v 2 on the moon after the fixes above. Running about a local game in
+Chrome (the same M2), it ran at 50 to 54 frames a second with 47 to 62 pauses of 35 to 87 ms in
+20 s. Standing still away from the bots, or on Highline, it was smooth.
+
+The host is not it (a tick costs 0.18 ms there with 4 bots, none over 5 ms), and neither is the
+upload of the frame's vertices, although `bufferSubData` led the profile: it only waited on a GPU
+that was behind, and three buffers in turn changed nothing. The GPU was behind when astronauts came
+near: three at 3 m took a frame from 14 to 36 ms. It was the pixels' cost (none at a quarter of
+the pixels, none with flat shading) and the moon's own (three marines as close on Highline cost
+nothing). The armour's wear (#267) and the stars in the sky that a reflection asks for (`K1(r,0.)`,
+#259) cost next to nothing alone, but together they made the shader three times as dear. Taking
+out either one was enough, which looks like a program too big for the GPU's registers.
+
+The stars are now drawn only where the sky is asked for at a width (`px > 0`): the sky itself and
+the orbit's fade, not a reflection, where they were a few dots on a visor. In the game, 2 v 2: 60
+frames a second, no pause over 35 ms in three runs of 20 s, a frame's GPU 24-31 ms at the 90th
+percentile down to 14 ms. Close up, 10 to 14 pixels in 400 000 change, by 22 levels at most.
 
 ## Moving the work to the GPU
 
@@ -207,6 +229,10 @@ Verts`, `verts.ts`): `out.push(...)` for a few numbers, and for many, `const a =
     that `fragOf()` defines for it (`MOON`), not behind a uniform at 0: unrun, it still slows the
     whole program. `render.test.ts` checks that Highline's shader has none of the moon's.
 
+14. **Look at a frame with the runners up close, on every map.** A cost that only shows when a few
+    of them fill the screen (a close fight) is missed by a frame of the map alone, and that is when
+    the player feels it. Time the GPU at fixed views with three runners at 3 m, as below.
+
 ## How to measure
 
 Scratch scripts, kept out of the repo (put them in your scratchpad or delete them before
@@ -279,3 +305,11 @@ console.log(((performance.now() - t0) / 200).toFixed(2), 'ms a frame');
   `requestAnimationFrame` so each callback runs between `beginQuery(TIME_ELAPSED_EXT)` and
   `endQuery`; read the queries back when `QUERY_RESULT_AVAILABLE`, skipping any while
   `GPU_DISJOINT_EXT` is set. The same wrapper times each callback on the CPU.
+
+- **The GPU at fixed views**: a scratch page in `demo/` (not committed) that builds the map, puts
+  runners where you want them (three at 3 m in front of the camera for a close fight), freezes
+  `performance.now` and `Date.now`, and draws each view some 90 frames under the timer above; take
+  each view's median past its first 20. Alternate the views (A, B, A, B): the GPU is shared with the
+  rest of the Mac and one run of a view can be off by tens of milliseconds. Wrap
+  `WebGL2RenderingContext.prototype.shaderSource` to rewrite the shader by a URL parameter, to take
+  out one part at a time and find what costs.

@@ -689,6 +689,30 @@ const TOP = EY + EB;
 const CHIN = EY - EB;
 const widthOf = (y: number) => EA * Math.sqrt(Math.max(0, 1 - ((y - EY) / EB) ** 2));
 /**
+ * The height of the grid's row `v` (0 the top, 1 the chin), the rows packed three times closer
+ * round the eyes' slits (the user, 2026-11-15: no steps round the eyes).
+ */
+const rowY = (() => {
+  const n = 400;
+  const acc = [0];
+  for (let i = 1; i <= n; i++) {
+    const y = TOP - ((TOP - CHIN) * (i - 0.5)) / n;
+    acc.push(acc[i - 1] + 1 + 2.2 * Math.exp(-(((y - EYE[1]) / 0.02) ** 2)));
+  }
+  return (v: number) => {
+    const goal = v * acc[n];
+    const i = Math.min(
+      Math.max(
+        acc.findIndex(a => a >= goal),
+        1,
+      ),
+      n,
+    );
+    const t = (i - 1 + (goal - acc[i - 1]) / (acc[i] - acc[i - 1])) / n;
+    return TOP - (TOP - CHIN) * t;
+  };
+})();
+/**
  * The jawbone's line on the right (the user, 2026-11-15: thin, bony, standing out low on the face,
  * its angle marked): down from under the ear to a sharp angle, then forward to the chin.
  */
@@ -719,7 +743,7 @@ const faceZ = (x: number, y: number) => {
   return (
     low +
     (dome - low) * brow(y) +
-    0.028 * orbit(x, y) ** 0.6 -
+    0.028 * orbit(x, y) ** 0.75 -
     0.007 * frown(x, y) -
     0.008 * Math.exp(-(((Math.abs(x) - 0.056) / 0.013) ** 2) - ((y + 0.008) / 0.012) ** 2) +
     0.016 * Math.exp(-(((Math.abs(x) - 0.052) / 0.015) ** 2) - ((y + 0.036) / 0.016) ** 2) -
@@ -758,12 +782,12 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
   const at = on(head, q, [0, HEAD_UP, 0]);
   const [nx, ny] = [
     [8, 10],
-    [18, 30],
-    [18, 30],
-    [44, 72],
+    [22, 38],
+    [22, 38],
+    [64, 92],
   ][lod];
   const spot = (u: number, v: number): Spot => {
-    const y = TOP - (TOP - CHIN) * v;
+    const y = rowY(v);
     const x = u * widthOf(y);
     // The slope from central differences a hair inside the rim (outside it the surface is flat),
     // turned at the rim to the dome's own normal there, straight out of the ellipse: no seam in the
@@ -787,7 +811,7 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
   // lips or inside drawn, the mouth is the grid painted dark: a hole there showed the sky through.
   const tri = (p: [number, number][]) => {
     const [u, v] = [0, 1].map(k => (p[0][k] + p[1][k] + p[2][k]) / 3);
-    const y = TOP - (TOP - CHIN) * v;
+    const y = rowY(v);
     const open = parted(u * widthOf(y), y);
     if (!open || !lod) {
       face(

@@ -812,14 +812,14 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
       );
     }
   }
-  // The lips round it, thick in their middle, curled.
+  // The lips round it, a little thicker in their middle (the user, 2026-11-15: thinner), curled.
   const pts = [...line, line[0]].map(([x, y]): Vec3 => [x, y, faceZ(x, y) - 0.002]);
   strand(
     out,
     at,
     q,
     pts,
-    pts.map(([x]) => 0.0032 + 0.0028 * (1 - (x / MW) ** 2)),
+    pts.map(([x]) => 0.0024 + 0.002 * (1 - (x / MW) ** 2)),
     sides,
     HEAD,
   );

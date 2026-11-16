@@ -6,12 +6,12 @@ import type { PlayerState } from '../shared/types';
 import { MOVE, MOVES, createGait } from './gait';
 import { JOINT as J, JOINTS, rest, solve, turn } from './rig';
 import { KIND } from './features';
-import { beast, body } from './skin';
+import { REGION, beast, body, skin } from './skin';
 import { animate, stance } from './soldier';
 import {
   FOOT_TIP,
   HEAD,
-  column,
+  backOf,
   elbow,
   eyes,
   heel,
@@ -19,6 +19,8 @@ import {
   ribs,
   sinews,
   skull,
+  tail,
+  teeth,
   toes,
 } from './xeno';
 import type { Vec3 } from './mesh';
@@ -53,7 +55,8 @@ describe('the xenomorph’s skin', () => {
       expect(s.t.length % 3).toBe(0);
     }
     // Detailed close up (the user, 2026-11-15: more polygons), still under the man.
-    expect(beast(3).v.length).toBeLessThan(body(3).v.length * 0.75);
+    // Its own surface, not the spine and pipes baked in with it.
+    expect(beast(3).v.length - backOf(3).baked.v.length).toBeLessThan(body(3).v.length * 0.75);
   });
 
   it('carries a long curved dome past the back of the head, and none on the own first-person body', () => {
@@ -74,21 +77,71 @@ describe('its pieces', () => {
   it('runs one chain of vertebrae from the base of the skull down the back into the tail, which the sting arches over the head', () => {
     const draw = (sting: number) => {
       const v: number[] = [];
-      column(v, S, 0, 0, sting, [1, 0, 0], 2);
+      tail(v, S, 0, 0, sting, [1, 0, 0], 3);
       expect(v.every(Number.isFinite)).toBe(true);
       return points(v);
     };
     const [still, strike] = [draw(0), draw(1)];
-    // Up to the skull's base, behind the head joint; down the back, behind the chest.
-    expect(still.some(([x, y, z]) => Math.abs(x) < 0.03 && y > 1.6 && z > 0.08)).toBe(true);
-    expect(still.some(([, y, z]) => Math.abs(y - S.pos[J.CHEST][1]) < 0.05 && z > 0.12)).toBe(true);
+    // The back's half is the skin's (backOf()), at rest here: up to the skull's base, behind the
+    // head joint; down the back, behind the chest.
+    const s = beast(3);
+    const back = Array.from({ length: s.v.length / 6 }, (_, i) => s.v.slice(i * 6, i * 6 + 3));
+    expect(back.some(([x, y, z]) => Math.abs(x) < 0.03 && y > 1.6 && z > 0.08)).toBe(true);
+    expect(back.some(([, y, z]) => Math.abs(y - S.pos[J.CHEST][1]) < 0.05 && z > 0.12)).toBe(true);
     // The stinger's point is the last vertex: behind at rest, over and past the head in the sting.
     const [rest0, hit] = [still.at(-1)!, strike.at(-1)!];
     expect(rest0[2]).toBeGreaterThan(1);
     expect(hit[2]).toBeLessThan(0);
     expect(hit[1]).toBeGreaterThan(1.6);
     // Pinched at each joint: the vertebrae are beads, not a smooth tube.
-    expect(still.length).toBeGreaterThan(34 * 4 * 8);
+    expect(still.length).toBeGreaterThan((34 - backOf(3).n) * 6 * 12 * 6);
+    // The pipes up the neck are the skin's too, in their own colour; none far.
+    const pipes = (lod: number) => [...beast(lod).c].filter(c => c == REGION.STRIPE).length;
+    expect(pipes(1)).toBeGreaterThan(0);
+    expect(pipes(0)).toBe(0);
+  });
+
+  it('goes on from the skin’s spine into the tail with no crack, however the body bends', () => {
+    const book = new Map();
+    const p = at({ vx: 6, mode: MODE.GROUND });
+    for (let k = 0; k < 40; k++) {
+      animate(
+        book,
+        [p],
+        1 / 60,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        new Map([[1, { role: ROLE.XENO }]]),
+      );
+    }
+    const { s } = stance(book.get(1));
+    for (const lod of [0, 1, 3]) {
+      const sk: number[] = [];
+      skin(
+        sk,
+        beast(lod),
+        s,
+        Array.from({ length: 32 }, () => [0, 0, 0]),
+      );
+      const t: number[] = [];
+      tail(t, s, 0.3, 0.7, 0.4, [1, 0, 0], lod);
+      // The tail's first triangles stand on the ring the skin's last bead ends on.
+      const first = points(t).slice(0, 6);
+      const posed = points(sk);
+      for (const q of first) {
+        const d = Math.min(...posed.map(v => Math.hypot(v[0] - q[0], v[1] - q[1], v[2] - q[2])));
+        if (d > 1e-5) {
+          // Not on the joint's ring: on the next one, a vertebra's length on.
+          expect(d).toBeGreaterThan(0.004);
+        }
+      }
+      expect(
+        first.filter(q => posed.some(v => Math.hypot(v[0] - q[0], v[1] - q[1], v[2] - q[2]) < 1e-5))
+          .length,
+      ).toBeGreaterThan(0);
+    }
   });
 
   it('puts three clawed toes ahead of each foot, tendons and spurs, a rib cage round the chest and glowing eyes on the head', () => {
@@ -116,6 +169,7 @@ describe('its pieces', () => {
     // tendons in a lighter chitin beside it.
     const sk: number[] = [];
     skull(sk, O, ID, 3);
+    teeth(sk, O, ID, 3);
     const f = points(sk);
     expect(Math.min(...f.map(p => p[2]))).toBeLessThan(-0.11);
     const reds = new Set(Array.from({ length: sk.length / 10 }, (_, i) => sk[i * 10 + 6]));

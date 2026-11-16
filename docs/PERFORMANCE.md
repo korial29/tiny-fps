@@ -176,6 +176,40 @@ hangs and climbs at six pitches, the back plates and the shoulder blades do show
 behind the head on a ledge), and what never showed (the belly's plate, the gusset, the hips' straps)
 is 2.5 % of it.
 
+## The xenomorph (2026-11-16)
+
+An audit of the xenomorph (#279) found one runner of it five to twelve times dearer than an
+astronaut, and up to fifteen people can play it on the moon. Measured in Node (`soldier()` with the
+store's list, as in the game), one runner a frame, and the first frame of one in a fresh process:
+
+| Measure                    | Before           | After            | Astronaut        |
+| -------------------------- | ---------------- | ---------------- | ---------------- |
+| Far (lod 0): CPU, vertices | 0.74 ms, 23 094  | 0.12 ms, 10 680  | 0.06 ms, 10 344  |
+| Near (lod 1)               | 1.62 ms, 75 993  | 0.17 ms, 70 281  | 0.16 ms, 41 040  |
+| Close (lod 3)              | 3.44 ms, 182 892 | 0.31 ms, 169 647 | 0.67 ms, 139 860 |
+| Pieces drawn a pass        | 23               | 14 far, 17       | 9                |
+| First frame of a close one | 104 ms           | 7 ms             |                  |
+| Its own first-person body  | 2.9 ms           | 1.2 ms           | 2.9 ms           |
+
+- **The spine and the neck's pipes were rebuilt every frame through `sheet()`**, which allocates per
+  triangle: 60 % of its time. Both only follow joints, so the back's half of the spine and the pipes
+  are baked into its skin (`backOf()` in `xeno.ts`, appended by `shape()`), each point on the two
+  joints of the bones it lies between, and `flesh()` poses them. The tail stays on the CPU
+  (`tail()`), written straight into `out`; its first ring is the skin's last, on the pelvis alone,
+  so there is no crack.
+- **Its rigid pieces were made on first sight**: 70 to 90 ms for the close skull. `partsOf()` lists
+  them, one piece per joint where they were several, and `render.ts` makes them at the map's load.
+  The skull works out each node of its grid once (it is the corner of six triangles), and its close
+  grid is 50 by 72, packed harder round the eyes, where it was 64 by 92: the same steps round the
+  orbits, a third fewer vertices.
+- **Its far level kept most of the near one**: every rib row, every toe's knuckle and pad, the pipes.
+  Far, every third row of ribs, the toes' digits and claws, no pipes; near, the veins' trunks alone.
+  `soldier.test.ts` holds the far one under 11 000 vertices and a quarter of the near one.
+- **Hair-thin pieces cast no shadow**: a `Draw` with `s` (the veins, the teeth, the eyes' glow) is
+  left out of the depth passes.
+- **Its claws grew every hand vertex every frame**, about the wrist; `hand()` now grows its cached
+  hand once (`grow`), hers too.
+
 ## Rules for every change
 
 1. **Count the vertices of what you add, at every level.** A runner is drawn at lod 3 within 4 m
@@ -211,7 +245,9 @@ Verts`, `verts.ts`): `out.push(...)` for a few numbers, and for many, `const a =
 8. **A rigid piece goes through the store.** A piece that only follows a joint (no vertex of its
    own moving) is made once at the origin and drawn with `rigid()` in `soldier()` or a `list` of its
    own: its key names everything its vertices depend on (level, colours, build), never the pose. A
-   piece that changes shape or colour each frame stays in `out`.
+   piece that changes shape or colour each frame stays in `out`. Merge the pieces on one joint (one
+   draw a pass each), make them at the map's load, and mark one too thin for a shadow (`thin`,
+   `Draw.s`): the depth passes skip it.
 9. **Hand a per-frame model only the frame's `Verts` in the game.** Tests pass plain arrays and that
    is fine there; in the game, if a plain array ever goes through the same index writes as the
    `Verts` (a mesh built once with `skin()`, say), V8 falls back to a generic path for good: the

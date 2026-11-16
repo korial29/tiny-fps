@@ -81,6 +81,7 @@ import {
   CLING_FACING,
   CLING_HOLD,
   CLING_LEAP,
+  CLING_WALK,
 } from './constants';
 import { bound, ground } from './relief';
 import { EV, KEY, LIMB, MODE, SIDE } from './types';
@@ -996,11 +997,12 @@ const cling = (p: PlayerState, w: World, c: Ctl): void => {
   const [wu, wa] = [fw * hu - s * ha, fw * ha + s * hu];
   // Two keys go no faster than one.
   const n = Math.sqrt(wu * wu + wa * wa);
-  // As fast as on a floor (the user, 2026-11-16): its run, and its sprint with the key held, got to
-  // as on a floor; its speed on the wall last step carries on.
+  // It walks, CLING_WALK of its run; with the sprint key it runs as on a floor, its run at once and
+  // its sprint got to as there (the user, 2026-11-16). Its speed on the wall last step carries on.
   const was = Math.sqrt(p.vx * p.vx + p.vy * p.vy + p.vz * p.vz);
-  const run = c.kit.run * c.pace;
-  const top = c.keys & KEY.SPRINT ? c.kit.sprint * c.pace : run;
+  const runs = c.keys & KEY.SPRINT;
+  const run = c.kit.run * c.pace * (runs ? 1 : CLING_WALK);
+  const top = runs ? c.kit.sprint * c.pace : run;
   const sp =
     was > top
       ? Math.max(top, was - DECAY * DT)

@@ -208,11 +208,12 @@ export const step = (
   ) {
     p.charge = Math.min((p.charge ?? 0) + 1, HEAVY_MAX);
   } else if (top && armed && !busy && (p.charge ?? 0) >= HEAVY_TAP) {
-    [p.heavy, p.charge] = [true, 0];
+    // The tail's release keeps its charge to its end: how hard it strikes (sting()).
+    [p.heavy, p.charge] = [true, kit.xeno ? p.charge : 0];
     p.swing = swingOf(p, table).ticks;
   } else {
-    // The xenomorph's charge is its tail's alone, held at the top: anywhere else it is gone.
-    p.charge = top || kit.xeno ? 0 : p.charge;
+    // The xenomorph's charge is its tail's alone, held at the top or let go: anywhere else it is gone.
+    p.charge = top || (kit.xeno && !p.heavy) ? 0 : p.charge;
     // A hastier class runs the swing down faster, but stops on the tick of the wind-up's top and of
     // the strike (the cut's, or the punch's), so neither is skipped.
     const s = p.swing ?? 0;
@@ -223,6 +224,7 @@ export const step = (
       (v == c.ticks - c.strike || v == blow.ticks - blow.strike || (!p.heavy && v == ticks - hold));
     p.swing = Math.max(0, kit.haste > 1 && stop(s - 1) ? s - 1 : s - kit.haste);
     p.heavy = !!p.swing && !!p.heavy;
+    p.charge = kit.xeno && !p.heavy ? 0 : p.charge;
   }
   // The battery holds no more than the player carries, and nothing without the gun: a shot never
   // spends more than he has.

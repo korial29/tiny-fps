@@ -27,6 +27,8 @@ import {
   XENO_HP,
   XENO_PACE,
   WALL_KICK_SPEED,
+  HEAVY_MAX,
+  TAIL_HP,
 } from './constants';
 import { swingOf } from './blade';
 import { STRIKE, step } from './gun';
@@ -450,9 +452,9 @@ describe('the claws and the tail', () => {
     }
     expect(p.swing).toBe(ticks - hold);
     expect(p.charge).toBe(39);
-    // Let go: the heavy release, its own timer; no pounce from the charge.
+    // Let go: the heavy release, its own timer, the charge kept for its strength; no pounce from it.
     hit(p, 0);
-    expect([p.heavy, p.charge, p.mode, p.dash]).toEqual([true, 0, MODE.GROUND, 0]);
+    expect([p.heavy, p.charge, p.mode, p.dash]).toEqual([true, 39, MODE.GROUND, 0]);
     expect(p.swing).toBe(swingOf(p, TAILS).ticks);
     expect(swingOf(p, TAILS).reach).toBeGreaterThan(TAILS[STING.STAB].reach);
     let n = 1;
@@ -460,6 +462,14 @@ describe('the claws and the tail', () => {
       n++;
     }
     expect(n).toBe(swingOf(p, TAILS).strike);
+    expect(p.charge).toBe(39);
+    // Over, the charge is gone and the next strike starts.
+    while (p.swing) {
+      hit(p, 0);
+    }
+    expect([p.heavy, p.charge]).toEqual([false, 0]);
+    hit(p, KEY.BLADE);
+    expect([p.cut, p.swing]).toEqual([STING.LASH, TAILS[STING.LASH].ticks]);
     // DASH charges nothing: the tail strikes out of a dash.
     const q = at(-20, 0, { z: 50, yaw: 0 });
     hit(q, KEY.DASH);
@@ -543,21 +553,36 @@ describe('the xenomorph in a room', () => {
     x.state.cut = BLOW.CLAW_L;
     inner.punch(x);
     expect([m.state.hp, m.state.stun]).toEqual([HP_MAX - XENO_CLAW, 0]);
-    x.state.cut = BLOW.CLAW_R;
-    inner.punch(x);
-    expect(m.state.down).toBeGreaterThan(0);
+    // The user, 2026-11-16: two swipes were a kill; a marine with no armour takes four.
+    let swipes = 1;
+    while (!m.state.down && swipes < 10) {
+      x.state.cut = x.state.cut === BLOW.CLAW_L ? BLOW.CLAW_R : BLOW.CLAW_L;
+      inner.punch(x);
+      swipes++;
+    }
+    expect(swipes).toBe(4);
     const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
     expect(frag).toMatchObject({ by: x.info.id, who: m.info.id, how: FRAG.CLAW });
   });
 
-  it('puts down whoever its tail reaches in one strike, through his armour; the spin all round it', () => {
-    const { inner, ps } = room(ROLE.XENO, ROLE.MARINE, ROLE.MARINE);
-    const [x, m] = ps;
-    face(x.state, m.state);
-    m.state.armor = ARMOR_MAX;
-    Object.assign(x.state, { cut: STING.STAB, swing: 1 });
-    inner.cut(x);
-    expect(m.state.down).toBeGreaterThan(0);
+  it('strikes with its tail as hard as it charged, never a kill on a fresh marine; the spin all round it', () => {
+    // The user, 2026-11-16, after Aliens versus Predator: let go at once it takes little, a full
+    // charge much, and none of it puts a marine with full health down.
+    const lost = (charge: number, armor = 0) => {
+      const r = room(ROLE.XENO, ROLE.MARINE);
+      const [a, b] = r.ps;
+      face(a.state, b.state);
+      b.state.armor = armor;
+      Object.assign(a.state, { cut: STING.STAB, swing: 1, heavy: charge > 0, charge });
+      r.inner.cut(a);
+      return [HP_MAX - b.state.hp, armor - b.state.armor, +(b.state.down > 0)];
+    };
+    expect(lost(0)).toEqual([TAIL_HP[0], 0, 0]);
+    expect(lost(HEAVY_MAX / 2)).toEqual([(TAIL_HP[0] + TAIL_HP[1]) / 2, 0, 0]);
+    expect(lost(HEAVY_MAX)).toEqual([TAIL_HP[1], 0, 0]);
+    expect(TAIL_HP[1]).toBeLessThan(HP_MAX);
+    // His armour takes it first.
+    expect(lost(HEAVY_MAX, ARMOR_MAX)).toEqual([TAIL_HP[1] - ARMOR_MAX, ARMOR_MAX, 0]);
     // Out of a stab's reach, no; the charged one reaches further.
     const reach = TAILS[STING.STAB].reach;
     const far = (heavy: boolean) => {
@@ -565,12 +590,12 @@ describe('the xenomorph in a room', () => {
       const [a, b] = r.ps;
       face(a.state, b.state);
       b.state.z = a.state.z - reach - 0.3 - 0.4;
-      Object.assign(a.state, { cut: STING.STAB, swing: 1, heavy });
+      Object.assign(a.state, { cut: STING.STAB, swing: 1, heavy, charge: +heavy * HEAVY_MAX });
       r.inner.cut(a);
-      return b.state.down > 0;
+      return b.state.hp < HP_MAX;
     };
     expect([far(false), far(true)]).toEqual([false, true]);
-    // A foe behind it: the lash misses him, the spin does not.
+    // A foe behind it: the lash misses him, the spin does not; no special kills either.
     const behind = (cut: number) => {
       const r = room(ROLE.XENO, ROLE.MARINE);
       const [a, b] = r.ps;
@@ -578,9 +603,10 @@ describe('the xenomorph in a room', () => {
       b.state.z = a.state.z + 1.5;
       Object.assign(a.state, { cut, swing: 1 });
       r.inner.cut(a);
-      return b.state.down > 0;
+      return HP_MAX - b.state.hp;
     };
-    expect([behind(STING.LASH), behind(STING.SPIN)]).toEqual([false, true]);
+    expect([behind(STING.LASH), behind(STING.SPIN)]).toEqual([0, TAILS[STING.SPIN].hp]);
+    expect(Math.max(TAILS[STING.SPIN].hp, TAILS[STING.LEAP].hp)).toBeLessThan(HP_MAX);
   });
 
   it('burns who strikes it with a blade or a fist with its acid, not another xenomorph', () => {

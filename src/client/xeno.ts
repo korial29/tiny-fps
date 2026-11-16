@@ -84,7 +84,7 @@ export const lashOf = (
   // Charged, it is cocked on its side of the view, the left sweep's on the left.
   const cocked: Lash =
     c == STING.SWEEP_L ? ([0, -COCKED[1], ...COCKED.slice(2)] as unknown as Lash) : COCKED;
-  if (p.charge) {
+  if (p.charge && !p.heavy) {
     // Drawn in and coiled by a tap of charge, then still but for its breath (the user, 2026-11-16).
     const [k, s] = [ease(p.charge / HEAVY_TAP), Math.sin(t * 2.4)];
     const [a, b, d, r, h, l] = cocked;

@@ -319,10 +319,10 @@ export const locked = (t: number, push = 0): number[] => [
   ...LOCK.slice(3),
 ];
 /**
- * The parry (the user, 2026-11-16): the hands snap up before the right of the chest and the blade
+ * The parry (the user, 2026-11-16): the hands snap up before the right shoulder and the blade
  * sweeps across the body toward the upper left, its edge to the shot, like GUARD.
  */
-export const DEFLECT = [0.14, -0.2, 0.46, -0.62, 0.72, 0.3];
+export const DEFLECT = [0.26, -0.2, 0.46, -0.62, 0.72, 0.3];
 /** Seconds of a parry: to the block in PARRY_IN, eased back to the hold by PARRY_OUT. */
 export const [PARRY_IN, PARRY_OUT] = [0.06, 0.38];
 /** How far into DEFLECT a hold is `s` seconds after the blade met a ball (it peaks at PARRY_IN): 0 to 1 and back to 0. */

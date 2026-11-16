@@ -4,7 +4,7 @@
 // it. The other moves are static poses (MOVES) eased in by critically damped springs, so a switch
 // never pops. Everything is in the runner's frame: x right, y up, -z ahead. No DOM.
 import { BLOW, DASH_COOLDOWN, DASH_TICKS, DOWN_TICKS, PUNCHES, TICK_HZ } from '../shared/constants';
-import { floored } from '../shared/physics';
+import { TOWARD, floored } from '../shared/physics';
 import { FALL, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import type { Vec3 } from './mesh';
@@ -321,15 +321,6 @@ const keyed = (K: number[][], t: number): number[] => {
   const [a, b] = [K[i - 1], K[i]];
   return a.map((v, j) => v + (b[j] - v) * ease((t - a[0]) / (b[0] - a[0])));
 };
-
-/** The unit vector toward a wall on each SIDE of PlayerState.wall, on the floor plane. */
-const TOWARD = [
-  [0, 0],
-  [1, 0],
-  [-1, 0],
-  [0, 1],
-  [0, -1],
-];
 
 /** The rover's lean in the frame of its yaw, `k` of the way: the nose up by its pitch, the right side down by its roll (basis() in mesh.ts). */
 const tipped = (s: Seat, k: number): Quat =>

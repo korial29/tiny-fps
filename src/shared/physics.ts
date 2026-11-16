@@ -129,7 +129,7 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v
 const len = (x: number, z: number): number => sqrt(x * x + z * z);
 
 /** The unit vector from a player toward a wall or a ledge on each SIDE. */
-const TOWARD = [
+export const TOWARD = [
   [0, 0],
   [1, 0],
   [-1, 0],

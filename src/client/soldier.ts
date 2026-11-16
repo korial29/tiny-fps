@@ -34,6 +34,8 @@ import {
 } from './body';
 import { HOOK, JAB, LUNGE, SIDE, armOf, bare, blowOf, createGait, frame, thrown } from './gait';
 import type { Floor, Gait, Seat } from './gait';
+import { FOOT_UP, createFours } from './fours';
+import type { Fours } from './fours';
 import {
   ARC,
   RIFLE_HOLD,
@@ -86,7 +88,7 @@ import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
 import { STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, PARENT, REST, axis, mul, slerp, solve, turn } from './rig';
+import { JOINT as J, PARENT, REST, RESTS, axis, mul, rest, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
 import {
   REGION,
@@ -126,6 +128,8 @@ export interface Runner {
   /** The player as last seen. */
   p: PlayerState;
   gait: Gait;
+  /** The xenomorph's gait on all fours (fours.ts): none for the others. */
+  fours?: Fours;
   /** How much of a dash it is in, eased from 0 to 1: the length of the streaks. */
   dash: number;
   /** Seconds since its last shot, and how far its gun arm is raised to aim, eased from 0 to 1. */
@@ -228,10 +232,13 @@ export const createRunner = (
     femme(face.w);
   }
   gait.update(p, 0, undefined, seat);
+  const fours = look?.role === ROLE.XENO ? createFours() : undefined;
+  fours?.update(p, 0);
   return {
     seat,
     p: { ...p },
     gait,
+    fours,
     dash: +dashing(p),
     since: 1e3,
     aim: 0,
@@ -342,7 +349,9 @@ export const animate = (
     const seat = seatOf(p, rovers);
     if (r) {
       r.seat = seat;
-      r.gait.update(p, dt, world && floorOf(world, p.y), seat);
+      const floor = world && floorOf(world, p.y);
+      r.gait.update(p, dt, floor, seat);
+      r.fours?.update(p, dt, floor);
       r.dash += (+dashing(p) - r.dash) * (1 - Math.exp(-dt * DASH_RATE));
       r.since = p.shots == r.p.shots && !p.zapping ? r.since + dt : 0;
       // A shot raises the gun at once, so that it points at the shot when the beam is drawn.
@@ -718,8 +727,6 @@ export const dissolve = (out: Out, from: number, k: number) => {
  * the legs read as an animal's: the hips a little higher, the foot's long bone near upright over its
  * ball, the bones straight (the user, 2026-11-15: a deeper crouch bowed the legs into an arc).
  */
-/** How far prowl() tips the xenomorph's foot down from the gait's, radians: steep, the arch of its sole showing. */
-const FOOT_UP = 1.0;
 /** Where the ankle stands over the ball once the foot is tipped FOOT_UP: up, and behind it. */
 const ANKLE = [
   -(FOOT_TIP[1] * Math.cos(FOOT_UP) + FOOT_TIP[2] * Math.sin(FOOT_UP)),
@@ -776,9 +783,18 @@ const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose =>
 };
 
 /** The runner's pose this frame, solved: the gait, the fall and sink of one down, and the weapon's hold; and the way the body faces. */
+/** A pose with nothing in it, for one wholly laid over: shared, so frozen. */
+const BARE: Pose = Object.freeze({ ...rest(), rot: Object.freeze(rest().rot) as Quat[] });
+
 export const stance = (r: Runner) => {
-  let pose = r.gait.pose();
   const { p } = r;
+  // Down or floored, the weapon stays in the hand as it falls. At the wheel both hands are on the yoke.
+  const lying = !!p.down || floored(p) || driving(r);
+  // All on fours (fours.ts) the gait's pose is wholly laid over: it is not built.
+  const fours = !lying && (r.fours?.weight ?? 0) > 0.998;
+  let pose = fours
+    ? { ...BARE, at: [p.x, p.y, p.z] as Vec3, yaw: p.yaw, rest: RESTS[r.build ?? 0] }
+    : r.gait.pose();
   // Lying down, it sinks into the roof for the last half second.
   const sink = p.down ? 0.5 * Math.min(Math.max(1 - p.down / 30, 0), 1) : 0;
   if (p.down) {
@@ -787,8 +803,6 @@ export const stance = (r: Runner) => {
       at: [pose.at[0], pose.at[1] - sink, pose.at[2]],
     };
   }
-  // Down or floored, the weapon stays in the hand as it falls. At the wheel both hands are on the yoke.
-  const lying = !!p.down || floored(p) || driving(r);
   if (r.jab > 0.002 && !lying && r.blow != BLOW.TAIL) {
     // A punch: the striking fist out (the blow's), the other back to the hip, the chest behind it.
     // The xenomorph's sting is its tail's (xeno.ts), not an arm's.
@@ -816,11 +830,14 @@ export const stance = (r: Runner) => {
     rot[J.CHEST] = mul(rot[J.CHEST], axis([1, 0, 0], FLINCH[2] * k));
     pose = { ...pose, rot };
   }
-  let s = solve(pose);
   if (r.look?.role === ROLE.XENO && !lying) {
-    pose = prowl(pose, s, p);
-    s = solve(pose);
+    // On all fours in a sprint and on a wall, which leaves nothing of the prowl once it is all in.
+    if (!fours) {
+      pose = prowl(pose, solve(pose), p);
+    }
+    pose = r.fours?.apply(pose) ?? pose;
   }
+  let s = solve(pose);
   if (p.wield && !lying) {
     pose = brandish(pose, p, r.prog, r.gait.phase, r.t);
     s = solve(pose);
@@ -1095,6 +1112,7 @@ export const soldier = (
           : 0.65 + 0.35 * Math.max(0, 1 - (u - hit) / (1 - hit)) * +!!u,
         color,
         lod,
+        r.fours?.weight,
       );
       const part = partsOf(lod);
       const put = ({ key, make, thin }: Part, at: Vec3, q: Quat) =>

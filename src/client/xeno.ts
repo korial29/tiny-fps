@@ -19,6 +19,8 @@ import type { Floats, Out } from './verts';
  */
 export const CHITIN_X = [0.06, 0.065, 0.078];
 
+/** How far the tail turns back toward the level when the body is on all fours (fours.ts), radians. */
+const LAID = 1.4;
 /** Metres: the tail's length, its root's radius and its tip's, the stinger's length. */
 export const TAIL = { len: 1.45, root: 0.046, tip: 0.012, sting: 0.17 };
 
@@ -89,8 +91,9 @@ const BACK = [J.HEAD, J.NECK, J.CHEST, J.CHEST, J.SPINE, J.PELVIS, J.PELVIS];
  * base of the skull down to the coccyx low over the rear, then the tail's twelve. The tail bends
  * from down and back up to its tip, sways with the clock `t` (none with `sway` 0) and more with the
  * speed `run` (0 to 1); `sting` (0 to 1) arches it up over the back and forward past the head.
+ * `fours` (0 to 1) is how far the body is on all fours, its pelvis level: the tail trails behind.
  */
-const bonesOf = (s: Solved, t: number, run: number, sting: number, sway = 1): Bone[] => {
+const bonesOf = (s: Solved, t: number, run: number, sting: number, sway = 1, fours = 0): Bone[] => {
   const [P, q] = [s.pos[J.PELVIS], s.rot[J.PELVIS]];
   const back = (j: number, v: Vec3, r: number): Bone => [
     on(s.pos[j], s.rot[j], v),
@@ -112,8 +115,9 @@ const bonesOf = (s: Solved, t: number, run: number, sting: number, sway = 1): Bo
   let p: Vec3 = [0, -0.15, 0.16];
   for (let k = 1; k <= steps; k++) {
     const u = k / steps;
-    const lift = -0.55 + 1.15 * u + 0.25 * run;
-    const a = lift + (u * Math.PI * 1.08 - lift) * sting;
+    // On all fours it trails straight back, its end hardly up.
+    const lift = -0.55 + (1.15 * u + 0.25 * run) * (1 - 0.65 * fours);
+    const a = lift - LAID * fours * (1 - sting) + (u * Math.PI * 1.08 - lift) * sting;
     const swing =
       sway * (1 - sting) * (0.35 + 0.4 * run) * u * Math.sin(t * (1.6 + 2.4 * run) - u * 3.5);
     const way: Vec3 = [Math.sin(swing), Math.sin(a), Math.cos(a) * Math.cos(swing)];
@@ -461,7 +465,7 @@ const strip = (
  * on (the back's is in the skin, backOf()), each vertebra a bead pinched at its joints with a spine
  * standing out of it but near the tip, as bonesOf() bends and sways it; the stinger at its end, a
  * blade swelling to a barb, then a point, glowing in the team's `color`. Written straight into
- * `out`. `lod` 0 far, 1 near, 3 close.
+ * `out`. `lod` 0 far, 1 near, 3 close. `fours` (0 to 1): how far the body is on all fours (fours.ts).
  */
 export const tail = (
   out: Out,
@@ -471,10 +475,11 @@ export const tail = (
   sting: number,
   color: number[],
   lod: number,
+  fours = 0,
 ) => {
   const back = backOf(lod);
   // From the spine's bone, whose place shapes the curve's start at the pelvis.
-  const curve = curveOf(bonesOf(s, t, run, sting).slice(BACK.length - 3), 4);
+  const curve = curveOf(bonesOf(s, t, run, sting, 1, fours).slice(BACK.length - 3), 4);
   const { len, total } = curve;
   const all = VERTEBRAE[lod];
   const n = all - back.n;

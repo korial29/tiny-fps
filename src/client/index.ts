@@ -254,7 +254,9 @@ const play = (
   canvas.addEventListener('click', () => audio.unlock());
   const fx = createEffects();
   const announcer = createAnnouncer();
-  const foley = createFoley(audio);
+  /** Whether a player of the roster is a xenomorph: its own sounds (foley, combat, taunts). */
+  const beast = (id: number) => roleOf(roster.find(p => p.id == id)?.role, world.def) == ROLE.XENO;
+  const foley = createFoley(audio, beast);
   const body = createBody(world);
   const chase = createChase(world);
   const tracer = createTracer();
@@ -271,11 +273,13 @@ const play = (
     id => rd?.muzzle(id),
     id => voiceOf(id, roster.find(p => p.id == id)?.body),
     id => speakerOf(id, roster.find(p => p.id == id)?.body),
+    beast,
   );
   const taunts = createTaunts(
     audio,
     id => roster.find(p => p.id == id)?.body,
     id => roster.find(p => p.id == id)?.team,
+    beast,
   );
   /** Each ally's face on the radio, drawn once for his look and colour (a portrait costs two frames). */
   const faces = new Map<string, HTMLCanvasElement>();

@@ -58,7 +58,11 @@ const SOFT_THUD = 2;
 
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
 
-export const createFoley = (a: Audio): Foley => {
+export const createFoley = (
+  a: Audio,
+  /** Whether a player is a xenomorph: chitin feet that click, and a shriek for its pounce. */
+  beast: (id: number) => boolean = () => false,
+): Foley => {
   const wind = a.loop(SOUND.WIND);
   const scrape = a.loop(SOUND.SCRAPE);
   /** Footfalls of the own player so far. */
@@ -79,7 +83,7 @@ export const createFoley = (a: Audio): Foley => {
   const tap = (p: PlayerState, n: number, at?: Vec3) => {
     const run = sprinting(p);
     a.play(
-      p.mode === MODE.WALLRUN ? SOUND.WALLSTEP : SOUND.STEP,
+      beast(p.id) ? SOUND.CHITIN : p.mode === MODE.WALLRUN ? SOUND.WALLSTEP : SOUND.STEP,
       at,
       run || p.mode === MODE.WALLRUN ? 1 : p.mode === MODE.CROUCH ? 0.35 : 0.6,
       (run ? 0.92 : 1) * (n & 1 ? 1.06 : 0.94),
@@ -103,7 +107,7 @@ export const createFoley = (a: Audio): Foley => {
       for (const [bit, id] of [
         [EV.JUMP, SOUND.JUMP],
         [EV.DOUBLE, SOUND.DOUBLE],
-        [EV.DASH, SOUND.DASH],
+        [EV.DASH, beast(p.id) ? SOUND.SHRIEK : SOUND.DASH],
         [EV.GRAB, SOUND.GRAB],
         [EV.CLIMB, SOUND.SCUFF],
       ]) {

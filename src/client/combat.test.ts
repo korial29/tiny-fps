@@ -1144,3 +1144,65 @@ describe('the fists’ feel (the user, 2026-11-13: their own, not the katana’s
     expect(tried(4, Math.PI / 2)).toEqual([]);
   });
 });
+
+describe('the xenomorph’s sounds', () => {
+  const beastly = () => {
+    const t = setup();
+    const audio = { play: vi.fn(), speak: vi.fn(() => true) };
+    const combat = createCombat(
+      WORLD,
+      audio,
+      t.hud,
+      t.fx,
+      t.tracer,
+      t.ctl,
+      t.balls,
+      undefined,
+      undefined,
+      undefined,
+      id => id == 2,
+    );
+    let now = 1000;
+    const frame = (others: PlayerState[], me = player()) =>
+      combat.frame(VIEW, me, others, 0, 1 / 60, (now += 1000 / 60));
+    const ids = () => audio.play.mock.calls.map(c => c[0]);
+    const x = (o: Partial<PlayerState>) => player({ id: 2, x: 5, ammo: -1, hp: 12, ...o });
+    return { audio, frame, ids, x };
+  };
+
+  it('screeches when hurt and shrieks going down, its acid sizzling, never in a runner’s voice', () => {
+    const { audio, frame, ids, x } = beastly();
+    frame([x({})]);
+    frame([x({ hp: 10 })]);
+    expect(ids()).toEqual([SOUND.XENO_PAIN, SOUND.ACID]);
+    frame([x({ hp: 0, down: 120 })]);
+    expect(ids()).toEqual([SOUND.XENO_PAIN, SOUND.ACID, SOUND.XENO_DEATH, SOUND.ACID]);
+    expect(audio.speak).not.toHaveBeenCalled();
+    // Where it stands.
+    expect(audio.play.mock.calls.every(c => c[1]?.[0] == 5)).toBe(true);
+  });
+
+  it('hisses as its pounce charges and shrieks as it leaps', () => {
+    const { frame, ids, x } = beastly();
+    frame([x({})]);
+    frame([x({ charge: 4 })]);
+    frame([x({ charge: 30 })]);
+    expect(ids()).toEqual([SOUND.XENO_HISS]);
+    frame([x({ charge: 0 })]);
+    expect(ids()).toEqual([SOUND.XENO_HISS, SOUND.SHRIEK]);
+  });
+
+  it('swipes its claws and whips its tail with sounds of their own, not the fists’ whoosh', () => {
+    const { frame, ids, x } = beastly();
+    for (const [b, id] of [
+      [BLOW.CLAW_L, SOUND.CLAW],
+      [BLOW.CLAW_R, SOUND.CLAW],
+      [BLOW.TAIL, SOUND.STING],
+    ]) {
+      frame([x({ swing: 0, cut: b })]);
+      frame([x({ swing: PUNCHES[b].ticks, cut: b })]);
+      expect(ids().at(-1)).toBe(id);
+    }
+    expect(ids()).not.toContain(SOUND.SWISH);
+  });
+});

@@ -491,7 +491,7 @@ describe('a vehicle’s damage', () => {
     expect([SOUND.HULL, SOUND.ARC, SOUND.WRECK, SOUND.CRUMBLE]).toEqual([47, 48, 49, 50]);
     expect([SOUND.DOOR, SOUND.SHUT]).toEqual([45, 46]);
     expect([SOUND.ALARM, SOUND.STRIKE]).toEqual([58, 59]);
-    expect(LAYERS).toHaveLength(60);
+    expect(LAYERS).toHaveLength(69);
     for (const id of [47, 48, 49, 50]) {
       expect(LOOPED).not.toContain(id);
     }
@@ -539,5 +539,27 @@ describe('the ship (the user, 2026-11-12)', () => {
     expect(s.length).toBeGreaterThan(sound('HULL').length);
     expect(rms(s)).toBeGreaterThan(rms(sound('HULL')));
     expect(peak(s)).toBeGreaterThan(0.8);
+  });
+});
+
+describe('the xenomorph’s sounds', () => {
+  it('come after all the others, none looped, its pain and death higher than a runner’s', () => {
+    expect([
+      SOUND.XENO_HISS,
+      SOUND.SHRIEK,
+      SOUND.CLAW,
+      SOUND.STING,
+      SOUND.XENO_PAIN,
+      SOUND.XENO_DEATH,
+      SOUND.CHITIN,
+      SOUND.ACID,
+      SOUND.ROAR,
+    ]).toEqual([60, 61, 62, 63, 64, 65, 66, 67, 68]);
+    for (let id = 60; id <= 68; id++) {
+      expect(LOOPED).not.toContain(id);
+    }
+    // The voice's first oscillator: a screech, not a man's "ugh" or "aah".
+    expect(LAYERS[SOUND.XENO_PAIN][0][1]).toBeGreaterThan(2 * LAYERS[SOUND.PAIN][0][1]);
+    expect(LAYERS[SOUND.XENO_DEATH][0][1]).toBeGreaterThan(2 * LAYERS[SOUND.DEATH][0][1]);
   });
 });

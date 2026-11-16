@@ -167,7 +167,9 @@ const HEAVY_CUE = 8;
 const FIST_CUE = 16;
 const WHOOSH = { rate: [1.9, 1.85, 1.45, 1.55], gain: [0.3, 0.3, 0.45, 0.5] };
 /** The thud of a blow that landed, the tackle's impact played higher: its gain, by BLOW, and its rate. */
-const THUD = [[0.35, 0.35, 0.65, 0.7], 1.5] as const;
+const THUD = [[0.35, 0.35, 0.65, 0.7, 0.5, 0.5, 0.8], 1.5] as const;
+/** The xenomorph's swipes, left then right a little apart in pitch, and its tail's whip: rate, by BLOW from CLAW_L. */
+const RAKE = [1.05, 0.95, 1];
 /** The swish of a cut, by CUT: higher and quieter for a thrust, lower and fuller for a slash. */
 const SWISH = { rate: [1.3, 1.05, 0.95, 0.8], gain: [0.6, 0.8, 0.8, 1] };
 
@@ -188,6 +190,8 @@ export const createCombat = (
   voice: (id: number) => number = voiceOf,
   /** A player's own voice in the players' sprite (speakerOf()). */
   speaker: (id: number) => number = speakerOf,
+  /** Whether a player is a xenomorph: its own cries, its acid, its hiss and shriek at a pounce. */
+  beast: (id: number) => boolean = () => false,
 ): Combat => {
   /** The own player after each live step that fired, since the last frame. */
   let pending: PlayerState[] = [];
@@ -213,6 +217,12 @@ export const createCombat = (
    */
   const cry = (id: number, died: boolean, at?: Vec3) => {
     const r = rate();
+    // The xenomorph screeches, never speaks, and its blood sizzles where it was hit.
+    if (beast(id)) {
+      audio.play(died ? SOUND.XENO_DEATH : SOUND.XENO_PAIN, at, at ? 0.9 : 0.7, r);
+      audio.play(SOUND.ACID, at, at ? 0.6 : 0.45, r);
+      return;
+    }
     if (
       died &&
       audio.speak?.(
@@ -307,6 +317,16 @@ export const createCombat = (
   };
   /** The swish of the cut `c`, at `at`; a heavy release's (c + HEAVY_CUE) louder and much deeper. */
   const swish = (c: number, at?: Vec3) => {
+    if (c >= FIST_CUE + BLOW.CLAW_L) {
+      const b = c - FIST_CUE;
+      audio.play(
+        b == BLOW.TAIL ? SOUND.STING : SOUND.CLAW,
+        at,
+        0.6,
+        RAKE[b - BLOW.CLAW_L] * rate(),
+      );
+      return;
+    }
     if (c >= FIST_CUE) {
       audio.play(SOUND.SWISH, at, WHOOSH.gain[c - FIST_CUE], WHOOSH.rate[c - FIST_CUE]);
       return;
@@ -409,6 +429,10 @@ export const createCombat = (
           if (me.wield) {
             audio.play(SOUND.ZAP);
           }
+        }
+        // The xenomorph hisses as it starts to charge a pounce (its leap's shriek is foley.ts's).
+        if (was && beast(me.id) && !(was.charge ?? 0) && (me.charge ?? 0) > 0 && !me.down) {
+          audio.play(SOUND.XENO_HISS, undefined, 0.55, rate());
         }
         const f = fresh(me) ? inHand(me) : -1;
         if (was) {
@@ -541,6 +565,15 @@ export const createCombat = (
           cry(p.id, p.down > 0 && !lived[1], at);
         }
         lives.set(p.id, [life(p), p.down > 0]);
+        // Another xenomorph: a hiss as its pounce charges, a shriek as it leaps.
+        const charged = charges.get(p.id);
+        if (charged !== undefined && beast(p.id) && !p.down) {
+          if (!charged && (p.charge ?? 0) > 0) {
+            audio.play(SOUND.XENO_HISS, at, 0.6, rate());
+          } else if (charged > 0 && !(p.charge ?? 0)) {
+            audio.play(SOUND.SHRIEK, at, 0.8, rate());
+          }
+        }
         charges.set(p.id, p.charge ?? 0);
         if ((p.charge ?? 0) >= CHARGE_TAP && p.ammo >= 0 && !p.wield && !p.down) {
           hot.push({ p: gun(p), k: filled(p.charge) });

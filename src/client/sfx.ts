@@ -164,6 +164,21 @@ export const SOUND = {
   /** The orbital station's mission: the alarm of a strike armed, and the strike's lasers from the sky. */
   ALARM: 58,
   STRIKE: 59,
+  /**
+   * The xenomorph's own (the user, 2026-11-16: not a runner's): a hiss with a growl under it as it
+   * charges a pounce, a shriek as it leaps, its claws' swipe and the whip of its tail, a screech of
+   * pain and a big roar going down, the light tick of its claws at each step, the sizzle of its acid
+   * blood, and a roar after a kill.
+   */
+  XENO_HISS: 60,
+  SHRIEK: 61,
+  CLAW: 62,
+  STING: 63,
+  XENO_PAIN: 64,
+  XENO_DEATH: 65,
+  CHITIN: 66,
+  ACID: 67,
+  ROAR: 68,
 } as const;
 
 /**
@@ -547,6 +562,65 @@ export const LAYERS: Voice[][] = [
     [1, 1800, -2, 0.02, 0.25, 0.55, 0.05, 0.4, 0, 1, 0.25, 0.08],
     [3, 3000, -1.5, 0.01, 0.3, 0.5, 0, 0.3, 0, 1, 0.45, 0.1],
     [2, 70, -1, 0.005, 0.15, 0.6, 0, 1, 0, 1, 0.7, 0.15],
+  ],
+  // XENO_HISS: breath forced through teeth, bright then dull, over a wobbling growl in the chest.
+  [
+    [3, 9000, 0, 0.08, 0.35, 0.35, 0, 0.5, 0, 1, 0.45],
+    [3, 3000, 0, 0.1, 0.3, 0.35, 0.3, 0.15, 0, 1, 0.3],
+    [1, 85, 0, 0.1, 0.3, 0.3, 0.12, 0.08, 0, 1, 0.35],
+  ],
+  // SHRIEK: a scream rising then torn off, a saw and a square a fifth up shaking over a rasp.
+  [
+    [1, 900, 0.7, 0.01, 0.14, 0.3, 0.06, 0.35, 0, 1, 0.35],
+    [0, 1350, 0.7, 0.01, 0.12, 0.28, 0.07, 0.2, 0, 1, 0.14],
+    [3, 6000, 0.3, 0.005, 0.12, 0.25, 0.4, 0.4, 0, 1, 0.35],
+    [2, 1800, 0.7, 0.01, 0.1, 0.25, 0.08, 1, 0, 1, 0.12],
+  ],
+  // CLAW: a swipe that cuts the air high and fast, then the claws' tips clicking together.
+  [
+    [3, 16000, -2, 0.004, 0.02, 0.1, 0, 0.6, 0, 1, 0.45],
+    [3, 9000, 0, 0.001, 0, 0.02, 0, 0.9, 0, 1, 0.35, 0.05],
+    [3, 7000, 0, 0.001, 0, 0.02, 0, 0.9, 0, 1, 0.25, 0.08],
+  ],
+  // STING: the tail whipping through the air and cracking at the end, a dull thump in it.
+  [
+    [3, 14000, -3, 0.002, 0.01, 0.12, 0, 0.7, 0, 1, 0.55],
+    [2, 500, -4, 0.002, 0, 0.1, 0, 1, 0, 1, 0.3],
+    [3, 4000, 0, 0.001, 0, 0.05, 0, 0.8, 0, 1, 0.45, 0.1],
+  ],
+  // XENO_PAIN: a short screech dropping away, a saw and a square shaking over a hiss.
+  [
+    [1, 700, -1, 0.005, 0.05, 0.18, 0.1, 0.3, 0, 1, 0.35],
+    [0, 1050, -1, 0.005, 0.04, 0.16, 0.1, 0.2, 0, 1, 0.12],
+    [3, 5000, 0, 0.005, 0.05, 0.15, 0.4, 0.3, 0, 1, 0.35],
+  ],
+  // XENO_DEATH (the user, 2026-11-16: a big roar): a deep growl swelling over a sub's rumble, a
+  // rasp of breath all through it, and a screech torn out of it and falling away.
+  [
+    [1, 90, 0.5, 0.06, 0.42, 0.45, 0.15, 0.12, 0, 1, 0.4],
+    [1, 270, 0.5, 0.06, 0.42, 0.45, 0.15, 0.2, 0, 1, 0.2],
+    [2, 50, 0.3, 0.03, 0.4, 0.5, 0, 1, 0, 1, 0.35],
+    [3, 2200, 0, 0.08, 0.42, 0.42, 0.5, 0.25, 0, 1, 0.35],
+    [1, 640, -0.9, 0.05, 0.22, 0.35, 0.1, 0.3, 0, 1, 0.25, 0.28],
+  ],
+  // CHITIN (the user, 2026-11-16: light and stealthy, a claw's tick): a claw's tip ticking on the
+  // floor, bright and short, over the faintest pad of the foot.
+  [
+    [0, 3800, 0, 0.001, 0, 0.006, 0, 0.5, 0, 1, 0.22],
+    [2, 6000, -2, 0.001, 0, 0.01, 0, 1, 0, 1, 0.2],
+    [3, 2000, 0, 0.002, 0, 0.03, 0, 0.1, 0, 1, 0.12],
+  ],
+  // ACID: a fizz crackling bright and wavering, over a dull sizzle that dies away.
+  [
+    [3, 18000, 0, 0.01, 0.3, 0.5, 0.6, 0.7, 0, 1, 0.3],
+    [3, 3000, 0, 0.02, 0.2, 0.4, 0.3, 0.12, 0, 1, 0.3],
+  ],
+  // ROAR: a growl swelling up from the chest into a screech, a rasp of breath all through it.
+  [
+    [1, 110, 0.9, 0.08, 0.32, 0.42, 0.15, 0.12, 0, 1, 0.45],
+    [1, 330, 0.9, 0.08, 0.32, 0.42, 0.15, 0.2, 0, 1, 0.2],
+    [3, 2500, 0, 0.1, 0.3, 0.42, 0.5, 0.2, 0, 1, 0.4],
+    [1, 700, 0.5, 0.05, 0.18, 0.35, 0.08, 0.3, 0, 1, 0.25, 0.2],
   ],
 ];
 

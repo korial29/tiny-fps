@@ -619,3 +619,29 @@ describe('the ship the own player flies (the user, 2026-11-12)', () => {
     expect(played).toHaveLength(1);
   });
 });
+
+describe('the xenomorph', () => {
+  it('clicks its chitin feet, its own and the others’, and shrieks at its own pounce', () => {
+    const { audio, ids } = fake();
+    const f = createFoley(audio, id => id == 1 || id == 2);
+    f.me(player(), { ev: 0, fall: 0 }, 0);
+    f.me(player(), { ev: EV.DASH, fall: 0 }, 1);
+    expect(ids()).toEqual([SOUND.CHITIN, SOUND.SHRIEK]);
+    f.others([player({ id: 2 })], () => 0);
+    f.others([player({ id: 2 })], () => 1);
+    expect(ids().at(-1)).toBe(SOUND.CHITIN);
+    expect(ids()).not.toContain(SOUND.STEP);
+    expect(ids()).not.toContain(SOUND.DASH);
+  });
+
+  it('ticks its steps softer than a runner’s, stealthily', () => {
+    const gain = (beastly: boolean) => {
+      const { audio, played } = fake();
+      const f = createFoley(audio, () => beastly);
+      f.me(player(), { ev: 0, fall: 0 }, 0);
+      f.me(player(), { ev: 0, fall: 0 }, 1);
+      return played[0].gain;
+    };
+    expect(gain(true)!).toBeLessThan(gain(false)! / 2);
+  });
+});

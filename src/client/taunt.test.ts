@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FRAG } from '../shared/protocol';
 import type { Vec3 } from './mesh';
+import { SOUND } from './sfx';
 import {
   TAUNT_DELAY,
   TAUNT_GAP,
@@ -87,6 +88,24 @@ describe('createTaunts', () => {
     taunts.frag(frag(3, ME), ME, 10);
     taunts.frame(20, at);
     expect(speak.mock.calls.map(c => c[1])).toEqual([undefined, undefined]);
+  });
+
+  it('has a xenomorph roar after its frag, from where it is drawn, with no words', () => {
+    const speak = vi.fn(() => true);
+    const play = vi.fn();
+    const taunts = createTaunts(
+      { speak, play },
+      () => 0,
+      // It is an enemy of the own player.
+      id => +(id == 5),
+      id => id == 5,
+    );
+    taunts.frag(frag(5, 2), ME, 10);
+    taunts.frame(20, id => [id, 0, 0]);
+    expect(speak).not.toHaveBeenCalled();
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play.mock.calls[0][0]).toBe(SOUND.ROAR);
+    expect(play.mock.calls[0][1]).toEqual([5, 0, 0]);
   });
 
   it('says nothing of a player it does not draw', () => {

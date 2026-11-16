@@ -4,6 +4,7 @@
 import { FRAG } from '../shared/protocol';
 import type { Audio } from './audio';
 import type { Vec3 } from './mesh';
+import { SOUND } from './sfx';
 import { CAST, KIND, LINES, VOICES } from './voice/cast';
 
 /** Seconds from a frag to its taunt: the victim's cry first. */
@@ -65,11 +66,13 @@ export interface Taunts {
 }
 
 export const createTaunts = (
-  audio: Pick<Audio, 'speak'>,
+  audio: Pick<Audio, 'speak'> & Partial<Pick<Audio, 'play'>>,
   /** A player's build (BODY) from the roster. */
   body: (id: number) => number | undefined,
   /** A player's team from the roster. */
   team: (id: number) => number | undefined = () => undefined,
+  /** Whether a player is a xenomorph: it roars (ROAR), with no words and no radio. */
+  beast: (id: number) => boolean = () => false,
 ): Taunts => {
   /**
    * The taunts waiting: when, who says it, the clip, and whether the own player hears it close
@@ -84,7 +87,7 @@ export const createTaunts = (
         return;
       }
       last.set(m.by, now);
-      const clip = tauntOf(speakerOf(m.by, body(m.by)), m.how, m.n);
+      const clip = beast(m.by) ? -1 : tauntOf(speakerOf(m.by, body(m.by)), m.how, m.n);
       const close = m.by == me || m.who == me;
       const ally = !close && team(m.by) !== undefined && team(m.by) === team(me);
       due.push({ t: now + wait, by: m.by, clip, close, ally });
@@ -98,7 +101,12 @@ export const createTaunts = (
         }
         due.splice(i, 1);
         const p = d.close || d.ally ? undefined : where(d.by);
-        if (d.close) {
+        if (d.clip < 0) {
+          // An enemy's from where it is drawn, and none when it is not.
+          if (d.close || d.ally || p) {
+            audio.play?.(SOUND.ROAR, p, p ? 1 : 0.7, paceOf(d.by));
+          }
+        } else if (d.close) {
           audio.speak(d.clip, undefined, 0.75, paceOf(d.by));
         } else if (d.ally) {
           if (audio.speak(d.clip, undefined, 0.7, paceOf(d.by), true)) {

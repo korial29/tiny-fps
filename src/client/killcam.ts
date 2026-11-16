@@ -9,12 +9,12 @@ import type { Vec3 } from './mesh';
 
 export const KILLCAM = {
   /** The pivot over the two's feet, the camera back from it on the floor plane and up over it: metres. */
-  UP: 1.1,
+  UP: 1.3,
   BACK: 3.4,
   RISE: 1.1,
   /** The camera's side angle from behind the killer at the start (rad), and the turn it makes over SPAN. */
-  FROM: 1.15,
-  SWEEP: 0.8,
+  FROM: 1.35,
+  SWEEP: 0.6,
   /** Seconds the turn takes: a xenomorph's lock and the hold after the kill. */
   SPAN: GLORY_TICKS / TICK_HZ + 1.1,
   /** Seconds the camera stays after the kill: the head eaten, or the body thrown back. */

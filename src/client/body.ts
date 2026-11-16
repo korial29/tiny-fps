@@ -1189,14 +1189,20 @@ const RATES = {
   feast: 12,
 };
 
+/** Ticks into a glory kill where the head starts back, where it strikes, where the strike is home, and the period of its tugs. */
+export const BITE = [40, 84, 94, 9];
+
 /**
  * The bite of a glory kill (the user, 2026-11-16, after DOOM 2016) at `lock` ticks left of its
- * GLORY_TICKS: the head drawn back over the first two thirds as the claws hold the prey, then
- * driven down into him; the neck's turn for menace().
+ * GLORY_TICKS: once on him (feast.ts) the head drawn slowly back as the claws hold the prey, then
+ * driven down into him, and tugging at his head to the end; the neck's turn for menace().
  */
 export const devour = (lock: number): number => {
-  const u = 1 - lock / GLORY_TICKS;
-  return u < 0.68 ? -0.45 * Math.min(u / 0.4, 1) : -0.45 + 1.15 * Math.min((u - 0.68) / 0.12, 1);
+  const e = GLORY_TICKS - lock;
+  const k = (a: number, b: number) => Math.min(Math.max((e - a) / (b - a), 0), 1);
+  const back = k(BITE[0], BITE[1]);
+  const tug = e > BITE[2] ? 0.15 * Math.abs(Math.sin(((e - BITE[2]) * Math.PI) / BITE[3])) : 0;
+  return -0.5 * back * back * (3 - 2 * back) + 1.2 * k(BITE[1], BITE[2]) - tug;
 };
 
 export const createBody = (world?: World): Body => {

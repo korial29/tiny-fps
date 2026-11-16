@@ -877,7 +877,8 @@ const play = (
         ctf,
         tracer,
         shown,
-        third ? me : undefined,
+        // Not while the camera is still in the head: it would see the inside of it.
+        k > 0.2 ? me : undefined,
         v => {
           doors.draw(v, pov, dt);
           wrecks.draw(v);

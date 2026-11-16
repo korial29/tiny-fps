@@ -116,6 +116,7 @@ import {
 import { CHITIN_X, FOOT_TIP, HEAD, PART, PIPE, eyes, lashOf, partsOf, tail } from './xeno';
 import type { Part } from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
+import { FEAST, clutched, mounted, seize } from './feast';
 import type { Face } from './expression';
 import { CH, toneFor } from './features';
 import { createTrail } from './trail';
@@ -186,6 +187,13 @@ export interface Runner {
   build?: number;
   /** The skin and haircut the player picked (PlayerInfo.tone and hair): his id's when absent. */
   look?: Choice;
+  /**
+   * A xenomorph's glory kill (feast.ts): the id of the other one, how far the xenomorph is on its
+   * prey (mounted(), then down to 0 over FEAST.DROP once it has fed), and the other's feet.
+   */
+  mate?: number;
+  mount?: number;
+  with?: Vec3;
 }
 
 /** A man's haircuts (look.ts's HAIR_NAMES[0]): how long the hair stands off the scalp, the first one shaved. */
@@ -398,6 +406,15 @@ export const animate = (
       r.curls = r.curls.map((c, i) => c + (g[i] - c) * (1 - Math.exp(-dt * CLOSE)));
       r.blow = thrown(p, xeno) > 0 ? blowOf(p, xeno) : r.blow;
       r.flinch = Math.max(r.flinch - dt / FLINCH[0], 0);
+      // A glory kill: the two locked, a xenomorph and its prey; after it, it slides off him.
+      const mate = p.lock && p.foe !== undefined ? others.find(q => q.id == p.foe) : undefined;
+      if (mate && xeno != (book.get(mate.id)?.look?.role === ROLE.XENO)) {
+        [r.mate, r.mount] = [mate.id, mounted(p.lock!)];
+      } else {
+        r.mount = Math.max((r.mount ?? 0) - dt / FEAST.DROP, 0);
+      }
+      const on = r.mount ? others.find(q => q.id == r.mate) : undefined;
+      r.with = on && [on.x, on.y, on.z];
       // A blow of his fists the host counted: the nearest he reaches, in his arc, flinches.
       const hit = world && bare(p) && p.hits != r.p.hits && p.swing;
       if (hit) {
@@ -843,6 +860,9 @@ export const stance = (r: Runner) => {
   const { p } = r;
   // Down or floored, the weapon stays in the hand as it falls. At the wheel both hands are on the yoke.
   const lying = !!p.down || floored(p) || driving(r);
+  // In a glory kill (feast.ts) the arms are the kill's: no weapon is held up.
+  const mate = (r.mount ?? 0) > 0 ? r.with : undefined;
+  const busy = lying || !!mate;
   // All on fours (fours.ts) the gait's pose is wholly laid over: it is not built.
   const fours = !lying && (r.fours?.weight ?? 0) > 0.998;
   let pose = fours
@@ -888,16 +908,22 @@ export const stance = (r: Runner) => {
     if (!fours) {
       pose = prowl(pose, solve(pose), p);
     }
-    if (r.menace || p.lock) {
-      pose = menace(pose, p.lock ? devour(p.lock) : 0);
+    // Its head still down in him while it slides off.
+    if (r.menace || p.lock || mate) {
+      pose = menace(pose, p.lock ? devour(p.lock) : mate ? devour(0) * r.mount! : 0);
     }
     pose = r.fours?.apply(pose) ?? pose;
+    if (mate) {
+      pose = seize(pose, mate, r.mount!);
+    }
+  } else if (mate && !lying) {
+    pose = clutched(pose, mate, r.mount!);
   }
   let s = solve(pose);
-  if (p.wield && !lying) {
+  if (p.wield && !busy) {
     pose = brandish(pose, p, r.prog, r.gait.phase, r.t, r.parry);
     s = solve(pose);
-  } else if ((p.railed || p.rifled) && !lying) {
+  } else if ((p.railed || p.rifled) && !busy) {
     // The rail gun or the rifle in both hands, at the ready when not firing: the left on its front grip, the
     // elbow down and out. On a wall it is put away, unless its bolt is going out (stowed()).
     if (p.railed && stowed(p)) {
@@ -905,7 +931,7 @@ export const stance = (r: Runner) => {
     }
     pose = carried(pose, s, r);
     s = solve(pose);
-  } else if (r.aim > 0.01 && p.ammo >= 0) {
+  } else if (r.aim > 0.01 && p.ammo >= 0 && !busy) {
     // Seated, the eye the gun is held out from is lower.
     pose = lifted(
       pose,
@@ -919,7 +945,7 @@ export const stance = (r: Runner) => {
   // hip and brings it up under the grip (pouch.ts, the user, 2026-11-09).
   const sp = swapOf(p);
   const w =
-    lying || p.wield || p.railed || sp < 0
+    busy || p.wield || p.railed || sp < 0
       ? 0
       : ease(span(sp, 0.12, 0.2)) * (1 - ease(span(sp, BROUGHT - 0.03, BROUGHT)));
   let carry: [Vec3, Vec3[]] | undefined;
@@ -1099,7 +1125,7 @@ export const soldier = (
     hurt: r.hurt / HURT,
     effort: strain(p),
     focus: Math.max(r.aim, +!!p.charge),
-    shout: +(r.prog >= 0 || dashing(p)),
+    shout: +(r.prog >= 0 || dashing(p) || !!r.mount),
     grin: +(r.grin > 0),
     anger: Math.min((2 * r.mad) / MAD, 1),
     gx: Math.atan2(look[0], -look[2]),

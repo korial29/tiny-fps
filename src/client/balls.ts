@@ -7,7 +7,15 @@
 // the rifle's launcher falls as it flies: the own one along the ticks the host's toss() gives it
 // from the predicted launch, the others' on the arc of the last snapshot's place, direction and
 // speed; it always ends in a burst. No DOM.
-import { INTERP_DELAY, MISSILE_R, NADE, NADE_R, PLASMA_R, TICK_HZ } from '../shared/constants';
+import {
+  BOLT,
+  INTERP_DELAY,
+  MISSILE_R,
+  NADE,
+  NADE_R,
+  PLASMA_R,
+  TICK_HZ,
+} from '../shared/constants';
 import { gravity } from '../shared/physics';
 import { launch, lob, lobbed, speedOf, toss, wave } from '../shared/plasma';
 import type { Ball, PlayerState } from '../shared/types';
@@ -65,6 +73,13 @@ export interface Balls {
 }
 
 const at = (b: { x: number; y: number; z: number }): Vec3 => [b.x, b.y, b.z];
+/**
+ * The key of a ball the host sends: its shooter and id, and apart for a vehicle's bolts and
+ * missiles, which a driver's bolt count names (room.ts) and could meet the number of a shot of his
+ * own gun: one of those, in flight or spent, would hide it.
+ */
+export const keyOf = (b: Ball): number =>
+  ((b.by << 8) | b.id) + (b.power === BOLT || b.missile ? 1 << 16 : 0);
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
 export const createBalls = (world: World): Balls => {
@@ -120,7 +135,7 @@ export const createBalls = (world: World): Balls => {
     snapshot(balls, me, now) {
       const keys = new Set<number>();
       for (const b of balls) {
-        const key = (b.by << 8) | b.id;
+        const key = keyOf(b);
         let f = live.get(key);
         keys.add(key);
         if (b.by == me && (f?.own || spent.has(key))) {

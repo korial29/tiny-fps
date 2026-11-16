@@ -325,9 +325,14 @@ export const RIFLE_SPEED = 400;
 export const PLASMA_R = 0.12;
 /** Plasma balls in flight in a room at most: past it the oldest bursts. They go on the wire. */
 export const PLASMA_MAX = 64;
-/** Ball.power of a rover's laser bolt (rover.ts): past CHARGE_MAX, so it names the bolt. It flies at BOLT_SPEED m/s and grazes like the laser rifle's. */
+/** Ball.power of a vehicle's laser bolt (rover.ts): past CHARGE_MAX, so it names the bolt. It flies at BOLT_SPEED m/s. */
 export const BOLT = 6;
 export const BOLT_SPEED = 120;
+/**
+ * What a vehicle's bolts take (the user, 2026-11-16: stronger, they grazed like the rifle's rounds):
+ * BOLT_HP from a player each one that hits him, and 1 from a hull every BOLT_GRAZE on it.
+ */
+export const [BOLT_HP, BOLT_GRAZE] = [1, 2];
 /** Radians the view kicks up per shot (client side: the kick is in the pitch the inputs carry). */
 export const RECOIL = 0.012;
 /** Ticks a player lies down after the health ran out, then he is back at a spawn of his team. */

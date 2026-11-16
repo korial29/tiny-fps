@@ -45,6 +45,8 @@ import {
   TICK_HZ,
   VEHICLE,
   BOLT,
+  BOLT_GRAZE,
+  BOLT_HP,
   PUNCHES,
   TAILS,
   PUNCH_HITS,
@@ -890,9 +892,9 @@ export class Room {
         by.state.hits = (by.state.hits + 1) & 255;
       }
       if (b.power === 0 || b.power === BOLT) {
-        // Bolts and rounds graze a hull: every VEHICLE.GRAZE on it (from anyone) take 1 hp.
+        // Rounds graze a hull: every VEHICLE.GRAZE on it (from anyone) take 1 hp; bolts every BOLT_GRAZE.
         const w = this.wear[this.rovers.indexOf(hull)];
-        w.graze = (w.graze + 1) % VEHICLE.GRAZE;
+        w.graze = (w.graze + 1) % (b.power === BOLT ? BOLT_GRAZE : VEHICLE.GRAZE);
         if (!w.graze) {
           this.hurt(hull, 1, b.by, b.team);
         }
@@ -908,7 +910,9 @@ export class Room {
     if (by) {
       by.state.hits = (by.state.hits + 1) & 255;
     }
-    if (b.power === 0 || b.power === BOLT) {
+    if (b.power === BOLT) {
+      this.shot(foe, BOLT_HP, by, b.dx, b.dz);
+    } else if (b.power === 0) {
       // The laser rifle's: every RIFLE_HITS on him (from anyone, until he goes down) take 1 hp.
       foe.graze = ((foe.graze ?? 0) + 1) % RIFLE_HITS;
       if (!foe.graze) {

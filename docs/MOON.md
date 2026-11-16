@@ -17,17 +17,17 @@ Space helmets on every runner, after DOOM's 90s marine helmet, not copied.
 
 ## Layout (red's half; blue's is its mirror)
 
-| What        | Where                                    | Size                      | Notes                                                                                                                           |
-| ----------- | ---------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Dome        | centre (80, 0, 236)                      | radius 22, height 16      | Collision: 4 stacked tiers (r 22 to 6, tops 6, 11, 14.5, 16), walkable. Visual: a smooth hemisphere with a band of lit windows. |
-| Flag base   | (80, 1, 234)                             | step 9.5, dais 8.5, 1 m   | In the dome's hall, 2 m from its centre toward the door (was (80, 1, 205) outdoors, see below).                                 |
-| Spawns      | 8 at z 262–268, x 56–104                 |                           | Facing −z (yaw 0), as Highline's red.                                                                                           |
-| Armoury     | plinth x 60–70, y 0–1.5, z 250–256       |                           | The 4 racks 2.5 m apart on top, as Highline.                                                                                    |
-| Landing pad | disc centre (40, 0.25, 220)              | radius 13                 | Collision: a thin 26 × 0.25 × 26 box. A shuttle on it: fuselage box 14 × 3 × 4 as cover.                                        |
-| Modules     | (118, 0, 226) and (112, 0, 200)          | 14 × 5 × 8                | Long halls with lit windows.                                                                                                    |
-| Tubes       | dome ↔ each module                       | 4 wide × 3.5 high         | Box collision, tops walkable; drawn as rounded tubes.                                                                           |
-| Light masts | along the tubes (the pad's went, 11-14)  | 0.4 × 10 × 0.4            | A lamp on top.                                                                                                                  |
-| Field       | z 150–200                                |                           | Open regolith, boulders 2–6 m as cover, low ramps up to the tube tops, a parked rover.                                          |
+| What        | Where                                   | Size                    | Notes                                                                                                                           |
+| ----------- | --------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Dome        | centre (80, 0, 236)                     | radius 22, height 16    | Collision: 4 stacked tiers (r 22 to 6, tops 6, 11, 14.5, 16), walkable. Visual: a smooth hemisphere with a band of lit windows. |
+| Flag base   | (80, 1, 234)                            | step 9.5, dais 8.5, 1 m | In the dome's hall, 2 m from its centre toward the door (was (80, 1, 205) outdoors, see below).                                 |
+| Spawns      | 8 at z 262–268, x 56–104                |                         | Facing −z (yaw 0), as Highline's red.                                                                                           |
+| Armoury     | plinth x 60–70, y 0–1.5, z 250–256      |                         | The 4 racks 2.5 m apart on top, as Highline.                                                                                    |
+| Landing pad | disc centre (40, 0.25, 220)             | radius 13               | Collision: a thin 26 × 0.25 × 26 box. A shuttle on it: fuselage box 14 × 3 × 4 as cover.                                        |
+| Modules     | (118, 0, 226) and (112, 0, 200)         | 14 × 5 × 8              | Long halls with lit windows.                                                                                                    |
+| Tubes       | dome ↔ each module                      | 4 wide × 3.5 high       | Box collision, tops walkable; drawn as rounded tubes.                                                                           |
+| Light masts | along the tubes (the pad's went, 11-14) | 0.4 × 10 × 0.4          | A lamp on top.                                                                                                                  |
+| Field       | z 150–200                               |                         | Open regolith, boulders 2–6 m as cover, low ramps up to the tube tops, a parked rover.                                          |
 
 The middle, z 132–148: **the rille**, a 16 m chasm across the crater, open to the kill floor, with
 three crossings: a tube bridge in the middle (x 74–86, a deck at y 0 with low walls), a long jump on
@@ -222,14 +222,15 @@ The user: the wings went through everything, shots on another ship or a rover se
 
 A rover and a ship have `VEHICLE.HP` (10) of health, full when parked afresh. `Room.hurt()` is the one way it goes down; it is the host's alone, like a player's `hp`, and no step reads it, so the driver's replay is unchanged.
 
-| Weapon                              | Takes from a hull                                                                                             |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Plasma ball                         | Its power: 1, up to `CHARGE_MAX` (5) charged                                                                  |
-| Laser rifle round, a vehicle's bolt | 1 for every `VEHICLE.GRAZE` (4) that meet the hull, from anyone (a body takes 1 for every 2)                  |
-| Rail gun                            | 1 at the first touch, 1 more each `RAIL_DRAIN` ticks while it holds and `RAIL_TICKS` after                    |
-| Grenade, a ship's missile           | `blast()`'s rule on the hull: `NADE_HP` (5) on it, less with the distance, nothing from 5 m or behind a brush |
-| Katana                              | The cut's hp (2, heavy 3); an arc of energy its cut's too                                                     |
-| Fists, a run-over, a tackle         | Nothing                                                                                                       |
+| Weapon                      | Takes from a hull                                                                                                    |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Plasma ball                 | Its power: 1, up to `CHARGE_MAX` (5) charged                                                                         |
+| Laser rifle round           | 1 for every `VEHICLE.GRAZE` (4) that meet the hull, from anyone (a body takes 1 for every 2)                         |
+| A vehicle's bolt            | 1 for every `BOLT_GRAZE` (2) that meet the hull, from anyone; a body takes `BOLT_HP` (1) each (the user, 2026-11-16) |
+| Rail gun                    | 1 at the first touch, 1 more each `RAIL_DRAIN` ticks while it holds and `RAIL_TICKS` after                           |
+| Grenade, a ship's missile   | `blast()`'s rule on the hull: `NADE_HP` (5) on it, less with the distance, nothing from 5 m or behind a brush        |
+| Katana                      | The cut's hp (2, heavy 3); an arc of energy its cut's too                                                            |
+| Fists, a run-over, a tackle | Nothing                                                                                                              |
 
 - **Whose**: a vehicle is of its driver's team (else its rider's), and of the team whose base it is parked at when empty (`homeOf()`: the first half of the rovers, and of the ships, are red's). A team's shots pass through its own vehicles and take nothing, as for a teammate.
 - **Hull and crew**: the hull is the rover's three body circles `BODY_H` tall, the ship's `HITS` spheres (`struck()`, `reach()`, `slashed()` in `rover.ts`). A shot the hull stops does not reach the crew; one that passes over it hits who sits there. A blast takes nothing from who is seated.
@@ -268,4 +269,3 @@ A side mission: a pilot is told to fly up to a station over the rille; inside he
 
 - **The bots** (`src/shared/sortie.ts`, `Room.errands()`): while the mission waits, or the other team's strike counts down, each team sends at most one bot, the nearest to its ship when the ship stands free on its pad and the bot carries no flag. It boards, flies up in front of its own mouth (`steer()`: the nose on the point, the speed and the height eased so it can still brake), in, down on its circle, out, through the door to the console, and presses; while its team's strike counts down it stands guard there and fights whoever comes; afterwards it boards again, leaves by its own mouth, comes straight down well under the cannon and lands on its pad. From its base a bot cancels a strike with a second or two to spare.
 - **A ship left in the station** (`Room.recall()`) goes home to its pad 20 s after the last player has left the station (`STATION.RECALL`), so a team whose pilot died up there can fly the mission again.
-

@@ -14,8 +14,8 @@ import {
   TEAM_COLOR,
   TICK_HZ,
   BOLT,
+  BOLT_HP,
   BOLT_SPEED,
-  RIFLE_HITS,
 } from './constants';
 import { HIGHLINE } from './map';
 import { MOON } from './moon';
@@ -1171,7 +1171,7 @@ describe('Room: the rovers', () => {
     expect(Math.hypot(b.x - x, 0)).toBeGreaterThan((5 * BOLT_SPEED * Math.abs(b.dx)) / TICK_HZ);
   });
 
-  it("grazes an enemy with the rover's bolts like the laser rifle's, and spares a teammate", () => {
+  it("takes BOLT_HP from an enemy with each of the rover's bolts, and spares a teammate", () => {
     const { room, a, r } = driven();
     const b = join(room, 'Bob');
     const c = join(room, 'Cid');
@@ -1183,8 +1183,8 @@ describe('Room: the rovers', () => {
     expect(who(room, c).info.team).toBe(who(room, a).info.team);
     send(room, a, KEY.FIRE, 1);
     send(room, a, 0, 40);
-    // Two bolts in him: RIFLE_HITS of them take one hp.
-    expect(st(room, b).hp).toBe(HP_MAX - 2 / RIFLE_HITS);
+    // Two bolts in him, BOLT_HP each: not the rifle's graze.
+    expect(st(room, b).hp).toBe(HP_MAX - 2 * BOLT_HP);
     expect(st(room, c).hp).toBe(HP_MAX);
     expect(st(room, a).hits).toBe(2);
   });

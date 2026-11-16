@@ -63,7 +63,8 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     environment: 'node',
     // The moon's scenery is built whole in several tests: seconds each on a CI runner, past the default 5 s.
-    testTimeout: 30_000,
+    // A runner's four workers share its four vCPUs: a 20 s test there took 32 s on a busy run.
+    testTimeout: 60_000,
     // Shards by each file's time (test/durations.json), not by a hash of its path.
     sequence: { sequencer: Sequencer },
     coverage: {

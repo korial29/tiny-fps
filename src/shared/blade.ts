@@ -7,6 +7,7 @@ import {
   HEAVY,
   HEAVY_ARC,
   HEAVY_HP,
+  HEAVY_MAX,
   HEAVY_REACH,
   HIPS,
   LOCK_FACING,
@@ -16,6 +17,8 @@ import {
   NECK,
   PARRY_ARC,
   PLAYER_R,
+  TAIL_HP,
+  TAILS,
 } from './constants';
 import { forward, heightOf } from './physics';
 import { CUT, KEY, LIMB, MODE, SPECIAL_CUT } from './types';
@@ -80,6 +83,20 @@ export const swingOf = (p: Pick<PlayerState, 'cut' | 'heavy'>, table: typeof CUT
         hp: c.hp + HEAVY_HP,
       }
     : c;
+};
+
+/**
+ * The health a xenomorph's swing `p` takes: the claws and the specials their own `hp`; the tail
+ * TAIL_HP[0] let go before a charge, up to TAIL_HP[1] for a heavy release of a full one (`charge`
+ * stays through the release, gun.ts).
+ */
+export const sting = (p: Pick<PlayerState, 'cut' | 'heavy' | 'charge'>): number => {
+  const c = TAILS[p.cut ?? 0]!;
+  if (c.hold < 0) {
+    return c.hp;
+  }
+  const k = p.heavy ? Math.min(p.charge ?? 0, HEAVY_MAX) / HEAVY_MAX : 0;
+  return TAIL_HP[0] + Math.round((TAIL_HP[1] - TAIL_HP[0]) * k);
 };
 
 /**

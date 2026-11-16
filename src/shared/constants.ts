@@ -233,8 +233,8 @@ export const BLOW = {
   CLAW_L: 4,
   CLAW_R: 5,
 } as const;
-/** A swipe of the claws: XENO_CLAW health (the user, 2026-11-16: they hurt). */
-export const XENO_CLAW = 4;
+/** A swipe of the claws: XENO_CLAW health (the user, 2026-11-16: they hurt; then 4 was too much). */
+export const XENO_CLAW = 2;
 const CLAW = { ticks: 16, strike: 5, reach: 1.8, arc: 0.7, hp: XENO_CLAW, hold: -1, knock: 0 };
 export const PUNCHES = [
   PUNCH,
@@ -248,22 +248,28 @@ export const PUNCHES = [
  * The xenomorph's tail (the user, 2026-11-16: it fights as the katana does, slower, and its sting
  * kills). The right button (KEY.BLADE, input.ts) starts a strike by the keys as cutOf() reads them:
  * a STAB ahead with FORWARD, a SWEEP across from LEFT or RIGHT, else a LASH down from above. Held at
- * the top of its wind-up (`hold`) it charges as a cut does (HEAVY, swingOf()). A double click of the
- * right button (KEY.SPECIAL with it) is its special: a sweep's is the SPIN, the tail whipped all
- * round the body; the stab's and the lash's the LEAP, up TAIL_LEAP m/s and down on the foe as it
- * lands. Whoever a strike reaches goes down (`hp` Infinity: through armour). The xenomorph's `cut`
- * reads this table: CLAW_L and CLAW_R are its claws, at their place in it.
+ * the top of its wind-up (`hold`) it charges as a cut does (HEAVY, swingOf()), and the strike takes
+ * more the longer it charged (TAIL_HP, sting()). A double click of the right button (KEY.SPECIAL
+ * with it) is its special: a sweep's is the SPIN, the tail whipped all round the body; the stab's
+ * and the lash's the LEAP, up TAIL_LEAP m/s and down on the foe as it lands; each takes its own
+ * `hp`. The xenomorph's `cut` reads this table: CLAW_L and CLAW_R are its claws, at their place in it.
  */
+/**
+ * The tail's strike (the user, 2026-11-16, after Aliens versus Predator, 1999: held, it charges; let
+ * go, it strikes as hard as it charged; full, it hurts a lot but kills no one fresh): TAIL_HP[0]
+ * health let go before a charge (HEAVY_TAP), up to TAIL_HP[1] at a full one (HEAVY_MAX), under HP_MAX.
+ */
+export const TAIL_HP = [2, 6] as const;
 export const STING = { STAB: 0, SWEEP_L: 1, SWEEP_R: 2, LASH: 3, SPIN: 6, LEAP: 7 } as const;
 export const TAILS = [
-  { ticks: 52, strike: 26, reach: 3.4, arc: 0.25, hp: Infinity, hold: 18, knock: 0 },
-  { ticks: 50, strike: 26, reach: 2.8, arc: 1.1, hp: Infinity, hold: 16, knock: 0 },
-  { ticks: 50, strike: 26, reach: 2.8, arc: 1.1, hp: Infinity, hold: 16, knock: 0 },
-  { ticks: 54, strike: 28, reach: 3.1, arc: 0.4, hp: Infinity, hold: 20, knock: 0 },
+  { ticks: 52, strike: 26, reach: 3.4, arc: 0.25, hp: TAIL_HP[0], hold: 18, knock: 0 },
+  { ticks: 50, strike: 26, reach: 2.8, arc: 1.1, hp: TAIL_HP[0], hold: 16, knock: 0 },
+  { ticks: 50, strike: 26, reach: 2.8, arc: 1.1, hp: TAIL_HP[0], hold: 16, knock: 0 },
+  { ticks: 54, strike: 28, reach: 3.1, arc: 0.4, hp: TAIL_HP[0], hold: 20, knock: 0 },
   CLAW,
   CLAW,
-  { ticks: 60, strike: 30, reach: 2.6, arc: Math.PI, hp: Infinity, hold: -1, knock: 0 },
-  { ticks: 63, strike: 52, reach: 2.8, arc: 0.6, hp: Infinity, hold: -1, knock: 0 },
+  { ticks: 60, strike: 30, reach: 2.6, arc: Math.PI, hp: 3, hold: -1, knock: 0 },
+  { ticks: 63, strike: 52, reach: 2.8, arc: 0.6, hp: 5, hold: -1, knock: 0 },
 ];
 export const TAIL_LEAP = 10;
 export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];

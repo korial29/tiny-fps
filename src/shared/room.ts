@@ -60,7 +60,7 @@ import {
   PUNCH_MEMORY,
   PUNCH_STUN,
 } from './constants';
-import { CHEST, crossing, fends, knock, limbOf, roll, strike, swingOf } from './blade';
+import { CHEST, crossing, fends, knock, limbOf, roll, sting, strike, swingOf } from './blade';
 import { Bot } from './bot';
 import { Ctf } from './ctf';
 import { KITS, ROLE, kitOf } from './kit';
@@ -1056,13 +1056,13 @@ export class Room {
    * whole one. The PUNCH_STUN-th blow he takes with no more than PUNCH_MEMORY ticks between two, or
    * a blow with a `knock`, stuns him as a tackle does: a stumble thrown the way `p` faces (`knock`
    * times as hard), the flag dropped, `by` the puncher. The xenomorph's swings (TAILS) take their
-   * whole `hp` and never stun: its claws XENO_CLAW, its tail all.
+   * whole `hp` and never stun: its claws XENO_CLAW, its tail as hard as it charged (sting()).
    */
   private punch(p: Player, view: number | undefined): void {
     // The xenomorph's claws and tail: their own table and frag, and they never stun.
     const xeno = this.kit(p).xeno;
     const blow = xeno
-      ? { ...swingOf(p.state, TAILS), knock: 0 }
+      ? { ...swingOf(p.state, TAILS), hp: sting(p.state), knock: 0 }
       : (PUNCHES[p.state.cut ?? 0] ?? PUNCHES[0]);
     const seen = strike(this.world, p.state, this.enemies(p, view), blow);
     const foes = this.players().filter(q => seen.some(s => s.id === q.info.id));

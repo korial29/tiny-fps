@@ -3,7 +3,7 @@
 // lying flag, guard the base), goes there along nav.ts's legs, and shoots the enemies it sees. It
 // fights after UT2004's bots (docs/BOTS.md): a character drawn from its id and the room's skill,
 // strafes, jumps and dashes aside in a fight, and a dash out of the way of a ball coming at it.
-import { FALL_SAFE, PLASMA_SPEED, RIFLE_SPEED, STEP_H, TICK_HZ } from './constants';
+import { FALL_SAFE, JUMP_SPEED, PLASMA_SPEED, RIFLE_SPEED, STEP_H, TICK_HZ } from './constants';
 import { eyeHeight, floorAt, forward, gravity, norm } from './physics';
 import { navOf, path, ROUTES } from './nav';
 import type { Edge, Nav, Vec3, Way } from './nav';
@@ -11,6 +11,7 @@ import type { Flying } from './plasma';
 import { stepOf } from './plasma';
 import { Sortie } from './sortie';
 import type { Errand } from './sortie';
+import type { Kit } from './kit';
 import type { Leg } from './routes';
 import { EV, FLAG, KEY, MODE } from './types';
 import type { FlagState, PlayerState } from './types';
@@ -36,6 +37,8 @@ export interface Sight {
   balls?: readonly Flying[];
   /** What the room asks of it at the orbital station (sortie.ts). */
   errand?: Errand;
+  /** The numbers of its class (kit.ts): the marine's when absent. */
+  kit?: Kit;
 }
 
 export type Intent = { keys: number; yaw: number; pitch: number };
@@ -108,6 +111,9 @@ const HOVER = 4;
 const TACKLE = 4;
 /** Metres a bot without a gun goes out of its way to the rack. */
 const ARM = 30;
+/** Metres off a bot that takes no gun goes for an enemy in sight, and the most he may be above or below. */
+const HUNT = 15;
+const HUNT_Y = 2;
 /**
  * Metres ahead a walking bot looks for a wall or a drop, the seconds of its speed it looks for the
  * floor further on (it does not stop at once), and the share of the drop that hurts it will walk into.
@@ -215,6 +221,11 @@ export class Bot {
   private weighed = new Set<number>();
   /** Its errand to the orbital station, when it has one. */
   private sortie = new Sortie();
+  /**
+   * Whether it jumps unlike the marine the routes were flown with (the ninja, the xenomorph): it
+   * steers every leap in the air to come down on its point, as the moon's (`land`).
+   */
+  private steer = false;
 
   public constructor(id: number, skill = SKILL) {
     this.id = id;
@@ -234,6 +245,7 @@ export class Bot {
     const t = ++this.ticks;
     const p = s.me.state;
     this.world = s.world;
+    this.steer = !!s.kit && s.kit.jump !== JUMP_SPEED;
     if (p.down) {
       this.goal = undefined;
       this.foe = -1;
@@ -414,8 +426,24 @@ export class Bot {
     if (this.sortie.board) {
       return this.sortie.board;
     }
-    if (p.ammo < 0 && home.rack && flat(p.x, p.z, home.rack[0], home.rack[2]) < ARM) {
+    const gear = s.kit?.gear ?? true;
+    if (p.ammo < 0 && gear && home.rack && flat(p.x, p.z, home.rack[0], home.rack[2]) < ARM) {
       return home.rack;
+    }
+    // Claws reach no farther than an arm: it runs at the enemy it sees close by.
+    const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
+    const prey = gear
+      ? undefined
+      : others.find(
+          o =>
+            o.team !== team &&
+            !o.state.down &&
+            Math.abs(o.state.y - p.y) < HUNT_Y &&
+            flat(p.x, p.z, o.state.x, o.state.z) < HUNT &&
+            !hidden(world, eye, [o.state.x, o.state.y + 1.2, o.state.z]),
+        );
+    if (prey) {
+      return at(prey.state);
     }
     if (mine.state === FLAG.CARRIED) {
       const h = holder(mine);
@@ -676,7 +704,9 @@ export class Bot {
     } else if (f.ran && f.ended < 0) {
       f.ended = f.k;
     }
-    if (leg.land) {
+    const n = leg.run ? (f.ended < 0 ? -1 : f.k - f.ended) : f.k;
+    const extra = (n === leg.dash ? DASH : 0) | (n === leg.double ? JUMP : 0);
+    if (leg.land || this.steer) {
       // Will the flight carry it past the point, or short of it, by the time it is down at its height?
       const [tx, tz] = leg.to;
       const d = flat(p.x, p.z, tx, tz);
@@ -687,15 +717,14 @@ export class Bot {
         0.05,
       );
       return {
-        keys: v * t < d - 0.3 ? FORWARD : v * t > d + 0.3 ? BACK : 0,
+        keys: (v * t < d - 0.3 ? FORWARD : v * t > d + 0.3 ? BACK : 0) | (leg.land ? 0 : extra),
         yaw,
         free: false,
         exact: true,
       };
     }
-    const n = leg.run ? (f.ended < 0 ? -1 : f.k - f.ended) : f.k;
     return {
-      keys: (n === leg.dash ? keys | DASH : keys) | (n === leg.double ? JUMP : 0),
+      keys: keys | extra,
       yaw,
       free: false,
       exact: true,

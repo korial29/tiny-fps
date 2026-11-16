@@ -347,6 +347,8 @@ describe('createHud', () => {
     expect(v()).toBe('1');
     hud.hurt(0.005);
     expect(v()).toBe('');
+    // A glow in from every edge, not only a darkening of the corners.
+    expect(HUD_CSS).toMatch(/u\{inset:0;opacity:0;box-shadow:inset /);
   });
 
   it('whites the view out from above by the strike’s light, over the down screen', () => {

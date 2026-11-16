@@ -8,21 +8,41 @@
 // from the predicted launch, the others' on the arc of the last snapshot's place, direction and
 // speed; it always ends in a burst. No DOM.
 import {
+  ARC_R,
   BOLT,
   INTERP_DELAY,
   MISSILE_R,
   NADE,
   NADE_R,
   PLASMA_R,
+  PLAYER_R,
   TICK_HZ,
 } from '../shared/constants';
-import { gravity } from '../shared/physics';
+import { gravity, heightOf } from '../shared/physics';
 import { launch, lob, lobbed, speedOf, toss, wave } from '../shared/plasma';
 import type { Ball, PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import type { Orb } from './beams';
 import type { Vec3 } from './mesh';
+
+/** Metres of slack round a body for onBody(): the wire keeps a ball's place to 1/32 m. */
+const SLACK = 0.1;
+
+/**
+ * Whether the burst ball `b` burst on the body of `p`, both as the same snapshot has them: its
+ * centre within the body's cylinder grown by the ball's radius. A hit the host counts but takes no
+ * health for yet (a laser round, a vehicle's bolt) is seen this way.
+ */
+export const onBody = (b: Ball, p: Pick<PlayerState, 'x' | 'y' | 'z' | 'mode'>): boolean => {
+  const r = PLAYER_R + (b.arc ? ARC_R : PLASMA_R) + SLACK;
+  return (
+    b.burst &&
+    (b.x - p.x) ** 2 + (b.z - p.z) ** 2 <= r * r &&
+    b.y >= p.y - SLACK &&
+    b.y <= p.y + heightOf(p) + SLACK
+  );
+};
 
 /** Seconds a ball takes to come from the muzzle onto its line, and the metres of its trail. */
 export const CATCH = 0.12;

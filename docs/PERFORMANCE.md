@@ -133,7 +133,7 @@ what each step costs:
    vertex shader places it (`R` in `VERT`), in the shadow passes and the scene alike. The runners'
    pads, collar, guard, helmets, pack, crotch panel, pouch and buckle go there (`soldier()`'s `list`,
    `pads()`'s). Without a list (the tests, the own body, a runner coming apart) the old path draws
-   them into `out`, and `store.highline.test.ts` and `store.moon.test.ts` check both give the same triangles. Measured: 202 000 to
+   them into `out`, and the `store.highline*` and `store.moon*` tests check both give the same triangles. Measured: 202 000 to
    159 000 vertices written a match frame, the frame's CPU 9.7 to 8.7 ms in the browser, the GPU's
    time the same.
 2. **Guns, katana, cars, and the own hands** (done): the gun's and the rail gun's and the rifle's
@@ -151,7 +151,7 @@ what each step costs:
    `store.ts`'s `data`, a float texture read by `texelFetch` with no vertex array; a frame sends a
    runner's 25 dual quaternions, his palette and his face's weights. `VERT`'s modes 1 and 2 are
    `skin()` and `armor()` for one vertex; `test/flesh.ts` is their twin in JavaScript, and
-   `store.highline.test.ts` and `store.moon.test.ts` check it draws what the CPU draws: places within a tenth of a millimetre,
+   the `store.highline*` and `store.moon*` tests check it draws what the CPU draws: places within a tenth of a millimetre,
    colours as they are, a few armour walls' normals a degree or two off (slivers 1.5 mm tall whose
    own normal takes the floats' error). Measured in Node: Tranquility 5.9 to 3.8 ms a frame,
    Highline 7.0 to 6.3 ms (half the runners there being ninjas, still on the CPU).
@@ -159,7 +159,7 @@ what each step costs:
    for a shader, so `skinOf()` bakes it for each skin and each face's traits (a player's, constant):
    the skin at rest shaped by the traits, `dress()` on it, its pressed places taken as the rest's and
    its bare share kept per vertex (`hb` in `VERT`). The shader then adds only the expressions, none
-   under the guard. `store.test.ts` holds every expression at its full, alone, within 0.1 mm of the
+   under the guard. `store.face.test.ts` holds every expression at its full, alone, within 0.1 mm of the
    CPU's (0.08 mm at most: the jaw stays behind the guard), and the hood's colour within a fraction of
    a level of 255. Measured in Node: Highline 6.2 to 4.0 ms a frame. The first build of it went
    through `skin()` with a plain array and slowed every `skin()` after it (the own body's too) by

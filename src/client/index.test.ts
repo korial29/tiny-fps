@@ -253,6 +253,22 @@ describe('tinyFps, the match through the socket', () => {
     expect(sent.at(-1)).toBeInstanceOf(ArrayBuffer);
   });
 
+  it('shows a space helmet’s visor round the astronaut’s view on the moon, and none round the xenomorph’s', () => {
+    text({ t: 'roster', you: 0, players: roster, map: 'tranquility', host: 0 });
+    snap();
+    frames();
+    expect(q('del').hidden).toBe(false);
+    text({
+      t: 'roster',
+      you: 0,
+      players: [{ ...roster[0], role: ROLE.XENO }, roster[1]],
+      map: 'tranquility',
+      host: 0,
+    });
+    frames();
+    expect(q('del').hidden).toBe(true);
+  });
+
   it('tints the name tag of another player with his team colour', () => {
     // No renderer here, so no projection: the tag exists but is hidden. It is tinted all the same.
     const tag = [...hud().querySelectorAll<HTMLElement>('b')].find(b => b.textContent === 'Bob');

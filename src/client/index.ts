@@ -463,6 +463,8 @@ const play = (
       hud.life(kit.hp);
       [hpMax, ctl.beast] = [kit.hp, kit.xeno];
       rd?.vision(kit.xeno);
+      // The xenomorph breathes no air: no helmet, so no visor round its view (the user, 2026-11-16).
+      hud.visor(!!world.def.helmets && !kit.xeno);
       // No map to pick in the game's menu (the user, 2026-11-13): it is the join page's choice.
       count.textContent = `Players: ${roster.length}`;
     } else if (m?.t == 'frag') {
@@ -670,7 +672,8 @@ const play = (
       dt,
       driving ? ctl.keys : 0,
     );
-    if (world.def.helmets) {
+    // Its breath in a helmet: never the xenomorph's, who wears none.
+    if (world.def.helmets && !ctl.beast) {
       foley.breathe(me, dt);
     }
     // The camera moves for the eye only: the inputs keep sending the real height and angles. A

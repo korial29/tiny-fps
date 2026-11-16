@@ -11,10 +11,12 @@ import { animate, stance } from './soldier';
 import {
   FOOT_TIP,
   HEAD,
+  HOOKED,
   backOf,
   elbow,
   eyes,
   heel,
+  lashOf,
   metatarsal,
   ribs,
   sinews,
@@ -23,6 +25,8 @@ import {
   teeth,
   toes,
 } from './xeno';
+import type { Lash } from './xeno';
+import { STING, TAILS } from '../shared/constants';
 import type { Vec3 } from './mesh';
 import type { Quat } from './rig';
 
@@ -75,24 +79,30 @@ describe('the xenomorph’s skin', () => {
 describe('its pieces', () => {
   const S = solve(rest());
   it('runs one chain of vertebrae from the base of the skull down the back into the tail, which the sting arches over the head', () => {
-    const draw = (sting: number) => {
+    const draw = (lash: Lash) => {
       const v: number[] = [];
-      tail(v, S, 0, 0, sting, [1, 0, 0], 3);
+      tail(v, S, 0, 0, lash, [1, 0, 0], 3);
       expect(v.every(Number.isFinite)).toBe(true);
       return points(v);
     };
-    const [still, strike] = [draw(0), draw(1)];
+    const { ticks, strike: at } = TAILS[STING.LASH];
+    const [still, strike] = [
+      draw(HOOKED),
+      draw(lashOf({ cut: STING.LASH, swing: ticks - at, down: 0 })),
+    ];
     // The back's half is the skin's (backOf()), at rest here: up to the skull's base, behind the
     // head joint; down the back, behind the chest.
     const s = beast(3);
     const back = Array.from({ length: s.v.length / 6 }, (_, i) => s.v.slice(i * 6, i * 6 + 3));
     expect(back.some(([x, y, z]) => Math.abs(x) < 0.03 && y > 1.6 && z > 0.08)).toBe(true);
     expect(back.some(([, y, z]) => Math.abs(y - S.pos[J.CHEST][1]) < 0.05 && z > 0.12)).toBe(true);
-    // The stinger's point is the last vertex: behind at rest, over and past the head in the sting.
+    // The stinger's point is the last vertex: behind at rest, hooked up; a lash brings it over the
+    // head and down in front of it.
     const [rest0, hit] = [still.at(-1)!, strike.at(-1)!];
     expect(rest0[2]).toBeGreaterThan(1);
-    expect(hit[2]).toBeLessThan(0);
-    expect(hit[1]).toBeGreaterThan(1.6);
+    expect(rest0[1]).toBeGreaterThan(S.pos[J.PELVIS][1]);
+    expect(hit[2]).toBeLessThan(-0.3);
+    expect(Math.max(...strike.map(p => p[1]))).toBeGreaterThan(1.8);
     // Pinched at each joint: the vertebrae are beads, not a smooth tube.
     expect(still.length).toBeGreaterThan((34 - backOf(3).n) * 6 * 12 * 6);
     // The pipes up the neck are the skin's too, in their own colour; none far.
@@ -126,7 +136,7 @@ describe('its pieces', () => {
         Array.from({ length: 32 }, () => [0, 0, 0]),
       );
       const t: number[] = [];
-      tail(t, s, 0.3, 0.7, 0.4, [1, 0, 0], lod);
+      tail(t, s, 0.3, 0.7, [0.4, 0, 0, 0.1, 0.5, 0], [1, 0, 0], lod);
       // The tail's first triangles stand on the ring the skin's last bead ends on.
       const first = points(t).slice(0, 6);
       const posed = points(sk);
@@ -235,10 +245,15 @@ describe('its pose', () => {
 });
 
 describe('its blows on the arms', () => {
-  it('swipes the left claws with the left arm and the right with the right, the sting with neither', async () => {
-    const { BLOW } = await import('../shared/constants');
-    const { SIDE } = await import('./gait');
-    expect([SIDE[BLOW.CLAW_L], SIDE[BLOW.CLAW_R], SIDE[BLOW.TAIL]]).toEqual([-1, 1, 0]);
+  it('swipes the left claws with the left arm and the right with the right, the tail with neither', async () => {
+    const { BLOW, STING } = await import('../shared/constants');
+    const { SIDE, TAIL_BLOW, blowOf, thrown } = await import('./gait');
+    expect([SIDE[BLOW.CLAW_L], SIDE[BLOW.CLAW_R], SIDE[TAIL_BLOW]]).toEqual([-1, 1, 0]);
+    // A tail's strike shares its cut with a fist's blow: the xenomorph's is the tail's.
+    const p = { ...at({}), ammo: -1, swing: 12, cut: STING.STAB };
+    expect([blowOf(p), blowOf(p, true)]).toEqual([BLOW.JAB, TAIL_BLOW]);
+    expect(thrown(p)).toBeGreaterThan(0);
+    expect(thrown(p, true)).toBe(0);
   });
 });
 

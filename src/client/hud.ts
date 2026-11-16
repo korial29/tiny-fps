@@ -287,7 +287,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Xenomorph',
-    `${XENO_HP} health, climbs any wall, pounces on its prey; claws and a tail sting, acid for blood, sees its enemies glow.`,
+    `${XENO_HP} health, twice as fast and high, climbs any wall, pounces on its prey; claws and a tail that kills, acid for blood, sees its enemies glow.`,
     'No gun, no katana, no armour: it has to get close.',
     'Every map',
   ],
@@ -342,12 +342,14 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
   [
     'Xenomorph',
     [
-      ['W', 'facing a wall: cling to it, then W and S climb, A and D go along'],
+      ['Shift|+|W', 'facing a wall: cling to it, then W and S climb, A and D go along'],
       ['Space', 'on a wall: leap off along the look'],
       ['C', 'on a wall: let go'],
       ['Q', 'hold to charge a pounce, let go to leap: it pins whoever it lands on'],
       ['Left click', 'claws, left then right'],
-      ['Right click|or|G', 'tail sting: slow, long reach'],
+      ['Right click|or|G', 'tail: slow, it kills; W stab, A or D sweep, else lash'],
+      ['Hold right click', 'charge the tail: further and wider'],
+      ['Double right click', 'special: a spin all round, or a leap down on the foe'],
     ],
   ],
   [

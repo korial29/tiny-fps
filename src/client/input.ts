@@ -106,7 +106,11 @@ export interface Controls {
   weapon: number;
   /** At a ship's stick (the client sets it): a press of G is a missile whatever the weapon, a double click nothing more than a click. */
   pilot: boolean;
-  /** Playing the xenomorph (the client sets it): the right button or G stings with the tail (SPECIAL alone). */
+  /**
+   * Playing the xenomorph (the client sets it): the right button strikes with the tail as FIRE cuts
+   * with the katana, KEY.BLADE while it is held (a charge at the strike's top), with SPECIAL on the
+   * step after a double click of it (the special); G is a short press of it.
+   */
   beast: boolean;
   /**
    * The KEY bits of the next step, read once per step. Same as `keys`, plus BLADE while the katana
@@ -145,8 +149,11 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   let special = false;
   /** G pressed, waiting for its step: a grenade when the rifle is the choice. */
   let nade = false;
-  /** The right button pressed, waiting for its step: the xenomorph's sting. */
+  /** The right button pressed, waiting for its step, held now, and when it was last pressed (ms): the xenomorph's tail. */
   let sting = false;
+  let stinging = false;
+  let stung = -Infinity;
+  let twist = false;
   /** The weapons the own player has as of the last step, for the wheel. */
   let have = owned();
   const c: Controls = {
@@ -157,23 +164,29 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     pilot: false,
     beast: false,
     take() {
+      const moved = pending ? dashKeys(c.keys, pending) : c.keys;
+      if (c.beast) {
+        const keys =
+          moved |
+          (nade || sting || stinging ? KEY.BLADE : 0) |
+          (twist ? KEY.BLADE | KEY.SPECIAL : 0);
+        pending = 0;
+        special = nade = sting = twist = false;
+        return keys;
+      }
       const keys =
-        (pending ? dashKeys(c.keys, pending) : c.keys) |
-        (c.beast
-          ? nade || sting
+        moved |
+        (c.pilot
+          ? nade
             ? KEY.SPECIAL
             : 0
-          : c.pilot
+          : c.weapon == WEAPON.RIFLE
             ? nade
               ? KEY.SPECIAL
               : 0
-            : c.weapon == WEAPON.RIFLE
-              ? nade
-                ? KEY.SPECIAL
-                : 0
-              : special
-                ? KEY.FIRE | KEY.SPECIAL
-                : 0);
+            : special
+              ? KEY.FIRE | KEY.SPECIAL
+              : 0);
       pending = 0;
       special = nade = sting = false;
       return withWeapon(keys, c.weapon);
@@ -198,7 +211,12 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   // The left button fires, under the lock only; a release always counts. The right one stings
   // with the xenomorph's tail.
   on(document, 'mousedown', (e: MouseEvent) => {
-    sting ||= c.locked() && e.button == 2;
+    if (c.locked() && e.button == 2) {
+      const now = performance.now();
+      [sting, stinging] = [true, true];
+      twist ||= now - stung <= DOUBLE_CLICK_MS;
+      stung = twist ? -Infinity : now;
+    }
     if (c.locked() && !e.button) {
       c.keys |= KEY.FIRE;
       const now = performance.now();
@@ -209,6 +227,9 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   on(document, 'mouseup', (e: MouseEvent) => {
     if (!e.button) {
       c.keys &= ~KEY.FIRE;
+    }
+    if (e.button == 2) {
+      stinging = false;
     }
   });
   // The wheel turns to the next weapon he has, down forward and up back, under the lock only.

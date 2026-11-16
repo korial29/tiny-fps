@@ -19,10 +19,9 @@ import {
   RECOIL,
   TICK_HZ,
   BLOW,
-  PUNCHES,
 } from '../shared/constants';
 import { strike, swingOf } from '../shared/blade';
-import { blowOf } from './gait';
+import { TAIL_BLOW, blowOf, blowing } from './gait';
 import { powerOf } from '../shared/gun';
 import { eyeHeight } from '../shared/physics';
 import { lobbed } from '../shared/plasma';
@@ -141,10 +140,13 @@ export const swung = (a?: Blade, b?: Blade): number =>
     ? (b.cut ?? 0)
     : -1;
 
-/** Whether the step from a to b is the strike of its cut: `swing` went down through the strike tick (CUTS). */
-export const struck = (a?: Blade, b?: Blade): boolean => {
+/**
+ * Whether the step from a to b is the strike of its cut: `swing` went down through the strike tick
+ * (CUTS; the xenomorph's, `xeno`, TAILS).
+ */
+export const struck = (a?: Blade, b?: Blade, xeno = false): boolean => {
   // With no blade the swing is a punch.
-  const { ticks, strike: at } = b && !b.blade ? PUNCHES[blowOf(b)] : swingOf(b ?? {});
+  const { ticks, strike: at } = b && !b.blade ? blowing(b, xeno) : swingOf(b ?? {});
   return !!a && !!b && (a.swing ?? 0) > ticks - at && (b.swing ?? 0) <= ticks - at;
 };
 
@@ -320,7 +322,7 @@ export const createCombat = (
     if (c >= FIST_CUE + BLOW.CLAW_L) {
       const b = c - FIST_CUE;
       audio.play(
-        b == BLOW.TAIL ? SOUND.STING : SOUND.CLAW,
+        b == TAIL_BLOW ? SOUND.STING : SOUND.CLAW,
         at,
         0.6,
         RAKE[b - BLOW.CLAW_L] * rate(),
@@ -389,11 +391,12 @@ export const createCombat = (
         fx.fire(nade ? 3 : b?.power);
       }
       const c = swung(a, b);
+      const xeno = !!b && beast(b.id);
       if (c >= 0) {
-        cuts.push(fists(b) ? FIST_CUE + blowOf(b!) : c + (b?.heavy ? HEAVY_CUE : 0));
+        cuts.push(fists(b) ? FIST_CUE + blowOf(b!, xeno) : c + (b?.heavy ? HEAVY_CUE : 0));
       }
-      if (b && struck(a, b) && fists(b)) {
-        fx.blow(blowOf(b));
+      if (b && struck(a, b, xeno) && fists(b)) {
+        fx.blow(blowOf(b, xeno));
       } else if (b && struck(a, b)) {
         fx.cut(b.cut ?? 0);
         // The ARC cut throws its arc of energy at its strike.
@@ -421,8 +424,9 @@ export const createCombat = (
           hud.hit();
           // A blow of the fists that landed: a thud, and a hook or a lunge kicks the look.
           if (fists(me)) {
-            audio.play(SOUND.TACKLE, undefined, THUD[0][blowOf(me)], THUD[1]);
-            if (blowOf(me) >= BLOW.HOOK) {
+            const b = blowOf(me, beast(me.id));
+            audio.play(SOUND.TACKLE, undefined, THUD[0][b], THUD[1]);
+            if (b >= BLOW.HOOK) {
               fx.punch();
             }
           }
@@ -581,14 +585,14 @@ export const createCombat = (
         const old = blades.get(p.id);
         const c = swung(old, p);
         if (c >= 0) {
-          swish(fists(p) ? FIST_CUE + blowOf(p) : c + (p.heavy ? HEAVY_CUE : 0), at);
+          swish(fists(p) ? FIST_CUE + blowOf(p, beast(p.id)) : c + (p.heavy ? HEAVY_CUE : 0), at);
         }
         // A blow of his fists the host counted: a thud, and the own player knocked when it is he
         // that the blow reaches.
         if (old && p.hits != old.hits && fists(p) && p.swing) {
-          const b = blowOf(p);
+          const b = blowOf(p, beast(p.id));
           audio.play(SOUND.TACKLE, at, THUD[0][b], THUD[1]);
-          if (me && !me.down && strike(world, p, [me], PUNCHES[b]).length) {
+          if (me && !me.down && strike(world, p, [me], blowing(p, beast(p.id))).length) {
             fx.blow(b, true);
           }
         }

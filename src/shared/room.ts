@@ -4,7 +4,6 @@ import {
   ARC_KNOCK,
   ARMOR_BACK,
   ARMOR_MAX,
-  BLOW,
   CUTS,
   DOWN_TICKS,
   FLOOR_TICKS,
@@ -47,6 +46,7 @@ import {
   VEHICLE,
   BOLT,
   PUNCHES,
+  TAILS,
   PUNCH_HITS,
   PUNCH_MEMORY,
   PUNCH_STUN,
@@ -1008,18 +1008,21 @@ export class Room {
    * up once. A jab or a cross takes half a point, 1 hp every PUNCH_HITS of them; a hook or a lunge a
    * whole one. The PUNCH_STUN-th blow he takes with no more than PUNCH_MEMORY ticks between two, or
    * a blow with a `knock`, stuns him as a tackle does: a stumble thrown the way `p` faces (`knock`
-   * times as hard), the flag dropped, `by` the puncher.
+   * times as hard), the flag dropped, `by` the puncher. The xenomorph's swings (TAILS) take their
+   * whole `hp` and never stun: its claws XENO_CLAW, its tail all.
    */
   private punch(p: Player, view: number | undefined): void {
-    const blow = PUNCHES[p.state.cut ?? 0] ?? PUNCHES[0];
+    // The xenomorph's claws and tail: their own table and frag, and they never stun.
+    const xeno = this.kit(p).xeno;
+    const blow = xeno
+      ? { ...swingOf(p.state, TAILS), knock: 0 }
+      : (PUNCHES[p.state.cut ?? 0] ?? PUNCHES[0]);
     const seen = strike(this.world, p.state, this.enemies(p, view), blow);
     const foes = this.players().filter(q => seen.some(s => s.id === q.info.id));
     if (!foes.length) {
       return;
     }
     p.state.hits = (p.state.hits + 1) & 255;
-    // The xenomorph's claws and tail: their own frag, and only the tail's knock stuns.
-    const xeno = (p.state.cut ?? 0) >= BLOW.CLAW_L;
     for (const foe of foes) {
       this.acid(foe, p);
       const fresh = this.ticks - (foe.punched ?? -Infinity) <= PUNCH_MEMORY;
@@ -1035,7 +1038,7 @@ export class Room {
       ) {
         continue;
       }
-      if (blow.knock || foe.blows >= PUNCH_STUN) {
+      if (!xeno && (blow.knock || foe.blows >= PUNCH_STUN)) {
         foe.blows = 0;
         this.drop(foe.info.id);
         const [dx, dz] = forward(p.state.yaw);

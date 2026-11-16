@@ -2,7 +2,11 @@
 // its spine down the back and on into the tail, and the glowing slits of its eyes (its claws are
 // hand()'s, body.ts). All
 // of it generated, original: a lean biomechanical stalker, not a copy of any film's creature.
+import { swingOf } from '../shared/blade';
+import { STING, TAILS } from '../shared/constants';
 import { TAU } from '../shared/physics';
+import type { PlayerState } from '../shared/types';
+import { ease } from './gun';
 import { cross, face, sheet } from './helmet';
 import type { Spot } from './helmet';
 import { unit } from './mesh';
@@ -21,8 +25,92 @@ export const CHITIN_X = [0.06, 0.065, 0.078];
 
 /** How far the tail turns back toward the level when the body is on all fours (fours.ts), radians. */
 const LAID = 1.4;
-/** Metres: the tail's length, its root's radius and its tip's, the stinger's length. */
-export const TAIL = { len: 1.45, root: 0.046, tip: 0.012, sting: 0.17 };
+/** Metres: the tail's length, its root's radius and its tip's, the stinger's length, width and thickness. */
+export const TAIL = { len: 1.45, root: 0.072, tip: 0.024, sting: 0.3, wide: 0.07, thin: 0.014 };
+/** How far the tip of the tail at rest curls up and forward: a hook (the user, 2026-11-16). */
+const HOOK = 6;
+
+/**
+ * A pose of the tail, as bonesOf() takes it: its arch over the back (0 behind, 1 over the head and
+ * forward down into the view), its turn about the pelvis' up (radians, to its left: through its
+ * right side, a tail pointing back turns forward), its lean to the right, its reach (as a share of
+ * its length, a whip stretched), how much of the hook at its tip it keeps, and how far its root
+ * rises (radians, less toward the tip).
+ */
+export type Lash = readonly [
+  sting: number,
+  side: number,
+  lean: number,
+  reach: number,
+  hook: number,
+  rise: number,
+];
+/** At rest: behind, hooked. */
+export const HOOKED: Lash = [0, 0, 0, 0, 1, 0];
+
+/**
+ * Where its tail is through a strike (TAILS, by the cut): it goes from HOOKED to the strike's poise
+ * by the top of the wind-up (or most of the way to the strike for a special), is driven to its end
+ * at the strike, eased in, then comes back. A charge holds the poise and trembles with the clock
+ * `t`. The SPIN turns the tail low once round the body.
+ */
+export const lashOf = (
+  p: Pick<PlayerState, 'cut' | 'swing' | 'heavy' | 'charge' | 'down'>,
+  t = 0,
+): Lash => {
+  const c = p.cut ?? 0;
+  const k = TAILS[c];
+  // None but the tail's: its claws are those under the specials with no hold.
+  if (!p.swing || p.down || k.hold < 0 == c < STING.SPIN) {
+    return HOOKED;
+  }
+  // A heavy release runs on its own timer from the top of the wind-up.
+  const u = p.heavy
+    ? (k.hold + (1 - p.swing / swingOf(p, TAILS).ticks) * (k.ticks - k.hold)) / k.ticks
+    : 1 - p.swing / k.ticks;
+  const [hit, top] = [k.strike / k.ticks, (k.hold > 0 ? k.hold : 0.7 * k.strike) / k.ticks];
+  const back = ease((u - hit) / (1 - hit));
+  const mix = (a: Lash, b: Lash, d: number) =>
+    a.map((v, i) => v + (b[i] - v) * d) as unknown as Lash;
+  if (c == STING.SPIN) {
+    return mix([0.3, TAU * ease(u), 0, 0.2, 0, 0], HOOKED, back + (1 - ease(u / top)) * +(u < top));
+  }
+  const [poise, to] = LASH[c];
+  if (u < top) {
+    const shake: Lash = [0, (p.charge ?? 0) > 0 ? 0.03 * Math.sin(t * 50) : 0, 0, 0, 0, 0];
+    return mix(HOOKED, poise, ease(u / top)).map((v, i) => v + shake[i]) as unknown as Lash;
+  }
+  return mix(mix(poise, to, Math.min((u - top) / (hit - top), 1) ** 2), HOOKED, back);
+};
+
+/**
+ * By the cut (STING): the pose the tail is poised in, then the one it is driven to. The stab and
+ * the sweeps after Aliens versus Predator's first person (the user, 2026-11-16): round the hip at
+ * the waist, into the view from low on its side, curling in to the middle; the lash and the leap
+ * over the right shoulder, down from above.
+ */
+const LASH: Record<number, [Lash, Lash]> = {
+  [STING.STAB]: [
+    [0, 3, 0, 0.15, 0.7, 0.5],
+    [0, 4.6, 0, 0.35, 0, 0.7],
+  ],
+  [STING.SWEEP_R]: [
+    [0, 3.4, 0, 0.3, 0.6, 0.5],
+    [0, 5.6, 0, 0.45, 0, 0.6],
+  ],
+  [STING.SWEEP_L]: [
+    [0, -3.4, 0, 0.3, 0.6, 0.5],
+    [0, -5.6, 0, 0.45, 0, 0.6],
+  ],
+  [STING.LASH]: [
+    [0.8, 0, 0.5, 0.33, 0, 0],
+    [1.08, 0.1, 0.5, 0.6, 0, 0],
+  ],
+  [STING.LEAP]: [
+    [0.84, 0, 0.35, 0.37, 0, 0],
+    [1.08, 0.2, 0.35, 0.6, 0, 0],
+  ],
+};
 
 /** Sides round a piece at each level of detail (far, near, the own body, close), by how fine it is. */
 const SIDES = [
@@ -89,11 +177,22 @@ const BACK = [J.HEAD, J.NECK, J.CHEST, J.CHEST, J.SPINE, J.PELVIS, J.PELVIS];
  * Its spine's points in the world, from the solved skeleton `s` (the user, 2026-11-15: vertebrae
  * linked to one another, from the tail up the back to the head): the back's seven (BACK), from the
  * base of the skull down to the coccyx low over the rear, then the tail's twelve. The tail bends
- * from down and back up to its tip, sways with the clock `t` (none with `sway` 0) and more with the
- * speed `run` (0 to 1); `sting` (0 to 1) arches it up over the back and forward past the head.
- * `fours` (0 to 1) is how far the body is on all fours, its pelvis level: the tail trails behind.
+ * from down and back up to its tip, hooked at the end, sways with the clock `t` (none with `sway`
+ * 0) and more with the speed `run` (0 to 1), and takes the pose `lash` (Lash): the arch, the turn
+ * most of all toward the tip, the lean toward the tip so it curls back in as it comes down.
+ * `fours` (0 to 1) is how far the body is on all fours, its pelvis level: the tail trails behind,
+ * as much as it keeps its hook (a strike lifts it out of that).
  */
-const bonesOf = (s: Solved, t: number, run: number, sting: number, sway = 1, fours = 0): Bone[] => {
+const bonesOf = (
+  s: Solved,
+  t: number,
+  run: number,
+  lash: Lash = HOOKED,
+  sway = 1,
+  fours = 0,
+): Bone[] => {
+  const [sting, side, lean, reach, hook, rise] = lash;
+  const laid = fours * hook;
   const [P, q] = [s.pos[J.PELVIS], s.rot[J.PELVIS]];
   const back = (j: number, v: Vec3, r: number): Bone => [
     on(s.pos[j], s.rot[j], v),
@@ -112,19 +211,34 @@ const bonesOf = (s: Solved, t: number, run: number, sting: number, sway = 1, fou
   ];
   // The tail in the pelvis' frame: its angle in the pelvis' plane (0 back, up from there) along it.
   const steps = 12;
+  const len = (TAIL.len * (1 + reach)) / steps;
   let p: Vec3 = [0, -0.15, 0.16];
   for (let k = 1; k <= steps; k++) {
     const u = k / steps;
     // On all fours it trails straight back, its end hardly up.
-    const lift = -0.55 + (1.15 * u + 0.25 * run) * (1 - 0.65 * fours);
-    const a = lift - LAID * fours * (1 - sting) + (u * Math.PI * 1.08 - lift) * sting;
+    const lift =
+      -0.55 +
+      (1.15 * u + 0.25 * run + hook * HOOK * Math.max(0, u - 0.55) ** 1.5) * (1 - 0.65 * laid) +
+      rise * (1 - u);
+    const a = lift - LAID * laid * (1 - sting) + ((0.3 + 1.1 * u ** 1.3) * Math.PI - lift) * sting;
     const swing =
-      sway * (1 - sting) * (0.35 + 0.4 * run) * u * Math.sin(t * (1.6 + 2.4 * run) - u * 3.5);
-    const way: Vec3 = [Math.sin(swing), Math.sin(a), Math.cos(a) * Math.cos(swing)];
-    p = [0, 1, 2].map(i => p[i] + (way[i] * TAIL.len) / steps) as Vec3;
+      sway *
+      hook *
+      (1 - sting) *
+      (0.35 + 0.4 * run) *
+      u *
+      Math.sin(t * (1.6 + 2.4 * run) - u * 3.5);
+    const [c, n] = [Math.cos(side * (0.3 + 0.7 * u)), Math.sin(side * (0.3 + 0.7 * u))];
+    // Leaning more toward the tip: a hook, the stinger curling in under the arch.
+    const [lc, ls] = [Math.cos(lean * (0.4 + u)), Math.sin(lean * (0.4 + u))];
+    const [sx, sy, sz] = [Math.sin(swing), Math.sin(a), Math.cos(a) * Math.cos(swing)];
+    const wx = sx * lc + sy * ls;
+    const way: Vec3 = [wx * c + sz * n, sy * lc - sx * ls, sz * c - wx * n];
+    p = [0, 1, 2].map(i => p[i] + way[i] * len) as Vec3;
+    const nx = Math.cos(a) * ls;
     bones.push([
       on(P, q, p),
-      turn(q, [0, Math.cos(a), -Math.sin(a)]),
+      turn(q, [nx * c - Math.sin(a) * n, Math.cos(a) * lc, -Math.sin(a) * c - nx * n]),
       TAIL.tip + (TAIL.root - TAIL.tip) * (1 - u) ** 1.3,
     ]);
   }
@@ -267,7 +381,7 @@ export const backOf = (lod: number): Back => (backs[lod] ??= bake(lod));
 const bake = (lod: number): Back => {
   const S = solve(rest());
   const out = new Bake();
-  const curve = curveOf(bonesOf(S, 0, 0, 0, 0));
+  const curve = curveOf(bonesOf(S, 0, 0, [0, 0, 0, 0, 0, 0], 0));
   // The pelvis' bone, where the tail's free part starts.
   const L = curve.len[(BACK.length - 2) * 4];
   const n = Math.round((VERTEBRAE[lod] * L) / curve.total);
@@ -461,37 +575,44 @@ const strip = (
 };
 
 /**
- * Its tail, in the world, from the solved skeleton `s`: the column's free part, from the pelvis
- * on (the back's is in the skin, backOf()), each vertebra a bead pinched at its joints with a spine
- * standing out of it but near the tip, as bonesOf() bends and sways it; the stinger at its end, a
- * blade swelling to a barb, then a point, glowing in the team's `color`. Written straight into
- * `out`. `lod` 0 far, 1 near, 3 close. `fours` (0 to 1): how far the body is on all fours (fours.ts).
+ * Its tail, in the world, from the solved skeleton `s`, in the pose `lash` (lashOf()): the column's
+ * free part, from the pelvis on (the back's is in the skin, backOf()), thick, each vertebra a bead
+ * pinched at its joints (the user, 2026-11-16: a spine), with a spine standing out of its top and,
+ * close, a process out of each side swept back, but near the tip; its rings follow the curve's own
+ * up, so a tail turned round the hip stays round. The stinger at its end: a curved knife's blade
+ * (blade()), glowing in the team's `color`. Written straight into `out`. `lod` 0 far, 1 near, 3 close.
+ * `fours` (0 to 1): how far the body is on all fours (fours.ts).
  */
 export const tail = (
   out: Out,
   s: Solved,
   t: number,
   run: number,
-  sting: number,
+  lash: Lash,
   color: number[],
   lod: number,
   fours = 0,
 ) => {
   const back = backOf(lod);
   // From the spine's bone, whose place shapes the curve's start at the pelvis.
-  const curve = curveOf(bonesOf(s, t, run, sting, 1, fours).slice(BACK.length - 3), 4);
+  const curve = curveOf(bonesOf(s, t, run, lash, 1, fours).slice(BACK.length - 3), 4);
   const { len, total } = curve;
   const all = VERTEBRAE[lod];
   const n = all - back.n;
   const [sides, shape] = [SIDES[2][lod], BEAD[lod]];
   const [P, q] = [s.pos[J.PELVIS], s.rot[J.PELVIS]];
-  const side = turn(q, [1, 0, 0]);
+  /** The way across the curve at a point of it, its up crossed with its way on: not unit, ringTo() makes it so. */
+  const across = (up: Vec3, tan: Vec3): Vec3 => [
+    up[1] * tan[2] - up[2] * tan[1],
+    up[2] * tan[0] - up[0] * tan[2],
+    up[0] * tan[1] - up[1] * tan[0],
+  ];
   // The ring the back's last bead ends on, carried by the pelvis as the skin's is: no crack.
-  let na = ringTo(RA, on(P, q, back.c), turn(q, back.tan), side, back.r, sides);
+  let na = ringTo(RA, on(P, q, back.c), turn(q, back.tan), turn(q, [1, 0, 0]), back.r, sides);
   for (let v = 0; v < n; v++) {
     for (let j = v ? 0 : 1; j < shape.length; j++) {
       const [b, tan] = along(curve, ((v + j / shape.length) / n) * total);
-      const nb = ringTo(RB, b[0], tan, side, b[2] * shape[j], sides);
+      const nb = ringTo(RB, b[0], tan, across(b[1], tan), b[2] * shape[j], sides);
       strip(out, RA, na, RB, nb, CHITIN_X, -1);
       [RA, RB, na] = [RB, RA, nb];
     }
@@ -499,22 +620,98 @@ export const tail = (
       // Its spine: short down to the coccyx (the user, 2026-11-15), the tail's long.
       const l = ((v + 0.5) / n) * total;
       const [b, tan] = along(curve, l);
-      const d = unit(mix3(b[1], tan, 0.45));
+      const x = unit(across(b[1], tan));
       const h = b[2] * (l < len[4] ? 1.2 : 2.1);
-      const root = [0, 1, 2].map(i => b[0][i] + b[1][i] * b[2] * 0.6) as Vec3;
-      const top = [0, 1, 2].map(i => root[i] + d[i] * h) as Vec3;
-      const m = ringTo(RC, root, d, side, b[2] * 0.35, SIDES[0][lod]);
-      strip(out, RC, m, RD, ringTo(RD, top, d, side, 0, 1), CHITIN_X, -1);
+      /** A spike out of the bead along `d`, its ring steadied by `ref` (never along `d`). */
+      const thorn = (d: Vec3, h: number, at: number, ref: Vec3, sides: number) => {
+        const root = [0, 1, 2].map(i => b[0][i] + d[i] * b[2] * at) as Vec3;
+        const top = [0, 1, 2].map(i => root[i] + d[i] * h) as Vec3;
+        const m = ringTo(RC, root, d, ref, b[2] * 0.35, sides);
+        strip(out, RC, m, RD, ringTo(RD, top, d, ref, 0, 1), CHITIN_X, -1);
+      };
+      thorn(unit(mix3(b[1], tan, 0.45)), h, 0.6, x, SIDES[0][lod]);
+      // The processes out of its sides, swept back toward the root: three sides are enough.
+      for (const k of lod > 1 ? [1, -1] : []) {
+        thorn(
+          unit(mix3(x.map(e => e * k) as Vec3, tan.map(e => -e) as Vec3, 0.35)),
+          b[2] * 0.9,
+          0.7,
+          b[1],
+          3,
+        );
+      }
     }
   }
-  // The stinger.
-  const [[end], w] = along(curve, total);
-  const pt = (k: number): Vec3 => [end[0] + w[0] * k, end[1] + w[1] * k, end[2] + w[2] * k];
-  na = ringTo(RA, end, w, side, TAIL.tip, sides);
-  let nb = ringTo(RB, pt(TAIL.sting * 0.35), w, side, 0.03, sides);
-  strip(out, RA, na, RB, nb, color, -2);
-  nb = ringTo(RC, pt(TAIL.sting), w, side, 0, 1);
-  strip(out, RB, sides, RC, nb, color, -2);
+  const [[end, up], w] = along(curve, total);
+  blade(out, end, w, up, color, sides, lod);
+};
+
+/** Ring scratch of blade(): four spots a ring, a place then a normal each. */
+const [BA, BB] = [new Float64Array(24), new Float64Array(24)];
+
+/**
+ * The stinger (the user, 2026-11-16: a curved knife's blade), from the tail's end `at` along `w`,
+ * its flat faces to the sides and its back on the tail's `up`: it swells out of a collar to its
+ * widest a quarter along, then narrows to its point, curving down under the tail's way, both its
+ * back and its edge sharp, thin across. Glowing in `color`; a collar of chitin where it starts.
+ */
+const blade = (
+  out: Out,
+  at: Vec3,
+  w: Vec3,
+  up: Vec3,
+  color: number[],
+  sides: number,
+  lod: number,
+) => {
+  const { sting: L, wide, thin, tip } = TAIL;
+  // Far, two rings of it and no collar; near, four.
+  const steps = [2, 4, 6, 6][lod];
+  let way = w;
+  let c = at;
+  if (lod) {
+    ringTo(RA, at, w, up, tip, sides);
+    ringTo(RB, at.map((v, i) => v + w[i] * 0.02) as Vec3, w, up, tip * 1.3, sides);
+    strip(out, RA, sides, RB, sides, CHITIN_X, -1);
+  }
+  let na = 0;
+  for (let k = 0; k <= steps; k++) {
+    const f = k / steps;
+    if (k) {
+      // Bent down under the tail by a little more each step: a curve, not a corner.
+      way = unit(way.map((v, i) => v - up[i] * (1.9 / steps)) as Vec3);
+      c = c.map((v, i) => v + way[i] * (L / steps)) as Vec3;
+    }
+    // Its back's way, across its way, and the way through its faces.
+    const b = unit(
+      up.map((v, i) => v - way[i] * (up[0] * way[0] + up[1] * way[1] + up[2] * way[2])) as Vec3,
+    );
+    const x: Vec3 = [
+      b[1] * way[2] - b[2] * way[1],
+      b[2] * way[0] - b[0] * way[2],
+      b[0] * way[1] - b[1] * way[0],
+    ];
+    const width = wide * (f < 0.25 ? 0.45 + 2.2 * f : (1 - f) / 0.75);
+    const t = thin * (1 - f) + 0.002;
+    // Its back high on the tail's side, its edge further out under it.
+    const R = k % 2 ? BB : BA;
+    const spots: [Vec3, number, number][] = [
+      [b, width * 0.4, 0],
+      [x, t, 0.5],
+      [b, -width, 0],
+      [x, -t, -0.5],
+    ];
+    spots.forEach(([d, r, lift], i) => {
+      for (let j = 0; j < 3; j++) {
+        R[i * 6 + j] = c[j] + d[j] * r + b[j] * lift * width * 0.3;
+        R[i * 6 + 3 + j] = d[j] * Math.sign(r);
+      }
+    });
+    if (k) {
+      strip(out, k % 2 ? BA : BB, na, R, 4, color, -2);
+    }
+    na = 4;
+  }
 };
 
 /** Bone: its claws and teeth, nothing else. */

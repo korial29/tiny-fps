@@ -48,6 +48,8 @@ export interface Kit {
   damage: number;
   /** His running speeds with a gun in hand, of his own. */
   slow: number;
+  /** The ground's accelerations (ACCEL, SPRINT_ACCEL), as a share of the marine's. */
+  accel: number;
   /** Health at a spawn, and what the packs heal up to. */
   hp: number;
   /** Whether the racks give him their weapons and he wears the armour pickups. */
@@ -77,6 +79,7 @@ const MARINE: Kit = {
   clip: RIFLE_CLIP,
   damage: 1,
   slow: 1,
+  accel: 1,
   hp: HP_MAX,
   gear: true,
   xeno: false,
@@ -105,21 +108,24 @@ const NINJA: Kit = {
   clip: RIFLE_CLIP / 2,
   damage: 0.5,
   slow: 0.55,
+  accel: 1,
   hp: HP_MAX,
   gear: true,
   xeno: false,
 };
 
 /**
- * No weapon, no armour, more health; a little faster than the marine, under the ninja; it climbs
- * any wall and pounces, so it needs no wall-run of its own.
+ * No weapon, no armour, more health; it climbs any wall and pounces, so it needs no wall-run of its
+ * own. Twice as fast as a man on the ground, getting there as quickly, and its jumps twice as high
+ * (the user, 2026-11-16): a jump's height goes as the square of its speed.
  */
 const XENO: Kit = {
   ...MARINE,
-  run: RUN_SPEED * 1.1,
-  sprint: SPRINT_SPEED * 1.1,
-  jump: JUMP_SPEED * 1.15,
-  double: DOUBLE_JUMP_SPEED * 1.15,
+  run: RUN_SPEED * 2,
+  sprint: SPRINT_SPEED * 2,
+  jump: JUMP_SPEED * Math.SQRT2,
+  double: DOUBLE_JUMP_SPEED * Math.SQRT2,
+  accel: 2,
   ammo: 0,
   rail: 0,
   rifle: 0,

@@ -12,6 +12,7 @@
 // steps, and the tackled client gets the result in the next snapshot, then replays on it.
 import {
   ACCEL,
+  BLOW,
   AIR_ACCEL,
   AIR_JUMPS,
   AIR_SPEED,
@@ -661,7 +662,13 @@ const unwalled = (p: PlayerState, w: World, c: Ctl, h: number): [x: number, z: n
  * Ground control: speed toward the wished direction (a vector of length 0 to 1), up to `top` times
  * its length; friction with none.
  */
-const steer = (p: PlayerState, wish: [number, number], top: number, run = RUN_SPEED): void => {
+const steer = (
+  p: PlayerState,
+  wish: [number, number],
+  top: number,
+  run = RUN_SPEED,
+  accel = 1,
+): void => {
   const m = len(wish[0], wish[1]);
   if (m < EPS) {
     const s = len(p.vx, p.vz);
@@ -683,7 +690,7 @@ const steer = (p: PlayerState, wish: [number, number], top: number, run = RUN_SP
   top *= m;
   par =
     par < top
-      ? Math.min(top, par + (par >= run ? SPRINT_ACCEL : ACCEL) * DT)
+      ? Math.min(top, par + (par >= run ? SPRINT_ACCEL : ACCEL) * accel * DT)
       : Math.max(top, par - DECAY * DT);
   p.vx = px + par * wx;
   p.vz = pz + par * wz;
@@ -915,11 +922,12 @@ const holdAt = (p: Pos, w: World, side: number): Hold | undefined => {
 };
 
 /**
- * The xenomorph takes hold of a wall it faces with forward held: in the air within WALL_REACH, on
- * a floor touching it, a wall from the knees to the head (wallGap). Not the side it just kicked off.
+ * The xenomorph takes hold of a wall it faces with forward and the sprint held (the user,
+ * 2026-11-16: running into a wall, not walking): in the air within WALL_REACH, on a floor touching
+ * it, a wall from the knees to the head (wallGap). Not the side it just kicked off.
  */
 const clingTo = (p: PlayerState, w: World, c: Ctl): boolean => {
-  if (!c.kit.xeno || !c.fwd || c.stumble) {
+  if (!c.kit.xeno || !c.fwd || !(c.keys & KEY.SPRINT) || c.stumble) {
     return false;
   }
   const reach = p.mode === MODE.AIR ? WALL_REACH : 0.05;
@@ -1002,12 +1010,20 @@ const cling = (p: PlayerState, w: World, c: Ctl): void => {
   }
 };
 
+/** Whether the xenomorph's swing is its tail's (TAILS), not its claws'. */
+export const tailing = (p: Pick<PlayerState, 'swing' | 'cut'>): boolean =>
+  !!p.swing && p.cut !== BLOW.CLAW_L && p.cut !== BLOW.CLAW_R;
+
 /**
  * The xenomorph's dash: DASH held on a floor or a wall, with the dash timer run out, charges a
  * pounce (`charge`); let go, it leaps along the look, at least POUNCE_PITCH up, faster the longer
  * the charge. Anywhere else, or stumbling, the charge is lost.
  */
 const pounce = (p: PlayerState, c: Ctl): void => {
+  // A strike of its tail holds `charge` at the top of its wind-up (gun.ts): not a pounce's.
+  if (tailing(p)) {
+    return;
+  }
   const ready = !c.stumble && p.dash === 0 && (onFloor(p.mode) || p.mode === MODE.CLING);
   if (ready && c.keys & KEY.DASH) {
     p.charge = Math.min((p.charge ?? 0) + 1, POUNCE_HOLD);
@@ -1181,7 +1197,7 @@ const onGround = (p: PlayerState, w: World, c: Ctl, burst: boolean): void => {
   } else {
     const sprint = (c.keys & KEY.SPRINT) !== 0 && c.fwd;
     const run = c.kit.run * c.pace;
-    steer(p, unwalled(p, w, c, PLAYER_H), sprint ? c.kit.sprint * c.pace : run, run);
+    steer(p, unwalled(p, w, c, PLAYER_H), sprint ? c.kit.sprint * c.pace : run, run, c.kit.accel);
   }
 };
 

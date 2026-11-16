@@ -21,8 +21,8 @@ import { FOOT_TIP } from './xeno';
 /** How far the xenomorph's foot is tipped down from flat on its ball, radians: steep, the arch of its sole showing. */
 export const FOOT_UP = 1.0;
 
-/** Floor speeds, m/s: past the first it drops on all fours (a sprint: its run is 6.6), under the second it stands again. */
-export const [DROP, RISE] = [7.2, 6.2];
+/** Floor speeds, m/s: past the first it drops on all fours (a sprint: its run is 12), under the second it stands again. */
+export const [DROP, RISE] = [14.4, 12.4];
 
 /**
  * The gaits, per paw (hind left, hind right, fore left, fore right): where in the stride it touches
@@ -141,8 +141,8 @@ export const createFours = (): Fours => {
     const speed = Math.hypot(p.vx, p.vz);
     // A leap keeps it on all fours, off a gallop or off a wall.
     fast = walks ? speed > (fast ? RISE : DROP) : air && (fast || (wall && speed > DROP));
-    // Its claws strike reared up; its tail's sting does not need it to.
-    const claws = !!p.swing && p.cut != BLOW.TAIL;
+    // Its claws strike reared up; its tail does not need it to.
+    const claws = !!p.swing && (p.cut == BLOW.CLAW_L || p.cut == BLOW.CLAW_R);
     const want = (cling || fast) && !p.down && !p.stun && !claws;
     if (fresh) {
       [sp[0], sp[1], sp[2], sp[3]] = [+want, 0, +air, 0];
@@ -203,7 +203,9 @@ export const createFours = (): Fours => {
     const v = Math.hypot(...sum(v3, N, -dot(v3, N)));
     const ahead = dot(v3, F);
     const G = cling ? CRAWL : GALLOP;
-    const rate = cling ? 1.2 + 0.6 * v : 2 + 0.08 * v;
+    // Past the old sprint (9.9 m/s, the speed it was tuned for) the stride quickens with the speed,
+    // so a planted paw stays in the leg's reach.
+    const rate = cling ? 1.2 + 0.6 * v : (2 + 0.08 * v) * Math.max(1, v / 9.9);
     const moving = v > 0.3;
     if (moving || paws.some(w => !w.on)) {
       ph = (ph + (moving ? rate : 2.5) * dt) % 1;

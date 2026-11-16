@@ -2,16 +2,7 @@
 // renderer's vertex format. A runner is the last PlayerState seen and the gait that eases the body
 // toward it; the dash streaks are the only thing drawn here that the gait does not pose. A
 // player's (x, y, z) is the bottom of the feet. No DOM.
-import {
-  BLOW,
-  DOWN_TICKS,
-  EYE,
-  HEAT_MAX,
-  PUNCHES,
-  RUN_SPEED,
-  STEP_H,
-  TICK_HZ,
-} from '../shared/constants';
+import { BLOW, DOWN_TICKS, EYE, HEAT_MAX, RUN_SPEED, STEP_H, TICK_HZ } from '../shared/constants';
 import { strike } from '../shared/blade';
 import { TAU, floored } from '../shared/physics';
 import { LIMB, MODE } from '../shared/types';
@@ -32,7 +23,20 @@ import {
   stowed,
   wield,
 } from './body';
-import { HOOK, JAB, LUNGE, SIDE, armOf, bare, blowOf, createGait, frame, thrown } from './gait';
+import {
+  HOOK,
+  JAB,
+  LUNGE,
+  SIDE,
+  TAIL_BLOW,
+  armOf,
+  bare,
+  blowOf,
+  blowing,
+  createGait,
+  frame,
+  thrown,
+} from './gait';
 import type { Floor, Gait, Seat } from './gait';
 import { FOOT_UP, createFours } from './fours';
 import type { Fours } from './fours';
@@ -104,7 +108,7 @@ import {
   swing,
   tressOf,
 } from './skin';
-import { CHITIN_X, FOOT_TIP, HEAD, PART, PIPE, eyes, partsOf, tail } from './xeno';
+import { CHITIN_X, FOOT_TIP, HEAD, PART, PIPE, eyes, lashOf, partsOf, tail } from './xeno';
 import type { Part } from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
 import type { Face } from './expression';
@@ -375,10 +379,11 @@ export const animate = (
       r.mad = p.hp < r.p.hp || p.stun > r.p.stun ? MAD : Math.max(r.mad - dt, 0);
       r.grin = felled(r.p, p, id => book.get(id)?.p, others) ? GRIN : Math.max(r.grin - dt, 0);
       r.dt += dt;
-      r.jab += (thrown(p) - r.jab) * (1 - Math.exp(-dt * 45));
+      const xeno = r.look?.role === ROLE.XENO;
+      r.jab += (thrown(p, xeno) - r.jab) * (1 - Math.exp(-dt * 45));
       const g = grasp(p, r.seat);
       r.curls = r.curls.map((c, i) => c + (g[i] - c) * (1 - Math.exp(-dt * CLOSE)));
-      r.blow = thrown(p) > 0 ? blowOf(p) : r.blow;
+      r.blow = thrown(p, xeno) > 0 ? blowOf(p, xeno) : r.blow;
       r.flinch = Math.max(r.flinch - dt / FLINCH[0], 0);
       // A blow of his fists the host counted: the nearest he reaches, in his arc, flinches.
       const hit = world && bare(p) && p.hits != r.p.hits && p.swing;
@@ -387,7 +392,7 @@ export const animate = (
           world,
           p,
           others.filter(q => q.id != p.id),
-          PUNCHES[blowOf(p)],
+          blowing(p, xeno),
         );
         const d = (q: PlayerState) => (q.x - p.x) ** 2 + (q.z - p.z) ** 2;
         const foe = near.sort((a, b) => d(a) - d(b))[0];
@@ -803,7 +808,7 @@ export const stance = (r: Runner) => {
       at: [pose.at[0], pose.at[1] - sink, pose.at[2]],
     };
   }
-  if (r.jab > 0.002 && !lying && r.blow != BLOW.TAIL) {
+  if (r.jab > 0.002 && !lying && r.blow != TAIL_BLOW) {
     // A punch: the striking fist out (the blow's), the other back to the hip, the chest behind it.
     // The xenomorph's sting is its tail's (xeno.ts), not an arm's.
     const rot = pose.rot.slice();
@@ -1099,17 +1104,12 @@ export const soldier = (
       }
     }
     if (xeno) {
-      const blow = PUNCHES[BLOW.TAIL];
-      const u = p.cut === BLOW.TAIL && p.swing ? 1 - p.swing / blow.ticks : 0;
-      const hit = blow.strike / blow.ticks;
       tail(
         out,
         s,
         r.t,
-        Math.min(Math.hypot(p.vx, p.vz) / 9, 1),
-        u < hit
-          ? 0.65 * ease(u / hit)
-          : 0.65 + 0.35 * Math.max(0, 1 - (u - hit) / (1 - hit)) * +!!u,
+        Math.min(Math.hypot(p.vx, p.vz) / 18, 1),
+        lashOf(p, r.t),
         color,
         lod,
         r.fours?.weight,

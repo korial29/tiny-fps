@@ -81,6 +81,7 @@ import {
   CLING_FACING,
   CLING_HOLD,
   CLING_LEAP,
+  CLING_WALK,
 } from './constants';
 import { bound, ground } from './relief';
 import { EV, KEY, LIMB, MODE, SIDE } from './types';
@@ -690,6 +691,15 @@ const steer = (
 };
 
 /**
+ * A step along its speed, through the boxes and bodies as fly() takes it, with no gravity and no
+ * control: the xenomorph's dash to its glory kill's prey (gun.ts).
+ */
+export const coast = (p: PlayerState, w: World, bodies: readonly Body[]): void => {
+  fly(p, w, heightOf(p), 0, false, bodies);
+  [p.x, p.y, p.z] = [f32(p.x), f32(p.y), f32(p.z)];
+};
+
+/**
  * Moves the cylinder by its speed for one step: sideways (sliding along the boxes, which takes the
  * speed into them away), then up or down by g times the world's gravity (a ceiling stops a rise, a floor a
  * fall). Returns the speed it came down on a floor at, or -1 when it is not on one. With `snap`
@@ -954,8 +964,8 @@ const clingTo = (p: PlayerState, w: World, c: Ctl, speed: [number, number, numbe
 /**
  * On a wall, the wall is its floor (the user, 2026-11-16, to roam it freely): the look's heading
  * turned onto it is forward, so W climbs looking at the wall, goes along it looking along it and
- * down it looking away, S the other way, A and D across. Crouch lets go; a jump kicks off it,
- * straight back when looking at it, else along the look. At a top under the head, climbing pulls
+ * down it looking away, S the other way, A and D across. Crouch lets go; a jump leaps where the
+ * view turned over onto the wall looks. At a top under the head, climbing pulls
  * it up onto the top (MODE.CLIMB); down on a floor, it stands.
  */
 const cling = (p: PlayerState, w: World, c: Ctl): void => {
@@ -967,17 +977,15 @@ const cling = (p: PlayerState, w: World, c: Ctl): void => {
     return;
   }
   if (c.jump) {
+    // Where the view looks, turned over onto the wall, its floor (the user, 2026-11-16; crawl.ts):
+    // the look's heading on the wall is forward on it and its pitch out of it; off it at least
+    // WALL_KICK_SPEED / 2.
     enter(p, MODE.AIR);
-    if (c.fx * nx + c.fz * nz > 0.3) {
-      p.vx = -nx * WALL_KICK_SPEED;
-      p.vz = -nz * WALL_KICK_SPEED;
-      leap(p, WALL_KICK_UP);
-    } else {
-      const cp = Math.cos(p.pitch);
-      p.vx = c.fx * cp * CLING_LEAP;
-      p.vz = c.fz * cp * CLING_LEAP;
-      leap(p, Math.max(Math.sin(p.pitch) * CLING_LEAP, WALL_KICK_UP / 2));
-    }
+    const [cp, out] = [Math.cos(p.pitch) * CLING_LEAP, Math.sin(p.pitch) * CLING_LEAP];
+    const [k, a] = [Math.max(out, WALL_KICK_SPEED / 2), (c.fz * nx - c.fx * nz) * cp];
+    p.vx = -nx * k - nz * a;
+    p.vz = -nz * k + nx * a;
+    leap(p, (c.fx * nx + c.fz * nz) * cp);
     return;
   }
   const fw = (c.keys & KEY.FORWARD ? 1 : 0) - (c.keys & KEY.BACK ? 1 : 0);
@@ -989,11 +997,12 @@ const cling = (p: PlayerState, w: World, c: Ctl): void => {
   const [wu, wa] = [fw * hu - s * ha, fw * ha + s * hu];
   // Two keys go no faster than one.
   const n = Math.sqrt(wu * wu + wa * wa);
-  // As fast as on a floor (the user, 2026-11-16): its run, and its sprint with the key held, got to
-  // as on a floor; its speed on the wall last step carries on.
+  // It walks, CLING_WALK of its run; with the sprint key it runs as on a floor, its run at once and
+  // its sprint got to as there (the user, 2026-11-16). Its speed on the wall last step carries on.
   const was = Math.sqrt(p.vx * p.vx + p.vy * p.vy + p.vz * p.vz);
-  const run = c.kit.run * c.pace;
-  const top = c.keys & KEY.SPRINT ? c.kit.sprint * c.pace : run;
+  const runs = c.keys & KEY.SPRINT;
+  const run = c.kit.run * c.pace * (runs ? 1 : CLING_WALK);
+  const top = runs ? c.kit.sprint * c.pace : run;
   const sp =
     was > top
       ? Math.max(top, was - DECAY * DT)

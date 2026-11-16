@@ -3,7 +3,7 @@
 // hand()'s, body.ts). All
 // of it generated, original: a lean biomechanical stalker, not a copy of any film's creature.
 import { swingOf } from '../shared/blade';
-import { HEAVY_MAX, STING, TAILS } from '../shared/constants';
+import { HEAVY_TAP, STING, TAILS } from '../shared/constants';
 import { TAU } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ease } from './gun';
@@ -55,8 +55,9 @@ export const HOOKED: Lash = [0, 0, 0, 0, 1, 0];
  * Where its tail is through a strike (TAILS, by the cut): it goes from HOOKED to the strike's poise
  * in the first third of the wind-up (or most of the way to the strike for a special), so it answers
  * the click at once (the user, 2026-11-16), is driven to its end at the strike, eased in, then
- * comes back. A charge holds the poise drawn in, coils it in an S to the side as it grows (the
- * user, 2026-11-16) and trembles with the clock `t`. The SPIN turns the tail low once round the body.
+ * comes back. A charge holds it cocked on its side, drawn in and coiled in an S over a tap of
+ * charge, then still but for its breath with the clock `t` (the user, 2026-11-16); let go, it
+ * strikes from there. The SPIN turns the tail low once round the body.
  */
 export const lashOf = (
   p: Pick<PlayerState, 'cut' | 'swing' | 'heavy' | 'charge' | 'down'>,
@@ -84,9 +85,10 @@ export const lashOf = (
   const cocked: Lash =
     c == STING.SWEEP_L ? ([0, -COCKED[1], ...COCKED.slice(2)] as unknown as Lash) : COCKED;
   if (p.charge) {
-    const k = Math.sqrt(Math.min(p.charge / HEAVY_MAX, 1));
+    // Drawn in and coiled by a tap of charge, then still but for its breath (the user, 2026-11-16).
+    const [k, s] = [ease(p.charge / HEAVY_TAP), Math.sin(t * 2.4)];
     const [a, b, d, r, h, l] = cocked;
-    return [a, b + 0.03 * Math.sin(t * 50), d, r - 0.12 * k, h, l, k];
+    return [a, b + 0.02 * s, d, r - 0.12 * k, h, l + 0.04 * s, k];
   }
   if (u < top) {
     // In sight within a third of the wind-up, held there to its top.

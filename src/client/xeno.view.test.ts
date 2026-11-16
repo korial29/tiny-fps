@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EYE, HEAVY_MAX, STING, TAILS } from '../shared/constants';
+import { EYE, HEAVY_MAX, HEAVY_TAP, STING, TAILS } from '../shared/constants';
 import { STILL } from '../shared/physics';
 import { MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -102,14 +102,24 @@ describe('its tail in the own view', () => {
     }
   });
 
-  it('coils in an S on its side as the charge grows, in sight', () => {
+  it('coils in an S on its side over a tap of charge, then holds still but for its breath, in sight', () => {
     const { ticks, hold } = TAILS[STING.STAB];
-    const coil = (charge: number) =>
-      lashOf({ cut: STING.STAB, swing: ticks - hold, charge, down: 0 })[6] ?? 0;
-    expect(coil(0)).toBe(0);
-    expect(coil(HEAVY_MAX / 4)).toBeGreaterThan(0.3);
-    expect(coil(HEAVY_MAX)).toBe(1);
-    expect(coil(HEAVY_MAX)).toBeGreaterThan(coil(HEAVY_MAX / 4));
+    const lash = (charge: number, t = 0) =>
+      lashOf({ cut: STING.STAB, swing: ticks - hold, charge, down: 0 }, t);
+    expect(lash(0)[6] ?? 0).toBe(0);
+    expect(lash(HEAVY_TAP / 2)[6]).toBeGreaterThan(0.3);
+    expect(lash(HEAVY_TAP)[6]).toBe(1);
+    expect(lash(HEAVY_MAX)[6]).toBe(1);
+    // Held, it moves only with its breath: a few hundredths, slowly (the user, 2026-11-16).
+    for (let t = 0; t < 3; t += 0.05) {
+      const [a, b] = [lash(HEAVY_MAX, t), lash(HEAVY_MAX, t + 1 / 60)];
+      expect(Math.max(...(a as readonly number[]).map((v, i) => Math.abs(v - b[i]!)))).toBeLessThan(
+        0.002,
+      );
+      expect(
+        Math.max(...(a as readonly number[]).map((v, i) => Math.abs(v - lash(HEAVY_MAX)[i]!))),
+      ).toBeLessThan(0.05);
+    }
     expect(tail(STING.STAB, ticks - hold, HEAVY_MAX)).toBeGreaterThan(50);
   });
 });

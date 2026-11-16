@@ -3,12 +3,15 @@ import { IDLE, duo } from '../../test/teams';
 import {
   ARMOR_MAX,
   BLOW,
+  CLING_WALK,
   CUTS,
+  GLORY_DASH,
+  GLORY_FAR,
   GLORY_HP,
   GLORY_PUSH,
-  GLORY_REACH,
   GLORY_TICKS,
   RUN_SPEED,
+  SPRINT_SPEED,
   STING,
   TAILS,
   TAIL_LEAP,
@@ -23,6 +26,7 @@ import {
   XENO_DASH,
   XENO_HP,
   XENO_PACE,
+  WALL_KICK_SPEED,
 } from './constants';
 import { swingOf } from './blade';
 import { STRIKE, step } from './gun';
@@ -31,13 +35,15 @@ import { ROOFTOPS } from './map';
 import { STILL, move } from './physics';
 import { FRAG, decodeSnapshot, encodeSnapshot } from './protocol';
 import { Room } from './room';
-import { pouncing } from './tackle';
+import { glory, pouncing } from './tackle';
 import { KEY, LIMB, MODE, TEX } from './types';
 import type { Conn, Input, PlayerState } from './types';
 import { build } from './world';
 import type { Brush } from './world';
 
 const [MARINE, XENO] = [KITS[ROLE.MARINE], KITS[ROLE.XENO]];
+/** Its walk on a wall. */
+const WALK = XENO.run * CLING_WALK;
 type Vec3 = [number, number, number];
 const box = (min: Vec3, max: Vec3): Brush => ({ min, max, top: TEX.TILE, side: TEX.BRICK });
 /** A ground at y = 0, a block 5 m high from x = 1 to 4 and z = -10 to 10, and far off a tower 30 m high. */
@@ -169,9 +175,7 @@ describe('the xenomorph on a wall', () => {
     go(p, 0);
     expect(p.y).toBe(y);
     go(p, KEY.BACK);
-    expect(p.y).toBeCloseTo(y - XENO.run / 60, 4);
-    // Faster on a wall than a man runs (the user, 2026-11-16: it crawled).
-    expect(XENO.run).toBeGreaterThan(RUN_SPEED);
+    expect(p.y).toBeCloseTo(y - WALK / 60, 4);
     // Facing +x, the right is +z; looking away from the wall, the right is -z.
     const z = p.z;
     go(p, KEY.RIGHT);
@@ -179,11 +183,11 @@ describe('the xenomorph on a wall', () => {
     go(p, KEY.RIGHT, WEST);
     expect(p.z).toBeCloseTo(z, 5);
     expect(p.mode).toBe(MODE.CLING);
-    // A jump looking away leaps along the look.
-    go(p, KEY.JUMP, WEST);
+    // A jump looking away and up, out of the wall as the turned view sees it: off it, and down.
+    go(p, KEY.JUMP, WEST, 1.2);
     expect(p.mode).toBe(MODE.AIR);
     expect(p.vx).toBeLessThan(-5);
-    expect(p.vy).toBeGreaterThan(0);
+    expect(p.vy).toBeLessThan(0);
     // It does not take hold of the wall it kicked off before it lands.
     for (let k = 0; k < 5; k++) {
       go(p, RUN, EAST);
@@ -207,12 +211,12 @@ describe('the xenomorph on a wall', () => {
     let p = on();
     let [y, z] = [p.y, p.z];
     go(p, KEY.FORWARD, SOUTH);
-    expect(p.z - z).toBeCloseTo(XENO.run / 60, 4);
+    expect(p.z - z).toBeCloseTo(WALK / 60, 4);
     expect(p.y).toBeCloseTo(y, 5);
     // Looking that way, the right is down the wall and the left up it.
     [y, z] = [p.y, p.z];
     go(p, KEY.RIGHT, SOUTH);
-    expect(p.y - y).toBeCloseTo(-XENO.run / 60, 4);
+    expect(p.y - y).toBeCloseTo(-WALK / 60, 4);
     expect(p.z).toBeCloseTo(z, 5);
     go(p, KEY.LEFT, SOUTH);
     expect(p.y).toBeCloseTo(y, 4);
@@ -221,24 +225,30 @@ describe('the xenomorph on a wall', () => {
     [y, z] = [p.y, p.z];
     go(p, KEY.FORWARD, (EAST + 2 * Math.PI + SOUTH) / 2 - Math.PI);
     const [dy, dz] = [p.y - y, p.z - z];
-    expect(dy).toBeGreaterThan(0.05);
-    expect(dz).toBeGreaterThan(0.05);
-    expect(Math.sqrt(dy * dy + dz * dz)).toBeCloseTo(XENO.run / 60, 4);
+    expect(dy).toBeGreaterThan(0.03);
+    expect(dz).toBeGreaterThan(0.03);
+    expect(Math.sqrt(dy * dy + dz * dz)).toBeCloseTo(WALK / 60, 4);
     // Two keys at once go no faster than one.
     p = on();
     [y, z] = [p.y, p.z];
     go(p, KEY.FORWARD | KEY.RIGHT);
-    expect(Math.sqrt((p.y - y) ** 2 + (p.z - z) ** 2)).toBeCloseTo(XENO.run / 60, 4);
+    expect(Math.sqrt((p.y - y) ** 2 + (p.z - z) ** 2)).toBeCloseTo(WALK / 60, 4);
   });
 
-  it('goes as fast on a wall as on a floor, and faster with the sprint (the user, 2026-11-16)', () => {
-    // Up the tower from a stand on it: its run at once, then the sprint got to as on a floor.
+  it('walks on a wall, and with the sprint key runs as on a floor (the user, 2026-11-16)', () => {
+    // Up the tower from a stand on it: a walk, slower than a man runs.
     const p = at(-49.8, 2, { mode: MODE.AIR, ground: false, yaw: WEST });
     go(p, RUN, WEST);
     expect(p.mode).toBe(MODE.CLING);
     let y = p.y;
     go(p, KEY.FORWARD, WEST);
+    expect((p.y - y) * 60).toBeCloseTo(WALK, 3);
+    expect(WALK).toBeLessThan(RUN_SPEED);
+    // The sprint key: its run at once, then its sprint got to as on a floor, faster than a man's.
+    y = p.y;
+    go(p, RUN, WEST);
     expect((p.y - y) * 60).toBeCloseTo(XENO.run, 3);
+    expect(XENO.sprint).toBeGreaterThan(SPRINT_SPEED);
     const g = at(-20, 0, { z: 50, yaw: 0 });
     let [t, tg] = [0, 0];
     for (let k = 0; k < 90; k++) {
@@ -251,13 +261,13 @@ describe('the xenomorph on a wall', () => {
     expect(p.mode).toBe(MODE.CLING);
     expect((p.y - y) * 60).toBeCloseTo(XENO.sprint, 3);
     expect(Math.abs(t - tg)).toBeLessThanOrEqual(8);
-    // The sprint let go, it falls back to its run.
-    for (let k = 0; k < 30; k++) {
+    // The sprint let go, it falls back to its walk.
+    for (let k = 0; k < 45; k++) {
       y = p.y;
       go(p, KEY.FORWARD, WEST);
     }
     expect(p.mode).toBe(MODE.CLING);
-    expect((p.y - y) * 60).toBeCloseTo(XENO.run, 3);
+    expect((p.y - y) * 60).toBeCloseTo(WALK, 3);
   });
 
   it('runs on up a wall at the speed it ran into it', () => {
@@ -272,6 +282,30 @@ describe('the xenomorph on a wall', () => {
     const y = p.y;
     go(p, RUN);
     expect((p.y - y) * 60).toBeGreaterThan(v - 0.1);
+  });
+
+  it('leaps where the view turned over onto the wall looks (the user, 2026-11-16, after Aliens versus Predator)', () => {
+    const jump = (yaw: number, pitch: number) => {
+      const p = at(0.2, 3, { mode: MODE.AIR, ground: false });
+      go(p, RUN);
+      expect(p.mode).toBe(MODE.CLING);
+      go(p, KEY.JUMP, yaw, pitch);
+      expect(p.mode).toBe(MODE.AIR);
+      return [p.vx, p.vy, p.vz];
+    };
+    // Looking at the wall, the view looks up it: up, pushed off it.
+    let [vx, vy, vz] = jump(EAST, 0);
+    expect(vy).toBeGreaterThan(8);
+    expect(vx).toBeLessThanOrEqual(-WALL_KICK_SPEED / 2 + 1e-4);
+    expect(Math.abs(vz)).toBeLessThan(1e-4);
+    // Looking along it (toward +z), along it.
+    [vx, vy, vz] = jump(Math.PI, 0);
+    expect(vz).toBeGreaterThan(8);
+    expect(Math.abs(vy)).toBeLessThan(1);
+    // Looking away from it, down it.
+    [vx, vy, vz] = jump(WEST, 0);
+    expect(vy).toBeLessThan(-8);
+    expect(vx).toBeLessThan(0);
   });
 
   it('walks down off the wall onto the floor', () => {
@@ -585,7 +619,7 @@ describe('the xenomorph in a room', () => {
     expect(m.state.hp).toBe(HP_MAX - 2 * POUNCE_HP);
   });
 
-  it('glory kills on E a weak foe it faces, close: both held GLORY_TICKS, then his head eaten', () => {
+  it('glory kills on E a foe it faces, close, at any health: both held GLORY_TICKS, then his head eaten', () => {
     const { inner, ps, sent } = room(ROLE.XENO, ROLE.MARINE);
     const [x, m] = ps;
     face(x.state, m.state);
@@ -600,15 +634,15 @@ describe('the xenomorph in a room', () => {
       go(x, 0, yaw);
       return held;
     };
-    // Too healthy for it, then out of its look, then too far: nothing.
-    m.state.hp = GLORY_HP + 1;
-    expect(e(0)).toBe(0);
-    Object.assign(m.state, { hp: GLORY_HP, armor: ARMOR_MAX });
+    // At full health and armour (the user, 2026-11-16: whenever it wants), but out of its look,
+    // then too far: nothing.
+    Object.assign(m.state, { hp: HP_MAX, armor: ARMOR_MAX });
     expect(e(Math.PI)).toBe(0);
-    m.state.z = 51 - GLORY_REACH - 0.3;
+    m.state.z = 51 - GLORY_FAR - 0.3;
     expect(e(0)).toBe(0);
-    // Two metres off, ahead: held, and brought in to a metre of him.
-    m.state.z = 49;
+    // Six metres off, ahead (the user, 2026-11-16: from afar): held, and it dashes to a metre of
+    // him over the lock's first GLORY_DASH ticks, fast, then stays.
+    m.state.z = 45;
     go(x, KEY.USE, 0);
     expect([x.state.lock, x.state.foe, m.state.lock, m.state.foe]).toEqual([
       GLORY_TICKS,
@@ -616,9 +650,16 @@ describe('the xenomorph in a room', () => {
       GLORY_TICKS,
       x.info.id,
     ]);
-    expect(x.state.z).toBeCloseTo(50, 4);
+    expect(Math.hypot(x.state.vx, x.state.vz)).toBeGreaterThan(XENO.sprint);
+    for (let k = 0; k < GLORY_DASH; k++) {
+      go(x, 0, 0);
+    }
+    expect(x.state.z).toBeCloseTo(46, 3);
+    expect([x.state.vx, x.state.vz]).toEqual([0, 0]);
+    go(x, 0, 0);
+    expect(x.state.z).toBeCloseTo(46, 3);
     const [mx, mz] = [m.state.x, m.state.z];
-    for (let k = 0; k < GLORY_TICKS - 2; k++) {
+    for (let k = 0; k < GLORY_TICKS - 3 - GLORY_DASH; k++) {
       go(x, KEY.FORWARD | KEY.SPRINT, 0);
       go(m, KEY.BACK | KEY.SPRINT, Math.PI);
     }
@@ -632,6 +673,40 @@ describe('the xenomorph in a room', () => {
     expect([m.state.lost, x.state.lock, m.state.lock]).toEqual([LIMB.EATEN, 0, 0]);
     const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
     expect(frag).toMatchObject({ by: x.info.id, who: m.info.id, how: FRAG.GLORY });
+  });
+
+  it('dashes to its prey the same from a snapshot: the predictor replays it to the bit', () => {
+    const s = {
+      ...at(-20, 0, { z: 50, yaw: 0, lock: GLORY_TICKS - 5, foe: 1, vx: 0.5, vz: -19.25 }),
+      ack: 0,
+      by: 0,
+    };
+    const q = {
+      ...s,
+      ...decodeSnapshot(encodeSnapshot({ tick: 1, players: [s], ...IDLE }))!.players[0],
+    };
+    for (let k = 0; k < GLORY_DASH; k++) {
+      for (const p of [s, q]) {
+        step(p, { seq: k, keys: KEY.FORWARD, yaw: 0, pitch: 0 }, pit, 0, true, [], XENO);
+      }
+      expect([q.x, q.y, q.z, q.vx, q.vz]).toEqual([s.x, s.y, s.z, s.vx, s.vz]);
+    }
+    // It went on along its speed, keys or not, then stopped.
+    expect(s.z).toBeCloseTo(50 - (19.25 * (GLORY_DASH - 5)) / 60, 3);
+    expect([s.vx, s.vz]).toEqual([0, 0]);
+  });
+
+  it('glory kills from afar only what it sees: no prey behind a wall', () => {
+    // The block of the pit stands from x = 1 to 4: a foe past it is hidden, one this side is not.
+    const me = at(0, 0, { yaw: EAST });
+    const foe = (x: number) => ({ ...at(x, 0), id: 7, hp: HP_MAX });
+    expect(glory(me, [foe(6)], pit)).toBeUndefined();
+    const q = at(-3, 0, { yaw: WEST });
+    expect(glory(q, [foe(-3 - GLORY_FAR + 0.5)], pit)?.id).toBe(7);
+    expect(glory(q, [foe(-3 - GLORY_FAR - 0.5)], pit)).toBeUndefined();
+    // The katana's: close, and weak.
+    expect(glory(q, [foe(-4)])).toBeUndefined();
+    expect(glory(q, [{ ...foe(-4), hp: GLORY_HP }])?.id).toBe(7);
   });
 
   it('beheads on E a weak foe ahead with the katana in hand, the body thrown back, no lock', () => {

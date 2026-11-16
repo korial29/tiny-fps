@@ -270,8 +270,8 @@ export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];
 /**
  * The xenomorph (the user, 2026-11-15; kit.ts). XENO_HP health. It clings to a wall it faces with
  * forward and the sprint held (MODE.CLING, physics.ts; the sprint since the user, 2026-11-16):
- * up, down or along it as fast as on a floor, its run and its sprint with the key held (the user,
- * 2026-11-16) while the wall rises CLING_HOLD m over its feet; a jump kicks it off along the look at CLING_LEAP
+ * up, down or along it at a walk (CLING_WALK of its run), with the sprint key at its run then its
+ * sprint as on a floor (the user, 2026-11-16) while the wall rises CLING_HOLD m over its feet; a jump kicks it off along the look at CLING_LEAP
  * m/s. It dashes as a man does, XENO_DASH times as fast so as far, three in a row (kit.ts; the
  * user, 2026-11-16: no more charged pounce); an enemy its dash's burst reaches is pinned (room.ts):
  * POUNCE_HP health, his flag dropped, a stumble of POUNCE_STUN ticks, once per TACKLE_COOLDOWN. An
@@ -281,16 +281,26 @@ export const XENO_HP = 12;
 export const CLING_FACING = 0.6;
 export const CLING_HOLD = 0.4;
 export const CLING_LEAP = 10;
+/** Its walk on a wall, a share of its run: the sprint key runs there (the user, 2026-11-16). */
+export const CLING_WALK = 0.5;
 /** 1.4: a step of its burst stays under PLAYER_R, so it cannot tunnel through a thin brush (physics.ts). */
 export const XENO_DASH = 1.4;
 export const [POUNCE_HP, POUNCE_STUN] = [2, 60];
 /**
  * The glory kill (the user, 2026-11-16, after DOOM 2016): an enemy with GLORY_HP health or less, up,
- * flashes in the xenomorph's vision and to one with the katana in hand, who beheads him on E; E (KEY.USE) within GLORY_REACH metres of him and GLORY_ARC
- * radians of its look locks the two (`lock`, `foe`, as a saber lock) for GLORY_TICKS, where neither
- * moves, then it eats his head: he goes down through his armour (LIMB.EATEN), a frag of FRAG.GLORY.
+ * flashes to one with the katana in hand, who beheads him on E within GLORY_REACH metres. The
+ * xenomorph's takes any enemy up, with no flash (the user, 2026-11-16): E within GLORY_FAR metres
+ * of him, in sight, and GLORY_ARC radians of its look locks the two (`lock`, `foe`, as a saber
+ * lock) for GLORY_TICKS, where he does not move and it dashes to him, then it eats his head: he
+ * goes down through his armour (LIMB.EATEN), a frag of FRAG.GLORY.
  */
 export const [GLORY_HP, GLORY_REACH, GLORY_ARC, GLORY_TICKS] = [3, 2.5, 1, 54];
+/**
+ * The xenomorph's glory kill from afar (the user, 2026-11-16): within GLORY_FAR metres, in sight,
+ * it dashes to a metre of its prey over the first GLORY_DASH ticks of the lock. 7 m in 20 ticks is
+ * 21 m/s, a step under PLAYER_R: it cannot tunnel.
+ */
+export const [GLORY_FAR, GLORY_DASH] = [8, 20];
 /** The katana's glory kill (room.ts feast()): the speed it throws the beheaded body back at. */
 export const GLORY_PUSH = 7;
 /** How much faster than a man the xenomorph runs (the user, 2026-11-16: a little, not twice). */

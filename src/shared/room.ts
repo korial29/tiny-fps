@@ -39,6 +39,7 @@ import {
   STUMBLE_KNOCK,
   STUMBLE_TICKS,
   ACID_HP,
+  GLORY_DASH,
   GLORY_PUSH,
   GLORY_TICKS,
   POUNCE_HP,
@@ -1147,12 +1148,14 @@ export class Room {
   }
 
   /**
-   * E pressed by `p`, the xenomorph or one with the katana in hand: the nearest enemy who is up with
-   * GLORY_HP or less, within GLORY_REACH and GLORY_ARC of its look where `p` drew him, and in no
-   * lock, is glory killed. The katana takes his head at once and throws the body back GLORY_PUSH
-   * m/s, the follow-through of a cut across in hand (the user, 2026-11-16). The xenomorph holds
-   * him: the two locked (`lock`, `foe`) for GLORY_TICKS, his flag dropped, `p` brought in a metre
-   * from him; duel() ends it. True when it happened.
+   * E pressed by `p`, the xenomorph or one with the katana in hand: the nearest enemy who is up,
+   * within GLORY_ARC of its look where `p` drew him, and in no lock, is glory killed (glory()):
+   * with the katana within GLORY_REACH and with GLORY_HP or less, the xenomorph's within
+   * GLORY_FAR, in sight, at any health (the user, 2026-11-16). The katana takes his head at once
+   * and throws the body back GLORY_PUSH m/s, the follow-through of a cut across in hand (the user,
+   * 2026-11-16). The xenomorph holds him: the two locked (`lock`, `foe`) for GLORY_TICKS, his flag
+   * dropped, `p` dashing to a metre of him (the user, 2026-11-16); duel() ends it. True when it
+   * happened.
    */
   private feast(p: Player, view: number | undefined): boolean {
     const me = p.state;
@@ -1168,6 +1171,7 @@ export class Room {
         const { hp, down, lock, mode } = q?.state ?? s;
         return q ? [{ ...s, hp, down, lock, mode }] : [];
       }),
+      xeno ? this.world : undefined,
     );
     const foe = this.players().find(q => q.info.id === seen?.id);
     if (!seen || !foe) {
@@ -1199,12 +1203,9 @@ export class Room {
       Object.assign(a.state, { ...FREE, lock: GLORY_TICKS, foe: b.info.id, pressed: true });
       Object.assign(a.state, { swing: 0, charge: 0, stun: 0, zap: false, vx: 0, vz: 0 });
     }
-    if (d > 1) {
-      [me.x, me.z] = [
-        Math.fround(me.x + (dx * (d - 1)) / d),
-        Math.fround(me.z + (dz * (d - 1)) / d),
-      ];
-    }
+    // It dashes to a metre of him over the lock's first GLORY_DASH ticks (step() in gun.ts).
+    const v = (Math.max(d - 1, 0) * TICK_HZ) / GLORY_DASH / d;
+    [me.vx, me.vz] = [Math.fround(dx * v), Math.fround(dz * v)];
     return true;
   }
 

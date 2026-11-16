@@ -67,7 +67,10 @@ import {
   cutting,
   ends,
   held as sword,
+  PARRY_IN,
+  deflect,
   locked,
+  parrying,
   poised,
   progress,
   BEHIND as BACK,
@@ -102,6 +105,8 @@ export interface Body {
   muzzle(): Vec3;
   /** How far a share of the trunk's twist in a cut has turned the body as of the last update (radians, trunk()): the drawn view turns with it. */
   spun(): number;
+  /** The katana in hand just struck a ball back: it snaps into the parry (DEFLECT, katana.ts) and eases back. */
+  parried(): void;
   /** Its gait's footsteps so far and stride phase (Gait.steps, Gait.phase): the sounds of its steps and the bob of the view go with its feet. */
   readonly steps: number;
   readonly phase: number;
@@ -1213,8 +1218,8 @@ export const createBody = (world?: World): Body => {
   let target: Vec3 = [0, 0, 8];
   /** How far the gun is pushed out of the trunk, in the camera's space, as of the last pose(). */
   let lift: Vec3 = [0, 0, 0];
-  /** Seconds, for the flailing of a stumble. */
-  let clock = 0;
+  /** Seconds, for the flailing of a stumble; and since the last parry. */
+  let [clock, parry] = [0, Infinity];
   /** Which hand the wall is on: -1 left, 1 right, eased. */
   let side = 0;
   /** The ledge the hands are on: the body's x and z, the height of its top, and the way the wall faces. */
@@ -1253,6 +1258,7 @@ export const createBody = (world?: World): Body => {
     drawn = now;
     me = { ...p };
     clock += dt;
+    parry += dt;
     prog = progress(prog, p, dt);
     jolt = (p.pushes ?? 0) !== pushes && p.lock ? 1 : jolt * Math.exp(-dt * 12);
     pushes = p.pushes ?? 0;
@@ -1364,7 +1370,10 @@ export const createBody = (world?: World): Body => {
     const a = w.amp * (1 + 0.5 * w.sprint);
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     // In a saber lock the blade crosses the foe's, shaking, and each press drives it on.
-    const k = me?.lock ? locked(clock, jolt) : poised(me ?? {}, Math.max(prog, 0), clock);
+    const k = deflect(
+      me?.lock ? locked(clock, jolt) : poised(me ?? {}, Math.max(prog, 0), clock),
+      parrying(parry),
+    );
     const at: Vec3 = [k[0] + 0.012 * a * s, k[1] + 0.018 * a * c - 0.35 * (1 - w.blade), k[2]];
     return { at, g: unit([k[3], k[4], k[5]]) };
   };
@@ -1965,7 +1974,8 @@ export const createBody = (world?: World): Body => {
           );
         }
         const [base, point] = ends(s.pos[J.HAND_R], s.rot[J.HAND_R]);
-        trail.mark(base, point, grasp > 0.5 && cutting(prog));
+        // The parry's sweep leaves a streak like a cut's.
+        trail.mark(base, point, grasp > 0.5 && (cutting(prog) || parry < 2 * PARRY_IN));
         trail.draw(out);
       }
     },
@@ -1975,6 +1985,7 @@ export const createBody = (world?: World): Body => {
     },
     muzzle: () => tip(...holster(), me ? kindOf(me) : 0),
     spun: () => (me && prog >= 0 ? SWAY * bent(me, prog)[0] * w.blade : 0),
+    parried: () => (parry = 0),
     get steps() {
       return gait.steps;
     },

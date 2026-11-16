@@ -27,12 +27,13 @@ import type { World } from './world';
 export const CHEST = 0.7;
 
 /**
- * Whether `p` can meet the ball `b` that reached him with the katana: in hand, on his feet (not
- * hanging, climbing, seated or stumbling), a ball (not a grenade or an arc) coming at him within
- * PARRY_ARC radians of his facing. Whether he does is his kit's chance (Kit.parry, room.ts).
+ * Whether `p` can meet the ball `b` that reached him with the katana: in hand and idle (not in a
+ * cut, a punch or charging one: the user, 2026-11-16), on his feet (not hanging, climbing, seated or
+ * stumbling), a ball (not a grenade or an arc) coming at him within PARRY_ARC radians of his facing.
+ * Whether he does is his kit's chance (Kit.parry, room.ts).
  */
 export const fends = (p: PlayerState, b: Ball): boolean => {
-  if (!p.wield || p.stun > 0 || b.arc || b.power === NADE) {
+  if (!p.wield || p.swing || p.charge || p.stun > 0 || b.arc || b.power === NADE) {
     return false;
   }
   if (p.mode === MODE.HANG || p.mode === MODE.CLIMB || p.mode === MODE.RIDE) {

@@ -2725,6 +2725,33 @@ describe('the ninja’s parry', () => {
     expect(volley(20, ROLE.MARINE).parried).toBe(0);
   });
 
+  it('parries on the run as well as standing', () => {
+    const m = match();
+    m.room.receive(m.bob, JSON.stringify({ t: 'body', body: 0, role: ROLE.NINJA }));
+    let parried = 0;
+    for (let k = 0; k < 30; k++) {
+      m.put(m.cy, 0, 0, { ...GUN, shots: m.state(m.cy).shots });
+      m.put(m.bob, 12, 0, { ...SWORD, yaw: WEST, shots: m.state(m.bob).shots });
+      const to = (m.state(m.cy).shots + 1) & 255;
+      for (let t = 0; t < 40; t++) {
+        m.send(m.bob, FORWARD | SPRINT, { yaw: WEST });
+        m.send(m.cy, m.state(m.cy).shots === to || t % 2 ? 0 : FIRE);
+        m.room.tick();
+      }
+      expect(m.state(m.bob).wield).toBe(true);
+      expect(Math.abs(m.state(m.bob).vx)).toBeGreaterThan(RUN_SPEED * 0.8);
+      parried += m.state(m.bob).hp === HP_MAX ? 1 : 0;
+      m.land();
+    }
+    expect(parried / 30).toBeGreaterThan(PARRY - 0.2);
+    expect(parried / 30).toBeLessThan(PARRY + 0.2);
+  });
+
+  it('meets nothing while he cuts or charges a cut', () => {
+    expect(volley(20, ROLE.NINJA, WEST, { swing: 5, cut: CUT.SLASH }).parried).toBe(0);
+    expect(volley(20, ROLE.NINJA, WEST, { charge: 10 }).parried).toBe(0);
+  });
+
   it('puts the ball he sends back in the snapshot as his', () => {
     const m = match();
     m.room.receive(m.bob, JSON.stringify({ t: 'body', body: 0, role: ROLE.NINJA }));

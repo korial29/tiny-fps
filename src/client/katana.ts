@@ -318,6 +318,24 @@ export const locked = (t: number, push = 0): number[] => [
   LOCK[2] + 0.06 * push,
   ...LOCK.slice(3),
 ];
+/**
+ * The parry (the user, 2026-11-16): the hands snap up before the right of the chest and the blade
+ * sweeps across the body toward the upper left, its edge to the shot, like GUARD.
+ */
+export const DEFLECT = [0.14, -0.2, 0.46, -0.62, 0.72, 0.3];
+/** Seconds of a parry: to the block in PARRY_IN, eased back to the hold by PARRY_OUT. */
+export const [PARRY_IN, PARRY_OUT] = [0.06, 0.38];
+/** How far into DEFLECT a hold is `s` seconds after the blade met a ball (it peaks at PARRY_IN): 0 to 1 and back to 0. */
+export const parrying = (s: number) => {
+  const v = clamp(s < PARRY_IN ? s / PARRY_IN : (PARRY_OUT - s) / (PARRY_OUT - PARRY_IN));
+  return v * v * (3 - 2 * v);
+};
+/** The grip and blade `k` (as stroke() gives them) taken `e` of the way to DEFLECT, the blade a unit again: a new array. */
+export const deflect = (k: number[], e: number): number[] => {
+  const g = k.map((v, i) => v + (DEFLECT[i] - v) * e);
+  const n = Math.hypot(g[3], g[4], g[5]) || 1;
+  return [g[0], g[1], g[2], g[3] / n, g[4] / n, g[5] / n];
+};
 /** The share of cut `c`'s swing at which it strikes. */
 const strikeAt = (c: number) => CUTS[c].strike / CUTS[c].ticks;
 /** The middle of the shoulders in the keys' space, which turns with the chest. */

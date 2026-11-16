@@ -84,7 +84,10 @@ import {
   cutting,
   ends,
   held as sword,
+  PARRY_IN,
+  deflect,
   locked,
+  parrying,
   poised,
   progress,
 } from './katana';
@@ -145,6 +148,8 @@ export interface Runner {
   focus: Vec3;
   /** How far through its katana cut it is, -1 when it is not cutting, the light the blade leaves and the clock of its crackle. */
   prog: number;
+  /** Seconds since his katana struck a ball back (DEFLECT, katana.ts), from below 0 when it is yet to be drawn. */
+  parry: number;
   trail: Trail;
   t: number;
   /** The limb a katana's cut took off, while he is down (see limbs.ts). */
@@ -250,6 +255,7 @@ export const createRunner = (
     aim: 0,
     focus: far(p),
     prog: -1,
+    parry: Infinity,
     trail: createTrail(),
     t: 0,
     hurt: 0,
@@ -364,6 +370,7 @@ export const animate = (
       r.aim = r.since == 0 ? 1 : r.aim + (+(r.since < AIMING) - r.aim) * (1 - Math.exp(-dt * 12));
       r.focus = r.since < AIMING ? (world ? focus(p, world)[0] : far(p)) : r.focus;
       r.prog = progress(r.prog, p, dt);
+      r.parry += dt;
       // Put down by the bolt: a burst of sparks, then more as he comes apart.
       const k = fried(p);
       if (k > 0 && k < 1) {
@@ -564,11 +571,22 @@ const CARRY = [-0.02, -0.5, 0.26, 0, 0.45, 0.89];
  * seen from the runner's eye (the share `e` of it, so that it is drawn from the guard and back to
  * it), and the trunk twisting, bending and leaning through it (trunk()).
  */
-export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number, t = 0): Pose => {
+export const brandish = (
+  from: Pose,
+  p: PlayerState,
+  prog: number,
+  ph: number,
+  t = 0,
+  parry = Infinity,
+): Pose => {
   // In a saber lock the blade crosses the foe's, shaking, and the trunk leans into him.
   const e = p.lock ? 1 : prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
   const k = p.lock ? locked(t) : poised(p, Math.max(prog, 0), t);
-  const g = CARRY.map((v, i) => v + (k[i] - v) * e);
+  // A parry snaps the blade across from whatever hold it is in.
+  const g = deflect(
+    CARRY.map((v, i) => v + (k[i] - v) * e),
+    parrying(parry),
+  );
   g[1] += 0.02 * Math.sin(TAU * ph) * (1 - e);
   // A cut turns the whole body on its feet with a share of the trunk's twist.
   const [tw, bd, ln] = p.lock ? [0, 0.15, 0] : prog < 0 ? [0, 0, 0] : bent(p, prog).map(v => v * e);
@@ -870,7 +888,7 @@ export const stance = (r: Runner) => {
   }
   let s = solve(pose);
   if (p.wield && !lying) {
-    pose = brandish(pose, p, r.prog, r.gait.phase, r.t);
+    pose = brandish(pose, p, r.prog, r.gait.phase, r.t, r.parry);
     s = solve(pose);
   } else if ((p.railed || p.rifled) && !lying) {
     // The rail gun or the rifle in both hands, at the ready when not firing: the left on its front grip, the
@@ -1286,7 +1304,10 @@ export const soldier = (
   }
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t, 1, 1, 0, gpu);
-    r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));
+    r.trail.mark(
+      ...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]),
+      cutting(r.prog) || (r.parry >= 0 && r.parry < 2 * PARRY_IN),
+    );
   } else if ((p.railed ? !stowed(p) : p.ammo >= 0 || p.rifled) && !p.down && !driving(r)) {
     // A swap shows: the battery or the capsule out and in, the glow off until it is.
     const sp = swapOf(p);

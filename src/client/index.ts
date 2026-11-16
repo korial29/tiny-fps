@@ -1,6 +1,7 @@
 import {
   BOLT,
   HP_MAX,
+  INTERP_DELAY,
   NADE,
   LOCK_WIN,
   PLAYER_H,
@@ -376,6 +377,10 @@ const play = (
           if (p?.wield && p.mode !== MODE.RIDE && !b.arc && b.power !== NADE) {
             audio.play(SOUND.SHING, at, 0.8, 1.6);
             audio.play(SOUND.ZAP, at, 0.4, 1.3);
+            rd?.parried(b.by, at ? INTERP_DELAY / 1000 : 0);
+            if (!at) {
+              body.parried();
+            }
           } else if (b.power === BOLT) {
             audio.play(SOUND.BLASTER, [b.x, b.y, b.z], 0.6, 0.92 + 0.16 * ((b.id * 0.618) % 1));
           }

@@ -30,6 +30,8 @@ import {
   NADE,
   RIFLE_CLIP,
   RIFLE_RANGE,
+  PARRY_SIDE,
+  PARRY_WIDE,
   RIFLE_HITS,
   RULES,
   SHOCK_KNOCK,
@@ -959,13 +961,17 @@ export class Room {
 
   /**
    * The katana of `p` met the ball `b`: it ends on the blade (its burst, no hit), and one as strong
-   * leaves his eye along his look, his own and his team's, its range full again. Its id runs on from
-   * his `shots` by 64 plus his parries: the sum only grows, so it names no ball of his still in flight.
+   * leaves his eye along his look, or PARRY_WIDE of the time PARRY_SIDE off it to one side, his own
+   * and his team's, its range full again. Its id runs on from his `shots` by 64 plus his parries: the
+   * sum only grows, so it names no ball of his still in flight.
    */
   private deflect(p: Player, b: Flying): void {
     p.parries = ((p.parries ?? 0) + 1) & 255;
+    const r = roll(this.ticks, b.by, b.id, p.info.id, p.parries);
+    const yaw =
+      p.state.yaw + (r < PARRY_WIDE ? (r < PARRY_WIDE / 2 ? -PARRY_SIDE : PARRY_SIDE) : 0);
     this.shoot(p, this.ticks, {
-      ...launch({ ...p.state, rifled: false }, p.info.team),
+      ...launch({ ...p.state, yaw, rifled: false }, p.info.team),
       id: (p.state.shots + 64 + p.parries) & 255,
       power: b.power ?? 1,
       left: b.power === 0 ? RIFLE_RANGE : GUN_RANGE,

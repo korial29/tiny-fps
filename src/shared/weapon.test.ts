@@ -54,6 +54,8 @@ import {
   NADE_HP,
   NADE_R,
   PARRY,
+  PARRY_SIDE,
+  PARRY_WIDE,
 } from './constants';
 import {
   BLOW,
@@ -73,6 +75,7 @@ import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
 import { STILL, floored, spawn, speedOf } from './physics';
 import { PLASMA_LAG, PLASMA_STEP, launch } from './plasma';
+import type { Flying } from './plasma';
 import { CUT, FALL, FLAG, KEY, LIMB, MODE, TEAM, TEX } from './types';
 import { felled } from './gun';
 import type { Conn, PlayerState, Rules, Snapshot } from './types';
@@ -2711,12 +2714,44 @@ describe('the ninja’s parry', () => {
 
   it('sends a parried ball along his look, his own, at the full strength of the shot', () => {
     const { m, parried, back } = volley(20, ROLE.NINJA);
-    expect(parried).toBeGreaterThan(0);
-    // Every ball he sent back came down the line to Cy and took 1 hp, not the half of his guns.
-    expect(back).toBe(parried);
-    expect(m.state(m.bob).hits).toBe(parried);
+    expect(back).toBeGreaterThan(0);
+    // A ball he sent back down the line to Cy took 1 hp, not the half of his guns; the others went wide.
+    expect(back).toBeLessThanOrEqual(parried);
+    expect(m.state(m.bob).hits).toBe(back);
     // The shooter counts the hits that landed, not the ones the blade met.
     expect(m.state(m.cy).hits).toBe(20 - parried);
+  });
+
+  it('sends about PARRY_WIDE of the balls it meets off to a side, as often left as right', () => {
+    const m = match();
+    m.room.receive(m.bob, JSON.stringify({ t: 'body', body: 0, role: ROLE.NINJA }));
+    const turns: number[] = [];
+    for (let k = 0; k < 200; k++) {
+      m.put(m.cy, 0, 0, { ...GUN, shots: m.state(m.cy).shots });
+      m.put(m.bob, 10, 0, { ...SWORD, wield: true, yaw: WEST, shots: m.state(m.bob).shots });
+      m.ticks(SNAP_EVERY);
+      m.tap(m.cy);
+      for (let t = 0; t < 40; t++) {
+        m.room.tick();
+        const b = (m.room['balls'] as Flying[]).find(f => f.by === 1 && f.back);
+        if (b) {
+          // Bob faces west (-x): how far the ball's way turns from his look, left positive.
+          turns.push(Math.atan2(-b.dz, -b.dx));
+          break;
+        }
+      }
+      m.land();
+    }
+    const wide = turns.filter(t => Math.abs(t) > 1e-3);
+    expect(turns.length).toBeGreaterThan(100);
+    expect(wide.length / turns.length).toBeGreaterThan(PARRY_WIDE - 0.1);
+    expect(wide.length / turns.length).toBeLessThan(PARRY_WIDE + 0.1);
+    for (const t of wide) {
+      expect(Math.abs(t)).toBeCloseTo(PARRY_SIDE, 5);
+    }
+    const left = wide.filter(t => t > 0).length;
+    expect(left).toBeGreaterThan(wide.length * 0.25);
+    expect(left).toBeLessThan(wide.length * 0.75);
   });
 
   it('meets nothing from behind, without the katana in hand, or as a marine', () => {

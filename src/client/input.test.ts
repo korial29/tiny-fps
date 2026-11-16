@@ -363,6 +363,7 @@ describe('createInput', () => {
       ['KeyW', KEY.FORWARD],
       ['KeyA', KEY.LEFT],
       ['KeyD', KEY.RIGHT],
+      ['KeyS', KEY.BACK],
     ])(
       'of %s as the xenomorph is a full pounce that way: DASH held POUNCE_HOLD steps, then that key alone',
       (code, bit) => {
@@ -378,16 +379,6 @@ describe('createInput', () => {
         expect(ctl.take()).toBe(0);
       },
     );
-
-    it('of S as the xenomorph is the one step of DASH it always was', () => {
-      make();
-      lock(true);
-      ctl.beast = true;
-      tap('KeyS');
-      tap('KeyS', 50);
-      expect(ctl.take()).toBe(KEY.DASH | KEY.BACK);
-      expect(ctl.take()).toBe(0);
-    });
 
     it('is not on E, nor on the right button, nor on a double tap of another key', () => {
       make();

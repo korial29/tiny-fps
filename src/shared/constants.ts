@@ -269,16 +269,17 @@ export const TAIL_LEAP = 10;
 export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];
 /**
  * The xenomorph (the user, 2026-11-15; kit.ts). XENO_HP health. It clings to a wall it faces with
- * forward and the sprint held (MODE.CLING, physics.ts; the sprint since the user, 2026-11-16): CLING_SPEED m/s up, down or along it while the wall rises
- * CLING_HOLD m over its feet; a jump kicks it off along the look at CLING_LEAP m/s. DASH held on a
- * floor or a wall charges a pounce for up to POUNCE_HOLD ticks (PlayerState.charge); let go, it
- * leaps POUNCE_MIN to POUNCE_MAX m/s toward the keys held (the look with none), at least POUNCE_PITCH up, and the dash timer
- * runs from POUNCE_COOL: the first POUNCE_FLY ticks of it in the air, an enemy it reaches is
- * pinned (room.ts): POUNCE_HP health, his flag dropped, a stumble of POUNCE_STUN ticks. An enemy
- * whose katana or fists hit it loses ACID_HP.
+ * forward and the sprint held (MODE.CLING, physics.ts; the sprint since the user, 2026-11-16):
+ * CLING_SPEED m/s up, down or along it (faster than a man runs, the user 2026-11-16: it was slow)
+ * while the wall rises CLING_HOLD m over its feet; a jump kicks it off along the look at CLING_LEAP
+ * m/s. DASH held on a floor or a wall charges a pounce for up to POUNCE_HOLD ticks
+ * (PlayerState.charge); let go, it leaps POUNCE_MIN to POUNCE_MAX m/s toward the keys held (the
+ * look with none), at least POUNCE_PITCH up, and the dash timer runs from POUNCE_COOL: the first
+ * POUNCE_FLY ticks of it in the air, an enemy it reaches is pinned (room.ts): POUNCE_HP health, his
+ * flag dropped, a stumble of POUNCE_STUN ticks. An enemy whose katana or fists hit it loses ACID_HP.
  */
 export const XENO_HP = 12;
-export const CLING_SPEED = 4.5;
+export const CLING_SPEED = 8;
 export const CLING_FACING = 0.6;
 export const CLING_HOLD = 0.4;
 export const CLING_LEAP = 10;
@@ -286,6 +287,17 @@ export const POUNCE_HOLD = 36;
 export const [POUNCE_MIN, POUNCE_MAX, POUNCE_PITCH] = [9, 17, 0.3];
 export const [POUNCE_COOL, POUNCE_FLY] = [48, 40];
 export const [POUNCE_HP, POUNCE_STUN] = [2, 60];
+/**
+ * The glory kill (the user, 2026-11-16, after DOOM 2016): an enemy with GLORY_HP health or less, up,
+ * flashes in the xenomorph's vision and to one with the katana in hand, who beheads him on E; E (KEY.USE) within GLORY_REACH metres of him and GLORY_ARC
+ * radians of its look locks the two (`lock`, `foe`, as a saber lock) for GLORY_TICKS, where neither
+ * moves, then it eats his head: he goes down through his armour (LIMB.EATEN), a frag of FRAG.GLORY.
+ */
+export const [GLORY_HP, GLORY_REACH, GLORY_ARC, GLORY_TICKS] = [3, 2.5, 1, 54];
+/** The katana's glory kill (room.ts feast()): the speed it throws the beheaded body back at. */
+export const GLORY_PUSH = 7;
+/** How much faster than a man the xenomorph runs (the user, 2026-11-16: a little, not twice). */
+export const XENO_PACE = 1.25;
 export const ACID_HP = 1;
 /** Shots the rack loads. */
 export const AMMO_MAX = 60;

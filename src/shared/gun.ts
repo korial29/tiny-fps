@@ -385,7 +385,8 @@ const duel = (p: PlayerState, i: Input): Strike => {
   p.pressed = fire;
   p.away = i.keys & (KEY.LEFT | KEY.RIGHT | KEY.BACK) ? Math.min((p.away ?? 0) + 1, LOCK_BREAK) : 0;
   p.lock = Math.max(1, p.lock! - 1);
-  [p.wield, p.swing, p.charge] = [true, 0, 0];
+  // The katana stays in hand: a glory kill's two (room.ts) hold none.
+  [p.wield, p.swing, p.charge] = [!!p.blade, 0, 0];
   return STRIKE.NONE;
 };
 

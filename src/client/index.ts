@@ -12,11 +12,12 @@ import {
 import { mapKey, mapOf } from '../shared/maps';
 import { bruise, eyeHeight, heightOf } from '../shared/physics';
 import { cylinder } from '../shared/plasma';
-import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
+import { FRAG, decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ClientText, ServerText } from '../shared/protocol';
 import { EV, FLAG, KEY, MODE } from '../shared/types';
 import type { Choice, PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
 import { ROLE, buildOf, kitOf, roleOf, rolesOf } from '../shared/kit';
+import { glory } from '../shared/tackle';
 import { TONES, toneOf } from './features';
 import { styleOf } from './hair';
 import { shaved } from './skin';
@@ -506,10 +507,25 @@ const play = (
         roster.find(p => p.id == id)?.team ?? 0,
       ];
       hud.feed(who(m.by), who(m.who));
+      // A glory kill: heard where the victim lies (the user, 2026-11-16).
+      if (m.how == FRAG.GLORY) {
+        const v = match?.players.find(q => q.id == m.who);
+        const at: [number, number, number] | undefined =
+          v && m.who != you.id ? [v.x, v.y + 1.6, v.z] : undefined;
+        // The xenomorph's bite, or the katana's stroke through the neck.
+        audio.play(beast(m.by) ? SOUND.TACKLE : SOUND.SHING, at, 1, 0.6);
+        audio.play(beast(m.by) ? SOUND.XENO_PAIN : SOUND.ZAP, at, 0.7, 0.5);
+        if (m.by == you.id) {
+          fx.punch();
+        }
+      }
       if (m.by == you.id) {
         hud.frags(m.n);
         const line = announcer.frag(m, you, performance.now() / 1000);
-        hud.fragged(`${who(m.who)[0]} killed!`, line === undefined ? '' : SAID[line]);
+        hud.fragged(
+          m.how == FRAG.GLORY ? `${who(m.who)[0]}: glory kill!` : `${who(m.who)[0]} killed!`,
+          line === undefined ? '' : SAID[line],
+        );
         if (line !== undefined) {
           audio.say(line);
         }
@@ -644,8 +660,24 @@ const play = (
     const carrying = !!match?.flags.some(f => f.state === FLAG.CARRIED && f.by == you.id);
     const car = driving ? rovers[wheel] : undefined;
     ctl.pilot = !!car?.ship;
+    rd?.edge(!!me?.wield && !me.down);
+    // E on a foe weak enough, close and ahead: the host tries the glory kill before a seat.
+    const team = (id: number) => roster.find(p => p.id == id)?.team;
+    const prey =
+      me && (ctl.beast || me.wield) && !seat && !me.lock
+        ? glory(
+            me,
+            others.filter(p => team(p.id) !== you.team),
+          )
+        : undefined;
     hud.rover(
-      seat ? (now - since < OUT_HINT * 1000 ? 'get out' : '') : boarding(me, rovers, carrying),
+      prey
+        ? 'glory kill'
+        : seat
+          ? now - since < OUT_HINT * 1000
+            ? 'get out'
+            : ''
+          : boarding(me, rovers, carrying),
       car ? kmh(car) : undefined,
     );
     const [up, out] = car?.ship ? limits(car, world) : [0, 0];
@@ -690,7 +722,8 @@ const play = (
     felt = me && { ...me };
     prior = new Map(others.map(p => [p.id, p]));
     // A saber lock: the gauge of the tug of war, the own presses against the foe's.
-    const foe = me?.lock ? who(me.foe ?? -1) : undefined;
+    // Not a glory kill's: nobody pushes there.
+    const foe = me?.lock && me.wield ? who(me.foe ?? -1) : undefined;
     hud.duel(foe ? ((me!.pushes ?? 0) - (foe.pushes ?? 0)) / LOCK_WIN : undefined);
     body.update(me, dt, fx.kick, canvas.clientWidth / (canvas.clientHeight || 1));
     // The steps sound as the drawn feet land: the own body's now, the others' as last drawn.

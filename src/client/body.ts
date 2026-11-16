@@ -11,6 +11,7 @@ import {
   CHARGE_TICKS,
   DASH_COOLDOWN,
   DASH_TICKS,
+  GLORY_TICKS,
   GRAB_GAP,
   PLAYER_R,
   STEP_H,
@@ -1184,6 +1185,17 @@ const RATES = {
   stun: 14,
   gun: 10,
   blade: 10,
+  feast: 12,
+};
+
+/**
+ * The bite of a glory kill (the user, 2026-11-16, after DOOM 2016) at `lock` ticks left of its
+ * GLORY_TICKS: the head drawn back over the first two thirds as the claws hold the prey, then
+ * driven down into him; the neck's turn for menace().
+ */
+export const devour = (lock: number): number => {
+  const u = 1 - lock / GLORY_TICKS;
+  return u < 0.68 ? -0.45 * Math.min(u / 0.4, 1) : -0.45 + 1.15 * Math.min((u - 0.68) / 0.12, 1);
 };
 
 export const createBody = (world?: World): Body => {
@@ -1208,6 +1220,7 @@ export const createBody = (world?: World): Body => {
     stun: 0,
     gun: 0,
     blade: 0,
+    feast: 0,
   };
   /** The kick of the last shot, 0 to 1, and how much of the right hand's pose the gun and the katana take, as of the last pose(). */
   let [kick, hold, grasp, wide] = [0, 0, 0, 1.6];
@@ -1285,6 +1298,8 @@ export const createBody = (world?: World): Body => {
       // other swinging with the stride.
       gun: +(!p.down && !p.wield && (p.ammo >= 0 || !!p.rifled || (!!p.railed && !stowed(p)))),
       blade: +(!!p.wield && !p.down),
+      // A glory kill's hold (room.ts feast()): the xenomorph's, with no blade in it.
+      feast: +(xeno && !!p.lock && !p.down),
     };
     for (const n of Object.keys(RATES) as (keyof typeof RATES)[]) {
       w[n] += (to[n] - w[n]) * (1 - Math.exp(-dt * RATES[n]));
@@ -1540,6 +1555,9 @@ export const createBody = (world?: World): Body => {
             : [0.02, -0.13, 0.66];
       h = mix(h, strikes ? fist : [0.26, -0.36, 0.26], jab);
       h = mix(h, [0.46, 0.05 + 0.2 * flail, 0.4 + 0.1 * flail], w.stun);
+      // A glory kill: both claws up in the view holding the prey, torn apart as the bite goes in.
+      const bite = me?.lock ? Math.max(devour(me.lock), 0) : 0;
+      h = mix(h, [0.17 + 0.16 * bite, -0.02 - 0.1 * bite, 0.46 - 0.06 * bite], w.feast);
       if (grip) {
         // On the ledge's lip, a hand-width apart along the wall, the right hand on the right.
         let [tx, tz] = [-grip.dz, grip.dx];
@@ -1578,6 +1596,7 @@ export const createBody = (world?: World): Body => {
         [0.1, w.slide],
         [0.1, w.plant],
         [0.2, w.stun],
+        [0.5, w.feast],
       ]) {
         curl += (open - curl) * t;
       }

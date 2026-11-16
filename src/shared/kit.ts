@@ -18,6 +18,7 @@ import {
   WALLRUN_TICKS,
   PARRY,
   XENO_HP,
+  XENO_PACE,
 } from './constants';
 import type { WorldDef } from './world';
 
@@ -121,16 +122,17 @@ const NINJA: Kit = {
 
 /**
  * No weapon, no armour, more health; it climbs any wall and pounces, so it needs no wall-run of its
- * own. Twice as fast as a man on the ground, getting there as quickly, and its jumps twice as high
- * (the user, 2026-11-16): a jump's height goes as the square of its speed.
+ * own. XENO_PACE as fast as a man on the ground, a little only, or no one could fight it (the user,
+ * 2026-11-16), getting there as quickly, and its jumps twice as high: a jump's height goes as the
+ * square of its speed.
  */
 const XENO: Kit = {
   ...MARINE,
-  run: RUN_SPEED * 2,
-  sprint: SPRINT_SPEED * 2,
+  run: RUN_SPEED * XENO_PACE,
+  sprint: SPRINT_SPEED * XENO_PACE,
   jump: JUMP_SPEED * Math.SQRT2,
   double: DOUBLE_JUMP_SPEED * Math.SQRT2,
-  accel: 2,
+  accel: XENO_PACE,
   ammo: 0,
   rail: 0,
   rifle: 0,

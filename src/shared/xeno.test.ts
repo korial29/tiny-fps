@@ -5,6 +5,11 @@ import {
   BLOW,
   CLING_SPEED,
   CUTS,
+  GLORY_HP,
+  GLORY_PUSH,
+  GLORY_REACH,
+  GLORY_TICKS,
+  RUN_SPEED,
   STING,
   TAILS,
   TAIL_LEAP,
@@ -18,6 +23,7 @@ import {
   POUNCE_PITCH,
   POUNCE_STUN,
   XENO_HP,
+  XENO_PACE,
 } from './constants';
 import { swingOf } from './blade';
 import { STRIKE, step } from './gun';
@@ -27,8 +33,8 @@ import { STILL, move } from './physics';
 import { FRAG, decodeSnapshot, encodeSnapshot } from './protocol';
 import { Room } from './room';
 import { pouncing } from './tackle';
-import { KEY, MODE, TEX } from './types';
-import type { Conn, PlayerState } from './types';
+import { KEY, LIMB, MODE, TEX } from './types';
+import type { Conn, Input, PlayerState } from './types';
 import { build } from './world';
 import type { Brush } from './world';
 
@@ -73,7 +79,7 @@ const hit = (p: PlayerState, keys: number, yaw = 0) =>
   step(p, { seq: 0, keys, yaw, pitch: 0 }, pit, 0, true, [], XENO);
 
 describe('its speed and its jumps', () => {
-  it('runs twice as fast as a man, gets there as fast, and jumps twice as high', () => {
+  it('runs a little faster than a man, gets there as fast, and jumps twice as high', () => {
     const top = (kit: typeof XENO, keys: number) => {
       const p = at(-20, 0, { z: 50, yaw: 0 });
       let t = 0;
@@ -84,10 +90,12 @@ describe('its speed and its jumps', () => {
       return [-p.vz, t];
     };
     const [[xr, xt], [mr, mt]] = [top(XENO, KEY.FORWARD), top(MARINE, KEY.FORWARD)];
-    expect(xr).toBeCloseTo(2 * mr, 4);
+    expect(xr).toBeCloseTo(XENO_PACE * mr, 4);
     expect(xt).toBe(mt);
     const [[xs, xst], [ms, mst]] = [top(XENO, RUN), top(MARINE, RUN)];
-    expect(xs).toBeCloseTo(2 * ms, 4);
+    expect(xs).toBeCloseTo(XENO_PACE * ms, 4);
+    // A little only (the user, 2026-11-16): twice a man's speed left no one a chance.
+    expect(XENO_PACE).toBeLessThan(1.5);
     expect(xst).toBe(mst);
     const peak = (kit: typeof XENO) => {
       const p = at(-20, 0, { z: 50 });
@@ -163,6 +171,8 @@ describe('the xenomorph on a wall', () => {
     expect(p.y).toBe(y);
     go(p, KEY.BACK);
     expect(p.y).toBeCloseTo(y - CLING_SPEED / 60, 4);
+    // Faster on a wall than a man runs (the user, 2026-11-16: it crawled).
+    expect(CLING_SPEED).toBeGreaterThan(RUN_SPEED);
     // Facing +x, the right is +z; looking away from the wall, the right is -z.
     const z = p.z;
     go(p, KEY.RIGHT);
@@ -370,13 +380,14 @@ describe('the claws and the tail', () => {
 });
 
 describe('the xenomorph in a room', () => {
-  type Pl = { info: { name: string; id: number; team: number }; state: PlayerState };
+  type Pl = { info: { name: string; id: number; team: number }; state: PlayerState; bank?: number };
   type Inner = {
     players(): Pl[];
     punch(p: Pl, view?: number): void;
     cut(p: Pl, view?: number): void;
     tackle(p: Pl, view?: number): void;
     heal(players: Pl[]): void;
+    apply(p: Pl, input: Input): void;
   };
   const room = (...roles: number[]) => {
     const r = new Room({}, ROOFTOPS);
@@ -476,6 +487,108 @@ describe('the xenomorph in a room', () => {
     // Once: the pounce is spent.
     inner.tackle(x);
     expect(m.state.hp).toBe(HP_MAX - POUNCE_HP);
+  });
+
+  it('glory kills on E a weak foe it faces, close: both held GLORY_TICKS, then his head eaten', () => {
+    const { inner, ps, sent } = room(ROLE.XENO, ROLE.MARINE);
+    const [x, m] = ps;
+    face(x.state, m.state);
+    let seq = 0;
+    const go = (p: Pl, keys: number, yaw: number) => {
+      p.bank = 99;
+      inner.apply(p, { seq: ++seq & 65535, keys, yaw, pitch: 0 });
+    };
+    const e = (yaw: number) => {
+      go(x, KEY.USE, yaw);
+      const held = x.state.lock ?? 0;
+      go(x, 0, yaw);
+      return held;
+    };
+    // Too healthy for it, then out of its look, then too far: nothing.
+    m.state.hp = GLORY_HP + 1;
+    expect(e(0)).toBe(0);
+    Object.assign(m.state, { hp: GLORY_HP, armor: ARMOR_MAX });
+    expect(e(Math.PI)).toBe(0);
+    m.state.z = 51 - GLORY_REACH - 0.3;
+    expect(e(0)).toBe(0);
+    // Two metres off, ahead: held, and brought in to a metre of him.
+    m.state.z = 49;
+    go(x, KEY.USE, 0);
+    expect([x.state.lock, x.state.foe, m.state.lock, m.state.foe]).toEqual([
+      GLORY_TICKS,
+      m.info.id,
+      GLORY_TICKS,
+      x.info.id,
+    ]);
+    expect(x.state.z).toBeCloseTo(50, 4);
+    const [mx, mz] = [m.state.x, m.state.z];
+    for (let k = 0; k < GLORY_TICKS - 2; k++) {
+      go(x, KEY.FORWARD | KEY.SPRINT, 0);
+      go(m, KEY.BACK | KEY.SPRINT, Math.PI);
+    }
+    // Neither moves, and he cannot get away.
+    expect([m.state.x, m.state.z, m.state.down]).toEqual([mx, mz, 0]);
+    expect(m.state.lock).toBeGreaterThan(0);
+    for (let k = 0; k < 2; k++) {
+      go(x, 0, 0);
+    }
+    expect(m.state.down).toBeGreaterThan(0);
+    expect([m.state.lost, x.state.lock, m.state.lock]).toEqual([LIMB.EATEN, 0, 0]);
+    const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
+    expect(frag).toMatchObject({ by: x.info.id, who: m.info.id, how: FRAG.GLORY });
+  });
+
+  it('beheads on E a weak foe ahead with the katana in hand, the body thrown back, no lock', () => {
+    const { inner, ps, sent } = room(ROLE.MARINE, ROLE.MARINE);
+    const [k, m] = ps;
+    face(k.state, m.state);
+    k.bank = 99;
+    const e = () => {
+      inner.apply(k, { seq: 1, keys: KEY.USE | KEY.BLADE, yaw: 0, pitch: 0 });
+      inner.apply(k, { seq: 2, keys: KEY.BLADE, yaw: 0, pitch: 0 });
+    };
+    m.state.hp = GLORY_HP;
+    // Empty-handed: nothing.
+    e();
+    expect(m.state.down).toBe(0);
+    Object.assign(k.state, { blade: true });
+    m.state.hp = GLORY_HP + 1;
+    e();
+    expect(m.state.down).toBe(0);
+    m.state.hp = GLORY_HP;
+    inner.apply(k, { seq: 3, keys: KEY.USE | KEY.BLADE, yaw: 0, pitch: 0 });
+    expect(m.state.down).toBeGreaterThan(0);
+    expect([m.state.lost, m.state.lock ?? 0, k.state.lock ?? 0]).toEqual([LIMB.HEAD, 0, 0]);
+    // Thrown back, away from him (he looks toward -z).
+    expect(m.state.vz).toBeLessThan(-GLORY_PUSH + 0.5);
+    expect(k.state.swing).toBeGreaterThan(0);
+    const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
+    expect(frag).toMatchObject({ by: k.info.id, who: m.info.id, how: FRAG.GLORY });
+  });
+
+  it('ends a glory kill when the xenomorph goes down, the prey free; a pounce on a weak foe only pins', () => {
+    const { inner, ps } = room(ROLE.XENO, ROLE.MARINE);
+    const [x, m] = ps;
+    face(x.state, m.state);
+    m.state.hp = GLORY_HP;
+    x.bank = m.bank = 99;
+    inner.apply(x, { seq: 1, keys: KEY.USE, yaw: 0, pitch: 0 });
+    expect(m.state.lock).toBe(GLORY_TICKS);
+    x.state.down = 100;
+    inner.apply(m, { seq: 1, keys: 0, yaw: Math.PI, pitch: 0 });
+    expect([m.state.lock, m.state.down, m.state.hp]).toEqual([0, 0, GLORY_HP]);
+    // The pounce.
+    const two = room(ROLE.XENO, ROLE.MARINE);
+    const [y, n] = two.ps;
+    face(y.state, n.state);
+    n.state.hp = GLORY_HP;
+    Object.assign(y.state, { mode: MODE.AIR, dash: POUNCE_COOL, vx: 0, vz: -12 });
+    two.inner.tackle(y);
+    expect([n.state.hp, n.state.down, n.state.stun]).toEqual([
+      GLORY_HP - POUNCE_HP,
+      0,
+      POUNCE_STUN,
+    ]);
   });
 
   it('wears no armour and heals up to its own health', () => {

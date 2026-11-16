@@ -16,6 +16,7 @@ import {
   RAKE,
   arc,
   clasp,
+  devour,
   hands,
   inv,
   reach,
@@ -124,6 +125,8 @@ import type { Out } from './verts';
 
 /** How fast the dash streaks grow and fade, 1 / s. */
 const DASH_RATE = 14;
+/** The neck a xenomorph bit the head off (LIMB.EATEN): raw, dark red where a katana's cut glows. */
+const RAW = [0.32, 0.02, 0.02];
 
 /** A point 30 m along the look of `p`, for a runner that has not shot yet. */
 const far = (p: PlayerState): Vec3 => {
@@ -815,11 +818,12 @@ const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose =>
  * bent lower over the prowl, the head pushed forward at the camera, the arms raised forward, the
  * elbows bent so the claws open ahead of the chest.
  */
-const menace = (pose: Pose): Pose => {
+const menace = (pose: Pose, bite = 0): Pose => {
   const X: Vec3 = [1, 0, 0];
   const rot = pose.rot.slice();
-  // The spine, the chest, the neck and the head, joints in a row.
-  [-0.12, -0.1, 0.18, 0.08].forEach(
+  // The spine, the chest, the neck and the head, joints in a row; a glory kill's bite (devour())
+  // draws the neck and the head back, then drives them down into the prey.
+  [-0.12, -0.1 - 0.3 * Math.abs(bite), 0.18 + bite, 0.08 + 0.6 * bite].forEach(
     (v, i) => (rot[J.SPINE + i] = mul(rot[J.SPINE + i], axis(X, v))),
   );
   // About x alone, in the parent's frame: the two arms' frames are mirrored, so a turn about
@@ -884,8 +888,8 @@ export const stance = (r: Runner) => {
     if (!fours) {
       pose = prowl(pose, solve(pose), p);
     }
-    if (r.menace) {
-      pose = menace(pose);
+    if (r.menace || p.lock) {
+      pose = menace(pose, p.lock ? devour(p.lock) : 0);
     }
     pose = r.fours?.apply(pose) ?? pose;
   }
@@ -1105,6 +1109,9 @@ export const soldier = (
   const blade = p.wield && !p.down && !driving(r);
   if (r.cut && !xeno) {
     const cs = cut(lod, r.cut.limb, build)[0];
+    if (r.cut.eaten) {
+      colors[REGION.CAP] = RAW;
+    }
     const at = out.length;
     skin(out, cs, s, colors, r.face.w);
     // The stump's face is the last vertex drawn.
@@ -1117,7 +1124,9 @@ export const soldier = (
         buckle(o, a, q, build, color),
       );
     }
-    piece(out, r.cut, colors, lod, sink, r.face.w, armored);
+    if (!r.cut.eaten) {
+      piece(out, r.cut, colors, lod, sink, r.face.w, armored);
+    }
     gloves(out, r, s, colors, lod, armored, r.cut.limb, marine);
   } else {
     const from = out.length;

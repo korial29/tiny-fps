@@ -174,6 +174,20 @@ describe('a limb cut off', () => {
     expect(t.spit).not.toHaveBeenCalled();
   });
 
+  it('draws a head a xenomorph ate as the head cut off, with no piece, no sparks and a raw neck', () => {
+    const t = tracer();
+    const r = felled(LIMB.EATEN, 120, t).get(1)!;
+    expect([r.cut?.limb, r.cut?.eaten]).toEqual([LIMB.HEAD, true]);
+    expect([t.shock.mock.calls.length, t.spit.mock.calls.length]).toEqual([0, 0]);
+    const v = drawn(r);
+    expect(v.length / STRIDE).toBe(cut(1, LIMB.HEAD)[0].t.length + fingers(r.curls));
+    // Its face unlit but dark red, where a katana's cut glows orange.
+    const reds = (w: number[]) => w.filter((_, i) => i % STRIDE == 6 && w[i + 2] == -2);
+    expect(reds(v).length).toBeGreaterThan(10);
+    expect(Math.max(...reds(v))).toBeLessThan(0.5);
+    expect(Math.max(...reds(drawn(felled(LIMB.HEAD, 1).get(1)!)))).toBeGreaterThan(2);
+  });
+
   it('is forgotten when the runner is up again or leaves, and never made by a shot', () => {
     const book = felled(LIMB.HEAD, 30);
     animate(book, [man({ down: 0 })], DT);

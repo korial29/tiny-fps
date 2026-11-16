@@ -269,8 +269,8 @@ const RELIEF = 0.06;
 // head a brush hides (a negative Ve.w, hidden() on the CPU) glows as a soft orange column (xr) on
 // what hides him: the view ray through the pixel, on past it, passes within his cylinder. One in
 // sight gets none: it would be a box of light round him. A |Ve.w| past 100 is one weak enough for a
-// glory kill: his glow strobes blue-white (gl); with the katana in hand (Vn.x 0) only those are in
-// Ve, and they strobe the same, with no vision.
+// glory kill: a soft blue-white pulse goes over him (gl, 0 to 30 %, 1.4 Hz; the user, 2026-11-16: lightly); with the katana in hand (Vn.x 0) only those are in
+// Ve, and they pulse the same, with no vision.
 export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y,Ss;uniform int Q;
@@ -437,7 +437,7 @@ float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}
 c.g=mix(c.g,c.r,z);
 float gl=0.;for(int i=0;i<16;i++){if(float(i)>=Vn.y)break;vec2 dq=P.xz-Ve[i].xz;float hi=step(dot(dq,dq),.5)*step(Ve[i].y+.03,P.y)*step(P.y,Ve[i].y+mod(abs(Ve[i].w),100.));ht=max(ht,hi);gl=max(gl,hi*step(50.,abs(Ve[i].w)));}
 float xr=0.;if(Vn.x>0.){vec3 xd=P-E;float xa=max(dot(xd.xz,xd.xz),1e-4);for(int i=0;i<16;i++){if(float(i)>=Vn.y)break;if(Ve[i].w>0.)continue;float xs=max(dot(Ve[i].xz-E.xz,xd.xz)/xa,0.);vec3 xp=E+xd*xs;float xh=mod(-Ve[i].w,100.)*.5,xi=(1.-smoothstep(.12,.34,length(xp.xz-Ve[i].xz)))*(1.-smoothstep(.8,1.,abs(xp.y-Ve[i].y-xh)/xh));xr=max(xr,xi);gl=max(gl,xi*step(50.,-Ve[i].w));}}
-vec3 fc=F.rgb;if(Vn.x>0.){c=mix(xv(c),vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));fc=xv(fc);}c=mix(c,vec3(1.8,2.6,3.6),gl*step(0.,sin(T*22.)));
+vec3 fc=F.rgb;if(Vn.x>0.){c=mix(xv(c),vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));fc=xv(fc);}c=mix(c,vec3(.7,1.1,1.9),gl*(.15+.15*sin(T*9.)));
 o=vec4(mix(c,fc,1.-exp(-F.a*(1.-.6*Vn.x)*(1.-max(ht,xr))*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc)*ah);
 #ifdef MOON
 float pv=length(fwidth(V)),fa=Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E))*step(P.y,${ORBIT.SEAM}.),Ob.z*smoothstep(1.25,1.6,length((P.xz-Cb.xy)*Cb.zw)));

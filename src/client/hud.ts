@@ -114,7 +114,8 @@ const [RIM, BLUR] = (() => {
 export const HUD_CSS =
   `h5,aside,nav,var,output,section,em,u,sup,ul,dl,s,mark,ins,figure,del,menu,label,samp,cite,q,dfn,tt,h1,h2,ol{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
-  `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
+  // The red halo of a hit: a glow in from every edge over a dark red rim.
+  `u{inset:0;opacity:0;box-shadow:inset 0 0 16vmin 3vmin #e00c;background:radial-gradient(ellipse at center,#0000 55%,#a008 100%)}` +
   // The orbital strike's light: white from above, red hot round it, growing until the view is white.
   `sup{inset:0;z-index:1;opacity:0;--w:0%;background:radial-gradient(circle at 50% 0,#fff var(--w),#ffd2bc calc(var(--w) + 30%),#ff3c1e00 calc(var(--w) + 80%))}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +

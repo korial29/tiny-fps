@@ -19,7 +19,7 @@ import { createAnnouncer } from './announce';
 import { TAUNT_LATE, createTaunts, speakerOf } from './taunt';
 import { LINE, SAID } from './voice/clips';
 import { createAudio, savedMute, toggleMute } from './audio';
-import { createBalls } from './balls';
+import { createBalls, onBody } from './balls';
 import { createTracer } from './beams';
 import { beats, cues, say } from './beats';
 import { createBody } from './body';
@@ -365,6 +365,16 @@ const play = (
         }
         bolts = flying;
         balls.snapshot(s.balls ?? [], you.id, performance.now());
+        // An enemy's ball, round or bolt that burst on the own body reddens the view at once, even
+        // when the host keeps its point for the next hit.
+        const self = s.players.find(p => p.id == you.id);
+        if (
+          self &&
+          !self.down &&
+          s.balls?.some(b => roster.find(q => q.id == b.by)?.team != you.team && onBody(b, self))
+        ) {
+          fx.hurt = 1;
+        }
         // A door that starts to open or to shut is heard where it is.
         for (const c of doors.snapshot(s.doors)) {
           audio.play(c.id, c.at, 0.9);

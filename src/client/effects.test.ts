@@ -579,6 +579,16 @@ describe('the fists', () => {
     expect(taken.pitch[1]).toBeGreaterThan(0.02);
     expect(taken.pitch[1]).toBeGreaterThan(given.pitch[1] * 3);
   });
+
+  it('reddens the view round its edge for a blow taken, every one, and not for one given', () => {
+    for (const b of [BLOW.JAB, BLOW.CROSS, BLOW.HOOK, BLOW.LUNGE]) {
+      const [given, taken] = [createEffects(), createEffects()];
+      given.blow(b);
+      taken.blow(b, true);
+      expect(given.hurt).toBe(0);
+      expect(taken.hurt).toBe(1);
+    }
+  });
 });
 
 describe('the rail gun’s bolt', () => {

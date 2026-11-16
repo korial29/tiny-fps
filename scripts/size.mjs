@@ -36,7 +36,8 @@ const BUDGETS = [
   { file: 'dist/index.js', max: 216 * 1024 + 256 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
-  { file: 'dist/local.js', max: 46 * 1024 },
+  // 46 KB until the ninja's parry (the user, 2026-11-16).
+  { file: 'dist/local.js', max: 47 * 1024 },
 ];
 
 // An entry plus every chunk it statically imports, concatenated.

@@ -26,8 +26,10 @@ import {
   RAIL_DRAIN,
   RAIL_TICKS,
   MISSILE_R,
+  GUN_RANGE,
   NADE,
   RIFLE_CLIP,
+  RIFLE_RANGE,
   RIFLE_HITS,
   RULES,
   SHOCK_KNOCK,
@@ -53,7 +55,7 @@ import {
   PUNCH_MEMORY,
   PUNCH_STUN,
 } from './constants';
-import { CHEST, crossing, knock, limbOf, strike, swingOf } from './blade';
+import { CHEST, crossing, fends, knock, limbOf, roll, strike, swingOf } from './blade';
 import { Bot } from './bot';
 import { Ctf } from './ctf';
 import { KITS, kitOf } from './kit';
@@ -122,6 +124,8 @@ interface Player {
   burn?: number;
   /** The laser rifle's hits on him toward the next hp: every RIFLE_HITS take one. */
   graze?: number;
+  /** The balls his katana sent back (deflect()), u8: they name the new ones. */
+  parries?: number;
   /** Half points of damage on him toward the next hp, a ninja's guns' (shot()); and who last railed him. */
   halves?: number;
   railer?: Player;
@@ -757,7 +761,7 @@ export class Room {
   /**
    * `hp` of a gun's damage to `foe` from `by`: as his class deals it (Kit.damage, a ninja's half), the
    * half points kept on `foe` toward the next, the hit going (dx, dz). True when he went down; `how`
-   * is the FRAG then.
+   * is the FRAG then. A ball sent back (`back`) hurts in full whoever sent it.
    */
   private shot(
     foe: Player,
@@ -766,8 +770,9 @@ export class Room {
     dx: number,
     dz: number,
     how: number = FRAG.GUN,
+    back = false,
   ): boolean {
-    const bank = (foe.halves ?? 0) + hp * 2 * (by ? kitOf(by.info.role, this.world.def).damage : 1);
+    const bank = (foe.halves ?? 0) + hp * 2 * (by && !back ? this.kit(by).damage : 1);
     foe.halves = bank % 2;
     return bank >= 2 && this.harm(foe, Math.floor(bank / 2), by, how, felled(FALL.SHOT, dx, dz));
   }
@@ -907,6 +912,10 @@ export class Room {
     if (!foe) {
       return;
     }
+    if (fends(foe.state, b) && roll(this.ticks, b.by, b.id, foe.info.id) < this.kit(foe).parry) {
+      this.deflect(foe, b);
+      return;
+    }
     if (by) {
       by.state.hits = (by.state.hits + 1) & 255;
     }
@@ -916,10 +925,10 @@ export class Room {
       // The laser rifle's: every RIFLE_HITS on him (from anyone, until he goes down) take 1 hp.
       foe.graze = ((foe.graze ?? 0) + 1) % RIFLE_HITS;
       if (!foe.graze) {
-        this.shot(foe, 1, by, b.dx, b.dz);
+        this.shot(foe, 1, by, b.dx, b.dz, FRAG.GUN, b.back);
       }
     } else if (!b.arc) {
-      this.shot(foe, b.power ?? 1, by, b.dx, b.dz);
+      this.shot(foe, b.power ?? 1, by, b.dx, b.dz, FRAG.GUN, b.back);
     } else if (this.harm(foe, CUTS[b.arc].hp, by, FRAG.BLADE, felled(FALL.STRUCK, b.dx, b.dz))) {
       // The limb a blade would take along the arc's line, swung from a metre back on it.
       const from = by && { ...by.state, cut: b.arc, yaw: Math.atan2(-b.dx, -b.dz) };
@@ -941,6 +950,22 @@ export class Room {
       foe.by = b.by;
       this.ctf.drop(foe.state);
     }
+  }
+
+  /**
+   * The katana of `p` met the ball `b`: it ends on the blade (its burst, no hit), and one as strong
+   * leaves his eye along his look, his own and his team's, its range full again. Its id runs on from
+   * his `shots` by 64 plus his parries: the sum only grows, so it names no ball of his still in flight.
+   */
+  private deflect(p: Player, b: Flying): void {
+    p.parries = ((p.parries ?? 0) + 1) & 255;
+    this.shoot(p, this.ticks, {
+      ...launch({ ...p.state, rifled: false }, p.info.team),
+      id: (p.state.shots + 64 + p.parries) & 255,
+      power: b.power ?? 1,
+      left: b.power === 0 ? RIFLE_RANGE : GUN_RANGE,
+      back: true,
+    });
   }
 
   /**

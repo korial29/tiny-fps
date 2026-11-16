@@ -16,6 +16,7 @@ import {
   RUN_SPEED,
   SPRINT_SPEED,
   WALLRUN_TICKS,
+  PARRY,
   XENO_HP,
 } from './constants';
 import type { WorldDef } from './world';
@@ -50,6 +51,8 @@ export interface Kit {
   slow: number;
   /** The ground's accelerations (ACCEL, SPRINT_ACCEL), as a share of the marine's. */
   accel: number;
+  /** The chance his katana in hand strikes back a ball that comes at him from in front (room.ts). */
+  parry: number;
   /** Health at a spawn, and what the packs heal up to. */
   hp: number;
   /** Whether the racks give him their weapons and he wears the armour pickups. */
@@ -80,6 +83,7 @@ const MARINE: Kit = {
   damage: 1,
   slow: 1,
   accel: 1,
+  parry: 0,
   hp: HP_MAX,
   gear: true,
   xeno: false,
@@ -88,7 +92,7 @@ const MARINE: Kit = {
 /**
  * Faster, higher, twice as long on a wall, three dashes in a row and twice as quick with the blade;
  * with the guns (the user, 2026-11-13) half the ammo, half the magazine, half the rate of fire, half
- * the damage, and slowed hard while one is in hand.
+ * the damage, and slowed hard while one is in hand. The katana in hand strikes balls back (PARRY).
  */
 const NINJA: Kit = {
   run: RUN_SPEED * 1.2,
@@ -109,6 +113,7 @@ const NINJA: Kit = {
   damage: 0.5,
   slow: 0.55,
   accel: 1,
+  parry: PARRY,
   hp: HP_MAX,
   gear: true,
   xeno: false,

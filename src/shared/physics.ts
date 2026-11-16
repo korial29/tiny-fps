@@ -81,7 +81,6 @@ import {
   CLING_FACING,
   CLING_HOLD,
   CLING_LEAP,
-  CLING_SPEED,
 } from './constants';
 import { bound, ground } from './relief';
 import { EV, KEY, LIMB, MODE, SIDE } from './types';
@@ -920,7 +919,7 @@ const holdAt = (p: Pos, w: World, side: number): Hold | undefined => {
  * 2026-11-16: running into a wall, not walking): in the air within WALL_REACH, on a floor touching
  * it, a wall from the knees to the head (wallGap). Not the side it just kicked off.
  */
-const clingTo = (p: PlayerState, w: World, c: Ctl): boolean => {
+const clingTo = (p: PlayerState, w: World, c: Ctl, speed: [number, number, number]): boolean => {
   if (!c.kit.xeno || !c.fwd || !(c.keys & KEY.SPRINT) || c.stumble) {
     return false;
   }
@@ -936,7 +935,13 @@ const clingTo = (p: PlayerState, w: World, c: Ctl): boolean => {
     ) {
       enter(p, MODE.CLING);
       p.wall = side;
-      p.vx = p.vy = p.vz = 0;
+      // Its speed goes on up the wall: the share into it turned up, the share along it kept.
+      const [tx, tz] = [-nz, nx];
+      const k = Math.min(1, (c.kit.sprint * c.pace) / Math.max(speed[0], EPS));
+      const a = (speed[1] * tx + speed[2] * tz) * k;
+      p.vx = tx * a;
+      p.vz = tz * a;
+      p.vy = Math.sqrt(Math.max(0, (speed[0] * k) ** 2 - a * a));
       p.jumps = AIR_JUMPS;
       p.coyote = 0;
       p.ev |= EV.GRAB;
@@ -984,7 +989,16 @@ const cling = (p: PlayerState, w: World, c: Ctl): void => {
   const [wu, wa] = [fw * hu - s * ha, fw * ha + s * hu];
   // Two keys go no faster than one.
   const n = Math.sqrt(wu * wu + wa * wa);
-  const v = n > 1 ? CLING_SPEED / n : CLING_SPEED;
+  // As fast as on a floor (the user, 2026-11-16): its run, and its sprint with the key held, got to
+  // as on a floor; its speed on the wall last step carries on.
+  const was = Math.sqrt(p.vx * p.vx + p.vy * p.vy + p.vz * p.vz);
+  const run = c.kit.run * c.pace;
+  const top = c.keys & KEY.SPRINT ? c.kit.sprint * c.pace : run;
+  const sp =
+    was > top
+      ? Math.max(top, was - DECAY * DT)
+      : Math.min(top, Math.max(run, was + SPRINT_ACCEL * c.kit.accel * DT));
+  const v = n > 1 ? sp / n : sp;
   const up = wu > 0.05 ? 1 : wu < -0.05 ? -1 : 0;
   const k = wa * v;
   const { a, sign } = along(p, p.wall);
@@ -1078,6 +1092,7 @@ const free = (p: PlayerState, w: World, c: Ctl): void => {
   // A burst has no gravity, unless the dasher is rising (a jump out of a dash keeps its arc).
   const g = burst && p.vy <= 0 ? 0 : p.mode === MODE.WALLRUN ? WALLRUN_GRAVITY : 1;
   const was = p.mode;
+  const speed: [number, number, number] = [len(p.vx, p.vz), p.vx, p.vz];
   const hit = fly(p, w, heightOf(p), g, onFloor(was), c.bodies);
 
   if (hit >= 0) {
@@ -1102,7 +1117,7 @@ const free = (p: PlayerState, w: World, c: Ctl): void => {
     p.ev |= p.mode === MODE.SLIDE ? EV.SLIDE_END : 0;
     enter(p, MODE.AIR);
   }
-  if ((p.mode === MODE.AIR || p.mode === MODE.GROUND) && clingTo(p, w, c)) {
+  if ((p.mode === MODE.AIR || p.mode === MODE.GROUND) && clingTo(p, w, c, speed)) {
     return;
   }
   if (p.mode === MODE.AIR) {

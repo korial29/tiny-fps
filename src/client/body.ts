@@ -26,6 +26,7 @@ import type { World } from '../shared/world';
 import { SIDE, blowOf, createGait, frame, thrown } from './gait';
 import { fetched, pouch, pouchAt } from './pouch';
 import { buckle } from './buckle';
+import { createFours } from './fours';
 import type { Floor } from './gait';
 import {
   GUN_ON,
@@ -1208,6 +1209,12 @@ export const createBody = (world?: World): Body => {
   let xeno = false;
   /** The own player as last seen. */
   let me: PlayerState | undefined;
+  /**
+   * The xenomorph on a wall: on all fours over it as the others see it (fours.ts), heading where it
+   * looks, so the body turns with the mouse (the user, 2026-11-16); and until that has blended out.
+   */
+  const fours = createFours();
+  let clung = false;
   const w = {
     amp: 0,
     sprint: 0,
@@ -1267,7 +1274,12 @@ export const createBody = (world?: World): Body => {
       me = undefined;
       return;
     }
-    gait.update(p, dt, world && floorOf(world, p.y));
+    const floor = world && floorOf(world, p.y);
+    gait.update(p, dt, floor);
+    if (xeno) {
+      fours.update(p, dt, floor);
+      clung = p.mode == MODE.CLING || (clung && fours.weight > 0.002);
+    }
     const now = p.down ? -1 : p.wield ? 1 : p.rifled ? 3 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
     const f = fresh(p);
     first = now !== drawn ? f : first && !(me?.reload && !p.reload);
@@ -1402,7 +1414,8 @@ export const createBody = (world?: World): Body => {
     if (!me || me.down || dist(eye, [me.x, me.y + eyeHeight(me), me.z]) > AWAY) {
       return undefined;
     }
-    const g = gait.pose();
+    const wf = xeno && clung ? fours.weight : 0;
+    const g = wf ? fours.apply(gait.pose()) : gait.pose();
     const q: Pose = {
       at: [...g.at],
       yaw: g.yaw,
@@ -1410,6 +1423,7 @@ export const createBody = (world?: World): Body => {
       rot: g.rot.map(r => [...r] as Quat),
       rest: g.rest,
     };
+    const pawed = g.rot;
     const [r, u, f] = basis(yaw, pitch, roll);
     /** Camera space (right, up, forward) as a direction in the world, and a world direction in it. */
     const turn = ([a, b, c]: Vec3): Vec3 => [
@@ -1456,14 +1470,13 @@ export const createBody = (world?: World): Body => {
     const s0 = solve(q);
     const ahead: Vec3 = [-Math.sin(yaw), 0, -Math.cos(yaw)];
     const nose = add(s0.pos[J.HEAD], spin(s0.rot[J.HEAD], [0, 0.02, -0.08]));
-    q.at = add(
-      q.at,
-      sub(eye, along(nose, [-ahead[0] * BEHIND, -DROP, -ahead[2] * BEHIND], w.plant)),
-    );
+    const shift = sub(eye, along(nose, [-ahead[0] * BEHIND, -DROP, -ahead[2] * BEHIND], w.plant));
+    q.at = add(q.at, shift);
     const s = solve(q);
     const fwd: Vec3 = [-Math.sin(q.yaw), 0, -Math.cos(q.yaw)];
     for (const j of [J.THIGH_L, J.THIGH_R]) {
-      reach(q, s, j, s0.pos[j + 2], fwd, true);
+      // On all fours the paws go with the body, which is laid out round its head.
+      reach(q, s, j, along(s0.pos[j + 2], shift, wf), fwd, true);
     }
     // The weapons stay out of the trunk and in sight: looking down, their grips would sink into the
     // chest or under it, so they go forward until they are clear. The katana's two grips and its
@@ -1810,6 +1823,10 @@ export const createBody = (world?: World): Body => {
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], pw);
         }
+      }
+      // On a wall the fore paws stay on it (fours.ts).
+      for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
+        q.rot[k] = slerp(q.rot[k], pawed[k], wf);
       }
     }
     // The slap, once the right hand has the gun (the user, 2026-11-09: the hand flat, the palm

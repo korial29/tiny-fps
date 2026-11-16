@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   AMMO_PACK,
   BLOW,
+  STING,
+  TAILS,
   PUNCHES,
   GUN_RELOAD,
   RAIL_RELOAD,
@@ -1197,10 +1199,11 @@ describe('the xenomorph’s sounds', () => {
     for (const [b, id] of [
       [BLOW.CLAW_L, SOUND.CLAW],
       [BLOW.CLAW_R, SOUND.CLAW],
-      [BLOW.TAIL, SOUND.STING],
+      [STING.STAB, SOUND.STING],
+      [STING.SPIN, SOUND.STING],
     ]) {
       frame([x({ swing: 0, cut: b })]);
-      frame([x({ swing: PUNCHES[b].ticks, cut: b })]);
+      frame([x({ swing: TAILS[b].ticks, cut: b })]);
       expect(ids().at(-1)).toBe(id);
     }
     expect(ids()).not.toContain(SOUND.SWISH);

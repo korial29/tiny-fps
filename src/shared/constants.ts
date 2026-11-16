@@ -232,10 +232,10 @@ export const BLOW = {
   /** The xenomorph's (kit.ts): a swipe of the left claws, then of the right, while FIRE goes on. */
   CLAW_L: 4,
   CLAW_R: 5,
-  /** Its tail's sting, on SPECIAL: slow, far, and it throws whoever it stings. */
-  TAIL: 6,
 } as const;
-const CLAW = { ticks: 16, strike: 5, reach: 1.8, arc: 0.7, hp: 1, hold: -1, knock: 0 };
+/** A swipe of the claws: XENO_CLAW health (the user, 2026-11-16: they hurt). */
+export const XENO_CLAW = 4;
+const CLAW = { ticks: 16, strike: 5, reach: 1.8, arc: 0.7, hp: XENO_CLAW, hold: -1, knock: 0 };
 export const PUNCHES = [
   PUNCH,
   PUNCH,
@@ -243,12 +243,33 @@ export const PUNCHES = [
   { ticks: 26, strike: 7, reach: 2.2, arc: 0.5, hp: 1, hold: -1, knock: 1.2 },
   CLAW,
   CLAW,
-  { ticks: 40, strike: 18, reach: 3.2, arc: 0.3, hp: 3, hold: -1, knock: 1.2 },
 ];
+/**
+ * The xenomorph's tail (the user, 2026-11-16: it fights as the katana does, slower, and its sting
+ * kills). The right button (KEY.BLADE, input.ts) starts a strike by the keys as cutOf() reads them:
+ * a STAB ahead with FORWARD, a SWEEP across from LEFT or RIGHT, else a LASH down from above. Held at
+ * the top of its wind-up (`hold`) it charges as a cut does (HEAVY, swingOf()). A double click of the
+ * right button (KEY.SPECIAL with it) is its special: a sweep's is the SPIN, the tail whipped all
+ * round the body; the stab's and the lash's the LEAP, up TAIL_LEAP m/s and down on the foe as it
+ * lands. Whoever a strike reaches goes down (`hp` Infinity: through armour). The xenomorph's `cut`
+ * reads this table: CLAW_L and CLAW_R are its claws, at their place in it.
+ */
+export const STING = { STAB: 0, SWEEP_L: 1, SWEEP_R: 2, LASH: 3, SPIN: 6, LEAP: 7 } as const;
+export const TAILS = [
+  { ticks: 52, strike: 26, reach: 3.4, arc: 0.25, hp: Infinity, hold: 18, knock: 0 },
+  { ticks: 50, strike: 26, reach: 2.8, arc: 1.1, hp: Infinity, hold: 16, knock: 0 },
+  { ticks: 50, strike: 26, reach: 2.8, arc: 1.1, hp: Infinity, hold: 16, knock: 0 },
+  { ticks: 54, strike: 28, reach: 3.1, arc: 0.4, hp: Infinity, hold: 20, knock: 0 },
+  CLAW,
+  CLAW,
+  { ticks: 60, strike: 30, reach: 2.6, arc: Math.PI, hp: Infinity, hold: -1, knock: 0 },
+  { ticks: 63, strike: 52, reach: 2.8, arc: 0.6, hp: Infinity, hold: -1, knock: 0 },
+];
+export const TAIL_LEAP = 10;
 export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];
 /**
  * The xenomorph (the user, 2026-11-15; kit.ts). XENO_HP health. It clings to a wall it faces with
- * forward held (MODE.CLING, physics.ts): CLING_SPEED m/s up, down or along it while the wall rises
+ * forward and the sprint held (MODE.CLING, physics.ts; the sprint since the user, 2026-11-16): CLING_SPEED m/s up, down or along it while the wall rises
  * CLING_HOLD m over its feet; a jump kicks it off along the look at CLING_LEAP m/s. DASH held on a
  * floor or a wall charges a pounce for up to POUNCE_HOLD ticks (PlayerState.charge); let go, it
  * leaps POUNCE_MIN to POUNCE_MAX m/s along the look, at least POUNCE_PITCH up, and the dash timer

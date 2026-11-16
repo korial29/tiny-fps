@@ -78,7 +78,7 @@ import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin }
 import type { Pose, Quat } from './rig';
 import { armor } from './armor';
 import { CUFF, CUFF_NEAR, CUFF_SIDES, REGION, beast, body, palette, skin } from './skin';
-import { BONE, CHITIN_X, FOOT_TIP, PART, partsOf } from './xeno';
+import { BONE, CHITIN_X, FOOT_TIP, HOOKED, PART, lashOf, partsOf, tail } from './xeno';
 import type { Part } from './xeno';
 import { CLOTH } from './mask';
 import { createTrail } from './trail';
@@ -1512,8 +1512,8 @@ export const createBody = (world?: World): Body => {
       // A punch (no weapon at all, FIRE) drives the striking fist of its blow (SIDE) up to the
       // middle of the view and brings the other into its lower corner, drawn back. A hook comes
       // round from the side, a lunge goes further out.
-      const jab = me ? thrown(me) : 0;
-      const blow = me ? blowOf(me) : 0;
+      const jab = me ? thrown(me, xeno) : 0;
+      const blow = me ? blowOf(me, xeno) : 0;
       const strikes = sd == SIDE[blow];
       const fist: Vec3 =
         blow == BLOW.HOOK
@@ -1869,6 +1869,12 @@ export const createBody = (world?: World): Body => {
             expand(out, { m: mesh(foot.key, made(foot)), q: s.rot[f], t: s.pos[f], k: 1 });
             const at = add(s.pos[f], spin(s.rot[f], FOOT_TIP));
             expand(out, { m: mesh(toes.key, made(toes)), q: s.rot[t], t: at, k: 1 });
+          }
+          // Its tail (the user, 2026-11-16: seen in the own view as the katana is), only while it
+          // strikes: round the hip or over the shoulder, into the view.
+          const lash = me ? lashOf(me, clock) : HOOKED;
+          if (lash != HOOKED) {
+            tail(out, s, clock, 0, lash, color, 2);
           }
         }
         // The ninja's own plates in his team's colour (soldier.ts).

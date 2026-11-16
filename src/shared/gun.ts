@@ -32,6 +32,9 @@ import {
   SPECIAL_LATE,
   BLOW,
   PUNCHES,
+  TAILS,
+  TAIL_LEAP,
+  STING,
 } from './constants';
 import { KITS } from './kit';
 import type { Kit } from './kit';
@@ -179,20 +182,28 @@ export const step = (
   // The katana's swing runs down, but stays at the top of a cut's wind-up while FIRE is held there:
   // a charge. Let go after HEAVY_TAP, the rest of the cut is the heavy release, its own timer; busy
   // hands or the end of the match drop the charge and the cut goes on.
-  const { ticks, hold } = CUTS[p.cut ?? 0];
-  // The xenomorph's `charge` is its pounce's (physics.ts), never a cut's.
-  const top = !kit.xeno && !!p.swing && !p.heavy && ticks - (p.swing ?? 0) === hold;
-  if (top && p.wield && armed && !busy && i.keys & KEY.FIRE) {
+  // The xenomorph's tail strikes as the katana cuts, from its own table, and charges on the right
+  // button (KEY.BLADE) where the katana does on FIRE; its claws never hold.
+  const table = kit.xeno ? TAILS : CUTS;
+  const { ticks, hold } = table[p.cut ?? 0];
+  const top = !!p.swing && !p.heavy && ticks - (p.swing ?? 0) === hold;
+  if (
+    top &&
+    (p.wield || kit.xeno) &&
+    armed &&
+    !busy &&
+    i.keys & (kit.xeno ? KEY.BLADE : KEY.FIRE)
+  ) {
     p.charge = Math.min((p.charge ?? 0) + 1, HEAVY_MAX);
   } else if (top && armed && !busy && (p.charge ?? 0) >= HEAVY_TAP) {
     [p.heavy, p.charge] = [true, 0];
-    p.swing = swingOf(p).ticks;
+    p.swing = swingOf(p, table).ticks;
   } else {
     p.charge = top ? 0 : p.charge;
     // A hastier class runs the swing down faster, but stops on the tick of the wind-up's top and of
     // the strike (the cut's, or the punch's), so neither is skipped.
     const s = p.swing ?? 0;
-    const c = swingOf(p);
+    const c = swingOf(p, table);
     const blow = PUNCHES[p.cut ?? 0] ?? PUNCHES[0];
     const stop = (v: number) =>
       v == s - 1 &&
@@ -237,12 +248,12 @@ export const step = (
   }
   // With no weapon at all the swing is a punch (PUNCHES, by its blow), not a cut.
   const bare = hand < 0;
-  const c = bare ? (PUNCHES[p.cut ?? 0] ?? PUNCHES[0]) : swingOf(p);
+  const c = kit.xeno ? swingOf(p, TAILS) : bare ? (PUNCHES[p.cut ?? 0] ?? PUNCHES[0]) : swingOf(p);
   if (p.swing && c.ticks - p.swing === c.strike) {
     return STRIKE.CUT;
   }
   if (kit.xeno) {
-    claws(p, i, fresh, busy);
+    beast(p, i, fresh, busy);
     return STRIKE.NONE;
   }
   // The gun's charge goes with the katana in hand and not charging, the rail gun, the hands busy,
@@ -322,27 +333,45 @@ export const step = (
 };
 
 /**
- * The xenomorph's blows (BLOW): FIRE swipes the left claws, then the right while it goes on, a
- * fresh press after a swipe's strike throwing the next at once; SPECIAL alone stings with the tail.
- * Not with the hands busy (a hang, a climb); on a wall they are free.
+ * The xenomorph's blows: FIRE swipes the left claws, then the right while it goes on, a fresh press
+ * after a swipe's strike throwing the next at once (BLOW). The right button (KEY.BLADE) strikes with
+ * the tail as FIRE cuts with the katana (TAILS): by the keys (cutOf()), its special with SPECIAL (a
+ * double click), which also turns a strike just started into it within SPECIAL_LATE ticks. Not while
+ * a pounce charges, nor with the hands busy (a hang, a climb); on a wall they are free.
  */
-const claws = (p: PlayerState, i: Input, fresh: boolean, busy: boolean): void => {
+const beast = (p: PlayerState, i: Input, fresh: boolean, busy: boolean): void => {
   if (busy) {
     return;
   }
-  const c = PUNCHES[p.cut ?? 0];
-  const other = p.cut === BLOW.CLAW_L ? BLOW.CLAW_R : BLOW.CLAW_L;
-  if (!p.swing && i.keys & KEY.SPECIAL && !(i.keys & KEY.FIRE)) {
-    p.cut = BLOW.TAIL;
-  } else if (
-    i.keys & KEY.FIRE &&
-    (!p.swing || (fresh && p.cut !== BLOW.TAIL && c.ticks - p.swing > c.strike))
-  ) {
-    p.cut = other;
-  } else {
-    return;
+  const c = TAILS[p.cut ?? 0];
+  const claw = p.cut === BLOW.CLAW_L || p.cut === BLOW.CLAW_R;
+  const tail = !!(i.keys & KEY.BLADE);
+  const late = c.ticks - (p.swing ?? 0);
+  const special =
+    tail &&
+    !!(i.keys & KEY.SPECIAL) &&
+    !!p.swing &&
+    !claw &&
+    !p.heavy &&
+    (p.cut ?? 0) < SPECIAL_CUT &&
+    late <= SPECIAL_LATE;
+  if (tail && ((!p.swing && !p.charge) || special)) {
+    const base = cutOf(i.keys);
+    p.cut =
+      i.keys & KEY.SPECIAL
+        ? base === CUT.LEFT || base === CUT.RIGHT
+          ? STING.SPIN
+          : STING.LEAP
+        : base;
+    [p.heavy, p.swing, p.charge] = [false, TAILS[p.cut].ticks, 0];
+    if (p.cut === STING.LEAP && p.mode === MODE.GROUND) {
+      p.vy = TAIL_LEAP;
+      p.ev |= EV.JUMP;
+    }
+  } else if (i.keys & KEY.FIRE && (!p.swing || (fresh && claw && c.ticks - p.swing > c.strike))) {
+    p.cut = p.cut === BLOW.CLAW_L ? BLOW.CLAW_R : BLOW.CLAW_L;
+    [p.heavy, p.swing] = [false, TAILS[p.cut].ticks];
   }
-  [p.heavy, p.swing] = [false, PUNCHES[p.cut].ticks];
 };
 
 /**

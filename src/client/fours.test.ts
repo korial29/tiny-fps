@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BLOW, PLAYER_R } from '../shared/constants';
+import { BLOW, PLAYER_R, STING } from '../shared/constants';
 import { MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { DROP, RISE, createFours } from './fours';
@@ -76,7 +76,7 @@ describe('on all fours', () => {
 
   it('stays down until the speed falls under RISE', () => {
     const f = createFours();
-    const p = state({ vz: -9 });
+    const p = state({ vz: -16 });
     for (let i = 0; i < 60; i++) {
       f.update(p, DT);
     }
@@ -101,7 +101,7 @@ describe('on all fours', () => {
   });
 
   it('gallops with its trunk level, the head ahead of the shoulders', () => {
-    run({ vz: -9.9 }, 1.5, s => {
+    run({ vz: -18 }, 1.5, s => {
       const back = sub(s.pos[J.NECK], s.pos[J.PELVIS]);
       // Ahead (-z) and near level.
       expect(-back[2] / len(back)).toBeGreaterThan(0.8);
@@ -116,7 +116,7 @@ describe('on all fours', () => {
     const highs = PAWS.map(() => -Infinity);
     const was: (Vec3 | undefined)[] = PAWS.map(() => undefined);
     let slid = 0;
-    run({ vz: -9.9 }, 2, (s, p) => {
+    run({ vz: -18 }, 2, (s, p) => {
       if (p.z > -5) {
         return;
       }
@@ -169,15 +169,15 @@ describe('on all fours', () => {
   });
 
   it('rears up to strike with its claws, not with its tail', () => {
-    const claws = run({ vz: -9.9, swing: 10, cut: BLOW.CLAW_L }, 1).f;
-    const tail = run({ vz: -9.9, swing: 10, cut: BLOW.TAIL }, 1).f;
+    const claws = run({ vz: -18, swing: 10, cut: BLOW.CLAW_L }, 1).f;
+    const tail = run({ vz: -18, swing: 10, cut: STING.STAB }, 1).f;
     expect(claws.weight).toBe(0);
     expect(tail.weight).toBeGreaterThan(0.99);
   });
 
   it('keeps on all fours in a leap off a gallop', () => {
     const f = createFours();
-    const p = state({ vz: -9.9 });
+    const p = state({ vz: -18 });
     for (let i = 0; i < 60; i++) {
       f.update(p, DT);
     }

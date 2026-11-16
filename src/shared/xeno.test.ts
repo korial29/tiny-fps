@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { IDLE, duo } from '../../test/teams';
 import {
+  ARMOR_MAX,
   BLOW,
   CLING_SPEED,
+  CUTS,
+  STING,
+  TAILS,
+  TAIL_LEAP,
+  XENO_CLAW,
   HP_MAX,
   POUNCE_COOL,
   POUNCE_HOLD,
@@ -11,9 +17,9 @@ import {
   POUNCE_MIN,
   POUNCE_PITCH,
   POUNCE_STUN,
-  PUNCHES,
   XENO_HP,
 } from './constants';
+import { swingOf } from './blade';
 import { STRIKE, step } from './gun';
 import { KITS, ROLE } from './kit';
 import { ROOFTOPS } from './map';
@@ -60,13 +66,49 @@ const at = (x: number, y: number, over: Partial<PlayerState> = {}): PlayerState 
 });
 const go = (p: PlayerState, keys: number, yaw = p.yaw, pitch = 0, kit = XENO) =>
   move(p, { seq: 0, keys, yaw, pitch }, pit, 0, [], kit);
+/** Running: forward with the sprint, which a wall is taken hold of with. */
+const RUN = KEY.FORWARD | KEY.SPRINT;
+/** One step of the xenomorph's weapons on the open ground. */
+const hit = (p: PlayerState, keys: number, yaw = 0) =>
+  step(p, { seq: 0, keys, yaw, pitch: 0 }, pit, 0, true, [], XENO);
+
+describe('its speed and its jumps', () => {
+  it('runs twice as fast as a man, gets there as fast, and jumps twice as high', () => {
+    const top = (kit: typeof XENO, keys: number) => {
+      const p = at(-20, 0, { z: 50, yaw: 0 });
+      let t = 0;
+      for (let k = 0; k < 400; k++) {
+        go(p, keys, 0, 0, kit);
+        t = -p.vz < (keys & KEY.SPRINT ? kit.sprint : kit.run) - 0.01 ? k : t;
+      }
+      return [-p.vz, t];
+    };
+    const [[xr, xt], [mr, mt]] = [top(XENO, KEY.FORWARD), top(MARINE, KEY.FORWARD)];
+    expect(xr).toBeCloseTo(2 * mr, 4);
+    expect(xt).toBe(mt);
+    const [[xs, xst], [ms, mst]] = [top(XENO, RUN), top(MARINE, RUN)];
+    expect(xs).toBeCloseTo(2 * ms, 4);
+    expect(xst).toBe(mst);
+    const peak = (kit: typeof XENO) => {
+      const p = at(-20, 0, { z: 50 });
+      go(p, KEY.JUMP, 0, 0, kit);
+      let y = 0;
+      for (let k = 0; k < 120; k++) {
+        go(p, 0, 0, 0, kit);
+        y = Math.max(y, p.y);
+      }
+      return y;
+    };
+    expect(peak(XENO) / peak(MARINE)).toBeCloseTo(2, 1);
+  });
+});
 
 describe('the xenomorph on a wall', () => {
   it('clings to a wall it walks into, climbs it and pulls itself up onto its top', () => {
     const p = at(0, 0);
     const modes = new Set<number>();
     for (let k = 0; k < 200 && !(p.mode === MODE.GROUND && p.y > 4); k++) {
-      go(p, KEY.FORWARD);
+      go(p, RUN);
       modes.add(p.mode);
     }
     expect([...modes]).toEqual(expect.arrayContaining([MODE.CLING, MODE.CLIMB]));
@@ -76,25 +118,45 @@ describe('the xenomorph on a wall', () => {
     // The marine walks into the same wall and stays at its foot.
     const m = at(0, 0);
     for (let k = 0; k < 200; k++) {
-      go(m, KEY.FORWARD, EAST, 0, MARINE);
+      go(m, RUN, EAST, 0, MARINE);
       expect(m.mode).not.toBe(MODE.CLING);
     }
     expect(m.y).toBe(0);
   });
 
+  it('takes hold of a wall only running into it: forward without the sprint walks into it', () => {
+    const p = at(0, 0);
+    for (let k = 0; k < 100; k++) {
+      go(p, KEY.FORWARD);
+      expect(p.mode).not.toBe(MODE.CLING);
+    }
+    expect(p.y).toBe(0);
+    go(p, RUN);
+    expect(p.mode).toBe(MODE.CLING);
+    const q = at(0.2, 2, { mode: MODE.AIR, ground: false });
+    go(q, KEY.FORWARD);
+    expect(q.mode).not.toBe(MODE.CLING);
+    go(q, RUN);
+    expect(q.mode).toBe(MODE.CLING);
+    // On the wall, the sprint can go: it climbs on.
+    const y = q.y;
+    go(q, KEY.FORWARD);
+    expect([q.mode, q.y > y]).toEqual([MODE.CLING, true]);
+  });
+
   it('takes hold of a wall it faces in the air, not one beside it', () => {
     const p = at(0.2, 2, { mode: MODE.AIR, ground: false });
-    go(p, KEY.FORWARD);
+    go(p, RUN);
     expect(p.mode).toBe(MODE.CLING);
     // Along the wall, looking along it: no hold.
     const q = at(0.2, 2, { mode: MODE.AIR, ground: false, yaw: 0 });
-    go(q, KEY.FORWARD, 0);
+    go(q, RUN, 0);
     expect(q.mode).not.toBe(MODE.CLING);
   });
 
   it('goes down and along it, stays put with no key, lets go on crouch and kicks off on a jump', () => {
     const p = at(0.2, 3, { mode: MODE.AIR, ground: false });
-    go(p, KEY.FORWARD);
+    go(p, RUN);
     expect(p.mode).toBe(MODE.CLING);
     const y = p.y;
     go(p, 0);
@@ -115,18 +177,18 @@ describe('the xenomorph on a wall', () => {
     expect(p.vy).toBeGreaterThan(0);
     // It does not take hold of the wall it kicked off before it lands.
     for (let k = 0; k < 5; k++) {
-      go(p, KEY.FORWARD, EAST);
+      go(p, RUN, EAST);
       expect(p.mode).not.toBe(MODE.CLING);
     }
     const q = at(0.2, 3, { mode: MODE.AIR, ground: false });
-    go(q, KEY.FORWARD);
+    go(q, RUN);
     go(q, KEY.CROUCH);
     expect(q.mode).toBe(MODE.AIR);
   });
 
   it('walks down off the wall onto the floor', () => {
     const p = at(0.2, 0.5, { mode: MODE.AIR, ground: false });
-    go(p, KEY.FORWARD);
+    go(p, RUN);
     expect(p.mode).toBe(MODE.CLING);
     for (let k = 0; k < 20 && p.mode === MODE.CLING; k++) {
       go(p, KEY.BACK);
@@ -138,7 +200,7 @@ describe('the xenomorph on a wall', () => {
   it('climbs a tower as high as it goes, with no time limit', () => {
     const p = at(-49.5, 0, { yaw: WEST });
     for (let k = 0; k < 500 && p.y < 29; k++) {
-      go(p, KEY.FORWARD, WEST);
+      go(p, RUN, WEST);
     }
     expect(p.y).toBeGreaterThan(29);
   });
@@ -173,7 +235,7 @@ describe('the pounce', () => {
 
   it('pounces off a wall too, and the marine dashes where it pounces', () => {
     const p = at(0.2, 3, { mode: MODE.AIR, ground: false });
-    go(p, KEY.FORWARD);
+    go(p, RUN);
     go(p, KEY.DASH, WEST, 0.5);
     go(p, 0, WEST, 0.5);
     expect(p.mode).toBe(MODE.AIR);
@@ -200,24 +262,81 @@ describe('the pounce', () => {
 });
 
 describe('the claws and the tail', () => {
-  it('swipes left then right while FIRE goes on, and stings with SPECIAL', () => {
+  it('swipes left then right while FIRE goes on', () => {
     const p = at(-20, 0, { z: 50, yaw: 0 });
     const cuts: number[] = [];
     let strikes = 0;
     for (let k = 0; k < 60; k++) {
-      strikes += +(
-        step(p, { seq: 0, keys: KEY.FIRE, yaw: 0, pitch: 0 }, pit, 0, true, [], XENO) === STRIKE.CUT
-      );
+      strikes += +(hit(p, KEY.FIRE) === STRIKE.CUT);
       if (cuts.at(-1) !== p.cut) {
         cuts.push(p.cut!);
       }
     }
     expect(cuts.slice(0, 3)).toEqual([BLOW.CLAW_L, BLOW.CLAW_R, BLOW.CLAW_L]);
     expect(strikes).toBeGreaterThanOrEqual(3);
+  });
+
+  it('strikes with the tail on the right button as the keys say: a stab, a sweep, a lash', () => {
+    for (const [keys, cut] of [
+      [KEY.FORWARD, STING.STAB],
+      [KEY.LEFT, STING.SWEEP_L],
+      [KEY.RIGHT, STING.SWEEP_R],
+      [0, STING.LASH],
+      [KEY.BACK, STING.LASH],
+    ]) {
+      const p = at(-20, 0, { z: 50, yaw: 0 });
+      hit(p, KEY.BLADE | keys);
+      expect([p.cut, p.swing]).toEqual([cut, TAILS[cut].ticks]);
+      // A tap: it runs on to its strike, slower than any cut of the katana.
+      let n = 1;
+      while (hit(p, 0) !== STRIKE.CUT) {
+        n++;
+      }
+      expect(n).toBe(TAILS[cut].strike);
+      expect(n).toBeGreaterThan(Math.max(...CUTS.slice(0, 4).map(c => c.strike)));
+    }
+  });
+
+  it('charges the tail at the top of its wind-up while the right button is held, not a pounce', () => {
+    const p = at(-20, 0, { z: 50, yaw: 0 });
+    const { hold, ticks } = TAILS[STING.STAB];
+    for (let k = 0; k < hold + 40; k++) {
+      hit(p, KEY.BLADE | KEY.FORWARD);
+    }
+    expect(p.swing).toBe(ticks - hold);
+    expect(p.charge).toBe(39);
+    // Let go: the heavy release, its own timer; no pounce from the charge.
+    hit(p, 0);
+    expect([p.heavy, p.charge, p.mode, p.dash]).toEqual([true, 0, MODE.GROUND, 0]);
+    expect(p.swing).toBe(swingOf(p, TAILS).ticks);
+    expect(swingOf(p, TAILS).reach).toBeGreaterThan(TAILS[STING.STAB].reach);
+    let n = 1;
+    while (hit(p, 0) !== STRIKE.CUT) {
+      n++;
+    }
+    expect(n).toBe(swingOf(p, TAILS).strike);
+    // No tail while a pounce charges.
     const q = at(-20, 0, { z: 50, yaw: 0 });
-    step(q, { seq: 0, keys: KEY.SPECIAL, yaw: 0, pitch: 0 }, pit, 0, true, [], XENO);
-    expect(q.cut).toBe(BLOW.TAIL);
-    expect(q.swing).toBe(PUNCHES[BLOW.TAIL].ticks);
+    hit(q, KEY.DASH);
+    hit(q, KEY.DASH | KEY.BLADE);
+    expect(q.swing).toBe(0);
+  });
+
+  it('turns a double click into its special: the spin for a sweep, the leap for a stab or a lash', () => {
+    const p = at(-20, 0, { z: 50, yaw: 0 });
+    hit(p, KEY.BLADE | KEY.SPECIAL | KEY.LEFT);
+    expect(p.cut).toBe(STING.SPIN);
+    const q = at(-20, 0, { z: 50, yaw: 0 });
+    hit(q, KEY.BLADE | KEY.FORWARD);
+    hit(q, KEY.BLADE | KEY.SPECIAL | KEY.FORWARD);
+    expect([q.cut, q.swing, q.vy]).toEqual([STING.LEAP, TAILS[STING.LEAP].ticks, TAIL_LEAP]);
+    let air = false;
+    for (let k = 0; k < TAILS[STING.LEAP].strike - 1; k++) {
+      hit(q, 0);
+      air ||= q.mode === MODE.AIR;
+    }
+    expect(air).toBe(true);
+    expect(hit(q, 0)).toBe(STRIKE.CUT);
   });
 
   it('takes nothing from the racks', () => {
@@ -266,29 +385,51 @@ describe('the xenomorph in a room', () => {
     expect([ps[0].state.hp, ps[1].state.hp]).toEqual([XENO_HP, HP_MAX]);
   });
 
-  it('takes a whole point a claw, three a sting with a stumble, and frags with its own kind', () => {
+  it('takes XENO_CLAW a swipe, never stuns, and frags with its own kind', () => {
     const { inner, ps, sent } = room(ROLE.XENO, ROLE.MARINE);
     const [x, m] = ps;
     face(x.state, m.state);
     x.state.cut = BLOW.CLAW_L;
     inner.punch(x);
-    expect(m.state.hp).toBe(HP_MAX - 1);
+    expect([m.state.hp, m.state.stun]).toEqual([HP_MAX - XENO_CLAW, 0]);
     x.state.cut = BLOW.CLAW_R;
-    inner.punch(x);
-    inner.punch(x);
-    // Claws never stun, as the third punch does.
-    expect([m.state.hp, m.state.stun]).toEqual([HP_MAX - 3, 0]);
-    x.state.cut = BLOW.TAIL;
-    inner.punch(x);
-    expect(m.state.hp).toBe(HP_MAX - 6);
-    expect(m.state.stun).toBeGreaterThan(0);
-    m.state.stun = 0;
-    face(x.state, m.state);
-    x.state.cut = BLOW.TAIL;
     inner.punch(x);
     expect(m.state.down).toBeGreaterThan(0);
     const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
     expect(frag).toMatchObject({ by: x.info.id, who: m.info.id, how: FRAG.CLAW });
+  });
+
+  it('puts down whoever its tail reaches in one strike, through his armour; the spin all round it', () => {
+    const { inner, ps } = room(ROLE.XENO, ROLE.MARINE, ROLE.MARINE);
+    const [x, m] = ps;
+    face(x.state, m.state);
+    m.state.armor = ARMOR_MAX;
+    Object.assign(x.state, { cut: STING.STAB, swing: 1 });
+    inner.cut(x);
+    expect(m.state.down).toBeGreaterThan(0);
+    // Out of a stab's reach, no; the charged one reaches further.
+    const reach = TAILS[STING.STAB].reach;
+    const far = (heavy: boolean) => {
+      const r = room(ROLE.XENO, ROLE.MARINE);
+      const [a, b] = r.ps;
+      face(a.state, b.state);
+      b.state.z = a.state.z - reach - 0.3 - 0.4;
+      Object.assign(a.state, { cut: STING.STAB, swing: 1, heavy });
+      r.inner.cut(a);
+      return b.state.down > 0;
+    };
+    expect([far(false), far(true)]).toEqual([false, true]);
+    // A foe behind it: the lash misses him, the spin does not.
+    const behind = (cut: number) => {
+      const r = room(ROLE.XENO, ROLE.MARINE);
+      const [a, b] = r.ps;
+      face(a.state, b.state);
+      b.state.z = a.state.z + 1.5;
+      Object.assign(a.state, { cut, swing: 1 });
+      r.inner.cut(a);
+      return b.state.down > 0;
+    };
+    expect([behind(STING.LASH), behind(STING.SPIN)]).toEqual([false, true]);
   });
 
   it('burns who strikes it with a blade or a fist with its acid, not another xenomorph', () => {

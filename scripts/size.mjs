@@ -30,7 +30,8 @@ const BUDGETS = [
   // 203 KB until its rib cage, longer legs, bigger hands and more detail (the user, 2026-11-15: 5 KB more).
   // 209 KB until the xenomorph made cheap to draw: its spine baked in, its pieces made at load (the user, 2026-11-16).
   // 212 KB until the xenomorph on all fours (the user, 2026-11-16).
-  { file: 'dist/index.js', max: 214 * 1024 },
+  // 214 KB until its tail fought as the katana, seen in first person, its blade and its vertebrae (the user, 2026-11-16: 1 KB more).
+  { file: 'dist/index.js', max: 215 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   { file: 'dist/local.js', max: 46 * 1024 },

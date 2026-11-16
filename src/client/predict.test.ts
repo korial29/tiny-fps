@@ -17,6 +17,7 @@ import {
   TICK_HZ,
   NADE_MAX,
   BLOW,
+  STING,
 } from '../shared/constants';
 import { STRIKE, step } from '../shared/gun';
 import { ROOFTOPS } from '../shared/map';
@@ -626,7 +627,7 @@ describe('prediction against the room', () => {
     const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
     // First up the wall north of the start, and onto the roof above it; then at random.
     const steps: Omit<Input, 'seq'>[] = Array.from({ length: 300 }, () => ({
-      keys: KEY.FORWARD,
+      keys: KEY.FORWARD | KEY.SPRINT,
       yaw: 0,
       pitch: 0,
     }));
@@ -635,6 +636,8 @@ describe('prediction against the room', () => {
       if (k % 25 === 0) {
         keys =
           (rnd() < 0.8 ? KEY.FORWARD : rnd() < 0.3 ? KEY.BACK : 0) |
+          (rnd() < 0.5 ? KEY.SPRINT : 0) |
+          (rnd() < 0.15 ? KEY.BLADE : 0) |
           (rnd() < 0.2 ? KEY.LEFT : rnd() < 0.2 ? KEY.RIGHT : 0) |
           (rnd() < 0.15 ? KEY.JUMP : 0) |
           (rnd() < 0.08 ? KEY.CROUCH : 0) |
@@ -663,7 +666,8 @@ describe('prediction against the room', () => {
       }
     });
     expect([...modes]).toEqual(expect.arrayContaining([MODE.CLING, MODE.CLIMB, MODE.AIR]));
-    expect([...blows].sort()).toEqual([BLOW.CLAW_L, BLOW.CLAW_R, BLOW.TAIL]);
+    expect([...blows]).toEqual(expect.arrayContaining([BLOW.CLAW_L, BLOW.CLAW_R, STING.LEAP]));
+    expect([...blows].some(b => b < BLOW.CLAW_L)).toBe(true);
     expect(pounces).toBeGreaterThan(5);
     for (const [name, lag] of LAGS) {
       const r = race(lag, steps, 0, [], [], true, { role: ROLE.XENO });

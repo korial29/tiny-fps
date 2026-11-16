@@ -34,12 +34,12 @@ export const cutOf = (keys: number): number => {
 };
 
 /**
- * The swing `p` is in, its numbers as CUTS has them: the cut's own, or, for a heavy release (`heavy`),
- * the rest of it from the top of its wind-up, HEAVY times as slow, with its own timer from there,
- * and harder and wider.
+ * The swing `p` is in, its numbers as CUTS has them (`table`; the xenomorph's is TAILS): the cut's
+ * own, or, for a heavy release (`heavy`), the rest of it from the top of its wind-up, HEAVY times as
+ * slow, with its own timer from there, and harder and wider.
  */
-export const swingOf = (p: Pick<PlayerState, 'cut' | 'heavy'>) => {
-  const c = CUTS[p.cut ?? 0];
+export const swingOf = (p: Pick<PlayerState, 'cut' | 'heavy'>, table: typeof CUTS = CUTS) => {
+  const c = table[p.cut ?? 0];
   return p.heavy
     ? {
         ...c,

@@ -289,11 +289,13 @@ export const [POUNCE_COOL, POUNCE_FLY] = [48, 40];
 export const [POUNCE_HP, POUNCE_STUN] = [2, 60];
 /**
  * The glory kill (the user, 2026-11-16, after DOOM 2016): an enemy with GLORY_HP health or less, up,
- * flashes in the xenomorph's vision; E (KEY.USE) within GLORY_REACH metres of him and GLORY_ARC
+ * flashes in the xenomorph's vision and to one with the katana in hand, who beheads him on E; E (KEY.USE) within GLORY_REACH metres of him and GLORY_ARC
  * radians of its look locks the two (`lock`, `foe`, as a saber lock) for GLORY_TICKS, where neither
  * moves, then it eats his head: he goes down through his armour (LIMB.EATEN), a frag of FRAG.GLORY.
  */
 export const [GLORY_HP, GLORY_REACH, GLORY_ARC, GLORY_TICKS] = [3, 2.5, 1, 54];
+/** The katana's glory kill (room.ts feast()): the speed it throws the beheaded body back at. */
+export const GLORY_PUSH = 7;
 /** How much faster than a man the xenomorph runs (the user, 2026-11-16: a little, not twice). */
 export const XENO_PACE = 1.25;
 export const ACID_HP = 1;

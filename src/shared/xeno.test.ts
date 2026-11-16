@@ -6,6 +6,7 @@ import {
   CLING_SPEED,
   CUTS,
   GLORY_HP,
+  GLORY_PUSH,
   GLORY_REACH,
   GLORY_TICKS,
   RUN_SPEED,
@@ -535,6 +536,34 @@ describe('the xenomorph in a room', () => {
     expect([m.state.lost, x.state.lock, m.state.lock]).toEqual([LIMB.EATEN, 0, 0]);
     const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
     expect(frag).toMatchObject({ by: x.info.id, who: m.info.id, how: FRAG.GLORY });
+  });
+
+  it('beheads on E a weak foe ahead with the katana in hand, the body thrown back, no lock', () => {
+    const { inner, ps, sent } = room(ROLE.MARINE, ROLE.MARINE);
+    const [k, m] = ps;
+    face(k.state, m.state);
+    k.bank = 99;
+    const e = () => {
+      inner.apply(k, { seq: 1, keys: KEY.USE | KEY.BLADE, yaw: 0, pitch: 0 });
+      inner.apply(k, { seq: 2, keys: KEY.BLADE, yaw: 0, pitch: 0 });
+    };
+    m.state.hp = GLORY_HP;
+    // Empty-handed: nothing.
+    e();
+    expect(m.state.down).toBe(0);
+    Object.assign(k.state, { blade: true });
+    m.state.hp = GLORY_HP + 1;
+    e();
+    expect(m.state.down).toBe(0);
+    m.state.hp = GLORY_HP;
+    inner.apply(k, { seq: 3, keys: KEY.USE | KEY.BLADE, yaw: 0, pitch: 0 });
+    expect(m.state.down).toBeGreaterThan(0);
+    expect([m.state.lost, m.state.lock ?? 0, k.state.lock ?? 0]).toEqual([LIMB.HEAD, 0, 0]);
+    // Thrown back, away from him (he looks toward -z).
+    expect(m.state.vz).toBeLessThan(-GLORY_PUSH + 0.5);
+    expect(k.state.swing).toBeGreaterThan(0);
+    const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
+    expect(frag).toMatchObject({ by: k.info.id, who: m.info.id, how: FRAG.GLORY });
   });
 
   it('ends a glory kill when the xenomorph goes down, the prey free; a pounce on a weak foe only pins', () => {

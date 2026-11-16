@@ -37,6 +37,7 @@ import {
   STUMBLE_KNOCK,
   STUMBLE_TICKS,
   ACID_HP,
+  GLORY_PUSH,
   GLORY_TICKS,
   POUNCE_COOL,
   POUNCE_FLY,
@@ -1131,14 +1132,17 @@ export class Room {
   }
 
   /**
-   * E pressed by the xenomorph `p`: the nearest enemy who is up with GLORY_HP or less, within
-   * GLORY_REACH and GLORY_ARC of its look where `p` drew him, and in no lock, is held for a glory
-   * kill: the two locked (`lock`, `foe`) for GLORY_TICKS, his flag dropped, `p` brought in a metre
-   * from him. duel() ends it. True when it started.
+   * E pressed by `p`, the xenomorph or one with the katana in hand: the nearest enemy who is up with
+   * GLORY_HP or less, within GLORY_REACH and GLORY_ARC of its look where `p` drew him, and in no
+   * lock, is glory killed. The katana takes his head at once and throws the body back GLORY_PUSH
+   * m/s, the follow-through of a cut across in hand (the user, 2026-11-16). The xenomorph holds
+   * him: the two locked (`lock`, `foe`) for GLORY_TICKS, his flag dropped, `p` brought in a metre
+   * from him; duel() ends it. True when it happened.
    */
   private feast(p: Player, view: number | undefined): boolean {
     const me = p.state;
-    if (!this.kit(p).xeno || me.down || me.stun || me.lock || me.mode === MODE.RIDE) {
+    const xeno = this.kit(p).xeno;
+    if ((!xeno && !me.wield) || me.down || me.stun || me.lock || me.mode === MODE.RIDE) {
       return false;
     }
     // Where `p` drew them, with their health and lock as they are now.
@@ -1154,6 +1158,24 @@ export class Room {
     if (!seen || !foe) {
       return false;
     }
+    const [dx, dz] = [seen.x - me.x, seen.z - me.z];
+    const d = Math.hypot(dx, dz) || 1;
+    if (!xeno) {
+      const c = CUTS[CUT.RIGHT];
+      // Past the cut's strike: its follow-through is drawn, and it strikes no one more.
+      [me.cut, me.swing, me.heavy, me.charge] = [CUT.RIGHT, c.ticks - c.strike - 1, false, 0];
+      me.hits = (me.hits + 1) & 255;
+      this.harm(foe, Infinity, p, FRAG.GLORY, felled(FALL.STRUCK, dx / d, dz / d));
+      Object.assign(foe.state, {
+        lost: LIMB.HEAD,
+        vx: (dx / d) * GLORY_PUSH,
+        vy: 3,
+        vz: (dz / d) * GLORY_PUSH,
+        ground: false,
+        mode: MODE.AIR,
+      });
+      return true;
+    }
     this.drop(foe.info.id);
     for (const [a, b] of [
       [p, foe],
@@ -1162,8 +1184,6 @@ export class Room {
       Object.assign(a.state, { ...FREE, lock: GLORY_TICKS, foe: b.info.id, pressed: true });
       Object.assign(a.state, { swing: 0, charge: 0, stun: 0, zap: false, vx: 0, vz: 0 });
     }
-    const [dx, dz] = [seen.x - me.x, seen.z - me.z];
-    const d = Math.hypot(dx, dz);
     if (d > 1) {
       [me.x, me.z] = [
         Math.fround(me.x + (dx * (d - 1)) / d),

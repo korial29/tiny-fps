@@ -507,13 +507,14 @@ const play = (
         roster.find(p => p.id == id)?.team ?? 0,
       ];
       hud.feed(who(m.by), who(m.who));
-      // A glory kill: the bite heard where the victim lies (the user, 2026-11-16).
+      // A glory kill: heard where the victim lies (the user, 2026-11-16).
       if (m.how == FRAG.GLORY) {
         const v = match?.players.find(q => q.id == m.who);
         const at: [number, number, number] | undefined =
           v && m.who != you.id ? [v.x, v.y + 1.6, v.z] : undefined;
-        audio.play(SOUND.TACKLE, at, 1, 0.6);
-        audio.play(SOUND.XENO_PAIN, at, 0.7, 0.5);
+        // The xenomorph's bite, or the katana's stroke through the neck.
+        audio.play(beast(m.by) ? SOUND.TACKLE : SOUND.SHING, at, 1, 0.6);
+        audio.play(beast(m.by) ? SOUND.XENO_PAIN : SOUND.ZAP, at, 0.7, 0.5);
         if (m.by == you.id) {
           fx.punch();
         }
@@ -659,10 +660,11 @@ const play = (
     const carrying = !!match?.flags.some(f => f.state === FLAG.CARRIED && f.by == you.id);
     const car = driving ? rovers[wheel] : undefined;
     ctl.pilot = !!car?.ship;
+    rd?.edge(!!me?.wield && !me.down);
     // E on a foe weak enough, close and ahead: the host tries the glory kill before a seat.
     const team = (id: number) => roster.find(p => p.id == id)?.team;
     const prey =
-      me && ctl.beast && !seat && !me.lock
+      me && (ctl.beast || me.wield) && !seat && !me.lock
         ? glory(
             me,
             others.filter(p => team(p.id) !== you.team),

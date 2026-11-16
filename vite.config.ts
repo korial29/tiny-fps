@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { Sequencer } from './test/sequencer';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 
@@ -63,6 +64,8 @@ export default defineConfig({
     environment: 'node',
     // The moon's scenery is built whole in several tests: seconds each on a CI runner, past the default 5 s.
     testTimeout: 30_000,
+    // Shards by each file's time (test/durations.json), not by a hash of its path.
+    sequence: { sequencer: Sequencer },
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

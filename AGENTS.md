@@ -38,6 +38,7 @@ Node 24 (`.nvmrc`).
 npm start           # demo with hot reload (Vite)
 npm run dev:server  # WebSocket server on :8787
 npm test            # Vitest
+npm run test:durations  # the full suite, then test/durations.json (the CI shards by it)
 npm run lint        # Prettier + ESLint + tsc --noEmit
 npm run build       # dist/: client, local, server, types
 npm run size        # gzip budgets
@@ -105,6 +106,7 @@ Read [docs/PERFORMANCE.md](docs/PERFORMANCE.md) before adding anything drawn eve
 ## Tests
 
 - Vitest. A fix comes with a test that fails without it.
+- CI runs the tests on four runners (`ci.yml`), the files split by their seconds in `test/durations.json` (`test/sequencer.ts`), four workers each, no coverage. Keep a file under about 15 s locally: Vitest runs a file's tests one after another, so a long file is the floor of its shard; split a heavy one by its `describe` blocks into `name.topic.test.ts`. Run `npm run test:durations` after adding, splitting or growing a test file.
 - Prediction must be checked against the room: the same inputs through the room and through the predictor end at exactly the same place (state is float32 on both sides). Those tests build their world from `ROOFTOPS` and pass it to the `Room`, whose default map is `HIGHLINE`.
 - The map is checked by `src/shared/highline.test.ts`: symmetry (every brush has a twin, bases and spawns mirror), validity (no overlap, no crack, spawns and flags on tops with room), the three routes from each base to the other flag and back, the fast route's need for a dash, a double jump and a wall-run and the low route's need for none, the ways back up after a miss, and a capture flown through a room.
 - Visual work: render the built client with a fake socket in headless Chromium, look at the screenshot, then report.

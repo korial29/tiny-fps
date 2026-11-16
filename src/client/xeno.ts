@@ -1032,20 +1032,26 @@ const tubed = (
     acc.push(acc[i - 1] + far(w[i - 1], w[i]));
   }
   const a = room(out, 0);
+  // Scalars only: a nearest segment for every vertex, with arrays, was a tenth of a second at load.
   for (let i = from; i < out.length; i += STRIDE) {
-    const p: Vec3 = [a[i], a[i + 1], a[i + 2]];
-    let [best, along] = [Infinity, 0];
+    const [px, py, pz] = [a[i], a[i + 1], a[i + 2]];
+    let best = Infinity;
+    let along = 0;
     for (let k = 1; k < w.length; k++) {
-      const [s, e] = [w[k - 1], w[k]];
-      const d = [e[0] - s[0], e[1] - s[1], e[2] - s[2]];
-      const l2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2] || 1;
+      const s = w[k - 1];
+      const e = w[k];
+      const dx = e[0] - s[0];
+      const dy = e[1] - s[1];
+      const dz = e[2] - s[2];
+      const l2 = dx * dx + dy * dy + dz * dz || 1;
       const t = Math.min(
-        Math.max(((p[0] - s[0]) * d[0] + (p[1] - s[1]) * d[1] + (p[2] - s[2]) * d[2]) / l2, 0),
+        Math.max(((px - s[0]) * dx + (py - s[1]) * dy + (pz - s[2]) * dz) / l2, 0),
         1,
       );
-      const m = far(p, [s[0] + d[0] * t, s[1] + d[1] * t, s[2] + d[2] * t]);
+      const m = Math.hypot(px - (s[0] + dx * t), py - (s[1] + dy * t), pz - (s[2] + dz * t));
       if (m < best) {
-        [best, along] = [m, acc[k - 1] + (acc[k] - acc[k - 1]) * t];
+        best = m;
+        along = acc[k - 1] + (acc[k] - acc[k - 1]) * t;
       }
     }
     a[i + 6] = along;
@@ -1470,16 +1476,32 @@ export const HEAD_UP = 0.065;
  */
 const grow = (o: Out, from: number, at: Vec3, q: Quat) => {
   const a = room(o, 0);
-  const back: Quat = [-q[0], -q[1], -q[2], q[3]];
+  const [qx, qy, qz, qw] = q;
+  // turn() by q (s 1) or its inverse (s -1), written out: four a vertex over the head's tens of
+  // thousands allocated most of the map's load.
+  let [X, Y, Z] = [0, 0, 0];
+  const rot = (s: number, x: number, y: number, z: number) => {
+    const [ux, uy, uz] = [s * qx, s * qy, s * qz];
+    const tx = 2 * (uy * z - uz * y);
+    const ty = 2 * (uz * x - ux * z);
+    const tz = 2 * (ux * y - uy * x);
+    X = x + qw * tx + uy * tz - uz * ty;
+    Y = y + qw * ty + uz * tx - ux * tz;
+    Z = z + qw * tz + ux * ty - uy * tx;
+  };
   for (let i = from; i < o.length; i += STRIDE) {
-    const p = turn(back, [a[i] - at[0], a[i + 1] - at[1], a[i + 2] - at[2]]);
-    const w = turn(q, [p[0] * HEAD_K * HEAD_X, p[1] * HEAD_K, p[2] * HEAD_K]);
-    const m = turn(back, [a[i + 3], a[i + 4], a[i + 5]]);
-    const n = turn(q, unit([m[0] / HEAD_X, m[1], m[2]]));
-    for (let r = 0; r < 3; r++) {
-      a[i + r] = at[r] + w[r];
-      a[i + 3 + r] = n[r];
-    }
+    rot(-1, a[i] - at[0], a[i + 1] - at[1], a[i + 2] - at[2]);
+    rot(1, X * HEAD_K * HEAD_X, Y * HEAD_K, Z * HEAD_K);
+    a[i] = at[0] + X;
+    a[i + 1] = at[1] + Y;
+    a[i + 2] = at[2] + Z;
+    rot(-1, a[i + 3], a[i + 4], a[i + 5]);
+    const mx = X / HEAD_X;
+    const l = Math.hypot(mx, Y, Z) || 1;
+    rot(1, mx / l, Y / l, Z / l);
+    a[i + 3] = X;
+    a[i + 4] = Y;
+    a[i + 5] = Z;
   }
 };
 // A lower, flatter forehead (the user, 2026-11-15: too conical), the chin where it was.

@@ -12,17 +12,46 @@ import {
   LOCK_FACING,
   LOCK_WINDOW,
   MIDLINE,
+  NADE,
   NECK,
+  PARRY_ARC,
   PLAYER_R,
 } from './constants';
 import { forward, heightOf } from './physics';
-import { CUT, KEY, LIMB, SPECIAL_CUT } from './types';
-import type { PlayerState } from './types';
+import { CUT, KEY, LIMB, MODE, SPECIAL_CUT } from './types';
+import type { Ball, PlayerState } from './types';
 import { hidden } from './world';
 import type { World } from './world';
 
 /** Where on the body the blade is, as a share of its height: the chest, which a brush must not cover. */
 export const CHEST = 0.7;
+
+/**
+ * Whether `p` can meet the ball `b` that reached him with the katana: in hand, on his feet (not
+ * hanging, climbing, seated or stumbling), a ball (not a grenade or an arc) coming at him within
+ * PARRY_ARC radians of his facing. Whether he does is his kit's chance (Kit.parry, room.ts).
+ */
+export const fends = (p: PlayerState, b: Ball): boolean => {
+  if (!p.wield || p.stun > 0 || b.arc || b.power === NADE) {
+    return false;
+  }
+  if (p.mode === MODE.HANG || p.mode === MODE.CLIMB || p.mode === MODE.RIDE) {
+    return false;
+  }
+  const [fx, fz] = forward(p.yaw);
+  const h = Math.sqrt(b.dx * b.dx + b.dz * b.dz);
+  return h > 1e-6 && -(b.dx * fx + b.dz * fz) >= Math.cos(PARRY_ARC) * h;
+};
+
+/** A number in [0, 1) from integers, the same for the same ones: the host's dice, which tests can replay. */
+export const roll = (...n: number[]): number => {
+  let h = 2166136261;
+  for (const v of n) {
+    h = Math.imul(h ^ v, 16777619);
+  }
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  return ((h ^ (h >>> 12)) >>> 0) / 2 ** 32;
+};
 
 /**
  * The cut the keys held when FIRE starts a swing give: LEFT or RIGHT, one of them, cuts across from

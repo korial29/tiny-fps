@@ -279,3 +279,13 @@ A class with no weapon at all (`ROLE.XENO`, kit.ts): the racks give it nothing a
 - Pounce: DASH held on a floor or a wall charges for up to 0.6 s; let go, it leaps 9 to 17 m/s along the look, at least 0.3 rad up. The first enemy its body meets in the next 40 ticks of flight is pinned: 2 hp, his flag dropped, a stumble of a second; the pounce stops on him.
 - Acid: an enemy's katana or fists that hit it cost him 1 hp, never another xenomorph's.
 - Kills by any of these are `FRAG.CLAW`.
+
+## The ninja's parry (the user, 2026-11-16)
+
+With the katana in hand the ninja meets the shots that come at him and strikes them back where he aims.
+
+- Which: a ball of the gun (any charge), a round of the laser rifle or a vehicle's bolt; not a grenade, a missile or the katana's arc. It must come at him within `PARRY_ARC` (1.2 rad) of his facing, while he is on his feet: not hanging, climbing, seated or stumbling (`fends()`, blade.ts).
+- How often: `Kit.parry`, `PARRY` (0.7) for the ninja, 0 for the others. The host rolls it (`roll()`, a hash of the tick, the ball and the ninja: the same match plays the same).
+- What: the ball ends on his blade (its burst, no hit for its shooter), and one as strong leaves his eye along his look (`Room.deflect()`), his and his team's, with its full range again. It hurts at the full strength of the shot that came, not the half of his guns (`Flying.back`), and its hits and frags are his. Its id is his `shots` + 64 + his parries, u8, so it names no ball of his still in flight.
+- Wire: nothing new; the sent-back ball is an ordinary ball of his.
+- Feedback: a client hears a ring (`SHING` high, with a `ZAP`) where a new ball of a player with the katana in hand appears: he fires none, so it can only be a parry. The class menu says it in the ninja's strengths.

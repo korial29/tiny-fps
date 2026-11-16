@@ -418,6 +418,13 @@ export const [NECK, HIPS, MIDLINE] = [0.82, 0.45, 0.12];
  */
 export const SHOCK_TICKS = 24;
 export const SHOCK_KNOCK = 4;
+/**
+ * The ninja's parry (the user, 2026-11-16): with the katana in hand, a ball (not a grenade or an arc)
+ * that comes at him within PARRY_ARC radians of his facing is struck back PARRY of the time (Kit.parry),
+ * along his look.
+ */
+export const PARRY = 0.7;
+export const PARRY_ARC = 1.2;
 
 /**
  * The saber lock (the user, 2026-11-07, after Jedi Outcast): two foes whose cuts strike within

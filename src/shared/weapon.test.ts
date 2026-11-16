@@ -53,6 +53,7 @@ import {
   NADE_SPEED,
   NADE_HP,
   NADE_R,
+  PARRY,
 } from './constants';
 import {
   BLOW,
@@ -2678,4 +2679,69 @@ describe('random fire', () => {
     expect(taken).toBeGreaterThan(2);
     expect(down.size).toBeGreaterThan(1);
   }, 60_000);
+});
+
+describe('the ninja’s parry', () => {
+  const WEST = Math.PI / 2;
+  /**
+   * Cy (red) shoots `n` balls east, one at a time, at Bob (blue) 10 m off with the katana in hand,
+   * facing `yaw`, of the class `role`; both healed before each. Bob's parries and the balls that
+   * came back to Cy.
+   */
+  const volley = (n: number, role: number, yaw = WEST, over: Partial<PlayerState> = {}) => {
+    const m = match();
+    m.room.receive(m.bob, JSON.stringify({ t: 'body', body: 0, role }));
+    const keep = (c: Peer) => ({ shots: m.state(c).shots, hits: m.state(c).hits });
+    let [parried, back] = [0, 0];
+    for (let k = 0; k < n; k++) {
+      m.put(m.cy, 0, 0, { ...GUN, ...keep(m.cy) });
+      m.put(m.bob, 10, 0, { ...SWORD, wield: true, yaw, ...keep(m.bob), ...over });
+      m.fire(m.cy);
+      parried += m.state(m.bob).hp === HP_MAX ? 1 : 0;
+      back += HP_MAX - m.state(m.cy).hp;
+    }
+    return { m, parried, back };
+  };
+
+  it('strikes back about PARRY of the balls that come at the ninja from in front', () => {
+    const { parried } = volley(60, ROLE.NINJA);
+    expect(parried / 60).toBeGreaterThan(PARRY - 0.15);
+    expect(parried / 60).toBeLessThan(PARRY + 0.15);
+  });
+
+  it('sends a parried ball along his look, his own, at the full strength of the shot', () => {
+    const { m, parried, back } = volley(20, ROLE.NINJA);
+    expect(parried).toBeGreaterThan(0);
+    // Every ball he sent back came down the line to Cy and took 1 hp, not the half of his guns.
+    expect(back).toBe(parried);
+    expect(m.state(m.bob).hits).toBe(parried);
+    // The shooter counts the hits that landed, not the ones the blade met.
+    expect(m.state(m.cy).hits).toBe(20 - parried);
+  });
+
+  it('meets nothing from behind, without the katana in hand, or as a marine', () => {
+    expect(volley(20, ROLE.NINJA, EAST).parried).toBe(0);
+    expect(volley(20, ROLE.NINJA, WEST, { wield: false }).parried).toBe(0);
+    expect(volley(20, ROLE.MARINE).parried).toBe(0);
+  });
+
+  it('puts the ball he sends back in the snapshot as his', () => {
+    const m = match();
+    m.room.receive(m.bob, JSON.stringify({ t: 'body', body: 0, role: ROLE.NINJA }));
+    const seen = new Set<number>();
+    for (let k = 0; k < 10; k++) {
+      m.put(m.cy, 0, 0, { ...GUN, shots: m.state(m.cy).shots });
+      m.put(m.bob, 10, 0, { ...SWORD, wield: true, yaw: WEST, shots: m.state(m.bob).shots });
+      m.ticks(SNAP_EVERY);
+      m.tap(m.cy);
+      for (let t = 0; t < 40; t++) {
+        m.room.tick();
+        if (m.room['ticks'] % SNAP_EVERY === 0) {
+          (m.snap(m.ann).balls ?? []).forEach(b => b.by === 1 && !b.burst && seen.add(b.id));
+        }
+      }
+      m.land();
+    }
+    expect(seen.size).toBeGreaterThan(3);
+  });
 });

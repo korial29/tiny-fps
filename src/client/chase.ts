@@ -10,10 +10,15 @@ import type { Vec3 } from './mesh';
 import { damp } from './spring';
 
 export const CHASE = {
-  /** The pivot above the rover's centre, the camera behind it along the look, and above that line: metres. */
+  /**
+   * The pivot above the rover's centre, the camera behind it along the look, and above that line:
+   * metres. RISE keeps the view over the rover's roll bar onto what its lasers strike from AIM_MIN
+   * on: at 0.6 a strike nearer than some 25 m, and the bolts on their way to it, were behind the
+   * rover itself (a level look on the moon's rolling ground meets it that near).
+   */
   UP: 1.6,
   BACK: 6.5,
-  RISE: 0.6,
+  RISE: 1.6,
   /** The spring the pivot trails the rover on, and the one the camera backs out on after a wall pulled it in (1 / s). */
   W: 16,
   OUT: 5,

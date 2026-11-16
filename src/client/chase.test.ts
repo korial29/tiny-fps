@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { box, land, rise } from '../../test/slope';
 import { ground } from '../shared/relief';
-import { ROVER } from '../shared/rover';
+import { AIM_MIN, ROVER, aimOf, bolts } from '../shared/rover';
 import { NOBODY } from '../shared/types';
 import type { Rover } from '../shared/types';
 import type { World } from '../shared/world';
 import { CHASE, chasePitch, createChase } from './chase';
+import { craft } from './craft';
+import { STRIDE } from './mesh';
+import { rover } from './rover';
 import type { Chase, Shot } from './chase';
 import type { Vec3 } from './mesh';
 
@@ -125,7 +128,7 @@ describe('the chase camera against the world', () => {
   });
 
   it('is pulled in by a slope behind it, and stays over the ground', () => {
-    const w = land(x => (x > 4 ? (x - 4) * rise(35) : 0));
+    const w = land(x => (x > 3 ? (x - 3) * rise(45) : 0));
     const r = car();
     const s = sit(createChase(w), r, Math.PI / 2, CHASE.HI);
     expect(dist(s.at, pivot(r))).toBeLessThan(reach(CHASE.HI) - 0.3);
@@ -254,4 +257,73 @@ describe('the chase camera in time', () => {
     const s = sit(c, next);
     expect(s.at[0]).toBeCloseTo(200, 5);
   });
+});
+
+describe('the chase camera over the own lasers', () => {
+  const w = land();
+  /** Whether the segment from `o` to `b` passes through a triangle of `tris` (Möller–Trumbore). */
+  const through = (o: Vec3, b: Vec3, tris: Vec3[][]) => {
+    const d = b.map((v, i) => v - o[i]) as Vec3;
+    const sub = (a: Vec3, c: Vec3) => a.map((v, i) => v - c[i]) as Vec3;
+    const cross = (a: Vec3, c: Vec3): Vec3 => [
+      a[1] * c[2] - a[2] * c[1],
+      a[2] * c[0] - a[0] * c[2],
+      a[0] * c[1] - a[1] * c[0],
+    ];
+    const dot = (a: Vec3, c: Vec3) => a[0] * c[0] + a[1] * c[1] + a[2] * c[2];
+    return tris.some(([a, b1, c]) => {
+      const [e1, e2] = [sub(b1, a), sub(c, a)];
+      const p = cross(d, e2);
+      const det = dot(e1, p);
+      if (Math.abs(det) < 1e-12) {
+        return false;
+      }
+      const t0 = sub(o, a);
+      const u = dot(t0, p) / det;
+      const q = cross(t0, e1);
+      const v = dot(d, q) / det;
+      const t = dot(e2, q) / det;
+      return u >= 0 && v >= 0 && u + v <= 1 && t > 1e-4 && t < 1 - 1e-4;
+    });
+  };
+  const triangles = (out: number[]): Vec3[][] => {
+    const tris: Vec3[][] = [];
+    for (let i = 0; i + 3 * STRIDE <= out.length; i += 3 * STRIDE) {
+      tris.push([0, 1, 2].map(k => out.slice(i + k * STRIDE, i + (k * STRIDE + 3)) as Vec3));
+    }
+    return tris;
+  };
+
+  // A ship flies nose on the look, 14 m long: what its look meets is a ship's length ahead at least.
+  it.each([
+    ['rover', false, AIM_MIN, [0, CHASE.HI / 2]],
+    ['ship', true, 2 * AIM_MIN, [0]],
+  ])(
+    'shows the %s’s bolts and where they strike, from its nearest aim on, over the vehicle',
+    (_, ship, nearest, pitches) => {
+      const r = car({ ship });
+      const out: number[] = [];
+      if (ship) {
+        craft(out, r, [1, 0.2, 0.2], 0, 2);
+      } else {
+        rover(out, r, w, 0, [1, 0.2, 0.2], 2);
+      }
+      const tris = triangles(out);
+      for (const pitch of pitches) {
+        for (const near of [nearest, 2 * nearest, 4 * nearest]) {
+          const { at } = sit(createChase(w), r, 0, pitch);
+          // The look meets something `near` metres on: the bolts cross there and burst.
+          const end = aimOf(r, 0, pitch, () => near);
+          expect(through(at, end, tris)).toBe(false);
+          // Their last half too, on the way to it.
+          for (const b of bolts(r, 1, 0, 0, pitch, 0, () => near)) {
+            const o: Vec3 = [b.x, b.y, b.z];
+            for (let k = 0.5; k < 1; k += 0.1) {
+              expect(through(at, o.map((v, i) => v + (end[i] - v) * k) as Vec3, tris)).toBe(false);
+            }
+          }
+        }
+      }
+    },
+  );
 });

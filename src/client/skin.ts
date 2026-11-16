@@ -778,13 +778,13 @@ const TRUNK_X = remake(
     r[3] *= 0.72 + 0.2 * up - 0.2 * neck + 0.4 * hip;
     r[4] *= 0.8 + 0.18 * up - 0.15 * neck + 0.3 * hip;
     r[2] -= 0.018 * hip;
-    // Its ribs: the strips under the chest in turn lighter and darker.
-    const rib = at > 1.02 && at < 1.4 && TRUNK.rings.findIndex(q => q[0] == at) % 2;
-    // One chitin up to the skull: a lighter neck drew a collar's line round it.
-    return [...r.slice(0, 6), rib ? TRIM : JACKET];
+    // One chitin up to the skull: a lighter neck drew a collar's line round it, and the ribs are
+    // xeno.ts's (painted strips under them read as a belt).
+    return [...r.slice(0, 6), JACKET];
   },
-  // More sides close: the shoulders' outline round, not in facets.
-  { far: [...TRUNK.far, 16], n: [8, 14, 28] },
+  // More sides near and close: the shoulders' outline round, not in facets (14 near and 28 close
+  // still drew their corners).
+  { far: [...TRUNK.far, 16], n: [8, 18, 36] },
 );
 // The neck runs on up into the skull, where its top is hidden: no flat ring under the jaw.
 // A long neck under the head carried high (xeno.ts: HEAD_UP), running up into it.
@@ -797,7 +797,15 @@ TRUNK_X.rings.push(
 );
 // The leg ends at the ankle, closed: its foot is xeno.ts's metatarsal(), longer than the rig's.
 const LEG_X = remake(
-  { ...LEG, rings: [...LEG.rings.filter(r => r[0] > 0.1), [0.075, 0.1, 0, 0, 0, 3, UPPER]] },
+  // Its end a dome into the ankle's ball (metatarsal()): a flat cap drew a boot's sole there.
+  {
+    ...LEG,
+    rings: [
+      ...LEG.rings.filter(r => r[0] > 0.1),
+      [0.088, 0.1, 0, 0.04, 0.042, 3, UPPER],
+      [0.072, 0.1, 0, 0, 0, 3, UPPER],
+    ],
+  },
   r => {
     const [at] = r;
     // The thighs set wider at the top, under the wide hips.
@@ -811,9 +819,25 @@ const LEG_X = remake(
       return t * t * (3 - 2 * t);
     };
     const thigh = e(0.44, 0.6);
-    r[3] *= 0.64 + 0.32 * thigh + 0.06 * g(0.72, 0.1) + 0.24 * g(0.33, 0.09) - 0.06 * g(0.5, 0.035);
-    r[4] *= 0.7 + 0.34 * thigh + 0.06 * g(0.72, 0.1) + 0.42 * g(0.33, 0.09) - 0.06 * g(0.5, 0.035);
-    r[2] += 0.012 * g(0.7, 0.1) - 0.028 * g(0.33, 0.09);
+    // Its skeleton showing through (the user, 2026-11-16: as a human skeleton's): full at the
+    // hip, a lean thigh down to the knee's knobs and its kneecap in front, a lean shin with a little
+    // calf behind, and the ankle's knobs.
+    const hip = e(0.72, 0.88);
+    r[3] *=
+      0.58 +
+      0.24 * thigh +
+      0.14 * hip +
+      0.16 * g(0.495, 0.03) +
+      0.06 * g(0.33, 0.09) +
+      0.14 * g(0.095, 0.02);
+    r[4] *=
+      0.64 +
+      0.26 * thigh +
+      0.14 * hip +
+      0.1 * g(0.495, 0.03) +
+      0.16 * g(0.33, 0.09) +
+      0.08 * g(0.095, 0.02);
+    r[2] += 0.006 * g(0.5, 0.025) - 0.012 * g(0.33, 0.09);
     // A knee that bends in one place (the user, 2026-11-15: an angle, not a curve): the man's rings
     // blend the thigh and the shin over 40 cm round it; here only the 8 cm across it do, and the
     // shin hangs on its own bone down to the ankle.
@@ -823,26 +847,23 @@ const LEG_X = remake(
     r[5] = u < 1 ? u : at >= 0.53 ? 1 : at > 0.45 ? 1 + (0.53 - at) / 0.08 : 2;
     return [...r.slice(0, 6), at > 0.11 ? PANTS : UPPER];
   },
-  { far: [0, 3, 8, 11, 15, 17], n: [6, 12, 22] },
+  { far: [0, 3, 8, 11, 15, 18], n: [6, 12, 22] },
 );
 // Real shoulders (the user, 2026-11-15: no angle there): the deltoid's cap near the man's, round
 // over the joint, then the arm thinning under it down to the wrist.
 const ARM_X = remake(ARM, r => {
   const at = r[0];
   const g = (c: number, w: number) => Math.exp(-(((at - c) / w) ** 2));
-  const t = Math.min(Math.max((at - 1.05) / 0.3, 0), 1);
-  // One smooth profile, as the legs' (the user, 2026-11-15): the top as thick as the shoulder it
-  // hangs from (a thinner one left a slanting facet there), a round biceps, a lean elbow, the
-  // forearm's muscles under it, a thin wrist. The sides are the man's, so the first strip fans from
-  // the shoulder's side evenly.
-  const k =
-    0.66 +
-    0.3 * t * t * (3 - 2 * t) +
-    0.06 * g(1.2, 0.06) +
-    0.1 * g(1.0, 0.045) -
-    0.05 * g(1.09, 0.025);
-  r[3] *= k;
-  r[4] *= k + 0.02;
+  const t = Math.min(Math.max((at - 1.2) / 0.17, 0), 1);
+  const top = t * t * (3 - 2 * t);
+  // Its skeleton showing through (the user, 2026-11-16: as a human skeleton's, no pieces laid on
+  // it): the top as thick as the shoulder it hangs from (a thinner one left a slanting facet
+  // there), then a lean shaft down to the elbow's knobs, wide across with its point behind, a
+  // thin forearm and the wrist's knobs. The sides are the man's, so the first strip fans from the
+  // shoulder's side evenly.
+  r[3] *= 0.6 + 0.36 * top + 0.17 * g(1.175, 0.028) + 0.1 * g(0.965, 0.02);
+  r[4] *= 0.62 + 0.36 * top + 0.12 * g(1.17, 0.028) + 0.05 * g(0.965, 0.02);
+  r[2] -= 0.005 * g(1.165, 0.025);
   return [...r.slice(0, 6), r[0] < 0.98 ? GLOVE : JACKET];
 });
 /**
@@ -863,6 +884,31 @@ const PROFILE = [0.42, 1.69, 0.21, 0.084, 0.1];
 const TIP = 0.062;
 const BANANA = [0.17, 0.09];
 
+/**
+ * The dome's section `z` behind the face's edge (0 to PROFILE[0]), in the rest pose: its centre's
+ * height, half width and half height (an ellipse). xeno.ts lays its veins on it.
+ */
+export const domeAt = (z: number): [number, number, number] => {
+  const k = Math.sqrt(Math.max(0, 1 - (z / PROFILE[0]) ** 2));
+  const c = PROFILE[1] - PROFILE[2] * (z / PROFILE[0]) ** 2;
+  // The top as it is (the user, 2026-11-15: perfect); the underside curves up toward the tip,
+  // thinning the back of the head into a blade clear of the neck and the back.
+  const top = c + PROFILE[4] * k;
+  // A banana (the user, 2026-11-15): from the face's full edge (no seam) down to a body of a
+  // nearly even thickness along the top's curve, tapering a little, and a round end.
+  // Out of the face's edge with no slope of its own (the user, 2026-11-15: no line between the
+  // banana and the face), eased over several rings.
+  const e = Math.min(Math.max(z / 0.16, 0), 1);
+  const f = e * e * (3 - 2 * e);
+  const along = Math.max(0, (z - 0.1) / (PROFILE[0] - 0.1));
+  const u = Math.max(0, (z - PROFILE[0] + TIP) / TIP);
+  const cap = Math.sqrt(Math.max(0, 1 - u * u));
+  // One even thickness from the face's edge to the round end (the user, 2026-11-15: a regular
+  // banana), thin enough there to clear the neck.
+  const th = (2 * PROFILE[4] * (1 - f) + f * BANANA[0]) * cap;
+  const w = (PROFILE[3] * (1 - f) + f * (BANANA[1] - (BANANA[1] - TIP) * along)) * cap;
+  return [top - th / 2, w, th / 2];
+};
 const CREST: Loft = {
   chain: [J.HEAD, J.HEAD],
   n: [6, 16, 36],
@@ -872,25 +918,8 @@ const CREST: Loft = {
   rings: Array.from({ length: 12 }, (_, i) => {
     // From the tip at the back (i = 0) to the face's edge (i = 11), closer together toward the tip.
     const z = PROFILE[0] * Math.cos(((i / 11) * Math.PI) / 2);
-    const k = Math.sqrt(Math.max(0, 1 - (z / PROFILE[0]) ** 2));
-    const c = PROFILE[1] - PROFILE[2] * (z / PROFILE[0]) ** 2;
-    // The top as it is (the user, 2026-11-15: perfect); the underside curves up toward the tip,
-    // thinning the back of the head into a blade clear of the neck and the back.
-    const top = c + PROFILE[4] * k;
-    // A banana (the user, 2026-11-15): from the face's full edge (no seam) down to a body of a
-    // nearly even thickness along the top's curve, tapering a little, and a round end.
-    // Out of the face's edge with no slope of its own (the user, 2026-11-15: no line between the
-    // banana and the face), eased over several rings.
-    const e = Math.min(Math.max(z / 0.16, 0), 1);
-    const f = e * e * (3 - 2 * e);
-    const along = Math.max(0, (z - 0.1) / (PROFILE[0] - 0.1));
-    const u = Math.max(0, (z - PROFILE[0] + TIP) / TIP);
-    const cap = Math.sqrt(Math.max(0, 1 - u * u));
-    // One even thickness from the face's edge to the round end (the user, 2026-11-15: a regular
-    // banana), thin enough there to clear the neck.
-    const th = (2 * PROFILE[4] * (1 - f) + f * BANANA[0]) * cap;
-    const w = (PROFILE[3] * (1 - f) + f * (BANANA[1] - (BANANA[1] - TIP) * along)) * cap;
-    return [z, 0, top - th / 2, w, th / 2, 0, TRIM];
+    const [c, w, h] = domeAt(z);
+    return [z, 0, c, w, h, 0, TRIM];
   }),
 };
 // A ring between each two: a smooth skull close up.
@@ -1045,7 +1074,8 @@ const shape = (lod: number, xeno = false): Skin => {
                 ? lod == 2
                   ? 2.6
                   : 1.9 + 0.1 * clamp((at - SPLIT) / 0.07)
-                : (L.e ?? 2) * (L === LG && at < 0.12 ? 2 : 1);
+                : // The shoe's square; the xenomorph's ankle round.
+                  (L.e ?? 2) * (L === LEG && at < 0.12 ? 2 : 1);
             // The back widens over the 12 cm under the armpits toward the shoulders' ring, whose
             // vertices it takes at the split: no ridge across the shoulder blades. The chest does
             // not: it would stand out of the shoulders' front (the user, 2026-11-09: no shelf).
@@ -2171,7 +2201,7 @@ export const bindOf = (build = 0) => BINDS[build];
  * The upper arm of shoulder joint `j` in the world without its turn about itself: the swing of
  * its rotation from the collarbone's, about the bone's rest axis, on the collarbone's.
  */
-const swing = (rot: Quat[], j: number, build = 0): Quat => {
+export const swing = (rot: Quat[], j: number, build = 0): Quat => {
   const c = rot[j - 1];
   const l = mul([-c[0], -c[1], -c[2], c[3]], rot[j]);
   const b = RESTS[build][j + 1];

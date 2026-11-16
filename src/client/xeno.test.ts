@@ -112,13 +112,14 @@ describe('its pieces', () => {
     expect(Math.max(...r.map(p => Math.abs(p[0])))).toBeGreaterThan(0.15);
     expect(Math.max(...out(o => elbow(o, O, ID, 1)).map(p => p[2]))).toBeGreaterThan(0.1);
     expect(Math.max(...out(o => heel(o, O, ID, 1)).map(p => p[2]))).toBeGreaterThan(0.1);
-    // A human skull's face in front, in the dome's colour, the mouth dark between grey teeth.
+    // A human skull's face in front, in the dome's colour, the mouth dark between steel teeth,
+    // tendons in a lighter chitin beside it.
     const sk: number[] = [];
     skull(sk, O, ID, 3);
     const f = points(sk);
     expect(Math.min(...f.map(p => p[2]))).toBeLessThan(-0.11);
     const reds = new Set(Array.from({ length: sk.length / 10 }, (_, i) => sk[i * 10 + 6]));
-    expect([...reds].sort((a, b) => a - b)).toEqual([0.02, HEAD[0], 0.42]);
+    expect([...reds].sort((a, b) => a - b)).toEqual([0.02, HEAD[0], HEAD[0] * 1.45, 0.66]);
     const lit: number[] = [];
     eyes(lit, O, ID, [1, 0, 0]);
     expect(lit.filter((_, i) => i % 10 == 8).every(l => l == -2)).toBe(true);

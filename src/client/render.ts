@@ -6,6 +6,7 @@
 // colour writes off. The scene goes into an offscreen target, then a second, small program (POST)
 // turns it into the picture on the canvas. No DOM beyond the canvas.
 import { ORBIT } from '../shared/constants';
+import { ROLE } from '../shared/kit';
 import { heightOf } from '../shared/physics';
 import { altitude } from '../shared/ship';
 import { MODE, TEX } from '../shared/types';
@@ -1422,8 +1423,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           rifled: false,
         },
       };
-      // At ease, the arms down: no fighter's guard.
+      // At ease, the arms down: no fighter's guard. The xenomorph is never at ease: it threatens.
       const r = createRunner(model, undefined, build, look ?? {}, true);
+      r.menace = look?.role === ROLE.XENO;
       if (shot.grin) {
         // Eased in at once: a moment of the face's time, under its first blink's half second.
         r.grin = GRIN;

@@ -156,5 +156,14 @@ export const roleOf = (role: number | undefined, def: Pick<WorldDef, 'helmets'>)
   return all.includes(role ?? -1) ? role! : all[0];
 };
 
+/**
+ * The build (BODY) a player is drawn with: the one picked, but the xenomorph's skin is cut on the
+ * man's skeleton (the user, 2026-11-16: no gender for it). The choice is kept for another class.
+ */
+export const buildOf = (
+  p: { role?: number; body?: number },
+  def: Pick<WorldDef, 'helmets'>,
+): number => (roleOf(p.role, def) == ROLE.XENO ? 0 : (p.body ?? 0));
+
 export const kitOf = (role: number | undefined, def: Pick<WorldDef, 'helmets'>): Kit =>
   KITS[roleOf(role, def)];

@@ -6,7 +6,7 @@ import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ClientText, ServerText } from '../shared/protocol';
 import { EV, FLAG, KEY, MODE } from '../shared/types';
 import type { Choice, PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
-import { ROLE, kitOf, roleOf, rolesOf } from '../shared/kit';
+import { ROLE, buildOf, kitOf, roleOf, rolesOf } from '../shared/kit';
 import { TONES, toneOf } from './features';
 import { styleOf } from './hair';
 import { shaved } from './skin';
@@ -430,7 +430,7 @@ const play = (
       colors = new Map(roster.map(p => [p.id, p.color]));
       names = new Map(roster.map(p => [p.id, p.name]));
       rd?.wear(
-        new Map(roster.map(p => [p.id, p.body ?? 0])),
+        new Map(roster.map(p => [p.id, buildOf(p, world.def)])),
         new Map(
           roster.map(({ id, tone, hair, role }) => [
             id,
@@ -443,7 +443,7 @@ const play = (
       const build = own?.body ?? 0;
       picked = { body: build, tone: own?.tone, hair: own?.hair, role: own?.role };
       body.wear(
-        build,
+        own ? buildOf(own, world.def) : 0,
         own?.tone === undefined ? undefined : TONES[own.tone],
         roleOf(own?.role, world.def) == ROLE.NINJA,
         roleOf(own?.role, world.def) == ROLE.XENO,

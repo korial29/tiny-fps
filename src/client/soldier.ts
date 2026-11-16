@@ -34,6 +34,8 @@ import {
 } from './body';
 import { HOOK, JAB, LUNGE, SIDE, armOf, bare, blowOf, createGait, frame, thrown } from './gait';
 import type { Floor, Gait, Seat } from './gait';
+import { FOOT_UP, createFours } from './fours';
+import type { Fours } from './fours';
 import {
   ARC,
   RIFLE_HOLD,
@@ -126,6 +128,8 @@ export interface Runner {
   /** The player as last seen. */
   p: PlayerState;
   gait: Gait;
+  /** The xenomorph's gait on all fours (fours.ts): none for the others. */
+  fours?: Fours;
   /** How much of a dash it is in, eased from 0 to 1: the length of the streaks. */
   dash: number;
   /** Seconds since its last shot, and how far its gun arm is raised to aim, eased from 0 to 1. */
@@ -228,10 +232,13 @@ export const createRunner = (
     femme(face.w);
   }
   gait.update(p, 0, undefined, seat);
+  const fours = look?.role === ROLE.XENO ? createFours() : undefined;
+  fours?.update(p, 0);
   return {
     seat,
     p: { ...p },
     gait,
+    fours,
     dash: +dashing(p),
     since: 1e3,
     aim: 0,
@@ -342,7 +349,9 @@ export const animate = (
     const seat = seatOf(p, rovers);
     if (r) {
       r.seat = seat;
-      r.gait.update(p, dt, world && floorOf(world, p.y), seat);
+      const floor = world && floorOf(world, p.y);
+      r.gait.update(p, dt, floor, seat);
+      r.fours?.update(p, dt, floor);
       r.dash += (+dashing(p) - r.dash) * (1 - Math.exp(-dt * DASH_RATE));
       r.since = p.shots == r.p.shots && !p.zapping ? r.since + dt : 0;
       // A shot raises the gun at once, so that it points at the shot when the beam is drawn.
@@ -718,8 +727,6 @@ export const dissolve = (out: Out, from: number, k: number) => {
  * the legs read as an animal's: the hips a little higher, the foot's long bone near upright over its
  * ball, the bones straight (the user, 2026-11-15: a deeper crouch bowed the legs into an arc).
  */
-/** How far prowl() tips the xenomorph's foot down from the gait's, radians: steep, the arch of its sole showing. */
-const FOOT_UP = 1.0;
 /** Where the ankle stands over the ball once the foot is tipped FOOT_UP: up, and behind it. */
 const ANKLE = [
   -(FOOT_TIP[1] * Math.cos(FOOT_UP) + FOOT_TIP[2] * Math.sin(FOOT_UP)),
@@ -819,6 +826,8 @@ export const stance = (r: Runner) => {
   let s = solve(pose);
   if (r.look?.role === ROLE.XENO && !lying) {
     pose = prowl(pose, s, p);
+    // On all fours in a sprint and on a wall.
+    pose = r.fours?.apply(pose) ?? pose;
     s = solve(pose);
   }
   if (p.wield && !lying) {
@@ -1095,6 +1104,7 @@ export const soldier = (
           : 0.65 + 0.35 * Math.max(0, 1 - (u - hit) / (1 - hit)) * +!!u,
         color,
         lod,
+        r.fours?.weight,
       );
       const part = partsOf(lod);
       const put = ({ key, make, thin }: Part, at: Vec3, q: Quat) =>

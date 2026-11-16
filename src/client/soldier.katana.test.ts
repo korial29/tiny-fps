@@ -4,9 +4,9 @@ import { STILL } from '../shared/physics';
 import { CUT, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { grip } from './gun';
-import { BEHIND, axes } from './katana';
+import { BEHIND, PARRY_IN, PARRY_OUT, axes, ends } from './katana';
 import { KATANA_LEFT } from './body';
-import { STRIDE, add } from './mesh';
+import { STRIDE, add, basis, dot, sub } from './mesh';
 import { JOINT as J, solve, turn } from './rig';
 import { animate, brandish, createRunner, soldier, stance } from './soldier';
 import type { Runner } from './soldier';
@@ -194,6 +194,32 @@ describe('a runner with the katana', () => {
         expect(r.p.z - point[2]).toBeGreaterThan(at(hilt)[2] + 0.8);
       }
     });
+  });
+
+  it('parries: the blade sweeps across to the left and back, the grip in both hands', () => {
+    const p = blade();
+    const r = createRunner(p);
+    const across = (parry: number) => {
+      const s = solve(brandish(r.gait.pose(), p, -1, 0, 0, parry));
+      const [b, t] = ends(s.pos[J.HAND_R], s.rot[J.HAND_R]);
+      const d = sub(t, b);
+      const [right] = basis(p.yaw, 0);
+      return {
+        side: dot(d, right) / Math.hypot(...d),
+        hands: Math.hypot(...sub(s.pos[J.HAND_L], s.pos[J.HAND_R])),
+        low: s.pos[J.CHEST][1] - s.pos[J.HAND_R][1],
+        tip: s.pos[J.HEAD][1] - t[1],
+      };
+    };
+    const [rest, block, after] = [across(Infinity), across(PARRY_IN), across(PARRY_OUT)];
+    expect(rest.side).toBeGreaterThan(-0.2);
+    expect(block.side).toBeLessThan(-0.5);
+    expect(after.side).toBeCloseTo(rest.side, 5);
+    // Low enough to guard him (the user): the fists under the chest, the point under the head.
+    expect(block.low).toBeGreaterThan(0.08);
+    expect(block.tip).toBeGreaterThan(0.1);
+    // The left hand stays by the right on the grip.
+    expect(block.hands).toBeLessThan(0.25);
   });
 
   it('twists the chest through a cut across, so the shoulders carry the arms', () => {

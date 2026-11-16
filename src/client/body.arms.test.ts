@@ -16,7 +16,7 @@ import {
   loadFrame,
   swapOf,
 } from './gun';
-import { BEHIND, axes, ends } from './katana';
+import { BEHIND, PARRY_IN, axes, ends } from './katana';
 import { SHINE, STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, turn } from './rig';
@@ -586,5 +586,33 @@ describe('the rail gun in both hands', () => {
       );
       expect(away(palm, at)).toBeLessThan(0.015);
     }
+  });
+});
+
+describe('the parry', () => {
+  it('lays the katana along the view’s diagonal, from the bottom right to the top left, and back', () => {
+    const p = man({ blade: true, wield: true, ammo: -1 });
+    /** On the screen (-1 to 1 each way): where the katana's line meets its bottom edge and its top edge, and the right fist. */
+    const line = (body: Body) => {
+      const s = pose(body, p);
+      const [b, t] = ends(s.pos[J.HAND_R], s.rot[J.HAND_R]).map(v => {
+        const [x, y, z] = local(p, v);
+        return [x / (z * TAN * ASPECT), y / (z * TAN)];
+      });
+      const k = (t[1] - b[1]) / (t[0] - b[0]);
+      return { bottom: b[0] + (-1 - b[1]) / k, top: b[0] + (1 - b[1]) / k, base: b };
+    };
+    const body = watch(p, 60);
+    const guard = line(body);
+    body.parried();
+    body.update(p, PARRY_IN);
+    const block = line(body);
+    expect(block.bottom).toBeGreaterThan(0.4);
+    expect(block.top).toBeLessThan(-0.5);
+    // The guard (the blade ahead and up) is nothing like it.
+    expect(guard.top).toBeGreaterThan(-0.2);
+    // Back in the guard once it is over.
+    body.update(p, 1);
+    expect(line(body).top).toBeCloseTo(guard.top, 2);
   });
 });

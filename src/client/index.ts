@@ -1,4 +1,14 @@
-import { BOLT, HP_MAX, LOCK_WIN, PLAYER_H, PLAYER_R, TICK_HZ, VEHICLE } from '../shared/constants';
+import {
+  BOLT,
+  HP_MAX,
+  INTERP_DELAY,
+  NADE,
+  LOCK_WIN,
+  PLAYER_H,
+  PLAYER_R,
+  TICK_HZ,
+  VEHICLE,
+} from '../shared/constants';
 import { mapKey, mapOf } from '../shared/maps';
 import { bruise, eyeHeight, heightOf } from '../shared/physics';
 import { cylinder } from '../shared/plasma';
@@ -6,7 +16,7 @@ import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ClientText, ServerText } from '../shared/protocol';
 import { EV, FLAG, KEY, MODE } from '../shared/types';
 import type { Choice, PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
-import { ROLE, kitOf, roleOf, rolesOf } from '../shared/kit';
+import { ROLE, buildOf, kitOf, roleOf, rolesOf } from '../shared/kit';
 import { TONES, toneOf } from './features';
 import { styleOf } from './hair';
 import { shaved } from './skin';
@@ -19,7 +29,7 @@ import { createAnnouncer } from './announce';
 import { TAUNT_LATE, createTaunts, speakerOf } from './taunt';
 import { LINE, SAID } from './voice/clips';
 import { createAudio, savedMute, toggleMute } from './audio';
-import { createBalls } from './balls';
+import { createBalls, onBody } from './balls';
 import { createTracer } from './beams';
 import { beats, cues, say } from './beats';
 import { createBody } from './body';
@@ -310,8 +320,8 @@ const play = (
   let you = { id: -1, team: 0 };
   /** The latest snapshot, for the flags and the match; the one before it tells what just happened. */
   let match: Snapshot | undefined;
-  /** The rovers' laser bolts of the last snapshot, by shooter and id. */
-  let bolts = new Set<number>();
+  /** The balls of the last snapshot, by shooter and id. */
+  let seen = new Set<number>();
   /** The result of the match that has just ended, while its end screen shows. */
   let ended: Summary | undefined;
   let colors = new Map<number, string>();
@@ -352,19 +362,41 @@ const play = (
       if (s) {
         predictor.snapshot(s, performance.now());
         // A vehicle's laser bolt, new in this snapshot: its blaster is heard where it is, each a
-        // little off the pitch of the last so that a salvo does not drone.
+        // little off the pitch of the last so that a salvo does not drone. A new ball of a player
+        // with the katana in hand, who fires none, is one his blade sent back: it rings.
         const flying = new Set<number>();
         for (const b of s.balls ?? []) {
-          if (b.power === BOLT) {
-            const key = (b.by << 8) | b.id;
-            flying.add(key);
-            if (!bolts.has(key) && !b.burst) {
-              audio.play(SOUND.BLASTER, [b.x, b.y, b.z], 0.6, 0.92 + 0.16 * ((b.id * 0.618) % 1));
+          const key = (b.by << 8) | b.id;
+          flying.add(key);
+          if (seen.has(key) || b.burst) {
+            continue;
+          }
+          const p = s.players.find(q => q.id === b.by);
+          const at: [number, number, number] | undefined =
+            b.by === you.id ? undefined : [b.x, b.y, b.z];
+          if (p?.wield && p.mode !== MODE.RIDE && !b.arc && b.power !== NADE) {
+            audio.play(SOUND.SHING, at, 0.8, 1.6);
+            audio.play(SOUND.ZAP, at, 0.4, 1.3);
+            rd?.parried(b.by, at ? INTERP_DELAY / 1000 : 0);
+            if (!at) {
+              body.parried();
             }
+          } else if (b.power === BOLT) {
+            audio.play(SOUND.BLASTER, [b.x, b.y, b.z], 0.6, 0.92 + 0.16 * ((b.id * 0.618) % 1));
           }
         }
-        bolts = flying;
+        seen = flying;
         balls.snapshot(s.balls ?? [], you.id, performance.now());
+        // An enemy's ball, round or bolt that burst on the own body reddens the view at once, even
+        // when the host keeps its point for the next hit.
+        const self = s.players.find(p => p.id == you.id);
+        if (
+          self &&
+          !self.down &&
+          s.balls?.some(b => roster.find(q => q.id == b.by)?.team != you.team && onBody(b, self))
+        ) {
+          fx.hurt = 1;
+        }
         // A door that starts to open or to shut is heard where it is.
         for (const c of doors.snapshot(s.doors)) {
           audio.play(c.id, c.at, 0.9);
@@ -430,7 +462,7 @@ const play = (
       colors = new Map(roster.map(p => [p.id, p.color]));
       names = new Map(roster.map(p => [p.id, p.name]));
       rd?.wear(
-        new Map(roster.map(p => [p.id, p.body ?? 0])),
+        new Map(roster.map(p => [p.id, buildOf(p, world.def)])),
         new Map(
           roster.map(({ id, tone, hair, role }) => [
             id,
@@ -443,7 +475,7 @@ const play = (
       const build = own?.body ?? 0;
       picked = { body: build, tone: own?.tone, hair: own?.hair, role: own?.role };
       body.wear(
-        build,
+        own ? buildOf(own, world.def) : 0,
         own?.tone === undefined ? undefined : TONES[own.tone],
         roleOf(own?.role, world.def) == ROLE.NINJA,
         roleOf(own?.role, world.def) == ROLE.XENO,

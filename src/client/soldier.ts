@@ -84,7 +84,11 @@ import {
   cutting,
   ends,
   held as sword,
+  DEFLECT_LOW,
+  PARRY_IN,
+  deflect,
   locked,
+  parrying,
   poised,
   progress,
 } from './katana';
@@ -134,6 +138,8 @@ export interface Runner {
   gait: Gait;
   /** The xenomorph's gait on all fours (fours.ts): none for the others. */
   fours?: Fours;
+  /** Posed to threaten, the xenomorph of the menu's picture (menace()). */
+  menace?: boolean;
   /** How much of a dash it is in, eased from 0 to 1: the length of the streaks. */
   dash: number;
   /** Seconds since its last shot, and how far its gun arm is raised to aim, eased from 0 to 1. */
@@ -143,6 +149,8 @@ export interface Runner {
   focus: Vec3;
   /** How far through its katana cut it is, -1 when it is not cutting, the light the blade leaves and the clock of its crackle. */
   prog: number;
+  /** Seconds since his katana struck a ball back (DEFLECT, katana.ts), from below 0 when it is yet to be drawn. */
+  parry: number;
   trail: Trail;
   t: number;
   /** The limb a katana's cut took off, while he is down (see limbs.ts). */
@@ -248,6 +256,7 @@ export const createRunner = (
     aim: 0,
     focus: far(p),
     prog: -1,
+    parry: Infinity,
     trail: createTrail(),
     t: 0,
     hurt: 0,
@@ -362,6 +371,7 @@ export const animate = (
       r.aim = r.since == 0 ? 1 : r.aim + (+(r.since < AIMING) - r.aim) * (1 - Math.exp(-dt * 12));
       r.focus = r.since < AIMING ? (world ? focus(p, world)[0] : far(p)) : r.focus;
       r.prog = progress(r.prog, p, dt);
+      r.parry += dt;
       // Put down by the bolt: a burst of sparks, then more as he comes apart.
       const k = fried(p);
       if (k > 0 && k < 1) {
@@ -562,11 +572,24 @@ const CARRY = [-0.02, -0.5, 0.26, 0, 0.45, 0.89];
  * seen from the runner's eye (the share `e` of it, so that it is drawn from the guard and back to
  * it), and the trunk twisting, bending and leaning through it (trunk()).
  */
-export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number, t = 0): Pose => {
+export const brandish = (
+  from: Pose,
+  p: PlayerState,
+  prog: number,
+  ph: number,
+  t = 0,
+  parry = Infinity,
+): Pose => {
   // In a saber lock the blade crosses the foe's, shaking, and the trunk leans into him.
   const e = p.lock ? 1 : prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
   const k = p.lock ? locked(t) : poised(p, Math.max(prog, 0), t);
-  const g = CARRY.map((v, i) => v + (k[i] - v) * e);
+  // A parry snaps the blade across from whatever hold it is in, and holds its line (clasp()).
+  const pe = parrying(parry);
+  const g = deflect(
+    CARRY.map((v, i) => v + (k[i] - v) * e),
+    pe,
+    DEFLECT_LOW,
+  );
   g[1] += 0.02 * Math.sin(TAU * ph) * (1 - e);
   // A cut turns the whole body on its feet with a share of the trunk's twist.
   const [tw, bd, ln] = p.lock ? [0, 0.15, 0] : prog < 0 ? [0, 0, 0] : bent(p, prog).map(v => v * e);
@@ -602,7 +625,7 @@ export const brandish = (from: Pose, p: PlayerState, prog: number, ph: number, t
   shrug(q, s, J.ARM_R, at);
   shrug(q, s, J.ARM_L, add(at, dir.map(v => -BEHIND * v) as Vec3));
   const poles: [Vec3, Vec3] = [turn([0.5, -1, -0.35]), turn([-0.5, -1, -0.35])];
-  const [grip, d, right, left] = clasp(solve(q), at, dir, poles);
+  const [grip, d, right, left] = clasp(solve(q), at, dir, poles, 0.1 * (1 - 0.98 * pe));
   wield(q, s, J.ARM_R, grip, d, poles[0], right);
   wield(
     q,
@@ -787,6 +810,27 @@ const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose =>
   return q;
 };
 
+/**
+ * The xenomorph threatening, for the menu's picture (the user, 2026-11-16: an offensive posture):
+ * bent lower over the prowl, the head pushed forward at the camera, the arms raised forward, the
+ * elbows bent so the claws open ahead of the chest.
+ */
+const menace = (pose: Pose): Pose => {
+  const X: Vec3 = [1, 0, 0];
+  const rot = pose.rot.slice();
+  // The spine, the chest, the neck and the head, joints in a row.
+  [-0.12, -0.1, 0.18, 0.08].forEach(
+    (v, i) => (rot[J.SPINE + i] = mul(rot[J.SPINE + i], axis(X, v))),
+  );
+  // About x alone, in the parent's frame: the two arms' frames are mirrored, so a turn about
+  // another axis sent one out and the other in.
+  for (const a of [J.ARM_L, J.ARM_R]) {
+    rot[a] = mul(axis(X, 0.68), rot[a]);
+    rot[a + 1] = mul(rot[a + 1], axis(X, 1.05));
+  }
+  return { ...pose, rot };
+};
+
 /** The runner's pose this frame, solved: the gait, the fall and sink of one down, and the weapon's hold; and the way the body faces. */
 /** A pose with nothing in it, for one wholly laid over: shared, so frozen. */
 const BARE: Pose = Object.freeze({ ...rest(), rot: Object.freeze(rest().rot) as Quat[] });
@@ -840,11 +884,14 @@ export const stance = (r: Runner) => {
     if (!fours) {
       pose = prowl(pose, solve(pose), p);
     }
+    if (r.menace) {
+      pose = menace(pose);
+    }
     pose = r.fours?.apply(pose) ?? pose;
   }
   let s = solve(pose);
   if (p.wield && !lying) {
-    pose = brandish(pose, p, r.prog, r.gait.phase, r.t);
+    pose = brandish(pose, p, r.prog, r.gait.phase, r.t, r.parry);
     s = solve(pose);
   } else if ((p.railed || p.rifled) && !lying) {
     // The rail gun or the rifle in both hands, at the ready when not firing: the left on its front grip, the
@@ -1260,7 +1307,10 @@ export const soldier = (
   }
   if (blade) {
     sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t, 1, 1, 0, gpu);
-    r.trail.mark(...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]), cutting(r.prog));
+    r.trail.mark(
+      ...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]),
+      cutting(r.prog) || (r.parry >= 0 && r.parry < 2 * PARRY_IN),
+    );
   } else if ((p.railed ? !stowed(p) : p.ammo >= 0 || p.rifled) && !p.down && !driving(r)) {
     // A swap shows: the battery or the capsule out and in, the glow off until it is.
     const sp = swapOf(p);

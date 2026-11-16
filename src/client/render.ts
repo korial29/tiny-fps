@@ -6,6 +6,7 @@
 // colour writes off. The scene goes into an offscreen target, then a second, small program (POST)
 // turns it into the picture on the canvas. No DOM beyond the canvas.
 import { ORBIT } from '../shared/constants';
+import { ROLE } from '../shared/kit';
 import { heightOf } from '../shared/physics';
 import { altitude } from '../shared/ship';
 import { MODE, TEX } from '../shared/types';
@@ -42,6 +43,7 @@ import { craft } from './craft';
 import { rolled, rover } from './rover';
 import type { Quat } from './rig';
 import { GRIN, animate, createRunner, soldier } from './soldier';
+import { PARRY_IN } from './katana';
 import { BARE_REGIONS, COLOURS, REGION, TOP, UNLIT, beast, body } from './skin';
 import { CLOTH } from './mask';
 import { CHANNELS } from './features';
@@ -724,6 +726,8 @@ export interface Renderer {
   muzzle(id: number): Vec3 | undefined;
   /** The runners of the players `ids` grin for a moment: their team has captured. */
   cheer(ids: number[]): void;
+  /** The katana of player `id` struck a ball back, seen `late` s before he is drawn there: his runner parries. */
+  parried(id: number, late: number): void;
   /** The xenomorph's vision (the own player is one): a grey-blue world, the enemies in sight glowing. */
   vision(on: boolean): void;
   /** The body of each player (PlayerInfo.body, BODY), from the roster: the man's for one not in it; and the skin and haircut he picked, his id's for one not in `looks`. */
@@ -1386,6 +1390,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       new Set(b.values()).forEach(k => k && dressed(k));
     },
     vision: on => (seeing = on),
+    parried: (id, late) => {
+      const r = runners.get(id);
+      if (r) {
+        // At its block as the ball meets the blade where he is drawn, `late` s behind.
+        r.parry = PARRY_IN - late;
+      }
+    },
     cheer: ids =>
       ids.forEach(id => {
         const r = runners.get(id);
@@ -1422,8 +1433,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           rifled: false,
         },
       };
-      // At ease, the arms down: no fighter's guard.
+      // At ease, the arms down: no fighter's guard. The xenomorph is never at ease: it threatens.
       const r = createRunner(model, undefined, build, look ?? {}, true);
+      r.menace = look?.role === ROLE.XENO;
       if (shot.grin) {
         // Eased in at once: a moment of the face's time, under its first blink's half second.
         r.grin = GRIN;

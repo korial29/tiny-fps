@@ -11,7 +11,7 @@ import {
   WALLRUN_TICKS,
 } from './constants';
 import { STRIKE, step } from './gun';
-import { KITS, ROLE, kitOf, roleOf, rolesOf } from './kit';
+import { KITS, ROLE, buildOf, kitOf, roleOf, rolesOf } from './kit';
 import type { Kit } from './kit';
 import { MAPS } from './maps';
 import { STILL, move } from './physics';
@@ -259,5 +259,16 @@ describe('chosen, what a player picked', () => {
     expect(chosen({ hair: 4, tone: 6, role: 4 })).toEqual({});
     expect(chosen({ role: 3 })).toEqual({ role: ROLE.XENO });
     expect(chosen({ tone: 1.5, hair: -1, role: '1', body: 2 })).toEqual({});
+  });
+});
+
+describe('buildOf', () => {
+  it('draws the build picked, but the xenomorph on the man’s skeleton whatever was picked', () => {
+    expect(buildOf({ role: ROLE.MARINE, body: 1 }, MAPS.highline)).toBe(1);
+    expect(buildOf({ role: ROLE.NINJA }, MAPS.highline)).toBe(0);
+    expect(buildOf({ role: ROLE.XENO, body: 1 }, MAPS.highline)).toBe(0);
+    expect(buildOf({ role: ROLE.XENO, body: 1 }, MAPS.tranquility)).toBe(0);
+    // A class the map does not offer is its default's: the marine here, her build again.
+    expect(buildOf({ role: ROLE.ASTRONAUT, body: 1 }, MAPS.highline)).toBe(1);
   });
 });

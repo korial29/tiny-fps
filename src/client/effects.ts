@@ -32,7 +32,7 @@ export interface Effects {
   lines: number;
   /** Steps walked on a floor or a wall: each whole number is a footfall. */
   stride: number;
-  /** 0 to 1: the red vignette of a tackle, full at the hit and gone in under a second. */
+  /** 0 to 1: the red halo round the view of a hit, of any weapon, or a tackle: full at the hit and gone in under a second. */
   hurt: number;
   /** The kick of the gun in the hand, 1 at a shot (up to 3 for a charged one) and gone in a tenth of a second. */
   kick: number;
@@ -250,6 +250,8 @@ export const createEffects = (): Effects => {
       p[1] += taken ? l : b == BLOW.LUNGE ? -l : 0;
       r[1] += (taken ? 1 : sd) * roll * (b == BLOW.HOOK ? 2.5 : 1);
       thump = !taken && b == BLOW.LUNGE ? 1 : thump;
+      // A blow taken reddens the view like any hit, though the host may keep its point for the next.
+      fx.hurt = taken ? 1 : fx.hurt;
     },
 
     update(me, keys, dt, hit = { ev: 0, fall: 0 }, phase) {

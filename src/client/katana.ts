@@ -318,6 +318,33 @@ export const locked = (t: number, push = 0): number[] => [
   LOCK[2] + 0.06 * push,
   ...LOCK.slice(3),
 ];
+/**
+ * The parry (the user, 2026-11-16), in the own view: the katana across the whole view, from its
+ * bottom right corner to its top left, its edge to the shot. The grip is asked for past the arms'
+ * reach on the right: clasp() keeps the wrists straight and pulls the fists in to the bottom middle,
+ * the hilt toward the corner.
+ */
+export const DEFLECT = [0.8, -0.28, 0.42, -0.72, 0.58, 0.36];
+/**
+ * The runner's parry, from his eye like CARRY (soldier.ts), low so that it guards him: the hands
+ * before the belly and the blade forward and across the trunk to the height of the left shoulder.
+ * With the wrists straight (clasp()), a blade turned more across or upright lifts the hands to the
+ * chest and the block over it.
+ */
+export const DEFLECT_LOW = [0.1, -0.6, 0.25, -0.65, 0.3, 0.7];
+/** Seconds of a parry: to the block in PARRY_IN, eased back to the hold by PARRY_OUT. */
+export const [PARRY_IN, PARRY_OUT] = [0.06, 0.38];
+/** How far into DEFLECT a hold is `s` seconds after the blade met a ball (it peaks at PARRY_IN): 0 to 1 and back to 0. */
+export const parrying = (s: number) => {
+  const v = clamp(s < PARRY_IN ? s / PARRY_IN : (PARRY_OUT - s) / (PARRY_OUT - PARRY_IN));
+  return v * v * (3 - 2 * v);
+};
+/** The grip and blade `k` (as stroke() gives them) taken `e` of the way to the parry `to`, the blade a unit again: a new array. */
+export const deflect = (k: number[], e: number, to = DEFLECT): number[] => {
+  const g = k.map((v, i) => v + (to[i] - v) * e);
+  const n = Math.hypot(g[3], g[4], g[5]) || 1;
+  return [g[0], g[1], g[2], g[3] / n, g[4] / n, g[5] / n];
+};
 /** The share of cut `c`'s swing at which it strikes. */
 const strikeAt = (c: number) => CUTS[c].strike / CUTS[c].ticks;
 /** The middle of the shoulders in the keys' space, which turns with the chest. */

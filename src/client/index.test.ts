@@ -300,6 +300,49 @@ describe('tinyFps, the match through the socket', () => {
     }
   });
 
+  it('reddens the view round its edge when an enemy’s round bursts on the own body, even one that takes no health', () => {
+    const ann = spawn(0, world, 0, 0);
+    const halo = () => +(q('u').style.opacity || 0);
+    const round = (by: number, dx = 0) => ({
+      id: 9,
+      by,
+      x: ann.x + dx,
+      y: ann.y + 1,
+      z: ann.z,
+      dx: 0,
+      dy: 0,
+      dz: -1,
+      burst: true,
+      power: 0,
+    });
+    // Bob is blue: his laser round on Ann, her health as it was.
+    snap({ balls: [round(1)] });
+    frames();
+    expect(halo()).toBeGreaterThan(0.5);
+    vi.advanceTimersByTime(3000);
+    expect(halo()).toBe(0);
+    // Two metres aside, on whatever stood there: no hit.
+    snap({ balls: [round(1, 2)] });
+    frames();
+    expect(halo()).toBe(0);
+  });
+
+  it('leaves the view clear for a teammate’s round where she stands', () => {
+    text({
+      t: 'roster',
+      you: 0,
+      players: [roster[0], { ...roster[1], team: TEAM.RED }],
+    });
+    const ann = spawn(0, world, 0, 0);
+    snap({
+      balls: [
+        { id: 9, by: 1, x: ann.x, y: ann.y + 1, z: ann.z, dx: 0, dy: 0, dz: -1, burst: true },
+      ],
+    });
+    frames();
+    expect(q('u').style.opacity).toBe('');
+  });
+
   it('tints the name tag of another player with his team colour', () => {
     // No renderer here, so no projection: the tag exists but is hidden. It is tinted all the same.
     const tag = [...hud().querySelectorAll<HTMLElement>('b')].find(b => b.textContent === 'Bob');

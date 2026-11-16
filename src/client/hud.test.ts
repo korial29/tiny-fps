@@ -164,6 +164,25 @@ describe('createHud', () => {
       expect(lit('Hair')).toEqual([false, false, true, false, false]);
     });
 
+    it('offers the xenomorph no body, skin or haircut, and gives them back with another class', () => {
+      show();
+      hud.cast(vi.fn());
+      hud.wear(BODY.FEMALE, { tone: 2, hair: 3, role: ROLE.MARINE });
+      const box = (l: string) => screen.querySelector<HTMLElement>(`[aria-label="${l}"]`)!;
+      const shown = () => ['Body', 'Skin', 'Hair'].map(l => !box(l).hidden);
+      expect(shown()).toEqual([true, true, true]);
+      group('Class')[ROLE.XENO].click();
+      expect(shown()).toEqual([false, false, false]);
+      // The labels over the skin and the haircut go with them.
+      expect((box('Skin').previousElementSibling as HTMLElement).hidden).toBe(true);
+      expect((box('Hair').previousElementSibling as HTMLElement).hidden).toBe(true);
+      group('Class')[ROLE.MARINE].click();
+      expect(shown()).toEqual([true, true, true]);
+      // Her choices kept.
+      expect(lit('Body')).toEqual([false, true]);
+      expect(lit('Skin')).toEqual([false, false, true, false, false, false]);
+    });
+
     it('lights what the roster says without telling it back, and greys out the classes the map does not offer', () => {
       show();
       const pick = vi.fn();
@@ -347,6 +366,8 @@ describe('createHud', () => {
     expect(v()).toBe('1');
     hud.hurt(0.005);
     expect(v()).toBe('');
+    // A glow in from every edge, not only a darkening of the corners.
+    expect(HUD_CSS).toMatch(/u\{inset:0;opacity:0;box-shadow:inset /);
   });
 
   it('whites the view out from above by the strike’s light, over the down screen', () => {

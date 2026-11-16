@@ -15,7 +15,7 @@ import { STILL } from '../shared/physics';
 import { fly, launch, lob, toss } from '../shared/plasma';
 import type { Ball, PlayerState } from '../shared/types';
 import { build } from '../shared/world';
-import { CATCH, TRAIL, createBalls } from './balls';
+import { CATCH, TRAIL, createBalls, onBody } from './balls';
 import type { Vec3 } from './mesh';
 
 /** A roof, and a wall across z = -20. */
@@ -324,5 +324,43 @@ describe('a vehicle’s bolt fired by the own player', () => {
     b.frame((GUN_RANGE / PLASMA_SPEED) * 1000 + 1, muzzle);
     b.snapshot([bolt(7, { power: NADE, v: 40, missile: true })], 1, 5000);
     expect(b.frame(5000 + INTERP_DELAY, muzzle).orbs).toHaveLength(1);
+  });
+});
+
+describe('a ball on the own body', () => {
+  /** A foe 10 m ahead of the own player, who shoots at him at `pitch`, flown as the host does. */
+  const shot = (pitch: number, over: Partial<PlayerState> = {}): Ball & { hit: boolean } => {
+    const foe = me({ id: 2, z: -10, ...over });
+    const b = launch(me({ pitch }));
+    let hit = false;
+    while (!b.burst) {
+      hit ||= !!fly(WORLD, b, PLASMA_SPEED / TICK_HZ, [foe]);
+    }
+    return { ...b, hit };
+  };
+
+  it('is told from where the host’s ball burst, from his knees to his head', () => {
+    for (const pitch of [-0.12, -0.05, 0, 0.015]) {
+      const b = shot(pitch);
+      expect(b.hit).toBe(true);
+      expect(onBody(b, me({ id: 2, z: -10 }))).toBe(true);
+    }
+  });
+
+  it('is not one that burst on the wall behind him, nor on the roof at his feet a step off', () => {
+    // Over his head: on to the wall at z = -20.
+    const high = shot(0.3);
+    expect(high.hit).toBe(false);
+    expect(onBody(high, me({ id: 2, z: -10 }))).toBe(false);
+    // Into the roof a metre and a half short of him.
+    const low = { ...shot(-0.4), burst: true };
+    expect(onBody(low, me({ id: 2, z: -10 }))).toBe(false);
+  });
+
+  it('is only a burst ball: one still flying through his place is not a hit yet', () => {
+    const at = me({ id: 2, z: -10 });
+    const ball: Ball = { id: 1, by: 1, x: 0, y: 1, z: -10, dx: 0, dy: 0, dz: -1, burst: false };
+    expect(onBody(ball, at)).toBe(false);
+    expect(onBody({ ...ball, burst: true }, at)).toBe(true);
   });
 });

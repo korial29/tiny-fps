@@ -11,6 +11,7 @@ import {
   RAIL_MAX,
   NADE_MAX,
   ORBIT,
+  PARRY,
   RIFLE_CLIP,
   RULES,
   TEAM_COLOR,
@@ -114,7 +115,8 @@ const [RIM, BLUR] = (() => {
 export const HUD_CSS =
   `h5,aside,nav,var,output,section,em,u,sup,ul,dl,s,mark,ins,figure,del,menu,label,samp,cite,q,dfn,tt,h1,h2,ol{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
-  `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
+  // The red halo of a hit: a glow in from every edge over a dark red rim.
+  `u{inset:0;opacity:0;box-shadow:inset 0 0 16vmin 3vmin #e00c;background:radial-gradient(ellipse at center,#0000 55%,#a008 100%)}` +
   // The orbital strike's light: white from above, red hot round it, growing until the view is white.
   `sup{inset:0;z-index:1;opacity:0;--w:0%;background:radial-gradient(circle at 50% 0,#fff var(--w),#ffd2bc calc(var(--w) + 30%),#ff3c1e00 calc(var(--w) + 80%))}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
@@ -277,7 +279,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Ninja',
-    'Runs 20 % faster, jumps much higher, wall-runs twice as long, chains 3 dashes; katana and fists twice as fast.',
+    `Runs 20 % faster, jumps much higher, wall-runs twice as long, chains 3 dashes; katana and fists twice as fast; the katana in hand, when he is not striking, parries ${Math.round(PARRY * 100)} % of the shots from in front, even on the run, and sends them back where he aims.`,
     'Guns: half the ammo, magazine, rate of fire and damage, and slowed hard while one is in hand.',
     'City maps',
   ],
@@ -703,16 +705,22 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         return b;
       }),
     );
-  /** Each group's pick lit and in the Tab order; with none, its first is. The ninja's hood hides the hair: no haircut to pick. */
+  /** Each group's pick lit and in the Tab order; with none, its first is. The ninja's hood hides the hair: no haircut to pick; the xenomorph has none of the three. */
   const lit = () => {
     KEYS.forEach((k, g) => {
       const on = picked[k] ?? -1;
       turn(radios(g), 'aria-checked', on);
       radios(g)[0].tabIndex = on < 0 ? 0 : radios(g)[0].tabIndex;
     });
-    const hooded = picked.role == ROLE.NINJA;
-    groups[2].hidden = hooded;
-    (groups[2].previousElementSibling as HTMLElement).hidden = hooded;
+    // The xenomorph has no body, skin or haircut to pick (the user, 2026-11-16): one creature.
+    const beastly = picked.role == ROLE.XENO;
+    [beastly, beastly, beastly || picked.role == ROLE.NINJA].forEach((h, g) => {
+      groups[g].hidden = h;
+      // The labels over the skin and the haircut go with them.
+      if (g) {
+        (groups[g].previousElementSibling as HTMLElement).hidden = h;
+      }
+    });
   };
   const choose = (g: number, i: number) => {
     const b = radios(g)[i];

@@ -8,7 +8,12 @@ import {
   AMPLE_TRUNK,
   BASE,
   BEHIND,
+  DEFLECT,
   GUARD,
+  PARRY_IN,
+  PARRY_OUT,
+  deflect,
+  parrying,
   TIP,
   arcs,
   axes,
@@ -666,5 +671,24 @@ describe('the charged cut, as drawn', () => {
     const [a, b] = [0.1, 0.13].map(t => poised({ cut: CUT.LEFT, charge: 10 }, top, t).slice(0, 2));
     expect(Math.hypot(a[0] - b[0], a[1] - b[1])).toBeGreaterThan(0.0005);
     expect(Math.hypot(a[0] - b[0], a[1] - b[1])).toBeLessThan(0.012);
+  });
+});
+
+describe('the parry', () => {
+  it('snaps to DEFLECT at PARRY_IN and eases back to the hold by PARRY_OUT', () => {
+    expect([-1, 0, PARRY_OUT, Infinity].map(parrying)).toEqual([0, 0, 0, 0]);
+    expect(parrying(PARRY_IN)).toBe(1);
+    expect(parrying(PARRY_IN / 2)).toBeCloseTo(0.5, 5);
+    expect(parrying((PARRY_IN + PARRY_OUT) / 2)).toBeCloseTo(0.5, 5);
+  });
+
+  it('moves a hold toward DEFLECT, the blade a unit all the way', () => {
+    for (const e of [0, 0.3, 0.7, 1]) {
+      const k = deflect(GUARD, e);
+      expect(Math.hypot(k[3], k[4], k[5])).toBeCloseTo(1, 6);
+    }
+    const n = Math.hypot(...DEFLECT.slice(3));
+    expect(deflect(GUARD, 1)).toEqual(DEFLECT.map((v, i) => (i < 3 ? v : v / n)));
+    expect(deflect(GUARD, 0).slice(0, 3)).toEqual(GUARD.slice(0, 3));
   });
 });

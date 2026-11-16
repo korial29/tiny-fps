@@ -44,6 +44,8 @@ export interface Flesh {
   accent?: number[];
   /** The runner's id: the marks of his skin (moles, freckles, scars) in the shader. */
   seed?: number;
+  /** The xenomorph's skin: its chitin (CHITIN in mesh.ts). */
+  chitin?: boolean;
 }
 
 /** What the vertex shader reads by texel (flesh.ts): four floats each, 2048 a row. */

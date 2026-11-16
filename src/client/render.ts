@@ -22,6 +22,8 @@ import type { CtfScene } from './flag';
 import {
   CARD_BASE,
   CARD_STEP,
+  CHITIN,
+  TUBE,
   GILT,
   GLOSS,
   HAIR_ROOT,
@@ -155,7 +157,7 @@ if(Sm==1){vec4 h=g(Sb.y+gl_VertexID);k(int(h.x),P,N);int a=int(h.y);vec3 l=Sp[a]
 if(hb.x>=0.&&(hb.y>.5||a==${REGION.FLESH}))l=vec3(${CLOTH})+(l-vec3(${CLOTH}))*hb.x;
 float hw=0.;for(int i=0;i<3;i++){vec4 o=g(Sb.y+gl_VertexID/3*3+i);hw+=int(o.y)==${REGION.HAIR}?1.-(int(o.z)!=${REGION.HAIR}?o.w:0.):int(o.z)==${REGION.HAIR}?o.w:0.;}hw/=3.;
 float bw=float(${BARE_REGIONS.map(r => `a==${r}`).join('||')})*(hb.x<0.?1.:hb.x);
-C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:hw>.5&&hb.x<0.?${HAIR_ROOT}-${HAIR_SPAN}*clamp((${TOP}-ry)/.3,0.,1.):-1.+(${SKIN_LAYER}+1.)*bw,l.z);gl_Position=m*vec4(P,1);return;}
+C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:Sb.w==2?${CHITIN}:hw>.5&&hb.x<0.?${HAIR_ROOT}-${HAIR_SPAN}*clamp((${TOP}-ry)/.3,0.,1.):-1.+(${SKIN_LAYER}+1.)*bw,l.z);gl_Position=m*vec4(P,1);return;}
 if(Sm==2){int b=Sb.y+gl_VertexID*${PLATE},j,K,t;vec4 h=g(b),G4=g(b+4),R4=g(b+5);j=int(h.y);K=int(h.z);t=int(h.x)*3;
 vec3 X[3],Z[3],W3[3],M3[3],XR[3],RR[3];
 for(int i=0;i<3;i++){k(int(g(Sb.z+t+i).x),X[i],Z[i]);XR[i]=kr;}
@@ -382,6 +384,17 @@ float sc=step(abs(al),.006+.007*hh.z)*step(hh.x,.4)*smoothstep(.0007,.0002,lengt
 c=mix(c,vec3(dot(c,vec3(.3,.5,.2)))*vec3(.8,.68,.55)*(.55+.2*gr),(.3+.5*lowy)*smoothstep(.35,.75,gr));
 c=mix(c,vec3(.07,.075,.08),ch);c=mix(c,vec3(.7,.7,.72),sc*(1.-ch)*.9);
 h+=.00004*n3(q*900.)*(1.-smoothstep(.4,1.,pw*900.))-.00012*ch;}
+float kt=step(abs(L-(${CHITIN})),.005),kg=1.,kf=0.;
+if(kt>0.){vec3 q=Rp;float pw=max(max(length(dx),length(dy)),max(length(dFdx(Rp)),length(dFdy(Rp))));kf=smoothstep(.8,2.5,length(fwidth(N))/max(max(length(dx),length(dy)),1e-5)*.01);float kp=(1.-smoothstep(.04,.075,abs(Rp.y-1.37)))*smoothstep(.1,.12,abs(Rp.x))*(1.-smoothstep(.21,.24,abs(Rp.x))),fa=(1.-smoothstep(.35,1.,pw*160.))*(1.-kf)*(1.-kp),fb=(1.-smoothstep(.35,1.,pw*400.))*(1.-kf)*(1.-kp),fc=1.-smoothstep(.35,1.,pw*25.);
+vec3 qc=q*80.,ic=floor(qc);float d1=9.,d2=9.;
+for(int j=0;j<27;j++){vec3 cc=ic+vec3(j%3,(j/3)%3,j/9)-1.,pt=cc+.1+.8*hs(cc);float d=length(qc-pt);if(d<d1){d2=d1;d1=d;}else if(d<d2)d2=d;}
+float ed=d2-d1,gv=(1.-smoothstep(.02,.16,ed))*fa,gn=n3(q*380.)-.5,mo=n3(q*7.)*.6+n3(q*19.+5.)*.4;
+c*=(1.+.3*(mo-.5)*fc)*(1.-.18*gv)*(1.+.1*gn*fb);
+h+=fa*.00022*smoothstep(0.,.45,ed)+fb*.00005*gn;
+kg=(1.-.5*gv)*(.5+mo);}
+float kr=step(abs(L-(${TUBE})),.005),rr=0.;
+if(kr>0.){float u=C.x*200.,fr=1.-smoothstep(.15,.4,fwidth(u));rr=smoothstep(.15,.6,abs(fract(u)-.5)*2.);
+c=vec3(.3,.305,.315)*mix(.8,.5+.75*rr,fr);h+=fr*.0005*rr;rr=mix(.6,rr,fr);}
 float ah=1.,kh=step(-1.497,L)*step(L,-1.443)*smoothstep(.02,.12,(-1.45-L)/.04),hp=max(length(dx),length(dy)),st=0.,st2=0.;
 vec3 T=-nz((dFdx(L)*a+dFdy(L)*b)*sign(det));T=nz(T-n*dot(T,n));
 if(kh>0.){for(int i=-3;i<=3;i++){vec3 q=P+T*float(i)*.011;st+=vn3(q*650.);st2+=vn3(q*200.+4.);}
@@ -399,7 +412,7 @@ ac*=max(1.-vh*(smoothstep(ln-.03,ln,al)+step(1.5,kd)*(1.-smoothstep(0.,.1,al))),
 c*=.8+.4*hq.z;st=hq.z;st2=hq.y;}
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
-vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];
+vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];if(kt>0.)R=vec2(.22*kg*(1.-kf),40.);if(kr>0.)R=vec2(.5*(.3+.7*rr),36.);
 vec3 y=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s),V=normalize(E-P),w=nz(n+m);
 float sd=max(dot(m,O),0.)*smoothstep(0.,.1,dot(n,O)),sv=1.;
 sd=mix(sd,.5*sqrt(max(1.-dot(T,O)*dot(T,O),0.))*smoothstep(-.3,.4,dot(n,O)),kx*.6);
@@ -430,7 +443,7 @@ c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(1.-kx)*(1.-.75*kb)*(.4+.6*mix(1.,t.a,s))+hl+
 vec3 r=reflect(-V,m),k=K1(r,0.);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
 c+=kb*k*(.01+.08*fr)*(.4+.6*sv);
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
-c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr));
+c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr)*(1.-kf)*(1.-.85*kr));
 c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv)*mix(1.,sm*(1.-ch),wa);
 c+=wa*ch*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),60.)*.5;
 c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(-abs(r.y-.12)*18.)),step(abs(L-(${GILT})),.02)*(.45+.45*fr));
@@ -886,7 +899,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.bindVertexArray(none);
         gl.uniform1i(u.Sm, f.kind);
         gl.uniform1f(u.Ss, f.seed ?? 0);
-        gl.uniform4i(u.Sb, ...f.at, +!!f.plate);
+        // The skin's last: 2 its chitin (CHITIN), else whether an armour is plated.
+        gl.uniform4i(u.Sb, ...f.at, f.chitin ? 2 : +!!f.plate);
         gl.uniform4fv(u.Sq, f.d);
         gl.uniform3fv(u.Sp, f.pal);
         gl.uniform4fv(u.Sw, f.face);

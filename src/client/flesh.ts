@@ -172,6 +172,8 @@ export const flesh = (
   hood?: number,
   /** The runner's id: his skin's marks. */
   seed = 0,
+  /** The xenomorph's: its chitin. */
+  chitin = false,
 ) => {
   const [vs, cs] = skinOf(s, hood !== undefined && face ? [hood, face] : undefined);
   const d = Float32Array.from(duals(s, pose));
@@ -184,7 +186,17 @@ export const flesh = (
       q: ID,
       t: ORIGIN,
       k: 1,
-      f: { kind, at: [vs, at, cs], d, pal, face: w, plate: a?.plate, accent: a?.accent, seed },
+      f: {
+        kind,
+        at: [vs, at, cs],
+        d,
+        pal,
+        face: w,
+        plate: a?.plate,
+        accent: a?.accent,
+        seed,
+        chitin,
+      },
     });
   go(1, cs, s.t.length);
   if (armour) {

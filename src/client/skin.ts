@@ -776,7 +776,9 @@ const TRUNK_X = remake(
     // Wide hips and a full rear under the starved waist (the user, 2026-11-15): wider and deeper
     // round the pelvis, the depth thrown back.
     const hip = Math.exp(-(((at - 0.95) / 0.09) ** 2));
-    r[3] *= 0.72 + 0.2 * up - 0.2 * neck + 0.4 * hip;
+    // Its shoulders narrower, the arm's start with them (the user, 2026-11-16: skeletal).
+    const sh = Math.exp(-(((at - 1.36) / 0.07) ** 2));
+    r[3] *= 0.72 + 0.2 * up - 0.2 * neck + 0.4 * hip - 0.1 * sh;
     r[4] *= 0.8 + 0.18 * up - 0.15 * neck + 0.3 * hip;
     r[2] -= 0.018 * hip;
     // One chitin up to the skull: a lighter neck drew a collar's line round it, and the ribs are
@@ -855,6 +857,8 @@ const LEG_X = remake(
 const ARM_X = remake(ARM, r => {
   const at = r[0];
   const g = (c: number, w: number) => Math.exp(-(((at - c) / w) ** 2));
+  // Full where it meets the shoulder, easing down to a lean bone (the user, 2026-11-16: the top of
+  // the arm too thick, skeletal, an insect's; over 7 cm it left an edge down its side).
   const t = Math.min(Math.max((at - 1.2) / 0.17, 0), 1);
   const top = t * t * (3 - 2 * t);
   // Its skeleton showing through (the user, 2026-11-16: as a human skeleton's, no pieces laid on
@@ -862,9 +866,15 @@ const ARM_X = remake(ARM, r => {
   // there), then a lean shaft down to the elbow's knobs, wide across with its point behind, a
   // thin forearm and the wrist's knobs. The sides are the man's, so the first strip fans from the
   // shoulder's side evenly.
-  r[3] *= 0.6 + 0.36 * top + 0.17 * g(1.175, 0.028) + 0.1 * g(0.965, 0.02);
-  r[4] *= 0.62 + 0.36 * top + 0.12 * g(1.17, 0.028) + 0.05 * g(0.965, 0.02);
+  // A lean biceps and forearm under it (the user, 2026-11-16: too thin, out of balance), each
+  // swelling a little in its middle, the joints' knobs between.
+  const meat = 0.16 * g(1.245, 0.05) * (1 - top) + 0.14 * g(1.06, 0.055);
+  r[3] *= 0.58 + 0.28 * top + meat + 0.18 * g(1.175, 0.028) + 0.1 * g(0.965, 0.02);
+  r[4] *= 0.6 + 0.28 * top + meat + 0.13 * g(1.17, 0.028) + 0.06 * g(0.965, 0.02);
   r[2] -= 0.005 * g(1.165, 0.025);
+  // Its top drawn in with the narrower shoulder (TRUNK_X): out where it was, it stood past the
+  // shoulder's side, an edge down it.
+  r[1] -= 0.02 * g(1.36, 0.09);
   return [...r.slice(0, 6), r[0] < 0.98 ? GLOVE : JACKET];
 });
 /**
@@ -881,6 +891,13 @@ const ARM_X = remake(ARM, r => {
  * clear of the neck.
  */
 const PROFILE = [0.42, 1.69, 0.21, 0.084, 0.1];
+/**
+ * How much larger its head is than it was drawn (the user, 2026-11-16: a bigger head), about the
+ * head joint: the dome here (CREST), the face's pieces in xeno.ts (grow()).
+ */
+export const HEAD_K = 1.12;
+/** And how much narrower (the user, 2026-11-16: less round, the sides in), across it alone. */
+export const HEAD_X = 0.86;
 /** The radius of the round end of the dome, and the banana's thickness and half width behind the face. */
 const TIP = 0.062;
 const BANANA = [0.17, 0.09];
@@ -920,7 +937,8 @@ const CREST: Loft = {
     // From the tip at the back (i = 0) to the face's edge (i = 11), closer together toward the tip.
     const z = PROFILE[0] * Math.cos(((i / 11) * Math.PI) / 2);
     const [c, w, h] = domeAt(z);
-    return [z, 0, c, w, h, 0, TRIM];
+    // Grown about the head joint at rest (0, 1.62, 0), as xeno.ts grows the face.
+    return [z * HEAD_K, 0, 1.62 + (c - 1.62) * HEAD_K, w * HEAD_K * HEAD_X, h * HEAD_K, 0, TRIM];
   }),
 };
 // A ring between each two: a smooth skull close up.

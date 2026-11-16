@@ -778,13 +778,13 @@ const TRUNK_X = remake(
     r[3] *= 0.72 + 0.2 * up - 0.2 * neck + 0.4 * hip;
     r[4] *= 0.8 + 0.18 * up - 0.15 * neck + 0.3 * hip;
     r[2] -= 0.018 * hip;
-    // Its ribs: the strips under the chest in turn lighter and darker.
-    const rib = at > 1.02 && at < 1.4 && TRUNK.rings.findIndex(q => q[0] == at) % 2;
-    // One chitin up to the skull: a lighter neck drew a collar's line round it.
-    return [...r.slice(0, 6), rib ? TRIM : JACKET];
+    // One chitin up to the skull: a lighter neck drew a collar's line round it, and the ribs are
+    // xeno.ts's (painted strips under them read as a belt).
+    return [...r.slice(0, 6), JACKET];
   },
-  // More sides close: the shoulders' outline round, not in facets.
-  { far: [...TRUNK.far, 16], n: [8, 14, 28] },
+  // More sides near and close: the shoulders' outline round, not in facets (14 near and 28 close
+  // still drew their corners).
+  { far: [...TRUNK.far, 16], n: [8, 18, 36] },
 );
 // The neck runs on up into the skull, where its top is hidden: no flat ring under the jaw.
 // A long neck under the head carried high (xeno.ts: HEAD_UP), running up into it.
@@ -797,7 +797,15 @@ TRUNK_X.rings.push(
 );
 // The leg ends at the ankle, closed: its foot is xeno.ts's metatarsal(), longer than the rig's.
 const LEG_X = remake(
-  { ...LEG, rings: [...LEG.rings.filter(r => r[0] > 0.1), [0.075, 0.1, 0, 0, 0, 3, UPPER]] },
+  // Its end a dome into the ankle's ball (metatarsal()): a flat cap drew a boot's sole there.
+  {
+    ...LEG,
+    rings: [
+      ...LEG.rings.filter(r => r[0] > 0.1),
+      [0.088, 0.1, 0, 0.04, 0.042, 3, UPPER],
+      [0.072, 0.1, 0, 0, 0, 3, UPPER],
+    ],
+  },
   r => {
     const [at] = r;
     // The thighs set wider at the top, under the wide hips.
@@ -823,7 +831,7 @@ const LEG_X = remake(
     r[5] = u < 1 ? u : at >= 0.53 ? 1 : at > 0.45 ? 1 + (0.53 - at) / 0.08 : 2;
     return [...r.slice(0, 6), at > 0.11 ? PANTS : UPPER];
   },
-  { far: [0, 3, 8, 11, 15, 17], n: [6, 12, 22] },
+  { far: [0, 3, 8, 11, 15, 18], n: [6, 12, 22] },
 );
 // Real shoulders (the user, 2026-11-15: no angle there): the deltoid's cap near the man's, round
 // over the joint, then the arm thinning under it down to the wrist.
@@ -1045,7 +1053,8 @@ const shape = (lod: number, xeno = false): Skin => {
                 ? lod == 2
                   ? 2.6
                   : 1.9 + 0.1 * clamp((at - SPLIT) / 0.07)
-                : (L.e ?? 2) * (L === LG && at < 0.12 ? 2 : 1);
+                : // The shoe's square; the xenomorph's ankle round.
+                  (L.e ?? 2) * (L === LEG && at < 0.12 ? 2 : 1);
             // The back widens over the 12 cm under the armpits toward the shoulders' ring, whose
             // vertices it takes at the split: no ridge across the shoulder blades. The chest does
             // not: it would stand out of the shoulders' front (the user, 2026-11-09: no shelf).

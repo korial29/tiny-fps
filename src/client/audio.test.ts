@@ -487,6 +487,19 @@ describe('speak', () => {
     expect(noise.stopped).toBe(1);
   });
 
+  it('plays a sound over the radio as it says a line: clipped, thinned, after a squelch', () => {
+    const a = unlocked();
+    a.play(SOUND.HIT, undefined, 0.7, 1, true);
+    const roar = fake()
+      .sources.filter(s => !s.loop)
+      .at(-1)!;
+    const shaper = roar.to as Node & { curve: Float32Array };
+    expect(shaper.curve).toBeDefined();
+    expect((shaper.to as Node & { type: string }).type).toBe('highpass');
+    expect(roar.args![0]).toBeGreaterThan(0);
+    expect(fake().sources.some(s => s.loop && s.to?.to === shaper)).toBe(true);
+  });
+
   it('loads the Opus voices first', async () => {
     expect(atob(await VOICED[0]()).slice(0, 4)).toBe('OggS');
   });

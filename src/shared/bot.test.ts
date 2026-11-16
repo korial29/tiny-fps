@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Bot, personaOf } from './bot';
+import { KITS, ROLE } from './kit';
+import type { Kit } from './kit';
 import { HIGHLINE } from './map';
 import { MOON } from './moon';
 import { ROUTES, navBuilt, navOf, path } from './nav';
@@ -160,6 +162,36 @@ describe('Room: bots', () => {
     expect(took).toBe(true);
   });
 
+  it('gives the bots the marine, the ninja and the xenomorph in turn, by name', () => {
+    const room = new Room({ bots: 4 });
+    const a = join(room);
+    const bots = roster(a).players.filter(p => p.bot);
+    expect(bots.map(p => [p.name, p.role])).toEqual([
+      ['Ada (bot)', ROLE.MARINE],
+      ['Bix (bot)', ROLE.NINJA],
+      ['Cog (bot)', ROLE.XENO],
+    ]);
+  });
+
+  for (const [name, role] of [
+    ['ninja', ROLE.NINJA],
+    ['xenomorph', ROLE.XENO],
+  ] as const) {
+    it(`plays a ${name} bot that takes the enemy flag across HIGHLINE and brings it home`, () => {
+      const room = new Room({ bots: 2 });
+      const a = join(room);
+      for (const p of room['players']()) {
+        if (p.bot) {
+          p.info.role = role;
+        }
+      }
+      for (let s = 0; s < 180 && !(a.bins.length && snap(a).score[1]); s++) {
+        ticks(room, 60);
+      }
+      expect(snap(a).score).toEqual([0, 1]);
+    });
+  }
+
   it('keeps a match of bots going without a fault', () => {
     const room = new Room({ bots: 8 });
     const a = join(room);
@@ -239,6 +271,21 @@ describe('Bot: the gun', () => {
     }
     return fired;
   };
+
+  /** Where a red bot of the kit `kit` with no gun wants to be, a blue player 10 m to its left. */
+  const goal = (kit: Kit) => {
+    const world = build(arena([]));
+    const bot = new Bot(0);
+    const me = { id: 0, team: 0, state: { ...spawn(0, world, 0, 0), ammo: -1 } };
+    const foe = { id: 1, team: 1, state: { ...spawn(1, world, 0, 1), x: -10, z: 10 } };
+    bot.think({ me, others: [foe], flags: [home, home], world, kit });
+    return bot['goal'];
+  };
+
+  it('goes at an enemy close by with the claws, and for the flag with a gun', () => {
+    expect(goal(KITS[ROLE.XENO])).toEqual([-10, 0, 10]);
+    expect(goal(KITS[ROLE.MARINE])).toEqual([0, 0, -40]);
+  });
 
   it('shoots an enemy in sight, not through a wall', () => {
     expect(fires([])).toBe(true);

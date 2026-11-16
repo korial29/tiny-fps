@@ -56,3 +56,10 @@ Sources: [UT2004 bot internal variables](<https://wiki.beyondunreal.com/UE2:Bot_
 [CTFSquadAI](https://beyondunrealwiki.github.io/pages/ctfsquadai.html),
 [AlternatePath](https://wiki.beyondunreal.com:443/Legacy:AlternatePath),
 [DefensePoint](https://unrealarchive.org/wikis/unreal-wiki/Legacy:Creating_A_Defense_Point_In_UT200x.html).
+
+## Classes (the user, 2026-11-16)
+
+The bots take the marine, the ninja and the xenomorph in turn by their name (`BOT_ROLES` in `room.ts`), so a room of eight has all three on each map; the moon offers no ninja and makes him an astronaut (`roleOf()`). The room hands each bot its `Kit` (`Sight.kit`):
+
+- A class that takes no gun (`Kit.gear` false, the xenomorph) never walks to the rack, and runs at an enemy it sees within `HUNT` (15 m) and `HUNT_Y` (2 m) of its height: its claws reach an arm's length.
+- A class that jumps unlike the marine the routes were flown with (the ninja, the xenomorph, `Kit.jump`) steers every leap in the air to come down on its point, as the moon's `land` legs, still pressing a leg's dash and double jump on their step. Held forward all the way, the xenomorph's jump twice as high overshot the leaps before the enemy tower, caught a wall and fell.

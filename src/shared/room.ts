@@ -62,7 +62,7 @@ import {
 import { CHEST, crossing, fends, knock, limbOf, roll, strike, swingOf } from './blade';
 import { Bot } from './bot';
 import { Ctf } from './ctf';
-import { KITS, kitOf } from './kit';
+import { KITS, ROLE, kitOf } from './kit';
 import { shut, swing } from './doors';
 import { STRIKE, felled, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
@@ -164,6 +164,12 @@ interface Wear {
 }
 /** The names of the bots, in turn. */
 const BOT_NAMES = ['Ada', 'Bix', 'Cog', 'Dot', 'Echo', 'Flux', 'Gear', 'Hex'];
+/**
+ * The classes the bots take in turn by their name (the user, 2026-11-16: bots play the ninja and
+ * the xenomorph too). A map that does not offer one gives its default (roleOf()): the moon's
+ * ninja is an astronaut.
+ */
+const BOT_ROLES = [ROLE.MARINE, ROLE.NINJA, ROLE.XENO];
 
 /** The two seats of a rover, the driver's first. */
 const SEATS = ['driver', 'rider'] as const;
@@ -1756,6 +1762,7 @@ export class Room {
           world: this.world,
           balls: this.balls,
           errand: errands.get(p.info.id),
+          kit: this.kit(p),
         });
         p.seq = ((p.seq ?? -1) + 1) & 0xffff;
         this.apply(p, onWire({ ...i, seq: p.seq, view: this.ticks & 0xffff }));
@@ -1873,8 +1880,9 @@ export class Room {
         this.peers.set(conn, null);
         // The first name no bot here bears.
         const names = players.map(p => p.info.name);
-        const name = BOT_NAMES.map(n => `${n} (bot)`).find(n => !names.includes(n)) ?? 'Bot';
-        this.join(conn, name, {}, true);
+        const n = BOT_NAMES.findIndex(b => !names.includes(`${b} (bot)`));
+        const name = n < 0 ? 'Bot' : `${BOT_NAMES[n]} (bot)`;
+        this.join(conn, name, { role: BOT_ROLES[Math.max(n, 0) % BOT_ROLES.length] }, true);
       } else {
         return;
       }

@@ -3,7 +3,7 @@
 // hand()'s, body.ts). All
 // of it generated, original: a lean biomechanical stalker, not a copy of any film's creature.
 import { swingOf } from '../shared/blade';
-import { STING, TAILS } from '../shared/constants';
+import { HEAVY_MAX, STING, TAILS } from '../shared/constants';
 import { TAU } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ease } from './gun';
@@ -23,6 +23,8 @@ import type { Floats, Out } from './verts';
  */
 export const CHITIN_X = [0.06, 0.065, 0.078];
 
+/** How far a full charge bends the tail to one side at its root and the other at its tip: an S, radians. */
+const COIL = 0.8;
 /** How far the tail turns back toward the level when the body is on all fours (fours.ts), radians. */
 const LAID = 1.4;
 /** Metres: the tail's length, its root's radius and its tip's, the stinger's length, width and thickness. */
@@ -34,8 +36,8 @@ const HOOK = 6;
  * A pose of the tail, as bonesOf() takes it: its arch over the back (0 behind, 1 over the head and
  * forward down into the view), its turn about the pelvis' up (radians, to its left: through its
  * right side, a tail pointing back turns forward), its lean to the right, its reach (as a share of
- * its length, a whip stretched), how much of the hook at its tip it keeps, and how far its root
- * rises (radians, less toward the tip).
+ * its length, a whip stretched), how much of the hook at its tip it keeps, how far its root
+ * rises (radians, less toward the tip), and how far it is coiled in an S to the side (0 to 1, a charge).
  */
 export type Lash = readonly [
   sting: number,
@@ -44,15 +46,17 @@ export type Lash = readonly [
   reach: number,
   hook: number,
   rise: number,
+  coil?: number,
 ];
 /** At rest: behind, hooked. */
 export const HOOKED: Lash = [0, 0, 0, 0, 1, 0];
 
 /**
  * Where its tail is through a strike (TAILS, by the cut): it goes from HOOKED to the strike's poise
- * by the top of the wind-up (or most of the way to the strike for a special), is driven to its end
- * at the strike, eased in, then comes back. A charge holds the poise and trembles with the clock
- * `t`. The SPIN turns the tail low once round the body.
+ * in the first third of the wind-up (or most of the way to the strike for a special), so it answers
+ * the click at once (the user, 2026-11-16), is driven to its end at the strike, eased in, then
+ * comes back. A charge holds the poise drawn in, coils it in an S to the side as it grows (the
+ * user, 2026-11-16) and trembles with the clock `t`. The SPIN turns the tail low once round the body.
  */
 export const lashOf = (
   p: Pick<PlayerState, 'cut' | 'swing' | 'heavy' | 'charge' | 'down'>,
@@ -71,46 +75,64 @@ export const lashOf = (
   const [hit, top] = [k.strike / k.ticks, (k.hold > 0 ? k.hold : 0.7 * k.strike) / k.ticks];
   const back = ease((u - hit) / (1 - hit));
   const mix = (a: Lash, b: Lash, d: number) =>
-    a.map((v, i) => v + (b[i] - v) * d) as unknown as Lash;
+    (a as readonly number[]).map((v, i) => v + (b[i]! - v) * d) as unknown as Lash;
   if (c == STING.SPIN) {
     return mix([0.3, TAU * ease(u), 0, 0.2, 0, 0], HOOKED, back + (1 - ease(u / top)) * +(u < top));
   }
   const [poise, to] = LASH[c];
-  if (u < top) {
-    const shake: Lash = [0, (p.charge ?? 0) > 0 ? 0.03 * Math.sin(t * 50) : 0, 0, 0, 0, 0];
-    return mix(HOOKED, poise, ease(u / top)).map((v, i) => v + shake[i]) as unknown as Lash;
+  // Charged, it is cocked on its side of the view, the left sweep's on the left.
+  const cocked: Lash =
+    c == STING.SWEEP_L ? ([0, -COCKED[1], ...COCKED.slice(2)] as unknown as Lash) : COCKED;
+  if (p.charge) {
+    const k = Math.sqrt(Math.min(p.charge / HEAVY_MAX, 1));
+    const [a, b, d, r, h, l] = cocked;
+    return [a, b + 0.03 * Math.sin(t * 50), d, r - 0.12 * k, h, l, k];
   }
-  return mix(mix(poise, to, Math.min((u - top) / (hit - top), 1) ** 2), HOOKED, back);
+  if (u < top) {
+    // In sight within a third of the wind-up, held there to its top.
+    return mix(HOOKED, poise, 1 - Math.max(0, 1 - (3 * u) / top) ** 3);
+  }
+  // A heavy release from where the charge held it, round the shorter way.
+  const from = p.heavy ? cocked : poise;
+  const end: Lash = [
+    to[0],
+    to[1] + TAU * Math.round((from[1] - to[1]) / TAU),
+    ...to.slice(2),
+  ] as unknown as Lash;
+  return mix(mix(from, end, Math.min((u - top) / (hit - top), 1) ** 2), HOOKED, back);
 };
 
 /**
  * By the cut (STING): the pose the tail is poised in, then the one it is driven to. The stab and
- * the sweeps after Aliens versus Predator's first person (the user, 2026-11-16): round the hip at
- * the waist, into the view from low on its side, curling in to the middle; the lash and the leap
- * over the right shoulder, down from above.
+ * the sweeps after Aliens versus Predator's first person (the user, 2026-11-16): poised up on its
+ * side of the view, in sight from the click (the user, 2026-11-16: it answered late, round the hip),
+ * driven into the view, curling in to the middle; the lash and the leap poised over the right
+ * shoulder, in the top of the view, down from above.
  */
 const LASH: Record<number, [Lash, Lash]> = {
   [STING.STAB]: [
-    [0, 3, 0, 0.15, 0.7, 0.5],
+    [0, 5, 0, 0.2, 0, 1.2],
     [0, 4.6, 0, 0.35, 0, 0.7],
   ],
   [STING.SWEEP_R]: [
-    [0, 3.4, 0, 0.3, 0.6, 0.5],
+    [0, 4.5, 0, 0.2, 0, 1.2],
     [0, 5.6, 0, 0.45, 0, 0.6],
   ],
   [STING.SWEEP_L]: [
-    [0, -3.4, 0, 0.3, 0.6, 0.5],
+    [0, -4.5, 0, 0.2, 0, 1.2],
     [0, -5.6, 0, 0.45, 0, 0.6],
   ],
   [STING.LASH]: [
-    [0.8, 0, 0.5, 0.33, 0, 0],
+    [0.9, 0, 0.7, 0.3, 0, 0],
     [1.08, 0.1, 0.5, 0.6, 0, 0],
   ],
   [STING.LEAP]: [
-    [0.84, 0, 0.35, 0.37, 0, 0],
+    [0.9, 0, 0.7, 0.3, 0, 0],
     [1.08, 0.2, 0.35, 0.6, 0, 0],
   ],
 };
+/** Charged: up on the right of the view, ahead, where its S shows (the user, 2026-11-16). */
+const COCKED: Lash = LASH[STING.STAB][0];
 
 /** Sides round a piece at each level of detail (far, near, the own body, close), by how fine it is. */
 const SIDES = [
@@ -191,7 +213,7 @@ const bonesOf = (
   sway = 1,
   fours = 0,
 ): Bone[] => {
-  const [sting, side, lean, reach, hook, rise] = lash;
+  const [sting, side, lean, reach, hook, rise, coil = 0] = lash;
   const laid = fours * hook;
   const [P, q] = [s.pos[J.PELVIS], s.rot[J.PELVIS]];
   const back = (j: number, v: Vec3, r: number): Bone => [
@@ -223,11 +245,13 @@ const bonesOf = (
     const a = lift - LAID * laid * (1 - sting) + ((0.3 + 1.1 * u ** 1.3) * Math.PI - lift) * sting;
     const swing =
       sway *
-      hook *
-      (1 - sting) *
-      (0.35 + 0.4 * run) *
-      u *
-      Math.sin(t * (1.6 + 2.4 * run) - u * 3.5);
+        hook *
+        (1 - sting) *
+        (0.35 + 0.4 * run) *
+        u *
+        Math.sin(t * (1.6 + 2.4 * run) - u * 3.5) +
+      // Coiled: an S, one way near the root and back the other toward the tip.
+      COIL * coil * Math.cos(TAU * u);
     const [c, n] = [Math.cos(side * (0.3 + 0.7 * u)), Math.sin(side * (0.3 + 0.7 * u))];
     // Leaning more toward the tip: a hook, the stinger curling in under the arch.
     const [lc, ls] = [Math.cos(lean * (0.4 + u)), Math.sin(lean * (0.4 + u))];

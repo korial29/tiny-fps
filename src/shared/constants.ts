@@ -270,15 +270,14 @@ export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];
 /**
  * The xenomorph (the user, 2026-11-15; kit.ts). XENO_HP health. It clings to a wall it faces with
  * forward and the sprint held (MODE.CLING, physics.ts; the sprint since the user, 2026-11-16):
- * CLING_SPEED m/s up, down or along it (faster than a man runs, the user 2026-11-16: it was slow)
- * while the wall rises CLING_HOLD m over its feet; a jump kicks it off along the look at CLING_LEAP
+ * up, down or along it as fast as on a floor, its run and its sprint with the key held (the user,
+ * 2026-11-16) while the wall rises CLING_HOLD m over its feet; a jump kicks it off along the look at CLING_LEAP
  * m/s. It dashes as a man does, XENO_DASH times as fast so as far, three in a row (kit.ts; the
  * user, 2026-11-16: no more charged pounce); an enemy its dash's burst reaches is pinned (room.ts):
  * POUNCE_HP health, his flag dropped, a stumble of POUNCE_STUN ticks, once per TACKLE_COOLDOWN. An
  * enemy whose katana or fists hit it loses ACID_HP.
  */
 export const XENO_HP = 12;
-export const CLING_SPEED = 8;
 export const CLING_FACING = 0.6;
 export const CLING_HOLD = 0.4;
 export const CLING_LEAP = 10;

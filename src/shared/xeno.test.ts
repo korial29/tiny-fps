@@ -3,7 +3,6 @@ import { IDLE, duo } from '../../test/teams';
 import {
   ARMOR_MAX,
   BLOW,
-  CLING_SPEED,
   CUTS,
   GLORY_HP,
   GLORY_PUSH,
@@ -170,9 +169,9 @@ describe('the xenomorph on a wall', () => {
     go(p, 0);
     expect(p.y).toBe(y);
     go(p, KEY.BACK);
-    expect(p.y).toBeCloseTo(y - CLING_SPEED / 60, 4);
+    expect(p.y).toBeCloseTo(y - XENO.run / 60, 4);
     // Faster on a wall than a man runs (the user, 2026-11-16: it crawled).
-    expect(CLING_SPEED).toBeGreaterThan(RUN_SPEED);
+    expect(XENO.run).toBeGreaterThan(RUN_SPEED);
     // Facing +x, the right is +z; looking away from the wall, the right is -z.
     const z = p.z;
     go(p, KEY.RIGHT);
@@ -208,12 +207,12 @@ describe('the xenomorph on a wall', () => {
     let p = on();
     let [y, z] = [p.y, p.z];
     go(p, KEY.FORWARD, SOUTH);
-    expect(p.z - z).toBeCloseTo(CLING_SPEED / 60, 4);
+    expect(p.z - z).toBeCloseTo(XENO.run / 60, 4);
     expect(p.y).toBeCloseTo(y, 5);
     // Looking that way, the right is down the wall and the left up it.
     [y, z] = [p.y, p.z];
     go(p, KEY.RIGHT, SOUTH);
-    expect(p.y - y).toBeCloseTo(-CLING_SPEED / 60, 4);
+    expect(p.y - y).toBeCloseTo(-XENO.run / 60, 4);
     expect(p.z).toBeCloseTo(z, 5);
     go(p, KEY.LEFT, SOUTH);
     expect(p.y).toBeCloseTo(y, 4);
@@ -224,12 +223,55 @@ describe('the xenomorph on a wall', () => {
     const [dy, dz] = [p.y - y, p.z - z];
     expect(dy).toBeGreaterThan(0.05);
     expect(dz).toBeGreaterThan(0.05);
-    expect(Math.sqrt(dy * dy + dz * dz)).toBeCloseTo(CLING_SPEED / 60, 4);
+    expect(Math.sqrt(dy * dy + dz * dz)).toBeCloseTo(XENO.run / 60, 4);
     // Two keys at once go no faster than one.
     p = on();
     [y, z] = [p.y, p.z];
     go(p, KEY.FORWARD | KEY.RIGHT);
-    expect(Math.sqrt((p.y - y) ** 2 + (p.z - z) ** 2)).toBeCloseTo(CLING_SPEED / 60, 4);
+    expect(Math.sqrt((p.y - y) ** 2 + (p.z - z) ** 2)).toBeCloseTo(XENO.run / 60, 4);
+  });
+
+  it('goes as fast on a wall as on a floor, and faster with the sprint (the user, 2026-11-16)', () => {
+    // Up the tower from a stand on it: its run at once, then the sprint got to as on a floor.
+    const p = at(-49.8, 2, { mode: MODE.AIR, ground: false, yaw: WEST });
+    go(p, RUN, WEST);
+    expect(p.mode).toBe(MODE.CLING);
+    let y = p.y;
+    go(p, KEY.FORWARD, WEST);
+    expect((p.y - y) * 60).toBeCloseTo(XENO.run, 3);
+    const g = at(-20, 0, { z: 50, yaw: 0 });
+    let [t, tg] = [0, 0];
+    for (let k = 0; k < 90; k++) {
+      y = p.y;
+      go(p, RUN, WEST);
+      go(g, RUN, 0);
+      t = (p.y - y) * 60 < XENO.sprint - 0.01 ? k : t;
+      tg = -g.vz < XENO.sprint - 0.01 ? k : tg;
+    }
+    expect(p.mode).toBe(MODE.CLING);
+    expect((p.y - y) * 60).toBeCloseTo(XENO.sprint, 3);
+    expect(Math.abs(t - tg)).toBeLessThanOrEqual(8);
+    // The sprint let go, it falls back to its run.
+    for (let k = 0; k < 30; k++) {
+      y = p.y;
+      go(p, KEY.FORWARD, WEST);
+    }
+    expect(p.mode).toBe(MODE.CLING);
+    expect((p.y - y) * 60).toBeCloseTo(XENO.run, 3);
+  });
+
+  it('runs on up a wall at the speed it ran into it', () => {
+    const p = at(-30, 0, { yaw: EAST });
+    let v = 0;
+    for (let k = 0; k < 300 && p.mode !== MODE.CLING; k++) {
+      v = Math.sqrt(p.vx * p.vx + p.vz * p.vz);
+      go(p, RUN);
+    }
+    expect(p.mode).toBe(MODE.CLING);
+    expect(v).toBeGreaterThan(XENO.run + 1);
+    const y = p.y;
+    go(p, RUN);
+    expect((p.y - y) * 60).toBeGreaterThan(v - 0.1);
   });
 
   it('walks down off the wall onto the floor', () => {

@@ -475,7 +475,7 @@ describe('prediction against the room', () => {
     }
   }, 60_000);
 
-  it('agrees with the host exactly for a xenomorph: walls climbed, pounces charged, claws and tail, under every lag', () => {
+  it('agrees with the host exactly for a xenomorph: walls climbed, dashes chained, claws and tail, under every lag', () => {
     let s = 1337;
     const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
     // First up the wall north of the start, and onto the roof above it; then at random.
@@ -500,20 +500,21 @@ describe('prediction against the room', () => {
         turn = (rnd() - 0.5) * 0.1;
         pitch = (rnd() - 0.3) * 0.8;
       }
-      // DASH let go now and then, so the charges end in pounces.
-      const held = k % 25 < 20 ? keys : keys & ~KEY.DASH;
+      // DASH pressed afresh every few steps, so dashes chain.
+      const held = k % 4 ? keys & ~KEY.DASH : keys;
       yaw += turn;
       steps.push({ keys: held, yaw: ((yaw % 6.2832) + 6.2832) % 6.2832, pitch });
     }
     // The guard: what it did, stepped with no network.
     const p = spawn(0, world, 0);
     const [modes, blows] = [new Set<number>(), new Set<number>()];
-    let pounces = 0;
+    let [dashes, chained] = [0, 0];
     steps.forEach((i, k) => {
-      const charged = (p.charge ?? 0) > 0;
+      const ready = p.dash === 0;
       step(p, onWire({ ...i, seq: k }), world, 0, true, [], kitOf(ROLE.XENO, ROOFTOPS));
       modes.add(p.mode);
-      pounces += +(charged && !!(p.ev & EV.DASH));
+      dashes += +!!(p.ev & EV.DASH);
+      chained += +(!ready && !!(p.ev & EV.DASH));
       if (p.swing) {
         blows.add(p.cut ?? 0);
       }
@@ -521,7 +522,8 @@ describe('prediction against the room', () => {
     expect([...modes]).toEqual(expect.arrayContaining([MODE.CLING, MODE.CLIMB, MODE.AIR]));
     expect([...blows]).toEqual(expect.arrayContaining([BLOW.CLAW_L, BLOW.CLAW_R, STING.LEAP]));
     expect([...blows].some(b => b < BLOW.CLAW_L)).toBe(true);
-    expect(pounces).toBeGreaterThan(5);
+    expect(dashes).toBeGreaterThan(20);
+    expect(chained).toBeGreaterThan(5);
     for (const [name, lag] of LAGS) {
       const r = race(lag, steps, 0, [], [], true, { role: ROLE.XENO });
       expect([r.worst, r.end, r.final, r.differing], `${name} lag`).toEqual([0, 0, 0, []]);

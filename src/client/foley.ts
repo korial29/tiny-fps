@@ -63,7 +63,7 @@ const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
 
 export const createFoley = (
   a: Audio,
-  /** Whether a player is a xenomorph: chitin feet that click, and a shriek for its pounce. */
+  /** Whether a player is a xenomorph: chitin feet that click, and a shriek for its dash. */
   beast: (id: number) => boolean = () => false,
 ): Foley => {
   const wind = a.loop(SOUND.WIND);

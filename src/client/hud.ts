@@ -291,7 +291,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Xenomorph',
-    `${XENO_HP} health, a little faster, jumps twice as high, runs up any wall, pounces on its prey and eats the head of a weak one; claws and a tail that kills, acid for blood, sees its enemies glow through walls.`,
+    `${XENO_HP} health, a little faster, jumps twice as high, runs up any wall, dashes three times in a row and further, pins whoever its dash reaches and eats the head of a weak one; claws and a tail that kills, acid for blood, sees its enemies glow through walls.`,
     'No gun, no katana, no armour: it has to get close.',
     'Every map',
   ],
@@ -350,10 +350,9 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
       ['Space', 'on a wall: leap off along the look'],
       ['C', 'on a wall: let go'],
       [
-        'Q',
-        'hold to charge a pounce, let go to leap toward the keys held: it pins whoever it lands on',
+        'Q|or|W A S D twice',
+        'dash, three in a row and further than a man: it pins whoever it reaches',
       ],
-      ['W|A|D|twice', 'a full pounce that way, with its cry'],
       ['Left click', 'claws, left then right'],
       ['Right click|or|G', 'tail: slow, it kills; W stab, A or D sweep, else lash'],
       ['Hold right click', 'charge the tail: further and wider'],

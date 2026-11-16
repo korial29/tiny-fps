@@ -9,8 +9,6 @@ import {
   GLORY_REACH,
   PLAYER_H,
   PLAYER_R,
-  POUNCE_COOL,
-  POUNCE_FLY,
   TACKLE_REACH,
 } from './constants';
 import { forward, heightOf } from './physics';
@@ -22,11 +20,10 @@ export const tackling = (p: PlayerState): boolean =>
   p.mode === MODE.SLIDE || p.dash > DASH_COOLDOWN - DASH_TICKS;
 
 /**
- * Whether a xenomorph is in the strike of its pounce: in the air, the first POUNCE_FLY ticks of the
- * dash timer it leapt with (POUNCE_COOL). Only for a xenomorph: another's dash runs through it too.
+ * Whether a xenomorph is in the strike of its pounce: the burst of a dash. Only for a xenomorph:
+ * another's dash runs through an enemy.
  */
-export const pouncing = (p: PlayerState): boolean =>
-  p.mode === MODE.AIR && p.dash > POUNCE_COOL - POUNCE_FLY && p.dash <= POUNCE_COOL;
+export const pouncing = (p: PlayerState): boolean => p.dash > DASH_COOLDOWN - DASH_TICKS;
 
 /**
  * Whether the cylinders of `a` and `b` overlap, with TACKLE_REACH of reach on top: closer than

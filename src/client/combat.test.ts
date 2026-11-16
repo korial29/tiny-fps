@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  DASH_COOLDOWN,
   AMMO_PACK,
   BLOW,
   STING,
@@ -1184,14 +1185,17 @@ describe('the xenomorph’s sounds', () => {
     expect(audio.play.mock.calls.every(c => c[1]?.[0] == 5)).toBe(true);
   });
 
-  it('hisses as its pounce charges and shrieks as it leaps', () => {
+  it('hisses as its tail charges and shrieks at each dash, not as the charge ends', () => {
     const { frame, ids, x } = beastly();
     frame([x({})]);
     frame([x({ charge: 4 })]);
     frame([x({ charge: 30 })]);
-    expect(ids()).toEqual([SOUND.XENO_HISS]);
     frame([x({ charge: 0 })]);
-    expect(ids()).toEqual([SOUND.XENO_HISS, SOUND.SHRIEK]);
+    expect(ids()).toEqual([SOUND.XENO_HISS]);
+    frame([x({ dash: DASH_COOLDOWN })]);
+    frame([x({ dash: DASH_COOLDOWN - 16 })]);
+    frame([x({ dash: DASH_COOLDOWN })]);
+    expect(ids()).toEqual([SOUND.XENO_HISS, SOUND.SHRIEK, SOUND.SHRIEK]);
   });
 
   it('swipes its claws and whips its tail with sounds of their own, not the fists’ whoosh', () => {

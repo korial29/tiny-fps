@@ -39,12 +39,12 @@ import {
   ACID_HP,
   GLORY_PUSH,
   GLORY_TICKS,
-  POUNCE_COOL,
-  POUNCE_FLY,
   POUNCE_HP,
   POUNCE_STUN,
   SNAP_EVERY,
   TACKLE_COOLDOWN,
+  DASH_COOLDOWN,
+  DASH_TICKS,
   TEAM_COLOR,
   TICK_HZ,
   VEHICLE,
@@ -681,8 +681,10 @@ export class Room {
    */
   private tackle(p: Player, view: number | undefined): void {
     const me = p.state;
-    if (!me.down && pouncing(me) && this.kit(p).xeno) {
-      this.pin(p, view);
+    if (this.kit(p).xeno) {
+      if (!me.down && pouncing(me) && this.ticks - p.tackled >= TACKLE_COOLDOWN) {
+        this.pin(p, view);
+      }
       return;
     }
     if (me.down || !tackling(me) || this.ticks - p.tackled < TACKLE_COOLDOWN) {
@@ -708,9 +710,9 @@ export class Room {
   }
 
   /**
-   * A xenomorph's pounce `p` meets an enemy who is up, where `p` drew him: he is pinned, POUNCE_HP
-   * of health, his flag dropped and a stumble of POUNCE_STUN thrown the way it leapt. The pounce
-   * ends on him: it stops, its dash timer past the strike.
+   * A xenomorph's dash `p` meets an enemy who is up, where `p` drew him: he is pinned, POUNCE_HP
+   * of health, his flag dropped and a stumble of POUNCE_STUN thrown the way it went. The burst
+   * ends on him, and the next pin waits TACKLE_COOLDOWN: three dashes in a row are not three pins.
    */
   private pin(p: Player, view: number | undefined): void {
     const me = p.state;
@@ -721,8 +723,9 @@ export class Room {
     }
     const v = speedOf(me);
     const [dx, dz] = v > 1e-3 ? [me.vx / v, me.vz / v] : forward(me.yaw);
-    me.dash = Math.min(me.dash, POUNCE_COOL - POUNCE_FLY);
+    me.dash = Math.min(me.dash, DASH_COOLDOWN - DASH_TICKS);
     [me.vx, me.vz] = [me.vx * 0.2, me.vz * 0.2];
+    p.tackled = this.ticks;
     me.hits = (me.hits + 1) & 255;
     if (this.harm(foe, POUNCE_HP, p, FRAG.CLAW, felled(FALL.STRUCK, dx, dz))) {
       return;

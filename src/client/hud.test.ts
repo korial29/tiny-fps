@@ -290,7 +290,9 @@ describe('createHud', () => {
       expect(rows).toContain('Left clicklasers');
       expect(rows).toContain('G or Right clicklaser rifle: a grenade from its launcher');
       expect(rows).toContain('G or Right clickmissiles');
-      expect(rows).toContain('W A D twicea full pounce that way, with its cry');
+      expect(rows).toContain(
+        'Q or W A S D twicedash, three in a row and further than a man: it pins whoever it reaches',
+      );
       expect(rows).toContain('1 2 3 4gun, katana, rail gun, laser rifle');
       expect(rows).toContain('Double clickspecial: lunge, energy arc, leap');
     });

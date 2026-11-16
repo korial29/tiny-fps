@@ -12,7 +12,6 @@
 // steps, and the tackled client gets the result in the next snapshot, then replays on it.
 import {
   ACCEL,
-  BLOW,
   AIR_ACCEL,
   AIR_JUMPS,
   AIR_SPEED,
@@ -25,7 +24,6 @@ import {
   CROUCH_SPEED,
   DASH_COOLDOWN,
   DASH_EXIT_SPEED,
-  DASH_SPEED,
   DASH_TICKS,
   DECAY,
   EYE,
@@ -84,11 +82,6 @@ import {
   CLING_HOLD,
   CLING_LEAP,
   CLING_SPEED,
-  POUNCE_COOL,
-  POUNCE_HOLD,
-  POUNCE_MAX,
-  POUNCE_MIN,
-  POUNCE_PITCH,
 } from './constants';
 import { bound, ground } from './relief';
 import { EV, KEY, LIMB, MODE, SIDE } from './types';
@@ -251,7 +244,8 @@ const gap = (b: Brush, x: number, z: number): [dx: number, dz: number] => [
  * A centre inside a footprint (it never gets there by walking, see below) leaves by the nearest
  * side. Returns the whole push, for the caller to take the speed into the wall away.
  *
- * Tunnelling is impossible: a step is at most DASH_SPEED / TICK_HZ = 0.27 m, and each push leaves
+ * Tunnelling is impossible: a step is at most the xenomorph's dash, DASH_SPEED * XENO_DASH / TICK_HZ
+ * = 0.37 m (a man's 0.27), and each push leaves
  * the centre at least PLAYER_R = 0.4 m from the footprint of every box it started beside, so a
  * step of that size cannot bring the centre across one, however thin. The candidates come from
  * near() with twice PLAYER_R, enough for the one push of at most PLAYER_R that matters.
@@ -1010,45 +1004,6 @@ const cling = (p: PlayerState, w: World, c: Ctl): void => {
   }
 };
 
-/** Whether the xenomorph's swing is its tail's (TAILS), not its claws'. */
-export const tailing = (p: Pick<PlayerState, 'swing' | 'cut'>): boolean =>
-  !!p.swing && p.cut !== BLOW.CLAW_L && p.cut !== BLOW.CLAW_R;
-
-/**
- * The xenomorph's dash: DASH held on a floor or a wall, with the dash timer run out, charges a
- * pounce (`charge`); let go, it leaps toward the keys held (the look with none: the user,
- * 2026-11-16), at least POUNCE_PITCH up, faster the longer the charge. Anywhere else, or stumbling, the charge is lost.
- */
-const pounce = (p: PlayerState, c: Ctl): void => {
-  // A strike of its tail holds `charge` at the top of its wind-up (gun.ts): not a pounce's.
-  if (tailing(p)) {
-    return;
-  }
-  const ready = !c.stumble && p.dash === 0 && (onFloor(p.mode) || p.mode === MODE.CLING);
-  if (ready && c.keys & KEY.DASH) {
-    p.charge = Math.min((p.charge ?? 0) + 1, POUNCE_HOLD);
-    return;
-  }
-  if (ready && p.charge) {
-    const v = POUNCE_MIN + ((POUNCE_MAX - POUNCE_MIN) * p.charge) / POUNCE_HOLD;
-    const pitch = Math.max(p.pitch, POUNCE_PITCH);
-    const cp = Math.cos(pitch);
-    if (p.mode !== MODE.CLING) {
-      p.wall = SIDE.NONE;
-    }
-    p.ev |= p.mode === MODE.SLIDE ? EV.SLIDE_END : 0;
-    enter(p, MODE.AIR);
-    // Toward the keys held as it lets go, as a dash goes; with none, along the look.
-    const [dx, dz] = c.wx || c.wz ? [c.wx, c.wz] : [c.fx, c.fz];
-    p.vx = dx * cp * v;
-    p.vz = dz * cp * v;
-    leap(p, Math.sin(pitch) * v);
-    p.dash = POUNCE_COOL;
-    p.ev |= EV.DASH;
-  }
-  p.charge = 0;
-};
-
 /** Takes hold of a ledge: hang there. */
 const grab = (p: PlayerState, l: Ledge, dashes: number): void => {
   enter(p, MODE.HANG);
@@ -1078,7 +1033,6 @@ const free = (p: PlayerState, w: World, c: Ctl): void => {
     p.dashes = c.kit.dashes;
   }
   if (
-    !c.kit.xeno &&
     c.dash &&
     (p.dash === 0 || (chain && p.dashes > 0 && p.dash <= DASH_COOLDOWN - DASH_GAP)) &&
     (ground
@@ -1095,8 +1049,8 @@ const free = (p: PlayerState, w: World, c: Ctl): void => {
         p.ev |= EV.WALLRUN_END;
       }
     }
-    p.vx = dx * DASH_SPEED;
-    p.vz = dz * DASH_SPEED;
+    p.vx = dx * c.kit.dash;
+    p.vz = dz * c.kit.dash;
     p.dash = DASH_COOLDOWN;
     p.ev |= EV.DASH;
   }
@@ -1284,9 +1238,6 @@ export const move = (
     }
   }
 
-  if (kit.xeno && p.mode !== MODE.HANG && p.mode !== MODE.CLIMB && !riding) {
-    pounce(p, c);
-  }
   if (p.mode === MODE.HANG) {
     hang(p, w, c);
   }

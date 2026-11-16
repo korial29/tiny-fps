@@ -166,7 +166,7 @@ export const SOUND = {
   STRIKE: 59,
   /**
    * The xenomorph's own (the user, 2026-11-16: not a runner's): a hiss with a growl under it as it
-   * charges a pounce, a shriek as it leaps, its claws' swipe and the whip of its tail, a screech of
+   * charges its tail, a shriek as it dashes, its claws' swipe and the whip of its tail, a screech of
    * pain and a big roar going down, its footfall (claws, wet pad, weight) at each step, the sizzle of
    * its acid blood, a roar after a kill, and the heavier footfall of a landing.
    */

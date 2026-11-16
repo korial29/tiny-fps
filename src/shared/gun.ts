@@ -199,7 +199,8 @@ export const step = (
     [p.heavy, p.charge] = [true, 0];
     p.swing = swingOf(p, table).ticks;
   } else {
-    p.charge = top ? 0 : p.charge;
+    // The xenomorph's charge is its tail's alone, held at the top: anywhere else it is gone.
+    p.charge = top || kit.xeno ? 0 : p.charge;
     // A hastier class runs the swing down faster, but stops on the tick of the wind-up's top and of
     // the strike (the cut's, or the punch's), so neither is skipped.
     const s = p.swing ?? 0;
@@ -337,7 +338,7 @@ export const step = (
  * after a swipe's strike throwing the next at once (BLOW). The right button (KEY.BLADE) strikes with
  * the tail as FIRE cuts with the katana (TAILS): by the keys (cutOf()), its special with SPECIAL (a
  * double click), which also turns a strike just started into it within SPECIAL_LATE ticks. Not while
- * a pounce charges, nor with the hands busy (a hang, a climb); on a wall they are free.
+ * the tail charges, nor with the hands busy (a hang, a climb); on a wall they are free.
  */
 const beast = (p: PlayerState, i: Input, fresh: boolean, busy: boolean): void => {
   if (busy) {

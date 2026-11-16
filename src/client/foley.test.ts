@@ -621,7 +621,7 @@ describe('the ship the own player flies (the user, 2026-11-12)', () => {
 });
 
 describe('the xenomorph', () => {
-  it('clicks its chitin feet, its own and the others’, and shrieks at its own pounce', () => {
+  it('clicks its chitin feet, its own and the others’, and shrieks at its own dash', () => {
     const { audio, ids } = fake();
     const f = createFoley(audio, id => id == 1 || id == 2);
     f.me(player(), { ev: 0, fall: 0 }, 0);

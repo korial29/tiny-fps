@@ -12,6 +12,8 @@ import {
   CHARGE_TICKS,
   CUTS,
   DASH_COOLDOWN,
+  GLORY_DASH,
+  GLORY_TICKS,
   GUN_RELOAD,
   HEAVY_MAX,
   HEAVY_TAP,
@@ -38,7 +40,7 @@ import {
 } from './constants';
 import { KITS } from './kit';
 import type { Kit } from './kit';
-import { forward, move, respawn } from './physics';
+import { coast, forward, move, respawn } from './physics';
 import { tackling } from './tackle';
 import type { Body } from './physics';
 import { CUT, EV, KEY, MODE, SPECIAL_CUT } from './types';
@@ -122,7 +124,17 @@ export const step = (
 ): Strike => {
   const down = p.down > 0;
   const locked = !down && (p.lock ?? 0) > 0;
-  move(p, down || locked ? { ...i, keys: 0 } : i, w, team, bodies, kit);
+  // A xenomorph's glory kill: it dashes to its prey over the lock's first GLORY_DASH ticks (feast()
+  // in room.ts gives it the speed), then stays.
+  if (locked && !p.wield && p.lock! > GLORY_TICKS - GLORY_DASH && (p.vx || p.vz)) {
+    coast(p, w, bodies);
+    p.ev = p.lock == GLORY_TICKS ? EV.DASH : 0;
+    if (p.lock! <= GLORY_TICKS - GLORY_DASH + 1) {
+      p.vx = p.vz = 0;
+    }
+  } else {
+    move(p, down || locked ? { ...i, keys: 0 } : i, w, team, bodies, kit);
+  }
   // A class's own health at a spawn, and never more than it has (a change of class).
   p.hp = Math.min(p.ev & EV.RESPAWN ? kit.hp : p.hp, kit.hp);
   // The rail gun cools on each step its bolt did not go out, slower while it is hot.

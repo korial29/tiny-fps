@@ -34,6 +34,7 @@ import { createBalls, onBody } from './balls';
 import { createTracer } from './beams';
 import { beats, cues, say } from './beats';
 import { createBody } from './body';
+import { createCrawl } from './crawl';
 import { chasePitch, createChase } from './chase';
 import { createCombat, sight, voiceOf } from './combat';
 import { createDoors } from './doors';
@@ -274,6 +275,7 @@ const play = (
     return speakerOf(id, p?.body, roleOf(p?.role, world.def) == ROLE.NINJA);
   };
   const body = createBody(world);
+  const crawl = createCrawl();
   const chase = createChase(world);
   const tracer = createTracer();
   const balls = createBalls(world);
@@ -661,13 +663,14 @@ const play = (
     const car = driving ? rovers[wheel] : undefined;
     ctl.pilot = !!car?.ship;
     rd?.edge(!!me?.wield && !me.down);
-    // E on a foe weak enough, close and ahead: the host tries the glory kill before a seat.
+    // E on a foe close and ahead (weak enough for the katana): the host tries the glory kill before a seat.
     const team = (id: number) => roster.find(p => p.id == id)?.team;
     const prey =
       me && (ctl.beast || me.wield) && !seat && !me.lock
         ? glory(
             me,
             others.filter(p => team(p.id) !== you.team),
+            ctl.beast ? world : undefined,
           )
         : undefined;
     hud.rover(
@@ -759,11 +762,14 @@ const play = (
     );
     const third = shot.k > 0;
     const pov = shot.at;
-    const pitch = shot.pitch;
-    const view = ctl.yaw + body.spun() * (1 - shot.k);
-    const lens = third
-      ? { ...fx, roll: fx.roll * (1 - shot.k), fov: fx.fov * (1 - shot.k) + shot.fov }
-      : fx;
+    // On a wall the xenomorph's view turns over onto it, its floor (crawl.ts).
+    crawl.update(me, dt);
+    const [view, pitch, roll] = crawl.view(
+      ctl.yaw + body.spun() * (1 - shot.k),
+      shot.pitch,
+      fx.roll * (1 - shot.k),
+    );
+    const lens = third ? { ...fx, roll, fov: fx.fov * (1 - shot.k) + shot.fov } : { ...fx, roll };
     // The driver is unarmed and his body is the renderer's to draw whole: no sight, no muzzle.
     const look = me && !third ? sight(world, eye, cam, ctl.yaw, ctl.pitch, pitch) : undefined;
     if (look) {

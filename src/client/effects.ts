@@ -38,12 +38,16 @@ export interface Effects {
   kick: number;
   /** 0 to 1: how far the view has gone down to the floor, while the own player is down. */
   lie: number;
+  /** 0 to 1: the white light of the orbital station's lasers on the own player (glareAt()). */
+  glare: number;
   /** The own player fired a shot of `power` (1 to CHARGE_MAX): a shake of the eye, the look and the roll, and the kick of the gun, much stronger for a charged one. */
   fire(power?: number): void;
   /** The own player was hit: the red vignette and a small knock. */
   wound(): void;
   /** The own player was tackled: a hard jolt of the eye, the look and the roll, and the vignette. */
   jolt(): void;
+  /** The orbital station's lasers came down on the own player: the light that blinds him starts. */
+  blind(): void;
   /** A grenade burst near the own player, `k` 0 to 1 as it is nearer: the view is shaken as hard as a tackle at 1. */
   quake(k: number): void;
   /** The own player tackled someone: a small punch of the look and the field of view. */
@@ -112,6 +116,24 @@ const FADE = 3;
 /** The tackler's punch: the same, smaller, and the degrees of field of view it adds. */
 const PUNCH = [-1, 1.2];
 const PUNCH_FOV = 4;
+/**
+ * The orbital strike's light on the own player: seconds it grows to white (while the lasers burn,
+ * RAY in beams.ts), stays white, and clears off the DISINTEGRATED screen.
+ */
+export const BLIND = [1.2, 0.5, 1.8];
+
+/** The strike's light `t` seconds after it came down: ever faster up to 1, held, then eased away. */
+export const glareAt = (t: number): number => {
+  const [up, hold, out] = BLIND;
+  if (t < 0) {
+    return 0;
+  }
+  if (t < up) {
+    return (t / up) ** 2;
+  }
+  const k = Math.min(1, Math.max(0, (t - up - hold) / out));
+  return 1 - k * k * (3 - 2 * k);
+};
 /** A shot: the eye's, the look's and the roll's speed it is kicked with, and how much the roll's goes either way. */
 const SHOT = [-0.25, 0.4, 0.5];
 /** A cut's strike: the eye's speed, then the look's (a slash) and the roll's (across). */
@@ -149,6 +171,8 @@ export const createEffects = (): Effects => {
   let fall = 0;
   let shots = 0;
   let zap = 1;
+  /** Seconds since the strike's lasers came down on the own player. */
+  let blinded = Infinity;
   /** The eye height as drawn; undefined until the first state, which it starts at. */
   let h: number | undefined;
   let last: PlayerState | undefined;
@@ -166,6 +190,7 @@ export const createEffects = (): Effects => {
     hurt: 0,
     kick: 0,
     lie: 0,
+    glare: 0,
 
     fire(power = 1) {
       // The roll's kick alternates sides; a full charge kicks 3.4 times as hard.
@@ -189,6 +214,10 @@ export const createEffects = (): Effects => {
       p[1] += JOLT[1];
       r[1] += JOLT[2];
       fx.hurt = 1;
+    },
+
+    blind() {
+      blinded = 0;
     },
 
     quake(k) {
@@ -265,6 +294,8 @@ export const createEffects = (): Effects => {
       spring(p, dt);
       spring(r, dt);
       fx.hurt *= Math.exp(-dt * FADE);
+      blinded += dt;
+      fx.glare = glareAt(blinded);
       thump *= Math.exp(-dt * 10);
       fx.kick *= Math.exp(-dt * 22);
       fx.lie += (+!!me?.down - fx.lie) * ease(5);

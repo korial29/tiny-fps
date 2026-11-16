@@ -3,7 +3,7 @@ import { BLOW, DASH_COOLDOWN, DASH_TICKS } from '../shared/constants';
 import { STILL } from '../shared/physics';
 import { CUT, EV, KEY, MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { createEffects, stepLength, stepping } from './effects';
+import { BLIND, createEffects, glareAt, stepLength, stepping } from './effects';
 import type { Effects } from './effects';
 
 const DT = 1 / 60;
@@ -402,11 +402,13 @@ describe('tackle', () => {
 describe('shape', () => {
   it('holds the numbers the camera draws and the stride, and update', () => {
     expect(Object.keys(createEffects()).sort()).toEqual([
+      'blind',
       'blow',
       'cut',
       'dy',
       'fire',
       'fov',
+      'glare',
       'hurt',
       'jolt',
       'kick',
@@ -594,5 +596,44 @@ describe('the rail gun’s bolt', () => {
     expect(jolt({})).toBe(0);
     expect(jolt({ zapping: true })).toBeGreaterThan(0.004);
     expect(jolt({ zapping: true, heat: 110 })).toBeGreaterThan(jolt({ zapping: true }) * 1.5);
+  });
+});
+
+describe('the orbital strike’s light', () => {
+  const [up, hold, out] = BLIND;
+
+  it('grows ever faster to white while the lasers burn, stays, then clears', () => {
+    expect(glareAt(0)).toBe(0);
+    // Slow at first, then faster: a quarter at half way.
+    expect(glareAt(up / 2)).toBeCloseTo(0.25, 9);
+    expect(glareAt(up * 0.9) - glareAt(up * 0.8)).toBeGreaterThan(
+      glareAt(up * 0.2) - glareAt(up * 0.1),
+    );
+    expect(glareAt(up)).toBe(1);
+    expect(glareAt(up + hold)).toBe(1);
+    expect(glareAt(up + hold + out / 2)).toBeCloseTo(0.5, 9);
+    expect(glareAt(up + hold + out)).toBe(0);
+    expect(glareAt(Infinity)).toBe(0);
+  });
+
+  it('starts when the lasers come down on the own player, and only then', () => {
+    const fx = createEffects();
+    run(fx, me(), 1);
+    expect(fx.glare).toBe(0);
+    fx.jolt();
+    run(fx, me(), 0.5);
+    expect(fx.glare).toBe(0);
+    fx.blind();
+    const seen: number[] = [];
+    for (let t = 0; t < up + hold + out + 0.2; t += DT) {
+      fx.update(me({ down: 60 }), 0, DT);
+      seen.push(fx.glare);
+    }
+    const top = seen.indexOf(Math.max(...seen));
+    expect(seen[top]).toBe(1);
+    // Up without a dip, then down without a rise.
+    expect(seen.slice(0, top + 1).every((g, i, l) => !i || g >= l[i - 1])).toBe(true);
+    expect(seen.slice(top).every((g, i, l) => !i || g <= l[i - 1])).toBe(true);
+    expect(seen.at(-1)).toBe(0);
   });
 });

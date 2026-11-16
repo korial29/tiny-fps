@@ -112,9 +112,11 @@ const [RIM, BLUR] = (() => {
 })();
 
 export const HUD_CSS =
-  `h5,aside,nav,var,output,section,em,u,ul,dl,s,mark,ins,figure,del,menu,label,samp,cite,q,dfn,tt,h1,h2,ol{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,var,output,section,em,u,sup,ul,dl,s,mark,ins,figure,del,menu,label,samp,cite,q,dfn,tt,h1,h2,ol{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   `u{inset:0;opacity:0;background:radial-gradient(ellipse at center,#0000 35%,#d10000dd 120%)}` +
+  // The orbital strike's light: white from above, red hot round it, growing until the view is white.
+  `sup{inset:0;z-index:1;opacity:0;--w:0%;background:radial-gradient(circle at 50% 0,#fff var(--w),#ffd2bc calc(var(--w) + 30%),#ff3c1e00 calc(var(--w) + 80%))}` +
   `nav{top:8px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr auto 1fr;gap:2px 16px;align-items:center;text-align:center;font-size:13px}` +
   `nav span,nav time{font:900 clamp(16px,4.6vw,24px)/1 system-ui,sans-serif;letter-spacing:.03em;white-space:nowrap}nav time{min-width:4.2ch;font-variant-numeric:tabular-nums;font-size:clamp(14px,3.8vw,20px)}` +
   `nav small{font-size:clamp(10px,2.6vw,12px);white-space:nowrap;opacity:.95}nav small:first-of-type{text-align:right}nav small:last-of-type{text-align:left}` +
@@ -468,6 +470,8 @@ export interface Hud {
   visor(on: boolean): void;
   /** The red vignette of a tackle, 0 (none) to 1 (full). */
   hurt(level: number): void;
+  /** The orbital strike's light over the view, 0 (none) to 1 (all white), over the down screen. */
+  glare(level: number): void;
   /**
    * The health as pips out of HP_MAX, and the weapon in hand: the ammo counter with the gun glyph,
    * the katana glyph when `wield` (or when it is all there is), or the rail gun's lightning left
@@ -631,7 +635,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
       `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
       `<data></data><span></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
-      `<s hidden></s><mark hidden></mark><ins hidden><i></i></ins>` +
+      `<s hidden></s><mark hidden></mark><sup></sup><ins hidden><i></i></ins>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav><var hidden></var>` +
       `<h1 hidden>FRAGS<span>0</span></h1><label hidden><canvas width="${COMM}" height="${COMM}"></canvas><span></span><i>${'<b></b>'.repeat(5)}</i></label><ol></ol><h2 hidden><span></span><small></small></h2>` +
       `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q><dfn hidden></dfn><dfn hidden></dfn><tt hidden></tt><tt hidden></tt>` +
@@ -774,6 +778,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const banner = one('output');
   const [prompt, act, meter, speed] = ['samp', 'samp span', 'cite', 'cite span'].map(t => one(t));
   const vignette = one('u');
+  const light = one('sup');
   const rim = one('del');
   const end = one('section');
   const [title, score, next] = ['h6', 'strong', 'span'].map(t =>
@@ -872,6 +877,14 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       const v = level < 0.01 ? '' : `${Math.min(1, level)}`;
       if (vignette.style.opacity != v) {
         vignette.style.opacity = v;
+      }
+    },
+    glare(level) {
+      const k = Math.min(1, level);
+      const v = k < 0.01 ? '' : `${Math.min(1, 2 * k)}`;
+      if (light.style.opacity != v) {
+        light.style.opacity = v;
+        light.style.setProperty('--w', v && `${(100 * k).toFixed(1)}%`);
       }
     },
     vitals(

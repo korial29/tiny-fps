@@ -408,6 +408,7 @@ const play = (
                 tracer.burst([p.x, p.y + 1, p.z], true);
                 if (p.id == you.id) {
                   fx.jolt();
+                  fx.blind();
                 }
               }
             }
@@ -607,6 +608,7 @@ const play = (
     // Seated, the move keys are the rover's: no strafe leans the view.
     fx.update(me, seat ? 0 : ctl.keys, dt, hit, body.phase);
     hud.hurt(fx.hurt);
+    hud.glare(fx.glare);
     const carrying = !!match?.flags.some(f => f.state === FLAG.CARRIED && f.by == you.id);
     const car = driving ? rovers[wheel] : undefined;
     ctl.pilot = !!car?.ship;

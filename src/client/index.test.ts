@@ -7,6 +7,7 @@ import { FRAG, encodeSnapshot } from '../shared/protocol';
 import type { ServerText } from '../shared/protocol';
 import { HIGHLINE, ROOFTOPS } from '../shared/map';
 import { MOON } from '../shared/moon';
+import { PHASE } from '../shared/station';
 import { BODY, FLAG, TEAM } from '../shared/types';
 import { ROLE } from '../shared/kit';
 import type { FlagState, PlayerInfo, SnapPlayer, SocketLike, Snapshot } from '../shared/types';
@@ -267,6 +268,36 @@ describe('tinyFps, the match through the socket', () => {
     });
     frames();
     expect(q('del').hidden).toBe(true);
+  });
+
+  it('whites the own view out when the station’s strike comes down on him, then clears it', () => {
+    text({ t: 'roster', you: 0, players: roster, map: 'tranquility', host: 0 });
+    const armed = { phase: PHASE.ARMED, team: TEAM.BLUE, left: 1 };
+    snap({ station: armed });
+    frames();
+    const glare = () => +(q('sup').style.opacity || 0);
+    expect(glare()).toBe(0);
+    snap({ station: { phase: PHASE.STRUCK, team: TEAM.BLUE, left: 15 } });
+    frames();
+    const first = glare();
+    vi.advanceTimersByTime(600);
+    // Growing while the lasers burn, white once they are done.
+    expect(glare()).toBeGreaterThan(first);
+    vi.advanceTimersByTime(900);
+    expect(glare()).toBe(1);
+    vi.advanceTimersByTime(3000);
+    expect(glare()).toBe(0);
+  });
+
+  it('leaves the view clear when the station’s strike is on the other team', () => {
+    text({ t: 'roster', you: 0, players: roster, map: 'tranquility', host: 0 });
+    snap({ station: { phase: PHASE.ARMED, team: TEAM.RED, left: 1 } });
+    frames();
+    snap({ station: { phase: PHASE.STRUCK, team: TEAM.RED, left: 15 } });
+    for (let i = 0; i < 30; i++) {
+      frames();
+      expect(q('sup').style.opacity).toBe('');
+    }
   });
 
   it('tints the name tag of another player with his team colour', () => {

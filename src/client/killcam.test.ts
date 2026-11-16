@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { box, land } from '../../test/slope';
-import { KILLCAM, createKillCam } from './killcam';
+import { KILLCAM, createKillCam, sees } from './killcam';
 import type { Kill, KillCam } from './killcam';
 import type { Vec3 } from './mesh';
 
@@ -100,5 +100,10 @@ describe('the glory kill camera', () => {
     expect(back).toMatchObject({ at: EYE, k: 0 });
     const first = run(createKillCam(land()), PAIR, 30);
     expect(run(c, PAIR, 30).yaw).toBeCloseTo(first.yaw, 6);
+  });
+
+  it('takes the xenomorph out of its vision: the prey in his own colours from halfway out', () => {
+    expect([0, 0.49, 0.5, 1].map(k => sees(true, k))).toEqual([true, true, false, false]);
+    expect(sees(false, 0)).toBe(false);
   });
 });

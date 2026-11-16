@@ -36,7 +36,7 @@ import { beats, cues, say } from './beats';
 import { createBody } from './body';
 import { createCrawl } from './crawl';
 import { chasePitch, createChase } from './chase';
-import { KILLCAM, createKillCam } from './killcam';
+import { KILLCAM, createKillCam, sees } from './killcam';
 import { createCombat, sight, voiceOf } from './combat';
 import { createDoors } from './doors';
 import { createEffects } from './effects';
@@ -502,7 +502,6 @@ const play = (
       hud.magazines([kit.mag, kit.cap, kit.clip]);
       hud.life(kit.hp);
       [hpMax, ctl.beast] = [kit.hp, kit.xeno];
-      rd?.vision(kit.xeno);
       // The xenomorph breathes no air: no helmet, so no visor round its view (the user, 2026-11-16).
       hud.visor(!!world.def.helmets && !kit.xeno);
       // No map to pick in the game's menu (the user, 2026-11-13): it is the join page's choice.
@@ -788,6 +787,7 @@ const play = (
     );
     const k = Math.max(shot.k, watch.k);
     hud.outside(watch.k > 0);
+    rd?.vision(sees(ctl.beast, watch.k));
     const third = k > 0;
     const pov = watch.k ? watch.at : shot.at;
     // On a wall the xenomorph's view turns over onto it, its floor (crawl.ts).

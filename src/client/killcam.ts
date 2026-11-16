@@ -25,6 +25,13 @@ export const KILLCAM = {
   PAD: 0.3,
 } as const;
 
+/**
+ * Whether the xenomorph's vision (grey-blue world, glowing enemies) is on with the kill camera `k`
+ * of the way out: it is its eyes', so out of its head the world and the prey keep their colours
+ * (the user, 2026-11-16), from halfway out.
+ */
+export const sees = (xeno: boolean, k: number): boolean => xeno && k < 0.5;
+
 /** What a frame is drawn from. */
 export interface Kill {
   at: Vec3;

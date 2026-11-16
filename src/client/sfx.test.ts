@@ -199,6 +199,37 @@ describe('the sounds of the game', () => {
     }
   });
 
+  it('make the death cry a scream: held at full voice for a third of a second, then dying out', () => {
+    const s = sound('DEATH');
+    const at = (a: number, b: number) => rms(s.subarray(a * RATE, b * RATE));
+    for (let t = 0.05; t < 0.35; t += 0.1) {
+      expect(at(t, t + 0.05)).toBeGreaterThan(0.2);
+    }
+    expect(at(s.length / RATE - 0.08, s.length / RATE)).toBeLessThan(0.01);
+  });
+
+  it('throw the death cry up to a low scream, under 420 Hz, before it falls', () => {
+    const s = sound('DEATH');
+    // The pitch at t: the shortest lag that carries most of the energy, walked up to its top. The
+    // shortest, as every other period of the rasp is louder and twice the period matches better.
+    const hz = (t: number) => {
+      const a = Math.round(t * RATE);
+      const c = (lag: number) =>
+        s.subarray(a, a + 1200).reduce((m, x, i) => m + x * s[a + i + lag], 0);
+      let lag = 70;
+      while (c(lag) < 0.6 * c(0)) {
+        lag++;
+      }
+      while (c(lag + 1) > c(lag)) {
+        lag++;
+      }
+      return RATE / lag;
+    };
+    expect(hz(0.2)).toBeGreaterThan(330);
+    expect(hz(0.2)).toBeLessThan(420);
+    expect(hz(0.5)).toBeLessThan(0.75 * hz(0.2));
+  });
+
   it('give the katana three sounds: the shing, the swish of a cut and the zap of a hit', () => {
     const blade = ['SHING', 'SWISH', 'ZAP'] as const;
     expect(blade.map(n => SOUND[n])).toEqual([23, 24, 25]);
@@ -561,11 +592,13 @@ describe('the xenomorph’s sounds', () => {
     }
     // The voice's first oscillator: a screech, not a man's "ugh".
     expect(LAYERS[SOUND.XENO_PAIN][0][1]).toBeGreaterThan(2 * LAYERS[SOUND.PAIN][0][1]);
-    // Its death a roar: deeper, longer and louder than a man's "aah".
-    const [roar, aah] = [render(SOUND.XENO_DEATH), render(SOUND.DEATH)];
-    expect(LAYERS[SOUND.XENO_DEATH][0][1]).toBeLessThan(LAYERS[SOUND.DEATH][0][1] / 2);
-    expect(roar.length).toBeGreaterThan(aah.length);
-    expect(peak(roar)).toBeGreaterThan(peak(aah));
+    // Its death a roar: deeper and longer than a man's scream (held over 330 Hz), with more sound
+    // in it. The scream is clipped and as loud at its peak; the roar outlasts it.
+    const [roar, scream] = [render(SOUND.XENO_DEATH), render(SOUND.DEATH)];
+    const energy = (s: Float32Array) => s.reduce((m, x) => m + x * x, 0);
+    expect(LAYERS[SOUND.XENO_DEATH][0][1]).toBeLessThan(330 / 2);
+    expect(roar.length).toBeGreaterThan(scream.length);
+    expect(energy(roar)).toBeGreaterThan(energy(scream));
   });
 
   // The voices of a sound: clicks (a square or noise of 10 ms at most), thumps (a falling sine

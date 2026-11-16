@@ -149,7 +149,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   let special = false;
   /** G (or the right button, but for the xenomorph) pressed, waiting for its step: a grenade when the rifle is the choice, a missile at a ship's stick. */
   let nade = false;
-  /** The xenomorph's double tap of W, A or D: the direction of its pounce, and the steps of charge left. */
+  /** The xenomorph's double tap of a move key: the direction of its pounce, and the steps of charge left. */
   let [lunge, charging] = [0, 0];
   /** The right button pressed, waiting for its step, held now, and when it was last pressed (ms): the xenomorph's tail. */
   let sting = false;
@@ -274,8 +274,8 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
         const now = performance.now();
         const before = tapped.get(e.code);
         if (before !== undefined && now - before <= DOUBLE_TAP_MS) {
-          // The xenomorph pounces that way with a full charge (the user, 2026-11-16), but backward.
-          if (c.beast && bit !== KEY.BACK) {
+          // The xenomorph pounces that way with a full charge, any way (the user, 2026-11-16).
+          if (c.beast) {
             [lunge, charging] = [bit, POUNCE_HOLD];
           } else {
             pending = bit;

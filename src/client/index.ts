@@ -12,7 +12,7 @@ import {
 import { mapKey, mapOf } from '../shared/maps';
 import { bruise, eyeHeight, heightOf } from '../shared/physics';
 import { cylinder } from '../shared/plasma';
-import { decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
+import { FRAG, decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ClientText, ServerText } from '../shared/protocol';
 import { EV, FLAG, KEY, MODE } from '../shared/types';
 import type { Choice, PlayerInfo, PlayerState, SocketLike, Snapshot } from '../shared/types';
@@ -506,10 +506,21 @@ const play = (
         roster.find(p => p.id == id)?.team ?? 0,
       ];
       hud.feed(who(m.by), who(m.who));
+      // A glory kill: the bite heard where the victim lies (the user, 2026-11-16).
+      if (m.how == FRAG.GLORY) {
+        const v = match?.players.find(q => q.id == m.who);
+        const at: [number, number, number] | undefined =
+          v && m.who != you.id ? [v.x, v.y + 1.6, v.z] : undefined;
+        audio.play(SOUND.TACKLE, at, 1, 0.6);
+        audio.play(SOUND.XENO_PAIN, at, 0.7, 0.5);
+      }
       if (m.by == you.id) {
         hud.frags(m.n);
         const line = announcer.frag(m, you, performance.now() / 1000);
-        hud.fragged(`${who(m.who)[0]} killed!`, line === undefined ? '' : SAID[line]);
+        hud.fragged(
+          m.how == FRAG.GLORY ? `${who(m.who)[0]}: glory kill!` : `${who(m.who)[0]} killed!`,
+          line === undefined ? '' : SAID[line],
+        );
         if (line !== undefined) {
           audio.say(line);
         }

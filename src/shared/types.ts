@@ -97,7 +97,16 @@ export const SPECIAL_CUT = 4;
  * The limb a katana's cut takes off when it puts a player down (PlayerState.lost), by where the
  * blade crosses the body (see limbOf(), blade.ts). Sides are the victim's own.
  */
-export const LIMB = { NONE: 0, HEAD: 1, ARM_L: 2, ARM_R: 3, LEG_L: 4, LEG_R: 5 } as const;
+export const LIMB = {
+  NONE: 0,
+  HEAD: 1,
+  ARM_L: 2,
+  ARM_R: 3,
+  LEG_L: 4,
+  LEG_R: 5,
+  /** The head a xenomorph's glory kill ate (GLORY_HP): gone, not thrown. */
+  EATEN: 6,
+} as const;
 
 /**
  * How a player went down (bits 5-6 of PlayerState.fell), for the clients' fall: PLAIN as before,

@@ -5,6 +5,8 @@ import {
   BLOW,
   CLING_SPEED,
   CUTS,
+  GLORY_HP,
+  RUN_SPEED,
   STING,
   TAILS,
   TAIL_LEAP,
@@ -18,6 +20,7 @@ import {
   POUNCE_PITCH,
   POUNCE_STUN,
   XENO_HP,
+  XENO_PACE,
 } from './constants';
 import { swingOf } from './blade';
 import { STRIKE, step } from './gun';
@@ -27,7 +30,7 @@ import { STILL, move } from './physics';
 import { FRAG, decodeSnapshot, encodeSnapshot } from './protocol';
 import { Room } from './room';
 import { pouncing } from './tackle';
-import { KEY, MODE, TEX } from './types';
+import { KEY, LIMB, MODE, TEX } from './types';
 import type { Conn, PlayerState } from './types';
 import { build } from './world';
 import type { Brush } from './world';
@@ -73,7 +76,7 @@ const hit = (p: PlayerState, keys: number, yaw = 0) =>
   step(p, { seq: 0, keys, yaw, pitch: 0 }, pit, 0, true, [], XENO);
 
 describe('its speed and its jumps', () => {
-  it('runs twice as fast as a man, gets there as fast, and jumps twice as high', () => {
+  it('runs a little faster than a man, gets there as fast, and jumps twice as high', () => {
     const top = (kit: typeof XENO, keys: number) => {
       const p = at(-20, 0, { z: 50, yaw: 0 });
       let t = 0;
@@ -84,10 +87,12 @@ describe('its speed and its jumps', () => {
       return [-p.vz, t];
     };
     const [[xr, xt], [mr, mt]] = [top(XENO, KEY.FORWARD), top(MARINE, KEY.FORWARD)];
-    expect(xr).toBeCloseTo(2 * mr, 4);
+    expect(xr).toBeCloseTo(XENO_PACE * mr, 4);
     expect(xt).toBe(mt);
     const [[xs, xst], [ms, mst]] = [top(XENO, RUN), top(MARINE, RUN)];
-    expect(xs).toBeCloseTo(2 * ms, 4);
+    expect(xs).toBeCloseTo(XENO_PACE * ms, 4);
+    // A little only (the user, 2026-11-16): twice a man's speed left no one a chance.
+    expect(XENO_PACE).toBeLessThan(1.5);
     expect(xst).toBe(mst);
     const peak = (kit: typeof XENO) => {
       const p = at(-20, 0, { z: 50 });
@@ -163,6 +168,8 @@ describe('the xenomorph on a wall', () => {
     expect(p.y).toBe(y);
     go(p, KEY.BACK);
     expect(p.y).toBeCloseTo(y - CLING_SPEED / 60, 4);
+    // Faster on a wall than a man runs (the user, 2026-11-16: it crawled).
+    expect(CLING_SPEED).toBeGreaterThan(RUN_SPEED);
     // Facing +x, the right is +z; looking away from the wall, the right is -z.
     const z = p.z;
     go(p, KEY.RIGHT);
@@ -476,6 +483,32 @@ describe('the xenomorph in a room', () => {
     // Once: the pounce is spent.
     inner.tackle(x);
     expect(m.state.hp).toBe(HP_MAX - POUNCE_HP);
+  });
+
+  it('eats the head of an enemy it pounces on with GLORY_HP or less, through his armour', () => {
+    const { inner, ps, sent } = room(ROLE.XENO, ROLE.MARINE);
+    const [x, m] = ps;
+    face(x.state, m.state);
+    Object.assign(m.state, { hp: GLORY_HP, armor: ARMOR_MAX });
+    Object.assign(x.state, { mode: MODE.AIR, dash: POUNCE_COOL, vx: 0, vz: -12 });
+    inner.tackle(x);
+    expect(m.state.down).toBeGreaterThan(0);
+    expect(m.state.lost).toBe(LIMB.EATEN);
+    expect(pouncing(x.state)).toBe(false);
+    const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
+    expect(frag).toMatchObject({ by: x.info.id, who: m.info.id, how: FRAG.GLORY });
+    // One more health and it is the plain pin.
+    const two = room(ROLE.XENO, ROLE.MARINE);
+    const [y, n] = two.ps;
+    face(y.state, n.state);
+    n.state.hp = GLORY_HP + 1;
+    Object.assign(y.state, { mode: MODE.AIR, dash: POUNCE_COOL, vx: 0, vz: -12 });
+    two.inner.tackle(y);
+    expect([n.state.hp, n.state.down, n.state.stun]).toEqual([
+      GLORY_HP + 1 - POUNCE_HP,
+      0,
+      POUNCE_STUN,
+    ]);
   });
 
   it('wears no armour and heals up to its own health', () => {

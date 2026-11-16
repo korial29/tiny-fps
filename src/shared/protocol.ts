@@ -102,7 +102,17 @@ export interface Result {
 
 /** What put a player down, in a frag message. */
 /** CLAW is all the xenomorph's: claws, tail, pounce, and its acid. */
-export const FRAG = { GUN: 0, BLADE: 1, FIST: 2, RAIL: 3, NADE: 4, VEHICLE: 5, CLAW: 6 } as const;
+export const FRAG = {
+  GUN: 0,
+  BLADE: 1,
+  FIST: 2,
+  RAIL: 3,
+  NADE: 4,
+  VEHICLE: 5,
+  CLAW: 6,
+  /** The xenomorph's pounce that ate his head (GLORY_HP). */
+  GLORY: 7,
+} as const;
 
 export type ServerText =
   /**

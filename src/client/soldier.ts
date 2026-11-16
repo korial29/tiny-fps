@@ -124,6 +124,8 @@ import type { Out } from './verts';
 
 /** How fast the dash streaks grow and fade, 1 / s. */
 const DASH_RATE = 14;
+/** The neck a xenomorph bit the head off (LIMB.EATEN): raw, dark red where a katana's cut glows. */
+const RAW = [0.32, 0.02, 0.02];
 
 /** A point 30 m along the look of `p`, for a runner that has not shot yet. */
 const far = (p: PlayerState): Vec3 => {
@@ -1105,6 +1107,9 @@ export const soldier = (
   const blade = p.wield && !p.down && !driving(r);
   if (r.cut && !xeno) {
     const cs = cut(lod, r.cut.limb, build)[0];
+    if (r.cut.eaten) {
+      colors[REGION.CAP] = RAW;
+    }
     const at = out.length;
     skin(out, cs, s, colors, r.face.w);
     // The stump's face is the last vertex drawn.
@@ -1117,7 +1122,9 @@ export const soldier = (
         buckle(o, a, q, build, color),
       );
     }
-    piece(out, r.cut, colors, lod, sink, r.face.w, armored);
+    if (!r.cut.eaten) {
+      piece(out, r.cut, colors, lod, sink, r.face.w, armored);
+    }
     gloves(out, r, s, colors, lod, armored, r.cut.limb, marine);
   } else {
     const from = out.length;

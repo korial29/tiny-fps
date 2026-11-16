@@ -1,7 +1,8 @@
 // The limb a katana's finishing cut takes off (PlayerState.lost), drawn: the skin's limb (cut() in
 // skin.ts) frozen in the pose of the cut and thrown off the body as one rigid piece that tumbles,
 // bounces on the roof and lies there until the body is gone. Both cut faces glow, cauterized; the
-// cut bursts in cyan sparks and the stump spits a few more for a second. Changes no rule. No DOM.
+// cut bursts in cyan sparks and the stump spits a few more for a second. A head a xenomorph ate
+// (LIMB.EATEN) is the head's cut with no piece, no sparks and a raw stump. Changes no rule. No DOM.
 import { GRAVITY } from '../shared/constants';
 import { ROLE } from '../shared/kit';
 import { LIMB } from '../shared/types';
@@ -42,6 +43,8 @@ export const ground =
 
 export interface Piece {
   limb: number;
+  /** The head a xenomorph ate (LIMB.EATEN): the stump is drawn, raw and unlit, not the piece. */
+  eaten?: boolean;
   /** The joints in the pose of the cut, which the limb is skinned with, and its middle then. */
   s: ReturnType<typeof solve>;
   c: Vec3;
@@ -145,9 +148,11 @@ export const track = (
     r.cut = undefined;
     return;
   }
+  const eaten = k == LIMB.EATEN;
   if (!r.cut) {
-    r.cut = sever(k, solve(r.gait.pose()), r.p, r.build);
-    if (fresh) {
+    r.cut = sever(eaten ? LIMB.HEAD : k, solve(r.gait.pose()), r.p, r.build);
+    r.cut.eaten = eaten;
+    if (fresh || eaten) {
       for (let i = 0; i < 240; i++) {
         fall(r.cut, 1 / 60, floor);
       }

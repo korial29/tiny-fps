@@ -37,6 +37,7 @@ import {
   STUMBLE_KNOCK,
   STUMBLE_TICKS,
   ACID_HP,
+  GLORY_HP,
   POUNCE_COOL,
   POUNCE_FLY,
   POUNCE_HP,
@@ -707,8 +708,9 @@ export class Room {
 
   /**
    * A xenomorph's pounce `p` meets an enemy who is up, where `p` drew him: he is pinned, POUNCE_HP
-   * of health, his flag dropped and a stumble of POUNCE_STUN thrown the way it leapt. The pounce
-   * ends on him: it stops, its dash timer past the strike.
+   * of health, his flag dropped and a stumble of POUNCE_STUN thrown the way it leapt; with GLORY_HP
+   * or less it eats his head, through his armour (the glory kill). The pounce ends on him: it stops,
+   * its dash timer past the strike.
    */
   private pin(p: Player, view: number | undefined): void {
     const me = p.state;
@@ -722,6 +724,11 @@ export class Room {
     me.dash = Math.min(me.dash, POUNCE_COOL - POUNCE_FLY);
     [me.vx, me.vz] = [me.vx * 0.2, me.vz * 0.2];
     me.hits = (me.hits + 1) & 255;
+    if (foe.state.hp <= GLORY_HP) {
+      this.harm(foe, Infinity, p, FRAG.GLORY, felled(FALL.STRUCK, dx, dz));
+      foe.state.lost = LIMB.EATEN;
+      return;
+    }
     if (this.harm(foe, POUNCE_HP, p, FRAG.CLAW, felled(FALL.STRUCK, dx, dz))) {
       return;
     }

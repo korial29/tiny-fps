@@ -291,7 +291,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Xenomorph',
-    `${XENO_HP} health, twice as fast and high, climbs any wall, pounces on its prey; claws and a tail that kills, acid for blood, sees its enemies glow.`,
+    `${XENO_HP} health, a little faster, jumps twice as high, runs up any wall, pounces on its prey and eats the head of a weak one; claws and a tail that kills, acid for blood, sees its enemies glow through walls.`,
     'No gun, no katana, no armour: it has to get close.',
     'Every map',
   ],

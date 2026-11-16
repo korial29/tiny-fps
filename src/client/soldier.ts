@@ -99,6 +99,7 @@ import {
   palette,
   shaved,
   skin,
+  swing,
   tressOf,
 } from './skin';
 import {
@@ -106,6 +107,7 @@ import {
   FOOT_TIP,
   HEAD,
   column,
+  cuff,
   elbow,
   eyes,
   heel,
@@ -118,6 +120,7 @@ import {
   sinews,
   skull,
   toes,
+  veins,
 } from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
 import type { Face } from './expression';
@@ -1123,8 +1126,14 @@ export const soldier = (
       );
       for (const f of [J.FOREARM_L, J.FOREARM_R]) {
         rigid(`elbow ${lod}`, s.pos[f], s.rot[f], (o, a, q) => elbow(o, a, q, lod));
+        // The disc where the shoulder ends and the arm begins.
+        const [arm, k] = [f - 1, f == J.FOREARM_L ? -1 : 1];
+        rigid(`cuff ${lod} ${k}`, s.pos[arm], swing(s.rot, arm), (o, a, q) =>
+          cuff(o, a, q, lod, k),
+        );
       }
       rigid(`skull ${lod}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => skull(o, a, q, lod));
+      rigid(`veins ${lod}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => veins(o, a, q, lod));
       rigid(`eyes ${color}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => eyes(o, a, q, color));
     } else {
       rigid('pouch', s.pos[J.PELVIS], s.rot[J.PELVIS], pouch);

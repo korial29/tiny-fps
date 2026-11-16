@@ -9,6 +9,7 @@ import { unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, turn } from './rig';
 import type { Quat } from './rig';
+import { bindOf, domeAt } from './skin';
 import type { Out } from './verts';
 
 /**
@@ -432,38 +433,76 @@ export const ribs = (out: Out, at: Vec3, q: Quat, lod: number, low = false) => {
   const n = SIDES[1][lod];
   // On the spine joint, two more under the cage (the user, 2026-11-15), shorter, not reaching
   // round to the front: the floating ribs.
+  // Many, close together (the user, 2026-11-16: tighter, more of them, higher up on the pecs):
+  // a row every 3 cm, the top ones over the pecs only across the front, clear of the armpits.
+  // [height at the back, half width, half depth, where it starts round from the back]
+  const CAGE = [
+    [0.2, 0.14, 0.108],
+    [0.165, 0.145, 0.116],
+    [0.135, 0.152, 0.126],
+    [0.09, 0.158, 0.141],
+    [0.04, 0.156, 0.137],
+    [-0.01, 0.153, 0.133],
+    [-0.06, 0.146, 0.127],
+    [-0.11, 0.136, 0.118],
+    [-0.15, 0.129, 0.112],
+  ];
+  const size = (y: number) => {
+    const k = Math.min(
+      Math.max(
+        CAGE.findIndex(v => v[0] < y),
+        1,
+      ),
+      CAGE.length - 1,
+    );
+    const t = Math.min(Math.max((y - CAGE[k - 1][0]) / (CAGE[k][0] - CAGE[k - 1][0]), 0), 1);
+    return [1, 2].map(j => CAGE[k - 1][j] + (CAGE[k][j] - CAGE[k - 1][j]) * t);
+  };
   const rows = low
     ? [
-        [0.06, 0.122, 0.108],
-        [0.01, 0.124, 0.106],
+        [0.035, 0.122, 0.108, Math.PI],
+        [0.005, 0.124, 0.106, Math.PI],
       ]
-    : [
-        [0.09, 0.158, 0.141],
-        [0.04, 0.156, 0.137],
-        [-0.01, 0.153, 0.133],
-        [-0.06, 0.146, 0.127],
-        [-0.11, 0.136, 0.118],
-      ];
-  rows.forEach(([y, w, d], i) => {
+    : Array.from({ length: 13 }, (_, i) => {
+        const y = 0.23 - 0.03 * i;
+        // Where it reaches the front, a few centimetres lower than at the back.
+        const [w, d] = size(y - 0.04);
+        // Over the pecs, out on their fuller curve.
+        const pec = Math.min(Math.max((y - 0.04) / 0.1, 0), 1);
+        return [y, w + 0.008 * pec, d + 0.022 * pec, y > 0.1 ? 1.15 : Math.PI];
+      });
+  rows.forEach(([y, w, d, from], i) => {
     for (const s of [-1, 1]) {
       const pts: Vec3[] = [];
       // From the spine's vertebra at the middle of the back (the user, 2026-11-15) round the side
-      // to the front.
-      const end = low ? 0.75 + 0.12 * i : i > 2 ? 0.55 : 0.4;
-      // Sixteen steps round: with eight, each bend showed as a knee on the side.
-      const K = 16;
+      // to the front; the pecs' only across the front.
+      // Each meets the breastbone in the middle (the user, 2026-11-16).
+      const end = low ? 0.75 + 0.12 * i : 0.05;
+      // Sixteen steps round a whole one: with eight, each bend showed as a knee on the side.
+      const K = Math.max(6, Math.round((16 * (from - end)) / (Math.PI - 0.4)));
       for (let k = 0; k <= K; k++) {
-        const a = Math.PI - ((Math.PI - end) * k) / K;
-        pts.push([s * w * Math.sin(a), y - 0.06 * (k / K), -0.013 - d * Math.cos(a)]);
+        const a = from - ((from - end) * k) / K;
+        // Sloping down toward the front, by how far round it is from the back.
+        const drop = (0.06 * (Math.PI - a)) / (Math.PI - 0.4);
+        let py = y - drop;
+        // The lower ones rise toward the breastbone's foot as they near the front (the user,
+        // 2026-11-16), as a human cage's cartilage does: they fan in under it.
+        // A shorter breastbone (the user, 2026-11-16): its foot higher, the ribs under it climbing
+        // to it over more of their way round.
+        const foot = 0.0;
+        if (!low && py < foot) {
+          const f = Math.min(Math.max((1.9 - a) / 1.75, 0), 1);
+          py += (foot + 0.12 * (py - foot) - py) * f * f * (3 - 2 * f);
+        }
+        pts.push([s * w * Math.sin(a), py, -0.013 - d * Math.cos(a)]);
       }
-      // Thin at the spine, where the column covers it, fullest round the side, tapering to a round
-      // end in front: thick all along, they read as hoops round the back.
+      // Thin at its ends, fullest in its middle; thinner than they were, being closer.
       strand(
         out,
         at,
         q,
         pts,
-        pts.map((_, k) => 0.0065 + 0.006 * Math.sin((Math.PI * k) / K)),
+        pts.map((_, k) => 0.0025 + 0.0075 * Math.sin((Math.PI * k) / K) ** 0.7),
         n,
         SINEW,
         -1,
@@ -474,19 +513,58 @@ export const ribs = (out: Out, at: Vec3, q: Quat, lod: number, low = false) => {
     }
   });
   if (!low) {
+    // The ribs linked to one another down their outer side (the user, 2026-11-16): a cord through
+    // each row at the same angle round, full where it crosses a rib, pinched between two.
+    // Near the shoulder's line only (the user, 2026-11-16): the outer ends of the upper rows.
+    // On the ribs' starts (the user, 2026-11-16), where they come out of the pecs' skin.
+    for (const [a, k0, k1] of [[0.92, 0, 5]] as const) {
+      for (const s of [-1, 1]) {
+        const pts: Vec3[] = [];
+        const radii: number[] = [];
+        const on = rows.slice(k0, k1);
+        on.forEach(([y, w, d], i) => {
+          const drop = (0.06 * (Math.PI - a)) / (Math.PI - 0.4);
+          const p = (yy: number): Vec3 => {
+            // As the ribs: the lower ones rise toward the breastbone's foot.
+            if (yy < -0.07) {
+              const f = Math.min(Math.max((1.3 - a) / 1.2, 0), 1);
+              yy += (-0.07 + 0.2 * (yy + 0.07) - yy) * f * f * (3 - 2 * f);
+            }
+            // Lifted a little: the pecs' skin swells over the ribs' outer ends.
+            const [W, D] = [w + 0.009, d + 0.009];
+            return [s * W * Math.sin(a), yy, -0.013 - D * Math.cos(a)];
+          };
+          const r = 0.0075;
+          pts.push(p(y - drop));
+          radii.push(r);
+          const next = on[i + 1];
+          if (next) {
+            // Halfway to the next, a little sunk and thinner.
+            const [ny, nw, nd] = next;
+            const [p0, p1] = [p(y - drop), p(ny - drop)];
+            const [mw, md] = [(w + nw) / 2 + 0.011, (d + nd) / 2 + 0.011];
+            pts.push([s * mw * Math.sin(a), (p0[1] + p1[1]) / 2, -0.013 - md * Math.cos(a)]);
+            radii.push(0.006);
+          }
+        });
+        strand(out, at, q, pts, radii, n, SINEW, -1, true, [1, 0, 0]);
+      }
+    }
+  }
+  if (!low) {
     strand(
       out,
       at,
       q,
       // Sunk in the skin (the user, 2026-11-15: more a part of its body), out of it at both ends.
       [
+        [0, 0.17, -0.112],
         [0, 0.13, -0.128],
         [0, 0.09, -0.142],
-        [0, 0.03, -0.148],
-        [0, -0.03, -0.146],
-        [0, -0.08, -0.136],
+        [0, 0.045, -0.147],
+        [0, 0.005, -0.146],
       ],
-      [0.004, 0.011, 0.012, 0.011, 0.004],
+      [0.004, 0.009, 0.011, 0.012, 0.006],
       n,
       SINEW,
     );
@@ -638,13 +716,18 @@ const spur = (
   len: number,
   r: number,
   n: number,
+  hook = 0.016,
 ) => {
   const d = unit(dir);
   // The horns' taper and a curve down to the point: every spike of its body one family, in its
   // chitin (bone is for the claws and the teeth).
   const pts = Array.from({ length: 5 }, (_, i): Vec3 => {
     const k = i / 4;
-    return [base[0] + d[0] * len * k, base[1] + d[1] * len * k - 0.016 * k * k, base[2] + d[2] * len * k];
+    return [
+      base[0] + d[0] * len * k,
+      base[1] + d[1] * len * k - hook * k * k,
+      base[2] + d[2] * len * k,
+    ];
   });
   strand(
     out,
@@ -654,6 +737,10 @@ const spur = (
     pts.map((_, i) => r * (1 - i / 4) ** 0.85 + 0.0008),
     n,
     CHITIN_X,
+    -1,
+    true,
+    // Off the spike's way, so its rings never pinch.
+    Math.abs(d[0]) > 0.7 ? [0, 1, 0] : [1, 0, 0],
   );
 };
 
@@ -662,6 +749,72 @@ export const elbow = (out: Out, at: Vec3, q: Quat, lod: number) =>
   spur(out, at, q, [0, -0.02, 0.03], [0, 0.45, 1], 0.12, 0.016, SIDES[1][lod]);
 export const heel = (out: Out, at: Vec3, q: Quat, lod: number) =>
   spur(out, at, q, [0, -0.4, 0.035], [0, 0.35, 1], 0.09, 0.014, SIDES[1][lod]);
+
+/**
+ * The disc at the top of its arm (the user, 2026-11-16: where the shoulder ends and the arm
+ * begins), on the arm's swing (its joint without its twist, as the skin's top is), `s` 1 the right
+ * arm: a full disc slanting through the shoulder, thin with a rounded rim and low domed faces,
+ * its rim fading into the skin toward the armpit.
+ */
+export const cuff = (out: Out, at: Vec3, q: Quat, lod: number, s: number) => {
+  if (!lod) {
+    return;
+  }
+  const n = [8, 20, 24, 36][lod];
+  // Set in the round of the shoulder at 45 degrees (the user, 2026-11-16): its plane through the
+  // humerus' head, slanting from the armpit up over the point of the shoulder; `ax` square to it,
+  // out and down, `e1` in it, out and up, `e2` front to back.
+  const ax: Vec3 = [s * Math.SQRT1_2, -Math.SQRT1_2, 0];
+  const e1: Vec3 = [s * Math.SQRT1_2, Math.SQRT1_2, 0];
+  const e2: Vec3 = [0, 0, 1];
+  // The shoulder's section in that plane: its middle, half width (along e1) and half depth.
+  const [c, rx, rz]: [Vec3, number, number] = [[s * -0.024, 0.0, 0.0], 0.054, 0.058];
+  // Across it, out along `ax`: [offset, scale of the section].
+  // A full disc (the user, 2026-11-16: the circle filled): a low dome closes each face.
+  // Thicker and wider (the user, 2026-11-16).
+  const PROFILE = [
+    [-0.027, 0],
+    [-0.026, 0.5],
+    [-0.022, 0.88],
+    [-0.015, 1.18],
+    [-0.009, 1.32],
+    [-0.004, 1.39],
+    [0.0, 1.41],
+    [0.004, 1.39],
+    [0.009, 1.32],
+    [0.015, 1.18],
+    [0.022, 0.88],
+    [0.026, 0.5],
+    [0.027, 0],
+  ];
+
+  const R = (rx + rz) / 2;
+  const rows = PROFILE.map(([h0, k0], i): Spot[] => {
+    const [a, b] = [PROFILE[Math.max(i - 1, 0)], PROFILE[Math.min(i + 1, PROFILE.length - 1)]];
+    const [dh, dk] = [b[0] - a[0], (b[1] - a[1]) * R];
+    const l = Math.hypot(dh, dk) || 1;
+    if (!k0) {
+      const p: Vec3 = [0, 1, 2].map(x => c[x] + ax[x] * h0) as Vec3;
+      return [[on(at, q, p), turn(q, h0 > 0 ? ax : (ax.map(v => -v) as Vec3))]];
+    }
+    return Array.from({ length: n }, (_, j): Spot => {
+      const t = (j / n) * TAU;
+      const [cs, sn] = [Math.cos(t), Math.sin(t)];
+      // Down toward the armpit it fades back into the skin: there it cut through the chest.
+      const v = Math.min(Math.max((-cs - 0.1) / 0.6, 0), 1);
+      const fade = v * v * (3 - 2 * v);
+      const k = k0 > 0.92 ? k0 + (0.92 - k0) * fade : k0;
+      const h = h0 * (1 - fade);
+      const p: Vec3 = [0, 1, 2].map(
+        x => c[x] + e1[x] * rx * k * cs + e2[x] * rz * k * sn + ax[x] * h,
+      ) as Vec3;
+      const nr = unit([0, 1, 2].map(x => (e1[x] * cs) / rx + (e2[x] * sn) / rz) as Vec3);
+      const m = unit([0, 1, 2].map(x => (nr[x] * dh - ax[x] * dk) / l) as Vec3);
+      return [on(at, q, p), turn(q, m)];
+    });
+  });
+  sheet(rows, CHITIN_X, -1, out);
+};
 
 /** A value on a curve through [y, value] points, by y, highest first. */
 const curve = (pts: number[][], y: number) => {
@@ -696,7 +849,8 @@ const DEPTH = [
 export const HEAD = CHITIN_X;
 const [DARK, TEETH] = [
   [0.02, 0.02, 0.025],
-  [0.42, 0.42, 0.4],
+  // Steel bright (the user, 2026-11-16: metal teeth).
+  [0.66, 0.68, 0.72],
 ];
 /**
  * The middle of an orbit and how its long axis rises toward the temple (the user, 2026-11-15: less
@@ -929,20 +1083,22 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
     -1,
     out,
   );
-  // The teeth, grey, from under each lip toward the other; the fangs, a lip's curl apart, longest.
+  // The teeth, steel, from under each lip toward the other, many, long and sharp (the user,
+  // 2026-11-16): the fangs, a lip's curl apart, longest, the upper ones over the lower lip.
   for (const [k, up] of [
-    [9, true],
-    [8, false],
+    [13, true],
+    [12, false],
   ] as const) {
     for (let i = 0; i < k; i++) {
-      const x = -MW * 0.8 + (1.6 * MW * i) / (k - 1);
+      const x = -MW * 0.84 + (1.68 * MW * i) / (k - 1);
       const fang = Math.exp(-(((Math.abs(x) - FANG) / 0.005) ** 2));
+      const side = 1 - 0.35 * (x / MW) ** 2;
       const [edge, tip] = up
-        ? [MY + above(x), MY - 0.0015 - 0.006 * fang]
-        : [MY - below(x), MY + 0.0015 + 0.0045 * fang];
+        ? [MY + above(x), MY - (0.003 + 0.007 * fang) * side]
+        : [MY - below(x), MY + (0.0025 + 0.006 * fang) * side];
       // Rooted just inside the lip's line, set back behind the face by more than their own
       // thickness: rooted 3 mm out past the lower lip, they came through the chin under it.
-      const r = 0.0034 + 0.0012 * fang;
+      const r = 0.0024 + 0.0012 * fang;
       const root = edge + (up ? -0.0012 : 0.0012);
       const z = Math.max(faceZ(x, root), faceZ(x, MY)) + r + 0.0008;
       strand(
@@ -951,14 +1107,37 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
         q,
         [
           [x, root, z],
-          [x, tip, z - 0.002],
+          [x, (root + tip) / 2, z - 0.0016],
+          [x, tip, z - 0.0026],
         ],
-        [r, 0.0007],
+        [r, r * 0.6, 0.0003],
         sides,
         TEETH,
         -1,
         false,
       );
+    }
+  }
+  // Cords of sinew beside the mouth (the user, 2026-11-16: a head with more biomechanical
+  // detail): each side three tendons stretched from the upper jaw to the lower one past the
+  // corner of the mouth, bowed out, half sunk in the face.
+  for (const s of [-1, 1]) {
+    for (const [x0, x1, r0] of [
+      [0.037, 0.035, 0.0019],
+      [0.044, 0.042, 0.0022],
+      [0.051, 0.047, 0.0018],
+    ]) {
+      const pts: Vec3[] = [];
+      const radii: number[] = [];
+      for (let j = 0; j <= 8; j++) {
+        const t = j / 8;
+        const x = s * (x0 + (x1 - x0) * t + 0.003 * Math.sin(Math.PI * t));
+        const y = -0.016 - 0.05 * t;
+        const r = r0 * (0.55 + 0.45 * Math.sin(Math.PI * t));
+        pts.push([x, y, faceZ(x, y) - r * 0.35]);
+        radii.push(r);
+      }
+      strand(out, at, q, pts, radii, SIDES[0][lod], SINEW, -1, true, [0, 0, 1]);
     }
   }
   // The lips round it, a little thicker in their middle (the user, 2026-11-15: thinner), curled.
@@ -1003,6 +1182,137 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
     face(out, HEAD, -1, [quad[0], quad[1], quad[2]]);
     face(out, HEAD, -1, [quad[0], quad[2], quad[3]]);
   });
+};
+
+/**
+ * Veins along its dome (the user, 2026-11-16), on the head joint: on each side three running back
+ * from the face's edge along the banana, wandering a little up and down its side, thinning toward
+ * the back, with a short branch off each; one along each side of the top. Half sunk in the skin.
+ */
+export const veins = (out: Out, head: Vec3, q: Quat, lod: number) => {
+  if (!lod) {
+    return;
+  }
+  const rest = bindOf(0)[J.HEAD];
+  const n = SIDES[0][lod];
+  /** The dome's surface at `z` behind the face, `a` round it from the top, `r` out of it. */
+  const at = (z: number, a: number, r: number): Vec3 => {
+    const [c, w, h] = domeAt(z);
+    const [sn, cs] = [Math.sin(a), Math.cos(a)];
+    const m = unit([sn / w, cs / h, 0]);
+    return [w * sn + m[0] * r, c + h * cs + m[1] * r - rest[1], z];
+  };
+  /** A seeded random in [0, 1): the same tree on every screen. */
+  let seed = 7;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  /**
+   * A vessel on side `s` from (z0, a0), `len` long along the dome, turning by `drift` round it,
+   * `r0` thick at its root and tapering. It branches as blood vessels do (the user, 2026-11-16:
+   * smaller veins, like branches): two to four thinner ones leave it along its length, off to
+   * either side, each branching again, down to `depth` levels and a hair's thickness.
+   */
+  const vessel = (
+    s: number,
+    z0: number,
+    a0: number,
+    len: number,
+    drift: number,
+    r0: number,
+    depth: number,
+    front = 0,
+  ) => {
+    const K = Math.max(3, Math.round((lod > 2 ? 70 : 36) * len));
+    const wav = rnd() * TAU;
+    const way = (t: number) => a0 + drift * t + 0.05 * Math.sin(t * 9 + wav);
+    // Out of the skin at its root over the first tenth, then tapering; a trunk carried on over the
+    // face (`front`) comes out of it there instead.
+    const thick = (t: number) => r0 * (1 - 0.7 * t) * (front ? 1 : Math.min(1, 0.2 + t * 8));
+    const pts: Vec3[] = [];
+    const radii: number[] = [];
+    if (front) {
+      // Over the face first, from where it fades out up to the rim, in one piece with the rest.
+      const F = lod > 2 ? 24 : 10;
+      for (let j = 0; j < F; j++) {
+        const t = j / F;
+        const e = front + (0.985 - front) * t;
+        const a = s * (a0 + 0.015 * Math.sin(t * 7 + wav));
+        const [x, y] = [EA * e * Math.sin(a), EY + EB * e * Math.cos(a)];
+        const r = r0 * Math.min(1, t * 1.6) ** 1.5;
+        pts.push(onFace(x, y, r * 0.35));
+        radii.push(r);
+      }
+      // A fork off it halfway over the face, thinner, fading out sooner.
+      face3(s, a0, (front + 0.985) / 2, front + 0.1, r0 * 0.5, wav);
+    }
+    for (let i = 0; i <= K; i++) {
+      const t = i / K;
+      const r = thick(t);
+      pts.push(at(Math.min(z0 + len * t, 0.41), s * way(t), r * 0.35));
+      radii.push(r);
+    }
+    strand(out, head, q, pts, radii, r0 < 0.0012 ? 3 : n, SINEW, -1, true, [0, 0, 1]);
+    if (!depth || r0 < 0.0009) {
+      return;
+    }
+    const kids = 2 + Math.floor(rnd() * 3);
+    for (let k = 0; k < kids; k++) {
+      const t = (k + 0.3 + 0.5 * rnd()) / kids;
+      const off = (k % 2 ? 1 : -1) * (0.5 + 0.6 * rnd());
+      vessel(
+        s,
+        z0 + len * t,
+        way(t),
+        len * (0.3 + 0.25 * rnd()) * (1 - 0.4 * t),
+        drift * 0.3 + off,
+        thick(t) * 0.62,
+        depth - 1,
+      );
+    }
+  };
+  /** The face's surface at (x, y), `r` out of it along its normal, in the head joint's frame. */
+  const onFace = (x: number, y: number, r: number): Vec3 => {
+    const h = 1e-3;
+    const m = unit([
+      (faceZ(x + h, y) - faceZ(x - h, y)) / (2 * h),
+      (faceZ(x, y + h) - faceZ(x, y - h)) / (2 * h),
+      -1,
+    ]);
+    return [x + m[0] * r, y + HEAD_UP + m[1] * r, faceZ(x, y) + m[2] * r];
+  };
+  /** A vein over the face only, from `e1` of the way out to the rim (r0 thick) in to `e0`, fading. */
+  const face3 = (s: number, a0: number, e1: number, e0: number, r0: number, wav: number) => {
+    const F = lod > 2 ? 14 : 7;
+    const pts: Vec3[] = [];
+    const radii: number[] = [];
+    for (let j = 0; j <= F; j++) {
+      const t = j / F;
+      const e = e1 + (e0 - e1) * t;
+      const a = s * (a0 + 0.3 * t * t + 0.015 * Math.sin(t * 6 + wav));
+      const [x, y] = [EA * e * Math.sin(a), EY + EB * e * Math.cos(a)];
+      const r = r0 * (1 - t) ** 1.4;
+      pts.push(onFace(x, y, r * 0.35));
+      radii.push(r);
+    }
+    strand(out, head, q, pts, radii, 3, SINEW, -1, true, [0, 0, 1]);
+  };
+  const depth = lod > 2 ? 4 : 2;
+  for (const s of [-1, 1]) {
+    // The same seed each side: the two trees mirror.
+    seed = 7;
+    // Each trunk carried on over the face, fading out short of the orbits and the jaw's
+    // tendons (the user, 2026-11-16: thinning to nothing).
+    for (const [a0, drift, len, r0, front] of [
+      [0.4, 0.1, 0.36, 0.0022, 0.4],
+      [1.05, 0.25, 0.34, 0.0026, 0.62],
+      [1.5, -0.2, 0.3, 0.0028, 0.76],
+      [1.95, 0.3, 0.26, 0.0024, 0.66],
+    ]) {
+      vessel(s, 0.02, a0, len, drift, r0, depth, front);
+    }
+  }
 };
 
 /** Its eyes, glowing slits at the back of the orbits in the team's `color`. */

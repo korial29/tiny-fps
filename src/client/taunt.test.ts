@@ -11,7 +11,7 @@ import {
   speakerOf,
   tauntOf,
 } from './taunt';
-import { CAST, KIND, LINES, VOICES } from './voice/cast';
+import { CAST, KIND, LINES, NINJA, VOICES } from './voice/cast';
 
 /** The kind of line a clip is, and whose voice says it. */
 const kindOf = (clip: number) =>
@@ -19,7 +19,6 @@ const kindOf = (clip: number) =>
 
 describe('voices', () => {
   it('has a clip for every line of every voice', () => {
-    expect(CAST).toHaveLength(VOICES * 2 * LINES);
     expect(Object.values(KIND).at(-1)![1]).toBe(LINES);
   });
 
@@ -46,6 +45,15 @@ describe('voices', () => {
     }
   });
 
+  it('gives a ninja a Japanese voice of his body, after the others', () => {
+    expect(speakerOf(3, 0, true)).toBe(NINJA);
+    expect(speakerOf(3, 1, true)).toBe(NINJA + 1);
+    expect(NINJA).toBe(2 * VOICES);
+    // The plain voices and the ninja's all have every line.
+    expect(CAST).toHaveLength((NINJA + 2) * LINES);
+    expect(kindOf(tauntOf(NINJA, FRAG.BLADE, 1))).toBe('BLADE');
+  });
+
   it('cries going down in the speaker’s voice', () => {
     expect(kindOf(deathOf(2, 5))).toBe('DEATH');
     expect(Math.floor(deathOf(2, 5) / LINES)).toBe(2);
@@ -59,7 +67,7 @@ describe('createTaunts', () => {
     // Players 1 (the own), 6 and 7 are red, the others blue.
     const taunts = createTaunts(
       { speak },
-      id => (id == 4 ? 1 : 0),
+      id => speakerOf(id, id == 4 ? 1 : 0),
       id => +![1, 6, 7].includes(id),
     );
     const at = (id: number): Vec3 | undefined => (id == 9 ? undefined : [id, 0, 0]);
@@ -115,7 +123,7 @@ describe('createTaunts', () => {
     const play = vi.fn();
     const taunts = createTaunts(
       { speak, play },
-      () => 0,
+      () => speakerOf(0),
       // It is an enemy of the own player.
       id => +(id == 5),
       id => id == 5,
@@ -133,7 +141,7 @@ describe('createTaunts', () => {
     const play = vi.fn();
     const taunts = createTaunts(
       { speak, play },
-      () => 0,
+      () => speakerOf(0),
       id => +(id == 5),
       id => id == 5,
     );
@@ -183,7 +191,7 @@ describe('createTaunts', () => {
     const speak = vi.fn(() => false);
     const taunts = createTaunts(
       { speak },
-      () => 0,
+      () => speakerOf(0),
       id => +(id != 6 && id != ME),
     );
     taunts.frag(frag(6, 2), ME, 10);

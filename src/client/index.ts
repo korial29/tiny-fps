@@ -267,6 +267,11 @@ const play = (
   /** Whether a player of the roster is a xenomorph: its own sounds (foley, combat, taunts). */
   const beast = (id: number) => roleOf(roster.find(p => p.id == id)?.role, world.def) == ROLE.XENO;
   const foley = createFoley(audio, beast);
+  /** A player's voice: his body's, a ninja's in Japanese. */
+  const speaker = (id: number) => {
+    const p = roster.find(q => q.id == id);
+    return speakerOf(id, p?.body, roleOf(p?.role, world.def) == ROLE.NINJA);
+  };
   const body = createBody(world);
   const chase = createChase(world);
   const tracer = createTracer();
@@ -282,15 +287,10 @@ const play = (
     balls,
     id => rd?.muzzle(id),
     id => voiceOf(id, roster.find(p => p.id == id)?.body),
-    id => speakerOf(id, roster.find(p => p.id == id)?.body),
+    speaker,
     beast,
   );
-  const taunts = createTaunts(
-    audio,
-    id => roster.find(p => p.id == id)?.body,
-    id => roster.find(p => p.id == id)?.team,
-    beast,
-  );
+  const taunts = createTaunts(audio, speaker, id => roster.find(p => p.id == id)?.team, beast);
   /** Each face on the radio, drawn once for his look and colour (a portrait costs two frames). */
   const faces = new Map<string, HTMLCanvasElement>();
   const wrecks = createWrecks(world, { tracer, audio, fx });

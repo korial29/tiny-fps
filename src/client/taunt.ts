@@ -1,12 +1,12 @@
 // The players' own voices (voice/cast.ts): the taunt a player throws at the one he just fragged (an
 // ally's over the radio, wherever he is, and so is the one of the enemy who fragged the own player),
-// and the cry of one going down. Each player has a voice of
-// his body's, by his id, the same on every screen, and so are the lines he picks.
+// and the cry of one going down. Each player has a voice of his body's, by his id (a ninja's in
+// Japanese), the same on every screen, and so are the lines he picks.
 import { FRAG } from '../shared/protocol';
 import type { Audio } from './audio';
 import type { Vec3 } from './mesh';
 import { SOUND, secondsOf } from './sfx';
-import { CAST, KIND, LINES, VOICES } from './voice/cast';
+import { CAST, KIND, LINES, NINJA, VOICES } from './voice/cast';
 
 /** Seconds from a frag to its taunt: the victim's cry first. */
 export const TAUNT_DELAY = 0.6;
@@ -17,8 +17,9 @@ export const TAUNT_GAP = 4;
 /** Metres over the feet a player's voice comes from. */
 const MOUTH = 1.6;
 
-/** The voice of player `id` in a build (BODY): one of the man's or one of the woman's. */
-export const speakerOf = (id: number, body = 0): number => (body ? VOICES : 0) + (id % VOICES);
+/** The voice of player `id` in a build (BODY): one of the man's or one of the woman's, a ninja's own. */
+export const speakerOf = (id: number, body = 0, ninja = false): number =>
+  ninja ? NINJA + body : (body ? VOICES : 0) + (id % VOICES);
 
 /** A player's speed of speech, a little off the next's by his id, so that two in a voice differ. */
 export const paceOf = (id: number): number => 0.95 + 0.1 * ((id * 0.618) % 1);
@@ -69,8 +70,8 @@ export interface Taunts {
 
 export const createTaunts = (
   audio: Pick<Audio, 'speak'> & Partial<Pick<Audio, 'play'>>,
-  /** A player's build (BODY) from the roster. */
-  body: (id: number) => number | undefined,
+  /** A player's voice from the roster (speakerOf()). */
+  speaker: (id: number) => number,
   /** A player's team from the roster. */
   team: (id: number) => number | undefined = () => undefined,
   /** Whether a player is a xenomorph: it roars (ROAR), with no words, over the radio all the same. */
@@ -89,7 +90,7 @@ export const createTaunts = (
         return;
       }
       last.set(m.by, now);
-      const clip = beast(m.by) ? -1 : tauntOf(speakerOf(m.by, body(m.by)), m.how, m.n);
+      const clip = beast(m.by) ? -1 : tauntOf(speaker(m.by), m.how, m.n);
       const close = m.by == me;
       const radio =
         !close && (m.who == me || (team(m.by) !== undefined && team(m.by) === team(me)));

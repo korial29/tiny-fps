@@ -640,6 +640,10 @@ export const LAYERS: Voice[][] = [
   ],
 ];
 
+/** The seconds sound `id` lasts: its longest voice, from its start late to the end of its decay. */
+export const secondsOf = (id: number, layers: Voice[][] = LAYERS): number =>
+  Math.max(...layers[id].map(([, , , a, s, d, , , , , , late = 0]) => late + a + s + d));
+
 /** The sounds played in a loop: their buffers go through seam. */
 export const LOOPED: number[] = [
   SOUND.WIND,

@@ -22,9 +22,9 @@ export interface Audio {
   /**
    * Plays the sound `id` (an index into the layers). With `at`, panned left or right by its direction from the listener and
    * fainter with distance; without, centred (the own player's sounds). `gain` scales the volume,
-   * `rate` the speed and so the pitch.
+   * `rate` the speed and so the pitch; over the `radio` as speak() says a line.
    */
-  play(id: number, at?: Vec3, gain?: number, rate?: number): void;
+  play(id: number, at?: Vec3, gain?: number, rate?: number, radio?: boolean): void;
   /**
    * Says the announcer's line `id` (LINE), centred, the music lowered under it. Lines wait their
    * turn, two at most and each once; none before the voice is decoded, a moment after unlock.
@@ -241,6 +241,8 @@ export const createAudio = (
     src.onended = () => voices.delete(v);
     if (clip) {
       src.start(at0, ...clip);
+    } else if (radio) {
+      src.start(at0);
     } else {
       src.start();
     }
@@ -269,8 +271,8 @@ export const createAudio = (
     listen(at, y) {
       [eye, yaw] = [at, y];
     },
-    play(id, at, gain = 1, rate = 1) {
-      emit(bufs[id], at, gain, rate);
+    play(id, at, gain = 1, rate = 1, radio = false) {
+      emit(bufs[id], at, gain, rate, undefined, radio);
     },
     say(id) {
       if (speech && lines.length < 2 && !lines.includes(id)) {

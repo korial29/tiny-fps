@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FRAG } from '../shared/protocol';
 import type { Vec3 } from './mesh';
-import { SOUND } from './sfx';
+import { SOUND, secondsOf } from './sfx';
 import {
   TAUNT_DELAY,
   TAUNT_GAP,
@@ -11,7 +11,7 @@ import {
   speakerOf,
   tauntOf,
 } from './taunt';
-import { CAST, KIND, LINES, VOICES } from './voice/cast';
+import { CAST, KIND, LINES, NINJA, VOICES } from './voice/cast';
 
 /** The kind of line a clip is, and whose voice says it. */
 const kindOf = (clip: number) =>
@@ -19,7 +19,6 @@ const kindOf = (clip: number) =>
 
 describe('voices', () => {
   it('has a clip for every line of every voice', () => {
-    expect(CAST).toHaveLength(VOICES * 2 * LINES);
     expect(Object.values(KIND).at(-1)![1]).toBe(LINES);
   });
 
@@ -46,6 +45,15 @@ describe('voices', () => {
     }
   });
 
+  it('gives a ninja a Japanese voice of his body, after the others', () => {
+    expect(speakerOf(3, 0, true)).toBe(NINJA);
+    expect(speakerOf(3, 1, true)).toBe(NINJA + 1);
+    expect(NINJA).toBe(2 * VOICES);
+    // The plain voices and the ninja's all have every line.
+    expect(CAST).toHaveLength((NINJA + 2) * LINES);
+    expect(kindOf(tauntOf(NINJA, FRAG.BLADE, 1))).toBe('BLADE');
+  });
+
   it('cries going down in the speaker’s voice', () => {
     expect(kindOf(deathOf(2, 5))).toBe('DEATH');
     expect(Math.floor(deathOf(2, 5) / LINES)).toBe(2);
@@ -59,7 +67,7 @@ describe('createTaunts', () => {
     // Players 1 (the own), 6 and 7 are red, the others blue.
     const taunts = createTaunts(
       { speak },
-      id => (id == 4 ? 1 : 0),
+      id => speakerOf(id, id == 4 ? 1 : 0),
       id => +![1, 6, 7].includes(id),
     );
     const at = (id: number): Vec3 | undefined => (id == 9 ? undefined : [id, 0, 0]);
@@ -82,12 +90,32 @@ describe('createTaunts', () => {
     expect(speak).toHaveBeenCalledTimes(1);
   });
 
-  it('says the own taunt and the one aimed at the own player close, centred', () => {
+  it('says the own taunt close, centred, with no radio', () => {
     const { speak, taunts, at } = setup();
     taunts.frag(frag(ME, 2), ME, 10, TAUNT_LATE);
+    expect(taunts.frame(20, at)).toEqual([]);
+    const [, where, , , radio] = speak.mock.calls[0];
+    expect(where).toBeUndefined();
+    expect(radio).toBeFalsy();
+  });
+
+  it('brings the taunt of the enemy who fragged the own player over the radio, and only his', () => {
+    const { speak, taunts, at } = setup();
+    // Enemy 3 fragged the own player: over the radio, wherever he is, his face on its screen.
     taunts.frag(frag(3, ME), ME, 10);
-    taunts.frame(20, at);
-    expect(speak.mock.calls.map(c => c[1])).toEqual([undefined, undefined]);
+    // Enemy 9 is not drawn: the radio carries him all the same.
+    taunts.frag(frag(9, ME), ME, 10 + TAUNT_GAP);
+    const said = taunts.frame(30, at);
+    expect(speak.mock.calls.map(c => [c[1], c[4]])).toEqual([
+      [undefined, true],
+      [undefined, true],
+    ]);
+    expect(said.map(s => s.by).sort()).toEqual([3, 9]);
+    // Enemy 5 fragged a teammate: in the air, from his mouth.
+    taunts.frag(frag(5, 6), ME, 40);
+    expect(taunts.frame(50, at)).toEqual([]);
+    expect(speak.mock.calls[2][1]).toEqual([5, 1.6, 0]);
+    expect(speak.mock.calls[2][4]).toBeFalsy();
   });
 
   it('has a xenomorph roar after its frag, from where it is drawn, with no words', () => {
@@ -95,7 +123,7 @@ describe('createTaunts', () => {
     const play = vi.fn();
     const taunts = createTaunts(
       { speak, play },
-      () => 0,
+      () => speakerOf(0),
       // It is an enemy of the own player.
       id => +(id == 5),
       id => id == 5,
@@ -106,6 +134,23 @@ describe('createTaunts', () => {
     expect(play).toHaveBeenCalledTimes(1);
     expect(play.mock.calls[0][0]).toBe(SOUND.ROAR);
     expect(play.mock.calls[0][1]).toEqual([5, 0, 0]);
+  });
+
+  it('brings the roar of a xenomorph who fragged the own player over the radio, its face on the screen', () => {
+    const speak = vi.fn(() => true);
+    const play = vi.fn();
+    const taunts = createTaunts(
+      { speak, play },
+      () => speakerOf(0),
+      id => +(id == 5),
+      id => id == 5,
+    );
+    // Not drawn: the radio carries it all the same.
+    taunts.frag(frag(5, ME), ME, 10);
+    const said = taunts.frame(20, () => undefined);
+    expect(speak).not.toHaveBeenCalled();
+    expect(play.mock.calls).toEqual([[SOUND.ROAR, undefined, 0.7, expect.any(Number), true]]);
+    expect(said).toEqual([{ by: 5, s: expect.closeTo(secondsOf(SOUND.ROAR), 0) }]);
   });
 
   it('says nothing of a player it does not draw', () => {
@@ -137,8 +182,8 @@ describe('createTaunts', () => {
     expect(where).toBeUndefined();
     expect(radio).toBe(true);
     expect(said).toEqual([{ by: 7, s: expect.closeTo(CAST[clip][1], 0) }]);
-    // An enemy's is no radio line.
-    taunts.frag(frag(4, ME, 1), ME, 20);
+    // An enemy's who fragged someone else is no radio line.
+    taunts.frag(frag(4, 2, 1), ME, 20);
     expect(taunts.frame(30, at)).toEqual([]);
   });
 
@@ -146,7 +191,7 @@ describe('createTaunts', () => {
     const speak = vi.fn(() => false);
     const taunts = createTaunts(
       { speak },
-      () => 0,
+      () => speakerOf(0),
       id => +(id != 6 && id != ME),
     );
     taunts.frag(frag(6, 2), ME, 10);

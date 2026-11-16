@@ -267,6 +267,11 @@ const play = (
   /** Whether a player of the roster is a xenomorph: its own sounds (foley, combat, taunts). */
   const beast = (id: number) => roleOf(roster.find(p => p.id == id)?.role, world.def) == ROLE.XENO;
   const foley = createFoley(audio, beast);
+  /** A player's voice: his body's, a ninja's in Japanese. */
+  const speaker = (id: number) => {
+    const p = roster.find(q => q.id == id);
+    return speakerOf(id, p?.body, roleOf(p?.role, world.def) == ROLE.NINJA);
+  };
   const body = createBody(world);
   const chase = createChase(world);
   const tracer = createTracer();
@@ -282,16 +287,11 @@ const play = (
     balls,
     id => rd?.muzzle(id),
     id => voiceOf(id, roster.find(p => p.id == id)?.body),
-    id => speakerOf(id, roster.find(p => p.id == id)?.body),
+    speaker,
     beast,
   );
-  const taunts = createTaunts(
-    audio,
-    id => roster.find(p => p.id == id)?.body,
-    id => roster.find(p => p.id == id)?.team,
-    beast,
-  );
-  /** Each ally's face on the radio, drawn once for his look and colour (a portrait costs two frames). */
+  const taunts = createTaunts(audio, speaker, id => roster.find(p => p.id == id)?.team, beast);
+  /** Each face on the radio, drawn once for his look and colour (a portrait costs two frames). */
   const faces = new Map<string, HTMLCanvasElement>();
   const wrecks = createWrecks(world, { tracer, audio, fx });
   let rd: Renderer | undefined;
@@ -584,8 +584,8 @@ const play = (
       ctl.pitch = chasePitch(ctl.pitch, rovers[wheel]);
     }
     audio.listen(eye, ctl.yaw);
-    // An ally's taunt comes over the radio, his face on its screen; drawn before the frame, which
-    // then takes the canvas back.
+    // An ally's taunt, and the one of the enemy who fragged the own player, come over the radio,
+    // the speaker's face on its screen; drawn before the frame, which then takes the canvas back.
     for (const { by, s } of taunts.frame(now / 1000, id => {
       const p = others.find(o => o.id == id);
       return p && [p.x, p.y, p.z];
@@ -606,7 +606,7 @@ const play = (
           }
         }
       }
-      hud.comm(names.get(by) ?? 'Ally', info?.team ?? 0, s, face);
+      hud.comm(names.get(by) ?? '', info?.team ?? 0, s, face);
     }
     const dt = Math.min((now - before) / 1000, 0.1);
     // The flags and the bases for the renderer and the lights, and the HUD that goes with them.

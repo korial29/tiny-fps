@@ -268,9 +268,10 @@ const RELIEF = 0.06;
 // inside their cylinder: their bodies. Through a wall (the user, 2026-11-16) one whose chest and
 // head a brush hides (a negative Ve.w, hidden() on the CPU) glows as a soft orange column (xr) on
 // what hides him: the view ray through the pixel, on past it, passes within his cylinder. One in
-// sight gets none: it would be a box of light round him. A |Ve.w| past 100 is one weak enough for a
-// glory kill: a soft blue-white pulse goes over him (gl, 0 to 30 %, 1.4 Hz; the user, 2026-11-16: lightly); with the katana in hand (Vn.x 0) only those are in
-// Ve, and they pulse the same, with no vision.
+// sight gets none: it would be a box of light round him. A |Ve.w| past 100 is one weak enough for
+// the katana's glory kill: with it in hand (Vn.x 0) only those are in Ve, with no vision, and a
+// bright orange flash goes over him (gl, 10 to 100 %, 2.2 Hz, blooming; the user, 2026-11-16: the
+// light blue-white pulse did not show).
 export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y,Ss;uniform int Q;
@@ -437,7 +438,7 @@ float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}
 c.g=mix(c.g,c.r,z);
 float gl=0.;for(int i=0;i<16;i++){if(float(i)>=Vn.y)break;vec2 dq=P.xz-Ve[i].xz;float hi=step(dot(dq,dq),.5)*step(Ve[i].y+.03,P.y)*step(P.y,Ve[i].y+mod(abs(Ve[i].w),100.));ht=max(ht,hi);gl=max(gl,hi*step(50.,abs(Ve[i].w)));}
 float xr=0.;if(Vn.x>0.){vec3 xd=P-E;float xa=max(dot(xd.xz,xd.xz),1e-4);for(int i=0;i<16;i++){if(float(i)>=Vn.y)break;if(Ve[i].w>0.)continue;float xs=max(dot(Ve[i].xz-E.xz,xd.xz)/xa,0.);vec3 xp=E+xd*xs;float xh=mod(-Ve[i].w,100.)*.5,xi=(1.-smoothstep(.12,.34,length(xp.xz-Ve[i].xz)))*(1.-smoothstep(.8,1.,abs(xp.y-Ve[i].y-xh)/xh));xr=max(xr,xi);gl=max(gl,xi*step(50.,-Ve[i].w));}}
-vec3 fc=F.rgb;if(Vn.x>0.){c=mix(xv(c),vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));fc=xv(fc);}c=mix(c,vec3(.7,1.1,1.9),gl*(.15+.15*sin(T*9.)));
+vec3 fc=F.rgb;if(Vn.x>0.){c=mix(xv(c),vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));fc=xv(fc);}c=mix(c,vec3(2.,.45,.03),gl*(.55+.45*sin(T*14.)));
 o=vec4(mix(c,fc,1.-exp(-F.a*(1.-.6*Vn.x)*(1.-max(ht,xr))*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc)*ah);
 #ifdef MOON
 float pv=length(fwidth(V)),fa=Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E))*step(P.y,${ORBIT.SEAM}.),Ob.z*smoothstep(1.25,1.6,length((P.xz-Cb.xy)*Cb.zw)));
@@ -1330,11 +1331,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.uniform4fv(
           u.Ve,
           // A negative height: a wall hides his chest and his head, so he glows through it; 100 m
-          // more: weak enough for a glory kill (GLORY_HP), he flashes.
+          // more: weak enough for the katana's glory kill (GLORY_HP), he flashes; the xenomorph's
+          // takes anyone, so none flashes in its vision (the user, 2026-11-16).
           prey.flatMap(p => {
             const h = heightOf(p);
             const seen = [0.6, 0.95].some(k => !hidden(world, eye, [p.x, p.y + h * k, p.z]));
-            const w = h + 0.3 + (p.hp <= GLORY_HP && !p.lock ? 100 : 0);
+            const w = h + 0.3 + (keen && p.hp <= GLORY_HP && !p.lock ? 100 : 0);
             return [p.x, p.y, p.z, seen ? w : -w];
           }),
         );

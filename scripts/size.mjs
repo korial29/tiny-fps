@@ -34,7 +34,8 @@ const BUDGETS = [
   // 215 KB until the orbital strike's light and the red halo of any hit (the user, 2026-11-16: 256 B more).
   // 216 KB until the xenomorph's own picture in the menu, no style or gender for it (#291, the user, 2026-11-16: 1 KB more).
   // 216 KB + 256 B until the glory kills, the xenomorph's and the katana's, its vision through walls (the user, 2026-11-16: 217 KB).
-  { file: 'dist/index.js', max: 217 * 1024 },
+  // 217 KB until the xenomorph's view turned over onto a wall and its glory kill from afar (the user, 2026-11-16: 218 KB).
+  { file: 'dist/index.js', max: 218 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

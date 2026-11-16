@@ -7,7 +7,7 @@ import { MOVE, MOVES, createGait } from './gait';
 import { JOINT as J, JOINTS, rest, solve, turn } from './rig';
 import { KIND } from './features';
 import { REGION, beast, body, skin } from './skin';
-import { animate, stance } from './soldier';
+import { animate, createRunner, stance } from './soldier';
 import {
   FOOT_TIP,
   HEAD,
@@ -301,5 +301,22 @@ describe('its face on the HUD', () => {
     expect(has(DEAD, EYE)).toBe(false);
     expect(has(frame(0, 0), ACID)).toBe(false);
     expect(has(frame(4, 0), ACID)).toBe(true);
+  });
+});
+
+describe('its picture in the menu', () => {
+  it('threatens: the claws brought forward ahead of the chest, the head pushed forward', () => {
+    const pose = (menace: boolean) => {
+      const r = createRunner(at(), undefined, 0, { role: ROLE.XENO }, true);
+      r.menace = menace;
+      return stance(r).s.pos;
+    };
+    const [calm, mean] = [pose(false), pose(true)];
+    // Forward is -z.
+    for (const h of [J.HAND_L, J.HAND_R]) {
+      expect(mean[h][2]).toBeLessThan(calm[h][2] - 0.15);
+      expect(mean[h][2]).toBeLessThan(mean[J.CHEST][2]);
+    }
+    expect(mean[J.HEAD][2]).toBeLessThan(calm[J.HEAD][2]);
   });
 });

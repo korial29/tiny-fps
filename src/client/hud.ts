@@ -704,16 +704,22 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         return b;
       }),
     );
-  /** Each group's pick lit and in the Tab order; with none, its first is. The ninja's hood hides the hair: no haircut to pick. */
+  /** Each group's pick lit and in the Tab order; with none, its first is. The ninja's hood hides the hair: no haircut to pick; the xenomorph has none of the three. */
   const lit = () => {
     KEYS.forEach((k, g) => {
       const on = picked[k] ?? -1;
       turn(radios(g), 'aria-checked', on);
       radios(g)[0].tabIndex = on < 0 ? 0 : radios(g)[0].tabIndex;
     });
-    const hooded = picked.role == ROLE.NINJA;
-    groups[2].hidden = hooded;
-    (groups[2].previousElementSibling as HTMLElement).hidden = hooded;
+    // The xenomorph has no body, skin or haircut to pick (the user, 2026-11-16): one creature.
+    const beastly = picked.role == ROLE.XENO;
+    [beastly, beastly, beastly || picked.role == ROLE.NINJA].forEach((h, g) => {
+      groups[g].hidden = h;
+      // The labels over the skin and the haircut go with them.
+      if (g) {
+        (groups[g].previousElementSibling as HTMLElement).hidden = h;
+      }
+    });
   };
   const choose = (g: number, i: number) => {
     const b = radios(g)[i];

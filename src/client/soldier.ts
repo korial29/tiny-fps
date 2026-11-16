@@ -134,6 +134,8 @@ export interface Runner {
   gait: Gait;
   /** The xenomorph's gait on all fours (fours.ts): none for the others. */
   fours?: Fours;
+  /** Posed to threaten, the xenomorph of the menu's picture (menace()). */
+  menace?: boolean;
   /** How much of a dash it is in, eased from 0 to 1: the length of the streaks. */
   dash: number;
   /** Seconds since its last shot, and how far its gun arm is raised to aim, eased from 0 to 1. */
@@ -787,6 +789,27 @@ const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose =>
   return q;
 };
 
+/**
+ * The xenomorph threatening, for the menu's picture (the user, 2026-11-16: an offensive posture):
+ * bent lower over the prowl, the head pushed forward at the camera, the arms raised forward, the
+ * elbows bent so the claws open ahead of the chest.
+ */
+const menace = (pose: Pose): Pose => {
+  const X: Vec3 = [1, 0, 0];
+  const rot = pose.rot.slice();
+  // The spine, the chest, the neck and the head, joints in a row.
+  [-0.12, -0.1, 0.18, 0.08].forEach(
+    (v, i) => (rot[J.SPINE + i] = mul(rot[J.SPINE + i], axis(X, v))),
+  );
+  // About x alone, in the parent's frame: the two arms' frames are mirrored, so a turn about
+  // another axis sent one out and the other in.
+  for (const a of [J.ARM_L, J.ARM_R]) {
+    rot[a] = mul(axis(X, 0.68), rot[a]);
+    rot[a + 1] = mul(rot[a + 1], axis(X, 1.05));
+  }
+  return { ...pose, rot };
+};
+
 /** The runner's pose this frame, solved: the gait, the fall and sink of one down, and the weapon's hold; and the way the body faces. */
 /** A pose with nothing in it, for one wholly laid over: shared, so frozen. */
 const BARE: Pose = Object.freeze({ ...rest(), rot: Object.freeze(rest().rot) as Quat[] });
@@ -839,6 +862,9 @@ export const stance = (r: Runner) => {
     // On all fours in a sprint and on a wall, which leaves nothing of the prowl once it is all in.
     if (!fours) {
       pose = prowl(pose, solve(pose), p);
+    }
+    if (r.menace) {
+      pose = menace(pose);
     }
     pose = r.fours?.apply(pose) ?? pose;
   }

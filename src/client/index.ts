@@ -36,6 +36,7 @@ import { beats, cues, say } from './beats';
 import { createBody } from './body';
 import { createCrawl } from './crawl';
 import { chasePitch, createChase } from './chase';
+import { KILLCAM, createKillCam } from './killcam';
 import { createCombat, sight, voiceOf } from './combat';
 import { createDoors } from './doors';
 import { createEffects } from './effects';
@@ -277,6 +278,9 @@ const play = (
   const body = createBody(world);
   const crawl = createCrawl();
   const chase = createChase(world);
+  const killcam = createKillCam(world);
+  /** The own last glory kill's victim, and until when (performance.now()) the kill camera stays on him. */
+  let kill = { who: -1, until: 0 };
   const tracer = createTracer();
   const balls = createBalls(world);
   const doors = createDoors(world);
@@ -519,6 +523,7 @@ const play = (
         audio.play(beast(m.by) ? SOUND.XENO_PAIN : SOUND.ZAP, at, 0.7, 0.5);
         if (m.by == you.id) {
           fx.punch();
+          kill = { who: m.who, until: performance.now() + KILLCAM.HOLD * 1000 };
         }
       }
       if (m.by == you.id) {
@@ -760,16 +765,43 @@ const play = (
       ctl.pitch,
       dt,
     );
-    const third = shot.k > 0;
-    const pov = shot.at;
+    // A glory kill of the own player's is watched from outside (killcam.ts): the xenomorph's lock
+    // on its prey, then the kill a moment longer, the katana's too (the user, 2026-11-16).
+    const victim =
+      me && !driving
+        ? others.find(p =>
+            ctl.beast && me.lock && !me.wield
+              ? p.id == me.foe
+              : p.id == kill.who && now < kill.until,
+          )
+        : undefined;
+    const watch = killcam.frame(
+      me && victim
+        ? [
+            [me.x, me.y, me.z],
+            [victim.x, victim.y, victim.z],
+          ]
+        : undefined,
+      ctl.yaw,
+      cam,
+      dt,
+    );
+    const k = Math.max(shot.k, watch.k);
+    hud.outside(watch.k > 0);
+    const third = k > 0;
+    const pov = watch.k ? watch.at : shot.at;
     // On a wall the xenomorph's view turns over onto it, its floor (crawl.ts).
     crawl.update(me, dt);
-    const [view, pitch, roll] = crawl.view(
-      ctl.yaw + body.spun() * (1 - shot.k),
+    const [turned, tilted, roll] = crawl.view(
+      ctl.yaw + body.spun() * (1 - k),
       shot.pitch,
-      fx.roll * (1 - shot.k),
+      fx.roll * (1 - k),
     );
-    const lens = third ? { ...fx, roll, fov: fx.fov * (1 - shot.k) + shot.fov } : { ...fx, roll };
+    // The shortest way round from the eye's look to the kill camera's.
+    const swing = Math.atan2(Math.sin(watch.yaw - turned), Math.cos(watch.yaw - turned));
+    const view = turned + swing * watch.k;
+    const pitch = tilted + (watch.pitch - tilted) * watch.k;
+    const lens = third ? { ...fx, roll, fov: fx.fov * (1 - k) + shot.fov } : { ...fx, roll };
     // The driver is unarmed and his body is the renderer's to draw whole: no sight, no muzzle.
     const look = me && !third ? sight(world, eye, cam, ctl.yaw, ctl.pitch, pitch) : undefined;
     if (look) {

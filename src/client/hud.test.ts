@@ -1124,8 +1124,15 @@ describe('the rover on the HUD', () => {
     it('is styled by tag: the prompt, the speed, and the gun and crosshair hidden at the wheel', () => {
       expect(HUD_CSS).toMatch(/samp\{[^}]*bottom/);
       expect(HUD_CSS).toMatch(/cite\{[^}]*right/);
-      expect(HUD_CSS).toContain('div.v>i,.v dl,.v del{display:none}');
+      expect(HUD_CSS).toContain('div.v>i,.v dl,.v del,div.o>i,.o dl,.o del{display:none}');
       expect(HUD_CSS.split('{')[0].split(',')).toEqual(expect.arrayContaining(['samp', 'cite']));
+    });
+
+    it('hides the gun and the crosshair the same way while a glory kill is watched from outside', () => {
+      hud.outside(true);
+      expect(screen.classList.contains('o')).toBe(true);
+      hud.outside(false);
+      expect(screen.classList.contains('o')).toBe(false);
     });
 
     it('shows the health of the vehicle he sits in as ten pips over the speed, and hides it on foot', () => {

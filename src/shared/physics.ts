@@ -12,7 +12,6 @@
 // steps, and the tackled client gets the result in the next snapshot, then replays on it.
 import {
   ACCEL,
-  BLOW,
   AIR_ACCEL,
   AIR_JUMPS,
   AIR_SPEED,
@@ -25,7 +24,6 @@ import {
   CROUCH_SPEED,
   DASH_COOLDOWN,
   DASH_EXIT_SPEED,
-  DASH_SPEED,
   DASH_TICKS,
   DECAY,
   EYE,
@@ -84,11 +82,6 @@ import {
   CLING_HOLD,
   CLING_LEAP,
   CLING_SPEED,
-  POUNCE_COOL,
-  POUNCE_HOLD,
-  POUNCE_MAX,
-  POUNCE_MIN,
-  POUNCE_PITCH,
 } from './constants';
 import { bound, ground } from './relief';
 import { EV, KEY, LIMB, MODE, SIDE } from './types';
@@ -251,7 +244,8 @@ const gap = (b: Brush, x: number, z: number): [dx: number, dz: number] => [
  * A centre inside a footprint (it never gets there by walking, see below) leaves by the nearest
  * side. Returns the whole push, for the caller to take the speed into the wall away.
  *
- * Tunnelling is impossible: a step is at most DASH_SPEED / TICK_HZ = 0.27 m, and each push leaves
+ * Tunnelling is impossible: a step is at most the xenomorph's dash, DASH_SPEED * XENO_DASH / TICK_HZ
+ * = 0.37 m (a man's 0.27), and each push leaves
  * the centre at least PLAYER_R = 0.4 m from the footprint of every box it started beside, so a
  * step of that size cannot bring the centre across one, however thin. The candidates come from
  * near() with twice PLAYER_R, enough for the one push of at most PLAYER_R that matters.
@@ -953,9 +947,11 @@ const clingTo = (p: PlayerState, w: World, c: Ctl): boolean => {
 };
 
 /**
- * On a wall: forward climbs and back goes down, the side keys go along it (as the look sees it);
- * crouch lets go; a jump kicks off it, straight back when looking at it, else along the look. At a
- * top under the head, climbing pulls it up onto the top (MODE.CLIMB); down on a floor, it stands.
+ * On a wall, the wall is its floor (the user, 2026-11-16, to roam it freely): the look's heading
+ * turned onto it is forward, so W climbs looking at the wall, goes along it looking along it and
+ * down it looking away, S the other way, A and D across. Crouch lets go; a jump kicks off it,
+ * straight back when looking at it, else along the look. At a top under the head, climbing pulls
+ * it up onto the top (MODE.CLIMB); down on a floor, it stands.
  */
 const cling = (p: PlayerState, w: World, c: Ctl): void => {
   const [nx, nz] = TOWARD[p.wall];
@@ -979,11 +975,18 @@ const cling = (p: PlayerState, w: World, c: Ctl): void => {
     }
     return;
   }
-  const up = (c.keys & KEY.FORWARD ? 1 : 0) - (c.keys & KEY.BACK ? 1 : 0);
+  const fw = (c.keys & KEY.FORWARD ? 1 : 0) - (c.keys & KEY.BACK ? 1 : 0);
   const s = (c.keys & KEY.RIGHT ? 1 : 0) - (c.keys & KEY.LEFT ? 1 : 0);
-  // Along the wall to the right of one facing it, turned when the look is turned away from it.
+  // Along the wall to the right of one facing it; the look's heading on the wall is up by its
+  // share toward the wall and along by its share along it, the side keys square to that.
   const [tx, tz] = [-nz, nx];
-  const k = (tx * -c.fz + tz * c.fx >= 0 ? s : -s) * CLING_SPEED;
+  const [hu, ha] = [c.fx * nx + c.fz * nz, c.fx * tx + c.fz * tz];
+  const [wu, wa] = [fw * hu - s * ha, fw * ha + s * hu];
+  // Two keys go no faster than one.
+  const n = Math.sqrt(wu * wu + wa * wa);
+  const v = n > 1 ? CLING_SPEED / n : CLING_SPEED;
+  const up = wu > 0.05 ? 1 : wu < -0.05 ? -1 : 0;
+  const k = wa * v;
   const { a, sign } = along(p, p.wall);
   if (up > 0 && hold.top < p.y + PLAYER_H) {
     // The top is under the head: up onto it, when there is room to stand there.
@@ -998,7 +1001,7 @@ const cling = (p: PlayerState, w: World, c: Ctl): void => {
   }
   p.vx = tx * k;
   p.vz = tz * k;
-  p.vy = up > 0 && hold.top - p.y <= CLING_HOLD + 0.05 ? 0 : up * CLING_SPEED;
+  p.vy = up > 0 && hold.top - p.y <= CLING_HOLD + 0.05 ? 0 : wu * v;
   const pull = Math.min(hold.gap, WALL_PULL * DT);
   p.x += nx * pull;
   p.z += nz * pull;
@@ -1008,45 +1011,6 @@ const cling = (p: PlayerState, w: World, c: Ctl): void => {
     p.coyote = COYOTE_TICKS;
     p.ev |= EV.LAND;
   }
-};
-
-/** Whether the xenomorph's swing is its tail's (TAILS), not its claws'. */
-export const tailing = (p: Pick<PlayerState, 'swing' | 'cut'>): boolean =>
-  !!p.swing && p.cut !== BLOW.CLAW_L && p.cut !== BLOW.CLAW_R;
-
-/**
- * The xenomorph's dash: DASH held on a floor or a wall, with the dash timer run out, charges a
- * pounce (`charge`); let go, it leaps toward the keys held (the look with none: the user,
- * 2026-11-16), at least POUNCE_PITCH up, faster the longer the charge. Anywhere else, or stumbling, the charge is lost.
- */
-const pounce = (p: PlayerState, c: Ctl): void => {
-  // A strike of its tail holds `charge` at the top of its wind-up (gun.ts): not a pounce's.
-  if (tailing(p)) {
-    return;
-  }
-  const ready = !c.stumble && p.dash === 0 && (onFloor(p.mode) || p.mode === MODE.CLING);
-  if (ready && c.keys & KEY.DASH) {
-    p.charge = Math.min((p.charge ?? 0) + 1, POUNCE_HOLD);
-    return;
-  }
-  if (ready && p.charge) {
-    const v = POUNCE_MIN + ((POUNCE_MAX - POUNCE_MIN) * p.charge) / POUNCE_HOLD;
-    const pitch = Math.max(p.pitch, POUNCE_PITCH);
-    const cp = Math.cos(pitch);
-    if (p.mode !== MODE.CLING) {
-      p.wall = SIDE.NONE;
-    }
-    p.ev |= p.mode === MODE.SLIDE ? EV.SLIDE_END : 0;
-    enter(p, MODE.AIR);
-    // Toward the keys held as it lets go, as a dash goes; with none, along the look.
-    const [dx, dz] = c.wx || c.wz ? [c.wx, c.wz] : [c.fx, c.fz];
-    p.vx = dx * cp * v;
-    p.vz = dz * cp * v;
-    leap(p, Math.sin(pitch) * v);
-    p.dash = POUNCE_COOL;
-    p.ev |= EV.DASH;
-  }
-  p.charge = 0;
 };
 
 /** Takes hold of a ledge: hang there. */
@@ -1078,7 +1042,6 @@ const free = (p: PlayerState, w: World, c: Ctl): void => {
     p.dashes = c.kit.dashes;
   }
   if (
-    !c.kit.xeno &&
     c.dash &&
     (p.dash === 0 || (chain && p.dashes > 0 && p.dash <= DASH_COOLDOWN - DASH_GAP)) &&
     (ground
@@ -1095,8 +1058,8 @@ const free = (p: PlayerState, w: World, c: Ctl): void => {
         p.ev |= EV.WALLRUN_END;
       }
     }
-    p.vx = dx * DASH_SPEED;
-    p.vz = dz * DASH_SPEED;
+    p.vx = dx * c.kit.dash;
+    p.vz = dz * c.kit.dash;
     p.dash = DASH_COOLDOWN;
     p.ev |= EV.DASH;
   }
@@ -1284,9 +1247,6 @@ export const move = (
     }
   }
 
-  if (kit.xeno && p.mode !== MODE.HANG && p.mode !== MODE.CLIMB && !riding) {
-    pounce(p, c);
-  }
   if (p.mode === MODE.HANG) {
     hang(p, w, c);
   }

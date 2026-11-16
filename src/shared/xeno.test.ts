@@ -15,13 +15,13 @@ import {
   TAIL_LEAP,
   XENO_CLAW,
   HP_MAX,
-  POUNCE_COOL,
-  POUNCE_HOLD,
+  DASH_COOLDOWN,
+  DASH_SPEED,
+  DASH_TICKS,
   POUNCE_HP,
-  POUNCE_MAX,
-  POUNCE_MIN,
-  POUNCE_PITCH,
   POUNCE_STUN,
+  TACKLE_COOLDOWN,
+  XENO_DASH,
   XENO_HP,
   XENO_PACE,
 } from './constants';
@@ -196,6 +196,42 @@ describe('the xenomorph on a wall', () => {
     expect(q.mode).toBe(MODE.AIR);
   });
 
+  it('takes its wall for a floor: W goes where the look heads on it, A and D across (the user, 2026-11-16)', () => {
+    // On the wall east of it, +z is along it to the right; yaw π looks toward +z.
+    const on = () => {
+      const p = at(0.2, 3, { mode: MODE.AIR, ground: false });
+      go(p, RUN);
+      expect(p.mode).toBe(MODE.CLING);
+      return p;
+    };
+    const SOUTH = Math.PI;
+    let p = on();
+    let [y, z] = [p.y, p.z];
+    go(p, KEY.FORWARD, SOUTH);
+    expect(p.z - z).toBeCloseTo(CLING_SPEED / 60, 4);
+    expect(p.y).toBeCloseTo(y, 5);
+    // Looking that way, the right is down the wall and the left up it.
+    [y, z] = [p.y, p.z];
+    go(p, KEY.RIGHT, SOUTH);
+    expect(p.y - y).toBeCloseTo(-CLING_SPEED / 60, 4);
+    expect(p.z).toBeCloseTo(z, 5);
+    go(p, KEY.LEFT, SOUTH);
+    expect(p.y).toBeCloseTo(y, 4);
+    // Half way between the wall and along it: up and along at once, no faster than straight up.
+    p = on();
+    [y, z] = [p.y, p.z];
+    go(p, KEY.FORWARD, (EAST + 2 * Math.PI + SOUTH) / 2 - Math.PI);
+    const [dy, dz] = [p.y - y, p.z - z];
+    expect(dy).toBeGreaterThan(0.05);
+    expect(dz).toBeGreaterThan(0.05);
+    expect(Math.sqrt(dy * dy + dz * dz)).toBeCloseTo(CLING_SPEED / 60, 4);
+    // Two keys at once go no faster than one.
+    p = on();
+    [y, z] = [p.y, p.z];
+    go(p, KEY.FORWARD | KEY.RIGHT);
+    expect(Math.sqrt((p.y - y) ** 2 + (p.z - z) ** 2)).toBeCloseTo(CLING_SPEED / 60, 4);
+  });
+
   it('walks down off the wall onto the floor', () => {
     const p = at(0.2, 0.5, { mode: MODE.AIR, ground: false });
     go(p, RUN);
@@ -216,60 +252,67 @@ describe('the xenomorph on a wall', () => {
   });
 });
 
-describe('the pounce', () => {
-  it('charges while DASH is held, then leaps along the look as far as the charge, at least POUNCE_PITCH up', () => {
+describe('the dash (the user, 2026-11-16: a man’s, further and three in a row, no charged pounce)', () => {
+  /** Metres a dash on the open ground carries the kit, from a stand, until it stops. */
+  const reach = (kit = XENO) => {
     const p = at(-20, 0, { z: 50, yaw: 0 });
-    for (let k = 0; k < POUNCE_HOLD + 20; k++) {
+    go(p, KEY.DASH, 0, 0, kit);
+    for (let k = 0; k < DASH_COOLDOWN; k++) {
+      go(p, 0, 0, 0, kit);
+    }
+    return 50 - p.z;
+  };
+
+  it('dashes on a press, as a man does, XENO_DASH as fast: further, and nothing charges', () => {
+    const p = at(-20, 0, { z: 50, yaw: 0 });
+    go(p, KEY.DASH, 0);
+    expect([p.mode, p.dash, p.charge ?? 0]).toEqual([MODE.GROUND, DASH_COOLDOWN, 0]);
+    expect(-p.vz).toBeCloseTo(DASH_SPEED * XENO_DASH, 3);
+    expect(pouncing(p)).toBe(true);
+    // Held: no more than the one dash, and no leap when let go.
+    for (let k = 0; k < 40; k++) {
       go(p, KEY.DASH, 0);
     }
-    expect(p.charge).toBe(POUNCE_HOLD);
-    expect(p.mode).toBe(MODE.GROUND);
     go(p, 0, 0);
-    expect(p.mode).toBe(MODE.AIR);
-    expect(p.charge).toBe(0);
-    expect(p.dash).toBe(POUNCE_COOL);
-    expect(-p.vz).toBeCloseTo(POUNCE_MAX * Math.cos(POUNCE_PITCH), 3);
-    expect(p.vy).toBeGreaterThan(0);
-    expect(pouncing(p)).toBe(true);
-    // A tap is a short one, and the timer holds the next back.
-    const q = at(-20, 0, { z: 50, yaw: 0 });
-    go(q, KEY.DASH, 0);
-    go(q, 0, 0);
-    expect(-q.vz).toBeLessThan(POUNCE_MIN * 1.05);
-    while (q.mode !== MODE.GROUND) {
-      go(q, 0, 0);
-    }
-    go(q, KEY.DASH, 0);
-    expect(q.charge ?? 0).toBe(0);
+    expect([p.mode, p.charge ?? 0]).toEqual([MODE.GROUND, 0]);
+    expect(reach() - reach(MARINE)).toBeGreaterThan(1);
+    // A step of the burst stays under the player's radius: it cannot tunnel through a thin brush.
+    expect((DASH_SPEED * XENO_DASH) / 60).toBeLessThan(0.4);
   });
 
-  it('leaps toward the keys held as it lets go, like a dash (the double tap of A or D)', () => {
+  it('dashes toward the keys held (the double tap of A or D)', () => {
     for (const [keys, side] of [
       [KEY.RIGHT, 1],
       [KEY.LEFT, -1],
     ]) {
       const p = at(-20, 0, { z: 50, yaw: 0 });
-      for (let k = 0; k < POUNCE_HOLD; k++) {
-        go(p, KEY.DASH, 0);
-      }
-      go(p, keys, 0);
-      expect(p.mode).toBe(MODE.AIR);
-      expect(p.vx * side).toBeCloseTo(POUNCE_MAX * Math.cos(POUNCE_PITCH), 3);
+      go(p, keys | KEY.DASH, 0);
+      expect(p.vx * side).toBeCloseTo(DASH_SPEED * XENO_DASH, 3);
       expect(Math.abs(p.vz)).toBeLessThan(1e-3);
     }
   });
 
-  it('pounces off a wall too, and the marine dashes where it pounces', () => {
-    const p = at(0.2, 3, { mode: MODE.AIR, ground: false });
-    go(p, RUN);
-    go(p, KEY.DASH, WEST, 0.5);
-    go(p, 0, WEST, 0.5);
-    expect(p.mode).toBe(MODE.AIR);
-    expect(p.vx).toBeLessThan(-5);
-    const m = at(-20, 0, { z: 50, yaw: 0 });
-    go(m, KEY.DASH, 0, 0, MARINE);
-    expect(m.charge ?? 0).toBe(0);
-    expect(m.dash).toBeGreaterThan(POUNCE_COOL);
+  it('chains three dashes in a row, on the ground and in the air, then waits the cooldown', () => {
+    const chain = (y: number) => {
+      const p = at(-20, y, { z: 50, yaw: 0, dashes: 3 });
+      p.mode = y ? MODE.AIR : MODE.GROUND;
+      let dashes = 0;
+      for (let k = 0; k < 70; k++) {
+        go(p, k % 2 ? 0 : KEY.DASH, 0);
+        dashes += +(p.dash === DASH_COOLDOWN);
+      }
+      return dashes;
+    };
+    expect(chain(0)).toBe(3);
+    expect(chain(20)).toBe(3);
+    // The marine dashes once in the air.
+    const m = at(-20, 20, { z: 50, yaw: 0, mode: MODE.AIR, ground: false, dashes: 1 });
+    let n = 0;
+    for (let k = 0; k < 70; k++) {
+      go(m, k % 2 ? 0 : KEY.DASH, 0, 0, MARINE);
+      n += +(m.dash === DASH_COOLDOWN);
+    }
+    expect(n).toBe(1);
   });
 
   it('goes on the wire: the cling and the charge', () => {
@@ -323,7 +366,7 @@ describe('the claws and the tail', () => {
     }
   });
 
-  it('charges the tail at the top of its wind-up while the right button is held, not a pounce', () => {
+  it('charges the tail at the top of its wind-up while the right button is held', () => {
     const p = at(-20, 0, { z: 50, yaw: 0 });
     const { hold, ticks } = TAILS[STING.STAB];
     for (let k = 0; k < hold + 40; k++) {
@@ -341,11 +384,11 @@ describe('the claws and the tail', () => {
       n++;
     }
     expect(n).toBe(swingOf(p, TAILS).strike);
-    // No tail while a pounce charges.
+    // DASH charges nothing: the tail strikes out of a dash.
     const q = at(-20, 0, { z: 50, yaw: 0 });
     hit(q, KEY.DASH);
     hit(q, KEY.DASH | KEY.BLADE);
-    expect(q.swing).toBe(0);
+    expect([q.swing, q.charge ?? 0]).toEqual([TAILS[STING.LASH].ticks, 0]);
   });
 
   it('turns a double click into its special: the spin for a sweep, the leap for a stab or a lash', () => {
@@ -380,7 +423,12 @@ describe('the claws and the tail', () => {
 });
 
 describe('the xenomorph in a room', () => {
-  type Pl = { info: { name: string; id: number; team: number }; state: PlayerState; bank?: number };
+  type Pl = {
+    info: { name: string; id: number; team: number };
+    state: PlayerState;
+    bank?: number;
+    tackled: number;
+  };
   type Inner = {
     players(): Pl[];
     punch(p: Pl, view?: number): void;
@@ -475,18 +523,24 @@ describe('the xenomorph in a room', () => {
     expect(x.state.hp).toBeLessThan(XENO_HP - 1);
   });
 
-  it('pins an enemy it pounces on: health, a long stumble, his flag dropped; then its pounce is over', () => {
+  it('pins an enemy its dash reaches: health, a long stumble, his flag dropped; then its burst is over', () => {
     const { inner, ps } = room(ROLE.XENO, ROLE.MARINE);
     const [x, m] = ps;
     face(x.state, m.state);
-    Object.assign(x.state, { mode: MODE.AIR, dash: POUNCE_COOL, vx: 0, vz: -12 });
+    Object.assign(x.state, { dash: DASH_COOLDOWN, vx: 0, vz: -12 });
     inner.tackle(x);
     expect(m.state.hp).toBe(HP_MAX - POUNCE_HP);
     expect(m.state.stun).toBe(POUNCE_STUN);
     expect(pouncing(x.state)).toBe(false);
-    // Once: the pounce is spent.
+    expect(x.state.dash).toBe(DASH_COOLDOWN - DASH_TICKS);
+    // Once: the burst is spent, and the next dash of a chain pins only TACKLE_COOLDOWN later.
+    inner.tackle(x);
+    x.state.dash = DASH_COOLDOWN;
     inner.tackle(x);
     expect(m.state.hp).toBe(HP_MAX - POUNCE_HP);
+    x.tackled -= TACKLE_COOLDOWN;
+    inner.tackle(x);
+    expect(m.state.hp).toBe(HP_MAX - 2 * POUNCE_HP);
   });
 
   it('glory kills on E a weak foe it faces, close: both held GLORY_TICKS, then his head eaten', () => {
@@ -566,7 +620,7 @@ describe('the xenomorph in a room', () => {
     expect(frag).toMatchObject({ by: k.info.id, who: m.info.id, how: FRAG.GLORY });
   });
 
-  it('ends a glory kill when the xenomorph goes down, the prey free; a pounce on a weak foe only pins', () => {
+  it('ends a glory kill when the xenomorph goes down, the prey free; a dash into a weak foe only pins', () => {
     const { inner, ps } = room(ROLE.XENO, ROLE.MARINE);
     const [x, m] = ps;
     face(x.state, m.state);
@@ -577,12 +631,12 @@ describe('the xenomorph in a room', () => {
     x.state.down = 100;
     inner.apply(m, { seq: 1, keys: 0, yaw: Math.PI, pitch: 0 });
     expect([m.state.lock, m.state.down, m.state.hp]).toEqual([0, 0, GLORY_HP]);
-    // The pounce.
+    // The dash.
     const two = room(ROLE.XENO, ROLE.MARINE);
     const [y, n] = two.ps;
     face(y.state, n.state);
     n.state.hp = GLORY_HP;
-    Object.assign(y.state, { mode: MODE.AIR, dash: POUNCE_COOL, vx: 0, vz: -12 });
+    Object.assign(y.state, { dash: DASH_COOLDOWN, vx: 0, vz: -12 });
     two.inner.tackle(y);
     expect([n.state.hp, n.state.down, n.state.stun]).toEqual([
       GLORY_HP - POUNCE_HP,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { at, EAST, NORTH, WEST } from '../../test/yard';
-import { DASH_SPEED, MAX_PITCH, POUNCE_HOLD } from '../shared/constants';
+import { DASH_SPEED, MAX_PITCH } from '../shared/constants';
 import { EV, KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { STILL } from '../shared/physics';
@@ -364,21 +364,15 @@ describe('createInput', () => {
       ['KeyA', KEY.LEFT],
       ['KeyD', KEY.RIGHT],
       ['KeyS', KEY.BACK],
-    ])(
-      'of %s as the xenomorph is a full pounce that way: DASH held POUNCE_HOLD steps, then that key alone',
-      (code, bit) => {
-        make();
-        lock(true);
-        ctl.beast = true;
-        tap(code);
-        tap(code, 50);
-        for (let k = 0; k < POUNCE_HOLD; k++) {
-          expect(ctl.take()).toBe(KEY.DASH);
-        }
-        expect(ctl.take()).toBe(bit);
-        expect(ctl.take()).toBe(0);
-      },
-    );
+    ])('of %s as the xenomorph is a dash that way, as a man’s: no charge', (code, bit) => {
+      make();
+      lock(true);
+      ctl.beast = true;
+      tap(code);
+      tap(code, 50);
+      expect(ctl.take()).toBe(bit | KEY.DASH);
+      expect(ctl.take()).toBe(0);
+    });
 
     it('is not on E, nor on the right button, nor on a double tap of another key', () => {
       make();

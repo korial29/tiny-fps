@@ -1,4 +1,4 @@
-import { MAX_PITCH, POUNCE_HOLD } from '../shared/constants';
+import { MAX_PITCH } from '../shared/constants';
 import { KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 
@@ -149,8 +149,6 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   let special = false;
   /** G (or the right button, but for the xenomorph) pressed, waiting for its step: a grenade when the rifle is the choice, a missile at a ship's stick. */
   let nade = false;
-  /** The xenomorph's double tap of a move key: the direction of its pounce, and the steps of charge left. */
-  let [lunge, charging] = [0, 0];
   /** The right button pressed, waiting for its step, held now, and when it was last pressed (ms): the xenomorph's tail. */
   let sting = false;
   let stinging = false;
@@ -166,12 +164,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     pilot: false,
     beast: false,
     take() {
-      let moved = pending ? dashKeys(c.keys, pending) : c.keys;
-      if (c.beast && lunge) {
-        // A full charge (DASH held POUNCE_HOLD steps), then let go with the tapped way alone.
-        moved = charging ? c.keys | KEY.DASH : (c.keys & ~DIRS & ~KEY.DASH) | lunge;
-        lunge = charging-- ? lunge : 0;
-      }
+      const moved = pending ? dashKeys(c.keys, pending) : c.keys;
       if (c.beast) {
         const keys =
           moved |
@@ -274,12 +267,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
         const now = performance.now();
         const before = tapped.get(e.code);
         if (before !== undefined && now - before <= DOUBLE_TAP_MS) {
-          // The xenomorph pounces that way with a full charge, any way (the user, 2026-11-16).
-          if (c.beast) {
-            [lunge, charging] = [bit, POUNCE_HOLD];
-          } else {
-            pending = bit;
-          }
+          pending = bit;
           tapped.delete(e.code);
         } else {
           tapped.set(e.code, now);
@@ -296,7 +284,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     c.keys &= ~keyBit(e.code);
   });
   const release = () => {
-    c.keys = pending = lunge = charging = 0;
+    c.keys = pending = 0;
     down.clear();
     tapped.clear();
   };

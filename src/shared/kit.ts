@@ -17,6 +17,8 @@ import {
   SPRINT_SPEED,
   WALLRUN_TICKS,
   PARRY,
+  DASH_SPEED,
+  XENO_DASH,
   XENO_HP,
   XENO_PACE,
 } from './constants';
@@ -33,6 +35,8 @@ export interface Kit {
   wallrun: number;
   /** Dashes in a row before the full DASH_COOLDOWN; 1 is the old rule: one in the air, any on the ground. */
   dashes: number;
+  /** A dash's burst, m/s: its length goes with it, the burst's ticks being everyone's. */
+  dash: number;
   /** Swing ticks the katana runs down per step. */
   haste: number;
   /** What the racks fill and the packs top up to: the gun's shots, the rail gun's lightning, the rifle's rounds. */
@@ -60,7 +64,7 @@ export interface Kit {
   gear: boolean;
   /**
    * The xenomorph's body: claws and a tail for weapons (PUNCHES from BLOW.CLAW_L), clinging to the
-   * walls (MODE.CLING), the dash a pounce charged on DASH held, acid for blood (room.ts).
+   * walls (MODE.CLING), a dash's burst that pins an enemy it reaches, acid for blood (room.ts).
    */
   xeno: boolean;
 }
@@ -72,6 +76,7 @@ const MARINE: Kit = {
   double: DOUBLE_JUMP_SPEED,
   wallrun: WALLRUN_TICKS,
   dashes: 1,
+  dash: DASH_SPEED,
   haste: 1,
   ammo: AMMO_MAX,
   rail: RAIL_MAX,
@@ -102,6 +107,7 @@ const NINJA: Kit = {
   double: DOUBLE_JUMP_SPEED * 1.3,
   wallrun: WALLRUN_TICKS * 2,
   dashes: 3,
+  dash: DASH_SPEED,
   haste: 2,
   ammo: AMMO_MAX / 2,
   rail: RAIL_MAX / 2,
@@ -121,10 +127,11 @@ const NINJA: Kit = {
 };
 
 /**
- * No weapon, no armour, more health; it climbs any wall and pounces, so it needs no wall-run of its
- * own. XENO_PACE as fast as a man on the ground, a little only, or no one could fight it (the user,
+ * No weapon, no armour, more health; it climbs any wall, so it needs no wall-run of its own.
+ * XENO_PACE as fast as a man on the ground, a little only, or no one could fight it (the user,
  * 2026-11-16), getting there as quickly, and its jumps twice as high: a jump's height goes as the
- * square of its speed.
+ * square of its speed. It dashes as a man does, further (XENO_DASH) and three in a row (the user,
+ * 2026-11-16, in place of the charged pounce).
  */
 const XENO: Kit = {
   ...MARINE,
@@ -132,6 +139,8 @@ const XENO: Kit = {
   sprint: SPRINT_SPEED * XENO_PACE,
   jump: JUMP_SPEED * Math.SQRT2,
   double: DOUBLE_JUMP_SPEED * Math.SQRT2,
+  dashes: 3,
+  dash: DASH_SPEED * XENO_DASH,
   accel: XENO_PACE,
   ammo: 0,
   rail: 0,

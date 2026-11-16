@@ -192,7 +192,7 @@ export const createCombat = (
   voice: (id: number) => number = voiceOf,
   /** A player's own voice in the players' sprite (speakerOf()). */
   speaker: (id: number) => number = speakerOf,
-  /** Whether a player is a xenomorph: its own cries, its acid, its hiss and shriek at a pounce. */
+  /** Whether a player is a xenomorph: its own cries, its acid, its hiss at a tail's charge, its shriek at a dash. */
   beast: (id: number) => boolean = () => false,
 ): Combat => {
   /** The own player after each live step that fired, since the last frame. */
@@ -257,6 +257,8 @@ export const createCombat = (
     Math.min(1, Math.max(0, (ticks - CHARGE_TAP) / (CHARGE_TICKS - CHARGE_TAP)));
   /** Each other player's charge at the last frame: the strength of his next shot. */
   const charges = new Map<number, number>();
+  /** Each other player's dash timer at the last frame: a xenomorph's dash is heard as it goes up. */
+  const dashed = new Map<number, number>();
   /** The muzzle of a runner's gun (his rail gun's in hand), as he fires at what he looks at. */
   const gun = (p: PlayerState): Vec3 => {
     // A long gun is shouldered, which only the drawn runner knows (soldier.ts).
@@ -434,7 +436,7 @@ export const createCombat = (
             audio.play(SOUND.ZAP);
           }
         }
-        // The xenomorph hisses as it starts to charge a pounce (its leap's shriek is foley.ts's).
+        // The xenomorph hisses as it starts to charge its tail (its dash's shriek is foley.ts's).
         if (was && beast(me.id) && !(was.charge ?? 0) && (me.charge ?? 0) > 0 && !me.down) {
           audio.play(SOUND.XENO_HISS, undefined, 0.55, rate());
         }
@@ -569,16 +571,18 @@ export const createCombat = (
           cry(p.id, p.down > 0 && !lived[1], at);
         }
         lives.set(p.id, [life(p), p.down > 0]);
-        // Another xenomorph: a hiss as its pounce charges, a shriek as it leaps.
+        // Another xenomorph: a hiss as its tail charges, a shriek as it dashes (its timer went up).
         const charged = charges.get(p.id);
         if (charged !== undefined && beast(p.id) && !p.down) {
           if (!charged && (p.charge ?? 0) > 0) {
             audio.play(SOUND.XENO_HISS, at, 0.6, rate());
-          } else if (charged > 0 && !(p.charge ?? 0)) {
+          }
+          if (p.dash > (dashed.get(p.id) ?? Infinity)) {
             audio.play(SOUND.SHRIEK, at, 0.8, rate());
           }
         }
         charges.set(p.id, p.charge ?? 0);
+        dashed.set(p.id, p.dash);
         if ((p.charge ?? 0) >= CHARGE_TAP && p.ammo >= 0 && !p.wield && !p.down) {
           hot.push({ p: gun(p), k: filled(p.charge) });
         }
@@ -642,6 +646,7 @@ export const createCombat = (
           lives.delete(id);
           blades.delete(id);
           charges.delete(id);
+          dashed.delete(id);
         }
       }
       const { orbs, bursts } = balls.frame(now, id => {

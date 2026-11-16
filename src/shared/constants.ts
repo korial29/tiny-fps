@@ -272,20 +272,18 @@ export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];
  * forward and the sprint held (MODE.CLING, physics.ts; the sprint since the user, 2026-11-16):
  * CLING_SPEED m/s up, down or along it (faster than a man runs, the user 2026-11-16: it was slow)
  * while the wall rises CLING_HOLD m over its feet; a jump kicks it off along the look at CLING_LEAP
- * m/s. DASH held on a floor or a wall charges a pounce for up to POUNCE_HOLD ticks
- * (PlayerState.charge); let go, it leaps POUNCE_MIN to POUNCE_MAX m/s toward the keys held (the
- * look with none), at least POUNCE_PITCH up, and the dash timer runs from POUNCE_COOL: the first
- * POUNCE_FLY ticks of it in the air, an enemy it reaches is pinned (room.ts): POUNCE_HP health, his
- * flag dropped, a stumble of POUNCE_STUN ticks. An enemy whose katana or fists hit it loses ACID_HP.
+ * m/s. It dashes as a man does, XENO_DASH times as fast so as far, three in a row (kit.ts; the
+ * user, 2026-11-16: no more charged pounce); an enemy its dash's burst reaches is pinned (room.ts):
+ * POUNCE_HP health, his flag dropped, a stumble of POUNCE_STUN ticks, once per TACKLE_COOLDOWN. An
+ * enemy whose katana or fists hit it loses ACID_HP.
  */
 export const XENO_HP = 12;
 export const CLING_SPEED = 8;
 export const CLING_FACING = 0.6;
 export const CLING_HOLD = 0.4;
 export const CLING_LEAP = 10;
-export const POUNCE_HOLD = 36;
-export const [POUNCE_MIN, POUNCE_MAX, POUNCE_PITCH] = [9, 17, 0.3];
-export const [POUNCE_COOL, POUNCE_FLY] = [48, 40];
+/** 1.4: a step of its burst stays under PLAYER_R, so it cannot tunnel through a thin brush (physics.ts). */
+export const XENO_DASH = 1.4;
 export const [POUNCE_HP, POUNCE_STUN] = [2, 60];
 /**
  * The glory kill (the user, 2026-11-16, after DOOM 2016): an enemy with GLORY_HP health or less, up,

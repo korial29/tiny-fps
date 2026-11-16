@@ -1016,8 +1016,8 @@ export const tailing = (p: Pick<PlayerState, 'swing' | 'cut'>): boolean =>
 
 /**
  * The xenomorph's dash: DASH held on a floor or a wall, with the dash timer run out, charges a
- * pounce (`charge`); let go, it leaps along the look, at least POUNCE_PITCH up, faster the longer
- * the charge. Anywhere else, or stumbling, the charge is lost.
+ * pounce (`charge`); let go, it leaps toward the keys held (the look with none: the user,
+ * 2026-11-16), at least POUNCE_PITCH up, faster the longer the charge. Anywhere else, or stumbling, the charge is lost.
  */
 const pounce = (p: PlayerState, c: Ctl): void => {
   // A strike of its tail holds `charge` at the top of its wind-up (gun.ts): not a pounce's.
@@ -1038,8 +1038,10 @@ const pounce = (p: PlayerState, c: Ctl): void => {
     }
     p.ev |= p.mode === MODE.SLIDE ? EV.SLIDE_END : 0;
     enter(p, MODE.AIR);
-    p.vx = c.fx * cp * v;
-    p.vz = c.fz * cp * v;
+    // Toward the keys held as it lets go, as a dash goes; with none, along the look.
+    const [dx, dz] = c.wx || c.wz ? [c.wx, c.wz] : [c.fx, c.fz];
+    p.vx = dx * cp * v;
+    p.vz = dz * cp * v;
     leap(p, Math.sin(pitch) * v);
     p.dash = POUNCE_COOL;
     p.ev |= EV.DASH;

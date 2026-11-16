@@ -272,7 +272,7 @@ export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];
  * forward and the sprint held (MODE.CLING, physics.ts; the sprint since the user, 2026-11-16): CLING_SPEED m/s up, down or along it while the wall rises
  * CLING_HOLD m over its feet; a jump kicks it off along the look at CLING_LEAP m/s. DASH held on a
  * floor or a wall charges a pounce for up to POUNCE_HOLD ticks (PlayerState.charge); let go, it
- * leaps POUNCE_MIN to POUNCE_MAX m/s along the look, at least POUNCE_PITCH up, and the dash timer
+ * leaps POUNCE_MIN to POUNCE_MAX m/s toward the keys held (the look with none), at least POUNCE_PITCH up, and the dash timer
  * runs from POUNCE_COOL: the first POUNCE_FLY ticks of it in the air, an enemy it reaches is
  * pinned (room.ts): POUNCE_HP health, his flag dropped, a stumble of POUNCE_STUN ticks. An enemy
  * whose katana or fists hit it loses ACID_HP.

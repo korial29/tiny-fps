@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { at, EAST, NORTH, WEST } from '../../test/yard';
-import { DASH_SPEED, MAX_PITCH } from '../shared/constants';
+import { DASH_SPEED, MAX_PITCH, POUNCE_HOLD } from '../shared/constants';
 import { EV, KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { STILL } from '../shared/physics';
@@ -173,6 +173,36 @@ describe('createInput', () => {
     lock(false);
   });
 
+  it('takes the right button for G with every weapon and at a ship’s stick, the xenomorph’s for its tail', () => {
+    make();
+    lock(true);
+    const right = () => {
+      document.dispatchEvent(new MouseEvent('mousedown', { button: 2 }));
+      document.dispatchEvent(new MouseEvent('mouseup', { button: 2 }));
+      return ctl.take();
+    };
+    const g = () => {
+      key('keydown', 'KeyG');
+      key('keyup', 'KeyG');
+      return ctl.take();
+    };
+    ctl.weapon = WEAPON.RIFLE;
+    expect(right()).toBe(g());
+    expect(right() & KEY.SPECIAL).toBe(KEY.SPECIAL);
+    ctl.pilot = true;
+    expect(right()).toBe(g());
+    expect(right() & KEY.SPECIAL).toBe(KEY.SPECIAL);
+    ctl.pilot = false;
+    ctl.weapon = WEAPON.GUN;
+    expect(right()).toBe(g());
+    // A fresh one: a second right click this soon is the tail's double click.
+    ctl.destroy();
+    make();
+    lock(true);
+    ctl.beast = true;
+    expect(right()).toBe(KEY.BLADE);
+  });
+
   it('holds KEY.USE while E is down, on every step, and drops it at the release', () => {
     make();
     lock(true);
@@ -327,6 +357,36 @@ describe('createInput', () => {
       expect(ctl.take()).toBe(KEY.BACK | KEY.DASH | KEY.SPRINT);
       expect(ctl.take()).toBe(KEY.FORWARD | KEY.BACK | KEY.SPRINT);
       expect(ctl.keys).toBe(KEY.FORWARD | KEY.BACK | KEY.SPRINT);
+    });
+
+    it.each([
+      ['KeyW', KEY.FORWARD],
+      ['KeyA', KEY.LEFT],
+      ['KeyD', KEY.RIGHT],
+    ])(
+      'of %s as the xenomorph is a full pounce that way: DASH held POUNCE_HOLD steps, then that key alone',
+      (code, bit) => {
+        make();
+        lock(true);
+        ctl.beast = true;
+        tap(code);
+        tap(code, 50);
+        for (let k = 0; k < POUNCE_HOLD; k++) {
+          expect(ctl.take()).toBe(KEY.DASH);
+        }
+        expect(ctl.take()).toBe(bit);
+        expect(ctl.take()).toBe(0);
+      },
+    );
+
+    it('of S as the xenomorph is the one step of DASH it always was', () => {
+      make();
+      lock(true);
+      ctl.beast = true;
+      tap('KeyS');
+      tap('KeyS', 50);
+      expect(ctl.take()).toBe(KEY.DASH | KEY.BACK);
+      expect(ctl.take()).toBe(0);
     });
 
     it('is not on E, nor on the right button, nor on a double tap of another key', () => {

@@ -167,8 +167,8 @@ export const SOUND = {
   /**
    * The xenomorph's own (the user, 2026-11-16: not a runner's): a hiss with a growl under it as it
    * charges a pounce, a shriek as it leaps, its claws' swipe and the whip of its tail, a screech of
-   * pain and a big roar going down, the light tick of its claws at each step, the sizzle of its acid
-   * blood, and a roar after a kill.
+   * pain and a big roar going down, its footfall (claws, wet pad, weight) at each step, the sizzle of
+   * its acid blood, a roar after a kill, and the heavier footfall of a landing.
    */
   XENO_HISS: 60,
   SHRIEK: 61,
@@ -179,6 +179,7 @@ export const SOUND = {
   CHITIN: 66,
   ACID: 67,
   ROAR: 68,
+  XENO_LAND: 69,
 } as const;
 
 /**
@@ -603,12 +604,17 @@ export const LAYERS: Voice[][] = [
     [3, 2200, 0, 0.08, 0.42, 0.42, 0.5, 0.25, 0, 1, 0.35],
     [1, 640, -0.9, 0.05, 0.22, 0.35, 0.1, 0.3, 0, 1, 0.25, 0.28],
   ],
-  // CHITIN (the user, 2026-11-16: light and stealthy, a claw's tick): a claw's tip ticking on the
-  // floor, bright and short, over the faintest pad of the foot.
+  // CHITIN (the user, 2026-11-16: dry chitin clicks, wet organic friction, heavy impacts on stone):
+  // the claws' tips clicking down one after another, a dull thump of the weight into the stone with
+  // its grit, then the wet pad sliding and sucking off the floor.
   [
     [0, 3800, 0, 0.001, 0, 0.006, 0, 0.5, 0, 1, 0.22],
-    [2, 6000, -2, 0.001, 0, 0.01, 0, 1, 0, 1, 0.2],
-    [3, 2000, 0, 0.002, 0, 0.03, 0, 0.1, 0, 1, 0.12],
+    [0, 3100, 0, 0.001, 0, 0.005, 0, 0.5, 0, 1, 0.16, 0.017],
+    [3, 9000, 0, 0.001, 0, 0.004, 0, 0.9, 0, 1, 0.18, 0.031],
+    [2, 85, -3, 0.002, 0.01, 0.12, 0, 1, 0, 1, 0.6, 0.004],
+    [3, 5000, -1, 0.001, 0, 0.04, 0, 0.35, 0, 1, 0.28, 0.004],
+    [3, 2200, 1.5, 0.015, 0.02, 0.08, 0.6, 0.25, 0, 1, 0.3, 0.02],
+    [2, 380, 3, 0.002, 0, 0.03, 0, 1, 0, 1, 0.1, 0.06],
   ],
   // ACID: a fizz crackling bright and wavering, over a dull sizzle that dies away.
   [
@@ -621,6 +627,16 @@ export const LAYERS: Voice[][] = [
     [1, 330, 0.9, 0.08, 0.32, 0.42, 0.15, 0.2, 0, 1, 0.2],
     [3, 2500, 0, 0.1, 0.3, 0.42, 0.5, 0.2, 0, 1, 0.4],
     [1, 700, 0.5, 0.05, 0.18, 0.35, 0.08, 0.3, 0, 1, 0.25, 0.2],
+  ],
+  // XENO_LAND: the whole weight hitting the stone, deeper and longer than a step, its plates
+  // clattering against each other, and a wet slap of the pads spreading out.
+  [
+    [2, 60, -2.5, 0.002, 0.02, 0.22, 0, 1, 0, 1, 0.9],
+    [3, 4500, -1, 0.001, 0, 0.08, 0, 0.3, 0, 1, 0.45],
+    [0, 3600, 0, 0.001, 0, 0.006, 0, 0.5, 0, 1, 0.2, 0.012],
+    [0, 2900, 0, 0.001, 0, 0.006, 0, 0.5, 0, 1, 0.18, 0.026],
+    [0, 4200, 0, 0.001, 0, 0.005, 0, 0.5, 0, 1, 0.14, 0.041],
+    [3, 1800, 1, 0.01, 0.04, 0.12, 0.6, 0.2, 0, 1, 0.35, 0.015],
   ],
 ];
 

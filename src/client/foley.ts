@@ -41,6 +41,9 @@ const OUT_AT = 0.42;
 const WIND_UP = 1.5;
 const CALM_DOWN = 6;
 
+/** The xenomorph's footfalls' rates, foot by foot. */
+export const PAWS = [0.9, 1.08, 0.96, 1.13];
+
 /** A fall slower than this (m/s) makes no sound on the others. */
 const SOFT = 3;
 
@@ -82,14 +85,9 @@ export const createFoley = (
   /** The footfall n of p: harder at a sprint, softer crouched, the two feet a little apart in pitch. */
   const tap = (p: PlayerState, n: number, at?: Vec3) => {
     const run = sprinting(p);
-    // The xenomorph's claws tick, softly: it moves stealthily.
+    // The xenomorph's footfall, played softly (it moves stealthily); its four feet each a pitch.
     if (beast(p.id)) {
-      a.play(
-        SOUND.CHITIN,
-        at,
-        run ? 0.45 : p.mode === MODE.CROUCH ? 0.15 : 0.28,
-        n & 1 ? 1.1 : 0.9,
-      );
+      a.play(SOUND.CHITIN, at, run ? 0.45 : p.mode === MODE.CROUCH ? 0.15 : 0.28, PAWS[n & 3]);
       return;
     }
     a.play(
@@ -99,9 +97,14 @@ export const createFoley = (
       (run ? 0.92 : 1) * (n & 1 ? 1.06 : 0.94),
     );
   };
-  /** A landing at `fall` m/s: a harder one is louder and lower. */
-  const land = (fall: number, at?: Vec3) =>
-    a.play(SOUND.LAND, at, clamp(fall / 14, 0.2), 1.25 - 0.5 * clamp(fall / 20));
+  /** A landing of `id` at `fall` m/s: a harder one is louder and lower. */
+  const land = (id: number, fall: number, at?: Vec3) =>
+    a.play(
+      beast(id) ? SOUND.XENO_LAND : SOUND.LAND,
+      at,
+      clamp(fall / 14, 0.2),
+      1.25 - 0.5 * clamp(fall / 20),
+    );
 
   return {
     me(p, hit, steps) {
@@ -126,7 +129,7 @@ export const createFoley = (
         }
       }
       if (hit.ev & EV.LAND) {
-        land(hit.fall);
+        land(p.id, hit.fall);
       }
       // Wind from 4 m/s to 16: a run is nearly silent, a dash or a long fall roars.
       const u = clamp((Math.hypot(p.vx, p.vy, p.vz) - 4) / 12);
@@ -247,7 +250,7 @@ export const createFoley = (
             tap(p, n, at);
           }
           if (p.ground && !s.p.ground && s.p.vy < -SOFT) {
-            land(-s.p.vy, at);
+            land(p.id, -s.p.vy, at);
           }
         }
         seen.set(p.id, { p, steps: n });

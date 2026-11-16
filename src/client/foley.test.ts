@@ -7,7 +7,7 @@ import { ROVER, drive } from '../shared/rover';
 import { SHIP, dock } from '../shared/ship';
 import { land, rover as parked, run } from '../../test/slope';
 import type { Audio } from './audio';
-import { BREATH, SKID_FROM, createFoley } from './foley';
+import { BREATH, PAWS, SKID_FROM, createFoley } from './foley';
 import { createGait } from './gait';
 import type { Gait } from './gait';
 import { SOUND } from './sfx';
@@ -632,6 +632,26 @@ describe('the xenomorph', () => {
     expect(ids().at(-1)).toBe(SOUND.CHITIN);
     expect(ids()).not.toContain(SOUND.STEP);
     expect(ids()).not.toContain(SOUND.DASH);
+  });
+
+  it('sets its four feet down each at its own pitch', () => {
+    const { audio, played } = fake();
+    const f = createFoley(audio, () => true);
+    for (let n = 0; n <= 8; n++) {
+      f.me(player(), { ev: 0, fall: 0 }, n);
+    }
+    expect(played.map(p => p.rate)).toEqual([1, 2, 3, 4, 5, 6, 7, 8].map(n => PAWS[n & 3]));
+    expect(new Set(PAWS).size).toBe(4);
+  });
+
+  it('lands with its own heavy footfall, its own and the others’', () => {
+    const { audio, ids } = fake();
+    const f = createFoley(audio, id => id == 1 || id == 2);
+    f.me(player(), { ev: EV.LAND, fall: 12 }, 0);
+    const air = player({ id: 2, x: 4, y: 3, vy: -12, mode: MODE.AIR, ground: false });
+    f.others([air], () => 0);
+    f.others([player({ id: 2, x: 4, y: 0 })], () => 0);
+    expect(ids()).toEqual([SOUND.XENO_LAND, SOUND.XENO_LAND]);
   });
 
   it('ticks its steps softer than a runner’s, stealthily', () => {

@@ -801,12 +801,17 @@ describe('a runner with the katana', () => {
       return {
         side: dot(d, right) / Math.hypot(...d),
         hands: Math.hypot(...sub(s.pos[J.HAND_L], s.pos[J.HAND_R])),
+        low: s.pos[J.CHEST][1] - s.pos[J.HAND_R][1],
+        tip: s.pos[J.HEAD][1] - t[1],
       };
     };
     const [rest, block, after] = [across(Infinity), across(PARRY_IN), across(PARRY_OUT)];
     expect(rest.side).toBeGreaterThan(-0.2);
-    expect(block.side).toBeLessThan(-0.6);
+    expect(block.side).toBeLessThan(-0.5);
     expect(after.side).toBeCloseTo(rest.side, 5);
+    // Low enough to guard him (the user): the fists under the chest, the point under the head.
+    expect(block.low).toBeGreaterThan(0.08);
+    expect(block.tip).toBeGreaterThan(0.1);
     // The left hand stays by the right on the grip.
     expect(block.hands).toBeLessThan(0.25);
   });

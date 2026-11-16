@@ -84,6 +84,7 @@ import {
   cutting,
   ends,
   held as sword,
+  DEFLECT_LOW,
   PARRY_IN,
   deflect,
   locked,
@@ -582,10 +583,12 @@ export const brandish = (
   // In a saber lock the blade crosses the foe's, shaking, and the trunk leans into him.
   const e = p.lock ? 1 : prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
   const k = p.lock ? locked(t) : poised(p, Math.max(prog, 0), t);
-  // A parry snaps the blade across from whatever hold it is in.
+  // A parry snaps the blade across from whatever hold it is in, and holds its line (clasp()).
+  const pe = parrying(parry);
   const g = deflect(
     CARRY.map((v, i) => v + (k[i] - v) * e),
-    parrying(parry),
+    pe,
+    DEFLECT_LOW,
   );
   g[1] += 0.02 * Math.sin(TAU * ph) * (1 - e);
   // A cut turns the whole body on its feet with a share of the trunk's twist.
@@ -622,7 +625,7 @@ export const brandish = (
   shrug(q, s, J.ARM_R, at);
   shrug(q, s, J.ARM_L, add(at, dir.map(v => -BEHIND * v) as Vec3));
   const poles: [Vec3, Vec3] = [turn([0.5, -1, -0.35]), turn([-0.5, -1, -0.35])];
-  const [grip, d, right, left] = clasp(solve(q), at, dir, poles);
+  const [grip, d, right, left] = clasp(solve(q), at, dir, poles, 0.1 * (1 - 0.98 * pe));
   wield(q, s, J.ARM_R, grip, d, poles[0], right);
   wield(
     q,

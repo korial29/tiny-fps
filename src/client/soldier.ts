@@ -116,7 +116,7 @@ import {
 import { CHITIN_X, FOOT_TIP, HEAD, PART, PIPE, eyes, lashOf, partsOf, tail } from './xeno';
 import type { Part } from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
-import { FEAST, clutched, mounted, seize } from './feast';
+import { FEAST, chew, clutched, eating, mounted, seize } from './feast';
 import type { Face } from './expression';
 import { CH, toneFor } from './features';
 import { createTrail } from './trail';
@@ -194,6 +194,8 @@ export interface Runner {
   mate?: number;
   mount?: number;
   with?: Vec3;
+  /** The share of a drop of blood owed to the next frame (FEAST.GORE). */
+  gore?: number;
 }
 
 /** A man's haircuts (look.ts's HAIR_NAMES[0]): how long the hair stands off the scalp, the first one shaved. */
@@ -348,7 +350,7 @@ export const animate = (
   others: PlayerState[],
   dt: number,
   world?: World,
-  tracer?: Pick<Tracer, 'shock' | 'spit'>,
+  tracer?: Pick<Tracer, 'shock' | 'spit'> & Partial<Pick<Tracer, 'gore'>>,
   rovers?: Rover[],
   builds?: ReadonlyMap<number, number>,
   looks?: ReadonlyMap<number, Choice>,
@@ -415,6 +417,16 @@ export const animate = (
       }
       const on = r.mount ? others.find(q => q.id == r.mate) : undefined;
       r.with = on && [on.x, on.y, on.z];
+      // Its prey's blood as it eats: spurting from his head, a burst as it goes.
+      if (xeno && on) {
+        const head: Vec3 = [on.x, on.y + 1.55, on.z];
+        if (r.p.lock && !p.lock) {
+          tracer?.gore?.(head, FEAST.GORE[1], 3.5);
+        }
+        r.gore = (r.gore ?? 0) + eating(p.lock ?? 0, r.mount) * FEAST.GORE[0] * dt;
+        tracer?.gore?.(head, Math.floor(r.gore), 2.5);
+        r.gore %= 1;
+      }
       // A blow of his fists the host counted: the nearest he reaches, in his arc, flinches.
       const hit = world && bare(p) && p.hits != r.p.hits && p.swing;
       if (hit) {
@@ -914,10 +926,10 @@ export const stance = (r: Runner) => {
     }
     pose = r.fours?.apply(pose) ?? pose;
     if (mate) {
-      pose = seize(pose, mate, r.mount!);
+      pose = chew(seize(pose, mate, r.mount!), eating(p.lock ?? 0, r.mount!), r.t);
     }
   } else if (mate && !lying) {
-    pose = clutched(pose, mate, r.mount!);
+    pose = clutched(pose, mate, r.mount!, r.t);
   }
   let s = solve(pose);
   if (p.wield && !busy) {

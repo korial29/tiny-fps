@@ -4,9 +4,9 @@ import { ROLE } from '../shared/kit';
 import { STILL } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { BITE } from './body';
-import { FEAST, clutched, mounted, seize } from './feast';
+import { FEAST, chew, clutched, eating, mounted, seize } from './feast';
 import type { Vec3 } from './mesh';
-import { JOINT as J, rest, solve } from './rig';
+import { JOINT as J, rest, solve, turn } from './rig';
 import { animate, stance } from './soldier';
 import type { Runner } from './soldier';
 
@@ -37,7 +37,7 @@ describe('seize()', () => {
     expect(seize(p, PREY, 0)).toBe(p);
   });
 
-  it('turns it to him, up against him, its feet on the floor', () => {
+  it('turns it to him, up on him a little, its feet on the front of his thighs', () => {
     const p = xeno();
     const q = seize(p, PREY, 1);
     // Facing him: forward(yaw) is (-sin yaw, -cos yaw), and he is along -z.
@@ -47,10 +47,17 @@ describe('seize()', () => {
     const pelvis = s.pos[J.PELVIS];
     expect(Math.hypot(pelvis[0] - PREY[0], pelvis[2] - PREY[2])).toBeCloseTo(FEAST.CLING, 6);
     expect(pelvis[2]).toBeGreaterThan(PREY[2]);
-    // Its legs as they were, its feet on the floor: no higher than in the pose it had.
-    const was = solve(p);
-    for (const j of [J.FOOT_L, J.FOOT_R, J.PELVIS]) {
-      expect(s.pos[j][1]).toBeCloseTo(was.pos[j][1], 1);
+    expect(pelvis[1]).toBeGreaterThan(solve(p).pos[J.PELVIS][1] + FEAST.LIFT - 0.05);
+    const [fx, ft, fy] = FEAST.FEET;
+    expect(dist(s.pos[J.FOOT_L], [-fx, fy, -1 + ft])).toBeLessThan(0.02);
+    expect(dist(s.pos[J.FOOT_R], [fx, fy, -1 + ft])).toBeLessThan(0.02);
+    // Its knees bent as a knee bends: forward, toward him, ahead of the line from its hip to its foot.
+    for (const [hip, knee, foot] of [
+      [J.THIGH_L, J.SHIN_L, J.FOOT_L],
+      [J.THIGH_R, J.SHIN_R, J.FOOT_R],
+    ]) {
+      const mid = [0, 1, 2].map(i => (s.pos[hip][i] + s.pos[foot][i]) / 2);
+      expect(s.pos[knee][2]).toBeLessThan(mid[2]);
     }
   });
 });
@@ -77,6 +84,71 @@ describe('clutched()', () => {
   });
 });
 
+describe('his panic', () => {
+  it('throws his head about every way, his feet where they stand', () => {
+    const p = rest([0, 0, -1], 0);
+    const at = (t: number) => solve(clutched(p, [0, 0, 0], 1, t));
+    const a = at(0);
+    const ts = Array.from({ length: 60 }, (_, i) => i / 30);
+    const looks = ts.map(t => {
+      const s = at(t);
+      const q = s.rot[J.HEAD];
+      // Where the top of his head points, from his neck.
+      return [2 * (q[0] * q[1] + q[3] * q[2]), 2 * (q[1] * q[2] - q[3] * q[0])];
+    });
+    // Side to side and back and forth, well apart on each.
+    for (const k of [0, 1]) {
+      const v = looks.map(l => l[k]);
+      expect(Math.max(...v) - Math.min(...v)).toBeGreaterThan(0.3);
+    }
+    // His feet stay where they stand however he fights.
+    for (const t of ts) {
+      const s = at(t);
+      for (const j of [J.FOOT_L, J.FOOT_R]) {
+        expect(dist(s.pos[j], a.pos[j])).toBeLessThan(0.01);
+      }
+    }
+  });
+
+  it('fights it with his body: his chest twists and his hands shove, and he jerks back as it seizes him', () => {
+    const p = rest([0, 0, -1], 0);
+    const ts = Array.from({ length: 60 }, (_, i) => i / 30);
+    const chest = ts.map(t => solve(clutched(p, [0, 0, 0], 1, t)).pos[J.ARM_R][2]);
+    expect(Math.max(...chest) - Math.min(...chest)).toBeGreaterThan(0.05);
+    const hand = ts.map(t => solve(clutched(p, [0, 0, 0], 1, t)).pos[J.HAND_R][2]);
+    expect(Math.max(...hand) - Math.min(...hand)).toBeGreaterThan(0.04);
+    // Halfway through its lunge his head is further back than the bend alone would put it (he faces it already).
+    const facing = rest([0, 0, -1], Math.PI);
+    const head = (m: number) => solve(clutched(facing, [0, 0, 0], m, 0)).pos[J.NECK][2];
+    expect(head(0.5)).toBeLessThan(head(0) + (head(1) - head(0)) / 2 - 0.03);
+  });
+});
+
+describe('its eating', () => {
+  it('starts with its strike, and fades as it lets go of him', () => {
+    expect(eating(GLORY_TICKS - BITE[1] + 1, 1)).toBe(0);
+    expect(eating(GLORY_TICKS - BITE[1], 1)).toBe(1);
+    expect(eating(1, 1)).toBe(1);
+    expect(eating(0, 0.4)).toBe(0.4);
+    expect(eating(0, 0)).toBe(0);
+  });
+
+  it('shakes its head left and right, CHEW[1] times a second, not up and down', () => {
+    const p = xeno();
+    expect(chew(p, 0, 1)).toBe(p);
+    // Where its head looks: left and right, not up and down.
+    const look = (t: number) => turn(solve(chew(p, 1, t)).rot[J.HEAD], [0, 0, -1]);
+    const ts = Array.from({ length: 40 }, (_, i) => i / 120);
+    const [xs, ys] = [0, 1].map(k => ts.map(t => look(t)[k]));
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.4);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeLessThan(0.05);
+    const tip = (t: number) => look(t)[0];
+    // Back where it was a full shake later.
+    expect(tip(0.1 + 1 / FEAST.CHEW[1])).toBeCloseTo(tip(0.1), 6);
+    expect(Math.abs(tip(0.1 + 0.5 / FEAST.CHEW[1]) - tip(0.1))).toBeGreaterThan(0.1);
+  });
+});
+
 describe('a glory kill drawn', () => {
   const XENO = 1;
   const PREY_ID = 2;
@@ -96,34 +168,55 @@ describe('a glory kill drawn', () => {
     ...STILL,
     ...over,
   });
+  let drops = 0;
+  let bursts = 0;
+  const tracer = {
+    shock() {},
+    spit() {},
+    gore(_: Vec3, n: number) {
+      drops += n;
+      bursts += +(n >= FEAST.GORE[1]);
+    },
+  };
   const frames = (book: Map<number, Runner>, ps: PlayerState[], n: number) => {
     for (let k = 0; k < n; k++) {
-      animate(book, ps, 1 / 60, undefined, undefined, undefined, undefined, looks);
+      animate(book, ps, 1 / 60, undefined, tracer, undefined, undefined, looks);
     }
   };
 
-  it('puts the xenomorph up against its prey while locked, then lets go of him over DROP', () => {
+  it('puts the xenomorph up on its prey while locked, then lets go of him over DROP', () => {
     const book = new Map();
     const free = [state(XENO, {}), state(PREY_ID, { z: -1, yaw: Math.PI })];
     frames(book, free, 2);
     const low = stance(book.get(XENO)).s.pos[J.PELVIS][1];
     const locked = [
-      state(XENO, { lock: 10, foe: PREY_ID }),
-      state(PREY_ID, { z: -1, yaw: Math.PI, lock: 10, foe: XENO }),
+      state(XENO, { lock: 30, foe: PREY_ID }),
+      state(PREY_ID, { z: -1, yaw: Math.PI, lock: 30, foe: XENO }),
     ];
     frames(book, locked, 2);
+    // Locked before its strike: no blood yet.
+    expect(drops).toBe(0);
     expect(book.get(XENO).mount).toBe(1);
     expect(book.get(PREY_ID).mount).toBe(1);
     const on = stance(book.get(XENO)).s;
-    // Up against him on its feet: its claws over his shoulders, its head just by his.
-    expect(Math.min(on.pos[J.TOE_L][1], on.pos[J.TOE_R][1])).toBeLessThan(0.15);
+    // Up on him: its claws over his shoulders, its head over his.
     const [cx, ct, cy] = FEAST.CLAWS;
     expect(dist(on.pos[J.HAND_L], [-cx, cy, -1 + ct])).toBeLessThan(0.02);
     expect(dist(on.pos[J.HAND_R], [cx, cy, -1 + ct])).toBeLessThan(0.02);
-    expect(dist(on.pos[J.HEAD], stance(book.get(PREY_ID)).s.pos[J.HEAD])).toBeLessThan(0.45);
+    const his = stance(book.get(PREY_ID)).s.pos[J.HEAD];
+    expect(on.pos[J.HEAD][1]).toBeGreaterThan(his[1] + 0.2);
+    expect(Math.hypot(on.pos[J.HEAD][0] - his[0], on.pos[J.HEAD][2] - his[2])).toBeLessThan(0.4);
+    // Its bite: his blood spurts from his head, some FEAST.GORE[0] drops a second.
+    const biting = locked.map(q => ({ ...q, lock: 3 }));
+    frames(book, biting, 60);
+    expect(drops).toBeGreaterThan(FEAST.GORE[0] * 0.9);
+    expect(drops).toBeLessThan(FEAST.GORE[0] * 1.1);
+    expect(bursts).toBe(0);
     // The kill: both free, he goes down; it is still on him a moment, then off.
     const after = [state(XENO, {}), state(PREY_ID, { z: -1, yaw: Math.PI, down: 100 })];
     frames(book, after, Math.round((FEAST.DROP / 2) * 60));
+    // A burst as his head goes.
+    expect(bursts).toBe(1);
     expect(book.get(XENO).mount).toBeGreaterThan(0.3);
     expect(book.get(XENO).mount).toBeLessThan(0.7);
     frames(book, after, Math.round((FEAST.DROP / 2) * 60) + 2);

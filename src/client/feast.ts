@@ -1,10 +1,11 @@
 // The xenomorph's glory kill as drawn (the user, 2026-11-16: it climbs onto its prey and eats his
-// head; then its legs on the floor, its head just by his): after its dash it lunges into him and
-// stands up against him, its claws over his shoulders, rears its head back and bites; he bends back
-// under it, his hands up against its chest. After the kill it lets go of him as he falls. Poses only: the host still holds the two a metre apart and
-// nothing of it is on the wire. Pure, no DOM.
+// head; not as high as his chest, its head over his, its knees bent as knees bend): after its dash
+// it lunges into him and climbs a little on him, its feet on his thighs, its claws over his
+// shoulders, leaning over his head, rears its head back and bites; he bends back under it, his
+// hands up against its chest. After the kill it lets go of him as he falls. Poses only: the host
+// still holds the two a metre apart and nothing of it is on the wire. Pure, no DOM.
 import { GLORY_TICKS } from '../shared/constants';
-import { reach } from './body';
+import { BITE, reach } from './body';
 import { basis, mix } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, mul, solve } from './rig';
@@ -15,15 +16,30 @@ export const FEAST = {
   LEAP: [18, 18],
   /** Seconds it takes to let go of him after the kill. */
   DROP: 0.45,
-  /** Its pelvis in front of his feet, toward it, metres: its feet stay on the floor (the user, 2026-11-16). */
+  /** Its pelvis in front of his feet, toward it, and how far it climbs, metres: a little, its head over his (the user, 2026-11-16). */
   CLING: 0.5,
+  LIFT: 0.35,
   /** The tip back of its pelvis that stands its bent back up against him, radians. */
-  UPRIGHT: 0.2,
+  UPRIGHT: 0.05,
+  /** Its feet on the front of his thighs: across from his middle, toward it, and up; its knees forward and apart, as a knee bends. */
+  FEET: [0.17, 0.22, 0.6],
   /** Its claws over his shoulders: across, toward it (negative: behind his front), and up. */
   CLAWS: [0.19, -0.08, 1.52],
   /** His bend back under its weight, spine to head (radians), and how far his hips sink (metres). */
   BEND: [0.16, 0.2, 0.12, 0.22],
   SINK: 0.1,
+  /** His head thrown about in panic: the most it turns (radians) left and right, up and down, and over. */
+  PANIC: [0.55, 0.35, 0.3],
+  /**
+   * His body fighting it (the user, 2026-11-16): the jerk back as it seizes him (radians, at the
+   * middle of its lunge), then his chest twisting and his trunk rocking (radians), his hands shoving (metres).
+   */
+  STARTLE: 0.35,
+  STRUGGLE: [0.3, 0.12, 0.07],
+  /** Its head shaken left and right as it eats (the user, 2026-11-16): the most it turns (radians) and how often (Hz). */
+  CHEW: [0.32, 6],
+  /** Drops of blood a second from his head as it eats, and in the burst when his head goes. */
+  GORE: [110, 40],
   /** His hands against its chest: across, toward it, and up. */
   PUSH: [0.16, 0.34, 1.58],
 } as const;
@@ -59,8 +75,7 @@ const limb = (q: Pose, j: number, to: Vec3, pole: Vec3, m: number) => {
 
 /**
  * The xenomorph's `pose` on its prey, whose feet are at `prey`, by the share `m` (mounted()): turned
- * to him, stood up and up against him, its legs as they were on the floor, its claws over his
- * shoulders.
+ * to him and up on him, its feet on his thighs, its claws over his shoulders, leaning over his head.
  */
 export const seize = (pose: Pose, prey: Vec3, m: number): Pose => {
   if (m <= 0) {
@@ -70,15 +85,22 @@ export const seize = (pose: Pose, prey: Vec3, m: number): Pose => {
   const rot = pose.rot.slice();
   rot[J.PELVIS] = mul(rot[J.PELVIS], axis(X, FEAST.UPRIGHT * m));
   const q: Pose = { ...pose, yaw: pose.yaw + wrap(yaw - pose.yaw) * m, rot };
-  // The whole of it, feet and all, from where it is up to him.
+  // The whole of it from where it is up to him, and up on him.
   const pelvis = solve(q).pos[J.PELVIS];
   const want = off(prey, r, f, 0, -FEAST.CLING, 0);
-  q.at = [q.at[0] + (want[0] - pelvis[0]) * m, q.at[1], q.at[2] + (want[2] - pelvis[2]) * m];
-  const claws = FEAST.CLAWS;
-  for (const [side, arm] of [
-    [-1, J.ARM_L],
-    [1, J.ARM_R],
+  q.at = [0, 1, 2].map(i => q.at[i] + (i == 1 ? FEAST.LIFT : want[i] - pelvis[i]) * m) as Vec3;
+  const [feet, claws] = [FEAST.FEET, FEAST.CLAWS];
+  for (const [side, thigh, arm] of [
+    [-1, J.THIGH_L, J.ARM_L],
+    [1, J.THIGH_R, J.ARM_R],
   ]) {
+    limb(
+      q,
+      thigh,
+      off(prey, r, f, side * feet[0], -feet[1], feet[2]),
+      off([0, 0, 0], r, f, 0.6 * side, 1, 0.4),
+      m,
+    );
     // The elbows out and back.
     limb(
       q,
@@ -93,15 +115,38 @@ export const seize = (pose: Pose, prey: Vec3, m: number): Pose => {
 
 /**
  * The prey's `pose` under the xenomorph whose feet are at `eater`, by the share `m`: turned to it,
- * bent back with his hips sunk, his feet where they were, his hands up against its chest.
+ * bent back with his hips sunk, his feet where they were, his hands up against its chest, jerked
+ * back as it seizes him, then fighting it, his head thrown about in panic, at `t` seconds (the
+ * user, 2026-11-16).
  */
-export const clutched = (pose: Pose, eater: Vec3, m: number): Pose => {
+export const clutched = (pose: Pose, eater: Vec3, m: number, t = 0): Pose => {
   if (m <= 0) {
     return pose;
   }
   const [yaw, f, r] = facing(pose.at, eater);
   const rot = pose.rot.slice();
   FEAST.BEND.forEach((a, i) => (rot[J.SPINE + i] = mul(rot[J.SPINE + i], axis(X, a * m))));
+  const [tw, rk, shove] = FEAST.STRUGGLE.map(a => a * m);
+  rot[J.SPINE] = mul(
+    rot[J.SPINE],
+    mul(
+      axis(X, FEAST.STARTLE * Math.sin(Math.PI * m)),
+      axis([0, 0, 1], rk * Math.sin(4.3 * t + 1)),
+    ),
+  );
+  rot[J.CHEST] = mul(
+    rot[J.CHEST],
+    axis([0, 1, 0], tw * (0.6 * Math.sin(5.7 * t) + 0.4 * Math.sin(9.1 * t + 2))),
+  );
+  // Each way at its own pace, so it never repeats the same jerk.
+  const [yw, pt, rl] = FEAST.PANIC.map(a => a * m);
+  rot[J.HEAD] = mul(
+    rot[J.HEAD],
+    mul(
+      axis([0, 1, 0], yw * (0.7 * Math.sin(11.3 * t) + 0.3 * Math.sin(17.9 * t + 1))),
+      mul(axis(X, pt * Math.sin(8.7 * t + 2)), axis([0, 0, 1], rl * Math.sin(6.1 * t + 4))),
+    ),
+  );
   const q: Pose = { ...pose, yaw: pose.yaw + wrap(yaw - pose.yaw) * m, rot };
   const feet = solve(q);
   q.hips = [q.hips[0], q.hips[1] - FEAST.SINK * m, q.hips[2]];
@@ -111,14 +156,35 @@ export const clutched = (pose: Pose, eater: Vec3, m: number): Pose => {
   ]) {
     // Each foot back where it stood, the knee bent ahead.
     reach(q, solve(q), thigh, feet.pos[thigh + 2], f);
+    // Each hand shoving at its own time.
     const push = FEAST.PUSH;
+    const jab = shove * Math.max(Math.sin(7.9 * t + (side - 1) * 1.7), 0);
     limb(
       q,
       arm,
-      off(pose.at, r, f, side * push[0], push[1], push[2]),
+      off(pose.at, r, f, side * push[0], push[1] + jab, push[2] + 0.4 * jab),
       off([0, 0, 0], r, f, side, -0.3, -1),
       m,
     );
   }
   return q;
+};
+
+/**
+ * How hard the xenomorph eats, 0 to 1: from its strike (BITE[1]) to the kill with `lock` ticks
+ * left, then `mount` as it lets go of him (lock 0).
+ */
+export const eating = (lock: number, mount: number): number =>
+  lock ? +(GLORY_TICKS - lock >= BITE[1]) * mount : mount;
+
+/** The xenomorph's `pose` with its head shaken left and right, `a` of the way (eating()), at `t` seconds. */
+export const chew = (pose: Pose, a: number, t: number): Pose => {
+  if (a <= 0) {
+    return pose;
+  }
+  const rot = pose.rot.slice();
+  const w = 2 * Math.PI * FEAST.CHEW[1] * t;
+  rot[J.NECK] = mul(rot[J.NECK], axis([0, 1, 0], 0.4 * FEAST.CHEW[0] * a * Math.sin(w - 0.6)));
+  rot[J.HEAD] = mul(rot[J.HEAD], axis([0, 1, 0], FEAST.CHEW[0] * a * Math.sin(w)));
+  return { ...pose, rot };
 };

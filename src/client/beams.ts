@@ -1,7 +1,7 @@
 // What the weapons light up: the plasma balls, each a blue-white core in a soft halo with a short
 // trail, a blue flash at the muzzle of a shot, a splash of light and sparks where a ball bursts,
 // the bolts and sparks of the katana's shock, the katana's arcs of energy, and the rail gun's lightning, a new shape each frame. Everything turns to face the camera and is
-// unlit and above 1, so that the bloom makes it glow. No DOM, no GL.
+// unlit and above 1, so that the bloom makes it glow, but the blood of a glory kill, dark. No DOM, no GL.
 import { NADE, NADE_R, BOLT as ROVER_BOLT } from '../shared/constants';
 import { CUT } from '../shared/types';
 import { LIGHT } from './lights';
@@ -27,6 +27,9 @@ const SPARK = 0.22;
 /** Seconds a grenade's fireball lasts, and its embers; the embers thrown. */
 export const BOOM = 0.45;
 const EMBER = 0.7;
+/** Seconds a drop of blood flies, and its colour (the user, 2026-11-16: blood as the xenomorph eats). */
+const GORE = 0.6;
+const BLOOD = [0.55, 0.02, 0.015];
 const EMBERS = 40;
 /** The fireball's radius at its widest, as a share of NADE_R, its puffs, and its colours from the outside in. */
 const FIRE = 0.35;
@@ -69,6 +72,8 @@ interface Spark {
   red?: boolean;
   /** A grenade's ember: orange, and it lasts EMBER. */
   hot?: boolean;
+  /** A drop of blood: dark red, bigger, and it lasts GORE. */
+  blood?: boolean;
 }
 /** A flash at a muzzle or a splash at a burst: where, how old, and which. */
 interface Glow {
@@ -128,6 +133,8 @@ export interface Tracer {
   strike(at: Vec3, from?: Vec3): void;
   /** One spark out of `at`, up and a little aside: a cut limb's stump spitting. */
   spit(at: Vec3): void;
+  /** `n` drops of blood out of `at`, flung at `speed` m/s each way and up, falling. */
+  gore(at: Vec3, n: number, speed?: number): void;
   /** Where the own muzzle is now: its flash stays there, so that a kick of the view does not leave it behind. */
   mount(a: Vec3): void;
   /** Ages everything by dt seconds and drops what is over. */
@@ -392,6 +399,13 @@ export const createTracer = (): Tracer => {
     spit(at) {
       sparks.push({ p: at, v: [rnd(), rnd() + 2, rnd()], age: 0 });
     },
+    gore(at, n, speed = 2) {
+      for (let i = 0; i < n; i++) {
+        const v: Vec3 = [rnd() * speed, rnd() * speed + speed * 0.8, rnd() * speed];
+        sparks.push({ p: at, v, age: 0, blood: true });
+      }
+      sparks = sparks.slice(-MAX * SPARKS);
+    },
     strike(at, from) {
       rays.push({ p: at, age: 0, from });
     },
@@ -404,7 +418,7 @@ export const createTracer = (): Tracer => {
       }
       rays = rays.filter(r => r.age < RAY);
       glows = glows.filter(g => g.age < (g.boom ? BOOM : g.splash ? SPLASH : FLASH));
-      sparks = sparks.filter(s => s.age < (s.hot ? EMBER : SPARK));
+      sparks = sparks.filter(s => s.age < (s.hot ? EMBER : s.blood ? GORE : SPARK));
       bolts = bolts.filter(b => b.age < BOLT);
       for (const s of sparks) {
         s.v[1] -= 9 * dt;
@@ -589,7 +603,11 @@ export const createTracer = (): Tracer => {
           RIBBONS.forEach(([w, rgb, lift]) => ribbon(out, p, q, w * 0.5 * k, rgb, eye, lift));
         }
       }
-      for (const { p, age, red, hot: ember } of sparks) {
+      for (const { p, age, red, hot: ember, blood } of sparks) {
+        if (blood) {
+          disc(out, p, 0.05 * (1 - (0.5 * age) / GORE), BLOOD, eye, 0, 5);
+          continue;
+        }
         const k = 1 - age / (ember ? EMBER : SPARK);
         disc(
           out,

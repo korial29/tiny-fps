@@ -1218,7 +1218,7 @@ describe('looking down with a weapon in hand', () => {
 });
 
 describe('the bite of a glory kill', () => {
-  it('draws the head back once on him, drives it down into the prey, then tugs to the end', () => {
+  it('draws the head back once on him, then drives it down into the prey just before the kill', () => {
     const at = (e: number) => devour(GLORY_TICKS - e);
     expect(at(0)).toBeCloseTo(0, 6);
     expect(at(BITE[0])).toBeCloseTo(0, 6);
@@ -1230,10 +1230,8 @@ describe('the bite of a glory kill', () => {
       expect(at(e + 1)).toBeGreaterThan(at(e));
     }
     expect(at(BITE[2])).toBeCloseTo(0.7, 6);
-    // Tugs: back up a little and down again, never out of him.
-    const tugs = Array.from({ length: GLORY_TICKS - BITE[2] }, (_, i) => at(BITE[2] + i));
-    expect(Math.min(...tugs)).toBeLessThan(0.6);
-    expect(Math.min(...tugs)).toBeGreaterThan(0.5);
-    expect(BITE[2]).toBeLessThan(GLORY_TICKS - 2 * BITE[3]);
+    expect(at(GLORY_TICKS)).toBeCloseTo(0.7, 6);
+    // His head goes (the host's kill) a tenth of a second after the bite is home.
+    expect(GLORY_TICKS - BITE[2]).toBe(6);
   });
 });

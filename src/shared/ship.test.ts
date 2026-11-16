@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as ride from '../../test/ride';
 import { box, land } from '../../test/slope';
 import { duo } from '../../test/teams';
-import { ORBIT, RAIL_DRAIN, TICK_HZ, VEHICLE } from './constants';
+import { BOLT_GRAZE, ORBIT, RAIL_DRAIN, TICK_HZ, VEHICLE } from './constants';
 import { MOON } from './moon';
 import { move } from './physics';
 import { decodeSnapshot, encodeInput } from './protocol';
@@ -322,9 +322,9 @@ describe('Room: the ships', () => {
       send(room, b, KEY.FIRE, 1, Math.PI);
       Object.assign(blue, { x: red.x, y: red.y, z: red.z - 40, vx: 0, vy: 0, vz: 0 });
     }
-    // Every VEHICLE.GRAZE bolts on the hull took 1: forty in all, twenty salvos.
-    expect(n).toBeGreaterThanOrEqual(((VEHICLE.HP * VEHICLE.GRAZE) / 2 - 1) * SHIP.GUN_COOL);
-    expect(n).toBeLessThan(30 * SHIP.GUN_COOL);
+    // Every BOLT_GRAZE bolts on the hull took 1: twenty in all, ten salvos.
+    expect(n).toBeGreaterThanOrEqual(((VEHICLE.HP * BOLT_GRAZE) / 2 - 1) * SHIP.GUN_COOL);
+    expect(n).toBeLessThan(15 * SHIP.GUN_COOL);
     expect(red.hp).toBe(0);
     expect(red.wreck).toBeGreaterThan(VEHICLE.WRECK - 3);
     expect(red.driver).toBe(NOBODY);

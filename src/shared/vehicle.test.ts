@@ -23,6 +23,7 @@ import {
   SNAP_EVERY,
   TICK_HZ,
   VEHICLE,
+  BOLT_GRAZE,
 } from './constants';
 import { STILL } from './physics';
 import { blast } from './plasma';
@@ -240,7 +241,7 @@ describe('what each weapon takes from an enemy vehicle', () => {
     expect(m.state(m.cy).hits).toBe(3 * VEHICLE.GRAZE);
   });
 
-  it('a rover’s lasers graze it the same: two bolts a salvo, 1 hp every two salvos', () => {
+  it('a rover’s lasers take 1 hp every BOLT_GRAZE bolts on it: two a salvo, 1 hp a salvo', () => {
     const m = match();
     m.board(m.ann, 0);
     // Blue's rover is 20 m south of red's: Ann looks south at it.
@@ -249,7 +250,8 @@ describe('what each weapon takes from an enemy vehicle', () => {
     m.hold(m.ann, ROVER.GUN_COOL * 4, FIRE, south);
     m.hold(m.ann, 1, 0, south);
     m.land();
-    expect(hp(m)).toEqual([10, 8, 10, 10]);
+    // Four salvos, eight bolts.
+    expect(hp(m)).toEqual([10, 10 - 8 / BOLT_GRAZE, 10, 10]);
   });
 
   it('the rail gun’s bolt sears it: 1 at the first touch, 1 more each RAIL_DRAIN ticks, RAIL_TICKS after it lets go', () => {
@@ -661,10 +663,10 @@ describe('a vehicle’s lasers and a rover’s crashes', () => {
     send(0, 1);
     const [, blue, ship] = cars();
     expect(ship.driver).toBe(0);
-    // Two salvos at the rover 20 m ahead, a little down to its body: four bolts, one hp.
+    // Two salvos at the rover 20 m ahead, a little down to its body: four bolts, all on it.
     send(FIRE, 2 * SHIP.GUN_COOL, EAST, -0.01);
     send(0, 30);
-    expect(blue.hp).toBe(VEHICLE.HP - 1);
+    expect(blue.hp).toBe(VEHICLE.HP - 4 / BOLT_GRAZE);
   });
 
   it('take health from a rover driven into a wall, more the faster, and none from a slow touch', () => {

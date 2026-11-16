@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BOLT,
   EYE,
   GRAVITY,
   GUN_RANGE,
@@ -281,5 +282,47 @@ describe('a grenade', () => {
     b.snapshot([{ ...ball, x: at[0], y: at[1], z: at[2], burst: true }], 1, 1500);
     expect(b.frame(1500 + INTERP_DELAY - 1, muzzle).bursts).toEqual([]);
     expect(b.frame(1500 + INTERP_DELAY, muzzle)).toEqual({ orbs: [], bursts: [[at, NADE]] });
+  });
+});
+
+describe('a vehicle’s bolt fired by the own player', () => {
+  /** A bolt of the own driver (id 1), named `id` by his bolt count, as the host sends it. */
+  const bolt = (id: number, o: Partial<Ball> = {}): Ball => ({
+    id,
+    by: 1,
+    x: 0,
+    y: 2,
+    z: -3,
+    dx: 0,
+    dy: 0,
+    dz: -1,
+    burst: false,
+    power: BOLT,
+    ...o,
+  });
+
+  it('is drawn though an own shot of the same number went out of range unburst', () => {
+    // Shots in the open end at GUN_RANGE with no word of a burst from the host.
+    const b = createBalls(WORLD);
+    b.fire(me({ yaw: Math.PI }), 0);
+    b.frame((GUN_RANGE / PLASMA_SPEED) * 1000 + 1, muzzle);
+    // Then he takes a vehicle: its bolt count starts low and meets the shot's number.
+    b.snapshot([bolt(7)], 1, 5000);
+    expect(b.frame(5000 + INTERP_DELAY, muzzle).orbs).toHaveLength(1);
+  });
+
+  it('is drawn beside an own shot of the same number still in flight', () => {
+    const b = createBalls(WORLD);
+    b.fire(me({ yaw: Math.PI }), 0);
+    b.snapshot([bolt(7)], 1, 10);
+    expect(b.frame(10 + INTERP_DELAY, muzzle).orbs).toHaveLength(2);
+  });
+
+  it('is drawn for a ship’s missile too', () => {
+    const b = createBalls(WORLD);
+    b.fire(me({ yaw: Math.PI }), 0);
+    b.frame((GUN_RANGE / PLASMA_SPEED) * 1000 + 1, muzzle);
+    b.snapshot([bolt(7, { power: NADE, v: 40, missile: true })], 1, 5000);
+    expect(b.frame(5000 + INTERP_DELAY, muzzle).orbs).toHaveLength(1);
   });
 });

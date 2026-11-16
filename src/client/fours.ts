@@ -13,7 +13,7 @@ import type { Floor } from './gait';
 import { dot, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { cross } from './helmet';
-import { JOINT as J, JOINTS, RESTS, axis, mul, slerp, solve, turn } from './rig';
+import { JOINT as J, JOINTS, PARENT, RESTS, axis, mul, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
 import { damp } from './spring';
 import { FOOT_TIP } from './xeno';
@@ -74,12 +74,16 @@ const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
 const ease = (v: number) => (v = clamp(v)) * v * (3 - 2 * v);
 const arc = (a: number, b: number) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 /** a + p b + q c + r d. */
-const sum = (a: Vec3, b: Vec3, p: number, c: Vec3 = X, q = 0, d: Vec3 = X, r = 0): Vec3 =>
-  a.map((v, i) => v + b[i] * p + c[i] * q + d[i] * r) as Vec3;
+const sum = (a: Vec3, b: Vec3, p: number, c: Vec3 = X, q = 0, d: Vec3 = X, r = 0): Vec3 => [
+  a[0] + b[0] * p + c[0] * q + d[0] * r,
+  a[1] + b[1] * p + c[1] * q + d[1] * r,
+  a[2] + b[2] * p + c[2] * q + d[2] * r,
+];
 /** p a + q b + r c. */
 const of = (a: Vec3, p: number, b: Vec3 = X, q = 0, c: Vec3 = X, r = 0): Vec3 =>
   sum([0, 0, 0], a, p, b, q, c, r);
 const neg = (a: Vec3): Vec3 => [-a[0], -a[1], -a[2]];
+const ID: Quat = [0, 0, 0, 1];
 
 interface Paw {
   on: boolean;
@@ -274,7 +278,8 @@ export const createFours = (): Fours => {
     if (w < 0.002 || !live) {
       return pose;
     }
-    const q: Pose = { ...pose, hips: [...pose.hips], rot: pose.rot.map(r => [...r] as Quat) };
+    // Every joint is turned afresh below: the clavicles stay at rest, the rest is set before it is read.
+    const q: Pose = { ...pose, hips: [0, 0, 0], rot: new Array<Quat>(JOINTS).fill(ID) };
     const { rot } = q;
     const REST = pose.rest ?? RESTS[0];
     const [R, N, F] = [turn(S, X), turn(S, Y), turn(S, neg(Z))];
@@ -288,9 +293,6 @@ export const createFours = (): Fours => {
     rot[J.CHEST] = mul(axis(X, -0.12 * flex), axis(Z, -bend));
     const hip = sum(sum(O, N, high, F, -HALF), at, -1);
     q.hips = sum(turn(inv(root), hip), REST[0], -1);
-    for (let j = J.CLAVICLE_L; j < JOINTS; j++) {
-      rot[j] = [0, 0, 0, 1];
-    }
     const s0 = solve(q);
     // A wall is posed as a floor (the user, 2026-11-16): the knees ahead, the elbows back.
     const arch = wall ? ARCH : FOOT_UP;
@@ -319,7 +321,8 @@ export const createFours = (): Fours => {
         );
       }
     });
-    const s1 = solve(q);
+    // The world turn of the limb's second bone, from the parent's (the trunk is as s0 has it): no second solve.
+    const second = (j: number) => mul(mul(s0.rot[PARENT[j]], rot[j]), rot[j + 1]);
     paws.forEach((p, i) => {
       const s = i % 2 ? 1 : -1;
       if (i > 1) {
@@ -329,16 +332,15 @@ export const createFours = (): Fours => {
           of(N, s * Math.cos(b), a, s * Math.sin(b)),
           of(a, Math.cos(b), N, -Math.sin(b)),
         );
-        rot[hand] = mul(inv(s1.rot[hand - 1]), palm);
+        rot[hand] = mul(inv(second(hand - 2)), palm);
       } else {
         const j = s < 0 ? J.FOOT_L : J.FOOT_R;
-        rot[j] = mul(inv(s1.rot[j - 1]), foot(p));
+        rot[j] = mul(inv(second(j - 2)), foot(p));
         rot[j + 1] = axis(X, (arch + 0.5 * p.k) * (1 - p.k));
       }
     });
     // The head up off the trunk, ahead: on a floor most of the way to the look, on a wall ahead up it
     // and a little out, turned only a little to the look.
-    const s2 = solve(q);
     const aim = mul(axis(Y, look), axis(X, clamp(pitch, -1, 1) * 0.9));
     let head: Quat;
     if (wall) {
@@ -347,10 +349,13 @@ export const createFours = (): Fours => {
     } else {
       head = slerp(mul(axis(Y, heading), axis(X, 0.1)), aim, 0.7);
     }
-    const rel = mul(inv(s2.rot[J.CHEST]), head);
+    const rel = mul(inv(s0.rot[J.CHEST]), head);
     rot[J.NECK] = slerp([0, 0, 0, 1], rel, 0.4);
     rot[J.HEAD] = mul(inv(rot[J.NECK]), rel);
     // As far as it has blended in.
+    if (w > 0.998) {
+      return q;
+    }
     return {
       ...pose,
       hips: pose.hips.map((v, i) => v + (q.hips[i] - v) * w) as Vec3,

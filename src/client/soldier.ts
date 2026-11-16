@@ -88,7 +88,7 @@ import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
 import { STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, PARENT, REST, axis, mul, slerp, solve, turn } from './rig';
+import { JOINT as J, PARENT, REST, RESTS, axis, mul, rest, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
 import {
   REGION,
@@ -783,9 +783,18 @@ const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose =>
 };
 
 /** The runner's pose this frame, solved: the gait, the fall and sink of one down, and the weapon's hold; and the way the body faces. */
+/** A pose with nothing in it, for one wholly laid over: shared, so frozen. */
+const BARE: Pose = Object.freeze({ ...rest(), rot: Object.freeze(rest().rot) as Quat[] });
+
 export const stance = (r: Runner) => {
-  let pose = r.gait.pose();
   const { p } = r;
+  // Down or floored, the weapon stays in the hand as it falls. At the wheel both hands are on the yoke.
+  const lying = !!p.down || floored(p) || driving(r);
+  // All on fours (fours.ts) the gait's pose is wholly laid over: it is not built.
+  const fours = !lying && (r.fours?.weight ?? 0) > 0.998;
+  let pose = fours
+    ? { ...BARE, at: [p.x, p.y, p.z] as Vec3, yaw: p.yaw, rest: RESTS[r.build ?? 0] }
+    : r.gait.pose();
   // Lying down, it sinks into the roof for the last half second.
   const sink = p.down ? 0.5 * Math.min(Math.max(1 - p.down / 30, 0), 1) : 0;
   if (p.down) {
@@ -794,8 +803,6 @@ export const stance = (r: Runner) => {
       at: [pose.at[0], pose.at[1] - sink, pose.at[2]],
     };
   }
-  // Down or floored, the weapon stays in the hand as it falls. At the wheel both hands are on the yoke.
-  const lying = !!p.down || floored(p) || driving(r);
   if (r.jab > 0.002 && !lying && r.blow != BLOW.TAIL) {
     // A punch: the striking fist out (the blow's), the other back to the hip, the chest behind it.
     // The xenomorph's sting is its tail's (xeno.ts), not an arm's.
@@ -823,13 +830,14 @@ export const stance = (r: Runner) => {
     rot[J.CHEST] = mul(rot[J.CHEST], axis([1, 0, 0], FLINCH[2] * k));
     pose = { ...pose, rot };
   }
-  let s = solve(pose);
   if (r.look?.role === ROLE.XENO && !lying) {
-    pose = prowl(pose, s, p);
-    // On all fours in a sprint and on a wall.
+    // On all fours in a sprint and on a wall, which leaves nothing of the prowl once it is all in.
+    if (!fours) {
+      pose = prowl(pose, solve(pose), p);
+    }
     pose = r.fours?.apply(pose) ?? pose;
-    s = solve(pose);
   }
+  let s = solve(pose);
   if (p.wield && !lying) {
     pose = brandish(pose, p, r.prog, r.gait.phase, r.t);
     s = solve(pose);

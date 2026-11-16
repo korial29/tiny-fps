@@ -276,7 +276,7 @@ A class with no weapon at all (`ROLE.XENO`, kit.ts): the racks give it nothing a
 
 - Claws: FIRE swipes the left claws, then the right while it is held, a fresh press after a swipe's strike throwing the next at once (`BLOW.CLAW_L`, `CLAW_R`: 16 ticks, the strike at 5, 1.8 m, 1 hp each). They never count toward the third punch's stun.
 - Tail: SPECIAL alone, on the right button or G (`BLOW.TAIL`): 40 ticks, the strike at 18, 3.2 m in a narrow arc, 3 hp, and it throws the one it stings as a hook does (his flag dropped).
-- Pounce: DASH held on a floor or a wall charges for up to 0.6 s; let go, it leaps 9 to 17 m/s along the look, at least 0.3 rad up. The first enemy its body meets in the next 40 ticks of flight is pinned: 2 hp, his flag dropped, a stumble of a second; the pounce stops on him.
+- Pounce: DASH held on a floor or a wall charges for up to 0.6 s; let go, it leaps 9 to 17 m/s toward the keys held (along the look with none), at least 0.3 rad up. A double tap of W, A or D is a full pounce that way, with its hiss and its shriek (the user, 2026-11-16): the client holds DASH for the whole charge, then lets go with the tapped key alone. The first enemy its body meets in the next 40 ticks of flight is pinned: 2 hp, his flag dropped, a stumble of a second; the pounce stops on him.
 - Acid: an enemy's katana or fists that hit it cost him 1 hp, never another xenomorph's.
 - Kills by any of these are `FRAG.CLAW`.
 

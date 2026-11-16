@@ -288,7 +288,9 @@ describe('createHud', () => {
       const rows = [...panels()[1].querySelectorAll('tr')].map(r => r.textContent);
       expect(rows).toContain('Eget in, get out');
       expect(rows).toContain('Left clicklasers');
-      expect(rows).toContain('Glaser rifle: a grenade from its launcher');
+      expect(rows).toContain('G or Right clicklaser rifle: a grenade from its launcher');
+      expect(rows).toContain('G or Right clickmissiles');
+      expect(rows).toContain('W A D twicea full pounce that way, with its cry');
       expect(rows).toContain('1 2 3 4gun, katana, rail gun, laser rifle');
       expect(rows).toContain('Double clickspecial: lunge, energy arc, leap');
     });

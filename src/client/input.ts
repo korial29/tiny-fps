@@ -1,4 +1,4 @@
-import { MAX_PITCH } from '../shared/constants';
+import { MAX_PITCH, POUNCE_HOLD } from '../shared/constants';
 import { KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 
@@ -147,8 +147,10 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   /** When the left button was last pressed (ms), and a double click waiting for its step. */
   let clicked = -Infinity;
   let special = false;
-  /** G pressed, waiting for its step: a grenade when the rifle is the choice. */
+  /** G (or the right button, but for the xenomorph) pressed, waiting for its step: a grenade when the rifle is the choice, a missile at a ship's stick. */
   let nade = false;
+  /** The xenomorph's double tap of W, A or D: the direction of its pounce, and the steps of charge left. */
+  let [lunge, charging] = [0, 0];
   /** The right button pressed, waiting for its step, held now, and when it was last pressed (ms): the xenomorph's tail. */
   let sting = false;
   let stinging = false;
@@ -164,7 +166,12 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     pilot: false,
     beast: false,
     take() {
-      const moved = pending ? dashKeys(c.keys, pending) : c.keys;
+      let moved = pending ? dashKeys(c.keys, pending) : c.keys;
+      if (c.beast && lunge) {
+        // A full charge (DASH held POUNCE_HOLD steps), then let go with the tapped way alone.
+        moved = charging ? c.keys | KEY.DASH : (c.keys & ~DIRS & ~KEY.DASH) | lunge;
+        lunge = charging-- ? lunge : 0;
+      }
       if (c.beast) {
         const keys =
           moved |
@@ -212,6 +219,8 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   // with the xenomorph's tail.
   on(document, 'mousedown', (e: MouseEvent) => {
     if (c.locked() && e.button == 2) {
+      // On every weapon and vehicle the right button is G (the user, 2026-11-16); the xenomorph's is its tail.
+      nade ||= !c.beast;
       const now = performance.now();
       [sting, stinging] = [true, true];
       twist ||= now - stung <= DOUBLE_CLICK_MS;
@@ -265,7 +274,12 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
         const now = performance.now();
         const before = tapped.get(e.code);
         if (before !== undefined && now - before <= DOUBLE_TAP_MS) {
-          pending = bit;
+          // The xenomorph pounces that way with a full charge (the user, 2026-11-16), but backward.
+          if (c.beast && bit !== KEY.BACK) {
+            [lunge, charging] = [bit, POUNCE_HOLD];
+          } else {
+            pending = bit;
+          }
           tapped.delete(e.code);
         } else {
           tapped.set(e.code, now);
@@ -282,7 +296,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     c.keys &= ~keyBit(e.code);
   });
   const release = () => {
-    c.keys = pending = 0;
+    c.keys = pending = lunge = charging = 0;
     down.clear();
     tapped.clear();
   };

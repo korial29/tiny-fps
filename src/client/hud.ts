@@ -340,7 +340,7 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
       ['R', 'swap the battery', 'KeyR'],
       ['1|2|3|4', 'gun, katana, rail gun, laser rifle', 'Digit1 Digit2 Digit3 Digit4'],
       ['Wheel', 'next weapon'],
-      ['G', 'laser rifle: a grenade from its launcher', 'KeyG'],
+      ['G|or|Right click', 'laser rifle: a grenade from its launcher', 'KeyG'],
     ],
   ],
   [
@@ -349,7 +349,11 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
       ['Shift|+|W', 'facing a wall: cling to it, then W and S climb, A and D go along'],
       ['Space', 'on a wall: leap off along the look'],
       ['C', 'on a wall: let go'],
-      ['Q', 'hold to charge a pounce, let go to leap: it pins whoever it lands on'],
+      [
+        'Q',
+        'hold to charge a pounce, let go to leap toward the keys held: it pins whoever it lands on',
+      ],
+      ['W|A|D|twice', 'a full pounce that way, with its cry'],
       ['Left click', 'claws, left then right'],
       ['Right click|or|G', 'tail: slow, it kills; W stab, A or D sweep, else lash'],
       ['Hold right click', 'charge the tail: further and wider'],
@@ -386,7 +390,7 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
       ['Space|C', 'climb, sink'],
       ['Shift', 'boost'],
       ['Left click', 'lasers'],
-      ['G', 'missiles'],
+      ['G|or|Right click', 'missiles'],
     ],
   ],
   [

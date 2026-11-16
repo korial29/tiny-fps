@@ -233,6 +233,22 @@ describe('the pounce', () => {
     expect(q.charge ?? 0).toBe(0);
   });
 
+  it('leaps toward the keys held as it lets go, like a dash (the double tap of A or D)', () => {
+    for (const [keys, side] of [
+      [KEY.RIGHT, 1],
+      [KEY.LEFT, -1],
+    ]) {
+      const p = at(-20, 0, { z: 50, yaw: 0 });
+      for (let k = 0; k < POUNCE_HOLD; k++) {
+        go(p, KEY.DASH, 0);
+      }
+      go(p, keys, 0);
+      expect(p.mode).toBe(MODE.AIR);
+      expect(p.vx * side).toBeCloseTo(POUNCE_MAX * Math.cos(POUNCE_PITCH), 3);
+      expect(Math.abs(p.vz)).toBeLessThan(1e-3);
+    }
+  });
+
   it('pounces off a wall too, and the marine dashes where it pounces', () => {
     const p = at(0.2, 3, { mode: MODE.AIR, ground: false });
     go(p, RUN);

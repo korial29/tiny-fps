@@ -1,5 +1,6 @@
 // The players' own voices (voice/cast.ts): the taunt a player throws at the one he just fragged (an
-// ally's over the radio, wherever he is), and the cry of one going down. Each player has a voice of
+// ally's over the radio, wherever he is, and so is the one of the enemy who fragged the own player),
+// and the cry of one going down. Each player has a voice of
 // his body's, by his id, the same on every screen, and so are the lines he picks.
 import { FRAG } from '../shared/protocol';
 import type { Audio } from './audio';
@@ -40,7 +41,7 @@ export const tauntOf = (speaker: number, how: number, n: number): number =>
 export const deathOf = (speaker: number, k: number): number =>
   speaker * LINES + pick(KIND.DEATH, k);
 
-/** An ally's line that began: who says it, and its seconds. */
+/** A line over the radio that began: who says it, and its seconds. */
 export interface Said {
   by: number;
   s: number;
@@ -58,9 +59,9 @@ export interface Taunts {
     wait?: number,
   ): void;
   /**
-   * Says the taunts due at `now` (s): the own and the one aimed at the own player centred, an
-   * ally's over the radio wherever he is, an enemy's from where `where` draws him (feet), unheard
-   * when it does not draw him. Returns the allies' lines that began.
+   * Says the taunts due at `now` (s): the own centred, an ally's and the one aimed at the own
+   * player over the radio wherever their author is, any other enemy's from where `where` draws him
+   * (feet), unheard when it does not draw him. Returns the radio's lines that began.
    */
   frame(now: number, where: (id: number) => Vec3 | undefined): Said[];
 }
@@ -76,9 +77,9 @@ export const createTaunts = (
 ): Taunts => {
   /**
    * The taunts waiting: when, who says it, the clip, and whether the own player hears it close
-   * (his own, or aimed at him) or over the radio (an ally's).
+   * (his own) or over the radio (an ally's, or aimed at him).
    */
-  const due: { t: number; by: number; clip: number; close: boolean; ally: boolean }[] = [];
+  const due: { t: number; by: number; clip: number; close: boolean; radio: boolean }[] = [];
   /** When each player last taunted. */
   const last = new Map<number, number>();
   return {
@@ -88,9 +89,10 @@ export const createTaunts = (
       }
       last.set(m.by, now);
       const clip = beast(m.by) ? -1 : tauntOf(speakerOf(m.by, body(m.by)), m.how, m.n);
-      const close = m.by == me || m.who == me;
-      const ally = !close && team(m.by) !== undefined && team(m.by) === team(me);
-      due.push({ t: now + wait, by: m.by, clip, close, ally });
+      const close = m.by == me;
+      const radio =
+        !close && (m.who == me || (team(m.by) !== undefined && team(m.by) === team(me)));
+      due.push({ t: now + wait, by: m.by, clip, close, radio });
     },
     frame(now, where) {
       const said: Said[] = [];
@@ -100,15 +102,15 @@ export const createTaunts = (
           continue;
         }
         due.splice(i, 1);
-        const p = d.close || d.ally ? undefined : where(d.by);
+        const p = d.close || d.radio ? undefined : where(d.by);
         if (d.clip < 0) {
-          // An enemy's from where it is drawn, and none when it is not.
-          if (d.close || d.ally || p) {
+          // It has no radio: centred on the one it fragged, else from where it is drawn.
+          if (d.close || d.radio || p) {
             audio.play?.(SOUND.ROAR, p, p ? 1 : 0.7, paceOf(d.by));
           }
         } else if (d.close) {
           audio.speak(d.clip, undefined, 0.75, paceOf(d.by));
-        } else if (d.ally) {
+        } else if (d.radio) {
           if (audio.speak(d.clip, undefined, 0.7, paceOf(d.by), true)) {
             said.push({ by: d.by, s: CAST[d.clip][1] / paceOf(d.by) });
           }

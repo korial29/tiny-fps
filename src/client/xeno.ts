@@ -60,6 +60,24 @@ const mix3 = (a: Vec3, b: Vec3, k: number): Vec3 => [
   a[2] + (b[2] - a[2]) * k,
 ];
 const far = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+/**
+ * A smooth curve through `pts` (Catmull-Rom), three more points between each two; `mid(i, u)` is
+ * what else a point carries, `u` of the way from point i to the next.
+ */
+const smooth = <T>(pts: Vec3[], mid: (i: number, u: number) => T): [Vec3, T][] =>
+  pts.flatMap((b, i) => {
+    const [a, c, d] = [pts[i - 1] ?? b, pts[i + 1], pts[i + 2] ?? pts[i + 1]];
+    return c
+      ? [0, 0.25, 0.5, 0.75].map((u): [Vec3, T] => {
+          const [u2, u3] = [u * u, u * u * u];
+          const w = [-u3 + 2 * u2 - u, 3 * u3 - 5 * u2 + 2, -3 * u3 + 4 * u2 + u, u3 - u2];
+          return [
+            [0, 1, 2].map(j => (a[j] * w[0] + b[j] * w[1] + c[j] * w[2] + d[j] * w[3]) / 2) as Vec3,
+            mid(i, u),
+          ];
+        })
+      : [[b, mid(i, 0)]];
+  });
 
 /**
  * Its spine, in the world, from the base of the skull down the back and on into the tail (the user,
@@ -111,23 +129,13 @@ export const column = (
     ]);
   }
   // A smooth curve through them (Catmull-Rom), then walked by its length: a vertebra every so often.
-  const dense: Bone[] = [];
-  bones.forEach((b, i) => {
-    const [a, c, d] = [bones[i - 1] ?? b, bones[i + 1], bones[i + 2] ?? bones[i + 1]];
-    if (!c) {
-      dense.push(b);
-      return;
-    }
-    for (let k = 0; k < 4; k++) {
-      const u = k / 4;
-      const [u2, u3] = [u * u, u * u * u];
-      const w = [-u3 + 2 * u2 - u, 3 * u3 - 5 * u2 + 2, -3 * u3 + 4 * u2 + u, u3 - u2];
-      const pt = [0, 1, 2].map(
-        j => (a[0][j] * w[0] + b[0][j] * w[1] + c[0][j] * w[2] + d[0][j] * w[3]) / 2,
-      );
-      dense.push([pt as Vec3, unit(mix3(b[1], c[1], u)), b[2] + (c[2] - b[2]) * u]);
-    }
-  });
+  const dense = smooth(
+    bones.map(b => b[0]),
+    (i, u): [Vec3, number] => {
+      const [b, c] = [bones[i], bones[i + 1] ?? bones[i]];
+      return [unit(mix3(b[1], c[1], u)), b[2] + (c[2] - b[2]) * u];
+    },
+  ).map(([p, [up, r]]): Bone => [p, up, r]);
   const len = [0];
   for (let i = 1; i < dense.length; i++) {
     len.push(len[i - 1] + far(dense[i][0], dense[i - 1][0]));
@@ -630,22 +638,7 @@ export const pipes = (out: Out, s: Solved, lod: number) => {
         const b = a + 0.22 * Math.sin(c * 1.4 + i * 2.1);
         return on(s.pos[j], s.rot[j], [k * r * Math.sin(b), y, z - r * Math.cos(b)]);
       });
-      const dense: Vec3[] = [];
-      pts.forEach((p, m) => {
-        const [o, c, d] = [pts[m - 1] ?? p, pts[m + 1], pts[m + 2] ?? pts[m + 1]];
-        if (!c) {
-          dense.push(p);
-          return;
-        }
-        for (let t = 0; t < 4; t++) {
-          const u = t / 4;
-          const [u2, u3] = [u * u, u * u * u];
-          const w = [-u3 + 2 * u2 - u, 3 * u3 - 5 * u2 + 2, -3 * u3 + 4 * u2 + u, u3 - u2];
-          dense.push(
-            [0, 1, 2].map(x => (o[x] * w[0] + p[x] * w[1] + c[x] * w[2] + d[x] * w[3]) / 2) as Vec3,
-          );
-        }
-      });
+      const dense = smooth(pts, () => 0).map(([p]) => p);
       strand(
         out,
         [0, 0, 0],
@@ -772,21 +765,10 @@ export const cuff = (out: Out, at: Vec3, q: Quat, lod: number, s: number) => {
   // Across it, out along `ax`: [offset, scale of the section].
   // A full disc (the user, 2026-11-16: the circle filled): a low dome closes each face.
   // Thicker and wider (the user, 2026-11-16).
-  const PROFILE = [
-    [-0.027, 0],
-    [-0.026, 0.5],
-    [-0.022, 0.88],
-    [-0.015, 1.18],
-    [-0.009, 1.32],
-    [-0.004, 1.39],
-    [0.0, 1.41],
-    [0.004, 1.39],
-    [0.009, 1.32],
-    [0.015, 1.18],
-    [0.022, 0.88],
-    [0.026, 0.5],
-    [0.027, 0],
-  ];
+  const PROFILE = Array.from({ length: 13 }, (_, i) => {
+    const a = (Math.PI * i) / 12;
+    return [-0.027 * Math.cos(a), 1.41 * Math.sin(a) ** 0.55];
+  });
 
   const R = (rx + rz) / 2;
   const rows = PROFILE.map(([h0, k0], i): Spot[] => {
@@ -894,16 +876,12 @@ const TOP = EY + EB;
 /** The bottom of the chin (the user, 2026-11-15: a short one). */
 const CHIN = EY - EB;
 const widthOf = (y: number) => EA * Math.sqrt(Math.max(0, 1 - ((y - EY) / EB) ** 2));
-/**
- * The height of the grid's row `v` (0 the top, 1 the chin), the rows packed three times closer
- * round the eyes' slits (the user, 2026-11-15: no steps round the eyes).
- */
-const rowY = (() => {
+/** [0, 1] onto itself, the steps packed where `density` (of the place, 0 to 1) is high. */
+const warp = (density: (t: number) => number) => {
   const n = 400;
   const acc = [0];
   for (let i = 1; i <= n; i++) {
-    const y = TOP - ((TOP - CHIN) * (i - 0.5)) / n;
-    acc.push(acc[i - 1] + 1 + 2.2 * Math.exp(-(((y - EYE[1]) / 0.02) ** 2)));
+    acc.push(acc[i - 1] + density((i - 0.5) / n));
   }
   return (v: number) => {
     const goal = v * acc[n];
@@ -914,33 +892,21 @@ const rowY = (() => {
       ),
       n,
     );
-    const t = (i - 1 + (goal - acc[i - 1]) / (acc[i] - acc[i - 1])) / n;
-    return TOP - (TOP - CHIN) * t;
+    return (i - 1 + (goal - acc[i - 1]) / (acc[i] - acc[i - 1])) / n;
   };
-})();
+};
+const rowW = warp(t => 1 + 2.2 * Math.exp(-(((TOP - (TOP - CHIN) * t - EYE[1]) / 0.02) ** 2)));
+const colW = warp(t => 1 + 1.6 * Math.exp(-(((Math.abs(2 * t - 1) - 0.38) / 0.26) ** 2)));
+/**
+ * The height of the grid's row `v` (0 the top, 1 the chin), the rows packed three times closer
+ * round the eyes' slits (the user, 2026-11-15: no steps round the eyes).
+ */
+const rowY = (v: number) => TOP - (TOP - CHIN) * rowW(v);
 /**
  * The grid's column `u` (-1 to 1, evenly spaced) moved so the columns pack twice as close over the
  * orbits: the slanted rim of an orbit crossed the even columns in steps along the slit.
  */
-const colU = (() => {
-  const n = 400;
-  const acc = [0];
-  for (let i = 1; i <= n; i++) {
-    const u = -1 + (2 * (i - 0.5)) / n;
-    acc.push(acc[i - 1] + 1 + 1.6 * Math.exp(-(((Math.abs(u) - 0.38) / 0.26) ** 2)));
-  }
-  return (u: number) => {
-    const goal = ((u + 1) / 2) * acc[n];
-    const i = Math.min(
-      Math.max(
-        acc.findIndex(a => a >= goal),
-        1,
-      ),
-      n,
-    );
-    return -1 + (2 * (i - 1 + (goal - acc[i - 1]) / (acc[i] - acc[i - 1]))) / n;
-  };
-})();
+const colU = (u: number) => -1 + 2 * colW((u + 1) / 2);
 /**
  * The jawbone's line on the right (the user, 2026-11-15: thin, bony, standing out low on the face,
  * its angle marked): down from under the ear to a sharp angle, then forward to the chin.

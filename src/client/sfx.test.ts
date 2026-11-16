@@ -491,7 +491,7 @@ describe('a vehicle’s damage', () => {
     expect([SOUND.HULL, SOUND.ARC, SOUND.WRECK, SOUND.CRUMBLE]).toEqual([47, 48, 49, 50]);
     expect([SOUND.DOOR, SOUND.SHUT]).toEqual([45, 46]);
     expect([SOUND.ALARM, SOUND.STRIKE]).toEqual([58, 59]);
-    expect(LAYERS).toHaveLength(69);
+    expect(LAYERS).toHaveLength(70);
     for (const id of [47, 48, 49, 50]) {
       expect(LOOPED).not.toContain(id);
     }
@@ -543,7 +543,7 @@ describe('the ship (the user, 2026-11-12)', () => {
 });
 
 describe('the xenomorph’s sounds', () => {
-  it('come after all the others, none looped: a screech for pain, a big roar for death, a light tick for a step', () => {
+  it('come after all the others, none looped: a screech for pain, a big roar for death', () => {
     expect([
       SOUND.XENO_HISS,
       SOUND.SHRIEK,
@@ -554,8 +554,9 @@ describe('the xenomorph’s sounds', () => {
       SOUND.CHITIN,
       SOUND.ACID,
       SOUND.ROAR,
-    ]).toEqual([60, 61, 62, 63, 64, 65, 66, 67, 68]);
-    for (let id = 60; id <= 68; id++) {
+      SOUND.XENO_LAND,
+    ]).toEqual([60, 61, 62, 63, 64, 65, 66, 67, 68, 69]);
+    for (let id = 60; id <= 69; id++) {
       expect(LOOPED).not.toContain(id);
     }
     // The voice's first oscillator: a screech, not a man's "ugh".
@@ -565,9 +566,42 @@ describe('the xenomorph’s sounds', () => {
     expect(LAYERS[SOUND.XENO_DEATH][0][1]).toBeLessThan(LAYERS[SOUND.DEATH][0][1] / 2);
     expect(roar.length).toBeGreaterThan(aah.length);
     expect(peak(roar)).toBeGreaterThan(peak(aah));
-    // A step: a tick far shorter and quieter than a boot's.
-    const [tick, boot] = [render(SOUND.CHITIN), render(SOUND.STEP)];
-    expect(tick.length).toBeLessThan(boot.length / 2);
-    expect(peak(tick)).toBeLessThan(peak(boot));
+  });
+
+  // The voices of a sound: clicks (a square or noise of 10 ms at most), thumps (a falling sine
+  // under 100 Hz) and wet rubs (a dull noise wobbling for 50 ms or more).
+  const parts = (id: number) => {
+    const v = LAYERS[id];
+    const len = ([, , , a, s, d]: (typeof v)[number]) => a + s + d;
+    return {
+      clicks: v.filter(x => (x[0] == 0 || x[0] == 3) && len(x) <= 0.01),
+      thumps: v.filter(x => x[0] == 2 && x[1] < 100 && x[2] < 0),
+      rubs: v.filter(x => x[0] == 3 && x[7] <= 0.3 && x[6] > 0 && len(x) >= 0.05),
+    };
+  };
+
+  it('step with dry chitin clicks, wet organic friction and a heavy impact on the stone', () => {
+    const { clicks, thumps, rubs } = parts(SOUND.CHITIN);
+    // The claws come down one after another, not as one click.
+    expect(new Set(clicks.map(x => x[11] ?? 0)).size).toBeGreaterThanOrEqual(3);
+    // The weight: deeper than a boot's thump.
+    expect(thumps).toHaveLength(1);
+    expect(thumps[0][1]).toBeLessThan(LAYERS[SOUND.STEP][0][1]);
+    // The wet pad slides after the foot is down.
+    expect(rubs).toHaveLength(1);
+    expect(rubs[0][11]).toBeGreaterThan(thumps[0][11] ?? 0);
+    const [paw, boot] = [render(SOUND.CHITIN), render(SOUND.STEP)];
+    expect(paw.length).toBeGreaterThan(boot.length);
+    expect(peak(paw)).toBeLessThan(1);
+  });
+
+  it('land heavier than they step: deeper, longer and louder, clattering and slapping wet', () => {
+    const [step, fall] = [parts(SOUND.CHITIN), parts(SOUND.XENO_LAND)];
+    expect(fall.thumps[0][1]).toBeLessThan(step.thumps[0][1]);
+    expect(fall.clicks.length).toBeGreaterThanOrEqual(3);
+    expect(fall.rubs).toHaveLength(1);
+    const [paw, land] = [render(SOUND.CHITIN), render(SOUND.XENO_LAND)];
+    expect(land.length).toBeGreaterThan(paw.length);
+    expect(rms(land)).toBeGreaterThan(rms(paw));
   });
 });

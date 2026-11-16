@@ -1,4 +1,14 @@
-import { BOLT, HP_MAX, LOCK_WIN, PLAYER_H, PLAYER_R, TICK_HZ, VEHICLE } from '../shared/constants';
+import {
+  BOLT,
+  HP_MAX,
+  INTERP_DELAY,
+  NADE,
+  LOCK_WIN,
+  PLAYER_H,
+  PLAYER_R,
+  TICK_HZ,
+  VEHICLE,
+} from '../shared/constants';
 import { mapKey, mapOf } from '../shared/maps';
 import { bruise, eyeHeight, heightOf } from '../shared/physics';
 import { cylinder } from '../shared/plasma';
@@ -310,8 +320,8 @@ const play = (
   let you = { id: -1, team: 0 };
   /** The latest snapshot, for the flags and the match; the one before it tells what just happened. */
   let match: Snapshot | undefined;
-  /** The rovers' laser bolts of the last snapshot, by shooter and id. */
-  let bolts = new Set<number>();
+  /** The balls of the last snapshot, by shooter and id. */
+  let seen = new Set<number>();
   /** The result of the match that has just ended, while its end screen shows. */
   let ended: Summary | undefined;
   let colors = new Map<number, string>();
@@ -352,18 +362,30 @@ const play = (
       if (s) {
         predictor.snapshot(s, performance.now());
         // A vehicle's laser bolt, new in this snapshot: its blaster is heard where it is, each a
-        // little off the pitch of the last so that a salvo does not drone.
+        // little off the pitch of the last so that a salvo does not drone. A new ball of a player
+        // with the katana in hand, who fires none, is one his blade sent back: it rings.
         const flying = new Set<number>();
         for (const b of s.balls ?? []) {
-          if (b.power === BOLT) {
-            const key = (b.by << 8) | b.id;
-            flying.add(key);
-            if (!bolts.has(key) && !b.burst) {
-              audio.play(SOUND.BLASTER, [b.x, b.y, b.z], 0.6, 0.92 + 0.16 * ((b.id * 0.618) % 1));
+          const key = (b.by << 8) | b.id;
+          flying.add(key);
+          if (seen.has(key) || b.burst) {
+            continue;
+          }
+          const p = s.players.find(q => q.id === b.by);
+          const at: [number, number, number] | undefined =
+            b.by === you.id ? undefined : [b.x, b.y, b.z];
+          if (p?.wield && p.mode !== MODE.RIDE && !b.arc && b.power !== NADE) {
+            audio.play(SOUND.SHING, at, 0.8, 1.6);
+            audio.play(SOUND.ZAP, at, 0.4, 1.3);
+            rd?.parried(b.by, at ? INTERP_DELAY / 1000 : 0);
+            if (!at) {
+              body.parried();
             }
+          } else if (b.power === BOLT) {
+            audio.play(SOUND.BLASTER, [b.x, b.y, b.z], 0.6, 0.92 + 0.16 * ((b.id * 0.618) % 1));
           }
         }
-        bolts = flying;
+        seen = flying;
         balls.snapshot(s.balls ?? [], you.id, performance.now());
         // An enemy's ball, round or bolt that burst on the own body reddens the view at once, even
         // when the host keeps its point for the next hit.

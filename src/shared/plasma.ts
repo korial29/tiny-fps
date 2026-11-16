@@ -42,6 +42,8 @@ export const PLASMA_LAG = 12;
 export interface Flying extends Ball {
   team: number;
   left: number;
+  /** A ninja's katana sent it back: it hurts as the shot that came, not as his guns. */
+  back?: boolean;
 }
 
 /** How far shot `n` of the laser rifle drifts off the look, yaw and pitch: a pattern within RIFLE_DRIFT, the same for the host and every client. */

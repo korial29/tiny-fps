@@ -11,6 +11,7 @@ import {
   RAIL_MAX,
   NADE_MAX,
   ORBIT,
+  PARRY,
   RIFLE_CLIP,
   RULES,
   TEAM_COLOR,
@@ -278,7 +279,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Ninja',
-    'Runs 20 % faster, jumps much higher, wall-runs twice as long, chains 3 dashes; katana and fists twice as fast.',
+    `Runs 20 % faster, jumps much higher, wall-runs twice as long, chains 3 dashes; katana and fists twice as fast; the katana in hand, when he is not striking, parries ${Math.round(PARRY * 100)} % of the shots from in front, even on the run, and sends them back where he aims.`,
     'Guns: half the ammo, magazine, rate of fire and damage, and slowed hard while one is in hand.',
     'City maps',
   ],

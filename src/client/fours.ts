@@ -161,19 +161,15 @@ export const createFours = (): Fours => {
     };
 
     // The surface: a floor under it, or the wall it clings to, the body heading up it, along it
-    // or down it as it goes.
+    // or down it as the look heads on it (the user, 2026-11-16: the wall is its floor, physics.ts).
     let [St, to]: [Quat, Vec3] = [S, off];
     if (cling) {
       const [nx, nz] = TOWARD[p.wall];
       const N: Vec3 = [-nx, 0, -nz];
       const side: Vec3 = [-nz, 0, nx];
-      const [vu, vs] = [p.vy, p.vx * side[0] + p.vz * side[2]];
-      if (vu * vu + vs * vs > 0.25) {
-        const way = Math.atan2(vs, vu);
-        climb = reset ? way : climb + arc(climb, way) * (1 - Math.exp(-8 * dt));
-      } else if (reset) {
-        climb = 0;
-      }
+      const [fx, fz] = [-Math.sin(p.yaw), -Math.cos(p.yaw)];
+      const way = Math.atan2(fx * side[0] + fz * side[2], fx * nx + fz * nz);
+      climb = reset ? way : climb + arc(climb, way) * (1 - Math.exp(-8 * dt));
       const F = of(Y, Math.cos(climb), side, Math.sin(climb));
       St = frame(cross(F, N), neg(N));
       to = [nx * PLAYER_R, MID, nz * PLAYER_R];

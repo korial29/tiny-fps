@@ -159,12 +159,30 @@ describe('on all fours', () => {
     expect(near).toBe(1);
   });
 
-  it('heads down the wall as it goes down it', () => {
-    run({ mode: MODE.CLING, wall: SIDE.NORTH, vy: -4.5 }, 1.5, (s, p) => {
+  it('heads on the wall where the look heads: down it looking away, along it looking along (the user, 2026-11-16)', () => {
+    run({ mode: MODE.CLING, wall: SIDE.NORTH, vy: -4.5, yaw: Math.PI }, 1.5, (s, p) => {
       if (p.y > -3) {
         return;
       }
       expect(s.pos[J.HEAD][1]).toBeLessThan(s.pos[J.PELVIS][1] - 0.3);
+    });
+    // Looking west along it, still or going the other way: its head to the west, level.
+    for (const vx of [0, 4.5]) {
+      let n = 0;
+      run({ mode: MODE.CLING, wall: SIDE.NORTH, vx, yaw: Math.PI / 2 }, 1.5, s => {
+        if (++n < 60) {
+          return;
+        }
+        const back = sub(s.pos[J.NECK], s.pos[J.PELVIS]);
+        expect(back[0] / len(back)).toBeLessThan(-0.85);
+      });
+    }
+    // Going down it while looking at it: head up, the look's way.
+    let n = 0;
+    run({ mode: MODE.CLING, wall: SIDE.NORTH, vy: -4.5 }, 1.5, s => {
+      if (++n > 30) {
+        expect(s.pos[J.HEAD][1]).toBeGreaterThan(s.pos[J.PELVIS][1] + 0.3);
+      }
     });
   });
 

@@ -346,7 +346,7 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
   [
     'Xenomorph',
     [
-      ['Shift|+|W', 'facing a wall: cling to it, then W and S climb, A and D go along'],
+      ['Shift|+|W', 'facing a wall: cling to it, then W goes where you look on it, A and D across'],
       ['Space', 'on a wall: leap off along the look'],
       ['C', 'on a wall: let go'],
       [

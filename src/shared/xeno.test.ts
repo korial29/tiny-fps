@@ -196,6 +196,42 @@ describe('the xenomorph on a wall', () => {
     expect(q.mode).toBe(MODE.AIR);
   });
 
+  it('takes its wall for a floor: W goes where the look heads on it, A and D across (the user, 2026-11-16)', () => {
+    // On the wall east of it, +z is along it to the right; yaw π looks toward +z.
+    const on = () => {
+      const p = at(0.2, 3, { mode: MODE.AIR, ground: false });
+      go(p, RUN);
+      expect(p.mode).toBe(MODE.CLING);
+      return p;
+    };
+    const SOUTH = Math.PI;
+    let p = on();
+    let [y, z] = [p.y, p.z];
+    go(p, KEY.FORWARD, SOUTH);
+    expect(p.z - z).toBeCloseTo(CLING_SPEED / 60, 4);
+    expect(p.y).toBeCloseTo(y, 5);
+    // Looking that way, the right is down the wall and the left up it.
+    [y, z] = [p.y, p.z];
+    go(p, KEY.RIGHT, SOUTH);
+    expect(p.y - y).toBeCloseTo(-CLING_SPEED / 60, 4);
+    expect(p.z).toBeCloseTo(z, 5);
+    go(p, KEY.LEFT, SOUTH);
+    expect(p.y).toBeCloseTo(y, 4);
+    // Half way between the wall and along it: up and along at once, no faster than straight up.
+    p = on();
+    [y, z] = [p.y, p.z];
+    go(p, KEY.FORWARD, (EAST + 2 * Math.PI + SOUTH) / 2 - Math.PI);
+    const [dy, dz] = [p.y - y, p.z - z];
+    expect(dy).toBeGreaterThan(0.05);
+    expect(dz).toBeGreaterThan(0.05);
+    expect(Math.sqrt(dy * dy + dz * dz)).toBeCloseTo(CLING_SPEED / 60, 4);
+    // Two keys at once go no faster than one.
+    p = on();
+    [y, z] = [p.y, p.z];
+    go(p, KEY.FORWARD | KEY.RIGHT);
+    expect(Math.sqrt((p.y - y) ** 2 + (p.z - z) ** 2)).toBeCloseTo(CLING_SPEED / 60, 4);
+  });
+
   it('walks down off the wall onto the floor', () => {
     const p = at(0.2, 0.5, { mode: MODE.AIR, ground: false });
     go(p, RUN);

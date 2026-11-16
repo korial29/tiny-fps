@@ -947,9 +947,11 @@ const clingTo = (p: PlayerState, w: World, c: Ctl): boolean => {
 };
 
 /**
- * On a wall: forward climbs and back goes down, the side keys go along it (as the look sees it);
- * crouch lets go; a jump kicks off it, straight back when looking at it, else along the look. At a
- * top under the head, climbing pulls it up onto the top (MODE.CLIMB); down on a floor, it stands.
+ * On a wall, the wall is its floor (the user, 2026-11-16, to roam it freely): the look's heading
+ * turned onto it is forward, so W climbs looking at the wall, goes along it looking along it and
+ * down it looking away, S the other way, A and D across. Crouch lets go; a jump kicks off it,
+ * straight back when looking at it, else along the look. At a top under the head, climbing pulls
+ * it up onto the top (MODE.CLIMB); down on a floor, it stands.
  */
 const cling = (p: PlayerState, w: World, c: Ctl): void => {
   const [nx, nz] = TOWARD[p.wall];
@@ -973,11 +975,18 @@ const cling = (p: PlayerState, w: World, c: Ctl): void => {
     }
     return;
   }
-  const up = (c.keys & KEY.FORWARD ? 1 : 0) - (c.keys & KEY.BACK ? 1 : 0);
+  const fw = (c.keys & KEY.FORWARD ? 1 : 0) - (c.keys & KEY.BACK ? 1 : 0);
   const s = (c.keys & KEY.RIGHT ? 1 : 0) - (c.keys & KEY.LEFT ? 1 : 0);
-  // Along the wall to the right of one facing it, turned when the look is turned away from it.
+  // Along the wall to the right of one facing it; the look's heading on the wall is up by its
+  // share toward the wall and along by its share along it, the side keys square to that.
   const [tx, tz] = [-nz, nx];
-  const k = (tx * -c.fz + tz * c.fx >= 0 ? s : -s) * CLING_SPEED;
+  const [hu, ha] = [c.fx * nx + c.fz * nz, c.fx * tx + c.fz * tz];
+  const [wu, wa] = [fw * hu - s * ha, fw * ha + s * hu];
+  // Two keys go no faster than one.
+  const n = Math.sqrt(wu * wu + wa * wa);
+  const v = n > 1 ? CLING_SPEED / n : CLING_SPEED;
+  const up = wu > 0.05 ? 1 : wu < -0.05 ? -1 : 0;
+  const k = wa * v;
   const { a, sign } = along(p, p.wall);
   if (up > 0 && hold.top < p.y + PLAYER_H) {
     // The top is under the head: up onto it, when there is room to stand there.
@@ -992,7 +1001,7 @@ const cling = (p: PlayerState, w: World, c: Ctl): void => {
   }
   p.vx = tx * k;
   p.vz = tz * k;
-  p.vy = up > 0 && hold.top - p.y <= CLING_HOLD + 0.05 ? 0 : up * CLING_SPEED;
+  p.vy = up > 0 && hold.top - p.y <= CLING_HOLD + 0.05 ? 0 : wu * v;
   const pull = Math.min(hold.gap, WALL_PULL * DT);
   p.x += nx * pull;
   p.z += nz * pull;

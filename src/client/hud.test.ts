@@ -349,6 +349,22 @@ describe('createHud', () => {
     expect(v()).toBe('');
   });
 
+  it('whites the view out from above by the strike’s light, over the down screen', () => {
+    const g = () => q('sup');
+    expect(g().style.opacity).toBe('');
+    hud.glare(0.25);
+    expect(g().style.opacity).toBe('0.5');
+    expect(g().style.getPropertyValue('--w')).toBe('25.0%');
+    hud.glare(1);
+    expect(g().style.opacity).toBe('1');
+    expect(g().style.getPropertyValue('--w')).toBe('100.0%');
+    hud.glare(0.005);
+    expect(g().style.opacity).toBe('');
+    // Above the DOWN screen, which it gives way to as it clears.
+    expect(HUD_CSS).toMatch(/sup\{inset:0;z-index:1;/);
+    expect(g().previousElementSibling!.tagName).toBe('MARK');
+  });
+
   it('draws the outline of the helmet’s own visor round a clear view, the face in its notch', () => {
     const el = () => q('del');
     expect(el().hidden).toBe(true);

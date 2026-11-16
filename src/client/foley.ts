@@ -82,8 +82,18 @@ export const createFoley = (
   /** The footfall n of p: harder at a sprint, softer crouched, the two feet a little apart in pitch. */
   const tap = (p: PlayerState, n: number, at?: Vec3) => {
     const run = sprinting(p);
+    // The xenomorph's claws tick, softly: it moves stealthily.
+    if (beast(p.id)) {
+      a.play(
+        SOUND.CHITIN,
+        at,
+        run ? 0.45 : p.mode === MODE.CROUCH ? 0.15 : 0.28,
+        n & 1 ? 1.1 : 0.9,
+      );
+      return;
+    }
     a.play(
-      beast(p.id) ? SOUND.CHITIN : p.mode === MODE.WALLRUN ? SOUND.WALLSTEP : SOUND.STEP,
+      p.mode === MODE.WALLRUN ? SOUND.WALLSTEP : SOUND.STEP,
       at,
       run || p.mode === MODE.WALLRUN ? 1 : p.mode === MODE.CROUCH ? 0.35 : 0.6,
       (run ? 0.92 : 1) * (n & 1 ? 1.06 : 0.94),

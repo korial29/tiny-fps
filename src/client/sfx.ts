@@ -167,8 +167,8 @@ export const SOUND = {
   /**
    * The xenomorph's own (the user, 2026-11-16: not a runner's): a hiss with a growl under it as it
    * charges a pounce, a shriek as it leaps, its claws' swipe and the whip of its tail, a screech of
-   * pain and a long dying shriek, the clicks of its chitin feet, the sizzle of its acid blood, and
-   * a roar after a kill.
+   * pain and a big roar going down, the light tick of its claws at each step, the sizzle of its acid
+   * blood, and a roar after a kill.
    */
   XENO_HISS: 60,
   SHRIEK: 61,
@@ -594,18 +594,21 @@ export const LAYERS: Voice[][] = [
     [0, 1050, -1, 0.005, 0.04, 0.16, 0.1, 0.2, 0, 1, 0.12],
     [3, 5000, 0, 0.005, 0.05, 0.15, 0.4, 0.3, 0, 1, 0.35],
   ],
-  // XENO_DEATH: a long shriek falling and breaking up, over a rattle in the throat.
+  // XENO_DEATH (the user, 2026-11-16: a big roar): a deep growl swelling over a sub's rumble, a
+  // rasp of breath all through it, and a screech torn out of it and falling away.
   [
-    [1, 1000, -1.2, 0.01, 0.25, 0.6, 0.12, 0.3, 0, 1, 0.4],
-    [1, 1500, -1.2, 0.01, 0.2, 0.55, 0.14, 0.2, 0, 1, 0.15],
-    [3, 4500, -0.6, 0.02, 0.3, 0.5, 0.5, 0.3, 0, 1, 0.35],
-    [1, 80, 0, 0.02, 0.3, 0.5, 0.2, 0.1, 0, 1, 0.25],
+    [1, 90, 0.5, 0.06, 0.42, 0.45, 0.15, 0.12, 0, 1, 0.4],
+    [1, 270, 0.5, 0.06, 0.42, 0.45, 0.15, 0.2, 0, 1, 0.2],
+    [2, 50, 0.3, 0.03, 0.4, 0.5, 0, 1, 0, 1, 0.35],
+    [3, 2200, 0, 0.08, 0.42, 0.42, 0.5, 0.25, 0, 1, 0.35],
+    [1, 640, -0.9, 0.05, 0.22, 0.35, 0.1, 0.3, 0, 1, 0.25, 0.28],
   ],
-  // CHITIN: a foot's claws on the floor, two hard clicks and a tick of hollow shell.
+  // CHITIN (the user, 2026-11-16: light and stealthy, a claw's tick): a claw's tip ticking on the
+  // floor, bright and short, over the faintest pad of the foot.
   [
-    [3, 12000, 0, 0.001, 0, 0.015, 0, 0.9, 0, 1, 0.45],
-    [3, 8000, 0, 0.001, 0, 0.012, 0, 0.9, 0, 1, 0.3, 0.03],
-    [2, 2400, -3, 0.001, 0, 0.02, 0, 1, 0, 1, 0.1],
+    [0, 3800, 0, 0.001, 0, 0.006, 0, 0.5, 0, 1, 0.22],
+    [2, 6000, -2, 0.001, 0, 0.01, 0, 1, 0, 1, 0.2],
+    [3, 2000, 0, 0.002, 0, 0.03, 0, 0.1, 0, 1, 0.12],
   ],
   // ACID: a fizz crackling bright and wavering, over a dull sizzle that dies away.
   [

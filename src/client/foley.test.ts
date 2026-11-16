@@ -633,4 +633,15 @@ describe('the xenomorph', () => {
     expect(ids()).not.toContain(SOUND.STEP);
     expect(ids()).not.toContain(SOUND.DASH);
   });
+
+  it('ticks its steps softer than a runner’s, stealthily', () => {
+    const gain = (beastly: boolean) => {
+      const { audio, played } = fake();
+      const f = createFoley(audio, () => beastly);
+      f.me(player(), { ev: 0, fall: 0 }, 0);
+      f.me(player(), { ev: 0, fall: 0 }, 1);
+      return played[0].gain;
+    };
+    expect(gain(true)!).toBeLessThan(gain(false)! / 2);
+  });
 });

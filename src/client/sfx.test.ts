@@ -543,7 +543,7 @@ describe('the ship (the user, 2026-11-12)', () => {
 });
 
 describe('the xenomorph’s sounds', () => {
-  it('come after all the others, none looped, its pain and death higher than a runner’s', () => {
+  it('come after all the others, none looped: a screech for pain, a big roar for death, a light tick for a step', () => {
     expect([
       SOUND.XENO_HISS,
       SOUND.SHRIEK,
@@ -558,8 +558,16 @@ describe('the xenomorph’s sounds', () => {
     for (let id = 60; id <= 68; id++) {
       expect(LOOPED).not.toContain(id);
     }
-    // The voice's first oscillator: a screech, not a man's "ugh" or "aah".
+    // The voice's first oscillator: a screech, not a man's "ugh".
     expect(LAYERS[SOUND.XENO_PAIN][0][1]).toBeGreaterThan(2 * LAYERS[SOUND.PAIN][0][1]);
-    expect(LAYERS[SOUND.XENO_DEATH][0][1]).toBeGreaterThan(2 * LAYERS[SOUND.DEATH][0][1]);
+    // Its death a roar: deeper, longer and louder than a man's "aah".
+    const [roar, aah] = [render(SOUND.XENO_DEATH), render(SOUND.DEATH)];
+    expect(LAYERS[SOUND.XENO_DEATH][0][1]).toBeLessThan(LAYERS[SOUND.DEATH][0][1] / 2);
+    expect(roar.length).toBeGreaterThan(aah.length);
+    expect(peak(roar)).toBeGreaterThan(peak(aah));
+    // A step: a tick far shorter and quieter than a boot's.
+    const [tick, boot] = [render(SOUND.CHITIN), render(SOUND.STEP)];
+    expect(tick.length).toBeLessThan(boot.length / 2);
+    expect(peak(tick)).toBeLessThan(peak(boot));
   });
 });

@@ -5,7 +5,7 @@
 import { FRAG } from '../shared/protocol';
 import type { Audio } from './audio';
 import type { Vec3 } from './mesh';
-import { SOUND } from './sfx';
+import { SOUND, secondsOf } from './sfx';
 import { CAST, KIND, LINES, VOICES } from './voice/cast';
 
 /** Seconds from a frag to its taunt: the victim's cry first. */
@@ -61,7 +61,8 @@ export interface Taunts {
   /**
    * Says the taunts due at `now` (s): the own centred, an ally's and the one aimed at the own
    * player over the radio wherever their author is, any other enemy's from where `where` draws him
-   * (feet), unheard when it does not draw him. Returns the radio's lines that began.
+   * (feet), unheard when it does not draw him; a xenomorph roars in their place. Returns the
+   * radio's lines that began.
    */
   frame(now: number, where: (id: number) => Vec3 | undefined): Said[];
 }
@@ -72,7 +73,7 @@ export const createTaunts = (
   body: (id: number) => number | undefined,
   /** A player's team from the roster. */
   team: (id: number) => number | undefined = () => undefined,
-  /** Whether a player is a xenomorph: it roars (ROAR), with no words and no radio. */
+  /** Whether a player is a xenomorph: it roars (ROAR), with no words, over the radio all the same. */
   beast: (id: number) => boolean = () => false,
 ): Taunts => {
   /**
@@ -104,8 +105,10 @@ export const createTaunts = (
         due.splice(i, 1);
         const p = d.close || d.radio ? undefined : where(d.by);
         if (d.clip < 0) {
-          // It has no radio: centred on the one it fragged, else from where it is drawn.
-          if (d.close || d.radio || p) {
+          if (d.radio && audio.play) {
+            audio.play(SOUND.ROAR, undefined, 0.7, paceOf(d.by), true);
+            said.push({ by: d.by, s: secondsOf(SOUND.ROAR) / paceOf(d.by) });
+          } else if (d.close || p) {
             audio.play?.(SOUND.ROAR, p, p ? 1 : 0.7, paceOf(d.by));
           }
         } else if (d.close) {

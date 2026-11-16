@@ -712,10 +712,13 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
     });
     // The xenomorph has no body, skin or haircut to pick (the user, 2026-11-16): one creature.
     const beastly = picked.role == ROLE.XENO;
-    const hooded = picked.role == ROLE.NINJA || beastly;
-    groups[0].hidden = beastly;
-    groups[1].hidden = (groups[1].previousElementSibling as HTMLElement).hidden = beastly;
-    groups[2].hidden = (groups[2].previousElementSibling as HTMLElement).hidden = hooded;
+    [beastly, beastly, beastly || picked.role == ROLE.NINJA].forEach((h, g) => {
+      groups[g].hidden = h;
+      // The labels over the skin and the haircut go with them.
+      if (g) {
+        (groups[g].previousElementSibling as HTMLElement).hidden = h;
+      }
+    });
   };
   const choose = (g: number, i: number) => {
     const b = radios(g)[i];

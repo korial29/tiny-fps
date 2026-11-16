@@ -797,10 +797,10 @@ const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose =>
 const menace = (pose: Pose): Pose => {
   const X: Vec3 = [1, 0, 0];
   const rot = pose.rot.slice();
-  rot[J.SPINE] = mul(rot[J.SPINE], axis(X, -0.12));
-  rot[J.CHEST] = mul(rot[J.CHEST], axis(X, -0.1));
-  rot[J.NECK] = mul(rot[J.NECK], axis(X, 0.18));
-  rot[J.HEAD] = mul(rot[J.HEAD], axis(X, 0.08));
+  // The spine, the chest, the neck and the head, joints in a row.
+  [-0.12, -0.1, 0.18, 0.08].forEach(
+    (v, i) => (rot[J.SPINE + i] = mul(rot[J.SPINE + i], axis(X, v))),
+  );
   // About x alone, in the parent's frame: the two arms' frames are mirrored, so a turn about
   // another axis sent one out and the other in.
   for (const a of [J.ARM_L, J.ARM_R]) {

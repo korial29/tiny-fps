@@ -49,8 +49,9 @@ import { PLATE, VERT as VERT_TEXELS } from './flesh';
 import { OWN, SCRATCHED, prepare } from './armor';
 import { Verts } from './verts';
 import { STYLES, closeMesh } from './hair';
-import { data, filled, stored, used } from './store';
+import { ID, ORIGIN, data, filled, mesh, stored, used } from './store';
 import type { Pieces } from './store';
+import { partsOf } from './xeno';
 import type { Out } from './verts';
 import type { Runner } from './soldier';
 import { skyline, trees } from './skyline';
@@ -777,8 +778,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   for (let s = 0; s < STYLES; s++) {
     closeMesh(s);
   }
-  // The xenomorph's skins too, but no armour recipe: it wears none.
-  [0, 1, 3].forEach(lod => beast(lod));
+  // The xenomorph's skins too (the own body's as well), but no armour recipe: it wears none. And
+  // its rigid pieces: its close skull alone took a frame of 70 ms.
+  [0, 1, 2, 3].forEach(lod => beast(lod));
+  [0, 1, 3].forEach(lod =>
+    partsOf(lod).forEach(({ key, make }) => mesh(key, o => make(o, ORIGIN, ID))),
+  );
   /** Each rover's wheels: the angle they have rolled to, and where the rover was last frame. */
   const spins: number[] = [];
   const was: [number, number][] = [];
@@ -853,9 +858,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   let [sent, roomy] = [0, 0];
   /** The texture of the store's data (store.ts, unit 4), its rows, and the floats of `data` it holds. */
   let [flesh, rows, read] = [{} as WebGLTexture, 0, 0];
-  /** The frame's pieces, drawn after the frame's own vertices in every pass. */
-  const place = () => {
-    for (const { m, q, t, k, f, w, h } of pieces) {
+  /** The frame's pieces, drawn after the frame's own vertices in every pass; in a `depth` pass, not the thin ones. */
+  const place = (depth = false) => {
+    for (const { m, q, t, k, f, w, h, s } of pieces) {
+      if (depth && s) {
+        continue;
+      }
       gl.uniform1f(u.Ak, +!!w);
       if (f) {
         // Posed by the shader from its texels: no vertex array.
@@ -1281,7 +1289,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.uniformMatrix4fv(u.m, false, i ? pk.m.subarray(i * 16 - 16, i * 16) : sunM);
         gl.clear(gl.DEPTH_BUFFER_BIT);
         gl.drawArrays(gl.TRIANGLES, 0, first + beamAt / STRIDE);
-        place();
+        place(true);
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, shadows);

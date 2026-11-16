@@ -7,10 +7,11 @@ import { cross, face, sheet } from './helmet';
 import type { Spot } from './helmet';
 import { unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, turn } from './rig';
+import { JOINT as J, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
-import { bindOf, domeAt } from './skin';
-import type { Out } from './verts';
+import { REGION, bindOf, domeAt } from './skin';
+import { room } from './verts';
+import type { Floats, Out } from './verts';
 
 /**
  * Its chitin: a near black with a cold sheen, one colour from the skull to the tail: a lighter head
@@ -79,23 +80,17 @@ const smooth = <T>(pts: Vec3[], mid: (i: number, u: number) => T): [Vec3, T][] =
       : [[b, mid(i, 0)]];
   });
 
+/** The joints the back's points hang on, from the base of the skull to the coccyx (bonesOf()). */
+const BACK = [J.HEAD, J.NECK, J.CHEST, J.CHEST, J.SPINE, J.PELVIS, J.PELVIS];
+
 /**
- * Its spine, in the world, from the base of the skull down the back and on into the tail (the user,
- * 2026-11-15: vertebrae linked to one another, from the tail up the back to the head): one chain of
- * vertebrae, each a bead pinched at its joints with a spine standing out of it, on the back half
- * sunk in the skin, the tail free. The tail bends from down and back up to its tip, sways with the
- * clock `t` and more with the speed `run` (0 to 1); `sting` (0 to 1) arches it up over the back and
- * forward past the head. The stinger glows in the team's `color`. `lod` 0 far, 1 near, 2 close.
+ * Its spine's points in the world, from the solved skeleton `s` (the user, 2026-11-15: vertebrae
+ * linked to one another, from the tail up the back to the head): the back's seven (BACK), from the
+ * base of the skull down to the coccyx low over the rear, then the tail's twelve. The tail bends
+ * from down and back up to its tip, sways with the clock `t` (none with `sway` 0) and more with the
+ * speed `run` (0 to 1); `sting` (0 to 1) arches it up over the back and forward past the head.
  */
-export const column = (
-  out: Out,
-  s: Solved,
-  t: number,
-  run: number,
-  sting: number,
-  color: number[],
-  lod: number,
-) => {
+const bonesOf = (s: Solved, t: number, run: number, sting: number, sway = 1): Bone[] => {
   const [P, q] = [s.pos[J.PELVIS], s.rot[J.PELVIS]];
   const back = (j: number, v: Vec3, r: number): Bone => [
     on(s.pos[j], s.rot[j], v),
@@ -119,8 +114,9 @@ export const column = (
     const u = k / steps;
     const lift = -0.55 + 1.15 * u + 0.25 * run;
     const a = lift + (u * Math.PI * 1.08 - lift) * sting;
-    const sway = (1 - sting) * (0.35 + 0.4 * run) * u * Math.sin(t * (1.6 + 2.4 * run) - u * 3.5);
-    const way: Vec3 = [Math.sin(sway), Math.sin(a), Math.cos(a) * Math.cos(sway)];
+    const swing =
+      sway * (1 - sting) * (0.35 + 0.4 * run) * u * Math.sin(t * (1.6 + 2.4 * run) - u * 3.5);
+    const way: Vec3 = [Math.sin(swing), Math.sin(a), Math.cos(a) * Math.cos(swing)];
     p = [0, 1, 2].map(i => p[i] + (way[i] * TAIL.len) / steps) as Vec3;
     bones.push([
       on(P, q, p),
@@ -128,72 +124,392 @@ export const column = (
       TAIL.tip + (TAIL.root - TAIL.tip) * (1 - u) ** 1.3,
     ]);
   }
-  // A smooth curve through them (Catmull-Rom), then walked by its length: a vertebra every so often.
+  return bones;
+};
+
+/** A smooth curve through bones (smooth()), from its `skip`th point, and its length up to each. */
+interface Curve {
+  dense: Bone[];
+  len: number[];
+  total: number;
+}
+const curveOf = (bones: Bone[], skip = 0): Curve => {
   const dense = smooth(
     bones.map(b => b[0]),
     (i, u): [Vec3, number] => {
       const [b, c] = [bones[i], bones[i + 1] ?? bones[i]];
       return [unit(mix3(b[1], c[1], u)), b[2] + (c[2] - b[2]) * u];
     },
-  ).map(([p, [up, r]]): Bone => [p, up, r]);
+  )
+    .slice(skip)
+    .map(([p, [up, r]]): Bone => [p, up, r]);
   const len = [0];
   for (let i = 1; i < dense.length; i++) {
     len.push(len[i - 1] + far(dense[i][0], dense[i - 1][0]));
   }
-  const total = len[len.length - 1];
-  /** The column `l` metres down it from the skull, and its way there. */
-  const at = (l: number): [Bone, Vec3] => {
-    const i = Math.min(
-      Math.max(
-        1,
-        len.findIndex(v => v >= l),
-      ),
-      dense.length - 1,
+  return { dense, len, total: len[len.length - 1] };
+};
+
+/** The curve `c` `l` metres along it, its way there, and where that is between its points (2.5: halfway from the third to the fourth). */
+const along = ({ dense, len }: Curve, l: number): [Bone, Vec3, number] => {
+  const i = Math.min(
+    Math.max(
+      1,
+      len.findIndex(v => v >= l),
+    ),
+    dense.length - 1,
+  );
+  const [a, b] = [dense[i - 1], dense[i]];
+  const k = Math.min(Math.max((l - len[i - 1]) / Math.max(len[i] - len[i - 1], 1e-6), 0), 1);
+  return [
+    [mix3(a[0], b[0], k), unit(mix3(a[1], b[1], k)), a[2] + (b[2] - a[2]) * k],
+    unit([0, 1, 2].map(j => b[0][j] - a[0][j]) as Vec3),
+    i - 1 + k,
+  ];
+};
+
+/** Vertebrae down the whole column, far and nearer, and the rings of a bead pinched at its joints: close, rounder. */
+const VERTEBRAE = [14, 34, 34, 34];
+const BEAD = [
+  [0.8, 1],
+  [0.7, 0.94, 1, 0.94],
+  [0.7, 0.94, 1, 0.94],
+  [0.7, 0.86, 0.98, 1, 0.98, 0.86],
+];
+
+/**
+ * Geometry baked into the beast's skin (shape() in skin.ts), posed with it by flesh() at no cost a
+ * frame: places and normals at rest, six numbers a vertex, its two joints and its weight on the
+ * second, three vertex indices a triangle and the palette region of each corner.
+ */
+export interface Baked {
+  v: number[];
+  j: number[];
+  w: number[];
+  t: number[];
+  c: number[];
+}
+
+/** Rows of spots, each on two joints, sewn into triangles as sheet() sews them. */
+class Bake implements Baked {
+  v: number[] = [];
+  j: number[] = [];
+  w: number[] = [];
+  t: number[] = [];
+  c: number[] = [];
+
+  /** The spots of a row, hanging on joints `a` and `b`, `u` of the way to `b`: their indices. */
+  row(spots: Spot[], a: number, b: number, u: number) {
+    return spots.map(([p, m]) => {
+      this.v.push(p[0], p[1], p[2], m[0], m[1], m[2]);
+      this.j.push(a, b);
+      this.w.push(u);
+      return this.w.length - 1;
+    });
+  }
+
+  /** A triangle as face() makes it: none of no area, wound as its first corner's normal faces. */
+  tri(p: number, q: number, r: number, region: number) {
+    const V = this.v;
+    const [a, b, d] = [p * 6, q * 6, r * 6];
+    const c = cross(
+      [V[b] - V[a], V[b + 1] - V[a + 1], V[b + 2] - V[a + 2]],
+      [V[d] - V[a], V[d + 1] - V[a + 1], V[d + 2] - V[a + 2]],
     );
-    const [a, b] = [dense[i - 1], dense[i]];
-    const k = Math.min(Math.max((l - len[i - 1]) / Math.max(len[i] - len[i - 1], 1e-6), 0), 1);
-    return [
-      [mix3(a[0], b[0], k), unit(mix3(a[1], b[1], k)), a[2] + (b[2] - a[2]) * k],
-      unit([0, 1, 2].map(j => b[0][j] - a[0][j]) as Vec3),
-    ];
+    if (Math.hypot(...c) < 1e-9) {
+      return;
+    }
+    const flip = c[0] * V[a + 3] + c[1] * V[a + 4] + c[2] * V[a + 5] < 0;
+    this.t.push(...(flip ? [p, r, q] : [p, q, r]));
+    this.c.push(region, region, region);
+  }
+
+  sheet(rows: number[][], region: number) {
+    rows.slice(1).forEach((row, r) => {
+      const prev = rows[r];
+      const n = Math.max(row.length, prev.length);
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        const [a, b] = [prev[i % prev.length], prev[j % prev.length]];
+        const [c, d] = [row[i % row.length], row[j % row.length]];
+        this.tri(a, c, d, region);
+        this.tri(a, d, b, region);
+      }
+    });
+  }
+}
+
+/** The back's part of the column at a level of detail: baked, how many vertebrae, and the ring the tail goes on from, on the pelvis. */
+interface Back {
+  baked: Baked;
+  n: number;
+  /** The last ring's middle in the pelvis' frame, its way, its radius. */
+  c: Vec3;
+  tan: Vec3;
+  r: number;
+}
+const backs: Back[] = [];
+
+/** The pipes' colour: a very dark grey, lighter than the chitin. */
+export const PIPE = [0.1, 0.1, 0.105];
+
+/**
+ * The back's half of its spine, sunk in the skin, and the pipes up its neck, baked into the skin of
+ * `lod` (shape() in skin.ts): they only follow the joints, so the shader poses them with the rest
+ * of it. The vertebrae lie at rest as column() spaced them; each point hangs on the joints of the
+ * two bones it lies between, the last ring on the pelvis alone, where tail() takes the column on.
+ */
+export const backOf = (lod: number): Back => (backs[lod] ??= bake(lod));
+const bake = (lod: number): Back => {
+  const S = solve(rest());
+  const out = new Bake();
+  const curve = curveOf(bonesOf(S, 0, 0, 0, 0));
+  // The pelvis' bone, where the tail's free part starts.
+  const L = curve.len[(BACK.length - 2) * 4];
+  const n = Math.round((VERTEBRAE[lod] * L) / curve.total);
+  const [sides, shape, side] = [SIDES[2][lod], BEAD[lod], [1, 0, 0] as Vec3];
+  const { JACKET, STRIPE } = REGION;
+  /** The joints of the bones at `f` between the curve's points (along()), and how far from the first. */
+  const hang = (spots: Spot[], f: number) => {
+    const b = Math.min(Math.floor(f / 4), BACK.length - 2);
+    return out.row(spots, BACK[b], BACK[b + 1], (f - 4 * b) / 4);
   };
-  // The vertebrae, each bead's rings from joint to joint, and their spines but far and near the tip.
-  const n = lod ? 34 : 14;
-  const sides = SIDES[2][lod];
-  // Each bead pinched at its joints; close, rounder.
-  const shape = lod > 2 ? [0.7, 0.86, 0.98, 1, 0.98, 0.86] : lod ? [0.7, 0.94, 1, 0.94] : [0.8, 1];
-  const side = turn(q, [1, 0, 0]);
-  const rows: Spot[][] = [];
+  const [[head], down, f0] = along(curve, 0);
+  const rows = [hang([[head, down.map(x => -x) as Vec3]], f0)];
   for (let v = 0; v < n; v++) {
     shape.forEach((k, j) => {
-      const [b, tan] = at(((v + j / shape.length) / n) * total);
-      rows.push(ring(b[0], tan, side, b[2] * k, sides));
+      const [b, tan, f] = along(curve, ((v + j / shape.length) / n) * L);
+      rows.push(hang(ring(b[0], tan, side, b[2] * k, sides), f));
     });
-    if (lod && v < n - 6) {
-      const [b, tan] = at(((v + 0.5) / n) * total);
+    if (lod) {
+      // Its spine, short on the back.
+      const [b, tan, f] = along(curve, ((v + 0.5) / n) * L);
       const d = unit(mix3(b[1], tan, 0.45));
-      // Short on the back, down to the coccyx (the user, 2026-11-15), the tail's as they were.
-      const h = b[2] * (((v + 0.5) / n) * total < len[(bones.length - 13) * 4] ? 1.2 : 2.1);
       const root = [0, 1, 2].map(i => b[0][i] + b[1][i] * b[2] * 0.6) as Vec3;
-      const top = [0, 1, 2].map(i => root[i] + d[i] * h) as Vec3;
-      sheet([ring(root, d, side, b[2] * 0.35, SIDES[0][lod]), [[top, d]]], CHITIN_X, -1, out);
+      const top = [0, 1, 2].map(i => root[i] + d[i] * b[2] * 1.2) as Vec3;
+      out.sheet(
+        [hang(ring(root, d, side, b[2] * 0.35, SIDES[0][lod]), f), hang([[top, d]], f)],
+        JACKET,
+      );
     }
   }
-  const [[end], w] = at(total);
-  const [[head], down] = at(0);
-  sheet([[[head, down.map(x => -x) as Vec3]], ...rows], CHITIN_X, -1, out);
-  // The stinger: a blade swelling to a barb, then a point, glowing.
+  const [b, tan] = along(curve, L);
+  const r = b[2] * shape[0];
+  rows.push(out.row(ring(b[0], tan, side, r, sides), J.PELVIS, J.PELVIS, 0));
+  out.sheet(rows, JACKET);
+  if (lod) {
+    pipes(out, S, lod, STRIPE);
+  }
+  const c = S.pos[J.PELVIS];
+  return { baked: out, n, c: [b[0][0] - c[0], b[0][1] - c[1], b[0][2] - c[2]], tan, r };
+};
+
+/**
+ * Thin pipes up its neck (the user, 2026-11-15: following the neck, in curves, many): six each side,
+ * from the top of the chest round the neck's sides into the underside of the skull, each through
+ * points carried by the chest, the neck and the head, so it bends with them, on a smooth curve
+ * that snakes round the neck. Baked at rest from `s` (backOf()), in the palette's `region`.
+ */
+const pipes = (out: Bake, s: Solved, lod: number, region: number) => {
+  // The joint, the height over it and the neck's radius there (on its muscles), its centre's z.
+  const ctl: [number, number, number, number][] = [
+    [J.CHEST, 0.15, 0.08, 0],
+    [J.NECK, 0.0, 0.062, 0.002],
+    [J.NECK, 0.06, 0.057, 0.004],
+    [J.HEAD, 0.0, 0.055, 0.006],
+    [J.HEAD, 0.05, 0.05, 0.01],
+  ];
+  const n = SIDES[0][lod];
+  const side: Vec3 = [1, 0, 0];
+  for (const k of [-1, 1]) {
+    [0.4, 0.75, 1.1, 1.45, 1.8, 2.15].forEach((a, i) => {
+      // A wave round the neck, each pipe out of step with the next.
+      const pts = ctl.map(([j, y, r, z], c): Vec3 => {
+        const b = a + 0.22 * Math.sin(c * 1.4 + i * 2.1);
+        return on(s.pos[j], s.rot[j], [k * r * Math.sin(b), y, z - r * Math.cos(b)]);
+      });
+      const w = smooth(pts, () => 0).map(([p]) => p);
+      const last = w.length - 1;
+      const way = (m: number) =>
+        unit([0, 1, 2].map(j => w[Math.min(m + 1, last)][j] - w[Math.max(m - 1, 0)][j]) as Vec3);
+      /** Point `m` of the curve hangs on the joints of the two controls it lies between. */
+      const hang = (spots: Spot[], m: number) => {
+        const c = Math.min(Math.floor(m / 4), ctl.length - 2);
+        return out.row(spots, ctl[c][0], ctl[c + 1][0], (m - 4 * c) / 4);
+      };
+      // Both ends are buried in the chest and the skull: no caps but a point.
+      out.sheet(
+        [
+          hang([[w[0], way(0).map(v => -v) as Vec3]], 0),
+          ...w.map((p, m) => hang(ring(p, way(m), side, 0.0042 - 0.0015 * (m / last), n), m)),
+          hang([[w[last], way(last)]], last),
+        ],
+        region,
+      );
+    });
+  }
+};
+
+/** Scratch rings of tail(): each spot's place then normal. */
+let [RA, RB] = [new Float64Array(96), new Float64Array(96)];
+const [RC, RD] = [new Float64Array(96), new Float64Array(6)];
+
+/** A ring of `n` spots into `R`, as ring() makes them; or the point `c` facing `tan` (n 1). */
+const ringTo = (R: Float64Array, c: Vec3, tan: Vec3, side: Vec3, r: number, n: number) => {
+  if (n == 1) {
+    R.set(c);
+    R.set(tan, 3);
+    return 1;
+  }
+  let ax = tan[1] * side[2] - tan[2] * side[1];
+  let ay = tan[2] * side[0] - tan[0] * side[2];
+  let az = tan[0] * side[1] - tan[1] * side[0];
+  const l = Math.hypot(ax, ay, az) || 1;
+  [ax, ay, az] = [ax / l, ay / l, az / l];
+  const bx = ay * tan[2] - az * tan[1];
+  const by = az * tan[0] - ax * tan[2];
+  const bz = ax * tan[1] - ay * tan[0];
+  for (let i = 0; i < n; i++) {
+    const cs = Math.cos((i / n) * TAU);
+    const sn = Math.sin((i / n) * TAU);
+    const mx = ax * cs + bx * sn;
+    const my = ay * cs + by * sn;
+    const mz = az * cs + bz * sn;
+    R[i * 6] = c[0] + mx * r;
+    R[i * 6 + 1] = c[1] + my * r;
+    R[i * 6 + 2] = c[2] + mz * r;
+    R[i * 6 + 3] = mx;
+    R[i * 6 + 4] = my;
+    R[i * 6 + 5] = mz;
+  }
+  return n;
+};
+
+/** Spot `s` of `S` into `a` at `w`, in `col` on `layer`; the next place to write. */
+const spot = (a: Floats, w: number, S: Float64Array, s: number, col: number[], layer: number) => {
+  a[w] = S[s];
+  a[w + 1] = S[s + 1];
+  a[w + 2] = S[s + 2];
+  a[w + 3] = S[s + 3];
+  a[w + 4] = S[s + 4];
+  a[w + 5] = S[s + 5];
+  a[w + 6] = col[0];
+  a[w + 7] = col[1];
+  a[w + 8] = layer;
+  a[w + 9] = col[2];
+  return w + 10;
+};
+
+/** The triangle of spots p, q, r as face() draws it, into `a` at `w`; the next place to write. */
+const tri = (
+  a: Floats,
+  w: number,
+  P: Float64Array,
+  p: number,
+  Q: Float64Array,
+  q: number,
+  R: Float64Array,
+  r: number,
+  col: number[],
+  layer: number,
+) => {
+  const ux = Q[q] - P[p];
+  const uy = Q[q + 1] - P[p + 1];
+  const uz = Q[q + 2] - P[p + 2];
+  const vx = R[r] - P[p];
+  const vy = R[r + 1] - P[p + 1];
+  const vz = R[r + 2] - P[p + 2];
+  const cx = uy * vz - uz * vy;
+  const cy = uz * vx - ux * vz;
+  const cz = ux * vy - uy * vx;
+  if (cx * cx + cy * cy + cz * cz < 1e-18) {
+    return w;
+  }
+  w = spot(a, w, P, p, col, layer);
+  return cx * P[p + 3] + cy * P[p + 4] + cz * P[p + 5] < 0
+    ? spot(a, spot(a, w, R, r, col, layer), Q, q, col, layer)
+    : spot(a, spot(a, w, Q, q, col, layer), R, r, col, layer);
+};
+
+/** Triangles between the rows A (`na` spots) and B (`nb`) into `out`, as sheet() sews them. */
+const strip = (
+  out: Out,
+  A: Float64Array,
+  na: number,
+  B: Float64Array,
+  nb: number,
+  col: number[],
+  layer: number,
+) => {
+  const n = Math.max(na, nb);
+  const a = room(out, n * 60);
+  let w = out.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const pa = (i % na) * 6;
+    const pb = (j % na) * 6;
+    const pc = (i % nb) * 6;
+    const pd = (j % nb) * 6;
+    w = tri(a, w, A, pa, B, pc, B, pd, col, layer);
+    w = tri(a, w, A, pa, B, pd, A, pb, col, layer);
+  }
+  out.length = w;
+};
+
+/**
+ * Its tail, in the world, from the solved skeleton `s`: the column's free part, from the pelvis
+ * on (the back's is in the skin, backOf()), each vertebra a bead pinched at its joints with a spine
+ * standing out of it but near the tip, as bonesOf() bends and sways it; the stinger at its end, a
+ * blade swelling to a barb, then a point, glowing in the team's `color`. Written straight into
+ * `out`. `lod` 0 far, 1 near, 3 close.
+ */
+export const tail = (
+  out: Out,
+  s: Solved,
+  t: number,
+  run: number,
+  sting: number,
+  color: number[],
+  lod: number,
+) => {
+  const back = backOf(lod);
+  // From the spine's bone, whose place shapes the curve's start at the pelvis.
+  const curve = curveOf(bonesOf(s, t, run, sting).slice(BACK.length - 3), 4);
+  const { len, total } = curve;
+  const all = VERTEBRAE[lod];
+  const n = all - back.n;
+  const [sides, shape] = [SIDES[2][lod], BEAD[lod]];
+  const [P, q] = [s.pos[J.PELVIS], s.rot[J.PELVIS]];
+  const side = turn(q, [1, 0, 0]);
+  // The ring the back's last bead ends on, carried by the pelvis as the skin's is: no crack.
+  let na = ringTo(RA, on(P, q, back.c), turn(q, back.tan), side, back.r, sides);
+  for (let v = 0; v < n; v++) {
+    for (let j = v ? 0 : 1; j < shape.length; j++) {
+      const [b, tan] = along(curve, ((v + j / shape.length) / n) * total);
+      const nb = ringTo(RB, b[0], tan, side, b[2] * shape[j], sides);
+      strip(out, RA, na, RB, nb, CHITIN_X, -1);
+      [RA, RB, na] = [RB, RA, nb];
+    }
+    if (lod && back.n + v < all - 6) {
+      // Its spine: short down to the coccyx (the user, 2026-11-15), the tail's long.
+      const l = ((v + 0.5) / n) * total;
+      const [b, tan] = along(curve, l);
+      const d = unit(mix3(b[1], tan, 0.45));
+      const h = b[2] * (l < len[4] ? 1.2 : 2.1);
+      const root = [0, 1, 2].map(i => b[0][i] + b[1][i] * b[2] * 0.6) as Vec3;
+      const top = [0, 1, 2].map(i => root[i] + d[i] * h) as Vec3;
+      const m = ringTo(RC, root, d, side, b[2] * 0.35, SIDES[0][lod]);
+      strip(out, RC, m, RD, ringTo(RD, top, d, side, 0, 1), CHITIN_X, -1);
+    }
+  }
+  // The stinger.
+  const [[end], w] = along(curve, total);
   const pt = (k: number): Vec3 => [end[0] + w[0] * k, end[1] + w[1] * k, end[2] + w[2] * k];
-  sheet(
-    [
-      ring(end, w, side, TAIL.tip, sides),
-      ring(pt(TAIL.sting * 0.35), w, side, 0.03, sides),
-      [[pt(TAIL.sting), w]],
-    ],
-    color,
-    -2,
-    out,
-  );
+  na = ringTo(RA, end, w, side, TAIL.tip, sides);
+  let nb = ringTo(RB, pt(TAIL.sting * 0.35), w, side, 0.03, sides);
+  strip(out, RA, na, RB, nb, color, -2);
+  nb = ringTo(RC, pt(TAIL.sting), w, side, 0, 1);
+  strip(out, RB, sides, RC, nb, color, -2);
 };
 
 /** Bone: its claws and teeth, nothing else. */
@@ -341,31 +657,33 @@ export const toes = (out: Out, at: Vec3, q: Quat, lod: number) => {
       [s * 1.15, 0, -l],
     ];
     strand(out, at, q, p, [0.021, 0.017, 0.016, 0.012], n, CHITIN_X);
-    // The knuckle, and the toe's pad under its end.
-    strand(
-      out,
-      at,
-      q,
-      [
-        [s * 0.72, 0.02, -l * 0.43],
-        [s * 0.78, 0.02, -l * 0.5],
-      ],
-      [0.016, 0.014],
-      n,
-      CHITIN_X,
-    );
-    strand(
-      out,
-      at,
-      q,
-      [
-        [s * 1.1, -0.008, -l * 0.85],
-        [s * 1.15, -0.01, -l * 0.97],
-      ],
-      [0.012, 0.01],
-      n,
-      CHITIN_X,
-    );
+    // The knuckle, and the toe's pad under its end; far, the digit and its claw alone.
+    if (lod) {
+      strand(
+        out,
+        at,
+        q,
+        [
+          [s * 0.72, 0.02, -l * 0.43],
+          [s * 0.78, 0.02, -l * 0.5],
+        ],
+        [0.016, 0.014],
+        n,
+        CHITIN_X,
+      );
+      strand(
+        out,
+        at,
+        q,
+        [
+          [s * 1.1, -0.008, -l * 0.85],
+          [s * 1.15, -0.01, -l * 0.97],
+        ],
+        [0.012, 0.01],
+        n,
+        CHITIN_X,
+      );
+    }
     if (lod && d > 0) {
       strand(
         out,
@@ -479,7 +797,11 @@ export const ribs = (out: Out, at: Vec3, q: Quat, lod: number, low = false) => {
         const pec = Math.min(Math.max((y - 0.04) / 0.1, 0), 1);
         return [y, w + 0.008 * pec, d + 0.022 * pec, y > 0.1 ? 1.15 : Math.PI];
       });
+  // Far, every third row of the cage: the ribs there are hairs, and their count would be half the body's.
   rows.forEach(([y, w, d, from], i) => {
+    if (!lod && !low && i % 3) {
+      return;
+    }
     for (const s of [-1, 1]) {
       const pts: Vec3[] = [];
       // From the spine's vertebra at the middle of the back (the user, 2026-11-15) round the side
@@ -487,7 +809,8 @@ export const ribs = (out: Out, at: Vec3, q: Quat, lod: number, low = false) => {
       // Each meets the breastbone in the middle (the user, 2026-11-16).
       const end = low ? 0.75 + 0.12 * i : 0.05;
       // Sixteen steps round a whole one: with eight, each bend showed as a knee on the side.
-      const K = Math.max(6, Math.round((16 * (from - end)) / (Math.PI - 0.4)));
+      // Far, five.
+      const K = lod ? Math.max(6, Math.round((16 * (from - end)) / (Math.PI - 0.4))) : 5;
       for (let k = 0; k <= K; k++) {
         const a = from - ((from - end) * k) / K;
         // Sloping down toward the front, by how far round it is from the back.
@@ -520,7 +843,7 @@ export const ribs = (out: Out, at: Vec3, q: Quat, lod: number, low = false) => {
       );
     }
   });
-  if (!low) {
+  if (!low && lod) {
     // The ribs linked to one another down their outer side (the user, 2026-11-16): a cord through
     // each row at the same angle round, full where it crosses a rib, pinched between two.
     // Near the shoulder's line only (the user, 2026-11-16): the outer ends of the upper rows.
@@ -611,47 +934,6 @@ export const clavicles = (out: Out, at: Vec3, q: Quat, lod: number) => {
       true,
       [0, 1, 0],
     );
-  }
-};
-
-/** The pipes' colour: a very dark grey, lighter than the chitin. */
-const PIPE = [0.1, 0.1, 0.105];
-/**
- * Thin pipes up its neck (the user, 2026-11-15: following the neck, in curves, many): six each side,
- * from the top of the chest round the neck's sides into the underside of the skull, each through
- * points carried by the chest, the neck and the head, so it bends with them, on a smooth curve
- * that snakes round the neck. In the world, from the solved skeleton `s`.
- */
-export const pipes = (out: Out, s: Solved, lod: number) => {
-  // The joint, the height over it and the neck's radius there (on its muscles), its centre's z.
-  const ctl: [number, number, number, number][] = [
-    [J.CHEST, 0.15, 0.08, 0],
-    [J.NECK, 0.0, 0.062, 0.002],
-    [J.NECK, 0.06, 0.057, 0.004],
-    [J.HEAD, 0.0, 0.055, 0.006],
-    [J.HEAD, 0.05, 0.05, 0.01],
-  ];
-  for (const k of [-1, 1]) {
-    [0.4, 0.75, 1.1, 1.45, 1.8, 2.15].forEach((a, i) => {
-      // A wave round the neck, each pipe out of step with the next.
-      const pts = ctl.map(([j, y, r, z], c): Vec3 => {
-        const b = a + 0.22 * Math.sin(c * 1.4 + i * 2.1);
-        return on(s.pos[j], s.rot[j], [k * r * Math.sin(b), y, z - r * Math.cos(b)]);
-      });
-      const dense = smooth(pts, () => 0).map(([p]) => p);
-      strand(
-        out,
-        [0, 0, 0],
-        [0, 0, 0, 1],
-        dense,
-        dense.map((_, m) => 0.0042 - 0.0015 * (m / (dense.length - 1))),
-        SIDES[0][lod],
-        PIPE,
-        -1,
-        // Both ends are buried in the chest and the skull.
-        false,
-      );
-    });
   }
 };
 
@@ -885,28 +1167,32 @@ const warp = (density: (t: number) => number) => {
   }
   return (v: number) => {
     const goal = v * acc[n];
-    const i = Math.min(
-      Math.max(
-        acc.findIndex(a => a >= goal),
-        1,
-      ),
-      n,
-    );
+    // The first step at or past the goal, by halving: the face's grid asks for thousands.
+    let [lo, hi] = [0, n + 1];
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      [lo, hi] = acc[m] >= goal ? [lo, m] : [m + 1, hi];
+    }
+    const i = Math.min(Math.max(lo > n ? -1 : lo, 1), n);
     return (i - 1 + (goal - acc[i - 1]) / (acc[i] - acc[i - 1])) / n;
   };
 };
-const rowW = warp(t => 1 + 2.2 * Math.exp(-(((TOP - (TOP - CHIN) * t - EYE[1]) / 0.02) ** 2)));
-const colW = warp(t => 1 + 1.6 * Math.exp(-(((Math.abs(2 * t - 1) - 0.38) / 0.26) ** 2)));
 /**
- * The height of the grid's row `v` (0 the top, 1 the chin), the rows packed three times closer
- * round the eyes' slits (the user, 2026-11-15: no steps round the eyes).
+ * The rows packed round the eyes' slits (the user, 2026-11-15: no steps round the eyes), and the
+ * columns over the orbits, whose slanted rims crossed even columns in steps along the slit: near,
+ * three and twice as close; close, five and three and a half times, on a grid of fewer rows and
+ * columns (its steps there as fine as on the old one of 64 by 92, a third of the vertices).
  */
-const rowY = (v: number) => TOP - (TOP - CHIN) * rowW(v);
-/**
- * The grid's column `u` (-1 to 1, evenly spaced) moved so the columns pack twice as close over the
- * orbits: the slanted rim of an orbit crossed the even columns in steps along the slit.
- */
-const colU = (u: number) => -1 + 2 * colW((u + 1) / 2);
+const [ROWS, COLS] = [
+  [2.2, 4].map(k =>
+    warp(t => 1 + k * Math.exp(-(((TOP - (TOP - CHIN) * t - EYE[1]) / 0.02) ** 2))),
+  ),
+  [1.6, 2.6].map(k => warp(t => 1 + k * Math.exp(-(((Math.abs(2 * t - 1) - 0.38) / 0.26) ** 2)))),
+];
+/** The height of the grid's row `v` (0 the top, 1 the chin), on the close grid if `fine`. */
+const rowY = (v: number, fine: boolean) => TOP - (TOP - CHIN) * ROWS[+fine](v);
+/** The grid's column `u` (-1 to 1, evenly spaced) moved to pack over the orbits, on the close grid if `fine`. */
+const colU = (u: number, fine: boolean) => -1 + 2 * COLS[+fine]((u + 1) / 2);
 /**
  * The jawbone's line on the right (the user, 2026-11-15: thin, bony, standing out low on the face,
  * its angle marked): down from under the ear to a sharp angle, then forward to the chin.
@@ -923,8 +1209,10 @@ const jawline = (x: number, y: number) => {
   const ax = Math.abs(x);
   let d = 1;
   for (let i = 1; i < JAW.length; i++) {
-    const [[x0, y0], [x1, y1]] = [JAW[i - 1], JAW[i]];
-    const [dx, dy] = [x1 - x0, y1 - y0];
+    const x0 = JAW[i - 1][0];
+    const y0 = JAW[i - 1][1];
+    const dx = JAW[i][0] - x0;
+    const dy = JAW[i][1] - y0;
     const t = Math.min(Math.max(((ax - x0) * dx + (y - y0) * dy) / (dx * dx + dy * dy), 0), 1);
     d = Math.min(d, Math.hypot(ax - x0 - dx * t, y - y0 - dy * t));
   }
@@ -979,11 +1267,11 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
     [8, 10],
     [22, 38],
     [22, 38],
-    [64, 92],
+    [50, 72],
   ][lod];
   const spot = (u: number, v: number): Spot => {
-    const y = rowY(v);
-    const x = colU(u) * widthOf(y);
+    const y = rowY(v, lod > 2);
+    const x = colU(u, lod > 2) * widthOf(y);
     // The slope from central differences a hair inside the rim (outside it the surface is flat),
     // turned at the rim to the dome's own normal there, straight out of the ellipse: no seam in the
     // light where the face meets the back of the head.
@@ -1002,34 +1290,44 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
     const g = 1 + 0.01 * w;
     return [on(at, q, [x * g, EY + (y - EY) * g, faceZ(x, y) + 0.004 * w]), turn(q, n)];
   };
+  // Each node of the grid worked out once: it is the corner of six triangles.
+  const nodes: Spot[] = [];
+  for (let j = 0; j <= ny; j++) {
+    for (let i = 0; i <= nx; i++) {
+      nodes.push(spot((2 * i) / nx - 1, j / ny));
+    }
+  }
+  /** The grid's node in column i, row j. */
+  const node = (i: number, j: number) => nodes[j * (nx + 1) + i];
   // The grid, but where the lips part: the hole's edge, in steps, lies under the lips. Far, with no
   // lips or inside drawn, the mouth is the grid painted dark: a hole there showed the sky through.
-  const tri = (p: [number, number][]) => {
+  const tri = (p: [number, number][], s: Spot[]) => {
     const [u, v] = [0, 1].map(k => (p[0][k] + p[1][k] + p[2][k]) / 3);
-    const y = rowY(v);
-    const open = parted(colU(u) * widthOf(y), y);
+    const y = rowY(v, lod > 2);
+    const open = parted(colU(u, lod > 2) * widthOf(y), y);
     if (!open || !lod) {
-      face(
-        out,
-        open ? DARK : HEAD,
-        -1,
-        p.map(([a, b]) => spot(a, b)),
-      );
+      face(out, open ? DARK : HEAD, -1, s);
     }
   };
   for (let j = 0; j < ny; j++) {
     for (let i = 0; i < nx; i++) {
       const [u0, u1, v0, v1] = [(2 * i) / nx - 1, (2 * (i + 1)) / nx - 1, j / ny, (j + 1) / ny];
-      tri([
-        [u0, v0],
-        [u1, v0],
-        [u1, v1],
-      ]);
-      tri([
-        [u0, v0],
-        [u1, v1],
-        [u0, v1],
-      ]);
+      tri(
+        [
+          [u0, v0],
+          [u1, v0],
+          [u1, v1],
+        ],
+        [node(i, j), node(i + 1, j), node(i + 1, j + 1)],
+      );
+      tri(
+        [
+          [u0, v0],
+          [u1, v1],
+          [u0, v1],
+        ],
+        [node(i, j), node(i + 1, j + 1), node(i, j + 1)],
+      );
     }
   }
   if (!lod) {
@@ -1049,6 +1347,60 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
     -1,
     out,
   );
+  // The lips round it, a little thicker in their middle (the user, 2026-11-15: thinner), curled.
+  const pts = [...line, line[0]].map(([x, y]): Vec3 => [x, y, faceZ(x, y) - 0.002]);
+  strand(
+    out,
+    at,
+    q,
+    pts,
+    pts.map(([x]) => 0.0024 + 0.002 * (1 - (x / MW) ** 2)),
+    sides,
+    HEAD,
+    -1,
+    // A loop: its two ends meet.
+    false,
+    // Steadied by the face's forward axis: by its x axis, along which the lips run, they pinched
+    // into a V in their middle.
+    [0, 0, 1],
+  );
+  // A band of the face round the lips, a grid cell wide (the user, 2026-11-15: no holes round the
+  // mouth): it covers the steps the grid's hole leaves outside the thinner lips.
+  const m = lod > 2 ? 0.005 : 0.01;
+  const at3 = (x: number, y: number): Spot => {
+    const h = 1e-3;
+    const nz: Vec3 = unit([
+      (faceZ(x + h, y) - faceZ(x - h, y)) / (2 * h),
+      (faceZ(x, y + h) - faceZ(x, y - h)) / (2 * h),
+      -1,
+    ]);
+    return [on(at, q, [x, y, faceZ(x, y) - 0.0006]), turn(q, nz)];
+  };
+  // Out of the lips' line (it runs clockwise: left to right over the top, back under).
+  const band = line.map(([x, y], i): [number, number] => {
+    const [a, b] = [line[(i + line.length - 1) % line.length], line[(i + 1) % line.length]];
+    const [tx, ty] = [b[0] - a[0], b[1] - a[1]];
+    const l = Math.hypot(tx, ty) || 1;
+    return [x - (ty / l) * m, y + (tx / l) * m];
+  });
+  line.forEach(([x, y], i) => {
+    const j = (i + 1) % line.length;
+    const quad = [at3(x, y), at3(...line[j]), at3(...band[j]), at3(...band[i])];
+    face(out, HEAD, -1, [quad[0], quad[1], quad[2]]);
+    face(out, HEAD, -1, [quad[0], quad[2], quad[3]]);
+  });
+};
+
+/**
+ * The fine parts of its face, too thin for a shadow (soldier.ts keeps them out of the depth passes):
+ * its steel teeth and the cords of sinew beside its mouth. Not far.
+ */
+export const teeth = (out: Out, head: Vec3, q: Quat, lod: number) => {
+  if (!lod) {
+    return;
+  }
+  const at = on(head, q, [0, HEAD_UP, 0]);
+  const sides = SIDES[1][lod];
   // The teeth, steel, from under each lip toward the other, many, long and sharp (the user,
   // 2026-11-16): the fangs, a lip's curl apart, longest, the upper ones over the lower lip.
   for (const [k, up] of [
@@ -1106,48 +1458,6 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
       strand(out, at, q, pts, radii, SIDES[0][lod], SINEW, -1, true, [0, 0, 1]);
     }
   }
-  // The lips round it, a little thicker in their middle (the user, 2026-11-15: thinner), curled.
-  const pts = [...line, line[0]].map(([x, y]): Vec3 => [x, y, faceZ(x, y) - 0.002]);
-  strand(
-    out,
-    at,
-    q,
-    pts,
-    pts.map(([x]) => 0.0024 + 0.002 * (1 - (x / MW) ** 2)),
-    sides,
-    HEAD,
-    -1,
-    // A loop: its two ends meet.
-    false,
-    // Steadied by the face's forward axis: by its x axis, along which the lips run, they pinched
-    // into a V in their middle.
-    [0, 0, 1],
-  );
-  // A band of the face round the lips, a grid cell wide (the user, 2026-11-15: no holes round the
-  // mouth): it covers the steps the grid's hole leaves outside the thinner lips.
-  const m = lod > 2 ? 0.005 : 0.01;
-  const at3 = (x: number, y: number): Spot => {
-    const h = 1e-3;
-    const nz: Vec3 = unit([
-      (faceZ(x + h, y) - faceZ(x - h, y)) / (2 * h),
-      (faceZ(x, y + h) - faceZ(x, y - h)) / (2 * h),
-      -1,
-    ]);
-    return [on(at, q, [x, y, faceZ(x, y) - 0.0006]), turn(q, nz)];
-  };
-  // Out of the lips' line (it runs clockwise: left to right over the top, back under).
-  const band = line.map(([x, y], i): [number, number] => {
-    const [a, b] = [line[(i + line.length - 1) % line.length], line[(i + 1) % line.length]];
-    const [tx, ty] = [b[0] - a[0], b[1] - a[1]];
-    const l = Math.hypot(tx, ty) || 1;
-    return [x - (ty / l) * m, y + (tx / l) * m];
-  });
-  line.forEach(([x, y], i) => {
-    const j = (i + 1) % line.length;
-    const quad = [at3(x, y), at3(...line[j]), at3(...band[j]), at3(...band[i])];
-    face(out, HEAD, -1, [quad[0], quad[1], quad[2]]);
-    face(out, HEAD, -1, [quad[0], quad[2], quad[3]]);
-  });
 };
 
 /**
@@ -1264,7 +1574,8 @@ export const veins = (out: Out, head: Vec3, q: Quat, lod: number) => {
     }
     strand(out, head, q, pts, radii, 3, SINEW, -1, true, [0, 0, 1]);
   };
-  const depth = lod > 2 ? 4 : 2;
+  // Near, the trunks alone: their branches are under a pixel there.
+  const depth = lod > 2 ? 4 : 0;
   for (const s of [-1, 1]) {
     // The same seed each side: the two trees mirror.
     seed = 7;
@@ -1282,7 +1593,7 @@ export const veins = (out: Out, head: Vec3, q: Quat, lod: number) => {
 };
 
 /** Its eyes, glowing slits at the back of the orbits in the team's `color`. */
-export const eyes = (out: Out, head: Vec3, q: Quat, color: number[]) => {
+export const eyes = (out: Out, head: Vec3, q: Quat, color: number[], lod = 1) => {
   const at = on(head, q, [0, HEAD_UP, 0]);
   for (const s of [-1, 1]) {
     // A glowing slit along the orbit's slant, a lens lying on its floor, thin pointed ends, a full
@@ -1292,6 +1603,81 @@ export const eyes = (out: Out, head: Vec3, q: Quat, color: number[]) => {
       const [x, y] = [s * (EYE[0] + d), EYE[1] + SLANT * d];
       return [x, y, faceZ(x, y) - radii[i] - 0.0004];
     });
-    strand(out, at, q, pts, radii, 8, color, -2, true, [0, 0, 1]);
+    strand(out, at, q, pts, radii, lod ? 8 : 4, color, -2, true, [0, 0, 1]);
   }
 };
+
+/** A rigid piece made at the origin of its joint's frame, then only placed (store.ts). */
+type Make = (o: Out, at: Vec3, q: Quat) => void;
+/**
+ * A rigid piece of the xenomorph at a level of detail: its key in the store (all its vertices
+ * depend on), how it is made, and whether it is `thin`, too fine for a shadow: left out of the
+ * depth passes.
+ */
+export interface Part {
+  key: string;
+  make: Make;
+  thin?: boolean;
+}
+/** Its pieces by the joint they go on (partsOf()), those on one joint merged: one draw each a pass. */
+export const PART = {
+  SHIN: 0,
+  FOOT: 1,
+  TOES: 2,
+  CHEST: 3,
+  SPINE: 4,
+  ELBOW: 5,
+  CUFF_L: 6,
+  CUFF_R: 7,
+  HEAD: 8,
+  FINE: 9,
+};
+const parts: Part[][] = [];
+/** The horns on joint `j` (HORNS). */
+const hornsOn = (o: Out, at: Vec3, q: Quat, lod: number, j: number) => {
+  for (const [k, base, len, w] of HORNS) {
+    if (k == j) {
+      horns(o, at, q, lod, base, len, w);
+    }
+  }
+};
+/** The xenomorph's rigid pieces at `lod`, in PART's order; render.ts makes them all at the map's load. */
+export const partsOf = (lod: number): Part[] =>
+  (parts[lod] ??= [
+    {
+      key: `xeno shin ${lod}`,
+      make: (o, a, q) => {
+        sinews(o, a, q, lod);
+        heel(o, a, q, lod);
+      },
+    },
+    { key: `xeno foot ${lod}`, make: (o, a, q) => metatarsal(o, a, q, lod) },
+    { key: `xeno toes ${lod}`, make: (o, a, q) => toes(o, a, q, lod) },
+    {
+      key: `xeno chest ${lod}`,
+      make: (o, a, q) => {
+        ribs(o, a, q, lod);
+        clavicles(o, a, q, lod);
+        hornsOn(o, a, q, lod, J.CHEST);
+      },
+    },
+    {
+      key: `xeno spine ${lod}`,
+      make: (o, a, q) => {
+        ribs(o, a, q, lod, true);
+        hornsOn(o, a, q, lod, J.SPINE);
+      },
+    },
+    { key: `xeno elbow ${lod}`, make: (o, a, q) => elbow(o, a, q, lod) },
+    { key: `xeno cuff ${lod} -1`, make: (o, a, q) => cuff(o, a, q, lod, -1) },
+    { key: `xeno cuff ${lod} 1`, make: (o, a, q) => cuff(o, a, q, lod, 1) },
+    { key: `xeno head ${lod}`, make: (o, a, q) => skull(o, a, q, lod) },
+    {
+      key: `xeno fine ${lod}`,
+      make: (o, a, q) => {
+        teeth(o, a, q, lod);
+        veins(o, a, q, lod);
+      },
+      thin: true,
+    },
+  ]);

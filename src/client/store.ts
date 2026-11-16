@@ -22,6 +22,8 @@ export interface Draw {
   f?: Flesh;
   /** Worn: armour, which the shader scuffs (grime, chipped paint, scratches) on its glossy and gold parts. */
   w?: boolean;
+  /** Thin: too fine for a shadow, left out of the depth passes (the xenomorph's veins, teeth and eyes). */
+  s?: boolean;
   /** Close hair (hair.ts), coloured `rgb`, swung by `sw` in the head's frame at the time `t`: the shader sways it (swayOf()). */
   h?: { rgb: number[]; sw: Vec3; t: number };
 }
@@ -136,7 +138,7 @@ export const expand = (out: Out, { m, q, t, k, h: hair }: Draw) => {
       const tx = 2 * (qy * z - qz * y);
       const ty = 2 * (qz * x - qx * z);
       const tz = 2 * (qx * y - qy * x);
-      const o = h ? [0, 0, 0] : t;
+      const o = h ? NONE : t;
       a[w + h] = o[0] + (x + qw * tx + qy * tz - qz * ty);
       a[w + h + 1] = o[1] + (y + qw * ty + qz * tx - qx * tz);
       a[w + h + 2] = o[2] + (z + qw * tz + qx * ty - qy * tx);

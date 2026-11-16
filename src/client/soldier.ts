@@ -102,26 +102,8 @@ import {
   swing,
   tressOf,
 } from './skin';
-import {
-  CHITIN_X,
-  FOOT_TIP,
-  HEAD,
-  column,
-  cuff,
-  elbow,
-  eyes,
-  heel,
-  metatarsal,
-  ribs,
-  clavicles,
-  horns,
-  HORNS,
-  pipes,
-  sinews,
-  skull,
-  toes,
-  veins,
-} from './xeno';
+import { CHITIN_X, FOOT_TIP, HEAD, PART, PIPE, eyes, partsOf, tail } from './xeno';
+import type { Part } from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
 import type { Face } from './expression';
 import { CH, toneFor } from './features';
@@ -930,6 +912,12 @@ const gloves = (
   );
 };
 
+/** The xenomorph's legs and arms (partsOf()): the shin, foot, toe and upper arm joints, left then right. */
+const LIMBS_X = [
+  [J.SHIN_L, J.FOOT_L, J.TOE_L, J.ARM_L],
+  [J.SHIN_R, J.FOOT_R, J.TOE_R, J.ARM_R],
+];
+
 /** Draws the runner and gives back its solved skeleton, or nothing once a bolt has burnt it away. */
 export const soldier = (
   out: Out,
@@ -956,9 +944,11 @@ export const soldier = (
     scale = 1,
     /** Armour: worn (Draw.w). */
     w = false,
+    /** Too fine for a shadow (Draw.s). */
+    thin = false,
   ) =>
     gpu
-      ? gpu.push({ m: mesh(key, o => make(o, ORIGIN, ID)), q, t: at, k: scale, w })
+      ? gpu.push({ m: mesh(key, o => make(o, ORIGIN, ID)), q, t: at, k: scale, w, s: thin })
       : make(out, at, q);
   r.tip = undefined;
   const [build, picked] = [r.build ?? 0, r.look];
@@ -982,11 +972,17 @@ export const soldier = (
     !!build,
   );
   if (xeno) {
-    const { PANTS, UPPER, GLOVE, JACKET, TRIM, SOLE, FLESH, CAP } = REGION;
+    const { PANTS, UPPER, GLOVE, JACKET, TRIM, SOLE, FLESH, CAP, STRIPE } = REGION;
     for (const k of [PANTS, UPPER, GLOVE, JACKET, SOLE]) {
       colors[k] = CHITIN_X;
     }
-    [colors[TRIM], colors[FLESH], colors[CAP]] = [HEAD, CHITIN_X.map(v => v * 0.6), color];
+    // The pipes up its neck are its skin's (backOf() in xeno.ts).
+    [colors[TRIM], colors[FLESH], colors[CAP], colors[STRIPE]] = [
+      HEAD,
+      CHITIN_X.map(v => v * 0.6),
+      color,
+      PIPE,
+    ];
   }
   if (ninja) {
     const { PANTS, UPPER, GLOVE, STRIPE, STRIPE_LOW, BELT } = REGION;
@@ -1089,7 +1085,7 @@ export const soldier = (
       const blow = PUNCHES[BLOW.TAIL];
       const u = p.cut === BLOW.TAIL && p.swing ? 1 - p.swing / blow.ticks : 0;
       const hit = blow.strike / blow.ticks;
-      column(
+      tail(
         out,
         s,
         r.t,
@@ -1100,41 +1096,35 @@ export const soldier = (
         color,
         lod,
       );
-      pipes(out, s, lod);
-      for (const [shin, foot, toe] of [
-        [J.SHIN_L, J.FOOT_L, J.TOE_L],
-        [J.SHIN_R, J.FOOT_R, J.TOE_R],
-      ]) {
-        rigid(`sinews ${lod}`, s.pos[shin], s.rot[shin], (o, a, q) => sinews(o, a, q, lod));
-        rigid(`heel ${lod}`, s.pos[shin], s.rot[shin], (o, a, q) => heel(o, a, q, lod));
-        rigid(`foot ${lod}`, s.pos[foot], s.rot[foot], (o, a, q) => metatarsal(o, a, q, lod));
+      const part = partsOf(lod);
+      const put = ({ key, make, thin }: Part, at: Vec3, q: Quat) =>
+        rigid(key, at, q, make, 1, false, thin);
+      for (const [shin, foot, toe, arm] of LIMBS_X) {
+        put(part[PART.SHIN], s.pos[shin], s.rot[shin]);
+        put(part[PART.FOOT], s.pos[foot], s.rot[foot]);
         // The toes at the foot's end, turned as the toe joint: level on a floor (prowl()).
-        const tip = add(s.pos[foot], turn(s.rot[foot], FOOT_TIP));
-        rigid(`toes ${lod}`, tip, s.rot[toe], (o, a, q) => toes(o, a, q, lod));
+        put(part[PART.TOES], add(s.pos[foot], turn(s.rot[foot], FOOT_TIP)), s.rot[toe]);
+        put(part[PART.ELBOW], s.pos[arm + 1], s.rot[arm + 1]);
+        if (lod) {
+          // The disc where the shoulder ends and the arm begins.
+          put(part[arm == J.ARM_L ? PART.CUFF_L : PART.CUFF_R], s.pos[arm], swing(s.rot, arm));
+        }
       }
-      rigid(`ribs ${lod}`, s.pos[J.CHEST], s.rot[J.CHEST], (o, a, q) => ribs(o, a, q, lod));
-      HORNS.forEach(([j, base, len, w], i) =>
-        rigid(`horns ${i} ${lod}`, s.pos[j], s.rot[j], (o, a, q) =>
-          horns(o, a, q, lod, base, len, w),
-        ),
-      );
-      rigid(`clavicles ${lod}`, s.pos[J.CHEST], s.rot[J.CHEST], (o, a, q) =>
-        clavicles(o, a, q, lod),
-      );
-      rigid(`low ribs ${lod}`, s.pos[J.SPINE], s.rot[J.SPINE], (o, a, q) =>
-        ribs(o, a, q, lod, true),
-      );
-      for (const f of [J.FOREARM_L, J.FOREARM_R]) {
-        rigid(`elbow ${lod}`, s.pos[f], s.rot[f], (o, a, q) => elbow(o, a, q, lod));
-        // The disc where the shoulder ends and the arm begins.
-        const [arm, k] = [f - 1, f == J.FOREARM_L ? -1 : 1];
-        rigid(`cuff ${lod} ${k}`, s.pos[arm], swing(s.rot, arm), (o, a, q) =>
-          cuff(o, a, q, lod, k),
-        );
+      put(part[PART.CHEST], s.pos[J.CHEST], s.rot[J.CHEST]);
+      put(part[PART.SPINE], s.pos[J.SPINE], s.rot[J.SPINE]);
+      put(part[PART.HEAD], s.pos[J.HEAD], s.rot[J.HEAD]);
+      if (lod) {
+        put(part[PART.FINE], s.pos[J.HEAD], s.rot[J.HEAD]);
       }
-      rigid(`skull ${lod}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => skull(o, a, q, lod));
-      rigid(`veins ${lod}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => veins(o, a, q, lod));
-      rigid(`eyes ${color}`, s.pos[J.HEAD], s.rot[J.HEAD], (o, a, q) => eyes(o, a, q, color));
+      rigid(
+        `xeno eyes ${+!!lod} ${color}`,
+        s.pos[J.HEAD],
+        s.rot[J.HEAD],
+        (o, a, q) => eyes(o, a, q, color, lod),
+        1,
+        false,
+        true,
+      );
     } else {
       rigid('pouch', s.pos[J.PELVIS], s.rot[J.PELVIS], pouch);
     }

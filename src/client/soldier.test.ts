@@ -1132,6 +1132,17 @@ describe('the ninja', () => {
     expect(far.length / STRIDE).toBeLessThan(12000);
     expect(far.length * 2).toBeLessThan(near.length);
   });
+
+  it('draws the xenomorph far away under 11 000 vertices and a quarter of its near ones (the user, 2026-11-16: lags)', () => {
+    const r = hold({}, 5);
+    r.look = { role: ROLE.XENO };
+    const [far, near] = [[], []] as number[][];
+    soldier(far, r, [1, 0.2, 0.2], 0, true, false);
+    soldier(near, r, [1, 0.2, 0.2], 1, true, false);
+    // 23 000 before: 13 rows of ribs, every toe's knuckle and pad, the pipes up its neck.
+    expect(far.length / STRIDE).toBeLessThan(11000);
+    expect(far.length * 4).toBeLessThan(near.length);
+  });
 });
 
 describe('armour without a helmet (Highline)', () => {

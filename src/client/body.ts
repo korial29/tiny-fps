@@ -78,11 +78,13 @@ import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin }
 import type { Pose, Quat } from './rig';
 import { armor } from './armor';
 import { CUFF, CUFF_NEAR, CUFF_SIDES, REGION, beast, body, palette, skin } from './skin';
-import { BONE, CHITIN_X, FOOT_TIP, metatarsal, toes } from './xeno';
+import { BONE, CHITIN_X, FOOT_TIP, PART, partsOf } from './xeno';
+import type { Part } from './xeno';
 import { CLOTH } from './mask';
 import { createTrail } from './trail';
 import { room } from './verts';
 import type { Out } from './verts';
+import { ID, ORIGIN, expand, mesh } from './store';
 
 export type Solved = ReturnType<typeof solve>;
 
@@ -110,6 +112,17 @@ export interface Body {
   /** The own player's character (BUILD in rig.ts, PlayerInfo.body): the woman's arms are slimmer and her hands smaller, on the same grips; `tone` the skin he picked (the default's when absent). */
   wear(build: number, tone?: number[], ninja?: boolean, xeno?: boolean): void;
 }
+
+/** The xenomorph's feet: each foot's joint and its toes'. */
+const FEET = [
+  [J.FOOT_L, J.TOE_L],
+  [J.FOOT_R, J.TOE_R],
+];
+/** What mesh() makes of a part: the part at the origin. */
+const made =
+  ({ make }: Part) =>
+  (o: Out) =>
+    make(o, ORIGIN, ID);
 
 /** Metres the camera may be from the eye of the body and still show it: the bob is centimetres, a crouch's ease under a metre. */
 const AWAY = 1;
@@ -647,6 +660,8 @@ export const hand = (
   lights = false,
   /** The xenomorph's claws on the fingertips (Grip). */
   claws = false,
+  /** Its size: the xenomorph's grows from the wrist over 4 cm, hers is smaller (hands()). */
+  grow = 1,
 ) => {
   // A hand is built in its own space, the same as long as nothing it is made of changes (a grip
   // held, the hand at rest): some ten thousand vertices that are then only carried to the wrist.
@@ -654,13 +669,21 @@ export const hand = (
   // to frame, and every frame built the hand again.
   [curl, point, push, cup] = [curl, point, push, cup].map(tidy);
   to &&= to.map(tidy) as Vec3;
-  const key = `${+claws} ${+lite} ${+lights} ${curl} ${point} ${push} ${to} ${cup} ${tint} ${bare} ${+(bare === tint)}`;
+  const key = `${+claws} ${+lite} ${+lights} ${curl} ${point} ${push} ${to} ${cup} ${tint} ${bare} ${+(bare === tint)} ${grow}`;
   let m = BUILT.get(key);
   if (!m) {
     if (BUILT.size >= KEPT) {
       BUILT.clear();
     }
     BUILT.set(key, (m = shape(curl, tint, point, push, to, bare, cup, lite, lights, claws)));
+    // Grown about the wrist, the origin here: the claws' from the wrist's cuff on.
+    for (let i = 0; grow != 1 && i < m.length; i += 10) {
+      const t = claws ? Math.min(Math.hypot(m[i], m[i + 1], m[i + 2]) / 0.04, 1) : 1;
+      const g = 1 + (grow - 1) * t * t * (3 - 2 * t);
+      m[i] *= g;
+      m[i + 1] *= g;
+      m[i + 2] *= g;
+    }
   }
   // Hand space (x toward the thumb, y the back, z toward the fingers), a point and a direction, to the world.
   let o = out.length;
@@ -1108,7 +1131,6 @@ export const hands = (
       return;
     }
     const q = s.rot[j];
-    const at = out.length;
     hand(
       out,
       s.pos[j],
@@ -1125,20 +1147,10 @@ export const hands = (
       lite,
       lights,
       claws,
+      // The xenomorph's hands larger (CLAW_HAND), but at the wrist, where they meet the arm's
+      // cuff, and growing from it over 4 cm; hers smaller.
+      claws ? CLAW_HAND : build ? HAND_F : 1,
     );
-    const a = room(out, 0);
-    // The xenomorph's hands larger (CLAW_HAND), but at the wrist, where they meet the arm's cuff, and
-    // growing from it over 4 cm; hers smaller.
-    const f = claws ? CLAW_HAND : build ? HAND_F : 1;
-    for (let k = at; f != 1 && k < out.length; k += STRIDE) {
-      const w = s.pos[j];
-      const r = Math.hypot(a[k] - w[0], a[k + 1] - w[1], a[k + 2] - w[2]);
-      const t = claws ? Math.min(r / 0.04, 1) : 1;
-      const g = 1 + (f - 1) * t * t * (3 - 2 * t);
-      for (let d = 0; d < 3; d++) {
-        a[k + d] = w[d] + g * (a[k + d] - w[d]);
-      }
-    }
   });
 
 /** The floor under a player standing at height `y`: the first top within a step above or below it. */
@@ -1851,12 +1863,12 @@ export const createBody = (world?: World): Body => {
         skin(out, xeno ? beast(2) : body(2, build), s, colors);
         if (xeno) {
           // Its feet, the skin's legs ending at the ankles (soldier.ts draws them on the others).
-          for (const [f, t] of [
-            [J.FOOT_L, J.TOE_L],
-            [J.FOOT_R, J.TOE_R],
-          ]) {
-            metatarsal(out, s.pos[f], s.rot[f], 3);
-            toes(out, add(s.pos[f], spin(s.rot[f], FOOT_TIP)), s.rot[t], 3);
+          // The runners' close ones (partsOf()), made once, carried here.
+          const [foot, toes] = [partsOf(3)[PART.FOOT], partsOf(3)[PART.TOES]];
+          for (const [f, t] of FEET) {
+            expand(out, { m: mesh(foot.key, made(foot)), q: s.rot[f], t: s.pos[f], k: 1 });
+            const at = add(s.pos[f], spin(s.rot[f], FOOT_TIP));
+            expand(out, { m: mesh(toes.key, made(toes)), q: s.rot[t], t: at, k: 1 });
           }
         }
         // The ninja's own plates in his team's colour (soldier.ts).

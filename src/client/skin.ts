@@ -33,6 +33,7 @@ import {
 import type { Uv } from './features';
 import { room } from './verts';
 import type { Out } from './verts';
+import { backOf } from './xeno';
 
 const SKIN = TONES[1];
 
@@ -1948,9 +1949,27 @@ const shape = (lod: number, xeno = false): Skin => {
       t: new Uint32Array(tt),
     };
   }
+  // The xenomorph's spine down its back and the pipes up its neck (backOf() in xeno.ts): baked in,
+  // so the shader poses them with the rest of it. In the open: no shade.
+  let shade = o;
+  if (xeno && lod != 2) {
+    const x = backOf(lod).baked;
+    const at = w.length;
+    shade = new Float32Array(at + x.w.length).fill(1);
+    shade.set(o);
+    for (let i = 0; i < x.w.length; i++) {
+      v.push(...x.v.slice(i * 6, i * 6 + 6));
+      j.push(x.j[i * 2], x.j[i * 2 + 1]);
+      w.push(x.w[i]);
+      g.push(KIND.BODY);
+    }
+    x.t.forEach(k => t.push(k + at));
+    c.push(...x.c);
+    l.push(...Array<number>(x.t.length / 3).fill(LIMB.NONE));
+  }
   return {
     v: new Float32Array(v),
-    o,
+    o: shade,
     j: new Uint8Array(j),
     w: new Float32Array(w),
     t: new Uint16Array(t),

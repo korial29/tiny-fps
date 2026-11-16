@@ -276,8 +276,7 @@ export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];
  * (PlayerState.charge); let go, it leaps POUNCE_MIN to POUNCE_MAX m/s toward the keys held (the
  * look with none), at least POUNCE_PITCH up, and the dash timer runs from POUNCE_COOL: the first
  * POUNCE_FLY ticks of it in the air, an enemy it reaches is pinned (room.ts): POUNCE_HP health, his
- * flag dropped, a stumble of POUNCE_STUN ticks, or eaten at GLORY_HP or less. An enemy whose
- * katana or fists hit it loses ACID_HP.
+ * flag dropped, a stumble of POUNCE_STUN ticks. An enemy whose katana or fists hit it loses ACID_HP.
  */
 export const XENO_HP = 12;
 export const CLING_SPEED = 8;
@@ -289,10 +288,12 @@ export const [POUNCE_MIN, POUNCE_MAX, POUNCE_PITCH] = [9, 17, 0.3];
 export const [POUNCE_COOL, POUNCE_FLY] = [48, 40];
 export const [POUNCE_HP, POUNCE_STUN] = [2, 60];
 /**
- * A pounce on an enemy with GLORY_HP health or less is a glory kill (the user, 2026-11-16): it eats
- * his head, he goes down through his armour (LIMB.EATEN), a frag of FRAG.GLORY.
+ * The glory kill (the user, 2026-11-16, after DOOM 2016): an enemy with GLORY_HP health or less, up,
+ * flashes in the xenomorph's vision; E (KEY.USE) within GLORY_REACH metres of him and GLORY_ARC
+ * radians of its look locks the two (`lock`, `foe`, as a saber lock) for GLORY_TICKS, where neither
+ * moves, then it eats his head: he goes down through his armour (LIMB.EATEN), a frag of FRAG.GLORY.
  */
-export const GLORY_HP = 3;
+export const [GLORY_HP, GLORY_REACH, GLORY_ARC, GLORY_TICKS] = [3, 2.5, 1, 54];
 /** How much faster than a man the xenomorph runs (the user, 2026-11-16: a little, not twice). */
 export const XENO_PACE = 1.25;
 export const ACID_HP = 1;

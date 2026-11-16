@@ -625,7 +625,8 @@ export const createCombat = (
       buzz += dt;
       const all = me ? [me, ...others] : others;
       for (const p of all) {
-        const f = p.lock ? all.find(q => q.id === p.foe) : undefined;
+        // A glory kill's lock has no blades to cross.
+        const f = p.lock && p.wield ? all.find(q => q.id === p.foe) : undefined;
         if (f && (p.id < f.id || !f.lock)) {
           const at: Vec3 = [(p.x + f.x) / 2, (p.y + f.y) / 2 + 1.45, (p.z + f.z) / 2];
           tracer.crackle(at);

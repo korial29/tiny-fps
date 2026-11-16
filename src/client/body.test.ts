@@ -11,7 +11,8 @@ import {
 import { STILL } from '../shared/physics';
 import { MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { FINGER_SIDES, STRAP, createBody, finger, hand, phalanges } from './body';
+import { FINGER_SIDES, STRAP, createBody, devour, finger, hand, phalanges } from './body';
+import { GLORY_TICKS } from '../shared/constants';
 import type { Body } from './body';
 import { MUZZLE, REAR, button, gun, readout } from './gun';
 import { BOW, ends } from './katana';
@@ -1213,5 +1214,17 @@ describe('looking down with a weapon in hand', () => {
     }
     // In sight down to well past the guard's tilt.
     expect(seen(hands(p, body, -1.2)[1])).toBe(true);
+  });
+});
+
+describe('the bite of a glory kill', () => {
+  it('draws the head back, then drives it down into the prey at the end', () => {
+    const at = (u: number) => devour(Math.round(GLORY_TICKS * (1 - u)));
+    expect(at(0)).toBeCloseTo(0, 6);
+    expect(at(0.5)).toBeLessThan(-0.4);
+    expect(at(1)).toBeGreaterThan(0.6);
+    for (let k = GLORY_TICKS; k > 0.35 * GLORY_TICKS; k--) {
+      expect(devour(k - 1)).toBeLessThanOrEqual(devour(k));
+    }
   });
 });

@@ -37,7 +37,7 @@ import {
   STUMBLE_KNOCK,
   STUMBLE_TICKS,
   ACID_HP,
-  GLORY_HP,
+  GLORY_TICKS,
   POUNCE_COOL,
   POUNCE_FLY,
   POUNCE_HP,
@@ -95,7 +95,7 @@ import type { Sight } from './rover';
 import { SHIP } from './ship';
 import type { Errand } from './sortie';
 import { PHASE, STATION, Station, inside, reaches as atPost } from './station';
-import { pouncing, reaches, tackling } from './tackle';
+import { glory, pouncing, reaches, tackling } from './tackle';
 import { BODY, CUT, EV, FALL, HAIRS_N, KEY, LIMB, MODE, NOBODY, TONES_N } from './types';
 import type { Choice, Conn, Every, Input, PlayerInfo, PlayerState, Rover, Rules } from './types';
 import { build, hidden, ray } from './world';
@@ -446,7 +446,7 @@ export class Room {
         Object.assign(p.state, here);
         if (use && r && p.state.mode === MODE.RIDE) {
           leave(p.state, r, 1, this.world);
-        } else if (use && !this.press(p)) {
+        } else if (use && !this.feast(p, input.view) && !this.press(p)) {
           this.enter(p);
         }
       }
@@ -708,9 +708,8 @@ export class Room {
 
   /**
    * A xenomorph's pounce `p` meets an enemy who is up, where `p` drew him: he is pinned, POUNCE_HP
-   * of health, his flag dropped and a stumble of POUNCE_STUN thrown the way it leapt; with GLORY_HP
-   * or less it eats his head, through his armour (the glory kill). The pounce ends on him: it stops,
-   * its dash timer past the strike.
+   * of health, his flag dropped and a stumble of POUNCE_STUN thrown the way it leapt. The pounce
+   * ends on him: it stops, its dash timer past the strike.
    */
   private pin(p: Player, view: number | undefined): void {
     const me = p.state;
@@ -724,11 +723,6 @@ export class Room {
     me.dash = Math.min(me.dash, POUNCE_COOL - POUNCE_FLY);
     [me.vx, me.vz] = [me.vx * 0.2, me.vz * 0.2];
     me.hits = (me.hits + 1) & 255;
-    if (foe.state.hp <= GLORY_HP) {
-      this.harm(foe, Infinity, p, FRAG.GLORY, felled(FALL.STRUCK, dx, dz));
-      foe.state.lost = LIMB.EATEN;
-      return;
-    }
     if (this.harm(foe, POUNCE_HP, p, FRAG.CLAW, felled(FALL.STRUCK, dx, dz))) {
       return;
     }
@@ -1137,6 +1131,49 @@ export class Room {
   }
 
   /**
+   * E pressed by the xenomorph `p`: the nearest enemy who is up with GLORY_HP or less, within
+   * GLORY_REACH and GLORY_ARC of its look where `p` drew him, and in no lock, is held for a glory
+   * kill: the two locked (`lock`, `foe`) for GLORY_TICKS, his flag dropped, `p` brought in a metre
+   * from him. duel() ends it. True when it started.
+   */
+  private feast(p: Player, view: number | undefined): boolean {
+    const me = p.state;
+    if (!this.kit(p).xeno || me.down || me.stun || me.lock || me.mode === MODE.RIDE) {
+      return false;
+    }
+    // Where `p` drew them, with their health and lock as they are now.
+    const seen = glory(
+      me,
+      this.enemies(p, view).flatMap(s => {
+        const q = this.players().find(o => o.info.id === s.id);
+        const { hp, down, lock, mode } = q?.state ?? s;
+        return q ? [{ ...s, hp, down, lock, mode }] : [];
+      }),
+    );
+    const foe = this.players().find(q => q.info.id === seen?.id);
+    if (!seen || !foe) {
+      return false;
+    }
+    this.drop(foe.info.id);
+    for (const [a, b] of [
+      [p, foe],
+      [foe, p],
+    ]) {
+      Object.assign(a.state, { ...FREE, lock: GLORY_TICKS, foe: b.info.id, pressed: true });
+      Object.assign(a.state, { swing: 0, charge: 0, stun: 0, zap: false, vx: 0, vz: 0 });
+    }
+    const [dx, dz] = [seen.x - me.x, seen.z - me.z];
+    const d = Math.hypot(dx, dz);
+    if (d > 1) {
+      [me.x, me.z] = [
+        Math.fround(me.x + (dx * (d - 1)) / d),
+        Math.fround(me.z + (dz * (d - 1)) / d),
+      ];
+    }
+    return true;
+  }
+
+  /**
    * A saber lock of `p`, after his input: it ends when a side leads by LOCK_WIN presses (the other
    * takes LOCK_HP and the katana's shock, thrown along the winner's look), when one has stepped out
    * (LOCK_BREAK ticks of a side or back key: both are free), or when it has run its LOCK_TICKS (both
@@ -1150,6 +1187,22 @@ export class Room {
     const o = this.players().find(r => r.info.id === q.foe);
     if (!o || o.state.foe !== p.info.id || !o.state.lock || o.state.down || q.down) {
       Object.assign(q, FREE);
+      return;
+    }
+    // A glory kill (feast()): held to its end, whatever the keys, then the head is eaten.
+    const [x, y] = [p, o].map(r => this.kit(r).xeno);
+    if (x !== y) {
+      if (q.lock > 1 && o.state.lock > 1) {
+        return;
+      }
+      const [eater, prey] = x ? [p, o] : [o, p];
+      Object.assign(q, FREE);
+      Object.assign(o.state, FREE);
+      eater.state.hits = (eater.state.hits + 1) & 255;
+      const [dx, dz] = [prey.state.x - eater.state.x, prey.state.z - eater.state.z];
+      const d = Math.hypot(dx, dz) || 1;
+      this.harm(prey, Infinity, eater, FRAG.GLORY, felled(FALL.STRUCK, dx / d, dz / d));
+      prey.state.lost = LIMB.EATEN;
       return;
     }
     const lead = (q.pushes ?? 0) - (o.state.pushes ?? 0);

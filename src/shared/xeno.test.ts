@@ -6,6 +6,8 @@ import {
   CLING_SPEED,
   CUTS,
   GLORY_HP,
+  GLORY_REACH,
+  GLORY_TICKS,
   RUN_SPEED,
   STING,
   TAILS,
@@ -31,7 +33,7 @@ import { FRAG, decodeSnapshot, encodeSnapshot } from './protocol';
 import { Room } from './room';
 import { pouncing } from './tackle';
 import { KEY, LIMB, MODE, TEX } from './types';
-import type { Conn, PlayerState } from './types';
+import type { Conn, Input, PlayerState } from './types';
 import { build } from './world';
 import type { Brush } from './world';
 
@@ -377,13 +379,14 @@ describe('the claws and the tail', () => {
 });
 
 describe('the xenomorph in a room', () => {
-  type Pl = { info: { name: string; id: number; team: number }; state: PlayerState };
+  type Pl = { info: { name: string; id: number; team: number }; state: PlayerState; bank?: number };
   type Inner = {
     players(): Pl[];
     punch(p: Pl, view?: number): void;
     cut(p: Pl, view?: number): void;
     tackle(p: Pl, view?: number): void;
     heal(players: Pl[]): void;
+    apply(p: Pl, input: Input): void;
   };
   const room = (...roles: number[]) => {
     const r = new Room({}, ROOFTOPS);
@@ -485,27 +488,75 @@ describe('the xenomorph in a room', () => {
     expect(m.state.hp).toBe(HP_MAX - POUNCE_HP);
   });
 
-  it('eats the head of an enemy it pounces on with GLORY_HP or less, through his armour', () => {
+  it('glory kills on E a weak foe it faces, close: both held GLORY_TICKS, then his head eaten', () => {
     const { inner, ps, sent } = room(ROLE.XENO, ROLE.MARINE);
     const [x, m] = ps;
     face(x.state, m.state);
+    let seq = 0;
+    const go = (p: Pl, keys: number, yaw: number) => {
+      p.bank = 99;
+      inner.apply(p, { seq: ++seq & 65535, keys, yaw, pitch: 0 });
+    };
+    const e = (yaw: number) => {
+      go(x, KEY.USE, yaw);
+      const held = x.state.lock ?? 0;
+      go(x, 0, yaw);
+      return held;
+    };
+    // Too healthy for it, then out of its look, then too far: nothing.
+    m.state.hp = GLORY_HP + 1;
+    expect(e(0)).toBe(0);
     Object.assign(m.state, { hp: GLORY_HP, armor: ARMOR_MAX });
-    Object.assign(x.state, { mode: MODE.AIR, dash: POUNCE_COOL, vx: 0, vz: -12 });
-    inner.tackle(x);
+    expect(e(Math.PI)).toBe(0);
+    m.state.z = 51 - GLORY_REACH - 0.3;
+    expect(e(0)).toBe(0);
+    // Two metres off, ahead: held, and brought in to a metre of him.
+    m.state.z = 49;
+    go(x, KEY.USE, 0);
+    expect([x.state.lock, x.state.foe, m.state.lock, m.state.foe]).toEqual([
+      GLORY_TICKS,
+      m.info.id,
+      GLORY_TICKS,
+      x.info.id,
+    ]);
+    expect(x.state.z).toBeCloseTo(50, 4);
+    const [mx, mz] = [m.state.x, m.state.z];
+    for (let k = 0; k < GLORY_TICKS - 2; k++) {
+      go(x, KEY.FORWARD | KEY.SPRINT, 0);
+      go(m, KEY.BACK | KEY.SPRINT, Math.PI);
+    }
+    // Neither moves, and he cannot get away.
+    expect([m.state.x, m.state.z, m.state.down]).toEqual([mx, mz, 0]);
+    expect(m.state.lock).toBeGreaterThan(0);
+    for (let k = 0; k < 2; k++) {
+      go(x, 0, 0);
+    }
     expect(m.state.down).toBeGreaterThan(0);
-    expect(m.state.lost).toBe(LIMB.EATEN);
-    expect(pouncing(x.state)).toBe(false);
+    expect([m.state.lost, x.state.lock, m.state.lock]).toEqual([LIMB.EATEN, 0, 0]);
     const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
     expect(frag).toMatchObject({ by: x.info.id, who: m.info.id, how: FRAG.GLORY });
-    // One more health and it is the plain pin.
+  });
+
+  it('ends a glory kill when the xenomorph goes down, the prey free; a pounce on a weak foe only pins', () => {
+    const { inner, ps } = room(ROLE.XENO, ROLE.MARINE);
+    const [x, m] = ps;
+    face(x.state, m.state);
+    m.state.hp = GLORY_HP;
+    x.bank = m.bank = 99;
+    inner.apply(x, { seq: 1, keys: KEY.USE, yaw: 0, pitch: 0 });
+    expect(m.state.lock).toBe(GLORY_TICKS);
+    x.state.down = 100;
+    inner.apply(m, { seq: 1, keys: 0, yaw: Math.PI, pitch: 0 });
+    expect([m.state.lock, m.state.down, m.state.hp]).toEqual([0, 0, GLORY_HP]);
+    // The pounce.
     const two = room(ROLE.XENO, ROLE.MARINE);
     const [y, n] = two.ps;
     face(y.state, n.state);
-    n.state.hp = GLORY_HP + 1;
+    n.state.hp = GLORY_HP;
     Object.assign(y.state, { mode: MODE.AIR, dash: POUNCE_COOL, vx: 0, vz: -12 });
     two.inner.tackle(y);
     expect([n.state.hp, n.state.down, n.state.stun]).toEqual([
-      GLORY_HP + 1 - POUNCE_HP,
+      GLORY_HP - POUNCE_HP,
       0,
       POUNCE_STUN,
     ]);

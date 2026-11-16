@@ -4,12 +4,16 @@
 import {
   DASH_COOLDOWN,
   DASH_TICKS,
+  GLORY_ARC,
+  GLORY_HP,
+  GLORY_REACH,
+  PLAYER_H,
   PLAYER_R,
   POUNCE_COOL,
   POUNCE_FLY,
   TACKLE_REACH,
 } from './constants';
-import { heightOf } from './physics';
+import { forward, heightOf } from './physics';
 import { MODE } from './types';
 import type { PlayerState } from './types';
 
@@ -32,3 +36,31 @@ export const reaches = (a: PlayerState, b: PlayerState): boolean =>
   Math.hypot(a.x - b.x, a.z - b.z) < 2 * PLAYER_R + TACKLE_REACH &&
   a.y < b.y + heightOf(b) &&
   b.y < a.y + heightOf(a);
+
+/**
+ * The enemy the xenomorph `me` would glory kill with E (room.ts feast()), of `foes` as it sees
+ * them: the nearest one up, in no lock and not seated, with GLORY_HP health or less, within
+ * GLORY_REACH on the floor plane, a body's height above or below, and GLORY_ARC of its look.
+ */
+export const glory = (me: PlayerState, foes: readonly PlayerState[]): PlayerState | undefined => {
+  const [fx, fz] = forward(me.yaw);
+  let best: PlayerState | undefined;
+  let near = GLORY_REACH;
+  for (const f of foes) {
+    const [dx, dz] = [f.x - me.x, f.z - me.z];
+    const d = Math.hypot(dx, dz);
+    const facing = d < 1e-3 || Math.acos(Math.min(1, (dx * fx + dz * fz) / d)) <= GLORY_ARC;
+    if (
+      !f.down &&
+      !f.lock &&
+      f.mode !== MODE.RIDE &&
+      f.hp <= GLORY_HP &&
+      d <= near &&
+      Math.abs(f.y - me.y) < PLAYER_H &&
+      facing
+    ) {
+      [best, near] = [f, d];
+    }
+  }
+  return best;
+};

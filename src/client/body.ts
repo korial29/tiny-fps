@@ -83,7 +83,7 @@ import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin }
 import type { Pose, Quat } from './rig';
 import { armor } from './armor';
 import { CUFF, CUFF_NEAR, CUFF_SIDES, REGION, beast, body, palette, skin } from './skin';
-import { BONE, CHITIN_X, FOOT_TIP, HOOKED, PART, lashOf, partsOf, tail } from './xeno';
+import { CHITIN_X, CLAW, FOOT_TIP, HOOKED, PART, lashOf, partsOf, tail } from './xeno';
 import type { Part } from './xeno';
 import { CLOTH } from './mask';
 import { createTrail } from './trail';
@@ -540,10 +540,12 @@ const tube = (
   }
 };
 
+/** The xenomorph's fingers against a man's: long (the user's picture, 2026-11-17). */
+const LANK = 1.28;
 /** The curl the xenomorph's fingers close to at most. */
 export const RAKE = 0.35;
 /** How far each of the xenomorph's claws reaches past the root of its last phalanx, metres. */
-const CLAW_L = 0.05;
+const CLAW_L = 0.042;
 /** A finger's half thickness at its root (11.2 mm until the fingers closed round a grip, 2026-11-09). */
 const FINGER_R = 0.01;
 /** The lengths of a finger's three phalanges against `l`, the root one first. */
@@ -567,8 +569,11 @@ export const finger = (
   l: number,
   r: number,
   t: Vec3,
+  /** 0 to 1: a skeleton's finger (the xenomorph's), thin bones between swollen knuckles, a fine tip. */
+  bony = 0,
 ): Ring[] => {
   const [l1, l2, l3] = BONES.map(k => k * l);
+  const shaft = 1 - 0.34 * bony;
   const j1 = along(p, d1, l1);
   const j2 = along(j1, d2, l2);
   /** A ring at `c` across `d`, `k` thick, `h` of that from the palm side to the back. */
@@ -586,7 +591,7 @@ export const finger = (
       ring(
         mix(mix(a, c, k), mix(c, b, k), k),
         add(mix(sub(c, a), [0, 0, 0], k), mix(sub(b, c), [0, 0, 0], 1 - k)),
-        k0 + (k1 - k0) * k,
+        (k0 + (k1 - k0) * k) * (shaft + 0.24 * bony * Math.sin(Math.PI * k)),
         // Flatter across the joint, most at its middle: the inside of the bend does not fold.
         1 - flat * Math.sin(Math.PI * k),
       ),
@@ -598,16 +603,19 @@ export const finger = (
   // The root sunk 12 mm in the palm and flared, a fillet that leaves it at a slant with no seam
   // (the user, 2026-11-09).
   return [
-    ring(along(p, unit(t), -0.012), t, 1.35),
-    ring(p, t, 1.1),
-    ring(a1, d1, 1),
+    // The xenomorph's thin finger leaves the palm thinner too: no step down just past its root.
+    ring(along(p, unit(t), -0.012), t, 1.35 * (1 - 0.2 * bony)),
+    ring(p, t, 1.1 * (1 - 0.2 * bony)),
+    ring(a1, d1, shaft),
     ...bend(a1, j1, mid, 0.98, 0.95, 0.22),
     // The glove's edge, rolled, then the bare finger a hair beyond it.
-    ring(mid, d2, 0.95),
-    ring(along(mid, d2, 0.003), d2, 0.88),
+    ring(mid, d2, 0.95 * shaft),
+    ring(along(mid, d2, 0.003), d2, 0.88 * shaft),
     ...bend(along(mid, d2, 0.003), j2, b2, 0.86, 0.84),
-    ring(b2, d3, 0.82),
-    ring(along(j2, d3, l3 - 0.001), d3, 0.7),
+    // The xenomorph's last phalanx as wide as its claw's root, which goes on from it.
+    ring(b2, d3, 0.82 * (1 - 0.24 * bony)),
+    // Its tip thinner inside the claw, which sheathes it: none of it through the claw.
+    ring(along(j2, d3, l3 - 0.001), d3, 0.7 * (1 - 0.4 * bony)),
     ring(along(j2, d3, l3 + 0.006), d3, 0),
   ];
 };
@@ -770,10 +778,19 @@ const shape = (
   // A whole glove (`bare` the glove's own colour, a space suit's) has no nails showing.
   const nail = bare === tint ? tint : mix(bare as Vec3, [0.98, 0.74, 0.7], 0.4);
   /** A finger's tube, its glove to ring BARE and bare beyond, and the nail on its tip. */
-  const digit = (p: Vec3, ds: [Vec3, Vec3, Vec3], l: number, r: number, t: Vec3, from = 1) => {
+  const digit = (
+    p: Vec3,
+    ds: [Vec3, Vec3, Vec3],
+    l: number,
+    r: number,
+    t: Vec3,
+    from = 1,
+    /** Its claw's length against CLAW_L, how hard it hooks down and its root's width (the thumb's: short, curled, fine). */
+    [reach, hook, slim] = [1, 1, 1],
+  ) => {
     paint = k => (k < BARE ? tint : bare);
     // From where it leaves the palm, ring `from`: a weld skins its root.
-    const all = finger(p, ...ds, l, r, t);
+    const all = finger(p, ...ds, l, r, t, +claws);
     const ks = lite ? [from, ...LITE.filter(k => k > from)] : all.map((_, k) => k).slice(from);
     tube(
       ks.map(k => all[k]),
@@ -787,18 +804,30 @@ const shape = (
     if (claws) {
       // A claw for the nail: from the back of the last phalanx, out past the tip and hooked down
       // toward the palm, tapering to a point.
-      paint = () => BONE;
+      paint = () => CLAW;
       const ring = (k: number, w: number): Ring => {
         const c = add(
-          along(j2, d, BONES[2] * l * 0.55 + CLAW_L * k),
-          y.map(v => v * (r * 0.5 - CLAW_L * 0.45 * k * k)) as Vec3,
+          // On the finger's own axis, from just before its tip: one line from the finger into the claw.
+          along(j2, d, BONES[2] * l * 0.68 + CLAW_L * reach * k * (1 - 0.25 * (hook - 1) * k)),
+          y.map(v => v * (r * 0.04 - CLAW_L * reach * 0.45 * hook * k * k)) as Vec3,
         );
-        const t = unit(add(d, y.map(v => -v * 0.9 * k) as Vec3));
+        const t = unit(add(d, y.map(v => -v * 0.9 * hook * k) as Vec3));
         const b = unit(cross(t, x));
-        return [c, x.map(v => v * r * w) as Vec3, b.map(v => v * r * w * 0.8) as Vec3];
+        return [c, x.map(v => v * r * w * slim) as Vec3, b.map(v => v * r * w * slim) as Vec3];
       };
-      tube([ring(0, 0.9), ring(0.35, 0.7), ring(0.7, 0.4), ring(1, 0)], lite ? 4 : FS, (q, n) =>
-        put(q, n),
+      // Flush on the finger at its root, then swelling clear of the fingertip inside it.
+      tube(
+        // Its first ring inside the finger: no open rim behind the claw to see into.
+        [
+          ring(0, 0.35),
+          ring(0.04, 0.66),
+          ring(0.16, 0.74),
+          ring(0.4, 0.56),
+          ring(0.7, 0.3),
+          ring(1, 0),
+        ],
+        lite ? 4 : FS,
+        (q, n) => put(q, n),
       );
       return;
     }
@@ -824,13 +853,19 @@ const shape = (
   };
   /** Each finger's ring where it leaves the palm: its middle and its vertices, as finger() places them. */
   const roots: [Vec3, Vec3[], Vec3, Vec3][] = [];
+  const nexts: Ring[] = [];
   for (let i = 0; i < 4; i++) {
     // `point` straightens the index out of the fist, to press a button.
     const ds = phalanges(i ? curl : curl * (1 - point), i);
     const at: Vec3 = [0.034 - 0.0225 * i, -0.004, 0.092];
     const t = unit(add(ds[0], [0, 0, 1]));
-    digit(at, ds, 0.04 * LENGTH[i], FINGER_R * THICK[i], t);
-    const [, x, y] = finger(at, ...ds, 0.04 * LENGTH[i], FINGER_R * THICK[i], t)[1];
+    // The xenomorph's long and lean (the user's picture, 2026-11-17: a skeleton's hand).
+    const [fl, fr] = [0.04 * LENGTH[i] * (claws ? LANK : 1), FINGER_R * THICK[i]];
+    digit(at, ds, fl, fr, t);
+    const rings = finger(at, ...ds, fl, fr, t, +claws);
+    const [, x, y] = rings[1];
+    // The finger's next ring as it is drawn (digit()), for its root's normals (seamless, below).
+    nexts.push(rings[lite ? LITE[0] : 2]);
     roots.push([
       at,
 
@@ -929,9 +964,23 @@ const shape = (
       sum.set(x, add(sum.get(x) ?? [0, 0, 0], n));
     }
   }
+  // The xenomorph's (the user, 2026-11-17: a seam where its fingers leave the palm): a root's
+  // vertex takes the very normal its finger's tube gives it (tube()), so the light does not break
+  // across the joint.
+  const seamless = new Map<Vec3, Vec3>();
+  if (claws) {
+    roots.forEach(([, ring], f) => {
+      const [c, x, y] = nexts[f];
+      ring.forEach((v, k) => {
+        const a = (k * TAU) / FS;
+        const on = [0, 1, 2].map(d => c[d] + x[d] * Math.cos(a) + y[d] * Math.sin(a)) as Vec3;
+        seamless.set(v, unit(cross(sub(ring[(k + 1) % FS], ring[(k + FS - 1) % FS]), sub(on, v))));
+      });
+    });
+  }
   for (const t of tris) {
     for (const [p, n] of t) {
-      put(p, unit(add(n, unit(sum.get(p)!))));
+      put(p, seamless.get(p) ?? unit(add(n, unit(sum.get(p)!))));
     }
   }
   // `push` (0 to 1) reaches the thumb's tip out along `to`, onto the katana's button.
@@ -940,13 +989,14 @@ const shape = (
     return k && to ? unit(mix(d, to, push)) : d;
   });
   const tp: Vec3 = [0.032, -0.01, 0.025];
-  digit(tp, [d1, d2, d2], 0.037, 0.0124, d1, 2);
+  digit(tp, [d1, d2, d2], 0.037, 0.0124, d1, 2, [0.6, 2.2, 0.7]);
   // The thumb's mound (the user, 2026-11-09: the thumb shows the most, holding a gun): from a
   // footprint on the palm round its root, its ring there pushed out onto the palm's surface, a
   // skin swells into the thumb halfway along its first bone. One piece with the palm.
   paint = () => tint;
   {
-    const rings = finger(tp, d1, d2, d2, 0.037, 0.0124, d1);
+    // As the thumb is drawn (digit()): the xenomorph's thin bone, or the mound ended in a step.
+    const rings = finger(tp, d1, d2, d2, 0.037, 0.0124, d1, +claws);
     const [, x1, y1] = rings[1];
     const [c2, x2, y2] = rings[2];
     /** The palm's ring at `z`: its middle's height, half its width and its height. */
@@ -994,6 +1044,49 @@ const shape = (
         }
       }
     }
+  }
+  // The xenomorph's tendons over the back of its hand: each from the wrist straight to its
+  // finger's root and on along the finger's first bone (the user, 2026-11-17: in line with it).
+  if (claws && !lite) {
+    paint = () => tint.map(c => c * 1.5);
+    /** The top of the palm's back at (x, z). */
+    const top = (x: number, z: number): Vec3 => {
+      const n = Math.min(
+        Math.max(
+          PALM.findIndex(r => r[0] > z),
+          1,
+        ),
+        PALM.length - 1,
+      );
+      const [a, b] = [PALM[n - 1], PALM[n]];
+      const f = Math.min(Math.max((z - a[0]) / (b[0] - a[0]), 0), 1);
+      const [y, w, h] = [1, 2, 3].map(k => a[k] + (b[k] - a[k]) * f);
+      return [x, y + h * Math.sqrt(Math.max(1 - (x / w) ** 2, 0)) + 0.0006, z];
+    };
+    roots.forEach(([at], f) => {
+      const [d1] = phalanges(f ? curl : curl * (1 - point), f);
+      const up = unit(cross(d1, X));
+      const r = FINGER_R * THICK[f];
+      // On the finger: over its root, then down into its first bone.
+      const [on, end] = [0.004, 0.02].map((l, k) =>
+        add(along(at, d1, l), up.map(v => v * r * (k ? 0.45 : 0.86)) as Vec3),
+      );
+      // The same line back to the wrist, a little drawn in toward its middle.
+      const back = [0.012, 0.036, 0.06, 0.082].map(z => {
+        const u = (0.092 - z) / 0.08;
+        return top((at[0] - d1[0] * (0.092 - z)) * (1 - 0.45 * u), z);
+      });
+      const pts = [...back, on, end];
+      tube(
+        pts.map((c, k): Ring => {
+          // Out of the wrist as a hair (tube() starts on a ring), into the bone as a point.
+          const w = k == pts.length - 1 ? 0 : k ? 0.0026 : 0.0008;
+          return [c, [w, 0, 0], [0, w, 0]];
+        }),
+        5,
+        put,
+      );
+    });
   }
   // No glove's shell, plate or strap on a near hand, nor on the xenomorph's bare one.
   if (lite || claws) {
@@ -1916,8 +2009,8 @@ export const createBody = (world?: World): Body => {
         }
         const from = out.length;
         if (xeno) {
-          const { PANTS, UPPER, GLOVE, JACKET, TRIM, SOLE } = REGION;
-          for (const k of [PANTS, UPPER, GLOVE, JACKET, TRIM, SOLE]) {
+          const { PANTS, UPPER, GLOVE, JACKET, TRIM, SOLE, BELT } = REGION;
+          for (const k of [PANTS, UPPER, GLOVE, JACKET, TRIM, SOLE, BELT]) {
             colors[k] = CHITIN_X;
           }
         }

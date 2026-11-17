@@ -20,13 +20,13 @@ import {
   NADE_COOL,
 } from '../shared/constants';
 import { STILL } from '../shared/physics';
-import { CUT, KEY } from '../shared/types';
+import { CUT, KEY, LIMB } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
 import { TRAIL, createBalls } from './balls';
 import { createTracer } from './beams';
 import type { Orb } from './beams';
-import { createCombat, fired, sight, struck, swung, voiceOf } from './combat';
+import { createCombat, dreadful, fired, sight, struck, swung, voiceOf } from './combat';
 import { aimed, focus, tip } from './gun';
 import type { Vec3 } from './mesh';
 import type { View } from './combat';
@@ -685,6 +685,41 @@ describe('the sounds and the screen of what happens to the own player', () => {
     expect(clip - VOICES * LINES).toBeLessThan(KIND.DEATH[1]);
     expect(at[0]).toBe(5);
     expect(t.audio.play.mock.calls.map(c => c[0])).not.toContain(SOUND.DEATH);
+  });
+
+  it('cries out at a dreadful death, groans at any other: a limb cut off, a hard fall, a heavy hit', () => {
+    const was = { life: 1, vy: 0 };
+    expect(dreadful(was, player({ hp: 0, down: 120 }))).toBe(false);
+    expect(dreadful(was, player({ hp: 0, down: 120, lost: LIMB.HEAD }))).toBe(true);
+    expect(dreadful({ life: 1, vy: -25 }, player({ hp: 0, down: 120 }))).toBe(true);
+    expect(dreadful({ life: 5, vy: 0 }, player({ hp: 0, down: 120 }))).toBe(true);
+    expect(dreadful({ life: 2, vy: -10 }, player({ hp: 0, down: 120 }))).toBe(false);
+  });
+
+  it('says a groan for a shot that puts a player down, a cry of pain for a cut that takes a limb', () => {
+    const t = setup();
+    const speak = vi.fn(() => true);
+    const combat = createCombat(
+      WORLD,
+      { ...t.audio, speak },
+      t.hud,
+      t.fx,
+      t.tracer,
+      t.ctl,
+      t.balls,
+    );
+    const frame = (others: PlayerState[]) => combat.frame(VIEW, player(), others, 0, 1 / 60, 1000);
+    const bob = (o: Partial<PlayerState>) => player({ id: 2, x: 5, ...o });
+    const kind = (clip: number) =>
+      Object.entries(KIND).find(([, [a, b]]) => clip % LINES >= a && clip % LINES < b)![0];
+    frame([bob({ hp: 1 })]);
+    frame([bob({ hp: 0, down: 120, ammo: -1 })]);
+    frame([bob({ hp: 5, down: 0, ammo: -1 })]);
+    frame([bob({ hp: 0, down: 120, ammo: -1, lost: LIMB.ARM_L })]);
+    expect(speak.mock.calls.map(c => kind((c as unknown as [number])[0]))).toEqual([
+      'GROAN',
+      'DEATH',
+    ]);
   });
 
   it('falls back on the synth cry while the voices are not decoded', () => {

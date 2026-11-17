@@ -54,9 +54,21 @@ describe('voices', () => {
     expect(kindOf(tauntOf(NINJA, FRAG.BLADE, 1))).toBe('BLADE');
   });
 
-  it('cries going down in the speaker’s voice', () => {
+  it('cries going down in the speaker’s voice, or groans', () => {
     expect(kindOf(deathOf(2, 5))).toBe('DEATH');
     expect(Math.floor(deathOf(2, 5) / LINES)).toBe(2);
+    expect(kindOf(deathOf(2, 5, true))).toBe('GROAN');
+    expect(Math.floor(deathOf(2, 5, true) / LINES)).toBe(2);
+  });
+
+  it('keeps the cries and the groans brief (the user, 2026-11-17: they were long screams)', () => {
+    for (let speaker = 0; speaker < NINJA + 2; speaker++) {
+      for (const [a, b] of [KIND.DEATH, KIND.GROAN]) {
+        for (let k = a; k < b; k++) {
+          expect(CAST[speaker * LINES + k][1]).toBeLessThan(0.75);
+        }
+      }
+    }
   });
 });
 

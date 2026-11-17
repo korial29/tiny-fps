@@ -12,6 +12,7 @@ import {
   CHARGE_MAX,
   CHARGE_TAP,
   CHARGE_TICKS,
+  FALL_SAFE,
   GUN_RANGE,
   MAX_PITCH,
   NADE,
@@ -158,6 +159,14 @@ export const voiceOf = (id: number, body = 0): number =>
 /** Health and armour together: what a hit takes. */
 const life = (p: Pick<PlayerState, 'hp' | 'armor'>): number => p.hp + (p.armor ?? 0);
 
+/**
+ * A death worth a cry of pain rather than a groan (the user, 2026-11-17): a katana's cut that took
+ * a limb, a fall hard enough to hurt (the speed a frame before the landing), or a hit of 3 or more
+ * (a grenade, a charged shot). `was` is the life and vertical speed a frame before.
+ */
+export const dreadful = (was: { life: number; vy: number }, p: PlayerState): boolean =>
+  (p.lost ?? 0) > 0 || was.vy < -0.9 * FALL_SAFE || was.life - life(p) >= 3;
+
 const BUZZ = 0.16;
 const CRACKLE = 0.09;
 /** A bolt's buzz goes up and down 1.6 times a second, by 35 % of its pitch either way. */
@@ -204,8 +213,8 @@ export const createCombat = (
   let buzz = 0;
   /** The `shots` of each other player at the last frame, and what the katana reads of him. */
   const seen = new Map<number, number>();
-  /** The health of each other player at the last frame, and whether he was down. */
-  const lives = new Map<number, [number, boolean]>();
+  /** The health of each other player at the last frame, whether he was down, and his vertical speed. */
+  const lives = new Map<number, [number, boolean, number]>();
   const blades = new Map<number, Blade>();
   /** The own cuts started in the live steps since the last frame. */
   let cuts: number[] = [];
@@ -215,9 +224,10 @@ export const createCombat = (
   let deaths = 0;
   /**
    * Player `id` cries out in pain, or as he goes down (`died`), at `at` (the own, centred): going
-   * down, a scream in his own voice once the voices are decoded, the synth's before.
+   * down, in his own voice once the voices are decoded (the synth's before), a brief cry of pain
+   * when the death is `dire` (dreadful()), else a groan.
    */
-  const cry = (id: number, died: boolean, at?: Vec3) => {
+  const cry = (id: number, died: boolean, at?: Vec3, dire = false) => {
     const r = rate();
     // The xenomorph screeches, never speaks, and its blood sizzles where it was hit.
     if (beast(id)) {
@@ -228,7 +238,7 @@ export const createCombat = (
     if (
       died &&
       audio.speak?.(
-        deathOf(speaker(id), id + deaths++),
+        deathOf(speaker(id), id + deaths++, !dire),
         at,
         at ? 1 : 0.8,
         paceOf(id) * (0.5 + r / 2),
@@ -450,7 +460,7 @@ export const createCombat = (
         if (was && life(me) < life(was)) {
           const died = me.down > 0 && !was.down;
           audio.play(died ? SOUND.DOWN : SOUND.HURT);
-          cry(me.id, died);
+          cry(me.id, died, undefined, dreadful({ life: life(was), vy: was.vy }, me));
           fx.wound();
         } else if (was && life(me) > life(was) && !was.down) {
           audio.play((me.armor ?? 0) > (was.armor ?? 0) ? SOUND.ARMOR : SOUND.PACK);
@@ -568,9 +578,9 @@ export const createCombat = (
         seen.set(p.id, p.shots);
         const lived = lives.get(p.id);
         if (lived && life(p) < lived[0]) {
-          cry(p.id, p.down > 0 && !lived[1], at);
+          cry(p.id, p.down > 0 && !lived[1], at, dreadful({ life: lived[0], vy: lived[2] }, p));
         }
-        lives.set(p.id, [life(p), p.down > 0]);
+        lives.set(p.id, [life(p), p.down > 0, p.vy]);
         // Another xenomorph: a hiss as its tail charges, a shriek as it dashes (its timer went up).
         const charged = charges.get(p.id);
         if (charged !== undefined && beast(p.id) && !p.down) {

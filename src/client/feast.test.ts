@@ -16,6 +16,7 @@ import {
   mounted,
   seize,
   spun,
+  swaying,
   topple,
   toppled,
 } from './feast';
@@ -77,7 +78,7 @@ describe('seize()', () => {
 });
 
 describe('clutched()', () => {
-  it('turns him to it, bent back and sunk, his feet where they were, his hands against its chest', () => {
+  it('turns him to it, bent back and sunk, his feet where they were, his arms raised against it', () => {
     const p = rest([0, 0, -1], 2);
     const before = solve(p);
     const q = clutched(p, [0, 0, 0], 1);
@@ -93,8 +94,49 @@ describe('clutched()', () => {
     }
     // Bent back: his head behind his pelvis, away from it.
     expect(s.pos[J.HEAD][2]).toBeLessThan(s.pos[J.PELVIS][2] - 0.1);
+    // His hands raised over his shoulders, out toward it (+z), at its neck and chest.
     const [px, pt, py] = FEAST.PUSH;
-    expect(dist(s.pos[J.HAND_R], [-px, py, -1 + pt])).toBeLessThan(0.02);
+    for (const [arm, hand, side] of [
+      [J.ARM_L, J.HAND_L, 1],
+      [J.ARM_R, J.HAND_R, -1],
+    ]) {
+      expect(s.pos[hand][1]).toBeGreaterThan(s.pos[arm][1] + 0.15);
+      expect(s.pos[hand][2]).toBeGreaterThan(s.pos[arm][2] + 0.2);
+      // Facing +z, his right is -x.
+      expect(dist(s.pos[hand], [side * px, py, -1 + pt])).toBeLessThan(0.2);
+    }
+  });
+
+  it('claws at it with both hands, each its own way, up and down and across', () => {
+    const p = rest([0, 0, -1], 2);
+    const ts = Array.from({ length: 60 }, (_, i) => i / 60);
+    const hands = ts.map(t => solve(clutched(p, [0, 0, 0], 1, t)));
+    for (const h of [J.HAND_L, J.HAND_R]) {
+      for (const k of [0, 1]) {
+        const v = hands.map(s => s.pos[h][k]);
+        expect(Math.max(...v) - Math.min(...v)).toBeGreaterThan(0.05);
+      }
+    }
+    // Not together: the two hands' heights apart at some time.
+    expect(
+      Math.max(...hands.map(s => Math.abs(s.pos[J.HAND_L][1] - s.pos[J.HAND_R][1]))),
+    ).toBeGreaterThan(0.06);
+  });
+
+  it('puts his hands on its belly as drawn, and shoves by pulling back off it, never into it', () => {
+    const p = rest([0, 0, -1], 2);
+    // Its belly 0.5 m toward it (+z), at the height of his chest.
+    const bust: Vec3 = [0, 1.35, -0.5];
+    const [, out] = FEAST.HOLD;
+    for (let k = 0; k < 60; k++) {
+      const s = solve(clutched(p, [0, 0, 0], 1, k / 60, bust));
+      for (const h of [J.HAND_L, J.HAND_R]) {
+        // Off its middle toward him by its chest's radius at least, and on it.
+        expect(bust[2] - s.pos[h][2]).toBeGreaterThan(out - 1e-6);
+        expect(bust[2] - s.pos[h][2]).toBeLessThan(out + FEAST.STRUGGLE[2] + 0.01);
+        expect(Math.abs(s.pos[h][1] - bust[1])).toBeLessThan(0.1);
+      }
+    }
   });
 });
 
@@ -184,10 +226,16 @@ describe('a glory kill drawn', () => {
   });
   let drops = 0;
   let bursts = 0;
+  const thighs: Vec3[] = [];
   const tracer = {
     shock() {},
     spit() {},
-    gore(_: Vec3, n: number) {
+    gore(at: Vec3, n: number) {
+      // His thighs' (FEAST.GRIP), else his head's.
+      if (Math.abs(at[1] - FEAST.GRIP[2]) < 1e-9) {
+        thighs.push(at);
+        return;
+      }
       drops += n;
       bursts += +(n >= FEAST.GORE[1]);
     },
@@ -208,8 +256,15 @@ describe('a glory kill drawn', () => {
       state(PREY_ID, { z: -1, yaw: Math.PI, lock: 30, foe: XENO }),
     ];
     frames(book, locked, 2);
-    // Locked before its strike: no blood yet.
+    // Locked before its strike: no blood from his head yet; from his thighs, where its feet grip
+    // them, both of them, on each side of him (at z = -1).
     expect(drops).toBe(0);
+    expect(thighs.length).toBeGreaterThan(0);
+    frames(book, locked, 60);
+    expect(thighs.length).toBeGreaterThan(FEAST.GRIP[0] * 0.9);
+    expect(thighs.length).toBeLessThan(FEAST.GRIP[0] * 1.1 + 2);
+    expect(new Set(thighs.map(t => Math.sign(t[0])))).toEqual(new Set([-1, 1]));
+    thighs.forEach(t => expect([Math.abs(t[0]), t[2]]).toEqual([FEAST.GRIP[1], -1]));
     expect(book.get(XENO).mount).toBe(1);
     expect(book.get(PREY_ID).mount).toBe(1);
     const on = stance(book.get(XENO)).s;
@@ -237,6 +292,30 @@ describe('a glory kill drawn', () => {
     expect(book.get(XENO).mount).toBe(0);
     expect(stance(book.get(XENO)).s.pos[J.PELVIS][1]).toBeCloseTo(low, 1);
     expect(stance(book.get(XENO)).s.pos[J.PELVIS][2]).toBeCloseTo(0, 1);
+  });
+
+  it('keeps its head down at his after the kill, eating, then lifts it', () => {
+    const book = new Map<number, Runner>();
+    // Its head's turn, and how far it is from the one it holds when it is not eating, radians.
+    const head = () => stance(book.get(XENO)!).s.rot[J.HEAD];
+    const from = (a: number[], b: number[]) =>
+      2 * Math.acos(Math.min(1, Math.abs(a.reduce((d, v, i) => d + v * b[i], 0))));
+    frames(book, [state(XENO, {}), state(PREY_ID, { z: -1, yaw: Math.PI })], 2);
+    const up = head();
+    frames(
+      book,
+      [
+        state(XENO, { lock: 3, foe: PREY_ID }),
+        state(PREY_ID, { z: -1, yaw: Math.PI, lock: 3, foe: XENO }),
+      ],
+      2,
+    );
+    // Bent down at him while it eats on, back as it was once it has fed.
+    const after = [state(XENO, {}), state(PREY_ID, { z: -1, yaw: Math.PI, down: 100 })];
+    frames(book, after, Math.round((FEAST.FEED[0] - FEAST.FEED[1]) * 60) - 2);
+    expect(from(head(), up)).toBeGreaterThan(0.4);
+    frames(book, after, Math.round(FEAST.FEED[1] * 60) + 4);
+    expect(from(head(), up)).toBeLessThan(0.05);
   });
 
   it('leaves a lock of two humans (a saber lock) to the katana', () => {
@@ -424,5 +503,24 @@ describe('the beheaded victim', () => {
       expect(reach(s, arm, hand)).toBeGreaterThan(0.5);
       expect(reach(a, arm, hand)).toBeLessThan(0.45);
     }
+  });
+});
+
+describe('the fight', () => {
+  it('rocks the two together on the lock’s ticks, from nothing before it is on him', () => {
+    expect(swaying(GLORY_TICKS - 10, 0)).toBe(0);
+    const ts = Array.from({ length: 60 }, (_, k) => swaying(GLORY_TICKS - 40 - k, 1));
+    expect(Math.max(...ts)).toBeGreaterThan(0.9);
+    expect(Math.min(...ts)).toBeLessThan(-0.9);
+    // It and his trunk go the same way in the world: its right is his left (they face).
+    const x =
+      solve(seize(xeno(), PREY, 1, 1)).pos[J.PELVIS][0] -
+      solve(seize(xeno(), PREY, 1, 0)).pos[J.PELVIS][0];
+    const p = rest([0, 0, -1], Math.PI);
+    const y =
+      solve(clutched(p, [0, 0, 0], 1, 0, undefined, 1)).pos[J.NECK][0] -
+      solve(clutched(p, [0, 0, 0], 1, 0, undefined, 0)).pos[J.NECK][0];
+    expect(x).toBeGreaterThan(0.05);
+    expect(y).toBeGreaterThan(0.03);
   });
 });

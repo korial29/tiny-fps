@@ -4,7 +4,7 @@
 // shoulders, leaning over his head, rears its head back and bites; he bends back under it, his
 // hands up against its chest. After the kill it lets go of him as he falls. Poses only: the host
 // still holds the two a metre apart and nothing of it is on the wire. Pure, no DOM.
-import { CUTS, EXEC, GLORY_TICKS } from '../shared/constants';
+import { CUTS, EXEC, GLORY_TICKS, TICK_HZ } from '../shared/constants';
 import { CUT } from '../shared/types';
 import { BITE, arc, inv, reach } from './body';
 import { add, basis, mix, sub, unit } from './mesh';
@@ -41,8 +41,24 @@ export const FEAST = {
   CHEW: [0.32, 6],
   /** Drops of blood a second from his head as it eats, and in the burst when his head goes. */
   GORE: [110, 40],
-  /** His hands against its chest: across, toward it, and up. */
-  PUSH: [0.16, 0.34, 1.58],
+  /** His hands raised against it, at its neck and its chest, to tear it off him (the user, 2026-11-17): across, toward it, and up. */
+  PUSH: [0.2, 0.36, 1.78],
+  /** His hands clawing at it, each its own way: metres up and down, and across. */
+  CLAW: [0.06, 0.04],
+  /**
+   * His hands on its belly as drawn (the user, 2026-11-17: on it, not through it): across from its
+   * middle, off it toward him (its belly's radius), and up; they shove by pulling back off it.
+   */
+  HOLD: [0.1, 0.16, 0.04],
+  /**
+   * The two rocking left and right together as they fight (the user, 2026-11-17): metres aside,
+   * radians of lean, and beats a second, on the lock's own ticks so both screens agree.
+   */
+  SWAY: [0.07, 0.12, 1.7],
+  /** Drops of blood a second from his thighs while its feet grip them, and where: across and up. */
+  GRIP: [30, 0.17, 0.62],
+  /** Seconds it keeps its head down at his after the kill, eating (the user, 2026-11-17), the last FED of them lifting it. */
+  FEED: [1.4, 0.35],
 } as const;
 
 const length = (v: Vec3) => Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
@@ -79,7 +95,7 @@ const limb = (q: Pose, j: number, to: Vec3, pole: Vec3, m: number) => {
  * The xenomorph's `pose` on its prey, whose feet are at `prey`, by the share `m` (mounted()): turned
  * to him and up on him, its feet on his thighs, its claws over his shoulders, leaning over his head.
  */
-export const seize = (pose: Pose, prey: Vec3, m: number): Pose => {
+export const seize = (pose: Pose, prey: Vec3, m: number, sway = 0): Pose => {
   if (m <= 0) {
     return pose;
   }
@@ -91,6 +107,9 @@ export const seize = (pose: Pose, prey: Vec3, m: number): Pose => {
   const pelvis = solve(q).pos[J.PELVIS];
   const want = off(prey, r, f, 0, -FEAST.CLING, 0);
   q.at = [0, 1, 2].map(i => q.at[i] + (i == 1 ? FEAST.LIFT : want[i] - pelvis[i]) * m) as Vec3;
+  // Rocked to its right and back (swaying()): aside and leaning.
+  q.at = off(q.at, r, f, FEAST.SWAY[0] * sway, 0, 0);
+  rot[J.PELVIS] = mul(axis([0, 0, 1], -FEAST.SWAY[1] * sway), rot[J.PELVIS]);
   const [feet, claws] = [FEAST.FEET, FEAST.CLAWS];
   for (const [side, thigh, arm] of [
     [-1, J.THIGH_L, J.ARM_L],
@@ -117,11 +136,19 @@ export const seize = (pose: Pose, prey: Vec3, m: number): Pose => {
 
 /**
  * The prey's `pose` under the xenomorph whose feet are at `eater`, by the share `m`: turned to it,
- * bent back with his hips sunk, his feet where they were, his hands up against its chest, jerked
+ * bent back with his hips sunk, his feet where they were, his arms raised against it (his hands on
+ * its belly `bust` as drawn, when it is known), jerked
  * back as it seizes him, then fighting it, his head thrown about in panic, at `t` seconds (the
  * user, 2026-11-16).
  */
-export const clutched = (pose: Pose, eater: Vec3, m: number, t = 0): Pose => {
+export const clutched = (
+  pose: Pose,
+  eater: Vec3,
+  m: number,
+  t = 0,
+  bust?: Vec3,
+  sway = 0,
+): Pose => {
   if (m <= 0) {
     return pose;
   }
@@ -149,25 +176,30 @@ export const clutched = (pose: Pose, eater: Vec3, m: number, t = 0): Pose => {
       mul(axis(X, pt * Math.sin(8.7 * t + 2)), axis([0, 0, 1], rl * Math.sin(6.1 * t + 4))),
     ),
   );
+  // Rocked with it, the same way in the world: to his left as it goes to its right.
+  rot[J.SPINE] = mul(rot[J.SPINE], axis([0, 0, 1], FEAST.SWAY[1] * sway));
   const q: Pose = { ...pose, yaw: pose.yaw + wrap(yaw - pose.yaw) * m, rot };
   const feet = solve(q);
-  q.hips = [q.hips[0], q.hips[1] - FEAST.SINK * m, q.hips[2]];
+  q.hips = [q.hips[0] - 0.6 * FEAST.SWAY[0] * sway, q.hips[1] - FEAST.SINK * m, q.hips[2]];
   for (const [side, thigh, arm] of [
     [-1, J.THIGH_L, J.ARM_L],
     [1, J.THIGH_R, J.ARM_R],
   ]) {
     // Each foot back where it stood, the knee bent ahead.
     reach(q, solve(q), thigh, feet.pos[thigh + 2], f);
-    // Each hand shoving at its own time.
-    const push = FEAST.PUSH;
+    // Raised against it in panic, each hand shoving and clawing at its own time, the elbows down
+    // and a little out, as a push bends them (the user, 2026-11-17): on its belly as drawn
+    // (`bust`), shoving by pulling back off it, never into it.
+    const [lift, wide] = FEAST.CLAW.map(a => a * m);
     const jab = shove * Math.max(Math.sin(7.9 * t + (side - 1) * 1.7), 0);
-    limb(
-      q,
-      arm,
-      off(pose.at, r, f, side * push[0], push[1] + jab, push[2] + 0.4 * jab),
-      off([0, 0, 0], r, f, side, -0.3, -1),
-      m,
-    );
+    const claw = lift * Math.sin(9.7 * t + side * 2.3);
+    const sway = wide * Math.sin(6.1 * t + side);
+    const [across, out, up] = FEAST.HOLD;
+    const push = FEAST.PUSH;
+    const to = bust
+      ? off(bust, r, f, side * across + sway, -out - jab, up + claw)
+      : off(pose.at, r, f, side * push[0] + sway, push[1] - jab, push[2] + claw);
+    limb(q, arm, to, off([0, 0, 0], r, f, 0.6 * side, -0.2, -1), m);
   }
   return q;
 };
@@ -341,3 +373,10 @@ export const topple = (pose: Pose, t: number): Pose => {
   const hips = turn(inv(Y), sub(pelvis, pose.at)).map((v, i) => v - base[i]) as Vec3;
   return { ...pose, rot, hips };
 };
+
+/**
+ * How far the two rock as they fight with `lock` ticks of the glory kill left, -1 to 1, times how
+ * far it is on him (`m`): on the lock's ticks, which both of them count, so the two go together.
+ */
+export const swaying = (lock: number, m: number): number =>
+  m * Math.sin((2 * Math.PI * FEAST.SWAY[2] * (GLORY_TICKS - lock)) / TICK_HZ);

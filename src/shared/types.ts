@@ -106,6 +106,8 @@ export const LIMB = {
   LEG_R: 5,
   /** The head a xenomorph's glory kill ate (GLORY_HP): gone, not thrown. */
   EATEN: 6,
+  /** The head the fists' glory kill burst with its punch down (EXEC): gone in blood, not thrown. */
+  BURST: 7,
 } as const;
 
 /**

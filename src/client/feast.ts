@@ -448,3 +448,253 @@ export const crouch = (pose: Pose, w: number): Pose => {
   }
   return q;
 };
+
+/**
+ * The fists' execution as drawn (EXEC, the user 2026-11-17: a glory kill for everyone, the victim's
+ * kneel the katana's, the killer's blows his own), in ticks of the lock: turned to his victim over
+ * TURN, the right fist drawn back low by the hip (GUT: cocked, still cocked), driven up into his
+ * belly on the strike of the katana's cut down, so the victim kneels on it (home), buried there as he
+ * folds (held), back to the guard (back); the left hand on the back of his bowed head, holding it
+ * (GRAB: from, on); the right fist raised high over the shoulder (SMASH: from, raised), held there a
+ * beat, brought down onto his head on the lock's last tick, as it bursts. Past the lock, the punch
+ * follows through and the guard comes back (AFTER: ticks of each). The body turns behind the blows:
+ * the chest's TWIST, the trunk's BEND forward (radians) and the hips' SINK (metres) at the gut punch
+ * and at the smash, the trunk leaning back RISE as the fist is raised. Places are across, ahead and
+ * up from the killer's feet: the GUARD by the chin (right, left), the fist COCKED by the hip, RAISED
+ * over the shoulder and through, PAST, after the head; on the victim: the fist on his belly, ahead of
+ * his spine (BELLY), and on the front of his head (FACE: toward the killer, up from its joint); the
+ * left hand on the back of it (NAPE).
+ */
+export const PUMMEL = {
+  TURN: 6,
+  GUT: [24, 31, EXECUTE.KNEEL[0], 44, 54],
+  GRAB: [50, 60],
+  SMASH: [58, 74, 80, EXEC.TICKS],
+  AFTER: [8, 24],
+  TWIST: [0.45, 0.55],
+  BEND: [0.35, 0.45],
+  SINK: [0.08, 0.16],
+  RISE: 0.08,
+  GUARD: [
+    [0.15, 0.3, 1.36],
+    [-0.13, 0.34, 1.4],
+  ],
+  COCKED: [0.3, -0.1, 0.98],
+  RAISED: [0.26, -0.16, 1.98],
+  PAST: [0.1, 0.5, 0.72],
+  BELLY: 0.19,
+  FACE: [0.12, 0.06],
+  NAPE: [0.02, 0.12],
+  /** Drops of blood as the head bursts, and how fast they fly; a spurt from the belly and the mouth on the gut punch. */
+  BURST: [140, 4.5],
+  SPURT: [14, 8],
+  /**
+   * His way in (the user, 2026-11-17: not a slide, and a leap that looks like one): a fighter's
+   * bound over the host's dash (GLORY_DASH ticks). He dips and pushes off the back foot, is in the
+   * air from tick OFF to ON, TOP metres up at the middle (a parabola), the left knee driven up ahead
+   * and the right leg folded behind, the left foot reaching down to land first and the right one
+   * stepping in after; the knees take the landing. Keys [tick, value] of each foot (metres ahead of
+   * his feet and up from them, the flight's lift apart), of the hips (metres down) and of the lean
+   * forward (radians); the last of each his fighting stance, the feet under him whatever the gait
+   * left behind, WIDE apart.
+   */
+  LEAP: { OFF: 3, ON: 19, TOP: 0.3, WIDE: 0.13 },
+  LEAD: [
+    [0, 0.13, 0],
+    [3, 0.08, 0.03],
+    [8, 0.32, 0.26],
+    [14, 0.36, 0.18],
+    [19, 0.2, 0],
+    [21, 0.13, 0],
+  ],
+  TRAIL: [
+    [0, -0.16, 0],
+    [3, -0.36, 0],
+    [7, -0.46, 0.22],
+    [13, -0.34, 0.3],
+    [19, -0.28, 0.06],
+    [24, -0.16, 0],
+  ],
+  HIPS: [
+    [0, 0.05],
+    [2, 0.15],
+    [4, 0.02],
+    [11, 0.06],
+    [19, 0.04],
+    [22, 0.2],
+    [27, 0.12],
+    [34, 0.05],
+  ],
+  LEAN: [
+    [0, 0],
+    [2, 0.12],
+    [5, 0.3],
+    [14, 0.15],
+    [21, 0.32],
+    [30, 0.06],
+    [36, 0],
+  ],
+} as const;
+
+/** A fists' execution's killer, in its lock: his blows are drawn (pummel()), no weapon in hand. */
+export const pummeling = (p: { exec?: number; lock?: number; wield?: boolean }): boolean =>
+  p.exec === EXEC.KILLER && !!p.lock && !p.wield;
+
+/** The victim of a fists' execution as the killer last saw him: his feet, and his belly and head when drawn. */
+export interface Prey {
+  feet: Vec3;
+  belly?: Vec3;
+  head?: Vec3;
+}
+
+/** Of eased keys [tick, value], the value at `e`: a strike's key (`hard`) speeds up into it, as a blow does. */
+const along = <T>(
+  keys: [number, T, boolean?][],
+  e: number,
+  blend: (a: T, b: T, u: number) => T,
+): T => {
+  let i = 0;
+  while (i < keys.length - 1 && e >= keys[i + 1][0]) {
+    i++;
+  }
+  if (i == keys.length - 1 || e <= keys[0][0]) {
+    return keys[e <= keys[0][0] ? 0 : i][1];
+  }
+  const [[t0, a], [t1, b, hard]] = [keys[i], keys[i + 1]];
+  const u = clamp((e - t0) / (t1 - t0));
+  return blend(a, b, hard ? u * u : ease(u));
+};
+
+const num = (a: number, b: number, u: number) => a + (b - a) * u;
+
+/**
+ * The killer's `pose` in the fists' execution `e` ticks into its lock (past EXEC.TICKS after the
+ * kill, a fraction between ticks), on `prey`: turned to him, the blows of PUMMEL, his feet where
+ * they were. Faded out over the end of AFTER.
+ */
+export const pummel = (pose: Pose, e: number, prey: Prey): Pose => {
+  const [follow, back] = PUMMEL.AFTER;
+  const end = EXEC.TICKS + follow;
+  const w = e <= end ? 1 : 1 - ease(clamp((e - end) / back));
+  if (w <= 0) {
+    return pose;
+  }
+  const [yaw, f, r] = facing(pose.at, prey.feet);
+  const turn = ease(clamp(e / PUMMEL.TURN)) * w;
+  const q: Pose = { ...pose, yaw: pose.yaw + wrap(yaw - pose.yaw) * turn, rot: pose.rot.slice() };
+  const [g0, c0, home, held, gone] = PUMMEL.GUT;
+  const [from, raised, poised, smash] = PUMMEL.SMASH;
+  // The chest turned behind each blow, the trunk bent into it, the hips down.
+  const k = (a: number, b: number): [number, number][] => [
+    [0, 0],
+    [g0, -0.6 * a],
+    [c0, -0.7 * a],
+    [home, b],
+    [held, b],
+    [gone, 0],
+    [from, 0],
+    [raised, -a],
+    [poised, -a],
+    [smash, b],
+    [end, 0.6 * b],
+    [end + back, 0],
+  ];
+  const keyed = (a: number, b: number) =>
+    along(
+      k(a, b).map(([t, v], i) => [t, v, i == 3 || i == 9] as [number, number, boolean]),
+      e,
+      num,
+    ) * w;
+  const twist = keyed(PUMMEL.TWIST[0], PUMMEL.TWIST[1]);
+  // Forward into the gut punch (BEND[0]), back as the fist is raised, forward into the smash.
+  const first = (i: number) => (e < from ? PUMMEL.BEND[0] / PUMMEL.BEND[1] : 1) * i;
+  const lean = (k: readonly (readonly number[])[]) =>
+    along(
+      k.map(([t, v]) => [t, v] as [number, number]),
+      e,
+      num,
+    );
+  const bend = first(keyed(PUMMEL.RISE, PUMMEL.BEND[1])) + lean(PUMMEL.LEAN) * w;
+  const sink =
+    Math.max(keyed(0, PUMMEL.SINK[1]), 0) * (e < from ? PUMMEL.SINK[0] / PUMMEL.SINK[1] : 1);
+  const feet = solve(q);
+  q.rot[J.SPINE] = mul(q.rot[J.SPINE], axis(X, -0.4 * bend));
+  q.rot[J.CHEST] = mul(axis([0, 1, 0], twist), mul(q.rot[J.CHEST], axis(X, -0.6 * bend)));
+  // The bound in over the dash (LEAP): its flight a parabola, the hips his own (not the gait's dash
+  // crouch), each foot on its keys, the left knee ahead, the right folded behind.
+  const { OFF, ON, TOP, WIDE } = PUMMEL.LEAP;
+  const v = clamp((e - OFF) / (ON - OFF));
+  q.at = [q.at[0], q.at[1] + TOP * 4 * v * (1 - v) * w, q.at[2]];
+  const down = lean(PUMMEL.HIPS);
+  q.hips = q.hips.map((h, i) => h * (1 - w) + (i == 1 ? -down * w - sink : 0)) as Vec3;
+  for (const [side, thigh, keys] of [
+    [-1, J.THIGH_L, PUMMEL.LEAD],
+    [1, J.THIGH_R, PUMMEL.TRAIL],
+  ] as const) {
+    const [ahead, up] = along(
+      keys.map(([t, a, u]) => [t, [a, u]] as [number, number[]]),
+      e,
+      (a, b, u) => [num(a[0], b[0], u), num(a[1], b[1], u)],
+    );
+    const own = off(q.at, r, f, side * WIDE, ahead, 0.06 + up);
+    reach(q, solve(q), thigh, mix(feet.pos[thigh + 2], own, w), off([0, 0, 0], r, f, 0, 1, -0.4));
+  }
+  // Where the blows land on him: his belly and his head as drawn, else as a kneel would put them.
+  const kn = kneeling(EXEC.TICKS - Math.min(e, EXEC.TICKS));
+  const belly = off(
+    prey.belly ?? off(prey.feet, r, f, 0, 0, 1.1 - EXECUTE.LOW * kn),
+    r,
+    f,
+    0,
+    -PUMMEL.BELLY,
+    0,
+  );
+  const head = prey.head ?? off(prey.feet, r, f, 0, -0.15 * kn, 1.62 - EXECUTE.LOW * kn);
+  const at = (p: readonly number[]) => off(pose.at, r, f, p[0], p[1], p[2]);
+  const [guardR, guardL] = PUMMEL.GUARD.map(at);
+  const fist = along<Vec3>(
+    [
+      [0, guardR],
+      [g0, at(PUMMEL.COCKED)],
+      [c0, at(PUMMEL.COCKED)],
+      [home, belly, true],
+      [held, belly],
+      [gone, guardR],
+      [from, guardR],
+      [raised, at(PUMMEL.RAISED)],
+      [poised, at(PUMMEL.RAISED)],
+      [smash, off(head, r, f, 0, -PUMMEL.FACE[0], PUMMEL.FACE[1]), true],
+      [end, at(PUMMEL.PAST)],
+      [end + back, guardR],
+    ],
+    e,
+    mix,
+  );
+  const [grab, holding] = PUMMEL.GRAB;
+  const hand = along<Vec3>(
+    [
+      [0, guardL],
+      [grab, guardL],
+      [holding, off(head, r, f, 0, PUMMEL.NAPE[0], PUMMEL.NAPE[1])],
+      [smash, off(head, r, f, 0, PUMMEL.NAPE[0], PUMMEL.NAPE[1])],
+      [end, guardL],
+    ],
+    e,
+    mix,
+  );
+  // The elbow down and out, raised and out over the shoulder for the punch down.
+  const high = along<number>(
+    [
+      [0, 0],
+      [from, 0],
+      [raised, 1],
+      [smash, 0.6],
+      [end, 0],
+    ],
+    e,
+    num,
+  );
+  limb(q, J.ARM_R, fist, off([0, 0, 0], r, f, 0.7, -0.4, 1.4 * high - 0.8), w);
+  limb(q, J.ARM_L, hand, off([0, 0, 0], r, f, -0.7, -0.3, -0.8), w);
+  return q;
+};

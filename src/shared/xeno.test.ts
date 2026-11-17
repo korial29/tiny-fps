@@ -808,11 +808,8 @@ describe('the xenomorph in a room', () => {
       step(k, KEY.USE | KEY.BLADE);
       step(k, KEY.BLADE);
     };
-    m.state.hp = GLORY_HP;
-    // Empty-handed: nothing.
-    e();
-    expect(m.state.lock ?? 0).toBe(0);
     Object.assign(k.state, { blade: true });
+    // Too strong: nothing.
     m.state.hp = GLORY_HP + 1;
     e();
     expect(m.state.lock ?? 0).toBe(0);
@@ -852,6 +849,50 @@ describe('the xenomorph in a room', () => {
       0,
     ]);
     // Not thrown: he tips over from his knee where he is (feast.ts).
+    expect([m.state.vx, m.state.vz]).toEqual([0, 0]);
+    const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
+    expect(frag).toMatchObject({ by: k.info.id, who: m.info.id, how: FRAG.GLORY });
+  });
+
+  it('executes on E a weak foe ahead with the fists, whatever else is in hand: a dash, no cut, his head burst', () => {
+    const { inner, ps, sent } = room(ROLE.MARINE, ROLE.NINJA);
+    const [k, m] = ps;
+    face(k.state, m.state);
+    m.state.z = 49;
+    k.bank = m.bank = 999;
+    // The gun in hand, and a katana he does not hold: the fists all the same.
+    Object.assign(k.state, { ammo: 20, mag: 10, blade: true });
+    let seq = 0;
+    const step = (p: typeof k, keys: number) =>
+      inner.apply(p, { seq: ++seq, keys, yaw: p.state.yaw, pitch: 0 });
+    // Too strong: nothing.
+    m.state.hp = GLORY_HP + 1;
+    step(k, KEY.USE);
+    step(k, 0);
+    expect(m.state.lock ?? 0).toBe(0);
+    m.state.hp = GLORY_HP;
+    step(k, KEY.USE);
+    expect([k.state.lock, m.state.lock, k.state.wield]).toEqual([EXEC.TICKS, EXEC.TICKS, false]);
+    expect([k.state.exec, m.state.exec]).toEqual([EXEC.KILLER, EXEC.VICTIM]);
+    for (let t = 1; t < EXEC.TICKS; t++) {
+      step(m, KEY.BACK | KEY.SPRINT | KEY.FIRE);
+      if (!k.state.lock) {
+        // His victim's last tick ended it.
+        break;
+      }
+      step(k, KEY.FIRE | KEY.BLADE);
+      // No swing, no shot, no katana coming to hand.
+      expect([k.state.swing, k.state.wield, k.state.shots]).toEqual([0, false, 0]);
+      if (t == GLORY_DASH) {
+        // Closer than the swordsman: a fist's reach.
+        expect(Math.hypot(k.state.x - m.state.x, k.state.z - m.state.z)).toBeCloseTo(EXEC.FIST, 1);
+      }
+      if (t < EXEC.TICKS - 1) {
+        expect([m.state.down, m.state.hp, m.state.z]).toEqual([0, GLORY_HP, 49]);
+      }
+    }
+    expect(m.state.down).toBeGreaterThan(0);
+    expect([m.state.lost, m.state.lock ?? 0, k.state.lock ?? 0]).toEqual([LIMB.BURST, 0, 0]);
     expect([m.state.vx, m.state.vz]).toEqual([0, 0]);
     const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
     expect(frag).toMatchObject({ by: k.info.id, who: m.info.id, how: FRAG.GLORY });

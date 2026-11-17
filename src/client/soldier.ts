@@ -130,6 +130,7 @@ import { footing } from './footing';
 import {
   EXECUTE,
   FEAST,
+  PUMMEL,
   chew,
   clutched,
   crouch,
@@ -137,12 +138,15 @@ import {
   intent,
   kneel,
   mounted,
+  pummel,
+  pummeling,
   seize,
   spun,
   swaying,
   topple,
 } from './feast';
 import type { Face } from './expression';
+import type { Prey } from './feast';
 import { CH, toneFor } from './features';
 import { createTrail } from './trail';
 import type { Trail } from './trail';
@@ -236,6 +240,14 @@ export interface Runner {
   slain?: { at: Vec3; t: number; pivot?: number };
   /** The execution's victim's pose as he last knelt, or the xenomorph's prey's as it last held him: the dead body tips over from it. */
   knelt?: Pose;
+  /**
+   * The fists' execution (feast.ts pummel()): its killer's ticks into the lock, smoothed between
+   * snapshots and running on past it after the kill, and his victim as last drawn; its victim's
+   * `fist`, set while he kneels to fists rather than a katana.
+   */
+  pum?: number;
+  prey?: Prey;
+  fist?: boolean;
   /** The skeleton as last drawn: a limb cut off leaves from it (limbs.ts track()). */
   s?: ReturnType<typeof solve>;
 }
@@ -483,19 +495,46 @@ export const animate = (
         r.slain = { at: r.with, t: 0, pivot: J.FOOT_R };
       }
       r.killer = victim(p) ? r.with : undefined;
+      // Kneeling to fists (a killer with no katana in hand): blood and no sparks, his head burst.
+      r.fist = victim(p) ? !!foe && !foe.wield : !!r.fist && !!p.down;
       if (victim(p) && victim(r.p)) {
         const was = EXEC.TICKS - r.p.lock! < EXECUTE.KNEEL[0];
         if (was && EXEC.TICKS - p.lock! >= EXECUTE.KNEEL[0]) {
-          const chest: Vec3 = [p.x, p.y + 1.25, p.z];
-          tracer?.gore?.(chest, EXECUTE.WOUND, 2.5);
-          tracer?.shock(chest);
+          const chest: Vec3 = [p.x, p.y + (r.fist ? 1.05 : 1.25), p.z];
+          tracer?.gore?.(chest, r.fist ? PUMMEL.SPURT[0] : EXECUTE.WOUND, 2.5);
+          if (r.fist) {
+            tracer?.gore?.([p.x, p.y + 1.5, p.z], PUMMEL.SPURT[1], 1.5);
+          } else {
+            tracer?.shock(chest);
+          }
         }
       }
       if (victim(r.p) && p.down) {
-        const neck: Vec3 = [p.x, p.y + 1.05, p.z];
-        tracer?.gore?.(neck, EXECUTE.NECK, 3.5);
-        tracer?.shock(neck);
+        const head = r.s?.pos[J.HEAD];
+        const neck: Vec3 =
+          r.fist && head ? [head[0], head[1] + 0.1, head[2]] : [p.x, p.y + 1.05, p.z];
+        if (r.fist) {
+          tracer?.gore?.(neck, PUMMEL.BURST[0], PUMMEL.BURST[1]);
+        } else {
+          tracer?.gore?.(neck, EXECUTE.NECK, 3.5);
+          tracer?.shock(neck);
+        }
         r.bleed = EXECUTE.BLEEDING;
+      }
+      // The fists' execution's killer: his ticks into it, smoothed, his victim's belly and head as
+      // last drawn; after the kill they run on for the follow-through, kept where they were.
+      if (pummeling(p) && foe && !p.down) {
+        const e = EXEC.TICKS - p.lock!;
+        const was = r.pum ?? -Infinity;
+        r.pum = Math.abs(was - e) > 6 ? e : Math.min(Math.max(was + dt * TICK_HZ, e - 1), e + 1);
+        const v = book.get(foe.id)?.s?.pos;
+        const copy = (j: number): Vec3 | undefined => v && [v[j][0], v[j][1], v[j][2]];
+        r.prey = { feet: [foe.x, foe.y, foe.z], belly: copy(J.SPINE), head: copy(J.HEAD) };
+      } else if (r.pum !== undefined) {
+        // Cut short (either went down first): no blow at the air.
+        const on = r.pum >= EXEC.TICKS - 3 && !p.down;
+        r.pum = on ? r.pum + dt * TICK_HZ : undefined;
+        r.pum = r.pum! > EXEC.TICKS + PUMMEL.AFTER[0] + PUMMEL.AFTER[1] ? undefined : r.pum;
       }
       if (r.bleed && r.cut?.at) {
         r.bleed = Math.max(r.bleed - dt, 0);
@@ -813,6 +852,10 @@ export const grasp = (p: PlayerState, seat?: Seat): number[] => {
   if (driving({ p, seat })) {
     return [0.9, 0.9];
   }
+  // The fists' execution: both fists, the left hand opening on his head (feast.ts PUMMEL.GRAB).
+  if (pummeling(p)) {
+    return [EXEC.TICKS - p.lock! > PUMMEL.GRAB[0] ? 0.45 : 1, 1];
+  }
   const armed = p.ammo >= 0 || !!p.railed || !!p.rifled || !!p.wield;
   const pace = Math.min(Math.max((Math.hypot(p.vx, p.vz) - RUN_SPEED) / 3, 0), 1);
   const free = dashing(p)
@@ -972,7 +1015,7 @@ export const stance = (r: Runner) => {
   const lying = !!p.down || floored(p) || driving(r);
   // In a glory kill (feast.ts) the arms are the kill's: no weapon is held up.
   const mate = (r.mount ?? 0) > 0 ? r.with : undefined;
-  const busy = lying || !!mate || (p.exec === EXEC.VICTIM && !!p.lock);
+  const busy = lying || !!mate || (p.exec === EXEC.VICTIM && !!p.lock) || r.pum !== undefined;
   // All on fours (fours.ts) the gait's pose is wholly laid over: it is not built.
   const fours = !lying && (r.fours?.weight ?? 0) > 0.998;
   let pose = fours
@@ -1052,6 +1095,10 @@ export const stance = (r: Runner) => {
     pose = r.knelt = clutched(pose, mate, r.mount!, r.t, r.bust, sway);
   } else if (p.exec === EXEC.VICTIM && p.lock && r.with && !lying) {
     pose = r.knelt = kneel(pose, r.with, p.lock, r.t);
+  }
+  // The fists' execution's blows, and their follow-through after the kill.
+  if (r.pum !== undefined && r.prey && !lying) {
+    pose = pummel(pose, r.pum, r.prey);
   }
   // Beheaded on his knee: the same kneel, tipping over, not another fall.
   if (r.slain && p.down && r.knelt) {
@@ -1500,7 +1547,12 @@ export const soldier = (
       ...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]),
       cutting(r.prog) || (r.parry >= 0 && r.parry < 2 * PARRY_IN),
     );
-  } else if ((p.railed ? !stowed(p) : p.ammo >= 0 || p.rifled) && !p.down && !driving(r)) {
+  } else if (
+    (p.railed ? !stowed(p) : p.ammo >= 0 || p.rifled) &&
+    !p.down &&
+    !driving(r) &&
+    r.pum === undefined
+  ) {
     // A swap shows: the battery or the capsule out and in, the glow off until it is.
     const sp = swapOf(p);
     held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, undefined, 0, kindOf(p), r.t, {

@@ -436,6 +436,15 @@ describe('a katana’s execution (EXEC)', () => {
     expect([p.x, p.z, p.swing, p.wield, p.lock]).toEqual([0, 0, 0, false, 1]);
   });
 
+  it('throws the fists’ execution no cut and keeps it empty-handed, the katana it does not hold left alone', () => {
+    const p = locked(EXEC.KILLER, { wield: false });
+    for (let e = 1; e < EXEC.TICKS; e++) {
+      expect(hit(p, FORWARD | FIRE | KEY.BLADE)).toBe(STRIKE.NONE);
+      expect([p.x, p.z, p.swing, p.wield, p.shots]).toEqual([0, 0, 0, false, 0]);
+    }
+    expect([p.lock, p.blade]).toEqual([1, true]);
+  });
+
   it('is no saber lock', () => {
     expect([sabering(locked(EXEC.KILLER)), sabering(locked(0)), sabering(armed(0, 0))]).toEqual([
       false,

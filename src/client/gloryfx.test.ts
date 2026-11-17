@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { EXEC, GLORY_TICKS } from '../shared/constants';
 import { STILL } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
-import { EXEC_AFTER, EXEC_CUES, FEAST_AFTER, FEAST_CUES, createGloryFx } from './gloryfx';
+import {
+  EXEC_AFTER,
+  EXEC_CUES,
+  FEAST_AFTER,
+  FEAST_CUES,
+  FIST_AFTER,
+  FIST_CUES,
+  createGloryFx,
+} from './gloryfx';
 import type { Cue } from './gloryfx';
 import type { Vec3 } from './mesh';
 import { SOUND } from './sfx';
@@ -35,9 +43,12 @@ const rig = (xenos: number[] = []) => {
 /** How many times a cue plays over a whole lock. */
 const times = ([tick, , , , , every, last]: Cue) =>
   every ? Math.floor((last! - tick) / every) + 1 : 1;
-/** The two locked with `lock` ticks left, the killer at the origin, his victim 1 m ahead. */
-const pair = (lock: number, exec: boolean): PlayerState[] => [
-  state(K, { lock, foe: V, exec: exec ? EXEC.KILLER : 0 }),
+/**
+ * The two locked with `lock` ticks left, the killer at the origin, his victim 1 m ahead: the
+ * xenomorph's (`exec` false), an execution with the katana in hand (true), or with the fists.
+ */
+const pair = (lock: number, exec: boolean | 'fist'): PlayerState[] => [
+  state(K, { lock, foe: V, exec: exec ? EXEC.KILLER : 0, wield: exec === true }),
   state(V, { z: -1, lock, foe: K, exec: exec ? EXEC.VICTIM : 0 }),
 ];
 
@@ -72,6 +83,27 @@ describe('the glory kills’ sounds', () => {
     expect(played.map(p => p[0]).slice(0, 3)).toEqual([SOUND.ZAP, SOUND.PAIN, SOUND.THUD]);
   });
 
+  it('plays the fists’ when no katana is in hand: the bound in, the punch in his belly, his cry, the punch down', () => {
+    const { fx, played } = rig();
+    for (let lock = EXEC.TICKS; lock > 0; lock -= 2) {
+      fx.frame(pair(lock, 'fist'));
+    }
+    expect(played).toHaveLength(FIST_CUES.reduce((n, c) => n + times(c), 0));
+    const ids = played.map(p => p[0]);
+    // None of the katana's.
+    expect(ids).not.toContain(SOUND.ZAP);
+    expect(ids).not.toContain(SOUND.SHING);
+    expect(ids.slice(0, 4)).toEqual([SOUND.GRUNT, SOUND.JUMP, SOUND.LAND, SOUND.STEP]);
+    // The punch in the belly heard on him, and his cry in his voice, as he goes down on his knee.
+    const gut = played.find(p => p[0] == SOUND.TACKLE)!;
+    expect(gut[1]).toEqual([0, 1.3, -1]);
+    const cry = played.find(p => p[0] == SOUND.PAIN)!;
+    expect(cry[3]).toBeGreaterThan(1.2);
+    // The punch down's whoosh is the last, on the killer.
+    expect(played.at(-1)![0]).toBe(SOUND.SWISH);
+    expect(played.at(-1)![1]).toEqual([0, 1.3, 0]);
+  });
+
   it('does not play late what went before one is seen', () => {
     const { fx, played } = rig([K]);
     fx.frame(pair(10, false));
@@ -84,6 +116,7 @@ describe('the glory kills’ sounds', () => {
     for (const [exec, after] of [
       [false, FEAST_AFTER],
       [true, EXEC_AFTER],
+      ['fist', FIST_AFTER],
     ] as const) {
       const { fx, played, later } = rig([K]);
       fx.frame(pair(2, exec));

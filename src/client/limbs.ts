@@ -2,7 +2,8 @@
 // skin.ts) frozen in the pose of the cut and thrown off the body as one rigid piece that tumbles,
 // bounces on the roof and lies there until the body is gone. Both cut faces glow, cauterized; the
 // cut bursts in cyan sparks and the stump spits a few more for a second. A head a xenomorph ate
-// (LIMB.EATEN) is the head's cut with no piece, no sparks and a raw stump. Changes no rule. No DOM.
+// (LIMB.EATEN), or one the fists' execution burst (LIMB.BURST), is the head's cut with no piece, no
+// sparks and a raw stump. Changes no rule. No DOM.
 import { GRAVITY } from '../shared/constants';
 import { ROLE } from '../shared/kit';
 import { LIMB } from '../shared/types';
@@ -43,7 +44,7 @@ export const ground =
 
 export interface Piece {
   limb: number;
-  /** The head a xenomorph ate (LIMB.EATEN): the stump is drawn, raw and unlit, not the piece. */
+  /** The head a xenomorph ate (LIMB.EATEN) or a punch burst (LIMB.BURST): the stump is drawn, raw and unlit, not the piece. */
   eaten?: boolean;
   /** The joints in the pose of the cut, which the limb is skinned with, and its middle then. */
   s: ReturnType<typeof solve>;
@@ -156,7 +157,8 @@ export const track = (
     r.cut = undefined;
     return;
   }
-  const eaten = k == LIMB.EATEN;
+  // A head eaten or burst by a punch: no piece, a raw stump.
+  const eaten = k == LIMB.EATEN || k == LIMB.BURST;
   if (!r.cut) {
     r.cut = sever(eaten ? LIMB.HEAD : k, r.s ?? solve(r.gait.pose()), r.p, r.build);
     r.cut.eaten = eaten;

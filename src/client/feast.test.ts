@@ -16,6 +16,8 @@ import {
   mounted,
   seize,
   spun,
+  topple,
+  toppled,
 } from './feast';
 import type { Vec3 } from './mesh';
 import { JOINT as J, rest, solve, turn } from './rig';
@@ -269,27 +271,47 @@ describe('the katana’s execution drawn', () => {
     expect(spun(at(EXEC.CUTS[1] + 6))).toBeGreaterThan(Math.PI / 2);
   });
 
-  it('kneels him before the swordsman: turned to him, his hips down, his knees on the floor ahead of his feet', () => {
+  it('drops him on his right knee, his left foot ahead, bent over with his hands on his belly', () => {
     // He looks away from the swordsman at +z.
     const p = rest([0, 0, -1], 0);
     const stood = solve(p);
     const up = kneel(p, [0, 0, 0], at(EXECUTE.TURN));
     expect(Math.cos(up.yaw)).toBeCloseTo(-1, 6);
     expect(solve(up).pos[J.PELVIS][1]).toBeCloseTo(stood.pos[J.PELVIS][1], 6);
-    const q = kneel(p, [0, 0, 0], 1);
-    const s = solve(q);
+    const s = solve(kneel(p, [0, 0, 0], 1));
     expect(s.pos[J.PELVIS][1]).toBeCloseTo(stood.pos[J.PELVIS][1] - EXECUTE.LOW, 6);
-    for (const [knee, foot] of [
-      [J.SHIN_L, J.FOOT_L],
-      [J.SHIN_R, J.FOOT_R],
-    ]) {
-      expect(s.pos[knee][1]).toBeLessThan(0.2);
-      expect(s.pos[foot][1]).toBeCloseTo(0.1, 2);
-      // Facing +z: the knee ahead of the foot.
-      expect(s.pos[knee][2]).toBeGreaterThan(s.pos[foot][2] + 0.2);
-    }
-    // Bowed: his head ahead of his pelvis, toward the swordsman.
-    expect(s.pos[J.HEAD][2]).toBeGreaterThan(s.pos[J.PELVIS][2]);
+    // Facing +z: the right knee down on the floor ahead of its foot, the left foot planted ahead
+    // of its hip and its knee up.
+    expect(s.pos[J.SHIN_R][1]).toBeLessThan(0.2);
+    expect(s.pos[J.SHIN_R][2]).toBeGreaterThan(s.pos[J.FOOT_R][2] + 0.2);
+    expect(s.pos[J.FOOT_L][1]).toBeCloseTo(0.1, 2);
+    expect(s.pos[J.FOOT_L][2]).toBeGreaterThan(s.pos[J.THIGH_L][2] + EXECUTE.STEP - 0.05);
+    expect(s.pos[J.SHIN_L][1]).toBeGreaterThan(0.4);
+    // Bent over: his head ahead of his pelvis; his hands on his belly.
+    expect(s.pos[J.HEAD][2]).toBeGreaterThan(s.pos[J.PELVIS][2] + 0.1);
+    // Facing +z, his right is -x.
+    const [across, fore, up_] = EXECUTE.BELLY;
+    const pelvis = s.pos[J.PELVIS];
+    expect(
+      dist(s.pos[J.HAND_L], [pelvis[0] + across, pelvis[1] + up_, pelvis[2] + fore]),
+    ).toBeLessThan(0.03);
+    expect(
+      dist(s.pos[J.HAND_R], [pelvis[0] - across, pelvis[1] + up_, pelvis[2] + fore]),
+    ).toBeLessThan(0.03);
+  });
+
+  it('pants, and shakes his head no', () => {
+    const p = rest([0, 0, -1], 0);
+    const ts = Array.from({ length: 60 }, (_, i) => i / 60);
+    const look = (t: number) => turn(solve(kneel(p, [0, 0, 0], 1, t)).rot[J.HEAD], [0, 0, -1])[0];
+    const chest = (t: number) => solve(kneel(p, [0, 0, 0], 1, t)).pos[J.NECK][1];
+    const [l, c] = [ts.map(look), ts.map(chest)];
+    // Side to side, both ways.
+    expect(Math.min(...l)).toBeLessThan(-0.2);
+    expect(Math.max(...l)).toBeGreaterThan(0.2);
+    // The chest heaves: up and down, a few centimetres.
+    expect(Math.max(...c) - Math.min(...c)).toBeGreaterThan(0.02);
+    expect(Math.max(...c) - Math.min(...c)).toBeLessThan(0.15);
   });
 
   it('draws the two through animate() and stance(): him kneeling, the blood, his head off from where it was drawn', () => {
@@ -344,7 +366,8 @@ describe('the katana’s execution drawn', () => {
       frame(at(e));
     }
     const s = stance(book.get(V)!).s;
-    expect(s.pos[J.PELVIS][1]).toBeLessThan(stood.pos[J.PELVIS][1] - EXECUTE.LOW + 0.05);
+    // Down on his knee: the floor (footing()) holds him up a little.
+    expect(s.pos[J.PELVIS][1]).toBeLessThan(stood.pos[J.PELVIS][1] - EXECUTE.LOW + 0.07);
     // The cut down: one spurt and a shock.
     expect(gores).toEqual([[[0, 1.25, -1], EXECUTE.WOUND]]);
     expect(shocks).toBe(1);
@@ -363,5 +386,43 @@ describe('the katana’s execution drawn', () => {
     }
     expect(gores.length).toBeGreaterThan(10);
     expect(book.get(V)!.bleed).toBeLessThan(EXECUTE.BLEEDING);
+  });
+});
+
+describe('the beheaded victim', () => {
+  const knelt = () => kneel(rest([0, 0, -1], 0), [0, 0, 0], 1);
+
+  it('tips over from his knee, faster as he goes, a little bounce on the floor, then still', () => {
+    const [T, A] = EXECUTE.FALL;
+    expect(toppled(0)).toBe(0);
+    expect(toppled(T / 2)).toBeCloseTo(A / 4, 6);
+    expect(toppled(T)).toBeCloseTo(A, 6);
+    expect(Math.max(...[0.05, 0.1, 0.15].map(d => toppled(T + d)))).toBeGreaterThan(A);
+    expect(toppled(T + 3)).toBeCloseTo(A, 3);
+  });
+
+  it('starts where he knelt, and goes over onto his right side about his right knee', () => {
+    const p = knelt();
+    const [a, b] = [solve(p), solve(topple(p, 0))];
+    a.pos.forEach((v, j) => expect(dist(v, b.pos[j])).toBeLessThan(1e-9));
+    const down = solve(topple(p, 3));
+    // His right knee stays where it was on the floor; he faces +z, so his right is -x.
+    expect(dist(down.pos[J.SHIN_R], a.pos[J.SHIN_R])).toBeLessThan(1e-6);
+    expect(down.pos[J.CHEST][0]).toBeLessThan(a.pos[J.CHEST][0] - 0.4);
+    expect(down.pos[J.CHEST][1]).toBeLessThan(0.5);
+  });
+
+  it('goes limp: the raised leg stretches out, the arms fall along the body', () => {
+    const [a, s] = [solve(knelt()), solve(topple(knelt(), 3))];
+    const reach = (x: ReturnType<typeof solve>, j: number, k: number) => dist(x.pos[j], x.pos[k]);
+    expect(reach(s, J.THIGH_L, J.FOOT_L)).toBeGreaterThan(reach(a, J.THIGH_L, J.FOOT_L) + 0.15);
+    // The hands off the belly, out at the end of arms nearly straight.
+    for (const [arm, hand] of [
+      [J.ARM_L, J.HAND_L],
+      [J.ARM_R, J.HAND_R],
+    ]) {
+      expect(reach(s, arm, hand)).toBeGreaterThan(0.5);
+      expect(reach(a, arm, hand)).toBeLessThan(0.45);
+    }
   });
 });

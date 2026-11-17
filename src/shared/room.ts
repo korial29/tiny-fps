@@ -41,7 +41,6 @@ import {
   ACID_HP,
   GLORY_DASH,
   EXEC,
-  GLORY_PUSH,
   GLORY_TICKS,
   POUNCE_HP,
   POUNCE_STUN,
@@ -1227,9 +1226,6 @@ export class Room {
       const d = Math.hypot(dx, dz) || 1;
       this.harm(prey, Infinity, eater, FRAG.GLORY, felled(FALL.STRUCK, dx / d, dz / d));
       prey.state.lost = exec ? LIMB.HEAD : LIMB.EATEN;
-      if (exec) {
-        Object.assign(prey.state, { vx: (dx / d) * GLORY_PUSH, vz: (dz / d) * GLORY_PUSH });
-      }
       return;
     }
     const lead = (q.pushes ?? 0) - (o.state.pushes ?? 0);

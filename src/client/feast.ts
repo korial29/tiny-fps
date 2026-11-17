@@ -6,10 +6,10 @@
 // still holds the two a metre apart and nothing of it is on the wire. Pure, no DOM.
 import { CUTS, EXEC, GLORY_TICKS } from '../shared/constants';
 import { CUT } from '../shared/types';
-import { BITE, reach } from './body';
-import { basis, mix } from './mesh';
+import { BITE, arc, inv, reach } from './body';
+import { add, basis, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { JOINT as J, axis, mul, solve } from './rig';
+import { JOINT as J, RESTS, axis, mul, slerp, solve, turn } from './rig';
 import type { Pose } from './rig';
 
 export const FEAST = {
@@ -45,6 +45,7 @@ export const FEAST = {
   PUSH: [0.16, 0.34, 1.58],
 } as const;
 
+const length = (v: Vec3) => Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
 const clamp = (v: number) => Math.min(Math.max(v, 0), 1);
 const ease = (u: number) => u * u * (3 - 2 * u);
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -192,18 +193,31 @@ export const chew = (pose: Pose, a: number, t: number): Pose => {
 
 /**
  * The katana's execution as drawn (EXEC, the user 2026-11-17): its victim turns to the swordsman as
- * he dashes in (TURN ticks), drops to his knees on the strike of the cut down (KNEEL: from that tick,
- * over so many), his trunk bowed and his head down (BOW, radians) and his hips LOW metres lower;
- * the swordsman spins a whole turn into the cut across, ending on its strike (SPIN); on the cut down
- * a spurt of WOUND drops of blood, and when his head goes NECK drops, then BLEED a second from the
- * neck for BLEEDING seconds.
+ * he dashes in (TURN ticks), drops on the strike of the cut down (KNEEL: from that tick, over so
+ * many) onto one knee, the right, the left foot ahead (STEP, metres), his hips LOW metres lower,
+ * bent over in pain (BOW, radians: spine, chest, neck) with his hands on his belly (BELLY: across,
+ * ahead and over his pelvis), panting (PANT: radians of the chest's heave, beats a second) and his
+ * head shaking no (NO: radians each way, shakes a second); the swordsman spins a whole turn into the
+ * cut across, ending on its strike (SPIN); on the cut down a spurt of WOUND drops of blood, and when
+ * his head goes NECK drops, then BLEED a second from the neck for BLEEDING seconds.
  */
 export const EXECUTE = {
   TURN: 8,
   KNEEL: [EXEC.CUTS[0] + CUTS[CUT.SLASH].strike, 10],
-  BOW: [0.3, 0.35],
-  LOW: 0.45,
+  STEP: 0.4,
+  /** The kneeling leg over the floor, metres: the knee joint, the ankle and the toes' joint. */
+  SOLE: [0.09, 0.15, 0.06],
+  LOW: 0.42,
+  BOW: [0.25, 0.4, 0.2],
+  BELLY: [0.08, 0.2, 0.1],
+  PANT: [0.07, 2.6],
+  NO: [0.4, 1.4],
   SPIN: [EXEC.CUTS[1], CUTS[CUT.RIGHT].strike],
+  /** The beheaded body, still on its knee, tips over onto its right side about it: in so many seconds, so far (radians). */
+  FALL: [0.7, 1.45],
+  /** Its bounce on the floor: a share of the fall, how fast it dies out, its rate (rad/s); and the seconds it takes to go limp. */
+  SETTLE: [0.06, 5, 14],
+  LIMP: 1.1,
   WOUND: 25,
   NECK: 45,
   BLEED: 60,
@@ -223,26 +237,107 @@ export const spun = (lock: number): number =>
 
 /**
  * The victim's `pose` before the swordsman whose feet are at `killer`, with `lock` ticks of the
- * execution left: turned to him, then on his knees (his feet behind them on the floor), bowed, his
- * head down.
+ * execution left, at `t` seconds: turned to him, then down on his right knee, his left foot ahead,
+ * bent over with his hands on his belly, panting, his head shaking no.
  */
-export const kneel = (pose: Pose, killer: Vec3, lock: number): Pose => {
+export const kneel = (pose: Pose, killer: Vec3, lock: number, t = 0): Pose => {
   const [turn, k] = [clamp(into(lock) / EXECUTE.TURN), kneeling(lock)];
-  const [yaw, f] = facing(pose.at, killer);
-  const rot = pose.rot.slice();
-  rot[J.CHEST] = mul(rot[J.CHEST], axis(X, -EXECUTE.BOW[0] * k));
-  rot[J.NECK] = mul(rot[J.NECK], axis(X, -EXECUTE.BOW[1] * k));
-  const q: Pose = { ...pose, yaw: pose.yaw + wrap(yaw - pose.yaw) * turn, rot };
+  const [yaw, f, r] = facing(pose.at, killer);
+  const q: Pose = { ...pose, yaw: pose.yaw + wrap(yaw - pose.yaw) * turn };
   if (k <= 0) {
     return q;
   }
-  q.hips = [q.hips[0], q.hips[1] - EXECUTE.LOW * k, q.hips[2]];
-  for (const thigh of [J.THIGH_L, J.THIGH_R]) {
-    // The foot behind the hip, flat on the floor; the knee forward, down on it.
-    const s = solve(q);
-    const hip = s.pos[thigh];
-    const to: Vec3 = [hip[0] - f[0] * 0.42, q.at[1] + 0.1, hip[2] - f[2] * 0.42];
-    reach(q, s, thigh, mix(s.pos[thigh + 2], to, k), f);
+  const rot = (q.rot = pose.rot.slice());
+  const [pant, beat] = EXECUTE.PANT;
+  const heave = pant * Math.sin(2 * Math.PI * beat * t);
+  const [no, shakes] = EXECUTE.NO;
+  EXECUTE.BOW.forEach((a, i) => {
+    rot[J.SPINE + i] = mul(rot[J.SPINE + i], axis(X, -(a + (i == 1 ? heave : 0)) * k));
+  });
+  rot[J.HEAD] = mul(rot[J.HEAD], axis([0, 1, 0], no * k * Math.sin(2 * Math.PI * shakes * t)));
+  q.hips = [q.hips[0], q.hips[1] - (EXECUTE.LOW + 0.3 * heave) * k, q.hips[2]];
+  // The left foot planted ahead, its knee up.
+  const floor = q.at[1];
+  let s = solve(q);
+  const hipL = s.pos[J.THIGH_L];
+  const step: Vec3 = [hipL[0] + f[0] * EXECUTE.STEP, floor + 0.1, hipL[2] + f[2] * EXECUTE.STEP];
+  reach(q, s, J.THIGH_L, mix(s.pos[J.FOOT_L], step, k), [f[0], 1, f[2]]);
+  // The right knee down on the floor, as far ahead of the hip as the thigh lets it; the shin back
+  // from it, the heel up, the toes tucked under on the floor (they went through it, flat).
+  s = solve(q);
+  const [hip, kn, ft, toe] = [J.THIGH_R, J.SHIN_R, J.FOOT_R, J.TOE_R].map(j => s.pos[j]);
+  const [thigh, shin, foot] = [length(sub(kn, hip)), length(sub(ft, kn)), length(sub(toe, ft))];
+  const [knee, ankle, tip] = EXECUTE.SOLE;
+  const fore = Math.sqrt(Math.max(thigh ** 2 - (hip[1] - floor - knee) ** 2, 0));
+  const back = Math.sqrt(shin ** 2 - (ankle - knee) ** 2) - fore;
+  const heel: Vec3 = [hip[0] - f[0] * back, floor + ankle, hip[2] - f[2] * back];
+  reach(q, s, J.THIGH_R, mix(ft, heel, k), f);
+  s = solve(q);
+  const under = Math.sqrt(Math.max(foot ** 2 - (ankle - tip) ** 2, 0));
+  const to = sub(off(s.pos[J.FOOT_R], [0, 0, 0], f, 0, under, tip - ankle), s.pos[J.FOOT_R]);
+  const laid = mul(arc(unit(sub(s.pos[J.TOE_R], s.pos[J.FOOT_R])), unit(to)), s.rot[J.FOOT_R]);
+  q.rot[J.FOOT_R] = slerp(q.rot[J.FOOT_R], mul(inv(s.rot[J.SHIN_R]), laid), k);
+  // His hands on his belly, the elbows out.
+  const pelvis = solve(q).pos[J.PELVIS];
+  const [across, ahead, up] = EXECUTE.BELLY;
+  for (const [side, arm] of [
+    [-1, J.ARM_L],
+    [1, J.ARM_R],
+  ]) {
+    const to = off(pelvis, r, f, side * across, ahead, up);
+    limb(q, arm, to, off([0, 0, 0], r, f, side, 0.2, -0.6), k);
   }
   return q;
+};
+
+/**
+ * How far the beheaded body has tipped over `t` seconds after the kill, radians: faster as it goes,
+ * as a fall does, then a small bounce on the floor (SETTLE: its share, how fast it dies out, its rate).
+ */
+export const toppled = (t: number): number => {
+  const [T, A] = EXECUTE.FALL;
+  const [k, damp, w] = EXECUTE.SETTLE;
+  return t < T ? A * (t / T) ** 2 : A * (1 + k * Math.exp(-damp * (t - T)) * Math.sin(w * (t - T)));
+};
+
+/** How far a beheaded body's joints go limp, toward their rest, as it tips over: the arms down along it (the user, 2026-11-17). */
+const LIMP: [number, number][] = [
+  [J.THIGH_L, 0.7],
+  [J.SHIN_L, 0.85],
+  [J.FOOT_L, 0.5],
+  [J.ARM_L, 1],
+  [J.FOREARM_L, 0.9],
+  [J.HAND_L, 1],
+  [J.ARM_R, 1],
+  [J.FOREARM_R, 0.9],
+  [J.HAND_R, 1],
+];
+
+/**
+ * The kneeling `pose` `t` seconds after his head went: tipped onto its right side about its right
+ * knee on the floor (toppled()), going limp as it goes (the user, 2026-11-17: not stiff): the raised
+ * leg stretching out, the arms falling along the body, the trunk slumping and turning a little.
+ */
+export const topple = (pose: Pose, t: number): Pose => {
+  const a = toppled(t);
+  if (a <= 0) {
+    return pose;
+  }
+  const limp = ease(clamp(t / EXECUTE.LIMP));
+  const rot = pose.rot.slice();
+  for (const [j, k] of LIMP) {
+    rot[j] = slerp(rot[j], [0, 0, 0, 1], k * limp);
+  }
+  rot[J.SPINE] = mul(rot[J.SPINE], axis(X, -0.25 * limp));
+  rot[J.CHEST] = mul(rot[J.CHEST], mul(axis(X, -0.15 * limp), axis([0, 1, 0], 0.2 * limp)));
+  const s = solve({ ...pose, rot });
+  const knee = s.pos[J.SHIN_R];
+  const R = axis(basis(pose.yaw, 0)[2], a);
+  const Y = axis([0, 1, 0], pose.yaw);
+  // The turn about the knee in the frame of the yaw, the pelvis put where it takes it.
+  rot[J.PELVIS] = mul(mul(inv(Y), mul(R, Y)), rot[J.PELVIS]);
+  const pelvis = add(knee, turn(R, sub(s.pos[J.PELVIS], knee)));
+  const base = (pose.rest ?? RESTS[0])[0];
+  const hips = turn(inv(Y), sub(pelvis, pose.at)).map((v, i) => v - base[i]) as Vec3;
+  return { ...pose, rot, hips };
 };

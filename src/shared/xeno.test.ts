@@ -9,7 +9,6 @@ import {
   GLORY_FAR,
   EXEC,
   GLORY_HP,
-  GLORY_PUSH,
   GLORY_TICKS,
   RUN_SPEED,
   SPRINT_SPEED,
@@ -793,7 +792,8 @@ describe('the xenomorph in a room', () => {
       0,
       0,
     ]);
-    expect(m.state.vz).toBeCloseTo(-GLORY_PUSH, 3);
+    // Not thrown: he tips over from his knee where he is (feast.ts).
+    expect([m.state.vx, m.state.vz]).toEqual([0, 0]);
     const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
     expect(frag).toMatchObject({ by: k.info.id, who: m.info.id, how: FRAG.GLORY });
   });

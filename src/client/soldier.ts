@@ -126,7 +126,19 @@ import {
 import { CHITIN_X, FOOT_TIP, HEAD, PART, PIPE, eyes, lashOf, partsOf, tail } from './xeno';
 import type { Part } from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
-import { EXECUTE, FEAST, chew, clutched, eating, kneel, mounted, seize, spun } from './feast';
+import { footing } from './footing';
+import {
+  EXECUTE,
+  FEAST,
+  chew,
+  clutched,
+  eating,
+  kneel,
+  mounted,
+  seize,
+  spun,
+  topple,
+} from './feast';
 import type { Face } from './expression';
 import { CH, toneFor } from './features';
 import { createTrail } from './trail';
@@ -208,6 +220,11 @@ export interface Runner {
   gore?: number;
   /** Seconds left of the blood from the neck of one the katana's execution beheaded. */
   bleed?: number;
+  /** The execution's victim: the swordsman's feet while he kneels; once beheaded, them and the seconds since. */
+  killer?: Vec3;
+  slain?: { at: Vec3; t: number };
+  /** The execution's victim's pose as he last knelt: his beheaded body tips over from it. */
+  knelt?: Pose;
   /** The skeleton as last drawn: a limb cut off leaves from it (limbs.ts track()). */
   s?: ReturnType<typeof solve>;
 }
@@ -434,7 +451,13 @@ export const animate = (
       const on = r.mount ? others.find(q => q.id == r.mate) : p.exec ? foe : undefined;
       r.with = on && [on.x, on.y, on.z];
       // The execution's blood: a spurt on the cut down, a burst as his head goes, then the neck.
+      // His body tips over from his knee, before the swordsman he knelt to (r.slain).
       const victim = (q: PlayerState) => q.exec === EXEC.VICTIM && !!q.lock;
+      r.slain = p.down && r.slain ? { ...r.slain, t: r.slain.t + dt } : undefined;
+      if (victim(r.p) && p.down && r.killer) {
+        r.slain = { at: r.killer, t: 0 };
+      }
+      r.killer = victim(p) ? r.with : undefined;
       if (victim(p) && victim(r.p)) {
         const was = EXEC.TICKS - r.p.lock! < EXECUTE.KNEEL[0];
         if (was && EXEC.TICKS - p.lock! >= EXECUTE.KNEEL[0]) {
@@ -970,7 +993,15 @@ export const stance = (r: Runner) => {
   } else if (mate && !lying) {
     pose = clutched(pose, mate, r.mount!, r.t);
   } else if (p.exec === EXEC.VICTIM && p.lock && r.with && !lying) {
-    pose = kneel(pose, r.with, p.lock);
+    pose = r.knelt = kneel(pose, r.with, p.lock, r.t);
+  }
+  // Beheaded on his knee: the same kneel, tipping over, not another fall.
+  if (r.slain && p.down && r.knelt) {
+    pose = topple({ ...r.knelt, at: [p.x, p.y - sink, p.z] }, r.slain.t);
+  }
+  // Down or kneeling, nothing goes through the floor (it still sinks into it at the end).
+  if (p.down || (p.exec === EXEC.VICTIM && p.lock)) {
+    pose = footing(pose, p.y - sink);
   }
   let s = solve(pose);
   if (p.wield && !busy) {

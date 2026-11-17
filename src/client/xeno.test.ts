@@ -9,6 +9,7 @@ import { KIND } from './features';
 import { REGION, beast, body, skin } from './skin';
 import { animate, createRunner, stance } from './soldier';
 import {
+  FIN,
   FOOT_TIP,
   HEAD,
   HOOKED,
@@ -109,6 +110,28 @@ describe('its pieces', () => {
     const pipes = (lod: number) => [...beast(lod).c].filter(c => c == REGION.STRIPE).length;
     expect(pipes(1)).toBeGreaterThan(0);
     expect(pipes(0)).toBe(0);
+  });
+
+  it('stands a comb of blades on its vertebrae, up the back and down the tail, none far', () => {
+    /** How far the tail's points stand off its lowest, in the slab of it 0.7 to 0.74 m behind. */
+    const high = (lod: number) => {
+      const v: number[] = [];
+      tail(v, S, 0, 0, HOOKED, [1, 0, 0], lod);
+      const ys = points(v)
+        .filter(p => p[2] > 0.7 && p[2] < 0.74)
+        .map(p => p[1]);
+      return Math.max(...ys) - Math.min(...ys);
+    };
+    // Halfway down the tail, where it is 9 cm thick: the blades stand well over it.
+    expect(high(3)).toBeGreaterThan(0.13);
+    expect(high(1)).toBeGreaterThan(0.13);
+    expect(high(0)).toBeLessThan(0.1);
+    // The back's are the skin's: off the column behind the pelvis by most of the coccyx's blade.
+    const z = (lod: number) => {
+      const b = backOf(lod).baked.v;
+      return Math.max(...b.filter((_, i) => i % 6 == 2 && b[i - 1] < S.pos[J.SPINE][1]));
+    };
+    expect(z(3) - z(0)).toBeGreaterThan(FIN.coccyx * 0.5);
   });
 
   it('goes on from the skin’s spine into the tail with no crack, however the body bends', () => {

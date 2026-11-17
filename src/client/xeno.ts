@@ -224,14 +224,16 @@ const bonesOf = (
     r,
   ];
   const bones: Bone[] = [
-    back(J.HEAD, [0, 0.01, 0.12], 0.016),
-    back(J.NECK, [0, 0.03, 0.055], 0.019),
-    back(J.CHEST, [0, 0.12, 0.115], 0.024),
-    back(J.CHEST, [0, -0.04, 0.12], 0.027),
-    back(J.SPINE, [0, 0, 0.1], 0.029),
-    back(J.PELVIS, [0, -0.03, 0.11], 0.036),
+    // As thick as the tail's from the chest down (the user, 2026-11-17: the tail's design up the back).
+    // Up the neck to the base of the skull, ending fine (the user, 2026-11-17).
+    back(J.HEAD, [0, 0.075, 0.105], 0.007),
+    back(J.NECK, [0, 0.07, 0.06], 0.019),
+    back(J.CHEST, [0, 0.12, 0.125], 0.03),
+    back(J.CHEST, [0, -0.04, 0.132], 0.042),
+    back(J.SPINE, [0, 0, 0.114], 0.047),
+    back(J.PELVIS, [0, -0.03, 0.124], 0.053),
     // Down to the coccyx, low over the rear (the user, 2026-11-15), where the tail leaves it.
-    back(J.PELVIS, [0, -0.12, 0.13], 0.04),
+    back(J.PELVIS, [0, -0.12, 0.14], 0.058),
   ];
   // The tail in the pelvis' frame: its angle in the pelvis' plane (0 back, up from there) along it.
   const steps = 12;
@@ -312,14 +314,106 @@ const along = ({ dense, len }: Curve, l: number): [Bone, Vec3, number] => {
   ];
 };
 
-/** Vertebrae down the whole column, far and nearer, and the rings of a bead pinched at its joints: close, rounder. */
+/**
+ * Vertebrae down the whole column, far and nearer, and the rings of one (the user, 2026-11-17: a
+ * spine, an alien's): a spool, a rim at each end and a waist between, pinched to a disc at its joints.
+ */
 const VERTEBRAE = [14, 34, 34, 34];
 const BEAD = [
   [0.8, 1],
-  [0.7, 0.94, 1, 0.94],
-  [0.7, 0.94, 1, 0.94],
-  [0.7, 0.86, 0.98, 1, 0.98, 0.86],
+  [0.6, 1, 0.8, 1],
+  [0.6, 1, 0.8, 1],
+  [0.58, 0.97, 0.84, 0.78, 0.84, 0.97],
 ];
+
+/**
+ * The blade out of the top of each vertebra (the user's picture, 2026-11-17: a comb of thin curved
+ * blades down the column): metres high at the skull, at the coccyx and at its highest on the tail,
+ * how far along the tail that is and where the blades stop before the stinger; its lean toward the
+ * tail's tip at its root and how much more at its point, radians; half its chord as a share of a
+ * vertebra's length, half its thickness as a share of the column's radius; rings by level of detail.
+ */
+export const FIN = {
+  skull: 0.012,
+  coccyx: 0.13,
+  high: 0.16,
+  at: 0.22,
+  end: 0.84,
+  lean: 0.05,
+  bend: 0.5,
+  chord: 0.4,
+  thick: 0.26,
+  steps: [0, 2, 3, 4],
+};
+/** A blade's height `u` of the way down the tail: up from the coccyx's, then down to a nub. */
+const finH = (u: number) =>
+  u < FIN.at
+    ? FIN.coccyx + (FIN.high - FIN.coccyx) * Math.sin(((u / FIN.at) * Math.PI) / 2)
+    : FIN.high * (1 - 0.85 * ((u - FIN.at) / (FIN.end - FIN.at)) ** 1.2);
+
+/** The rings of the last blade fin() made, four spots each (a place then a normal), then its point. */
+const FINS = Array.from({ length: 5 }, () => new Float64Array(24));
+/**
+ * A blade into FINS, `steps` rings and a point: from `base` out along `up`, `h` high, leaning toward
+ * `tan` and bending further that way up to its point; flat, its faces to the unit `x` and -x, its
+ * edges sharp, `chord` and `thick` its half chord and half thickness at the root.
+ */
+const fin = (
+  base: Vec3,
+  up: Vec3,
+  tan: Vec3,
+  x: Vec3,
+  h: number,
+  chord: number,
+  thick: number,
+  steps: number,
+  lean = FIN.lean,
+) => {
+  let [cx, cy, cz] = base;
+  for (let k = 0; k <= steps; k++) {
+    const f = k / steps;
+    const a = lean + FIN.bend * f;
+    const [cs, sn] = [Math.cos(a), Math.sin(a)];
+    const [dx, dy, dz] = [
+      up[0] * cs + tan[0] * sn,
+      up[1] * cs + tan[1] * sn,
+      up[2] * cs + tan[2] * sn,
+    ];
+    if (k) {
+      cx += (dx * h) / steps;
+      cy += (dy * h) / steps;
+      cz += (dz * h) / steps;
+    }
+    const R = FINS[k];
+    if (k == steps) {
+      R[0] = cx;
+      R[1] = cy;
+      R[2] = cz;
+      R[3] = dx;
+      R[4] = dy;
+      R[5] = dz;
+      break;
+    }
+    // Across the blade in its plane, toward the tail's tip: its trailing edge.
+    const [ex, ey, ez] = [
+      tan[0] * cs - up[0] * sn,
+      tan[1] * cs - up[1] * sn,
+      tan[2] * cs - up[2] * sn,
+    ];
+    const w = chord * (1 - 0.55 * f ** 1.3);
+    const t = thick * (1 - 0.6 * f);
+    for (let i = 0; i < 4; i++) {
+      // Its leading edge, a face, its trailing edge, the other face.
+      const [m, n] = i % 2 ? [0, 2 - i] : [i - 1, 0];
+      R[i * 6] = cx + ex * m * w + x[0] * n * t;
+      R[i * 6 + 1] = cy + ey * m * w + x[1] * n * t;
+      R[i * 6 + 2] = cz + ez * m * w + x[2] * n * t;
+      R[i * 6 + 3] = ex * m + x[0] * n;
+      R[i * 6 + 4] = ey * m + x[1] * n;
+      R[i * 6 + 5] = ez * m + x[2] * n;
+    }
+  }
+};
 
 /**
  * Geometry baked into the beast's skin (shape() in skin.ts), posed with it by flesh() at no cost a
@@ -410,9 +504,11 @@ const bake = (lod: number): Back => {
   const curve = curveOf(bonesOf(S, 0, 0, [0, 0, 0, 0, 0, 0], 0));
   // The pelvis' bone, where the tail's free part starts.
   const L = curve.len[(BACK.length - 2) * 4];
-  const n = Math.round((VERTEBRAE[lod] * L) / curve.total);
+  // As long as the tail's (the user, 2026-11-17: the same blades up the back), whatever its pose.
+  const n = Math.round((VERTEBRAE[lod] * L) / (L + TAIL.len));
   const [sides, shape, side] = [SIDES[2][lod], BEAD[lod], [1, 0, 0] as Vec3];
-  const { JACKET, STRIPE } = REGION;
+  // The column on a region of its own: the tail's smooth black, not the skin's plates (render.ts).
+  const { BELT: JACKET, STRIPE } = REGION;
   /** The joints of the bones at `f` between the curve's points (along()), and how far from the first. */
   const hang = (spots: Spot[], f: number) => {
     const b = Math.min(Math.floor(f / 4), BACK.length - 2);
@@ -426,15 +522,35 @@ const bake = (lod: number): Back => {
       rows.push(hang(ring(b[0], tan, side, b[2] * k, sides), f));
     });
     if (lod) {
-      // Its spine, short on the back.
-      const [b, tan, f] = along(curve, ((v + 0.5) / n) * L);
-      const d = unit(mix3(b[1], tan, 0.45));
-      const root = [0, 1, 2].map(i => b[0][i] + b[1][i] * b[2] * 0.6) as Vec3;
-      const top = [0, 1, 2].map(i => root[i] + d[i] * b[2] * 1.2) as Vec3;
+      // Its blade, a nub under the skull, higher down the back to the tail's.
+      const u = (v + 0.5) / n;
+      const [b, tan, f] = along(curve, u * L);
+      const root = [0, 1, 2].map(i => b[0][i] + b[1][i] * b[2] * 0.5) as Vec3;
+      const h = FIN.skull + (FIN.coccyx - FIN.skull) * u;
+      const steps = FIN.steps[lod];
+      // The whole blade smaller toward the skull, not only lower: the tail's shape, reduced.
+      const k = h / FIN.coccyx;
+      // Swept down toward the tail as the tail's are toward its tip: there the column's up lags its curve.
+      fin(root, b[1], tan, side, h, (k * FIN.chord * L) / n, k * FIN.thick * b[2], steps, 0.6);
       out.sheet(
-        [hang(ring(root, d, side, b[2] * 0.35, SIDES[0][lod]), f), hang([[top, d]], f)],
+        FINS.slice(0, steps + 1).map((R, k) =>
+          hang(
+            Array.from({ length: k < steps ? 4 : 1 }, (_, i): Spot => [
+              [R[i * 6], R[i * 6 + 1], R[i * 6 + 2]],
+              [R[i * 6 + 3], R[i * 6 + 4], R[i * 6 + 5]],
+            ]),
+            f,
+          ),
+        ),
         JACKET,
       );
+      // The processes out of its sides, swept down toward the tail, as the tail's.
+      for (const k of lod > 1 ? [1, -1] : []) {
+        const d = unit(mix3([k, 0, 0], tan, 0.35));
+        const at = [0, 1, 2].map(i => b[0][i] + d[i] * b[2] * 0.7) as Vec3;
+        const top = [0, 1, 2].map(i => at[i] + d[i] * b[2] * 0.9) as Vec3;
+        out.sheet([hang(ring(at, d, b[1], b[2] * 0.35, 3), f), hang([[top, d]], f)], JACKET);
+      }
     }
   }
   const [b, tan] = along(curve, L);
@@ -610,9 +726,9 @@ const strip = (
 
 /**
  * Its tail, in the world, from the solved skeleton `s`, in the pose `lash` (lashOf()): the column's
- * free part, from the pelvis on (the back's is in the skin, backOf()), thick, each vertebra a bead
- * pinched at its joints (the user, 2026-11-16: a spine), with a spine standing out of its top and,
- * close, a process out of each side swept back, but near the tip; its rings follow the curve's own
+ * free part, from the pelvis on (the back's is in the skin, backOf()), thick, each vertebra a spool
+ * pinched at its joints (BEAD), with a blade standing out of its top (FIN, fin()) and, close, a
+ * process out of each side swept back, but near the tip; its rings follow the curve's own
  * up, so a tail turned round the hip stays round. The stinger at its end: a curved knife's blade
  * (blade()), glowing in the team's `color`. Written straight into `out`. `lod` 0 far, 1 near, 3 close.
  * `fours` (0 to 1): how far the body is on all fours (fours.ts).
@@ -630,7 +746,7 @@ export const tail = (
   const back = backOf(lod);
   // From the spine's bone, whose place shapes the curve's start at the pelvis.
   const curve = curveOf(bonesOf(s, t, run, lash, 1, fours).slice(BACK.length - 3), 4);
-  const { len, total } = curve;
+  const { total } = curve;
   const all = VERTEBRAE[lod];
   const n = all - back.n;
   const [sides, shape] = [SIDES[2][lod], BEAD[lod]];
@@ -650,12 +766,25 @@ export const tail = (
       strip(out, RA, na, RB, nb, CHITIN_X, -1);
       [RA, RB, na] = [RB, RA, nb];
     }
-    if (lod && back.n + v < all - 6) {
-      // Its spine: short down to the coccyx (the user, 2026-11-15), the tail's long.
-      const l = ((v + 0.5) / n) * total;
-      const [b, tan] = along(curve, l);
+    const u = (v + 0.5) / n;
+    if (lod && u < FIN.end) {
+      const [b, tan] = along(curve, u * total);
       const x = unit(across(b[1], tan));
-      const h = b[2] * (l < len[4] ? 1.2 : 2.1);
+      // Its blade, sunk in the vertebra's waist.
+      const steps = FIN.steps[lod];
+      fin(
+        [0, 1, 2].map(i => b[0][i] + b[1][i] * b[2] * 0.5) as Vec3,
+        b[1],
+        tan,
+        x,
+        finH(u),
+        (FIN.chord * total) / n,
+        FIN.thick * b[2],
+        steps,
+      );
+      for (let k = 1; k <= steps; k++) {
+        strip(out, FINS[k - 1], 4, FINS[k], k < steps ? 4 : 1, CHITIN_X, -1);
+      }
       /** A spike out of the bead along `d`, its ring steadied by `ref` (never along `d`). */
       const thorn = (d: Vec3, h: number, at: number, ref: Vec3, sides: number) => {
         const root = [0, 1, 2].map(i => b[0][i] + d[i] * b[2] * at) as Vec3;
@@ -663,7 +792,6 @@ export const tail = (
         const m = ringTo(RC, root, d, ref, b[2] * 0.35, sides);
         strip(out, RC, m, RD, ringTo(RD, top, d, ref, 0, 1), CHITIN_X, -1);
       };
-      thorn(unit(mix3(b[1], tan, 0.45)), h, 0.6, x, SIDES[0][lod]);
       // The processes out of its sides, swept back toward the root: three sides are enough.
       for (const k of lod > 1 ? [1, -1] : []) {
         thorn(
@@ -750,6 +878,8 @@ const blade = (
 
 /** Bone: its claws and teeth, nothing else. */
 export const BONE = [0.62, 0.6, 0.52];
+/** Its claws, hands and feet (the user, 2026-11-17: less white): a dull horn, darker than bone. */
+export const CLAW = [0.3, 0.28, 0.24];
 /** Its tendons and ribs: the chitin, a little lighter. */
 const SINEW = CHITIN_X.map(v => v * 1.45);
 
@@ -808,12 +938,13 @@ const strand = (
 export const FOOT_TIP: Vec3 = [0, -0.035, -0.25];
 
 /** The three front toes: how far out to the side each goes (in widths of TOE_W) and its length. */
+// Long and fine (the user, 2026-11-17: slimmer, more real feet).
 const TOES = [
-  [-1, 0.11],
-  [0, 0.13],
-  [1, 0.11],
+  [-1, 0.125],
+  [0, 0.15],
+  [1, 0.125],
 ];
-const TOE_W = 0.034;
+const TOE_W = 0.027;
 
 /**
  * Its foot on a foot joint (the user, 2026-11-15: an arched sole, tendons and toes): a round ankle
@@ -822,28 +953,51 @@ const TOE_W = 0.034;
  * over the instep from the ankle to the toes, where toes() carries them on to the claws. The pose
  * stands it near upright (prowl() in soldier.ts): a third segment to the leg.
  */
+/**
+ * strand(), its curve rounded (the user, 2026-11-17: the feet less angular): close, three more
+ * rings between each two points on a smooth curve through them (smooth()), their radii between.
+ */
+const rounded =
+  (lod: number): typeof strand =>
+  (out, at, q, pts, radii, ...rest) => {
+    if (lod < 2 || pts.length < 3) {
+      return strand(out, at, q, pts, radii, ...rest);
+    }
+    const fine = smooth(pts, (i, u) => radii[i] + ((radii[i + 1] ?? radii[i]) - radii[i]) * u);
+    strand(
+      out,
+      at,
+      q,
+      fine.map(([p]) => p),
+      fine.map(([, r]) => r),
+      ...rest,
+    );
+  };
 export const metatarsal = (out: Out, at: Vec3, q: Quat, lod: number) => {
+  const soft = rounded(lod);
   const n = SIDES[2][lod];
   const [x, y, z] = FOOT_TIP;
   /** A point along the foot, k from the ankle (0) to the ball (1), lifted by the arch. */
   const along = (k: number, up = 0, side = 0): Vec3 => [
     x * k + side,
-    y * k + 0.022 * Math.sin(Math.PI * k) + up,
+    // A plantar arch (the user, 2026-11-17): the bone bows well up between the heel and the ball.
+    y * k + 0.042 * Math.sin(Math.PI * k) ** 0.8 + up,
     z * k,
   ];
-  strand(
+  soft(
     out,
     at,
     q,
     [[0, 0.03, 0.03], [0, 0.005, 0.012], along(0.2), along(0.5), along(0.8), along(1)],
     // The ankle's ball just over the shin's end (thicker, it stood round it as a boot's cuff), then
     // the bone thinning evenly to the ball of the foot.
-    [0.024, 0.037, 0.032, 0.028, 0.027, 0.029],
+    // Lean (the user, 2026-11-17): a bone's thickness, swelling a little into the ball.
+    [0.022, 0.033, 0.027, 0.021, 0.018, 0.022],
     n,
     CHITIN_X,
   );
   // The pads: the heel's behind and under the ankle, the ball's under the foot's end.
-  strand(
+  soft(
     out,
     at,
     q,
@@ -851,27 +1005,63 @@ export const metatarsal = (out: Out, at: Vec3, q: Quat, lod: number) => {
       [0, -0.012, 0.03],
       [0, -0.03, 0.005],
     ],
-    [0.024, 0.016],
+    [0.019, 0.012],
     n,
     CHITIN_X,
   );
-  strand(out, at, q, [along(0.82, -0.016), along(1.02, -0.02)], [0.02, 0.024], n, CHITIN_X);
-  if (!lod) {
-    return;
-  }
-  for (const [t] of TOES) {
-    const w = t * 0.011;
-    strand(
+  soft(out, at, q, [along(0.84, -0.012), along(1.02, -0.015)], [0.015, 0.019], n, CHITIN_X);
+  // The cord under the arch, stretched straight from the heel's pad to the ball's: the hollow
+  // between it and the bone is the arch.
+  soft(
+    out,
+    at,
+    q,
+    [
+      [0, -0.034, 0.004],
+      [x * 0.5, y * 0.5 - 0.01, z * 0.5],
+      [x * 0.9, y * 0.9 - 0.02, z * 0.9],
+    ],
+    [0.006, 0.0045, 0.006],
+    SIDES[0][lod],
+    SINEW,
+  );
+  // The ankle's two knobs, one each side of the joint.
+  for (const k of [-1, 1]) {
+    soft(
       out,
       at,
       q,
       [
-        [w * 0.3, 0.032, -0.01],
-        along(0.35, 0.03, w * 0.8),
-        along(0.7, 0.031, w * 1.6),
-        along(1, 0.03, t * TOE_W * 0.4),
+        [k * 0.022, 0.012, 0.012],
+        [k * 0.027, 0.0, 0.008],
       ],
-      [0.006, 0.0075, 0.0075, 0.0065],
+      [0.011, 0.009],
+      SIDES[0][lod],
+      CHITIN_X,
+      -1,
+      true,
+      [0, 0, 1],
+    );
+  }
+  if (!lod) {
+    return;
+  }
+  /** How high over the bone's middle its skin is, `side` out from it, where it is `r` thick. */
+  const lie = (r: number, side: number) => Math.sqrt(Math.max(r * r - side * side, 0)) + 0.001;
+  for (const [t] of TOES) {
+    const w = t * 0.011;
+    soft(
+      out,
+      at,
+      q,
+      [
+        [w * 0.3, 0.025, -0.01],
+        // On the bone's round, not over its corner: a tendon out at the side lies lower.
+        along(0.35, lie(0.023, w * 0.8), w * 0.8),
+        along(0.7, lie(0.019, w * 1.4), w * 1.4),
+        along(1, lie(0.022, t * TOE_W * 0.4), t * TOE_W * 0.4),
+      ],
+      [0.004, 0.005, 0.005, 0.0045],
       SIDES[0][lod],
       SINEW,
     );
@@ -884,72 +1074,75 @@ export const metatarsal = (out: Out, at: Vec3, q: Quat, lod: number) => {
  * its top, and at its end a big hooked claw of bone curving down past the toe.
  */
 export const toes = (out: Out, at: Vec3, q: Quat, lod: number) => {
-  const n = SIDES[1][lod];
+  const soft = rounded(lod);
+  // Round, not faceted (the user, 2026-11-17).
+  const n = SIDES[2][lod];
   for (const [t, l] of [...TOES, [0, -0.05]]) {
     const s = t * TOE_W;
     const d = Math.sign(l);
     const p: Vec3[] = [
-      [s * 0.4, 0.006, 0],
-      [s * 0.75, 0.016, -l * 0.45],
-      [s, 0.012, -l * 0.62],
-      [s * 1.15, 0, -l],
+      [s * 0.4, 0.004, 0],
+      [s * 0.75, 0.013, -l * 0.45],
+      [s, 0.009, -l * 0.62],
+      [s * 1.15, -0.002, -l],
     ];
-    strand(out, at, q, p, [0.021, 0.017, 0.016, 0.012], n, CHITIN_X);
+    soft(out, at, q, p, [0.016, 0.012, 0.0115, 0.0085], n, CHITIN_X);
     // The knuckle, and the toe's pad under its end; far, the digit and its claw alone.
     if (lod) {
-      strand(
+      soft(
         out,
         at,
         q,
         [
-          [s * 0.72, 0.02, -l * 0.43],
-          [s * 0.78, 0.02, -l * 0.5],
+          [s * 0.72, 0.016, -l * 0.43],
+          [s * 0.78, 0.016, -l * 0.5],
         ],
-        [0.016, 0.014],
+        [0.0125, 0.0105],
         n,
         CHITIN_X,
       );
-      strand(
+      soft(
         out,
         at,
         q,
         [
-          [s * 1.1, -0.008, -l * 0.85],
-          [s * 1.15, -0.01, -l * 0.97],
+          [s * 1.1, -0.008, -l * 0.87],
+          [s * 1.15, -0.009, -l * 0.97],
         ],
-        [0.012, 0.01],
+        [0.009, 0.0075],
         n,
         CHITIN_X,
       );
     }
     if (lod && d > 0) {
-      strand(
+      soft(
         out,
         at,
         q,
         [
-          [s * 0.45, 0.026, -l * 0.05],
-          [s * 0.76, 0.034, -l * 0.47],
-          [s * 1.12, 0.014, -l * 0.95],
+          [s * 0.45, 0.019, -l * 0.05],
+          [s * 0.76, 0.027, -l * 0.47],
+          [s * 1.12, 0.009, -l * 0.95],
         ],
-        [0.0065, 0.006, 0.005],
+        [0.0045, 0.004, 0.0035],
         SIDES[0][lod],
         SINEW,
       );
     }
     const [tx, ty, tz] = p[3];
-    strand(
+    soft(
       out,
       at,
       q,
       [
-        [tx, ty + 0.008, tz + 0.008 * d],
-        [tx * 1.05, ty + 0.008, tz - 0.05 * d],
-        [tx * 1.1, ty - 0.024, tz - 0.082 * d],
+        [tx, ty + 0.006, tz + 0.008 * d],
+        [tx * 1.03, ty + 0.012, tz - 0.03 * d],
+        [tx * 1.07, ty + 0.004, tz - 0.062 * d],
+        [tx * 1.1, ty - 0.022, tz - 0.085 * d],
       ],
-      [0.014, 0.009, 0],
+      [0.0105, 0.008, 0.005, 0],
       n,
-      BONE,
+      CLAW,
     );
   }
 };
@@ -1023,6 +1216,8 @@ const tubed = (
   radii: number[],
   n: number,
   axis: Vec3 | Vec3[] = [1, 0, 0],
+  /** How bright the shader paints it: its green, 1 its usual grey. */
+  shade = 1,
 ) => {
   const from = out.length;
   strand(out, at, q, pts, radii, n, SINEW, -1, true, axis);
@@ -1055,7 +1250,144 @@ const tubed = (
       }
     }
     a[i + 6] = along;
+    a[i + 7] = shade;
     a[i + 8] = TUBE;
+  }
+};
+
+/** The thigh's length, hip to knee, and a point on its skin (a hair off it): `t` of the way down, `a` round from the front toward the outside, `off` proud of it. */
+const THIGH = 0.44;
+const onThigh = (s: number, t: number, a: number, off: number): Vec3 => {
+  const k = (1 - t) ** 2;
+  return [
+    s * (0.067 + 0.028 * k + off) * Math.sin(a),
+    -THIGH * t,
+    -(0.086 + 0.034 * k + off) * Math.cos(a),
+  ];
+};
+/**
+ * The windows in a thigh (the user's picture, 2026-11-17): [round the thigh from its front, radians,
+ * outward; from and to, as shares of its length; the ribbed tube's radius]. One, on the outside of
+ * its front (the user, 2026-11-17: only the one on the side).
+ */
+const WINDOWS = [[0.85, 0.38, 0.92, 0.022]];
+/**
+ * Windows in a limb (WINDOWS' rows), on its joint: in each a ribbed tube (tubed()) sunk in the limb,
+ * swelling to its middle, framed by two bony cords that part round it and meet at its ends. `at(t,
+ * a, off)` is a point of the limb's skin, `girth` its radius, for the cords' angle off the tube.
+ */
+const windows = (
+  out: Out,
+  at: Vec3,
+  q: Quat,
+  lod: number,
+  rows: number[][],
+  skin: (t: number, a: number, off: number) => Vec3,
+  girth: number,
+  /** The tube's shade (tubed()) and the cords' colour. */
+  shade = 1,
+  cord = SINEW,
+) => {
+  if (!lod) {
+    return;
+  }
+  const steps = lod > 1 ? 8 : 5;
+  const us = Array.from({ length: steps + 1 }, (_, i) => i / steps);
+  const swell = (u: number) => Math.sin(Math.PI * u) ** 0.55;
+  for (const [a, t0, t1, r] of rows) {
+    tubed(
+      out,
+      at,
+      q,
+      us.map(u => skin(t0 + (t1 - t0) * u, a, -0.35 * r)),
+      us.map(u => r * (0.25 + 0.75 * swell(u))),
+      SIDES[1][lod],
+      [1, 0, 0],
+      shade,
+    );
+    for (const k of [-1, 1]) {
+      strand(
+        out,
+        at,
+        q,
+        us.map(u =>
+          skin(t0 - 0.03 + (t1 - t0 + 0.06) * u, a + k * ((r + 0.004) / girth) * swell(u), 0.002),
+        ),
+        us.map(u => (0.0045 + 0.003 * swell(u)) * Math.min(1, r / 0.02 + 0.3)),
+        SIDES[0][lod],
+        cord,
+      );
+    }
+  }
+};
+/** The legs' and hips' details, discreet (the user, 2026-11-17: darker): their tubes' shade and their cords' colour, hardly over the chitin's. */
+const DIM = 0.45;
+const CORD = CHITIN_X.map(v => v * 1.15);
+/**
+ * A thigh's open flesh, on the thigh joint of side `s` (-1 left): its window (WINDOWS).
+ */
+export const thigh = (out: Out, at: Vec3, q: Quat, lod: number, s: number) =>
+  windows(out, at, q, lod, WINDOWS, (t, a, off) => onThigh(s, t, a, off), 0.07, DIM, CORD);
+
+/**
+ * Its hips, on the pelvis joint (the user's picture, 2026-11-17): each side a ribbed tube down the
+ * groin from the hip bone to the crotch, the two a V, a cord along it, and a ribbed tube round the
+ * hip's socket from the front over the side to the back. High on the pelvis (the user, 2026-11-17),
+ * clear of the thighs as they swing.
+ */
+export const hips = (out: Out, at: Vec3, q: Quat, lod: number) => {
+  if (!lod) {
+    return;
+  }
+  const n = SIDES[1][lod];
+  for (const s of [-1, 1]) {
+    tubed(
+      out,
+      at,
+      q,
+      [
+        [s * 0.141, 0.035, -0.075],
+        [s * 0.108, 0.0, -0.096],
+        [s * 0.07, -0.03, -0.11],
+        [s * 0.03, -0.055, -0.112],
+      ],
+      [0.008, 0.016, 0.015, 0.007],
+      n,
+      [0, 0, 1],
+      DIM,
+    );
+    strand(
+      out,
+      at,
+      q,
+      [
+        [s * 0.16, 0.03, -0.066],
+        [s * 0.125, -0.012, -0.098],
+        [s * 0.08, -0.045, -0.112],
+        [s * 0.035, -0.072, -0.112],
+      ],
+      [0.005, 0.007, 0.007, 0.004],
+      SIDES[0][lod],
+      CORD,
+      -1,
+      true,
+      [0, 0, 1],
+    );
+    tubed(
+      out,
+      at,
+      q,
+      [
+        [s * 0.132, 0.005, -0.09],
+        [s * 0.155, -0.005, -0.04],
+        [s * 0.162, -0.01, 0.03],
+        [s * 0.136, -0.01, 0.09],
+      ],
+      [0.007, 0.014, 0.014, 0.007],
+      n,
+      [0, 1, 0],
+      DIM,
+    );
   }
 };
 
@@ -1344,9 +1676,32 @@ export const elbow = (out: Out, at: Vec3, q: Quat, lod: number) => {
       ],
       [0.005, 0.0085, 0.009, 0.0085, 0.007, 0.004],
       SIDES[0][lod],
+      [1, 0, 0],
+      DIM,
     );
   }
 };
+/**
+ * A forearm's window (the user's picture, 2026-11-17: only on the forearm's visible face), on the
+ * forearm joint of side `s` (1 the right): one down its outside, elbow to wrist, 26 cm, a little
+ * sunk in the skin's rough shape so no gap shows (a little clipping is fine).
+ */
+export const forearm = (out: Out, at: Vec3, q: Quat, lod: number, s: number) =>
+  windows(
+    out,
+    at,
+    q,
+    lod,
+    [[-0.7, 0.14, 0.86, 0.014]],
+    (t, a, off) => [
+      s * (0.032 - 0.009 * t + off) * Math.cos(a),
+      -0.26 * t,
+      (0.036 - 0.009 * t + off) * Math.sin(a),
+    ],
+    0.034,
+    DIM,
+    CORD,
+  );
 export const heel = (out: Out, at: Vec3, q: Quat, lod: number) =>
   spur(out, at, q, [0, -0.4, 0.035], [0, 0.35, 1], 0.09, 0.014, SIDES[1][lod]);
 
@@ -1551,6 +1906,29 @@ const [ROWS, COLS] = [
 const rowY = (v: number, fine: boolean) => TOP - (TOP - CHIN) * ROWS[+fine](v);
 /** The grid's column `u` (-1 to 1, evenly spaced) moved to pack over the orbits, on the close grid if `fine`. */
 const colU = (u: number, fine: boolean) => -1 + 2 * COLS[+fine]((u + 1) / 2);
+/**
+ * The lower jaw's line on the face (x out from the middle, y): down from under the cheekbone to its
+ * angle, then straight in to the chin's corner, and level across the chin. How far its ridge stands
+ * out and its half width, metres.
+ */
+const JAW = [
+  [0.068, -0.012],
+  [0.06, -0.054],
+  [0.03, -0.087],
+  [0, -0.087],
+];
+const [JAW_H, JAW_W] = [0.017, 0.006];
+/** How far (x, y) is from the jaw's line. */
+const jawline = (x: number, y: number) => {
+  let best = Infinity;
+  for (let i = 1; i < JAW.length; i++) {
+    const [[ax, ay], [bx, by]] = [JAW[i - 1], JAW[i]];
+    const [dx, dy] = [bx - ax, by - ay];
+    const t = Math.min(Math.max(((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy), 0), 1);
+    best = Math.min(best, Math.hypot(x - ax - dx * t, y - ay - dy * t));
+  }
+  return best;
+};
 /** The face's surface at (x, y): an ellipse's front under a forehead's sphere, the orbits sunk, the cheekbones out. */
 const faceZ = (x: number, y: number) => {
   const u = Math.min(Math.abs(x) / Math.max(widthOf(y), 1e-6), 1);
@@ -1568,7 +1946,9 @@ const faceZ = (x: number, y: number) => {
     // None at the rim: there it pulled the face off the dome, a crack round the cheek.
     0.07 *
       Math.exp(-(((Math.abs(x) - 0.056) / 0.019) ** 2) - ((y + 0.04) / 0.024) ** 2) *
-      (1 - u ** 8)
+      (1 - u ** 8) -
+    // The lower jaw's bone (the user, 2026-11-17: angular): a ridge standing out along JAW.
+    JAW_H * Math.exp(-((jawline(Math.abs(x), y) / JAW_W) ** 2)) * (1 - u ** 8)
   );
 };
 /** How much of the dome's rim the face takes at (x, y): none inside, all at its edge. */
@@ -2043,6 +2423,11 @@ export const PART = {
   CUFF_R: 7,
   HEAD: 8,
   FINE: 9,
+  THIGH_L: 10,
+  THIGH_R: 11,
+  HIPS: 12,
+  FOREARM_L: 13,
+  FOREARM_R: 14,
 };
 const parts: Part[][] = [];
 /** The horns on joint `j` (HORNS). */
@@ -2112,6 +2497,11 @@ export const partsOf = (lod: number): Part[] =>
         },
         thin: true,
       },
+      { key: `xeno thigh ${lod} -1`, make: (o, a, q) => thigh(o, a, q, lod, -1) },
+      { key: `xeno thigh ${lod} 1`, make: (o, a, q) => thigh(o, a, q, lod, 1) },
+      { key: `xeno hips ${lod}`, make: (o, a, q) => hips(o, a, q, lod) },
+      { key: `xeno forearm ${lod} -1`, make: (o, a, q) => forearm(o, a, q, lod, -1) },
+      { key: `xeno forearm ${lod} 1`, make: (o, a, q) => forearm(o, a, q, lod, 1) },
     ] as Part[]
   ).map(({ make, ...rest }) => ({
     ...rest,

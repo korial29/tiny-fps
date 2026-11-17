@@ -157,7 +157,7 @@ if(Sm==1){vec4 h=g(Sb.y+gl_VertexID);k(int(h.x),P,N);int a=int(h.y);vec3 l=Sp[a]
 if(hb.x>=0.&&(hb.y>.5||a==${REGION.FLESH}))l=vec3(${CLOTH})+(l-vec3(${CLOTH}))*hb.x;
 float hw=0.;for(int i=0;i<3;i++){vec4 o=g(Sb.y+gl_VertexID/3*3+i);hw+=int(o.y)==${REGION.HAIR}?1.-(int(o.z)!=${REGION.HAIR}?o.w:0.):int(o.z)==${REGION.HAIR}?o.w:0.;}hw/=3.;
 float bw=float(${BARE_REGIONS.map(r => `a==${r}`).join('||')})*(hb.x<0.?1.:hb.x);
-C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:Sb.w==2?${CHITIN}:hw>.5&&hb.x<0.?${HAIR_ROOT}-${HAIR_SPAN}*clamp((${TOP}-ry)/.3,0.,1.):-1.+(${SKIN_LAYER}+1.)*bw,l.z);gl_Position=m*vec4(P,1);return;}
+C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:Sb.w==2&&a!=${REGION.BELT}?${CHITIN}:hw>.5&&hb.x<0.?${HAIR_ROOT}-${HAIR_SPAN}*clamp((${TOP}-ry)/.3,0.,1.):-1.+(${SKIN_LAYER}+1.)*bw,l.z);gl_Position=m*vec4(P,1);return;}
 if(Sm==2){int b=Sb.y+gl_VertexID*${PLATE},j,K,t;vec4 h=g(b),G4=g(b+4),R4=g(b+5);j=int(h.y);K=int(h.z);t=int(h.x)*3;
 vec3 X[3],Z[3],W3[3],M3[3],XR[3],RR[3];
 for(int i=0;i<3;i++){k(int(g(Sb.z+t+i).x),X[i],Z[i]);XR[i]=kr;}
@@ -392,7 +392,7 @@ h+=fa*.00022*smoothstep(0.,.45,ed)+fb*.00005*gn;
 kg=(1.-.5*gv)*(.5+mo);}
 float kr=step(abs(L-(${TUBE})),.005),rr=0.;
 if(kr>0.){float u=C.x*200.,fr=1.-smoothstep(.15,.4,fwidth(u));rr=smoothstep(.15,.6,abs(fract(u)-.5)*2.);
-c=vec3(.3,.305,.315)*mix(.8,.5+.75*rr,fr);h+=fr*.0005*rr;rr=mix(.6,rr,fr);}
+c=vec3(.3,.305,.315)*mix(.8,.5+.75*rr,fr)*C.y;h+=fr*.0005*rr;rr=mix(.6,rr,fr);}
 float ah=1.,kh=step(-1.497,L)*step(L,-1.443)*smoothstep(.02,.12,(-1.45-L)/.04),hp=max(length(dx),length(dy)),st=0.,st2=0.;
 vec3 T=-nz((dFdx(L)*a+dFdy(L)*b)*sign(det));T=nz(T-n*dot(T,n));
 if(kh>0.){for(int i=-3;i<=3;i++){vec3 q=P+T*float(i)*.011;st+=vn3(q*650.);st2+=vn3(q*200.+4.);}

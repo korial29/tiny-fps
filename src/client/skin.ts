@@ -778,8 +778,13 @@ const TRUNK_X = remake(
     const hip = Math.exp(-(((at - 0.95) / 0.09) ** 2));
     // Its shoulders narrower, the arm's start with them (the user, 2026-11-16: skeletal).
     const sh = Math.exp(-(((at - 1.36) / 0.07) ** 2));
-    r[3] *= 0.72 + 0.2 * up - 0.2 * neck + 0.4 * hip - 0.1 * sh;
-    r[4] *= 0.8 + 0.18 * up - 0.15 * neck + 0.3 * hip;
+    // A bony girdle round the top of the pelvis (the user, 2026-11-17: a shape that carries the
+    // hips' tubes, hips() in xeno.ts, clear of the thighs): a ledge over the top of the legs.
+    // Its crests flare out at the sides at a sharp angle (the user, 2026-11-17: aggressive, angled
+    // upward): widening slowly up from the legs to their point, cut in sharply over it.
+    const girdle = Math.exp(-(((at - 1.03) / (at < 1.03 ? 0.07 : 0.02)) ** 2));
+    r[3] *= 0.72 + 0.2 * up - 0.2 * neck + 0.4 * hip - 0.1 * sh + 0.16 * girdle ** 2.2;
+    r[4] *= 0.8 + 0.18 * up - 0.15 * neck + 0.3 * hip + 0.14 * girdle;
     r[2] -= 0.018 * hip;
     // One chitin up to the skull: a lighter neck drew a collar's line round it, and the ribs are
     // xeno.ts's (painted strips under them read as a belt).
@@ -828,19 +833,24 @@ const LEG_X = remake(
     const hip = e(0.72, 0.88);
     r[3] *=
       0.58 +
+      // Muscled thighs (the user, 2026-11-17): fuller all round, the quadriceps bulging in front.
       0.24 * thigh +
-      0.14 * hip +
+      0.12 * g(0.72, 0.11) +
+      // Lean under the pelvis' girdle (the user, 2026-11-17): the leg's top tucks in under it.
+      0.07 * hip +
       0.16 * g(0.495, 0.03) +
-      0.06 * g(0.33, 0.09) +
+      // Muscled calves (the user, 2026-11-17): wider, and bulging behind the shin.
+      0.17 * g(0.34, 0.08) +
       0.14 * g(0.095, 0.02);
     r[4] *=
       0.64 +
       0.26 * thigh +
-      0.14 * hip +
+      0.2 * g(0.72, 0.11) +
+      0.07 * hip +
       0.1 * g(0.495, 0.03) +
-      0.16 * g(0.33, 0.09) +
+      0.36 * g(0.34, 0.08) +
       0.08 * g(0.095, 0.02);
-    r[2] += 0.006 * g(0.5, 0.025) - 0.012 * g(0.33, 0.09);
+    r[2] += 0.006 * g(0.5, 0.025) - 0.019 * g(0.34, 0.08) - 0.012 * g(0.72, 0.11);
     // A knee that bends in one place (the user, 2026-11-15: an angle, not a curve): the man's rings
     // blend the thigh and the shin over 40 cm round it; here only the 8 cm across it do, and the
     // shin hangs on its own bone down to the ankle.
@@ -945,6 +955,10 @@ const CREST: Loft = {
 CREST.rings = finer(CREST.rings, false);
 CREST.far = [0, 3, 6, 9, CREST.rings.length - 2, CREST.rings.length - 1];
 
+/** How high the xenomorph's hip bones rise at their outer ends, metres. */
+const WING = 0.05;
+/** How deep the front of its pelvis is sunk in at the middle, metres. */
+const BOWL = 0.05;
 const shape = (lod: number, xeno = false): Skin => {
   const [TR, LG, AR] = xeno ? [TRUNK_X, LEG_X, ARM_X] : [TRUNK, LEG, ARM];
   const [v, j, w, t, c, l, g, c2, cm]: number[][] = [[], [], [], [], [], [], [], [], []];
@@ -1038,12 +1052,24 @@ const shape = (lod: number, xeno = false): Skin => {
             : 0;
         const k = L === TR ? ease((ax - 0.06) / 0.08) * top * clamp((y - SPLIT - 0.02) / 0.03) : 0;
         const [clav, arm] = x < 0 ? [J.CLAVICLE_L, SWING_L] : [J.CLAVICLE_R, SWING_R];
+        // The xenomorph's hip bones rise at the sides (the user, 2026-11-17: the hips go up): the
+        // pelvis' girdle lifted the further out it is, a wing each side over the waist.
+        const wing =
+          xeno && L === TR
+            ? WING * clamp((ax - 0.07) / 0.085) ** 3 * Math.exp(-(((y - 1.01) / 0.045) ** 2))
+            : 0;
+        // Its pelvis open in front as a skeleton's (the user, 2026-11-17: a hollow in the middle,
+        // between the hip bones): the front sunk in toward the middle, under the belly.
+        const bowl =
+          xeno && L === TR && z < 0
+            ? BOWL * (1 - clamp(ax / 0.11)) ** 1.5 * Math.exp(-(((y - 0.99) / 0.05) ** 2))
+            : 0;
         return q
           ? put([x, y, z], k > 0.5 ? clav : J.CHEST, arm, q)
           : k
             ? put([x, y, z], J.CHEST, clav, k)
             : put(
-                [x, y, z],
+                [x, y + wing, z + bowl],
                 side(L.chain[Math.max(g, 0)]),
                 side(L.chain[g + 1] ?? L.chain[0]),
                 g < 0 ? 0 : u - g,

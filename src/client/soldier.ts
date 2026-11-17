@@ -105,7 +105,7 @@ import {
 } from './katana';
 import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
-import { STRIDE, add, basis, dot, sub, unit } from './mesh';
+import { CHITIN, STRIDE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, RESTS, axis, mul, rest, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
@@ -1270,8 +1270,9 @@ export const soldier = (
     !!build,
   );
   if (xeno) {
-    const { PANTS, UPPER, GLOVE, JACKET, TRIM, SOLE, FLESH, CAP, STRIPE } = REGION;
-    for (const k of [PANTS, UPPER, GLOVE, JACKET, SOLE]) {
+    const { PANTS, UPPER, GLOVE, JACKET, TRIM, SOLE, FLESH, CAP, STRIPE, BELT } = REGION;
+    // BELT: its spine up the back, the tail's smooth black (backOf() in xeno.ts).
+    for (const k of [PANTS, UPPER, GLOVE, JACKET, SOLE, BELT]) {
       colors[k] = CHITIN_X;
     }
     // The pipes up its neck are its skin's (backOf() in xeno.ts).
@@ -1407,12 +1408,27 @@ export const soldier = (
         put(part[PART.TOES], add(s.pos[foot], turn(s.rot[foot], FOOT_TIP)), s.rot[toe]);
         put(part[PART.ELBOW], s.pos[arm + 1], s.rot[arm + 1]);
         if (lod) {
+          // The windows in its thigh, on the joint over the shin's.
+          put(
+            part[shin == J.SHIN_L ? PART.THIGH_L : PART.THIGH_R],
+            s.pos[shin - 1],
+            s.rot[shin - 1],
+          );
           // The disc where the shoulder ends and the arm begins.
           put(part[arm == J.ARM_L ? PART.CUFF_L : PART.CUFF_R], s.pos[arm], swing(s.rot, arm));
+          // The window down the outside of its forearm.
+          put(
+            part[arm == J.ARM_L ? PART.FOREARM_L : PART.FOREARM_R],
+            s.pos[arm + 1],
+            s.rot[arm + 1],
+          );
         }
       }
       put(part[PART.CHEST], s.pos[J.CHEST], s.rot[J.CHEST]);
       put(part[PART.SPINE], s.pos[J.SPINE], s.rot[J.SPINE]);
+      if (lod) {
+        put(part[PART.HIPS], s.pos[J.PELVIS], s.rot[J.PELVIS]);
+      }
       put(part[PART.HEAD], s.pos[J.HEAD], s.rot[J.HEAD]);
       if (lod) {
         put(part[PART.FINE], s.pos[J.HEAD], s.rot[J.HEAD]);
@@ -1434,7 +1450,41 @@ export const soldier = (
         buckle(o, a, q, build, color),
       );
     }
-    gloves(out, r, s, colors, lod, armored, LIMB.NONE, marine, xeno);
+    if (xeno && lod) {
+      // Its hands in its chitin (the user, 2026-11-17: the skin's texture on them): each a rigid
+      // piece on its wrist, so the texture lies on the hand's own rest place and does not swim;
+      // one a step of the fingers' curl, not one a frame.
+      const glove = colors[REGION.GLOVE];
+      for (const j of [J.HAND_L, J.HAND_R]) {
+        const i = +(j == J.HAND_R);
+        const curl = Math.round(Math.min(r.curls[i], RAKE) * 20) / 20;
+        rigid(`xeno hand ${lod < 3} ${i} ${curl}`, s.pos[j], s.rot[j], (o, a, q) => {
+          const at: ReturnType<typeof solve> = { ...s, pos: [], rot: [] };
+          [at.pos[j], at.rot[j]] = [a, q];
+          const from = o.length;
+          hands(
+            o,
+            at,
+            0,
+            [curl, curl],
+            glove,
+            // Its fingertips in the same chitin, up to the claws.
+            glove,
+            { claws: true },
+            lod < 3,
+            j == J.HAND_R ? J.HAND_L : J.HAND_R,
+          );
+          const v = room(o, 0);
+          for (let n = from; n < o.length; n += STRIDE) {
+            if (v[n + 8] == -1 && v[n + 6] == glove[0] && v[n + 9] == glove[2]) {
+              v[n + 8] = CHITIN;
+            }
+          }
+        });
+      }
+    } else {
+      gloves(out, r, s, colors, lod, armored, LIMB.NONE, marine, xeno);
+    }
     if (k > 0) {
       dissolve(out, from, k);
     }

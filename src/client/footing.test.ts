@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DOWN_TICKS, EXEC } from '../shared/constants';
+import { DOWN_TICKS, EXEC, GLORY_TICKS } from '../shared/constants';
 import { felled } from '../shared/gun';
 import { ROLE } from '../shared/kit';
 import { STILL } from '../shared/physics';
@@ -117,5 +117,49 @@ describe('a body down on the floor (footing())', () => {
       low = Math.min(low, lowest(book.get(2)!));
     }
     expect(low).toBeGreaterThan(-0.025);
+  });
+
+  it('keeps the xenomorph’s prey out of it, held and as he falls on his side', () => {
+    const book = new Map<number, Runner>();
+    const looks = new Map([
+      [1, { role: ROLE.XENO }],
+      [2, { role: ROLE.MARINE }],
+    ]);
+    let low = Infinity;
+    for (let e = 1; e < GLORY_TICKS; e++) {
+      const lock = GLORY_TICKS - e;
+      animate(
+        book,
+        [state(1, { lock, foe: 2 }), state(2, { z: -1, yaw: Math.PI, lock, foe: 1 })],
+        1 / 60,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        looks,
+      );
+      low = Math.min(low, lowest(book.get(2)!));
+    }
+    for (let k = 0; k < LYING; k++) {
+      const v = state(2, {
+        z: -1,
+        yaw: Math.PI,
+        down: DOWN_TICKS - k,
+        fell: felled(FALL.STRUCK, 0, 1),
+      });
+      animate(
+        book,
+        [state(1, {}), { ...v, lost: LIMB.EATEN, hp: 0 }],
+        1 / 60,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        looks,
+      );
+      low = Math.min(low, lowest(book.get(2)!));
+    }
+    // His armour's plates, as he bends back, stand a little further off the skin.
+    expect(low).toBeGreaterThan(-0.03);
   });
 });

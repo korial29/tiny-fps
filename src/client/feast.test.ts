@@ -4,12 +4,13 @@ import { ROLE } from '../shared/kit';
 import { STILL } from '../shared/physics';
 import { CUT, LIMB } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { BITE } from './body';
+import { BITE, inv } from './body';
 import {
   EXECUTE,
   FEAST,
   chew,
   clutched,
+  crouch,
   eating,
   kneel,
   kneeling,
@@ -20,8 +21,9 @@ import {
   topple,
   toppled,
 } from './feast';
+import { KILLCAM } from './killcam';
 import type { Vec3 } from './mesh';
-import { JOINT as J, rest, solve, turn } from './rig';
+import { JOINT as J, mul, rest, solve, turn } from './rig';
 import { animate, stance } from './soldier';
 import type { Runner } from './soldier';
 
@@ -294,14 +296,18 @@ describe('a glory kill drawn', () => {
     expect(stance(book.get(XENO)).s.pos[J.PELVIS][2]).toBeCloseTo(0, 1);
   });
 
-  it('keeps its head down at his after the kill, eating, then lifts it', () => {
+  it('keeps its head down at his after the kill, chewing, turned to him, and lifts it slowly once the camera is back in the eye', () => {
+    // The killer's camera is back in his eye before the head goes up: he does not see it.
+    expect(FEAST.FEED[0] - FEAST.FEED[1]).toBeGreaterThanOrEqual(KILLCAM.HOLD + KILLCAM.BLEND);
     const book = new Map<number, Runner>();
-    // Its head's turn, and how far it is from the one it holds when it is not eating, radians.
-    const head = () => stance(book.get(XENO)!).s.rot[J.HEAD];
     const from = (a: number[], b: number[]) =>
       2 * Math.acos(Math.min(1, Math.abs(a.reduce((d, v, i) => d + v * b[i], 0))));
+    const neck = () => {
+      const s = stance(book.get(XENO)!).s;
+      return mul(inv(s.rot[J.CHEST]), s.rot[J.HEAD]);
+    };
     frames(book, [state(XENO, {}), state(PREY_ID, { z: -1, yaw: Math.PI })], 2);
-    const up = head();
+    const up = neck();
     frames(
       book,
       [
@@ -310,12 +316,62 @@ describe('a glory kill drawn', () => {
       ],
       2,
     );
-    // Bent down at him while it eats on, back as it was once it has fed.
-    const after = [state(XENO, {}), state(PREY_ID, { z: -1, yaw: Math.PI, down: 100 })];
-    frames(book, after, Math.round((FEAST.FEED[0] - FEAST.FEED[1]) * 60) - 2);
-    expect(from(head(), up)).toBeGreaterThan(0.4);
-    frames(book, after, Math.round(FEAST.FEED[1] * 60) + 4);
-    expect(from(head(), up)).toBeLessThan(0.05);
+    // After the kill the player looks away (+x): it stays turned to him (-z) and bent at him.
+    const after = [
+      state(XENO, { yaw: -Math.PI / 2 }),
+      state(PREY_ID, { z: -1, yaw: Math.PI, down: 100 }),
+    ];
+    const bend: number[] = [];
+    const ahead: number[] = [];
+    for (let k = 0; k < Math.round((FEAST.FEED[0] + FEAST.LOW[1]) * 60) + 4; k++) {
+      frames(book, after, 1);
+      bend.push(from(neck(), up));
+      const s = stance(book.get(XENO)!).s;
+      ahead.push(turn(s.rot[J.PELVIS], [0, 0, -1])[2]);
+    }
+    const lift = Math.round((FEAST.FEED[0] - FEAST.FEED[1]) * 60);
+    // Down and chewing while the camera is out: bent, and the bend moving.
+    const held = bend.slice(10, lift - 2);
+    expect(Math.min(...held)).toBeGreaterThan(0.3);
+    expect(Math.max(...held) - Math.min(...held)).toBeGreaterThan(0.1);
+    ahead.slice(10, lift).forEach(z => expect(z).toBeLessThan(-0.7));
+    // Done eating, its head stays low a while, then comes up the rest slowly, never at once.
+    const done = Math.round(FEAST.FEED[0] * 60);
+    expect(bend[done + 2]).toBeGreaterThan(0.15);
+    for (let k = lift + 6; k < bend.length - 1; k++) {
+      expect(Math.abs(bend[k + 1] - bend[k])).toBeLessThan(0.05);
+    }
+    expect(bend.at(-1)!).toBeLessThan(0.05);
+  });
+
+  it('hops back off him on an arc after the kill, and lets him fall on his side from where it held him', () => {
+    const book = new Map<number, Runner>();
+    const locked = [
+      state(XENO, { lock: 3, foe: PREY_ID }),
+      state(PREY_ID, { z: -1, yaw: Math.PI, lock: 3, foe: XENO }),
+    ];
+    frames(book, locked, 2);
+    const on = stance(book.get(XENO)!).s.pos[J.PELVIS];
+    const held = stance(book.get(PREY_ID)!).s;
+    const after = [
+      state(XENO, {}),
+      state(PREY_ID, { z: -1, yaw: Math.PI, down: 100, lost: LIMB.EATEN }),
+    ];
+    const its: Vec3[] = [];
+    const his: ReturnType<typeof solve>[] = [];
+    for (let k = 0; k < 60; k++) {
+      frames(book, after, 1);
+      its.push(stance(book.get(XENO)!).s.pos[J.PELVIS]);
+      his.push(stance(book.get(PREY_ID)!).s);
+    }
+    // Its pelvis: up over where it was on him halfway through the hop, and back off him (+z).
+    const half = its[Math.round((FEAST.DROP * 60) / 2)];
+    expect(half[1]).toBeGreaterThan(on[1] + FEAST.HOP * 0.5);
+    expect(its[Math.round(FEAST.DROP * 60) + 2][2]).toBeGreaterThan(on[2] + 0.3);
+    // His fall starts where he was held, no jump, and ends on his side (his right, -x as he faces +z).
+    his[0].pos.forEach((v, j) => expect(dist(v, held.pos[j])).toBeLessThan(0.08));
+    expect(his.at(-1)!.pos[J.CHEST][0]).toBeLessThan(held.pos[J.CHEST][0] - 0.5);
+    expect(his.at(-1)!.pos[J.CHEST][1]).toBeLessThan(0.6);
   });
 
   it('leaves a lock of two humans (a saber lock) to the katana', () => {
@@ -503,6 +559,26 @@ describe('the beheaded victim', () => {
       expect(reach(s, arm, hand)).toBeGreaterThan(0.5);
       expect(reach(a, arm, hand)).toBeLessThan(0.45);
     }
+  });
+});
+
+describe('its crouch after the kill', () => {
+  it('sinks its hips back and low, its feet where they were, its back bent, its claws ahead and low', () => {
+    const p = { ...rest([0, 0, 0], 0), hips: [0, -0.1, 0] as Vec3 };
+    const [a, s] = [solve(p), solve(crouch(p, 1))];
+    const [, sink, back] = FEAST.CROUCH;
+    expect(s.pos[J.PELVIS][1]).toBeCloseTo(a.pos[J.PELVIS][1] - sink, 6);
+    // Facing -z: back is +z.
+    expect(s.pos[J.PELVIS][2]).toBeCloseTo(a.pos[J.PELVIS][2] + back, 6);
+    for (const j of [J.FOOT_L, J.FOOT_R]) {
+      expect(dist(s.pos[j], a.pos[j])).toBeLessThan(0.01);
+    }
+    // Its claws down by its hips and out ahead, as far as a man's arms reach from a straight back.
+    for (const h of [J.HAND_L, J.HAND_R]) {
+      expect(s.pos[h][1]).toBeLessThan(s.pos[J.PELVIS][1]);
+      expect(s.pos[h][2]).toBeLessThan(s.pos[J.PELVIS][2] - 0.25);
+    }
+    expect(crouch(p, 0)).toBe(p);
   });
 });
 

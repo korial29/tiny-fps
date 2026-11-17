@@ -16,7 +16,9 @@ export const FEAST = {
   /** The tick of the lock its lunge starts on (its dash is over at GLORY_DASH, 20), and the ticks it takes. */
   LEAP: [18, 18],
   /** Seconds it takes to let go of him after the kill. */
-  DROP: 0.45,
+  DROP: 0.5,
+  /** Its hop back off him after the kill (the user, 2026-11-17): how high it arcs, metres. */
+  HOP: 0.45,
   /** Its pelvis in front of his feet, toward it, and how far it climbs, metres: a little, its head over his (the user, 2026-11-16). */
   CLING: 0.5,
   LIFT: 0.35,
@@ -57,8 +59,21 @@ export const FEAST = {
   SWAY: [0.07, 0.12, 1.7],
   /** Drops of blood a second from his thighs while its feet grip them, and where: across and up. */
   GRIP: [30, 0.17, 0.62],
-  /** Seconds it keeps its head down at his after the kill, eating (the user, 2026-11-17), the last FED of them lifting it. */
-  FEED: [1.4, 0.35],
+  /**
+   * Seconds it keeps its head down at his after the kill, chewing, turned to him, and the last of
+   * them lifting it slowly as the chewing dies out (the user, 2026-11-17: not all at once), only
+   * once the killer's camera is back in his eye (KILLCAM.HOLD and BLEND).
+   */
+  FEED: [2.2, 0.8],
+  /** How far down its head stays once it has lifted it (devour()'s scale: 0.7 in him), and the seconds it then takes to come up the rest (the user, 2026-11-17: it went too high). */
+  LOW: [0.3, 1.2],
+  /**
+   * Its low hunting crouch once it has landed off him, as a cat's (the user, 2026-11-17): seconds
+   * it takes to get down; how far its hips sink and go back (metres); its back bent forward (radians:
+   * spine, chest) and its neck lifting the head back up level; its claws ahead and low (metres
+   * ahead of its pelvis, over the floor, across).
+   */
+  CROUCH: [0.25, 0.3, 0.12, 0.35, 0.3, 0.45, 0.5, 0.35, 0.22],
 } as const;
 
 const length = (v: Vec3) => Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
@@ -95,7 +110,7 @@ const limb = (q: Pose, j: number, to: Vec3, pole: Vec3, m: number) => {
  * The xenomorph's `pose` on its prey, whose feet are at `prey`, by the share `m` (mounted()): turned
  * to him and up on him, its feet on his thighs, its claws over his shoulders, leaning over his head.
  */
-export const seize = (pose: Pose, prey: Vec3, m: number, sway = 0): Pose => {
+export const seize = (pose: Pose, prey: Vec3, m: number, sway = 0, hop = 0): Pose => {
   if (m <= 0) {
     return pose;
   }
@@ -107,8 +122,10 @@ export const seize = (pose: Pose, prey: Vec3, m: number, sway = 0): Pose => {
   const pelvis = solve(q).pos[J.PELVIS];
   const want = off(prey, r, f, 0, -FEAST.CLING, 0);
   q.at = [0, 1, 2].map(i => q.at[i] + (i == 1 ? FEAST.LIFT : want[i] - pelvis[i]) * m) as Vec3;
-  // Rocked to its right and back (swaying()): aside and leaning.
-  q.at = off(q.at, r, f, FEAST.SWAY[0] * sway, 0, 0);
+  // Rocked to its right and back (swaying()): aside and leaning. Off him after the kill, a hop
+  // back on an arc (`hop`, 0 to 1 and back), the back leaning away.
+  q.at = off(q.at, r, f, FEAST.SWAY[0] * sway, 0, FEAST.HOP * hop);
+  rot[J.PELVIS] = mul(rot[J.PELVIS], axis(X, 0.3 * hop));
   rot[J.PELVIS] = mul(axis([0, 0, 1], -FEAST.SWAY[1] * sway), rot[J.PELVIS]);
   const [feet, claws] = [FEAST.FEET, FEAST.CLAWS];
   for (const [side, thigh, arm] of [
@@ -347,10 +364,11 @@ const LIMP: [number, number][] = [
 
 /**
  * The kneeling `pose` `t` seconds after his head went: tipped onto its right side about its right
- * knee on the floor (toppled()), going limp as it goes (the user, 2026-11-17: not stiff): the raised
- * leg stretching out, the arms falling along the body, the trunk slumping and turning a little.
+ * knee on the floor (toppled()), or about `pivot` (the xenomorph's prey, standing: his right foot),
+ * going limp as it goes (the user, 2026-11-17: not stiff): the raised leg stretching out, the arms
+ * falling along the body, the trunk slumping and turning a little.
  */
-export const topple = (pose: Pose, t: number): Pose => {
+export const topple = (pose: Pose, t: number, pivot: number = J.SHIN_R): Pose => {
   const a = toppled(t);
   if (a <= 0) {
     return pose;
@@ -363,7 +381,7 @@ export const topple = (pose: Pose, t: number): Pose => {
   rot[J.SPINE] = mul(rot[J.SPINE], axis(X, -0.25 * limp));
   rot[J.CHEST] = mul(rot[J.CHEST], mul(axis(X, -0.15 * limp), axis([0, 1, 0], 0.2 * limp)));
   const s = solve({ ...pose, rot });
-  const knee = s.pos[J.SHIN_R];
+  const knee = s.pos[pivot];
   const R = axis(basis(pose.yaw, 0)[2], a);
   const Y = axis([0, 1, 0], pose.yaw);
   // The turn about the knee in the frame of the yaw, the pelvis put where it takes it.
@@ -380,3 +398,53 @@ export const topple = (pose: Pose, t: number): Pose => {
  */
 export const swaying = (lock: number, m: number): number =>
   m * Math.sin((2 * Math.PI * FEAST.SWAY[2] * (GLORY_TICKS - lock)) / TICK_HZ);
+
+/**
+ * The xenomorph's `pose` turned to its prey at `prey`, `w` of the way, its neck and head with its
+ * body rather than after the player's look (the user, 2026-11-17: its head on him all along).
+ */
+export const intent = (pose: Pose, prey: Vec3, w: number): Pose => {
+  if (w <= 0) {
+    return pose;
+  }
+  const [yaw] = facing(pose.at, prey);
+  const rot = pose.rot.slice();
+  for (const j of [J.NECK, J.HEAD]) {
+    rot[j] = slerp(rot[j], [0, 0, 0, 1], w);
+  }
+  return { ...pose, yaw: pose.yaw + wrap(yaw - pose.yaw) * w, rot };
+};
+
+/**
+ * The xenomorph's `pose` down in a low hunting crouch, `w` of the way (CROUCH): its hips sunk and
+ * back, its feet where they were, its back bent forward and its head kept up, its claws ahead and low.
+ */
+export const crouch = (pose: Pose, w: number): Pose => {
+  if (w <= 0) {
+    return pose;
+  }
+  const [, sink, back, spine, chest, neck, ahead, low, across] = FEAST.CROUCH;
+  const f = basis(pose.yaw, 0)[2];
+  const r = basis(pose.yaw, 0)[0];
+  const feet = solve(pose);
+  const rot = pose.rot.slice();
+  rot[J.SPINE] = mul(rot[J.SPINE], axis(X, -spine * w));
+  rot[J.CHEST] = mul(rot[J.CHEST], axis(X, -chest * w));
+  rot[J.NECK] = mul(rot[J.NECK], axis(X, neck * w));
+  const q: Pose = {
+    ...pose,
+    rot,
+    hips: [pose.hips[0], pose.hips[1] - sink * w, pose.hips[2] + back * w],
+  };
+  for (const [side, thigh, arm] of [
+    [-1, J.THIGH_L, J.ARM_L],
+    [1, J.THIGH_R, J.ARM_R],
+  ]) {
+    // The feet where they stood, the knees bent ahead over them.
+    reach(q, solve(q), thigh, feet.pos[thigh + 2], f);
+    const pelvis = solve(q).pos[J.PELVIS];
+    const claw = off([pelvis[0], pose.at[1], pelvis[2]], r, f, side * across, ahead, low);
+    limb(q, arm, claw, off([0, 0, 0], r, f, side, -0.3, 0.2), w);
+  }
+  return q;
+};

@@ -132,7 +132,9 @@ import {
   FEAST,
   chew,
   clutched,
+  crouch,
   eating,
+  intent,
   kneel,
   mounted,
   seize,
@@ -220,6 +222,9 @@ export interface Runner {
   /** The xenomorph's belly as last drawn, for its prey's hands; the seconds it eats on after the kill. */
   bust?: Vec3;
   feed?: number;
+  /** Where its prey's feet were as it last held him (FEAST.FEED); the seconds left of its head coming up after (FEAST.LOW). */
+  fedOn?: Vec3;
+  low?: number;
   /** The share of a drop of blood owed to the next frame (FEAST.GORE, EXECUTE.BLEED), the same from its prey's thighs (FEAST.GRIP), and the drops so far. */
   gore?: number;
   grip?: number;
@@ -228,8 +233,8 @@ export interface Runner {
   bleed?: number;
   /** The execution's victim: the swordsman's feet while he kneels; once beheaded, them and the seconds since. */
   killer?: Vec3;
-  slain?: { at: Vec3; t: number };
-  /** The execution's victim's pose as he last knelt: his beheaded body tips over from it. */
+  slain?: { at: Vec3; t: number; pivot?: number };
+  /** The execution's victim's pose as he last knelt, or the xenomorph's prey's as it last held him: the dead body tips over from it. */
   knelt?: Pose;
   /** The skeleton as last drawn: a limb cut off leaves from it (limbs.ts track()). */
   s?: ReturnType<typeof solve>;
@@ -458,14 +463,24 @@ export const animate = (
       r.with = on && [on.x, on.y, on.z];
       // Its prey's hands go on its belly as it was last drawn; it eats on a while after the kill.
       r.bust = !xeno && r.mount ? book.get(r.mate!)?.s?.pos[J.SPINE] : undefined;
+      const fed = r.feed;
       r.feed =
         xeno && r.p.lock && !p.lock && r.mount ? FEAST.FEED[0] : Math.max((r.feed ?? 0) - dt, 0);
+      // Done eating, its head comes up the rest of the way slowly (FEAST.LOW).
+      r.low = fed && !r.feed ? FEAST.LOW[1] : Math.max((r.low ?? 0) - dt, 0);
+      // Where its prey was as it last held him: it stays turned to him while it eats on.
+      r.fedOn = xeno && r.with ? r.with : r.feed ? r.fedOn : undefined;
       // The execution's blood: a spurt on the cut down, a burst as his head goes, then the neck.
       // His body tips over from his knee, before the swordsman he knelt to (r.slain).
       const victim = (q: PlayerState) => q.exec === EXEC.VICTIM && !!q.lock;
       r.slain = p.down && r.slain ? { ...r.slain, t: r.slain.t + dt } : undefined;
       if (victim(r.p) && p.down && r.killer) {
         r.slain = { at: r.killer, t: 0 };
+      }
+      // The xenomorph's prey, let go of as his head goes: he falls on his side from where it
+      // held him, about his right foot.
+      if (!xeno && r.p.lock && !r.p.exec && p.down && r.mount && r.with) {
+        r.slain = { at: r.with, t: 0, pivot: J.FOOT_R };
       }
       r.killer = victim(p) ? r.with : undefined;
       if (victim(p) && victim(r.p)) {
@@ -1003,28 +1018,49 @@ export const stance = (r: Runner) => {
     if (!fours) {
       pose = prowl(pose, solve(pose), p);
     }
-    // Its head still down at his, eating, a while after the kill (FEAST.FEED), lifted at the end.
-    const fed = Math.min((r.feed ?? 0) / FEAST.FEED[1], 1);
+    // Its head still down at his a while after the kill (FEAST.FEED), lifted slowly at the end;
+    // turned to him all along, whatever the player looks at.
+    const fed = ease((r.feed ?? 0) / FEAST.FEED[1]);
+    const prey = mate ?? (fed ? r.fedOn : undefined);
+    if (prey) {
+      pose = intent(pose, prey, Math.max(r.mount ?? 0, fed));
+    }
+    // Lifting, it keeps its head low (FEAST.LOW), then lets it come up slowly: not too high at once.
+    const [held, slow] = FEAST.LOW;
     if (r.menace || p.lock || mate || fed) {
-      pose = menace(pose, p.lock ? devour(p.lock) : devour(0) * fed);
+      const bite = r.feed ? held + (devour(0) - held) * fed : 0;
+      pose = menace(pose, p.lock ? devour(p.lock) : bite);
+    } else if (r.low) {
+      // The whole of its menace let go of together, as its head comes up.
+      const k = ease(r.low / slow);
+      const m = menace(pose, held);
+      pose = { ...pose, rot: pose.rot.map((q, j) => slerp(q, m.rot[j], k)) };
     }
     pose = r.fours?.apply(pose) ?? pose;
     if (mate) {
-      pose = seize(pose, mate, r.mount!, p.lock ? swaying(p.lock, r.mount!) : 0);
+      // After the kill it hops back off him on an arc (FEAST.HOP), its head still at his.
+      const hop = p.lock ? 0 : Math.sin(Math.PI * (1 - r.mount!));
+      pose = seize(pose, mate, r.mount!, p.lock ? swaying(p.lock, r.mount!) : 0, hop);
     }
+    // Chewing as it bites, and on after the kill, dying out as its head lifts.
     pose = chew(pose, p.lock ? eating(p.lock, r.mount ?? 0) : fed, r.t);
+    // Landed off him, down in a low hunting crouch (FEAST.CROUCH), let go of as its head comes up.
+    const since = FEAST.FEED[0] - (r.feed ?? 0) - FEAST.DROP;
+    pose = crouch(pose, r.feed ? ease(since / FEAST.CROUCH[0]) : ease((r.low ?? 0) / slow));
   } else if (mate && !lying) {
     const sway = p.lock ? swaying(p.lock, r.mount!) : 0;
-    pose = clutched(pose, mate, r.mount!, r.t, r.bust, sway);
+    pose = r.knelt = clutched(pose, mate, r.mount!, r.t, r.bust, sway);
   } else if (p.exec === EXEC.VICTIM && p.lock && r.with && !lying) {
     pose = r.knelt = kneel(pose, r.with, p.lock, r.t);
   }
   // Beheaded on his knee: the same kneel, tipping over, not another fall.
   if (r.slain && p.down && r.knelt) {
-    pose = topple({ ...r.knelt, at: [p.x, p.y - sink, p.z] }, r.slain.t);
+    pose = topple({ ...r.knelt, at: [p.x, p.y - sink, p.z] }, r.slain.t, r.slain.pivot);
   }
-  // Down or kneeling, nothing goes through the floor (it still sinks into it at the end).
-  if (p.down || (p.exec === EXEC.VICTIM && p.lock)) {
+  // Down, kneeling or held by the xenomorph, nothing goes through the floor (it still sinks into
+  // it at the end).
+  const held = !!mate && r.look?.role !== ROLE.XENO;
+  if (p.down || (p.exec === EXEC.VICTIM && p.lock) || held) {
     pose = footing(pose, p.y - sink);
   }
   let s = solve(pose);

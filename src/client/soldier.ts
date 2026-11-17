@@ -2,7 +2,17 @@
 // renderer's vertex format. A runner is the last PlayerState seen and the gait that eases the body
 // toward it; the dash streaks are the only thing drawn here that the gait does not pose. A
 // player's (x, y, z) is the bottom of the feet. No DOM.
-import { BLOW, DOWN_TICKS, EYE, HEAT_MAX, RUN_SPEED, STEP_H, TICK_HZ } from '../shared/constants';
+import { sabering } from '../shared/gun';
+import {
+  BLOW,
+  DOWN_TICKS,
+  EXEC,
+  EYE,
+  HEAT_MAX,
+  RUN_SPEED,
+  STEP_H,
+  TICK_HZ,
+} from '../shared/constants';
 import { strike } from '../shared/blade';
 import { TAU, floored } from '../shared/physics';
 import { LIMB, MODE } from '../shared/types';
@@ -116,6 +126,22 @@ import {
 import { CHITIN_X, FOOT_TIP, HEAD, PART, PIPE, eyes, lashOf, partsOf, tail } from './xeno';
 import type { Part } from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
+import { footing } from './footing';
+import {
+  EXECUTE,
+  FEAST,
+  chew,
+  clutched,
+  crouch,
+  eating,
+  intent,
+  kneel,
+  mounted,
+  seize,
+  spun,
+  swaying,
+  topple,
+} from './feast';
 import type { Face } from './expression';
 import { CH, toneFor } from './features';
 import { createTrail } from './trail';
@@ -186,6 +212,32 @@ export interface Runner {
   build?: number;
   /** The skin and haircut the player picked (PlayerInfo.tone and hair): his id's when absent. */
   look?: Choice;
+  /**
+   * A xenomorph's glory kill (feast.ts): the id of the other one, how far the xenomorph is on its
+   * prey (mounted(), then down to 0 over FEAST.DROP once it has fed), and the other's feet.
+   */
+  mate?: number;
+  mount?: number;
+  with?: Vec3;
+  /** The xenomorph's belly as last drawn, for its prey's hands; the seconds it eats on after the kill. */
+  bust?: Vec3;
+  feed?: number;
+  /** Where its prey's feet were as it last held him (FEAST.FEED); the seconds left of its head coming up after (FEAST.LOW). */
+  fedOn?: Vec3;
+  low?: number;
+  /** The share of a drop of blood owed to the next frame (FEAST.GORE, EXECUTE.BLEED), the same from its prey's thighs (FEAST.GRIP), and the drops so far. */
+  gore?: number;
+  grip?: number;
+  drops?: number;
+  /** Seconds left of the blood from the neck of one the katana's execution beheaded. */
+  bleed?: number;
+  /** The execution's victim: the swordsman's feet while he kneels; once beheaded, them and the seconds since. */
+  killer?: Vec3;
+  slain?: { at: Vec3; t: number; pivot?: number };
+  /** The execution's victim's pose as he last knelt, or the xenomorph's prey's as it last held him: the dead body tips over from it. */
+  knelt?: Pose;
+  /** The skeleton as last drawn: a limb cut off leaves from it (limbs.ts track()). */
+  s?: ReturnType<typeof solve>;
 }
 
 /** A man's haircuts (look.ts's HAIR_NAMES[0]): how long the hair stands off the scalp, the first one shaved. */
@@ -340,7 +392,7 @@ export const animate = (
   others: PlayerState[],
   dt: number,
   world?: World,
-  tracer?: Pick<Tracer, 'shock' | 'spit'>,
+  tracer?: Pick<Tracer, 'shock' | 'spit'> & Partial<Pick<Tracer, 'gore'>>,
   rovers?: Rover[],
   builds?: ReadonlyMap<number, number>,
   looks?: ReadonlyMap<number, Choice>,
@@ -398,6 +450,80 @@ export const animate = (
       r.curls = r.curls.map((c, i) => c + (g[i] - c) * (1 - Math.exp(-dt * CLOSE)));
       r.blow = thrown(p, xeno) > 0 ? blowOf(p, xeno) : r.blow;
       r.flinch = Math.max(r.flinch - dt / FLINCH[0], 0);
+      // A glory kill: the two locked, a xenomorph and its prey; after it, it slides off him. Or the
+      // katana's execution (exec): the other one is where the victim faces.
+      const foe = p.lock && p.foe !== undefined ? others.find(q => q.id == p.foe) : undefined;
+      const mate = foe && !p.exec && xeno != (book.get(foe.id)?.look?.role === ROLE.XENO);
+      if (mate) {
+        [r.mate, r.mount] = [foe.id, mounted(p.lock!)];
+      } else {
+        r.mount = Math.max((r.mount ?? 0) - dt / FEAST.DROP, 0);
+      }
+      const on = r.mount ? others.find(q => q.id == r.mate) : p.exec ? foe : undefined;
+      r.with = on && [on.x, on.y, on.z];
+      // Its prey's hands go on its belly as it was last drawn; it eats on a while after the kill.
+      r.bust = !xeno && r.mount ? book.get(r.mate!)?.s?.pos[J.SPINE] : undefined;
+      const fed = r.feed;
+      r.feed =
+        xeno && r.p.lock && !p.lock && r.mount ? FEAST.FEED[0] : Math.max((r.feed ?? 0) - dt, 0);
+      // Done eating, its head comes up the rest of the way slowly (FEAST.LOW).
+      r.low = fed && !r.feed ? FEAST.LOW[1] : Math.max((r.low ?? 0) - dt, 0);
+      // Where its prey was as it last held him: it stays turned to him while it eats on.
+      r.fedOn = xeno && r.with ? r.with : r.feed ? r.fedOn : undefined;
+      // The execution's blood: a spurt on the cut down, a burst as his head goes, then the neck.
+      // His body tips over from his knee, before the swordsman he knelt to (r.slain).
+      const victim = (q: PlayerState) => q.exec === EXEC.VICTIM && !!q.lock;
+      r.slain = p.down && r.slain ? { ...r.slain, t: r.slain.t + dt } : undefined;
+      if (victim(r.p) && p.down && r.killer) {
+        r.slain = { at: r.killer, t: 0 };
+      }
+      // The xenomorph's prey, let go of as his head goes: he falls on his side from where it
+      // held him, about his right foot.
+      if (!xeno && r.p.lock && !r.p.exec && p.down && r.mount && r.with) {
+        r.slain = { at: r.with, t: 0, pivot: J.FOOT_R };
+      }
+      r.killer = victim(p) ? r.with : undefined;
+      if (victim(p) && victim(r.p)) {
+        const was = EXEC.TICKS - r.p.lock! < EXECUTE.KNEEL[0];
+        if (was && EXEC.TICKS - p.lock! >= EXECUTE.KNEEL[0]) {
+          const chest: Vec3 = [p.x, p.y + 1.25, p.z];
+          tracer?.gore?.(chest, EXECUTE.WOUND, 2.5);
+          tracer?.shock(chest);
+        }
+      }
+      if (victim(r.p) && p.down) {
+        const neck: Vec3 = [p.x, p.y + 1.05, p.z];
+        tracer?.gore?.(neck, EXECUTE.NECK, 3.5);
+        tracer?.shock(neck);
+        r.bleed = EXECUTE.BLEEDING;
+      }
+      if (r.bleed && r.cut?.at) {
+        r.bleed = Math.max(r.bleed - dt, 0);
+        r.gore = (r.gore ?? 0) + EXECUTE.BLEED * dt;
+        tracer?.gore?.(r.cut.at, Math.floor(r.gore), 1.5);
+        r.gore %= 1;
+      }
+      // Its prey's blood as it eats: spurting from his head, a burst as it goes.
+      if (xeno && on) {
+        const head: Vec3 = [on.x, on.y + 1.55, on.z];
+        if (r.p.lock && !p.lock) {
+          tracer?.gore?.(head, FEAST.GORE[1], 3.5);
+        }
+        r.gore = (r.gore ?? 0) + eating(p.lock ?? 0, r.mount) * FEAST.GORE[0] * dt;
+        tracer?.gore?.(head, Math.floor(r.gore), 2.5);
+        r.gore %= 1;
+        // And from his thighs, where its feet grip them, a leg at a time, dripping down.
+        if (p.lock) {
+          const [rate, across, up] = FEAST.GRIP;
+          const [dx, dz] = [on.x - p.x, on.z - p.z];
+          const d = Math.hypot(dx, dz) || 1;
+          r.grip = (r.grip ?? 0) + rate * r.mount * dt;
+          for (; r.grip >= 1; r.grip--) {
+            const side = (r.drops = (r.drops ?? 0) + 1) % 2 ? across : -across;
+            tracer?.gore?.([on.x - (dz / d) * side, on.y + up, on.z + (dx / d) * side], 1, 0.5);
+          }
+        }
+      }
       // A blow of his fists the host counted: the nearest he reaches, in his arc, flinches.
       const hit = world && bare(p) && p.hits != r.p.hits && p.swing;
       if (hit) {
@@ -584,8 +710,9 @@ export const brandish = (
   parry = Infinity,
 ): Pose => {
   // In a saber lock the blade crosses the foe's, shaking, and the trunk leans into him.
-  const e = p.lock ? 1 : prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
-  const k = p.lock ? locked(t) : poised(p, Math.max(prog, 0), t);
+  const lk = sabering(p);
+  const e = lk ? 1 : prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
+  const k = lk ? locked(t) : poised(p, Math.max(prog, 0), t);
   // A parry snaps the blade across from whatever hold it is in, and holds its line (clasp()).
   const pe = parrying(parry);
   const g = deflect(
@@ -595,7 +722,7 @@ export const brandish = (
   );
   g[1] += 0.02 * Math.sin(TAU * ph) * (1 - e);
   // A cut turns the whole body on its feet with a share of the trunk's twist.
-  const [tw, bd, ln] = p.lock ? [0, 0.15, 0] : prog < 0 ? [0, 0, 0] : bent(p, prog).map(v => v * e);
+  const [tw, bd, ln] = lk ? [0, 0.15, 0] : prog < 0 ? [0, 0, 0] : bent(p, prog).map(v => v * e);
   const spin = prog < 0 ? 0 : SWAY * tw;
   const pose = { ...from, yaw: from.yaw + spin };
   // The hands go round with the chest's whole twist and down and up with its bend.
@@ -843,6 +970,9 @@ export const stance = (r: Runner) => {
   const { p } = r;
   // Down or floored, the weapon stays in the hand as it falls. At the wheel both hands are on the yoke.
   const lying = !!p.down || floored(p) || driving(r);
+  // In a glory kill (feast.ts) the arms are the kill's: no weapon is held up.
+  const mate = (r.mount ?? 0) > 0 ? r.with : undefined;
+  const busy = lying || !!mate || (p.exec === EXEC.VICTIM && !!p.lock);
   // All on fours (fours.ts) the gait's pose is wholly laid over: it is not built.
   const fours = !lying && (r.fours?.weight ?? 0) > 0.998;
   let pose = fours
@@ -888,16 +1018,64 @@ export const stance = (r: Runner) => {
     if (!fours) {
       pose = prowl(pose, solve(pose), p);
     }
-    if (r.menace || p.lock) {
-      pose = menace(pose, p.lock ? devour(p.lock) : 0);
+    // Its head still down at his a while after the kill (FEAST.FEED), lifted slowly at the end;
+    // turned to him all along, whatever the player looks at.
+    const fed = ease((r.feed ?? 0) / FEAST.FEED[1]);
+    const prey = mate ?? (fed ? r.fedOn : undefined);
+    if (prey) {
+      pose = intent(pose, prey, Math.max(r.mount ?? 0, fed));
+    }
+    // Lifting, it keeps its head low (FEAST.LOW), then lets it come up slowly: not too high at once.
+    const [held, slow] = FEAST.LOW;
+    if (r.menace || p.lock || mate || fed) {
+      const bite = r.feed ? held + (devour(0) - held) * fed : 0;
+      pose = menace(pose, p.lock ? devour(p.lock) : bite);
+    } else if (r.low) {
+      // The whole of its menace let go of together, as its head comes up.
+      const k = ease(r.low / slow);
+      const m = menace(pose, held);
+      pose = { ...pose, rot: pose.rot.map((q, j) => slerp(q, m.rot[j], k)) };
     }
     pose = r.fours?.apply(pose) ?? pose;
+    if (mate) {
+      // After the kill it hops back off him on an arc (FEAST.HOP), its head still at his.
+      const hop = p.lock ? 0 : Math.sin(Math.PI * (1 - r.mount!));
+      pose = seize(pose, mate, r.mount!, p.lock ? swaying(p.lock, r.mount!) : 0, hop);
+    }
+    // Chewing as it bites, and on after the kill, dying out as its head lifts.
+    pose = chew(pose, p.lock ? eating(p.lock, r.mount ?? 0) : fed, r.t);
+    // Standing as it eats; down in a low hunting crouch only at the end, as its head comes up
+    // (FEAST.CROUCH, the user 2026-11-17), then back to its prowl slowly.
+    pose = crouch(pose, r.feed ? 1 - fed : ease((r.low ?? 0) / slow));
+  } else if (mate && !lying) {
+    const sway = p.lock ? swaying(p.lock, r.mount!) : 0;
+    pose = r.knelt = clutched(pose, mate, r.mount!, r.t, r.bust, sway);
+  } else if (p.exec === EXEC.VICTIM && p.lock && r.with && !lying) {
+    pose = r.knelt = kneel(pose, r.with, p.lock, r.t);
+  }
+  // Beheaded on his knee: the same kneel, tipping over, not another fall.
+  if (r.slain && p.down && r.knelt) {
+    pose = topple({ ...r.knelt, at: [p.x, p.y - sink, p.z] }, r.slain.t, r.slain.pivot);
+  }
+  // Down, kneeling or held by the xenomorph, nothing goes through the floor (it still sinks into
+  // it at the end).
+  const held = !!mate && r.look?.role !== ROLE.XENO;
+  if (p.down || (p.exec === EXEC.VICTIM && p.lock) || held) {
+    pose = footing(pose, p.y - sink);
   }
   let s = solve(pose);
-  if (p.wield && !lying) {
-    pose = brandish(pose, p, r.prog, r.gait.phase, r.t, r.parry);
+  if (p.wield && !busy) {
+    // The execution's cut across comes out of a whole turn of the body.
+    const spin = p.exec === EXEC.KILLER && p.lock ? spun(p.lock) : 0;
+    const [from, q] = spin
+      ? [
+          { ...pose, yaw: pose.yaw + spin },
+          { ...p, yaw: p.yaw + spin },
+        ]
+      : [pose, p];
+    pose = brandish(from, q, r.prog, r.gait.phase, r.t, r.parry);
     s = solve(pose);
-  } else if ((p.railed || p.rifled) && !lying) {
+  } else if ((p.railed || p.rifled) && !busy) {
     // The rail gun or the rifle in both hands, at the ready when not firing: the left on its front grip, the
     // elbow down and out. On a wall it is put away, unless its bolt is going out (stowed()).
     if (p.railed && stowed(p)) {
@@ -905,7 +1083,7 @@ export const stance = (r: Runner) => {
     }
     pose = carried(pose, s, r);
     s = solve(pose);
-  } else if (r.aim > 0.01 && p.ammo >= 0) {
+  } else if (r.aim > 0.01 && p.ammo >= 0 && !busy) {
     // Seated, the eye the gun is held out from is lower.
     pose = lifted(
       pose,
@@ -919,7 +1097,7 @@ export const stance = (r: Runner) => {
   // hip and brings it up under the grip (pouch.ts, the user, 2026-11-09).
   const sp = swapOf(p);
   const w =
-    lying || p.wield || p.railed || sp < 0
+    busy || p.wield || p.railed || sp < 0
       ? 0
       : ease(span(sp, 0.12, 0.2)) * (1 - ease(span(sp, BROUGHT - 0.03, BROUGHT)));
   let carry: [Vec3, Vec3[]] | undefined;
@@ -1071,6 +1249,7 @@ export const soldier = (
   const plate = helmets ? undefined : color;
   const marine = plated && !ninja && !!plate;
   const { s, sink, yaw, carry } = stance(r);
+  r.s = s;
   // His face: a wince when hit, a grimace down, a shout in a cut or a dash, effort in a sprint or a
   // climb, focus aiming, a grin; the eyes on his aim from where the head points.
   // The head on the runner he looks at, as far as it turns; the eyes on him, or on the aim.
@@ -1099,7 +1278,7 @@ export const soldier = (
     hurt: r.hurt / HURT,
     effort: strain(p),
     focus: Math.max(r.aim, +!!p.charge),
-    shout: +(r.prog >= 0 || dashing(p)),
+    shout: +(r.prog >= 0 || dashing(p) || !!r.mount),
     grin: +(r.grin > 0),
     anger: Math.min((2 * r.mad) / MAD, 1),
     gx: Math.atan2(look[0], -look[2]),

@@ -7,8 +7,8 @@ import {
   CUTS,
   GLORY_DASH,
   GLORY_FAR,
+  EXEC,
   GLORY_HP,
-  GLORY_PUSH,
   GLORY_TICKS,
   RUN_SPEED,
   SPRINT_SPEED,
@@ -38,7 +38,7 @@ import { STILL, move } from './physics';
 import { FRAG, decodeSnapshot, encodeSnapshot } from './protocol';
 import { Room } from './room';
 import { glory, pouncing } from './tackle';
-import { KEY, LIMB, MODE, TEX } from './types';
+import { CUT, KEY, LIMB, MODE, TEX } from './types';
 import type { Conn, Input, PlayerState } from './types';
 import { build } from './world';
 import type { Brush } from './world';
@@ -735,32 +735,81 @@ describe('the xenomorph in a room', () => {
     expect(glory(q, [{ ...foe(-4), hp: GLORY_HP }])?.id).toBe(7);
   });
 
-  it('beheads on E a weak foe ahead with the katana in hand, the body thrown back, no lock', () => {
+  it('executes on E a weak foe ahead with the katana in hand: a dash, a cut down, a cut across that takes his head', () => {
     const { inner, ps, sent } = room(ROLE.MARINE, ROLE.MARINE);
     const [k, m] = ps;
     face(k.state, m.state);
-    k.bank = 99;
+    // Two metres off: the swordsman dashes in to EXEC.REACH.
+    m.state.z = 49;
+    k.bank = m.bank = 999;
+    let seq = 0;
+    const step = (p: typeof k, keys: number) =>
+      inner.apply(p, { seq: ++seq, keys, yaw: p.state.yaw, pitch: 0 });
     const e = () => {
-      inner.apply(k, { seq: 1, keys: KEY.USE | KEY.BLADE, yaw: 0, pitch: 0 });
-      inner.apply(k, { seq: 2, keys: KEY.BLADE, yaw: 0, pitch: 0 });
+      step(k, KEY.USE | KEY.BLADE);
+      step(k, KEY.BLADE);
     };
     m.state.hp = GLORY_HP;
     // Empty-handed: nothing.
     e();
-    expect(m.state.down).toBe(0);
+    expect(m.state.lock ?? 0).toBe(0);
     Object.assign(k.state, { blade: true });
     m.state.hp = GLORY_HP + 1;
     e();
-    expect(m.state.down).toBe(0);
+    expect(m.state.lock ?? 0).toBe(0);
     m.state.hp = GLORY_HP;
-    inner.apply(k, { seq: 3, keys: KEY.USE | KEY.BLADE, yaw: 0, pitch: 0 });
+    step(k, KEY.USE | KEY.BLADE);
+    expect([k.state.lock, m.state.lock]).toEqual([EXEC.TICKS, EXEC.TICKS]);
+    expect([k.state.exec, m.state.exec]).toEqual([EXEC.KILLER, EXEC.VICTIM]);
+    expect([k.state.foe, m.state.foe]).toEqual([m.info.id, k.info.id]);
+    const cuts: [number, number, number][] = [];
+    for (let t = 1; t < EXEC.TICKS; t++) {
+      // He runs, it shoots: neither counts.
+      step(m, KEY.BACK | KEY.SPRINT | KEY.FIRE);
+      step(k, KEY.FIRE | KEY.LEFT);
+      if (k.state.swing && (cuts.at(-1)?.[1] ?? -1) !== k.state.cut) {
+        cuts.push([t, k.state.cut!, k.state.swing]);
+      }
+      if (t == GLORY_DASH) {
+        // In front of him.
+        expect(Math.hypot(k.state.x - m.state.x, k.state.z - m.state.z)).toBeCloseTo(EXEC.REACH, 1);
+      }
+      if (t < EXEC.TICKS - 1) {
+        expect([m.state.down, m.state.hp, m.state.z]).toEqual([0, GLORY_HP, 49]);
+      }
+    }
+    expect(cuts).toEqual([
+      [EXEC.CUTS[0], CUT.SLASH, CUTS[CUT.SLASH].ticks],
+      [EXEC.CUTS[1], CUT.RIGHT, CUTS[CUT.RIGHT].ticks],
+    ]);
+    // The lock's last tick is the strike of the cut across: his head goes, the body falls back.
+    const c = CUTS[CUT.RIGHT];
+    expect(c.ticks - k.state.swing!).toBe(c.strike);
     expect(m.state.down).toBeGreaterThan(0);
-    expect([m.state.lost, m.state.lock ?? 0, k.state.lock ?? 0]).toEqual([LIMB.HEAD, 0, 0]);
-    // Thrown back, away from him (he looks toward -z).
-    expect(m.state.vz).toBeLessThan(-GLORY_PUSH + 0.5);
-    expect(k.state.swing).toBeGreaterThan(0);
+    expect([m.state.lost, m.state.lock ?? 0, k.state.lock ?? 0, k.state.exec]).toEqual([
+      LIMB.HEAD,
+      0,
+      0,
+      0,
+    ]);
+    // Not thrown: he tips over from his knee where he is (feast.ts).
+    expect([m.state.vx, m.state.vz]).toEqual([0, 0]);
     const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
     expect(frag).toMatchObject({ by: k.info.id, who: m.info.id, how: FRAG.GLORY });
+  });
+
+  it('ends an execution with neither hurt when the swordsman goes down in it', () => {
+    const { inner, ps } = room(ROLE.MARINE, ROLE.MARINE);
+    const [k, m] = ps;
+    face(k.state, m.state);
+    Object.assign(k.state, { blade: true, wield: true });
+    m.state.hp = GLORY_HP;
+    k.bank = m.bank = 99;
+    inner.apply(k, { seq: 1, keys: KEY.USE | KEY.BLADE, yaw: 0, pitch: 0 });
+    expect(m.state.exec).toBe(EXEC.VICTIM);
+    k.state.down = 100;
+    inner.apply(m, { seq: 1, keys: 0, yaw: Math.PI, pitch: 0 });
+    expect([m.state.lock, m.state.exec, m.state.down, m.state.hp]).toEqual([0, 0, 0, GLORY_HP]);
   });
 
   it('ends a glory kill when the xenomorph goes down, the prey free; a dash into a weak foe only pins', () => {

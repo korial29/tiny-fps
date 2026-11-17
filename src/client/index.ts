@@ -1,5 +1,6 @@
 import {
   BOLT,
+  EXEC,
   HP_MAX,
   INTERP_DELAY,
   NADE,
@@ -9,6 +10,7 @@ import {
   TICK_HZ,
   VEHICLE,
 } from '../shared/constants';
+import { sabering } from '../shared/gun';
 import { mapKey, mapOf } from '../shared/maps';
 import { bruise, eyeHeight, heightOf } from '../shared/physics';
 import { cylinder } from '../shared/plasma';
@@ -36,6 +38,7 @@ import { beats, cues, say } from './beats';
 import { createBody } from './body';
 import { createCrawl } from './crawl';
 import { chasePitch, createChase } from './chase';
+import { KILLCAM, createKillCam, sees } from './killcam';
 import { createCombat, sight, voiceOf } from './combat';
 import { createDoors } from './doors';
 import { createEffects } from './effects';
@@ -277,6 +280,9 @@ const play = (
   const body = createBody(world);
   const crawl = createCrawl();
   const chase = createChase(world);
+  const killcam = createKillCam(world);
+  /** The own last glory kill's victim, and until when (performance.now()) the kill camera stays on him. */
+  let kill = { who: -1, until: 0 };
   const tracer = createTracer();
   const balls = createBalls(world);
   const doors = createDoors(world);
@@ -498,7 +504,6 @@ const play = (
       hud.magazines([kit.mag, kit.cap, kit.clip]);
       hud.life(kit.hp);
       [hpMax, ctl.beast] = [kit.hp, kit.xeno];
-      rd?.vision(kit.xeno);
       // The xenomorph breathes no air: no helmet, so no visor round its view (the user, 2026-11-16).
       hud.visor(!!world.def.helmets && !kit.xeno);
       // No map to pick in the game's menu (the user, 2026-11-13): it is the join page's choice.
@@ -519,6 +524,7 @@ const play = (
         audio.play(beast(m.by) ? SOUND.XENO_PAIN : SOUND.ZAP, at, 0.7, 0.5);
         if (m.by == you.id) {
           fx.punch();
+          kill = { who: m.who, until: performance.now() + KILLCAM.HOLD * 1000 };
         }
       }
       if (m.by == you.id) {
@@ -726,7 +732,7 @@ const play = (
     prior = new Map(others.map(p => [p.id, p]));
     // A saber lock: the gauge of the tug of war, the own presses against the foe's.
     // Not a glory kill's: nobody pushes there.
-    const foe = me?.lock && me.wield ? who(me.foe ?? -1) : undefined;
+    const foe = me && sabering(me) && me.wield ? who(me.foe ?? -1) : undefined;
     hud.duel(foe ? ((me!.pushes ?? 0) - (foe.pushes ?? 0)) / LOCK_WIN : undefined);
     body.update(me, dt, fx.kick, canvas.clientWidth / (canvas.clientHeight || 1));
     // The steps sound as the drawn feet land: the own body's now, the others' as last drawn.
@@ -760,16 +766,44 @@ const play = (
       ctl.pitch,
       dt,
     );
-    const third = shot.k > 0;
-    const pov = shot.at;
+    // A glory kill of the own player's is watched from outside (killcam.ts): the xenomorph's lock
+    // on its prey, then the kill a moment longer, the katana's too (the user, 2026-11-16).
+    const victim =
+      me && !driving
+        ? others.find(p =>
+            (ctl.beast && me.lock && !me.wield) || (me.lock && me.exec === EXEC.KILLER)
+              ? p.id == me.foe
+              : p.id == kill.who && now < kill.until,
+          )
+        : undefined;
+    const watch = killcam.frame(
+      me && victim
+        ? [
+            [me.x, me.y, me.z],
+            [victim.x, victim.y, victim.z],
+          ]
+        : undefined,
+      ctl.yaw,
+      cam,
+      dt,
+    );
+    const k = Math.max(shot.k, watch.k);
+    hud.outside(watch.k > 0);
+    rd?.vision(sees(ctl.beast, watch.k));
+    const third = k > 0;
+    const pov = watch.k ? watch.at : shot.at;
     // On a wall the xenomorph's view turns over onto it, its floor (crawl.ts).
     crawl.update(me, dt);
-    const [view, pitch, roll] = crawl.view(
-      ctl.yaw + body.spun() * (1 - shot.k),
+    const [turned, tilted, roll] = crawl.view(
+      ctl.yaw + body.spun() * (1 - k),
       shot.pitch,
-      fx.roll * (1 - shot.k),
+      fx.roll * (1 - k),
     );
-    const lens = third ? { ...fx, roll, fov: fx.fov * (1 - shot.k) + shot.fov } : { ...fx, roll };
+    // The shortest way round from the eye's look to the kill camera's.
+    const swing = Math.atan2(Math.sin(watch.yaw - turned), Math.cos(watch.yaw - turned));
+    const view = turned + swing * watch.k;
+    const pitch = tilted + (watch.pitch - tilted) * watch.k;
+    const lens = third ? { ...fx, roll, fov: fx.fov * (1 - k) + shot.fov } : { ...fx, roll };
     // The driver is unarmed and his body is the renderer's to draw whole: no sight, no muzzle.
     const look = me && !third ? sight(world, eye, cam, ctl.yaw, ctl.pitch, pitch) : undefined;
     if (look) {
@@ -845,7 +879,8 @@ const play = (
         ctf,
         tracer,
         shown,
-        third ? me : undefined,
+        // Not while the camera is still in the head: it would see the inside of it.
+        k > 0.2 ? me : undefined,
         v => {
           doors.draw(v, pov, dt);
           wrecks.draw(v);

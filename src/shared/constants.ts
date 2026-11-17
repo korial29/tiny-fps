@@ -298,17 +298,25 @@ export const [POUNCE_HP, POUNCE_STUN] = [2, 60];
  * xenomorph's takes any enemy up, with no flash (the user, 2026-11-16): E within GLORY_FAR metres
  * of him, in sight, and GLORY_ARC radians of its look locks the two (`lock`, `foe`, as a saber
  * lock) for GLORY_TICKS, where he does not move and it dashes to him, then it eats his head: he
- * goes down through his armour (LIMB.EATEN), a frag of FRAG.GLORY.
+ * goes down through his armour (LIMB.EATEN), a frag of FRAG.GLORY. 2 s, the time to see it climb
+ * on him and bite (the user, 2026-11-16: 0.9 s before).
  */
-export const [GLORY_HP, GLORY_REACH, GLORY_ARC, GLORY_TICKS] = [3, 2.5, 1, 54];
+export const [GLORY_HP, GLORY_REACH, GLORY_ARC, GLORY_TICKS] = [3, 2.5, 1, 120];
 /**
  * The xenomorph's glory kill from afar (the user, 2026-11-16): within GLORY_FAR metres, in sight,
  * it dashes to a metre of its prey over the first GLORY_DASH ticks of the lock. 7 m in 20 ticks is
  * 21 m/s, a step under PLAYER_R: it cannot tunnel.
  */
 export const [GLORY_FAR, GLORY_DASH] = [8, 20];
-/** The katana's glory kill (room.ts feast()): the speed it throws the beheaded body back at. */
-export const GLORY_PUSH = 7;
+/**
+ * The katana's glory kill, an execution (room.ts feast(), the user 2026-11-17: 1.5 s, not at once):
+ * E locks the two for EXEC.TICKS (`exec` KILLER and VICTIM); the swordsman dashes in front of him,
+ * to EXEC.REACH metres, over GLORY_DASH ticks, cuts down (CUT.SLASH) at EXEC.CUTS[0] and drops him
+ * to his knees, then spins into a cut across (CUT.RIGHT) at EXEC.CUTS[1], whose strike is the
+ * lock's last tick: his head goes (LIMB.HEAD) and the body, still on its knee, tips over where it
+ * is (feast.ts topple()).
+ */
+export const EXEC = { TICKS: 88, REACH: 1.3, CUTS: [20, 74], KILLER: 1, VICTIM: 2 } as const;
 /** How much faster than a man the xenomorph runs (the user, 2026-11-16: a little, not twice). */
 export const XENO_PACE = 1.25;
 export const ACID_HP = 1;

@@ -334,6 +334,7 @@ describe('createRenderer', () => {
         charging: vi.fn(),
         crackle: vi.fn(),
         spit: vi.fn(),
+        gore: vi.fn(),
         strike: vi.fn(),
         mount: vi.fn(),
         update: vi.fn(),

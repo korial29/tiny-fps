@@ -12,6 +12,7 @@ import {
   CHARGE_TICKS,
   CUTS,
   DASH_COOLDOWN,
+  EXEC,
   GLORY_DASH,
   GLORY_TICKS,
   GUN_RELOAD,
@@ -124,12 +125,14 @@ export const step = (
 ): Strike => {
   const down = p.down > 0;
   const locked = !down && (p.lock ?? 0) > 0;
-  // A xenomorph's glory kill: it dashes to its prey over the lock's first GLORY_DASH ticks (feast()
-  // in room.ts gives it the speed), then stays.
-  if (locked && !p.wield && p.lock! > GLORY_TICKS - GLORY_DASH && (p.vx || p.vz)) {
+  // A glory kill, the xenomorph's or the katana's execution: it dashes to its prey over the lock's
+  // first GLORY_DASH ticks (feast() in room.ts gives it the speed), then stays.
+  const all = p.exec ? EXEC.TICKS : GLORY_TICKS;
+  const killer = !p.wield || p.exec === EXEC.KILLER;
+  if (locked && killer && p.lock! > all - GLORY_DASH && (p.vx || p.vz)) {
     coast(p, w, bodies);
-    p.ev = p.lock == GLORY_TICKS ? EV.DASH : 0;
-    if (p.lock! <= GLORY_TICKS - GLORY_DASH + 1) {
+    p.ev = p.lock == all ? EV.DASH : 0;
+    if (p.lock! <= all - GLORY_DASH + 1) {
       p.vx = p.vz = 0;
     }
   } else {
@@ -395,6 +398,9 @@ const beast = (p: PlayerState, i: Input, fresh: boolean, busy: boolean): void =>
  * lock runs down to 1, where it waits for the host, who parts the two (room.ts).
  */
 const duel = (p: PlayerState, i: Input): Strike => {
+  if (p.exec) {
+    return execute(p);
+  }
   const fire = !!(i.keys & KEY.FIRE);
   p.pushes = ((p.pushes ?? 0) + +(fire && !p.pressed)) & 255;
   p.pressed = fire;
@@ -402,6 +408,26 @@ const duel = (p: PlayerState, i: Input): Strike => {
   p.lock = Math.max(1, p.lock! - 1);
   // The katana stays in hand: a glory kill's two (room.ts) hold none.
   [p.wield, p.swing, p.charge] = [!!p.blade, 0, 0];
+  return STRIKE.NONE;
+};
+
+/** A lock that is a saber lock, not a glory kill's execution: the blades cross. */
+export const sabering = (p: Pick<PlayerState, 'lock' | 'exec'>): boolean => !!p.lock && !p.exec;
+
+/**
+ * A step of a katana's glory kill (EXEC), whatever the keys: the swordsman's two cuts start on
+ * their ticks of the lock (EXEC.CUTS: a cut down, then one across whose strike is the lock's last
+ * tick), and strike no one; his victim holds no weapon up. Predicted, as a cut is.
+ */
+const execute = (p: PlayerState): Strike => {
+  p.lock = Math.max(1, p.lock! - 1);
+  p.away = p.pushes = 0;
+  const e = EXEC.TICKS - p.lock;
+  const at = (EXEC.CUTS as readonly number[]).indexOf(e);
+  const killer = p.exec === EXEC.KILLER;
+  p.cut = killer && at >= 0 ? [CUT.SLASH, CUT.RIGHT][at] : p.cut;
+  p.swing = killer && at >= 0 ? CUTS[p.cut!].ticks : Math.max(0, (p.swing ?? 0) - 1);
+  [p.wield, p.charge, p.heavy] = [killer && !!p.blade, 0, false];
   return STRIKE.NONE;
 };
 

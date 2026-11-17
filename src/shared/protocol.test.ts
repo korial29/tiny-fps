@@ -241,6 +241,7 @@ describe('snapshot frame', () => {
           pressed: true,
           pushes: 17,
           away: 3,
+          exec: 2,
           rail: 7,
           railed: true,
           zapping: true,
@@ -299,7 +300,7 @@ describe('snapshot frame', () => {
       200, // lock
       5 | 128, // foe 5, FIRE held at the last step
       17, // pushes
-      3, // away
+      3 | (2 << 6), // away 3, exec VICTIM << 6
       8, // rail: 7 ticks plus one
       1 | 4 | 8 | 32, // railed, zapping << 2, rifled << 3, hot << 5
       130, // slow

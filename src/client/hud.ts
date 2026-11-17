@@ -243,7 +243,8 @@ export const HUD_CSS =
   `samp var{display:inline-block;margin-right:8px;padding:1px 7px;border:1px solid #fffb;border-radius:4px;font-style:normal;font-weight:900}` +
   `q{width:26px;height:26px;margin:-13px 0 0 -13px;border:2px solid #5f8;border-radius:50%;box-shadow:0 0 6px #3f6,inset 0 0 4px #3f6;background:radial-gradient(#afc 0 1.5px,#0000 2px)}q::before,q::after{content:none}` +
   `cite{right:12px;bottom:10px;font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}cite small{margin-left:6px;font-size:14px}` +
-  `div.v>i,.v dl,.v del{display:none}` +
+  // Out of the head (at the wheel, or watching a glory kill): no crosshair, no gun, no visor.
+  `div.v>i,.v dl,.v del,div.o>i,.o dl,.o del{display:none}` +
   // A vehicle's health: ten pips over the speed for who is in it, and a small bar over one near by.
   `tt{right:12px;bottom:62px;width:148px;height:10px;background:linear-gradient(90deg,var(--c,#5fd28a) var(--a,100%),#fff3 0);-webkit-mask:repeating-linear-gradient(90deg,#000 0 13px,#0000 13px 15px);mask:repeating-linear-gradient(90deg,#000 0 13px,#0000 13px 15px);filter:drop-shadow(0 1px 1px #000)}` +
   `tt+tt{right:auto;bottom:auto;transform:translate(-50%,-50%) scale(.5)}` +
@@ -551,6 +552,8 @@ export interface Hud {
    * `speed` the km/h shown at the wheel, where the gun and the crosshair then hide; undefined off it.
    */
   rover(act: string, speed?: number): void;
+  /** The camera out of the head for a glory kill (killcam.ts): the crosshair, the gun and the visor's rim go. */
+  outside(on: boolean): void;
   /** The rover's reticle, where its lasers cross: `at` on screen in [0, 1] from the top left; undefined hides it. */
   aim(at?: [number, number]): void;
   /** The ship flown: its missiles and height, and how near its limits are (limits(), ship.ts); undefined hides it. */
@@ -1102,6 +1105,9 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       meter.hidden = v === undefined;
       set(speed, `${v ?? 0}`);
       screen.classList.toggle('v', v !== undefined);
+    },
+    outside(on) {
+      screen.classList.toggle('o', on);
     },
     end(sum, left) {
       end.hidden = !sum;

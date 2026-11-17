@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { loaded } from '../../test/loaded';
 import { EAST, at, yard } from '../../test/yard';
 import {
+  EXEC,
   AMMO_MAX,
   CHARGE_MAX,
   CHARGE_TAP,
@@ -35,7 +36,7 @@ import {
   RIFLE_RELOAD,
 } from './constants';
 import { swingOf } from './blade';
-import { STRIKE, powerOf, step, within } from './gun';
+import { STRIKE, powerOf, sabering, step, within } from './gun';
 import { spawn } from './physics';
 import { onWire } from './protocol';
 import { CUT, EV, KEY, MODE } from './types';
@@ -392,6 +393,55 @@ describe('a saber lock', () => {
       hit(p, 0);
     }
     expect(p.lock).toBe(1);
+  });
+});
+
+describe('a katana’s execution (EXEC)', () => {
+  const locked = (exec: number, over: Partial<PlayerState> = {}) =>
+    armed(0, 0, {
+      blade: true,
+      wield: true,
+      lock: EXEC.TICKS,
+      foe: 1,
+      pressed: true,
+      exec,
+      ...over,
+    });
+
+  it('starts the swordsman’s cut down and cut across on their ticks, whatever the keys, and strikes no one', () => {
+    const p = locked(EXEC.KILLER);
+    const starts: [number, number][] = [];
+    for (let e = 1; e < EXEC.TICKS; e++) {
+      const was = p.swing ?? 0;
+      expect(hit(p, FORWARD | KEY.LEFT | FIRE | (e % 2 ? KEY.SPECIAL : 0))).toBe(STRIKE.NONE);
+      if (p.swing! > was) {
+        starts.push([e, p.cut!]);
+      }
+      expect([p.x, p.z, p.shots, p.wield, p.away, p.pushes]).toEqual([0, 0, 0, true, 0, 0]);
+    }
+    expect(starts).toEqual([
+      [EXEC.CUTS[0], CUT.SLASH],
+      [EXEC.CUTS[1], CUT.RIGHT],
+    ]);
+    // Held at 1 for the host, on the strike of the cut across.
+    expect(p.lock).toBe(1);
+    expect(CUTS[CUT.RIGHT].ticks - p.swing!).toBe(CUTS[CUT.RIGHT].strike);
+  });
+
+  it('holds his victim still with nothing in hand and no cut', () => {
+    const p = locked(EXEC.VICTIM);
+    for (let e = 1; e < EXEC.TICKS; e++) {
+      hit(p, FORWARD | KEY.SPRINT | FIRE | KEY.BLADE);
+    }
+    expect([p.x, p.z, p.swing, p.wield, p.lock]).toEqual([0, 0, 0, false, 1]);
+  });
+
+  it('is no saber lock', () => {
+    expect([sabering(locked(EXEC.KILLER)), sabering(locked(0)), sabering(armed(0, 0))]).toEqual([
+      false,
+      true,
+      false,
+    ]);
   });
 });
 

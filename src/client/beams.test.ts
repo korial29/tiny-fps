@@ -468,3 +468,22 @@ describe('a vehicle’s damage', () => {
     expect(drawn(t)).toEqual([]);
   });
 });
+
+describe('the blood of a glory kill', () => {
+  it('flies out in dark red drops that do not glow, falls, and is gone in a little over half a second', () => {
+    const t = createTracer();
+    const at: Vec3 = [0, 1.6, -3];
+    t.gore(at, 5);
+    const v = drawn(t);
+    // Five drops of five triangles.
+    expect(v).toHaveLength(5 * 5 * 3);
+    for (const x of v) {
+      expect(x[6]).toBeGreaterThan(5 * Math.max(x[7], x[9]));
+      expect(x[6]).toBeLessThan(1);
+    }
+    t.update(0.4);
+    expect(Math.max(...drawn(t).map(x => x[1]))).toBeLessThan(at[1] + 0.5);
+    t.update(0.25);
+    expect(drawn(t)).toEqual([]);
+  });
+});

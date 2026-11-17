@@ -17,7 +17,7 @@ import {
   STEP_H,
   HEAT_MAX,
 } from '../shared/constants';
-import { powerOf } from '../shared/gun';
+import { powerOf, sabering } from '../shared/gun';
 import { TAU, eyeHeight, speedOf, sprinting } from '../shared/physics';
 import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -1190,13 +1190,21 @@ const RATES = {
 };
 
 /**
+ * Ticks into a glory kill where the head starts back, where it strikes and where the strike is home:
+ * GLORY_TICKS takes his head 0.1 s later (the user, 2026-11-16: the head went too long after).
+ */
+export const BITE = [46, 104, 114];
+
+/**
  * The bite of a glory kill (the user, 2026-11-16, after DOOM 2016) at `lock` ticks left of its
- * GLORY_TICKS: the head drawn back over the first two thirds as the claws hold the prey, then
+ * GLORY_TICKS: once on him (feast.ts) the head drawn slowly back as the claws hold the prey, then
  * driven down into him; the neck's turn for menace().
  */
 export const devour = (lock: number): number => {
-  const u = 1 - lock / GLORY_TICKS;
-  return u < 0.68 ? -0.45 * Math.min(u / 0.4, 1) : -0.45 + 1.15 * Math.min((u - 0.68) / 0.12, 1);
+  const e = GLORY_TICKS - lock;
+  const k = (a: number, b: number) => Math.min(Math.max((e - a) / (b - a), 0), 1);
+  const back = k(BITE[0], BITE[1]);
+  return -0.5 * back * back * (3 - 2 * back) + 1.2 * k(BITE[1], BITE[2]);
 };
 
 export const createBody = (world?: World): Body => {
@@ -1290,7 +1298,7 @@ export const createBody = (world?: World): Body => {
     parry += dt;
     braced = parrying(parry);
     prog = progress(prog, p, dt);
-    jolt = (p.pushes ?? 0) !== pushes && p.lock ? 1 : jolt * Math.exp(-dt * 12);
+    jolt = (p.pushes ?? 0) !== pushes && sabering(p) ? 1 : jolt * Math.exp(-dt * 12);
     pushes = p.pushes ?? 0;
     trail.update(dt);
     const walks = p.mode == MODE.GROUND || p.mode == MODE.CROUCH || p.mode == MODE.WALLRUN;
@@ -1403,7 +1411,7 @@ export const createBody = (world?: World): Body => {
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     // In a saber lock the blade crosses the foe's, shaking, and each press drives it on.
     const k = deflect(
-      me?.lock ? locked(clock, jolt) : poised(me ?? {}, Math.max(prog, 0), clock),
+      me && sabering(me) ? locked(clock, jolt) : poised(me ?? {}, Math.max(prog, 0), clock),
       braced,
     );
     const at: Vec3 = [k[0] + 0.012 * a * s, k[1] + 0.018 * a * c - 0.35 * (1 - w.blade), k[2]];
@@ -1437,7 +1445,7 @@ export const createBody = (world?: World): Body => {
     const sw = w.blade > 0.002 ? blade() : undefined;
     // Locked, the trunk leans into the foe.
     const [tw, bd, ln] =
-      sw && me.lock
+      sw && sabering(me)
         ? [0, 0.15 * w.blade, 0]
         : sw && prog >= 0
           ? bent(me, prog).map(v => v * w.blade)

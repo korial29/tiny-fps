@@ -40,7 +40,7 @@ import {
   STUMBLE_TICKS,
   ACID_HP,
   GLORY_DASH,
-  GLORY_PUSH,
+  EXEC,
   GLORY_TICKS,
   POUNCE_HP,
   POUNCE_STUN,
@@ -259,7 +259,7 @@ const setEvery: Every = (cb, ms) => {
 /** A vehicle parked afresh, for the host's own count of its damage. */
 const NEW: Wear = { graze: 0, sear: 0, burn: 0, by: NOBODY, team: -1 };
 /** A player out of any saber lock. */
-const FREE = { lock: 0, foe: 0, pushes: 0, pressed: false, away: 0 };
+const FREE = { lock: 0, foe: 0, pushes: 0, pressed: false, away: 0, exec: 0 };
 /** Where a rewound copy of a player stood and looked, to put over his live state. */
 const pick = ({ x, y, z, yaw }: PlayerState) => ({ x, y, z, yaw });
 /** Where a player stands. */
@@ -1151,11 +1151,10 @@ export class Room {
    * E pressed by `p`, the xenomorph or one with the katana in hand: the nearest enemy who is up,
    * within GLORY_ARC of its look where `p` drew him, and in no lock, is glory killed (glory()):
    * with the katana within GLORY_REACH and with GLORY_HP or less, the xenomorph's within
-   * GLORY_FAR, in sight, at any health (the user, 2026-11-16). The katana takes his head at once
-   * and throws the body back GLORY_PUSH m/s, the follow-through of a cut across in hand (the user,
-   * 2026-11-16). The xenomorph holds him: the two locked (`lock`, `foe`) for GLORY_TICKS, his flag
-   * dropped, `p` dashing to a metre of him (the user, 2026-11-16); duel() ends it. True when it
-   * happened.
+   * GLORY_FAR, in sight, at any health (the user, 2026-11-16). The two are locked (`lock`, `foe`),
+   * his flag dropped, `p` dashing in front of him: the xenomorph to a metre for GLORY_TICKS (the
+   * user, 2026-11-16), the swordsman to EXEC.REACH for an execution of EXEC.TICKS (`exec`, the user
+   * 2026-11-17: no longer at once); duel() ends it. True when it happened.
    */
   private feast(p: Player, view: number | undefined): boolean {
     const me = p.state;
@@ -1179,32 +1178,18 @@ export class Room {
     }
     const [dx, dz] = [seen.x - me.x, seen.z - me.z];
     const d = Math.hypot(dx, dz) || 1;
-    if (!xeno) {
-      const c = CUTS[CUT.RIGHT];
-      // Past the cut's strike: its follow-through is drawn, and it strikes no one more.
-      [me.cut, me.swing, me.heavy, me.charge] = [CUT.RIGHT, c.ticks - c.strike - 1, false, 0];
-      me.hits = (me.hits + 1) & 255;
-      this.harm(foe, Infinity, p, FRAG.GLORY, felled(FALL.STRUCK, dx / d, dz / d));
-      Object.assign(foe.state, {
-        lost: LIMB.HEAD,
-        vx: (dx / d) * GLORY_PUSH,
-        vy: 3,
-        vz: (dz / d) * GLORY_PUSH,
-        ground: false,
-        mode: MODE.AIR,
-      });
-      return true;
-    }
     this.drop(foe.info.id);
-    for (const [a, b] of [
-      [p, foe],
-      [foe, p],
-    ]) {
-      Object.assign(a.state, { ...FREE, lock: GLORY_TICKS, foe: b.info.id, pressed: true });
+    const [lock, near] = xeno ? [GLORY_TICKS, 1] : [EXEC.TICKS, EXEC.REACH];
+    for (const [a, b, exec] of [
+      [p, foe, EXEC.KILLER],
+      [foe, p, EXEC.VICTIM],
+    ] as const) {
+      Object.assign(a.state, { ...FREE, lock, foe: b.info.id, pressed: true });
       Object.assign(a.state, { swing: 0, charge: 0, stun: 0, zap: false, vx: 0, vz: 0 });
+      a.state.exec = xeno ? 0 : exec;
     }
-    // It dashes to a metre of him over the lock's first GLORY_DASH ticks (step() in gun.ts).
-    const v = (Math.max(d - 1, 0) * TICK_HZ) / GLORY_DASH / d;
+    // It dashes in front of him over the lock's first GLORY_DASH ticks (step() in gun.ts).
+    const v = (Math.max(d - near, 0) * TICK_HZ) / GLORY_DASH / d;
     [me.vx, me.vz] = [Math.fround(dx * v), Math.fround(dz * v)];
     return true;
   }
@@ -1225,20 +1210,22 @@ export class Room {
       Object.assign(q, FREE);
       return;
     }
-    // A glory kill (feast()): held to its end, whatever the keys, then the head is eaten.
+    // A glory kill (feast()): held to its end, whatever the keys, then the head is eaten, or cut
+    // off on the strike of the execution's last cut.
     const [x, y] = [p, o].map(r => this.kit(r).xeno);
-    if (x !== y) {
+    const exec = !!q.exec;
+    if (x !== y || exec) {
       if (q.lock > 1 && o.state.lock > 1) {
         return;
       }
-      const [eater, prey] = x ? [p, o] : [o, p];
+      const [eater, prey] = (exec ? q.exec === EXEC.KILLER : x) ? [p, o] : [o, p];
       Object.assign(q, FREE);
       Object.assign(o.state, FREE);
       eater.state.hits = (eater.state.hits + 1) & 255;
       const [dx, dz] = [prey.state.x - eater.state.x, prey.state.z - eater.state.z];
       const d = Math.hypot(dx, dz) || 1;
       this.harm(prey, Infinity, eater, FRAG.GLORY, felled(FALL.STRUCK, dx / d, dz / d));
-      prey.state.lost = LIMB.EATEN;
+      prey.state.lost = exec ? LIMB.HEAD : LIMB.EATEN;
       return;
     }
     const lead = (q.pushes ?? 0) - (o.state.pushes ?? 0);

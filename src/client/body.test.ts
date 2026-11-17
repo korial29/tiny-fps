@@ -11,7 +11,7 @@ import {
 import { STILL } from '../shared/physics';
 import { MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
-import { FINGER_SIDES, STRAP, createBody, devour, finger, hand, phalanges } from './body';
+import { BITE, FINGER_SIDES, STRAP, createBody, devour, finger, hand, phalanges } from './body';
 import { GLORY_TICKS } from '../shared/constants';
 import type { Body } from './body';
 import { MUZZLE, REAR, button, gun, readout } from './gun';
@@ -1218,13 +1218,20 @@ describe('looking down with a weapon in hand', () => {
 });
 
 describe('the bite of a glory kill', () => {
-  it('draws the head back, then drives it down into the prey at the end', () => {
-    const at = (u: number) => devour(Math.round(GLORY_TICKS * (1 - u)));
+  it('draws the head back once on him, then drives it down into the prey just before the kill', () => {
+    const at = (e: number) => devour(GLORY_TICKS - e);
     expect(at(0)).toBeCloseTo(0, 6);
-    expect(at(0.5)).toBeLessThan(-0.4);
-    expect(at(1)).toBeGreaterThan(0.6);
-    for (let k = GLORY_TICKS; k > 0.35 * GLORY_TICKS; k--) {
-      expect(devour(k - 1)).toBeLessThanOrEqual(devour(k));
+    expect(at(BITE[0])).toBeCloseTo(0, 6);
+    expect(at(BITE[1])).toBeCloseTo(-0.5, 6);
+    for (let e = BITE[0]; e < BITE[1]; e++) {
+      expect(at(e + 1)).toBeLessThanOrEqual(at(e));
     }
+    for (let e = BITE[1]; e < BITE[2]; e++) {
+      expect(at(e + 1)).toBeGreaterThan(at(e));
+    }
+    expect(at(BITE[2])).toBeCloseTo(0.7, 6);
+    expect(at(GLORY_TICKS)).toBeCloseTo(0.7, 6);
+    // His head goes (the host's kill) a tenth of a second after the bite is home.
+    expect(GLORY_TICKS - BITE[2]).toBe(6);
   });
 });

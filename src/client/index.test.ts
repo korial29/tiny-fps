@@ -191,7 +191,7 @@ describe('tinyFps, the match through the socket', () => {
       body: BODY.FEMALE,
       role: ROLE.NINJA,
     });
-    // No astronaut off the moon: greyed out and deaf to a click.
+    // No astronaut off the moon: hidden and deaf to a click.
     const told = sent.length;
     radios('Class')[ROLE.ASTRONAUT].click();
     expect(sent).toHaveLength(told);

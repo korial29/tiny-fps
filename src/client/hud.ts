@@ -238,9 +238,13 @@ export const HUD_CSS =
   `del::after{content:"";position:absolute;inset:0;background:${RIM} 0 0/100% 100% no-repeat}` +
   `strong{font-size:22px}` +
   `table{border-collapse:collapse;font-size:16px}td{padding:2px 10px}td+td{text-align:left}td:first-child{text-align:right;opacity:.7}` +
-  // The rover: the key to get in or out, over the face, and the speed where the gun's count is; at the wheel the gun, the crosshair and the visor's rim go.
-  `samp{left:50%;bottom:128px;transform:translateX(-50%);padding:6px 14px;border-radius:6px;background:#0008;font:inherit;font-size:15px;white-space:nowrap}` +
-  `samp var{display:inline-block;margin-right:8px;padding:1px 7px;border:1px solid #fffb;border-radius:4px;font-style:normal;font-weight:900}` +
+  // What E does, just under the crosshair where the eye is (over the face it was missed), and the speed where the gun's count is; at the wheel the gun, the crosshair and the visor's rim go.
+  `samp{left:50%;top:57%;transform:translateX(-50%);padding:7px 14px;border-radius:6px;background:#000b;font:800 18px/1 system-ui;text-transform:uppercase;white-space:nowrap}` +
+  // In line: the orbital mission's var rule had put the key 66 px down, onto the face.
+  `samp var{position:static;margin-right:9px;padding:3px 8px;border:0;background:#fff;color:#000;font:inherit;text-shadow:none}` +
+  // A glory kill on offer swells and shrinks, in red, to make the player take it.
+  `samp.g{background:#600c;box-shadow:0 0 0 2px #f53;animation:urge .7s infinite alternate}samp.g var{background:#f53}` +
+  `@keyframes urge{to{transform:translateX(-50%) scale(1.14)}}` +
   `q{width:26px;height:26px;margin:-13px 0 0 -13px;border:2px solid #5f8;border-radius:50%;box-shadow:0 0 6px #3f6,inset 0 0 4px #3f6;background:radial-gradient(#afc 0 1.5px,#0000 2px)}q::before,q::after{content:none}` +
   `cite{right:12px;bottom:10px;font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}cite small{margin-left:6px;font-size:14px}` +
   // Out of the head (at the wheel, or watching a glory kill): no crosshair, no gun, no visor.
@@ -408,6 +412,8 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
 
 /** Seconds the way out is shown after sitting down. */
 export const OUT_HINT = 4;
+/** The prompt of a glory kill on offer, drawn pulsing. */
+export const GLORY_ACT = 'glory kill';
 
 /**
  * What E does for a player on foot: 'drive' near a rover whose wheel is free, 'ride' when only the
@@ -548,7 +554,7 @@ export interface Hud {
    */
   comm(name: string, team: number, s: number, face?: CanvasImageSource): void;
   /**
-   * The rover: `act` is what E does now ('drive', 'ride', 'get out'; '' hides the prompt), and
+   * The rover: `act` is what E does now ('drive', 'ride', 'get out', GLORY_ACT which pulses; '' hides the prompt), and
    * `speed` the km/h shown at the wheel, where the gun and the crosshair then hide; undefined off it.
    */
   rover(act: string, speed?: number): void;
@@ -1101,6 +1107,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
     },
     rover(what, v) {
       prompt.hidden = !what;
+      prompt.classList.toggle('g', what == GLORY_ACT);
       set(act, what);
       meter.hidden = v === undefined;
       set(speed, `${v ?? 0}`);

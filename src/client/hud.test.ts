@@ -28,6 +28,7 @@ import {
   FRAG_MS,
   CAST,
   CONTROLS,
+  GLORY_ACT,
   GOAL,
   HIT_MS,
   HAIR_NAMES,
@@ -1094,6 +1095,23 @@ describe('the rover on the HUD', () => {
       expect(prompt().hidden).toBe(true);
     });
 
+    it('pulses the prompt of a glory kill alone, under the crosshair rather than over the face', () => {
+      hud.rover(GLORY_ACT);
+      expect(prompt().textContent).toBe(`E${GLORY_ACT}`);
+      expect(prompt().classList.contains('g')).toBe(true);
+      hud.rover('drive');
+      expect(prompt().classList.contains('g')).toBe(false);
+      hud.rover('');
+      expect(HUD_CSS).toMatch(/samp\.g\{[^}]*animation:urge/);
+      expect(HUD_CSS).toMatch(
+        /@keyframes urge\{to\{transform:translateX\(-50%\) scale\(1\.\d+\)\}\}/,
+      );
+      expect(HUD_CSS).toMatch(/samp\{left:50%;top:5\d%/);
+      expect(HUD_CSS).not.toMatch(/samp\{[^}]*bottom:/);
+      // The key stays in the box: the orbital mission's var rule had it 66 px down, on the face.
+      expect(HUD_CSS).toMatch(/samp var\{position:static;/);
+    });
+
     it('puts the reticle where the lasers cross on screen, and hides it off the wheel', () => {
       const q = () => screen.querySelector<HTMLElement>('q')!;
       expect(q().hidden).toBe(true);
@@ -1122,7 +1140,7 @@ describe('the rover on the HUD', () => {
     });
 
     it('is styled by tag: the prompt, the speed, and the gun and crosshair hidden at the wheel', () => {
-      expect(HUD_CSS).toMatch(/samp\{[^}]*bottom/);
+      expect(HUD_CSS).toMatch(/samp\{left:50%;top:5\d%/);
       expect(HUD_CSS).toMatch(/cite\{[^}]*right/);
       expect(HUD_CSS).toContain('div.v>i,.v dl,.v del,div.o>i,.o dl,.o del{display:none}');
       expect(HUD_CSS.split('{')[0].split(',')).toEqual(expect.arrayContaining(['samp', 'cite']));

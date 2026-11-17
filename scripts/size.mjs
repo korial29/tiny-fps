@@ -45,7 +45,9 @@ const BUDGETS = [
   // 224.5 KB until the xenomorph's fixes: no vehicles, a glory kill up close that heals it, G held for the tail
   // (the user, 2026-11-17: 225 KB), then 226.5 KB for the fists' glory kill, its bound, its blows and its
   // sounds (the user, 2026-11-17: up to 2 KB more).
-  { file: 'dist/index.js', max: 226 * 1024 + 512 },
+  // 226.5 KB until the synth's brief death cries and groans in place of the spoken screams
+  // (the user, 2026-11-17: 227 KB).
+  { file: 'dist/index.js', max: 227 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

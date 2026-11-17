@@ -65,6 +65,22 @@ const crossings = (s: Float32Array) =>
   s.reduce((n, x, i) => n + +(i > 0 && s[i - 1] < 0 !== x < 0), 0) / (s.length / RATE);
 /** The sound by its name in SOUND. */
 const sound = (name: keyof typeof SOUND) => render(SOUND[name], LAYERS);
+/**
+ * The pitch of `s` at `t`: the shortest lag from `lag` on that carries most of the energy, walked
+ * up to its top. The shortest, as every other period of a rasp is louder and twice the period
+ * matches better.
+ */
+const pitch = (s: Float32Array, t: number, lag = 70) => {
+  const a = Math.round(t * RATE);
+  const c = (l: number) => s.subarray(a, a + 1200).reduce((m, x, i) => m + x * s[a + i + l], 0);
+  while (c(lag) < 0.6 * c(0)) {
+    lag++;
+  }
+  while (c(lag + 1) > c(lag)) {
+    lag++;
+  }
+  return RATE / lag;
+};
 
 describe('the sounds of the game', () => {
   it('are one entry per id, and the looped ones are the wind, the scrape, the hum, the buzz, the gun’s charge, the rover’s engine and skid and the ship’s jet', () => {
@@ -192,42 +208,56 @@ describe('the sounds of the game', () => {
   });
 
   it('make the death cry longer than the cry of pain, both lower than the hit', () => {
-    expect(sound('DEATH').length).toBeGreaterThan(2 * sound('PAIN').length);
+    expect(sound('DEATH').length).toBeGreaterThan(sound('PAIN').length);
     const hit = crossings(sound('HIT')) / sound('HIT').length;
     for (const n of ['PAIN', 'DEATH'] as const) {
       expect(crossings(sound(n)) / sound(n).length).toBeLessThan(hit);
     }
   });
 
-  it('make the death cry a scream: held at full voice for a third of a second, then dying out', () => {
-    const s = sound('DEATH');
-    const at = (a: number, b: number) => rms(s.subarray(a * RATE, b * RATE));
-    for (let t = 0.05; t < 0.35; t += 0.1) {
-      expect(at(t, t + 0.05)).toBeGreaterThan(0.2);
+  it('make the death cry a brief cry of pain (the user, 2026-11-17): loud at once, falling, under half a second', () => {
+    for (const n of ['DEATH', 'HER_DEATH'] as const) {
+      const s = sound(n);
+      const at = (a: number, b: number) => rms(s.subarray(a * RATE, b * RATE));
+      expect(s.length / RATE).toBeLessThan(0.45);
+      expect(at(0, 0.04)).toBeGreaterThan(0.2);
+      expect(at(0.2, 0.25)).toBeLessThan(0.8 * at(0.03, 0.08));
+      expect(at(s.length / RATE - 0.06, s.length / RATE)).toBeLessThan(0.02);
+      // Quieter than the groans: it was too loud.
+      expect(Math.max(...s.map(Math.abs))).toBeLessThan(0.6);
     }
-    expect(at(s.length / RATE - 0.08, s.length / RATE)).toBeLessThan(0.01);
   });
 
-  it('throw the death cry up to a low scream, under 420 Hz, before it falls', () => {
+  it('throw his cry up to about 330 Hz at once, then let it fall', () => {
     const s = sound('DEATH');
-    // The pitch at t: the shortest lag that carries most of the energy, walked up to its top. The
-    // shortest, as every other period of the rasp is louder and twice the period matches better.
-    const hz = (t: number) => {
-      const a = Math.round(t * RATE);
-      const c = (lag: number) =>
-        s.subarray(a, a + 1200).reduce((m, x, i) => m + x * s[a + i + lag], 0);
-      let lag = 70;
-      while (c(lag) < 0.6 * c(0)) {
-        lag++;
-      }
-      while (c(lag + 1) > c(lag)) {
-        lag++;
-      }
-      return RATE / lag;
-    };
-    expect(hz(0.2)).toBeGreaterThan(330);
-    expect(hz(0.2)).toBeLessThan(420);
-    expect(hz(0.5)).toBeLessThan(0.75 * hz(0.2));
+    expect(pitch(s, 0.04, 110)).toBeGreaterThan(290);
+    expect(pitch(s, 0.04, 110)).toBeLessThan(380);
+    expect(pitch(s, 0.25, 110)).toBeLessThan(0.9 * pitch(s, 0.04, 110));
+  });
+
+  it('give the woman a cry of her own, half as high again as his', () => {
+    const [him, her] = [sound('DEATH'), sound('HER_DEATH')];
+    expect([SOUND.HER_DEATH, SOUND.GROAN, SOUND.HER_GROAN]).toEqual([71, 72, 73]);
+    expect(pitch(her, 0.04, 30)).toBeGreaterThan(480);
+    expect(pitch(her, 0.04, 30)).toBeLessThan(650);
+    expect(pitch(her, 0.04, 30) / pitch(him, 0.04, 110)).toBeGreaterThan(1.5);
+  });
+
+  it('cut the groans off in the throat: short, loud, then only a breath, lower than the screams', () => {
+    // Zero crossings while the voice is on: a breath counts as many as a cry.
+    const voiced = (s: Float32Array) => crossings(s.subarray(0.08 * RATE, 0.24 * RATE));
+    for (const [n, scream] of [
+      ['GROAN', 'DEATH'],
+      ['HER_GROAN', 'HER_DEATH'],
+    ] as const) {
+      const s = sound(n);
+      const at = (a: number, b: number) => rms(s.subarray(a * RATE, b * RATE));
+      expect(s.length / RATE).toBeLessThan(0.6);
+      expect(at(0.05, 0.2)).toBeGreaterThan(0.25);
+      expect(at(0.33, 0.4)).toBeLessThan(0.1 * at(0.05, 0.2));
+      expect(voiced(s)).toBeLessThan(voiced(sound(scream)));
+    }
+    expect(voiced(sound('HER_GROAN'))).toBeGreaterThan(voiced(sound('GROAN')));
   });
 
   it('give the katana three sounds: the shing, the swish of a cut and the zap of a hit', () => {
@@ -522,7 +552,7 @@ describe('a vehicle’s damage', () => {
     expect([SOUND.HULL, SOUND.ARC, SOUND.WRECK, SOUND.CRUMBLE]).toEqual([47, 48, 49, 50]);
     expect([SOUND.DOOR, SOUND.SHUT]).toEqual([45, 46]);
     expect([SOUND.ALARM, SOUND.STRIKE]).toEqual([58, 59]);
-    expect(LAYERS).toHaveLength(71);
+    expect(LAYERS).toHaveLength(74);
     for (const id of [47, 48, 49, 50]) {
       expect(LOOPED).not.toContain(id);
     }
@@ -592,8 +622,8 @@ describe('the xenomorph’s sounds', () => {
     }
     // The voice's first oscillator: a screech, not a man's "ugh".
     expect(LAYERS[SOUND.XENO_PAIN][0][1]).toBeGreaterThan(2 * LAYERS[SOUND.PAIN][0][1]);
-    // Its death a roar: deeper and longer than a man's scream (held over 330 Hz), with more sound
-    // in it. The scream is clipped and as loud at its peak; the roar outlasts it.
+    // Its death a roar: deeper and longer than a man's death cry (thrown up to 330 Hz), with more
+    // sound in it; the roar outlasts it.
     const [roar, scream] = [render(SOUND.XENO_DEATH), render(SOUND.DEATH)];
     const energy = (s: Float32Array) => s.reduce((m, x) => m + x * x, 0);
     expect(LAYERS[SOUND.XENO_DEATH][0][1]).toBeLessThan(330 / 2);

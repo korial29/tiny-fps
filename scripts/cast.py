@@ -1,5 +1,6 @@
 """The players' own voices, spoken by Kokoro-82M (Apache-2.0) and encoded into one sprite: the taunts
-a player says when he frags, and his cry or his groan as he goes down. The ninja's are in Japanese, in voices of
+a player says when he frags. His cry as he goes down is the synth's (sfx.ts, scream()), not his
+voice (the user, 2026-11-17). The ninja's are in Japanese, in voices of
 their own after the others.
 
 Writes src/client/voice/cast.ts (the speakers, the kinds of line and where each clip lies in the
@@ -41,10 +42,6 @@ KINDS = [
     ("FISTS", ["With my bare hands!", "Slapped silly."]),
     # A frag with the katana.
     ("BLADE", ["Clean cut.", "Cut down to size."]),
-    # Going down (the user, 2026-11-17): a brief cry of pain for a dreadful death (a limb cut off, a
-    # hard fall, a heavy hit), a groan for the others. "Hngh!" is spelt out, "Uhh!" said "ooh".
-    ("DEATH", ["Agh!", "Argh!", "Ah!"]),
-    ("GROAN", ["Ugh!", "Unh!", "Oof!"]),
 ]
 # The ninja's lines, as many of each kind, in kana as they sound (は said "wa" written わ), each
 # with its romaji and its meaning for cast.ts.
@@ -78,15 +75,6 @@ NINJA_KINDS = [
             ("きりすて ごめん！", "Kirisute gomen! (Leave to cut you down!)"),
         ],
     ),
-    (
-        "DEATH",
-        [
-            ("ぐあっ！", "Gua'!"),
-            ("ぎゃっ！", "Gya'!"),
-            ("いたっ！", "Ita'! (Ouch!)"),
-        ],
-    ),
-    ("GROAN", [("うっ！", "U'!"), ("ぐっ！", "Gu'!"), ("くっ！", "Ku'!")]),
 ]
 assert [(k, len(t)) for k, t in NINJA_KINDS] == [(k, len(t)) for k, t in KINDS]
 
@@ -147,27 +135,6 @@ def trim(a):
     return a[max(loud[0] - RATE // 100, 0) : loud[-1] + RATE // 20]
 
 
-def pained(a, groan):
-    """Kokoro says a cry flat. A cry of pain is thrown up a third and falls a little, trembling; a
-    groan starts under the voice and sinks. Both strained by a soft clip, fading over their last
-    third."""
-    n = len(a)
-    rate = np.linspace(0.95, 0.8, n) if groan else np.linspace(1.25, 0.9, n)
-    at = np.cumsum(rate)
-    at = at[at < n - 1]
-    out = np.interp(at, np.arange(n), a)
-    if not groan:
-        out *= 1 + 0.12 * np.sin(2 * np.pi * 7 * np.arange(len(out)) / RATE)
-    out = np.tanh(2.5 * out / np.abs(out).max()) / np.tanh(2.5)
-    fade = len(out) // 3
-    out[-fade:] *= np.linspace(1, 0, fade) ** 2
-    return out
-
-
-# The peak of a clip: the cries and groans under the lines (the cries were too loud).
-PEAK = {"DEATH": 0.6, "GROAN": 0.7}
-
-
 parts, clips, t = [np.zeros(GAP, np.float32)], [], GAP
 said = [(s, KINDS, False) for s in SPEAKERS] + [
     (s, [(k, [phonemes(x) for x, _ in t]) for k, t in NINJA_KINDS], True) for s in NINJAS
@@ -178,9 +145,7 @@ for (voice, speed), kinds, sounds in said:
             a, sr = kokoro.create(text, voice=voice, speed=speed, lang="en-us", is_phonemes=sounds)
             assert sr == RATE
             a = trim(a)
-            if kind in PEAK:
-                a = pained(a, kind == "GROAN")
-            a = (a / np.abs(a).max() * PEAK.get(kind, 0.9)).astype(np.float32)
+            a = (a / np.abs(a).max() * 0.9).astype(np.float32)
             a = np.concatenate([a, np.zeros(-len(a) % TICK, np.float32)])
             clips.append((t, len(a)))
             parts += [a, np.zeros(GAP, np.float32)]

@@ -52,7 +52,6 @@ import type { Hud } from './hud';
 import { basis } from './mesh';
 import type { Vec3 } from './mesh';
 import { SOUND } from './sfx';
-import { deathOf, paceOf, speakerOf } from './taunt';
 
 /** The sound of each cue of a swap (CUES): the gun's, then the rail gun's. */
 const RELOADS = [
@@ -186,7 +185,7 @@ const SWISH = { rate: [1.3, 1.05, 0.95, 0.8], gain: [0.6, 0.8, 0.8, 1] };
 
 export const createCombat = (
   world: World,
-  audio: Pick<Audio, 'play'> & Partial<Pick<Audio, 'loop' | 'speak'>>,
+  audio: Pick<Audio, 'play'> & Partial<Pick<Audio, 'loop'>>,
   hud: Pick<Hud, 'vitals' | 'hit' | 'down'>,
   fx: Pick<Effects, 'fire' | 'cut' | 'wound' | 'lie' | 'quake' | 'blow' | 'punch'>,
   tracer: Pick<
@@ -199,8 +198,8 @@ export const createCombat = (
   drawn?: (id: number) => Vec3 | undefined,
   /** The pitch of a player's voice (voiceOf()). */
   voice: (id: number) => number = voiceOf,
-  /** A player's own voice in the players' sprite (speakerOf()). */
-  speaker: (id: number) => number = speakerOf,
+  /** A player's BODY: his death cries' voice. */
+  bodyOf: (id: number) => number | undefined = () => undefined,
   /** Whether a player is a xenomorph: its own cries, its acid, its hiss at a tail's charge, its shriek at a dash. */
   beast: (id: number) => boolean = () => false,
 ): Combat => {
@@ -220,12 +219,9 @@ export const createCombat = (
   let cuts: number[] = [];
   /** A little off the pitch each time, so that a burst does not drone. */
   const rate = () => 0.94 + 0.12 * ((seq++ * 0.618) % 1);
-  /** Cries of players going down so far: each picks the next of his voice's. */
-  let deaths = 0;
   /**
    * Player `id` cries out in pain, or as he goes down (`died`), at `at` (the own, centred): going
-   * down, in his own voice once the voices are decoded (the synth's before), a brief cry of pain
-   * when the death is `dire` (dreadful()), else a groan.
+   * down, a brief cry of pain when the death is `dire` (dreadful()), else a groan; hers her own.
    */
   const cry = (id: number, died: boolean, at?: Vec3, dire = false) => {
     const r = rate();
@@ -235,18 +231,20 @@ export const createCombat = (
       audio.play(SOUND.ACID, at, at ? 0.6 : 0.45, r);
       return;
     }
-    if (
-      died &&
-      audio.speak?.(
-        deathOf(speaker(id), id + deaths++, !dire),
-        at,
-        at ? 1 : 0.8,
-        paceOf(id) * (0.5 + r / 2),
-      )
-    ) {
+    if (died) {
+      const her = !!bodyOf(id);
+      const sound = dire
+        ? her
+          ? SOUND.HER_DEATH
+          : SOUND.DEATH
+        : her
+          ? SOUND.HER_GROAN
+          : SOUND.GROAN;
+      // Her cries are her own: only the man's offset of each player is played on them.
+      audio.play(sound, at, at ? 0.9 : 0.7, voiceOf(id) * r);
       return;
     }
-    audio.play(died ? SOUND.DEATH : SOUND.PAIN, at, at ? 0.9 : 0.7, voice(id) * r);
+    audio.play(SOUND.PAIN, at, at ? 0.9 : 0.7, voice(id) * r);
   };
   /** A shot; a charged one (`power` over 1) deeper and louder, with the long blast under it. */
   const laser = (at?: Vec3, power = 1) => {

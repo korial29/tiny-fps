@@ -2,15 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { FRAG } from '../shared/protocol';
 import type { Vec3 } from './mesh';
 import { SOUND, secondsOf } from './sfx';
-import {
-  TAUNT_DELAY,
-  TAUNT_GAP,
-  TAUNT_LATE,
-  createTaunts,
-  deathOf,
-  speakerOf,
-  tauntOf,
-} from './taunt';
+import { TAUNT_DELAY, TAUNT_GAP, TAUNT_LATE, createTaunts, speakerOf, tauntOf } from './taunt';
 import { CAST, KIND, LINES, NINJA, VOICES } from './voice/cast';
 
 /** The kind of line a clip is, and whose voice says it. */
@@ -52,23 +44,6 @@ describe('voices', () => {
     // The plain voices and the ninja's all have every line.
     expect(CAST).toHaveLength((NINJA + 2) * LINES);
     expect(kindOf(tauntOf(NINJA, FRAG.BLADE, 1))).toBe('BLADE');
-  });
-
-  it('cries going down in the speaker’s voice, or groans', () => {
-    expect(kindOf(deathOf(2, 5))).toBe('DEATH');
-    expect(Math.floor(deathOf(2, 5) / LINES)).toBe(2);
-    expect(kindOf(deathOf(2, 5, true))).toBe('GROAN');
-    expect(Math.floor(deathOf(2, 5, true) / LINES)).toBe(2);
-  });
-
-  it('keeps the cries and the groans brief (the user, 2026-11-17: they were long screams)', () => {
-    for (let speaker = 0; speaker < NINJA + 2; speaker++) {
-      for (const [a, b] of [KIND.DEATH, KIND.GROAN]) {
-        for (let k = a; k < b; k++) {
-          expect(CAST[speaker * LINES + k][1]).toBeLessThan(0.75);
-        }
-      }
-    }
   });
 });
 

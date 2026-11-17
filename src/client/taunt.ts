@@ -1,7 +1,8 @@
 // The players' own voices (voice/cast.ts): the taunt a player throws at the one he just fragged (an
-// ally's over the radio, wherever he is, and so is the one of the enemy who fragged the own player),
-// and the cry or the groan of one going down. Each player has a voice of his body's, by his id (a ninja's in
-// Japanese), the same on every screen, and so are the lines he picks.
+// ally's over the radio, wherever he is, and so is the one of the enemy who fragged the own player).
+// Not the cry of one going down: that is the synth's (sfx.ts, scream()). Each player has a voice of
+// his body's, by his id (a ninja's in Japanese), the same on every screen, and so are the lines he
+// picks.
 import { FRAG } from '../shared/protocol';
 import type { Audio } from './audio';
 import type { Vec3 } from './mesh';
@@ -37,10 +38,6 @@ export const tauntOf = (speaker: number, how: number, n: number): number =>
     how == FRAG.FIST ? KIND.FISTS : how == FRAG.BLADE ? KIND.BLADE : KIND.TAUNT,
     speaker * 3 + n * 7,
   );
-
-/** The clip (CAST) of `speaker`'s `k`th cry as he goes down: a brief cry of pain, or a `groan`. */
-export const deathOf = (speaker: number, k: number, groan = false): number =>
-  speaker * LINES + pick(groan ? KIND.GROAN : KIND.DEATH, k);
 
 /** A line over the radio that began: who says it, and its seconds. */
 export interface Said {

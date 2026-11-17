@@ -299,7 +299,7 @@ const play = (
     balls,
     id => rd?.muzzle(id),
     id => voiceOf(id, roster.find(p => p.id == id)?.body),
-    speaker,
+    id => roster.find(p => p.id == id)?.body,
     beast,
   );
   const taunts = createTaunts(audio, speaker, id => roster.find(p => p.id == id)?.team, beast);

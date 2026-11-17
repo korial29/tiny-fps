@@ -182,6 +182,15 @@ export const SOUND = {
   XENO_LAND: 69,
   /** A fist bursting a head (the fists' glory kill): a deep thump, bone cracking, a wet splatter. */
   SMASH: 70,
+  /**
+   * The death cries (scream(), the user 2026-11-17: a synth's, not the players' voices): DEATH his
+   * brief cry of pain and HER_DEATH hers, for a dreadful death (a limb cut off, a hard fall, a heavy
+   * hit); GROAN and HER_GROAN cut off in the throat, for the others. Hers are her own, not his
+   * played faster: that raised the vowel with the pitch into a cartoon's.
+   */
+  HER_DEATH: 71,
+  GROAN: 72,
+  HER_GROAN: 73,
 } as const;
 
 /**
@@ -281,11 +290,12 @@ export const LAYERS: Voice[][] = [
     [2, 110, -2.5, 0.002, 0.01, 0.2, 0, 1, 0, 1, 0.9],
     [3, 2500, 0, 0.02, 0.03, 0.17, 0.3, 0.12, 0, 1, 0.5, 0.04],
   ],
-  // DOWN: a heavy thump, a saw falling with a wobble and a rustle of the fall.
+  // DOWN: the body falling, knees then trunk: two thumps, the second deeper, and a rustle of
+  // the gear. No tone: the death cry is the voice over it.
   [
-    [2, 90, -1.2, 0.002, 0.04, 0.45, 0, 1, 0, 1, 0.9],
-    [1, 180, -1.5, 0.01, 0.06, 0.4, 0.05, 0.2, 0, 1, 0.45],
-    [3, 3000, 0, 0.02, 0, 0.35, 0.3, 0.1, 0, 1, 0.4, 0.12],
+    [2, 90, -1.2, 0.002, 0.03, 0.3, 0, 1, 0, 1, 0.8],
+    [2, 65, -1.5, 0.002, 0.04, 0.35, 0, 1, 0, 1, 0.9, 0.16],
+    [3, 3000, 0, 0.01, 0, 0.3, 0.3, 0.1, 0, 1, 0.4, 0.12],
   ],
   // GUN: a click, a square rising and a shimmer over it.
   [
@@ -646,6 +656,10 @@ export const LAYERS: Voice[][] = [
     [3, 1400, 1, 0.01, 0.06, 0.28, 0.7, 0.2, 0, 1, 0.6, 0.03],
     [1, 230, -2, 0.005, 0.03, 0.14, 0.3, 0.25, 0, 1, 0.3, 0.025],
   ],
+  // HER_DEATH, GROAN, HER_GROAN: voices of their own, scream(); render() never reads these.
+  [],
+  [],
+  [],
 ];
 
 /** The seconds sound `id` lasts: its longest voice, from its start late to the end of its decay. */
@@ -669,8 +683,8 @@ export const LOOPED: number[] = [
  * noise), silent at both ends (no click).
  */
 export const render = (id: number, layers: Voice[][] = LAYERS): Float32Array => {
-  if (layers == LAYERS && id == SOUND.DEATH) {
-    return scream();
+  if (layers == LAYERS && CRIES[id]) {
+    return scream(CRIES[id]);
   }
   const voices = layers[id].map(
     (v, i) => [synth(v, id * 9 + i), Math.round((v[11] ?? 0) * RATE)] as const,
@@ -682,55 +696,174 @@ export const render = (id: number, layers: Voice[][] = LAYERS): Float32Array => 
 };
 
 /**
- * The death cry of a human (the user, 2026-11-16: "a real scream", then lower and shorter), a
- * source-filter voice: a saw for the vocal folds, its pitch thrown up to a strained 380 Hz, held
- * shaking a quarter of a second, then falling away an octave and a half; every other period louder (the period doubling of a torn throat, the rasp), breath riding
- * each period; four vowel formants gliding from a wide "aah" to a dying "uh", then a soft clip.
+ * A cry of a human voice, source-filter: the flow through the vocal folds (a Rosenberg pulse, not a
+ * saw: a saw buzzes like a synth) through four vowel formants, breath riding each opening, and no
+ * two periods alike in length or loudness. The death cries are short cries of pain (the user,
+ * 2026-11-17: "a brief cry of pain", the screams were long, loud and synthetic).
  */
-export const scream = (): Float32Array => {
-  const n = Math.round(0.75 * RATE);
+export type Cry = {
+  /** Seconds. */
+  len: number;
+  /** The pitch (Hz) at the start, at `up` s, at `hold` s, and at the end, falling from `hold`. */
+  hz: [number, number, number, number];
+  up: number;
+  hold: number;
+  /** Vibrato: Hz and depth. */
+  vib: [number, number];
+  /** How much each period's loudness is off the last (shimmer). */
+  shim: number;
+  /** Every other period this much louder: the rasp of a torn throat. */
+  rasp: number;
+  /** Breath on each opening while held, and more of it as the voice gives out. */
+  breath: [number, number];
+  /** The formants: Hz at the start, at the end, bandwidth, gain. */
+  F: number[][];
+  /** Seconds where the voice stops dead, a breath let out after it; 0 fades it out over `fade` s. */
+  choke: number;
+  fade: number;
+  /** The peak of the samples. */
+  vol: number;
+  seed: number;
+};
+
+/** His: a short "AH!" thrown up to 330 Hz at once, falling to an "uh" and a breath. */
+const HIS: Cry = {
+  len: 0.42,
+  hz: [230, 330, 305, 170],
+  up: 0.035,
+  hold: 0.1,
+  vib: [6, 0.015],
+  shim: 0.3,
+  rasp: 0.25,
+  breath: [0.15, 0.4],
+  F: [
+    [750, 560, 110, 1],
+    [1250, 1050, 130, 0.6],
+    [2550, 2400, 180, 0.3],
+    [3500, 3300, 260, 0.15],
+  ],
+  choke: 0,
+  fade: 0.3,
+  vol: 0.55,
+  seed: 55,
+};
+
+/** Hers: the same cry at 560 Hz, a shorter throat, little rasp, more breath. Not his raised: his rasp under her pitch read as a man in falsetto. */
+const HERS: Cry = {
+  ...HIS,
+  len: 0.4,
+  hz: [400, 560, 520, 300],
+  rasp: 0.06,
+  breath: [0.25, 0.45],
+  F: [
+    [900, 650, 130, 1],
+    [1550, 1250, 160, 0.65],
+    [2900, 2750, 220, 0.3],
+    [4000, 3800, 300, 0.15],
+  ],
+  seed: 58,
+};
+
+/** His groan as a shot puts him down: a rising "hngh-uh" cut off in the throat, then the breath out. */
+const GROANED: Cry = {
+  len: 0.5,
+  hz: [150, 205, 185, 120],
+  up: 0.05,
+  hold: 0.2,
+  vib: [6.5, 0.025],
+  shim: 0.35,
+  rasp: 0.5,
+  breath: [0.15, 0.3],
+  F: [
+    [600, 550, 90, 1],
+    [1150, 1000, 110, 0.6],
+    [2450, 2300, 160, 0.25],
+    [3400, 3200, 240, 0.12],
+  ],
+  choke: 0.27,
+  fade: 0.3,
+  vol: 0.85,
+  seed: 59,
+};
+
+/** Hers: the same cut-off cry, her pitch and throat. */
+const MOANED: Cry = {
+  ...GROANED,
+  hz: [270, 370, 330, 215],
+  shim: 0.3,
+  rasp: 0.15,
+  breath: [0.22, 0.35],
+  F: GROANED.F.map(([a, b, bw, g]) => [a * 1.17, b * 1.17, bw * 1.2, g]),
+  seed: 60,
+};
+
+/** The death cries by SOUND id. */
+const CRIES: Record<number, Cry> = {
+  [SOUND.DEATH]: HIS,
+  [SOUND.HER_DEATH]: HERS,
+  [SOUND.GROAN]: GROANED,
+  [SOUND.HER_GROAN]: MOANED,
+};
+
+/** The flow through the folds over a period: opening over 40 %, shut over 16 %, closed the rest. */
+const flow = (p: number) =>
+  p < 0.4
+    ? 0.5 * (1 - Math.cos((Math.PI * p) / 0.4))
+    : p < 0.56
+      ? Math.cos((Math.PI * (p - 0.4)) / 0.32)
+      : 0;
+
+/** Renders a Cry as mono samples at RATE, peaking at its `vol`. */
+export const scream = (c: Cry = HIS): Float32Array => {
+  const n = Math.round(c.len * RATE);
   const out = new Float32Array(n);
-  // Formants: Hz at the start, at the end, bandwidth, gain.
-  const F = [
-    [800, 520, 100, 1],
-    [1200, 900, 120, 0.65],
-    [2550, 2350, 170, 0.32],
-    [3500, 3200, 250, 0.16],
-  ];
+  let top = 0;
   // Each formant's two past inputs and outputs, a band-pass biquad of 0 dB at its peak.
-  const z = F.map(() => [0, 0, 0, 0]);
-  let seed = 55;
+  const z = c.F.map(() => [0, 0, 0, 0]);
+  let seed = c.seed;
   const rand = () => ((seed = (Math.imul(seed, 1103515245) + 12345) | 0) >>> 0) / 2 ** 31 - 1;
   let phase = 0;
+  let last = 0;
   let odd = 1;
   let jitter = 0;
-  // Each period a little off the last in pitch and in loudness: a held synth note never is.
   let wob = 0;
   let shim = 1;
   let peak = 0;
   const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+  const [h0, h1, h2, h3] = c.hz;
   for (let i = 0; i < n; i++) {
     const t = i / RATE;
-    // Rises in 60 ms, climbs a little while held, falls from 0.3 s.
-    const fall = ease((t - 0.3) / 0.4);
-    jitter += (rand() * 0.03 - jitter) * 0.002;
-    const f0 =
-      (200 + 150 * ease(t / 0.06) + 30 * ease((t - 0.06) / 0.24) - 240 * fall) *
-      (1 + 0.025 * Math.sin(t * 2 * Math.PI * 5.5) * (1 - fall) + jitter + wob);
+    const fall = ease((t - c.hold) / (c.len - c.hold));
+    jitter += (rand() * 0.04 - jitter) * 0.002;
+    const hz =
+      t < c.up
+        ? h0 + (h1 - h0) * ease(t / c.up)
+        : t < c.hold
+          ? h1 + ((h2 - h1) * (t - c.up)) / (c.hold - c.up)
+          : h2 + (h3 - h2) * fall;
+    const f0 = hz * (1 + c.vib[1] * Math.sin(t * 2 * Math.PI * c.vib[0]) + jitter + wob);
     phase += f0 / RATE;
     if (phase >= 1) {
       phase -= 1;
       odd = -odd;
-      wob = rand() * 0.012;
-      shim = 1 + rand() * 0.12;
+      wob = rand() * 0.02;
+      shim = 1 + rand() * c.shim;
     }
-    const rasp = (1 + 0.35 * odd * (1 - fall * 0.6)) * shim;
-    // A pulse of breath on each opening of the folds, louder as the voice gives out.
-    const breath = rand() * (0.12 + 0.35 * fall) * (1 - phase);
-    const x = ((1 - 2 * phase) * rasp + breath) * (1 - 0.5 * fall);
+    // The flow's slope is what the mouth radiates; per period, so a higher voice is not louder.
+    const u = flow(phase);
+    const fold = ((u - last) * RATE * 0.2 * (1 + c.rasp * odd * (1 - fall * 0.6)) * shim) / f0;
+    last = u;
+    const breath = rand() * (c.breath[0] + c.breath[1] * fall) * (0.3 + u);
+    // In in 8 ms, then out quadratically over the last `fade` s, or stopped in 15 ms.
+    const on =
+      Math.min(1, t / 0.008) *
+      (c.choke ? Math.max(0, 1 - (t - c.choke) / 0.015) : Math.min(1, ((c.len - t) / c.fade) ** 2));
+    // The breath let out after a choke.
+    const air = c.choke && t > c.choke ? 1.5 * Math.exp(-(t - c.choke) / 0.07) : 0;
+    const x = (fold + breath) * (1 - 0.5 * fall) * on + rand() * air;
     let y = 0;
     for (let k = 0; k < 4; k++) {
-      const [a, b, bw, g] = F[k];
+      const [a, b, bw, g] = c.F[k];
       const f = a + (b - a) * fall;
       const w = (2 * Math.PI * f) / RATE;
       const r = (Math.sin(w) * bw) / f / 2;
@@ -743,12 +876,15 @@ export const scream = (): Float32Array => {
       s[2] = o;
       y += o * g;
     }
-    // Comes in in 25 ms, fades out quadratically over the last 0.3 s.
-    const env = Math.min(1, t / 0.025) * Math.min(1, ((0.75 - t) / 0.3) ** 2);
-    out[i] = Math.tanh(y * 3) * env;
+    out[i] = y * Math.min(1, (c.len - t) / 0.01);
+    top = Math.max(top, Math.abs(out[i]));
+  }
+  // The same soft clip on every cry, whatever its loudness through the throat.
+  for (let i = 0; i < n; i++) {
+    out[i] = Math.tanh((out[i] / top) * 2);
     peak = Math.max(peak, Math.abs(out[i]));
   }
-  return out.map(v => (v / peak) * 0.85);
+  return out.map(v => (v / peak) * c.vol);
 };
 
 /**

@@ -323,11 +323,13 @@ describe('a glory kill drawn', () => {
     ];
     const bend: number[] = [];
     const ahead: number[] = [];
+    const hips: number[] = [];
     for (let k = 0; k < Math.round((FEAST.FEED[0] + FEAST.LOW[1]) * 60) + 4; k++) {
       frames(book, after, 1);
       bend.push(from(neck(), up));
       const s = stance(book.get(XENO)!).s;
       ahead.push(turn(s.rot[J.PELVIS], [0, 0, -1])[2]);
+      hips.push(s.pos[J.PELVIS][1]);
     }
     const lift = Math.round((FEAST.FEED[0] - FEAST.FEED[1]) * 60);
     // Down and chewing while the camera is out: bent, and the bend moving.
@@ -339,9 +341,16 @@ describe('a glory kill drawn', () => {
     const done = Math.round(FEAST.FEED[0] * 60);
     expect(bend[done + 2]).toBeGreaterThan(0.15);
     for (let k = lift + 6; k < bend.length - 1; k++) {
-      expect(Math.abs(bend[k + 1] - bend[k])).toBeLessThan(0.05);
+      // Its chewing turned it 0.2 rad a frame.
+      expect(Math.abs(bend[k + 1] - bend[k])).toBeLessThan(0.08);
     }
     expect(bend.at(-1)!).toBeLessThan(0.05);
+    // Standing as it eats; low only as its head comes up at the end, then up again.
+    expect(hips[30]).toBeCloseTo(hips[lift - 2], 2);
+    expect(hips[Math.round(FEAST.FEED[0] * 60)]).toBeLessThan(
+      hips[lift - 2] - FEAST.CROUCH[0] * 0.8,
+    );
+    expect(hips.at(-1)!).toBeCloseTo(hips[lift - 2], 1);
   });
 
   it('hops back off him on an arc after the kill, and lets him fall on his side from where it held him', () => {
@@ -566,7 +575,7 @@ describe('its crouch after the kill', () => {
   it('sinks its hips back and low, its feet where they were, its back bent, its claws ahead and low', () => {
     const p = { ...rest([0, 0, 0], 0), hips: [0, -0.1, 0] as Vec3 };
     const [a, s] = [solve(p), solve(crouch(p, 1))];
-    const [, sink, back] = FEAST.CROUCH;
+    const [sink, back] = FEAST.CROUCH;
     expect(s.pos[J.PELVIS][1]).toBeCloseTo(a.pos[J.PELVIS][1] - sink, 6);
     // Facing -z: back is +z.
     expect(s.pos[J.PELVIS][2]).toBeCloseTo(a.pos[J.PELVIS][2] + back, 6);

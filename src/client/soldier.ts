@@ -1044,9 +1044,9 @@ export const stance = (r: Runner) => {
     }
     // Chewing as it bites, and on after the kill, dying out as its head lifts.
     pose = chew(pose, p.lock ? eating(p.lock, r.mount ?? 0) : fed, r.t);
-    // Landed off him, down in a low hunting crouch (FEAST.CROUCH), let go of as its head comes up.
-    const since = FEAST.FEED[0] - (r.feed ?? 0) - FEAST.DROP;
-    pose = crouch(pose, r.feed ? ease(since / FEAST.CROUCH[0]) : ease((r.low ?? 0) / slow));
+    // Standing as it eats; down in a low hunting crouch only at the end, as its head comes up
+    // (FEAST.CROUCH, the user 2026-11-17), then back to its prowl slowly.
+    pose = crouch(pose, r.feed ? 1 - fed : ease((r.low ?? 0) / slow));
   } else if (mate && !lying) {
     const sway = p.lock ? swaying(p.lock, r.mount!) : 0;
     pose = r.knelt = clutched(pose, mate, r.mount!, r.t, r.bust, sway);

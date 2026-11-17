@@ -68,12 +68,12 @@ export const FEAST = {
   /** How far down its head stays once it has lifted it (devour()'s scale: 0.7 in him), and the seconds it then takes to come up the rest (the user, 2026-11-17: it went too high). */
   LOW: [0.3, 1.2],
   /**
-   * Its low hunting crouch once it has landed off him, as a cat's (the user, 2026-11-17): seconds
-   * it takes to get down; how far its hips sink and go back (metres); its back bent forward (radians:
+   * Its low hunting crouch at the end, as its head comes up from eating, as a cat's (the user,
+   * 2026-11-17: standing first, on the hunt again only at the end): how far its hips sink and go back (metres); its back bent forward (radians:
    * spine, chest) and its neck lifting the head back up level; its claws ahead and low (metres
    * ahead of its pelvis, over the floor, across).
    */
-  CROUCH: [0.25, 0.3, 0.12, 0.35, 0.3, 0.45, 0.5, 0.35, 0.22],
+  CROUCH: [0.3, 0.12, 0.35, 0.3, 0.45, 0.5, 0.35, 0.22],
 } as const;
 
 const length = (v: Vec3) => Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
@@ -423,7 +423,7 @@ export const crouch = (pose: Pose, w: number): Pose => {
   if (w <= 0) {
     return pose;
   }
-  const [, sink, back, spine, chest, neck, ahead, low, across] = FEAST.CROUCH;
+  const [sink, back, spine, chest, neck, ahead, low, across] = FEAST.CROUCH;
   const f = basis(pose.yaw, 0)[2];
   const r = basis(pose.yaw, 0)[0];
   const feet = solve(pose);

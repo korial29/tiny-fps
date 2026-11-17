@@ -20,18 +20,17 @@ import {
   NADE_COOL,
 } from '../shared/constants';
 import { STILL } from '../shared/physics';
-import { CUT, KEY } from '../shared/types';
+import { BODY, CUT, KEY, LIMB } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
 import { TRAIL, createBalls } from './balls';
 import { createTracer } from './beams';
 import type { Orb } from './beams';
-import { createCombat, fired, sight, struck, swung, voiceOf } from './combat';
+import { createCombat, dreadful, fired, sight, struck, swung, voiceOf } from './combat';
 import { aimed, focus, tip } from './gun';
 import type { Vec3 } from './mesh';
 import type { View } from './combat';
 import { SOUND } from './sfx';
-import { KIND, LINES, VOICES } from './voice/cast';
 
 const player = (o: Partial<PlayerState> = {}): PlayerState => ({
   id: 1,
@@ -656,51 +655,52 @@ describe('the sounds and the screen of what happens to the own player', () => {
     expect(cries().map(c => c[0])).toEqual([SOUND.PAIN, SOUND.DEATH]);
   });
 
-  it('screams in the voice of the one going down, where he stands, once the voices are decoded', () => {
-    const t = setup();
-    const speak = vi.fn(() => true);
-    const combat = createCombat(
-      WORLD,
-      { ...t.audio, speak },
-      t.hud,
-      t.fx,
-      t.tracer,
-      t.ctl,
-      t.balls,
-      undefined,
-      undefined,
-      id => (id == 2 ? VOICES : 0),
-    );
-    const bob = (o: Partial<PlayerState>) => player({ id: 2, x: 5, ...o });
-    const frame = (others: PlayerState[]) => combat.frame(VIEW, player(), others, 0, 1 / 60, 1000);
-    frame([bob({ hp: 5 })]);
-    frame([bob({ hp: 3 })]);
-    // A loss of health stays the synth's grunt.
-    expect(speak).not.toHaveBeenCalled();
-    frame([bob({ hp: 0, down: 120, ammo: -1 })]);
-    expect(speak).toHaveBeenCalledTimes(1);
-    const [clip, at] = speak.mock.calls[0] as unknown as [number, Vec3];
-    // One of the cries of the woman's first voice, at him.
-    expect(clip - VOICES * LINES).toBeGreaterThanOrEqual(KIND.DEATH[0]);
-    expect(clip - VOICES * LINES).toBeLessThan(KIND.DEATH[1]);
-    expect(at[0]).toBe(5);
-    expect(t.audio.play.mock.calls.map(c => c[0])).not.toContain(SOUND.DEATH);
+  it('cries out at a dreadful death, groans at any other: a limb cut off, a hard fall, a heavy hit', () => {
+    const was = { life: 1, vy: 0 };
+    expect(dreadful(was, player({ hp: 0, down: 120 }))).toBe(false);
+    expect(dreadful(was, player({ hp: 0, down: 120, lost: LIMB.HEAD }))).toBe(true);
+    expect(dreadful({ life: 1, vy: -25 }, player({ hp: 0, down: 120 }))).toBe(true);
+    expect(dreadful({ life: 5, vy: 0 }, player({ hp: 0, down: 120 }))).toBe(true);
+    expect(dreadful({ life: 2, vy: -10 }, player({ hp: 0, down: 120 }))).toBe(false);
   });
 
-  it('falls back on the synth cry while the voices are not decoded', () => {
+  it('groans as a shot puts a player down, cries out in pain as a cut takes a limb; hers her own', () => {
     const t = setup();
     const combat = createCombat(
       WORLD,
-      { ...t.audio, speak: () => false },
+      t.audio,
       t.hud,
       t.fx,
       t.tracer,
       t.ctl,
       t.balls,
+      undefined,
+      undefined,
+      id => (id == 3 ? BODY.FEMALE : undefined),
     );
-    combat.frame(VIEW, player({ hp: 5 }), [], 0, 1 / 60, 1000);
-    combat.frame(VIEW, player({ hp: 0, down: 120, ammo: -1 }), [], 0, 1 / 60, 1020);
-    expect(t.audio.play.mock.calls.map(c => c[0])).toEqual([SOUND.DOWN, SOUND.DEATH]);
+    const frame = (others: PlayerState[]) => combat.frame(VIEW, player(), others, 0, 1 / 60, 1000);
+    const him = (o: Partial<PlayerState>) => player({ id: 2, x: 5, ...o });
+    const her = (o: Partial<PlayerState>) => player({ id: 3, x: -5, ...o });
+    const down = { hp: 0, down: 120, ammo: -1 };
+    frame([him({ hp: 1 }), her({ hp: 1 })]);
+    frame([him(down), her(down)]);
+    frame([him({ hp: 1, ammo: -1 }), her({ hp: 1, ammo: -1 })]);
+    frame([him({ ...down, lost: LIMB.ARM_L }), her({ ...down, lost: LIMB.HEAD })]);
+    const cries = t.audio.play.mock.calls.filter(c =>
+      [SOUND.DEATH, SOUND.HER_DEATH, SOUND.GROAN, SOUND.HER_GROAN].includes(c[0] as never),
+    );
+    expect(cries.map(c => c[0])).toEqual([
+      SOUND.GROAN,
+      SOUND.HER_GROAN,
+      SOUND.DEATH,
+      SOUND.HER_DEATH,
+    ]);
+    // Where each stands, and hers not sped up by her higher voice: that raised the vowel too.
+    expect(cries.map(c => (c[1] as Vec3)[0])).toEqual([5, -5, 5, -5]);
+    for (const c of cries) {
+      expect(c[3]).toBeGreaterThan(0.8);
+      expect(c[3]).toBeLessThan(1.2);
+    }
   });
 
   it('gives each player a voice of his own, the woman a higher one', () => {

@@ -4,7 +4,7 @@ export const VOICES = 2;
 /** The ninja's voice for each body, in Japanese, after the others: the man's, then the woman's. */
 export const NINJA = 4;
 /** Clips each voice says, in the order of KIND. */
-export const LINES = 17;
+export const LINES = 14;
 /** The clips of a voice by kind: the first and one past the last. */
 export const KIND = {
   /** "Too slow." "Stay down." "Back to the spawn with you." "Is that all you've got?" "Nice try." "Get off my roof." "Who wants some more?" "Sit down." "Lights out." "You run like a tourist." The ninja: "Osoi! (Too slow!)" "Yowai! (Weak!)" "Baka me! (You fool!)" "Shugyō ga tarin. (Not enough training.)" "Saru mo ki kara ochiru. (Even monkeys fall from trees.)" "Nana korobi ya oki. (Fall seven times, stand up eight.)" "Denaoshite koi! (Come back when you are ready!)" "Zako me! (Small fry!)" "Jūnen hayai! (Ten years too early!)" "I no naka no kawazu. (A frog in a well.)" */
@@ -13,15 +13,13 @@ export const KIND = {
   FISTS: [10, 12],
   /** "Clean cut." "Cut down to size." The ninja: "Ittō ryōdan! (Cut in two at one stroke!)" "Kirisute gomen! (Leave to cut you down!)" */
   BLADE: [12, 14],
-  /** "Aaaaaargh!" "Nooooooo!" "Aaaah!" The ninja: "Guwaaah!" "Gyaaah!" "Munen... (Regret...)" */
-  DEATH: [14, 17],
 } as const;
 
 /** Seconds of silence before each clip. */
 const GAP = 0.2;
 /** Each clip's length in centiseconds, two base-36 digits a clip, voice by voice. */
 const LENGTHS =
-  '22273g2z262m2p1y24352z2a252w2g2h1z262g3t3p2g37312c2a3w3b2k2a3e302y2520243d31252l2m212539322b202w2i2h1x2d2m3o3t2q363f2k2p3v3i2s2h3g393d1w1t1t222u443h2y252i3g3d3i2w2w2y2f2e1w211x2x3p3n34262v3i3i3a372x2n1v26';
+  '22273g2z262m2p1y24352z2a252w262g3t3p2g37312c2a3w3b2k2a3e20243d31252l2m212539322b202w2d2m3o3t2q363f2k2p3v3i2s2h3g1t1t222u443h2y252i3g3d3i2w2w1w211x2x3p3n34262v3i3i3a372x';
 
 /** Where each clip lies in the sprite, voice by voice: its start and its length, seconds. */
 export const CAST: readonly (readonly [number, number])[] = [];

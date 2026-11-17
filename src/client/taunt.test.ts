@@ -2,15 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { FRAG } from '../shared/protocol';
 import type { Vec3 } from './mesh';
 import { SOUND, secondsOf } from './sfx';
-import {
-  TAUNT_DELAY,
-  TAUNT_GAP,
-  TAUNT_LATE,
-  createTaunts,
-  deathOf,
-  speakerOf,
-  tauntOf,
-} from './taunt';
+import { TAUNT_DELAY, TAUNT_GAP, TAUNT_LATE, createTaunts, speakerOf, tauntOf } from './taunt';
 import { CAST, KIND, LINES, NINJA, VOICES } from './voice/cast';
 
 /** The kind of line a clip is, and whose voice says it. */
@@ -52,11 +44,6 @@ describe('voices', () => {
     // The plain voices and the ninja's all have every line.
     expect(CAST).toHaveLength((NINJA + 2) * LINES);
     expect(kindOf(tauntOf(NINJA, FRAG.BLADE, 1))).toBe('BLADE');
-  });
-
-  it('cries going down in the speaker’s voice', () => {
-    expect(kindOf(deathOf(2, 5))).toBe('DEATH');
-    expect(Math.floor(deathOf(2, 5) / LINES)).toBe(2);
   });
 });
 

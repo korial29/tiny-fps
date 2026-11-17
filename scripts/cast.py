@@ -1,5 +1,6 @@
 """The players' own voices, spoken by Kokoro-82M (Apache-2.0) and encoded into one sprite: the taunts
-a player says when he frags, and his cry as he goes down. The ninja's are in Japanese, in voices of
+a player says when he frags. His cry as he goes down is the synth's (sfx.ts, scream()), not his
+voice (the user, 2026-11-17). The ninja's are in Japanese, in voices of
 their own after the others.
 
 Writes src/client/voice/cast.ts (the speakers, the kinds of line and where each clip lies in the
@@ -41,8 +42,6 @@ KINDS = [
     ("FISTS", ["With my bare hands!", "Slapped silly."]),
     # A frag with the katana.
     ("BLADE", ["Clean cut.", "Cut down to size."]),
-    # Going down: cries, bent below into a scream.
-    ("DEATH", ["Aaaaaargh!", "Nooooooo!", "Aaaah!"]),
 ]
 # The ninja's lines, as many of each kind, in kana as they sound (は said "wa" written わ), each
 # with its romaji and its meaning for cast.ts.
@@ -74,14 +73,6 @@ NINJA_KINDS = [
         [
             ("いっとう りょうだん！", "Ittō ryōdan! (Cut in two at one stroke!)"),
             ("きりすて ごめん！", "Kirisute gomen! (Leave to cut you down!)"),
-        ],
-    ),
-    (
-        "DEATH",
-        [
-            ("ぐわあああっ！", "Guwaaah!"),
-            ("ぎゃあああ！", "Gyaaah!"),
-            ("むねん…", "Munen... (Regret...)"),
         ],
     ),
 ]
@@ -144,22 +135,6 @@ def trim(a):
     return a[max(loud[0] - RATE // 100, 0) : loud[-1] + RATE // 20]
 
 
-def scream(a):
-    """Kokoro says a cry flat: start it a third higher, let it fall below the voice, strain it."""
-    n = len(a)
-    rate = np.linspace(1.3, 0.8, n)
-    at = np.cumsum(rate)
-    at = at[at < n - 1]
-    out = np.interp(at, np.arange(n), a)
-    # A tremble in the throat, six times a second, and a soft clip for the strain.
-    out *= 1 + 0.25 * np.sin(2 * np.pi * 6 * np.arange(len(out)) / RATE)
-    out = np.tanh(3 * out / np.abs(out).max()) / np.tanh(3)
-    # Fades out over its last fifth.
-    fade = int(len(out) * 0.2)
-    out[-fade:] *= np.linspace(1, 0, fade)
-    return out
-
-
 parts, clips, t = [np.zeros(GAP, np.float32)], [], GAP
 said = [(s, KINDS, False) for s in SPEAKERS] + [
     (s, [(k, [phonemes(x) for x, _ in t]) for k, t in NINJA_KINDS], True) for s in NINJAS
@@ -167,12 +142,9 @@ said = [(s, KINDS, False) for s in SPEAKERS] + [
 for (voice, speed), kinds, sounds in said:
     for kind, texts in kinds:
         for text in texts:
-            slow = speed * (0.75 if kind == "DEATH" else 1)
-            a, sr = kokoro.create(text, voice=voice, speed=slow, lang="en-us", is_phonemes=sounds)
+            a, sr = kokoro.create(text, voice=voice, speed=speed, lang="en-us", is_phonemes=sounds)
             assert sr == RATE
             a = trim(a)
-            if kind == "DEATH":
-                a = scream(a)
             a = (a / np.abs(a).max() * 0.9).astype(np.float32)
             a = np.concatenate([a, np.zeros(-len(a) % TICK, np.float32)])
             clips.append((t, len(a)))

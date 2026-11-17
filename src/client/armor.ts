@@ -252,16 +252,23 @@ const chestTop = (a: number) => 1.5 - 0.045 * Math.cos((a * Math.PI * 1.4) / 180
  * The chest plate's armholes (the user, 2026-11-12: a triangle came through the plate under the
  * armpit; 2026-11-13: small triangles on its sides): the shoulder's skin stands out of the trunk's
  * at the split (1.41 m, skin.ts), and a plate's edge across the two was cut in steps. Its top falls
- * to `y`, under the split, between the first two angles `a`, before the shoulder's skin starts; it
- * stays there over the pecs, then rounds down to `low` between the last two: no corner standing
- * out under the arm. The shoulder's bell (pads.ts) is over what is left bare. The breach that ran
- * across the plate by the armpits (2026-11-13) was the rim of the arm's hole in the trunk's skin:
- * see TURN in cook().
+ * from the neckline's to `low` between the two angles `a`, in one round curve with no corner at
+ * either end (the user, 2026-11-17: it fell in two steps, a block and a ledge with walls under the
+ * bell), steep enough to be under the split before the shoulder's skin starts (52 degrees). The
+ * shoulder's bell (pads.ts) is over what is left bare. The breach that ran across the plate by the
+ * armpits (2026-11-13) was the rim of the arm's hole in the trunk's skin: see TURN in cook().
  */
-export const ARMPIT = { a: [45, 52, 54, 64], y: 1.385, low: 1.34 };
+export const ARMPIT = { a: [36, 66], low: 1.34, round: [50, 64], r: 0.03 };
 const chestHigh = (a: number) => {
-  const [q, top, [a0, a1, a2, a3]] = [Math.abs(a), chestTop(a), ARMPIT.a];
-  return top - (top - ARMPIT.y) * smooth(a0, a1, q) - (ARMPIT.y - ARMPIT.low) * smooth(a2, a3, q);
+  const [top, q, [r0, r1]] = [chestTop(a), Math.abs(a), ARMPIT.round];
+  // Its corner with the plate's side (64 degrees) rounded off (the user, 2026-11-17): a quarter
+  // circle down to it, met upright.
+  const t = Math.min(Math.max((q - r0) / (r1 - r0), 0), 1);
+  return (
+    top -
+    (top - ARMPIT.low) * smooth(ARMPIT.a[0], ARMPIT.a[1], q) ** 0.7 -
+    ARMPIT.r * (1 - Math.sqrt(1 - t * t))
+  );
 };
 
 /** The marine's shoulder blade plates: ovals `at` degrees either side of the spine, `a` degrees and `h` metres half wide and high, their middle at `y`. */
@@ -1045,9 +1052,13 @@ const moulding = (s: Skin, gi: number) => {
     };
     let [g, a, R, py] = gap(0);
     let [lo, hi] = [0, CEIL];
-    // Her alone (his chest is flat enough, and his plate is left as it was): where the normal
-    // crosses the shell, by halving; a dome's slope is too steep to walk down.
-    for (let i = 0; b && i < 12; i++) {
+    // Where the normal crosses the shell, by halving: a dome's slope is too steep to walk down
+    // (hers). His chest is flat enough for the gap at the foot, but over the trunk's split the
+    // shoulder's skin turns its normal off the trunk's, and his plate set off by it stood 3 to 5 mm
+    // over the plate under the split, a line across it (the user, 2026-11-17): there, halving.
+    const f0 = facing(x, z, o);
+    const tilt = b ? 1 : smooth(0.97, 0.9, f0);
+    for (let i = 0; tilt > 0 && i < 12; i++) {
       const m = (lo + hi) / 2;
       [g, a, R, py] = gap(m);
       if (g > 0) {
@@ -1056,7 +1067,11 @@ const moulding = (s: Skin, gi: number) => {
         hi = m;
       }
     }
-    const d = Math.min(CEIL, Math.max(FLOOR, b ? lo : g / facing(x, z, o)));
+    const first = gap(0)[0] / f0;
+    if (tilt > 0) {
+      [g, a, R, py] = gap(lo);
+    }
+    const d = Math.min(CEIL, Math.max(FLOOR, first + (lo - first) * tilt));
     const [sa, ca] = [Math.sin(a), Math.cos(a)];
     const e = 1e-3;
     const Ra = (shell(a + e, py) - shell(a - e, py)) / (2 * e);
@@ -1070,7 +1085,27 @@ const moulding = (s: Skin, gi: number) => {
       Pa[0] * Py[1] - Pa[1] * Py[0],
     );
     const out = N[0] * sa - N[2] * ca >= 0 ? N : N.map(q => -q);
-    const m = [d, o[0] - out[0], o[1] - out[1], o[2] - out[2], ...o];
+    // By the armhole, back down onto the skin over the last centimetres under the plate's edge
+    // (the user, 2026-11-17): there the skin hollows under the arm, centimetres under the shell,
+    // and the plate's edge stood off it as a wall as tall, cut in slivers. Down to half again OFF:
+    // at OFF the shoulder's skin, out over the trunk's under the split, came through it. Under the
+    // split alone: over it the plate followed the step between the trunk's skin and the
+    // shoulder's, a line across it.
+    const deg = (a * 180) / Math.PI;
+    const arm =
+      REGIONS[gi].high === chestHigh
+        ? smooth(30, 50, Math.abs(deg)) *
+          (1 - smooth(0.005, 0.05, chestHigh(deg) - y)) *
+          (1 - smooth(1.385, 1.405, y))
+        : 0;
+    const keep = 1 - arm;
+    const m = [
+      1.5 * OFF + (d - 1.5 * OFF) * keep,
+      (o[0] - out[0]) * keep,
+      (o[1] - out[1]) * keep,
+      (o[2] - out[2]) * keep,
+      ...o,
+    ];
     done.set(c, m);
     return m;
   };

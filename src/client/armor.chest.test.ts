@@ -255,7 +255,7 @@ describe('the armour', () => {
       for (const build of [0, 1]) {
         for (const lod of [1, 3]) {
           const [plate, bare] = [front(build, lod), front(build, lod, true)];
-          // Off the plate's top line by the armpit (ARMPIT.y), where the bare shoulder over its
+          // Off the plate's top line by the armpit (ARMPIT), where the bare shoulder over its
           // edge is the skin met.
           for (let y = 1.302; y < 1.42; y += 0.005) {
             for (let x = 0.08; x < 0.16; x += 0.005) {
@@ -271,6 +271,23 @@ describe('the armour', () => {
           }
         }
       }
+    });
+
+    it('falls into the armhole in one curve, with no step (the user, 2026-11-17)', () => {
+      // It fell 7.5 cm in 7 degrees, then a ledge, then 4.5 cm more: a block and a step with walls.
+      const high = (a: number) => REGIONS[0].high!(a, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+      let last = Infinity;
+      // To 60 degrees: past it the corner with the plate's side is rounded, met upright.
+      for (let a = 30; a <= 60; a += 0.5) {
+        const fall = high(a) - high(a + 0.5);
+        expect(fall).toBeLessThan(0.004);
+        if (a > 45 && a < 62) {
+          // Falling all the way down, no shelf on the way.
+          expect(fall).toBeGreaterThan(0.0005);
+        }
+        last = Math.min(last, high(a));
+      }
+      expect(last).toBeLessThan(1.35);
     });
   });
 });

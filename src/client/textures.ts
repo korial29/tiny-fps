@@ -229,3 +229,61 @@ export const textures = (): Uint8ClampedArray => {
   });
   return out;
 };
+
+/** The chitin's plates (CHITIN): cells across its 3D texture, which repeats; texels across a cell. */
+export const [PLATES, PLATE_TEXELS] = [6, 16];
+let plated: Uint8Array | undefined;
+/**
+ * The xenomorph's chitin plates, worked out once (the user, 2026-11-16: in a texture, to cost the
+ * GPU less; the shader read 27 cells a pixel): a cube of PLATES cells a side, a jittered point in
+ * each, wrapping round; each texel how far it is from the edge between its two nearest points (the
+ * second's distance less the first's, in cells, 1 at most) times 255. Its V down to an edge is the
+ * groove's crisp line, so PLATE_TEXELS keeps it under a millimetre wide.
+ */
+export const plates = (): Uint8Array => {
+  if (plated) {
+    return plated;
+  }
+  const P = PLATES;
+  const n = P * PLATE_TEXELS;
+  let seed = 3;
+  const pts = Float64Array.from(
+    { length: P * P * P * 3 },
+    () => 0.1 + (0.8 * (seed = (seed * 16807) % 2147483647)) / 2147483647,
+  );
+  const out = new Uint8Array(n * n * n);
+  // Scalars only, as in a loop over vertices: millions of distances.
+  for (let k = 0; k < n; k++) {
+    const z = (k + 0.5) / PLATE_TEXELS;
+    const cz = Math.floor(z);
+    for (let j = 0; j < n; j++) {
+      const y = (j + 0.5) / PLATE_TEXELS;
+      const cy = Math.floor(y);
+      for (let i = 0; i < n; i++) {
+        const x = (i + 0.5) / PLATE_TEXELS;
+        const cx = Math.floor(x);
+        let d1 = 9;
+        let d2 = 9;
+        for (let az = cz - 1; az <= cz + 1; az++) {
+          for (let ay = cy - 1; ay <= cy + 1; ay++) {
+            for (let ax = cx - 1; ax <= cx + 1; ax++) {
+              const w = (((ax + P) % P) + ((ay + P) % P) * P + ((az + P) % P) * P * P) * 3;
+              const dx = x - ax - pts[w];
+              const dy = y - ay - pts[w + 1];
+              const dz = z - az - pts[w + 2];
+              const d = dx * dx + dy * dy + dz * dz;
+              if (d < d1) {
+                d2 = d1;
+                d1 = d;
+              } else if (d < d2) {
+                d2 = d;
+              }
+            }
+          }
+        }
+        out[i + (j + k * n) * n] = Math.min(Math.sqrt(d2) - Math.sqrt(d1), 1) * 255;
+      }
+    }
+  }
+  return (plated = out);
+};

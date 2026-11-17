@@ -1324,6 +1324,7 @@ export const soldier = (
         plated || ninja ? { fine: lod > 2, plate, accent: color, ninja, bare: !plated } : undefined,
         ninja && !helmets ? build : undefined,
         p.id,
+        xeno,
       );
       // The armour's plates are worn.
       gpu.forEach((d, i) => i >= n0 && d.f?.kind == 2 && (d.w = true));

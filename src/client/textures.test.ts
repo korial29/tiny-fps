@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TEX } from '../shared/types';
-import { LAYERS, SIZE, textures } from './textures';
+import { LAYERS, PLATES, PLATE_TEXELS, SIZE, plates, textures } from './textures';
 
 const pix = textures();
 const layer = (l: number) => pix.subarray(l * SIZE * SIZE * 4, (l + 1) * SIZE * SIZE * 4);
@@ -117,5 +117,33 @@ describe('textures', () => {
     expect(mean(TEX.STEEL, 0)).toBeGreaterThan(130);
     const dark = layer(TEX.GRATE).filter((v, i) => i % 4 == 1 && v < 30).length;
     expect(dark).toBeGreaterThan(SIZE * SIZE * 0.3);
+  });
+});
+
+describe('the chitin plates', () => {
+  const n = PLATES * PLATE_TEXELS;
+  const p = plates();
+  const at = (i: number, j: number, k: number) => p[(i % n) + ((j % n) + (k % n) * n) * n];
+  // How far the edge distance moves from a texel to the next: at most 2 cells a cell.
+  const step = (2 / PLATE_TEXELS) * 255 + 1;
+
+  it('has plates and edges between them', () => {
+    expect(Math.min(...p.subarray(0, n * n))).toBeLessThan(20);
+    expect(p.reduce((m, v) => Math.max(m, v), 0)).toBeGreaterThan(120);
+  });
+
+  it('repeats with no seam: across each face as smooth as inside', () => {
+    let worst = 0;
+    for (let a = 0; a < n; a += 3) {
+      for (let b = 0; b < n; b += 3) {
+        worst = Math.max(
+          worst,
+          Math.abs(at(n - 1, a, b) - at(n, a, b)),
+          Math.abs(at(a, n - 1, b) - at(a, n, b)),
+          Math.abs(at(a, b, n - 1) - at(a, b, n)),
+        );
+      }
+    }
+    expect(worst).toBeLessThanOrEqual(step);
   });
 });

@@ -25,7 +25,7 @@ import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { SIDE, blowOf, createGait, frame, thrown } from './gait';
 import { fetched, pouch, pouchAt } from './pouch';
-import { buckle } from './buckle';
+import { buckle, tails } from './buckle';
 import { createFours } from './fours';
 import type { Floor } from './gait';
 import {
@@ -443,9 +443,9 @@ const TOWARD = [
 ];
 
 /** Finger thicknesses against FINGER_R, index to little: the little finger is thinner. */
-const THICK = [1, 1, 0.96, 0.86];
+const THICK = [1, 1.02, 0.95, 0.82];
 /** Finger lengths against 4 cm, index to little. */
-const LENGTH = [1, 1.1, 1, 0.82];
+const LENGTH = [0.97, 1.08, 1, 0.8];
 /** The thumb's two segments when the palm carries the rifle's handguard: closed on its near side, along it (the user, 2026-11-10). */
 const CUP: Vec3[] = [unit([0.7, -0.7, 0]), unit([0.9, -0.4, 0.1])];
 /** The thumb's two segments open and in a fist, as directions in the hand (x toward the thumb). */
@@ -553,7 +553,7 @@ const BONES = [1, 0.62, 0.42];
 /** The ring of a finger from which on it is bare: the glove's fingers end 60 % along the middle phalanx. */
 export const BARE = 8;
 /** The rings of a finger a near runner's hand keeps past its root (hand()'s `lite`): the knuckle's bend, the glove's edge, the last bend, the tip. */
-const LITE = [5, 8, 12, 15];
+const LITE = [5, 8, 12, 16];
 
 /**
  * The rings of a finger, in the hand's space: from `p` along `d1`, `d2` then `d3`, its three
@@ -574,12 +574,15 @@ export const finger = (
 ): Ring[] => {
   const [l1, l2, l3] = BONES.map(k => k * l);
   const shaft = 1 - 0.34 * bony;
+  const oval = 0.93 + 0.07 * bony;
+  const taper = 1 - bony;
   const j1 = along(p, d1, l1);
   const j2 = along(j1, d2, l2);
   /** A ring at `c` across `d`, `k` thick, `h` of that from the palm side to the back. */
   const ring = (c: Vec3, d: Vec3, k: number, h = 1): Ring => {
     const [t, y] = [unit(d), unit(cross(d, X))];
-    return [c, cross(y, t).map(v => v * r * k) as Vec3, y.map(v => v * r * k * h) as Vec3];
+    // A man's finger is a little wider than it is deep (the user, 2026-11-17: more real hands).
+    return [c, cross(y, t).map(v => v * r * k) as Vec3, y.map(v => v * r * k * h * oval) as Vec3];
   };
   /**
    * The bend from `a` to `b` round the joint `j`, a curve on it (its ends along the two bones, no
@@ -591,7 +594,8 @@ export const finger = (
       ring(
         mix(mix(a, c, k), mix(c, b, k), k),
         add(mix(sub(c, a), [0, 0, 0], k), mix(sub(b, c), [0, 0, 0], 1 - k)),
-        (k0 + (k1 - k0) * k) * (shaft + 0.24 * bony * Math.sin(Math.PI * k)),
+        // A knuckle swells a little over its joint; a skeleton's, a lot.
+        (k0 + (k1 - k0) * k) * (shaft + (0.06 + 0.18 * bony) * Math.sin(Math.PI * k)),
         // Flatter across the joint, most at its middle: the inside of the bend does not fold.
         1 - flat * Math.sin(Math.PI * k),
       ),
@@ -606,16 +610,19 @@ export const finger = (
     // The xenomorph's thin finger leaves the palm thinner too: no step down just past its root.
     ring(along(p, unit(t), -0.012), t, 1.35 * (1 - 0.2 * bony)),
     ring(p, t, 1.1 * (1 - 0.2 * bony)),
-    ring(a1, d1, shaft),
-    ...bend(a1, j1, mid, 0.98, 0.95, 0.22),
+    // It tapers from its root to its tip (the user, 2026-11-17: they were tubes), a human one.
+    ring(a1, d1, shaft * (1 - 0.04 * taper)),
+    ...bend(a1, j1, mid, 0.98 - 0.02 * taper, 0.95 - 0.05 * taper, 0.22),
     // The glove's edge, rolled, then the bare finger a hair beyond it.
-    ring(mid, d2, 0.95 * shaft),
-    ring(along(mid, d2, 0.003), d2, 0.88 * shaft),
-    ...bend(along(mid, d2, 0.003), j2, b2, 0.86, 0.84),
+    ring(mid, d2, (0.95 - 0.05 * taper) * shaft),
+    ring(along(mid, d2, 0.003), d2, (0.88 - 0.05 * taper) * shaft),
+    ...bend(along(mid, d2, 0.003), j2, b2, 0.86 - 0.04 * taper, 0.84 - 0.07 * taper),
     // The xenomorph's last phalanx as wide as its claw's root, which goes on from it.
-    ring(b2, d3, 0.82 * (1 - 0.24 * bony)),
+    ring(b2, d3, (0.82 - 0.06 * taper) * (1 - 0.24 * bony)),
     // Its tip thinner inside the claw, which sheathes it: none of it through the claw.
-    ring(along(j2, d3, l3 - 0.001), d3, 0.7 * (1 - 0.4 * bony)),
+    // A round tip: the pad of the finger, not a cone.
+    ring(along(j2, d3, l3 - 0.003), d3, (0.7 + 0.02 * taper) * (1 - 0.4 * bony)),
+    ring(along(j2, d3, l3 + 0.003), d3, 0.46 * (1 - 0.4 * bony)),
     ring(along(j2, d3, l3 + 0.006), d3, 0),
   ];
 };
@@ -758,8 +765,10 @@ const shape = (
   // The palm starts as the sleeve's cuff does, vertex for vertex, its normals leaning to the fingers.
   const PALM = [
     [WRIST[1] - CUFF[0], CUFF[1] - WRIST[0], CUFF[3], CUFF[4]],
-    [0.025, 0, 0.043, 0.024],
-    [0.06, -0.002, 0.046, 0.019],
+    // The heel of the hand narrower than the knuckles and thick, the palm thinner toward the fingers
+    // (the user, 2026-11-17: it was a mitt, as wide at the wrist as at the knuckles).
+    [0.025, 0, 0.038, 0.0235],
+    [0.06, -0.002, 0.045, 0.018],
     [0.092, -0.004, 0.046, 0.0125],
     [0.104, -0.004, 0, 0],
   ];
@@ -989,14 +998,14 @@ const shape = (
     return k && to ? unit(mix(d, to, push)) : d;
   });
   const tp: Vec3 = [0.032, -0.01, 0.025];
-  digit(tp, [d1, d2, d2], 0.037, 0.0124, d1, 2, [0.6, 2.2, 0.7]);
+  digit(tp, [d1, d2, d2], 0.037, 0.0116, d1, 2, [0.6, 2.2, 0.7]);
   // The thumb's mound (the user, 2026-11-09: the thumb shows the most, holding a gun): from a
   // footprint on the palm round its root, its ring there pushed out onto the palm's surface, a
   // skin swells into the thumb halfway along its first bone. One piece with the palm.
   paint = () => tint;
   {
     // As the thumb is drawn (digit()): the xenomorph's thin bone, or the mound ended in a step.
-    const rings = finger(tp, d1, d2, d2, 0.037, 0.0124, d1, +claws);
+    const rings = finger(tp, d1, d2, d2, 0.037, 0.0116, d1, +claws);
     const [, x1, y1] = rings[1];
     const [c2, x2, y2] = rings[2];
     /** The palm's ring at `z`: its middle's height, half its width and its height. */
@@ -1014,9 +1023,7 @@ const shape = (
     };
     const foot = Array.from({ length: FS }, (_, k): [Vec3, Vec3] => {
       const a = (k * TAU) / FS;
-      const q = [0, 1, 2].map(
-        d => tp[d] + 1.7 * (x1[d] * Math.cos(a) + y1[d] * Math.sin(a)),
-      ) as Vec3;
+      const q = [0, 1, 2].map(d => tp[d] + 2 * (x1[d] * Math.cos(a) + y1[d] * Math.sin(a))) as Vec3;
       const [yc, w, h] = section(q[2]);
       // Out from the palm's axis onto its surface.
       const e = Math.hypot(q[0] / w, (q[1] - yc) / h) || 1;
@@ -1030,7 +1037,8 @@ const shape = (
     });
     // A third ring between, swollen: the mound.
     const mid = foot.map(([q, n], k): [Vec3, Vec3] => [
-      add(mix(q, top[k][0], 0.5), n.map(c => c * 0.003) as Vec3),
+      // The ball of the thumb: a fuller mound between the palm and the thumb's root.
+      add(mix(q, top[k][0], 0.5), n.map(c => c * 0.0065) as Vec3),
       unit(add(n, top[k][1])),
     ]);
     for (const [a, b] of [
@@ -2037,7 +2045,15 @@ export const createBody = (world?: World): Body => {
         }
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
         if (ninja) {
-          buckle(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build, color);
+          buckle(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build);
+          tails(
+            out,
+            s.pos[J.PELVIS],
+            s.rot[J.PELVIS],
+            build,
+            clock,
+            me ? Math.hypot(me.vx, me.vz) : 0,
+          );
         }
         // The right thumb presses the button of the katana or the plasma gun as it comes on.
         const tk = me?.wield ? 1 : me ? kindOf(me) : -1;

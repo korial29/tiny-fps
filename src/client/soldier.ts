@@ -80,12 +80,12 @@ import { flesh } from './flesh';
 import type { Pieces } from './store';
 import { CLOTH, dress, mask } from './mask';
 import { cigar } from './cigar';
-import { GOLD, pads } from './pads';
+import { pads } from './pads';
 import { ROLE } from '../shared/kit';
-import { armor } from './armor';
+import { SASH, armor } from './armor';
 import { CUP_F, crotch, hose, pack } from './pack';
 import { fetched, pouch, pouchAt } from './pouch';
-import { buckle } from './buckle';
+import { buckle, tails } from './buckle';
 import type { Tracer } from './beams';
 import {
   BEHIND,
@@ -105,7 +105,7 @@ import {
 } from './katana';
 import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
-import { CHITIN, STRIDE, add, basis, dot, sub, unit } from './mesh';
+import { CHITIN, STRIDE, TWILL, WEAVE, add, basis, dot, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, RESTS, axis, mul, rest, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
@@ -1217,6 +1217,8 @@ const LIMBS_X = [
 ];
 
 /** Draws the runner and gives back its solved skeleton, or nothing once a bolt has burnt it away. */
+/** The ninja's boots: black cloth, a shade lighter than his suit so they show on it. */
+const BOOT = [0.06, 0.06, 0.066];
 export const soldier = (
   out: Out,
   r: Runner,
@@ -1285,7 +1287,9 @@ export const soldier = (
   }
   if (ninja) {
     const { PANTS, UPPER, GLOVE, STRIPE, STRIPE_LOW, BELT } = REGION;
-    [colors[PANTS], colors[UPPER], colors[GLOVE]] = [CLOTH, CLOTH, CLOTH];
+    [colors[PANTS], colors[UPPER], colors[GLOVE]] = [CLOTH, CLOTH, BOOT];
+    // His boots: black cloth a shade over the suit's (the user, 2026-11-17), the sole darker.
+    [colors[UPPER], colors[REGION.SOLE]] = [BOOT, BOOT.map(c => c * 0.25)];
     // His belt is cut in a V by armor() (BELT in armor.ts), the skin's under it black.
     [colors[STRIPE], colors[STRIPE_LOW], colors[BELT]] = [color, color, CLOTH];
   }
@@ -1348,8 +1352,9 @@ export const soldier = (
     }
     if (ninja) {
       rigid(`buckle ${build} ${color}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
-        buckle(o, a, q, build, color),
+        buckle(o, a, q, build),
       );
+      tails(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build, r.t, Math.hypot(p.vx, p.vz));
     }
     if (!r.cut.eaten) {
       piece(out, r.cut, colors, lod, sink, r.face.w, armored);
@@ -1373,6 +1378,7 @@ export const soldier = (
         ninja && !helmets ? build : undefined,
         p.id,
         xeno,
+        ninja,
       );
       // The armour's plates are worn.
       gpu.forEach((d, i) => i >= n0 && d.f?.kind == 2 && (d.w = true));
@@ -1447,8 +1453,9 @@ export const soldier = (
     }
     if (ninja) {
       rigid(`buckle ${build} ${color}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
-        buckle(o, a, q, build, color),
+        buckle(o, a, q, build),
       );
+      tails(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build, r.t, Math.hypot(p.vx, p.vz));
     }
     if (xeno && lod) {
       // Its hands in its chitin (the user, 2026-11-17: the skin's texture on them): each a rigid
@@ -1481,6 +1488,50 @@ export const soldier = (
             }
           }
         });
+      }
+    } else if (ninja && lod) {
+      // His hands as the xenomorph's, rigid pieces a step of the curl (the user, 2026-11-17: improve
+      // the hands), so the shader's textures lie on them: the glove woven as his suit, and the
+      // plate on the back of the hand and the knuckles' shell in the guard's brushed metal.
+      const glove = colors[REGION.GLOVE];
+      const cup = +(!!p.rifled && !p.down && !floored(p) && !driving(r));
+      for (const j of [J.HAND_L, J.HAND_R]) {
+        const i = +(j == J.HAND_R);
+        const curl = Math.round(r.curls[i] * 20) / 20;
+        rigid(
+          `ninja hand ${lod < 3} ${i} ${curl} ${cup} ${build}`,
+          s.pos[j],
+          s.rot[j],
+          (o, a, q) => {
+            const at: ReturnType<typeof solve> = { ...s, pos: [], rot: [] };
+            [at.pos[j], at.rot[j]] = [a, q];
+            const from = o.length;
+            hands(
+              o,
+              at,
+              build,
+              [curl, curl],
+              glove,
+              glove,
+              { cup },
+              lod < 3,
+              j == J.HAND_R ? J.HAND_L : J.HAND_R,
+            );
+            const v = room(o, 0);
+            for (let n = from; n < o.length; n += STRIDE) {
+              if (v[n + 8] != -1) {
+                continue;
+              }
+              const k = v[n + 6] / glove[0];
+              if (Math.abs(k - 1) < 1e-6) {
+                v[n + 8] = WEAVE;
+              } else if (Math.abs(k - 0.72) < 1e-6 || v[n + 6] == 0.09) {
+                // The plate (0.72 of the glove's colour in hand()) and the shell (its SHELL).
+                [v[n + 6], v[n + 7], v[n + 9], v[n + 8]] = [SASH[0], SASH[1], SASH[2], TWILL];
+              }
+            }
+          },
+        );
       }
     } else {
       gloves(out, r, s, colors, lod, armored, LIMB.NONE, marine, xeno);
@@ -1521,7 +1572,7 @@ export const soldier = (
   if (plated) {
     const from = out.length;
     const n0 = gpu?.length ?? 0;
-    pads(out, s, build, ninja ? GOLD : (plate ?? [0.85, 0.86, 0.88]), !ninja, color, !lod, gpu);
+    pads(out, s, build, ninja ? SASH : (plate ?? [0.85, 0.86, 0.88]), !ninja, color, !lod, gpu);
     // And so are the bells and the pads.
     gpu?.forEach((d, i) => i >= n0 && (d.w = true));
     if (k > 0) {
@@ -1536,11 +1587,11 @@ export const soldier = (
         `mask ${color} ${!lod}`,
         s.pos[J.HEAD],
         s.rot[J.HEAD],
-        (o, a, q) => mask(o, a, q, 0, color, !lod),
+        (o, a, q) => mask(o, a, q, 0, color, !lod, SASH),
         build ? HEAD_SCALE : 1,
       );
     } else {
-      mask(out, s.pos[J.HEAD], s.rot[J.HEAD], build, color, !lod);
+      mask(out, s.pos[J.HEAD], s.rot[J.HEAD], build, color, !lod, SASH);
     }
     if (k > 0) {
       dissolve(out, from, k);

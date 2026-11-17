@@ -243,17 +243,19 @@ const TRUNK: Loft = {
   // ribs, the chest fullest at 1.37 m under the armpits, which are at 1.41 (4 cm higher than they
   // were), the shoulders falling gently to the neck. Each ring's centre forward and half depth from
   // the front and the back it is measured to.
+  // Flared (the user, 2026-11-18: less of a block, a trunk): 35 cm across under the armpits down to 29
+  // at the waist, where it was 33 to 31, and the waist thinner front to back; the hips wider under it.
   // The belt at the waist and a stripe down each side (both only on a space suit: see palette()).
   rings: [
-    [0.93, 0, 0.013, 0.178, 0.111, 0, PANTS],
-    [0.99, 0, 0.015, 0.176, 0.111, 0.25, BELT],
-    [1.03, 0, 0.011, 0.165, 0.12, 0.5, JACKET, ...SIDE],
-    [1.075, 0, 0.012, 0.159, 0.12, 0.75, JACKET, ...SIDE],
-    [1.12, 0, 0.012, 0.156, 0.121, 1, JACKET, ...SIDE],
-    [1.25, 0, 0.011, 0.158, 0.127, 1.73, JACKET, ...SIDE],
-    [1.3, 0, 0.014, 0.162, 0.131, 1.85, JACKET, ...SIDE],
-    [1.37, 0, 0.015, 0.166, 0.137, 1.97, JACKET, ...SIDE],
-    [1.41, 0, 0.007, 0.172, 0.138, 2, JACKET, ...SIDE],
+    [0.93, 0, -0.013, 0.19, 0.137, 0, PANTS],
+    [0.99, 0, 0.002, 0.182, 0.124, 0.25, BELT],
+    [1.03, 0, 0.0155, 0.152, 0.111, 0.5, JACKET, ...SIDE],
+    [1.075, 0, 0.016, 0.146, 0.109, 0.75, JACKET, ...SIDE],
+    [1.12, 0, 0.012, 0.147, 0.113, 1, JACKET, ...SIDE],
+    [1.25, 0, 0.011, 0.161, 0.126, 1.73, JACKET, ...SIDE],
+    [1.3, 0, 0.014, 0.169, 0.131, 1.85, JACKET, ...SIDE],
+    [1.37, 0, 0.015, 0.175, 0.137, 1.97, JACKET, ...SIDE],
+    [1.41, 0, 0.007, 0.179, 0.138, 2, JACKET, ...SIDE],
     [1.41, 0, 0.007, 0.249, 0.138, 2, JACKET],
     [1.445, 0, -0.003, 0.238, 0.135, 2, JACKET],
     [1.475, 0, -0.0085, 0.223, 0.1265, 2.03, JACKET],
@@ -264,6 +266,21 @@ const TRUNK: Loft = {
   ],
 };
 
+// Muscled and shapely (the user, 2026-11-17: they were sausages, a tube of a thigh over a knee wider
+// than it): a full thigh, its quadriceps forward, tapering to a lean knee; a calf bulging behind the
+// shin under it, lean again down to the ankle.
+// The knee (the user, 2026-11-17): its cap stands forward of the thigh's end and the shin's top, a
+// little wider there over the joint's knobs, a hollow under it.
+// Boots (the user, 2026-11-17: model boots): a lip round the shaft's top under the knee, a stouter
+// ankle, a shorter foot with a round toe box, and a thick sole as wide at the ground as at its welt
+// (it tapered to a point, a slipper's).
+// It bends in one place (the user, 2026-11-17: the fold's break): the thigh and the shin blend over
+// the 15 cm round the joint, not the 40 they did, which bent the leg in a curve.
+// Muscled buttocks (the user, 2026-11-17: they were flat): the pelvis' ring and the top two of each
+// leg stand 5 cm further back (then more), each cheek round on its own leg, a fold under them where the thigh
+// starts; the small of the back over them drawn in, so they stand out from it.
+// Rounder (the user, 2026-11-17: round the thighs and the buttocks): the thighs as wide as they are
+// deep nearly, the hips wider over them, the back of the thigh full under the buttock.
 // A leg to the sole: the shoe is its last rings. Its first ring is the pelvis' half, and it is not
 // written here.
 const LEG: Loft = {
@@ -273,28 +290,28 @@ const LEG: Loft = {
   far: [0, 3, 8, 11, 15, 18, 20, 22],
   rings: [
     [0.93, 0.1, 0, 0, 0, 0, PANTS, ...SIDE_LOW],
-    [0.85, 0.1, 0.006, 0.087, 0.103, 0.6, PANTS, ...SIDE_LOW],
-    [0.79, 0.1, 0.002, 0.079, 0.093, 0.785, PANTS, ...SIDE_LOW],
-    [0.72, 0.1, -0.002, 0.074, 0.084, 1, PANTS, ...SIDE_LOW],
-    [0.66, 0.1, -0.002, 0.072, 0.086, 1.088, PANTS, ...SIDE_LOW],
-    [0.6, 0.1, -0.003, 0.072, 0.088, 1.176, PANTS, ...SIDE_LOW],
-    [0.55, 0.1, -0.003, 0.081, 0.081, 1.25, PANTS, ...SIDE_LOW],
-    [0.52, 0.1, -0.004, 0.083, 0.082, 1.375, PANTS, ...SIDE_LOW],
-    [0.49, 0.1, -0.004, 0.083, 0.082, 1.5, PANTS, ...SIDE_LOW],
-    [0.455, 0.1, -0.001, 0.08, 0.079, 1.65, PANTS, ...SIDE_LOW],
-    [0.425, 0.1, 0.002, 0.082, 0.08, 1.779, UPPER],
-    [0.415, 0.1, 0.003, 0.079, 0.078, 1.811, UPPER],
-    [0.375, 0.1, 0.007, 0.064, 0.068, 1.9, UPPER],
-    [0.33, 0.1, 0.012, 0.057, 0.062, 2, UPPER],
-    [0.26, 0.1, 0.008, 0.05, 0.058, 2.025, UPPER],
-    [0.19, 0.1, 0.003, 0.054, 0.066, 2.05, UPPER],
-    [0.105, 0.1, 0, 0.048, 0.05, 2.3, UPPER],
-    [0.085, 0.1, 0.003, 0.048, 0.047, 2.5, UPPER],
-    [0.065, 0.1, 0.02, 0.054, 0.108, 3, UPPER],
-    [0.045, 0.1, 0.039, 0.057, 0.146, 3, UPPER],
-    [0.026, 0.1, 0.059, 0.057, 0.164, 3, SOLE],
-    [0.008, 0.1, 0.062, 0.037, 0.152, 3, SOLE],
-    [0, 0.1, 0.062, 0, 0, 3, SOLE],
+    [0.85, 0.1, -0.017, 0.098, 0.131, 0.6, PANTS, ...SIDE_LOW],
+    [0.79, 0.1, -0.003, 0.097, 0.119, 0.785, PANTS, ...SIDE_LOW],
+    [0.72, 0.1, 0.004, 0.091, 0.106, 1, PANTS, ...SIDE_LOW],
+    [0.66, 0.1, 0.004, 0.083, 0.097, 1, PANTS, ...SIDE_LOW],
+    [0.6, 0.1, 0.003, 0.074, 0.087, 1.03, PANTS, ...SIDE_LOW],
+    [0.55, 0.1, 0.001, 0.064, 0.075, 1.12, PANTS, ...SIDE_LOW],
+    [0.52, 0.1, 0.005, 0.064, 0.078, 1.3, PANTS, ...SIDE_LOW],
+    [0.49, 0.1, 0.006, 0.063, 0.078, 1.5, PANTS, ...SIDE_LOW],
+    [0.455, 0.1, 0, 0.057, 0.068, 1.72, PANTS, ...SIDE_LOW],
+    [0.425, 0.1, -0.005, 0.064, 0.074, 1.9, UPPER],
+    [0.415, 0.1, -0.006, 0.065, 0.075, 1.94, UPPER],
+    [0.375, 0.1, -0.01, 0.064, 0.076, 2, UPPER],
+    [0.33, 0.1, -0.011, 0.061, 0.074, 2, UPPER],
+    [0.26, 0.1, -0.005, 0.051, 0.061, 2.025, UPPER],
+    [0.19, 0.1, 0, 0.045, 0.054, 2.05, UPPER],
+    [0.105, 0.1, 0, 0.047, 0.053, 2.3, UPPER],
+    [0.085, 0.1, 0.004, 0.05, 0.055, 2.5, UPPER],
+    [0.065, 0.1, 0.022, 0.054, 0.098, 3, UPPER],
+    [0.045, 0.1, 0.045, 0.057, 0.132, 3, UPPER],
+    [0.026, 0.1, 0.058, 0.059, 0.146, 3, SOLE],
+    [0.008, 0.1, 0.058, 0.055, 0.143, 3, SOLE],
+    [0, 0.1, 0.058, 0, 0, 3, SOLE],
   ],
 };
 
@@ -311,25 +328,34 @@ const [SWING_R, SWING_L] = [JOINTS, JOINTS + 1];
 // wrist. Each segment hangs on its own bone alone; only the rings around the elbow blend the arm
 // and the forearm, and those around the wrist the forearm and the hand, so a bent elbow folds in
 // one place and both segments stay straight.
+// Muscled (the user, 2026-11-17: the elbow, the muscles, the fold): a full shoulder and a biceps
+// that stands forward over a lean arm above the elbow; the elbow narrow, its point behind; the
+// forearm's belly just under it, wider than it is deep, tapering to a lean wrist; the fold a little
+// tighter round the joint. The forearm leaner (the user, 2026-11-17: too big for the wrist and the
+// hand): 9 cm across under the elbow, 6.5 at the wrist, with no wide cuff over the glove.
 const ARM: Loft = {
   chain: [SWING_R, J.ARM_R, J.FOREARM_R, J.HAND_R],
   // More sides than the shoulder's side it hangs from (4, 8, 16) near and close: rounder (the user,
   // 2026-11-08); close, the eye's own arms included, 24 (17 until the user, 2026-11-09: fewer angles).
   n: [4, 10, 24],
   m: true,
-  far: [0, 2, 4, 7, 9, 10, 12, 14],
+  far: [0, 2, 5, 9, 11, 12, 14, 16],
   rings: [
     [SPLIT, 0.195, 0, 0, 0, 0, JACKET],
-    [1.36, 0.2, 0.004, 0.054, 0.063, 0.38, JACKET, ...SIDE],
-    [1.31, 0.2, 0.006, 0.053, 0.061, 0.5, JACKET, ...SIDE],
-    [1.225, 0.208, -0.002, 0.055, 0.063, 1.12, JACKET, ...SIDE],
-    [1.18, 0.214, 0.003, 0.052, 0.062, 1.5, JACKET, ...SIDE],
-    [1.135, 0.222, -0.002, 0.049, 0.056, 1.9, JACKET, ...SIDE],
-    [1.09, 0.222, -0.001, 0.05, 0.058, 2, JACKET, ...SIDE],
-    [1.05, 0.222, -0.001, 0.044, 0.055, 2, JACKET, ...SIDE],
-    [1.01, 0.222, 0, 0.04, 0.049, 2, JACKET, ...SIDE],
-    [0.975, 0.222, 0, 0.043, 0.048, 2.05, GLOVE],
-    [0.935, 0.222, 0, 0.038, 0.04, 2.6, GLOVE],
+    [1.36, 0.2, 0.004, 0.057, 0.067, 0.38, JACKET, ...SIDE],
+    [1.31, 0.2, 0.01, 0.056, 0.069, 0.5, JACKET, ...SIDE],
+    [1.225, 0.208, 0.002, 0.047, 0.055, 1, JACKET, ...SIDE],
+    // The fold (the user, 2026-11-17: the arms' folds): a ring close each side of the elbow's, so the
+    // arm and the forearm blend over 4 cm and the arm breaks there, not in a curve over 9.
+    [1.2, 0.211, -0.002, 0.044, 0.052, 1.2, JACKET, ...SIDE],
+    [1.18, 0.214, -0.006, 0.041, 0.049, 1.5, JACKET, ...SIDE],
+    [1.16, 0.218, -0.004, 0.043, 0.048, 1.8, JACKET, ...SIDE],
+    [1.135, 0.222, 0, 0.045, 0.048, 2, JACKET, ...SIDE],
+    [1.09, 0.222, 0, 0.042, 0.045, 2, JACKET, ...SIDE],
+    [1.05, 0.222, 0, 0.037, 0.04, 2, JACKET, ...SIDE],
+    [1.01, 0.222, 0, 0.033, 0.035, 2, JACKET, ...SIDE],
+    [0.975, 0.222, 0, 0.033, 0.035, 2.05, GLOVE],
+    [0.935, 0.222, 0, 0.03, 0.031, 2.6, GLOVE],
     [0.885, 0.222, -0.004, 0.032, 0.046, 3, GLOVE],
     [0.84, 0.222, -0.008, 0.033, 0.05, 3, GLOVE],
     [0.795, 0.222, -0.012, 0.029, 0.042, 3, GLOVE],

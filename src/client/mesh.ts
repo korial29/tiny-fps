@@ -77,6 +77,20 @@ export const CHITIN = -1.17;
 export const TUBE = -1.19;
 
 /**
+ * Brushed, scratched metal (the ninja's guard and shoulder pads, the user, 2026-11-17: a metallic
+ * texture with scratches; it was a twill): within GLOSS's band of the shader, so it keeps the clear
+ * coat and the wear, with a fine brushing across it and long pale scratches two ways, on its rest
+ * place.
+ */
+export const TWILL = -1.135;
+/**
+ * Woven cloth (the ninja's hood, the user, 2026-11-17: a weave on it), on its rest place: a plain
+ * weave of threads round the piece's upright axis and up it, each over one and under the next, a
+ * bump and a tone, and a slow mottle. Lit like -1, whose band of the shader's SPEC row it is in.
+ */
+export const WEAVE = -0.94;
+
+/**
  * Camera axes [right, up, forward]: forward is (-sin yaw cos pitch, sin pitch, -cos yaw cos pitch),
  * y up at roll 0. A positive roll leans the camera right: up tilts toward right.
  */

@@ -46,6 +46,10 @@ export interface Flesh {
   seed?: number;
   /** The xenomorph's skin: its chitin (CHITIN in mesh.ts). */
   chitin?: boolean;
+  /** The ninja's skin: his suit is woven cloth (WEAVE in mesh.ts). */
+  woven?: boolean;
+  /** The ninja's armour: its trunk is quilted (render.ts). */
+  quilt?: boolean;
 }
 
 /** What the vertex shader reads by texel (flesh.ts): four floats each, 2048 a row. */

@@ -32,6 +32,8 @@ import {
   SKIN_LAYER,
   STRIDE,
   basis,
+  WEAVE,
+  TWILL,
 } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
 import { furnishing } from './moonbase';
@@ -122,6 +124,15 @@ const GLOBE_FROM = 20;
 const GLOBE_IN = 60;
 const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
 
+/**
+ * The layer of the ninja's boots' uppers, in WEAVE's band (woven as it is): the shader adds their
+ * details on the rest place (the user, 2026-11-17): a band wound round the ankle, a cord tied under
+ * the lip of the shaft, and the split of the toe.
+ */
+const BOOT_LAYER = -0.88;
+/** The regions of a ninja's skin that are woven cloth: his suit, and his boots' uppers (the user, 2026-11-17: cloth, not leather). */
+const SUIT = [REGION.PANTS, REGION.UPPER, REGION.GLOVE, REGION.STRIPE, REGION.STRIPE_LOW];
+
 /** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
 const SAMPLES = 4;
 
@@ -157,7 +168,8 @@ if(Sm==1){vec4 h=g(Sb.y+gl_VertexID);k(int(h.x),P,N);int a=int(h.y);vec3 l=Sp[a]
 if(hb.x>=0.&&(hb.y>.5||a==${REGION.FLESH}))l=vec3(${CLOTH})+(l-vec3(${CLOTH}))*hb.x;
 float hw=0.;for(int i=0;i<3;i++){vec4 o=g(Sb.y+gl_VertexID/3*3+i);hw+=int(o.y)==${REGION.HAIR}?1.-(int(o.z)!=${REGION.HAIR}?o.w:0.):int(o.z)==${REGION.HAIR}?o.w:0.;}hw/=3.;
 float bw=float(${BARE_REGIONS.map(r => `a==${r}`).join('||')})*(hb.x<0.?1.:hb.x);
-C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:Sb.w==2&&a!=${REGION.BELT}?${CHITIN}:hw>.5&&hb.x<0.?${HAIR_ROOT}-${HAIR_SPAN}*clamp((${TOP}-ry)/.3,0.,1.):-1.+(${SKIN_LAYER}+1.)*bw,l.z);gl_Position=m*vec4(P,1);return;}
+float cw=Sb.w!=3?0.:${SUIT.map(r => `a==${r}`).join('||')}?1.:a==${REGION.FLESH}&&hb.x>=0.?1.-hb.x:0.;
+C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:Sb.w==2&&a!=${REGION.BELT}?${CHITIN}:hw>.5&&hb.x<0.?${HAIR_ROOT}-${HAIR_SPAN}*clamp((${TOP}-ry)/.3,0.,1.):-1.+(${SKIN_LAYER}+1.)*bw+(${WEAVE}+1.)*cw+(Sb.w==3&&a==${REGION.UPPER}?${BOOT_LAYER - WEAVE}:0.),l.z);gl_Position=m*vec4(P,1);return;}
 if(Sm==2){int b=Sb.y+gl_VertexID*${PLATE},j,K,t;vec4 h=g(b),G4=g(b+4),R4=g(b+5);j=int(h.y);K=int(h.z);t=int(h.x)*3;
 vec3 X[3],Z[3],W3[3],M3[3],XR[3],RR[3];
 for(int i=0;i<3;i++){k(int(g(Sb.z+t+i).x),X[i],Z[i]);XR[i]=kr;}
@@ -171,7 +183,7 @@ if(sn>1e-6){float cs=dot(o,q);vec3 u=e/sn;s=s*cs+cross(u,s)*sn+u*dot(u,s)*(1.-cs
 q-=s;l=length(q);q/=l>0.?l:1.;}
 vec3 l=g(b+6).xyz;bool pl=Sb.w!=0;
 if(l.x<0.)l=Sc[1];else if((K&${OWN})!=0){}else if(pl&&abs(h.w-(${GLOSS}))<.01)l=Sc[0];else if(pl&&(K&1)!=0)l=Sc[0]*.75;else if(pl&&G4.w>0.)l=l.x>.55?vec3(${SCRATCHED[1]}):vec3(${SCRATCHED[0]});
-Wa=Ak>0.?((K&1)!=0?2.:1.):0.;N=q;C=vec4(l.xy,h.w,l.z);gl_Position=m*vec4(P,1);return;}
+Wa=(Ak>0.?((K&1)!=0?2.:1.):0.)+(Sb.w==4?4.:0.);N=q;C=vec4(l.xy,h.w,l.z);gl_Position=m*vec4(P,1);return;}
 if(Sm==3){float f=c.y,ph=c.w<0.?-1.:floor((${CARD_BASE}-c.z)*${(1 / CARD_STEP).toFixed(1)})*1.7,T=Hs.w,fo=f*step(0.,ph),o2=fo*(.002+.0015*sin(T*2.7+ph));
 vec3 d=.6*f*Hs.xyz+fo*vec3(.005*sin(T*2.3+ph)+.003*sin(T*5.1+ph*1.7),.002*sin(T*3.1+ph*.7),.004*sin(T*1.9+ph*1.3)+.003)+n*o2;
 P=R[1].xyz+r(p+d);N=r(n);C=vec4(Hc.rg*c.x,c.z,Hc.b*c.x);Rp=vec3(c.w<0.?-1.-c.w:c.w,step(c.w,0.),0);Wa=-1.;gl_Position=m*vec4(P,1);return;}
@@ -229,6 +241,12 @@ export const SPEC = [
   [1.4, 90],
   [1.1, 34],
 ];
+/** Bands a metre up the ninja's bracers and shin guards: leather straps one over the next, 4.5 cm each. */
+const BANDS = 22;
+/** Diamonds a metre of the quilting on the trunk of the ninja's armour, along each diagonal: 2.5 cm each. */
+const QUILT = 40;
+/** Threads a metre of the woven cloth (WEAVE): 1.6 mm each, coarse enough to show on a runner a few metres off. */
+const PITCH = 620;
 /** Metres a height of 1 in a texture's alpha stands for. */
 const RELIEF = 0.06;
 
@@ -374,10 +392,20 @@ float k=hd*smoothstep(wd,wd*.3,d)*(1.-smoothstep(.85,1.,abs(t)))+hd*step(g2.y,.5
 sr=max(sr,k);}
 c=mix(c,c*vec3(.45,.33,.28),mo*.85);c=mix(c,c*vec3(1.05,.72,.7),bl*.6);c=mix(c,c*vec3(.74,.58,.48),fk*.75);c=mix(c,c*vec3(1.18,.98,.98)+.025,sr*.8);}
 float h=t.a*s*${RELIEF}+f1*-.00004*pore*(1.-sr)+f2*.00007*n6+f3*.0002*n18+.00012*sr,det=dot(dx,a);
-float wa=min(Wa,1.)*(step(abs(L-(${GLOSS})),.02)+step(abs(L-(${GILT})),.02)),ch=0.,gr=.5,sm=1.;
+float Wq=step(3.5,Wa),Wb=Wa-4.*Wq,nk=Wq*step(abs(L-(${GLOSS})),.02)*step(Wb,1.5),lz=nk*max(step(Rp.y,.6),step(.155,abs(Rp.x))*step(Rp.y,1.19)),qz=nk*(1.-lz)*smoothstep(1.,1.03,Rp.y);
+if(lz>0.){float t=fract(Rp.y*${BANDS}.),fl=lz*(1.-smoothstep(.2,.6,max(length(dFdx(Rp)),length(dFdy(Rp)))*${BANDS}.));
+c*=1.+fl*(.2*(1.-t)-.1-.5*smoothstep(.1,0.,t))+lz*.14*(n3(Rp*300.)-.5);h+=fl*.002*(1.-t)+lz*.00006*n3(Rp*500.);}
+if(qz>0.){vec3 gx=dFdx(Rp),gy=dFdy(Rp),w3=abs(cross(gx,gy));vec2 q=(w3.x>max(w3.y,w3.z)?Rp.zy:w3.y>w3.z?Rp.xz:Rp.xy)*${QUILT}.,f=(fract(vec2(q.x+q.y,q.x-q.y))-.5)*3.1416;
+float pz=cos(f.x)*cos(f.y),fq=qz*(1.-smoothstep(.2,.6,max(length(gx),length(gy))*${QUILT}.));
+c*=1.+fq*(.3*pz-.15-.35*smoothstep(.1,0.,pz));h+=fq*.0014*pz;}
+if(abs(L-(${TWILL}))<.004){vec3 q=Rp,q1=vec3(.8*q.x-.6*q.y,.6*q.x+.8*q.y,q.z),q2=vec3(.5*q.x+.87*q.y,q.z,-.87*q.x+.5*q.y);
+float pw=max(length(dFdx(q)),length(dFdy(q))),fa=1.-smoothstep(.3,1.,pw*1400.),fb=1.-smoothstep(.3,1.,pw*500.);
+float br=n3(q*vec3(45,1400,45))-.5,s1=smoothstep(.8,.86,n3(q1*vec3(18,520,18))),s2=smoothstep(.83,.88,n3(q2*vec3(520,16,16)+7.)),sc=max(s1,s2)*fb;
+c*=1.+fa*.45*br+.2*(n3(q*30.)-.5);c=mix(c,c*2.1+.06,sc*.75);h+=fa*.00004*br-.00012*sc;}
+float wa=min(Wb,1.)*(step(abs(L-(${GLOSS})),.02)+step(abs(L-(${GILT})),.02)),ch=0.,gr=.5,sm=1.;
 if(wa>0.){vec3 q=Rp;float pw=max(length(dx),length(dy)),lowy=smoothstep(1.1,.25,q.y);
 gr=n3(q*9.)*.6+n3(q*23.+3.)*.4;sm=.55+.9*n3(q*31.+9.);
-float cv=max(clamp(length(fwidth(N))/max(pw,1e-5)*.02,0.,1.),step(1.5,Wa)),ce=n3(q*140.)*.65+n3(q*420.+7.)*.35;
+float cv=max(clamp(length(fwidth(N))/max(pw,1e-5)*.02,0.,1.),step(1.5,Wb)),ce=n3(q*140.)*.65+n3(q*420.+7.)*.35;
 float zn=smoothstep(.35,.75,n3(q*5.+2.));ch=smoothstep(.87-.14*zn-.2*cv,.9-.14*zn-.2*cv,ce)*(1.-.85*smoothstep(.0006,.0025,pw));
 vec3 cl=floor(q*45.),hh=hs(cl+.5),d=normalize(hs(cl+3.7)-.5),e=q-(cl+.2+.6*hh)/45.;float al=dot(e,d);
 float sc=step(abs(al),.006+.007*hh.z)*step(hh.x,.4)*smoothstep(.0007,.0002,length(e-d*al))*(1.-smoothstep(.3,1.,pw*2500.));
@@ -393,6 +421,14 @@ kg=(1.-.5*gv)*(.5+mo);}
 float kr=step(abs(L-(${TUBE})),.005),rr=0.;
 if(kr>0.){float u=C.x*200.,fr=1.-smoothstep(.15,.4,fwidth(u));rr=smoothstep(.15,.6,abs(fract(u)-.5)*2.);
 c=vec3(.3,.305,.315)*mix(.8,.5+.75*rr,fr)*C.y;h+=fr*.0005*rr;rr=mix(.6,rr,fr);}
+float kw=clamp((L+1.)/(${WEAVE}+1.),0.,1.)*step(-1.,L)*step(L,-.5);
+if(kw>0.){vec3 gx=dFdx(Rp),gy=dFdy(Rp),w3=abs(cross(gx,gy));vec2 q=(w3.x>max(w3.y,w3.z)?Rp.zy:w3.y>w3.z?Rp.xz:Rp.xy)*${PITCH}.,i=floor(q),f=(q-i-.5)*3.1416;float fw=1.-smoothstep(.35,1.,max(length(gx),length(gy))*${PITCH}.),v=step(.5,mod(i.x+i.y,2.)),th=mix(cos(f.y)*(.55+.45*cos(f.x)),cos(f.x)*(.55+.45*cos(f.y)),v);
+c*=1.+kw*(fw*(.9*th-.35+.25*(v-.5))+.3*(n3(Rp*35.)-.5));h+=kw*fw*.00035*th;}
+float bz=step(${BOOT_LAYER - 0.025},L)*step(L,${BOOT_LAYER + 0.02});
+if(bz>0.){float y=Rp.y,an=atan(Rp.z,abs(Rp.x)-.1),wz=smoothstep(.085,.1,y)*(1.-smoothstep(.2,.215,y)),t=fract(y*34.+an*.3183),fb=1.-smoothstep(.3,.8,max(length(dFdx(Rp)),length(dFdy(Rp)))*34.);
+c*=1.+wz*fb*(.5*(1.-t)-.2-.6*smoothstep(.12,0.,t));h+=wz*fb*.0012*(1.-t);
+float tie=smoothstep(.383,.387,y)*(1.-smoothstep(.399,.403,y)),sp=smoothstep(.0035,.001,abs(abs(Rp.x)-.089))*step(Rp.z,-.125)*step(y,.075);
+c=mix(c,vec3(.2,.19,.18),tie*.8)*(1.-.8*sp);h+=tie*.0015-.001*sp;}
 float ah=1.,kh=step(-1.497,L)*step(L,-1.443)*smoothstep(.02,.12,(-1.45-L)/.04),hp=max(length(dx),length(dy)),st=0.,st2=0.;
 vec3 T=-nz((dFdx(L)*a+dFdy(L)*b)*sign(det));T=nz(T-n*dot(T,n));
 if(kh>0.){for(int i=-3;i<=3;i++){vec3 q=P+T*float(i)*.011;st+=vn3(q*650.);st2+=vn3(q*200.+4.);}
@@ -897,8 +933,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.bindVertexArray(none);
         gl.uniform1i(u.Sm, f.kind);
         gl.uniform1f(u.Ss, f.seed ?? 0);
-        // The skin's last: 2 its chitin (CHITIN), else whether an armour is plated.
-        gl.uniform4i(u.Sb, ...f.at, f.chitin ? 2 : +!!f.plate);
+        // The skin's last: 2 its chitin (CHITIN), 3 a woven suit (WEAVE), 4 the ninja's plated armour (quilted on the trunk, Wa + 4), else whether an armour is plated.
+        gl.uniform4i(u.Sb, ...f.at, f.chitin ? 2 : f.woven ? 3 : f.quilt ? 4 : +!!f.plate);
         gl.uniform4fv(u.Sq, f.d);
         gl.uniform3fv(u.Sp, f.pal);
         gl.uniform4fv(u.Sw, f.face);

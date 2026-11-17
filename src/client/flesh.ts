@@ -174,6 +174,8 @@ export const flesh = (
   seed = 0,
   /** The xenomorph's: its chitin. */
   chitin = false,
+  /** The ninja's: his suit is woven cloth. */
+  woven = false,
 ) => {
   const [vs, cs] = skinOf(s, hood !== undefined && face ? [hood, face] : undefined);
   const d = Float32Array.from(duals(s, pose));
@@ -196,6 +198,8 @@ export const flesh = (
         accent: a?.accent,
         seed,
         chitin,
+        woven: woven && kind == 1,
+        quilt: !!a?.ninja,
       },
     });
   go(1, cs, s.t.length);

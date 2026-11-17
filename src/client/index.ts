@@ -692,7 +692,9 @@ const play = (
           ? now - since < OUT_HINT * 1000
             ? 'get out'
             : ''
-          : boarding(me, rovers, carrying),
+          : ctl.beast
+            ? ''
+            : boarding(me, rovers, carrying),
       car ? kmh(car) : undefined,
     );
     const [up, out] = car?.ship ? limits(car, world) : [0, 0];

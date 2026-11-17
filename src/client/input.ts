@@ -208,16 +208,20 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
       c.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, c.pitch - e.movementY * SENS));
     }
   });
+  // The xenomorph's tail: held, it charges at the top of its strike; it strikes on the release.
+  const tail = () => {
+    const now = performance.now();
+    [sting, stinging] = [true, true];
+    twist ||= now - stung <= DOUBLE_CLICK_MS;
+    stung = twist ? -Infinity : now;
+  };
   // The left button fires, under the lock only; a release always counts. The right one stings
   // with the xenomorph's tail.
   on(document, 'mousedown', (e: MouseEvent) => {
     if (c.locked() && e.button == 2) {
       // On every weapon and vehicle the right button is G (the user, 2026-11-16); the xenomorph's is its tail.
       nade ||= !c.beast;
-      const now = performance.now();
-      [sting, stinging] = [true, true];
-      twist ||= now - stung <= DOUBLE_CLICK_MS;
-      stung = twist ? -Infinity : now;
+      tail();
     }
     if (c.locked() && !e.button) {
       c.keys |= KEY.FIRE;
@@ -259,7 +263,12 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
       onMute();
     }
     if (e.code == NADE && !e.repeat && c.locked()) {
-      nade = true;
+      // The xenomorph's G is its tail, held as the right button is (the user, 2026-11-17).
+      if (c.beast) {
+        tail();
+      } else {
+        nade = true;
+      }
     }
     if (bit && c.locked()) {
       // A press is a key going down: an auto-repeat is a hold, not a second tap.
@@ -282,9 +291,13 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   on(document, 'keyup', (e: KeyboardEvent) => {
     down.delete(e.code);
     c.keys &= ~keyBit(e.code);
+    if (e.code == NADE) {
+      stinging = false;
+    }
   });
   const release = () => {
     c.keys = pending = 0;
+    sting = stinging = false;
     down.clear();
     tapped.clear();
   };

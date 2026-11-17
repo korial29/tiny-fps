@@ -533,13 +533,8 @@ export const LAYERS: Voice[][] = [
     [2, 1050, -1.4, 0.006, 0.04, 0.16, 0.025, 1, 0, 1, 0.14],
     [3, 2500, 0, 0.004, 0.02, 0.12, 0.4, 0.15, 0, 1, 0.4],
   ],
-  // DEATH: an "aah" that shakes and falls away over half a second, with a rasp in the throat.
-  [
-    [1, 240, -0.8, 0.01, 0.2, 0.45, 0.05, 0.2, 0, 1, 0.45],
-    [2, 720, -0.8, 0.01, 0.2, 0.45, 0.05, 1, 0, 1, 0.3],
-    [2, 1200, -0.8, 0.01, 0.15, 0.4, 0.05, 1, 0, 1, 0.15],
-    [3, 1800, -0.5, 0.02, 0.15, 0.4, 0.6, 0.12, 0, 1, 0.35],
-  ],
+  // DEATH: a voice of its own, scream(); render() never reads this.
+  [],
   // AMMO: two clacks of metal, and a square blip that steps up a fifth.
   [
     [3, 7000, 0, 0.001, 0, 0.025, 0, 0.6, 0, 1, 0.55],
@@ -661,6 +656,9 @@ export const LOOPED: number[] = [
  * noise), silent at both ends (no click).
  */
 export const render = (id: number, layers: Voice[][] = LAYERS): Float32Array => {
+  if (layers == LAYERS && id == SOUND.DEATH) {
+    return scream();
+  }
   const voices = layers[id].map(
     (v, i) => [synth(v, id * 9 + i), Math.round((v[11] ?? 0) * RATE)] as const,
   );
@@ -668,6 +666,76 @@ export const render = (id: number, layers: Voice[][] = LAYERS): Float32Array => 
   return Float32Array.from({ length: Math.max(...voices.map(([v, d]) => d + v.length)) }, (_, i) =>
     Math.tanh(voices.reduce((sum, [v, d]) => sum + (v[i - d] ?? 0), 0)),
   );
+};
+
+/**
+ * The death cry of a human (the user, 2026-11-16: "a real scream", then lower and shorter), a
+ * source-filter voice: a saw for the vocal folds, its pitch thrown up to a strained 380 Hz, held
+ * shaking a quarter of a second, then falling away an octave and a half; every other period louder (the period doubling of a torn throat, the rasp), breath riding
+ * each period; four vowel formants gliding from a wide "aah" to a dying "uh", then a soft clip.
+ */
+export const scream = (): Float32Array => {
+  const n = Math.round(0.75 * RATE);
+  const out = new Float32Array(n);
+  // Formants: Hz at the start, at the end, bandwidth, gain.
+  const F = [
+    [800, 520, 100, 1],
+    [1200, 900, 120, 0.65],
+    [2550, 2350, 170, 0.32],
+    [3500, 3200, 250, 0.16],
+  ];
+  // Each formant's two past inputs and outputs, a band-pass biquad of 0 dB at its peak.
+  const z = F.map(() => [0, 0, 0, 0]);
+  let seed = 55;
+  const rand = () => ((seed = (Math.imul(seed, 1103515245) + 12345) | 0) >>> 0) / 2 ** 31 - 1;
+  let phase = 0;
+  let odd = 1;
+  let jitter = 0;
+  // Each period a little off the last in pitch and in loudness: a held synth note never is.
+  let wob = 0;
+  let shim = 1;
+  let peak = 0;
+  const ease = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+  for (let i = 0; i < n; i++) {
+    const t = i / RATE;
+    // Rises in 60 ms, climbs a little while held, falls from 0.3 s.
+    const fall = ease((t - 0.3) / 0.4);
+    jitter += (rand() * 0.03 - jitter) * 0.002;
+    const f0 =
+      (200 + 150 * ease(t / 0.06) + 30 * ease((t - 0.06) / 0.24) - 240 * fall) *
+      (1 + 0.025 * Math.sin(t * 2 * Math.PI * 5.5) * (1 - fall) + jitter + wob);
+    phase += f0 / RATE;
+    if (phase >= 1) {
+      phase -= 1;
+      odd = -odd;
+      wob = rand() * 0.012;
+      shim = 1 + rand() * 0.12;
+    }
+    const rasp = (1 + 0.35 * odd * (1 - fall * 0.6)) * shim;
+    // A pulse of breath on each opening of the folds, louder as the voice gives out.
+    const breath = rand() * (0.12 + 0.35 * fall) * (1 - phase);
+    const x = ((1 - 2 * phase) * rasp + breath) * (1 - 0.5 * fall);
+    let y = 0;
+    for (let k = 0; k < 4; k++) {
+      const [a, b, bw, g] = F[k];
+      const f = a + (b - a) * fall;
+      const w = (2 * Math.PI * f) / RATE;
+      const r = (Math.sin(w) * bw) / f / 2;
+      const s = z[k];
+      // s holds x[n-1], x[n-2], y[n-1], y[n-2].
+      const o = (r * (x - s[1]) + 2 * Math.cos(w) * s[2] - (1 - r) * s[3]) / (1 + r);
+      s[1] = s[0];
+      s[0] = x;
+      s[3] = s[2];
+      s[2] = o;
+      y += o * g;
+    }
+    // Comes in in 25 ms, fades out quadratically over the last 0.3 s.
+    const env = Math.min(1, t / 0.025) * Math.min(1, ((0.75 - t) / 0.3) ** 2);
+    out[i] = Math.tanh(y * 3) * env;
+    peak = Math.max(peak, Math.abs(out[i]));
+  }
+  return out.map(v => (v / peak) * 0.85);
 };
 
 /**

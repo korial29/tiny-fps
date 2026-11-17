@@ -61,7 +61,7 @@ import type { Out } from './verts';
 import type { Runner } from './soldier';
 import { skyline, trees } from './skyline';
 import { deepen, street } from './street';
-import { LAYERS, SIZE, textures } from './textures';
+import { LAYERS, PLATES, PLATE_TEXELS, SIZE, plates, textures } from './textures';
 import { drawDrops, fall } from './drops';
 import { traffic } from './traffic';
 import { vision, zones } from './vision';
@@ -278,7 +278,7 @@ export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y,Ss;uniform int Q;
 uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform float Sn;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
-uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform vec4 Ve[16];uniform vec2 Vn;out vec4 o;
+uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D Pl;uniform vec4 Ve[16];uniform vec2 Vn;out vec4 o;
 vec3 xv(vec3 c){return dot(c,vec3(.3,.59,.11))*vec3(.55,.8,1.2);}
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
@@ -384,11 +384,9 @@ float sc=step(abs(al),.006+.007*hh.z)*step(hh.x,.4)*smoothstep(.0007,.0002,lengt
 c=mix(c,vec3(dot(c,vec3(.3,.5,.2)))*vec3(.8,.68,.55)*(.55+.2*gr),(.3+.5*lowy)*smoothstep(.35,.75,gr));
 c=mix(c,vec3(.07,.075,.08),ch);c=mix(c,vec3(.7,.7,.72),sc*(1.-ch)*.9);
 h+=.00004*n3(q*900.)*(1.-smoothstep(.4,1.,pw*900.))-.00012*ch;}
-float kt=step(abs(L-(${CHITIN})),.005),kg=1.,kf=0.;
-if(kt>0.){vec3 q=Rp;float pw=max(max(length(dx),length(dy)),max(length(dFdx(Rp)),length(dFdy(Rp))));kf=smoothstep(.8,2.5,length(fwidth(N))/max(max(length(dx),length(dy)),1e-5)*.01);float kp=(1.-smoothstep(.04,.075,abs(Rp.y-1.37)))*smoothstep(.1,.12,abs(Rp.x))*(1.-smoothstep(.21,.24,abs(Rp.x))),fa=(1.-smoothstep(.35,1.,pw*160.))*(1.-kf)*(1.-kp),fb=(1.-smoothstep(.35,1.,pw*400.))*(1.-kf)*(1.-kp),fc=1.-smoothstep(.35,1.,pw*25.);
-vec3 qc=q*80.,ic=floor(qc);float d1=9.,d2=9.;
-for(int j=0;j<27;j++){vec3 cc=ic+vec3(j%3,(j/3)%3,j/9)-1.,pt=cc+.1+.8*hs(cc);float d=length(qc-pt);if(d<d1){d2=d1;d1=d;}else if(d<d2)d2=d;}
-float ed=d2-d1,gv=(1.-smoothstep(.02,.16,ed))*fa,gn=n3(q*380.)-.5,mo=n3(q*7.)*.6+n3(q*19.+5.)*.4;
+float kt=step(abs(L-(${CHITIN})),.005),kg=1.;
+if(kt>0.){vec3 q=Rp;float pw=max(max(length(dx),length(dy)),max(length(dFdx(Rp)),length(dFdy(Rp))));float kp=(1.-smoothstep(.04,.075,abs(Rp.y-1.37)))*smoothstep(.1,.12,abs(Rp.x))*(1.-smoothstep(.21,.24,abs(Rp.x))),fa=(1.-smoothstep(.35,1.,pw*160.))*(1.-kp),fb=(1.-smoothstep(.35,1.,pw*400.))*(1.-kp),fc=1.-smoothstep(.35,1.,pw*25.);
+float ed=texture(Pl,mat3(.8,.36,-.48,-.6,.48,-.64,0.,.8,.6)*q*${(80 / PLATES).toFixed(4)}).r,gv=(1.-smoothstep(.02,.16,ed))*fa,gn=n3(q*380.)-.5,mo=n3(q*7.)*.6+n3(q*19.+5.)*.4;
 c*=(1.+.3*(mo-.5)*fc)*(1.-.18*gv)*(1.+.1*gn*fb);
 h+=fa*.00022*smoothstep(0.,.45,ed)+fb*.00005*gn;
 kg=(1.-.5*gv)*(.5+mo);}
@@ -412,7 +410,7 @@ ac*=max(1.-vh*(smoothstep(ln-.03,ln,al)+step(1.5,kd)*(1.-smoothstep(0.,.1,al))),
 c*=.8+.4*hq.z;st=hq.z;st2=hq.y;}
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
-vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];if(kt>0.)R=vec2(.22*kg*(1.-kf),40.);if(kr>0.)R=vec2(.5*(.3+.7*rr),36.);
+vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];if(kt>0.)R=vec2(.22*kg,40.);if(kr>0.)R=vec2(.5*(.3+.7*rr),36.);
 vec3 y=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s),V=normalize(E-P),w=nz(n+m);
 float sd=max(dot(m,O),0.)*smoothstep(0.,.1,dot(n,O)),sv=1.;
 sd=mix(sd,.5*sqrt(max(1.-dot(T,O)*dot(T,O),0.))*smoothstep(-.3,.4,dot(n,O)),kx*.6);
@@ -443,7 +441,7 @@ c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(1.-kx)*(1.-.75*kb)*(.4+.6*mix(1.,t.a,s))+hl+
 vec3 r=reflect(-V,m),k=K1(r,0.);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
 c+=kb*k*(.01+.08*fr)*(.4+.6*sv);
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
-c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr)*(1.-kf)*(1.-.85*kr));
+c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr)*(1.-.85*kr));
 c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv)*mix(1.,sm*(1.-ch),wa);
 c+=wa*ch*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),60.)*.5;
 c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(-abs(r.y-.12)*18.)),step(abs(L-(${GILT})),.02)*(.45+.45*fr));
@@ -1055,8 +1053,17 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       'Sn',
       'Ve',
       'Vn',
+      'Pl',
     ]);
     gl.uniform1i(u.D, 1);
+    gl.uniform1i(u.Pl, 5);
+    // Unit 5: the chitin's plates (plates()), read in the skin's rest space; it repeats (REPEAT, the default).
+    const pn = PLATES * PLATE_TEXELS;
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_3D, gl.createTexture());
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.R8, pn, pn, pn, 0, gl.RED, gl.UNSIGNED_BYTE, plates());
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.activeTexture(gl.TEXTURE0);
     gl.uniform4fv(u.R, STILL);
     // The crater's bound: its centre and one over its half axes, for the relief's edge fading into the globe.
     const b = world.relief?.bound ?? [0, 0, 1, 1];

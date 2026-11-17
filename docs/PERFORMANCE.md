@@ -210,6 +210,25 @@ store's list, as in the game), one runner a frame, and the first frame of one in
 - **Its claws grew every hand vertex every frame**, about the wrist; `hand()` now grows its cached
   hand once (`grow`), hers too.
 
+### Its chitin (2026-11-17)
+
+The chitin's plates (`CHITIN`, #305) were a cellular noise worked out on every pixel of it: the
+two nearest of 27 jittered points. Timed on Tranquility at fixed views (an M-series Mac, 1881 by
+1103, medians of 160 frames, the GPU's time a frame):
+
+| View                   | master  | 27 cells a pixel | 3D texture |
+| ---------------------- | ------- | ---------------- | ---------- |
+| The map, no xenomorph  | 12.1 ms | 12.5 ms          | 12.4–13.0  |
+| One filling the screen | 13.6 ms | 15.4 ms          | 14.3–14.8  |
+| Three at 3 m           | 14.7 ms | 17.0 ms          | 15.6–16.0  |
+| Eight from 3 to 30 m   | 13.7 ms | 15.3 ms          | 14.4–14.9  |
+
+Three at 3 m went past a frame at 60 Hz. The plates are now read from a 3D texture made at load
+(`plates()` in `textures.ts`, unit 5): six cells a side that repeat, 16 texels a cell (at 8 the
+V of the edge distance filled in between texels and the grooves lost their crisp line), read
+along a turned axis so the repeat does not run along the body's. 175 ms at load. Searching 8
+cells in place of 27 saved only 0.4 ms: the rest was the loop's weight on the whole program.
+
 ## Rules for every change
 
 1. **Count the vertices of what you add, at every level.** A runner is drawn at lod 3 within 4 m

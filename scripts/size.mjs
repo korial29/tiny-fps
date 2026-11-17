@@ -36,7 +36,8 @@ const BUDGETS = [
   // 216 KB + 256 B until the glory kills, the xenomorph's and the katana's, its vision through walls (the user, 2026-11-16: 217 KB).
   // 217 KB until the xenomorph's view turned over onto a wall and its glory kill from afar (the user, 2026-11-16: 218 KB).
   // 218 KB until the xenomorph's bigger narrower head, its chitin and striated tubes (the user, 2026-11-16: 219 KB).
-  { file: 'dist/index.js', max: 219 * 1024 },
+  // 219 KB until its chitin's plates read from a 3D texture made at load (the user, 2026-11-17: 256 B more).
+  { file: 'dist/index.js', max: 219 * 1024 + 256 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

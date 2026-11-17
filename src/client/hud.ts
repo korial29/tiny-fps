@@ -175,7 +175,8 @@ export const HUD_CSS =
   `aside[data-v=pause] main,aside:not([data-v=pause]) .pm,aside[data-v=controls] [role=tab],aside[data-v=character] [role=tab],aside[data-v=character] blockquote,aside[data-v=character] address{display:none}` +
   `aside:not([data-v=controls]):not([data-v=character]) .bk{display:none}aside .bk{padding:11px 14px;text-align:left;font-size:15px;font-weight:700;color:#8d9aa7}aside .bk:hover{color:#fff}` +
   // The character: his live picture, beside it the body, the skin and the haircut, a row of chips
-  // each; under them the class, a card each, the ones the map does not offer greyed out.
+  // each; under them the class, a card each, the ones the map does not offer not shown (the user,
+  // 2026-11-17: hidden, not greyed out).
   `aside fieldset{display:grid;grid-template-columns:240px minmax(0,1fr);gap:10px 16px;align-content:start;margin:0;padding:0;border:0;min-width:0}aside fieldset h4{grid-column:1/-1;margin:0}` +
   `aside canvas{width:100%;height:auto;aspect-ratio:3/4;border:1px solid #26323e;border-radius:14px;cursor:inherit;background:radial-gradient(#26323e,#0d141c)}` +
   `aside .op{display:grid;gap:5px;align-content:start}aside fieldset small{margin-top:4px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8d9aa7}` +
@@ -185,7 +186,7 @@ export const HUD_CSS =
   `aside [role=radio]:hover{border-color:#3a4a5a}aside [role=radio]:disabled{opacity:.4;cursor:not-allowed}` +
   `aside [aria-checked=true],aside [aria-checked=true]:hover{border-color:#f7782a;box-shadow:0 0 0 1px #f7782a;color:#fff}` +
   `aside .sw [role=radio]{width:24px;height:24px;padding:0;border-radius:50%;border:2px solid #0b1016}aside .sw [aria-checked=true]{box-shadow:0 0 0 2px #f7782a}` +
-  `aside .cl{grid-column:1/-1;display:grid;gap:6px}` +
+  `aside .cl{grid-column:1/-1;display:grid;gap:6px}aside .cl [role=radio][hidden]{display:none}` +
   `aside .cl [role=radio]{display:grid;grid-template-columns:86px 1fr;gap:2px 10px;align-items:baseline;padding:9px 12px;border-radius:12px;text-align:left}aside .cl strong{grid-row:span 3;font-size:15px;font-weight:800}` +
   `aside .cl span{font-size:12px;font-weight:500;line-height:1.35;color:#b7c2cd}aside .cl .w{font-size:11px;font-weight:700;color:#ffb347}` +
   // A class's pros and cons, a + and a − before each.
@@ -523,7 +524,7 @@ export interface Hud {
   /**
    * The own player's character (BODY): the face is hers when she is the woman. `c` is what the
    * roster says he picked, shown chosen on the title screen, and `roles` the classes the map offers
-   * (ROLE): the others are greyed out.
+   * (ROLE): the others are hidden.
    */
   wear(body: number, c?: Choice, roles?: number[]): void;
   /**
@@ -957,7 +958,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         cuts(+!!body);
       }
       picked = { ...c, body: +!!body };
-      radios(3).forEach((b, i) => (b.disabled = !!roles && !roles.includes(i)));
+      radios(3).forEach((b, i) => (b.hidden = b.disabled = !!roles && !roles.includes(i)));
       lit();
       // The face's look: the man's, the woman's, or the xenomorph's head (face.ts).
       const look = c.role === ROLE.XENO ? LOOK.XENO : +!!body;

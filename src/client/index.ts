@@ -284,6 +284,8 @@ const play = (
   const killcam = createKillCam(world);
   /** The own last glory kill's victim, and until when (performance.now()) the kill camera stays on him. */
   let kill = { who: -1, until: 0 };
+  /** The killers of executions seen under way, and whether with the fists (no katana in hand): its kill is heard so. */
+  const fisted = new Map<number, boolean>();
   const tracer = createTracer();
   const balls = createBalls(world);
   const doors = createDoors(world);
@@ -468,6 +470,11 @@ const play = (
           }
         }
         match = s;
+        for (const q of s.players) {
+          if (q.exec === EXEC.KILLER && q.lock) {
+            fisted.set(q.id, !q.wield);
+          }
+        }
       }
       return;
     }
@@ -525,9 +532,15 @@ const play = (
         const v = match?.players.find(q => q.id == m.who);
         const at: [number, number, number] | undefined =
           v && m.who != you.id ? [v.x, v.y + 1.6, v.z] : undefined;
-        // The xenomorph's bite, or the katana's stroke through the neck.
-        audio.play(beast(m.by) ? SOUND.TACKLE : SOUND.SHING, at, 1, 0.6);
-        audio.play(beast(m.by) ? SOUND.XENO_PAIN : SOUND.ZAP, at, 0.7, 0.5);
+        // The xenomorph's bite, or the katana's stroke through the neck; the fists' punch that
+        // bursts the head (no katana in the killer's hand) is gloryfx.ts's.
+        if (beast(m.by)) {
+          audio.play(SOUND.TACKLE, at, 1, 0.6);
+          audio.play(SOUND.XENO_PAIN, at, 0.7, 0.5);
+        } else if (!fisted.get(m.by)) {
+          audio.play(SOUND.SHING, at, 1, 0.6);
+          audio.play(SOUND.ZAP, at, 0.7, 0.5);
+        }
         if (m.by == you.id) {
           fx.punch();
           kill = { who: m.who, until: performance.now() + KILLCAM.HOLD * 1000 };
@@ -674,11 +687,13 @@ const play = (
     const carrying = !!match?.flags.some(f => f.state === FLAG.CARRIED && f.by == you.id);
     const car = driving ? rovers[wheel] : undefined;
     ctl.pilot = !!car?.ship;
-    rd?.edge(!!me?.wield && !me.down);
-    // E on a foe close and ahead (weak enough for the katana): the host tries the glory kill before a seat.
+    // Anyone but the xenomorph sees the foes weak enough for an execution flash, the katana's or
+    // the fists' (the user, 2026-11-17).
+    rd?.edge(!!me && !ctl.beast && !me.down);
+    // E on a foe close and ahead (weak enough for an execution): the host tries the glory kill before a seat.
     const team = (id: number) => roster.find(p => p.id == id)?.team;
     const prey =
-      me && (ctl.beast || me.wield) && !seat && !me.lock
+      me && !seat && !me.lock
         ? glory(
             me,
             others.filter(p => team(p.id) !== you.team),

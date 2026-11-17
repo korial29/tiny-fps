@@ -180,6 +180,8 @@ export const SOUND = {
   ACID: 67,
   ROAR: 68,
   XENO_LAND: 69,
+  /** A fist bursting a head (the fists' glory kill): a deep thump, bone cracking, a wet splatter. */
+  SMASH: 70,
 } as const;
 
 /**
@@ -632,6 +634,17 @@ export const LAYERS: Voice[][] = [
     [0, 2900, 0, 0.001, 0, 0.006, 0, 0.5, 0, 1, 0.18, 0.026],
     [0, 4200, 0, 0.001, 0, 0.005, 0, 0.5, 0, 1, 0.14, 0.041],
     [3, 1800, 1, 0.01, 0.04, 0.12, 0.6, 0.2, 0, 1, 0.35, 0.015],
+  ],
+  // SMASH: the fist's weight, a sine thump diving, a sharp crack and the skull giving in three
+  // clicks of bright noise, then a wet splatter of wavering noise and a low squelch under it.
+  [
+    [2, 95, -3, 0.001, 0.01, 0.22, 0, 1, 0, 1, 1],
+    [3, 7000, -2, 0.001, 0, 0.05, 0, 0.6, 0, 1, 0.7],
+    [3, 9000, 0, 0.001, 0, 0.012, 0, 0.8, 0, 1, 0.4, 0.018],
+    [3, 7500, 0, 0.001, 0, 0.012, 0, 0.8, 0, 1, 0.32, 0.041],
+    [3, 8500, 0, 0.001, 0, 0.01, 0, 0.8, 0, 1, 0.25, 0.066],
+    [3, 1400, 1, 0.01, 0.06, 0.28, 0.7, 0.2, 0, 1, 0.6, 0.03],
+    [1, 230, -2, 0.005, 0.03, 0.14, 0.3, 0.25, 0, 1, 0.3, 0.025],
   ],
 ];
 

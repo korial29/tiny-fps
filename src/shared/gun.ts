@@ -125,7 +125,7 @@ export const step = (
 ): Strike => {
   const down = p.down > 0;
   const locked = !down && (p.lock ?? 0) > 0;
-  // A glory kill, the xenomorph's or the katana's execution: it dashes to its prey over the lock's
+  // A glory kill, the xenomorph's or an execution: it dashes to its prey over the lock's
   // first GLORY_DASH ticks (feast() in room.ts gives it the speed), then stays.
   const all = p.exec ? EXEC.TICKS : GLORY_TICKS;
   const killer = !p.wield || p.exec === EXEC.KILLER;
@@ -415,19 +415,20 @@ const duel = (p: PlayerState, i: Input): Strike => {
 export const sabering = (p: Pick<PlayerState, 'lock' | 'exec'>): boolean => !!p.lock && !p.exec;
 
 /**
- * A step of a katana's glory kill (EXEC), whatever the keys: the swordsman's two cuts start on
- * their ticks of the lock (EXEC.CUTS: a cut down, then one across whose strike is the lock's last
- * tick), and strike no one; his victim holds no weapon up. Predicted, as a cut is.
+ * A step of a glory kill's execution (EXEC), whatever the keys: with the katana in hand at its start
+ * (`wield`, kept through it) the swordsman's two cuts start on their ticks of the lock (EXEC.CUTS: a
+ * cut down, then one across whose strike is the lock's last tick), and strike no one; the fists'
+ * start no swing (their blows are drawn). His victim holds no weapon up. Predicted, as a cut is.
  */
 const execute = (p: PlayerState): Strike => {
   p.lock = Math.max(1, p.lock! - 1);
   p.away = p.pushes = 0;
   const e = EXEC.TICKS - p.lock;
   const at = (EXEC.CUTS as readonly number[]).indexOf(e);
-  const killer = p.exec === EXEC.KILLER;
-  p.cut = killer && at >= 0 ? [CUT.SLASH, CUT.RIGHT][at] : p.cut;
-  p.swing = killer && at >= 0 ? CUTS[p.cut!].ticks : Math.max(0, (p.swing ?? 0) - 1);
-  [p.wield, p.charge, p.heavy] = [killer && !!p.blade, 0, false];
+  const blade = p.exec === EXEC.KILLER && !!p.wield;
+  p.cut = blade && at >= 0 ? [CUT.SLASH, CUT.RIGHT][at] : p.cut;
+  p.swing = blade && at >= 0 ? CUTS[p.cut!].ticks : Math.max(0, (p.swing ?? 0) - 1);
+  [p.wield, p.charge, p.heavy] = [blade, 0, false];
   return STRIKE.NONE;
 };
 

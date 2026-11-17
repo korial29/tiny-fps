@@ -522,7 +522,7 @@ describe('a vehicle’s damage', () => {
     expect([SOUND.HULL, SOUND.ARC, SOUND.WRECK, SOUND.CRUMBLE]).toEqual([47, 48, 49, 50]);
     expect([SOUND.DOOR, SOUND.SHUT]).toEqual([45, 46]);
     expect([SOUND.ALARM, SOUND.STRIKE]).toEqual([58, 59]);
-    expect(LAYERS).toHaveLength(70);
+    expect(LAYERS).toHaveLength(71);
     for (const id of [47, 48, 49, 50]) {
       expect(LOOPED).not.toContain(id);
     }
@@ -636,5 +636,22 @@ describe('the xenomorph’s sounds', () => {
     const [paw, land] = [render(SOUND.CHITIN), render(SOUND.XENO_LAND)];
     expect(land.length).toBeGreaterThan(paw.length);
     expect(rms(land)).toBeGreaterThan(rms(paw));
+  });
+});
+
+describe('the fists’ glory kill', () => {
+  it('bursts a head with a short sound: the thump at once, the splatter ringing on after it', () => {
+    const s = render(SOUND.SMASH);
+    expect(LOOPED).not.toContain(SOUND.SMASH);
+    expect(s.length / RATE).toBeGreaterThan(0.25);
+    expect(s.length / RATE).toBeLessThan(0.6);
+    const level = (a: number, b: number) => {
+      const part = s.subarray(Math.floor(a * RATE), Math.floor(b * RATE));
+      return Math.sqrt(part.reduce((n, x) => n + x * x, 0) / part.length);
+    };
+    // Loudest in its first 50 ms, still heard at 150 ms, then dying.
+    expect(level(0, 0.05)).toBeGreaterThan(level(0.15, 0.2));
+    expect(level(0.15, 0.2)).toBeGreaterThan(0.01);
+    expect(level(0.15, 0.2)).toBeGreaterThan(level(0.3, 0.35));
   });
 });

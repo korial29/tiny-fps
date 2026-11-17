@@ -294,7 +294,8 @@ export const XENO_DASH = 1.4;
 export const [POUNCE_HP, POUNCE_STUN] = [2, 60];
 /**
  * The glory kill (the user, 2026-11-16, after DOOM 2016): an enemy with GLORY_HP health or less, up,
- * flashes to one with the katana in hand, who beheads him on E within GLORY_REACH metres. The
+ * flashes to anyone but the xenomorph, who executes him on E within GLORY_REACH metres (the user,
+ * 2026-11-17: the fists for everyone, the katana with it in hand; EXEC). The
  * xenomorph's takes any enemy up, with no flash (the user, 2026-11-16): E within GLORY_REACH metres
  * of him too (the user, 2026-11-17: only very close; 8 m before), in sight, and GLORY_ARC radians
  * of its look locks the two (`lock`, `foe`, as a saber
@@ -316,9 +317,19 @@ export const XENO_FEED = 1;
  * to EXEC.REACH metres, over GLORY_DASH ticks, cuts down (CUT.SLASH) at EXEC.CUTS[0] and drops him
  * to his knees, then spins into a cut across (CUT.RIGHT) at EXEC.CUTS[1], whose strike is the
  * lock's last tick: his head goes (LIMB.HEAD) and the body, still on its knee, tips over where it
- * is (feast.ts topple()).
+ * is (feast.ts topple()). Without the katana in hand it is the fists' (the user, 2026-11-17): the
+ * same lock, dashing to EXEC.FIST metres, a punch in the belly on the cut down's strike drops him on
+ * his knee the same, and a punch down on his head on the lock's last tick bursts it (LIMB.BURST).
+ * The fists strike nothing on the host: their blows are drawn (feast.ts pummel()).
  */
-export const EXEC = { TICKS: 88, REACH: 1.3, CUTS: [20, 74], KILLER: 1, VICTIM: 2 } as const;
+export const EXEC = {
+  TICKS: 88,
+  REACH: 1.3,
+  FIST: 0.7,
+  CUTS: [20, 74],
+  KILLER: 1,
+  VICTIM: 2,
+} as const;
 /** How much faster than a man the xenomorph runs (the user, 2026-11-16: a little, not twice). */
 export const XENO_PACE = 1.25;
 export const ACID_HP = 1;

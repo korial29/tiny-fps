@@ -8,6 +8,7 @@ import { BITE, inv } from './body';
 import {
   EXECUTE,
   FEAST,
+  PUMMEL,
   chew,
   clutched,
   crouch,
@@ -15,6 +16,8 @@ import {
   kneel,
   kneeling,
   mounted,
+  pummel,
+  pummeling,
   seize,
   spun,
   swaying,
@@ -23,8 +26,8 @@ import {
 } from './feast';
 import { KILLCAM } from './killcam';
 import type { Vec3 } from './mesh';
-import { JOINT as J, mul, rest, solve, turn } from './rig';
-import { animate, stance } from './soldier';
+import { JOINT as J, axis, mul, rest, solve, turn } from './rig';
+import { animate, grasp, stance } from './soldier';
 import type { Runner } from './soldier';
 
 const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -529,6 +532,216 @@ describe('the katana’s execution drawn', () => {
       frame(0, { down: 100, lost: LIMB.HEAD });
     }
     expect(gores.length).toBeGreaterThan(10);
+    expect(book.get(V)!.bleed).toBeLessThan(EXECUTE.BLEEDING);
+  });
+});
+
+describe('the fists’ execution drawn (pummel())', () => {
+  // The killer at the origin looking off to his right; his victim kneeling a fist's reach ahead (-z).
+  const killer = () => rest([0, 0, 0], -0.5);
+  // Standing as the fist goes in, kneeling and bowed toward him for the smash.
+  const feet: Vec3 = [0, 0, -EXEC.FIST];
+  const belly: Vec3 = [0, 1.1, -EXEC.FIST];
+  const head: Vec3 = [0, 1.17, -EXEC.FIST + 0.25];
+  const prey = { feet, belly, head };
+  const [, , home, held] = PUMMEL.GUT;
+  const [, raised, , smash] = PUMMEL.SMASH;
+
+  it('turns him to his victim, his feet where they stood', () => {
+    const p = killer();
+    const stood = solve(p);
+    for (const e of [0, home, raised, smash, smash + 4]) {
+      const q = pummel(p, e, prey);
+      expect(Math.cos(q.yaw)).toBeCloseTo(e < PUMMEL.TURN ? Math.cos(p.yaw) : 1, 6);
+      const s = solve(q);
+      // The feet stay on the floor as the hips sink.
+      expect(Math.abs(s.pos[J.FOOT_L][1] - stood.pos[J.FOOT_L][1])).toBeLessThan(0.015);
+      expect(Math.abs(s.pos[J.FOOT_R][1] - stood.pos[J.FOOT_R][1])).toBeLessThan(0.015);
+    }
+  });
+
+  it('bounds in over the dash: a dip, a push off the back foot, a stride in the air, the left foot down first', () => {
+    // A gait that left his feet behind him, as a dash drawn on the ground does.
+    const p = killer();
+    const rot = p.rot.slice();
+    for (const j of [J.THIGH_L, J.THIGH_R]) {
+      rot[j] = mul(rot[j], axis([1, 0, 0], -0.7));
+    }
+    const behind = { ...p, rot };
+    const dragged = solve(behind);
+    const floor = solve(p).pos[J.FOOT_L][1];
+    expect(Math.abs(dragged.pos[J.FOOT_L][2] - dragged.pos[J.PELVIS][2])).toBeGreaterThan(0.4);
+    const at = (e: number) => solve(pummel(behind, e, prey)).pos;
+    const { OFF, ON, TOP } = PUMMEL.LEAP;
+    // The dip before the push, lower than he stands.
+    expect(at(2)[J.PELVIS][1]).toBeLessThan(at(0)[J.PELVIS][1] - 0.05);
+    // Pushing off: the right foot still on the floor, behind him.
+    expect(at(OFF)[J.FOOT_R][1]).toBeCloseTo(floor, 2);
+    expect(at(OFF)[J.FOOT_R][2]).toBeGreaterThan(0.3);
+    // In the air: up by about TOP, the left knee driven up ahead, the right foot folded behind.
+    const mid = at((OFF + ON) / 2);
+    expect(mid[J.PELVIS][1]).toBeGreaterThan(at(0)[J.PELVIS][1] + TOP - 0.1);
+    expect(mid[J.SHIN_L][2]).toBeLessThan(mid[J.PELVIS][2] - 0.25);
+    expect(mid[J.FOOT_R][2]).toBeGreaterThan(mid[J.PELVIS][2] + 0.2);
+    for (const j of [J.FOOT_L, J.FOOT_R]) {
+      expect(mid[j][1]).toBeGreaterThan(floor + 0.4);
+    }
+    // Down on the left foot first, the right still coming in.
+    expect(at(ON + 2)[J.FOOT_L][1]).toBeCloseTo(floor, 2);
+    expect(at(ON + 2)[J.FOOT_R][1]).toBeGreaterThan(floor + 0.01);
+    // The knees take it: lower after the landing than in his stance.
+    expect(at(ON + 3)[J.PELVIS][1]).toBeLessThan(at(PUMMEL.LEAN.at(-1)![0] - 4)[J.PELVIS][1] - 0.1);
+    // Then his stance, the feet under him facing the victim (-z): the left ahead, the right back.
+    const [lead, trail] = [PUMMEL.LEAD.at(-1)!, PUMMEL.TRAIL.at(-1)!];
+    for (const e of [ON + 6, PUMMEL.GUT[2], EXEC.TICKS]) {
+      const s = at(e);
+      expect(s[J.FOOT_L][1]).toBeCloseTo(floor, 2);
+      expect(s[J.FOOT_R][1]).toBeCloseTo(floor, 2);
+      expect(s[J.FOOT_L][2]).toBeCloseTo(-lead[1], 2);
+      expect(s[J.FOOT_R][2]).toBeCloseTo(-trail[1], 2);
+    }
+  });
+
+  it('drives the right fist into his belly on the cut down’s strike, and down on his head on the lock’s last tick', () => {
+    expect(home).toBe(EXECUTE.KNEEL[0]);
+    expect(smash).toBe(EXEC.TICKS);
+    const fist = (e: number) => solve(pummel(killer(), e, prey)).pos[J.HAND_R];
+    // On his belly, from the front: the fist a little short of its middle, toward the killer.
+    expect(dist(fist(home), [belly[0], belly[1], belly[2] + PUMMEL.BELLY])).toBeLessThan(0.03);
+    expect(dist(fist(held), [belly[0], belly[1], belly[2] + PUMMEL.BELLY])).toBeLessThan(0.03);
+    // Cocked low and back before it, raised high over the shoulder before the smash.
+    expect(fist(PUMMEL.GUT[1])[1]).toBeLessThan(1.05);
+    expect(fist(PUMMEL.GUT[1])[2]).toBeGreaterThan(-0.05);
+    expect(fist(raised)[1]).toBeGreaterThan(1.75);
+    const top: Vec3 = [head[0], head[1] + PUMMEL.FACE[1], head[2] + PUMMEL.FACE[0]];
+    expect(dist(fist(smash), top)).toBeLessThan(0.03);
+    // Coming down, faster as it goes: more of the way in the second half.
+    const y = (e: number) => fist(e)[1];
+    expect(y(smash - 4) - y(smash)).toBeGreaterThan(y(PUMMEL.SMASH[2]) - y(smash - 4));
+  });
+
+  it('holds his head with the left hand for the smash, then lets go', () => {
+    const hand = (e: number) => solve(pummel(killer(), e, prey)).pos[J.HAND_L];
+    const nape: Vec3 = [head[0], head[1] + PUMMEL.NAPE[1], head[2] - PUMMEL.NAPE[0]];
+    expect(dist(hand(PUMMEL.GRAB[0]), nape)).toBeGreaterThan(0.2);
+    for (const e of [PUMMEL.GRAB[1], raised, smash]) {
+      expect(dist(hand(e), nape)).toBeLessThan(0.03);
+    }
+    expect(dist(hand(smash + PUMMEL.AFTER[0]), nape)).toBeGreaterThan(0.2);
+  });
+
+  it('bends into each blow and leans back as the fist goes up', () => {
+    const lean = (e: number) => {
+      const s = solve(pummel(killer(), e, prey));
+      return s.pos[J.NECK][2] - s.pos[J.PELVIS][2];
+    };
+    expect(lean(home)).toBeLessThan(lean(0) - 0.05);
+    expect(lean(raised)).toBeGreaterThan(lean(0));
+    expect(lean(smash)).toBeLessThan(lean(home));
+  });
+
+  it('lets go of the pose after the follow-through', () => {
+    const p = killer();
+    expect(pummel(p, EXEC.TICKS + PUMMEL.AFTER[0] + PUMMEL.AFTER[1], prey)).toBe(p);
+    expect(pummeling({ exec: EXEC.KILLER, lock: 5, wield: false })).toBe(true);
+    expect(pummeling({ exec: EXEC.KILLER, lock: 5, wield: true })).toBe(false);
+    expect(pummeling({ exec: EXEC.VICTIM, lock: 5 })).toBe(false);
+  });
+
+  it('draws the two through animate() and stance(): the gut punch’s blood and no sparks, his head burst, the gun put away', () => {
+    const [K, V] = [1, 2];
+    const looks = new Map([
+      [K, { role: ROLE.MARINE }],
+      [V, { role: ROLE.MARINE }],
+    ]);
+    const state = (id: number, over: Partial<PlayerState>): PlayerState => ({
+      id,
+      x: 0,
+      y: 0,
+      z: 0,
+      vy: 0,
+      yaw: 0,
+      pitch: 0,
+      ground: true,
+      ...STILL,
+      ...over,
+    });
+    const gores: [Vec3, number][] = [];
+    let shocks = 0;
+    const tracer = {
+      shock: () => shocks++,
+      spit() {},
+      gore: (p: Vec3, n: number) => gores.push([p, n]),
+    };
+    const book = new Map<number, Runner>();
+    const at = (e: number) => EXEC.TICKS - e;
+    const frame = (
+      lock: number,
+      over: Partial<PlayerState> = {},
+      kill: Partial<PlayerState> = {},
+    ) =>
+      animate(
+        book,
+        [
+          state(K, {
+            z: 0,
+            ammo: 20,
+            mag: 10,
+            lock,
+            foe: V,
+            exec: lock ? EXEC.KILLER : 0,
+            ...kill,
+          }),
+          state(V, {
+            z: -EXEC.FIST,
+            yaw: Math.PI,
+            lock,
+            foe: K,
+            exec: lock ? EXEC.VICTIM : 0,
+            ...over,
+          }),
+        ],
+        1 / 60,
+        undefined,
+        tracer,
+        undefined,
+        undefined,
+        looks,
+      );
+    frame(at(1));
+    for (let e = 2; e < EXEC.TICKS; e++) {
+      frame(at(e));
+      book.get(V)!.s = stance(book.get(V)!).s;
+      if (e == PUMMEL.GUT[2] + 1) {
+        // The fist in his belly as he goes down.
+        const s = stance(book.get(K)!).s;
+        const v = book.get(V)!.s!;
+        expect(dist(s.pos[J.HAND_R], v.pos[J.SPINE])).toBeLessThan(PUMMEL.BELLY + 0.08);
+      }
+    }
+    expect(grasp(book.get(K)!.p)).toEqual([0.45, 1]);
+    // The gut punch: blood from the belly and the mouth, no sparks.
+    expect(gores.map(g => g[1])).toEqual([PUMMEL.SPURT[0], PUMMEL.SPURT[1]]);
+    expect(shocks).toBe(0);
+    // His left hand on the head he holds, the right fist coming down on it.
+    const v = book.get(V)!.s!;
+    expect(dist(stance(book.get(K)!).s.pos[J.HAND_L], v.pos[J.HEAD])).toBeLessThan(0.2);
+    expect(stance(book.get(K)!).s.pos[J.HAND_R][1]).toBeGreaterThan(v.pos[J.HEAD][1]);
+    // The kill: the head bursts where it was drawn, a big burst, then the neck bleeds; the fist
+    // is home on it.
+    frame(0, { down: 100, lost: LIMB.BURST });
+    expect(dist(stance(book.get(K)!).s.pos[J.HAND_R], v.pos[J.HEAD])).toBeLessThan(0.2);
+    const burst = gores[2];
+    expect(burst[1]).toBe(PUMMEL.BURST[0]);
+    expect(dist(burst[0], [v.pos[J.HEAD][0], v.pos[J.HEAD][1] + 0.1, v.pos[J.HEAD][2]])).toBe(0);
+    expect(shocks).toBe(0);
+    expect(book.get(V)!.cut?.eaten).toBe(true);
+    // The punch follows through, then he is back to himself.
+    expect(book.get(K)!.pum).toBeGreaterThan(EXEC.TICKS - 1);
+    for (let k = 0; k < 60; k++) {
+      frame(0, { down: 100, lost: LIMB.BURST });
+    }
+    expect(book.get(K)!.pum).toBeUndefined();
     expect(book.get(V)!.bleed).toBeLessThan(EXECUTE.BLEEDING);
   });
 });

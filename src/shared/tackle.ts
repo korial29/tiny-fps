@@ -39,8 +39,9 @@ export const reaches = (a: PlayerState, b: PlayerState): boolean =>
 /**
  * The enemy `me` would glory kill with E (room.ts feast()), of `foes` as it sees them: the nearest
  * one up, in no lock and not seated, within GLORY_REACH on the floor plane, a body's height above or
- * below and GLORY_ARC of its look. With the katana (`w` undefined) with GLORY_HP health or less; the
- * xenomorph's in sight through the world `w`, at any health (the user, 2026-11-16).
+ * below and GLORY_ARC of its look. An execution, the katana's or the fists' (`w` undefined), with
+ * GLORY_HP health or less; the xenomorph's in sight through the world `w`, at any health (the user,
+ * 2026-11-16).
  */
 export const glory = (
   me: PlayerState,

@@ -1149,18 +1149,18 @@ export class Room {
   }
 
   /**
-   * E pressed by `p`, the xenomorph or one with the katana in hand: the nearest enemy who is up,
-   * within GLORY_ARC of its look where `p` drew him, and in no lock, is glory killed (glory()):
-   * within GLORY_REACH, with the katana with GLORY_HP or less, the xenomorph's in sight, at any
-   * health (the user, 2026-11-16). The two are locked (`lock`, `foe`),
+   * E pressed by `p`: the nearest enemy who is up, within GLORY_ARC of its look where `p` drew him,
+   * and in no lock, is glory killed (glory()): within GLORY_REACH, with GLORY_HP or less, the
+   * xenomorph's in sight, at any health (the user, 2026-11-16). The two are locked (`lock`, `foe`),
    * his flag dropped, `p` dashing in front of him: the xenomorph to a metre for GLORY_TICKS (the
-   * user, 2026-11-16), the swordsman to EXEC.REACH for an execution of EXEC.TICKS (`exec`, the user
-   * 2026-11-17: no longer at once); duel() ends it. True when it happened.
+   * user, 2026-11-16), anyone else for an execution of EXEC.TICKS (`exec`, the user 2026-11-17: no
+   * longer at once), to EXEC.REACH with the katana in hand, else to EXEC.FIST with the fists (the
+   * user, 2026-11-17: a glory kill for everyone); duel() ends it. True when it happened.
    */
   private feast(p: Player, view: number | undefined): boolean {
     const me = p.state;
     const xeno = this.kit(p).xeno;
-    if ((!xeno && !me.wield) || me.down || me.stun || me.lock || me.mode === MODE.RIDE) {
+    if (me.down || me.stun || me.lock || me.mode === MODE.RIDE) {
       return false;
     }
     // Where `p` drew them, with their health and lock as they are now.
@@ -1180,7 +1180,7 @@ export class Room {
     const [dx, dz] = [seen.x - me.x, seen.z - me.z];
     const d = Math.hypot(dx, dz) || 1;
     this.drop(foe.info.id);
-    const [lock, near] = xeno ? [GLORY_TICKS, 1] : [EXEC.TICKS, EXEC.REACH];
+    const [lock, near] = xeno ? [GLORY_TICKS, 1] : [EXEC.TICKS, me.wield ? EXEC.REACH : EXEC.FIST];
     for (const [a, b, exec] of [
       [p, foe, EXEC.KILLER],
       [foe, p, EXEC.VICTIM],
@@ -1211,8 +1211,8 @@ export class Room {
       Object.assign(q, FREE);
       return;
     }
-    // A glory kill (feast()): held to its end, whatever the keys, then the head is eaten, or cut
-    // off on the strike of the execution's last cut.
+    // A glory kill (feast()): held to its end, whatever the keys, then the head is eaten, cut off
+    // on the strike of the execution's last cut, or burst by its last punch (no katana in hand).
     const [x, y] = [p, o].map(r => this.kit(r).xeno);
     const exec = !!q.exec;
     if (x !== y || exec) {
@@ -1220,13 +1220,14 @@ export class Room {
         return;
       }
       const [eater, prey] = (exec ? q.exec === EXEC.KILLER : x) ? [p, o] : [o, p];
+      const head = !exec ? LIMB.EATEN : eater.state.wield ? LIMB.HEAD : LIMB.BURST;
       Object.assign(q, FREE);
       Object.assign(o.state, FREE);
       eater.state.hits = (eater.state.hits + 1) & 255;
       const [dx, dz] = [prey.state.x - eater.state.x, prey.state.z - eater.state.z];
       const d = Math.hypot(dx, dz) || 1;
       this.harm(prey, Infinity, eater, FRAG.GLORY, felled(FALL.STRUCK, dx / d, dz / d));
-      prey.state.lost = exec ? LIMB.HEAD : LIMB.EATEN;
+      prey.state.lost = head;
       // The xenomorph that ate him gets XENO_FEED health back (the user, 2026-11-17).
       if (!exec) {
         eater.state.hp = Math.min(eater.state.hp + XENO_FEED, this.kit(eater).hp);

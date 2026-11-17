@@ -42,7 +42,9 @@ const BUDGETS = [
   // the bodies that are down. 512 B more for the two together, which pack less tight than apart
   // (the user, 2026-11-17: 223.5 KB).
   // 223.5 KB until the E prompt under the crosshair and the glory kill's that pulses (the user, 2026-11-17: 224.5 KB).
-  { file: 'dist/index.js', max: 224 * 1024 + 512 },
+  // 224.5 KB until the xenomorph's fixes: no vehicles, a glory kill up close that heals it, G held for the tail
+  // (the user, 2026-11-17: 225 KB).
+  { file: 'dist/index.js', max: 225 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

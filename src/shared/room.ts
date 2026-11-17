@@ -59,6 +59,7 @@ import {
   PUNCH_HITS,
   PUNCH_MEMORY,
   PUNCH_STUN,
+  XENO_FEED,
 } from './constants';
 import { CHEST, crossing, fends, knock, limbOf, roll, sting, strike, swingOf } from './blade';
 import { Bot } from './bot';
@@ -1150,8 +1151,8 @@ export class Room {
   /**
    * E pressed by `p`, the xenomorph or one with the katana in hand: the nearest enemy who is up,
    * within GLORY_ARC of its look where `p` drew him, and in no lock, is glory killed (glory()):
-   * with the katana within GLORY_REACH and with GLORY_HP or less, the xenomorph's within
-   * GLORY_FAR, in sight, at any health (the user, 2026-11-16). The two are locked (`lock`, `foe`),
+   * within GLORY_REACH, with the katana with GLORY_HP or less, the xenomorph's in sight, at any
+   * health (the user, 2026-11-16). The two are locked (`lock`, `foe`),
    * his flag dropped, `p` dashing in front of him: the xenomorph to a metre for GLORY_TICKS (the
    * user, 2026-11-16), the swordsman to EXEC.REACH for an execution of EXEC.TICKS (`exec`, the user
    * 2026-11-17: no longer at once); duel() ends it. True when it happened.
@@ -1226,6 +1227,10 @@ export class Room {
       const d = Math.hypot(dx, dz) || 1;
       this.harm(prey, Infinity, eater, FRAG.GLORY, felled(FALL.STRUCK, dx / d, dz / d));
       prey.state.lost = exec ? LIMB.HEAD : LIMB.EATEN;
+      // The xenomorph that ate him gets XENO_FEED health back (the user, 2026-11-17).
+      if (!exec) {
+        eater.state.hp = Math.min(eater.state.hp + XENO_FEED, this.kit(eater).hp);
+      }
       return;
     }
     const lead = (q.pushes ?? 0) - (o.state.pushes ?? 0);
@@ -1414,11 +1419,12 @@ export class Room {
 
   /**
    * A press of USE on foot: the nearest rover within ROVER.ENTER_R on the floor plane with a seat
-   * for him, the wheel first; a flag carrier only rides. Not while down, stumbling or in a lock.
+   * for him, the wheel first; a flag carrier only rides. Not while down, stumbling or in a lock, and
+   * never the xenomorph (the user, 2026-11-17).
    */
   private enter(p: Player): void {
     const q = p.state;
-    if (q.down || q.stun || q.lock || q.mode === MODE.RIDE) {
+    if (q.down || q.stun || q.lock || q.mode === MODE.RIDE || this.kit(p).xeno) {
       return;
     }
     const carrier = this.ctf.carrying(p.info.id) >= 0;

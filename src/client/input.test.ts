@@ -203,6 +203,24 @@ describe('createInput', () => {
     expect(right()).toBe(KEY.BLADE);
   });
 
+  it('holds the xenomorph’s tail on G while it is down, and lets it go only at the release', () => {
+    make();
+    lock(true);
+    ctl.beast = true;
+    key('keydown', 'KeyG');
+    // An auto-repeat is still the hold, not a fresh press.
+    key('keydown', 'KeyG', true);
+    expect([ctl.take(), ctl.take(), ctl.take()]).toEqual([KEY.BLADE, KEY.BLADE, KEY.BLADE]);
+    key('keyup', 'KeyG');
+    expect(ctl.take()).toBe(0);
+    // A second press this soon is the tail's special, as a double right click.
+    key('keydown', 'KeyG');
+    expect(ctl.take()).toBe(KEY.BLADE | KEY.SPECIAL);
+    // A lost lock lets it go.
+    lock(false);
+    expect(ctl.take()).toBe(0);
+  });
+
   it('holds KEY.USE while E is down, on every step, and drops it at the release', () => {
     make();
     lock(true);

@@ -6,7 +6,8 @@ import {
   CLING_WALK,
   CUTS,
   GLORY_DASH,
-  GLORY_FAR,
+  GLORY_REACH,
+  XENO_FEED,
   EXEC,
   GLORY_HP,
   GLORY_TICKS,
@@ -444,6 +445,21 @@ describe('the claws and the tail', () => {
     }
   });
 
+  it('never strikes with the tail while it is held, however long: only at the release', () => {
+    const p = at(-20, 0, { z: 50, yaw: 0 });
+    const { hold, ticks } = TAILS[STING.LASH];
+    for (let k = 0; k < 5 * HEAVY_MAX; k++) {
+      expect(hit(p, KEY.BLADE)).not.toBe(STRIKE.CUT);
+    }
+    expect([p.swing, p.charge, p.heavy]).toEqual([ticks - hold, HEAVY_MAX, false]);
+    hit(p, 0);
+    let n = 1;
+    while (hit(p, 0) !== STRIKE.CUT) {
+      n++;
+    }
+    expect(n).toBe(swingOf(p, TAILS).strike);
+  });
+
   it('charges the tail at the top of its wind-up while the right button is held', () => {
     const p = at(-20, 0, { z: 50, yaw: 0 });
     const { hold, ticks } = TAILS[STING.STAB];
@@ -540,6 +556,26 @@ describe('the xenomorph in a room', () => {
     Object.assign(a, { x: 20, y: 10, z: 51, yaw: 0, pitch: 0, mode: MODE.GROUND, stun: 0 });
     Object.assign(b, { x: 20, y: 10, z: 50, yaw: Math.PI, pitch: 0, mode: MODE.GROUND, stun: 0 });
   };
+
+  it('never takes a vehicle: E by a rover seats a marine, not the xenomorph (the user, 2026-11-17)', () => {
+    const [sx, sy, sz] = ROOFTOPS.teams[0].spawns[0];
+    const r = new Room({}, { ...ROOFTOPS, rovers: [[sx + 3, sy, sz, 0]] });
+    const conns = [ROLE.XENO, ROLE.MARINE].map((role, k) => {
+      const c: Conn = { send: () => {} };
+      r.connect(c);
+      r.receive(c, JSON.stringify({ t: 'join', name: `p${k}`, role }));
+      return c;
+    });
+    const inner = r as unknown as Inner;
+    const ps = [0, 1].map(k => inner.players().find(p => p.info.name == `p${k}`)!);
+    for (const [k, p] of ps.entries()) {
+      Object.assign(p.state, { x: sx + 1.5, y: sy, z: sz, mode: MODE.GROUND, stun: 0 });
+      p.bank = 99;
+      inner.apply(p, { seq: 1, keys: KEY.USE, yaw: 0, pitch: 0 });
+      expect(p.state.mode === MODE.RIDE).toBe(k == 1);
+    }
+    expect(conns).toHaveLength(2);
+  });
 
   it('spawns with its own health, and the marine with his', () => {
     const { ps } = room(ROLE.XENO, ROLE.MARINE);
@@ -645,7 +681,7 @@ describe('the xenomorph in a room', () => {
     expect(m.state.hp).toBe(HP_MAX - 2 * POUNCE_HP);
   });
 
-  it('glory kills on E a foe it faces, close, at any health: both held GLORY_TICKS, then his head eaten', () => {
+  it('glory kills on E a foe it faces, close, at any health: both held GLORY_TICKS, then his head eaten, a health back', () => {
     const { inner, ps, sent } = room(ROLE.XENO, ROLE.MARINE);
     const [x, m] = ps;
     face(x.state, m.state);
@@ -661,14 +697,17 @@ describe('the xenomorph in a room', () => {
       return held;
     };
     // At full health and armour (the user, 2026-11-16: whenever it wants), but out of its look,
-    // then too far: nothing.
+    // then too far: six metres off is no longer close (the user, 2026-11-17).
     Object.assign(m.state, { hp: HP_MAX, armor: ARMOR_MAX });
+    x.state.hp = XENO_HP - 2;
     expect(e(Math.PI)).toBe(0);
-    m.state.z = 51 - GLORY_FAR - 0.3;
-    expect(e(0)).toBe(0);
-    // Six metres off, ahead (the user, 2026-11-16: from afar): held, and it dashes to a metre of
-    // him over the lock's first GLORY_DASH ticks, fast, then stays.
     m.state.z = 45;
+    expect(e(0)).toBe(0);
+    m.state.z = 51 - GLORY_REACH - 0.3;
+    expect(e(0)).toBe(0);
+    // Two metres off, ahead: held, and it dashes to a metre of him over the lock's first
+    // GLORY_DASH ticks, then stays.
+    m.state.z = 49;
     go(x, KEY.USE, 0);
     expect([x.state.lock, x.state.foe, m.state.lock, m.state.foe]).toEqual([
       GLORY_TICKS,
@@ -676,14 +715,13 @@ describe('the xenomorph in a room', () => {
       GLORY_TICKS,
       x.info.id,
     ]);
-    expect(Math.hypot(x.state.vx, x.state.vz)).toBeGreaterThan(XENO.sprint);
     for (let k = 0; k < GLORY_DASH; k++) {
       go(x, 0, 0);
     }
-    expect(x.state.z).toBeCloseTo(46, 3);
+    expect(x.state.z).toBeCloseTo(50, 3);
     expect([x.state.vx, x.state.vz]).toEqual([0, 0]);
     go(x, 0, 0);
-    expect(x.state.z).toBeCloseTo(46, 3);
+    expect(x.state.z).toBeCloseTo(50, 3);
     const [mx, mz] = [m.state.x, m.state.z];
     for (let k = 0; k < GLORY_TICKS - 3 - GLORY_DASH; k++) {
       go(x, KEY.FORWARD | KEY.SPRINT, 0);
@@ -699,6 +737,21 @@ describe('the xenomorph in a room', () => {
     expect([m.state.lost, x.state.lock, m.state.lock]).toEqual([LIMB.EATEN, 0, 0]);
     const frag = sent.map(s => JSON.parse(s)).find(s => s.t == 'frag');
     expect(frag).toMatchObject({ by: x.info.id, who: m.info.id, how: FRAG.GLORY });
+    // Eating him gave it XENO_FEED health back (the user, 2026-11-17), never past XENO_HP.
+    expect(x.state.hp).toBe(XENO_HP - 2 + XENO_FEED);
+  });
+
+  it('gets no more than XENO_HP from a foe it eats', () => {
+    const { inner, ps } = room(ROLE.XENO, ROLE.MARINE);
+    const [x, m] = ps;
+    face(x.state, m.state);
+    x.bank = m.bank = 999;
+    inner.apply(x, { seq: 1, keys: KEY.USE, yaw: 0, pitch: 0 });
+    for (let k = 2; k < GLORY_TICKS + 4; k++) {
+      inner.apply(x, { seq: k, keys: 0, yaw: 0, pitch: 0 });
+    }
+    expect(m.state.lost).toBe(LIMB.EATEN);
+    expect(x.state.hp).toBe(XENO_HP);
   });
 
   it('dashes to its prey the same from a snapshot: the predictor replays it to the bit', () => {
@@ -722,14 +775,20 @@ describe('the xenomorph in a room', () => {
     expect([s.vx, s.vz]).toEqual([0, 0]);
   });
 
-  it('glory kills from afar only what it sees: no prey behind a wall', () => {
-    // The block of the pit stands from x = 1 to 4: a foe past it is hidden, one this side is not.
+  it('glory kills only close, and only what it sees: no prey behind a wall', () => {
+    // A thin wall at x = 1: a foe past it is hidden, one as close in the open is not.
+    const [floor] = pit.def.brushes;
+    const walled = build({ ...pit.def, brushes: [floor, box([1, 0, -10], [1.3, 5, 10])] });
+    const open = build({ ...pit.def, brushes: [floor] });
     const me = at(0, 0, { yaw: EAST });
     const foe = (x: number) => ({ ...at(x, 0), id: 7, hp: HP_MAX });
-    expect(glory(me, [foe(6)], pit)).toBeUndefined();
+    expect(glory(me, [foe(2.2)], walled)).toBeUndefined();
+    expect(glory(me, [foe(2.2)], open)?.id).toBe(7);
+    // Only very close (the user, 2026-11-17): GLORY_REACH, as the katana.
     const q = at(-3, 0, { yaw: WEST });
-    expect(glory(q, [foe(-3 - GLORY_FAR + 0.5)], pit)?.id).toBe(7);
-    expect(glory(q, [foe(-3 - GLORY_FAR - 0.5)], pit)).toBeUndefined();
+    expect(glory(q, [foe(-3 - GLORY_REACH + 0.2)], pit)?.id).toBe(7);
+    expect(glory(q, [foe(-3 - GLORY_REACH - 0.2)], pit)).toBeUndefined();
+    expect(glory(q, [foe(-9)], pit)).toBeUndefined();
     // The katana's: close, and weak.
     expect(glory(q, [foe(-4)])).toBeUndefined();
     expect(glory(q, [{ ...foe(-4), hp: GLORY_HP }])?.id).toBe(7);

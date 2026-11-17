@@ -40,8 +40,8 @@ const BUDGETS = [
   // 4 KB more for the glory kills (the user, 2026-11-16 and 17, from 218 to 222 KB before the head above): watched in
   // third person, the xenomorph seizing its prey, his panic and blood, the katana's execution and the floor under
   // the bodies that are down. 512 B more for the two together, which pack less tight than apart
-  // (the user, 2026-11-17: 223.5 KB).
-  { file: 'dist/index.js', max: 223 * 1024 + 512 },
+  // (the user, 2026-11-17: 223.5 KB). 768 B more for the glory kills' sounds (the user, 2026-11-17: 224.25 KB).
+  { file: 'dist/index.js', max: 224 * 1024 + 256 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

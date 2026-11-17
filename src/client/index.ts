@@ -38,6 +38,7 @@ import { beats, cues, say } from './beats';
 import { createBody } from './body';
 import { createCrawl } from './crawl';
 import { chasePitch, createChase } from './chase';
+import { createGloryFx } from './gloryfx';
 import { KILLCAM, createKillCam, sees } from './killcam';
 import { createCombat, sight, voiceOf } from './combat';
 import { createDoors } from './doors';
@@ -300,6 +301,11 @@ const play = (
     beast,
   );
   const taunts = createTaunts(audio, speaker, id => roster.find(p => p.id == id)?.team, beast);
+  const gloryfx = createGloryFx(
+    (id, at, gain, rate) => audio.play(id, at, gain, rate),
+    id => voiceOf(id, roster.find(p => p.id == id)?.body),
+    beast,
+  );
   /** Each face on the radio, drawn once for his look and colour (a portrait costs two frames). */
   const faces = new Map<string, HTMLCanvasElement>();
   const wrecks = createWrecks(world, { tracer, audio, fx });
@@ -809,6 +815,8 @@ const play = (
     if (look) {
       body.aim(look.local);
     }
+    // The glory kills' sounds, on their locks' ticks (gloryfx.ts).
+    gloryfx.frame(me ? [me, ...others] : others);
     combat.frame(
       me &&
         look && {

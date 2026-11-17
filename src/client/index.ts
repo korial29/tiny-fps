@@ -46,7 +46,7 @@ import { flagDraws } from './flag';
 import { createFoley } from './foley';
 import { mood } from './face';
 import { dashing, felled, strain } from './expression';
-import { COMM, HUD_CSS, OUT_HINT, boarding, createHud, kmh } from './hud';
+import { COMM, GLORY_ACT, HUD_CSS, OUT_HINT, boarding, createHud, kmh } from './hud';
 import type { Summary } from './hud';
 import { createInput } from './input';
 import { createPredictor } from './predict';
@@ -681,7 +681,7 @@ const play = (
         : undefined;
     hud.rover(
       prey
-        ? 'glory kill'
+        ? GLORY_ACT
         : seat
           ? now - since < OUT_HINT * 1000
             ? 'get out'

@@ -981,7 +981,8 @@ export const metatarsal = (out: Out, at: Vec3, q: Quat, lod: number) => {
   const along = (k: number, up = 0, side = 0): Vec3 => [
     x * k + side,
     // A plantar arch (the user, 2026-11-17): the bone bows well up between the heel and the ball.
-    y * k + 0.042 * Math.sin(Math.PI * k) ** 0.8 + up,
+    // (Past the ball, k over 1, the sine is negative: no power of it.)
+    y * k + 0.042 * Math.max(Math.sin(Math.PI * k), 0) ** 0.8 + up,
     z * k,
   ];
   soft(

@@ -136,7 +136,15 @@ export const fall = (c: Piece, dt: number, floor: Ground) => {
  * way); moved by dt, the stump spitting; forgotten once he is up.
  */
 export const track = (
-  r: { p: PlayerState; gait: Pick<Gait, 'pose'>; cut?: Piece; build?: number; look?: Choice },
+  r: {
+    p: PlayerState;
+    gait: Pick<Gait, 'pose'>;
+    cut?: Piece;
+    build?: number;
+    look?: Choice;
+    /** The skeleton as last drawn, which the limb leaves from: the gait's pose without it. */
+    s?: ReturnType<typeof solve>;
+  },
   dt: number,
   floor: Ground,
   fresh: boolean,
@@ -150,7 +158,7 @@ export const track = (
   }
   const eaten = k == LIMB.EATEN;
   if (!r.cut) {
-    r.cut = sever(eaten ? LIMB.HEAD : k, solve(r.gait.pose()), r.p, r.build);
+    r.cut = sever(eaten ? LIMB.HEAD : k, r.s ?? solve(r.gait.pose()), r.p, r.build);
     r.cut.eaten = eaten;
     if (fresh || eaten) {
       for (let i = 0; i < 240; i++) {

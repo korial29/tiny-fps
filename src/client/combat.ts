@@ -22,7 +22,7 @@ import {
 } from '../shared/constants';
 import { strike, swingOf } from '../shared/blade';
 import { TAIL_BLOW, blowOf, blowing } from './gait';
-import { powerOf } from '../shared/gun';
+import { powerOf, sabering } from '../shared/gun';
 import { eyeHeight } from '../shared/physics';
 import { lobbed } from '../shared/plasma';
 import { CUT, KEY, MODE } from '../shared/types';
@@ -630,7 +630,7 @@ export const createCombat = (
       const all = me ? [me, ...others] : others;
       for (const p of all) {
         // A glory kill's lock has no blades to cross.
-        const f = p.lock && p.wield ? all.find(q => q.id === p.foe) : undefined;
+        const f = sabering(p) && p.wield ? all.find(q => q.id === p.foe) : undefined;
         if (f && (p.id < f.id || !f.lock)) {
           const at: Vec3 = [(p.x + f.x) / 2, (p.y + f.y) / 2 + 1.45, (p.z + f.z) / 2];
           tracer.crackle(at);

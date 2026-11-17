@@ -2,7 +2,17 @@
 // renderer's vertex format. A runner is the last PlayerState seen and the gait that eases the body
 // toward it; the dash streaks are the only thing drawn here that the gait does not pose. A
 // player's (x, y, z) is the bottom of the feet. No DOM.
-import { BLOW, DOWN_TICKS, EYE, HEAT_MAX, RUN_SPEED, STEP_H, TICK_HZ } from '../shared/constants';
+import { sabering } from '../shared/gun';
+import {
+  BLOW,
+  DOWN_TICKS,
+  EXEC,
+  EYE,
+  HEAT_MAX,
+  RUN_SPEED,
+  STEP_H,
+  TICK_HZ,
+} from '../shared/constants';
 import { strike } from '../shared/blade';
 import { TAU, floored } from '../shared/physics';
 import { LIMB, MODE } from '../shared/types';
@@ -116,7 +126,7 @@ import {
 import { CHITIN_X, FOOT_TIP, HEAD, PART, PIPE, eyes, lashOf, partsOf, tail } from './xeno';
 import type { Part } from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
-import { FEAST, chew, clutched, eating, mounted, seize } from './feast';
+import { EXECUTE, FEAST, chew, clutched, eating, kneel, mounted, seize, spun } from './feast';
 import type { Face } from './expression';
 import { CH, toneFor } from './features';
 import { createTrail } from './trail';
@@ -194,8 +204,12 @@ export interface Runner {
   mate?: number;
   mount?: number;
   with?: Vec3;
-  /** The share of a drop of blood owed to the next frame (FEAST.GORE). */
+  /** The share of a drop of blood owed to the next frame (FEAST.GORE, EXECUTE.BLEED). */
   gore?: number;
+  /** Seconds left of the blood from the neck of one the katana's execution beheaded. */
+  bleed?: number;
+  /** The skeleton as last drawn: a limb cut off leaves from it (limbs.ts track()). */
+  s?: ReturnType<typeof solve>;
 }
 
 /** A man's haircuts (look.ts's HAIR_NAMES[0]): how long the hair stands off the scalp, the first one shaved. */
@@ -408,15 +422,39 @@ export const animate = (
       r.curls = r.curls.map((c, i) => c + (g[i] - c) * (1 - Math.exp(-dt * CLOSE)));
       r.blow = thrown(p, xeno) > 0 ? blowOf(p, xeno) : r.blow;
       r.flinch = Math.max(r.flinch - dt / FLINCH[0], 0);
-      // A glory kill: the two locked, a xenomorph and its prey; after it, it slides off him.
-      const mate = p.lock && p.foe !== undefined ? others.find(q => q.id == p.foe) : undefined;
-      if (mate && xeno != (book.get(mate.id)?.look?.role === ROLE.XENO)) {
-        [r.mate, r.mount] = [mate.id, mounted(p.lock!)];
+      // A glory kill: the two locked, a xenomorph and its prey; after it, it slides off him. Or the
+      // katana's execution (exec): the other one is where the victim faces.
+      const foe = p.lock && p.foe !== undefined ? others.find(q => q.id == p.foe) : undefined;
+      const mate = foe && !p.exec && xeno != (book.get(foe.id)?.look?.role === ROLE.XENO);
+      if (mate) {
+        [r.mate, r.mount] = [foe.id, mounted(p.lock!)];
       } else {
         r.mount = Math.max((r.mount ?? 0) - dt / FEAST.DROP, 0);
       }
-      const on = r.mount ? others.find(q => q.id == r.mate) : undefined;
+      const on = r.mount ? others.find(q => q.id == r.mate) : p.exec ? foe : undefined;
       r.with = on && [on.x, on.y, on.z];
+      // The execution's blood: a spurt on the cut down, a burst as his head goes, then the neck.
+      const victim = (q: PlayerState) => q.exec === EXEC.VICTIM && !!q.lock;
+      if (victim(p) && victim(r.p)) {
+        const was = EXEC.TICKS - r.p.lock! < EXECUTE.KNEEL[0];
+        if (was && EXEC.TICKS - p.lock! >= EXECUTE.KNEEL[0]) {
+          const chest: Vec3 = [p.x, p.y + 1.25, p.z];
+          tracer?.gore?.(chest, EXECUTE.WOUND, 2.5);
+          tracer?.shock(chest);
+        }
+      }
+      if (victim(r.p) && p.down) {
+        const neck: Vec3 = [p.x, p.y + 1.05, p.z];
+        tracer?.gore?.(neck, EXECUTE.NECK, 3.5);
+        tracer?.shock(neck);
+        r.bleed = EXECUTE.BLEEDING;
+      }
+      if (r.bleed && r.cut?.at) {
+        r.bleed = Math.max(r.bleed - dt, 0);
+        r.gore = (r.gore ?? 0) + EXECUTE.BLEED * dt;
+        tracer?.gore?.(r.cut.at, Math.floor(r.gore), 1.5);
+        r.gore %= 1;
+      }
       // Its prey's blood as it eats: spurting from his head, a burst as it goes.
       if (xeno && on) {
         const head: Vec3 = [on.x, on.y + 1.55, on.z];
@@ -613,8 +651,9 @@ export const brandish = (
   parry = Infinity,
 ): Pose => {
   // In a saber lock the blade crosses the foe's, shaking, and the trunk leans into him.
-  const e = p.lock ? 1 : prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
-  const k = p.lock ? locked(t) : poised(p, Math.max(prog, 0), t);
+  const lk = sabering(p);
+  const e = lk ? 1 : prog < 0 ? 0 : ease(prog * 6) * ease((1 - prog) * 5);
+  const k = lk ? locked(t) : poised(p, Math.max(prog, 0), t);
   // A parry snaps the blade across from whatever hold it is in, and holds its line (clasp()).
   const pe = parrying(parry);
   const g = deflect(
@@ -624,7 +663,7 @@ export const brandish = (
   );
   g[1] += 0.02 * Math.sin(TAU * ph) * (1 - e);
   // A cut turns the whole body on its feet with a share of the trunk's twist.
-  const [tw, bd, ln] = p.lock ? [0, 0.15, 0] : prog < 0 ? [0, 0, 0] : bent(p, prog).map(v => v * e);
+  const [tw, bd, ln] = lk ? [0, 0.15, 0] : prog < 0 ? [0, 0, 0] : bent(p, prog).map(v => v * e);
   const spin = prog < 0 ? 0 : SWAY * tw;
   const pose = { ...from, yaw: from.yaw + spin };
   // The hands go round with the chest's whole twist and down and up with its bend.
@@ -874,7 +913,7 @@ export const stance = (r: Runner) => {
   const lying = !!p.down || floored(p) || driving(r);
   // In a glory kill (feast.ts) the arms are the kill's: no weapon is held up.
   const mate = (r.mount ?? 0) > 0 ? r.with : undefined;
-  const busy = lying || !!mate;
+  const busy = lying || !!mate || (p.exec === EXEC.VICTIM && !!p.lock);
   // All on fours (fours.ts) the gait's pose is wholly laid over: it is not built.
   const fours = !lying && (r.fours?.weight ?? 0) > 0.998;
   let pose = fours
@@ -930,10 +969,20 @@ export const stance = (r: Runner) => {
     }
   } else if (mate && !lying) {
     pose = clutched(pose, mate, r.mount!, r.t);
+  } else if (p.exec === EXEC.VICTIM && p.lock && r.with && !lying) {
+    pose = kneel(pose, r.with, p.lock);
   }
   let s = solve(pose);
   if (p.wield && !busy) {
-    pose = brandish(pose, p, r.prog, r.gait.phase, r.t, r.parry);
+    // The execution's cut across comes out of a whole turn of the body.
+    const spin = p.exec === EXEC.KILLER && p.lock ? spun(p.lock) : 0;
+    const [from, q] = spin
+      ? [
+          { ...pose, yaw: pose.yaw + spin },
+          { ...p, yaw: p.yaw + spin },
+        ]
+      : [pose, p];
+    pose = brandish(from, q, r.prog, r.gait.phase, r.t, r.parry);
     s = solve(pose);
   } else if ((p.railed || p.rifled) && !busy) {
     // The rail gun or the rifle in both hands, at the ready when not firing: the left on its front grip, the
@@ -1109,6 +1158,7 @@ export const soldier = (
   const plate = helmets ? undefined : color;
   const marine = plated && !ninja && !!plate;
   const { s, sink, yaw, carry } = stance(r);
+  r.s = s;
   // His face: a wince when hit, a grimace down, a shout in a cut or a dash, effort in a sprint or a
   // climb, focus aiming, a grin; the eyes on his aim from where the head points.
   // The head on the runner he looks at, as far as it turns; the eyes on him, or on the aim.

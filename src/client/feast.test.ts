@@ -1,10 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { GLORY_DASH, GLORY_TICKS } from '../shared/constants';
+import { CUTS, EXEC, GLORY_DASH, GLORY_TICKS } from '../shared/constants';
 import { ROLE } from '../shared/kit';
 import { STILL } from '../shared/physics';
+import { CUT, LIMB } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { BITE } from './body';
-import { FEAST, chew, clutched, eating, mounted, seize } from './feast';
+import {
+  EXECUTE,
+  FEAST,
+  chew,
+  clutched,
+  eating,
+  kneel,
+  kneeling,
+  mounted,
+  seize,
+  spun,
+} from './feast';
 import type { Vec3 } from './mesh';
 import { JOINT as J, rest, solve, turn } from './rig';
 import { animate, stance } from './soldier';
@@ -239,5 +251,117 @@ describe('a glory kill drawn', () => {
       animate(book, ps, 1 / 60, undefined, undefined, undefined, undefined, man);
     }
     expect(book.get(XENO).mount ?? 0).toBe(0);
+  });
+});
+
+describe('the katana’s execution drawn', () => {
+  const at = (e: number) => EXEC.TICKS - e;
+
+  it('puts him on his knees on the strike of the cut down, and spins the swordsman a whole turn into the cut across', () => {
+    expect(EXECUTE.KNEEL[0]).toBe(EXEC.CUTS[0] + CUTS[CUT.SLASH].strike);
+    expect(kneeling(at(EXECUTE.KNEEL[0]))).toBe(0);
+    expect(kneeling(at(EXECUTE.KNEEL[0] + EXECUTE.KNEEL[1]))).toBe(1);
+    expect(kneeling(1)).toBe(1);
+    expect(spun(at(EXEC.CUTS[1]))).toBe(0);
+    // The cut across strikes on the lock's last tick, facing him again after a whole turn.
+    expect(EXEC.CUTS[1] + CUTS[CUT.RIGHT].strike).toBe(EXEC.TICKS - 1);
+    expect(spun(1)).toBeCloseTo(2 * Math.PI, 6);
+    expect(spun(at(EXEC.CUTS[1] + 6))).toBeGreaterThan(Math.PI / 2);
+  });
+
+  it('kneels him before the swordsman: turned to him, his hips down, his knees on the floor ahead of his feet', () => {
+    // He looks away from the swordsman at +z.
+    const p = rest([0, 0, -1], 0);
+    const stood = solve(p);
+    const up = kneel(p, [0, 0, 0], at(EXECUTE.TURN));
+    expect(Math.cos(up.yaw)).toBeCloseTo(-1, 6);
+    expect(solve(up).pos[J.PELVIS][1]).toBeCloseTo(stood.pos[J.PELVIS][1], 6);
+    const q = kneel(p, [0, 0, 0], 1);
+    const s = solve(q);
+    expect(s.pos[J.PELVIS][1]).toBeCloseTo(stood.pos[J.PELVIS][1] - EXECUTE.LOW, 6);
+    for (const [knee, foot] of [
+      [J.SHIN_L, J.FOOT_L],
+      [J.SHIN_R, J.FOOT_R],
+    ]) {
+      expect(s.pos[knee][1]).toBeLessThan(0.2);
+      expect(s.pos[foot][1]).toBeCloseTo(0.1, 2);
+      // Facing +z: the knee ahead of the foot.
+      expect(s.pos[knee][2]).toBeGreaterThan(s.pos[foot][2] + 0.2);
+    }
+    // Bowed: his head ahead of his pelvis, toward the swordsman.
+    expect(s.pos[J.HEAD][2]).toBeGreaterThan(s.pos[J.PELVIS][2]);
+  });
+
+  it('draws the two through animate() and stance(): him kneeling, the blood, his head off from where it was drawn', () => {
+    const [K, V] = [1, 2];
+    const looks = new Map([
+      [K, { role: ROLE.NINJA }],
+      [V, { role: ROLE.MARINE }],
+    ]);
+    const state = (id: number, over: Partial<PlayerState>): PlayerState => ({
+      id,
+      x: 0,
+      y: 0,
+      z: 0,
+      vy: 0,
+      yaw: 0,
+      pitch: 0,
+      ground: true,
+      ...STILL,
+      ...over,
+    });
+    const gores: [Vec3, number][] = [];
+    let shocks = 0;
+    const tracer = {
+      shock: () => shocks++,
+      spit() {},
+      gore: (p: Vec3, n: number) => gores.push([p, n]),
+    };
+    const book = new Map<number, Runner>();
+    const frame = (lock: number, over: Partial<PlayerState> = {}) =>
+      animate(
+        book,
+        [
+          state(K, {
+            z: 0.3,
+            blade: true,
+            wield: true,
+            lock,
+            foe: V,
+            exec: lock ? EXEC.KILLER : 0,
+          }),
+          state(V, { z: -1, yaw: Math.PI, lock, foe: K, exec: lock ? EXEC.VICTIM : 0, ...over }),
+        ],
+        1 / 60,
+        undefined,
+        tracer,
+        undefined,
+        undefined,
+        looks,
+      );
+    const stood = (frame(at(1)), stance(book.get(V)!).s);
+    for (let e = 2; e < EXEC.TICKS; e++) {
+      frame(at(e));
+    }
+    const s = stance(book.get(V)!).s;
+    expect(s.pos[J.PELVIS][1]).toBeLessThan(stood.pos[J.PELVIS][1] - EXECUTE.LOW + 0.05);
+    // The cut down: one spurt and a shock.
+    expect(gores).toEqual([[[0, 1.25, -1], EXECUTE.WOUND]]);
+    expect(shocks).toBe(1);
+    // His weapon hand is not held up: he is busy dying.
+    expect(stance(book.get(V)!).s.pos[J.HAND_R][1]).toBeLessThan(1.4);
+    // The kill: his head goes from the kneeling head, with a burst, then blood from the neck.
+    book.get(V)!.s = s;
+    frame(0, { down: 100, lost: LIMB.HEAD });
+    expect(gores[1]).toEqual([[0, 1.05, -1], EXECUTE.NECK]);
+    // The head leaves from where it was drawn, low on his knees, not from a standing pose.
+    const cut = book.get(V)!.cut!;
+    expect(cut.c[1]).toBeCloseTo(s.pos[J.HEAD][1] + 0.1, 0);
+    expect(cut.c[1]).toBeLessThan(stood.pos[J.HEAD][1] - 0.3);
+    for (let k = 0; k < 30; k++) {
+      frame(0, { down: 100, lost: LIMB.HEAD });
+    }
+    expect(gores.length).toBeGreaterThan(10);
+    expect(book.get(V)!.bleed).toBeLessThan(EXECUTE.BLEEDING);
   });
 });

@@ -35,7 +35,8 @@
 //   lock: the ticks left in a saber lock; foe: bits 0-3 the id locked with, bit 4 the high bit of the
 //   dashes left, bit 5 the high bit of hp, bit 6 the high bit of the mode, bit 7 FIRE held at the
 //   last step (`pressed`); pushes: the FIRE presses in the lock; away: the ticks a side or back key
-//   has been held in it. rail: the rail gun's ticks of lightning plus one (0: no rail gun);
+//   has been held in it (bits 0-5; bits 6-7 `exec`: a katana's glory kill, EXEC).
+//   rail: the rail gun's ticks of lightning plus one (0: no rail gun);
 //   railing: bit 0 railed (it is in hand), bit 1 inRail (inside the circle of the rail rack), bit 2
 //   zapping (its bolt went out), bit 3 rifled (the laser rifle in hand), bit 4 inRifle, bit 5 hot (overheated),
 //   bit 6 USE held (the third bit of `held`: the timers byte is full); slow: the ticks left drained by the bolt. Bit 4 of lost: fried; bit
@@ -303,7 +304,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
         (p.pressed ? 128 : 0),
     );
     v.setUint8(o + 50, p.pushes ?? 0);
-    v.setUint8(o + 51, p.away ?? 0);
+    v.setUint8(o + 51, (p.away ?? 0) | ((p.exec ?? 0) << 6));
     v.setUint8(o + 52, (p.rail ?? -1) + 1);
     v.setUint8(
       o + 53,
@@ -458,7 +459,8 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       foe: v.getUint8(o + 49) & 15,
       pressed: v.getUint8(o + 49) > 127,
       pushes: v.getUint8(o + 50),
-      away: v.getUint8(o + 51),
+      away: v.getUint8(o + 51) & 63,
+      exec: v.getUint8(o + 51) >> 6,
       rail: v.getUint8(o + 52) - 1,
       railed: (v.getUint8(o + 53) & 1) > 0,
       inRail: (v.getUint8(o + 53) & 2) > 0,

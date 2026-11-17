@@ -308,8 +308,16 @@ export const [GLORY_HP, GLORY_REACH, GLORY_ARC, GLORY_TICKS] = [3, 2.5, 1, 120];
  * 21 m/s, a step under PLAYER_R: it cannot tunnel.
  */
 export const [GLORY_FAR, GLORY_DASH] = [8, 20];
+/**
+ * The katana's glory kill, an execution (room.ts feast(), the user 2026-11-17: 1.5 s, not at once):
+ * E locks the two for EXEC.TICKS (`exec` KILLER and VICTIM); the swordsman dashes in front of him,
+ * to EXEC.REACH metres, over GLORY_DASH ticks, cuts down (CUT.SLASH) at EXEC.CUTS[0] and drops him
+ * to his knees, then spins into a cut across (CUT.RIGHT) at EXEC.CUTS[1], whose strike is the
+ * lock's last tick: his head goes (LIMB.HEAD) and the body falls back at GLORY_PUSH m/s.
+ */
+export const EXEC = { TICKS: 88, REACH: 1.3, CUTS: [20, 74], KILLER: 1, VICTIM: 2 } as const;
 /** The katana's glory kill (room.ts feast()): the speed it throws the beheaded body back at. */
-export const GLORY_PUSH = 7;
+export const GLORY_PUSH = 2;
 /** How much faster than a man the xenomorph runs (the user, 2026-11-16: a little, not twice). */
 export const XENO_PACE = 1.25;
 export const ACID_HP = 1;

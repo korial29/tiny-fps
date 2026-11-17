@@ -1,5 +1,6 @@
 import {
   BOLT,
+  EXEC,
   HP_MAX,
   INTERP_DELAY,
   NADE,
@@ -9,6 +10,7 @@ import {
   TICK_HZ,
   VEHICLE,
 } from '../shared/constants';
+import { sabering } from '../shared/gun';
 import { mapKey, mapOf } from '../shared/maps';
 import { bruise, eyeHeight, heightOf } from '../shared/physics';
 import { cylinder } from '../shared/plasma';
@@ -730,7 +732,7 @@ const play = (
     prior = new Map(others.map(p => [p.id, p]));
     // A saber lock: the gauge of the tug of war, the own presses against the foe's.
     // Not a glory kill's: nobody pushes there.
-    const foe = me?.lock && me.wield ? who(me.foe ?? -1) : undefined;
+    const foe = me && sabering(me) && me.wield ? who(me.foe ?? -1) : undefined;
     hud.duel(foe ? ((me!.pushes ?? 0) - (foe.pushes ?? 0)) / LOCK_WIN : undefined);
     body.update(me, dt, fx.kick, canvas.clientWidth / (canvas.clientHeight || 1));
     // The steps sound as the drawn feet land: the own body's now, the others' as last drawn.
@@ -769,7 +771,7 @@ const play = (
     const victim =
       me && !driving
         ? others.find(p =>
-            ctl.beast && me.lock && !me.wield
+            (ctl.beast && me.lock && !me.wield) || (me.lock && me.exec === EXEC.KILLER)
               ? p.id == me.foe
               : p.id == kill.who && now < kill.until,
           )

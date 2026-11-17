@@ -275,6 +275,8 @@ export interface PlayerState {
   foe?: number;
   pushes?: number;
   pressed?: boolean;
+  /** In a katana's glory kill rather than a saber lock: EXEC.KILLER or EXEC.VICTIM. Absent reads 0. */
+  exec?: number;
   away?: number;
   /** Ticks of lightning left in the rail gun; absent or -1 without it (taken at the team's rail rack, lost on going down). */
   rail?: number;

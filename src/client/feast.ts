@@ -4,7 +4,8 @@
 // shoulders, leaning over his head, rears its head back and bites; he bends back under it, his
 // hands up against its chest. After the kill it lets go of him as he falls. Poses only: the host
 // still holds the two a metre apart and nothing of it is on the wire. Pure, no DOM.
-import { GLORY_TICKS } from '../shared/constants';
+import { CUTS, EXEC, GLORY_TICKS } from '../shared/constants';
+import { CUT } from '../shared/types';
 import { BITE, reach } from './body';
 import { basis, mix } from './mesh';
 import type { Vec3 } from './mesh';
@@ -187,4 +188,61 @@ export const chew = (pose: Pose, a: number, t: number): Pose => {
   rot[J.NECK] = mul(rot[J.NECK], axis([0, 1, 0], 0.4 * FEAST.CHEW[0] * a * Math.sin(w - 0.6)));
   rot[J.HEAD] = mul(rot[J.HEAD], axis([0, 1, 0], FEAST.CHEW[0] * a * Math.sin(w)));
   return { ...pose, rot };
+};
+
+/**
+ * The katana's execution as drawn (EXEC, the user 2026-11-17): its victim turns to the swordsman as
+ * he dashes in (TURN ticks), drops to his knees on the strike of the cut down (KNEEL: from that tick,
+ * over so many), his trunk bowed and his head down (BOW, radians) and his hips LOW metres lower;
+ * the swordsman spins a whole turn into the cut across, ending on its strike (SPIN); on the cut down
+ * a spurt of WOUND drops of blood, and when his head goes NECK drops, then BLEED a second from the
+ * neck for BLEEDING seconds.
+ */
+export const EXECUTE = {
+  TURN: 8,
+  KNEEL: [EXEC.CUTS[0] + CUTS[CUT.SLASH].strike, 10],
+  BOW: [0.3, 0.35],
+  LOW: 0.45,
+  SPIN: [EXEC.CUTS[1], CUTS[CUT.RIGHT].strike],
+  WOUND: 25,
+  NECK: 45,
+  BLEED: 60,
+  BLEEDING: 0.8,
+} as const;
+
+/** Ticks into the execution with `lock` ticks of it left. */
+const into = (lock: number) => EXEC.TICKS - lock;
+
+/** How far down on his knees its victim is with `lock` ticks left, 0 to 1. */
+export const kneeling = (lock: number): number =>
+  ease(clamp((into(lock) - EXECUTE.KNEEL[0]) / EXECUTE.KNEEL[1]));
+
+/** How far the swordsman has spun into his cut across with `lock` ticks left, radians (a whole turn at its strike). */
+export const spun = (lock: number): number =>
+  2 * Math.PI * ease(clamp((into(lock) - EXECUTE.SPIN[0]) / EXECUTE.SPIN[1]));
+
+/**
+ * The victim's `pose` before the swordsman whose feet are at `killer`, with `lock` ticks of the
+ * execution left: turned to him, then on his knees (his feet behind them on the floor), bowed, his
+ * head down.
+ */
+export const kneel = (pose: Pose, killer: Vec3, lock: number): Pose => {
+  const [turn, k] = [clamp(into(lock) / EXECUTE.TURN), kneeling(lock)];
+  const [yaw, f] = facing(pose.at, killer);
+  const rot = pose.rot.slice();
+  rot[J.CHEST] = mul(rot[J.CHEST], axis(X, -EXECUTE.BOW[0] * k));
+  rot[J.NECK] = mul(rot[J.NECK], axis(X, -EXECUTE.BOW[1] * k));
+  const q: Pose = { ...pose, yaw: pose.yaw + wrap(yaw - pose.yaw) * turn, rot };
+  if (k <= 0) {
+    return q;
+  }
+  q.hips = [q.hips[0], q.hips[1] - EXECUTE.LOW * k, q.hips[2]];
+  for (const thigh of [J.THIGH_L, J.THIGH_R]) {
+    // The foot behind the hip, flat on the floor; the knee forward, down on it.
+    const s = solve(q);
+    const hip = s.pos[thigh];
+    const to: Vec3 = [hip[0] - f[0] * 0.42, q.at[1] + 0.1, hip[2] - f[2] * 0.42];
+    reach(q, s, thigh, mix(s.pos[thigh + 2], to, k), f);
+  }
+  return q;
 };

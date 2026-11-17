@@ -17,7 +17,7 @@ import {
   STEP_H,
   HEAT_MAX,
 } from '../shared/constants';
-import { powerOf } from '../shared/gun';
+import { powerOf, sabering } from '../shared/gun';
 import { TAU, eyeHeight, speedOf, sprinting } from '../shared/physics';
 import { MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -1298,7 +1298,7 @@ export const createBody = (world?: World): Body => {
     parry += dt;
     braced = parrying(parry);
     prog = progress(prog, p, dt);
-    jolt = (p.pushes ?? 0) !== pushes && p.lock ? 1 : jolt * Math.exp(-dt * 12);
+    jolt = (p.pushes ?? 0) !== pushes && sabering(p) ? 1 : jolt * Math.exp(-dt * 12);
     pushes = p.pushes ?? 0;
     trail.update(dt);
     const walks = p.mode == MODE.GROUND || p.mode == MODE.CROUCH || p.mode == MODE.WALLRUN;
@@ -1411,7 +1411,7 @@ export const createBody = (world?: World): Body => {
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     // In a saber lock the blade crosses the foe's, shaking, and each press drives it on.
     const k = deflect(
-      me?.lock ? locked(clock, jolt) : poised(me ?? {}, Math.max(prog, 0), clock),
+      me && sabering(me) ? locked(clock, jolt) : poised(me ?? {}, Math.max(prog, 0), clock),
       braced,
     );
     const at: Vec3 = [k[0] + 0.012 * a * s, k[1] + 0.018 * a * c - 0.35 * (1 - w.blade), k[2]];
@@ -1445,7 +1445,7 @@ export const createBody = (world?: World): Body => {
     const sw = w.blade > 0.002 ? blade() : undefined;
     // Locked, the trunk leans into the foe.
     const [tw, bd, ln] =
-      sw && me.lock
+      sw && sabering(me)
         ? [0, 0.15 * w.blade, 0]
         : sw && prog >= 0
           ? bent(me, prog).map(v => v * w.blade)

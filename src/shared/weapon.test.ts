@@ -335,7 +335,7 @@ describe('the grenade launcher', () => {
     m.ticks(SNAP_EVERY);
   };
 
-  it('launches a grenade on a double click: one ball of power NADE in flight, a grenade and no round spent', () => {
+  it('launches a grenade on G: one ball of power NADE in flight, a grenade and no round spent', () => {
     const m = match();
     ready(m);
     m.send(m.cy, CLICK, { pitch: 0.3 });
@@ -2028,7 +2028,7 @@ describe('a cut', () => {
 
 describe('the arc of energy', () => {
   const { SPECIAL } = KEY;
-  /** Cy, the katana in hand, double clicks a cut across (`keys`, let go at once: he does not step aside) and waits for its strike; the arc then flies out. */
+  /** Cy, the katana in hand, cuts a special across (`keys`, let go at once: he does not step aside) and waits for its strike; the arc then flies out. */
   const throwArc = (m: ReturnType<typeof match>, keys: number = LEFT) => {
     m.ticks(SNAP_EVERY);
     m.send(m.cy, keys | FIRE | SPECIAL);
@@ -2036,7 +2036,7 @@ describe('the arc of energy', () => {
     m.hold(m.cy, CUTS[CUT.ARC_L].strike, 0);
   };
 
-  it('goes out of a double click on a cut across, and hits Bob 8 m away: the cut’s hp, and he is floored, thrown along its flight', () => {
+  it('goes out of a special cut across, and hits Bob 8 m away: the cut’s hp, and he is floored, thrown along its flight', () => {
     for (const keys of [LEFT, RIGHT]) {
       const m = match();
       m.put(m.cy, 0, 0, SWORD);

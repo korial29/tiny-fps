@@ -54,9 +54,9 @@ export const KEY = {
    */
   BLADE: 512,
   /**
-   * Set with FIRE by a double click (the client's choice): the katana's special cut, the special
-   * of the cut the keys give (see CUT). Set alone by G with the laser rifle in hand: a grenade from
-   * its launcher. Ignored with the other guns.
+   * Set for one step by G or the right button (the client's choice): with the katana in hand, the
+   * special of the cut the keys give (see CUT); with the laser rifle in hand, a grenade from its
+   * launcher. Ignored with the other guns.
    */
   SPECIAL: 1024,
   /**
@@ -75,7 +75,7 @@ export const KEY = {
 /**
  * The katana's cuts (PlayerState.cut, constants CUTS), chosen by the keys held when FIRE starts
  * one: LEFT or RIGHT (one of them) cuts across from that side, else FORWARD thrusts, else (back or
- * no key) it slashes down from above. With SPECIAL (a double click) each has its special, the cut
+ * no key) it slashes down from above. With SPECIAL (G or the right button) each has its special, the cut
  * plus SPECIAL_CUT: the thrust a LUNGE (a dash forward on the point), a cut across an ARC (a heavy
  * cut down across the body that throws an arc of energy ahead, see wave(), plasma.ts), the slash a
  * LEAP (a jump and a blow down on landing).

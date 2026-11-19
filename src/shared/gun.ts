@@ -109,8 +109,8 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  *   letting it go fires a ball as strong as the charge (powerOf()), spending as many shots; or it
  *   starts the katana's swing (`cut` from the keys), unless the hands are busy (a hang, a climb).
  *   The katana in hand, busy hands or no shot left drop the charge.
- *   With SPECIAL (a double click) the swing is the cut's special; its press within SPECIAL_LATE
- *   ticks of a cut's start turns that cut into it. The cut strikes `CUTS[cut].strike` ticks into
+ *   SPECIAL (G or the right button) with the katana in hand and no swing starts the special of
+ *   that cut instead, FIRE or not. The cut strikes `CUTS[cut].strike` ticks into
  *   its swing. The look is the input's, so both go where the player sees.
  * `armed` is false while the match is over: no weapon, no rack. `bodies` are move()'s.
  */
@@ -286,12 +286,15 @@ export const step = (
     p.shots = (p.shots + 1) & 255;
     return STRIKE.NADE;
   }
+  // G or the right button (SPECIAL, with or without FIRE) with the katana in hand and no swing:
+  // the special of the cut the keys give.
+  if (p.wield && i.keys & KEY.SPECIAL && !busy && !p.swing) {
+    p.cut = cutOf(i.keys) + SPECIAL_CUT;
+    [p.swing, p.charge] = [CUTS[p.cut].ticks, 0];
+    launch(p);
+    return STRIKE.NONE;
+  }
   if (i.keys & KEY.FIRE && !busy) {
-    // A double click's second press turns a cut just started into its special.
-    const late = CUTS[p.cut ?? 0].ticks - (p.swing ?? 0);
-    const special =
-      !!(i.keys & KEY.SPECIAL) &&
-      (!p.swing || (!p.heavy && (p.cut ?? 0) < SPECIAL_CUT && late <= SPECIAL_LATE));
     if (bare) {
       // A punch, and the next when it is over while FIRE is held: a jab, or a lunge on the run. A
       // fresh press after the strike chains the next blow (BLOW).
@@ -307,8 +310,8 @@ export const step = (
         p.cut!++;
         p.swing = PUNCHES[p.cut!].ticks;
       }
-    } else if (p.wield && (!p.swing || special)) {
-      p.cut = cutOf(i.keys) + (special ? SPECIAL_CUT : 0);
+    } else if (p.wield && !p.swing) {
+      p.cut = cutOf(i.keys);
       [p.swing, p.charge] = [CUTS[p.cut].ticks, 0];
       launch(p);
     } else if (p.rifled) {

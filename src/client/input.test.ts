@@ -6,7 +6,6 @@ import { EV, KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { STILL } from '../shared/physics';
 import {
-  DOUBLE_CLICK_MS,
   DOUBLE_TAP_MS,
   WHEEL_MS,
   chosen,
@@ -402,7 +401,8 @@ describe('createInput', () => {
       }
       tap('Space');
       tap('Space', 50);
-      expect([ctl.take(), ctl.keys]).toEqual([0, 0]);
+      // The right button is G: SPECIAL, no dash.
+      expect([ctl.take(), ctl.keys]).toEqual([KEY.SPECIAL, 0]);
       const menu = new MouseEvent('contextmenu', { cancelable: true });
       document.dispatchEvent(menu);
       expect(menu.defaultPrevented).toBe(false);
@@ -519,16 +519,13 @@ describe('createInput', () => {
       expect(ctl.keys & ~KEY.FIRE).toBe(0);
     });
 
-    it('sends G with the rifle chosen as SPECIAL and RIFLE on one step: a grenade; a double click is two clicks', () => {
-      let clock = 1000;
-      vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    it('sends G with the rifle chosen as SPECIAL and RIFLE on one step: a grenade', () => {
       make();
       lock(true);
       ctl.weapon = WEAPON.RIFLE;
       button('mousedown', 0);
       button('mouseup', 0);
       expect(ctl.take()).toBe(KEY.RIFLE);
-      clock += DOUBLE_CLICK_MS - 1;
       button('mousedown', 0);
       expect(ctl.take()).toBe(KEY.FIRE | KEY.RIFLE);
       button('mouseup', 0);
@@ -538,33 +535,29 @@ describe('createInput', () => {
       key('keydown', 'KeyG', true);
       expect(ctl.take()).toBe(KEY.RIFLE);
       key('keyup', 'KeyG');
-      // Another weapon chosen, G does nothing.
-      ctl.weapon = WEAPON.GUN;
-      key('keydown', 'KeyG');
-      expect(ctl.take()).toBe(0);
     });
 
-    it('sends one step of FIRE and SPECIAL after a double click, however short, and not after two slow clicks', () => {
-      let clock = 1000;
-      vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    it('sends one step of SPECIAL with the katana chosen on a press of G or of the right button, not on a double click', () => {
       make();
       lock(true);
-      const click = (gap: number) => {
-        clock += gap;
+      ctl.weapon = WEAPON.BLADE;
+      for (let n = 0; n < 2; n++) {
         button('mousedown', 0);
         button('mouseup', 0);
-      };
-      click(0);
-      click(DOUBLE_CLICK_MS + 1);
-      expect(ctl.take()).toBe(0);
-      click(DOUBLE_CLICK_MS);
-      expect(ctl.take()).toBe(KEY.FIRE | KEY.SPECIAL);
-      expect(ctl.take()).toBe(0);
-      // A third click right after is a new first one, not another special.
-      click(50);
-      expect(ctl.take()).toBe(0);
-      click(50);
-      expect(ctl.take()).toBe(KEY.FIRE | KEY.SPECIAL);
+      }
+      expect(ctl.take()).toBe(KEY.BLADE);
+      key('keydown', 'KeyG');
+      expect(ctl.take()).toBe(KEY.SPECIAL | KEY.BLADE);
+      key('keyup', 'KeyG');
+      expect(ctl.take()).toBe(KEY.BLADE);
+      button('mousedown', 2);
+      expect(ctl.take()).toBe(KEY.SPECIAL | KEY.BLADE);
+      // Held, the right button is one special.
+      expect(ctl.take()).toBe(KEY.BLADE);
+      button('mouseup', 2);
+      lock(false);
+      button('mousedown', 2);
+      expect(ctl.take()).toBe(KEY.BLADE);
     });
   });
 

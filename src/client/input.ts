@@ -46,7 +46,7 @@ export const dashKeys = (keys: number, dir: number): number => (keys & ~DIRS) | 
 /** The KEY bit of a KeyboardEvent.code, 0 for a key the game ignores. */
 export const keyBit = (code: string): number => BITS[code] ?? 0;
 
-/** A second left press within this of the first (ms) is a double click: the katana's special cut. */
+/** A second right press (or G) within this of the first (ms) is a double click: the xenomorph's tail special. */
 export const DOUBLE_CLICK_MS = 300;
 
 /** The wheel swaps the weapon at most this often (ms): a trackpad's flick is a hundred events, one swap. */
@@ -104,7 +104,7 @@ export interface Controls {
   keys: number;
   /** The chosen weapon (WEAPON: 1, 2, 3 and the wheel). */
   weapon: number;
-  /** At a ship's stick (the client sets it): a press of G is a missile whatever the weapon, a double click nothing more than a click. */
+  /** At a ship's stick (the client sets it): a press of G or of the right button is a missile whatever the weapon. */
   pilot: boolean;
   /**
    * Playing the xenomorph (the client sets it): the right button strikes with the tail as FIRE cuts
@@ -116,8 +116,9 @@ export interface Controls {
    * The KEY bits of the next step, read once per step. Same as `keys`, plus BLADE while the katana
    * is chosen and RAIL while the rail gun is, except for the step right after a double tap: it carries DASH and only the tapped
    * direction, so the dash goes that way whatever else is held, and nothing else is on the wire.
-   * The step after a double click carries FIRE and SPECIAL, however short the click was, but with
-   * the rifle chosen; the step after a press of G carries SPECIAL with the rifle chosen: a grenade.
+   * The step after a press of G or of the right button carries SPECIAL: the katana's special cut
+   * with it in hand, a grenade with the rifle, a missile at a ship's stick (step() ignores it with
+   * the other guns).
    */
   take(): number;
   /** One live step of the own player, its state before and after: a katana or a rail gun picked up is chosen, losing every weapon chooses the gun. */
@@ -131,8 +132,8 @@ export interface Controls {
 /**
  * Click the canvas to lock the pointer; while locked the mouse looks, the keys move (WASD, Shift
  * sprints, Space jumps, Q dashes, C crouches, E gets in and out of a rover, a direction key pressed twice within DOUBLE_TAP_MS dashes that
- * way, the left button fires or cuts and a double click cuts the special, G launches a grenade with the
- * rifle, 1, 2 and 3 or the wheel pick
+ * way, the left button fires or cuts, G or the right button cuts the katana's special or launches a
+ * grenade with the rifle, 1, 2 and 3 or the wheel pick
  * the gun, the katana or the rail gun) and M calls `onMute`.
  */
 export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Controls => {
@@ -144,10 +145,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   const tapped = new Map<string, number>();
   let pending = 0;
   let swapped = -Infinity;
-  /** When the left button was last pressed (ms), and a double click waiting for its step. */
-  let clicked = -Infinity;
-  let special = false;
-  /** G (or the right button, but for the xenomorph) pressed, waiting for its step: a grenade when the rifle is the choice, a missile at a ship's stick. */
+  /** G (or the right button, but for the xenomorph) pressed, waiting for its step: the katana's special, a grenade with the rifle, a missile at a ship's stick. */
   let nade = false;
   /** The right button pressed, waiting for its step, held now, and when it was last pressed (ms): the xenomorph's tail. */
   let sting = false;
@@ -171,24 +169,12 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
           (nade || sting || stinging ? KEY.BLADE : 0) |
           (twist ? KEY.BLADE | KEY.SPECIAL : 0);
         pending = 0;
-        special = nade = sting = twist = false;
+        nade = sting = twist = false;
         return keys;
       }
-      const keys =
-        moved |
-        (c.pilot
-          ? nade
-            ? KEY.SPECIAL
-            : 0
-          : c.weapon == WEAPON.RIFLE
-            ? nade
-              ? KEY.SPECIAL
-              : 0
-            : special
-              ? KEY.FIRE | KEY.SPECIAL
-              : 0);
+      const keys = moved | (nade ? KEY.SPECIAL : 0);
       pending = 0;
-      special = nade = sting = false;
+      nade = sting = false;
       return withWeapon(keys, c.weapon);
     },
     track: (was, now) => {
@@ -225,9 +211,6 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     }
     if (c.locked() && !e.button) {
       c.keys |= KEY.FIRE;
-      const now = performance.now();
-      special ||= now - clicked <= DOUBLE_CLICK_MS;
-      clicked = special ? -Infinity : now;
     }
   });
   on(document, 'mouseup', (e: MouseEvent) => {

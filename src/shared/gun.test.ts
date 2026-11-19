@@ -875,7 +875,7 @@ describe('the swing', () => {
     expect(p.charge).toBe(HEAVY_TAP - 2);
     expect(struck(p, ticks, 0)).toEqual([strike - hold - 1]);
     expect(p.heavy).toBe(false);
-    // A double click's special runs through its top with FIRE held.
+    // A special (G or the right button) runs through its top with FIRE held.
     const q = sword();
     hit(q, FIRE | SPECIAL);
     const special = CUTS[q.cut!];

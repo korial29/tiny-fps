@@ -363,7 +363,11 @@ describe('the others', () => {
     const draw = drawn(f);
     // A sprinter and a jogger: each steps with its own runner's feet.
     for (let i = 0; i <= 120; i++) {
-      draw([player({ id: 2, x: i * 0.15, vx: 9 }), player({ id: 3, x: 30 + i * 0.03, vx: 2 })]);
+      // Both run the way they look (+x).
+      draw([
+        player({ id: 2, x: i * 0.15, vx: 9, yaw: -Math.PI / 2 }),
+        player({ id: 3, x: 30 + i * 0.03, vx: 2, yaw: -Math.PI / 2 }),
+      ]);
     }
     const near = played.filter(p => p.at![0] < 20).length;
     const far = played.length - near;

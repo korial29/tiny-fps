@@ -50,7 +50,9 @@ const BUDGETS = [
   // 227 KB until the xenomorph's bladed spine, hips, limbs, feet and hands (the user, 2026-11-17: 2 KB more).
   // 229 KB until the ninja's rework: the cloth hood, the textures, the sash and its blades, the
   // muscled body (the user, 2026-11-18: 233 KB).
-  { file: 'dist/index.js', max: 233 * 1024 },
+  // 233 KB until the more natural gait: the lean into an acceleration, the hips trailing a turn, the
+  // steps on the spot (the user, 2026-11-19: 234 KB).
+  { file: 'dist/index.js', max: 234 * 1024 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

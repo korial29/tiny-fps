@@ -76,6 +76,7 @@
 //   A snapshot is 4 + 62 × players + 57 × rovers + 10 + 2 to 16 bytes: 12 on top of the players and
 //   the rovers when both flags are home and no ball flies; with balls, 1 + 11 × balls more.
 // Every multi-byte field is big-endian (DataView's default).
+import type { BotView } from './bot';
 import { NADE, VEHICLE } from './constants';
 import { FLAG, KEY, MODE } from './types';
 import type { Ball, Choice, FlagState, Input, PlayerInfo, Rover, Snapshot } from './types';
@@ -88,7 +89,9 @@ import type { Ball, Choice, FlagState, Input, PlayerInfo, Rover, Snapshot } from
 export type ClientText =
   | ({ t: 'join'; name: string } & Choice)
   | { t: 'map'; map: string }
-  | ({ t: 'body'; body: number } & Choice);
+  | ({ t: 'body'; body: number } & Choice)
+  /** Watch a bot (its id) and get what it is up to, or stop (no id). */
+  | { t: 'watch'; id?: number };
 
 /** What a player did in a match, for the end screen: it carries the name and the team, which a leaver takes out of the roster. */
 export interface Result {
@@ -135,7 +138,9 @@ export type ServerText =
    */
   | { t: 'frag'; by: number; who: number; how: number; n: number; first?: true }
   /** The match is over: the final captures of red and blue, and every player's result. */
-  | { t: 'end'; score: [number, number]; players: Result[] };
+  | { t: 'end'; score: [number, number]; players: Result[] }
+  /** What the bot a player watches is up to, ten times a second. */
+  | ({ t: 'bot' } & BotView);
 
 export const MSG_INPUT = 1;
 export const MSG_SNAPSHOT = 2;

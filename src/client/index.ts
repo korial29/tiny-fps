@@ -49,6 +49,7 @@ import { mood } from './face';
 import { dashing, felled, strain } from './expression';
 import { COMM, GLORY_ACT, HUD_CSS, OUT_HINT, boarding, createHud, kmh } from './hud';
 import type { Summary } from './hud';
+import { createWatch } from './watch';
 import { createInput } from './input';
 import { createPredictor } from './predict';
 import { gather } from './lights';
@@ -345,6 +346,15 @@ const play = (
   let names = new Map<number, string>();
   /** Tags above the others, by player id. */
   const tags = new Map<number, HTMLElement>();
+  /** The bot view (watch.ts): B looks through a bot's eyes, the next one, then the own again. */
+  const botcam = createWatch(screen);
+  const onKey = (e: KeyboardEvent) => {
+    if (e.code == 'KeyB' && !e.repeat && open) {
+      const id = botcam.next(roster.filter(p => p.bot).map(p => p.id));
+      ws.send(JSON.stringify({ t: 'watch', id } satisfies ClientText));
+    }
+  };
+  document.addEventListener('keydown', onKey);
   let open = false;
   /** Shown on the title screen instead of "Click to play": a closed connection, a full room, no WebGL. */
   let msg = rd ? '' : 'WebGL2 is not available';
@@ -570,6 +580,8 @@ const play = (
       audio.say(announcer.end(m.score, you.team));
     } else if (m?.t == 'full') {
       msg = 'Room is full';
+    } else if (m?.t == 'bot') {
+      botcam.take(m);
     }
   };
 
@@ -813,8 +825,14 @@ const play = (
     const k = Math.max(shot.k, watch.k);
     hud.outside(watch.k > 0);
     rd?.vision(sees(ctl.beast, watch.k));
-    const third = k > 0;
-    const pov = watch.k ? watch.at : shot.at;
+    // Watching a bot (B), the view is its eyes', and the own player is drawn as one of the others.
+    const spy = botcam.id === undefined ? undefined : others.find(p => p.id == botcam.id);
+    const third = k > 0 || !!spy;
+    const pov: [number, number, number] = spy
+      ? [spy.x, spy.y + eyeHeight(spy), spy.z]
+      : watch.k
+        ? watch.at
+        : shot.at;
     // On a wall the xenomorph's view turns over onto it, its floor (crawl.ts).
     crawl.update(me, dt);
     const [turned, tilted, roll] = crawl.view(
@@ -824,9 +842,13 @@ const play = (
     );
     // The shortest way round from the eye's look to the kill camera's.
     const swing = Math.atan2(Math.sin(watch.yaw - turned), Math.cos(watch.yaw - turned));
-    const view = turned + swing * watch.k;
-    const pitch = tilted + (watch.pitch - tilted) * watch.k;
-    const lens = third ? { ...fx, roll, fov: fx.fov * (1 - k) + shot.fov } : { ...fx, roll };
+    const view = spy ? spy.yaw : turned + swing * watch.k;
+    const pitch = spy ? spy.pitch : tilted + (watch.pitch - tilted) * watch.k;
+    const lens = spy
+      ? fx
+      : third
+        ? { ...fx, roll, fov: fx.fov * (1 - k) + shot.fov }
+        : { ...fx, roll };
     // The driver is unarmed and his body is the renderer's to draw whole: no sight, no muzzle.
     const look = me && !third ? sight(world, eye, cam, ctl.yaw, ctl.pitch, pitch) : undefined;
     if (look) {
@@ -890,7 +912,7 @@ const play = (
         pov,
         view,
         pitch,
-        visible,
+        spy ? visible.filter(p => p !== spy) : visible,
         colors,
         lens,
         [
@@ -905,7 +927,7 @@ const play = (
         tracer,
         shown,
         // Not while the camera is still in the head: it would see the inside of it.
-        k > 0.2 ? me : undefined,
+        k > 0.2 || spy ? me : undefined,
         v => {
           doors.draw(v, pov, dt);
           wrecks.draw(v);
@@ -930,6 +952,7 @@ const play = (
       } else {
         hud.aim();
       }
+      botcam.draw(rd.project, id => names.get(id) ?? '?');
     }
     // The health of the vehicle he sits in, and of the nearest other one within NEAR_HULL metres in sight.
     const mine = seat && rovers[seat.rover];
@@ -1029,6 +1052,8 @@ const play = (
       }
       dead = true;
       cancelAnimationFrame(raf);
+      document.removeEventListener('keydown', onKey);
+      botcam.destroy();
       ctl.destroy();
       audio.destroy();
       rd?.destroy();

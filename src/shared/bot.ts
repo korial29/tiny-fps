@@ -43,6 +43,22 @@ export interface Sight {
 
 export type Intent = { keys: number; yaw: number; pitch: number };
 
+/** What a bot is up to, sent to a player who watches it (the room's 'bot' text). */
+export interface BotView {
+  id: number;
+  /** Why it goes where it goes: 'take flag', 'chase carrier', 'gun rack'… */
+  why: string;
+  /** Its way: the entry, the nodes it goes through, then its goal; `next` is the point it goes to now. */
+  path: Vec3[];
+  next: number;
+  /** What it does on the way: 'to entry', a leg's kind ('go', 'leap', 'slide'), 'walk', 'to goal', 'no way'. */
+  doing: string;
+  /** The enemy it fights, -1 for none. */
+  foe: number;
+  /** The KEY bits it last pressed. */
+  keys: number;
+}
+
 /** How far a bot shoots, metres, and how far it sees an enemy to fight. */
 const RANGE = 35;
 /** Radians off the target a bot still shoots. */
@@ -217,6 +233,9 @@ export class Bot {
   /** The way it strafes in a fight (1 left, -1 right) and the tick it may turn back. */
   private strafing = 1;
   private turnBack = 0;
+  /** Why it goes where it goes, and the keys it last pressed: for its view(). */
+  private why = '';
+  private keys = 0;
   /** The balls it has weighed, by shooter and count: it decides once whether to get out of the way. */
   private weighed = new Set<number>();
   /** Its errand to the orbital station, when it has one. */
@@ -242,6 +261,43 @@ export class Bot {
 
   /** The input of this tick. */
   public think(s: Sight): Intent {
+    const i = this.decide(s);
+    this.keys = i.keys;
+    return i;
+  }
+
+  /**
+   * What it is up to, for a player who watches it (the client's bot view): its goal and why, the
+   * way there as points (its entry, the nodes of the edges, the goal), the index of the point it
+   * goes to now, what it is doing on the way, the enemy it fights and the keys it last pressed.
+   */
+  public view(): BotView {
+    const { entry, edges } = this.way;
+    const r = (v: Vec3): Vec3 => [v[0], v[1], v[2]].map(n => Math.round(n * 10) / 10) as Vec3;
+    const path = [...(entry ? [entry] : []), ...edges.map(e => this.nav!.nodes[e.to])];
+    if (this.goal) {
+      path.push(this.goal);
+    }
+    const e = edges[this.leg];
+    return {
+      id: this.id,
+      why: this.why,
+      path: path.map(r),
+      next: this.leg < 0 ? 0 : this.leg + (entry ? 1 : 0),
+      doing: !this.goal
+        ? 'no way'
+        : this.leg < 0
+          ? 'to entry'
+          : e
+            ? (e.leg?.k ?? 'walk')
+            : 'to goal',
+      foe: this.foe,
+      keys: this.keys,
+    };
+  }
+
+  /** think()'s work. */
+  private decide(s: Sight): Intent {
     const t = ++this.ticks;
     const p = s.me.state;
     this.world = s.world;
@@ -421,13 +477,16 @@ export class Bot {
       return h && [h.x, y! > h.y - HOVER ? y! : h.y, h.z];
     };
     if (theirs.state === FLAG.CARRIED && theirs.by === me.id) {
+      this.why = 'flag home';
       return home.base;
     }
     if (this.sortie.board) {
+      this.why = 'station';
       return this.sortie.board;
     }
     const gear = s.kit?.gear ?? true;
     if (p.ammo < 0 && gear && home.rack && flat(p.x, p.z, home.rack[0], home.rack[2]) < ARM) {
+      this.why = 'gun rack';
       return home.rack;
     }
     // Claws reach no farther than an arm: it runs at the enemy it sees close by.
@@ -443,29 +502,36 @@ export class Bot {
             !hidden(world, eye, [o.state.x, o.state.y + 1.2, o.state.z]),
         );
     if (prey) {
+      this.why = 'hunt';
       return at(prey.state);
     }
     if (mine.state === FLAG.CARRIED) {
       const h = holder(mine);
       if (h) {
+        this.why = 'chase carrier';
         return h;
       }
     }
     if (mine.state === FLAG.DROPPED) {
+      this.why = 'return flag';
       return [mine.x, mine.y, mine.z];
     }
     if (this.id % GUARD === GUARD - 1) {
+      this.why = 'guard';
       return home.base;
     }
     if (theirs.state === FLAG.CARRIED) {
       const h = holder(theirs);
       if (h) {
+        this.why = 'escort';
         return h;
       }
     }
     if (theirs.state === FLAG.DROPPED) {
+      this.why = 'take flag';
       return [theirs.x, theirs.y, theirs.z];
     }
+    this.why = 'take flag';
     return world.def.teams[1 - team].base;
   }
 

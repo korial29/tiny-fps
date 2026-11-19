@@ -142,9 +142,9 @@ const vambrace = (x: number, y: number) =>
  */
 export const BICEPS = { y: [1.203, 1.315], cut: 0.018, off: 0.0045 };
 
-/** The knee pad's dome: up to 8 mm out at the kneecap. */
+/** The knee pad's dome: up to 5 mm out at the kneecap (8 until the knee under it got leaner, 2026-11-19: it stood out as a ball). */
 const knee = (x: number, y: number) =>
-  0.008 * Math.max(0, 1 - ((Math.abs(x) - 0.1) / 0.07) ** 2 - ((y - 0.515) / 0.055) ** 2);
+  0.005 * Math.max(0, 1 - ((Math.abs(x) - 0.1) / 0.06) ** 2 - ((y - 0.512) / 0.048) ** 2);
 
 /**
  * The briefs (the user, 2026-11-10: round the hips under the belt, the leg's opening rising from the
@@ -410,8 +410,15 @@ export const REGIONS: Region[] = [
   { part: PART.LEG, cx: 0.1, y: [0.585, 0.94], a: [-62, 78], high: plates },
   // The ninja's shin guards (the user, 2026-11-13), from under the knee to the boot.
   { part: PART.LEG, cx: 0.1, y: [0.17, 0.44], a: [-62, 62], alone: true },
-  // The knees: round (the user, 2026-11-10), domed.
-  { part: PART.LEG, cx: 0.1, y: [0.46, 0.57], a: [-60, 60], round: [56, 0.515, 0.05], swell: knee },
+  // The knees: round (the user, 2026-11-10), domed; smaller on the leaner knee (2026-11-19).
+  {
+    part: PART.LEG,
+    cx: 0.1,
+    y: [0.46, 0.57],
+    a: [-60, 60],
+    round: [47, 0.512, 0.043],
+    swell: knee,
+  },
   // The forearms, down to the gloves (the user, 2026-11-10), all round the arm (2026-11-12).
   {
     part: PART.ARM,

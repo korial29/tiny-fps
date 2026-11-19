@@ -794,7 +794,7 @@ describe('the xenomorph in a room', () => {
     expect(glory(q, [{ ...foe(-4), hp: GLORY_HP }])?.id).toBe(7);
   });
 
-  it('executes on E a weak foe ahead with the katana in hand: a dash, a cut down, a cut across that takes his head', () => {
+  it('executes on E a weak foe ahead with the katana in hand: a dash, a thrust, a cut down that takes his head', () => {
     const { inner, ps, sent } = room(ROLE.MARINE, ROLE.MARINE);
     const [k, m] = ps;
     face(k.state, m.state);
@@ -819,13 +819,16 @@ describe('the xenomorph in a room', () => {
     expect([k.state.exec, m.state.exec]).toEqual([EXEC.KILLER, EXEC.VICTIM]);
     expect([k.state.foe, m.state.foe]).toEqual([m.info.id, k.info.id]);
     const cuts: [number, number, number][] = [];
+    let swung = 0;
     for (let t = 1; t < EXEC.TICKS; t++) {
       // He runs, it shoots: neither counts.
       step(m, KEY.BACK | KEY.SPRINT | KEY.FIRE);
       step(k, KEY.FIRE | KEY.LEFT);
-      if (k.state.swing && (cuts.at(-1)?.[1] ?? -1) !== k.state.cut) {
-        cuts.push([t, k.state.cut!, k.state.swing]);
+      // A swing that starts: its count goes up.
+      if ((k.state.swing ?? 0) > swung) {
+        cuts.push([t, k.state.cut!, k.state.swing!]);
       }
+      swung = k.state.swing ?? 0;
       if (t == GLORY_DASH) {
         // In front of him.
         expect(Math.hypot(k.state.x - m.state.x, k.state.z - m.state.z)).toBeCloseTo(EXEC.REACH, 1);
@@ -835,11 +838,11 @@ describe('the xenomorph in a room', () => {
       }
     }
     expect(cuts).toEqual([
-      [EXEC.CUTS[0], CUT.SLASH, CUTS[CUT.SLASH].ticks],
-      [EXEC.CUTS[1], CUT.RIGHT, CUTS[CUT.RIGHT].ticks],
+      [EXEC.CUTS[0], CUT.THRUST, CUTS[CUT.THRUST].ticks],
+      [EXEC.CUTS[1], CUT.SLASH, CUTS[CUT.SLASH].ticks],
     ]);
-    // The lock's last tick is the strike of the cut across: his head goes, the body falls back.
-    const c = CUTS[CUT.RIGHT];
+    // The lock's last tick is the strike of the cut down: his head goes, the body falls back.
+    const c = CUTS[CUT.SLASH];
     expect(c.ticks - k.state.swing!).toBe(c.strike);
     expect(m.state.down).toBeGreaterThan(0);
     expect([m.state.lost, m.state.lock ?? 0, k.state.lock ?? 0, k.state.exec]).toEqual([

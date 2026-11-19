@@ -395,10 +395,12 @@ const DIAGONAL = (s: number, k = 1) => [
   [0.68, 0.24 * k, -0.5, 0.2],
   [0.84, 0.2 * k, -0.4, 0.3],
 ];
+/** The share of the cut down's swing at the top of its wind-up, the blade over the head. */
+export const SLASH_TOP = 0.28;
 /** Raised over the head, the blade upright, down through the middle to the hands low at the hips and the point ahead. */
 const SLASH = (s: number) => [
   [0.14, 0.03, -0.06, 0.44],
-  [0.28, 0.02, 0.2, 0.28],
+  [SLASH_TOP, 0.02, 0.2, 0.28],
   [0.34, 0.02, 0.06, 0.44],
   [s, 0, -0.45, 0.4],
   [0.52, 0, -0.62, 0.16],

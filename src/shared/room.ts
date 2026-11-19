@@ -113,6 +113,8 @@ interface Player {
   bot?: Bot;
   /** A bot's last seq. */
   seq?: number;
+  /** The bot this player watches, told what it is up to (the 'bot' text). */
+  watch?: number;
   state: PlayerState;
   /** The order he joined in: the oldest player is the host. */
   since: number;
@@ -164,6 +166,8 @@ interface Wear {
   by: number;
   team: number;
 }
+/** Ticks between two of a bot's views to the players who watch it. */
+const WATCH = 6;
 /** The names of the bots, in turn. */
 const BOT_NAMES = ['Ada', 'Bix', 'Cog', 'Dot', 'Echo', 'Flux', 'Gear', 'Hex'];
 /**
@@ -379,6 +383,8 @@ export class Room {
       } else if (p && msg?.t === 'map' && p === this.host() && Object.hasOwn(MAPS, msg.map)) {
         this.next = msg.map === this.mapName ? undefined : msg.map;
         this.roster();
+      } else if (p && msg?.t === 'watch') {
+        p.watch = typeof msg.id === 'number' ? msg.id : undefined;
       } else if (p && msg?.t === 'body') {
         // It changes at once, and the roster tells everyone; the class is the next step's.
         const { id, name, team, color } = p.info;
@@ -1760,6 +1766,12 @@ export class Room {
           kit: this.kit(p),
         });
         p.seq = ((p.seq ?? -1) + 1) & 0xffff;
+        // Built only for a bot someone watches.
+        const watchers = players.filter(q => q.watch === p.info.id);
+        if (watchers.length && this.ticks % WATCH === 0) {
+          const text = JSON.stringify({ t: 'bot', ...p.bot.view() } satisfies ServerText);
+          watchers.forEach(q => q.conn.send(text));
+        }
         this.apply(p, onWire({ ...i, seq: p.seq, view: this.ticks & 0xffff }));
       }
     }

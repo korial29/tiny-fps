@@ -406,6 +406,7 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
     'Game',
     [
       ['M', 'mute', 'KeyM'],
+      ['B', 'see through a bot’s eyes: its way, its goal; again for the next'],
       ['Esc', 'this screen'],
     ],
   ],

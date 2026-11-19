@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Bot, personaOf } from './bot';
 import { KITS, ROLE } from './kit';
 import type { Kit } from './kit';
@@ -131,6 +131,34 @@ describe('Room: bots', () => {
     const world = (r: Room) => (r as unknown as { world: World }).world;
     expect(navBuilt(world(new Room({ bots: 2 })))).toBe(true);
     expect(navBuilt(world(new Room()))).toBe(false);
+  });
+
+  it('tells a player who watches a bot what it is up to, ten times a second, until he stops', () => {
+    const room = new Room({ bots: 2 });
+    const a = join(room);
+    const bot = roster(a).players.find(p => p.bot)!;
+    room.receive(a, JSON.stringify({ t: 'watch', id: bot.id }));
+    ticks(room, 60);
+    const views = a.texts.filter(m => m.t === 'bot');
+    expect(views.length).toBe(10);
+    const v = views.at(-1)!;
+    expect(v).toMatchObject({ id: bot.id, why: expect.any(String), doing: expect.any(String) });
+    if (v.t === 'bot') {
+      expect(v.path.length).toBeGreaterThan(0);
+      expect(v.next).toBeLessThan(v.path.length);
+    }
+    room.receive(a, JSON.stringify({ t: 'watch' }));
+    ticks(room, 60);
+    expect(a.texts.filter(m => m.t === 'bot')).toHaveLength(10);
+  });
+
+  it('builds no bot view while nobody watches', () => {
+    const view = vi.spyOn(Bot.prototype, 'view');
+    const room = new Room({ bots: 8 });
+    join(room);
+    ticks(room, 60);
+    expect(view).not.toHaveBeenCalled();
+    view.mockRestore();
   });
 
   it('takes no bot without the rule', () => {

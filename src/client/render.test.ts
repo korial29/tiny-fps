@@ -887,3 +887,15 @@ describe('no NaN out of the shaders', () => {
     expect(FRAG).toContain(`x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.)`);
   });
 });
+
+describe('the glory kill flash', () => {
+  it('blinks on the time: no local T hides the uniform in the fragment shader', () => {
+    expect(FRAG).toMatch(/uniform float T\b/);
+    const main = FRAG.slice(FRAG.indexOf('void main('));
+    expect(main).not.toMatch(/(vec[234]|float|int)\s+T\s*=/);
+    expect(main).not.toMatch(/[,(]\s*T\s*=/);
+  });
+  it('reaches the feet, the tail and the claws of the runners drawn as pieces', () => {
+    expect(FRAG).toMatch(/gl=max\(gl,Gp\*step\(dot\(dq,dq\),6\.25\)\*step\(Ve\[i\]\.y-\.4,P\.y\)/);
+  });
+});

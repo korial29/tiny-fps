@@ -296,7 +296,7 @@ export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y,Ss;uniform int Q;
 uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform float Sn;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
-uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D Pl;uniform vec4 Ve[16];uniform vec2 Vn;out vec4 o;
+uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D Pl;uniform vec4 Ve[16];uniform vec2 Vn;uniform float Gp;out vec4 o;
 vec3 xv(vec3 c){return dot(c,vec3(.3,.59,.11))*vec3(.55,.8,1.2);}
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
@@ -430,15 +430,15 @@ c*=1.+wz*fb*(.5*(1.-t)-.2-.6*smoothstep(.12,0.,t));h+=wz*fb*.0012*(1.-t);
 float tie=smoothstep(.383,.387,y)*(1.-smoothstep(.399,.403,y)),sp=smoothstep(.0035,.001,abs(abs(Rp.x)-.089))*step(Rp.z,-.125)*step(y,.075);
 c=mix(c,vec3(.2,.19,.18),tie*.8)*(1.-.8*sp);h+=tie*.0015-.001*sp;}
 float ah=1.,kh=step(-1.497,L)*step(L,-1.443)*smoothstep(.02,.12,(-1.45-L)/.04),hp=max(length(dx),length(dy)),st=0.,st2=0.;
-vec3 T=-nz((dFdx(L)*a+dFdy(L)*b)*sign(det));T=nz(T-n*dot(T,n));
-if(kh>0.){for(int i=-3;i<=3;i++){vec3 q=P+T*float(i)*.011;st+=vn3(q*650.);st2+=vn3(q*200.+4.);}
+vec3 Tn=-nz((dFdx(L)*a+dFdy(L)*b)*sign(det));Tn=nz(Tn-n*dot(Tn,n));
+if(kh>0.){for(int i=-3;i<=3;i++){vec3 q=P+Tn*float(i)*.011;st+=vn3(q*650.);st2+=vn3(q*200.+4.);}
 st=clamp(.5+(st/7.-.5)*1.7,0.,1.);st2=clamp(.5+(st2/7.-.5)*2.6,0.,1.);
 float hf=1.-smoothstep(.4,1.,hp*650.);st=mix(.5,st,hf);st2=mix(.5,st2,1.-smoothstep(.4,1.,hp*200.));
 c*=.9+.16*st+.16*(st2-.5);
 if(Wa<-.5&&Rp.y>.5)ah=1.-smoothstep(.94,1.,Rp.x+.08*(st-.5));}
 float kc=step(-1.3895,L)*step(L,-1.3595),ac=1.,kx=max(kh,kc);
 if(kc>0.){float cu=(${CARD_BASE}-L)*${(1 / CARD_STEP).toFixed(1)},ci=floor(cu),uu=(cu-ci-.02)/.96,kd=step(100.,ci)+step(200.,ci),x=uu*(kd<.5?10.:kd<1.5?7.:2.),ix=floor(x);
-T=nz(cross(T,n));vec3 hq=hs(vec3(ci,ix,7.));
+Tn=nz(cross(Tn,n));vec3 hq=hs(vec3(ci,ix,7.));
 float d=abs(fract(x)-.5)*2.,wd=kd<.5?.65+.3*hq.x:kd<1.5?.2+.4*hq.x:.3+.3*hq.x,fw=max(fwidth(x)*2.,1e-3);
 float vh=step(Wa,-.5),al=Rp.x,ln=1.-(kd<.5?.08:.2)*hs(vec3(ci,ix,3.)).x;wd*=1.-.8*vh*smoothstep(ln-.3,ln,al);
 ac=clamp((wd-d)/fw+.5,0.,1.)*min(1.,max(wd/fw,kd>1.5?.45:0.))*(kd<.5?1.:step(.12,hq.y))*(kd<.5?.98:.92);
@@ -449,7 +449,7 @@ vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
 vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];if(kt>0.)R=vec2(.22*kg,40.);if(kr>0.)R=vec2(.5*(.3+.7*rr),36.);
 vec3 y=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s),V=normalize(E-P),w=nz(n+m);
 float sd=max(dot(m,O),0.)*smoothstep(0.,.1,dot(n,O)),sv=1.;
-sd=mix(sd,.5*sqrt(max(1.-dot(T,O)*dot(T,O),0.))*smoothstep(-.3,.4,dot(n,O)),kx*.6);
+sd=mix(sd,.5*sqrt(max(1.-dot(Tn,O)*dot(Tn,O),0.))*smoothstep(-.3,.4,dot(n,O)),kx*.6);
 vec3 wr=vec3(.38,.16,.1),sw=clamp((dot(m,O)+wr)/(1.+wr),0.,1.)*smoothstep(-.35,.1,dot(n,O));
 if(sd>0.&&g<1.){
 vec4 q=W*vec4(P+n*.08,1);q.xyz=q.xyz*.5+.5;
@@ -457,7 +457,7 @@ float v=0.;
 for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADOW},0,q.z-.0004));
 sv=mix(v/4.,1.,smoothstep(.8,1.,max(max(abs(q.x-.5),abs(q.y-.5)),abs(q.z-.5))*2.));}
 vec3 l=y*(mix(mix(H[1],H[0],max(w.y,0.)),H[2],max(-w.y,0.))+X*mix(vec3(sd),sw,kb)*sv),sp=X*sv*sd*pow(max(dot(m,nz(O+V)),0.),R.y);
-vec3 Hh=nz(O+V),T1=nz(T+m*(-.1+.12*(st-.5))),T2=nz(T+m*(.15+.12*(st-.5)));float d1=dot(T1,Hh),d2=dot(T2,Hh);
+vec3 Hh=nz(O+V),T1=nz(Tn+m*(-.1+.12*(st-.5))),T2=nz(Tn+m*(.15+.12*(st-.5)));float d1=dot(T1,Hh),d2=dot(T2,Hh);
 vec3 hl=kx*X*sv*smoothstep(-.15,.35,dot(n,O))*(.08*pow(max(1.-d1*d1,0.),80.)*(.5+st)+.06*c/(dot(c,vec3(.3,.5,.2))+.02)*pow(max(1.-d2*d2,0.),14.)*(.3+1.4*st2*st));
 vec3 skp=kb*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),90.)*(.07+.4*pow(clamp(1.-dot(n,V),0.,1.),5.))*(.6+.8*n9);
 for(int i=0;i<${MAX_LIGHTS};i++){
@@ -483,7 +483,7 @@ c+=wa*ch*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),60.)*.5;
 c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(-abs(r.y-.12)*18.)),step(abs(L-(${GILT})),.02)*(.45+.45*fr));
 float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5),ht=0.;
 c.g=mix(c.g,c.r,z);
-float gl=0.;for(int i=0;i<16;i++){if(float(i)>=Vn.y)break;vec2 dq=P.xz-Ve[i].xz;float hi=step(dot(dq,dq),.5)*step(Ve[i].y+.03,P.y)*step(P.y,Ve[i].y+mod(abs(Ve[i].w),100.));ht=max(ht,hi);gl=max(gl,hi*step(50.,abs(Ve[i].w)));}
+float gl=0.;for(int i=0;i<16;i++){if(float(i)>=Vn.y)break;vec2 dq=P.xz-Ve[i].xz;float hi=step(dot(dq,dq),.5)*step(Ve[i].y+.03,P.y)*step(P.y,Ve[i].y+mod(abs(Ve[i].w),100.));ht=max(ht,hi);gl=max(gl,Gp*step(dot(dq,dq),6.25)*step(Ve[i].y-.4,P.y)*step(P.y,Ve[i].y+mod(abs(Ve[i].w),100.)+.6)*step(50.,abs(Ve[i].w)));}
 float xr=0.;if(Vn.x>0.){vec3 xd=P-E;float xa=max(dot(xd.xz,xd.xz),1e-4);for(int i=0;i<16;i++){if(float(i)>=Vn.y)break;if(Ve[i].w>0.)continue;float xs=max(dot(Ve[i].xz-E.xz,xd.xz)/xa,0.);vec3 xp=E+xd*xs;float xh=mod(-Ve[i].w,100.)*.5,xi=(1.-smoothstep(.12,.34,length(xp.xz-Ve[i].xz)))*(1.-smoothstep(.8,1.,abs(xp.y-Ve[i].y-xh)/xh));xr=max(xr,xi);gl=max(gl,xi*step(50.,-Ve[i].w));}}
 vec3 fc=F.rgb;if(Vn.x>0.){c=mix(xv(c),vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));fc=xv(fc);}c=mix(c,vec3(2.,.45,.03),gl*(.55+.45*sin(T*14.)));
 o=vec4(mix(c,fc,1.-exp(-F.a*(1.-.6*Vn.x)*(1.-max(ht,xr))*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc)*ah);
@@ -1076,6 +1076,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       'Sg',
       'Sm',
       'Ak',
+      'Gp',
       'Hc',
       'Hs',
       'Ss',
@@ -1275,6 +1276,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       dust.draw(v);
       // A carried flag is strapped to its carrier's chest.
       const chests = new Map<number, [Vec3, Quat]>();
+      const crowdAt = v.length;
       for (const p of crowd) {
         const d = Math.hypot(p.x - eye[0], p.z - eye[2]);
         const s = soldier(
@@ -1293,6 +1295,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           chests.set(p.id, [[c[0] + back[0], c[1] + back[1], c[2] + back[2]], q]);
         }
       }
+      const crowdEnd = v.length;
       ctf?.flags.forEach(f => flag(v, f, teamRgb(f.team), now, f.by && chests.get(f.by.id)));
       // What glows casts nothing: it comes after the last thing that casts a shadow.
       const beamAt = v.length;
@@ -1383,6 +1386,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
               .filter(p => !p.down && colors.get(p.id) !== own && (seeing || p.hp <= GLORY_HP))
               .slice(0, 16)
           : [];
+      const flashing = keen && prey.some(p => p.hp <= GLORY_HP && !p.lock);
       gl.uniform2f(u.Vn, +seeing, prey.length);
       if (prey.length) {
         gl.uniform4fv(
@@ -1414,6 +1418,19 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const fade = clamp01(high / ORBIT_FADE);
       const edge = high > 0 ? 1 : low;
       gl.uniform4f(u.Ob, globe, fade, edge, 0);
+      /** The frame's own vertices from `at`: the runners' (their tails and claws are not pieces) take the glory flash's wide reach. */
+      const drawn = (at: number) => {
+        if (!flashing) {
+          gl.drawArrays(gl.TRIANGLES, at, bodyAt / STRIDE);
+          return;
+        }
+        const [a, b] = [crowdAt / STRIDE, crowdEnd / STRIDE];
+        gl.drawArrays(gl.TRIANGLES, at, a);
+        gl.uniform1f(u.Gp, 1);
+        gl.drawArrays(gl.TRIANGLES, at + a, b - a);
+        gl.uniform1f(u.Gp, 0);
+        gl.drawArrays(gl.TRIANGLES, at + b, (bodyAt - crowdEnd) / STRIDE);
+      };
       if (heavensN) {
         // The Earth goes with the eye, so it is as far as the stars, and never fades into the globe.
         const sky0 = first - heavensN;
@@ -1424,11 +1441,16 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.drawArrays(gl.TRIANGLES, sky0, heavensN);
         gl.uniform4fv(u.R, STILL);
         gl.uniform4f(u.Ob, globe, fade, edge, 0);
-        gl.drawArrays(gl.TRIANGLES, first, bodyAt / STRIDE);
+        drawn(first);
+      } else if (flashing) {
+        gl.drawArrays(gl.TRIANGLES, 0, first);
+        drawn(first);
       } else {
         gl.drawArrays(gl.TRIANGLES, 0, first + bodyAt / STRIDE);
       }
+      gl.uniform1f(u.Gp, 1);
       place();
+      gl.uniform1f(u.Gp, 0);
       // The sky after the world, at depth 1: shaded only where nothing stands in front of it (the
       // moon's globe is the costliest pixel of the frame). The view ray of each pixel from the camera's axes.
       gl.uniform3fv(u.J, [right.map(c => c * tan * (w / h)), up.map(c => c * tan), fwd].flat());

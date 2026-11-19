@@ -38,6 +38,7 @@ import {
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
 import { furnishing } from './moonbase';
 import { hangar, satellite } from './satellite';
+import { mouths, rooms } from '../shared/station';
 import { HEAVENS, heavens, moonscape } from './moonscape';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
@@ -539,6 +540,71 @@ export const project = (
   const cx = m[0] * x + m[4] * y + m[8] * z + m[12];
   const cy = m[1] * x + m[5] * y + m[9] * z + m[13];
   return [0.5 + cx / (2 * w), 0.5 - cy / (2 * w)];
+};
+
+/** The left, right, bottom, top and near planes of a view-projection: the last row plus or minus another. */
+const PLANES = [
+  [1, 0],
+  [-1, 0],
+  [1, 1],
+  [-1, 1],
+  [1, 2],
+];
+
+/**
+ * Whether a sphere reaches into the view of `m`. A point light out of it lights no pixel drawn, and
+ * the GPU pays for every light on every fragment, hidden ones too.
+ */
+export const inView = (m: Float32Array, [x, y, z]: Vec3, r: number): boolean =>
+  PLANES.every(([s, i]) => {
+    const [a, b, c, d] = [
+      m[3] + s * m[i],
+      m[7] + s * m[4 + i],
+      m[11] + s * m[8 + i],
+      m[15] + s * m[12 + i],
+    ];
+    return a * x + b * y + c * z + d >= -r * Math.sqrt(a * a + b * b + c * c);
+  });
+
+/**
+ * The pixels [x, y, width, height] (from the bottom left) the quads cover on a `w` by `h` target seen
+ * through `m`, cut at the near plane, a pixel wider each side; undefined when none.
+ */
+export const cover = (
+  m: Float32Array,
+  quads: Vec3[][],
+  w: number,
+  h: number,
+): [number, number, number, number] | undefined => {
+  const NEAR = 1e-3;
+  // The union of each quad's box on the target: two mouths off either side of the view are none.
+  let [l, b, r, t] = [w, h, 0, 0];
+  for (const q of quads) {
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    const add = (cx: number, cy: number, cw: number) => {
+      const [px, py] = [(cx / cw / 2 + 0.5) * w, (cy / cw / 2 + 0.5) * h];
+      [x0, y0, x1, y1] = [Math.min(x0, px), Math.min(y0, py), Math.max(x1, px), Math.max(y1, py)];
+    };
+    const c = q.map(([x, y, z]) =>
+      [0, 1, 3].map(i => m[i] * x + m[4 + i] * y + m[8 + i] * z + m[12 + i]),
+    );
+    c.forEach((a, i) => {
+      const e = c[(i + 1) % c.length];
+      if (a[2] > NEAR) {
+        add(a[0], a[1], a[2]);
+      }
+      if (a[2] > NEAR != e[2] > NEAR) {
+        const k = (NEAR - a[2]) / (e[2] - a[2]);
+        add(a[0] + (e[0] - a[0]) * k, a[1] + (e[1] - a[1]) * k, NEAR);
+      }
+    });
+    const [ql, qb] = [Math.max(0, Math.floor(x0) - 1), Math.max(0, Math.floor(y0) - 1)];
+    const [qr, qt] = [Math.min(w, Math.ceil(x1) + 1), Math.min(h, Math.ceil(y1) + 1)];
+    if (qr > ql && qt > qb) {
+      [l, b, r, t] = [Math.min(l, ql), Math.min(b, qb), Math.max(r, qr), Math.max(t, qt)];
+    }
+  }
+  return r > l && t > b ? [l, b, r - l, t - b] : undefined;
 };
 
 /**
@@ -1349,7 +1415,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         read = used;
       }
       // The headlights of the rovers that are driven, after the lights given.
-      const pk = pack([...lights, ...beams(rovers.filter(r => !r.ship))]);
+      const pk = pack(
+        [...lights, ...beams(rovers.filter(r => !r.ship))].filter(
+          l => l.kind != LIGHT.POINT || inView(vp, l.p, l.range),
+        ),
+      );
       const first = ground.length / STRIDE;
       const sunM = sunProj(sunDir, sunAt(eye, yaw));
       // Layer 0: the sun, once; then one layer per mapped light.
@@ -1455,7 +1525,19 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       // moon's globe is the costliest pixel of the frame). The view ray of each pixel from the camera's axes.
       gl.uniform3fv(u.J, [right.map(c => c * tan * (w / h)), up.map(c => c * tan), fwd].flat());
       gl.uniform1f(u.Y, 1);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      // In the station's rooms space shows only through the hangar's mouths: the sky's pixels
+      // elsewhere are behind a wall, and the GPU would still shade them (the globe's craters).
+      const { station } = world.def;
+      const sky =
+        station && rooms(station).some(([lo, hi]) => eye.every((c, i) => c > lo[i] && c < hi[i]))
+          ? cover(vp, mouths(station), w, h)
+          : [0, 0, w, h];
+      if (sky) {
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(sky[0], sky[1], sky[2], sky[3]);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.disable(gl.SCISSOR_TEST);
+      }
       gl.uniform1f(u.Y, 0);
       if (v.length > bodyAt) {
         // Last, over a cleared depth: the body never sinks into a wall.

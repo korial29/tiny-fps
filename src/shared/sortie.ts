@@ -51,6 +51,9 @@ export const SORTIE = {
   LAND: 10,
 };
 
+/** Metres before a ship's centre a bot walks to, to board it. */
+const NOSE = 4;
+
 const flat = (ax: number, az: number, bx: number, bz: number) =>
   Math.sqrt((bx - ax) ** 2 + (bz - az) ** 2);
 const toward = (x0: number, z0: number, x1: number, z1: number) =>
@@ -202,7 +205,9 @@ export class Sortie {
       if (nearby(ship, p)) {
         return { keys: press, yaw: toward(p.x, p.z, ship.x, ship.z), pitch: 0 };
       }
-      this.board = [ship.x, ship.y - SHIP.DROP, ship.z];
+      // Before its nose, inside the reach: the wings at its back would hold a body off its side.
+      const [fx, fz] = forward(ship.yaw);
+      this.board = [ship.x + fx * NOSE, ship.y - SHIP.DROP, ship.z + fz * NOSE];
     }
     return undefined;
   }

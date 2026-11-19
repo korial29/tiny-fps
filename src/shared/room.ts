@@ -297,6 +297,8 @@ export class Room {
   private mapName: string;
   /** The map the host picked for the next match, when it is another one. */
   private next: string | undefined;
+  /** The next map's world, built with the bots' mesh while the end screen runs rather than in the tick that starts the match. */
+  private ready: [map: string, world: World] | undefined;
   /** Joins so far: each player's `since`. */
   private joins = 0;
   /** Ids of bots let go this tick, not given again before the next: the person who takes a bot's place would be drawn where it stood. */
@@ -349,7 +351,9 @@ export class Room {
     }
     this.mapName = this.next;
     this.next = undefined;
-    this.world = build(mapOf(this.mapName));
+    const [map, world] = this.ready ?? [];
+    this.ready = undefined;
+    this.world = map === this.mapName && world ? world : build(mapOf(this.mapName));
     this.ctf = new Ctf(this.world, this.rules);
     this.gone = this.spots();
     this.fresh();
@@ -361,6 +365,17 @@ export class Room {
       this.ctf.join(p.info.id, p.info.team, p.state);
     }
     this.roster();
+  }
+
+  /** The next map's world and the bots' mesh of it, built ahead (Tranquility's mesh takes some 30 ms). */
+  private prepare(): void {
+    if (this.next !== undefined) {
+      const world = build(mapOf(this.next));
+      if (this.rules.bots) {
+        navOf(world);
+      }
+      this.ready = [this.next, world];
+    }
   }
 
   /** Number of joined players, the bots left out: a room of bots alone is empty. */
@@ -545,6 +560,7 @@ export class Room {
     );
     if (turn === 'end') {
       this.end(players);
+      this.prepare();
     } else if (turn === 'start') {
       this.load();
       this.restart(players);

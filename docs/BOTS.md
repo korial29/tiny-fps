@@ -25,7 +25,7 @@ worth taking, what tiny-fps took, and what is left.
 | Skill and traits       | `personaOf(id, skill)`: the aim's first error, the reaction, the aim's turn rate, Jumpiness, how long it strafes one way, its chance of dodging a ball. `Rules.botSkill`, `BOT_SKILL` on the server, 0 to 7, 4 when absent.                       |
 | Dodging projectiles    | `evade()`: an enemy ball that will pass within 1.3 m of the chest in the next half second is weighed once; with the bot's chance it dashes across the ball's way, away from it, where the floor is open. Not on a leg of a route, nor in the air. |
 | Moving in a fight      | `dodge()`: it strafes one way for a while, then the other, never toward a drop; now and then it jumps or dashes aside.                                                                                                                            |
-| Reach specs, JumpSpots | `routes.ts`'s legs (a jump, a dash, a double jump, a wall-run, as the tests fly them), the moon's `CROSSINGS`, joined by straight walks (`walkable()`).                                                                                           |
+| Reach specs, JumpSpots | A navigation mesh (`nav.ts`): the brushes' tops and the relief as rectangles, joined by portals a body walks, drops or hops through; `routes.ts`'s legs and the moon's `CROSSINGS` as links (a jump, a dash, a double jump, a wall-run, as the tests fly them). A* then the funnel. |
 | AlternatePaths         | each bot prefers one of a map's three routes (`ROUTES`), by its id.                                                                                                                                                                               |
 | Squads                 | one bot in eight guards its base; the others attack, chase the enemy carrier, return a lying flag; the carrier runs rather than fights.                                                                                                           |
 | Moving about           | `walk()`: round a wall or a drop by the nearest open turn, onto a box low enough to jump, a dash where the way ahead is long, straight and wide, the look turning a little each tick.                                                             |
@@ -40,13 +40,15 @@ worth taking, what tiny-fps took, and what is left.
 3. **Weapons** (medium). The katana at close range, the rifle's grenade at a group, aimed at the
    feet; the rail gun at range.
 4. **Memory and hearing** (medium). Hunt where an enemy was last seen; turn to a shot heard.
-5. **Jumps found by the physics** (dear). Build the graph's jump and dash edges by flying them with
+5. **Jumps found by the physics** (dear). Build the mesh's jump and dash links by flying them with
    `move()`, as the UT editor builds its reach specs, instead of writing them by hand: every map
-   gets them, the moon's craters and boulders included. A build per map, cached.
+   gets them, one set per class (the ninja's and the xenomorph's jumps, the xenomorph's walls). A
+   build per map, cached. Then the vehicles: a mesh of the rover's own, and links to board one.
 
 ## How a change is judged
 
-Bot-only matches, headless, 16 minutes each, 8 bots, with numbers for the captures, the flags
+Bot-only matches, headless, 16 minutes each, 8 bots (`npm run botmatch`: `BOTMATCH` matches,
+`BOTMATCH_MAP`, `BOTMATCH_OUT` for the numbers, `node_modules/.cache/botmatch.json` by default), with numbers for the captures, the flags
 taken, the deaths, the falls, the blocks (5 s without moving), the time stopped on the way and the
 abrupt turns of the look. One match is noise: the same code can give twice the captures from one
 match to the next, so a change is judged on 24 matches or more, against master.

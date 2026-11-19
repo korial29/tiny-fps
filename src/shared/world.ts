@@ -148,16 +148,25 @@ export const build = (def: WorldDef, cell = CELL): World => {
   };
 };
 
+/** The call of near() that last listed each brush, so a brush in several cells is listed once (the bots' mesh asks for hundreds). */
+let marks = new Uint32Array(0);
+let mark = 0;
+
 /**
  * Indices of the brushes whose footprint may overlap the square of half side r around (x, z): every
  * brush listed in a cell the square touches, once each. A candidate list, not an exact overlap.
  */
 export const near = (w: World, x: number, z: number, r: number): number[] => {
   const out: number[] = [];
+  if (marks.length < w.def.brushes.length) {
+    marks = new Uint32Array(w.def.brushes.length);
+  }
+  mark = (mark + 1) >>> 0 || (marks.fill(0), 1);
   for (let cx = at(x - r, w.cell); cx <= at(x + r, w.cell); cx++) {
     for (let cz = at(z - r, w.cell); cz <= at(z + r, w.cell); cz++) {
       for (const i of w.grid.get(key(cx, cz)) ?? []) {
-        if (!out.includes(i)) {
+        if (marks[i] !== mark) {
+          marks[i] = mark;
           out.push(i);
         }
       }

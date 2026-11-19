@@ -152,6 +152,10 @@ describe('Room: bots', () => {
     expect(a.texts.filter(m => m.t === 'bot')).toHaveLength(10);
   });
 
+  it('points its view at the first point of no way before it plans one', () => {
+    expect(new Bot(0).view()).toMatchObject({ path: [], next: 0, doing: 'no way' });
+  });
+
   it('builds no bot view while nobody watches', () => {
     const view = vi.spyOn(Bot.prototype, 'view');
     const room = new Room({ bots: 8 });
@@ -239,33 +243,32 @@ describe('nav', () => {
     for (const [k] of ROUTES.entries()) {
       for (const [x, y, z] of red.spawns) {
         const there = path(nav, w, [x, y, z], blue.base, k);
-        expect(there.entry).toBeDefined();
-        expect(there.edges.length).toBeGreaterThan(5);
+        expect(there.at(-1)!.to).toEqual(blue.base);
+        expect(there.filter(st => st.leg).length).toBeGreaterThan(2);
         // The route it prefers is the one it takes.
-        expect(there.edges.filter(e => e.route >= 0).every(e => e.route === k)).toBe(true);
+        const routes = there.flatMap(st => (st.edge && st.edge.route! >= 0 ? [st.edge.route] : []));
+        expect(routes.every(r => r === k)).toBe(true);
       }
       const back = path(nav, w, blue.base, red.base, k);
-      expect(back.edges.length).toBeGreaterThan(5);
+      expect(back.at(-1)!.to).toEqual(red.base);
     }
   });
 
-  it('never walks straight onto the take-off of a jump that wants a run-up', () => {
+  it('runs up to a jump that wants it along the run of its route', () => {
     const [x, y, z] = red.spawns[0];
     const way = path(nav, w, [x, y, z], blue.base, 0);
-    expect(nav.runUp.size).toBeGreaterThan(0);
-    for (const [i, e] of way.edges.entries()) {
-      if (nav.runUp.has(e.to)) {
-        expect(way.edges[i + 1]?.leg?.k).toBe('leap');
-        expect(e.leg).toBeDefined();
-      }
-    }
+    const runs = way.filter(
+      (st, k) => st.leg?.k === 'leap' && st.leg.sprint && way[k - 1]?.leg?.k === 'go',
+    );
+    expect(runs.length).toBeGreaterThan(0);
   });
 
-  it('has lanes on the moon from each spawn to the other flag', () => {
+  it('finds a way on the moon from each spawn to the other flag', () => {
     const m = build(MOON);
     const [r, b] = MOON.teams;
-    const [x, y, z] = r.spawns[0];
-    expect(path(navOf(m), m, [x, y, z], b.base).edges.length).toBeGreaterThan(3);
+    for (const [x, y, z] of r.spawns) {
+      expect(path(navOf(m), m, [x, y, z], b.base).at(-1)!.to).toEqual(b.base);
+    }
   });
 });
 
@@ -345,18 +348,18 @@ describe('Bot: the keys of a leg', () => {
     const bot = new Bot(0);
     const goal = [foe.state.x, foe.state.y, foe.state.z];
     // On the Spine's run-up to its 11 m jump: the leg after the run to it.
-    const way = path(
+    const steps = path(
       navOf(world),
       world,
       [me.state.x, me.state.y, me.state.z],
       HIGHLINE.teams[1].base,
       0,
     );
-    expect(way.edges[1].leg?.k).toBe('leap');
+    const step = steps.findIndex(st => st.leg?.k === 'leap');
+    expect(steps[step - 1].leg?.k).toBe('go');
     Object.assign(bot, {
-      nav: navOf(world),
-      way,
-      leg: 1,
+      steps,
+      step,
       goal,
       planned: 0,
       last: [me.state.x, me.state.y, me.state.z],
@@ -403,7 +406,7 @@ describe('Bot: on the moon', () => {
     const [x, y, z] = r.spawns[0];
     const legs = [0, 1, 2].map(k =>
       path(nav, world, [x, y, z], b.base, k)
-        .edges.flatMap(e => (e.leg?.k === 'leap' ? [e.leg] : []))
+        .flatMap(st => (st.leg?.k === 'leap' ? [st.leg] : []))
         .map(l => l.to.join(',')),
     );
     expect(legs[0]).toEqual([]);
@@ -476,14 +479,16 @@ describe('nav: off the ways', () => {
     const w = build(HIGHLINE);
     const [x, y, z] = HIGHLINE.teams[1].spawns[0];
     const way = path(navOf(w), w, [x, y, z], HIGHLINE.teams[0].rack!);
-    expect(way.entry).toBeDefined();
-    expect(way.edges.length).toBeGreaterThan(5);
+    expect(way.length).toBeGreaterThan(5);
+    const [gx, , gz] = way.at(-1)!.to;
+    const [rx, , rz] = HIGHLINE.teams[0].rack!;
+    expect(Math.hypot(gx - rx, gz - rz)).toBeLessThan(1.5);
   });
 
   it('finds a way from the middle of a tower’s stair', () => {
     const w = build(HIGHLINE);
     const way = path(navOf(w), w, [56.8, 24.2, 227], [98, 14.5, 131]);
-    expect(way.entry).toBeDefined();
+    expect(way.at(-1)!.to).toEqual([98, 14.5, 131]);
   });
 });
 

@@ -1,11 +1,11 @@
 // The ninja's shoulder pads (the user, 2026-11-13, on his picture of a ninja's armour): on each
-// shoulder three lames one over the other, the lowest the longest, each a kite seen from above with
-// its point just past the arm, creased down its middle like a roof, sloping down over the shoulder
-// to cover it (the user: discreet, but over the shoulders) with its point kicked up. A
+// shoulder three lames one over the other, the lowest the longest, each with a plain round end just
+// past the arm, creased down its middle, sloping down over the shoulder to cover it (the user:
+// discreet, but over the shoulders) and turned down onto the arm at its end. A
 // piece of their own, built once for the right shoulder and mirrored: carried at the arm's joint,
 // turned as the collarbone is and a little as the arm (so it lifts when the arm does). And his collar,
 // on the chest at the neck's foot.
-import { GILT, GLOSS, STRIDE } from './mesh';
+import { GLOSS, STRIDE, TWILL } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J } from './rig';
 import type { Quat } from './rig';
@@ -19,9 +19,9 @@ import type { Out } from './verts';
  * width fore and aft, and its height at its start.
  */
 export const LAMES = [
-  [-0.05, 0.09, 0.115, 0.075],
-  [-0.058, 0.06, 0.102, 0.086],
-  [-0.066, 0.03, 0.089, 0.097],
+  [-0.05, 0.09, 0.115, 0.053],
+  [-0.058, 0.06, 0.102, 0.063],
+  [-0.066, 0.03, 0.089, 0.073],
 ];
 /**
  * His collar, standing round the back of the neck and open in front: how far round from the back it
@@ -30,11 +30,12 @@ export const LAMES = [
  */
 export const COLLAR = { a: 2.5, r: 0.085, flare: 0.035, foot: -0.035, back: 0.12, end: 0.05 };
 /** How far a lame rises to its point, how far its edges fall from its crease, its thickness, and the share of the arm's turn it takes. */
-const [RISE, FALL, THICK, LIFT] = [0.03, 0.075, 0.007, 0.55];
+// Its point no longer kicks up (the user, 2026-11-17: fold it down onto the arm): it turns down, RISE under 0.
+const [RISE, FALL, THICK, LIFT] = [-0.015, 0.075, 0.007, 0.55];
 /** Where along a lame it is widest. */
 const WIDE = 0.45;
-/** How far a lame slopes down along the shoulder before its point kicks up. */
-const SLOPE = 0.07;
+/** How far a lame slopes down along the shoulder to its end. */
+const SLOPE = 0.085;
 
 /**
  * The shoulder under the pads (the user, 2026-11-13: the pads went into the shoulder): the top of
@@ -44,17 +45,26 @@ const SLOPE = 0.07;
  */
 const shoulder = (x: number, z: number) => {
   const out = Math.max(x - 0.02, 0);
-  const front = FRONT[0] + (FRONT[1] - FRONT[0]) * Math.min(Math.max((x + 0.04) / 0.06, 0), 1);
-  return 0.038 - 0.4 * x - out * (0.5 + 18 * out) - (z < 0 ? front : 1.5) * z * z;
+  const t = Math.min(Math.max((x + 0.04) / 0.06, 0), 1);
+  const [front, back] = [FRONT[0] + (FRONT[1] - FRONT[0]) * t, REAR[0] + (REAR[1] - REAR[0]) * t];
+  return 0.038 - 0.4 * x - out * (0.5 + 18 * out) - (z < 0 ? front : back) * z * z;
 };
 /**
  * How fast it falls in front (the user, 2026-11-13: wrap the front of the shoulders), by the neck
  * and from over the joint on: there the skin falls some 4 cm in 6, by the neck far less.
  */
 const FRONT = [3, 9];
-const [CLEAR, STACK] = [0.015, 0.009];
+/**
+ * And behind (the user, 2026-11-17: wrap the shoulder round to the back): level by the neck, over
+ * the blade; falling past the joint, round the back of the arm. 7 there went 1 mm into her shoulder
+ * behind the joint, where her skin falls less than his.
+ */
+const REAR = [2.5, 5.5];
+// Closer (the user, 2026-11-17: a void between the pads and the shoulders), then clear again, with
+// their edges falling less: they went into the arm as it moved.
+const [CLEAR, STACK] = [0.016, 0.008];
 /** How round the lame's turn onto the shoulder is (m): the width of the smooth maximum. */
-const EASE = 0.03;
+const EASE = 0.016;
 
 /**
  * The lames' front half (the user, 2026-11-13: wrap the front of the shoulders more): this much
@@ -62,9 +72,9 @@ const EASE = 0.03;
  * (1.6 plunged too steeply, the user, 2026-11-13), down onto the chest piece (the user: fill the
  * gap between the pads and the plates).
  */
-export const FORE = { wide: 1.35, fall: 1.35 };
+export const FORE = { wide: 1.25, fall: 1 };
 /** Their back half (the user, 2026-11-13: the pads go on behind too): as FORE, over the shoulder blade. */
-export const AFT = { wide: 1.4, fall: 1.25 };
+export const AFT = { wide: 1.2, fall: 1.3 };
 /**
  * How a lame falls from its crease to its edges, as a power of the way across: round over the
  * shoulder, not a roof's straight slope (the user, 2026-11-13: round the slope; it was 1.3).
@@ -74,7 +84,9 @@ export const CROWN = 2;
 /** The lame `i` at `u` across it (-1 its front edge, 1 its back) and `v` along it, `d` under its top. */
 const at = (i: number, u: number, v: number, d = 0): Vec3 => {
   const l = LAMES[i];
-  const w = v < WIDE ? 0.75 + (0.25 * v) / WIDE : (1 - v) / (1 - WIDE);
+  // A plain round end (the user, 2026-11-17: a simpler edge; it tapered straight to a point, three
+  // of them a zigzag).
+  const w = v < WIDE ? 0.85 + (0.15 * v) / WIDE : Math.sqrt(1 - ((v - WIDE) / (1 - WIDE)) ** 2);
   const fore = u < 0;
   const half = fore ? FORE : AFT;
   const [x, z] = [l[0] + (l[1] - l[0]) * v, 0.01 + u * w * l[2] * half.wide];
@@ -159,12 +171,7 @@ const [LAME_COLS, LAME_ROWS] = [10, 6];
 /** A lame's quads: its top and underside, its inner end, its front and back edges. */
 export const LAME_QUADS = LAME_COLS * LAME_ROWS * 2 + LAME_COLS + LAME_ROWS * 2;
 
-/**
- * The ninja's colours (the user, 2026-11-13: vary them): gold shoulder pads that shine (GILT; a darker
- * gold, the user), and a
- * collar of brown cloth, matte.
- */
-export const GOLD = [0.6, 0.4, 0.09];
+/** The ninja's collar (the user, 2026-11-13: vary the colours): brown cloth, matte. */
 export const COLLAR_CLOTH = [0.3, 0.18, 0.1];
 
 /** Built once at each level: the full one, and the far one (`pads()`'s `far`). */
@@ -282,8 +289,8 @@ const make = (far: boolean) => {
 };
 
 /**
- * Appends the ninja's shoulder pads and his collar on the solved pose `s`, the pads in `color` (GOLD
- * for him), the collar in COLLAR_CLOTH;
+ * Appends the ninja's shoulder pads and his collar on the solved pose `s`, the pads in `color` (the
+ * sash's grey for him, brushed metal), the collar in COLLAR_CLOTH;
  * smaller on the woman (`build`). Or the `marine`'s shoulder bells, and no collar, with a band
  * round them in `band` (the astronaut's team colour on his white bells).
  */
@@ -344,7 +351,8 @@ export const pads = (
         const shade = banded ? 1 : m[j + 6];
         dst[w + 6] = rgb[0] * shade;
         dst[w + 7] = rgb[1] * shade;
-        dst[w + 8] = shade != 1 || cloth ? -1 : marine ? GLOSS : GILT;
+        // The ninja's are brushed metal as his guard is (the user, 2026-11-17: the sash's grey; they were gold, GILT).
+        dst[w + 8] = shade != 1 || cloth ? -1 : marine ? GLOSS : TWILL;
         dst[w + 9] = rgb[2] * shade;
         w += STRIDE;
       }

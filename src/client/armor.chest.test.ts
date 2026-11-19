@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { ARMHOLE, BELT, BRACER, DOME, REGIONS, SIDES, SIGN, SPINE, VEST, armor } from './armor';
+import {
+  ARMHOLE,
+  BACK,
+  BELT,
+  BRACER,
+  DOME,
+  FLANK,
+  NOTCH,
+  REGIONS,
+  SASH,
+  SHIELD,
+  SIGN,
+  VEST,
+  armor,
+} from './armor';
 import { GLOSS, STRIDE } from './mesh';
 import { rest, solve } from './rig';
 import { body, palette, skin } from './skin';
@@ -137,7 +151,9 @@ describe('the armour', () => {
         for (let i = n; i < out.length; i += STRIDE) {
           const [x, y, z] = [out[i], out[i + 1], out[i + 2]];
           const dark = Math.max(out[i + 6], out[i + 7], out[i + 9]) < 0.15;
-          if (dark && z < 0 && Math.abs(y - sy) < size) {
+          // 2 mm in from the sign's foot: his right pec's first vent ends there, and on the
+          // flatter piece (2026-11-18) its tip came 0.5 mm into the sign's height.
+          if (dark && z < 0 && Math.abs(y - sy) < size - 0.002) {
             for (const k of [0, 1]) {
               ink[k] += +(Math.abs(x - (k ? -sx : sx)) < size);
             }
@@ -150,21 +166,56 @@ describe('the armour', () => {
       }
     });
 
-    it("builds the ninja's back of pieces: none across the trunk's split, blocks down the spine standing out, a plate on each flank (the user, 2026-11-13: one big block)", () => {
-      const back = REGIONS.filter(r => r.alone && r.part == REGIONS[0].part && r.face == 180);
-      for (const r of back) {
-        expect(r.y[1] <= 1.402 || r.y[0] >= 1.412).toBe(true);
+    it("builds the ninja's back as his front: a shield over the spine that leaves the shoulder blades bare, three lames under it that meet the belly's at the flanks (the user, 2026-11-17; it was pieces each side of a spine of blocks, 2026-11-13)", () => {
+      const own = REGIONS.filter(r => r.alone && r.part == REGIONS[0].part && !r.belt);
+      const back = own.filter(r => r.face == 180);
+      // One piece and three lames: no half plates, no blocks down the spine, none on the flanks.
+      expect(back.map(r => !!r.mould)).toEqual([true, false, false, false]);
+      expect(own.filter(r => r.off)).toEqual([]);
+      expect(own.filter(r => !r.face && r.a[0] > 0)).toEqual([]);
+      // The lames: the belly's own heights, each round to the flank, a seam between the two.
+      const belly = own.filter(r => !r.face && !r.mould);
+      expect(belly.length).toBe(3);
+      back.slice(1).forEach((r, k) => {
+        expect(r.y).toEqual(belly[k].y);
+        expect([r.a, belly[k].a]).toEqual([
+          [-FLANK, FLANK],
+          [-FLANK, FLANK],
+        ]);
+      });
+      expect(2 * FLANK).toBeGreaterThan(174);
+      expect(2 * FLANK).toBeLessThan(180);
+      // The shield's top: up at the spine, held to SHIELD[0] off it, then (its fall once under
+      // way, 3 degrees on) only down to a low band over the chevron at SHIELD[1], on to its sides.
+      const high = (b: number) => back[0].high!(180 - b, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+      expect(high(0)).toBeCloseTo(BACK.top, 6);
+      expect(high(SHIELD[0])).toBeGreaterThan(BACK.top);
+      for (let b = SHIELD[0] + 3; b < SHIELD[1]; b++) {
+        expect(high(b + 1)).toBeLessThan(high(b));
       }
-      const blocks = back.filter(r => r.off == SPINE.off);
-      expect(blocks.length).toBe(SPINE.n);
-      expect(SPINE.off).toBeGreaterThan(0.012);
-      const sides = REGIONS.filter(r => r.alone && !r.face && r.a[0] >= SIDES.a[0] - 1e-9);
-      const flank = REGIONS.filter(r => r.alone && !r.face && r.a[1] <= -SIDES.a[0] + 1e-9);
-      expect(sides.length).toBe(SIDES.y.length);
-      expect(flank.length).toBe(SIDES.y.length);
+      expect(high(SHIELD[1])).toBeCloseTo(VEST.y + 0.02, 6);
+      expect(high(46)).toBeCloseTo(VEST.y + 0.02, 6);
+      // Drawn: plate up the spine, none over the shoulder blades, on him and on her.
+      for (const build of [0, 1]) {
+        const out: number[] = [];
+        const s = body(1, build);
+        skin(out, s, solve(rest([0, 0, 0], 0, build)), palette([0.9, 0.2, 0.1]));
+        const n = out.length;
+        armor(out, 0, s, true, undefined, true);
+        let [spine, blades] = [0, 0];
+        for (let i = n; i < out.length; i += STRIDE) {
+          const [x, y, z] = [Math.abs(out[i]), out[i + 1], out[i + 2]];
+          if (out[i + 8] == GLOSS && z > 0.03 && y > 1.36) {
+            spine += +(x < 0.03 && y > 1.43);
+            blades += +(x > 0.09);
+          }
+        }
+        expect(spine).toBeGreaterThan(10);
+        expect(blades).toBe(0);
+      }
     });
 
-    it("cuts the ninja's belt in a slight V, in his team's colour, drawn alone on a map with no armour (the user, 2026-11-13)", () => {
+    it("ties the ninja's waist in a sash: wide, nearly level, in its own grey, drawn alone on a map with no armour (the user, 2026-11-17; it was a thin belt in a V in his team's colour, 2026-11-13)", () => {
       for (const build of [0, 1]) {
         const out: number[] = [];
         const s = body(1, build);
@@ -174,34 +225,46 @@ describe('the armour', () => {
         expect(out.length).toBeGreaterThan(n);
         const pts: number[][] = [];
         for (let i = n; i < out.length; i += STRIDE) {
-          // All of it the belt: in the team's colour, round the waist.
-          expect([out[i + 6], out[i + 7], out[i + 9]]).toEqual([0.1, 0.8, 0.3]);
+          // All of it the sash: in its grey, not the team's colour, round the waist; plain cloth
+          // here, the weave being the shader's.
+          expect([out[i + 6], out[i + 7], out[i + 9]]).toEqual(SASH);
+          expect(out[i + 8]).toBe(-1);
           pts.push([out[i], out[i + 1], out[i + 2]]);
         }
-        const low = (f: (p: number[]) => boolean) => Math.min(...pts.filter(f).map(p => p[1]));
-        const front = low(p => Math.abs(p[0]) < 0.02 && p[2] < 0);
-        const hips = low(p => Math.abs(p[0]) > 0.14);
-        expect(front).toBeCloseTo(BELT.y, 2);
-        expect(hips - front).toBeGreaterThan(0.009);
+        const ys = (f: (p: number[]) => boolean) => pts.filter(f).map(p => p[1]);
+        const front = ys(p => Math.abs(p[0]) < 0.02 && p[2] < 0);
+        const hips = ys(p => Math.abs(p[0]) > 0.14);
+        expect(Math.min(...front)).toBeCloseTo(BELT.y, 2);
+        // Wide: 4.5 cm and more, where the belt was 4.
+        expect(Math.max(...front) - Math.min(...front)).toBeGreaterThan(0.045);
+        // Nearly level: up over the hips, by less than a third of its height (the V rose 5 cm).
+        const rise = Math.min(...hips) - Math.min(...front);
+        expect(rise).toBeGreaterThan(0.008);
+        expect(rise).toBeLessThan(0.02);
       }
     });
 
-    it("covers his pecs with the ninja's chest piece out to the shoulders (the user, 2026-11-13)", () => {
+    it("covers his pecs with the ninja's chest piece out to the shoulders, open down the sternum (the user, 2026-11-13; the cut, 2026-11-18)", () => {
       for (const lod of [1, 3]) {
         const at = front(0, lod, false, true);
         for (const side of [1, -1]) {
-          // Over the top of the pecs, above the split, and over their outer edge under it.
-          for (let x = 0; x <= 0.15; x += 0.005) {
+          // Over the top of the pecs, above the split, from beside the cut; and over their outer
+          // edge under it, under the cut's point.
+          for (let x = 0.03; x <= 0.15; x += 0.005) {
             expect(at(side * x, 1.44)).toBeDefined();
           }
           for (let x = 0; x <= 0.15; x += 0.005) {
-            expect(at(side * x, 1.38)).toBeDefined();
+            expect(at(side * x, 1.37)).toBeDefined();
           }
+        }
+        // The cut: the suit shows down the middle, from the neckline to its point.
+        for (let y = 1.39; y < 1.48; y += 0.01) {
+          expect(at(0, y)).toBeUndefined();
         }
       }
     });
 
-    it("tops the ninja's vest in one block, its edge one smooth curve into the armhole, close or near (the user, 2026-11-13)", () => {
+    it("tops the ninja's vest in one block, its edge up out of the cut down the sternum, then one smooth curve into the armhole, close or near (the user, 2026-11-13; the cut, 2026-11-18)", () => {
       for (const build of [0, 1]) {
         for (const lod of [1, 3]) {
           const at = front(build, lod, false, true);
@@ -219,9 +282,17 @@ describe('the armour', () => {
           for (let x = 0; x < 0.12; x += 0.005) {
             tops.push(top(x));
           }
-          // No V at the neck: the middle is as high as the shallow neckline lets it.
-          expect(tops[0]).toBeGreaterThan(Math.max(...tops) - VEST.neck - 0.008);
-          for (let i = 8; i < tops.length; i++) {
+          // The cut: NOTCH.deep under the shallow neckline at the middle (hers drawn 1.6 cm
+          // lower still, on her shorter trunk), its sides only up, hollow, to the top by 5 cm out.
+          const point = VEST.top[build] - VEST.neck - NOTCH.deep;
+          expect(tops[0]).toBeLessThan(point + 0.003);
+          expect(tops[0]).toBeGreaterThan(point - (build ? 0.02 : 0.003));
+          for (let i = 1; i <= 6; i++) {
+            expect(tops[i]).toBeGreaterThan(tops[i - 1]);
+          }
+          expect(tops[3] - tops[0]).toBeLessThan((tops[6] - tops[0]) * 0.6);
+          expect(tops[6]).toBeGreaterThan(Math.max(...tops) - 0.008);
+          for (let i = 10; i < tops.length; i++) {
             // Only down from the neckline outward, with no cliff into the armhole: it fell 10 cm
             // in 2 there, then ran on as a shelf.
             expect(tops[i]).toBeLessThan(tops[i - 1] + 0.003);
@@ -262,8 +333,10 @@ describe('the armour', () => {
               for (const k of [1, -1]) {
                 const [p, q] = [plate(k * x, y), bare(k * x, y)];
                 // In the armhole the plate met is the biceps', on the arm behind the chest's
-                // front: never more than 0.063 deep.
-                if (p && q && p[0] > 0.063) {
+                // front: never more than 0.063 deep. And off the top line means plate 6 mm up
+                // too: on the wider chest (2026-11-18) the line's outer end came onto a point
+                // looked at, the shoulder's skin 1 mm over its tip.
+                if (p && q && p[0] > 0.063 && (plate(k * x, y + 0.006)?.[0] ?? 0) > 0.063) {
                   expect(p[0]).toBeGreaterThan(q[0]);
                 }
               }

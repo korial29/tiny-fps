@@ -1,17 +1,21 @@
-// The ninja's hood and face guard (the user, 2026-11-12). The hood is painted on the head's own skin
+// The ninja's hood and face guard (the user, 2026-11-12). The hood is cloth of its own over the head
+// on a near runner (COWL: a shell off the skull with a hem over the brows, a seam, folds; the ears
+// drawn in under it), and on every runner it is painted on the head's own skin
 // (dress()), black from the neck to the crown but round the eyes and down the upper cheeks, so it
 // takes the face's shape; the ideogram 忍 (shinobi) in the team's colour on it behind each temple. The
-// guard over the mouth is a piece of its own in the team's colour (reshaped on the user's picture,
-// 2026-11-13): its top edge low under the eyes with a small peak up the nose, swept up to a point
-// beside each eye; its sides round the cheeks, drawn in to a narrow chin; jutting out down its
-// middle, with a kite of black mesh over the mouth under the nose, and a big hollow on each cheek
-// sunk in the shell inside a thin rim, plain in the team's colour; the face under it is pressed in. Built once, carried by the head joint like the hair
+// guard over the mouth is a piece of its own in the sash's grey, brushed metal (reshaped on the user's
+// pictures, 2026-11-13 and 2026-11-17): its top edge level under the eyes with a small peak up the
+// nose, swept up in a hollow curve to a tall point by each temple; its sides round the cheeks, drawn
+// in to a narrow chin; jutting out down its middle, with a kite of black mesh under the nose, three
+// grooves at the mouth,
+// and a big hollow on each cheek sunk in the shell inside a thin rim, its floor black mesh; the face
+// under it is pressed in. Built once, carried by the head joint like the hair
 // (hair.ts), the woman's scaled to her head.
 import { HEAD_SCALE } from './hair';
 import { JOINT as J, turn } from './rig';
 import type { Quat } from './rig';
 import type { Vec3 } from './mesh';
-import { STRIDE } from './mesh';
+import { STRIDE, TWILL, WEAVE } from './mesh';
 import { REGION, TOP, bindOf, scalp } from './skin';
 import type { Skin } from './skin';
 import { room } from './verts';
@@ -24,7 +28,7 @@ const [GUARD, INK] = [
   [0.012, 0.012, 0.014],
 ];
 /** Shades that are no shade: the team's colour, the meshes' ink, their wire, and the team's colour in a groove. */
-const [TEAM, BLACK, WIRE, GROOVE] = [-1, -2, -3, -4];
+const [TEAM, BLACK, WIRE, GROOVE, SIGN] = [-1, -2, -3, -4, -5];
 /** The face opening's bottom, the top of its arch over the brows, and how far round it goes either side of the front (radians). */
 const [SLIT_LO, SLIT_HI, SLIT] = [1.668, 1.73, 1.02];
 /** The opening's edge round the face at `a`: an arch over the brows, down to the guard at the cheeks. */
@@ -67,20 +71,20 @@ const skull = (a: number, y: number, off: number): Vec3 => {
  * user, 2026-11-13: no skin beside the guard), level under the eyes and up with the guard's sweep
  * to its points beside them.
  */
-const under = (a: number) => PT + HORN * clamp((Math.abs(a) / AT - 0.4) / 0.6) ** 1.6;
+const under = (a: number) => PT + sweep(a / AT);
 /** The guard over the mouth: its top (under the eyes) and bottom (under the chin, the user 2026-11-13), and its half widths there (radians round; then wider, over the jaw and the cheeks). */
 const [PT, PB, AT, AB] = [1.662, 1.575, 1.25, 0.85];
 /** How high its points beside the eyes stand over its top, and the power that rounds its sides out over the cheeks. */
-const [HORN, ROUND] = [0.045, 0.55];
+const [HORN, ROUND] = [0.058, 0.55];
 const half = (y: number) => AB + (AT - AB) * clamp((y - PB) / (PT - PB)) ** ROUND;
 /**
- * How far its top edge rises at `x` across it (-1 to 1): a peak up the bridge of the nose, `NOSE`
- * high, sloping straight down over the cheekbones to `LOW` (the user, 2026-11-13, on a picture), then
- * the sweep up to the point at each end.
+ * How far its top edge rises at `x` across it (-1 to 1): a small peak up the bridge of the nose,
+ * `NOSE` high, down to `LOW`, then level under the eye and a hollow sweep up to a tall point at each
+ * end, by the temple (the user, 2026-11-17, on a picture: it went straight up from the cheekbone).
  */
-const [NOSE, LOW] = [0.026, 0.45];
-const crest = (x: number) =>
-  NOSE * clamp(1 - Math.abs(x) / LOW) + HORN * clamp((Math.abs(x) - LOW) / (1 - LOW)) ** 1.4;
+const [NOSE, LOW] = [0.02, 0.3];
+const sweep = (x: number) => HORN * clamp((Math.abs(x) - LOW) / (1 - LOW)) ** 2.1;
+const crest = (x: number) => NOSE * clamp(1 - Math.abs(x) / LOW) ** 1.5 + sweep(x);
 /** Its bottom corners drawn up: round at the chin. */
 const CHIN = 0.016;
 /** The height of its side edge at `q` round from the front. */
@@ -121,6 +125,31 @@ const prow = (a: number, y: number) =>
   clamp(1 - Math.abs(a) / 1.0) ** 1.3 *
   // From the nose to the chin an arc (the user, 2026-11-13): furthest out at the mouth.
   (0.3 + 0.7 * Math.sin(Math.PI * clamp((PT + 0.014 - y) / (PT + 0.014 - PB + 0.004))));
+
+/**
+ * The hood's cloth (the user, 2026-11-17: it was paint on the head): a shell of its own off the
+ * skull, `off` out at rest, a seam `SEAM` proud over the crown from the brow to the nape, hanging
+ * `DRAPE` looser down the back of the head, with soft folds there, down to `NECK` round the throat.
+ * Tucked in behind the guard. A far runner's is the paint alone.
+ */
+const COWL = { off: 0.006, seam: 0.0035, drape: 0.011, fold: 0.003, neck: 1.558, hem: 0.0045 };
+const cowl = (a: number, y: number) => {
+  if (covers(Math.abs(a), y)) {
+    return 0.001;
+  }
+  const low = clamp((1.7 - y) / 0.12);
+  return (
+    COWL.off +
+    // The seam is as wide in metres all the way: by the angle it was a knob on the crown.
+    COWL.seam * Math.exp(-((skull(a, y, 0)[0] / 0.008) ** 2)) * clamp((y - 1.7) / 0.03) +
+    COWL.drape * ((1 - Math.cos(a)) / 2) * low * low +
+    COWL.fold * Math.sin(y * 230 + 2.5 * Math.cos(2 * a)) * low * (0.35 + 0.65 * Math.sin(a) ** 2)
+  );
+};
+/** Where the ears are, drawn in under the cloth: from and to round the head (radians), and their bottom and top. */
+const EARS = [1.3, 2.1, 1.6, 1.74];
+/** The cloth's grey, as a shade of the guard's rim: a little lighter than the suit, so its folds show. */
+const WOVEN = 1;
 
 /** The grooves at the mouth: their places round (radians), their bottom and top, their width (m). */
 export const MOUTH = { a: [-0.1, 0, 0.1], y: [1.598, 1.624], w: 0.0026 };
@@ -228,9 +257,51 @@ const make = (far: boolean): number[] => {
     }
   }
 
+  // The hood's cloth: over the brows and the crown, round the sides and the back down to the neck,
+  // and under the guard round the throat; a rolled hem along its edge over the brows, thinner as it
+  // goes in behind the guard.
+  const cloth =
+    (a0: number, a1: number, lo: (a: number) => number, hi: number) => (u: number, v: number) => {
+      const a = round(u, a0, a1);
+      const y = round(1 - (1 - v) ** 2, lo(a), hi);
+      return skull(a, y, cowl(a, y));
+    };
+  if (!far) {
+    sheet(cloth(-SLIT, SLIT, arch, TOP - 0.002), 32, 10, WOVEN);
+    sheet(
+      cloth(SLIT, 2 * Math.PI - SLIT, () => COWL.neck, TOP - 0.002),
+      48,
+      26,
+      WOVEN,
+    );
+    // In front it stops at the guard's bottom (the user, 2026-11-17: a black veil hung before the
+    // neck: the skull's base straight down under the chin, off the throat).
+    sheet(
+      cloth(-SLIT, SLIT, () => PB - 0.003, PT),
+      24,
+      6,
+      WOVEN,
+    );
+    sheet(
+      (u, v) => {
+        const a = round(u, -SLIT, SLIT);
+        const [y, t] = [arch(a), Math.PI * v];
+        const r = COWL.hem * clamp((y - PT - crest(a / AT)) / 0.012);
+        return skull(
+          a,
+          y + r * (1 - Math.cos(t)) - 0.001,
+          t ? COWL.off + 0.7 * r * Math.sin(t) : 0,
+        );
+      },
+      24,
+      5,
+      WOVEN,
+    );
+  }
   // On the guard's face (or the hood's, `on` HOOD), 0.8 mm out, `a` round and `y` high, and its normal there.
   const face = (a: number, y: number, off = 0.0008, on = OUT): [Vec3, Vec3] => {
-    const f = (u: number, v: number) => skull(u, v, on + off + (on == OUT ? prow(u, v) : 0));
+    const f = (u: number, v: number) =>
+      skull(u, v, off + (on == OUT ? on + prow(u, v) : far ? on : cowl(u, v)));
     return [f(a, y), normal(f, a, y)];
   };
   /** A line `w` wide along the points `pts` ([a, y] each) on the guard or the hood, in pieces of PIECE at most. */
@@ -259,40 +330,40 @@ const make = (far: boolean): number[] => {
       for (let i = 0; i < stroke.length; i += 2) {
         pts.push([side * AK - ((stroke[i] - 0.5) * S) / 0.085, YK + (stroke[i + 1] - 0.5) * S]);
       }
-      line(pts, 0.0024, TEAM, HOOD);
+      line(pts, 0.0024, SIGN, HOOD);
     }
   }
-  /** A panel of black mesh over p(off)(u, v): the ink, `n` wires each way `w` wide (in u, v) on it, and a painted groove round it with `groove`. */
+  /**
+   * A panel of black mesh over p(off)(u, v): the ink, `nu` wires down it and `nv` across, `wu` and
+   * `wv` wide (in u, in v), and a painted groove round it with `groove`. No wire with `bare`.
+   */
   const mesh = (
     p: (off: number) => (u: number, v: number) => Vec3,
-    n: number,
-    w: number,
+    [nu, nv]: number[],
+    [wu, wv]: number[],
     groove = false,
+    bare = false,
   ) => {
     sheet(p(0.0008), far ? 2 : 6, far ? 3 : 12, BLACK);
-    for (let k = 1; k < 2 * n; k++) {
-      const [c, wire] = [((k % n) + 0.5 * +(k > n)) / n, p(0.0013)];
-      if (k != n) {
-        sheet(
-          (u, v) => (k < n ? wire(c + (v - 0.5) * w, u) : wire(u, c + (v - 0.5) * w)),
-          far ? 2 : 8,
-          1,
-          WIRE,
-        );
-      }
+    const wire = p(0.0013);
+    for (let k = 1; k < nu && !bare; k++) {
+      sheet((u, v) => wire(k / nu + (v - 0.5) * wu, u), far ? 2 : 8, 1, WIRE);
+    }
+    for (let k = 1; k < nv && !bare; k++) {
+      sheet((u, v) => wire(u, (k + 0.5) / nv + (v - 0.5) * wv), far ? 2 : 8, 1, WIRE);
     }
     for (const c of groove ? [0, 1] : []) {
-      sheet((u, v) => p(0.0013)(c + (v - 0.5) * w * 2, u), far ? 2 : 8, 1, GROOVE);
-      sheet((u, v) => p(0.0013)(u, c + (v - 0.5) * w * 2), far ? 2 : 8, 1, GROOVE);
+      sheet((u, v) => wire(c + (v - 0.5) * wu * 2, u), far ? 2 : 8, 1, GROOVE);
+      sheet((u, v) => wire(u, c + (v - 0.5) * wv * 2), far ? 2 : 8, 1, GROOVE);
     }
   };
   // The kite over the mouth: its point up the nose, its widest low; raised to the nose and smaller
   // (the user, 2026-11-13, on a picture).
   const KITE = [
-    [0, 1.666],
-    [0.008, 1.648],
-    [0, 1.637],
-    [-0.008, 1.648],
+    [0, 1.668],
+    [0.0105, 1.645],
+    [0, 1.632],
+    [-0.0105, 1.645],
   ];
   mesh(
     off => (u, v) => {
@@ -303,11 +374,11 @@ const make = (far: boolean): number[] => {
         off,
       )[0];
     },
-    4,
-    0.07,
+    [5, 5],
+    [0.06, 0.06],
     true,
   );
-  // Three grooves down the guard at the mouth, under the kite (the user, 2026-11-13).
+  // Three grooves down the guard at the mouth, under the kite (the user, 2026-11-13; kept, 2026-11-17).
   for (const a of MOUTH.a) {
     line(
       [
@@ -318,8 +389,22 @@ const make = (far: boolean): number[] => {
       GROOVE,
     );
   }
-  // The hollow on each cheek is the shell's own, plain in the team's colour (the user, 2026-11-13:
-  // no mesh there).
+  // The floor of the hollow on each cheek is black mesh too (the user, 2026-11-17, on a picture; it
+  // was plain), the shell's rim left round it. A far runner's has no wire.
+  for (const side of [1, -1]) {
+    mesh(
+      off => (u, v) => {
+        const t = V0 + (V1 - V0) * v;
+        const w = CHEEK - inner(t);
+        const b = Math.min(BEVEL, w / 2);
+        return guard(OUT + off)((1 + side * (CHEEK - w + b + (w - 2 * b) * u)) / 2, t);
+      },
+      [8, 18],
+      [0.045, 0.018],
+      false,
+      far,
+    );
+  }
   return out;
 };
 
@@ -363,9 +448,15 @@ export const dress = (out: Out, from: number, s: Skin, at: Vec3, q: Quat, build 
       // How far inside the opening, metres: bare beyond 12 mm, eased, the hood's black outside it.
       const inside = Math.min(y - under(a), arch(a) - y, (SLIT - qa) * 0.08);
       BARE[i] = clamp(inside / 0.012) ** 2 * (3 - 2 * clamp(inside / 0.012));
-      // Under the guard: drawn in behind its inner face.
-      if (covers(qa, y)) {
-        const p = skull(a, y, IN - 0.002 + prow(a, y));
+      // Under the guard: drawn in behind its inner face. Under the hood's cloth: what stands out
+      // of the skull (the ears) is drawn in under it.
+      const guarded = covers(qa, y);
+      // Only what the head alone carries: a vertex the neck shares is elsewhere on a turned head
+      // than at rest, where the shader's skin is dressed (flesh.ts), and the two fell apart there.
+      const whole = (j0 == J.HEAD ? 1 - s.w[i] : 0) + (j1 == J.HEAD ? s.w[i] : 0) > 0.999;
+      const ear = whole && !BARE[i] && qa > EARS[0] && qa < EARS[1] && y > EARS[2] && y < EARS[3];
+      if (guarded || ear) {
+        const p = skull(a, y, guarded ? IN - 0.002 + prow(a, y) : 0.003);
         const [r, d] = [Math.hypot(p[0], p[2] - cz), Math.hypot(x, z - cz)];
         if (d > r) {
           const f = r / d;
@@ -415,13 +506,15 @@ export const mask = (
   color = GUARD,
   /** A far runner's: fewer quads. */
   far = false,
+  /** The guard's shell, when not in `color` (the user, 2026-11-17: the sash's grey); the ideograms stay in `color`. */
+  shell = color,
 ) => {
   const m = (made[+far] ??= make(far));
   const o = bindOf(0)[J.HEAD];
   const k = build ? HEAD_SCALE : 1;
   let w = out.length;
   const dst = room(out, (m.length / 7) * STRIDE);
-  const [wire, groove] = [GUARD.map(c => c * 2.6), color.map(c => c * 0.45)];
+  const [wire, groove] = [GUARD.map(c => c * 2.6), shell.map(c => c * 0.45)];
   const [qx, qy, qz, qw] = q;
   for (let i = 0; i < m.length; i += 7, w += 10) {
     // turn() written out, twice, in plain numbers: the guard is some nine thousand vertices a frame.
@@ -446,17 +539,20 @@ export const mask = (
     const shade = m[i + 6];
     const rgb =
       shade == TEAM
-        ? color
-        : shade == WIRE
-          ? wire
-          : shade == BLACK
-            ? INK
-            : shade == GROOVE
-              ? groove
-              : GUARD.map(c => (c * shade) / 0.9);
+        ? shell
+        : shade == SIGN
+          ? color
+          : shade == WIRE
+            ? wire
+            : shade == BLACK
+              ? INK
+              : shade == GROOVE
+                ? groove
+                : GUARD.map(c => (c * shade) / 0.9);
     dst[w + 6] = rgb[0];
     dst[w + 7] = rgb[1];
-    dst[w + 8] = -1;
+    // The shell is brushed metal (the user, 2026-11-17), the hood's cloth woven; the rest is matte.
+    dst[w + 8] = shade == TEAM ? TWILL : shade == WOVEN ? WEAVE : -1;
     dst[w + 9] = rgb[2];
   }
   out.length = w;

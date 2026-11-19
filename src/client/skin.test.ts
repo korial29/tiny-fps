@@ -310,7 +310,10 @@ describe('skin', () => {
         n++;
       }
     }
-    expect(n).toBeGreaterThan(20);
+    // 21 of them until the chest widened by 7 mm a side under the armpits (the user, 2026-11-18):
+    // the same triangles, three of them now with their middle past the 13 cm, where the fold's own
+    // triangle (the sleeve's inside, facing back) is.
+    expect(n).toBeGreaterThan(17);
   });
 
   it('keeps the surface continuous when a joint bends 90 degrees, and creases the inside', () => {

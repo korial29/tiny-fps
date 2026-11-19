@@ -111,10 +111,13 @@ describe('the armour', () => {
           for (let t = 45; t <= 135; t += 15) {
             expect(at(k * t, line(t) - 0.005)).toBe(false);
           }
-          // On the side, a strap high up the hip, the suit under it, and over it.
-          expect(at(k * 90, BRIEFS.hip - 0.005)).toBe(true);
+          // On the side, a strap high up the hip, the suit under it, and over it. The strap
+          // stands off along the hip's normals, which tilt up under the waist drawn in
+          // (2026-11-18): it is drawn 7 mm over its line on the skin, where it was 3.
+          const lift = 0.007;
+          expect(at(k * 90, BRIEFS.hip - 0.005 + lift)).toBe(true);
           expect(at(k * 90, BRIEFS.hip - BRIEFS.strap - 0.006)).toBe(false);
-          expect(at(k * 90, BRIEFS.hip + 0.006)).toBe(false);
+          expect(at(k * 90, BRIEFS.hip + 0.006 + lift)).toBe(false);
           expect(at(k * 90, 0.99)).toBe(false);
         }
       }
@@ -295,7 +298,7 @@ describe('the armour', () => {
       }
     });
 
-    it("are the ninja's own on his pieces, the long ones unbroken (the user, 2026-11-13: more detail)", () => {
+    it("are the ninja's own on his pieces, the long ones unbroken (the user, 2026-11-13: more detail; his back as his front, 2026-11-17, the cut down the sternum, 2026-11-18)", () => {
       for (const build of [0, 1]) {
         const out: number[] = [];
         const s = body(3, build);
@@ -316,8 +319,17 @@ describe('the armour', () => {
         expect(marks.length).toBeGreaterThan(NINJA_DETAILS.length * 6);
         // None of the marine's slits on the right of his chest, under the collar.
         expect(marks.filter(p => p[0] > 0.05 && p[1] > 1.42 && p[2] < 0)).toEqual([]);
-        // The seam down the chest, the vents, the lames' rivets, the shins'.
-        expect(marks.some(p => Math.abs(p[0]) < 0.005 && p[1] > 1.38 && p[2] < 0)).toBe(true);
+        // The seam down the chest, what the cut down the sternum leaves of it under its point
+        // (NOTCH; drawn at 1.38 m on him, 1.33 on her) and none in it; the vents, the lames'
+        // rivets, the shins'.
+        const seam = marks.filter(p => Math.abs(p[0]) < 0.005 && p[2] < 0).map(p => p[1]);
+        expect(Math.min(...seam)).toBeGreaterThan(1.3);
+        expect(Math.max(...seam)).toBeGreaterThan(build ? 1.32 : 1.37);
+        expect(Math.max(...seam)).toBeLessThan(build ? 1.33 : 1.38);
+        // The lames' heights at their rivets, as drawn (hers under his on her shorter trunk).
+        const lames = [1.234, 1.158, 1.084].map(
+          (y, i) => y - (build ? [0.011, 0.008, 0.003][i] : 0),
+        );
         for (const k of [1, -1]) {
           expect(marks.some(p => p[0] * k > 0.04 && p[1] > 1.32 && p[1] < 1.38 && p[2] < 0)).toBe(
             true,
@@ -326,8 +338,19 @@ describe('the armour', () => {
             true,
           );
           expect(marks.some(p => p[0] * k > 0 && p[1] < 0.45)).toBe(true);
-          // A groove down each lower blade plate of the back, 9 cm in one line: laid flat on a
-          // skin triangle it went under the curved plate, in dashes.
+          // A rivet on each lame, the back's as the belly's: at the heights of the back's old
+          // lames the first had none (it fell in a gap) and the second's was on its bottom edge.
+          for (const y of lames) {
+            for (const z of [1, -1]) {
+              const rivet = marks.filter(
+                p =>
+                  p[0] * k > 0.04 && p[0] * k < 0.12 && p[2] * z > 0 && Math.abs(p[1] - y) < 0.01,
+              );
+              expect(rivet.length).toBeGreaterThanOrEqual(6);
+            }
+          }
+          // A groove down each side of the back piece, 9 cm in one line: laid flat on a skin
+          // triangle it went under the curved plate, in dashes.
           const ys = marks
             .filter(
               p => p[0] * k > 0.02 && p[0] * k < 0.07 && p[2] > 0 && p[1] > 1.26 && p[1] < 1.4,

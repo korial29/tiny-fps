@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STRIDE } from './mesh';
+import { STRIDE, TWILL, WEAVE } from './mesh';
 import { CLOTH, MOUTH, dress, mask } from './mask';
 import { JOINT as J, rest, solve } from './rig';
 import { bindOf, body, palette, skin } from './skin';
@@ -39,11 +39,11 @@ describe('mask, the ninja hood and face guard', () => {
     const red = pts.filter(p => p[6] == RED[0] && p[7] == RED[1] && p[9] == RED[2]);
     expect(red.some(p => Math.abs(p[0]) < 0.01 && p[1] > 1.6 && p[1] < 1.65)).toBe(true);
     // Its arrow up the nose stops under the eye line, and nothing covers the eyes.
-    expect(Math.max(...pts.filter(p => Math.abs(p[0]) < 0.04).map(p => p[1]))).toBeLessThan(1.69);
+    expect(Math.max(...red.filter(p => Math.abs(p[0]) < 0.04).map(p => p[1]))).toBeLessThan(1.69);
     expect(
-      Math.max(...pts.filter(p => Math.abs(p[0]) > 0.022 && Math.abs(p[0]) < 0.045).map(p => p[1])),
+      Math.max(...red.filter(p => Math.abs(p[0]) > 0.022 && Math.abs(p[0]) < 0.045).map(p => p[1])),
     ).toBeLessThan(1.68);
-    const high = red.filter(p => p[1] > 1.72);
+    const high = red.filter(p => p[1] > 1.725);
     expect(high.length).toBeGreaterThan(30);
     expect(high.filter(p => p[0] > 0).length).toBe(high.filter(p => p[0] < 0).length);
   });
@@ -60,13 +60,18 @@ describe('mask, the ninja hood and face guard', () => {
     expect(Math.min(...band(0).map(p => p[2]))).toBeGreaterThan(-0.12);
   });
 
-  it('has its black mesh only in the kite under the nose, the cheeks plain (the user, 2026-11-13)', () => {
+  it('has black mesh in the kite under the nose and in the hollow of each cheek (the user, 2026-11-17)', () => {
     const ink = pts.filter(p => p[6] < 0.02 && p[7] < 0.02 && p[9] < 0.02);
-    expect(ink.length).toBeGreaterThan(0);
-    for (const p of ink) {
-      expect(Math.abs(p[0])).toBeLessThan(0.012);
-      expect(p[1]).toBeGreaterThan(1.633);
-    }
+    const kite = ink.filter(p => Math.abs(p[0]) < 0.014);
+    const cheeks = ink.filter(p => Math.abs(p[0]) >= 0.014);
+    expect(kite.length).toBeGreaterThan(0);
+    expect(Math.min(...kite.map(p => p[1]))).toBeGreaterThan(1.628);
+    // A panel each side, the same, clear of the plain front and inside the shell's edge.
+    expect(cheeks.filter(p => p[0] > 0).length).toBeGreaterThan(100);
+    expect(cheeks.filter(p => p[0] > 0).length).toBe(cheeks.filter(p => p[0] < 0).length);
+    expect(Math.min(...cheeks.map(p => Math.abs(p[0])))).toBeGreaterThan(0.025);
+    expect(Math.min(...cheeks.map(p => p[1]))).toBeGreaterThan(1.575);
+    expect(Math.max(...cheeks.map(p => p[1]))).toBeLessThan(1.7);
   });
 
   it('has three grooves down the guard at the mouth, in a darker team colour (the user, 2026-11-13)', () => {
@@ -81,6 +86,18 @@ describe('mask, the ninja hood and face guard', () => {
     const cols = xs.filter((x, i) => i == 0 || x - xs[i - 1] > 1);
     expect(cols.length).toBe(3);
     expect(groove.some(p => Math.abs(p[0]) < 0.002)).toBe(true);
+  });
+
+  it('has its top edge level under the eyes, then swept up to a tall point by each temple (the user, 2026-11-17)', () => {
+    const red = pts.filter(p => p[6] == RED[0] && p[1] < 1.73);
+    const top = (f: (p: number[]) => boolean) => Math.max(...red.filter(f).map(p => p[1]));
+    const front = (lo: number, hi: number) =>
+      top(p => p[2] < 0 && Math.abs(p[0]) >= lo && Math.abs(p[0]) < hi);
+    // Under the eye it stays within 6 mm of its lowest; the points stand 4 cm over that.
+    expect(front(0.03, 0.04) - front(0.02, 0.03)).toBeLessThan(0.006);
+    expect(top(() => true) - front(0.02, 0.03)).toBeGreaterThan(0.04);
+    // The shell is brushed metal, its mesh matte.
+    expect(pts.filter(p => p[6] == RED[0]).every(p => p[8] == TWILL || p[1] > 1.73)).toBe(true);
   });
 
   it('paints the hood on the head, but round the eyes', () => {
@@ -103,9 +120,13 @@ describe('mask, the ninja hood and face guard', () => {
     expect(low.every(c => black(c.rgb))).toBe(true);
   });
 
-  it('keeps the face behind the guard, and moves nothing else', () => {
+  it('keeps the face behind the guard and the ears under the hood, and moves nothing else', () => {
     const moved = corners.filter(c => Math.hypot(...c.now.map((v, i) => v - c.at[i])) > 1e-6);
-    expect(moved.every(c => c.at[1] > 1.57 && c.at[1] < 1.71)).toBe(true);
+    // Nothing of the neck, and nothing the hood leaves bare.
+    expect(moved.every(c => c.at[1] > 1.57 && (c.at[1] < 1.71 || black(c.rgb)))).toBe(true);
+    const wide = (f: (c: (typeof corners)[0]) => number[]) =>
+      Math.max(...corners.filter(c => c.at[1] > 1.6).map(c => Math.abs(f(c)[0])));
+    expect(wide(c => c.now)).toBeLessThan(wide(c => c.at) - 0.008);
     // The tip of the nose, pressed in, is behind the guard's front.
     const nose = Math.min(
       ...corners
@@ -130,15 +151,32 @@ describe('mask on a far runner (the user, 2026-11-14: lags in a match)', () => {
   };
   const [near, far] = [draw(false), draw(true)];
 
-  it('takes under a quarter of the vertices, over the same face, in the same colours', () => {
+  it('takes under a quarter of the vertices, over the same face, in the same colours, with no cloth of its own', () => {
     expect(far.length * 4).toBeLessThan(near.length);
     expect(far.length % 3).toBe(0);
+    // The hood's cloth is the near one's alone: a far runner's is painted on his head.
+    const grey = (p: number[]) => p[8] == WEAVE;
+    expect(far.some(grey)).toBe(false);
+    const shell = near.filter(grey);
     for (let d = 0; d < 3; d++) {
-      const [a, b] = [near.map(p => p[d]), far.map(p => p[d])];
-      expect(Math.abs(Math.min(...b) - Math.min(...a))).toBeLessThan(0.003);
-      expect(Math.abs(Math.max(...b) - Math.max(...a))).toBeLessThan(0.003);
+      const [a, b] = [near.filter(p => !grey(p)).map(p => p[d]), far.map(p => p[d])];
+      // The near one's ideograms lie on the cloth, 3 mm further out than the paint.
+      expect(Math.abs(Math.min(...b) - Math.min(...a))).toBeLessThan(0.004);
+      expect(Math.abs(Math.max(...b) - Math.max(...a))).toBeLessThan(0.004);
     }
     const colours = (ps: number[][]) => new Set(ps.map(p => `${p[6]} ${p[7]} ${p[9]}`));
-    expect(colours(far)).toEqual(colours(near));
+    expect(colours(far)).toEqual(colours(near.filter(p => !grey(p))));
+    // The cloth: over the crown and round the back of the head, off the skull, down to the skull's
+    // base and no lower (the user, 2026-11-17: it hung round the neck, a veil before the throat); in
+    // front it stops at the guard's bottom.
+    const ys = shell.map(p => p[1]);
+    expect(Math.max(...ys)).toBeGreaterThan(1.8);
+    expect(Math.min(...ys)).toBeLessThan(1.565);
+    expect(Math.min(...ys)).toBeGreaterThan(1.55);
+    const front = shell.filter(p => p[2] < 0 && Math.abs(p[0]) < 0.03).map(p => p[1]);
+    expect(Math.min(...front)).toBeGreaterThan(1.57);
+    expect(Math.max(...shell.map(p => p[2])) - Math.max(...far.map(p => p[2]))).toBeGreaterThan(
+      0.05,
+    );
   });
 });

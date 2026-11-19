@@ -112,11 +112,21 @@ describe('her armour', () => {
     ]) {
       expect(dist(s.pos[a], s.pos[b])).toBeCloseTo(dist(f[a], f[b]), 5);
     }
-    // Every plate vertex is by the skin it was cut from: within 6 cm of a skin vertex.
+    // Every plate vertex is by the skin it was cut from: within 6 cm of a skin vertex, or of the
+    // middle of a skin triangle or of one of its edges: on her fuller thighs and hips (2026-11-17)
+    // two rings are up to 12 cm apart, and a plate 1 cm off the middle of such a triangle was 7 cm
+    // from its corners.
     const skinV: number[][] = [];
     const plates: number[][] = [];
-    for (let i = 0; i < out.length; i += STRIDE) {
-      (out[i + 8] == GLOSS ? plates : skinV).push([out[i], out[i + 1], out[i + 2]]);
+    for (let i = 0; i < out.length; i += 3 * STRIDE) {
+      const t = [0, 1, 2].map(c => [0, 1, 2].map(j => out[i + c * STRIDE + j]));
+      if (out[i + 8] == GLOSS) {
+        plates.push(...t);
+      } else {
+        const mid = (...ps: number[][]) =>
+          ps[0].map((_, j) => ps.reduce((sum, p) => sum + p[j], 0) / ps.length);
+        skinV.push(...t, mid(t[0], t[1]), mid(t[1], t[2]), mid(t[2], t[0]), mid(...t));
+      }
     }
     expect(plates.length).toBeGreaterThan(1000);
     for (let i = 0; i < plates.length; i += 17) {

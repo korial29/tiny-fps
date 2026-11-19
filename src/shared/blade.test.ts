@@ -16,7 +16,6 @@ import {
   NECK,
   PLAYER_H,
   PLAYER_R,
-  SPECIAL_LATE,
 } from './constants';
 import { CUT, KEY, LIMB, MODE, SPECIAL_CUT, TEX } from './types';
 import type { PlayerState } from './types';
@@ -512,33 +511,31 @@ describe('the special cuts', () => {
   const go = (p: PlayerState, keys: number) =>
     step(p, onWire({ keys, yaw: p.yaw, pitch: 0, seq: 0 }), yard, 0);
 
-  it('come with a double click: each cut’s special is the cut plus SPECIAL_CUT', () => {
+  it('come with G or the right button: each cut’s special is the cut plus SPECIAL_CUT, FIRE or not', () => {
     for (const [keys, cut] of [
       [FORWARD, CUT.LUNGE],
       [LEFT, CUT.ARC_L],
       [RIGHT, CUT.ARC_R],
       [0, CUT.LEAP],
     ]) {
-      const p = armed();
-      go(p, keys | FIRE | SPECIAL);
-      expect([p.cut, p.swing]).toEqual([cut, CUTS[cut].ticks]);
+      for (const fire of [0, FIRE]) {
+        const p = armed();
+        go(p, keys | fire | SPECIAL);
+        expect([p.cut, p.swing]).toEqual([cut, CUTS[cut].ticks]);
+      }
       expect(cut).toBe(cutOf(keys) + SPECIAL_CUT);
     }
   });
 
-  it('turns a cut just started into its special, up to SPECIAL_LATE ticks into it, not later and not twice', () => {
-    for (const [late, turned] of [
-      [3, true],
-      [SPECIAL_LATE, true],
-      [SPECIAL_LATE + 1, false],
-    ] as const) {
+  it('starts only out of a swing: a press during a cut, plain or special, changes nothing', () => {
+    for (const late of [1, 3, 18]) {
       const p = armed();
       go(p, LEFT | FIRE);
       for (let i = 1; i < late; i++) {
         go(p, 0);
       }
-      go(p, LEFT | FIRE | SPECIAL);
-      expect(p.cut, `${late} ticks in`).toBe(turned ? CUT.ARC_L : CUT.LEFT);
+      go(p, LEFT | SPECIAL);
+      expect([p.cut, p.swing], `${late} ticks in`).toEqual([CUT.LEFT, CUTS[CUT.LEFT].ticks - late]);
     }
     const p = armed();
     go(p, FIRE | SPECIAL);

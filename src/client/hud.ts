@@ -375,7 +375,7 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
       ['Left click', 'slash'],
       ['W|+|Left click', 'thrust'],
       ['A|or|D|+|Left click', 'cut across'],
-      ['Double click', 'special: lunge, energy arc, leap'],
+      ['G|or|Right click', 'special: lunge, energy arc, leap'],
       ['Blades locked', 'click fast; step aside to break'],
     ],
   ],

@@ -420,12 +420,12 @@ describe('a katana’s execution (EXEC)', () => {
       expect([p.x, p.z, p.shots, p.wield, p.away, p.pushes]).toEqual([0, 0, 0, true, 0, 0]);
     }
     expect(starts).toEqual([
-      [EXEC.CUTS[0], CUT.SLASH],
-      [EXEC.CUTS[1], CUT.RIGHT],
+      [EXEC.CUTS[0], CUT.THRUST],
+      [EXEC.CUTS[1], CUT.SLASH],
     ]);
-    // Held at 1 for the host, on the strike of the cut across.
+    // Held at 1 for the host, on the strike of the cut down.
     expect(p.lock).toBe(1);
-    expect(CUTS[CUT.RIGHT].ticks - p.swing!).toBe(CUTS[CUT.RIGHT].strike);
+    expect(CUTS[CUT.SLASH].ticks - p.swing!).toBe(CUTS[CUT.SLASH].strike);
   });
 
   it('holds his victim still with nothing in hand and no cut', () => {

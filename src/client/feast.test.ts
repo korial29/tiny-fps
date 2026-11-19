@@ -14,12 +14,13 @@ import {
   crouch,
   eating,
   kneel,
+  lunge,
   kneeling,
   mounted,
   pummel,
   pummeling,
   seize,
-  spun,
+  raised,
   swaying,
   topple,
   toppled,
@@ -408,16 +409,66 @@ describe('a glory kill drawn', () => {
 describe('the katana’s execution drawn', () => {
   const at = (e: number) => EXEC.TICKS - e;
 
-  it('puts him on his knees on the strike of the cut down, and spins the swordsman a whole turn into the cut across', () => {
-    expect(EXECUTE.KNEEL[0]).toBe(EXEC.CUTS[0] + CUTS[CUT.SLASH].strike);
+  it('puts him on his knees on the strike of the thrust, then raises the blade over the head, holds it and cuts down on his neck: no turn on himself', () => {
+    expect(EXECUTE.KNEEL[0]).toBe(EXEC.CUTS[0] + CUTS[CUT.THRUST].strike);
     expect(kneeling(at(EXECUTE.KNEEL[0]))).toBe(0);
     expect(kneeling(at(EXECUTE.KNEEL[0] + EXECUTE.KNEEL[1]))).toBe(1);
     expect(kneeling(1)).toBe(1);
-    expect(spun(at(EXEC.CUTS[1]))).toBe(0);
-    // The cut across strikes on the lock's last tick, facing him again after a whole turn.
-    expect(EXEC.CUTS[1] + CUTS[CUT.RIGHT].strike).toBe(EXEC.TICKS - 1);
-    expect(spun(1)).toBeCloseTo(2 * Math.PI, 6);
-    expect(spun(at(EXEC.CUTS[1] + 6))).toBeGreaterThan(Math.PI / 2);
+    // The cut down strikes on the lock's last tick.
+    expect(EXEC.CUTS[1] + CUTS[CUT.SLASH].strike).toBe(EXEC.TICKS - 1);
+    const [TOP, T] = [0.28, CUTS[CUT.SLASH].ticks];
+    const [from, over] = EXECUTE.RAISE;
+    // Through the thrust the blade is his own swing's (-1): the raise waits for it to be over.
+    expect(from).toBe(EXEC.CUTS[0] + CUTS[CUT.THRUST].ticks);
+    expect(raised(at(EXEC.CUTS[0] + 5), 0.2, TOP)).toBe(-1);
+    expect(raised(at(from - 1), 0.96, TOP)).toBe(-1);
+    // Then up from the guard, with no jump, and over the head before the cut down starts.
+    expect(raised(at(from), -1, TOP)).toBe(0);
+    const up = [0, 4, 8, 12, over].map(d => raised(at(from + d), -1, TOP));
+    up.slice(1).forEach((v, i) => expect(v).toBeGreaterThan(up[i]));
+    expect(from + over).toBeLessThan(EXEC.CUTS[1]);
+    expect(raised(at(from + over), -1, TOP)).toBeCloseTo(TOP, 9);
+    expect(raised(at(EXEC.CUTS[1] - 1), -1, TOP)).toBeCloseTo(TOP, 9);
+    // Held there as the cut down winds up, then down with it.
+    expect(raised(at(EXEC.CUTS[1] + 4), 4 / T, TOP)).toBe(TOP);
+    expect(raised(1, CUTS[CUT.SLASH].strike / T, TOP)).toBe(CUTS[CUT.SLASH].strike / T);
+  });
+
+  it('moves the swordsman on his legs: a lunge onto the right foot behind the thrust, a step in and a sink under the cut down, the left foot where it stands', () => {
+    // He looks along -z.
+    const p = rest([0, 0, 0], 0);
+    const [still, s] = [solve(p), (e: number) => solve(lunge(p, e))];
+    const far = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    // Before the thrust and long after the kill: as he stood.
+    for (const e of [0, EXEC.CUTS[0] - 4, EXEC.TICKS + 60]) {
+      still.pos.forEach((q, j) => expect(far(s(e).pos[j], q)).toBeLessThan(1e-6));
+    }
+    const [home, top, down] = [
+      EXECUTE.KNEEL[0],
+      EXECUTE.RAISE[0] + EXECUTE.RAISE[1],
+      EXEC.TICKS - 1,
+    ];
+    for (const [e, ahead, low] of [
+      [home, 0.2, 0.1],
+      [down, 0.1, 0.1],
+    ]) {
+      const at = s(e);
+      // The hips forward and down, the right foot stepped out ahead on the floor, the left one not moved.
+      expect(at.pos[J.PELVIS][2]).toBeLessThan(still.pos[J.PELVIS][2] - ahead);
+      expect(at.pos[J.PELVIS][1]).toBeLessThan(still.pos[J.PELVIS][1] - low);
+      expect(at.pos[J.FOOT_R][2]).toBeLessThan(still.pos[J.FOOT_R][2] - 0.2);
+      expect(at.pos[J.FOOT_R][1]).toBeCloseTo(still.pos[J.FOOT_R][1], 2);
+      expect(far(at.pos[J.FOOT_L], still.pos[J.FOOT_L])).toBeLessThan(0.02);
+    }
+    // The blade over his head, he stands up again, the right foot back under him.
+    const up = s(top);
+    expect(up.pos[J.PELVIS][1]).toBeGreaterThan(still.pos[J.PELVIS][1] - 0.02);
+    expect(far(up.pos[J.FOOT_R], still.pos[J.FOOT_R])).toBeLessThan(0.02);
+    // No jump from a tick to the next: the lunge at its fastest goes 10 cm a tick.
+    for (let e = 0; e < EXEC.TICKS + 45; e++) {
+      const [a, b] = [s(e), s(e + 1)];
+      a.pos.forEach((q, j) => expect(far(q, b.pos[j])).toBeLessThan(0.12));
+    }
   });
 
   it('drops him on his right knee, his left foot ahead, bent over with his hands on his belly', () => {

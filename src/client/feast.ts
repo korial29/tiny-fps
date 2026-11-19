@@ -242,17 +242,19 @@ export const chew = (pose: Pose, a: number, t: number): Pose => {
 
 /**
  * The katana's execution as drawn (EXEC, the user 2026-11-17): its victim turns to the swordsman as
- * he dashes in (TURN ticks), drops on the strike of the cut down (KNEEL: from that tick, over so
+ * he dashes in (TURN ticks), drops on the strike of the thrust (KNEEL: from that tick, over so
  * many) onto one knee, the right, the left foot ahead (STEP, metres), his hips LOW metres lower,
  * bent over in pain (BOW, radians: spine, chest, neck) with his hands on his belly (BELLY: across,
  * ahead and over his pelvis), panting (PANT: radians of the chest's heave, beats a second) and his
- * head shaking no (NO: radians each way, shakes a second); the swordsman spins a whole turn into the
- * cut across, ending on its strike (SPIN); on the cut down a spurt of WOUND drops of blood, and when
+ * head shaking no (NO: radians each way, shakes a second); the swordsman runs him through, draws
+ * the blade out, raises it over his head in both hands (RAISE: from that tick, over so many),
+ * holds it there and brings it down on the bowed neck (the user, 2026-11-19: a samurai's
+ * execution, a thrust first, no turn on himself); on the thrust a spurt of WOUND drops of blood, and when
  * his head goes NECK drops, then BLEED a second from the neck for BLEEDING seconds.
  */
 export const EXECUTE = {
   TURN: 8,
-  KNEEL: [EXEC.CUTS[0] + CUTS[CUT.SLASH].strike, 10],
+  KNEEL: [EXEC.CUTS[0] + CUTS[CUT.THRUST].strike, 10],
   STEP: 0.4,
   /** The kneeling leg over the floor, metres: the knee joint, the ankle and the toes' joint. */
   SOLE: [0.09, 0.15, 0.06],
@@ -261,7 +263,7 @@ export const EXECUTE = {
   BELLY: [0.08, 0.2, 0.1],
   PANT: [0.07, 2.6],
   NO: [0.4, 1.4],
-  SPIN: [EXEC.CUTS[1], CUTS[CUT.RIGHT].strike],
+  RAISE: [EXEC.CUTS[0] + CUTS[CUT.THRUST].ticks, 14],
   /** The beheaded body, still on its knee, tips over onto its right side about it: in so many seconds, so far (radians). */
   FALL: [0.7, 1.45],
   /** Its bounce on the floor: a share of the fall, how fast it dies out, its rate (rad/s); and the seconds it takes to go limp. */
@@ -280,9 +282,20 @@ const into = (lock: number) => EXEC.TICKS - lock;
 export const kneeling = (lock: number): number =>
   ease(clamp((into(lock) - EXECUTE.KNEEL[0]) / EXECUTE.KNEEL[1]));
 
-/** How far the swordsman has spun into his cut across with `lock` ticks left, radians (a whole turn at its strike). */
-export const spun = (lock: number): number =>
-  2 * Math.PI * ease(clamp((into(lock) - EXECUTE.SPIN[0]) / EXECUTE.SPIN[1]));
+/**
+ * Where in the cut down's swing (katana.ts stroke()) the swordsman's blade is drawn with `lock`
+ * ticks left and his own swing at `prog`: his thrust first (-1: his own cut, as it is), then, the
+ * blade drawn out of him and back in the guard, up to the top of the cut down's wind-up (`top`),
+ * held there until that cut comes down from it.
+ */
+export const raised = (lock: number, prog: number, top: number): number => {
+  const [e, [from, over]] = [into(lock), EXECUTE.RAISE];
+  return e < from
+    ? -1
+    : e < EXEC.CUTS[1]
+      ? top * ease(clamp((e - from) / over))
+      : Math.max(prog, top);
+};
 
 /**
  * The victim's `pose` before the swordsman whose feet are at `killer`, with `lock` ticks of the
@@ -453,7 +466,7 @@ export const crouch = (pose: Pose, w: number): Pose => {
  * The fists' execution as drawn (EXEC, the user 2026-11-17: a glory kill for everyone, the victim's
  * kneel the katana's, the killer's blows his own), in ticks of the lock: turned to his victim over
  * TURN, the right fist drawn back low by the hip (GUT: cocked, still cocked), driven up into his
- * belly on the strike of the katana's cut down, so the victim kneels on it (home), buried there as he
+ * belly on the strike of the katana's thrust, so the victim kneels on it (home), buried there as he
  * folds (held), back to the guard (back); the left hand on the back of his bowed head, holding it
  * (GRAB: from, on); the right fist raised high over the shoulder (SMASH: from, raised), held there a
  * beat, brought down onto his head on the lock's last tick, as it bursts. Past the lock, the punch
@@ -566,6 +579,57 @@ const along = <T>(
 };
 
 const num = (a: number, b: number, u: number) => a + (b - a) * u;
+
+/**
+ * The swordsman's legs through the katana's execution (the user, 2026-11-19: he stood fixed to the
+ * floor): keys [tick of the lock, hips forward, hips down, right foot forward, right foot up]
+ * (metres). He draws back, lunges onto his right foot behind the thrust, comes back as he draws
+ * the blade out, rises as he raises it, then steps in and sinks under the cut down, and stands
+ * up again after it.
+ */
+const [c0, home] = [EXEC.CUTS[0], EXECUTE.KNEEL[0]];
+const [top, down] = [EXECUTE.RAISE[0] + EXECUTE.RAISE[1], EXEC.TICKS - 1];
+export const LUNGE = [
+  [c0 - 4, 0, 0, 0, 0],
+  [c0 + 3, -0.07, 0.05, 0, 0],
+  [home - 3, 0.1, 0.08, 0.2, 0.07],
+  [home, 0.26, 0.15, 0.34, 0],
+  [home + 7, 0.26, 0.15, 0.34, 0],
+  [home + 14, 0.1, 0.06, 0.18, 0.06],
+  [top - 6, 0, 0.02, 0, 0],
+  [top, -0.04, 0, 0, 0],
+  [down - 9, -0.04, 0, 0, 0],
+  [down - 4, 0.04, 0.06, 0.14, 0.06],
+  [down, 0.14, 0.15, 0.26, 0],
+  [down + 16, 0.14, 0.15, 0.26, 0],
+  [down + 30, 0.04, 0.05, 0.1, 0.05],
+  [down + 40, 0, 0, 0, 0],
+];
+
+/** The swordsman's `pose` `e` ticks into the katana's execution (past EXEC.TICKS after the kill): his hips and his right foot on LUNGE, the left where it stands. */
+export const lunge = (pose: Pose, e: number): Pose => {
+  const [fwd, sink, step, up] = along(
+    LUNGE.map(([t, ...v], i) => [t, v, i == 3 || i == 10] as [number, number[], boolean]),
+    e,
+    (a, b, u) => a.map((v, j) => num(v, b[j], u)),
+  );
+  if (!(fwd || sink || step || up)) {
+    return pose;
+  }
+  const q: Pose = { ...pose, rot: pose.rot.slice() };
+  const [r, , f] = basis(q.yaw, 0);
+  const was = solve(q);
+  q.hips = [q.hips[0], q.hips[1] - sink, q.hips[2] - fwd];
+  for (const [j, a, h] of [
+    [J.THIGH_L, 0, 0],
+    [J.THIGH_R, step, up],
+  ]) {
+    reach(q, solve(q), j, off(was.pos[j + 2], r, f, 0, a, h), [f[0], 0.3, f[2]]);
+    // The sole as it lay, whatever the shin does over it.
+    q.rot[j + 2] = mul(inv(solve(q).rot[j + 1]), was.rot[j + 2]);
+  }
+  return q;
+};
 
 /**
  * The killer's `pose` in the fists' execution `e` ticks into its lock (past EXEC.TICKS after the

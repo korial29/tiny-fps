@@ -314,11 +314,12 @@ export const XENO_FEED = 1;
 /**
  * The katana's glory kill, an execution (room.ts feast(), the user 2026-11-17: 1.5 s, not at once):
  * E locks the two for EXEC.TICKS (`exec` KILLER and VICTIM); the swordsman dashes in front of him,
- * to EXEC.REACH metres, over GLORY_DASH ticks, cuts down (CUT.SLASH) at EXEC.CUTS[0] and drops him
- * to his knees, then spins into a cut across (CUT.RIGHT) at EXEC.CUTS[1], whose strike is the
- * lock's last tick: his head goes (LIMB.HEAD) and the body, still on its knee, tips over where it
+ * to EXEC.REACH metres, over GLORY_DASH ticks, runs him through (CUT.THRUST, the user 2026-11-19) at EXEC.CUTS[0] and drops him
+ * to his knees, then raises the blade over his head and cuts down (CUT.SLASH, the user
+ * 2026-11-19: a samurai's execution, no spin) at EXEC.CUTS[1], whose strike is the lock's last
+ * tick: his head goes (LIMB.HEAD) and the body, still on its knee, tips over where it
  * is (feast.ts topple()). Without the katana in hand it is the fists' (the user, 2026-11-17): the
- * same lock, dashing to EXEC.FIST metres, a punch in the belly on the cut down's strike drops him on
+ * same lock, dashing to EXEC.FIST metres, a punch in the belly on the thrust's strike drops him on
  * his knee the same, and a punch down on his head on the lock's last tick bursts it (LIMB.BURST).
  * The fists strike nothing on the host: their blows are drawn (feast.ts pummel()).
  */
@@ -326,7 +327,7 @@ export const EXEC = {
   TICKS: 88,
   REACH: 1.3,
   FIST: 0.7,
-  CUTS: [20, 74],
+  CUTS: [26, 71],
   KILLER: 1,
   VICTIM: 2,
 } as const;

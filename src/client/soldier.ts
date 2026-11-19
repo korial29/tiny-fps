@@ -15,7 +15,7 @@ import {
 } from '../shared/constants';
 import { strike } from '../shared/blade';
 import { TAU, floored } from '../shared/physics';
-import { LIMB, MODE } from '../shared/types';
+import { CUT, LIMB, MODE } from '../shared/types';
 import type { Choice, PlayerState, Rover } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
@@ -102,6 +102,7 @@ import {
   parrying,
   poised,
   progress,
+  SLASH_TOP,
 } from './katana';
 import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
@@ -137,11 +138,12 @@ import {
   eating,
   intent,
   kneel,
+  lunge,
   mounted,
   pummel,
   pummeling,
   seize,
-  spun,
+  raised,
   swaying,
   topple,
 } from './feast';
@@ -247,6 +249,8 @@ export interface Runner {
    */
   pum?: number;
   prey?: Prey;
+  /** The katana's execution (feast.ts lunge()): its swordsman's ticks into the lock, smoothed as `pum`, running on past it for his recovery. */
+  exe?: number;
   fist?: boolean;
   /** The skeleton as last drawn: a limb cut off leaves from it (limbs.ts track()). */
   s?: ReturnType<typeof solve>;
@@ -520,6 +524,15 @@ export const animate = (
           tracer?.shock(neck);
         }
         r.bleed = EXECUTE.BLEEDING;
+      }
+      // The katana's execution's swordsman: his ticks into it, smoothed, and on past the kill.
+      if (p.exec === EXEC.KILLER && p.lock && p.wield && !p.down) {
+        const e = EXEC.TICKS - p.lock;
+        const was = r.exe ?? -Infinity;
+        r.exe = Math.abs(was - e) > 6 ? e : Math.min(Math.max(was + dt * TICK_HZ, e - 1), e + 1);
+      } else if (r.exe !== undefined) {
+        const off = r.exe < EXEC.TICKS - 3 || p.down || r.exe > EXEC.TICKS + 40;
+        r.exe = off ? undefined : r.exe + dt * TICK_HZ;
       }
       // The fists' execution's killer: his ticks into it, smoothed, his victim's belly and head as
       // last drawn; after the kill they run on for the follow-through, kept where they were.
@@ -1112,15 +1125,21 @@ export const stance = (r: Runner) => {
   }
   let s = solve(pose);
   if (p.wield && !busy) {
-    // The execution's cut across comes out of a whole turn of the body.
-    const spin = p.exec === EXEC.KILLER && p.lock ? spun(p.lock) : 0;
-    const [from, q] = spin
-      ? [
-          { ...pose, yaw: pose.yaw + spin },
-          { ...p, yaw: p.yaw + spin },
-        ]
-      : [pose, p];
-    pose = brandish(from, q, r.prog, r.gait.phase, r.t, r.parry);
+    // The execution's last cut: the blade raised back over the head, held, then down on his neck.
+    const up =
+      p.exec === EXEC.KILLER && p.lock
+        ? raised(EXEC.TICKS - (r.exe ?? EXEC.TICKS - p.lock), r.prog, SLASH_TOP)
+        : -1;
+    // His legs go with his blade.
+    pose = r.exe === undefined ? pose : lunge(pose, r.exe);
+    pose = brandish(
+      pose,
+      up < 0 ? p : { ...p, cut: CUT.SLASH },
+      up < 0 ? r.prog : up,
+      r.gait.phase,
+      r.t,
+      r.parry,
+    );
     s = solve(pose);
   } else if ((p.railed || p.rifled) && !busy) {
     // The rail gun or the rifle in both hands, at the ready when not firing: the left on its front grip, the

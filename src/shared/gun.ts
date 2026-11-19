@@ -420,7 +420,7 @@ export const sabering = (p: Pick<PlayerState, 'lock' | 'exec'>): boolean => !!p.
 /**
  * A step of a glory kill's execution (EXEC), whatever the keys: with the katana in hand at its start
  * (`wield`, kept through it) the swordsman's two cuts start on their ticks of the lock (EXEC.CUTS: a
- * cut down, then one across whose strike is the lock's last tick), and strike no one; the fists'
+ * thrust, then a cut down whose strike is the lock's last tick), and strike no one; the fists'
  * start no swing (their blows are drawn). His victim holds no weapon up. Predicted, as a cut is.
  */
 const execute = (p: PlayerState): Strike => {
@@ -429,7 +429,7 @@ const execute = (p: PlayerState): Strike => {
   const e = EXEC.TICKS - p.lock;
   const at = (EXEC.CUTS as readonly number[]).indexOf(e);
   const blade = p.exec === EXEC.KILLER && !!p.wield;
-  p.cut = blade && at >= 0 ? [CUT.SLASH, CUT.RIGHT][at] : p.cut;
+  p.cut = blade && at >= 0 ? [CUT.THRUST, CUT.SLASH][at] : p.cut;
   p.swing = blade && at >= 0 ? CUTS[p.cut!].ticks : Math.max(0, (p.swing ?? 0) - 1);
   [p.wield, p.charge, p.heavy] = [blade, 0, false];
   return STRIKE.NONE;

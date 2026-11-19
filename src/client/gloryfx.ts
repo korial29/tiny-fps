@@ -38,14 +38,15 @@ export const FEAST_CUES: Cue[] = [
   [108, SOUND.CLAW, 1, 0.6, 0.55, 8, 119],
 ];
 
-/** The katana's, over EXEC.TICKS: the cut down bites at 36, he is on his knee at 46. */
+/** The katana's, over EXEC.TICKS: the thrust goes in at 36, he is on his knee at 46. */
 export const EXEC_CUES: Cue[] = [
   [36, SOUND.ZAP, 1, 0.9, 1],
   [37, SOUND.PAIN, 1, 1, 1, 0, 0, true],
   [46, SOUND.THUD, 1, 0.8, 1.5],
+  // The blade rings as it goes up over his head.
+  [48, SOUND.SHING, 0, 0.7, 0.9],
   [50, SOUND.EXHALE, 1, 0.45, 1.5, 23, 72],
   [61, SOUND.INHALE, 1, 0.45, 1.6, 23, 72],
-  [72, SOUND.SHING, 0, 0.7, 0.9],
 ];
 
 /**

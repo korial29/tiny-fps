@@ -129,9 +129,9 @@ const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
  * details on the rest place (the user, 2026-11-17): a band wound round the ankle, a cord tied under
  * the lip of the shaft, and the split of the toe.
  */
-const BOOT_LAYER = -0.88;
+export const BOOT_LAYER = -0.88;
 /** The regions of a ninja's skin that are woven cloth: his suit, and his boots' uppers (the user, 2026-11-17: cloth, not leather). */
-const SUIT = [REGION.PANTS, REGION.UPPER, REGION.GLOVE, REGION.STRIPE, REGION.STRIPE_LOW];
+export const SUIT = [REGION.PANTS, REGION.UPPER, REGION.GLOVE, REGION.STRIPE, REGION.STRIPE_LOW];
 
 /** Samples of the scene target: the canvas' own antialiasing no longer reaches it. */
 const SAMPLES = 4;

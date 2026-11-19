@@ -819,7 +819,19 @@ describe('what a pixel pays for', () => {
     // Seven 3D noises a pixel on every pixel of the city were 3.7 ms of GPU a frame.
     const skin = block(FRAG, 'if(kb>0.){');
     expect(skin).toContain('n3(Rp*1500.)');
-    expect(FRAG.replace(skin, '')).not.toContain('n3(Rp');
+    // The ninja's bands and his cloth have noises on the rest place too, each under its own layer's
+    // guard: what main() runs for every pixel, outside any branch, calls none.
+    const guards = ['if(kb>0.){', 'if(lz>0.){', 'if(kw>0.){'];
+    expect(guards.reduce((s, g) => s.replace(block(s, g), ''), FRAG)).not.toContain('n3(Rp');
+    const main = block(FRAG, 'void main(){').slice('void main(){'.length);
+    let [flat, depth] = ['', 0];
+    for (const ch of main) {
+      depth += ch == '{' ? 1 : 0;
+      flat += depth ? '' : ch;
+      depth -= ch == '}' ? 1 : 0;
+    }
+    expect(flat).toContain('float kb=');
+    expect(flat).not.toContain('n3(');
   });
 });
 

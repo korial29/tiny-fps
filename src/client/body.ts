@@ -444,6 +444,9 @@ const TOWARD = [
 
 /** Finger thicknesses against FINGER_R, index to little: the little finger is thinner. */
 const THICK = [1, 1.02, 0.95, 0.82];
+/** The xenomorph's, as the fingers were before the man's were reworked (2026-11-17): its hand was tuned on them. */
+const THICK_X = [1, 1, 0.96, 0.86];
+const LENGTH_X = [1, 1.1, 1, 0.82];
 /** Finger lengths against 4 cm, index to little. */
 const LENGTH = [0.97, 1.08, 1, 0.8];
 /** The thumb's two segments when the palm carries the rifle's handguard: closed on its near side, along it (the user, 2026-11-10). */
@@ -553,7 +556,7 @@ const BONES = [1, 0.62, 0.42];
 /** The ring of a finger from which on it is bare: the glove's fingers end 60 % along the middle phalanx. */
 export const BARE = 8;
 /** The rings of a finger a near runner's hand keeps past its root (hand()'s `lite`): the knuckle's bend, the glove's edge, the last bend, the tip. */
-const LITE = [5, 8, 12, 16];
+const LITE = [5, 8, 12];
 
 /**
  * The rings of a finger, in the hand's space: from `p` along `d1`, `d2` then `d3`, its three
@@ -621,8 +624,9 @@ export const finger = (
     ring(b2, d3, (0.82 - 0.06 * taper) * (1 - 0.24 * bony)),
     // Its tip thinner inside the claw, which sheathes it: none of it through the claw.
     // A round tip: the pad of the finger, not a cone.
-    ring(along(j2, d3, l3 - 0.003), d3, (0.7 + 0.02 * taper) * (1 - 0.4 * bony)),
-    ring(along(j2, d3, l3 + 0.003), d3, 0.46 * (1 - 0.4 * bony)),
+    ...(bony
+      ? [ring(along(j2, d3, l3 - 0.001), d3, 0.7 * (1 - 0.4 * bony))]
+      : [ring(along(j2, d3, l3 - 0.003), d3, 0.72), ring(along(j2, d3, l3 + 0.003), d3, 0.46)]),
     ring(along(j2, d3, l3 + 0.006), d3, 0),
   ];
 };
@@ -767,8 +771,15 @@ const shape = (
     [WRIST[1] - CUFF[0], CUFF[1] - WRIST[0], CUFF[3], CUFF[4]],
     // The heel of the hand narrower than the knuckles and thick, the palm thinner toward the fingers
     // (the user, 2026-11-17: it was a mitt, as wide at the wrist as at the knuckles).
-    [0.025, 0, 0.038, 0.0235],
-    [0.06, -0.002, 0.045, 0.018],
+    ...(claws
+      ? [
+          [0.025, 0, 0.043, 0.024],
+          [0.06, -0.002, 0.046, 0.019],
+        ]
+      : [
+          [0.025, 0, 0.038, 0.0235],
+          [0.06, -0.002, 0.045, 0.018],
+        ]),
     [0.092, -0.004, 0.046, 0.0125],
     [0.104, -0.004, 0, 0],
   ];
@@ -800,7 +811,9 @@ const shape = (
     paint = k => (k < BARE ? tint : bare);
     // From where it leaves the palm, ring `from`: a weld skins its root.
     const all = finger(p, ...ds, l, r, t, +claws);
-    const ks = lite ? [from, ...LITE.filter(k => k > from)] : all.map((_, k) => k).slice(from);
+    const ks = lite
+      ? [from, ...LITE.filter(k => k > from), all.length - 1]
+      : all.map((_, k) => k).slice(from);
     tube(
       ks.map(k => all[k]),
       FS,
@@ -869,7 +882,9 @@ const shape = (
     const at: Vec3 = [0.034 - 0.0225 * i, -0.004, 0.092];
     const t = unit(add(ds[0], [0, 0, 1]));
     // The xenomorph's long and lean (the user's picture, 2026-11-17: a skeleton's hand).
-    const [fl, fr] = [0.04 * LENGTH[i] * (claws ? LANK : 1), FINGER_R * THICK[i]];
+    const [fl, fr] = claws
+      ? [0.04 * LENGTH_X[i] * LANK, FINGER_R * THICK_X[i]]
+      : [0.04 * LENGTH[i], FINGER_R * THICK[i]];
     digit(at, ds, fl, fr, t);
     const rings = finger(at, ...ds, fl, fr, t, +claws);
     const [, x, y] = rings[1];
@@ -998,14 +1013,17 @@ const shape = (
     return k && to ? unit(mix(d, to, push)) : d;
   });
   const tp: Vec3 = [0.032, -0.01, 0.025];
-  digit(tp, [d1, d2, d2], 0.037, 0.0116, d1, 2, [0.6, 2.2, 0.7]);
+  // The thumb's thickness, the spread of its foot on the palm and its mound's height: the
+  // xenomorph's as they were.
+  const [TR, SPREAD, MOUND] = claws ? [0.0124, 1.7, 0.003] : [0.0116, 2, 0.0065];
+  digit(tp, [d1, d2, d2], 0.037, TR, d1, 2, [0.6, 2.2, 0.7]);
   // The thumb's mound (the user, 2026-11-09: the thumb shows the most, holding a gun): from a
   // footprint on the palm round its root, its ring there pushed out onto the palm's surface, a
   // skin swells into the thumb halfway along its first bone. One piece with the palm.
   paint = () => tint;
   {
     // As the thumb is drawn (digit()): the xenomorph's thin bone, or the mound ended in a step.
-    const rings = finger(tp, d1, d2, d2, 0.037, 0.0116, d1, +claws);
+    const rings = finger(tp, d1, d2, d2, 0.037, TR, d1, +claws);
     const [, x1, y1] = rings[1];
     const [c2, x2, y2] = rings[2];
     /** The palm's ring at `z`: its middle's height, half its width and its height. */
@@ -1023,7 +1041,9 @@ const shape = (
     };
     const foot = Array.from({ length: FS }, (_, k): [Vec3, Vec3] => {
       const a = (k * TAU) / FS;
-      const q = [0, 1, 2].map(d => tp[d] + 2 * (x1[d] * Math.cos(a) + y1[d] * Math.sin(a))) as Vec3;
+      const q = [0, 1, 2].map(
+        d => tp[d] + SPREAD * (x1[d] * Math.cos(a) + y1[d] * Math.sin(a)),
+      ) as Vec3;
       const [yc, w, h] = section(q[2]);
       // Out from the palm's axis onto its surface.
       const e = Math.hypot(q[0] / w, (q[1] - yc) / h) || 1;
@@ -1038,7 +1058,7 @@ const shape = (
     // A third ring between, swollen: the mound.
     const mid = foot.map(([q, n], k): [Vec3, Vec3] => [
       // The ball of the thumb: a fuller mound between the palm and the thumb's root.
-      add(mix(q, top[k][0], 0.5), n.map(c => c * 0.0065) as Vec3),
+      add(mix(q, top[k][0], 0.5), n.map(c => c * MOUND) as Vec3),
       unit(add(n, top[k][1])),
     ]);
     for (const [a, b] of [
@@ -1123,14 +1143,16 @@ const shape = (
         [0, 0, 0.009 * k],
       ];
     }),
-    10,
+    // Eight sides: half of the ridge is sunk in the glove (10 until the fingers' round tips, 2026-11-18).
+    8,
     put,
   );
   // A padded plate on the back of the hand, and the strap round the wrist with its buckle.
   paint = () => tint.map(v => v * 0.72);
   tube(
-    [0.03, 0.031, 0.034, 0.05, 0.066, 0.069, 0.071].map((z, i): Ring => {
-      const k = [0.1, 0.6, 0.92, 1, 1, 0.75, 0][i];
+    // No ring across its middle: the back of the hand is straight under it, within 0.1 mm.
+    [0.03, 0.031, 0.034, 0.066, 0.069, 0.071].map((z, i): Ring => {
+      const k = [0.1, 0.6, 0.92, 1, 0.75, 0][i];
       return [
         [0, back(z) + 0.0004, z],
         [0.019 * k, 0, 0],

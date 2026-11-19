@@ -54,7 +54,7 @@ interface Region {
   legs?: boolean;
   /** No plate: the suit's dark ribbed cloth, a hair off the skin, with no wall (the gusset). */
   thin?: boolean;
-  /** No plate: the ninja's belt, cloth in the team's colour a hair off the skin, with no wall. */
+  /** No plate: the ninja's sash, cloth in its own grey (SASH) a hair off the skin, with no wall. */
   belt?: boolean;
 }
 
@@ -227,14 +227,12 @@ const plates = (_a: number, c: Corner) => {
  */
 const GUSSET = { under: 0.025, off: 0.003, tuck: 0.006 };
 /**
- * The ninja's belt (the user, 2026-11-13: a V on the sides, then deeper, on him and on her): its
- * bottom at the front's middle, under the buckle's middle (buckle.ts), rising `rise` to the hips,
- * then down round the back to `back` from the front's (over it, the back's last lames would meet
- * it); its height, and how far it stands off the skin. Cut as the gusset is, so drawn on every
- * map, armour or none (armor()'s `bare`).
+ * The ninja's belt, a sash (the user, 2026-11-17: the thin strip in a V of 2026-11-13 did not
+ * please): wide, nearly level, woven cloth knotted in front (buckle.ts). Its bottom at the front's
+ * middle, rising `rise` to the hips, then down round the back to `back` over the front's; its
+ * height, and how far it stands off the skin. Cut as the gusset is, so drawn on every map, armour
+ * or none (armor()'s `bare`).
  */
-// A sash now (the user, 2026-11-17: the thin V strip did not please): wider, nearly level, woven
-// cloth standing further off the suit, knotted in front (buckle.ts).
 export const BELT = { y: 0.982, rise: 0.016, back: 0.004, h: 0.048, off: 0.007 };
 const beltLow = (a: number) =>
   BELT.y +
@@ -371,47 +369,17 @@ const vestTop = (a: number, fem: number) => {
   );
 };
 /**
- * The ninja's back (the user, 2026-11-13: one big block, not pretty): two plates on each shoulder
- * blade, from `spine` degrees off the spine (a groove down it) to `a`, parted at the trunk's split
- * (`split`, 1.41 m: one plate across it showed the step between the two rings): the upper one up to
- * `top` by the spine, rising `rise` toward the shoulder and rounding off by `corner` at its outer
- * end; the lower one from `low` by the spine, rising `wing` to its outer end. Under them three lames
- * as the belly's, the first's top at `lames`, each `lame` high, their point `dip` down at the spine.
+ * The ninja's back piece (the user, 2026-11-17: one piece as the front's, where plates by halves
+ * stood each side of a spine of blocks, with a plate on each flank): its top is at `top` at the
+ * spine and rises by `rise` beside it, before it falls (SHIELD).
  */
-export const BACK = {
-  spine: 6,
-  a: 62,
-  split: [1.4, 1.414],
-  top: 1.475,
-  rise: 0.03,
-  corner: 0.045,
-  low: 1.245,
-  wing: 0.06,
-  lames: 1.222,
-  lame: 0.048,
-  dip: 0.025,
-};
-/**
- * The blocks down the spine, in the back's groove: how many, the first's top, their height and the
- * gap between two (none across the split), their half width (degrees) and how far they stand off
- * the skin.
- */
-export const SPINE = { n: 15, top: 1.47, h: 0.022, gap: 0.008, a: 3.5, off: 0.017 };
-/** The plates on the flanks: their heights, and the angles round from the front they span. */
-export const SIDES = {
-  y: [
-    [1.215, 1.33],
-    [1.09, 1.2],
-  ],
-  a: [82, 116],
-};
+export const BACK = { top: 1.475, rise: 0.03 };
 /** How far round the lames go, from the front and from the back (degrees): they meet at the flank, a seam between them. */
-const FLANK = 88.5;
+export const FLANK = 88.5;
 /** The back piece's shield: the angles off the spine between which its top falls. */
-const SHIELD = [9, 34];
-/** The back piece's top at `b` degrees off the spine. */
-const bladeTop = (b: number) =>
-  BACK.top + BACK.rise * smooth(0, 35, b) - BACK.corner * smooth(40, BACK.a, b) ** 2;
+export const SHIELD = [9, 34];
+/** The back piece's top at `b` degrees off the spine, before the shield's fall. */
+const bladeTop = (b: number) => BACK.top + BACK.rise * smooth(0, 35, b);
 /** How far the ninja's bracers stand off the forearm: half a plate's thickness. */
 export const BRACER = 0.006;
 export const REGIONS: Region[] = [
@@ -529,7 +497,7 @@ export const REGIONS: Region[] = [
     thin: true,
   },
   { part: PART.LEG, cx: 0.1, y: [0.74, 0.94], a: [-181, 181], low: gusset, thin: true },
-  // The ninja's belt, in a V (BELT).
+  // The ninja's sash (BELT).
   {
     part: PART.TRUNK,
     cx: 0,
@@ -541,9 +509,9 @@ export const REGIONS: Region[] = [
     alone: true,
   },
   // The ninja's vest (the user, 2026-11-13, on his picture of a ninja's armour): a chest piece up to
-  // the neck in one block, its bottom a chevron; three lames down the belly nested under it, each
-  // narrower; a plate on the back and one on the small of it; and a bracer on each forearm. His
-  // shoulder pads and his collar are pieces of their own (pads.ts).
+  // the neck in one block, its bottom a chevron; three lames down the belly nested under it, round
+  // to the flanks; the same on his back (below); and a bracer on each forearm. His shoulder pads and
+  // his collar are pieces of their own (pads.ts).
   ...[0, 1].map((fem): Region => ({
     part: PART.TRUNK,
     cx: 0,
@@ -856,7 +824,7 @@ const dome = (x: number, y: number) =>
 /** The ninja's vest has them a little smaller (the user, 2026-11-13): this much of their height. */
 export const SLIM = 0.65;
 /** The cut down the sternum of his chest piece: how deep at the middle, how far round each side (degrees), and how hollow its sides. */
-const NOTCH = { deep: 0.105, a: 17, curve: 1.6 };
+export const NOTCH = { deep: 0.105, a: 17, curve: 1.6 };
 /** And his pecs on it: this much of the chest plate's. */
 const FLAT = 0.25;
 
@@ -1314,7 +1282,7 @@ const cook = (s: Skin, fine: boolean): Recipe => {
           continue;
         }
         if (region.belt) {
-          // The belt: cloth in the team's colour (ACCENT), no wall.
+          // The sash: woven cloth in its own grey, no wall.
           for (let i = 1; i + 1 < poly.length; i++) {
             add(
               [poly[0], poly[i], poly[i + 1]],
@@ -1439,25 +1407,24 @@ const VENTS = [0, 1].map(b =>
 
 /**
  * The ninja's details (the user, 2026-11-13: more detail on his armour), as DETAILS on his own
- * pieces: a seam down the chest piece; a rivet at each end of each lame;
- * a groove down each of the back's blade plates, a rivet at each end of each back lame; a band at each end of the bracers with
- * three slits between them; a groove down each shin guard, a rivet each side of its top. And by
- * build, the vents (VENTS) and 忍 on the left pec (SIGNS).
+ * pieces: a seam down the chest piece, what its cut down the sternum leaves of it (NOTCH); a rivet
+ * each side of each lame; a groove down each side of the back piece, a rivet each side of each back
+ * lame, as the belly's; a band at each end of the bracers with three slits between them; a groove
+ * down each shin guard, a rivet each side of its top. And by build, the vents (VENTS) and 忍 on the
+ * left pec (SIGNS).
  */
 export const NINJA_DETAILS = [
   [PART.TRUNK, 0, 0, 1.38, 0, 0.1, 0.0012, 1],
-  ...[0, 1, 2].map(k => {
-    const a = 39 - k * 4;
-    const y = VEST.y - VEST.gap - k * (VEST.lame + VEST.gap) - VEST.lame / 2 - chevron(a);
-    return [PART.TRUNK, 0, a, y, 0, 0.007, 0.0035, 0];
-  }),
-  // A groove down each blade plate, and a rivet at each end of each back lame.
+  // The lames' rivets, then a groove down each side of the back piece.
+  ...[0, 180].flatMap(face =>
+    [0, 1, 2].map(k => {
+      const a = 39 - k * 4;
+      const y = VEST.y - VEST.gap - k * (VEST.lame + VEST.gap) - VEST.lame / 2 - chevron(a);
+      // The back's are the belly's, mirrored: at the old lames' heights one fell in a gap.
+      return [PART.TRUNK, 0, Math.abs(face - a), y, 0, 0.007, 0.0035, 0];
+    }),
+  ),
   [PART.TRUNK, 0, 160, 1.33, 0, 0.09, 0.0013, 0],
-  ...[0, 1, 2].map(k => {
-    const a = 180 - (45 - k * 4);
-    const y = BACK.lames - k * (BACK.lame + VEST.gap) - BACK.lame / 2;
-    return [PART.TRUNK, 0, a, y, 0, 0.007, 0.0035, 0];
-  }),
   ...[1.005, 1.125].map(y => [PART.ARM, 0.222, 90, y, 90, 0.05, 0.0013, 0]),
   ...[1.05, 1.065, 1.08].map(y => [PART.ARM, 0.222, 90, y, 90, 0.018, 0.0011, 0]),
   [PART.LEG, 0.1, 0, 0.3, 0, 0.2, 0.0013, 0],

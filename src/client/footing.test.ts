@@ -160,6 +160,8 @@ describe('a body down on the floor (footing())', () => {
       low = Math.min(low, lowest(book.get(2)!));
     }
     // His armour's plates, as he bends back, stand a little further off the skin.
-    expect(low).toBeGreaterThan(-0.03);
+    // 3 cm until his hips and thighs were rounded (the user, 2026-11-17): lying on his side, the
+    // suit at his hip is 1 mm lower, under the same joint radii (RADII).
+    expect(low).toBeGreaterThan(-0.032);
   });
 });

@@ -1216,9 +1216,9 @@ const LIMBS_X = [
   [J.SHIN_R, J.FOOT_R, J.TOE_R, J.ARM_R],
 ];
 
-/** Draws the runner and gives back its solved skeleton, or nothing once a bolt has burnt it away. */
 /** The ninja's boots: black cloth, a shade lighter than his suit so they show on it. */
 const BOOT = [0.06, 0.06, 0.066];
+/** Draws the runner and gives back its solved skeleton, or nothing once a bolt has burnt it away. */
 export const soldier = (
   out: Out,
   r: Runner,

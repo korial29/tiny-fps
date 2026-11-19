@@ -1,8 +1,9 @@
 // The vertex shader's skin and armour (render.ts's VERT, modes 1 and 2) in JavaScript, for the tests:
 // what the GPU draws of a Draw with flesh, from the same texels.
-import { GLOSS } from '../src/client/mesh';
+import { GLOSS, WEAVE } from '../src/client/mesh';
 import { OWN, SCRATCHED } from '../src/client/armor';
 import { PLATE, VERT } from '../src/client/flesh';
+import { BOOT_LAYER, SUIT } from '../src/client/render';
 import { BARE_REGIONS, REGION, UNLIT } from '../src/client/skin';
 import { SKIN_LAYER } from '../src/client/mesh';
 import { CLOTH } from '../src/client/mask';
@@ -79,12 +80,22 @@ export const pose = (out: number[], d: Draw) => {
       }
       // Bare skin takes the skin layer, as far as the hood leaves it bare.
       const bw = BARE_REGIONS.includes(h[1]) ? (hb[0] < 0 ? 1 : hb[0]) : 0;
+      // A ninja's suit is woven cloth, his hood too as far as it covers the skin; his boots' uppers
+      // a layer of their own in the weave's band.
+      const cw = !f.woven
+        ? 0
+        : SUIT.includes(h[1])
+          ? 1
+          : h[1] == REGION.FLESH && hb[0] >= 0
+            ? 1 - hb[0]
+            : 0;
+      const boot = f.woven && h[1] == REGION.UPPER ? BOOT_LAYER - WEAVE : 0;
       out.push(
         ...P,
         ...N,
         l[0],
         l[1],
-        UNLIT.includes(h[1]) ? -2 : -1 + (SKIN_LAYER + 1) * bw,
+        UNLIT.includes(h[1]) ? -2 : -1 + (SKIN_LAYER + 1) * bw + (WEAVE + 1) * cw + boot,
         l[2],
       );
       continue;

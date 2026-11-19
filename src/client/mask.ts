@@ -3,7 +3,7 @@
 // drawn in under it), and on every runner it is painted on the head's own skin
 // (dress()), black from the neck to the crown but round the eyes and down the upper cheeks, so it
 // takes the face's shape; the ideogram 忍 (shinobi) in the team's colour on it behind each temple. The
-// guard over the mouth is a piece of its own in the team's colour, lacquered (reshaped on the user's
+// guard over the mouth is a piece of its own in the sash's grey, brushed metal (reshaped on the user's
 // pictures, 2026-11-13 and 2026-11-17): its top edge level under the eyes with a small peak up the
 // nose, swept up in a hollow curve to a tall point by each temple; its sides round the cheeks, drawn
 // in to a narrow chin; jutting out down its middle, with a kite of black mesh under the nose, three
@@ -451,7 +451,11 @@ export const dress = (out: Out, from: number, s: Skin, at: Vec3, q: Quat, build 
       // Under the guard: drawn in behind its inner face. Under the hood's cloth: what stands out
       // of the skull (the ears) is drawn in under it.
       const guarded = covers(qa, y);
-      if (guarded || (!BARE[i] && qa > EARS[0] && qa < EARS[1] && y > EARS[2] && y < EARS[3])) {
+      // Only what the head alone carries: a vertex the neck shares is elsewhere on a turned head
+      // than at rest, where the shader's skin is dressed (flesh.ts), and the two fell apart there.
+      const whole = (j0 == J.HEAD ? 1 - s.w[i] : 0) + (j1 == J.HEAD ? s.w[i] : 0) > 0.999;
+      const ear = whole && !BARE[i] && qa > EARS[0] && qa < EARS[1] && y > EARS[2] && y < EARS[3];
+      if (guarded || ear) {
         const p = skull(a, y, guarded ? IN - 0.002 + prow(a, y) : 0.003);
         const [r, d] = [Math.hypot(p[0], p[2] - cz), Math.hypot(x, z - cz)];
         if (d > r) {
@@ -547,7 +551,7 @@ export const mask = (
                 : GUARD.map(c => (c * shade) / 0.9);
     dst[w + 6] = rgb[0];
     dst[w + 7] = rgb[1];
-    // The shell is lacquered (the user, 2026-11-17, on a picture: a glossy guard); the rest is matte.
+    // The shell is brushed metal (the user, 2026-11-17), the hood's cloth woven; the rest is matte.
     dst[w + 8] = shade == TEAM ? TWILL : shade == WOVEN ? WEAVE : -1;
     dst[w + 9] = rgb[2];
   }

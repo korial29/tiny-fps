@@ -107,20 +107,21 @@ const draw = (body: Body, p: PlayerState, pitch = 0, color = TEAM): Vert[] => {
 const colored = (v: Vert[], c: number[]) => v.filter(q => c.every((n, i) => q.c[i] == n));
 /**
  * Vertices of the hand, in the order drawn: the palm, a tube of the cuff's sides and 3 rings; each
- * finger, one of FINGER_SIDES and 15 rings from where it leaves the palm (four rings round each bend,
- * the glove's edge), then a fan, and its nail; the weld from the palm's last ring to the fingers'
+ * finger, one of FINGER_SIDES and 16 rings from where it leaves the palm (four rings round each bend,
+ * the glove's edge, two round the tip: the user, 2026-11-17), then a fan, and its nail; the weld from the palm's last ring to the fingers'
  * roots (the user, 2026-11-09: one piece), the palm's 24 and the roots' outline zipped (46 steps); the thumb,
- * 14 rings from halfway along its first bone, and its nail; its mound, two strips from the palm;
+ * 15 rings from halfway along its first bone, and its nail; its mound, two strips from the palm;
  * the glove's gear (the knuckles' shell, the back's plate and its stitching, the strap and its buckle).
  */
 const [PALM, FINGER, THUMB, NAIL, WELD, MOUND, GEAR] = [
   12 * CUFF_SIDES,
+  870,
   810,
-  750,
   24,
   (CUFF_SIDES + 46) * 3,
   2 * FINGER_SIDES * 6,
-  1764 + 18 * CUFF_SIDES,
+  // 1764 until the fingers' round tips (2026-11-18): the knuckles' shell went from 10 sides to 8, the plate lost its middle ring.
+  1470 + 18 * CUFF_SIDES,
 ];
 const HAND = PALM + 4 * (FINGER + NAIL) + WELD + THUMB + NAIL + MOUND + GEAR;
 const away = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);

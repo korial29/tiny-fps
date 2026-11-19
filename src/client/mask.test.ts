@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GLOSS, STRIDE } from './mesh';
+import { STRIDE, TWILL, WEAVE } from './mesh';
 import { CLOTH, MOUTH, dress, mask } from './mask';
 import { JOINT as J, rest, solve } from './rig';
 import { bindOf, body, palette, skin } from './skin';
@@ -96,8 +96,8 @@ describe('mask, the ninja hood and face guard', () => {
     // Under the eye it stays within 6 mm of its lowest; the points stand 4 cm over that.
     expect(front(0.03, 0.04) - front(0.02, 0.03)).toBeLessThan(0.006);
     expect(top(() => true) - front(0.02, 0.03)).toBeGreaterThan(0.04);
-    // The shell is lacquered, its mesh matte.
-    expect(pts.filter(p => p[6] == RED[0]).every(p => p[8] == GLOSS || p[1] > 1.73)).toBe(true);
+    // The shell is brushed metal, its mesh matte.
+    expect(pts.filter(p => p[6] == RED[0]).every(p => p[8] == TWILL || p[1] > 1.73)).toBe(true);
   });
 
   it('paints the hood on the head, but round the eyes', () => {
@@ -155,7 +155,7 @@ describe('mask on a far runner (the user, 2026-11-14: lags in a match)', () => {
     expect(far.length * 4).toBeLessThan(near.length);
     expect(far.length % 3).toBe(0);
     // The hood's cloth is the near one's alone: a far runner's is painted on his head.
-    const grey = (p: number[]) => p[6] == 0.06 && p[9] == 0.07;
+    const grey = (p: number[]) => p[8] == WEAVE;
     expect(far.some(grey)).toBe(false);
     const shell = near.filter(grey);
     for (let d = 0; d < 3; d++) {
@@ -166,10 +166,15 @@ describe('mask on a far runner (the user, 2026-11-14: lags in a match)', () => {
     }
     const colours = (ps: number[][]) => new Set(ps.map(p => `${p[6]} ${p[7]} ${p[9]}`));
     expect(colours(far)).toEqual(colours(near.filter(p => !grey(p))));
-    // The cloth: over the crown and round the back of the head, down round the neck, off the skull.
+    // The cloth: over the crown and round the back of the head, off the skull, down to the skull's
+    // base and no lower (the user, 2026-11-17: it hung round the neck, a veil before the throat); in
+    // front it stops at the guard's bottom.
     const ys = shell.map(p => p[1]);
     expect(Math.max(...ys)).toBeGreaterThan(1.8);
-    expect(Math.min(...ys)).toBeLessThan(1.54);
+    expect(Math.min(...ys)).toBeLessThan(1.565);
+    expect(Math.min(...ys)).toBeGreaterThan(1.55);
+    const front = shell.filter(p => p[2] < 0 && Math.abs(p[0]) < 0.03).map(p => p[1]);
+    expect(Math.min(...front)).toBeGreaterThan(1.57);
     expect(Math.max(...shell.map(p => p[2])) - Math.max(...far.map(p => p[2]))).toBeGreaterThan(
       0.05,
     );

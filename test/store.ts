@@ -4,6 +4,7 @@ import { spawn } from '../src/shared/physics';
 import { ROLE } from '../src/shared/kit';
 import { build } from '../src/shared/world';
 import { SKIN_LAYER, STRIDE } from '../src/client/mesh';
+import { BOOT_LAYER } from '../src/client/render';
 import { animate, soldier } from '../src/client/soldier';
 import type { Runner } from '../src/client/soldier';
 import { expand } from '../src/client/store';
@@ -19,7 +20,9 @@ export const apart = (a: number[], b: number[]) => {
   const most = a.length == b.length ? [0, 0, 0, 0] : [Infinity, Infinity, Infinity, Infinity];
   a.forEach((x, i) => {
     // The GPU's bare skin carries the skin layer (render.ts), where the CPU's has -1.
-    const y = i % STRIDE == 8 && x <= -1 && x >= SKIN_LAYER ? -1 : x;
+    // And a ninja's woven suit and boots (WEAVE, BOOT_LAYER), where the CPU's skin has -1 too; not
+    // where the CPU itself writes a layer (his rigid hands).
+    const y = i % STRIDE == 8 && b[i] == -1 && x <= BOOT_LAYER && x >= SKIN_LAYER ? -1 : x;
     const [n, d] = [i % STRIDE, Math.abs(y - b[i])];
     const k = n < 3 ? 0 : n < 6 ? 2 : 1;
     most[k] = Math.max(most[k], d);

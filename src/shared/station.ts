@@ -55,6 +55,27 @@ export const inside = (
   z: number,
 ): boolean => x > min[0] && x < max[0] && y > min[1] && y < max[1] && z > min[2] && z < max[2];
 
+/** The hangar and the command room, each [min, max]: shut but for the hangar's mouths (station()). */
+export const rooms = ({ hull: [x, , z], post: [[, Y]] }: StationDef): [Vec3, Vec3][] => [
+  [
+    [x - 24, Y, z - HULL.R],
+    [x + 24, Y + 14, z + HULL.R],
+  ],
+  [
+    [x + 24, Y, z - 10],
+    [x + 40, Y + 4, z + 10],
+  ],
+];
+
+/** The hangar's two mouths, between its side walls and under the lintels: four corners each. */
+export const mouths = ({ hull: [x, , z], post: [[, Y]] }: StationDef): Vec3[][] =>
+  [z - HULL.R, z + HULL.R].map(m => [
+    [x - 20, Y, m],
+    [x + 20, Y, m],
+    [x + 20, Y + 11, m],
+    [x - 20, Y + 11, m],
+  ]);
+
 export class Station {
   public phase: number = PHASE.READY;
   /** The team that armed the mission (ARMED, STRUCK). */

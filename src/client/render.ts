@@ -542,33 +542,21 @@ export const project = (
   return [0.5 + cx / (2 * w), 0.5 - cy / (2 * w)];
 };
 
-/** The left, right, bottom, top and near planes of a view-projection: the last row plus or minus another. */
-const PLANES = [
-  [1, 0],
-  [-1, 0],
-  [1, 1],
-  [-1, 1],
-  [1, 2],
-];
-
 /**
- * Whether a sphere reaches into the view of `m`. A point light out of it lights no pixel drawn, and
- * the GPU pays for every light on every fragment, hidden ones too.
+ * Whether a sphere reaches into the view of `m`, by its left, right, bottom, top and near planes (the
+ * last row plus or minus another). A point light out of it lights no pixel drawn, and the GPU pays
+ * for every light on every fragment, hidden ones too.
  */
-export const inView = (m: Float32Array, [x, y, z]: Vec3, r: number): boolean =>
-  PLANES.every(([s, i]) => {
-    const [a, b, c, d] = [
-      m[3] + s * m[i],
-      m[7] + s * m[4 + i],
-      m[11] + s * m[8 + i],
-      m[15] + s * m[12 + i],
-    ];
-    return a * x + b * y + c * z + d >= -r * Math.sqrt(a * a + b * b + c * c);
+export const inView = (m: Float32Array, p: Vec3, r: number): boolean =>
+  [1, -1, 1, -1, 1].every((s, k) => {
+    const n = [0, 4, 8, 12].map(j => m[j + 3] + s * m[j + (k >> 1)]);
+    return n[0] * p[0] + n[1] * p[1] + n[2] * p[2] + n[3] >= -r * Math.hypot(n[0], n[1], n[2]);
   });
 
 /**
  * The pixels [x, y, width, height] (from the bottom left) the quads cover on a `w` by `h` target seen
- * through `m`, cut at the near plane, a pixel wider each side; undefined when none.
+ * through `m`, cut at the near plane, a pixel wider each side; undefined when none. Each quad's box
+ * is clamped alone: two mouths off either side of the view are none.
  */
 export const cover = (
   m: Float32Array,
@@ -576,32 +564,25 @@ export const cover = (
   w: number,
   h: number,
 ): [number, number, number, number] | undefined => {
-  const NEAR = 1e-3;
-  // The union of each quad's box on the target: two mouths off either side of the view are none.
   let [l, b, r, t] = [w, h, 0, 0];
   for (const q of quads) {
-    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
-    const add = (cx: number, cy: number, cw: number) => {
-      const [px, py] = [(cx / cw / 2 + 0.5) * w, (cy / cw / 2 + 0.5) * h];
-      [x0, y0, x1, y1] = [Math.min(x0, px), Math.min(y0, py), Math.max(x1, px), Math.max(y1, py)];
-    };
-    const c = q.map(([x, y, z]) =>
-      [0, 1, 3].map(i => m[i] * x + m[4 + i] * y + m[8 + i] * z + m[12 + i]),
+    const c = q.map(p =>
+      [0, 1, 3].map(i => m[i] * p[0] + m[4 + i] * p[1] + m[8 + i] * p[2] + m[12 + i]),
     );
-    c.forEach((a, i) => {
-      const e = c[(i + 1) % c.length];
-      if (a[2] > NEAR) {
-        add(a[0], a[1], a[2]);
-      }
-      if (a[2] > NEAR != e[2] > NEAR) {
-        const k = (NEAR - a[2]) / (e[2] - a[2]);
-        add(a[0] + (e[0] - a[0]) * k, a[1] + (e[1] - a[1]) * k, NEAR);
-      }
+    // The corners ahead of the near plane, and where the edges cross it, on the target.
+    const s = c.flatMap((a, i) => {
+      const e = c[(i + 1) % 4];
+      return [a[2] > 1e-3 ? 0 : -1, a[2] > 1e-3 != e[2] > 1e-3 ? (1e-3 - a[2]) / (e[2] - a[2]) : -1]
+        .filter(k => k >= 0)
+        .map(k => a.map((v, j) => v + (e[j] - v) * k))
+        .map(([x, y, z]) => [(x / z / 2 + 0.5) * w, (y / z / 2 + 0.5) * h]);
     });
-    const [ql, qb] = [Math.max(0, Math.floor(x0) - 1), Math.max(0, Math.floor(y0) - 1)];
-    const [qr, qt] = [Math.min(w, Math.ceil(x1) + 1), Math.min(h, Math.ceil(y1) + 1)];
-    if (qr > ql && qt > qb) {
-      [l, b, r, t] = [Math.min(l, ql), Math.min(b, qb), Math.max(r, qr), Math.max(t, qt)];
+    const [x0, y0] = [0, 1].map(j => Math.max(0, Math.floor(Math.min(...s.map(p => p[j]))) - 1));
+    const [x1, y1] = [w, h].map((n, j) =>
+      Math.min(n, Math.ceil(Math.max(...s.map(p => p[j]))) + 1),
+    );
+    if (x1 > x0 && y1 > y0) {
+      [l, b, r, t] = [Math.min(l, x0), Math.min(b, y0), Math.max(r, x1), Math.max(t, y1)];
     }
   }
   return r > l && t > b ? [l, b, r - l, t - b] : undefined;

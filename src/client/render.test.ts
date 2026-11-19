@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { HIGHLINE, ROOFTOPS } from '../shared/map';
 import { MAPS } from '../shared/maps';
@@ -6,7 +7,7 @@ import { ROVER } from '../shared/rover';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
 import type { Brush, WorldDef } from '../shared/world';
-import { STRIDE, basis } from './mesh';
+import { STRIDE, TWILL, basis } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS } from './lights';
 import type { Light } from './lights';
 import {
@@ -779,8 +780,9 @@ describe('the regolith in the shader', () => {
   });
 });
 
-/** The source with its `#ifdef MOON` blocks taken out: what a map without the moon compiles. */
-const earthly = (src: string) => src.replace(/#ifdef MOON\n[\s\S]*?#endif\n/g, '');
+/** The source with its `#ifdef MOON` blocks and the globe's program taken out: what a map without the moon compiles. */
+const earthly = (src: string) =>
+  src.replace(/#ifdef MOON\n[\s\S]*?#endif\n/g, '').replace(/#ifdef ORB\n[\s\S]*?#else\n/, '');
 
 /** The text from `open` to the brace that closes the block it opens. */
 const block = (src: string, open: string) => {
@@ -798,13 +800,55 @@ const block = (src: string, open: string) => {
 describe('what a pixel pays for', () => {
   it('compiles the moon only into a map that has it', () => {
     expect(fragOf(HIGHLINE)).not.toContain('#define MOON');
-    expect(fragOf(MAPS.tranquility)).toMatch(/^#version 300 es\n#define MOON\n/);
+    expect(fragOf(MAPS.tranquility)).toContain('\n#define MOON\n');
     // On Highline nothing of the globe, the stars, the craters or the orbit's fade is left.
     const src = earthly(FRAG);
-    for (const call of ['mg(', 'sk(', 'cs(', 'cr(', 'gh(', 'fa>']) {
+    for (const call of ['mg(', 'sk(', 'cs(', 'cr(', 'gh(', 'Ob.y*smoothstep(', 'texture(Og']) {
       expect(src).not.toContain(call);
     }
     expect(FRAG).toContain('mg(');
+  });
+
+  it('sets every scene uniform through uni(), which every program gets', () => {
+    // Set straight on the GL, a uniform would reach only the program in use: the map's and the
+    // bodies' would draw with different values, and nothing would tell.
+    const src = readFileSync(new URL('./render.ts', import.meta.url), 'utf8');
+    expect(src.match(/gl\.uniform\w*\(\s*(u|v\.u)\b/g)).toBeNull();
+    expect(src.match(/uni\('uniform/g)!.length).toBeGreaterThan(50);
+  });
+
+  it('compiles into each program only the code of what it draws', () => {
+    // The map's has no skin, armour wear, hair or chitin; the bodies' no regolith: three ninjas at
+    // 3 m on Highline took 1.1 to 1.9 ms of GPU less a frame, the same pixels to the byte.
+    expect(fragOf(HIGHLINE, 'LAND')).not.toContain('#define NINJA');
+    expect(fragOf(HIGHLINE, 'FLESH')).toContain('#define NINJA');
+    expect(fragOf(HIGHLINE)).toMatch(/^#version 300 es\n#define LAND\n#define FLESH\n/);
+    for (const code of [
+      'float kb=FL(',
+      'float wa=FL(',
+      'float kt=FL(',
+      'float kr=FL(',
+      'kh=FL(',
+      'float kc=FL(',
+      'float ks=LD(',
+    ]) {
+      expect(FRAG).toContain(code);
+    }
+    expect(FRAG).toContain('#ifdef FLESH\n#define FL(x) x\n#else\n#define FL(x) 0.\n#endif');
+    // The globe's own program shades the globe and nothing else.
+    expect(FRAG).toContain('#ifdef ORB\nvec3 d=normalize(P);bool t;o=vec4(mg(d,');
+  });
+
+  it('compiles the ninja only into a map that offers him', () => {
+    // On the moon his quilting, cloth, boots and brushed metal never run, yet they slowed every
+    // pixel: three astronauts at 3 m took 17.3 ms of GPU a frame with them, 15.4 without.
+    expect(fragOf(HIGHLINE)).toContain('#define NINJA');
+    expect(fragOf(MAPS.tranquility)).not.toContain('#define NINJA');
+    const plain = FRAG.replace(/#ifdef NINJA\n[\s\S]*?#endif\n/g, '');
+    for (const code of ['if(lz>0.)', 'if(qz>0.)', 'if(kw>0.)', 'if(bz>0.)', `L-(${TWILL}))<.004`]) {
+      expect(FRAG).toContain(code);
+      expect(plain).not.toContain(code);
+    }
   });
 
   it('draws the stars in the sky, not in what reflects it', () => {
@@ -812,7 +856,9 @@ describe('what a pixel pays for', () => {
     // three times dearer on close astronauts (14 to 36 ms of GPU with three of them at 3 m).
     expect(FRAG).toContain('if(px>0.)c+=Sn*sk(d,px);');
     expect(FRAG).toContain('k=K1(r,0.)');
-    expect(FRAG).toMatch(/o=vec4\(K0\(d,length\(fwidth\(d\)\)\),1\)/);
+    // The sky asks it at the width of its pixel.
+    expect(FRAG).toContain('vec3 kd=Y>.5?normalize(P):-normalize(E-P);float kp=length(fwidth(kd))');
+    expect(FRAG).toContain('K0(kd,kp)');
   });
 
   it('works out the noises of the skin only on skin', () => {

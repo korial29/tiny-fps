@@ -132,7 +132,7 @@ describe('createRenderer', () => {
    */
   const draws = (kept = false) => {
     const out: [number, number][] = [];
-    let [still, posed] = [true, false];
+    let [still, posed, next] = [true, false, false];
     for (const c of calls) {
       const at = (c[1] as { u?: string } | undefined)?.u;
       if (c[0] == 'uniform4fv' && at == 'R') {
@@ -140,7 +140,17 @@ describe('createRenderer', () => {
       } else if (c[0] == 'uniform1i' && at == 'Sm') {
         posed = c[2] != 0;
       } else if (c[0] == 'drawArrays' && c[3] != 3 && (still && !posed) != kept) {
-        out.push([c[2], c[3]] as [number, number]);
+        // The map and what moves on it are two programs (fragOf()): a range drawn on with nothing
+        // drawn or cleared between is the same range.
+        const last = out[out.length - 1];
+        if (next && last[0] + last[1] == c[2]) {
+          last[1] += c[3] as number;
+        } else {
+          out.push([c[2], c[3]] as [number, number]);
+        }
+        next = true;
+      } else if (c[0] == 'drawArrays' || c[0] == 'clear') {
+        next = false;
       }
     }
     return out;
@@ -199,11 +209,18 @@ describe('createRenderer', () => {
       expect(frag).toContain(`abs(L-(${SHINE}))`);
       // The sky without the moon's globe: a reflection of it is not worth its cost on every pixel.
       expect(frag).toMatch(/r=reflect\(-V,m\),k=K1\(r,0\.\)/);
-      // The sky pass and the crater fading into the globe are the one function, and its definition.
-      expect(frag.match(/K0\(/g)).toHaveLength(3);
-      // The globe is shaded only for a pixel that fades into it, and a crater cell looks at the
-      // neighbours on its near side alone: 4 on the ground, 8 on the globe (the user's lag in orbit).
-      expect(frag).toContain('if(fa>.002)o.rgb=mix(o.rgb,K0(-V,pv),fa)');
+      // The sky pass and the crater fading into the globe share one call of the one function (two
+      // copies of it cost three astronauts at 3 m 1.2 ms of GPU), which reads the globe off its
+      // half-size texture: the globe itself is shaded once, by its own pass.
+      expect(frag.match(/K0\(/g)).toHaveLength(2);
+      expect(frag.match(/mg\(d,/g)).toHaveLength(1);
+      expect(frag).toContain('#ifdef ORB\nvec3 d=normalize(P);bool t;o=vec4(mg(d,');
+      expect(frag).toContain('texture(Og,gl_FragCoord.xy*.5/vec2(textureSize(Og,0)))');
+      // A pixel faded through into the globe skips the ground's shading; one partly faded mixes in
+      // what was read. A crater cell looks at the neighbours on its near side alone: 4 on the
+      // ground, 8 on the globe (the user's lag in orbit).
+      expect(frag).toContain('if(fa>=1.&&C.z>-1.3){o=vec4(gk,1);return;}');
+      expect(frag).toContain('if(fa>.002)o.rgb=mix(o.rgb,gk,fa)');
       expect(frag).toMatch(/vec3 ct\(vec2 q,float s\)\{[^}]*for\(int j=0;j<4;j\+\+\)/);
       expect(frag).toMatch(/vec4 cr\(vec3 p,float s\)\{[^}]*for\(int j=0;j<8;j\+\+\)/);
     });

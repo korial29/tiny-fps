@@ -123,6 +123,66 @@ the orbit's fade, not a reflection, where they were a few dots on a visor. In th
 frames a second, no pause over 35 ms in three runs of 20 s, a frame's GPU 24-31 ms at the 90th
 percentile down to 14 ms. Close up, 10 to 14 pixels in 400 000 change, by 22 levels at most.
 
+### Climbing over the moon (2026-11-19)
+
+The user: laggy on Tranquility as the ship climbs. The GPU of a frame looking down (pitch -0.9) on
+the M2 at 1728 by 1013, base then after, from a scratch page at fixed heights:
+
+| Height | 2 m  | 30 m | 100 m | 200 m | 290 m | 320 m | 400 m | 600 m | 900 m |
+| ------ | ---- | ---- | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
+| Before | 11.5 | 17.0 | 19.2  | 23.5  | 25.4  | 39.1  | 36.6  | 30.3  | 18.8  |
+| After  | 11.3 | 14.2 | 15.3  | 15.2  | 14.2  | 14.8  | 13.6  | 11.8  | 12.2  |
+
+Every view, any pitch, is 15.7 ms or less after (40.5 before). The globe's crater loop (`cr()`, up
+to 7 octaves of 8 cells, all at least a pixel wide from orbit) was the cost, and over the seam every
+crater pixel paid for the ground and for the globe and blended the two. The globe is now shaded once
+a frame at half the frame's size and read by the sky and the fading crater; a pixel faded through
+skips the ground. On the ground nothing changes: the globe is off under `GLOBE_FROM`.
+
+Then each class at 3 m and from 15 to 40 m (the user: which one costs, after the work on all
+three). The CPU is no problem (a runner 0.05 to 0.3 ms a frame, a close astronaut 0.7); the own body
+of a marine or an astronaut is 3.5 ms (97 000 vertices). On Highline the marine, the ninja and the
+xenomorph cost the same, about 3 ms of GPU for three at 3 m. On the moon three astronauts at 3 m
+took 17.4 ms, three xenomorphs 16.3: the ninja's quilting, cloth, boots and brushed metal, which
+never run there (the moon offers no ninja), slowed every pixel through the shader's registers.
+`fragOf()` compiles them in only where he is offered (`#define NINJA`): 15.7 and 14.7 ms, the
+pixels the same to the byte. Taking the skin's texture out too would win 1 ms more, but a head cut
+off shows skin on the moon.
+
+Then the scene's shader in parts (the user, 2026-11-19): one source compiled three times by
+`fragOf()`, `LAND` for the map, the sky and the depth passes (no skin, armour wear, hair, chitin or
+ninja), `FLESH` for the runners, the vehicles, the effects and the own body (no regolith), `ORB` for
+the globe alone. Each program keeps its own uniforms: `uni()` keeps the last arguments of each and
+`use()` sends a program what changed since it last drew. Three at 3 m, all in one program against
+the parts, alternated on one build, the pixels the same to the byte:
+
+| Three at 3 m            | One program | Parts      |
+| ----------------------- | ----------- | ---------- |
+| Tranquility, astronauts | 13.1, 13.2  | 11.8, 12.8 |
+| Tranquility, xenomorphs | 12.3, 12.3  | 12.6, 12.5 |
+| Highline, marines       | 12.6, 12.9  | 12.6, 11.5 |
+| Highline, ninjas        | 10.9, 11.3  | 9.8, 9.4   |
+| Highline, xenomorphs    | 12.1, 12.2  | 10.5, 10.9 |
+
+The globe's own program did most of it: its code had stayed in the program that draws everything
+else. Against the start of the day, three astronauts at 3 m on the moon went from 17.4 to about 12.3
+ms, and looking down from a ship at any height is 13 ms at most.
+
+Then where a frame's GPU goes. The shadow passes are 0.3 to 1.1 ms of it (the whole map's vertices
+in the sun's pass included): caching the static shadows or culling what is out of view would win
+half a millisecond at most on an M2. The pixels are the cost. The colour pass had alpha to coverage
+on for everything, though only smoke and hair need it: it keeps the GPU from skipping the pixels
+something in front hides (an M2's hidden surface removal). On only for what moves (`moving()`,
+`still()`), the same pixels to the byte:
+
+| Empty view, then three at 3 m | Before     | After     |
+| ----------------------------- | ---------- | --------- |
+| Highline, ninjas              | 8.3, 10.9  | 7.0, 9.9  |
+| Tranquility, astronauts       | 11.4, 14.0 | 9.3, 12.8 |
+
+4x MSAA costs 1 to 2 ms (1x instead): a filter in its place would take part of that back for less
+clean edges, so it stays.
+
 ## Moving the work to the GPU
 
 The plan agreed on 2026-11-14 (the user), one step and one PR at a time, the size budget raised by
@@ -280,9 +340,10 @@ Verts`, `verts.ts`): `out.push(...)` for a few numbers, and for many, `const a =
 12. **A pixel pays for what it computes, not for what it keeps.** In the fragment shader, work that
     only some pixels need (the skin's, the armour's wear) goes under an `if` on what tells them
     apart; multiplying it by a factor that is 0 elsewhere still pays for it on every pixel.
-13. **What a map does not have is not compiled in.** Code for one map only goes under an `#ifdef`
-    that `fragOf()` defines for it (`MOON`), not behind a uniform at 0: unrun, it still slows the
-    whole program. `render.test.ts` checks that Highline's shader has none of the moon's.
+13. **What a map does not have is not compiled in.** Code for one map or one class only goes under
+    an `#ifdef` that `fragOf()` defines where it is needed (`MOON`, `NINJA`), not behind a uniform
+    at 0: unrun, it still slows the whole program. `render.test.ts` checks that Highline's shader
+    has none of the moon's and the moon's none of the ninja's. What a part of the scene does not draw is not compiled into its program either (`LAND`, `FLESH`, `ORB`): a material's code goes under `FL()` or `LD()`, or its own `#ifdef`. A class's code goes under its own `#define`, given by `rolesOf()` of the map (`NINJA`); a scene uniform is set with `uni()`, never on the GL (a test checks it), or only one program gets it.
 
 14. **Look at a frame with the runners up close, on every map.** A cost that only shows when a few
     of them fill the screen (a close fight) is missed by a frame of the map alone, and that is when

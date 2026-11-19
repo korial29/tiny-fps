@@ -111,7 +111,7 @@ describe('createRenderer', () => {
    */
   const draws = (kept = false) => {
     const out: [number, number][] = [];
-    let [still, posed] = [true, false];
+    let [still, posed, next] = [true, false, false];
     for (const c of calls) {
       const at = (c[1] as { u?: string } | undefined)?.u;
       if (c[0] == 'uniform4fv' && at == 'R') {
@@ -119,7 +119,17 @@ describe('createRenderer', () => {
       } else if (c[0] == 'uniform1i' && at == 'Sm') {
         posed = c[2] != 0;
       } else if (c[0] == 'drawArrays' && c[3] != 3 && (still && !posed) != kept) {
-        out.push([c[2], c[3]] as [number, number]);
+        // The map and what moves on it are two programs (fragOf()): a range drawn on with nothing
+        // drawn or cleared between is the same range.
+        const last = out[out.length - 1];
+        if (next && last[0] + last[1] == c[2]) {
+          last[1] += c[3] as number;
+        } else {
+          out.push([c[2], c[3]] as [number, number]);
+        }
+        next = true;
+      } else if (c[0] == 'drawArrays' || c[0] == 'clear') {
+        next = false;
       }
     }
     return out;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { damp } from './spring';
+import { damp, sway } from './spring';
 
 describe('damp', () => {
   const settle = (dt: number, secs: number, w = 10) => {
@@ -46,5 +46,31 @@ describe('damp', () => {
   it('is stable for a long step', () => {
     const s = [5, 3];
     expect(damp(s, 0, 1, 30, 10)).toBeCloseTo(1, 9);
+  });
+});
+
+describe('sway', () => {
+  it('passes the target a little, comes back and settles on it', () => {
+    const s = [0, 0];
+    const path: number[] = [];
+    for (let t = 0; t < 2; t += 1 / 60) {
+      path.push(sway(s, 0, 1, 8, 1 / 60));
+    }
+    const peak = Math.max(...path);
+    expect(peak).toBeGreaterThan(1.05);
+    expect(peak).toBeLessThan(1.15);
+    expect(path[path.length - 1]).toBeCloseTo(1, 3);
+    expect(path[0]).toBeLessThan(0.02);
+  });
+
+  it('gives the same answer in one step or many', () => {
+    const a = [0.3, -2];
+    const b = [0.3, -2];
+    sway(a, 0, 1, 9, 0.3);
+    for (let i = 0; i < 30; i++) {
+      sway(b, 0, 1, 9, 0.01);
+    }
+    expect(b[0]).toBeCloseTo(a[0], 9);
+    expect(b[1]).toBeCloseTo(a[1], 9);
   });
 });

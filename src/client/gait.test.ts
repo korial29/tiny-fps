@@ -1208,8 +1208,9 @@ describe('gait: the poses of the other moves', () => {
     const f = fs[fs.length - 1];
     expect(pelvis(f)).toBeLessThan(0.75);
     expect(lean(f)).toBeGreaterThan(0.2);
+    // Over a stride: the arms swing a little about it.
     for (const j of [J.HAND_L, J.HAND_R]) {
-      expect(f.pos[j][2]).toBeLessThan(f.pos[J.PELVIS][2] - 0.2);
+      expect(mean(fs.slice(-40).map(h => h.pos[j][2] - h.pos[J.PELVIS][2]))).toBeLessThan(-0.2);
     }
   });
 });
@@ -1683,5 +1684,95 @@ describe('a fall when he goes down (the user, 2026-11-13)', () => {
       const later = die(felled(FALL.STRUCK, s, 0), 1.8);
       expect(later.pos[J.HEAD][1]).toBeCloseTo(h[1], 3);
     }
+  });
+});
+
+describe('gait: turns and changes of direction (the user, 2026-11-19: natural and fluid, not stiff)', () => {
+  /** A runner with a gun, stood for a second, then driven: the frames with the look at each. */
+  const driven = (secs: number, drive: (p: PlayerState, t: number) => void) => {
+    const g = createGait();
+    const p = state({ ammo: 5 });
+    sim(g, p, 1, () => undefined);
+    const looks: number[] = [];
+    const fs = sim(g, p, secs, (q, t) => {
+      drive(q, t);
+      q.x += q.vx * DT;
+      q.z += q.vz * DT;
+      looks.push(q.yaw);
+    });
+    return { g, p, fs, looks };
+  };
+  const turnOf = (a: number, b: number) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+  /** The furthest a sole's ball goes while it is on the floor, over every time it is. */
+  const drift = (fs: Frame[], side: 'L' | 'R') =>
+    Math.max(
+      0,
+      ...contacts(fs, side, 1).map(r =>
+        Math.max(...r.map(q => Math.hypot(q[0] - r[0][0], q[2] - r[0][2]))),
+      ),
+    );
+
+  it('turns on the spot over planted feet: the hips trail the look, the chest stays on it, and the feet step round', () => {
+    const { g, fs, looks } = driven(1.5, (q, t) => (q.yaw += t < 1 ? 3 * DT : 0));
+    expect(g.steps).toBeGreaterThanOrEqual(4);
+    // Half a second in: the hips are behind the look, the chest nearly on it.
+    const behind = turnOf(yawOf(fs[30].rot[J.PELVIS]), looks[30]);
+    expect(behind).toBeGreaterThan(0.25);
+    expect(behind).toBeLessThan(0.95);
+    expect(Math.abs(turnOf(yawOf(fs[30].rot[J.CHEST]), looks[30]))).toBeLessThan(0.15);
+    // A foot on the floor stays where it is: it does not spin with the body.
+    expect(drift(fs, 'L')).toBeLessThan(0.02);
+    expect(drift(fs, 'R')).toBeLessThan(0.02);
+    // The turn over, the hips catch up.
+    const end = fs.length - 1;
+    expect(Math.abs(turnOf(yawOf(fs[end].rot[J.PELVIS]), looks[end]))).toBeLessThan(0.1);
+  });
+
+  it('leans into a sidestep as it starts, to either side', () => {
+    for (const s of [1, -1]) {
+      const { fs } = driven(1.5, q => (q.vx = 6 * s));
+      const lean = fs.map(f => roll(f) * s);
+      expect(Math.max(...lean.slice(0, 24))).toBeGreaterThan(0.06);
+      // More than in the steady sidestep that follows.
+      expect(Math.max(...lean.slice(0, 24))).toBeGreaterThan(mean(lean.slice(-30)) + 0.03);
+    }
+  });
+
+  it('takes quicker steps sideways and backward than ahead, the legs passing one before the other', () => {
+    const run = (vx: number, vz: number) => {
+      const { g, fs } = driven(3, q => ([q.vx, q.vz] = [vx, vz]));
+      const last = fs.slice(-90);
+      const gap = Math.min(...last.map(f => Math.hypot(...sub(f.pos[J.FOOT_L], f.pos[J.FOOT_R]))));
+      return { steps: g.steps, gap };
+    };
+    const [ahead, side, back] = [run(0, -6), run(6, 0), run(0, 6)];
+    expect(side.steps).toBeGreaterThan(ahead.steps * 1.15);
+    expect(back.steps).toBeGreaterThan(ahead.steps * 1.15);
+    expect(side.gap).toBeGreaterThan(0.12);
+  });
+
+  it('comes to a stop on its feet: they step back under the body, they do not slide there', () => {
+    const { g, fs } = driven(2, (q, t) => (q.vz = t < 1 ? -6 : 0));
+    const before = fs[59].steps;
+    expect(g.steps).toBeGreaterThan(before);
+    for (const side of ['L', 'R'] as const) {
+      expect(drift(fs.slice(60), side)).toBeLessThan(0.02);
+    }
+    // Standing again within 0.7 s: both feet under the hips, the pelvis back up.
+    const f = fs[60 + 42];
+    for (const j of [J.FOOT_L, J.FOOT_R]) {
+      const d = sub(f.pos[j], f.pos[J.PELVIS]);
+      expect(Math.hypot(d[0], d[2])).toBeLessThan(0.3);
+    }
+    expect(f.pos[J.PELVIS][1]).toBeGreaterThan(0.84);
+  });
+
+  it('sets off without sinking: the foot behind leaves at once', () => {
+    const { fs } = driven(1, q => (q.vz = -6));
+    const stood = fs[0].pos[J.PELVIS][1];
+    expect(Math.min(...fs.slice(0, 40).map(f => f.pos[J.PELVIS][1]))).toBeGreaterThan(stood - 0.13);
+    expect(
+      fs[12].steps + +(fs[12].pos[J.FOOT_L][1] > 0.1 || fs[12].pos[J.FOOT_R][1] > 0.1),
+    ).toBeGreaterThan(0);
   });
 });

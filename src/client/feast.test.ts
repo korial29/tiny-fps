@@ -256,6 +256,8 @@ describe('a glory kill drawn', () => {
     const free = [state(XENO, {}), state(PREY_ID, { z: -1, yaw: Math.PI })];
     frames(book, free, 2);
     const low = stance(book.get(XENO)).s.pos[J.PELVIS][1];
+    // In its guard the hips sit a little behind the feet.
+    const back = stance(book.get(XENO)).s.pos[J.PELVIS][2];
     const locked = [
       state(XENO, { lock: 30, foe: PREY_ID }),
       state(PREY_ID, { z: -1, yaw: Math.PI, lock: 30, foe: XENO }),
@@ -296,7 +298,7 @@ describe('a glory kill drawn', () => {
     frames(book, after, Math.round((FEAST.DROP / 2) * 60) + 2);
     expect(book.get(XENO).mount).toBe(0);
     expect(stance(book.get(XENO)).s.pos[J.PELVIS][1]).toBeCloseTo(low, 1);
-    expect(stance(book.get(XENO)).s.pos[J.PELVIS][2]).toBeCloseTo(0, 1);
+    expect(stance(book.get(XENO)).s.pos[J.PELVIS][2]).toBeCloseTo(back, 1);
   });
 
   it('keeps its head down at his after the kill, chewing, turned to him, and lifts it slowly once the camera is back in the eye', () => {

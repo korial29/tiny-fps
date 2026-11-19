@@ -6,7 +6,7 @@
 // colour writes off. The scene goes into an offscreen target, then a second, small program (POST)
 // turns it into the picture on the canvas. No DOM beyond the canvas.
 import { GLORY_HP, ORBIT } from '../shared/constants';
-import { ROLE } from '../shared/kit';
+import { ROLE, rolesOf } from '../shared/kit';
 import { heightOf } from '../shared/physics';
 import { altitude } from '../shared/ship';
 import { MODE, TEX } from '../shared/types';
@@ -297,7 +297,17 @@ export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y,Ss;uniform int Q;
 uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform float Sn;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
-uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D Pl;uniform vec4 Ve[16];uniform vec2 Vn;uniform float Gp;out vec4 o;
+uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D Pl;uniform vec4 Ve[16];uniform vec2 Vn;uniform float Gp;uniform sampler2D Og;out vec4 o;
+#ifdef FLESH
+#define FL(x) x
+#else
+#define FL(x) 0.
+#endif
+#ifdef LAND
+#define LD(x) x
+#else
+#define LD(x) 0.
+#endif
 vec3 xv(vec3 c){return dot(c,vec3(.3,.59,.11))*vec3(.55,.8,1.2);}
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
@@ -338,7 +348,7 @@ vec3 K1(vec3 d,float px);
 vec3 K0(vec3 d,float px){
 vec3 s=K1(d,px);
 #ifdef MOON
-if(Ob.x>0.){bool t;vec3 m=mg(d,px,t);if(t)s=mix(s,m,Ob.z);}
+if(Ob.x>0.){vec4 m=texture(Og,gl_FragCoord.xy*.5/vec2(textureSize(Og,0)));s=s*(1.-Ob.z*m.a)+Ob.z*m.rgb;}
 #endif
 return s;}
 vec3 K1(vec3 d,float px){
@@ -355,13 +365,20 @@ float vn3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(
 float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(vh(i),vh(i+vec2(1,0)),f.x),mix(vh(i+vec2(0,1)),vh(i+vec2(1,1)),f.x),f.y);}
 void main(){
 if(Z<0.){if(C.z<-2.5||(C.z<-1.3595&&C.z>-1.3895))discard;return;}
-if(Y>.5){vec3 d=normalize(P);o=vec4(K0(d,length(fwidth(d))),1);if(Vn.x>0.)o.rgb=xv(o.rgb);return;}
+#ifdef ORB
+vec3 d=normalize(P);bool t;o=vec4(mg(d,length(fwidth(d))*.5,t),t);
+#else
+vec3 kd=Y>.5?normalize(P):-normalize(E-P);float kp=length(fwidth(kd)),fa=Y;
 #ifdef MOON
-if(Ob.w>.5&&Ob.x>0.){vec3 p;if(gh(normalize(P-E),p))discard;}
+if(Y<.5){fa=Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E))*step(P.y,${ORBIT.SEAM}.),Ob.z*smoothstep(1.25,1.6,length((P.xz-Cb.xy)*Cb.zw)));
+if(Ob.w>.5&&Ob.x>0.){vec3 p;if(gh(normalize(P-E),p))discard;}}
 #endif
+vec3 gk=fa>.002?K0(kd,kp):vec3(0);
+if(Y>.5){o=vec4(gk,1);if(Vn.x>0.)o.rgb=xv(o.rgb);return;}
+if(fa>=1.&&C.z>-1.3){o=vec4(gk,1);return;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
-float ks=step(abs(L-${TEX.STONE}.),.5);vec3 cg=vec3(0);
+float ks=LD(step(abs(L-${TEX.STONE}.),.5));vec3 cg=vec3(0);
 if(ks>.5){
 vec2 uv=C.xy/${TILE}.,gx=dFdx(uv),gy=dFdy(uv);float q=vn(C.xy*.11)*8.,iq=floor(q);
 vec4 ta=textureGrad(S,vec3(uv+sin(vec2(3,7)*iq),L),gx,gy),tb=textureGrad(S,vec3(uv+sin(vec2(3,7)*(iq+1.)),L),gx,gy);
@@ -376,7 +393,7 @@ if(Sn>0.){vec3 cq=cs(P.xz,length(P-E));float uw=smoothstep(.7,.95,normalize(N).y
 }
 vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
 vec3 n=normalize(normalize(N)+cg),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
-float kb=clamp(-(L+1.)/.06,0.,1.)*step(-1.08,L)*step(L,-.5),pw=max(length(dx),length(dy));
+float kb=FL(clamp(-(L+1.)/.06,0.,1.)*step(-1.08,L)*step(L,-.5)),pw=max(length(dx),length(dy));
 float f1=kb*(1.-smoothstep(.35,1.,pw*1500.)),f2=kb*(1.-smoothstep(.35,1.,pw*600.)),f3=kb*(1.-smoothstep(.35,1.,pw*180.));
 float pore=0.,n6=0.,n18=0.,n9=0.;
 if(kb>0.){pore=smoothstep(.62,.86,n3(Rp*1500.));float ma=n3(Rp*65.)-.5,mb=n3(Rp*24.+7.)-.5,md=.09*ma+.07*mb;
@@ -393,7 +410,9 @@ float k=hd*smoothstep(wd,wd*.3,d)*(1.-smoothstep(.85,1.,abs(t)))+hd*step(g2.y,.5
 sr=max(sr,k);}
 c=mix(c,c*vec3(.45,.33,.28),mo*.85);c=mix(c,c*vec3(1.05,.72,.7),bl*.6);c=mix(c,c*vec3(.74,.58,.48),fk*.75);c=mix(c,c*vec3(1.18,.98,.98)+.025,sr*.8);}
 float h=t.a*s*${RELIEF}+f1*-.00004*pore*(1.-sr)+f2*.00007*n6+f3*.0002*n18+.00012*sr,det=dot(dx,a);
-float Wq=step(3.5,Wa),Wb=Wa-4.*Wq,nk=Wq*step(abs(L-(${GLOSS})),.02)*step(Wb,1.5),lz=nk*max(step(Rp.y,.6),step(.155,abs(Rp.x))*step(Rp.y,1.19)),qz=nk*(1.-lz)*smoothstep(1.,1.03,Rp.y);
+float Wq=step(3.5,Wa),Wb=Wa-4.*Wq;
+#ifdef NINJA
+float nk=Wq*step(abs(L-(${GLOSS})),.02)*step(Wb,1.5),lz=nk*max(step(Rp.y,.6),step(.155,abs(Rp.x))*step(Rp.y,1.19)),qz=nk*(1.-lz)*smoothstep(1.,1.03,Rp.y);
 if(lz>0.){float t=fract(Rp.y*${BANDS}.),fl=lz*(1.-smoothstep(.2,.6,max(length(dFdx(Rp)),length(dFdy(Rp)))*${BANDS}.));
 c*=1.+fl*(.2*(1.-t)-.1-.5*smoothstep(.1,0.,t))+lz*.14*(n3(Rp*300.)-.5);h+=fl*.002*(1.-t)+lz*.00006*n3(Rp*500.);}
 if(qz>0.){vec3 gx=dFdx(Rp),gy=dFdy(Rp),w3=abs(cross(gx,gy));vec2 q=(w3.x>max(w3.y,w3.z)?Rp.zy:w3.y>w3.z?Rp.xz:Rp.xy)*${QUILT}.,f=(fract(vec2(q.x+q.y,q.x-q.y))-.5)*3.1416;
@@ -403,7 +422,8 @@ if(abs(L-(${TWILL}))<.004){vec3 q=Rp,q1=vec3(.8*q.x-.6*q.y,.6*q.x+.8*q.y,q.z),q2
 float pw=max(length(dFdx(q)),length(dFdy(q))),fa=1.-smoothstep(.3,1.,pw*1400.),fb=1.-smoothstep(.3,1.,pw*500.);
 float br=n3(q*vec3(45,1400,45))-.5,s1=smoothstep(.8,.86,n3(q1*vec3(18,520,18))),s2=smoothstep(.83,.88,n3(q2*vec3(520,16,16)+7.)),sc=max(s1,s2)*fb;
 c*=1.+fa*.45*br+.2*(n3(q*30.)-.5);c=mix(c,c*2.1+.06,sc*.75);h+=fa*.00004*br-.00012*sc;}
-float wa=min(Wb,1.)*(step(abs(L-(${GLOSS})),.02)+step(abs(L-(${GILT})),.02)),ch=0.,gr=.5,sm=1.;
+#endif
+float wa=FL(min(Wb,1.)*(step(abs(L-(${GLOSS})),.02)+step(abs(L-(${GILT})),.02))),ch=0.,gr=.5,sm=1.;
 if(wa>0.){vec3 q=Rp;float pw=max(length(dx),length(dy)),lowy=smoothstep(1.1,.25,q.y);
 gr=n3(q*9.)*.6+n3(q*23.+3.)*.4;sm=.55+.9*n3(q*31.+9.);
 float cv=max(clamp(length(fwidth(N))/max(pw,1e-5)*.02,0.,1.),step(1.5,Wb)),ce=n3(q*140.)*.65+n3(q*420.+7.)*.35;
@@ -413,15 +433,16 @@ float sc=step(abs(al),.006+.007*hh.z)*step(hh.x,.4)*smoothstep(.0007,.0002,lengt
 c=mix(c,vec3(dot(c,vec3(.3,.5,.2)))*vec3(.8,.68,.55)*(.55+.2*gr),(.3+.5*lowy)*smoothstep(.35,.75,gr));
 c=mix(c,vec3(.07,.075,.08),ch);c=mix(c,vec3(.7,.7,.72),sc*(1.-ch)*.9);
 h+=.00004*n3(q*900.)*(1.-smoothstep(.4,1.,pw*900.))-.00012*ch;}
-float kt=step(abs(L-(${CHITIN})),.005),kg=1.;
+float kt=FL(step(abs(L-(${CHITIN})),.005)),kg=1.;
 if(kt>0.){vec3 q=Rp;float pw=max(max(length(dx),length(dy)),max(length(dFdx(Rp)),length(dFdy(Rp))));float kp=(1.-smoothstep(.04,.075,abs(Rp.y-1.37)))*smoothstep(.1,.12,abs(Rp.x))*(1.-smoothstep(.21,.24,abs(Rp.x))),fa=(1.-smoothstep(.35,1.,pw*160.))*(1.-kp),fb=(1.-smoothstep(.35,1.,pw*400.))*(1.-kp),fc=1.-smoothstep(.35,1.,pw*25.);
 float ed=texture(Pl,mat3(.8,.36,-.48,-.6,.48,-.64,0.,.8,.6)*q*${(80 / PLATES).toFixed(4)}).r,gv=(1.-smoothstep(.02,.16,ed))*fa,gn=n3(q*380.)-.5,mo=n3(q*7.)*.6+n3(q*19.+5.)*.4;
 c*=(1.+.3*(mo-.5)*fc)*(1.-.18*gv)*(1.+.1*gn*fb);
 h+=fa*.00022*smoothstep(0.,.45,ed)+fb*.00005*gn;
 kg=(1.-.5*gv)*(.5+mo);}
-float kr=step(abs(L-(${TUBE})),.005),rr=0.;
+float kr=FL(step(abs(L-(${TUBE})),.005)),rr=0.;
 if(kr>0.){float u=C.x*200.,fr=1.-smoothstep(.15,.4,fwidth(u));rr=smoothstep(.15,.6,abs(fract(u)-.5)*2.);
 c=vec3(.3,.305,.315)*mix(.8,.5+.75*rr,fr)*C.y;h+=fr*.0005*rr;rr=mix(.6,rr,fr);}
+#ifdef NINJA
 float kw=clamp((L+1.)/(${WEAVE}+1.),0.,1.)*step(-1.,L)*step(L,-.5);
 if(kw>0.){vec3 gx=dFdx(Rp),gy=dFdy(Rp),w3=abs(cross(gx,gy));vec2 q=(w3.x>max(w3.y,w3.z)?Rp.zy:w3.y>w3.z?Rp.xz:Rp.xy)*${PITCH}.,i=floor(q),f=(q-i-.5)*3.1416;float fw=1.-smoothstep(.35,1.,max(length(gx),length(gy))*${PITCH}.),v=step(.5,mod(i.x+i.y,2.)),th=mix(cos(f.y)*(.55+.45*cos(f.x)),cos(f.x)*(.55+.45*cos(f.y)),v);
 c*=1.+kw*(fw*(.9*th-.35+.25*(v-.5))+.3*(n3(Rp*35.)-.5));h+=kw*fw*.00035*th;}
@@ -430,14 +451,15 @@ if(bz>0.){float y=Rp.y,an=atan(Rp.z,abs(Rp.x)-.1),wz=smoothstep(.085,.1,y)*(1.-s
 c*=1.+wz*fb*(.5*(1.-t)-.2-.6*smoothstep(.12,0.,t));h+=wz*fb*.0012*(1.-t);
 float tie=smoothstep(.383,.387,y)*(1.-smoothstep(.399,.403,y)),sp=smoothstep(.0035,.001,abs(abs(Rp.x)-.089))*step(Rp.z,-.125)*step(y,.075);
 c=mix(c,vec3(.2,.19,.18),tie*.8)*(1.-.8*sp);h+=tie*.0015-.001*sp;}
-float ah=1.,kh=step(-1.497,L)*step(L,-1.443)*smoothstep(.02,.12,(-1.45-L)/.04),hp=max(length(dx),length(dy)),st=0.,st2=0.;
+#endif
+float ah=1.,kh=FL(step(-1.497,L)*step(L,-1.443)*smoothstep(.02,.12,(-1.45-L)/.04)),hp=max(length(dx),length(dy)),st=0.,st2=0.;
 vec3 Tn=-nz((dFdx(L)*a+dFdy(L)*b)*sign(det));Tn=nz(Tn-n*dot(Tn,n));
 if(kh>0.){for(int i=-3;i<=3;i++){vec3 q=P+Tn*float(i)*.011;st+=vn3(q*650.);st2+=vn3(q*200.+4.);}
 st=clamp(.5+(st/7.-.5)*1.7,0.,1.);st2=clamp(.5+(st2/7.-.5)*2.6,0.,1.);
 float hf=1.-smoothstep(.4,1.,hp*650.);st=mix(.5,st,hf);st2=mix(.5,st2,1.-smoothstep(.4,1.,hp*200.));
 c*=.9+.16*st+.16*(st2-.5);
 if(Wa<-.5&&Rp.y>.5)ah=1.-smoothstep(.94,1.,Rp.x+.08*(st-.5));}
-float kc=step(-1.3895,L)*step(L,-1.3595),ac=1.,kx=max(kh,kc);
+float kc=FL(step(-1.3895,L)*step(L,-1.3595)),ac=1.,kx=max(kh,kc);
 if(kc>0.){float cu=(${CARD_BASE}-L)*${(1 / CARD_STEP).toFixed(1)},ci=floor(cu),uu=(cu-ci-.02)/.96,kd=step(100.,ci)+step(200.,ci),x=uu*(kd<.5?10.:kd<1.5?7.:2.),ix=floor(x);
 Tn=nz(cross(Tn,n));vec3 hq=hs(vec3(ci,ix,7.));
 float d=abs(fract(x)-.5)*2.,wd=kd<.5?.65+.3*hq.x:kd<1.5?.2+.4*hq.x:.3+.3*hq.x,fw=max(fwidth(x)*2.,1e-3);
@@ -489,19 +511,83 @@ float xr=0.;if(Vn.x>0.){vec3 xd=P-E;float xa=max(dot(xd.xz,xd.xz),1e-4);for(int 
 vec3 fc=F.rgb;if(Vn.x>0.){c=mix(xv(c),vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));fc=xv(fc);}c=mix(c,vec3(2.,.45,.03),gl*(.55+.45*sin(T*14.)));
 o=vec4(mix(c,fc,1.-exp(-F.a*(1.-.6*Vn.x)*(1.-max(ht,xr))*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc)*ah);
 #ifdef MOON
-float pv=length(fwidth(V)),fa=Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E))*step(P.y,${ORBIT.SEAM}.),Ob.z*smoothstep(1.25,1.6,length((P.xz-Cb.xy)*Cb.zw)));
-if(fa>.002)o.rgb=mix(o.rgb,K0(-V,pv),fa);
+if(fa>.002)o.rgb=mix(o.rgb,gk,fa);
+#endif
 #endif
 }`;
 
+/** The scene's uniforms. */
+const UNIFORMS = [
+  'm',
+  'E',
+  'T',
+  'Z',
+  'Q',
+  'A',
+  'B',
+  'K',
+  'M',
+  'D',
+  'F',
+  'U',
+  'G',
+  'W',
+  'H',
+  'O',
+  'X',
+  'Y',
+  'J',
+  'R',
+  'Sg',
+  'Sm',
+  'Ak',
+  'Gp',
+  'Hc',
+  'Hs',
+  'Ss',
+  'Sb',
+  'Sq',
+  'Sp',
+  'Sw',
+  'Sc',
+  'Ob',
+  'Cb',
+  'Sn',
+  'Ve',
+  'Vn',
+  'Pl',
+  'Og',
+];
+
+/** A scene program (fragOf()): its uniforms' places and the arguments last sent to each. */
+interface Variant {
+  p: WebGLProgram;
+  u: Record<string, WebGLUniformLocation>;
+  sent: Map<string, unknown[]>;
+}
+type Setter = Extract<keyof WebGL2RenderingContext, `uniform${string}`>;
+
 /**
- * The scene's fragment shader for a map: the moon's globe, stars, craters and orbit fade only where
- * the map has them. Left in on another map, never run, they still cost Highline 2.4 ms of GPU a frame.
+ * The scene's fragment shader for a map and for what it draws: the moon's globe, stars, craters and
+ * orbit fade only where the map has them, the ninja's quilting, cloth, boots and brushed metal only
+ * where he is offered (rolesOf()). `LAND` is the map and the sky
+ * (the regolith, no skin, armour, hair or chitin), `FLESH` the runners, the vehicles and the
+ * effects (no regolith), `ORB` the globe alone; with none, all of it. Left in where it never runs,
+ * code still costs every pixel through the shader's registers: the moon 2.4 ms of GPU a frame on
+ * Highline, the ninja's 1.9 ms on three astronauts at 3 m on the moon.
  */
-export const fragOf = (def: Pick<WorldDef, 'scenery' | 'seam' | 'relief'>) =>
-  def.scenery === 'moon' || def.seam !== undefined || def.relief
-    ? FRAG.replace('\n', '\n#define MOON\n')
-    : FRAG;
+export const fragOf = (
+  def: Pick<WorldDef, 'scenery' | 'seam' | 'relief' | 'helmets'>,
+  kind = 'LAND\n#define FLESH',
+) =>
+  FRAG.replace(
+    '\n',
+    `\n#define ${kind}\n${moonly(def) ? '#define MOON\n' : ''}${rolesOf(def).includes(ROLE.NINJA) && kind != 'LAND' ? '#define NINJA\n' : ''}`,
+  );
+
+/** A map with the moon's sky: its globe, stars and craters. */
+const moonly = (def: Pick<WorldDef, 'scenery' | 'seam' | 'relief'>) =>
+  def.scenery === 'moon' || def.seam !== undefined || !!def.relief;
 
 /**
  * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
@@ -930,16 +1016,56 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const pixels = textures();
   const tail = ground.length * 4;
   let cap = tail + TAIL;
-  let u: Record<string, WebGLUniformLocation> = {};
   let shadows: WebGLTexture;
   let depth: WebGLFramebuffer;
-  let scene: WebGLProgram;
+  /** The scene's programs (fragOf()): the map and the sky, the bodies, the moon's globe. */
+  let land: Variant;
+  let bodies: Variant;
+  let globed: Variant | undefined;
+  /** The scene program in use, the values given to the scene's uniforms by name (setter, arguments). */
+  let live: Variant | undefined;
+  const given = new Map<string, [Setter, unknown[]]>();
+  /** One uniform into its place in `v`, unless `v` already has these arguments. */
+  const send = (v: Variant, n: string, f: Setter, a: unknown[]) => {
+    if (v.sent.get(n) !== a && v.u[n]) {
+      (gl[f] as (...x: unknown[]) => void)(v.u[n], ...a);
+    }
+    v.sent.set(n, a);
+  };
+  /** Sets a scene uniform: in the program in use now, and in each other one when it is next used. */
+  const uni = (f: Setter, n: string, ...a: unknown[]) => {
+    given.set(n, [f, a]);
+    send(live!, n, f, a);
+  };
+  /**
+   * The colour pass of what moves: smoke (layer -3) and hair are see-through, their alpha covers that
+   * share of the samples. Not the map's: on with nothing to cover, it kept the GPU from skipping the
+   * hidden pixels (an M2's hidden surface removal), 1.5 to 2.8 ms of a frame.
+   */
+  const moving = () => {
+    use(bodies);
+    gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+  };
+  const still = () => {
+    gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+    use(land);
+  };
+  /** Draws with `v` from now on, given what the uniforms were set to meanwhile. */
+  const use = (v: Variant) => {
+    if (v != live) {
+      gl.useProgram(v.p);
+      live = v;
+      given.forEach(([f, a], n) => send(v, n, f, a));
+    }
+  };
   let post: WebGLProgram;
   let pu: Record<string, WebGLUniformLocation> = {};
   let fmt: number;
   // The multisampled target the scene draws into, and the texture it is resolved to.
   let msaa: WebGLFramebuffer;
   let hdr: Target;
+  /** The moon's globe at half the frame's size, on a map that has it. */
+  let orb: Target | undefined;
   /** The bloom's blur levels, from half the frame down: each a pair, the second one the scratch. */
   let bloom: [Target, Target][];
   /** The frame size the targets were built for, [0, 0] before the first. */
@@ -974,37 +1100,37 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       if (depth && s) {
         continue;
       }
-      gl.uniform1f(u.Ak, +!!w);
+      uni('uniform1f', 'Ak', +!!w);
       if (f) {
         // Posed by the shader from its texels: no vertex array.
         gl.bindVertexArray(none);
-        gl.uniform1i(u.Sm, f.kind);
-        gl.uniform1f(u.Ss, f.seed ?? 0);
+        uni('uniform1i', 'Sm', f.kind);
+        uni('uniform1f', 'Ss', f.seed ?? 0);
         // The skin's last: 2 its chitin (CHITIN), 3 a woven suit (WEAVE), 4 the ninja's plated armour (quilted on the trunk, Wa + 4), else whether an armour is plated.
-        gl.uniform4i(u.Sb, ...f.at, f.chitin ? 2 : f.woven ? 3 : f.quilt ? 4 : +!!f.plate);
-        gl.uniform4fv(u.Sq, f.d);
-        gl.uniform3fv(u.Sp, f.pal);
-        gl.uniform4fv(u.Sw, f.face);
-        gl.uniform3fv(u.Sc, [...(f.plate ?? [0, 0, 0]), ...(f.accent ?? [0, 0, 0])]);
+        uni('uniform4i', 'Sb', ...f.at, f.chitin ? 2 : f.woven ? 3 : f.quilt ? 4 : +!!f.plate);
+        uni('uniform4fv', 'Sq', f.d);
+        uni('uniform3fv', 'Sp', f.pal);
+        uni('uniform4fv', 'Sw', f.face);
+        uni('uniform3fv', 'Sc', [...(f.plate ?? [0, 0, 0]), ...(f.accent ?? [0, 0, 0])]);
         gl.drawArrays(gl.TRIANGLES, 0, m.count);
-        gl.uniform1i(u.Sm, 0);
+        uni('uniform1i', 'Sm', 0);
       } else {
         gl.bindVertexArray(kept);
-        gl.uniform4fv(u.R, [...q, ...t, k]);
+        uni('uniform4fv', 'R', [...q, ...t, k]);
         if (h) {
           // Close hair, coloured and swayed by the shader (mode 3, swayOf()).
-          gl.uniform1i(u.Sm, 3);
-          gl.uniform3fv(u.Hc, h.rgb);
-          gl.uniform4f(u.Hs, ...h.sw, h.t);
+          uni('uniform1i', 'Sm', 3);
+          uni('uniform3fv', 'Hc', h.rgb);
+          uni('uniform4f', 'Hs', ...h.sw, h.t);
         }
         gl.drawArrays(gl.TRIANGLES, m.first, m.count);
         if (h) {
-          gl.uniform1i(u.Sm, 0);
+          uni('uniform1i', 'Sm', 0);
         }
       }
     }
-    gl.uniform1f(u.Ak, 0);
-    gl.uniform4fv(u.R, STILL);
+    uni('uniform1f', 'Ak', 0);
+    uni('uniform4fv', 'R', STILL);
     gl.bindVertexArray(main);
   };
 
@@ -1057,6 +1183,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     owned.splice(0).forEach(free => free());
     made = [w, h];
     hdr = target(w, h);
+    orb = !moonly(world.def) ? undefined : target((w + 1) >> 1, (h + 1) >> 1);
     bloom = [1, 2, 3].map(i => [0, 1].map(() => target(w >> i || 1, h >> i || 1))) as typeof bloom;
     const rb = (format: number) => {
       const r = gl.createRenderbuffer();
@@ -1099,48 +1226,20 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     made = [0, 0];
     [post, pu] = link(POST_VERT, POST_FRAG, ['S', 'Y', 'L']);
     gl.uniform1iv(pu.S, [0, 1, 2, 3]);
-    [scene, u] = link(VERT, fragOf(world.def), [
-      'm',
-      'E',
-      'T',
-      'Z',
-      'Q',
-      'A',
-      'B',
-      'K',
-      'M',
-      'D',
-      'F',
-      'U',
-      'G',
-      'W',
-      'H',
-      'O',
-      'X',
-      'Y',
-      'J',
-      'R',
-      'Sg',
-      'Sm',
-      'Ak',
-      'Gp',
-      'Hc',
-      'Hs',
-      'Ss',
-      'Sb',
-      'Sq',
-      'Sp',
-      'Sw',
-      'Sc',
-      'Ob',
-      'Cb',
-      'Sn',
-      'Ve',
-      'Vn',
-      'Pl',
-    ]);
-    gl.uniform1i(u.D, 1);
-    gl.uniform1i(u.Pl, 5);
+    const variant = (kind: string): Variant => {
+      const [p, l] = link(VERT, fragOf(world.def, kind), UNIFORMS);
+      return { p, u: l, sent: new Map() };
+    };
+    [land, bodies, globed] = [
+      variant('LAND'),
+      variant('FLESH'),
+      moonly(world.def) ? variant('ORB') : undefined,
+    ];
+    live = undefined;
+    use(land);
+    uni('uniform1i', 'D', 1);
+    uni('uniform1i', 'Og', 2);
+    uni('uniform1i', 'Pl', 5);
     // Unit 5: the chitin's plates (plates()), read in the skin's rest space; it repeats (REPEAT, the default).
     const pn = PLATES * PLATE_TEXELS;
     gl.activeTexture(gl.TEXTURE5);
@@ -1148,13 +1247,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     gl.texImage3D(gl.TEXTURE_3D, 0, gl.R8, pn, pn, pn, 0, gl.RED, gl.UNSIGNED_BYTE, plates());
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.activeTexture(gl.TEXTURE0);
-    gl.uniform4fv(u.R, STILL);
+    uni('uniform4fv', 'R', STILL);
     // The crater's bound: its centre and one over its half axes, for the relief's edge fading into the globe.
     const b = world.relief?.bound ?? [0, 0, 1, 1];
-    gl.uniform4f(u.Cb, b[0], b[1], 1 / b[2], 1 / b[3]);
+    uni('uniform4f', 'Cb', b[0], b[1], 1 / b[2], 1 / b[3]);
     // The moon's stars and craters, drawn by the shader.
-    gl.uniform1f(u.Sn, +(world.def.scenery === 'moon'));
-    gl.uniform1i(u.Sg, 4);
+    uni('uniform1f', 'Sn', +(world.def.scenery === 'moon'));
+    uni('uniform1i', 'Sg', 4);
     // The store's data, read by texel: sent again whole on a new context.
     gl.activeTexture(gl.TEXTURE4);
     gl.bindTexture(gl.TEXTURE_2D, (flesh = gl.createTexture()));
@@ -1229,13 +1328,14 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   /** The world's fog, daylight, sun and tint palette, and the clear colour (the horizon's), into the program. */
   const climate = () => {
     const tints = palette(city(world));
-    gl.uniform4fv(u.F, fogOf(world.def));
-    gl.uniform1f(u.U, fogRef(world.def));
-    gl.uniform3fv(u.H, daylight(world.def).flat());
-    gl.uniform3fv(u.O, sunDir);
-    gl.uniform3fv(u.X, sun.color);
-    gl.uniform3fv(
-      u.G,
+    uni('uniform4fv', 'F', fogOf(world.def));
+    uni('uniform1f', 'U', fogRef(world.def));
+    uni('uniform3fv', 'H', daylight(world.def).flat());
+    uni('uniform3fv', 'O', sunDir);
+    uni('uniform3fv', 'X', sun.color);
+    uni(
+      'uniform3fv',
+      'G',
       Float32Array.from({ length: MAX_TINTS * 3 }, (_, i) => tints[(i / 3) | 0]?.[i % 3] ?? 1),
     );
     gl.clearColor(...sky[1], 1);
@@ -1404,7 +1504,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const first = ground.length / STRIDE;
       const sunM = sunProj(sunDir, sunAt(eye, yaw));
       // Layer 0: the sun, once; then one layer per mapped light.
-      gl.uniform1f(u.Z, -1);
+      uni('uniform1f', 'Z', -1);
       // Unit 1 is unbound meanwhile: sampling a map the framebuffer writes is a feedback loop.
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
@@ -1413,7 +1513,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.enable(gl.POLYGON_OFFSET_FILL);
       for (let i = 0; i <= pk.maps; i++) {
         gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, shadows, 0, i);
-        gl.uniformMatrix4fv(u.m, false, i ? pk.m.subarray(i * 16 - 16, i * 16) : sunM);
+        uni('uniformMatrix4fv', 'm', false, i ? pk.m.subarray(i * 16 - 16, i * 16) : sunM);
         gl.clear(gl.DEPTH_BUFFER_BIT);
         gl.drawArrays(gl.TRIANGLES, 0, first + beamAt / STRIDE);
         place(true);
@@ -1423,11 +1523,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.activeTexture(gl.TEXTURE0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, msaa);
       gl.viewport(0, 0, w, h);
-      gl.uniformMatrix4fv(u.m, false, vp);
-      gl.uniformMatrix4fv(u.W, false, sunM);
-      gl.uniform3fv(u.E, eye);
-      gl.uniform1f(u.T, performance.now() / 1000);
-      gl.uniform1f(u.Z, 1);
+      uni('uniformMatrix4fv', 'm', false, vp);
+      uni('uniformMatrix4fv', 'W', false, sunM);
+      uni('uniform3fv', 'E', eye);
+      uni('uniform1f', 'T', performance.now() / 1000);
+      uni('uniform1f', 'Z', 1);
       // The enemies as drawn: every runner not in the own team's colour, up and on foot.
       const own = colors.get(body?.id ?? self?.id ?? -1);
       // With the katana in hand, only those it could glory kill: they flash.
@@ -1438,11 +1538,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
               .slice(0, 16)
           : [];
       const flashing = keen && prey.some(p => p.hp <= GLORY_HP && !p.lock);
-      gl.uniform2f(u.Vn, +seeing, prey.length);
+      uni('uniform2f', 'Vn', +seeing, prey.length);
       if (prey.length) {
-        gl.uniform4fv(
-          u.Ve,
-          // A negative height: a wall hides his chest and his head, so he glows through it; 100 m
+        uni(
+          'uniform4fv',
+          'Ve', // A negative height: a wall hides his chest and his head, so he glows through it; 100 m
           // more: weak enough for the katana's glory kill (GLORY_HP), he flashes; the xenomorph's
           // takes anyone, so none flashes in its vision (the user, 2026-11-16).
           prey.flatMap(p => {
@@ -1453,14 +1553,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           }),
         );
       }
-      gl.uniform1i(u.Q, pk.n);
-      gl.uniform4fv(u.A, pk.a);
-      gl.uniform4fv(u.B, pk.b);
-      gl.uniform4fv(u.K, pk.k);
-      gl.uniformMatrix4fv(u.M, false, pk.m);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-      // Smoke (layer -3) is see-through: its alpha covers that share of the samples.
-      gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+      uni('uniform1i', 'Q', pk.n);
+      uni('uniform4fv', 'A', pk.a);
+      uni('uniform4fv', 'B', pk.b);
+      uni('uniform4fv', 'K', pk.k);
+      uni('uniformMatrix4fv', 'M', false, pk.m);
       // Over the edge of space the crater fades into the moon's globe, drawn with the sky.
       const high = posing || world.def.seam === undefined ? 0 : eye[1] - world.def.seam;
       // From a little height the globe is the ground past the relief's edge, where that edge fades.
@@ -1468,7 +1565,38 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const globe = low > 0 || high > 0 ? Math.max(altitude(eye[1]), 1) / MOON_R : 0;
       const fade = clamp01(high / ORBIT_FADE);
       const edge = high > 0 ? 1 : low;
-      gl.uniform4f(u.Ob, globe, fade, edge, 0);
+      uni('uniform4f', 'Ob', globe, fade, edge, 0);
+      // The view ray of each pixel from the camera's axes, for the sky and the globe.
+      const rays = [right.map(c => c * tan * (w / h)), up.map(c => c * tan), fwd].flat();
+      // In the station's rooms space shows only through the hangar's mouths: the sky's pixels
+      // elsewhere are behind a wall, and the GPU would still shade them (the globe's craters).
+      const { station } = world.def;
+      const sky =
+        station && rooms(station).some(([lo, hi]) => eye.every((c, i) => c > lo[i] && c < hi[i]))
+          ? cover(vp, mouths(station), w, h)
+          : [0, 0, w, h];
+      // The globe at half the frame's size, read by the sky and the crater fading into it on unit 2
+      // (the composite of the last frame left it empty): its craters, shaded on every pixel, were
+      // two thirds of a frame's GPU looking down from orbit, 38 ms at 320 m.
+      if (globe && orb && sky && globed) {
+        gl.activeTexture(gl.TEXTURE2);
+        use(globed);
+        uni('uniform3fv', 'J', rays);
+        uni('uniform1f', 'Y', 2);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, orb.f);
+        gl.viewport(0, 0, orb.w, orb.h);
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(sky[0] >> 1, sky[1] >> 1, (sky[2] >> 1) + 2, (sky[3] >> 1) + 2);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.disable(gl.SCISSOR_TEST);
+        uni('uniform1f', 'Y', 0);
+        use(land);
+        gl.bindTexture(gl.TEXTURE_2D, orb.t);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, msaa);
+        gl.viewport(0, 0, w, h);
+        gl.activeTexture(gl.TEXTURE0);
+      }
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       /** The frame's own vertices from `at`: the runners' (their tails and claws are not pieces) take the glory flash's wide reach. */
       const drawn = (at: number) => {
         if (!flashing) {
@@ -1477,9 +1605,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         }
         const [a, b] = [crowdAt / STRIDE, crowdEnd / STRIDE];
         gl.drawArrays(gl.TRIANGLES, at, a);
-        gl.uniform1f(u.Gp, 1);
+        uni('uniform1f', 'Gp', 1);
         gl.drawArrays(gl.TRIANGLES, at + a, b - a);
-        gl.uniform1f(u.Gp, 0);
+        uni('uniform1f', 'Gp', 0);
         gl.drawArrays(gl.TRIANGLES, at + b, (bodyAt - crowdEnd) / STRIDE);
       };
       if (heavensN) {
@@ -1487,45 +1615,42 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         const sky0 = first - heavensN;
         gl.drawArrays(gl.TRIANGLES, 0, sky0);
         const [x, y, z] = HEAVENS;
-        gl.uniform4fv(u.R, [0, 0, 0, 1, eye[0] - x, eye[1] - y, eye[2] - z, 1]);
-        gl.uniform4f(u.Ob, globe, fade, edge, 1);
+        uni('uniform4fv', 'R', [0, 0, 0, 1, eye[0] - x, eye[1] - y, eye[2] - z, 1]);
+        uni('uniform4f', 'Ob', globe, fade, edge, 1);
         gl.drawArrays(gl.TRIANGLES, sky0, heavensN);
-        gl.uniform4fv(u.R, STILL);
-        gl.uniform4f(u.Ob, globe, fade, edge, 0);
-        drawn(first);
-      } else if (flashing) {
-        gl.drawArrays(gl.TRIANGLES, 0, first);
-        drawn(first);
+        uni('uniform4fv', 'R', STILL);
+        uni('uniform4f', 'Ob', globe, fade, edge, 0);
       } else {
-        gl.drawArrays(gl.TRIANGLES, 0, first + bodyAt / STRIDE);
+        gl.drawArrays(gl.TRIANGLES, 0, first);
       }
-      gl.uniform1f(u.Gp, 1);
-      place();
-      gl.uniform1f(u.Gp, 0);
-      // The sky after the world, at depth 1: shaded only where nothing stands in front of it (the
-      // moon's globe is the costliest pixel of the frame). The view ray of each pixel from the camera's axes.
-      gl.uniform3fv(u.J, [right.map(c => c * tan * (w / h)), up.map(c => c * tan), fwd].flat());
-      gl.uniform1f(u.Y, 1);
-      // In the station's rooms space shows only through the hangar's mouths: the sky's pixels
-      // elsewhere are behind a wall, and the GPU would still shade them (the globe's craters).
-      const { station } = world.def;
-      const sky =
-        station && rooms(station).some(([lo, hi]) => eye.every((c, i) => c > lo[i] && c < hi[i]))
-          ? cover(vp, mouths(station), w, h)
-          : [0, 0, w, h];
+      // What moves, with the code of its own materials and none of the map's (fragOf()).
+      if (bodyAt || pieces.length) {
+        moving();
+        if (bodyAt) {
+          drawn(first);
+        }
+        uni('uniform1f', 'Gp', 1);
+        place();
+        uni('uniform1f', 'Gp', 0);
+        still();
+      }
+      // The sky after the world, at depth 1: shaded only where nothing stands in front of it.
+      uni('uniform3fv', 'J', rays);
+      uni('uniform1f', 'Y', 1);
       if (sky) {
         gl.enable(gl.SCISSOR_TEST);
         gl.scissor(sky[0], sky[1], sky[2], sky[3]);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         gl.disable(gl.SCISSOR_TEST);
       }
-      gl.uniform1f(u.Y, 0);
+      uni('uniform1f', 'Y', 0);
       if (v.length > bodyAt) {
         // Last, over a cleared depth: the body never sinks into a wall.
         gl.clear(gl.DEPTH_BUFFER_BIT);
+        moving();
         gl.drawArrays(gl.TRIANGLES, first + bodyAt / STRIDE, (v.length - bodyAt) / STRIDE);
+        still();
       }
-      gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaa);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, hdr.f);
       gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
@@ -1545,7 +1670,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.bindTexture(gl.TEXTURE_2D, null);
       }
       gl.activeTexture(gl.TEXTURE0);
-      gl.useProgram(scene);
+      live = undefined;
+      use(land);
     },
     project: (x, y, z) => project(vp, x, y, z),
     steps: id => runners.get(id)?.gait.steps,

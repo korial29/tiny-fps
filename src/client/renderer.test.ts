@@ -111,7 +111,7 @@ describe('createRenderer', () => {
    */
   const draws = (kept = false) => {
     const out: [number, number][] = [];
-    let [still, posed] = [true, false];
+    let [still, posed, next] = [true, false, false];
     for (const c of calls) {
       const at = (c[1] as { u?: string } | undefined)?.u;
       if (c[0] == 'uniform4fv' && at == 'R') {
@@ -119,7 +119,17 @@ describe('createRenderer', () => {
       } else if (c[0] == 'uniform1i' && at == 'Sm') {
         posed = c[2] != 0;
       } else if (c[0] == 'drawArrays' && c[3] != 3 && (still && !posed) != kept) {
-        out.push([c[2], c[3]] as [number, number]);
+        // The map and what moves on it are two programs (fragOf()): a range drawn on with nothing
+        // drawn or cleared between is the same range.
+        const last = out[out.length - 1];
+        if (next && last[0] + last[1] == c[2]) {
+          last[1] += c[3] as number;
+        } else {
+          out.push([c[2], c[3]] as [number, number]);
+        }
+        next = true;
+      } else if (c[0] == 'drawArrays' || c[0] == 'clear') {
+        next = false;
       }
     }
     return out;
@@ -392,6 +402,64 @@ describe('createRenderer', () => {
     ]);
     expect(calls.filter(c => c[0] == 'enable').map(c => c[1])).not.toContain(K('BLEND'));
     expect(calls.filter(c => c[0] == 'depthMask')).toHaveLength(0);
+  });
+
+  it('draws the map and the sky with its program, what moves with the bodies’, each value of a uniform sent to both', () => {
+    const rd = createRenderer(canvas, ROOM);
+    const p: PlayerState = {
+      id: 1,
+      x: 2,
+      y: 0,
+      z: 2,
+      vy: 0,
+      yaw: 0,
+      pitch: 0,
+      ground: true,
+      ...STILL,
+    };
+    const linked = calls.length;
+    rd.frame([1, 1.6, 1], 0, 0, [p], new Map(), createEffects(), []);
+    // Which program each colour-pass draw ran in, by the `#define` its fragment shader was given.
+    const src = new Map<unknown, string>();
+    const kind = new Map<unknown, string>();
+    for (const c of calls.slice(0, linked)) {
+      if (c[0] == 'shaderSource') {
+        src.set(c[1], String(c[2]));
+      } else if (c[0] == 'attachShader' && src.get(c[2])?.includes('sampler2DArray')) {
+        kind.set(c[1], src.get(c[2])!.split('\n')[1]);
+      }
+    }
+    expect([...kind.values()]).toEqual(['#define LAND', '#define FLESH']);
+    // The map's program is in use when a frame starts.
+    let [on, colour] = [
+      kind.get(
+        calls
+          .slice(0, linked)
+          .filter(c => c[0] == 'useProgram')
+          .at(-1)![1],
+      )!,
+      false,
+    ];
+    const ran: [string, number, number][] = [];
+    for (const c of calls.slice(linked)) {
+      if (c[0] == 'useProgram') {
+        on = kind.get(c[1]) ?? '';
+      } else if (c[0] == 'viewport') {
+        colour = c[3] == 320;
+      } else if (c[0] == 'drawArrays' && colour && on) {
+        ran.push([on.slice(8), c[2] as number, c[3] as number]);
+      }
+    }
+    expect(ran[0]).toEqual(['LAND', 0, FLOOR_VERTS]);
+    expect(ran.filter(r => r[0] == 'FLESH').length).toBeGreaterThan(1);
+    expect(ran.find(r => r[0] == 'FLESH' && r[1] == FLOOR_VERTS)![2]).toBeGreaterThan(0);
+    // The sky, last, with the map's.
+    expect(ran.at(-1)).toEqual(['LAND', 0, 3]);
+    // The eye reaches each program before its first draw.
+    const eye = calls
+      .slice(linked)
+      .filter(c => c[0] == 'uniform3fv' && (c[1] as { u: string }).u == 'E');
+    expect(eye.length).toBeGreaterThanOrEqual(2);
   });
 
   describe('body', () => {

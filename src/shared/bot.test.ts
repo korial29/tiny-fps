@@ -517,6 +517,11 @@ describe('Bot: after UT2004', () => {
     expect(godlike.react).toBeLessThan(novice.react);
     expect(godlike.turn).toBeGreaterThan(novice.turn);
     expect(godlike.duck).toBeGreaterThan(novice.duck);
+    expect(godlike.shake).toBeLessThan(novice.shake);
+    expect(godlike.lead).toBeGreaterThan(novice.lead);
+    expect(godlike.track).toBeGreaterThan(novice.track);
+    expect(godlike.warn).toBeLessThanOrEqual(novice.warn);
+    expect(godlike.warn).toBeGreaterThanOrEqual(1);
   });
 
   // A red bot standing at its base with blue's flag: nowhere to go, so a dash can only be out of a ball's way.
@@ -584,5 +589,96 @@ describe('Bot: after UT2004', () => {
     }
     expect(keys & KEY.LEFT && keys & KEY.RIGHT).toBeTruthy();
     expect(keys & (KEY.JUMP | KEY.DASH)).not.toBe(0);
+  });
+});
+
+describe('Bot: a fair fight', () => {
+  const world = build({
+    brushes: [{ min: [-50, -5, -50], max: [50, 0, 50], top: TEX.TILE, side: TEX.TILE }],
+    teams: [
+      { base: [0, 0, 40], spawns: [[0, 0, 10, 0]] },
+      { base: [0, 0, -40], spawns: [[0, 0, -10, Math.PI]] },
+    ],
+    floor: -20,
+    sun: { dir: [0, 1, 0], color: [1, 1, 1] },
+    sky: [
+      [0, 0, 1],
+      [1, 1, 1],
+    ],
+  });
+  const home: FlagState = { state: FLAG.HOME, by: 0, x: 0, y: 0, z: 0, left: 0 };
+
+  /**
+   * How far off a blue player each shot of a red bot at z 10, looking `yaw`, goes, radians, over
+   * `ticks`: the player stands still at (x, z), 10 m ahead by default.
+   */
+  const shots = (
+    o: { x?: number; z?: number; yaw?: number; id?: number; ticks?: number } = {},
+    hunters?: ReadonlyMap<number, readonly number[]>,
+    bot = new Bot(o.id ?? 0, 7),
+  ): number[] => {
+    const id = o.id ?? 0;
+    const me = {
+      id,
+      team: 0,
+      state: { ...spawn(0, world, 0, 0), yaw: o.yaw ?? 0, ammo: 60, mag: 30 },
+    };
+    const [x, z] = [o.x ?? 0, o.z ?? 0];
+    const foe = { id: 9, team: 1, state: { ...spawn(1, world, 0, 1), x, z } };
+    const want = Math.atan2(-(x - me.state.x), -(z - me.state.z));
+    const offs: number[] = [];
+    for (let k = 0; k < (o.ticks ?? 240); k++) {
+      const i = bot.think({ me, others: [foe], flags: [home, home], world, hunters });
+      me.state.yaw = i.yaw;
+      me.state.held = 0;
+      if (i.keys & KEY.FIRE) {
+        me.state.shots++;
+        offs.push(Math.abs(Math.atan2(Math.sin(i.yaw - want), Math.cos(i.yaw - want))));
+      }
+    }
+    return offs;
+  };
+
+  it('fires its first shots past a new enemy, then at him', () => {
+    const offs = shots();
+    const { warn } = personaOf(0, 7);
+    expect(offs.length).toBeGreaterThan(warn + 5);
+    // 1.6 m beside him at 10 m is 0.16 rad off.
+    expect(offs.slice(0, warn).every(a => a > 0.12)).toBe(true);
+    const rest = offs.slice(warn);
+    expect(rest.reduce((a, b) => a + b, 0) / rest.length).toBeLessThan(0.06);
+  });
+
+  it('warns no enemy again that it has just fought', () => {
+    const bot = new Bot(0, 7);
+    shots({ ticks: 120 }, undefined, bot);
+    // Out of sight a tick (behind a teammate's back, say), then back: no new warning.
+    bot.think({
+      me: { id: 0, team: 0, state: spawn(0, world, 0, 0) },
+      others: [],
+      flags: [home, home],
+      world,
+    });
+    const offs = shots({ ticks: 120 }, undefined, bot);
+    expect(offs[0]).toBeLessThan(0.12);
+  });
+
+  it('sees ahead and hears close by, but never shoots one behind its back it has not met', () => {
+    // 20 m behind it.
+    expect(shots({ z: 30, yaw: 0 })).toEqual([]);
+    // 4 m behind it: heard.
+    expect(shots({ z: 14, yaw: 0 }).length).toBeGreaterThan(0);
+    // 20 m ahead.
+    expect(shots({ z: -10, yaw: 0 }).length).toBeGreaterThan(0);
+  });
+
+  it('shoots past an enemy two of its team already shoot to hit', () => {
+    const { warn } = personaOf(5, 7);
+    const busy = shots({ id: 5 }, new Map([[9, [2, 3]]])).slice(warn);
+    expect(busy.length).toBeGreaterThan(5);
+    expect(busy.every(a => a > 0.12)).toBe(true);
+    // Two of higher ids give way to it.
+    const free = shots({ id: 5 }, new Map([[9, [7, 8]]])).slice(warn);
+    expect(free.reduce((a, b) => a + b, 0) / free.length).toBeLessThan(0.06);
   });
 });

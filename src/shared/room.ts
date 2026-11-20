@@ -1769,6 +1769,13 @@ export class Room {
   private think(players: Player[]): void {
     const others = players.map(q => ({ id: q.info.id, team: q.info.team, state: q.state }));
     const errands = this.errands(players);
+    // Who shot to hit whom last tick: a few of them hit, the others shoot past (bot.ts, TOKENS).
+    const hunters = new Map<number, number[]>();
+    for (const p of players) {
+      if (p.bot && p.bot.hunting >= 0) {
+        hunters.set(p.bot.hunting, [...(hunters.get(p.bot.hunting) ?? []), p.info.id]);
+      }
+    }
     for (const p of players) {
       if (p.bot) {
         const me = others.find(o => o.id === p.info.id)!;
@@ -1780,6 +1787,7 @@ export class Room {
           balls: this.balls,
           errand: errands.get(p.info.id),
           kit: this.kit(p),
+          hunters,
         });
         p.seq = ((p.seq ?? -1) + 1) & 0xffff;
         // Built only for a bot someone watches.

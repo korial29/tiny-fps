@@ -22,6 +22,10 @@ interface Tally {
   blocks: number;
   stopped: number;
   turns: number;
+  /** Shots fired and shots that hit, the bots' gun; frags. */
+  shots: number;
+  hits: number;
+  frags: number;
 }
 
 /**
@@ -31,7 +35,16 @@ interface Tally {
 const play = (n: number): Tally => {
   const room = new Room({ bots: 9, map: MAP, botSkill: n % 8 });
   let last: ArrayBuffer | undefined;
-  const c: Conn = { send: d => typeof d !== 'string' && (last = d) };
+  let frags = 0;
+  const c: Conn = {
+    send: d => {
+      if (typeof d !== 'string') {
+        last = d;
+      } else if (d.startsWith('{"t":"frag"')) {
+        frags++;
+      }
+    },
+  };
   room.connect(c);
   room.receive(c, JSON.stringify({ t: 'join', name: 'bench' }));
   const players = () => [
@@ -41,10 +54,31 @@ const play = (n: number): Tally => {
   ];
   const me = players().find(p => !p.bot)!;
   // Matches of the same code differ only by where they start: a few seconds of bots alone first.
-  const t: Tally = { captures: 0, taken: 0, deaths: 0, falls: 0, blocks: 0, stopped: 0, turns: 0 };
+  const t: Tally = {
+    captures: 0,
+    taken: 0,
+    deaths: 0,
+    falls: 0,
+    blocks: 0,
+    stopped: 0,
+    turns: 0,
+    shots: 0,
+    hits: 0,
+    frags: 0,
+  };
   const seen = new Map<
     PlayerState,
-    { x: number; z: number; px: number; pz: number; since: number; yaw: number; down: number }
+    {
+      x: number;
+      z: number;
+      px: number;
+      pz: number;
+      since: number;
+      yaw: number;
+      down: number;
+      shots: number;
+      hits: number;
+    }
   >();
   let flags: number[] = [FLAG.HOME, FLAG.HOME];
   let score = 0;
@@ -67,7 +101,12 @@ const play = (n: number): Tally => {
         since: k,
         yaw: s.yaw,
         down: s.down,
+        shots: s.shots,
+        hits: s.hits,
       };
+      // The counters wrap: a step back is a new count.
+      t.shots += Math.max(0, s.shots - o.shots);
+      t.hits += Math.max(0, s.hits - o.hits);
       if (s.down && !o.down) {
         t.deaths++;
       }
@@ -88,7 +127,7 @@ const play = (n: number): Tally => {
       if (turn > 1) {
         t.turns++;
       }
-      [o.yaw, o.down, o.px, o.pz] = [s.yaw, s.down, s.x, s.z];
+      [o.yaw, o.down, o.px, o.pz, o.shots, o.hits] = [s.yaw, s.down, s.x, s.z, s.shots, s.hits];
       seen.set(s, o);
     }
     if (last && k % 2 === 0) {
@@ -101,6 +140,7 @@ const play = (n: number): Tally => {
     }
   }
   t.stopped = Math.round(t.stopped / 60);
+  t.frags = frags;
   return t;
 };
 

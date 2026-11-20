@@ -33,6 +33,8 @@ export interface Seen {
   id: number;
   team: number;
   state: PlayerState;
+  /** A bot: one the team's roles are handed out to (squad()). */
+  bot?: boolean;
 }
 
 /** What a bot knows each tick. */
@@ -47,6 +49,10 @@ export interface Sight {
   errand?: Errand;
   /** The numbers of its class (kit.ts): the marine's when absent. */
   kit?: Kit;
+  /** The health packs there now, not taken. */
+  packs?: readonly Vec3[];
+  /** The bots that shot to hit each enemy last tick, by the enemy's id (Bot.hunting): TOKENS of them hit, the others miss. */
+  hunters?: ReadonlyMap<number, readonly number[]>;
 }
 
 export type Intent = { keys: number; yaw: number; pitch: number };
@@ -71,6 +77,17 @@ export interface BotView {
 const RANGE = 35;
 /** Radians off the target a bot still shoots. */
 const CONE = 0.06;
+/** Half the angle a bot sees ahead of its look, radians, and metres all round it hears an enemy. */
+const VIEW = 1.1;
+const HEAR = 5;
+/** Ticks a bot remembers an enemy it fought: met again within them, he gets no warning shot. */
+const MEMORY = 180;
+/** Bots that shoot to hit the same enemy at once; the others shoot past him. */
+const TOKENS = 2;
+/** Metres a second across a bot's view (its own speed with the target's) that double its aim's wander. */
+const CROSS = 6;
+/** Metres a shot that is meant to miss passes beside the body. */
+const PAST = 1.6;
 /** The skill of a room's bots when its rules give none: 0 (novice) to 7 (godlike), as in UT2004. */
 export const SKILL = 4;
 
@@ -91,6 +108,14 @@ export interface Persona {
   strafe: number;
   /** Its chance of dashing out of the way of a ball coming at it. */
   duck: number;
+  /** Shots it fires past a new target before it shoots to hit. */
+  warn: number;
+  /** Radians its aim wanders about the target, about. */
+  shake: number;
+  /** The share of a target's flight time it leads him by. */
+  lead: number;
+  /** The share of a target's change of speed it catches up with a tick. */
+  track: number;
 }
 
 /** A number in [0, 1) that looks random, the same for the same n. */
@@ -105,11 +130,15 @@ export const personaOf = (id: number, skill = SKILL): Persona => {
   const s = Math.max(0, Math.min(7, skill)) / 7;
   return {
     miss: (0.3 - 0.22 * s) * (0.75 + 0.5 * r(1)),
-    react: Math.round((36 - 28 * s) * (0.75 + 0.5 * r(2))),
-    turn: 0.05 + 0.09 * s,
+    react: Math.round((40 - 24 * s) * (0.75 + 0.5 * r(2))),
+    turn: 0.04 + 0.06 * s,
     jumpy: 0.003 + 0.012 * r(3),
     strafe: Math.round(25 + 45 * r(4)),
-    duck: 0.15 + 0.75 * s,
+    duck: 0.1 + 0.6 * s,
+    warn: Math.round(1 + 2 * (1 - s) + r(5)),
+    shake: (0.15 - 0.1 * s) * (0.75 + 0.5 * r(6)),
+    lead: 0.3 + 0.6 * s,
+    track: 0.03 + 0.09 * s,
   };
 };
 
@@ -163,8 +192,72 @@ const DASH_FAR = 8;
 const DASH_GAP = 120;
 /** Metres of floor a bot wants on the side it strafes to. */
 const SIDE = 1.5;
-/** The bots whose id is GUARD - 1 modulo GUARD stay home. */
-const GUARD = 8;
+/** Health a player is in trouble at or under, and metres off him an enemy makes it trouble. */
+const LOW = 3;
+const NEAR = 12;
+/** Metres a bot goes out of its way to a health pack when it is in trouble, or to help a teammate. */
+const MEND = 30;
+const HELP = 40;
+
+/** What a bot of a team does, handed out by squad(). */
+type Role = 'chase' | 'return' | 'escort' | 'help' | 'guard' | 'attack';
+
+/**
+ * The roles of a team's bots this tick, the same in every bot's head (they see the same team):
+ * the nearest to each job takes it, the most pressing jobs first. Half the team or more chase the
+ * enemy who has the flag (all but an escort when ours has theirs too: no capture till ours is
+ * home), one or two return a lying flag, two escort the carrier, one goes to a teammate an enemy
+ * is on while he is low, one guards home in a squad of three or more, and the rest attack.
+ */
+export const squad = (
+  team: number,
+  players: readonly Seen[],
+  flags: readonly FlagState[],
+  world: World,
+): { roles: Map<number, Role>; trouble?: Seen } => {
+  const [mine, theirs] = [flags[team], flags[1 - team]];
+  const roles = new Map<number, Role>();
+  const up = players.filter(o => !o.state.down);
+  const by = (id: number) => up.find(o => o.id === id);
+  const ours = theirs.state === FLAG.CARRIED ? by(theirs.by) : undefined;
+  const enemy = mine.state === FLAG.CARRIED ? by(mine.by) : undefined;
+  // A teammate low with an enemy on him: the lowest first. He is given no job.
+  const trouble = up
+    .filter(o => o.team === team && o.state.hp <= LOW)
+    .filter(o =>
+      up.some(f => f.team !== team && flat(f.state.x, f.state.z, o.state.x, o.state.z) < NEAR),
+    )
+    .sort((a, b) => a.state.hp - b.state.hp)[0];
+  // Sorted by id, so a tie goes the same way in every head (the sort keeps the order).
+  const free = up
+    .filter(o => o.team === team && o.bot && o !== ours && o !== trouble)
+    .sort((a, b) => a.id - b.id);
+  const n = free.length;
+  const take = (role: Role, count: number, x: number, z: number, far = Infinity) =>
+    free
+      .filter(o => !roles.has(o.id) && flat(o.state.x, o.state.z, x, z) < far)
+      .sort((a, b) => flat(a.state.x, a.state.z, x, z) - flat(b.state.x, b.state.z, x, z))
+      .slice(0, count)
+      .forEach(o => roles.set(o.id, role));
+  if (enemy) {
+    take('chase', ours ? Math.max(1, n - 1) : Math.ceil(n / 2), enemy.state.x, enemy.state.z);
+  }
+  if (mine.state === FLAG.DROPPED) {
+    take('return', n >= 4 ? 2 : 1, mine.x, mine.z);
+  }
+  if (ours) {
+    take('escort', 2, ours.state.x, ours.state.z);
+  }
+  if (trouble) {
+    take('help', 1, trouble.state.x, trouble.state.z, HELP);
+  }
+  if (n >= 3 && !enemy) {
+    const [x, , z] = world.def.teams[team].base;
+    take('guard', 1, x, z);
+  }
+  free.forEach(o => roles.has(o.id) || roles.set(o.id, 'attack'));
+  return { roles, trouble };
+};
 
 const flat = (ax: number, az: number, bx: number, bz: number): number =>
   Math.sqrt((bx - ax) ** 2 + (bz - az) ** 2);
@@ -229,6 +322,18 @@ export class Bot {
   private pitch = 0;
   private foe = -1;
   private since = 0;
+  /** Its aim's wander off the target, yaw and pitch, and the target's speed as it has made it out. */
+  private err = 0;
+  private errUp = 0;
+  private speed: Vec3 = [0, 0, 0];
+  /** Its shot count when it met the target, the shots it fires past him first, and to which side. */
+  private shot = 0;
+  private warned = 0;
+  private past = 1;
+  /** The tick it last fought each enemy, by id. */
+  private met = new Map<number, number>();
+  /** The enemy it shot to hit this tick, -1 for none: the room hands it to the others as `hunters`. */
+  public hunting = -1;
   private last: Vec3 = [0, 0, 0];
   private world: World | undefined;
   /** Where it looks walking, turned a little each tick; the side of its last detour; its last dash. */
@@ -305,6 +410,7 @@ export class Bot {
   private decide(s: Sight): Intent {
     const t = ++this.ticks;
     const p = s.me.state;
+    this.hunting = -1;
     this.world = s.world;
     this.steer = !!s.kit && s.kit.jump !== JUMP_SPEED;
     if (p.down) {
@@ -510,34 +616,40 @@ export class Bot {
       this.why = 'hunt';
       return at(prey.state);
     }
-    if (mine.state === FLAG.CARRIED) {
-      const h = holder(mine);
-      if (h) {
-        this.why = 'chase carrier';
-        return h;
+    const { roles, trouble } = squad(team, [{ ...me, bot: true }, ...others], flags, world);
+    const role = roles.get(me.id);
+    // Low itself, a pack close by: mended first, but for the chase of our flag.
+    if (p.hp <= LOW && role !== 'chase') {
+      const pack = s.packs
+        ?.map(q => [q, flat(p.x, p.z, q[0], q[2])] as const)
+        .filter(([, d]) => d < MEND)
+        .sort((a, b) => a[1] - b[1])[0];
+      if (pack) {
+        this.why = 'health';
+        return pack[0];
       }
     }
-    if (mine.state === FLAG.DROPPED) {
+    const h = role === 'chase' ? holder(mine) : role === 'escort' ? holder(theirs) : undefined;
+    if (h) {
+      this.why = role === 'chase' ? 'chase carrier' : 'escort';
+      return h;
+    }
+    if (role === 'return') {
       this.why = 'return flag';
       return [mine.x, mine.y, mine.z];
     }
-    if (this.id % GUARD === GUARD - 1) {
+    if (role === 'help' && trouble) {
+      this.why = 'help';
+      return at(trouble.state);
+    }
+    if (role === 'guard') {
       this.why = 'guard';
       return home.base;
     }
-    if (theirs.state === FLAG.CARRIED) {
-      const h = holder(theirs);
-      if (h) {
-        this.why = 'escort';
-        return h;
-      }
-    }
-    if (theirs.state === FLAG.DROPPED) {
-      this.why = 'take flag';
-      return [theirs.x, theirs.y, theirs.z];
-    }
     this.why = 'take flag';
-    return world.def.teams[1 - team].base;
+    return theirs.state === FLAG.DROPPED
+      ? [theirs.x, theirs.y, theirs.z]
+      : world.def.teams[1 - team].base;
   }
 
   private plan(w: World, p: PlayerState, goal: Vec3): void {
@@ -852,6 +964,11 @@ export class Bot {
     }
     const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
     const carrier = flags[me.team].state === FLAG.CARRIED ? flags[me.team].by : -1;
+    const theirs = flags[1 - me.team];
+    const mates = others
+      .filter(o => o.team === me.team && !o.state.down)
+      .filter(o => o.state.hp <= LOW || (theirs.state === FLAG.CARRIED && theirs.by === o.id))
+      .map(o => o.state);
     let foe: Seen | undefined;
     let best = Infinity;
     for (const o of others) {
@@ -860,9 +977,13 @@ export class Bot {
         continue;
       }
       const d = flat(p.x, p.z, q.x, q.z);
-      // The one who has our flag first, then the nearest.
-      const score = o.id === carrier ? d - RANGE : d;
-      if (d < RANGE && score < best && !hidden(world, eye, [q.x, q.y + 1.2, q.z])) {
+      // The one who has our flag first, then one on a teammate who carries theirs or is low, then the nearest.
+      const onMate = mates.some(m => flat(m.x, m.z, q.x, q.z) < NEAR);
+      const score = o.id === carrier ? d - RANGE : onMate ? d - RANGE / 2 : d;
+      // It sees ahead of its look and hears close by; the one it fights it follows round.
+      const ahead = Math.abs(turn(p.yaw, toward(p.x, p.z, q.x, q.z))) < VIEW;
+      const noticed = o.id === this.foe || d < HEAR || ahead;
+      if (noticed && d < RANGE && score < best && !hidden(world, eye, [q.x, q.y + 1.2, q.z])) {
         [foe, best] = [o, score];
       }
     }
@@ -880,15 +1001,43 @@ export class Bot {
       this.since = this.ticks;
       const miss = this.persona.miss;
       this.aim = norm(p.yaw + (this.rnd() < 0.5 ? miss : -miss));
+      this.speed = [0, 0, 0];
+      // One it has just fought knows it is there: no warning again.
+      const known = this.ticks - (this.met.get(foe.id) ?? -MEMORY) < MEMORY;
+      [this.shot, this.warned, this.past] = [p.shots, known ? 0 : this.persona.warn, 1];
+      if (this.rnd() < 0.5) {
+        this.past = -1;
+      }
     }
+    this.met.set(foe.id, this.ticks);
     const d = flat(p.x, p.z, q.x, q.z);
-    // Lead him by the ball's flight.
-    const lead = d / (p.rifled ? RIFLE_SPEED : PLASMA_SPEED);
-    const [tx, ty, tz] = [q.x + q.vx * lead, q.y + 1.1 + q.vy * lead, q.z + q.vz * lead];
-    const want = toward(p.x, p.z, tx, tz);
+    // His speed as it makes it out, late; the lead a share of the ball's flight.
+    const v = this.speed;
+    const k = this.persona.track;
+    [v[0], v[1], v[2]] = [
+      v[0] + (q.vx - v[0]) * k,
+      v[1] + (q.vy - v[1]) * k,
+      v[2] + (q.vz - v[2]) * k,
+    ];
+    const lead = (this.persona.lead * d) / (p.rifled ? RIFLE_SPEED : PLASMA_SPEED);
+    const [tx, ty, tz] = [q.x + v[0] * lead, q.y + 1.1 + v[1] * lead, q.z + v[2] * lead];
+    // The aim wanders about him, never still on him, the more as he crosses its view or it moves.
+    const [ux, uz] = [(q.x - p.x) / Math.max(d, 0.1), (q.z - p.z) / Math.max(d, 0.1)];
+    const across = Math.abs((q.vx - p.vx) * uz - (q.vz - p.vz) * ux);
+    const shake = this.persona.shake * (1 + across / CROSS);
+    this.err = this.err * 0.94 + (this.rnd() * 2 - 1) * shake * 0.35;
+    this.errUp = this.errUp * 0.94 + (this.rnd() * 2 - 1) * shake * 0.2;
+    // Shots past him first, and past him too when TOKENS of its team already shoot to hit him.
+    const hunters = s.hunters?.get(foe.id) ?? [];
+    const before = hunters.filter(id => id !== this.id && id < this.id).length;
+    const warning = p.shots - this.shot < this.warned;
+    const hit = !warning && before < TOKENS;
+    // A shot meant to miss leaves the wander out: on the wrong side it would put it on him.
+    const off = hit ? this.err : this.past * Math.atan2(PAST, Math.max(d, 1));
+    const want = norm(toward(p.x, p.z, tx, tz) + off);
     const rate = this.persona.turn;
     this.aim = norm(this.aim + Math.max(-rate, Math.min(rate, turn(this.aim, want))));
-    this.pitch = Math.atan2(ty - eye[1], Math.max(d, 0.1));
+    this.pitch = Math.atan2(ty - eye[1], Math.max(d, 0.1)) + this.errUp;
     const ready =
       this.ticks - this.since > this.persona.react && Math.abs(turn(this.aim, want)) < CONE;
     if (foe.id === carrier && d < TACKLE && p.ground && !(p.held & DASH)) {
@@ -897,6 +1046,9 @@ export class Bot {
     const armed = p.ammo > 0 && (p.mag ?? 0) > 0 && !p.wield;
     // The gun fires on letting go: a tap, held one step in two.
     const pull = (armed && d < RANGE) || (!armed && d < 1.4);
+    if (!warning) {
+      this.hunting = foe.id;
+    }
     return { keys: ready && pull && this.ticks & 1 ? FIRE : 0 };
   }
 }

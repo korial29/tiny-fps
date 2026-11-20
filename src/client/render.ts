@@ -1552,9 +1552,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       uni('uniform1f', 'T', performance.now() / 1000);
       uni('uniform1f', 'Z', 1);
       // Xenomorph vision uses enemy positions to reveal them through walls.
-      const prey = seeing
-        ? crowd.filter(p => !p.down && colors.get(p.id) !== own)
-        : [];
+      const prey = seeing ? crowd.filter(p => !p.down && colors.get(p.id) !== own) : [];
       uni('uniform1i', 'Vn', seeing ? prey.length + 1 : 0);
       if (prey.length) {
         uni(

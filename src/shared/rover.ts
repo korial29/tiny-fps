@@ -20,7 +20,7 @@ import {
   VEHICLE,
 } from './constants';
 import { step } from './gun';
-import { floorAt, forward, gapTo, gravity, heightOf, norm, shove } from './physics';
+import { floorAt, forward, gapTo, gravity, heightOf, nearBody, norm, shove } from './physics';
 import type { Body } from './physics';
 import { cylinder } from './plasma';
 import { bound } from './relief';
@@ -470,8 +470,11 @@ export const drive = (
     for (const h of hulls(o)) {
       for (const a of ROVER.BODY) {
         const [x, y, z] = at(r, a, 0, -DROP);
-        const [dx, dz, oy] = gapTo(h, x, z);
         const reach = ROVER.RB + h.r;
+        if (!nearBody(h, x, z, reach)) {
+          continue;
+        }
+        const [dx, dz, oy] = gapTo(h, x, z);
         const d = sqrt(dx * dx + dz * dz);
         if (d >= reach - 1e-4 || oy >= y + ROVER.BODY_H || oy + h.h <= y) {
           continue;

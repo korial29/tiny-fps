@@ -91,13 +91,40 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
     return [sign*wide,y,depth];
   }
   const vertices=points.map((p,i)=>shape(p,arm[i],leg[i]));
+  // Both Marine rings at the armpit share a height. Fit the front of their
+  // junction to the same chest surface, with a rounded belly and a shallow sternum.
+  const fade = (v: number) => {
+    const t = Math.min(1, Math.max(0, v));
+    return t*t*(3-2*t);
+  };
+  const pecSurface = (x: number, y: number) => {
+    const ax = Math.sqrt(x*x + .0004);
+    const ribs = .172*Math.sqrt(Math.max(.02, 1-(x/.365)**2));
+    const belly = .063*bell((ax-.129)/.115)*bell((y-1.396-.075*ax)/.077);
+    const sternum = .004*bell(x/.040)*bell((y-1.40)/.097);
+    return -ribs-belly+sternum+.023*((y-1.398)/.143)**2;
+  };
+  const influence = vertices.map(([x,y,z]) =>
+    fade((y-1.295)/.055)*fade((1.526-y)/.07)*
+    fade((.324-Math.abs(x))/.074)*fade((-z-.036)/.052));
+  vertices.forEach((p,i)=>{
+    if(influence[i]) p[2]+=(pecSurface(p[0],p[1])-p[2])*influence[i];
+  });
   const normals:Vec3[]=points.map(()=>[0,0,0]);
   for(const [a,b,c] of faces) {
     const u=sub(vertices[b],vertices[a]),v=sub(vertices[c],vertices[a]);
     const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
     for(const k of [a,b,c]) for(let d=0;d<3;d++) normals[k][d]+=n[d];
   }
-  const smooth=normals.map(unit), result:number[]=[];
+  const smooth=normals.map((n,i)=>{
+    const w=influence[i], original=unit(n);
+    if(!w) return original;
+    const [x,y]=vertices[i], h=.0001;
+    const surfaceNormal=unit([
+      pecSurface(x+h,y)-pecSurface(x-h,y),pecSurface(x,y+h)-pecSurface(x,y-h),-2*h,
+    ]);
+    return unit(original.map((v,k)=>v+(surfaceNormal[k]-v)*w) as Vec3);
+  }), result:number[]=[];
   for(const face of faces) for(const k of face) {
     const [x,y]=points[k];
     const pelvic=y<.987&&y>.865&&Math.abs(x)<.158&&arm[k]<.2;

@@ -76,6 +76,8 @@ import {
   parrying,
   poised,
   progress,
+  heldWrist,
+  wristEnds,
   BEHIND as BACK,
 } from './katana';
 import { STRIDE, add, basis, dot, mix, sub, unit } from './mesh';
@@ -118,7 +120,7 @@ export interface Body {
   /** Appends the body's vertices (see STRIDE) in the jacket `color`; nothing when pose() has none. */
   draw(out: Out, eye: Vec3, yaw: number, pitch: number, roll?: number, color?: number[]): void;
   /** The own player's character (BUILD in rig.ts, PlayerInfo.body): the woman's arms are slimmer and her hands smaller, on the same grips; `tone` the skin he picked (the default's when absent). */
-  wear(build: number, tone?: number[], ninja?: boolean, xeno?: boolean): void;
+  wear(build: number, tone?: number[], ninja?: boolean, xeno?: boolean, hunter?: boolean): void;
 }
 
 /** The xenomorph's feet: each foot's joint and its toes'. */
@@ -1339,6 +1341,8 @@ export const createBody = (world?: World): Body => {
   let ninja = false;
   /** The xenomorph: its own body (beast()) in chitin, claws on its fingertips (hand()). */
   let xeno = false;
+  /** The Hunter's wrist blades use the same deterministic cut timing as the shared blade. */
+  let hunter = false;
   /** The own player as last seen. */
   let me: PlayerState | undefined;
   /**
@@ -1724,7 +1728,7 @@ export const createBody = (world?: World): Body => {
       // The weapons take the hand unless it is on a ledge or a wall or reeling. The katana takes
       // both hands.
       const free = 1 - clamp(w.plant + toWall + w.stun);
-      const onSword = sw ? w.blade * free : 0;
+      const onSword = sw ? w.blade * free * (hunter && sd < 0 ? 0 : 1) : 0;
       let taken = onSword;
       if (sd > 0) {
         hold = w.gun * free;
@@ -2011,8 +2015,9 @@ export const createBody = (world?: World): Body => {
     },
     update,
     pose,
-    wear(b, t, n = false, x = false) {
+    wear(b, t, n = false, x = false, h = false) {
       [tone, ninja, xeno] = [x ? CHITIN_X : t, n, x];
+      hunter = h;
       if (b != build) {
         // Her own skeleton: a gait of its own, in the pose of the player at once.
         [build, gait] = [b, createGait(0, b)];
@@ -2145,20 +2150,26 @@ export const createBody = (world?: World): Body => {
           );
         }
         if (grasp > 0.2) {
-          sword(
-            out,
-            s.pos[J.HAND_R],
-            s.rot[J.HAND_R],
-            1,
-            clock,
-            clamp(grasp * 1.5 - 0.5),
-            // The thumb presses the button on the hilt and the blade lights up, all of it: it is no
-            // light saber (the user, 2026-11-09).
-            power(since - Math.max(pressOf(1), 0), 0.3),
-            span(poke(since, pressOf(1)), 0.8, 1),
-          );
+          if (hunter) {
+            heldWrist(out, s.pos[J.HAND_R], s.rot[J.HAND_R], 1, clamp(grasp * 1.5 - 0.5));
+          } else {
+            sword(
+              out,
+              s.pos[J.HAND_R],
+              s.rot[J.HAND_R],
+              1,
+              clock,
+              clamp(grasp * 1.5 - 0.5),
+              // The thumb presses the button on the hilt and the blade lights up, all of it: it is no
+              // light saber (the user, 2026-11-09).
+              power(since - Math.max(pressOf(1), 0), 0.3),
+              span(poke(since, pressOf(1)), 0.8, 1),
+            );
+          }
         }
-        const [base, point] = ends(s.pos[J.HAND_R], s.rot[J.HAND_R]);
+        const [base, point] = hunter
+          ? wristEnds(s.pos[J.HAND_R], s.rot[J.HAND_R])
+          : ends(s.pos[J.HAND_R], s.rot[J.HAND_R]);
         // The parry's sweep leaves a streak like a cut's.
         trail.mark(base, point, grasp > 0.5 && (cutting(prog) || parry < 2 * PARRY_IN));
         trail.draw(out);

@@ -94,7 +94,7 @@ import {
   SWAY,
   bent,
   cutting,
-  ends,
+  ends as swordEnds,
   held as sword,
   DEFLECT_LOW,
   PARRY_IN,
@@ -104,6 +104,8 @@ import {
   poised,
   progress,
   SLASH_TOP,
+  heldWrist,
+  wristEnds,
 } from './katana';
 import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
@@ -761,6 +763,7 @@ export const brandish = (
   ph: number,
   t = 0,
   parry = Infinity,
+  oneHand = false,
 ): Pose => {
   // In a saber lock the blade crosses the foe's, shaking, and the trunk leans into him.
   const lk = sabering(p);
@@ -806,8 +809,12 @@ export const brandish = (
   const at = add(eye, turn(g.slice(0, 3)));
   const dir = unit(turn(g.slice(3, 6)));
   shrug(q, s, J.ARM_R, at);
-  shrug(q, s, J.ARM_L, add(at, dir.map(v => -BEHIND * v) as Vec3));
   const poles: [Vec3, Vec3] = [turn([0.5, -1, -0.35]), turn([-0.5, -1, -0.35])];
+  if (oneHand) {
+    wield(q, s, J.ARM_R, at, dir, poles[0]);
+    return q;
+  }
+  shrug(q, s, J.ARM_L, add(at, dir.map(v => -BEHIND * v) as Vec3));
   const [grip, d, right, left] = clasp(solve(q), at, dir, poles, 0.1 * (1 - 0.98 * pe));
   wield(q, s, J.ARM_R, grip, d, poles[0], right);
   wield(
@@ -1140,6 +1147,7 @@ export const stance = (r: Runner) => {
       r.gait.phase,
       r.t,
       r.parry,
+      r.look?.role === ROLE.HUNTER,
     );
     s = solve(pose);
   } else if ((p.railed || p.rifled) && !busy) {
@@ -1664,9 +1672,17 @@ export const soldier = (
     );
   }
   if (blade) {
-    sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t, 1, 1, 0, gpu);
+    if (r.look?.role === ROLE.HUNTER) {
+      heldWrist(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, gpu);
+    } else {
+      sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t, 1, 1, 0, gpu);
+    }
+    const tips =
+      r.look?.role === ROLE.HUNTER
+        ? wristEnds(s.pos[J.HAND_R], s.rot[J.HAND_R])
+        : swordEnds(s.pos[J.HAND_R], s.rot[J.HAND_R]);
     r.trail.mark(
-      ...(ends(s.pos[J.HAND_R], s.rot[J.HAND_R]) as [Vec3, Vec3]),
+      ...(tips as [Vec3, Vec3]),
       cutting(r.prog) || (r.parry >= 0 && r.parry < 2 * PARRY_IN),
     );
   } else if (

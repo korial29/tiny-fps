@@ -518,6 +518,7 @@ const play = (
         own?.tone === undefined ? undefined : TONES[own.tone],
         roleOf(own?.role, world.def) == ROLE.NINJA,
         roleOf(own?.role, world.def) == ROLE.XENO,
+        roleOf(own?.role, world.def) == ROLE.HUNTER,
       );
       // The title screen shows what his id gives where he has picked nothing: his skin and cut as drawn.
       hud.wear(

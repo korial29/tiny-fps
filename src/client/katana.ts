@@ -187,6 +187,88 @@ export const katana = (lod: number): number[] => {
   return (built[lod] = out);
 };
 
+const wristBuilt: number[][] = [];
+const wristCuff = [0.16, 0.13, 0.2];
+const wristSteel = [0.55, 0.62, 0.68];
+const wristEdge = [0.95, 0.83, 0.54];
+
+/** The Hunter's twin wrist blades and bracer, in the hand's local space. */
+export const wristBlade = (lod: number): number[] => {
+  if (wristBuilt[lod]) return wristBuilt[lod];
+  const out: number[] = [];
+  const quad = (a: Vec3, b: Vec3, c: Vec3, d: Vec3, color: number[]) => {
+    tri(out, a, b, c, color);
+    tri(out, a, c, d, color);
+  };
+  const box = (lo: Vec3, hi: Vec3, color: number[]) => {
+    const [x0, y0, z0] = lo;
+    const [x1, y1, z1] = hi;
+    const v = [
+      [x0, y0, z0],
+      [x1, y0, z0],
+      [x1, y1, z0],
+      [x0, y1, z0],
+      [x0, y0, z1],
+      [x1, y0, z1],
+      [x1, y1, z1],
+      [x0, y1, z1],
+    ] as Vec3[];
+    for (const f of [
+      [0, 1, 2, 3],
+      [5, 4, 7, 6],
+      [4, 0, 3, 7],
+      [1, 5, 6, 2],
+      [3, 2, 6, 7],
+      [4, 5, 1, 0],
+    ]) {
+      quad(v[f[0]], v[f[1]], v[f[2]], v[f[3]], color);
+    }
+  };
+  // A dark metal bracer around the back of the wrist.
+  box([-0.075, -0.045, 0.015], [0.075, 0.045, 0.14], wristCuff);
+  box([-0.081, -0.052, 0.035], [0.081, -0.043, 0.12], wristEdge);
+  for (const side of [-1, 1]) {
+    const center = side * 0.031;
+    const w = 0.016;
+    const top: Vec3[] = [
+      [center - w, 0.035, 0.015],
+      [center + w, 0.035, 0.015],
+      [center + w * 0.62, 0.035, -0.205],
+      [center, 0.035, -0.39],
+      [center - w * 0.62, 0.035, -0.205],
+    ];
+    const bottom = top.map(([x, , z]) => [x, 0.018, z] as Vec3);
+    const steel = side < 0 ? wristSteel : [0.4, 0.48, 0.53];
+    quad(top[0], top[1], top[3], top[4], steel);
+    tri(out, top[1], top[2], top[3], steel);
+    tri(out, bottom[1], bottom[0], bottom[3], wristCuff);
+    tri(out, bottom[2], bottom[1], bottom[3], wristCuff);
+    tri(out, bottom[3], bottom[4], bottom[0], wristCuff);
+    for (let i = 0; i < top.length; i++) {
+      const j = (i + 1) % top.length;
+      quad(top[i], bottom[i], bottom[j], top[j], wristSteel);
+    }
+    tri(out, top[0], top[4], [center, 0.036, -0.39], wristEdge);
+  }
+  return (wristBuilt[lod] = out);
+};
+
+/** Places the wrist blade at the Hunter's right wrist. */
+export const heldWrist = (out: Out, pos: Vec3, q: Quat, lod: number, k = 1, list?: Pieces) => {
+  const frame = axes(q);
+  if (list && k == 1) {
+    list.push({ m: mesh(`wrist blades ${lod}`, o => o.push(...wristBlade(lod))), q, t: pos, k });
+  } else {
+    place(out, wristBlade(lod), pos, frame, [0, 0, 0], k);
+  }
+};
+
+/** The blade's sweep endpoints for the Hunter's cut trail. */
+export const wristEnds = (pos: Vec3, q: Quat): Vec3[] => {
+  const f = axes(q)[2];
+  return [pos, sum([pos, 1], [f, 0.39])];
+};
+
 /** Appends arcs of lightning flickering along the blade at the clock `t` (s): a few zigzags of thin crossed ribbons, each new every 70 ms. */
 export const arcs = (out: Out, at: Vec3, [r, u, f]: Vec3[], t: number, lod: number, k = 1) => {
   const step = Math.floor(t * 14);

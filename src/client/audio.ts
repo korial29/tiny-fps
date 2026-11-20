@@ -64,11 +64,12 @@ const MUSIC = 0.5;
  * music. GROUP is each sound's bus, in SOUND order; LOUD a sound's own level over its bus, 0 dB
  * when absent. The game menu's Audio panel changes them for this browser (mix()).
  */
-export const LEVELS = [-22.5, -25.5, -13.5, -10.5, -14.9, -17.5, -6];
+export const LEVELS = [-22.5, -25.5, -13.5, -10.5, -17.5, -17.5, -6];
 const BAKED = [...LEVELS];
 const MIXED = 'tiny-fps:mix';
 export const LOUD: Record<number, number> = {};
-export const GROUP = '11111111115555202222552222222222222222223334433333333300553300220012012000';
+export const GROUP =
+  '111111111155552022225522222222222222222233344333333333005533002200120120002000';
 const level = (id: number) => LEVELS[+GROUP[id]] + (LOUD[id] ?? 0);
 let mixed = () => {};
 /** Sets bus `i` to `db` live, and keeps the mix for the next visit; none, the mix as made. */

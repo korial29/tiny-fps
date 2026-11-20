@@ -150,7 +150,7 @@ afterEach(() => {
 
 describe('the mix', () => {
   it('is the user\u2019s, set by ear in the menu', () => {
-    expect(MIX).toEqual([-22.5, -25.5, -13.5, -10.5, -14.9, -17.5, -6]);
+    expect(MIX).toEqual([-22.5, -25.5, -13.5, -10.5, -17.5, -17.5, -6]);
   });
 
   it('gives every sound one of the groups, the dash among the moves', () => {

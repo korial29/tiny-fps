@@ -1057,7 +1057,12 @@ describe('the others and the katana', () => {
     expect(audio.play).toHaveBeenCalledTimes(1);
     frame(player(), [other(CUT.THRUST, 24)]);
     expect(audio.play).toHaveBeenCalledTimes(2);
-    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SWISH, [5, 1.6, -3], expect.closeTo(-4.44, 2), 1.3);
+    expect(audio.play).toHaveBeenLastCalledWith(
+      SOUND.SWISH,
+      [5, 1.6, -3],
+      expect.closeTo(-4.44, 2),
+      1.3,
+    );
   });
 
   it('swish for a cut that changed under a running swing', () => {

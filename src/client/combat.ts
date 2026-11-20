@@ -238,7 +238,7 @@ export const createCombat = (
       return;
     }
     if (hunter(id)) {
-      audio.play(died ? SOUND.HUNTER_DEATH : SOUND.HUNTER_PAIN, at, at ? 0.9 : 0.7, r);
+      audio.play(died ? SOUND.HUNTER_DEATH : SOUND.HUNTER_PAIN, at, at ? -0.9 : -3.1, r);
       return;
     }
     if (died) {
@@ -259,7 +259,7 @@ export const createCombat = (
   /** A shot; a charged one (`power` over 1) deeper and louder, with the long blast under it. */
   const laser = (at?: Vec3, power = 1, harpoon = false) => {
     if (harpoon) {
-      audio.play(SOUND.HARPOON, at, at ? 0.75 : 0.55, rate());
+      audio.play(SOUND.HARPOON, at, at ? -2.5 : -5.2, rate());
       return;
     }
     audio.play(

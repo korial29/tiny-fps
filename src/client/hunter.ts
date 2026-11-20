@@ -2,12 +2,118 @@
 import { SHINE, STRIDE, TWILL, WEAVE, capsule, dress, segment, solid, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 
+import { body } from './skin';
+import { hands } from './body';
+import { KIND } from './features';
+import { JOINT as J, JOINTS, rest, solve } from './rig';
+
 const hide: Vec3 = [0.39, 0.42, 0.28];
 const leather: Vec3 = [0.15, 0.12, 0.105];
 const graphite: Vec3 = [0.18, 0.22, 0.23];
 const silver: Vec3 = [0.57, 0.66, 0.66];
 const bronze: Vec3 = [0.59, 0.37, 0.19];
 const light: Vec3 = [1, 0.24, 0.065];
+
+const stature = 1.2;
+const bell = (x: number) => Math.exp(-x*x);
+
+// Sculpt the Marine's rest skin, including the shared shoulder and crotch vertices.
+// Bone weights distinguish the inside of an arm from the adjacent chest wall.
+function marineBuild(lod: 0 | 1 | 2): number[] {
+  const base = body([0, 1, 3][lod]);
+  const points: Vec3[] = [];
+  const arm: number[] = [], leg: number[] = [];
+  const faces: number[][] = [];
+  const share = (joint: number, limb: 'arm' | 'leg') => Number(limb === 'arm'
+    ? (joint >= J.ARM_L && joint <= J.HAND_L) || (joint >= J.ARM_R && joint <= J.HAND_R) || joint >= JOINTS
+    : joint >= J.THIGH_L && joint < JOINTS);
+  for (let i=0;i<base.w.length;i++) {
+    points.push([base.v[6*i],base.v[6*i+1],base.v[6*i+2]]);
+    const a=base.j[2*i], b=base.j[2*i+1], w=base.w[i];
+    arm.push((1-w)*share(a,'arm')+w*share(b,'arm'));
+    leg.push((1-w)*share(a,'leg')+w*share(b,'leg'));
+  }
+  const splits=new Map<number,number>();
+  function mid(a:number,b:number) {
+    const key=Math.min(a,b)*1048576+Math.max(a,b);
+    const found=splits.get(key);
+    if(found!==undefined) return found;
+    const i=points.length;
+    points.push(points[a].map((v,k)=>(v+points[b][k])/2) as Vec3);
+    arm.push((arm[a]+arm[b])/2);
+    leg.push((leg[a]+leg[b])/2);
+    splits.set(key,i);
+    return i;
+  }
+  for(let i=0;i<base.t.length;i+=3) {
+    const [a,b,c]=base.t.subarray(i,i+3);
+    if([a,b,c].some(k=>base.g[k]!==KIND.BODY || points[k][1]>1.558)) continue;
+    if(lod===2) {
+      const ab=mid(a,b), bc=mid(b,c), ca=mid(c,a);
+      faces.push([a,ab,ca],[ab,b,bc],[ca,bc,c],[ab,bc,ca]);
+    } else faces.push([a,b,c]);
+  }
+
+  if (lod===2) {
+    // Add intermediate samples for the shallow relief across the Marine's broad torso rings.
+    const coarse=faces.splice(0);
+    for(const [a,b,c] of coarse) {
+      if([a,b,c].every(k=>points[k][1]>1.02&&points[k][1]<1.52&&arm[k]<.5)){
+        const ab=mid(a,b),bc=mid(b,c),ca=mid(c,a);
+        faces.push([a,ab,ca],[ab,b,bc],[ca,bc,c],[ab,bc,ca]);
+      } else faces.push([a,b,c]);
+    }
+  }
+  function shape([x,y,z]:Vec3, armWeight:number, legWeight:number):Vec3 {
+    // Fade into the shared shoulder ring before the sleeve joins the trunk.
+    armWeight*=Math.min(1,Math.max(0,(1.41-y)/.105));
+    const ax=Math.abs(x), sign=Math.sign(x), torso=1-armWeight-legWeight;
+    const chest=bell((y-1.405)/.15);
+    const armMass=.51*bell((y-1.325)/.104)+.33*bell((y-1.11)/.079);
+    const legMass=.29*bell((y-.745)/.15)+.24*bell((y-.34)/.095);
+    const shoulder=.061+.19*Math.max(0,1.45-y);
+    const armX=.212;
+    const wide=ax*(1.09+.30*chest)*torso
+      +(armX+shoulder+(ax-armX)*(1.18+armMass))*armWeight
+      +(.125+(ax-.1)*(1.1+legMass))*legWeight;
+    let depth=z*(1.18+.23*chest*torso+armMass*armWeight+legMass*legWeight);
+    const front=Math.min(1,Math.max(0,-z/.074));
+    // Broad paired pecs narrowing into the sternum, then three shorter abdominal pairs.
+    const pec=.067*bell(((ax-.09)/.086)**2)*bell((y-1.392-.10*ax)/.067);
+    let abs=0;
+    for(const height of [1.115,1.186,1.257]) abs+=.047*bell((y-height-.07*ax)/.032)*bell(((ax-.045)/.037)**2);
+    const oblique=.019*bell((ax-.123)/.032)*bell((y-1.20-.32*ax)/.12);
+    depth-=torso*front*(pec+abs+oblique);
+    depth+=torso*Math.max(0,Math.min(1,z/.085))*.042*bell((ax-.083)/.056)*bell((y-1.37)/.14);
+    depth-=front*(armWeight*.027*bell((y-1.307)/.069)
+      +legWeight*(.047*bell((ax-.12-.20*(y-.72))/.041)*bell((y-.726)/.133)
+        +.028*bell((ax-.067)/.029)*bell((y-.59)/.065)));
+    return [sign*wide,y,depth];
+  }
+  const vertices=points.map((p,i)=>shape(p,arm[i],leg[i]));
+  const normals:Vec3[]=points.map(()=>[0,0,0]);
+  for(const [a,b,c] of faces) {
+    const u=sub(vertices[b],vertices[a]),v=sub(vertices[c],vertices[a]);
+    const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
+    for(const k of [a,b,c]) for(let d=0;d<3;d++) normals[k][d]+=n[d];
+  }
+  const smooth=normals.map(unit), result:number[]=[];
+  for(const face of faces) for(const k of face) {
+    const [x,y]=points[k];
+    const pelvic=y<.987&&y>.865&&Math.abs(x)<.158&&arm[k]<.2;
+    const tint=y<.145?graphite:pelvic?leather:hide;
+    result.push(...vertices[k],...smooth[k],tint[0],tint[1],-1,tint[2]);
+  }
+  if(lod) {
+    const gloves:number[]=[];
+    hands(gloves,solve(rest()),0,[.24,.24],graphite,hide,{},lod===1);
+    for(let i=0;i<gloves.length;i+=STRIDE) {
+      const p=shape([gloves[i],gloves[i+1],gloves[i+2]],1,0);
+      result.push(...p,...gloves.slice(i+3,i+STRIDE));
+    }
+  }
+  return result;
+}
 
 export function hunter(lod: 0 | 1 | 2) {
   const parts: Record<string, number[]> = {};
@@ -86,41 +192,15 @@ export function hunter(lod: 0 | 1 | 2) {
     });
   }
 
-  part('Body');
-  limb([0,0.91,0],[0,1.52,0],[0.14,0.215,0.15,0.25,0.265,0.15],hide,0.71);
-  limb([0,1.46,0],[0,1.68,0],[0.145,0.095,0.105],graphite,0.9);
+  parts['Marine anatomy'] = marineBuild(lod);
+  part('Mask lining');
+  limb([0,1.51,0],[0,1.68,0],[0.085,0.077,0.097],hide,.97);
   limb([0,1.59,0],[0,1.86,0.01],[0.084,0.112,0.144,0.13,0.058],graphite,1);
   for(const s of [-1,1]) {
-    part('Leg'+s);
-    const hip: Vec3=[s*0.11,0.97,0], knee: Vec3=[s*0.155,0.53,-0.034], ankle: Vec3=[s*0.185,0.12,0.025];
-    limb(hip,knee,[0.1,0.118,0.106,0.076],hide,1.08,-1,true);
-    limb(knee,ankle,[0.073,0.09,0.084,0.05],leather,1);
-    limb([s*0.18,0.22,0.016],ankle,[0.069,0.077,0.064],graphite);
-    limb([s*0.185,0.075,0.075],[s*0.188,0.067,-0.152],[0.053,0.076,0.082,0.045],graphite,0.81);
-    for(let j=0;j<3;j++) {
-      const x=s*(0.153+j*0.008), y=0.51-j*0.107;
-      plate([[x-0.059,y+0.047,-0.088],[x+0.062,y+0.047,-0.085],[x+0.045,y-0.05,-0.089],[x,y-0.09,-0.10],[x-0.05,y-0.048,-0.086]],[x,y,-0.135],j===0?bronze:graphite);
-    }
-    limb([s*0.125,0.815,0],[s*0.137,0.765,-0.007],[0.121,0.117],leather,1.07);
-    part('Arm'+s);
-    const shoulder: Vec3=[s*0.235,1.47,0], elbow: Vec3=[s*0.35,1.185,0.012], wrist: Vec3=[s*0.39,0.995,-0.115];
-    limb(shoulder,elbow,[0.094,0.113,0.09,0.065],hide,0.98,-1,true);
-    limb(elbow,wrist,[0.069,0.087,0.064,0.05],graphite,1, TWILL,true);
-    limb(wrist,[s*0.397,0.898,-0.139],[0.05,0.056,0.038],hide,0.81,-1,true);
-    for(let j=0;j<(lod?4:2);j++){
-      const x=s*(0.365+j*(lod?0.019:0.043));
-      limb([x,0.922,-0.147],[x,0.855+Math.abs(1-j)*0.008,-0.17],[0.014,0.013,0.006],leather);
-    }
     part('Mantle'+s);
     for(let j=0;j<3;j++) {
       const x=s*(0.238+j*0.024), y=1.503-j*0.035;
       limb([x,y-0.045,0],[x,y+0.041,0],[0.102-j*0.012,0.113-j*0.012,0.065],j===0?bronze:graphite,1.22,TWILL);
-    }
-    part('Breastplate'+s);
-    plate([[s*0.009,1.473,-0.184],[s*0.17,1.506,-0.09],[s*0.258,1.435,-0.05],[s*0.19,1.334,-0.123],[s*0.026,1.312,-0.184]],[s*0.104,1.407,-0.226],graphite);
-    for(let j=0;j<3;j++){
-      const y=1.295-j*0.062;
-      plate([[s*0.012,y,-0.135],[s*(0.192-j*0.014),y+0.043,-0.085],[s*0.152,y-0.02,-0.098],[s*0.017,y-0.038,-0.135]],[s*0.086,y,-0.157],j===0?bronze:graphite);
     }
     part('Quills'+s);
     const count=[3,5,7][lod];
@@ -142,19 +222,13 @@ export function hunter(lod: 0 | 1 | 2) {
     limb([x-0.079,y,0.128],[x+0.019,y+0.049,0.164],[0.032,0.038,0.031],graphite,1,TWILL);
   }
   for (const s of [-1,1]) {
-    part('Greave and gauntlet details'+s);
+    part('Gauntlet'+s);
+    limb([s*.345,1.125,0],[s*.376,.955,-.004],[.072,.067,.056,.049],graphite,1,TWILL);
     for (let j=0;j<3;j++) {
-      const y=1.151-j*0.046, x=s*(0.358+j*0.01), z=-0.01-j*0.026;
-      limb([x,y,z],[x+s*0.004,y-0.019,z-0.011],[0.084-j*0.005,0.079-j*0.005],j===1?bronze:graphite,1,TWILL);
+      const y=1.11-j*0.046, x=s*(0.35+j*0.008), z=0;
+      limb([x,y,z],[x+s*0.004,y-0.019,z-0.011],[0.073-j*0.006,0.070-j*0.006],j===1?bronze:graphite,1,TWILL);
     }
-    const x=s*0.14;
-    plate([[x-0.075,0.842,-0.08],[x+0.065,0.844,-0.087],[x+0.07,0.73,-0.098],[x+0.01,0.63,-0.123],[x-0.057,0.687,-0.112]],[x,0.764,-0.158],graphite);
-    if(lod) for(let j=0;j<3;j++) {
-      const y=0.785-j*0.03;
-      limb([x-0.032,y,-0.149],[x+0.028,y+0.022,-0.141],[0.004,0.005],bronze);
-    }
-    part('Collar'+s);
-    limb([s*0.061,1.533,-0.08],[s*0.172,1.48,-0.116],[0.024,0.028,0.024],bronze,0.76,TWILL);
+
   }
   const alloy: Vec3 = [0.42, 0.425, 0.405];
   const rim: Vec3 = [0.36, 0.365, 0.35];
@@ -311,5 +385,18 @@ export function hunter(lod: 0 | 1 | 2) {
     plate([diskPoint(0.054,a-0.32,0),diskPoint(0.109,a-0.41,0),diskPoint(0.139,a+0.27,0),diskPoint(0.089,a+0.22,0),diskPoint(0.054,a+0.66,0)],diskPoint(0.083,a,-0.019),silver,SHINE);
   }
   limb(hub,[hub[0]+0.013,hub[1],hub[2]-0.026],[0.075,0.061,0.034],bronze,1,TWILL);
+  for (const [name, mesh] of Object.entries(parts)) {
+    const head = ['Mandible shell','Visor grille','Cranial shell','Temple optics','Mask lining'].includes(name)
+      || name.startsWith('Quills') || name.startsWith('Swept temple rail');
+    for (let i=0;i<mesh.length;i+=STRIDE) {
+      if (head) {
+        mesh[i+1]+=(stature-1)*1.55;
+      } else {
+        if(name==='Wrist blade') { mesh[i]-=.025; mesh[i+2]+=.132; mesh[i+1]-=.035; }
+        if(name.startsWith('Mantle')) mesh[i]+=.024*Math.sign(mesh[i]);
+        mesh[i]*=stature; mesh[i+1]*=stature; mesh[i+2]*=stature;
+      }
+    }
+  }
   return parts;
 }

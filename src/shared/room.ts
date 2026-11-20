@@ -176,7 +176,7 @@ const BOT_NAMES = ['Ada', 'Bix', 'Cog', 'Dot', 'Echo', 'Flux', 'Gear', 'Hex'];
  * the xenomorph too). A map that does not offer one gives its default (roleOf()): the moon's
  * ninja is an astronaut.
  */
-const BOT_ROLES = [ROLE.MARINE, ROLE.NINJA, ROLE.XENO];
+const BOT_ROLES = [ROLE.MARINE, ROLE.NINJA, ROLE.XENO, ROLE.HUNTER];
 
 /** The two seats of a rover, the driver's first. */
 const SEATS = ['driver', 'rider'] as const;

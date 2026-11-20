@@ -24,7 +24,7 @@ import {
 } from './constants';
 import type { WorldDef } from './world';
 
-export const ROLE = { MARINE: 0, NINJA: 1, ASTRONAUT: 2, XENO: 3 } as const;
+export const ROLE = { MARINE: 0, NINJA: 1, ASTRONAUT: 2, XENO: 3, HUNTER: 4 } as const;
 
 export interface Kit {
   run: number;
@@ -69,6 +69,8 @@ export interface Kit {
    * walls (MODE.CLING), a dash's burst that pins an enemy it reaches, acid for blood (room.ts).
    */
   xeno: boolean;
+  /** The Hunter's class identity; its weapons and vision are introduced in later build steps. */
+  hunter?: boolean;
 }
 
 const MARINE: Kit = {
@@ -156,8 +158,11 @@ const XENO: Kit = {
   xeno: true,
 };
 
+/** The Hunter's movement and health start at the marine baseline; class-specific combat comes next. */
+const HUNTER: Kit = { ...MARINE, hunter: true };
+
 /** By ROLE. The astronaut moves and fights as the marine: the moon's gravity is the map's. */
-export const KITS: readonly Kit[] = [MARINE, NINJA, MARINE, XENO];
+export const KITS: readonly Kit[] = [MARINE, NINJA, MARINE, XENO, HUNTER];
 
 /** Ticks after a dash's start before the next of a chain: the burst and a breath. */
 export const DASH_GAP = 16;
@@ -167,7 +172,9 @@ export const DASH_GAP = 16;
  * and the xenomorph, who breathes none.
  */
 export const rolesOf = (def: Pick<WorldDef, 'helmets'>): number[] =>
-  def.helmets ? [ROLE.ASTRONAUT, ROLE.XENO] : [ROLE.MARINE, ROLE.NINJA, ROLE.XENO];
+  def.helmets
+    ? [ROLE.ASTRONAUT, ROLE.XENO, ROLE.HUNTER]
+    : [ROLE.MARINE, ROLE.NINJA, ROLE.XENO, ROLE.HUNTER];
 
 /** The class a player plays on the map: his `role` when the map offers it, else the map's default. */
 export const roleOf = (role: number | undefined, def: Pick<WorldDef, 'helmets'>): number => {

@@ -36,6 +36,8 @@ export const PALETTE = [
   0xff1c2f5e, 0xff2f4c8a, 0xff4a45cc,
   // The xenomorph's: its chitin, the chitin's sheen, its eyes' glow, its acid.
   0xff1c1412, 0xff604e46, 0xff3246ff, 0xff28e696,
+  // The Hunter's dark mask, bronze plates and targeting optics.
+  0xff171a20, 0xffb56b35, 0xffffb94d,
 ];
 const [
   ,
@@ -62,12 +64,15 @@ const [
   CHIT_HI,
   EYE,
   ACID,
+  HUNT_DARK,
+  HUNT_BRASS,
+  HUNT_GLOW,
 ] = PALETTE.map((_, i) => i);
 
 const sprites: Uint8Array[] = [];
 
-/** The faces of sprite(): the man's, the woman's and the xenomorph's. */
-export const LOOK = { MAN: 0, WOMAN: 1, XENO: 2 } as const;
+/** The faces of sprite(): the man's, the woman's, the xenomorph's and the Hunter's. */
+export const LOOK = { MAN: 0, WOMAN: 1, XENO: 2, HUNTER: 3 } as const;
 
 /**
  * Frame `n`'s pixels, FW by FH palette indices, row by row; built once. `fem` (LOOK.WOMAN) is the
@@ -81,6 +86,9 @@ export const sprite = (n: number, fem = 0): Uint8Array => {
   }
   if (fem == LOOK.XENO) {
     return (sprites[key] = beast(n));
+  }
+  if (fem == LOOK.HUNTER) {
+    return (sprites[key] = hunter(n));
   }
   const p = new Uint8Array(FW * FH);
   const dead = n == DEAD;
@@ -256,6 +264,52 @@ export const sprite = (n: number, fem = 0): Uint8Array => {
     put(m + 6, 24, BLOOD);
   }
   return (sprites[key] = p);
+};
+
+/** The Hunter's original pixel portrait: a plated mask, luminous targeting optics and cheek blades. */
+const hunter = (n: number): Uint8Array => {
+  const p = new Uint8Array(FW * FH);
+  const dead = n == DEAD;
+  const more = n >= MORE;
+  const level = dead ? 4 : n == GLOW ? 0 : more ? Math.floor((n - MORE) / 3) : Math.floor(n / 8);
+  const e = more ? 8 + ((n - MORE) % 3) : n >= 40 ? -1 : n % 8;
+  const put = (x: number, y: number, c: number) => {
+    if (x >= 0 && x < FW && y >= 0 && y < FH) p[y * FW + x] = c;
+  };
+  const box = (x: number, y: number, w: number, h: number, c: number) => {
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) put(x + i, y + j, c);
+  };
+  const shift = e == EXPR.TURN_L ? -1 : e == EXPR.TURN_R ? 1 : 0;
+  // Broad crown and tapered mask.
+  for (let y = 2; y < 27; y++) {
+    const half = y < 13 ? 8 + Math.floor((y - 2) / 5) : Math.max(4, 11 - Math.floor((y - 13) / 2));
+    for (let x = 0; x < FW; x++) {
+      const d = Math.abs(x - 11.5);
+      if (d <= half) put(x, y, d == half || y == 26 ? LINE : y < 8 ? HUNT_BRASS : HUNT_DARK);
+    }
+  }
+  // Segmented forehead plates.
+  box(5, 4, 5, 2, dead ? GREY : HUNT_BRASS);
+  box(14, 4, 5, 2, dead ? GREY : HUNT_BRASS);
+  box(10, 3, 4, 7, dead ? GREY : HUNT_BRASS);
+  box(11, 5, 2, 6, dead ? GREY : GOLD);
+  // Optics track the same eight expressions as the other faces.
+  const look = e == EXPR.LEFT || e == EXPR.TURN_L ? -1 : e == EXPR.RIGHT || e == EXPR.TURN_R ? 1 : 0;
+  const eye = dead ? GREY : e == EXPR.RAGE || e == EXPR.SHOUT ? HUNT_GLOW : LED;
+  for (const side of [-1, 1]) {
+    const x = Math.round(11.5 + side * 4 + shift + look);
+    for (let k = 0; k < 3; k++) put(x + side * k, 13 - k, eye);
+    // Mandibles and the lower respirator grille.
+    put(Math.round(11.5 + side * 5), 18, dead ? GREY : HUNT_BRASS);
+    for (let y = 20; y < 25; y++) {
+      put(Math.round(11.5 + side * (5 - Math.floor((y - 20) / 2))), y, dead ? GREY : HUNT_BRASS);
+    }
+  }
+  box(9, 18, 6, 1, LINE);
+  box(9, 20, 6, 1, dead ? GREY : HUNT_BRASS);
+  for (let i = 0; i < Math.min(level, 4); i++) put(7 + i * 2, 10 + (i % 2) * 3, dead ? GREY : BLOOD);
+  if (e == EXPR.SHOUT || e == EXPR.OUCH) box(10, 22, 4, 2, LINE);
+  return (sprites[n + FRAMES * LOOK.HUNTER] = p);
 };
 
 /**

@@ -43,7 +43,7 @@ import { createDoors } from './doors';
 import { createEffects } from './effects';
 import { flagDraws } from './flag';
 import { createFoley } from './foley';
-import { mood } from './face';
+import { GLOW, LOOK, PALETTE, FW, FH, mood, sprite } from './face';
 import { dashing, felled, strain } from './expression';
 import { COMM, GLORY_ACT, HUD_CSS, OUT_HINT, boarding, createHud, kmh } from './hud';
 import type { Summary } from './hud';
@@ -667,7 +667,18 @@ const play = (
         if (!face) {
           face = document.createElement('canvas');
           face.width = face.height = COMM;
-          if (rd.portrait(face, p, info.body ?? 0, color, look, FACE)) {
+          if (roleOf(info.role, world.def) == ROLE.HUNTER) {
+            face.width = FW;
+            face.height = FH;
+            const g = face.getContext('2d');
+            if (g) {
+              const image = g.createImageData(FW, FH);
+              const pixels = new Uint32Array(image.data.buffer);
+              sprite(GLOW, LOOK.HUNTER).forEach((c, i) => (pixels[i] = PALETTE[c]));
+              g.putImageData(image, 0, 0);
+              faces.set(key, face);
+            }
+          } else if (rd.portrait(face, p, info.body ?? 0, color, look, FACE)) {
             faces.set(key, face);
           }
         }

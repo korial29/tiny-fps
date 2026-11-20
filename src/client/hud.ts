@@ -301,6 +301,12 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
     'Melee only. No armour or vehicles.',
     'Every map',
   ],
+  [
+    'Hunter',
+    'An armored alien hunter with thermal and xenomorph detection visions, a harpoon, wrist blades, a returning disc and an assisted shoulder laser.',
+    'Class weapons and vision are being added in stages.',
+    'Every map',
+  ],
 ];
 
 /** A skin tone (TONES, linear) as a CSS colour. */
@@ -725,7 +731,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         return b;
       }),
     );
-  /** Each group's pick lit and in the Tab order; with none, its first is. The ninja's hood hides the hair: no haircut to pick; the xenomorph has none of the three. */
+  /** Each group's pick lit and in the Tab order; with none, its first is. */
   const lit = () => {
     KEYS.forEach((k, g) => {
       const on = picked[k] ?? -1;
@@ -964,8 +970,9 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       picked = { ...c, body: +!!body };
       radios(3).forEach((b, i) => (b.hidden = b.disabled = !!roles && !roles.includes(i)));
       lit();
-      // The face's look: the man's, the woman's, or the xenomorph's head (face.ts).
-      const look = c.role === ROLE.XENO ? LOOK.XENO : +!!body;
+      // The face's look: the man's, the woman's, the xenomorph's or the Hunter's head (face.ts).
+      const look =
+        c.role === ROLE.XENO ? LOOK.XENO : c.role === ROLE.HUNTER ? LOOK.HUNTER : +!!body;
       if (look != fem) {
         [fem, shown] = [look, -1];
       }

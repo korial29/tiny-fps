@@ -1,5 +1,9 @@
 # Rooftop CTF
 
+The Hunter class addition requested on 2026-11-20 is planned in [HUNTER.md](HUNTER.md). It adds
+Predator-inspired weapons and vision as a class feature; the existing rooftop CTF rules remain
+unchanged for other classes.
+
 A new direction, set by the user on 2026-11-05: an open-air capture-the-flag game between two teams of players, inspired by Mirror's Edge. The parkour movement and the character come first. There are no CPU enemies, no campaign levels and no weapons: a carrier is stopped by a tackle.
 
 [PARITY.md](PARITY.md) and [GRAPHICS.md](GRAPHICS.md) record the work that came before. The renderer (lights, shadows, bloom, materials), the netcode (prediction, lag compensation), the sound and the HUD carry over.

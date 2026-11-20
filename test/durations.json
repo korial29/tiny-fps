@@ -80,6 +80,7 @@
   "src/client/store.test.ts": 0.5,
   "src/client/street.test.ts": 2.2,
   "src/client/tackle.test.ts": 7.1,
+  "src/client/targeting.test.ts": 0,
   "src/client/taunt.test.ts": 0,
   "src/client/textures.test.ts": 0.9,
   "src/client/traffic.test.ts": 15.5,

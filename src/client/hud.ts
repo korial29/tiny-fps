@@ -246,7 +246,6 @@ export const HUD_CSS =
   // A glory kill on offer swells and shrinks, in red, to make the player take it.
   `samp.g{background:#600c;box-shadow:0 0 0 2px #f53;animation:urge .7s infinite alternate}samp.g var{background:#f53}` +
   `@keyframes urge{to{transform:translateX(-50%) scale(1.14)}}` +
-  `q{width:26px;height:26px;margin:-13px 0 0 -13px;border:2px solid #5f8;border-radius:50%;box-shadow:0 0 6px #3f6,inset 0 0 4px #3f6;background:radial-gradient(#afc 0 1.5px,#0000 2px)}q::before,q::after{content:none}` +
   `cite{right:12px;bottom:10px;font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}cite small{margin-left:6px;font-size:14px}` +
   // Out of the head (at the wheel, or watching a glory kill): no crosshair, no gun, no visor.
   `div.v>i,.v dl,.v del,div.o>i,.o dl,.o del{display:none}` +

@@ -6,14 +6,12 @@ import {
   NADE,
   LOCK_WIN,
   PLAYER_H,
-  PLAYER_R,
   TICK_HZ,
   VEHICLE,
 } from '../shared/constants';
 import { sabering } from '../shared/gun';
 import { mapKey, mapOf } from '../shared/maps';
-import { bruise, eyeHeight, heightOf } from '../shared/physics';
-import { cylinder } from '../shared/plasma';
+import { bruise, eyeHeight } from '../shared/physics';
 import { FRAG, decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
 import type { ClientText, ServerText } from '../shared/protocol';
 import { EV, FLAG, KEY, MODE } from '../shared/types';
@@ -24,10 +22,10 @@ import { TONES, toneOf } from './features';
 import { styleOf } from './hair';
 import { shaved } from './skin';
 import { SONGS, SOUND } from './sfx';
-import { aimOf, gap2, struck } from '../shared/rover';
+import { gap2 } from '../shared/rover';
 import { SHIP, altitude, limits } from '../shared/ship';
 import { PHASE, inside } from '../shared/station';
-import { build, hidden, ray } from '../shared/world';
+import { build, hidden } from '../shared/world';
 import { createAnnouncer } from './announce';
 import { TAUNT_LATE, createTaunts, speakerOf } from './taunt';
 import { LINE, SAID } from './voice/clips';
@@ -60,6 +58,8 @@ import { packsOf } from './props';
 import { FACE, HEAD, createRenderer } from './render';
 import { STEPS, createLoader } from './loading';
 import { createWrecks } from './wreck';
+import type { createTargeting } from './targeting';
+import { targetingPhysics } from './targeting-physics';
 import type { Renderer } from './render';
 
 export type { PlayerInfo, SocketLike } from '../shared/types';
@@ -260,6 +260,12 @@ const play = (
   let started = false;
 
   const world = build(mapOf(key));
+  let targeting: ReturnType<typeof createTargeting> | undefined;
+  if (world.def.rovers?.length || world.def.ships?.length) {
+    import('./targeting')
+      .then(({ createTargeting }) => (targeting = createTargeting(screen, world, targetingPhysics)))
+      .catch(() => {});
+  }
   const predictor = createPredictor(world);
   const audio = createAudio(undefined, undefined, SONGS[key]);
   audio.mute(savedMute());
@@ -936,22 +942,19 @@ const play = (
       if (step < STEPS.length) {
         progress((step = STEPS.length));
       }
-      // The reticle: where the lasers cross, on what the look meets as the host's sight() does
-      // (a wall, another vehicle, a runner who is up), or along the look.
-      if (car) {
-        const hulls = rovers.filter(r => r !== car && !r.wreck);
-        const up = others.filter(p => !p.down && p.mode !== MODE.RIDE);
-        const [x, y, z] = aimOf(car, ctl.yaw, ctl.pitch, (o, d, m) =>
-          Math.min(
-            ray(world, o, d, m),
-            ...hulls.map(r => struck(r, o, d, m)),
-            ...up.map(p => cylinder(o, d, p, PLAYER_R, heightOf(p))),
-          ),
-        );
-        hud.aim(rd.project(x, y, z));
-      } else {
-        hud.aim();
-      }
+      hud.aim(
+        targeting?.frame(
+          car?.ship && (car.wreck || me.down || spy || match?.over) ? undefined : car,
+          ctl,
+          pov,
+          canvas.width / canvas.height,
+          rd.project,
+          rovers,
+          others,
+          you.team,
+          team,
+        ),
+      );
       botcam.draw(rd.project, id => names.get(id) ?? '?');
     }
     // The health of the vehicle he sits in, and of the nearest other one within NEAR_HULL metres in sight.

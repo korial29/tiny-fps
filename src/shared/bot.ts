@@ -33,6 +33,8 @@ export interface Seen {
   id: number;
   team: number;
   state: PlayerState;
+  /** A bot: one the team's roles are handed out to (squad()). */
+  bot?: boolean;
 }
 
 /** What a bot knows each tick. */
@@ -47,6 +49,8 @@ export interface Sight {
   errand?: Errand;
   /** The numbers of its class (kit.ts): the marine's when absent. */
   kit?: Kit;
+  /** The health packs there now, not taken. */
+  packs?: readonly Vec3[];
   /** The bots that shot to hit each enemy last tick, by the enemy's id (Bot.hunting): TOKENS of them hit, the others miss. */
   hunters?: ReadonlyMap<number, readonly number[]>;
 }
@@ -188,8 +192,72 @@ const DASH_FAR = 8;
 const DASH_GAP = 120;
 /** Metres of floor a bot wants on the side it strafes to. */
 const SIDE = 1.5;
-/** The bots whose id is GUARD - 1 modulo GUARD stay home. */
-const GUARD = 8;
+/** Health a player is in trouble at or under, and metres off him an enemy makes it trouble. */
+const LOW = 3;
+const NEAR = 12;
+/** Metres a bot goes out of its way to a health pack when it is in trouble, or to help a teammate. */
+const MEND = 30;
+const HELP = 40;
+
+/** What a bot of a team does, handed out by squad(). */
+type Role = 'chase' | 'return' | 'escort' | 'help' | 'guard' | 'attack';
+
+/**
+ * The roles of a team's bots this tick, the same in every bot's head (they see the same team):
+ * the nearest to each job takes it, the most pressing jobs first. Half the team or more chase the
+ * enemy who has the flag (all but an escort when ours has theirs too: no capture till ours is
+ * home), one or two return a lying flag, two escort the carrier, one goes to a teammate an enemy
+ * is on while he is low, one guards home in a squad of three or more, and the rest attack.
+ */
+export const squad = (
+  team: number,
+  players: readonly Seen[],
+  flags: readonly FlagState[],
+  world: World,
+): { roles: Map<number, Role>; trouble?: Seen } => {
+  const [mine, theirs] = [flags[team], flags[1 - team]];
+  const roles = new Map<number, Role>();
+  const up = players.filter(o => !o.state.down);
+  const by = (id: number) => up.find(o => o.id === id);
+  const ours = theirs.state === FLAG.CARRIED ? by(theirs.by) : undefined;
+  const enemy = mine.state === FLAG.CARRIED ? by(mine.by) : undefined;
+  // A teammate low with an enemy on him: the lowest first. He is given no job.
+  const trouble = up
+    .filter(o => o.team === team && o.state.hp <= LOW)
+    .filter(o =>
+      up.some(f => f.team !== team && flat(f.state.x, f.state.z, o.state.x, o.state.z) < NEAR),
+    )
+    .sort((a, b) => a.state.hp - b.state.hp)[0];
+  // Sorted by id, so a tie goes the same way in every head (the sort keeps the order).
+  const free = up
+    .filter(o => o.team === team && o.bot && o !== ours && o !== trouble)
+    .sort((a, b) => a.id - b.id);
+  const n = free.length;
+  const take = (role: Role, count: number, x: number, z: number, far = Infinity) =>
+    free
+      .filter(o => !roles.has(o.id) && flat(o.state.x, o.state.z, x, z) < far)
+      .sort((a, b) => flat(a.state.x, a.state.z, x, z) - flat(b.state.x, b.state.z, x, z))
+      .slice(0, count)
+      .forEach(o => roles.set(o.id, role));
+  if (enemy) {
+    take('chase', ours ? Math.max(1, n - 1) : Math.ceil(n / 2), enemy.state.x, enemy.state.z);
+  }
+  if (mine.state === FLAG.DROPPED) {
+    take('return', n >= 4 ? 2 : 1, mine.x, mine.z);
+  }
+  if (ours) {
+    take('escort', 2, ours.state.x, ours.state.z);
+  }
+  if (trouble) {
+    take('help', 1, trouble.state.x, trouble.state.z, HELP);
+  }
+  if (n >= 3 && !enemy) {
+    const [x, , z] = world.def.teams[team].base;
+    take('guard', 1, x, z);
+  }
+  free.forEach(o => roles.has(o.id) || roles.set(o.id, 'attack'));
+  return { roles, trouble };
+};
 
 const flat = (ax: number, az: number, bx: number, bz: number): number =>
   Math.sqrt((bx - ax) ** 2 + (bz - az) ** 2);
@@ -548,34 +616,40 @@ export class Bot {
       this.why = 'hunt';
       return at(prey.state);
     }
-    if (mine.state === FLAG.CARRIED) {
-      const h = holder(mine);
-      if (h) {
-        this.why = 'chase carrier';
-        return h;
+    const { roles, trouble } = squad(team, [{ ...me, bot: true }, ...others], flags, world);
+    const role = roles.get(me.id);
+    // Low itself, a pack close by: mended first, but for the chase of our flag.
+    if (p.hp <= LOW && role !== 'chase') {
+      const pack = s.packs
+        ?.map(q => [q, flat(p.x, p.z, q[0], q[2])] as const)
+        .filter(([, d]) => d < MEND)
+        .sort((a, b) => a[1] - b[1])[0];
+      if (pack) {
+        this.why = 'health';
+        return pack[0];
       }
     }
-    if (mine.state === FLAG.DROPPED) {
+    const h = role === 'chase' ? holder(mine) : role === 'escort' ? holder(theirs) : undefined;
+    if (h) {
+      this.why = role === 'chase' ? 'chase carrier' : 'escort';
+      return h;
+    }
+    if (role === 'return') {
       this.why = 'return flag';
       return [mine.x, mine.y, mine.z];
     }
-    if (this.id % GUARD === GUARD - 1) {
+    if (role === 'help' && trouble) {
+      this.why = 'help';
+      return at(trouble.state);
+    }
+    if (role === 'guard') {
       this.why = 'guard';
       return home.base;
     }
-    if (theirs.state === FLAG.CARRIED) {
-      const h = holder(theirs);
-      if (h) {
-        this.why = 'escort';
-        return h;
-      }
-    }
-    if (theirs.state === FLAG.DROPPED) {
-      this.why = 'take flag';
-      return [theirs.x, theirs.y, theirs.z];
-    }
     this.why = 'take flag';
-    return world.def.teams[1 - team].base;
+    return theirs.state === FLAG.DROPPED
+      ? [theirs.x, theirs.y, theirs.z]
+      : world.def.teams[1 - team].base;
   }
 
   private plan(w: World, p: PlayerState, goal: Vec3): void {
@@ -890,6 +964,11 @@ export class Bot {
     }
     const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
     const carrier = flags[me.team].state === FLAG.CARRIED ? flags[me.team].by : -1;
+    const theirs = flags[1 - me.team];
+    const mates = others
+      .filter(o => o.team === me.team && !o.state.down)
+      .filter(o => o.state.hp <= LOW || (theirs.state === FLAG.CARRIED && theirs.by === o.id))
+      .map(o => o.state);
     let foe: Seen | undefined;
     let best = Infinity;
     for (const o of others) {
@@ -898,8 +977,9 @@ export class Bot {
         continue;
       }
       const d = flat(p.x, p.z, q.x, q.z);
-      // The one who has our flag first, then the nearest.
-      const score = o.id === carrier ? d - RANGE : d;
+      // The one who has our flag first, then one on a teammate who carries theirs or is low, then the nearest.
+      const onMate = mates.some(m => flat(m.x, m.z, q.x, q.z) < NEAR);
+      const score = o.id === carrier ? d - RANGE : onMate ? d - RANGE / 2 : d;
       // It sees ahead of its look and hears close by; the one it fights it follows round.
       const ahead = Math.abs(turn(p.yaw, toward(p.x, p.z, q.x, q.z))) < VIEW;
       const noticed = o.id === this.foe || d < HEAR || ahead;

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Bot, personaOf } from './bot';
+import { Bot, personaOf, squad } from './bot';
+import type { Seen } from './bot';
 import { KITS, ROLE } from './kit';
 import type { Kit } from './kit';
 import { HIGHLINE } from './map';
@@ -680,5 +681,94 @@ describe('Bot: a fair fight', () => {
     // Two of higher ids give way to it.
     const free = shots({ id: 5 }, new Map([[9, [7, 8]]])).slice(warn);
     expect(free.reduce((a, b) => a + b, 0) / free.length).toBeLessThan(0.06);
+  });
+});
+
+describe('Bot: team play', () => {
+  const world = build({
+    brushes: [{ min: [-50, -5, -50], max: [50, 0, 50], top: TEX.TILE, side: TEX.TILE }],
+    teams: [
+      { base: [0, 0, 40], spawns: [[0, 0, 10, 0]] },
+      { base: [0, 0, -40], spawns: [[0, 0, -10, Math.PI]] },
+    ],
+    floor: -20,
+    sun: { dir: [0, 1, 0], color: [1, 1, 1] },
+    sky: [
+      [0, 0, 1],
+      [1, 1, 1],
+    ],
+  });
+  const home: FlagState = { state: FLAG.HOME, by: 0, x: 0, y: 0, z: 0, left: 0 };
+  const carried = (by: number): FlagState => ({ ...home, state: FLAG.CARRIED, by });
+  /** A player of `team` at (x, z), a bot unless said. */
+  const at = (id: number, team: number, x: number, z: number, more: Partial<Seen> = {}): Seen => ({
+    id,
+    team,
+    state: { ...spawn(team, world, id, team), x, z, ammo: 10, mag: 5 },
+    bot: true,
+    ...more,
+  });
+  // Four red bots strung along x at z 0, two blue ones.
+  const reds = () => [at(0, 0, -30, 0), at(1, 0, -10, 0), at(2, 0, 10, 0), at(3, 0, 30, 0)];
+
+  it('sends the half of the team nearest to the enemy who has our flag after him, the rest on', () => {
+    const blue = at(9, 1, 35, 5);
+    const { roles } = squad(0, [...reds(), blue], [carried(9), home], world);
+    expect([0, 1, 2, 3].map(id => roles.get(id))).toEqual(['attack', 'attack', 'chase', 'chase']);
+  });
+
+  it('chases with all but an escort when both flags are out: no capture till ours is home', () => {
+    const team = [...reds(), at(4, 0, 0, 20)];
+    const { roles } = squad(0, [...team, at(9, 1, 35, 5)], [carried(9), carried(4)], world);
+    expect([0, 1, 2, 3].map(id => roles.get(id)).sort()).toEqual([
+      'chase',
+      'chase',
+      'chase',
+      'escort',
+    ]);
+    // The carrier has none: he runs home.
+    expect(roles.has(4)).toBe(false);
+  });
+
+  it('escorts its carrier with the two nearest, guards home with one', () => {
+    const team = [...reds(), at(4, 0, 12, 0)];
+    const { roles } = squad(0, team, [home, carried(4)], world);
+    // The carrier at x 12: bots 2 (x 10) and 3 (x 30); bot 1 is the nearest left to red's base.
+    expect([0, 1, 2, 3].map(id => roles.get(id))).toEqual(['attack', 'guard', 'escort', 'escort']);
+  });
+
+  it('sends the nearest free bot to a teammate who is low with an enemy on him', () => {
+    const human = at(5, 0, 20, 10, { bot: undefined });
+    human.state.hp = 2;
+    const { roles, trouble } = squad(0, [...reds(), human, at(9, 1, 25, 12)], [home, home], world);
+    expect(trouble?.id).toBe(5);
+    expect([...roles].filter(([, r]) => r === 'help')).toEqual([[2, 'help']]);
+    // Healthy again: no help.
+    human.state.hp = 8;
+    expect([
+      ...squad(0, [...reds(), human, at(9, 1, 25, 12)], [home, home], world).roles.values(),
+    ]).not.toContain('help');
+  });
+
+  it('goes for a health pack close by when it is low', () => {
+    const bot = new Bot(0);
+    const me = at(0, 0, 0, 10);
+    me.state.hp = 2;
+    bot.think({ me, others: [], flags: [home, home], world, packs: [[8, 0, 10]] });
+    expect(bot.view().why).toBe('health');
+    me.state.hp = 8;
+    bot.think({ me, others: [], flags: [home, home], world, packs: [[8, 0, 10]] });
+    expect(bot.view().why).toBe('take flag');
+  });
+
+  it('fights the enemy on its carrier before a nearer one', () => {
+    const bot = new Bot(0);
+    const me = at(0, 0, 0, 10);
+    const carrier = at(4, 0, 6, -8, { bot: undefined });
+    // A blue 8 m ahead, and one 4 m off the carrier, 18 m ahead.
+    const near = at(8, 1, -2, 2);
+    const onHim = at(9, 1, 6, -6);
+    bot.think({ me, others: [carrier, near, onHim], flags: [home, carried(4)], world });
+    expect(bot.view().foe).toBe(9);
   });
 });

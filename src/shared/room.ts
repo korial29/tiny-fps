@@ -1767,7 +1767,14 @@ export class Room {
 
   /** Each bot's input of this tick, applied as a client's would be on arrival. */
   private think(players: Player[]): void {
-    const others = players.map(q => ({ id: q.info.id, team: q.info.team, state: q.state }));
+    const others = players.map(q => ({
+      id: q.info.id,
+      team: q.info.team,
+      state: q.state,
+      ...(q.bot ? { bot: true } : {}),
+    }));
+    const { packs = [] } = this.world.def;
+    const health = packs.filter((_, k) => !this.gone[k]);
     const errands = this.errands(players);
     // Who shot to hit whom last tick: a few of them hit, the others shoot past (bot.ts, TOKENS).
     const hunters = new Map<number, number[]>();
@@ -1788,6 +1795,7 @@ export class Room {
           errand: errands.get(p.info.id),
           kit: this.kit(p),
           hunters,
+          packs: health,
         });
         p.seq = ((p.seq ?? -1) + 1) & 0xffff;
         // Built only for a bot someone watches.

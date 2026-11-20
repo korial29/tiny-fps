@@ -27,7 +27,7 @@ worth taking, what tiny-fps took, and what is left.
 | Moving in a fight      | `dodge()`: it strafes one way for a while, then the other, never toward a drop; now and then it jumps or dashes aside.                                                                                                                                                                                       |
 | Reach specs, JumpSpots | A navigation mesh (`nav.ts`): the brushes' tops and the relief as rectangles, joined by portals a body walks, drops or hops through; `routes.ts`'s legs and the moon's `CROSSINGS` as links (a jump, a dash, a double jump, a wall-run, as the tests fly them). A* then the funnel.                          |
 | AlternatePaths         | each bot prefers one of a map's three routes (`ROUTES`), by its id.                                                                                                                                                                                                                                          |
-| Squads                 | one bot in eight guards its base; the others attack, chase the enemy carrier, return a lying flag; the carrier runs rather than fights.                                                                                                                                                                      |
+| Squads                 | `squad()`: roles handed out by the team's numbers each tick (below); the carrier runs rather than fights.                                                                                                                                                                                                    |
 | Moving about           | `walk()`: round a wall or a drop by the nearest open turn, onto a box low enough to jump, a dash where the way ahead is long, straight and wide, the look turning a little each tick.                                                                                                                        |
 
 ## Fair fights (the user, 2026-11-20: they were too good)
@@ -52,13 +52,36 @@ On 8 bot-only matches against master: Highline's accuracy 62 % to 32 % (28 % at 
 7), frags 87 to 39 a match, captures 6.6 to 10.6; Tranquility's 53 % to 27 %, frags 95 to 33,
 captures 11.6 to 20.3. The bench counts the shots, the hits and the frags.
 
+## Team play (the user, 2026-11-20: to make up for the aim)
+
+`squad()` in `bot.ts` hands out a role to each bot of a team every tick. Every bot works it out
+from the same team, so they agree with no message. The nearest bot to a job takes it, the most
+pressing jobs first:
+
+- **chase**: half the team or more go after the enemy who has our flag. When we also have theirs,
+  all but one escort chase him: there is no capture till ours is home.
+- **return**: one bot (two in a squad of four or more) sends a lying flag home.
+- **escort**: the two nearest go with our carrier.
+- **help**: the nearest bot within `HELP` (40 m) goes to a teammate, a person or a bot, who is
+  `LOW` (3 hp or less) with an enemy within `NEAR` (12 m) of him.
+- **guard**: one bot stays home in a squad of three or more, while our flag is home.
+- **attack**: the rest go for their flag.
+
+A bot that is low goes for a health pack within `MEND` (30 m) first, unless it chases our flag
+(`Sight.packs`, the ones there). In a fight it shoots first the one who has our flag, then one on
+a teammate who carries theirs or is low, then the nearest.
+
+Against the same bots with the old goals, aim being equal (8 matches, sides swapped each match):
+57 captures to 30 on Highline, 106 to 45 on Tranquility. In bot-only matches flags are taken more
+(28 to 43 a match on Highline) and come back more. The bench's blocks go up (17 to 56): the guard
+stands at home.
+
 ## What is left, by cost
 
-1. **Squad roles and defence points** (cheap). Attack, defend and freelance by the team's numbers
-   rather than by id; defenders spread over a few points per base with a view of the flag, not all
-   on it; an escort for the carrier.
-2. **Items** (cheap). Health packs when hurt, ammo packs when low, the other racks (rail gun,
-   rifle, katana) when the way passes near.
+1. **Defence points** (cheap). The guard spreads over a few points per base with a view of the
+   flag, not on it.
+2. **Items** (cheap). Ammo packs when low, armour, the other racks (rail gun, rifle, katana) when
+   the way passes near.
 3. **Weapons** (medium). The katana at close range, the rifle's grenade at a group, aimed at the
    feet; the rail gun at range.
 4. **Memory and hearing** (medium). Hunt where an enemy was last seen; turn to a shot heard.

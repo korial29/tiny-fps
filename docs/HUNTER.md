@@ -1,7 +1,7 @@
 # Hunter
 
 Le modèle 3D du Hunter est considéré comme déjà créé. Ce plan couvre son intégration jouable
-dans `tiny-fps`, inspirée d’*Aliens versus Predator* (1999). Les armes et la vision doivent être
+dans `tiny-fps`, inspirée d’_Aliens versus Predator_ (1999). Les armes et la vision doivent être
 résolues par l’hôte et prédites par le client, comme le reste du combat.
 
 ## Étapes PR
@@ -11,8 +11,8 @@ fusionnée.
 
 1. **Socle, menus et portrait** — rôle réseau stable sur toutes les cartes; choix dans le menu;
    portrait pixel-art dans le HUD et la radio. (PR #334)
-2. **Lames de poignet** — commencer avec l’arme de mêlée; réutiliser les règles partagées de
-   frappe et de prédiction. Le profil de combat suit la lame déjà implémentée.
+2. **Lames de poignet** — commencer avec les lames; dessin dédié sur le bras local et les autres
+   joueurs, avec les règles partagées de frappe et de prédiction.
 3. **Harpon** — projectile résolu par l’hôte, prédit côté client, avec impacts et munitions.
 4. **Disque volant** — projectile qui revient au lanceur, avec états réseau et récupération.
 5. **Laser d’épaule** — tir avec assistance de visée bornée, validé côté hôte.
@@ -30,7 +30,7 @@ les visions ne doivent pas transmettre aux autres clients des informations de ci
 ## État
 
 - [x] PR #334 : rôle, menus, disponibilité sur les cartes et portrait pixel-art HUD/radio.
-- [x] PR 2 : commence avec les lames de poignet, via les règles de mêlée et de prédiction existantes.
+- [x] PR 2 : lames doubles sur le poignet, visibles en première et troisième personne; combat mêlée partagé et prédit.
 - [ ] PR 3 : harpon.
 - [ ] PR 4 : disque volant.
 - [ ] PR 5 : laser d’épaule.

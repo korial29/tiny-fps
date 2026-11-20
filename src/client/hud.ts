@@ -218,7 +218,7 @@ export const HUD_CSS =
   // The armour: gold pips after the health, only the ones there.
   `ul li.a{background:#fc3}li.a.e{display:none}li:not(.a)+li.a{margin-left:6px}` +
   `dl{right:12px;bottom:10px;display:flex;align-items:center;gap:10px}dl svg{width:38px;fill:#fff;filter:drop-shadow(0 1px 1px #000)}` +
-  `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data,dl.k span,dl.b :is(svg,data,span){display:none}dl.w data{opacity:.35}dl.k svg{width:64px;fill:#8ef}dl.r svg{fill:#c9f}dl.r data{color:#dcf}dl.f svg{fill:#f86}dl.f data{color:#fdb}dl span::first-line{font-size:22px}` +
+  `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data,dl.k span,dl.b>:not(small){display:none}dl.w data{opacity:.35}dl.k svg{width:64px;fill:#8ef}dl.r svg{fill:#c9f}dl.r data{color:#dcf}dl.f svg{fill:#f86}dl.f data{color:#fdb}dl span::first-line{font-size:22px}` +
   `dl small{position:absolute;bottom:100%;right:0;display:flex;gap:10px;font-size:11px;white-space:nowrap}dl kbd{font:inherit;opacity:.5}dl kbd.a{opacity:1}` +
   `dl data{font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}dl.e data{color:#f66}` +
   `s{left:50%;top:50%;width:28px;height:28px;margin:-14px 0 0 -14px;` +

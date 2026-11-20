@@ -53,6 +53,8 @@ export interface Sight {
   packs?: readonly Vec3[];
   /** The bots that shot to hit each enemy last tick, by the enemy's id (Bot.hunting): TOKENS of them hit, the others miss. */
   hunters?: ReadonlyMap<number, readonly number[]>;
+  /** Its team's roles this tick, worked out once by the room for all its bots: squad()'s when absent. */
+  squad?: Squad;
 }
 
 export type Intent = { keys: number; yaw: number; pitch: number };
@@ -202,6 +204,12 @@ const HELP = 40;
 /** What a bot of a team does, handed out by squad(). */
 type Role = 'chase' | 'return' | 'escort' | 'help' | 'guard' | 'attack';
 
+/** A team's roles, and the teammate in trouble the 'help' role goes to. */
+export interface Squad {
+  roles: ReadonlyMap<number, Role>;
+  trouble?: Seen;
+}
+
 /**
  * The roles of a team's bots this tick, the same in every bot's head (they see the same team):
  * the nearest to each job takes it, the most pressing jobs first. Half the team or more chase the
@@ -214,7 +222,7 @@ export const squad = (
   players: readonly Seen[],
   flags: readonly FlagState[],
   world: World,
-): { roles: Map<number, Role>; trouble?: Seen } => {
+): Squad => {
   const [mine, theirs] = [flags[team], flags[1 - team]];
   const roles = new Map<number, Role>();
   const up = players.filter(o => !o.state.down);
@@ -616,7 +624,8 @@ export class Bot {
       this.why = 'hunt';
       return at(prey.state);
     }
-    const { roles, trouble } = squad(team, [{ ...me, bot: true }, ...others], flags, world);
+    const { roles, trouble } =
+      s.squad ?? squad(team, [{ ...me, bot: true }, ...others], flags, world);
     const role = roles.get(me.id);
     // Low itself, a pack close by: mended first, but for the chase of our flag.
     if (p.hp <= LOW && role !== 'chase') {
@@ -1030,7 +1039,8 @@ export class Bot {
     // Shots past him first, and past him too when TOKENS of its team already shoot to hit him.
     const hunters = s.hunters?.get(foe.id) ?? [];
     const before = hunters.filter(id => id !== this.id && id < this.id).length;
-    const warning = p.shots - this.shot < this.warned;
+    // shots is a byte: the count since the first look wraps with it.
+    const warning = ((p.shots - this.shot) & 255) < this.warned;
     const hit = !warning && before < TOKENS;
     // A shot meant to miss leaves the wander out: on the wrong side it would put it on him.
     const off = hit ? this.err : this.past * Math.atan2(PAST, Math.max(d, 1));
@@ -1046,7 +1056,8 @@ export class Bot {
     const armed = p.ammo > 0 && (p.mag ?? 0) > 0 && !p.wield;
     // The gun fires on letting go: a tap, held one step in two.
     const pull = (armed && d < RANGE) || (!armed && d < 1.4);
-    if (!warning) {
+    // Only a bot that shoots holds a token: one empty or still turning leaves it to a teammate.
+    if (!warning && ready && pull) {
       this.hunting = foe.id;
     }
     return { keys: ready && pull && this.ticks & 1 ? FIRE : 0 };

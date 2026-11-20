@@ -614,7 +614,7 @@ describe('Bot: a fair fight', () => {
    * `ticks`: the player stands still at (x, z), 10 m ahead by default.
    */
   const shots = (
-    o: { x?: number; z?: number; yaw?: number; id?: number; ticks?: number } = {},
+    o: { x?: number; z?: number; yaw?: number; id?: number; ticks?: number; fired?: number } = {},
     hunters?: ReadonlyMap<number, readonly number[]>,
     bot = new Bot(o.id ?? 0, 7),
   ): number[] => {
@@ -622,7 +622,7 @@ describe('Bot: a fair fight', () => {
     const me = {
       id,
       team: 0,
-      state: { ...spawn(0, world, 0, 0), yaw: o.yaw ?? 0, ammo: 60, mag: 30 },
+      state: { ...spawn(0, world, 0, 0), yaw: o.yaw ?? 0, ammo: 60, mag: 30, shots: o.fired ?? 0 },
     };
     const [x, z] = [o.x ?? 0, o.z ?? 0];
     const foe = { id: 9, team: 1, state: { ...spawn(1, world, 0, 1), x, z } };
@@ -633,7 +633,7 @@ describe('Bot: a fair fight', () => {
       me.state.yaw = i.yaw;
       me.state.held = 0;
       if (i.keys & KEY.FIRE) {
-        me.state.shots++;
+        me.state.shots = (me.state.shots + 1) & 255;
         offs.push(Math.abs(Math.atan2(Math.sin(i.yaw - want), Math.cos(i.yaw - want))));
       }
     }
@@ -648,6 +648,29 @@ describe('Bot: a fair fight', () => {
     expect(offs.slice(0, warn).every(a => a > 0.12)).toBe(true);
     const rest = offs.slice(warn);
     expect(rest.reduce((a, b) => a + b, 0) / rest.length).toBeLessThan(0.06);
+  });
+
+  it('stops warning after its first shots when its shot count wraps past 255', () => {
+    const { warn } = personaOf(0, 7);
+    const offs = shots({ fired: 254 });
+    expect(offs.length).toBeGreaterThan(warn + 5);
+    expect(offs.slice(0, warn).every(a => a > 0.12)).toBe(true);
+    const rest = offs.slice(warn);
+    expect(rest.reduce((a, b) => a + b, 0) / rest.length).toBeLessThan(0.06);
+  });
+
+  it('holds no token on an enemy while it turns to him', () => {
+    const bot = new Bot(0, 7);
+    shots({ ticks: 120 }, undefined, bot);
+    expect(bot.hunting).toBe(9);
+    // He steps round to its side, past its warning: until its aim is on him, a teammate hits him.
+    bot.think({
+      me: { id: 0, team: 0, state: { ...spawn(0, world, 0, 0), ammo: 60, mag: 30, shots: 60 } },
+      others: [{ id: 9, team: 1, state: { ...spawn(1, world, 0, 1), x: 8, z: 10 } }],
+      flags: [home, home],
+      world,
+    });
+    expect(bot.hunting).toBe(-1);
   });
 
   it('warns no enemy again that it has just fought', () => {
@@ -759,6 +782,21 @@ describe('Bot: team play', () => {
     me.state.hp = 8;
     bot.think({ me, others: [], flags: [home, home], world, packs: [[8, 0, 10]] });
     expect(bot.view().why).toBe('take flag');
+  });
+
+  it('takes the role the room worked out for its team', () => {
+    const bot = new Bot(0);
+    const me = at(0, 0, 0, 10);
+    bot.think({ me, others: [], flags: [home, home], world });
+    expect(bot.view().why).toBe('take flag');
+    bot.think({
+      me,
+      others: [],
+      flags: [home, home],
+      world,
+      squad: { roles: new Map([[0, 'guard']]) },
+    });
+    expect(bot.view().why).toBe('guard');
   });
 
   it('fights the enemy on its carrier before a nearer one', () => {

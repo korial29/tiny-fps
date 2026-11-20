@@ -41,22 +41,24 @@ does, and tells a player he is under fire before it hits him. `fight()` in `bot.
 - **Warning shots.** Its first `warn` shots at a new enemy (1 to 4, fewer the higher the skill)
   pass `PAST` (1.6 m) beside him. An enemy it fought within `MEMORY` (3 s) gets none again.
 - **Attack tokens.** At most `TOKENS` (2) bots shoot to hit the same enemy; the others shoot past
-  him, the lowest ids first (`Bot.hunting`, `Sight.hunters`, built by the room from the last
-  tick). A player caught by four bots is not cut down in a tick.
+  him (`Bot.hunting`, `Sight.hunters`, built by the room from the last tick). Only a bot that
+  fires holds a token: not one with an empty gun, still reacting or still turning onto him. The
+  lowest ids keep them, so the same bots always shoot to hit; rotating them is left for later. A
+  player caught by four bots is not cut down in a tick.
 - **A hand, not a turret.** The aim wanders about the target (`shake`), the more as he crosses
   its view and as it moves (`CROSS`, 6 m/s doubles it); it reads his speed late (`track`) and
   leads him by a share of the ball's flight (`lead`); a shot meant to miss leaves the wander out.
 - **Slower.** The reaction is longer and the turn rate lower than before, and it dodges a ball less.
 
-On 8 bot-only matches against master: Highline's accuracy 62 % to 32 % (28 % at skill 0, 38 % at
-7), frags 87 to 39 a match, captures 6.6 to 10.6; Tranquility's 53 % to 27 %, frags 95 to 33,
-captures 11.6 to 20.3. The bench counts the shots, the hits and the frags.
+On 24 bot-only matches a map, the bots before these rules against the bots with them and with the
+team play below: Highline's accuracy 62 % to 29 %, frags 87 to 41 a match; Tranquility's 53 % to
+32 %, frags 96 to 34. The bench counts the shots, the hits and the frags.
 
 ## Team play (the user, 2026-11-20: to make up for the aim)
 
-`squad()` in `bot.ts` hands out a role to each bot of a team every tick. Every bot works it out
-from the same team, so they agree with no message. The nearest bot to a job takes it, the most
-pressing jobs first:
+`squad()` in `bot.ts` hands out a role to each bot of a team every tick. The room works it out
+once per team, before any bot moves, and hands it in (`Sight.squad`), so all of a team's bots go
+by the same roles. The nearest bot to a job takes it, the most pressing jobs first:
 
 - **chase**: half the team or more go after the enemy who has our flag. When we also have theirs,
   all but one escort chase him: there is no capture till ours is home.
@@ -64,22 +66,30 @@ pressing jobs first:
 - **escort**: the two nearest go with our carrier.
 - **help**: the nearest bot within `HELP` (40 m) goes to a teammate, a person or a bot, who is
   `LOW` (3 hp or less) with an enemy within `NEAR` (12 m) of him.
-- **guard**: one bot stays home in a squad of three or more, while our flag is home.
+- **guard**: one bot stays home in a squad of three or more, while our flag is home. It walks a
+  round about the flag (`patrol()`): up to `POSTS` (8) points `ROUND` (5 m) off it on the flag's
+  own floor, a stop of 1.5 to 3 s at each, clockwise or not by its id. Stood at a point it watches
+  the way in nearest its side, its look sweeping `SWEEP` (0.35 rad) either side: the ways in are
+  where the ways from the enemy's base, one by route, come within `ENTRY` (12 m) of the flag. On
+  Highline they come up the tower's sides, not from the enemy's end.
 - **attack**: the rest go for their flag.
 
 A bot that is low goes for a health pack within `MEND` (30 m) first, unless it chases our flag
 (`Sight.packs`, the ones there). In a fight it shoots first the one who has our flag, then one on
 a teammate who carries theirs or is low, then the nearest.
 
-Against the same bots with the old goals, aim being equal (8 matches, sides swapped each match):
-57 captures to 30 on Highline, 106 to 45 on Tranquility. In bot-only matches flags are taken more
-(28 to 43 a match on Highline) and come back more. The bench's blocks go up (17 to 56): the guard
-stands at home.
+Against the same bots with the old goals, aim being equal (24 matches a map, sides swapped each
+match): 156 captures to 93 on Highline (15 matches won, 9 lost), 321 to 127 on Tranquility (24
+won). In bot-only matches against the bots before, captures go 6.7 to 7.8 a match on Highline and
+11.6 to 16.3 on Tranquility, and flags are taken more (25 to 30, 32 to 56). Highline's blocks go 34
+to 66 a match: mostly a carrier waiting at home for his own flag with his escorts by him, and
+chasers walking at the foot of the tower the enemy carrier waits on (a stall of the way to a
+player up a tower, left for later).
 
 ## What is left, by cost
 
-1. **Defence points** (cheap). The guard spreads over a few points per base with a view of the
-   flag, not on it.
+1. **Defence points** (cheap). Several guards over points chosen per base, with a view of the
+   way in, rather than one round about the flag.
 2. **Items** (cheap). Ammo packs when low, armour, the other racks (rail gun, rifle, katana) when
    the way passes near.
 3. **Weapons** (medium). The katana at close range, the rifle's grenade at a group, aimed at the

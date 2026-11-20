@@ -10,7 +10,7 @@ import { move, spawn } from './physics';
 import { decodeSnapshot } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
-import { FLAG, KEY, MODE, TEX } from './types';
+import { EV, FLAG, KEY, MODE, TEX } from './types';
 import type { Conn, FlagState, Snapshot } from './types';
 import { build } from './world';
 import type { Brush, World, WorldDef } from './world';
@@ -614,7 +614,7 @@ describe('Bot: a fair fight', () => {
    * `ticks`: the player stands still at (x, z), 10 m ahead by default.
    */
   const shots = (
-    o: { x?: number; z?: number; yaw?: number; id?: number; ticks?: number } = {},
+    o: { x?: number; z?: number; yaw?: number; id?: number; ticks?: number; shots?: number } = {},
     hunters?: ReadonlyMap<number, readonly number[]>,
     bot = new Bot(o.id ?? 0, 7),
   ): number[] => {
@@ -622,7 +622,13 @@ describe('Bot: a fair fight', () => {
     const me = {
       id,
       team: 0,
-      state: { ...spawn(0, world, 0, 0), yaw: o.yaw ?? 0, ammo: 60, mag: 30 },
+      state: {
+        ...spawn(0, world, 0, 0),
+        yaw: o.yaw ?? 0,
+        ammo: 60,
+        mag: 30,
+        shots: o.shots ?? 0,
+      },
     };
     const [x, z] = [o.x ?? 0, o.z ?? 0];
     const foe = { id: 9, team: 1, state: { ...spawn(1, world, 0, 1), x, z } };
@@ -633,7 +639,8 @@ describe('Bot: a fair fight', () => {
       me.state.yaw = i.yaw;
       me.state.held = 0;
       if (i.keys & KEY.FIRE) {
-        me.state.shots++;
+        // A u8 on the wire, as step() counts it.
+        me.state.shots = (me.state.shots + 1) & 255;
         offs.push(Math.abs(Math.atan2(Math.sin(i.yaw - want), Math.cos(i.yaw - want))));
       }
     }
@@ -648,6 +655,29 @@ describe('Bot: a fair fight', () => {
     expect(offs.slice(0, warn).every(a => a > 0.12)).toBe(true);
     const rest = offs.slice(warn);
     expect(rest.reduce((a, b) => a + b, 0) / rest.length).toBeLessThan(0.06);
+  });
+
+  it('counts its warning shots across the wrap of the shot count', () => {
+    const offs = shots({ shots: 254 });
+    const { warn } = personaOf(0, 7);
+    expect(offs.slice(0, warn).every(a => a > 0.12)).toBe(true);
+    const rest = offs.slice(warn);
+    expect(rest.reduce((a, b) => a + b, 0) / rest.length).toBeLessThan(0.06);
+  });
+
+  it('holds no token while it still reacts to an enemy it meets again', () => {
+    const bot = new Bot(0, 7);
+    shots({ ticks: 120 }, undefined, bot);
+    expect(bot.hunting).toBe(9);
+    bot.think({
+      me: { id: 0, team: 0, state: spawn(0, world, 0, 0) },
+      others: [],
+      flags: [home, home],
+      world,
+    });
+    // Back in sight: no warning shot for him, but its reaction runs again before it shoots.
+    shots({ ticks: 1 }, undefined, bot);
+    expect(bot.hunting).toBe(-1);
   });
 
   it('warns no enemy again that it has just fought', () => {
@@ -750,6 +780,19 @@ describe('Bot: team play', () => {
     ]).not.toContain('help');
   });
 
+  it('takes the role the room hands it', () => {
+    const bot = new Bot(0);
+    const me = at(0, 0, 0, 10);
+    bot.think({
+      me,
+      others: [],
+      flags: [home, home],
+      world,
+      squad: { roles: new Map([[0, 'guard']]) },
+    });
+    expect(bot.view().why).toBe('guard');
+  });
+
   it('goes for a health pack close by when it is low', () => {
     const bot = new Bot(0);
     const me = at(0, 0, 0, 10);
@@ -771,4 +814,64 @@ describe('Bot: team play', () => {
     bot.think({ me, others: [carrier, near, onHim], flags: [home, carried(4)], world });
     expect(bot.view().foe).toBe(9);
   });
+});
+
+describe('Bot: the guard', () => {
+  for (const def of [HIGHLINE, MOON]) {
+    it(`walks a round about its flag on ${def.name}, watching the ways in at each point, never falling`, () => {
+      const world = build(def);
+      const home: FlagState = { state: FLAG.HOME, by: 0, x: 0, y: 0, z: 0, left: 0 };
+      for (const team of [0, 1]) {
+        const bot = new Bot(team ? 3 : 4);
+        const base = def.teams[team].base;
+        const me = {
+          id: team ? 3 : 4,
+          team,
+          state: {
+            ...spawn(team, world, 0, team),
+            x: base[0],
+            y: base[1],
+            z: base[2],
+            ammo: 10,
+            mag: 5,
+          },
+        };
+        const squad = { roles: new Map([[me.id, 'guard' as const]]) };
+        const posts = new Set<string>();
+        let far = 0;
+        // The ways in: where the ways from the enemy's base, one by route, come within 12 m.
+        const nav = navOf(world);
+        const ins = [-1, 0, 1, 2].map(r =>
+          [
+            def.teams[1 - team].base,
+            ...path(nav, world, def.teams[1 - team].base, base, r).map(st => st.to),
+          ]
+            .reverse()
+            .find(q => Math.hypot(q[0] - base[0], q[2] - base[2]) > 12)!,
+        );
+        let [watch, stood] = [0, 0];
+        for (let k = 0; k < 60 * 60; k++) {
+          const i = bot.think({ me, others: [], flags: [home, home], world, squad });
+          move(me.state, { ...i, seq: k & 0xffff }, world, team);
+          expect(me.state.ev & EV.RESPAWN).toBe(0);
+          far = Math.max(far, Math.hypot(me.state.x - base[0], me.state.z - base[2]));
+          posts.add(bot.view().path.at(-1)!.join());
+          if (k > 120 && Math.hypot(me.state.vx, me.state.vz) < 0.3) {
+            stood++;
+            // Its look within 0.7 rad of one of them (the sweep is 0.35 either side).
+            watch += +ins.some(
+              q =>
+                Math.cos(me.state.yaw - Math.atan2(-(q[0] - me.state.x), -(q[2] - me.state.z))) >
+                Math.cos(0.7),
+            );
+          }
+        }
+        expect(stood).toBeGreaterThan(600);
+        expect(watch / stood).toBeGreaterThan(0.8);
+        expect(posts.size).toBeGreaterThanOrEqual(4);
+        expect(far).toBeLessThan(8);
+        expect(far).toBeGreaterThan(3);
+      }
+    });
+  }
 });

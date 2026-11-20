@@ -290,12 +290,8 @@ export const step = (
   // the left with LEFT alone held, else from the right; a double click (SPECIAL with FIRE) cuts the
   // special of the cut the keys give.
   if (p.wield && i.keys & KEY.SPECIAL && !busy && !p.swing) {
-    p.cut =
-      i.keys & KEY.FIRE
-        ? cutOf(i.keys) + SPECIAL_CUT
-        : (i.keys & (KEY.LEFT | KEY.RIGHT)) === KEY.LEFT
-          ? CUT.ARC_L
-          : CUT.ARC_R;
+    const c = cutOf(i.keys);
+    p.cut = SPECIAL_CUT + (i.keys & KEY.FIRE || c == CUT.LEFT ? c : CUT.RIGHT);
     [p.swing, p.charge] = [CUTS[p.cut].ticks, 0];
     launch(p);
     return STRIKE.NONE;

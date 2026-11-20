@@ -4,50 +4,38 @@ Le modèle 3D du Hunter est considéré comme déjà créé. Ce plan couvre son 
 dans `tiny-fps`, inspirée d’*Aliens versus Predator* (1999). Les armes et la vision doivent être
 résolues par l’hôte et prédites par le client, comme le reste du combat.
 
-## Étapes
+## Étapes PR
 
-Chaque étape doit rester jouable et être livrée séparément.
+Chaque PR ajoute une capacité jouable et se base sur la précédente jusqu’à ce que la série soit
+fusionnée.
 
-1. **Socle de classe et présentation**
-   - Réserver un rôle réseau stable au Hunter, le proposer sur les cartes compatibles et le rendre
-     sélectionnable dans l’écran titre et le menu pause.
-   - Relier son modèle 3D existant à l’apparence du roster, du joueur local et des spectateurs.
-   - Ajouter un portrait pixel-art de sa tête au HUD et à l’écran radio.
-   - Définir ses stats de déplacement, santé et équipement sans modifier celles des autres classes.
-2. **Armes du Hunter**
-   - Lame de poignet : réutiliser les animations et règles de mêlée déjà présentes, avec un profil
-     propre au Hunter.
-   - Harpon : tir à projectile résolu côté hôte, prédiction, impacts, munitions et son.
-   - Disque volant : projectile qui revient à son lanceur, avec états réseau et récupération.
-   - Laser d’épaule : tir à distance avec acquisition assistée, limitée et lisible pour les autres
-     joueurs; la validation du tir reste côté hôte.
-3. **Vision et commandes**
-   - Ajouter une commande pour basculer entre vision thermique et détection des Xénomorphes.
-   - Garder le mode choisi côté client; appliquer les filtres au rendu, sans révéler les cibles aux
-     autres classes ni modifier leur vision.
-   - Afficher le mode actif et documenter son contrôle dans l’écran des commandes.
-4. **Voix, radio et finition**
-   - Créer des cris synthétiques originaux évoquant le Predator, sans reprendre d’enregistrement
-     ou de réplique du film.
-   - Jouer les sons de douleur, de mort et les cris/taunts du Hunter; les taunts d’équipe passent
-     par la radio et affichent son portrait.
-   - Vérifier menus, roster, HUD, spectateur, reconnexion et échanges réseau avec plusieurs rôles.
+1. **Socle, menus et portrait** — rôle réseau stable sur toutes les cartes; choix dans le menu;
+   portrait pixel-art dans le HUD et la radio. (PR #334)
+2. **Lames de poignet** — commencer avec l’arme de mêlée; réutiliser les règles partagées de
+   frappe et de prédiction. Le profil de combat suit la lame déjà implémentée.
+3. **Harpon** — projectile résolu par l’hôte, prédit côté client, avec impacts et munitions.
+4. **Disque volant** — projectile qui revient au lanceur, avec états réseau et récupération.
+5. **Laser d’épaule** — tir avec assistance de visée bornée, validé côté hôte.
+6. **Vision** — bascule locale entre vision thermique et détection des Xénomorphes, avec commande
+   et indicateur HUD.
+7. **Modèle et identité sonore** — raccorder le modèle 3D au roster et aux vues, générer des cris
+   originaux et les intégrer à la radio.
 
 ## Ordre technique
 
-L’étape 1 précède toutes les autres. L’étape 2 ajoute des champs au protocole seulement si les
-états d’arme existants ne suffisent pas; toute modification doit rester compatible avec le client
-et l’hôte de la même version. L’étape 3 ne doit pas envoyer aux clients des informations de cible
-qu’ils ne sont pas autorisés à voir. L’étape 4 termine l’identité sonore et les portraits.
+Les états de combat sont autoritatifs côté hôte et prédits par le client. Chaque nouvelle arme
+ajoute des champs réseau seulement si les états existants ne suffisent pas. L’assistance de visée et
+les visions ne doivent pas transmettre aux autres clients des informations de cible cachées.
 
 ## État
 
-- [x] Plan et périmètre rédigés.
-- [x] Rôle réseau, présence dans les menus, choix de classe sur toutes les cartes, portrait pixel-art HUD/radio.
-- [ ] Relier le modèle 3D existant et finaliser l’équipement du Hunter.
-- [ ] Quatre armes jouables et équilibrées.
-- [ ] Deux modes de vision et commande.
-- [ ] Cris, radio et intégration finale.
+- [x] PR #334 : rôle, menus, disponibilité sur les cartes et portrait pixel-art HUD/radio.
+- [x] PR 2 : commence avec les lames de poignet, via les règles de mêlée et de prédiction existantes.
+- [ ] PR 3 : harpon.
+- [ ] PR 4 : disque volant.
+- [ ] PR 5 : laser d’épaule.
+- [ ] PR 6 : visions.
+- [ ] PR 7 : modèle 3D et cris.
 
 Le projet n’a pas encore d’assets audio dédiés au Hunter. Les sons seront générés par le synthétiseur
 du jeu, comme les autres effets, à moins qu’un asset original ne soit fourni.

@@ -218,7 +218,7 @@ export const HUD_CSS =
   // The armour: gold pips after the health, only the ones there.
   `ul li.a{background:#fc3}li.a.e{display:none}li:not(.a)+li.a{margin-left:6px}` +
   `dl{right:12px;bottom:10px;display:flex;align-items:center;gap:10px}dl svg{width:38px;fill:#fff;filter:drop-shadow(0 1px 1px #000)}` +
-  `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data,dl.k span{display:none}dl.w data{opacity:.35}dl.k svg{width:64px;fill:#8ef}dl.r svg{fill:#c9f}dl.r data{color:#dcf}dl.f svg{fill:#f86}dl.f data{color:#fdb}dl span::first-line{font-size:22px}` +
+  `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data,dl.k span,dl.b>:not(small){display:none}dl.w data{opacity:.35}dl.k svg{width:64px;fill:#8ef}dl.r svg{fill:#c9f}dl.r data{color:#dcf}dl.f svg{fill:#f86}dl.f data{color:#fdb}dl span::first-line{font-size:22px}` +
   `dl small{position:absolute;bottom:100%;right:0;display:flex;gap:10px;font-size:11px;white-space:nowrap}dl kbd{font:inherit;opacity:.5}dl kbd.a{opacity:1}` +
   `dl data{font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}dl.e data{color:#f66}` +
   `s{left:50%;top:50%;width:28px;height:28px;margin:-14px 0 0 -14px;` +
@@ -285,8 +285,8 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Ninja',
-    `Runs 20 % faster, jumps much higher, wall-runs twice as long, chains 3 dashes; katana and fists twice as fast; the katana in hand, when he is not striking, parries ${Math.round(PARRY * 100)} % of the shots from in front, even on the run, and sends them back where he aims, or off to a side ${Math.round(PARRY_WIDE * 100)} % of the time.`,
-    'Guns: half the ammo, magazine, rate of fire and damage, and slowed hard while one is in hand.',
+    `20 % faster, higher jumps, 2× wall-run time, 3 dashes. Starts with a katana. Katana and fists attack twice as fast. Between swings the katana parries ${Math.round(PARRY * 100)} % of frontal shots even on the run, deflecting ${Math.round(PARRY_WIDE * 100)} % of parries sideways and the rest toward the aim.`,
+    'Half ammo, magazine size, fire rate and damage. Guns slow movement.',
     'City maps',
   ],
   [
@@ -297,8 +297,8 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Xenomorph',
-    `${XENO_HP} health, a little faster, jumps twice as high, runs up any wall, dashes three times in a row and further, pins whoever its dash reaches and eats the head of a foe right in front of it, a health back; claws and a tail that hits as hard as it was charged, acid for blood, sees its enemies glow through walls.`,
-    'No gun, no katana, no armour, no vehicle: it has to get close.',
+    `${XENO_HP} health, slightly faster, double jump height, runs up walls. Chains 3 longer dashes that pin foes. A head bite heals it. Claws, a chargeable tail, acid blood and vision through walls.`,
+    'Melee only. No armour or vehicles.',
     'Every map',
   ],
 ];
@@ -344,7 +344,11 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
       ['Click|again', 'bare hands, as a punch lands: cross, then hook'],
       ['Shift|+|Left click', 'bare hands, at a sprint: lunge'],
       ['R', 'swap the battery', 'KeyR'],
-      ['1|2|3|4', 'gun, katana, rail gun, laser rifle', 'Digit1 Digit2 Digit3 Digit4'],
+      [
+        '1|2|3|4|5',
+        'gun, katana, rail gun, laser rifle, fists',
+        'Digit1 Digit2 Digit3 Digit4 Digit5',
+      ],
       ['Wheel', 'next weapon'],
       ['G|or|Right click', 'laser rifle: a grenade from its launcher', 'KeyG'],
     ],
@@ -361,11 +365,8 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
       ],
       ['Left click', 'claws, left then right'],
       ['Right click|or|G', 'tail: slow; W stab, A or D sweep, else lash'],
-      [
-        'Hold right click|or|G',
-        'charge the tail; it strikes only when you let go: harder the longer, further and wider',
-      ],
-      ['Right click|or|G|twice', 'special: a spin all round, or a leap down on the foe'],
+      ['Hold right click|or|G', 'hold to charge range, arc and damage. Release to strike.'],
+      ['Right click|or|G|twice', 'release to spin or leap and strike'],
     ],
   ],
   [
@@ -515,6 +516,7 @@ export interface Hud {
     rifled?: boolean,
     nades?: number,
     armor?: number,
+    fists?: boolean,
   ): void;
   /** The health the own player's class has at most (Kit.hp): as many pips. */
   life(max: number): void;
@@ -654,7 +656,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       `<ul>${'<li></li>'.repeat(HP_MAX)}${'<li class=a></li>'.repeat(ARMOR_MAX)}</ul><figure hidden><canvas width="${FW}" height="${FH}"></canvas></figure>` +
       `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
       `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
-      `<data></data><span></span><small hidden><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd></small></dl>` +
+      `<data></data><span></span><small><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd><kbd>5 fists</kbd></small></dl>` +
       `<s hidden></s><mark hidden></mark><sup></sup><ins hidden><i></i></ins>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav><var hidden></var>` +
       `<h1 hidden>FRAGS<span>0</span></h1><label hidden><canvas width="${COMM}" height="${COMM}"></canvas><span></span><i>${'<b></b>'.repeat(5)}</i></label><ol></ol><h2 hidden><span></span><small></small></h2>` +
@@ -926,14 +928,16 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       rifled = false,
       nades = 0,
       armor = 0,
+      fists = false,
     ) {
       pips.forEach((li, i) => li.classList.toggle('e', i >= hp));
       plates.forEach((li, i) => li.classList.toggle('e', i >= armor));
       life.classList.toggle('low', hp <= 1);
       const have = [rounds >= 0, blade, rail >= 0, rifle >= 0];
-      const k = !railed && !rifled && blade && (wield || !have[0]);
+      const k = !fists && !railed && !rifled && blade && (wield || !have[0]);
       const n = rifled ? rifle : railed ? rail : rounds;
       ammo.hidden = !have.some(Boolean);
+      ammo.classList.toggle('b', fists);
       ammo.classList.toggle('k', k);
       ammo.classList.toggle('r', railed);
       ammo.classList.toggle('f', rifled);
@@ -948,10 +952,9 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         ? `  ${'●'.repeat(nades)}${'○'.repeat(Math.max(NADE_MAX - nades, 0))}`
         : '';
       set(spare, `${'▮'.repeat(rest / size)}${rest % size ? '▯' : ''}\n${rest}${dots}`);
-      slots.hidden = have.filter(Boolean).length < 2;
       [...slots.children].forEach((kbd, i) => {
-        (kbd as HTMLElement).hidden = !have[i];
-        kbd.classList.toggle('a', i == (k ? 1 : rifled ? 3 : railed ? 2 : 0));
+        (kbd as HTMLElement).hidden = i < 4 && !have[i];
+        kbd.classList.toggle('a', i == (fists ? 4 : k ? 1 : rifled ? 3 : railed ? 2 : 0));
       });
     },
     wear(body, c = {}, roles) {

@@ -1,5 +1,5 @@
 import { MAX_PITCH } from '../shared/constants';
-import { KEY } from '../shared/types';
+import { EV, KEY } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 
 /** Radians per pixel of mouse movement. */
@@ -28,7 +28,7 @@ const BITS: Record<string, number> = {
 };
 
 /** The keys that pick a weapon, in WEAPON's order, and the ones that act on a press: mute, and the rifle's grenade. */
-const DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4'];
+const DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'];
 const [MUTE, NADE] = ['KeyM', 'KeyG'];
 
 /** Every KeyboardEvent.code the game reads: the title screen's controls must tell them all. */
@@ -52,8 +52,8 @@ export const DOUBLE_CLICK_MS = 300;
 /** The wheel swaps the weapon at most this often (ms): a trackpad's flick is a hundred events, one swap. */
 export const WHEEL_MS = 250;
 
-/** The weapon chosen: 1, 2, 3 and 4 on the keyboard. */
-export const WEAPON = { GUN: 0, BLADE: 1, RAIL: 2, RIFLE: 3 } as const;
+/** The weapon chosen: 1 through 5 on the keyboard. */
+export const WEAPON = { GUN: 0, BLADE: 1, RAIL: 2, RIFLE: 3, FISTS: 4 } as const;
 
 /** The choice after a key: 1 the gun, 2 the katana, 3 the rail gun, 4 the laser rifle, any other key keeps it. */
 export const picked = (weapon: number, code: string): number => {
@@ -64,29 +64,31 @@ export const picked = (weapon: number, code: string): number => {
 /** Which of the gun, the katana, the rail gun and the laser rifle a player has; all of them when there is no state yet. */
 export const owned = (p?: PlayerState): boolean[] =>
   p
-    ? [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0]
-    : [true, true, true, true];
+    ? [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0, true]
+    : [true, true, true, true, true];
 
 /**
- * The choice after a step of the own player. Picking the katana, the rail gun or the rifle up switches to
- * it, once; losing every weapon (going down) goes back to the gun; anything else, the gun picked
- * up included, keeps it.
+ * Follow the spawn's weapon and switch to newly picked-up special weapons unless fists are selected.
  */
 export const chosen = (weapon: number, was?: PlayerState, now?: PlayerState): number => {
+  if (!now || now.down) {
+    return WEAPON.GUN;
+  }
+  if (!was || was.down || now.ev & EV.RESPAWN) {
+    return +!!now.wield;
+  }
   const [a, b] = [owned(was), owned(now)];
-  return !now || !b.some(Boolean)
-    ? WEAPON.GUN
-    : ((was && [WEAPON.BLADE, WEAPON.RAIL, WEAPON.RIFLE].find(k => b[k] && !a[k])) ?? weapon);
+  return weapon === WEAPON.FISTS ? weapon : ([1, 2, 3].find(k => b[k] && !a[k]) ?? weapon);
 };
 
 /** The keys of a step with KEY.BLADE set while the katana is the choice, KEY.RAIL while the rail gun is, KEY.RIFLE while the rifle is. */
 export const withWeapon = (keys: number, weapon: number): number =>
-  keys | [0, KEY.BLADE, KEY.RAIL, KEY.RIFLE][weapon];
+  keys | [0, KEY.BLADE, KEY.RAIL, KEY.RIFLE, KEY.FISTS][weapon];
 
-/** The choice the wheel turns to, `dir` 1 or -1: the next weapon he has, round the four. */
+/** The choice the wheel turns to, `dir` 1 or -1: the next weapon he has, including fists. */
 export const turned = (weapon: number, dir: number, have: boolean[]): number => {
-  for (let k = 1; k <= 4; k++) {
-    const n = (weapon + dir * k + 4) % 4;
+  for (let k = 1; k <= DIGITS.length; k++) {
+    const n = (weapon + dir * k + DIGITS.length) % DIGITS.length;
     if (have[n]) {
       return n;
     }

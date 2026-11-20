@@ -71,6 +71,7 @@ import {
   span,
   tip,
   swapOf,
+  handOf,
 } from './gun';
 import { helm } from './helm';
 import { helmet } from './helmet';
@@ -869,7 +870,7 @@ export const grasp = (p: PlayerState, seat?: Seat): number[] => {
   if (pummeling(p)) {
     return [EXEC.TICKS - p.lock! > PUMMEL.GRAB[0] ? 0.45 : 1, 1];
   }
-  const armed = p.ammo >= 0 || !!p.railed || !!p.rifled || !!p.wield;
+  const armed = handOf(p) >= 0;
   const pace = Math.min(Math.max((Math.hypot(p.vx, p.vz) - RUN_SPEED) / 3, 0), 1);
   const free = dashing(p)
     ? 1
@@ -890,8 +891,8 @@ export const grasp = (p: PlayerState, seat?: Seat): number[] => {
   }
   // In a swap the left hand brings the new battery up from the pouch.
   return [
-    p.ammo >= 0 && !p.railed && swapOf(p) >= 0 ? 0.7 : free,
-    (p.railed ? !stowed(p) : p.ammo >= 0) ? 0.9 : free,
+    p.ammo >= 0 && !p.fists && !p.railed && swapOf(p) >= 0 ? 0.7 : free,
+    (p.railed ? !stowed(p) : p.ammo >= 0 && !p.fists) ? 0.9 : free,
   ];
 };
 
@@ -1149,7 +1150,7 @@ export const stance = (r: Runner) => {
     }
     pose = carried(pose, s, r);
     s = solve(pose);
-  } else if (r.aim > 0.01 && p.ammo >= 0 && !busy) {
+  } else if (r.aim > 0.01 && p.ammo >= 0 && !p.fists && !busy) {
     // Seated, the eye the gun is held out from is lower.
     pose = lifted(
       pose,
@@ -1422,6 +1423,7 @@ export const soldier = (
         color,
         lod,
         r.fours?.weight,
+        p,
       );
       const part = partsOf(lod);
       const put = ({ key, make, thin }: Part, at: Vec3, q: Quat) =>
@@ -1668,6 +1670,7 @@ export const soldier = (
       cutting(r.prog) || (r.parry >= 0 && r.parry < 2 * PARRY_IN),
     );
   } else if (
+    !p.fists &&
     (p.railed ? !stowed(p) : p.ammo >= 0 || p.rifled) &&
     !p.down &&
     !driving(r) &&

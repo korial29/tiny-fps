@@ -9,7 +9,7 @@ import type { PlayerState } from '../shared/types';
 import { ease } from './gun';
 import { cross, face, sheet } from './helmet';
 import type { Spot } from './helmet';
-import { CHITIN, STRIDE, TUBE, unit } from './mesh';
+import { CHITIN, STRIDE, TUBE, basis, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
@@ -37,7 +37,7 @@ const HOOK = 6;
  * forward down into the view), its turn about the pelvis' up (radians, to its left: through its
  * right side, a tail pointing back turns forward), its lean to the right, its reach (as a share of
  * its length, a whip stretched), how much of the hook at its tip it keeps, how far its root
- * rises (radians, less toward the tip), and how far it is coiled in an S to the side (0 to 1, a charge).
+ * rises, how far it coils in an S, and how strongly its tip follows the aim.
  */
 export type Lash = readonly [
   sting: number,
@@ -47,9 +47,10 @@ export type Lash = readonly [
   hook: number,
   rise: number,
   coil?: number,
+  aim?: number,
 ];
 /** At rest: behind, hooked. */
-export const HOOKED: Lash = [0, 0, 0, 0, 1, 0];
+export const HOOKED: Lash = [0, 0, 0, 0, 1, 0, 0, 0];
 
 /**
  * Where its tail is through a strike (TAILS, by the cut): it goes from HOOKED to the strike's poise
@@ -66,20 +67,17 @@ export const lashOf = (
   const c = p.cut ?? 0;
   const k = TAILS[c];
   // None but the tail's: its claws are those under the specials with no hold.
-  if (!p.swing || p.down || k.hold < 0 == c < STING.SPIN) {
+  if (!p.swing || p.down || k.hold < 0) {
     return HOOKED;
   }
   // A heavy release runs on its own timer from the top of the wind-up.
   const u = p.heavy
     ? (k.hold + (1 - p.swing / swingOf(p, TAILS).ticks) * (k.ticks - k.hold)) / k.ticks
     : 1 - p.swing / k.ticks;
-  const [hit, top] = [k.strike / k.ticks, (k.hold > 0 ? k.hold : 0.7 * k.strike) / k.ticks];
+  const [hit, top] = [k.strike / k.ticks, k.hold / k.ticks];
   const back = ease((u - hit) / (1 - hit));
   const mix = (a: Lash, b: Lash, d: number) =>
-    (a as readonly number[]).map((v, i) => v + (b[i]! - v) * d) as unknown as Lash;
-  if (c == STING.SPIN) {
-    return mix([0.3, TAU * ease(u), 0, 0.2, 0, 0], HOOKED, back + (1 - ease(u / top)) * +(u < top));
-  }
+    (a as readonly number[]).map((v, i) => v + ((b[i] ?? 0) - v) * d) as unknown as Lash;
   const [poise, to] = LASH[c];
   // Charged, it is cocked on its side of the view, the left sweep's on the left.
   const cocked: Lash =
@@ -96,10 +94,14 @@ export const lashOf = (
   }
   // A heavy release from where the charge held it, round the shorter way.
   const from = p.heavy ? cocked : poise;
+  if (c == STING.SPIN) {
+    return mix([0.3, TAU * ease((u - top) / (1 - top)), 0, 0.2, 0, 0], HOOKED, back);
+  }
+  const target = p.heavy ? THRUST : to;
   const end: Lash = [
-    to[0],
-    to[1] + TAU * Math.round((from[1] - to[1]) / TAU),
-    ...to.slice(2),
+    target[0],
+    target[1] + TAU * Math.round((from[1] - target[1]) / TAU),
+    ...target.slice(2),
   ] as unknown as Lash;
   return mix(mix(from, end, Math.min((u - top) / (hit - top), 1) ** 2), HOOKED, back);
 };
@@ -111,11 +113,10 @@ export const lashOf = (
  * driven into the view, curling in to the middle; the lash and the leap poised over the right
  * shoulder, in the top of the view, down from above.
  */
+const THRUST: Lash = [1.08, 0, 0, 0.6, 0, 0, 0, 1];
+const DOWN: Lash = [0.9, 0, 0.7, 0.3, 0, 0, 0, 0];
 const LASH: Record<number, [Lash, Lash]> = {
-  [STING.STAB]: [
-    [0, 5, 0, 0.2, 0, 1.2],
-    [0, 4.6, 0, 0.35, 0, 0.7],
-  ],
+  [STING.STAB]: [[0, 5, 0, 0.2, 0, 1.2, 0, 0], THRUST],
   [STING.SWEEP_R]: [
     [0, 4.5, 0, 0.2, 0, 1.2],
     [0, 5.6, 0, 0.45, 0, 0.6],
@@ -124,14 +125,9 @@ const LASH: Record<number, [Lash, Lash]> = {
     [0, -4.5, 0, 0.2, 0, 1.2],
     [0, -5.6, 0, 0.45, 0, 0.6],
   ],
-  [STING.LASH]: [
-    [0.9, 0, 0.7, 0.3, 0, 0],
-    [1.08, 0.1, 0.5, 0.6, 0, 0],
-  ],
-  [STING.LEAP]: [
-    [0.9, 0, 0.7, 0.3, 0, 0],
-    [1.08, 0.2, 0.35, 0.6, 0, 0],
-  ],
+  [STING.LASH]: [DOWN, THRUST],
+  [STING.SPIN]: [[0.3, 0, 0, 0.2, 0, 0], HOOKED],
+  [STING.LEAP]: [DOWN, THRUST],
 };
 /** Charged: up on the right of the view, ahead, where its S shows (the user, 2026-11-16). */
 const COCKED: Lash = LASH[STING.STAB][0];
@@ -742,15 +738,16 @@ export const tail = (
   color: number[],
   lod: number,
   fours = 0,
+  look?: Pick<PlayerState, 'yaw' | 'pitch'>,
 ) => {
   const back = backOf(lod);
   // From the spine's bone, whose place shapes the curve's start at the pelvis.
   const curve = curveOf(bonesOf(s, t, run, lash, 1, fours).slice(BACK.length - 3), 4);
+  const [P, q] = [s.pos[J.PELVIS], s.rot[J.PELVIS]];
   const { total } = curve;
   const all = VERTEBRAE[lod];
   const n = all - back.n;
   const [sides, shape] = [SIDES[2][lod], BEAD[lod]];
-  const [P, q] = [s.pos[J.PELVIS], s.rot[J.PELVIS]];
   /** The way across the curve at a point of it, its up crossed with its way on: not unit, ringTo() makes it so. */
   const across = (up: Vec3, tan: Vec3): Vec3 => [
     up[1] * tan[2] - up[2] * tan[1],
@@ -805,7 +802,15 @@ export const tail = (
     }
   }
   const [[end, up], w] = along(curve, total);
-  blade(out, end, w, up, color, sides, lod);
+  blade(
+    out,
+    end,
+    look && lash[7] ? unit(mix3(w, basis(look.yaw, look.pitch)[2], lash[7])) : w,
+    up,
+    color,
+    sides,
+    lod,
+  );
 };
 
 /** Ring scratch of blade(): four spots a ring, a place then a normal each. */

@@ -58,6 +58,7 @@ import {
   swapOf,
   tip,
   cellsOf,
+  handOf,
 } from './gun';
 import {
   BASE,
@@ -1411,7 +1412,7 @@ export const createBody = (world?: World): Body => {
       fours.update(p, dt, floor);
       clung = p.mode == MODE.CLING || (clung && fours.weight > 0.002);
     }
-    const now = p.down ? -1 : p.wield ? 1 : p.rifled ? 3 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
+    const now = handOf(p);
     const f = fresh(p);
     first = now !== drawn ? f : first && !(me?.reload && !p.reload);
     since = now !== drawn || (me?.reload && !p.reload) ? 0 : since + dt;
@@ -2059,7 +2060,7 @@ export const createBody = (world?: World): Body => {
           // strikes: round the hip or over the shoulder, into the view.
           const lash = me ? lashOf(me, clock) : HOOKED;
           if (lash != HOOKED) {
-            tail(out, s, clock, 0, lash, color, 2);
+            tail(out, s, clock, 0, lash, color, 2, 0, me);
           }
         }
         // The ninja's own plates in his team's colour (soldier.ts).

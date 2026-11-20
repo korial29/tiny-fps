@@ -159,6 +159,7 @@ export const STILL = {
   hits: 0,
   blade: false,
   wield: false,
+  fists: false,
   swing: 0,
   cut: 0,
   zap: false,
@@ -181,7 +182,13 @@ export const STILL = {
 };
 
 /** A player standing on spawn point n of a team (modulo the count): the red team's by default. */
-export const spawn = (id: number, w: World, n: number, team = 0): PlayerState => {
+export const spawn = (
+  id: number,
+  w: World,
+  n: number,
+  team = 0,
+  kit: Kit = KITS[0],
+): PlayerState => {
   const { spawns } = w.def.teams[team];
   const [x, y, z, yaw] = spawns[((n % spawns.length) + spawns.length) % spawns.length];
   return {
@@ -194,6 +201,9 @@ export const spawn = (id: number, w: World, n: number, team = 0): PlayerState =>
     pitch: 0,
     ground: true,
     ...STILL,
+    hp: kit.hp,
+    blade: !!kit.katana,
+    wield: !!kit.katana,
   };
 };
 
@@ -201,9 +211,9 @@ export const spawn = (id: number, w: World, n: number, team = 0): PlayerState =>
  * Puts the player back at the spawn of his id in his team, looking where he looked, with full
  * health and no gun (EV.RESPAWN). The shot and hit counters go on: a reset would read as a shot.
  */
-export const respawn = (p: PlayerState, w: World, team: number): void => {
+export const respawn = (p: PlayerState, w: World, team: number, kit: Kit = KITS[0]): void => {
   const { yaw, pitch, id, shots, hits } = p;
-  Object.assign(p, spawn(id, w, id, team), { yaw, pitch, shots, hits, ev: p.ev | EV.RESPAWN });
+  Object.assign(p, spawn(id, w, id, team, kit), { yaw, pitch, shots, hits, ev: p.ev | EV.RESPAWN });
 };
 
 /** The modes with the feet on a floor: ground, slide and crouch. */
@@ -1250,7 +1260,10 @@ export const move = (
     bodies,
     kit,
     // A gun in hand: one carried, and the katana not in hand (gun.ts's choice at the last step).
-    pace: !p.wield && (p.ammo >= 0 || (p.rail ?? -1) >= 0 || (p.rifle ?? -1) >= 0) ? kit.slow : 1,
+    pace:
+      !p.fists && !p.wield && (p.ammo >= 0 || (p.rail ?? -1) >= 0 || (p.rifle ?? -1) >= 0)
+        ? kit.slow
+        : 1,
   };
 
   const before = p.mode;
@@ -1290,7 +1303,7 @@ export const move = (
   }
   if (p.y < w.def.floor) {
     // Fallen off the roofs: back at the spawn of the player's id in his team.
-    respawn(p, w, team);
+    respawn(p, w, team, kit);
   }
   p.t = p.mode === before ? Math.min(255, p.t + 1) : p.t;
   p.buffer = Math.max(0, p.buffer - 1);

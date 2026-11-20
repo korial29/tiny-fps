@@ -5,7 +5,7 @@
 // Input, 12 bytes: [type u8 = MSG_INPUT][seq u16][keys u16][yaw u16][pitch i16][view u16][frac u8]
 //   yaw in 65536ths of a turn, decoded in [0, 2π); pitch in 1/10000 rad; view is the host tick
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
-//   keys is a u16: KEY bits 0 to 14 (forward, back, left, right, jump, sprint, dash, crouch, fire, blade, special, rail, reload, rifle, use).
+//   keys is a u16: KEY bits 0 to 15 (forward, back, left, right, jump, sprint, dash, crouch, fire, blade, special, rail, reload, rifle, use, fists).
 // Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][players u8][rovers u8], the rovers 0 on a map
 //   without any. Then players × 62 bytes:
 //   [id u8][x f32][y f32][z f32][vx f32][vy f32][vz f32][edge f32]
@@ -42,7 +42,7 @@
 //   bit 6 USE held (the third bit of `held`: the timers byte is full); slow: the ticks left drained by the bolt. Bit 4 of lost: fried; bit
 //   5: heavy (the katana's charged cut let go). charge is the katana's too, held at a cut's top.
 //   mag: the shots in the gun's battery; cap: the ticks in the rail gun's capsule; reload: the ticks
-//   left swapping the one in hand; rifle: the laser rifle's rounds plus one (0: none); clip: its cell;
+//   left swapping the one in hand (bits 0-6), bit 7: fists selected; rifle: the laser rifle's rounds plus one (0: none); clip: its cell;
 //   heat: the rail gun's heat (HEAT_MAX at most). nade: bits 0-5 the ticks before the rifle's
 //   launcher fires again (`lob`), bits 6-7 its grenades left (`nades`).
 //   Then the rovers, rovers × 57 bytes, in the order of WorldDef.rovers then WorldDef.ships:
@@ -200,7 +200,7 @@ export const encodeInput = (i: Input): ArrayBuffer => {
   const v = new DataView(new ArrayBuffer(INPUT_BYTES));
   v.setUint8(0, MSG_INPUT);
   v.setUint16(1, i.seq & 0xffff);
-  v.setUint16(3, i.keys & 0x7fff);
+  v.setUint16(3, i.keys);
   v.setUint16(5, toTurn(i.yaw));
   v.setInt16(7, toPitch(i.pitch));
   const view = toView(i.view);
@@ -220,7 +220,7 @@ export const decodeInput = (buf: ArrayBuffer): Input | null => {
   }
   return {
     seq: v.getUint16(1),
-    keys: v.getUint16(3) & 0x7fff,
+    keys: v.getUint16(3),
     yaw: fromTurn(v.getUint16(5)),
     pitch: fromPitch(v.getInt16(7)),
     view: (v.getUint16(9) * 256 + v.getUint8(11)) / 256,
@@ -326,7 +326,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setUint8(o + 54, p.slow ?? 0);
     v.setUint8(o + 55, p.mag ?? 0);
     v.setUint8(o + 56, p.cap ?? 0);
-    v.setUint8(o + 57, p.reload ?? 0);
+    v.setUint8(o + 57, (p.reload ?? 0) | (+!!p.fists << 7));
     v.setUint8(o + 58, (p.rifle ?? -1) + 1);
     v.setUint8(o + 59, p.clip ?? 0);
     v.setUint8(o + 60, p.heat ?? 0);
@@ -476,7 +476,8 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       slow: v.getUint8(o + 54),
       mag: v.getUint8(o + 55),
       cap: v.getUint8(o + 56),
-      reload: v.getUint8(o + 57),
+      reload: v.getUint8(o + 57) & 127,
+      fists: !!(v.getUint8(o + 57) & 128),
       rifle: v.getUint8(o + 58) - 1,
       clip: v.getUint8(o + 59),
       rifled: (v.getUint8(o + 53) & 8) > 0,

@@ -319,6 +319,22 @@ describe('Bot: the gun', () => {
     expect(goal(KITS[ROLE.MARINE])).toEqual([0, 0, -40]);
   });
 
+  it('pursues enemies with the katana and mixes normal and special attacks', () => {
+    const world = build(arena([]));
+    const kit = KITS[ROLE.NINJA];
+    const bot = new Bot(0);
+    const me = { id: 0, team: 0, state: { ...spawn(0, world, 0, 0, kit), ammo: 20, mag: 6 } };
+    const foe = { id: 1, team: 1, state: { ...me.state, id: 1, z: me.state.z - 1.4 } };
+    let attacks = 0;
+    for (let i = 0; i < 90; i++) {
+      const intent = bot.think({ me, others: [foe], flags: [home, home], world, kit });
+      expect(intent.keys & KEY.BLADE).toBe(KEY.BLADE);
+      attacks |= intent.keys & (KEY.FIRE | KEY.SPECIAL);
+    }
+    expect(attacks).toBe(KEY.FIRE | KEY.SPECIAL);
+    expect(bot.view().why).toBe('hunt');
+  });
+
   it('shoots an enemy in sight, not through a wall', () => {
     expect(fires([])).toBe(true);
     expect(fires([{ min: [-5, 0, -1], max: [5, 4, 1], top: TEX.TILE, side: TEX.BRICK }])).toBe(

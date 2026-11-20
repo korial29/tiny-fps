@@ -500,14 +500,22 @@ describe('the claws and the tail', () => {
     const q = at(-20, 0, { z: 50, yaw: 0 });
     hit(q, KEY.BLADE | KEY.FORWARD);
     hit(q, KEY.BLADE | KEY.SPECIAL | KEY.FORWARD);
-    expect([q.cut, q.swing, q.vy]).toEqual([STING.LEAP, TAILS[STING.LEAP].ticks, TAIL_LEAP]);
-    let air = false;
-    for (let k = 0; k < TAILS[STING.LEAP].strike - 1; k++) {
-      hit(q, 0);
-      air ||= q.mode === MODE.AIR;
+    expect([q.cut, q.swing, q.vy]).toEqual([STING.LEAP, TAILS[STING.LEAP].ticks, 0]);
+    for (const state of [p, q]) {
+      for (let k = 0; k < 180; k++) {
+        expect(hit(state, KEY.BLADE)).toBe(STRIKE.NONE);
+      }
+      expect(state.charge).toBe(HEAVY_MAX);
+      expect(state.vy).toBe(0);
+      hit(state, 0);
+      expect(state.heavy).toBe(true);
+      expect(state.vy).toBe(state.cut === STING.LEAP ? TAIL_LEAP : 0);
+      let strikes = 0;
+      for (let k = 0; k < 100; k++) {
+        strikes += +(hit(state, 0) === STRIKE.CUT);
+      }
+      expect(strikes).toBe(1);
     }
-    expect(air).toBe(true);
-    expect(hit(q, 0)).toBe(STRIKE.CUT);
   });
 
   it('takes nothing from the racks', () => {

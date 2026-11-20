@@ -299,7 +299,7 @@ describe('createHud', () => {
       expect(rows).toContain(
         'Q or W A S D twicedash, three in a row and further than a man: it pins whoever it reaches',
       );
-      expect(rows).toContain('1 2 3 4gun, katana, rail gun, laser rifle');
+      expect(rows).toContain('1 2 3 4 5gun, katana, rail gun, laser rifle, fists');
       expect(rows).toContain('G or Right clickenergy arc');
       expect(rows).toContain('Double clickspecial: lunge, energy arc, leap');
     });
@@ -900,17 +900,20 @@ describe('the gun on the HUD', () => {
       expect(ammo().classList.contains('e')).toBe(true);
     });
 
-    it('tells the slots, 1 gun and 2 katana, only while both are carried, the one in hand lit', () => {
+    it('lists carried weapons alongside fists and highlights the choice', () => {
       hud.vitals(5, 30, false, false);
-      expect(slots().hidden).toBe(true);
+      expect(shown()).toEqual(['1 gun', '5 fists']);
       hud.vitals(5, -1, true, true);
-      expect(slots().hidden).toBe(true);
+      expect(shown()).toEqual(['2 katana', '5 fists']);
       hud.vitals(5, 30, true, false);
       expect(slots().hidden).toBe(false);
-      expect(shown()).toEqual(['1 gun', '2 katana']);
+      expect(shown()).toEqual(['1 gun', '2 katana', '5 fists']);
       expect(lit()).toEqual(['1 gun']);
       hud.vitals(5, 30, true, true);
       expect(lit()).toEqual(['2 katana']);
+      hud.vitals(5, 30, true, false, -1, false, 6, false, -1, false, 0, 0, true);
+      expect(lit()).toEqual(['5 fists']);
+      expect(ammo().classList.contains('b')).toBe(true);
     });
 
     it('shows the rail gun’s lightning left in violet with the gun glyph, and its slot 3 when it is carried', () => {
@@ -921,9 +924,9 @@ describe('the gun on the HUD', () => {
         ammo().classList.contains('k'),
       ]).toEqual([false, true, false]);
       expect(count().textContent).toBe('7');
-      expect(slots().hidden).toBe(true);
+      expect(shown()).toEqual(['3 rail', '5 fists']);
       hud.vitals(5, 30, true, false, 0, true);
-      expect(shown()).toEqual(['1 gun', '2 katana', '3 rail']);
+      expect(shown()).toEqual(['1 gun', '2 katana', '3 rail', '5 fists']);
       expect(lit()).toEqual(['3 rail']);
       expect(ammo().classList.contains('e')).toBe(true);
       expect(HUD_CSS).toMatch(/dl\.r svg\{fill:#c9f\}/);
@@ -937,7 +940,7 @@ describe('the gun on the HUD', () => {
     it('says on the title screen how to pick and how to cut', () => {
       hud.title('Click to play', 'Rooftops');
       const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
-      expect(rows).toContain('1 2 3 4gun, katana, rail gun, laser rifle');
+      expect(rows).toContain('1 2 3 4 5gun, katana, rail gun, laser rifle, fists');
       expect(rows).toContain('Wheelnext weapon');
       expect(rows).toContain('W + Left clickthrust');
       expect(rows).toContain('A or D + Left clickcut across');

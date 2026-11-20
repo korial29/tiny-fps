@@ -62,6 +62,8 @@ export interface Kit {
   hp: number;
   /** Whether the racks give him their weapons and he wears the armour pickups. */
   gear: boolean;
+  /** Carries a katana from spawn. */
+  katana?: boolean;
   /**
    * The xenomorph's body: claws and a tail for weapons (PUNCHES from BLOW.CLAW_L), clinging to the
    * walls (MODE.CLING), a dash's burst that pins an enemy it reaches, acid for blood (room.ts).
@@ -121,6 +123,7 @@ const NINJA: Kit = {
   slow: 0.55,
   accel: 1,
   parry: PARRY,
+  katana: true,
   hp: HP_MAX,
   gear: true,
   xeno: false,

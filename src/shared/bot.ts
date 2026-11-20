@@ -4,6 +4,7 @@
 // fights after UT2004's bots (docs/BOTS.md): a character drawn from its id and the room's skill,
 // strafes, jumps and dashes aside in a fight, and a dash out of the way of a ball coming at it.
 import {
+  CUTS,
   FALL_SAFE,
   JUMP_SPEED,
   PLASMA_SPEED,
@@ -21,12 +22,13 @@ import { Sortie } from './sortie';
 import type { Errand } from './sortie';
 import type { Kit } from './kit';
 import type { Leg } from './routes';
-import { EV, FLAG, KEY, MODE } from './types';
+import { CUT, EV, FLAG, KEY, MODE } from './types';
 import type { FlagState, PlayerState } from './types';
 import { hidden, ray } from './world';
 import type { World } from './world';
 
-const { FORWARD, BACK, LEFT, RIGHT, JUMP, SPRINT, DASH, CROUCH, FIRE, RELOAD } = KEY;
+const { FORWARD, BACK, LEFT, RIGHT, JUMP, SPRINT, DASH, CROUCH, FIRE, RELOAD, BLADE, SPECIAL } =
+  KEY;
 
 /** A player as a bot sees him: the host's own state, no rewind. */
 export interface Seen {
@@ -420,6 +422,9 @@ export class Bot {
   /** The input of this tick. */
   public think(s: Sight): Intent {
     const i = this.decide(s);
+    if (s.kit?.katana && s.me.state.blade && !s.me.state.down) {
+      i.keys |= BLADE;
+    }
     this.keys = i.keys;
     return i;
   }
@@ -642,22 +647,29 @@ export class Bot {
       return this.sortie.board;
     }
     const gear = s.kit?.gear ?? true;
-    if (p.ammo < 0 && gear && home.rack && flat(p.x, p.z, home.rack[0], home.rack[2]) < ARM) {
+    if (
+      p.ammo < 0 &&
+      gear &&
+      !s.kit?.katana &&
+      home.rack &&
+      flat(p.x, p.z, home.rack[0], home.rack[2]) < ARM
+    ) {
       this.why = 'gun rack';
       return home.rack;
     }
     // Claws reach no farther than an arm: it runs at the enemy it sees close by.
     const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
-    const prey = gear
-      ? undefined
-      : others.find(
-          o =>
-            o.team !== team &&
-            !o.state.down &&
-            Math.abs(o.state.y - p.y) < HUNT_Y &&
-            flat(p.x, p.z, o.state.x, o.state.z) < HUNT &&
-            !hidden(world, eye, [o.state.x, o.state.y + 1.2, o.state.z]),
-        );
+    const prey =
+      gear && !s.kit?.katana
+        ? undefined
+        : others.find(
+            o =>
+              o.team !== team &&
+              !o.state.down &&
+              Math.abs(o.state.y - p.y) < HUNT_Y &&
+              flat(p.x, p.z, o.state.x, o.state.z) < HUNT &&
+              !hidden(world, eye, [o.state.x, o.state.y + 1.2, o.state.z]),
+          );
     if (prey) {
       this.why = 'hunt';
       return at(prey.state);
@@ -1080,6 +1092,7 @@ export class Bot {
     }
     this.met.set(foe.id, this.ticks);
     const d = flat(p.x, p.z, q.x, q.z);
+    const blade = !!s.kit?.katana && !!p.blade;
     // His speed as it makes it out, late; the lead a share of the ball's flight.
     const v = this.speed;
     const k = this.persona.track;
@@ -1088,7 +1101,7 @@ export class Bot {
       v[1] + (q.vy - v[1]) * k,
       v[2] + (q.vz - v[2]) * k,
     ];
-    const lead = (this.persona.lead * d) / (p.rifled ? RIFLE_SPEED : PLASMA_SPEED);
+    const lead = blade ? 0 : (this.persona.lead * d) / (p.rifled ? RIFLE_SPEED : PLASMA_SPEED);
     const [tx, ty, tz] = [q.x + v[0] * lead, q.y + 1.1 + v[1] * lead, q.z + v[2] * lead];
     // The aim wanders about him, never still on him, the more as he crosses its view or it moves.
     const [ux, uz] = [(q.x - p.x) / Math.max(d, 0.1), (q.z - p.z) / Math.max(d, 0.1)];
@@ -1112,6 +1125,10 @@ export class Bot {
       this.ticks - this.since > this.persona.react && Math.abs(turn(this.aim, want)) < CONE;
     if (foe.id === carrier && d < TACKLE && p.ground && !(p.held & DASH)) {
       return { keys: FORWARD | DASH };
+    }
+    if (blade) {
+      const inReach = d < CUTS[CUT.SLASH].reach && Math.abs(q.y - p.y) < HUNT_Y;
+      return { keys: ready && inReach && !p.swing ? (this.rnd() < 0.25 ? SPECIAL : FIRE) : 0 };
     }
     const armed = p.ammo > 0 && (p.mag ?? 0) > 0 && !p.wield;
     // The gun fires on letting go: a tap, held one step in two.

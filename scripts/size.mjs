@@ -55,7 +55,8 @@ const BUDGETS = [
   // 234.5 KB until the scene's shader compiled per part and the moon's globe at half size, for
   // the GPU (the user, 2026-11-19).
   // 235 KB until the ships' predictive targeting, loaded lazily (the user, 2026-11-20: 256 B more).
-  { file: 'dist/index.js', max: 235 * 1024 + 256 },
+  // 235 KB + 384 B until the tail's aim and flash, and the fists' weapon slot (the user, 2026-11-20: 128 B more).
+  { file: 'dist/index.js', max: 235 * 1024 + 384 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

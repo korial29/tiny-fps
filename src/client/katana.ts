@@ -194,7 +194,9 @@ const wristEdge = [0.95, 0.83, 0.54];
 
 /** The Hunter's twin wrist blades and bracer, in the hand's local space. */
 export const wristBlade = (lod: number): number[] => {
-  if (wristBuilt[lod]) return wristBuilt[lod];
+  if (wristBuilt[lod]) {
+    return wristBuilt[lod];
+  }
   const out: number[] = [];
   const quad = (a: Vec3, b: Vec3, c: Vec3, d: Vec3, color: number[]) => {
     tri(out, a, b, c, color);

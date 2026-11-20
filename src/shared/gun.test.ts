@@ -45,6 +45,19 @@ import { build } from './world';
 
 const { FORWARD, JUMP, FIRE, CROUCH } = KEY;
 
+it('can punch with weapons in reserve and re-equip the katana afterward', () => {
+  const p = Object.assign(at(-10, 0).p, { blade: true, wield: true, ammo: 12, mag: 6 });
+  expect(hit(p, KEY.FISTS | FIRE)).toBe(STRIKE.NONE);
+  expect(p).toMatchObject({ fists: true, blade: true, wield: false, ammo: 12 });
+  let strikes = 0;
+  for (let i = 0; i < 20; i++) {
+    strikes += +(hit(p, KEY.FISTS) === STRIKE.CUT);
+  }
+  expect(strikes).toBe(1);
+  hit(p, KEY.BLADE);
+  expect(p).toMatchObject({ fists: false, wield: true, ammo: 12 });
+});
+
 /** A yard with a rack for red at (5, 0, 0) and a blue one at (-5, 0, 0). */
 const racked = build({
   ...yard.def,

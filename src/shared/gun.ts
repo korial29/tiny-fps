@@ -32,7 +32,6 @@ import {
   RAIL_SPEND,
   RAIL_RELOAD,
   RIFLE_RELOAD,
-  SPECIAL_LATE,
   BLOW,
   PUNCHES,
   TAILS,
@@ -148,8 +147,7 @@ export const step = (
   if (down) {
     // A fall under the kill floor has already put him back, and cleared `down`.
     if (p.down > 0 && !--p.down) {
-      respawn(p, w, team);
-      p.hp = kit.hp;
+      respawn(p, w, team, kit);
     }
     return STRIKE.NONE;
   }
@@ -171,7 +169,7 @@ export const step = (
     [p.ammo, p.mag] = [kit.ammo, kit.mag];
   }
   p.rack = inside;
-  p.blade = !!p.blade || (armed && gear && !!blade && within(p, blade, RACK_R));
+  p.blade = !!kit.katana || !!p.blade || (armed && gear && !!blade && within(p, blade, RACK_R));
   const inRail = !!rail && within(p, rail, RACK_R);
   if (armed && gear && inRail && !p.inRail) {
     [p.rail, p.cap] = [kit.rail, kit.cap];
@@ -201,16 +199,14 @@ export const step = (
   // button (KEY.BLADE) where the katana does on FIRE; its claws never hold.
   const table = kit.xeno ? TAILS : CUTS;
   const { ticks, hold } = table[p.cut ?? 0];
-  const top = !!p.swing && !p.heavy && ticks - (p.swing ?? 0) === hold;
-  if (
-    top &&
-    (p.wield || kit.xeno) &&
-    armed &&
-    !busy &&
-    i.keys & (kit.xeno ? KEY.BLADE : KEY.FIRE)
-  ) {
+  const top = !!p.swing && !p.heavy && ticks - p.swing === hold;
+  const free = armed && !busy;
+  const holding = !!(i.keys & (kit.xeno ? KEY.BLADE : KEY.FIRE));
+  if (kit.xeno && top && !free) {
+    [p.swing, p.charge] = [0, 0];
+  } else if (top && free && holding && (p.wield || kit.xeno)) {
     p.charge = Math.min((p.charge ?? 0) + 1, HEAVY_MAX);
-  } else if (top && armed && !busy && (p.charge ?? 0) >= HEAVY_TAP) {
+  } else if (top && free && (p.charge ?? 0) >= HEAVY_TAP) {
     // The tail's release keeps its charge to its end: how hard it strikes (sting()).
     [p.heavy, p.charge] = [true, kit.xeno ? p.charge : 0];
     p.swing = swingOf(p, table).ticks;
@@ -229,21 +225,26 @@ export const step = (
     p.heavy = !!p.swing && !!p.heavy;
     p.charge = kit.xeno && !p.heavy ? 0 : p.charge;
   }
+  if (kit.xeno && top && free && !holding && p.cut === STING.LEAP && p.mode === MODE.GROUND) {
+    p.vy = TAIL_LEAP;
+    p.ev |= EV.JUMP;
+  }
   // The battery holds no more than the player carries, and nothing without the gun: a shot never
   // spends more than he has.
   p.mag = Math.min(p.mag ?? 0, Math.max(p.ammo, 0));
   const has = [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0];
   const want = i.keys & KEY.BLADE ? 1 : i.keys & KEY.RAIL ? 2 : i.keys & KEY.RIFLE ? 3 : 0;
-  const hand = p.swing && p.blade ? 1 : has[want] ? want : has.indexOf(true);
+  const fists = gear && !!(i.keys & KEY.FISTS) && !(p.swing && p.wield);
+  const hand = p.swing && p.wield ? 1 : fists ? -1 : has[want] ? want : has.indexOf(true);
   // A switch of weapon drops the swap under way.
-  if (hand != (p.rifled ? 3 : p.railed ? 2 : +!!p.wield)) {
+  if (hand != (p.fists ? -1 : p.rifled ? 3 : p.railed ? 2 : +!!p.wield)) {
     p.reload = 0;
   }
-  [p.wield, p.railed, p.rifled] = [hand == 1, hand == 2, hand == 3];
   // A punch under way ends when a weapon comes to hand.
-  if (p.swing && hand >= 0 && !p.blade) {
+  if (p.swing && hand >= 0 && !p.wield) {
     p.swing = 0;
   }
+  [p.wield, p.railed, p.rifled, p.fists] = [hand == 1, hand == 2, hand == 3, fists];
   if (!armed) {
     [p.charge, p.reload] = [kit.xeno ? p.charge : 0, 0];
     return STRIKE.NONE;
@@ -261,7 +262,7 @@ export const step = (
     if (!--p.reload) {
       p[key] = full;
     }
-  } else if (hand != 1 && carried >= 0 && !busy && load < full && (!load || i.keys & KEY.RELOAD)) {
+  } else if (hand >= 0 && hand != 1 && !busy && load < full && (!load || i.keys & KEY.RELOAD)) {
     [p.reload, p.charge] = [ticks2, 0];
   }
   // With no weapon at all the swing is a punch (PUNCHES, by its blow), not a cut.
@@ -276,7 +277,15 @@ export const step = (
   }
   // The gun's charge goes with the katana in hand and not charging, the rail gun, the hands busy,
   // or no shot left.
-  if ((p.wield && !top) || p.railed || p.rifled || busy || p.reload || (!p.wield && !p.mag)) {
+  if (
+    bare ||
+    (p.wield && !top) ||
+    p.railed ||
+    p.rifled ||
+    busy ||
+    p.reload ||
+    (!p.wield && !p.mag)
+  ) {
     p.charge = 0;
   }
   // G with the rifle in hand (SPECIAL, with or without FIRE): a grenade from its launcher.
@@ -357,8 +366,8 @@ export const step = (
  * The xenomorph's blows: FIRE swipes the left claws, then the right while it goes on, a fresh press
  * after a swipe's strike throwing the next at once (BLOW). The right button (KEY.BLADE) strikes with
  * the tail as FIRE cuts with the katana (TAILS): by the keys (cutOf()), its special with SPECIAL (a
- * double click), which also turns a strike just started into it within SPECIAL_LATE ticks. Not while
- * the tail charges, nor with the hands busy (a hang, a climb); on a wall they are free.
+ * double click), which can replace the first tap before it strikes. All tail attacks pause
+ * at their wind-up while the button is held. On a wall the hands are free.
  */
 const beast = (p: PlayerState, i: Input, fresh: boolean, busy: boolean): void => {
   if (busy) {
@@ -367,7 +376,7 @@ const beast = (p: PlayerState, i: Input, fresh: boolean, busy: boolean): void =>
   const c = TAILS[p.cut ?? 0];
   const claw = p.cut === BLOW.CLAW_L || p.cut === BLOW.CLAW_R;
   const tail = !!(i.keys & KEY.BLADE);
-  const late = c.ticks - (p.swing ?? 0);
+  const elapsed = c.ticks - (p.swing ?? 0);
   const special =
     tail &&
     !!(i.keys & KEY.SPECIAL) &&
@@ -375,7 +384,7 @@ const beast = (p: PlayerState, i: Input, fresh: boolean, busy: boolean): void =>
     !claw &&
     !p.heavy &&
     (p.cut ?? 0) < SPECIAL_CUT &&
-    late <= SPECIAL_LATE;
+    elapsed < c.strike;
   if (tail && ((!p.swing && !p.charge) || special)) {
     const base = cutOf(i.keys);
     p.cut =
@@ -385,10 +394,6 @@ const beast = (p: PlayerState, i: Input, fresh: boolean, busy: boolean): void =>
           : STING.LEAP
         : base;
     [p.heavy, p.swing, p.charge] = [false, TAILS[p.cut].ticks, 0];
-    if (p.cut === STING.LEAP && p.mode === MODE.GROUND) {
-      p.vy = TAIL_LEAP;
-      p.ev |= EV.JUMP;
-    }
   } else if (i.keys & KEY.FIRE && (!p.swing || (fresh && claw && c.ticks - p.swing > c.strike))) {
     p.cut = p.cut === BLOW.CLAW_L ? BLOW.CLAW_R : BLOW.CLAW_L;
     [p.heavy, p.swing] = [false, TAILS[p.cut].ticks];

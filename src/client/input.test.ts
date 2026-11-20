@@ -79,14 +79,15 @@ describe('CODES', () => {
 
 describe('the weapon choice', () => {
   const { GUN, BLADE, RAIL } = WEAPON;
-  it('picks the gun on 1, the katana on 2, the rail gun on 3 and the rifle on 4, and keeps the choice on any other key', () => {
+  it('picks the gun on 1, the katana on 2, the rail gun on 3 the rifle on 4 and fists on 5, and keeps the choice on any other key', () => {
     expect(picked(BLADE, 'Digit1')).toBe(GUN);
     expect(picked(GUN, 'Digit2')).toBe(BLADE);
     expect(picked(BLADE, 'Digit2')).toBe(BLADE);
     expect(picked(GUN, 'Digit3')).toBe(RAIL);
     expect(picked(RAIL, 'KeyW')).toBe(RAIL);
     expect(picked(GUN, 'Digit4')).toBe(WEAPON.RIFLE);
-    expect(picked(GUN, 'Digit5')).toBe(GUN);
+    expect(picked(GUN, 'Digit5')).toBe(WEAPON.FISTS);
+    expect(withWeapon(KEY.FIRE, WEAPON.FISTS)).toBe(KEY.FIRE | KEY.FISTS);
     expect(withWeapon(KEY.FIRE, WEAPON.RIFLE)).toBe(KEY.FIRE | KEY.RIFLE);
     expect(turned(RAIL, 1, [true, true, true, true])).toBe(WEAPON.RIFLE);
     expect(turned(WEAPON.RIFLE, 1, [true, true, true, true])).toBe(GUN);
@@ -106,6 +107,8 @@ describe('the weapon choice', () => {
     // Switching back to the gun by hand sticks: the next steps are not a pickup.
     expect(chosen(GUN, both, both)).toBe(GUN);
     expect(chosen(BLADE, both, both)).toBe(BLADE);
+    expect(chosen(WEAPON.FISTS, gun, both)).toBe(WEAPON.FISTS);
+    expect(chosen(GUN, undefined, player({ blade: true, wield: true }))).toBe(BLADE);
     expect(chosen(GUN, both, player({ blade: true, rail: 10 }))).toBe(RAIL);
   });
 
@@ -679,7 +682,7 @@ describe('createInput', () => {
       ctl.track(player(), player({ rail: 10 }));
       expect(ctl.weapon).toBe(WEAPON.RAIL);
       wheel(100);
-      expect(ctl.weapon).toBe(WEAPON.GUN);
+      expect(ctl.weapon).toBe(WEAPON.FISTS);
       clock += WHEEL_MS;
       wheel(-100);
       expect(ctl.weapon).toBe(WEAPON.RAIL);

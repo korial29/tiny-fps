@@ -442,7 +442,7 @@ describe('prediction against the room', () => {
       }
       yaw += turn;
       steps.push({
-        keys: keys | (k % every === 0 ? KEY.FIRE : 0),
+        keys: KEY.FISTS | keys | (k % every === 0 ? KEY.FIRE : 0),
         yaw: ((yaw % 6.2832) + 6.2832) % 6.2832,
         pitch: 0,
       });
@@ -453,7 +453,7 @@ describe('prediction against the room', () => {
       const blows = new Set<number>();
       steps.forEach((i, k) => {
         step(p, onWire({ ...i, seq: k }), world, 0, true, [], kitOf(role, ROOFTOPS));
-        if (p.swing && !p.blade && p.ammo < 0) {
+        if (p.swing && p.fists) {
           blows.add(p.cut ?? 0);
         }
       });

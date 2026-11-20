@@ -162,7 +162,7 @@ export const createPredictor = (world: World): Predictor => {
       if (ride(own!, car, i, world, team, fleet())) {
         // Under the kill floor: the host puts him at a spawn and parks the rover.
         if (car.driver === id) {
-          respawn(own!, world, team);
+          respawn(own!, world, team, kit);
         }
         car = park(world)[carK];
       }

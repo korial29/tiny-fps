@@ -1761,10 +1761,10 @@ describe('the fists’ blows (the user, 2026-11-13: a combo, a running punch, th
   const still = (m: ReturnType<typeof match>) =>
     Object.assign(m.state(m.bob), { x: 1.2, z: 0, vx: 0, vz: 0, stun: 0 });
   /** Steps until the player's swing is past its strike: one with FIRE (a press), the rest without. */
-  const until = (m: ReturnType<typeof match>, past: (p: PlayerState) => boolean) => {
+  const until = (m: ReturnType<typeof match>, past: (p: PlayerState) => boolean, keys = 0) => {
     let n = 0;
     for (; n < 64 && !past(m.state(m.cy)); n++) {
-      m.hold(m.cy, 1, 0);
+      m.hold(m.cy, 1, keys);
     }
     return n;
   };
@@ -1863,13 +1863,13 @@ describe('the fists’ blows (the user, 2026-11-13: a combo, a running punch, th
   it('runs a ninja’s blows and their chain twice as fast as a marine’s', () => {
     const steps = (role?: number) => {
       const m = facing(role);
-      m.send(m.cy, FIRE);
-      let n = 1 + until(m, struckOf);
-      m.send(m.cy, FIRE);
-      n += 1 + until(m, struckOf);
-      m.send(m.cy, FIRE);
+      m.send(m.cy, KEY.FISTS | FIRE);
+      let n = 1 + until(m, struckOf, KEY.FISTS);
+      m.send(m.cy, KEY.FISTS | FIRE);
+      n += 1 + until(m, struckOf, KEY.FISTS);
+      m.send(m.cy, KEY.FISTS | FIRE);
       expect(m.state(m.cy).cut).toBe(BLOW.HOOK);
-      n += 1 + until(m, p => !p.swing);
+      n += 1 + until(m, p => !p.swing, KEY.FISTS);
       return [n, m.state(m.cy).hits];
     };
     const [marine, ninja] = [steps(), steps(ROLE.NINJA)];

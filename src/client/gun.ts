@@ -1358,6 +1358,12 @@ export const GUN_ON = { lit: 0.95, from: 0.05, up: 0.45, digits: 1.05 };
  */
 export const PRESS = 0.45;
 export const pressAt = (kind: number) => (kind == 2 ? PRESS / 1.4 : PRESS);
+/** The selected weapon slot, or -1 when bare-handed or down. */
+export const handOf = (
+  p: Pick<PlayerState, 'down' | 'fists' | 'wield' | 'rifled' | 'railed' | 'ammo'>,
+): number =>
+  p.down || p.fists ? -1 : p.wield ? 1 : p.rifled ? 3 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
+
 /**
  * A tracker of the weapons each player has had in hand since taking them: true when the weapon in
  * `p`'s hand comes to it for the first time, the only time it is switched on (the user,
@@ -1368,7 +1374,7 @@ export const firsts = () => {
   return (
     p: Pick<
       PlayerState,
-      'id' | 'ammo' | 'blade' | 'rail' | 'rifle' | 'down' | 'wield' | 'rifled' | 'railed'
+      'id' | 'ammo' | 'fists' | 'blade' | 'rail' | 'rifle' | 'down' | 'wield' | 'rifled' | 'railed'
     >,
   ) => {
     const h = had.get(p.id) ?? new Set<number>();
@@ -1376,7 +1382,7 @@ export const firsts = () => {
     [p.ammo >= 0, p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0].forEach(
       (o, k) => o || h.delete(k),
     );
-    const k = p.down ? -1 : p.wield ? 1 : p.rifled ? 3 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
+    const k = handOf(p);
     return k >= 0 && !h.has(k) && !!h.add(k);
   };
 };

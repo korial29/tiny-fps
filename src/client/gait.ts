@@ -393,7 +393,7 @@ export const SIDE = [-1, 1, -1, 1, -1, 1, 0];
 
 /** Whether the player has no weapon at all: FIRE punches. */
 export const bare = (p: PlayerState): boolean =>
-  p.ammo < 0 && !p.blade && (p.rail ?? -1) < 0 && (p.rifle ?? -1) < 0;
+  !!p.fists || (p.ammo < 0 && !p.blade && (p.rail ?? -1) < 0 && (p.rifle ?? -1) < 0);
 
 /**
  * The blow (BLOW) of a bare-handed swing. The xenomorph's (`xeno`) cut reads TAILS: its claws, else
@@ -624,7 +624,7 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
     set(W + 2 * MOVE.RIDE, +rides, 14);
     set(W + 2 * MOVE.CLING, +cling, 12);
     sat = rides ? (seat ?? { yaw: p.yaw, pitch: 0, roll: 0, steer: 0, s: 1 }) : sat;
-    armed = p.ammo >= 0 || !!p.railed || !!p.rifled || !!p.wield;
+    armed = !p.fists && (p.ammo >= 0 || !!p.railed || !!p.rifled || !!p.wield);
     set(KEN, +(!!p.wield && bow > 0), 10);
     set(BARE, +(!armed && bow > 0 && !p.down), 8);
     set(LOW, +(p.mode == MODE.CROUCH), 12);

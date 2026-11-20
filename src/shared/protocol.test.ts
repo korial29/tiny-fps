@@ -135,10 +135,10 @@ describe('input frame', () => {
     }
   });
 
-  it('carries USE in bit 14 and drops bit 15', () => {
+  it('carries USE and FISTS in bits 14 and 15', () => {
     const back = decodeInput(encodeInput({ seq: 1, keys: 0xffff, yaw: 0, pitch: 0 }))!;
-    expect(back.keys).toBe(0x7fff);
-    expect(back.keys & KEY.USE).toBe(KEY.USE);
+    expect(back.keys).toBe(0xffff);
+    expect(back.keys & (KEY.USE | KEY.FISTS)).toBe(KEY.USE | KEY.FISTS);
   });
 
   it('folds yaw into [0, 2π), negative ones included', () => {
@@ -196,6 +196,18 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
+  it('keeps fists selected and carried weapons separate from the reload timer', () => {
+    const p = player(1, { fists: true, reload: 96, ammo: 12, blade: true, wield: false });
+    const taken = decodeSnapshot(encodeSnapshot({ tick: 1, players: [p], ...IDLE }))!;
+    expect(taken.players[0]).toMatchObject({
+      fists: true,
+      reload: 96,
+      ammo: 12,
+      blade: true,
+      wield: false,
+    });
+  });
+
   it('has a 4-byte head, 62 bytes per player, then the match: 10 bytes and a byte per flag at home', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
@@ -843,7 +855,8 @@ describe('snapshot frame', () => {
     expect(Object.keys(SIDE).length).toBeLessThanOrEqual(8);
     // A slide, a wall-run and a climb end long before t saturates, and the key bits are fifteen.
     expect(SLIDE_TICKS).toBeLessThan(255);
-    expect(Math.max(...Object.values(KEY))).toBeLessThanOrEqual(0x4000);
+    expect(Math.max(...Object.values(KEY))).toBeLessThanOrEqual(0x8000);
+    expect(Math.max(GUN_RELOAD, RAIL_RELOAD, RIFLE_RELOAD)).toBeLessThan(128);
     // The rifle's rounds plus one, its cell and its cooldown (the gun's 3 bits).
     expect(Math.max(RIFLE_MAX + 1, RIFLE_CLIP, RIFLE_RELOAD)).toBeLessThanOrEqual(255);
     expect(RIFLE_COOL).toBeLessThanOrEqual(7);

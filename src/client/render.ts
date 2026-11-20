@@ -283,21 +283,18 @@ const RELIEF = 0.06;
 // form (x is the climb along it, times FOG_RISE; the branch is its limit at 0). D and x are bounded
 // (FOG_FAR, FOG_CLIMB): where a thin face only grazes a pixel's samples, P is extrapolated to the
 // pixel's centre, kilometres off, and exp(-x) overflowed to infinity; times the moon's density of 0
-// that is NaN (a grey rectangle over its horizon for a frame, the user 2026-11-13). Vn.x is the
-// xenomorph's vision (the user, 2026-11-15): the world and the sky grey-blue (xv), the fog 60 %
-// thinner; the Vn.y enemies in Ve (feet and height) glow orange and take no fog (ht), on what lies
+// that is NaN (a grey rectangle over its horizon for a frame, the user 2026-11-13). Vn switches on
+// the xenomorph's vision: the world and the sky grey-blue (xv), the fog 60 %
+// thinner; the Vn - 1 enemies in Ve (feet and height) glow orange and take no fog (ht), on what lies
 // inside their cylinder: their bodies. Through a wall (the user, 2026-11-16) one whose chest and
 // head a brush hides (a negative Ve.w, hidden() on the CPU) glows as a soft orange column (xr) on
 // what hides him: the view ray through the pixel, on past it, passes within his cylinder. One in
-// sight gets none: it would be a box of light round him. A |Ve.w| past 100 is one weak enough for
-// the katana's glory kill: with it in hand (Vn.x 0) only those are in Ve, with no vision, and a
-// bright orange flash goes over him (gl, 10 to 100 %, 2.2 Hz, blooming; the user, 2026-11-16: the
-// light blue-white pulse did not show).
+// sight gets no through-wall glow. Gp pulses over the full geometry of a glory kill target.
 export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y,Ss;uniform int Q;
 uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform float Sn;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
-uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D Pl;uniform vec4 Ve[16];uniform vec2 Vn;uniform float Gp;uniform sampler2D Og;out vec4 o;
+uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D Pl;uniform vec4 Ve[16];uniform int Vn;uniform float Gp;uniform sampler2D Og;out vec4 o;
 #ifdef FLESH
 #define FL(x) x
 #else
@@ -374,7 +371,7 @@ if(Y<.5){fa=Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E))*step(P.y,${ORB
 if(Ob.w>.5&&Ob.x>0.){vec3 p;if(gh(normalize(P-E),p))discard;}}
 #endif
 vec3 gk=fa>.002?K0(kd,kp):vec3(0);
-if(Y>.5){o=vec4(gk,1);if(Vn.x>0.)o.rgb=xv(o.rgb);return;}
+if(Y>.5){o=vec4(gk,1);if(Vn>0)o.rgb=xv(o.rgb);return;}
 if(fa>=1.&&C.z>-1.3){o=vec4(gk,1);return;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
@@ -506,10 +503,12 @@ c+=wa*ch*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),60.)*.5;
 c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(-abs(r.y-.12)*18.)),step(abs(L-(${GILT})),.02)*(.45+.45*fr));
 float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5),ht=0.;
 c.g=mix(c.g,c.r,z);
-float gl=0.;for(int i=0;i<16;i++){if(float(i)>=Vn.y)break;vec2 dq=P.xz-Ve[i].xz;float hi=step(dot(dq,dq),.5)*step(Ve[i].y+.03,P.y)*step(P.y,Ve[i].y+mod(abs(Ve[i].w),100.));ht=max(ht,hi);gl=max(gl,Gp*step(dot(dq,dq),6.25)*step(Ve[i].y-.4,P.y)*step(P.y,Ve[i].y+mod(abs(Ve[i].w),100.)+.6)*step(50.,abs(Ve[i].w)));}
-float xr=0.;if(Vn.x>0.){vec3 xd=P-E;float xa=max(dot(xd.xz,xd.xz),1e-4);for(int i=0;i<16;i++){if(float(i)>=Vn.y)break;if(Ve[i].w>0.)continue;float xs=max(dot(Ve[i].xz-E.xz,xd.xz)/xa,0.);vec3 xp=E+xd*xs;float xh=mod(-Ve[i].w,100.)*.5,xi=(1.-smoothstep(.12,.34,length(xp.xz-Ve[i].xz)))*(1.-smoothstep(.8,1.,abs(xp.y-Ve[i].y-xh)/xh));xr=max(xr,xi);gl=max(gl,xi*step(50.,-Ve[i].w));}}
-vec3 fc=F.rgb;if(Vn.x>0.){c=mix(xv(c),vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));fc=xv(fc);}c=mix(c,vec3(2.,.45,.03),gl*(.55+.45*sin(T*14.)));
-o=vec4(mix(c,fc,1.-exp(-F.a*(1.-.6*Vn.x)*(1.-max(ht,xr))*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc)*ah);
+float xr=0.;vec3 fc=F.rgb;if(Vn>0){
+vec3 xd=P-E;float xa=max(dot(xd.xz,xd.xz),1e-4);
+for(int i=0;i<Vn-1;i++){vec4 e=Ve[i];vec2 dq=P.xz-e.xz;ht=max(ht,step(dot(dq,dq),.5)*step(e.y+.03,P.y)*step(P.y,e.y+abs(e.w)));
+if(e.w>0.)continue;float xs=max(dot(e.xz-E.xz,xd.xz)/xa,0.);vec3 xp=E+xd*xs;float xh=-e.w*.5;xr=max(xr,(1.-smoothstep(.12,.34,length(xp.xz-e.xz)))*(1.-smoothstep(.8,1.,abs(xp.y-e.y-xh)/xh)));}
+c=mix(xv(c),vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));fc=xv(fc);}c=mix(c,vec3(2.,.45,.03),Gp*(.55+.45*sin(T*14.)));
+o=vec4(mix(c,fc,1.-exp(-F.a*(1.-.6*step(1.,float(Vn)))*(1.-max(ht,xr))*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc)*ah);
 #ifdef MOON
 if(fa>.002)o.rgb=mix(o.rgb,gk,fa);
 #endif
@@ -918,7 +917,7 @@ export interface Renderer {
   parried(id: number, late: number): void;
   /** The xenomorph's vision (the own player is one): a grey-blue world, the enemies in sight glowing. */
   vision(on: boolean): void;
-  /** The own katana in hand (the user, 2026-11-16): an enemy it could glory kill flashes. */
+  /** Let eligible glory kill targets flash during play. */
   edge(on: boolean): void;
   /** The body of each player (PlayerInfo.body, BODY), from the roster: the man's for one not in it; and the skin and haircut he picked, his id's for one not in `looks`. */
   wear(builds: ReadonlyMap<number, number>, looks?: ReadonlyMap<number, Choice>): void;
@@ -1075,7 +1074,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   let lost = false;
   /** The xenomorph's vision is on (vision()). */
   let seeing = false;
-  /** The own katana in hand: the enemies it could glory kill flash (edge()). */
+  /** Whether weak enemies flash outside of portraits. */
   let keen = false;
   let vp = new Float32Array(16);
   /** The frame's vertices as written, and as the GPU takes them: both kept from frame to frame. */
@@ -1083,6 +1082,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   let floats = new Float32Array(0);
   /** The frame's pieces of the store (store.ts), drawn after its own vertices. */
   const pieces: Pieces = [];
+  const glowPieces: boolean[] = [];
+  const glowRanges: [number, number][] = [];
   /** The vertex arrays of the frame's buffer and of the store's, the two buffers, and the store's floats sent and room. */
   let [main, kept, frameBuf, held, none] = [{}, {}, {}, {}, {}] as [
     WebGLVertexArrayObject,
@@ -1096,7 +1097,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   let [flesh, rows, read] = [{} as WebGLTexture, 0, 0];
   /** The frame's pieces, drawn after the frame's own vertices in every pass; in a `depth` pass, not the thin ones. */
   const place = (depth = false) => {
-    for (const { m, q, t, k, f, w, h, s } of pieces) {
+    let glow = false;
+    for (let i = 0; i < pieces.length; i++) {
+      const { m, q, t, k, f, w, h, s } = pieces[i];
+      if (!depth && glow !== !!glowPieces[i]) {
+        glow = !glow;
+        uni('uniform1f', 'Gp', +glow);
+      }
       if (depth && s) {
         continue;
       }
@@ -1128,6 +1135,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           uni('uniform1i', 'Sm', 0);
         }
       }
+    }
+    if (glow) {
+      uni('uniform1f', 'Gp', 0);
     }
     uni('uniform1f', 'Ak', 0);
     uni('uniform4fv', 'R', STILL);
@@ -1423,8 +1433,14 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       dust.draw(v);
       // A carried flag is strapped to its carrier's chest.
       const chests = new Map<number, [Vec3, Quat]>();
-      const crowdAt = v.length;
+      const own = colors.get(body?.id ?? self?.id ?? -1);
+      glowRanges.length = 0;
+      glowPieces.length = 0;
       for (const p of crowd) {
+        const flash =
+          !posing && keen && !p.down && !p.lock && p.hp <= GLORY_HP && colors.get(p.id) !== own;
+        const start = v.length;
+        const firstPiece = pieces.length;
         const d = Math.hypot(p.x - eye[0], p.z - eye[2]);
         const s = soldier(
           v,
@@ -1435,6 +1451,14 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           !!world.def.armor,
           pieces,
         );
+        if (flash) {
+          if (v.length > start) {
+            glowRanges.push([start, v.length]);
+          }
+          for (let i = firstPiece; i < pieces.length; i++) {
+            glowPieces[i] = true;
+          }
+        }
         if (s) {
           // A space suit's pack is on the back: the flag is strapped on the pack, further back.
           const [c, q] = [s.pos[JOINT.CHEST], s.rot[JOINT.CHEST]];
@@ -1442,7 +1466,6 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           chests.set(p.id, [[c[0] + back[0], c[1] + back[1], c[2] + back[2]], q]);
         }
       }
-      const crowdEnd = v.length;
       ctf?.flags.forEach(f => flag(v, f, teamRgb(f.team), now, f.by && chests.get(f.by.id)));
       // What glows casts nothing: it comes after the last thing that casts a shadow.
       const beamAt = v.length;
@@ -1528,28 +1551,19 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       uni('uniform3fv', 'E', eye);
       uni('uniform1f', 'T', performance.now() / 1000);
       uni('uniform1f', 'Z', 1);
-      // The enemies as drawn: every runner not in the own team's colour, up and on foot.
-      const own = colors.get(body?.id ?? self?.id ?? -1);
-      // With the katana in hand, only those it could glory kill: they flash.
-      const prey =
-        seeing || keen
-          ? crowd
-              .filter(p => !p.down && colors.get(p.id) !== own && (seeing || p.hp <= GLORY_HP))
-              .slice(0, 16)
-          : [];
-      const flashing = keen && prey.some(p => p.hp <= GLORY_HP && !p.lock);
-      uni('uniform2f', 'Vn', +seeing, prey.length);
+      // Xenomorph vision uses enemy positions to reveal them through walls.
+      const prey = seeing
+        ? crowd.filter(p => !p.down && colors.get(p.id) !== own).slice(0, 16)
+        : [];
+      uni('uniform1i', 'Vn', seeing ? prey.length + 1 : 0);
       if (prey.length) {
         uni(
           'uniform4fv',
-          'Ve', // A negative height: a wall hides his chest and his head, so he glows through it; 100 m
-          // more: weak enough for the katana's glory kill (GLORY_HP), he flashes; the xenomorph's
-          // takes anyone, so none flashes in its vision (the user, 2026-11-16).
+          'Ve',
           prey.flatMap(p => {
             const h = heightOf(p);
             const seen = [0.6, 0.95].some(k => !hidden(world, eye, [p.x, p.y + h * k, p.z]));
-            const w = h + 0.3 + (keen && p.hp <= GLORY_HP && !p.lock ? 100 : 0);
-            return [p.x, p.y, p.z, seen ? w : -w];
+            return [p.x, p.y, p.z, seen ? h + 0.3 : -h - 0.3];
           }),
         );
       }
@@ -1597,19 +1611,6 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.activeTexture(gl.TEXTURE0);
       }
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-      /** The frame's own vertices from `at`: the runners' (their tails and claws are not pieces) take the glory flash's wide reach. */
-      const drawn = (at: number) => {
-        if (!flashing) {
-          gl.drawArrays(gl.TRIANGLES, at, bodyAt / STRIDE);
-          return;
-        }
-        const [a, b] = [crowdAt / STRIDE, crowdEnd / STRIDE];
-        gl.drawArrays(gl.TRIANGLES, at, a);
-        uni('uniform1f', 'Gp', 1);
-        gl.drawArrays(gl.TRIANGLES, at + a, b - a);
-        uni('uniform1f', 'Gp', 0);
-        gl.drawArrays(gl.TRIANGLES, at + b, (bodyAt - crowdEnd) / STRIDE);
-      };
       if (heavensN) {
         // The Earth goes with the eye, so it is as far as the stars, and never fades into the globe.
         const sky0 = first - heavensN;
@@ -1627,11 +1628,17 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       if (bodyAt || pieces.length) {
         moving();
         if (bodyAt) {
-          drawn(first);
+          let start = 0;
+          for (const [a, b] of glowRanges) {
+            gl.drawArrays(gl.TRIANGLES, first + start / STRIDE, (a - start) / STRIDE);
+            uni('uniform1f', 'Gp', 1);
+            gl.drawArrays(gl.TRIANGLES, first + a / STRIDE, (b - a) / STRIDE);
+            uni('uniform1f', 'Gp', 0);
+            start = b;
+          }
+          gl.drawArrays(gl.TRIANGLES, first + start / STRIDE, (bodyAt - start) / STRIDE);
         }
-        uni('uniform1f', 'Gp', 1);
         place();
-        uni('uniform1f', 'Gp', 0);
         still();
       }
       // The sky after the world, at depth 1: shaded only where nothing stands in front of it.

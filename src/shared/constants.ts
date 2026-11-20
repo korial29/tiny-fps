@@ -251,7 +251,7 @@ export const PUNCHES = [
  * the top of its wind-up (`hold`) it charges as a cut does (HEAVY, swingOf()), and the strike takes
  * more the longer it charged (TAIL_HP, sting()). A double click of the right button (KEY.SPECIAL
  * with it) is its special: a sweep's is the SPIN, the tail whipped all round the body; the stab's
- * and the lash's the LEAP, up TAIL_LEAP m/s and down on the foe as it lands; each takes its own
+ * and the lash's the LEAP, up TAIL_LEAP m/s once released and down on the foe; each takes its own
  * `hp`. The xenomorph's `cut` reads this table: CLAW_L and CLAW_R are its claws, at their place in it.
  */
 /**
@@ -268,8 +268,8 @@ export const TAILS = [
   { ticks: 54, strike: 28, reach: 3.1, arc: 0.4, hp: TAIL_HP[0], hold: 20, knock: 0 },
   CLAW,
   CLAW,
-  { ticks: 60, strike: 30, reach: 2.6, arc: Math.PI, hp: 3, hold: -1, knock: 0 },
-  { ticks: 63, strike: 52, reach: 2.8, arc: 0.6, hp: 5, hold: -1, knock: 0 },
+  { ticks: 60, strike: 30, reach: 2.6, arc: Math.PI, hp: 3, hold: 18, knock: 0 },
+  { ticks: 63, strike: 52, reach: 2.8, arc: 0.6, hp: 5, hold: 32, knock: 0 },
 ];
 export const TAIL_LEAP = 10;
 export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];
@@ -446,8 +446,6 @@ export const [HEAVY_HP, HEAVY_REACH, HEAVY_ARC] = [2, 0.5, 1.4];
  */
 export const [ARC_SPEED, ARC_RANGE, ARC_R] = [24, 15, 0.6];
 export const [FLOOR_TICKS, ARC_KNOCK] = [63, 7];
-/** Ticks into a cut's swing in which a double click's second press still turns it into its special. */
-export const SPECIAL_LATE = 18;
 /** The lunge's throw along the look (m/s), held for the burst of a dash: it spends the dash. */
 export const LUNGE_SPEED = 13;
 /** The leap's jump (m/s up), from a floor only: 1.4 m up and down in 45 ticks, the blow (LEAP's strike) just before the landing. */

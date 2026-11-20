@@ -86,8 +86,8 @@ export const swingOf = (p: Pick<PlayerState, 'cut' | 'heavy'>, table: typeof CUT
 };
 
 /**
- * The health a xenomorph's swing `p` takes: the claws and the specials their own `hp`; the tail
- * TAIL_HP[0] let go before a charge, up to TAIL_HP[1] for a heavy release of a full one (`charge`
+ * The health a xenomorph's swing `p` takes: its base damage on a tap, and for a tail strike
+ * up to TAIL_HP[1] on a full charge (`charge`
  * stays through the release, gun.ts).
  */
 export const sting = (p: Pick<PlayerState, 'cut' | 'heavy' | 'charge'>): number => {
@@ -96,7 +96,7 @@ export const sting = (p: Pick<PlayerState, 'cut' | 'heavy' | 'charge'>): number 
     return c.hp;
   }
   const k = p.heavy ? Math.min(p.charge ?? 0, HEAVY_MAX) / HEAVY_MAX : 0;
-  return TAIL_HP[0] + Math.round((TAIL_HP[1] - TAIL_HP[0]) * k);
+  return c.hp + Math.round((TAIL_HP[1] - c.hp) * k);
 };
 
 /**

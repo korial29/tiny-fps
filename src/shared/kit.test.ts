@@ -14,7 +14,7 @@ import { STRIKE, step } from './gun';
 import { KITS, ROLE, buildOf, kitOf, roleOf, rolesOf } from './kit';
 import type { Kit } from './kit';
 import { MAPS } from './maps';
-import { STILL, move } from './physics';
+import { STILL, move, spawn } from './physics';
 import { decodeSnapshot, encodeSnapshot } from './protocol';
 import { Room, chosen } from './room';
 import { ROOFTOPS } from './map';
@@ -66,6 +66,14 @@ describe('the classes a map offers', () => {
 });
 
 describe('the ninja', () => {
+  it('starts and respawns with the katana drawn', () => {
+    const p = spawn(1, yard, 0, 0, NINJA);
+    expect(p).toMatchObject({ blade: true, wield: true });
+    Object.assign(p, { down: 1, blade: false, wield: false });
+    step(p, { seq: 0, yaw: 0, pitch: 0, keys: 0 }, yard, 0, true, [], NINJA);
+    expect(p).toMatchObject({ down: 0, blade: true, wield: true });
+  });
+
   it('runs and sprints faster', () => {
     for (const [keys, top] of [
       [KEY.FORWARD, RUN_SPEED],

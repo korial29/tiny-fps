@@ -942,6 +942,6 @@ describe('the glory kill flash', () => {
     expect(main).not.toMatch(/[,(]\s*T\s*=/);
   });
   it('reaches the feet, the tail and the claws of the runners drawn as pieces', () => {
-    expect(FRAG).toMatch(/gl=max\(gl,Gp\*step\(dot\(dq,dq\),6\.25\)\*step\(Ve\[i\]\.y-\.4,P\.y\)/);
+    expect(FRAG).toContain('Gp*(.55+.45*sin(T*14.))');
   });
 });

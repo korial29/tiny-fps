@@ -70,6 +70,8 @@ export const KEY = {
   RIFLE: 8192,
   /** Press to get into the rover at hand, or out of the one he rides. */
   USE: 16384,
+  /** Select bare hands even while carrying a weapon. */
+  FISTS: 32768,
 } as const;
 
 /**
@@ -261,6 +263,8 @@ export interface PlayerState {
   blade?: boolean;
   /** The katana is in hand rather than the gun (see KEY.BLADE). Absent reads false. */
   wield?: boolean;
+  /** Bare hands selected explicitly; carried weapons remain available. */
+  fists?: boolean;
   /** Ticks left in the katana's swing, CUTS[cut].ticks at its start, 0 when ready. Absent reads 0. */
   swing?: number;
   /** CUT of the running or last swing. Absent reads 0. */

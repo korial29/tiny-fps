@@ -50,7 +50,7 @@ import { dashing, felled, strain } from './expression';
 import { COMM, GLORY_ACT, HUD_CSS, OUT_HINT, boarding, createHud, kmh } from './hud';
 import type { Summary } from './hud';
 import { createWatch } from './watch';
-import { createInput } from './input';
+import { createInput, WEAPON } from './input';
 import { createPredictor } from './predict';
 import { gather } from './lights';
 import { marks } from './marks';
@@ -266,6 +266,7 @@ const play = (
   hud.mute(audio.muted);
   hud.frags(0);
   hud.visor(!!world.def.helmets);
+  let defaultWeapon: number = WEAPON.GUN;
   const ctl = createInput(canvas, () => hud.mute(toggleMute(audio)));
   // The click that takes the pointer lock is the gesture that lets the sound start.
   canvas.addEventListener('click', () => audio.unlock());
@@ -524,6 +525,10 @@ const play = (
       );
       predictor.you(you.id, you.team, own?.role);
       const kit = kitOf(own?.role, world.def);
+      const weapon = kit.katana ? WEAPON.BLADE : WEAPON.GUN;
+      if (weapon !== defaultWeapon) {
+        ctl.weapon = defaultWeapon = weapon;
+      }
       hud.magazines([kit.mag, kit.cap, kit.clip]);
       hud.life(kit.hp);
       [hpMax, ctl.beast] = [kit.hp, kit.xeno];

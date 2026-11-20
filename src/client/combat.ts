@@ -47,6 +47,7 @@ import {
   pressAt,
   swapOf,
   tip,
+  handOf,
 } from './gun';
 import type { Hud } from './hud';
 import { basis } from './mesh';
@@ -121,6 +122,7 @@ type Blade = Pick<
   | 'cut'
   | 'wield'
   | 'blade'
+  | 'fists'
   | 'heavy'
   | 'down'
   | 'railed'
@@ -146,7 +148,7 @@ export const swung = (a?: Blade, b?: Blade): number =>
  */
 export const struck = (a?: Blade, b?: Blade, xeno = false): boolean => {
   // With no blade the swing is a punch.
-  const { ticks, strike: at } = b && !b.blade ? blowing(b, xeno) : swingOf(b ?? {});
+  const { ticks, strike: at } = b && (!b.blade || b.fists) ? blowing(b, xeno) : swingOf(b ?? {});
   return !!a && !!b && (a.swing ?? 0) > ticks - at && (b.swing ?? 0) <= ticks - at;
 };
 
@@ -352,10 +354,8 @@ export const createCombat = (
     );
   };
   /** The weapon in the hand of `p`: 0 the gun, 1 the katana, 2 the rail gun, -1 none. */
-  const inHand = (p: Blade) =>
-    p.down ? -1 : p.wield ? 1 : p.rifled ? 3 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
   /** Whether a player's swing is a blow of his fists: no weapon at all. */
-  const fists = (p?: Blade) => !!p && !p.blade && inHand(p) < 0;
+  const fists = (p?: Blade) => !!p && (!p.blade || !!p.fists) && handOf(p) < 0;
   /** Whether the weapon in a player's hand has just come to it for the first time (firsts()). */
   const fresh = firsts();
   /** Sounds to play later: when (ms), which, where, and how loud and fast. */
@@ -371,8 +371,8 @@ export const createCombat = (
     const [a, b, r] = [swapOf(was), swapOf(now), +!!now.railed];
     // The click of the slap home loud (the user, 2026-11-09).
     CUES[r].forEach((c, i) => a < c && b >= c && audio.play(RELOADS[r][i], at, !r && i ? 1 : 0.7));
-    const h = inHand(now);
-    if (h != 1 && h >= 0 && (inHand(was) != h || (a >= 0 && b < 0))) {
+    const h = handOf(now);
+    if (h != 1 && h >= 0 && (handOf(was) != h || (a >= 0 && b < 0))) {
       boot(SOUND.BOOT, at, 0.5, r ? 1.4 : 1, first);
     }
     // The rail gun overheating hisses.
@@ -448,7 +448,7 @@ export const createCombat = (
         if (was && beast(me.id) && !(was.charge ?? 0) && (me.charge ?? 0) > 0 && !me.down) {
           audio.play(SOUND.XENO_HISS, undefined, 0.55, rate());
         }
-        const f = fresh(me) ? inHand(me) : -1;
+        const f = fresh(me) ? handOf(me) : -1;
         if (was) {
           shing(was, me, undefined, f);
           reloads(was, me, undefined, f);
@@ -507,6 +507,7 @@ export const createCombat = (
           !!me.rifled,
           me.nades ?? 0,
           me.armor ?? 0,
+          !!me.fists,
         );
         cuts.forEach(c => swish(c));
         hud.down(fx.lie, me.down / TICK_HZ);
@@ -608,7 +609,7 @@ export const createCombat = (
             fx.blow(b, true);
           }
         }
-        const f = fresh(p) ? inHand(p) : -1;
+        const f = fresh(p) ? handOf(p) : -1;
         if (old) {
           shing(old, p, at, f);
           reloads(old, p, at, f);
@@ -618,6 +619,7 @@ export const createCombat = (
           cut: p.cut,
           wield: p.wield,
           blade: p.blade,
+          fists: p.fists,
           heavy: p.heavy,
           down: p.down,
           railed: p.railed,

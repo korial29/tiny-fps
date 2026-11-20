@@ -112,6 +112,19 @@ describe('its pieces', () => {
     expect(pipes(0)).toBe(0);
   });
 
+  it('aims the released stinger along the look even when the pelvis faces elsewhere', () => {
+    const { ticks, strike } = TAILS[STING.LEAP];
+    const lash = lashOf({ cut: STING.LEAP, down: 0, swing: ticks - strike });
+    const tip = (yaw: number) => {
+      const v: number[] = [];
+      tail(v, S, 0, 0, lash, [1, 0, 0], 3, 0, { yaw, pitch: 0 });
+      return points(v).at(-1)!;
+    };
+    const left = tip(Math.PI / 2);
+    const right = tip(-Math.PI / 2);
+    expect(right[0] - left[0]).toBeGreaterThan(0.3);
+  });
+
   it('stands a comb of blades on its vertebrae, up the back and down the tail, none far', () => {
     /** How far the tail's points stand off its lowest, in the slab of it 0.7 to 0.74 m behind. */
     const high = (lod: number) => {

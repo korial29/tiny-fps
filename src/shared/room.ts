@@ -65,6 +65,7 @@ import { CHEST, crossing, fends, knock, limbOf, roll, sting, strike, swingOf } f
 import { Bot } from './bot';
 import { Ctf } from './ctf';
 import { KITS, ROLE, kitOf } from './kit';
+import type { Kit } from './kit';
 import { shut, swing } from './doors';
 import { STRIKE, felled, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
@@ -827,6 +828,7 @@ export class Room {
       reload: 0,
       blade: false,
       wield: false,
+      fists: false,
       swing: 0,
       lost: LIMB.NONE,
       fell,
@@ -1002,7 +1004,7 @@ export class Room {
    * `p` drew it) takes the cut's hp, and its crew none of it.
    */
   private cut(p: Player, view: number | undefined): void {
-    if (!p.state.blade) {
+    if (!p.state.wield && (!p.state.blade || p.state.fists)) {
       this.punch(p, view);
       return;
     }
@@ -1462,8 +1464,7 @@ export class Room {
   private sink(r: Rover): void {
     for (const p of this.players()) {
       if (this.seatOf(p)[0] === r) {
-        respawn(p.state, this.world, p.info.team);
-        p.state.hp = this.kit(p).hp;
+        respawn(p.state, this.world, p.info.team, this.kit(p));
         this.ctf.moved(p.state);
       }
     }
@@ -1703,12 +1704,12 @@ export class Room {
   }
 
   /** The first spawn point of the team with none of `others` within SPAWN_CLEAR, else the next one round-robin. */
-  private place(id: number, team: number, others: PlayerState[]): PlayerState {
+  private place(id: number, team: number, others: PlayerState[], kit: Kit): PlayerState {
     const n = this.world.def.teams[team].spawns.findIndex((_, k) => {
       const { x, z } = spawn(id, this.world, k, team);
       return !others.some(o => Math.hypot(o.x - x, o.z - z) < SPAWN_CLEAR);
     });
-    return spawn(id, this.world, n < 0 ? this.rr[team]++ : n, team);
+    return spawn(id, this.world, n < 0 ? this.rr[team]++ : n, team, kit);
   }
 
   /** The match is over: everyone gets the result and what each player did. */
@@ -1735,7 +1736,7 @@ export class Room {
     shut(this.world);
     for (const p of players) {
       const { shots, hits } = p.state;
-      p.state = { ...this.place(p.info.id, p.info.team, put), shots, hits, hp: this.kit(p).hp };
+      p.state = { ...this.place(p.info.id, p.info.team, put, this.kit(p)), shots, hits };
       put.push(p.state);
       this.ctf.place(p.info.id, p.state);
     }
@@ -1928,14 +1929,12 @@ export class Room {
         ...chosen(picked),
         ...(bot ? { bot } : {}),
       },
-      state: {
-        ...this.place(
-          id,
-          team,
-          players.map(p => p.state),
-        ),
-        hp: kitOf(chosen(picked).role, this.world.def).hp,
-      },
+      state: this.place(
+        id,
+        team,
+        players.map(p => p.state),
+        kitOf(chosen(picked).role, this.world.def),
+      ),
       since: this.joins++,
       bank: INPUT_BURST,
       ack: 0xffff,

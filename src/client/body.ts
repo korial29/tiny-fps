@@ -1437,9 +1437,10 @@ export const createBody = (world?: World): Body => {
       wall: +(p.mode == MODE.WALLRUN),
       slide: +(p.mode == MODE.SLIDE),
       stun: +(p.stun > 0),
-      // The rail gun is put away on a wall unless its bolt is going out: a hand on the wall, the
-      // other swinging with the stride.
-      gun: +(!p.down && !p.wield && (p.ammo >= 0 || !!p.rifled || (!!p.railed && !stowed(p)))),
+      // Weapons are put away on a wall unless the rail gun's bolt is going out: a hand on the
+      // wall, the other swinging with the stride. This also keeps the rifle's left hand from
+      // staying locked to its handguard while wall-running.
+      gun: +(!p.down && !p.wield && !stowed(p) && (p.ammo >= 0 || !!p.rifled || !!p.railed)),
       blade: +(!!p.wield && !p.down),
       // A glory kill's hold (room.ts feast()): the xenomorph's, with no blade in it.
       feast: +(xeno && !!p.lock && !p.down),

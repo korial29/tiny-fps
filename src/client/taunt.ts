@@ -73,6 +73,8 @@ export const createTaunts = (
   team: (id: number) => number | undefined = () => undefined,
   /** Whether a player is a xenomorph: it roars (ROAR), with no words, over the radio all the same. */
   beast: (id: number) => boolean = () => false,
+  /** Whether a player is a Hunter: its original click-call plays as a radio taunt. */
+  hunter: (id: number) => boolean = () => false,
 ): Taunts => {
   /**
    * The taunts waiting: when, who says it, the clip, and whether the own player hears it close
@@ -87,7 +89,7 @@ export const createTaunts = (
         return;
       }
       last.set(m.by, now);
-      const clip = beast(m.by) ? -1 : tauntOf(speaker(m.by), m.how, m.n);
+      const clip = beast(m.by) || hunter(m.by) ? -1 : tauntOf(speaker(m.by), m.how, m.n);
       const close = m.by == me;
       const radio =
         !close && (m.who == me || (team(m.by) !== undefined && team(m.by) === team(me)));
@@ -103,11 +105,12 @@ export const createTaunts = (
         due.splice(i, 1);
         const p = d.close || d.radio ? undefined : where(d.by);
         if (d.clip < 0) {
+          const sound = hunter(d.by) ? SOUND.HUNTER_TAUNT : SOUND.ROAR;
           if (d.radio && audio.play) {
-            audio.play(SOUND.ROAR, undefined, 0.7, paceOf(d.by), true);
-            said.push({ by: d.by, s: secondsOf(SOUND.ROAR) / paceOf(d.by) });
+            audio.play(sound, undefined, 0.7, paceOf(d.by), true);
+            said.push({ by: d.by, s: secondsOf(sound) / paceOf(d.by) });
           } else if (d.close || p) {
-            audio.play?.(SOUND.ROAR, p, p ? 1 : 0.7, paceOf(d.by));
+            audio.play?.(sound, p, p ? 1 : 0.7, paceOf(d.by));
           }
         } else if (d.close) {
           audio.speak(d.clip, undefined, 0.75, paceOf(d.by));

@@ -25,8 +25,8 @@ les visions ne doivent pas transmettre aux autres clients des informations de ci
 - [x] PR #334 : rôle, menus, disponibilité sur les cartes et portrait pixel-art HUD/radio.
 - [x] PR #338 : lames doubles en vue première et troisième personne; harpon rapide; disque renvoyé
       vers son porteur et récupéré au contact; laser d’épaule avec acquisition hôte dans un cône limité.
-- [x] PR vision : touche V pour alterner vision normale, thermique et détection locale des Xénomorphes.
-- [ ] PR cris : identité vocale Hunter intégrée à la radio.
+- [x] PR #339 : touche V pour alterner vision normale, thermique et détection locale des Xénomorphes.
+- [x] PR #340 : douleur et mort avec une voix originale; appel de frag synthétisé transmis sur la radio alliée.
 
-Le projet n’a pas encore d’assets audio dédiés au Hunter. Les sons seront générés par le synthétiseur
-du jeu, comme les autres effets, à moins qu’un asset original ne soit fourni.
+Les cris et appels Hunter sont synthétisés par le moteur audio du jeu; ils n’utilisent aucun extrait
+enregistré.

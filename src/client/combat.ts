@@ -236,6 +236,10 @@ export const createCombat = (
       audio.play(SOUND.ACID, at, at ? 0.6 : 0.45, r);
       return;
     }
+    if (hunter(id)) {
+      audio.play(died ? SOUND.HUNTER_DEATH : SOUND.HUNTER_PAIN, at, at ? 0.9 : 0.7, r);
+      return;
+    }
     if (died) {
       const her = !!bodyOf(id);
       const sound = dire

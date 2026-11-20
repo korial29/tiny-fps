@@ -193,6 +193,10 @@ export const SOUND = {
   HER_GROAN: 73,
   /** A Hunter harpoon: a tight mechanical release, then a quick metallic flight zing. */
   HARPOON: 74,
+  /** Original Hunter voice: a pain rasp, a fatal throat shriek and the short radio click-call. */
+  HUNTER_PAIN: 75,
+  HUNTER_DEATH: 76,
+  HUNTER_TAUNT: 77,
 } as const;
 
 /**
@@ -667,6 +671,26 @@ export const LAYERS: Voice[][] = [
     [0, 1900, -3, 0.001, 0, 0.035, 0, 0.35, 0, 1, 0.45],
     [3, 6800, -1.8, 0.001, 0, 0.08, 0.1, 0.16, 0, 1, 0.34, 0.012],
     [2, 900, -1.4, 0.004, 0.02, 0.1, 0.2, 0.3, 0, 1, 0.28, 0.018],
+  ],
+  // HUNTER_PAIN: an original guttural chirr, metallic clicks over a low rasp.
+  [
+    [3, 2600, -1.5, 0.001, 0.02, 0.16, 0.25, 0.18, 0, 1, 0.42],
+    [1, 150, 1.1, 0.012, 0.05, 0.2, 0.15, 0.12, 0, 1, 0.4],
+    [0, 1700, 0, 0.001, 0, 0.018, 0, 0.45, 0, 1, 0.24, 0.065],
+  ],
+  // HUNTER_DEATH: an unvoiced shriek climbing into a descending, broken growl.
+  [
+    [3, 4200, 0.9, 0.015, 0.13, 0.32, 0.35, 0.12, 0, 1, 0.45],
+    [1, 95, 1.7, 0.04, 0.18, 0.38, 0.18, 0.11, 0, 1, 0.5],
+    [2, 520, -1.5, 0.03, 0.08, 0.28, 0.22, 0.18, 0, 1, 0.3, 0.12],
+  ],
+  // HUNTER_TAUNT: three dry clicks, a bent metallic call, and a low answering pulse.
+  [
+    [0, 2200, 0, 0.001, 0, 0.014, 0, 0.4, 0, 1, 0.28],
+    [0, 3100, 0, 0.001, 0, 0.013, 0, 0.4, 0, 1, 0.24, 0.075],
+    [0, 1900, 0, 0.001, 0, 0.015, 0, 0.4, 0, 1, 0.28, 0.15],
+    [1, 190, 1.4, 0.025, 0.1, 0.25, 0.12, 0.16, 0, 1, 0.35, 0.17],
+    [2, 720, -0.8, 0.015, 0.05, 0.2, 0.2, 0.2, 0, 1, 0.3, 0.2],
   ],
 ];
 

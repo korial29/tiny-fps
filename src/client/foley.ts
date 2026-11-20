@@ -7,6 +7,7 @@ import { ROVER } from '../shared/rover';
 import { SHIP } from '../shared/ship';
 import { EV, KEY, MODE } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
+import { db } from './audio';
 import type { Audio, Loop } from './audio';
 import type { Hit } from './effects';
 import type { Vec3 } from './mesh';
@@ -87,13 +88,13 @@ export const createFoley = (
     const run = sprinting(p);
     // The xenomorph's footfall, played softly (it moves stealthily); its four feet each a pitch.
     if (beast(p.id)) {
-      a.play(SOUND.CHITIN, at, run ? 0.45 : p.mode === MODE.CROUCH ? 0.15 : 0.28, PAWS[n & 3]);
+      a.play(SOUND.CHITIN, at, run ? -6.9 : p.mode === MODE.CROUCH ? -16.5 : -11.1, PAWS[n & 3]);
       return;
     }
     a.play(
       p.mode === MODE.WALLRUN ? SOUND.WALLSTEP : SOUND.STEP,
       at,
-      run || p.mode === MODE.WALLRUN ? 1 : p.mode === MODE.CROUCH ? 0.35 : 0.6,
+      run || p.mode === MODE.WALLRUN ? 0 : p.mode === MODE.CROUCH ? -9.1 : -4.4,
       (run ? 0.92 : 1) * (n & 1 ? 1.06 : 0.94),
     );
   };
@@ -102,7 +103,7 @@ export const createFoley = (
     a.play(
       beast(id) ? SOUND.XENO_LAND : SOUND.LAND,
       at,
-      clamp(fall / 14, 0.2),
+      db(clamp(fall / 14, 0.2)),
       1.25 - 0.5 * clamp(fall / 20),
     );
 
@@ -165,7 +166,7 @@ export const createFoley = (
       // can take, as the host counts it (drive()'s jolt).
       const jolt = same ? Math.hypot(r.vx - was.vx, r.vz - was.vz) : 0;
       if (jolt > ROVER.CRASH) {
-        a.play(SOUND.CRASH, undefined, clamp(jolt / 25, 0.4), 1.25 - 0.3 * clamp(jolt / 30));
+        a.play(SOUND.CRASH, undefined, db(clamp(jolt / 25, 0.4)), 1.25 - 0.3 * clamp(jolt / 30));
       }
       if (!same) {
         air = drop = 0;
@@ -174,7 +175,7 @@ export const createFoley = (
         drop = Math.max(drop, -r.vy);
       } else {
         if (acc > STOP && air >= AIR && drop > SOFT_THUD) {
-          a.play(SOUND.THUD, undefined, clamp(drop / 10, 0.25), 1.1 - 0.3 * clamp(drop / 12));
+          a.play(SOUND.THUD, undefined, db(clamp(drop / 10, 0.25)), 1.1 - 0.3 * clamp(drop / 12));
         }
         // A stop empties it at once; a frame between two leaves most of it.
         air = acc > STOP ? 0 : Math.max(0, air - 2 * dt);
@@ -207,7 +208,7 @@ export const createFoley = (
       if (was && dt > 0 && Math.hypot(r.x - was.x, r.y - was.y, r.z - was.z) < 5) {
         const jolt = Math.hypot(r.vx - was.vx, (r.vy - was.vy) / 2, r.vz - was.vz);
         if (jolt > SHIP.CRASH) {
-          a.play(SOUND.CRASH, undefined, clamp(jolt / 40, 0.5), 1.1 - 0.3 * clamp(jolt / 60));
+          a.play(SOUND.CRASH, undefined, db(clamp(jolt / 40, 0.5)), 1.1 - 0.3 * clamp(jolt / 60));
         }
       }
     },
@@ -234,9 +235,9 @@ export const createFoley = (
       const [gain, rate] = [0.3 + 0.4 * effort, 1 + 0.15 * effort];
       if (cycle >= 1) {
         cycle %= 1;
-        a.play(SOUND.INHALE, undefined, gain, rate);
+        a.play(SOUND.INHALE, undefined, db(gain), rate);
       } else if (was < OUT_AT && cycle >= OUT_AT) {
-        a.play(SOUND.EXHALE, undefined, gain, rate);
+        a.play(SOUND.EXHALE, undefined, db(gain), rate);
       }
     },
 

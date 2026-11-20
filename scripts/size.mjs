@@ -58,7 +58,8 @@ const BUDGETS = [
   // 235 KB + 384 B until the tail's aim and flash, and the fists' weapon slot (the user, 2026-11-20: 128 B more).
   // 235 KB + 384 B until the bot and vehicle simulation speed-ups (the user, 2026-11-20: 384 B more).
   // 235 KB + 2816 B until the Hunter's class, HUD portrait, weapons and vision (#334/#338/#339, 2026-11-20).
-  { file: 'dist/index.js', max: 235 * 1024 + 2816 },
+  // 235 KB + 2816 B until the audio engine: levels in dB, sounds placed in 3D (the user, 2026-11-20: 1 KB more).
+  { file: 'dist/index.js', max: 236 * 1024 + 2816 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

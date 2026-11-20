@@ -7,6 +7,7 @@ import { TICK_HZ, VEHICLE } from '../shared/constants';
 import { gravity } from '../shared/physics';
 import type { Rover } from '../shared/types';
 import type { World } from '../shared/world';
+import { db } from './audio';
 import { STRIDE, basis } from './mesh';
 import type { Vec3 } from './mesh';
 import { SOUND } from './sfx';
@@ -270,7 +271,7 @@ export interface Stage {
     ring(at: Vec3, r: number): void;
     spit(at: Vec3): void;
   };
-  audio: { play(id: number, at?: Vec3, gain?: number, rate?: number): void };
+  audio: { play(id: number, at?: Vec3, db?: number, rate?: number): void };
   fx: { quake(k: number): void };
 }
 
@@ -328,8 +329,8 @@ export const createWrecks = (world: World, { tracer, audio, fx }: Stage): Wrecks
     tracer.blast(at, 2.2 * big);
     tracer.ring([r.x, r.y - (r.ship ? 1.2 : 1), r.z], 9 * big);
     fuses.push([0.12, along(r, half), 1.4 * big], [0.27, along(r, -half), 1.6 * big]);
-    audio.play(SOUND.WRECK, at, 2.4, r.ship ? 0.85 : 1);
-    audio.play(SOUND.BLAST, at, 1.6, 0.35);
+    audio.play(SOUND.WRECK, at, 7.6, r.ship ? 0.85 : 1);
+    audio.play(SOUND.BLAST, at, 4.1, 0.35);
     for (let i = 0; i < BITS; i++) {
       const [a, s] = [rnd() * 6.283, (3 + 9 * rnd()) * big];
       bits.push({
@@ -357,7 +358,7 @@ export const createWrecks = (world: World, { tracer, audio, fx }: Stage): Wrecks
         f[0] -= dt;
         if (f[0] <= 0) {
           tracer.blast(f[1], f[2]);
-          audio.play(SOUND.BLAST, f[1], 1.2, 0.45);
+          audio.play(SOUND.BLAST, f[1], 1.6, 0.45);
         }
       }
       fuses = fuses.filter(f => f[0] > 0);
@@ -390,7 +391,7 @@ export const createWrecks = (world: World, { tracer, audio, fx }: Stage): Wrecks
           fresh[k] = SHIMMER;
         } else if (old && !w && (r.hp ?? VEHICLE.HP) < (old.hp ?? VEHICLE.HP)) {
           // A hit on the hull: a clang and a few sparks off a place that arcs.
-          audio.play(SOUND.HULL, at, 1, 0.9 + 0.2 * rnd());
+          audio.play(SOUND.HULL, at, 0, 0.9 + 0.2 * rnd());
           const from = spots(r, k).at(-1) ?? at;
           for (let i = 0; i < 4; i++) {
             tracer.spit(from);
@@ -402,7 +403,7 @@ export const createWrecks = (world: World, { tracer, audio, fx }: Stage): Wrecks
           eased[k] =
             e === undefined || Math.abs(e - w) > 8 ? w : clamp(e - dt * TICK_HZ, w - 3.99, w);
           if (e !== undefined && eased[k] < VEHICLE.FADE && e >= VEHICLE.FADE) {
-            audio.play(SOUND.CRUMBLE, at, 1.3);
+            audio.play(SOUND.CRUMBLE, at, 2.3);
           }
         } else {
           delete eased[k];
@@ -424,7 +425,7 @@ export const createWrecks = (world: World, { tracer, audio, fx }: Stage): Wrecks
           }
         }
         if (live.length && hush[k] <= 0) {
-          audio.play(SOUND.ARC, at, 0.3 + 0.06 * live.length, 0.8 + 0.5 * rnd());
+          audio.play(SOUND.ARC, at, db(0.3 + 0.06 * live.length), 0.8 + 0.5 * rnd());
           hush[k] = 0.15 + 0.3 * rnd();
         }
         const top: Vec3 = [r.x, r.y + (r.ship ? 0.6 : 0.3), r.z];

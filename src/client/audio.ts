@@ -1,4 +1,5 @@
-// Web Audio: the sounds of sfx.ts placed in stereo around the listener, and the music loop.
+// Web Audio: the sounds of sfx.ts placed in 3D around the listener (HRTF, fainter with distance by
+// the inverse law), their levels in dB, and the music loop.
 import type { Vec3 } from './mesh';
 import { LAYERS, LOOPED, MUSIC_RATE, RATE, music, render, seam } from './sfx';
 import type { Voice } from './sfx';
@@ -7,7 +8,7 @@ import { CLIPS } from './voice/clips';
 
 /** A sound that plays on and on, started on its first set. */
 export interface Loop {
-  /** Volume and speed (pitch) to move to, eased over a fraction of a second: 0 is silence. */
+  /** Volume (a fader, 0 silence and 1 its level) and speed (pitch) to move to, eased over a fraction of a second. */
   set(volume: number, rate: number): void;
 }
 
@@ -20,11 +21,11 @@ export interface Audio {
   /** Where the listener is and looks, each frame (yaw as a player's: 0 looks toward -z). */
   listen(eye: Vec3, yaw: number): void;
   /**
-   * Plays the sound `id` (an index into the layers). With `at`, panned left or right by its direction from the listener and
-   * fainter with distance; without, centred (the own player's sounds). `gain` scales the volume,
-   * `rate` the speed and so the pitch; over the `radio` as speak() says a line.
+   * Plays the sound `id` (an index into the layers). With `at`, placed where it is round the
+   * listener and fainter with distance; without, centred (the own player's sounds). `db` is added
+   * to its level, `rate` is the speed and so the pitch; over the `radio` as speak() says a line.
    */
-  play(id: number, at?: Vec3, gain?: number, rate?: number, radio?: boolean): void;
+  play(id: number, at?: Vec3, db?: number, rate?: number, radio?: boolean): void;
   /**
    * Says the announcer's line `id` (LINE), centred, the music lowered under it. Lines wait their
    * turn, two at most and each once; none before the voice is decoded, a moment after unlock.
@@ -36,7 +37,7 @@ export interface Audio {
    * of squelch before and after it and a hiss under it. False, and silent, until the voices are
    * decoded.
    */
-  speak(id: number, at?: Vec3, gain?: number, rate?: number, radio?: boolean): boolean;
+  speak(id: number, at?: Vec3, db?: number, rate?: number, radio?: boolean): boolean;
   /** The sound `id` (one of LOOPED) as a loop, silent until its first set; the own player's, centred. */
   loop(id: number): Loop;
   /** Mutes or unmutes everything, music included. */
@@ -46,11 +47,54 @@ export interface Audio {
   destroy(): void;
 }
 
-/** Metres past which a sound is silent. */
-const RANGE = 40;
+/** Metres past which a sound is not played (the user, 2026-11-20: 80, from 40). */
+const RANGE = 80;
+/** Metres within which a placed sound is at its level: 6 dB less each time the distance doubles past it. */
+const NEAR = 2;
+/** A level in dB as a gain, and back. */
+export const gain = (db: number) => 10 ** (db / 20);
+export const db = (g: number) => 20 * Math.log10(g);
 /** Sounds playing at once: past it the quietest goes. */
 const VOICES = 24;
 const MUSIC = 0.5;
+/**
+ * The mix (the user, 2026-11-20, by ear in the menu's Audio panel): a bus per group of sounds, its
+ * level in dB, in LEVELS' order: voices (the announcer, the players' lines and cries), moves,
+ * weapons, vehicles and the world, the helmet's breath, the game's events and pickups, then the
+ * music. GROUP is each sound's bus, in SOUND order; LOUD a sound's own level over its bus, 0 dB
+ * when absent. The game menu's Audio panel changes them for this browser (mix()).
+ */
+export const LEVELS = [-22.5, -25.5, -13.5, -10.5, -17.5, -17.5, -6];
+const BAKED = [...LEVELS];
+const MIXED = 'tiny-fps:mix';
+export const LOUD: Record<number, number> = {};
+export const GROUP =
+  '111111111155552022225522222222222222222233344333333333005533002200120120002000';
+const level = (id: number) => LEVELS[+GROUP[id]] + (LOUD[id] ?? 0);
+let mixed = () => {};
+/** Sets bus `i` to `db` live, and keeps the mix for the next visit; none, the mix as made. */
+export const mix = (i?: number, db = 0) => {
+  if (i === undefined) {
+    LEVELS.splice(0, 7, ...BAKED);
+  } else {
+    LEVELS[i] = db;
+  }
+  mixed();
+  try {
+    localStorage.setItem(MIXED, JSON.stringify(LEVELS));
+  } catch {
+    // Not kept.
+  }
+};
+// The mix of the last visit. Storage throws when blocked, or is absent: the mix as made then.
+try {
+  const kept = JSON.parse(localStorage.getItem(MIXED)!) as number[] | null;
+  if (kept?.length == 7) {
+    LEVELS.splice(0, 7, ...kept);
+  }
+} catch {
+  // As made.
+}
 const STORE = 'tiny-fps:muted';
 /** The announcer's volume, and the music's share of its own under a line. */
 const SPEECH = 0.9;
@@ -147,13 +191,20 @@ export const createAudio = (
       }
     }
   };
+  mixed = () =>
+    bed.gain.setTargetAtTime(
+      (talking ? MUSIC * DUCK : MUSIC) * gain(LEVELS[6]),
+      ctx.currentTime,
+      0.15,
+    );
+  mixed();
   const next = () => {
     const id = lines.shift();
     talking = id !== undefined && !!speech;
-    bed.gain.setTargetAtTime(talking ? MUSIC * DUCK : MUSIC, ctx.currentTime, 0.15);
+    mixed();
     if (talking) {
       const src = source(speech!);
-      src.connect(out(master, SPEECH));
+      src.connect(out(master, SPEECH * gain(LEVELS[0])));
       src.onended = next;
       src.start(0, ...CLIPS[id!]);
     }
@@ -170,23 +221,34 @@ export const createAudio = (
     return src;
   };
 
-  /** Buffer `b` (from `clip`'s start for its length) as play() places it; false when unheard. */
+  /** Buffer `b` (from `clip`'s start for its length) at `level` dB as play() places it; false when unheard. */
   const emit = (
     b: AudioBuffer | undefined,
     at: Vec3 | undefined,
-    gain: number,
+    level: number,
     rate: number,
     clip?: readonly [number, number],
     radio = false,
   ): boolean => {
-    let pan = 0;
-    let vol = gain;
+    const loud = gain(level);
+    /** What reaches the listener, for the voices' priority: the panner's own fall with distance. */
+    let vol = loud;
+    let p: PannerNode | undefined;
     if (at) {
       const [dx, dy, dz] = at.map((v, i) => v - eye[i]);
       const d = Math.hypot(dx, dy, dz);
-      vol = Math.max(0, 1 - d / RANGE) ** 2 * gain;
-      // The listener's right is (cos yaw, -sin yaw) on x, z.
-      pan = (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / Math.max(d, 1);
+      if (d > RANGE) {
+        return false;
+      }
+      vol *= NEAR / Math.max(d, NEAR);
+      // Placed round a listener at the origin looking down -z: its right (cos yaw, -sin yaw) on x,
+      // its ahead (-sin yaw, -cos yaw) on -z.
+      const [c, s] = [Math.cos(yaw), Math.sin(yaw)];
+      p = ctx.createPanner();
+      p.panningModel = 'HRTF';
+      p.refDistance = NEAR;
+      p.maxDistance = RANGE;
+      p.setPosition(dx * c - dz * s, dy, dx * s + dz * c);
     }
     if (!b || !vol) {
       return false;
@@ -201,8 +263,6 @@ export const createAudio = (
     }
     const src = source(b);
     src.playbackRate.value = rate;
-    const p = ctx.createStereoPanner();
-    p.pan.value = pan;
     let head: AudioNode = src;
     /** When the voice starts: after the squelch over the radio. */
     let at0 = 0;
@@ -235,7 +295,7 @@ export const createAudio = (
       n.stop(t + pre + len + post);
       at0 = t + pre;
     }
-    head.connect(p).connect(out(master, vol));
+    (p ? head.connect(p) : head).connect(out(master, loud));
     const v = { vol, src };
     voices.add(v);
     src.onended = () => voices.delete(v);
@@ -271,8 +331,8 @@ export const createAudio = (
     listen(at, y) {
       [eye, yaw] = [at, y];
     },
-    play(id, at, gain = 1, rate = 1, radio = false) {
-      emit(bufs[id], at, gain, rate, undefined, radio);
+    play(id, at, db = 0, rate = 1, radio = false) {
+      emit(bufs[id], at, db + level(id), rate, undefined, radio);
     },
     say(id) {
       if (speech && lines.length < 2 && !lines.includes(id)) {
@@ -282,8 +342,8 @@ export const createAudio = (
         }
       }
     },
-    speak(id, at, gain = 1, rate = 1, radio = false) {
-      return !!cast && emit(cast, at, gain, rate, CAST[id], radio);
+    speak(id, at, db = 0, rate = 1, radio = false) {
+      return !!cast && emit(cast, at, db + LEVELS[0], rate, CAST[id], radio);
     },
     loop(id) {
       let src: AudioBufferSourceNode | undefined;
@@ -297,7 +357,7 @@ export const createAudio = (
             src.start();
           }
           if (src) {
-            g.gain.setTargetAtTime(volume, ctx.currentTime, 0.08);
+            g.gain.setTargetAtTime(volume * gain(level(id)), ctx.currentTime, 0.08);
             src.playbackRate.setTargetAtTime(rate, ctx.currentTime, 0.08);
           }
         },

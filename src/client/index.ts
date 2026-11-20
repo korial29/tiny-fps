@@ -29,7 +29,7 @@ import { build, hidden } from '../shared/world';
 import { createAnnouncer } from './announce';
 import { TAUNT_LATE, createTaunts, speakerOf } from './taunt';
 import { LINE, SAID } from './voice/clips';
-import { createAudio, savedMute, toggleMute } from './audio';
+import { createAudio, db, savedMute, toggleMute } from './audio';
 import { createBalls, onBody } from './balls';
 import { createTracer } from './beams';
 import { beats, cues, say } from './beats';
@@ -322,7 +322,7 @@ const play = (
     hunter,
   );
   const gloryfx = createGloryFx(
-    (id, at, gain, rate) => audio.play(id, at, gain, rate),
+    (id, at, gain, rate) => audio.play(id, at, db(gain), rate),
     id => voiceOf(id, roster.find(p => p.id == id)?.body),
     beast,
   );
@@ -419,14 +419,14 @@ const play = (
           const at: [number, number, number] | undefined =
             b.by === you.id ? undefined : [b.x, b.y, b.z];
           if (p?.wield && p.mode !== MODE.RIDE && !b.arc && b.power !== NADE) {
-            audio.play(SOUND.SHING, at, 0.8, 1.6);
-            audio.play(SOUND.ZAP, at, 0.4, 1.3);
+            audio.play(SOUND.SHING, at, -1.9, 1.6);
+            audio.play(SOUND.ZAP, at, -8, 1.3);
             rd?.parried(b.by, at ? INTERP_DELAY / 1000 : 0);
             if (!at) {
               body.parried();
             }
           } else if (b.power === BOLT) {
-            audio.play(SOUND.BLASTER, [b.x, b.y, b.z], 0.6, 0.92 + 0.16 * ((b.id * 0.618) % 1));
+            audio.play(SOUND.BLASTER, [b.x, b.y, b.z], -4.4, 0.92 + 0.16 * ((b.id * 0.618) % 1));
           }
         }
         seen = flying;
@@ -443,7 +443,7 @@ const play = (
         }
         // A door that starts to open or to shut is heard where it is.
         for (const c of doors.snapshot(s.doors)) {
-          audio.play(c.id, c.at, 0.9);
+          audio.play(c.id, c.at, -0.9);
         }
         const told = beats(match, s);
         for (const beat of told) {
@@ -457,7 +457,7 @@ const play = (
             [ctl.yaw, ctl.pitch] = [world.def.teams[you.team].spawns[0][3], 0];
           }
           for (const c of cues(beat, you)) {
-            audio.play(c.id, c.at, c.gain, c.rate);
+            audio.play(c.id, c.at, db(c.gain ?? 1), c.rate);
           }
           if (beat.kind == 'capture') {
             // The team that captured grins, the own face in the HUD with it.
@@ -571,11 +571,11 @@ const play = (
         // The xenomorph's bite, or the katana's stroke through the neck; the fists' punch that
         // bursts the head (no katana in the killer's hand) is gloryfx.ts's.
         if (beast(m.by)) {
-          audio.play(SOUND.TACKLE, at, 1, 0.6);
-          audio.play(SOUND.XENO_PAIN, at, 0.7, 0.5);
+          audio.play(SOUND.TACKLE, at, 0, 0.6);
+          audio.play(SOUND.XENO_PAIN, at, -3.1, 0.5);
         } else if (!fisted.get(m.by)) {
-          audio.play(SOUND.SHING, at, 1, 0.6);
-          audio.play(SOUND.ZAP, at, 0.7, 0.5);
+          audio.play(SOUND.SHING, at, 0, 0.6);
+          audio.play(SOUND.ZAP, at, -3.1, 0.5);
         }
         if (m.by == you.id) {
           fx.punch();

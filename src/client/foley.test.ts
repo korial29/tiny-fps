@@ -102,7 +102,7 @@ describe('the own player', () => {
     expect(soft.rate!).toBeGreaterThan(mid.rate!);
     expect(mid.rate!).toBeGreaterThan(huge.rate!);
     expect(huge.rate!).toBeGreaterThan(0.5);
-    expect(soft.gain!).toBeGreaterThan(0.1);
+    expect(soft.gain!).toBeGreaterThan(-20);
   });
 
   describe('footsteps', () => {

@@ -1,8 +1,18 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SPRITES, VOICED, createAudio, savedMute, toggleMute } from './audio';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  GROUP,
+  LEVELS,
+  SPRITES,
+  db,
+  gain,
+  VOICED,
+  createAudio,
+  savedMute,
+  toggleMute,
+} from './audio';
 import type { Audio } from './audio';
-import { MUSIC_RATE, RATE } from './sfx';
+import { LAYERS as SOUNDS, MUSIC_RATE, RATE, SOUND as IDS } from './sfx';
 import { CAST } from './voice/cast';
 import { CLIPS, LINE } from './voice/clips';
 import type { Voice } from './sfx';
@@ -27,6 +37,11 @@ interface Node {
     setValueAtTime: ReturnType<typeof vi.fn>;
   };
   pan: { value: number };
+  /** A panner's place round the listener, and its model. */
+  pos?: number[];
+  panningModel?: string;
+  refDistance?: number;
+  maxDistance?: number;
   playbackRate: { value: number; setTargetAtTime: ReturnType<typeof vi.fn> };
   buffer?: { length: number };
   loop?: boolean;
@@ -70,6 +85,12 @@ class FakeContext {
     return n;
   }
   createStereoPanner = () => this.node();
+  createPanner = () =>
+    Object.assign(this.node(), {
+      setPosition(this: Node, ...pos: number[]) {
+        this.pos = pos;
+      },
+    });
   createBiquadFilter = () => Object.assign(this.node(), { type: '', frequency: { value: 0 } });
   createWaveShaper = () => Object.assign(this.node(), { curve: null as Float32Array | null });
   createBufferSource() {
@@ -95,11 +116,15 @@ const install = () => {
   FakeContext.all = [];
   vi.stubGlobal('AudioContext', FakeContext);
 };
-/** The last voice played: its sound id, pan and volume, read down its source > panner > gain. */
+/**
+ * The last voice played: its sound id, its place round the listener (none centred), the panner and
+ * its level, read down its source > panner (when placed) > gain.
+ */
 const voice = () => {
   const src = fake().sources.at(-1)!;
-  const pan = src.to!;
-  return { id: src.buffer!.length - 10, pan: pan.pan.value, vol: pan.to!.gain.value, src };
+  const panner = src.to!.pos ? src.to! : undefined;
+  const pos = panner?.pos?.map(v => v + 0);
+  return { id: src.buffer!.length - 10, pos, panner, vol: (panner ?? src).to!.gain.value, src };
 };
 /** Voices that started and were not stopped (the music is the loop). */
 const playing = () => fake().sources.filter(s => !s.loop && s.started && !s.stopped).length;
@@ -114,9 +139,39 @@ const unlocked = (yaw = 0): Audio => {
 };
 const at = (dx: number, dz: number): [number, number, number] => [EYE[0] + dx, EYE[1], EYE[2] + dz];
 
+/** The baked mix; the tests play at 0 dB unless they read it. */
+const MIX = [...LEVELS];
+beforeEach(() => LEVELS.fill(0));
 afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
+  LEVELS.splice(0, LEVELS.length, ...MIX);
+});
+
+describe('the mix', () => {
+  it('is the user\u2019s, set by ear in the menu', () => {
+    expect(MIX).toEqual([-22.5, -25.5, -13.5, -10.5, -17.5, -17.5, -6]);
+  });
+
+  it('gives every sound one of the groups, the dash among the moves', () => {
+    expect(GROUP).toHaveLength(SOUNDS.length);
+    expect(GROUP).toMatch(/^[0-5]+$/);
+    expect(GROUP[IDS.DASH]).toBe('1');
+    expect(GROUP[IDS.INHALE]).toBe('4');
+  });
+
+  it('scales a sound by its group and the music by its own', () => {
+    LEVELS.splice(0, LEVELS.length, ...MIX);
+    const a = unlocked();
+    a.play(SOUND.HIT);
+    expect(voice().vol).toBeCloseTo(gain(-25.5), 5);
+    const bed = fake().gains[1];
+    expect(bed.gain.setTargetAtTime).toHaveBeenLastCalledWith(
+      expect.closeTo(0.5 * gain(-6), 5),
+      3,
+      expect.any(Number),
+    );
+  });
 });
 
 describe('unlock', () => {
@@ -160,66 +215,67 @@ describe('unlock', () => {
 });
 
 describe('play', () => {
-  it('pans a source to the right right and one to the left left', () => {
+  it('places a source round the listener: right, left, ahead (-z) and behind', () => {
     const a = unlocked();
-    a.play(SOUND.HIT, at(5, 0));
-    expect(voice().pan).toBeCloseTo(1);
-    a.play(SOUND.HIT, at(-5, 0));
-    expect(voice().pan).toBeCloseTo(-1);
+    for (const [dx, dz, pos] of [
+      [5, 0, [5, 0, 0]],
+      [-5, 0, [-5, 0, 0]],
+      [0, -5, [0, 0, -5]],
+      [0, 5, [0, 0, 5]],
+    ] as const) {
+      a.play(SOUND.HIT, at(dx, dz));
+      voice().pos!.forEach((v, i) => expect(v).toBeCloseTo(pos[i]));
+    }
   });
 
-  it('centres a source straight ahead or straight behind', () => {
-    const a = unlocked();
-    a.play(SOUND.HIT, at(0, -5));
-    expect(voice().pan).toBeCloseTo(0);
-    a.play(SOUND.HIT, at(0, 5));
-    expect(voice().pan).toBeCloseTo(0);
-  });
-
-  it('follows the yaw: facing -x, -z is on the right and +z on the left', () => {
+  it('follows the yaw: facing -x, -z is on the right, +z on the left and -x ahead', () => {
     const a = unlocked(Math.PI / 2);
-    a.play(SOUND.HIT, at(0, -5));
-    expect(voice().pan).toBeCloseTo(1);
-    a.play(SOUND.HIT, at(0, 5));
-    expect(voice().pan).toBeCloseTo(-1);
-    a.play(SOUND.HIT, at(-5, 0));
-    expect(voice().pan).toBeCloseTo(0);
+    for (const [dx, dz, pos] of [
+      [0, -5, [5, 0, 0]],
+      [0, 5, [-5, 0, 0]],
+      [-5, 0, [0, 0, -5]],
+    ] as const) {
+      a.play(SOUND.HIT, at(dx, dz));
+      voice().pos!.forEach((v, i) => expect(v).toBeCloseTo(pos[i]));
+    }
   });
 
-  it('is fainter with distance and silent beyond the range', () => {
+  it('fades by the inverse law past 2 m through an HRTF panner, and is not played past 80 m', () => {
     const a = unlocked();
-    a.play(SOUND.HIT, at(2, 0));
-    const near = voice().vol;
     a.play(SOUND.HIT, at(20, 0));
-    const far = voice().vol;
-    expect(near).toBeGreaterThan(far);
-    expect(far).toBeGreaterThan(0);
+    expect(voice().panner).toMatchObject({ panningModel: 'HRTF', refDistance: 2, maxDistance: 80 });
     const n = fake().sources.length;
-    a.play(SOUND.HIT, at(41, 0));
-    expect(fake().sources).toHaveLength(n);
+    a.play(SOUND.HIT, at(79, 0));
+    expect(fake().sources).toHaveLength(n + 1);
+    a.play(SOUND.HIT, at(81, 0));
+    expect(fake().sources).toHaveLength(n + 1);
   });
 
-  it('plays without a position centred and at full volume', () => {
+  it('plays without a position centred, with no panner, at its level', () => {
     const a = unlocked(1.3);
     a.play(SOUND.HIT);
-    expect(voice()).toMatchObject({ pan: 0, vol: 1 });
+    expect(voice()).toMatchObject({ pos: undefined, vol: 1 });
   });
 
-  it('scales the volume by the gain, with or without a position', () => {
+  it('adds the dB asked to the level, with or without a position', () => {
     const a = unlocked();
-    a.play(SOUND.HEART, undefined, 0.5);
-    expect(voice().vol).toBe(0.5);
-    a.play(SOUND.HIT, at(2, 0));
-    const full = voice().vol;
-    a.play(SOUND.HIT, at(2, 0), 0.5);
-    expect(voice().vol).toBeCloseTo(full / 2);
+    a.play(SOUND.HEART, undefined, -6);
+    expect(voice().vol).toBeCloseTo(0.5, 2);
+    a.play(SOUND.HIT, at(2, 0), 6);
+    expect(voice().vol).toBeCloseTo(2, 1);
+  });
+
+  it('turns dB into gains and back', () => {
+    expect(gain(-20)).toBeCloseTo(0.1);
+    expect(db(0.5)).toBeCloseTo(-6.02);
+    expect(gain(db(0.3))).toBeCloseTo(0.3);
   });
 
   it('plays at the rate asked, 1 by default', () => {
     const a = unlocked();
     a.play(SOUND.HIT);
     expect(voice().src.playbackRate.value).toBe(1);
-    a.play(SOUND.HIT, undefined, 1, 0.75);
+    a.play(SOUND.HIT, undefined, 0, 0.75);
     expect(voice().src.playbackRate.value).toBe(0.75);
   });
 
@@ -452,20 +508,19 @@ describe('speak', () => {
 
   it('plays the clip from its place in the sprite, placed as a sound and at its pace', async () => {
     const a = await voiced();
-    expect(a.speak(5, at(4, 0), 1, 1.05)).toBe(true);
+    expect(a.speak(5, at(4, 0), 0, 1.05)).toBe(true);
     const s = clips().at(-1)!;
     expect(s.args).toEqual([0, ...CAST[5]]);
     expect(s.playbackRate.value).toBe(1.05);
-    // To the right, and fainter than close by.
-    expect(s.to!.pan.value).toBeGreaterThan(0);
-    expect(s.to!.to!.gain.value).toBeLessThan(1);
+    // Placed to the right, through the panner that fades it with distance.
+    expect(s.to!.pos![0]).toBeCloseTo(4);
     // Out of range: unheard.
     expect(a.speak(5, at(100, 0))).toBe(false);
   });
 
   it('clips a line over the radio and thins it through a headset\u2019s band, centred, after a squelch', async () => {
     const a = await voiced();
-    expect(a.speak(2, undefined, 0.7, 1, true)).toBe(true);
+    expect(a.speak(2, undefined, -3, 1, true)).toBe(true);
     type Filter = Node & { type: string; frequency: { value: number } };
     const line = clips().at(-1)!;
     const shaper = line.to as Node & { curve: Float32Array };
@@ -476,8 +531,8 @@ describe('speak', () => {
     const lp = hp.to as Filter;
     expect([hp.type, lp.type]).toEqual(['highpass', 'lowpass']);
     expect(hp.frequency.value).toBeLessThan(lp.frequency.value);
-    expect(lp.to!.pan.value).toBe(0);
-    expect(lp.to!.to!.gain.value).toBe(0.7);
+    expect(lp.to!.pos).toBeUndefined();
+    expect(lp.to!.gain.value).toBeCloseTo(gain(-3));
     // The noise into the same amplifier: loud, low under the line, loud again, then stopped.
     const noise = fake().sources.find(s => s.loop && s.to?.to === shaper)!;
     const g = noise.to!.gain;
@@ -489,7 +544,7 @@ describe('speak', () => {
 
   it('plays a sound over the radio as it says a line: clipped, thinned, after a squelch', () => {
     const a = unlocked();
-    a.play(SOUND.HIT, undefined, 0.7, 1, true);
+    a.play(SOUND.HIT, undefined, -3, 1, true);
     const roar = fake()
       .sources.filter(s => !s.loop)
       .at(-1)!;

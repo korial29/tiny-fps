@@ -196,7 +196,7 @@ describe('input frame', () => {
 });
 
 describe('snapshot frame', () => {
-  it('has a 4-byte head, 62 bytes per player, then the match: 10 bytes and a byte per flag at home', () => {
+  it('has a 5-byte head, 62 bytes per player, then the match: 10 bytes and a byte per flag at home', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,
       players: [
@@ -266,10 +266,10 @@ describe('snapshot frame', () => {
       ...IDLE,
       packs: 2 ** 47 + 0x8000_0005,
     });
-    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([4, 62, 10]);
+    expect([SNAP_HEAD, SNAP_PLAYER, SNAP_MATCH]).toEqual([5, 62, 10]);
     expect(buf.byteLength).toBe(SNAP_HEAD + SNAP_PLAYER + SNAP_MATCH + 2);
     expect(bytes(buf)).toEqual([
-      ...[MSG_SNAPSHOT, 0x12, 0x34, 1],
+      ...[MSG_SNAPSHOT, 0x12, 0x34, 1, 0],
       7,
       // Big-endian float32: 1, 2, 3, then vx -2, vy -1, vz 0.5 and the edge 12.5.
       ...[0x3f, 0x80, 0, 0],
@@ -539,20 +539,21 @@ describe('snapshot frame', () => {
       expect(bytes(none)[SNAP_HEAD + 3 * SNAP_PLAYER + SNAP_MATCH]).toBe(FLAG.DROPPED);
       expect(bytes(encodeSnapshot(snap([], 3, rest)))).toEqual(bytes(none));
       expect(decodeSnapshot(none)).not.toHaveProperty('rovers');
-      // A rover adds its count bit and its block after the players, and moves nothing else.
+      // A rover adds its count and its block after the players, and moves nothing else.
       const one = bytes(encodeSnapshot(snap([rover()], 3, rest)));
       expect(one.splice(SNAP_HEAD + 3 * SNAP_PLAYER, SNAP_ROVER)).toHaveLength(SNAP_ROVER);
-      one[3] &= 31;
+      expect(one[4]).toBe(1);
+      one[4] = 0;
       expect(one).toEqual(bytes(none));
     });
 
-    it('puts the rover count in the top three bits of the count byte, and the players in the low five', () => {
-      expect([SNAP_ROVER, MAX_ROVERS]).toEqual([57, 7]);
+    it("puts the player count in the head's fourth byte and the rover count in its fifth", () => {
+      expect([SNAP_ROVER, MAX_ROVERS]).toEqual([57, 15]);
       for (const players of [0, 1, 5, MAX_PLAYERS]) {
         for (let n = 0; n <= MAX_ROVERS; n++) {
           const sent = Array.from({ length: n }, (_, k) => rover(k));
           const buf = encodeSnapshot(snap(sent, players));
-          expect(bytes(buf)[3]).toBe(players | (n << 5));
+          expect(bytes(buf).slice(3, 5)).toEqual([players, n]);
           expect(buf.byteLength).toBe(
             SNAP_HEAD + players * SNAP_PLAYER + n * SNAP_ROVER + SNAP_MATCH + 2,
           );
@@ -562,11 +563,11 @@ describe('snapshot frame', () => {
           expect('rovers' in back).toBe(n > 0);
         }
       }
-      // The count has no fourth bit: an eighth rover is not sent, and the frame stays whole.
-      const eight = Array.from({ length: 8 }, (_, k) => rover(k));
-      const buf = encodeSnapshot(snap(eight, 2));
-      expect(bytes(buf)[3]).toBe(2 | (7 << 5));
-      expect(decodeSnapshot(buf)!.rovers).toEqual(eight.slice(0, 7));
+      // A rover past MAX_ROVERS is not sent, and the frame stays whole.
+      const more = Array.from({ length: MAX_ROVERS + 1 }, (_, k) => rover(k));
+      const buf = encodeSnapshot(snap(more, 2));
+      expect(bytes(buf)[4]).toBe(MAX_ROVERS);
+      expect(decodeSnapshot(buf)!.rovers).toEqual(more.slice(0, MAX_ROVERS));
     });
 
     it('round-trips a rover’s float32 state exactly, with both seats', () => {
@@ -667,7 +668,7 @@ describe('snapshot frame', () => {
         },
       );
       const buf = encodeSnapshot(sent);
-      expect(bytes(buf)[3]).toBe(16 | (4 << 5));
+      expect(bytes(buf).slice(3, 5)).toEqual([16, 4]);
       expect(buf.byteLength).toBe(
         SNAP_HEAD + 16 * SNAP_PLAYER + 4 * SNAP_ROVER + SNAP_MATCH + 2 + 8 + 1 + 3 * SNAP_BALL,
       );
@@ -689,9 +690,15 @@ describe('snapshot frame', () => {
       }
       expect(decodeSnapshot(new Uint8Array([...bytes(ok), 0]).buffer)).toBeNull();
       // One rover more or fewer than the bytes hold, none at all, and a rover counted as a player.
-      for (const count of [2 | (3 << 5), 2 | (1 << 5), 2, 3 | (1 << 5), 2 | (7 << 5)]) {
+      for (const count of [
+        [2, 3],
+        [2, 1],
+        [2, 0],
+        [3, 1],
+        [2, 7],
+      ]) {
         const bad = new Uint8Array(ok.slice(0));
-        bad[3] = count;
+        bad.set(count, 3);
         expect(decodeSnapshot(bad.buffer), `count ${count}`).toBeNull();
       }
       // A rover's worth of bytes with no count for it.
@@ -829,9 +836,9 @@ describe('snapshot frame', () => {
     expect(STUMBLE_TICKS).toBeLessThanOrEqual(63);
     // The id of a tackler is 4 bits.
     expect(MAX_PLAYERS).toBeLessThanOrEqual(16);
-    // The count byte: 5 bits of players, 3 of rovers, and NOBODY is no player's id.
-    expect(MAX_PLAYERS).toBeLessThanOrEqual(31);
-    expect(MAX_ROVERS).toBe(7);
+    // A byte of players, one of rovers, and NOBODY is no player's id.
+    expect(MAX_PLAYERS).toBeLessThanOrEqual(255);
+    expect(MAX_ROVERS).toBe(15);
     for (const def of Object.values(MAPS)) {
       expect(def.rovers?.length ?? 0).toBeLessThanOrEqual(MAX_ROVERS);
     }

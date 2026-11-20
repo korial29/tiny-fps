@@ -125,7 +125,7 @@ afterEach(() => {
 
 describe('the mix', () => {
   it('is the user\u2019s, from the demo\u2019s mixer, with the music at full level', () => {
-    expect(MIX).toEqual([0.4, 0.1, 0.3, 0.25, 0.15, 0.3, 1]);
+    expect(MIX).toEqual([0.48, 0.12, 0.36, 0.3, 0.18, 0.36, 1]);
   });
 
   it('gives every sound one of the groups, the dash among the moves', () => {
@@ -139,7 +139,7 @@ describe('the mix', () => {
     LEVELS.splice(0, LEVELS.length, ...MIX);
     const a = unlocked();
     a.play(SOUND.HIT);
-    expect(voice().vol).toBeCloseTo(0.1);
+    expect(voice().vol).toBeCloseTo(0.12);
     const bed = fake().gains[1];
     expect(bed.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.5, 3, expect.any(Number));
   });

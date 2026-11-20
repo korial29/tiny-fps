@@ -57,7 +57,7 @@ const MUSIC = 0.5;
  * the world, the helmet's breath, the game's events and pickups, then the music. GROUP is each
  * sound's group, in SOUND order. The mixer sets LEVELS live and calls remix() for the music.
  */
-export const LEVELS = [0.4, 0.1, 0.3, 0.25, 0.15, 0.3, 1];
+export const LEVELS = [0.48, 0.12, 0.36, 0.3, 0.18, 0.36, 1];
 export const GROUP = '11111111115555202222552222222222222222223334433333333300553300220012012000';
 const level = (id: number) => LEVELS[+GROUP[id]];
 let mixed = () => {};

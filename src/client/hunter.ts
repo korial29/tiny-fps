@@ -71,15 +71,17 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
     const chest=bell((y-1.405)/.15);
     const armMass=.68*bell((y-1.319)/.084)+.49*bell((y-1.098)/.073);
     const legMass=.29*bell((y-.745)/.15)+.24*bell((y-.34)/.095);
-    const shoulder=.061+.19*Math.max(0,1.45-y);
+    const shoulder=.061+.19*Math.max(0,1.45-y)-.024*bell((y-1.37)/.14);
     const armX=.212;
     const deltoid=bell((y-1.446)/.072)*bell((ax-.222)/.057);
-    const wide=ax*(1.09+.34*chest-.11*bell((y-1.095)/.116))*torso
-      +.039*deltoid
+    // Fill the lower rib cage and waist progressively; the shoulder cap tapers separately.
+    const ribWidth=1.09+.245*chest+.20*bell((y-1.178)/.16);
+    const wide=ax*ribWidth*torso
+      +.012*deltoid
       +(armX+shoulder+(ax-armX)*(1.18+armMass))*armWeight
       +(.125+(ax-.1)*(1.1+legMass))*legWeight;
     let depth=z*(1.18+.23*chest*torso+armMass*armWeight+legMass*legWeight);
-    depth+=z*.40*deltoid;
+    depth+=z*.22*deltoid;
     const front=Math.min(1,Math.max(0,-z/.074));
     // Broad paired pecs narrowing into the sternum, then three shorter abdominal pairs.
     const pec=.067*bell(((ax-.09)/.086)**2)*bell((y-1.392-.10*ax)/.067);
@@ -87,9 +89,9 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
     let abs=0;
     for(const height of [1.065,1.125,1.187,1.25]) {
       const rise=.56*ax+1.9*ax*ax;
-      abs+=.032*bell((y-height-rise)/.026)*bell((ax-.073)/.075);
+      abs+=.023*bell((y-height-rise)/.031)*bell((ax-.073)/.075);
     }
-    const oblique=.019*bell((ax-.123)/.032)*bell((y-1.20-.32*ax)/.12);
+    const oblique=.013*bell((ax-.123)/.032)*bell((y-1.20-.32*ax)/.12);
     depth-=torso*front*(pec+abs+oblique);
     depth+=torso*Math.max(0,Math.min(1,z/.085))*.042*bell((ax-.083)/.056)*bell((y-1.37)/.14);
     depth-=front*(armWeight*(.043*bell((y-1.307)/.071)+.021*bell((y-1.098)/.08))
@@ -97,7 +99,7 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
         +.028*bell((ax-.067)/.029)*bell((y-.59)/.065)));
     const reach = Math.max(0,1.46-y)*armWeight;
     depth+=armWeight*Math.max(0,z/.07)*.036*bell((y-1.336)/.098);
-    return [sign*(wide+.073*reach),y-.115*reach+.018*deltoid,depth];
+    return [sign*(wide+.073*reach),y-.115*reach+.009*deltoid,depth];
   }
   const vertices=points.map((p,i)=>shape(p,arm[i],leg[i]));
   // Both Marine rings at the armpit share a height. Fit the front of their
@@ -109,7 +111,7 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
   const pecSurface = (x: number, y: number) => {
     const ax = Math.sqrt(x*x + .0004);
     const ribs = .172*Math.sqrt(Math.max(.02, 1-(x/.365)**2));
-    const belly = .087*bell((ax-.135)/.126)*bell((y-1.398-.087*ax)/.073);
+    const belly = .074*bell((ax-.129)/.135)*bell((y-1.398-.087*ax)/.073);
     const sternum = .004*bell(x/.040)*bell((y-1.40)/.097);
     return -ribs-belly+sternum+.023*((y-1.398)/.143)**2;
   };
@@ -144,8 +146,8 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
     const flanks=Math.min(1,Math.abs(px)/.33);
     const pigment=.5+.5*Math.sin(91*px+29*py+1.7*Math.sin(43*pz-52*py))*
       Math.cos(63*py-51*pz+.9*Math.sin(66*px));
-    const pecLight=.12*bell((Math.abs(px)-.13)/.09)*bell((py-1.408)/.057);
-    const midline=.13*bell(px/.018)*bell((py-1.32)/.18);
+    const pecLight=.086*bell((Math.abs(px)-.13)/.09)*bell((py-1.408)/.057);
+    const midline=.087*bell(px/.018)*bell((py-1.32)/.18);
     const shade=.91-.34*flanks-(.09+.14*flanks)*pigment
       +.14*Math.max(0,-smooth[k][2])+pecLight-midline;
     const warm=[.57*shade,.40*shade,.285*shade];

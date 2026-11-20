@@ -280,6 +280,9 @@ const play = (
   const announcer = createAnnouncer();
   /** Whether a player of the roster is a xenomorph: its own sounds (foley, combat, taunts). */
   const beast = (id: number) => roleOf(roster.find(p => p.id == id)?.role, world.def) == ROLE.XENO;
+  /** Whether a player fires the Hunter's harpoon. */
+  const hunter = (id: number) =>
+    roleOf(roster.find(p => p.id == id)?.role, world.def) == ROLE.HUNTER;
   const foley = createFoley(audio, beast);
   /** A player's voice: his body's, a ninja's in Japanese. */
   const speaker = (id: number) => {
@@ -309,6 +312,7 @@ const play = (
     id => voiceOf(id, roster.find(p => p.id == id)?.body),
     id => roster.find(p => p.id == id)?.body,
     beast,
+    hunter,
   );
   const taunts = createTaunts(audio, speaker, id => roster.find(p => p.id == id)?.team, beast);
   const gloryfx = createGloryFx(

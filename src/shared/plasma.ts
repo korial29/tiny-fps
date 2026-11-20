@@ -8,6 +8,10 @@ import {
   ARC_RANGE,
   ARC_SPEED,
   GUN_RANGE,
+  HARPOON,
+  HARPOON_RANGE,
+  HARPOON_SPEED,
+  HARPOON_R,
   NADE,
   NADE_COOL,
   NADE_HOLD,
@@ -58,7 +62,7 @@ export const drift = (n: number): [number, number] => [
  * as the shot (`power`). The laser rifle's (the user, 2026-11-08: the gun's balls, in red) has
  * power 0, RIFLE_RANGE to go, and leaves along the look drifted by its shot's pattern.
  */
-export const launch = (p: PlayerState, team = 0): Flying => {
+export const launch = (p: PlayerState, team = 0, harpoon = false): Flying => {
   const [dy, dp] = p.rifled ? drift(p.shots) : [0, 0];
   const [yaw, pitch] = [p.yaw + dy, p.pitch + dp];
   const [sy, cy, sp, cp] = [Math.sin(yaw), Math.cos(yaw), Math.sin(pitch), Math.cos(pitch)];
@@ -72,9 +76,9 @@ export const launch = (p: PlayerState, team = 0): Flying => {
     dx: -sy * cp,
     dy: sp,
     dz: -cy * cp,
-    left: p.rifled ? RIFLE_RANGE : GUN_RANGE,
+    left: p.rifled ? RIFLE_RANGE : harpoon ? HARPOON_RANGE : GUN_RANGE,
     burst: false,
-    power: p.rifled ? 0 : (p.power ?? 1),
+    power: p.rifled ? 0 : harpoon ? HARPOON : (p.power ?? 1),
   };
 };
 
@@ -93,7 +97,15 @@ export const wave = (p: PlayerState, team = 0): Flying => ({
 
 /** The speed of the flight `b`, m/s: an arc's, a bolt's, a rifle round's (power 0) or a ball's. A grenade has its own (`Ball.v`). */
 export const speedOf = (b: Pick<Ball, 'arc' | 'power'>): number =>
-  b.arc ? ARC_SPEED : b.power === BOLT ? BOLT_SPEED : b.power === 0 ? RIFLE_SPEED : PLASMA_SPEED;
+  b.arc
+    ? ARC_SPEED
+    : b.power === HARPOON
+      ? HARPOON_SPEED
+      : b.power === BOLT
+        ? BOLT_SPEED
+        : b.power === 0
+          ? RIFLE_SPEED
+          : PLASMA_SPEED;
 
 /** Metres the flight `b` goes in a tick. */
 export const stepOf = (b: Ball): number => speedOf(b) / TICK_HZ;
@@ -149,12 +161,13 @@ export const fly = (
   const o: Vec3 = [b.x, b.y, b.z];
   const d: Vec3 = [b.dx, b.dy, b.dz];
   const go = Math.min(m, b.left);
+  const radius = b.power === HARPOON ? HARPOON_R : PLASMA_R;
   // The edge of space stops it: past it nothing on the other side is reached.
   const seam = w.def.seam === undefined || !d[1] ? Infinity : (w.def.seam - o[1]) / d[1];
-  let t = ray(w, o, d, seam > 1e-6 ? Math.min(go, seam) : go, PLASMA_R);
+  let t = ray(w, o, d, seam > 1e-6 ? Math.min(go, seam) : go, radius);
   let hit: PlayerState | undefined;
   for (const f of foes) {
-    const u = cylinder(o, d, f, PLAYER_R + (b.arc ? ARC_R : PLASMA_R), heightOf(f));
+    const u = cylinder(o, d, f, PLAYER_R + (b.arc ? ARC_R : radius), heightOf(f));
     if (u < t) {
       [t, hit] = [u, f];
     }

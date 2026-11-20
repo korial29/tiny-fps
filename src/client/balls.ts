@@ -10,6 +10,8 @@
 import {
   ARC_R,
   BOLT,
+  HARPOON,
+  HARPOON_R,
   INTERP_DELAY,
   MISSILE_R,
   NADE,
@@ -35,7 +37,7 @@ const SLACK = 0.1;
  * health for yet (a laser round, a vehicle's bolt) is seen this way.
  */
 export const onBody = (b: Ball, p: Pick<PlayerState, 'x' | 'y' | 'z' | 'mode'>): boolean => {
-  const r = PLAYER_R + (b.arc ? ARC_R : PLASMA_R) + SLACK;
+  const r = PLAYER_R + (b.arc ? ARC_R : b.power === HARPOON ? HARPOON_R : PLASMA_R) + SLACK;
   return (
     b.burst &&
     (b.x - p.x) ** 2 + (b.z - p.z) ** 2 <= r * r &&
@@ -79,7 +81,7 @@ interface Flight {
 
 export interface Balls {
   /** The own player fired, or threw an arc with the katana: `p` is his state after the step, `now` the time of the step (ms). */
-  fire(p: PlayerState, now: number): void;
+  fire(p: PlayerState, now: number, harpoon?: boolean): void;
   /** The balls of a snapshot received at `now` (ms); `me` is the own id. */
   snapshot(balls: Ball[], me: number, now: number): void;
   /**
@@ -108,8 +110,8 @@ export const createBalls = (world: World): Balls => {
   const spent = new Set<number>();
 
   return {
-    fire(p, now) {
-      const b = p.wield ? wave(p) : lobbed(p) ? lob(p) : launch(p);
+    fire(p, now, harpoon = false) {
+      const b = p.wield ? wave(p) : lobbed(p) ? lob(p) : launch(p, 0, harpoon && !p.rifled);
       const [o, d]: Vec3[] = [at(b), [b.dx, b.dy, b.dz]];
       const key = (p.id << 8) | b.id;
       if (b.power === NADE) {
@@ -135,7 +137,7 @@ export const createBalls = (world: World): Balls => {
         return;
       }
       // The wall it bursts on, as the host's fly() finds it.
-      const r = ray(world, o, d, b.left, PLASMA_R);
+      const r = ray(world, o, d, b.left, b.power === HARPOON ? HARPOON_R : PLASMA_R);
       spent.delete(key);
       live.set(key, {
         own: true,

@@ -31,7 +31,7 @@ les visions ne doivent pas transmettre aux autres clients des informations de ci
 
 - [x] PR #334 : rôle, menus, disponibilité sur les cartes et portrait pixel-art HUD/radio.
 - [x] PR 2 : lames doubles sur le poignet, visibles en première et troisième personne; combat mêlée partagé et prédit.
-- [ ] PR 3 : harpon.
+- [x] PR 3 : harpon, projectile dédié rapide, étroit, synchronisé et dommageable côté hôte, avec son de lancement.
 - [ ] PR 4 : disque volant.
 - [ ] PR 5 : laser d’épaule.
 - [ ] PR 6 : visions.

@@ -204,6 +204,8 @@ export const createCombat = (
   bodyOf: (id: number) => number | undefined = () => undefined,
   /** Whether a player is a xenomorph: its own cries, its acid, its hiss at a tail's charge, its shriek at a dash. */
   beast: (id: number) => boolean = () => false,
+  /** Whether a player fires the Hunter's harpoon rather than a plasma ball. */
+  hunter: (id: number) => boolean = () => false,
 ): Combat => {
   /** The own player after each live step that fired, since the last frame. */
   let pending: PlayerState[] = [];
@@ -249,7 +251,11 @@ export const createCombat = (
     audio.play(SOUND.PAIN, at, at ? 0.9 : 0.7, voice(id) * r);
   };
   /** A shot; a charged one (`power` over 1) deeper and louder, with the long blast under it. */
-  const laser = (at?: Vec3, power = 1) => {
+  const laser = (at?: Vec3, power = 1, harpoon = false) => {
+    if (harpoon) {
+      audio.play(SOUND.HARPOON, at, at ? 0.75 : 0.55, rate());
+      return;
+    }
     audio.play(
       SOUND.LASER,
       at,
@@ -540,9 +546,10 @@ export const createCombat = (
             lase(p, from, now);
             continue;
           }
-          balls.fire(p, now);
+          const harpoon = hunter(p.id);
+          balls.fire(p, now, harpoon);
           tracer.flash(from, true, heat(p.power));
-          laser(undefined, p.power);
+          laser(undefined, p.power, harpoon);
         }
       }
       // The muzzles charging: the own, and every other gun in hand.
@@ -572,7 +579,7 @@ export const createCombat = (
           const c = charges.get(p.id) ?? 0;
           const power = c >= CHARGE_TAP ? Math.min(powerOf(c), CHARGE_MAX) : 1;
           tracer.flash(gun(p), false, heat(power));
-          laser(at, power);
+          laser(at, power, hunter(p.id));
         }
         seen.set(p.id, p.shots);
         const lived = lives.get(p.id);

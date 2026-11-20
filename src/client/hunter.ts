@@ -136,6 +136,29 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
     ]);
     return unit(original.map((v,k)=>v+(surfaceNormal[k]-v)*w) as Vec3);
   }), result:number[]=[];
+  // The clavicles rise outwards from the sternum, then flatten at the acromion.
+  // Move the skin in depth and transform its normals with the same displacement.
+  function collarDepth(x: number, y: number, z: number) {
+    const ax = Math.abs(x);
+    const span = fade((ax - .007) / .030) * fade((.279 - ax) / .067);
+    const line = 1.485 + .025 * Math.sin(Math.PI * Math.min(1, ax / .25))
+      + .011 * Math.min(1, ax / .25);
+    const ridge = .020 * bell((y - line) / .013);
+    const hollow = .006 * bell((y - line - .019) / .019);
+    return span * fade((-z - .030) / .060) * (hollow - ridge);
+  }
+  vertices.forEach((p, i) => {
+    const [x, y, z] = p;
+    if (y < 1.44 || y > 1.555 || z >= -.030 || Math.abs(x) >= .279) return;
+    const h = .0001;
+    const dx = (collarDepth(x+h,y,z)-collarDepth(x-h,y,z))/(2*h);
+    const dy = (collarDepth(x,y+h,z)-collarDepth(x,y-h,z))/(2*h);
+    const dz = (collarDepth(x,y,z+h)-collarDepth(x,y,z-h))/(2*h);
+    const [nx,ny,nz] = smooth[i];
+    const depthNormal = nz / (1+dz);
+    smooth[i] = unit([nx-depthNormal*dx,ny-depthNormal*dy,depthNormal]);
+    p[2] += collarDepth(x,y,z);
+  });
   for(const face of faces) for(const k of face) {
     const [x,y]=points[k];
     const pelvic=y<.987&&y>.865&&Math.abs(x)<.158&&arm[k]<.2;

@@ -188,7 +188,8 @@ export function hunter(lod: 0 | 1 | 2) {
   const dome: Surface = (u,v) => {
     const a=(u-0.5)*2*Math.PI, t=v*Math.PI*0.4999;
     return polar(a,0.153*Math.cos(t),0.181*Math.cos(t),
-      brow(a)+(1.922-brow(a))*Math.sin(t),0.067*Math.sin(t));
+      brow(a)+(1.957-brow(a))*Math.sin(t),
+      .132*Math.sin(t)**1.35 + .039*(1-Math.cos(a))/2*Math.sin(2*t));
   };
   panel(dome,slices,rings,alloy);
   panel((u,v)=>{
@@ -223,15 +224,33 @@ export function hunter(lod: 0 | 1 | 2) {
     }
   }
 
+  // A bevel around the mouth and two dished cheeks are sculpted into one shell.
+  const smoothStep = (lo: number, hi: number, x: number) => {
+    const t = Math.min(1, Math.max(0, (x-lo)/(hi-lo)));
+    return t*t*(3-2*t);
+  };
   part('Mandible shell');
   panel((u,v)=>{
     const a=(u-.5)*(3.76-.48*v), side=Math.abs(Math.sin(a));
     const bottom=1.574+.052*side**2+.016*(1-Math.cos(a));
     const top=brow(a)-aperture(a)-.0015;
     const bulge=Math.sin(Math.PI*v);
-    return polar(a,.127+.023*v+.016*bulge+.014*side**2*bulge,.159+.019*v+.021*bulge,
-      bottom+(top-bottom)*v,-.012*(1-v));
-  },slices,rings,alloy);
+    const p=polar(a,.127+.023*v+.016*bulge+.014*side**2*bulge,
+      .159+.019*v+.021*bulge,bottom+(top-bottom)*v,-.012*(1-v));
+    const x=Math.abs(p[0]);
+    const cheek=Math.exp(-(((Math.abs(a)-.91)/.48)**2)
+      -(((v-.36-.29*side)/.225)**2))*bulge;
+    p[0] *= 1-.19*cheek;
+    p[2] += .037*cheek;
+
+    // The top edge fits below the narrow central bridge of the grille.
+    const width=.058-.022*v;
+    const bevel=1-smoothStep(width-.008,width+.009,x);
+    const mouth=bevel*smoothStep(0,.10,v)*(1-smoothStep(.83,.99,v));
+    const faceDepth=-.213-.007*v+.004*(x/width)**2;
+    p[2]+=(faceDepth-p[2])*mouth;
+    return p;
+  },slices*2,rings*2,alloy);
 
   for(const sign of [-1,1]){
     part('Swept temple rail'+sign);
@@ -241,7 +260,7 @@ export function hunter(lod: 0 | 1 | 2) {
       const sweep=Math.max(0,(u-.66)/.34)**2;
       return polar(a,.154+.008*taper+.013*Math.sin(Math.PI*v)*taper,
         .183+.006*Math.sin(Math.PI*v)*taper,
-        brow(a)+.001+.087*u*u+v*.047*taper,.055*sweep);
+        brow(a)+.001+.111*u*u+v*.047*taper,.107*sweep);
     };
     // Close the swept tip on the inner face where it lifts clear of the shell.
     panel(rail,slices/2,5,rim,sign<0);

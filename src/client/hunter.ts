@@ -70,7 +70,7 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
     const ax=Math.abs(x), sign=Math.sign(x), torso=1-armWeight-legWeight;
     const chest=bell((y-1.405)/.15);
     const armMass=.68*bell((y-1.319)/.084)+.49*bell((y-1.098)/.073);
-    const legMass=.29*bell((y-.745)/.15)+.24*bell((y-.34)/.095);
+    const legMass=.32*bell((y-.745)/.15)+.28*bell((y-.35)/.095);
     const shoulder=.061+.19*Math.max(0,1.45-y)-.024*bell((y-1.37)/.14);
     const armX=.212;
     const deltoid=bell((y-1.446)/.072)*bell((ax-.222)/.057);
@@ -99,7 +99,8 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
         +.028*bell((ax-.067)/.029)*bell((y-.59)/.065)));
     const reach = Math.max(0,1.46-y)*armWeight;
     depth+=armWeight*Math.max(0,z/.07)*.036*bell((y-1.336)/.098);
-    return [sign*(wide+.073*reach),y-.115*reach+.009*deltoid,depth];
+    const stance=.042*Math.min(1, Math.max(0,(.955-y)/.51))*legWeight;
+    return [sign*(wide+stance+.073*reach),y-.115*reach+.009*deltoid,depth];
   }
   const vertices=points.map((p,i)=>shape(p,arm[i],leg[i]));
   // Both Marine rings at the armpit share a height. Fit the front of their
@@ -164,7 +165,7 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
     const pelvic=y<.987&&y>.865&&Math.abs(x)<.158&&arm[k]<.2;
     const tint=y<.145?graphite:pelvic?leather:hide;
     const [px,py,pz]=vertices[k];
-    const coverage=tint===hide ? Math.min(1,Math.max(0,(y-.99)/.07)+arm[k]) : 0;
+    const coverage=tint===hide ? Math.min(1,Math.max(0,(y-.99)/.07)+arm[k]+leg[k]) : 0;
     // Pigment follows the flanks and shoulders, with broken mottling over the lighter chest.
     const flanks=Math.min(1,Math.abs(px)/.33);
     const pigment=.5+.5*Math.sin(91*px+29*py+1.7*Math.sin(43*pz-52*py))*
@@ -311,6 +312,108 @@ export function hunter(lod: 0 | 1 | 2) {
     for (let j=0;j<rows;j++) for(let i=0;i<cols;i++){
       const a=j*(cols+1)+i, b=a+1, c=a+cols+1, d=c+1;
       for(const k of reverse?[a,b,c,b,d,c]:[a,c,b,b,c,d]) out.push(...verts[k]);
+    }
+  }
+
+  // Fit the kit to cross-sections of the actual leg at this level of detail.
+  // Each ray meets the skin before the ankle straps or the cords stand off it.
+  const legSkin = parts['Marine anatomy'];
+  const low = .083, step = .022, levels = 37, sectors = [12, 24, 36][lod];
+  for (const side of [-1, 1]) {
+    const centres: number[] = [];
+    const radii: number[][] = [];
+    const slices: number[][] = Array.from({length:levels}, () => []);
+    for (let i=0;i<legSkin.length;i+=3*STRIDE) {
+      if (side*legSkin[i]<-.005 || side*legSkin[i]>.31) continue;
+      const a=legSkin[i+1], b=legSkin[i+STRIDE+1], c=legSkin[i+2*STRIDE+1];
+      const first=Math.max(0,Math.ceil((Math.min(a,b,c)-low)/step));
+      const last=Math.min(levels-1,Math.ceil((Math.max(a,b,c)-low)/step)-1);
+      for(let row=first;row<=last;row++) slices[row].push(i);
+    }
+    for (let row = 0; row < levels; row++) {
+      const y = low + row * step;
+      const edges: number[][] = [];
+      let xmin = Infinity, xmax = -Infinity;
+      for (const i of slices[row]) {
+        const hits: number[] = [];
+        for (let j = 0; j < 3; j++) {
+          const a = i + j * STRIDE, b = i + (j + 1) % 3 * STRIDE;
+          if ((legSkin[a+1] > y) === (legSkin[b+1] > y)) continue;
+          const t = (y-legSkin[a+1]) / (legSkin[b+1]-legSkin[a+1]);
+          hits.push(legSkin[a]+t*(legSkin[b]-legSkin[a]), legSkin[a+2]+t*(legSkin[b+2]-legSkin[a+2]));
+        }
+        if (hits.length !== 4) continue;
+        edges.push(hits);
+        xmin = Math.min(xmin, hits[0], hits[2]);
+        xmax = Math.max(xmax, hits[0], hits[2]);
+      }
+      const cx = (xmin+xmax)/2;
+      centres.push(cx);
+      radii.push(Array.from({length:sectors}, (_,k) => {
+        const angle=2*Math.PI*k/sectors, dx=Math.sin(angle), dz=-Math.cos(angle);
+        let radius=Infinity;
+        for (const [x,z,bx,bz] of edges) {
+          const ex=bx-x, ez=bz-z, det=dx*ez-dz*ex;
+          if (Math.abs(det)<1e-10) continue;
+          const r=((x-cx)*ez-z*ex)/det, t=((x-cx)*dz-z*dx)/det;
+          if (r>0 && t>=0 && t<=1) radius=Math.min(radius,r);
+        }
+        return radius;
+      }));
+    }
+    function wrap(angle:number,y:number,gap:number):Vec3 {
+      const h=Math.min(levels-1,Math.max(0,(y-low)/step)), a=Math.floor(h), b=Math.min(levels-1,a+1);
+      const turn=(angle/(2*Math.PI)%1+1)%1*sectors, k=Math.floor(turn), next=(k+1)%sectors;
+      const radius=(row:number)=>radii[row][k]+(radii[row][next]-radii[row][k])*(turn-k);
+      const r=radius(a)+(radius(b)-radius(a))*(h-a)+gap;
+      return [centres[a]+(centres[b]-centres[a])*(h-a)+r*Math.sin(angle),y,-r*Math.cos(angle)];
+    }
+
+    if (lod) {
+      part('Thigh net '+side);
+      const cords=lod===2?11:8;
+      for (const direction of [-1,1]) for (let i=0;i<cords;i++) {
+        panel((u,v)=>wrap(2*Math.PI*i/cords+direction*3.75*v+(u-.5)*.044,
+          .535+.337*v,.007+.0006*(1-direction)),1,lod===2?24:14,leather);
+      }
+    }
+    part('Leg straps '+side);
+    for(const [base,width] of [[.087,.029],[.319,.026],[.511,.021],[.837,.034]]) {
+      panel((u,v)=>wrap(2*Math.PI*u,base+width*v,.009+.003*Math.sin(Math.PI*v)),sectors,3,leather);
+    }
+    part('Shin plates '+side);
+    for(let course=0;course<5;course++) {
+      const base=.145+.062*course;
+      panel((u,v)=>{
+        const angle=(u-.5)*(2.88+.32*v);
+        const ridge=Math.max(0,Math.cos(angle));
+        return wrap(angle,base+.078*v-.032*ridge**4,
+          .009+.010*(1-v)+.009*ridge**6+.003*Math.sin(Math.PI*v));
+      },lod===2?16:8,4,course%2?[.31,.35,.35]:[.36,.39,.385]);
+    }
+    part('Boot lames '+side);
+    for (let j=0;j<2;j++) {
+      panel((u,v)=>{
+        const a=(u-.5)*Math.PI, z=-.191+j*.076+.080*v;
+        const arch=.037+j*.014+.018*v;
+        return [side*.167+(.059+.004*v)*Math.sin(a),
+          .023+arch*Math.cos(a), z-.010*Math.cos(a)];
+      },lod===2?16:8,4,j===0?[.26,.30,.30]:[.32,.355,.35]);
+    }
+    part('Patella '+side);
+    const cap:Surface=(u,v)=>{
+      const angle=(u-.5)*(1.58+1.36*Math.sin(Math.PI*v*.86));
+      const ridge=Math.cos(angle);
+      return wrap(angle,.426+.119*v-.022*ridge**4*(1-v),
+        .016+.021*ridge**3*Math.sin(Math.PI*v)+.004*ridge);
+    };
+    panel(cap,lod===2?18:10,7,[.40,.43,.425]);
+    if(lod) {
+      for(const sign of [-1,1]) panel((u,v)=>{
+        const p=cap(.5+sign*(.095+.30*v)+(u-.5)*.025,.15+.69*v);
+        p[2]-=.002;
+        return p;
+      },2,8,bronze);
     }
   }
 

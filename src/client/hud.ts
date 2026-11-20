@@ -24,6 +24,7 @@ import { free, gap2, nearby } from '../shared/rover';
 import { SHIP } from '../shared/ship';
 import { FLAG, MODE } from '../shared/types';
 import type { Choice, PlayerState, Rover, Snapshot } from '../shared/types';
+import { LEVELS, mix } from './audio';
 import { TONES } from './features';
 import { ROLE } from '../shared/kit';
 import { FH, FW, LOOK, PALETTE, sprite } from './face';
@@ -173,8 +174,8 @@ export const HUD_CSS =
   `aside .pm{pointer-events:auto;display:grid;gap:10px;width:min(300px,100% - 32px);padding:24px 22px;border:1px solid #2c3a48;border-radius:16px;background:#0b1016e6;backdrop-filter:blur(14px);box-shadow:0 24px 80px #000b;color:#e9eef3;text-align:center;user-select:none}` +
   `aside .pm strong{margin-bottom:6px;font:900 18px/1 system-ui,sans-serif;letter-spacing:.2em;color:#ffb347}aside .pm button{padding:12px;border-color:#26323e;background:#121a23;font-size:15px;font-weight:800}aside .pm button:hover{border-color:#f7782a}` +
   `aside .pm button:first-of-type{border:0;background:linear-gradient(#ff9a4a,#e8590c);text-transform:uppercase;letter-spacing:.08em}` +
-  `aside[data-v=pause] main,aside:not([data-v=pause]) .pm,aside[data-v=controls] [role=tab],aside[data-v=character] [role=tab],aside[data-v=character] blockquote,aside[data-v=character] address{display:none}` +
-  `aside:not([data-v=controls]):not([data-v=character]) .bk{display:none}aside .bk{padding:11px 14px;text-align:left;font-size:15px;font-weight:700;color:#8d9aa7}aside .bk:hover{color:#fff}` +
+  `aside[data-v=pause] main,aside:not([data-v=pause]) .pm,aside[data-v=controls] [role=tab],aside[data-v=character] [role=tab],aside[data-v=audio] [role=tab],aside[data-v=character] blockquote,aside[data-v=character] address{display:none}` +
+  `aside:not([data-v=controls]):not([data-v=character]):not([data-v=audio]) .bk{display:none}aside .bk{padding:11px 14px;text-align:left;font-size:15px;font-weight:700;color:#8d9aa7}aside .bk:hover{color:#fff}` +
   // The character: his live picture, beside it the body, the skin and the haircut, a row of chips
   // each; under them the class, a card each, the ones the map does not offer not shown (the user,
   // 2026-11-17: hidden, not greyed out).
@@ -205,6 +206,9 @@ export const HUD_CSS =
   `aside article+article{columns:2;column-gap:34px}aside table{width:100%;margin:0 0 18px;break-inside:avoid;font-size:13.5px}aside caption{margin:0 0 6px;padding-bottom:6px;border-bottom:1px solid #26323e}` +
   `aside td{padding:4px 0;vertical-align:top}aside td:first-child{width:46%;padding-right:12px;text-align:right;white-space:nowrap;opacity:1;color:#8d9aa7}aside td+td{color:#dbe3ea}` +
   `aside kbd{display:inline-block;min-width:24px;padding:2px 7px;border:1px solid #3a4a5a;border-bottom-width:2px;border-radius:6px;background:#18222c;color:#fff;font:700 12px/1.3 system-ui,sans-serif;text-align:center}` +
+  // The Audio panel: a slider a bus, its level in dB beside it.
+  `aside article.mx{columns:auto;display:grid;gap:14px;max-width:560px;align-content:start}aside .mx div{position:static;width:auto;height:auto;overflow:visible;background:none;text-shadow:none;display:grid;grid-template-columns:120px 1fr 64px;gap:14px;align-items:center;font-size:14px;font-weight:700}` +
+  `aside .mx input{accent-color:#f7782a}aside .mx div span{text-align:right;color:#b7c2cd;font-variant-numeric:tabular-nums}aside .mx button{justify-self:start;padding:8px 14px;border-color:#26323e;background:#121a23;font-weight:700}` +
   `aside article[hidden]{display:none}` +
   `@container (max-width:980px){aside address{grid-template-columns:1fr}}` +
   `@container (max-width:760px){aside main{flex-direction:column}aside header{flex:none;flex-flow:row wrap;align-items:center;padding:10px 12px;border-right:0;border-bottom:1px solid #26323e}` +
@@ -259,10 +263,20 @@ export const HUD_CSS =
   `@keyframes blink{to{opacity:.35}}`;
 
 /** The menu of a game paused by Escape (the user, 2026-11-12): play on, then the two parts of the title screen it opens, then leave. */
-export const PAUSE = ['Resume', 'Controls', 'Character', 'Quit'];
+export const PAUSE = ['Resume', 'Controls', 'Character', 'Audio', 'Quit'];
 
 /** The tabs of the title screen's menu, the first one shown first. */
-export const TABS = ['Game', 'Controls'];
+export const TABS = ['Game', 'Controls', 'Audio'];
+/** The Audio panel's sliders (the user, 2026-11-20): a name, and its bus in LEVELS (audio.ts). */
+export const MIXES: [name: string, bus: number][] = [
+  ['Music', 6],
+  ['Voices', 0],
+  ['Movement', 1],
+  ['Weapons', 2],
+  ['Vehicles', 3],
+  ['Breathing', 4],
+  ['Game events', 5],
+];
 
 /** The characters' first names (the user, 2026-11-11: names, not "man" and "woman"), in BODY's order, and the size of the character's picture in pixels. */
 export const CAST = ['Kai', 'Nova'];
@@ -661,7 +675,10 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
                   .join(' ')}<td>${does}`,
             )
             .join('')}</table>`,
-      ).join('')}</article></main></aside>` +
+      ).join('')}</article>` +
+      `<article role="tabpanel" class="mx" hidden><h4>Volume</h4>${MIXES.map(
+        ([n]) => `<div>${n}<input type="range" min="-40" max="6" step="0.5"><span></span></div>`,
+      ).join('')}<button>Reset</button></article></main></aside>` +
       `<del hidden></del><u></u><h5 hidden>Muted (M)</h5>` +
       `<ul>${'<li></li>'.repeat(HP_MAX)}${'<li class=a></li>'.repeat(ARMOR_MAX)}</ul><figure hidden><canvas width="${FW}" height="${FH}"></canvas></figure>` +
       `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
@@ -710,15 +727,35 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   let started = false;
   const view = (v: string) => {
     menu.dataset.v = v;
-    tabs[+(v == 'controls')].click();
+    tabs[Math.max(0, ['character', 'controls', 'audio'].indexOf(v))].click();
   };
-  const [resume, controls, character, leave] = [
+  const [resume, controls, character, sound, leave] = [
     ...menu.querySelectorAll<HTMLElement>('.pm button'),
   ];
   resume.onclick = play;
   controls.onclick = () => view('controls');
   character.onclick = () => view('character');
+  sound.onclick = () => view('audio');
   leave.onclick = quit;
+  // The Audio panel: each slider sets its bus live; Reset gives back the mix as made.
+  const sliders = all('.mx input') as HTMLInputElement[];
+  const levels = () =>
+    sliders.forEach((el, k) => {
+      el.value = `${LEVELS[MIXES[k][1]]}`;
+      el.nextElementSibling!.textContent = `${LEVELS[MIXES[k][1]].toFixed(1)} dB`;
+    });
+  sliders.forEach(
+    (el, k) =>
+      (el.oninput = () => {
+        mix(MIXES[k][1], +el.value);
+        levels();
+      }),
+  );
+  one('.mx button').onclick = () => {
+    mix();
+    levels();
+  };
+  levels();
   one('.bk').onclick = () => view('pause');
   // The character's choice, in the order of its groups: body, skin, haircut, class.
   const KEYS = ['body', 'tone', 'hair', 'role'] as const;

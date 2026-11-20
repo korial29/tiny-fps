@@ -31,6 +31,8 @@ vi.mock('./audio', () => ({
     destroy: () => {},
   }),
   db: (g: number) => 20 * Math.log10(g),
+  LEVELS: [0, 0, 0, 0, 0, 0, 0],
+  mix: () => {},
   savedMute: () => false,
   toggleMute: () => false,
 }));

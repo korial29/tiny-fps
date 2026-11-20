@@ -2,15 +2,11 @@ import { tinyFps } from '../src/client';
 import type { TinyFps } from '../src/client';
 import { localSocket } from '../src/local';
 import { MAPS } from '../src/shared/maps';
-import { mixer } from './mixer';
 
 /** When this page was built or served (vite.config.ts): tabs of another build do not share a local room. */
 declare const __BUILD__: string;
 
 const q = new URLSearchParams(location.search);
-if (q.has('mixer')) {
-  mixer();
-}
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const form = $<HTMLFormElement>('form');

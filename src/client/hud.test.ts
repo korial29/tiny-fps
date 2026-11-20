@@ -35,6 +35,7 @@ import {
   HAIR_NAMES,
   HEAD_PX,
   HUD_CSS,
+  MIXES,
   PAUSE,
   ROLES,
   SHOT,
@@ -45,6 +46,7 @@ import {
   kmh,
   rim,
 } from './hud';
+import { LEVELS } from './audio';
 import { VISOR } from './helmet';
 import { createTargeting } from './targeting';
 import { targetingPhysics } from './targeting-physics';
@@ -78,37 +80,37 @@ describe('createHud', () => {
       expect(q('aside header strong').textContent).toBe('Click to play');
     });
 
-    it('has a menu of two entries, Game then Controls, and shows the Game panel first', () => {
+    it('has a menu of three entries, Game, Controls and Audio, and shows the Game panel first', () => {
       show();
-      expect(tabs().map(t => t.textContent)).toEqual(['Game', 'Controls']);
-      expect(TABS).toEqual(['Game', 'Controls']);
-      expect(on(tabs(), 'aria-selected')).toEqual(['true', 'false']);
-      expect(panels().map(p => p.hidden)).toEqual([false, true]);
+      expect(tabs().map(t => t.textContent)).toEqual(['Game', 'Controls', 'Audio']);
+      expect(TABS).toEqual(['Game', 'Controls', 'Audio']);
+      expect(on(tabs(), 'aria-selected')).toEqual(['true', 'false', 'false']);
+      expect(panels().map(p => p.hidden)).toEqual([false, true, true]);
     });
 
     it('shows the other panel and hides the first on a click of its entry, and back', () => {
       show();
       tabs()[1].click();
-      expect(on(tabs(), 'aria-selected')).toEqual(['false', 'true']);
-      expect(panels().map(p => p.hidden)).toEqual([true, false]);
+      expect(on(tabs(), 'aria-selected')).toEqual(['false', 'true', 'false']);
+      expect(panels().map(p => p.hidden)).toEqual([true, false, true]);
       tabs()[0].click();
-      expect(on(tabs(), 'aria-selected')).toEqual(['true', 'false']);
-      expect(panels().map(p => p.hidden)).toEqual([false, true]);
+      expect(on(tabs(), 'aria-selected')).toEqual(['true', 'false', 'false']);
+      expect(panels().map(p => p.hidden)).toEqual([false, true, true]);
     });
 
     it('goes from an entry to the other with the arrows, the chosen one alone in the Tab order', () => {
       show();
       screen.ownerDocument.body.append(screen);
-      expect(tabs().map(t => t.tabIndex)).toEqual([0, -1]);
+      expect(tabs().map(t => t.tabIndex)).toEqual([0, -1, -1]);
       press(tabs()[0], 'ArrowDown');
-      expect(panels().map(p => p.hidden)).toEqual([true, false]);
-      expect(tabs().map(t => t.tabIndex)).toEqual([-1, 0]);
+      expect(panels().map(p => p.hidden)).toEqual([true, false, true]);
+      expect(tabs().map(t => t.tabIndex)).toEqual([-1, 0, -1]);
       expect(document.activeElement).toBe(tabs()[1]);
       press(tabs()[1], 'ArrowUp');
-      expect(panels().map(p => p.hidden)).toEqual([false, true]);
+      expect(panels().map(p => p.hidden)).toEqual([false, true, true]);
       // Any other key is the page's.
       press(tabs()[0], 'KeyW');
-      expect(panels().map(p => p.hidden)).toEqual([false, true]);
+      expect(panels().map(p => p.hidden)).toEqual([false, true, true]);
       screen.remove();
     });
 
@@ -207,6 +209,23 @@ describe('createHud', () => {
       expect(group('Hair').map(b => b.textContent)).toEqual(HAIR_NAMES[BODY.MALE]);
     });
 
+    it('sets a bus live from its slider, shows its dB, keeps the mix, and Reset gives back the mix as made', () => {
+      show();
+      const sliders = [...screen.querySelectorAll<HTMLInputElement>('.mx input')];
+      expect(sliders.map(el => el.parentElement!.firstChild!.textContent)).toEqual(
+        MIXES.map(([n]) => n),
+      );
+      const made = [...LEVELS];
+      sliders[0].value = '-12';
+      sliders[0].dispatchEvent(new Event('input'));
+      expect(LEVELS[MIXES[0][1]]).toBe(-12);
+      expect(sliders[0].nextElementSibling!.textContent).toBe('-12.0 dB');
+      expect(JSON.parse(localStorage.getItem('tiny-fps:mix')!)[MIXES[0][1]]).toBe(-12);
+      q<HTMLButtonElement>('.mx button').click();
+      expect(LEVELS).toEqual(made);
+      expect(sliders[0].value).toBe(`${made[MIXES[0][1]]}`);
+    });
+
     it('opens on a small pause menu once the player has been in the game', () => {
       const [play, quit] = [vi.fn(), vi.fn()];
       screen = document.createElement('div');
@@ -223,15 +242,19 @@ describe('createHud', () => {
       expect(items().map(b => b.textContent)).toEqual(PAUSE);
       items()[1].click();
       expect(v()).toBe('controls');
-      expect(panels().map(p => p.hidden)).toEqual([true, false]);
+      expect(panels().map(p => p.hidden)).toEqual([true, false, true]);
       q('.bk').click();
       expect(v()).toBe('pause');
       items()[2].click();
       expect(v()).toBe('character');
-      expect(panels().map(p => p.hidden)).toEqual([false, true]);
+      expect(panels().map(p => p.hidden)).toEqual([false, true, true]);
+      q('.bk').click();
+      items()[3].click();
+      expect(v()).toBe('audio');
+      expect(panels().map(p => p.hidden)).toEqual([true, true, false]);
       items()[0].click();
       expect(play).toHaveBeenCalledOnce();
-      items()[3].click();
+      items()[4].click();
       expect(quit).toHaveBeenCalledOnce();
       // Escape again, after playing on: the pause menu, not the part last opened.
       hud.title('', HIGHLINE.name!);

@@ -58,18 +58,42 @@ export const db = (g: number) => 20 * Math.log10(g);
 const VOICES = 24;
 const MUSIC = 0.5;
 /**
- * The mix (the user, 2026-11-20, with the demo's mixer, ?mixer): a bus per group of sounds, its
+ * The mix (the user, 2026-11-20, by ear in the menu's Audio panel): a bus per group of sounds, its
  * level in dB, in LEVELS' order: voices (the announcer, the players' lines and cries), moves,
  * weapons, vehicles and the world, the helmet's breath, the game's events and pickups, then the
  * music. GROUP is each sound's bus, in SOUND order; LOUD a sound's own level over its bus, 0 dB
- * when absent. The mixer sets LEVELS live and calls remix() for the music.
+ * when absent. The game menu's Audio panel changes them for this browser (mix()).
  */
-export const LEVELS = [-6.4, -18.4, -8.9, -10.5, -14.9, -8.9, 0];
+export const LEVELS = [-22.5, -25.5, -13.5, -10.5, -14.9, -17.5, -6];
+const BAKED = [...LEVELS];
+const MIXED = 'tiny-fps:mix';
 export const LOUD: Record<number, number> = {};
 export const GROUP = '11111111115555202222552222222222222222223334433333333300553300220012012000';
 const level = (id: number) => LEVELS[+GROUP[id]] + (LOUD[id] ?? 0);
 let mixed = () => {};
-export const remix = () => mixed();
+/** Sets bus `i` to `db` live, and keeps the mix for the next visit; none, the mix as made. */
+export const mix = (i?: number, db = 0) => {
+  if (i === undefined) {
+    LEVELS.splice(0, 7, ...BAKED);
+  } else {
+    LEVELS[i] = db;
+  }
+  mixed();
+  try {
+    localStorage.setItem(MIXED, JSON.stringify(LEVELS));
+  } catch {
+    // Not kept.
+  }
+};
+// The mix of the last visit. Storage throws when blocked, or is absent: the mix as made then.
+try {
+  const kept = JSON.parse(localStorage.getItem(MIXED)!) as number[] | null;
+  if (kept?.length == 7) {
+    LEVELS.splice(0, 7, ...kept);
+  }
+} catch {
+  // As made.
+}
 const STORE = 'tiny-fps:muted';
 /** The announcer's volume, and the music's share of its own under a line. */
 const SPEECH = 0.9;

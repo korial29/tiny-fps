@@ -971,7 +971,8 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       radios(3).forEach((b, i) => (b.hidden = b.disabled = !!roles && !roles.includes(i)));
       lit();
       // The face's look: the man's, the woman's, the xenomorph's or the Hunter's head (face.ts).
-      const look = c.role === ROLE.XENO ? LOOK.XENO : c.role === ROLE.HUNTER ? LOOK.HUNTER : +!!body;
+      const look =
+        c.role === ROLE.XENO ? LOOK.XENO : c.role === ROLE.HUNTER ? LOOK.HUNTER : +!!body;
       if (look != fem) {
         [fem, shown] = [look, -1];
       }

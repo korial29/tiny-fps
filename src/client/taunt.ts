@@ -107,19 +107,24 @@ export const createTaunts = (
         if (d.clip < 0) {
           const sound = hunter(d.by) ? SOUND.HUNTER_TAUNT : SOUND.ROAR;
           if (d.radio && audio.play) {
+<<<<<<< HEAD
             audio.play(sound, undefined, 0.7, paceOf(d.by), true);
             said.push({ by: d.by, s: secondsOf(sound) / paceOf(d.by) });
+=======
+            audio.play(SOUND.ROAR, undefined, -3.1, paceOf(d.by), true);
+            said.push({ by: d.by, s: secondsOf(SOUND.ROAR) / paceOf(d.by) });
+>>>>>>> 86504b2 (feat(audio): an engine in dB, the sounds placed in 3D)
           } else if (d.close || p) {
             audio.play?.(sound, p, p ? 1 : 0.7, paceOf(d.by));
           }
         } else if (d.close) {
-          audio.speak(d.clip, undefined, 0.75, paceOf(d.by));
+          audio.speak(d.clip, undefined, -2.5, paceOf(d.by));
         } else if (d.radio) {
-          if (audio.speak(d.clip, undefined, 0.7, paceOf(d.by), true)) {
+          if (audio.speak(d.clip, undefined, -3.1, paceOf(d.by), true)) {
             said.push({ by: d.by, s: CAST[d.clip][1] / paceOf(d.by) });
           }
         } else if (p) {
-          audio.speak(d.clip, [p[0], p[1] + MOUTH, p[2]], 1, paceOf(d.by));
+          audio.speak(d.clip, [p[0], p[1] + MOUTH, p[2]], 0, paceOf(d.by));
         }
       }
       return said;

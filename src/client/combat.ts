@@ -32,6 +32,7 @@ import type { PlayerState } from '../shared/types';
 import { beam } from '../shared/rail';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
+import { db } from './audio';
 import type { Audio, Loop } from './audio';
 import type { Balls } from './balls';
 import type { Tracer } from './beams';
@@ -232,8 +233,8 @@ export const createCombat = (
     const r = rate();
     // The xenomorph screeches, never speaks, and its blood sizzles where it was hit.
     if (beast(id)) {
-      audio.play(died ? SOUND.XENO_DEATH : SOUND.XENO_PAIN, at, at ? 0.9 : 0.7, r);
-      audio.play(SOUND.ACID, at, at ? 0.6 : 0.45, r);
+      audio.play(died ? SOUND.XENO_DEATH : SOUND.XENO_PAIN, at, at ? -0.9 : -3.1, r);
+      audio.play(SOUND.ACID, at, at ? -4.4 : -6.9, r);
       return;
     }
     if (hunter(id)) {
@@ -250,10 +251,10 @@ export const createCombat = (
           ? SOUND.HER_GROAN
           : SOUND.GROAN;
       // Her cries are her own: only the man's offset of each player is played on them.
-      audio.play(sound, at, at ? 0.9 : 0.7, voiceOf(id) * r);
+      audio.play(sound, at, at ? -0.9 : -3.1, voiceOf(id) * r);
       return;
     }
-    audio.play(SOUND.PAIN, at, at ? 0.9 : 0.7, voice(id) * r);
+    audio.play(SOUND.PAIN, at, at ? -0.9 : -3.1, voice(id) * r);
   };
   /** A shot; a charged one (`power` over 1) deeper and louder, with the long blast under it. */
   const laser = (at?: Vec3, power = 1, harpoon = false) => {
@@ -264,11 +265,11 @@ export const createCombat = (
     audio.play(
       SOUND.LASER,
       at,
-      (at ? 0.7 : 0.5) * (1 + 0.15 * (power - 1)),
+      db((at ? 0.7 : 0.5) * (1 + 0.15 * (power - 1))),
       rate() * (1 - 0.1 * (power - 1)),
     );
     if (power > 1) {
-      audio.play(SOUND.BLAST, at, (at ? 0.5 : 0.35) * (0.4 + 0.15 * power), 1.2 - 0.06 * power);
+      audio.play(SOUND.BLAST, at, db((at ? 0.5 : 0.35) * (0.4 + 0.15 * power)), 1.2 - 0.06 * power);
     }
   };
   /** How charged a shot of `power` is, 0 to 1. */
@@ -299,7 +300,7 @@ export const createCombat = (
       balls.fire(p, now);
     }
     tracer.flash(from, !at, -1);
-    audio.play(SOUND.LASE, at, at ? 0.5 : 0.4, rate());
+    audio.play(SOUND.LASE, at, at ? -6 : -8, rate());
   };
   /** A grenade leaves the launcher of `p` at `from`, heard at `at` (the own when not given): an orange flash and a hollow thump. */
   const thump = (p: PlayerState, from: Vec3, now: number, at?: Vec3) => {
@@ -307,8 +308,8 @@ export const createCombat = (
       balls.fire(p, now);
     }
     tracer.flash(from, !at, 1);
-    audio.play(SOUND.TACKLE, at, at ? 0.9 : 0.7, 0.55);
-    audio.play(SOUND.DASH, at, at ? 0.5 : 0.35, 0.7);
+    audio.play(SOUND.TACKLE, at, at ? -0.9 : -3.1, 0.55);
+    audio.play(SOUND.DASH, at, at ? -6 : -9.1, 0.7);
   };
   /** The own rail gun's hum and its bolt's buzz, started when it is first in hand. */
   let hum: Loop | undefined;
@@ -337,7 +338,7 @@ export const createCombat = (
     const left = (crackles.get(p.id) ?? 0) - dt;
     crackles.set(p.id, left > 0 ? left : CRACKLE);
     if (left <= 0) {
-      audio.play(SOUND.RAIL, at, 0.7, wail(now));
+      audio.play(SOUND.RAIL, at, -3.1, wail(now));
     }
   };
   /** The swish of the cut `c`, at `at`; a heavy release's (c + HEAVY_CUE) louder and much deeper. */
@@ -347,20 +348,20 @@ export const createCombat = (
       audio.play(
         b == TAIL_BLOW ? SOUND.STING : SOUND.CLAW,
         at,
-        0.6,
+        -4.4,
         RAKE[b - BLOW.CLAW_L] * rate(),
       );
       return;
     }
     if (c >= FIST_CUE) {
-      audio.play(SOUND.SWISH, at, WHOOSH.gain[c - FIST_CUE], WHOOSH.rate[c - FIST_CUE]);
+      audio.play(SOUND.SWISH, at, db(WHOOSH.gain[c - FIST_CUE]), WHOOSH.rate[c - FIST_CUE]);
       return;
     }
     const [k, heavy] = [c % HEAVY_CUE, c >= HEAVY_CUE];
     audio.play(
       SOUND.SWISH,
       at,
-      SWISH.gain[k] * (heavy ? 1.5 : 1),
+      db(SWISH.gain[k] * (heavy ? 1.5 : 1)),
       SWISH.rate[k] * (heavy ? 0.55 : 1),
     );
   };
@@ -375,27 +376,27 @@ export const createCombat = (
   /** Plays `id` now, or once the thumb or the finger presses the button of a weapon taken for the first time, `first` its kind. */
   const boot = (id: number, at: Vec3 | undefined, g: number, r: number, first: number) =>
     first < 0
-      ? audio.play(id, at, g, r)
+      ? audio.play(id, at, db(g), r)
       : later.push([clock + 1000 * pressAt(first), id, at, g, r]);
   /** The sounds of a swap as it passes its cues (CUES), the boot of a gun that comes to hand or whose swap is done, and the hiss of an overheating, at `at`. */
   const reloads = (was: Blade, now: Blade, at?: Vec3, first = -1) => {
     const [a, b, r] = [swapOf(was), swapOf(now), +!!now.railed];
     // The click of the slap home loud (the user, 2026-11-09).
-    CUES[r].forEach((c, i) => a < c && b >= c && audio.play(RELOADS[r][i], at, !r && i ? 1 : 0.7));
+    CUES[r].forEach((c, i) => a < c && b >= c && audio.play(RELOADS[r][i], at, !r && i ? 0 : -3.1));
     const h = handOf(now);
     if (h != 1 && h >= 0 && (handOf(was) != h || (a >= 0 && b < 0))) {
       boot(SOUND.BOOT, at, 0.5, r ? 1.4 : 1, first);
     }
     // The rail gun overheating hisses.
     if (now.hot && !was.hot) {
-      audio.play(SOUND.HISS, at, 0.8);
+      audio.play(SOUND.HISS, at, -1.9);
     }
   };
   /** The shing of the katana coming into the hand or leaving it (not when it is lost). */
   const shing = (was: Blade, now: Blade, at?: Vec3, first = -1) =>
     !!was.wield != !!now.wield &&
     (now.wield || now.blade) &&
-    (now.wield ? boot(SOUND.IGNITE, at, 0.6, 1, first) : audio.play(SOUND.SHING, at, 0.6, 0.85));
+    (now.wield ? boot(SOUND.IGNITE, at, 0.6, 1, first) : audio.play(SOUND.SHING, at, -4.4, 0.85));
 
   return {
     step(a, b) {
@@ -433,7 +434,7 @@ export const createCombat = (
       for (let i = later.length; i--;) {
         const [t, id, at, g, r] = later[i];
         if (now >= t) {
-          audio.play(id, at, g, r);
+          audio.play(id, at, db(g), r);
           later.splice(i, 1);
         }
       }
@@ -446,7 +447,7 @@ export const createCombat = (
           // A blow of the fists that landed: a thud, and a hook or a lunge kicks the look.
           if (fists(me)) {
             const b = blowOf(me, beast(me.id));
-            audio.play(SOUND.TACKLE, undefined, THUD[0][b], THUD[1]);
+            audio.play(SOUND.TACKLE, undefined, db(THUD[0][b]), THUD[1]);
             if (b >= BLOW.HOOK) {
               fx.punch();
             }
@@ -457,7 +458,7 @@ export const createCombat = (
         }
         // The xenomorph hisses as it starts to charge its tail (its dash's shriek is foley.ts's).
         if (was && beast(me.id) && !(was.charge ?? 0) && (me.charge ?? 0) > 0 && !me.down) {
-          audio.play(SOUND.XENO_HISS, undefined, 0.55, rate());
+          audio.play(SOUND.XENO_HISS, undefined, -5.2, rate());
         }
         const f = fresh(me) ? handOf(me) : -1;
         if (was) {
@@ -597,10 +598,10 @@ export const createCombat = (
         const charged = charges.get(p.id);
         if (charged !== undefined && beast(p.id) && !p.down) {
           if (!charged && (p.charge ?? 0) > 0) {
-            audio.play(SOUND.XENO_HISS, at, 0.6, rate());
+            audio.play(SOUND.XENO_HISS, at, -4.4, rate());
           }
           if (p.dash > (dashed.get(p.id) ?? Infinity)) {
-            audio.play(SOUND.SHRIEK, at, 0.8, rate());
+            audio.play(SOUND.SHRIEK, at, -1.9, rate());
           }
         }
         charges.set(p.id, p.charge ?? 0);
@@ -617,7 +618,7 @@ export const createCombat = (
         // that the blow reaches.
         if (old && p.hits != old.hits && fists(p) && p.swing) {
           const b = blowOf(p, beast(p.id));
-          audio.play(SOUND.TACKLE, at, THUD[0][b], THUD[1]);
+          audio.play(SOUND.TACKLE, at, db(THUD[0][b]), THUD[1]);
           if (me && !me.down && strike(world, p, [me], blowing(p, beast(p.id))).length) {
             fx.blow(b, true);
           }
@@ -658,7 +659,7 @@ export const createCombat = (
           const at: Vec3 = [(p.x + f.x) / 2, (p.y + f.y) / 2 + 1.45, (p.z + f.z) / 2];
           tracer.crackle(at);
           if (buzz > BUZZ) {
-            audio.play(SOUND.ZAP, at, 0.35, 0.8 + 0.4 * ((seq++ * 0.618) % 1));
+            audio.play(SOUND.ZAP, at, -9.1, 0.8 + 0.4 * ((seq++ * 0.618) % 1));
           }
         }
       }
@@ -684,15 +685,15 @@ export const createCombat = (
           // A grenade: a fireball, a deep blast, and the view shaken within three radii of it; a
           // missile's `wide` times as big.
           tracer.blast(at, wide);
-          audio.play(SOUND.BLAST, at, 1.6, 0.45);
-          audio.play(SOUND.TACKLE, at, 1.4, 0.4);
-          audio.play(SOUND.SPLASH, at, 1.2, 0.35);
+          audio.play(SOUND.BLAST, at, 4.1, 0.45);
+          audio.play(SOUND.TACKLE, at, 2.9, 0.4);
+          audio.play(SOUND.SPLASH, at, 1.6, 0.35);
           const d = me ? Math.hypot(at[0] - me.x, at[1] - me.y - 1, at[2] - me.z) : Infinity;
           fx.quake(Math.max(0, 1 - d / (3 * NADE_R * wide)));
           continue;
         }
         tracer.burst(at, !k);
-        audio.play(SOUND.SPLASH, at, k ? 1 : 1.3, k ? 1 : 0.6);
+        audio.play(SOUND.SPLASH, at, k ? 0 : 2.3, k ? 1 : 0.6);
       }
     },
   };

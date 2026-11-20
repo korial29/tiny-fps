@@ -136,7 +136,7 @@ describe('createTaunts', () => {
     taunts.frag(frag(5, ME), ME, 10);
     const said = taunts.frame(20, () => undefined);
     expect(speak).not.toHaveBeenCalled();
-    expect(play.mock.calls).toEqual([[SOUND.ROAR, undefined, 0.7, expect.any(Number), true]]);
+    expect(play.mock.calls).toEqual([[SOUND.ROAR, undefined, -3.1, expect.any(Number), true]]);
     expect(said).toEqual([{ by: 5, s: expect.closeTo(secondsOf(SOUND.ROAR), 0) }]);
   });
 

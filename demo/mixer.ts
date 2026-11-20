@@ -1,8 +1,9 @@
-// The mixer (?mixer): a slider per group of sounds, LEVELS of audio.ts, applied live and kept in
-// this browser. Copy gives the groups' gains, to bake into LEVELS.
+// The mixer (?mixer): a slider per bus of sounds, LEVELS of audio.ts in dB, applied live and kept
+// in this browser. Copy gives the buses' levels, to bake into LEVELS.
 import { LEVELS, remix } from '../src/client/audio';
 
-const KEPT = 'tiny-fps-mix';
+/** The old linear gains, under another key, are left behind. */
+const KEPT = 'tiny-fps-mix-db';
 /** LEVELS' groups, by index. */
 const NAMES = ['VOICES', 'MOVES', 'WEAPONS', 'VEHICLES', 'BREATH', 'GAME', 'MUSIC'];
 /** The order of the sliders. */
@@ -67,17 +68,17 @@ export const mixer = () => {
     const i = NAMES.indexOf(name);
     const row = document.createElement('label');
     row.style.cssText =
-      'display:grid;grid-template-columns:90px 1fr 34px;gap:6px;align-items:center';
+      'display:grid;grid-template-columns:80px 1fr 56px;gap:6px;align-items:center';
     const input = Object.assign(document.createElement('input'), {
       type: 'range',
-      min: '0',
-      max: '2',
-      step: '0.05',
+      min: '-40',
+      max: '6',
+      step: '0.1',
     });
     const value = document.createElement('span');
-    const set = (gain: number) => {
-      input.value = String(gain);
-      value.textContent = gain.toFixed(2);
+    const set = (level: number) => {
+      input.value = String(level);
+      value.textContent = `${level.toFixed(1)} dB`;
     };
     set(LEVELS[i]);
     input.oninput = () => {

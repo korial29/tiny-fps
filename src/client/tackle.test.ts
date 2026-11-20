@@ -30,6 +30,7 @@ vi.mock('./audio', () => ({
     muted: false,
     destroy: () => {},
   }),
+  db: (g: number) => 20 * Math.log10(g),
   savedMute: () => false,
   toggleMute: () => false,
 }));
@@ -140,7 +141,7 @@ describe('the tackle through the socket, from each side', () => {
     expect(spies.jolt).toHaveBeenCalledTimes(1);
     expect(spies.punch).not.toHaveBeenCalled();
     expect(Number(q('u').style.opacity)).toBeGreaterThan(0.5);
-    expect(played(SOUND.TACKLE)).toEqual([[SOUND.TACKLE, undefined, undefined, undefined]]);
+    expect(played(SOUND.TACKLE)).toEqual([[SOUND.TACKLE, undefined, 0, undefined]]);
     expect(played(SOUND.GRUNT)).toHaveLength(1);
     // The rest of the stumble and its end make nothing more.
     snap(STUMBLE_TICKS - 2, lying);

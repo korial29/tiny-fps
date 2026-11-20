@@ -325,7 +325,7 @@ describe('the own shots', () => {
     }
     expect(orbs()).toEqual([]);
     expect(reds).toEqual([true]);
-    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, bursts[0], 1.3, 0.6);
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, bursts[0], 2.3, 0.6);
   });
 
   it('fly at PLASMA_SPEED onto the look line, and burst on the wall it meets, with the zap there', () => {
@@ -350,7 +350,7 @@ describe('the own shots', () => {
     expect(bursts[0][2]).toBeCloseTo(-20 + PLASMA_R, 6);
     expect(orbs()).toEqual([]);
     expect(ids()).toEqual([SOUND.LASER, SOUND.SPLASH]);
-    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, bursts[0], 1, 1);
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, bursts[0], 0, 1);
   });
 
   it('start at the muzzle in the camera, kicked and shaken with it', () => {
@@ -597,7 +597,7 @@ describe('the others shots', () => {
       frame(player(), [p]);
     }
     expect(bursts).toEqual([[5, 1.6, -7]]);
-    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, [5, 1.6, -7], 1, 1);
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, [5, 1.6, -7], 0, 1);
     expect(orbs()).toEqual([]);
   });
 });
@@ -874,7 +874,7 @@ describe('the own cuts', () => {
     frame(cutting(CUT.SLASH, 0));
     combat.step(cutting(CUT.SLASH, 0), cutting(CUT.SLASH, 36));
     frame(cutting(CUT.SLASH, 36));
-    expect(audio.play).toHaveBeenCalledWith(SOUND.SWISH, undefined, 1, 0.8);
+    expect(audio.play).toHaveBeenCalledWith(SOUND.SWISH, undefined, 0, 0.8);
     combat.step(cutting(CUT.SLASH, 36), cutting(CUT.SLASH, 35));
     frame(cutting(CUT.SLASH, 35));
     expect(audio.play).toHaveBeenCalledTimes(1);
@@ -1051,13 +1051,13 @@ describe('the others and the katana', () => {
     const { frame, audio } = setup();
     frame(player(), [other(CUT.SLASH, 0)]);
     frame(player(), [other(CUT.SLASH, 36)]);
-    expect(audio.play).toHaveBeenCalledWith(SOUND.SWISH, [5, 1.6, -3], 1, 0.8);
+    expect(audio.play).toHaveBeenCalledWith(SOUND.SWISH, [5, 1.6, -3], 0, 0.8);
     frame(player(), [other(CUT.SLASH, 20)]);
     frame(player(), [other(CUT.SLASH, 0)]);
     expect(audio.play).toHaveBeenCalledTimes(1);
     frame(player(), [other(CUT.THRUST, 24)]);
     expect(audio.play).toHaveBeenCalledTimes(2);
-    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SWISH, [5, 1.6, -3], 0.6, 1.3);
+    expect(audio.play).toHaveBeenLastCalledWith(SOUND.SWISH, [5, 1.6, -3], expect.closeTo(-4.44, 2), 1.3);
   });
 
   it('swish for a cut that changed under a running swing', () => {

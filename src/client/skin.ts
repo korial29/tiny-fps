@@ -1918,27 +1918,6 @@ const shape = (lod: number, xeno = false): Skin => {
     });
     next.forEach((c, i) => (v[i] = c));
   }
-  // The trunk and sleeve rings meet at the same height but have different widths.
-  // Give their front corners one chest profile through the junction.
-  const chestDepth = (x: number, y: number) =>
-    -0.146 * Math.sqrt(Math.max(0.015, 1 - (x / 0.222) ** 2)) +
-    0.018 * ((y - SPLIT) / 0.105) ** 2 -
-    0.008 * Math.exp(-(((x * x - 0.007) / 0.01) ** 2));
-  const chest: [number, number][] = [];
-  if (!xeno) {
-    for (let i = 0; i < v.length; i += 6) {
-      const [x, y, z] = [v[i], v[i + 1], v[i + 2]];
-      if (y < SPLIT - 0.095 || y > SPLIT + 0.095 || z >= -0.038) continue;
-      const weight =
-        soft((0.095 - Math.abs(y - SPLIT)) / 0.059) *
-        soft((0.204 - Math.abs(x)) / 0.052) *
-        soft((-z - 0.038) / 0.046);
-      if (weight > 0) {
-        v[i + 2] += weight * (chestDepth(x, y) - z);
-        chest.push([i, weight]);
-      }
-    }
-  }
   /** Smooth normals of the positions P (`st` floats a vertex): the area-weighted mean of the triangles around a vertex. */
   const normals = (P: ArrayLike<number>, st: number) => {
     const out = new Float32Array(w.length * 3);
@@ -1965,21 +1944,6 @@ const shape = (lod: number, xeno = false): Skin => {
     return out;
   };
   normals(v, 6).forEach((f, i) => (v[((i / 3) | 0) * 6 + 3 + (i % 3)] = f));
-  // A nearly edge-on triangle at the join can still tip an averaged normal.
-  // Match the fitted surface normal, easing back into the sleeve's own normals.
-  for (const [i, weight] of chest) {
-    const x = v[i], y = v[i + 1], h = 0.0001;
-    const dx = (chestDepth(x + h, y) - chestDepth(x - h, y)) / (2 * h);
-    const dy = (chestDepth(x, y + h) - chestDepth(x, y - h)) / (2 * h);
-    const length = Math.hypot(dx, dy, 1);
-    const nx = v[i + 3] + weight * (dx / length - v[i + 3]);
-    const ny = v[i + 4] + weight * (dy / length - v[i + 4]);
-    const nz = v[i + 5] + weight * (-1 / length - v[i + 5]);
-    const norm = Math.hypot(nx, ny, nz);
-    v[i + 3] = nx / norm;
-    v[i + 4] = ny / norm;
-    v[i + 5] = nz / norm;
-  }
   // Occlusion, baked in the rest pose so the arms stand off the chest: the torso's sides in the
   // shadow of the upper arms hanging by them, the insides of the sleeves and the armpits in the
   // torso's. Each occluder shades a vertex by the cosine toward its closest point and by how near

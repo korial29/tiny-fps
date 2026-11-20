@@ -7,6 +7,11 @@ import {
   ARC_R,
   ARC_RANGE,
   ARC_SPEED,
+  DISK,
+  DISK_RETURN,
+  DISK_RANGE,
+  DISK_R,
+  DISK_SPEED,
   GUN_RANGE,
   HARPOON,
   HARPOON_RANGE,
@@ -82,6 +87,13 @@ export const launch = (p: PlayerState, team = 0, harpoon = false): Flying => {
   };
 };
 
+/** The Hunter's returning disc: a wide, fast shot that the room turns back toward its owner. */
+export const disk = (p: PlayerState, team = 0): Flying => ({
+  ...launch(p, team),
+  power: DISK,
+  left: DISK_RANGE,
+});
+
 /**
  * The arc of energy the ARC cut of `p` throws at its strike (`p` the state after that step): from
  * the eye along the look like a ball, ARC_RANGE metres to go, its CUT in `arc`. Its id is the
@@ -99,13 +111,15 @@ export const wave = (p: PlayerState, team = 0): Flying => ({
 export const speedOf = (b: Pick<Ball, 'arc' | 'power'>): number =>
   b.arc
     ? ARC_SPEED
-    : b.power === HARPOON
-      ? HARPOON_SPEED
-      : b.power === BOLT
-        ? BOLT_SPEED
-        : b.power === 0
-          ? RIFLE_SPEED
-          : PLASMA_SPEED;
+    : b.power === DISK || b.power === DISK_RETURN
+      ? DISK_SPEED
+      : b.power === HARPOON
+        ? HARPOON_SPEED
+        : b.power === BOLT
+          ? BOLT_SPEED
+          : b.power === 0
+            ? RIFLE_SPEED
+            : PLASMA_SPEED;
 
 /** Metres the flight `b` goes in a tick. */
 export const stepOf = (b: Ball): number => speedOf(b) / TICK_HZ;
@@ -161,7 +175,12 @@ export const fly = (
   const o: Vec3 = [b.x, b.y, b.z];
   const d: Vec3 = [b.dx, b.dy, b.dz];
   const go = Math.min(m, b.left);
-  const radius = b.power === HARPOON ? HARPOON_R : PLASMA_R;
+  const radius =
+    b.power === DISK || b.power === DISK_RETURN
+      ? DISK_R
+      : b.power === HARPOON
+        ? HARPOON_R
+        : PLASMA_R;
   // The edge of space stops it: past it nothing on the other side is reached.
   const seam = w.def.seam === undefined || !d[1] ? Infinity : (w.def.seam - o[1]) / d[1];
   let t = ray(w, o, d, seam > 1e-6 ? Math.min(go, seam) : go, radius);

@@ -10,6 +10,7 @@ import {
   CHARGE_MAX,
   CHARGE_TAP,
   CHARGE_TICKS,
+  DISK_COOL,
   CUTS,
   DASH_COOLDOWN,
   EXEC,
@@ -80,7 +81,7 @@ const launch = (p: PlayerState): void => {
 };
 
 /** What a step struck, for the host to resolve: nothing, a shot (a plasma ball), the katana's cut, a rail gun's beam, a laser rifle's shot, or a grenade from its launcher. */
-export const STRIKE = { NONE: 0, SHOT: 1, CUT: 2, RAIL: 3, LASER: 4, NADE: 5 } as const;
+export const STRIKE = { NONE: 0, SHOT: 1, CUT: 2, RAIL: 3, LASER: 4, NADE: 5, DISK: 6 } as const;
 export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
 
 /**
@@ -294,6 +295,21 @@ export const step = (
     [p.lob, p.cool] = [NADE_COOL, NADE_HOLD];
     p.shots = (p.shots + 1) & 255;
     return STRIKE.NADE;
+  }
+  // The Hunter throws the disc with SPECIAL alone while the wrist blades are out. FIRE+SPECIAL
+  // still selects the blades' special cut.
+  if (
+    kit.hunter &&
+    p.wield &&
+    i.keys & KEY.SPECIAL &&
+    !(i.keys & KEY.FIRE) &&
+    !busy &&
+    !p.swing &&
+    !p.cool
+  ) {
+    p.cool = DISK_COOL;
+    p.shots = (p.shots + 1) & 255;
+    return STRIKE.DISK;
   }
   // With the katana in hand and no swing, G or the right button (SPECIAL alone) cuts the ARC, from
   // the left with LEFT alone held, else from the right; a double click (SPECIAL with FIRE) cuts the

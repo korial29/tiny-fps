@@ -367,6 +367,8 @@ export interface Ball {
   arc?: number;
   /** A ship's missile (power NADE): it flies straight, and its blast reaches MISSILE_R. */
   missile?: boolean;
+  /** A Hunter disc which is steering back to its owner. */
+  returning?: boolean;
 }
 
 /** The flag of a team as a snapshot carries it: only the fields of its state are meaningful, the rest read 0. */

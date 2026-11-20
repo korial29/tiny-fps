@@ -10,6 +10,11 @@ import {
   HEAVY,
   HARPOON,
   HARPOON_HP,
+  DISK,
+  DISK_RETURN,
+  DISK_HP,
+  DISK_SPEED,
+  HUNTER_LASER_COOL,
   INPUT_BURST,
   LOCK_BREAK,
   LOCK_HP,
@@ -72,8 +77,18 @@ import { shut, swing } from './doors';
 import { STRIKE, felled, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
 import { navOf } from './nav';
-import { bruise, floorAt, forward, heightOf, respawn, spawn, speedOf, stumble } from './physics';
-import { PLASMA_LAG, blast, cylinder, fly, launch, lob, stepOf, toss, wave } from './plasma';
+import {
+  bruise,
+  eyeHeight,
+  floorAt,
+  forward,
+  heightOf,
+  respawn,
+  spawn,
+  speedOf,
+  stumble,
+} from './physics';
+import { PLASMA_LAG, blast, cylinder, disk, fly, launch, lob, stepOf, toss, wave } from './plasma';
 import type { Flying } from './plasma';
 import { FRAG, decodeInput, encodeSnapshot, onWire, parseText } from './protocol';
 import type { ClientText, ServerText } from './protocol';
@@ -289,6 +304,8 @@ export class Room {
   private gone: number[];
   /** The plasma balls in flight, and the ones that burst since the last snapshot, which sends them once more. */
   private balls: Flying[] = [];
+  /** Last tick a Hunter's shoulder laser hit, by player id. */
+  private hunterLasers = new Map<number, number>();
   /** The map's rovers, in the order of WorldDef.rovers, then its ships (ship.ts). */
   private rovers: Rover[] = [];
   /** Ticks toward each ship's next missile, by index in `rovers`. */
@@ -477,6 +494,8 @@ export class Room {
           this.shoot(p, input.view);
         } else if (struck === STRIKE.NADE) {
           this.shoot(p, input.view, lob(p.state, p.info.team));
+        } else if (struck === STRIKE.DISK) {
+          this.shoot(p, input.view, disk(p.state, p.info.team));
         }
         Object.assign(p.state, here);
         if (use && r && p.state.mode === MODE.RIDE) {
@@ -914,6 +933,28 @@ export class Room {
     const foes = peers.filter(q => q.info.team !== b.team && !q.state.down);
     const by = peers.find(q => q.info.id === b.by);
     const o: [number, number, number] = [b.x, b.y, b.z];
+    if (b.returning || b.power === DISK_RETURN) {
+      if (!by) {
+        b.burst = true;
+        return;
+      }
+      const target: [number, number, number] = [
+        by.state.x,
+        by.state.y + eyeHeight(by.state),
+        by.state.z,
+      ];
+      const delta = target.map((v, i) => v - o[i]);
+      const distance = Math.hypot(...delta);
+      if (distance < 0.65) {
+        b.burst = true;
+        return;
+      }
+      [b.dx, b.dy, b.dz] = delta.map(v => v / distance) as [number, number, number];
+      const travel = Math.min(distance, DISK_SPEED / TICK_HZ);
+      [b.x, b.y, b.z] = [o[0] + b.dx * travel, o[1] + b.dy * travel, o[2] + b.dz * travel];
+      b.power = DISK_RETURN;
+      return;
+    }
     if (b.power === NADE) {
       toss(
         this.world,
@@ -933,6 +974,14 @@ export class Room {
       m,
       foes.map(f => f.state),
     );
+    const turnDiskBack = () => {
+      if (b.power === DISK && (b.burst || b.left <= 0)) {
+        b.returning = true;
+        b.power = DISK_RETURN;
+        b.burst = false;
+        b.left = 1;
+      }
+    };
     const hull = this.ram(b, o);
     if (hull) {
       if (by) {
@@ -947,17 +996,22 @@ export class Room {
         }
       } else if (b.power === HARPOON) {
         this.hurt(hull, 1, b.by, b.team);
+      } else if (b.power === DISK) {
+        this.hurt(hull, 1, b.by, b.team);
       } else {
         this.hurt(hull, b.arc ? CUTS[b.arc].hp : (b.power ?? 1), b.by, b.team);
       }
+      turnDiskBack();
       return;
     }
     const foe = foes.find(q => q.state === hit);
     if (!foe) {
+      turnDiskBack();
       return;
     }
     if (fends(foe.state, b) && roll(this.ticks, b.by, b.id, foe.info.id) < this.kit(foe).parry) {
       this.deflect(foe, b);
+      turnDiskBack();
       return;
     }
     if (by) {
@@ -967,6 +1021,8 @@ export class Room {
       this.shot(foe, BOLT_HP, by, b.dx, b.dz);
     } else if (b.power === HARPOON) {
       this.shot(foe, HARPOON_HP, by, b.dx, b.dz, FRAG.GUN, b.back);
+    } else if (b.power === DISK) {
+      this.shot(foe, DISK_HP, by, b.dx, b.dz, FRAG.GUN, b.back);
     } else if (b.power === 0) {
       // The laser rifle's: every RIFLE_HITS on him (from anyone, until he goes down) take 1 hp.
       foe.graze = ((foe.graze ?? 0) + 1) % RIFLE_HITS;
@@ -996,6 +1052,7 @@ export class Room {
       foe.by = b.by;
       this.ctf.drop(foe.state);
     }
+    turnDiskBack();
   }
 
   /**
@@ -1134,6 +1191,10 @@ export class Room {
    * and counts a hit. An enemy vehicle's hull is drained the same way, and shields who is behind it.
    */
   private rail(p: Player, view: number | undefined): void {
+    if (this.kit(p).hunter) {
+      this.shoulder(p, view);
+      return;
+    }
     const { o, d, t, hit } = beam(this.world, p.state, this.enemies(p, view));
     // An enemy hull before the body or the wall takes the bolt: seared RAIL_TICKS more (dock()).
     const [s, k] = this.hulls(p.info.team, view).reduce(
@@ -1163,6 +1224,57 @@ export class Room {
         [foe.burn, foe.railer] = [0, p];
         this.fry(foe);
       }
+    }
+  }
+
+  /** A lightly assisted shoulder shot: host-side target selection stays inside a narrow forward cone. */
+  private shoulder(p: Player, view: number | undefined): void {
+    const foes = this.enemies(p, view);
+    const origin: [number, number, number] = [p.state.x, p.state.y + eyeHeight(p.state), p.state.z];
+    const cp = Math.cos(p.state.pitch);
+    const look: [number, number, number] = [
+      -Math.sin(p.state.yaw) * cp,
+      Math.sin(p.state.pitch),
+      -Math.cos(p.state.yaw) * cp,
+    ];
+    let target: PlayerState | undefined;
+    let best = 0.985;
+    for (const foe of foes) {
+      const point: [number, number, number] = [foe.x, foe.y + eyeHeight(foe) * 0.65, foe.z];
+      const delta = point.map((v, i) => v - origin[i]);
+      const distance = Math.hypot(...delta);
+      const alignment = distance
+        ? delta.reduce((sum, v, i) => sum + (v / distance) * look[i], 0)
+        : 1;
+      if (distance < GUN_RANGE && alignment > best && !hidden(this.world, origin, point)) {
+        best = alignment;
+        target = foe;
+      }
+    }
+    if (
+      !target ||
+      this.ticks - (this.hunterLasers.get(p.info.id) ?? -Infinity) < HUNTER_LASER_COOL
+    ) {
+      return;
+    }
+    const point: [number, number, number] = [
+      target.x,
+      target.y + eyeHeight(target) * 0.65,
+      target.z,
+    ];
+    const delta = point.map((v, i) => v - origin[i]);
+    const distance = Math.hypot(...delta) || 1;
+    const yaw = Math.atan2(-delta[0], -delta[2]);
+    const pitch = Math.asin(delta[1] / distance);
+    const aimed = beam(this.world, { ...p.state, yaw, pitch }, [target]);
+    if (aimed.hit?.id !== target.id) {
+      return;
+    }
+    this.hunterLasers.set(p.info.id, this.ticks);
+    p.state.hits = (p.state.hits + 1) & 255;
+    const foe = this.players().find(q => q.info.id === target.id);
+    if (foe) {
+      this.shot(foe, 1, p, aimed.d[0], aimed.d[2]);
     }
   }
 

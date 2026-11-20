@@ -9,6 +9,7 @@
 // of it, and its burst is a fireball that shakes the view of who stands near. A player who loses
 // health, to a weapon or a fall, cries out in his own voice, and cries out longer as he goes down. No DOM.
 import {
+  DISK,
   CHARGE_MAX,
   CHARGE_TAP,
   CHARGE_TICKS,
@@ -532,7 +533,8 @@ export const createCombat = (
         from = [0, 1, 2].map(i => v.cam[i] + r[i] * m[0] + u[i] * m[1] + f[i] * m[2]) as Vec3;
         tracer.mount(from);
         for (const p of pending) {
-          if (p.wield) {
+          const discShot = p.power === DISK;
+          if (p.wield && !discShot) {
             balls.fire(p, now);
             continue;
           }
@@ -547,8 +549,8 @@ export const createCombat = (
             continue;
           }
           const harpoon = hunter(p.id);
-          balls.fire(p, now, harpoon);
-          tracer.flash(from, true, heat(p.power));
+          balls.fire(p, now, harpoon, discShot);
+          tracer.flash(from, true, discShot ? -1 : heat(p.power));
           laser(undefined, p.power, harpoon);
         }
       }

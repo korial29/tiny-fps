@@ -294,7 +294,7 @@ export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y,Ss;uniform int Q;
 uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform float Sn;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
-uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D Pl;uniform vec4 Ve[16];uniform int Vn;uniform float Gp;uniform sampler2D Og;out vec4 o;
+uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D Pl;uniform vec4 Ve[16];uniform int Vn;uniform int Hv;uniform float Gp;uniform sampler2D Og;out vec4 o;
 #ifdef FLESH
 #define FL(x) x
 #else
@@ -306,6 +306,7 @@ uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D 
 #define LD(x) 0.
 #endif
 vec3 xv(vec3 c){return dot(c,vec3(.3,.59,.11))*vec3(.55,.8,1.2);}
+vec3 tv(vec3 c){float l=dot(c,vec3(.3,.59,.11));return vec3(l*1.25,l*.42,l*.12);}
 const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
 vec3 nz(vec3 v){return v*inversesqrt(max(dot(v,v),1e-12));}
@@ -371,7 +372,7 @@ if(Y<.5){fa=Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E))*step(P.y,${ORB
 if(Ob.w>.5&&Ob.x>0.){vec3 p;if(gh(normalize(P-E),p))discard;}}
 #endif
 vec3 gk=fa>.002?K0(kd,kp):vec3(0);
-if(Y>.5){o=vec4(gk,1);if(Vn>0)o.rgb=xv(o.rgb);return;}
+if(Y>.5){o=vec4(gk,1);if(Vn>0)o.rgb=Hv==1?tv(o.rgb):xv(o.rgb);return;}
 if(fa>=1.&&C.z>-1.3){o=vec4(gk,1);return;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
@@ -507,7 +508,7 @@ float xr=0.;vec3 fc=F.rgb;if(Vn>0){
 vec3 xd=P-E;float xa=max(dot(xd.xz,xd.xz),1e-4);
 for(int i=0;i<Vn-1;i++){vec4 e=Ve[i];vec2 dq=P.xz-e.xz;ht=max(ht,step(dot(dq,dq),.5)*step(e.y+.03,P.y)*step(P.y,e.y+abs(e.w)));
 if(e.w>0.)continue;float xs=max(dot(e.xz-E.xz,xd.xz)/xa,0.);vec3 xp=E+xd*xs;float xh=-e.w*.5;xr=max(xr,(1.-smoothstep(.12,.34,length(xp.xz-e.xz)))*(1.-smoothstep(.8,1.,abs(xp.y-e.y-xh)/xh)));}
-c=mix(xv(c),vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));fc=xv(fc);}c=mix(c,vec3(2.,.45,.03),Gp*(.55+.45*sin(T*14.)));
+c=mix(Hv==1?tv(c):xv(c),Hv==2?vec3(.15,2.,1.8):vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,Hv==2?vec3(.1,1.8,2.):vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));fc=Hv==1?tv(fc):xv(fc);}c=mix(c,vec3(2.,.45,.03),Gp*(.55+.45*sin(T*14.)));
 o=vec4(mix(c,fc,1.-exp(-F.a*(1.-.6*step(1.,float(Vn)))*(1.-max(ht,xr))*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc)*ah);
 #ifdef MOON
 if(fa>.002)o.rgb=mix(o.rgb,gk,fa);
@@ -554,6 +555,7 @@ const UNIFORMS = [
   'Sn',
   'Ve',
   'Vn',
+  'Hv',
   'Pl',
   'Og',
 ];
@@ -917,6 +919,8 @@ export interface Renderer {
   parried(id: number, late: number): void;
   /** The xenomorph's vision (the own player is one): a grey-blue world, the enemies in sight glowing. */
   vision(on: boolean): void;
+  /** The Hunter's local vision filter and the players it can detect. */
+  hunterVision(mode: number, targets: PlayerState[]): void;
   /** Let eligible glory kill targets flash during play. */
   edge(on: boolean): void;
   /** The body of each player (PlayerInfo.body, BODY), from the roster: the man's for one not in it; and the skin and haircut he picked, his id's for one not in `looks`. */
@@ -1074,6 +1078,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   let lost = false;
   /** The xenomorph's vision is on (vision()). */
   let seeing = false;
+  /** Hunter vision is local; only the caller supplies eligible enemies. */
+  let hunterMode = 0;
+  let hunterTargets: PlayerState[] = [];
   /** Whether weak enemies flash outside of portraits. */
   let keen = false;
   let vp = new Float32Array(16);
@@ -1552,8 +1559,15 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       uni('uniform1f', 'T', performance.now() / 1000);
       uni('uniform1f', 'Z', 1);
       // Xenomorph vision uses enemy positions to reveal them through walls.
-      const prey = seeing ? crowd.filter(p => !p.down && colors.get(p.id) !== own) : [];
-      uni('uniform1i', 'Vn', seeing ? prey.length + 1 : 0);
+      const activeHunterMode = seeing ? 0 : hunterMode;
+      const prey = seeing
+        ? crowd.filter(p => !p.down && colors.get(p.id) !== own)
+        : activeHunterMode
+          ? hunterTargets.filter(p => !p.down)
+          : [];
+      prey.length = Math.min(prey.length, 16);
+      uni('uniform1i', 'Vn', seeing || activeHunterMode ? prey.length + 1 : 0);
+      uni('uniform1i', 'Hv', activeHunterMode);
       if (prey.length) {
         uni(
           'uniform4fv',
@@ -1687,6 +1701,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       new Set(b.values()).forEach(k => k && dressed(k));
     },
     vision: on => (seeing = on),
+    hunterVision: (mode, targets) => {
+      hunterMode = mode;
+      hunterTargets = targets;
+    },
     edge: on => (keen = on),
     parried: (id, late) => {
       const r = runners.get(id);

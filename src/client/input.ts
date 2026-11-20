@@ -30,9 +30,10 @@ const BITS: Record<string, number> = {
 /** The keys that pick a weapon, in WEAPON's order, and the ones that act on a press: mute, and the rifle's grenade. */
 const DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'];
 const [MUTE, NADE] = ['KeyM', 'KeyG'];
+const VISION = 'KeyV';
 
 /** Every KeyboardEvent.code the game reads: the title screen's controls must tell them all. */
-export const CODES: readonly string[] = [...Object.keys(BITS), ...DIGITS, MUTE, NADE];
+export const CODES: readonly string[] = [...Object.keys(BITS), ...DIGITS, MUTE, NADE, VISION];
 
 /** The four direction bits. */
 const DIRS = KEY.FORWARD | KEY.BACK | KEY.LEFT | KEY.RIGHT;
@@ -114,6 +115,10 @@ export interface Controls {
    * step after a double click of it (the special); G is a short press of it.
    */
   beast: boolean;
+  /** Hunter-only local vision: 0 normal, 1 thermal, 2 alien scan. */
+  vision: number;
+  /** Whether the local player chose the Hunter class. */
+  hunter: boolean;
   /**
    * The KEY bits of the next step, read once per step. Same as `keys`, plus BLADE while the katana
    * is chosen and RAIL while the rail gun is, except for the step right after a double tap: it carries DASH and only the tapped
@@ -166,6 +171,8 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     weapon: WEAPON.GUN,
     pilot: false,
     beast: false,
+    vision: 0,
+    hunter: false,
     take() {
       const moved = pending ? dashKeys(c.keys, pending) : c.keys;
       if (c.beast) {
@@ -263,6 +270,9 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
       } else {
         nade = true;
       }
+    }
+    if (e.code === VISION && !e.repeat && c.locked() && c.hunter) {
+      c.vision = (c.vision + 1) % 3;
     }
     if (bit && c.locked()) {
       // A press is a key going down: an auto-repeat is a hold, not a second tap.

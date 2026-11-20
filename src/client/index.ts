@@ -543,6 +543,10 @@ const play = (
       hud.magazines([kit.mag, kit.cap, kit.clip]);
       hud.life(kit.hp);
       [hpMax, ctl.beast] = [kit.hp, kit.xeno];
+      ctl.hunter = !!kit.hunter;
+      if (!ctl.hunter) {
+        ctl.vision = 0;
+      }
       // The xenomorph breathes no air: no helmet, so no visor round its view (the user, 2026-11-16).
       hud.visor(!!world.def.helmets && !kit.xeno);
       // No map to pick in the game's menu (the user, 2026-11-13): it is the join page's choice.
@@ -852,6 +856,15 @@ const play = (
     const k = Math.max(shot.k, watch.k);
     hud.outside(watch.k > 0);
     rd?.vision(sees(ctl.beast, watch.k));
+    const hunterMode = ctl.hunter ? ctl.vision : 0;
+    const hunterTargets = others.filter(
+      p =>
+        team(p.id) !== you.team &&
+        !p.down &&
+        (hunterMode === 1 || (hunterMode === 2 && beast(p.id))),
+    );
+    rd?.hunterVision(hunterMode, hunterTargets);
+    hud.hunterVision(['', 'THERMAL', 'ALIEN SCAN'][hunterMode]);
     // Watching a bot (B), the view is its eyes', and the own player is drawn as one of the others.
     const spy = botcam.id === undefined ? undefined : others.find(p => p.id == botcam.id);
     const third = k > 0 || !!spy;

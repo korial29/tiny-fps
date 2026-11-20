@@ -314,7 +314,13 @@ const play = (
     beast,
     hunter,
   );
-  const taunts = createTaunts(audio, speaker, id => roster.find(p => p.id == id)?.team, beast);
+  const taunts = createTaunts(
+    audio,
+    speaker,
+    id => roster.find(p => p.id == id)?.team,
+    beast,
+    hunter,
+  );
   const gloryfx = createGloryFx(
     (id, at, gain, rate) => audio.play(id, at, gain, rate),
     id => voiceOf(id, roster.find(p => p.id == id)?.body),

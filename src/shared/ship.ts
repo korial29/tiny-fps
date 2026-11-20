@@ -10,7 +10,7 @@
 // and pushed back, and the HUD warns (limits()). Past the world's seam (ORBIT.SEAM) the ship is in
 // space, up to the ceiling at ORBIT.TOP: altitude() is how high that is drawn.
 import { ORBIT, TICK_HZ, VEHICLE } from './constants';
-import { floorAt, gapTo, gravity, norm, shove } from './physics';
+import { floorAt, gapTo, gravity, nearBody, norm, shove } from './physics';
 import { bound } from './relief';
 import { KEY, NOBODY } from './types';
 import type { Body } from './physics';
@@ -103,11 +103,18 @@ export const WING = [
   [6.4, -4.9, -6.1, -0.7, -0.78],
 ];
 /** The right wing's section `x` metres right of the centre, between two of WING's. */
+const sections = new Map<number, number[]>();
 const section = (x: number): number[] => {
+  const cached = sections.get(x);
+  if (cached) {
+    return cached;
+  }
   const k = x < WING[1][0] ? 0 : 1;
   const [a, b] = [WING[k], WING[k + 1]];
   const t = (x - a[0]) / (b[0] - a[0]);
-  return a.map((v, n) => v + (b[n] - v) * t);
+  const result = a.map((v, n) => v + (b[n] - v) * t);
+  sections.set(x, result);
+  return result;
 };
 /**
  * The right wing as the shots meet it: boxes in the ship's frame along the span, each round its
@@ -136,6 +143,14 @@ const WING_BODY = [
 const WING_H = 0.4;
 /** The wing tips against the brushes: a circle this wide, this far right of the centre. */
 const TIP = { X: 5.6, R: 0.8 };
+/** Horizontal bound on every collision circle, at any pitch and roll. */
+const COLLISION_REACH = Math.max(
+  ...SHIP.BODY.map(k => Math.abs(k) + SHIP.DROP + SHIP.R),
+  TIP.X +
+    Math.abs(section(TIP.X)[4]) +
+    Math.max(Math.abs(section(TIP.X)[1]), Math.abs(section(TIP.X)[2])) +
+    TIP.R,
+);
 /** Where the wings' undersides meet the floor: right of the centre, and the trailing edge (-1), the middle of the chord (0) or the leading edge (1). */
 const TOUCH = [
   [3.2, 0],
@@ -162,7 +177,14 @@ const FLOATS = 'x y z vx vy vz yaw pitch roll wy wp wr steer'.split(' ') as Excl
 
 /** The ship's axes in the world: right, up and the nose, pitched and banked (mesh.ts's basis()). */
 export const axes = (r: Rover): [Vec3, Vec3, Vec3] => {
-  const [sy, cy, sp, cp, sr, cr] = [r.yaw, r.pitch, r.roll].flatMap(a => [sin(a), cos(a)]);
+  const [sy, cy, sp, cp, sr, cr] = [
+    sin(r.yaw),
+    cos(r.yaw),
+    sin(r.pitch),
+    cos(r.pitch),
+    sin(r.roll),
+    cos(r.roll),
+  ];
   const R: Vec3 = [cy, 0, -sy];
   const U: Vec3 = [sy * sp, cp, cy * sp];
   return [
@@ -172,9 +194,24 @@ export const axes = (r: Rover): [Vec3, Vec3, Vec3] => {
   ];
 };
 
+/** Points on the same ship share its axes until it turns. */
+const frames = new WeakMap<
+  Rover,
+  { yaw: number; pitch: number; roll: number; axes: [Vec3, Vec3, Vec3] }
+>();
+const pointAxes = (r: Rover): [Vec3, Vec3, Vec3] => {
+  const f = frames.get(r);
+  if (f && f.yaw === r.yaw && f.pitch === r.pitch && f.roll === r.roll) {
+    return f.axes;
+  }
+  const next = { yaw: r.yaw, pitch: r.pitch, roll: r.roll, axes: axes(r) };
+  frames.set(r, next);
+  return next.axes;
+};
+
 /** A point of the ship, `b` m right of the centre, `u` m above it and `a` m ahead of it. */
 export const point = (r: Rover, b: number, u: number, a: number): Vec3 => {
-  const [R, U, F] = axes(r);
+  const [R, U, F] = pointAxes(r);
   return [
     r.x + R[0] * b + U[0] * u + F[0] * a,
     r.y + R[1] * b + U[1] * u + F[1] * a,
@@ -486,10 +523,16 @@ export const pilot = (
       [TIP.X, low, (le + te) / 2, TIP.R, WING_H],
     ];
     for (const o of others) {
+      if (!nearBody(o, r.x, r.z, COLLISION_REACH + o.r)) {
+        continue;
+      }
       for (const [b, u, k, rad, h] of mine) {
         const [x, y, z] = point(r, b, u, k);
-        const [dx, dz, oy] = gapTo(o, x, z);
         const reach = rad + o.r;
+        if (!nearBody(o, x, z, reach)) {
+          continue;
+        }
+        const [dx, dz, oy] = gapTo(o, x, z);
         const d = sqrt(dx * dx + dz * dz);
         if (d >= reach - 1e-4 || oy >= y + h || oy + o.h <= y) {
           continue;

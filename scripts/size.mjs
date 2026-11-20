@@ -56,14 +56,16 @@ const BUDGETS = [
   // the GPU (the user, 2026-11-19).
   // 235 KB until the ships' predictive targeting, loaded lazily (the user, 2026-11-20: 256 B more).
   // 235 KB + 384 B until the tail's aim and flash, and the fists' weapon slot (the user, 2026-11-20: 128 B more).
-  { file: 'dist/index.js', max: 235 * 1024 + 384 },
+  // 235 KB + 384 B until the bot and vehicle simulation speed-ups (the user, 2026-11-20: 384 B more).
+  { file: 'dist/index.js', max: 235 * 1024 + 768 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
   // 47 KB until the xenomorph's walk on a wall, its jump where it looks and its glory kill's dash (the user, 2026-11-16: 48 KB).
   // 48 KB until the bots' navigation mesh (the user, 2026-11-19: 50 KB, then 51 for CI's zlib, 2026-11-20).
   // 51 KB until the bots' fair fights and team play (the user, 2026-11-20: 52 KB).
-  { file: 'dist/local.js', max: 52 * 1024 },
+  // 52 KB until the bot and vehicle simulation speed-ups (the user, 2026-11-20: 512 B more).
+  { file: 'dist/local.js', max: 52 * 1024 + 512 },
 ];
 
 // An entry plus every chunk it statically imports, concatenated.

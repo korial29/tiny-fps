@@ -51,6 +51,17 @@ const RANGE = 40;
 /** Sounds playing at once: past it the quietest goes. */
 const VOICES = 24;
 const MUSIC = 0.5;
+/**
+ * The mix (the user, 2026-11-20, with the demo's mixer, ?mixer): a gain per group of sounds, in
+ * LEVELS' order: voices (the announcer, the players' lines and cries), moves, weapons, vehicles and
+ * the world, the helmet's breath, the game's events and pickups, then the music. GROUP is each
+ * sound's group, in SOUND order. The mixer sets LEVELS live and calls remix() for the music.
+ */
+export const LEVELS = [0.4, 0.1, 0.3, 0.25, 0.15, 0.3, 1];
+export const GROUP = '11111111115555202222552222222222222222223334433333333300553300220012012000';
+const level = (id: number) => LEVELS[+GROUP[id]];
+let mixed = () => {};
+export const remix = () => mixed();
 const STORE = 'tiny-fps:muted';
 /** The announcer's volume, and the music's share of its own under a line. */
 const SPEECH = 0.9;
@@ -147,13 +158,16 @@ export const createAudio = (
       }
     }
   };
+  mixed = () =>
+    bed.gain.setTargetAtTime((talking ? MUSIC * DUCK : MUSIC) * LEVELS[6], ctx.currentTime, 0.15);
+  mixed();
   const next = () => {
     const id = lines.shift();
     talking = id !== undefined && !!speech;
-    bed.gain.setTargetAtTime(talking ? MUSIC * DUCK : MUSIC, ctx.currentTime, 0.15);
+    mixed();
     if (talking) {
       const src = source(speech!);
-      src.connect(out(master, SPEECH));
+      src.connect(out(master, SPEECH * LEVELS[0]));
       src.onended = next;
       src.start(0, ...CLIPS[id!]);
     }
@@ -272,7 +286,7 @@ export const createAudio = (
       [eye, yaw] = [at, y];
     },
     play(id, at, gain = 1, rate = 1, radio = false) {
-      emit(bufs[id], at, gain, rate, undefined, radio);
+      emit(bufs[id], at, gain * level(id), rate, undefined, radio);
     },
     say(id) {
       if (speech && lines.length < 2 && !lines.includes(id)) {
@@ -283,7 +297,7 @@ export const createAudio = (
       }
     },
     speak(id, at, gain = 1, rate = 1, radio = false) {
-      return !!cast && emit(cast, at, gain, rate, CAST[id], radio);
+      return !!cast && emit(cast, at, gain * LEVELS[0], rate, CAST[id], radio);
     },
     loop(id) {
       let src: AudioBufferSourceNode | undefined;
@@ -297,7 +311,7 @@ export const createAudio = (
             src.start();
           }
           if (src) {
-            g.gain.setTargetAtTime(volume, ctx.currentTime, 0.08);
+            g.gain.setTargetAtTime(volume * level(id), ctx.currentTime, 0.08);
             src.playbackRate.setTargetAtTime(rate, ctx.currentTime, 0.08);
           }
         },

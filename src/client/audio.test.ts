@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SPRITES, VOICED, createAudio, savedMute, toggleMute } from './audio';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GROUP, LEVELS, SPRITES, VOICED, createAudio, savedMute, toggleMute } from './audio';
 import type { Audio } from './audio';
-import { MUSIC_RATE, RATE } from './sfx';
+import { LAYERS as SOUNDS, MUSIC_RATE, RATE, SOUND as IDS } from './sfx';
 import { CAST } from './voice/cast';
 import { CLIPS, LINE } from './voice/clips';
 import type { Voice } from './sfx';
@@ -114,9 +114,35 @@ const unlocked = (yaw = 0): Audio => {
 };
 const at = (dx: number, dz: number): [number, number, number] => [EYE[0] + dx, EYE[1], EYE[2] + dz];
 
+/** The baked mix; the tests play at full level unless they read it. */
+const MIX = [...LEVELS];
+beforeEach(() => LEVELS.fill(1));
 afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
+  LEVELS.splice(0, LEVELS.length, ...MIX);
+});
+
+describe('the mix', () => {
+  it('is the user\u2019s, from the demo\u2019s mixer, with the music at full level', () => {
+    expect(MIX).toEqual([0.4, 0.1, 0.3, 0.25, 0.15, 0.3, 1]);
+  });
+
+  it('gives every sound one of the groups, the dash among the moves', () => {
+    expect(GROUP).toHaveLength(SOUNDS.length);
+    expect(GROUP).toMatch(/^[0-5]+$/);
+    expect(GROUP[IDS.DASH]).toBe('1');
+    expect(GROUP[IDS.INHALE]).toBe('4');
+  });
+
+  it('scales a sound by its group and the music by its own', () => {
+    LEVELS.splice(0, LEVELS.length, ...MIX);
+    const a = unlocked();
+    a.play(SOUND.HIT);
+    expect(voice().vol).toBeCloseTo(0.1);
+    const bed = fake().gains[1];
+    expect(bed.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.5, 3, expect.any(Number));
+  });
 });
 
 describe('unlock', () => {

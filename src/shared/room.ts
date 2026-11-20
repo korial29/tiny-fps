@@ -62,7 +62,7 @@ import {
   XENO_FEED,
 } from './constants';
 import { CHEST, crossing, fends, knock, limbOf, roll, sting, strike, swingOf } from './blade';
-import { Bot } from './bot';
+import { Bot, squad } from './bot';
 import { Ctf } from './ctf';
 import { KITS, ROLE, kitOf } from './kit';
 import { shut, swing } from './doors';
@@ -1776,6 +1776,8 @@ export class Room {
     const { packs = [] } = this.world.def;
     const health = packs.filter((_, k) => !this.gone[k]);
     const errands = this.errands(players);
+    // Each team's roles, once a tick and before any bot moves: the same for all of them.
+    const squads = [0, 1].map(team => squad(team, others, this.ctf.flags, this.world));
     // Who shot to hit whom last tick: a few of them hit, the others shoot past (bot.ts, TOKENS).
     const hunters = new Map<number, number[]>();
     for (const p of players) {
@@ -1796,6 +1798,7 @@ export class Room {
           kit: this.kit(p),
           hunters,
           packs: health,
+          squad: squads[p.info.team],
         });
         p.seq = ((p.seq ?? -1) + 1) & 0xffff;
         // Built only for a bot someone watches.

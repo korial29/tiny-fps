@@ -47,12 +47,12 @@ const play = (n: number): Tally => {
   };
   room.connect(c);
   room.receive(c, JSON.stringify({ t: 'join', name: 'bench' }));
-  const players = () => [
+  const players = [
     ...(
       room as unknown as { peers: Map<Conn, { bot?: unknown; state: PlayerState }> }
     ).peers.values(),
   ];
-  const me = players().find(p => !p.bot)!;
+  const me = players.find(p => !p.bot)!;
   // Matches of the same code differ only by where they start: a few seconds of bots alone first.
   const t: Tally = {
     captures: 0,
@@ -88,7 +88,7 @@ const play = (n: number): Tally => {
     if (k < n * 37) {
       continue;
     }
-    for (const p of players()) {
+    for (const p of players) {
       const s = p.state;
       if (!p.bot) {
         continue;
@@ -111,16 +111,16 @@ const play = (n: number): Tally => {
         t.deaths++;
       }
       // Put back at a spawn up: a fall under the kill floor (a respawn after going down is no fall).
-      if (!s.down && !o.down && Math.hypot(s.x - o.px, s.z - o.pz) > 20) {
+      if (!s.down && !o.down && (s.x - o.px) ** 2 + (s.z - o.pz) ** 2 > 20 ** 2) {
         t.falls++;
       }
-      const d = Math.hypot(s.x - o.x, s.z - o.z);
-      if (s.down || d > 1) {
+      const distance2 = (s.x - o.x) ** 2 + (s.z - o.z) ** 2;
+      if (s.down || distance2 > 1) {
         Object.assign(o, { x: s.x, z: s.z, since: k });
       } else if (k - o.since === BLOCK) {
         t.blocks++;
       }
-      if (!s.down && Math.hypot(s.vx, s.vz) < 0.5) {
+      if (!s.down && s.vx ** 2 + s.vz ** 2 < 0.5 ** 2) {
         t.stopped++;
       }
       const turn = Math.abs(((s.yaw - o.yaw + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);

@@ -24,7 +24,7 @@ import { respawn, stumble } from './physics';
 import { FRAG, decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
-import { ROVER, park, seat } from './rover';
+import { ROVER, park, seat, solid } from './rover';
 import { BODY, FLAG, KEY, MODE, NOBODY, TEAM, TEX } from './types';
 import type { Conn, Every, Input, PlayerState, Rover, Snapshot } from './types';
 import { build } from './world';
@@ -1102,6 +1102,42 @@ describe('Room: the rovers', () => {
     Object.assign(st(room, a), { x: 6, z: 4 + ROVER.ENTER_R + 0.5 });
     use(room, a);
     expect(st(room, a).mode).not.toBe(MODE.RIDE);
+  });
+
+  it('updates cached vehicle solids when a ship moves or turns', () => {
+    const room = new Room({ map: 'tranquility' });
+    const a = join(room, 'Ann');
+    const state = st(room, a);
+    const fleet = room['rovers'];
+    const ship = fleet.find(r => r.ship)!;
+    for (const change of [
+      () => {},
+      () => {
+        ship.x += 3;
+      },
+      () => {
+        ship.y += 2;
+      },
+      () => {
+        ship.z -= 1;
+      },
+      () => {
+        ship.yaw += 0.3;
+      },
+      () => {
+        ship.pitch += 0.2;
+      },
+      () => {
+        ship.roll -= 0.1;
+      },
+      () => {
+        ship.wreck = 1;
+        state.down = 1;
+      },
+    ]) {
+      change();
+      expect(room['solids'](state)).toEqual(solid(fleet, state));
+    }
   });
 
   it("takes the rider's seat when the wheel is taken, and nothing when both are", () => {

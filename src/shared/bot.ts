@@ -263,23 +263,41 @@ export const squad = (
   const ours = theirs.state === FLAG.CARRIED ? by(theirs.by) : undefined;
   const enemy = mine.state === FLAG.CARRIED ? by(mine.by) : undefined;
   // A teammate low with an enemy on him: the lowest first. He is given no job.
-  const trouble = up
-    .filter(o => o.team === team && o.state.hp <= LOW)
-    .filter(o =>
-      up.some(f => f.team !== team && flat(f.state.x, f.state.z, o.state.x, o.state.z) < NEAR),
-    )
-    .sort((a, b) => a.state.hp - b.state.hp)[0];
+  let trouble: Seen | undefined;
+  for (const o of up) {
+    if (
+      o.team === team &&
+      o.state.hp <= LOW &&
+      (!trouble || o.state.hp < trouble.state.hp) &&
+      up.some(f => f.team !== team && flat(f.state.x, f.state.z, o.state.x, o.state.z) < NEAR)
+    ) {
+      trouble = o;
+    }
+  }
   // Sorted by id, so a tie goes the same way in every head (the sort keeps the order).
   const free = up
     .filter(o => o.team === team && o.bot && o !== ours && o !== trouble)
     .sort((a, b) => a.id - b.id);
   const n = free.length;
-  const take = (role: Role, count: number, x: number, z: number, far = Infinity) =>
-    free
-      .filter(o => !roles.has(o.id) && flat(o.state.x, o.state.z, x, z) < far)
-      .sort((a, b) => flat(a.state.x, a.state.z, x, z) - flat(b.state.x, b.state.z, x, z))
-      .slice(0, count)
-      .forEach(o => roles.set(o.id, role));
+  const take = (role: Role, count: number, x: number, z: number, far = Infinity) => {
+    while (count-- > 0) {
+      let nearest: Seen | undefined;
+      let distance = far;
+      for (const o of free) {
+        if (!roles.has(o.id)) {
+          const d = flat(o.state.x, o.state.z, x, z);
+          if (d < distance) {
+            nearest = o;
+            distance = d;
+          }
+        }
+      }
+      if (!nearest) {
+        break;
+      }
+      roles.set(nearest.id, role);
+    }
+  };
   if (enemy) {
     take('chase', ours ? Math.max(1, n - 1) : Math.ceil(n / 2), enemy.state.x, enemy.state.z);
   }
@@ -679,13 +697,17 @@ export class Bot {
     const role = roles.get(me.id);
     // Low itself, a pack close by: mended first, but for the chase of our flag.
     if (p.hp <= LOW && role !== 'chase') {
-      const pack = s.packs
-        ?.map(q => [q, flat(p.x, p.z, q[0], q[2])] as const)
-        .filter(([, d]) => d < MEND)
-        .sort((a, b) => a[1] - b[1])[0];
+      let pack: Vec3 | undefined;
+      let nearest = MEND;
+      for (const q of s.packs ?? []) {
+        const d = flat(p.x, p.z, q[0], q[2]);
+        if (d < nearest) {
+          [pack, nearest] = [q, d];
+        }
+      }
       if (pack) {
         this.why = 'health';
-        return pack[0];
+        return pack;
       }
     }
     const h = role === 'chase' ? holder(mine) : role === 'escort' ? holder(theirs) : undefined;
@@ -1039,17 +1061,14 @@ export class Bot {
   private fight(s: Sight, free: boolean): { keys: number } | undefined {
     const { me, others, world, flags } = s;
     const p = me.state;
-    if (!p.ground) {
+    // A route leg and a flag carrier keep their movement keys instead of fighting.
+    const theirs = flags[1 - me.team];
+    if (!p.ground || !free || (theirs.state === FLAG.CARRIED && theirs.by === me.id)) {
       this.foe = -1;
       return undefined;
     }
     const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
     const carrier = flags[me.team].state === FLAG.CARRIED ? flags[me.team].by : -1;
-    const theirs = flags[1 - me.team];
-    const mates = others
-      .filter(o => o.team === me.team && !o.state.down)
-      .filter(o => o.state.hp <= LOW || (theirs.state === FLAG.CARRIED && theirs.by === o.id))
-      .map(o => o.state);
     let foe: Seen | undefined;
     let best = Infinity;
     for (const o of others) {
@@ -1058,20 +1077,29 @@ export class Bot {
         continue;
       }
       const d = flat(p.x, p.z, q.x, q.z);
-      // The one who has our flag first, then one on a teammate who carries theirs or is low, then the nearest.
-      const onMate = mates.some(m => flat(m.x, m.z, q.x, q.z) < NEAR);
-      const score = o.id === carrier ? d - RANGE : onMate ? d - RANGE / 2 : d;
       // It sees ahead of its look and hears close by; the one it fights it follows round.
-      const ahead = Math.abs(turn(p.yaw, toward(p.x, p.z, q.x, q.z))) < VIEW;
-      const noticed = o.id === this.foe || d < HEAR || ahead;
-      if (noticed && d < RANGE && score < best && !hidden(world, eye, [q.x, q.y + 1.2, q.z])) {
+      if (
+        d >= RANGE ||
+        (o.id !== this.foe &&
+          d >= HEAR &&
+          Math.abs(turn(p.yaw, toward(p.x, p.z, q.x, q.z))) >= VIEW)
+      ) {
+        continue;
+      }
+      // The one who has our flag first, then one on a teammate who carries theirs or is low, then the nearest.
+      const onMate = others.some(
+        m =>
+          m.team === me.team &&
+          !m.state.down &&
+          (m.state.hp <= LOW || (theirs.state === FLAG.CARRIED && theirs.by === m.id)) &&
+          flat(m.state.x, m.state.z, q.x, q.z) < NEAR,
+      );
+      const score = o.id === carrier ? d - RANGE : onMate ? d - RANGE / 2 : d;
+      if (score < best && !hidden(world, eye, [q.x, q.y + 1.2, q.z])) {
         [foe, best] = [o, score];
       }
     }
-    // On a leg the keys are the leg's: a jump's run-up wants its sprint, even past the carrier. And
-    // the carrier runs: a fight would cost him the sprint.
-    const carrying = flags[1 - me.team].state === FLAG.CARRIED && flags[1 - me.team].by === me.id;
-    if (!foe || !free || carrying) {
+    if (!foe) {
       this.foe = -1;
       return undefined;
     }
@@ -1111,7 +1139,7 @@ export class Bot {
     this.errUp = this.errUp * 0.94 + (this.rnd() * 2 - 1) * shake * 0.2;
     // Shots past him first, and past him too when TOKENS of its team already shoot to hit him.
     const hunters = s.hunters?.get(foe.id) ?? [];
-    const before = hunters.filter(id => id !== this.id && id < this.id).length;
+    const before = hunters.filter(id => id < this.id).length;
     // The count wraps at 256.
     const warning = ((p.shots - this.shot) & 255) < this.warned;
     const hit = !warning && before < TOKENS;

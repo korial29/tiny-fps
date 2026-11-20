@@ -26,7 +26,7 @@ les visions ne doivent pas transmettre aux autres clients des informations de ci
 - [x] PR #338 : lames doubles en vue première et troisième personne; harpon rapide; disque renvoyé
       vers son porteur et récupéré au contact; laser d’épaule avec acquisition hôte dans un cône limité.
 - [x] PR #339 : touche V pour alterner vision normale, thermique et détection locale des Xénomorphes.
-- [x] PR cris : douleur et mort avec une voix originale; appel de frag synthétisé transmis sur la radio alliée.
+- [x] PR #340 : douleur et mort avec une voix originale; appel de frag synthétisé transmis sur la radio alliée.
 
 Les cris et appels Hunter sont synthétisés par le moteur audio du jeu; ils n’utilisent aucun extrait
 enregistré.

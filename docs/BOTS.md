@@ -42,20 +42,26 @@ does, and tells a player he is under fire before it hits him. `fight()` in `bot.
   pass `PAST` (1.6 m) beside him. An enemy it fought within `MEMORY` (3 s) gets none again.
 - **Attack tokens.** At most `TOKENS` (2) bots shoot to hit the same enemy; the others shoot past
   him, the lowest ids first (`Bot.hunting`, `Sight.hunters`, built by the room from the last
-  tick). A player caught by four bots is not cut down in a tick.
+  tick), so the same bots always get the tokens. A bot holds one only while it aims at him and can
+  fire: one still turning, reacting or empty leaves it to a teammate. A player caught by four bots
+  is not cut down in a tick.
 - **A hand, not a turret.** The aim wanders about the target (`shake`), the more as he crosses
   its view and as it moves (`CROSS`, 6 m/s doubles it); it reads his speed late (`track`) and
   leads him by a share of the ball's flight (`lead`); a shot meant to miss leaves the wander out.
 - **Slower.** The reaction is longer and the turn rate lower than before, and it dodges a ball less.
 
-On 8 bot-only matches against master: Highline's accuracy 62 % to 32 % (28 % at skill 0, 38 % at
-7), frags 87 to 39 a match, captures 6.6 to 10.6; Tranquility's 53 % to 27 %, frags 95 to 33,
-captures 11.6 to 20.3. The bench counts the shots, the hits and the frags.
+On 24 bot-only matches a map against the bots before it: Highline's accuracy 62 % to 32 % (28 %
+at skill 0, 38 % at 7, on 8 matches), frags 87 to 39 a match, captures 6.7 to 10.7; Tranquility's
+53 % to 27 %, frags 96 to 33, captures 11.6 to 20.5. The bench counts the shots, the hits and the
+frags.
 
 ## Team play (the user, 2026-11-20: to make up for the aim)
 
 `squad()` in `bot.ts` hands out a role to each bot of a team every tick. Every bot works it out
-from the same team, so they agree with no message. The nearest bot to a job takes it, the most
+from the same team, so they agree with no message. Each works it out as it thinks, after the bots
+before it in the tick have moved: worked out once a tick for the whole team, the roles differed
+on 1 % of the bots' ticks (chase and escort swapped on near ties) and Highline lost 2.4 captures a
+match on 24. The nearest bot to a job takes it, the most
 pressing jobs first:
 
 - **chase**: half the team or more go after the enemy who has our flag. When we also have theirs,
@@ -71,10 +77,12 @@ A bot that is low goes for a health pack within `MEND` (30 m) first, unless it c
 (`Sight.packs`, the ones there). In a fight it shoots first the one who has our flag, then one on
 a teammate who carries theirs or is low, then the nearest.
 
-Against the same bots with the old goals, aim being equal (8 matches, sides swapped each match):
-57 captures to 30 on Highline, 106 to 45 on Tranquility. In bot-only matches flags are taken more
-(28 to 43 a match on Highline) and come back more. The bench's blocks go up (17 to 56): the guard
-stands at home.
+Against the same bots with the old goals, aim being equal (8 matches only, sides swapped each
+match, not rerun): 57 captures to 30 on Highline, 106 to 45 on Tranquility. In bot-only matches,
+where both teams play the roles, on 24 matches a map against the fair fights alone: flags are
+taken more (28 to 40.5 a match on Highline, 36.6 to 56.5 on Tranquility) and sent home more, so
+fewer are captured (10.7 to 8.8, 20.5 to 17.7). The bench's blocks go up (17 to 53 on Highline,
+31 to 53 on Tranquility): the guard stands at home.
 
 ## What is left, by cost
 

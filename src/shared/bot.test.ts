@@ -784,21 +784,6 @@ describe('Bot: team play', () => {
     expect(bot.view().why).toBe('take flag');
   });
 
-  it('takes the role the room worked out for its team', () => {
-    const bot = new Bot(0);
-    const me = at(0, 0, 0, 10);
-    bot.think({ me, others: [], flags: [home, home], world });
-    expect(bot.view().why).toBe('take flag');
-    bot.think({
-      me,
-      others: [],
-      flags: [home, home],
-      world,
-      squad: { roles: new Map([[0, 'guard']]) },
-    });
-    expect(bot.view().why).toBe('guard');
-  });
-
   it('fights the enemy on its carrier before a nearer one', () => {
     const bot = new Bot(0);
     const me = at(0, 0, 0, 10);

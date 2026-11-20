@@ -62,7 +62,7 @@ import {
   XENO_FEED,
 } from './constants';
 import { CHEST, crossing, fends, knock, limbOf, roll, sting, strike, swingOf } from './blade';
-import { Bot, squad } from './bot';
+import { Bot } from './bot';
 import { Ctf } from './ctf';
 import { KITS, ROLE, kitOf } from './kit';
 import { shut, swing } from './doors';
@@ -1783,12 +1783,6 @@ export class Room {
         hunters.set(p.bot.hunting, [...(hunters.get(p.bot.hunting) ?? []), p.info.id]);
       }
     }
-    // The roles of each team, worked out once for all its bots (bot.ts, squad()).
-    const squads = [0, 1].map(team =>
-      players.some(p => p.bot && p.info.team === team)
-        ? squad(team, others, this.ctf.flags, this.world)
-        : undefined,
-    );
     for (const p of players) {
       if (p.bot) {
         const me = others.find(o => o.id === p.info.id)!;
@@ -1801,7 +1795,6 @@ export class Room {
           errand: errands.get(p.info.id),
           kit: this.kit(p),
           hunters,
-          squad: squads[p.info.team],
           packs: health,
         });
         p.seq = ((p.seq ?? -1) + 1) & 0xffff;

@@ -53,8 +53,6 @@ export interface Sight {
   packs?: readonly Vec3[];
   /** The bots that shot to hit each enemy last tick, by the enemy's id (Bot.hunting): TOKENS of them hit, the others miss. */
   hunters?: ReadonlyMap<number, readonly number[]>;
-  /** Its team's roles this tick, worked out once by the room for all its bots: squad()'s when absent. */
-  squad?: Squad;
 }
 
 export type Intent = { keys: number; yaw: number; pitch: number };
@@ -204,12 +202,6 @@ const HELP = 40;
 /** What a bot of a team does, handed out by squad(). */
 type Role = 'chase' | 'return' | 'escort' | 'help' | 'guard' | 'attack';
 
-/** A team's roles, and the teammate in trouble the 'help' role goes to. */
-export interface Squad {
-  roles: ReadonlyMap<number, Role>;
-  trouble?: Seen;
-}
-
 /**
  * The roles of a team's bots this tick, the same in every bot's head (they see the same team):
  * the nearest to each job takes it, the most pressing jobs first. Half the team or more chase the
@@ -222,7 +214,7 @@ export const squad = (
   players: readonly Seen[],
   flags: readonly FlagState[],
   world: World,
-): Squad => {
+): { roles: Map<number, Role>; trouble?: Seen } => {
   const [mine, theirs] = [flags[team], flags[1 - team]];
   const roles = new Map<number, Role>();
   const up = players.filter(o => !o.state.down);
@@ -624,8 +616,10 @@ export class Bot {
       this.why = 'hunt';
       return at(prey.state);
     }
-    const { roles, trouble } =
-      s.squad ?? squad(team, [{ ...me, bot: true }, ...others], flags, world);
+    // Worked out by each bot as it thinks, after the bots before it this tick have moved: once a
+    // tick for the whole team swaps chase and escort on near ties, and cost Highline 2 captures a
+    // match over 24.
+    const { roles, trouble } = squad(team, [{ ...me, bot: true }, ...others], flags, world);
     const role = roles.get(me.id);
     // Low itself, a pack close by: mended first, but for the chase of our flag.
     if (p.hp <= LOW && role !== 'chase') {

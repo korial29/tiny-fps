@@ -17,17 +17,17 @@ Space helmets on every runner, after DOOM's 90s marine helmet, not copied.
 
 ## Layout (red's half; blue's is its mirror)
 
-| What        | Where                                   | Size                    | Notes                                                                                                                           |
-| ----------- | --------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Dome        | centre (80, 0, 236)                     | radius 22, height 16    | Collision: 4 stacked tiers (r 22 to 6, tops 6, 11, 14.5, 16), walkable. Visual: a smooth hemisphere with a band of lit windows. |
-| Flag base   | (80, 1, 234)                            | step 9.5, dais 8.5, 1 m | In the dome's hall, 2 m from its centre toward the door (was (80, 1, 205) outdoors, see below).                                 |
-| Spawns      | 8 at z 262–268, x 56–104                |                         | Facing −z (yaw 0), as Highline's red.                                                                                           |
-| Armoury     | plinth x 60–70, y 0–1.5, z 250–256      |                         | The 4 racks 2.5 m apart on top, as Highline.                                                                                    |
-| Landing pad | disc centre (40, 0.25, 220)             | radius 13               | Collision: a thin 26 × 0.25 × 26 box. A shuttle on it: fuselage box 14 × 3 × 4 as cover.                                        |
-| Modules     | (118, 0, 226) and (112, 0, 200)         | 14 × 5 × 8              | Long halls with lit windows.                                                                                                    |
-| Tubes       | dome ↔ each module                      | 4 wide × 3.5 high       | Box collision, tops walkable; drawn as rounded tubes.                                                                           |
-| Light masts | along the tubes (the pad's went, 11-14) | 0.4 × 10 × 0.4          | A lamp on top.                                                                                                                  |
-| Field       | z 150–200                               |                         | Open regolith, boulders 2–6 m as cover, low ramps up to the tube tops, a parked rover.                                          |
+| What         | Where                                              | Size                    | Notes                                                                                                                           |
+| ------------ | -------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Dome         | centre (80, 0, 236)                                | radius 22, height 16    | Collision: 4 stacked tiers (r 22 to 6, tops 6, 11, 14.5, 16), walkable. Visual: a smooth hemisphere with a band of lit windows. |
+| Flag base    | (80, 1, 234)                                       | step 9.5, dais 8.5, 1 m | In the dome's hall, 2 m from its centre toward the door (was (80, 1, 205) outdoors, see below).                                 |
+| Spawns       | 8 at z 262–268, x 56–104                           |                         | Facing −z (yaw 0), as Highline's red.                                                                                           |
+| Armoury      | plinth x 60–70, y 0–1.5, z 250–256                 |                         | The 4 racks 2.5 m apart on top, as Highline.                                                                                    |
+| Landing pads | disc centres (40, 0.25, 220) and (13.5, 0.25, 220) | radius 13               | Collision: a thin 26 × 0.25 × 26 box. A shuttle on it: fuselage box 14 × 3 × 4 as cover.                                        |
+| Modules      | (118, 0, 226) and (112, 0, 200)                    | 14 × 5 × 8              | Long halls with lit windows.                                                                                                    |
+| Tubes        | dome ↔ each module                                 | 4 wide × 3.5 high       | Box collision, tops walkable; drawn as rounded tubes.                                                                           |
+| Light masts  | along the tubes (the pad's went, 11-14)            | 0.4 × 10 × 0.4          | A lamp on top.                                                                                                                  |
+| Field        | z 150–200                                          |                         | Open regolith, boulders 2–6 m as cover, low ramps up to the tube tops, a parked rover.                                          |
 
 The middle, z 132–148: **the rille**, a 16 m chasm across the crater, open to the kill floor, with
 three crossings: a tube bridge in the middle (x 74–86, a deck at y 0 with low walls), a long jump on
@@ -189,7 +189,7 @@ The far crest of the crater wall showed as a row of big triangles against the sk
 
 The user: the draft shuttle on each pad becomes a combat ship a player boards and flies, up to a limit. Their choices: arcade controls, lasers and missiles, a ceiling plus the crater's edge, a ship that can be shot down and comes back.
 
-- `MOON.ships` stands one on each pad, nose toward the other base. The shuttle's brush and its three ghosts are gone; the ship is a solid body (`shipHull()`) players walk into and stand on, as a rover.
+- `MOON.ships` stands one on each pad, nose toward the other base. Two pads a base since 2026-11-20 (the user: a second ship a team), the second at x 13.5 west of the first, so four ships: red's two, then blue's (`homeOf()`). With the four rovers that is eight vehicles, past the three bits the snapshot's head had for them: the head is five bytes, a byte of players and one of vehicles. The shuttle's brush and its three ghosts are gone; the ship is a solid body (`shipHull()`) players walk into and stand on, as a rover.
 - `src/shared/ship.ts` is the simulation: a `Rover` with `ship` set, so it shares the rovers' seats, snapshot slot (three bytes a vehicle: kind and health, wreck time, missiles), prediction and chase camera. `rover.ts` hands it to `pilot()` wherever it would `drive()`. One seat; a flag's carrier does not fly.
 - Controls: the look aims the nose, W and S thrust and brake, A and D slide, Space and C climb and sink, Shift boosts, a click fires the two lasers (bolts, as the rover's), G a missile (a grenade at 60 m/s from a pod that flies straight, no gravity, and bursts out to `MISSILE_R`, 14 m: the user, 2026-11-14; `Ball.missile`, bit 7 of its power byte on the wire). Four missiles, one loaded back every 5 s. With nobody at the stick it falls to a floor.
 - The limit: the climb fades over the last 20 m under `CEIL` (120 m) and a push brings it back past it; the same at `EDGE` (0.88 of the crater's bound). Never more than 12 m past either. The HUD warns from half way into the last 20 m.

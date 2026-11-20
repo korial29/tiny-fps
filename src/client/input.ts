@@ -46,7 +46,7 @@ export const dashKeys = (keys: number, dir: number): number => (keys & ~DIRS) | 
 /** The KEY bit of a KeyboardEvent.code, 0 for a key the game ignores. */
 export const keyBit = (code: string): number => BITS[code] ?? 0;
 
-/** A second right press (or G) within this of the first (ms) is a double click: the xenomorph's tail special. */
+/** A second press within this of the first (ms) is a double click: the katana's special of the cut (left), the xenomorph's tail special (right or G). */
 export const DOUBLE_CLICK_MS = 300;
 
 /** The wheel swaps the weapon at most this often (ms): a trackpad's flick is a hundred events, one swap. */
@@ -149,6 +149,9 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   let swapped = -Infinity;
   /** G (or the right button, but for the xenomorph) pressed, waiting for its step: the katana's special, a grenade with the rifle, a missile at a ship's stick. */
   let nade = false;
+  /** A double left click, waiting for its step, and when the left button was last pressed (ms): the katana's special of the cut. */
+  let special = false;
+  let clicked = -Infinity;
   /** The right button pressed, waiting for its step, held now, and when it was last pressed (ms): the xenomorph's tail. */
   let sting = false;
   let stinging = false;
@@ -174,9 +177,12 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
         nade = sting = twist = false;
         return keys;
       }
-      const keys = moved | (nade ? KEY.SPECIAL : 0);
+      const keys =
+        moved |
+        (nade ? KEY.SPECIAL : 0) |
+        (special && !c.pilot && c.weapon != WEAPON.RIFLE ? KEY.FIRE | KEY.SPECIAL : 0);
       pending = 0;
-      nade = sting = false;
+      nade = special = sting = false;
       return withWeapon(keys, c.weapon);
     },
     track: (was, now) => {
@@ -213,6 +219,9 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     }
     if (c.locked() && !e.button) {
       c.keys |= KEY.FIRE;
+      const now = performance.now();
+      special ||= now - clicked <= DOUBLE_CLICK_MS;
+      clicked = special ? -Infinity : now;
     }
   });
   on(document, 'mouseup', (e: MouseEvent) => {

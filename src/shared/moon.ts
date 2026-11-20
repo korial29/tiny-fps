@@ -30,7 +30,11 @@ const mirror = ({ min, max }: Bx): Bx =>
   bx(min[0], min[1], ZED - max[2], max[0], max[1], ZED - min[2]);
 
 /** The domes' centres, the landing pads (x, z, radius), the modules, the tubes and the masts (centres), red's then blue's: what the scenery draws on. */
-const PAD = [40, 220, 13];
+/** Two a base (the user, 2026-11-20: a second ship a team), the second west of the first. */
+const PADS = [
+  [40, 220, 13],
+  [13.5, 220, 13],
+];
 /** By the tubes. The four at the pad's corners went (the user, 2026-11-14): a ship hit them for nothing. */
 const MASTS = [
   [106.2, 230.4],
@@ -145,6 +149,7 @@ export const [MOUND, RISE] = [3, 8];
  */
 export const FLATS = [
   [27, 67, 53, 93],
+  [0.5, 67, 26.5, 93],
   [56, 74, 104, 133],
   [96, 56, 125, 90],
   [98, 36, 102, 40],
@@ -763,7 +768,7 @@ export const LAYOUT = {
   sites: SITES,
   pillars: PILLARS,
   domes: [DOME, [DOME[0], ZED - DOME[1]]],
-  pads: [PAD, [PAD[0], ZED - PAD[1], PAD[2]]],
+  pads: [...PADS, ...PADS.map(([x, z, r]) => [x, ZED - z, r])],
   modules: [...MODULES, ...MODULES.map(mirror)],
   tubes: [...TUBES, ...TUBES.map(mirror)],
   masts: [...MASTS, ...MASTS.map(([x, z]) => [x, ZED - z])],
@@ -821,8 +826,8 @@ const half: Brush[] = [
   { ...box(75.75, 0.5, FLAG - 4.25, 84.25, 1, FLAG + 4.25, PAINT, CONCRETE, RED), ghost: true },
   // The armoury, a red plinth behind the dome: the racks stand on it.
   box(60, 0, 259, 70, 1.5, 265, STEEL, PAINT, RED),
-  // The landing pad, its spaceship's (ship.ts: a solid body, not a brush), and masts by the tubes.
-  box(27, 0, 207, 53, 0.25, 233, METAL),
+  // The landing pads, their spaceships' (ship.ts: a solid body, not a brush), and masts by the tubes.
+  ...PADS.map(([x, z, r]) => box(x - r, 0, z - r, x + r, 0.25, z + r, METAL)),
   ...MASTS.map(([x, z]) => box(x - 0.2, 0, z - 0.2, x + 0.2, 10, z + 0.2, STEEL)),
   // The west long jump: a spur of the lip into the rille, orange.
   box(12, -30, 148 - (16 - WEST_GAP) / 2, 24, 0, 148, PAINT, STONE, [1, 0.42, 0.08]),
@@ -964,10 +969,10 @@ export const MOON: WorldDef = {
     [100, 0, ZED - 178, Math.PI],
     [30, 0, ZED - 255, Math.PI],
   ],
-  // A combat ship on each landing pad, its nose toward the other base.
+  // A combat ship on each landing pad, its nose toward the other base: red's, then blue's (homeOf()).
   ships: [
-    [PAD[0], 0.25, PAD[1], 0],
-    [PAD[0], 0.25, ZED - PAD[1], Math.PI],
+    ...PADS.map(([x, z]): Spawn => [x, 0.25, z, 0]),
+    ...PADS.map(([x, z]): Spawn => [x, 0.25, ZED - z, Math.PI]),
   ],
   // The dome's door and the two airlocks of each base, and the station's command room door.
   doors: [...DOORS, ...DOORS.map(mirror), STATION_DOOR],

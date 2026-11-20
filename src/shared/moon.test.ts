@@ -383,12 +383,18 @@ const topAt = (x: number, z: number) =>
 describe('MOON, the rim and the layout the scenery follows', () => {
   it('lays out what the scenery draws on its boxes: both halves, the blue one mirrored', () => {
     const { pads, masts } = LAYOUT;
-    expect([pads.length, masts.length]).toEqual([2, 4]);
-    expect(pads[1]).toEqual([40, ZED - 220, 13]);
-    // A ship stands on each pad, the blue one mirrored, noses toward the other base.
+    expect([pads.length, masts.length]).toEqual([4, 4]);
+    expect(pads.slice(2)).toEqual([
+      [40, ZED - 220, 13],
+      [13.5, ZED - 220, 13],
+    ]);
+    // A ship stands on each pad, two a team (the user, 2026-11-20), blue's mirrored, noses toward
+    // the other base.
     expect(MOON.ships).toEqual([
       [40, 0.25, 220, 0],
+      [13.5, 0.25, 220, 0],
       [40, 0.25, ZED - 220, Math.PI],
+      [13.5, 0.25, ZED - 220, Math.PI],
     ]);
     for (const [x, z] of masts) {
       expect(
@@ -813,7 +819,7 @@ describe('MOON, the relief round the arena', () => {
         src.match(/\*\*|Math\.(?!imul|sqrt|abs|min|max|floor|ceil|round|PI)\w+/g) ?? [],
       ).toEqual([]);
     }
-    expect(checksum(relief)).toBe(3677647529);
+    expect(checksum(relief)).toBe(1922351503);
   });
 
   it('keeps every spawn, flag base, rack and pack on flat ground: the relief is exactly 0 under each', () => {
@@ -1001,8 +1007,8 @@ describe('MOON, the relief with the real physics', () => {
       }
     };
     for (const [x0, z0, yaw] of [
-      [3, 60, WEST],
-      [3, 215, WEST],
+      [3, 40, WEST],
+      [3, 240, WEST],
       [157, 100, EAST],
       [157, 190, EAST],
       [20, 3, NORTH],

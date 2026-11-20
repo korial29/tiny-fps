@@ -68,6 +68,7 @@
     "format": "npm run format:prettier && npm run format:eslint",
     "test": "vitest run --coverage",
     "test:ci": "vitest run --maxWorkers=100% --passWithNoTests",
+    "botmatch": "BOTMATCH=${BOTMATCH:-24} vitest run src/shared/botmatch.test.ts",
     "test:durations": "vitest run --reporter=json --outputFile=node_modules/.cache/vitest-report.json && node scripts/durations.mjs node_modules/.cache/vitest-report.json",
     "test:watch": "vitest --watch"
   },

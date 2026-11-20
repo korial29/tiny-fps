@@ -19,6 +19,7 @@ import {
 } from './constants';
 import { HIGHLINE } from './map';
 import { MOON } from './moon';
+import { navBuilt } from './nav';
 import { respawn, stumble } from './physics';
 import { FRAG, decodeSnapshot, encodeInput } from './protocol';
 import type { ServerText } from './protocol';
@@ -27,7 +28,7 @@ import { ROVER, park, seat } from './rover';
 import { BODY, FLAG, KEY, MODE, NOBODY, TEAM, TEX } from './types';
 import type { Conn, Every, Input, PlayerState, Rover, Snapshot } from './types';
 import { build } from './world';
-import type { Spawn, WorldDef } from './world';
+import type { Spawn, World, WorldDef } from './world';
 import { loaded } from '../../test/loaded';
 import { duo } from '../../test/teams';
 
@@ -390,6 +391,21 @@ describe('Room: the host picks the map', () => {
       x: MOON.teams[0].spawns[0][0],
       z: MOON.teams[0].spawns[0][2],
     });
+  });
+
+  it("builds the picked map and its bots' mesh while the end screen runs, not as the match starts", () => {
+    const room = new Room({ timeLimit: 2, bots: 2 });
+    const a = join(room, 'Ann');
+    pick(room, a, 'tranquility');
+    ticks(room, 2 * TICK_HZ);
+    expect(snap(a)).toMatchObject({ over: true });
+    const inner = room as unknown as { world: World; ready?: [string, World] };
+    const [map, world] = inner.ready!;
+    expect(map).toBe('tranquility');
+    expect(navBuilt(world)).toBe(true);
+    ticks(room, END_SCREEN * TICK_HZ + SNAP_EVERY);
+    expect(roster(a).map).toBe('tranquility');
+    expect(inner.world).toBe(world);
   });
 
   it('plays the pick at the next join once the room is empty', () => {

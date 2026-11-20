@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDLE } from '../../test/teams';
 import { MAPS } from '../shared/maps';
 import { HIGHLINE } from '../shared/map';
+import { build } from '../shared/world';
 import { BODY, FLAG, HAIRS_N, TONES_N } from '../shared/types';
 import { ROLE } from '../shared/kit';
 import { TONES } from './features';
@@ -45,6 +46,8 @@ import {
   rim,
 } from './hud';
 import { VISOR } from './helmet';
+import { createTargeting } from './targeting';
+import { targetingPhysics } from './targeting-physics';
 import { CODES } from './input';
 import type { Hud, Summary } from './hud';
 import type { Mark } from './marks';
@@ -298,6 +301,7 @@ describe('createHud', () => {
       );
       expect(rows).toContain('1 2 3 4 5gun, katana, rail gun, laser rifle, fists');
       expect(rows).toContain('G or Right clickspecial: lunge, energy arc, leap');
+      expect(rows).toContain('Double clickspecial: lunge, energy arc, leap');
     });
 
     it('plays on a click of its button, from either panel, and on no other click of the panel', () => {
@@ -1118,6 +1122,8 @@ describe('the rover on the HUD', () => {
     });
 
     it('puts the reticle where the lasers cross on screen, and hides it off the wheel', () => {
+      createTargeting(screen, build(HIGHLINE), targetingPhysics);
+      const css = screen.querySelector('style')!.textContent;
       const q = () => screen.querySelector<HTMLElement>('q')!;
       expect(q().hidden).toBe(true);
       hud.aim([0.25, 0.4]);
@@ -1125,8 +1131,8 @@ describe('the rover on the HUD', () => {
       expect([q().style.left, q().style.top]).toEqual(['25%', '40%']);
       hud.aim();
       expect(q().hidden).toBe(true);
-      expect(HUD_CSS).toMatch(/q\{[^}]*border-radius:50%/);
-      expect(HUD_CSS).toContain('q::before,q::after{content:none}');
+      expect(css).toMatch(/q\{[^}]*border-radius:50%/);
+      expect(css).toContain('q::before,q::after{content:none}');
     });
 
     it('shows the speed at the wheel, with or without the prompt, and marks the screen so the gun and the crosshair hide', () => {

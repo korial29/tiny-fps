@@ -511,19 +511,20 @@ describe('the special cuts', () => {
   const go = (p: PlayerState, keys: number) =>
     step(p, onWire({ keys, yaw: p.yaw, pitch: 0, seq: 0 }), yard, 0);
 
-  it('come with G or the right button: each cut’s special is the cut plus SPECIAL_CUT, FIRE or not', () => {
+  it('come with a double click (FIRE and SPECIAL): each cut’s special is the cut plus SPECIAL_CUT; G alone is the arc', () => {
     for (const [keys, cut] of [
       [FORWARD, CUT.LUNGE],
       [LEFT, CUT.ARC_L],
       [RIGHT, CUT.ARC_R],
       [0, CUT.LEAP],
     ]) {
-      for (const fire of [0, FIRE]) {
-        const p = armed();
-        go(p, keys | fire | SPECIAL);
-        expect([p.cut, p.swing]).toEqual([cut, CUTS[cut].ticks]);
-      }
+      const p = armed();
+      go(p, keys | FIRE | SPECIAL);
+      expect([p.cut, p.swing]).toEqual([cut, CUTS[cut].ticks]);
       expect(cut).toBe(cutOf(keys) + SPECIAL_CUT);
+      const g = armed();
+      go(g, keys | SPECIAL);
+      expect(g.cut).toBe(keys == LEFT ? CUT.ARC_L : CUT.ARC_R);
     }
   });
 

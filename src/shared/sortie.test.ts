@@ -63,7 +63,8 @@ describe('a bot at the orbital station', () => {
     expect(armed / 60).toBeLessThan(45);
     expect(Math.abs(struck - armed - STATION.ARM)).toBeLessThanOrEqual(1);
     expect(home / 60).toBeLessThan(140);
-    expect(Math.hypot(ship.x - MOON.ships![1][0], ship.z - MOON.ships![1][2])).toBeLessThan(3);
+    const [px, , pz] = MOON.ships!.find(s => s[2] < 140)!;
+    expect(Math.hypot(ship.x - px, ship.z - pz)).toBeLessThan(3);
   });
 
   it("cancels the other team's strike in time from its own base", () => {

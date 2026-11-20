@@ -295,10 +295,16 @@ export const step = (
     p.shots = (p.shots + 1) & 255;
     return STRIKE.NADE;
   }
-  // G or the right button (SPECIAL, with or without FIRE) with the katana in hand and no swing:
-  // the special of the cut the keys give.
+  // With the katana in hand and no swing, G or the right button (SPECIAL alone) cuts the ARC, from
+  // the left with LEFT alone held, else from the right; a double click (SPECIAL with FIRE) cuts the
+  // special of the cut the keys give.
   if (p.wield && i.keys & KEY.SPECIAL && !busy && !p.swing) {
-    p.cut = cutOf(i.keys) + SPECIAL_CUT;
+    p.cut =
+      i.keys & KEY.FIRE
+        ? cutOf(i.keys) + SPECIAL_CUT
+        : (i.keys & (KEY.LEFT | KEY.RIGHT)) === KEY.LEFT
+          ? CUT.ARC_L
+          : CUT.ARC_R;
     [p.swing, p.charge] = [CUTS[p.cut].ticks, 0];
     launch(p);
     return STRIKE.NONE;

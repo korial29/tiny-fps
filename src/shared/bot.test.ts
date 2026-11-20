@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Bot, personaOf } from './bot';
+import { Bot, personaOf, squad } from './bot';
+import type { Seen } from './bot';
 import { KITS, ROLE } from './kit';
 import type { Kit } from './kit';
 import { HIGHLINE } from './map';
@@ -9,7 +10,7 @@ import { move, spawn } from './physics';
 import { decodeSnapshot } from './protocol';
 import type { ServerText } from './protocol';
 import { Room } from './room';
-import { FLAG, KEY, MODE, TEX } from './types';
+import { EV, FLAG, KEY, MODE, TEX } from './types';
 import type { Conn, FlagState, Snapshot } from './types';
 import { build } from './world';
 import type { Brush, World, WorldDef } from './world';
@@ -152,6 +153,10 @@ describe('Room: bots', () => {
     expect(a.texts.filter(m => m.t === 'bot')).toHaveLength(10);
   });
 
+  it('points its view at the first point of no way before it plans one', () => {
+    expect(new Bot(0).view()).toMatchObject({ path: [], next: 0, doing: 'no way' });
+  });
+
   it('builds no bot view while nobody watches', () => {
     const view = vi.spyOn(Bot.prototype, 'view');
     const room = new Room({ bots: 8 });
@@ -239,33 +244,32 @@ describe('nav', () => {
     for (const [k] of ROUTES.entries()) {
       for (const [x, y, z] of red.spawns) {
         const there = path(nav, w, [x, y, z], blue.base, k);
-        expect(there.entry).toBeDefined();
-        expect(there.edges.length).toBeGreaterThan(5);
+        expect(there.at(-1)!.to).toEqual(blue.base);
+        expect(there.filter(st => st.leg).length).toBeGreaterThan(2);
         // The route it prefers is the one it takes.
-        expect(there.edges.filter(e => e.route >= 0).every(e => e.route === k)).toBe(true);
+        const routes = there.flatMap(st => (st.edge && st.edge.route! >= 0 ? [st.edge.route] : []));
+        expect(routes.every(r => r === k)).toBe(true);
       }
       const back = path(nav, w, blue.base, red.base, k);
-      expect(back.edges.length).toBeGreaterThan(5);
+      expect(back.at(-1)!.to).toEqual(red.base);
     }
   });
 
-  it('never walks straight onto the take-off of a jump that wants a run-up', () => {
+  it('runs up to a jump that wants it along the run of its route', () => {
     const [x, y, z] = red.spawns[0];
     const way = path(nav, w, [x, y, z], blue.base, 0);
-    expect(nav.runUp.size).toBeGreaterThan(0);
-    for (const [i, e] of way.edges.entries()) {
-      if (nav.runUp.has(e.to)) {
-        expect(way.edges[i + 1]?.leg?.k).toBe('leap');
-        expect(e.leg).toBeDefined();
-      }
-    }
+    const runs = way.filter(
+      (st, k) => st.leg?.k === 'leap' && st.leg.sprint && way[k - 1]?.leg?.k === 'go',
+    );
+    expect(runs.length).toBeGreaterThan(0);
   });
 
-  it('has lanes on the moon from each spawn to the other flag', () => {
+  it('finds a way on the moon from each spawn to the other flag', () => {
     const m = build(MOON);
     const [r, b] = MOON.teams;
-    const [x, y, z] = r.spawns[0];
-    expect(path(navOf(m), m, [x, y, z], b.base).edges.length).toBeGreaterThan(3);
+    for (const [x, y, z] of r.spawns) {
+      expect(path(navOf(m), m, [x, y, z], b.base).at(-1)!.to).toEqual(b.base);
+    }
   });
 });
 
@@ -361,18 +365,18 @@ describe('Bot: the keys of a leg', () => {
     const bot = new Bot(0);
     const goal = [foe.state.x, foe.state.y, foe.state.z];
     // On the Spine's run-up to its 11 m jump: the leg after the run to it.
-    const way = path(
+    const steps = path(
       navOf(world),
       world,
       [me.state.x, me.state.y, me.state.z],
       HIGHLINE.teams[1].base,
       0,
     );
-    expect(way.edges[1].leg?.k).toBe('leap');
+    const step = steps.findIndex(st => st.leg?.k === 'leap');
+    expect(steps[step - 1].leg?.k).toBe('go');
     Object.assign(bot, {
-      nav: navOf(world),
-      way,
-      leg: 1,
+      steps,
+      step,
       goal,
       planned: 0,
       last: [me.state.x, me.state.y, me.state.z],
@@ -419,7 +423,7 @@ describe('Bot: on the moon', () => {
     const [x, y, z] = r.spawns[0];
     const legs = [0, 1, 2].map(k =>
       path(nav, world, [x, y, z], b.base, k)
-        .edges.flatMap(e => (e.leg?.k === 'leap' ? [e.leg] : []))
+        .flatMap(st => (st.leg?.k === 'leap' ? [st.leg] : []))
         .map(l => l.to.join(',')),
     );
     expect(legs[0]).toEqual([]);
@@ -492,14 +496,16 @@ describe('nav: off the ways', () => {
     const w = build(HIGHLINE);
     const [x, y, z] = HIGHLINE.teams[1].spawns[0];
     const way = path(navOf(w), w, [x, y, z], HIGHLINE.teams[0].rack!);
-    expect(way.entry).toBeDefined();
-    expect(way.edges.length).toBeGreaterThan(5);
+    expect(way.length).toBeGreaterThan(5);
+    const [gx, , gz] = way.at(-1)!.to;
+    const [rx, , rz] = HIGHLINE.teams[0].rack!;
+    expect(Math.hypot(gx - rx, gz - rz)).toBeLessThan(1.5);
   });
 
   it('finds a way from the middle of a tower’s stair', () => {
     const w = build(HIGHLINE);
     const way = path(navOf(w), w, [56.8, 24.2, 227], [98, 14.5, 131]);
-    expect(way.entry).toBeDefined();
+    expect(way.at(-1)!.to).toEqual([98, 14.5, 131]);
   });
 });
 
@@ -528,6 +534,11 @@ describe('Bot: after UT2004', () => {
     expect(godlike.react).toBeLessThan(novice.react);
     expect(godlike.turn).toBeGreaterThan(novice.turn);
     expect(godlike.duck).toBeGreaterThan(novice.duck);
+    expect(godlike.shake).toBeLessThan(novice.shake);
+    expect(godlike.lead).toBeGreaterThan(novice.lead);
+    expect(godlike.track).toBeGreaterThan(novice.track);
+    expect(godlike.warn).toBeLessThanOrEqual(novice.warn);
+    expect(godlike.warn).toBeGreaterThanOrEqual(1);
   });
 
   // A red bot standing at its base with blue's flag: nowhere to go, so a dash can only be out of a ball's way.
@@ -596,4 +607,287 @@ describe('Bot: after UT2004', () => {
     expect(keys & KEY.LEFT && keys & KEY.RIGHT).toBeTruthy();
     expect(keys & (KEY.JUMP | KEY.DASH)).not.toBe(0);
   });
+});
+
+describe('Bot: a fair fight', () => {
+  const world = build({
+    brushes: [{ min: [-50, -5, -50], max: [50, 0, 50], top: TEX.TILE, side: TEX.TILE }],
+    teams: [
+      { base: [0, 0, 40], spawns: [[0, 0, 10, 0]] },
+      { base: [0, 0, -40], spawns: [[0, 0, -10, Math.PI]] },
+    ],
+    floor: -20,
+    sun: { dir: [0, 1, 0], color: [1, 1, 1] },
+    sky: [
+      [0, 0, 1],
+      [1, 1, 1],
+    ],
+  });
+  const home: FlagState = { state: FLAG.HOME, by: 0, x: 0, y: 0, z: 0, left: 0 };
+
+  /**
+   * How far off a blue player each shot of a red bot at z 10, looking `yaw`, goes, radians, over
+   * `ticks`: the player stands still at (x, z), 10 m ahead by default.
+   */
+  const shots = (
+    o: { x?: number; z?: number; yaw?: number; id?: number; ticks?: number; shots?: number } = {},
+    hunters?: ReadonlyMap<number, readonly number[]>,
+    bot = new Bot(o.id ?? 0, 7),
+  ): number[] => {
+    const id = o.id ?? 0;
+    const me = {
+      id,
+      team: 0,
+      state: {
+        ...spawn(0, world, 0, 0),
+        yaw: o.yaw ?? 0,
+        ammo: 60,
+        mag: 30,
+        shots: o.shots ?? 0,
+      },
+    };
+    const [x, z] = [o.x ?? 0, o.z ?? 0];
+    const foe = { id: 9, team: 1, state: { ...spawn(1, world, 0, 1), x, z } };
+    const want = Math.atan2(-(x - me.state.x), -(z - me.state.z));
+    const offs: number[] = [];
+    for (let k = 0; k < (o.ticks ?? 240); k++) {
+      const i = bot.think({ me, others: [foe], flags: [home, home], world, hunters });
+      me.state.yaw = i.yaw;
+      me.state.held = 0;
+      if (i.keys & KEY.FIRE) {
+        // A u8 on the wire, as step() counts it.
+        me.state.shots = (me.state.shots + 1) & 255;
+        offs.push(Math.abs(Math.atan2(Math.sin(i.yaw - want), Math.cos(i.yaw - want))));
+      }
+    }
+    return offs;
+  };
+
+  it('fires its first shots past a new enemy, then at him', () => {
+    const offs = shots();
+    const { warn } = personaOf(0, 7);
+    expect(offs.length).toBeGreaterThan(warn + 5);
+    // 1.6 m beside him at 10 m is 0.16 rad off.
+    expect(offs.slice(0, warn).every(a => a > 0.12)).toBe(true);
+    const rest = offs.slice(warn);
+    expect(rest.reduce((a, b) => a + b, 0) / rest.length).toBeLessThan(0.06);
+  });
+
+  it('counts its warning shots across the wrap of the shot count', () => {
+    const offs = shots({ shots: 254 });
+    const { warn } = personaOf(0, 7);
+    expect(offs.slice(0, warn).every(a => a > 0.12)).toBe(true);
+    const rest = offs.slice(warn);
+    expect(rest.reduce((a, b) => a + b, 0) / rest.length).toBeLessThan(0.06);
+  });
+
+  it('holds no token while it still reacts to an enemy it meets again', () => {
+    const bot = new Bot(0, 7);
+    shots({ ticks: 120 }, undefined, bot);
+    expect(bot.hunting).toBe(9);
+    bot.think({
+      me: { id: 0, team: 0, state: spawn(0, world, 0, 0) },
+      others: [],
+      flags: [home, home],
+      world,
+    });
+    // Back in sight: no warning shot for him, but its reaction runs again before it shoots.
+    shots({ ticks: 1 }, undefined, bot);
+    expect(bot.hunting).toBe(-1);
+  });
+
+  it('warns no enemy again that it has just fought', () => {
+    const bot = new Bot(0, 7);
+    shots({ ticks: 120 }, undefined, bot);
+    // Out of sight a tick (behind a teammate's back, say), then back: no new warning.
+    bot.think({
+      me: { id: 0, team: 0, state: spawn(0, world, 0, 0) },
+      others: [],
+      flags: [home, home],
+      world,
+    });
+    const offs = shots({ ticks: 120 }, undefined, bot);
+    expect(offs[0]).toBeLessThan(0.12);
+  });
+
+  it('sees ahead and hears close by, but never shoots one behind its back it has not met', () => {
+    // 20 m behind it.
+    expect(shots({ z: 30, yaw: 0 })).toEqual([]);
+    // 4 m behind it: heard.
+    expect(shots({ z: 14, yaw: 0 }).length).toBeGreaterThan(0);
+    // 20 m ahead.
+    expect(shots({ z: -10, yaw: 0 }).length).toBeGreaterThan(0);
+  });
+
+  it('shoots past an enemy two of its team already shoot to hit', () => {
+    const { warn } = personaOf(5, 7);
+    const busy = shots({ id: 5 }, new Map([[9, [2, 3]]])).slice(warn);
+    expect(busy.length).toBeGreaterThan(5);
+    expect(busy.every(a => a > 0.12)).toBe(true);
+    // Two of higher ids give way to it.
+    const free = shots({ id: 5 }, new Map([[9, [7, 8]]])).slice(warn);
+    expect(free.reduce((a, b) => a + b, 0) / free.length).toBeLessThan(0.06);
+  });
+});
+
+describe('Bot: team play', () => {
+  const world = build({
+    brushes: [{ min: [-50, -5, -50], max: [50, 0, 50], top: TEX.TILE, side: TEX.TILE }],
+    teams: [
+      { base: [0, 0, 40], spawns: [[0, 0, 10, 0]] },
+      { base: [0, 0, -40], spawns: [[0, 0, -10, Math.PI]] },
+    ],
+    floor: -20,
+    sun: { dir: [0, 1, 0], color: [1, 1, 1] },
+    sky: [
+      [0, 0, 1],
+      [1, 1, 1],
+    ],
+  });
+  const home: FlagState = { state: FLAG.HOME, by: 0, x: 0, y: 0, z: 0, left: 0 };
+  const carried = (by: number): FlagState => ({ ...home, state: FLAG.CARRIED, by });
+  /** A player of `team` at (x, z), a bot unless said. */
+  const at = (id: number, team: number, x: number, z: number, more: Partial<Seen> = {}): Seen => ({
+    id,
+    team,
+    state: { ...spawn(team, world, id, team), x, z, ammo: 10, mag: 5 },
+    bot: true,
+    ...more,
+  });
+  // Four red bots strung along x at z 0, two blue ones.
+  const reds = () => [at(0, 0, -30, 0), at(1, 0, -10, 0), at(2, 0, 10, 0), at(3, 0, 30, 0)];
+
+  it('sends the half of the team nearest to the enemy who has our flag after him, the rest on', () => {
+    const blue = at(9, 1, 35, 5);
+    const { roles } = squad(0, [...reds(), blue], [carried(9), home], world);
+    expect([0, 1, 2, 3].map(id => roles.get(id))).toEqual(['attack', 'attack', 'chase', 'chase']);
+  });
+
+  it('chases with all but an escort when both flags are out: no capture till ours is home', () => {
+    const team = [...reds(), at(4, 0, 0, 20)];
+    const { roles } = squad(0, [...team, at(9, 1, 35, 5)], [carried(9), carried(4)], world);
+    expect([0, 1, 2, 3].map(id => roles.get(id)).sort()).toEqual([
+      'chase',
+      'chase',
+      'chase',
+      'escort',
+    ]);
+    // The carrier has none: he runs home.
+    expect(roles.has(4)).toBe(false);
+  });
+
+  it('escorts its carrier with the two nearest, guards home with one', () => {
+    const team = [...reds(), at(4, 0, 12, 0)];
+    const { roles } = squad(0, team, [home, carried(4)], world);
+    // The carrier at x 12: bots 2 (x 10) and 3 (x 30); bot 1 is the nearest left to red's base.
+    expect([0, 1, 2, 3].map(id => roles.get(id))).toEqual(['attack', 'guard', 'escort', 'escort']);
+  });
+
+  it('sends the nearest free bot to a teammate who is low with an enemy on him', () => {
+    const human = at(5, 0, 20, 10, { bot: undefined });
+    human.state.hp = 2;
+    const { roles, trouble } = squad(0, [...reds(), human, at(9, 1, 25, 12)], [home, home], world);
+    expect(trouble?.id).toBe(5);
+    expect([...roles].filter(([, r]) => r === 'help')).toEqual([[2, 'help']]);
+    // Healthy again: no help.
+    human.state.hp = 8;
+    expect([
+      ...squad(0, [...reds(), human, at(9, 1, 25, 12)], [home, home], world).roles.values(),
+    ]).not.toContain('help');
+  });
+
+  it('takes the role the room hands it', () => {
+    const bot = new Bot(0);
+    const me = at(0, 0, 0, 10);
+    bot.think({
+      me,
+      others: [],
+      flags: [home, home],
+      world,
+      squad: { roles: new Map([[0, 'guard']]) },
+    });
+    expect(bot.view().why).toBe('guard');
+  });
+
+  it('goes for a health pack close by when it is low', () => {
+    const bot = new Bot(0);
+    const me = at(0, 0, 0, 10);
+    me.state.hp = 2;
+    bot.think({ me, others: [], flags: [home, home], world, packs: [[8, 0, 10]] });
+    expect(bot.view().why).toBe('health');
+    me.state.hp = 8;
+    bot.think({ me, others: [], flags: [home, home], world, packs: [[8, 0, 10]] });
+    expect(bot.view().why).toBe('take flag');
+  });
+
+  it('fights the enemy on its carrier before a nearer one', () => {
+    const bot = new Bot(0);
+    const me = at(0, 0, 0, 10);
+    const carrier = at(4, 0, 6, -8, { bot: undefined });
+    // A blue 8 m ahead, and one 4 m off the carrier, 18 m ahead.
+    const near = at(8, 1, -2, 2);
+    const onHim = at(9, 1, 6, -6);
+    bot.think({ me, others: [carrier, near, onHim], flags: [home, carried(4)], world });
+    expect(bot.view().foe).toBe(9);
+  });
+});
+
+describe('Bot: the guard', () => {
+  for (const def of [HIGHLINE, MOON]) {
+    it(`walks a round about its flag on ${def.name}, watching the ways in at each point, never falling`, () => {
+      const world = build(def);
+      const home: FlagState = { state: FLAG.HOME, by: 0, x: 0, y: 0, z: 0, left: 0 };
+      for (const team of [0, 1]) {
+        const bot = new Bot(team ? 3 : 4);
+        const base = def.teams[team].base;
+        const me = {
+          id: team ? 3 : 4,
+          team,
+          state: {
+            ...spawn(team, world, 0, team),
+            x: base[0],
+            y: base[1],
+            z: base[2],
+            ammo: 10,
+            mag: 5,
+          },
+        };
+        const squad = { roles: new Map([[me.id, 'guard' as const]]) };
+        const posts = new Set<string>();
+        let far = 0;
+        // The ways in: where the ways from the enemy's base, one by route, come within 12 m.
+        const nav = navOf(world);
+        const ins = [-1, 0, 1, 2].map(r =>
+          [
+            def.teams[1 - team].base,
+            ...path(nav, world, def.teams[1 - team].base, base, r).map(st => st.to),
+          ]
+            .reverse()
+            .find(q => Math.hypot(q[0] - base[0], q[2] - base[2]) > 12)!,
+        );
+        let [watch, stood] = [0, 0];
+        for (let k = 0; k < 60 * 60; k++) {
+          const i = bot.think({ me, others: [], flags: [home, home], world, squad });
+          move(me.state, { ...i, seq: k & 0xffff }, world, team);
+          expect(me.state.ev & EV.RESPAWN).toBe(0);
+          far = Math.max(far, Math.hypot(me.state.x - base[0], me.state.z - base[2]));
+          posts.add(bot.view().path.at(-1)!.join());
+          if (k > 120 && Math.hypot(me.state.vx, me.state.vz) < 0.3) {
+            stood++;
+            // Its look within 0.7 rad of one of them (the sweep is 0.35 either side).
+            watch += +ins.some(
+              q =>
+                Math.cos(me.state.yaw - Math.atan2(-(q[0] - me.state.x), -(q[2] - me.state.z))) >
+                Math.cos(0.7),
+            );
+          }
+        }
+        expect(stood).toBeGreaterThan(600);
+        expect(watch / stood).toBeGreaterThan(0.8);
+        expect(posts.size).toBeGreaterThanOrEqual(4);
+        expect(far).toBeLessThan(8);
+        expect(far).toBeGreaterThan(3);
+      }
+    });
+  }
 });

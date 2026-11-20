@@ -191,10 +191,17 @@ describe('a ship in flight (pilot)', () => {
   });
 
   it('stands on each pad of Tranquility, nose to the other base', () => {
-    const [red, blue] = park(build(MOON)).filter(r => r.ship);
-    expect([red.x, red.z, red.yaw]).toEqual([40, 220, 0]);
-    expect([blue.x, blue.z]).toEqual([40, 60]);
-    expect(blue.yaw).toBeCloseTo(Math.PI, 6);
+    // Two a team (the user, 2026-11-20): red's, then blue's.
+    const ships = park(build(MOON)).filter(r => r.ship);
+    expect(ships.map(r => [r.x, r.z])).toEqual([
+      [40, 220],
+      [13.5, 220],
+      [40, 60],
+      [13.5, 60],
+    ]);
+    for (const [k, r] of ships.entries()) {
+      expect(r.yaw).toBeCloseTo(k < 2 ? 0 : Math.PI, 6);
+    }
   });
 });
 

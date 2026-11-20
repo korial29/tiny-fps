@@ -6,8 +6,8 @@
 //   yaw in 65536ths of a turn, decoded in [0, 2π); pitch in 1/10000 rad; view is the host tick
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
 //   keys is a u16: KEY bits 0 to 15 (forward, back, left, right, jump, sprint, dash, crouch, fire, blade, special, rail, reload, rifle, use, fists).
-// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][counts u8], counts: bits 0-4 the players, bits 5-7
-//   the rovers (0 on a map without any). Then players × 62 bytes:
+// Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][players u8][rovers u8], the rovers 0 on a map
+//   without any. Then players × 62 bytes:
 //   [id u8][x f32][y f32][z f32][vx f32][vy f32][vz f32][edge f32]
 //   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8][stun u8]
 //   [gun u24][shots u8][hits u8][swing u8][lost u8][charge u8][lock u8][foe u8][pushes u8][away u8]
@@ -73,7 +73,7 @@
 //   Then, only on a map with a station (station.ts), the doors' section written even with no door:
 //   [station u16] bits 0-1 the PHASE, bit 2 the team that armed it, bits 3-9 the whole seconds left
 //   in the phase (Snapshot.station).
-//   A snapshot is 4 + 62 × players + 57 × rovers + 10 + 2 to 16 bytes: 12 on top of the players and
+//   A snapshot is 5 + 62 × players + 57 × rovers + 10 + 2 to 16 bytes: 12 on top of the players and
 //   the rovers when both flags are home and no ball flies; with balls, 1 + 11 × balls more.
 // Every multi-byte field is big-endian (DataView's default).
 import type { BotView } from './bot';
@@ -146,12 +146,12 @@ export const MSG_INPUT = 1;
 export const MSG_SNAPSHOT = 2;
 
 export const INPUT_BYTES = 12;
-export const SNAP_HEAD = 4;
+export const SNAP_HEAD = 5;
 export const SNAP_PLAYER = 62;
 /** Bytes of a rover: thirteen float32, the two seats, then the kind and health, the wreck's time and a ship's missiles. */
 export const SNAP_ROVER = 57;
-/** The rover count has three bits of the head's count byte, the players the other five. */
-export const MAX_ROVERS = 7;
+/** The most rovers and ships a snapshot carries (Tranquility has eight: four rovers, four ships). */
+export const MAX_ROVERS = 15;
 /** A rover's floats, in wire order. */
 const ROVER_F = [
   ...['x', 'y', 'z', 'vx', 'vy', 'vz', 'yaw'],
@@ -232,7 +232,7 @@ const flagBytes = (state: number): number =>
   state === FLAG.CARRIED ? 2 : state === FLAG.DROPPED ? 8 : 1;
 
 export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
-  // A rover past the count's three bits is not sent.
+  // A rover past MAX_ROVERS is not sent.
   const rovers = (s.rovers ?? []).slice(0, MAX_ROVERS);
   const mid = SNAP_HEAD + SNAP_PLAYER * s.players.length;
   const end = mid + SNAP_ROVER * rovers.length;
@@ -248,7 +248,8 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
   );
   v.setUint8(0, MSG_SNAPSHOT);
   v.setUint16(1, s.tick & 0xffff);
-  v.setUint8(3, s.players.length | (rovers.length << 5));
+  v.setUint8(3, s.players.length);
+  v.setUint8(4, rovers.length);
   s.players.forEach((p, i) => {
     const o = SNAP_HEAD + i * SNAP_PLAYER;
     v.setUint8(o, p.id);
@@ -400,9 +401,9 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
     return null;
   }
   const v = new DataView(buf);
-  const count = v.getUint8(3) & 31;
+  const count = v.getUint8(3);
   const mid = SNAP_HEAD + SNAP_PLAYER * count;
-  const end = mid + SNAP_ROVER * (v.getUint8(3) >> 5);
+  const end = mid + SNAP_ROVER * v.getUint8(4);
   if (v.getUint8(0) !== MSG_SNAPSHOT || buf.byteLength < end + SNAP_MATCH + 2) {
     return null;
   }

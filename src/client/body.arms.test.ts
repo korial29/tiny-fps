@@ -572,6 +572,19 @@ describe('the rail gun in both hands', () => {
     }
   });
 
+  it('puts the assault rifle away on a wall-run, freeing both hands for the wall animation', () => {
+    for (const side of [SIDE.EAST, SIDE.WEST]) {
+      const p = { ...wall, wall: side, ammo: -1, rifle: 100, clip: 20, rifled: true };
+      const body = watch(p, 90);
+      expect(metal(body, p)).toBe(0);
+      const plain = watch({ ...wall, wall: side }, 90);
+      const [left, right] = hands(p, body);
+      const [plainLeft, plainRight] = hands({ ...wall, wall: side }, plain);
+      expect(away(left, plainLeft)).toBeLessThan(0.1);
+      expect(away(right, plainRight)).toBeLessThan(0.1);
+    }
+  });
+
   it('takes it back in both hands on a wall while its bolt goes out, the wall on either side', () => {
     for (const side of [SIDE.EAST, SIDE.WEST]) {
       const p = { ...wall, wall: side, rail: 100, railed: true, zapping: true };

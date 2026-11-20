@@ -2036,6 +2036,21 @@ describe('the arc of energy', () => {
     m.hold(m.cy, CUTS[CUT.ARC_L].strike, 0);
   };
 
+  it('goes out of G (SPECIAL alone) whatever keys are held, from the left with LEFT alone', () => {
+    for (const keys of [0, LEFT, RIGHT, FORWARD]) {
+      const m = match();
+      m.put(m.cy, 0, 0, SWORD);
+      m.put(m.bob, 8);
+      m.ticks(SNAP_EVERY);
+      m.send(m.cy, keys | SPECIAL);
+      m.ticks(1);
+      m.hold(m.cy, CUTS[CUT.ARC_L].strike, 0);
+      expect(m.state(m.cy).cut, `keys ${keys}`).toBe(keys == LEFT ? CUT.ARC_L : CUT.ARC_R);
+      m.land();
+      expect(m.state(m.bob).hp).toBe(HP_MAX - CUTS[CUT.ARC_L].hp);
+    }
+  });
+
   it('goes out of a special cut across, and hits Bob 8 m away: the cut’s hp, and he is floored, thrown along its flight', () => {
     for (const keys of [LEFT, RIGHT]) {
       const m = match();

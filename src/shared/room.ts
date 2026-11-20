@@ -62,7 +62,7 @@ import {
   XENO_FEED,
 } from './constants';
 import { CHEST, crossing, fends, knock, limbOf, roll, sting, strike, swingOf } from './blade';
-import { Bot } from './bot';
+import { Bot, squad } from './bot';
 import { Ctf } from './ctf';
 import { KITS, ROLE, kitOf } from './kit';
 import type { Kit } from './kit';
@@ -298,6 +298,8 @@ export class Room {
   private mapName: string;
   /** The map the host picked for the next match, when it is another one. */
   private next: string | undefined;
+  /** The next map's world, built with the bots' mesh while the end screen runs rather than in the tick that starts the match. */
+  private ready: [map: string, world: World] | undefined;
   /** Joins so far: each player's `since`. */
   private joins = 0;
   /** Ids of bots let go this tick, not given again before the next: the person who takes a bot's place would be drawn where it stood. */
@@ -350,7 +352,9 @@ export class Room {
     }
     this.mapName = this.next;
     this.next = undefined;
-    this.world = build(mapOf(this.mapName));
+    const [map, world] = this.ready ?? [];
+    this.ready = undefined;
+    this.world = map === this.mapName && world ? world : build(mapOf(this.mapName));
     this.ctf = new Ctf(this.world, this.rules);
     this.gone = this.spots();
     this.fresh();
@@ -362,6 +366,17 @@ export class Room {
       this.ctf.join(p.info.id, p.info.team, p.state);
     }
     this.roster();
+  }
+
+  /** The next map's world and the bots' mesh of it, built ahead (Tranquility's mesh takes some 30 ms). */
+  private prepare(): void {
+    if (this.next !== undefined) {
+      const world = build(mapOf(this.next));
+      if (this.rules.bots) {
+        navOf(world);
+      }
+      this.ready = [this.next, world];
+    }
   }
 
   /** Number of joined players, the bots left out: a room of bots alone is empty. */
@@ -546,6 +561,7 @@ export class Room {
     );
     if (turn === 'end') {
       this.end(players);
+      this.prepare();
     } else if (turn === 'start') {
       this.load();
       this.restart(players);
@@ -1752,8 +1768,24 @@ export class Room {
 
   /** Each bot's input of this tick, applied as a client's would be on arrival. */
   private think(players: Player[]): void {
-    const others = players.map(q => ({ id: q.info.id, team: q.info.team, state: q.state }));
+    const others = players.map(q => ({
+      id: q.info.id,
+      team: q.info.team,
+      state: q.state,
+      ...(q.bot ? { bot: true } : {}),
+    }));
+    const { packs = [] } = this.world.def;
+    const health = packs.filter((_, k) => !this.gone[k]);
     const errands = this.errands(players);
+    // Each team's roles, once a tick and before any bot moves: the same for all of them.
+    const squads = [0, 1].map(team => squad(team, others, this.ctf.flags, this.world));
+    // Who shot to hit whom last tick: a few of them hit, the others shoot past (bot.ts, TOKENS).
+    const hunters = new Map<number, number[]>();
+    for (const p of players) {
+      if (p.bot && p.bot.hunting >= 0) {
+        hunters.set(p.bot.hunting, [...(hunters.get(p.bot.hunting) ?? []), p.info.id]);
+      }
+    }
     for (const p of players) {
       if (p.bot) {
         const me = others.find(o => o.id === p.info.id)!;
@@ -1765,6 +1797,9 @@ export class Room {
           balls: this.balls,
           errand: errands.get(p.info.id),
           kit: this.kit(p),
+          hunters,
+          packs: health,
+          squad: squads[p.info.team],
         });
         p.seq = ((p.seq ?? -1) + 1) & 0xffff;
         // Built only for a bot someone watches.

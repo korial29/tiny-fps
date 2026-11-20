@@ -88,6 +88,7 @@ import {
   speedOf,
   stumble,
 } from './physics';
+import type { Body } from './physics';
 import { PLASMA_LAG, blast, cylinder, disk, fly, launch, lob, stepOf, toss, wave } from './plasma';
 import type { Flying } from './plasma';
 import { FRAG, decodeInput, encodeSnapshot, onWire, parseText } from './protocol';
@@ -101,6 +102,7 @@ import {
   free,
   gap2,
   homeOf,
+  hulls,
   leave,
   missile,
   park,
@@ -110,7 +112,6 @@ import {
   seat,
   skid,
   slashed,
-  solid,
   struck,
   nearby,
 } from './rover';
@@ -308,6 +309,8 @@ export class Room {
   private hunterLasers = new Map<number, number>();
   /** The map's rovers, in the order of WorldDef.rovers, then its ships (ship.ts). */
   private rovers: Rover[] = [];
+  /** Collision geometry reused while a vehicle's pose is unchanged. */
+  private vehicleBodies = new WeakMap<Rover, { pose: number[]; ship?: boolean; bodies: Body[] }>();
   /** Ticks toward each ship's next missile, by index in `rovers`. */
   private rearm: number[] = [];
   /** Each vehicle's damage short of a whole hp, by index in `rovers`. */
@@ -469,7 +472,7 @@ export class Room {
           this.world,
           p.info.team,
           !this.ctf.over,
-          solid(this.rovers, p.state),
+          this.solids(p.state),
           kitOf(p.info.role, this.world.def),
         );
         this.ctf.moved(p.state);
@@ -513,6 +516,32 @@ export class Room {
       p.ack = input.seq;
       this.seats();
     }
+  }
+
+  /** Vehicle solids for a step; a driven vehicle can move between two players' inputs. */
+  private solids(p: PlayerState): Body[] {
+    const out: Body[] = [];
+    for (const r of this.rovers) {
+      if (p.down && r.wreck) {
+        continue;
+      }
+      let saved = this.vehicleBodies.get(r);
+      if (
+        !saved ||
+        saved.ship !== r.ship ||
+        saved.pose[0] !== r.x ||
+        saved.pose[1] !== r.y ||
+        saved.pose[2] !== r.z ||
+        saved.pose[3] !== r.yaw ||
+        saved.pose[4] !== r.pitch ||
+        saved.pose[5] !== r.roll
+      ) {
+        saved = { pose: [r.x, r.y, r.z, r.yaw, r.pitch, r.roll], ship: r.ship, bodies: hulls(r) };
+        this.vehicleBodies.set(r, saved);
+      }
+      out.push(...saved.bodies);
+    }
+    return out;
   }
 
   /** A peer left: its player goes, the roster goes out again. */
@@ -616,16 +645,19 @@ export class Room {
         this.history.shift();
       }
       // One buffer for everyone: transports must not mutate it.
-      const snap = encodeSnapshot({
-        tick: now,
-        players: players.map(p => ({ ...p.state, ack: p.ack, by: p.state.stun ? p.by : 0 })),
-        ...this.ctf.wire(),
-        packs: this.gone.reduce((m, t, k) => (t ? m : m + 2 ** k), 0),
-        balls: this.balls,
-        rovers: this.rovers,
-        doors: this.world.doors?.map(d => d.open),
-        station: this.world.def.station && this.station.wire(),
-      });
+      const snap = encodeSnapshot(
+        {
+          tick: now,
+          players: players.map(p => p.state),
+          ...this.ctf.wire(),
+          packs: this.gone.reduce((m, t, k) => (t ? m : m + 2 ** k), 0),
+          balls: this.balls,
+          rovers: this.rovers,
+          doors: this.world.doors?.map(d => d.open),
+          station: this.world.def.station && this.station.wire(),
+        },
+        players,
+      );
       players.forEach(p => p.conn.send(snap));
       // Every snapshot reaches every peer (WebSocket, BroadcastChannel): a burst is sent once.
       this.balls = this.balls.filter(b => !b.burst && b.left > 0);
@@ -1432,7 +1464,7 @@ export class Room {
           kit.gear && (q.armor ?? 0) < ARMOR_MAX,
         ][kind];
       };
-      const p = players.find(o => !o.state.down && wants(o) && within(o.state, at, PACK_R));
+      const p = players.find(o => !o.state.down && within(o.state, at, PACK_R) && wants(o));
       if (p) {
         const q = p.state;
         const kit = kitOf(p.info.role, this.world.def);
@@ -1902,12 +1934,17 @@ export class Room {
     const hunters = new Map<number, number[]>();
     for (const p of players) {
       if (p.bot && p.bot.hunting >= 0) {
-        hunters.set(p.bot.hunting, [...(hunters.get(p.bot.hunting) ?? []), p.info.id]);
+        const ids = hunters.get(p.bot.hunting);
+        if (ids) {
+          ids.push(p.info.id);
+        } else {
+          hunters.set(p.bot.hunting, [p.info.id]);
+        }
       }
     }
-    for (const p of players) {
+    for (const [index, p] of players.entries()) {
       if (p.bot) {
-        const me = others.find(o => o.id === p.info.id)!;
+        const me = others[index];
         const i = p.bot.think({
           me,
           others: others.filter(o => o !== me),
@@ -1922,10 +1959,12 @@ export class Room {
         });
         p.seq = ((p.seq ?? -1) + 1) & 0xffff;
         // Built only for a bot someone watches.
-        const watchers = players.filter(q => q.watch === p.info.id);
-        if (watchers.length && this.ticks % WATCH === 0) {
-          const text = JSON.stringify({ t: 'bot', ...p.bot.view() } satisfies ServerText);
-          watchers.forEach(q => q.conn.send(text));
+        if (this.ticks % WATCH === 0) {
+          const watchers = players.filter(q => q.watch === p.info.id);
+          if (watchers.length) {
+            const text = JSON.stringify({ t: 'bot', ...p.bot.view() } satisfies ServerText);
+            watchers.forEach(q => q.conn.send(text));
+          }
         }
         this.apply(p, onWire({ ...i, seq: p.seq, view: this.ticks & 0xffff }));
       }

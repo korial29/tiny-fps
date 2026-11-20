@@ -195,15 +195,15 @@ describe('createHud', () => {
       expect(lit('Body')).toEqual([false, true]);
       expect(lit('Skin')).toEqual([false, false, true, false, false, false]);
       expect(lit('Hair')).toEqual([false, false, false, true, false]);
-      expect(group('Class').map(b => b.disabled)).toEqual([false, false, true, true]);
-      expect(group('Class').map(b => b.hidden)).toEqual([false, false, true, true]);
+      expect(group('Class').map(b => b.disabled)).toEqual([false, false, true, true, true]);
+      expect(group('Class').map(b => b.hidden)).toEqual([false, false, true, true, true]);
       group('Class')[ROLE.ASTRONAUT].click();
       expect(pick).not.toHaveBeenCalled();
       // On the moon: the astronaut alone.
       hud.wear(BODY.MALE, { role: ROLE.ASTRONAUT }, [ROLE.ASTRONAUT]);
-      expect(group('Class').map(b => b.disabled)).toEqual([true, true, false, true]);
-      expect(group('Class').map(b => b.hidden)).toEqual([true, true, false, true]);
-      expect(lit('Class')).toEqual([false, false, true, false]);
+      expect(group('Class').map(b => b.disabled)).toEqual([true, true, false, true, true]);
+      expect(group('Class').map(b => b.hidden)).toEqual([true, true, false, true, true]);
+      expect(lit('Class')).toEqual([false, false, true, false, false]);
       expect(group('Hair').map(b => b.textContent)).toEqual(HAIR_NAMES[BODY.MALE]);
     });
 

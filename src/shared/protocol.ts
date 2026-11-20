@@ -79,7 +79,17 @@
 import type { BotView } from './bot';
 import { NADE, VEHICLE } from './constants';
 import { FLAG, KEY, MODE } from './types';
-import type { Ball, Choice, FlagState, Input, PlayerInfo, Rover, Snapshot } from './types';
+import type {
+  Ball,
+  Choice,
+  FlagState,
+  Input,
+  PlayerInfo,
+  PlayerState,
+  Rover,
+  SnapPlayer,
+  Snapshot,
+} from './types';
 
 /**
  * join: the first frame of a peer, with what he picked on the title screen (Choice: the body, BODY,
@@ -231,7 +241,16 @@ export const decodeInput = (buf: ArrayBuffer): Input | null => {
 const flagBytes = (state: number): number =>
   state === FLAG.CARRIED ? 2 : state === FLAG.DROPPED ? 8 : 1;
 
-export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
+type SnapshotStates = Omit<Snapshot, 'players'> & { players: readonly PlayerState[] };
+export function encodeSnapshot(s: Snapshot): ArrayBuffer;
+export function encodeSnapshot(
+  s: SnapshotStates,
+  meta: readonly { ack: number; by: number }[],
+): ArrayBuffer;
+export function encodeSnapshot(
+  s: SnapshotStates,
+  meta?: readonly { ack: number; by: number }[],
+): ArrayBuffer {
   // A rover past MAX_ROVERS is not sent.
   const rovers = (s.rovers ?? []).slice(0, MAX_ROVERS);
   const mid = SNAP_HEAD + SNAP_PLAYER * s.players.length;
@@ -252,6 +271,8 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
   v.setUint8(4, rovers.length);
   s.players.forEach((p, i) => {
     const o = SNAP_HEAD + i * SNAP_PLAYER;
+    const ack = meta ? meta[i].ack : (p as SnapPlayer).ack;
+    const by = meta ? (p.stun ? meta[i].by : 0) : (p as SnapPlayer).by;
     v.setUint8(o, p.id);
     v.setFloat32(o + 1, p.x);
     v.setFloat32(o + 5, p.y);
@@ -262,13 +283,13 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     v.setFloat32(o + 25, p.edge);
     v.setUint16(o + 29, toTurn(p.yaw));
     v.setInt16(o + 31, toPitch(p.pitch));
-    v.setUint16(o + 33, p.ack & 0xffff);
+    v.setUint16(o + 33, ack & 0xffff);
     v.setUint8(
       o + 35,
       (p.mode & 7) | ((p.wall & 7) << 3) | ((p.jumps & 1) << 6) | ((p.dashes & 1) << 7),
     );
     v.setUint8(o + 36, p.t);
-    v.setUint8(o + 37, p.dash | (((p.by >> 2) & 3) << 6));
+    v.setUint8(o + 37, p.dash | (((by >> 2) & 3) << 6));
     v.setUint8(
       o + 38,
       (p.coyote & 7) |
@@ -276,7 +297,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
         (p.held & KEY.JUMP ? 64 : 0) |
         (p.held & KEY.DASH ? 128 : 0),
     );
-    v.setUint8(o + 39, p.stun | ((p.by & 3) << 6));
+    v.setUint8(o + 39, p.stun | ((by & 3) << 6));
     const gun =
       (p.hp & 7) |
       ((p.cool & 7) << 3) |
@@ -393,7 +414,7 @@ export const encodeSnapshot = (s: Snapshot): ArrayBuffer => {
     );
   }
   return v.buffer;
-};
+}
 
 /** Null on anything that is not a well-formed snapshot frame. */
 export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {

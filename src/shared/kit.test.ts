@@ -53,9 +53,9 @@ const go = (p: PlayerState, keys: number, kit: Kit) =>
   move(p, { seq: 0, keys, yaw: 0, pitch: 0 }, yard, 0, [], kit);
 
 describe('the classes a map offers', () => {
-  it('is the marine, the ninja and the xenomorph in the city, the astronaut and the xenomorph on the moon', () => {
-    expect(rolesOf(MAPS.highline)).toEqual([ROLE.MARINE, ROLE.NINJA, ROLE.XENO]);
-    expect(rolesOf(MAPS.tranquility)).toEqual([ROLE.ASTRONAUT, ROLE.XENO]);
+  it('offers the Hunter alongside the other classes on every map', () => {
+    expect(rolesOf(MAPS.highline)).toEqual([ROLE.MARINE, ROLE.NINJA, ROLE.XENO, ROLE.HUNTER]);
+    expect(rolesOf(MAPS.tranquility)).toEqual([ROLE.ASTRONAUT, ROLE.XENO, ROLE.HUNTER]);
     expect(roleOf(ROLE.XENO, MAPS.tranquility)).toBe(ROLE.XENO);
     expect(roleOf(ROLE.NINJA, MAPS.tranquility)).toBe(ROLE.ASTRONAUT);
     expect(roleOf(ROLE.ASTRONAUT, MAPS.highline)).toBe(ROLE.MARINE);
@@ -264,7 +264,7 @@ describe('chosen, what a player picked', () => {
     });
     expect(chosen({ body: 0, tone: 0, hair: 3, role: 0 })).toEqual({ tone: 0, hair: 3, role: 0 });
     // The man has four haircuts, a skin index is whole and in range, a class is a ROLE.
-    expect(chosen({ hair: 4, tone: 6, role: 4 })).toEqual({});
+    expect(chosen({ hair: 4, tone: 6, role: 5 })).toEqual({});
     expect(chosen({ role: 3 })).toEqual({ role: ROLE.XENO });
     expect(chosen({ tone: 1.5, hair: -1, role: '1', body: 2 })).toEqual({});
   });

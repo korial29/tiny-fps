@@ -30,6 +30,8 @@ worth taking, what tiny-fps took, and what is left.
 | Squads                 | `squad()`: roles handed out by the team's numbers each tick (below); the carrier runs rather than fights.                                                                                                                                                                                                    |
 | Moving about           | `walk()`: round a wall or a drop by the nearest open turn, onto a box low enough to jump, a dash where the way ahead is long, straight and wide, the look turning a little each tick.                                                                                                                        |
 
+Team assignments and pickup choices keep the same distance and id tie-breaks without sorting each tick.
+
 ## Fair fights (the user, 2026-11-20: they were too good)
 
 A bot gets no more than a player would: it shoots what it could see, misses as a hand on a mouse

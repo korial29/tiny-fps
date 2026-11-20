@@ -274,10 +274,16 @@ const hunter = (n: number): Uint8Array => {
   const level = dead ? 4 : n == GLOW ? 0 : more ? Math.floor((n - MORE) / 3) : Math.floor(n / 8);
   const e = more ? 8 + ((n - MORE) % 3) : n >= 40 ? -1 : n % 8;
   const put = (x: number, y: number, c: number) => {
-    if (x >= 0 && x < FW && y >= 0 && y < FH) p[y * FW + x] = c;
+    if (x >= 0 && x < FW && y >= 0 && y < FH) {
+      p[y * FW + x] = c;
+    }
   };
   const box = (x: number, y: number, w: number, h: number, c: number) => {
-    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) put(x + i, y + j, c);
+    for (let j = 0; j < h; j++) {
+      for (let i = 0; i < w; i++) {
+        put(x + i, y + j, c);
+      }
+    }
   };
   const shift = e == EXPR.TURN_L ? -1 : e == EXPR.TURN_R ? 1 : 0;
   // Broad crown and tapered mask.
@@ -285,7 +291,9 @@ const hunter = (n: number): Uint8Array => {
     const half = y < 13 ? 8 + Math.floor((y - 2) / 5) : Math.max(4, 11 - Math.floor((y - 13) / 2));
     for (let x = 0; x < FW; x++) {
       const d = Math.abs(x - 11.5);
-      if (d <= half) put(x, y, d == half || y == 26 ? LINE : y < 8 ? HUNT_BRASS : HUNT_DARK);
+      if (d <= half) {
+        put(x, y, d == half || y == 26 ? LINE : y < 8 ? HUNT_BRASS : HUNT_DARK);
+      }
     }
   }
   // Segmented forehead plates.
@@ -294,11 +302,14 @@ const hunter = (n: number): Uint8Array => {
   box(10, 3, 4, 7, dead ? GREY : HUNT_BRASS);
   box(11, 5, 2, 6, dead ? GREY : GOLD);
   // Optics track the same eight expressions as the other faces.
-  const look = e == EXPR.LEFT || e == EXPR.TURN_L ? -1 : e == EXPR.RIGHT || e == EXPR.TURN_R ? 1 : 0;
+  const look =
+    e == EXPR.LEFT || e == EXPR.TURN_L ? -1 : e == EXPR.RIGHT || e == EXPR.TURN_R ? 1 : 0;
   const eye = dead ? GREY : e == EXPR.RAGE || e == EXPR.SHOUT ? HUNT_GLOW : LED;
   for (const side of [-1, 1]) {
     const x = Math.round(11.5 + side * 4 + shift + look);
-    for (let k = 0; k < 3; k++) put(x + side * k, 13 - k, eye);
+    for (let k = 0; k < 3; k++) {
+      put(x + side * k, 13 - k, eye);
+    }
     // Mandibles and the lower respirator grille.
     put(Math.round(11.5 + side * 5), 18, dead ? GREY : HUNT_BRASS);
     for (let y = 20; y < 25; y++) {
@@ -307,8 +318,12 @@ const hunter = (n: number): Uint8Array => {
   }
   box(9, 18, 6, 1, LINE);
   box(9, 20, 6, 1, dead ? GREY : HUNT_BRASS);
-  for (let i = 0; i < Math.min(level, 4); i++) put(7 + i * 2, 10 + (i % 2) * 3, dead ? GREY : BLOOD);
-  if (e == EXPR.SHOUT || e == EXPR.OUCH) box(10, 22, 4, 2, LINE);
+  for (let i = 0; i < Math.min(level, 4); i++) {
+    put(7 + i * 2, 10 + (i % 2) * 3, dead ? GREY : BLOOD);
+  }
+  if (e == EXPR.SHOUT || e == EXPR.OUCH) {
+    box(10, 22, 4, 2, LINE);
+  }
   return (sprites[n + FRAMES * LOOK.HUNTER] = p);
 };
 

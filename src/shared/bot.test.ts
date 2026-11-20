@@ -763,6 +763,13 @@ describe('Bot: team play', () => {
     expect([0, 1, 2, 3].map(id => roles.get(id))).toEqual(['attack', 'attack', 'chase', 'chase']);
   });
 
+  it('breaks equal distances by bot id, regardless of roster order', () => {
+    const team = [at(7, 0, -10, 0), at(2, 0, 10, 0)];
+    const { roles } = squad(0, [...team, at(9, 1, 0, 0)], [carried(9), home], world);
+    expect(roles.get(2)).toBe('chase');
+    expect(roles.get(7)).toBe('attack');
+  });
+
   it('chases with all but an escort when both flags are out: no capture till ours is home', () => {
     const team = [...reds(), at(4, 0, 0, 20)];
     const { roles } = squad(0, [...team, at(9, 1, 35, 5)], [carried(9), carried(4)], world);

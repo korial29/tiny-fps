@@ -63,7 +63,7 @@ const player = (o: Partial<PlayerState> = {}): PlayerState => ({
 });
 
 describe('CODES', () => {
-  it('lists every key the game reads: the held ones, the weapons, mute and the grenade', () => {
+  it('lists every key the game reads: movement, weapons, mute, grenade and vision', () => {
     for (const code of ['KeyW', 'ArrowLeft', 'Space', 'ShiftRight', 'KeyC', 'KeyR', 'KeyE']) {
       expect(keyBit(code)).toBeGreaterThan(0);
       expect(CODES).toContain(code);
@@ -71,9 +71,9 @@ describe('CODES', () => {
     expect(CODES).toEqual(
       expect.arrayContaining(['Digit1', 'Digit2', 'Digit3', 'Digit4', 'KeyM', 'KeyG']),
     );
-    // Nothing else: a held key has a bit, a weapon key picks.
+    // Nothing else: these keys do not map to a held bit or a weapon choice.
     const rest = CODES.filter(c => !keyBit(c) && picked(-1, c) < 0);
-    expect(rest.sort()).toEqual(['KeyG', 'KeyM']);
+    expect(rest.sort()).toEqual(['KeyG', 'KeyM', 'KeyV']);
   });
 });
 

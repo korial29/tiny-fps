@@ -9,7 +9,7 @@ résolues par l’hôte et prédites par le client, comme le reste du combat.
 1. **Socle, menus et portrait** — rôle réseau stable sur toutes les cartes; choix dans le menu;
    portrait pixel-art dans le HUD et la radio. (PR #334)
 2. **Armes** — lames de poignet, harpon, disque volant qui revient au lanceur et laser d’épaule
-   avec assistance de visée bornée, tous validés par l’hôte. (PR unique)
+   avec assistance de visée bornée, tous validés par l’hôte. (PR #338)
 3. **Vision** — bascule locale entre vision thermique et détection des Xénomorphes, avec commande
    et indicateur HUD. (PR séparée)
 4. **Cris** — générer des cris originaux pour le Hunter et les intégrer à la radio. (PR séparée)
@@ -23,9 +23,9 @@ les visions ne doivent pas transmettre aux autres clients des informations de ci
 ## État
 
 - [x] PR #334 : rôle, menus, disponibilité sur les cartes et portrait pixel-art HUD/radio.
-- [ ] PR armes : lames doubles en vue première et troisième personne; harpon rapide; disque renvoyé
+- [x] PR #338 : lames doubles en vue première et troisième personne; harpon rapide; disque renvoyé
       vers son porteur et récupéré au contact; laser d’épaule avec acquisition hôte dans un cône limité.
-- [ ] PR vision : thermique et détection des Xénomorphes.
+- [x] PR vision : touche V pour alterner vision normale, thermique et détection locale des Xénomorphes.
 - [ ] PR cris : identité vocale Hunter intégrée à la radio.
 
 Le projet n’a pas encore d’assets audio dédiés au Hunter. Les sons seront générés par le synthétiseur

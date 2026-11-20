@@ -126,6 +126,7 @@ export const HUD_CSS =
   // The orbital station's mission under the score, in amber; urgent, red and blinking.
   `var{top:66px;left:50%;transform:translateX(-50%);padding:5px 14px;border:1px solid #ffb34780;border-radius:4px;background:#000b;color:#ffb347;font:800 normal clamp(11px,2.6vw,14px)/1.2 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}` +
   `var.hot{color:#ff5a3c;border-color:#ff5a3c;animation:hot 1s steps(2) infinite}@keyframes hot{50%{border-color:#ff5a3c00}}` +
+  `i.hv{pointer-events:none;top:48px;left:50%;transform:translateX(-50%);padding:4px 10px;border:1px solid #8fffc080;border-radius:4px;background:#00130dcc;color:#a4ffcf;font:800 11px/1 system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase}` +
   // The banner of an event (the user, 2026-11-09: no underline, a nicer design): heavy italic in the
   // team's colour, glowing, on a dark band fading out at both ends, popping in.
   `output{top:18%;left:50%;transform:translateX(-50%);padding:12px 64px;font:900 italic clamp(20px,4.4vw,40px)/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;` +
@@ -303,8 +304,8 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Hunter',
-    'Starts with wrist blades. Harpoon, returning disc, assisted shoulder laser and two vision modes are planned.',
-    'The wrist blade uses the shared katana combat rules while the other Hunter systems are added.',
+    'Starts with wrist blades. The harpoon, returning disc and assisted shoulder laser complete the hunt.',
+    'Press V to cycle thermal vision and alien detection.',
     'Every map',
   ],
 ];
@@ -359,6 +360,7 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
       ['G|or|Right click', 'laser rifle: a grenade from its launcher', 'KeyG'],
     ],
   ],
+  ['Hunter', [['V', 'cycle normal, thermal and alien scan', 'KeyV']]],
   [
     'Xenomorph',
     [
@@ -491,6 +493,8 @@ export interface Hud {
   marks(list: Mark[]): void;
   /** The orbital station's mission line (mission.ts), `hot` when urgent; none hides it. */
   mission(text?: string, hot?: boolean): void;
+  /** The Hunter's current local vision mode. */
+  hunterVision(text?: string): void;
   /** The dark rim of a space helmet's visor around the screen: on while the own player wears one, off otherwise. */
   visor(on: boolean): void;
   /** The red vignette of a tackle, 0 (none) to 1 (full). */
@@ -664,7 +668,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
       `<data></data><span></span><small><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd><kbd>5 fists</kbd></small></dl>` +
       `<s hidden></s><mark hidden></mark><sup></sup><ins hidden><i></i></ins>` +
-      `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav><var hidden></var>` +
+      `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav><var hidden></var><i class="hv" hidden></i>` +
       `<h1 hidden>FRAGS<span>0</span></h1><label hidden><canvas width="${COMM}" height="${COMM}"></canvas><span></span><i>${'<b></b>'.repeat(5)}</i></label><ol></ol><h2 hidden><span></span><small></small></h2>` +
       `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q><dfn hidden></dfn><dfn hidden></dfn><tt hidden></tt><tt hidden></tt>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
@@ -900,6 +904,11 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       const el = one('var');
       el.hidden = !text;
       el.classList.toggle('hot', hot);
+      set(el, text);
+    },
+    hunterVision(text = '') {
+      const el = one('i.hv');
+      el.hidden = !text;
       set(el, text);
     },
     visor: on => {

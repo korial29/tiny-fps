@@ -3,10 +3,18 @@
 // lying flag, guard the base), goes there along nav.ts's legs, and shoots the enemies it sees. It
 // fights after UT2004's bots (docs/BOTS.md): a character drawn from its id and the room's skill,
 // strafes, jumps and dashes aside in a fight, and a dash out of the way of a ball coming at it.
-import { FALL_SAFE, JUMP_SPEED, PLASMA_SPEED, RIFLE_SPEED, STEP_H, TICK_HZ } from './constants';
+import {
+  FALL_SAFE,
+  JUMP_SPEED,
+  PLASMA_SPEED,
+  PLAYER_R,
+  RIFLE_SPEED,
+  STEP_H,
+  TICK_HZ,
+} from './constants';
 import { eyeHeight, floorAt, forward, gravity, norm } from './physics';
 import { navOf, path, ROUTES } from './nav';
-import type { Edge, Nav, Vec3, Way } from './nav';
+import type { Step, Vec3 } from './nav';
 import type { Flying } from './plasma';
 import { stepOf } from './plasma';
 import { Sortie } from './sortie';
@@ -204,13 +212,13 @@ export class Bot {
   public readonly id: number;
   /** The route it prefers, an index of nav.ts's ROUTES. */
   private prefer: number;
-  private nav: Nav | undefined;
-  private way: Way = { edges: [] };
+  /** Its way: the points it goes through, walking or on a leg; the last is its goal or as near as it gets. */
+  private steps: Step[] = [];
   /** The goal of the way, and the tick it was planned. */
   private goal: Vec3 | undefined;
   private planned = 0;
-  /** -1 walking to the way's entry, then the edge it is on; edges.length walking to the goal. */
-  private leg = 0;
+  /** The step it is on; steps.length once there. */
+  private step = 0;
   private flight: Flight | undefined;
   /** The best distance to the point it walks to, and the tick it was last bettered. */
   private best = Infinity;
@@ -272,25 +280,22 @@ export class Bot {
    * goes to now, what it is doing on the way, the enemy it fights and the keys it last pressed.
    */
   public view(): BotView {
-    const { entry, edges } = this.way;
     const r = (v: Vec3): Vec3 => [v[0], v[1], v[2]].map(n => Math.round(n * 10) / 10) as Vec3;
-    const path = [...(entry ? [entry] : []), ...edges.map(e => this.nav!.nodes[e.to])];
-    if (this.goal) {
-      path.push(this.goal);
-    }
-    const e = edges[this.leg];
+    const s = this.steps[this.step];
     return {
       id: this.id,
       why: this.why,
-      path: path.map(r),
-      next: this.leg < 0 ? 0 : this.leg + (entry ? 1 : 0),
+      path: this.steps.map(st => r(st.to)),
+      next: Math.max(0, Math.min(this.step, this.steps.length - 1)),
       doing: !this.goal
         ? 'no way'
-        : this.leg < 0
-          ? 'to entry'
-          : e
-            ? (e.leg?.k ?? 'walk')
-            : 'to goal',
+        : !s
+          ? 'there'
+          : s.leg
+            ? s.leg.k
+            : this.step === this.steps.length - 1
+              ? 'to goal'
+              : 'walk',
       foe: this.foe,
       keys: this.keys,
     };
@@ -337,7 +342,7 @@ export class Bot {
       (!this.goal ||
         flat(goal[0], goal[2], this.goal[0], this.goal[2]) >
           Math.max(DRIFT, SHARE * flat(p.x, p.z, goal[0], goal[2])) ||
-        (!this.way.edges.length && t - this.planned > REPLAN))
+        (!this.steps.some(st => st.leg) && t - this.planned > REPLAN))
     ) {
       this.plan(s.world, p, goal);
     }
@@ -538,22 +543,14 @@ export class Bot {
   private plan(w: World, p: PlayerState, goal: Vec3): void {
     this.goal = goal;
     this.planned = this.ticks;
-    this.nav = navOf(w);
-    this.way = path(this.nav, w, at(p), goal, this.prefer);
-    this.leg = this.way.entry ? -1 : 0;
+    // The carrier goes home the quickest way: its route was for spreading the attack. Not a body
+    // that jumps unlike the marine the links were flown with: it keeps to the route it knows.
+    const prefer = this.why === 'flag home' && !this.steer ? -1 : this.prefer;
+    this.steps = path(navOf(w), w, at(p), goal, prefer);
+    this.step = 0;
     this.flight = undefined;
     this.best = Infinity;
     this.better = this.ticks;
-  }
-
-  /** The point it walks straight to now: the entry, a walk's end, or the goal past the last edge. */
-  private target(): Vec3 {
-    const { edges, entry } = this.way;
-    if (this.leg < 0) {
-      return entry!;
-    }
-    const e: Edge | undefined = edges[this.leg];
-    return e ? this.nav!.nodes[e.to] : this.goal!;
   }
 
   /**
@@ -561,16 +558,29 @@ export class Bot {
    * yaw must be kept to the letter (a leg of a route, as the tests fly it).
    */
   private pilot(p: PlayerState): Move {
-    const e = this.leg >= 0 ? this.way.edges[this.leg] : undefined;
-    if (e?.leg) {
-      return this.fly(p, e.leg);
+    const s = this.steps[this.step];
+    if (s?.leg) {
+      return this.fly(p, s.leg);
     }
-    const [x, , z] = this.target();
+    if (!s) {
+      return { keys: 0, yaw: this.aim, free: true, exact: false };
+    }
+    const [x, y, z] = s.to;
     const d = flat(p.x, p.z, x, z);
-    // A node where a jump lands may stand against a wall: blocked close to it is there.
+    // Off a drop or onto a box: it steers to come down on the point, and starts no leg in the air.
+    if (!p.ground) {
+      return {
+        keys: this.alight(p, x, y, z),
+        yaw: toward(p.x, p.z, x, z),
+        free: false,
+        exact: false,
+      };
+    }
+    const last = this.step === this.steps.length - 1;
+    // A point where a jump lands may stand against a wall: blocked close to it is there.
     const near = d < 2 && this.ticks - this.better > STUCK_JUMP;
-    if (d < (e || this.leg < 0 ? 0.5 : 1) || (near && this.leg < this.way.edges.length)) {
-      if (this.leg < this.way.edges.length) {
+    if (d < (last ? 1 : 0.5) || (near && !last)) {
+      if (!last) {
         this.next();
         return this.pilot(p);
       }
@@ -610,7 +620,7 @@ export class Bot {
     if (p.ground && hop && !(p.held & JUMP)) {
       keys |= JUMP;
     }
-    if (Math.abs(turn(this.look, yaw)) < 0.15 && !this.way.edges[this.leg + 1]?.leg) {
+    if (Math.abs(turn(this.look, yaw)) < 0.15 && !this.steps[this.step + 1]?.leg) {
       keys |= this.dash(w, p, yaw, d);
     }
     return { keys, yaw, free: true, exact: false };
@@ -653,8 +663,16 @@ export class Bot {
     const [fx, fz] = forward(yaw);
     const hurts = (SAFE * FALL_SAFE ** 2) / (2 * gravity(w));
     const far = Math.max(ahead, AHEAD + BRAKE * Math.sqrt(p.vx ** 2 + p.vz ** 2));
+    // A floor under any part of the body holds it, as the physics has it: along a beam's edge too.
     for (let t = 0.5; t <= far; t += 0.5) {
-      if (floorAt(w, p.x + fx * t, p.z + fz * t, p.y + HOP) < p.y - hurts) {
+      const [x, z] = [p.x + fx * t, p.z + fz * t];
+      const y = p.y + HOP;
+      const under = Math.max(
+        floorAt(w, x, z, y),
+        floorAt(w, x - fz * PLAYER_R, z + fx * PLAYER_R, y),
+        floorAt(w, x + fz * PLAYER_R, z - fx * PLAYER_R, y),
+      );
+      if (under < p.y - hurts) {
         return false;
       }
     }
@@ -679,7 +697,7 @@ export class Bot {
   }
 
   private next(): void {
-    this.leg++;
+    this.step++;
     this.flight = undefined;
     this.best = Infinity;
     this.better = this.ticks;
@@ -719,7 +737,7 @@ export class Bot {
       // A route's runs are run to the letter: its lines keep to beams and ledges. A sprint dashes
       // where the roof is wide and no jump comes next, the carrier as his chasers do.
       if (run) {
-        const next = this.way.edges[this.leg + 1]?.leg;
+        const next = this.steps[this.step + 1]?.leg;
         const dash =
           leg.sprint && next?.k !== 'leap'
             ? this.dash(this.world!, p, run.yaw, flat(p.x, p.z, ...leg.to) - LEG_ROOM)
@@ -772,18 +790,12 @@ export class Bot {
     }
     const n = leg.run ? (f.ended < 0 ? -1 : f.k - f.ended) : f.k;
     const extra = (n === leg.dash ? DASH : 0) | (n === leg.double ? JUMP : 0);
-    if (leg.land || this.steer) {
-      // Will the flight carry it past the point, or short of it, by the time it is down at its height?
-      const [tx, tz] = leg.to;
-      const d = flat(p.x, p.z, tx, tz);
-      const v = (p.vx * (tx - p.x) + p.vz * (tz - p.z)) / (d || 1);
-      const g = gravity(this.world!);
-      const t = Math.max(
-        (p.vy + Math.sqrt(Math.max(p.vy ** 2 + 2 * g * (p.y - leg.y), 0))) / g,
-        0.05,
-      );
+    // A body that jumps unlike the marine steers to come down on the point once the leg's dash and
+    // double jump are spent: braked before them, a dash falls short of the far roof.
+    const spent = n > Math.max(leg.dash ?? -1, leg.double ?? -1);
+    if (leg.land || (this.steer && spent)) {
       return {
-        keys: (v * t < d - 0.3 ? FORWARD : v * t > d + 0.3 ? BACK : 0) | (leg.land ? 0 : extra),
+        keys: this.alight(p, leg.to[0], leg.y, leg.to[1]) | (leg.land ? 0 : extra),
         yaw,
         free: false,
         exact: true,
@@ -797,15 +809,32 @@ export class Bot {
     };
   }
 
+  /**
+   * FORWARD or BACK in the air to come down on (x, y, z) facing it: will the flight carry it past
+   * the point, or short of it, by the time it is down at its height? 0 when it will land there.
+   */
+  private alight(p: PlayerState, x: number, y: number, z: number): number {
+    const d = flat(p.x, p.z, x, z);
+    const v = (p.vx * (x - p.x) + p.vz * (z - p.z)) / (d || 1);
+    const g = gravity(this.world!);
+    const t = Math.max((p.vy + Math.sqrt(Math.max(p.vy ** 2 + 2 * g * (p.y - y), 0))) / g, 0.05);
+    return v * t < d - 0.3 ? FORWARD : v * t > d + 0.3 ? BACK : 0;
+  }
+
   /** Whether the edge after this one is a jump that wants the run-up of this one. */
   private leapNext(): boolean {
-    const l = this.way.edges[this.leg + 1]?.leg;
+    const l = this.steps[this.step + 1]?.leg;
     return l?.k === 'leap' && l.sprint;
   }
 
   /** A leg is over: on to the next on its roof, else a new way from where the bot came down. */
   private landed(p: PlayerState, leg: Leg): Move {
     if (Math.abs(p.y - leg.y) > 0.3) {
+      // Came down elsewhere: the link costs more for the rest of the room's life.
+      const e = this.steps[this.step]?.edge;
+      if (e) {
+        e.fails = (e.fails ?? 0) + 1;
+      }
       this.goal = undefined;
       return { keys: 0, yaw: p.yaw, free: false, exact: true };
     }

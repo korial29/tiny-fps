@@ -354,6 +354,10 @@ describe('createHud', () => {
       expect(body).toContain('pointer-events:none');
       const tags = group.split(',');
       for (const el of screen.children) {
+        if (el.matches('i.hv')) {
+          expect(HUD_CSS).toContain('i.hv{pointer-events:none;');
+          continue;
+        }
         expect(tags).toContain(el.tagName.toLowerCase());
       }
       // But the host's map buttons.

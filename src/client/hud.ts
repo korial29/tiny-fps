@@ -126,7 +126,7 @@ export const HUD_CSS =
   // The orbital station's mission under the score, in amber; urgent, red and blinking.
   `var{top:66px;left:50%;transform:translateX(-50%);padding:5px 14px;border:1px solid #ffb34780;border-radius:4px;background:#000b;color:#ffb347;font:800 normal clamp(11px,2.6vw,14px)/1.2 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}` +
   `var.hot{color:#ff5a3c;border-color:#ff5a3c;animation:hot 1s steps(2) infinite}@keyframes hot{50%{border-color:#ff5a3c00}}` +
-  `i.hv{top:48px;left:50%;transform:translateX(-50%);padding:4px 10px;border:1px solid #8fffc080;border-radius:4px;background:#00130dcc;color:#a4ffcf;font:800 11px/1 system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase}` +
+  `i.hv{pointer-events:none;top:48px;left:50%;transform:translateX(-50%);padding:4px 10px;border:1px solid #8fffc080;border-radius:4px;background:#00130dcc;color:#a4ffcf;font:800 11px/1 system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase}` +
   // The banner of an event (the user, 2026-11-09: no underline, a nicer design): heavy italic in the
   // team's colour, glowing, on a dark band fading out at both ends, popping in.
   `output{top:18%;left:50%;transform:translateX(-50%);padding:12px 64px;font:900 italic clamp(20px,4.4vw,40px)/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;` +

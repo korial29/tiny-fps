@@ -158,8 +158,8 @@ const XENO: Kit = {
   xeno: true,
 };
 
-/** The Hunter's movement and health start at the marine baseline; class-specific combat comes next. */
-const HUNTER: Kit = { ...MARINE, hunter: true };
+/** The Hunter starts with the wrist blade; the other class weapons arrive in their own steps. */
+const HUNTER: Kit = { ...MARINE, katana: true, hunter: true };
 
 /** By ROLE. The astronaut moves and fights as the marine: the moon's gravity is the map's. */
 export const KITS: readonly Kit[] = [MARINE, NINJA, MARINE, XENO, HUNTER];

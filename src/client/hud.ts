@@ -303,8 +303,8 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Hunter',
-    'An armored alien hunter with thermal and xenomorph detection visions, a harpoon, wrist blades, a returning disc and an assisted shoulder laser.',
-    'Class weapons and vision are being added in stages.',
+    'Starts with wrist blades. Harpoon, returning disc, assisted shoulder laser and two vision modes are planned.',
+    'The wrist blade uses the shared katana combat rules while the other Hunter systems are added.',
     'Every map',
   ],
 ];

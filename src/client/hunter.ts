@@ -122,10 +122,6 @@ export function hunter(lod: 0 | 1 | 2) {
       const y=1.295-j*0.062;
       plate([[s*0.012,y,-0.135],[s*(0.192-j*0.014),y+0.043,-0.085],[s*0.152,y-0.02,-0.098],[s*0.017,y-0.038,-0.135]],[s*0.086,y,-0.157],j===0?bronze:graphite);
     }
-    part('Faceplate'+s);
-    plate([[0,1.855,-0.065],[s*0.095,1.839,-0.072],[s*0.145,1.797,-0.045],[s*0.137,1.758,-0.10],[s*0.039,1.732,-0.167],[0,1.701,-0.176]],[s*0.051,1.807,-0.187],silver);
-    plate([[s*0.129,1.744,-0.104],[s*0.104,1.689,-0.121],[s*0.052,1.625,-0.118],[s*0.014,1.672,-0.175],[s*0.041,1.718,-0.168]],[s*0.087,1.704,-0.16],silver);
-    limb([s*0.036,1.724,-0.165],[s*0.12,1.751,-0.115],[0.006,0.008,0.003],light,1,-2);
     part('Quills'+s);
     const count=[3,5,7][lod];
     for(let j=0;j<count;j++){
@@ -160,13 +156,118 @@ export function hunter(lod: 0 | 1 | 2) {
     part('Collar'+s);
     limb([s*0.061,1.533,-0.08],[s*0.172,1.48,-0.116],[0.024,0.028,0.024],bronze,0.76,TWILL);
   }
-  part('Visor bridge');
-  plate([[-0.034,1.713,-0.155],[0,1.732,-0.17],[0.034,1.713,-0.155],[0.022,1.642,-0.139],[0,1.618,-0.12],[-0.022,1.642,-0.139]],[0,1.685,-0.182],graphite);
-  part('Helmet crown');
-  plate([[-0.141,1.77,-0.046],[-0.143,1.817,-0.033],[-0.11,1.861,-0.027],
-    [-0.054,1.883,-0.025],[0.054,1.883,-0.025],[0.11,1.861,-0.027],
-    [0.143,1.817,-0.033],[0.141,1.77,-0.046],[0.09,1.793,-0.146],
-    [0,1.761,-0.18],[-0.09,1.793,-0.146]],[0,1.819,-0.191],silver);
+  const alloy: Vec3 = [0.42, 0.425, 0.405];
+  const rim: Vec3 = [0.36, 0.365, 0.35];
+  const gauze: Vec3 = [0.19, 0.205, 0.20];
+  // Angles run from the wearer's left to right across the face. Each panel
+  // has its own edge normals so the lip of the visor catches a separate highlight.
+  type Surface = (u: number, v: number) => Vec3;
+  function panel(surface: Surface, cols: number, rows: number, tint: Vec3, reverse = false) {
+    const verts: number[][] = [];
+    for (let j = 0; j <= rows; j++) for (let i = 0; i <= cols; i++) {
+      const u = i / cols, v = j / rows;
+      const du = sub(surface(Math.min(1,u+0.001),v),surface(Math.max(0,u-0.001),v));
+      const dv = sub(surface(u,Math.min(1,v+0.001)),surface(u,Math.max(0,v-0.001)));
+      const n = unit([dv[1]*du[2]-dv[2]*du[1],dv[2]*du[0]-dv[0]*du[2],dv[0]*du[1]-dv[1]*du[0]]);
+      verts.push([...surface(u,v),...n.map(c=>reverse?-c:c),tint[0],tint[1],TWILL,tint[2]]);
+    }
+    for (let j=0;j<rows;j++) for(let i=0;i<cols;i++){
+      const a=j*(cols+1)+i, b=a+1, c=a+cols+1, d=c+1;
+      for(const k of reverse?[a,b,c,b,d,c]:[a,c,b,b,c,d]) out.push(...verts[k]);
+    }
+  }
+
+  const slices = [16, 36, 72][lod];
+  const rings = [5, 10, 18][lod];
+  const brow = (a: number) => 1.739 + 0.116 * (1-Math.cos(a))/2;
+  const aperture = (a: number) => 0.008 + 0.025*Math.exp(-((Math.abs(a)-0.82)**2)/0.18);
+  const polar = (a: number, w: number, depth: number, y: number, z=0): Vec3 =>
+    [w*Math.sin(a),y,z-depth*Math.cos(a)];
+
+  part('Cranial shell');
+  const dome: Surface = (u,v) => {
+    const a=(u-0.5)*2*Math.PI, t=v*Math.PI*0.4999;
+    return polar(a,0.153*Math.cos(t),0.181*Math.cos(t),
+      brow(a)+(1.922-brow(a))*Math.sin(t),0.067*Math.sin(t));
+  };
+  panel(dome,slices,rings,alloy);
+  panel((u,v)=>{
+    const a=(u-.5)*2*Math.PI;
+    return polar(a,0.147+v*.006,0.174+v*.007,brow(a)-.003*(1-v));
+  },slices,2,rim);
+
+  part('Visor grille');
+  const visor: Surface = (u,v) => {
+    const a=(u-.5)*3.36;
+    return polar(a,.149,.174,brow(a)-aperture(a)*(1-v));
+  };
+  panel(visor,slices,2,gauze);
+  if (lod) {
+    // Stagger recessed dark cells on the curved band. Use physical pitch across
+    // the eye so the centre bridge contains fewer rows than the wider temples.
+    const columns = lod===2 ? 64 : 36;
+    const pitch = 0.54 / columns;
+    for(let i=0;i<columns;i++){
+      const u=(i+.5)/columns, a=(u-.5)*3.36, h=aperture(a);
+      for(let y=pitch*(i%2 ? .62 : 1.09);y<h-pitch*.35;y+=pitch*.94){
+        const cell: Surface=(s,t)=>{
+          const angle=2*Math.PI*s;
+          const p=visor(u+Math.cos(angle)*(.43/columns)*t,(y+pitch*.41*Math.sin(angle)*t)/h);
+          return [p[0]*1.003,p[1],p[2]*1.003];
+        };
+        // A small planar hexagon, with the normal of the underlying curved grille.
+        const center=cell(0,0), n:Vec3=[Math.sin(a),0,-Math.cos(a)];
+        for(let k=0;k<6;k++) for(const p of [center,cell((k+1)/6,1),cell(k/6,1)])
+          out.push(...p,...n,.044,.049,-1,.048);
+      }
+    }
+  }
+
+  part('Mandible shell');
+  panel((u,v)=>{
+    const a=(u-.5)*(3.76-.48*v), side=Math.abs(Math.sin(a));
+    const bottom=1.574+.052*side**2+.016*(1-Math.cos(a));
+    const top=brow(a)-aperture(a)-.0015;
+    const bulge=Math.sin(Math.PI*v);
+    return polar(a,.127+.023*v+.016*bulge+.014*side**2*bulge,.159+.019*v+.021*bulge,
+      bottom+(top-bottom)*v,-.012*(1-v));
+  },slices,rings,alloy);
+
+  for(const sign of [-1,1]){
+    part('Swept temple rail'+sign);
+    const rail: Surface=(u,v)=>{
+      const a=sign*(.32+u*1.95);
+      const taper=Math.sin(Math.PI*u)**.64;
+      const sweep=Math.max(0,(u-.66)/.34)**2;
+      return polar(a,.154+.008*taper+.013*Math.sin(Math.PI*v)*taper,
+        .183+.006*Math.sin(Math.PI*v)*taper,
+        brow(a)+.001+.087*u*u+v*.047*taper,.055*sweep);
+    };
+    // Close the swept tip on the inner face where it lifts clear of the shell.
+    panel(rail,slices/2,5,rim,sign<0);
+    panel((u,v)=>{
+      const p=rail(u,v);
+      p[0]-=sign*.012*Math.sin(Math.PI*u)*Math.sin(Math.PI*v);
+      return p;
+    },slices/2,5,rim,sign>0);
+  }
+  // A flush three-port optical cluster sits just above the outer eye.
+  part('Temple optics');
+  const opticNormal = unit([.91,.02,-.42]);
+  const socket: Vec3 = [.146,1.797,-.072];
+  function port(base: Vec3, length: number, radii: number[], tint: Vec3) {
+    const end=base.map((c,k)=>c+length*opticNormal[k]) as Vec3;
+    limb(base,end,radii,tint,1,TWILL);
+    return end;
+  }
+  const cap=port(socket,.012,[.022,.023,.021],rim);
+  const lens=port(cap,.001,[.018,.018],graphite);
+  for(let i=0;i<3;i++) {
+    const a=i*2*Math.PI/3, dx=.008*Math.cos(a);
+    const base:Vec3=[lens[0]+.42*dx,lens[1]+.008*Math.sin(a),lens[2]+.91*dx];
+    const lip=port(base,.0014,[.0058,.0057],alloy);
+    port(lip,.0004,[.0038,.0038],[.055,.063,.06]);
+  }
   part('Rangefinder');
   limb([-0.232,1.704,-0.042],[-0.23,1.705,-0.138],[0.018,0.025,0.02],bronze,1,TWILL);
   limb([-0.23,1.705,-0.138],[-0.23,1.705,-0.14],[0.012,0.012],light,1,-2);

@@ -537,7 +537,7 @@ describe('createInput', () => {
       key('keyup', 'KeyG');
     });
 
-    it('sends one step of SPECIAL with the katana chosen on a press of G or of the right button, not on a double click', () => {
+    it('sends one step of SPECIAL with the katana chosen on a press of G or of the right button, and of FIRE and SPECIAL on a double click', () => {
       make();
       lock(true);
       ctl.weapon = WEAPON.BLADE;
@@ -545,6 +545,7 @@ describe('createInput', () => {
         button('mousedown', 0);
         button('mouseup', 0);
       }
+      expect(ctl.take()).toBe(KEY.FIRE | KEY.SPECIAL | KEY.BLADE);
       expect(ctl.take()).toBe(KEY.BLADE);
       key('keydown', 'KeyG');
       expect(ctl.take()).toBe(KEY.SPECIAL | KEY.BLADE);

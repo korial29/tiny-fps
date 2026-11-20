@@ -88,7 +88,7 @@ import { EV, KEY, LIMB, MODE, SIDE } from './types';
 import type { Input, PlayerState } from './types';
 import { DASH_GAP, KITS } from './kit';
 import type { Kit } from './kit';
-import { near } from './world';
+import { atPoint, near } from './world';
 import type { Brush, World } from './world';
 
 const DT = 1 / TICK_HZ;
@@ -336,6 +336,13 @@ export const gapTo = (o: Body, x: number, z: number): [dx: number, dz: number, y
   return [x - ax - t * ux, z - az - t * uz, ay + t * (by - ay)];
 };
 
+/** A conservative horizontal bound around a body's axis, expanded by the other radius. */
+export const nearBody = (o: Body, x: number, z: number, radius: number): boolean =>
+  x >= Math.min(o.a[0], o.b[0]) - radius &&
+  x <= Math.max(o.a[0], o.b[0]) + radius &&
+  z >= Math.min(o.a[2], o.b[2]) - radius &&
+  z <= Math.max(o.a[2], o.b[2]) + radius;
+
 /**
  * push() for the bodies: the player's circle out of each body that blocks it (as blocks() a
  * brush), along the line from its axis. A centre on the axis leaves by the body's right (a is its
@@ -344,8 +351,11 @@ export const gapTo = (o: Body, x: number, z: number): [dx: number, dz: number, y
 const jostle = (p: Pos, bodies: readonly Body[], h: number): [x: number, z: number] => {
   let [tx, tz] = [0, 0];
   for (const o of bodies) {
-    const [dx, dz, y] = gapTo(o, p.x, p.z);
     const r = o.r + PLAYER_R;
+    if (!nearBody(o, p.x, p.z, r)) {
+      continue;
+    }
+    const [dx, dz, y] = gapTo(o, p.x, p.z);
     const d2 = dx * dx + dz * dz;
     if (d2 >= (r - EPS) ** 2 || y + o.h <= p.y + STEP_H + SKIN || y >= p.y + h - SKIN) {
       continue;
@@ -395,6 +405,9 @@ const span = (
     }
   }
   for (const o of bodies) {
+    if (!nearBody(o, p.x, p.z, o.r + PLAYER_R)) {
+      continue;
+    }
     const [dx, dz, y] = gapTo(o, p.x, p.z);
     if (dx * dx + dz * dz >= (o.r + PLAYER_R - EPS) ** 2) {
       continue;
@@ -414,7 +427,7 @@ const span = (
  */
 export const floorAt = (w: World, x: number, z: number, y: number): number => {
   let floor = ground(w, x, z);
-  for (const i of near(w, x, z, 0)) {
+  for (const i of atPoint(w, x, z)) {
     const { min, max } = w.def.brushes[i];
     if (x >= min[0] && x <= max[0] && z >= min[2] && z <= max[2] && max[1] <= y) {
       floor = Math.max(floor, max[1]);

@@ -208,6 +208,20 @@ describe('snapshot frame', () => {
     });
   });
 
+  it('encodes host metadata without copying player states', () => {
+    const players = [player(0, { stun: 5, by: 2 }), player(1, { stun: 0, by: 3 })];
+    const meta = [
+      { ack: 55, by: 9 },
+      { ack: 77, by: 8 },
+    ];
+    const snapshot = { tick: 1, players, ...IDLE };
+    const expected = {
+      ...snapshot,
+      players: players.map((p, i) => ({ ...p, ack: meta[i].ack, by: p.stun ? meta[i].by : 0 })),
+    };
+    expect(bytes(encodeSnapshot(snapshot, meta))).toEqual(bytes(encodeSnapshot(expected)));
+  });
+
   it('has a 5-byte head, 62 bytes per player, then the match: 10 bytes and a byte per flag at home', () => {
     const buf = encodeSnapshot({
       tick: 0x1234,

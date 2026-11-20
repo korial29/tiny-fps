@@ -938,10 +938,10 @@ describe('the gun in the right hand', () => {
     const hung = draw(watch(h, 120), h);
     expect(glow(hung).length).toBe(0);
     const w = armed({ ...wall });
-    // A wall on the east is on the right: that hand is busy; one on the left leaves it free.
+    // The wall animation takes over both hands, regardless of which side the wall is on.
     expect(glow(draw(watch(w, 120), w)).length).toBe(0);
     const left = armed({ ...wall, wall: SIDE.WEST });
-    expect(glow(draw(watch(left, 120), left)).length).toBeGreaterThan(50);
+    expect(glow(draw(watch(left, 120), left)).length).toBe(0);
   });
 
   it('shows it again after the hang', () => {

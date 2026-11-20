@@ -191,6 +191,8 @@ export const SOUND = {
   HER_DEATH: 71,
   GROAN: 72,
   HER_GROAN: 73,
+  /** A Hunter harpoon: a tight mechanical release, then a quick metallic flight zing. */
+  HARPOON: 74,
 } as const;
 
 /**
@@ -660,6 +662,12 @@ export const LAYERS: Voice[][] = [
   [],
   [],
   [],
+  // HARPOON: the launcher snaps open, its cable rings, and the point whistles away.
+  [
+    [0, 1900, -3, 0.001, 0, 0.035, 0, 0.35, 0, 1, 0.45],
+    [3, 6800, -1.8, 0.001, 0, 0.08, 0.1, 0.16, 0, 1, 0.34, 0.012],
+    [2, 900, -1.4, 0.004, 0.02, 0.1, 0.2, 0.3, 0, 1, 0.28, 0.018],
+  ],
 ];
 
 /** The seconds sound `id` lasts: its longest voice, from its start late to the end of its decay. */

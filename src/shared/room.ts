@@ -8,6 +8,8 @@ import {
   DOWN_TICKS,
   FLOOR_TICKS,
   HEAVY,
+  HARPOON,
+  HARPOON_HP,
   INPUT_BURST,
   LOCK_BREAK,
   LOCK_HP,
@@ -880,7 +882,8 @@ export class Room {
    * against the others as they are now. Past PLASMA_MAX balls in flight, the oldest bursts. A
    * grenade (lob()) is flown on the same way, a tick of its arc at a time.
    */
-  private shoot(p: Player, view = 0, b = launch(p.state, p.info.team)): void {
+  private shoot(p: Player, view = 0, b?: Flying): void {
+    b ??= launch(p.state, p.info.team, this.kit(p).hunter);
     // Ticks back, on the u16 circle; a view ahead of now is no lag.
     const lag = (this.ticks - view + 0x10000) % 0x10000;
     this.balls.push(b);
@@ -942,6 +945,8 @@ export class Room {
         if (!w.graze) {
           this.hurt(hull, 1, b.by, b.team);
         }
+      } else if (b.power === HARPOON) {
+        this.hurt(hull, 1, b.by, b.team);
       } else {
         this.hurt(hull, b.arc ? CUTS[b.arc].hp : (b.power ?? 1), b.by, b.team);
       }
@@ -960,6 +965,8 @@ export class Room {
     }
     if (b.power === BOLT) {
       this.shot(foe, BOLT_HP, by, b.dx, b.dz);
+    } else if (b.power === HARPOON) {
+      this.shot(foe, HARPOON_HP, by, b.dx, b.dz, FRAG.GUN, b.back);
     } else if (b.power === 0) {
       // The laser rifle's: every RIFLE_HITS on him (from anyone, until he goes down) take 1 hp.
       foe.graze = ((foe.graze ?? 0) + 1) % RIFLE_HITS;

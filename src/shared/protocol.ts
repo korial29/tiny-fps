@@ -66,7 +66,7 @@
 //     256ths of a turn and a pitch in 127ths of a quarter turn; power: the health it takes, or for an
 //     arc of energy bit 7 set and the CUT that threw it (Ball.arc) in bits 0-6, or for a grenade
 //     (power NADE) bit 6 set and its speed in whole m/s in bits 0-5 (Ball.v), bit 7 too for a ship's
-//     missile (an arc's CUT never reaches bit 6).
+//     missile (an arc's CUT never reaches bit 6); the Hunter disc uses power 9 outbound and 10 returning.
 //   Then, only on a map with doors: the balls' count is always written (0 with none), and after
 //   the balls [doors u8], then a nibble a door, the first in the high half of its byte: how far it
 //   is open in fifteenths (Snapshot.doors). 1 + doors / 2 bytes, and 1 more when no ball flies.
@@ -572,7 +572,10 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
           ? { power: 1, arc: v.getUint8(o + 10) & 127 }
           : v.getUint8(o + 10) > 63
             ? { power: NADE, v: v.getUint8(o + 10) & 63 }
-            : { power: v.getUint8(o + 10) }),
+            : {
+                power: v.getUint8(o + 10),
+                ...(v.getUint8(o + 10) === 10 ? { returning: true } : {}),
+              }),
     });
   }
   return {

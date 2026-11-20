@@ -370,6 +370,22 @@ export const GUN_RANGE = 80;
 export const PLASMA_SPEED = 80;
 export const RIFLE_SPEED = 400;
 export const PLASMA_R = 0.12;
+/** Ball.power of the Hunter's harpoon: its own projectile kind in snapshots. */
+export const HARPOON = 8;
+export const HARPOON_SPEED = 72;
+export const HARPOON_RANGE = 90;
+export const HARPOON_R = 0.08;
+export const HARPOON_HP = 2;
+/** Ball.power values for a Hunter's returning disc (outbound, then returning). */
+export const DISK = 9;
+export const DISK_RETURN = 10;
+export const DISK_SPEED = 52;
+export const DISK_RANGE = 28;
+export const DISK_R = 0.16;
+export const DISK_HP = 2;
+export const DISK_COOL = 75;
+/** Ticks between assisted shoulder-laser hits. */
+export const HUNTER_LASER_COOL = 18;
 /** Plasma balls in flight in a room at most: past it the oldest bursts. They go on the wire. */
 export const PLASMA_MAX = 64;
 /** Ball.power of a vehicle's laser bolt (rover.ts): past CHARGE_MAX, so it names the bolt. It flies at BOLT_SPEED m/s. */

@@ -2,7 +2,7 @@
 // trail, a blue flash at the muzzle of a shot, a splash of light and sparks where a ball bursts,
 // the bolts and sparks of the katana's shock, the katana's arcs of energy, and the rail gun's lightning, a new shape each frame. Everything turns to face the camera and is
 // unlit and above 1, so that the bloom makes it glow, but the blood of a glory kill, dark. No DOM, no GL.
-import { NADE, NADE_R, BOLT as ROVER_BOLT } from '../shared/constants';
+import { DISK, DISK_RETURN, HARPOON, NADE, NADE_R, BOLT as ROVER_BOLT } from '../shared/constants';
 import { CUT } from '../shared/types';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
@@ -482,6 +482,21 @@ export const createTracer = (): Tracer => {
           });
           continue;
         }
+        if (power === HARPOON) {
+          // A narrow bronze shaft with a bright point, rather than a round plasma bolt.
+          const back = p.map((v, i) => v - d[i] * Math.max(tail, 0.28)) as Vec3;
+          ribbon(out, p, back, 0.018, [0.62, 0.38, 0.18], eye, 0.015, 0.004, 0.1);
+          disc(out, p, 0.025, [2.4, 1.55, 0.7], eye, 0.025, 8);
+          continue;
+        }
+        if (power === DISK || power === DISK_RETURN) {
+          // A flat spinning bronze disc, brighter on the return flight, with a short edge trail.
+          const back = p.map((v, i) => v - d[i] * Math.max(tail * 0.55, 0.12)) as Vec3;
+          ribbon(out, p, back, 0.025, [0.85, 0.55, 0.2], eye, 0.018, 0.004, 0.1);
+          disc(out, p, 0.12, [1.15, 0.72, 0.28], eye, 0.02, 12);
+          disc(out, p, 0.055, [0.25, 0.18, 0.1], eye, 0.025, 8);
+          continue;
+        }
         // A rover's bolt is a streak: four times the trail.
         const end = p.map((v, i) => v - d[i] * tail * (power === ROVER_BOLT ? 4 : 1)) as Vec3;
         // A charged ball swells, up to twice the size at the full charge, and turns orange; the
@@ -661,9 +676,13 @@ export const createTracer = (): Tracer => {
           .sort((a, b) => dist(a) - dist(b))
           .slice(0, LIT)
           .map(o =>
-            (o.power ?? 1) > 1
-              ? point(o.p, o.power === NADE ? 3 : 6, 1.5, [1.4, 0.55, 0.15])
-              : point(o.p, 4, 1, o.power === 0 ? [1.4, 0.15, 0.1] : [0.25, 0.5, 1.4]),
+            o.power === HARPOON
+              ? point(o.p, 4, 1.2, [1.4, 0.55, 0.18])
+              : o.power === DISK || o.power === DISK_RETURN
+                ? point(o.p, 5, 1.4, [1.4, 0.7, 0.25])
+                : (o.power ?? 1) > 1
+                  ? point(o.p, o.power === NADE ? 3 : 6, 1.5, [1.4, 0.55, 0.15])
+                  : point(o.p, 4, 1, o.power === 0 ? [1.4, 0.15, 0.1] : [0.25, 0.5, 1.4]),
           ),
         ...hot.slice(0, 2).map(({ p, k }) => point(p, 2 + 3 * k, 0.4 + 1.2 * k, [1.4, 0.55, 0.15])),
         ...rays

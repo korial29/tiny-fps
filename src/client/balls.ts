@@ -10,6 +10,11 @@
 import {
   ARC_R,
   BOLT,
+  DISK,
+  DISK_RETURN,
+  DISK_R,
+  HARPOON,
+  HARPOON_R,
   INTERP_DELAY,
   MISSILE_R,
   NADE,
@@ -19,7 +24,7 @@ import {
   TICK_HZ,
 } from '../shared/constants';
 import { gravity, heightOf } from '../shared/physics';
-import { launch, lob, lobbed, speedOf, toss, wave } from '../shared/plasma';
+import { disk, launch, lob, lobbed, speedOf, toss, wave } from '../shared/plasma';
 import type { Ball, PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
@@ -35,7 +40,16 @@ const SLACK = 0.1;
  * health for yet (a laser round, a vehicle's bolt) is seen this way.
  */
 export const onBody = (b: Ball, p: Pick<PlayerState, 'x' | 'y' | 'z' | 'mode'>): boolean => {
-  const r = PLAYER_R + (b.arc ? ARC_R : PLASMA_R) + SLACK;
+  const r =
+    PLAYER_R +
+    (b.arc
+      ? ARC_R
+      : b.power === DISK || b.power === DISK_RETURN
+        ? DISK_R
+        : b.power === HARPOON
+          ? HARPOON_R
+          : PLASMA_R) +
+    SLACK;
   return (
     b.burst &&
     (b.x - p.x) ** 2 + (b.z - p.z) ** 2 <= r * r &&
@@ -75,11 +89,12 @@ interface Flight {
   v?: number;
   /** A ship's missile: it flies straight, and bursts MISSILE_R wide. */
   missile?: boolean;
+  returning?: boolean;
 }
 
 export interface Balls {
   /** The own player fired, or threw an arc with the katana: `p` is his state after the step, `now` the time of the step (ms). */
-  fire(p: PlayerState, now: number): void;
+  fire(p: PlayerState, now: number, harpoon?: boolean, disc?: boolean): void;
   /** The balls of a snapshot received at `now` (ms); `me` is the own id. */
   snapshot(balls: Ball[], me: number, now: number): void;
   /**
@@ -108,8 +123,15 @@ export const createBalls = (world: World): Balls => {
   const spent = new Set<number>();
 
   return {
-    fire(p, now) {
-      const b = p.wield ? wave(p) : lobbed(p) ? lob(p) : launch(p);
+    fire(p, now, harpoon = false, discShot = false) {
+      const b =
+        p.wield && !discShot
+          ? wave(p)
+          : discShot
+            ? disk(p)
+            : lobbed(p)
+              ? lob(p)
+              : launch(p, 0, harpoon && !p.rifled);
       const [o, d]: Vec3[] = [at(b), [b.dx, b.dy, b.dz]];
       const key = (p.id << 8) | b.id;
       if (b.power === NADE) {
@@ -135,7 +157,7 @@ export const createBalls = (world: World): Balls => {
         return;
       }
       // The wall it bursts on, as the host's fly() finds it.
-      const r = ray(world, o, d, b.left, PLASMA_R);
+      const r = ray(world, o, d, b.left, b.power === HARPOON ? HARPOON_R : PLASMA_R);
       spent.delete(key);
       live.set(key, {
         own: true,
@@ -144,8 +166,8 @@ export const createBalls = (world: World): Balls => {
         o,
         t: now,
         d,
-        end: o.map((v, i) => v + d[i] * r) as Vec3,
-        pop: r < b.left,
+        ...(b.power === DISK ? {} : { end: o.map((v, i) => v + d[i] * r) as Vec3 }),
+        pop: b.power !== DISK && r < b.left,
         due: Infinity,
         power: b.power ?? 1,
         arc: b.arc,
@@ -159,6 +181,15 @@ export const createBalls = (world: World): Balls => {
         let f = live.get(key);
         keys.add(key);
         if (b.by == me && (f?.own || spent.has(key))) {
+          if (f && (b.returning || b.power === DISK_RETURN)) {
+            [f.o, f.t, f.d, f.power, f.returning] = [
+              at(b),
+              now,
+              [b.dx, b.dy, b.dz],
+              DISK_RETURN,
+              true,
+            ];
+          }
           if (b.burst) {
             spent.delete(key);
             if (f?.path) {
@@ -167,7 +198,11 @@ export const createBalls = (world: World): Balls => {
               const n = f.path.reduce((m, q, i, l) => (gap(q) < gap(l[m]) ? i : m), 0);
               f.path = [...f.path.slice(0, n + 1), at(b)];
             } else if (f) {
-              [f.end, f.pop] = [at(b), true];
+              [f.end, f.pop] = [at(b), b.power !== DISK_RETURN];
+              if (b.power === DISK_RETURN) {
+                f.due = now;
+                f.returning = false;
+              }
             }
           }
           continue;
@@ -187,13 +222,21 @@ export const createBalls = (world: World): Balls => {
               power: b.power ?? 1,
               arc: b.arc,
               missile: b.missile,
+              returning: b.returning,
             }),
           );
         }
         if (b.burst) {
           [f.end, f.pop, f.due] = [at(b), true, now];
         } else {
-          [f.o, f.t, f.d, f.v] = [at(b), now, [b.dx, b.dy, b.dz], b.v];
+          [f.o, f.t, f.d, f.v, f.power, f.returning] = [
+            at(b),
+            now,
+            [b.dx, b.dy, b.dz],
+            b.v,
+            b.power ?? 1,
+            b.returning || b.power === DISK_RETURN,
+          ];
         }
       }
       // A ball the host no longer sends without a burst has flown its range.
@@ -217,7 +260,10 @@ export const createBalls = (world: World): Balls => {
         if (
           (f.path
             ? tick >= last
-            : !nade && f.end && s >= dot(f.end.map((v, i) => v - f.o[i]) as Vec3, f.d)) ||
+            : !nade &&
+              !f.returning &&
+              f.end &&
+              s >= dot(f.end.map((v, i) => v - f.o[i]) as Vec3, f.d)) ||
           t >= f.due
         ) {
           if (f.pop) {
@@ -237,6 +283,15 @@ export const createBalls = (world: World): Balls => {
         }
         let p = f.o.map((v, i) => v + f.d[i] * s) as Vec3;
         let d = f.d;
+        if (f.returning) {
+          const target = muzzle(f.by);
+          if (target) {
+            const delta = target.map((v, i) => v - f.o[i]);
+            const distance = Math.hypot(...delta) || 1;
+            d = delta.map(v => v / distance) as Vec3;
+            p = f.o.map((v, i) => v + d[i] * Math.min(distance, s)) as Vec3;
+          }
+        }
         if (nade) {
           // Along its ticks, or down the arc gravity gives from the last snapshot.
           const [a, b] = f.path

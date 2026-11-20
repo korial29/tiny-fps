@@ -359,7 +359,7 @@ export interface Ball {
   dz: number;
   /** It burst where it is: the last snapshot that carries it. */
   burst: boolean;
-  /** Its strength, 1 to CHARGE_MAX: the health it takes. Absent reads 1. 0 is a laser rifle's, BOLT a rover's, NADE a grenade. */
+  /** Its strength, 1 to CHARGE_MAX: the health it takes. Absent reads 1. 0 is a laser rifle's, BOLT a rover's, NADE a grenade, HARPOON a Hunter's harpoon. */
   power?: number;
   /** A grenade's speed along its direction, m/s (the wire keeps whole m/s, 63 at most). Absent for the rest. */
   v?: number;
@@ -367,6 +367,8 @@ export interface Ball {
   arc?: number;
   /** A ship's missile (power NADE): it flies straight, and its blast reaches MISSILE_R. */
   missile?: boolean;
+  /** A Hunter disc which is steering back to its owner. */
+  returning?: boolean;
 }
 
 /** The flag of a team as a snapshot carries it: only the fields of its state are meaningful, the rest read 0. */

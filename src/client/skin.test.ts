@@ -276,6 +276,20 @@ describe('skin', () => {
     expect(turned.join).toBeLessThan(65);
   });
 
+  it('keeps the chest facing forward across the shared armpit ring', () => {
+    for (const lod of [0, 1, 2, 3]) {
+      const { v } = body(lod);
+      let samples = 0;
+      for (let i = 0; i < v.length; i += 6) {
+        if (Math.abs(v[i]) < 0.155 && Math.abs(v[i + 1] - 1.41) < 0.006 && v[i + 2] < -0.068) {
+          expect(Math.abs(v[i + 4])).toBeLessThan(0.15);
+          samples++;
+        }
+      }
+      expect(samples).toBeGreaterThan(0);
+    }
+  });
+
   it('relaxes the eye’s own shoulders once posed, and only its: no pole, unit normals', () => {
     const r = body(2).r!;
     expect(r.k.length).toBeGreaterThan(200);

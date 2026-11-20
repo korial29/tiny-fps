@@ -123,6 +123,11 @@ export const key = (cx: number, cz: number): number => (cx + OFF) * (2 * OFF) + 
 const at = (v: number, cell: number): number =>
   Math.min(Math.max(Math.floor(v / cell), -OFF), OFF - 1);
 
+const EMPTY: readonly number[] = [];
+/** Brush candidates in the one cell containing a point; the returned list is read-only. */
+export const atPoint = (w: World, x: number, z: number): readonly number[] =>
+  w.grid.get(key(at(x, w.cell), at(z, w.cell))) ?? EMPTY;
+
 /** Builds the grid: each brush is listed in every cell its footprint covers. */
 export const build = (def: WorldDef, cell = CELL): World => {
   const grid = new Map<number, number[]>();

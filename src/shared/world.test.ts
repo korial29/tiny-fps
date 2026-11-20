@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TEX } from './types';
-import { build, hidden, near, ray } from './world';
+import { atPoint, build, hidden, near, ray } from './world';
 import type { Brush, WorldDef } from './world';
 import { duo } from '../../test/teams';
 
@@ -70,6 +70,15 @@ describe('build and near', () => {
 
   it('is empty over empty ground', () => {
     expect(near(build(def([])), 0, 0, 5)).toEqual([]);
+  });
+
+  it('finds the same point candidates as near, including cell boundaries and the grid limits', () => {
+    const w = build(def([brush([-5, 0, -4], [8, 1, 4]), brush([4, 0, -1], [4, 2, 1])]), 4);
+    for (const x of [-5000, -4.001, -4, -0.001, 0, 4, 8, 5000]) {
+      for (const z of [-5000, -4, -0.001, 0, 4, 5000]) {
+        expect(atPoint(w, x, z)).toEqual(near(w, x, z, 0));
+      }
+    }
   });
 });
 

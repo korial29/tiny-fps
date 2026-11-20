@@ -734,8 +734,9 @@ const pillar = (
 const base = (o: number[]) => {
   moonbase(o);
   hull(o);
-  const [px, pz] = LAYOUT.pads[0];
-  pad(o, px, pz);
+  for (const [px, pz] of LAYOUT.pads.slice(0, LAYOUT.pads.length / 2)) {
+    pad(o, px, pz);
+  }
   for (const [x, z] of LAYOUT.masts.slice(0, LAYOUT.masts.length / 2)) {
     mast(o, x, z, 0);
   }

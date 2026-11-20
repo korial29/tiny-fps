@@ -7,7 +7,7 @@ import { MOON, ZED } from './moon';
 import { DOORS } from './moonbase';
 import { floorAt, spawn } from './physics';
 import { fly, launch } from './plasma';
-import { decodeSnapshot, encodeSnapshot } from './protocol';
+import { SNAP_HEAD, decodeSnapshot, encodeSnapshot } from './protocol';
 import { beam } from './rail';
 import { Room } from './room';
 import { ROVER, bolts, park } from './rover';
@@ -300,23 +300,23 @@ describe('doors, the room and the wire', () => {
 
   it('adds no byte to a snapshot of a map without doors', () => {
     const plain = new Uint8Array(encodeSnapshot(base));
-    expect(plain).toHaveLength(4 + 12);
+    expect(plain).toHaveLength(SNAP_HEAD + 12);
     expect(new Uint8Array(encodeSnapshot({ ...base, doors: undefined }))).toEqual(plain);
     expect(new Uint8Array(encodeSnapshot({ ...base, doors: [] }))).toEqual(plain);
     expect(decodeSnapshot(plain.buffer)!.doors).toBeUndefined();
     const flown = new Uint8Array(encodeSnapshot({ ...base, balls: [ball] }));
-    expect(flown).toHaveLength(4 + 12 + 1 + 11);
+    expect(flown).toHaveLength(SNAP_HEAD + 12 + 1 + 11);
     expect(new Uint8Array(encodeSnapshot({ ...base, balls: [ball], doors: [] }))).toEqual(flown);
   });
 
   it('carries the doors in a nibble each after the balls: 5 bytes for six, 4 when a ball flies, and they round-trip', () => {
     const doors = [0, 1 / 15, 7 / 15, 8 / 15, 14 / 15, 1];
     const a = encodeSnapshot({ ...base, doors });
-    expect(a.byteLength).toBe(4 + 12 + 5);
+    expect(a.byteLength).toBe(SNAP_HEAD + 12 + 5);
     expect(decodeSnapshot(a)).toMatchObject({ ...base, doors });
     expect(decodeSnapshot(a)!.balls).toBeUndefined();
     const b = encodeSnapshot({ ...base, balls: [ball], doors });
-    expect(b.byteLength).toBe(4 + 12 + 1 + 11 + 4);
+    expect(b.byteLength).toBe(SNAP_HEAD + 12 + 1 + 11 + 4);
     expect(decodeSnapshot(b)!.doors).toEqual(doors);
     expect(decodeSnapshot(b)!.balls).toHaveLength(1);
     // An odd count, and a state between two steps goes to the nearest: half open stays half open.

@@ -551,10 +551,40 @@ export function hunter(lod: 0 | 1 | 2) {
     plate([diskPoint(0.054,a-0.32,0),diskPoint(0.109,a-0.41,0),diskPoint(0.139,a+0.27,0),diskPoint(0.089,a+0.22,0),diskPoint(0.054,a+0.66,0)],diskPoint(0.083,a,-0.019),silver,SHINE);
   }
   limb(hub,[hub[0]+0.013,hub[1],hub[2]-0.026],[0.075,0.061,0.034],bronze,1,TWILL);
+  // Lift the knee and pelvis from a planted foot; ease the rise out under the ribs.
+  // The derivative of the same curve transforms the normals of the fitted kit.
+  function legRise(y: number): [number, number] {
+    if (y <= .085 || y >= 1.40) return [0, 0];
+    if (y < .94) {
+      const t = (y - .085) / .855;
+      return [.080 * t, .080 / .855];
+    }
+    if (y <= 1.04) return [.080, 0];
+    const t = (y - 1.04) / .36;
+    return [.080 * (1 - t*t*(3-2*t)), -.080 * 6*t*(1-t)/.36];
+  }
   for (const [name, mesh] of Object.entries(parts)) {
     const head = ['Mandible shell','Visor grille','Cranial shell','Temple optics','Mask lining'].includes(name)
       || name.startsWith('Quills') || name.startsWith('Swept temple rail');
+    const anatomy = name === 'Marine anatomy';
+    const legKit = /^(Thigh net|Leg straps|Shin plates|Patella|Boot lames) /.test(name);
+    const beltKit = name === 'Belt' || name === 'Flying disc';
     for (let i=0;i<mesh.length;i+=STRIDE) {
+      if (beltKit) mesh[i+1] += .080;
+      if (anatomy || legKit) {
+        const x = mesh[i], y = mesh[i+1];
+        // The relaxed arms hang alongside the trunk at the height of the belt.
+        const t = anatomy ? Math.min(1, Math.max(0, (.31-Math.abs(x))/.055)) : 1;
+        if (t > 0 && y > .085 && y < 1.40) {
+          const [rise, slope] = legRise(y);
+          const weight = t*t*(3-2*t);
+          const dyDx = anatomy ? -Math.sign(x)*rise*6*t*(1-t)/.055 : 0;
+          const ny = mesh[i+4]/(1+weight*slope);
+          const n = unit([mesh[i+3]-ny*dyDx, ny, mesh[i+5]]);
+          mesh[i+1] += weight*rise;
+          mesh[i+3]=n[0]; mesh[i+4]=n[1]; mesh[i+5]=n[2];
+        }
+      }
       if (head) {
         mesh[i+1]+=(stature-1)*1.55;
       } else {

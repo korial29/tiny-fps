@@ -380,6 +380,7 @@ describe('Bot: the keys of a leg', () => {
       steps,
       step,
       goal,
+      plannedWhy: 'chase carrier',
       planned: 0,
       last: [me.state.x, me.state.y, me.state.z],
     });
@@ -827,6 +828,49 @@ describe('Bot: team play', () => {
     ]);
     // The carrier has none: he runs home.
     expect(roles.has(4)).toBe(false);
+  });
+
+  it('breaks a flag standoff between the last two bots at their bases', () => {
+    const room = new Room({ bots: 3, botSkill: 7 }, world.def);
+    const client = join(room);
+    for (const p of room['players']()) {
+      if (!p.bot) {
+        p.state.down = 9999;
+        continue;
+      }
+      const [x, y, z] = world.def.teams[p.info.team].base;
+      p.info.role = ROLE.MARINE;
+      Object.assign(p.state, { x, y, z, ammo: 30, mag: 6 });
+      room['ctf'].flags[1 - p.info.team] = carried(p.info.id);
+    }
+    ticks(room, 10 * 60);
+    expect(snap(client).flags.every(f => f.state === FLAG.CARRIED)).toBe(true);
+    for (let s = 10; s < 40 && snap(client).flags.every(f => f.state === FLAG.CARRIED); s++) {
+      ticks(room, 60);
+    }
+    expect(snap(client).flags.some(f => f.state !== FLAG.CARRIED)).toBe(true);
+  });
+
+  it('prioritises recovering its flag over a nearby enemy and health pack', () => {
+    const bot = new Bot(0);
+    const me = at(0, 0, 0, 10);
+    me.state.hp = 2;
+    const decoy = at(1, 1, 0, 3);
+    const carrier = at(2, 1, 0, -10);
+    const sight = {
+      me,
+      others: [decoy, carrier],
+      flags: [carried(carrier.id), home],
+      world,
+      kit: KITS[ROLE.XENO],
+      packs: [[8, 0, 10] as [number, number, number]],
+    };
+    bot.think(sight);
+    expect(bot.view()).toMatchObject({ why: 'chase carrier', path: [[0, 0, -10]] });
+    // The drop is close enough to reuse the chase path, but the new objective needs its own point.
+    sight.flags[0] = { ...home, state: FLAG.DROPPED, z: -8 };
+    bot.think(sight);
+    expect(bot.view()).toMatchObject({ why: 'return flag', path: [[0, 0, -8]] });
   });
 
   it('escorts its carrier with the two nearest, guards home with one', () => {

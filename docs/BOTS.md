@@ -76,9 +76,15 @@ by the same roles. The nearest bot to a job takes it, the most pressing jobs fir
   Highline they come up the tower's sides, not from the enemy's end.
 - **attack**: the rest go for their flag.
 
-A bot that is low goes for a health pack within `MEND` (30 m) first, unless it chases our flag
-(`Sight.packs`, the ones there). In a fight it shoots first the one who has our flag, then one on
-a teammate who carries theirs or is low, then the nearest.
+Chasing the enemy carrier and returning a dropped home flag take priority over nearby prey and
+health packs, even when the assigned bot is wounded. A bot on other duties still seeks a health
+pack within `MEND` (30 m) when low. Marines on urgent flag duties take the shortest route the
+mesh finds, and bots replan on landing when those objectives change. In a fight a bot shoots first
+the one who has our flag, then one on a teammate who carries theirs or is low, then the nearest.
+
+If both flags are carried, a bot carrier waits up to 20 seconds after reaching its own base. If
+both flags are still carried, it joins the pursuit and can fight while carrying. It heads back
+to its base as soon as its own flag is dropped or returned.
 
 Against the same bots with the old goals, aim being equal (24 matches a map, sides swapped each
 match): 156 captures to 93 on Highline (15 matches won, 9 lost), 321 to 127 on Tranquility (24
@@ -107,8 +113,10 @@ player up a tower, left for later).
 Bot-only matches, headless, 16 minutes each, 8 bots (`npm run botmatch`: `BOTMATCH` matches,
 `BOTMATCH_MAP`, `BOTMATCH_OUT` for the numbers, `node_modules/.cache/botmatch.json` by default), with numbers for the captures, the flags
 taken, the deaths, the falls, the blocks (5 s without moving), the time stopped on the way and the
-abrupt turns of the look, the bots' shots, hits and frags. One match is noise: the same code can give twice the captures from one
-match to the next, so a change is judged on 24 matches or more, against master.
+abrupt turns of the look, the bots' shots, hits and frags. The bench also records the total time
+both flags are carried and the longest uninterrupted exchange in each match. One match is noise:
+the same code can give twice the captures from one match to the next, so a change is judged on 24
+matches or more, against master.
 
 Sources: [UT2004 bot internal variables](<https://wiki.beyondunreal.com/UE2:Bot_internal_variables_(UT2004)>),
 [UT2003 AI for level designers](https://www.zx.net.nz/mirror/unreal.epicgames.com/ut2ai.htm),

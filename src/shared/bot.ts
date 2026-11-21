@@ -15,6 +15,7 @@ import {
   STEP_H,
   TICK_HZ,
 } from './constants';
+import { touches } from './ctf';
 import { eyeHeight, floorAt, forward, gravity, norm } from './physics';
 import { locate, navOf, path, WADE } from './nav';
 import type { Step, Vec3 } from './nav';
@@ -165,6 +166,8 @@ const DRIFT = 4;
 const SHARE = 0.25;
 /** Metres over the floor under a player in the air past which he is over a gap, not jumping on a roof. */
 const HOVER = 4;
+/** How long a carrier waits at home for the team to break a flag exchange before joining the chase. */
+const FLAG_WAIT = 20 * TICK_HZ;
 /** Metres from the enemy carrier a bot dashes into him: the tackle. */
 const TACKLE = 4;
 /** Metres a bot without a gun goes out of its way to the rack. */
@@ -263,10 +266,11 @@ export const squad = (
   const by = (id: number) => up.find(o => o.id === id);
   const ours = theirs.state === FLAG.CARRIED ? by(theirs.by) : undefined;
   const enemy = mine.state === FLAG.CARRIED ? by(mine.by) : undefined;
-  // A teammate low with an enemy on him: the lowest first. He is given no job.
+  // When our flag is out, even a wounded bot may be needed to recover it.
   let trouble: Seen | undefined;
   for (const o of up) {
     if (
+      mine.state === FLAG.HOME &&
       o.team === team &&
       o.state.hp <= LOW &&
       (!trouble || o.state.hp < trouble.state.hp) &&
@@ -367,7 +371,10 @@ export class Bot {
   private steps: Step[] = [];
   /** The goal of the way, and the tick it was planned. */
   private goal: Vec3 | undefined;
+  private plannedWhy = '';
   private planned = 0;
+  /** Tick the carrier reached home during a flag exchange, or 0 while it is still on the way. */
+  private flagWait = 0;
   /** Tick of the last grounded rack search, and the path to its chosen rack. */
   private rackChecked = -REPLAN;
   private rackTarget?: Vec3;
@@ -500,6 +507,7 @@ export class Bot {
     this.steer = !!s.kit && s.kit.jump !== JUMP_SPEED;
     if (p.down) {
       this.goal = this.rackTarget = undefined;
+      this.flagWait = 0;
       this.rackChecked = -REPLAN;
       this.foe = -1;
       return { keys: 0, yaw: this.aim, pitch: 0 };
@@ -535,6 +543,8 @@ export class Bot {
       p.ground &&
       (!this.goal ||
         !!this.rackSteps ||
+        (this.plannedWhy !== this.why && (this.urgent() || this.urgent(this.plannedWhy))) ||
+        (this.urgent() && Math.abs(goal[1] - this.goal[1]) > HOVER) ||
         flat(goal[0], goal[2], this.goal[0], this.goal[2]) >
           Math.max(DRIFT, SHARE * flat(p.x, p.z, goal[0], goal[2])) ||
         (!this.steps.some(st => st.leg) && t - this.planned > REPLAN))
@@ -546,8 +556,7 @@ export class Bot {
     if (!fight) {
       this.pitch = 0;
       // The carrier turns at once: a swing would cost him the sprint as he runs for it.
-      const runs =
-        s.flags[1 - s.me.team].state === FLAG.CARRIED && s.flags[1 - s.me.team].by === s.me.id;
+      const runs = this.why === 'flag home';
       if (move.exact || runs) {
         this.look = this.aim = move.yaw;
         return this.evade(s, { keys: move.keys, yaw: move.yaw, pitch: 0 }, move.exact);
@@ -670,13 +679,40 @@ export class Bot {
     // A player is chased where he stands, or will stand: on the floor under him when he is in the
     // air, unless that is the void of a gap he is jumping.
     const holder = (f: FlagState): Vec3 | undefined => {
-      const h = others.find(o => o.id === f.by)?.state;
+      const h = others.find(o => o.id === f.by && !o.state.down)?.state;
       const y = h && floorAt(world, h.x, h.z, h.y + STEP_H);
       return h && [h.x, y! > h.y - HOVER ? y! : h.y, h.z];
     };
     if (theirs.state === FLAG.CARRIED && theirs.by === me.id) {
+      if (mine.state === FLAG.CARRIED) {
+        if (touches(p, home.base)) {
+          this.flagWait ||= this.ticks;
+        }
+        if (this.flagWait && this.ticks - this.flagWait >= FLAG_WAIT) {
+          const enemy = holder(mine);
+          if (enemy) {
+            this.why = 'chase carrier';
+            return enemy;
+          }
+        }
+      } else {
+        this.flagWait = 0;
+      }
       this.why = 'flag home';
       return home.base;
+    }
+    this.flagWait = 0;
+    const { roles, trouble } =
+      s.squad ?? squad(team, [{ ...me, bot: true }, ...others], flags, world);
+    const role = roles.get(me.id);
+    const enemy = role === 'chase' ? holder(mine) : undefined;
+    if (enemy) {
+      this.why = 'chase carrier';
+      return enemy;
+    }
+    if (role === 'return') {
+      this.why = 'return flag';
+      return [mine.x, mine.y, mine.z];
     }
     if (this.sortie.board) {
       this.why = 'station';
@@ -700,11 +736,8 @@ export class Bot {
       this.why = 'hunt';
       return at(prey.state);
     }
-    const { roles, trouble } =
-      s.squad ?? squad(team, [{ ...me, bot: true }, ...others], flags, world);
-    const role = roles.get(me.id);
-    // Low itself, a pack close by: mended first, but for the chase of our flag.
-    if (p.hp <= LOW && role !== 'chase') {
+    // Mend after urgent flag duties have been dealt with.
+    if (p.hp <= LOW) {
       let pack: Vec3 | undefined;
       let nearest = MEND;
       for (const q of s.packs ?? []) {
@@ -718,14 +751,10 @@ export class Bot {
         return pack;
       }
     }
-    const h = role === 'chase' ? holder(mine) : role === 'escort' ? holder(theirs) : undefined;
+    const h = role === 'escort' ? holder(theirs) : undefined;
     if (h) {
-      this.why = role === 'chase' ? 'chase carrier' : 'escort';
+      this.why = 'escort';
       return h;
-    }
-    if (role === 'return') {
-      this.why = 'return flag';
-      return [mine.x, mine.y, mine.z];
     }
     if (role === 'help' && trouble) {
       this.why = 'help';
@@ -821,12 +850,18 @@ export class Bot {
     return this.posts[this.post].at;
   }
 
+  private urgent(why = this.why): boolean {
+    return why === 'flag home' || why === 'chase carrier' || why === 'return flag';
+  }
+
   private plan(w: World, p: PlayerState, goal: Vec3): void {
     this.goal = goal;
+    this.plannedWhy = this.why;
     this.planned = this.ticks;
-    // The carrier goes home the quickest way: its route was for spreading the attack. Not a body
-    // that jumps unlike the marine the links were flown with: it keeps to the route it knows.
-    const direct = (this.why === 'flag home' && !this.steer) || this.why.endsWith(' rack');
+    // The carrier and the bots on urgent flag duty go the quickest way: routes are for spreading
+    // the attack. Not a body that jumps unlike the marine the links were flown with: it keeps to
+    // the route it knows.
+    const direct = (this.urgent() && !this.steer) || this.why.endsWith(' rack');
     const nav = navOf(w);
     // The route it prefers, one of the world's: the bots of a team spread over them.
     const prefer = direct ? -1 : this.id % nav.ways;
@@ -1138,9 +1173,13 @@ export class Bot {
   private fight(s: Sight, free: boolean, weapon: number): { keys: number } | undefined {
     const { me, others, world, flags } = s;
     const p = me.state;
-    // A route leg and a flag carrier keep their movement keys instead of fighting.
+    // A route leg and a carrier heading home keep their movement keys instead of fighting.
     const theirs = flags[1 - me.team];
-    if (!p.ground || !free || (theirs.state === FLAG.CARRIED && theirs.by === me.id)) {
+    if (
+      !p.ground ||
+      !free ||
+      (theirs.state === FLAG.CARRIED && theirs.by === me.id && this.why !== 'chase carrier')
+    ) {
       this.foe = -1;
       return undefined;
     }

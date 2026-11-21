@@ -228,8 +228,6 @@ const half: Brush[] = [
   box([19, 26, 222], [22, 27.4, 225], TEX.STEEL),
   box([42, 26, 222], [45, 27.4, 225], TEX.STEEL),
   box([29, 26, 229], [35, 27.1, 229.6], TEX.CONCRETE),
-  // The armoury, a red plinth 1.5 m high ahead of the spawns: the racks stand on it, so a run and a jump take them.
-  box([24.5, 26, 215], [35, 27.5, 219], TEX.STEEL, TEX.PAINT, RED),
   // The Spine (high route): roofs at 26 m, the viaduct with its wall to run along, a catch roof
   // under each gap and a ladder back up.
   roof(6, 164, 26, 201, 26, TEX.GLASS),
@@ -373,22 +371,22 @@ export const HIGHLINE: WorldDef = {
   lore: 'The towers of an old business district, closed for years, far above streets that still have traffic. Two crews of runners have taken the roofs. Three routes cross between them, and a fall takes you back to your tower.',
   brushes: [...half, ...half.map(flip), ...centre],
   teams: [
-    // The racks stand on the armoury, past the flag ahead of the spawns, 2.5 m apart.
+    // The basic weapons are by the base; the rifle and rail reward runs into contested territory.
     {
       base: [32, 26, 224],
       spawns: row(0, 236, 231),
-      rack: [30.75, 27.5, 217],
-      blade: [33.25, 27.5, 217],
-      rail: [28.25, 27.5, 217],
-      rifle: [25.75, 27.5, 217],
+      rack: [30.75, 26, 217],
+      blade: [38, 26, 217],
+      rail: [18, 26, 137],
+      rifle: [48, 19, 156],
     },
     {
       base: [32, 26, ZED - 224],
       spawns: row(Math.PI, ZED - 236, ZED - 231),
-      rack: [30.75, 27.5, ZED - 217],
-      blade: [33.25, 27.5, ZED - 217],
-      rail: [28.25, 27.5, ZED - 217],
-      rifle: [25.75, 27.5, ZED - 217],
+      rack: [30.75, 26, ZED - 217],
+      blade: [38, 26, ZED - 217],
+      rail: [18, 26, ZED - 137],
+      rifle: [48, 19, ZED - 156],
     },
   ],
   packs: [

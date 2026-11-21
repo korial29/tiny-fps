@@ -127,7 +127,7 @@ describe('MOON', () => {
     expect(count(TEX.BRICK) + count(TEX.WOOD) + count(TEX.LAVA)).toBe(0);
     const red = brushes.filter(b => b.tint === TEAM_TINT[0]);
     const blue = brushes.filter(b => b.tint === TEAM_TINT[1]);
-    expect(red.length).toBeGreaterThanOrEqual(3);
+    expect(red.length).toBeGreaterThanOrEqual(2);
     expect(red.length).toBe(blue.length);
     expect(red.every(b => b.min[2] > ZED / 2 + 15)).toBe(true);
     expect(blue.every(b => b.max[2] < ZED / 2 - 15)).toBe(true);
@@ -338,27 +338,16 @@ describe('MOON, racks and packs', () => {
     expect(problems(MOON)).toEqual([]);
   });
 
-  it('stands the four racks 2.5 m apart on the plinth, 1.5 m up, behind the dome', () => {
-    for (const [team, t] of teams.entries()) {
-      const racks = [t.rifle!, t.rail!, t.rack!, t.blade!];
-      for (const [k, r] of racks.entries()) {
-        expect(r[1]).toBe(1.5);
-        expect(
-          brushes.some(
-            b =>
-              b.max[1] === 1.5 &&
-              b.min[0] < r[0] &&
-              r[0] < b.max[0] &&
-              b.min[2] < r[2] &&
-              r[2] < b.max[2],
-          ),
-        ).toBe(true);
-        if (k) {
-          expect(r[0] - racks[k - 1][0]).toBeCloseTo(2.5, 6);
-        }
+  it('puts the basic weapons near the spawns and the rifle and rail on different approaches', () => {
+    for (const { base, spawns, rack, blade, rifle, rail } of teams) {
+      for (const point of [rack!, blade!]) {
+        expect(spawns.some(([x, , z]) => Math.hypot(x - point[0], z - point[2]) < 20)).toBe(true);
       }
-      // Between the spawns' rows and the dome's back (z 258).
-      expect(team ? ZED - racks[0][2] : racks[0][2]).toBeGreaterThan(258);
+      const distance = ([x, , z]: number[]) => Math.hypot(x - base[0], z - base[2]);
+      expect(distance(rifle!)).toBeGreaterThan(60);
+      expect(distance(rail!)).toBeGreaterThan(distance(rifle!));
+      expect(rifle![0]).toBeGreaterThan(base[0]);
+      expect(rail![0]).toBeLessThan(base[0]);
     }
   });
 
@@ -675,13 +664,18 @@ describe('MOON, flown with the real physics', () => {
     expect(s.low).toBe(0);
   });
 
-  it('takes a jump from every spawn to the racks on the plinth', () => {
-    for (const [team, { spawns, rack, blade, rail, rifle }] of teams.entries()) {
-      for (const at of [rack!, blade!, rail!, rifle!]) {
-        const [x, y, z, yaw] = spawns[0];
+  it('can reach the basic weapons directly from nearby spawns without jumping', () => {
+    for (const { spawns, rack, blade } of teams) {
+      for (const point of [rack!, blade!]) {
+        const [x, y, z, yaw] = spawns.reduce((near, spawn) =>
+          Math.hypot(spawn[0] - point[0], spawn[2] - point[2]) <
+          Math.hypot(near[0] - point[0], near[2] - point[2])
+            ? spawn
+            : near,
+        );
         const s = Sim.at(world).put(x, y, z, yaw);
-        const k = flyTo(s, at, 5);
-        expect(k, `team ${team}`).toBeGreaterThanOrEqual(0);
+        expect(s.goTo(point[0], point[2], { r: 0.5 })).toBeGreaterThan(0);
+        expect(s.p.y).toBe(point[1]);
       }
     }
   });
@@ -1460,7 +1454,7 @@ describe('MOON, the small relief', () => {
     let [speed, tilt, top] = [0, 0, 0];
     for (const [x, z, yaw] of [
       [14, 252, EAST],
-      [150, 262, WEST],
+      [150, 274, WEST],
       [205, 250, NORTH],
       [-20, 300, WEST],
       [-8, 20, SOUTH],

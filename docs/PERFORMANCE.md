@@ -28,10 +28,12 @@ not a 30% improvement across the runs. The GPU query medians varied from 4.1 to 
 Highline runs; this short, shared-GPU measurement does not establish a GPU improvement.
 
 The rack's rigid guns and the rigid part of a pickup vest are built into the GPU store at load;
-only their transforms and the vest's pulsing shield change in a frame. `place()` and `tri()` write
-directly into a frame's typed buffer, and armour corners keep the rest normals that do not change
+only their transforms and the vest's pulsing shield change in a frame. `tri()` writes directly into
+a frame's typed buffer, and armour corners keep the rest normals that do not change
 with the pose. The boxes remain on the CPU: moving each box to its own GPU draw made this scene
-slower. The own body's close skin must retain `relax()`: a direct move to the existing flesh shader
+slower. A smaller version without a separate typed-buffer path in `place()` measured 4.8 ms on
+Highline and 5.0 ms on Tranquility in the same headless test. The own body's close skin must retain
+`relax()`: a direct move to the existing flesh shader
 was fast but moved some vertices by 6 cm. Test fights and flight separately; this spawn view does
 not cover them.
 

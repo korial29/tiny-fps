@@ -1,6 +1,7 @@
 // Vertex format and the shapes built from it, shared by the renderer and the models. No DOM.
 import { TAU } from '../shared/physics';
 import { room } from './verts';
+import type { Verts } from './verts';
 import type { Out } from './verts';
 
 export type Vec3 = [number, number, number];
@@ -246,6 +247,53 @@ export const solid = (
  * so an ellipsoid made of a sphere shades like one. Written without allocations: a body is placed
  * a thousand vertices at a time.
  */
+const placeVerts = (
+  out: Verts,
+  src: number[],
+  eye: Vec3,
+  [r, u, f]: Vec3[],
+  off: Vec3,
+  k: number | Vec3,
+  tint: number[],
+) => {
+  const [kx, ky, kz] = typeof k == 'number' ? [k, k, k] : k;
+  const even = kx == ky && ky == kz;
+  const [rx, ry, rz, ux, uy, uz, fx, fy, fz] = [...r, ...u, ...f];
+  const ox = eye[0] + rx * off[0] + ux * off[1] + fx * off[2];
+  const oy = eye[1] + ry * off[0] + uy * off[1] + fy * off[2];
+  const oz = eye[2] + rz * off[0] + uz * off[1] + fz * off[2];
+  const dst = out.room(src.length);
+  let at = out.length;
+  for (let i = 0; i < src.length; i += STRIDE) {
+    const x = src[i] * kx,
+      y = src[i + 1] * ky,
+      z = src[i + 2] * kz;
+    let m = src[i + 3],
+      n = src[i + 4],
+      w = src[i + 5];
+    if (!even) {
+      m /= kx;
+      n /= ky;
+      w /= kz;
+      const h = Math.sqrt(m * m + n * n + w * w) || 1;
+      m /= h;
+      n /= h;
+      w /= h;
+    }
+    dst[at++] = ox + rx * x + ux * y - fx * z;
+    dst[at++] = oy + ry * x + uy * y - fy * z;
+    dst[at++] = oz + rz * x + uz * y - fz * z;
+    dst[at++] = rx * m + ux * n - fx * w;
+    dst[at++] = ry * m + uy * n - fy * w;
+    dst[at++] = rz * m + uz * n - fz * w;
+    dst[at++] = src[i + 6] * tint[0];
+    dst[at++] = src[i + 7] * tint[1];
+    dst[at++] = src[i + 8];
+    dst[at++] = src[i + 9] * tint[2];
+  }
+  out.length = at;
+};
+
 export const place = (
   out: Out,
   src: number[],
@@ -255,6 +303,10 @@ export const place = (
   k: number | Vec3,
   tint: number[] = [1, 1, 1],
 ) => {
+  if (!Array.isArray(out)) {
+    placeVerts(out, src, eye, [r, u, f], off, k, tint);
+    return;
+  }
   const [kx, ky, kz] = typeof k == 'number' ? [k, k, k] : k;
   const even = kx == ky && ky == kz;
   const [rx, ry, rz, ux, uy, uz, fx, fy, fz] = [...r, ...u, ...f];

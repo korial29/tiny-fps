@@ -16,6 +16,27 @@ percent of its tick. Lag in this game comes from the client's frame.
 
 ## Where the time went
 
+### Headless Chrome, 2026-11-21
+
+On an Apple M4 Pro, a local 4 v 4 (one person and seven bots), stationary at the spawn, measured
+for 10 seconds after warm-up in Chrome headless at a 1200 by 2029 CSS pixel viewport and DPR 1.
+The game's animation callback is timed on the CPU, and WebGL timer queries measure its GPU work.
+The baseline is a separate checkout of the unmodified code. On Highline the callback's median and
+90th percentile fell from 6.5 and 6.8 ms to 4.9 and 5.2 ms (two after runs agreed), a 25% median
+reduction. On Tranquility one run fell from 6.1 to 4.9 ms; another after run was 5.7 ms. These are
+not a 30% improvement across the runs. The GPU query medians varied from 4.1 to 4.9 ms across the
+Highline runs; this short, shared-GPU measurement does not establish a GPU improvement.
+
+The rack's rigid guns and the rigid part of a pickup vest are built into the GPU store at load;
+only their transforms and the vest's pulsing shield change in a frame. `tri()` writes directly into
+a frame's typed buffer, and armour corners keep the rest normals that do not change
+with the pose. The boxes remain on the CPU: moving each box to its own GPU draw made this scene
+slower. A smaller version without a separate typed-buffer path in `place()` measured 4.8 ms on
+Highline and 5.0 ms on Tranquility in the same headless test. The own body's close skin must retain
+`relax()`: a direct move to the existing flesh shader
+was fast but moved some vertices by 6 cm. Test fights and flight separately; this spawn view does
+not cover them.
+
 Every runner, the own body and the vehicles are rebuilt on the CPU each frame: the skin is skinned
 in JavaScript (`skin()`), the armour is cut out of it (`armor()`), then hands, pads, guard, helmet,
 guns are placed vertex by vertex into the frame's vertices (`v` in `Renderer.frame()`), which are

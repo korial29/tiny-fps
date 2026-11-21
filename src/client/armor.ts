@@ -736,6 +736,7 @@ export interface Recipe {
 interface Shared {
   u: Int32Array;
   x: Int32Array;
+  rest: Float64Array;
 }
 export const CORNER = 11;
 export const TRI = 6;
@@ -1898,7 +1899,18 @@ const shared = (c: number[], t: number[], list: Int32Array): Shared => {
       x[n * 3 + j] = k;
     }
   }
-  return { u: Int32Array.from(u), x };
+  const rest = new Float64Array((u.length / 2) * 3);
+  for (let k = 0; k < u.length; k += 2) {
+    const ci = u[k];
+    if (c[ci + 5] || c[ci + 6] || c[ci + 7]) {
+      const l = Math.sqrt(c[ci + 8] ** 2 + c[ci + 9] ** 2 + c[ci + 10] ** 2) || 1;
+      const o = (k / 2) * 3;
+      rest[o] = c[ci + 8] / l;
+      rest[o + 1] = c[ci + 9] / l;
+      rest[o + 2] = c[ci + 10] / l;
+    }
+  }
+  return { u: Int32Array.from(u), x, rest };
 };
 
 /** Each distinct corner's place and normal, six numbers, from frame to frame. */
@@ -1917,7 +1929,11 @@ export const armor = (
   const astro = !plate && !ninja;
   const [r, list] = wornOf(s, fine, ninja, astro, bare);
   const { c, t } = r;
-  const { u, x } = ((r.s ??= [])[+ninja | (+astro << 1) | (+bare << 2)] ??= shared(c, t, list));
+  const { u, x, rest } = ((r.s ??= [])[+ninja | (+astro << 1) | (+bare << 2)] ??= shared(
+    c,
+    t,
+    list,
+  ));
   if (Q.length < u.length * 3) {
     Q = new Float64Array(u.length * 3);
   }
@@ -1960,10 +1976,9 @@ export const armor = (
     let gz = c[ci + 7];
     if (gx || gy || gz) {
       // The swell's slope, turned as the normal turned from rest to drawn (Rodrigues), tilts it.
-      const rl = Math.sqrt(c[ci + 8] ** 2 + c[ci + 9] ** 2 + c[ci + 10] ** 2) || 1;
-      const rx = c[ci + 8] / rl;
-      const ry = c[ci + 9] / rl;
-      const rz = c[ci + 10] / rl;
+      const rx = rest[(k / 2) * 3];
+      const ry = rest[(k / 2) * 3 + 1];
+      const rz = rest[(k / 2) * 3 + 2];
       const kx = ry * nz - rz * ny;
       const ky = rz * nx - rx * nz;
       const kz = rx * ny - ry * nx;

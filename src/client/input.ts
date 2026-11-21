@@ -128,6 +128,8 @@ export interface Controls {
    * the other guns).
    */
   take(): number;
+  /** The next step's keys without consuming queued presses, for the local visual preview. */
+  peek(): number;
   /** One live step of the own player, its state before and after: a katana or a rail gun picked up is chosen, losing every weapon chooses the gun. */
   track(was?: PlayerState, now?: PlayerState): void;
   /** The canvas holds the pointer lock. */
@@ -173,24 +175,30 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     beast: false,
     vision: 0,
     hunter: false,
-    take() {
+    peek() {
       const moved = pending ? dashKeys(c.keys, pending) : c.keys;
       if (c.beast) {
-        const keys =
+        return (
           moved |
           (nade || sting || stinging ? KEY.BLADE : 0) |
-          (twist ? KEY.BLADE | KEY.SPECIAL : 0);
-        pending = 0;
-        nade = sting = twist = false;
-        return keys;
+          (twist ? KEY.BLADE | KEY.SPECIAL : 0)
+        );
       }
       const keys =
         moved |
         (nade ? KEY.SPECIAL : 0) |
         (special && !c.pilot && c.weapon != WEAPON.RIFLE ? KEY.FIRE | KEY.SPECIAL : 0);
-      pending = 0;
-      nade = special = sting = false;
       return withWeapon(keys, c.weapon);
+    },
+    take() {
+      const keys = c.peek();
+      pending = 0;
+      if (c.beast) {
+        nade = sting = twist = false;
+      } else {
+        nade = special = sting = false;
+      }
+      return keys;
     },
     track: (was, now) => {
       c.weapon = chosen(c.weapon, was, now);

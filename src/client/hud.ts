@@ -700,6 +700,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   );
   const one = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
   const [muted, menu] = ['h5', 'aside'].map(t => one(t));
+  let lastVitals: Parameters<Hud['vitals']> | undefined;
   let mags = [GUN_MAG, RAIL_CAP, RIFLE_CLIP];
   const [name, tag, lore, status] = ['h3', 'address small', 'address>span', 'header strong'].map(
     t => one(`aside ${t}`),
@@ -842,6 +843,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const plates = pips.splice(HP_MAX);
   /** As many health pips as `max`, before the armour's. */
   const pipsOf = (max: number) => {
+    lastVitals = undefined;
     while (pips.length < max) {
       const li = document.createElement('li');
       plates[0].before(li);
@@ -863,6 +865,11 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const vignette = one('u');
   const light = one('sup');
   const rim = one('del');
+  const mission = one('var');
+  const vision = one('i.hv');
+  const aim = one('q');
+  const [panel, warn] = screen.querySelectorAll<HTMLElement>('dfn');
+  const bars = screen.querySelectorAll<HTMLElement>('tt');
   const end = one('section');
   const [title, score, next] = ['h6', 'strong', 'span'].map(t =>
     end.querySelector<HTMLElement>(t)!,
@@ -890,7 +897,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       if (menu.hidden && text && started) {
         view('pause');
       }
-      menu.hidden = !text;
+      menu.toggleAttribute('hidden', !text);
       set(name, map);
       set(tag, kind);
       set(lore, story);
@@ -907,11 +914,14 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       chose = pick;
       return groups[0].closest('fieldset')!.querySelector('canvas')!;
     },
-    magazines: sizes => (mags = sizes),
+    magazines(sizes) {
+      mags = sizes;
+      lastVitals = undefined;
+    },
     life: pipsOf,
     mute: on => (muted.hidden = !on),
     match(m, who) {
-      bar.hidden = false;
+      bar.toggleAttribute('hidden', false);
       set(red, `${TEAM_NAME[0].toUpperCase()} ${m.score[0]}`);
       set(blue, `${m.score[1]} ${TEAM_NAME[1].toUpperCase()}`);
       set(time, m.over ? 'END' : clock(m.clock));
@@ -946,15 +956,13 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       });
     },
     mission(text = '', hot = false) {
-      const el = one('var');
-      el.hidden = !text;
-      el.classList.toggle('hot', hot);
-      set(el, text);
+      mission.toggleAttribute('hidden', !text);
+      mission.classList.toggle('hot', hot);
+      set(mission, text);
     },
     hunterVision(text = '') {
-      const el = one('i.hv');
-      el.hidden = !text;
-      set(el, text);
+      vision.toggleAttribute('hidden', !text);
+      set(vision, text);
     },
     visor: on => {
       rim.hidden = !on;
@@ -975,21 +983,26 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         light.style.setProperty('--w', v && `${(100 * k).toFixed(1)}%`);
       }
     },
-    vitals(
-      hp,
-      rounds,
-      blade = false,
-      wield = false,
-      rail = -1,
-      railed = false,
-      loaded,
-      swapping = false,
-      rifle = -1,
-      rifled = false,
-      nades = 0,
-      armor = 0,
-      fists = false,
-    ) {
+    vitals(...values) {
+      if (lastVitals?.length === values.length && values.every((v, i) => v === lastVitals![i])) {
+        return;
+      }
+      lastVitals = values;
+      const [
+        hp,
+        rounds,
+        blade = false,
+        wield = false,
+        rail = -1,
+        railed = false,
+        loaded,
+        swapping = false,
+        rifle = -1,
+        rifled = false,
+        nades = 0,
+        armor = 0,
+        fists = false,
+      ] = values;
       pips.forEach((li, i) => li.classList.toggle('e', i >= hp));
       plates.forEach((li, i) => li.classList.toggle('e', i >= armor));
       life.classList.toggle('low', hp <= 1);
@@ -1038,7 +1051,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       }
     },
     face(n) {
-      frame.hidden = n < 0;
+      frame.toggleAttribute('hidden', n < 0);
       if (n < 0 || n == shown) {
         return;
       }
@@ -1057,11 +1070,11 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       ticker = setTimeout(() => (marker.hidden = true), HIT_MS);
     },
     duel(lead) {
-      rope.hidden = lead === undefined;
+      rope.toggleAttribute('hidden', lead === undefined);
       knot.style.left = `${50 + 50 * Math.max(-1, Math.min(1, lead ?? 0))}%`;
     },
     down(level, left, what = 'DOWN') {
-      fallen.hidden = level < 0.02;
+      fallen.toggleAttribute('hidden', level < 0.02);
       fallen.style.opacity = `${Math.min(level, 1)}`;
       set(fallen, fallen.hidden ? '' : `${what}\nBack in ${left.toFixed(1)}`);
     },
@@ -1144,28 +1157,25 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       setTimeout(() => li.remove(), FEED_MS);
     },
     aim(at) {
-      const q = one('q');
-      q.hidden = !at;
+      aim.toggleAttribute('hidden', !at);
       if (at) {
-        q.style.left = `${at[0] * 100}%`;
-        q.style.top = `${at[1] * 100}%`;
+        aim.style.left = `${at[0] * 100}%`;
+        aim.style.top = `${at[1] * 100}%`;
       }
     },
     ship(s) {
-      const [panel, warn] = screen.querySelectorAll<HTMLElement>('dfn');
-      panel.hidden = !s;
+      panel.toggleAttribute('hidden', !s);
       const w = s ? warning(s.up, s.out) : '';
-      warn.hidden = !w;
+      warn.toggleAttribute('hidden', !w);
       set(warn, w);
       if (s) {
         set(panel, `MISSILES ${s.nades}/${SHIP.MISSILES}  ·  ALT ${height(s.alt)}`);
       }
     },
     hull(own, near) {
-      const bars = screen.querySelectorAll<HTMLElement>('tt');
       [own, near?.hp].forEach((hp, i) => {
         const bar = bars[i];
-        bar.hidden = hp === undefined;
+        bar.toggleAttribute('hidden', hp === undefined);
         if (hp !== undefined) {
           // Green, amber from 6 down, red from 3.
           bar.style.setProperty('--a', `${Math.max(0, Math.min(1, hp / VEHICLE.HP)) * 100}%`);
@@ -1178,10 +1188,10 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       }
     },
     rover(what, v) {
-      prompt.hidden = !what;
+      prompt.toggleAttribute('hidden', !what);
       prompt.classList.toggle('g', what == GLORY_ACT);
       set(act, what);
-      meter.hidden = v === undefined;
+      meter.toggleAttribute('hidden', v === undefined);
       set(speed, `${v ?? 0}`);
       screen.classList.toggle('v', v !== undefined);
     },
@@ -1189,7 +1199,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       screen.classList.toggle('o', on);
     },
     end(sum, left) {
-      end.hidden = !sum;
+      end.toggleAttribute('hidden', !sum);
       if (!sum) {
         built = undefined;
         return;

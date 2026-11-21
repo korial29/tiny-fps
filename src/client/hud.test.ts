@@ -64,6 +64,28 @@ describe('createHud', () => {
   const q = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
   const [muted, menu] = ['h5', 'aside'].map(t => () => q(t));
 
+  it('leaves a stable HUD alone and refreshes the same vitals after a kit change', () => {
+    const frame = () => {
+      hud.vitals(3, 42, false, false, -1, false, 12);
+      hud.ship();
+      hud.aim();
+      hud.hull();
+      hud.mission();
+    };
+    frame();
+    const observer = new MutationObserver(() => {});
+    observer.observe(screen, { subtree: true, attributes: true, childList: true });
+    frame();
+    expect(observer.takeRecords()).toHaveLength(0);
+    observer.disconnect();
+
+    hud.life(XENO_HP);
+    hud.magazines([10, 10, 10]);
+    frame();
+    expect(screen.querySelectorAll('ul li.e:not(.a)')).toHaveLength(XENO_HP - 3);
+    expect(q('dl span').textContent).toBe('▮▮▮\n30');
+  });
+
   describe('title screen', () => {
     const show = (map = HIGHLINE) => hud.title('Click to play', map.name!, map.tag, map.lore);
     const tabs = () => [...screen.querySelectorAll<HTMLElement>('[role=tab]')];

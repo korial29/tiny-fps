@@ -881,6 +881,12 @@ interface Target {
   h: number;
 }
 
+interface FrameView {
+  width: number;
+  height: number;
+  now: number;
+}
+
 export interface Renderer {
   /**
    * Draws one frame: the sky, the brushes and the others as seen from eye, then the own `body` over
@@ -906,6 +912,7 @@ export interface Renderer {
     self?: PlayerState,
     /** Adds what else moves in the map (the doors): drawn lit, casting shadows, with the other players. */
     more?: (v: Out) => void,
+    view?: FrameView,
   ): void;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
@@ -988,7 +995,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const spins: number[] = [];
   const was: [number, number][] = [];
   const dust = createDust();
-  let clock = performance.now() / 1000;
+  let clock: number | undefined;
   const gl = canvas.getContext('webgl2', { antialias: false, depth: false });
   if (!gl) {
     throw new Error('WebGL2 is not available');
@@ -1374,8 +1381,23 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   const api: Renderer = {
-    frame(eye, yaw, pitch, others, colors, fx, lights, body, ctf, tracer, rovers = [], self, more) {
-      const [w, h] = size();
+    frame(
+      eye,
+      yaw,
+      pitch,
+      others,
+      colors,
+      fx,
+      lights,
+      body,
+      ctf,
+      tracer,
+      rovers = [],
+      self,
+      more,
+      view,
+    ) {
+      const [w, h] = view ? backing(view.width, view.height, devicePixelRatio) : size();
       if (lost || !w || !h) {
         return;
       }
@@ -1391,9 +1413,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       // The frame's vertices, into the store the last frame left.
       v.length = 0;
       pieces.length = 0;
-      const now = performance.now() / 1000;
-      const dt = Math.min(0.1, now - clock);
-      clock = now;
+      const now = (view?.now ?? performance.now()) / 1000;
+      // Radio and menu portraits share the renderer, but have their own animation.
+      const dt = posing ? 0 : Math.max(0, Math.min(0.1, now - (clock ?? now)));
+      if (!posing) {
+        clock = now;
+      }
       // The own player, seen from outside his head, is one of the crowd.
       const crowd = self ? [...others, self] : others;
       animate(runners, crowd, dt, world, tracer, rovers, builds, looks);
@@ -1559,7 +1584,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       uni('uniformMatrix4fv', 'm', false, vp);
       uni('uniformMatrix4fv', 'W', false, sunM);
       uni('uniform3fv', 'E', eye);
-      uni('uniform1f', 'T', performance.now() / 1000);
+      uni('uniform1f', 'T', now);
       uni('uniform1f', 'Z', 1);
       // Xenomorph vision uses enemy positions to reveal them through walls.
       const activeHunterMode = seeing ? 0 : hunterMode;

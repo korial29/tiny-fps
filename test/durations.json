@@ -53,6 +53,7 @@
   "src/client/mission.test.ts": 0.1,
   "src/client/moonbase.test.ts": 0.3,
   "src/client/moonscape.test.ts": 8.2,
+  "src/client/pacing.test.ts": 0,
   "src/client/pack.test.ts": 0.1,
   "src/client/pads.test.ts": 0.5,
   "src/client/predict.arms.test.ts": 10.9,

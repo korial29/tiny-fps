@@ -10,6 +10,7 @@ import { createEffects } from './effects';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
 import { STRIDE } from './mesh';
+import { filled } from './store';
 import { LAYERS } from './textures';
 import { PORTRAIT, MAX_PIXELS, SHADOW, backing, createRenderer, scenery } from './render';
 import type * as Traffic from './traffic';
@@ -403,6 +404,18 @@ describe('createRenderer', () => {
     ]);
     expect(calls.filter(c => c[0] == 'enable').map(c => c[1])).not.toContain(K('BLEND'));
     expect(calls.filter(c => c[0] == 'depthMask')).toHaveLength(0);
+  });
+
+  it('does not build Hunter outfit meshes when the first Hunter comes close', () => {
+    const rd = createRenderer(canvas, ROOM);
+    const p = { ...spawn(1, ROOM, 0, 0), ...STILL, ammo: -1 };
+    const eye: [number, number, number] = [p.x, p.y + 1.6, p.z + 2];
+    const draw = () => rd.frame(eye, 0, 0, [p], new Map(), createEffects(), []);
+    draw(); // Warm the regular runner's pieces shared with the Hunter.
+    const before = filled;
+    rd.wear(new Map(), new Map([[p.id, { role: ROLE.HUNTER }]]));
+    draw();
+    expect(filled).toBe(before);
   });
 
   it('draws the map and the sky with its program, what moves with the bodies’, each value of a uniform sent to both', () => {

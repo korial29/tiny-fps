@@ -42,7 +42,7 @@ import { mouths, rooms } from '../shared/station';
 import { HEAVENS, heavens, moonscape } from './moonscape';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
-import { battery, cell, kit, racks, vest } from './props';
+import { battery, cell, kit, racks, rackWeapon, vest, vestMesh } from './props';
 import { PACK } from './pack';
 import { JOINT, JOINTS, turn } from './rig';
 import { craft } from './craft';
@@ -981,6 +981,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   [0, 1, 3].forEach(lod =>
     partsOf(lod).forEach(({ key, make }) => mesh(key, o => make(o, ORIGIN, ID))),
   );
+  [0, 2, 3].forEach(rackWeapon);
+  vestMesh();
   /** Each rover's wheels: the angle they have rolled to, and where the rover was last frame. */
   const spins: number[] = [];
   const was: [number, number][] = [];
@@ -1400,11 +1402,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       fall(dt);
       drawDrops(v);
       ctf?.bases.forEach((at, team) => base(v, at, teamRgb(team), now));
-      racks(v, ctf?.racks, ctf?.blades, now, ctf?.rails, ctf?.rifles);
+      racks(v, ctf?.racks, ctf?.blades, now, ctf?.rails, ctf?.rifles, pieces);
       ctf?.packs?.forEach(at => kit(v, at, now));
       ctf?.ammo?.forEach(at => cell(v, at, now));
       ctf?.cells?.forEach(at => battery(v, at, now));
-      ctf?.vests?.forEach(at => vest(v, at, now));
+      ctf?.vests?.forEach(at => vest(v, at, now, pieces));
       more?.(v);
       // The rovers, then the ships: of each kind the first half of the map's are red's, the others
       // blue's. The wheels turn by the way the rover went along its nose since the last frame.

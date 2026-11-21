@@ -9,6 +9,8 @@ import { GILT, GLOSS, STRIDE, basis, dim, place, segment, solid } from './mesh';
 import type { Vec3 } from './mesh';
 import { room } from './verts';
 import type { Out } from './verts';
+import { mesh } from './store';
+import type { Pieces } from './store';
 
 /**
  * The packs of `all` whose bit is set in `mask`, if any: the ones that are there to take. The bits
@@ -22,7 +24,18 @@ export const packsOf = (all: readonly Vec3[] = [], mask = 0, from = 0): Vec3[] =
  * the weapon, and the weapon over it: the gun, or by `kind` the katana (1), crackling, the rail
  * gun (2) or the laser rifle (3).
  */
-export const rack = (out: Out, at: Vec3, rgb: number[], t: number, kind = 0) => {
+/** A rack's rotating rigid weapon, made once in model space. */
+export const rackWeapon = (kind: number) =>
+  mesh(`rack-weapon-${kind}`, out => {
+    const v = [gun, gun, railgun, rifle][kind](0);
+    const a = room(out, v.length);
+    for (let i = 0; i < v.length; i++) {
+      a[i] = v[i];
+    }
+    out.length = v.length;
+  });
+
+export const rack = (out: Out, at: Vec3, rgb: number[], t: number, kind = 0, pieces?: Pieces) => {
   const dark = rgb.map(c => c * 0.45);
   segment(
     out,
@@ -44,6 +57,14 @@ export const rack = (out: Out, at: Vec3, rgb: number[], t: number, kind = 0) => 
   if (kind == 1) {
     // Lying level, turning about its middle, 42 cm ahead of the grip.
     sword(out, over.map((v, i) => v - ax[2][i] * 0.42) as Vec3, ax, 0, t);
+  } else if (pieces) {
+    const half = t * 0.4;
+    pieces.push({
+      m: rackWeapon(kind),
+      q: [0, Math.sin(half), 0, Math.cos(half)],
+      t: over,
+      k: kind == 3 ? 1.2 : 1.5,
+    });
   } else {
     place(out, [gun, gun, railgun, rifle][kind](0), over, ax, [0, 0, 0], kind == 3 ? 1.2 : 1.5);
   }
@@ -57,9 +78,10 @@ export const racks = (
   t = 0,
   rails: readonly (Vec3 | undefined)[] = [],
   rifles: readonly (Vec3 | undefined)[] = [],
+  pieces?: Pieces,
 ) =>
   [guns, blades, rails, rifles].forEach((list, kind) =>
-    list.forEach((at, team) => at && rack(out, at, teamRgb(team), t, kind)),
+    list.forEach((at, team) => at && rack(out, at, teamRgb(team), t, kind, pieces)),
   );
 
 /** The faces of a cube: the normal and the two edges. */
@@ -232,6 +254,7 @@ const shellAt = (a: number, t: number, k = 1): Vec3 => {
 };
 
 let cuirass: number[] | undefined;
+let shield: number[] = [];
 
 /** The outward normal of the cuirass at the angle a and the share t of the way up. */
 const shellNormal = (a: number, t: number): Vec3 => {
@@ -313,19 +336,31 @@ const armour = (): number[] => {
   for (let i = from; i < out.length; i += STRIDE) {
     out[i + 8] = -2;
   }
+  shield = out.slice(from);
   return (cuirass = out);
 };
 
+/** Keep the rigid shell on the GPU; the small shield still pulses in the frame. */
+export const vestMesh = () =>
+  mesh('pickup-vest', out => {
+    const model = armour();
+    const count = model.length - shield.length;
+    const a = room(out, count);
+    for (let i = 0; i < count; i++) {
+      a[i] = model[i];
+    }
+    out.length = count;
+  });
+
 /** An armour at `at`: a green cuirass turning and bobbing over it, its shield pulsing. */
-export const vest = (out: Out, at: Vec3, t: number) => {
+export const vest = (out: Out, at: Vec3, t: number, pieces?: Pieces) => {
+  const model = armour();
+  const pos: Vec3 = [at[0], at[1] + 0.6 + 0.07 * Math.sin(t * 2.2 + at[0]), at[2]];
+  if (pieces) {
+    const half = t * 0.45;
+    pieces.push({ m: vestMesh(), q: [0, Math.sin(half), 0, Math.cos(half)], t: pos, k: 1 });
+  }
   const from = out.length;
-  place(
-    out,
-    armour(),
-    [at[0], at[1] + 0.6 + 0.07 * Math.sin(t * 2.2 + at[0]), at[2]],
-    basis(t * 0.9, 0),
-    [0, 0, 0],
-    1,
-  );
+  place(out, pieces ? shield : model, pos, basis(t * 0.9, 0), [0, 0, 0], 1);
   dim(out, from, 0.75 + 0.25 * Math.sin(t * 3));
 };

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Verts } from './verts';
 import { DETAIL, STRIDE, aim, basis, capsule, place, segment, smooth, solid } from './mesh';
 import type { Vec3 } from './mesh';
 
@@ -6,6 +7,17 @@ import type { Vec3 } from './mesh';
 const vertex = [1, 2, -3, 1, 0, 0, 0.5, 0.25, -1, 1];
 
 describe('place', () => {
+  it('writes exactly the same vertices to the frame buffer and a plain array', () => {
+    for (const scale of [0.5, [2, 1, 3] as Vec3]) {
+      const plain = [123];
+      const frame = new Verts();
+      frame.push(123);
+      const axes = basis(0.7, -0.4, 0.2);
+      place(plain, [...vertex, ...vertex], [3, 5, 7], axes, [1, 2, 3], scale, [0.3, 0.6, 0.9]);
+      place(frame, [...vertex, ...vertex], [3, 5, 7], axes, [1, 2, 3], scale, [0.3, 0.6, 0.9]);
+      expect(Array.from(frame.a.subarray(0, frame.length))).toEqual(plain);
+    }
+  });
   it('moves a vertex along the axes, with z running backward', () => {
     const out: number[] = [];
     place(out, vertex, [10, 0, 0], basis(0, 0), [0, 0, 0], 1);

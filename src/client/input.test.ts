@@ -310,6 +310,17 @@ describe('createInput', () => {
       ['KeyD', 'ArrowRight', KEY.RIGHT],
     ];
 
+    it('previews a queued dash without consuming it', () => {
+      make();
+      lock(true);
+      tap('KeyW');
+      tap('KeyW', 100);
+      expect(ctl.peek()).toBe(KEY.FORWARD | KEY.DASH);
+      expect(ctl.peek()).toBe(KEY.FORWARD | KEY.DASH);
+      expect(ctl.take()).toBe(KEY.FORWARD | KEY.DASH);
+      expect(ctl.take()).toBe(0);
+    });
+
     it.each(
       DIRS.flatMap(
         ([wasd, arrow, bit]) =>

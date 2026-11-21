@@ -106,6 +106,27 @@ export const tri = (out: Out, a: Vec3, b: Vec3, c: Vec3, [r, g, bl]: number[]) =
   const [vx, vy, vz] = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
   const n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
   const l = Math.hypot(...n) || 1;
+  if (!Array.isArray(out)) {
+    const dst = out.room(3 * STRIDE);
+    let i = out.length;
+    const x = n[0] / l,
+      y = n[1] / l,
+      z = n[2] / l;
+    for (const p of [a, b, c]) {
+      dst[i++] = p[0];
+      dst[i++] = p[1];
+      dst[i++] = p[2];
+      dst[i++] = x;
+      dst[i++] = y;
+      dst[i++] = z;
+      dst[i++] = r;
+      dst[i++] = g;
+      dst[i++] = -1;
+      dst[i++] = bl;
+    }
+    out.length = i;
+    return;
+  }
   for (const p of [a, b, c]) {
     out.push(...p, n[0] / l, n[1] / l, n[2] / l, r, g, -1, bl);
   }

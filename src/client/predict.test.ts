@@ -26,6 +26,7 @@ import type { WorldDef } from '../shared/world';
 import * as lines from '../../test/lines';
 import { loaded } from '../../test/loaded';
 import { Sim } from '../../test/pilot';
+import { yard } from '../../test/yard';
 import { createPredictor } from './predict';
 import { IDLE } from '../../test/teams';
 
@@ -74,6 +75,51 @@ const fell = (p: PlayerState) =>
   });
 /** The way a tackler of these tests goes: north-east. */
 const TACKLE_WAY = [0.6, -0.8];
+
+describe('the local visual preview', () => {
+  it('draws from the latest tick toward the next without changing prediction, inputs or events', () => {
+    const pred = createPredictor(world);
+    pred.you(1);
+    pred.snapshot(snapshot(1, snapPlayer(1)), 0);
+    pred.step(fwd, STEP);
+    const current = pred.me(1)!;
+    const previous = pred.me(0)!;
+    expect(pred.view(0, fwd)!.z).toBe(current.z);
+    expect(current.z).toBeLessThan(previous.z);
+    const half = pred.view(0.5, fwd)!;
+    const end = pred.view(1, fwd)!;
+    expect(end.z).toBeLessThan(current.z);
+    expect(half.z).toBeCloseTo((current.z + end.z) / 2, 8);
+    expect(pred.me(1)).toEqual(current);
+    expect(pred.events().ev).toBe(0);
+    const input = pred.step(fwd, 2 * STEP);
+    expect(input.seq).toBe(1);
+    expect(pred.me(1)!.z).toBeCloseTo(end.z, 8);
+  });
+
+  it('previews a jump without committing its event or changing the next simulated input', () => {
+    const pred = createPredictor(world);
+    pred.you(1);
+    pred.snapshot(snapshot(1, snapPlayer(1, { vz: 0 })), 0);
+    const current = pred.me(1)!;
+    const jump = { ...fwd, keys: KEY.JUMP };
+    expect(pred.view(1, jump)!.y).toBeGreaterThan(current.y);
+    expect(pred.events().ev).toBe(0);
+    expect(pred.me(1)).toEqual(current);
+    expect(pred.step(jump, STEP).keys).toBe(KEY.JUMP);
+    expect(pred.events().ev & EV.JUMP).toBe(EV.JUMP);
+  });
+
+  it('does not preview through a wall', () => {
+    const pred = createPredictor(yard);
+    pred.you(1);
+    pred.snapshot(snapshot(1, snapPlayer(1, { x: 99.58, y: 0, z: 10, vx: RUN_SPEED, vz: 0 })), 0);
+    const intoWall = { keys: KEY.FORWARD, yaw: -Math.PI / 2, pitch: 0 };
+    expect(pred.view(1, intoWall)!.x).toBeLessThanOrEqual(99.6);
+    pred.step(intoWall, STEP);
+    expect(pred.me(1)!.x).toBeLessThanOrEqual(99.6);
+  });
+});
 
 describe('prediction against the room', () => {
   /**

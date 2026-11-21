@@ -3,6 +3,7 @@ import { PACK_BITS, RACK_R } from '../shared/constants';
 import { GILT, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { battery, cell, kit, packsOf, rack, racks, vest } from './props';
+import { apart, unfolded } from '../../test/store';
 
 const PACKS: Vec3[] = [
   [1, 0, 0],
@@ -132,6 +133,16 @@ describe('an armour', () => {
     expect(glow.length).toBeGreaterThan(0);
     expect(glow.every(g => g[7] > 1)).toBe(true);
   });
+
+  it('places its cached shell like the CPU model and keeps the pulsing shield', () => {
+    for (const t of [0, 1.3, 4.2]) {
+      const cpu: number[] = [];
+      vest(cpu, [10, 5, 20], t);
+      const [gpu, n] = unfolded((out, pieces) => vest(out, [10, 5, 20], t, pieces));
+      expect(n).toBe(1);
+      expect(Math.max(...apart(gpu, cpu))).toBeLessThan(1e-4);
+    }
+  });
 });
 
 describe('an ammo pack', () => {
@@ -192,6 +203,20 @@ describe('a rack', () => {
   it('is cheap', () => {
     expect(v.length).toBeLessThan(2300);
   });
+});
+
+it('keeps rotating rack weapons on the GPU without changing their placement', () => {
+  for (const kind of [0, 2, 3]) {
+    for (const t of [0, 1.3, 4.2]) {
+      const cpu: number[] = [];
+      rack(cpu, [4, 3, 8], [1, 0.2, 0.2], t, kind);
+      const [gpu, n] = unfolded((out, pieces) =>
+        rack(out, [4, 3, 8], [1, 0.2, 0.2], t, kind, pieces),
+      );
+      expect(n).toBe(1);
+      expect(Math.max(...apart(gpu, cpu))).toBeLessThan(1e-4);
+    }
+  }
 });
 
 describe('a katana rack', () => {

@@ -813,7 +813,7 @@ describe('MOON, the relief round the arena', () => {
         src.match(/\*\*|Math\.(?!imul|sqrt|abs|min|max|floor|ceil|round|PI)\w+/g) ?? [],
       ).toEqual([]);
     }
-    expect(checksum(relief)).toBe(1922351503);
+    expect(checksum(relief)).toBe(1234479133);
   });
 
   it('keeps every spawn, flag base, rack and pack on flat ground: the relief is exactly 0 under each', () => {
@@ -1454,7 +1454,7 @@ describe('MOON, the small relief', () => {
     let [speed, tilt, top] = [0, 0, 0];
     for (const [x, z, yaw] of [
       [14, 252, EAST],
-      [150, 274, WEST],
+      [150, 262, WEST],
       [205, 250, NORTH],
       [-20, 300, WEST],
       [-8, 20, SOUTH],

@@ -379,6 +379,8 @@ const at = (x: number, z: number): number => {
       ((w + crest - Math.sqrt((w - crest) * (w - crest) + soft * soft)) / 2) *
       (1 - sm((k - 1.3) / 0.35));
   }
+  // Soften the ridge where rovers can now cross behind the dome.
+  h *= 1 - 0.55 * sm((16 - far(x - 44, z - 122)) / 10);
   // The Bowl's floor stays 5 m over the kill floor.
   return Math.max(h, -14.5) + w;
 };

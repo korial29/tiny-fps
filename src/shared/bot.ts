@@ -9,6 +9,8 @@ import {
   JUMP_SPEED,
   PLASMA_SPEED,
   PLAYER_R,
+  RAIL_RANGE,
+  RIFLE_RANGE,
   RIFLE_SPEED,
   STEP_H,
   TICK_HZ,
@@ -27,8 +29,7 @@ import type { FlagState, PlayerState } from './types';
 import { hidden, ray } from './world';
 import type { World } from './world';
 
-const { FORWARD, BACK, LEFT, RIGHT, JUMP, SPRINT, DASH, CROUCH, FIRE, RELOAD, BLADE, SPECIAL } =
-  KEY;
+const { FORWARD, BACK, LEFT, RIGHT, JUMP, SPRINT, DASH, CROUCH, FIRE, BLADE, SPECIAL } = KEY;
 
 /** A player as a bot sees him: the host's own state, no rewind. */
 export interface Seen {
@@ -369,6 +370,10 @@ export class Bot {
   /** The goal of the way, and the tick it was planned. */
   private goal: Vec3 | undefined;
   private planned = 0;
+  /** Tick of the last grounded rack search, and the path to its chosen rack. */
+  private rackChecked = -REPLAN;
+  private rackTarget?: Vec3;
+  private rackSteps?: Step[];
   /** The step it is on; steps.length once there. */
   private step = 0;
   private flight: Flight | undefined;
@@ -388,6 +393,7 @@ export class Bot {
   /** Its shot count when it met the target, the shots it fires past him first, and to which side. */
   private shot = 0;
   private warned = 0;
+  private railWarnings = 0;
   private past = 1;
   /** A guard's flag and round, the point it goes to, the tick it leaves it, and where it looks there. */
   private base: Vec3 | undefined;
@@ -439,16 +445,23 @@ export class Bot {
 
   /** The input of this tick. */
   public think(s: Sight): Intent {
-    const i = this.decide(s);
-    if (s.kit?.katana && s.me.state.blade && !s.me.state.down) {
-      i.keys |= BLADE;
-    } else if (!s.me.state.down) {
-      if ((s.me.state.rail ?? -1) > 0) {
-        i.keys |= KEY.RAIL;
-      } else if ((s.me.state.rifle ?? -1) > 0) {
-        i.keys |= KEY.RIFLE;
-      }
+    const p = s.me.state;
+    const weapon = p.down
+      ? 0
+      : s.kit?.katana && p.blade
+        ? BLADE
+        : (p.rail ?? 0) > 0
+          ? KEY.RAIL
+          : (p.rifle ?? 0) > 0
+            ? KEY.RIFLE
+            : p.ammo < 0 && p.blade
+              ? BLADE
+              : 0;
+    if (this.foe >= 0 && this.keys & FIRE && p.zapping) {
+      this.railWarnings++;
     }
+    const i = this.decide(s, weapon);
+    i.keys |= weapon;
     this.keys = i.keys;
     return i;
   }
@@ -481,26 +494,28 @@ export class Bot {
   }
 
   /** think()'s work. */
-  private decide(s: Sight): Intent {
+  private decide(s: Sight, weapon: number): Intent {
     const t = ++this.ticks;
     const p = s.me.state;
     this.hunting = -1;
     this.world = s.world;
     this.steer = !!s.kit && s.kit.jump !== JUMP_SPEED;
     if (p.down) {
-      this.goal = undefined;
+      this.goal = this.rackTarget = undefined;
+      this.rackChecked = -REPLAN;
       this.foe = -1;
       return { keys: 0, yaw: this.aim, pitch: 0 };
     }
     // Put back at a spawn: whatever way it was on is gone.
     if (p.ev & EV.RESPAWN || flat(p.x, p.z, this.last[0], this.last[2]) > 5) {
-      this.goal = undefined;
+      this.goal = this.rackTarget = undefined;
+      this.rackChecked = -REPLAN;
     }
     this.last = at(p);
     if (s.errand) {
       const e = this.sortie.think(this.id, p, s.errand, t);
       // On guard at the post, it fights whoever comes in sight.
-      const f = e && s.errand.go === 'guard' && !e.keys ? this.fight(s, true) : undefined;
+      const f = e && s.errand.go === 'guard' && !e.keys ? this.fight(s, true, weapon) : undefined;
       if (f) {
         return { keys: f.keys, yaw: this.aim, pitch: this.pitch };
       }
@@ -521,6 +536,7 @@ export class Bot {
     if (
       p.ground &&
       (!this.goal ||
+        !!this.rackSteps ||
         flat(goal[0], goal[2], this.goal[0], this.goal[2]) >
           Math.max(DRIFT, SHARE * flat(p.x, p.z, goal[0], goal[2])) ||
         (!this.steps.some(st => st.leg) && t - this.planned > REPLAN))
@@ -528,9 +544,7 @@ export class Bot {
       this.plan(s.world, p, goal);
     }
     const move = this.pilot(p);
-    const fight = this.fight(s, move.free);
-    // The battery is flat: a fresh one, every other step so each is a press.
-    const reload = p.ammo > 0 && !p.mag && !p.reload && t & 1 ? RELOAD : 0;
+    const fight = this.fight(s, move.free, weapon);
     if (!fight) {
       this.pitch = 0;
       // The carrier turns at once: a swing would cost him the sprint as he runs for it.
@@ -538,7 +552,7 @@ export class Bot {
         s.flags[1 - s.me.team].state === FLAG.CARRIED && s.flags[1 - s.me.team].by === s.me.id;
       if (move.exact || runs) {
         this.look = this.aim = move.yaw;
-        return this.evade(s, { keys: move.keys | reload, yaw: move.yaw, pitch: 0 }, move.exact);
+        return this.evade(s, { keys: move.keys, yaw: move.yaw, pitch: 0 }, move.exact);
       }
       // Walking, it turns as a player does: the look swings round, the feet go the way meanwhile.
       const off = turn(this.look, move.yaw);
@@ -547,7 +561,7 @@ export class Bot {
         Math.abs(off) > SWING && move.keys & FORWARD
           ? (move.keys & ~(FORWARD | SPRINT | DASH)) | keysFor(this.look, move.yaw)
           : move.keys;
-      return this.evade(s, { keys: keys | reload, yaw: this.look, pitch: 0 }, false);
+      return this.evade(s, { keys, yaw: this.look, pitch: 0 }, false);
     }
     this.look = this.aim;
     if (fight.keys & DASH) {
@@ -557,7 +571,7 @@ export class Bot {
     const keys = move.keys & ~(FORWARD | BACK | LEFT | RIGHT | SPRINT);
     const dirs = move.keys & FORWARD ? keysFor(this.aim, move.yaw) : 0;
     const out = {
-      keys: (dirs & ~(LEFT | RIGHT)) | this.dodge(s.world, p) | keys | fight.keys | reload,
+      keys: (dirs & ~(LEFT | RIGHT)) | this.dodge(s.world, p) | keys | fight.keys,
       yaw: this.aim,
       pitch: this.pitch,
     };
@@ -739,37 +753,42 @@ export class Bot {
         [home.rifle, (p.rifle ?? -1) < 0, 'rifle rack'],
         [home.blade, !p.blade, 'katana rack'],
       ];
-      let nearest = 14;
-      let target: Vec3 | undefined;
-      for (const [point, missing, why] of choices) {
-        if (!point || !missing) {
-          continue;
-        }
-        const d = flat(p.x, p.z, point[0], point[2]);
-        if (d >= nearest) {
-          continue;
-        }
-        const from = at(p);
-        const steps = path(navOf(world), world, from, point);
-        const end = steps.at(-1)?.to;
-        let length = 0;
-        let last = from;
-        for (const { to } of steps) {
-          length += Math.hypot(to[0] - last[0], to[1] - last[1], to[2] - last[2]);
-          last = to;
-        }
-        if (
-          length < nearest &&
-          end &&
-          Math.hypot(end[0] - point[0], end[1] - point[1], end[2] - point[2]) < 1
-        ) {
-          nearest = length;
-          target = point;
-          this.why = why;
-        }
+      const current = choices.find(
+        ([point, missing]) => missing && point && point === this.rackTarget,
+      );
+      if (current && this.goal === this.rackTarget) {
+        this.why = current[2];
+        return this.rackTarget!;
       }
-      if (target) {
-        return target;
+      if (p.ground && this.ticks - this.rackChecked >= REPLAN / 4) {
+        const from = at(p);
+        this.rackTarget = undefined;
+        this.rackChecked = this.ticks;
+        let nearest = 14;
+        for (const [point, missing, why] of choices) {
+          if (!point || !missing || flat(p.x, p.z, point[0], point[2]) >= nearest) {
+            continue;
+          }
+          const steps = path(navOf(world), world, from, point);
+          if (steps.at(-1)?.to !== point) {
+            continue;
+          }
+          let length = 0;
+          let last = from;
+          for (const { to } of steps) {
+            length += Math.hypot(to[0] - last[0], to[1] - last[1], to[2] - last[2]);
+            last = to;
+          }
+          if (length < nearest) {
+            nearest = length;
+            this.rackTarget = point;
+            this.rackSteps = steps;
+            this.why = why;
+          }
+        }
+        if (this.rackTarget) {
+          return this.rackTarget;
+        }
       }
     }
     if (role === 'guard') {
@@ -811,7 +830,8 @@ export class Bot {
     // that jumps unlike the marine the links were flown with: it keeps to the route it knows.
     const direct = (this.why === 'flag home' && !this.steer) || this.why.endsWith(' rack');
     const prefer = direct ? -1 : this.prefer;
-    this.steps = path(navOf(w), w, at(p), goal, prefer);
+    this.steps = this.rackSteps ?? path(navOf(w), w, at(p), goal, prefer);
+    this.rackSteps = undefined;
     this.step = 0;
     this.flight = undefined;
     this.best = Infinity;
@@ -1108,7 +1128,7 @@ export class Bot {
   }
 
   /** The look and the trigger at the enemy to fight now, if any. */
-  private fight(s: Sight, free: boolean): { keys: number } | undefined {
+  private fight(s: Sight, free: boolean, weapon: number): { keys: number } | undefined {
     const { me, others, world, flags } = s;
     const p = me.state;
     // A route leg and a flag carrier keep their movement keys instead of fighting.
@@ -1118,6 +1138,9 @@ export class Bot {
       return undefined;
     }
     const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
+    const rail = weapon === KEY.RAIL;
+    const rifle = weapon === KEY.RIFLE;
+    const range = rail ? RAIL_RANGE : rifle ? RIFLE_RANGE : RANGE;
     const carrier = flags[me.team].state === FLAG.CARRIED ? flags[me.team].by : -1;
     let foe: Seen | undefined;
     let best = Infinity;
@@ -1129,7 +1152,7 @@ export class Bot {
       const d = flat(p.x, p.z, q.x, q.z);
       // It sees ahead of its look and hears close by; the one it fights it follows round.
       if (
-        d >= RANGE ||
+        d >= range ||
         (o.id !== this.foe &&
           d >= HEAR &&
           Math.abs(turn(p.yaw, toward(p.x, p.z, q.x, q.z))) >= VIEW)
@@ -1144,7 +1167,7 @@ export class Bot {
           (m.state.hp <= LOW || (theirs.state === FLAG.CARRIED && theirs.by === m.id)) &&
           flat(m.state.x, m.state.z, q.x, q.z) < NEAR,
       );
-      const score = o.id === carrier ? d - RANGE : onMate ? d - RANGE / 2 : d;
+      const score = o.id === carrier ? d - range : onMate ? d - range / 2 : d;
       if (score < best && !hidden(world, eye, [q.x, q.y + 1.2, q.z])) {
         [foe, best] = [o, score];
       }
@@ -1163,14 +1186,19 @@ export class Bot {
       this.speed = [0, 0, 0];
       // One it has just fought knows it is there: no warning again.
       const known = this.ticks - (this.met.get(foe.id) ?? -MEMORY) < MEMORY;
-      [this.shot, this.warned, this.past] = [p.shots, known ? 0 : this.persona.warn, 1];
+      [this.shot, this.warned, this.past, this.railWarnings] = [
+        p.shots,
+        known ? 0 : this.persona.warn,
+        1,
+        0,
+      ];
       if (this.rnd() < 0.5) {
         this.past = -1;
       }
     }
     this.met.set(foe.id, this.ticks);
     const d = flat(p.x, p.z, q.x, q.z);
-    const blade = !!s.kit?.katana && !!p.blade;
+    const blade = weapon === BLADE || !!(p.swing && p.wield);
     // His speed as it makes it out, late; the lead a share of the ball's flight.
     const v = this.speed;
     const k = this.persona.track;
@@ -1179,8 +1207,7 @@ export class Bot {
       v[1] + (q.vy - v[1]) * k,
       v[2] + (q.vz - v[2]) * k,
     ];
-    const lead =
-      blade || p.railed ? 0 : (this.persona.lead * d) / (p.rifled ? RIFLE_SPEED : PLASMA_SPEED);
+    const lead = blade || rail ? 0 : (this.persona.lead * d) / (rifle ? RIFLE_SPEED : PLASMA_SPEED);
     const [tx, ty, tz] = [q.x + v[0] * lead, q.y + 1.1 + v[1] * lead, q.z + v[2] * lead];
     // The aim wanders about him, never still on him, the more as he crosses its view or it moves.
     const [ux, uz] = [(q.x - p.x) / Math.max(d, 0.1), (q.z - p.z) / Math.max(d, 0.1)];
@@ -1192,7 +1219,7 @@ export class Bot {
     const hunters = s.hunters?.get(foe.id) ?? [];
     const before = hunters.filter(id => id < this.id).length;
     // The count wraps at 256.
-    const warning = ((p.shots - this.shot) & 255) < this.warned;
+    const warning = ((p.shots - this.shot) & 255) + this.railWarnings < this.warned;
     const hit = !warning && before < TOKENS;
     // A shot meant to miss leaves the wander out: on the wrong side it would put it on him.
     const off = hit ? this.err : this.past * Math.atan2(PAST, Math.max(d, 1));
@@ -1209,13 +1236,17 @@ export class Bot {
       const inReach = d < CUTS[CUT.SLASH].reach && Math.abs(q.y - p.y) < HUNT_Y;
       return { keys: ready && inReach && !p.swing ? (this.rnd() < 0.25 ? SPECIAL : FIRE) : 0 };
     }
-    const armed = p.ammo > 0 && (p.mag ?? 0) > 0 && !p.wield;
-    // The gun fires on letting go: a tap, held one step in two.
-    const pull = (armed && d < RANGE) || (!armed && d < 1.4);
+    const armed = rail
+      ? !!p.cap && !p.hot
+      : rifle
+        ? !!p.clip && !p.cool
+        : p.ammo > 0 && (p.mag ?? 0) > 0;
+    const reach = rail || rifle ? Math.hypot(d, ty - eye[1]) : d;
+    const pull = p.ammo < 0 && !weapon ? d < 1.4 : armed && !p.reload && reach < range;
     // A token is held only by a bot that shoots: not one empty, still reacting or turning.
     if (!warning && ready && pull) {
       this.hunting = foe.id;
     }
-    return { keys: ready && pull && this.ticks & 1 ? FIRE : 0 };
+    return { keys: ready && pull && (rail || rifle || this.ticks & 1) ? FIRE : 0 };
   }
 }

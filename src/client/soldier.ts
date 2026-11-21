@@ -75,6 +75,7 @@ import {
 } from './gun';
 import { helm } from './helm';
 import { helmet } from './helmet';
+import { hunter as hunterModel } from './hunter';
 import { HEAD_SCALE, STYLE, hair, styleOf, sway } from './hair';
 import { ID, ORIGIN, mesh } from './store';
 import { flesh } from './flesh';
@@ -1246,6 +1247,94 @@ const LIMBS_X = [
 
 /** The ninja's boots: black cloth, a shade lighter than his suit so they show on it. */
 const BOOT = [0.06, 0.06, 0.066];
+
+type HunterKitPart = { name: string; joint: number; vertices: number[] };
+const hunterKits = new Map<string, HunterKitPart[]>();
+const hunterJoint = (name: string): number => {
+  const left = name.endsWith('-1');
+  if (name.startsWith('Thigh net')) {
+    return left ? J.THIGH_L : J.THIGH_R;
+  }
+  if (
+    name.startsWith('Leg straps') ||
+    name.startsWith('Shin plates') ||
+    name.startsWith('Patella')
+  ) {
+    return left ? J.SHIN_L : J.SHIN_R;
+  }
+  if (name.startsWith('Boot lames')) {
+    return left ? J.FOOT_L : J.FOOT_R;
+  }
+  if (name === 'Belt' || name === 'Flying disc') {
+    return J.PELVIS;
+  }
+  if (name === 'Wrist blade' || name === 'Blade cuff') {
+    return J.HAND_R;
+  }
+  if (
+    name === 'Harpoon harness' ||
+    name === 'Laser saddle' ||
+    name === 'Shoulder laser' ||
+    name === 'Harpoon'
+  ) {
+    return J.CHEST;
+  }
+  return J.HEAD;
+};
+
+/** The Hunter's design study fitted to the animated runner's rest joints. */
+const hunterKit = (lod: 0 | 1 | 2, build: number): HunterKitPart[] => {
+  const key = `${lod}:${build}`;
+  let parts = hunterKits.get(key);
+  if (parts) {
+    return parts;
+  }
+  const solved = solve(rest([0, 0, 0], 0, build));
+  const model = hunterModel(lod);
+  parts = Object.entries(model)
+    .filter(([name]) => name !== 'Marine anatomy' && name !== 'Wrist blade')
+    .map(([name, vertices]) => {
+      const joint = hunterJoint(name);
+      const anchor = solved.pos[joint];
+      const rotation = solved.rot[joint];
+      const inverse: Quat = [-rotation[0], -rotation[1], -rotation[2], rotation[3]];
+      const local = vertices.slice();
+      for (let i = 0; i < local.length; i += STRIDE) {
+        const p = turn(inverse, [
+          local[i] - anchor[0],
+          local[i + 1] - anchor[1],
+          local[i + 2] - anchor[2],
+        ]);
+        const n = turn(inverse, [local[i + 3], local[i + 4], local[i + 5]]);
+        [local[i], local[i + 1], local[i + 2]] = p;
+        [local[i + 3], local[i + 4], local[i + 5]] = n;
+      }
+      return { name, joint, vertices: local };
+    });
+  hunterKits.set(key, parts);
+  return parts;
+};
+
+/** Appends one Hunter kit mesh in world space when the vertex store is unavailable. */
+const placeHunterPart = (out: Out, vertices: number[], at: Vec3, q: Quat): void => {
+  for (let i = 0; i < vertices.length; i += STRIDE) {
+    const p = turn(q, [vertices[i], vertices[i + 1], vertices[i + 2]]);
+    const n = turn(q, [vertices[i + 3], vertices[i + 4], vertices[i + 5]]);
+    out.push(
+      at[0] + p[0],
+      at[1] + p[1],
+      at[2] + p[2],
+      n[0],
+      n[1],
+      n[2],
+      vertices[i + 6],
+      vertices[i + 7],
+      vertices[i + 8],
+      vertices[i + 9],
+    );
+  }
+};
+
 /** Draws the runner and gives back its solved skeleton, or nothing once a bolt has burnt it away. */
 export const soldier = (
   out: Out,
@@ -1284,12 +1373,13 @@ export const soldier = (
   // its belt, a hood and a guard over the mouth; an armour of his own (2026-11-13): armor.ts's
   // `alone` plates, and the shoulder pads and collar of pads.ts.
   const ninja = picked?.role === ROLE.NINJA;
+  const isHunter = picked?.role === ROLE.HUNTER;
   // The xenomorph: a body of its own (beast() in skin.ts, xeno.ts) in black chitin, a glowing line
   // down its spine in the team's colour; no armour, hair or helmet.
   const xeno = picked?.role === ROLE.XENO;
-  helmets &&= !xeno;
-  const plated = armored && !xeno;
-  armored &&= !ninja && !xeno;
+  helmets &&= !xeno && !isHunter;
+  const plated = armored && !xeno && !isHunter;
+  armored &&= !ninja && !xeno && !isHunter;
   const colors = palette(
     ninja || xeno ? CLOTH : color,
     xeno ? CHITIN_X : build ? tressOf(p.id, picked) : hairOf(p.id, picked),
@@ -1419,6 +1509,21 @@ export const soldier = (
       // The armour, cut out of the skin just drawn.
       if (plated || ninja) {
         armor(out, from, bs, lod > 2, plate, ninja, color, !plated);
+      }
+    }
+    if (isHunter) {
+      for (const part of hunterKit(Math.min(lod, 2) as 0 | 1 | 2, build)) {
+        const at = s.pos[part.joint];
+        const q = s.rot[part.joint];
+        rigid(
+          `hunter ${part.name} ${lod} ${build}`,
+          at,
+          q,
+          (o, position, rotation) => placeHunterPart(o, part.vertices, position, rotation),
+          1,
+          true,
+          part.name.startsWith('Temple') || part.name === 'Rangefinder',
+        );
       }
     }
     if (xeno) {

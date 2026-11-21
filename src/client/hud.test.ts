@@ -170,7 +170,7 @@ describe('createHud', () => {
       expect(lit('Hair')).toEqual([false, false, true, false, false]);
     });
 
-    it('offers the xenomorph no body, skin or haircut, and gives them back with another class', () => {
+    it('offers creatures no body, skin or haircut, and gives them back with another class', () => {
       show();
       hud.cast(vi.fn());
       hud.wear(BODY.FEMALE, { tone: 2, hair: 3, role: ROLE.MARINE });
@@ -182,6 +182,10 @@ describe('createHud', () => {
       // The labels over the skin and the haircut go with them.
       expect((box('Skin').previousElementSibling as HTMLElement).hidden).toBe(true);
       expect((box('Hair').previousElementSibling as HTMLElement).hidden).toBe(true);
+      group('Class')[ROLE.MARINE].click();
+      expect(shown()).toEqual([true, true, true]);
+      group('Class')[ROLE.HUNTER].click();
+      expect(shown()).toEqual([false, false, false]);
       group('Class')[ROLE.MARINE].click();
       expect(shown()).toEqual([true, true, true]);
       // Her choices kept.
@@ -941,6 +945,12 @@ describe('the gun on the HUD', () => {
       hud.vitals(5, 30, true, false, -1, false, 6, false, -1, false, 0, 0, true);
       expect(lit()).toEqual(['5 fists']);
       expect(ammo().classList.contains('b')).toBe(true);
+    });
+
+    it('labels the Hunter weapon slots by their loadout', () => {
+      hud.wear(BODY.MALE, { role: ROLE.HUNTER });
+      hud.vitals(5, 30, true, false, 7, false, 6, false, 30);
+      expect(shown()).toEqual(['1 harpoon', '2 blades', '3 laser', '4 rifle', '5 fists']);
     });
 
     it('shows the rail gun’s lightning left in violet with the gun glyph, and its slot 3 when it is carried', () => {

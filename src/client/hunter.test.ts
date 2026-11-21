@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { hunter } from './hunter';
-import { STRIDE } from './mesh';
+import { SHINE, STRIDE, WEAVE } from './mesh';
 
 it('keeps the front of the pectorals smooth across the Marine shoulder ring', () => {
   const mesh = hunter(2)['Marine anatomy'];
@@ -13,4 +13,28 @@ it('keeps the front of the pectorals smooth across the Marine shoulder ring', ()
     }
   }
   expect(sampled).toBeGreaterThan(0);
+});
+
+it('adds the Hunter armor details and uses the metal and net materials', () => {
+  const model = hunter(2);
+  for (const name of ['Shoulder plates', 'Belt', 'Flying disc']) {
+    expect(model[name]?.length, name).toBeGreaterThan(0);
+  }
+  expect(
+    model['Marine anatomy'].some(
+      (_, i) => i % STRIDE === 8 && model['Marine anatomy'][i] === WEAVE,
+    ),
+  ).toBe(true);
+  for (const name of ['Cranial shell', 'Shin plates 1', 'Flying disc']) {
+    const mesh = model[name];
+    expect(
+      mesh.some((_, i) => i % STRIDE === 8 && mesh[i] === SHINE),
+      name,
+    ).toBe(true);
+  }
+  expect(
+    hunter(0)['Marine anatomy'].some(
+      (_, i) => i % STRIDE === 8 && hunter(0)['Marine anatomy'][i] === WEAVE,
+    ),
+  ).toBe(false);
 });

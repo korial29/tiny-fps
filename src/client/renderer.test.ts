@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STILL, spawn } from '../shared/physics';
+import { ROLE } from '../shared/kit';
 import { TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
@@ -661,6 +662,14 @@ describe('Renderer.portrait, the picture of a character card', () => {
     expect((eye[2] as number[])[1]).toBeCloseTo(PORTRAIT.y + PORTRAIT.eye);
     // A 3:4 card out of a 320 by 200 frame: the 150 pixels in the middle, the whole height.
     expect(draw).toHaveBeenCalledExactlyOnceWith(canvas, 85, 0, 150, 200, 0, 0, 300, 400);
+  });
+
+  it('backs the camera off for the taller Hunter portrait', () => {
+    const rd = createRenderer(canvas, ROOM);
+    calls.length = 0;
+    expect(rd.portrait(card(), me, 0, '#e23b3b', { role: ROLE.HUNTER })).toBe(true);
+    const eye = calls.filter(c => c[0] == 'uniform3fv' && (c[1] as { u: string }).u == 'E').pop()!;
+    expect((eye[2] as number[])[1]).toBeCloseTo(PORTRAIT.y + 1.19);
   });
 
   it('leaves the runners of the match as they were', () => {

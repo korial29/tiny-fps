@@ -3,12 +3,27 @@ import { FLAG_REACH, TEAM_COLOR } from '../shared/constants';
 import { STILL } from '../shared/physics';
 import { FLAG, TEAM } from '../shared/types';
 import type { FlagState, PlayerState } from '../shared/types';
-import { POLE, base, flag, flagDraws, teamRgb } from './flag';
+import { POLE, base, flag, flagDraws, teamRgb, tri } from './flag';
 import type { FlagDraw } from './flag';
 import { STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import { axis } from './rig';
 import type { Quat } from './rig';
+import { Verts } from './verts';
+
+it('writes identical triangle vertices to the frame and a plain array', () => {
+  const plain: number[] = [42];
+  const frame = new Verts();
+  frame.push(42);
+  for (const a of [
+    [1, 2, 3],
+    [0, 0, 0],
+  ] as Vec3[]) {
+    tri(plain, a, [4, 3, 2], [-2, 3, 8], [0.3, 0.5, 0.8]);
+    tri(frame, a, [4, 3, 2], [-2, 3, 8], [0.3, 0.5, 0.8]);
+  }
+  expect(Array.from(frame.a.subarray(0, frame.length))).toEqual(plain);
+});
 
 interface Vertex {
   p: Vec3;

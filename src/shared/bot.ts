@@ -442,6 +442,12 @@ export class Bot {
     const i = this.decide(s);
     if (s.kit?.katana && s.me.state.blade && !s.me.state.down) {
       i.keys |= BLADE;
+    } else if (!s.me.state.down) {
+      if ((s.me.state.rail ?? -1) > 0) {
+        i.keys |= KEY.RAIL;
+      } else if ((s.me.state.rifle ?? -1) > 0) {
+        i.keys |= KEY.RIFLE;
+      }
     }
     this.keys = i.keys;
     return i;
@@ -665,16 +671,6 @@ export class Bot {
       return this.sortie.board;
     }
     const gear = s.kit?.gear ?? true;
-    if (
-      p.ammo < 0 &&
-      gear &&
-      !s.kit?.katana &&
-      home.rack &&
-      flat(p.x, p.z, home.rack[0], home.rack[2]) < ARM
-    ) {
-      this.why = 'gun rack';
-      return home.rack;
-    }
     // Claws reach no farther than an arm: it runs at the enemy it sees close by.
     const eye: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
     const prey =
@@ -723,6 +719,59 @@ export class Bot {
       this.why = 'help';
       return at(trouble.state);
     }
+    if (
+      p.ammo <= 0 &&
+      (p.rail ?? 0) <= 0 &&
+      (p.rifle ?? 0) <= 0 &&
+      !p.rack &&
+      gear &&
+      !s.kit?.katana &&
+      home.rack &&
+      flat(p.x, p.z, home.rack[0], home.rack[2]) < ARM
+    ) {
+      this.why = 'gun rack';
+      return home.rack;
+    }
+    // Detour for a weapon not yet carried, without abandoning urgent flag duties.
+    if (gear && !s.kit?.katana && role === 'attack') {
+      const choices: [Vec3 | undefined, boolean, string][] = [
+        [home.rail, (p.rail ?? -1) < 0, 'rail rack'],
+        [home.rifle, (p.rifle ?? -1) < 0, 'rifle rack'],
+        [home.blade, !p.blade, 'katana rack'],
+      ];
+      let nearest = 14;
+      let target: Vec3 | undefined;
+      for (const [point, missing, why] of choices) {
+        if (!point || !missing) {
+          continue;
+        }
+        const d = flat(p.x, p.z, point[0], point[2]);
+        if (d >= nearest) {
+          continue;
+        }
+        const from = at(p);
+        const steps = path(navOf(world), world, from, point);
+        const end = steps.at(-1)?.to;
+        let length = 0;
+        let last = from;
+        for (const { to } of steps) {
+          length += Math.hypot(to[0] - last[0], to[1] - last[1], to[2] - last[2]);
+          last = to;
+        }
+        if (
+          length < nearest &&
+          end &&
+          Math.hypot(end[0] - point[0], end[1] - point[1], end[2] - point[2]) < 1
+        ) {
+          nearest = length;
+          target = point;
+          this.why = why;
+        }
+      }
+      if (target) {
+        return target;
+      }
+    }
     if (role === 'guard') {
       this.why = 'guard';
       return this.patrol(world, p, home.base, world.def.teams[1 - team].base);
@@ -760,7 +809,8 @@ export class Bot {
     this.planned = this.ticks;
     // The carrier goes home the quickest way: its route was for spreading the attack. Not a body
     // that jumps unlike the marine the links were flown with: it keeps to the route it knows.
-    const prefer = this.why === 'flag home' && !this.steer ? -1 : this.prefer;
+    const direct = (this.why === 'flag home' && !this.steer) || this.why.endsWith(' rack');
+    const prefer = direct ? -1 : this.prefer;
     this.steps = path(navOf(w), w, at(p), goal, prefer);
     this.step = 0;
     this.flight = undefined;
@@ -1129,7 +1179,8 @@ export class Bot {
       v[1] + (q.vy - v[1]) * k,
       v[2] + (q.vz - v[2]) * k,
     ];
-    const lead = blade ? 0 : (this.persona.lead * d) / (p.rifled ? RIFLE_SPEED : PLASMA_SPEED);
+    const lead =
+      blade || p.railed ? 0 : (this.persona.lead * d) / (p.rifled ? RIFLE_SPEED : PLASMA_SPEED);
     const [tx, ty, tz] = [q.x + v[0] * lead, q.y + 1.1 + v[1] * lead, q.z + v[2] * lead];
     // The aim wanders about him, never still on him, the more as he crosses its view or it moves.
     const [ux, uz] = [(q.x - p.x) / Math.max(d, 0.1), (q.z - p.z) / Math.max(d, 0.1)];

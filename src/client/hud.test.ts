@@ -278,7 +278,7 @@ describe('createHud', () => {
       expect(lines[1]).toMatch(/own flag is at home/);
       expect(lines[2]).toContain(`${RULES.scoreLimit} captures`);
       expect(lines[2]).toContain(`${RULES.timeLimit / 60} minutes`);
-      expect(lines[3]).toMatch(/armoury past your flag/);
+      expect(lines[3]).toMatch(/heavier weapons along the routes/);
     });
 
     it.each(Object.entries(MAPS))('tells the title, the kind and the lore of %s', (_, map) => {
@@ -983,7 +983,9 @@ describe('the gun on the HUD', () => {
       expect(rows).toContain('A or D + Left clickcut across');
       expect(rows).toContain('Left clickslash');
       expect(rows).toContain('Blades lockedclick fast; step aside to break');
-      expect(screen.querySelector('aside')!.textContent).toMatch(/armoury past your flag/);
+      expect(screen.querySelector('aside')!.textContent).toMatch(
+        /heavier weapons along the routes/,
+      );
     });
   });
 

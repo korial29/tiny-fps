@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Bot, personaOf, squad } from './bot';
+import { step } from './gun';
 import type { Seen } from './bot';
 import { KITS, ROLE } from './kit';
 import type { Kit } from './kit';
@@ -392,7 +393,21 @@ describe('Bot: on the moon', () => {
 
   /** A red bot of this id flown from a point with the real physics: the lowest it went and where it ended. */
   const flight = (id: number, [x, y, z]: [number, number, number], secs: number) => {
-    const me = { id, team: 0, state: { ...spawn(id, world, 0, 0), x, y, z, ammo: 10, mag: 5 } };
+    const me = {
+      id,
+      team: 0,
+      state: {
+        ...spawn(id, world, 0, 0),
+        x,
+        y,
+        z,
+        ammo: 10,
+        mag: 5,
+        blade: true,
+        rifle: 10,
+        rail: 10,
+      },
+    };
     const bot = new Bot(id);
     let low = Infinity;
     for (let k = 0; k < secs * 60 && me.state.z > 110; k++) {
@@ -491,8 +506,7 @@ describe('Bot: in a fight', () => {
 });
 
 describe('nav: off the ways', () => {
-  it('finds a way across the map to a goal on a plinth, which no node walks straight to', () => {
-    // A carrier on red's armoury, 1.5 m up: chased from blue's spawn, not run at in a straight line.
+  it('finds a way across the map to a rack off the marked routes', () => {
     const w = build(HIGHLINE);
     const [x, y, z] = HIGHLINE.teams[1].spawns[0];
     const way = path(navOf(w), w, [x, y, z], HIGHLINE.teams[0].rack!);
@@ -825,6 +839,56 @@ describe('Bot: team play', () => {
     me.state.hp = 8;
     bot.think({ me, others: [], flags: [home, home], world, packs: [[8, 0, 10]] });
     expect(bot.view().why).toBe('take flag');
+  });
+
+  it('seeks a nearby missing rifle, then equips it, while a carrier goes home', () => {
+    const world = build(HIGHLINE);
+    const bot = new Bot(0);
+    const me = at(0, 0, 43, 156);
+    me.state.y = 19;
+    me.state.ammo = 10;
+    me.state.blade = true;
+    bot.think({ me, others: [], flags: [home, home], world });
+    expect(bot.view().why).toBe('rifle rack');
+    me.state.rifle = 10;
+    expect(bot.think({ me, others: [], flags: [home, home], world }).keys & KEY.RIFLE).toBeTruthy();
+    me.state.rail = 10;
+    expect(bot.think({ me, others: [], flags: [home, home], world }).keys & KEY.RAIL).toBeTruthy();
+    bot.think({ me, others: [], flags: [home, carried(me.id)], world });
+    expect(bot.view().why).toBe('flag home');
+  });
+
+  it.each([
+    [
+      HIGHLINE,
+      240,
+      [
+        ['rifle', 43, 19, 156],
+        ['rail', 18, 26, 145],
+      ],
+    ],
+    [
+      MOON,
+      280,
+      [
+        ['rifle', 145, 0, 194],
+        ['rail', 43, 0, 164],
+      ],
+    ],
+  ] as const)('walks to the distant racks and picks up their weapons', (def, zed, starts) => {
+    const world = build(def);
+    for (const team of [0, 1]) {
+      for (const [name, x, y, z] of starts) {
+        const bot = new Bot(team);
+        const me = at(team, team, x, team ? zed - z : z);
+        Object.assign(me.state, { y, ammo: 10, blade: true });
+        for (let k = 0; k < 600 && (me.state[name] ?? -1) < 0; k++) {
+          const intent = bot.think({ me, others: [], flags: [home, home], world });
+          step(me.state, { ...intent, seq: k }, world, team);
+        }
+        expect(me.state[name], `${name}, team ${team}`).toBeGreaterThan(0);
+      }
+    }
   });
 
   it('fights the enemy on its carrier before a nearer one', () => {

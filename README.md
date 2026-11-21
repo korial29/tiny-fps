@@ -255,6 +255,7 @@ The game is the movement and a capture the flag on top of it, with a tackle, a g
 
 - **The host is authoritative**: the Node server, or the host tab in local mode. It runs the players on the map.
 - **Inputs, not positions**: each client sends one 12-byte input per step at 60 Hz, holding its keys, view angles and the moment it sees the others at. It predicts its own player at once and replays what the host has not acknowledged yet.
+- **Responsive local movement**: between steps, the client's view previews the next movement step using the held inputs and collision world. The preview never sends an input or changes the predicted state; vehicles, knockdowns and locked animations keep their existing interpolation.
 - **Snapshots** go out at 30 Hz: a 4-byte head, 58 bytes per player (position, speed, look angles, the movement state and its timers, health, ammo and magazines, weapons and swing), then the match: the captures, the clock, the packs and the two flags, 12 bytes when both are home, then the plasma balls in flight, 10 bytes each, in a compact binary format. The other players are drawn 100 ms in the past, interpolated between snapshots.
 - **Rendering**: one WebGL2 shader program and one vertex buffer, up to 16 lights, with up to 4 shadow maps drawn by the same program.
 

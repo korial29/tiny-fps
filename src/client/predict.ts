@@ -13,7 +13,7 @@ import { kitOf } from '../shared/kit';
 import { TAU, norm, respawn } from '../shared/physics';
 import { onWire } from '../shared/protocol';
 import { drive, park, ride, seat, skid, solid } from '../shared/rover';
-import { MODE, NOBODY } from '../shared/types';
+import { EV, MODE, NOBODY } from '../shared/types';
 import type { Input, PlayerState, Rover, SnapPlayer, Snapshot } from '../shared/types';
 import type { World } from '../shared/world';
 
@@ -47,6 +47,8 @@ export interface Predictor {
    * beside it (at the time of the last step plus alpha of a step).
    */
   me(alpha: number): PlayerState | undefined;
+  /** The own player for drawing, previewing the next step without changing prediction or inputs. */
+  view(alpha: number, input: Omit<Input, 'seq' | 'view'>): PlayerState | undefined;
   /** The other players at now - INTERP_DELAY; a player missing from the latest snapshot is gone. */
   others(now: number): PlayerState[];
   /**
@@ -271,6 +273,20 @@ export const createPredictor = (world: World): Predictor => {
     return k < 0 ? undefined : { rover: k, seat: 1 };
   };
 
+  const me = (alpha: number): PlayerState | undefined => {
+    if (!own || !prev) {
+      return undefined;
+    }
+    const t = Math.max(0, Math.min(1, alpha));
+    const p = lerp(prev, own, t);
+    const at = riding();
+    const r = at && rovers(clock + t * STEP, t)[at.rover];
+    if (at && r && prev.mode === MODE.RIDE) {
+      seat(p, r, at.seat);
+    }
+    return p;
+  };
+
   return {
     you: (n, t = 0, role) => {
       [id, team, kit] = [n, t, kitOf(role, world.def)];
@@ -349,18 +365,24 @@ export const createPredictor = (world: World): Predictor => {
       return out;
     },
 
-    me: alpha => {
+    me,
+
+    view: (alpha, input) => {
       if (!own || !prev) {
         return undefined;
       }
-      const t = Math.max(0, Math.min(1, alpha));
-      const p = lerp(prev, own, t);
-      const at = riding();
-      const r = at && rovers(clock + t * STEP, t)[at.rover];
-      if (at && r && prev.mode === MODE.RIDE) {
-        seat(p, r, at.seat);
+      // Vehicle seats, knockdowns and locked animations keep their established interpolation.
+      if (own.mode === MODE.RIDE || own.down || own.lock) {
+        return me(alpha);
       }
-      return p;
+      const future = state(own);
+      step(future, onWire({ ...input, seq }), world, team, armed, solid(fleet(), future), kit);
+      // A respawn is a teleport, not a path for the camera to interpolate across the map.
+      if (future.ev & EV.RESPAWN) {
+        return state(own);
+      }
+      const t = Math.max(0, Math.min(1, alpha));
+      return { ...own, ...mid(own, future, t) };
     },
 
     others,

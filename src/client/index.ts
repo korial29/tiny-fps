@@ -645,7 +645,7 @@ const play = (
       }
     }
 
-    const me = predictor.me(acc / STEP);
+    const me = predictor.view(acc / STEP, { keys: ctl.peek(), yaw: ctl.yaw, pitch: ctl.pitch });
     const others = predictor.others(now);
     // The station's strike disintegrated the other team: who of it lies down is not drawn.
     const st = match?.station;

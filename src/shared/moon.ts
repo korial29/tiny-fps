@@ -142,7 +142,7 @@ export const MOUNDS = [48, 144];
 export const [MOUND, RISE] = [3, 8];
 /**
  * Where the field stays flat at y 0, x0, z0, x1, z1 with z from the centre line: the landing pad,
- * the dome with the armoury and the spawns, the modules and tubes, the two rovers, the packs on the
+ * the dome and the spawns, the modules and tubes, the two rovers, the packs on the
  * floor, the run-up to each mound. The relief is 0 for 6 m round each (so the lattice's
  * triangles are level over it) and back to itself 6 m further. The lips need none: the field
  * starts 12 m behind them.
@@ -379,6 +379,8 @@ const at = (x: number, z: number): number => {
       ((w + crest - Math.sqrt((w - crest) * (w - crest) + soft * soft)) / 2) *
       (1 - sm((k - 1.3) / 0.35));
   }
+  // Soften the ridge where rovers can now cross behind the dome.
+  h *= 1 - 0.55 * sm((16 - far(x - 44, z - 122)) / 10);
   // The Bowl's floor stays 5 m over the kill floor.
   return Math.max(h, -14.5) + w;
 };
@@ -824,8 +826,6 @@ const half: Brush[] = [
   // drawn by client/moonbase.ts (daises()), the zone's square of 8.4 m on top.
   { ...box(75.25, 0, FLAG - 4.75, 84.75, 0.5, FLAG + 4.75, PAINT, CONCRETE, RED), ghost: true },
   { ...box(75.75, 0.5, FLAG - 4.25, 84.25, 1, FLAG + 4.25, PAINT, CONCRETE, RED), ghost: true },
-  // The armoury, a red plinth behind the dome: the racks stand on it.
-  box(60, 0, 259, 70, 1.5, 265, STEEL, PAINT, RED),
   // The landing pads, their spaceships' (ship.ts: a solid body, not a brush), and masts by the tubes.
   ...PADS.map(([x, z, r]) => box(x - r, 0, z - r, x + r, 0.25, z + r, METAL)),
   ...MASTS.map(([x, z]) => box(x - 0.2, 0, z - 0.2, x + 0.2, 10, z + 0.2, STEEL)),
@@ -875,16 +875,17 @@ const SPAWNS: Spawn[] = [
   ...[56, 68, 80, 92, 104].map((x): Spawn => [x, 0, 271, 0]),
   ...[62, 80, 98].map((x): Spawn => [x, 0, 267, 0]),
 ];
-/** The racks on the plinth, 2.5 m apart: rifle, rail, gun, katana. */
-const racks = (z: number) =>
-  Object.fromEntries(
-    ['rifle', 'rail', 'rack', 'blade'].map((k, i) => [k, [61.25 + 2.5 * i, 1.5, z] as Vec3]),
-  );
-const team = (z: number, s: Spawn[]) => ({
-  base: [80, 1, z] as Vec3,
-  spawns: s,
-  ...racks(z + (z > 140 ? 28 : -28)),
-});
+const team = (z: number, s: Spawn[]) => {
+  const side = (p: Vec3) => (z > ZED / 2 ? p : flipPoint(p));
+  return {
+    base: [80, 1, z] as Vec3,
+    spawns: s,
+    rack: side([66, 0, 262]),
+    blade: side([94, 0, 262]),
+    rifle: side([145, 0, 191]),
+    rail: side([43, 0, 158]),
+  };
+};
 
 /** The orbital station (station.ts): over the rille, between the edge of space and the ceiling. */
 const [STATION_BRUSHES, STATION_DEF, STATION_DOOR] = station(80, 600, ZED / 2);

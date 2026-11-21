@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Bot, personaOf, squad } from './bot';
+import { step, STRIKE } from './gun';
 import type { Seen } from './bot';
 import { KITS, ROLE } from './kit';
 import type { Kit } from './kit';
 import { HIGHLINE } from './map';
 import { MOON } from './moon';
 import { ROUTES, navBuilt, navOf, path } from './nav';
+import * as navigation from './nav';
 import { move, spawn } from './physics';
 import { decodeSnapshot } from './protocol';
 import type { ServerText } from './protocol';
@@ -392,7 +394,21 @@ describe('Bot: on the moon', () => {
 
   /** A red bot of this id flown from a point with the real physics: the lowest it went and where it ended. */
   const flight = (id: number, [x, y, z]: [number, number, number], secs: number) => {
-    const me = { id, team: 0, state: { ...spawn(id, world, 0, 0), x, y, z, ammo: 10, mag: 5 } };
+    const me = {
+      id,
+      team: 0,
+      state: {
+        ...spawn(id, world, 0, 0),
+        x,
+        y,
+        z,
+        ammo: 10,
+        mag: 5,
+        blade: true,
+        rifle: 10,
+        rail: 10,
+      },
+    };
     const bot = new Bot(id);
     let low = Infinity;
     for (let k = 0; k < secs * 60 && me.state.z > 110; k++) {
@@ -491,8 +507,7 @@ describe('Bot: in a fight', () => {
 });
 
 describe('nav: off the ways', () => {
-  it('finds a way across the map to a goal on a plinth, which no node walks straight to', () => {
-    // A carrier on red's armoury, 1.5 m up: chased from blue's spawn, not run at in a straight line.
+  it('finds a way across the map to a rack off the marked routes', () => {
     const w = build(HIGHLINE);
     const [x, y, z] = HIGHLINE.teams[1].spawns[0];
     const way = path(navOf(w), w, [x, y, z], HIGHLINE.teams[0].rack!);
@@ -673,6 +688,37 @@ describe('Bot: a fair fight', () => {
     expect(rest.reduce((a, b) => a + b, 0) / rest.length).toBeLessThan(0.06);
   });
 
+  it.each([
+    [KEY.RAIL, STRIKE.RAIL, 10, { rail: 240, cap: 80 }],
+    [KEY.RIFLE, STRIKE.LASER, 42, { rifle: 30, clip: 10 }],
+  ] as const)(
+    'fires a loaded heavy weapon without plasma and finishes its warnings',
+    (key, strike, distance, load) => {
+      const bot = new Bot(0, 7);
+      const me = { id: 0, team: 0, state: { ...spawn(0, world, 0, 0), ammo: -1, mag: 0, ...load } };
+      const foe = { id: 9, team: 1, state: { ...spawn(1, world, 0, 1), z: 10 - distance } };
+      const firing: boolean[] = [];
+      for (let seq = 0; seq < 180; seq++) {
+        const intent = bot.think({ me, others: [foe], flags: [home, home], world });
+        const fired = step(
+          me.state,
+          { ...intent, keys: intent.keys & (KEY.FIRE | key), seq },
+          world,
+          0,
+        );
+        if (fired === strike) {
+          firing.push(bot.hunting === foe.id);
+        }
+      }
+      const { warn } = personaOf(0, 7);
+      expect(firing.slice(0, warn)).toEqual(Array(warn).fill(false));
+      expect(firing.slice(warn)).toContain(true);
+      if (key === KEY.RAIL) {
+        expect(me.state.shots).toBe(0);
+      }
+    },
+  );
+
   it('counts its warning shots across the wrap of the shot count', () => {
     const offs = shots({ shots: 254 });
     const { warn } = personaOf(0, 7);
@@ -825,6 +871,82 @@ describe('Bot: team play', () => {
     me.state.hp = 8;
     bot.think({ me, others: [], flags: [home, home], world, packs: [[8, 0, 10]] });
     expect(bot.view().why).toBe('take flag');
+  });
+
+  it('seeks a nearby missing rifle, then equips it, while a carrier goes home', () => {
+    const world = build(HIGHLINE);
+    const bot = new Bot(0);
+    const me = at(0, 0, 43, 156);
+    me.state.y = 19;
+    me.state.ammo = 10;
+    me.state.blade = true;
+    bot.think({ me, others: [], flags: [home, home], world });
+    expect(bot.view().why).toBe('rifle rack');
+    me.state.rifle = 10;
+    expect(bot.think({ me, others: [], flags: [home, home], world }).keys & KEY.RIFLE).toBeTruthy();
+    me.state.rail = 10;
+    expect(bot.think({ me, others: [], flags: [home, home], world }).keys & KEY.RAIL).toBeTruthy();
+    bot.think({ me, others: [], flags: [home, carried(me.id)], world });
+    expect(bot.view().why).toBe('flag home');
+  });
+
+  it.each([
+    [
+      HIGHLINE,
+      240,
+      [
+        ['rifle', 43, 19, 156],
+        ['rail', 18, 26, 145],
+      ],
+    ],
+    [
+      MOON,
+      280,
+      [
+        ['rifle', 145, 0, 194],
+        ['rail', 43, 0, 164],
+      ],
+    ],
+  ] as const)('walks to the distant racks and picks up their weapons', (def, zed, starts) => {
+    const world = build(def);
+    for (const team of [0, 1]) {
+      for (const [name, x, y, z] of starts) {
+        const bot = new Bot(team);
+        const me = at(team, team, x, team ? zed - z : z);
+        Object.assign(me.state, { y, ammo: 10, blade: true });
+        for (let k = 0; k < 600 && (me.state[name] ?? -1) < 0; k++) {
+          const intent = bot.think({ me, others: [], flags: [home, home], world });
+          step(me.state, { ...intent, seq: k }, world, team);
+        }
+        expect(me.state[name], `${name}, team ${team}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('paces failed rack searches and waits for the floor before searching again', () => {
+    const world = build(MOON);
+    const bot = new Bot(0);
+    const me = at(0, 0, 31, 155);
+    Object.assign(me.state, { y: 0, ammo: 10, blade: true, rifle: 10, rail: -1 });
+    const search = vi.spyOn(navigation, 'path');
+    const scans = () =>
+      search.mock.calls.filter(([, , , goal]) => goal === MOON.teams[0].rail).length;
+    try {
+      for (let k = 0; k < 10; k++) {
+        bot.think({ me, others: [], flags: [home, home], world });
+      }
+      expect(scans()).toBe(1);
+      me.state.ground = false;
+      for (let k = 0; k < 60; k++) {
+        bot.think({ me, others: [], flags: [home, home], world });
+      }
+      expect(scans()).toBe(1);
+      me.state.ground = true;
+      bot.think({ me, others: [], flags: [home, home], world });
+      expect(scans()).toBe(2);
+    } finally {
+      search.mockRestore();
+    }
   });
 
   it('fights the enemy on its carrier before a nearer one', () => {

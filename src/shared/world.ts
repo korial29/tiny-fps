@@ -33,11 +33,11 @@ export interface TeamDef {
   spawns: Spawn[];
   /** The gun rack near the spawns, a point on a top: walking within RACK_R gives the gun with AMMO_MAX shots. */
   rack?: Vec3;
-  /** The katana rack, next to the gun rack, a point on a top: walking within RACK_R gives the katana. */
+  /** The katana rack, a point on a top: walking within RACK_R gives the katana. */
   blade?: Vec3;
-  /** The rail gun rack, on the other side of the gun rack: walking within RACK_R gives the rail gun with RAIL_MAX shots. */
+  /** The rail gun rack: walking within RACK_R gives the rail gun with RAIL_MAX shots. */
   rail?: Vec3;
-  /** The laser rifle rack, past the rail gun's: walking within RACK_R gives the rifle with RIFLE_MAX rounds. */
+  /** The laser rifle rack: walking within RACK_R gives the rifle with RIFLE_MAX rounds. */
   rifle?: Vec3;
 }
 

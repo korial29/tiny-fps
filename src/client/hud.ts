@@ -333,7 +333,7 @@ export const GOAL = [
   'Two teams, two flags. Take the enemy flag from its base and run it home.',
   'A capture counts only while your own flag is at home.',
   `First team to ${RULES.scoreLimit} captures wins, or the one ahead after ${RULES.timeLimit / 60} minutes.`,
-  'The gun, the katana, the rail gun and the rifle wait on the armoury past your flag.',
+  'Find basic weapons near your spawn and heavier weapons along the routes.',
 ];
 
 /**

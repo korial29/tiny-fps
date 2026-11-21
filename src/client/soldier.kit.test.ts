@@ -13,6 +13,7 @@ import type { Vec3 } from './mesh';
 import { JOINT as J, REST, solve, turn } from './rig';
 import { FRY, animate, dissolve, fried, seatOf, soldier, stance } from './soldier';
 import type { Runner } from './soldier';
+import { hunter } from './hunter';
 import { PACK, pack } from './pack';
 
 const DT = 1 / 60;
@@ -233,6 +234,22 @@ describe('the ninja', () => {
     // 23 000 before: 13 rows of ribs, every toe's knuckle and pad, the pipes up its neck.
     expect(far.length / STRIDE).toBeLessThan(11000);
     expect(far.length * 4).toBeLessThan(near.length);
+  });
+});
+
+describe('the Hunter', () => {
+  it('draws the complete Hunter model at the player’s feet instead of the Marine skin', () => {
+    const r = hold({}, 5);
+    r.look = { role: ROLE.HUNTER };
+    const out: number[] = [];
+    soldier(out, r, [0.15, 0.4, 1], 0);
+    const expected = Object.entries(hunter(0))
+      .filter(([name]) => !name.startsWith('Quills') && name !== 'Visor grille')
+      .reduce((n, [, part]) => n + part.length, 0);
+    const heights = Array.from({ length: out.length / STRIDE }, (_, i) => out[i * STRIDE + 1]);
+    expect(out.length).toBeGreaterThanOrEqual(expected);
+    expect(Math.min(...heights)).toBeCloseTo(r.p.y, 2);
+    expect(Math.max(...heights)).toBeGreaterThan(r.p.y + 2.3);
   });
 });
 

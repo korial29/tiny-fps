@@ -48,7 +48,7 @@ import { JOINT, JOINTS, turn } from './rig';
 import { craft } from './craft';
 import { rolled, rover } from './rover';
 import type { Quat } from './rig';
-import { GRIN, animate, createRunner, soldier } from './soldier';
+import { GRIN, animate, createRunner, soldier, warmHunter } from './soldier';
 import { PARRY_IN } from './katana';
 import { BARE_REGIONS, COLOURS, REGION, TOP, UNLIT, beast, body } from './skin';
 import { CLOTH } from './mask';
@@ -969,6 +969,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   // with its face's channels takes a tenth of a second), they would stall a frame of the match. So
   // would their armour's recipes (a quarter of a second close up).
   const dressed = (build = 0) => [0, 1, 3].forEach(lod => prepare(body(lod, build), lod > 2));
+  warmHunter();
   dressed();
   // Her close hair, every style (half a second for the five): a style can come with a player who
   // joins or change in the menu mid-match, and the store's buffer grows now, not in a frame.
@@ -1722,11 +1723,15 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           r.grin = GRIN;
         }
       }),
-    portrait(into, p, build, color, look, shot = PORTRAIT) {
+    portrait(into, p, build, color, look, inputShot = PORTRAIT) {
       const card = into.getContext('2d');
       if (lost || !card || !size()[1]) {
         return false;
       }
+      // The complete Hunter model is taller than a standard runner, so keep its mask and boots in
+      // the portrait frame together.
+      const shot =
+        look?.role === ROLE.HUNTER ? { ...inputShot, eye: 1.19, away: 4.6, turn: -0.1 } : inputShot;
       // A runner of his own, with the player's id (his face and hair), standing still far above the map.
       const [crowd, worn, styled] = [runners, builds, looks];
       [runners, builds, looks] = [

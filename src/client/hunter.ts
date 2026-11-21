@@ -304,7 +304,7 @@ export function hunter(lod: 0 | 1 | 2) {
   }
   // Round the outline with a quadratic Bezier at each corner, then loft the shell
   // through shrinking copies of the outline to the crown. Shared normals cross each seam.
-  function plate(edge: Vec3[], peak: Vec3, color: Vec3, layer = TWILL, sharp = false) {
+  function plate(edge: Vec3[], peak: Vec3, color: Vec3, sharp = false, layer = SHINE) {
     const outline: Vec3[] = [];
     const corners = [1, 3, 6][lod];
     const blend = sharp ? 0.05 : 0.34;
@@ -425,7 +425,14 @@ export function hunter(lod: 0 | 1 | 2) {
   // Angles run from the wearer's left to right across the face. Each panel
   // has its own edge normals so the lip of the visor catches a separate highlight.
   type Surface = (u: number, v: number) => Vec3;
-  function panel(surface: Surface, cols: number, rows: number, tint: Vec3, reverse = false) {
+  function panel(
+    surface: Surface,
+    cols: number,
+    rows: number,
+    tint: Vec3,
+    reverse = false,
+    layer = SHINE,
+  ) {
     const verts: number[][] = [];
     for (let j = 0; j <= rows; j++) {
       for (let i = 0; i <= cols; i++) {
@@ -443,7 +450,7 @@ export function hunter(lod: 0 | 1 | 2) {
           ...n.map(c => (reverse ? -c : c)),
           tint[0],
           tint[1],
-          TWILL,
+          layer,
           tint[2],
         ]);
       }
@@ -568,6 +575,8 @@ export function hunter(lod: 0 | 1 | 2) {
             1,
             lod === 2 ? 24 : 14,
             leather,
+            false,
+            WEAVE,
           );
         }
       }
@@ -584,6 +593,8 @@ export function hunter(lod: 0 | 1 | 2) {
         sectors,
         3,
         leather,
+        false,
+        TWILL,
       );
     }
     part('Shin plates ' + side);
@@ -601,25 +612,26 @@ export function hunter(lod: 0 | 1 | 2) {
         },
         lod === 2 ? 16 : 8,
         4,
-        course % 2 ? [0.31, 0.35, 0.35] : [0.36, 0.39, 0.385],
+        course % 2 ? [0.39, 0.42, 0.41] : [0.48, 0.51, 0.49],
       );
     }
     part('Boot lames ' + side);
     for (let j = 0; j < 2; j++) {
       panel(
         (u, v) => {
-          const a = (u - 0.5) * Math.PI,
-            z = -0.191 + j * 0.076 + 0.08 * v;
+          const a = (u - 0.5) * Math.PI;
           const arch = 0.037 + j * 0.014 + 0.018 * v;
           return [
-            side * 0.167 + (0.059 + 0.004 * v) * Math.sin(a),
+            side * 0.151 + (0.048 + 0.003 * v) * Math.sin(a),
             0.023 + arch * Math.cos(a),
-            z - 0.01 * Math.cos(a),
+            -0.17 + j * 0.064 + 0.066 * v - 0.008 * Math.cos(a),
           ];
         },
         lod === 2 ? 16 : 8,
         4,
-        j === 0 ? [0.26, 0.3, 0.3] : [0.32, 0.355, 0.35],
+        j === 0 ? [0.26, 0.3, 0.3] : [0.38, 0.41, 0.4],
+        false,
+        j === 0 ? WEAVE : SHINE,
       );
     }
     part('Patella ' + side);
@@ -632,7 +644,7 @@ export function hunter(lod: 0 | 1 | 2) {
         0.016 + 0.021 * ridge ** 3 * Math.sin(Math.PI * v) + 0.004 * ridge,
       );
     };
-    panel(cap, lod === 2 ? 18 : 10, 7, [0.4, 0.43, 0.425]);
+    panel(cap, lod === 2 ? 18 : 10, 7, [0.49, 0.52, 0.5]);
     if (lod) {
       for (const sign of [-1, 1]) {
         panel(
@@ -807,18 +819,83 @@ export function hunter(lod: 0 | 1 | 2) {
   part('Rangefinder');
   limb([-0.232, 1.704, -0.042], [-0.23, 1.705, -0.138], [0.018, 0.025, 0.02], bronze, 1, TWILL);
   limb([-0.23, 1.705, -0.138], [-0.23, 1.705, -0.14], [0.012, 0.012], light, 1, -2);
+  part('Shoulder plates');
+  for (const side of [-1, 1]) {
+    plate(
+      [
+        [side * 0.145, 1.476, -0.07],
+        [side * 0.188, 1.548, -0.05],
+        [side * 0.29, 1.567, -0.025],
+        [side * 0.366, 1.524, -0.015],
+        [side * 0.369, 1.461, -0.048],
+        [side * 0.306, 1.423, -0.09],
+        [side * 0.215, 1.428, -0.108],
+      ],
+      [side * 0.267, 1.49, -0.164],
+      alloy,
+    );
+  }
+  if (lod > 0) {
+    out = parts['Marine anatomy'];
+    const point = (x: number, y: number): Vec3 => [x, y, -0.205 + 0.2 * Math.abs(x)];
+    const rows = lod === 2 ? 12 : 7;
+    for (const direction of [-1, 1]) {
+      for (let strand = 0; strand <= rows; strand++) {
+        const startX = -0.235 + (0.47 * strand) / rows;
+        for (let step = 0; step < 4; step++) {
+          const t = step / 4,
+            next = (step + 1) / 4,
+            x = startX + direction * 0.19 * t,
+            end = startX + direction * 0.19 * next;
+          if (Math.abs(end) <= 0.295) {
+            limb(
+              point(x, 1.17 + 0.285 * t),
+              point(end, 1.17 + 0.285 * next),
+              [0.0032, 0.0032],
+              [0.095, 0.087, 0.073],
+              1,
+              WEAVE,
+            );
+          }
+        }
+      }
+    }
+  }
   part('Belt');
-  limb([0, 0.973, 0], [0, 1.045, 0], [0.207, 0.215, 0.198], leather, 0.79, WEAVE);
+  limb([0, 0.973, 0], [0, 1.045, 0], [0.198, 0.206, 0.191], graphite, 0.86, WEAVE);
+  // A layered clasp and narrow pouches break up the broad belt.
   plate(
     [
-      [-0.071, 1.028, -0.162],
-      [0.071, 1.028, -0.162],
-      [0.084, 0.924, -0.164],
-      [0.018, 0.753, -0.18],
-      [-0.069, 0.854, -0.173],
+      [-0.052, 1.027, -0.202],
+      [0.052, 1.027, -0.202],
+      [0.054, 0.987, -0.211],
+      [0.044, 0.963, -0.214],
+      [-0.044, 0.963, -0.214],
+      [-0.054, 0.987, -0.211],
     ],
-    [0, 0.918, -0.192],
-    bronze,
+    [0, 0.995, -0.223],
+    alloy,
+  );
+  for (const side of [-1, 1]) {
+    // Low profile pouches sit beside the buckle.
+    limb(
+      [side * 0.137, 0.966, -0.159],
+      [side * 0.137, 1.035, -0.15],
+      [0.034, 0.036, 0.031],
+      leather,
+      0.9,
+      TWILL,
+    );
+  }
+  plate(
+    [
+      [-0.031, 0.934, -0.177],
+      [0.031, 0.934, -0.177],
+      [0.027, 0.722, -0.176],
+      [-0.027, 0.722, -0.176],
+    ],
+    [0, 0.822, -0.205],
+    alloy,
   );
   part('Wrist blade');
   plate(
@@ -831,7 +908,6 @@ export function hunter(lod: 0 | 1 | 2) {
     ],
     [0.398, 0.949, -0.229],
     silver,
-    SHINE,
     true,
   );
   part('Shoulder laser');
@@ -859,7 +935,6 @@ export function hunter(lod: 0 | 1 | 2) {
     ],
     [0.382, 1.857, 0.143],
     silver,
-    SHINE,
     true,
   );
   part('Flying disc');
@@ -873,18 +948,18 @@ export function hunter(lod: 0 | 1 | 2) {
     const a = (j * Math.PI) / 3;
     plate(
       [
-        diskPoint(0.054, a - 0.32, 0),
-        diskPoint(0.109, a - 0.41, 0),
-        diskPoint(0.139, a + 0.27, 0),
-        diskPoint(0.089, a + 0.22, 0),
-        diskPoint(0.054, a + 0.66, 0),
+        diskPoint(0.039, a - 0.19, 0),
+        diskPoint(0.104, a - 0.34, 0),
+        diskPoint(0.143, a + 0.08, -0.001),
+        diskPoint(0.111, a + 0.25, -0.002),
+        diskPoint(0.062, a + 0.57, -0.002),
       ],
-      diskPoint(0.083, a, -0.019),
+      diskPoint(0.081, a + 0.08, -0.007),
       silver,
-      SHINE,
+      true,
     );
   }
-  limb(hub, [hub[0] + 0.013, hub[1], hub[2] - 0.026], [0.075, 0.061, 0.034], bronze, 1, TWILL);
+  limb(hub, [hub[0] + 0.009, hub[1], hub[2] - 0.009], [0.052, 0.044, 0.023], bronze, 1, SHINE);
   // Lift the knee and pelvis from a planted foot; ease the rise out under the ribs.
   // The derivative of the same curve transforms the normals of the fitted kit.
   function legRise(y: number): [number, number] {
@@ -939,6 +1014,12 @@ export function hunter(lod: 0 | 1 | 2) {
           mesh[i] += 0.013;
           mesh[i + 2] += 0.132;
           mesh[i + 1] -= 0.094;
+        }
+        if (anatomy && mesh[i + 1] < 0.2) {
+          const blend = smoothStep(0.035, 0.2, mesh[i + 1]),
+            scale = 0.86 + 0.14 * blend;
+          mesh[i] *= scale;
+          mesh[i + 2] *= scale;
         }
         mesh[i] *= stature;
         mesh[i + 1] *= stature;

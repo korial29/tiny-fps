@@ -318,7 +318,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Hunter',
-    'Starts with wrist blades. The harpoon, returning disc and assisted shoulder laser complete the hunt.',
+    'Slot 1 fires a harpoon. Slot 2 has wrist blades; G or right click throws a returning disc. Slot 3 fires the assisted shoulder laser.',
     'Press V to cycle thermal vision and alien detection.',
     'Every map',
   ],
@@ -374,7 +374,15 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
       ['G|or|Right click', 'laser rifle: a grenade from its launcher', 'KeyG'],
     ],
   ],
-  ['Hunter', [['V', 'cycle normal, thermal and alien scan', 'KeyV']]],
+  [
+    'Hunter',
+    [
+      ['1', 'harpoon'],
+      ['2', 'wrist blades; G or right click throws the returning disc'],
+      ['3', 'assisted shoulder laser'],
+      ['V', 'cycle normal, thermal and alien scan', 'KeyV'],
+    ],
+  ],
   [
     'Xenomorph',
     [
@@ -780,8 +788,8 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       radios(g)[0].tabIndex = on < 0 ? 0 : radios(g)[0].tabIndex;
     });
     // The xenomorph has no body, skin or haircut to pick (the user, 2026-11-16): one creature.
-    const beastly = picked.role == ROLE.XENO;
-    [beastly, beastly, beastly || picked.role == ROLE.NINJA].forEach((h, g) => {
+    const fixedLook = picked.role == ROLE.XENO || picked.role == ROLE.HUNTER;
+    [fixedLook, fixedLook, fixedLook || picked.role == ROLE.NINJA].forEach((h, g) => {
       groups[g].hidden = h;
       // The labels over the skin and the haircut go with them.
       if (g) {
@@ -1004,7 +1012,13 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         ? `  ${'●'.repeat(nades)}${'○'.repeat(Math.max(NADE_MAX - nades, 0))}`
         : '';
       set(spare, `${'▮'.repeat(rest / size)}${rest % size ? '▯' : ''}\n${rest}${dots}`);
+      const names =
+        picked.role === ROLE.HUNTER
+          ? ['1 harpoon', '2 blades', '3 laser', '4 rifle', '5 fists']
+          : ['1 gun', '2 katana', '3 rail', '4 rifle', '5 fists'];
       [...slots.children].forEach((kbd, i) => {
+        kbd.textContent = names[i];
+        (kbd as HTMLElement).title = names[i];
         (kbd as HTMLElement).hidden = i < 4 && !have[i];
         kbd.classList.toggle('a', i == (fists ? 4 : k ? 1 : rifled ? 3 : railed ? 2 : 0));
       });

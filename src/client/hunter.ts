@@ -16,6 +16,7 @@ const light: Vec3 = [1, 0.24, 0.065];
 
 const stature = 1.2;
 const bell = (x: number) => Math.exp(-x * x);
+const built: Partial<Record<0 | 1 | 2, Record<string, number[]>>> = {};
 
 // Sculpt the Marine's rest skin, including the shared shoulder and crotch vertices.
 // Bone weights distinguish the inside of an arm from the adjacent chest wall.
@@ -258,6 +259,9 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
 }
 
 export function hunter(lod: 0 | 1 | 2) {
+  if (built[lod]) {
+    return built[lod]!;
+  }
   const parts: Record<string, number[]> = {};
   let out: number[] = [];
   const part = (name: string) => {
@@ -942,5 +946,5 @@ export function hunter(lod: 0 | 1 | 2) {
       }
     }
   }
-  return parts;
+  return (built[lod] = parts);
 }

@@ -351,6 +351,7 @@ describe('the rover, predicted against the room', () => {
         // Half a step after the last one: his body is on the rider's seat of the rover drawn then.
         const alpha = 0.5;
         const body = pred.me(alpha)!;
+        expect(pred.view(alpha, { keys, yaw: 1, pitch: 0 })).toEqual(body);
         const r = pred.rovers(now + alpha * DT, alpha)[0];
         const sat = { ...body };
         seat(sat, r, 1);

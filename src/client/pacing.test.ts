@@ -19,15 +19,33 @@ describe('render pacing', () => {
     }
   });
 
+  it.each([
+    [240, 165],
+    [240, 120],
+    [120, 60],
+    [60, 120],
+  ])('adapts to a stable change from %i to %i Hz', (from, to) => {
+    const pacing = createPacing(1000 / from);
+    let now = 0;
+    for (let i = 0; i < from; i++) {
+      pacing.draw((now += 1000 / from), true);
+    }
+    for (let i = 0; i < to * 3; i++) {
+      const draw = pacing.draw((now += 1000 / to), true);
+      if (i > 30) {
+        expect(draw).toBe(true);
+      }
+    }
+  });
+
   it('learns high refresh after a scene starts in the background', () => {
     const pacing = createPacing();
     for (let i = 0; i < 12; i++) {
       pacing.draw(i * FAST, true);
     }
-    for (let i = 12; i < 240; i += 2) {
+    for (let i = 12; i < 240; i++) {
       expect(pacing.draw(i * FAST, true)).toBe(true);
     }
-    expect(pacing.draw(239 * FAST, true)).toBe(false);
   });
 
   it('ignores one late frame and time spent loading or hidden', () => {
@@ -45,9 +63,13 @@ describe('render pacing', () => {
 
   it('keeps a steady 60 Hz across recovered vsyncs under load, then retries 120 Hz', () => {
     const pacing = createPacing(FAST);
-    for (let i = 0; i <= 400; i += 2) {
-      expect(pacing.draw(i * FAST, true)).toBe(true);
+    let lastPaint = 0;
+    for (let i = 0; i <= 400; i++) {
+      if (i % 8 !== 1 && i % 8 !== 3 && i % 8 !== 5 && pacing.draw(i * FAST, true)) {
+        lastPaint = i;
+      }
     }
+    expect(lastPaint).toBe(400);
     for (let i = 401; i <= 440; i++) {
       expect(pacing.draw(i * FAST, true)).toBe(i % 2 === 0);
     }

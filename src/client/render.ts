@@ -913,7 +913,7 @@ export interface Renderer {
     /** Adds what else moves in the map (the doors): drawn lit, casting shadows, with the other players. */
     more?: (v: Out) => void,
     view?: FrameView,
-  ): void;
+  ): boolean;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
   /** The footsteps of the player `id`'s runner so far (Gait.steps), undefined before it is drawn. */
@@ -976,7 +976,6 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   // with its face's channels takes a tenth of a second), they would stall a frame of the match. So
   // would their armour's recipes (a quarter of a second close up).
   const dressed = (build = 0) => [0, 1, 3].forEach(lod => prepare(body(lod, build), lod > 2));
-  warmHunter();
   dressed();
   // Her close hair, every style (half a second for the five): a style can come with a player who
   // joins or change in the menu mid-match, and the store's buffer grows now, not in a frame.
@@ -1399,7 +1398,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     ) {
       const [w, h] = view ? backing(view.width, view.height, devicePixelRatio) : size();
       if (lost || !w || !h) {
-        return;
+        return false;
       }
       if (canvas.width != w || canvas.height != h) {
         canvas.width = w;
@@ -1719,6 +1718,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.activeTexture(gl.TEXTURE0);
       live = undefined;
       use(land);
+      return true;
     },
     project: (x, y, z) => project(vp, x, y, z),
     steps: id => runners.get(id)?.gait.steps,
@@ -1727,6 +1727,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       [builds, looks] = [b, l];
       // Her skins and their armour now, as the man's are built at the start: not in a frame of the match.
       new Set(b.values()).forEach(k => k && dressed(k));
+      for (const look of l.values()) {
+        if (look.role === ROLE.HUNTER) {
+          warmHunter();
+          break;
+        }
+      }
     },
     vision: on => (seeing = on),
     hunterVision: (mode, targets) => {
@@ -1752,6 +1758,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const card = into.getContext('2d');
       if (lost || !card || !size()[1]) {
         return false;
+      }
+      if (look?.role === ROLE.HUNTER) {
+        warmHunter();
       }
       // The complete Hunter model is taller than a standard runner, so keep its mask and boots in
       // the portrait frame together.

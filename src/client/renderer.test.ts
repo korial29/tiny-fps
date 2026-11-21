@@ -412,8 +412,10 @@ describe('createRenderer', () => {
     const eye: [number, number, number] = [p.x, p.y + 1.6, p.z + 2];
     const draw = () => rd.frame(eye, 0, 0, [p], new Map(), createEffects(), []);
     draw(); // Warm the regular runner's pieces shared with the Hunter.
-    const before = filled;
+    const regular = filled;
     rd.wear(new Map(), new Map([[p.id, { role: ROLE.HUNTER }]]));
+    const before = filled;
+    expect(before).toBeGreaterThan(regular);
     draw();
     expect(filled).toBe(before);
   });

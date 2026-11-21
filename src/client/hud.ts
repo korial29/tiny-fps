@@ -701,6 +701,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const one = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
   const [muted, menu] = ['h5', 'aside'].map(t => one(t));
   let lastVitals: Parameters<Hud['vitals']> | undefined;
+  let lastHunter = false;
   let mags = [GUN_MAG, RAIL_CAP, RIFLE_CLIP];
   const [name, tag, lore, status] = ['h3', 'address small', 'address>span', 'header strong'].map(
     t => one(`aside ${t}`),
@@ -984,10 +985,16 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       }
     },
     vitals(...values) {
-      if (lastVitals?.length === values.length && values.every((v, i) => v === lastVitals![i])) {
+      const hunter = picked.role === ROLE.HUNTER;
+      if (
+        hunter === lastHunter &&
+        lastVitals?.length === values.length &&
+        values.every((v, i) => v === lastVitals![i])
+      ) {
         return;
       }
       lastVitals = values;
+      lastHunter = hunter;
       const [
         hp,
         rounds,
@@ -1025,10 +1032,9 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         ? `  ${'●'.repeat(nades)}${'○'.repeat(Math.max(NADE_MAX - nades, 0))}`
         : '';
       set(spare, `${'▮'.repeat(rest / size)}${rest % size ? '▯' : ''}\n${rest}${dots}`);
-      const names =
-        picked.role === ROLE.HUNTER
-          ? ['1 harpoon', '2 blades', '3 laser', '4 rifle', '5 fists']
-          : ['1 gun', '2 katana', '3 rail', '4 rifle', '5 fists'];
+      const names = hunter
+        ? ['1 harpoon', '2 blades', '3 laser', '4 rifle', '5 fists']
+        : ['1 gun', '2 katana', '3 rail', '4 rifle', '5 fists'];
       [...slots.children].forEach((kbd, i) => {
         kbd.textContent = names[i];
         (kbd as HTMLElement).title = names[i];

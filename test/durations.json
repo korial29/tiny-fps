@@ -40,6 +40,7 @@
   "src/client/helmet.test.ts": 1,
   "src/client/hud.test.ts": 2.4,
   "src/client/hunter.test.ts": 0.8,
+  "src/client/index.pacing.test.ts": 0.5,
   "src/client/index.test.ts": 17.6,
   "src/client/input.test.ts": 0,
   "src/client/katana.test.ts": 0.2,

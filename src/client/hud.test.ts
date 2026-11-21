@@ -970,8 +970,11 @@ describe('the gun on the HUD', () => {
     });
 
     it('labels the Hunter weapon slots by their loadout', () => {
+      const vitals = () => hud.vitals(5, 30, true, false, 7, false, 6, false, 30);
+      vitals();
+      expect(shown()).toEqual(['1 gun', '2 katana', '3 rail', '4 rifle', '5 fists']);
       hud.wear(BODY.MALE, { role: ROLE.HUNTER });
-      hud.vitals(5, 30, true, false, 7, false, 6, false, 30);
+      vitals();
       expect(shown()).toEqual(['1 harpoon', '2 blades', '3 laser', '4 rifle', '5 fists']);
     });
 

@@ -401,6 +401,7 @@ const play = (
   const pacing = createPacing(period);
   let last: number | undefined;
   let rendered: number | undefined;
+  let displayed: number | undefined;
   let acc = 0;
   let raf = 0;
   let dead = false;
@@ -651,7 +652,12 @@ const play = (
     }
     for (; ready && acc >= STEP; acc -= STEP) {
       const was = predictor.me(1);
-      const input = predictor.step({ keys: ctl.take(), yaw: ctl.yaw, pitch: ctl.pitch }, now);
+      ctl.pilot = predictor.piloting();
+      const input = predictor.step(
+        { keys: ctl.take(), yaw: ctl.yaw, pitch: ctl.pitch },
+        now,
+        displayed,
+      );
       const next = predictor.me(1);
       combat.step(was, next);
       ctl.track(was, next);
@@ -668,6 +674,7 @@ const play = (
     // Read the canvas box before the HUD writes invalidate layout.
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
+    ctl.pilot = predictor.piloting();
     const me = predictor.view(acc / STEP, { keys: ctl.peek(), yaw: ctl.yaw, pitch: ctl.pitch });
     const others = predictor.others(now);
     // The station's strike disintegrated the other team: who of it lies down is not drawn.
@@ -757,7 +764,6 @@ const play = (
     hud.glare(fx.glare);
     const carrying = !!match?.flags.some(f => f.state === FLAG.CARRIED && f.by == you.id);
     const car = driving ? rovers[wheel] : undefined;
-    ctl.pilot = !!car?.ship;
     // Anyone but the xenomorph sees the foes weak enough for an execution flash, the katana's or
     // the fists' (the user, 2026-11-17).
     rd?.edge(!!me && !ctl.beast && !me.down);
@@ -979,7 +985,7 @@ const play = (
         progress((step = 3));
         return;
       }
-      rd.frame(
+      const painted = rd.frame(
         pov,
         view,
         pitch,
@@ -1005,6 +1011,9 @@ const play = (
         },
         { width, height, now },
       );
+      if (painted) {
+        displayed = predictor.viewTick(now);
+      }
       if (step < STEPS.length) {
         progress((step = STEPS.length));
       }

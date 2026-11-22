@@ -378,7 +378,7 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
       [
         '1|2|3|4|5',
         'gun, katana, rail gun, laser rifle, fists',
-        'Digit1 Digit2 Digit3 Digit4 Digit5',
+        'Digit1 Digit2 Digit3 Digit4 Digit5 Numpad1 Numpad2 Numpad3 Numpad4 Numpad5',
       ],
       ['Wheel', 'next weapon'],
       ['G|or|Right click', 'laser rifle: a grenade from its launcher', 'KeyG'],

@@ -28,9 +28,9 @@ export interface Predictor {
    * own player with it, keeps it for replay, and returns it for the caller to send (the very
    * values predicted with, which the host reads back). Until the own player is known (no snapshot
    * shows it yet) it only numbers and keeps the input: the first snapshot replays it.
-   * With `now` (ms, performance.now()) the input carries the view tick the others are drawn at.
+   * With `now` (ms, performance.now()) the input carries the view tick, unless a displayed tick is supplied.
    */
-  step(i: Omit<Input, 'seq' | 'view'>, now?: number): Input;
+  step(i: Omit<Input, 'seq' | 'view'>, now?: number, displayed?: number): Input;
   /** A decoded snapshot, received at `now` (ms, performance.now()). */
   snapshot(s: Snapshot, now: number): void;
   /**
@@ -51,6 +51,8 @@ export interface Predictor {
   view(alpha: number, input: Omit<Input, 'seq' | 'view'>): PlayerState | undefined;
   /** The other players at now - INTERP_DELAY; a player missing from the latest snapshot is gone. */
   others(now: number): PlayerState[];
+  viewTick(now: number): number | undefined;
+  piloting(): boolean;
   /**
    * The map's rovers, in the order of WorldDef.rovers: the one the own player drives predicted and
    * eased by alpha like me(), the others at now - INTERP_DELAY. Empty on a map without rovers.
@@ -292,8 +294,8 @@ export const createPredictor = (world: World): Predictor => {
       [id, team, kit] = [n, t, kitOf(role, world.def)];
     },
 
-    step: (i, now) => {
-      const input = onWire({ ...i, seq, view: now === undefined ? undefined : view(now) });
+    step: (i, now, displayed = now === undefined ? undefined : view(now)) => {
+      const input = onWire({ ...i, seq, view: displayed });
       seq = (seq + 1) & 0xffff;
       pending.push(input);
       if (pending.length > MAX_PENDING) {
@@ -386,6 +388,8 @@ export const createPredictor = (world: World): Predictor => {
     },
 
     others,
+    viewTick: view,
+    piloting: () => driving() && !!car?.ship,
     rovers,
     riding,
   };

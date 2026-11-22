@@ -1254,13 +1254,19 @@ const hunterParts = (lod: HunterLod) =>
     ([name]) => lod !== 0 || (!name.startsWith('Quills') && name !== 'Visor grille'),
   ));
 
+let hunterWarmed = false;
+
 /** Build and index the Hunter models before they can be drawn during a match. */
 export const warmHunter = () => {
+  if (hunterWarmed) {
+    return;
+  }
   for (const lod of [0, 1] as const) {
     for (const [name, vertices] of hunterParts(lod)) {
       mesh(`hunter ${name} ${lod}`, o => placeHunterPart(o, vertices, ORIGIN, ID));
     }
   }
+  hunterWarmed = true;
 };
 
 /** Places a part of the Hunter's complete rest-pose model at the player's feet and heading. */

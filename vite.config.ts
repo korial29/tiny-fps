@@ -27,8 +27,8 @@ const libBuild = {
   },
   emptyOutDir: false,
   target: 'es2022',
-  // Terser leaves room in the gzip budget for the browser host and its bot simulation.
-  minify: isBuildingLocal ? ('terser' as const) : true,
+  // Terser leaves room in the gzip budgets for both browser libraries.
+  minify: 'terser' as const,
   terserOptions: { compress: { passes: 2 } },
   // Vite keeps whitespace in ES library output; ship it fully minified.
   rolldownOptions: { output: { minify: true } },

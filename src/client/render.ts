@@ -881,6 +881,12 @@ interface Target {
   h: number;
 }
 
+interface FrameView {
+  width: number;
+  height: number;
+  now: number;
+}
+
 export interface Renderer {
   /**
    * Draws one frame: the sky, the brushes and the others as seen from eye, then the own `body` over
@@ -906,7 +912,8 @@ export interface Renderer {
     self?: PlayerState,
     /** Adds what else moves in the map (the doors): drawn lit, casting shadows, with the other players. */
     more?: (v: Out) => void,
-  ): void;
+    view?: FrameView,
+  ): boolean;
   /** A world point on screen as of the last frame, in [0, 1] from the top left. */
   project(x: number, y: number, z: number): [number, number] | undefined;
   /** The footsteps of the player `id`'s runner so far (Gait.steps), undefined before it is drawn. */
@@ -969,7 +976,6 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   // with its face's channels takes a tenth of a second), they would stall a frame of the match. So
   // would their armour's recipes (a quarter of a second close up).
   const dressed = (build = 0) => [0, 1, 3].forEach(lod => prepare(body(lod, build), lod > 2));
-  warmHunter();
   dressed();
   // Her close hair, every style (half a second for the five): a style can come with a player who
   // joins or change in the menu mid-match, and the store's buffer grows now, not in a frame.
@@ -988,7 +994,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const spins: number[] = [];
   const was: [number, number][] = [];
   const dust = createDust();
-  let clock = performance.now() / 1000;
+  let clock: number | undefined;
   const gl = canvas.getContext('webgl2', { antialias: false, depth: false });
   if (!gl) {
     throw new Error('WebGL2 is not available');
@@ -1374,10 +1380,25 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   canvas.addEventListener('webglcontextrestored', onRestored);
 
   const api: Renderer = {
-    frame(eye, yaw, pitch, others, colors, fx, lights, body, ctf, tracer, rovers = [], self, more) {
-      const [w, h] = size();
+    frame(
+      eye,
+      yaw,
+      pitch,
+      others,
+      colors,
+      fx,
+      lights,
+      body,
+      ctf,
+      tracer,
+      rovers = [],
+      self,
+      more,
+      view,
+    ) {
+      const [w, h] = view ? backing(view.width, view.height, devicePixelRatio) : size();
       if (lost || !w || !h) {
-        return;
+        return false;
       }
       if (canvas.width != w || canvas.height != h) {
         canvas.width = w;
@@ -1391,9 +1412,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       // The frame's vertices, into the store the last frame left.
       v.length = 0;
       pieces.length = 0;
-      const now = performance.now() / 1000;
-      const dt = Math.min(0.1, now - clock);
-      clock = now;
+      const now = (view?.now ?? performance.now()) / 1000;
+      // Radio and menu portraits share the renderer, but have their own animation.
+      const dt = posing ? 0 : Math.max(0, Math.min(0.1, now - (clock ?? now)));
+      if (!posing) {
+        clock = now;
+      }
       // The own player, seen from outside his head, is one of the crowd.
       const crowd = self ? [...others, self] : others;
       animate(runners, crowd, dt, world, tracer, rovers, builds, looks);
@@ -1559,7 +1583,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       uni('uniformMatrix4fv', 'm', false, vp);
       uni('uniformMatrix4fv', 'W', false, sunM);
       uni('uniform3fv', 'E', eye);
-      uni('uniform1f', 'T', performance.now() / 1000);
+      uni('uniform1f', 'T', now);
       uni('uniform1f', 'Z', 1);
       // Xenomorph vision uses enemy positions to reveal them through walls.
       const activeHunterMode = seeing ? 0 : hunterMode;
@@ -1694,6 +1718,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       gl.activeTexture(gl.TEXTURE0);
       live = undefined;
       use(land);
+      return true;
     },
     project: (x, y, z) => project(vp, x, y, z),
     steps: id => runners.get(id)?.gait.steps,
@@ -1702,6 +1727,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       [builds, looks] = [b, l];
       // Her skins and their armour now, as the man's are built at the start: not in a frame of the match.
       new Set(b.values()).forEach(k => k && dressed(k));
+      for (const look of l.values()) {
+        if (look.role === ROLE.HUNTER) {
+          warmHunter();
+          break;
+        }
+      }
     },
     vision: on => (seeing = on),
     hunterVision: (mode, targets) => {
@@ -1727,6 +1758,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const card = into.getContext('2d');
       if (lost || !card || !size()[1]) {
         return false;
+      }
+      if (look?.role === ROLE.HUNTER) {
+        warmHunter();
       }
       // The complete Hunter model is taller than a standard runner, so keep its mask and boots in
       // the portrait frame together.

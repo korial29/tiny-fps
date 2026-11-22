@@ -52,6 +52,7 @@ import { createInput, WEAPON } from './input';
 import { createPredictor } from './predict';
 import { gather } from './lights';
 import { marks } from './marks';
+import { createPacing } from './pacing';
 import { brief, goal } from './mission';
 import { lamps } from './satellite';
 import { packsOf } from './props';
@@ -146,11 +147,11 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     p.onmessage = ev => early.push(ev);
     // The scene starts once the loading screen is painted: building the map holds the main thread
     // a while. A tab in the background has no frames, and starts after a wait.
-    const start = () => {
+    const start = (period?: number) => {
       if (live) {
         return;
       }
-      live = play(container, key, p, () => emit('quit'), loader.step);
+      live = play(container, key, p, () => emit('quit'), loader.step, period);
       // The game first in its container, the loading screen over it.
       container.append(loader.el);
       if (up) {
@@ -159,7 +160,10 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       early.forEach(ev => p.onmessage?.(ev));
     };
     const timers = [setTimeout(start, 250), 0];
-    const raf = requestAnimationFrame(() => (timers[1] = setTimeout(start)));
+    let raf = requestAnimationFrame(first => {
+      // Sample a refresh while only the loader is drawing, before WebGL can miss a vsync.
+      raf = requestAnimationFrame(next => (timers[1] = setTimeout(() => start(next - first))));
+    });
     scene = {
       destroy() {
         cancelAnimationFrame(raf);
@@ -230,6 +234,7 @@ const play = (
   ws: SocketLike,
   quit = () => {},
   progress: (step: number) => void = () => {},
+  period?: number,
 ): { destroy(): void } => {
   const wrap = document.createElement('div');
   const root = wrap.attachShadow({ mode: 'open' });
@@ -361,8 +366,14 @@ const play = (
   let ended: Summary | undefined;
   let colors = new Map<number, string>();
   let names = new Map<number, string>();
+  let teams = new Map<number, number>();
   /** Tags above the others, by player id. */
   const tags = new Map<number, HTMLElement>();
+  const label = (id: number, el: HTMLElement) => {
+    el.textContent = names.get(id) ?? '';
+    el.style.color = colors.get(id) ?? '';
+  };
+  const team = (id: number) => teams.get(id);
   /** The bot view (watch.ts): B looks through a bot's eyes, the next one, then the own again. */
   const botcam = createWatch(screen);
   const onKey = (e: KeyboardEvent) => {
@@ -387,7 +398,10 @@ const play = (
   let won = false;
   /** The rover last driven (its index), whether the own player is seated, and since when (ms). */
   let [wheel, seated, since] = [-1, false, 0];
-  let last = performance.now();
+  const pacing = createPacing(period);
+  let last: number | undefined;
+  let rendered: number | undefined;
+  let displayed: number | undefined;
   let acc = 0;
   let raf = 0;
   let dead = false;
@@ -510,6 +524,8 @@ const play = (
       roster = m.players;
       colors = new Map(roster.map(p => [p.id, p.color]));
       names = new Map(roster.map(p => [p.id, p.name]));
+      teams = new Map(roster.map(p => [p.id, p.team]));
+      tags.forEach((el, id) => label(id, el));
       rd?.wear(
         new Map(roster.map(p => [p.id, buildOf(p, world.def)])),
         new Map(
@@ -615,16 +631,15 @@ const play = (
     let el = tags.get(id);
     if (!el) {
       tags.set(id, (el = document.createElement('b')));
+      label(id, el);
       screen.append(el);
     }
     return el;
   };
 
-  const frame = () => {
+  const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
-    const now = performance.now();
-    const before = last;
-    acc = Math.min(acc + (now - last) / 1000, MAX_STEPS * STEP);
+    acc = Math.min(acc + (now - (last ?? now)) / 1000, MAX_STEPS * STEP);
     last = now;
 
     if (!ready) {
@@ -637,21 +652,36 @@ const play = (
     }
     for (; ready && acc >= STEP; acc -= STEP) {
       const was = predictor.me(1);
-      const input = predictor.step({ keys: ctl.take(), yaw: ctl.yaw, pitch: ctl.pitch }, now);
-      combat.step(was, predictor.me(1));
-      ctl.track(was, predictor.me(1));
+      ctl.pilot = predictor.piloting();
+      const input = predictor.step(
+        { keys: ctl.take(), yaw: ctl.yaw, pitch: ctl.pitch },
+        now,
+        displayed,
+      );
+      const next = predictor.me(1);
+      combat.step(was, next);
+      ctl.track(was, next);
       if (open) {
         ws.send(encodeInput(input));
       }
     }
 
+    if (!pacing.draw(now, !!rd && step === STEPS.length && ctl.locked() && !msg)) {
+      return;
+    }
+    const dt = Math.min((now - (rendered ?? now)) / 1000, 0.1);
+    rendered = now;
+    // Read the canvas box before the HUD writes invalidate layout.
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    ctl.pilot = predictor.piloting();
     const me = predictor.view(acc / STEP, { keys: ctl.peek(), yaw: ctl.yaw, pitch: ctl.pitch });
     const others = predictor.others(now);
     // The station's strike disintegrated the other team: who of it lies down is not drawn.
     const st = match?.station;
-    const gone = (id: number) =>
-      st?.phase === PHASE.STRUCK && roster.find(q => q.id == id)?.team != st.team;
-    const visible = others.filter(p => !(p.down && gone(p.id)));
+    const struck = st?.phase === PHASE.STRUCK;
+    const gone = (id: number) => struck && team(id) != st.team;
+    const visible = struck ? others.filter(p => !(p.down && gone(p.id))) : others;
     const eye: [number, number, number] = me ? [me.x, me.y + eyeHeight(me), me.z] : [0, 0, 0];
     // The rovers, and the own seat: at the wheel the camera chases the rover, beside it the view
     // stays in the rider's head, where his shots leave from.
@@ -700,7 +730,6 @@ const play = (
       }
       hud.comm(names.get(by) ?? '', info?.team ?? 0, s, face);
     }
-    const dt = Math.min((now - before) / 1000, 0.1);
     // The flags and the bases for the renderer and the lights, and the HUD that goes with them.
     const who = (id: number) => (id == you.id ? me : others.find(p => p.id == id));
     const ctf = match && {
@@ -735,12 +764,10 @@ const play = (
     hud.glare(fx.glare);
     const carrying = !!match?.flags.some(f => f.state === FLAG.CARRIED && f.by == you.id);
     const car = driving ? rovers[wheel] : undefined;
-    ctl.pilot = !!car?.ship;
     // Anyone but the xenomorph sees the foes weak enough for an execution flash, the katana's or
     // the fists' (the user, 2026-11-17).
     rd?.edge(!!me && !ctl.beast && !me.down);
     // E on a foe close and ahead (weak enough for an execution): the host tries the glory kill before a seat.
-    const team = (id: number) => roster.find(p => p.id == id)?.team;
     const prey =
       me && !seat && !me.lock
         ? glory(
@@ -769,14 +796,18 @@ const play = (
       // A hit comes from the nearest foe up: the angle to him off the view, to the right.
       const worn = (q: PlayerState) => q.hp + (q.armor ?? 0);
       const lost = felt && !felt.down ? Math.max(0, worn(felt) - worn(me)) : 0;
-      const team = new Map(roster.map(p => [p.id, p.team]));
-      let [from, near] = [undefined as number | undefined, Infinity];
-      for (const p of others) {
-        const [dx, dz] = [p.x - me.x, p.z - me.z];
-        const d = Math.hypot(dx, dz);
-        if (lost && now - thud > FELL && !p.down && team.get(p.id) != you.team && d < near) {
-          const [s, c] = [Math.sin(ctl.yaw), Math.cos(ctl.yaw)];
-          [from, near] = [Math.atan2(dx * c - dz * s, -dx * s - dz * c), d];
+      let from: number | undefined;
+      if (lost && now - thud > FELL) {
+        let near = Infinity;
+        const [s, c] = [Math.sin(ctl.yaw), Math.cos(ctl.yaw)];
+        for (const p of others) {
+          if (!p.down && team(p.id) !== you.team) {
+            const [dx, dz] = [p.x - me.x, p.z - me.z];
+            const d = dx * dx + dz * dz;
+            if (d < near) {
+              [from, near] = [Math.atan2(dx * c - dz * s, -dx * s - dz * c), d];
+            }
+          }
         }
       }
       const has = (q?: PlayerState) =>
@@ -806,7 +837,7 @@ const play = (
     // Not a glory kill's: nobody pushes there.
     const foe = me && sabering(me) && me.wield ? who(me.foe ?? -1) : undefined;
     hud.duel(foe ? ((me!.pushes ?? 0) - (foe.pushes ?? 0)) / LOCK_WIN : undefined);
-    body.update(me, dt, fx.kick, canvas.clientWidth / (canvas.clientHeight || 1));
+    body.update(me, dt, fx.kick, width / (height || 1));
     // The steps sound as the drawn feet land: the own body's now, the others' as last drawn.
     foley.me(me, hit, body.steps);
     foley.others(others, id => rd?.steps(id));
@@ -937,8 +968,8 @@ const play = (
     }
     if (me && rd) {
       // The cards' pictures, once the own player and his colour are known: drawn before the frame, which then takes the canvas back.
-      const mine = `${you.id}${colors.get(you.id)}${JSON.stringify(picked)}`;
-      if (!ctl.locked() && drawn != mine && colors.has(you.id)) {
+      const mine = !ctl.locked() && `${you.id}${colors.get(you.id)}${JSON.stringify(picked)}`;
+      if (mine && drawn != mine && colors.has(you.id)) {
         const color = colors.get(you.id)!;
         // Dressed as the class he plays here.
         const look = { ...picked, role: roleOf(picked.role, world.def) };
@@ -954,7 +985,7 @@ const play = (
         progress((step = 3));
         return;
       }
-      rd.frame(
+      const painted = rd.frame(
         pov,
         view,
         pitch,
@@ -978,7 +1009,11 @@ const play = (
           doors.draw(v, pov, dt);
           wrecks.draw(v);
         },
+        { width, height, now },
       );
+      if (painted) {
+        displayed = predictor.viewTick(now);
+      }
       if (step < STEPS.length) {
         progress((step = STEPS.length));
       }
@@ -1049,17 +1084,11 @@ const play = (
         me && !(p.down && gone(p.id)) && !hidden(world, pov, top) ? rd?.project(...top) : undefined;
       const el = tag(p.id);
       seen.add(p.id);
-      el.hidden = !at;
+      el.toggleAttribute('hidden', !at);
       if (at) {
         el.style.left = at[0] * 100 + '%';
         el.style.top = at[1] * 100 + '%';
       }
-      const name = names.get(p.id) ?? '';
-      if (el.textContent != name) {
-        el.textContent = name;
-      }
-      // In the team's colour.
-      el.style.color = colors.get(p.id) ?? '';
     }
     for (const [id, el] of tags) {
       if (!seen.has(id)) {

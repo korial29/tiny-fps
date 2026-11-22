@@ -6,6 +6,7 @@ import { body } from './skin';
 import { hands } from './body';
 import { KIND } from './features';
 import { JOINT as J, JOINTS, rest, solve } from './rig';
+import { Verts } from './verts';
 
 const hide: Vec3 = [0.39, 0.42, 0.28];
 const leather: Vec3 = [0.15, 0.12, 0.105];
@@ -248,11 +249,13 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
     }
   }
   if (lod) {
-    const gloves: number[] = [];
+    // Use the same buffer type as the hands drawn every frame.
+    const gloves = new Verts();
     hands(gloves, solve(rest()), 0, [0.24, 0.24], graphite, hide, {}, lod === 1);
+    const v = gloves.a;
     for (let i = 0; i < gloves.length; i += STRIDE) {
-      const p = shape([gloves[i], gloves[i + 1], gloves[i + 2]], 1, 0);
-      result.push(...p, ...gloves.slice(i + 3, i + STRIDE));
+      const p = shape([v[i], v[i + 1], v[i + 2]], 1, 0);
+      result.push(...p, ...v.subarray(i + 3, i + STRIDE));
     }
   }
   return result;

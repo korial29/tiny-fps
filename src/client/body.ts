@@ -149,7 +149,7 @@ const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
 export const inv = ([x, y, z, w]: Quat): Quat => [-x, -y, -z, w];
 const dist = (a: Vec3, b: Vec3) => Math.hypot(...sub(a, b));
 
-type HunterViewPart = { joint: number; vertices: number[] };
+type HunterViewPart = { joint: number; orientation: number; vertices: number[] };
 const hunterViewParts = new Map<string, HunterViewPart[]>();
 
 /** The Hunter's equipment that can be seen from the eye: wrists, shoulder, chest and belt. */
@@ -179,8 +179,6 @@ const hunterView = (build: number): HunterViewPart[] => {
     'Laser saddle',
     'Shoulder laser',
     'Shoulder plates',
-    'Rib guard',
-    'Chest net',
     'Belt',
     'Flying disc',
   ]);
@@ -189,15 +187,22 @@ const hunterView = (build: number): HunterViewPart[] => {
     .filter(([name]) => visible.has(name))
     .map(([name, source]) => {
       const joint = at(name);
-      const anchor = joints.pos[joint];
-      const rotation = joints.rot[joint];
+      const wrist = joint === J.HAND_L || joint === J.HAND_R;
+      const orientation = wrist ? (joint === J.HAND_L ? J.FOREARM_L : J.FOREARM_R) : joint;
+      // The bracelet is drawn on the runner's sculpted, scaled wrist. Rebase
+      // its lower rim onto the first-person wrist and let the forearm turn it.
+      const anchor: Vec3 = wrist
+        ? [(joint === J.HAND_L ? -1 : 1) * 0.392 * 1.08, 0.884 * 1.2, -0.002 * 1.104]
+        : joints.pos[joint];
+      const fit = wrist ? 0.78 : 1;
+      const rotation = joints.rot[orientation];
       const inverse: Quat = [-rotation[0], -rotation[1], -rotation[2], rotation[3]];
       const vertices = source.slice();
       for (let i = 0; i < vertices.length; i += STRIDE) {
         const [qx, qy, qz, qw] = inverse;
-        const x = vertices[i] - anchor[0],
-          y = vertices[i + 1] - anchor[1],
-          z = vertices[i + 2] - anchor[2];
+        const x = (vertices[i] - anchor[0]) * fit,
+          y = (vertices[i + 1] - anchor[1]) * fit,
+          z = (vertices[i + 2] - anchor[2]) * fit;
         const tx = 2 * (qy * z - qz * y),
           ty = 2 * (qz * x - qx * z),
           tz = 2 * (qx * y - qy * x);
@@ -214,7 +219,7 @@ const hunterView = (build: number): HunterViewPart[] => {
         vertices[i + 4] = ny + qw * nty + qz * ntx - qx * ntz;
         vertices[i + 5] = nz + qw * ntz + qx * nty - qy * ntx;
       }
-      return { joint, vertices };
+      return { joint, orientation, vertices };
     });
   hunterViewParts.set(key, parts);
   return parts;
@@ -223,7 +228,7 @@ const hunterView = (build: number): HunterViewPart[] => {
 /** Draws one rigid Hunter part from its rest joint onto the first-person pose. */
 const drawHunterPart = (out: Out, part: HunterViewPart, s: Solved): void => {
   const at = s.pos[part.joint];
-  const [qx, qy, qz, qw] = s.rot[part.joint];
+  const [qx, qy, qz, qw] = s.rot[part.orientation];
   const start = out.length;
   const vertices = room(out, part.vertices.length);
   for (let i = 0; i < part.vertices.length; i += STRIDE) {

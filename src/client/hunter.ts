@@ -215,7 +215,7 @@ function marineBuild(lod: 0 | 1 | 2, chestFaces: number[]): number[] {
     p[2] += collarDepth(x, y, z);
   });
   for (const face of faces) {
-    if (lod && face.every(k => arm[k] < 0.5) && face.some(k => points[k][1] > 0.98)) {
+    if (face.every(k => arm[k] < 0.5) && face.some(k => points[k][1] > 0.98)) {
       chestFaces.push(result.length);
     }
     for (const k of face) {
@@ -532,7 +532,7 @@ export function hunter(lod: 0 | 1 | 2) {
     limb(
       [side * 0.38, 1.015, 0],
       [side * 0.392, 0.884, -0.002],
-      [0.057, 0.062, 0.05, 0.037],
+      [0.069, 0.062, 0.052, 0.044],
       silver,
       0.94,
       TWILL,
@@ -726,8 +726,8 @@ export function hunter(lod: 0 | 1 | 2) {
     ]) {
       panel(
         (u, v) => wrap(2 * Math.PI * u, base + width * v, 0.009 + 0.003 * Math.sin(Math.PI * v)),
-        sectors,
-        3,
+        lod ? sectors : 8,
+        lod ? 3 : 1,
         leather,
         false,
         TWILL,
@@ -757,7 +757,7 @@ export function hunter(lod: 0 | 1 | 2) {
       );
     }
     part('Shin seams ' + side);
-    for (let course = 0; course < 5; course++) {
+    for (let course = 0; lod && course < 5; course++) {
       const base = 0.143 + 0.062 * course;
       const jointClearance = course === 0 ? 0.018 : course === 4 ? 0.013 : 0;
       armor(
@@ -1043,7 +1043,10 @@ export function hunter(lod: 0 | 1 | 2) {
       continue;
     }
     const rib = torsoFaces.has(i) && corners.some(k => skin[k] < -0.045 && skin[k + 1] < 1.49);
-    for (let course = -2; course <= (rib ? 3 : 0); course++) {
+    for (let course = lod ? -2 : 0; course <= (rib ? 3 : 0); course++) {
+      if (!lod && course > 0 && course !== 2) {
+        continue;
+      }
       const triangle = corners.map(k => {
         const x = Math.abs(skin[k]),
           y = skin[k + 1],
@@ -1061,7 +1064,7 @@ export function hunter(lod: 0 | 1 | 2) {
         const centre = 1.3 - 0.25 * t + 0.08 * fullness;
         const flute = centre + (course - 2) * width * 0.57;
         const ribEdge = Math.min(
-          (width * 0.43 - Math.abs(azimuth - flute)) * 0.23,
+          (width * (lod ? 0.43 : 0.95) - Math.abs(azimuth - flute)) * 0.23,
           y - 1.035 - 0.018 * Math.abs(course - 2),
           1.425 - y - 0.008 * Math.abs(course - 2),
         );
@@ -1088,11 +1091,13 @@ export function hunter(lod: 0 | 1 | 2) {
         };
       });
       // Bevel the cut edge into a dark welt under the brushed metal face.
-      for (const [lo, hi, base, rise, tint] of [
+      const bevels = [
         [0, 0.005, 0.003, 0.005, graphite],
         [0.005, 0.014, 0.008, 0.006, rim],
         [0.014, 1, 0.014, 0, alloy],
-      ] as const) {
+      ] as const;
+      const distant = [[0, 1, 0.009, 0, alloy]] as const;
+      for (const [lo, hi, base, rise, tint] of lod ? bevels : distant) {
         let polygon = triangle;
         for (const bound of [lo, hi]) {
           const kept: typeof triangle = [];
@@ -1261,7 +1266,7 @@ export function hunter(lod: 0 | 1 | 2) {
     limb(rail(0.1, 0.027), rail(0.64, 0.035), [0.007, 0.013, 0.006], graphite, 0.76, TWILL);
   }
   limb(barrel(0.62), muzzle, [0.032, 0.034, 0.026], graphite, 1, TWILL);
-  for (const t of [0.28, 0.53, 0.86]) {
+  for (const t of lod ? [0.28, 0.53, 0.86] : [0.86]) {
     const r = t < 0.6 ? 0.047 : 0.031;
     limb(barrel(t), barrel(t + 0.046), [r, r], rim, 0.95, TWILL);
   }
@@ -1391,7 +1396,7 @@ export function hunter(lod: 0 | 1 | 2) {
         const toe = Math.min(1, Math.max(0, (-z - 0.15) / 0.12));
         const width = 1 - fit * (0.11 + 0.19 * waist + 0.16 * toe);
         const height = 1 - fit * (0.03 + 0.12 * toe);
-        const inner = Math.max(0, Math.min(1, 0.5 - (side * (mesh[i] - centre)) / 0.1));
+        const inner = Math.max(0, Math.min(1, (-side * (mesh[i] - centre)) / 0.06));
         const arch = 0.014 * waist * inner * fit;
         mesh[i] = centre + (mesh[i] - centre) * width - side * 0.009 * toe * fit;
         mesh[i + 1] = y * height + arch;

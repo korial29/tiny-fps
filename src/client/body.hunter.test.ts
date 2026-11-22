@@ -35,8 +35,6 @@ it('draws the Hunter model equipment on the first-person rig', () => {
     'Harpoon harness',
     'Blade cuff',
     'Left bracer',
-    'Rib guard',
-    'Chest net',
     'Laser saddle',
     'Shoulder laser',
     'Shoulder plates',

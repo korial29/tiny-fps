@@ -931,12 +931,17 @@ export function hunter(lod: 0 | 1 | 2) {
     }
     let height = -Infinity;
     for (let i = 0; i < skin.length; i += 3 * STRIDE) {
-      const ax = skin[i], az = skin[i + 2],
-        bx = skin[i + STRIDE], bz = skin[i + STRIDE + 2],
-        cx = skin[i + 2 * STRIDE], cz = skin[i + 2 * STRIDE + 2];
+      const ax = skin[i],
+        az = skin[i + 2],
+        bx = skin[i + STRIDE],
+        bz = skin[i + STRIDE + 2],
+        cx = skin[i + 2 * STRIDE],
+        cz = skin[i + 2 * STRIDE + 2];
       if (
-        x < Math.min(ax, bx, cx) || x > Math.max(ax, bx, cx) ||
-        z < Math.min(az, bz, cz) || z > Math.max(az, bz, cz)
+        x < Math.min(ax, bx, cx) ||
+        x > Math.max(ax, bx, cx) ||
+        z < Math.min(az, bz, cz) ||
+        z > Math.max(az, bz, cz)
       ) {
         continue;
       }
@@ -949,8 +954,7 @@ export function hunter(lod: 0 | 1 | 2) {
       if (a < -1e-6 || b < -1e-6 || a + b > 1 + 1e-6) {
         continue;
       }
-      const y = a * skin[i + 1] + b * skin[i + STRIDE + 1] +
-        (1 - a - b) * skin[i + 2 * STRIDE + 1];
+      const y = a * skin[i + 1] + b * skin[i + STRIDE + 1] + (1 - a - b) * skin[i + 2 * STRIDE + 1];
       if (y > 1.35 && y < 1.56) {
         height = Math.max(height, y);
       }
@@ -967,12 +971,17 @@ export function hunter(lod: 0 | 1 | 2) {
     }
     let edge = -Infinity;
     for (let i = 0; i < skin.length; i += 3 * STRIDE) {
-      const ay = skin[i + 1], az = skin[i + 2],
-        by = skin[i + STRIDE + 1], bz = skin[i + STRIDE + 2],
-        cy = skin[i + 2 * STRIDE + 1], cz = skin[i + 2 * STRIDE + 2];
+      const ay = skin[i + 1],
+        az = skin[i + 2],
+        by = skin[i + STRIDE + 1],
+        bz = skin[i + STRIDE + 2],
+        cy = skin[i + 2 * STRIDE + 1],
+        cz = skin[i + 2 * STRIDE + 2];
       if (
-        y < Math.min(ay, by, cy) || y > Math.max(ay, by, cy) ||
-        z < Math.min(az, bz, cz) || z > Math.max(az, bz, cz)
+        y < Math.min(ay, by, cy) ||
+        y > Math.max(ay, by, cy) ||
+        z < Math.min(az, bz, cz) ||
+        z > Math.max(az, bz, cz)
       ) {
         continue;
       }
@@ -985,8 +994,7 @@ export function hunter(lod: 0 | 1 | 2) {
       if (a < -1e-6 || b < -1e-6 || a + b > 1 + 1e-6) {
         continue;
       }
-      const x = side * (a * skin[i] + b * skin[i + STRIDE] +
-        (1 - a - b) * skin[i + 2 * STRIDE]);
+      const x = side * (a * skin[i] + b * skin[i + STRIDE] + (1 - a - b) * skin[i + 2 * STRIDE]);
       edge = Math.max(edge, x);
     }
     sideCache.set(key, edge);

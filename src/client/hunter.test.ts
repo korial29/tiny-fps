@@ -21,9 +21,7 @@ it('adds the Hunter armor details and uses the metal and net materials', () => {
     expect(model[name]?.length, name).toBeGreaterThan(0);
   }
   expect(
-    model['Chest net'].some(
-      (_, i) => i % STRIDE === 8 && model['Chest net'][i] === WEAVE,
-    ),
+    model['Chest net'].some((_, i) => i % STRIDE === 8 && model['Chest net'][i] === WEAVE),
   ).toBe(true);
   for (const name of ['Cranial shell', 'Shin plates 1', 'Flying disc']) {
     const mesh = model[name];

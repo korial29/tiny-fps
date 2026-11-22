@@ -471,33 +471,9 @@ export function hunter(lod: 0 | 1 | 2) {
     }
   }
 
-  // Hard plate faces keep a separate normal at each fold. The soft panel loft
-  // above is reserved for cloth, straps and the curved mask.
+  // One smooth normal field per plate; separate calls keep the overlapping lips distinct.
   function armor(surface: Surface, cols: number, rows: number, tint: Vec3) {
-    const vertex = (p: Vec3, n: Vec3) => out.push(...p, ...n, tint[0], tint[1], SHINE, tint[2]);
-    for (let j = 0; j < rows; j++) {
-      for (let i = 0; i < cols; i++) {
-        const [u, v] = [i / cols, j / rows];
-        const a = surface(u, v),
-          b = surface((i + 1) / cols, v),
-          c = surface(u, (j + 1) / rows),
-          d = surface((i + 1) / cols, (j + 1) / rows);
-        for (const triangle of [
-          [a, c, b],
-          [b, c, d],
-        ]) {
-          const [p, q, r] = triangle;
-          const e = sub(q, p),
-            f = sub(r, p);
-          const n = unit([
-            e[1] * f[2] - e[2] * f[1],
-            e[2] * f[0] - e[0] * f[2],
-            e[0] * f[1] - e[1] * f[0],
-          ]);
-          triangle.forEach(point => vertex(point, n));
-        }
-      }
-    }
+    panel(surface, cols, rows, tint);
   }
 
   // Fit the kit to cross-sections of the actual leg at this level of detail.
@@ -643,8 +619,8 @@ export function hunter(lod: 0 | 1 | 2) {
             0.012 + 0.014 * (1 - v) + 0.021 * fold + 0.004 * centre,
           );
         },
-        lod === 0 ? 4 : 8,
-        2,
+        lod === 0 ? 6 : lod === 1 ? 10 : 12,
+        lod === 0 ? 2 : 3,
         course % 2 ? [0.38, 0.42, 0.41] : [0.45, 0.49, 0.47],
       );
     }
@@ -686,21 +662,35 @@ export function hunter(lod: 0 | 1 | 2) {
       [0.29, 0.33, 0.33],
     );
     part('Boot lames ' + side);
-    for (let j = 0; j < 3; j++) {
+    for (let j = 0; j < 2; j++) {
       armor(
         (u, v) => {
           const a = (u - 0.5) * 2.52,
-            z = -0.32 + j * 0.068 + 0.085 * v;
+            z = -0.185 + j * 0.08 + 0.08 * v;
           const ridge = Math.max(0, 1 - Math.abs(u - 0.5) * 4);
           return [
-            side * 0.167 + (0.055 + 0.023 * v) * Math.sin(a),
-            0.024 + 0.055 * v + 0.012 * ridge + 0.008 * j,
+            side * 0.151 + (0.052 + 0.017 * v - 0.004 * j) * Math.sin(a),
+            0.043 + 0.047 * v + 0.013 * ridge + 0.025 * j,
             z - 0.018 * ridge * (1 - v),
           ];
         },
-        lod === 0 ? 4 : 8,
-        2,
-        j % 2 ? [0.3, 0.34, 0.34] : [0.37, 0.41, 0.4],
+        lod === 0 ? 6 : lod === 1 ? 10 : 12,
+        lod === 0 ? 2 : 3,
+        j ? [0.32, 0.36, 0.35] : [0.39, 0.43, 0.42],
+      );
+    }
+    part('Boot side ' + side);
+    for (const edge of [-1, 1]) {
+      panel(
+        (u, v) => [
+          side * 0.151 + edge * (0.053 + 0.01 * u + 0.004 * v),
+          0.026 + v * (0.005 + 0.055 * Math.sin(Math.PI * u)),
+          -0.18 + 0.18 * u,
+        ],
+        lod === 0 ? 3 : 6,
+        lod === 0 ? 1 : 3,
+        [0.3, 0.34, 0.33],
+        edge < 0,
       );
     }
     part('Patella ' + side);
@@ -714,7 +704,7 @@ export function hunter(lod: 0 | 1 | 2) {
         0.022 + 0.031 * fold * Math.sin(Math.PI * v) + 0.011 * chevron,
       );
     };
-    armor(cap, lod === 0 ? 4 : 8, 3, [0.49, 0.52, 0.5]);
+    armor(cap, lod === 0 ? 6 : lod === 1 ? 10 : 12, lod === 0 ? 2 : 4, [0.49, 0.52, 0.5]);
     part('Patella crest ' + side);
     armor(
       (u, v) => {
@@ -1059,7 +1049,7 @@ export function hunter(lod: 0 | 1 | 2) {
       name.startsWith('Swept temple rail');
     const anatomy = name === 'Marine anatomy';
     const legKit =
-      /^(Thigh net|Leg straps|Shin plates|Shin seams|Shin flanges|Ankle cuff|Patella|Boot lames) /.test(
+      /^(Thigh net|Leg straps|Shin plates|Shin seams|Shin flanges|Ankle cuff|Patella|Boot lames|Boot side) /.test(
         name,
       );
     const beltKit = name === 'Belt' || name === 'Flying disc';

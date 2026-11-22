@@ -319,7 +319,7 @@ export function hunter(lod: 0 | 1 | 2) {
   }
   // Round the outline with a quadratic Bezier at each corner, then loft the shell
   // through shrinking copies of the outline to the crown. Shared normals cross each seam.
-  function plate(edge: Vec3[], peak: Vec3, color: Vec3, sharp = false, layer = SHINE) {
+  function plate(edge: Vec3[], peak: Vec3, color: Vec3, sharp = false, layer = TWILL) {
     const outline: Vec3[] = [];
     const corners = [1, 3, 6][lod];
     const blend = sharp ? 0.05 : 0.34;
@@ -400,7 +400,7 @@ export function hunter(lod: 0 | 1 | 2) {
   parts['Marine anatomy'] = marineBuild(lod);
   part('Mask lining');
   limb([0, 1.51, 0], [0, 1.68, 0], [0.085, 0.077, 0.097], [0.35, 0.25, 0.18], 0.97);
-  limb([0, 1.59, 0], [0, 1.86, 0.01], [0.084, 0.112, 0.144, 0.13, 0.058], graphite, 1);
+  limb([0, 1.59, 0], [0, 1.86, 0.01], [0.084, 0.112, 0.144, 0.13, 0.058], graphite, 1, TWILL);
   for (const s of [-1, 1]) {
     part('Quills' + s);
     const count = [3, 5, 7][lod];
@@ -446,7 +446,7 @@ export function hunter(lod: 0 | 1 | 2) {
     rows: number,
     tint: Vec3,
     reverse = false,
-    layer = SHINE,
+    layer = TWILL,
   ) {
     const verts: number[][] = [];
     for (let j = 0; j <= rows; j++) {
@@ -759,7 +759,7 @@ export function hunter(lod: 0 | 1 | 2) {
     const a = (u - 0.5) * 3.36;
     return polar(a, 0.149, 0.174, brow(a) - aperture(a) * (1 - v));
   };
-  panel(visor, slices, 2, gauze);
+  panel(visor, slices, 2, gauze, false, -1);
   if (lod) {
     // Stagger recessed dark cells on the curved band. Use physical pitch across
     // the eye so the centre bridge contains fewer rows than the wider temples.

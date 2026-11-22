@@ -94,16 +94,16 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
       sign = Math.sign(x),
       torso = 1 - armWeight - legWeight;
     const chest = bell((y - 1.405) / 0.15);
-    const armMass = 0.68 * bell((y - 1.319) / 0.084) + 0.49 * bell((y - 1.098) / 0.073);
+    const armMass = 0.6 * bell((y - 1.319) / 0.084) + 0.49 * bell((y - 1.098) / 0.073);
     const legMass = 0.32 * bell((y - 0.745) / 0.15) + 0.28 * bell((y - 0.35) / 0.095);
-    const shoulder = 0.061 + 0.19 * Math.max(0, 1.45 - y) - 0.024 * bell((y - 1.37) / 0.14);
-    const armX = 0.212;
+    const shoulder = 0.05 + 0.17 * Math.max(0, 1.45 - y) - 0.024 * bell((y - 1.37) / 0.14);
+    const armX = 0.205;
     const deltoid = bell((y - 1.446) / 0.072) * bell((ax - 0.222) / 0.057);
     // Fill the lower rib cage and waist progressively; the shoulder cap tapers separately.
-    const ribWidth = 1.09 + 0.245 * chest + 0.2 * bell((y - 1.178) / 0.16);
+    const ribWidth = 1.09 + 0.22 * chest + 0.2 * bell((y - 1.178) / 0.16);
     const wide =
       ax * ribWidth * torso +
-      0.012 * deltoid +
+      0.008 * deltoid +
       (armX + shoulder + (ax - armX) * (1.18 + armMass)) * armWeight +
       (0.125 + (ax - 0.1) * (1.1 + legMass)) * legWeight;
     let depth = z * (1.18 + 0.23 * chest * torso + armMass * armWeight + legMass * legWeight);
@@ -926,19 +926,22 @@ export function hunter(lod: 0 | 1 | 2) {
   pads(shoulderPads, shoulderPose, 0, alloy, false, alloy, lod === 0, undefined, true);
   const shoulderVerts = shoulderPads.a;
   for (let i = 0; i < shoulderPads.length; i += STRIDE) {
+    if (shoulderVerts[i + 8] !== TWILL) {
+      continue;
+    }
     const side = shoulderVerts[i] < 0 ? -1 : 1;
     const arm = shoulderPose.pos[side < 0 ? J.ARM_L : J.ARM_R];
     const outward = side * (shoulderVerts[i] - arm[0]);
-    const xScale = outward < 0 ? 0.65 : 1.8;
+    const xScale = outward < 0 ? 0.65 : 1.55;
     const normal = unit([
       shoulderVerts[i + 3] / xScale,
-      shoulderVerts[i + 4] / 1.1,
-      shoulderVerts[i + 5] / (shoulderVerts[i + 2] < 0 ? 1.55 : 1.28),
+      shoulderVerts[i + 4] / 0.95,
+      shoulderVerts[i + 5] / (shoulderVerts[i + 2] < 0 ? 1.4 : 1.15),
     ]);
     const x = arm[0] + (shoulderVerts[i] - arm[0]) * xScale;
     const y =
-      arm[1] + (shoulderVerts[i + 1] - arm[1]) * 1.1 + 0.044 - 0.035 * Math.max(0, outward / 0.09);
-    const rawZ = shoulderVerts[i + 2] * (shoulderVerts[i + 2] < 0 ? 1.55 : 1.28);
+      arm[1] + (shoulderVerts[i + 1] - arm[1]) * 0.95 + 0.035 - 0.02 * Math.max(0, outward / 0.09);
+    const rawZ = shoulderVerts[i + 2] * (shoulderVerts[i + 2] < 0 ? 1.4 : 1.15);
     const surface = shoulderVerts[i + 2] < 0 ? frontDepth(x, y) : Infinity;
     out.push(
       x,

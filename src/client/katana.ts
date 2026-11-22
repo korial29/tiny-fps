@@ -192,7 +192,7 @@ const wristCuff = [0.16, 0.13, 0.2];
 const wristSteel = [0.55, 0.62, 0.68];
 const wristEdge = [0.95, 0.83, 0.54];
 
-/** The Hunter's twin wrist blades and bracer, in the hand's local space. */
+/** The Hunter's twin inward-curving wrist blades and forearm bracelet, in the hand's local space. */
 export const wristBlade = (lod: number): number[] => {
   if (wristBuilt[lod]) {
     return wristBuilt[lod];
@@ -226,31 +226,53 @@ export const wristBlade = (lod: number): number[] => {
       quad(v[f[0]], v[f[1]], v[f[2]], v[f[3]], color);
     }
   };
-  // A dark metal bracer around the back of the wrist.
-  box([-0.075, -0.045, 0.015], [0.075, 0.045, 0.14], wristCuff);
-  box([-0.081, -0.052, 0.035], [0.081, -0.043, 0.12], wristEdge);
+  // A fitted bracelet around the forearm: two metal bands clamp a low-profile emitter housing.
+  box([-0.07, -0.047, 0.018], [0.07, 0.047, 0.145], wristCuff);
+  box([-0.078, -0.054, 0.034], [0.078, -0.044, 0.053], wristEdge);
+  box([-0.078, -0.054, 0.113], [0.078, -0.044, 0.132], wristEdge);
+  box([-0.075, 0.043, 0.042], [0.075, 0.053, 0.124], wristSteel);
+  box([-0.043, 0.051, 0.048], [0.043, 0.057, 0.117], wristCuff);
   for (const side of [-1, 1]) {
-    const center = side * 0.031;
-    const w = 0.016;
-    const top: Vec3[] = [
-      [center - w, 0.035, 0.015],
-      [center + w, 0.035, 0.015],
-      [center + w * 0.62, 0.035, -0.205],
-      [center, 0.035, -0.39],
-      [center - w * 0.62, 0.035, -0.205],
-    ];
-    const bottom = top.map(([x, , z]) => [x, 0.018, z] as Vec3);
+    // Each blade leaves the outer edge of the bracelet and sweeps toward the centreline.
+    const stations = [
+      [0.052, 0.026, 0.016],
+      [0.054, -0.055, 0.016],
+      [0.05, -0.14, 0.014],
+      [0.041, -0.225, 0.012],
+      [0.027, -0.3, 0.009],
+      [0.011, -0.36, 0.005],
+      [0, -0.4, 0],
+    ].map(([x, z, w]) => [side * x, z, w] as const);
+    const centers = stations.map(([x, z]) => [x, 0.046, z] as Vec3);
+    const edges = stations.map(([x, z, w], i) => {
+      const before = stations[Math.max(0, i - 1)];
+      const after = stations[Math.min(stations.length - 1, i + 1)];
+      const dx = after[0] - before[0];
+      const dz = after[1] - before[1];
+      const length = Math.hypot(dx, dz) || 1;
+      const nx = -dz / length;
+      const nz = dx / length;
+      return [[x + nx * w, 0.025, z + nz * w] as Vec3, [x - nx * w, 0.025, z - nz * w] as Vec3];
+    });
     const steel = side < 0 ? wristSteel : [0.4, 0.48, 0.53];
-    quad(top[0], top[1], top[3], top[4], steel);
-    tri(out, top[1], top[2], top[3], steel);
-    tri(out, bottom[1], bottom[0], bottom[3], wristCuff);
-    tri(out, bottom[2], bottom[1], bottom[3], wristCuff);
-    tri(out, bottom[3], bottom[4], bottom[0], wristCuff);
-    for (let i = 0; i < top.length; i++) {
-      const j = (i + 1) % top.length;
-      quad(top[i], bottom[i], bottom[j], top[j], wristSteel);
+    for (let i = 0; i < stations.length - 1; i++) {
+      const [a, b] = [centers[i], centers[i + 1]];
+      for (const edge of [0, 1]) {
+        const [c, d] = [edges[i][edge], edges[i + 1][edge]];
+        tri(out, a, c, b, steel);
+        tri(out, b, c, d, steel);
+        tri(out, c, a, [a[0], 0.017, a[2]], wristCuff);
+        tri(out, d, c, [b[0], 0.017, b[2]], wristCuff);
+        quad(c, d, [b[0], 0.017, b[2]], [a[0], 0.017, a[2]], wristSteel);
+      }
     }
-    tri(out, top[0], top[4], [center, 0.036, -0.39], wristEdge);
+    // A bright sharpened edge runs along the inward-facing side of each curved blade.
+    for (let i = 0; i < stations.length - 2; i++) {
+      const p = edges[i][side < 0 ? 0 : 1];
+      const q = edges[i + 1][side < 0 ? 0 : 1];
+      const r = edges[i + 2][side < 0 ? 0 : 1];
+      tri(out, p, q, r, wristEdge);
+    }
   }
   return (wristBuilt[lod] = out);
 };

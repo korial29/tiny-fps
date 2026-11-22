@@ -682,7 +682,7 @@ export function hunter(lod: 0 | 1 | 2) {
       a,
       0.153 * Math.cos(t),
       0.181 * Math.cos(t),
-      brow(a) + (1.957 - brow(a)) * Math.sin(t),
+      brow(a) + (2.01 - brow(a)) * Math.sin(t),
       0.132 * Math.sin(t) ** 1.35 + ((0.039 * (1 - Math.cos(a))) / 2) * Math.sin(2 * t),
     );
   };
@@ -926,20 +926,14 @@ export function hunter(lod: 0 | 1 | 2) {
   limb([-0.28, 1.676, -0.162], [-0.28, 1.676, -0.174], [0.05, 0.046], silver, 0.92, SHINE);
   limb([-0.28, 1.676, -0.175], [-0.28, 1.676, -0.177], [0.028, 0.028], light, 1, -2);
   part('Harpoon');
-  limb([-0.34, 0.367, 0.108], [0.367, 1.823, 0.183], [0.015, 0.019, 0.016], bronze, 1, SHINE);
-  plate(
-    [
-      [0.342, 1.817, 0.166],
-      [0.359, 1.885, 0.16],
-      [0.45, 1.985, 0.17],
-      [0.413, 1.839, 0.156],
-      [0.382, 1.844, 0.157],
-      [0.372, 1.798, 0.16],
-    ],
-    [0.382, 1.857, 0.143],
-    silver,
-    true,
-  );
+  // A folding bolt rifle rides diagonally across the back: long barrel, receiver, stock and folded legs.
+  limb([-0.31, 1.15, 0.19], [0.25, 1.73, 0.19], [0.035, 0.032, 0.028], graphite, 0.72, TWILL);
+  limb([-0.08, 1.39, 0.145], [0.11, 1.59, 0.145], [0.062, 0.068, 0.054], bronze, 0.9, SHINE);
+  limb([-0.25, 1.2, 0.16], [-0.08, 1.37, 0.16], [0.041, 0.043, 0.038], leather, 0.78, TWILL);
+  limb([0.08, 1.57, 0.15], [0.28, 1.77, 0.15], [0.046, 0.046, 0.04], graphite, 0.74, TWILL);
+  limb([-0.12, 1.33, 0.104], [-0.21, 1.27, 0.103], [0.012, 0.013], silver, 1, SHINE);
+  limb([0.13, 1.63, 0.104], [0.04, 1.57, 0.103], [0.012, 0.013], silver, 1, SHINE);
+  limb([-0.018, 1.475, 0.087], [-0.018, 1.51, 0.087], [0.018, 0.013], silver, 1, SHINE);
   part('Flying disc');
   const hub: Vec3 = [-0.206, 0.961, -0.163];
   const diskPoint = (r: number, a: number, z: number): Vec3 => [
@@ -1032,3 +1026,42 @@ export function hunter(lod: 0 | 1 | 2) {
   }
   return (built[lod] = parts);
 }
+
+/** The Hunter's foldable, long-bolt rifle in right-hand grip space (muzzle points along -z). */
+const harpoons: number[][] = [];
+export const hunterHarpoon = (lod: 0 | 1 | 2): number[] => {
+  if (harpoons[lod]) {
+    return harpoons[lod];
+  }
+  const out: number[] = [];
+  const steel = [0.56, 0.61, 0.59];
+  const dark = [0.13, 0.16, 0.17];
+  const bronze = [0.54, 0.34, 0.16];
+  const part = (a: Vec3, b: Vec3, radius: number, tint: number[], width = radius) => {
+    const length = Math.hypot(...sub(b, a));
+    segment(
+      out,
+      solid(lod, length, [radius, radius * 0.92, radius * 0.65]),
+      a,
+      b,
+      [1, 0, 0],
+      length,
+      [1, width / radius],
+      tint,
+    );
+  };
+  // Long telescoping barrel and a stepped receiver, sized around the hand's grip at the origin.
+  part([0, 0.018, -0.12], [0, 0.018, -0.69], 0.031, steel);
+  part([0, 0.018, -0.66], [0, 0.018, -0.78], 0.043, bronze, 1.2);
+  part([0, 0, -0.4], [0, 0.035, -0.14], 0.075, dark, 1.25);
+  part([0, -0.025, -0.18], [0, -0.16, -0.04], 0.046, bronze, 0.85);
+  part([0, 0.012, -0.08], [0, 0.02, 0.23], 0.038, dark);
+  // Fold-out support struts, sight rail and the bronze locking bands on the barrel.
+  part([-0.06, -0.105, -0.31], [-0.075, -0.23, -0.66], 0.012, steel);
+  part([0.06, -0.105, -0.31], [0.075, -0.23, -0.66], 0.012, steel);
+  part([-0.042, 0.079, -0.42], [0.042, 0.079, -0.42], 0.012, bronze);
+  part([-0.042, 0.079, -0.25], [0.042, 0.079, -0.25], 0.012, bronze);
+  part([0, 0.09, -0.37], [0, 0.16, -0.32], 0.024, dark, 1.15);
+  part([0, 0.16, -0.32], [0, 0.16, -0.26], 0.012, steel);
+  return (harpoons[lod] = out);
+};

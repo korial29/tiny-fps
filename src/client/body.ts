@@ -80,11 +80,12 @@ import {
   wristEnds,
   BEHIND as BACK,
 } from './katana';
-import { STRIDE, add, basis, dot, mix, sub, unit } from './mesh';
+import { STRIDE, WEAVE, add, basis, dot, mix, place, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
 import { armor } from './armor';
+import { hunter as hunterModel, hunterHarpoon } from './hunter';
 import { CUFF, CUFF_NEAR, CUFF_SIDES, REGION, beast, body, palette, skin } from './skin';
 import { CHITIN_X, CLAW, FOOT_TIP, HOOKED, PART, lashOf, partsOf, tail } from './xeno';
 import type { Part } from './xeno';
@@ -147,6 +148,113 @@ const POLE: Vec3 = [0.7, -1, -0.5];
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
 export const inv = ([x, y, z, w]: Quat): Quat => [-x, -y, -z, w];
 const dist = (a: Vec3, b: Vec3) => Math.hypot(...sub(a, b));
+
+type HunterViewPart = { joint: number; vertices: number[] };
+const hunterViewParts = new Map<string, HunterViewPart[]>();
+
+/** The Hunter's equipment that can be seen from the eye: wrists, shoulder, chest and belt. */
+const hunterView = (build: number): HunterViewPart[] => {
+  const key = `1:${build}`;
+  const cached = hunterViewParts.get(key);
+  if (cached) {
+    return cached;
+  }
+  const joints = solve(rest([0, 0, 0], 0, build));
+  const at = (name: string) => {
+    if (name === 'Belt' || name === 'Flying disc') {
+      return J.PELVIS;
+    }
+    if (name === 'Blade cuff') {
+      return J.HAND_R;
+    }
+    return J.CHEST;
+  };
+  const visible = new Set([
+    'Harpoon harness',
+    'Blade cuff',
+    'Laser saddle',
+    'Shoulder laser',
+    'Shoulder plates',
+    'Torso net',
+    'Belt',
+    'Flying disc',
+  ]);
+  const model = hunterModel(1);
+  const net: number[] = [];
+  const anatomy = model['Marine anatomy'];
+  for (let i = 0; i < anatomy.length; i += 3 * STRIDE) {
+    if ([0, 1, 2].every(k => anatomy[i + k * STRIDE + 8] === WEAVE)) {
+      net.push(...anatomy.slice(i, i + 3 * STRIDE));
+    }
+  }
+  const parts = [...Object.entries(model), ['Torso net', net] as [string, number[]]]
+    .filter(([name]) => visible.has(name))
+    .map(([name, source]) => {
+      const joint = at(name);
+      const anchor = joints.pos[joint];
+      const rotation = joints.rot[joint];
+      const inverse: Quat = [-rotation[0], -rotation[1], -rotation[2], rotation[3]];
+      const vertices = source.slice();
+      for (let i = 0; i < vertices.length; i += STRIDE) {
+        const [qx, qy, qz, qw] = inverse;
+        const x = vertices[i] - anchor[0],
+          y = vertices[i + 1] - anchor[1],
+          z = vertices[i + 2] - anchor[2];
+        const tx = 2 * (qy * z - qz * y),
+          ty = 2 * (qz * x - qx * z),
+          tz = 2 * (qx * y - qy * x);
+        vertices[i] = x + qw * tx + qy * tz - qz * ty;
+        vertices[i + 1] = y + qw * ty + qz * tx - qx * tz;
+        vertices[i + 2] = z + qw * tz + qx * ty - qy * tx;
+        const nx = vertices[i + 3],
+          ny = vertices[i + 4],
+          nz = vertices[i + 5];
+        const ntx = 2 * (qy * nz - qz * ny),
+          nty = 2 * (qz * nx - qx * nz),
+          ntz = 2 * (qx * ny - qy * nx);
+        vertices[i + 3] = nx + qw * ntx + qy * ntz - qz * nty;
+        vertices[i + 4] = ny + qw * nty + qz * ntx - qx * ntz;
+        vertices[i + 5] = nz + qw * ntz + qx * nty - qy * ntx;
+      }
+      return { joint, vertices };
+    });
+  hunterViewParts.set(key, parts);
+  return parts;
+};
+
+/** Draws one rigid Hunter part from its rest joint onto the first-person pose. */
+const drawHunterPart = (out: Out, part: HunterViewPart, s: Solved): void => {
+  const at = s.pos[part.joint];
+  const [qx, qy, qz, qw] = s.rot[part.joint];
+  const start = out.length;
+  const vertices = room(out, part.vertices.length);
+  for (let i = 0; i < part.vertices.length; i += STRIDE) {
+    const x = part.vertices[i],
+      y = part.vertices[i + 1],
+      z = part.vertices[i + 2];
+    const tx = 2 * (qy * z - qz * y),
+      ty = 2 * (qz * x - qx * z),
+      tz = 2 * (qx * y - qy * x);
+    const nx = part.vertices[i + 3],
+      ny = part.vertices[i + 4],
+      nz = part.vertices[i + 5];
+    const ntx = 2 * (qy * nz - qz * ny),
+      nty = 2 * (qz * nx - qx * nz),
+      ntz = 2 * (qx * ny - qy * nx);
+    const k = start + i;
+    vertices[k] = at[0] + x + qw * tx + qy * tz - qz * ty;
+    vertices[k + 1] = at[1] + y + qw * ty + qz * tx - qx * tz;
+    vertices[k + 2] = at[2] + z + qw * tz + qx * ty - qy * tx;
+    vertices[k + 3] = nx + qw * ntx + qy * ntz - qz * nty;
+    vertices[k + 4] = ny + qw * nty + qz * ntx - qx * ntz;
+    vertices[k + 5] = nz + qw * ntz + qx * nty - qy * ntx;
+    vertices[k + 6] = part.vertices[i + 6];
+    vertices[k + 7] = part.vertices[i + 7];
+    vertices[k + 8] = part.vertices[i + 8];
+    vertices[k + 9] = part.vertices[i + 9];
+  }
+  out.length = start + part.vertices.length;
+};
 /** The point `k` along the direction `d` from `o`. */
 const along = (o: Vec3, d: Vec3, k: number): Vec3 => add(o, mix([0, 0, 0], d, k));
 
@@ -2031,9 +2139,21 @@ export const createBody = (world?: World): Body => {
       if (s) {
         // An armoured suit (see palette()): its gloves cover the fingers too; white armour in space,
         // else in the team's colour.
-        const suit = !!world?.def.armor && !ninja && !xeno;
+        const suit = !!world?.def.armor && !ninja && !xeno && !hunter;
         const plate = world?.def.helmets ? undefined : color;
-        const colors = palette(ninja || xeno ? CLOTH : color, undefined, undefined, suit, tone);
+        const colors = palette(
+          hunter ? [0.34, 0.25, 0.17] : ninja || xeno ? CLOTH : color,
+          undefined,
+          undefined,
+          suit,
+          hunter ? [0.42, 0.29, 0.19] : tone,
+        );
+        if (hunter) {
+          colors[REGION.PANTS] = [0.16, 0.15, 0.12];
+          colors[REGION.UPPER] = [0.38, 0.27, 0.17];
+          colors[REGION.GLOVE] = [0.12, 0.13, 0.12];
+          colors[REGION.BELT] = [0.19, 0.15, 0.11];
+        }
         if (ninja || xeno) {
           const { PANTS, UPPER, GLOVE, BELT } = REGION;
           // His belt is cut in a V by armor(), as on the others (soldier.ts).
@@ -2069,8 +2189,13 @@ export const createBody = (world?: World): Body => {
           }
         }
         // The ninja's own plates in his team's colour (soldier.ts).
-        if ((world?.def.armor && !xeno) || ninja) {
+        if ((world?.def.armor && !xeno && !hunter) || ninja) {
           armor(out, from, body(2, build), true, plate, ninja, color, !world?.def.armor);
+        }
+        if (hunter) {
+          for (const part of hunterView(build)) {
+            drawHunterPart(out, part, s);
+          }
         }
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
         if (ninja) {
@@ -2116,38 +2241,49 @@ export const createBody = (world?: World): Body => {
           const rail = kind == 2;
           const sp = me ? swapOf(me) : -1;
           const on = since - Math.max(pressOf(kind), 0);
-          held(
-            out,
-            s.pos[J.HAND_R],
-            s.rot[J.HAND_R],
-            1,
-            clamp(hold * 1.5 - 0.5),
-            kind == 3 ? me!.clip : rail ? charge(me!.cap ?? 0) : me?.mag,
-            level,
-            kind,
-            clock,
-            {
-              // Dark from when the old one comes out until the new one is in, the gun's counter
-              // dark with it; then the thumb presses the button on its side and the gun boots: the
-              // light comes on, and the counter fades in with the boot's whine.
-              light:
-                sp < 0 ? power(on, kind ? undefined : GUN_ON.lit) : 1 - ease(span(sp, 0.1, 0.2)),
-              swap: sp,
-              empty: !(kind == 3 ? me?.clip : rail ? me?.cap : me?.mag),
-              screen: sp < 0 ? span(on, GUN_ON.from, GUN_ON.up) : 1 - ease(span(sp, 0.1, 0.2)),
-              digits: sp < 0 && on >= GUN_ON.digits,
-              press: sp < 0 && kind != 2 ? span(poke(since, pressOf(kind)), 0.8, 1) : 0,
-              tune: rail && sp < 0 ? tune(since, pressOf(2)) : 0,
-              nades: kind == 3 ? (me?.nades ?? 0) : undefined,
-              id: me?.id,
-              floor: me?.ground ? me.y : undefined,
-              vel: me && [me.vx, me.vy, me.vz],
-              carry: carried,
-              cells: me && cellsOf(me),
-              heat: (me?.heat ?? 0) / HEAT_MAX,
-              hot: me?.hot,
-            },
-          );
+          if (hunter && kind === 0) {
+            place(
+              out,
+              hunterHarpoon(1),
+              gunGrip(s.pos[J.HAND_R], s.rot[J.HAND_R]),
+              gunAxes(s.rot[J.HAND_R]),
+              [0, 0, 0],
+              0.82,
+            );
+          } else if (!(hunter && rail)) {
+            held(
+              out,
+              s.pos[J.HAND_R],
+              s.rot[J.HAND_R],
+              1,
+              clamp(hold * 1.5 - 0.5),
+              kind == 3 ? me!.clip : rail ? charge(me!.cap ?? 0) : me?.mag,
+              level,
+              kind,
+              clock,
+              {
+                // Dark from when the old one comes out until the new one is in, the gun's counter
+                // dark with it; then the thumb presses the button on its side and the gun boots: the
+                // light comes on, and the counter fades in with the boot's whine.
+                light:
+                  sp < 0 ? power(on, kind ? undefined : GUN_ON.lit) : 1 - ease(span(sp, 0.1, 0.2)),
+                swap: sp,
+                empty: !(kind == 3 ? me?.clip : rail ? me?.cap : me?.mag),
+                screen: sp < 0 ? span(on, GUN_ON.from, GUN_ON.up) : 1 - ease(span(sp, 0.1, 0.2)),
+                digits: sp < 0 && on >= GUN_ON.digits,
+                press: sp < 0 && kind != 2 ? span(poke(since, pressOf(kind)), 0.8, 1) : 0,
+                tune: rail && sp < 0 ? tune(since, pressOf(2)) : 0,
+                nades: kind == 3 ? (me?.nades ?? 0) : undefined,
+                id: me?.id,
+                floor: me?.ground ? me.y : undefined,
+                vel: me && [me.vx, me.vy, me.vz],
+                carry: carried,
+                cells: me && cellsOf(me),
+                heat: (me?.heat ?? 0) / HEAT_MAX,
+                hot: me?.hot,
+              },
+            );
+          }
         }
         if (grasp > 0.2) {
           if (hunter) {

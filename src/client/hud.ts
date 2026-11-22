@@ -115,7 +115,7 @@ const [RIM, BLUR] = (() => {
 })();
 
 export const HUD_CSS =
-  `h5,aside,nav,var,output,section,em,u,sup,ul,dl,s,mark,ins,figure,del,menu,label,samp,cite,q,dfn,tt,h1,h2,ol{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
+  `h5,aside,nav,var,output,section,em,u,sup,ul,dl,s,mark,ins,figure,del,menu,label,samp,cite,q,dfn,tt,h1,h2,ol,i{position:absolute;margin:0;padding:0;pointer-events:none;user-select:none;white-space:pre-line}` +
   `h5{top:8px;right:12px;font-size:12px}` +
   // The red halo of a hit: a glow in from every edge over a dark red rim.
   `u{inset:0;opacity:0;box-shadow:inset 0 0 16vmin 3vmin #e00c;background:radial-gradient(ellipse at center,#0000 55%,#a008 100%)}` +
@@ -128,6 +128,15 @@ export const HUD_CSS =
   `var{top:66px;left:50%;transform:translateX(-50%);padding:5px 14px;border:1px solid #ffb34780;border-radius:4px;background:#000b;color:#ffb347;font:800 normal clamp(11px,2.6vw,14px)/1.2 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}` +
   `var.hot{color:#ff5a3c;border-color:#ff5a3c;animation:hot 1s steps(2) infinite}@keyframes hot{50%{border-color:#ff5a3c00}}` +
   `i.hv{pointer-events:none;top:48px;left:50%;transform:translateX(-50%);padding:4px 10px;border:1px solid #8fffc080;border-radius:4px;background:#00130dcc;color:#a4ffcf;font:800 11px/1 system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase}` +
+  // The Hunter's shoulder cannon: Predator-like red brackets close around one target, then lock.
+  `i.hl{z-index:2;width:42px;height:42px;transform:translate(-50%,-50%);color:#ff3029;filter:drop-shadow(0 0 5px #f21);transition:filter .12s}` +
+  `i.hl b{position:absolute;width:10px;height:10px;border-color:currentColor;border-style:solid;opacity:.7;transition:transform .12s,opacity .12s}` +
+  `i.hl b:nth-child(1){left:0;top:0;border-width:2px 0 0 2px}` +
+  `i.hl b:nth-child(2){right:0;top:0;border-width:2px 2px 0 0}` +
+  `i.hl b:nth-child(3){right:0;bottom:0;border-width:0 2px 2px 0}` +
+  `i.hl b:nth-child(4){left:0;bottom:0;border-width:0 0 2px 2px}` +
+  `i.hl small{position:absolute;top:47px;left:50%;transform:translateX(-50%);padding:3px 6px;background:#200d;color:currentColor;font:900 9px/1 system-ui,sans-serif;letter-spacing:.16em;white-space:nowrap}` +
+  `i.hl.locked{filter:drop-shadow(0 0 8px #f22);animation:hl-pulse .7s steps(2,end) infinite}i.hl.locked b{opacity:1}@keyframes hl-pulse{50%{opacity:.7}}` +
   // The banner of an event (the user, 2026-11-09: no underline, a nicer design): heavy italic in the
   // team's colour, glowing, on a dark band fading out at both ends, popping in.
   `output{top:18%;left:50%;transform:translateX(-50%);padding:12px 64px;font:900 italic clamp(20px,4.4vw,40px)/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;` +
@@ -254,6 +263,7 @@ export const HUD_CSS =
   `cite{right:12px;bottom:10px;font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}cite small{margin-left:6px;font-size:14px}` +
   // Out of the head (at the wheel, or watching a glory kill): no crosshair, no gun, no visor.
   `div.v>i,.v dl,.v del,div.o>i,.o dl,.o del{display:none}` +
+  `div.v .hl,div.o .hl{display:none}` +
   // A vehicle's health: ten pips over the speed for who is in it, and a small bar over one near by.
   `tt{right:12px;bottom:62px;width:148px;height:10px;background:linear-gradient(90deg,var(--c,#5fd28a) var(--a,100%),#fff3 0);-webkit-mask:repeating-linear-gradient(90deg,#000 0 13px,#0000 13px 15px);mask:repeating-linear-gradient(90deg,#000 0 13px,#0000 13px 15px);filter:drop-shadow(0 1px 1px #000)}` +
   `tt+tt{right:auto;bottom:auto;transform:translate(-50%,-50%) scale(.5)}` +
@@ -318,7 +328,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Hunter',
-    'Slot 1 fires a harpoon. Slot 2 has wrist blades; G or right click throws a returning disc. Slot 3 fires the assisted shoulder laser.',
+    'Slot 1 fires a long-bolt harpoon. Slot 2 has twin wrist blades; G or right click throws a returning disc (3 HP). Slot 3 locks the shoulder laser after 3 seconds and deals 3 HP.',
     'Press V to cycle thermal vision and alien detection.',
     'Every map',
   ],
@@ -379,7 +389,7 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
     [
       ['1', 'harpoon'],
       ['2', 'wrist blades; G or right click throws the returning disc'],
-      ['3', 'assisted shoulder laser'],
+      ['3', 'shoulder laser: hold aim on a target for 3 seconds to lock; 3 HP'],
       ['V', 'cycle normal, thermal and alien scan', 'KeyV'],
     ],
   ],
@@ -517,6 +527,8 @@ export interface Hud {
   mission(text?: string, hot?: boolean): void;
   /** The Hunter's current local vision mode. */
   hunterVision(text?: string): void;
+  /** The Predator-style shoulder-laser sight, at a screen point and progressing to a lock. */
+  hunterAim(at?: [number, number], progress?: number): void;
   /** The dark rim of a space helmet's visor around the screen: on while the own player wears one, off otherwise. */
   visor(on: boolean): void;
   /** The red vignette of a tackle, 0 (none) to 1 (full). */
@@ -695,7 +707,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       `<s hidden></s><mark hidden></mark><sup></sup><ins hidden><i></i></ins>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav><var hidden></var><i class="hv" hidden></i>` +
       `<h1 hidden>FRAGS<span>0</span></h1><label hidden><canvas width="${COMM}" height="${COMM}"></canvas><span></span><i>${'<b></b>'.repeat(5)}</i></label><ol></ol><h2 hidden><span></span><small></small></h2>` +
-      `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q><dfn hidden></dfn><dfn hidden></dfn><tt hidden></tt><tt hidden></tt>` +
+      `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q><i class="hl" hidden><b></b><b></b><b></b><b></b><small>TRACKING</small></i><dfn hidden></dfn><dfn hidden></dfn><tt hidden></tt><tt hidden></tt>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
   );
   const one = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
@@ -869,6 +881,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const mission = one('var');
   const vision = one('i.hv');
   const aim = one('q');
+  const hunterSight = one('i.hl');
   const [panel, warn] = screen.querySelectorAll<HTMLElement>('dfn');
   const bars = screen.querySelectorAll<HTMLElement>('tt');
   const end = one('section');
@@ -1167,6 +1180,26 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       if (at) {
         aim.style.left = `${at[0] * 100}%`;
         aim.style.top = `${at[1] * 100}%`;
+      }
+    },
+    hunterAim(at, progress = 0) {
+      hunterSight.toggleAttribute('hidden', !at);
+      if (at) {
+        hunterSight.style.left = `${at[0] * 100}%`;
+        hunterSight.style.top = `${at[1] * 100}%`;
+        const spread = 18 * (1 - Math.max(0, Math.min(1, progress)));
+        hunterSight.querySelectorAll('b').forEach((corner, i) => {
+          const signs = [
+            [-1, -1],
+            [1, -1],
+            [1, 1],
+            [-1, 1],
+          ][i];
+          (corner as HTMLElement).style.transform =
+            `translate(${signs[0] * spread}px,${signs[1] * spread}px)`;
+        });
+        hunterSight.classList.toggle('locked', progress >= 1);
+        hunterSight.querySelector('small')!.textContent = progress >= 1 ? 'LOCK' : 'TRACKING';
       }
     },
     ship(s) {

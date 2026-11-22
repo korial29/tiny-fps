@@ -96,7 +96,10 @@ describe('the weapon choice', () => {
     expect(picked(RAIL, 'KeyW')).toBe(RAIL);
     expect(picked(GUN, 'Digit4')).toBe(WEAPON.RIFLE);
     expect(picked(GUN, 'Digit5')).toBe(WEAPON.FISTS);
-    expect(picked(GUN, 'Numpad5')).toBe(WEAPON.FISTS);
+    expect(picked(GUN, 'Numpad5')).toBe(WEAPON.RIFLE);
+    expect(
+      ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4', 'Numpad5'].map(code => picked(GUN, code)),
+    ).toEqual([WEAPON.FISTS, GUN, BLADE, RAIL, WEAPON.RIFLE]);
     expect(withWeapon(KEY.FIRE, WEAPON.FISTS)).toBe(KEY.FIRE | KEY.FISTS);
     expect(withWeapon(KEY.FIRE, WEAPON.RIFLE)).toBe(KEY.FIRE | KEY.RIFLE);
     expect(turned(RAIL, 1, [true, true, true, true])).toBe(WEAPON.RIFLE);
@@ -215,15 +218,24 @@ describe('createInput', () => {
     expect(right()).toBe(KEY.BLADE);
   });
 
-  it('selects fists from the fifth number key and sends their weapon bit', () => {
+  it('selects fists from 5 on the main keyboard and maps the number pad from fists to rifle', () => {
     make();
     lock(true);
     key('keydown', 'Digit5');
     expect(ctl.weapon).toBe(WEAPON.FISTS);
     expect(ctl.take() & KEY.FISTS).toBe(KEY.FISTS);
     key('keyup', 'Digit5');
-    key('keydown', 'Numpad5');
-    expect(ctl.weapon).toBe(WEAPON.FISTS);
+    for (const [code, weapon] of [
+      ['Numpad1', WEAPON.FISTS],
+      ['Numpad2', WEAPON.GUN],
+      ['Numpad3', WEAPON.BLADE],
+      ['Numpad4', WEAPON.RAIL],
+      ['Numpad5', WEAPON.RIFLE],
+    ] as const) {
+      key('keydown', code);
+      expect(ctl.weapon).toBe(weapon);
+      key('keyup', code);
+    }
   });
 
   it('holds the xenomorph’s tail on G while it is down, and lets it go only at the release', () => {

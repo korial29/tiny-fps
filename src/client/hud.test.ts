@@ -366,6 +366,9 @@ describe('createHud', () => {
         'Q or W A S D twicedash, three in a row and further than a man: it pins whoever it reaches',
       );
       expect(rows).toContain('1 2 3 4 5gun, katana, rail gun, laser rifle, fists');
+      expect(rows).toContain(
+        'Numpad 1 Numpad 2 Numpad 3 Numpad 4 Numpad 5fists, gun, katana, rail gun, laser rifle',
+      );
       expect(rows).toContain('G or Right clickenergy arc');
       expect(rows).toContain('Double clickspecial: lunge, energy arc, leap');
     });
@@ -1020,6 +1023,9 @@ describe('the gun on the HUD', () => {
       hud.title('Click to play', 'Rooftops');
       const rows = [...screen.querySelectorAll('tr')].map(r => r.textContent);
       expect(rows).toContain('1 2 3 4 5gun, katana, rail gun, laser rifle, fists');
+      expect(rows).toContain(
+        'Numpad 1 Numpad 2 Numpad 3 Numpad 4 Numpad 5fists, gun, katana, rail gun, laser rifle',
+      );
       expect(rows).toContain('Wheelnext weapon');
       expect(rows).toContain('W + Left clickthrust');
       expect(rows).toContain('A or D + Left clickcut across');

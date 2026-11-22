@@ -63,11 +63,13 @@ export const WHEEL_MS = 250;
 
 /** The weapon chosen: 1 through 5 on the keyboard. */
 export const WEAPON = { GUN: 0, BLADE: 1, RAIL: 2, RIFLE: 3, FISTS: 4 } as const;
+const NUMPAD_WEAPONS = [WEAPON.FISTS, WEAPON.GUN, WEAPON.BLADE, WEAPON.RAIL, WEAPON.RIFLE];
 
 /** The choice after a key: 1 the gun, 2 the katana, 3 the rail gun, 4 the laser rifle, any other key keeps it. */
 export const picked = (weapon: number, code: string): number => {
-  const k = Math.max(DIGITS.indexOf(code), NUMPAD.indexOf(code));
-  return k < 0 ? weapon : k;
+  const digit = DIGITS.indexOf(code);
+  const numpad = NUMPAD.indexOf(code);
+  return digit >= 0 ? digit : numpad >= 0 ? NUMPAD_WEAPONS[numpad] : weapon;
 };
 
 /** Which of the gun, the katana, the rail gun and the laser rifle a player has; all of them when there is no state yet. */

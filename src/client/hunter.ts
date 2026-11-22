@@ -483,6 +483,7 @@ export function hunter(lod: 0 | 1 | 2) {
     step = 0.022,
     levels = 37,
     sectors = [12, 24, 36][lod];
+  const bootCentres: Record<number, number> = {};
   for (const side of [-1, 1]) {
     const centres: number[] = [];
     const radii: number[][] = [];
@@ -551,6 +552,7 @@ export function hunter(lod: 0 | 1 | 2) {
         }),
       );
     }
+    bootCentres[side] = centres[0];
     function wrap(angle: number, y: number, gap: number): Vec3 {
       const h = Math.min(levels - 1, Math.max(0, (y - low) / step)),
         a = Math.floor(h),
@@ -656,10 +658,10 @@ export function hunter(lod: 0 | 1 | 2) {
       armor(
         (u, v) => {
           const a = (u - 0.5) * 2.52,
-            z = -0.185 + j * 0.08 + 0.08 * v;
+            z = -0.22 + j * 0.085 + 0.095 * v;
           const ridge = Math.max(0, 1 - Math.abs(u - 0.5) * 4);
           return [
-            side * 0.151 + (0.052 + 0.017 * v - 0.004 * j) * Math.sin(a),
+            bootCentres[side] + (0.064 + 0.02 * v - 0.004 * j) * Math.sin(a),
             0.043 + 0.047 * v + 0.013 * ridge + 0.045 * j,
             z - 0.018 * ridge * (1 - v),
           ];
@@ -673,9 +675,9 @@ export function hunter(lod: 0 | 1 | 2) {
     for (const edge of [-1, 1]) {
       panel(
         (u, v) => [
-          side * 0.151 + edge * (0.053 + 0.01 * u + 0.004 * v),
+          bootCentres[side] + edge * (0.064 + 0.012 * u + 0.004 * v),
           0.026 + v * (0.005 + 0.055 * Math.sin(Math.PI * u)),
-          -0.18 + 0.18 * u,
+          -0.22 + 0.22 * u,
         ],
         lod === 0 ? 3 : 6,
         lod === 0 ? 1 : 3,
@@ -1054,8 +1056,9 @@ export function hunter(lod: 0 | 1 | 2) {
       if (bootKit || (anatomy && mesh[i + 1] < 0.135 && Math.abs(mesh[i]) < 0.31)) {
         const y = mesh[i + 1];
         const fit = Math.min(1, Math.max(0, (0.135 - y) / 0.055));
-        const side = Math.sign(mesh[i]);
-        mesh[i] = side * 0.151 + (mesh[i] - side * 0.151) * (1 + 0.34 * fit);
+        const side = mesh[i] < 0 ? -1 : 1;
+        const centre = bootCentres[side];
+        mesh[i] = centre + (mesh[i] - centre) * (1 + 0.34 * fit);
         mesh[i + 1] *= 1 + 0.28 * fit;
         mesh[i + 2] = 0.03 + (mesh[i + 2] - 0.03) * (1 + 0.38 * fit);
         const n = unit([
@@ -1074,12 +1077,6 @@ export function hunter(lod: 0 | 1 | 2) {
           mesh[i] += 0.013;
           mesh[i + 2] += 0.132;
           mesh[i + 1] -= 0.094;
-        }
-        if (anatomy && mesh[i + 1] < 0.2) {
-          const blend = smoothStep(0.035, 0.2, mesh[i + 1]),
-            scale = 0.86 + 0.14 * blend;
-          mesh[i] *= scale;
-          mesh[i + 2] *= scale;
         }
         mesh[i] *= stature;
         mesh[i + 1] *= stature;

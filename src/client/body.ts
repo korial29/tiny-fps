@@ -80,7 +80,7 @@ import {
   wristEnds,
   BEHIND as BACK,
 } from './katana';
-import { STRIDE, WEAVE, add, basis, dot, mix, place, sub, unit } from './mesh';
+import { STRIDE, add, basis, dot, mix, place, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
@@ -164,6 +164,9 @@ const hunterView = (build: number): HunterViewPart[] => {
     if (name === 'Belt' || name === 'Flying disc') {
       return J.PELVIS;
     }
+    if (name === 'Left bracer') {
+      return J.HAND_L;
+    }
     if (name === 'Blade cuff') {
       return J.HAND_R;
     }
@@ -172,22 +175,17 @@ const hunterView = (build: number): HunterViewPart[] => {
   const visible = new Set([
     'Harpoon harness',
     'Blade cuff',
+    'Left bracer',
     'Laser saddle',
     'Shoulder laser',
     'Shoulder plates',
-    'Torso net',
+    'Rib guard',
+    'Chest net',
     'Belt',
     'Flying disc',
   ]);
   const model = hunterModel(1);
-  const net: number[] = [];
-  const anatomy = model['Marine anatomy'];
-  for (let i = 0; i < anatomy.length; i += 3 * STRIDE) {
-    if ([0, 1, 2].every(k => anatomy[i + k * STRIDE + 8] === WEAVE)) {
-      net.push(...anatomy.slice(i, i + 3 * STRIDE));
-    }
-  }
-  const parts = [...Object.entries(model), ['Torso net', net] as [string, number[]]]
+  const parts = Object.entries(model)
     .filter(([name]) => visible.has(name))
     .map(([name, source]) => {
       const joint = at(name);
@@ -660,6 +658,9 @@ const LANK = 1.28;
 export const RAKE = 0.35;
 /** How far each of the xenomorph's claws reaches past the root of its last phalanx, metres. */
 const CLAW_L = 0.042;
+export const HUNTER_HAND: Vec3 = [0.45, 0.315, 0.22];
+const HUNTER_CLAW: Vec3 = [0.7, 0.61, 0.44];
+type Claws = boolean | 'short';
 /** A finger's half thickness at its root (11.2 mm until the fingers closed round a grip, 2026-11-09). */
 const FINGER_R = 0.01;
 /** The lengths of a finger's three phalanges against `l`, the root one first. */
@@ -798,7 +799,7 @@ export const hand = (
   /** The marine's: lit buttons on the strap round the wrist (WRIST_LIGHTS). */
   lights = false,
   /** The xenomorph's claws on the fingertips (Grip). */
-  claws = false,
+  claws: Claws = false,
   /** Its size: the xenomorph's grows from the wrist over 4 cm, hers is smaller (hands()). */
   grow = 1,
 ) => {
@@ -808,7 +809,7 @@ export const hand = (
   // to frame, and every frame built the hand again.
   [curl, point, push, cup] = [curl, point, push, cup].map(tidy);
   to &&= to.map(tidy) as Vec3;
-  const key = `${+claws} ${+lite} ${+lights} ${curl} ${point} ${push} ${to} ${cup} ${tint} ${bare} ${+(bare === tint)} ${grow}`;
+  const key = `${claws} ${+lite} ${+lights} ${curl} ${point} ${push} ${to} ${cup} ${tint} ${bare} ${+(bare === tint)} ${grow}`;
   let m = BUILT.get(key);
   if (!m) {
     if (BUILT.size >= KEPT) {
@@ -866,8 +867,10 @@ const shape = (
   cup: number,
   lite: boolean,
   lights: boolean,
-  claws = false,
+  clawStyle: Claws = false,
 ): number[] => {
+  const claws = clawStyle === true;
+  const shortClaws = clawStyle === 'short';
   const out: number[] = [];
   const [FS, CS] = lite ? [4, CUFF_NEAR] : [FINGER_SIDES, CUFF_SIDES];
   let paint = (_: number) => tint;
@@ -934,15 +937,16 @@ const shape = (
     const j2 = along(along(p, ds[0], BONES[0] * l), ds[1], BONES[1] * l);
     const y = unit(cross(d, X));
     const x = cross(y, d);
-    if (claws) {
+    if (clawStyle) {
       // A claw for the nail: from the back of the last phalanx, out past the tip and hooked down
       // toward the palm, tapering to a point.
-      paint = () => CLAW;
+      const length = (shortClaws ? 0.022 : CLAW_L) * reach;
+      paint = () => (shortClaws ? HUNTER_CLAW : CLAW);
       const ring = (k: number, w: number): Ring => {
         const c = add(
           // On the finger's own axis, from just before its tip: one line from the finger into the claw.
-          along(j2, d, BONES[2] * l * 0.68 + CLAW_L * reach * k * (1 - 0.25 * (hook - 1) * k)),
-          y.map(v => v * (r * 0.04 - CLAW_L * reach * 0.45 * hook * k * k)) as Vec3,
+          along(j2, d, BONES[2] * l * 0.68 + length * k * (1 - 0.25 * (hook - 1) * k)),
+          y.map(v => v * (r * (shortClaws ? 0.38 : 0.04) - length * 0.45 * hook * k * k)) as Vec3,
         );
         const t = unit(add(d, y.map(v => -v * 0.9 * hook * k) as Vec3));
         const b = unit(cross(t, x));
@@ -1228,7 +1232,7 @@ const shape = (
     });
   }
   // No glove's shell, plate or strap on a near hand, nor on the xenomorph's bare one.
-  if (lite || claws) {
+  if (lite || clawStyle) {
     return out;
   }
   /** The back of the palm at `z` forward and `x` across, its height in the hand. */
@@ -1349,7 +1353,7 @@ export interface Grip {
   /** The marine's lit buttons on the wrists' straps. */
   lights?: boolean;
   /** The xenomorph's: a hooked claw of bone on each fingertip, for the nail. */
-  claws?: boolean;
+  claws?: Claws;
 }
 
 /**
@@ -1392,7 +1396,7 @@ export const hands = (
       claws,
       // The xenomorph's hands larger (CLAW_HAND), but at the wrist, where they meet the arm's
       // cuff, and growing from it over 4 cm; hers smaller.
-      claws ? CLAW_HAND : build ? HAND_F : 1,
+      claws === true ? CLAW_HAND : build ? HAND_F : 1,
     );
   });
 
@@ -2149,9 +2153,9 @@ export const createBody = (world?: World): Body => {
           hunter ? [0.42, 0.29, 0.19] : tone,
         );
         if (hunter) {
-          colors[REGION.PANTS] = [0.16, 0.15, 0.12];
+          colors[REGION.PANTS] = HUNTER_HAND;
           colors[REGION.UPPER] = [0.38, 0.27, 0.17];
-          colors[REGION.GLOVE] = [0.12, 0.13, 0.12];
+          colors[REGION.GLOVE] = HUNTER_HAND;
           colors[REGION.BELT] = [0.19, 0.15, 0.11];
         }
         if (ninja || xeno) {
@@ -2222,15 +2226,15 @@ export const createBody = (world?: World): Body => {
           s,
           build,
           xeno ? curls.map(c => Math.min(c, RAKE)) : curls,
-          colors[7],
-          suit ? colors[7] : colors[3],
+          hunter ? HUNTER_HAND : colors[7],
+          hunter ? HUNTER_HAND : suit ? colors[7] : colors[3],
           {
             point: pointing,
             push,
             to: thumbTo(Math.max(tk, 0)),
             cup: cupping,
             lights: suit && !!plate,
-            claws: xeno,
+            claws: hunter ? 'short' : xeno,
           },
         );
         if (hold > 0.2) {

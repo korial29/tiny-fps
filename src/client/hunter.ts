@@ -3,8 +3,8 @@ import { SHINE, STRIDE, TWILL, WEAVE, capsule, dress, segment, solid, sub, unit 
 import type { Vec3 } from './mesh';
 
 import { body } from './skin';
-import { hands } from './body';
-import { pads } from './pads';
+import { wristBlade } from './katana';
+import { hands, HUNTER_HAND } from './body';
 import { KIND } from './features';
 import { JOINT as J, JOINTS, rest, solve } from './rig';
 import { Verts } from './verts';
@@ -22,7 +22,7 @@ const built: Partial<Record<0 | 1 | 2, Record<string, number[]>>> = {};
 
 // Sculpt the Marine's rest skin, including the shared shoulder and crotch vertices.
 // Bone weights distinguish the inside of an arm from the adjacent chest wall.
-function marineBuild(lod: 0 | 1 | 2): number[] {
+function marineBuild(lod: 0 | 1 | 2, chestFaces: number[]): number[] {
   const base = body([0, 1, 3][lod]);
   const points: Vec3[] = [];
   const arm: number[] = [],
@@ -94,8 +94,8 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
       sign = Math.sign(x),
       torso = 1 - armWeight - legWeight;
     const chest = bell((y - 1.405) / 0.15);
-    const armMass = 0.6 * bell((y - 1.319) / 0.084) + 0.49 * bell((y - 1.098) / 0.073);
-    const legMass = 0.32 * bell((y - 0.745) / 0.15) + 0.28 * bell((y - 0.35) / 0.095);
+    const armMass = 0.45 * bell((y - 1.319) / 0.084) + 0.36 * bell((y - 1.098) / 0.073);
+    const legMass = 0.26 * bell((y - 0.745) / 0.15) + 0.22 * bell((y - 0.35) / 0.095);
     const shoulder = 0.05 + 0.17 * Math.max(0, 1.45 - y) - 0.024 * bell((y - 1.37) / 0.14);
     const armX = 0.205;
     const deltoid = bell((y - 1.446) / 0.072) * bell((ax - 0.222) / 0.057);
@@ -215,13 +215,15 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
     p[2] += collarDepth(x, y, z);
   });
   for (const face of faces) {
+    if (lod && face.every(k => arm[k] < 0.5) && face.some(k => points[k][1] > 0.98)) {
+      chestFaces.push(result.length);
+    }
     for (const k of face) {
-      const [x, y] = points[k];
-      const pelvic = y < 0.987 && y > 0.865 && Math.abs(x) < 0.158 && arm[k] < 0.2;
-      const tint = y < 0.145 ? graphite : pelvic ? leather : hide;
+      const y = points[k][1];
+      const tint = y < 0.145 ? graphite : hide;
       const [px, py, pz] = vertices[k];
       const coverage =
-        tint === hide ? Math.min(1, Math.max(0, (y - 0.99) / 0.07) + arm[k] + leg[k]) : 0;
+        tint === hide ? Math.min(1, Math.max(0, (y - 0.15) / 0.07) + arm[k] + leg[k]) : 0;
       // Pigment follows the flanks and shoulders, with broken mottling over the lighter chest.
       const flanks = Math.min(1, Math.abs(px) / 0.33);
       const pigment =
@@ -239,25 +241,35 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
         pecLight -
         midline;
       const warm = [0.57 * shade, 0.4 * shade, 0.285 * shade];
+      const wristBlend = arm[k] * fade((1.015 - y) / 0.09);
       result.push(
         ...vertices[k],
         ...smooth[k],
-        tint[0] + coverage * (warm[0] - tint[0]),
-        tint[1] + coverage * (warm[1] - tint[1]),
+        (1 - wristBlend) * (tint[0] + coverage * (warm[0] - tint[0])) + wristBlend * HUNTER_HAND[0],
+        (1 - wristBlend) * (tint[1] + coverage * (warm[1] - tint[1])) + wristBlend * HUNTER_HAND[1],
         -1,
-        tint[2] + coverage * (warm[2] - tint[2]),
+        (1 - wristBlend) * (tint[2] + coverage * (warm[2] - tint[2])) + wristBlend * HUNTER_HAND[2],
       );
     }
   }
   if (lod) {
     // Use the same buffer type as the hands drawn every frame.
-    const gloves = new Verts();
+    const fingers = new Verts();
     const skeleton = solve(rest());
-    hands(gloves, skeleton, 0, [0.24, 0.24], graphite, hide, {}, lod === 1);
-    const v = gloves.a;
-    for (let i = 0; i < gloves.length; i += STRIDE) {
+    hands(
+      fingers,
+      skeleton,
+      0,
+      [0.19, 0.19],
+      HUNTER_HAND,
+      HUNTER_HAND,
+      { claws: 'short' },
+      lod === 1,
+    );
+    const v = fingers.a;
+    for (let i = 0; i < fingers.length; i += STRIDE) {
       const wrist = skeleton.pos[v[i] < 0 ? J.HAND_L : J.HAND_R];
-      const reach = Math.min(1, Math.max(0, (wrist[1] - v[i + 1]) / 0.09));
+      const reach = fade((wrist[1] - v[i + 1]) / 0.09);
       const p = shape(
         [
           wrist[0] + (v[i] - wrist[0]) * (1 + 0.24 * reach),
@@ -271,6 +283,87 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
     }
   }
   return result;
+}
+
+// Cut each diagonal ribbon on the finished skin triangles. Interpolating at
+// their shared edges keeps the diamonds continuous over the pecs and flanks.
+function chestNet(skin: number[], faces: number[]): number[] {
+  const mesh: number[] = [];
+  type Corner = { p: Vec3; angle: number; y: number; collar: number };
+  function clip(polygon: Corner[], distance: (v: Corner) => number): Corner[] {
+    const kept: Corner[] = [];
+    for (let i = 0; i < polygon.length; i++) {
+      const a = polygon[i],
+        b = polygon[(i + 1) % polygon.length];
+      const da = distance(a),
+        db = distance(b);
+      if (da >= 0) {
+        kept.push(a);
+      }
+      if (da >= 0 === db >= 0) {
+        continue;
+      }
+      const t = da / (da - db);
+      kept.push({
+        p: a.p.map((x, k) => x + (b.p[k] - x) * t) as Vec3,
+        angle: a.angle + (b.angle - a.angle) * t,
+        y: a.y + (b.y - a.y) * t,
+        collar: a.collar + (b.collar - a.collar) * t,
+      });
+    }
+    return kept;
+  }
+  for (const start of faces) {
+    const tri = [0, 1, 2].map(k => {
+      const i = start + k * STRIDE;
+      const angle = Math.atan2(skin[i], -skin[i + 2]) / (2 * Math.PI);
+      const y = skin[i + 1] / stature;
+      return {
+        p: [0, 1, 2].map(axis => skin[i + axis] + 0.0015 * skin[i + 3 + axis]) as Vec3,
+        angle,
+        y,
+        collar: 1.48 - 0.11 * Math.sin(2 * Math.PI * angle) ** 4 - y,
+      };
+    });
+    for (const v of tri) {
+      v.angle -= Math.round(v.angle - tri[0].angle);
+    }
+    const patch = clip(
+      clip(tri, v => v.y - 1.105),
+      v => v.collar,
+    );
+    if (patch.length < 3) {
+      continue;
+    }
+    const [a, b, c] = tri.map(v => v.p);
+    const ab = sub(b, a),
+      ac = sub(c, a);
+    const n = unit([
+      ab[1] * ac[2] - ab[2] * ac[1],
+      ab[2] * ac[0] - ab[0] * ac[2],
+      ab[0] * ac[1] - ab[1] * ac[0],
+    ]);
+    for (const direction of [-1, 1]) {
+      const phase = (v: Corner) => 28 * v.angle + direction * 18 * v.y;
+      const phases = patch.map(phase);
+      for (
+        let strand = Math.ceil(Math.min(...phases) - 0.035);
+        strand <= Math.max(...phases) + 0.035;
+        strand++
+      ) {
+        const band = clip(
+          clip(patch, v => phase(v) - strand + 0.035),
+          v => strand + 0.035 - phase(v),
+        );
+        for (let k = 2; k < band.length; k++) {
+          for (const v of [band[0], band[k - 1], band[k]]) {
+            mesh.push(...v.p, ...n, 0.07, 0.063, WEAVE, 0.055);
+          }
+        }
+      }
+    }
+  }
+  return mesh;
 }
 
 export function hunter(lod: 0 | 1 | 2) {
@@ -397,7 +490,8 @@ export function hunter(lod: 0 | 1 | 2) {
     });
   }
 
-  parts['Marine anatomy'] = marineBuild(lod);
+  const chestFaces: number[] = [];
+  parts['Marine anatomy'] = marineBuild(lod, chestFaces);
   part('Mask lining');
   limb([0, 1.51, 0], [0, 1.68, 0], [0.085, 0.077, 0.097], [0.35, 0.25, 0.18], 0.97);
   limb([0, 1.59, 0], [0, 1.86, 0.01], [0.084, 0.112, 0.144, 0.13, 0.058], graphite, 1, TWILL);
@@ -431,9 +525,29 @@ export function hunter(lod: 0 | 1 | 2) {
     );
   }
   part('Blade cuff');
-  limb([0.403, 0.983, -0.004], [0.424, 0.897, -0.005], [0.056, 0.061, 0.048], graphite, 1, TWILL);
+  for (const side of [1, -1]) {
+    if (side < 0) {
+      part('Left bracer');
+    }
+    limb(
+      [side * 0.38, 1.015, 0],
+      [side * 0.392, 0.884, -0.002],
+      [0.057, 0.062, 0.05, 0.037],
+      silver,
+      0.94,
+      TWILL,
+    );
+    limb(
+      [side * 0.39, 0.908, -0.002],
+      [side * 0.392, 0.895, -0.002],
+      [0.046, 0.044],
+      graphite,
+      1,
+      TWILL,
+    );
+  }
   part('Laser saddle');
-  limb([-0.245, 1.47, 0.063], [-0.257, 1.535, 0.058], [0.071, 0.082, 0.052], graphite, 1.24, TWILL);
+  limb([-0.228, 1.48, 0.079], [-0.233, 1.552, 0.082], [0.045, 0.049, 0.029], graphite, 1.05, TWILL);
   const alloy: Vec3 = [0.42, 0.425, 0.405];
   const rim: Vec3 = [0.36, 0.365, 0.35];
   const gauze: Vec3 = [0.19, 0.205, 0.2];
@@ -619,6 +733,9 @@ export function hunter(lod: 0 | 1 | 2) {
         TWILL,
       );
     }
+    // Keep the lames and their raised seams on the same slim shell.
+    const greave = (angle: number, y: number, relief: number) =>
+      wrap(angle, y, 0.003 + 0.48 * relief);
     part('Shin plates ' + side);
     for (let course = 0; course < 5; course++) {
       const base = 0.143 + 0.062 * course;
@@ -628,7 +745,7 @@ export function hunter(lod: 0 | 1 | 2) {
           const angle = (u - 0.5) * (2.52 + 0.28 * v);
           const centre = 1 - 2 * Math.abs(u - 0.5);
           const fold = Math.max(0, 1 - Math.abs(u - 0.5) * 5);
-          return wrap(
+          return greave(
             angle,
             base + 0.077 * v - 0.041 * centre,
             0.012 + jointClearance + 0.014 * (1 - v) + 0.021 * fold + 0.004 * centre,
@@ -647,7 +764,7 @@ export function hunter(lod: 0 | 1 | 2) {
         (u, v) => {
           const centre = 1 - 2 * Math.abs(u - 0.5);
           const fold = Math.max(0, 1 - Math.abs(u - 0.5) * 5);
-          return wrap(
+          return greave(
             (u - 0.5) * 2.53,
             base - 0.041 * centre + 0.005 * v,
             0.029 + jointClearance + 0.023 * fold + 0.005 * centre,
@@ -660,40 +777,75 @@ export function hunter(lod: 0 | 1 | 2) {
     }
     part('Ankle cuff ' + side);
     armor(
-      (u, v) => wrap((u - 0.5) * 2.65, 0.078 + 0.082 * v, 0.037 - 0.026 * v),
+      (u, v) => greave((u - 0.5) * 2.65, 0.078 + 0.082 * v, 0.037 - 0.026 * v),
       8,
       2,
       [0.29, 0.33, 0.33],
     );
+    // Fit the instep plates to transverse slices of the boot, from the
+    // rounded toe up to the ankle. Their edges turn down with the leather.
+    const footFaces: number[] = [];
+    for (let i = 0; i < legSkin.length; i += 3 * STRIDE) {
+      if (
+        [0, 1, 2].every(
+          k => side * legSkin[i + k * STRIDE] > 0 && legSkin[i + k * STRIDE + 1] < 0.19,
+        )
+      ) {
+        footFaces.push(i);
+      }
+    }
+    const footPoint = (angle: number, z: number): Vec3 => {
+      const dx = Math.sin(angle),
+        dy = Math.cos(angle);
+      const cx = bootCentres[side],
+        cy = 0.025;
+      let radius = 0;
+      for (const i of footFaces) {
+        const za = legSkin[i + 2],
+          zb = legSkin[i + STRIDE + 2],
+          zc = legSkin[i + 2 * STRIDE + 2];
+        if (z < Math.min(za, zb, zc) || z > Math.max(za, zb, zc)) {
+          continue;
+        }
+        // In the plane normal to the ray, the sample lies at (0,z).
+        const projected = [0, 1, 2].map(k => {
+          const j = i + k * STRIDE;
+          const x = legSkin[j] - cx,
+            y = legSkin[j + 1] - cy;
+          return [dy * x - dx * y, legSkin[j + 2] - z, dx * x + dy * y];
+        });
+        const [a, b, c] = projected;
+        const det = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+        if (Math.abs(det) < 1e-10) {
+          continue;
+        }
+        const u = (b[0] * c[1] - b[1] * c[0]) / det,
+          v = (c[0] * a[1] - c[1] * a[0]) / det;
+        if (u >= -1e-7 && v >= -1e-7 && u + v <= 1.0000001) {
+          radius = Math.max(radius, u * a[2] + v * b[2] + (1 - u - v) * c[2]);
+        }
+      }
+      return [cx + dx * (radius + 0.0035), cy + dy * (radius + 0.0035), z];
+    };
     part('Boot lames ' + side);
     for (let j = 0; j < 2; j++) {
-      armor(
+      panel(
         (u, v) => {
-          const a = (u - 0.5) * 2.52,
-            z = -0.22 + j * 0.085 + 0.095 * v;
-          const ridge = Math.max(0, 1 - Math.abs(u - 0.5) * 4);
-          return [
-            bootCentres[side] + (0.064 + 0.02 * v - 0.004 * j) * Math.sin(a),
-            0.043 + 0.047 * v + 0.013 * ridge + 0.045 * j,
-            z - 0.018 * ridge * (1 - v),
-          ];
+          const across = 2 * u - 1;
+          return footPoint(across * 1.29, -0.227 + j * 0.09 + v * 0.083 + 0.022 * across ** 2);
         },
-        lod === 0 ? 6 : lod === 1 ? 10 : 12,
-        lod === 0 ? 2 : 3,
-        j ? [0.32, 0.36, 0.35] : [0.39, 0.43, 0.42],
+        lod === 0 ? 6 : 12,
+        lod === 0 ? 2 : 4,
+        j ? rim : alloy,
       );
     }
     part('Boot side ' + side);
     for (const edge of [-1, 1]) {
       panel(
-        (u, v) => [
-          bootCentres[side] + edge * (0.064 + 0.012 * u + 0.004 * v),
-          0.026 + v * (0.005 + 0.055 * Math.sin(Math.PI * u)),
-          -0.22 + 0.22 * u,
-        ],
+        (u, v) => footPoint(edge * (1.46 - 0.5 * v), -0.035 + 0.102 * u),
         lod === 0 ? 3 : 6,
-        lod === 0 ? 1 : 3,
-        [0.3, 0.34, 0.33],
+        2,
+        graphite,
         edge < 0,
       );
     }
@@ -702,7 +854,7 @@ export function hunter(lod: 0 | 1 | 2) {
       const angle = (u - 0.5) * (2.38 + 0.3 * v);
       const fold = Math.max(0, 1 - Math.abs(u - 0.5) * 4);
       const chevron = 1 - 2 * Math.abs(u - 0.5);
-      return wrap(
+      return greave(
         angle,
         0.426 + 0.125 * v - 0.022 * chevron * (1 - v),
         0.039 + 0.031 * fold * Math.sin(Math.PI * v) + 0.011 * chevron,
@@ -713,7 +865,7 @@ export function hunter(lod: 0 | 1 | 2) {
     armor(
       (u, v) => {
         const centre = 1 - 2 * Math.abs(u - 0.5);
-        return wrap((u - 0.5) * (1.4 + 0.2 * v), 0.453 + 0.085 * v - 0.027 * centre, 0.088);
+        return greave((u - 0.5) * (1.4 + 0.2 * v), 0.453 + 0.085 * v - 0.027 * centre, 0.088);
       },
       4,
       2,
@@ -877,187 +1029,117 @@ export function hunter(lod: 0 | 1 | 2) {
     port(lip, 0.0004, [0.0038, 0.0038], [0.055, 0.063, 0.06]);
   }
   part('Rangefinder');
-  limb([-0.232, 1.704, -0.042], [-0.23, 1.705, -0.138], [0.018, 0.025, 0.02], bronze, 1, TWILL);
-  limb([-0.23, 1.705, -0.138], [-0.23, 1.705, -0.14], [0.012, 0.012], light, 1, -2);
+  limb([-0.221, 1.704, 0.064], [-0.231, 1.691, -0.052], [0.011, 0.015, 0.012], graphite, 1, TWILL);
+  limb([-0.231, 1.691, -0.052], [-0.231, 1.691, -0.054], [0.006, 0.006], light, 1, -2);
   const skin = parts['Marine anatomy'];
-  const depthCache = new Map<string, number>();
-  const frontDepth = (x: number, y: number) => {
-    const key = `${x},${y}`;
-    const cached = depthCache.get(key);
-    if (cached !== undefined) {
-      return cached;
-    }
-    let depth = Infinity;
-    for (let i = 0; i < skin.length; i += 3 * STRIDE) {
-      const ax = skin[i],
-        ay = skin[i + 1],
-        bx = skin[i + STRIDE],
-        by = skin[i + STRIDE + 1],
-        cx = skin[i + 2 * STRIDE],
-        cy = skin[i + 2 * STRIDE + 1];
-      if (
-        x < Math.min(ax, bx, cx) ||
-        x > Math.max(ax, bx, cx) ||
-        y < Math.min(ay, by, cy) ||
-        y > Math.max(ay, by, cy)
-      ) {
-        continue;
-      }
-      const area = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
-      if (Math.abs(area) < 1e-10) {
-        continue;
-      }
-      const a = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / area,
-        b = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / area;
-      if (a < -1e-6 || b < -1e-6 || a + b > 1 + 1e-6) {
-        continue;
-      }
-      depth = Math.min(
-        depth,
-        a * skin[i + 2] + b * skin[i + STRIDE + 2] + (1 - a - b) * skin[i + 2 * STRIDE + 2],
-      );
-    }
-    depthCache.set(key, depth);
-    return depth;
-  };
-  // Fit each lame to the actual shoulder skin. The ninja's shoulder profile is
-  // lower than the Hunter's sculpted deltoid in places, especially at the rim.
-  const topCache = new Map<string, number>();
-  const shoulderTop = (x: number, z: number) => {
-    const key = `${x},${z}`;
-    const cached = topCache.get(key);
-    if (cached !== undefined) {
-      return cached;
-    }
-    let height = -Infinity;
-    for (let i = 0; i < skin.length; i += 3 * STRIDE) {
-      const ax = skin[i],
-        az = skin[i + 2],
-        bx = skin[i + STRIDE],
-        bz = skin[i + STRIDE + 2],
-        cx = skin[i + 2 * STRIDE],
-        cz = skin[i + 2 * STRIDE + 2];
-      if (
-        x < Math.min(ax, bx, cx) ||
-        x > Math.max(ax, bx, cx) ||
-        z < Math.min(az, bz, cz) ||
-        z > Math.max(az, bz, cz)
-      ) {
-        continue;
-      }
-      const area = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
-      if (Math.abs(area) < 1e-10) {
-        continue;
-      }
-      const a = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / area,
-        b = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / area;
-      if (a < -1e-6 || b < -1e-6 || a + b > 1 + 1e-6) {
-        continue;
-      }
-      const y = a * skin[i + 1] + b * skin[i + STRIDE + 1] + (1 - a - b) * skin[i + 2 * STRIDE + 1];
-      if (y > 1.35 && y < 1.56) {
-        height = Math.max(height, y);
-      }
-    }
-    topCache.set(key, height);
-    return height;
-  };
-  const sideCache = new Map<string, number>();
-  const shoulderSide = (side: number, y: number, z: number) => {
-    const key = `${side},${y},${z}`;
-    const cached = sideCache.get(key);
-    if (cached !== undefined) {
-      return cached;
-    }
-    let edge = -Infinity;
-    for (let i = 0; i < skin.length; i += 3 * STRIDE) {
-      const ay = skin[i + 1],
-        az = skin[i + 2],
-        by = skin[i + STRIDE + 1],
-        bz = skin[i + STRIDE + 2],
-        cy = skin[i + 2 * STRIDE + 1],
-        cz = skin[i + 2 * STRIDE + 2];
-      if (
-        y < Math.min(ay, by, cy) ||
-        y > Math.max(ay, by, cy) ||
-        z < Math.min(az, bz, cz) ||
-        z > Math.max(az, bz, cz)
-      ) {
-        continue;
-      }
-      const area = (bz - cz) * (ay - cy) + (cy - by) * (az - cz);
-      if (Math.abs(area) < 1e-10) {
-        continue;
-      }
-      const a = ((bz - cz) * (y - cy) + (cy - by) * (z - cz)) / area,
-        b = ((cz - az) * (y - cy) + (ay - cy) * (z - cz)) / area;
-      if (a < -1e-6 || b < -1e-6 || a + b > 1 + 1e-6) {
-        continue;
-      }
-      const x = side * (a * skin[i] + b * skin[i + STRIDE] + (1 - a - b) * skin[i + 2 * STRIDE]);
-      edge = Math.max(edge, x);
-    }
-    sideCache.set(key, edge);
-    return edge;
-  };
   part('Shoulder plates');
-  const shoulderPads = new Verts();
-  const shoulderPose = solve(rest());
-  pads(shoulderPads, shoulderPose, 0, alloy, false, alloy, lod === 0, undefined, true);
-  const shoulderVerts = shoulderPads.a;
-  for (let i = 0; i < shoulderPads.length; i += STRIDE) {
-    if (shoulderVerts[i + 8] !== TWILL) {
+  const torsoFaces = new Set(chestFaces);
+  const ribGuard: number[] = [];
+  // Fit the shell directly to the sculpted deltoid and clavicle. Its front
+  // edge sweeps inward across the pec, and its outer skirt sits on the arm.
+  for (let i = 0; i < skin.length; i += 3 * STRIDE) {
+    const corners = [0, 1, 2].map(k => i + k * STRIDE);
+    if (corners.every(k => skin[k + 1] < 1.02 || Math.abs(skin[k]) < 0.035)) {
       continue;
     }
-    const side = shoulderVerts[i] < 0 ? -1 : 1;
-    const arm = shoulderPose.pos[side < 0 ? J.ARM_L : J.ARM_R];
-    const outward = side * (shoulderVerts[i] - arm[0]);
-    const xScale = outward < 0 ? 0.65 : 1.55;
-    const normal = unit([
-      shoulderVerts[i + 3] / xScale,
-      shoulderVerts[i + 4] / 0.95,
-      shoulderVerts[i + 5] / (shoulderVerts[i + 2] < 0 ? 1.4 : 1.15),
-    ]);
-    let x = arm[0] + (shoulderVerts[i] - arm[0]) * xScale;
-    let y =
-      arm[1] + (shoulderVerts[i + 1] - arm[1]) * 0.95 + 0.035 - 0.02 * Math.max(0, outward / 0.09);
-    const rawZ = shoulderVerts[i + 2] * (shoulderVerts[i + 2] < 0 ? 1.4 : 1.15);
-    if (outward > -0.03) {
-      x = side * Math.max(side * x, shoulderSide(side, y, rawZ) + 0.03);
-    }
-    y = Math.max(y, shoulderTop(x, rawZ) + 0.014);
-    const surface = shoulderVerts[i + 2] < 0 ? frontDepth(x, y) : Infinity;
-    out.push(
-      x,
-      y,
-      Math.min(rawZ, surface - 0.012),
-      ...normal,
-      ...shoulderVerts.subarray(i + 6, i + STRIDE),
-    );
-  }
-  if (lod > 0) {
-    part('Chest net');
-    for (const direction of [-1, 1]) {
-      for (let strand = -11; strand <= 11; strand++) {
-        let previous: Vec3 | undefined;
-        for (let step = 0; step <= 12; step++) {
-          const t = step / 12,
-            x = strand * 0.044 + direction * 0.235 * t,
-            y = 1.15 + 0.305 * t;
-          const depth = Math.abs(x) <= 0.255 ? frontDepth(x, y) : Infinity;
-          if (!Number.isFinite(depth)) {
-            previous = undefined;
-            continue;
+    const rib = torsoFaces.has(i) && corners.some(k => skin[k] < -0.045 && skin[k + 1] < 1.49);
+    for (let course = -2; course <= (rib ? 3 : 0); course++) {
+      const triangle = corners.map(k => {
+        const x = Math.abs(skin[k]),
+          y = skin[k + 1],
+          z = skin[k + 2];
+        const front = Math.max(0, Math.min(1, -z / 0.16));
+        const inside = 0.18 - 0.08 * front + 0.026 * bell((y - 1.53) / 0.042);
+        const lower =
+          1.342 + 0.09 * Math.exp(-(((x - 0.17) / 0.115) ** 2)) + 0.032 * Math.max(0, z / 0.16);
+        // Three long flutes run around the ribs under the armpit. Their
+        // tips converge at the belt while the upper ends tuck under the pauldron.
+        const t = Math.min(1, Math.max(0, (y - 1.035) / 0.425));
+        const fullness = Math.sin(Math.PI * t);
+        const width = 0.2 + 0.21 * t + 0.25 * fullness;
+        const azimuth = Math.atan2(-skin[k], -z);
+        const centre = 1.3 - 0.25 * t + 0.08 * fullness;
+        const flute = centre + (course - 2) * width * 0.57;
+        const ribEdge = Math.min(
+          (width * 0.43 - Math.abs(azimuth - flute)) * 0.23,
+          y - 1.035 - 0.018 * Math.abs(course - 2),
+          1.425 - y - 0.008 * Math.abs(course - 2),
+        );
+        return {
+          p: skin.slice(k, k + 3) as Vec3,
+          n:
+            course > 0
+              ? (skin.slice(k + 3, k + 6) as Vec3)
+              : unit([
+                  Math.sign(skin[k]) * Math.max(0.015, x - 0.205),
+                  (y - 1.325) * 0.72,
+                  z * 1.35,
+                ]),
+          edge:
+            course > 0
+              ? ribEdge
+              : Math.min(
+                  x - inside,
+                  y - lower,
+                  course === 0
+                    ? 1
+                    : y - lower + course * 0.043 - 0.023 * Math.min(1, Math.abs(z) / 0.16),
+                ),
+        };
+      });
+      // Bevel the cut edge into a dark welt under the brushed metal face.
+      for (const [lo, hi, base, rise, tint] of [
+        [0, 0.005, 0.003, 0.005, graphite],
+        [0.005, 0.014, 0.008, 0.006, rim],
+        [0.014, 1, 0.014, 0, alloy],
+      ] as const) {
+        let polygon = triangle;
+        for (const bound of [lo, hi]) {
+          const kept: typeof triangle = [];
+          for (let j = 0; j < polygon.length; j++) {
+            const a = polygon[j],
+              b = polygon[(j + 1) % polygon.length];
+            const keep = bound === lo ? a.edge >= bound : a.edge <= bound;
+            if (keep) {
+              kept.push(a);
+            }
+            const crosses = (a.edge - bound) * (b.edge - bound) < 0;
+            if (!crosses) {
+              continue;
+            }
+            const t = (bound - a.edge) / (b.edge - a.edge);
+            kept.push({
+              p: a.p.map((v, k) => v + t * (b.p[k] - v)) as Vec3,
+              n: a.n.map((v, k) => v + t * (b.n[k] - v)) as Vec3,
+              edge: bound,
+            });
           }
-          const point: Vec3 = [x, y, depth - 0.005];
-          if (previous) {
-            limb(previous, point, [0.0016, 0.0016], [0.07, 0.063, 0.055], 1, WEAVE);
+          polygon = kept;
+        }
+        for (let j = 2; j < polygon.length; j++) {
+          for (const v of [polygon[0], polygon[j - 1], polygon[j]]) {
+            const n = unit(v.n);
+            const bevel = base + (rise * (v.edge - lo)) / (hi - lo);
+            const lift =
+              course > 0 ? 0.002 + 0.55 * bevel + 0.0015 * (3 - course) : bevel - course * 0.007;
+            const color = course > 0 ? (lo === 0 ? leather : lo < 0.014 ? rim : graphite) : tint;
+            const target = course > 0 ? ribGuard : out;
+            target.push(
+              v.p[0] + lift * n[0],
+              v.p[1] + lift * n[1],
+              v.p[2] + lift * n[2],
+              ...n,
+              color[0],
+              color[1],
+              TWILL,
+              color[2],
+            );
           }
-          previous = point;
         }
       }
     }
   }
+  parts['Rib guard'] = ribGuard;
   part('Belt');
   limb([0, 0.973, 0], [0, 1.045, 0], [0.198, 0.206, 0.191], graphite, 0.86, WEAVE);
   // A layered clasp and narrow pouches break up the broad belt.
@@ -1084,41 +1166,107 @@ export function hunter(lod: 0 | 1 | 2) {
       TWILL,
     );
   }
-  plate(
-    [
-      [-0.031, 0.934, -0.177],
-      [0.031, 0.934, -0.177],
-      [0.027, 0.722, -0.176],
-      [-0.027, 0.722, -0.176],
-    ],
-    [0, 0.822, -0.205],
-    alloy,
-  );
+  // Each tasset folds along its spine. The turned lower lip casts a dark V
+  // over the next lame, and the exposed leather traces the silhouette.
+  for (let index = 0; index < 4; index++) {
+    const angle = (index * Math.PI) / 2;
+    const side = index % 2 === 1;
+    const length = side ? 0.29 : 0.315;
+    const count = [2, 5, 7][lod];
+    function tasset(across: number, down: number, lift: number, border = 0): Vec3 {
+      const width = (side ? 0.074 : 0.065) * (1 - 0.24 * down - 0.3 * down ** 4) + border;
+      const spine = 1 - Math.abs(across);
+      const radius =
+        (side ? 0.198 : index === 0 ? 0.184 : 0.165) +
+        (side ? 0.094 : 0.051) * Math.sin((down * Math.PI) / 2) +
+        0.015 * spine +
+        lift;
+      const x = across * width;
+      return [
+        x * Math.cos(angle) + radius * Math.sin(angle),
+        0.984 - length * down - (0.019 + 0.022 * down) * spine,
+        x * Math.sin(angle) - radius * Math.cos(angle),
+      ];
+    }
+    for (const half of [-1, 1]) {
+      const face = (u: number) => (half < 0 ? u - 1 : u);
+      panel((u, v) => tasset(face(u), v, 0, 0.006), 1, 3, leather, true, WEAVE);
+      for (let row = 0; row < count; row++) {
+        const end = (row + 1) / count;
+        panel(
+          (u, v) => tasset(face(u), (row + 0.94 * v) / count, 0.003 + 0.009 * v),
+          1,
+          1,
+          alloy,
+          true,
+          SHINE,
+        );
+        panel(
+          (u, v) => tasset(face(u), end - (0.06 * (1 - v)) / count, 0.012 - 0.009 * v),
+          1,
+          1,
+          rim,
+          true,
+          TWILL,
+        );
+      }
+    }
+  }
+  // Soft black tabs hang between the metal tassets and move clear of the thighs.
+  for (const side of [-1, 1]) {
+    for (const back of [-1, 1]) {
+      panel(
+        (u, v) => {
+          const angle = side * (0.56 + 0.47 * u + 0.08 * v);
+          const radius = 0.202 + 0.049 * v + 0.007 * Math.sin(Math.PI * u * 2);
+          return [
+            radius * Math.sin(angle),
+            0.981 - v * (0.23 + 0.052 * Math.sin(Math.PI * u)),
+            back * radius * Math.cos(angle),
+          ];
+        },
+        lod ? 5 : 2,
+        2,
+        [0.056, 0.051, 0.046],
+        side * back < 0,
+        WEAVE,
+      );
+    }
+  }
   part('Wrist blade');
-  plate(
-    [
-      [0.355, 1.026, -0.177],
-      [0.405, 1.051, -0.172],
-      [0.434, 0.973, -0.185],
-      [0.415, 0.685, -0.276],
-      [0.376, 0.934, -0.215],
-    ],
-    [0.398, 0.949, -0.229],
-    silver,
-    true,
-  );
+  const twin = wristBlade(lod);
+  for (let i = 0; i < twin.length; i += STRIDE) {
+    out.push(
+      0.39 + twin[i + 1] * 0.8,
+      0.91 + twin[i + 2] * 0.86,
+      twin[i] * 0.85,
+      twin[i + 4],
+      twin[i + 5],
+      twin[i + 3],
+      ...twin.slice(i + 6, i + STRIDE),
+    );
+  }
   part('Shoulder laser');
-  limb([-0.245, 1.46, 0.08], [-0.28, 1.676, 0.066], [0.064, 0.042, 0.059], bronze, 1, TWILL);
-  limb(
-    [-0.28, 1.676, 0.156],
-    [-0.28, 1.676, -0.164],
-    [0.045, 0.067, 0.069, 0.049, 0.052],
-    graphite,
-    0.9,
-    TWILL,
-  );
-  limb([-0.28, 1.676, -0.162], [-0.28, 1.676, -0.174], [0.05, 0.046], silver, 0.92, SHINE);
-  limb([-0.28, 1.676, -0.175], [-0.28, 1.676, -0.177], [0.028, 0.028], light, 1, -2);
+  limb([-0.233, 1.54, 0.082], [-0.221, 1.637, 0.06], [0.027, 0.021, 0.031], alloy, 0.88, TWILL);
+  // The short shroud rides above the pivot; the stepped muzzle shows a dark bore.
+  const breech: Vec3 = [-0.219, 1.673, 0.118];
+  const muzzle: Vec3 = [-0.242, 1.644, -0.14];
+  const barrel = (t: number): Vec3 => breech.map((x, k) => x + (muzzle[k] - x) * t) as Vec3;
+  limb(breech, barrel(0.68), [0.028, 0.045, 0.047, 0.034], alloy, 0.9, TWILL);
+  for (const side of [-1, 1]) {
+    const rail = (t: number, offset: number): Vec3 => {
+      const [x, y, z] = barrel(t);
+      return [x + side * offset, y + 0.016, z];
+    };
+    limb(rail(0.1, 0.027), rail(0.64, 0.035), [0.007, 0.013, 0.006], graphite, 0.76, TWILL);
+  }
+  limb(barrel(0.62), muzzle, [0.032, 0.034, 0.026], graphite, 1, TWILL);
+  for (const t of [0.28, 0.53, 0.86]) {
+    const r = t < 0.6 ? 0.047 : 0.031;
+    limb(barrel(t), barrel(t + 0.046), [r, r], rim, 0.95, TWILL);
+  }
+  limb(barrel(0.98), barrel(1.015), [0.028, 0.026], silver, 1, TWILL);
+  limb(barrel(1.015), barrel(1.019), [0.021, 0.021], [0.049, 0.055, 0.053], 1);
   part('Harpoon');
   // A folding bolt rifle rides diagonally across the back: long barrel, receiver, stock and folded legs.
   limb([-0.31, 1.15, 0.19], [0.25, 1.73, 0.19], [0.035, 0.032, 0.028], graphite, 0.72, TWILL);
@@ -1129,28 +1277,58 @@ export function hunter(lod: 0 | 1 | 2) {
   limb([0.13, 1.63, 0.104], [0.04, 1.57, 0.103], [0.012, 0.013], silver, 1, SHINE);
   limb([-0.018, 1.475, 0.087], [-0.018, 1.51, 0.087], [0.018, 0.013], silver, 1, SHINE);
   part('Flying disc');
-  const hub: Vec3 = [-0.206, 0.961, -0.163];
-  const diskPoint = (r: number, a: number, z: number): Vec3 => [
-    hub[0] + r * Math.cos(a) * 0.85,
-    hub[1] + r * Math.sin(a),
-    hub[2] + r * Math.cos(a) * 0.5 + z,
-  ];
-  for (let j = 0; j < 6; j++) {
-    const a = (j * Math.PI) / 3;
-    plate(
-      [
-        diskPoint(0.039, a - 0.19, 0),
-        diskPoint(0.104, a - 0.34, 0),
-        diskPoint(0.143, a + 0.08, -0.001),
-        diskPoint(0.111, a + 0.25, -0.002),
-        diskPoint(0.062, a + 0.57, -0.002),
-      ],
-      diskPoint(0.081, a + 0.08, -0.007),
-      silver,
-      true,
+  // The throwing disc sits face out on the hip. Six swept blades grow
+  // from separate bronze collars around a recessed steel boss.
+  const discPoint = (r: number, angle: number, height: number): Vec3 => {
+    const x = r * Math.cos(angle);
+    return [
+      -0.205 + 0.89 * x - 0.456 * height,
+      0.955 + r * Math.sin(angle),
+      -0.178 - 0.456 * x - 0.89 * height,
+    ];
+  };
+  const discSides = [12, 24, 36][lod];
+  function discRing(inner: number, outer: number, low: number, high: number, tint: Vec3) {
+    panel(
+      (u, v) => discPoint(inner + (outer - inner) * v, 2 * Math.PI * u, low + (high - low) * v),
+      discSides,
+      1,
+      tint,
+      outer > inner,
+      TWILL,
     );
   }
-  limb(hub, [hub[0] + 0.009, hub[1], hub[2] - 0.009], [0.052, 0.044, 0.023], bronze, 1, SHINE);
+  discRing(0.047, 0.049, -0.009, 0.003, graphite);
+  discRing(0.049, 0.039, 0.003, 0.011, alloy);
+  discRing(0.039, 0.031, 0.011, 0.01, bronze);
+  discRing(0.031, 0.025, 0.01, 0.004, graphite);
+  discRing(0.025, 0.001, 0.004, 0.012, alloy);
+  for (let j = 0; j < 6; j++) {
+    const spoke = (j * Math.PI) / 3;
+    function blade(u: number, across: number, height: number): Vec3 {
+      const r = 0.042 + 0.103 * u;
+      const width = 0.015 * (1 - u) ** 0.85 + 0.00035;
+      const a = spoke + 0.12 + 1.03 * u ** 1.6 + (width * across) / r;
+      return discPoint(r, a, height * (1 - u) + 0.003 * Math.sin(Math.PI * u));
+    }
+    const steps = [3, 6, 10][lod];
+    panel((u, v) => blade(u, -1 + 1.38 * v, 0.001 + 0.008 * v), steps, 1, alloy, false, TWILL);
+    panel((u, v) => blade(u, 0.38 + 0.62 * v, 0.009 - 0.009 * v), steps, 1, silver, false, SHINE);
+    panel((u, v) => blade(u, 1 - 2 * v, -0.002), steps, 1, rim, false, TWILL);
+    panel(
+      (u, v) =>
+        discPoint(
+          0.043 + 0.014 * u,
+          spoke + 0.12 + (v - 0.5) * 0.62,
+          0.009 + 0.004 * Math.sin(Math.PI * u),
+        ),
+      2,
+      2,
+      bronze,
+      false,
+      TWILL,
+    );
+  }
   // Lift the knee and pelvis from a planted foot; ease the rise out under the ribs.
   // The derivative of the same curve transforms the normals of the fitted kit.
   function legRise(y: number): [number, number] {
@@ -1175,6 +1353,7 @@ export function hunter(lod: 0 | 1 | 2) {
       name.startsWith('Quills') ||
       name.startsWith('Swept temple rail');
     const anatomy = name === 'Marine anatomy';
+    const trunkFit = anatomy || name === 'Rib guard';
     const legKit =
       /^(Thigh net|Leg straps|Shin plates|Shin seams|Ankle cuff|Patella|Boot lames|Boot side) /.test(
         name,
@@ -1185,15 +1364,15 @@ export function hunter(lod: 0 | 1 | 2) {
       if (beltKit) {
         mesh[i + 1] += 0.08;
       }
-      if (anatomy || legKit) {
+      if (trunkFit || legKit) {
         const x = mesh[i],
           y = mesh[i + 1];
         // The relaxed arms hang alongside the trunk at the height of the belt.
-        const t = anatomy ? Math.min(1, Math.max(0, (0.31 - Math.abs(x)) / 0.055)) : 1;
+        const t = trunkFit ? Math.min(1, Math.max(0, (0.31 - Math.abs(x)) / 0.055)) : 1;
         if (t > 0 && y > 0.085 && y < 1.4) {
           const [rise, slope] = legRise(y);
           const weight = t * t * (3 - 2 * t);
-          const dyDx = anatomy ? (-Math.sign(x) * rise * 6 * t * (1 - t)) / 0.055 : 0;
+          const dyDx = trunkFit ? (-Math.sign(x) * rise * 6 * t * (1 - t)) / 0.055 : 0;
           const ny = mesh[i + 4] / (1 + weight * slope);
           const n = unit([mesh[i + 3] - ny * dyDx, ny, mesh[i + 5]]);
           mesh[i + 1] += weight * rise;
@@ -1207,32 +1386,36 @@ export function hunter(lod: 0 | 1 | 2) {
         const fit = Math.min(1, Math.max(0, (0.135 - y) / 0.055));
         const side = mesh[i] < 0 ? -1 : 1;
         const centre = bootCentres[side];
-        const depthGain = mesh[i + 2] < 0.03 ? 0.18 : -0.25;
-        mesh[i] = centre + (mesh[i] - centre) * (1 + 0.34 * fit);
-        mesh[i + 1] *= 1 + 0.28 * fit;
-        mesh[i + 2] = 0.03 + (mesh[i + 2] - 0.03) * (1 + depthGain * fit);
-        const n = unit([
-          mesh[i + 3] / (1 + 0.34 * fit),
-          mesh[i + 4] / (1 + 0.28 * fit),
-          mesh[i + 5] / (1 + depthGain * fit),
-        ]);
+        const z = mesh[i + 2];
+        const waist = bell((z + 0.048) / 0.056);
+        const toe = Math.min(1, Math.max(0, (-z - 0.15) / 0.12));
+        const width = 1 - fit * (0.11 + 0.19 * waist + 0.16 * toe);
+        const height = 1 - fit * (0.03 + 0.12 * toe);
+        const inner = Math.max(0, Math.min(1, 0.5 - (side * (mesh[i] - centre)) / 0.1));
+        const arch = 0.014 * waist * inner * fit;
+        mesh[i] = centre + (mesh[i] - centre) * width - side * 0.009 * toe * fit;
+        mesh[i + 1] = y * height + arch;
+        const n = unit([mesh[i + 3] / width, mesh[i + 4] / height, mesh[i + 5]]);
         mesh[i + 3] = n[0];
         mesh[i + 4] = n[1];
         mesh[i + 5] = n[2];
       }
       if (head) {
-        mesh[i + 1] += (stature - 1) * 1.55;
+        // Seat the mask over the neck, keeping the shell, optics and quills together.
+        mesh[i + 1] += (stature - 1) * 1.55 - 0.065;
       } else {
-        if (name === 'Wrist blade') {
-          mesh[i] += 0.013;
-          mesh[i + 2] += 0.132;
-          mesh[i + 1] -= 0.094;
-        }
-        mesh[i] *= stature;
+        mesh[i] *= stature * 0.9;
         mesh[i + 1] *= stature;
-        mesh[i + 2] *= stature;
+        mesh[i + 2] *= stature * 0.92;
+        const n = unit([mesh[i + 3] / 0.9, mesh[i + 4], mesh[i + 5] / 0.92]);
+        mesh[i + 3] = n[0];
+        mesh[i + 4] = n[1];
+        mesh[i + 5] = n[2];
       }
     }
+  }
+  if (lod) {
+    parts['Chest net'] = chestNet(skin, chestFaces);
   }
   return (built[lod] = parts);
 }

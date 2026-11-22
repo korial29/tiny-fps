@@ -471,6 +471,35 @@ export function hunter(lod: 0 | 1 | 2) {
     }
   }
 
+  // Hard plate faces keep a separate normal at each fold. The soft panel loft
+  // above is reserved for cloth, straps and the curved mask.
+  function armor(surface: Surface, cols: number, rows: number, tint: Vec3) {
+    const vertex = (p: Vec3, n: Vec3) => out.push(...p, ...n, tint[0], tint[1], SHINE, tint[2]);
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        const [u, v] = [i / cols, j / rows];
+        const a = surface(u, v),
+          b = surface((i + 1) / cols, v),
+          c = surface(u, (j + 1) / rows),
+          d = surface((i + 1) / cols, (j + 1) / rows);
+        for (const triangle of [
+          [a, c, b],
+          [b, c, d],
+        ]) {
+          const [p, q, r] = triangle;
+          const e = sub(q, p),
+            f = sub(r, p);
+          const n = unit([
+            e[1] * f[2] - e[2] * f[1],
+            e[2] * f[0] - e[0] * f[2],
+            e[0] * f[1] - e[1] * f[0],
+          ]);
+          triangle.forEach(point => vertex(point, n));
+        }
+      }
+    }
+  }
+
   // Fit the kit to cross-sections of the actual leg at this level of detail.
   // Each ray meets the skin before the ankle straps or the cords stand off it.
   const legSkin = parts['Marine anatomy'];
@@ -602,52 +631,100 @@ export function hunter(lod: 0 | 1 | 2) {
     }
     part('Shin plates ' + side);
     for (let course = 0; course < 5; course++) {
-      const base = 0.145 + 0.062 * course;
-      panel(
+      const base = 0.143 + 0.062 * course;
+      armor(
         (u, v) => {
-          const angle = (u - 0.5) * (2.88 + 0.32 * v);
-          const ridge = Math.max(0, Math.cos(angle));
+          const angle = (u - 0.5) * (2.52 + 0.28 * v);
+          const centre = 1 - 2 * Math.abs(u - 0.5);
+          const fold = Math.max(0, 1 - Math.abs(u - 0.5) * 5);
           return wrap(
             angle,
-            base + 0.078 * v - 0.032 * ridge ** 4,
-            0.009 + 0.01 * (1 - v) + 0.009 * ridge ** 6 + 0.003 * Math.sin(Math.PI * v),
+            base + 0.077 * v - 0.041 * centre,
+            0.012 + 0.014 * (1 - v) + 0.021 * fold + 0.004 * centre,
           );
         },
-        lod === 2 ? 16 : 8,
-        4,
-        course % 2 ? [0.39, 0.42, 0.41] : [0.48, 0.51, 0.49],
+        lod === 0 ? 4 : 8,
+        2,
+        course % 2 ? [0.38, 0.42, 0.41] : [0.45, 0.49, 0.47],
       );
     }
-    part('Boot lames ' + side);
-    for (let j = 0; j < 2; j++) {
-      panel(
+    part('Shin seams ' + side);
+    for (let course = 0; course < 5; course++) {
+      const base = 0.143 + 0.062 * course;
+      armor(
         (u, v) => {
-          const a = (u - 0.5) * Math.PI;
-          const arch = 0.037 + j * 0.014 + 0.018 * v;
+          const centre = 1 - 2 * Math.abs(u - 0.5);
+          const fold = Math.max(0, 1 - Math.abs(u - 0.5) * 5);
+          return wrap(
+            (u - 0.5) * 2.53,
+            base - 0.041 * centre + 0.005 * v,
+            0.029 + 0.023 * fold + 0.005 * centre,
+          );
+        },
+        8,
+        1,
+        [0.18, 0.22, 0.22],
+      );
+    }
+    part('Shin flanges ' + side);
+    for (const edge of [-1, 1]) {
+      armor(
+        (u, v) => {
+          const angle = edge * (0.92 + 0.53 * u);
+          return wrap(angle, 0.12 + 0.34 * v, 0.016 + 0.023 * (1 - u) + 0.011 * v);
+        },
+        2,
+        lod === 0 ? 2 : 5,
+        [0.32, 0.36, 0.35],
+      );
+    }
+    part('Ankle cuff ' + side);
+    armor(
+      (u, v) => wrap((u - 0.5) * 2.65, 0.078 + 0.105 * v, 0.022 + 0.006 * (1 - v)),
+      8,
+      2,
+      [0.29, 0.33, 0.33],
+    );
+    part('Boot lames ' + side);
+    for (let j = 0; j < 3; j++) {
+      armor(
+        (u, v) => {
+          const a = (u - 0.5) * 2.52,
+            z = -0.32 + j * 0.068 + 0.085 * v;
+          const ridge = Math.max(0, 1 - Math.abs(u - 0.5) * 4);
           return [
-            side * 0.151 + (0.048 + 0.003 * v) * Math.sin(a),
-            0.023 + arch * Math.cos(a),
-            -0.17 + j * 0.064 + 0.066 * v - 0.008 * Math.cos(a),
+            side * 0.167 + (0.055 + 0.023 * v) * Math.sin(a),
+            0.024 + 0.055 * v + 0.012 * ridge + 0.008 * j,
+            z - 0.018 * ridge * (1 - v),
           ];
         },
-        lod === 2 ? 16 : 8,
-        4,
-        j === 0 ? [0.26, 0.3, 0.3] : [0.38, 0.41, 0.4],
-        false,
-        j === 0 ? WEAVE : SHINE,
+        lod === 0 ? 4 : 8,
+        2,
+        j % 2 ? [0.3, 0.34, 0.34] : [0.37, 0.41, 0.4],
       );
     }
     part('Patella ' + side);
     const cap: Surface = (u, v) => {
-      const angle = (u - 0.5) * (1.58 + 1.36 * Math.sin(Math.PI * v * 0.86));
-      const ridge = Math.cos(angle);
+      const angle = (u - 0.5) * (2.38 + 0.3 * v);
+      const fold = Math.max(0, 1 - Math.abs(u - 0.5) * 4);
+      const chevron = 1 - 2 * Math.abs(u - 0.5);
       return wrap(
         angle,
-        0.426 + 0.119 * v - 0.022 * ridge ** 4 * (1 - v),
-        0.016 + 0.021 * ridge ** 3 * Math.sin(Math.PI * v) + 0.004 * ridge,
+        0.426 + 0.125 * v - 0.022 * chevron * (1 - v),
+        0.022 + 0.031 * fold * Math.sin(Math.PI * v) + 0.011 * chevron,
       );
     };
-    panel(cap, lod === 2 ? 18 : 10, 7, [0.49, 0.52, 0.5]);
+    armor(cap, lod === 0 ? 4 : 8, 3, [0.49, 0.52, 0.5]);
+    part('Patella crest ' + side);
+    armor(
+      (u, v) => {
+        const centre = 1 - 2 * Math.abs(u - 0.5);
+        return wrap((u - 0.5) * (1.4 + 0.2 * v), 0.453 + 0.085 * v - 0.027 * centre, 0.059);
+      },
+      4,
+      2,
+      [0.54, 0.58, 0.56],
+    );
     if (lod) {
       for (const sign of [-1, 1]) {
         panel(
@@ -981,7 +1058,10 @@ export function hunter(lod: 0 | 1 | 2) {
       name.startsWith('Quills') ||
       name.startsWith('Swept temple rail');
     const anatomy = name === 'Marine anatomy';
-    const legKit = /^(Thigh net|Leg straps|Shin plates|Patella|Boot lames) /.test(name);
+    const legKit =
+      /^(Thigh net|Leg straps|Shin plates|Shin seams|Shin flanges|Ankle cuff|Patella|Boot lames) /.test(
+        name,
+      );
     const beltKit = name === 'Belt' || name === 'Flying disc';
     for (let i = 0; i < mesh.length; i += STRIDE) {
       if (beltKit) {

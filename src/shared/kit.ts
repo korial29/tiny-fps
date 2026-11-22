@@ -69,7 +69,7 @@ export interface Kit {
    * walls (MODE.CLING), a dash's burst that pins an enemy it reaches, acid for blood (room.ts).
    */
   xeno: boolean;
-  /** The Hunter's class identity; its weapons and vision are introduced in later build steps. */
+  /** The Hunter's class identity, used for its weapons and alternate vision modes. */
   hunter?: boolean;
 }
 
@@ -158,7 +158,7 @@ const XENO: Kit = {
   xeno: true,
 };
 
-/** The Hunter starts with the wrist blade; the other class weapons arrive in their own steps. */
+/** The Hunter starts with the wrist blades and carries the harpoon and shoulder laser loadout. */
 const HUNTER: Kit = { ...MARINE, katana: true, hunter: true };
 
 /** By ROLE. The astronaut moves and fights as the marine: the moon's gravity is the map's. */

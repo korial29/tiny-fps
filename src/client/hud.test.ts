@@ -64,6 +64,23 @@ describe('createHud', () => {
   const q = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
   const [muted, menu] = ['h5', 'aside'].map(t => () => q(t));
 
+  it('closes the Hunter laser brackets over its target and marks the lock', () => {
+    const sight = q<HTMLElement>('i.hl');
+    hud.hunterAim([0.3, 0.4], 0.5);
+    expect([
+      sight.hidden,
+      sight.style.left,
+      sight.style.top,
+      sight.classList.contains('locked'),
+    ]).toEqual([false, '30%', '40%', false]);
+    expect(sight.querySelector('b')!.style.transform).toBe('translate(-9px,-9px)');
+    hud.hunterAim([0.3, 0.4], 1);
+    expect(sight.classList.contains('locked')).toBe(true);
+    expect(sight.querySelector('small')!.textContent).toBe('LOCK');
+    hud.hunterAim();
+    expect(sight.hidden).toBe(true);
+  });
+
   it('leaves a stable HUD alone and refreshes the same vitals after a kit change', () => {
     const frame = () => {
       hud.vitals(3, 42, false, false, -1, false, 12);

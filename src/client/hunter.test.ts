@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { hunter } from './hunter';
+import { hunter, hunterHarpoon } from './hunter';
 import { SHINE, STRIDE, WEAVE } from './mesh';
 
 it('keeps the front of the pectorals smooth across the Marine shoulder ring', () => {
@@ -37,4 +37,11 @@ it('adds the Hunter armor details and uses the metal and net materials', () => {
       (_, i) => i % STRIDE === 8 && hunter(0)['Marine anatomy'][i] === WEAVE,
     ),
   ).toBe(false);
+});
+
+it('builds the Hunter harpoon as a detailed foldable rifle', () => {
+  const rifle = hunterHarpoon(1);
+  expect(rifle.length).toBeGreaterThan(300 * STRIDE);
+  expect(rifle.length % STRIDE).toBe(0);
+  expect(rifle.some((_, i) => i % STRIDE === 6 && rifle[i] > 0.4)).toBe(true);
 });

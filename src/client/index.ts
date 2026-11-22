@@ -400,6 +400,8 @@ const play = (
   let [wheel, seated, since] = [-1, false, 0];
   const pacing = createPacing(period);
   let last: number | undefined;
+  let hunterLock: { id: number; since: number } | undefined;
+  let hunterLockTone = -1;
   let rendered: number | undefined;
   let displayed: number | undefined;
   let acc = 0;
@@ -1030,6 +1032,52 @@ const play = (
           team,
         ),
       );
+      const laserSelected =
+        ctl.hunter && ctl.weapon === WEAPON.RAIL && !third && !me.down && !driving;
+      let target: PlayerState | undefined;
+      if (laserSelected) {
+        const cp = Math.cos(pitch);
+        const look: [number, number, number] = [
+          -Math.sin(view) * cp,
+          Math.sin(pitch),
+          -Math.cos(view) * cp,
+        ];
+        let best = 0.985;
+        for (const foe of others) {
+          if (foe.down || team(foe.id) === you.team) {
+            continue;
+          }
+          const point: [number, number, number] = [foe.x, foe.y + eyeHeight(foe) * 0.65, foe.z];
+          const delta = point.map((v, i) => v - pov[i]);
+          const distance = Math.hypot(...delta);
+          const alignment = distance
+            ? delta.reduce((sum, v, i) => sum + (v / distance) * look[i], 0)
+            : 1;
+          if (distance < 80 && alignment > best && !hidden(world, pov, point)) {
+            best = alignment;
+            target = foe;
+          }
+        }
+      }
+      const targetPoint = target
+        ? rd.project(target.x, target.y + eyeHeight(target) * 0.65, target.z)
+        : undefined;
+      if (!target || !targetPoint || targetPoint.some(v => v < 0 || v > 1)) {
+        hunterLock = undefined;
+        hunterLockTone = -1;
+        hud.hunterAim(laserSelected ? [0.5, 0.5] : undefined, 0);
+      } else {
+        if (hunterLock?.id !== target.id) {
+          hunterLock = { id: target.id, since: now };
+          hunterLockTone = -1;
+        }
+        const progress = Math.min(1, (now - hunterLock.since) / 3000);
+        if (progress >= 1 && hunterLockTone !== target.id) {
+          audio.play(SOUND.HUNTER_LOCK, undefined, -2.5, 1);
+          hunterLockTone = target.id;
+        }
+        hud.hunterAim(targetPoint, progress);
+      }
       botcam.draw(rd.project, id => names.get(id) ?? '?');
     }
     // The health of the vehicle he sits in, and of the nearest other one within NEAR_HULL metres in sight.

@@ -15,6 +15,8 @@ import {
   DISK_HP,
   DISK_SPEED,
   HUNTER_LASER_COOL,
+  HUNTER_LASER_HP,
+  HUNTER_LASER_LOCK,
   INPUT_BURST,
   LOCK_BREAK,
   LOCK_HP,
@@ -307,6 +309,8 @@ export class Room {
   private balls: Flying[] = [];
   /** Last tick a Hunter's shoulder laser hit, by player id. */
   private hunterLasers = new Map<number, number>();
+  /** Target and start tick of each Hunter's uninterrupted shoulder-laser lock. */
+  private hunterLocks = new Map<number, { target: number; since: number }>();
   /** The map's rovers, in the order of WorldDef.rovers, then its ships (ship.ts). */
   private rovers: Rover[] = [];
   /** Collision geometry reused while a vehicle's pose is unchanged. */
@@ -587,6 +591,19 @@ export class Room {
       p.bank = Math.min(INPUT_BURST, p.bank + 1);
     }
     this.think(players);
+    for (const p of players) {
+      if (!this.kit(p).hunter || p.state.down || !p.state.railed) {
+        this.hunterLocks.delete(p.info.id);
+        continue;
+      }
+      const target = this.shoulderTarget(p, undefined);
+      const lock = this.hunterLocks.get(p.info.id);
+      if (!target) {
+        this.hunterLocks.delete(p.info.id);
+      } else if (lock?.target !== target.id) {
+        this.hunterLocks.set(p.info.id, { target: target.id, since: now });
+      }
+    }
     for (const b of this.balls) {
       if (!b.burst && b.left > 0) {
         this.fly(b, stepOf(b));
@@ -1259,8 +1276,8 @@ export class Room {
     }
   }
 
-  /** A lightly assisted shoulder shot: host-side target selection stays inside a narrow forward cone. */
-  private shoulder(p: Player, view: number | undefined): void {
+  /** The shoulder laser's assisted target, kept inside a narrow forward cone and clear line of sight. */
+  private shoulderTarget(p: Player, view: number | undefined): PlayerState | undefined {
     const foes = this.enemies(p, view);
     const origin: [number, number, number] = [p.state.x, p.state.y + eyeHeight(p.state), p.state.z];
     const cp = Math.cos(p.state.pitch);
@@ -1283,12 +1300,22 @@ export class Room {
         target = foe;
       }
     }
+    return target;
+  }
+
+  /** Fires only after an uninterrupted three-second target lock; damage is three HP. */
+  private shoulder(p: Player, view: number | undefined): void {
+    const target = this.shoulderTarget(p, view);
+    const lock = this.hunterLocks.get(p.info.id);
     if (
       !target ||
+      lock?.target !== target.id ||
+      this.ticks - lock.since < HUNTER_LASER_LOCK ||
       this.ticks - (this.hunterLasers.get(p.info.id) ?? -Infinity) < HUNTER_LASER_COOL
     ) {
       return;
     }
+    const origin: [number, number, number] = [p.state.x, p.state.y + eyeHeight(p.state), p.state.z];
     const point: [number, number, number] = [
       target.x,
       target.y + eyeHeight(target) * 0.65,
@@ -1306,7 +1333,7 @@ export class Room {
     p.state.hits = (p.state.hits + 1) & 255;
     const foe = this.players().find(q => q.info.id === target.id);
     if (foe) {
-      this.shot(foe, 1, p, aimed.d[0], aimed.d[2]);
+      this.shot(foe, HUNTER_LASER_HP, p, aimed.d[0], aimed.d[2]);
     }
   }
 

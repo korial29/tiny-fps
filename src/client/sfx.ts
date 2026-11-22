@@ -197,6 +197,19 @@ export const SOUND = {
   HUNTER_PAIN: 75,
   HUNTER_DEATH: 76,
   HUNTER_TAUNT: 77,
+  /** Original wrist-blade mechanisms: an upward deployment and a lower, locking retraction. */
+  HUNTER_BLADE_DRAW: 78,
+  HUNTER_BLADE_SHEATHE: 79,
+  /** The Hunter's paired blades: a rasping sweep and a bright metal impact. */
+  HUNTER_BLADE_SWISH: 80,
+  HUNTER_BLADE_HIT: 81,
+  /** A spinning disc launch, its return whistle, and the catch against the wrist bracer. */
+  HUNTER_DISC_THROW: 82,
+  HUNTER_DISC_RETURN: 83,
+  HUNTER_DISC_CATCH: 84,
+  /** A rising three-step target lock and a heavy shoulder-mounted laser discharge. */
+  HUNTER_LOCK: 85,
+  HUNTER_LASER: 86,
 } as const;
 
 /**
@@ -691,6 +704,66 @@ export const LAYERS: Voice[][] = [
     [0, 1900, 0, 0.001, 0, 0.015, 0, 0.4, 0, 1, 0.28, 0.15],
     [1, 190, 1.4, 0.025, 0.1, 0.25, 0.12, 0.16, 0, 1, 0.35, 0.17],
     [2, 720, -0.8, 0.015, 0.05, 0.2, 0.2, 0.2, 0, 1, 0.3, 0.2],
+  ],
+  // HUNTER_BLADE_DRAW: a wrist ratchet, a pair of rising metal slides and a dry locking click.
+  [
+    [0, 1750, -1.8, 0.001, 0, 0.018, 0, 0.35, 0, 1, 0.32],
+    [3, 5100, -1.2, 0.001, 0, 0.055, 0, 0.2, 0, 1, 0.22, 0.018],
+    [1, 920, 1.7, 0.008, 0.025, 0.09, 0.15, 0.25, 0, 1, 0.3, 0.035],
+    [0, 2500, 0, 0.001, 0, 0.014, 0, 0.3, 0, 1, 0.25, 0.13],
+  ],
+  // HUNTER_BLADE_SHEATHE: a clipped latch, a short descending slide and a dull bracer thunk.
+  [
+    [0, 2300, 0, 0.001, 0, 0.018, 0, 0.3, 0, 1, 0.28],
+    [1, 1450, -2.1, 0.003, 0.01, 0.08, 0.1, 0.22, 0, 1, 0.3, 0.015],
+    [2, 125, -1.5, 0.002, 0.015, 0.09, 0, 0.3, 0, 1, 0.48, 0.065],
+  ],
+  // HUNTER_BLADE_SWISH: a filtered metallic rasp with a bent, airy whistle above it.
+  [
+    [3, 7600, -2.2, 0.002, 0, 0.12, 0, 0.17, 0, 1, 0.42],
+    [1, 2100, -2.8, 0.004, 0.012, 0.13, 0.2, 0.24, 0, 1, 0.24],
+    [2, 980, 2.8, 0.006, 0.008, 0.095, 0.1, 0.2, 0, 1, 0.2, 0.018],
+  ],
+  // HUNTER_BLADE_HIT: a low, compact strike under two bright, uneven metal ticks.
+  [
+    [2, 105, -2.3, 0.001, 0.012, 0.16, 0, 0.5, 0, 1, 0.75],
+    [3, 6400, -1, 0.001, 0, 0.055, 0, 0.22, 0, 1, 0.52],
+    [1, 1350, -1.9, 0.001, 0.008, 0.12, 0.1, 0.3, 0, 1, 0.32, 0.016],
+    [0, 2900, 0, 0.001, 0, 0.013, 0, 0.35, 0, 1, 0.25, 0.038],
+  ],
+  // HUNTER_DISC_THROW: a bracer release, three rising spinning harmonics and a thin flight zing.
+  [
+    [0, 1200, 0, 0.001, 0, 0.016, 0, 0.4, 0, 1, 0.36],
+    [1, 430, 3.2, 0.004, 0.025, 0.18, 0.18, 0.22, 0, 1, 0.28],
+    [2, 860, 3.2, 0.004, 0.02, 0.19, 0.12, 0.2, 0, 1, 0.25, 0.025],
+    [3, 7200, -0.5, 0.001, 0, 0.12, 0, 0.12, 0, 1, 0.22, 0.055],
+  ],
+  // HUNTER_DISC_RETURN: an inward-bending whistle with two short locator clicks.
+  [
+    [1, 690, 2.5, 0.005, 0.025, 0.2, 0.25, 0.18, 0, 1, 0.26],
+    [2, 1040, 2.1, 0.006, 0.02, 0.18, 0.16, 0.16, 0, 1, 0.23, 0.018],
+    [0, 2250, 0, 0.001, 0, 0.014, 0, 0.35, 0, 1, 0.2, 0.045],
+    [0, 2850, 0, 0.001, 0, 0.014, 0, 0.35, 0, 1, 0.18, 0.11],
+  ],
+  // HUNTER_DISC_CATCH: the disc seats back into its wrist mount with a weighty click and ring.
+  [
+    [2, 145, -2.4, 0.001, 0.012, 0.15, 0, 0.4, 0, 1, 0.62],
+    [0, 1750, -0.7, 0.001, 0, 0.035, 0, 0.3, 0, 1, 0.44],
+    [1, 840, -1.4, 0.004, 0.018, 0.11, 0.12, 0.24, 0, 1, 0.3, 0.018],
+  ],
+  // HUNTER_LOCK: three rising finder pulses resolve into a steady confirmation tone.
+  [
+    [0, 720, 0.5, 0.001, 0, 0.035, 0, 0.3, 0, 1, 0.24],
+    [0, 980, 0.5, 0.001, 0, 0.035, 0, 0.3, 0, 1, 0.25, 0.095],
+    [0, 1320, 0.5, 0.001, 0, 0.04, 0, 0.3, 0, 1, 0.34, 0.19],
+    [2, 1760, 0, 0.006, 0.035, 0.15, 0.08, 0.2, 0, 1, 0.2, 0.255],
+  ],
+  // HUNTER_LASER: the shoulder cannon charges its crack, then drives out a broad bass pulse.
+  [
+    [3, 8200, -1.8, 0.001, 0, 0.075, 0, 0.12, 0, 1, 0.42],
+    [1, 490, 2.6, 0.008, 0.028, 0.22, 0.18, 0.2, 0, 1, 0.35],
+    [2, 82, -2.2, 0.002, 0.025, 0.28, 0, 0.42, 0, 1, 0.88, 0.025],
+    [0, 1850, -1.4, 0.001, 0.01, 0.095, 0.1, 0.22, 0, 1, 0.32, 0.04],
   ],
 ];
 

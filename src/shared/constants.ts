@@ -382,8 +382,12 @@ export const DISK_RETURN = 10;
 export const DISK_SPEED = 52;
 export const DISK_RANGE = 28;
 export const DISK_R = 0.16;
-export const DISK_HP = 2;
+export const DISK_HP = 3;
 export const DISK_COOL = 75;
+/** Ticks a Hunter must keep a target in the shoulder laser's sight to lock on. */
+export const HUNTER_LASER_LOCK = 3 * TICK_HZ;
+/** Damage dealt by a locked Hunter shoulder laser. */
+export const HUNTER_LASER_HP = 3;
 /** Ticks between assisted shoulder-laser hits. */
 export const HUNTER_LASER_COOL = 18;
 /** Plasma balls in flight in a room at most: past it the oldest bursts. They go on the wire. */

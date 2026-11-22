@@ -104,6 +104,7 @@ export interface Balls {
   frame(
     now: number,
     muzzle: (id: number) => Vec3 | undefined,
+    discSound?: (kind: 'return' | 'catch', at: Vec3) => void,
   ): { orbs: Orb[]; bursts: [Vec3, number, number?][] };
 }
 
@@ -121,6 +122,8 @@ export const createBalls = (world: World): Balls => {
   const live = new Map<number, Flight>();
   /** Own balls that ended here before the host's word of their burst came: it is not drawn twice. */
   const spent = new Set<number>();
+  /** Disk sound cues discovered in snapshots, played by frame where the audio system lives. */
+  const discSounds: { kind: 'return' | 'catch'; at: Vec3 }[] = [];
 
   return {
     fire(p, now, harpoon = false, discShot = false) {
@@ -180,7 +183,35 @@ export const createBalls = (world: World): Balls => {
         const key = keyOf(b);
         let f = live.get(key);
         keys.add(key);
-        if (b.by == me && (f?.own || spent.has(key))) {
+        const returning = b.returning || b.power === DISK_RETURN;
+        const own = b.by == me && (f?.own || spent.has(key));
+        if (!f && !own) {
+          live.set(
+            key,
+            (f = {
+              own: false,
+              by: b.by,
+              t0: now,
+              o: at(b),
+              t: now,
+              d: [0, 0, 0],
+              pop: false,
+              due: Infinity,
+              power: b.power ?? 1,
+              arc: b.arc,
+              missile: b.missile,
+              returning: false,
+            }),
+          );
+        }
+        if (f && returning && !f.returning) {
+          discSounds.push({ kind: 'return', at: at(b) });
+        }
+        if (f?.returning && b.burst) {
+          discSounds.push({ kind: 'catch', at: at(b) });
+          f.returning = false;
+        }
+        if (own) {
           if (f && (b.returning || b.power === DISK_RETURN)) {
             [f.o, f.t, f.d, f.power, f.returning] = [
               at(b),
@@ -208,23 +239,7 @@ export const createBalls = (world: World): Balls => {
           continue;
         }
         if (!f) {
-          live.set(
-            key,
-            (f = {
-              own: false,
-              by: b.by,
-              t0: now,
-              o: at(b),
-              t: now,
-              d: [0, 0, 0],
-              pop: false,
-              due: Infinity,
-              power: b.power ?? 1,
-              arc: b.arc,
-              missile: b.missile,
-              returning: b.returning,
-            }),
-          );
+          continue;
         }
         if (b.burst) {
           [f.end, f.pop, f.due] = [at(b), true, now];
@@ -247,9 +262,12 @@ export const createBalls = (world: World): Balls => {
       }
     },
 
-    frame(now, muzzle) {
+    frame(now, muzzle, discSound) {
       const orbs: Orb[] = [];
       const bursts: [Vec3, number, number?][] = [];
+      for (const cue of discSounds.splice(0)) {
+        discSound?.(cue.kind, cue.at);
+      }
       for (const [key, f] of live) {
         const t = f.own ? now : now - INTERP_DELAY;
         const nade = f.power === NADE;

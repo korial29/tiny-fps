@@ -920,6 +920,78 @@ export function hunter(lod: 0 | 1 | 2) {
     depthCache.set(key, depth);
     return depth;
   };
+  // Fit each lame to the actual shoulder skin. The ninja's shoulder profile is
+  // lower than the Hunter's sculpted deltoid in places, especially at the rim.
+  const topCache = new Map<string, number>();
+  const shoulderTop = (x: number, z: number) => {
+    const key = `${x},${z}`;
+    const cached = topCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let height = -Infinity;
+    for (let i = 0; i < skin.length; i += 3 * STRIDE) {
+      const ax = skin[i], az = skin[i + 2],
+        bx = skin[i + STRIDE], bz = skin[i + STRIDE + 2],
+        cx = skin[i + 2 * STRIDE], cz = skin[i + 2 * STRIDE + 2];
+      if (
+        x < Math.min(ax, bx, cx) || x > Math.max(ax, bx, cx) ||
+        z < Math.min(az, bz, cz) || z > Math.max(az, bz, cz)
+      ) {
+        continue;
+      }
+      const area = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+      if (Math.abs(area) < 1e-10) {
+        continue;
+      }
+      const a = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / area,
+        b = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / area;
+      if (a < -1e-6 || b < -1e-6 || a + b > 1 + 1e-6) {
+        continue;
+      }
+      const y = a * skin[i + 1] + b * skin[i + STRIDE + 1] +
+        (1 - a - b) * skin[i + 2 * STRIDE + 1];
+      if (y > 1.35 && y < 1.56) {
+        height = Math.max(height, y);
+      }
+    }
+    topCache.set(key, height);
+    return height;
+  };
+  const sideCache = new Map<string, number>();
+  const shoulderSide = (side: number, y: number, z: number) => {
+    const key = `${side},${y},${z}`;
+    const cached = sideCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let edge = -Infinity;
+    for (let i = 0; i < skin.length; i += 3 * STRIDE) {
+      const ay = skin[i + 1], az = skin[i + 2],
+        by = skin[i + STRIDE + 1], bz = skin[i + STRIDE + 2],
+        cy = skin[i + 2 * STRIDE + 1], cz = skin[i + 2 * STRIDE + 2];
+      if (
+        y < Math.min(ay, by, cy) || y > Math.max(ay, by, cy) ||
+        z < Math.min(az, bz, cz) || z > Math.max(az, bz, cz)
+      ) {
+        continue;
+      }
+      const area = (bz - cz) * (ay - cy) + (cy - by) * (az - cz);
+      if (Math.abs(area) < 1e-10) {
+        continue;
+      }
+      const a = ((bz - cz) * (y - cy) + (cy - by) * (z - cz)) / area,
+        b = ((cz - az) * (y - cy) + (ay - cy) * (z - cz)) / area;
+      if (a < -1e-6 || b < -1e-6 || a + b > 1 + 1e-6) {
+        continue;
+      }
+      const x = side * (a * skin[i] + b * skin[i + STRIDE] +
+        (1 - a - b) * skin[i + 2 * STRIDE]);
+      edge = Math.max(edge, x);
+    }
+    sideCache.set(key, edge);
+    return edge;
+  };
   part('Shoulder plates');
   const shoulderPads = new Verts();
   const shoulderPose = solve(rest());
@@ -938,10 +1010,14 @@ export function hunter(lod: 0 | 1 | 2) {
       shoulderVerts[i + 4] / 0.95,
       shoulderVerts[i + 5] / (shoulderVerts[i + 2] < 0 ? 1.4 : 1.15),
     ]);
-    const x = arm[0] + (shoulderVerts[i] - arm[0]) * xScale;
-    const y =
+    let x = arm[0] + (shoulderVerts[i] - arm[0]) * xScale;
+    let y =
       arm[1] + (shoulderVerts[i + 1] - arm[1]) * 0.95 + 0.035 - 0.02 * Math.max(0, outward / 0.09);
     const rawZ = shoulderVerts[i + 2] * (shoulderVerts[i + 2] < 0 ? 1.4 : 1.15);
+    if (outward > -0.03) {
+      x = side * Math.max(side * x, shoulderSide(side, y, rawZ) + 0.03);
+    }
+    y = Math.max(y, shoulderTop(x, rawZ) + 0.014);
     const surface = shoulderVerts[i + 2] < 0 ? frontDepth(x, y) : Infinity;
     out.push(
       x,

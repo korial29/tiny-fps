@@ -4,6 +4,7 @@ import type { Vec3 } from './mesh';
 
 import { body } from './skin';
 import { hands } from './body';
+import { pads } from './pads';
 import { KIND } from './features';
 import { JOINT as J, JOINTS, rest, solve } from './rig';
 import { Verts } from './verts';
@@ -93,16 +94,16 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
       sign = Math.sign(x),
       torso = 1 - armWeight - legWeight;
     const chest = bell((y - 1.405) / 0.15);
-    const armMass = 0.68 * bell((y - 1.319) / 0.084) + 0.49 * bell((y - 1.098) / 0.073);
+    const armMass = 0.6 * bell((y - 1.319) / 0.084) + 0.49 * bell((y - 1.098) / 0.073);
     const legMass = 0.32 * bell((y - 0.745) / 0.15) + 0.28 * bell((y - 0.35) / 0.095);
-    const shoulder = 0.061 + 0.19 * Math.max(0, 1.45 - y) - 0.024 * bell((y - 1.37) / 0.14);
-    const armX = 0.212;
+    const shoulder = 0.05 + 0.17 * Math.max(0, 1.45 - y) - 0.024 * bell((y - 1.37) / 0.14);
+    const armX = 0.205;
     const deltoid = bell((y - 1.446) / 0.072) * bell((ax - 0.222) / 0.057);
     // Fill the lower rib cage and waist progressively; the shoulder cap tapers separately.
-    const ribWidth = 1.09 + 0.245 * chest + 0.2 * bell((y - 1.178) / 0.16);
+    const ribWidth = 1.09 + 0.22 * chest + 0.2 * bell((y - 1.178) / 0.16);
     const wide =
       ax * ribWidth * torso +
-      0.012 * deltoid +
+      0.008 * deltoid +
       (armX + shoulder + (ax - armX) * (1.18 + armMass)) * armWeight +
       (0.125 + (ax - 0.1) * (1.1 + legMass)) * legWeight;
     let depth = z * (1.18 + 0.23 * chest * torso + armMass * armWeight + legMass * legWeight);
@@ -251,10 +252,21 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
   if (lod) {
     // Use the same buffer type as the hands drawn every frame.
     const gloves = new Verts();
-    hands(gloves, solve(rest()), 0, [0.24, 0.24], graphite, hide, {}, lod === 1);
+    const skeleton = solve(rest());
+    hands(gloves, skeleton, 0, [0.24, 0.24], graphite, hide, {}, lod === 1);
     const v = gloves.a;
     for (let i = 0; i < gloves.length; i += STRIDE) {
-      const p = shape([v[i], v[i + 1], v[i + 2]], 1, 0);
+      const wrist = skeleton.pos[v[i] < 0 ? J.HAND_L : J.HAND_R];
+      const reach = Math.min(1, Math.max(0, (wrist[1] - v[i + 1]) / 0.09));
+      const p = shape(
+        [
+          wrist[0] + (v[i] - wrist[0]) * (1 + 0.24 * reach),
+          wrist[1] + (v[i + 1] - wrist[1]) * (1 + 0.18 * reach),
+          wrist[2] + (v[i + 2] - wrist[2]) * (1 + 0.2 * reach),
+        ],
+        1,
+        0,
+      );
       result.push(...p, ...v.subarray(i + 3, i + STRIDE));
     }
   }
@@ -307,7 +319,7 @@ export function hunter(lod: 0 | 1 | 2) {
   }
   // Round the outline with a quadratic Bezier at each corner, then loft the shell
   // through shrinking copies of the outline to the crown. Shared normals cross each seam.
-  function plate(edge: Vec3[], peak: Vec3, color: Vec3, sharp = false, layer = SHINE) {
+  function plate(edge: Vec3[], peak: Vec3, color: Vec3, sharp = false, layer = TWILL) {
     const outline: Vec3[] = [];
     const corners = [1, 3, 6][lod];
     const blend = sharp ? 0.05 : 0.34;
@@ -388,7 +400,7 @@ export function hunter(lod: 0 | 1 | 2) {
   parts['Marine anatomy'] = marineBuild(lod);
   part('Mask lining');
   limb([0, 1.51, 0], [0, 1.68, 0], [0.085, 0.077, 0.097], [0.35, 0.25, 0.18], 0.97);
-  limb([0, 1.59, 0], [0, 1.86, 0.01], [0.084, 0.112, 0.144, 0.13, 0.058], graphite, 1);
+  limb([0, 1.59, 0], [0, 1.86, 0.01], [0.084, 0.112, 0.144, 0.13, 0.058], graphite, 1, TWILL);
   for (const s of [-1, 1]) {
     part('Quills' + s);
     const count = [3, 5, 7][lod];
@@ -434,7 +446,7 @@ export function hunter(lod: 0 | 1 | 2) {
     rows: number,
     tint: Vec3,
     reverse = false,
-    layer = SHINE,
+    layer = TWILL,
   ) {
     const verts: number[][] = [];
     for (let j = 0; j <= rows; j++) {
@@ -471,6 +483,11 @@ export function hunter(lod: 0 | 1 | 2) {
     }
   }
 
+  // One smooth normal field per plate; separate calls keep the overlapping lips distinct.
+  function armor(surface: Surface, cols: number, rows: number, tint: Vec3) {
+    panel(surface, cols, rows, tint);
+  }
+
   // Fit the kit to cross-sections of the actual leg at this level of detail.
   // Each ray meets the skin before the ankle straps or the cords stand off it.
   const legSkin = parts['Marine anatomy'];
@@ -478,6 +495,7 @@ export function hunter(lod: 0 | 1 | 2) {
     step = 0.022,
     levels = 37,
     sectors = [12, 24, 36][lod];
+  const bootCentres: Record<number, number> = {};
   for (const side of [-1, 1]) {
     const centres: number[] = [];
     const radii: number[][] = [];
@@ -546,6 +564,7 @@ export function hunter(lod: 0 | 1 | 2) {
         }),
       );
     }
+    bootCentres[side] = centres[0];
     function wrap(angle: number, y: number, gap: number): Vec3 {
       const h = Math.min(levels - 1, Math.max(0, (y - low) / step)),
         a = Math.floor(h),
@@ -602,66 +621,104 @@ export function hunter(lod: 0 | 1 | 2) {
     }
     part('Shin plates ' + side);
     for (let course = 0; course < 5; course++) {
-      const base = 0.145 + 0.062 * course;
-      panel(
+      const base = 0.143 + 0.062 * course;
+      const jointClearance = course === 0 ? 0.018 : course === 4 ? 0.013 : 0;
+      armor(
         (u, v) => {
-          const angle = (u - 0.5) * (2.88 + 0.32 * v);
-          const ridge = Math.max(0, Math.cos(angle));
+          const angle = (u - 0.5) * (2.52 + 0.28 * v);
+          const centre = 1 - 2 * Math.abs(u - 0.5);
+          const fold = Math.max(0, 1 - Math.abs(u - 0.5) * 5);
           return wrap(
             angle,
-            base + 0.078 * v - 0.032 * ridge ** 4,
-            0.009 + 0.01 * (1 - v) + 0.009 * ridge ** 6 + 0.003 * Math.sin(Math.PI * v),
+            base + 0.077 * v - 0.041 * centre,
+            0.012 + jointClearance + 0.014 * (1 - v) + 0.021 * fold + 0.004 * centre,
           );
         },
-        lod === 2 ? 16 : 8,
-        4,
-        course % 2 ? [0.39, 0.42, 0.41] : [0.48, 0.51, 0.49],
+        lod === 0 ? 6 : lod === 1 ? 10 : 12,
+        lod === 0 ? 2 : 3,
+        course % 2 ? [0.38, 0.42, 0.41] : [0.45, 0.49, 0.47],
       );
     }
+    part('Shin seams ' + side);
+    for (let course = 0; course < 5; course++) {
+      const base = 0.143 + 0.062 * course;
+      const jointClearance = course === 0 ? 0.018 : course === 4 ? 0.013 : 0;
+      armor(
+        (u, v) => {
+          const centre = 1 - 2 * Math.abs(u - 0.5);
+          const fold = Math.max(0, 1 - Math.abs(u - 0.5) * 5);
+          return wrap(
+            (u - 0.5) * 2.53,
+            base - 0.041 * centre + 0.005 * v,
+            0.029 + jointClearance + 0.023 * fold + 0.005 * centre,
+          );
+        },
+        8,
+        1,
+        [0.18, 0.22, 0.22],
+      );
+    }
+    part('Ankle cuff ' + side);
+    armor(
+      (u, v) => wrap((u - 0.5) * 2.65, 0.078 + 0.082 * v, 0.037 - 0.026 * v),
+      8,
+      2,
+      [0.29, 0.33, 0.33],
+    );
     part('Boot lames ' + side);
     for (let j = 0; j < 2; j++) {
-      panel(
+      armor(
         (u, v) => {
-          const a = (u - 0.5) * Math.PI;
-          const arch = 0.037 + j * 0.014 + 0.018 * v;
+          const a = (u - 0.5) * 2.52,
+            z = -0.22 + j * 0.085 + 0.095 * v;
+          const ridge = Math.max(0, 1 - Math.abs(u - 0.5) * 4);
           return [
-            side * 0.151 + (0.048 + 0.003 * v) * Math.sin(a),
-            0.023 + arch * Math.cos(a),
-            -0.17 + j * 0.064 + 0.066 * v - 0.008 * Math.cos(a),
+            bootCentres[side] + (0.064 + 0.02 * v - 0.004 * j) * Math.sin(a),
+            0.043 + 0.047 * v + 0.013 * ridge + 0.045 * j,
+            z - 0.018 * ridge * (1 - v),
           ];
         },
-        lod === 2 ? 16 : 8,
-        4,
-        j === 0 ? [0.26, 0.3, 0.3] : [0.38, 0.41, 0.4],
-        false,
-        j === 0 ? WEAVE : SHINE,
+        lod === 0 ? 6 : lod === 1 ? 10 : 12,
+        lod === 0 ? 2 : 3,
+        j ? [0.32, 0.36, 0.35] : [0.39, 0.43, 0.42],
+      );
+    }
+    part('Boot side ' + side);
+    for (const edge of [-1, 1]) {
+      panel(
+        (u, v) => [
+          bootCentres[side] + edge * (0.064 + 0.012 * u + 0.004 * v),
+          0.026 + v * (0.005 + 0.055 * Math.sin(Math.PI * u)),
+          -0.22 + 0.22 * u,
+        ],
+        lod === 0 ? 3 : 6,
+        lod === 0 ? 1 : 3,
+        [0.3, 0.34, 0.33],
+        edge < 0,
       );
     }
     part('Patella ' + side);
     const cap: Surface = (u, v) => {
-      const angle = (u - 0.5) * (1.58 + 1.36 * Math.sin(Math.PI * v * 0.86));
-      const ridge = Math.cos(angle);
+      const angle = (u - 0.5) * (2.38 + 0.3 * v);
+      const fold = Math.max(0, 1 - Math.abs(u - 0.5) * 4);
+      const chevron = 1 - 2 * Math.abs(u - 0.5);
       return wrap(
         angle,
-        0.426 + 0.119 * v - 0.022 * ridge ** 4 * (1 - v),
-        0.016 + 0.021 * ridge ** 3 * Math.sin(Math.PI * v) + 0.004 * ridge,
+        0.426 + 0.125 * v - 0.022 * chevron * (1 - v),
+        0.039 + 0.031 * fold * Math.sin(Math.PI * v) + 0.011 * chevron,
       );
     };
-    panel(cap, lod === 2 ? 18 : 10, 7, [0.49, 0.52, 0.5]);
-    if (lod) {
-      for (const sign of [-1, 1]) {
-        panel(
-          (u, v) => {
-            const p = cap(0.5 + sign * (0.095 + 0.3 * v) + (u - 0.5) * 0.025, 0.15 + 0.69 * v);
-            p[2] -= 0.002;
-            return p;
-          },
-          2,
-          8,
-          bronze,
-        );
-      }
-    }
+    armor(cap, lod === 0 ? 6 : lod === 1 ? 10 : 12, lod === 0 ? 2 : 4, [0.49, 0.52, 0.5]);
+    part('Patella crest ' + side);
+    armor(
+      (u, v) => {
+        const centre = 1 - 2 * Math.abs(u - 0.5);
+        return wrap((u - 0.5) * (1.4 + 0.2 * v), 0.453 + 0.085 * v - 0.027 * centre, 0.088);
+      },
+      4,
+      2,
+      [0.54, 0.58, 0.56],
+    );
   }
 
   const slices = [16, 36, 72][lod];
@@ -702,7 +759,7 @@ export function hunter(lod: 0 | 1 | 2) {
     const a = (u - 0.5) * 3.36;
     return polar(a, 0.149, 0.174, brow(a) - aperture(a) * (1 - v));
   };
-  panel(visor, slices, 2, gauze);
+  panel(visor, slices, 2, gauze, false, -1);
   if (lod) {
     // Stagger recessed dark cells on the curved band. Use physical pitch across
     // the eye so the centre bridge contains fewer rows than the wider temples.
@@ -822,44 +879,181 @@ export function hunter(lod: 0 | 1 | 2) {
   part('Rangefinder');
   limb([-0.232, 1.704, -0.042], [-0.23, 1.705, -0.138], [0.018, 0.025, 0.02], bronze, 1, TWILL);
   limb([-0.23, 1.705, -0.138], [-0.23, 1.705, -0.14], [0.012, 0.012], light, 1, -2);
+  const skin = parts['Marine anatomy'];
+  const depthCache = new Map<string, number>();
+  const frontDepth = (x: number, y: number) => {
+    const key = `${x},${y}`;
+    const cached = depthCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let depth = Infinity;
+    for (let i = 0; i < skin.length; i += 3 * STRIDE) {
+      const ax = skin[i],
+        ay = skin[i + 1],
+        bx = skin[i + STRIDE],
+        by = skin[i + STRIDE + 1],
+        cx = skin[i + 2 * STRIDE],
+        cy = skin[i + 2 * STRIDE + 1];
+      if (
+        x < Math.min(ax, bx, cx) ||
+        x > Math.max(ax, bx, cx) ||
+        y < Math.min(ay, by, cy) ||
+        y > Math.max(ay, by, cy)
+      ) {
+        continue;
+      }
+      const area = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+      if (Math.abs(area) < 1e-10) {
+        continue;
+      }
+      const a = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / area,
+        b = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / area;
+      if (a < -1e-6 || b < -1e-6 || a + b > 1 + 1e-6) {
+        continue;
+      }
+      depth = Math.min(
+        depth,
+        a * skin[i + 2] + b * skin[i + STRIDE + 2] + (1 - a - b) * skin[i + 2 * STRIDE + 2],
+      );
+    }
+    depthCache.set(key, depth);
+    return depth;
+  };
+  // Fit each lame to the actual shoulder skin. The ninja's shoulder profile is
+  // lower than the Hunter's sculpted deltoid in places, especially at the rim.
+  const topCache = new Map<string, number>();
+  const shoulderTop = (x: number, z: number) => {
+    const key = `${x},${z}`;
+    const cached = topCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let height = -Infinity;
+    for (let i = 0; i < skin.length; i += 3 * STRIDE) {
+      const ax = skin[i],
+        az = skin[i + 2],
+        bx = skin[i + STRIDE],
+        bz = skin[i + STRIDE + 2],
+        cx = skin[i + 2 * STRIDE],
+        cz = skin[i + 2 * STRIDE + 2];
+      if (
+        x < Math.min(ax, bx, cx) ||
+        x > Math.max(ax, bx, cx) ||
+        z < Math.min(az, bz, cz) ||
+        z > Math.max(az, bz, cz)
+      ) {
+        continue;
+      }
+      const area = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+      if (Math.abs(area) < 1e-10) {
+        continue;
+      }
+      const a = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / area,
+        b = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / area;
+      if (a < -1e-6 || b < -1e-6 || a + b > 1 + 1e-6) {
+        continue;
+      }
+      const y = a * skin[i + 1] + b * skin[i + STRIDE + 1] + (1 - a - b) * skin[i + 2 * STRIDE + 1];
+      if (y > 1.35 && y < 1.56) {
+        height = Math.max(height, y);
+      }
+    }
+    topCache.set(key, height);
+    return height;
+  };
+  const sideCache = new Map<string, number>();
+  const shoulderSide = (side: number, y: number, z: number) => {
+    const key = `${side},${y},${z}`;
+    const cached = sideCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let edge = -Infinity;
+    for (let i = 0; i < skin.length; i += 3 * STRIDE) {
+      const ay = skin[i + 1],
+        az = skin[i + 2],
+        by = skin[i + STRIDE + 1],
+        bz = skin[i + STRIDE + 2],
+        cy = skin[i + 2 * STRIDE + 1],
+        cz = skin[i + 2 * STRIDE + 2];
+      if (
+        y < Math.min(ay, by, cy) ||
+        y > Math.max(ay, by, cy) ||
+        z < Math.min(az, bz, cz) ||
+        z > Math.max(az, bz, cz)
+      ) {
+        continue;
+      }
+      const area = (bz - cz) * (ay - cy) + (cy - by) * (az - cz);
+      if (Math.abs(area) < 1e-10) {
+        continue;
+      }
+      const a = ((bz - cz) * (y - cy) + (cy - by) * (z - cz)) / area,
+        b = ((cz - az) * (y - cy) + (ay - cy) * (z - cz)) / area;
+      if (a < -1e-6 || b < -1e-6 || a + b > 1 + 1e-6) {
+        continue;
+      }
+      const x = side * (a * skin[i] + b * skin[i + STRIDE] + (1 - a - b) * skin[i + 2 * STRIDE]);
+      edge = Math.max(edge, x);
+    }
+    sideCache.set(key, edge);
+    return edge;
+  };
   part('Shoulder plates');
-  for (const side of [-1, 1]) {
-    plate(
-      [
-        [side * 0.145, 1.476, -0.07],
-        [side * 0.188, 1.548, -0.05],
-        [side * 0.29, 1.567, -0.025],
-        [side * 0.366, 1.524, -0.015],
-        [side * 0.369, 1.461, -0.048],
-        [side * 0.306, 1.423, -0.09],
-        [side * 0.215, 1.428, -0.108],
-      ],
-      [side * 0.267, 1.49, -0.164],
-      alloy,
+  const shoulderPads = new Verts();
+  const shoulderPose = solve(rest());
+  pads(shoulderPads, shoulderPose, 0, alloy, false, alloy, lod === 0, undefined, true);
+  const shoulderVerts = shoulderPads.a;
+  for (let i = 0; i < shoulderPads.length; i += STRIDE) {
+    if (shoulderVerts[i + 8] !== TWILL) {
+      continue;
+    }
+    const side = shoulderVerts[i] < 0 ? -1 : 1;
+    const arm = shoulderPose.pos[side < 0 ? J.ARM_L : J.ARM_R];
+    const outward = side * (shoulderVerts[i] - arm[0]);
+    const xScale = outward < 0 ? 0.65 : 1.55;
+    const normal = unit([
+      shoulderVerts[i + 3] / xScale,
+      shoulderVerts[i + 4] / 0.95,
+      shoulderVerts[i + 5] / (shoulderVerts[i + 2] < 0 ? 1.4 : 1.15),
+    ]);
+    let x = arm[0] + (shoulderVerts[i] - arm[0]) * xScale;
+    let y =
+      arm[1] + (shoulderVerts[i + 1] - arm[1]) * 0.95 + 0.035 - 0.02 * Math.max(0, outward / 0.09);
+    const rawZ = shoulderVerts[i + 2] * (shoulderVerts[i + 2] < 0 ? 1.4 : 1.15);
+    if (outward > -0.03) {
+      x = side * Math.max(side * x, shoulderSide(side, y, rawZ) + 0.03);
+    }
+    y = Math.max(y, shoulderTop(x, rawZ) + 0.014);
+    const surface = shoulderVerts[i + 2] < 0 ? frontDepth(x, y) : Infinity;
+    out.push(
+      x,
+      y,
+      Math.min(rawZ, surface - 0.012),
+      ...normal,
+      ...shoulderVerts.subarray(i + 6, i + STRIDE),
     );
   }
   if (lod > 0) {
-    out = parts['Marine anatomy'];
-    const point = (x: number, y: number): Vec3 => [x, y, -0.205 + 0.2 * Math.abs(x)];
-    const rows = lod === 2 ? 12 : 7;
+    part('Chest net');
     for (const direction of [-1, 1]) {
-      for (let strand = 0; strand <= rows; strand++) {
-        const startX = -0.235 + (0.47 * strand) / rows;
-        for (let step = 0; step < 4; step++) {
-          const t = step / 4,
-            next = (step + 1) / 4,
-            x = startX + direction * 0.19 * t,
-            end = startX + direction * 0.19 * next;
-          if (Math.abs(end) <= 0.295) {
-            limb(
-              point(x, 1.17 + 0.285 * t),
-              point(end, 1.17 + 0.285 * next),
-              [0.0032, 0.0032],
-              [0.095, 0.087, 0.073],
-              1,
-              WEAVE,
-            );
+      for (let strand = -11; strand <= 11; strand++) {
+        let previous: Vec3 | undefined;
+        for (let step = 0; step <= 12; step++) {
+          const t = step / 12,
+            x = strand * 0.044 + direction * 0.235 * t,
+            y = 1.15 + 0.305 * t;
+          const depth = Math.abs(x) <= 0.255 ? frontDepth(x, y) : Infinity;
+          if (!Number.isFinite(depth)) {
+            previous = undefined;
+            continue;
           }
+          const point: Vec3 = [x, y, depth - 0.005];
+          if (previous) {
+            limb(previous, point, [0.0016, 0.0016], [0.07, 0.063, 0.055], 1, WEAVE);
+          }
+          previous = point;
         }
       }
     }
@@ -981,7 +1175,11 @@ export function hunter(lod: 0 | 1 | 2) {
       name.startsWith('Quills') ||
       name.startsWith('Swept temple rail');
     const anatomy = name === 'Marine anatomy';
-    const legKit = /^(Thigh net|Leg straps|Shin plates|Patella|Boot lames) /.test(name);
+    const legKit =
+      /^(Thigh net|Leg straps|Shin plates|Shin seams|Ankle cuff|Patella|Boot lames|Boot side) /.test(
+        name,
+      );
+    const bootKit = /^(Boot lames|Boot side) /.test(name);
     const beltKit = name === 'Belt' || name === 'Flying disc';
     for (let i = 0; i < mesh.length; i += STRIDE) {
       if (beltKit) {
@@ -1004,6 +1202,24 @@ export function hunter(lod: 0 | 1 | 2) {
           mesh[i + 5] = n[2];
         }
       }
+      if (bootKit || (anatomy && mesh[i + 1] < 0.135 && Math.abs(mesh[i]) < 0.31)) {
+        const y = mesh[i + 1];
+        const fit = Math.min(1, Math.max(0, (0.135 - y) / 0.055));
+        const side = mesh[i] < 0 ? -1 : 1;
+        const centre = bootCentres[side];
+        const depthGain = mesh[i + 2] < 0.03 ? 0.18 : -0.25;
+        mesh[i] = centre + (mesh[i] - centre) * (1 + 0.34 * fit);
+        mesh[i + 1] *= 1 + 0.28 * fit;
+        mesh[i + 2] = 0.03 + (mesh[i + 2] - 0.03) * (1 + depthGain * fit);
+        const n = unit([
+          mesh[i + 3] / (1 + 0.34 * fit),
+          mesh[i + 4] / (1 + 0.28 * fit),
+          mesh[i + 5] / (1 + depthGain * fit),
+        ]);
+        mesh[i + 3] = n[0];
+        mesh[i + 4] = n[1];
+        mesh[i + 5] = n[2];
+      }
       if (head) {
         mesh[i + 1] += (stature - 1) * 1.55;
       } else {
@@ -1011,12 +1227,6 @@ export function hunter(lod: 0 | 1 | 2) {
           mesh[i] += 0.013;
           mesh[i + 2] += 0.132;
           mesh[i + 1] -= 0.094;
-        }
-        if (anatomy && mesh[i + 1] < 0.2) {
-          const blend = smoothStep(0.035, 0.2, mesh[i + 1]),
-            scale = 0.86 + 0.14 * blend;
-          mesh[i] *= scale;
-          mesh[i + 2] *= scale;
         }
         mesh[i] *= stature;
         mesh[i + 1] *= stature;

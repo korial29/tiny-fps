@@ -305,6 +305,8 @@ export const pads = (
   far = false,
   /** The frame's pieces of the store: each pad and the collar go there, built once (store.ts). */
   list?: Pieces,
+  /** Reuse the layered shoulder pieces without the ninja's collar. */
+  shouldersOnly = false,
 ) => {
   const [lames, collar, shell] = (made[+far] ??= make(far));
   const pad = marine ? shell : lames;
@@ -379,7 +381,7 @@ export const pads = (
     const n = Math.hypot(...q) || 1;
     lay('pad', pad, s.pos[arm], q.map(c => c / n) as Quat, side);
   }
-  if (!marine) {
+  if (!marine && !shouldersOnly) {
     lay('collar', collar, s.pos[J.NECK], s.rot[J.CHEST], 1, COLLAR_CLOTH);
   }
 };

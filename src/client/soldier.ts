@@ -1251,7 +1251,8 @@ type HunterLod = 0 | 1;
 const hunterDraw: Partial<Record<HunterLod, [name: string, vertices: number[]][]>> = {};
 const hunterParts = (lod: HunterLod) =>
   (hunterDraw[lod] ??= Object.entries(hunterModel(lod)).filter(
-    ([name]) => lod !== 0 || (!name.startsWith('Quills') && name !== 'Visor grille'),
+    ([name, vertices]) =>
+      vertices.length > 0 && (lod !== 0 || (!name.startsWith('Quills') && name !== 'Visor grille')),
   ));
 
 let hunterWarmed = false;

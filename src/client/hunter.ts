@@ -110,7 +110,7 @@ function marineBuild(lod: 0 | 1 | 2, chestFaces: number[]): number[] {
     depth += z * 0.22 * deltoid;
     const front = Math.min(1, Math.max(0, -z / 0.074));
     // Broad paired pecs narrowing into the sternum, then three shorter abdominal pairs.
-    const pec = 0.067 * bell(((ax - 0.09) / 0.086) ** 2) * bell((y - 1.392 - 0.1 * ax) / 0.067);
+    const pec = 0.067 * bell(((ax - 0.09) / 0.086) ** 2) * bell((y - 1.371 - 0.12 * ax) / 0.096);
     // The oblique slips fan up from the central abdominal tendon.
     let abs = 0;
     for (const height of [1.065, 1.125, 1.187, 1.25]) {
@@ -146,13 +146,13 @@ function marineBuild(lod: 0 | 1 | 2, chestFaces: number[]): number[] {
   const pecSurface = (x: number, y: number) => {
     const ax = Math.sqrt(x * x + 0.0004);
     const ribs = 0.172 * Math.sqrt(Math.max(0.02, 1 - (x / 0.365) ** 2));
-    const belly = 0.074 * bell((ax - 0.129) / 0.135) * bell((y - 1.398 - 0.087 * ax) / 0.073);
+    const belly = 0.074 * bell((ax - 0.129) / 0.135) * bell((y - 1.371 - 0.12 * ax) / 0.1);
     const sternum = 0.004 * bell(x / 0.04) * bell((y - 1.4) / 0.097);
     return -ribs - belly + sternum + 0.023 * ((y - 1.398) / 0.143) ** 2;
   };
   const influence = vertices.map(
     ([x, y, z]) =>
-      fade((y - 1.295) / 0.055) *
+      fade((y - 1.246) / 0.075) *
       fade((1.526 - y) / 0.07) *
       fade((0.324 - Math.abs(x)) / 0.074) *
       fade((-z - 0.036) / 0.052),
@@ -231,7 +231,7 @@ function marineBuild(lod: 0 | 1 | 2, chestFaces: number[]): number[] {
         0.5 *
           Math.sin(91 * px + 29 * py + 1.7 * Math.sin(43 * pz - 52 * py)) *
           Math.cos(63 * py - 51 * pz + 0.9 * Math.sin(66 * px));
-      const pecLight = 0.086 * bell((Math.abs(px) - 0.13) / 0.09) * bell((py - 1.408) / 0.057);
+      const pecLight = 0.086 * bell((Math.abs(px) - 0.13) / 0.09) * bell((py - 1.383) / 0.083);
       const midline = 0.087 * bell(px / 0.018) * bell((py - 1.32) / 0.18);
       const shade =
         0.91 -
@@ -530,11 +530,11 @@ export function hunter(lod: 0 | 1 | 2) {
       part('Left bracer');
     }
     limb(
-      [side * 0.38, 1.015, 0],
+      [side * 0.362, 1.093, -0.006],
       [side * 0.392, 0.884, -0.002],
-      [0.069, 0.062, 0.052, 0.044],
+      [side > 0 ? 0.093 : 0.088, 0.084, 0.061, 0.048],
       silver,
-      0.94,
+      1.08,
       TWILL,
     );
     limb(
@@ -1242,12 +1242,12 @@ export function hunter(lod: 0 | 1 | 2) {
   const twin = wristBlade(lod);
   for (let i = 0; i < twin.length; i += STRIDE) {
     out.push(
-      0.39 + twin[i + 1] * 0.8,
-      0.91 + twin[i + 2] * 0.86,
-      twin[i] * 0.85,
+      0.392 + twin[i] * 0.86,
+      0.884 + twin[i + 1] * 0.86,
+      twin[i + 2] * 0.86,
+      twin[i + 3],
       twin[i + 4],
       twin[i + 5],
-      twin[i + 3],
       ...twin.slice(i + 6, i + STRIDE),
     );
   }

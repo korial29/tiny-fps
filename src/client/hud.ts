@@ -1029,7 +1029,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       const have = [rounds >= 0, blade, rail >= 0, rifle >= 0];
       const k = !fists && !railed && !rifled && blade && (wield || !have[0]);
       const n = rifled ? rifle : railed ? rail : rounds;
-      ammo.hidden = !have.some(Boolean);
+      ammo.hidden = !have.some(Boolean) && !fists;
       ammo.classList.toggle('b', fists);
       ammo.classList.toggle('k', k);
       ammo.classList.toggle('r', railed);

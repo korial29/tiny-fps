@@ -69,7 +69,16 @@ describe('CODES', () => {
       expect(CODES).toContain(code);
     }
     expect(CODES).toEqual(
-      expect.arrayContaining(['Digit1', 'Digit2', 'Digit3', 'Digit4', 'KeyM', 'KeyG']),
+      expect.arrayContaining([
+        'Digit1',
+        'Digit2',
+        'Digit3',
+        'Digit4',
+        'Digit5',
+        'Numpad5',
+        'KeyM',
+        'KeyG',
+      ]),
     );
     // Nothing else: these keys do not map to a held bit or a weapon choice.
     const rest = CODES.filter(c => !keyBit(c) && picked(-1, c) < 0);
@@ -87,6 +96,7 @@ describe('the weapon choice', () => {
     expect(picked(RAIL, 'KeyW')).toBe(RAIL);
     expect(picked(GUN, 'Digit4')).toBe(WEAPON.RIFLE);
     expect(picked(GUN, 'Digit5')).toBe(WEAPON.FISTS);
+    expect(picked(GUN, 'Numpad5')).toBe(WEAPON.FISTS);
     expect(withWeapon(KEY.FIRE, WEAPON.FISTS)).toBe(KEY.FIRE | KEY.FISTS);
     expect(withWeapon(KEY.FIRE, WEAPON.RIFLE)).toBe(KEY.FIRE | KEY.RIFLE);
     expect(turned(RAIL, 1, [true, true, true, true])).toBe(WEAPON.RIFLE);
@@ -203,6 +213,17 @@ describe('createInput', () => {
     lock(true);
     ctl.beast = true;
     expect(right()).toBe(KEY.BLADE);
+  });
+
+  it('selects fists from the fifth number key and sends their weapon bit', () => {
+    make();
+    lock(true);
+    key('keydown', 'Digit5');
+    expect(ctl.weapon).toBe(WEAPON.FISTS);
+    expect(ctl.take() & KEY.FISTS).toBe(KEY.FISTS);
+    key('keyup', 'Digit5');
+    key('keydown', 'Numpad5');
+    expect(ctl.weapon).toBe(WEAPON.FISTS);
   });
 
   it('holds the xenomorph’s tail on G while it is down, and lets it go only at the release', () => {

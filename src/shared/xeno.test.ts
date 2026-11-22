@@ -434,7 +434,7 @@ describe('the claws and the tail', () => {
     ]) {
       const p = at(-20, 0, { z: 50, yaw: 0 });
       hit(p, KEY.BLADE | keys);
-      expect([p.cut, p.swing]).toEqual([cut, TAILS[cut].ticks]);
+      expect([p.cut, p.swing, p.charge]).toEqual([cut, TAILS[cut].ticks - TAILS[cut].hold, 1]);
       // A tap: it runs on to its strike, slower than any cut of the katana.
       let n = 1;
       while (hit(p, 0) !== STRIKE.CUT) {
@@ -500,7 +500,11 @@ describe('the claws and the tail', () => {
     const q = at(-20, 0, { z: 50, yaw: 0 });
     hit(q, KEY.BLADE | KEY.FORWARD);
     hit(q, KEY.BLADE | KEY.SPECIAL | KEY.FORWARD);
-    expect([q.cut, q.swing, q.vy]).toEqual([STING.LEAP, TAILS[STING.LEAP].ticks, 0]);
+    expect([q.cut, q.swing, q.vy]).toEqual([
+      STING.LEAP,
+      TAILS[STING.LEAP].ticks - TAILS[STING.LEAP].hold,
+      0,
+    ]);
     for (const state of [p, q]) {
       for (let k = 0; k < 180; k++) {
         expect(hit(state, KEY.BLADE)).toBe(STRIKE.NONE);

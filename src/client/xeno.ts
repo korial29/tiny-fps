@@ -805,7 +805,11 @@ export const tail = (
   blade(
     out,
     end,
-    look && lash[7] ? unit(mix3(w, basis(look.yaw, look.pitch)[2], lash[7])) : w,
+    look && lash[7]
+      ? lash[7] >= 1
+        ? basis(look.yaw, look.pitch)[2]
+        : unit(mix3(w, basis(look.yaw, look.pitch)[2], lash[7]))
+      : w,
     up,
     color,
     sides,

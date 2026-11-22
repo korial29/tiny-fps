@@ -211,6 +211,10 @@ export const step = (
     // The tail's release keeps its charge to its end: how hard it strikes (sting()).
     [p.heavy, p.charge] = [true, kit.xeno ? p.charge : 0];
     p.swing = swingOf(p, table).ticks;
+  } else if (kit.xeno && top && free && !holding) {
+    // A short tap starts the ordinary lash on release; while held, the tail stays coiled.
+    p.charge = 0;
+    p.swing = ticks;
   } else {
     // The xenomorph's charge is its tail's alone, held at the top or let go: anywhere else it is gone.
     p.charge = top || (kit.xeno && !p.heavy) ? 0 : p.charge;
@@ -226,7 +230,15 @@ export const step = (
     p.heavy = !!p.swing && !!p.heavy;
     p.charge = kit.xeno && !p.heavy ? 0 : p.charge;
   }
-  if (kit.xeno && top && free && !holding && p.cut === STING.LEAP && p.mode === MODE.GROUND) {
+  if (
+    kit.xeno &&
+    top &&
+    free &&
+    !holding &&
+    p.heavy &&
+    p.cut === STING.LEAP &&
+    p.mode === MODE.GROUND
+  ) {
     p.vy = TAIL_LEAP;
     p.ev |= EV.JUMP;
   }
@@ -415,7 +427,7 @@ const beast = (p: PlayerState, i: Input, fresh: boolean, busy: boolean): void =>
           ? STING.SPIN
           : STING.LEAP
         : base;
-    [p.heavy, p.swing, p.charge] = [false, TAILS[p.cut].ticks, 0];
+    [p.heavy, p.swing, p.charge] = [false, TAILS[p.cut].ticks - TAILS[p.cut].hold, 1];
   } else if (i.keys & KEY.FIRE && (!p.swing || (fresh && claw && c.ticks - p.swing > c.strike))) {
     p.cut = p.cut === BLOW.CLAW_L ? BLOW.CLAW_R : BLOW.CLAW_L;
     [p.heavy, p.swing] = [false, TAILS[p.cut].ticks];

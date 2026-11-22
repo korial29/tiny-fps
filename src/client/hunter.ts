@@ -4,6 +4,7 @@ import type { Vec3 } from './mesh';
 
 import { body } from './skin';
 import { hands } from './body';
+import { pads } from './pads';
 import { KIND } from './features';
 import { JOINT as J, JOINTS, rest, solve } from './rig';
 import { Verts } from './verts';
@@ -251,10 +252,21 @@ function marineBuild(lod: 0 | 1 | 2): number[] {
   if (lod) {
     // Use the same buffer type as the hands drawn every frame.
     const gloves = new Verts();
-    hands(gloves, solve(rest()), 0, [0.24, 0.24], graphite, hide, {}, lod === 1);
+    const skeleton = solve(rest());
+    hands(gloves, skeleton, 0, [0.24, 0.24], graphite, hide, {}, lod === 1);
     const v = gloves.a;
     for (let i = 0; i < gloves.length; i += STRIDE) {
-      const p = shape([v[i], v[i + 1], v[i + 2]], 1, 0);
+      const wrist = skeleton.pos[v[i] < 0 ? J.HAND_L : J.HAND_R];
+      const reach = Math.min(1, Math.max(0, (wrist[1] - v[i + 1]) / 0.09));
+      const p = shape(
+        [
+          wrist[0] + (v[i] - wrist[0]) * (1 + 0.24 * reach),
+          wrist[1] + (v[i + 1] - wrist[1]) * (1 + 0.18 * reach),
+          wrist[2] + (v[i + 2] - wrist[2]) * (1 + 0.2 * reach),
+        ],
+        1,
+        0,
+      );
       result.push(...p, ...v.subarray(i + 3, i + STRIDE));
     }
   }
@@ -867,44 +879,94 @@ export function hunter(lod: 0 | 1 | 2) {
   part('Rangefinder');
   limb([-0.232, 1.704, -0.042], [-0.23, 1.705, -0.138], [0.018, 0.025, 0.02], bronze, 1, TWILL);
   limb([-0.23, 1.705, -0.138], [-0.23, 1.705, -0.14], [0.012, 0.012], light, 1, -2);
+  const skin = parts['Marine anatomy'];
+  const depthCache = new Map<string, number>();
+  const frontDepth = (x: number, y: number) => {
+    const key = `${x},${y}`;
+    const cached = depthCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let depth = Infinity;
+    for (let i = 0; i < skin.length; i += 3 * STRIDE) {
+      const ax = skin[i],
+        ay = skin[i + 1],
+        bx = skin[i + STRIDE],
+        by = skin[i + STRIDE + 1],
+        cx = skin[i + 2 * STRIDE],
+        cy = skin[i + 2 * STRIDE + 1];
+      if (
+        x < Math.min(ax, bx, cx) ||
+        x > Math.max(ax, bx, cx) ||
+        y < Math.min(ay, by, cy) ||
+        y > Math.max(ay, by, cy)
+      ) {
+        continue;
+      }
+      const area = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+      if (Math.abs(area) < 1e-10) {
+        continue;
+      }
+      const a = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / area,
+        b = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / area;
+      if (a < -1e-6 || b < -1e-6 || a + b > 1 + 1e-6) {
+        continue;
+      }
+      depth = Math.min(
+        depth,
+        a * skin[i + 2] + b * skin[i + STRIDE + 2] + (1 - a - b) * skin[i + 2 * STRIDE + 2],
+      );
+    }
+    depthCache.set(key, depth);
+    return depth;
+  };
   part('Shoulder plates');
-  for (const side of [-1, 1]) {
-    plate(
-      [
-        [side * 0.145, 1.476, -0.07],
-        [side * 0.188, 1.548, -0.05],
-        [side * 0.29, 1.567, -0.025],
-        [side * 0.366, 1.524, -0.015],
-        [side * 0.369, 1.461, -0.048],
-        [side * 0.306, 1.423, -0.09],
-        [side * 0.215, 1.428, -0.108],
-      ],
-      [side * 0.267, 1.49, -0.164],
-      alloy,
+  const shoulderPads = new Verts();
+  const shoulderPose = solve(rest());
+  pads(shoulderPads, shoulderPose, 0, alloy, false, alloy, lod === 0, undefined, true);
+  const shoulderVerts = shoulderPads.a;
+  for (let i = 0; i < shoulderPads.length; i += STRIDE) {
+    const side = shoulderVerts[i] < 0 ? -1 : 1;
+    const arm = shoulderPose.pos[side < 0 ? J.ARM_L : J.ARM_R];
+    const outward = side * (shoulderVerts[i] - arm[0]);
+    const xScale = outward < 0 ? 0.65 : 1.8;
+    const normal = unit([
+      shoulderVerts[i + 3] / xScale,
+      shoulderVerts[i + 4] / 1.1,
+      shoulderVerts[i + 5] / (shoulderVerts[i + 2] < 0 ? 1.55 : 1.28),
+    ]);
+    const x = arm[0] + (shoulderVerts[i] - arm[0]) * xScale;
+    const y =
+      arm[1] + (shoulderVerts[i + 1] - arm[1]) * 1.1 + 0.044 - 0.035 * Math.max(0, outward / 0.09);
+    const rawZ = shoulderVerts[i + 2] * (shoulderVerts[i + 2] < 0 ? 1.55 : 1.28);
+    const surface = shoulderVerts[i + 2] < 0 ? frontDepth(x, y) : Infinity;
+    out.push(
+      x,
+      y,
+      Math.min(rawZ, surface - 0.012),
+      ...normal,
+      ...shoulderVerts.subarray(i + 6, i + STRIDE),
     );
   }
   if (lod > 0) {
-    out = parts['Marine anatomy'];
-    const point = (x: number, y: number): Vec3 => [x, y, -0.205 + 0.2 * Math.abs(x)];
-    const rows = lod === 2 ? 12 : 7;
+    part('Chest net');
     for (const direction of [-1, 1]) {
-      for (let strand = 0; strand <= rows; strand++) {
-        const startX = -0.235 + (0.47 * strand) / rows;
-        for (let step = 0; step < 4; step++) {
-          const t = step / 4,
-            next = (step + 1) / 4,
-            x = startX + direction * 0.19 * t,
-            end = startX + direction * 0.19 * next;
-          if (Math.abs(end) <= 0.295) {
-            limb(
-              point(x, 1.17 + 0.285 * t),
-              point(end, 1.17 + 0.285 * next),
-              [0.0032, 0.0032],
-              [0.095, 0.087, 0.073],
-              1,
-              WEAVE,
-            );
+      for (let strand = -11; strand <= 11; strand++) {
+        let previous: Vec3 | undefined;
+        for (let step = 0; step <= 12; step++) {
+          const t = step / 12,
+            x = strand * 0.044 + direction * 0.235 * t,
+            y = 1.15 + 0.305 * t;
+          const depth = Math.abs(x) <= 0.255 ? frontDepth(x, y) : Infinity;
+          if (!Number.isFinite(depth)) {
+            previous = undefined;
+            continue;
           }
+          const point: Vec3 = [x, y, depth - 0.005];
+          if (previous) {
+            limb(previous, point, [0.0016, 0.0016], [0.07, 0.063, 0.055], 1, WEAVE);
+          }
+          previous = point;
         }
       }
     }
@@ -1058,13 +1120,14 @@ export function hunter(lod: 0 | 1 | 2) {
         const fit = Math.min(1, Math.max(0, (0.135 - y) / 0.055));
         const side = mesh[i] < 0 ? -1 : 1;
         const centre = bootCentres[side];
+        const depthGain = mesh[i + 2] < 0.03 ? 0.18 : -0.25;
         mesh[i] = centre + (mesh[i] - centre) * (1 + 0.34 * fit);
         mesh[i + 1] *= 1 + 0.28 * fit;
-        mesh[i + 2] = 0.03 + (mesh[i + 2] - 0.03) * (1 + 0.38 * fit);
+        mesh[i + 2] = 0.03 + (mesh[i + 2] - 0.03) * (1 + depthGain * fit);
         const n = unit([
           mesh[i + 3] / (1 + 0.34 * fit),
           mesh[i + 4] / (1 + 0.28 * fit),
-          mesh[i + 5] / (1 + 0.38 * fit),
+          mesh[i + 5] / (1 + depthGain * fit),
         ]);
         mesh[i + 3] = n[0];
         mesh[i + 4] = n[1];

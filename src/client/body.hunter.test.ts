@@ -1,9 +1,10 @@
 import { expect, it } from 'vitest';
 import { STILL } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
-import { createBody } from './body';
+import { createBody, hands, HUNTER_HAND } from './body';
+import { rest, solve } from './rig';
 import { hunter } from './hunter';
-import { SHINE, STRIDE, WEAVE } from './mesh';
+import { SHINE, STRIDE } from './mesh';
 
 const player: PlayerState = {
   id: 1,
@@ -33,22 +34,20 @@ it('draws the Hunter model equipment on the first-person rig', () => {
   const parts = [
     'Harpoon harness',
     'Blade cuff',
+    'Left bracer',
     'Laser saddle',
     'Shoulder laser',
     'Shoulder plates',
     'Belt',
     'Flying disc',
   ];
-  const net = model['Marine anatomy'].reduce(
-    (sum, _, i, vertices) =>
-      i % (3 * STRIDE) === 0 && [0, 1, 2].every(k => vertices[i + k * STRIDE + 8] === WEAVE)
-        ? sum + 3 * STRIDE
-        : sum,
-    0,
-  );
-  const expected = parts.reduce((sum, name) => sum + model[name].length, net);
-
-  expect(hunterView.length - marine.length).toBe(expected);
+  const plainHands: number[] = [],
+    clawedHands: number[] = [];
+  const pose = solve(rest());
+  hands(plainHands, pose, 0, [0, 0], [0, 0, 0], HUNTER_HAND);
+  hands(clawedHands, pose, 0, [0, 0], HUNTER_HAND, HUNTER_HAND, { claws: 'short' });
+  const gear = parts.reduce((sum, name) => sum + model[name].length, 0);
+  expect(hunterView.length - marine.length).toBe(gear + clawedHands.length - plainHands.length);
   expect(hunterView.some((_, i) => i % STRIDE === 8 && hunterView[i] === SHINE)).toBe(true);
   expect(hunterView.length % STRIDE).toBe(0);
 });

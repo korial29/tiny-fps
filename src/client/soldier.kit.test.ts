@@ -249,7 +249,8 @@ describe('the Hunter', () => {
     const heights = Array.from({ length: out.length / STRIDE }, (_, i) => out[i * STRIDE + 1]);
     expect(out.length).toBeGreaterThanOrEqual(expected);
     expect(Math.min(...heights)).toBeCloseTo(r.p.y, 2);
-    expect(Math.max(...heights)).toBeGreaterThan(r.p.y + 2.3);
+    // The lowered mask seats the crown 2.255 m above the planted feet.
+    expect(Math.max(...heights) - r.p.y).toBeCloseTo(2.255, 2);
   });
 });
 

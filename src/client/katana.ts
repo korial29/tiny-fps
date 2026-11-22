@@ -188,110 +188,80 @@ export const katana = (lod: number): number[] => {
 };
 
 const wristBuilt: number[][] = [];
-const wristCuff = [0.16, 0.13, 0.2];
-const wristSteel = [0.55, 0.62, 0.68];
-const wristEdge = [0.95, 0.83, 0.54];
+const wristCuff = [0.2, 0.23, 0.24];
+const wristSteel = [0.55, 0.62, 0.64];
+const wristEdge = [0.8, 0.84, 0.81];
+const wristTip: Vec3 = [0.062, -0.343, -0.052];
 
-/** The Hunter's twin inward-curving wrist blades and forearm bracelet, in the hand's local space. */
+/** Right wrist space: +x over the knuckles, -y along the fingers, z across the hand. */
 export const wristBlade = (lod: number): number[] => {
   if (wristBuilt[lod]) {
     return wristBuilt[lod];
   }
   const out: number[] = [];
-  const quad = (a: Vec3, b: Vec3, c: Vec3, d: Vec3, color: number[]) => {
-    tri(out, a, b, c, color);
-    tri(out, a, c, d, color);
-  };
-  const box = (lo: Vec3, hi: Vec3, color: number[]) => {
-    const [x0, y0, z0] = lo;
-    const [x1, y1, z1] = hi;
-    const v = [
-      [x0, y0, z0],
-      [x1, y0, z0],
-      [x1, y1, z0],
-      [x0, y1, z0],
-      [x0, y0, z1],
-      [x1, y0, z1],
-      [x1, y1, z1],
-      [x0, y1, z1],
-    ] as Vec3[];
-    for (const f of [
-      [0, 1, 2, 3],
-      [5, 4, 7, 6],
-      [4, 0, 3, 7],
-      [1, 5, 6, 2],
-      [3, 2, 6, 7],
-      [4, 5, 1, 0],
-    ]) {
-      quad(v[f[0]], v[f[1]], v[f[2]], v[f[3]], color);
-    }
-  };
-  // A fitted bracelet around the forearm: two metal bands clamp a low-profile emitter housing.
-  box([-0.07, -0.047, 0.018], [0.07, 0.047, 0.145], wristCuff);
-  box([-0.078, -0.054, 0.034], [0.078, -0.044, 0.053], wristEdge);
-  box([-0.078, -0.054, 0.113], [0.078, -0.044, 0.132], wristEdge);
-  box([-0.075, 0.043, 0.042], [0.075, 0.053, 0.124], wristSteel);
-  box([-0.043, 0.051, 0.048], [0.043, 0.057, 0.117], wristCuff);
+  // Chamfered dorsal cassette. Each guide enters its front face at wrist height.
+  const housing = (y: number, bottom: number, top: number, width: number): Vec3[] => [
+    [bottom, y, -width],
+    [top - 0.012, y, -width],
+    [top, y, -width + 0.012],
+    [top, y, width - 0.012],
+    [top - 0.012, y, width],
+    [bottom, y, width],
+  ];
+  loft(
+    out,
+    [
+      [[0.069, -0.015, 0]],
+      housing(-0.015, 0.042, 0.095, 0.047),
+      housing(0.023, 0.04, 0.098, 0.051),
+      housing(0.17, 0.026, 0.09, 0.052),
+      housing(0.235, 0.018, 0.069, 0.038),
+      [[0.043, 0.235, 0]],
+    ],
+    (row, face) => (row > 0 && face === 2 ? wristSteel : wristCuff),
+  );
   for (const side of [-1, 1]) {
-    // Each blade leaves the outer edge of the bracelet and sweeps toward the centreline.
-    const stations = [
-      [0.052, 0.026, 0.016],
-      [0.054, -0.055, 0.016],
-      [0.05, -0.14, 0.014],
-      [0.041, -0.225, 0.012],
-      [0.027, -0.3, 0.009],
-      [0.011, -0.36, 0.005],
-      [0, -0.4, 0],
-    ].map(([x, z, w]) => [side * x, z, w] as const);
-    const centers = stations.map(([x, z]) => [x, 0.046, z] as Vec3);
-    const edges = stations.map(([x, z, w], i) => {
-      const before = stations[Math.max(0, i - 1)];
-      const after = stations[Math.min(stations.length - 1, i + 1)];
-      const dx = after[0] - before[0];
-      const dz = after[1] - before[1];
-      const length = Math.hypot(dx, dz) || 1;
-      const nx = -dz / length;
-      const nz = dx / length;
-      return [[x + nx * w, 0.025, z + nz * w] as Vec3, [x - nx * w, 0.025, z - nz * w] as Vec3];
-    });
-    const steel = side < 0 ? wristSteel : [0.4, 0.48, 0.53];
-    for (let i = 0; i < stations.length - 1; i++) {
-      const [a, b] = [centers[i], centers[i + 1]];
-      for (const edge of [0, 1]) {
-        const [c, d] = [edges[i][edge], edges[i + 1][edge]];
-        tri(out, a, c, b, steel);
-        tri(out, b, c, d, steel);
-        tri(out, c, a, [a[0], 0.017, a[2]], wristCuff);
-        tri(out, d, c, [b[0], 0.017, b[2]], wristCuff);
-        quad(c, d, [b[0], 0.017, b[2]], [a[0], 0.017, a[2]], wristSteel);
-      }
+    const rings: Vec3[][] = [];
+    const steps = lod ? 9 : 5;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const y = 0.012 + (wristTip[1] - 0.012) * t;
+      const back = 0.071 + (wristTip[0] - 0.071) * t + 0.036 * Math.sin(Math.PI * t);
+      const z = side * (0.023 + 0.005 * t) + wristTip[2] * t * t * t;
+      const width = 0.012 * (1 - t * t);
+      rings.push(
+        i === steps
+          ? [[back, y, z]]
+          : [
+              [back + 0.009 * (1 - t), y, z],
+              [back, y, z + width],
+              [back - 0.006 * (1 - t), y, z],
+              [back, y, z - width],
+            ],
+      );
     }
-    // A bright sharpened edge runs along the inward-facing side of each curved blade.
-    for (let i = 0; i < stations.length - 2; i++) {
-      const p = edges[i][side < 0 ? 0 : 1];
-      const q = edges[i + 1][side < 0 ? 0 : 1];
-      const r = edges[i + 2][side < 0 ? 0 : 1];
-      tri(out, p, q, r, wristEdge);
-    }
+    loft(out, rings, (_, face) => (face === 0 || face === 3 ? wristEdge : wristSteel));
   }
   return (wristBuilt[lod] = out);
 };
 
-/** Places the wrist blade at the Hunter's right wrist. */
 export const heldWrist = (out: Out, pos: Vec3, q: Quat, lod: number, k = 1, list?: Pieces) => {
-  const frame = axes(q);
   if (list && k == 1) {
     list.push({ m: mesh(`wrist blades ${lod}`, o => o.push(...wristBlade(lod))), q, t: pos, k });
   } else {
-    place(out, wristBlade(lod), pos, frame, [0, 0, 0], k);
+    place(
+      out,
+      wristBlade(lod),
+      pos,
+      [turn(q, [1, 0, 0]), turn(q, [0, 1, 0]), turn(q, [0, 0, -1])],
+      ORIGIN,
+      k,
+    );
   }
 };
 
-/** The blade's sweep endpoints for the Hunter's cut trail. */
-export const wristEnds = (pos: Vec3, q: Quat): Vec3[] => {
-  const f = axes(q)[2];
-  return [pos, sum([pos, 1], [f, 0.39])];
-};
+export const wristEnds = (pos: Vec3, q: Quat): Vec3[] =>
+  [[0.071, -0.015, 0] as Vec3, wristTip].map(p => sum([pos, 1], [turn(q, p), 1]));
 
 /** Appends arcs of lightning flickering along the blade at the clock `t` (s): a few zigzags of thin crossed ribbons, each new every 70 ms. */
 export const arcs = (out: Out, at: Vec3, [r, u, f]: Vec3[], t: number, lod: number, k = 1) => {

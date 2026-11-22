@@ -75,7 +75,7 @@ import {
 } from './gun';
 import { helm } from './helm';
 import { helmet } from './helmet';
-import { hunter as hunterModel } from './hunter';
+import { hunter as hunterModel, hunterWristEnds } from './hunter';
 import { HEAD_SCALE, STYLE, hair, styleOf, sway } from './hair';
 import { ID, ORIGIN, mesh } from './store';
 import { flesh } from './flesh';
@@ -105,8 +105,6 @@ import {
   poised,
   progress,
   SLASH_TOP,
-  heldWrist,
-  wristEnds,
 } from './katana';
 import { ground, piece, track } from './limbs';
 import type { Piece } from './limbs';
@@ -1248,10 +1246,17 @@ const LIMBS_X = [
 /** The ninja's boots: black cloth, a shade lighter than his suit so they show on it. */
 const BOOT = [0.06, 0.06, 0.066];
 type HunterLod = 0 | 1;
+// Centres of the shared upper-arm rings in the far and near sculpted skins.
+const hunterShoulder: [Vec3, Vec3] = [
+  [0.283, 1.567, 0.004],
+  [0.28, 1.629, -0.016],
+];
+const hunterTrail = hunterWristEnds();
 const hunterDraw: Partial<Record<HunterLod, [name: string, vertices: number[]][]>> = {};
 const hunterParts = (lod: HunterLod) =>
   (hunterDraw[lod] ??= Object.entries(hunterModel(lod)).filter(
-    ([name]) => lod !== 0 || (!name.startsWith('Quills') && name !== 'Visor grille'),
+    ([name, vertices]) =>
+      vertices.length > 0 && (lod !== 0 || (!name.startsWith('Quills') && name !== 'Visor grille')),
   ));
 
 let hunterWarmed = false;
@@ -1451,19 +1456,28 @@ export const soldier = (
       const at: Vec3 = [p.x, p.y, p.z];
       const root = axis([0, 1, 0], yaw);
       const detail = Math.min(lod, 1) as HunterLod;
+      const armRotation = blade ? slerp(root, s.rot[J.FOREARM_R], 0.8) : root;
+      const armOrigin = blade
+        ? add(
+            at,
+            sub(turn(root, hunterShoulder[detail]), turn(armRotation, hunterShoulder[detail])),
+          )
+        : at;
       for (const [name, vertices] of hunterParts(detail)) {
-        if (name === 'Wrist blade' && blade) {
-          continue;
-        }
+        const onArm = name === 'Right arm' || name === 'Blade cuff' || name === 'Wrist blade';
         rigid(
           `hunter ${name} ${detail}`,
-          at,
-          root,
+          onArm ? armOrigin : at,
+          onArm ? armRotation : root,
           (o, position, rotation) => placeHunterPart(o, vertices, position, rotation),
           1,
           true,
           name.startsWith('Temple') || name === 'Rangefinder',
         );
+      }
+      if (blade) {
+        const [base, tip] = hunterTrail.map(p => add(armOrigin, turn(armRotation, p)));
+        r.trail.mark(base, tip, cutting(r.prog) || (r.parry >= 0 && r.parry < 2 * PARRY_IN));
       }
     } else {
       const bs = xeno ? beast(lod) : body(lod, build);
@@ -1751,19 +1765,11 @@ export const soldier = (
     );
   }
   if (blade) {
-    if (r.look?.role === ROLE.HUNTER) {
-      heldWrist(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, gpu);
-    } else {
+    if (!isHunter) {
       sword(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), r.t, 1, 1, 0, gpu);
+      const [base, tip] = swordEnds(s.pos[J.HAND_R], s.rot[J.HAND_R]);
+      r.trail.mark(base, tip, cutting(r.prog) || (r.parry >= 0 && r.parry < 2 * PARRY_IN));
     }
-    const tips =
-      r.look?.role === ROLE.HUNTER
-        ? wristEnds(s.pos[J.HAND_R], s.rot[J.HAND_R])
-        : swordEnds(s.pos[J.HAND_R], s.rot[J.HAND_R]);
-    r.trail.mark(
-      ...(tips as [Vec3, Vec3]),
-      cutting(r.prog) || (r.parry >= 0 && r.parry < 2 * PARRY_IN),
-    );
   } else if (
     !p.fists &&
     (p.railed ? !stowed(p) : p.ammo >= 0 || p.rifled) &&

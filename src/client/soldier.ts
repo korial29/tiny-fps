@@ -1246,7 +1246,11 @@ const LIMBS_X = [
 /** The ninja's boots: black cloth, a shade lighter than his suit so they show on it. */
 const BOOT = [0.06, 0.06, 0.066];
 type HunterLod = 0 | 1;
-const hunterShoulder: Vec3 = [0.314, 1.625, 0];
+// Centres of the shared upper-arm rings in the far and near sculpted skins.
+const hunterShoulder: [Vec3, Vec3] = [
+  [0.283, 1.567, 0.004],
+  [0.28, 1.629, -0.016],
+];
 const hunterTrail = hunterWristEnds();
 const hunterDraw: Partial<Record<HunterLod, [name: string, vertices: number[]][]>> = {};
 const hunterParts = (lod: HunterLod) =>
@@ -1454,7 +1458,10 @@ export const soldier = (
       const detail = Math.min(lod, 1) as HunterLod;
       const armRotation = blade ? slerp(root, s.rot[J.FOREARM_R], 0.8) : root;
       const armOrigin = blade
-        ? add(at, sub(turn(root, hunterShoulder), turn(armRotation, hunterShoulder)))
+        ? add(
+            at,
+            sub(turn(root, hunterShoulder[detail]), turn(armRotation, hunterShoulder[detail])),
+          )
         : at;
       for (const [name, vertices] of hunterParts(detail)) {
         const onArm = name === 'Right arm' || name === 'Blade cuff' || name === 'Wrist blade';

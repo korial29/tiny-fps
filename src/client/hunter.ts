@@ -3,7 +3,7 @@ import { SHINE, STRIDE, TWILL, WEAVE, capsule, dress, segment, solid, sub, unit 
 import type { Vec3 } from './mesh';
 
 import { body } from './skin';
-import { wristBlade } from './katana';
+import { wristBlade, wristEnds } from './katana';
 import { hands, HUNTER_HAND } from './body';
 import { KIND } from './features';
 import { JOINT as J, JOINTS, rest, solve } from './rig';
@@ -22,7 +22,7 @@ const built: Partial<Record<0 | 1 | 2, Record<string, number[]>>> = {};
 
 // Sculpt the Marine's rest skin, including the shared shoulder and crotch vertices.
 // Bone weights distinguish the inside of an arm from the adjacent chest wall.
-function marineBuild(lod: 0 | 1 | 2, chestFaces: number[]): number[] {
+function marineBuild(lod: 0 | 1 | 2, chestFaces: number[], swordArm: number[]): number[] {
   const base = body([0, 1, 3][lod]);
   const points: Vec3[] = [];
   const arm: number[] = [],
@@ -215,6 +215,9 @@ function marineBuild(lod: 0 | 1 | 2, chestFaces: number[]): number[] {
     p[2] += collarDepth(x, y, z);
   });
   for (const face of faces) {
+    if (face.every(k => points[k][0] > 0 && arm[k] > 0.3 && points[k][1] <= 1.361)) {
+      swordArm.push(result.length);
+    }
     if (face.every(k => arm[k] < 0.5) && face.some(k => points[k][1] > 0.98)) {
       chestFaces.push(result.length);
     }
@@ -268,6 +271,9 @@ function marineBuild(lod: 0 | 1 | 2, chestFaces: number[]): number[] {
     );
     const v = fingers.a;
     for (let i = 0; i < fingers.length; i += STRIDE) {
+      if (i % (3 * STRIDE) === 0 && v[i] > 0) {
+        swordArm.push(result.length);
+      }
       const wrist = skeleton.pos[v[i] < 0 ? J.HAND_L : J.HAND_R];
       const reach = fade((wrist[1] - v[i + 1]) / 0.09);
       const p = shape(
@@ -491,7 +497,8 @@ export function hunter(lod: 0 | 1 | 2) {
   }
 
   const chestFaces: number[] = [];
-  parts['Marine anatomy'] = marineBuild(lod, chestFaces);
+  const swordArm: number[] = [];
+  parts['Marine anatomy'] = marineBuild(lod, chestFaces, swordArm);
   part('Mask lining');
   limb([0, 1.51, 0], [0, 1.68, 0], [0.085, 0.077, 0.097], [0.35, 0.25, 0.18], 0.97);
   limb([0, 1.59, 0], [0, 1.86, 0.01], [0.084, 0.112, 0.144, 0.13, 0.058], graphite, 1, TWILL);
@@ -1422,8 +1429,37 @@ export function hunter(lod: 0 | 1 | 2) {
   if (lod) {
     parts['Chest net'] = chestNet(skin, chestFaces);
   }
+  // Split at the upper arm ring hidden under the pauldron. All fitting and
+  // shading used the joined skin, so the rest pose retains the same surface.
+  const arm: number[] = [];
+  let read = 0,
+    kept = 0;
+  for (const start of swordArm) {
+    if (start > read) {
+      skin.copyWithin(kept, read, start);
+      kept += start - read;
+    }
+    read = start + 3 * STRIDE;
+    for (let i = start; i < read; i++) {
+      arm.push(skin[i]);
+    }
+  }
+  skin.copyWithin(kept, read);
+  skin.length = kept + skin.length - read;
+  parts['Right arm'] = arm;
   return (built[lod] = parts);
 }
+
+/** Model-space cut trail on the same scaled mount as the baked blades. */
+export const hunterWristEnds = () =>
+  wristEnds([0, 0, 0], [0, 0, 0, 1]).map(
+    ([x, y, z]) =>
+      [
+        (0.392 + x * 0.86) * stature * 0.9,
+        (0.884 + y * 0.86) * stature,
+        z * 0.86 * stature * 0.92,
+      ] as Vec3,
+  );
 
 /** The Hunter's foldable, long-bolt rifle in right-hand grip space (muzzle points along -z). */
 const harpoons: number[][] = [];

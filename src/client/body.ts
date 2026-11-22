@@ -2296,7 +2296,7 @@ export const createBody = (world?: World): Body => {
         }
         if (grasp > 0.2) {
           if (hunter) {
-            heldWrist(out, s.pos[J.HAND_R], s.rot[J.HAND_R], 1, clamp(grasp * 1.5 - 0.5));
+            heldWrist(out, s.pos[J.HAND_R], s.rot[J.FOREARM_R], 1, clamp(grasp * 1.5 - 0.5));
           } else {
             sword(
               out,
@@ -2313,7 +2313,7 @@ export const createBody = (world?: World): Body => {
           }
         }
         const [base, point] = hunter
-          ? wristEnds(s.pos[J.HAND_R], s.rot[J.HAND_R])
+          ? wristEnds(s.pos[J.HAND_R], s.rot[J.FOREARM_R])
           : ends(s.pos[J.HAND_R], s.rot[J.HAND_R]);
         // The parry's sweep leaves a streak like a cut's.
         trail.mark(base, point, grasp > 0.5 && (cutting(prog) || parry < 2 * PARRY_IN));

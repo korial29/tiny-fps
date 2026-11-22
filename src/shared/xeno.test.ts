@@ -434,7 +434,7 @@ describe('the claws and the tail', () => {
     ]) {
       const p = at(-20, 0, { z: 50, yaw: 0 });
       hit(p, KEY.BLADE | keys);
-      expect([p.cut, p.swing]).toEqual([cut, TAILS[cut].ticks]);
+      expect([p.cut, p.swing, p.charge]).toEqual([cut, TAILS[cut].ticks - TAILS[cut].hold, 1]);
       // A tap: it runs on to its strike, slower than any cut of the katana.
       let n = 1;
       while (hit(p, 0) !== STRIKE.CUT) {
@@ -460,17 +460,17 @@ describe('the claws and the tail', () => {
     expect(n).toBe(swingOf(p, TAILS).strike);
   });
 
-  it('charges the tail at the top of its wind-up while the right button is held', () => {
+  it('charges the tail from the start of its coiled pose while the right button is held', () => {
     const p = at(-20, 0, { z: 50, yaw: 0 });
     const { hold, ticks } = TAILS[STING.STAB];
     for (let k = 0; k < hold + 40; k++) {
       hit(p, KEY.BLADE | KEY.FORWARD);
     }
     expect(p.swing).toBe(ticks - hold);
-    expect(p.charge).toBe(39);
+    expect(p.charge).toBe(hold + 40);
     // Let go: the heavy release, its own timer, the charge kept for its strength; no pounce from it.
     hit(p, 0);
-    expect([p.heavy, p.charge, p.mode, p.dash]).toEqual([true, 39, MODE.GROUND, 0]);
+    expect([p.heavy, p.charge, p.mode, p.dash]).toEqual([true, hold + 40, MODE.GROUND, 0]);
     expect(p.swing).toBe(swingOf(p, TAILS).ticks);
     expect(swingOf(p, TAILS).reach).toBeGreaterThan(TAILS[STING.STAB].reach);
     let n = 1;
@@ -478,14 +478,18 @@ describe('the claws and the tail', () => {
       n++;
     }
     expect(n).toBe(swingOf(p, TAILS).strike);
-    expect(p.charge).toBe(39);
+    expect(p.charge).toBe(hold + 40);
     // Over, the charge is gone and the next strike starts.
     while (p.swing) {
       hit(p, 0);
     }
     expect([p.heavy, p.charge]).toEqual([false, 0]);
     hit(p, KEY.BLADE);
-    expect([p.cut, p.swing]).toEqual([STING.LASH, TAILS[STING.LASH].ticks]);
+    expect([p.cut, p.swing, p.charge]).toEqual([
+      STING.LASH,
+      TAILS[STING.LASH].ticks - TAILS[STING.LASH].hold,
+      1,
+    ]);
     // DASH charges nothing: the tail strikes out of a dash.
     const q = at(-20, 0, { z: 50, yaw: 0 });
     hit(q, KEY.DASH);
@@ -500,7 +504,11 @@ describe('the claws and the tail', () => {
     const q = at(-20, 0, { z: 50, yaw: 0 });
     hit(q, KEY.BLADE | KEY.FORWARD);
     hit(q, KEY.BLADE | KEY.SPECIAL | KEY.FORWARD);
-    expect([q.cut, q.swing, q.vy]).toEqual([STING.LEAP, TAILS[STING.LEAP].ticks, 0]);
+    expect([q.cut, q.swing, q.vy]).toEqual([
+      STING.LEAP,
+      TAILS[STING.LEAP].ticks - TAILS[STING.LEAP].hold,
+      0,
+    ]);
     for (const state of [p, q]) {
       for (let k = 0; k < 180; k++) {
         expect(hit(state, KEY.BLADE)).toBe(STRIKE.NONE);

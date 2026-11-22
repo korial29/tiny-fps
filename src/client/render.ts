@@ -506,8 +506,8 @@ float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}
 c.g=mix(c.g,c.r,z);
 float xr=0.;vec3 fc=F.rgb;if(Vn>0){
 vec3 xd=P-E;float xa=max(dot(xd.xz,xd.xz),1e-4);
-for(int i=0;i<Vn-1;i++){vec4 e=Ve[i];vec2 dq=P.xz-e.xz;ht=max(ht,step(dot(dq,dq),.5)*step(e.y+.03,P.y)*step(P.y,e.y+abs(e.w)));
-if(e.w>0.)continue;float xs=max(dot(e.xz-E.xz,xd.xz)/xa,0.);vec3 xp=E+xd*xs;float xh=-e.w*.5;xr=max(xr,(1.-smoothstep(.12,.34,length(xp.xz-e.xz)))*(1.-smoothstep(.8,1.,abs(xp.y-e.y-xh)/xh)));}
+for(int i=0;i<Vn-1;i++){vec4 e=Ve[i];vec2 dq=P.xz-e.xz;float reach=Hv==2?2.8:.5;ht=max(ht,step(dot(dq,dq),reach)*step(e.y+.03,P.y)*step(P.y,e.y+abs(e.w)));
+if(e.w>0.)continue;float xs=max(dot(e.xz-E.xz,xd.xz)/xa,0.);vec3 xp=E+xd*xs;float xh=-e.w*.5;float halo=Hv==2?1.45:.34;xr=max(xr,(1.-smoothstep(halo*.35,halo,length(xp.xz-e.xz)))*(1.-smoothstep(.8,1.,abs(xp.y-e.y-xh)/xh)));}
 c=mix(Hv==1?tv(c):xv(c),Hv==2?vec3(.15,2.,1.8):vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,Hv==2?vec3(.1,1.8,2.):vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));fc=Hv==1?tv(fc):xv(fc);}c=mix(c,vec3(2.,.45,.03),Gp*(.55+.45*sin(T*14.)));
 o=vec4(mix(c,fc,1.-exp(-F.a*(1.-.6*step(1.,float(Vn)))*(1.-max(ht,xr))*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc)*ah);
 #ifdef MOON

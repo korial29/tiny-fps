@@ -817,6 +817,11 @@ describe('what a pixel pays for', () => {
     expect(src.match(/uni\('uniform/g)!.length).toBeGreaterThan(50);
   });
 
+  it('extends the alien scan highlight over a xenomorph tail', () => {
+    expect(FRAG).toContain('float reach=Hv==2?2.8:.5');
+    expect(FRAG).toContain('float halo=Hv==2?1.45:.34');
+  });
+
   it('compiles into each program only the code of what it draws', () => {
     // The map's has no skin, armour wear, hair or chitin; the bodies' no regolith: three ninjas at
     // 3 m on Highline took 1.1 to 1.9 ms of GPU less a frame, the same pixels to the byte.

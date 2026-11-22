@@ -552,7 +552,7 @@ describe('a vehicle’s damage', () => {
     expect([SOUND.HULL, SOUND.ARC, SOUND.WRECK, SOUND.CRUMBLE]).toEqual([47, 48, 49, 50]);
     expect([SOUND.DOOR, SOUND.SHUT]).toEqual([45, 46]);
     expect([SOUND.ALARM, SOUND.STRIKE]).toEqual([58, 59]);
-    expect(LAYERS).toHaveLength(78);
+    expect(LAYERS).toHaveLength(Object.keys(SOUND).length);
     for (const id of [47, 48, 49, 50]) {
       expect(LOOPED).not.toContain(id);
     }

@@ -9,7 +9,6 @@
 // of it, and its burst is a fireball that shakes the view of who stands near. A player who loses
 // health, to a weapon or a fall, cries out in his own voice, and cries out longer as he goes down. No DOM.
 import {
-  DISK,
   CHARGE_MAX,
   CHARGE_TAP,
   CHARGE_TICKS,
@@ -342,7 +341,7 @@ export const createCombat = (
     }
   };
   /** The swish of the cut `c`, at `at`; a heavy release's (c + HEAVY_CUE) louder and much deeper. */
-  const swish = (c: number, at?: Vec3) => {
+  const swish = (c: number, at?: Vec3, isHunter = false) => {
     if (c >= FIST_CUE + BLOW.CLAW_L) {
       const b = c - FIST_CUE;
       audio.play(
@@ -358,6 +357,10 @@ export const createCombat = (
       return;
     }
     const [k, heavy] = [c % HEAVY_CUE, c >= HEAVY_CUE];
+    if (isHunter) {
+      audio.play(SOUND.HUNTER_BLADE_SWISH, at, db(heavy ? 1 : 0.7), rate() * (heavy ? 0.82 : 1));
+      return;
+    }
     audio.play(
       SOUND.SWISH,
       at,
@@ -393,10 +396,23 @@ export const createCombat = (
     }
   };
   /** The shing of the katana coming into the hand or leaving it (not when it is lost). */
-  const shing = (was: Blade, now: Blade, at?: Vec3, first = -1) =>
-    !!was.wield != !!now.wield &&
-    (now.wield || now.blade) &&
-    (now.wield ? boot(SOUND.IGNITE, at, 0.6, 1, first) : audio.play(SOUND.SHING, at, -4.4, 0.85));
+  const shing = (was: Blade, now: Blade, at?: Vec3, first = -1, isHunter = false) => {
+    if (!!was.wield == !!now.wield || !(now.wield || now.blade)) {
+      return;
+    }
+    const sound = isHunter
+      ? now.wield
+        ? SOUND.HUNTER_BLADE_DRAW
+        : SOUND.HUNTER_BLADE_SHEATHE
+      : now.wield
+        ? SOUND.IGNITE
+        : SOUND.SHING;
+    if (now.wield) {
+      boot(sound, at, isHunter ? 0 : 0.6, isHunter ? rate() : 1, first);
+    } else {
+      audio.play(sound, at, isHunter ? -2.5 : -4.4, isHunter ? rate() : 0.85);
+    }
+  };
 
   return {
     step(a, b) {
@@ -444,6 +460,10 @@ export const createCombat = (
         if (was && me.hits != was.hits) {
           audio.play(SOUND.HIT);
           hud.hit();
+          if (hunter(me.id) && me.railed) {
+            audio.play(SOUND.HUNTER_LASER, undefined, -2.6, rate());
+            tracer.flash(gun(me), true, -1);
+          }
           // A blow of the fists that landed: a thud, and a hook or a lunge kicks the look.
           if (fists(me)) {
             const b = blowOf(me, beast(me.id));
@@ -453,7 +473,7 @@ export const createCombat = (
             }
           }
           if (me.wield) {
-            audio.play(SOUND.ZAP);
+            audio.play(hunter(me.id) ? SOUND.HUNTER_BLADE_HIT : SOUND.ZAP);
           }
         }
         // The xenomorph hisses as it starts to charge its tail (its dash's shriek is foley.ts's).
@@ -462,7 +482,7 @@ export const createCombat = (
         }
         const f = fresh(me) ? handOf(me) : -1;
         if (was) {
-          shing(was, me, undefined, f);
+          shing(was, me, undefined, f, hunter(me.id));
           reloads(was, me, undefined, f);
         }
         // A hit on the armour hurts as one on the health. Each pickup has its sound: an armour,
@@ -521,7 +541,7 @@ export const createCombat = (
           me.armor ?? 0,
           !!me.fists,
         );
-        cuts.forEach(c => swish(c));
+        cuts.forEach(c => swish(c, undefined, hunter(me.id) && c < FIST_CUE));
         hud.down(fx.lie, me.down / TICK_HZ);
         before = { ...me };
       } else {
@@ -538,7 +558,7 @@ export const createCombat = (
         from = [0, 1, 2].map(i => v.cam[i] + r[i] * m[0] + u[i] * m[1] + f[i] * m[2]) as Vec3;
         tracer.mount(from);
         for (const p of pending) {
-          const discShot = p.power === DISK;
+          const discShot = hunter(p.id) && p.wield;
           if (p.wield && !discShot) {
             balls.fire(p, now);
             continue;
@@ -553,10 +573,19 @@ export const createCombat = (
             lase(p, from, now);
             continue;
           }
-          const harpoon = hunter(p.id);
+          if (hunter(p.id) && p.railed) {
+            tracer.flash(from, true, -1);
+            audio.play(SOUND.HUNTER_LASER, undefined, -2.6, rate());
+            continue;
+          }
+          const harpoon = hunter(p.id) && !discShot;
           balls.fire(p, now, harpoon, discShot);
-          tracer.flash(from, true, discShot ? -1 : heat(p.power));
-          laser(undefined, p.power, harpoon);
+          if (discShot) {
+            audio.play(SOUND.HUNTER_DISC_THROW, undefined, -2.3, rate());
+          } else {
+            tracer.flash(from, true, heat(p.power));
+            laser(undefined, p.power, harpoon);
+          }
         }
       }
       // The muzzles charging: the own, and every other gun in hand.
@@ -568,19 +597,21 @@ export const createCombat = (
       cuts = [];
       // The rail guns' bolts: the own from its muzzle, the others' from theirs.
       const zaps: { a: Vec3; b: Vec3 }[] = [];
-      if (from && me?.zapping) {
+      if (from && me?.zapping && !(hunter(me.id) && me.railed)) {
         zap(zaps, me, from, dt, now);
       }
       for (const p of others) {
         const was = seen.get(p.id);
         const at: Vec3 = [p.x, p.y + eyeHeight(p), p.z];
-        if (p.zapping) {
+        if (p.zapping && !(hunter(p.id) && p.railed)) {
           zap(zaps, p, gun(p), dt, now, at);
         }
         if (was !== undefined && p.shots != was && lobbed(p)) {
           thump(p, gun(p), now, at);
         } else if (was !== undefined && p.shots != was && p.rifled) {
           lase(p, gun(p), now, at);
+        } else if (was !== undefined && p.shots != was && hunter(p.id) && p.wield) {
+          audio.play(SOUND.HUNTER_DISC_THROW, at, -2.3, rate());
         } else if (was !== undefined && p.shots != was) {
           // His charge at the last frame gives the strength of the shot.
           const c = charges.get(p.id) ?? 0;
@@ -610,9 +641,14 @@ export const createCombat = (
           hot.push({ p: gun(p), k: filled(p.charge) });
         }
         const old = blades.get(p.id);
+        if (old && p.hits != old.hits && hunter(p.id) && p.railed) {
+          audio.play(SOUND.HUNTER_LASER, at, -2.6, rate());
+          tracer.flash(gun(p), false, -1);
+        }
         const c = swung(old, p);
         if (c >= 0) {
-          swish(fists(p) ? FIST_CUE + blowOf(p, beast(p.id)) : c + (p.heavy ? HEAVY_CUE : 0), at);
+          const cue = fists(p) ? FIST_CUE + blowOf(p, beast(p.id)) : c + (p.heavy ? HEAVY_CUE : 0);
+          swish(cue, at, hunter(p.id) && cue < FIST_CUE);
         }
         // A blow of his fists the host counted: a thud, and the own player knocked when it is he
         // that the blow reaches.
@@ -625,7 +661,7 @@ export const createCombat = (
         }
         const f = fresh(p) ? handOf(p) : -1;
         if (old) {
-          shing(old, p, at, f);
+          shing(old, p, at, f, hunter(p.id));
           reloads(old, p, at, f);
         }
         blades.set(p.id, {
@@ -673,11 +709,21 @@ export const createCombat = (
           dashed.delete(id);
         }
       }
-      const { orbs, bursts } = balls.frame(now, id => {
-        const p = id == me?.id ? me : others.find(q => q.id == id);
-        // Seated, his balls are his rover's bolts: they leave from its lasers, where they are.
-        return !p || p.mode === MODE.RIDE ? undefined : p === me ? from : gun(p);
-      });
+      const { orbs, bursts } = balls.frame(
+        now,
+        id => {
+          const p = id == me?.id ? me : others.find(q => q.id == id);
+          // Seated, his balls are his rover's bolts: they leave from its lasers, where they are.
+          return !p || p.mode === MODE.RIDE ? undefined : p === me ? from : gun(p);
+        },
+        (kind, at) =>
+          audio.play(
+            kind === 'return' ? SOUND.HUNTER_DISC_RETURN : SOUND.HUNTER_DISC_CATCH,
+            at,
+            -2.8,
+            rate(),
+          ),
+      );
       tracer.orbs(orbs);
       // The laser rifle's (power 0) burst red, with a deeper, louder thud.
       for (const [at, k, wide = 1] of bursts) {

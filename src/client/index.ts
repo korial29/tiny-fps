@@ -401,6 +401,7 @@ const play = (
   const pacing = createPacing(period);
   let last: number | undefined;
   let hunterLock: { id: number; since: number } | undefined;
+  let hunterLockTone = -1;
   let rendered: number | undefined;
   let displayed: number | undefined;
   let acc = 0;
@@ -1063,12 +1064,18 @@ const play = (
         : undefined;
       if (!target || !targetPoint || targetPoint.some(v => v < 0 || v > 1)) {
         hunterLock = undefined;
+        hunterLockTone = -1;
         hud.hunterAim(laserSelected ? [0.5, 0.5] : undefined, 0);
       } else {
         if (hunterLock?.id !== target.id) {
           hunterLock = { id: target.id, since: now };
+          hunterLockTone = -1;
         }
         const progress = Math.min(1, (now - hunterLock.since) / 3000);
+        if (progress >= 1 && hunterLockTone !== target.id) {
+          audio.play(SOUND.HUNTER_LOCK, undefined, -2.5, 1);
+          hunterLockTone = target.id;
+        }
         hud.hunterAim(targetPoint, progress);
       }
       botcam.draw(rd.project, id => names.get(id) ?? '?');

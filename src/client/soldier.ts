@@ -81,6 +81,10 @@ import {
   CANNON_MUZZLE,
   HUNTER_REST,
   blendHunter,
+  DISC_HOLD,
+  DISC_HOOK,
+  DISC_SPREAD,
+  drawDisc,
   drawHarpoon,
   harpoonFeed,
   folded,
@@ -1172,7 +1176,7 @@ export const stance = (r: Runner) => {
       r.look?.role === ROLE.HUNTER,
     );
     s = solve(pose);
-  } else if ((p.railed || p.rifled) && !busy) {
+  } else if ((p.railed || (p.rifled && r.look?.role !== ROLE.HUNTER)) && !busy) {
     // The rail gun or the rifle in both hands, at the ready when not firing: the left on its front grip, the
     // elbow down and out. On a wall it is put away, unless its bolt is going out (stowed()).
     if (p.railed && stowed(p)) {
@@ -1254,7 +1258,14 @@ const gloves = (
     glove,
     suit ? glove : colors[REGION.FLESH],
     // The left thumb up the rifle's handguard; the marine's lit buttons on the wrists.
-    { cup: +(!!p.rifled && !p.down && !floored(p) && !driving(r)), lights, claws },
+    {
+      // The Hunter's disc (`rifled`) is in one hand: no left hand on a handguard.
+      cup: +(!!p.rifled && r.look?.role !== ROLE.HUNTER && !p.down && !floored(p) && !driving(r)),
+      lights,
+      claws,
+      spread: p.rifled && r.look?.role === ROLE.HUNTER ? DISC_SPREAD : 1,
+      hook: p.rifled && r.look?.role === ROLE.HUNTER ? DISC_HOOK : 0,
+    },
     lod < 3,
     limb == LIMB.ARM_L ? J.HAND_L : limb == LIMB.ARM_R ? J.HAND_R : -1,
   );
@@ -1274,7 +1285,7 @@ const hunterTrail = hunterWristEnds().map(p => sub(p, HUNTER_REST[J.FOREARM_R]))
 const hunterPieces = (lod: HunterLod) =>
   hunterRig(lod, name => lod === 0 && (name.startsWith('Quills') || name === 'Visor grille'));
 const hunterKey = (lod: HunterLod, piece: HunterPiece) =>
-  `hunter ${lod} ${piece.joint} ${+piece.thin} ${+piece.harpoon} ${+piece.cannon}`;
+  `hunter ${lod} ${piece.joint} ${+piece.thin} ${+piece.harpoon} ${+piece.cannon} ${+piece.disc}`;
 /**
  * The shoulder cannon's hinge and turn on a Hunter whose chest is at `chest` turned by `q`: stowed
  * (k 0) it lies back along the shoulder, CANNON_FOLD about the hinge from the chest's frame; out
@@ -1542,7 +1553,7 @@ export const soldier = (
         blendHunter(out, band, joints, s.rot);
       }
       for (const piece of rig.pieces) {
-        if (piece.harpoon && handOf(p) === 0) {
+        if ((piece.harpoon && handOf(p) === 0) || (piece.disc && p.rifled)) {
           continue;
         }
         if (piece.cannon) {
@@ -1848,7 +1859,15 @@ export const soldier = (
   ) {
     // A swap shows: the battery or the capsule out and in, the glow off until it is.
     const sp = swapOf(p);
-    if (isHunter && handOf(p) === 0) {
+    if (isHunter && p.rifled) {
+      // The disc held by its hub (the user, 2026-11-23): the palm on the hub, the disc beyond the
+      // palm, its face along the back of the hand (axes()' right).
+      const q = s.rot[J.HAND_R];
+      const [ax, up, fwd] = axes(q);
+      const at = grip(s.pos[J.HAND_R], q);
+      const hold = [0, 1, 2].map(i => fwd[i] * DISC_HOLD[0] - ax[i] * DISC_HOLD[1]) as Vec3;
+      drawDisc(out, add(at, hold), fwd, up, ax);
+    } else if (isHunter && handOf(p) === 0) {
       const q = s.rot[J.HAND_R];
       drawHarpoon(
         out,

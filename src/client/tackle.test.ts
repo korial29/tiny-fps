@@ -26,6 +26,7 @@ vi.mock('./audio', () => ({
     listen: () => {},
     play: spies.play,
     loop: () => ({ set: () => {} }),
+    hush: () => {},
     mute: () => {},
     muted: false,
     destroy: () => {},

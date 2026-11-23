@@ -181,12 +181,18 @@ export const step = (
   if (!gear) {
     [p.ammo, p.rail, p.rifle, p.blade, p.nades] = [-1, -1, -1, false, 0];
   }
-  // The Hunter takes no other weapon (the user, 2026-11-23): his harpoon, his blades and his
-  // shoulder cannon, which is always on him and spends nothing (`rail` 0: carried, nothing in it).
-  // The gun rack still refills the harpoon's bolts.
+  // The Hunter takes no other weapon (the user, 2026-11-23): his harpoon, his blades, his
+  // shoulder cannon and his disc, which are always on him and spend nothing (`rail` and `rifle` 0:
+  // carried, nothing in them; the disc takes the laser rifle's slot, `rifled`). The gun rack still
+  // refills the harpoon's bolts.
   const own = kit.hunter;
   if (own) {
-    [p.rail, p.cap, p.rifle, p.nades] = [0, 0, -1, 0];
+    [p.rail, p.cap, p.rifle, p.clip, p.nades] = [0, 0, 0, 0, 0];
+    // His harpoon is his from the start too, also when he took the class after his spawn (a class
+    // changes at the next step, not at a respawn): none (-1) gives him a full one.
+    if (p.ammo < 0 && !p.down) {
+      [p.ammo, p.mag] = [kit.ammo, kit.mag];
+    }
   }
   if (armed && gear && inside && !p.rack) {
     [p.ammo, p.mag] = [kit.ammo, kit.mag];
@@ -364,21 +370,6 @@ export const step = (
     p.shots = (p.shots + 1) & 255;
     return STRIKE.NADE;
   }
-  // The Hunter throws the disc with SPECIAL alone while the wrist blades are out. FIRE+SPECIAL
-  // still selects the blades' special cut.
-  if (
-    kit.hunter &&
-    p.wield &&
-    i.keys & KEY.SPECIAL &&
-    !(i.keys & KEY.FIRE) &&
-    !busy &&
-    !p.swing &&
-    !p.cool
-  ) {
-    p.cool = DISK_COOL;
-    p.shots = (p.shots + 1) & 255;
-    return STRIKE.DISK;
-  }
   // With the katana in hand and no swing, G or the right button (SPECIAL alone) cuts the ARC, from
   // the left with LEFT alone held, else from the right; a double click (SPECIAL with FIRE) cuts the
   // special of the cut the keys give.
@@ -413,6 +404,14 @@ export const step = (
       p.cut = cutOf(i.keys, !kit.hunter);
       [p.swing, p.charge] = [CUTS[p.cut].ticks, 0];
       launch(p);
+    } else if (p.rifled && own) {
+      // The Hunter's disc (the user, 2026-11-23: a weapon of its own, on key 4): thrown on FIRE,
+      // it comes back like a boomerang (Room.fly()); DISK_COOL ticks to the next throw.
+      if (!p.cool) {
+        p.cool = DISK_COOL;
+        p.shots = (p.shots + 1) & 255;
+        return STRIKE.DISK;
+      }
     } else if (p.rifled) {
       if (!p.cool && p.clip && !p.reload) {
         p.rifle!--;

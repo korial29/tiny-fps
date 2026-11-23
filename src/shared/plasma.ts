@@ -89,7 +89,8 @@ export const launch = (p: PlayerState, team = 0, harpoon = false): Flying => {
 
 /** The Hunter's returning disc: a wide, fast shot that the room turns back toward its owner. */
 export const disk = (p: PlayerState, team = 0): Flying => ({
-  ...launch(p, team),
+  // Thrown from the rifle's slot (`rifled`), straight down the look: no rifle drift.
+  ...launch({ ...p, rifled: false }, team),
   power: DISK,
   left: DISK_RANGE,
 });

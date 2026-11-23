@@ -333,6 +333,7 @@ describe('createRenderer', () => {
         out.push(...Array.from({ length: 6 * STRIDE }, () => 0)),
       );
       rd.frame([1, 1.6, 1], 0, 0, [], new Map(), createEffects(), [], undefined, undefined, {
+        solids: vi.fn(),
         flash: vi.fn(),
         laser: vi.fn(),
         burst: vi.fn(),

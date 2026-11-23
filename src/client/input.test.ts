@@ -122,17 +122,18 @@ describe('the weapon choice', () => {
     expect(turned(RAIL, 1, have, true)).toBe(BLADE);
   });
 
-  it('gives the Hunter no fists and nothing on 4 and 5, and his blades first (the user, 2026-11-23)', () => {
-    expect(owned(player({ ammo: 12, blade: true, rail: 0 }), true)).toEqual([
+  it('gives the Hunter no fists, his disc on 4, nothing on 5, and his blades first (the user, 2026-11-23)', () => {
+    expect(owned(player({ ammo: 12, blade: true, rail: 0, rifle: 0 }), true)).toEqual([
       true,
       true,
       true,
-      false,
+      true,
       false,
     ]);
-    for (const code of ['Digit4', 'Digit5', 'Numpad1', 'Numpad5']) {
+    for (const code of ['Digit5', 'Numpad1']) {
       expect(picked(RAIL, code, true)).toBe(RAIL);
     }
+    expect(picked(RAIL, 'Digit4', true)).toBe(WEAPON.RIFLE);
     expect(chosen(GUN, player({ down: 30 }), player({ down: 1 }), true)).toBe(BLADE);
     const armed = player({ ammo: 12, blade: true, rail: 0, wield: true });
     expect(chosen(WEAPON.FISTS, armed, armed, true)).toBe(BLADE);

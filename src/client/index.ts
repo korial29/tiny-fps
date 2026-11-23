@@ -942,9 +942,14 @@ const play = (
       p =>
         team(p.id) !== you.team &&
         !p.down &&
-        (hunterMode === 1 || (hunterMode === 2 && beast(p.id))),
+        // Thermal shows the humans (marines, ninjas, astronauts), the alien scan the xenomorphs
+        // (the user, 2026-11-23); neither shows another Hunter.
+        (hunterMode === 1 ? !beast(p.id) && !hunter(p.id) : hunterMode === 2 && beast(p.id)),
     );
-    rd?.hunterVision(hunterMode, hunterTargets);
+    // The thermal view shows the xenomorphs cold, all in blue (the user, 2026-11-23).
+    const cold =
+      hunterMode === 1 ? others.filter(p => team(p.id) !== you.team && !p.down && beast(p.id)) : [];
+    rd?.hunterVision(hunterMode, hunterTargets, cold);
     // Watching a bot (B), the view is its eyes', and the own player is drawn as one of the others.
     const spy = botcam.id === undefined ? undefined : others.find(p => p.id == botcam.id);
     const third = k > 0 || !!spy;
@@ -977,6 +982,8 @@ const play = (
     const special = hunterMode > 0 && alive && !third;
     heart.set(special ? 1 : 0, 1);
     hiss.set(special ? 0.32 : 0, 1);
+    // The music gives way to the visions' bed, the heartbeat and the static (the user, 2026-11-23).
+    audio.hush(special);
     const pov: [number, number, number] = spy
       ? [spy.x, spy.y + eyeHeight(spy), spy.z]
       : watch.k

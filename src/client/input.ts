@@ -78,8 +78,8 @@ export const picked = (weapon: number, code: string, hunter = false): number => 
   const digit = DIGITS.indexOf(code);
   const numpad = NUMPAD.indexOf(code);
   const slot = digit >= 0 ? digit : numpad >= 0 ? NUMPAD_WEAPONS[numpad] : -1;
-  // The Hunter has three slots, and no fists (the user, 2026-11-23).
-  return slot >= 0 && !(hunter && slot > 2) ? slotted(slot, hunter) : weapon;
+  // The Hunter has four slots (the disc on 4), and no fists (the user, 2026-11-23).
+  return slot >= 0 && !(hunter && slot > 3) ? slotted(slot, hunter) : weapon;
 };
 
 /** Which of the gun, the katana, the rail gun, the laser rifle and the fists a player has (the Hunter no fists); all of them when there is no state yet. */
@@ -103,6 +103,10 @@ export const chosen = (
   }
   if (!was || was.down || now.ev & EV.RESPAWN || (hunter && weapon === WEAPON.FISTS)) {
     return +!!now.wield;
+  }
+  // The Hunter carries all his weapons from the spawn: nothing new to switch to.
+  if (hunter) {
+    return weapon;
   }
   const [a, b] = [owned(was), owned(now)];
   return weapon === WEAPON.FISTS ? weapon : ([1, 2, 3].find(k => b[k] && !a[k]) ?? weapon);

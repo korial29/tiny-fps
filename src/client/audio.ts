@@ -40,6 +40,8 @@ export interface Audio {
   speak(id: number, at?: Vec3, db?: number, rate?: number, radio?: boolean): boolean;
   /** The sound `id` (one of LOOPED) as a loop, silent until its first set; the own player's, centred. */
   loop(id: number): Loop;
+  /** Fades the music out (true) or back in (false), the other sounds untouched: the Hunter's visions. */
+  hush(on: boolean): void;
   /** Mutes or unmutes everything, music included. */
   mute(on: boolean): void;
   readonly muted: boolean;
@@ -137,6 +139,7 @@ const silent = (): Audio => {
     loop: () => ({ set: () => {} }),
     say: () => {},
     speak: () => false,
+    hush: () => {},
     mute: on => {
       muted = on;
     },
@@ -178,6 +181,8 @@ export const createAudio = (
   let speech: AudioBuffer | undefined;
   const lines: number[] = [];
   let talking = false;
+  /** The music faded out under a Hunter's vision (hush()). */
+  let hushed = false;
   /** The players' voices once decoded, and the radio's noise, made on its first line. */
   let cast: AudioBuffer | undefined;
   let noise: AudioBuffer | undefined;
@@ -195,9 +200,9 @@ export const createAudio = (
   };
   mixed = () =>
     bed.gain.setTargetAtTime(
-      (talking ? MUSIC * DUCK : MUSIC) * gain(LEVELS[6]),
+      hushed ? 0 : (talking ? MUSIC * DUCK : MUSIC) * gain(LEVELS[6]),
       ctx.currentTime,
-      0.15,
+      hushed ? 0.3 : 0.15,
     );
   mixed();
   const next = () => {
@@ -364,6 +369,12 @@ export const createAudio = (
           }
         },
       };
+    },
+    hush(on) {
+      if (on != hushed) {
+        hushed = on;
+        mixed();
+      }
     },
     mute(on) {
       muted = on;

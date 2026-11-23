@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { duo } from '../../test/teams';
 import {
+  DISK_COOL,
   HEAT_MAX,
   HUNTER_LASER_COOL,
   HUNTER_LASER_HP,
@@ -98,12 +99,13 @@ describe('the Hunter’s shoulder cannon (the user, 2026-11-23: his third weapon
   });
 
   it('takes no other weapon: the rail and rifle racks give him nothing, the gun rack his harpoon bolts', () => {
+    // Key 4 (KEY.RIFLE) is his disc: carried, nothing in it, and no rifle, clip or grenade from the rack.
     const p = hunter({ x: -20, z: 46 });
     go(p, RAIL);
     expect(p).toMatchObject({ rail: 0, cap: 0, railed: true });
     Object.assign(p, STILL, { x: -20, z: 49, y: 1, inRifle: false });
     go(p, RIFLE);
-    expect(p).toMatchObject({ rifle: -1, rifled: false, nades: 0 });
+    expect(p).toMatchObject({ rifle: 0, clip: 0, rifled: true, nades: 0 });
     // An old marine's rail gun is not kept by a Hunter either.
     Object.assign(p, { rail: RAIL_MAX, cap: RAIL_CAP });
     go(p, 0);
@@ -191,13 +193,33 @@ describe('the shoulder cannon through the room', () => {
   it('does not lock on while the blades are in hand', () => {
     const m = match();
     const hp = m.foe.hp;
-    m.hold(HUNTER_LASER_LOCK + 10, FIRE);
+    m.hold(HUNTER_LASER_LOCK + 10, BLADE | FIRE);
     m.hold(2, RAIL | FIRE);
     expect(m.foe.hp).toBe(hp);
   });
 });
 
 describe('the Hunter’s wrist blades and harpoon (the user, 2026-11-23)', () => {
+  it('throws his disc on FIRE from slot 4, once each DISK_COOL ticks held, and not with G and the blades', () => {
+    const p = hunter();
+    expect(go(p, SPECIAL)).toBe(STRIKE.NONE);
+    go(p, RIFLE);
+    expect(p).toMatchObject({ rifled: true, wield: false, reload: 0 });
+    const strikes = Array.from({ length: DISK_COOL + 1 }, () => go(p, RIFLE | FIRE));
+    expect(strikes[0]).toBe(STRIKE.DISK);
+    expect(strikes.filter(s => s === STRIKE.DISK)).toHaveLength(2);
+  });
+
+  it('has his harpoon from the start, also when he took the class after his spawn', () => {
+    // A marine's spawn (no gun until the rack), then the class changes at the next step.
+    const p = Object.assign(spawn(0, world, 0, 0, KITS[ROLE.MARINE]), { x: 0, y: 1, z: 0 });
+    expect(p.ammo).toBe(-1);
+    go(p, 0);
+    expect(p).toMatchObject({ ammo: HUNTER.ammo, mag: HUNTER.mag, blade: true });
+    go(p, 0);
+    expect(p).toMatchObject({ railed: false, wield: false, fists: false });
+  });
+
   it('never thrust: FORWARD with FIRE slashes, and its special is the leap, not the lunge', () => {
     const p = hunter();
     go(p, BLADE | FORWARD | FIRE);

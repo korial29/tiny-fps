@@ -14,6 +14,7 @@ import {
   keyBit,
   CODES,
   picked,
+  slotted,
   turned,
   WEAPON,
   withWeapon,
@@ -104,6 +105,20 @@ describe('the weapon choice', () => {
     expect(withWeapon(KEY.FIRE, WEAPON.RIFLE)).toBe(KEY.FIRE | KEY.RIFLE);
     expect(turned(RAIL, 1, [true, true, true, true])).toBe(WEAPON.RIFLE);
     expect(turned(WEAPON.RIFLE, 1, [true, true, true, true])).toBe(GUN);
+  });
+
+  it('gives the Hunter his wrist blades on 1 and his harpoon on 2, the wheel in that order (the user, 2026-11-23)', () => {
+    expect(picked(GUN, 'Digit1', true)).toBe(BLADE);
+    expect(picked(BLADE, 'Digit2', true)).toBe(GUN);
+    expect(picked(GUN, 'Digit3', true)).toBe(RAIL);
+    expect(picked(GUN, 'Numpad2', true)).toBe(BLADE);
+    expect(picked(BLADE, 'Numpad3', true)).toBe(GUN);
+    expect([0, 1, 2, 3, 4].map(i => slotted(i, true))).toEqual([BLADE, GUN, RAIL, 3, 4]);
+    const have = [true, true, true, false, true];
+    expect(turned(BLADE, 1, have, true)).toBe(GUN);
+    expect(turned(GUN, 1, have, true)).toBe(RAIL);
+    expect(turned(BLADE, -1, have, true)).toBe(WEAPON.FISTS);
+    expect(turned(WEAPON.FISTS, 1, have, true)).toBe(BLADE);
   });
 
   it('sets KEY.BLADE exactly while the katana is chosen, KEY.RAIL while the rail gun is', () => {
@@ -523,6 +538,27 @@ describe('createInput', () => {
       expect(ctl.take()).toBe(KEY.FIRE | KEY.FORWARD);
       button('mouseup', 0);
       expect(ctl.keys).toBe(KEY.FORWARD);
+    });
+
+    it('scopes the Hunter’s harpoon while the right button or G is held, and only the left button fires it', () => {
+      make();
+      lock(true);
+      Object.assign(ctl, { hunter: true, canScope: true, weapon: WEAPON.GUN });
+      button('mousedown', 2);
+      expect(ctl.scoped).toBe(true);
+      expect(ctl.take()).toBe(0);
+      button('mouseup', 2);
+      expect(ctl.scoped).toBe(false);
+      // Letting go of the scope does not fire: no G, no burst, no shot.
+      expect(ctl.take()).toBe(0);
+      key('keydown', 'KeyG');
+      expect(ctl.scoped).toBe(true);
+      button('mousedown', 0);
+      expect(ctl.take()).toBe(KEY.FIRE);
+      button('mouseup', 0);
+      key('keyup', 'KeyG');
+      expect(ctl.scoped).toBe(false);
+      expect(ctl.take()).toBe(0);
     });
 
     it('is not on the right button, nor the middle one', () => {

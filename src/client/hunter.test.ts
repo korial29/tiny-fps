@@ -1,5 +1,15 @@
 import { expect, it } from 'vitest';
-import { HUNTER_REST, hunter, hunterHarpoon, hunterPose, hunterRig } from './hunter';
+import {
+  HARPOON_GONE,
+  HARPOON_RACK,
+  HUNTER_REST,
+  drawHarpoon,
+  harpoonFeed,
+  hunter,
+  hunterHarpoon,
+  hunterPose,
+  hunterRig,
+} from './hunter';
 import { rest, solve, turn } from './rig';
 import { GILT, STRIDE, TWILL, WEAVE } from './mesh';
 
@@ -67,4 +77,38 @@ it('cuts the Hunter into joint pieces that rebuild his model at rest', () => {
     const want = turn(pose.rot[j], HUNTER_REST[j]);
     p.forEach((v, k) => expect(v).toBeCloseTo(at[k] + want[k], 6));
   });
+});
+
+it('reloads the harpoon by its bolt alone: the fired one leaves forward, the next comes in from behind', () => {
+  expect(harpoonFeed(-1)).toBe(1);
+  expect(harpoonFeed(0)).toBe(0);
+  expect(harpoonFeed(HARPOON_RACK)).toBe(0);
+  expect(harpoonFeed(0.6)).toBeGreaterThan(0);
+  expect(harpoonFeed(0.6)).toBeLessThan(1);
+  expect(harpoonFeed(0.9)).toBe(1);
+  const axes = [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+  ] as [number, number, number][];
+  /** The bolt's vertices (the out list holds only it) and their mean z: forward is +z here. */
+  const bolt = (feed: number, fired = HARPOON_GONE) => {
+    const out: number[] = [];
+    drawHarpoon(out, 2, [0, 0, 0], axes, 1, 1, true, feed, [], fired);
+    let z = 0;
+    for (let i = 2; i < out.length; i += STRIDE) {
+      z += out[i];
+    }
+    return [out.length / STRIDE, (z * STRIDE) / out.length || 0];
+  };
+  const [seated, at] = bolt(1);
+  expect(seated).toBeGreaterThan(0);
+  // The tube empty just after the shot, the next bolt further back the less it is fed.
+  expect(bolt(0)[0]).toBe(0);
+  expect(bolt(0.3)[1]).toBeLessThan(bolt(0.7)[1]);
+  expect(bolt(0.7)[1]).toBeLessThan(at);
+  // The fired bolt drawn ahead of the seat, then gone.
+  const out = bolt(1, 0.5);
+  expect(out[0]).toBe(2 * seated);
+  expect(out[1]).toBeGreaterThan(at);
 });

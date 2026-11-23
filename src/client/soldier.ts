@@ -76,12 +76,19 @@ import {
 import { helm } from './helm';
 import { helmet } from './helmet';
 import {
+  CANNON_FOLD,
+  CANNON_HINGE,
+  CANNON_MUZZLE,
   HUNTER_REST,
   blendHunter,
   drawHarpoon,
+  harpoonFeed,
+  folded,
   hunterPose,
   hunterRig,
+  handsFree,
   hunterWristEnds,
+  unfold,
 } from './hunter';
 import type { HunterPiece } from './hunter';
 import { HEAD_SCALE, STYLE, hair, styleOf, sway } from './hair';
@@ -200,6 +207,8 @@ export interface Runner {
   parry: number;
   trail: Trail;
   t: number;
+  /** How far the Hunter's shoulder cannon is folded out, 0 stowed to 1 along his look. */
+  cannon: number;
   /** The limb a katana's cut took off, while he is down (see limbs.ts). */
   cut?: Piece;
   /** Seconds left of the grimace a hit puts on his face, and of the grin of a capture or of a foe put down. */
@@ -342,6 +351,7 @@ export const createRunner = (
     parry: Infinity,
     trail: createTrail(),
     t: 0,
+    cannon: 0,
     hurt: 0,
     grin: 0,
     mad: 0,
@@ -430,7 +440,9 @@ export const animate = (
       book.delete(id);
     }
   }
-  for (const p of others) {
+  for (const shown of others) {
+    // The Hunter's shoulder cannon leaves his hands free: his arms move as with no weapon.
+    const p = looks?.get(shown.id)?.role === ROLE.HUNTER ? handsFree(shown) : shown;
     const seen = book.get(p.id);
     if (seen) {
       const w = watched(p, others, seen.watching);
@@ -455,6 +467,7 @@ export const animate = (
       r.focus = r.since < AIMING ? (world ? focus(p, world)[0] : far(p)) : r.focus;
       r.prog = progress(r.prog, p, dt);
       r.parry += dt;
+      r.cannon = unfold(r.cannon, !!shown.railed && !p.down, dt);
       // Put down by the bolt: a burst of sparks, then more as he comes apart.
       const k = fried(p);
       if (k > 0 && k < 1) {
@@ -1261,7 +1274,23 @@ const hunterTrail = hunterWristEnds().map(p => sub(p, HUNTER_REST[J.FOREARM_R]))
 const hunterPieces = (lod: HunterLod) =>
   hunterRig(lod, name => lod === 0 && (name.startsWith('Quills') || name === 'Visor grille'));
 const hunterKey = (lod: HunterLod, piece: HunterPiece) =>
-  `hunter ${lod} ${piece.joint} ${+piece.thin} ${+piece.harpoon}`;
+  `hunter ${lod} ${piece.joint} ${+piece.thin} ${+piece.harpoon} ${+piece.cannon}`;
+/**
+ * The shoulder cannon's hinge and turn on a Hunter whose chest is at `chest` turned by `q`: stowed
+ * (k 0) it lies back along the shoulder, CANNON_FOLD about the hinge from the chest's frame; out
+ * (k 1) it points along his look.
+ */
+export const cannonOf = (
+  chest: Vec3,
+  q: Quat,
+  p: Pick<PlayerState, 'yaw' | 'pitch'>,
+  k: number,
+): [Vec3, Quat] => {
+  const hinge = add(chest, turn(q, sub(CANNON_HINGE, HUNTER_REST[J.CHEST])));
+  const stowed = mul(q, axis([1, 0, 0], CANNON_FOLD));
+  const look = mul(axis([0, 1, 0], p.yaw), axis([1, 0, 0], p.pitch));
+  return [hinge, slerp(stowed, look, folded(k))];
+};
 /** The Hunter's joints this frame (hunterPose()), reused. */
 const hunterAt: Vec3[] = [];
 
@@ -1514,6 +1543,23 @@ export const soldier = (
       }
       for (const piece of rig.pieces) {
         if (piece.harpoon && handOf(p) === 0) {
+          continue;
+        }
+        if (piece.cannon) {
+          const [hinge, q] = cannonOf(joints[J.CHEST], s.rot[J.CHEST], p, r.cannon);
+          rigid(
+            hunterKey(detail, piece),
+            hinge,
+            q,
+            (o, position, rotation) => placeHunterPart(o, piece.vertices, position, rotation),
+            1,
+            true,
+          );
+          // Its shots are seen to leave from its muzzle (combat.ts gun()).
+          if (r.cannon > 0) {
+            const m = add(hinge, turn(q, CANNON_MUZZLE));
+            r.tip = [m[0] - p.x, m[1] - p.y, m[2] - p.z];
+          }
           continue;
         }
         rigid(
@@ -1811,8 +1857,8 @@ export const soldier = (
         axes(q),
         0.82,
         1,
-        !!p.mag,
-        1,
+        !!p.mag || sp >= 0,
+        harpoonFeed(sp),
         gpu,
       );
     } else {

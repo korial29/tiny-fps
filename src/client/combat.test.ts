@@ -1025,6 +1025,34 @@ describe('drawing and sheathing the katana', () => {
     expect(rail.ids()).toEqual([SOUND.POP, SOUND.SCREW, SOUND.SCREW, SOUND.SCREW, SOUND.BOOT]);
   });
 
+  it('play the Hunter’s own rack of a harpoon bolt, not the battery’s swap', () => {
+    const t = setup();
+    const combat = createCombat(
+      WORLD,
+      t.audio,
+      t.hud,
+      t.fx,
+      t.tracer,
+      t.ctl,
+      t.balls,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => true,
+    );
+    let now = 1000;
+    const frame = (p: PlayerState) => combat.frame(VIEW, p, [], 0, 1 / 60, (now += 1000 / 60));
+    frame(player({ ammo: 12, mag: 0, blade: true }));
+    for (let r = GUN_RELOAD; r >= 0; r--) {
+      frame(player({ ammo: 12, mag: r ? 0 : 1, blade: true, reload: r }));
+    }
+    expect(t.ids()).toContain(SOUND.HARPOON_RELOAD);
+    expect(t.ids().filter(id => id === SOUND.HARPOON_RELOAD)).toHaveLength(1);
+    expect(t.ids()).not.toContain(SOUND.EJECT);
+    expect(t.ids()).not.toContain(SOUND.CLICK);
+  });
+
   it('play the draw for a katana picked up with no gun, which is in hand at once', () => {
     const { frame, ids } = setup();
     frame(player({ ammo: -1 }));

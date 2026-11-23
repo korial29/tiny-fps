@@ -60,10 +60,17 @@ export const roll = (...n: number[]): number => {
 /**
  * The cut the keys held when FIRE starts a swing give: LEFT or RIGHT, one of them, cuts across from
  * that side; else FORWARD thrusts; else (back or no key) it slashes. Both sides held are neither.
+ * The Hunter's wrist blades do not thrust (`thrust` false, the user 2026-11-23): FORWARD slashes.
  */
-export const cutOf = (keys: number): number => {
+export const cutOf = (keys: number, thrust = true): number => {
   const [l, r] = [keys & KEY.LEFT, keys & KEY.RIGHT];
-  return l && !r ? CUT.LEFT : r && !l ? CUT.RIGHT : keys & KEY.FORWARD ? CUT.THRUST : CUT.SLASH;
+  return l && !r
+    ? CUT.LEFT
+    : r && !l
+      ? CUT.RIGHT
+      : thrust && keys & KEY.FORWARD
+        ? CUT.THRUST
+        : CUT.SLASH;
 };
 
 /**

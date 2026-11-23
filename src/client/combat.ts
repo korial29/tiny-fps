@@ -54,6 +54,7 @@ import {
 import type { Hud } from './hud';
 import { basis } from './mesh';
 import type { Vec3 } from './mesh';
+import { HARPOON_RACK } from './hunter';
 import { SOUND } from './sfx';
 
 /** The sound of each cue of a swap (CUES): the gun's, then the rail gun's. */
@@ -73,6 +74,13 @@ export interface View {
   /** The own muzzle (the emitter) in the camera's space. */
   muzzle: Vec3;
 }
+
+/** The own muzzle in the world: the view's muzzle (camera space) from the camera. */
+const muzzleOf = (v: View): Vec3 => {
+  const [r, u, f] = basis(v.yaw, v.drawn);
+  const m = v.muzzle;
+  return [0, 1, 2].map(i => v.cam[i] + r[i] * m[0] + u[i] * m[1] + f[i] * m[2]) as Vec3;
+};
 
 /**
  * Where the own shots end: the first wall along the look ray from the eye, or the range. `local` is
@@ -398,10 +406,19 @@ export const createCombat = (
       ? audio.play(id, at, db(g), r)
       : later.push([clock + 1000 * pressAt(first), id, at, g, r]);
   /** The sounds of a swap as it passes its cues (CUES), the boot of a gun that comes to hand or whose swap is done, and the hiss of an overheating, at `at`. */
-  const reloads = (was: Blade, now: Blade, at?: Vec3, first = -1) => {
+  const reloads = (was: Blade, now: Blade, at?: Vec3, first = -1, harpoon = false) => {
     const [a, b, r] = [swapOf(was), swapOf(now), +!!now.railed];
-    // The click of the slap home loud (the user, 2026-11-09).
-    CUES[r].forEach((c, i) => a < c && b >= c && audio.play(RELOADS[r][i], at, !r && i ? 0 : -3.1));
+    if (harpoon && !r) {
+      // The Hunter's harpoon racks its next bolt in from behind (harpoonFeed(), from HARPOON_RACK).
+      if (a < HARPOON_RACK && b >= HARPOON_RACK) {
+        audio.play(SOUND.HARPOON_RELOAD, at, -2);
+      }
+    } else {
+      // The click of the slap home loud (the user, 2026-11-09).
+      CUES[r].forEach(
+        (c, i) => a < c && b >= c && audio.play(RELOADS[r][i], at, !r && i ? 0 : -3.1),
+      );
+    }
     const h = handOf(now);
     if (h != 1 && h >= 0 && (handOf(was) != h || (a >= 0 && b < 0))) {
       boot(SOUND.BOOT, at, 0.5, r ? 1.4 : 1, first);
@@ -479,7 +496,8 @@ export const createCombat = (
           hud.hit();
           if (hunter(me.id) && me.railed) {
             audio.play(SOUND.HUNTER_LASER, undefined, -2.6, rate());
-            tracer.flash(gun(me), true, -1);
+            // From the shoulder cannon's muzzle as the own view draws it.
+            tracer.flash(v ? muzzleOf(v) : gun(me), true, -1);
           }
           // A blow of the fists that landed: a thud, and a hook or a lunge kicks the look.
           if (fists(me)) {
@@ -500,7 +518,7 @@ export const createCombat = (
         const f = fresh(me) ? handOf(me) : -1;
         if (was) {
           shing(was, me, undefined, f, hunter(me.id));
-          reloads(was, me, undefined, f);
+          reloads(was, me, undefined, f, hunter(me.id));
         }
         // A hit on the armour hurts as one on the health. Each pickup has its sound: an armour,
         // a health pack, an ammo pack (more rounds in a gun he had); a gun taken is the gun's.
@@ -570,9 +588,8 @@ export const createCombat = (
       let from: Vec3 | undefined;
       if (v) {
         // The own shots: a flash on the muzzle, and their balls, which leave it.
-        const [r, u, f] = basis(v.yaw, v.drawn);
-        const m = v.muzzle;
-        from = [0, 1, 2].map(i => v.cam[i] + r[i] * m[0] + u[i] * m[1] + f[i] * m[2]) as Vec3;
+        const [, u, f] = basis(v.yaw, v.drawn);
+        from = muzzleOf(v);
         tracer.mount(from);
         for (const p of pending) {
           const discShot = hunter(p.id) && p.wield;
@@ -685,7 +702,7 @@ export const createCombat = (
         const f = fresh(p) ? handOf(p) : -1;
         if (old) {
           shing(old, p, at, f, hunter(p.id));
-          reloads(old, p, at, f);
+          reloads(old, p, at, f, hunter(p.id));
         }
         blades.set(p.id, {
           swing: p.swing,

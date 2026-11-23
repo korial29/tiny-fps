@@ -180,18 +180,25 @@ export const step = (
   if (!gear) {
     [p.ammo, p.rail, p.rifle, p.blade, p.nades] = [-1, -1, -1, false, 0];
   }
+  // The Hunter takes no other weapon (the user, 2026-11-23): his harpoon, his blades and his
+  // shoulder cannon, which is always on him and spends nothing (`rail` 0: carried, nothing in it).
+  // The gun rack still refills the harpoon's bolts.
+  const own = kit.hunter;
+  if (own) {
+    [p.rail, p.cap, p.rifle, p.nades] = [0, 0, -1, 0];
+  }
   if (armed && gear && inside && !p.rack) {
     [p.ammo, p.mag] = [kit.ammo, kit.mag];
   }
   p.rack = inside;
   p.blade = !!kit.katana || !!p.blade || (armed && gear && !!blade && within(p, blade, RACK_R));
   const inRail = !!rail && within(p, rail, RACK_R);
-  if (armed && gear && inRail && !p.inRail) {
+  if (armed && gear && !own && inRail && !p.inRail) {
     [p.rail, p.cap] = [kit.rail, kit.cap];
   }
   p.inRail = inRail;
   const inRifle = !!rifle && within(p, rifle, RACK_R);
-  if (armed && gear && inRifle && !p.inRifle) {
+  if (armed && gear && !own && inRifle && !p.inRifle) {
     [p.rifle, p.clip, p.nades] = [kit.rifle, kit.clip, NADE_MAX];
   }
   p.inRifle = inRifle;
@@ -317,7 +324,8 @@ export const step = (
   }
   // G with the pistol in hand: a burst of BURST plain shots, half its cooldown apart, then twice its
   // cooldown. A swap, a reload, busy hands, a charge or an empty battery end it.
-  const pistol = hand == 0 && !busy && !p.reload && !p.charge && !!p.mag;
+  // The Hunter's harpoon has no burst: its special is the scope, the client's alone (input.ts).
+  const pistol = hand == 0 && !kit.hunter && !busy && !p.reload && !p.charge && !!p.mag;
   p.burst = pistol ? (p.burst ?? 0) : 0;
   if (pistol && !p.cool && (p.burst || i.keys & KEY.SPECIAL)) {
     p.burst = (p.burst || BURST) - 1;
@@ -330,7 +338,15 @@ export const step = (
   }
   // G with the rail gun in hand: a discharge all round him (the host's ring()), RING_COST of the
   // capsule, which overheats the gun: it cools 2 s before it fires again.
-  if (p.railed && i.keys & KEY.SPECIAL && !busy && !p.reload && !p.hot && p.cap! >= RING_COST) {
+  if (
+    p.railed &&
+    !own &&
+    i.keys & KEY.SPECIAL &&
+    !busy &&
+    !p.reload &&
+    !p.hot &&
+    p.cap! >= RING_COST
+  ) {
     p.rail! -= RING_COST;
     p.cap! -= RING_COST;
     [p.heat, p.hot] = [HEAT_MAX, true];
@@ -365,7 +381,7 @@ export const step = (
   if (p.wield && i.keys & KEY.SPECIAL && !busy && !p.swing) {
     p.cut =
       i.keys & KEY.FIRE
-        ? cutOf(i.keys) + SPECIAL_CUT
+        ? cutOf(i.keys, !kit.hunter) + SPECIAL_CUT
         : (i.keys & (KEY.LEFT | KEY.RIGHT)) === KEY.LEFT
           ? CUT.ARC_L
           : CUT.ARC_R;
@@ -390,7 +406,7 @@ export const step = (
         p.swing = PUNCHES[p.cut!].ticks;
       }
     } else if (p.wield && !p.swing) {
-      p.cut = cutOf(i.keys);
+      p.cut = cutOf(i.keys, !kit.hunter);
       [p.swing, p.charge] = [CUTS[p.cut].ticks, 0];
       launch(p);
     } else if (p.rifled) {
@@ -401,6 +417,9 @@ export const step = (
         p.shots = (p.shots + 1) & 255;
         return STRIKE.LASER;
       }
+    } else if (p.railed && own) {
+      // The Hunter's shoulder cannon: held, it fires at what the host has locked on (Room.shoulder()).
+      return STRIKE.RAIL;
     } else if (p.railed) {
       if (p.cap && !p.reload && !p.hot) {
         // The bolt goes out every step; `cool` makes it spend a tick each RAIL_SPEND of them. It

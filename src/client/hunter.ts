@@ -16,6 +16,7 @@ import {
   unit,
 } from './mesh';
 import type { Vec3 } from './mesh';
+import type { PlayerState } from '../shared/types';
 
 import { body } from './skin';
 import { LINK, loft, panel, rod } from './rover';
@@ -37,6 +38,10 @@ const bronze: Vec3 = [0.59, 0.37, 0.19];
 const light: Vec3 = [1, 0.24, 0.065];
 
 const stature = 1.2;
+/** What the finished model is scaled by from the sculpt, off the head (hunter()'s last pass). */
+const sized = ([x, y, z]: Vec3): Vec3 => [x * stature * 0.9, y * stature, z * stature * 0.92];
+/** The top of the shoulder cannon's post, sculpted (CANNON_HINGE in the finished model). */
+const HINGE: Vec3 = [-0.221, 1.637, 0.06];
 const bell = (x: number) => Math.exp(-x * x);
 const built: Partial<Record<0 | 1 | 2, Record<string, number[]>>> = {};
 
@@ -1298,8 +1303,11 @@ export function hunter(lod: 0 | 1 | 2) {
       ...twin.slice(i + 6, i + STRIDE),
     );
   }
+  part('Laser mount');
+  limb([-0.233, 1.54, 0.082], HINGE, [0.027, 0.021, 0.031], alloy, 0.88, TWILL);
+  // The cannon itself, drawn deployed: it turns about the top of its post (CANNON_HINGE).
   part('Shoulder laser');
-  limb([-0.233, 1.54, 0.082], [-0.221, 1.637, 0.06], [0.027, 0.021, 0.031], alloy, 0.88, TWILL);
+  limb(HINGE, [-0.219, 1.66, 0.1], [0.024, 0.022], alloy, 0.9, TWILL);
   // The short shroud rides above the pivot; the stepped muzzle shows a dark bore.
   const breech: Vec3 = [-0.219, 1.673, 0.118];
   const muzzle: Vec3 = [-0.242, 1.644, -0.14];
@@ -1837,9 +1845,11 @@ export const drawHarpoon = (
   scale: number,
   open: number,
   loaded = true,
-  /** 0 just after a shot to 1: the next bolt slides forward from the stock into its seat. */
+  /** 0 as the reload starts to 1: the next bolt slides forward from behind the stock into its seat. */
   feed = 1,
   pieces?: Pieces,
+  /** How far (m, unscaled) the bolt just fired has flown out of the muzzle; drawn under HARPOON_GONE. */
+  fired = HARPOON_GONE,
 ) => {
   const parts = harpoonParts(lod);
   const retracted = (1 - open) * scale;
@@ -1856,10 +1866,34 @@ export const drawHarpoon = (
   put('body', 0);
   put('stock', 0.13 * retracted);
   put('slide', -0.4 * retracted);
-  if (loaded) {
-    const back = 0.22 * (1 - feed) ** 2 * scale;
+  if (loaded && feed > 0) {
+    // The next bolt comes in from behind the stock, most of a bolt's length back, and seats.
+    const back = HARPOON_BACK * (1 - feed) ** 2 * scale;
     place(out, parts.bolt, at, axes, [0, 0, -back], [scale, scale, scale - retracted / 3]);
   }
+  if (fired < HARPOON_GONE) {
+    // The bolt just fired, seen to leave the tube forward before the ball takes over.
+    place(out, parts.bolt, at, axes, [0, 0, fired * scale], scale);
+  }
+};
+/** Metres a fired bolt is drawn leaving the muzzle; past this the flying ball alone shows it. */
+export const HARPOON_GONE = 1.2;
+/** Metres behind its seat the next bolt starts as it feeds in. */
+export const HARPOON_BACK = 0.9;
+/** The share of the harpoon's reload (swapOf()) at which the next bolt starts in, and its sound. */
+export const HARPOON_RACK = 0.35;
+/** Seconds the fired bolt takes to leave the drawn tube (HARPOON_GONE). */
+export const HARPOON_OUT = 0.09;
+/**
+ * The next bolt's slide into its seat at `swap` of the harpoon's reload (swapOf(), 0 to 1; -1 none):
+ * absent for the first 35 % (the tube empty after the shot), then eased in by 85 %, seated after.
+ */
+export const harpoonFeed = (swap: number): number => {
+  if (swap < 0) {
+    return 1;
+  }
+  const t = Math.min(1, Math.max(0, (swap - HARPOON_RACK) / 0.5));
+  return t * t * (3 - 2 * t);
 };
 
 export const hunterHarpoon = (lod: 0 | 1 | 2): number[] => {
@@ -1872,6 +1906,29 @@ export const hunterHarpoon = (lod: 0 | 1 | 2): number[] => {
  * where the sculpted sleeves hang (wider than the rig's) and the neck under the lowered mask.
  * Rest rotations are the identity, so a joint's rest frame is this point alone.
  */
+/**
+ * The top of the shoulder cannon's post, in the rest model: the hinge it folds about. The model
+ * draws it deployed, along the look; stowed it lies back along the top of the shoulder.
+ */
+export const CANNON_HINGE: Vec3 = sized(HINGE);
+/** Radians the stowed cannon is turned about its hinge's right axis from the deployed one: muzzle back. */
+export const CANNON_FOLD = 2.9;
+/** The cannon's muzzle, from its hinge, deployed (the stepped muzzle's face). */
+export const CANNON_MUZZLE: Vec3 = sized([-0.021, 0.006, -0.205]);
+/** Seconds the cannon takes to fold out, or back. */
+export const CANNON_SWING = 0.35;
+/** The shoulder cannon's fold `k`, moved toward out (`out`) or stowed by `dt` seconds. */
+export const unfold = (k: number, out: boolean, dt: number): number =>
+  Math.min(1, Math.max(0, k + ((out ? 1 : -1) * dt) / CANNON_SWING));
+/**
+ * The Hunter as his arms are posed: with the shoulder cannon in use his hands hold nothing, so he
+ * is drawn as with no weapon in hand (not the rail gun's hold, nor the harpoon's).
+ */
+export const handsFree = <P extends Pick<PlayerState, 'railed' | 'ammo' | 'zapping'>>(p: P): P =>
+  p.railed ? { ...p, railed: false, ammo: -1, zapping: false } : p;
+/** How far along its swing a cannon folded out by `k` is: a smooth start and stop. */
+export const folded = (k: number): number => k * k * (3 - 2 * k);
+
 export const HUNTER_REST: Vec3[] = (() => {
   const bind = solve(rest()).pos;
   const at: Vec3[] = bind.map(([x, y, z]) => [x * stature * 0.9, y * stature, z * stature * 0.92]);
@@ -1928,6 +1985,7 @@ const HEAD_PARTS =
 const TRUNK_PARTS = new Set([
   'Harpoon harness',
   'Laser saddle',
+  'Laser mount',
   'Shoulder laser',
   'Harpoon',
   'Rib guard',
@@ -1978,6 +2036,8 @@ export interface HunterPiece {
   thin: boolean;
   /** The harpoon on his back, left out while it is in his hand. */
   harpoon: boolean;
+  /** The shoulder cannon, from its hinge (CANNON_HINGE) rather than the joint: it folds about it. */
+  cannon: boolean;
   vertices: number[];
 }
 
@@ -2125,12 +2185,13 @@ export const hunterRig = (
         }
       }
       const harpoon = name === 'Harpoon';
-      const key = joint * 4 + +thin + 2 * +harpoon;
+      const cannon = name === 'Shoulder laser';
+      const key = joint * 8 + +thin + 2 * +harpoon + 4 * +cannon;
       let piece = pieces.get(key);
       if (!piece) {
-        pieces.set(key, (piece = { joint, thin, harpoon, vertices: [] }));
+        pieces.set(key, (piece = { joint, thin, harpoon, cannon, vertices: [] }));
       }
-      const o = HUNTER_REST[joint];
+      const o = cannon ? CANNON_HINGE : HUNTER_REST[joint];
       for (let k = i; k < i + 3 * STRIDE; k += STRIDE) {
         piece.vertices.push(
           v[k] - o[0],

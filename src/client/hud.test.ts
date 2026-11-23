@@ -997,7 +997,19 @@ describe('the gun on the HUD', () => {
       expect(shown()).toEqual(['1 gun', '2 katana', '3 rail', '4 rifle', '5 fists']);
       hud.wear(BODY.MALE, { role: ROLE.HUNTER });
       vitals();
-      expect(shown()).toEqual(['1 harpoon', '2 blades', '3 laser', '4 rifle', '5 fists']);
+      expect(shown()).toEqual(['1 blades', '2 harpoon', '3 cannon', '4 rifle', '5 fists']);
+      // The harpoon in hand lights slot 2, the blades slot 1 (the user, 2026-11-23).
+      expect(lit()).toEqual(['2 harpoon']);
+      hud.vitals(5, 30, true, true, 7, false, 6, false, 30);
+      expect(lit()).toEqual(['1 blades']);
+    });
+
+    it('counts nothing for the Hunter’s shoulder cannon, which spends nothing and is never empty', () => {
+      hud.wear(BODY.MALE, { role: ROLE.HUNTER });
+      hud.vitals(5, 12, true, false, 0, true, 0);
+      expect(lit()).toEqual(['3 cannon']);
+      expect(count().textContent).toBe('∞');
+      expect(ammo().classList.contains('e')).toBe(false);
     });
 
     it('shows the rail gun’s lightning left in violet with the gun glyph, and its slot 3 when it is carried', () => {

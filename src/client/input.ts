@@ -65,11 +65,20 @@ export const WHEEL_MS = 250;
 export const WEAPON = { GUN: 0, BLADE: 1, RAIL: 2, RIFLE: 3, FISTS: 4 } as const;
 const NUMPAD_WEAPONS = [WEAPON.FISTS, WEAPON.GUN, WEAPON.BLADE, WEAPON.RAIL, WEAPON.RIFLE];
 
-/** The choice after a key: 1 the gun, 2 the katana, 3 the rail gun, 4 the laser rifle, any other key keeps it. */
-export const picked = (weapon: number, code: string): number => {
+/**
+ * The weapon in a slot (1 to 5 less one), and the slot of a weapon: WEAPON's order, but for the
+ * Hunter, whose wrist blades are slot 1 and harpoon slot 2 (the user, 2026-11-23). The swap is its
+ * own inverse.
+ */
+export const slotted = (slot: number, hunter = false): number =>
+  hunter && slot < 2 ? 1 - slot : slot;
+
+/** The choice after a key: 1 the gun, 2 the katana, 3 the rail gun, 4 the laser rifle (the Hunter's slots by slotted()), any other key keeps it. */
+export const picked = (weapon: number, code: string, hunter = false): number => {
   const digit = DIGITS.indexOf(code);
   const numpad = NUMPAD.indexOf(code);
-  return digit >= 0 ? digit : numpad >= 0 ? NUMPAD_WEAPONS[numpad] : weapon;
+  const slot = digit >= 0 ? digit : numpad >= 0 ? NUMPAD_WEAPONS[numpad] : -1;
+  return slot >= 0 ? slotted(slot, hunter) : weapon;
 };
 
 /** Which of the gun, the katana, the rail gun and the laser rifle a player has; all of them when there is no state yet. */
@@ -96,10 +105,11 @@ export const chosen = (weapon: number, was?: PlayerState, now?: PlayerState): nu
 export const withWeapon = (keys: number, weapon: number): number =>
   keys | [0, KEY.BLADE, KEY.RAIL, KEY.RIFLE, KEY.FISTS][weapon];
 
-/** The choice the wheel turns to, `dir` 1 or -1: the next weapon he has, including fists. */
-export const turned = (weapon: number, dir: number, have: boolean[]): number => {
+/** The choice the wheel turns to, `dir` 1 or -1: the next weapon he has in slot order, including fists. */
+export const turned = (weapon: number, dir: number, have: boolean[], hunter = false): number => {
+  const from = slotted(weapon, hunter);
   for (let k = 1; k <= DIGITS.length; k++) {
-    const n = (weapon + dir * k + DIGITS.length) % DIGITS.length;
+    const n = slotted((from + dir * k + DIGITS.length) % DIGITS.length, hunter);
     if (have[n]) {
       return n;
     }
@@ -168,9 +178,9 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   let swapped = -Infinity;
   /** G (or the right button, but for the xenomorph) pressed, waiting for its step: the katana's special, a grenade with the rifle, a missile at a ship's stick. */
   let nade = false;
-  /** A double left click, waiting for its step, and when the left button was last pressed (ms): the katana's special of the cut. */
-  let precisionShot = false;
+  /** Whether the Hunter's harpoon is in hand and its scope can come up. */
   const harpoonReady = () => c.canScope && c.hunter && !c.pilot && c.weapon === WEAPON.GUN;
+  /** A double left click, waiting for its step, and when the left button was last pressed (ms): the katana's special of the cut. */
   let special = false;
   let clicked = -Infinity;
   /** The right button pressed, waiting for its step, held now, and when it was last pressed (ms): the xenomorph's tail. */
@@ -202,7 +212,6 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
       }
       const keys =
         moved |
-        (precisionShot && harpoonReady() ? KEY.FIRE : 0) |
         (nade ? KEY.SPECIAL : 0) |
         (special && !c.pilot && c.weapon != WEAPON.RIFLE ? KEY.FIRE | KEY.SPECIAL : 0);
       return withWeapon(keys, c.weapon);
@@ -210,7 +219,6 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     take() {
       const keys = c.peek();
       pending = 0;
-      precisionShot = false;
       if (c.beast) {
         nade = sting = twist = false;
       } else {
@@ -230,7 +238,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
         now.fists ||
         !harpoonReady()
       ) {
-        c.scoped = precisionShot = false;
+        c.scoped = false;
       }
     },
     locked: () => (canvas.getRootNode() as Document | ShadowRoot).pointerLockElement == canvas,
@@ -258,6 +266,8 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   // with the xenomorph's tail.
   on(document, 'mousedown', (e: MouseEvent) => {
     if (c.locked() && e.button == 2) {
+      // The harpoon's special is its scope (the user, 2026-11-23): held, the view zooms in; the
+      // left button fires.
       if (harpoonReady()) {
         c.scoped = true;
         return;
@@ -278,7 +288,6 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
       c.keys &= ~KEY.FIRE;
     }
     if (e.button == 2) {
-      precisionShot ||= c.scoped && c.locked() && harpoonReady();
       c.scoped = false;
       stinging = false;
     }
@@ -293,7 +302,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
         e.preventDefault();
         if (now - swapped >= WHEEL_MS) {
           swapped = now;
-          c.weapon = turned(c.weapon, Math.sign(e.deltaY), have);
+          c.weapon = turned(c.weapon, Math.sign(e.deltaY), have, c.hunter);
         }
       }
     },
@@ -302,7 +311,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   on(document, 'keydown', (e: KeyboardEvent) => {
     const bit = keyBit(e.code);
     if (c.locked()) {
-      c.weapon = picked(c.weapon, e.code);
+      c.weapon = picked(c.weapon, e.code, c.hunter);
     }
     if (e.code == MUTE && !e.repeat && c.locked()) {
       onMute();
@@ -311,6 +320,9 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
       // The xenomorph's G is its tail, held as the right button is (the user, 2026-11-17).
       if (c.beast) {
         tail();
+      } else if (harpoonReady()) {
+        // G as the right button: the harpoon's scope while it is held.
+        c.scoped = true;
       } else {
         nade = true;
       }
@@ -341,11 +353,12 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     c.keys &= ~keyBit(e.code);
     if (e.code == NADE) {
       stinging = false;
+      c.scoped = false;
     }
   });
   const release = () => {
     c.keys = pending = 0;
-    c.scoped = precisionShot = false;
+    c.scoped = false;
     sting = stinging = false;
     down.clear();
     tapped.clear();

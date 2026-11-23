@@ -94,6 +94,8 @@ export interface TinyFps {
 const STEP = 1 / TICK_HZ;
 /** Steps run in one frame at most: a background tab catches up by this much, not by minutes. */
 const MAX_STEPS = 5;
+/** The Hunter's harpoon scope: the view's field of view change in degrees (70 to 18, about 4×) and its ease-in time (s). */
+const [SCOPE_FOV, SCOPE_IN] = [-52, 0.18];
 /** Metres within which a vehicle shows its health over it: a rover, a ship. */
 const NEAR_HULL = [14, 24];
 /** Ms after a hard landing during which a loss of health is the fall's, not a foe's: the snapshot's lag. */
@@ -426,6 +428,8 @@ const play = (
   let hunterLock: { id: number; since: number } | undefined;
   let hunterLockTone = -1;
   let rendered: number | undefined;
+  /** The harpoon scope's zoom, 0 out to 1 in. */
+  let scope = 0;
   let displayed: number | undefined;
   let acc = 0;
   let raf = 0;
@@ -945,7 +949,11 @@ const play = (
     if (!ctl.canScope) {
       ctl.scoped = false;
     }
-    hud.hunterVision(['', 'THERMAL', 'ALIEN SCAN'][hunterMode], ctl.scoped);
+    // The harpoon's scope eases in over SCOPE_IN s and out twice as fast; its overlay and the slower
+    // look come with the zoom's second half.
+    scope = Math.max(0, Math.min(1, scope + (ctl.scoped ? dt / SCOPE_IN : (-2 * dt) / SCOPE_IN)));
+    const scoped = scope > 0.5;
+    hud.hunterVision(['', 'THERMAL', 'ALIEN SCAN'][hunterMode], scoped);
     const pov: [number, number, number] = spy
       ? [spy.x, spy.y + eyeHeight(spy), spy.z]
       : watch.k
@@ -966,7 +974,7 @@ const play = (
       ? fx
       : third
         ? { ...fx, roll, fov: fx.fov * (1 - k) + shot.fov }
-        : { ...fx, roll, fov: ctl.scoped ? -44 : fx.fov };
+        : { ...fx, roll, fov: fx.fov + (SCOPE_FOV - fx.fov) * scope * scope * (3 - 2 * scope) };
     // The driver is unarmed and his body is the renderer's to draw whole: no sight, no muzzle.
     const look = me && !third ? sight(world, eye, cam, ctl.yaw, ctl.pitch, pitch) : undefined;
     if (look) {
@@ -1085,7 +1093,7 @@ const play = (
             : []),
           ...tracer.lights(),
         ],
-        third || ctl.scoped ? undefined : body,
+        third || scoped ? undefined : body,
         ctf,
         tracer,
         shown,

@@ -26,6 +26,7 @@ import { FLAG, MODE } from '../shared/types';
 import type { Choice, PlayerState, Rover, Snapshot } from '../shared/types';
 import { LEVELS, mix } from './audio';
 import { TONES } from './features';
+import { slotted } from './input';
 import { ROLE } from '../shared/kit';
 import { FH, FW, LOOK, PALETTE, sprite } from './face';
 import { VISOR } from './helmet';
@@ -333,7 +334,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Hunter',
-    'Slot 1 unfolds the harpoon rifle. Hold right click to aim through its scope and release to fire. Each bolt deals 4 HP and reloads in 1.3 seconds. Slot 2 has twin wrist blades; G or right click throws a returning disc (3 HP). Slot 3 locks the shoulder laser after 3 seconds and deals 3 HP.',
+    'Slot 1 has twin wrist blades, which slash and never thrust; G or right click throws a returning disc (3 HP). Slot 2 unfolds the harpoon rifle: hold right click or G to zoom through its scope, left click fires. Each bolt deals 4 HP and reloads in 1.3 seconds. Slot 3 unfolds the shoulder cannon: keep a foe in its sight for 3 seconds to lock on, then hold fire for 3 HP a hit. He takes no weapon from the racks.',
     'Press V to cycle thermal vision and alien detection.',
     'Every map',
   ],
@@ -397,9 +398,9 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
   [
     'Hunter',
     [
-      ['1', 'harpoon'],
-      ['2', 'wrist blades; G or right click throws the returning disc'],
-      ['3', 'shoulder laser: hold aim on a target for 3 seconds to lock; 3 HP'],
+      ['1', 'wrist blades, no thrust; G or right click throws the returning disc'],
+      ['2', 'harpoon; hold G or right click to zoom through its scope, left click fires'],
+      ['3', 'shoulder cannon: hold aim on a target for 3 seconds to lock; 3 HP'],
       ['V', 'cycle normal, thermal and alien scan', 'KeyV'],
     ],
   ],
@@ -1069,24 +1070,32 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       ammo.classList.toggle('r', railed);
       ammo.classList.toggle('f', rifled);
       const m = Math.max(loaded ?? n, 0);
-      ammo.classList.toggle('e', !k && !m);
+      // The Hunter's shoulder cannon spends nothing: no count, never empty.
+      const cannon = hunter && railed;
+      ammo.classList.toggle('e', !k && !m && !cannon);
       ammo.classList.toggle('w', swapping);
-      set(count, `${m}`);
+      set(count, cannon ? '∞' : `${m}`);
       // The rest as the magazines it makes, full ones and an open one for a part, over its count.
-      const rest = Math.max(n - m, 0);
+      const rest = cannon ? 0 : Math.max(n - m, 0);
       const size = rifled ? mags[2] : railed ? (mags[1] * 99) / RAIL_MAX : mags[0];
       const dots = rifled
         ? `  ${'●'.repeat(nades)}${'○'.repeat(Math.max(NADE_MAX - nades, 0))}`
         : '';
-      set(spare, `${'▮'.repeat(rest / size)}${rest % size ? '▯' : ''}\n${rest}${dots}`);
+      set(
+        spare,
+        cannon ? '' : `${'▮'.repeat(rest / size)}${rest % size ? '▯' : ''}\n${rest}${dots}`,
+      );
       const names = hunter
-        ? ['1 harpoon', '2 blades', '3 laser', '4 rifle', '5 fists']
+        ? ['1 blades', '2 harpoon', '3 cannon', '4 rifle', '5 fists']
         : ['1 gun', '2 katana', '3 rail', '4 rifle', '5 fists'];
+      // The keys in slot order; each shows the weapon in that slot (the Hunter's blades are first).
+      const held = fists ? 4 : k ? 1 : rifled ? 3 : railed ? 2 : 0;
       [...slots.children].forEach((kbd, i) => {
+        const w = slotted(i, hunter);
         kbd.textContent = names[i];
         (kbd as HTMLElement).title = names[i];
-        (kbd as HTMLElement).hidden = i < 4 && !have[i];
-        kbd.classList.toggle('a', i == (fists ? 4 : k ? 1 : rifled ? 3 : railed ? 2 : 0));
+        (kbd as HTMLElement).hidden = w < 4 && !have[w];
+        kbd.classList.toggle('a', w == held);
       });
     },
     wear(body, c = {}, roles) {

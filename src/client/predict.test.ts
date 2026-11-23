@@ -246,8 +246,8 @@ describe('prediction against the room', () => {
     const pred = createPredictor(map);
     pred.you(team, team, role);
     const kit = kitOf(role, def);
-    // As the room puts him in: with his class's health.
-    const ref: PlayerState = { ...spawn(team, world, 0, team), hp: kit.hp };
+    // As the room puts him in: with his class's health and loadout.
+    const ref: PlayerState = spawn(team, world, 0, team, kit);
     const inputs: { at: number; data: ArrayBuffer }[] = [];
     const snaps: { at: number; data: ArrayBuffer }[] = [];
     let seen = 0;
@@ -472,6 +472,28 @@ describe('prediction against the room', () => {
     expect(race(LAGS[1][1], COURSE.inputs, 0, [], [], false, { role: ROLE.NINJA }).at).not.toEqual(
       race(LAGS[1][1], COURSE.inputs).at,
     );
+  }, 60_000);
+
+  it('agrees with the host exactly for a Hunter who folds his shoulder cannon out and fires it', () => {
+    const { RAIL, FIRE, SPECIAL, FORWARD, SPRINT } = KEY;
+    // Out of the blades onto the cannon, fired on the run, G with it (no ring), back to the blades.
+    const script = [
+      ...Array.from({ length: 20 }, () => ({ keys: FORWARD, yaw: 0, pitch: 0 })),
+      ...Array.from({ length: 60 }, (_, k) => ({
+        keys: RAIL | FORWARD | (k % 3 ? FIRE : SPRINT),
+        yaw: k * 0.01,
+        pitch: 0,
+      })),
+      ...Array.from({ length: 20 }, () => ({ keys: RAIL | SPECIAL, yaw: 0.6, pitch: 0 })),
+      ...Array.from({ length: 20 }, () => ({ keys: FIRE, yaw: 0.6, pitch: 0 })),
+    ];
+    for (const [name, lag] of LAGS) {
+      const r = race(lag, script, 0, [], [], false, { role: ROLE.HUNTER });
+      expect(r.worst, `${name} lag`).toBe(0);
+      expect(r.end, `${name} lag`).toBe(0);
+      expect(r.differing, `${name} lag`).toEqual([]);
+      expect(r.lastDiffering, `${name} lag`).toEqual([]);
+    }
   }, 60_000);
 
   /**

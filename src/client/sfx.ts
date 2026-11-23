@@ -210,6 +210,8 @@ export const SOUND = {
   /** A rising three-step target lock and a heavy shoulder-mounted laser discharge. */
   HUNTER_LOCK: 85,
   HUNTER_LASER: 86,
+  /** The harpoon's next bolt racked in from behind: a servo's whine, the slide, the lock home. */
+  HARPOON_RELOAD: 87,
 } as const;
 
 /**
@@ -768,6 +770,16 @@ export const LAYERS: Voice[][] = [
     [1, 490, 2.6, 0.008, 0.028, 0.22, 0.18, 0.2, 0, 1, 0.35],
     [2, 82, -2.2, 0.002, 0.025, 0.28, 0, 0.42, 0, 1, 0.88, 0.025],
     [0, 1850, -1.4, 0.001, 0.01, 0.095, 0.1, 0.22, 0, 1, 0.32, 0.04],
+  ],
+  // HARPOON_RELOAD: a servo's saw whine climbing as the next bolt is driven in, the scrape of its
+  // shaft along the tube, then, as it seats (0.62 s in: harpoonFeed()'s 85 % of the 1.3 s reload), a heavy low clunk, a hard tick
+  // and a short metal ring.
+  [
+    [1, 160, 1.2, 0.02, 0.35, 0.15, 0.05, 0.25, 0, 1, 0.22],
+    [3, 3200, 0.6, 0.03, 0.4, 0.12, 0.2, 0.15, 0, 1, 0.3],
+    [2, 140, -3, 0.001, 0.01, 0.12, 0, 1, 0, 1, 0.7, 0.62],
+    [0, 2600, -2, 0.001, 0, 0.015, 0, 0.6, 0, 1, 0.45, 0.62],
+    [2, 1900, -0.3, 0.001, 0.02, 0.18, 0.08, 1, 0, 1, 0.18, 0.63],
   ],
 ];
 

@@ -9,6 +9,7 @@ import {
   BLOW,
   CHARGE_TAP,
   CHARGE_TICKS,
+  CUTS,
   DASH_COOLDOWN,
   DASH_TICKS,
   GLORY_TICKS,
@@ -87,10 +88,20 @@ import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
 import { armor } from './armor';
-import { hunter as hunterModel, drawHarpoon } from './hunter';
+import {
+  CANNON_FOLD,
+  CANNON_HINGE,
+  CANNON_MUZZLE,
+  hunter as hunterModel,
+  drawHarpoon,
+  harpoonFeed,
+  HARPOON_GONE,
+  HARPOON_OUT,
+  folded,
+  handsFree,
+  unfold,
+} from './hunter';
 
-/** Seconds the Hunter's next harpoon bolt takes to slide into the tube after a shot. */
-const HARPOON_FEED = 0.45;
 import { CUFF, CUFF_NEAR, CUFF_SIDES, REGION, beast, body, palette, skin } from './skin';
 import { CHITIN_X, CLAW, FOOT_TIP, HOOKED, PART, lashOf, partsOf, tail } from './xeno';
 import type { Part } from './xeno';
@@ -347,8 +358,8 @@ const hunterView = (build: number): HunterViewPart[] => {
     'Blade cuff',
     'Left bracer',
     'Laser saddle',
-    'Shoulder laser',
-    'Shoulder plates',
+    'Laser mount',
+    // Not the shoulder plates: beside the eye, they showed grey in the view's top corners.
     'Belt',
     'Flying disc',
   ]);
@@ -402,22 +413,67 @@ const hunterView = (build: number): HunterViewPart[] => {
   return parts;
 };
 
+/** The shoulder cannon's vertices from its hinge, for the own view, made once. */
+let cannonBuilt: number[] | undefined;
+const cannonVertices = (): number[] => {
+  if (!cannonBuilt) {
+    cannonBuilt = hunterModel(1)['Shoulder laser'].slice();
+    for (let i = 0; i < cannonBuilt.length; i += STRIDE) {
+      for (let k = 0; k < 3; k++) {
+        cannonBuilt[i + k] -= CANNON_HINGE[k];
+      }
+    }
+  }
+  return cannonBuilt;
+};
+/**
+ * The cannon's hinge in the camera's space (right, up, forward): stowed, low by the left shoulder
+ * and out of sight; out, raised over it and ahead of the eye, so the barrel comes in from the left
+ * edge of the view (the user, 2026-11-23: it folds out and is seen in the own view).
+ */
+const CANNON_LOW: Vec3 = [-0.3, -0.3, 0.05];
+const CANNON_UP: Vec3 = [-0.25, 0, 0.3];
+/** A direction in the camera's space (right, up, forward) in the model's axes (right, up, back). */
+const model = ([a, b, c]: Vec3): Vec3 => [a, b, -c];
+/**
+ * The own shoulder cannon, folded out by `k`: its hinge in the camera's space and its turn from
+ * the camera's frame. Out, it points from its hinge at what the look meets (`target`).
+ */
+const cannonInView = (k: number, target: Vec3): [Vec3, Quat] => {
+  const f = folded(k);
+  const hinge = mix(CANNON_LOW, CANNON_UP, f);
+  const [dx, dy, dz] = model(unit(sub(target, hinge)));
+  const look = mul(axis([0, 1, 0], Math.atan2(-dx, -dz)), axis([1, 0, 0], Math.asin(dy)));
+  return [hinge, slerp(axis([1, 0, 0], CANNON_FOLD), look, f)];
+};
+
 /** Draws one rigid Hunter part from its rest joint onto the first-person pose. */
-const drawHunterPart = (out: Out, part: HunterViewPart, s: Solved, pieces?: Pieces): void => {
-  const at = s.pos[part.joint];
+const drawHunterPart = (out: Out, part: HunterViewPart, s: Solved, pieces?: Pieces): void =>
+  placeRigid(out, part.key, part.vertices, s.rot[part.orientation], s.pos[part.joint], pieces);
+
+/** Draws `vertices` turned by `q` and moved to `at`: a store piece with `pieces`, else into `out`. */
+const placeRigid = (
+  out: Out,
+  key: string,
+  vertices: number[],
+  q: Quat,
+  at: Vec3,
+  pieces?: Pieces,
+): void => {
+  const part = { vertices };
   if (pieces) {
-    const m = mesh(part.key, o => {
+    const m = mesh(key, o => {
       const from = o.length;
       const a = room(o, part.vertices.length);
       part.vertices.forEach((v, i) => (a[from + i] = v));
       o.length = from + part.vertices.length;
     });
-    pieces.push({ m, q: s.rot[part.orientation], t: at, k: 1 });
+    pieces.push({ m, q, t: at, k: 1 });
     return;
   }
-  const [qx, qy, qz, qw] = s.rot[part.orientation];
+  const [qx, qy, qz, qw] = q;
   const start = out.length;
-  const vertices = room(out, part.vertices.length);
+  const placed = room(out, part.vertices.length);
   for (let i = 0; i < part.vertices.length; i += STRIDE) {
     const x = part.vertices[i],
       y = part.vertices[i + 1],
@@ -432,16 +488,16 @@ const drawHunterPart = (out: Out, part: HunterViewPart, s: Solved, pieces?: Piec
       nty = 2 * (qz * nx - qx * nz),
       ntz = 2 * (qx * ny - qy * nx);
     const k = start + i;
-    vertices[k] = at[0] + x + qw * tx + qy * tz - qz * ty;
-    vertices[k + 1] = at[1] + y + qw * ty + qz * tx - qx * tz;
-    vertices[k + 2] = at[2] + z + qw * tz + qx * ty - qy * tx;
-    vertices[k + 3] = nx + qw * ntx + qy * ntz - qz * nty;
-    vertices[k + 4] = ny + qw * nty + qz * ntx - qx * ntz;
-    vertices[k + 5] = nz + qw * ntz + qx * nty - qy * ntx;
-    vertices[k + 6] = part.vertices[i + 6];
-    vertices[k + 7] = part.vertices[i + 7];
-    vertices[k + 8] = part.vertices[i + 8];
-    vertices[k + 9] = part.vertices[i + 9];
+    placed[k] = at[0] + x + qw * tx + qy * tz - qz * ty;
+    placed[k + 1] = at[1] + y + qw * ty + qz * tx - qx * tz;
+    placed[k + 2] = at[2] + z + qw * tz + qx * ty - qy * tx;
+    placed[k + 3] = nx + qw * ntx + qy * ntz - qz * nty;
+    placed[k + 4] = ny + qw * nty + qz * ntx - qx * ntz;
+    placed[k + 5] = nz + qw * ntz + qx * nty - qy * ntx;
+    placed[k + 6] = part.vertices[i + 6];
+    placed[k + 7] = part.vertices[i + 7];
+    placed[k + 8] = part.vertices[i + 8];
+    placed[k + 9] = part.vertices[i + 9];
   }
   out.length = start + part.vertices.length;
 };
@@ -851,6 +907,30 @@ export const RAKE = 0.35;
 /** How far each of the xenomorph's claws reaches past the root of its last phalanx, metres. */
 const CLAW_L = 0.042;
 export const HUNTER_HAND: Vec3 = [0.45, 0.315, 0.22];
+/** Where the back of the Hunter's right wrist faces, in the view, with the blades out: up and well over to the right. */
+export const CLAW_ROLL: Vec3 = [0.8, 0.45, -0.4];
+/** The Hunter's left hand in its guard while the blades are out (view space, mirrored): low left, ahead. */
+export const GUARD: Vec3 = [0.3, -0.24, 0.44];
+/** How closed that guard hand is: open, the fingers a little bent. */
+const GUARD_CURL = 0.15;
+/** The guard hand thrown out ahead through a cut's wind-up, and pulled in to the belly on its strike. */
+export const LUNGE_L: Vec3 = [0.36, -0.1, 0.62];
+export const TUCK: Vec3 = [0.1, -0.24, 0.4];
+/**
+ * How far the Hunter's left hand is out ahead (LUNGE_L) and in at the belly (TUCK), 0 to 1 each, at
+ * `prog` of his cut (-1: none): out through the wind-up to the strike, then in within a tenth of
+ * the cut, held, and back to the guard over its last quarter.
+ */
+export const counter = (p: Pick<PlayerState, 'cut'>, prog: number): [number, number] => {
+  if (prog < 0) {
+    return [0, 0];
+  }
+  const c = CUTS[p.cut ?? 0] ?? CUTS[0];
+  const st = c.strike / c.ticks;
+  const snap = ease(span(prog, st, st + 0.1));
+  const back = 1 - ease(span(prog, 0.75, 1));
+  return [ease(span(prog, 0, st)) * (1 - snap), snap * back];
+};
 const HUNTER_CLAW: Vec3 = [0.7, 0.61, 0.44];
 type Claws = boolean | 'short';
 /** A finger's half thickness at its root (11.2 mm until the fingers closed round a grip, 2026-11-09). */
@@ -1701,7 +1781,12 @@ export const createBody = (world?: World): Body => {
    */
   let drawn = -1;
   let harpoonDraw = 0;
-  let harpoonFeed = 1;
+  /** Seconds since the harpoon's last shot: its bolt is drawn leaving the tube (HARPOON_OUT). */
+  let harpoonShot = Infinity;
+  /** How far the Hunter's own shoulder cannon is folded out: 0 stowed, 1 out (unfold()). */
+  let cannon = 0;
+  /** Whether the Hunter's own shoulder cannon is in use (the state drawn has it masked). */
+  let railed = false;
   let since = 9;
   /** Whether the weapon in hand came to it for the first time (firsts()): only then is it switched on, by hand (the user, 2026-11-09). */
   const fresh = firsts();
@@ -1710,13 +1795,19 @@ export const createBody = (world?: World): Body => {
   const pressOf = (kind: number) => (first ? pressAt(kind) : -1);
 
   const update: Body['update'] = (p, dt, k = 0, aspect = 1.6) => {
-    // A fresh kick is the harpoon's shot: the next bolt feeds into the tube.
-    harpoonFeed = k > kick + 0.5 ? 0 : Math.min(1, harpoonFeed + dt / HARPOON_FEED);
+    // A fresh kick is the harpoon's shot: its bolt leaves the tube; the reload feeds the next.
+    harpoonShot = k > kick + 0.5 ? 0 : harpoonShot + dt;
     kick = k;
     wide = aspect;
     if (!p) {
       me = undefined;
       return;
+    }
+    cannon = hunter ? unfold(cannon, !!p.railed && !p.down, dt) : 0;
+    // The shoulder cannon leaves his hands free: they move as with no weapon (handsFree()).
+    railed = hunter && !!p.railed;
+    if (railed) {
+      p = handsFree(p);
     }
     const floor = world && floorOf(world, p.y);
     gait.update(p, dt, floor);
@@ -1803,7 +1894,8 @@ export const createBody = (world?: World): Body => {
     // the left hand reaches its front grip.
     const r = me?.railed || me?.rifled || harpoonDraw ? 1 : 0;
     // A swap tips the gun over to show the battery under it, or the capsule on its top, and back.
-    const sp = me ? swapOf(me) : -1;
+    // The harpoon stays in aim: its next bolt feeds in on its own (drawHarpoon()).
+    const sp = me && !harpoonDraw ? swapOf(me) : -1;
     // Tipped over from the start, and back into aim after the slap (the user, 2026-11-09).
     const tipped = sp < 0 ? 0 : ease(span(sp, 0, 0.12)) * (1 - ease(span(sp, 0.8, 1)));
     const drawTilt = harpoonDraw ? 1 - ease(harpoonDraw) : 0;
@@ -2042,6 +2134,14 @@ export const createBody = (world?: World): Body => {
       // both hands.
       const free = 1 - clamp(w.plant + toWall + w.stun);
       const onSword = sw ? w.blade * free * (hunter && sd < 0 ? 0 : 1) : 0;
+      // With his wrist blades out the Hunter's left arm comes up into view in a guard, balanced
+      // against the right, its hand open, ready to fight (the user, 2026-11-23).
+      const guard = hunter && sd < 0 && sw ? w.blade * free : 0;
+      // In a cut it fights too (the user, 2026-11-23): it reaches out ahead through the wind-up,
+      // the swing's momentum, then snaps back in tight to the belly on the strike, and returns.
+      const [reached, tucked] = guard > 0 && me ? counter(me, prog) : [0, 0];
+      h = mix(h, mix(mix(GUARD, LUNGE_L, reached), TUCK, tucked), guard);
+      h[1] += 0.012 * k * guard * (1 - reached - tucked);
       let taken = onSword;
       if (sd > 0) {
         hold = w.gun * free;
@@ -2063,7 +2163,11 @@ export const createBody = (world?: World): Body => {
       ]) {
         curl += (open - curl) * t;
       }
-      curls[(sd + 1) / 2] = curl + (0.9 - curl) * taken - (hunter ? 0.55 * onSword : 0);
+      // The Hunter's blades come out of the bracer over a clenched fist (the user, 2026-11-23).
+      curls[(sd + 1) / 2] =
+        curl +
+        ((hunter && onSword ? 1 : 0.9) - curl) * taken +
+        (GUARD_CURL + 0.5 * tucked - curl) * guard;
       const to = add(eye, turn([h[0] * sd, h[1], h[2]]));
       const arm = sd < 0 ? J.ARM_L : J.ARM_R;
       reach(q, s, arm, to, turn([POLE[0] * sd, POLE[1], POLE[2]]));
@@ -2081,7 +2185,9 @@ export const createBody = (world?: World): Body => {
         reach(held, s, arm, at, keep([1, -0.8, 0.25]));
         const solved = solve(held);
         const forearm = unit(sub(solved.pos[J.HAND_R], solved.pos[J.FOREARM_R]));
-        const dorsal = unit(across(keep([-0.15, 0.85, -0.55]), forearm));
+        // The back of the wrist rolled well over to the right: the blades lean on their side (the
+        // user, 2026-11-23).
+        const dorsal = unit(across(keep(CLAW_ROLL), forearm));
         held.rot[J.FOREARM_R] = mul(inv(solved.rot[arm]), frame(dorsal, forearm));
         held.rot[J.HAND_R] = ID;
         for (const k of [arm, arm + 1, arm + 2]) {
@@ -2414,6 +2520,19 @@ export const createBody = (world?: World): Body => {
           for (const part of hunterView(build)) {
             drawHunterPart(out, part, s, pieces);
           }
+          // The shoulder cannon, from the camera: stowed, it is out of sight and not drawn.
+          if (cannon > 0) {
+            const [hinge, q] = cannonInView(cannon, target);
+            const view = mul(
+              mul(axis([0, 1, 0], yaw), axis([1, 0, 0], pitch)),
+              axis([0, 0, 1], -roll),
+            );
+            const [r, u, f] = basis(yaw, pitch, roll);
+            const at = [0, 1, 2].map(
+              i => eye[i] + r[i] * hinge[0] + u[i] * hinge[1] + f[i] * hinge[2],
+            ) as Vec3;
+            placeRigid(out, 'hunter view cannon', cannonVertices(), mul(view, q), at, pieces);
+          }
         }
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
         if (ninja) {
@@ -2470,9 +2589,10 @@ export const createBody = (world?: World): Body => {
               gunAxes(s.rot[J.HAND_R]),
               0.82,
               ease(harpoonDraw),
-              !!me?.mag,
-              ease(harpoonFeed),
+              !!me?.mag || sp >= 0,
+              harpoonFeed(sp),
               pieces,
+              (HARPOON_GONE * harpoonShot) / HARPOON_OUT,
             );
           } else if (!(hunter && rail)) {
             held(
@@ -2548,7 +2668,14 @@ export const createBody = (world?: World): Body => {
       const l = Math.hypot(...t);
       target = l < 3 ? (l ? (t.map(v => (v * 3) / l) as Vec3) : [0, 0, 3]) : t;
     },
-    muzzle: () => tip(...holster(), me ? kindOf(me) : 0),
+    muzzle: () => {
+      if (railed) {
+        // The shoulder cannon's muzzle, where its shots are seen to leave.
+        const [hinge, q] = cannonInView(cannon, target);
+        return add(hinge, model(spin(q, CANNON_MUZZLE)));
+      }
+      return tip(...holster(), me ? kindOf(me) : 0);
+    },
     spun: () => (me && prog >= 0 ? SWAY * bent(me, prog)[0] * w.blade : 0),
     parried: () => (parry = 0),
     get steps() {

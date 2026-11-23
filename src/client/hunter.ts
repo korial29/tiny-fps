@@ -42,6 +42,8 @@ const stature = 1.2;
 const sized = ([x, y, z]: Vec3): Vec3 => [x * stature * 0.9, y * stature, z * stature * 0.92];
 /** The top of the shoulder cannon's post, sculpted (CANNON_HINGE in the finished model). */
 const HINGE: Vec3 = [-0.221, 1.637, 0.06];
+/** The foot of the cannon's post, sculpted (CANNON_POST in the finished model). */
+const POST: Vec3 = [-0.233, 1.54, 0.082];
 const bell = (x: number) => Math.exp(-x * x);
 const built: Partial<Record<0 | 1 | 2, Record<string, number[]>>> = {};
 
@@ -1304,7 +1306,7 @@ export function hunter(lod: 0 | 1 | 2) {
     );
   }
   part('Laser mount');
-  limb([-0.233, 1.54, 0.082], HINGE, [0.027, 0.021, 0.031], alloy, 0.88, TWILL);
+  limb(POST, HINGE, [0.027, 0.021, 0.031], alloy, 0.88, TWILL);
   // The cannon itself, drawn deployed: it turns about the top of its post (CANNON_HINGE).
   part('Shoulder laser');
   limb(HINGE, [-0.219, 1.66, 0.1], [0.024, 0.022], alloy, 0.9, TWILL);
@@ -1911,6 +1913,8 @@ export const hunterHarpoon = (lod: 0 | 1 | 2): number[] => {
  * draws it deployed, along the look; stowed it lies back along the top of the shoulder.
  */
 export const CANNON_HINGE: Vec3 = sized(HINGE);
+/** The foot of the cannon's post, on its saddle on the left shoulder. */
+export const CANNON_POST: Vec3 = sized(POST);
 /** Radians the stowed cannon is turned about its hinge's right axis from the deployed one: muzzle back. */
 export const CANNON_FOLD = 2.9;
 /** The cannon's muzzle, from its hinge, deployed (the stepped muzzle's face). */

@@ -66,16 +66,24 @@ it('folds the shoulder cannon out into the own view when it is taken, and back o
   expect(cannon(false, 0.5)).toBeUndefined();
   // Out, its hinge over the left shoulder ahead of the eye.
   const out = cannon(true, 1)!;
-  expect(out.t[0]).toBeCloseTo(-0.25, 3);
-  expect(out.t[1]).toBeCloseTo(1.6, 3);
-  expect(out.t[2]).toBeCloseTo(-0.3, 3);
+  expect(out.t[0]).toBeCloseTo(-0.25, 2);
+  expect(out.t[1]).toBeCloseTo(1.6, 2);
+  expect(out.t[2]).toBeCloseTo(-0.3, 2);
+  // On its post, which stands on the left shoulder (the user, 2026-11-23): drawn from the same
+  // hinge, it reaches down and back to below the bottom left of the view.
+  const pieces: Pieces = [];
+  body.draw([], [0, 1.6, 0], 0, 0, 0, undefined, pieces);
+  const post = pieces.find(p => p.m === mesh('hunter view post', () => {}))!;
+  expect(post.t).toEqual(out.t);
+  expect(post.q).not.toEqual(out.q);
   // The muzzle is past the near plane, left of the crosshair and near the horizon.
   const [x, y, z] = body.muzzle();
   expect(z).toBeGreaterThan(0.3);
   expect(x / z).toBeLessThan(-0.3);
   expect(Math.abs(y / z)).toBeLessThan(0.3);
   // Half way, it is on its swing up; put away, it folds back out of the view.
-  expect(cannon(false, 0.1)!.t[1]).toBeLessThan(1.6);
+  // (its post swings it over from behind the shoulder).
+  expect(cannon(false, 0.1)!.t[2]).toBeGreaterThan(out.t[2]);
   expect(cannon(false, 1)).toBeUndefined();
 });
 

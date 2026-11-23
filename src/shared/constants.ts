@@ -393,8 +393,8 @@ export const DISK_COOL = 75;
 export const HUNTER_LASER_LOCK = 3 * TICK_HZ;
 /** Damage dealt by a locked Hunter shoulder laser. */
 export const HUNTER_LASER_HP = 3;
-/** Ticks between assisted shoulder-laser hits. */
-export const HUNTER_LASER_COOL = 18;
+/** Ticks between two shots of the shoulder cannon held down; `cool` is 4 bits on the wire, so 15 at most. */
+export const HUNTER_LASER_COOL = 15;
 /** Plasma balls in flight in a room at most: past it the oldest bursts. They go on the wire. */
 export const PLASMA_MAX = 64;
 /** Ball.power of a vehicle's laser bolt (rover.ts): past CHARGE_MAX, so it names the bolt. It flies at BOLT_SPEED m/s. */

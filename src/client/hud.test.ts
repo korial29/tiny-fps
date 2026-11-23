@@ -77,7 +77,7 @@ describe('createHud', () => {
     expect(HUD_CSS).toContain('i.hv{pointer-events:none;top:48px;width:auto;height:auto;');
   });
 
-  it('closes the Hunter laser brackets over its target and marks the lock', () => {
+  it('closes the Hunter laser’s three triangles over its target and marks the lock', () => {
     const sight = q<HTMLElement>('i.hl');
     hud.hunterAim([0.3, 0.4], 0.5);
     expect([
@@ -86,8 +86,25 @@ describe('createHud', () => {
       sight.style.top,
       sight.classList.contains('locked'),
     ]).toEqual([false, '30%', '40%', false]);
-    expect(sight.querySelector('b')!.style.transform).toBe('translate(-9px,-9px)');
-    hud.hunterAim([0.3, 0.4], 1);
+    // Tracking: three triangles, far out and each on its own beat (the user, 2026-11-23).
+    const out = (now: number) => {
+      hud.hunterAim([0.3, 0.4], 0, now);
+      return [...sight.querySelectorAll('b')].map(b =>
+        b.style.transform.match(/-?[\d.]+/g)!.map(Number),
+      );
+    };
+    const [a, b] = [out(1000), out(1500)];
+    expect(a).toHaveLength(3);
+    expect(Math.min(...a.map(t => -t[1]))).toBeGreaterThan(40);
+    const moved = a.map((t, i) => Math.abs(t[1] - b[i][1]));
+    expect(new Set(moved.map(m => m.toFixed(2))).size).toBe(3);
+    // Locked, they meet on him, a third of a turn apart.
+    hud.hunterAim([0.3, 0.4], 1, 2000);
+    expect([...sight.querySelectorAll('b')].map(b => b.style.transform)).toEqual([
+      'rotate(0deg) translateY(-13px)',
+      'rotate(120deg) translateY(-13px)',
+      'rotate(240deg) translateY(-13px)',
+    ]);
     expect(sight.classList.contains('locked')).toBe(true);
     expect(sight.querySelector('small')!.textContent).toBe('LOCK');
     hud.hunterAim();
@@ -1010,7 +1027,8 @@ describe('the gun on the HUD', () => {
       expect(shown()).toEqual(['1 gun', '2 katana', '3 rail', '4 rifle', '5 fists']);
       hud.wear(BODY.MALE, { role: ROLE.HUNTER });
       vitals();
-      expect(shown()).toEqual(['1 blades', '2 harpoon', '3 cannon', '4 rifle', '5 fists']);
+      // Three slots and no fists (the user, 2026-11-23).
+      expect(shown()).toEqual(['1 blades', '2 harpoon', '3 cannon']);
       // The harpoon in hand lights slot 2, the blades slot 1 (the user, 2026-11-23).
       expect(lit()).toEqual(['2 harpoon']);
       hud.vitals(5, 30, true, true, 7, false, 6, false, 30);

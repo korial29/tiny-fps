@@ -13,6 +13,7 @@ import {
   dashKeys,
   keyBit,
   CODES,
+  owned,
   picked,
   slotted,
   turned,
@@ -114,11 +115,27 @@ describe('the weapon choice', () => {
     expect(picked(GUN, 'Numpad2', true)).toBe(BLADE);
     expect(picked(BLADE, 'Numpad3', true)).toBe(GUN);
     expect([0, 1, 2, 3, 4].map(i => slotted(i, true))).toEqual([BLADE, GUN, RAIL, 3, 4]);
-    const have = [true, true, true, false, true];
+    const have = owned(player({ ammo: 12, blade: true, rail: 0 }), true);
     expect(turned(BLADE, 1, have, true)).toBe(GUN);
     expect(turned(GUN, 1, have, true)).toBe(RAIL);
-    expect(turned(BLADE, -1, have, true)).toBe(WEAPON.FISTS);
-    expect(turned(WEAPON.FISTS, 1, have, true)).toBe(BLADE);
+    expect(turned(BLADE, -1, have, true)).toBe(RAIL);
+    expect(turned(RAIL, 1, have, true)).toBe(BLADE);
+  });
+
+  it('gives the Hunter no fists and nothing on 4 and 5, and his blades first (the user, 2026-11-23)', () => {
+    expect(owned(player({ ammo: 12, blade: true, rail: 0 }), true)).toEqual([
+      true,
+      true,
+      true,
+      false,
+      false,
+    ]);
+    for (const code of ['Digit4', 'Digit5', 'Numpad1', 'Numpad5']) {
+      expect(picked(RAIL, code, true)).toBe(RAIL);
+    }
+    expect(chosen(GUN, player({ down: 30 }), player({ down: 1 }), true)).toBe(BLADE);
+    const armed = player({ ammo: 12, blade: true, rail: 0, wield: true });
+    expect(chosen(WEAPON.FISTS, armed, armed, true)).toBe(BLADE);
   });
 
   it('sets KEY.BLADE exactly while the katana is chosen, KEY.RAIL while the rail gun is', () => {

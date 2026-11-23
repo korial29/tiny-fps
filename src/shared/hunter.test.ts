@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { duo } from '../../test/teams';
-import { HEAT_MAX, HUNTER_LASER_HP, HUNTER_LASER_LOCK, RAIL_CAP, RAIL_MAX } from './constants';
+import {
+  HEAT_MAX,
+  HUNTER_LASER_COOL,
+  HUNTER_LASER_HP,
+  HUNTER_LASER_LOCK,
+  RAIL_CAP,
+  RAIL_MAX,
+} from './constants';
 import { STRIKE, step } from './gun';
 import { KITS, ROLE } from './kit';
 import { STILL, spawn } from './physics';
@@ -63,12 +70,24 @@ describe('the Hunter’s shoulder cannon (the user, 2026-11-23: his third weapon
     expect(p).toMatchObject({ railed: true, wield: false, reload: 0 });
   });
 
-  it('fires every step it is held, never spends, never heats and never swaps a capsule', () => {
+  it('fires on the click, then once each HUNTER_LASER_COOL ticks held, and never spends, heats or swaps', () => {
     const p = hunter();
     go(p, RAIL);
-    const strikes = Array.from({ length: 4 * HEAT_MAX }, () => go(p, RAIL | FIRE));
-    expect(strikes.every(s => s === STRIKE.RAIL)).toBe(true);
+    const n = 4 * HEAT_MAX;
+    const strikes = Array.from({ length: n }, () => go(p, RAIL | FIRE));
+    expect(strikes[0]).toBe(STRIKE.RAIL);
+    expect(strikes.filter(s => s === STRIKE.RAIL)).toHaveLength(Math.ceil(n / HUNTER_LASER_COOL));
+    expect(p.shots).toBe(Math.ceil(n / HUNTER_LASER_COOL));
     expect(p).toMatchObject({ rail: 0, cap: 0, heat: 0, hot: false, reload: 0, railed: true });
+  });
+
+  it('has no fists: KEY.FISTS leaves the weapon in hand', () => {
+    const p = hunter();
+    go(p, BLADE | KEY.FISTS | FIRE);
+    expect(p).toMatchObject({ fists: false, wield: true });
+    const q = hunter();
+    go(q, RAIL | KEY.FISTS);
+    expect(q).toMatchObject({ fists: false, railed: true });
   });
 
   it('has no ring on G', () => {
@@ -109,29 +128,64 @@ describe('the shoulder cannon through the room', () => {
     const foeC = join('foe', ROLE.MARINE);
     const state = (c: Peer): PlayerState => room['peers'].get(c)!.state;
     let seq = 0;
-    const hold = (n: number, keys: number) => {
+    const turn = (yaw: number, n: number, keys: number) => {
       for (let k = 0; k < n; k++) {
         room.receive(
           hunterC,
-          encodeInput({ seq: seq++, keys, yaw: EAST, pitch: 0, view: room['ticks'] }),
+          encodeInput({ seq: seq++, keys, yaw, pitch: 0, view: room['ticks'] }),
         );
         room.tick();
       }
     };
+    const hold = (n: number, keys: number) => turn(EAST, n, keys);
     // Face to face on the slab, 12 m apart, the foe square in the cannon's sight.
     Object.assign(state(hunterC), STILL, { x: 0, y: 1, z: 0, yaw: EAST, ground: true });
     Object.assign(state(foeC), STILL, { x: 12, y: 1, z: 0, yaw: -EAST, ground: true });
-    return { room, hold, hunter: state(hunterC), foe: state(foeC) };
+    return { room, hold, turn, hunter: state(hunterC), foe: state(foeC) };
   };
 
-  it('hits only once the foe has been held in its sight for the whole lock, then for three health', () => {
+  it('hits on the click, down the look, for three health (the user, 2026-11-23)', () => {
     const m = match();
+    const hp = m.foe.hp;
+    m.hold(1, RAIL);
+    m.hold(1, RAIL | FIRE);
+    expect(m.foe.hp).toBe(hp - HUNTER_LASER_HP);
+    expect(m.hunter.hits).toBe(1);
+  });
+
+  it('misses a foe off the look until he is locked on, then its shots go at him', () => {
+    const m = match();
+    // 4° to the side at 12 m: in the lock's cone, out of the straight shot's line.
+    Object.assign(m.foe, { z: 12 * Math.tan((4 * Math.PI) / 180) });
     const hp = m.foe.hp;
     m.hold(HUNTER_LASER_LOCK - 2, RAIL | FIRE);
     expect(m.foe.hp).toBe(hp);
-    m.hold(4, RAIL | FIRE);
-    expect(m.foe.hp).toBe(Math.max(0, hp - HUNTER_LASER_HP));
-    expect(m.hunter.hits).toBe(1);
+    expect(m.hunter.shots).toBeGreaterThan(1);
+    m.hold(HUNTER_LASER_COOL + 4, RAIL | FIRE);
+    expect(m.foe.hp).toBe(hp - HUNTER_LASER_HP);
+  });
+
+  it('loses the lock once the foe leaves the screen, and starts it over (the user, 2026-11-23)', () => {
+    const m = match();
+    Object.assign(m.foe, { z: 12 * Math.tan((4 * Math.PI) / 180) });
+    const hp = m.foe.hp;
+    m.hold(HUNTER_LASER_LOCK - 2, RAIL);
+    // One tick looking away: he is off the screen and the lock is gone.
+    m.turn(EAST + Math.PI / 2, 1, RAIL);
+    m.hold(HUNTER_LASER_COOL + 4, RAIL | FIRE);
+    expect(m.foe.hp).toBe(hp);
+    m.hold(HUNTER_LASER_LOCK, RAIL | FIRE);
+    expect(m.foe.hp).toBeLessThan(hp);
+  });
+
+  it('keeps the lock on a foe off the cone while he stays on the screen', () => {
+    const m = match();
+    Object.assign(m.foe, { z: 12 * Math.tan((4 * Math.PI) / 180) });
+    const hp = m.foe.hp;
+    m.hold(HUNTER_LASER_LOCK - 2, RAIL);
+    // 20° off the look: out of the 10° cone that starts a lock, still on the screen.
+    m.turn(EAST - (20 * Math.PI) / 180, HUNTER_LASER_COOL + 4, RAIL | FIRE);
+    expect(m.foe.hp).toBe(hp - HUNTER_LASER_HP);
   });
 
   it('does not lock on while the blades are in hand', () => {

@@ -1106,6 +1106,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   let floats = new Float32Array(0);
   /** The frame's pieces of the store (store.ts), drawn after its own vertices. */
   const pieces: Pieces = [];
+  /** The own body's pieces of the store (the Hunter's armour and harpoon), drawn with the body. */
+  const bodyPieces: Pieces = [];
   const glowPieces: boolean[] = [];
   const glowRanges: [number, number][] = [];
   /** The vertex arrays of the frame's buffer and of the store's, the two buffers, and the store's floats sent and room. */
@@ -1516,7 +1518,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         runners.get(p.id)?.trail.draw(v);
       }
       const bodyAt = v.length;
-      body?.draw(v, eye, yaw, pitch, fx.roll, rgb(colors.get(body.id) ?? '#888'));
+      bodyPieces.length = 0;
+      body?.draw(v, eye, yaw, pitch, fx.roll, rgb(colors.get(body.id) ?? '#888'), bodyPieces);
       if (tail + v.length * 4 > cap) {
         cap = tail + v.length * 8;
         alloc();
@@ -1698,11 +1701,24 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.disable(gl.SCISSOR_TEST);
       }
       uni('uniform1f', 'Y', 0);
-      if (v.length > bodyAt) {
+      if (v.length > bodyAt || bodyPieces.length) {
         // Last, over a cleared depth: the body never sinks into a wall.
         gl.clear(gl.DEPTH_BUFFER_BIT);
         moving();
-        gl.drawArrays(gl.TRIANGLES, first + bodyAt / STRIDE, (v.length - bodyAt) / STRIDE);
+        if (v.length > bodyAt) {
+          gl.drawArrays(gl.TRIANGLES, first + bodyAt / STRIDE, (v.length - bodyAt) / STRIDE);
+        }
+        if (bodyPieces.length) {
+          gl.bindVertexArray(kept);
+          for (const { m, q, t, k, w } of bodyPieces) {
+            uni('uniform1f', 'Ak', +!!w);
+            uni('uniform4fv', 'R', [...q, ...t, k]);
+            gl.drawArrays(gl.TRIANGLES, m.first, m.count);
+          }
+          uni('uniform1f', 'Ak', 0);
+          uni('uniform4fv', 'R', STILL);
+          gl.bindVertexArray(main);
+        }
         still();
       }
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaa);

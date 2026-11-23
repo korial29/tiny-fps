@@ -1812,6 +1812,8 @@ export const soldier = (
         0.82,
         1,
         !!p.mag,
+        1,
+        gpu,
       );
     } else {
       held(

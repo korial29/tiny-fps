@@ -705,12 +705,16 @@ export const LAYERS: Voice[][] = [
     [1, 190, 1.4, 0.025, 0.1, 0.25, 0.12, 0.16, 0, 1, 0.35, 0.17],
     [2, 720, -0.8, 0.015, 0.05, 0.2, 0.2, 0.2, 0, 1, 0.3, 0.2],
   ],
-  // HUNTER_BLADE_DRAW: a wrist ratchet, a pair of rising metal slides and a dry locking click.
+  // HUNTER_BLADE_DRAW, timed on the blades sliding out (BLADE_EXTEND, 0.3 s): two ratchet teeth,
+  // a rising scrape of steel on steel all the way out, a hard locking click as they reach their
+  // stop and a short ring after it.
   [
     [0, 1750, -1.8, 0.001, 0, 0.018, 0, 0.35, 0, 1, 0.32],
-    [3, 5100, -1.2, 0.001, 0, 0.055, 0, 0.2, 0, 1, 0.22, 0.018],
-    [1, 920, 1.7, 0.008, 0.025, 0.09, 0.15, 0.25, 0, 1, 0.3, 0.035],
-    [0, 2500, 0, 0.001, 0, 0.014, 0, 0.3, 0, 1, 0.25, 0.13],
+    [0, 2100, 0, 0.001, 0, 0.012, 0, 0.35, 0, 1, 0.22, 0.03],
+    [3, 6000, 1, 0.02, 0.18, 0.06, 0, 0.22, 0, 1, 0.24, 0.04],
+    [1, 700, 1.6, 0.02, 0.17, 0.05, 0.12, 0.2, 0, 1, 0.2, 0.05],
+    [0, 2600, 0, 0.001, 0, 0.016, 0, 0.3, 0, 1, 0.34, 0.29],
+    [2, 3400, -0.3, 0.001, 0, 0.18, 0.03, 1, 0, 1, 0.12, 0.29],
   ],
   // HUNTER_BLADE_SHEATHE: a clipped latch, a short descending slide and a dull bracer thunk.
   [

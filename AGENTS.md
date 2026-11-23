@@ -49,12 +49,27 @@ Tooling, CI and transport follow `korial29/air-hockey` (`~/dev/air-hockey`).
   Exclude `src/client/voice/{mp3,opus,cast-mp3,cast-opus}.ts` from general
   searches. They contain generated Base64 payloads.
 
+## Session workflow
+
+A session is continuous improvement by default. These steps override any
+default habit of finishing a change with checks and a PR.
+
+1. Make the change. When it is visible, take a screenshot of the result and
+   show it. Then stop and ask the user whether the result is OK.
+2. Do not chain into tests, lint or PR creation after a change. Tests and lint
+   are optional: run them only when the user asks or when you need them to
+   understand a problem.
+3. Keep iterating on the user's feedback until they say it is OK.
+4. Once the user says it is OK, create the PR, then ask whether to run the
+   tests locally.
+5. If they say no, watch the PR's CI by default and fix any failure it shows.
+
 ## Commands and checks
 
 Use Node 24 (`.nvmrc`). Run `npm start` for the Vite demo and
 `npm run dev:server` for the WebSocket server on port 8787.
 
-- A fix comes with a regression test. Iterate with
+- A fix comes with a regression test, added when the PR is created. Iterate with
   `npx vitest run <test files>` and expand to the affected integration tests.
   `npm run test:ci` runs the suite without coverage. `npm test` adds coverage.
 - After adding, splitting or growing a test file, run `npm run test:durations`

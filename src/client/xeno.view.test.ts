@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EYE, HEAVY_MAX, HEAVY_TAP, STING, TAILS } from '../shared/constants';
 import { STILL } from '../shared/physics';
+import { swingOf } from '../shared/blade';
 import { MODE, SIDE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { createBody } from './body';
@@ -8,7 +9,7 @@ import type { Body } from './body';
 import { STRIDE, basis } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J } from './rig';
-import { lashOf } from './xeno';
+import { HOOKED, lashOf } from './xeno';
 
 // The xenomorph's own first-person body (the user, 2026-11-16): on a wall it heads where it looks,
 // and its tail answers a click at once, coiled in an S on its side while it charges.
@@ -121,5 +122,34 @@ describe('its tail in the own view', () => {
       ).toBeLessThan(0.05);
     }
     expect(tail(STING.STAB, ticks - hold, HEAVY_MAX)).toBeGreaterThan(50);
+  });
+
+  it('comes out of its rest over the charge’s first ticks, then never sweeps across the view (the user, 2026-11-23)', () => {
+    for (const cut of [STING.STAB, STING.SWEEP_L, STING.SWEEP_R, STING.LASH]) {
+      const { ticks, hold } = TAILS[cut];
+      const lash = (charge: number) =>
+        lashOf({ cut, swing: ticks - hold, charge, down: 0 }) as readonly number[];
+      // The press: still near its rest, not at its poise in one frame.
+      const rest = (l: readonly number[]) =>
+        l.slice(0, 6).reduce((n, v, i) => n + Math.abs(v - HOOKED[i]!), 0);
+      expect(rest(lash(1))).toBeLessThan(rest(lash(HEAVY_MAX)) / 2);
+      // Its turn goes one way only, and settles once out of its rest.
+      const turns = Array.from({ length: HEAVY_MAX }, (_, k) => lash(k + 1)[1]!);
+      const sign = Math.sign(turns.at(-1)! - turns[0]!);
+      turns.slice(1).forEach((v, k) => expect((v - turns[k]!) * sign).toBeGreaterThanOrEqual(0));
+      expect(Math.abs(turns[HEAVY_TAP]! - turns.at(-1)!)).toBeLessThan(1e-9);
+    }
+  });
+
+  it('leans the lash’s tail less at a full charge, up into the view, and lets it go from there', () => {
+    const { ticks, hold } = TAILS[STING.LASH];
+    const held = lashOf({ cut: STING.LASH, swing: ticks - hold, charge: HEAVY_MAX, down: 0 });
+    const poised = lashOf({ cut: STING.LASH, swing: ticks - hold - 1, down: 0 });
+    // It showed in the bottom quarter of the view only (the user, 2026-11-23).
+    expect(held[2]).toBeLessThan(poised[2] * 0.7);
+    // The heavy release starts where the charge held it: no jump.
+    const heavy = swingOf({ cut: STING.LASH, heavy: true }, TAILS).ticks;
+    const out = lashOf({ cut: STING.LASH, swing: heavy, heavy: true, charge: HEAVY_MAX, down: 0 });
+    expect(out[2]).toBeCloseTo(held[2], 2);
   });
 });

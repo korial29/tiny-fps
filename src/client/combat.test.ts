@@ -10,6 +10,7 @@ import {
   RAIL_RELOAD,
   CUTS,
   CHARGE_TAP,
+  HEAVY_MAX,
   GUN_RANGE,
   INTERP_DELAY,
   MAX_PITCH,
@@ -19,6 +20,7 @@ import {
   NADE,
   NADE_COOL,
 } from '../shared/constants';
+import { swingOf } from '../shared/blade';
 import { STILL } from '../shared/physics';
 import { BODY, CUT, KEY, LIMB } from '../shared/types';
 import type { PlayerState } from '../shared/types';
@@ -460,6 +462,37 @@ describe('the rail gun’s bolts', () => {
     expect(on[on.length - 1].r).toBeGreaterThan(on[0].r * 1.5);
     expect(on[on.length - 1].v).toBeGreaterThan(on[0].v);
     expect(whine[whine.length - 1].v).toBe(0);
+  });
+
+  it('whine for no xenomorph: its charge is its tail’s (the user, 2026-11-23)', () => {
+    const t = setup();
+    const loops = new Map<number, { v: number; r: number }[]>();
+    const audio = {
+      ...t.audio,
+      loop: (id: number) => {
+        loops.set(id, []);
+        return { set: (v: number, r: number) => loops.get(id)!.push({ v, r }) };
+      },
+    };
+    const combat = createCombat(
+      WORLD,
+      audio,
+      t.hud,
+      t.fx,
+      t.tracer,
+      t.ctl,
+      t.balls,
+      undefined,
+      undefined,
+      undefined,
+      id => id == 1,
+    );
+    // The gun's loop is made while a gun is in hand; the xenomorph charges its tail after.
+    const charges = [0, ...Array.from({ length: 40 }, (_, k) => CHARGE_TAP + k)];
+    charges.forEach((charge, k) =>
+      combat.frame(VIEW, player({ charge }), [], 0, 1 / 60, 1000 + (k * 1000) / 60),
+    );
+    expect(loops.get(SOUND.CHARGE)!.every(s => s.v == 0)).toBe(true);
   });
 
   it('go from an other runner’s rail gun while he holds it, with the crackle where he is', () => {
@@ -1248,5 +1281,28 @@ describe('the xenomorph’s sounds', () => {
       expect(ids().at(-1)).toBe(id);
     }
     expect(ids()).not.toContain(SOUND.SWISH);
+  });
+
+  it('whips its tail when it lets go, a tap or a full charge, not at the press that coils it (the user, 2026-11-23)', () => {
+    const { frame, ids, x } = beastly();
+    const { ticks, hold } = TAILS[STING.LASH];
+    const coil = (charge: number) => x({ cut: STING.LASH, swing: ticks - hold, charge });
+    frame([x({})]);
+    // Pressed and held: the hiss, no whip.
+    for (let k = 1; k <= HEAVY_MAX; k++) {
+      frame([coil(k)]);
+    }
+    expect(ids()).toEqual([SOUND.XENO_HISS]);
+    // Let go at a full charge: the heavy release runs shorter than what was left of the swing.
+    const heavy = swingOf({ cut: STING.LASH, heavy: true }, TAILS).ticks;
+    expect(heavy).toBeLessThan(ticks - hold);
+    frame([x({ cut: STING.LASH, swing: heavy, heavy: true, charge: HEAVY_MAX })]);
+    expect(ids()).toEqual([SOUND.XENO_HISS, SOUND.STING]);
+    // A tap: coiled for a few ticks, then the strike from the top.
+    frame([x({})]);
+    frame([coil(1)]);
+    frame([coil(2)]);
+    frame([x({ cut: STING.LASH, swing: ticks - hold - 1, charge: 0 })]);
+    expect(ids().filter(id => id == SOUND.STING)).toHaveLength(2);
   });
 });

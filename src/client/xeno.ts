@@ -52,6 +52,8 @@ export type Lash = readonly [
   aim?: number,
   pull?: number,
 ];
+/** The share of its lean a charge takes off the tail, to raise it in the own view (Lash's `lean`). */
+const CHARGE_LEAN = 0.4;
 /** At rest: behind, hooked. */
 export const HOOKED: Lash = [0, 0, 0, 0, 1, 0, 0, 0];
 
@@ -59,7 +61,7 @@ export const HOOKED: Lash = [0, 0, 0, 0, 1, 0, 0, 0];
  * Where its tail is through a strike (TAILS, by the cut): it goes from HOOKED to the strike's poise
  * in the first third of the wind-up (or most of the way to the strike for a special), so it answers
  * the click at once (the user, 2026-11-16), is driven to its end at the strike, eased in, then
- * comes back. A charge holds it cocked on its side, drawn in and coiled in an S over a tap of
+ * comes back. A charge holds it at that poise, drawn in and coiled in an S over a tap of
  * charge, then still but for its breath with the clock `t` (the user, 2026-11-16); let go, it
  * strikes from there. The SPIN turns the tail low once round the body.
  */
@@ -86,23 +88,31 @@ export const lashOf = (
   // whipped all round: `a` of the way, as the tail comes out of its rest and goes back to it.
   const aimed = (l: Lash, a: number, pull = 0): Lash =>
     c == STING.SPIN ? l : [l[0], l[1], l[2], l[3], l[4], l[5], l[6] ?? 0, a, pull];
-  // Charged, it is cocked on its side of the view, the left sweep's on the left.
-  const cocked: Lash =
-    c == STING.SWEEP_L ? ([0, -COCKED[1], ...COCKED.slice(2)] as unknown as Lash) : COCKED;
   if (p.charge && !p.heavy) {
-    // Drawn in from its poise and coiled by a tap of charge, then still but for its breath (the
-    // user, 2026-11-16): a tap let go strikes from about its poise.
-    const [k, s] = [ease(p.charge / HEAVY_TAP), Math.sin(t * 2.4)];
-    const [a, b, d, r, h, l] = mix(poise, cocked, k);
-    return aimed([a, b + 0.02 * s, d, r - 0.12 * k, h, l + 0.04 * s, k], 1);
+    // The press starts the charge at the top of the wind-up: the tail comes out of its rest on the
+    // charge's own first ticks, as a wind-up's first third would, coiled in its S, and stays at its
+    // poise, drawn in by a tap of charge, then still but for its breath (the user, 2026-11-16). It no
+    // longer slides from there to another pose: across the view, that read as a first blow before
+    // the charge (the user, 2026-11-23). Let go, a tap or a heavy release strikes from there.
+    const f = 1 - Math.max(0, 1 - (3 * p.charge) / k.hold) ** 3;
+    const [g, s] = [ease(p.charge / HEAVY_TAP), Math.sin(t * 2.4)];
+    const [a, b, d, r, h, l] = mix(HOOKED, poise, f);
+    // Coiled as it comes in, not after: the S growing at the top swept the tip across the view.
+    // Leaning less than its poise, so the lash's tail rises to mid-view at a full charge and not
+    // just its stinger (the user, 2026-11-23: it showed in the bottom quarter only).
+    const lean = d * (1 - CHARGE_LEAN * f);
+    return aimed([a, b + 0.02 * s * f, lean, r - 0.12 * g, h, l + 0.04 * s * f, f], f);
   }
   if (u < top) {
     // In sight within a third of the wind-up, held there to its top.
     const f = 1 - Math.max(0, 1 - (3 * u) / top) ** 3;
     return aimed(mix(HOOKED, poise, f), f);
   }
-  // A heavy release from where the charge held it, round the shorter way, far out.
-  const from = p.heavy ? cocked : poise;
+  // A release from where the charge held it, the heavy one round the shorter way, far out.
+  // A heavy one from its charged lean (the tap's cannot be told from a plain strike's here).
+  const from: Lash = p.heavy
+    ? ([poise[0], poise[1], poise[2] * (1 - CHARGE_LEAN), ...poise.slice(3)] as unknown as Lash)
+    : poise;
   if (c == STING.SPIN) {
     return mix([0.3, TAU * ease((u - top) / (1 - top)), 0, 0.2, 0, 0], HOOKED, back);
   }
@@ -141,8 +151,6 @@ const LASH: Record<number, [Lash, Lash]> = {
   [STING.SPIN]: [[0.3, 0, 0, 0.2, 0, 0], HOOKED],
   [STING.LEAP]: [DOWN, THRUST],
 };
-/** Charged: up on the right of the view, ahead, where its S shows (the user, 2026-11-16). */
-const COCKED: Lash = LASH[STING.STAB][0];
 
 /** Sides round a piece at each level of detail (far, near, the own body, close), by how fine it is. */
 const SIDES = [
@@ -925,6 +933,10 @@ const blade = (
     ringTo(RA, at, w, up, tip, sides);
     ringTo(RB, at.map((v, i) => v + w[i] * 0.02) as Vec3, w, up, tip * 1.3, sides);
     strip(out, RA, sides, RB, sides, color, -2);
+    // Closed over the blade's root, a short cone: open, the sky showed through it, a gap between
+    // the tail and the blade (the user, 2026-11-23).
+    const shut = ringTo(RA, at.map((v, i) => v + w[i] * 0.05) as Vec3, w, up, 0, 1);
+    strip(out, RB, sides, RA, shut, color, -2);
   }
   let na = 0;
   for (let k = 0; k <= steps; k++) {

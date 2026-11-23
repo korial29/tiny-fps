@@ -75,7 +75,15 @@ import {
 } from './gun';
 import { helm } from './helm';
 import { helmet } from './helmet';
-import { hunter as hunterModel, hunterWristEnds, drawHarpoon } from './hunter';
+import {
+  HUNTER_REST,
+  blendHunter,
+  drawHarpoon,
+  hunterPose,
+  hunterRig,
+  hunterWristEnds,
+} from './hunter';
+import type { HunterPiece } from './hunter';
 import { HEAD_SCALE, STYLE, hair, styleOf, sway } from './hair';
 import { ID, ORIGIN, mesh } from './store';
 import { flesh } from './flesh';
@@ -1246,18 +1254,14 @@ const LIMBS_X = [
 /** The ninja's boots: black cloth, a shade lighter than his suit so they show on it. */
 const BOOT = [0.06, 0.06, 0.066];
 type HunterLod = 0 | 1;
-// Centres of the shared upper-arm rings in the far and near sculpted skins.
-const hunterShoulder: [Vec3, Vec3] = [
-  [0.283, 1.567, 0.004],
-  [0.28, 1.629, -0.016],
-];
-const hunterTrail = hunterWristEnds();
-const hunterDraw: Partial<Record<HunterLod, [name: string, vertices: number[]][]>> = {};
-const hunterParts = (lod: HunterLod) =>
-  (hunterDraw[lod] ??= Object.entries(hunterModel(lod)).filter(
-    ([name, vertices]) =>
-      vertices.length > 0 && (lod !== 0 || (!name.startsWith('Quills') && name !== 'Visor grille')),
-  ));
+const hunterTrail = hunterWristEnds().map(p => sub(p, HUNTER_REST[J.FOREARM_R]));
+/** The far level leaves out the quills and the visor grille. */
+const hunterPieces = (lod: HunterLod) =>
+  hunterRig(lod, name => lod === 0 && (name.startsWith('Quills') || name === 'Visor grille'));
+const hunterKey = (lod: HunterLod, piece: HunterPiece) =>
+  `hunter ${lod} ${piece.joint} ${+piece.thin} ${+piece.harpoon}`;
+/** The Hunter's joints this frame (hunterPose()), reused. */
+const hunterAt: Vec3[] = [];
 
 let hunterWarmed = false;
 
@@ -1267,8 +1271,8 @@ export const warmHunter = () => {
     return;
   }
   for (const lod of [0, 1] as const) {
-    for (const [name, vertices] of hunterParts(lod)) {
-      mesh(`hunter ${name} ${lod}`, o => placeHunterPart(o, vertices, ORIGIN, ID));
+    for (const piece of hunterPieces(lod).pieces) {
+      mesh(hunterKey(lod, piece), o => placeHunterPart(o, piece.vertices, ORIGIN, ID));
     }
   }
   hunterWarmed = true;
@@ -1453,33 +1457,31 @@ export const soldier = (
   } else {
     const from = out.length;
     if (isHunter) {
-      const at: Vec3 = [p.x, p.y, p.z];
-      const root = axis([0, 1, 0], yaw);
+      // His own bones carried by the runner's animated skeleton (hunterPose()), one rigid piece
+      // on each: the gait, the blade's cuts and the falls move him as they move the marine.
       const detail = Math.min(lod, 1) as HunterLod;
-      const armRotation = blade ? slerp(root, s.rot[J.FOREARM_R], 0.8) : root;
-      const armOrigin = blade
-        ? add(
-            at,
-            sub(turn(root, hunterShoulder[detail]), turn(armRotation, hunterShoulder[detail])),
-          )
-        : at;
-      for (const [name, vertices] of hunterParts(detail)) {
-        if (name === 'Harpoon' && handOf(p) === 0) {
+      const joints = hunterPose(s.pos, s.rot, [p.x, p.y, p.z], yaw, hunterAt);
+      const rig = hunterPieces(detail);
+      for (const band of rig.bands) {
+        blendHunter(out, band, joints, s.rot);
+      }
+      for (const piece of rig.pieces) {
+        if (piece.harpoon && handOf(p) === 0) {
           continue;
         }
-        const onArm = name === 'Right arm' || name === 'Blade cuff' || name === 'Wrist blade';
         rigid(
-          `hunter ${name} ${detail}`,
-          onArm ? armOrigin : at,
-          onArm ? armRotation : root,
-          (o, position, rotation) => placeHunterPart(o, vertices, position, rotation),
+          hunterKey(detail, piece),
+          joints[piece.joint],
+          s.rot[piece.joint],
+          (o, position, rotation) => placeHunterPart(o, piece.vertices, position, rotation),
           1,
           true,
-          name.startsWith('Temple') || name === 'Rangefinder',
+          piece.thin,
         );
       }
       if (blade) {
-        const [base, tip] = hunterTrail.map(p => add(armOrigin, turn(armRotation, p)));
+        const [elbow, q] = [joints[J.FOREARM_R], s.rot[J.FOREARM_R]];
+        const [base, tip] = hunterTrail.map(p => add(elbow, turn(q, p)));
         r.trail.mark(base, tip, cutting(r.prog) || (r.parry >= 0 && r.parry < 2 * PARRY_IN));
       }
     } else {

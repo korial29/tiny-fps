@@ -136,6 +136,7 @@ type Blade = Pick<
   | 'blade'
   | 'fists'
   | 'heavy'
+  | 'charge'
   | 'down'
   | 'railed'
   | 'ammo'
@@ -149,10 +150,23 @@ type Blade = Pick<
  * The CUT of a swing that started between two states of a player, or -1: `swing` jumped up (it
  * only counts down), or the cut changed under a running one.
  */
-export const swung = (a?: Blade, b?: Blade): number =>
-  a && b && (b.swing ?? 0) > 0 && ((b.swing ?? 0) > (a.swing ?? 0) || (b.cut ?? 0) != (a.cut ?? 0))
-    ? (b.cut ?? 0)
-    : -1;
+export const swung = (a?: Blade, b?: Blade, xeno = false): number => {
+  if (!a || !b || !(b.swing ?? 0)) {
+    return -1;
+  }
+  // The xenomorph's tail whips at its release, not at the press that coils it (the user,
+  // 2026-11-23: a first blow was heard before the charge): a tap let go strikes from the top.
+  const coiled = (s: Blade) => !!s.charge && !s.heavy;
+  if (xeno && coiled(b)) {
+    return -1;
+  }
+  // Let go, tap or heavy: the heavy release (TAIL_FAST) is shorter than what was left of the
+  // swing, so `swing` does not jump up there (the user, 2026-11-23: no sound at a full charge).
+  if (xeno && coiled(a)) {
+    return b.cut ?? 0;
+  }
+  return (b.swing ?? 0) > (a.swing ?? 0) || (b.cut ?? 0) != (a.cut ?? 0) ? (b.cut ?? 0) : -1;
+};
 
 /**
  * Whether the step from a to b is the strike of its cut: `swing` went down through the strike tick
@@ -478,8 +492,8 @@ export const createCombat = (
         const cannon = !!b?.railed && hunter(b.id);
         fx.fire(nade || (b?.railed && !cannon) ? 3 : cannon ? 1 : b?.power);
       }
-      const c = swung(a, b);
       const xeno = !!b && beast(b.id);
+      const c = swung(a, b, xeno);
       if (c >= 0) {
         cuts.push(fists(b) ? FIST_CUE + blowOf(b!, xeno) : c + (b?.heavy ? HEAVY_CUE : 0));
       }
@@ -568,7 +582,9 @@ export const createCombat = (
         // charge, louder as it fills.
         if (me.ammo >= 0 || charging) {
           charging ??= audio.loop?.(SOUND.CHARGE);
-          const c = me.wield || me.down || (me.charge ?? 0) < CHARGE_TAP ? -1 : filled(me.charge);
+          // The xenomorph's charge is its tail's: no gun whine (the user, 2026-11-23).
+          const off = me.wield || me.down || beast(me.id) || (me.charge ?? 0) < CHARGE_TAP;
+          const c = off ? -1 : filled(me.charge);
           charging?.set(c < 0 ? 0 : 0.2 + 0.25 * c, 0.8 + 1.2 * Math.max(c, 0));
         }
         const rail = me.rail ?? -1;
@@ -640,7 +656,7 @@ export const createCombat = (
       }
       // The muzzles charging: the own, and every other gun in hand.
       const hot: { p: Vec3; k: number }[] = [];
-      if (from && me && !me.wield && (me.charge ?? 0) >= CHARGE_TAP) {
+      if (from && me && !me.wield && !beast(me.id) && (me.charge ?? 0) >= CHARGE_TAP) {
         hot.push({ p: from, k: filled(me.charge) });
       }
       pending = [];
@@ -695,7 +711,7 @@ export const createCombat = (
           hot.push({ p: gun(p), k: filled(p.charge) });
         }
         const old = blades.get(p.id);
-        const c = swung(old, p);
+        const c = swung(old, p, beast(p.id));
         if (c >= 0) {
           const cue = fists(p) ? FIST_CUE + blowOf(p, beast(p.id)) : c + (p.heavy ? HEAVY_CUE : 0);
           swish(cue, at, hunter(p.id) && cue < FIST_CUE);
@@ -721,6 +737,7 @@ export const createCombat = (
           blade: p.blade,
           fists: p.fists,
           heavy: p.heavy,
+          charge: p.charge,
           down: p.down,
           railed: p.railed,
           ammo: p.ammo,

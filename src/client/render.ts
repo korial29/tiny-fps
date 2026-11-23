@@ -1705,7 +1705,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         // Last, over a cleared depth: the body never sinks into a wall.
         gl.clear(gl.DEPTH_BUFFER_BIT);
         moving();
-        gl.drawArrays(gl.TRIANGLES, first + bodyAt / STRIDE, (v.length - bodyAt) / STRIDE);
+        if (v.length > bodyAt) {
+          gl.drawArrays(gl.TRIANGLES, first + bodyAt / STRIDE, (v.length - bodyAt) / STRIDE);
+        }
         if (bodyPieces.length) {
           gl.bindVertexArray(kept);
           for (const { m, q, t, k, w } of bodyPieces) {

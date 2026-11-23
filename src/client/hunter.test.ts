@@ -43,9 +43,10 @@ it('builds the Hunter harpoon as a detailed foldable rifle', () => {
   expect(rifle.length).toBeGreaterThan(300 * STRIDE);
   expect(rifle.length % STRIDE).toBe(0);
   expect(rifle.some((_, i) => i % STRIDE === 6 && rifle[i] > 0.4)).toBe(true);
-  // Gilt bronze throughout, the forked prongs and lattice cage reaching past the bolt's point.
+  // Brushed bronze shell (TWILL), a gilt bolt and the leather grip's plain layer; the forked
+  // prongs and lattice cage reaching past the bolt's point.
   const layers = new Set(rifle.filter((_, i) => i % STRIDE === 8));
-  expect([...layers]).toEqual([GILT]);
+  expect(layers).toEqual(new Set([TWILL, GILT, -1]));
   const zs = rifle.filter((_, i) => i % STRIDE === 2);
   const xs = rifle.filter((_, i) => i % STRIDE === 0);
   expect(Math.min(...zs)).toBeLessThan(-1.3);

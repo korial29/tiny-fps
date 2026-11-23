@@ -509,6 +509,7 @@ describe('createRenderer', () => {
         -0.2,
         fx.roll,
         [1, 0, 0],
+        expect.any(Array),
       );
       expect(draws()).toEqual([
         [0, FLOOR_VERTS],
@@ -522,6 +523,27 @@ describe('createRenderer', () => {
       // The world, then a depth clear, then the body.
       expect(clears.at(-1)).toBeGreaterThan(scene[1]);
       expect(clears.at(-1)).toBeLessThan(scene[2]);
+    });
+
+    it('draws the pieces it hands over after the depth clear, placed, with no shadow', () => {
+      const rd = createRenderer(canvas, ROOM);
+      const piece = { m: { first: 5, count: 6 }, q: [0, 0, 0, 1], t: [1, 2, 3], k: 0.5 };
+      const b = body(
+        vi.fn((_out: number[], ...rest: unknown[]) => void (rest[5] as unknown[]).push(piece)),
+      );
+      rd.frame([1, 1.6, 1], 0, 0, [], new Map(), createEffects(), [], b);
+      // Once, in the scene's pass: the sun's shadow pass does not see the own body.
+      expect(draws(true).filter(([first]) => first == 5)).toEqual([[5, 6]]);
+      const at = calls.findIndex(c => c[0] == 'drawArrays' && c[2] == 5 && c[3] == 6);
+      const clears = calls.flatMap((c, i) =>
+        c[0] == 'clear' && c[1] == K('DEPTH_BUFFER_BIT') ? [i] : [],
+      );
+      expect(at).toBeGreaterThan(clears[clears.length - 1]);
+      const placed = calls
+        .slice(0, at)
+        .filter(c => c[0] == 'uniform4fv' && (c[1] as { u?: string }).u == 'R')
+        .pop();
+      expect(placed?.[2]).toEqual([0, 0, 0, 1, 1, 2, 3, 0.5]);
     });
 
     it('is not drawn, and costs no clear, when it has nothing to show', () => {

@@ -277,7 +277,7 @@ export const TAIL_LEAP = 10;
  * than a tap but TAIL_FAST times its time from the top, and TAIL_FAR metres further, where the
  * katana's heavy release is HEAVY times as slow and HEAVY_REACH further (swingOf()).
  */
-export const [TAIL_FAST, TAIL_FAR] = [0.75, 2];
+export const [TAIL_FAST, TAIL_FAR] = [0.75, 1];
 export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];
 /**
  * The xenomorph (the user, 2026-11-15; kit.ts). XENO_HP health. It clings to a wall it faces with

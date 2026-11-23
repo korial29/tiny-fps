@@ -776,8 +776,8 @@ export const tail = (
   }
   // The stinger at the foe: at the point AIM_AT metres ahead of the eyes, the blade's back up the
   // view, its base lifted so its curve's chord, not its root, points there (blade() bends it down).
-  // The tail's last vertebrae bend round, more each one toward the tip, till its end runs into the
-  // blade: no blade through the tail, and still a curve, never a straight run (the user, 2026-11-23).
+  // The tail's last vertebrae curve round till its end runs into the blade: no blade through the
+  // tail, and a curve, never a straight run (the user, 2026-11-23).
   const aim = look ? Math.min(lash[7] ?? 0, 1) : 0;
   let stinger: [Vec3, Vec3] | undefined;
   if (look && aim > 0) {
@@ -790,38 +790,18 @@ export const tail = (
     const top = unit(vu.map((v, i) => v - d[i] * dot) as Vec3);
     const [lc, ls] = [Math.cos(AIM_LIFT), Math.sin(AIM_LIFT)];
     const at = d.map((v, i) => v * lc + top[i] * ls) as Vec3;
-    // The turn that takes the tail's last step onto the blade's way, about their common normal.
-    const last = unit([0, 1, 2].map(i => tip[i] - bones[L - 1][0][i]) as Vec3);
-    const ax: Vec3 = [
-      last[1] * at[2] - last[2] * at[1],
-      last[2] * at[0] - last[0] * at[2],
-      last[0] * at[1] - last[1] * at[0],
-    ];
-    const sin = Math.hypot(ax[0], ax[1], ax[2]);
-    const turn = Math.atan2(sin, last[0] * at[0] + last[1] * at[1] + last[2] * at[2]);
-    if (sin > 1e-6) {
-      const k = ax.map(v => v / sin) as Vec3;
-      const steps = bones.slice(L - BEND, L + 1).map(b => b[0]);
-      let p = steps[0];
-      for (let j = 1; j <= BEND; j++) {
-        const v = [0, 1, 2].map(i => steps[j][i] - steps[j - 1][i]);
-        const a = turn * aim * (j / BEND) ** 1.5;
-        const [c, n] = [Math.cos(a), Math.sin(a)];
-        const kv = k[0] * v[0] + k[1] * v[1] + k[2] * v[2];
-        const kx = [
-          k[1] * v[2] - k[2] * v[1],
-          k[2] * v[0] - k[0] * v[2],
-          k[0] * v[1] - k[1] * v[0],
-        ];
-        p = [0, 1, 2].map(i => p[i] + v[i] * c + kx[i] * n + k[i] * kv * (1 - c)) as Vec3;
-        bones[L - BEND + j][0] = p;
-      }
-      // Its tip back where it was (a strike's, on the foe), the shift shared back along the bend.
-      const off = [0, 1, 2].map(i => tip[i] - p[i]);
-      for (let j = 1; j <= BEND; j++) {
-        const b = bones[L - BEND + j][0];
-        bones[L - BEND + j][0] = b.map((v, i) => v + off[i] * (j / BEND)) as Vec3;
-      }
+    // A curve from BEND steps back to the tip that ends along the blade's way: a quadratic
+    // Bézier whose control point is behind the tip along it, the tip kept where it was.
+    const p0 = bones[L - BEND][0];
+    const h = far(p0, tip) / 2;
+    for (let j = 1; j < BEND; j++) {
+      const [u, b] = [j / BEND, bones[L - BEND + j]];
+      b[0] = b[0].map(
+        (v, i) =>
+          v +
+          ((1 - u) ** 2 * p0[i] + 2 * (1 - u) * u * (tip[i] - at[i] * h) + u * u * tip[i] - v) *
+            aim,
+      ) as Vec3;
     }
     stinger = [at, top];
   }
@@ -912,7 +892,7 @@ const HIT_AT = [1.1, 1.2, 0.12] as const;
 const CLEAR = 0.45;
 /** Radians the stinger's root turns up from the foe: about half its curve (blade()), so its point meets him. */
 const AIM_LIFT = 0.85;
-/** The tail's last steps that bend round into an aimed stinger, the turn growing toward the tip. */
+/** The tail's last steps that curve round into an aimed stinger. */
 const BEND = 5;
 
 /** The stinger's steel: a cold, dark polish that takes the sky's reflection (SHINE). */

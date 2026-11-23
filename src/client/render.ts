@@ -1777,7 +1777,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const face = Math.atan2(-sunDir[0], -sunDir[2]) + shot.sun;
       const model: PlayerState = {
         ...p,
-        ...{ y: shot.y, vx: 0, vy: 0, vz: 0, yaw: face, pitch: 0, mode: MODE.GROUND, t: 0 },
+        ...{ y: shot.y, vx: 0, vy: 0, vz: 0, yaw: face, pitch: 0, mode: MODE.GROUND, t: p.t },
         ...{ down: 0, stun: 0, swing: 0, ev: 0, fall: 0, held: 0 },
         // Empty handed.
         ...{
@@ -1792,6 +1792,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       };
       // At ease, the arms down: no fighter's guard. The xenomorph is never at ease: it threatens.
       const r = createRunner(model, undefined, build, look ?? {}, true);
+      // Portrait frames do not advance time while posing. Sample the player's clock to keep the
+      // menu preview animated without simulating the elapsed time.
+      r.gait.update(model, 0, undefined, undefined, p.t);
+      r.t = p.t;
       r.menace = look?.role === ROLE.XENO;
       if (shot.grin) {
         // Eased in at once: a moment of the face's time, under its first blink's half second.

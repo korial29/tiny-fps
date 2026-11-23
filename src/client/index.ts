@@ -56,7 +56,7 @@ import { createPacing } from './pacing';
 import { brief, goal } from './mission';
 import { lamps } from './satellite';
 import { packsOf } from './props';
-import { FACE, HEAD, createRenderer } from './render';
+import { FACE, HEAD, PORTRAIT, createRenderer } from './render';
 import { STEPS, createLoader } from './loading';
 import { createWrecks } from './wreck';
 import type { createTargeting } from './targeting';
@@ -350,10 +350,41 @@ const play = (
   let picked: Choice & { body: number } = { body: 0 };
   /** The own class's health at most (Kit.hp), for the face. */
   let hpMax = HP_MAX;
-  const avatar = hud.cast(c => {
-    picked = c;
-    ws.send(JSON.stringify({ t: 'body', ...c } satisfies ClientText));
-  });
+  let previewActive = false;
+  let previewJobs: (() => void)[] = [];
+  let previewFrame = 0;
+  let previewNext = 0;
+  let headKey = '';
+  const pumpPreview = () => {
+    if (!previewActive || previewFrame || !previewJobs.length || dead) {
+      return;
+    }
+    previewFrame = requestAnimationFrame(() => {
+      previewFrame = 0;
+      if (previewActive && !dead) {
+        previewJobs.shift()?.();
+      }
+      pumpPreview();
+    });
+  };
+  const queuePreview = (draw: () => void) => {
+    previewJobs.push(draw);
+    pumpPreview();
+  };
+  const avatar = hud.cast(
+    c => {
+      picked = c;
+      ws.send(JSON.stringify({ t: 'body', ...c } satisfies ClientText));
+    },
+    active => {
+      previewActive = active;
+      if (active) {
+        previewNext = 0;
+        hud.previewLoading(!!rd);
+        pumpPreview();
+      }
+    },
+  );
   /** What the live picture shows: the own id, colour and choice. */
   let drawn = '';
   /** The own player's id and team, from the roster. */
@@ -969,18 +1000,54 @@ const play = (
       return;
     }
     if (me && rd) {
-      // The cards' pictures, once the own player and his colour are known: drawn before the frame, which then takes the canvas back.
+      // Character previews render one at a time between frames; the selectors stay responsive while
+      // the portrait and the haircut samples warm up.
       const mine = !ctl.locked() && `${you.id}${colors.get(you.id)}${JSON.stringify(picked)}`;
-      if (mine && drawn != mine && colors.has(you.id)) {
+      if (
+        mine &&
+        previewActive &&
+        colors.has(you.id) &&
+        !previewJobs.length &&
+        now >= previewNext
+      ) {
         const color = colors.get(you.id)!;
-        // Dressed as the class he plays here.
         const look = { ...picked, role: roleOf(picked.role, world.def) };
-        drawn = rd.portrait(avatar, me, picked.body, color, look) ? mine : drawn;
-        // Each haircut on offer, on his own head (none under a space helmet, which hides it).
-        if (!world.def.helmets) {
-          hud
-            .heads()
-            .forEach((c, hair) => rd!.portrait(c, me, picked.body, color, { ...look, hair }, HEAD));
+        previewNext = now + 220;
+        if (drawn !== mine) {
+          hud.previewLoading(true);
+        }
+        queuePreview(() => {
+          const current =
+            !ctl.locked() && `${you.id}${colors.get(you.id)}${JSON.stringify(picked)}`;
+          if (!previewActive || current !== mine) {
+            return;
+          }
+          if (rd!.portrait(avatar, me, picked.body, color, look, PORTRAIT)) {
+            drawn = mine;
+            hud.previewLoading(false);
+          }
+        });
+      }
+      if (mine && drawn === mine && previewActive && !world.def.helmets) {
+        const color = colors.get(you.id)!;
+        const look = { ...picked, role: roleOf(picked.role, world.def) };
+        const hairKey = mine;
+        if (
+          hairKey !== headKey &&
+          look.role !== ROLE.XENO &&
+          look.role !== ROLE.HUNTER &&
+          look.role !== ROLE.NINJA
+        ) {
+          headKey = hairKey;
+          hud.heads().forEach((picture, hair) =>
+            queuePreview(() => {
+              const current =
+                !ctl.locked() && `${you.id}${colors.get(you.id)}${JSON.stringify(picked)}`;
+              if (previewActive && current === mine) {
+                rd!.portrait(picture, me, picked.body, color, { ...look, hair }, HEAD);
+              }
+            }),
+          );
         }
       }
       if (step == 2) {
@@ -1172,6 +1239,7 @@ const play = (
       }
       dead = true;
       cancelAnimationFrame(raf);
+      previewJobs = [];
       document.removeEventListener('keydown', onKey);
       botcam.destroy();
       ctl.destroy();

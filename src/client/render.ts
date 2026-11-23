@@ -9,7 +9,7 @@ import { GLORY_HP, ORBIT } from '../shared/constants';
 import { ROLE, rolesOf } from '../shared/kit';
 import { heightOf } from '../shared/physics';
 import { altitude } from '../shared/ship';
-import { MODE, TEX } from '../shared/types';
+import { LIMB, MODE, TEX } from '../shared/types';
 import type { Choice, PlayerState, Rover } from '../shared/types';
 import { hidden } from '../shared/world';
 import type { World, WorldDef } from '../shared/world';
@@ -50,7 +50,7 @@ import { rolled, rover } from './rover';
 import type { Quat } from './rig';
 import { GRIN, animate, createRunner, soldier, warmHunter } from './soldier';
 import { PARRY_IN } from './katana';
-import { BARE_REGIONS, COLOURS, REGION, TOP, UNLIT, beast, body } from './skin';
+import { BARE_REGIONS, COLOURS, REGION, TOP, UNLIT, beast, body, cut } from './skin';
 import { CLOTH } from './mask';
 import { CHANNELS } from './features';
 import { PLATE, VERT as VERT_TEXELS } from './flesh';
@@ -974,8 +974,16 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   let looks: ReadonlyMap<number, Choice> = new Map();
   // The runners' skins at every level, now: built on the first runner to come near (the close one
   // with its face's channels takes a tenth of a second), they would stall a frame of the match. So
-  // would their armour's recipes (a quarter of a second close up).
-  const dressed = (build = 0) => [0, 1, 3].forEach(lod => prepare(body(lod, build), lod > 2));
+  // would their armour's recipes (a quarter of a second close up). And the halves a katana's cut
+  // makes of each (cut(), some 40 ms for every level and limb), built on the frame of the cut.
+  const dressed = (build = 0) => {
+    [0, 1, 3].forEach(lod => prepare(body(lod, build), lod > 2));
+    for (let lod = 0; lod < 4; lod++) {
+      for (let limb = LIMB.HEAD; limb <= LIMB.LEG_R; limb++) {
+        cut(lod, limb, build);
+      }
+    }
+  };
   dressed();
   // Her close hair, every style (half a second for the five): a style can come with a player who
   // joins or change in the menu mid-match, and the store's buffer grows now, not in a frame.

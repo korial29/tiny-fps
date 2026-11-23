@@ -125,6 +125,7 @@ import {
   beardOf,
   beast,
   body,
+  capOf,
   cut,
   eyesOf,
   hairOf,
@@ -134,6 +135,7 @@ import {
   swing,
   tressOf,
 } from './skin';
+import type { Skin } from './skin';
 import { CHITIN_X, FOOT_TIP, HEAD, PART, PIPE, eyes, lashOf, partsOf, tail } from './xeno';
 import type { Part } from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
@@ -1432,18 +1434,54 @@ export const soldier = (
   });
   r.dt = 0;
   const blade = p.wield && !p.down && !driving(r);
+  /**
+   * The skin `sk` in the pose `at` with the face `face`, the armour cut out of it and the ninja's
+   * hood of the build `hood`: posed by the shader (flesh.ts), or drawn into `out`.
+   */
+  const clad = (
+    sk: Skin,
+    face?: ArrayLike<number>,
+    hood?: number,
+    at = s,
+    armour = plated || ninja,
+  ) => {
+    const [from, n0] = [out.length, gpu?.length ?? 0];
+    if (gpu) {
+      flesh(
+        gpu,
+        sk,
+        at,
+        colors,
+        face,
+        armour ? { fine: lod > 2, plate, accent: color, ninja, bare: !plated } : undefined,
+        hood,
+        p.id,
+        xeno,
+        ninja,
+      );
+      // The armour's plates are worn.
+      gpu.forEach((d, i) => i >= n0 && d.f?.kind == 2 && (d.w = true));
+      return;
+    }
+    skin(out, sk, at, colors, face);
+    if (hood !== undefined) {
+      // The hood painted on the head, the face under the guard pressed in.
+      dress(out, from, sk, s.pos[J.HEAD], s.rot[J.HEAD], hood);
+    }
+    // The armour, cut out of the skin just drawn.
+    if (armour) {
+      armor(out, from, sk, lod > 2, plate, ninja, color, !plated);
+    }
+  };
   if (r.cut && !xeno) {
     const cs = cut(lod, r.cut.limb, build)[0];
     if (r.cut.eaten) {
       colors[REGION.CAP] = RAW;
     }
-    const at = out.length;
-    skin(out, cs, s, colors, r.face.w);
-    // The stump's face is the last vertex drawn.
-    r.cut.at = out.slice(out.length - STRIDE, out.length - STRIDE + 3) as Vec3;
-    if (plated || ninja) {
-      armor(out, at, cs, lod > 2, plate, ninja, color, !plated);
-    }
+    // Posed by the shader as the whole body is: on the CPU, the skin of a body lying cut close by
+    // took some 20 ms a frame.
+    clad(cs, r.face.w);
+    r.cut.at = capOf(cs, s);
     if (ninja) {
       rigid(`buckle ${build} ${color}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
         buckle(o, a, q, build),
@@ -1451,7 +1489,16 @@ export const soldier = (
       tails(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build, r.t, Math.hypot(p.vx, p.vz));
     }
     if (!r.cut.eaten) {
-      piece(out, r.cut, colors, lod, sink, r.face.w, armored);
+      piece(
+        out,
+        r.cut,
+        colors,
+        lod,
+        sink,
+        r.face.w,
+        armored,
+        gpu && ((sk, at) => clad(sk, r.face.w, undefined, at, false)),
+      );
     }
     gloves(out, r, s, colors, lod, armored, r.cut.limb, marine);
   } else {
@@ -1488,36 +1535,7 @@ export const soldier = (
       const bs = xeno ? beast(lod) : body(lod, build);
       // Under a helmet's dark visor no face shows: its channels are not worth their time.
       const face = helmets || xeno ? undefined : r.face.w;
-      if (gpu) {
-        const n0 = gpu.length;
-        // Posed by the shader, the hood and the armour too (flesh.ts).
-        flesh(
-          gpu,
-          bs,
-          s,
-          colors,
-          face,
-          plated || ninja
-            ? { fine: lod > 2, plate, accent: color, ninja, bare: !plated }
-            : undefined,
-          ninja && !helmets ? build : undefined,
-          p.id,
-          xeno,
-          ninja,
-        );
-        // The armour's plates are worn.
-        gpu.forEach((d, i) => i >= n0 && d.f?.kind == 2 && (d.w = true));
-      } else {
-        skin(out, bs, s, colors, face);
-        if (ninja && !helmets) {
-          // The hood painted on the head, the face under the guard pressed in.
-          dress(out, from, bs, s.pos[J.HEAD], s.rot[J.HEAD], build);
-        }
-        // The armour, cut out of the skin just drawn.
-        if (plated || ninja) {
-          armor(out, from, bs, lod > 2, plate, ninja, color, !plated);
-        }
-      }
+      clad(bs, face, ninja && !helmets ? build : undefined);
     }
     if (xeno) {
       tail(

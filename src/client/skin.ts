@@ -2466,6 +2466,19 @@ export const duals = (s: Skin, { pos, rot }: { pos: Vec3[]; rot: Quat[] }) => {
   return D;
 };
 
+/**
+ * Where skin() puts the middle of the cut face of a skin cut() made, in the pose `pose`: its last
+ * vertex, which hangs on one joint alone (sever()). The shader draws the skin, so nothing on the
+ * CPU reads it back from the frame.
+ */
+export const capOf = (s: Skin, { pos, rot }: { pos: Vec3[]; rot: Quat[] }): Vec3 => {
+  const k = s.w.length - 1;
+  const j = s.j[k * 2];
+  const b = BINDS[s.b ?? 0][j];
+  const t = turn(rot[j], [s.v[k * 6] - b[0], s.v[k * 6 + 1] - b[1], s.v[k * 6 + 2] - b[2]]);
+  return [t[0] + pos[j][0], t[1] + pos[j][1], t[2] + pos[j][2]];
+};
+
 /** The palette `colors` as the face `face` shows it: the line between the lips dark as the mouth opens (the teeth are pieces of their own, close). */
 export const mouthed = (colors: number[][], face?: ArrayLike<number>) => {
   const pal = colors.slice();

@@ -189,6 +189,7 @@ export const HUD_CSS =
   // each; under them the class, a card each, the ones the map does not offer not shown (the user,
   // 2026-11-17: hidden, not greyed out).
   `aside fieldset{display:grid;grid-template-columns:240px minmax(0,1fr);gap:10px 16px;align-content:start;margin:0;padding:0;border:0;min-width:0}aside fieldset h4{grid-column:1/-1;margin:0}` +
+  `aside .loader{grid-area:3/1}aside .loader[hidden]{display:none}` +
   `aside canvas{width:100%;height:auto;aspect-ratio:3/4;border:1px solid #26323e;border-radius:14px;cursor:inherit;background:radial-gradient(#26323e,#0d141c)}` +
   `aside .op{display:grid;gap:5px;align-content:start}aside fieldset small{margin-top:4px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8d9aa7}` +
   `aside [role=radiogroup]{display:flex;flex-wrap:wrap;gap:6px}aside [role=radiogroup][hidden]{display:none}` +
@@ -514,7 +515,12 @@ export interface Hud {
    * haircut, the class) each time the player changes a part of it. Returns the canvas of his live
    * picture (SHOT pixels).
    */
-  cast(pick: (c: Choice & { body: number }) => void): HTMLCanvasElement;
+  cast(
+    pick: (c: Choice & { body: number }) => void,
+    preview?: (active: boolean) => void,
+  ): HTMLCanvasElement;
+  /** Shows the loader over the character portrait while its deferred render is pending. */
+  previewLoading(loading: boolean): void;
   /** The pictures of the haircuts on offer, in their order (HEAD_PX square): the own head with each. */
   heads(): HTMLCanvasElement[];
   /** The own player's magazines, as his class holds them (Kit's mag, cap, clip): the spare ones counted by them. */
@@ -676,7 +682,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         (t, i) => `<button role="tab" aria-selected="${!i}" tabindex="${i && -1}">${t}</button>`,
       ).join('') +
       `<button class="bk">← Back</button><button><strong></strong></button></header>` +
-      `<article role="tabpanel"><fieldset><h4>Character</h4><canvas width="${SHOT[0]}" height="${SHOT[1]}"></canvas><span class="op">` +
+      `<article role="tabpanel"><fieldset><h4>Character</h4><canvas width="${SHOT[0]}" height="${SHOT[1]}"></canvas><span class="loader">Loading</span><span class="op">` +
       `<span role="radiogroup" aria-label="Body">${CAST.map(c => `<button role="radio">${c}</button>`).join('')}</span>` +
       `<small>Skin</small><span role="radiogroup" aria-label="Skin" class="sw">${TONES.map(
         (t, i) =>
@@ -725,6 +731,16 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   );
   const all = (sel: string) => [...menu.querySelectorAll<HTMLElement>(sel)];
   const [tabs, panels, groups] = ['[role=tab]', 'article', '[role=radiogroup]'].map(all);
+  let activePanel = 0;
+  let previewShown = false;
+  let previewState: ((active: boolean) => void) | undefined;
+  const previewActive = () => {
+    const active = !menu.hidden && activePanel === 0 && menu.dataset.v !== 'pause';
+    if (active !== previewShown) {
+      previewShown = active;
+      previewState?.(active);
+    }
+  };
   /** The one of `list` that is on, by its ARIA state `attr`: it alone is in the Tab order, the arrows go to the others. */
   const turn = (list: HTMLElement[], attr: string, on: number) =>
     list.forEach((el, i) => {
@@ -746,8 +762,10 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       };
     });
   arrows(tabs, i => {
+    activePanel = i;
     turn(tabs, 'aria-selected', i);
     panels.forEach((p, k) => (p.hidden = k != i));
+    previewActive();
   });
   one('header>:last-child').onclick = play;
   // The pause menu: what it shows (data-v): the menu, or the part of the panel it opened.
@@ -917,6 +935,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         view('pause');
       }
       menu.toggleAttribute('hidden', !text);
+      previewActive();
       set(name, map);
       set(tag, kind);
       set(lore, story);
@@ -929,9 +948,14 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       started = on;
     },
     heads: () => [...groups[2].querySelectorAll('canvas')],
-    cast(pick) {
+    cast(pick, preview) {
       chose = pick;
+      previewState = preview;
+      previewActive();
       return groups[0].closest('fieldset')!.querySelector('canvas')!;
+    },
+    previewLoading(loading) {
+      one<HTMLElement>('.loader').hidden = !loading;
     },
     magazines(sizes) {
       mags = sizes;

@@ -61,7 +61,8 @@ const BUDGETS = [
   // 243 KB + 2816 B until the Hunter's full 3D model is used in the menu and match (#341, 2026-11-21).
   // 235 KB + 2816 B until the audio engine: levels in dB, sounds placed in 3D (the user, 2026-11-20: 1 KB more).
   // 243 KB + 2816 B until the pistol's burst and the rail gun's ring (the user, 2026-11-23: 256 B more).
-  { file: 'dist/index.js', max: 243 * 1024 + 3072 },
+  // 146 B for the lazy, animated character previews (the user, 2026-11-23).
+  { file: 'dist/index.js', max: 243 * 1024 + 3218 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

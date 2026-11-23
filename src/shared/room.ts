@@ -34,6 +34,8 @@ import {
   RAIL_CELL,
   RAIL_DRAIN,
   RAIL_TICKS,
+  RING_H,
+  RING_R,
   MISSILE_R,
   GUN_RANGE,
   NADE,
@@ -501,6 +503,8 @@ export class Room {
           this.shoot(p, input.view);
         } else if (struck === STRIKE.NADE) {
           this.shoot(p, input.view, lob(p.state, p.info.team));
+        } else if (struck === STRIKE.RING) {
+          this.ring(p, input.view);
         } else if (struck === STRIKE.DISK) {
           this.shoot(p, input.view, disk(p.state, p.info.team));
         }
@@ -1334,6 +1338,41 @@ export class Room {
     const foe = this.players().find(q => q.info.id === target.id);
     if (foe) {
       this.shot(foe, HUNTER_LASER_HP, p, aimed.d[0], aimed.d[2]);
+    }
+  }
+
+  /**
+   * The rail gun's ring of `p` at the view tick `view`: every enemy within RING_R of him as `p` drew
+   * him, within RING_H of his height and in sight of his chest, is drained as the bolt drains (a
+   * first hp at once) and, still up and in no lock, shocked out of the ring. One hit for `p`.
+   */
+  private ring(p: Player, view: number | undefined): void {
+    const me = p.state;
+    const c: [number, number, number] = [me.x, me.y + 1, me.z];
+    let hit = false;
+    for (const seen of this.enemies(p, view)) {
+      const foe = this.players().find(q => q.info.id === seen.id);
+      const [dx, dz] = [seen.x - me.x, seen.z - me.z];
+      const d = Math.hypot(dx, dz);
+      if (
+        !foe ||
+        d > RING_R + PLAYER_R ||
+        Math.abs(seen.y - me.y) > RING_H ||
+        hidden(this.world, c, [seen.x, seen.y + 1, seen.z])
+      ) {
+        continue;
+      }
+      hit = true;
+      [foe.burn, foe.railer, foe.state.slow] = [0, p, RAIL_TICKS];
+      this.fry(foe);
+      if (!foe.state.down && !foe.state.lock) {
+        stumble(foe.state, dx / (d || 1), dz / (d || 1), SHOCK_TICKS, SHOCK_KNOCK);
+        foe.state.zap = true;
+        foe.by = p.info.id;
+      }
+    }
+    if (hit) {
+      me.hits = (me.hits + 1) & 255;
     }
   }
 

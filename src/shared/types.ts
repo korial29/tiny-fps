@@ -56,7 +56,8 @@ export const KEY = {
   /**
    * Set for one step by G or the right button (the client's choice): with the katana in hand, the
    * special of the cut the keys give (see CUT); with the laser rifle in hand, a grenade from its
-   * launcher. Ignored with the other guns.
+   * launcher; with the pistol, a burst of BURST shots; with the rail gun, a discharge all round
+   * (RING_R).
    */
   SPECIAL: 1024,
   /**
@@ -250,6 +251,8 @@ export interface PlayerState {
   inRifle?: boolean;
   /** Ticks FIRE has been held with the gun, up to CHARGE_TICKS, 0 when not charging. Absent reads 0. */
   charge?: number;
+  /** Shots left in the pistol's burst (G), 0 to BURST - 1. Absent reads 0. */
+  burst?: number;
   /** The strength of the last shot, 1 to CHARGE_MAX: the shots it spent and the health it takes. Set by the step that fires; not on the wire. */
   power?: number;
   /** Standing inside the circle of the team's rack as of the last step: the gun is filled on arrival only. Absent reads false. */

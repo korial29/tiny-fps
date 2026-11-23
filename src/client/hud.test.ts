@@ -360,7 +360,9 @@ describe('createHud', () => {
       const rows = [...panels()[1].querySelectorAll('tr')].map(r => r.textContent);
       expect(rows).toContain('Eget in, get out');
       expect(rows).toContain('Left clicklasers');
-      expect(rows).toContain('G or Right clicklaser rifle: a grenade from its launcher');
+      expect(rows).toContain(
+        'G or Right clickgun: burst of 3; rail gun: shock ring; rifle: grenade',
+      );
       expect(rows).toContain('G or Right clickmissiles');
       expect(rows).toContain(
         'Q or W A S D twicedash, three in a row and further than a man: it pins whoever it reaches',

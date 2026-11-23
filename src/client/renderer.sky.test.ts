@@ -336,6 +336,7 @@ describe('createRenderer', () => {
         flash: vi.fn(),
         burst: vi.fn(),
         blast: vi.fn(),
+        tesla: vi.fn(),
         ring: vi.fn(),
         arc: vi.fn(),
         orbs: vi.fn(),

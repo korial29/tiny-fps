@@ -185,6 +185,7 @@ describe('prediction against the room', () => {
     let shots = 0;
     let cuts = 0;
     let lobs = 0;
+    let rings = 0;
     let wielded = 0;
     let fills = 0;
     let granted = 0;
@@ -252,6 +253,7 @@ describe('prediction against the room', () => {
       shots += +(fired === STRIKE.SHOT);
       cuts += +(fired === STRIKE.CUT);
       lobs += +(fired === STRIKE.NADE);
+      rings += +(fired === STRIKE.RING);
       wielded += +!!ref.wield;
       fills += +(ref.ammo > had);
       respawns += +((ref.ev & EV.RESPAWN) !== 0);
@@ -291,6 +293,7 @@ describe('prediction against the room', () => {
       cuts,
       /** Grenades the reference launched. */
       lobs,
+      rings,
       wielded,
       fills,
       /** Ammo packs the reference took, and the fields of the host's last snapshot that the prediction does not match. */
@@ -582,6 +585,40 @@ describe('prediction against the room', () => {
       expect(r.fills, `${name} lag`).toBe(2);
       expect(r.ammo, `${name} lag`).toBe(AMMO_MAX);
       expect(r.shots, `${name} lag`).toBeGreaterThanOrEqual(GUN_MAG + 3);
+    }
+  }, 60_000);
+
+  it('agrees with the host exactly on the secondary fire: the pistol’s bursts and the rail gun’s rings, under every lag', () => {
+    const from = ROOFTOPS.teams[0].spawns[0];
+    const to = (rack: readonly number[]) => ({
+      yaw: Math.atan2(-(rack[0] - from[0]), -(rack[2] - from[2])),
+      n: Math.round((Math.hypot(rack[0] - from[0], rack[2] - from[2]) - 0.5) * 10) + 3,
+    });
+    for (const [rack, hand] of [
+      [ROOFTOPS.teams[0].rack!, 0],
+      [ROOFTOPS.teams[0].rail!, KEY.RAIL],
+    ] as const) {
+      const { yaw, n } = to(rack);
+      // To the rack, then 300 steps: G every 11 steps (some inside a burst or an overheat), FIRE
+      // held in stretches between.
+      const steps = [
+        ...Array.from({ length: n }, () => ({ keys: KEY.FORWARD, yaw, pitch: 0 })),
+        ...Array.from({ length: 300 }, (_, k) => ({
+          keys: hand | (k % 11 === 3 ? KEY.SPECIAL : 0) | (k % 60 > 40 ? KEY.FIRE : 0),
+          yaw,
+          pitch: 0,
+        })),
+      ];
+      for (const [name, lag] of LAGS) {
+        const r = race(lag, steps, 0, [], [], true);
+        expect([r.worst, r.end, r.final, r.differing], `${hand} ${name} lag`).toEqual([
+          0,
+          0,
+          0,
+          [],
+        ]);
+        expect(hand ? r.rings : r.shots, `${hand} ${name} lag`).toBeGreaterThan(hand ? 2 : 20);
+      }
     }
   }, 60_000);
 

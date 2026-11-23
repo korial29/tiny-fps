@@ -29,7 +29,7 @@
 //   and the hits landed (a plasma ball or a cut).
 //   swing: bits 0-5 the ticks left in the katana's swing, bits 6-7 the low two bits of its cut (CUT).
 //   lost: bits 0-2 the LIMB a katana's cut took off when it put him down (NONE once up), bit 3 the
-//   high bit of the cut (a special), bits 6-7 the armour (ARMOR_MAX at most). charge: the ticks FIRE has been held with the gun;
+//   high bit of the cut (a special), bits 6-7 the armour (ARMOR_MAX at most). charge: bits 0-5 the ticks FIRE has been held with the gun, bits 6-7 the shots left in the pistol's burst (`burst`);
 //   while down (when it is 0: no weapon) the fall instead (`fell`: bits 5-6 the FALL, bits 0-4 the
 //   way the hit went, in 32nds of a turn).
 //   lock: the ticks left in a saber lock; foe: bits 0-3 the id locked with, bit 4 the high bit of the
@@ -320,7 +320,7 @@ export function encodeSnapshot(
         (p.heavy ? 32 : 0) |
         ((p.armor ?? 0) << 6),
     );
-    v.setUint8(o + 47, p.down ? (p.fell ?? 0) : (p.charge ?? 0));
+    v.setUint8(o + 47, p.down ? (p.fell ?? 0) : (p.charge ?? 0) | ((p.burst ?? 0) << 6));
     v.setUint8(o + 48, p.lock ?? 0);
     v.setUint8(
       o + 49,
@@ -480,7 +480,8 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       cut: (v.getUint8(o + 45) >> 6) | ((v.getUint8(o + 46) >> 1) & 4),
       lost: v.getUint8(o + 46) & 7,
       // While he is down the charge's byte carries his fall: he holds no weapon then.
-      charge: (gun >> 13) & 127 ? 0 : v.getUint8(o + 47),
+      charge: (gun >> 13) & 127 ? 0 : v.getUint8(o + 47) & 63,
+      burst: (gun >> 13) & 127 ? 0 : v.getUint8(o + 47) >> 6,
       fell: (gun >> 13) & 127 ? v.getUint8(o + 47) : 0,
       lock: v.getUint8(o + 48),
       foe: v.getUint8(o + 49) & 15,

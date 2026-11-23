@@ -20,6 +20,7 @@ import {
   RECOIL,
   TICK_HZ,
   BLOW,
+  RING_R,
 } from '../shared/constants';
 import { strike, swingOf } from '../shared/blade';
 import { TAIL_BLOW, blowOf, blowing } from './gait';
@@ -193,7 +194,16 @@ export const createCombat = (
   fx: Pick<Effects, 'fire' | 'cut' | 'wound' | 'lie' | 'quake' | 'blow' | 'punch'>,
   tracer: Pick<
     Tracer,
-    'flash' | 'burst' | 'blast' | 'orbs' | 'update' | 'mount' | 'crackle' | 'charging' | 'lightning'
+    | 'flash'
+    | 'burst'
+    | 'blast'
+    | 'orbs'
+    | 'update'
+    | 'mount'
+    | 'crackle'
+    | 'charging'
+    | 'lightning'
+    | 'tesla'
   >,
   ctl: { pitch: number },
   balls: Pick<Balls, 'fire' | 'frame'>,
@@ -300,6 +310,12 @@ export const createCombat = (
     }
     tracer.flash(from, !at, -1);
     audio.play(SOUND.LASE, at, at ? -6 : -8, rate());
+  };
+  /** The rail gun's ring of `p`, heard at `at` (the own when not given): lightning all round him and a deep crack. */
+  const discharge = (p: PlayerState, at?: Vec3) => {
+    tracer.tesla([p.x, p.y, p.z], RING_R);
+    audio.play(SOUND.ZAP, at, at ? 1 : 0.8, 0.5);
+    audio.play(SOUND.BLAST, at, at ? 0.6 : 0.45, 1.5);
   };
   /** A grenade leaves the launcher of `p` at `from`, heard at `at` (the own when not given): an orange flash and a hollow thump. */
   const thump = (p: PlayerState, from: Vec3, now: number, at?: Vec3) => {
@@ -424,9 +440,10 @@ export const createCombat = (
         // A charged shot kicks the look up to 3.4 times as far; the laser rifle's, 20 a second, a third as far.
         // A grenade bucks the rifle in the left hand as hard as a half charge.
         const nade = !!b && lobbed(b);
-        const k = nade ? 2 : b?.rifled ? 0.3 : 1 + 0.6 * ((b?.power ?? 1) - 1);
+        // The rail gun's ring does not kick the look; it shakes the view as a grenade does.
+        const k = nade ? 2 : b?.railed ? 0 : b?.rifled ? 0.3 : 1 + 0.6 * ((b?.power ?? 1) - 1);
         ctl.pitch = Math.min(MAX_PITCH, ctl.pitch + RECOIL * k);
-        fx.fire(nade ? 3 : b?.power);
+        fx.fire(nade || b?.railed ? 3 : b?.power);
       }
       const c = swung(a, b);
       const xeno = !!b && beast(b.id);
@@ -573,6 +590,10 @@ export const createCombat = (
             lase(p, from, now);
             continue;
           }
+          if (p.railed) {
+            discharge(p);
+            continue;
+          }
           if (hunter(p.id) && p.railed) {
             tracer.flash(from, true, -1);
             audio.play(SOUND.HUNTER_LASER, undefined, -2.6, rate());
@@ -608,6 +629,8 @@ export const createCombat = (
         }
         if (was !== undefined && p.shots != was && lobbed(p)) {
           thump(p, gun(p), now, at);
+        } else if (was !== undefined && p.shots != was && p.railed) {
+          discharge(p, at);
         } else if (was !== undefined && p.shots != was && p.rifled) {
           lase(p, gun(p), now, at);
         } else if (was !== undefined && p.shots != was && hunter(p.id) && p.wield) {

@@ -33,6 +33,8 @@ import {
   RAIL_SPEND,
   RAIL_RELOAD,
   RIFLE_RELOAD,
+  BURST,
+  RING_COST,
   BLOW,
   PUNCHES,
   TAILS,
@@ -81,7 +83,16 @@ const launch = (p: PlayerState): void => {
 };
 
 /** What a step struck, for the host to resolve: nothing, a shot (a plasma ball), the katana's cut, a rail gun's beam, a laser rifle's shot, or a grenade from its launcher. */
-export const STRIKE = { NONE: 0, SHOT: 1, CUT: 2, RAIL: 3, LASER: 4, NADE: 5, DISK: 6 } as const;
+export const STRIKE = {
+  NONE: 0,
+  SHOT: 1,
+  CUT: 2,
+  RAIL: 3,
+  LASER: 4,
+  NADE: 5,
+  DISK: 6,
+  RING: 7,
+} as const;
 export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
 
 /**
@@ -145,6 +156,9 @@ export const step = (
   p.hot = !!p.hot && p.heat > HEAT_LOCK;
   p.zapping = false;
   p.zap = !!p.stun && !!p.zap;
+  if (down || locked) {
+    p.burst = 0;
+  }
   if (down) {
     // A fall under the kill floor has already put him back, and cleared `down`.
     if (p.down > 0 && !--p.down) {
@@ -300,6 +314,28 @@ export const step = (
     (!p.wield && !p.mag)
   ) {
     p.charge = 0;
+  }
+  // G with the pistol in hand: a burst of BURST plain shots, half its cooldown apart, then twice its
+  // cooldown. A swap, a reload, busy hands, a charge or an empty battery end it.
+  const pistol = hand == 0 && !busy && !p.reload && !p.charge && !!p.mag;
+  p.burst = pistol ? (p.burst ?? 0) : 0;
+  if (pistol && !p.cool && (p.burst || i.keys & KEY.SPECIAL)) {
+    p.burst = (p.burst || BURST) - 1;
+    p.power = 1;
+    p.ammo--;
+    p.mag!--;
+    p.shots = (p.shots + 1) & 255;
+    p.cool = p.burst ? Math.ceil(kit.cool / 2) : Math.min(15, kit.cool * 2);
+    return STRIKE.SHOT;
+  }
+  // G with the rail gun in hand: a discharge all round him (the host's ring()), RING_COST of the
+  // capsule, which overheats the gun: it cools 2 s before it fires again.
+  if (p.railed && i.keys & KEY.SPECIAL && !busy && !p.reload && !p.hot && p.cap! >= RING_COST) {
+    p.rail! -= RING_COST;
+    p.cap! -= RING_COST;
+    [p.heat, p.hot] = [HEAT_MAX, true];
+    p.shots = (p.shots + 1) & 255;
+    return STRIKE.RING;
   }
   // G with the rifle in hand (SPECIAL, with or without FIRE): a grenade from its launcher.
   if (p.rifled && i.keys & KEY.SPECIAL && !busy && p.nades && !p.lob) {

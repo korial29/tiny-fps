@@ -119,6 +119,8 @@ export interface Combat {
     dt: number,
     now?: number,
   ): void;
+  /** Where the own shoulder cannon is locked on (a foe's chest), or undefined: its shots' beams go there. */
+  lock(at?: Vec3): void;
 }
 
 /** Shots between two states of a player, a u8 counter that wraps. */
@@ -209,6 +211,7 @@ export const createCombat = (
     | 'update'
     | 'mount'
     | 'crackle'
+    | 'laser'
     | 'charging'
     | 'lightning'
     | 'tesla'
@@ -318,6 +321,12 @@ export const createCombat = (
     }
     tracer.flash(from, !at, -1);
     audio.play(SOUND.LASE, at, at ? -6 : -8, rate());
+  };
+  /** A shot of the Hunter's shoulder cannon `p` from its muzzle `from`, heard at `at` (the own when not given): a red beam down his look. */
+  const cannon = (p: PlayerState, from: Vec3, at?: Vec3, to = end(p)) => {
+    tracer.laser(from, to);
+    tracer.flash(from, !at, -1);
+    audio.play(SOUND.HUNTER_LASER, at, -2.6, rate());
   };
   /** The rail gun's ring of `p`, heard at `at` (the own when not given): lightning all round him and a deep crack. */
   const discharge = (p: PlayerState, at?: Vec3) => {
@@ -447,7 +456,12 @@ export const createCombat = (
     }
   };
 
+  /** The own shoulder cannon's lock (lock()). */
+  let locked: Vec3 | undefined;
   return {
+    lock(at) {
+      locked = at;
+    },
     step(a, b) {
       const n = fired(a, b);
       if (n && b) {
@@ -460,7 +474,9 @@ export const createCombat = (
         // The rail gun's ring does not kick the look; it shakes the view as a grenade does.
         const k = nade ? 2 : b?.railed ? 0 : b?.rifled ? 0.3 : 1 + 0.6 * ((b?.power ?? 1) - 1);
         ctl.pitch = Math.min(MAX_PITCH, ctl.pitch + RECOIL * k);
-        fx.fire(nade || b?.railed ? 3 : b?.power);
+        // The Hunter's shoulder cannon jolts the view as a plain shot.
+        const cannon = !!b?.railed && hunter(b.id);
+        fx.fire(nade || (b?.railed && !cannon) ? 3 : cannon ? 1 : b?.power);
       }
       const c = swung(a, b);
       const xeno = !!b && beast(b.id);
@@ -494,11 +510,6 @@ export const createCombat = (
         if (was && me.hits != was.hits) {
           audio.play(SOUND.HIT);
           hud.hit();
-          if (hunter(me.id) && me.railed) {
-            audio.play(SOUND.HUNTER_LASER, undefined, -2.6, rate());
-            // From the shoulder cannon's muzzle as the own view draws it.
-            tracer.flash(v ? muzzleOf(v) : gun(me), true, -1);
-          }
           // A blow of the fists that landed: a thud, and a hook or a lunge kicks the look.
           if (fists(me)) {
             const b = blowOf(me, beast(me.id));
@@ -607,13 +618,13 @@ export const createCombat = (
             lase(p, from, now);
             continue;
           }
-          if (p.railed) {
-            discharge(p);
+          if (hunter(p.id) && p.railed) {
+            // From the shoulder cannon's muzzle as the own view draws it.
+            cannon(p, from, undefined, locked);
             continue;
           }
-          if (hunter(p.id) && p.railed) {
-            tracer.flash(from, true, -1);
-            audio.play(SOUND.HUNTER_LASER, undefined, -2.6, rate());
+          if (p.railed) {
+            discharge(p);
             continue;
           }
           const harpoon = hunter(p.id) && !discShot;
@@ -646,6 +657,8 @@ export const createCombat = (
         }
         if (was !== undefined && p.shots != was && lobbed(p)) {
           thump(p, gun(p), now, at);
+        } else if (was !== undefined && p.shots != was && hunter(p.id) && p.railed) {
+          cannon(p, gun(p), at);
         } else if (was !== undefined && p.shots != was && p.railed) {
           discharge(p, at);
         } else if (was !== undefined && p.shots != was && p.rifled) {
@@ -681,10 +694,6 @@ export const createCombat = (
           hot.push({ p: gun(p), k: filled(p.charge) });
         }
         const old = blades.get(p.id);
-        if (old && p.hits != old.hits && hunter(p.id) && p.railed) {
-          audio.play(SOUND.HUNTER_LASER, at, -2.6, rate());
-          tracer.flash(gun(p), false, -1);
-        }
         const c = swung(old, p);
         if (c >= 0) {
           const cue = fists(p) ? FIST_CUE + blowOf(p, beast(p.id)) : c + (p.heavy ? HEAVY_CUE : 0);

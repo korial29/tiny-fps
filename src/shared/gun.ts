@@ -11,6 +11,7 @@ import {
   CHARGE_TAP,
   CHARGE_TICKS,
   DISK_COOL,
+  HUNTER_LASER_COOL,
   CUTS,
   DASH_COOLDOWN,
   EXEC,
@@ -268,8 +269,10 @@ export const step = (
   p.mag = Math.min(p.mag ?? 0, Math.max(p.ammo, 0));
   const has = [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0];
   const want = i.keys & KEY.BLADE ? 1 : i.keys & KEY.RAIL ? 2 : i.keys & KEY.RIFLE ? 3 : 0;
-  const fists = gear && !!(i.keys & KEY.FISTS) && !(p.swing && p.wield);
-  const hand = p.swing && p.wield ? 1 : fists ? -1 : has[want] ? want : has.indexOf(true);
+  // The Hunter has no fists (the user, 2026-11-23): his blades first when the choice is not his.
+  const fists = gear && !own && !!(i.keys & KEY.FISTS) && !(p.swing && p.wield);
+  const first = own && has[1] ? 1 : has.indexOf(true);
+  const hand = p.swing && p.wield ? 1 : fists ? -1 : has[want] ? want : first;
   // A switch of weapon drops the swap under way.
   if (hand != (p.fists ? -1 : p.rifled ? 3 : p.railed ? 2 : +!!p.wield)) {
     p.reload = 0;
@@ -418,8 +421,13 @@ export const step = (
         return STRIKE.LASER;
       }
     } else if (p.railed && own) {
-      // The Hunter's shoulder cannon: held, it fires at what the host has locked on (Room.shoulder()).
-      return STRIKE.RAIL;
+      // The Hunter's shoulder cannon fires on the click, one shot each HUNTER_LASER_COOL ticks while
+      // held (the user, 2026-11-23): down the look, or at the foe it has locked on (Room.shoulder()).
+      if (!p.cool) {
+        p.cool = HUNTER_LASER_COOL;
+        p.shots = (p.shots + 1) & 255;
+        return STRIKE.RAIL;
+      }
     } else if (p.railed) {
       if (p.cap && !p.reload && !p.hot) {
         // The bolt goes out every step; `cool` makes it spend a tick each RAIL_SPEND of them. It
@@ -458,6 +466,29 @@ export const step = (
     return STRIKE.SHOT;
   }
   return STRIKE.NONE;
+};
+
+/**
+ * The half width and height of the screen as the shoulder cannon's lock reads it, as the tangents
+ * of the look's half angles: a 70° view high on a 16:9 screen. Host and client share it, so the
+ * lock breaks on both when the target leaves it.
+ */
+export const SCREEN: readonly [number, number] = [1.2, 0.7];
+
+/** Whether `point` is on the screen of an eye at `eye` looking along `yaw` and `pitch` (SCREEN). */
+export const onScreen = (
+  eye: readonly number[],
+  yaw: number,
+  pitch: number,
+  point: readonly number[],
+): boolean => {
+  const [cp, sp, cy, sy] = [Math.cos(pitch), Math.sin(pitch), Math.cos(yaw), Math.sin(yaw)];
+  const d = [0, 1, 2].map(i => point[i] - eye[i]);
+  // Forward, right and up: yaw zero faces -z with +x on the right.
+  const z = -d[0] * sy * cp + d[1] * sp - d[2] * cy * cp;
+  const x = d[0] * cy - d[2] * sy;
+  const y = d[0] * sy * sp + d[1] * cp + d[2] * cy * sp;
+  return z > 0 && Math.abs(x) < SCREEN[0] * z && Math.abs(y) < SCREEN[1] * z;
 };
 
 /**

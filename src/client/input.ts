@@ -78,23 +78,30 @@ export const picked = (weapon: number, code: string, hunter = false): number => 
   const digit = DIGITS.indexOf(code);
   const numpad = NUMPAD.indexOf(code);
   const slot = digit >= 0 ? digit : numpad >= 0 ? NUMPAD_WEAPONS[numpad] : -1;
-  return slot >= 0 ? slotted(slot, hunter) : weapon;
+  // The Hunter has three slots, and no fists (the user, 2026-11-23).
+  return slot >= 0 && !(hunter && slot > 2) ? slotted(slot, hunter) : weapon;
 };
 
-/** Which of the gun, the katana, the rail gun and the laser rifle a player has; all of them when there is no state yet. */
-export const owned = (p?: PlayerState): boolean[] =>
+/** Which of the gun, the katana, the rail gun, the laser rifle and the fists a player has (the Hunter no fists); all of them when there is no state yet. */
+export const owned = (p?: PlayerState, hunter = false): boolean[] =>
   p
-    ? [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0, true]
-    : [true, true, true, true, true];
+    ? [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0, !hunter]
+    : [true, true, true, true, !hunter];
 
 /**
  * Follow the spawn's weapon and switch to newly picked-up special weapons unless fists are selected.
  */
-export const chosen = (weapon: number, was?: PlayerState, now?: PlayerState): number => {
+export const chosen = (
+  weapon: number,
+  was?: PlayerState,
+  now?: PlayerState,
+  hunter = false,
+): number => {
+  // The Hunter's wrist blades come first (the user, 2026-11-23).
   if (!now || now.down) {
-    return WEAPON.GUN;
+    return hunter ? WEAPON.BLADE : WEAPON.GUN;
   }
-  if (!was || was.down || now.ev & EV.RESPAWN) {
+  if (!was || was.down || now.ev & EV.RESPAWN || (hunter && weapon === WEAPON.FISTS)) {
     return +!!now.wield;
   }
   const [a, b] = [owned(was), owned(now)];
@@ -227,8 +234,8 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
       return keys;
     },
     track: (was, now) => {
-      c.weapon = chosen(c.weapon, was, now);
-      have = owned(now);
+      c.weapon = chosen(c.weapon, was, now, c.hunter);
+      have = owned(now, c.hunter);
       if (
         !now ||
         now.down ||

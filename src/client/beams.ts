@@ -61,6 +61,12 @@ const LIT = 4;
  * aside up there with no muzzle, how far round the muzzle, and their [halo, core] half widths and colours.
  */
 const [RAY, RAYS, SKY, SPREAD, BORE] = [1.4, 4, 380, 70, 2.2];
+/** Seconds the shoulder cannon's beam lasts, and its [halo, core] half widths and colours. */
+const CANNON = 0.14;
+const CANNON_BEAM: [number, number[]][] = [
+  [0.06, [2.4, 0.25, 0.12]],
+  [0.016, [4, 2, 1.4]],
+];
 const LASER: [number, number[]][] = [
   [0.3, [1.9, 0.22, 0.1]],
   [0.09, [3.6, 1.7, 1.2]],
@@ -113,6 +119,8 @@ export interface Tracer {
   charging(list: { p: Vec3; k: number }[]): void;
   /** The rail guns' bolts this frame, each from its muzzle `a` to where it ends `b`: jagged, with a branch, sparks at the end. */
   lightning(list: { a: Vec3; b: Vec3 }[]): void;
+  /** The Hunter's shoulder cannon's shot from `a` to `b`: a straight red beam that fades in CANNON seconds. */
+  laser(a: Vec3, b: Vec3): void;
   /** A ball burst at `at`: a splash of light and a spray of sparks; a laser rifle's, `red`, bigger and fiercer. */
   burst(at: Vec3, red?: boolean): void;
   /** A grenade burst at `at`: a white-hot fireball in orange puffs that swells and shrinks away, a shower of embers, a strong light. `size` times as wide for a vehicle blowing up. */
@@ -320,6 +328,7 @@ export const createTracer = (): Tracer => {
   let zaps: { a: Vec3; b: Vec3 }[] = [];
   let hot: { p: Vec3; k: number }[] = [];
   let rays: { p: Vec3; age: number; from?: Vec3 }[] = [];
+  let lasers: { a: Vec3; b: Vec3; age: number }[] = [];
   /** The eye of the last frame drawn: the balls nearest to it light the scene. */
   let seen: Vec3 = [0, 0, 0];
   let seed = 7;
@@ -415,6 +424,9 @@ export const createTracer = (): Tracer => {
       }
       sparks = sparks.slice(-MAX * SPARKS);
     },
+    laser(a, b) {
+      lasers.push({ a, b, age: 0 });
+    },
     strike(at, from) {
       rays.push({ p: at, age: 0, from });
     },
@@ -422,9 +434,10 @@ export const createTracer = (): Tracer => {
       glows.forEach(g => g.own && (g.p = a));
     },
     update(dt) {
-      for (const x of [...glows, ...sparks, ...bolts, ...rays]) {
+      for (const x of [...glows, ...sparks, ...bolts, ...rays, ...lasers]) {
         x.age += dt;
       }
+      lasers = lasers.filter(l => l.age < CANNON);
       rays = rays.filter(r => r.age < RAY);
       glows = glows.filter(
         g => g.age < (g.tesla ? TESLA : g.boom ? BOOM : g.splash ? SPLASH : FLASH),
@@ -438,6 +451,20 @@ export const createTracer = (): Tracer => {
     },
     draw(out, eye) {
       seen = eye;
+      for (const { a, b, age } of lasers) {
+        const k = 1 - age / CANNON;
+        CANNON_BEAM.forEach(([w, rgb], i) =>
+          ribbon(
+            out,
+            a,
+            b,
+            w * k,
+            rgb.map(c => c * k),
+            eye,
+            0.02 * i,
+          ),
+        );
+      }
       for (const { p, age, from } of rays) {
         // Snapped on, flickering, thinning out.
         const k =

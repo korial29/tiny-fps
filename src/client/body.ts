@@ -92,6 +92,7 @@ import {
   CANNON_FOLD,
   CANNON_HINGE,
   CANNON_MUZZLE,
+  CANNON_POST as POST_BASE,
   hunter as hunterModel,
   drawHarpoon,
   harpoonFeed,
@@ -427,12 +428,67 @@ const cannonVertices = (): number[] => {
   return cannonBuilt;
 };
 /**
- * The cannon's hinge in the camera's space (right, up, forward): stowed, low by the left shoulder
- * and out of sight; out, raised over it and ahead of the eye, so the barrel comes in from the left
- * edge of the view (the user, 2026-11-23: it folds out and is seen in the own view).
+ * The cannon's post in the own view: it stands on the left shoulder, at SHOULDER in the camera's
+ * space (right, up, forward), and is ARM metres long to the cannon's hinge. Stowed, it lies back
+ * behind the shoulder, out of sight; out, it swings up and forward so the cannon rides over the
+ * left of the view and the post comes in from the bottom left corner, fixed to the shoulder (the
+ * user, 2026-11-23). Its turn about the camera's right, ARM_DOWN stowed and ARM_UP out.
  */
-const CANNON_LOW: Vec3 = [-0.3, -0.3, 0.05];
-const CANNON_UP: Vec3 = [-0.25, 0, 0.3];
+const SHOULDER: Vec3 = [-0.39, -0.34, 0.13];
+/** How much stouter the post is in the own view than on the runner. */
+const POST_THICK = 1.1;
+const ARM = 0.4;
+const [ARM_DOWN, ARM_UP] = [1.6, -0.46];
+/** The post leans in towards the middle of the view as it rises (a turn about the forward axis). */
+const LEAN = -0.35;
+/** The post's turn in the model's axes when folded out by `f` (0 to 1): its +y to the hinge. */
+const armTurn = (f: number): Quat =>
+  mul(axis([1, 0, 0], ARM_DOWN + (ARM_UP - ARM_DOWN) * f), axis([0, 0, 1], LEAN));
+/** The cannon's hinge in the camera's space, its post folded out by `f`. */
+const hingeAt = (f: number): Vec3 => {
+  const t = ARM_DOWN + (ARM_UP - ARM_DOWN) * f;
+  const c = Math.cos(LEAN);
+  return add(SHOULDER, [-ARM * Math.sin(LEAN), ARM * c * Math.cos(t), -ARM * c * Math.sin(t)]);
+};
+/**
+ * The post's vertices for the own view, made once: the model's 'Laser mount' stretched to ARM
+ * along +y, its top at the origin, on its 'Laser saddle', both a little stouter.
+ */
+let postBuilt: number[] | undefined;
+const postVertices = (): number[] => {
+  if (!postBuilt) {
+    const parts = hunterModel(1);
+    const u = unit(sub(CANNON_HINGE, POST_BASE));
+    const long = Math.hypot(...sub(CANNON_HINGE, POST_BASE));
+    const e1 = unit([u[1], -u[0], 0]);
+    const e2: Vec3 = [
+      e1[1] * u[2] - e1[2] * u[1],
+      e1[2] * u[0] - e1[0] * u[2],
+      e1[0] * u[1] - e1[1] * u[0],
+    ];
+    postBuilt = [];
+    for (const [name, from, stretch, drop] of [
+      ['Laser mount', CANNON_HINGE, ARM / long, 0],
+      ['Laser saddle', POST_BASE, 1, -ARM],
+    ] as const) {
+      const v = parts[name];
+      for (let i = 0; i < v.length; i += STRIDE) {
+        const d = sub([v[i], v[i + 1], v[i + 2]], from);
+        const n: Vec3 = [v[i + 3], v[i + 4], v[i + 5]];
+        postBuilt.push(
+          dot(d, e1) * POST_THICK,
+          dot(d, u) * stretch + drop,
+          dot(d, e2) * POST_THICK,
+          dot(n, e1),
+          dot(n, u),
+          dot(n, e2),
+          ...v.slice(i + 6, i + STRIDE),
+        );
+      }
+    }
+  }
+  return postBuilt;
+};
 /** A direction in the camera's space (right, up, forward) in the model's axes (right, up, back). */
 const model = ([a, b, c]: Vec3): Vec3 => [a, b, -c];
 /**
@@ -441,7 +497,7 @@ const model = ([a, b, c]: Vec3): Vec3 => [a, b, -c];
  */
 const cannonInView = (k: number, target: Vec3): [Vec3, Quat] => {
   const f = folded(k);
-  const hinge = mix(CANNON_LOW, CANNON_UP, f);
+  const hinge = hingeAt(f);
   const [dx, dy, dz] = model(unit(sub(target, hinge)));
   const look = mul(axis([0, 1, 0], Math.atan2(-dx, -dz)), axis([1, 0, 0], Math.asin(dy)));
   return [hinge, slerp(axis([1, 0, 0], CANNON_FOLD), look, f)];
@@ -2532,6 +2588,15 @@ export const createBody = (world?: World): Body => {
               i => eye[i] + r[i] * hinge[0] + u[i] * hinge[1] + f[i] * hinge[2],
             ) as Vec3;
             placeRigid(out, 'hunter view cannon', cannonVertices(), mul(view, q), at, pieces);
+            // Its post, from the shoulder up to the hinge.
+            placeRigid(
+              out,
+              'hunter view post',
+              postVertices(),
+              mul(view, armTurn(folded(cannon))),
+              at,
+              pieces,
+            );
           }
         }
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);

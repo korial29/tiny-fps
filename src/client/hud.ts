@@ -133,13 +133,10 @@ export const HUD_CSS =
   // tell the player the view can change (the user, 2026-11-23).
   `i.hv kbd{display:inline-block;font:inherit;margin-right:7px;padding:2px 5px;border:1px solid #a4ffcf;border-radius:3px;color:#00130d;background:#a4ffcf}i.hv.idle{animation:blink .5s steps(2) infinite alternate}` +
   // The Hunter's shoulder cannon: Predator-like red brackets close around one target, then lock.
-  `i.hl{z-index:2;width:42px;height:42px;transform:translate(-50%,-50%);color:#ff3029;filter:drop-shadow(0 0 5px #f21);transition:filter .12s}` +
-  `i.hl b{position:absolute;width:10px;height:10px;border-color:currentColor;border-style:solid;opacity:.7;transition:transform .12s,opacity .12s}` +
-  `i.hl b:nth-child(1){left:0;top:0;border-width:2px 0 0 2px}` +
-  `i.hl b:nth-child(2){right:0;top:0;border-width:2px 2px 0 0}` +
-  `i.hl b:nth-child(3){right:0;bottom:0;border-width:0 2px 2px 0}` +
-  `i.hl b:nth-child(4){left:0;bottom:0;border-width:0 0 2px 2px}` +
-  `i.hl small{position:absolute;top:47px;left:50%;transform:translateX(-50%);padding:3px 6px;background:#200d;color:currentColor;font:900 9px/1 system-ui,sans-serif;letter-spacing:.16em;white-space:nowrap}` +
+  `i.hl{z-index:2;width:0;height:0;color:#ff3029;filter:drop-shadow(0 0 4px #f21);transition:filter .12s}` +
+  // Three triangles round the foe, each pointing at him (hunterAim() turns and spreads them).
+  `i.hl b{position:absolute;left:-5px;top:-9px;width:10px;height:18px;background:currentColor;clip-path:polygon(50% 100%,0 0,100% 0);opacity:.75}` +
+  `i.hl small{position:absolute;top:44px;left:0;transform:translateX(-50%);padding:3px 6px;background:#200d;color:currentColor;font:900 9px/1 system-ui,sans-serif;letter-spacing:.16em;white-space:nowrap}` +
   `i.hl.locked{filter:drop-shadow(0 0 8px #f22);animation:hl-pulse .7s steps(2,end) infinite}i.hl.locked b{opacity:1}@keyframes hl-pulse{50%{opacity:.7}}` +
   // The banner of an event (the user, 2026-11-09: no underline, a nicer design): heavy italic in the
   // team's colour, glowing, on a dark band fading out at both ends, popping in.
@@ -310,6 +307,9 @@ export const HAIR_NAMES = [
 ];
 
 /** The classes, in ROLE's order (kit.ts): the name, what it is good at, what it pays for it, and where it plays. */
+/** The beats (radians a second) of the shoulder cannon's three tracking triangles: out of step. */
+const AIM_BEAT = [2.3, 3.4, 2.8];
+
 export const ROLES: [name: string, pros: string, cons: string, where: string][] = [
   [
     'Marine',
@@ -337,7 +337,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Hunter',
-    'Slot 1 has twin wrist blades, which slash and never thrust; G or right click throws a returning disc (3 HP). Slot 2 unfolds the harpoon rifle: hold right click or G to zoom through its scope, left click fires. Each bolt deals 4 HP and reloads in 1.3 seconds. Slot 3 unfolds the shoulder cannon: keep a foe in its sight for 3 seconds to lock on, then hold fire for 3 HP a hit. He takes no weapon from the racks.',
+    'Slot 1 has twin wrist blades, which slash and never thrust; G or right click throws a returning disc (3 HP). Slot 2 unfolds the harpoon rifle: hold right click or G to zoom through its scope, left click fires. Each bolt deals 4 HP and reloads in 1.3 seconds. Slot 3 unfolds the shoulder cannon: each click fires a beam for 3 HP; keep a foe in its sight for 3 seconds to lock on and its shots home in. He carries all three from the spawn, has no fists and takes no weapon from the racks.',
     'Press V to cycle thermal vision and alien detection.',
     'Every map',
   ],
@@ -403,7 +403,7 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
     [
       ['1', 'wrist blades, no thrust; G or right click throws the returning disc'],
       ['2', 'harpoon; hold G or right click to zoom through its scope, left click fires'],
-      ['3', 'shoulder cannon: hold aim on a target for 3 seconds to lock; 3 HP'],
+      ['3', 'shoulder cannon: click fires (3 HP); 3 seconds on a target locks its aim'],
       ['V', 'cycle normal, thermal and alien scan', 'KeyV'],
     ],
   ],
@@ -550,7 +550,7 @@ export interface Hud {
    */
   hunterVision(text?: string, scoped?: boolean, hint?: boolean): void;
   /** The Predator-style shoulder-laser sight, at a screen point and progressing to a lock. */
-  hunterAim(at?: [number, number], progress?: number): void;
+  hunterAim(at?: [number, number], progress?: number, now?: number): void;
   /** The dark rim of a space helmet's visor around the screen: on while the own player wears one, off otherwise. */
   visor(on: boolean): void;
   /** The red vignette of a tackle, 0 (none) to 1 (full). */
@@ -729,7 +729,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       `<s hidden></s><mark hidden></mark><sup></sup><ins hidden><i></i></ins>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav><var hidden></var><i class="hv" hidden><kbd>V</kbd><span></span></i>` +
       `<h1 hidden>FRAGS<span>0</span></h1><label hidden><canvas width="${COMM}" height="${COMM}"></canvas><span></span><i>${'<b></b>'.repeat(5)}</i></label><ol></ol><h2 hidden><span></span><small></small></h2>` +
-      `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q><i class="hl" hidden><b></b><b></b><b></b><b></b><small>TRACKING</small></i><dfn hidden></dfn><dfn hidden></dfn><tt hidden></tt><tt hidden></tt>` +
+      `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q><i class="hl" hidden><b></b><b></b><b></b><small>TRACKING</small></i><dfn hidden></dfn><dfn hidden></dfn><tt hidden></tt><tt hidden></tt>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
   );
   const one = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
@@ -1094,7 +1094,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         cannon ? '' : `${'▮'.repeat(rest / size)}${rest % size ? '▯' : ''}\n${rest}${dots}`,
       );
       const names = hunter
-        ? ['1 blades', '2 harpoon', '3 cannon', '4 rifle', '5 fists']
+        ? ['1 blades', '2 harpoon', '3 cannon', '', '']
         : ['1 gun', '2 katana', '3 rail', '4 rifle', '5 fists'];
       // The keys in slot order; each shows the weapon in that slot (the Hunter's blades are first).
       const held = fists ? 4 : k ? 1 : rifled ? 3 : railed ? 2 : 0;
@@ -1102,7 +1102,8 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         const w = slotted(i, hunter);
         kbd.textContent = names[i];
         (kbd as HTMLElement).title = names[i];
-        (kbd as HTMLElement).hidden = w < 4 && !have[w];
+        // The Hunter has his three slots and no fists (the user, 2026-11-23).
+        (kbd as HTMLElement).hidden = hunter ? i > 2 : w < 4 && !have[w];
         kbd.classList.toggle('a', w == held);
       });
     },
@@ -1233,21 +1234,20 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         aim.style.top = `${at[1] * 100}%`;
       }
     },
-    hunterAim(at, progress = 0) {
+    hunterAim(at, progress = 0, now = 0) {
       hunterSight.toggleAttribute('hidden', !at);
       if (at) {
         hunterSight.style.left = `${at[0] * 100}%`;
         hunterSight.style.top = `${at[1] * 100}%`;
-        const spread = 18 * (1 - Math.max(0, Math.min(1, progress)));
-        hunterSight.querySelectorAll('b').forEach((corner, i) => {
-          const signs = [
-            [-1, -1],
-            [1, -1],
-            [1, 1],
-            [-1, 1],
-          ][i];
-          (corner as HTMLElement).style.transform =
-            `translate(${signs[0] * spread}px,${signs[1] * spread}px)`;
+        // Tracking, the three triangles stand far out round the foe, each drifting on its own
+        // beat; they close in over the lock's 3 s and meet on him when it is locked (the user,
+        // 2026-11-23).
+        const off = 1 - Math.max(0, Math.min(1, progress));
+        const t = now / 1000;
+        hunterSight.querySelectorAll('b').forEach((tri, i) => {
+          const r = 13 + 48 * off * (0.75 + 0.25 * Math.sin(t * AIM_BEAT[i] + 2.1 * i));
+          const a = 120 * i + 30 * off * Math.sin(t * AIM_BEAT[2 - i] * 0.8 + 1.3 + i);
+          (tri as HTMLElement).style.transform = `rotate(${a}deg) translateY(${-r}px)`;
         });
         hunterSight.classList.toggle('locked', progress >= 1);
         hunterSight.querySelector('small')!.textContent = progress >= 1 ? 'LOCK' : 'TRACKING';

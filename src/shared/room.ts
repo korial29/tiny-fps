@@ -14,7 +14,6 @@ import {
   DISK_RETURN,
   DISK_HP,
   DISK_SPEED,
-  HUNTER_LASER_COOL,
   HUNTER_LASER_HP,
   HUNTER_LASER_LOCK,
   INPUT_BURST,
@@ -78,7 +77,7 @@ import { Ctf } from './ctf';
 import { KITS, ROLE, kitOf } from './kit';
 import type { Kit } from './kit';
 import { shut, swing } from './doors';
-import { STRIKE, felled, step, within } from './gun';
+import { STRIKE, felled, onScreen, step, within } from './gun';
 import { MAPS, mapKey, mapOf } from './maps';
 import { navOf } from './nav';
 import {
@@ -309,8 +308,6 @@ export class Room {
   private gone: number[];
   /** The plasma balls in flight, and the ones that burst since the last snapshot, which sends them once more. */
   private balls: Flying[] = [];
-  /** Last tick a Hunter's shoulder laser hit, by player id. */
-  private hunterLasers = new Map<number, number>();
   /** Target and start tick of each Hunter's uninterrupted shoulder-laser lock. */
   private hunterLocks = new Map<number, { target: number; since: number }>();
   /** The map's rovers, in the order of WorldDef.rovers, then its ships (ship.ts). */
@@ -600,12 +597,17 @@ export class Room {
         this.hunterLocks.delete(p.info.id);
         continue;
       }
-      const target = this.shoulderTarget(p, undefined);
+      // The lock keeps its foe while he stays on the screen; once he leaves it, it is lost and the
+      // next foe in the cone starts a new one (the user, 2026-11-23).
       const lock = this.hunterLocks.get(p.info.id);
-      if (!target) {
+      if (lock && !this.lockedOn(p, lock.target, undefined)) {
         this.hunterLocks.delete(p.info.id);
-      } else if (lock?.target !== target.id) {
-        this.hunterLocks.set(p.info.id, { target: target.id, since: now });
+      }
+      if (!this.hunterLocks.has(p.info.id)) {
+        const target = this.shoulderTarget(p, undefined);
+        if (target) {
+          this.hunterLocks.set(p.info.id, { target: target.id, since: now });
+        }
       }
     }
     for (const b of this.balls) {
@@ -1307,36 +1309,46 @@ export class Room {
     return target;
   }
 
-  /** Fires only after an uninterrupted three-second target lock; damage is three HP. */
+  /** The enemy `id` as `p` saw him at `view`, while he is up, in range and on p's screen (onScreen()). */
+  private lockedOn(p: Player, id: number, view: number | undefined): PlayerState | undefined {
+    const foe = this.enemies(p, view).find(q => q.id === id);
+    const eye = [p.state.x, p.state.y + eyeHeight(p.state), p.state.z];
+    const point = foe && [foe.x, foe.y + eyeHeight(foe) * 0.65, foe.z];
+    return foe &&
+      point &&
+      !foe.down &&
+      Math.hypot(...point.map((v, i) => v - eye[i])) < GUN_RANGE &&
+      onScreen(eye, p.state.yaw, p.state.pitch, point)
+      ? foe
+      : undefined;
+  }
+
+  /**
+   * A shot of the shoulder cannon (gun.ts paces them): at the foe locked on for HUNTER_LASER_LOCK,
+   * else straight down the look. The first enemy in its line takes HUNTER_LASER_HP.
+   */
   private shoulder(p: Player, view: number | undefined): void {
-    const target = this.shoulderTarget(p, view);
     const lock = this.hunterLocks.get(p.info.id);
-    if (
-      !target ||
-      lock?.target !== target.id ||
-      this.ticks - lock.since < HUNTER_LASER_LOCK ||
-      this.ticks - (this.hunterLasers.get(p.info.id) ?? -Infinity) < HUNTER_LASER_COOL
-    ) {
-      return;
+    const target =
+      lock && this.ticks - lock.since >= HUNTER_LASER_LOCK
+        ? this.lockedOn(p, lock.target, view)
+        : undefined;
+    let aim = p.state;
+    if (target) {
+      const origin = [p.state.x, p.state.y + eyeHeight(p.state), p.state.z];
+      const point = [target.x, target.y + eyeHeight(target) * 0.65, target.z];
+      const delta = point.map((v, i) => v - origin[i]);
+      const distance = Math.hypot(...delta) || 1;
+      aim = {
+        ...p.state,
+        yaw: Math.atan2(-delta[0], -delta[2]),
+        pitch: Math.asin(delta[1] / distance),
+      };
     }
-    const origin: [number, number, number] = [p.state.x, p.state.y + eyeHeight(p.state), p.state.z];
-    const point: [number, number, number] = [
-      target.x,
-      target.y + eyeHeight(target) * 0.65,
-      target.z,
-    ];
-    const delta = point.map((v, i) => v - origin[i]);
-    const distance = Math.hypot(...delta) || 1;
-    const yaw = Math.atan2(-delta[0], -delta[2]);
-    const pitch = Math.asin(delta[1] / distance);
-    const aimed = beam(this.world, { ...p.state, yaw, pitch }, [target]);
-    if (aimed.hit?.id !== target.id) {
-      return;
-    }
-    this.hunterLasers.set(p.info.id, this.ticks);
-    p.state.hits = (p.state.hits + 1) & 255;
-    const foe = this.players().find(q => q.info.id === target.id);
+    const aimed = beam(this.world, aim, this.enemies(p, view));
+    const foe = this.players().find(q => q.info.id === aimed.hit?.id);
     if (foe) {
+      p.state.hits = (p.state.hits + 1) & 255;
       this.shot(foe, HUNTER_LASER_HP, p, aimed.d[0], aimed.d[2]);
     }
   }

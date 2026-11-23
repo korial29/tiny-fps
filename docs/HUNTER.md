@@ -40,20 +40,29 @@ and rifle racks give him nothing, and the gun rack only refills his harpoon bolt
 - **Always carried.** It is his from the spawn (`rail` and `cap` 0: carried, nothing to spend). It
   never empties, heats or swaps a capsule, and G does not fire the rail gun's ring with it
   (`src/shared/gun.ts`).
-- **Lock and fire.** The host keeps the enemy most in line with the look, within about 10°
-  (cos > 0.985), 80 m and in sight, as the target. Held for `HUNTER_LASER_LOCK` (3 s) without a
-  change of target, it is locked; then each `HUNTER_LASER_COOL` ticks with fire held, a hit takes
-  `HUNTER_LASER_HP` (3) (`Room.shoulder()`). The HUD's brackets track the same rule locally and
-  send nothing to the other players.
+- **Fire and lock.** Each click fires, then one shot each `HUNTER_LASER_COOL` ticks while held
+  (`p.cool`, predicted in `gun.ts`). A shot goes down the look and the first enemy in its line takes
+  `HUNTER_LASER_HP` (3) (`Room.shoulder()`). The lock starts on the enemy most in line with the
+  look, within about 10° (cos > 0.985), 80 m and in sight. It keeps him while he stays on the
+  screen (`onScreen()`, `SCREEN`, shared by host and client); once he leaves it, it is lost and
+  starts over. After `HUNTER_LASER_LOCK` (3 s) it is locked: the shots go at him and the cannon
+  turns to follow him. `HUNTER_LASER_COOL` is 15 at most: `cool` is 4 bits on the wire.
+- **Its sight.** Three red triangles round the foe, each pointing at him: tracking, they stand far
+  out, each drifting on its own beat; they close in over the 3 s and meet on him at the lock
+  (`hunterAim()`). The HUD reads the rule locally and sends nothing to the other players. Every
+  shot is seen as a red beam from the cannon's muzzle (`Tracer.laser()`), to the locked foe.
 - **Folds out.** Stowed, it lies back along his left shoulder; taken, it swings out about the top of
   its post (`CANNON_HINGE`) in `CANNON_SWING` (0.35 s) and points along his look. In the own view it
   rises from under the left shoulder into the top left of the view and points at what the look
-  meets (`body.ts`). Its shots are seen to leave from its muzzle in both views. With it, his hands
+  meets (`body.ts`), on its post, which stands on the left shoulder and comes into the view from
+  its bottom left corner (`SHOULDER`, `postVertices()`). Its shots are seen to leave from its muzzle in both views. With it, his hands
   hold nothing and move as unarmed (`handsFree()`).
 
 ## Blades, harpoon and slots (the user, 2026-11-23)
 
-- **Slots.** The wrist blades are on 1 and the harpoon on 2; the cannon stays on 3. Only the client's
+- **Slots.** The wrist blades are on 1 and the harpoon on 2; the cannon stays on 3. He has all three
+  from the spawn, the blades in hand, and no fists: keys 4 and 5 do nothing and the HUD shows three
+  slots. Only the client's
   key and wheel order change (`slotted()`, `src/client/input.ts`); the wire's `KEY.BLADE` is the same.
 - **No thrust.** The blades slash where the katana would thrust: FORWARD with FIRE gives `CUT.SLASH`,
   and its special the leap, never the lunge (`cutOf(keys, false)`, `src/shared/blade.ts`).

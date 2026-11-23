@@ -334,6 +334,7 @@ describe('createRenderer', () => {
       );
       rd.frame([1, 1.6, 1], 0, 0, [], new Map(), createEffects(), [], undefined, undefined, {
         flash: vi.fn(),
+        laser: vi.fn(),
         burst: vi.fn(),
         blast: vi.fn(),
         tesla: vi.fn(),

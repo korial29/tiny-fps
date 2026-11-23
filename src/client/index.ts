@@ -9,7 +9,9 @@ import {
   TICK_HZ,
   VEHICLE,
 } from '../shared/constants';
-import { sabering } from '../shared/gun';
+import { onScreen, sabering } from '../shared/gun';
+import { basis, dot } from './mesh';
+import type { Vec3 } from './mesh';
 import { mapKey, mapOf } from '../shared/maps';
 import { bruise, eyeHeight } from '../shared/physics';
 import { FRAG, decodeSnapshot, encodeInput, parseText } from '../shared/protocol';
@@ -62,6 +64,9 @@ import { createWrecks } from './wreck';
 import type { createTargeting } from './targeting';
 import { targetingPhysics } from './targeting-physics';
 import type { Renderer } from './render';
+
+/** When in the shoulder cannon's 3 s lock its tracking clicks come: closer and closer together. */
+const TRACK_CLICKS = [0.1, 0.3, 0.47, 0.61, 0.73, 0.83, 0.9, 0.95];
 
 export type { PlayerInfo, SocketLike } from '../shared/types';
 
@@ -426,7 +431,11 @@ const play = (
   const pacing = createPacing(period);
   let last: number | undefined;
   let hunterLock: { id: number; since: number } | undefined;
+  /** Where the locked foe's chest is, while the shoulder cannon is locked on: it points there. */
+  let lockedAt: [number, number, number] | undefined;
   let hunterLockTone = -1;
+  /** The tracking clicks played for the lock under way (TRACK_CLICKS). */
+  let hunterClicks = 0;
   let rendered: number | undefined;
   /** The harpoon scope's zoom, 0 out to 1 in. */
   let scope = 0;
@@ -992,7 +1001,10 @@ const play = (
     // The driver is unarmed and his body is the renderer's to draw whole: no sight, no muzzle.
     const look = me && !third ? sight(world, eye, cam, ctl.yaw, ctl.pitch, pitch) : undefined;
     if (look) {
-      body.aim(look.local);
+      // Locked on, the shoulder cannon points at the foe (at the last frame's place of him).
+      const [r, u, f] = basis(ctl.yaw, pitch);
+      const d = lockedAt?.map((v, i) => v - cam[i]);
+      body.aim(d ? [dot(d as Vec3, r), dot(d as Vec3, u), dot(d as Vec3, f)] : look.local);
     }
     // The glory kills' sounds, on their locks' ticks (gloryfx.ts).
     gloryfx.frame(me ? [me, ...others] : others);
@@ -1140,8 +1152,27 @@ const play = (
       );
       const laserSelected =
         ctl.hunter && ctl.weapon === WEAPON.RAIL && !third && !me.down && !driving;
-      let target: PlayerState | undefined;
-      if (laserSelected) {
+      const chest = (p: PlayerState): [number, number, number] => [
+        p.x,
+        p.y + eyeHeight(p) * 0.65,
+        p.z,
+      ];
+      // The lock keeps its foe while he is on the screen, as the host's does (onScreen()); once he
+      // leaves it, it is lost (the user, 2026-11-23).
+      let target = laserSelected ? others.find(p => p.id === hunterLock?.id) : undefined;
+      if (
+        target &&
+        (target.down ||
+          Math.hypot(...chest(target).map((v, i) => v - pov[i])) >= 80 ||
+          !onScreen(pov, view, pitch, chest(target)))
+      ) {
+        target = undefined;
+      }
+      if (!target) {
+        hunterLock = undefined;
+        hunterLockTone = -1;
+      }
+      if (laserSelected && !target) {
         const cp = Math.cos(pitch);
         const look: [number, number, number] = [
           -Math.sin(view) * cp,
@@ -1153,7 +1184,7 @@ const play = (
           if (foe.down || team(foe.id) === you.team) {
             continue;
           }
-          const point: [number, number, number] = [foe.x, foe.y + eyeHeight(foe) * 0.65, foe.z];
+          const point = chest(foe);
           const delta = point.map((v, i) => v - pov[i]);
           const distance = Math.hypot(...delta);
           const alignment = distance
@@ -1164,26 +1195,31 @@ const play = (
             target = foe;
           }
         }
-      }
-      const targetPoint = target
-        ? rd.project(target.x, target.y + eyeHeight(target) * 0.65, target.z)
-        : undefined;
-      if (!target || !targetPoint || targetPoint.some(v => v < 0 || v > 1)) {
-        hunterLock = undefined;
-        hunterLockTone = -1;
-        hud.hunterAim(laserSelected ? [0.5, 0.5] : undefined, 0);
-      } else {
-        if (hunterLock?.id !== target.id) {
+        if (target) {
           hunterLock = { id: target.id, since: now };
-          hunterLockTone = -1;
+          hunterClicks = 0;
         }
+      }
+      const targetPoint = target ? rd.project(...chest(target)) : undefined;
+      lockedAt = undefined;
+      if (!target || !hunterLock || !targetPoint) {
+        hud.hunterAim(laserSelected ? [0.5, 0.5] : undefined, 0, now);
+      } else {
         const progress = Math.min(1, (now - hunterLock.since) / 3000);
+        // Tracking, clicks closer and closer and higher as the triangles close in; locked, its tone
+        // (the user, 2026-11-23).
+        if (hunterClicks < TRACK_CLICKS.length && progress >= TRACK_CLICKS[hunterClicks]) {
+          audio.play(SOUND.CLICK, undefined, -5, 1.5 + 0.2 * hunterClicks++);
+        }
         if (progress >= 1 && hunterLockTone !== target.id) {
-          audio.play(SOUND.HUNTER_LOCK, undefined, -2.5, 1);
+          audio.play(SOUND.HUNTER_LOCK, undefined, 1, 1);
           hunterLockTone = target.id;
         }
-        hud.hunterAim(targetPoint, progress);
+        // Locked, the cannon turns to follow him and its shots go at him.
+        lockedAt = progress >= 1 ? chest(target) : undefined;
+        hud.hunterAim(targetPoint, progress, now);
       }
+      combat.lock(lockedAt);
       botcam.draw(rd.project, id => names.get(id) ?? '?');
     }
     // The health of the vehicle he sits in, and of the nearest other one within NEAR_HULL metres in sight.

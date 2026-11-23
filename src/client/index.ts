@@ -950,7 +950,9 @@ const play = (
       !me.railed &&
       !me.fists &&
       me.ammo >= 0;
-    if (!ctl.canScope) ctl.scoped = false;
+    if (!ctl.canScope) {
+      ctl.scoped = false;
+    }
     hud.hunterVision(['', 'THERMAL', 'ALIEN SCAN'][hunterMode], ctl.scoped);
     const pov: [number, number, number] = spy
       ? [spy.x, spy.y + eyeHeight(spy), spy.z]

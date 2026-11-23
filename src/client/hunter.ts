@@ -1315,7 +1315,7 @@ export function hunter(lod: 0 | 1 | 2) {
   limb(barrel(0.98), barrel(1.015), [0.028, 0.026], silver, 1, TWILL);
   limb(barrel(1.015), barrel(1.019), [0.021, 0.021], [0.049, 0.055, 0.053], 1);
   part('Harpoon');
-  drawHarpoon(out, lod, [-0.066, 1.25, 0.224], aim(unit([0.58, 0.81, 0]), [0, 0, 1]), 0.93, 0);
+  drawHarpoon(out, lod, [-0.066, 1.17, 0.224], aim(unit([0.58, 0.81, 0]), [0, 0, 1]), 0.93, 0);
   part('Flying disc');
   // The throwing disc sits face out on the hip. Six swept blades grow
   // from separate bronze collars around a recessed steel boss.

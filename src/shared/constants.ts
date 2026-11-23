@@ -380,7 +380,7 @@ export const HARPOON = 8;
 export const HARPOON_SPEED = 72;
 export const HARPOON_RANGE = 90;
 export const HARPOON_R = 0.08;
-export const HARPOON_HP = 2;
+export const HARPOON_HP = 4;
 /** Ball.power values for a Hunter's returning disc (outbound, then returning). */
 export const DISK = 9;
 export const DISK_RETURN = 10;

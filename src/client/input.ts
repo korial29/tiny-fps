@@ -129,6 +129,8 @@ export interface Controls {
   vision: number;
   /** Whether the local player chose the Hunter class. */
   hunter: boolean;
+  canScope: boolean;
+  scoped: boolean;
   /**
    * The KEY bits of the next step, read once per step. Same as `keys`, plus BLADE while the katana
    * is chosen and RAIL while the rail gun is, except for the step right after a double tap: it carries DASH and only the tapped
@@ -167,6 +169,8 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   /** G (or the right button, but for the xenomorph) pressed, waiting for its step: the katana's special, a grenade with the rifle, a missile at a ship's stick. */
   let nade = false;
   /** A double left click, waiting for its step, and when the left button was last pressed (ms): the katana's special of the cut. */
+  let precisionShot = false;
+  const harpoonReady = () => c.canScope && c.hunter && !c.pilot && c.weapon === WEAPON.GUN;
   let special = false;
   let clicked = -Infinity;
   /** The right button pressed, waiting for its step, held now, and when it was last pressed (ms): the xenomorph's tail. */
@@ -185,6 +189,8 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     beast: false,
     vision: 0,
     hunter: false,
+    canScope: false,
+    scoped: false,
     peek() {
       const moved = pending ? dashKeys(c.keys, pending) : c.keys;
       if (c.beast) {
@@ -196,6 +202,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
       }
       const keys =
         moved |
+        (precisionShot && harpoonReady() ? KEY.FIRE : 0) |
         (nade ? KEY.SPECIAL : 0) |
         (special && !c.pilot && c.weapon != WEAPON.RIFLE ? KEY.FIRE | KEY.SPECIAL : 0);
       return withWeapon(keys, c.weapon);
@@ -203,6 +210,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     take() {
       const keys = c.peek();
       pending = 0;
+      precisionShot = false;
       if (c.beast) {
         nade = sting = twist = false;
       } else {
@@ -213,6 +221,17 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
     track: (was, now) => {
       c.weapon = chosen(c.weapon, was, now);
       have = owned(now);
+      if (
+        !now ||
+        now.down ||
+        now.wield ||
+        now.railed ||
+        now.rifled ||
+        now.fists ||
+        !harpoonReady()
+      ) {
+        c.scoped = precisionShot = false;
+      }
     },
     locked: () => (canvas.getRootNode() as Document | ShadowRoot).pointerLockElement == canvas,
     destroy: () => ac.abort(),
@@ -223,8 +242,9 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   });
   on(document, 'mousemove', (e: MouseEvent) => {
     if (c.locked()) {
-      c.yaw = (((c.yaw - e.movementX * SENS) % TAU) + TAU) % TAU;
-      c.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, c.pitch - e.movementY * SENS));
+      const sensitivity = c.scoped ? SENS / 3 : SENS;
+      c.yaw = (((c.yaw - e.movementX * sensitivity) % TAU) + TAU) % TAU;
+      c.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, c.pitch - e.movementY * sensitivity));
     }
   });
   // The xenomorph's tail: held, it charges at the top of its strike; it strikes on the release.
@@ -238,6 +258,10 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   // with the xenomorph's tail.
   on(document, 'mousedown', (e: MouseEvent) => {
     if (c.locked() && e.button == 2) {
+      if (harpoonReady()) {
+        c.scoped = true;
+        return;
+      }
       // On every weapon and vehicle the right button is G (the user, 2026-11-16); the xenomorph's is its tail.
       nade ||= !c.beast;
       tail();
@@ -254,6 +278,8 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
       c.keys &= ~KEY.FIRE;
     }
     if (e.button == 2) {
+      precisionShot ||= c.scoped && c.locked() && harpoonReady();
+      c.scoped = false;
       stinging = false;
     }
   });
@@ -319,6 +345,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
   });
   const release = () => {
     c.keys = pending = 0;
+    c.scoped = precisionShot = false;
     sting = stinging = false;
     down.clear();
     tapped.clear();

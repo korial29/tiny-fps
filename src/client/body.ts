@@ -80,12 +80,12 @@ import {
   wristEnds,
   BEHIND as BACK,
 } from './katana';
-import { STRIDE, add, basis, dot, mix, place, sub, unit } from './mesh';
+import { STRIDE, add, basis, dot, mix, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin } from './rig';
 import type { Pose, Quat } from './rig';
 import { armor } from './armor';
-import { hunter as hunterModel, hunterHarpoon } from './hunter';
+import { hunter as hunterModel, drawHarpoon } from './hunter';
 import { CUFF, CUFF_NEAR, CUFF_SIDES, REGION, beast, body, palette, skin } from './skin';
 import { CHITIN_X, CLAW, FOOT_TIP, HOOKED, PART, lashOf, partsOf, tail } from './xeno';
 import type { Part } from './xeno';
@@ -1513,6 +1513,7 @@ export const createBody = (world?: World): Body => {
    * seconds since it came to hand or a swap put its new battery in: it lights up over them (power()).
    */
   let drawn = -1;
+  let harpoonDraw = 0;
   let since = 9;
   /** Whether the weapon in hand came to it for the first time (firsts()): only then is it switched on, by hand (the user, 2026-11-09). */
   const fresh = firsts();
@@ -1534,6 +1535,7 @@ export const createBody = (world?: World): Body => {
       clung = p.mode == MODE.CLING || (clung && fours.weight > 0.002);
     }
     const now = handOf(p);
+    harpoonDraw = hunter && now === 0 ? Math.min(1, harpoonDraw + dt / 0.55) : 0;
     const f = fresh(p);
     first = now !== drawn ? f : first && !(me?.reload && !p.reload);
     since = now !== drawn || (me?.reload && !p.reload) ? 0 : since + dt;
@@ -1609,12 +1611,13 @@ export const createBody = (world?: World): Body => {
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     // The rail gun is held in both hands like a rifle: nearer the middle and the chest, so that
     // the left hand reaches its front grip.
-    const r = me?.railed || me?.rifled ? 1 : 0;
+    const r = me?.railed || me?.rifled || harpoonDraw ? 1 : 0;
     // A swap tips the gun over to show the battery under it, or the capsule on its top, and back.
     const sp = me ? swapOf(me) : -1;
     // Tipped over from the start, and back into aim after the slap (the user, 2026-11-09).
     const tipped = sp < 0 ? 0 : ease(span(sp, 0, 0.12)) * (1 - ease(span(sp, 0.8, 1)));
-    const roll = tipped * (me?.rifled ? -1.1 : r ? 0.35 : -1.25);
+    const drawTilt = harpoonDraw ? 1 - ease(harpoonDraw) : 0;
+    const roll = tipped * (me?.rifled ? -1.1 : r ? 0.35 : -1.25) - 0.78 * drawTilt;
     const at: Vec3 = [
       Math.min(0.22, 0.18 * wide) * (1 - RIFLE[0] * r) +
         0.012 * a * s +
@@ -1624,9 +1627,9 @@ export const createBody = (world?: World): Body => {
       0.4 - RIFLE[1] * r - 0.05 * kicked + lift[2],
     ];
     // The rifle sits further out and higher than the rail gun, its counter in the lower view.
-    const rf = me?.rifled ? 1 : 0;
-    at[0] += 0.02 * rf;
-    at[1] += 0.045 * rf;
+    const rf = me?.rifled || harpoonDraw ? 1 : 0;
+    at[0] += 0.02 * rf + 0.085 * drawTilt;
+    at[1] += 0.045 * rf - 0.045 * drawTilt;
     at[2] += 0.02 * rf;
     at[0] -= (rf ? 0.1 : r ? 0.04 : 0.12) * tipped;
     at[1] += 0.03 * rf * tipped;
@@ -1753,12 +1756,15 @@ export const createBody = (world?: World): Body => {
     const fh = [0, 1, 2].map(i => TILT[1] * ga[2][i] - TILT[0] * ga[1][i]) as Vec3;
     const wrist = [0, 1, 2].map(i => gp[i] - 0.078 * fh[i] + 0.022 * ga[0][i]) as Vec3;
     // The rail gun's front grip, for the left hand.
-    const [fc, fd, fu] = fore(gp, ga, me ? kindOf(me) : 2);
+    // Cup the fixed lower shell with the thumb along the tube as the sleeve extends.
+    const [fc, fd, fu] = harpoonDraw
+      ? [along(along(gp, ga[2], 0.19), ga[1], 0.091), ga[2], ga[0]]
+      : fore(gp, ga, me ? kindOf(me) : 2);
     // The katana and both fists as one piece, the wrists straight, the shoulders gone with the
     // hands (clasp()).
     const kq = { ...q, rot: q.rot.slice() };
     let [grip0, blade0, fingR, fingL]: Vec3[] = [eye, Y, Y, Y];
-    if (sw) {
+    if (sw && !hunter) {
       // In the guard 6 cm toward the middle of the body and 5 cm up, back in a cut: the left arm
       // crosses less before the chest, the right fist stays in sight (the user, 2026-11-09).
       const [at, g] = [
@@ -1867,7 +1873,7 @@ export const createBody = (world?: World): Body => {
       ]) {
         curl += (open - curl) * t;
       }
-      curls[(sd + 1) / 2] = curl + (0.9 - curl) * taken;
+      curls[(sd + 1) / 2] = curl + (0.9 - curl) * taken - (hunter ? 0.55 * onSword : 0);
       const to = add(eye, turn([h[0] * sd, h[1], h[2]]));
       const arm = sd < 0 ? J.ARM_L : J.ARM_R;
       reach(q, s, arm, to, turn([POLE[0] * sd, POLE[1], POLE[2]]));
@@ -1878,7 +1884,20 @@ export const createBody = (world?: World): Body => {
         const rot = frame(turn(ga[0]), turn(fh));
         q.rot[arm + 2] = slerp(q.rot[arm + 2], mul(inv(solve(q).rot[J.FOREARM_R]), rot), hold);
       }
-      if (sw && onSword > 0.002) {
+      if (hunter && sw && onSword > 0.002) {
+        // Lead with the wrist. The elbow stays wide so the two blades cross into view.
+        const at = add(eye, add(keep(add(sw.at, [0.1, 0.12, -0.14])), clear));
+        const held = { ...q, rot: q.rot.slice() };
+        reach(held, s, arm, at, keep([1, -0.8, 0.25]));
+        const solved = solve(held);
+        const forearm = unit(sub(solved.pos[J.HAND_R], solved.pos[J.FOREARM_R]));
+        const dorsal = unit(across(keep([-0.15, 0.85, -0.55]), forearm));
+        held.rot[J.FOREARM_R] = mul(inv(solved.rot[arm]), frame(dorsal, forearm));
+        held.rot[J.HAND_R] = ID;
+        for (const k of [arm, arm + 1, arm + 2]) {
+          q.rot[k] = slerp(q.rot[k], held.rot[k], onSword);
+        }
+      } else if (sw && onSword > 0.002) {
         // Both hands round the grip, the left one BACK behind the right, the wrists straight.
         const at = along(grip0, blade0, sd > 0 ? 0 : -BACK);
         const held = { ...q, rot: q.rot.slice() };
@@ -1901,7 +1920,7 @@ export const createBody = (world?: World): Body => {
       }
       // The rail gun takes the left hand too, on its front grip, the elbow down and out; the
       // rifle's handguard lies in its palm, a cup (RIFLE_HOLD).
-      const two = sd < 0 && (me?.railed || me?.rifled) ? w.gun * free : 0;
+      const two = sd < 0 && (me?.railed || me?.rifled || harpoonDraw) ? w.gun * free : 0;
       if (two > 0.002) {
         const held = { ...q, rot: q.rot.slice() };
         if (fu) {
@@ -1933,7 +1952,7 @@ export const createBody = (world?: World): Body => {
       const sp = me ? swapOf(me) : -1;
       const rail = !!me?.railed;
       const onLoad =
-        sd < 0 && sp >= 0
+        sd < 0 && !harpoonDraw && sp >= 0
           ? w.gun *
             free *
             (rail
@@ -1944,7 +1963,7 @@ export const createBody = (world?: World): Body => {
       // the hand off the gun down to it, into it and the battery out, then up with it under the
       // grip, where the gun takes it (above BROUGHT). The battery is drawn in the hand (carried).
       const fetch =
-        sd < 0 && sp >= 0 && !rail
+        sd < 0 && !harpoonDraw && sp >= 0 && !rail
           ? w.gun * free * ease(span(sp, 0.12, 0.2)) * (1 - ease(span(sp, BROUGHT - 0.03, BROUGHT)))
           : 0;
       if (sd < 0) {
@@ -2221,7 +2240,10 @@ export const createBody = (world?: World): Body => {
         // The right thumb presses the button of the katana or the plasma gun as it comes on.
         const tk = me?.wield ? 1 : me ? kindOf(me) : -1;
         const push =
-          me && swapOf(me) < 0 && ((tk == 1 && grasp > 0.2) || (tk == 0 && hold > 0.2))
+          me &&
+          !harpoonDraw &&
+          swapOf(me) < 0 &&
+          ((tk == 1 && grasp > 0.2) || (tk == 0 && hold > 0.2))
             ? poke(since, pressOf(tk))
             : 0;
         // Her hand: the same one, smaller about the wrist, so it closes on the same grips.
@@ -2251,13 +2273,14 @@ export const createBody = (world?: World): Body => {
           const sp = me ? swapOf(me) : -1;
           const on = since - Math.max(pressOf(kind), 0);
           if (hunter && kind === 0) {
-            place(
+            drawHarpoon(
               out,
-              hunterHarpoon(1),
+              1,
               gunGrip(s.pos[J.HAND_R], s.rot[J.HAND_R]),
               gunAxes(s.rot[J.HAND_R]),
-              [0, 0, 0],
               0.82,
+              ease(harpoonDraw),
+              !!me?.mag,
             );
           } else if (!(hunter && rail)) {
             held(

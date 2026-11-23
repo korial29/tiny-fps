@@ -272,6 +272,12 @@ export const TAILS = [
   { ticks: 63, strike: 52, reach: 2.8, arc: 0.6, hp: 5, hold: 32, knock: 0 },
 ];
 export const TAIL_LEAP = 10;
+/**
+ * The tail's charged release (the user, 2026-11-23: let go, it goes far at full power): no slower
+ * than a tap but TAIL_FAST times its time from the top, and TAIL_FAR metres further, where the
+ * katana's heavy release is HEAVY times as slow and HEAVY_REACH further (swingOf()).
+ */
+export const [TAIL_FAST, TAIL_FAR] = [0.75, 2];
 export const [PUNCH_HITS, PUNCH_STUN, PUNCH_MEMORY] = [2, 3, 180];
 /**
  * The xenomorph (the user, 2026-11-15; kit.ts). XENO_HP health. It clings to a wall it faces with

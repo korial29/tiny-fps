@@ -28,6 +28,7 @@ import {
 } from './xeno';
 import type { Lash } from './xeno';
 import { STING, TAILS } from '../shared/constants';
+import { SHINE, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
 import type { Quat } from './rig';
 
@@ -123,6 +124,31 @@ describe('its pieces', () => {
     const left = tip(Math.PI / 2);
     const right = tip(-Math.PI / 2);
     expect(right[0] - left[0]).toBeGreaterThan(0.3);
+  });
+
+  it('lands a strike on the crosshair, its steel stinger pointed at the foe, whatever the look', () => {
+    const { ticks, strike } = TAILS[STING.STAB];
+    const lash = lashOf({ cut: STING.STAB, down: 0, swing: ticks - strike });
+    const eye = S.pos[J.HEAD];
+    for (const yaw of [0, Math.PI / 2, -0.6]) {
+      const v: number[] = [];
+      tail(v, S, 0, 0, lash, [1, 0, 0], 3, 0, { yaw, pitch: 0 });
+      expect(v.every(Number.isFinite)).toBe(true);
+      const tip = points(v).at(-1)!;
+      // Ahead of the eyes along the look, about on its line (the user, 2026-11-23).
+      const [f, r] = [
+        [-Math.sin(yaw), -Math.cos(yaw)],
+        [Math.cos(yaw), -Math.sin(yaw)],
+      ];
+      const d = [tip[0] - eye[0], tip[2] - eye[2]];
+      expect(d[0] * f[0] + d[1] * f[1]).toBeGreaterThan(1.5);
+      expect(Math.abs(d[0] * r[0] + d[1] * r[1])).toBeLessThan(0.4);
+      // The blade is polished steel (SHINE), not the team's glow.
+      const layers = new Set(
+        Array.from({ length: v.length / STRIDE }, (_, i) => v[i * STRIDE + 8]),
+      );
+      expect(layers.has(SHINE)).toBe(true);
+    }
   });
 
   it('stands a comb of blades on its vertebrae, up the back and down the tail, none far', () => {

@@ -17,6 +17,8 @@ import {
   NECK,
   PARRY_ARC,
   PLAYER_R,
+  TAIL_FAR,
+  TAIL_FAST,
   TAIL_HP,
   TAILS,
 } from './constants';
@@ -76,16 +78,19 @@ export const cutOf = (keys: number, thrust = true): number => {
 /**
  * The swing `p` is in, its numbers as CUTS has them (`table`; the xenomorph's is TAILS): the cut's
  * own, or, for a heavy release (`heavy`), the rest of it from the top of its wind-up, HEAVY times as
- * slow, with its own timer from there, and harder and wider.
+ * slow, with its own timer from there, and harder and wider. The tail's (TAILS) is fast and long
+ * instead: TAIL_FAST times its time, TAIL_FAR metres further.
  */
 export const swingOf = (p: Pick<PlayerState, 'cut' | 'heavy'>, table: typeof CUTS = CUTS) => {
   const c = table[p.cut ?? 0];
+  const tail = table === TAILS;
+  const k = tail ? TAIL_FAST : HEAVY;
   return p.heavy
     ? {
         ...c,
-        ticks: Math.round((c.ticks - c.hold) * HEAVY),
-        strike: Math.round((c.strike - c.hold) * HEAVY),
-        reach: c.reach + HEAVY_REACH,
+        ticks: Math.round((c.ticks - c.hold) * k),
+        strike: Math.round((c.strike - c.hold) * k),
+        reach: c.reach + (tail ? TAIL_FAR : HEAVY_REACH),
         arc: c.arc * HEAVY_ARC,
         hp: c.hp + HEAVY_HP,
       }

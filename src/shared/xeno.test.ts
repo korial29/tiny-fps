@@ -30,6 +30,8 @@ import {
   WALL_KICK_SPEED,
   HEAVY_MAX,
   TAIL_HP,
+  TAIL_FAR,
+  HEAVY_TAP,
 } from './constants';
 import { swingOf } from './blade';
 import { STRIKE, step } from './gun';
@@ -435,14 +437,29 @@ describe('the claws and the tail', () => {
       const p = at(-20, 0, { z: 50, yaw: 0 });
       hit(p, KEY.BLADE | keys);
       expect([p.cut, p.swing, p.charge]).toEqual([cut, TAILS[cut].ticks - TAILS[cut].hold, 1]);
-      // A tap: it runs on to its strike, slower than any cut of the katana.
+      // A tap: one quick blow on from its poise, not the wind-up over again (the user, 2026-11-23).
       let n = 1;
       while (hit(p, 0) !== STRIKE.CUT) {
         n++;
       }
-      expect(n).toBe(TAILS[cut].strike);
-      expect(n).toBeGreaterThan(Math.max(...CUTS.slice(0, 4).map(c => c.strike)));
+      expect(n).toBe(TAILS[cut].strike - TAILS[cut].hold);
+      // It strikes once: no second blow before the swing ends.
+      while (p.swing) {
+        expect(hit(p, 0)).not.toBe(STRIKE.CUT);
+      }
     }
+  });
+
+  it('lets a charged tail go fast and far: quicker than its tap, TAIL_FAR further', () => {
+    const p = at(-20, 0, { z: 50, yaw: 0 });
+    const { hold, strike, reach } = TAILS[STING.STAB];
+    for (let k = 0; k < HEAVY_TAP + 5; k++) {
+      hit(p, KEY.BLADE | KEY.FORWARD);
+    }
+    hit(p, 0);
+    expect(p.heavy).toBe(true);
+    expect(swingOf(p, TAILS).strike).toBeLessThan(strike - hold);
+    expect(swingOf(p, TAILS).reach).toBe(reach + TAIL_FAR);
   });
 
   it('never strikes with the tail while it is held, however long: only at the release', () => {

@@ -9,7 +9,7 @@ import type { PlayerState } from '../shared/types';
 import { ease } from './gun';
 import { cross, face, sheet } from './helmet';
 import type { Spot } from './helmet';
-import { CHITIN, STRIDE, TUBE, basis, unit } from './mesh';
+import { CHITIN, SHINE, STRIDE, TUBE, basis, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
@@ -37,7 +37,9 @@ const HOOK = 6;
  * forward down into the view), its turn about the pelvis' up (radians, to its left: through its
  * right side, a tail pointing back turns forward), its lean to the right, its reach (as a share of
  * its length, a whip stretched), how much of the hook at its tip it keeps, how far its root
- * rises, how far it coils in an S, and how strongly its tip follows the aim.
+ * rises, how far it coils in an S, how strongly its stinger follows the aim, and how far its tip
+ * is drawn onto the foe ahead of the eyes (tail(), the user 2026-11-23: in the own view the strike
+ * lands on the crosshair).
  */
 export type Lash = readonly [
   sting: number,
@@ -48,6 +50,7 @@ export type Lash = readonly [
   rise: number,
   coil?: number,
   aim?: number,
+  pull?: number,
 ];
 /** At rest: behind, hooked. */
 export const HOOKED: Lash = [0, 0, 0, 0, 1, 0, 0, 0];
@@ -79,31 +82,38 @@ export const lashOf = (
   const mix = (a: Lash, b: Lash, d: number) =>
     (a as readonly number[]).map((v, i) => v + ((b[i] ?? 0) - v) * d) as unknown as Lash;
   const [poise, to] = LASH[c];
+  // The stinger points at the foe through the whole strike (the user, 2026-11-23), but the SPIN's,
+  // whipped all round: `a` of the way, as the tail comes out of its rest and goes back to it.
+  const aimed = (l: Lash, a: number, pull = 0): Lash =>
+    c == STING.SPIN ? l : [l[0], l[1], l[2], l[3], l[4], l[5], l[6] ?? 0, a, pull];
   // Charged, it is cocked on its side of the view, the left sweep's on the left.
   const cocked: Lash =
     c == STING.SWEEP_L ? ([0, -COCKED[1], ...COCKED.slice(2)] as unknown as Lash) : COCKED;
   if (p.charge && !p.heavy) {
-    // Drawn in and coiled by a tap of charge, then still but for its breath (the user, 2026-11-16).
+    // Drawn in from its poise and coiled by a tap of charge, then still but for its breath (the
+    // user, 2026-11-16): a tap let go strikes from about its poise.
     const [k, s] = [ease(p.charge / HEAVY_TAP), Math.sin(t * 2.4)];
-    const [a, b, d, r, h, l] = cocked;
-    return [a, b + 0.02 * s, d, r - 0.12 * k, h, l + 0.04 * s, k];
+    const [a, b, d, r, h, l] = mix(poise, cocked, k);
+    return aimed([a, b + 0.02 * s, d, r - 0.12 * k, h, l + 0.04 * s, k], 1);
   }
   if (u < top) {
     // In sight within a third of the wind-up, held there to its top.
-    return mix(HOOKED, poise, 1 - Math.max(0, 1 - (3 * u) / top) ** 3);
+    const f = 1 - Math.max(0, 1 - (3 * u) / top) ** 3;
+    return aimed(mix(HOOKED, poise, f), f);
   }
-  // A heavy release from where the charge held it, round the shorter way.
+  // A heavy release from where the charge held it, round the shorter way, far out.
   const from = p.heavy ? cocked : poise;
   if (c == STING.SPIN) {
     return mix([0.3, TAU * ease((u - top) / (1 - top)), 0, 0.2, 0, 0], HOOKED, back);
   }
-  const target = p.heavy ? THRUST : to;
+  const target = p.heavy ? FAR : to;
   const end: Lash = [
     target[0],
     target[1] + TAU * Math.round((from[1] - target[1]) / TAU),
     ...target.slice(2),
   ] as unknown as Lash;
-  return mix(mix(from, end, Math.min((u - top) / (hit - top), 1) ** 2), HOOKED, back);
+  const go = Math.min((u - top) / (hit - top), 1) ** 2;
+  return aimed(mix(mix(from, end, go), HOOKED, back), 1 - back, go * (1 - back));
 };
 
 /**
@@ -115,6 +125,8 @@ export const lashOf = (
  */
 const THRUST: Lash = [1.08, 0, 0, 0.6, 0, 0, 0, 1];
 const DOWN: Lash = [0.9, 0, 0.7, 0.3, 0, 0, 0, 0];
+/** A charged release: the thrust, the tail stretched out far (TAIL_FAR, the user 2026-11-23). */
+const FAR: Lash = [1.08, 0, 0, 1.5, 0, 0, 0, 1];
 const LASH: Record<number, [Lash, Lash]> = {
   [STING.STAB]: [[0, 5, 0, 0.2, 0, 1.2, 0, 0], THRUST],
   [STING.SWEEP_R]: [
@@ -741,8 +753,53 @@ export const tail = (
   look?: Pick<PlayerState, 'yaw' | 'pitch'>,
 ) => {
   const back = backOf(lod);
+  const bones = bonesOf(s, t, run, lash, 1, fours);
+  const pull = look ? (lash[8] ?? 0) : 0;
+  if (pull > 0 && look) {
+    // The strike lands ahead of the eyes, a little under the crosshair, further the more the tail
+    // reaches (a charged release's far out): its tip drawn there, more of the pull toward the tip.
+    const [rt, vu, f] = basis(look.yaw, look.pitch);
+    const eye = s.pos[J.HEAD];
+    const D = HIT_AT[0] + HIT_AT[1] * lash[3];
+    const tip = bones[bones.length - 1][0];
+    const dt = [0, 1, 2].map(i => (eye[i] + f[i] * D - vu[i] * HIT_AT[2] - tip[i]) * pull);
+    const n = bones.length - BACK.length;
+    for (let k = 1; k <= n; k++) {
+      const b = bones[BACK.length + k - 1];
+      const w = (k / n) ** 2;
+      const at: Vec3 = [b[0][0] + dt[0] * w, b[0][1] + dt[1] * w, b[0][2] + dt[2] * w];
+      // Never through the head: a vertebra nearer the eyes than CLEAR goes out to it, to the right.
+      const o = [0, 1, 2].map(i => at[i] - eye[i] + rt[i] * 0.1);
+      const r = Math.hypot(o[0], o[1], o[2]);
+      b[0] = r < CLEAR ? (o.map((v, i) => eye[i] + (v / r) * CLEAR) as Vec3) : at;
+    }
+  }
+  // The stinger at the foe: at the point AIM_AT metres ahead of the eyes, the blade's back up the
+  // view, its base lifted so its curve's chord, not its root, points there (blade() bends it down).
+  // The tail's last vertebrae line up behind it (the user, 2026-11-23: no blade through the tail).
+  const aim = look ? Math.min(lash[7] ?? 0, 1) : 0;
+  let stinger: [Vec3, Vec3] | undefined;
+  if (look && aim > 0) {
+    const [, vu, f] = basis(look.yaw, look.pitch);
+    const eye = s.pos[J.HEAD];
+    const L = bones.length - 1;
+    const tip = bones[L][0];
+    const d = unit([0, 1, 2].map(i => eye[i] + f[i] * AIM_AT - tip[i]) as Vec3);
+    const dot = vu[0] * d[0] + vu[1] * d[1] + vu[2] * d[2];
+    const top = unit(vu.map((v, i) => v - d[i] * dot) as Vec3);
+    const [lc, ls] = [Math.cos(AIM_LIFT), Math.sin(AIM_LIFT)];
+    const at = d.map((v, i) => v * lc + top[i] * ls) as Vec3;
+    // A short run straight at the foe behind the tip: a stretched tail's long steps would fold it.
+    const seg = Math.min(far(bones[L][0], bones[L - 1][0]), STRAIGHT[1]);
+    for (let j = 1; j <= STRAIGHT[0]; j++) {
+      const b = bones[L - j];
+      const k = aim * (1 - (j - 1) / STRAIGHT[0]);
+      b[0] = b[0].map((v, i) => v + (tip[i] - d[i] * seg * j - v) * k) as Vec3;
+    }
+    stinger = [at, top];
+  }
   // From the spine's bone, whose place shapes the curve's start at the pelvis.
-  const curve = curveOf(bonesOf(s, t, run, lash, 1, fours).slice(BACK.length - 3), 4);
+  const curve = curveOf(bones.slice(BACK.length - 3), 4);
   const [P, q] = [s.pos[J.PELVIS], s.rot[J.PELVIS]];
   const { total } = curve;
   const all = VERTEBRAE[lod];
@@ -802,21 +859,37 @@ export const tail = (
     }
   }
   const [[end, up], w] = along(curve, total);
+  if (!stinger) {
+    blade(out, end, w, up, color, sides, lod);
+    return;
+  }
+  // Along the tail's own end, which now leads into the aim, so the blade grows out of it.
+  const [at, top] = stinger;
+  const way = aim >= 1 ? at : mix3(w, at, aim);
   blade(
     out,
     end,
-    look && lash[7]
-      ? lash[7] >= 1
-        ? basis(look.yaw, look.pitch)[2]
-        : unit(mix3(w, basis(look.yaw, look.pitch)[2], lash[7]))
-      : w,
-    up,
+    Math.hypot(...way) > 1e-3 ? unit(way) : at,
+    aim >= 1 ? top : unit(mix3(up, top, aim)),
     color,
     sides,
     lod,
   );
 };
 
+/** Metres ahead of the eyes the stinger points at through a strike: past where it lands, along the crosshair. */
+const AIM_AT = 6;
+/** Where a strike's tip lands: metres ahead of the eyes, more per share of reach (Lash), and under the crosshair. */
+const HIT_AT = [1.1, 1.2, 0.12] as const;
+/** Metres the drawn tail keeps from the eyes (tail()). */
+const CLEAR = 0.45;
+/** Radians the stinger's root turns up from the foe: about half its curve (blade()), so its point meets him. */
+const AIM_LIFT = 0.85;
+/** The tail's vertebrae before its tip lined up behind an aimed stinger, less each one back, and at most how far apart, metres. */
+const STRAIGHT = [3, 0.1] as const;
+
+/** The stinger's steel: a cold, dark polish that takes the sky's reflection (SHINE). */
+const STING_STEEL = [0.42, 0.44, 0.48];
 /** Ring scratch of blade(): four spots a ring, a place then a normal each. */
 const [BA, BB] = [new Float64Array(24), new Float64Array(24)];
 
@@ -824,7 +897,8 @@ const [BA, BB] = [new Float64Array(24), new Float64Array(24)];
  * The stinger (the user, 2026-11-16: a curved knife's blade), from the tail's end `at` along `w`,
  * its flat faces to the sides and its back on the tail's `up`: it swells out of a collar to its
  * widest a quarter along, then narrows to its point, curving down under the tail's way, both its
- * back and its edge sharp, thin across. Glowing in `color`; a collar of chitin where it starts.
+ * back and its edge sharp, thin across. Polished steel (the user, 2026-11-23: a metallic texture),
+ * out of a collar glowing in the team's `color`.
  */
 const blade = (
   out: Out,
@@ -843,7 +917,7 @@ const blade = (
   if (lod) {
     ringTo(RA, at, w, up, tip, sides);
     ringTo(RB, at.map((v, i) => v + w[i] * 0.02) as Vec3, w, up, tip * 1.3, sides);
-    strip(out, RA, sides, RB, sides, CHITIN_X, -1);
+    strip(out, RA, sides, RB, sides, color, -2);
   }
   let na = 0;
   for (let k = 0; k <= steps; k++) {
@@ -879,7 +953,7 @@ const blade = (
       }
     });
     if (k) {
-      strip(out, k % 2 ? BA : BB, na, R, 4, color, -2);
+      strip(out, k % 2 ? BA : BB, na, R, 4, STING_STEEL, SHINE);
     }
     na = 4;
   }

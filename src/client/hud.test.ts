@@ -64,6 +64,19 @@ describe('createHud', () => {
   const q = <T extends HTMLElement>(sel: string) => screen.querySelector<T>(sel)!;
   const [muted, menu] = ['h5', 'aside'].map(t => () => q(t));
 
+  it('shows the Hunter the V key: blinking in the plain view, steady with a special one', () => {
+    const label = q<HTMLElement>('i.hv');
+    const state = () => [label.hidden, label.classList.contains('idle'), label.textContent];
+    hud.hunterVision('', false, false);
+    expect(state()[0]).toBe(true);
+    hud.hunterVision('', false, true);
+    expect(state()).toEqual([false, true, 'VVISION']);
+    hud.hunterVision('THERMAL', false, true);
+    expect(state()).toEqual([false, false, 'VTHERMAL']);
+    // The crosshair's i rule of the host (6 px) must not squeeze the label.
+    expect(HUD_CSS).toContain('i.hv{pointer-events:none;top:48px;width:auto;height:auto;');
+  });
+
   it('closes the Hunter laser brackets over its target and marks the lock', () => {
     const sight = q<HTMLElement>('i.hl');
     hud.hunterAim([0.3, 0.4], 0.5);

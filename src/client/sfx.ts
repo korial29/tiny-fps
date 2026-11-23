@@ -212,6 +212,13 @@ export const SOUND = {
   HUNTER_LASER: 86,
   /** The harpoon's next bolt racked in from behind: a servo's whine, the slide, the lock home. */
   HARPOON_RELOAD: 87,
+  /**
+   * The Hunter's views (the user, 2026-11-23): the flash of a view switched with V, then, while a
+   * special one is on, a heart beating and a radio that barely holds its station, both looped.
+   */
+  HUNTER_FLASH: 88,
+  HEARTBEAT: 89,
+  STATIC: 90,
 } as const;
 
 /**
@@ -781,6 +788,27 @@ export const LAYERS: Voice[][] = [
     [0, 2600, -2, 0.001, 0, 0.015, 0, 0.6, 0, 1, 0.45, 0.62],
     [2, 1900, -0.3, 0.001, 0.02, 0.18, 0.08, 1, 0, 1, 0.18, 0.63],
   ],
+  // HUNTER_FLASH: a flash unit's whine charging up in 80 ms, then its pop: a burst of bright noise,
+  // a low thump under it and an electric zap falling away.
+  [
+    [1, 900, 6, 0.01, 0.06, 0.015, 0, 0.3, 0, 1, 0.2],
+    [2, 2400, 4, 0.01, 0.05, 0.02, 0, 1, 0, 1, 0.12],
+    [3, 9000, -2, 0.001, 0.01, 0.2, 0, 0.5, 0, 1, 0.6, 0.08],
+    [2, 170, -3, 0.001, 0.01, 0.14, 0, 1, 0, 1, 0.55, 0.08],
+    [0, 3200, -2.5, 0.001, 0, 0.14, 0.1, 0.3, 0, 1, 0.22, 0.085],
+  ],
+  // HEARTBEAT: one beat of a slow heart (65 a minute), its lub then its dub 0.27 s later, each a
+  // deep falling thump with a duller knock over it; a silent voice holds the loop to 0.92 s.
+  [
+    [2, 58, -1.2, 0.006, 0.03, 0.15, 0, 1, 0, 1, 0.95],
+    [2, 120, -2, 0.003, 0.01, 0.08, 0, 1, 0, 1, 0.45],
+    [3, 260, 0, 0.004, 0.015, 0.07, 0, 0.12, 0, 1, 0.5],
+    [2, 66, -1.4, 0.005, 0.02, 0.13, 0, 1, 0, 1, 0.75, 0.27],
+    [2, 135, -2, 0.003, 0.01, 0.06, 0, 1, 0, 1, 0.35, 0.27],
+    [2, 1, 0, 0.01, 0.9, 0.01, 0, 1, 0, 1, 0],
+  ],
+  // STATIC: a voice of its own, radio(); render() never reads this.
+  [],
 ];
 
 /** The seconds sound `id` lasts: its longest voice, from its start late to the end of its decay. */
@@ -797,6 +825,7 @@ export const LOOPED: number[] = [
   SOUND.ENGINE,
   SOUND.SKID,
   SOUND.JET,
+  SOUND.STATIC,
 ];
 
 /**
@@ -806,6 +835,9 @@ export const LOOPED: number[] = [
 export const render = (id: number, layers: Voice[][] = LAYERS): Float32Array => {
   if (layers == LAYERS && CRIES[id]) {
     return scream(CRIES[id]);
+  }
+  if (layers == LAYERS && id == SOUND.STATIC) {
+    return radio();
   }
   const voices = layers[id].map(
     (v, i) => [synth(v, id * 9 + i), Math.round((v[11] ?? 0) * RATE)] as const,
@@ -1006,6 +1038,63 @@ export const scream = (c: Cry = HIS): Float32Array => {
     peak = Math.max(peak, Math.abs(out[i]));
   }
   return out.map(v => (v / peak) * c.vol);
+};
+
+/**
+ * A radio that barely holds its station, under the Hunter's special views (the user, 2026-11-23:
+ * close to the film's, subtle, and no high tone over and over but a deep, unsettling and slightly
+ * distorted one coming back slowly, then rarer and slower still): once a loop a low growl swells in
+ * and sinks away, overdriven,
+ * over a faint hiss that fades and drops out, a crackle now and then and a slow tuning whistle.
+ * 6.1 s, for a 6 s loop (seam): the swell's envelope repeats every 6 s, so the seam joins it.
+ */
+export const radio = (): Float32Array => {
+  const n = Math.round(6.1 * RATE);
+  const out = new Float32Array(n);
+  let seed = 90;
+  /** In [-1, 1). */
+  const rand = () => ((seed = (Math.imul(seed, 1103515245) + 12345) | 0) >>> 0) / 2 ** 31 - 1;
+  const chance = (p: number) => rand() * 0.5 + 0.5 < p;
+  // The hiss's band (two one-pole filters) and reception (its level, where it heads and the samples
+  // before it heads elsewhere), the crackle's decaying burst, the whistle's phase; the growl's two
+  // saw phases and its low-pass.
+  let [low, high, level, aim, hold, crack, whistle] = [0, 0, 1, 1, 0, 0, 0];
+  let [a, b, dark] = [0, 0, 0];
+  for (let i = 0; i < n; i++) {
+    const t = i / RATE;
+    if (--hold <= 0) {
+      // A new stretch of 150 to 250 ms: clear, faded, or dropped out almost to nothing.
+      hold = RATE * (0.15 + 0.1 * rand());
+      const r = rand();
+      aim = r < -0.5 ? 0.1 : r < 0.2 ? 0.5 : 1;
+    }
+    level += (aim - level) * 0.004;
+    // Where in its 6 s the swell is: in over 1.2 s, out over 2.4 s, then silent till the next.
+    const p = (t / 6) % 1;
+    const swell =
+      p < 0.2 ? Math.sin((Math.PI / 2) * (p / 0.2)) ** 2 : p < 0.6 ? ((0.6 - p) / 0.4) ** 2 : 0;
+    // Two saws a little apart (they beat), sinking a few percent as the swell dies, with a slow
+    // wobble; low-passed, then overdriven.
+    const hz = 72 * (1 - 0.12 * Math.min(p, 0.6)) * (1 + 0.02 * Math.sin(2 * Math.PI * 1.5 * t));
+    a = (a + hz / RATE) % 1;
+    b = (b + (hz * 1.51) / RATE) % 1;
+    dark += (1 - 2 * a + 0.5 * (1 - 2 * b) - dark) * 0.06;
+    const growl = Math.tanh(3.5 * dark * swell);
+    low += (rand() - low) * 0.25;
+    high += (low - high) * 0.12;
+    crack *= 0.98;
+    if (chance(0.00015)) {
+      crack = rand() * 0.6;
+    }
+    whistle += (1600 + 250 * Math.sin((Math.PI * t) / 3)) / RATE;
+    const y =
+      0.75 * growl +
+      (low - high) * 0.5 * level +
+      crack * (rand() < 0 ? -1 : 1) +
+      0.03 * Math.max(0, Math.sin((2 * Math.PI * t) / 3)) ** 2 * Math.sin(2 * Math.PI * whistle);
+    out[i] = Math.tanh(y * 1.3) * 0.7;
+  }
+  return out;
 };
 
 /**

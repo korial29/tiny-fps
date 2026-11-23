@@ -128,7 +128,10 @@ export const HUD_CSS =
   // The orbital station's mission under the score, in amber; urgent, red and blinking.
   `var{top:66px;left:50%;transform:translateX(-50%);padding:5px 14px;border:1px solid #ffb34780;border-radius:4px;background:#000b;color:#ffb347;font:800 normal clamp(11px,2.6vw,14px)/1.2 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}` +
   `var.hot{color:#ff5a3c;border-color:#ff5a3c;animation:hot 1s steps(2) infinite}@keyframes hot{50%{border-color:#ff5a3c00}}` +
-  `i.hv{pointer-events:none;top:48px;left:50%;transform:translateX(-50%);padding:4px 10px;border:1px solid #8fffc080;border-radius:4px;background:#00130dcc;color:#a4ffcf;font:800 11px/1 system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase}` +
+  `i.hv{pointer-events:none;top:48px;width:auto;height:auto;margin:0;white-space:nowrap;left:50%;transform:translateX(-50%);padding:4px 10px;border:1px solid #8fffc080;border-radius:4px;background:#00130dcc;color:#a4ffcf;font:800 11px/1 system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase}` +
+  // The Hunter's V: a key cap before the view's name; blinking while the view is the plain one, to
+  // tell the player the view can change (the user, 2026-11-23).
+  `i.hv kbd{display:inline-block;font:inherit;margin-right:7px;padding:2px 5px;border:1px solid #a4ffcf;border-radius:3px;color:#00130d;background:#a4ffcf}i.hv.idle{animation:blink .5s steps(2) infinite alternate}` +
   // The Hunter's shoulder cannon: Predator-like red brackets close around one target, then lock.
   `i.hl{z-index:2;width:42px;height:42px;transform:translate(-50%,-50%);color:#ff3029;filter:drop-shadow(0 0 5px #f21);transition:filter .12s}` +
   `i.hl b{position:absolute;width:10px;height:10px;border-color:currentColor;border-style:solid;opacity:.7;transition:transform .12s,opacity .12s}` +
@@ -541,8 +544,11 @@ export interface Hud {
   marks(list: Mark[]): void;
   /** The orbital station's mission line (mission.ts), `hot` when urgent; none hides it. */
   mission(text?: string, hot?: boolean): void;
-  /** The Hunter's current local vision mode. */
-  hunterVision(text?: string, scoped?: boolean): void;
+  /**
+   * The Hunter's current local vision mode, `text` empty for the plain view; with `hint`, the V key
+   * is shown with it, blinking in the plain view.
+   */
+  hunterVision(text?: string, scoped?: boolean, hint?: boolean): void;
   /** The Predator-style shoulder-laser sight, at a screen point and progressing to a lock. */
   hunterAim(at?: [number, number], progress?: number): void;
   /** The dark rim of a space helmet's visor around the screen: on while the own player wears one, off otherwise. */
@@ -721,7 +727,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
       `<data></data><span></span><small><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd><kbd>5 fists</kbd></small></dl>` +
       `<s hidden></s><mark hidden></mark><sup></sup><ins hidden><i></i></ins>` +
-      `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav><var hidden></var><i class="hv" hidden></i>` +
+      `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav><var hidden></var><i class="hv" hidden><kbd>V</kbd><span></span></i>` +
       `<h1 hidden>FRAGS<span>0</span></h1><label hidden><canvas width="${COMM}" height="${COMM}"></canvas><span></span><i>${'<b></b>'.repeat(5)}</i></label><ol></ol><h2 hidden><span></span><small></small></h2>` +
       `<output hidden></output><samp hidden><var>E</var><span></span></samp><cite hidden><span></span><small>km/h</small></cite><q hidden></q><i class="hl" hidden><b></b><b></b><b></b><b></b><small>TRACKING</small></i><dfn hidden></dfn><dfn hidden></dfn><tt hidden></tt><tt hidden></tt>` +
       `<section hidden><h6></h6><strong></strong><table></table><span></span></section>`,
@@ -908,6 +914,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   const rim = one('del');
   const mission = one('var');
   const vision = one('i.hv');
+  const visionName = one('i.hv span');
   const aim = one('q');
   const hunterSight = one('i.hl');
   const [panel, warn] = screen.querySelectorAll<HTMLElement>('dfn');
@@ -1008,10 +1015,11 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       mission.classList.toggle('hot', hot);
       set(mission, text);
     },
-    hunterVision(text = '', scoped = false) {
+    hunterVision(text = '', scoped = false, hint = false) {
       screen.classList.toggle('scoped', scoped);
-      vision.toggleAttribute('hidden', !text);
-      set(vision, text);
+      vision.toggleAttribute('hidden', !text && !hint);
+      vision.classList.toggle('idle', !text);
+      set(visionName, text || 'VISION');
     },
     visor: on => {
       rim.hidden = !on;

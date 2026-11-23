@@ -83,7 +83,7 @@ const pitch = (s: Float32Array, t: number, lag = 70) => {
 };
 
 describe('the sounds of the game', () => {
-  it('are one entry per id, and the looped ones are the wind, the scrape, the hum, the buzz, the gun’s charge, the rover’s engine and skid and the ship’s jet', () => {
+  it('are one entry per id, and the looped ones are the wind, the scrape, the hum, the buzz, the gun’s charge, the rover’s engine and skid, the ship’s jet and the Hunter’s radio static', () => {
     expect(LAYERS).toHaveLength(Object.keys(SOUND).length);
     expect(Object.values(SOUND).sort((a, b) => a - b)).toEqual(LAYERS.map((_, i) => i));
     expect(LOOPED).toEqual([
@@ -95,6 +95,7 @@ describe('the sounds of the game', () => {
       SOUND.ENGINE,
       SOUND.SKID,
       SOUND.JET,
+      SOUND.STATIC,
     ]);
   });
 
@@ -316,15 +317,36 @@ describe('seam', () => {
     expect(rms(out.subarray(0, 2000)) / rms(out.subarray(2000))).toBeLessThan(1.1);
   });
 
-  it.each(LOOPED)('makes the loop %i a bed two seconds long that does not click', id => {
-    const s = seam(render(id, LAYERS));
-    expect(Math.abs(s.length / RATE - 2)).toBeLessThan(0.01);
-    expect(rms(s)).toBeGreaterThan(0.05);
-    expect(rms(s)).toBeLessThan(0.4);
-    const steps = s.map((x, i) => Math.abs(x - s[(i + 1) % s.length]));
-    const wrap = steps[steps.length - 1];
-    expect(wrap).toBeLessThanOrEqual(steps.subarray(0, -1).reduce((m, x) => Math.max(m, x), 0));
-    expect(peak(s)).toBeLessThan(1.1);
+  it.each(LOOPED)(
+    'makes the loop %i a bed that does not click, two seconds long (the Hunter’s static six)',
+    id => {
+      const s = seam(render(id, LAYERS));
+      expect(Math.abs(s.length / RATE - (id == SOUND.STATIC ? 6 : 2))).toBeLessThan(0.01);
+      expect(rms(s)).toBeGreaterThan(0.05);
+      expect(rms(s)).toBeLessThan(0.4);
+      const steps = s.map((x, i) => Math.abs(x - s[(i + 1) % s.length]));
+      const wrap = steps[steps.length - 1];
+      expect(wrap).toBeLessThanOrEqual(steps.subarray(0, -1).reduce((m, x) => Math.max(m, x), 0));
+      expect(peak(s)).toBeLessThan(1.1);
+    },
+  );
+});
+
+describe('the Hunter’s views', () => {
+  it('beat a heart twice a loop, under a second, its lub and dub apart', () => {
+    const s = sound('HEARTBEAT');
+    expect(s.length / RATE).toBeGreaterThan(0.85);
+    expect(s.length / RATE).toBeLessThan(0.95);
+    const at = (t: number) => rms(s.subarray(Math.round(t * RATE), Math.round((t + 0.05) * RATE)));
+    expect(at(0.02)).toBeGreaterThan(5 * at(0.6));
+    expect(at(0.29)).toBeGreaterThan(5 * at(0.6));
+  });
+
+  it('give the radio a slow growl: in its first seconds of six, quiet in its last two', () => {
+    const s = seam(render(SOUND.STATIC, LAYERS));
+    const span = (a: number, b: number) =>
+      rms(s.subarray(Math.round(a * RATE), Math.round(b * RATE)));
+    expect(span(0.6, 2.4)).toBeGreaterThan(3 * span(4, 5.9));
   });
 });
 

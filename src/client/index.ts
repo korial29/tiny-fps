@@ -430,6 +430,12 @@ const play = (
   let rendered: number | undefined;
   /** The harpoon scope's zoom, 0 out to 1 in. */
   let scope = 0;
+  /**
+   * The Hunter's view of the last frame, for the flash of a switch; and, under a special view, the
+   * heart and the failing radio (the user, 2026-11-23).
+   */
+  let viewed = 0;
+  const [heart, hiss] = [audio.loop(SOUND.HEARTBEAT), audio.loop(SOUND.STATIC)];
   let displayed: number | undefined;
   let acc = 0;
   let raf = 0;
@@ -953,7 +959,15 @@ const play = (
     // look come with the zoom's second half.
     scope = Math.max(0, Math.min(1, scope + (ctl.scoped ? dt / SCOPE_IN : (-2 * dt) / SCOPE_IN)));
     const scoped = scope > 0.5;
-    hud.hunterVision(['', 'THERMAL', 'ALIEN SCAN'][hunterMode], scoped);
+    const alive = !!me && !me.down;
+    hud.hunterVision(['', 'THERMAL', 'ALIEN SCAN'][hunterMode], scoped, ctl.hunter && alive);
+    if (hunterMode != viewed && alive) {
+      audio.play(SOUND.HUNTER_FLASH, undefined, -2);
+    }
+    viewed = hunterMode;
+    const special = hunterMode > 0 && alive && !third;
+    heart.set(special ? 1 : 0, 1);
+    hiss.set(special ? 0.32 : 0, 1);
     const pov: [number, number, number] = spy
       ? [spy.x, spy.y + eyeHeight(spy), spy.z]
       : watch.k

@@ -509,9 +509,9 @@ float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}
 c.g=mix(c.g,c.r,z);
 float xr=0.;vec3 fc=F.rgb;if(Vn>0){
 vec3 xd=P-E;float xa=max(dot(xd.xz,xd.xz),1e-4);
-float hh=0.;for(int i=0;i<Vn-1;i++){vec4 e=Ve[i];vec2 dq=P.xz-e.xz;float reach=Hv==2?.7:.5;float hi=step(dot(dq,dq),reach)*step(e.y+.03,P.y)*step(P.y,e.y+abs(e.w));ht=max(ht,hi);float hf=(P.y-e.y)/abs(e.w);float rd=length(dq),vo=exp(-pow((hf-.56)/.2,2.))*(1.-smoothstep(.24,.44,rd)),hb=max(1.-abs(hf-.68)*1.6-smoothstep(.2,.4,rd)*mix(.7,.12,smoothstep(.5,.6,hf))+1.1*vo,step(.85,hf)*.8);hh=max(hh,hi*clamp(hb*(.7+.3*abs(dot(n,V))),0.,1.));
-if(e.w>0.)continue;float xs=max(dot(e.xz-E.xz,xd.xz)/xa,0.);vec3 xp=E+xd*xs;float xh=-e.w*.5;float halo=Hv==2?.5:.34;xr=max(xr,(1.-smoothstep(halo*.35,halo,length(xp.xz-e.xz)))*(1.-smoothstep(.8,1.,abs(xp.y-e.y-xh)/xh)));}
-c=mix(hv(c),Hv==2?vec3(.15,2.,1.8)*(.7+.5*abs(dot(n,V))):Hv==1?hpal(hh):vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,Hv==2?vec3(.1,1.8,2.):Hv==1?vec3(2.,.75,.06):vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));fc=hv(fc);}c=mix(c,vec3(2.,.45,.03),Gp*(.55+.45*sin(T*14.)));
+float hh=0.,hc=0.;for(int i=0;i<Vn-1;i++){vec4 e=Ve[i];float cw=step(50.,abs(e.w)),eh=abs(e.w)-100.*cw;vec2 dq=P.xz-e.xz;float reach=Hv==2||cw>.5?1.4:.5;float hi=step(dot(dq,dq),reach)*step(e.y+.03,P.y)*step(P.y,e.y+eh);hc=max(hc,hi*cw);hi*=1.-cw;ht=max(ht,hi);float hf=(P.y-e.y)/eh;float rd=length(dq),vo=exp(-(hf-.56)*(hf-.56)*25.)*(1.-smoothstep(.24,.44,rd)),hbd=max(1.-abs(hf-.68)*1.6+1.1*vo,step(.85,hf)*mix(.8,.45,smoothstep(.9,1.,hf)));float hb=mix(mix(hbd,.42,smoothstep(.76,.85,hf)),mix(.15,.45,smoothstep(.45,.75,hf)),smoothstep(.19,.26,rd));hh=max(hh,hi*clamp(hb*(.7+.3*abs(dot(n,V))),0.,1.));
+if(e.w>0.||cw>.5)continue;float xs=max(dot(e.xz-E.xz,xd.xz)/xa,0.);vec3 xp=E+xd*xs;float xh=eh*.5;float halo=Hv==2?.9:.34;xr=max(xr,(1.-smoothstep(halo*.35,halo,length(xp.xz-e.xz)))*(1.-smoothstep(.8,1.,abs(xp.y-e.y-xh)/xh)));}
+c=mix(hv(c),Hv==2?vec3(.15,2.,1.8)*(.7+.5*abs(dot(n,V))):Hv==1?hpal(hh):vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,Hv==2?vec3(.1,1.8,2.):Hv==1?vec3(2.,.75,.06):vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));c=mix(c,vec3(.03,.1,.55)*(.6+.4*abs(dot(n,V))),hc);fc=hv(fc);}c=mix(c,vec3(2.,.45,.03),Gp*(.55+.45*sin(T*14.)));
 o=vec4(mix(c,fc,1.-exp(-F.a*(1.-.6*step(1.,float(Vn)))*(1.-max(ht,xr))*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc)*ah);
 #ifdef MOON
 if(fa>.002)o.rgb=mix(o.rgb,gk,fa);
@@ -940,7 +940,7 @@ export interface Renderer {
   /** The xenomorph's vision (the own player is one): a grey-blue world, the enemies in sight glowing. */
   vision(on: boolean): void;
   /** The Hunter's local vision filter and the players it can detect. */
-  hunterVision(mode: number, targets: PlayerState[]): void;
+  hunterVision(mode: number, targets: PlayerState[], cold?: PlayerState[]): void;
   /** Let eligible glory kill targets flash during play. */
   edge(on: boolean): void;
   /** The body of each player (PlayerInfo.body, BODY), from the roster: the man's for one not in it; and the skin and haircut he picked, his id's for one not in `looks`. */
@@ -1132,6 +1132,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   /** Hunter vision is local; only the caller supplies eligible enemies. */
   let hunterMode = 0;
   let hunterTargets: PlayerState[] = [];
+  /** Who the thermal view shows cold, all in blue: the xenomorphs (the user, 2026-11-23). */
+  let hunterCold: PlayerState[] = [];
   /** Whether weak enemies flash outside of portraits. */
   let keen = false;
   let vp = new Float32Array(16);
@@ -1651,7 +1653,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       const prey = seeing
         ? crowd.filter(p => !p.down && colors.get(p.id) !== own)
         : activeHunterMode
-          ? hunterTargets.filter(p => !p.down)
+          ? [...hunterTargets, ...(activeHunterMode === 1 ? hunterCold : [])].filter(p => !p.down)
           : [];
       prey.length = Math.min(prey.length, 16);
       uni('uniform1i', 'Vn', seeing || activeHunterMode ? prey.length + 1 : 0);
@@ -1663,7 +1665,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           prey.flatMap(p => {
             const h = heightOf(p);
             const seen = [0.6, 0.95].some(k => !hidden(world, eye, [p.x, p.y + h * k, p.z]));
-            return [p.x, p.y, p.z, seen ? h + 0.3 : -h - 0.3];
+            // A cold one (thermal, a xenomorph) is told by its height 100 m too tall: all blue.
+            const cold = activeHunterMode === 1 && hunterCold.includes(p) ? 100 : 0;
+            return [p.x, p.y, p.z, seen ? h + 0.3 + cold : -h - 0.3 - cold];
           }),
         );
       }
@@ -1809,9 +1813,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       }
     },
     vision: on => (seeing = on),
-    hunterVision: (mode, targets) => {
+    hunterVision: (mode, targets, cold = []) => {
       hunterMode = mode;
       hunterTargets = targets;
+      hunterCold = cold;
     },
     edge: on => (keen = on),
     parried: (id, late) => {

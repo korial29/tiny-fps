@@ -946,7 +946,10 @@ const play = (
         // (the user, 2026-11-23); neither shows another Hunter.
         (hunterMode === 1 ? !beast(p.id) && !hunter(p.id) : hunterMode === 2 && beast(p.id)),
     );
-    rd?.hunterVision(hunterMode, hunterTargets);
+    // The thermal view shows the xenomorphs cold, all in blue (the user, 2026-11-23).
+    const cold =
+      hunterMode === 1 ? others.filter(p => team(p.id) !== you.team && !p.down && beast(p.id)) : [];
+    rd?.hunterVision(hunterMode, hunterTargets, cold);
     // Watching a bot (B), the view is its eyes', and the own player is drawn as one of the others.
     const spy = botcam.id === undefined ? undefined : others.find(p => p.id == botcam.id);
     const third = k > 0 || !!spy;

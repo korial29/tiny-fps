@@ -817,9 +817,10 @@ describe('what a pixel pays for', () => {
     expect(src.match(/uni\('uniform/g)!.length).toBeGreaterThan(50);
   });
 
-  it('extends the alien scan highlight over a xenomorph tail', () => {
-    expect(FRAG).toContain('float reach=Hv==2?2.8:.5');
-    expect(FRAG).toContain('float halo=Hv==2?1.45:.34');
+  it('extends the alien scan highlight over a xenomorph tail, not onto a player beside it', () => {
+    // 1.18 m round it: most of the tail, short of a neighbour 1.6 m off (the user, 2026-11-23).
+    expect(FRAG).toContain('float reach=Hv==2||cw>.5?1.4:.5');
+    expect(FRAG).toContain('float halo=Hv==2?.9:.34');
   });
 
   it('compiles into each program only the code of what it draws', () => {

@@ -96,9 +96,11 @@ and rifle racks give him nothing, and the gun rack only refills his harpoon bolt
 
 - **Cannon shot.** Each shot is seen as a red ball the pistol's size flying from the muzzle at
   `PLASMA_SPEED`, bursting where it ends (`Tracer.laser()`). The host has already dealt the hit.
-- **Thermal.** Shows the humans only (marines, ninjas, astronauts; not xenomorphs nor Hunters). The
-  world is blue; a body goes green to yellow, orange and red from cold to hot: a red core and belly,
-  orange arms and head, green hands and feet (`tv()`, `hpal()`, the heat in `render.ts`).
+- **Thermal.** Shows the humans (marines, ninjas, astronauts) warm: the world is blue; a body goes
+  green to yellow, orange and red from cold to hot: a red core and belly, an orange chest, the top
+  of the head yellow, the arms yellow above and green at the hands, the legs yellow to green
+  (`tv()`, `hpal()`, the heat in `render.ts`). The xenomorphs show cold, all in blue
+  (`hunterVision()`'s `cold`); Hunters do not show.
 - **Alien scan.** Shows the xenomorphs only: an orange world, each xenomorph glowing cyan (`av()`).
 - **Music.** Either vision fades the music out; the heartbeat and the static play in its place
   (`Audio.hush()`).

@@ -2,8 +2,18 @@
 // trail, a blue flash at the muzzle of a shot, a splash of light and sparks where a ball bursts,
 // the bolts and sparks of the katana's shock, the katana's arcs of energy, and the rail gun's lightning, a new shape each frame. Everything turns to face the camera and is
 // unlit and above 1, so that the bloom makes it glow, but the blood of a glory kill, dark. No DOM, no GL.
-import { DISK, DISK_RETURN, HARPOON, NADE, NADE_R, BOLT as ROVER_BOLT } from '../shared/constants';
+import {
+  DISK,
+  DISK_RETURN,
+  HARPOON,
+  NADE,
+  NADE_R,
+  PLASMA_SPEED,
+  BOLT as ROVER_BOLT,
+} from '../shared/constants';
 import { CUT } from '../shared/types';
+import { discVertices } from './hunter';
+import { STRIDE } from './mesh';
 import { LIGHT } from './lights';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
@@ -61,12 +71,21 @@ const LIT = 4;
  * aside up there with no muzzle, how far round the muzzle, and their [halo, core] half widths and colours.
  */
 const [RAY, RAYS, SKY, SPREAD, BORE] = [1.4, 4, 380, 70, 2.2];
-/** Seconds the shoulder cannon's beam lasts, and its [halo, core] half widths and colours. */
-const CANNON = 0.14;
-const CANNON_BEAM: [number, number[]][] = [
-  [0.06, [2.4, 0.25, 0.12]],
-  [0.016, [4, 2, 1.4]],
+/**
+ * The shoulder cannon's shot (the user, 2026-11-23: a laser like the pistol's): a red ball the
+ * pistol's size that flies from the muzzle at PLASMA_SPEED, its trail growing to TRAIL, and bursts
+ * where it ends. The host has already dealt its hit; this only shows it.
+ */
+const CANNON_TRAIL = 1.2;
+/** The thrown disc's trail: times the ball's trail, and its [halo, core] half widths and blues. */
+const DISC_TRAIL = 2.5;
+const DISC_GLOW: [number, number[]][] = [
+  [0.09, [0.12, 0.35, 2.2]],
+  [0.03, [0.7, 1.4, 3.2]],
 ];
+/** The disc's turns a second, in radians, and its bank into its flight. */
+const DISC_SPIN = 30;
+const DISC_BANK = 0.35;
 const LASER: [number, number[]][] = [
   [0.3, [1.9, 0.22, 0.1]],
   [0.09, [3.6, 1.7, 1.2]],
@@ -119,7 +138,7 @@ export interface Tracer {
   charging(list: { p: Vec3; k: number }[]): void;
   /** The rail guns' bolts this frame, each from its muzzle `a` to where it ends `b`: jagged, with a branch, sparks at the end. */
   lightning(list: { a: Vec3; b: Vec3 }[]): void;
-  /** The Hunter's shoulder cannon's shot from `a` to `b`: a straight red beam that fades in CANNON seconds. */
+  /** The Hunter's shoulder cannon's shot from `a` to `b`: a red ball like the pistol's flying there, bursting at `b`. */
   laser(a: Vec3, b: Vec3): void;
   /** A ball burst at `at`: a splash of light and a spray of sparks; a laser rifle's, `red`, bigger and fiercer. */
   burst(at: Vec3, red?: boolean): void;
@@ -153,6 +172,8 @@ export interface Tracer {
   mount(a: Vec3): void;
   /** Ages everything by dt seconds and drops what is over. */
   update(dt: number): void;
+  /** Appends the thrown discs' metal, lit and casting shadows like the bodies: before draw()'s glow. */
+  solids(out: Out): void;
   /** Appends the balls, the flashes, the bolts and the sparks, turned to the camera at `eye`. */
   draw(out: Out, eye: Vec3): void;
   /** The lights of the flashes, the splashes, the bolts and the nearest balls, for gather(). */
@@ -198,6 +219,32 @@ const norm = (a: Vec3): Vec3 => {
   return [a[0] / l, a[1] / l, a[2] / l];
 };
 const vert = (out: Out, p: Vec3, [r, g, b]: number[]) => out.push(...p, 0, 1, 0, r, g, -2, b);
+/**
+ * The armour's disc (discVertices()) at `p` flying along `d`: its face up, banked DISC_BANK toward
+ * its right, turned `spin` radians about its face. Lit like the bodies: it is metal, not light.
+ */
+const spun = (out: Out, p: Vec3, d: Vec3, spin: number) => {
+  const flat = norm([d[0], 0, d[2]]);
+  const side = norm(cross(flat, [0, 1, 0]));
+  const [cb, sb] = [Math.cos(DISC_BANK), Math.sin(DISC_BANK)];
+  const n: Vec3 = [side[0] * sb, cb, side[2] * sb];
+  const e = norm(cross(n, side));
+  // e, f, n right-handed as the disc's own frame, or its faces would turn inside out.
+  const f = cross(n, e);
+  const [c, s] = [Math.cos(spin), Math.sin(spin)];
+  const x: Vec3 = [0, 1, 2].map(k => e[k] * c + f[k] * s) as Vec3;
+  const y: Vec3 = [0, 1, 2].map(k => f[k] * c - e[k] * s) as Vec3;
+  const v = discVertices(1);
+  for (let i = 0; i < v.length; i += STRIDE) {
+    for (const [o, w] of [
+      [i, 1],
+      [i + 3, 0],
+    ]) {
+      out.push(...[0, 1, 2].map(k => w * p[k] + v[o] * x[k] + v[o + 1] * y[k] + v[o + 2] * n[k]));
+    }
+    out.push(...v.slice(i + 6, i + STRIDE));
+  }
+};
 /**
  * What glows is drawn at its size times this: beyond 5 m it grows with the distance (at most 2.5
  * times), so that it stays a few pixels; nearer it may shrink down to `lo`, so that a ball or a
@@ -329,6 +376,8 @@ export const createTracer = (): Tracer => {
   let hot: { p: Vec3; k: number }[] = [];
   let rays: { p: Vec3; age: number; from?: Vec3 }[] = [];
   let lasers: { a: Vec3; b: Vec3; age: number }[] = [];
+  /** Seconds since the tracer was made: the discs' spin. */
+  let clock = 0;
   /** The eye of the last frame drawn: the balls nearest to it light the scene. */
   let seen: Vec3 = [0, 0, 0];
   let seed = 7;
@@ -434,10 +483,18 @@ export const createTracer = (): Tracer => {
       glows.forEach(g => g.own && (g.p = a));
     },
     update(dt) {
+      clock += dt;
       for (const x of [...glows, ...sparks, ...bolts, ...rays, ...lasers]) {
         x.age += dt;
       }
-      lasers = lasers.filter(l => l.age < CANNON);
+      // A cannon's ball that has got to its end bursts there.
+      for (const l of lasers) {
+        if (l.age * PLASMA_SPEED >= Math.hypot(...sub(l.b, l.a))) {
+          glows = [...glows, { p: l.b, age: 0, splash: true, hot: -0.6 }].slice(-MAX);
+          spray(l.b, 2 * SPARKS, 7, true);
+        }
+      }
+      lasers = lasers.filter(l => l.age * PLASMA_SPEED < Math.hypot(...sub(l.b, l.a)));
       rays = rays.filter(r => r.age < RAY);
       glows = glows.filter(
         g => g.age < (g.tesla ? TESLA : g.boom ? BOOM : g.splash ? SPLASH : FLASH),
@@ -449,21 +506,25 @@ export const createTracer = (): Tracer => {
         s.p = s.p.map((v, i) => v + s.v[i] * dt) as Vec3;
       }
     },
+    solids(out) {
+      for (const { p, d, power } of balls) {
+        if (power === DISK || power === DISK_RETURN) {
+          spun(out, p, d, clock * DISC_SPIN);
+        }
+      }
+    },
     draw(out, eye) {
       seen = eye;
       for (const { a, b, age } of lasers) {
-        const k = 1 - age / CANNON;
-        CANNON_BEAM.forEach(([w, rgb], i) =>
-          ribbon(
-            out,
-            a,
-            b,
-            w * k,
-            rgb.map(c => c * k),
-            eye,
-            0.02 * i,
-          ),
-        );
+        const d = norm(sub(b, a));
+        const len = Math.hypot(...sub(b, a));
+        const flown = Math.min(age * PLASMA_SPEED, len);
+        const p = a.map((v, i) => v + d[i] * flown) as Vec3;
+        const end = a.map((v, i) => v + d[i] * Math.max(flown - CANNON_TRAIL, 0)) as Vec3;
+        BALL.forEach(([r, , lift], i) => {
+          disc(out, p, r, RED[i], eye, lift);
+          ribbon(out, p, end, r * 0.5, RED[i], eye, lift, 0, 0.1);
+        });
       }
       for (const { p, age, from } of rays) {
         // Snapped on, flickering, thinning out.
@@ -528,11 +589,10 @@ export const createTracer = (): Tracer => {
           continue;
         }
         if (power === DISK || power === DISK_RETURN) {
-          // A flat spinning bronze disc, brighter on the return flight, with a short edge trail.
-          const back = p.map((v, i) => v - d[i] * Math.max(tail * 0.55, 0.12)) as Vec3;
-          ribbon(out, p, back, 0.025, [0.85, 0.55, 0.2], eye, 0.018, 0.004, 0.1);
-          disc(out, p, 0.12, [1.15, 0.72, 0.28], eye, 0.02, 12);
-          disc(out, p, 0.055, [0.25, 0.18, 0.1], eye, 0.025, 8);
+          // The armour's disc (the user, 2026-11-23), spinning nearly flat and banked into its
+          // flight, a blue trail behind it.
+          const back = p.map((v, i) => v - d[i] * Math.max(tail * DISC_TRAIL, 0.3)) as Vec3;
+          DISC_GLOW.forEach(([w, rgb], i) => ribbon(out, p, back, w, rgb, eye, 0.02 * i, 0, 0.1));
           continue;
         }
         // A rover's bolt is a streak: four times the trail.

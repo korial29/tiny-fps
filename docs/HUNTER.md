@@ -60,10 +60,26 @@ and rifle racks give him nothing, and the gun rack only refills his harpoon bolt
 
 ## Blades, harpoon and slots (the user, 2026-11-23)
 
-- **Slots.** The wrist blades are on 1 and the harpoon on 2; the cannon stays on 3. He has all three
-  from the spawn, the blades in hand, and no fists: keys 4 and 5 do nothing and the HUD shows three
-  slots. Only the client's
-  key and wheel order change (`slotted()`, `src/client/input.ts`); the wire's `KEY.BLADE` is the same.
+- **Slots.** The wrist blades are on 1, the harpoon on 2, the cannon on 3 and the disc on 4. He has
+  all four from the spawn, the blades in hand, and no fists: key 5 does nothing and the HUD shows four
+  slots. `step()` gives him the harpoon whenever he has none (`ammo` -1), so a player who picks the
+  class after his spawn has it too: a class changes at the next step, not at a respawn. Only the
+  client's key and wheel order change (`slotted()`, `src/client/input.ts`); the wire's `KEY.BLADE`
+  is the same.
+- **Disc.** It takes the laser rifle's slot (`KEY.RIFLE`, `rifled`, `rifle` and `clip` 0: carried,
+  nothing to spend), so the wire is unchanged. FIRE throws it (`STRIKE.DISK`), once each
+  `DISK_COOL` ticks; it flies out and comes back to him like a boomerang (`Room.fly()`). G with the
+  blades no longer throws it. In hand it is the hip's disc (`discVertices()`, `src/client/hunter.ts`),
+  and the hip's is hidden. In the own view the hand lies on the disc, both nearly flat, the fingers ahead (`DISC_TILT`), the
+  palm flat on its hub and the fingers and the thumb fanned out
+  over it, flat on its hub, bent to grip it over their three joints, most at the middle one (`DISC_SPREAD`, `DISC_HOOK`, `HOOK`,
+  `Grip.spread`, `Grip.hook`, `THUMB_WIDE`)
+  (`DISC_HOLD`, `DISC_CURL`, `DISC_RAISE`, `DISC_TILT`). The disc in hand and in flight is
+  `DISC_SCALE` (1.5) times the hip's; its hit radius is still `DISK_R`; in flight it is the same mesh, spinning
+  nearly flat, with a blue trail (`Tracer.solids()` and `draw()`, `src/client/beams.ts`).
+- **Blades' shape.** Narrower (`WRIST_SLIM`), smooth (`SMOOTH`), more curved (`WRIST_CURVE`) and
+  closing evenly onto the point (`WRIST_TAPER`); their heels sit inside the lower housing
+  (`WRIST_SINK`, `src/client/katana.ts`).
 - **No thrust.** The blades slash where the katana would thrust: FORWARD with FIRE gives `CUT.SLASH`,
   and its special the leap, never the lunge (`cutOf(keys, false)`, `src/shared/blade.ts`).
 - **The blades in the own view.** The right hand is a clenched fist, the blades rolled well over to
@@ -75,3 +91,14 @@ and rifle racks give him nothing, and the gun rack only refills his harpoon bolt
 - **Reload.** The gun stays in aim. The fired bolt is drawn leaving the tube; from 35 % of the 1.3 s
   reload the next bolt slides in from behind and seats by 85 %, with its own synthesised sound
   (`SOUND.HARPOON_RELOAD`: a servo whine, the slide, the lock home).
+
+## Cannon shot, visions and music (the user, 2026-11-23)
+
+- **Cannon shot.** Each shot is seen as a red ball the pistol's size flying from the muzzle at
+  `PLASMA_SPEED`, bursting where it ends (`Tracer.laser()`). The host has already dealt the hit.
+- **Thermal.** Shows the humans only (marines, ninjas, astronauts; not xenomorphs nor Hunters). The
+  world is blue; a body goes green to yellow, orange and red from cold to hot: a red core and belly,
+  orange arms and head, green hands and feet (`tv()`, `hpal()`, the heat in `render.ts`).
+- **Alien scan.** Shows the xenomorphs only: an orange world, each xenomorph glowing cyan (`av()`).
+- **Music.** Either vision fades the music out; the heartbeat and the static play in its place
+  (`Audio.hush()`).

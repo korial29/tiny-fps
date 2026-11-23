@@ -337,7 +337,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Hunter',
-    'Slot 1 has twin wrist blades, which slash and never thrust; G or right click throws a returning disc (3 HP). Slot 2 unfolds the harpoon rifle: hold right click or G to zoom through its scope, left click fires. Each bolt deals 4 HP and reloads in 1.3 seconds. Slot 3 unfolds the shoulder cannon: each click fires a beam for 3 HP; keep a foe in its sight for 3 seconds to lock on and its shots home in. He carries all three from the spawn, has no fists and takes no weapon from the racks.',
+    'Slot 1 has twin wrist blades, which slash and never thrust. Slot 2 unfolds the harpoon rifle: hold right click or G to zoom through its scope, left click fires. Each bolt deals 4 HP and reloads in 1.3 seconds. Slot 3 unfolds the shoulder cannon: each click fires a beam for 3 HP; keep a foe in its sight for 3 seconds to lock on and its shots home in. Slot 4 is his disc: left click throws it (3 HP) and it comes back like a boomerang. He carries all four from the spawn, has no fists and takes no weapon from the racks.',
     'Press V to cycle thermal vision and alien detection.',
     'Every map',
   ],
@@ -401,9 +401,10 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
   [
     'Hunter',
     [
-      ['1', 'wrist blades, no thrust; G or right click throws the returning disc'],
+      ['1', 'wrist blades, no thrust'],
       ['2', 'harpoon; hold G or right click to zoom through its scope, left click fires'],
       ['3', 'shoulder cannon: click fires (3 HP); 3 seconds on a target locks its aim'],
+      ['4', 'disc: click throws it (3 HP), it comes back like a boomerang'],
       ['V', 'cycle normal, thermal and alien scan', 'KeyV'],
     ],
   ],
@@ -1076,10 +1077,10 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       ammo.classList.toggle('b', fists);
       ammo.classList.toggle('k', k);
       ammo.classList.toggle('r', railed);
-      ammo.classList.toggle('f', rifled);
+      ammo.classList.toggle('f', rifled && !hunter);
       const m = Math.max(loaded ?? n, 0);
-      // The Hunter's shoulder cannon spends nothing: no count, never empty.
-      const cannon = hunter && railed;
+      // The Hunter's shoulder cannon and disc spend nothing: no count, never empty.
+      const cannon = hunter && (railed || rifled);
       ammo.classList.toggle('e', !k && !m && !cannon);
       ammo.classList.toggle('w', swapping);
       set(count, cannon ? '∞' : `${m}`);
@@ -1094,7 +1095,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         cannon ? '' : `${'▮'.repeat(rest / size)}${rest % size ? '▯' : ''}\n${rest}${dots}`,
       );
       const names = hunter
-        ? ['1 blades', '2 harpoon', '3 cannon', '', '']
+        ? ['1 blades', '2 harpoon', '3 cannon', '4 disc', '']
         : ['1 gun', '2 katana', '3 rail', '4 rifle', '5 fists'];
       // The keys in slot order; each shows the weapon in that slot (the Hunter's blades are first).
       const held = fists ? 4 : k ? 1 : rifled ? 3 : railed ? 2 : 0;
@@ -1102,8 +1103,8 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
         const w = slotted(i, hunter);
         kbd.textContent = names[i];
         (kbd as HTMLElement).title = names[i];
-        // The Hunter has his three slots and no fists (the user, 2026-11-23).
-        (kbd as HTMLElement).hidden = hunter ? i > 2 : w < 4 && !have[w];
+        // The Hunter has his four slots and no fists (the user, 2026-11-23).
+        (kbd as HTMLElement).hidden = hunter ? i > 3 : w < 4 && !have[w];
         kbd.classList.toggle('a', w == held);
       });
     },

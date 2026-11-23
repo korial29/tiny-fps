@@ -93,6 +93,13 @@ import {
   CANNON_HINGE,
   CANNON_MUZZLE,
   CANNON_POST as POST_BASE,
+  DISC_CURL,
+  DISC_HOLD,
+  DISC_HOOK,
+  DISC_RAISE,
+  DISC_SPREAD,
+  DISC_TILT,
+  drawDisc,
   hunter as hunterModel,
   drawHarpoon,
   harpoonFeed,
@@ -861,10 +868,15 @@ const THICK = [1, 1.02, 0.95, 0.82];
 const THICK_X = [1, 1, 0.96, 0.86];
 const LENGTH_X = [1, 1.1, 1, 0.82];
 /** Finger lengths against 4 cm, index to little. */
-const LENGTH = [0.97, 1.08, 1, 0.8];
+const LENGTH = [0.92, 1.08, 1, 0.8];
 /** The thumb's two segments when the palm carries the rifle's handguard: closed on its near side, along it (the user, 2026-11-10). */
 const CUP: Vec3[] = [unit([0.7, -0.7, 0]), unit([0.9, -0.4, 0.1])];
 /** The thumb's two segments open and in a fist, as directions in the hand (x toward the thumb). */
+/** The thumb's two bones swung out from the palm, in the hand's space: a hand spread wide (shape()'s `spread`). */
+const THUMB_WIDE: Vec3[] = [
+  [1, -0.05, 0.08],
+  [0.8, -0.4, 0.4],
+];
 const THUMB: [Vec3, Vec3][] = [
   [
     [0.55, -0.2, 0.8],
@@ -1004,6 +1016,11 @@ const LITE = [5, 8, 12];
  * through the joint, not a corner, so that a fist keeps a round knuckle. The glove ends at ring
  * BARE in a rolled edge; the skin goes on to the tip.
  */
+/** How far a joint's curve reaches along each bone (finger()'s `knee`): a wide, soft knuckle. */
+const KNEE = 0.6;
+/** A spread hand's (the Hunter's disc, the user 2026-11-23): sharper joints. */
+const KNEE_SHARP = 0.25;
+
 export const finger = (
   p: Vec3,
   d1: Vec3,
@@ -1014,6 +1031,8 @@ export const finger = (
   t: Vec3,
   /** 0 to 1: a skeleton's finger (the xenomorph's), thin bones between swollen knuckles, a fine tip. */
   bony = 0,
+  /** How far each joint's curve reaches along the bones, a share of them: less, a sharper joint. */
+  knee = KNEE,
 ): Ring[] => {
   const [l1, l2, l3] = BONES.map(k => k * l);
   const shaft = 1 - 0.34 * bony;
@@ -1046,7 +1065,14 @@ export const finger = (
   };
   // The first bend from 60 % back along the first bone to 60 % along the second: a wide knuckle,
   // its inside not folded.
-  const [a1, mid, b2] = [along(j1, d1, -0.6 * l1), along(j1, d2, 0.6 * l2), along(j2, d3, l3 / 2)];
+  const sharp = knee < KNEE;
+  const [a1, mid, b2] = [
+    along(j1, d1, -knee * l1),
+    along(j1, d2, knee * l2),
+    along(j2, d3, (sharp ? knee : 0.5) * l3),
+  ];
+  // The second bend starts past the glove's edge, or closer to its joint on a sharp one.
+  const s2 = sharp ? along(j2, d2, -knee * l2) : along(mid, d2, 0.003);
   // The root sunk 12 mm in the palm and flared, a fillet that leaves it at a slant with no seam
   // (the user, 2026-11-09).
   return [
@@ -1059,7 +1085,7 @@ export const finger = (
     // The glove's edge, rolled, then the bare finger a hair beyond it.
     ring(mid, d2, (0.95 - 0.05 * taper) * shaft),
     ring(along(mid, d2, 0.003), d2, (0.88 - 0.05 * taper) * shaft),
-    ...bend(along(mid, d2, 0.003), j2, b2, 0.86 - 0.04 * taper, 0.84 - 0.07 * taper),
+    ...bend(s2, j2, b2, 0.86 - 0.04 * taper, 0.84 - 0.07 * taper),
     // The xenomorph's last phalanx as wide as its claw's root, which goes on from it.
     ring(b2, d3, (0.82 - 0.06 * taper) * (1 - 0.24 * bony)),
     // Its tip thinner inside the claw, which sheathes it: none of it through the claw.
@@ -1077,14 +1103,39 @@ export const finger = (
  * fingers from the wrist and 2.2 cm toward the palm, their tips back at the heel of the palm (the
  * user, 2026-11-09: the fingers stood off the katana's grip).
  */
-export const phalanges = (curl: number, i: number): [Vec3, Vec3, Vec3] => {
-  const splay = -(i - 1.5) * 0.08 * (1 - curl);
+/**
+ * The share of phalanges()' `hook` each joint takes: the knuckle (below 0, the first bone lifts,
+ * the user 2026-11-23), the middle joint, the last.
+ */
+const HOOK = [-0.04, 0.6, 0.44];
+/** The share of phalanges()' extra `spread` each bone turns by: the first less, so its root does not kink. */
+const FAN = [0.35, 1, 1.1];
+/** A spread hand's little finger fanned out only this share as far as the rule would: it went off too far to the right. */
+const LITTLE_IN = 0.55;
+/** A spread hand's thumb mound, from its foot on the palm to the thumb's root, in this many steps (others 2). */
+const MOUND_RINGS = 4;
+
+export const phalanges = (curl: number, i: number, spread = 1, hook = 0): [Vec3, Vec3, Vec3] => {
+  // `spread` times the open hand's fan: wider apart, as on the Hunter's disc. What it adds turns
+  // the first bone only partly, the rest further out (FAN), so the finger leaves the knuckle
+  // without a kink.
+  const base = -(i - 1.5) * 0.08 * (1 - curl);
+  // A spread hand's little finger turns in toward the ring finger (LITTLE_IN, the user 2026-11-23).
+  const little = spread > 1 && i === 3 ? LITTLE_IN : 1;
+  const splays = FAN.map(f => base * little * (1 + (spread - 1) * f));
   // Past a grip's curl the joints bend no more (tighter, a bend folds into itself): the finger
   // turns at its root.
   const k = Math.min(curl, 0.9);
   const a = 0.1 + 1.81 * curl;
   const b = a + 0.08 + 1.74 * k;
-  const [x, y, z] = [a, b, b + 0.06 + 0.99 * k].map(n => unit([splay, -Math.sin(n), Math.cos(n)]));
+  // `hook` (radians) bends the finger further as a hand gripping an edge does, over its three
+  // joints: the first bone lifted a little at the knuckle, most of the bend at the middle joint,
+  // the rest at the last (HOOK, each joint's share).
+  const [x, y, z] = [
+    a + HOOK[0] * hook,
+    b + (HOOK[0] + HOOK[1]) * hook,
+    b + 0.06 + 0.99 * k + hook,
+  ].map((n, j) => unit([splays[j], -Math.sin(n), Math.cos(n)]));
   return [x, y, z];
 };
 
@@ -1130,6 +1181,10 @@ export const hand = (
   claws: Claws = false,
   /** Its size: the xenomorph's grows from the wrist over 4 cm, hers is smaller (hands()). */
   grow = 1,
+  /** How far the fingers fan out, times an open hand's (phalanges()). */
+  spread = 1,
+  /** How far the fingers' last bones bend further, radians (phalanges()). */
+  hook = 0,
 ) => {
   // A hand is built in its own space, the same as long as nothing it is made of changes (a grip
   // held, the hand at rest): some ten thousand vertices that are then only carried to the wrist.
@@ -1137,13 +1192,16 @@ export const hand = (
   // to frame, and every frame built the hand again.
   [curl, point, push, cup] = [curl, point, push, cup].map(tidy);
   to &&= to.map(tidy) as Vec3;
-  const key = `${claws} ${+lite} ${+lights} ${curl} ${point} ${push} ${to} ${cup} ${tint} ${bare} ${+(bare === tint)} ${grow}`;
+  const key = `${claws} ${+lite} ${+lights} ${curl} ${point} ${push} ${to} ${cup} ${tint} ${bare} ${+(bare === tint)} ${grow} ${spread} ${hook}`;
   let m = BUILT.get(key);
   if (!m) {
     if (BUILT.size >= KEPT) {
       BUILT.clear();
     }
-    BUILT.set(key, (m = shape(curl, tint, point, push, to, bare, cup, lite, lights, claws)));
+    BUILT.set(
+      key,
+      (m = shape(curl, tint, point, push, to, bare, cup, lite, lights, claws, spread, hook)),
+    );
     // Grown about the wrist, the origin here: the claws' from the wrist's cuff on.
     for (let i = 0; grow != 1 && i < m.length; i += 10) {
       const t = claws ? Math.min(Math.hypot(m[i], m[i + 1], m[i + 2]) / 0.04, 1) : 1;
@@ -1196,9 +1254,15 @@ const shape = (
   lite: boolean,
   lights: boolean,
   clawStyle: Claws = false,
+  spread = 1,
+  hook = 0,
 ): number[] => {
   const claws = clawStyle === true;
   const shortClaws = clawStyle === 'short';
+  // A spread hand's joints bend sharply (the user, 2026-11-23), the others' softly.
+  const knee = spread > 1 ? KNEE_SHARP : KNEE;
+  /** How spread the hand is, 0 to 1 (fully by a spread of 5): its thumb, mound and index follow. */
+  const wide = Math.min(1, Math.max(0, (spread - 1) / 4));
   const out: number[] = [];
   const [FS, CS] = lite ? [4, CUFF_NEAR] : [FINGER_SIDES, CUFF_SIDES];
   let paint = (_: number) => tint;
@@ -1252,7 +1316,7 @@ const shape = (
   ) => {
     paint = k => (k < BARE ? tint : bare);
     // From where it leaves the palm, ring `from`: a weld skins its root.
-    const all = finger(p, ...ds, l, r, t, +claws);
+    const all = finger(p, ...ds, l, r, t, +claws, knee);
     const ks = lite
       ? [from, ...LITE.filter(k => k > from), all.length - 1]
       : all.map((_, k) => k).slice(from);
@@ -1321,15 +1385,17 @@ const shape = (
   const nexts: Ring[] = [];
   for (let i = 0; i < 4; i++) {
     // `point` straightens the index out of the fist, to press a button.
-    const ds = phalanges(i ? curl : curl * (1 - point), i);
+    const ds = phalanges(i ? curl : curl * (1 - point), i, spread, hook);
     const at: Vec3 = [0.034 - 0.0225 * i, -0.004, 0.092];
-    const t = unit(add(ds[0], [0, 0, 1]));
+    // A spread hand's lifted first bones leave the palm along it, not tilted with them: no dip
+    // behind their root (the user, 2026-11-23).
+    const t = unit(add(ds[0], [0, 0, 1 + 3 * wide]));
     // The xenomorph's long and lean (the user's picture, 2026-11-17: a skeleton's hand).
     const [fl, fr] = claws
       ? [0.04 * LENGTH_X[i] * LANK, FINGER_R * THICK_X[i]]
       : [0.04 * LENGTH[i], FINGER_R * THICK[i]];
     digit(at, ds, fl, fr, t);
-    const rings = finger(at, ...ds, fl, fr, t, +claws);
+    const rings = finger(at, ...ds, fl, fr, t, +claws, knee);
     const [, x, y] = rings[1];
     // The finger's next ring as it is drawn (digit()), for its root's normals (seamless, below).
     nexts.push(rings[lite ? LITE[0] : 2]);
@@ -1434,8 +1500,10 @@ const shape = (
   // The xenomorph's (the user, 2026-11-17: a seam where its fingers leave the palm): a root's
   // vertex takes the very normal its finger's tube gives it (tube()), so the light does not break
   // across the joint.
+  // A spread hand's too (the user, 2026-11-23: a sharp line across the index's root): its
+  // fingers fan out most from the weld, and the light broke there.
   const seamless = new Map<Vec3, Vec3>();
-  if (claws) {
+  if (claws || wide > 0) {
     roots.forEach(([, ring], f) => {
       const [c, x, y] = nexts[f];
       ring.forEach((v, k) => {
@@ -1451,22 +1519,31 @@ const shape = (
     }
   }
   // `push` (0 to 1) reaches the thumb's tip out along `to`, onto the katana's button.
+  // A spread hand (`spread` past 1, the Hunter's disc) swings its thumb out to the side as well,
+  // fully by a spread of 5 (`wide`).
   const [d1, d2] = THUMB.map(([open, fist], k) => {
-    const d = unit(mix(unit(mix(open, fist, curl)), CUP[k], cup));
+    const d = unit(mix(unit(mix(unit(mix(open, fist, curl)), CUP[k], cup)), THUMB_WIDE[k], wide));
     return k && to ? unit(mix(d, to, push)) : d;
   });
   const tp: Vec3 = [0.032, -0.01, 0.025];
   // The thumb's thickness, the spread of its foot on the palm and its mound's height: the
   // xenomorph's as they were.
-  const [TR, SPREAD, MOUND] = claws ? [0.0124, 1.7, 0.003] : [0.0116, 2, 0.0065];
-  digit(tp, [d1, d2, d2], 0.037, TR, d1, 2, [0.6, 2.2, 0.7]);
+  // A spread hand's thumb (the Hunter's on his disc, the user 2026-11-23) is shorter, thicker at
+  // its foot, on a fuller mound.
+  const [tr, SPREAD, mound] = claws ? [0.0124, 1.7, 0.003] : [0.0116, 2, 0.0065];
+  const [TL, TR, MOUND] = [
+    0.037 * (1 - 0.12 * wide),
+    tr * (1 + 0.1 * wide),
+    mound * (1 + 0.5 * wide),
+  ];
+  digit(tp, [d1, d2, d2], TL, TR, d1, 2, [0.6, 2.2, 0.7]);
   // The thumb's mound (the user, 2026-11-09: the thumb shows the most, holding a gun): from a
   // footprint on the palm round its root, its ring there pushed out onto the palm's surface, a
   // skin swells into the thumb halfway along its first bone. One piece with the palm.
   paint = () => tint;
   {
     // As the thumb is drawn (digit()): the xenomorph's thin bone, or the mound ended in a step.
-    const rings = finger(tp, d1, d2, d2, 0.037, TR, d1, +claws);
+    const rings = finger(tp, d1, d2, d2, TL, TR, d1, +claws, knee);
     const [, x1, y1] = rings[1];
     const [c2, x2, y2] = rings[2];
     /** The palm's ring at `z`: its middle's height, half its width and its height. */
@@ -1484,8 +1561,9 @@ const shape = (
     };
     const foot = Array.from({ length: FS }, (_, k): [Vec3, Vec3] => {
       const a = (k * TAU) / FS;
+      // A spread thumb's foot is wider on the palm, for a gentler slope up to it.
       const q = [0, 1, 2].map(
-        d => tp[d] + SPREAD * (x1[d] * Math.cos(a) + y1[d] * Math.sin(a)),
+        d => tp[d] + SPREAD * (1 + 0.35 * wide) * (x1[d] * Math.cos(a) + y1[d] * Math.sin(a)),
       ) as Vec3;
       const [yc, w, h] = section(q[2]);
       // Out from the palm's axis onto its surface.
@@ -1498,16 +1576,26 @@ const shape = (
       const d: Vec3 = [0, 1, 2].map(i => x2[i] * Math.cos(a) + y2[i] * Math.sin(a)) as Vec3;
       return [add(c2, d), unit(d)];
     });
-    // A third ring between, swollen: the mound.
-    const mid = foot.map(([q, n], k): [Vec3, Vec3] => [
-      // The ball of the thumb: a fuller mound between the palm and the thumb's root.
-      add(mix(q, top[k][0], 0.5), n.map(c => c * MOUND) as Vec3),
-      unit(add(n, top[k][1])),
-    ]);
-    for (const [a, b] of [
-      [foot, mid],
-      [mid, top],
-    ]) {
+    // Rings between, swollen: the mound, the ball of the thumb. Eased from the palm to the thumb
+    // over MOUND_RINGS steps, its normals turning from the palm's to the thumb's, so no seam shows
+    // where it meets either (the user, 2026-11-23).
+    // Only a spread hand's (the disc's) takes the extra rings: the others keep the vertex budget.
+    const steps = wide > 0 ? MOUND_RINGS : 2;
+    const rings2 = Array.from({ length: steps + 1 }, (_, j) => {
+      const t = j / steps;
+      const e = t * t * (3 - 2 * t);
+      return foot.map(([q, n], k): [Vec3, Vec3] =>
+        j === 0
+          ? [q, n]
+          : j === steps
+            ? top[k]
+            : [
+                add(mix(q, top[k][0], e), n.map(c => c * MOUND * Math.sin(Math.PI * t)) as Vec3),
+                unit(mix(n, top[k][1], e)),
+              ],
+      );
+    });
+    for (const [a, b] of rings2.slice(1).map((r, j) => [rings2[j], r])) {
       for (let k = 0; k < FS; k++) {
         const n = (k + 1) % FS;
         for (const [q, m] of [a[k], a[n], b[n], a[k], b[n], b[k]]) {
@@ -1535,7 +1623,7 @@ const shape = (
       return [x, y + h * Math.sqrt(Math.max(1 - (x / w) ** 2, 0)) + 0.0006, z];
     };
     roots.forEach(([at], f) => {
-      const [d1] = phalanges(f ? curl : curl * (1 - point), f);
+      const [d1] = phalanges(f ? curl : curl * (1 - point), f, spread, hook);
       const up = unit(cross(d1, X));
       const r = FINGER_R * THICK[f];
       // On the finger: over its root, then down into its first bone.
@@ -1682,6 +1770,10 @@ export interface Grip {
   lights?: boolean;
   /** The xenomorph's: a hooked claw of bone on each fingertip, for the nail. */
   claws?: Claws;
+  /** The right hand's fingers fanned out this many times an open hand's (the Hunter's disc). */
+  spread?: number;
+  /** The right hand's fingers' last bones bent further, radians: gripping an edge. */
+  hook?: number;
 }
 
 /**
@@ -1697,7 +1789,16 @@ export const hands = (
   curls: number[],
   glove: number[],
   bare: number[],
-  { point = 0, push = 0, to, cup = 0, lights = false, claws = false }: Grip = {},
+  {
+    point = 0,
+    push = 0,
+    to,
+    cup = 0,
+    lights = false,
+    claws = false,
+    spread = 1,
+    hook = 0,
+  }: Grip = {},
   lite = false,
   skip = -1,
 ) =>
@@ -1725,6 +1826,8 @@ export const hands = (
       // The xenomorph's hands larger (CLAW_HAND), but at the wrist, where they meet the arm's
       // cuff, and growing from it over 4 cm; hers smaller.
       claws === true ? CLAW_HAND : build ? HAND_F : 1,
+      i ? spread : 1,
+      i ? hook : 0,
     );
   });
 
@@ -1948,14 +2051,17 @@ export const createBody = (world?: World): Body => {
     const [s, c] = [Math.sin(TAU * gait.phase), Math.cos(TAU * gait.phase)];
     // The rail gun is held in both hands like a rifle: nearer the middle and the chest, so that
     // the left hand reaches its front grip.
-    const r = me?.railed || me?.rifled || harpoonDraw ? 1 : 0;
+    // The Hunter's disc (`rifled`) is held in one hand, not shouldered as the rifle.
+    const rifle = !!me?.rifled && !hunter;
+    const r = me?.railed || rifle || harpoonDraw ? 1 : 0;
     // A swap tips the gun over to show the battery under it, or the capsule on its top, and back.
     // The harpoon stays in aim: its next bolt feeds in on its own (drawHarpoon()).
     const sp = me && !harpoonDraw ? swapOf(me) : -1;
     // Tipped over from the start, and back into aim after the slap (the user, 2026-11-09).
     const tipped = sp < 0 ? 0 : ease(span(sp, 0, 0.12)) * (1 - ease(span(sp, 0.8, 1)));
     const drawTilt = harpoonDraw ? 1 - ease(harpoonDraw) : 0;
-    const roll = tipped * (me?.rifled ? -1.1 : r ? 0.35 : -1.25) - 0.78 * drawTilt;
+    const disc = hunter && !!me?.rifled;
+    const roll = tipped * (rifle ? -1.1 : r ? 0.35 : -1.25) - 0.78 * drawTilt;
     const at: Vec3 = [
       Math.min(0.22, 0.18 * wide) * (1 - RIFLE[0] * r) +
         0.012 * a * s +
@@ -1965,7 +2071,7 @@ export const createBody = (world?: World): Body => {
       0.4 - RIFLE[1] * r - 0.05 * kicked + lift[2],
     ];
     // The rifle sits further out and higher than the rail gun, its counter in the lower view.
-    const rf = me?.rifled || harpoonDraw ? 1 : 0;
+    const rf = rifle || harpoonDraw ? 1 : 0;
     at[0] += 0.02 * rf + 0.085 * drawTilt;
     at[1] += 0.045 * rf - 0.045 * drawTilt;
     at[2] += 0.02 * rf;
@@ -1973,6 +2079,12 @@ export const createBody = (world?: World): Body => {
     at[1] += 0.03 * rf * tipped;
     at[2] += 0.1 * rf * tipped;
     at[1] += (r ? 0.03 : 0.17) * tipped;
+    // The disc is held up into the lower right of the view, so that it shows whole.
+    if (disc) {
+      at[0] += DISC_RAISE[0];
+      at[1] += DISC_RAISE[1];
+      at[2] += DISC_RAISE[2];
+    }
     // The slap home jolts the gun or the rifle: up 1.5 cm and back 1 cm, the nose kicked up, and
     // it settles (the user, 2026-11-09: a slight shock).
     const jolt = sp >= 0 && !me?.railed ? Math.max(0, 1 - Math.abs(sp - TAP - 0.02) / 0.04) : 0;
@@ -1985,6 +2097,12 @@ export const createBody = (world?: World): Body => {
       target[1] + (0.1 * kicked + (r ? 0 : 0.2) * tipped + 0.06 * jolt) * l,
       target[2],
     ];
+    if (disc) {
+      // The disc as in the user's picture (2026-11-23): the back of the hand to the eye, the
+      // fingers up and leaning ahead by DISC_TILT, the palm flat on the hub of the disc standing
+      // behind it, the fingers over its face between the blades.
+      return [at, pointed(at, add(at, [0, 1, DISC_TILT]), [0, 0, -1], [-1, 0, 0])];
+    }
     const [rc, rs] = [Math.cos(roll), Math.sin(roll)];
     return [at, pointed(at, to, [rc, rs, 0], [-rs, rc, 0])];
   };
@@ -2222,7 +2340,8 @@ export const createBody = (world?: World): Body => {
       // The Hunter's blades come out of the bracer over a clenched fist (the user, 2026-11-23).
       curls[(sd + 1) / 2] =
         curl +
-        ((hunter && onSword ? 1 : 0.9) - curl) * taken +
+        ((hunter && onSword ? 1 : hunter && me?.rifled && sd > 0 ? DISC_CURL : 0.9) - curl) *
+          taken +
         (GUARD_CURL + 0.5 * tucked - curl) * guard;
       const to = add(eye, turn([h[0] * sd, h[1], h[2]]));
       const arm = sd < 0 ? J.ARM_L : J.ARM_R;
@@ -2272,7 +2391,8 @@ export const createBody = (world?: World): Body => {
       }
       // The rail gun takes the left hand too, on its front grip, the elbow down and out; the
       // rifle's handguard lies in its palm, a cup (RIFLE_HOLD).
-      const two = sd < 0 && (me?.railed || me?.rifled || harpoonDraw) ? w.gun * free : 0;
+      const two =
+        sd < 0 && (me?.railed || (me?.rifled && !hunter) || harpoonDraw) ? w.gun * free : 0;
       if (two > 0.002) {
         const held = { ...q, rot: q.rot.slice() };
         if (fu) {
@@ -2574,7 +2694,10 @@ export const createBody = (world?: World): Body => {
         }
         if (hunter) {
           for (const part of hunterView(build)) {
-            drawHunterPart(out, part, s, pieces);
+            // The hip's disc is in his hand while it is the weapon.
+            if (!(me?.rifled && part.key.endsWith('Flying disc'))) {
+              drawHunterPart(out, part, s, pieces);
+            }
           }
           // The shoulder cannon, from the camera: stowed, it is out of sight and not drawn.
           if (cannon > 0) {
@@ -2636,6 +2759,9 @@ export const createBody = (world?: World): Body => {
             cup: cupping,
             lights: suit && !!plate,
             claws: hunter ? 'short' : xeno,
+            // The fingers fanned out over the disc's hub (the user, 2026-11-23).
+            spread: hunter && me?.rifled ? DISC_SPREAD : 1,
+            hook: hunter && me?.rifled ? DISC_HOOK : 0,
           },
         );
         if (hold > 0.2) {
@@ -2659,6 +2785,16 @@ export const createBody = (world?: World): Body => {
               pieces,
               (HARPOON_GONE * harpoonShot) / HARPOON_OUT,
             );
+          } else if (hunter && kind === 3) {
+            // The armour's disc held by its hub (the user, 2026-11-23): the palm on the hub, the
+            // fingers over its face between the blades; its face along the back of the hand
+            // (gunAxes()' right), the disc beyond the palm.
+            const q = s.rot[J.HAND_R];
+            const [ax, up, fwd] = gunAxes(q);
+            const at = gunGrip(s.pos[J.HAND_R], q).map(
+              (c, i) => c + fwd[i] * DISC_HOLD[0] - ax[i] * DISC_HOLD[1],
+            ) as Vec3;
+            drawDisc(out, at, fwd, up, ax);
           } else if (!(hunter && rail)) {
             held(
               out,

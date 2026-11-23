@@ -50,6 +50,7 @@ const fake = () => {
     loop: id => ({ set: (v, r) => void sets[id].push([v, r]) }),
     speak: () => false,
     say: () => {},
+    hush: () => {},
     mute: on => {
       muted = on;
     },

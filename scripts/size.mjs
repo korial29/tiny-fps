@@ -69,7 +69,8 @@ const BUDGETS = [
   // 260,223 B (260,000 B and the menu picture's 223 B) for the Hunter's shoulder cannon, sniper scope, blade guard and harpoon reload (the user, 2026-11-23).
   // 897 B for the Hunter's view hint, flash, heartbeat and radio growl (the user, 2026-11-23).
   // 262,000 B for the Hunter's cannon fired on the click, its post, its lock and three-slot loadout (the user, 2026-11-23).
-  { file: 'dist/index.js', max: 262_000 },
+  // 264,000 B for the Hunter's disc weapon, thermal and alien-scan palettes, cannon ball and disc grip (the user, 2026-11-23).
+  { file: 'dist/index.js', max: 264_000 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

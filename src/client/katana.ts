@@ -190,18 +190,28 @@ export const katana = (lod: number): number[] => {
 const wristBuilt: number[][] = [];
 /** Where the blades start in wristBlade(lod): the housing comes first. */
 const wristSplit: number[] = [];
-const wristCuff = [0.2, 0.23, 0.24];
 const wristSteel = [0.55, 0.62, 0.64];
 const wristEdge = [0.8, 0.84, 0.81];
 /** How far the blades and their housing stand over the back of the hand. */
 const dorsalLift = 0.026;
 /**
  * How far the blades curve in toward the palm (-x) at their point, metres: none at the heel, more
- * toward the tip, a talon's slight hook.
+ * toward the tip, a talon's hook (the user, 2026-11-23: more curved).
  */
-const WRIST_CURVE = 0.024;
+const WRIST_CURVE = 0.055;
 /** How far each blade stands off the hand's middle, across it. */
 const WRIST_GAP = 0.02;
+/** The share of the profile's depth (spine to edge) the wrist blades keep. */
+const WRIST_SLIM = 0.6;
+/**
+ * Metres the wrist blades sit lower than the outline: their heels inside the lowered housing, under
+ * its crown (the user, 2026-11-23: the blade always in its box).
+ */
+const WRIST_SINK = 0.024;
+/** The share of the blades' length over which they close onto their point. */
+const WRIST_TAPER = 0.09;
+/** Stations of the wrist blades' outline averaged each way: a smooth edge and spine. */
+const SMOOTH = 3;
 /** How far the blades sit down into their housing, below where they were drawn first. */
 const BLADE_DROP = 0.028;
 /** The blades' length to their first design's: short enough to fold back into their housing. */
@@ -222,7 +232,8 @@ export const wristBlade = (lod: number): number[] => {
   // the bracer's back. It is posed on the forearm, so its brushing holds still (wristHousing()).
   // Its sides and its sloped end sink into the bracer (whose back is some 4.2 cm up), so the two
   // meet in one crease of the same metal, no edge between them.
-  const [bed, crown, end] = [0.03, 0.094, 0.036];
+  // Low (the user, 2026-11-23: a lower block under the blades).
+  const [bed, crown, end] = [0.03, 0.074, 0.036];
   const height = (y: number) => {
     const t = Math.min(1, Math.max(0, (y - 0.05) / 0.125));
     return crown - (crown - end) * t * t * (3 - 2 * t);
@@ -310,12 +321,22 @@ export const wristBlade = (lod: number): number[] => {
   ];
   for (const side of [-1, 1]) {
     const z = side * WRIST_GAP;
-    const rings = profile.map(([along, lower, upper], i): Vec3[] => {
-      if (i === profile.length - 1) {
-        return [[wristTip[0] + dorsalLift, -along * BLADE_LENGTH, z]];
+    const last = profile.length - 1;
+    const rings = profile.map(([along], i): Vec3[] => {
+      // A smooth blade (the user, 2026-11-23): the outline averaged over SMOOTH stations each way,
+      // its notches and scallops gone (the point's own station left out of it).
+      const near = profile.slice(Math.max(i - SMOOTH, 0), Math.min(i + SMOOTH + 1, last));
+      const [lower, upper] = [1, 2].map(k => near.reduce((t, r) => t + r[k], 0) / near.length);
+      // The blades are WRIST_SLIM of the outline's depth, kept along the spine (narrower), and
+      // over the last WRIST_TAPER of their length both sides close evenly onto the point.
+      const t = Math.sqrt(Math.min(1, (profile[last][0] - along) / WRIST_TAPER));
+      const depth = (upper - lower) * WRIST_SLIM;
+      const x = dorsalLift + curveAt(along) - BLADE_DROP - WRIST_SINK;
+      const spine = upper - depth * 0.5 * (1 - t) + x;
+      const edge = spine - depth * t;
+      if (i === last) {
+        return [[spine, -along * BLADE_LENGTH, z]];
       }
-      const edge = lower + dorsalLift + curveAt(along) - BLADE_DROP,
-        spine = upper + dorsalLift + curveAt(along) - BLADE_DROP;
       const ridge = spine - (spine - edge) * 0.24;
       const rake = Math.min(0.014, (spine - edge) * 0.35);
       return [
@@ -325,10 +346,7 @@ export const wristBlade = (lod: number): number[] => {
         [ridge, -along * BLADE_LENGTH + 0.6 * rake, z - 0.0035],
       ];
     });
-    loft(out, rings, (row, facet) => {
-      if (row === 7 || row === 11 || row === 16) {
-        return wristCuff;
-      }
+    loft(out, rings, (_, facet) => {
       return facet === 0 || facet === 3 ? wristEdge : wristSteel;
     });
   }

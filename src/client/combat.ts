@@ -603,7 +603,8 @@ export const createCombat = (
         from = muzzleOf(v);
         tracer.mount(from);
         for (const p of pending) {
-          const discShot = hunter(p.id) && p.wield;
+          // The Hunter's disc, in the laser rifle's slot (the user, 2026-11-23).
+          const discShot = hunter(p.id) && !!p.rifled;
           if (p.wield && !discShot) {
             balls.fire(p, now);
             continue;
@@ -614,7 +615,7 @@ export const createCombat = (
             thump(p, from.map((c, i) => c + u[i] * dy + f[i] * dz) as Vec3, now);
             continue;
           }
-          if (p.rifled) {
+          if (p.rifled && !discShot) {
             lase(p, from, now);
             continue;
           }
@@ -661,10 +662,10 @@ export const createCombat = (
           cannon(p, gun(p), at);
         } else if (was !== undefined && p.shots != was && p.railed) {
           discharge(p, at);
+        } else if (was !== undefined && p.shots != was && hunter(p.id) && p.rifled) {
+          audio.play(SOUND.HUNTER_DISC_THROW, at, -2.3, rate());
         } else if (was !== undefined && p.shots != was && p.rifled) {
           lase(p, gun(p), now, at);
-        } else if (was !== undefined && p.shots != was && hunter(p.id) && p.wield) {
-          audio.play(SOUND.HUNTER_DISC_THROW, at, -2.3, rate());
         } else if (was !== undefined && p.shots != was) {
           // His charge at the last frame gives the strength of the shot.
           const c = charges.get(p.id) ?? 0;

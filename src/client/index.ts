@@ -934,10 +934,24 @@ const play = (
         (hunterMode === 1 || (hunterMode === 2 && beast(p.id))),
     );
     rd?.hunterVision(hunterMode, hunterTargets);
-    hud.hunterVision(['', 'THERMAL', 'ALIEN SCAN'][hunterMode]);
     // Watching a bot (B), the view is its eyes', and the own player is drawn as one of the others.
     const spy = botcam.id === undefined ? undefined : others.find(p => p.id == botcam.id);
     const third = k > 0 || !!spy;
+    ctl.canScope =
+      !!me &&
+      ctl.hunter &&
+      ctl.weapon === WEAPON.GUN &&
+      !third &&
+      !driving &&
+      !me.down &&
+      !me.lock &&
+      !me.wield &&
+      !me.rifled &&
+      !me.railed &&
+      !me.fists &&
+      me.ammo >= 0;
+    if (!ctl.canScope) ctl.scoped = false;
+    hud.hunterVision(['', 'THERMAL', 'ALIEN SCAN'][hunterMode], ctl.scoped);
     const pov: [number, number, number] = spy
       ? [spy.x, spy.y + eyeHeight(spy), spy.z]
       : watch.k
@@ -958,7 +972,7 @@ const play = (
       ? fx
       : third
         ? { ...fx, roll, fov: fx.fov * (1 - k) + shot.fov }
-        : { ...fx, roll };
+        : { ...fx, roll, fov: ctl.scoped ? -44 : fx.fov };
     // The driver is unarmed and his body is the renderer's to draw whole: no sight, no muzzle.
     const look = me && !third ? sight(world, eye, cam, ctl.yaw, ctl.pitch, pitch) : undefined;
     if (look) {
@@ -1068,7 +1082,7 @@ const play = (
             : []),
           ...tracer.lights(),
         ],
-        third ? undefined : body,
+        third || ctl.scoped ? undefined : body,
         ctf,
         tracer,
         shown,

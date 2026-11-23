@@ -202,6 +202,7 @@ export const spawn = (
     ground: true,
     ...STILL,
     hp: kit.hp,
+    ...(kit.hunter && { ammo: kit.ammo, mag: kit.mag }),
     blade: !!kit.katana,
     wield: !!kit.katana,
   };

@@ -416,6 +416,15 @@ export const step = (
         return STRIKE.RAIL;
       }
     } else if (!p.wield && !p.cool && p.mag && !p.reload) {
+      if (kit.hunter) {
+        p.power = 1;
+        p.ammo--;
+        p.mag--;
+        p.charge = 0;
+        p.cool = kit.cool;
+        p.shots = (p.shots + 1) & 255;
+        return STRIKE.SHOT;
+      }
       // Held, the gun charges; let go, it fires (below).
       p.charge = Math.min((p.charge ?? 0) + 1, CHARGE_TICKS);
     }

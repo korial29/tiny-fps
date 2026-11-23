@@ -191,7 +191,8 @@ const wristBuilt: number[][] = [];
 const wristCuff = [0.2, 0.23, 0.24];
 const wristSteel = [0.55, 0.62, 0.64];
 const wristEdge = [0.8, 0.84, 0.81];
-const wristTip: Vec3 = [0.062, -0.343, -0.052];
+const dorsalLift = 0.052;
+const wristTip: Vec3 = [0.055, -0.343, 0];
 
 /** Right wrist space: +x over the knuckles, -y along the fingers, z across the hand. */
 export const wristBlade = (lod: number): number[] => {
@@ -201,46 +202,83 @@ export const wristBlade = (lod: number): number[] => {
   const out: number[] = [];
   // Chamfered dorsal cassette. Each guide enters its front face at wrist height.
   const housing = (y: number, bottom: number, top: number, width: number): Vec3[] => [
-    [bottom, y, -width],
-    [top - 0.012, y, -width],
-    [top, y, -width + 0.012],
-    [top, y, width - 0.012],
-    [top - 0.012, y, width],
-    [bottom, y, width],
+    [bottom, y, -width * 0.62],
+    [bottom + dorsalLift, y, -width * 0.62],
+    [bottom + dorsalLift, y, -width],
+    [top + dorsalLift - 0.012, y, -width],
+    [top + dorsalLift, y, -width + 0.012],
+    [top + dorsalLift, y, width - 0.012],
+    [top + dorsalLift - 0.012, y, width],
+    [bottom + dorsalLift, y, width],
+    [bottom + dorsalLift, y, width * 0.62],
+    [bottom, y, width * 0.62],
   ];
   loft(
     out,
     [
-      [[0.069, -0.015, 0]],
+      [[0.069 + dorsalLift, -0.015, 0]],
       housing(-0.015, 0.042, 0.095, 0.047),
       housing(0.023, 0.04, 0.098, 0.051),
       housing(0.17, 0.026, 0.09, 0.052),
       housing(0.235, 0.018, 0.069, 0.038),
-      [[0.043, 0.235, 0]],
+      [[0.043 + dorsalLift, 0.235, 0]],
     ],
-    (row, face) => (row > 0 && face === 2 ? wristSteel : wristCuff),
+    (row, face) => (row > 0 && face === 4 ? wristSteel : wristCuff),
   );
+  // Viewed edge-on to the wrist, the two silhouettes are parallel: a deep
+  // crescent at the heel, two scallops and a long swept terminal point.
+  // Each station gives the distance along the hand and both sides of the outline.
+  const profile = [
+    [-0.012, 0.057, 0.088],
+    [0.04, 0.054, 0.088],
+    [0.053, 0.055, 0.088],
+    [0.062, 0.056, 0.07],
+    [0.072, 0.057, 0.065],
+    [0.082, 0.057, 0.067],
+    [0.092, 0.056, 0.082],
+    [0.097, 0.053, 0.105],
+    [0.11, 0.038, 0.101],
+    [0.119, 0.052, 0.1],
+    [0.137, 0.061, 0.098],
+    [0.15, 0.058, 0.096],
+    [0.159, 0.032, 0.104],
+    [0.166, 0.048, 0.103],
+    [0.182, 0.06, 0.101],
+    [0.198, 0.061, 0.099],
+    [0.21, 0.055, 0.097],
+    [0.219, 0.028, 0.106],
+    [0.242, 0.046, 0.105],
+    [0.269, 0.061, 0.101],
+    [0.291, 0.071, 0.095],
+    [0.306, 0.075, 0.091],
+    [0.311, 0.076, 0.087],
+    [0.315, 0.073, 0.089],
+    [0.328, 0.068, 0.078],
+    [-wristTip[1], wristTip[0], wristTip[0]],
+  ];
   for (const side of [-1, 1]) {
-    const rings: Vec3[][] = [];
-    const steps = lod ? 9 : 5;
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const y = 0.012 + (wristTip[1] - 0.012) * t;
-      const back = 0.071 + (wristTip[0] - 0.071) * t + 0.036 * Math.sin(Math.PI * t);
-      const z = side * (0.023 + 0.005 * t) + wristTip[2] * t * t * t;
-      const width = 0.012 * (1 - t * t);
-      rings.push(
-        i === steps
-          ? [[back, y, z]]
-          : [
-              [back + 0.009 * (1 - t), y, z],
-              [back, y, z + width],
-              [back - 0.006 * (1 - t), y, z],
-              [back, y, z - width],
-            ],
-      );
-    }
-    loft(out, rings, (_, face) => (face === 0 || face === 3 ? wristEdge : wristSteel));
+    const z = side * 0.03;
+    const rings = profile.map(([along, lower, upper], i): Vec3[] => {
+      const edge = lower + dorsalLift,
+        spine = upper + dorsalLift;
+      if (i === profile.length - 1) {
+        return [[edge, -along, z]];
+      }
+      const ridge = spine - (spine - edge) * 0.24;
+      const rake = Math.min(0.014, (spine - edge) * 0.35);
+      return [
+        [spine, -along + rake, z],
+        [ridge, -along + 0.6 * rake, z + 0.0035],
+        [edge, -along - rake, z],
+        [ridge, -along + 0.6 * rake, z - 0.0035],
+      ];
+    });
+    loft(out, rings, (row, facet) => {
+      if (row === 7 || row === 11 || row === 16) {
+        return wristCuff;
+      }
+      return facet === 0 || facet === 3 ? wristEdge : wristSteel;
+    });
   }
   return (wristBuilt[lod] = out);
 };
@@ -261,7 +299,9 @@ export const heldWrist = (out: Out, pos: Vec3, q: Quat, lod: number, k = 1, list
 };
 
 export const wristEnds = (pos: Vec3, q: Quat): Vec3[] =>
-  [[0.071, -0.015, 0] as Vec3, wristTip].map(p => sum([pos, 1], [turn(q, p), 1]));
+  [[0.071, -0.015, 0] as Vec3, wristTip].map(p =>
+    sum([pos, 1], [turn(q, [p[0] + dorsalLift, p[1], p[2]]), 1]),
+  );
 
 /** Appends arcs of lightning flickering along the blade at the clock `t` (s): a few zigzags of thin crossed ribbons, each new every 70 ms. */
 export const arcs = (out: Out, at: Vec3, [r, u, f]: Vec3[], t: number, lod: number, k = 1) => {

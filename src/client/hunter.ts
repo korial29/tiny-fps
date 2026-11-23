@@ -1,13 +1,28 @@
 // Hunter design study. Parts share the runner's metre scale, -z facing and mesh vertex format.
-import { SHINE, STRIDE, TWILL, WEAVE, capsule, dress, segment, solid, sub, unit } from './mesh';
+import {
+  SHINE,
+  STRIDE,
+  TWILL,
+  WEAVE,
+  aim,
+  place,
+  capsule,
+  dress,
+  segment,
+  solid,
+  sub,
+  unit,
+} from './mesh';
 import type { Vec3 } from './mesh';
 
 import { body } from './skin';
+import { loft } from './rover';
 import { wristBlade, wristEnds } from './katana';
 import { hands, HUNTER_HAND } from './body';
 import { KIND } from './features';
 import { JOINT as J, JOINTS, rest, solve } from './rig';
 import { Verts } from './verts';
+import type { Out } from './verts';
 
 const hide: Vec3 = [0.39, 0.42, 0.28];
 const leather: Vec3 = [0.15, 0.12, 0.105];
@@ -519,39 +534,58 @@ export function hunter(lod: 0 | 1 | 2) {
     }
   }
   part('Harpoon harness');
-  limb([-0.15, 1.05, 0.118], [0.155, 1.487, 0.131], [0.045, 0.045], leather, 0.64, WEAVE);
-  for (const y of [1.17, 1.41]) {
-    const x = (y - 1.07) * 0.485;
-    limb(
-      [x - 0.079, y, 0.128],
-      [x + 0.019, y + 0.049, 0.164],
-      [0.032, 0.038, 0.031],
-      graphite,
-      1,
-      TWILL,
-    );
-  }
-  part('Blade cuff');
+  // The single docking shoe remains on the back when the rifle is drawn.
+  limb([0, 1.34, 0.115], [0, 1.34, 0.211], [0.058, 0.05], graphite, 0.75, TWILL);
+  // Cut the cuffs from the forearm surface. Only the dorsal ridge stands
+  // proud; the sides and palm side keep the arm's natural taper.
+  const forearms = parts['Marine anatomy'];
   for (const side of [1, -1]) {
-    if (side < 0) {
-      part('Left bracer');
+    part(side > 0 ? 'Blade cuff' : 'Left bracer');
+    for (let i = 0; i < forearms.length; i += 3 * STRIDE) {
+      const y0 = forearms[i + 1],
+        y1 = forearms[i + STRIDE + 1],
+        y2 = forearms[i + 2 * STRIDE + 1];
+      if (
+        side * forearms[i] < 0.28 ||
+        Math.max(y0, y1, y2) < 0.884 ||
+        Math.min(y0, y1, y2) > 1.093
+      ) {
+        continue;
+      }
+      let face = [0, 1, 2].map(k => forearms.slice(i + k * STRIDE, i + k * STRIDE + 6));
+      for (const bound of [0.884, 1.093]) {
+        const polygon: number[][] = [];
+        for (let j = 0; j < face.length; j++) {
+          const a = face[j],
+            b = face[(j + 1) % face.length];
+          if (bound === 0.884 ? a[1] >= bound : a[1] <= bound) {
+            polygon.push(a);
+          }
+          if ((a[1] - bound) * (b[1] - bound) < 0) {
+            const t = (bound - a[1]) / (b[1] - a[1]);
+            polygon.push(a.map((v, k) => v + t * (b[k] - v)));
+          }
+        }
+        face = polygon;
+      }
+      for (let j = 2; j < face.length; j++) {
+        for (const v of [face[0], face[j - 1], face[j]]) {
+          const n = unit([v[3], v[4], v[5]]);
+          const dorsal = Math.max(0, side * n[0]) ** 4;
+          const offset = 0.0025 + 0.014 * dorsal;
+          out.push(
+            v[0] + n[0] * offset,
+            v[1] + n[1] * offset,
+            v[2] + n[2] * offset,
+            ...n,
+            silver[0],
+            silver[1],
+            TWILL,
+            silver[2],
+          );
+        }
+      }
     }
-    limb(
-      [side * 0.362, 1.093, -0.006],
-      [side * 0.392, 0.884, -0.002],
-      [side > 0 ? 0.093 : 0.088, 0.084, 0.061, 0.048],
-      silver,
-      1.08,
-      TWILL,
-    );
-    limb(
-      [side * 0.39, 0.908, -0.002],
-      [side * 0.392, 0.895, -0.002],
-      [0.046, 0.044],
-      graphite,
-      1,
-      TWILL,
-    );
   }
   part('Laser saddle');
   limb([-0.228, 1.48, 0.079], [-0.233, 1.552, 0.082], [0.045, 0.049, 0.029], graphite, 1.05, TWILL);
@@ -1189,8 +1223,8 @@ export function hunter(lod: 0 | 1 | 2) {
       const width = (side ? 0.074 : 0.065) * (1 - 0.24 * down - 0.3 * down ** 4) + border;
       const spine = 1 - Math.abs(across);
       const radius =
-        (side ? 0.198 : index === 0 ? 0.184 : 0.165) +
-        (side ? 0.094 : 0.051) * Math.sin((down * Math.PI) / 2) +
+        (side ? 0.217 : index === 0 ? 0.205 : 0.196) +
+        (side ? 0.047 : 0.042) * (1 - (1 - down) ** 3) +
         0.015 * spine +
         lift;
       const x = across * width;
@@ -1224,26 +1258,27 @@ export function hunter(lod: 0 | 1 | 2) {
       }
     }
   }
-  // Soft black tabs hang between the metal tassets and move clear of the thighs.
-  for (const side of [-1, 1]) {
-    for (const back of [-1, 1]) {
-      panel(
-        (u, v) => {
-          const angle = side * (0.56 + 0.47 * u + 0.08 * v);
-          const radius = 0.202 + 0.049 * v + 0.007 * Math.sin(Math.PI * u * 2);
-          return [
-            radius * Math.sin(angle),
-            0.981 - v * (0.23 + 0.052 * Math.sin(Math.PI * u)),
-            back * radius * Math.cos(angle),
-          ];
-        },
-        lod ? 5 : 2,
-        2,
-        [0.056, 0.051, 0.046],
-        side * back < 0,
-        WEAVE,
-      );
-    }
+  // A ring of folded black strips sits under the tassets, flaring over the thigh net.
+  const strips = 16;
+  for (let i = 0; i < strips; i++) {
+    panel(
+      (u, v) => {
+        const angle = ((i + (u - 0.5) * (1.04 - 0.08 * v)) * 2 * Math.PI) / strips;
+        const flare = 1 - (1 - v) ** 3;
+        const hip = Math.sin(2 * angle) ** 2;
+        const fold = 0.006 * Math.sin(Math.PI * u) + 0.004 * u;
+        return [
+          (0.193 + 0.055 * flare + 0.027 * hip + fold) * Math.sin(angle),
+          0.987 - v * (0.26 + 0.016 * (i % 2) + 0.023 * Math.sin(Math.PI * u)),
+          -(0.166 + 0.041 * flare + 0.058 * hip + fold) * Math.cos(angle),
+        ];
+      },
+      lod ? 4 : 2,
+      3,
+      [0.056, 0.051, 0.046],
+      true,
+      WEAVE,
+    );
   }
   part('Wrist blade');
   const twin = wristBlade(lod);
@@ -1280,25 +1315,20 @@ export function hunter(lod: 0 | 1 | 2) {
   limb(barrel(0.98), barrel(1.015), [0.028, 0.026], silver, 1, TWILL);
   limb(barrel(1.015), barrel(1.019), [0.021, 0.021], [0.049, 0.055, 0.053], 1);
   part('Harpoon');
-  // A folding bolt rifle rides diagonally across the back: long barrel, receiver, stock and folded legs.
-  limb([-0.31, 1.15, 0.19], [0.25, 1.73, 0.19], [0.035, 0.032, 0.028], graphite, 0.72, TWILL);
-  limb([-0.08, 1.39, 0.145], [0.11, 1.59, 0.145], [0.062, 0.068, 0.054], bronze, 0.9, SHINE);
-  limb([-0.25, 1.2, 0.16], [-0.08, 1.37, 0.16], [0.041, 0.043, 0.038], leather, 0.78, TWILL);
-  limb([0.08, 1.57, 0.15], [0.28, 1.77, 0.15], [0.046, 0.046, 0.04], graphite, 0.74, TWILL);
-  limb([-0.12, 1.33, 0.104], [-0.21, 1.27, 0.103], [0.012, 0.013], silver, 1, SHINE);
-  limb([0.13, 1.63, 0.104], [0.04, 1.57, 0.103], [0.012, 0.013], silver, 1, SHINE);
-  limb([-0.018, 1.475, 0.087], [-0.018, 1.51, 0.087], [0.018, 0.013], silver, 1, SHINE);
+  drawHarpoon(out, lod, [-0.066, 1.25, 0.224], aim(unit([0.58, 0.81, 0]), [0, 0, 1]), 0.93, 0);
   part('Flying disc');
   // The throwing disc sits face out on the hip. Six swept blades grow
   // from separate bronze collars around a recessed steel boss.
   const discPoint = (r: number, angle: number, height: number): Vec3 => {
     const x = r * Math.cos(angle);
     return [
-      -0.205 + 0.89 * x - 0.456 * height,
-      0.955 + r * Math.sin(angle),
-      -0.178 - 0.456 * x - 0.89 * height,
+      -0.176 + 0.89 * x - 0.456 * height,
+      0.988 + r * Math.sin(angle),
+      -0.222 - 0.456 * x - 0.89 * height,
     ];
   };
+  // The belt clip holds the hub clear of the hanging strips.
+  limb([-0.15, 0.995, -0.143], discPoint(0, 0, -0.008), [0.022, 0.025], graphite, 1, TWILL);
   const discSides = [12, 24, 36][lod];
   function discRing(inner: number, outer: number, low: number, high: number, tint: Vec3) {
     panel(
@@ -1386,7 +1416,11 @@ export function hunter(lod: 0 | 1 | 2) {
           const weight = t * t * (3 - 2 * t);
           const dyDx = trunkFit ? (-Math.sign(x) * rise * 6 * t * (1 - t)) / 0.055 : 0;
           const ny = mesh[i + 4] / (1 + weight * slope);
-          const n = unit([mesh[i + 3] - ny * dyDx, ny, mesh[i + 5]]);
+          // Taper the upper thighs and their fitted net together under the straight belt strips.
+          const thigh = bell((y - 0.78) / 0.17);
+          const width = 1 - 0.155 * thigh * weight;
+          mesh[i] *= width;
+          const n = unit([mesh[i + 3] / width - ny * dyDx, ny, mesh[i + 5]]);
           mesh[i + 1] += weight * rise;
           mesh[i + 3] = n[0];
           mesh[i + 4] = n[1];
@@ -1462,40 +1496,120 @@ export const hunterWristEnds = () =>
   );
 
 /** The Hunter's foldable, long-bolt rifle in right-hand grip space (muzzle points along -z). */
-const harpoons: number[][] = [];
-export const hunterHarpoon = (lod: 0 | 1 | 2): number[] => {
+const harpoons: { body: number[]; slide: number[]; stock: number[]; bolt: number[] }[] = [];
+const harpoonParts = (lod: 0 | 1 | 2) => {
   if (harpoons[lod]) {
     return harpoons[lod];
   }
-  const out: number[] = [];
-  const steel = [0.56, 0.61, 0.59];
-  const dark = [0.13, 0.16, 0.17];
-  const bronze = [0.54, 0.34, 0.16];
-  const part = (a: Vec3, b: Vec3, radius: number, tint: number[], width = radius) => {
+  const body: number[] = [],
+    slide: number[] = [],
+    stock: number[] = [],
+    bolt: number[] = [];
+  const part = (out: number[], a: Vec3, b: Vec3, radii: number[], color: Vec3, aspect = 1) => {
     const length = Math.hypot(...sub(b, a));
-    segment(
-      out,
-      solid(lod, length, [radius, radius * 0.92, radius * 0.65]),
-      a,
-      b,
-      [1, 0, 0],
-      length,
-      [1, width / radius],
-      tint,
-    );
+    segment(out, solid(lod, length, radii, [0, 0]), a, b, [1, 0, 0], length, [1, aspect], color);
   };
-  // Long telescoping barrel and a stepped receiver, sized around the hand's grip at the origin.
-  part([0, 0.018, -0.12], [0, 0.018, -0.69], 0.031, steel);
-  part([0, 0.018, -0.66], [0, 0.018, -0.78], 0.043, bronze, 1.2);
-  part([0, 0, -0.4], [0, 0.035, -0.14], 0.075, dark, 1.25);
-  part([0, -0.025, -0.18], [0, -0.16, -0.04], 0.046, bronze, 0.85);
-  part([0, 0.012, -0.08], [0, 0.02, 0.23], 0.038, dark);
-  // Fold-out support struts, sight rail and the bronze locking bands on the barrel.
-  part([-0.06, -0.105, -0.31], [-0.075, -0.23, -0.66], 0.012, steel);
-  part([0.06, -0.105, -0.31], [0.075, -0.23, -0.66], 0.012, steel);
-  part([-0.042, 0.079, -0.42], [0.042, 0.079, -0.42], 0.012, bronze);
-  part([-0.042, 0.079, -0.25], [0.042, 0.079, -0.25], 0.012, bronze);
-  part([0, 0.09, -0.37], [0, 0.16, -0.32], 0.024, dark, 1.15);
-  part([0, 0.16, -0.32], [0, 0.16, -0.26], 0.012, steel);
-  return (harpoons[lod] = out);
+  const shell: Vec3 = [0.31, 0.195, 0.195];
+  const ridge: Vec3 = [0.51, 0.345, 0.32];
+  const iron: Vec3 = [0.115, 0.092, 0.105];
+  const ivory: Vec3 = [0.72, 0.63, 0.72];
+  // The open rear cradle receives the hollow sleeve as the rifle folds.
+  const tube = (out: number[], rear: number, front: number, r: number, closed: boolean) => {
+    const facets = lod ? 8 : 4;
+    const point = (i: number, radius: number, z: number): Vec3 => {
+      const angle = (Math.PI * i) / facets;
+      return [radius * Math.cos(angle), 0.09 - radius * Math.sin(angle), z];
+    };
+    for (let i = 0; i < (closed ? 2 * facets : facets); i++) {
+      const end = (z: number) => [
+        point(i, r, z),
+        point(i + 1, r, z),
+        point(i + 1, r - 0.006, z),
+        point(i, r - 0.006, z),
+      ];
+      loft(out, end(rear), end(front), [shell, ridge, iron, ridge], ridge, ridge);
+    }
+  };
+  tube(body, 0.08, -0.1, 0.06, true);
+  tube(body, -0.1, -0.59, 0.058, false);
+  tube(slide, -0.52, -1.08, 0.05, true);
+
+  // A ridged lozenge at the nose, broadest halfway along its length.
+  const diamond = (z: number, r: number): Vec3[] => [
+    [0, 0.09 + r, z],
+    [r, 0.09, z],
+    [0, 0.09 - r, z],
+    [-r, 0.09, z],
+  ];
+  let edge = diamond(-0.72, 0.055);
+  const ribs = lod ? 7 : 3;
+  for (let i = 1; i <= ribs; i++) {
+    const t = i / ribs;
+    const z = -0.72 - 0.4 * t;
+    const r = 0.055 + 0.045 * (1 - Math.abs(2 * t - 1));
+    const lip = diamond(z + 0.018, r);
+    const next = diamond(z, r - 0.01);
+    loft(slide, edge, lip, [shell], i === 1 ? iron : undefined);
+    loft(slide, lip, next, [ridge], undefined, i === ribs ? iron : undefined);
+    edge = next;
+  }
+  // Offset the compact optic so the exposed bolt remains visible beside it.
+  part(body, [0.038, 0.055, -0.17], [0.076, 0.115, -0.17], [0.018, 0.018], iron);
+  part(body, [0.076, 0.127, -0.035], [0.076, 0.127, -0.32], [0.035, 0.023, 0.023, 0.037], shell);
+  part(body, [0.076, 0.127, -0.034], [0.076, 0.127, -0.03], [0.028, 0.027], [0.14, 0.38, 0.34]);
+  // A narrow sliding neck opens into the cheek rest and the broad shoulder pad.
+  const stockSection = (z: number, top: number, bottom: number, w: number): Vec3[] => [
+    [-w * 0.65, top, z],
+    [w * 0.65, top, z],
+    [w, top - 0.012, z],
+    [w * 0.8, bottom + 0.01, z],
+    [w * 0.5, bottom, z],
+    [-w * 0.5, bottom, z],
+    [-w * 0.8, bottom + 0.01, z],
+    [-w, top - 0.012, z],
+  ];
+  const neck = stockSection(0.055, 0.087, 0.046, 0.022);
+  const cheek = stockSection(0.235, 0.107, 0.044, 0.033);
+  const heel = stockSection(0.39, 0.095, -0.049, 0.039);
+  loft(stock, neck, cheek, [iron], iron);
+  loft(stock, cheek, heel, [ridge, shell, shell, shell]);
+  loft(stock, heel, stockSection(0.412, 0.097, -0.052, 0.04), [iron], undefined, iron);
+  part(bolt, [0, 0.067, 0.067], [0, 0.067, -1.09], [0.015, 0.016, 0.014], ivory);
+  part(bolt, [0, 0.067, -1.07], [0, 0.067, -1.24], [0.018, 0.024, 0.001], ridge, 0.6);
+  // Lift the action as one piece above the thumb, including the stock throughout its travel.
+  const actionRise = 0.05;
+  for (const piece of [body, slide, bolt, stock]) {
+    for (let i = 0; i < piece.length; i += STRIDE) {
+      piece[i + 1] += actionRise;
+      piece[i + 8] = SHINE;
+    }
+  }
+  // The pistol grip stays in the right palm beneath the raised shell.
+  part(body, [0, -0.05, 0.022], [0, 0.04 + actionRise, -0.026], [0.016, 0.019, 0.02], leather);
+  return (harpoons[lod] = { body, slide, stock, bolt });
+};
+
+/** Slide and stock travel in opposite directions as the compact back-mounted rifle opens. */
+export const drawHarpoon = (
+  out: Out,
+  lod: 0 | 1 | 2,
+  at: Vec3,
+  axes: Vec3[],
+  scale: number,
+  open: number,
+  loaded = true,
+) => {
+  const parts = harpoonParts(lod);
+  const retracted = (1 - open) * scale;
+  place(out, parts.body, at, axes, [0, 0, 0], scale);
+  place(out, parts.stock, at, axes, [0, 0, 0.13 * retracted], scale);
+  place(out, parts.slide, at, axes, [0, 0, -0.4 * retracted], scale);
+  if (loaded) {
+    place(out, parts.bolt, at, axes, [0, 0, 0], [scale, scale, scale - retracted / 3]);
+  }
+};
+
+export const hunterHarpoon = (lod: 0 | 1 | 2): number[] => {
+  const { body, stock, slide, bolt } = harpoonParts(lod);
+  return body.concat(stock, slide, bolt);
 };

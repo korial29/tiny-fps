@@ -75,7 +75,7 @@ import {
 } from './gun';
 import { helm } from './helm';
 import { helmet } from './helmet';
-import { hunter as hunterModel, hunterWristEnds } from './hunter';
+import { hunter as hunterModel, hunterWristEnds, drawHarpoon } from './hunter';
 import { HEAD_SCALE, STYLE, hair, styleOf, sway } from './hair';
 import { ID, ORIGIN, mesh } from './store';
 import { flesh } from './flesh';
@@ -1464,6 +1464,9 @@ export const soldier = (
           )
         : at;
       for (const [name, vertices] of hunterParts(detail)) {
+        if (name === 'Harpoon' && handOf(p) === 0) {
+          continue;
+        }
         const onArm = name === 'Right arm' || name === 'Blade cuff' || name === 'Wrist blade';
         rigid(
           `hunter ${name} ${detail}`,
@@ -1779,18 +1782,42 @@ export const soldier = (
   ) {
     // A swap shows: the battery or the capsule out and in, the glow off until it is.
     const sp = swapOf(p);
-    held(out, s.pos[J.HAND_R], s.rot[J.HAND_R], Math.min(lod, 1), 1, undefined, 0, kindOf(p), r.t, {
-      swap: sp,
-      light: sp < 0 ? 1 : 1 - ease(span(sp, 0.1, 0.2)),
-      cells: cellsOf(p),
-      heat: (p.heat ?? 0) / HEAT_MAX,
-      hot: p.hot,
-      id: p.id,
-      floor: p.ground ? p.y : undefined,
-      vel: [p.vx, p.vy, p.vz],
-      carry,
-      list: gpu,
-    });
+    if (isHunter && handOf(p) === 0) {
+      const q = s.rot[J.HAND_R];
+      drawHarpoon(
+        out,
+        Math.min(lod, 1) as HunterLod,
+        grip(s.pos[J.HAND_R], q),
+        axes(q),
+        0.82,
+        1,
+        !!p.mag,
+      );
+    } else {
+      held(
+        out,
+        s.pos[J.HAND_R],
+        s.rot[J.HAND_R],
+        Math.min(lod, 1),
+        1,
+        undefined,
+        0,
+        kindOf(p),
+        r.t,
+        {
+          swap: sp,
+          light: sp < 0 ? 1 : 1 - ease(span(sp, 0.1, 0.2)),
+          cells: cellsOf(p),
+          heat: (p.heat ?? 0) / HEAT_MAX,
+          hot: p.hot,
+          id: p.id,
+          floor: p.ground ? p.y : undefined,
+          vel: [p.vx, p.vy, p.vz],
+          carry,
+          list: gpu,
+        },
+      );
+    }
     if (p.railed || p.rifled) {
       const q = s.rot[J.HAND_R];
       const m = tip(grip(s.pos[J.HAND_R], q), axes(q), kindOf(p));

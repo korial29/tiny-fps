@@ -263,6 +263,10 @@ export const HUD_CSS =
   `@keyframes urge{to{transform:translateX(-50%) scale(1.14)}}` +
   `cite{right:12px;bottom:10px;font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}cite small{margin-left:6px;font-size:14px}` +
   // Out of the head (at the wheel, or watching a glory kill): no crosshair, no gun, no visor.
+  `.scoped::before{content:"";position:absolute;inset:0;pointer-events:none;background:` +
+  `linear-gradient(#241919,#241919) center/1px 76vmin no-repeat,` +
+  `linear-gradient(#241919,#241919) center/76vmin 1px no-repeat,` +
+  `radial-gradient(circle at center,transparent 37vmin,#211b1a 38vmin,#080707fa 39vmin)}` +
   `div.v>i,.v dl,.v del,div.o>i,.o dl,.o del{display:none}` +
   `div.v .hl,div.o .hl{display:none}` +
   // A vehicle's health: ten pips over the speed for who is in it, and a small bar over one near by.
@@ -329,7 +333,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Hunter',
-    'Slot 1 fires a long-bolt harpoon. Slot 2 has twin wrist blades; G or right click throws a returning disc (3 HP). Slot 3 locks the shoulder laser after 3 seconds and deals 3 HP.',
+    'Slot 1 unfolds the harpoon rifle. Hold right click to aim through its scope and release to fire. Each bolt deals 4 HP and reloads in 1.3 seconds. Slot 2 has twin wrist blades; G or right click throws a returning disc (3 HP). Slot 3 locks the shoulder laser after 3 seconds and deals 3 HP.',
     'Press V to cycle thermal vision and alien detection.',
     'Every map',
   ],
@@ -537,7 +541,7 @@ export interface Hud {
   /** The orbital station's mission line (mission.ts), `hot` when urgent; none hides it. */
   mission(text?: string, hot?: boolean): void;
   /** The Hunter's current local vision mode. */
-  hunterVision(text?: string): void;
+  hunterVision(text?: string, scoped?: boolean): void;
   /** The Predator-style shoulder-laser sight, at a screen point and progressing to a lock. */
   hunterAim(at?: [number, number], progress?: number): void;
   /** The dark rim of a space helmet's visor around the screen: on while the own player wears one, off otherwise. */
@@ -1003,7 +1007,8 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       mission.classList.toggle('hot', hot);
       set(mission, text);
     },
-    hunterVision(text = '') {
+    hunterVision(text = '', scoped = false) {
+      screen.classList.toggle('scoped', scoped);
       vision.toggleAttribute('hidden', !text);
       set(vision, text);
     },

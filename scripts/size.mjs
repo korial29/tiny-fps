@@ -65,7 +65,8 @@ const BUDGETS = [
   // 1319 B for the scalloped Hunter blades and folding harpoon (the user, 2026-11-23).
   // 2031 B for the Hunter carried by the runner's animated skeleton (the user, 2026-11-23).
   // 2900 B for the Hunter's ribbed harpoon, fitted bracers and sliding wrist blades (the user, 2026-11-23).
-  { file: 'dist/index.js', max: 243 * 1024 + 9468 },
+  // 223 B for the menu's picture moving on smoothly at its card's size (the user, 2026-11-23).
+  { file: 'dist/index.js', max: 243 * 1024 + 9691 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

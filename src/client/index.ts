@@ -352,24 +352,15 @@ const play = (
   let hpMax = HP_MAX;
   let previewActive = false;
   let previewJobs: (() => void)[] = [];
-  let previewFrame = 0;
   let previewNext = 0;
   let headKey = '';
-  const pumpPreview = () => {
-    if (!previewActive || previewFrame || !previewJobs.length || dead) {
-      return;
-    }
-    previewFrame = requestAnimationFrame(() => {
-      previewFrame = 0;
-      if (previewActive && !dead) {
-        previewJobs.shift()?.();
-      }
-      pumpPreview();
-    });
-  };
+  /**
+   * The menu's pictures waiting to be drawn, one per frame. frame() draws each before the view,
+   * which then takes the canvas back: a picture drawn in a callback of its own after the frame
+   * would be what the screen shows, the runner blinking over the game behind the menu.
+   */
   const queuePreview = (draw: () => void) => {
     previewJobs.push(draw);
-    pumpPreview();
   };
   const avatar = hud.cast(
     c => {
@@ -381,7 +372,6 @@ const play = (
       if (active) {
         previewNext = 0;
         hud.previewLoading(!!rd);
-        pumpPreview();
       }
     },
   );
@@ -1065,6 +1055,9 @@ const play = (
             }),
           );
         }
+      }
+      if (previewActive) {
+        previewJobs.shift()?.();
       }
       if (step == 2) {
         progress((step = 3));

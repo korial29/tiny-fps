@@ -17,6 +17,7 @@ import {
   PLAYER_R,
   STEP_H,
   HEAT_MAX,
+  PUNCHES,
 } from '../shared/constants';
 import { powerOf, sabering } from '../shared/gun';
 import { TAU, eyeHeight, speedOf, sprinting } from '../shared/physics';
@@ -977,6 +978,17 @@ const CLAW_L = 0.042;
 export const HUNTER_HAND: Vec3 = [0.45, 0.315, 0.22];
 /** Where the back of the Hunter's right wrist faces, in the view, with the blades out: up and well over to the right. */
 export const CLAW_ROLL: Vec3 = [0.8, 0.45, -0.4];
+
+/**
+ * A claw's rake in the own view, by its share of the swing: the striking hand (x out on its own
+ * side, y up, z ahead, metres from the eye) raised high and out, then slashed down and across to
+ * the other side, low and further out: up over the swing's first fifth, across by two fifths.
+ */
+const [RAKE_UP, RAKE_DOWN]: Vec3[] = [
+  [0.38, 0.12, 0.4],
+  [-0.2, -0.2, 0.58],
+];
+
 /** The Hunter's left hand in its guard while the blades are out (view space, mirrored): low left, ahead. */
 export const GUARD: Vec3 = [0.3, -0.24, 0.44];
 /** How closed that guard hand is: open, the fingers a little bent. */
@@ -2282,7 +2294,24 @@ export const createBody = (world?: World): Body => {
           : blow == BLOW.LUNGE
             ? [0.02, -0.12, 0.78]
             : [0.02, -0.13, 0.66];
-      h = mix(h, strikes ? fist : [0.26, -0.36, 0.26], jab);
+      // The xenomorph's claws rake (the user, 2026-11-23: a richer swipe than a punch): the
+      // striking hand flies up and out on its side, claws spread, slashes down and across the view
+      // through the strike, then comes back; the other is drawn back as a punch's. `rake`: the
+      // share of a claw's swing (-1 for none), `clutch` how much the striking hand follows it.
+      const rake =
+        me?.swing && strikes && (blow == BLOW.CLAW_L || blow == BLOW.CLAW_R)
+          ? 1 - me.swing / PUNCHES[blow].ticks
+          : -1;
+      const clutch = rake < 0 ? 0 : Math.min(1, 2.5 * (1 - rake));
+      h = mix(
+        h,
+        rake < 0
+          ? strikes
+            ? fist
+            : [0.26, -0.36, 0.26]
+          : mix(mix(h, RAKE_UP, ease(span(rake, 0, 0.2))), RAKE_DOWN, ease(span(rake, 0.2, 0.4))),
+        rake < 0 ? jab : clutch,
+      );
       h = mix(h, [0.46, 0.05 + 0.2 * flail, 0.4 + 0.1 * flail], w.stun);
       // A glory kill: both claws up in the view holding the prey, torn apart as the bite goes in.
       const bite = me?.lock ? Math.max(devour(me.lock), 0) : 0;
@@ -2337,6 +2366,9 @@ export const createBody = (world?: World): Body => {
       ]) {
         curl += (open - curl) * t;
       }
+      // Raking, the striking hand's claws spread wide up to the strike, then hook in as it tears
+      // through.
+      curl += (0.45 * +(rake > 0.4) - curl) * clutch;
       // The Hunter's blades come out of the bracer over a clenched fist (the user, 2026-11-23).
       curls[(sd + 1) / 2] =
         curl +
@@ -2346,8 +2378,9 @@ export const createBody = (world?: World): Body => {
       const to = add(eye, turn([h[0] * sd, h[1], h[2]]));
       const arm = sd < 0 ? J.ARM_L : J.ARM_R;
       reach(q, s, arm, to, turn([POLE[0] * sd, POLE[1], POLE[2]]));
-      // The palm turns down, the back of the hand to the view, flat on a ledge or the floor.
-      q.rot[arm + 2] = axis(Y, sd * (1 + 0.5 * (w.plant + w.slide)));
+      // The palm turns down, the back of the hand to the view, flat on a ledge or the floor;
+      // raking, it turns to face the way of the slash.
+      q.rot[arm + 2] = axis(Y, sd * (1 + 0.5 * (w.plant + w.slide) + 0.9 * clutch));
       if (sd > 0 && hold > 0.002) {
         // The back of the hand along the gun's right, the fingers around the grip.
         const rot = frame(turn(ga[0]), turn(fh));

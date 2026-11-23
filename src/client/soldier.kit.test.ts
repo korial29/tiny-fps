@@ -249,8 +249,36 @@ describe('the Hunter', () => {
     const heights = Array.from({ length: out.length / STRIDE }, (_, i) => out[i * STRIDE + 1]);
     expect(out.length).toBeGreaterThanOrEqual(expected);
     expect(Math.min(...heights)).toBeCloseTo(r.p.y, 2);
-    // The lowered mask seats the crown 2.255 m above the planted feet.
-    expect(Math.max(...heights) - r.p.y).toBeCloseTo(2.255, 2);
+    // Taller than the marine, though his ready stance bends him below his 2.255 m crown at rest.
+    const crown = Math.max(...heights) - r.p.y;
+    expect(crown).toBeGreaterThan(stance(r).s.pos[J.HEAD][1] - r.p.y + 0.3);
+    expect(crown).toBeLessThan(2.255);
+  });
+
+  it('runs on the marine’s animated legs instead of sliding frozen (the user, 2026-11-23)', () => {
+    const feet = (n: number) => {
+      const r = hold({ vz: -6 }, n);
+      r.look = { role: ROLE.HUNTER };
+      const out: number[] = [];
+      soldier(out, r, [0.15, 0.4, 1], 0);
+      // The lowest point under each half of the body, ahead of or behind the runner.
+      const low = [Infinity, Infinity];
+      const fore = [0, 0];
+      for (let i = 0; i < out.length; i += STRIDE) {
+        const side = +(out[i] > r.p.x);
+        if (out[i + 1] < low[side]) {
+          low[side] = out[i + 1];
+          fore[side] = r.p.z - out[i + 2];
+        }
+      }
+      return { low, fore, rig: stance(r).s.pos };
+    };
+    const [a, b] = [feet(40), feet(52)];
+    // The stride swaps which foot leads, as the marine's does.
+    expect(Math.sign(a.fore[0] - a.fore[1])).not.toBe(Math.sign(b.fore[0] - b.fore[1]));
+    expect(Math.abs(a.fore[0] - b.fore[0])).toBeGreaterThan(0.2);
+    // Neither boot goes through the roof.
+    expect(Math.min(...a.low, ...b.low)).toBeGreaterThan(1 - 0.01);
   });
 });
 

@@ -234,9 +234,10 @@ export const step = (
     [p.heavy, p.charge] = [true, kit.xeno ? p.charge : 0];
     p.swing = swingOf(p, table).ticks;
   } else if (kit.xeno && top && free && !holding && (p.charge ?? 0) > 0) {
-    // A short tap starts the ordinary lash on release; while held, the tail stays coiled.
+    // A short tap strikes at once from where it is poised (the user, 2026-11-23: one quick blow,
+    // not the wind-up over again); while held, the tail stays coiled.
     p.charge = 0;
-    p.swing = ticks - 1;
+    p.swing = ticks - hold - 1;
   } else {
     // The xenomorph's charge is its tail's alone, held at the top or let go: anywhere else it is gone.
     p.charge = top || (kit.xeno && !p.heavy) ? 0 : p.charge;

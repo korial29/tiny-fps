@@ -12,12 +12,13 @@ import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import type { Tracer } from './beams';
 import type { Gait } from './gait';
-import { STRIDE, unit } from './mesh';
+import { STRIDE, add, sub, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, axis, mul, solve, turn } from './rig';
 import type { Quat } from './rig';
 import { hands } from './body';
 import { REGION, cut, palette, skin } from './skin';
+import type { Skin } from './skin';
 import { room } from './verts';
 import type { Out } from './verts';
 
@@ -178,8 +179,20 @@ export const track = (
 };
 
 /**
+ * The skeleton the piece is skinned with, where it lies now: the pose of the cut carried by the
+ * piece's own turn and place, sunk by `sink`. Skinned with it, the limb lands where piece() moves
+ * the limb skinned in the pose of the cut (dual quaternions follow a turn of all their joints).
+ */
+export const placed = (c: Piece, sink: number): ReturnType<typeof solve> => ({
+  ...c.s,
+  pos: c.s.pos.map(x => add(turn(c.q, sub(x, c.c)), [c.p[0], c.p[1] - sink, c.p[2]])),
+  rot: c.s.rot.map(q => mul(c.q, q)),
+});
+
+/**
  * Appends the piece at level of detail `lod`, in `colors` (see palette()), sunk by `sink` metres with
- * the body; an arm with its hand, limp, in a space suit's glove on `suit`.
+ * the body; an arm with its hand, limp, in a space suit's glove on `suit`. With `gpu`, its skin goes
+ * there, in the skeleton where it lies (posed by the shader, flesh.ts), and the hand to `out`.
  */
 export const piece = (
   out: Out,
@@ -189,10 +202,17 @@ export const piece = (
   sink: number,
   face?: ArrayLike<number>,
   suit = false,
+  gpu?: (limb: Skin, at: ReturnType<typeof solve>) => void,
 ) => {
   const from = out.length;
+  const s = gpu ? placed(c, sink) : c.s;
   // A head off has its owner's face: down, the eyes shut.
-  skin(out, cut(lod, c.limb, c.b)[1], c.s, colors, face);
+  const limb = cut(lod, c.limb, c.b)[1];
+  if (gpu) {
+    gpu(limb, s);
+  } else {
+    skin(out, limb, s, colors, face);
+  }
   const arm = c.limb == LIMB.ARM_L || c.limb == LIMB.ARM_R;
   if (arm && lod) {
     const glove = colors[REGION.GLOVE];
@@ -200,7 +220,7 @@ export const piece = (
     const other = c.limb == LIMB.ARM_L ? J.HAND_R : J.HAND_L;
     hands(
       out,
-      c.s,
+      s,
       c.b ?? 0,
       [LIMP, LIMP],
       glove,
@@ -209,6 +229,9 @@ export const piece = (
       lod < 3,
       other,
     );
+  }
+  if (gpu) {
+    return;
   }
   const a = room(out, 0);
   for (let i = from; i < out.length; i += STRIDE) {

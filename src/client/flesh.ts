@@ -20,7 +20,11 @@ export const [VERT, CORN, PLATE] = [4, 1, 7];
 
 /** Where a skin's corners are in `data`, and its vertices: plain, and hooded by the traits of a face (a ninja's). */
 const corners = new WeakMap<Skin, number>();
-const skins = new WeakMap<Skin, Map<string, number>>();
+/**
+ * Plain, by the skin's rest vertices: the two halves cut() makes of a body share them, and their
+ * joints and weights, so the stump and the limb thrown off pack them once. Hooded, by the skin.
+ */
+const skins = new WeakMap<object, Map<string, number>>();
 
 /**
  * The vertices of the skin `s` in `data`: at rest at `v` (place and normal, six numbers each). A
@@ -82,8 +86,10 @@ export const skinOf = (s: Skin, hood?: [number, ArrayLike<number>]): [number, nu
   }
   const traits = hood ? Array.from(hood[1]).slice(TRAITS, CHANNELS) : [];
   const key = hood ? `${hood[0]} ${traits}` : '';
-  const book = skins.get(s) ?? new Map<string, number>();
-  skins.set(s, book);
+  // dress() reads the triangles, which differ between the halves.
+  const by = hood ? s : s.v;
+  const book = skins.get(by) ?? new Map<string, number>();
+  skins.set(by, book);
   let vs = book.get(key);
   if (vs === undefined) {
     if (hood) {

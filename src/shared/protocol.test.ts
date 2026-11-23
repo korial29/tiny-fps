@@ -773,6 +773,16 @@ describe('snapshot frame', () => {
     expect(fell >> 5).toBe(FALL.STRUCK);
   });
 
+  it('carries the pistol’s burst in the charge’s top bits, apart from the charge', () => {
+    const buf = encodeSnapshot({
+      tick: 0,
+      players: [player(1, { charge: 60, burst: 2 }), player(2, { charge: 0, burst: 1 })],
+      ...IDLE,
+    });
+    const [a, b] = decodeSnapshot(buf)!.players;
+    expect([a.charge, a.burst, b.charge, b.burst]).toEqual([60, 2, 0, 1]);
+  });
+
   it('round-trips MODE.RIDE', () => {
     // Seated, the USE that got him in still held, every neighbour of the mode's three bits set.
     const p = player(6, { mode: MODE.RIDE, wall: SIDE.NORTH, jumps: 1, dashes: 1, held: KEY.USE });

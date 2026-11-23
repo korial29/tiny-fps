@@ -26,6 +26,8 @@ export const SPLASH = 0.16;
 const SPARK = 0.22;
 /** Seconds a grenade's fireball lasts, and its embers; the embers thrown. */
 export const BOOM = 0.45;
+/** Seconds the rail gun's ring of lightning lasts. */
+const TESLA = 0.5;
 const EMBER = 0.7;
 /** Seconds a drop of blood flies, and its colour (the user, 2026-11-16: blood as the xenomorph eats). */
 const GORE = 0.6;
@@ -91,6 +93,8 @@ interface Glow {
   size?: number;
   /** A shock wave: a ring flat on the ground that widens to `size` and fades, in BOOM. */
   ring?: boolean;
+  /** The rail gun's ring: lightning round a circle that widens to `size`, in TESLA. */
+  tesla?: boolean;
 }
 /** A jagged bolt: two segments, a to m to b. */
 interface Bolt {
@@ -115,6 +119,8 @@ export interface Tracer {
   blast(at: Vec3, size?: number): void;
   /** A shock wave from `at`: a ring of fire flat on the ground, out to `r` metres as it fades. */
   ring(at: Vec3, r: number): void;
+  /** The rail gun's discharge round `at` (the feet): a loop of lightning out to `r` metres and bolts out to it, flickering as it fades. */
+  tesla(at: Vec3, r: number): void;
   /**
    * A short jagged bolt from `a` to `b` with a fork off its kink, gone in a twentieth of a second:
    * an arc on a damaged hull, `wide` times as thick as the katana's bolts.
@@ -370,6 +376,9 @@ export const createTracer = (): Tracer => {
     ring(at, r) {
       glows = [...glows, { p: at, age: 0, boom: true, ring: true, size: r }].slice(-MAX);
     },
+    tesla(at, r) {
+      glows = [...glows, { p: at, age: 0, tesla: true, size: r }].slice(-MAX);
+    },
     arc(a, b, wide = 3) {
       const l = Math.hypot(...sub(b, a));
       const m = a.map((v, i) => (v + b[i]) / 2 + rnd() * l * 0.3) as Vec3;
@@ -417,7 +426,9 @@ export const createTracer = (): Tracer => {
         x.age += dt;
       }
       rays = rays.filter(r => r.age < RAY);
-      glows = glows.filter(g => g.age < (g.boom ? BOOM : g.splash ? SPLASH : FLASH));
+      glows = glows.filter(
+        g => g.age < (g.tesla ? TESLA : g.boom ? BOOM : g.splash ? SPLASH : FLASH),
+      );
       sparks = sparks.filter(s => s.age < (s.hot ? EMBER : s.blood ? GORE : SPARK));
       bolts = bolts.filter(b => b.age < BOLT);
       for (const s of sparks) {
@@ -544,6 +555,36 @@ export const createTracer = (): Tracer => {
           }
         }
       }
+      for (const { p, age, size = 1 } of glows.filter(g => g.tesla)) {
+        // Out to its radius in a third of its time, a jagged loop just off the floor, and a few bolts
+        // from the chest out to it, a new shape each frame.
+        const k = age / TESLA;
+        const [r, f] = [size * Math.min(1, Math.sqrt(3 * k)), 1 - k];
+        const at = (a: number, q: number, h: number): Vec3 => [
+          p[0] + Math.cos(a) * q,
+          p[1] + h,
+          p[2] + Math.sin(a) * q,
+        ];
+        const zig = (line: Vec3[], w: number) => {
+          for (let i = 1; i < line.length; i++) {
+            ZAP.forEach(([h, rgb], z) =>
+              ribbon(out, line[i - 1], line[i], h * w * f, rgb, eye, 0.01 * z, h * w * f, 0.35),
+            );
+          }
+        };
+        const loop = Array.from({ length: 41 }, (_, i) =>
+          at((i * Math.PI) / 20, r, 0.15 + 0.2 * Math.abs(rnd())),
+        );
+        loop[40] = loop[0];
+        zig(loop, 1.6);
+        for (let j = 0; j < 5; j++) {
+          const a = rnd() * Math.PI;
+          zig(
+            [0, 1, 2, 3, 4].map(i => at(a + (i % 4 && rnd() * 0.2), (r * i) / 4, 1 - 0.2 * i)),
+            0.8,
+          );
+        }
+      }
       for (const { p, age, puffs = [], size = 1 } of glows.filter(g => g.boom && !g.ring)) {
         // The fireball, at its true size: out to FIRE of NADE_R in a quarter of its time, then it
         // shrinks away, white-hot inside orange, with a few puffs of the orange round it.
@@ -564,7 +605,7 @@ export const createTracer = (): Tracer => {
         );
         BLAZE.forEach((rgb, i) => disc(out, p, r * (1 - 0.3 * i), rgb, eye, 0.05 * (i + 1), 16, 1));
       }
-      for (const { p, age, splash, hot: h = 0 } of glows.filter(g => !g.boom)) {
+      for (const { p, age, splash, hot: h = 0 } of glows.filter(g => !g.boom && !g.tesla)) {
         // A flash shrinks; a splash swells as it fades. A charged one is orange and bigger, a
         // laser rifle's red and bigger.
         const k = 1 - age / (splash ? SPLASH : FLASH);
@@ -656,21 +697,23 @@ export const createTracer = (): Tracer => {
         ...glows
           .slice(-4)
           .map(g =>
-            g.boom
-              ? point(
-                  g.p,
-                  4 * NADE_R * (g.ring ? 1 : (g.size ?? 1)),
-                  6 * (1 - g.age / BOOM),
-                  [1.6, 0.8, 0.3],
-                )
-              : g.splash
+            g.tesla
+              ? point(g.p, 5, 1 - g.age / TESLA, [0.6, 0.5, 1.8])
+              : g.boom
                 ? point(
                     g.p,
-                    7,
-                    2 * (1 - g.age / SPLASH),
-                    (g.hot! < 0 ? RED[0] : [0.35, 0.7, 1.6]) as Vec3,
+                    4 * NADE_R * (g.ring ? 1 : (g.size ?? 1)),
+                    6 * (1 - g.age / BOOM),
+                    [1.6, 0.8, 0.3],
                   )
-                : point(g.p, 6, 1.3 * (1 - g.age / FLASH), [0.25, 0.55, 1.6]),
+                : g.splash
+                  ? point(
+                      g.p,
+                      7,
+                      2 * (1 - g.age / SPLASH),
+                      (g.hot! < 0 ? RED[0] : [0.35, 0.7, 1.6]) as Vec3,
+                    )
+                  : point(g.p, 6, 1.3 * (1 - g.age / FLASH), [0.25, 0.55, 1.6]),
           ),
         ...[...balls]
           .sort((a, b) => dist(a) - dist(b))

@@ -358,6 +358,11 @@ export const GUN_COOLDOWN = 7;
 export const CHARGE_TAP = 10;
 export const CHARGE_TICKS = 60;
 export const CHARGE_MAX = 5;
+/**
+ * The pistol's burst (the user, 2026-11-23): G or the right button with it in hand fires BURST plain
+ * shots, half its cooldown apart, then waits twice its cooldown (15 ticks at most: `cool` has 4 bits).
+ */
+export const BURST = 3;
 /** Metres a shot reaches: a plasma ball that has flown this far is gone. */
 export const GUN_RANGE = 80;
 /**
@@ -530,6 +535,14 @@ export const RAIL_RANGE = 30;
 export const HEAT_MAX = 120;
 export const HEAT_COOL = 2;
 export const HEAT_LOCK = 0;
+/**
+ * The rail gun's ring (the user, 2026-11-23): G or the right button with it in hand spends RING_COST
+ * ticks of the capsule in one discharge round the player, which overheats the gun (HEAT_MAX, 2 s to
+ * cool; the user asked for a smaller one than the first 6 m). Every enemy within RING_R metres on the floor plane and RING_H of his height, in sight of
+ * his chest, takes 1 hp, is drained as the bolt drains (RAIL_TICKS, slowed under SLOW_SPEED) and
+ * shocked as a katana shocks (SHOCK_TICKS, thrown out of the ring).
+ */
+export const [RING_COST, RING_R, RING_H] = [20, 4, 2.5];
 export const RAIL_TICKS = 180;
 export const RAIL_DRAIN = 60;
 export const SLOW_SPEED = 3;

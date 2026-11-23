@@ -56,6 +56,11 @@ import {
   PARRY,
   PARRY_SIDE,
   PARRY_WIDE,
+  BURST,
+  HEAT_MAX,
+  RAIL_CAP,
+  RING_COST,
+  RING_R,
 } from './constants';
 import {
   BLOW,
@@ -2820,5 +2825,113 @@ describe('the ninja’s parry', () => {
       m.land();
     }
     expect(seen.size).toBeGreaterThan(3);
+  });
+});
+
+describe('the pistol’s burst', () => {
+  const { SPECIAL } = KEY;
+  /** The step indices, of n inputs of `c` one a tick, that fired a shot; `keys(k)` is the k-th input's keys. */
+  const shots = (m: ReturnType<typeof match>, c: Peer, n: number, keys: (k: number) => number) => {
+    const at: number[] = [];
+    for (let k = 0; k < n; k++) {
+      const s = m.state(c).shots;
+      m.hold(c, 1, keys(k));
+      if (m.state(c).shots !== s) {
+        at.push(k);
+      }
+    }
+    return at;
+  };
+
+  it('fires BURST plain shots on one G, half the cooldown apart, then waits twice the cooldown', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, GUN);
+    m.put(m.bob, 10);
+    m.ticks(SNAP_EVERY);
+    const gap = Math.ceil(GUN_COOLDOWN / 2);
+    // G again on every step: a new burst only once the last one's cooldown has run.
+    const at = shots(m, m.cy, 2 * gap + 2 * GUN_COOLDOWN + 2, () => SPECIAL);
+    expect(at).toEqual([0, gap, 2 * gap, 2 * gap + 2 * GUN_COOLDOWN]);
+    expect(BURST).toBe(3);
+    expect(m.state(m.cy)).toMatchObject({ ammo: AMMO_MAX - 4, burst: BURST - 1 });
+    m.land();
+    // Each ball is a plain one: 1 hp apiece.
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 4);
+  });
+
+  it('runs out with the battery, and does not start during a charge', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, { ...GUN, mag: 2 });
+    expect(shots(m, m.cy, 12, k => (k ? 0 : SPECIAL))).toEqual([0, Math.ceil(GUN_COOLDOWN / 2)]);
+    expect(m.state(m.cy)).toMatchObject({ mag: 0, burst: 0 });
+    m.put(m.cy, 0, 0, GUN);
+    // FIRE held charges; G meanwhile fires nothing, and the release fires the charged ball.
+    expect(shots(m, m.cy, 20, k => (k < 19 ? FIRE | (k == 10 ? SPECIAL : 0) : 0))).toEqual([19]);
+  });
+
+  it('is the pistol’s alone: G with the katana or bare hands fires no ball', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, { ammo: -1 });
+    expect(shots(m, m.cy, 10, k => (k ? 0 : SPECIAL))).toEqual([]);
+  });
+});
+
+describe('the rail gun’s ring', () => {
+  const { SPECIAL } = KEY;
+  /** One G of `c` with the rail gun in hand, after two ticks for the history to see the puts. */
+  const ring = (m: ReturnType<typeof match>, c: Peer) => {
+    m.ticks(SNAP_EVERY);
+    m.send(c, RAIL | SPECIAL);
+    m.room.tick();
+  };
+
+  it('shocks and drains every enemy within RING_R, thrown out of it, and overheats the gun', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, RAILGUN);
+    m.put(m.bob, 2, 2.5);
+    m.put(m.dee, 0, -RING_R - 1);
+    m.put(m.ann, 2, 0);
+    ring(m, m.cy);
+    const bob = m.state(m.bob);
+    expect(bob).toMatchObject({ hp: HP_MAX - 1, slow: RAIL_TICKS, stun: SHOCK_TICKS, zap: true });
+    expect([Math.sign(bob.vx), Math.sign(bob.vz)]).toEqual([1, 1]);
+    expect(m.state(m.dee)).toMatchObject({ hp: HP_MAX, slow: 0, stun: 0 });
+    expect(m.state(m.ann)).toMatchObject({ hp: HP_MAX, stun: 0 });
+    expect(m.state(m.cy)).toMatchObject({
+      rail: RAIL_MAX - RING_COST,
+      cap: RAIL_CAP - RING_COST,
+      heat: HEAT_MAX,
+      hot: true,
+      hits: 1,
+      shots: 1,
+    });
+    // He is drained on as by the bolt: 1 hp more a second.
+    m.hold(m.bob, 60, 0);
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 2);
+  });
+
+  it('does not go through a wall, nor fire again before the gun has cooled', () => {
+    const m = match();
+    m.put(m.cy, 27, 0, RAILGUN);
+    m.put(m.bob, 31);
+    ring(m, m.cy);
+    expect(m.state(m.bob)).toMatchObject({ hp: HP_MAX, slow: 0 });
+    m.put(m.bob, 24);
+    ring(m, m.cy);
+    expect(m.state(m.bob).hp).toBe(HP_MAX);
+    expect(m.state(m.cy).rail).toBe(RAIL_MAX - RING_COST);
+    // Cooled after HEAT_MAX steps, it rings again.
+    m.hold(m.cy, HEAT_MAX, RAIL);
+    ring(m, m.cy);
+    expect(m.state(m.bob).hp).toBe(HP_MAX - 1);
+  });
+
+  it('needs RING_COST in the capsule', () => {
+    const m = match();
+    m.put(m.cy, 0, 0, { ...RAILGUN, cap: RING_COST - 1 });
+    m.put(m.bob, 3);
+    ring(m, m.cy);
+    expect(m.state(m.bob).hp).toBe(HP_MAX);
+    expect(m.state(m.cy).hot).toBe(false);
   });
 });

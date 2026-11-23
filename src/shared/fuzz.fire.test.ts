@@ -44,6 +44,7 @@ describe('random fire on ROOFTOPS', () => {
     // back now and then.
     let shots = 0;
     let rails = 0;
+    let rings = 0;
     let cuts = 0;
     let wielded = 0;
     let downs = 0;
@@ -62,6 +63,8 @@ describe('random fire on ROOFTOPS', () => {
       for (let k = 0; k < 20000; k++) {
         if (k % 6 === 0) {
           keys = (rnd() < 0.8 ? KEY.FORWARD : 0) | (Math.floor(rnd() * 0x1000) & ~KEY.FORWARD);
+          // G less often: each rail gun's ring overheats it for 2 s, and its bolt would seldom go out.
+          keys &= rnd() < 0.15 ? ~0 : ~KEY.SPECIAL;
           yaw += (rnd() - 0.5) * 1.5;
         }
         const before = p.shots;
@@ -72,16 +75,21 @@ describe('random fire on ROOFTOPS', () => {
           team,
         );
         const label = `seed ${seed}, step ${k}`;
-        // A plasma shot and a laser shot count a shot; the rail gun's bolt is a step spent zapping.
+        // A plasma shot, a laser shot and the rail gun's ring count a shot; its bolt is a step spent zapping.
         expect(
-          struck === STRIKE.SHOT || struck === STRIKE.LASER || struck === STRIKE.NADE,
+          struck === STRIKE.SHOT ||
+            struck === STRIKE.LASER ||
+            struck === STRIKE.NADE ||
+            struck === STRIKE.RING,
           label,
         ).toBe(((p.shots - before) & 255) === 1);
+        expect(struck !== STRIKE.RING || !!p.railed, label).toBe(true);
         expect((struck !== STRIKE.LASER && struck !== STRIKE.NADE) || !!p.rifled, label).toBe(true);
         expect(struck === STRIKE.RAIL, label).toBe(!!p.zapping);
         expect(!p.zapping || !!p.railed, label).toBe(true);
         shots += +(struck === STRIKE.SHOT);
         rails += +(struck === STRIKE.RAIL);
+        rings += +(struck === STRIKE.RING);
         cuts += +(struck === STRIKE.CUT);
         wielded += +!!p.wield;
         // In hand: the katana in mid swing, else the weapon wanted (BLADE, RAIL, RIFLE, or none for
@@ -145,7 +153,8 @@ describe('random fire on ROOFTOPS', () => {
         expect(p.hp, label).toBeLessThanOrEqual(HP_MAX);
         expect(p.ammo, label).toBeGreaterThanOrEqual(-1);
         expect(p.ammo, label).toBeLessThanOrEqual(AMMO_MAX);
-        expect(p.cool, label).toBeLessThanOrEqual(GUN_COOLDOWN);
+        // Twice the cooldown after the pistol's burst, within the 4 bits `cool` has on the wire.
+        expect(p.cool, label).toBeLessThanOrEqual(2 * GUN_COOLDOWN);
         expect(p.down, label).toBeLessThanOrEqual(DOWN_TICKS);
         expect(p.down > 0, label).toBe(p.hp === 0);
         expect(p.down > 0 ? p.ammo : -1, label).toBe(-1);
@@ -199,6 +208,7 @@ describe('random fire on ROOFTOPS', () => {
     // The run fired and went down and got up many times: or it proves little.
     expect(shots).toBeGreaterThan(300);
     expect(rails).toBeGreaterThan(100);
+    expect(rings).toBeGreaterThan(5);
     expect(cuts).toBeGreaterThan(300);
     expect(wielded).toBeGreaterThan(5000);
     expect(downs).toBeGreaterThan(20);

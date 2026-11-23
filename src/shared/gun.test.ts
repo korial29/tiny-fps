@@ -1097,8 +1097,9 @@ describe('the grenade launcher', () => {
 
   it('is the rifle’s: not with another weapon in hand, the hands busy or the match over, and it fires during a swap of the cell', () => {
     const p = rifleman({ ammo: AMMO_MAX });
-    expect(hit(p, SPECIAL)).toBe(STRIKE.NONE);
-    expect(p.rifled).toBe(false);
+    // G with the pistol in hand is its burst (the user, 2026-11-23), no grenade.
+    expect(hit(p, SPECIAL)).toBe(STRIKE.SHOT);
+    expect([p.rifled, p.nades]).toEqual([false, NADE_MAX]);
     expect(step(p, onWire({ keys: CLICK, yaw: EAST, pitch: 0, seq: 0 }), yard, 0, false)).toBe(
       STRIKE.NONE,
     );

@@ -1011,12 +1011,15 @@ const play = (
       // A new look's first picture and the haircut samples render one at a time between frames;
       // the selectors stay responsive while they warm up. Then the picture moves on in the frame.
       const mine = !ctl.locked() && `${you.id}${colors.get(you.id)}${JSON.stringify(picked)}`;
+      /** Whether this frame drew the picture again: then no other picture waits its turn in it. */
+      let posed = false;
       if (mine && previewActive && colors.has(you.id) && drawn === mine && now >= previewNext) {
         // Drawn: the renderer moves his runner on each frame (render.ts, posed), before this
         // frame takes the canvas back. At most PREVIEW_HZ: the menu's picture is small.
-        previewNext = now + 1000 / PREVIEW_HZ;
+        // From the time it was due, not the frame's: at 60 frames a second every second one.
+        previewNext = Math.max(previewNext, now - 1000 / PREVIEW_HZ) + 1000 / PREVIEW_HZ;
         const look = { ...picked, role: roleOf(picked.role, world.def) };
-        rd.portrait(avatar, me, picked.body, colors.get(you.id)!, look, PORTRAIT);
+        posed = rd.portrait(avatar, me, picked.body, colors.get(you.id)!, look, PORTRAIT);
       } else if (
         mine &&
         previewActive &&
@@ -1061,7 +1064,7 @@ const play = (
           );
         }
       }
-      if (previewActive) {
+      if (previewActive && !posed) {
         previewJobs.shift()?.();
       }
       if (step == 2) {

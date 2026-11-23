@@ -7,7 +7,7 @@ import { CUTS, TICK_HZ } from '../shared/constants';
 import type { PlayerState } from '../shared/types';
 import { glow as lit, tri } from './flag';
 import { button, grip } from './gun';
-import { dim, place } from './mesh';
+import { TWILL, dim, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
@@ -188,11 +188,28 @@ export const katana = (lod: number): number[] => {
 };
 
 const wristBuilt: number[][] = [];
+/** Where the blades start in wristBlade(lod): the housing comes first. */
+const wristSplit: number[] = [];
 const wristCuff = [0.2, 0.23, 0.24];
 const wristSteel = [0.55, 0.62, 0.64];
 const wristEdge = [0.8, 0.84, 0.81];
-const dorsalLift = 0.052;
-const wristTip: Vec3 = [0.055, -0.343, 0];
+/** How far the blades and their housing stand over the back of the hand. */
+const dorsalLift = 0.026;
+/**
+ * How far the blades curve in toward the palm (-x) at their point, metres: none at the heel, more
+ * toward the tip, a talon's slight hook.
+ */
+const WRIST_CURVE = 0.024;
+/** How far each blade stands off the hand's middle, across it. */
+const WRIST_GAP = 0.02;
+/** How far the blades sit down into their housing, below where they were drawn first. */
+const BLADE_DROP = 0.028;
+/** The blades' length to their first design's: short enough to fold back into their housing. */
+const BLADE_LENGTH = 0.8;
+/** The housing's brushed silver, the bracer's (silver in hunter.ts). */
+const HOUSING = [0.57, 0.66, 0.66];
+const curveAt = (along: number) => -WRIST_CURVE * Math.max(0, (along - 0.04) / 0.303) ** 2;
+const wristTip: Vec3 = [0.055 + curveAt(0.343) - BLADE_DROP, -0.343 * BLADE_LENGTH, 0];
 
 /** Right wrist space: +x over the knuckles, -y along the fingers, z across the hand. */
 export const wristBlade = (lod: number): number[] => {
@@ -200,31 +217,66 @@ export const wristBlade = (lod: number): number[] => {
     return wristBuilt[lod];
   }
   const out: number[] = [];
-  // Chamfered dorsal cassette. Each guide enters its front face at wrist height.
-  const housing = (y: number, bottom: number, top: number, width: number): Vec3[] => [
-    [bottom, y, -width * 0.62],
-    [bottom + dorsalLift, y, -width * 0.62],
-    [bottom + dorsalLift, y, -width],
-    [top + dorsalLift - 0.012, y, -width],
-    [top + dorsalLift, y, -width + 0.012],
-    [top + dorsalLift, y, width - 0.012],
-    [top + dorsalLift - 0.012, y, width],
-    [bottom + dorsalLift, y, width],
-    [bottom + dorsalLift, y, width * 0.62],
-    [bottom, y, width * 0.62],
-  ];
-  loft(
-    out,
-    [
-      [[0.069 + dorsalLift, -0.015, 0]],
-      housing(-0.015, 0.042, 0.095, 0.047),
-      housing(0.023, 0.04, 0.098, 0.051),
-      housing(0.17, 0.026, 0.09, 0.052),
-      housing(0.235, 0.018, 0.069, 0.038),
-      [[0.043 + dorsalLift, 0.235, 0]],
-    ],
-    (row, face) => (row > 0 && face === 4 ? wristSteel : wristCuff),
-  );
+  // The housing: a smooth, low dome over the blades' heels, rounded on its sides, in the bracer's
+  // brushed silver (TWILL); a rounded nose over the wrist, and its back sloping gently down onto
+  // the bracer's back. It is posed on the forearm, so its brushing holds still (wristHousing()).
+  // Its sides and its sloped end sink into the bracer (whose back is some 4.2 cm up), so the two
+  // meet in one crease of the same metal, no edge between them.
+  const [bed, crown, end] = [0.03, 0.094, 0.036];
+  const height = (y: number) => {
+    const t = Math.min(1, Math.max(0, (y - 0.05) / 0.125));
+    return crown - (crown - end) * t * t * (3 - 2 * t);
+  };
+  // Wide enough to hold both blades' heels (WRIST_GAP) under its flat top.
+  const halfWidth = (y: number) => 0.031 - 0.006 * Math.min(1, Math.max(0, (y - 0.05) / 0.125));
+  const nose = (y: number) =>
+    Math.sqrt(Math.max(0, 1 - ((-0.012 - Math.min(y, -0.012)) / 0.014) ** 2));
+  const dome = (angle: number, y: number): Vec3 => {
+    const k = nose(y);
+    const [c, si] = [Math.cos(angle), Math.sin(angle)];
+    // A superellipse's upper half: a flat top and steep sides joined by rounded shoulders.
+    return [
+      bed + (height(y) - bed) * k * Math.abs(si) ** 0.35,
+      y,
+      halfWidth(y) * k * Math.sign(c) * Math.abs(c) ** 0.35,
+    ];
+  };
+  const spot = (angle: number, y: number): [Vec3, Vec3] => {
+    const h = 1e-4;
+    const p = dome(angle, y);
+    const u = sum([dome(angle + h, y), 1], [dome(angle - h, y), -1]);
+    const v = sum([dome(angle, y + h), 1], [dome(angle, y - h), -1]);
+    let n = cross(u, v);
+    const away = sum([p, 1], [[bed - 0.01, Math.min(Math.max(y, -0.004), 0.12), 0], -1]);
+    if (n[0] * away[0] + n[1] * away[1] + n[2] * away[2] < 0) {
+      n = [-n[0], -n[1], -n[2]];
+    }
+    const l = Math.hypot(...n) || 1;
+    return [p, [n[0] / l, n[1] / l, n[2] / l]];
+  };
+  const steps = lod ? 14 : 8;
+  const angles = Array.from({ length: steps + 1 }, (_, i) => (Math.PI * i) / steps);
+  const ys = [-0.026, -0.023, -0.018, -0.012, 0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175];
+  const grid = ys.map(y => angles.map(a => spot(a, y)));
+  const vertex = ([p, n]: [Vec3, Vec3]) =>
+    out.push(...p, ...n, HOUSING[0], HOUSING[1], TWILL, HOUSING[2]);
+  for (let j = 1; j < grid.length; j++) {
+    for (let i = 0; i < steps; i++) {
+      const [a, b, c, d] = [grid[j - 1][i], grid[j - 1][i + 1], grid[j][i + 1], grid[j][i]];
+      for (const t of [
+        [a, b, c],
+        [a, c, d],
+      ]) {
+        const f = cross(sum([t[1][0], 1], [t[0][0], -1]), sum([t[2][0], 1], [t[0][0], -1]));
+        if (Math.hypot(...f) < 1e-12) {
+          continue;
+        }
+        const n = t[0][1];
+        (f[0] * n[0] + f[1] * n[1] + f[2] * n[2] < 0 ? [t[0], t[2], t[1]] : t).forEach(vertex);
+      }
+    }
+  }
+  wristSplit[lod] = out.length;
   // Viewed edge-on to the wrist, the two silhouettes are parallel: a deep
   // crescent at the heel, two scallops and a long swept terminal point.
   // Each station gives the distance along the hand and both sides of the outline.
@@ -254,23 +306,23 @@ export const wristBlade = (lod: number): number[] => {
     [0.311, 0.076, 0.087],
     [0.315, 0.073, 0.089],
     [0.328, 0.068, 0.078],
-    [-wristTip[1], wristTip[0], wristTip[0]],
+    [0.343, 0.055, 0.055],
   ];
   for (const side of [-1, 1]) {
-    const z = side * 0.03;
+    const z = side * WRIST_GAP;
     const rings = profile.map(([along, lower, upper], i): Vec3[] => {
-      const edge = lower + dorsalLift,
-        spine = upper + dorsalLift;
       if (i === profile.length - 1) {
-        return [[edge, -along, z]];
+        return [[wristTip[0] + dorsalLift, -along * BLADE_LENGTH, z]];
       }
+      const edge = lower + dorsalLift + curveAt(along) - BLADE_DROP,
+        spine = upper + dorsalLift + curveAt(along) - BLADE_DROP;
       const ridge = spine - (spine - edge) * 0.24;
       const rake = Math.min(0.014, (spine - edge) * 0.35);
       return [
-        [spine, -along + rake, z],
-        [ridge, -along + 0.6 * rake, z + 0.0035],
-        [edge, -along - rake, z],
-        [ridge, -along + 0.6 * rake, z - 0.0035],
+        [spine, -along * BLADE_LENGTH + rake, z],
+        [ridge, -along * BLADE_LENGTH + 0.6 * rake, z + 0.0035],
+        [edge, -along * BLADE_LENGTH - rake, z],
+        [ridge, -along * BLADE_LENGTH + 0.6 * rake, z - 0.0035],
       ];
     });
     loft(out, rings, (row, facet) => {
@@ -283,23 +335,47 @@ export const wristBlade = (lod: number): number[] => {
   return (wristBuilt[lod] = out);
 };
 
-export const heldWrist = (out: Out, pos: Vec3, q: Quat, lod: number, k = 1, list?: Pieces) => {
-  if (list && k == 1) {
-    list.push({ m: mesh(`wrist blades ${lod}`, o => o.push(...wristBlade(lod))), q, t: pos, k });
+/** The time (s) the blades take to slide out of their housing when they are taken in hand. */
+export const BLADE_EXTEND = 0.3;
+
+/**
+ * The right wrist's housing at `pos`, turned as the forearm `q`: always on the bracer. Into `list`
+ * (kept on the GPU, its brushed metal holding still) when given.
+ */
+export const wristHousing = (out: Out, pos: Vec3, q: Quat, lod: number, list?: Pieces) => {
+  const all = wristBlade(lod);
+  const part = all.slice(0, wristSplit[lod]);
+  if (list) {
+    list.push({ m: mesh(`wrist housing ${lod}`, o => o.push(...part)), q, t: pos, k: 1 });
   } else {
-    place(
-      out,
-      wristBlade(lod),
-      pos,
-      [turn(q, [1, 0, 0]), turn(q, [0, 1, 0]), turn(q, [0, 0, -1])],
-      ORIGIN,
-      k,
-    );
+    place(out, part, pos, [turn(q, [1, 0, 0]), turn(q, [0, 1, 0]), turn(q, [0, 0, -1])], ORIGIN, 1);
+  }
+};
+
+/**
+ * The two blades `out` of the housing by `extend` (0 in it, 1 out): they slide out of its nose,
+ * drawn along the fingers from a stub hidden under its crown to their full length.
+ */
+export const wristBlades = (
+  out: Out,
+  pos: Vec3,
+  q: Quat,
+  lod: number,
+  extend = 1,
+  list?: Pieces,
+) => {
+  const all = wristBlade(lod);
+  const part = all.slice(wristSplit[lod]);
+  if (list && extend >= 1) {
+    list.push({ m: mesh(`wrist blades only ${lod}`, o => o.push(...part)), q, t: pos, k: 1 });
+  } else {
+    const axes = [turn(q, [1, 0, 0]), turn(q, [0, 1, 0]), turn(q, [0, 0, -1])];
+    place(out, part, pos, axes, ORIGIN, [1, 0.08 + 0.92 * extend, 1]);
   }
 };
 
 export const wristEnds = (pos: Vec3, q: Quat): Vec3[] =>
-  [[0.071, -0.015, 0] as Vec3, wristTip].map(p =>
+  [[0.071 - BLADE_DROP, -0.015, 0] as Vec3, wristTip].map(p =>
     sum([pos, 1], [turn(q, [p[0] + dorsalLift, p[1], p[2]]), 1]),
   );
 

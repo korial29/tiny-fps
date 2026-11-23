@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(/src/client/voice/mp3.ts)",
+      "Read(/src/client/voice/opus.ts)",
+      "Read(/src/client/voice/cast-mp3.ts)",
+      "Read(/src/client/voice/cast-opus.ts)",
+      "Read(/package-lock.json)",
+      "Read(/node_modules/**)",
+      "Read(/dist/**)",
+      "Read(/coverage/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/quiet-tests.mjs\""
+          }
+        ]
+      }
+    ]
+  }
+}

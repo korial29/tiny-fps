@@ -697,8 +697,16 @@ describe('Renderer.portrait, the picture of a character card', () => {
     // The eye is up there with him, not on the map.
     const eye = calls.filter(c => c[0] == 'uniform3fv' && (c[1] as { u: string }).u == 'E').pop()!;
     expect((eye[2] as number[])[1]).toBeCloseTo(PORTRAIT.y + PORTRAIT.eye);
-    // A 3:4 card out of a 320 by 200 frame: the 150 pixels in the middle, the whole height.
-    expect(draw).toHaveBeenCalledExactlyOnceWith(canvas, 85, 0, 150, 200, 0, 0, 300, 400);
+    // A 3:4 card drawn at its own size where the screen has room: 150 by 200 of a 320 by 200
+    // screen, from its bottom left corner (GL's rows go up).
+    expect(draw).toHaveBeenCalledExactlyOnceWith(canvas, 0, 0, 150, 200, 0, 0, 300, 400);
+    const view = calls.filter(c => c[0] == 'viewport').pop()!;
+    expect(view.slice(1)).toEqual([0, 0, 150, 200]);
+    // The screen keeps its size, and the picture's targets are its own: a frame after it builds none.
+    expect([canvas.width, canvas.height]).toEqual([320, 200]);
+    calls.length = 0;
+    rd.frame([1, 1.6, 1], 0, 0, [], new Map(), createEffects(), []);
+    expect(calls.filter(c => c[0] == 'createFramebuffer')).toEqual([]);
   });
 
   it('backs the camera off for the taller Hunter portrait', () => {
@@ -718,6 +726,43 @@ describe('Renderer.portrait, the picture of a character card', () => {
     expect(rd.steps(1)).toBeDefined();
     // The model was a runner of the picture only.
     expect(rd.steps(4)).toBeUndefined();
+  });
+
+  it('moves the picture on by the time between its draws, standing where he was first drawn', () => {
+    let now = 1000;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const rd = createRenderer(canvas, ROOM);
+    const into = card();
+    const eyes = () => calls.filter(c => c[0] == 'uniform3fv' && (c[1] as { u: string }).u == 'E');
+    // The frame's own vertices (after the map's), copied: the store is rewritten by the next frame.
+    const runner = () =>
+      Array.from(
+        calls
+          .filter(c => c[0] == 'bufferSubData' && (c[2] as number) > 0)
+          .pop()![3] as Float32Array,
+      );
+    calls.length = 0;
+    rd.portrait(into, me, 0, '#e23b3b');
+    const made = eyes().length;
+    const at = eyes().pop()![2];
+    // The player under the menu moves on and his mode's ticks saturate (PlayerState.t stops at
+    // 255): the picture does not follow him, and its own clock goes on.
+    const moved: PlayerState = { ...me, x: me.x + 3, z: me.z - 2, t: 255 };
+    const pose = (ms: number) => {
+      now += ms;
+      calls.length = 0;
+      rd.portrait(into, moved, 0, '#e23b3b');
+      return runner();
+    };
+    const [a, b] = [pose(500), pose(1000)];
+    // Drawn again: one frame of the scene, not the two a new runner takes.
+    expect(eyes().length).toBe(made / 2);
+    expect(eyes().pop()![2]).toEqual(at);
+    expect(b).not.toEqual(a);
+    // Another look: a new runner, two frames.
+    calls.length = 0;
+    rd.portrait(into, me, 1, '#e23b3b');
+    expect(eyes().length).toBe(made);
   });
 
   it('draws nothing before the canvas has a size', () => {

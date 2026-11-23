@@ -99,6 +99,18 @@ describe('the character pictures of the menu', () => {
     expect(pictures).toBeGreaterThan(5);
   });
 
+  it('keep the picture moving long after the menu opened, some 30 times a second', () => {
+    // PlayerState.t, which once timed it, stops at 255 ticks: some four seconds.
+    vi.advanceTimersByTime(10_000);
+    drawn.length = 0;
+    for (let i = 0; i < 60; i++) {
+      vi.advanceTimersByTime(1000 / 60);
+    }
+    const pictures = drawn.filter(d => d == 'P').length;
+    expect(pictures).toBeGreaterThanOrEqual(25);
+    expect(pictures).toBeLessThanOrEqual(31);
+  });
+
   it('draw at most one picture a frame', () => {
     for (let i = 0; i < 120; i++) {
       drawn.length = 0;

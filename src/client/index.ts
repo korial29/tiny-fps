@@ -98,6 +98,8 @@ const MAX_STEPS = 5;
 const NEAR_HULL = [14, 24];
 /** Ms after a hard landing during which a loss of health is the fall's, not a foe's: the snapshot's lag. */
 const FELL = 500;
+/** Frames a second of the menu's character picture: each is a frame of the scene of its own. */
+const PREVIEW_HZ = 30;
 
 /**
  * Mounts the game in a Shadow DOM inside container: one WebGL2 canvas filling it, a click locks the
@@ -1006,22 +1008,25 @@ const play = (
       return;
     }
     if (me && rd) {
-      // Character previews render one at a time between frames; the selectors stay responsive while
-      // the portrait and the haircut samples warm up.
+      // A new look's first picture and the haircut samples render one at a time between frames;
+      // the selectors stay responsive while they warm up. Then the picture moves on in the frame.
       const mine = !ctl.locked() && `${you.id}${colors.get(you.id)}${JSON.stringify(picked)}`;
-      if (
+      if (mine && previewActive && colors.has(you.id) && drawn === mine && now >= previewNext) {
+        // Drawn: the renderer moves his runner on each frame (render.ts, posed), before this
+        // frame takes the canvas back. At most PREVIEW_HZ: the menu's picture is small.
+        previewNext = now + 1000 / PREVIEW_HZ;
+        const look = { ...picked, role: roleOf(picked.role, world.def) };
+        rd.portrait(avatar, me, picked.body, colors.get(you.id)!, look, PORTRAIT);
+      } else if (
         mine &&
         previewActive &&
         colors.has(you.id) &&
-        !previewJobs.length &&
-        now >= previewNext
+        drawn !== mine &&
+        !previewJobs.length
       ) {
         const color = colors.get(you.id)!;
         const look = { ...picked, role: roleOf(picked.role, world.def) };
-        previewNext = now + 220;
-        if (drawn !== mine) {
-          hud.previewLoading(true);
-        }
+        hud.previewLoading(true);
         queuePreview(() => {
           const current =
             !ctl.locked() && `${you.id}${colors.get(you.id)}${JSON.stringify(picked)}`;

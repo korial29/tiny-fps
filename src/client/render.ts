@@ -874,6 +874,16 @@ export const fogOf = ({ fog, sky }: WorldDef): [number, number, number, number] 
     : [...sky[1], 0];
 
 /** A texture and the framebuffer that draws into it. */
+/** What targets() builds, and how to delete it. */
+interface Targets {
+  made: number[];
+  hdr: Target;
+  orb: Target | undefined;
+  bloom: [Target, Target][];
+  msaa: WebGLFramebuffer;
+  owned: (() => void)[];
+}
+
 interface Target {
   t: WebGLTexture;
   f: WebGLFramebuffer;
@@ -947,6 +957,9 @@ export interface Renderer {
   ): boolean;
   destroy(): void;
 }
+
+/** Pixels high a picture is drawn at least, for a small card's to be smooth. */
+const PICTURE_MIN = 320;
 
 /** A character card's picture: how high over the map he stands (m), the camera's height over his feet and its distance (m), its angle off his front and his own off the sun (rad), its field of view (degrees), and how far it steps to its right (m). */
 export const PORTRAIT = { y: 500, eye: 1.3, away: 2.5, turn: -0.35, sun: 0.9, fov: 30, side: 0 };
@@ -1029,6 +1042,17 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const heavensN = world.def.scenery === 'moon' ? heavens().length / STRIDE : 0;
   /** True while portrait() draws: its runner stands high over the map, never in orbit. */
   let posing = false;
+  /** Seconds a posing frame moves its runner on: 0 but for a picture drawn again (see `posed`). */
+  let poseDt = 0;
+  /**
+   * The runner each picture last showed, its look (`key`), where he stands and when it was drawn
+   * (performance.now(), s): drawn again with the same look, the same runner moves on by the time
+   * since, so the menu's character breathes and blinks on as in a match.
+   */
+  const posed = new WeakMap<
+    HTMLCanvasElement,
+    { key: string; r: Runner; model: PlayerState; at: number }
+  >();
   // The moon has no traffic.
   const drive = world.def.scenery === 'moon' ? () => {} : traffic(world.def);
   const { sun, sky } = world.def;
@@ -1091,7 +1115,14 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   /** The frame size the targets were built for, [0, 0] before the first. */
   let made = [0, 0];
   /** Deletes what targets() built. */
-  const owned: (() => void)[] = [];
+  let owned: (() => void)[] = [];
+  /**
+   * A picture's own targets (portrait()), one set for each size of picture: built at its card's
+   * size, it costs a sixth of the screen's pixels. Swapped in for the frame's while it draws.
+   */
+  const asides = new Map<string, Targets>();
+  /** Where portrait() draws: its size in pixels, which posing frames take instead of the screen's. */
+  let poseAt: [number, number] | undefined;
   let lost = false;
   /** The xenomorph's vision is on (vision()). */
   let seeing = false;
@@ -1239,6 +1270,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     owned.push(() => gl.deleteFramebuffer(msaa));
   };
 
+  /** Puts the targets `to` in place of the frame's, and returns the frame's: a new set has none built. */
+  const swapTargets = (to?: Targets): Targets => {
+    const was = { made, hdr, orb, bloom, msaa, owned };
+    ({ made, hdr, orb, bloom, msaa, owned } = to ?? { ...was, made: [0, 0], owned: [] });
+    return was;
+  };
+
   /**
    * One pass of the post program: mode z and tap step (x, y), reading the sources on units 0 up and
    * drawing into `to` (the canvas when undefined).
@@ -1260,6 +1298,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     fmt = gl.getExtension('EXT_color_buffer_float') ? gl.RGBA16F : gl.RGBA8;
     owned.length = 0;
     made = [0, 0];
+    asides.clear();
     [post, pu] = link(POST_VERT, POST_FRAG, ['S', 'Y', 'L']);
     gl.uniform1iv(pu.S, [0, 1, 2, 3]);
     const variant = (kind: string): Variant => {
@@ -1406,11 +1445,17 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       more,
       view,
     ) {
-      const [w, h] = view ? backing(view.width, view.height, devicePixelRatio) : size();
+      const [w, h] =
+        posing && poseAt
+          ? poseAt
+          : view
+            ? backing(view.width, view.height, devicePixelRatio)
+            : size();
       if (lost || !w || !h) {
         return false;
       }
-      if (canvas.width != w || canvas.height != h) {
+      // A picture is drawn into a corner of the screen as it is (portrait()).
+      if (!(posing && poseAt) && (canvas.width != w || canvas.height != h)) {
         canvas.width = w;
         canvas.height = h;
       }
@@ -1430,7 +1475,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       }
       // The own player, seen from outside his head, is one of the crowd.
       const crowd = self ? [...others, self] : others;
-      animate(runners, crowd, dt, world, tracer, rovers, builds, looks);
+      // A picture's runner moves on by its own time (poseDt); the scene's drops and dust wait.
+      animate(runners, crowd, posing ? poseDt : dt, world, tracer, rovers, builds, looks);
       const [right, up, fwd] = basis(yaw, pitch, fx.roll);
       drive(v, eye, fwd, Date.now() / 1000, pieces);
       // The spent batteries and capsules falling to the floor.
@@ -1799,39 +1845,45 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       ];
       // The sun on one side of him and the camera on the same one, nearer his front: no glare off the chest.
       const face = Math.atan2(-sunDir[0], -sunDir[2]) + shot.sun;
-      const model: PlayerState = {
-        ...p,
-        ...{ y: shot.y, vx: 0, vy: 0, vz: 0, yaw: face, pitch: 0, mode: MODE.GROUND, t: p.t },
-        ...{ down: 0, stun: 0, swing: 0, ev: 0, fall: 0, held: 0 },
-        // Empty handed.
-        ...{
-          ammo: -1,
-          blade: false,
-          wield: false,
-          rail: -1,
-          rifle: -1,
-          railed: false,
-          rifled: false,
-        },
-      };
+      const key = `${p.id} ${build} ${color} ${JSON.stringify(look ?? {})} ${JSON.stringify(shot)}`;
+      const at = performance.now() / 1000;
+      const kept = posed.get(into);
+      const again = kept?.key === key;
+      // He stands where he was first drawn: the player moving under the menu does not walk him.
+      const model: PlayerState = again
+        ? kept.model
+        : {
+            ...p,
+            ...{ y: shot.y, vx: 0, vy: 0, vz: 0, yaw: face, pitch: 0, mode: MODE.GROUND, t: 0 },
+            ...{ down: 0, stun: 0, swing: 0, ev: 0, fall: 0, held: 0 },
+            // Empty handed.
+            ...{
+              ammo: -1,
+              blade: false,
+              wield: false,
+              rail: -1,
+              rifle: -1,
+              railed: false,
+              rifled: false,
+            },
+          };
       // At ease, the arms down: no fighter's guard. The xenomorph is never at ease: it threatens.
-      const r = createRunner(model, undefined, build, look ?? {}, true);
-      // Portrait frames do not advance time while posing. Sample the player's clock to keep the
-      // menu preview animated without simulating the elapsed time.
-      r.gait.update(model, 0, undefined, undefined, p.t);
-      r.t = p.t;
-      r.menace = look?.role === ROLE.XENO;
-      if (shot.grin) {
-        // Eased in at once: a moment of the face's time, under its first blink's half second.
-        r.grin = GRIN;
-        r.dt = 0.35;
+      const r = again ? kept.r : createRunner(model, undefined, build, look ?? {}, true);
+      posed.set(into, { key, r, model, at });
+      if (!again) {
+        r.menace = look?.role === ROLE.XENO;
+        if (shot.grin) {
+          // Eased in at once: a moment of the face's time, under its first blink's half second.
+          r.grin = GRIN;
+          r.dt = 0.35;
+        }
       }
       runners.set(p.id, r);
       const [a, d] = [face + shot.turn, shot.away];
       const eye: Vec3 = [
-        p.x - Math.sin(a) * d + Math.cos(a) * shot.side,
+        model.x - Math.sin(a) * d + Math.cos(a) * shot.side,
         shot.y + shot.eye,
-        p.z - Math.cos(a) * d - Math.sin(a) * shot.side,
+        model.z - Math.cos(a) * d - Math.sin(a) * shot.side,
       ];
       const lens = { fov: shot.fov - FOV_DEG, roll: 0, lines: 0 } as Effects;
       // A picture, not the view: never through the xenomorph's eyes.
@@ -1841,16 +1893,38 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         api.frame(eye, a + Math.PI, 0, [model], new Map([[p.id, color]]), lens, []);
         seeing = saw;
       };
-      // Twice: the first frame makes the runner, the second draws him settled. High as he is, no orbit.
+      // Drawn at the card's size (a small one, as a haircut's, at PICTURE_MIN pixels high), within
+      // the screen: its targets and the screen's bottom left corner, which the next frame paints over.
+      // The loading screen draws pictures before any frame has sized the canvas.
+      const [sw, sh] = size();
+      if (canvas.width != sw || canvas.height != sh) {
+        canvas.width = sw;
+        canvas.height = sh;
+      }
+      const fit = Math.min(
+        Math.max(1, PICTURE_MIN / into.height),
+        canvas.width / into.width,
+        canvas.height / into.height,
+      );
+      const [pw, ph] = [Math.floor(into.width * fit), Math.floor(into.height * fit)];
+      const sized = `${pw}x${ph}`;
+      const frame = swapTargets(asides.get(sized));
+      poseAt = [pw, ph];
+      // A new runner twice: the first frame makes him, the second draws him settled. One drawn again
+      // once, moved on by the time since (a tenth of a second at most). High as he is, no orbit.
       posing = true;
+      poseDt = again ? Math.min(0.1, Math.max(0, at - kept.at)) : 0;
       shoot();
-      shoot();
+      if (!again) {
+        shoot();
+      }
       posing = false;
+      poseDt = 0;
+      poseAt = undefined;
+      asides.set(sized, swapTargets(frame));
       [runners, builds, looks] = [crowd, worn, styled];
-      // The middle of the frame, as tall as it and as wide as the card.
-      const [w, h] = [canvas.width, canvas.height];
-      const cw = Math.min(w, (h * into.width) / into.height);
-      card.drawImage(canvas, (w - cw) / 2, 0, cw, h, 0, 0, into.width, into.height);
+      // GL counts rows from the bottom, the 2D canvas from the top.
+      card.drawImage(canvas, 0, canvas.height - ph, pw, ph, 0, 0, into.width, into.height);
       return true;
     },
     destroy() {

@@ -39,7 +39,7 @@ export interface Gait {
    * Moves to the state `p` after dt seconds. Without `floor` the feet stand on y = p.y. `seat` is
    * where a player who rides sits: without it he sits level, a rider, facing his look.
    */
-  update(p: PlayerState, dt: number, floor?: Floor, seat?: Seat, clock?: number): void;
+  update(p: PlayerState, dt: number, floor?: Floor, seat?: Seat): void;
   /** The pose now: one object, rewritten by each call. */
   pose(): Pose;
   /** Stride phase, in cycles: the left foot lands at 0 and the right one at a half. */
@@ -535,7 +535,7 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
    */
   let [how, dead, lay, far, y0, y1] = [0, 0, 1, 1, 0, 0];
 
-  const update = (p: PlayerState, dt: number, floor?: Floor, seat?: Seat, clock?: number) => {
+  const update = (p: PlayerState, dt: number, floor?: Floor, seat?: Seat) => {
     dt = clamp(dt, 0, 0.1);
     fresh = !known || Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) > TELEPORT;
     const walks = p.mode == MODE.GROUND || p.mode == MODE.CROUCH;
@@ -583,7 +583,7 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
         flip = flip >= 1 ? 0 : flip;
       }
     }
-    time = clock ?? time + dt;
+    time += dt;
     kick *= Math.exp(-dt * 7);
 
     // The moves other than the stride.

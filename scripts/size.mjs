@@ -67,7 +67,8 @@ const BUDGETS = [
   // 2900 B for the Hunter's ribbed harpoon, fitted bracers and sliding wrist blades (the user, 2026-11-23).
   // 223 B for the menu's picture moving on smoothly at its card's size (the user, 2026-11-23).
   // 260,223 B (260,000 B and the menu picture's 223 B) for the Hunter's shoulder cannon, sniper scope, blade guard and harpoon reload (the user, 2026-11-23).
-  { file: 'dist/index.js', max: 260_223 },
+  // 897 B for the Hunter's view hint, flash, heartbeat and radio growl (the user, 2026-11-23).
+  { file: 'dist/index.js', max: 261_120 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

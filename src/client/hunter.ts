@@ -19,7 +19,8 @@ import type { Vec3 } from './mesh';
 import type { PlayerState } from '../shared/types';
 
 import { body } from './skin';
-import { LINK, loft, panel, rod } from './rover';
+import { LINK, TUBE, loft, panel, rod } from './rover';
+import { glow } from './flag';
 import { wristBlade, wristEnds } from './katana';
 import { hands, HUNTER_HAND } from './body';
 import { KIND } from './features';
@@ -1524,10 +1525,11 @@ const harpoonParts = (lod: 0 | 1 | 2) => {
     const length = Math.hypot(...sub(b, a));
     segment(out, solid(lod, length, radii, [0, 0]), a, b, [1, 0, 0], length, [1, aspect], color);
   };
-  // Weathered bronze plates with brass ridges and blackened grooves.
-  const shell: Vec3 = [0.33, 0.2, 0.09];
-  const ridge = bronze;
-  const iron: Vec3 = [0.085, 0.066, 0.05];
+  // Very dark green plates, their ridges a worn, lighter green, the grooves near black (the user,
+  // 2026-11-24).
+  const shell: Vec3 = [0.035, 0.07, 0.042];
+  const ridge: Vec3 = [0.085, 0.15, 0.09];
+  const iron: Vec3 = [0.018, 0.028, 0.021];
   const ivory: Vec3 = [0.72, 0.63, 0.72];
   // The open rear cradle receives the hollow sleeve as the rifle folds.
   // Its outer face is banded in `bands` alternating plates whose seams lead at the top and bottom,
@@ -1540,7 +1542,7 @@ const harpoonParts = (lod: 0 | 1 | 2) => {
     closed: boolean,
     bands = 1,
   ) => {
-    const facets = lod ? 8 : 4;
+    const facets = lod > 1 ? 16 : lod ? 8 : 4;
     const point = (i: number, radius: number, j: number): Vec3 => {
       const angle = (Math.PI * i) / facets;
       const lead = j % bands ? 0.03 * Math.abs(Math.sin(angle)) : 0;
@@ -1583,7 +1585,7 @@ const harpoonParts = (lod: 0 | 1 | 2) => {
   // Smooth ribbed plating: P(a, s) at the angle a round the axis and s along it, normals by
   // differences, away from the row's centre (toward it for sign -1). A rib is graded from a dark
   // groove to a bright brass crest, so the relief reads without flat colour bands.
-  const groove: Vec3 = [0.12, 0.075, 0.035];
+  const groove: Vec3 = [0.012, 0.026, 0.016];
   const skin = (
     out: number[],
     P: (a: number, s: number) => Vec3,
@@ -1644,10 +1646,14 @@ const harpoonParts = (lod: 0 | 1 | 2) => {
   };
   const rows = (from: number, to: number) =>
     Array.from({ length: Math.round((from - to) / period) }, (_, k) =>
-      (lod ? [0.02, 0.5, 0.98] : [0.02, 0.98]).map(p => from - (k + p) * period),
+      (lod > 1 ? [0.02, 0.25, 0.5, 0.75, 0.98] : lod ? [0.02, 0.5, 0.98] : [0.02, 0.98]).map(
+        p => from - (k + p) * period,
+      ),
     ).flat();
   const around = (n: number, half = false) =>
     Array.from({ length: half ? n + 1 : n }, (_, i) => ((half ? 1 : 2) * Math.PI * i) / n);
+  /** Facets round the receiver and the sleeve, and round the receiver's open half. */
+  const [ring, halfRing] = lod > 1 ? [20, 10] : lod ? [10, 5] : [6, 3];
   // The chevrons: each rib's top and bottom lead its flanks, fading out at the ribbed span's ends.
   const lead = (a: number, s: number, from: number, to: number) =>
     0.045 * Math.sin(a) ** 2 * Math.min(1, (from - s) / 0.04, (s - to) / 0.04);
@@ -1667,14 +1673,14 @@ const harpoonParts = (lod: 0 | 1 | 2) => {
   };
   const receiverCrest = (s: number) => (s < 0.06 ? rib(s, 0.06) : 0.5);
   const fairing = [0.19, 0.16, 0.13, 0.1, 0.08];
-  skin(body, receiver, around(lod ? 8 : 6), [...fairing, ...rows(0.06, -0.12)], receiverCrest);
-  skin(body, receiver, around(lod ? 4 : 3, true), rows(-0.12, -0.6), receiverCrest);
+  skin(body, receiver, around(ring), [...fairing, ...rows(0.06, -0.12)], receiverCrest);
+  skin(body, receiver, around(halfRing, true), rows(-0.12, -0.6), receiverCrest);
   const inner = (a: number, s: number): Vec3 => [
     0.039 * Math.cos(a),
     0.09 - 0.039 * Math.sin(a),
     s,
   ];
-  skin(body, inner, around(lod ? 4 : 3, true), [-0.12, -0.6], () => 0, -1);
+  skin(body, inner, around(halfRing, true), [-0.12, -0.6], () => 0, -1);
   // The fairing's end, a dark ring round the stock's neck.
   panel(
     body,
@@ -1697,11 +1703,11 @@ const harpoonParts = (lod: 0 | 1 | 2) => {
     return [1.25 * r * Math.cos(a), 0.09 - 0.85 * r * Math.sin(a), s - lead(a, s, -0.6, -1.14)];
   };
   const sleeveRows = rows(-0.6, -1.14);
-  skin(slide, sleeve, around(lod ? 8 : 6), sleeveRows, s => rib(s, -0.6));
+  skin(slide, sleeve, around(ring), sleeveRows, s => rib(s, -0.6));
   for (const z of [sleeveRows[0], sleeveRows[sleeveRows.length - 1]]) {
-    const ring = around(lod ? 8 : 6).map(a => sleeve(a, z));
-    for (let i = 0; i < ring.length; i++) {
-      panel(slide, [ring[i], ring[(i + 1) % ring.length], [0, 0.09, z]], iron, [
+    const rim = around(ring).map(a => sleeve(a, z));
+    for (let i = 0; i < rim.length; i++) {
+      panel(slide, [rim[i], rim[(i + 1) % rim.length], [0, 0.09, z]], iron, [
         0,
         0,
         z < -1 ? -1 : 1,
@@ -1716,8 +1722,10 @@ const harpoonParts = (lod: 0 | 1 | 2) => {
       panel(out, [[x, y, z - 0.03], [x, y, z + 0.035], tip], color, [side, 0, 0]);
     }
   };
+  // Each rooted on the sleeve's crest where it stands (it narrows toward the muzzle).
   for (let i = 0; i < (lod ? 4 : 2); i++) {
-    spine(slide, [0, 0.165, -0.7 - 0.11 * i], 0.07 - 0.008 * i, iron);
+    const z = -0.7 - 0.11 * i;
+    spine(slide, [0, sleeve((3 * Math.PI) / 2, z)[1] - 0.006, z], 0.07 - 0.008 * i, iron);
   }
   // Twin forked prongs flank the muzzle, each a flat blade ending in a hollow square socket.
   for (const side of [-1, 1]) {
@@ -1748,19 +1756,23 @@ const harpoonParts = (lod: 0 | 1 | 2) => {
   const cage = (x: number, y: number, z: number): Vec3 => [0.042 * x, 0.095 + 0.042 * y, z];
   for (let i = 0; i < 4; i++) {
     const [x, y] = corners[i];
-    rod(slide, LINK, cage(x, y, -1.06), cage(x, y, -1.31), 0.006, ridge);
+    rod(slide, lod > 1 ? TUBE : LINK, cage(x, y, -1.06), cage(x, y, -1.31), 0.006, ridge);
     for (const z of lod ? [-1.16, -1.24, -1.31] : [-1.31]) {
       const [u, v] = corners[(i + 1) % 4];
-      rod(slide, LINK, cage(x, y, z), cage(u, v, z), 0.005, ridge);
+      rod(slide, lod > 1 ? TUBE : LINK, cage(x, y, z), cage(u, v, z), 0.005, ridge);
     }
   }
-  // Offset the compact optic so the exposed bolt remains visible beside it.
-  // It rides high on a tall post, a dark green lens at each end.
+  // Offset the compact optic so the exposed bolt remains visible beside it. It rides high on a
+  // tall post over the receiver's closed tube, behind the open cradle (the user, 2026-11-24: not
+  // over the bolt), a dark green lens at each end.
+  // Nearer (lod 1 and 2, the own view) it is turned round instead, below (harpoonFine()).
   const glass: Vec3 = [0.02, 0.12, 0.05];
-  part(body, [0.03, 0.075, -0.17], [0.076, 0.18, -0.17], [0.018, 0.016], iron);
-  part(body, [0.076, 0.19, -0.035], [0.076, 0.19, -0.32], [0.035, 0.023, 0.023, 0.037], shell);
-  part(body, [0.076, 0.19, -0.034], [0.076, 0.19, -0.03], [0.028, 0.027], glass);
-  part(body, [0.076, 0.19, -0.321], [0.076, 0.19, -0.325], [0.031, 0.03], glass);
+  if (!lod) {
+    part(body, [0.03, 0.075, -0.05], [0.076, 0.18, -0.05], [0.018, 0.016], iron);
+    part(body, [0.076, 0.19, 0.085], [0.076, 0.19, -0.2], [0.035, 0.023, 0.023, 0.037], shell);
+    part(body, [0.076, 0.19, 0.086], [0.076, 0.19, 0.09], [0.028, 0.027], glass);
+    part(body, [0.076, 0.19, -0.201], [0.076, 0.19, -0.205], [0.031, 0.03], glass);
+  }
   // A narrow sliding neck opens into the cheek rest and the broad shoulder pad.
   const stockSection = (z: number, top: number, bottom: number, w: number): Vec3[] => [
     [-w * 0.65, top, z],
@@ -1778,6 +1790,60 @@ const harpoonParts = (lod: 0 | 1 | 2) => {
   loft(stock, neck, cheek, [iron], iron);
   loft(stock, cheek, heel, [shell]);
   loft(stock, heel, stockSection(0.412, 0.097, -0.052, 0.04), [iron], undefined, iron);
+  // Raised chevrons along each side of the stock between the cheek rest and the heel, pointing
+  // toward the muzzle like the sleeve's (the user, 2026-11-24): each arm a strip standing out of
+  // the side's slope, with its two walls.
+  /** A point on the stock's side `side`, `t` from the cheek (0) to the heel (1), `v` from its top (0) to its bottom (1), `h` out of it. */
+  const flank = (side: number, t: number, v: number, h: number): Vec3 => {
+    const w = 0.033 + 0.006 * t;
+    const top = 0.107 - 0.012 * t - 0.012;
+    const bottom = 0.044 - 0.093 * t + 0.01;
+    return [side * (w - 0.2 * w * v + h), top + (bottom - top) * v, 0.235 + 0.155 * t];
+  };
+  for (const side of [-1, 1]) {
+    for (const apex of lod ? [0.18, 0.42, 0.66] : [0.3, 0.6]) {
+      for (const [v0, v1] of [
+        [0.12, 0.5],
+        [0.5, 0.88],
+      ]) {
+        // The arm runs from the apex (v 0.5, t apex) back to the edge (t apex + 0.2).
+        const tAt = (v: number) => apex + 0.2 * (Math.abs(v - 0.5) / 0.38);
+        const [ta, tb] = [tAt(v0), tAt(v1)];
+        const band = 0.07;
+        const h = 0.0035;
+        const out: Vec3 = [side, 0, 0];
+        panel(
+          stock,
+          [
+            flank(side, ta, v0, h),
+            flank(side, tb, v1, h),
+            flank(side, tb + band, v1, h),
+            flank(side, ta + band, v0, h),
+          ],
+          ridge,
+          out,
+        );
+        if (lod) {
+          for (const [edge, to] of [
+            [0, -1],
+            [band, 1],
+          ] as const) {
+            panel(
+              stock,
+              [
+                flank(side, ta + edge, v0, 0),
+                flank(side, tb + edge, v1, 0),
+                flank(side, tb + edge, v1, h),
+                flank(side, ta + edge, v0, h),
+              ],
+              iron,
+              [side * 0.3, 0, to],
+            );
+          }
+        }
+      }
+    }
+  }
   part(bolt, [0, 0.095, -0.1], [0, 0.095, -1.09], [0.015, 0.016, 0.014], ivory);
   part(bolt, [0, 0.095, -1.07], [0, 0.095, -1.24], [0.018, 0.024, 0.001], silver, 0.6);
   // Two swept barbs behind the point, flat in the horizontal plane and seen from both faces.
@@ -1807,7 +1873,291 @@ const harpoonParts = (lod: 0 | 1 | 2) => {
   }
   // The pistol grip stays in the right palm beneath the raised shell.
   part(body, [0, -0.05, 0.022], [0, 0.04 + actionRise, -0.026], [0.016, 0.019, 0.02], leather);
+  if (lod) {
+    body.push(...harpoonFine(shell, ridge, iron, actionRise, lod > 1));
+  }
   return (harpoons[lod] = { body, slide, stock, bolt });
+};
+
+/**
+ * A surface of revolution about `d` (unit) through `at`: `prof` its rows, each how far along `d`,
+ * its radius and the colour of the band from the row before. `e` is a unit across `d`. Normals
+ * are smooth round it, outward; no row may share the one before's `s` (a step is a slope).
+ */
+const lathe = (
+  out: number[],
+  at: Vec3,
+  d: Vec3,
+  e: Vec3,
+  prof: [number, number, Vec3?][],
+  n: number,
+) => {
+  const f: Vec3 = [d[1] * e[2] - d[2] * e[1], d[2] * e[0] - d[0] * e[2], d[0] * e[1] - d[1] * e[0]];
+  const point = (a: number, s: number, r: number): Vec3 => {
+    const [c, w] = [Math.cos(a) * r, Math.sin(a) * r];
+    return [0, 1, 2].map(k => at[k] + d[k] * s + e[k] * c + f[k] * w) as Vec3;
+  };
+  for (let k = 1; k < prof.length; k++) {
+    const [s0, r0] = prof[k - 1];
+    const [s1, r1, rgb = [0, 0, 0]] = prof[k];
+    const [ds, dr] = [Math.abs(s1 - s0), (r1 - r0) * Math.sign(s1 - s0)];
+    const normal = (a: number) =>
+      unit([0, 1, 2].map(j => (e[j] * Math.cos(a) + f[j] * Math.sin(a)) * ds - d[j] * dr) as Vec3);
+    for (let i = 0; i < n; i++) {
+      const [a0, a1] = [(2 * Math.PI * i) / n, (2 * Math.PI * (i + 1)) / n];
+      const corners: [Vec3, Vec3][] = [
+        [point(a0, s0, r0), normal(a0)],
+        [point(a1, s0, r0), normal(a1)],
+        [point(a1, s1, r1), normal(a1)],
+        [point(a0, s1, r1), normal(a0)],
+      ];
+      for (const [x, y, z] of [
+        [0, 1, 2],
+        [0, 2, 3],
+      ]) {
+        const [p, q, r] = [corners[x], corners[y], corners[z]];
+        const [u, v] = [sub(q[0], p[0]), sub(r[0], p[0])];
+        const g = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+        const m = p[1];
+        for (const [c, nm] of g[0] * m[0] + g[1] * m[1] + g[2] * m[2] < 0 ? [p, r, q] : [p, q, r]) {
+          out.push(...c, ...nm, rgb[0], rgb[1], -1, rgb[2]);
+        }
+      }
+    }
+  }
+};
+
+/** A flat disc of radius `r` facing `d` (unit) at `at`, `e` a unit across it. */
+const disc = (out: number[], at: Vec3, d: Vec3, e: Vec3, r: number, n: number, rgb: Vec3) => {
+  const f: Vec3 = [d[1] * e[2] - d[2] * e[1], d[2] * e[0] - d[0] * e[2], d[0] * e[1] - d[1] * e[0]];
+  const rim = (a: number) =>
+    [0, 1, 2].map(k => at[k] + (e[k] * Math.cos(a) + f[k] * Math.sin(a)) * r) as Vec3;
+  for (let i = 0; i < n; i++) {
+    const [p, q] = [rim((2 * Math.PI * i) / n), rim((2 * Math.PI * (i + 1)) / n)];
+    const [u, v] = [sub(p, at), sub(q, at)];
+    const g = u[1] * v[2] - u[2] * v[1];
+    const h = u[2] * v[0] - u[0] * v[2];
+    const l = u[0] * v[1] - u[1] * v[0];
+    const tri = g * d[0] + h * d[1] + l * d[2] < 0 ? [at, q, p] : [at, p, q];
+    for (const c of tri) {
+      out.push(...c, ...d, rgb[0], rgb[1], -1, rgb[2]);
+    }
+  }
+};
+
+/**
+ * The harpoon's close-up finish (lod 2, the own view; the user, 2026-11-24: rounder, more
+ * detailed, lit buttons): a round scope on two ring mounts, its rubber eyecup toward the eye, a
+ * flared objective and a sunshade, an elevation turret and a lit illumination knob, a red reticle
+ * ring glowing in the eyepiece, and on the receiver's left side, toward the eye, a panel of three
+ * lit buttons. Raised by `rise` with the rest of the action; made once.
+ */
+const harpoonFine = (
+  shell: Vec3,
+  ridge: Vec3,
+  iron: Vec3,
+  rise: number,
+  /** The own view's facets; fewer on a runner near by (lod 1). */
+  close: boolean,
+): number[] => {
+  const metal: number[] = [];
+  const glass: number[] = [];
+  const lights: number[] = [];
+  const Z: Vec3 = [0, 0, -1];
+  const [X, Y]: Vec3[] = [
+    [1, 0, 0],
+    [0, 1, 0],
+  ];
+  const n = close ? 24 : 12;
+  const small = close ? 16 : 8;
+  // The scope's axis, along -z from the eyepiece; rows by distance from it. The eyepiece is
+  // `back` behind the receiver's front, so both mounts stand on its closed tube (z above -0.12),
+  // not over the open cradle and the bolt.
+  const back = 0.12;
+  const axis: Vec3 = [0.076, 0.19, back];
+  lathe(
+    metal,
+    axis,
+    Z,
+    X,
+    [
+      [0.024, 0.021],
+      [0.022, 0.03, iron],
+      [0.026, 0.033, iron],
+      [0.05, 0.033, iron],
+      [0.054, 0.027, iron],
+      [0.056, 0.028, ridge],
+      [0.064, 0.028, ridge],
+      [0.066, 0.023, ridge],
+      [0.236, 0.023, shell],
+      [0.268, 0.035, shell],
+      [0.27, 0.037, ridge],
+      [0.28, 0.037, ridge],
+      [0.282, 0.035, ridge],
+      [0.316, 0.035, shell],
+      [0.318, 0.037, iron],
+      [0.334, 0.037, iron],
+      [0.337, 0.031, iron],
+    ],
+    n,
+  );
+  // The ring mounts: a clamp round the tube on a post down to the receiver's top.
+  for (const z of [0.105, 0.205]) {
+    lathe(
+      metal,
+      axis,
+      Z,
+      X,
+      [
+        [z - 0.008, 0.023],
+        [z - 0.006, 0.026, ridge],
+        [z + 0.006, 0.026, ridge],
+        [z + 0.008, 0.023, ridge],
+      ],
+      n,
+    );
+    const foot: Vec3 = [0.022, 0.118, back - z];
+    const top: Vec3 = [0.07, 0.17, back - z];
+    const along = unit(sub(top, foot));
+    lathe(
+      metal,
+      foot,
+      along,
+      Z,
+      [
+        [0, 0.008],
+        [Math.hypot(...sub(top, foot)), 0.006, iron],
+      ],
+      close ? 10 : 6,
+    );
+  }
+  // The elevation turret on top, ribbed, and the illumination knob on the left, toward the eye.
+  const turret: Vec3 = [0.076, 0.19 + 0.02, back - 0.155];
+  lathe(
+    metal,
+    turret,
+    Y,
+    X,
+    [
+      [0, 0.012],
+      [0.004, 0.012, iron],
+      [0.005, 0.014, ridge],
+      [0.009, 0.014, ridge],
+      [0.01, 0.013, iron],
+      [0.016, 0.013, iron],
+      [0.0175, 0.011, ridge],
+    ],
+    small,
+  );
+  disc(metal, [turret[0], turret[1] + 0.0175, turret[2]], Y, X, 0.011, small, ridge);
+  const knob: Vec3 = [0.076 - 0.02, 0.19, back - 0.155];
+  const L: Vec3 = [-1, 0, 0];
+  lathe(
+    metal,
+    knob,
+    L,
+    Y,
+    [
+      [0, 0.011],
+      [0.008, 0.011, iron],
+      [0.009, 0.012, ridge],
+      [0.014, 0.012, ridge],
+      [0.015, 0.0095, ridge],
+    ],
+    small,
+  );
+  // The receiver's button panel on its left side: a dark plate with a bevelled edge.
+  const [px, py0, py1, pz0, pz1] = [-0.056, 0.072, 0.11, -0.028, -0.132];
+  const b = 0.004;
+  const front: Vec3[] = [
+    [px, py0 + b, pz0],
+    [px, py1 - b, pz0],
+    [px, py1 - b, pz1],
+    [px, py0 + b, pz1],
+  ];
+  panel(metal, front, iron, L);
+  for (const [y, u] of [
+    [py1, 1],
+    [py0, -1],
+  ] as const) {
+    panel(
+      metal,
+      [
+        [px, y - u * b, pz0],
+        [px + 0.012, y, pz0],
+        [px + 0.012, y, pz1],
+        [px, y - u * b, pz1],
+      ],
+      ridge,
+      [-1, u, 0],
+    );
+  }
+  for (const z of [pz0, pz1]) {
+    panel(
+      metal,
+      [
+        [px, py0 + b, z],
+        [px, py1 - b, z],
+        [px + 0.012, py1, z],
+        [px + 0.012, py0, z],
+      ],
+      ridge,
+      [0, 0, z === pz0 ? 1 : -1],
+    );
+  }
+  // Each button in a raised bezel.
+  const buttons: [number, Vec3][] = [
+    [-0.052, [1, 0.1, 0.04]],
+    [-0.08, [1, 0.1, 0.04]],
+    [-0.108, [1, 0.45, 0.06]],
+  ];
+  for (const [z] of buttons) {
+    lathe(
+      metal,
+      [px, 0.091, z],
+      L,
+      Y,
+      [
+        [0, 0.0085],
+        [0.002, 0.0085, ridge],
+        [0.0028, 0.0068, ridge],
+      ],
+      small,
+    );
+  }
+  for (let i = 0; i < metal.length; i += STRIDE) {
+    metal[i + 8] = TWILL;
+  }
+  // The lenses, dark green glass, polished.
+  disc(glass, [axis[0], axis[1], back - 0.0235], [0, 0, 1], X, 0.021, n, [0.012, 0.05, 0.04]);
+  disc(glass, [axis[0], axis[1], back - 0.336], Z, X, 0.031, n, [0.015, 0.07, 0.05]);
+  for (let i = 0; i < glass.length; i += STRIDE) {
+    glass[i + 8] = SHINE;
+  }
+  // The lights: the reticle's ring in the eyepiece, the illumination knob's cap, the buttons.
+  const reticle = (r: number, w: number, rgb: Vec3) => {
+    for (let i = 0; i < n; i++) {
+      const [a0, a1] = [(2 * Math.PI * i) / n, (2 * Math.PI * (i + 1)) / n];
+      const at = (a: number, q: number): Vec3 => [
+        axis[0] + q * Math.cos(a),
+        axis[1] + q * Math.sin(a),
+        back - 0.023,
+      ];
+      panel(lights, [at(a0, r), at(a1, r), at(a1, r + w), at(a0, r + w)], rgb, [0, 0, 1]);
+    }
+  };
+  reticle(0.009, 0.0016, [1, 0.12, 0.05]);
+  disc(lights, [axis[0], axis[1], back - 0.023], [0, 0, 1], X, 0.0018, 6, [1, 0.12, 0.05]);
+  disc(lights, [knob[0] - 0.0152, knob[1], knob[2]], L, Y, 0.0055, small, [1, 0.12, 0.05]);
+  for (const [z, rgb] of buttons) {
+    disc(lights, [px - 0.0029, 0.091, z], L, Y, 0.0062, small, rgb);
+  }
+  glow(lights, 0, 1.8);
+  const out = [...metal, ...glass, ...lights];
+  for (let i = 1; i < out.length; i += STRIDE) {
+    out[i] += rise;
+  }
+  return out;
 };
 
 /** Slide and stock travel in opposite directions as the compact back-mounted rifle opens. */
@@ -1878,6 +2228,11 @@ export const drawHarpoon = (
     place(out, parts.bolt, at, axes, [0, 0, fired * scale], scale);
   }
 };
+/**
+ * Seconds the harpoon takes to unfold as it comes to hand (drawHarpoon()'s `open`, eased): slow
+ * enough to be seen (the user, 2026-11-24), SOUND.HARPOON_OPEN timed on it.
+ */
+export const HARPOON_DRAW = 1.1;
 /** Metres a fired bolt is drawn leaving the muzzle; past this the flying ball alone shows it. */
 export const HARPOON_GONE = 1.2;
 /** Metres behind its seat the next bolt starts as it feeds in. */

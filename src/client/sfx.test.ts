@@ -113,8 +113,11 @@ describe('the sounds of the game', () => {
       expect(Math.abs(s[0])).toBeLessThan(0.01);
       expect(Math.abs(s[s.length - 1])).toBeLessThan(0.01);
       expect(s.length).toBeGreaterThan(0.03 * RATE);
-      // The flag sounds are phrases, up to a second.
-      expect(s.length).toBeLessThan((id >= SOUND.TAKE ? 1 : 0.4) * RATE);
+      // The flag sounds are phrases, up to a second; the harpoon's unfolding lasts as long as it
+      // (HARPOON_DRAW, 1.1 s) and its lock rings after it.
+      expect(s.length).toBeLessThan(
+        (id == SOUND.HARPOON_OPEN ? 1.4 : id >= SOUND.TAKE ? 1 : 0.4) * RATE,
+      );
     });
   });
 

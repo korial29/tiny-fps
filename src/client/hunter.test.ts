@@ -11,7 +11,7 @@ import {
   hunterRig,
 } from './hunter';
 import { rest, solve, turn } from './rig';
-import { GILT, STRIDE, TWILL, WEAVE } from './mesh';
+import { GILT, SHINE, STRIDE, TWILL, WEAVE } from './mesh';
 
 it('keeps the front of the pectorals smooth across the Marine shoulder ring', () => {
   const mesh = hunter(2)['Marine anatomy'];
@@ -53,14 +53,40 @@ it('builds the Hunter harpoon as a detailed foldable rifle', () => {
   expect(rifle.length).toBeGreaterThan(300 * STRIDE);
   expect(rifle.length % STRIDE).toBe(0);
   expect(rifle.some((_, i) => i % STRIDE === 6 && rifle[i] > 0.4)).toBe(true);
-  // Brushed bronze shell (TWILL), a gilt bolt and the leather grip's plain layer; the forked
-  // prongs and lattice cage reaching past the bolt's point.
+  // Brushed shell (TWILL), a gilt bolt, the leather grip's plain layer, the scope's polished
+  // glass and its lit buttons; the forked prongs and lattice cage reaching past the bolt's point.
   const layers = new Set(rifle.filter((_, i) => i % STRIDE === 8));
-  expect(layers).toEqual(new Set([TWILL, GILT, -1]));
+  expect(layers).toEqual(new Set([TWILL, GILT, -1, SHINE, -2]));
+  // Far away it keeps its plain scope and no lights.
+  const far = hunterHarpoon(0);
+  expect(new Set(far.filter((_, i) => i % STRIDE === 8))).toEqual(new Set([TWILL, GILT, -1]));
   const zs = rifle.filter((_, i) => i % STRIDE === 2);
   const xs = rifle.filter((_, i) => i % STRIDE === 0);
   expect(Math.min(...zs)).toBeLessThan(-1.3);
   expect(Math.max(...xs.filter((_, i) => zs[i] < -1.25))).toBeGreaterThan(0.12);
+});
+
+it('gives the own view’s harpoon a round scope over the closed receiver, not the bolt (the user, 2026-11-24)', () => {
+  for (const lod of [0, 1, 2] as const) {
+    const rifle = hunterHarpoon(lod);
+    // The scope: everything above the receiver right of the bolt (x over 4 cm, y over 0.2 m with
+    // the action's rise) and behind the sleeve (z over -0.55); its mounts below it.
+    let [front, mount] = [0, 0];
+    for (let i = 0; i < rifle.length; i += STRIDE) {
+      const [x, y, z] = [rifle[i], rifle[i + 1], rifle[i + 2]];
+      if (x > 0.04 && y > 0.2 && z > -0.55) {
+        front = Math.min(front, z);
+      }
+      if (x > 0.045 && x < 0.065 && y > 0.17 && y < 0.195 && z > -0.55) {
+        mount = Math.min(mount, z);
+      }
+    }
+    expect(front).toBeGreaterThan(-0.23);
+    // Its mounts stand on the receiver's closed tube, in front of the cradle (z over -0.12).
+    expect(mount).toBeGreaterThan(-0.12);
+  }
+  // Rounder close up: many more vertices in the own view than on a runner near by.
+  expect(hunterHarpoon(2).length).toBeGreaterThan(2 * hunterHarpoon(1).length);
 });
 
 it('cuts the Hunter into joint pieces that rebuild his model at rest', () => {

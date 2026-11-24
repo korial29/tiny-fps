@@ -229,6 +229,11 @@ export const SOUND = {
   HUNTER_SEEK: 92,
   /** A harpoon bolt striking (the user, 2026-11-24: a shock, not a laser's splash). */
   HARPOON_HIT: 93,
+  /**
+   * The harpoon unfolding as it comes to hand (HARPOON_DRAW, 1.1 s): a catch let go, the slide and
+   * the stock grinding out, a ratchet over them, and a heavy lock as they reach their stops.
+   */
+  HARPOON_OPEN: 94,
 } as const;
 
 /**
@@ -857,6 +862,34 @@ export const LAYERS: Voice[][] = [
     [3, 1200, -1, 0.001, 0.01, 0.12, 0, 0.2, 0, 1, 0.45],
     [2, 2650, -0.2, 0.001, 0.005, 0.2, 0.03, 1, 0, 1, 0.14, 0.004],
     [2, 4100, -0.2, 0.001, 0.003, 0.12, 0.03, 1, 0, 1, 0.08, 0.004],
+  ],
+  // HARPOON_OPEN, timed on the unfolding (HARPOON_DRAW, 1.1 s, eased: slow, fast, slow): a catch
+  // let go, then the slide and the stock grinding out over 0.85 s, the grit and a low motor-like saw
+  // rising as they gather speed, six ratchet teeth along the way, and at 0.98 s the lock: a hard
+  // double clack, a deep thud of the parts meeting their stops and a short ring of the tube.
+  [
+    [0, 2200, -1.5, 0.001, 0, 0.02, 0, 0.35, 0, 1, 0.3],
+    [3, 4800, 0.6, 0.12, 0.6, 0.18, 0, 0.18, 0, 1, 0.3, 0.06],
+    [1, 160, 1.1, 0.12, 0.6, 0.16, 0.08, 0.15, 0, 1, 0.26, 0.06],
+    ...[0.22, 0.36, 0.48, 0.6, 0.71, 0.81].map((late): Voice => [
+      0,
+      1900,
+      0,
+      0.001,
+      0,
+      0.012,
+      0,
+      0.3,
+      0,
+      1,
+      0.18,
+      late,
+    ]),
+    [0, 2500, -2, 0.001, 0, 0.018, 0, 0.55, 0, 1, 0.42, 0.98],
+    [0, 1700, -2, 0.001, 0, 0.02, 0, 0.5, 0, 1, 0.34, 1.02],
+    [2, 110, -2.5, 0.001, 0.015, 0.14, 0, 1, 0, 1, 0.7, 0.98],
+    [2, 2100, -0.2, 0.001, 0.02, 0.3, 0.03, 1, 0, 1, 0.12, 0.99],
+    [2, 3350, -0.2, 0.001, 0.01, 0.2, 0.03, 1, 0, 1, 0.06, 0.99],
   ],
 ];
 

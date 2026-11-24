@@ -5,6 +5,8 @@ import { counter, createBody, hands, HUNTER_HAND } from './body';
 import { JOINT, rest, solve } from './rig';
 import { SHINE, STRIDE } from './mesh';
 import { mesh } from './store';
+import { wristComputer } from './computer';
+import { HUNTER_CELLS } from '../shared/constants';
 import type { Pieces } from './store';
 
 const player: PlayerState = {
@@ -49,6 +51,28 @@ it('draws the Hunter model equipment on the first-person rig', () => {
   expect(hunterView.length - marine.length).toBe(gear + clawed);
   expect(hunterView.some((_, i) => i % STRIDE === 8 && hunterView[i] === SHINE)).toBe(true);
   expect(hunterView.length % STRIDE).toBe(0);
+});
+
+it('leaves the wrist computer out of the own view while the left hand is on the harpoon (the user, 2026-11-24)', () => {
+  // Its glyphs show the cannon's shots left: the player's `cap`.
+  const shots = player.cap ?? HUNTER_CELLS;
+  const computer = mesh(`wrist computer ${shots}`, o => o.push(...wristComputer(shots)));
+  /** Whether the computer is drawn after `seconds` with the harpoon in hand or no weapon. */
+  const shown = (harpoon: boolean, seconds: number) => {
+    const body = createBody();
+    body.wear(0, undefined, false, false, true);
+    const p = harpoon ? { ...player, ammo: 3, mag: 1 } : player;
+    for (let t = 0; t < seconds; t += 1 / 60) {
+      body.update(p, 1 / 60);
+    }
+    const pieces: Pieces = [];
+    body.draw([], [0, 1.6, 0], 0, 0, 0, undefined, pieces);
+    return pieces.some(piece => piece.m === computer);
+  };
+  expect(shown(false, 0.5)).toBe(true);
+  // Neither as the forearm rolls up to the grip nor once it holds it.
+  expect(shown(true, 0.2)).toBe(false);
+  expect(shown(true, 1.5)).toBe(false);
 });
 
 it('folds the shoulder cannon out into the own view when it is taken, and back out of it', () => {

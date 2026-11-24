@@ -106,6 +106,7 @@ import {
   hunter as hunterModel,
   drawHarpoon,
   harpoonFeed,
+  HARPOON_DRAW,
   HARPOON_GONE,
   HARPOON_OUT,
   folded,
@@ -2042,7 +2043,7 @@ export const createBody = (world?: World): Body => {
     discBack = discOut && !out ? 0 : discBack + dt;
     discOut = out;
     const now = handOf(p);
-    harpoonDraw = hunter && now === 0 ? Math.min(1, harpoonDraw + dt / 0.55) : 0;
+    harpoonDraw = hunter && now === 0 ? Math.min(1, harpoonDraw + dt / HARPOON_DRAW) : 0;
     const f = fresh(p);
     first = now !== drawn ? f : first && !(me?.reload && !p.reload);
     since = now !== drawn || (me?.reload && !p.reload) ? 0 : since + dt;
@@ -2886,16 +2887,21 @@ export const createBody = (world?: World): Body => {
               drawHunterPart(out, part, s, pieces);
             }
           }
-          // The wrist computer on the left bracer, its glyphs the cannon's shots left.
-          const shots = me?.cap ?? HUNTER_CELLS;
-          placeRigid(
-            out,
-            `wrist computer ${shots}`,
-            wristComputer(shots),
-            s.rot[J.FOREARM_L],
-            s.pos[J.HAND_L],
-            pieces,
-          );
+          // The wrist computer on the left bracer, its glyphs the cannon's shots left. Not drawn
+          // while the left hand is on the harpoon: the forearm rolls as it comes up to the grip,
+          // and the computer would be seen on it at first and then turn out of sight (the user,
+          // 2026-11-24).
+          if (!harpoonDraw) {
+            const shots = me?.cap ?? HUNTER_CELLS;
+            placeRigid(
+              out,
+              `wrist computer ${shots}`,
+              wristComputer(shots),
+              s.rot[J.FOREARM_L],
+              s.pos[J.HAND_L],
+              pieces,
+            );
+          }
           // The shoulder cannon, from the camera: stowed, it is out of sight and not drawn.
           if (cannon > 0) {
             const [hinge, q] = cannonInView(cannon, target);
@@ -2964,9 +2970,10 @@ export const createBody = (world?: World): Body => {
           const sp = me ? swapOf(me) : -1;
           const on = since - Math.max(pressOf(kind), 0);
           if (hunter && kind === 0) {
+            // In close detail (lod 2): the round scope and the lit buttons (harpoonFine()).
             drawHarpoon(
               out,
-              1,
+              2,
               gunGrip(s.pos[J.HAND_R], s.rot[J.HAND_R]),
               gunAxes(s.rot[J.HAND_R]),
               0.82,

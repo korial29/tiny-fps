@@ -1,5 +1,5 @@
 // The xenomorph's own pieces (ROLE.XENO, the user 2026-11-15), round the skin of skin.ts's beast():
-// its spine down the back and on into the tail, and the glowing slits of its eyes (its claws are
+// its spine down the back and on into the tail, and its eyeless head under a glossy carapace (its claws are
 // hand()'s, body.ts). All
 // of it generated, original: a lean biomechanical stalker, not a copy of any film's creature.
 import { swingOf } from '../shared/blade';
@@ -9,11 +9,11 @@ import type { PlayerState } from '../shared/types';
 import { ease } from './gun';
 import { cross, face, sheet } from './helmet';
 import type { Spot } from './helmet';
-import { CHITIN, SHINE, STRIDE, TUBE, basis, unit } from './mesh';
+import { CHITIN, GLOSS, SHINE, STRIDE, TUBE, basis, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, rest, solve, turn } from './rig';
 import type { Quat } from './rig';
-import { HEAD_K, HEAD_X, REGION, bindOf, domeAt } from './skin';
+import { CREST_E, CREST_LEN, HEAD_K, HEAD_X, REGION, RIM, bindOf, domeAt } from './skin';
 import { room } from './verts';
 import type { Floats, Out } from './verts';
 
@@ -1883,14 +1883,40 @@ const DEPTH = [
   [0.06, 0.12],
   [0.035, 0.121],
   [0.012, 0.115],
-  [-0.02, 0.12],
-  [-0.05, 0.118],
-  // The chin pulled back, flat in front (the user, 2026-11-16: it stood out too far).
-  [-0.07, 0.11],
-  [-0.084, 0.096],
+  // Under the carapace's edge the face falls straight, a little back: no muzzle (the user,
+  // 2026-11-24: the mouth must not stand out as a beak), the cheeks full down to the chin.
+  [-0.012, 0.106],
+  [-0.026, 0.1],
+  [-0.06, 0.098],
+  [-0.08, 0.085],
   // Its underside rounding back: the face's lowest point, where its grid closes, no spike.
   [-0.095, 0.045],
 ];
+/** How deep the throat is behind the mouth, by height, as DEPTH: under the upper jaw's edge (GUM). */
+const THROAT = [
+  [-0.026, 0.1],
+  [-0.034, 0.052],
+  [-0.084, 0.045],
+  [-0.095, 0.03],
+];
+/**
+ * Its carapace (the user, 2026-11-24: no eyes; the whole top of the head from their line up smooth,
+ * black and glossy): its colour, the height on the face it ends at, and how far its edge stands
+ * out of the face under it, metres.
+ */
+export const SHELL = [0.012, 0.012, 0.016];
+const LIP = 0.004;
+/**
+ * The carapace's edge (the user, 2026-11-24: the top of the skull closes over the lower part along
+ * a curve): on the face low over the upper jaw across the mouth (EDGE[0]), rising beside it to
+ * EDGE[1] at the face's rim; then along the dome, as a share of each section's half height from
+ * its middle, on up to EDGE[2] over RISE metres, and level from there. A rolled rim runs along it
+ * (rim()), ROLL thick.
+ */
+const EDGE = [-0.021, -0.004, 0.1];
+const [RISE, ROLL] = [0.16, 0.0048];
+/** The height of the upper jaw's edge on the face, the throat under it (its jaws, further down). */
+const GUM = -0.026;
 /** Its head's chitin: the dome's (the skin's TRIM, soldier.ts) and its face's, the body's own. */
 export const HEAD = CHITIN_X;
 const [DARK, TEETH] = [
@@ -1898,25 +1924,6 @@ const [DARK, TEETH] = [
   // Steel bright (the user, 2026-11-16: metal teeth).
   [0.66, 0.68, 0.72],
 ];
-/**
- * The middle of an orbit and how its long axis rises toward the temple (the user, 2026-11-15: less
- * round, squinting, meaner): a narrow slanted slit, its inner corner low.
- */
-const [EYE, SLANT] = [[0.032, 0.012], 0.35];
-/**
- * How deep in an orbit (0 to 1) the point of the face (x, y) is, eased at its rim and its floor: a
- * rim falling steeply drew the grid's diagonals as steps along the slit's edge.
- */
-const orbit = (x: number, y: number) => {
-  const dx = Math.abs(x) - EYE[0];
-  const o = Math.max(0, 1 - (dx / 0.025) ** 2 - ((y - EYE[1] - SLANT * dx) / 0.0095) ** 2);
-  return o * o * (3 - 2 * o);
-};
-/** The frown over each orbit: a ridge along its upper edge, pressing down on it. */
-const frown = (x: number, y: number) => {
-  const dx = Math.abs(x) - EYE[0];
-  return Math.exp(-(((y - EYE[1] - SLANT * dx - 0.013) / 0.006) ** 2) - (dx / 0.03) ** 2);
-};
 /**
  * The head's front (the user, 2026-11-15: one smooth block with the back): an ellipsoid round the
  * middle of the head, its centre's height and its half width, height and depth. Its rim is the
@@ -1963,17 +1970,29 @@ const grow = (o: Out, from: number, at: Vec3, q: Quat) => {
   }
 };
 // A lower, flatter forehead (the user, 2026-11-15: too conical), the chin where it was.
-const [EY, EA, EB, EC] = [0.005, 0.084, 0.1, 0.105];
+// Lower again (the user, 2026-11-24: an egg seen from the front): 1 cm off its top, and the
+// section squarer than an ellipse, as the dome's (CREST_E).
+const [EY, EA, EB, EC] = [0, 0.084, 0.095, 0.105];
+/** How far out of the head's section (x, y) is, 1 on its rim. */
+const reach = (x: number, y: number) =>
+  (Math.abs(x / EA) ** CREST_E + Math.abs((y - EY) / EB) ** CREST_E) ** (1 / CREST_E);
+/** The point at `a` radians from the top round a section of half width 1 and half height 1, and the way out of it there (to scale by the other half size each). */
+const round = (a: number) => {
+  const p = [Math.sin(a), Math.cos(a)].map(v => Math.sign(v) * Math.abs(v) ** (2 / CREST_E));
+  return [...p, ...p.map(v => Math.sign(v) * Math.abs(v) ** (CREST_E - 1))];
+};
 /** How much of the forehead's sphere the face is at height y: none under the orbits, all over them. */
 const brow = (y: number) => {
-  const t = Math.min(Math.max((y - 0.005) / 0.025, 0), 1);
+  // From under the carapace's edge: over it the head is the one smooth ellipsoid, no crease.
+  const t = Math.min(Math.max((y + 0.034) / 0.03, 0), 1);
   return t * t * (3 - 2 * t);
 };
 /** The top of the face, and its half width at height y. */
 const TOP = EY + EB;
 /** The bottom of the chin (the user, 2026-11-15: a short one). */
 const CHIN = EY - EB;
-const widthOf = (y: number) => EA * Math.sqrt(Math.max(0, 1 - ((y - EY) / EB) ** 2));
+const widthOf = (y: number) =>
+  EA * Math.max(0, 1 - Math.abs((y - EY) / EB) ** CREST_E) ** (1 / CREST_E);
 /** [0, 1] onto itself, the steps packed where `density` (of the place, 0 to 1) is high. */
 const warp = (density: (t: number) => number) => {
   const n = 400;
@@ -1994,14 +2013,20 @@ const warp = (density: (t: number) => number) => {
   };
 };
 /**
- * The rows packed round the eyes' slits (the user, 2026-11-15: no steps round the eyes), and the
- * columns over the orbits, whose slanted rims crossed even columns in steps along the slit: near,
- * three and twice as close; close, five and three and a half times, on a grid of fewer rows and
- * columns (its steps there as fine as on the old one of 64 by 92, a third of the vertices).
+ * The grid's rows and columns, near and close: the rows packed toward the top, the columns a
+ * little off the middle each side.
  */
 const [ROWS, COLS] = [
   [2.2, 4].map(k =>
-    warp(t => 1 + k * Math.exp(-(((TOP - (TOP - CHIN) * t - EYE[1]) / 0.02) ** 2))),
+    // Packed toward the top, where the ellipsoid turns level: evenly spaced, its first row lay
+    // 3 cm ahead of the dome's edge, a flat facet the carapace's gloss showed.
+    // And round the upper jaw's edge, where it drops into the throat.
+    warp(
+      t =>
+        1 +
+        (0.25 * k) / Math.sqrt(t + 0.003) +
+        k * Math.exp(-(((TOP - (TOP - CHIN) * t - GUM + 0.004) / 0.008) ** 2)),
+    ),
   ),
   [1.6, 2.6].map(k => warp(t => 1 + k * Math.exp(-(((Math.abs(2 * t - 1) - 0.38) / 0.26) ** 2)))),
 ];
@@ -2009,57 +2034,33 @@ const [ROWS, COLS] = [
 const rowY = (v: number, fine: boolean) => TOP - (TOP - CHIN) * ROWS[+fine](v);
 /** The grid's column `u` (-1 to 1, evenly spaced) moved to pack over the orbits, on the close grid if `fine`. */
 const colU = (u: number, fine: boolean) => -1 + 2 * COLS[+fine]((u + 1) / 2);
-/**
- * The lower jaw's line on the face (x out from the middle, y): down from under the cheekbone to its
- * angle, then straight in to the chin's corner, and level across the chin. How far its ridge stands
- * out and its half width, metres.
- */
-const JAW = [
-  [0.068, -0.012],
-  [0.06, -0.054],
-  [0.03, -0.087],
-  [0, -0.087],
-];
-const [JAW_H, JAW_W] = [0.017, 0.006];
-/** How far (x, y) is from the jaw's line. */
-const jawline = (x: number, y: number) => {
-  let best = Infinity;
-  for (let i = 1; i < JAW.length; i++) {
-    const [[ax, ay], [bx, by]] = [JAW[i - 1], JAW[i]];
-    const [dx, dy] = [bx - ax, by - ay];
-    const t = Math.min(Math.max(((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy), 0), 1);
-    best = Math.min(best, Math.hypot(x - ax - dx * t, y - ay - dy * t));
-  }
-  return best;
-};
-/** The face's surface at (x, y): an ellipse's front under a forehead's sphere, the orbits sunk, the cheekbones out. */
+/** The face's surface at (x, y): an ellipse's front under the carapace's ellipsoid, the cheekbones out, the throat under the upper jaw. */
 const faceZ = (x: number, y: number) => {
   const u = Math.min(Math.abs(x) / Math.max(widthOf(y), 1e-6), 1);
-  const low = -curve(DEPTH, y) * Math.sqrt(1 - u * u);
-  const dome = -EC * Math.sqrt(Math.max(0, 1 - (x / EA) ** 2 - ((y - EY) / EB) ** 2));
+  // The mouth: between the cheeks, under the upper jaw's edge, the face falls back to the throat.
+  const mouth =
+    (1 - ease((Math.abs(x) - 0.036) / 0.012)) *
+    ease((GUM - y) / 0.007) *
+    (1 - ease((-0.1 - y) / 0.01));
+  const d = curve(DEPTH, y);
+  // The cheeks beside the mouth cut back under the carapace (the user, 2026-11-24: smaller
+  // cheeks): past the mouth's corners the face falls back toward the dome's edge, the jaws a
+  // narrow block under the wider dome.
+  const cheek = 1 - 0.75 * ease((Math.abs(x) - 0.038) / 0.02) * ease((-0.012 - y) / 0.012);
+  const low = -(d + (curve(THROAT, y) - d) * mouth) * Math.sqrt(1 - u * u) * cheek;
+  const dome = -EC * Math.sqrt(Math.max(0, 1 - reach(x, y) ** 2));
   return (
     low +
-    (dome - low) * brow(y) +
-    0.03 * orbit(x, y) -
-    0.007 * frown(x, y) -
+    (dome - low) * brow(y) -
     // The cheekbones, low (the user, 2026-11-16: too wide).
-    0.004 * Math.exp(-(((Math.abs(x) - 0.054) / 0.011) ** 2) - ((y + 0.008) / 0.011) ** 2) +
-    // The cheeks hollowed as deep as they go (the user, 2026-11-16): under the cheekbone, behind
-    // the corner of the mouth, the tendons stretched over the hollow.
-    // None at the rim: there it pulled the face off the dome, a crack round the cheek.
-    0.07 *
-      Math.exp(-(((Math.abs(x) - 0.056) / 0.019) ** 2) - ((y + 0.04) / 0.024) ** 2) *
-      (1 - u ** 8) -
-    // The lower jaw's bone (the user, 2026-11-17: angular): a ridge standing out along JAW.
-    JAW_H * Math.exp(-((jawline(Math.abs(x), y) / JAW_W) ** 2)) * (1 - u ** 8)
+    0.004 * Math.exp(-(((Math.abs(x) - 0.054) / 0.011) ** 2) - ((y + 0.008) / 0.011) ** 2)
   );
 };
 /** How much of the dome's rim the face takes at (x, y): none inside, all at its edge. */
-const rimOf = (x: number, y: number) =>
-  Math.min(Math.max((Math.hypot(x / EA, (y - EY) / EB) - 0.62) / 0.38, 0), 1) ** 2;
+const rimOf = (x: number, y: number) => Math.min(Math.max((reach(x, y) - 0.62) / 0.38, 0), 1) ** 2;
 /**
  * The face as skull() draws it at (x, y): faceZ, its rim tucked a hair under the dome's front ring.
- * What lies on the face follows this: on faceZ, the veins stood off it at the rim, hooks there.
+ * What lies on the face follows this.
  */
 const faceAt = (x: number, y: number): Vec3 => {
   const w = rimOf(x, y);
@@ -2067,32 +2068,38 @@ const faceAt = (x: number, y: number): Vec3 => {
   return [x * g, EY + (y - EY) * g, faceZ(x, y) + 0.004 * w];
 };
 /**
- * The mouth (the user, 2026-11-15: menacing lips over grey teeth, small and high): its half width,
- * the height of its middle and where the fangs are, and how far its lips part at x: the upper one
- * curled up over the fangs, a snarl.
+ * Its jaws (the user, 2026-11-24: the gaping jaws of the reference picture, no tongue). The upper
+ * one is the face's edge at GUM, the throat falling back under it. The lower one is a piece of its
+ * own (jaw()), a U hung open GAPE radians from HINGE (the right one) each side: its rami run
+ * forward to an arc ARC[0] wide and ARC[1] deep round the point ARC[2] ahead, in a plane through
+ * the hinges.
  */
-const [MW, MY, FANG] = [0.032, -0.038, 0.018];
-const above = (x: number) =>
-  (0.0055 + 0.008 * Math.exp(-(((Math.abs(x) - FANG) / 0.008) ** 2))) * (1 - (x / MW) ** 2) ** 0.5;
-const below = (x: number) => 0.008 * (1 - (x / MW) ** 2) ** 0.6;
-const parted = (x: number, y: number) => Math.abs(x) < MW && y < MY + above(x) && y > MY - below(x);
-/** The lips' line round the mouth, from the left corner over the upper lip and back under the lower one. */
-const lipline = (n: number): [number, number][] => {
-  const top = Array.from({ length: n + 1 }, (_, i): [number, number] => {
-    const x = -MW + (2 * MW * i) / n;
-    return [x, MY + above(x)];
-  });
-  const low = Array.from({ length: n - 1 }, (_, i): [number, number] => {
-    const x = MW - (2 * MW * (i + 1)) / n;
-    return [x, MY - below(x)];
-  });
-  return [...top, ...low];
+const HINGE: Vec3 = [0.05, -0.036, -0.02];
+const GAPE = 0.8;
+// A narrow mouth (the user, 2026-11-24).
+const ARC = [0.034, 0.034, -0.045];
+/** The height of the mandible's underside, under the chin and at the hinges. */
+const FLOOR = [-0.108, -0.1];
+/** The jaw's plane: the way its teeth point, and its height `z` ahead. */
+const JAW_UP: Vec3 = [0, Math.cos(GAPE), -Math.sin(GAPE)];
+const jawY = (z: number) => HINGE[1] - (HINGE[2] - z) * Math.tan(GAPE);
+/** The middle of the right ramus `t` of the way from the hinge to the arc, and of the arc at `a` radians from its front (positive to the right). */
+const ramusAt = (t: number, s = 1): Vec3 => {
+  const z = HINGE[2] + (ARC[2] - HINGE[2]) * t;
+  return [s * (HINGE[0] + (ARC[0] - HINGE[0]) * (1 - (1 - t) ** 2)), jawY(z), z];
 };
+const arcAt = (a: number): Vec3 => {
+  const z = ARC[2] - ARC[1] * Math.cos(a);
+  return [ARC[0] * Math.sin(a), jawY(z), z];
+};
+/** The mandible's half height where it is `x` out from the middle: deepest at the chin. */
+const jawH = (x: number) => 0.011 + 0.008 * Math.exp(-((x / 0.027) ** 2));
 
 /**
- * The face of its skull, a human skull's in its chitin: a forehead a smooth sphere, the
- * orbits sunk, the cheekbones, no nose; the mouth an opening whose edge the lips hide, dark inside,
- * with grey teeth, the fangs longest. A grid over the face, finer the closer.
+ * Its face, eyeless: over EDGE the front of its glossy carapace, one smooth ellipsoid with the
+ * dome; under it its chitin, the cheekbones, no nose, the mouth wide open, an opening whose edge
+ * the lips hide, dark inside, with steel teeth, the fangs longest. A grid over the face, finer the
+ * closer.
  */
 export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
   const at = on(head, q, [0, HEAD_UP, 0]);
@@ -2102,9 +2109,28 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
     [22, 38],
     [50, 72],
   ][lod];
-  const spot = (u: number, v: number): Spot => {
-    const y = rowY(v, lod > 2);
-    const x = colU(u, lod > 2) * widthOf(y);
+  // The row the carapace ends on: the nearest to its edge across the mouth.
+  let je = 0;
+  for (let j = 1; j <= ny; j++) {
+    const d = (k: number) => Math.abs(rowY(k / ny, lod > 2) - EDGE[0]);
+    je = d(j) < d(je) ? j : je;
+  }
+  const ye = rowY(je / ny, lod > 2);
+  /**
+   * Where the grid's node (u, v) is on the face: its rows bent up beside the mouth, most the
+   * edge's, which follows the carapace's curve up to the rim, none the top's and the chin's.
+   */
+  const xy = (u: number, v: number): [number, number] => {
+    const y0 = rowY(v, lod > 2);
+    const c = colU(u, lod > 2);
+    const w0 = widthOf(y0);
+    const t = w0 > 0.031 ? (Math.abs(c) * w0 - 0.03) / (w0 - 0.03) : 1;
+    const bend = y0 > ye ? (TOP - y0) / (TOP - ye) : (y0 - CHIN) / (ye - CHIN);
+    const y = y0 + (EDGE[1] - EDGE[0]) * ease(t) * bend;
+    return [c * widthOf(y), y];
+  };
+  const spot = (u: number, v: number, shell = false): Spot => {
+    const [x, y] = xy(u, v);
     // The slope from central differences a hair inside the rim (outside it the surface is flat),
     // turned at the rim to the dome's own normal there, straight out of the ellipse: no seam in the
     // light where the face meets the back of the head.
@@ -2115,30 +2141,48 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
       (faceZ(xi, yi + h) - faceZ(xi, yi - h)) / (2 * h),
     ];
     const m: Vec3 = unit([dz[0], dz[1], -1]);
-    const rim = unit([x / (EA * EA), (y - EY) / (EB * EB), 0]);
+    // The dome's own normal on its front ring, with the slope of its first strip (RIM): straight
+    // out of the ellipse, it was 4 degrees off the dome's on top, a reflection cut at the join.
+    const [sn, cs] = [x / EA, (y - EY) / EB];
+    const [gs, gc] = [sn, cs].map(v => Math.sign(v) * Math.abs(v) ** (CREST_E - 1));
+    const rim = unit([
+      EB * gs,
+      EA * gc,
+      -(EA * gc * (RIM[0] + RIM[2] * cs) + EB * RIM[1] * Math.abs(sn) ** CREST_E),
+    ]);
     const w = rimOf(x, y);
     const n = unit([0, 1, 2].map(i => m[i] * (1 - w) + rim[i] * w) as Vec3);
     // The rim tucked a hair under the dome's front ring: no crack where their vertices differ.
-    return [on(at, q, faceAt(x, y)), turn(q, n)];
+    const p = faceAt(x, y);
+    // The carapace stands a little proud of the face, but at the rim, where it goes a hair under
+    // the dome's front ring: over it, as the chitin does, its edge was a ridge in the gloss.
+    const k = (1 - 0.006 * w) / (1 + 0.01 * w);
+    return [
+      on(at, q, shell ? [p[0] * k, EY + (p[1] - EY) * k, p[2] - LIP * (1 - w)] : p),
+      turn(q, n),
+    ];
   };
-  // Each node of the grid worked out once: it is the corner of six triangles.
-  const nodes: Spot[] = [];
+  // Each node of the grid worked out once: it is the corner of six triangles. The carapace's rows
+  // down to its edge, then the face's from there: the edge's row twice, a step between them.
+  const [nodes, over]: Spot[][] = [[], []];
   for (let j = 0; j <= ny; j++) {
     for (let i = 0; i <= nx; i++) {
-      nodes.push(spot((2 * i) / nx - 1, j / ny));
+      const [u, v] = [(2 * i) / nx - 1, j / ny];
+      nodes.push(spot(u, v, j < je));
+      if (j == je) {
+        over.push(spot(u, v, true));
+      }
     }
   }
-  /** The grid's node in column i, row j. */
-  const node = (i: number, j: number) => nodes[j * (nx + 1) + i];
-  // The grid, but where the lips part: the hole's edge, in steps, lies under the lips. Far, with no
-  // lips or inside drawn, the mouth is the grid painted dark: a hole there showed the sky through.
+  /** The grid's node in column i, row j; `up`, the carapace's on the edge's row. */
+  const node = (i: number, j: number, up = false) =>
+    up && j == je ? over[i] : nodes[j * (nx + 1) + i];
+  // Under the upper jaw the throat, dark in its middle, behind the mandible.
   const tri = (p: [number, number][], s: Spot[]) => {
     const [u, v] = [0, 1].map(k => (p[0][k] + p[1][k] + p[2][k]) / 3);
-    const y = rowY(v, lod > 2);
-    const open = parted(colU(u, lod > 2) * widthOf(y), y);
-    if (!open || !lod) {
-      face(out, open ? DARK : HEAD, -1, s);
-    }
+    const [x, y] = xy(u, v);
+    const deep = y < GUM - 0.008 && Math.abs(x) < 0.039;
+    face(out, v < je / ny ? SHELL : deep ? DARK : HEAD, v < je / ny ? GLOSS : -1, s);
   };
   for (let j = 0; j < ny; j++) {
     for (let i = 0; i < nx; i++) {
@@ -2149,7 +2193,7 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
           [u1, v0],
           [u1, v1],
         ],
-        [node(i, j), node(i + 1, j), node(i + 1, j + 1)],
+        [node(i, j), node(i + 1, j), node(i + 1, j + 1, j < je)],
       );
       tri(
         [
@@ -2157,69 +2201,146 @@ export const skull = (out: Out, head: Vec3, q: Quat, lod: number) => {
           [u1, v1],
           [u0, v1],
         ],
-        [node(i, j), node(i + 1, j + 1), node(i, j + 1)],
+        [node(i, j), node(i + 1, j + 1, j < je), node(i, j + 1, j < je)],
       );
     }
+  }
+  // The underside of the carapace's edge, down to the face.
+  const under = turn(q, unit([0, -1, -0.4]));
+  for (let i = 0; i < nx; i++) {
+    const [a, b, c, d] = [over[i], over[i + 1], node(i + 1, je), node(i, je)].map(([p]): Spot => [
+      p,
+      under,
+    ]);
+    face(out, SHELL, GLOSS, [a, b, c]);
+    face(out, SHELL, GLOSS, [a, c, d]);
   }
   if (!lod) {
     return;
   }
-  const sides = SIDES[1][lod];
-  const n = lod > 2 ? 24 : 12;
-  const line = lipline(n);
-  const fwd = turn(q, [0, 0, -1]);
-  // Inside the mouth, dark, its edge inside the lips: no gap between them seen from below.
-  sheet(
-    [
-      [[on(at, q, [0, MY, faceZ(0, MY) + 0.018]), fwd]],
-      line.map(([x, y]): Spot => [on(at, q, [x, y, faceZ(x, y) - 0.001]), fwd]),
-    ],
-    DARK,
-    -1,
-    out,
-  );
-  // The lips round it, a little thicker in their middle (the user, 2026-11-15: thinner), curled.
-  const pts = [...line, line[0]].map(([x, y]): Vec3 => [x, y, faceZ(x, y) - 0.002]);
+  // The carapace's rolled rim, one piece: up one side of the dome from near its tip, across the
+  // face over the step, and back down the other side, thinning out toward the tip.
+  const rest = bindOf(0)[J.HEAD];
+  const [n, k, len] = [lod > 2 ? 32 : 16, lod > 2 ? 28 : 14, CREST_LEN * 0.86];
+  const side = (s: number) =>
+    Array.from({ length: k }, (_, i): [Vec3, number] => {
+      const z = (len * (i + 1)) / k;
+      const [c, w, h] = domeAt(z);
+      const [sn, cs, gs, gc] = round(s * edgeAt(z));
+      const m = unit([gs / w, gc / h, 0]);
+      return [
+        [w * sn + m[0] * 0.0015, c + h * cs + m[1] * 0.0015 - rest[1], z],
+        ROLL * (1 - (z / len) ** 3) + 0.0004,
+      ];
+    });
+  const across = Array.from({ length: n + 1 }, (_, i): [Vec3, number] => {
+    const [x, y] = xy((2 * i) / n - 1, je / ny);
+    const p = faceAt(x, y);
+    return [[p[0], p[1] + HEAD_UP, p[2] - LIP * (1 - rimOf(x, y))], ROLL];
+  });
+  const roll = [...side(-1).reverse(), ...across, ...side(1)];
   strand(
     out,
-    at,
+    head,
     q,
-    pts,
-    pts.map(([x]) => 0.0024 + 0.002 * (1 - (x / MW) ** 2)),
-    sides,
-    HEAD,
-    -1,
-    // A loop: its two ends meet.
-    false,
-    // Steadied by the face's forward axis: by its x axis, along which the lips run, they pinched
-    // into a V in their middle.
-    [0, 0, 1],
+    roll.map(([p]) => p),
+    roll.map(([, r]) => r),
+    SIDES[0][lod],
+    SHELL,
+    GLOSS,
+    true,
+    [0, 1, 0],
   );
-  // A band of the face round the lips, a grid cell wide (the user, 2026-11-15: no holes round the
-  // mouth): it covers the steps the grid's hole leaves outside the thinner lips.
-  const m = lod > 2 ? 0.005 : 0.01;
-  const at3 = (x: number, y: number): Spot => {
-    const h = 1e-3;
-    const nz: Vec3 = unit([
-      (faceZ(x + h, y) - faceZ(x - h, y)) / (2 * h),
-      (faceZ(x, y + h) - faceZ(x, y - h)) / (2 * h),
-      -1,
-    ]);
-    return [on(at, q, [x, y, faceZ(x, y) - 0.0006]), turn(q, nz)];
-  };
-  // Out of the lips' line (it runs clockwise: left to right over the top, back under).
-  const band = line.map(([x, y], i): [number, number] => {
-    const [a, b] = [line[(i + line.length - 1) % line.length], line[(i + 1) % line.length]];
-    const [tx, ty] = [b[0] - a[0], b[1] - a[1]];
-    const l = Math.hypot(tx, ty) || 1;
-    return [x - (ty / l) * m, y + (tx / l) * m];
+};
+
+/**
+ * Its lower jaw (HINGE, ARC), on the head joint: a bone taller than wide round the U, deepest at
+ * the chin, its ends buried in the throat behind the cheeks.
+ */
+export const jaw = (out: Out, head: Vec3, q: Quat, lod: number) => {
+  const at = on(head, q, [0, HEAD_UP, 0]);
+  const [nr, na, n] = [
+    [1, 4, 4],
+    [2, 8, 6],
+    [2, 8, 6],
+    [4, 16, 10],
+  ][lod];
+  const pts: Vec3[] = [
+    ...Array.from({ length: nr }, (_, i) => ramusAt(i / nr)),
+    ...Array.from({ length: na + 1 }, (_, i) => arcAt(Math.PI / 2 - (Math.PI * i) / na)),
+    ...Array.from({ length: nr }, (_, i) => ramusAt(1 - (i + 1) / nr, -1)),
+  ];
+  const last = pts.length - 1;
+  const rings = pts.map((p, i): Spot[] => {
+    const [a, b] = [pts[Math.max(i - 1, 0)], pts[Math.min(i + 1, last)]];
+    const t = unit([b[0] - a[0], b[1] - a[1], b[2] - a[2]]);
+    const side = unit(cross(t, JAW_UP));
+    const [w, h] = [0.008 + 0.005 * Math.exp(-((p[0] / 0.03) ** 2)), jawH(p[0])];
+    // Its underside does not climb to the hinge with the jaw's own slope (the user, 2026-11-24:
+    // fuller, filling the space toward the head): each section reaches down to a line nearly
+    // level from under the chin to the jaw's angle, under the cheek.
+    const front = ARC[2] - ARC[1];
+    const floor = FLOOR[0] + ((FLOOR[1] - FLOOR[0]) * (p[2] - front)) / (HINGE[2] - front);
+    const down: Vec3 = [0, Math.max(0, p[1] - JAW_UP[1] * h - floor), 0];
+    return Array.from({ length: n }, (_, k): Spot => {
+      const [c, s] = [Math.cos((k / n) * TAU), Math.sin((k / n) * TAU)];
+      const v = JAW_UP.map((u, j) => u * h + (s < 0 ? down[j] : 0));
+      const l = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+      return [
+        on(at, q, [0, 1, 2].map(j => p[j] + side[j] * w * c + v[j] * s) as Vec3),
+        turn(q, unit([0, 1, 2].map(j => (side[j] * c) / w + (v[j] * s) / l) as Vec3)),
+      ];
+    });
   });
-  line.forEach(([x, y], i) => {
-    const j = (i + 1) % line.length;
-    const quad = [at3(x, y), at3(...line[j]), at3(...band[j]), at3(...band[i])];
-    face(out, HEAD, -1, [quad[0], quad[1], quad[2]]);
-    face(out, HEAD, -1, [quad[0], quad[2], quad[3]]);
+  const back = turn(q, [0, 0, 1]);
+  sheet([[[on(at, q, pts[0]), back]], ...rings, [[on(at, q, pts[last]), back]]], HEAD, -1, out);
+};
+
+/**
+ * The chitin under its carapace (the user, 2026-11-24: glossy black from the eyes' line up), on the
+ * head joint: the underside of the dome, the arc of its sections under the carapace's edge (edgeAt()) set BELLY metres out of it, its two edges turned in under the
+ * carapace. At the face's edge it is no further out than the face's rim, which covers it.
+ */
+const BELLY = 0.003;
+/** The angle of the carapace's edge round the dome's section `z` behind the face, from its top (EDGE). */
+const edgeAt = (z: number) => {
+  const v = (EDGE[1] - EY) / EB + (EDGE[2] - (EDGE[1] - EY) / EB) * ease(z / RISE);
+  return Math.acos(Math.sign(v) * Math.abs(v) ** (CREST_E / 2));
+};
+export const belly = (out: Out, head: Vec3, q: Quat, lod: number) => {
+  const rest = bindOf(0)[J.HEAD];
+  const [K, N] = [
+    [6, 5],
+    [12, 10],
+    [12, 10],
+    [24, 18],
+  ][lod];
+  /** The angle of the carapace's edge round a section, from its top. */
+  const rows = Array.from({ length: K + 1 }, (_, k) => {
+    // Closer together toward the tip, as the dome's own rings.
+    const z = CREST_LEN * Math.sin(((k / K) * Math.PI) / 2);
+    const [c, w, h] = domeAt(z);
+    const a0 = edgeAt(z);
+    const e = Math.min(z / 0.04, 1);
+    const g = BELLY * (0.35 + 0.65 * e * e * (3 - 2 * e));
+    return Array.from({ length: N + 3 }, (_, i): Spot => {
+      // From the edge on one side, under, to the other; before and after, turned in.
+      const inn = i == 0 || i == N + 2;
+      const t = Math.min(Math.max((i - 1) / N, 0), 1);
+      const a = a0 + (2 * Math.PI - 2 * a0) * t + (i ? (inn ? 0.1 : 0) : -0.1);
+      const [sn, cs, gs, gc] = round(a);
+      const m = unit([gs / Math.max(w, 1e-4), gc / Math.max(h, 1e-4), 0]);
+      const off = w ? (inn ? -g : g) : 0;
+      return [on(head, q, [w * sn + m[0] * off, c + h * cs + m[1] * off - rest[1], z]), turn(q, m)];
+    });
   });
+  for (let k = 0; k < K; k++) {
+    for (let i = 0; i < N + 2; i++) {
+      const [a, b, c, d] = [rows[k][i], rows[k][i + 1], rows[k + 1][i + 1], rows[k + 1][i]];
+      face(out, HEAD, -1, [a, b, c]);
+      face(out, HEAD, -1, [a, c, d]);
+    }
+  }
 };
 
 /**
@@ -2232,215 +2353,99 @@ export const teeth = (out: Out, head: Vec3, q: Quat, lod: number) => {
   }
   const at = on(head, q, [0, HEAD_UP, 0]);
   const sides = SIDES[1][lod];
-  // The teeth, steel, from under each lip toward the other, many, long and sharp (the user,
-  // 2026-11-16): the fangs, a lip's curl apart, longest, the upper ones over the lower lip.
-  for (const [k, up] of [
-    [13, true],
-    [12, false],
-  ] as const) {
-    for (let i = 0; i < k; i++) {
-      const x = -MW * 0.84 + (1.68 * MW * i) / (k - 1);
-      const fang = Math.exp(-(((Math.abs(x) - FANG) / 0.005) ** 2));
-      const side = 1 - 0.35 * (x / MW) ** 2;
-      const [edge, tip] = up
-        ? [MY + above(x), MY - (0.003 + 0.007 * fang) * side]
-        : [MY - below(x), MY + (0.0025 + 0.006 * fang) * side];
-      // Rooted just inside the lip's line, set back behind the face by more than their own
-      // thickness: rooted 3 mm out past the lower lip, they came through the chin under it.
-      const r = 0.0024 + 0.0012 * fang;
-      const root = edge + (up ? -0.0012 : 0.0012);
-      const z = Math.max(faceZ(x, root), faceZ(x, MY)) + r + 0.0008;
-      strand(
-        out,
-        at,
-        q,
-        [
-          [x, root, z],
-          [x, (root + tip) / 2, z - 0.0016],
-          [x, tip, z - 0.0026],
-        ],
-        [r, r * 0.6, 0.0003],
-        sides,
-        TEETH,
-        -1,
-        false,
-      );
-    }
+  const fang = (x: number) => Math.exp(-(((Math.abs(x) - 0.021) / 0.005) ** 2));
+  const tooth = (root: Vec3, way: Vec3, len: number, r: number) =>
+    strand(
+      out,
+      at,
+      q,
+      [0, 0.5, 1].map(t => root.map((v, i) => v + way[i] * len * t) as Vec3),
+      [r, r * 0.72, 0.0003],
+      sides,
+      TEETH,
+      -1,
+      false,
+    );
+  /** The upper jaw's edge at x, a hair inside the face. */
+  const gum = (x: number, r: number): Vec3 => [x, GUM + 0.003, faceZ(x, GUM + 0.004) + r];
+  // The upper teeth, steel (the user, 2026-11-16), long cones hung from the upper jaw's edge round
+  // its arc, the fangs longest, a little forward at their tips.
+  // Close together (the user, 2026-11-24): each against the next.
+  for (let i = 0; i < 11; i++) {
+    const x = -0.036 + (0.072 * i) / 10;
+    const r = 0.0036 + 0.0006 * fang(x);
+    tooth(gum(x, r), [0, -1, -0.12], (0.015 + 0.005 * fang(x)) * (1 - 40 * x * x), r);
   }
-  // Cords of sinew beside the mouth (the user, 2026-11-16: a head with more biomechanical
-  // detail): each side three tendons stretched from the upper jaw to the lower one past the
-  // corner of the mouth, bowed out, half sunk in the face.
+  // The lower ones, up out of the mandible round its arc.
+  for (let i = 0; i < 12; i++) {
+    const p = arcAt(-1.3 + (2.6 * i) / 11);
+    const r = 0.0034 + 0.0006 * fang(p[0]);
+    const h = jawH(p[0]) - 0.002;
+    tooth(
+      p.map((v, j) => v + JAW_UP[j] * h) as Vec3,
+      // Less forward than the jaw hangs: square to it, they pointed out of the mouth.
+      unit([0, JAW_UP[1] + 0.7, JAW_UP[2]]),
+      (0.013 + 0.004 * fang(p[0])) * (1 - 40 * p[0] * p[0]),
+      r,
+    );
+  }
+  // Its upper gum, a band of sinew along the jaw's edge over the roots of the teeth.
+  const band = Array.from({ length: 17 }, (_, i) => -0.046 + (0.092 * i) / 16);
+  strand(
+    out,
+    at,
+    q,
+    // Half sunk in the face: proud of it, it read as a rod laid along the jaw.
+    band.map(x => gum(x, 0.0016)),
+    band.map(x => 0.0034 - 0.0016 * (x / 0.046) ** 2),
+    SIDES[0][lod],
+    SINEW,
+    -1,
+    true,
+    [0, 0, 1],
+  );
+  // Its lower lip, thin, round the mandible's upper outer edge.
+  const lip = Array.from({ length: 17 }, (_, i) => arcAt(-1.45 + (2.9 * i) / 16));
+  strand(
+    out,
+    at,
+    q,
+    lip.map(p => {
+      const o = unit([p[0], 0, (p[2] - ARC[2]) * (ARC[0] / ARC[1]) ** 2]);
+      const h = jawH(p[0]) - 0.0015;
+      return p.map((v, j) => v + JAW_UP[j] * h + o[j] * 0.004) as Vec3;
+    }),
+    lip.map(p => 0.003 - 0.001 * (p[0] / ARC[0]) ** 2),
+    SIDES[0][lod],
+    SINEW,
+    -1,
+    true,
+    [0, 1, 0],
+  );
+  // Tendons across the open cheek (the user, 2026-11-16: a head with more biomechanical detail;
+  // 2026-11-24: stretched from the upper jaw to the lower one, the gap showing between them):
+  // each side two, thick at their ends, bowed out a little.
   for (const s of [-1, 1]) {
-    for (const [x0, x1, r0] of [
-      [0.037, 0.035, 0.0019],
-      [0.044, 0.042, 0.0022],
-      [0.051, 0.047, 0.0018],
+    for (const [x, t, r0] of [
+      [0.042, 0.85, 0.004],
+      [0.05, 0.5, 0.0034],
     ]) {
-      const pts: Vec3[] = [];
-      const radii: number[] = [];
+      // Its upper end buried in the jaw: on the face, its round end was a knob there.
+      const a: Vec3 = [s * x, GUM + 0.006, faceZ(x, GUM + 0.006) + r0 + 0.002];
+      const m = ramusAt(t, s);
+      const b = m.map((v, j) => v + JAW_UP[j] * (jawH(m[0]) - 0.003)) as Vec3;
+      const [pts, radii]: [Vec3[], number[]] = [[], []];
       for (let j = 0; j <= 8; j++) {
-        const t = j / 8;
-        const x = s * (x0 + (x1 - x0) * t + 0.003 * Math.sin(Math.PI * t));
-        const y = -0.016 - 0.05 * t;
-        const r = r0 * (0.55 + 0.45 * Math.sin(Math.PI * t));
-        pts.push([x, y, faceZ(x, y) - r * 0.35]);
-        radii.push(r);
+        const k = j / 8;
+        const bow = Math.sin(Math.PI * k);
+        pts.push([
+          a[0] + (b[0] - a[0]) * k + s * 0.004 * bow,
+          a[1] + (b[1] - a[1]) * k,
+          a[2] + (b[2] - a[2]) * k,
+        ]);
+        radii.push(r0 * (1 - 0.45 * bow));
       }
       strand(out, at, q, pts, radii, SIDES[0][lod], SINEW, -1, true, [0, 0, 1]);
-    }
-  }
-};
-
-/**
- * Veins along its dome (the user, 2026-11-16), on the head joint: on each side three running back
- * from the face's edge along the banana, wandering a little up and down its side, thinning toward
- * the back, with a short branch off each; one along each side of the top. Half sunk in the skin.
- */
-export const veins = (out: Out, head: Vec3, q: Quat, lod: number) => {
-  if (!lod) {
-    return;
-  }
-  const rest = bindOf(0)[J.HEAD];
-  const n = SIDES[0][lod];
-  /** The dome's surface at `z` behind the face, `a` round it from the top, `r` out of it. */
-  // The normal of the last point at() or onFace() gave: a vein's rings are steadied by it, square
-  // to the vein wherever it runs (by one axis, they flipped where it ran along it: knots at the
-  // face's rim, where the veins turn back along the dome).
-  let nrm: Vec3 = [0, 0, -1];
-  const at = (z: number, a: number, r: number): Vec3 => {
-    const [c, w, h] = domeAt(z);
-    const [sn, cs] = [Math.sin(a), Math.cos(a)];
-    const m = unit([sn / w, cs / h, 0]);
-    nrm = m;
-    return [w * sn + m[0] * r, c + h * cs + m[1] * r - rest[1], z];
-  };
-  /** A seeded random in [0, 1): the same tree on every screen. */
-  let seed = 7;
-  const rnd = () => {
-    seed = (seed * 16807) % 2147483647;
-    return seed / 2147483647;
-  };
-  /**
-   * A vessel on side `s` from (z0, a0), `len` long along the dome, turning by `drift` round it,
-   * `r0` thick at its root and tapering. It branches as blood vessels do (the user, 2026-11-16:
-   * smaller veins, like branches): two to four thinner ones leave it along its length, off to
-   * either side, each branching again, down to `depth` levels and a hair's thickness.
-   */
-  const vessel = (
-    s: number,
-    z0: number,
-    a0: number,
-    len: number,
-    drift: number,
-    r0: number,
-    depth: number,
-    front = 0,
-  ) => {
-    const K = Math.max(3, Math.round((lod > 2 ? 70 : 36) * len));
-    const wav = rnd() * TAU;
-    const way = (t: number) => a0 + drift * t + 0.05 * Math.sin(t * 9 + wav);
-    // Out of the skin at its root over the first tenth, then tapering; a trunk carried on over the
-    // face (`front`) comes out of it there instead.
-    const thick = (t: number) => r0 * (1 - 0.7 * t) * (front ? 1 : Math.min(1, 0.2 + t * 8));
-    const pts: Vec3[] = [];
-    const radii: number[] = [];
-    const ns: Vec3[] = [];
-    if (front) {
-      // Over the face first, from where it fades out, sinking under the skin short of the rim; it
-      // comes out again on the dome just behind it. Drawn round the face's tight edge it stood
-      // off the outline as a hook.
-      const F = lod > 2 ? 24 : 10;
-      for (let j = 0; j <= F; j++) {
-        const t = j / F;
-        const e = front + (0.95 - front) * t;
-        const a = s * (a0 + 0.015 * Math.sin(t * 7 + wav));
-        const [x, y] = [EA * e * Math.sin(a), EY + EB * e * Math.cos(a)];
-        const dive = Math.max(0, (t - 0.7) / 0.3);
-        const r = r0 * Math.min(1, t * 1.6) ** 1.5 * (1 - 0.85 * dive);
-        pts.push(onFace(x, y, -r * (0.3 + 0.5 * dive)));
-        ns.push(nrm);
-        radii.push(r);
-      }
-      strand(out, head, q, pts, radii, n, SINEW, -1, true, ns);
-      pts.length = radii.length = ns.length = 0;
-      // A fork off it halfway over the face, thinner, fading out sooner.
-      face3(s, a0, (front + 0.95) / 2, front + 0.1, r0 * 0.5, wav);
-    }
-    for (let i = 0; i <= K; i++) {
-      const t = i / K;
-      // Out of the skin a little behind the rim, when it comes from the face.
-      const back = front ? Math.min(1, Math.max(0, (t - 0.04) / 0.16)) : 1;
-      const r = thick(t) * (0.15 + 0.85 * back * back * (3 - 2 * back));
-      // A third out of the skin: on the outline they stood off it as hooks.
-      pts.push(at(Math.min(z0 + len * t, 0.41), s * way(t), -r * (0.3 + 0.5 * (1 - back))));
-      ns.push(nrm);
-      radii.push(r);
-    }
-    strand(out, head, q, pts, radii, r0 < 0.0012 ? 3 : n, SINEW, -1, true, ns);
-    if (!depth || r0 < 0.0009) {
-      return;
-    }
-    const kids = 2 + Math.floor(rnd() * 3);
-    for (let k = 0; k < kids; k++) {
-      const t = (k + 0.3 + 0.5 * rnd()) / kids;
-      const off = (k % 2 ? 1 : -1) * (0.5 + 0.6 * rnd());
-      vessel(
-        s,
-        z0 + len * t,
-        way(t),
-        len * (0.3 + 0.25 * rnd()) * (1 - 0.4 * t),
-        drift * 0.3 + off,
-        thick(t) * 0.62,
-        depth - 1,
-      );
-    }
-  };
-  /** The face's surface at (x, y), `r` out of it along its normal, in the head joint's frame. */
-  const onFace = (x: number, y: number, r: number): Vec3 => {
-    const h = 1e-3;
-    const m = unit([
-      (faceZ(x + h, y) - faceZ(x - h, y)) / (2 * h),
-      (faceZ(x, y + h) - faceZ(x, y - h)) / (2 * h),
-      -1,
-    ]);
-    const p = faceAt(x, y);
-    nrm = m;
-    return [p[0] + m[0] * r, p[1] + HEAD_UP + m[1] * r, p[2] + m[2] * r];
-  };
-  /** A vein over the face only, from `e1` of the way out to the rim (r0 thick) in to `e0`, fading. */
-  const face3 = (s: number, a0: number, e1: number, e0: number, r0: number, wav: number) => {
-    const F = lod > 2 ? 14 : 7;
-    const pts: Vec3[] = [];
-    const radii: number[] = [];
-    const ns: Vec3[] = [];
-    for (let j = 0; j <= F; j++) {
-      const t = j / F;
-      const e = e1 + (e0 - e1) * t;
-      const a = s * (a0 + 0.3 * t * t + 0.015 * Math.sin(t * 6 + wav));
-      const [x, y] = [EA * e * Math.sin(a), EY + EB * e * Math.cos(a)];
-      // Out of the vein from nothing: at full thickness its root crossed it as a leaf.
-      const r = r0 * Math.min(1, t * 4) * (1 - t) ** 1.4;
-      pts.push(onFace(x, y, -r * 0.3));
-      ns.push(nrm);
-      radii.push(r);
-    }
-    strand(out, head, q, pts, radii, 3, SINEW, -1, true, ns);
-  };
-  // Near, the trunks alone: their branches are under a pixel there.
-  const depth = lod > 2 ? 4 : 0;
-  for (const s of [-1, 1]) {
-    // The same seed each side: the two trees mirror.
-    seed = 7;
-    // Each trunk carried on over the face, fading out short of the orbits and the jaw's
-    // tendons (the user, 2026-11-16: thinning to nothing).
-    for (const [a0, drift, len, r0, front] of [
-      [0.4, 0.1, 0.36, 0.0022, 0.4],
-      [1.05, 0.25, 0.34, 0.0026, 0.62],
-      [1.5, -0.2, 0.3, 0.0028, 0.76],
-      [1.95, 0.3, 0.26, 0.0024, 0.66],
-    ]) {
-      // Thinner by as much as the head grew (HEAD_K): as they were.
-      vessel(s, 0.012, a0, len, drift, r0 / HEAD_K, depth, front);
     }
   }
 };
@@ -2470,8 +2475,8 @@ export const hoses = (out: Out, head: Vec3, q: Quat, lod: number) => {
         const z = z0 + (z1 - z0) * t;
         const a = s * (a0 + (a1 - a0) * t);
         const [c, w, h] = domeAt(z);
-        const [sn, cs] = [Math.sin(a), Math.cos(a)];
-        const m = unit([sn / w, cs / h, 0]);
+        const [sn, cs, gs, gc] = round(a);
+        const m = unit([gs / w, gc / h, 0]);
         // Out of the skin over its middle, under it at its ends: grown out of the head.
         const e = Math.sin(Math.PI * t) ** 0.5;
         const r = r0 * (0.5 + 0.5 * e);
@@ -2483,23 +2488,6 @@ export const hoses = (out: Out, head: Vec3, q: Quat, lod: number) => {
       tubed(out, head, q, pts, radii, n, ns);
     }
   }
-};
-
-/** Its eyes, glowing slits at the back of the orbits in the team's `color`. */
-export const eyes = (out: Out, head: Vec3, q: Quat, color: number[], lod = 1) => {
-  const from = out.length;
-  const at = on(head, q, [0, HEAD_UP, 0]);
-  for (const s of [-1, 1]) {
-    // A glowing slit along the orbit's slant, a lens lying on its floor, thin pointed ends, a full
-    // middle. Wholly in front of the floor: sunk in it, its edge was cut in steps by the grid.
-    const radii = [0.0008, 0.0028, 0.0041, 0.0046, 0.0041, 0.0028, 0.0008];
-    const pts = [-0.015, -0.0105, -0.0055, 0, 0.0055, 0.0105, 0.015].map((d, i): Vec3 => {
-      const [x, y] = [s * (EYE[0] + d), EYE[1] + SLANT * d];
-      return [x, y, faceZ(x, y) - radii[i] - 0.0004];
-    });
-    strand(out, at, q, pts, radii, lod ? 8 : 4, color, -2, true, [0, 0, 1]);
-  }
-  grow(out, from, head, q);
 };
 
 /** A rigid piece made at the origin of its joint's frame, then only placed (store.ts). */
@@ -2586,6 +2574,8 @@ export const partsOf = (lod: number): Part[] =>
         make: (o, a, q) => {
           const from = o.length;
           skull(o, a, q, lod);
+          jaw(o, a, q, lod);
+          belly(o, a, q, lod);
           grow(o, from, a, q);
         },
       },
@@ -2594,7 +2584,6 @@ export const partsOf = (lod: number): Part[] =>
         make: (o, a, q) => {
           const from = o.length;
           teeth(o, a, q, lod);
-          veins(o, a, q, lod);
           hoses(o, a, q, lod);
           grow(o, from, a, q);
         },

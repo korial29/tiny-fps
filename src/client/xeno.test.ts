@@ -15,7 +15,6 @@ import {
   HOOKED,
   backOf,
   elbow,
-  eyes,
   heel,
   lashOf,
   metatarsal,
@@ -216,7 +215,7 @@ describe('its pieces', () => {
     }
   });
 
-  it('puts three clawed toes ahead of each foot, tendons and spurs, a rib cage round the chest and glowing eyes on the head', () => {
+  it('puts three clawed toes ahead of each foot, tendons and spurs, a rib cage round the chest and an eyeless head under a glossy carapace', () => {
     const out = (f: (o: number[]) => void) => {
       const v: number[] = [];
       f(v);
@@ -237,18 +236,18 @@ describe('its pieces', () => {
     expect(Math.max(...r.map(p => Math.abs(p[0])))).toBeGreaterThan(0.15);
     expect(Math.max(...out(o => elbow(o, O, ID, 1)).map(p => p[2]))).toBeGreaterThan(0.1);
     expect(Math.max(...out(o => heel(o, O, ID, 1)).map(p => p[2]))).toBeGreaterThan(0.1);
-    // A human skull's face in front, in the dome's colour, the mouth dark between steel teeth,
+    // Its face in front: the carapace's black over the chitin, the mouth dark between steel teeth,
     // tendons in a lighter chitin beside it.
     const sk: number[] = [];
     skull(sk, O, ID, 3);
     teeth(sk, O, ID, 3);
     const f = points(sk);
-    expect(Math.min(...f.map(p => p[2]))).toBeLessThan(-0.11);
+    // No muzzle: the front of the carapace is the furthest forward.
+    expect(Math.min(...f.map(p => p[2]))).toBeLessThan(-0.1);
     const reds = new Set(Array.from({ length: sk.length / 10 }, (_, i) => sk[i * 10 + 6]));
-    expect([...reds].sort((a, b) => a - b)).toEqual([0.02, HEAD[0], HEAD[0] * 1.45, 0.66]);
-    const lit: number[] = [];
-    eyes(lit, O, ID, [1, 0, 0]);
-    expect(lit.filter((_, i) => i % 10 == 8).every(l => l == -2)).toBe(true);
+    expect([...reds].sort((a, b) => a - b)).toEqual([0.012, 0.02, HEAD[0], HEAD[0] * 1.45, 0.66]);
+    // No eyes: nothing on the head glows.
+    expect(sk.some((l, i) => i % 10 == 8 && l == -2)).toBe(false);
   });
 });
 
@@ -352,15 +351,17 @@ describe('its claws', () => {
 });
 
 describe('its face on the HUD', () => {
-  it('has a head of its own in every frame, its eyes glowing but dead, and acid for its worst wounds', async () => {
-    const { DEAD, FRAMES, LOOK, PALETTE, frame, sprite } = await import('./face');
+  it('has a head of its own in every frame, no eyes, and acid for its worst wounds', async () => {
+    const { FRAMES, LOOK, PALETTE, frame, sprite } = await import('./face');
     const has = (n: number, c: number) => sprite(n, LOOK.XENO).includes(PALETTE.indexOf(c));
     const [EYE, ACID] = [0xff3246ff, 0xff28e696];
     for (let n = 0; n < FRAMES; n++) {
       expect(sprite(n, LOOK.XENO)).not.toEqual(sprite(n, LOOK.MAN));
     }
-    expect(has(frame(0, 0), EYE)).toBe(true);
-    expect(has(DEAD, EYE)).toBe(false);
+    // No eyes (the user, 2026-11-24): their red in no frame.
+    for (let n = 0; n < FRAMES; n++) {
+      expect(has(n, EYE)).toBe(false);
+    }
     expect(has(frame(0, 0), ACID)).toBe(false);
     expect(has(frame(4, 0), ACID)).toBe(true);
   });

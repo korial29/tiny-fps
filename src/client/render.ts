@@ -170,7 +170,7 @@ if(hb.x>=0.&&(hb.y>.5||a==${REGION.FLESH}))l=vec3(${CLOTH})+(l-vec3(${CLOTH}))*h
 float hw=0.;for(int i=0;i<3;i++){vec4 o=g(Sb.y+gl_VertexID/3*3+i);hw+=int(o.y)==${REGION.HAIR}?1.-(int(o.z)!=${REGION.HAIR}?o.w:0.):int(o.z)==${REGION.HAIR}?o.w:0.;}hw/=3.;
 float bw=float(${BARE_REGIONS.map(r => `a==${r}`).join('||')})*(hb.x<0.?1.:hb.x);
 float cw=Sb.w!=3?0.:${SUIT.map(r => `a==${r}`).join('||')}?1.:a==${REGION.FLESH}&&hb.x>=0.?1.-hb.x:0.;
-C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:Sb.w==2&&a!=${REGION.BELT}?${CHITIN}:hw>.5&&hb.x<0.?${HAIR_ROOT}-${HAIR_SPAN}*clamp((${TOP}-ry)/.3,0.,1.):-1.+(${SKIN_LAYER}+1.)*bw+(${WEAVE}+1.)*cw+(Sb.w==3&&a==${REGION.UPPER}?${BOOT_LAYER - WEAVE}:0.),l.z);gl_Position=m*vec4(P,1);return;}
+C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:Sb.w==2&&a!=${REGION.BELT}?a==${REGION.HAIR}?${GLOSS}:${CHITIN}:hw>.5&&hb.x<0.?${HAIR_ROOT}-${HAIR_SPAN}*clamp((${TOP}-ry)/.3,0.,1.):-1.+(${SKIN_LAYER}+1.)*bw+(${WEAVE}+1.)*cw+(Sb.w==3&&a==${REGION.UPPER}?${BOOT_LAYER - WEAVE}:0.),l.z);gl_Position=m*vec4(P,1);return;}
 if(Sm==2){int b=Sb.y+gl_VertexID*${PLATE},j,K,t;vec4 h=g(b),G4=g(b+4),R4=g(b+5);j=int(h.y);K=int(h.z);t=int(h.x)*3;
 vec3 X[3],Z[3],W3[3],M3[3],XR[3],RR[3];
 for(int i=0;i<3;i++){k(int(g(Sb.z+t+i).x),X[i],Z[i]);XR[i]=kr;}

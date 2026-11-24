@@ -34,7 +34,7 @@ export const PALETTE = [
   0xffe0eff2, 0xff1a12b0, 0xff5a3f7d, 0xff362f2a, 0xffffd93f, 0xff4ad3ff, 0xff86908a, 0xff18243a,
   // The woman's: her hair, its light, her lips.
   0xff1c2f5e, 0xff2f4c8a, 0xff4a45cc,
-  // The xenomorph's: its chitin, the chitin's sheen, its eyes' glow, its acid.
+  // The xenomorph's: its chitin, the chitin's sheen, a red no longer used, its acid.
   0xff1c1412, 0xff604e46, 0xff3246ff, 0xff28e696,
   // The Hunter's: his hide, its shade and light, the spikes of his crown and their sheen, his
   // dreadlocks, their shade and pale bands, his gums and throat.
@@ -64,7 +64,7 @@ const [
   LIP,
   CHIT,
   CHIT_HI,
-  EYE,
+  ,
   ACID,
   H_SKIN,
   H_SHADE,
@@ -513,11 +513,11 @@ const hunter = (n: number): Uint8Array => {
 
 /**
  * The xenomorph's head in the frame `n`, the frames as the runner's: its long skull seen from the
- * front, a dome of black chitin with a sheen down its crest, narrowing to the jaw; two glowing
- * slits for eyes, which look, narrow and open as the runner's do; its jaws, closed on their fangs,
- * open in a hiss (an ouch, the shout), bared (a grin), wide (a rage). Its wounds are acid: a
- * splash, a crack in the dome, acid from the mouth, more cracks. Dead, grey and dark-eyed, the jaw
- * slack. Turned toward a hit, the features move 2 pixels that way.
+ * front, a dome of black chitin with a sheen down its crest (gold in the GLOW frame), narrowing to
+ * the jaw; no eyes (the user, 2026-11-24); its jaws, closed on their fangs, open in a hiss (an
+ * ouch, the shout), bared (a grin), wide (a rage). Its wounds are acid: a splash, a crack in the
+ * dome, acid from the mouth, more cracks. Dead, grey, the jaw slack. Turned toward a hit, the
+ * features move 2 pixels that way.
  */
 const beast = (n: number): Uint8Array => {
   const p = new Uint8Array(FW * FH);
@@ -538,7 +538,7 @@ const beast = (n: number): Uint8Array => {
     }
   };
   const t = e == EXPR.TURN_L ? -2 : e == EXPR.TURN_R ? 2 : 0;
-  const [body, hi] = dead ? [GREY, GREY] : [CHIT, CHIT_HI];
+  const [body, hi] = dead ? [GREY, GREY] : [CHIT, n == GLOW ? GOLD : CHIT_HI];
   // The half width of the head at row y: a dome down to row 12, then the jaw narrowing to a snout.
   const half = (y: number) =>
     y <= 12
@@ -565,29 +565,7 @@ const beast = (n: number): Uint8Array => {
       put(t > 0 ? 4 : 19, y, LINE);
     }
   }
-  const look =
-    e == EXPR.LEFT || e == EXPR.TURN_L ? -1 : e == EXPR.RIGHT || e == EXPR.TURN_R ? 1 : 0;
   const wide = e == EXPR.OUCH || e == EXPR.SHOUT;
-  const narrow = e == EXPR.GRIN || e == EXPR.RAGE || e == EXPR.EFFORT || e == EXPR.FOCUS;
-  // The slits: slanting up to the temples, bright where they look.
-  for (const s of [-1, 1]) {
-    const x0 = 11.5 + s * 2 + t;
-    for (let k = 0; k < 5; k++) {
-      const x = Math.round(x0 + s * k);
-      const y = 14 - (k >> 1);
-      const lit = dead ? PUPIL : n == GLOW ? GOLD : EYE;
-      put(x, y, lit);
-      if (wide && k < 4) {
-        put(x, y - 1, lit);
-      }
-      if (!dead && n != GLOW && k == 2 + look * s) {
-        put(x, y, WHITE);
-      }
-    }
-    if (narrow && !dead) {
-      put(Math.round(x0 + s * 4), 12, LINE);
-    }
-  }
   // The jaws: shut on their fangs, or open.
   const m = 8 + t;
   const open = dead || wide || e == EXPR.RAGE;

@@ -318,8 +318,11 @@ const play = (
   hud.visor(!!world.def.helmets);
   let defaultWeapon: number = WEAPON.GUN;
   const ctl = createInput(canvas, () => hud.mute(toggleMute(audio)));
-  // The click that takes the pointer lock is the gesture that lets the sound start.
-  canvas.addEventListener('click', () => audio.unlock());
+  // Any gesture lets the sound start: a click or a key in the menu starts its theme, and so does
+  // the click that takes the pointer lock.
+  for (const e of ['pointerdown', 'keydown', 'click']) {
+    wrap.addEventListener(e, () => audio.unlock());
+  }
   const fx = createEffects();
   const announcer = createAnnouncer();
   /** Whether a player of the roster is a xenomorph: its own sounds (foley, combat, taunts). */
@@ -1328,6 +1331,8 @@ const play = (
 
     played ||= ctl.locked();
     started ||= played;
+    // The menus' theme while the menu shows, the map's music in the game.
+    audio.menu(!ctl.locked());
     hud.paused(started, !played);
     hud.title(
       msg ||

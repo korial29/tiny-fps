@@ -26,6 +26,7 @@ vi.mock('./sfx', async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
   render: (id: number) => new Float32Array(10 + id),
   music: () => new Float32Array(5),
+  anthem: () => new Float32Array(6),
   seam: (s: Float32Array) => new Float32Array(s.length - 5),
 }));
 
@@ -165,17 +166,19 @@ describe('the mix', () => {
     const a = unlocked();
     a.play(SOUND.HIT);
     expect(voice().vol).toBeCloseTo(gain(-25.5), 5);
-    const bed = fake().gains[1];
-    expect(bed.gain.setTargetAtTime).toHaveBeenLastCalledWith(
-      expect.closeTo(0.5 * gain(-6), 5),
-      3,
-      expect.any(Number),
-    );
+    // The map's music on the second gain, the menus' theme on the third: the theme first.
+    const [bed, title] = fake().gains.slice(1, 3);
+    const music = [expect.closeTo(0.5 * gain(-6), 5), 3, expect.any(Number)];
+    expect(title.gain.setTargetAtTime).toHaveBeenLastCalledWith(...music);
+    expect(bed.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 3, expect.any(Number));
+    a.menu(false);
+    expect(bed.gain.setTargetAtTime).toHaveBeenLastCalledWith(...music);
+    expect(title.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 3, 0.4);
   });
 });
 
 describe('unlock', () => {
-  it('resumes the context, renders every sound once and starts the music once', () => {
+  it('resumes the context, renders every sound once and starts the menus\u2019 theme once', () => {
     install();
     const a = createAudio(LAYERS);
     a.unlock();
@@ -184,18 +187,48 @@ describe('unlock', () => {
     expect(c.resumed).toBe(2);
     expect(c.buffers).toEqual([
       ...Object.values(SOUND).map(id => ({ length: 10 + id, rate: RATE })),
-      { length: 5, rate: MUSIC_RATE },
+      { length: 6, rate: MUSIC_RATE },
     ]);
     const loops = c.sources.filter(s => s.loop);
     expect(loops).toHaveLength(1);
     expect(loops[0].started).toBe(1);
   });
 
+  it('renders the map\u2019s music on leaving the menu, once', () => {
+    install();
+    const a = createAudio(LAYERS);
+    a.unlock();
+    for (const on of [false, true, false]) {
+      a.menu(on);
+    }
+    expect(
+      fake()
+        .buffers.filter(b => b.rate == MUSIC_RATE)
+        .map(b => b.length),
+    ).toEqual([6, 5]);
+    expect(fake().sources.filter(s => s.loop)).toHaveLength(2);
+  });
+
+  it('starts the map\u2019s music at unlock when the game came first', () => {
+    install();
+    const a = createAudio(LAYERS);
+    a.menu(false);
+    expect(fake().buffers).toHaveLength(0);
+    a.unlock();
+    expect(
+      fake()
+        .buffers.filter(b => b.rate == MUSIC_RATE)
+        .map(b => b.length),
+    ).toEqual([6, 5]);
+  });
+
   it('loops the song it is given: a map\u2019s own music', () => {
     install();
-    createAudio(LAYERS, SPRITES, () => new Float32Array(7)).unlock();
+    const a = createAudio(LAYERS, SPRITES, () => new Float32Array(7));
+    a.unlock();
+    a.menu(false);
     expect(fake().buffers.at(-1)).toEqual({ length: 7, rate: MUSIC_RATE });
-    expect(fake().sources.filter(s => s.loop)).toHaveLength(1);
+    expect(fake().sources.filter(s => s.loop)).toHaveLength(2);
   });
 
   it('plays nothing before the first unlock', () => {

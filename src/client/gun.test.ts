@@ -698,7 +698,9 @@ describe('the rail gun’s cells and heat', () => {
     const out: number[] = [];
     held(out, [0, 0, 0], IDENT, 1, 1, 50, 0, 2, 0, { cells: [1, 1, 1] });
     const cells = glowing(out).filter(x => x.c[2] > 1.5 && x.c[1] < 0.4);
-    const xs = cells.map(x => x.p[0]);
+    // Either side of the gun's middle, which is the grip's: off the wrist by the hold.
+    const mid = grip([0, 0, 0], IDENT, 2)[0];
+    const xs = cells.map(x => x.p[0] - mid);
     expect(Math.min(...xs)).toBeLessThan(-0.03);
     expect(Math.max(...xs)).toBeGreaterThan(0.03);
   });

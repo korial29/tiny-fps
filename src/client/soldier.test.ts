@@ -14,7 +14,7 @@ import { CUT, MODE, SIDE, TEX } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
-import { MUZZLE, REAR, RIFLE_CURL, aimed, button, grip, gun, tip } from './gun';
+import { LONG_CURL, MUZZLE, REAR, RIFLE_CURL, aimed, button, grip, gun, tip } from './gun';
 import { axes } from './katana';
 import { inv } from './body';
 import type { Solved } from './body';
@@ -407,7 +407,11 @@ describe('soldier', () => {
       expect(grasp(man({ blade: true, wield: true }))).toEqual([0.9, 0.9]);
       expect(grasp(man({ ammo: 5 }))[1]).toBe(0.9);
       expect(grasp(man({ ammo: 5 }))[0]).toBeLessThan(0.9);
-      expect(grasp(man({ rifled: true, ammo: 5 }))).toEqual([RIFLE_CURL, 0.9]);
+      // A long gun's grips in an opener hand, the fingers round them, not through (the user,
+      // 2026-11-25); the Hunter's fists, whose cannon borrows the rail gun's flag, as they were.
+      expect(grasp(man({ rifled: true, ammo: 5 }))).toEqual([RIFLE_CURL, LONG_CURL]);
+      expect(grasp(man({ railed: true, rail: 5 }))).toEqual([LONG_CURL, LONG_CURL]);
+      expect(grasp(man({ railed: true, rail: 5 }), undefined, true)).toEqual([0.9, 0.9]);
       expect(grasp(man({ ...HANGS }))).toEqual([0.1, 0.1]);
       expect(grasp(man({ down: 100, hp: 0 }))).toEqual([0.3, 0.3]);
     });

@@ -591,14 +591,16 @@ export const railgun = (lod: number): number[] => {
     wood,
   );
   tube(out, RECEIVER, n, drab);
+  // The grip, upright in the fist that holds it (LONG_TILT): leaning back as the pistol's, it
+  // came out of the fingers (the user, 2026-11-25: the hands clipped on the rail gun).
   tube(
     out,
     [
-      [0.03, 0.07, 0, 0],
-      [0.02, 0.05, 0.02, 0.022],
-      [0, 0, 0.02, 0.023],
-      [-0.02, -0.046, 0.021, 0.022],
-      [-0.03, -0.06, 0, 0],
+      [0, 0.07, 0, 0],
+      [0, 0.05, 0.013, 0.021],
+      [0, 0, 0.013, 0.021],
+      [0, -0.046, 0.013, 0.021],
+      [0, -0.06, 0, 0],
     ],
     m,
     steel,
@@ -795,6 +797,29 @@ export const insulators = (lod: number, heat = 0): number[] => {
 /** The weapon a gun model is, from a player or a flag: 0 the gun, 2 the rail gun (or true), 3 the laser rifle. */
 export const kindOf = (p: Pick<PlayerState, 'railed' | 'rifled'> | boolean | number): number =>
   typeof p == 'number' ? p : typeof p == 'boolean' ? +p * 2 : p.rifled ? 3 : p.railed ? 2 : 0;
+
+/**
+ * The tilt of a long gun's grip in the hand, as TILT: the rail gun's and the rifle's are held at
+ * the shoulder, the forearm rising to the grip from an elbow under it. With the pistol's tilt the
+ * knuckles pointed 23 degrees under the barrel and the wrist was bent 70 degrees and more on the
+ * grip (the user, 2026-11-25: a natural, anatomically correct hold). Here they point LONG_RAKE
+ * radians over the barrel, toward the forearm's line, on a grip that stands nearly upright.
+ */
+const LONG_RAKE = 0.1;
+export const LONG_TILT = [-Math.sin(LONG_RAKE), Math.cos(LONG_RAKE)];
+/**
+ * Where a fist holds a grip, from the wrist: metres along the fingers and toward the palm (FIST in
+ * body.ts), and how closed it is. A long gun's is held further into an opener hand: its grip, 2.6
+ * cm across, lies on the palm inside the fingers, which go round its front and close on its far
+ * side. In the fist of 0.9 that holds the pistol they went through it (the user, 2026-11-25).
+ */
+const HOLD = [0.078, 0.022];
+export const LONG_HOLD = [0.066, 0.029];
+export const LONG_CURL = 0.72;
+/** The hold of a weapon of `kind` (kindOf()) in the hand that has its grip. */
+export const holdOf = (kind: boolean | number = 0) => (kindOf(kind) >= 2 ? LONG_HOLD : HOLD);
+/** The grip's tilt in the hand for a weapon of `kind` (kindOf()): the pistol's, or a long gun's. */
+export const tiltOf = (kind: boolean | number = 0) => (kindOf(kind) >= 2 ? LONG_TILT : TILT);
 
 /**
  * The rifle's housing (the user, 2026-11-08): a block of one trapezoid section, wide at its foot in
@@ -1133,15 +1158,16 @@ export const rifle = (lod: number): number[] => {
     m,
     steel,
   );
-  // The pistol grip.
+  // The pistol grip, upright (the user, 2026-11-25: it leaned back as the pistol's, 25 degrees,
+  // too much for a gun held at the shoulder), in the fist that holds it (LONG_TILT).
   tube(
     out,
     [
-      [0.03, 0.07, 0, 0],
-      [0.02, 0.05, 0.02, 0.022],
-      [0, 0, 0.02, 0.023],
-      [-0.02, -0.046, 0.021, 0.022],
-      [-0.03, -0.06, 0, 0],
+      [0, 0.07, 0, 0],
+      [0, 0.05, 0.013, 0.021],
+      [0, 0, 0.013, 0.021],
+      [0, -0.046, 0.013, 0.021],
+      [0, -0.06, 0, 0],
     ],
     m,
     steel,
@@ -1598,7 +1624,7 @@ export const fore = (
 
 /** fore() for the hand at `pos` turned by `q`, which holds the grip. */
 export const foregrip = (pos: Vec3, q: Quat, kind: boolean | number = 2) =>
-  fore(grip(pos, q), axes(q), kind);
+  fore(grip(pos, q, kind), axes(q, kind), kind);
 
 /** The rail gun's lightning left as the counters show it: 99 when full (of `max`, a load by default), 0 when spent. */
 export const charge = (rail: number, max = RAIL_MAX): number =>
@@ -1613,10 +1639,10 @@ export const electrodes = (at: Vec3, [, u, f]: Vec3[]): Vec3[] =>
       ) as Vec3,
   );
 
-/** The gun's axes [right, up, forward] for a hand turned by `q` (see body.ts: its thumb is the hand's -z, the back of the hand its x, its fingers its -y). */
-export const axes = (q: Quat): Vec3[] => {
+/** The gun's axes [right, up, forward] for a hand turned by `q` (see body.ts: its thumb is the hand's -z, the back of the hand its x, its fingers its -y), the grip tilted in it as a weapon of `kind` is (tiltOf()). */
+export const axes = (q: Quat, kind: boolean | number = 0): Vec3[] => {
   const [th, back, fing] = [turn(q, [0, 0, -1]), turn(q, [1, 0, 0]), turn(q, [0, -1, 0])];
-  const [s, c] = TILT;
+  const [s, c] = tiltOf(kind);
   return [
     back,
     th.map((v, i) => c * v - s * fing[i]) as Vec3,
@@ -1624,10 +1650,11 @@ export const axes = (q: Quat): Vec3[] => {
   ];
 };
 
-/** The middle of the grip, for a wrist at `pos`: 8 cm along the fingers and 2 cm toward the palm. */
-export const grip = (pos: Vec3, q: Quat): Vec3 => {
+/** The middle of the grip, for a wrist at `pos`: 8 cm along the fingers and 2 cm toward the palm, or as a weapon of `kind` is held (holdOf()). */
+export const grip = (pos: Vec3, q: Quat, kind: boolean | number = 0): Vec3 => {
   const [fing, back] = [turn(q, [0, -1, 0]), turn(q, [1, 0, 0])];
-  return pos.map((v, i) => v + fing[i] * 0.078 - back[i] * 0.022) as Vec3;
+  const [reach, palm] = holdOf(kind);
+  return pos.map((v, i) => v + fing[i] * reach - back[i] * palm) as Vec3;
 };
 
 /** The segments of the digits 0 to 9, a to g: top, top right, bottom right, bottom, bottom left, top left, middle. */
@@ -2119,7 +2146,7 @@ export const held = (
     list,
   }: Lit = {},
 ) => {
-  const [at, ax] = [grip(pos, q), axes(q)];
+  const [at, ax] = [grip(pos, q, kind), axes(q, kind)];
   const w = kindOf(kind);
   const rail = w == 2;
   const d = 0.08 + 0.92 * light;
@@ -2187,7 +2214,7 @@ export const held = (
   const model = [gun, gun, railgun, rifle][w](lod);
   if (list && d == 1) {
     list.push({
-      m: mesh(`gun ${w} ${lod}`, o => place(o, model, ORIGIN, axes(ID), [0, 0, 0], 1)),
+      m: mesh(`gun ${w} ${lod}`, o => place(o, model, ORIGIN, axes(ID, w), [0, 0, 0], 1)),
       q,
       t: at,
       k,

@@ -5,8 +5,18 @@ import { DOWN_TICKS, TICK_HZ } from '../shared/constants';
 import { STILL } from '../shared/physics';
 import { LIMB, MODE, NOBODY, SIDE } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
-import { REAR, RIFLE_HOLD, foregrip, axes as frameOf, grip, railgun, rifle, tip } from './gun';
-import { FIST, inv } from './body';
+import {
+  LONG_HOLD,
+  REAR,
+  RIFLE_HOLD,
+  foregrip,
+  axes as frameOf,
+  grip,
+  railgun,
+  rifle,
+  tip,
+} from './gun';
+import { inv } from './body';
 import { SCALE, SHELL } from './helmet';
 import { GLOSS, SHINE, STRIDE, add, basis } from './mesh';
 import type { Vec3 } from './mesh';
@@ -136,7 +146,9 @@ describe('a runner with the rail gun', () => {
       const [at] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R]);
       const q = s.rot[J.HAND_L];
       const [fing, x] = [turn(q, [0, -1, 0]), turn(q, [1, 0, 0])];
-      const palm = [0, 1, 2].map(i => s.pos[J.HAND_L][i] + fing[i] * 0.078 + x[i] * 0.022);
+      const palm = [0, 1, 2].map(
+        i => s.pos[J.HAND_L][i] + fing[i] * LONG_HOLD[0] + x[i] * LONG_HOLD[1],
+      );
       expect(Math.hypot(...palm.map((v, i) => v - at[i]))).toBeLessThan(0.01);
     }
   });
@@ -482,7 +494,7 @@ describe('a runner shouldering a long gun (the user, 2026-11-10: it hung across 
   /** The gun in the right hand: a point of its model in the world, and its barrel's way. */
   const gunOf = (s: ReturnType<typeof solve>, kind: number) => {
     const q = s.rot[J.HAND_R];
-    const [at, ax] = [grip(s.pos[J.HAND_R], q), frameOf(q)];
+    const [at, ax] = [grip(s.pos[J.HAND_R], q, kind), frameOf(q, kind)];
     const put = ([x, y, z]: number[]) =>
       at.map((v, i) => v + ax[0][i] * x + ax[1][i] * y - ax[2][i] * z);
     // The rail gun's barrel lies on the long axis, the rifle's along the model's forward.
@@ -525,13 +537,18 @@ describe('a runner shouldering a long gun (the user, 2026-11-10: it hung across 
     const [at] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R], g.kind);
     const q = s.rot[J.HAND_L];
     const [fing, x] = [turn(q, [0, -1, 0]), turn(q, [1, 0, 0])];
-    const [reach, palm] = g.kind == 3 ? RIFLE_HOLD : FIST;
+    const [reach, palm] = g.kind == 3 ? RIFLE_HOLD : LONG_HOLD;
     expect(
       far(
         s.pos[J.HAND_L].map((v, i) => v + fing[i] * reach + x[i] * palm),
         at,
       ),
     ).toBeLessThan(0.01);
+    // The right wrist nearly straight on its grip: the forearm rises to it and the knuckles point
+    // along it, not under the barrel as the pistol's tilt had them (the user, 2026-11-25: the
+    // wrist twisted on the grip).
+    const knuckles = turn(s.rot[J.HAND_R], [0, -1, 0]);
+    expect(off(sub(s.pos[J.HAND_R], s.pos[J.FOREARM_R]), knuckles)).toBeLessThan(0.7);
     // Both elbows down: under the shoulder, or under the hand when it aims up over it.
     for (const j of [J.ARM_L, J.ARM_R]) {
       expect(s.pos[j + 1][1]).toBeLessThan(Math.max(s.pos[j][1], s.pos[j + 2][1]));
@@ -542,7 +559,9 @@ describe('a runner shouldering a long gun (the user, 2026-11-10: it hung across 
       expect(far(s.pos[j + 1], s.pos[j + 2])).toBeCloseTo(Math.hypot(...REST[j + 2]), 6);
       const bend = off(sub(s.pos[j], s.pos[j + 1]), sub(s.pos[j + 2], s.pos[j + 1]));
       expect(bend).toBeGreaterThan(1.3);
-      expect(bend).toBeLessThan(2.35);
+      // The right arm a little straighter since a long gun's grip is held further into the hand
+      // (LONG_HOLD): 2.361 with the rail gun looking far down, where it was under 2.35.
+      expect(bend).toBeLessThan(2.4);
     }
     // The butt in the pocket: before the joint, against the chest plate, a little inside it.
     const [bx, by, bz] = local(s, J.CHEST, s.pos[J.ARM_R], put(g.butt));
@@ -590,7 +609,7 @@ describe('a runner shouldering a long gun (the user, 2026-11-10: it hung across 
       const r = hold({ ...g.o, yaw: 0.7, pitch: 0.2 });
       const s = soldier([], r, [0.1, 0.8, 0.2])!;
       const q = s.rot[J.HAND_R];
-      const m = tip(grip(s.pos[J.HAND_R], q), frameOf(q), g.kind);
+      const m = tip(grip(s.pos[J.HAND_R], q, g.kind), frameOf(q, g.kind), g.kind);
       expect(far(r.tip!, sub(m, [r.p.x, r.p.y, r.p.z]))).toBeLessThan(1e-9);
       // None with the gun, or with no gun in hand.
       const armed = hold({ ammo: 30 });

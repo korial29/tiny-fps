@@ -20,7 +20,6 @@ import type { Choice, PlayerState, Rover } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import {
-  FIST,
   KATANA_LEFT,
   KATANA_TILT,
   RAKE,
@@ -55,9 +54,12 @@ import {
   ARC,
   RIFLE_HOLD,
   RIFLE_TILT,
+  holdOf,
+  LONG_CURL,
+  LONG_HOLD,
+  tiltOf,
   BROUGHT,
   RIFLE_CURL,
-  TILT,
   aimed,
   axes,
   cellsOf,
@@ -493,7 +495,7 @@ export const animate = (
       r.dt += dt;
       const xeno = r.look?.role === ROLE.XENO;
       r.jab += (thrown(p, xeno) - r.jab) * (1 - Math.exp(-dt * 45));
-      const g = grasp(p, r.seat);
+      const g = grasp(p, r.seat, r.look?.role === ROLE.HUNTER);
       r.curls = r.curls.map((c, i) => c + (g[i] - c) * (1 - Math.exp(-dt * CLOSE)));
       r.blow = thrown(p, xeno) > 0 ? blowOf(p, xeno) : r.blow;
       r.flinch = Math.max(r.flinch - dt / FLINCH[0], 0);
@@ -638,11 +640,14 @@ const lifted = (
   s: ReturnType<typeof solve>,
   [grip, ax]: [Vec3, Vec3[]],
   k: number,
+  kind = 0,
 ): Pose => {
   const rot = pose.rot.slice();
   const q = { ...pose, rot };
-  const [uh, fh] = [ax[0], ax[2].map((v, i) => v * TILT[1] - ax[1][i] * TILT[0]) as Vec3];
-  const wrist = grip.map((v, i) => v - 0.078 * fh[i] + 0.022 * uh[i]) as Vec3;
+  // The grip's tilt and place in the hand, as the weapon's kind has them (tiltOf(), holdOf()).
+  const [tilt, [far, palm]] = [tiltOf(kind), holdOf(kind)];
+  const [uh, fh] = [ax[0], ax[2].map((v, i) => v * tilt[1] - ax[1][i] * tilt[0]) as Vec3];
+  const wrist = grip.map((v, i) => v - far * fh[i] + palm * uh[i]) as Vec3;
   const pole: Vec3 = [uh[0] * 0.7, -1, uh[2] * 0.7];
   reach(
     q,
@@ -727,10 +732,11 @@ const carried = (from: Pose, s0: ReturnType<typeof solve>, r: Runner): Pose => {
       i => (ahead[i] + (r.focus[i] - ahead[i]) * r.aim) * (1 - low) + (butt[i] + 30 * d[i]) * low,
     ) as Vec3;
     const [at, ax] = shouldered(butt, to, side, top, kind);
-    const q = lifted(pose, s, [at, ax], 1);
+    const q = lifted(pose, s, [at, ax], 1, kind);
     s = solve(q);
     const [fore, g, up] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R], kind);
-    const [len, palm] = up ? RIFLE_HOLD : FIST;
+    // The rail gun's front grip, as thin as its rear one, in the same open hold.
+    const [len, palm] = up ? RIFLE_HOLD : LONG_HOLD;
     const sh = s.pos[J.ARM_L];
     // The rail gun's grip is taken from the shoulder's side and a little from over the elbow, as
     // a free hand takes a handle (wield()), the shoulder left where it is.
@@ -913,7 +919,7 @@ const CLOSE = 14;
  * nothing in them (the guard), a loose fist on a run, tighter at a sprint, open in the air, flat
  * on a ledge, a wall or the floor, limp lying down.
  */
-export const grasp = (p: PlayerState, seat?: Seat): number[] => {
+export const grasp = (p: PlayerState, seat?: Seat, hunter = false): number[] => {
   if (p.down || floored(p)) {
     return [0.3, 0.3];
   }
@@ -941,7 +947,10 @@ export const grasp = (p: PlayerState, seat?: Seat): number[] => {
     return [0.9, 0.9];
   }
   if (p.rifled || (p.railed && !stowed(p))) {
-    return [p.rifled ? RIFLE_CURL : 0.9, 0.9];
+    // A long gun's grips in an opener hand (LONG_CURL); not the Hunter's, whose disc and cannon
+    // only borrow these flags.
+    const round = hunter ? 0.9 : LONG_CURL;
+    return [p.rifled ? RIFLE_CURL : round, round];
   }
   // In a swap the left hand brings the new battery up from the pouch.
   return [
@@ -1212,6 +1221,7 @@ export const stance = (r: Runner) => {
       s,
       aimed(p.mode == MODE.RIDE ? { ...p, y: p.y - SEATED } : p, r.focus),
       r.aim,
+      r.look?.role === ROLE.HUNTER ? 0 : kindOf(p),
     );
     s = solve(pose);
   }
@@ -1228,7 +1238,7 @@ export const stance = (r: Runner) => {
     const f = fetched(
       sp,
       pouchAt(s.pos[J.PELVIS], s.rot[J.PELVIS]),
-      loadFrame(grip(s.pos[J.HAND_R], q), axes(q), kindOf(p), BROUGHT),
+      loadFrame(grip(s.pos[J.HAND_R], q, kindOf(p)), axes(q, kindOf(p)), kindOf(p), BROUGHT),
       s.pos[J.HAND_L],
     );
     carry = f.carry;
@@ -1923,7 +1933,7 @@ export const soldier = (
     }
     if (p.railed || p.rifled) {
       const q = s.rot[J.HAND_R];
-      const m = tip(grip(s.pos[J.HAND_R], q), axes(q), kindOf(p));
+      const m = tip(grip(s.pos[J.HAND_R], q, kindOf(p)), axes(q, kindOf(p)), kindOf(p));
       r.tip = [m[0] - p.x, m[1] - p.y, m[2] - p.z];
     }
   }
